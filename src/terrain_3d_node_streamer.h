@@ -142,6 +142,8 @@ private:
 		const Transform3D &rGlobalTransform, const Dictionary &rState, int nFlags
 	);
 	void buildDesiredSet( const Vector2i &rCenter );
+	bool usesFullAuthoringResidency( void ) const;
+	int getEffectiveRadiusRegions( void ) const;
 	bool spawnIdExists( uint64_t nId ) const;
 	int64_t allocateSpawnId( void );
 	void refreshSpawnId( void );
@@ -155,6 +157,7 @@ public:
 	void updateResidency( const Vector3 &rTargetPosition, bool bForce = false );
 	void deferUpdateForFrame( void );
 	void suspend( void );
+	void invalidateResidency( void ) { m_center = V2I_MAX; }
 
 	void setEnabled( bool bEnabled );
 	bool isEnabled( void ) const {

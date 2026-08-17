@@ -738,16 +738,28 @@ bool T3DNodeStreamer::activateRegion( const int iIndex, int &nNodeBudget ) {
 	return true;
 }
 
+bool T3DNodeStreamer::usesFullAuthoringResidency( void ) const {
+	return m_pTerrain && m_pTerrain->isEditorAuthoringMode() &&
+		!m_pTerrain->isEditorNodeStreamingPreviewActive();
+}
+
+int T3DNodeStreamer::getEffectiveRadiusRegions( void ) const {
+	if ( usesFullAuthoringResidency() && m_pTerrain && m_pTerrain->getData() ) {
+		return m_pTerrain->getData()->getRegionMapSizeInternal();
+	}
+	return m_nRadiusRegions;
+}
+
 void T3DNodeStreamer::buildDesiredSet( const Vector2i &rCenter ) {
 	m_desiredRegions.reset();
 	m_desiredRegionIndices.clear();
 	if ( !m_pTerrain || !m_pTerrain->getData() ) {
 		return;
 	}
-	const int hot_radius = m_pTerrain->isEditorAuthoringMode() ?
-		m_pTerrain->getData()->getRegionMapSizeInternal() : m_pTerrain->getStreamingHotRadius();
-	const Vector2i target_min = rCenter - Vector2i( hot_radius, hot_radius );
-	const Vector2i target_max = rCenter + Vector2i( hot_radius, hot_radius );
+	const bool full_authoring_residency = usesFullAuthoringResidency();
+	const int radius = getEffectiveRadiusRegions();
+	const Vector2i target_min = rCenter - Vector2i( radius, radius );
+	const Vector2i target_max = rCenter + Vector2i( radius, radius );
 	T3DData *const pData = m_pTerrain->getData();
 	const Vector2i *pLocations = pData->getRegionSlotsInternal();
 	const int location_count = pData->getRegionSlotCountInternal();
@@ -760,10 +772,11 @@ void T3DNodeStreamer::buildDesiredSet( const Vector2i &rCenter ) {
 		if ( !pRegion || pRegion->isDeleted() || pRegion->getStreamedNodeCount() == 0 ) {
 			continue;
 		}
-		const t3dregionStreamingState_t state = m_pTerrain->getRegionStreamingStateInternal( owner_location );
-		const bool owner_hot = state >= TERRAIN3D_REGION_STREAMING_HOT;
-		const bool coverage_hot = pRegion->streamedNodeCoverageIntersects( owner_location, target_min, target_max );
-		if ( owner_hot || coverage_hot ) {
+		const int owner_distance = MAX( Math::abs( owner_location.x - rCenter.x ),
+			Math::abs( owner_location.y - rCenter.y ) );
+		const bool owner_desired = full_authoring_residency || owner_distance <= radius;
+		const bool coverage_desired = pRegion->streamedNodeCoverageIntersects( owner_location, target_min, target_max );
+		if ( owner_desired || coverage_desired ) {
 			const int index = indexFromLocation( owner_location );
 			if ( index >= 0 ) {
 				m_desiredRegions.set( ( size_t ) ( index ) );
@@ -856,7 +869,7 @@ void T3DNodeStreamer::updateResidency( const Vector3 &rTargetPosition, const boo
 		m_center = center;
 		buildDesiredSet( center );
 	}
-	const bool authoring_full_residency = m_pTerrain->isEditorAuthoringMode();
+	const bool authoring_full_residency = usesFullAuthoringResidency();
 	m_bHasPendingActivation = false;
 	const int effective_unload_budget = authoring_full_residency ?
 		MAX( 1, getEffectiveUnloadRegionBudget() ) : getEffectiveUnloadRegionBudget();
@@ -886,8 +899,7 @@ void T3DNodeStreamer::updateResidency( const Vector3 &rTargetPosition, const boo
 		MAX( 1, getEffectiveLoadRegionBudget() ) : getEffectiveLoadRegionBudget();
 	int region_budget = effective_load_budget;
 	int node_budget = authoring_full_residency ? MAX( 1, m_nLoadNodeBudget ) : m_nLoadNodeBudget;
-	const int residency_radius = m_pTerrain->isEditorAuthoringMode() ? m_pTerrain->getData()->getRegionMapSizeInternal() :
-		m_pTerrain->getStreamingHotRadius();
+	const int residency_radius = getEffectiveRadiusRegions();
 	for ( int radius = 0; radius <= residency_radius && node_budget > 0; ++radius ) {
 		for ( int z = -radius; z <= radius && node_budget > 0; ++z ) {
 			for ( int x = -radius; x <= radius && node_budget > 0; ++x ) {
@@ -1092,6 +1104,9 @@ Dictionary T3DNodeStreamer::getStats( void ) const {
 	Dictionary stats;
 	stats["enabled"] = m_bEnabled;
 	stats["radius_regions"] = m_nRadiusRegions;
+	stats["effective_radius_regions"] = getEffectiveRadiusRegions();
+	stats["editor_preview"] = m_pTerrain && m_pTerrain->isEditorNodeStreamingPreviewActive();
+	stats["full_authoring_residency"] = usesFullAuthoringResidency();
 	stats["active_regions"] = m_nActiveRegionCount;
 	stats["active_nodes"] = m_nActiveNodeCount;
 	stats["movable_nodes"] = ( int ) ( m_movableNodes.size() );
