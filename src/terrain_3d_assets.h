@@ -40,6 +40,7 @@ public: // Constants
 private:
 	T3DTerrain *m_pTerrain = nullptr;
 	bool m_bSuppressTextureChanged = false;
+	bool m_bPersistenceDirty = false;
 
 	TypedArray<T3DTextureAsset> m_textureList;
 	TypedArray<T3DMeshAsset> m_meshList;
@@ -138,8 +139,12 @@ private:
 		Image::Format eRequiredFormat = Image::FORMAT_MAX, bool bAllowCompressedSurface = false
 	);
 	void updateTextureFiles( void );
+	void updateTextureSettingsInternal( bool bPersistentChange );
 	void updateTextureSettings( void );
+	void updateTexturePreview( void );
+	void updateMeshInternal( const int nId, bool bPersistentChange );
 	void updateMesh( const int nId );
+	void updateMeshPreview( const int nId );
 	void setupThumbnailCreation( void );
 	void destroyThumbnailCreation( void );
 	String getRuntimeMaterialCachePath( void ) const;

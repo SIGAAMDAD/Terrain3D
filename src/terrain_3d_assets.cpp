@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <limits>
+#include <godot_cpp/classes/editor_file_system.hpp>
+#include <godot_cpp/classes/editor_interface.hpp>
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/dir_access.hpp>
@@ -734,6 +736,12 @@ Dictionary T3DAssets::cookRuntimeMaterialCache( void ) {
 	if ( FileAccess::file_exists( backup_path ) ) {
 		DirAccess::remove_absolute( backup_path );
 	}
+	if ( IS_EDITOR && path.begins_with( "res://" ) ) {
+		EditorFileSystem *const pFilesystem = EditorInterface::get_singleton()->get_resource_filesystem();
+		if ( pFilesystem && !pFilesystem->is_scanning() ) {
+			pFilesystem->update_file( path );
+		}
+	}
 	result["path"] = path;
 	result["signature"] = ( int64_t ) ( signature );
 	result["complete"] = true;
@@ -755,11 +763,15 @@ void T3DAssets::connectAssetSignals( const t3dassetType_t type, const Ref<T3DAss
 		}
 		const Callable file_callback = callable_mp( this, &T3DAssets::updateTextureFiles );
 		const Callable setting_callback = callable_mp( this, &T3DAssets::updateTextureSettings );
+		const Callable preview_callback = callable_mp( this, &T3DAssets::updateTexturePreview );
 		if ( !pTexture->is_connected( "file_changed", file_callback ) ) {
 			pTexture->connect( "file_changed", file_callback );
 		}
 		if ( !pTexture->is_connected( "setting_changed", setting_callback ) ) {
 			pTexture->connect( "setting_changed", setting_callback );
+		}
+		if ( !pTexture->is_connected( "preview_changed", preview_callback ) ) {
+			pTexture->connect( "preview_changed", preview_callback );
 		}
 	} else if ( type == TYPE_MESH ) {
 		Ref<T3DMeshAsset> pMesh = rAsset;
@@ -767,8 +779,12 @@ void T3DAssets::connectAssetSignals( const t3dassetType_t type, const Ref<T3DAss
 			return;
 		}
 		const Callable settings_callback = callable_mp( this, &T3DAssets::updateMesh );
+		const Callable preview_callback = callable_mp( this, &T3DAssets::updateMeshPreview );
 		if ( !pMesh->is_connected( "instancer_setting_changed", settings_callback ) ) {
 			pMesh->connect( "instancer_setting_changed", settings_callback );
+		}
+		if ( !pMesh->is_connected( "preview_changed", preview_callback ) ) {
+			pMesh->connect( "preview_changed", preview_callback );
 		}
 	}
 }
@@ -788,11 +804,15 @@ void T3DAssets::disconnectAssetSignals( const t3dassetType_t type, const Ref<T3D
 		}
 		const Callable file_callback = callable_mp( this, &T3DAssets::updateTextureFiles );
 		const Callable setting_callback = callable_mp( this, &T3DAssets::updateTextureSettings );
+		const Callable preview_callback = callable_mp( this, &T3DAssets::updateTexturePreview );
 		if ( pTexture->is_connected( "file_changed", file_callback ) ) {
 			pTexture->disconnect( "file_changed", file_callback );
 		}
 		if ( pTexture->is_connected( "setting_changed", setting_callback ) ) {
 			pTexture->disconnect( "setting_changed", setting_callback );
+		}
+		if ( pTexture->is_connected( "preview_changed", preview_callback ) ) {
+			pTexture->disconnect( "preview_changed", preview_callback );
 		}
 	} else if ( type == TYPE_MESH ) {
 		Ref<T3DMeshAsset> pMesh = rAsset;
@@ -800,8 +820,12 @@ void T3DAssets::disconnectAssetSignals( const t3dassetType_t type, const Ref<T3D
 			return;
 		}
 		const Callable settings_callback = callable_mp( this, &T3DAssets::updateMesh );
+		const Callable preview_callback = callable_mp( this, &T3DAssets::updateMeshPreview );
 		if ( pMesh->is_connected( "instancer_setting_changed", settings_callback ) ) {
 			pMesh->disconnect( "instancer_setting_changed", settings_callback );
+		}
+		if ( pMesh->is_connected( "preview_changed", preview_callback ) ) {
+			pMesh->disconnect( "preview_changed", preview_callback );
 		}
 	}
 }
@@ -825,6 +849,7 @@ Ref<T3DAssetResource> T3DAssets::makePlaceholderAsset( const t3dassetType_t type
 }
 
 void T3DAssets::swapIds( const t3dassetType_t type, const int nSrcId, const int nDstId ) {
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Swapping asset ID: ", nSrcId, " and ID: ", nDstId );
 	Array list;
 	switch ( type ) {
@@ -883,6 +908,7 @@ void T3DAssets::swapIds( const t3dassetType_t type, const int nSrcId, const int 
  * But if an ID is invalid or already taken, the new ID is changed to the next available one
  */
 void T3DAssets::setAssetList( const t3dassetType_t type, const TypedArray<T3DAssetResource> &rList ) {
+	m_bPersistenceDirty = true;
 	const int max_size = type == TYPE_TEXTURE ? TERRAIN3D_MAX_TEXTURE_ASSETS : type == TYPE_MESH ? TERRAIN3D_MAX_MESH_ASSETS : 0;
 	if ( max_size == 0 ) {
 		return;
@@ -958,6 +984,7 @@ void T3DAssets::setAssetList( const t3dassetType_t type, const TypedArray<T3DAss
 }
 
 void T3DAssets::setAsset( const t3dassetType_t type, const int nId, const Ref<T3DAssetResource> &rAsset ) {
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "t3dsetting_t asset type: ", type, ", ID: ", nId, ", asset: ", rAsset );
 	const int max_size = type == TYPE_TEXTURE ? TERRAIN3D_MAX_TEXTURE_ASSETS : type == TYPE_MESH ? TERRAIN3D_MAX_MESH_ASSETS : 0;
 	if ( max_size == 0 || nId < 0 || nId >= max_size ) {
@@ -1064,6 +1091,7 @@ void T3DAssets::validateArrayMember(
 }
 
 void T3DAssets::updateTextureFiles( void ) {
+	m_bPersistenceDirty = true;
 	IS_INIT( VOID );
 	LOG( T3DTerrain::DEBUG, "Received texture_changed signal" );
 	if ( m_textureList.is_empty() ) {
@@ -1301,7 +1329,10 @@ void T3DAssets::updateTextureFiles( void ) {
 	}
 }
 
-void T3DAssets::updateTextureSettings( void ) {
+void T3DAssets::updateTextureSettingsInternal( const bool bPersistentChange ) {
+	if ( bPersistentChange ) {
+		m_bPersistenceDirty = true;
+	}
 	LOG( T3DTerrain::DEBUG, "Received setting_changed signal" );
 	m_textureSettings.nCount = MIN( m_textureList.size(), TERRAIN3D_MAX_TEXTURE_ASSETS );
 	for ( int index = 0; index < m_textureSettings.nCount; ++index ) {
@@ -1361,7 +1392,18 @@ void T3DAssets::updateTextureSettings( void ) {
 	}
 }
 
-void T3DAssets::updateMesh( const int nId ) {
+void T3DAssets::updateTextureSettings( void ) {
+	updateTextureSettingsInternal( true );
+}
+
+void T3DAssets::updateTexturePreview( void ) {
+	updateTextureSettingsInternal( false );
+}
+
+void T3DAssets::updateMeshInternal( const int nId, const bool bPersistentChange ) {
+	if ( bPersistentChange ) {
+		m_bPersistenceDirty = true;
+	}
 	if ( nId < 0 || nId >= m_meshList.size() ) {
 		LOG( T3DTerrain::ERROR, "Invalid mesh ID: ", nId );
 		return;
@@ -1369,6 +1411,14 @@ void T3DAssets::updateMesh( const int nId ) {
 	IS_INSTANCER_INIT( VOID );
 	T3DInstancer *const pInstancer = m_pTerrain->getInstancer();
 	pInstancer->updateMmis( nId, V2I_MAX, false );
+}
+
+void T3DAssets::updateMesh( const int nId ) {
+	updateMeshInternal( nId, true );
+}
+
+void T3DAssets::updateMeshPreview( const int nId ) {
+	updateMeshInternal( nId, false );
 }
 
 void T3DAssets::setupThumbnailCreation( void ) {
@@ -1440,6 +1490,7 @@ void T3DAssets::setTexturePackingMode( const t3dtexturePackingMode_t eMode ) {
 		return;
 	}
 	m_texturePackingMode = mode;
+	m_bPersistenceDirty = true;
 	for ( const Ref<T3DTextureAsset> pAsset : m_textureList ) {
 		if ( pAsset.is_valid() ) {
 			pAsset->setPackedPbrMode( usesPackedPbr() );
@@ -1490,6 +1541,7 @@ void T3DAssets::initialize( T3DTerrain *pTerrain ) {
 		updateTextureList();
 	}
 	updateMeshList();
+	m_bPersistenceDirty = false;
 }
 
 void T3DAssets::uninitialize( T3DTerrain *pTerrain ) {
@@ -1566,6 +1618,7 @@ void T3DAssets::setTextureList( const TypedArray<T3DTextureAsset> &rTextureList 
 }
 
 void T3DAssets::clearTextures( const bool bUpdate ) {
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Clearing texture list" );
 	for ( const Ref<T3DTextureAsset> pAsset : m_textureList ) {
 		disconnectAssetSignals( TYPE_TEXTURE, pAsset );
@@ -1734,6 +1787,7 @@ void T3DAssets::createMeshThumbnails( const int nId, const Vector2i &rSize, cons
 }
 
 void T3DAssets::updateMeshList( void ) {
+	m_bPersistenceDirty = true;
 	IS_INSTANCER_INIT( VOID );
 	LOG( T3DTerrain::INFO, "Updating mesh registry" );
 	if ( m_meshList.is_empty() ) {
@@ -1767,14 +1821,27 @@ Error T3DAssets::save( const String &rPath ) {
 		LOG( T3DTerrain::DEBUG, "t3dsetting_t file path to ", rPath );
 		take_over_path( rPath );
 	}
-	// Save to external resource file if specified
+	// Avoid rewriting clean asset resources during scene pre-save. The nested
+	// asset signal callbacks above mark this resource dirty when authored content
+	// actually changes.
 	Error err = OK;
 	String path = get_path();
+	const bool explicit_path = !rPath.is_empty();
 	if ( path.get_extension() == "tres" || path.get_extension() == "res" ) {
+		if ( !explicit_path && !m_bPersistenceDirty && FileAccess::file_exists( path ) ) {
+			return OK;
+		}
 		LOG( T3DTerrain::DEBUG, "Attempting to save external file: " + path );
 		err = ResourceSaver::get_singleton()->save( this, path, ResourceSaver::FLAG_COMPRESS );
 		if ( err == OK ) {
+			m_bPersistenceDirty = false;
 			LOG( T3DTerrain::INFO, "File saved successfully: ", path );
+			if ( IS_EDITOR && path.begins_with( "res://" ) ) {
+				EditorFileSystem *const pFilesystem = EditorInterface::get_singleton()->get_resource_filesystem();
+				if ( pFilesystem && !pFilesystem->is_scanning() ) {
+					pFilesystem->update_file( path );
+				}
+			}
 		} else {
 			LOG( T3DTerrain::ERROR, "Cannot save file: ", path, ". Error code: ", T3DTerrain::ERROR,
 				". Look up @GlobalScope Error enum in the Godot docs" );
