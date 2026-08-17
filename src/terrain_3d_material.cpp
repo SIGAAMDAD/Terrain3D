@@ -1,6 +1,9 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include <godot_cpp/classes/engine.hpp>
+#include <godot_cpp/classes/editor_file_system.hpp>
+#include <godot_cpp/classes/editor_interface.hpp>
+#include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/fast_noise_lite.hpp>
 #include <godot_cpp/classes/gradient.hpp>
 #include <godot_cpp/classes/image_texture.hpp>
@@ -2909,6 +2912,7 @@ void T3DMaterial::updateUniforms( const RID &rMaterial, const uint32_t nFlags ) 
 
 void T3DMaterial::setShaderParameters( const Dictionary &rDict ) {
 	SET_IF_DIFF( m_shaderParams, rDict );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "t3dsetting_t shader params dictionary: ", rDict.size() );
 }
 
@@ -2981,6 +2985,7 @@ void T3DMaterial::initialize( T3DTerrain *pTerrain ) {
 	}
 
 	update( FULL_REBUILD );
+	m_bPersistenceDirty = false;
 }
 
 void T3DMaterial::uninitialize( T3DTerrain *pTerrain ) {
@@ -3151,12 +3156,14 @@ void T3DMaterial::updateFarAtlasTextures( void ) {
 
 void T3DMaterial::setDisplacementScale( const real_t fDisplacementScale ) {
 	SET_IF_DIFF( m_fDisplacementScale, CLAMP( fDisplacementScale, 0.f, 2.f ) );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "t3dsetting_t displacement scale: ", fDisplacementScale );
 	update();
 }
 
 void T3DMaterial::setDisplacementSharpness( const real_t fDisplacementSharpness ) {
 	SET_IF_DIFF( m_fDisplacementSharpness, CLAMP( fDisplacementSharpness, 0.f, 1.f ) );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "t3dsetting_t displacement sharpness: ", fDisplacementSharpness );
 	update();
 	if ( m_pTerrain ) {
@@ -3166,12 +3173,14 @@ void T3DMaterial::setDisplacementSharpness( const real_t fDisplacementSharpness 
 
 void T3DMaterial::setWorldBackground( const t3dworldBackground_t background ) {
 	SET_IF_DIFF( m_worldBackground, background );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable world background: ", background );
 	update( FULL_REBUILD );
 }
 
 void T3DMaterial::setShaderVariantMode( const t3dshaderVariantMode_t mode ) {
 	SET_IF_DIFF( m_shaderVariantMode, mode );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "t3dsetting_t shader variant mode: ", mode );
 	clearShaderVariantCache();
 	update( FULL_REBUILD );
@@ -3180,6 +3189,7 @@ void T3DMaterial::setShaderVariantMode( const t3dshaderVariantMode_t mode ) {
 void T3DMaterial::setShaderVariantCacheLimit( const int nLimit ) {
 	const int limit = CLAMP( nLimit, TERRAIN3D_MIN_SHADER_VARIANT_CACHE_LIMIT, TERRAIN3D_MAX_SHADER_VARIANT_CACHE_LIMIT );
 	SET_IF_DIFF( m_nShaderVariantCacheLimit, limit );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "t3dsetting_t shader variant cache limit: ", limit );
 	trimShaderVariantCaches();
 	m_prewarmSignature = UINT64_MAX;
@@ -3190,6 +3200,7 @@ void T3DMaterial::setShaderVariantCacheLimit( const int nLimit ) {
 void T3DMaterial::setShaderVariantPrewarmLimit( const int nLimit ) {
 	const int limit = CLAMP( nLimit, TERRAIN3D_MIN_SHADER_VARIANT_PREWARM_LIMIT, TERRAIN3D_MAX_SHADER_VARIANT_PREWARM_LIMIT );
 	SET_IF_DIFF( m_nShaderVariantPrewarmLimit, limit );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "t3dsetting_t shader variant prewarm limit: ", limit );
 	m_prewarmSignature = UINT64_MAX;
 	prewarmShaderVariants();
@@ -3199,6 +3210,7 @@ void T3DMaterial::setShaderVariantPrewarmLimit( const int nLimit ) {
 void T3DMaterial::setShaderVariantSourceBudgetMb( const int nBudgetMb ) {
 	const int budget_mb = CLAMP( nBudgetMb, TERRAIN3D_MIN_SHADER_VARIANT_SOURCE_BUDGET_MB, TERRAIN3D_MAX_SHADER_VARIANT_SOURCE_BUDGET_MB );
 	SET_IF_DIFF( m_nShaderVariantSourceBudgetMb, budget_mb );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "t3dsetting_t shader variant source budget: ", budget_mb, " MiB" );
 	if ( m_pTerrain == nullptr ) {
 		setEffectiveShaderVariantSourceBudgetMb( budget_mb );
@@ -3284,172 +3296,205 @@ void T3DMaterial::refreshGpuRegionChannelPolicy( void ) {
 
 void T3DMaterial::setNearTextureFiltering( const t3dtextureFiltering_t filtering ) {
 	SET_IF_DIFF( m_nearQuality.textureFiltering, filtering );
+	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_NEAR );
 }
 
 void T3DMaterial::setNearMaterialSamplingQuality( const t3dmaterialSamplingQuality_t eQuality ) {
 	SET_IF_DIFF( m_nearQuality.materialSamplingQuality, eQuality );
+	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_NEAR );
 }
 
 void T3DMaterial::setNearTerrainNormalQuality( const t3dterrainNormalQuality_t eQuality ) {
 	SET_IF_DIFF( m_nearQuality.terrainNormalQuality, eQuality );
+	m_bPersistenceDirty = true;
 	refreshGpuRegionChannelPolicy();
 	tierQualityChanged( SHADER_TIER_NEAR );
 }
 
 void T3DMaterial::setNearTerrainColorQuality( const t3dterrainColorQuality_t eQuality ) {
 	SET_IF_DIFF( m_nearQuality.terrainColorQuality, eQuality );
+	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_NEAR );
 }
 
 void T3DMaterial::setNearSurfaceResponseQuality( const t3dsurfaceResponseQuality_t eQuality ) {
 	SET_IF_DIFF( m_nearQuality.surfaceResponseQuality, eQuality );
+	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_NEAR );
 }
 
 void T3DMaterial::setNearTextureSurfaceMode( const t3dtextureSurfaceMode_t mode ) {
 	SET_IF_DIFF( m_nearQuality.textureSurfaceMode, mode );
+	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_NEAR );
 }
 
 void T3DMaterial::setNearLightingModel( const t3dtierLightingModel_t model ) {
 	SET_IF_DIFF( m_nearQuality.lightingModel, model );
+	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_NEAR );
 }
 
 void T3DMaterial::setNearDetilingQuality( const t3dtierDetilingQuality_t eQuality ) {
 	SET_IF_DIFF( m_nearQuality.detilingQuality, eQuality );
+	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_NEAR );
 }
 
 void T3DMaterial::setNearAuthoredColorContribution( const real_t fContribution ) {
 	SET_IF_DIFF( m_nearQuality.fAuthoredColorContribution, CLAMP( fContribution, 0.0f, 1.0f ) );
+	m_bPersistenceDirty = true;
 	refreshGpuRegionChannelPolicy();
 	tierQualityChanged( SHADER_TIER_NEAR, false );
 }
 
 void T3DMaterial::setNearWetnessContribution( const real_t fContribution ) {
 	SET_IF_DIFF( m_nearQuality.fWetnessContribution, CLAMP( fContribution, 0.0f, 1.0f ) );
+	m_bPersistenceDirty = true;
 	refreshGpuRegionChannelPolicy();
 	tierQualityChanged( SHADER_TIER_NEAR, false );
 }
 
 void T3DMaterial::setNearMaterialLodBias( const real_t fBias ) {
 	SET_IF_DIFF( m_nearQuality.fMaterialLodBias, CLAMP( fBias, -2.0f, 4.0f ) );
+	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_NEAR, false );
 }
 
 void T3DMaterial::setMiddleTextureFiltering( const t3dtextureFiltering_t filtering ) {
 	SET_IF_DIFF( m_middleQuality.textureFiltering, filtering );
+	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_MIDDLE );
 }
 
 void T3DMaterial::setMiddleMaterialSamplingQuality( const t3dmaterialSamplingQuality_t eQuality ) {
 	SET_IF_DIFF( m_middleQuality.materialSamplingQuality, eQuality );
+	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_MIDDLE );
 }
 
 void T3DMaterial::setMiddleTerrainNormalQuality( const t3dterrainNormalQuality_t eQuality ) {
 	SET_IF_DIFF( m_middleQuality.terrainNormalQuality, eQuality );
+	m_bPersistenceDirty = true;
 	refreshGpuRegionChannelPolicy();
 	tierQualityChanged( SHADER_TIER_MIDDLE );
 }
 
 void T3DMaterial::setMiddleTerrainColorQuality( const t3dterrainColorQuality_t eQuality ) {
 	SET_IF_DIFF( m_middleQuality.terrainColorQuality, eQuality );
+	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_MIDDLE );
 }
 
 void T3DMaterial::setMiddleSurfaceResponseQuality( const t3dsurfaceResponseQuality_t eQuality ) {
 	SET_IF_DIFF( m_middleQuality.surfaceResponseQuality, eQuality );
+	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_MIDDLE );
 }
 
 void T3DMaterial::setMiddleTextureSurfaceMode( const t3dtextureSurfaceMode_t mode ) {
 	SET_IF_DIFF( m_middleQuality.textureSurfaceMode, mode );
+	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_MIDDLE );
 }
 
 void T3DMaterial::setMiddleLightingModel( const t3dtierLightingModel_t model ) {
 	SET_IF_DIFF( m_middleQuality.lightingModel, model );
+	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_MIDDLE );
 }
 
 void T3DMaterial::setMiddleDetilingQuality( const t3dtierDetilingQuality_t eQuality ) {
 	SET_IF_DIFF( m_middleQuality.detilingQuality, eQuality );
+	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_MIDDLE );
 }
 
 void T3DMaterial::setMiddleAuthoredColorContribution( const real_t fContribution ) {
 	SET_IF_DIFF( m_middleQuality.fAuthoredColorContribution, CLAMP( fContribution, 0.0f, 1.0f ) );
+	m_bPersistenceDirty = true;
 	refreshGpuRegionChannelPolicy();
 	tierQualityChanged( SHADER_TIER_MIDDLE, false );
 }
 
 void T3DMaterial::setMiddleWetnessContribution( const real_t fContribution ) {
 	SET_IF_DIFF( m_middleQuality.fWetnessContribution, CLAMP( fContribution, 0.0f, 1.0f ) );
+	m_bPersistenceDirty = true;
 	refreshGpuRegionChannelPolicy();
 	tierQualityChanged( SHADER_TIER_MIDDLE, false );
 }
 
 void T3DMaterial::setMiddleMaterialLodBias( const real_t fBias ) {
 	SET_IF_DIFF( m_middleQuality.fMaterialLodBias, CLAMP( fBias, -2.0f, 4.0f ) );
+	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_MIDDLE, false );
 }
 
 void T3DMaterial::setFarTextureFiltering( const t3dtextureFiltering_t filtering ) {
 	SET_IF_DIFF( m_farQuality.textureFiltering, filtering );
+	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_FAR );
 }
 
 void T3DMaterial::setFarMaterialSamplingQuality( const t3dmaterialSamplingQuality_t eQuality ) {
 	SET_IF_DIFF( m_farQuality.materialSamplingQuality, eQuality );
+	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_FAR );
 }
 
 void T3DMaterial::setFarTerrainNormalQuality( const t3dterrainNormalQuality_t eQuality ) {
 	SET_IF_DIFF( m_farQuality.terrainNormalQuality, eQuality );
+	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_FAR );
 }
 
 void T3DMaterial::setFarTerrainColorQuality( const t3dterrainColorQuality_t eQuality ) {
 	SET_IF_DIFF( m_farQuality.terrainColorQuality, eQuality );
+	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_FAR );
 }
 
 void T3DMaterial::setFarSurfaceResponseQuality( const t3dsurfaceResponseQuality_t eQuality ) {
 	SET_IF_DIFF( m_farQuality.surfaceResponseQuality, eQuality );
+	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_FAR );
 }
 
 void T3DMaterial::setFarTextureSurfaceMode( const t3dtextureSurfaceMode_t mode ) {
 	SET_IF_DIFF( m_farQuality.textureSurfaceMode, mode );
+	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_FAR );
 }
 
 void T3DMaterial::setFarLightingModel( const t3dtierLightingModel_t model ) {
 	SET_IF_DIFF( m_farQuality.lightingModel, model );
+	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_FAR );
 }
 
 void T3DMaterial::setFarDetilingQuality( const t3dtierDetilingQuality_t eQuality ) {
 	SET_IF_DIFF( m_farQuality.detilingQuality, eQuality );
+	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_FAR );
 }
 
 void T3DMaterial::setFarAuthoredColorContribution( const real_t fContribution ) {
 	SET_IF_DIFF( m_farQuality.fAuthoredColorContribution, CLAMP( fContribution, 0.0f, 1.0f ) );
+	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_FAR, false );
 }
 
 void T3DMaterial::setFarWetnessContribution( const real_t fContribution ) {
 	SET_IF_DIFF( m_farQuality.fWetnessContribution, CLAMP( fContribution, 0.0f, 1.0f ) );
+	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_FAR, false );
 }
 
 void T3DMaterial::setFarMaterialLodBias( const real_t fBias ) {
 	SET_IF_DIFF( m_farQuality.fMaterialLodBias, CLAMP( fBias, -2.0f, 4.0f ) );
+	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_FAR, false );
 }
 
@@ -3578,6 +3623,7 @@ void T3DMaterial::setColorSamplingMode( const t3dcolorSamplingMode_t mode ) {
 
 void T3DMaterial::setProjectionMode( const t3dprojectionMode_t mode ) {
 	SET_IF_DIFF( m_projectionMode, mode );
+	m_bPersistenceDirty = true;
 	m_shaderPerformancePreset = SHADER_PRESET_CUSTOM;
 	updateShader();
 	emit_changed();
@@ -3585,6 +3631,7 @@ void T3DMaterial::setProjectionMode( const t3dprojectionMode_t mode ) {
 
 void T3DMaterial::setTessellationMaterialMode( const t3dtessellationMaterialMode_t mode ) {
 	SET_IF_DIFF( m_tessellationMaterialMode, mode );
+	m_bPersistenceDirty = true;
 	m_shaderPerformancePreset = SHADER_PRESET_CUSTOM;
 	updateShader();
 	emit_changed();
@@ -3616,6 +3663,7 @@ void T3DMaterial::setDetilingMode( const t3ddetilingMode_t mode ) {
 
 void T3DMaterial::setWorldNoiseShaderMode( const t3dworldNoiseShaderMode_t mode ) {
 	SET_IF_DIFF( m_worldNoiseShaderMode, mode );
+	m_bPersistenceDirty = true;
 	m_shaderPerformancePreset = SHADER_PRESET_CUSTOM;
 	LOG( T3DTerrain::INFO, "t3dsetting_t world-noise shader mode: ", mode );
 	update( FULL_REBUILD );
@@ -3926,6 +3974,7 @@ void T3DMaterial::setPackedPbrSingleFetch( const bool bEnabled ) {
 
 void T3DMaterial::setAutoShaderEnabled( const bool bEnabled ) {
 	SET_IF_DIFF( m_bAutoShaderEnabled, bEnabled );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable auto shader: ", bEnabled );
 	updateShader();
 	if ( m_pTerrain && m_pTerrain->getData() ) {
@@ -3948,6 +3997,7 @@ void T3DMaterial::setAutoShaderEnabledTransient( const bool bEnabled ) {
 
 void T3DMaterial::setDualScalingEnabled( const bool bEnabled ) {
 	SET_IF_DIFF( m_bDualScalingEnabled, bEnabled );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable dual scaling: ", bEnabled );
 	updateShader();
 	emit_changed();
@@ -3955,6 +4005,7 @@ void T3DMaterial::setDualScalingEnabled( const bool bEnabled ) {
 
 void T3DMaterial::setMacroVariationEnabled( const bool bEnabled ) {
 	SET_IF_DIFF( m_bMacroVariationEnabled, bEnabled );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable macro variation: ", bEnabled );
 	updateShader();
 	emit_changed();
@@ -3966,6 +4017,7 @@ void T3DMaterial::setProjectionEnabled( const bool bEnabled ) {
 
 void T3DMaterial::setShaderOverrideEnabled( const bool bEnabled ) {
 	SET_IF_DIFF( m_bShaderOverrideEnabled, bEnabled );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable shader override: ", bEnabled );
 	if ( m_bShaderOverrideEnabled && m_pShaderOverride.is_null() ) {
 		LOG( T3DTerrain::DEBUG, "Instantiating new _shader_override" );
@@ -3983,12 +4035,14 @@ void T3DMaterial::setShaderOverride( const Ref<Shader> &rShader ) {
 	}
 	disconnectShaderOverrideSignals();
 	m_pShaderOverride = rShader;
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "t3dsetting_t override shader" );
 	update( FULL_REBUILD );
 }
 
 void T3DMaterial::setBufferShaderOverrideEnabled( const bool bEnabled ) {
 	SET_IF_DIFF( m_bBufferShaderOverrideEnabled, bEnabled );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable shader override: ", bEnabled );
 	if ( m_bBufferShaderOverrideEnabled && m_pBufferShaderOverride.is_null() ) {
 		LOG( T3DTerrain::DEBUG, "Instantiating new _shader_override" );
@@ -4006,6 +4060,7 @@ void T3DMaterial::setBufferShaderOverride( const Ref<Shader> &rShader ) {
 	}
 	disconnectShaderOverrideSignals();
 	m_pBufferShaderOverride = rShader;
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "t3dsetting_t override shader" );
 	updateShader();
 }
@@ -4033,6 +4088,7 @@ Variant T3DMaterial::getShaderParam( const StringName &strName ) const {
 
 void T3DMaterial::setOutputAlbedoEnabled( const bool bEnabled ) {
 	SET_IF_DIFF( m_bOutputAlbedoEnabled, bEnabled );
+	m_bPersistenceDirty = true;
 	m_shaderPerformancePreset = SHADER_PRESET_CUSTOM;
 	LOG( T3DTerrain::INFO, "Enable PBR output albedo: ", bEnabled );
 	updateShader();
@@ -4041,6 +4097,7 @@ void T3DMaterial::setOutputAlbedoEnabled( const bool bEnabled ) {
 
 void T3DMaterial::setOutputRoughnessEnabled( const bool bEnabled ) {
 	SET_IF_DIFF( m_bOutputRoughnessEnabled, bEnabled );
+	m_bPersistenceDirty = true;
 	m_shaderPerformancePreset = SHADER_PRESET_CUSTOM;
 	LOG( T3DTerrain::INFO, "Enable PBR output roughness: ", bEnabled );
 	updateShader();
@@ -4049,6 +4106,7 @@ void T3DMaterial::setOutputRoughnessEnabled( const bool bEnabled ) {
 
 void T3DMaterial::setOutputSpecularEnabled( const bool bEnabled ) {
 	SET_IF_DIFF( m_bOutputSpecularEnabled, bEnabled );
+	m_bPersistenceDirty = true;
 	m_shaderPerformancePreset = SHADER_PRESET_CUSTOM;
 	LOG( T3DTerrain::INFO, "Enable PBR output specular: ", bEnabled );
 	updateShader();
@@ -4057,6 +4115,7 @@ void T3DMaterial::setOutputSpecularEnabled( const bool bEnabled ) {
 
 void T3DMaterial::setOutputNormalMapEnabled( const bool bEnabled ) {
 	SET_IF_DIFF( m_bOutputNormalMapEnabled, bEnabled );
+	m_bPersistenceDirty = true;
 	m_shaderPerformancePreset = SHADER_PRESET_CUSTOM;
 	LOG( T3DTerrain::INFO, "Enable PBR output normal map: ", bEnabled );
 	updateShader();
@@ -4065,6 +4124,7 @@ void T3DMaterial::setOutputNormalMapEnabled( const bool bEnabled ) {
 
 void T3DMaterial::setOutputAmbientOcclusionEnabled( const bool bEnabled ) {
 	SET_IF_DIFF( m_bOutputAmbientOcclusionEnabled, bEnabled );
+	m_bPersistenceDirty = true;
 	m_shaderPerformancePreset = SHADER_PRESET_CUSTOM;
 	LOG( T3DTerrain::INFO, "Enable PBR output ambient occlusion: ", bEnabled );
 	updateShader();
@@ -4073,120 +4133,140 @@ void T3DMaterial::setOutputAmbientOcclusionEnabled( const bool bEnabled ) {
 
 void T3DMaterial::setShowRegionGrid( const bool bEnabled ) {
 	SET_IF_DIFF( m_bShowRegionGrid, bEnabled );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable show_region_grid: ", bEnabled );
 	updateShader();
 }
 
 void T3DMaterial::setShowInstancerGrid( const bool bEnabled ) {
 	SET_IF_DIFF( m_bShowInstancerGrid, bEnabled );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable show_instancer_grid: ", bEnabled );
 	updateShader();
 }
 
 void T3DMaterial::setShowVertexGrid( const bool bEnabled ) {
 	SET_IF_DIFF( m_bShowVertexGrid, bEnabled );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable show_vertex_grid: ", bEnabled );
 	updateShader();
 }
 
 void T3DMaterial::setShowContours( const bool bEnabled ) {
 	SET_IF_DIFF( m_bShowContours, bEnabled );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable show_contours: ", bEnabled );
 	updateShader();
 }
 
 void T3DMaterial::setShowNavigation( const bool bEnabled ) {
 	SET_IF_DIFF( m_bShowNavigation, bEnabled );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable show_navigation: ", bEnabled );
 	updateShader();
 }
 
 void T3DMaterial::setShowCheckered( const bool bEnabled ) {
 	SET_IF_DIFF( m_bDebugViewCheckered, bEnabled );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable set_show_checkered: ", bEnabled );
 	updateShader();
 }
 
 void T3DMaterial::setShowGrey( const bool bEnabled ) {
 	SET_IF_DIFF( m_bDebugViewGrey, bEnabled );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable show_grey: ", bEnabled );
 	updateShader();
 }
 
 void T3DMaterial::setShowHeightmap( const bool bEnabled ) {
 	SET_IF_DIFF( m_bDebugViewHeightmap, bEnabled );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable show_heightmap: ", bEnabled );
 	updateShader();
 }
 
 void T3DMaterial::setShowJaggedness( const bool bEnabled ) {
 	SET_IF_DIFF( m_bDebugViewJaggedness, bEnabled );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable show_jaggedness: ", bEnabled );
 	updateShader();
 }
 
 void T3DMaterial::setShowAutoshader( const bool bEnabled ) {
 	SET_IF_DIFF( m_bDebugViewAutoshader, bEnabled );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable show_autoshader: ", bEnabled );
 	updateShader();
 }
 
 void T3DMaterial::setShowControlTexture( const bool bEnabled ) {
 	SET_IF_DIFF( m_bDebugViewControlTexture, bEnabled );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable show_control_texture: ", bEnabled );
 	updateShader();
 }
 
 void T3DMaterial::setShowControlBlend( const bool bEnabled ) {
 	SET_IF_DIFF( m_bDebugViewControlBlend, bEnabled );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable show_control_blend: ", bEnabled );
 	updateShader();
 }
 
 void T3DMaterial::setShowControlAngle( const bool bEnabled ) {
 	SET_IF_DIFF( m_bDebugViewControlAngle, bEnabled );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable show_control_angle: ", bEnabled );
 	updateShader();
 }
 
 void T3DMaterial::setShowControlScale( const bool bEnabled ) {
 	SET_IF_DIFF( m_bDebugViewControlScale, bEnabled );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable show_control_scale: ", bEnabled );
 	updateShader();
 }
 
 void T3DMaterial::setShowColormap( const bool bEnabled ) {
 	SET_IF_DIFF( m_bDebugViewColormap, bEnabled );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable show_colormap: ", bEnabled );
 	updateShader();
 }
 
 void T3DMaterial::setShowRoughmap( const bool bEnabled ) {
 	SET_IF_DIFF( m_bDebugViewRoughmap, bEnabled );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable show_roughmap: ", bEnabled );
 	updateShader();
 }
 
 void T3DMaterial::setShowTextureAlbedo( const bool bEnabled ) {
 	SET_IF_DIFF( m_bPbrViewTexAlbedo, bEnabled );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable show_texture_albedo: ", bEnabled );
 	updateShader();
 }
 
 void T3DMaterial::setShowTextureHeight( const bool bEnabled ) {
 	SET_IF_DIFF( m_bPbrViewTexHeight, bEnabled );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable show_texture_height: ", bEnabled );
 	updateShader();
 }
 
 void T3DMaterial::setShowTextureNormal( const bool bEnabled ) {
 	SET_IF_DIFF( m_bPbrViewTexNormal, bEnabled );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable show_texture_normal: ", bEnabled );
 	updateShader();
 }
 
 void T3DMaterial::setShowTextureRough( const bool bEnabled ) {
 	SET_IF_DIFF( m_bPbrViewTexRough, bEnabled );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable show_texture_rough: ", bEnabled );
 	updateShader();
 }
@@ -4198,6 +4278,7 @@ void T3DMaterial::setShowDisplacementBuffer( const bool bEnabled ) {
 
 void T3DMaterial::setShowTextureAo( const bool bEnabled ) {
 	SET_IF_DIFF( m_bPbrViewTexAo, bEnabled );
+	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable show_texture_ao: ", bEnabled );
 	updateShader();
 }
@@ -4219,17 +4300,31 @@ Error T3DMaterial::save( const String &rPath ) {
 		if ( !m_activeParams.has( name ) ) {
 			LOG( T3DTerrain::DEBUG, "'", name, "' not found in shader parameters. Removing from dictionary." );
 			m_shaderParams.erase( name );
+			m_bPersistenceDirty = true;
 		}
 	}
 
-	// Save to external resource file if specified
+	// Save external resources only when authored state actually changed. Rewriting
+	// a clean .tres/.res on every scene save changes its mtime and makes the editor
+	// rediscover Terrain3D's own write on the next filesystem reconciliation.
 	Error err = OK;
 	String path = get_path();
+	const bool explicit_path = !rPath.is_empty();
 	if ( path.get_extension() == "tres" || path.get_extension() == "res" ) {
+		if ( !explicit_path && !m_bPersistenceDirty && FileAccess::file_exists( path ) ) {
+			return OK;
+		}
 		LOG( T3DTerrain::DEBUG, "Attempting to save external file: " + path );
 		err = ResourceSaver::get_singleton()->save( this, path, ResourceSaver::FLAG_COMPRESS );
 		if ( err == OK ) {
+			m_bPersistenceDirty = false;
 			LOG( T3DTerrain::INFO, "File saved successfully: ", path );
+			if ( IS_EDITOR && path.begins_with( "res://" ) ) {
+				EditorFileSystem *const pFilesystem = EditorInterface::get_singleton()->get_resource_filesystem();
+				if ( pFilesystem && !pFilesystem->is_scanning() ) {
+					pFilesystem->update_file( path );
+				}
+			}
 		} else {
 			LOG( T3DTerrain::ERROR, "Cannot save file: ", path, ". Error code: ", T3DTerrain::ERROR,
 				". Look up @GlobalScope Error enum in the Godot docs" );
@@ -4378,6 +4473,7 @@ bool T3DMaterial::_property_get_revert( const StringName &strName, Variant &rPro
 
 bool T3DMaterial::_set( const StringName &strName, const Variant &rProperty ) {
 	IS_INIT_COND( !m_activeParams.has( strName ), Resource::_set( strName, rProperty ) );
+	m_bPersistenceDirty = true;
 	if ( rProperty.get_type() == Variant::NIL ) {
 		setRuntimeMaterialParam( strName, Variant() );
 		m_shaderParams.erase( strName );

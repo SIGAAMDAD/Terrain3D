@@ -25,6 +25,8 @@ class T3DMaterial : public Resource {
 	GDCLASS( Terrain3DMaterial, Resource );
 	CLASS_NAME();
 
+	bool m_bPersistenceDirty = false;
+
 public: // Constants
 	typedef enum t3dworldBackground_e {
 		NONE,
