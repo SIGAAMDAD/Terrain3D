@@ -1,122 +1,294 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#pragma once
+
 #ifndef TERRAIN3D_ASSETS_CLASS_H
 #define TERRAIN3D_ASSETS_CLASS_H
 
-#include "constants.h"
+#include "eastl_config.h"
+#include <EASTL/array.h>
+
+#include "Terrain3DConstants.h"
 #include "generated_texture.h"
 #include "terrain_3d_mesh_asset.h"
 #include "terrain_3d_texture_asset.h"
 
-class Terrain3D;
-class Terrain3DInstancer;
+class T3DTerrain;
+class T3DInstancer;
 
-class Terrain3DAssets : public Resource {
-	GDCLASS(Terrain3DAssets, Resource);
+class T3DAssets : public Resource {
+	using Terrain3DAssets = T3DAssets;
+	GDCLASS( Terrain3DAssets, Resource );
 	CLASS_NAME();
 
 public: // Constants
-	enum AssetType {
+	typedef enum t3dassetType_e {
 		TYPE_TEXTURE,
 		TYPE_MESH,
-	};
+	} t3dassetType_t;
 
-	static inline const int MAX_TEXTURES = 32;
-	static inline const int MAX_MESHES = 256;
+	typedef enum t3dtexturePackingMode_e {
+		TEXTURE_PACKING_LEGACY = 0,
+		TEXTURE_PACKING_PACKED_PBR_R8 = 1,
+		// Deprecated serialized alias for projects created by the intermediate
+		// RGBA16UI implementation. It resolves to the new packed-PBR/R8 path.
+		TEXTURE_PACKING_SURFACE_R16 = TEXTURE_PACKING_PACKED_PBR_R8,
+		TEXTURE_PACKING_PBR_RGBA16UI = TEXTURE_PACKING_PACKED_PBR_R8,
+	} t3dtexturePackingMode_t;
+
 
 private:
-	Terrain3D *_terrain = nullptr;
+	T3DTerrain *m_pTerrain = nullptr;
+	bool m_bSuppressTextureChanged = false;
 
-	TypedArray<Terrain3DTextureAsset> _texture_list;
-	TypedArray<Terrain3DMeshAsset> _mesh_list;
+	TypedArray<T3DTextureAsset> m_textureList;
+	TypedArray<T3DMeshAsset> m_meshList;
 
-	GeneratedTexture _generated_albedo_textures;
-	GeneratedTexture _generated_normal_textures;
-	PackedColorArray _texture_colors;
-	PackedFloat32Array _texture_normal_depths;
-	PackedFloat32Array _texture_ao_strengths;
-	PackedFloat32Array _texture_ao_light_affects;
-	PackedFloat32Array _texture_roughness_mods;
-	PackedFloat32Array _texture_uv_scales;
-	PackedVector2Array _texture_detiles;
-	PackedVector2Array _texture_displacements;
+	T3DGeneratedTexture m_generatedAlbedoTextures;
+	T3DGeneratedTexture m_generatedNormalTextures;
+	T3DGeneratedTexture m_generatedSurfaceTextures;
+	T3DGeneratedTexture m_generatedDisplacementTextures;
+	t3dtexturePackingMode_t m_texturePackingMode = TEXTURE_PACKING_LEGACY;
+	typedef struct t3dtextureSettingsBlock_s {
+		eastl::array<Color, TERRAIN3D_MAX_TEXTURE_ASSETS> colors{};
+		eastl::array<float, TERRAIN3D_MAX_TEXTURE_ASSETS> normal_depths{};
+		eastl::array<float, TERRAIN3D_MAX_TEXTURE_ASSETS> ao_strengths{};
+		eastl::array<float, TERRAIN3D_MAX_TEXTURE_ASSETS> ao_light_affects{};
+		eastl::array<float, TERRAIN3D_MAX_TEXTURE_ASSETS> roughness_mods{};
+		eastl::array<float, TERRAIN3D_MAX_TEXTURE_ASSETS> metallics{};
+		eastl::array<float, TERRAIN3D_MAX_TEXTURE_ASSETS> uv_scales{};
+		eastl::array<Vector2, TERRAIN3D_MAX_TEXTURE_ASSETS> detiles{};
+		eastl::array<Vector2, TERRAIN3D_MAX_TEXTURE_ASSETS> displacements{};
+		int nCount = 0;
+	} t3dtextureSettingsBlock_t;
+	t3dtextureSettingsBlock_t m_textureSettings;
+	PackedColorArray m_textureColors;
+	PackedFloat32Array m_textureNormalDepths;
+	PackedFloat32Array m_textureAoStrengths;
+	PackedFloat32Array m_textureAoLightAffects;
+	PackedFloat32Array m_textureRoughnessMods;
+	PackedFloat32Array m_textureMetallics;
+	PackedFloat32Array m_textureUvScales;
+	PackedVector2Array m_textureDetiles;
+	PackedVector2Array m_textureDisplacements;
+
+	typedef enum t3druntimeMaterialChannel_e {
+		RUNTIME_MATERIAL_CHANNEL_ALBEDO = 0,
+		RUNTIME_MATERIAL_CHANNEL_NORMAL = 1,
+		RUNTIME_MATERIAL_CHANNEL_SURFACE = 2,
+		RUNTIME_MATERIAL_CHANNEL_DISPLACEMENT = 3,
+		RUNTIME_MATERIAL_CHANNEL_COUNT = 4,
+	} t3druntimeMaterialChannel_t;
+	typedef struct t3druntimeMaterialImageInfo_s {
+		uint64_t nOffset = 0u;
+		uint32_t nSize = 0u;
+		uint32_t nChecksum = 0u;
+		int32_t nWidth = 0;
+		int32_t nHeight = 0;
+		int32_t nFormat = ( int32_t ) ( Image::FORMAT_MAX );
+		uint32_t bMipmaps = 0u;
+	} t3druntimeMaterialImageInfo_t;
+	typedef struct t3druntimeMaterialLayerInfo_s {
+		eastl::array<t3druntimeMaterialImageInfo_t, RUNTIME_MATERIAL_CHANNEL_COUNT> channels{};
+		Color averageAlbedo = COLOR_WHITE;
+	} t3druntimeMaterialLayerInfo_t;
+	eastl::array<t3druntimeMaterialLayerInfo_t, TERRAIN3D_MAX_TEXTURE_ASSETS> m_runtimeMaterialCookedLayers{};
+	eastl::array<int, TERRAIN3D_MAX_TEXTURE_ASSETS> m_runtimeMaterialLogicalToPhysical{};
+	eastl::array<int, TERRAIN3D_MAX_TEXTURE_ASSETS> m_runtimeMaterialPhysicalToLogical{};
+	eastl::array<uint64_t, TERRAIN3D_MAX_TEXTURE_ASSETS> m_runtimeMaterialLastUseTick{};
+	eastl::array<uint64_t, TERRAIN3D_MAX_TEXTURE_ASSETS> m_runtimeMaterialRetireAfterTick{};
+	String m_runtimeMaterialCachePath;
+	uint64_t m_nRuntimeMaterialCookedSignature = 0u;
+	uint64_t m_nRuntimeMaterialTick = 0u;
+	int m_nRuntimeMaterialPhysicalLayers = 0;
+	int m_nRuntimeMaterialResidentCount = 0;
+	int m_nRuntimeMaterialUploadsLastTick = 0;
+	int m_nRuntimeMaterialEvictionsLastTick = 0;
+	bool m_bRuntimeMaterialCacheActive = false;
+	bool m_bRuntimeMaterialCookedValid = false;
+
+	typedef struct t3dtextureArrayLayout_s {
+		Vector2i vSize = V2I_ZERO;
+		Image::Format eFormat = Image::FORMAT_MAX;
+		bool bMipmaps = true;
+		bool bNeedsNormalization = false;
+	} t3dtextureArrayLayout_t;
 
 	// Mesh Thumbnail Generation
-	RID _scenario;
-	RID _viewport;
-	RID _viewport_texture;
-	RID _camera;
-	RID _key_light;
-	RID _key_light_instance;
-	RID _fill_light;
-	RID _fill_light_instance;
-	RID _mesh_instance;
+	RID m_scenario;
+	RID m_viewport;
+	RID m_viewportTexture;
+	RID m_camera;
+	RID m_keyLight;
+	RID m_keyLightInstance;
+	RID m_fillLight;
+	RID m_fillLightInstance;
+	RID m_meshInstance;
 
-	void _swap_ids(const AssetType p_type, const int p_src_id, const int p_dst_id);
-	void _set_asset_list(const AssetType p_type, const TypedArray<Terrain3DAssetResource> &p_list);
-	void _set_asset(const AssetType p_type, const int p_id, const Ref<Terrain3DAssetResource> &p_asset);
+	void swapIds( const t3dassetType_t type, const int nSrcId, const int nDstId );
+	void connectAssetSignals( const t3dassetType_t type, const Ref<T3DAssetResource> &rAsset );
+	void disconnectAssetSignals( const t3dassetType_t type, const Ref<T3DAssetResource> &rAsset );
+	Ref<T3DAssetResource> makePlaceholderAsset( const t3dassetType_t type, const int nId ) const;
+	void setAssetList( const t3dassetType_t type, const TypedArray<T3DAssetResource> &rList );
+	void setAsset( const t3dassetType_t type, const int nId, const Ref<T3DAssetResource> &rAsset );
 
-	void _update_texture_files();
-	void _update_texture_settings();
-	void _update_mesh(const int p_id);
-	void _setup_thumbnail_creation();
+	void validateArrayMember(
+		const Ref<Texture2D> &rTexture, const Ref<T3DTextureAsset> &rAsset,
+		const String &rLabel, t3dtextureArrayLayout_t &rLayout,
+		Image::Format eRequiredFormat = Image::FORMAT_MAX, bool bAllowCompressedSurface = false
+	);
+	void updateTextureFiles( void );
+	void updateTextureSettings( void );
+	void updateMesh( const int nId );
+	void setupThumbnailCreation( void );
+	void destroyThumbnailCreation( void );
+	String getRuntimeMaterialCachePath( void ) const;
+	uint64_t computeRuntimeMaterialSourceSignature( void ) const;
+	bool loadRuntimeMaterialCookedIndex( void );
+	Ref<Image> loadRuntimeMaterialCookedImage( int nLogicalId, int nChannel ) const;
+	bool initializeRuntimeMaterialPhysicalArrays( int nLayerLimit = -1 );
+	bool publishRuntimeMaterialLayer( int nLogicalId, int nPhysicalLayer );
+	void releaseRuntimeMaterialSourceTextures( void );
+	void resetRuntimeMaterialCacheState( bool bClearGeneratedArrays );
 
 public:
-	Terrain3DAssets() {}
-	~Terrain3DAssets() { destroy(); }
-	void initialize(Terrain3D *p_terrain);
-	bool is_initialized() { return _terrain != nullptr; }
-	void uninitialize();
-	void destroy();
+	T3DAssets( void ) {}
+	~T3DAssets( void ) {
+		destroy();
+	}
+	void initialize( T3DTerrain *pTerrain );
+	bool isInitialized( void ) const {
+		return m_pTerrain != nullptr;
+	}
+	bool isInitializedFor( const T3DTerrain *pTerrain ) const {
+		return m_pTerrain == pTerrain;
+	}
+	T3DTerrain *getTerrainOwner( void ) const {
+		return m_pTerrain;
+	}
+	void uninitialize( T3DTerrain *pTerrain );
+	void destroy( void );
 
-	void set_texture_asset(const int p_id, const Ref<Terrain3DTextureAsset> &p_texture);
-	Ref<Terrain3DTextureAsset> get_texture_asset(const int p_id) const;
-	void set_texture_list(const TypedArray<Terrain3DTextureAsset> &p_texture_list);
-	TypedArray<Terrain3DTextureAsset> get_texture_list() const { return _texture_list; }
-	int get_texture_count() const { return _texture_list.size(); }
-	int get_generated_array_size() const { return _generated_albedo_textures.size(); }
-	RID get_albedo_array_rid() const { return _generated_albedo_textures.get_rid(); }
-	RID get_normal_array_rid() const { return _generated_normal_textures.get_rid(); }
-	PackedColorArray get_texture_colors() const { return _texture_colors; }
-	PackedFloat32Array get_texture_normal_depths() const { return _texture_normal_depths; }
-	PackedFloat32Array get_texture_ao_strengths() const { return _texture_ao_strengths; }
-	PackedFloat32Array get_texture_ao_light_affects() const { return _texture_ao_light_affects; }
-	PackedFloat32Array get_texture_roughness_mods() const { return _texture_roughness_mods; }
-	PackedFloat32Array get_texture_uv_scales() const { return _texture_uv_scales; }
-	PackedVector2Array get_texture_detiles() const { return _texture_detiles; }
-	PackedVector2Array get_texture_displacements() const { return _texture_displacements; }
-	void clear_textures(const bool p_update = false);
-	void update_texture_list();
+	void setTextureAsset( const int nId, const Ref<T3DTextureAsset> &rTexture );
+	Ref<T3DTextureAsset> getTextureAsset( const int nId ) const;
+	void setTextureList( const TypedArray<T3DTextureAsset> &rTextureList );
+	TypedArray<T3DTextureAsset> getTextureList( void ) const;
+	int getTextureCount( void ) const {
+		return m_textureList.size();
+	}
+	int getGeneratedArraySize( void ) const {
+		return m_generatedAlbedoTextures.size();
+	}
+	RID getAlbedoArrayRid( void ) const {
+		return m_generatedAlbedoTextures.getRid();
+	}
+	int getAlbedoArrayMaxLod( void ) const {
+		return m_generatedAlbedoTextures.maxMipmapLevel();
+	}
+	RID getNormalArrayRid( void ) const {
+		return m_generatedNormalTextures.getRid();
+	}
+	RID getSurfaceArrayRid( void ) const {
+		return m_generatedSurfaceTextures.getRid();
+	}
+	RID getDisplacementArrayRid( void ) const {
+		return m_generatedDisplacementTextures.getRid();
+	}
+	size_t getGeneratedTexturePayloadBytes( void ) const {
+		return m_generatedAlbedoTextures.payloadBytes() + m_generatedNormalTextures.payloadBytes() +
+			m_generatedSurfaceTextures.payloadBytes() + m_generatedDisplacementTextures.payloadBytes();
+	}
+	// Deprecated compatibility alias.
+	RID getPbrArrayRid( void ) const {
+		return getSurfaceArrayRid();
+	}
+	void setTexturePackingMode( const t3dtexturePackingMode_t mode );
+	t3dtexturePackingMode_t getTexturePackingMode( void ) const {
+		return m_texturePackingMode;
+	}
+	bool usesPackedPbr( void ) const {
+		return m_texturePackingMode == TEXTURE_PACKING_PACKED_PBR_R8;
+	}
+	// Deprecated compatibility name. The displacement plane is R8.
+	bool usesSurfaceR16( void ) const {
+		return usesPackedPbr();
+	}
+	int getPackedPbrMipmapCount( void ) const {
+		return 1;
+	}
+	PackedColorArray getTextureColors( void ) const {
+		return m_textureColors;
+	}
+	PackedFloat32Array getTextureNormalDepths( void ) const {
+		return m_textureNormalDepths;
+	}
+	PackedFloat32Array getTextureAoStrengths( void ) const {
+		return m_textureAoStrengths;
+	}
+	PackedFloat32Array getTextureAoLightAffects( void ) const {
+		return m_textureAoLightAffects;
+	}
+	PackedFloat32Array getTextureRoughnessMods( void ) const {
+		return m_textureRoughnessMods;
+	}
+	PackedFloat32Array getTextureMetallics( void ) const {
+		return m_textureMetallics;
+	}
+	PackedFloat32Array getTextureUvScales( void ) const {
+		return m_textureUvScales;
+	}
+	PackedVector2Array getTextureDetiles( void ) const {
+		return m_textureDetiles;
+	}
+	PackedVector2Array getTextureDisplacements( void ) const {
+		return m_textureDisplacements;
+	}
+	void clearTextures( const bool bUpdate = false );
+	void updateTextureList( void );
+	bool configureRuntimeMaterialCache( void );
+	Dictionary cookRuntimeMaterialCache( void );
+	void updateRuntimeMaterialResidency( const uint8_t *pPriorityIds, int nPriorityCount );
+	PackedInt32Array getTextureLayerMap( void ) const;
+	PackedColorArray getRuntimeMaterialAverageAlbedo( void ) const;
+	Dictionary getRuntimeMaterialCacheStats( void ) const;
+	bool isRuntimeMaterialCacheActive( void ) const { return m_bRuntimeMaterialCacheActive; }
 
-	void set_mesh_asset(const int p_id, const Ref<Terrain3DMeshAsset> &p_mesh_asset);
-	Ref<Terrain3DMeshAsset> get_mesh_asset(const int p_id) const;
-	void set_mesh_list(const TypedArray<Terrain3DMeshAsset> &p_mesh_list);
-	TypedArray<Terrain3DMeshAsset> get_mesh_list() const { return _mesh_list; }
-	int get_mesh_count() const { return _mesh_list.size(); }
-	void create_mesh_thumbnails(const int p_id = -1, const Vector2i &p_size = V2I(512), const bool p_force = false);
-	void update_mesh_list();
-	void load_pending_meshes();
+	void setMeshAsset( const int nId, const Ref<T3DMeshAsset> &rMeshAsset );
+	Ref<T3DMeshAsset> getMeshAsset( const int nId ) const;
+	void setMeshList( const TypedArray<T3DMeshAsset> &rMeshList );
+	TypedArray<T3DMeshAsset> getMeshList( void ) const;
+	int getMeshCount( void ) const {
+		return m_meshList.size();
+	}
+	void createMeshThumbnails( const int nId = -1, const Vector2i &rSize = V2I( 256 ), const bool bForce = false );
+	void updateMeshList( void );
+	void loadPendingMeshes( void );
 
-	Error save(const String &p_path = "");
+	Error save( const String &rPath = "" );
 
 protected:
-	static void _bind_methods();
+	static void _bind_methods( void );
 };
 
-VARIANT_ENUM_CAST(Terrain3DAssets::AssetType);
+VARIANT_ENUM_CAST( T3DAssets::t3dassetType_t );
+VARIANT_ENUM_CAST( T3DAssets::t3dtexturePackingMode_t );
 
-inline Ref<Terrain3DTextureAsset> Terrain3DAssets::get_texture_asset(const int p_id) const {
-	if (p_id >= 0 && p_id < _texture_list.size()) {
-		return _texture_list[p_id];
+inline Ref<T3DTextureAsset> T3DAssets::getTextureAsset( const int nId ) const {
+	if ( nId >= 0 && nId < m_textureList.size() ) {
+		const Ref<T3DTextureAsset> pAsset = m_textureList[nId];
+		return pAsset.is_valid() && !pAsset->m_bPlaceholder ? pAsset : Ref<T3DTextureAsset>();
 	}
-	return Ref<Terrain3DTextureAsset>();
+	return Ref<T3DTextureAsset>();
 }
 
-inline Ref<Terrain3DMeshAsset> Terrain3DAssets::get_mesh_asset(const int p_id) const {
-	if (p_id >= 0 && p_id < _mesh_list.size()) {
-		return _mesh_list[p_id];
+inline Ref<T3DMeshAsset> T3DAssets::getMeshAsset( const int nId ) const {
+	if ( nId >= 0 && nId < m_meshList.size() ) {
+		const Ref<T3DMeshAsset> pAsset = m_meshList[nId];
+		return pAsset.is_valid() && !pAsset->m_bPlaceholder ? pAsset : Ref<T3DMeshAsset>();
 	}
-	return Ref<Terrain3DMeshAsset>();
+	return Ref<T3DMeshAsset>();
 }
+
+using Terrain3DAssets = T3DAssets;
 
 #endif // TERRAIN3D_ASSETS_CLASS_H

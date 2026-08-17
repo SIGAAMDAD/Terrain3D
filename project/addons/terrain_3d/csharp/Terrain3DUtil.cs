@@ -175,6 +175,17 @@ public partial class Terrain3DUtil : GodotObject
 		/// </summary>
 		public new static readonly StringName PackImage = "pack_image";
 		/// <summary>
+		/// Cached name for the 'pack_pbr_rgba16ui' member.
+		/// </summary>
+		public new static readonly StringName PackPbrRgba16Ui = "pack_pbr_rgba16ui";
+		public new static readonly StringName PackSurfaceRgba8 = "pack_surface_rgba8";
+		public new static readonly StringName PackDisplacementR8 = "pack_displacement_r8";
+		public new static readonly StringName SaveDisplacementR8Dds = "save_displacement_r8_dds";
+		[Obsolete("Use PackDisplacementR8.")]
+		public new static readonly StringName PackDisplacementR16 = "pack_displacement_r16";
+		[Obsolete("Use SaveDisplacementR8Dds.")]
+		public new static readonly StringName SaveDisplacementR16Dds = "save_displacement_r16_dds";
+		/// <summary>
 		/// Cached name for the 'luminance_to_height' member.
 		/// </summary>
 		public new static readonly StringName LuminanceToHeight = "luminance_to_height";
@@ -257,6 +268,27 @@ public partial class Terrain3DUtil : GodotObject
 
 	public new static Image PackImage(Image srcRgb, Image srcA, Image srcAo, bool invertGreen = false, bool invertAlpha = false, bool normalizeAlpha = false, long alphaChannel = 0, long aoChannel = 0) => 
 		ClassDB.ClassCallStatic(NativeName, GDExtensionMethodName.PackImage, [srcRgb, srcA, srcAo, invertGreen, invertAlpha, normalizeAlpha, alphaChannel, aoChannel]).As<Image>();
+
+	[Obsolete("Use PackSurfaceRgba8 and PackDisplacementR8.")]
+	public new static Image PackPbrRgba16Ui(Image normal, Image roughness, Image displacement, Image ao = null, Image metallic = null, bool invertNormalGreen = false, long roughnessChannel = 0, long displacementChannel = 0, long aoChannel = 0, long metallicChannel = 0, bool generateMipmaps = true) =>
+		ClassDB.ClassCallStatic(NativeName, GDExtensionMethodName.PackPbrRgba16Ui, [normal, roughness, displacement, ao, metallic, invertNormalGreen, roughnessChannel, displacementChannel, aoChannel, metallicChannel, generateMipmaps]).As<Image>();
+
+	public new static Image PackSurfaceRgba8(Image normal, Image roughness, Image ao = null, bool invertNormalGreen = false, long roughnessChannel = 0, long aoChannel = 0, bool generateMipmaps = true) =>
+		ClassDB.ClassCallStatic(NativeName, GDExtensionMethodName.PackSurfaceRgba8, [normal, roughness, ao, invertNormalGreen, roughnessChannel, aoChannel, generateMipmaps]).As<Image>();
+
+	public new static Image PackDisplacementR8(Image displacement, long channel = 0, bool generateMipmaps = true) =>
+		ClassDB.ClassCallStatic(NativeName, GDExtensionMethodName.PackDisplacementR8, [displacement, channel, generateMipmaps]).As<Image>();
+
+	public new static Error SaveDisplacementR8Dds(Image displacement, string path) =>
+		ClassDB.ClassCallStatic(NativeName, GDExtensionMethodName.SaveDisplacementR8Dds, [displacement, path]).As<Error>();
+
+	[Obsolete("Use PackDisplacementR8.")]
+	public new static Image PackDisplacementR16(Image displacement, long channel = 0, bool generateMipmaps = true) =>
+		ClassDB.ClassCallStatic(NativeName, GDExtensionMethodName.PackDisplacementR16, [displacement, channel, generateMipmaps]).As<Image>();
+
+	[Obsolete("Use SaveDisplacementR8Dds.")]
+	public new static Error SaveDisplacementR16Dds(Image displacement, string path) =>
+		ClassDB.ClassCallStatic(NativeName, GDExtensionMethodName.SaveDisplacementR16Dds, [displacement, path]).As<Error>();
 
 	public new static Image LuminanceToHeight(Image srcRgb) => 
 		ClassDB.ClassCallStatic(NativeName, GDExtensionMethodName.LuminanceToHeight, [srcRgb]).As<Image>();

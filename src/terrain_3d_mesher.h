@@ -1,95 +1,266 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#pragma once
+
 #ifndef TERRAIN3D_MESHER_CLASS_H
 #define TERRAIN3D_MESHER_CLASS_H
 
-#include "constants.h"
+#include "Terrain3DConstants.h"
 
-class Terrain3D;
+#include "eastl_config.h"
+#include <EASTL/array.h>
+#include <cstdint>
 
-class Terrain3DMesher {
-	CLASS_NAME_STATIC("Terrain3DMesher");
+class T3DTerrain;
+
+
+class T3DMesher {
+	CLASS_NAME_STATIC( "T3DMesher" );
 
 public: // Constants
-	enum MeshType {
-		TILE,
-		EDGE_A,
-		EDGE_B,
-		FILL_A,
-		FILL_B,
-		STANDARD_TRIM_A,
-		STANDARD_TRIM_B,
-		STANDARD_TILE,
-		STANDARD_EDGE_A,
-		STANDARD_EDGE_B,
-	};
-
+	typedef enum t3dmeshType_e {
+		LOD0_MESH,
+		OUTER_RING_MESH,
+		MESH_TYPE_COUNT,
+	} t3dmeshType_t;
 private:
-	Terrain3D *_terrain = nullptr;
-	RID _scenario = RID();
-	Vector2 _last_target_position = V2_MAX;
+	typedef struct t3dclipmapGeometry_s {
+		PackedVector3Array vertices;
+		PackedVector2Array metadata;
+		PackedInt32Array indices;
+		AABB aabb;
+	} t3dclipmapGeometry_t;
 
-	Array _mesh_rids;
-	// LODs -> MeshTypes -> Instances
-	Array _clipmap_rids;
+	typedef struct t3dclipmapBatch_s {
+		RID mesh;
+		RID multimesh;
+		RID instance;
+		PackedFloat32Array transformBuffer;
+		Vector2 anchorPosition = V2_MAX;
+		uint8_t nCount = 0;
+		uint8_t firstLod = 0;
+		uint8_t lastLod = 0;
+		uint8_t tier = 0;
+		bool bCastsShadows = false;
+		bool bOwnsMesh = false;
+	} t3dclipmapBatch_t;
 
-	// Mesh offset data
-	// LOD0 only
-	PackedVector3Array _trim_a_pos;
-	PackedVector3Array _trim_b_pos;
-	PackedVector3Array _tile_pos_lod_0;
-	// LOD1 +
-	PackedVector3Array _fill_a_pos;
-	PackedVector3Array _fill_b_pos;
-	PackedVector3Array _tile_pos;
-	// All LOD Levels
-	real_t _offset_a = 0.f;
-	real_t _offset_b = 0.f;
-	real_t _offset_c = 0.f;
-	PackedVector3Array _edge_pos;
+	typedef struct t3dlodBatchSlot_s {
+		int8_t batch = -1;
+		int8_t instance = -1;
+	} t3dlodBatchSlot_t;
 
-	RID _material;
-	int _tessellation_level = 0;
-	int _lods = 0;
-	int _mesh_size = 0;
-	real_t _vertex_spacing = 1.f;
-	uint32_t _render_layers = 1u; // Bit 1 only
+	T3DTerrain *m_pTerrain = nullptr;
+	RID m_scenario = RID();
+	eastl::array<Vector2, TERRAIN3D_MAX_CLIPMAP_LEVELS> m_szLastLodPositions{};
+	eastl::array<int, TERRAIN3D_MAX_CLIPMAP_LEVELS> m_szLastLodTestX{};
+	eastl::array<int, TERRAIN3D_MAX_CLIPMAP_LEVELS> m_szLastLodTestZ{};
+	eastl::array<real_t, TERRAIN3D_MAX_CLIPMAP_LEVELS> m_fLodScales{};
+	eastl::array<real_t, TERRAIN3D_MAX_CLIPMAP_LEVELS> m_fLodSnapSteps{};
+	eastl::array<real_t, TERRAIN3D_MAX_CLIPMAP_LEVELS> m_fLodNextSnapSteps{};
+	Vector3 m_lastShaderTargetPosition = V3_MAX;
 
-	void _generate_mesh_types();
-	RID _generate_mesh(const Vector2i &p_size, const bool p_standard_grid = false);
-	RID _instantiate_mesh(const PackedVector3Array &p_vertices, const PackedInt32Array &p_indices, const AABB &p_aabb);
-	void _generate_clipmap();
-	void _generate_offset_data();
+	eastl::array<RID, MESH_TYPE_COUNT> m_szMeshRids{};
+	eastl::array<t3dclipmapGeometry_t, MESH_TYPE_COUNT> m_szMeshGeometry{};
+	PackedVector4Array m_lodStateBuffer;
+	eastl::array<t3dclipmapBatch_t, TERRAIN3D_MAX_RENDER_BATCHES> m_szRenderBatches{};
+	eastl::array<t3dlodBatchSlot_t, TERRAIN3D_MAX_CLIPMAP_LEVELS> m_szLodBatchSlots{};
+	eastl::array<bool, TERRAIN3D_MAX_RENDER_BATCHES> m_bBatchDirty{};
+	t3dclipmapBatch_t m_shadowStateBatch{};
+	bool m_bShadowStateBatchDirty = false;
+	bool m_bSeparateShadowStateBatch = false;
+	int m_nRenderBatchCount = 0;
+	int m_nClipmapLevelCount = 0;
+	bool m_bStateMeshBatching = false;
 
-	void _clear_clipmap();
-	void _clear_mesh_types();
+	eastl::array<Vector3, TERRAIN3D_PAIR_INSTANCES> m_szTrimAPos{};
+	eastl::array<Vector3, TERRAIN3D_PAIR_INSTANCES> m_szTrimBPos{};
+	eastl::array<Vector3, TERRAIN3D_MAX_TILE_INSTANCES> m_szTilePosLod0{};
+	eastl::array<Vector3, TERRAIN3D_PAIR_INSTANCES> m_szFillAPos{};
+	eastl::array<Vector3, TERRAIN3D_PAIR_INSTANCES> m_szFillBPos{};
+	eastl::array<Vector3, TERRAIN3D_RING_TILE_INSTANCES> m_szTilePos{};
+	real_t m_fOffsetA = 0.f;
+	real_t m_fOffsetB = 0.f;
+	real_t m_fOffsetC = 0.f;
+	eastl::array<Vector3, TERRAIN3D_PAIR_INSTANCES> m_szEdgePos{};
+
+	eastl::array<RID, 3> m_szMaterials{};
+	int m_nNearShaderLodCount = TERRAIN3D_MAX_CLIPMAP_LEVELS;
+	int m_nMiddleShaderLodCount = 0;
+	int m_nClipmapUpdateBudget = TERRAIN3D_MAX_CLIPMAP_LEVELS;
+	int m_iDeferredLodCursor = 0;
+	bool m_bForceFullSnap = true;
+	uint32_t m_nNearUpdatesLastSnap = 0u;
+	uint32_t m_nMiddleUpdatesLastSnap = 0u;
+	uint32_t m_nFarUpdatesLastSnap = 0u;
+	uint32_t m_nTeleportsLastSnap = 0u;
+	uint32_t m_nBufferUploadsLastSnap = 0u;
+	int m_tessellationLevel = 0;
+	int m_nLods = 0;
+	int m_nMeshSize = 0;
+	real_t m_fVertexSpacing = 1.f;
+	real_t m_fClipmapAabbMinY = -0.1f;
+	real_t m_fClipmapAabbSizeY = 0.2f;
+	uint32_t m_renderLayers = 1u;
+	RenderingServer::ShadowCastingSetting m_castShadows = RenderingServer::SHADOW_CASTING_SETTING_OFF;
+	GeometryInstance3D::GIMode m_giMode = GeometryInstance3D::GI_MODE_DISABLED;
+	int m_nShadowLodCount = 0;
+	eastl::array<bool, 3> m_bTierShadowEnabled{ true, true, true };
+
+	void generateMeshTypes( void );
+	t3dclipmapGeometry_t generateCombinedGeometry( bool bLod0 );
+	void appendGrid(
+		PackedVector3Array &rVertices, PackedVector2Array &rMetadata,
+		PackedInt32Array &rIndices, const Vector2i &vSize, const Vector3 &rOrigin,
+		float fPartId, bool bStandardGrid
+	);
+	RID instantiateMesh(
+		const PackedVector3Array &rVertices, const PackedVector2Array &rMetadata,
+		const PackedInt32Array &rIndices, const AABB &rAabb, bool bIncludeBasis = true
+	);
+	RID instantiateStateMesh( int nFirstLod, int nLastLod );
+	t3dclipmapBatch_t createBatch(
+		const RID &rMesh, int nCount, int nFirstLod, int nLastLod,
+		int nTier, bool bCastsShadows
+	);
+	t3dclipmapBatch_t createStateBatch( int nFirstLod, int nLastLod, int nTier, bool bCastsShadows );
+	void freeBatch( t3dclipmapBatch_t &rBatch );
+	void setBatchInstance(
+		t3dclipmapBatch_t &rBatch, int iIndex, const Transform3D &rTransform,
+		int iTestX, int iTestZ
+	);
+	void flushDirtyBatches( void );
+	void refreshStateBatch( int iBatchIndex, eastl::array<bool, 3> &bDirtyTiers );
+	void refreshShadowStateBatch( void );
+	void updateBatchCustomAabb( int iBatchIndex );
+	void configureStateMaterials( void );
+	void rebuildRenderBatches( void );
+	void updateInstanceRid(
+		const RID &rRid, const RID &rMaterial,
+		RenderingServer::ShadowCastingSetting castShadows, bool bVisible, bool bBakedLight,
+		bool bDynamicGi
+	);
+	bool snapLevel( int nLod, const Vector3 &rSnappedTarget );
+	void generateClipmap( void );
+	void generateOffsetData( void );
+	void generateLodCache( void );
+
+	void clearClipmap( void );
+	void clearMeshTypes( void );
+	int getImmediateLodCount( void ) const;
+	int getLodTier( int nLod ) const;
+	bool lodCastsShadows( int nLod ) const;
+	size_t estimateGeometryPayloadBytes( int nFirstLod, int nLastLod, bool bIncludeBasis ) const;
 
 public:
-	Terrain3DMesher() {}
-	~Terrain3DMesher() { destroy(); }
+	T3DMesher( void ) {}
+	~T3DMesher( void ) {
+		destroy();
+	}
 
-	void initialize(Terrain3D *p_terrain, const int p_mesh_size, const int p_lods, const int p_tessellation_level,
-			const real_t p_vertex_spacing, const RID &p_material, const uint32_t p_render_layers);
-	void destroy();
+	void initialize(
+		T3DTerrain *pTerrain, const int nMeshSize, const int nLods, const int nTessellationLevel,
+		const real_t fVertexSpacing, const eastl::array<RID, 3> &rMaterials,
+		const int nNearShaderLodCount, const int nMiddleShaderLodCount,
+		const int nClipmapUpdateBudget, const uint32_t nRenderLayers,
+		const RenderingServer::ShadowCastingSetting castShadows,
+		const GeometryInstance3D::GIMode giMode, const int nShadowLodCount,
+		const eastl::array<bool, 3> &bTierShadowEnabled, const bool bStateMeshBatching = false
+	);
+	void destroy( void );
 
-	void snap();
-	void reset_target_position() { _last_target_position = V2_MAX; }
-	void update();
-	void update_aabbs(const real_t p_cull_margin = -1.f, const Vector2 &p_height_range = V2_MAX);
+	void snap( void );
+	void snap( const Vector3 &rTargetPosition );
+	void resetTargetPosition( void );
+	void update( void );
+	void updateAabbs( const real_t fCullMargin = -1.f, const Vector2 &rHeightRange = V2_MAX );
 
-	void set_material(const RID &p_material) { _material = p_material; }
-	RID get_material() const { return _material; }
-	void set_lods(const int p_lods) { _lods = p_lods; }
-	int get_lods() const { return _lods; }
-	void set_tessellation_level(const int p_level) { _tessellation_level = p_level; }
-	int get_tessellation_level() const { return _tessellation_level; }
-	void set_mesh_size(const int p_size) { _mesh_size = p_size; }
-	int get_mesh_size() const { return _mesh_size; }
-	void set_vertex_spacing(const real_t p_spacing) { _vertex_spacing = p_spacing; }
-	real_t get_vertex_spacing() const { return _vertex_spacing; }
-	void set_render_layers(const uint32_t p_layers) { _render_layers = p_layers; }
-	uint32_t get_render_layers() const { return _render_layers; }
+	void setTierLayout(
+		int nNearShaderLodCount, int nMiddleShaderLodCount,
+		int nClipmapUpdateBudget, bool bForceFullSnap = true
+	);
+
+	void setMaterials( const eastl::array<RID, 3> &rMaterials ) {
+		m_szMaterials = rMaterials;
+		m_lastShaderTargetPosition = V3_MAX;
+		configureStateMaterials();
+		update();
+	}
+	RID getMaterial( void ) const {
+		return m_szMaterials[0];
+	}
+	uint32_t getNearUpdatesLastSnap( void ) const { return m_nNearUpdatesLastSnap; }
+	uint32_t getMiddleUpdatesLastSnap( void ) const { return m_nMiddleUpdatesLastSnap; }
+	uint32_t getFarUpdatesLastSnap( void ) const { return m_nFarUpdatesLastSnap; }
+	uint32_t getTeleportsLastSnap( void ) const { return m_nTeleportsLastSnap; }
+	uint32_t getBufferUploadsLastSnap( void ) const { return m_nBufferUploadsLastSnap; }
+	int getRenderBatchCount( void ) const { return m_nRenderBatchCount; }
+	int getRenderBatchCountForTier( const int nTier ) const {
+		int count = 0;
+		for ( int index = 0; index < m_nRenderBatchCount; ++index ) {
+			count += ( int ) ( m_szRenderBatches[( size_t ) ( index )].tier ) == nTier ? 1 : 0;
+		}
+		return count;
+	}
+	int getShadowBatchCountForTier( const int nTier ) const {
+		int count = 0;
+		for ( int index = 0; index < m_nRenderBatchCount; ++index ) {
+			const t3dclipmapBatch_t &batch = m_szRenderBatches[( size_t ) ( index )];
+			count += ( int ) ( batch.tier ) == nTier && batch.bCastsShadows ? 1 : 0;
+		}
+		if ( m_bSeparateShadowStateBatch && ( int ) ( m_shadowStateBatch.tier ) == nTier ) {
+			++count;
+		}
+		return count;
+	}
+	int getShadowBatchCount( void ) const { return m_bSeparateShadowStateBatch ? 1 : 0; }
+	int getBaseMeshCount( void ) const {
+		return m_bStateMeshBatching ? m_nRenderBatchCount + ( ( m_bSeparateShadowStateBatch && m_shadowStateBatch.bOwnsMesh ) ? 1 : 0 ) : MESH_TYPE_COUNT;
+	}
+	size_t getVisibleGeometryPayloadBytes( void ) const;
+	size_t getShadowGeometryPayloadBytes( void ) const;
+	size_t getStreamingBufferBytes( void ) const;
+	void setLods( const int nLods ) {
+		m_nLods = nLods;
+	}
+	int getLods( void ) const {
+		return m_nLods;
+	}
+	void setTessellationLevel( const int nLevel ) {
+		m_tessellationLevel = nLevel;
+	}
+	int getTessellationLevel( void ) const {
+		return m_tessellationLevel;
+	}
+	void setMeshSize( const int nSize ) {
+		m_nMeshSize = nSize;
+	}
+	int getMeshSize( void ) const {
+		return m_nMeshSize;
+	}
+	void setVertexSpacing( const real_t fSpacing ) {
+		m_fVertexSpacing = fSpacing;
+	}
+	real_t getVertexSpacing( void ) const {
+		return m_fVertexSpacing;
+	}
+	void setRenderLayers( const uint32_t nLayers ) {
+		if ( m_renderLayers == nLayers ) {
+			return;
+		}
+		m_renderLayers = nLayers;
+		update();
+	}
+	uint32_t getRenderLayers( void ) const {
+		return m_renderLayers;
+	}
+	void setCastShadows( RenderingServer::ShadowCastingSetting castShadows );
+	void setGiMode( const GeometryInstance3D::GIMode giMode ) {
+		m_giMode = giMode;
+		update();
+	}
+	void setShadowLodCount( int nCount );
+	void setTierShadowEnabled( const eastl::array<bool, 3> &bEnabled );
 };
-// Inline Functions
 
 #endif // TERRAIN3D_MESHER_CLASS_H

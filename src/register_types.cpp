@@ -8,27 +8,48 @@
 
 #include "register_types.h"
 #include "terrain_3d.h"
+#include "terrain_3d_diagnostics.h"
+#include "terrain_3d_autoshader_baker.h"
 #include "terrain_3d_editor.h"
+#include "terrain_3d_erosion_job.h"
+#include "terrain_3d_erosion_settings.h"
+#include "terrain_3d_landform_baker.h"
+#include "terrain_3d_lightmap_streamer.h"
+#include "terrain_3d_node_streamer.h"
+#include "terrain_3d_region_lighting.h"
+#include "terrain_3d_packed_pbr_texture.h"
 
-void initialize_terrain_3d_module(ModuleInitializationLevel p_level) {
-	if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
+void initializeTerrain3dModule( ModuleInitializationLevel level ) {
+	if ( level != MODULE_INITIALIZATION_LEVEL_SCENE ) {
 		return;
 	}
-	ClassDB::register_class<Terrain3D>();
-	ClassDB::register_class<Terrain3DAssets>();
-	ClassDB::register_class<Terrain3DData>();
-	ClassDB::register_class<Terrain3DEditor>();
-	ClassDB::register_class<Terrain3DCollision>();
-	ClassDB::register_class<Terrain3DInstancer>();
-	ClassDB::register_class<Terrain3DMaterial>();
-	ClassDB::register_class<Terrain3DMeshAsset>();
-	ClassDB::register_class<Terrain3DRegion>();
-	ClassDB::register_class<Terrain3DTextureAsset>();
-	ClassDB::register_class<Terrain3DUtil>();
+	ClassDB::register_class<T3DTerrain>();
+	ClassDB::register_class<T3DMemoryStats>();
+	ClassDB::register_class<T3DShaderTierStats>();
+	ClassDB::register_class<T3DCacheStats>();
+	ClassDB::register_class<T3DFrameStats>();
+	ClassDB::register_class<T3DAutoShaderBaker>();
+	ClassDB::register_class<T3DAssets>();
+	ClassDB::register_class<T3DErosionSettings>();
+	ClassDB::register_class<T3DData>();
+	ClassDB::register_class<T3DErosionJob>();
+	ClassDB::register_class<T3DEditor>();
+	ClassDB::register_class<T3DLandformBaker>();
+	ClassDB::register_class<T3DCollision>();
+	ClassDB::register_class<T3DInstancer>();
+	ClassDB::register_class<T3DLightmapStreamer>();
+	ClassDB::register_class<T3DNodeStreamer>();
+	ClassDB::register_class<T3DMaterial>();
+	ClassDB::register_class<T3DMeshAsset>();
+	ClassDB::register_class<T3DRegion>();
+	ClassDB::register_class<T3DRegionLighting>();
+	ClassDB::register_class<T3DPackedPBRTexture>();
+	ClassDB::register_class<T3DTextureAsset>();
+	ClassDB::register_class<T3DUtil>();
 }
 
-void uninitialize_terrain_3d_module(ModuleInitializationLevel p_level) {
-	if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
+void uninitializeTerrain3dModule( ModuleInitializationLevel level ) {
+	if ( level != MODULE_INITIALIZATION_LEVEL_SCENE ) {
 		return;
 	}
 }
@@ -36,17 +57,18 @@ void uninitialize_terrain_3d_module(ModuleInitializationLevel p_level) {
 #ifdef GDEXTENSION
 extern "C" {
 // Initialization.
-GDExtensionBool GDE_EXPORT terrain_3d_init(
-		GDExtensionInterfaceGetProcAddress p_get_proc_address,
-		GDExtensionClassLibraryPtr p_library,
-		GDExtensionInitialization *r_initialization) {
-	GDExtensionBinding::InitObject init_obj(p_get_proc_address, p_library, r_initialization);
+GDExtensionBool GDE_EXPORT terrain3dInit(
+	GDExtensionInterfaceGetProcAddress getProcAddress,
+	GDExtensionClassLibraryPtr library,
+	GDExtensionInitialization *pInitialization
+) {
+	GDExtensionBinding::InitObject initObj( getProcAddress, library, pInitialization );
 
-	init_obj.register_initializer(initialize_terrain_3d_module);
-	init_obj.register_terminator(uninitialize_terrain_3d_module);
-	init_obj.set_minimum_library_initialization_level(MODULE_INITIALIZATION_LEVEL_SERVERS);
+	initObj.register_initializer( initializeTerrain3dModule );
+	initObj.register_terminator( uninitializeTerrain3dModule );
+	initObj.set_minimum_library_initialization_level( MODULE_INITIALIZATION_LEVEL_SERVERS );
 
-	return init_obj.init();
+	return initObj.init();
 }
 }
 #endif /* GDEXTENSION */

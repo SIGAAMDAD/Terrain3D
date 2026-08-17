@@ -27,7 +27,7 @@ extends Node3D
 		amount = value
 		particle_count = value
 		last_pos = Vector3.ZERO
-		for p in particle_nodes:
+		for p: GPUParticles3D in particle_nodes:
 			p.amount = amount
 
 
@@ -43,7 +43,7 @@ extends Node3D
 ## Distance between instances
 @export_range(0.125, 2.0, 0.015625) var instance_spacing: float = 0.5:
 	set(value):
-		instance_spacing = clamp(round(value * 64.0) * 0.015625, 0.125, 2.0)
+		instance_spacing = clampf(roundf(value * 64.0) * 0.015625, 0.125, 2.0)
 		rows = maxi(int(cell_width / instance_spacing), 1)
 		amount = rows * rows
 		_set_offsets()
@@ -52,7 +52,7 @@ extends Node3D
 ## Width of an individual cell of the grid
 @export_range(8.0, 256.0, 1.0) var cell_width: float = 32.0:
 	set(value):
-		cell_width = clamp(value, 8.0, 256.0)
+		cell_width = clampf(value, 8.0, 256.0)
 		rows = maxi(int(cell_width / instance_spacing), 1)
 		amount = rows * rows
 		calculated_distance = 1.0
@@ -64,12 +64,12 @@ extends Node3D
 			aabb.size = Vector3(cell_width, height, cell_width)
 			aabb.position = aabb.size * -0.5
 			aabb.position.y = height_range[1]
-			for p in particle_nodes:
+			for p: GPUParticles3D in particle_nodes:
 				p.custom_aabb = aabb
 		_set_offsets()
 
 
-## Grid width. Must be odd. 
+## Grid width. Must be odd.
 ## Higher values cull slightly better, draw further out.
 @export_range(1, 15, 2) var grid_width: int = 9:
 	set(value):
@@ -82,7 +82,7 @@ extends Node3D
 @export_range(1, 256, 1) var process_fixed_fps: int = 30:
 	set(value):
 		process_fixed_fps = maxi(value, 1)
-		for p in particle_nodes:
+		for p: GPUParticles3D in particle_nodes:
 			p.fixed_fps = process_fixed_fps
 			p.preprocess = 1.0 / float(process_fixed_fps)
 
@@ -90,7 +90,7 @@ extends Node3D
 		GeometryInstance3D.ShadowCastingSetting.SHADOW_CASTING_SETTING_ON):
 	set(value):
 		shadow_mode = value
-		for p in particle_nodes:
+		for p: GPUParticles3D in particle_nodes:
 			p.cast_shadow = value
 
 ## Access to process material parameters
@@ -106,7 +106,7 @@ extends Node3D
 	"BaseMaterial3D,ShaderMaterial") var mesh_material_override: Material:
 	set(value):
 		mesh_material_override = value
-		for p in particle_nodes:
+		for p: GPUParticles3D in particle_nodes:
 			p.material_override = mesh_material_override
 
 #endregion
@@ -159,10 +159,10 @@ func _create_grid() -> void:
 	var half_grid: int = grid_width / 2
 	# Iterating the array like this allows identifying grid position, in case setting
 	# different mesh or materials is desired for LODs etc.
-	for x in range(-half_grid, half_grid + 1):
-		for z in range(-half_grid, half_grid + 1):
+	for x: int in range(-half_grid, half_grid + 1):
+		for z: int in range(-half_grid, half_grid + 1):
 			#var ring: int = maxi(maxi(absi(x), absi(z)), 0)
-			var particle_node = GPUParticles3D.new()
+			var particle_node := GPUParticles3D.new()
 			particle_node.lifetime = 600.0
 			particle_node.amount = amount
 			particle_node.explosiveness = 1.0
@@ -189,8 +189,8 @@ func _create_grid() -> void:
 func _set_offsets() -> void:
 	var half_grid: int = grid_width / 2
 	offsets.clear()
-	for x in range(-half_grid, half_grid + 1):
-		for z in range(-half_grid, half_grid + 1):
+	for x: int in range(-half_grid, half_grid + 1):
+		for z: int in range(-half_grid, half_grid + 1):
 			var offset := Vector3(
 				float(x * rows) * instance_spacing,
 				0.0,
@@ -207,9 +207,9 @@ func _destroy_grid() -> void:
 
 
 func _position_grid(pos: Vector3) -> void:
-	for i in particle_nodes.size():
-		var node: GPUParticles3D = particle_nodes[i]
-		var snap = Vector3(pos.x, 0, pos.z).snapped(Vector3.ONE) + offsets[i]
+	for i: int in particle_nodes.size():
+		var node := particle_nodes[i] as GPUParticles3D
+		var snap: Vector3 = Vector3(pos.x, 0, pos.z).snapped(Vector3.ONE) + offsets[i]
 		node.global_position = (snap / instance_spacing).round() * instance_spacing
 		node.reset_physics_interpolation()
 		node.restart(true) # keep the same seed.
@@ -221,8 +221,8 @@ func _update_process_parameters() -> void:
 		if terrain and process_rid.is_valid():
 			RenderingServer.material_set_param(process_rid, "_background_mode", terrain.material.world_background)
 			if terrain.material.world_background > 0:
-				RenderingServer.material_set_param(process_rid, "ground_level", terrain.material.ground_level)
-				RenderingServer.material_set_param(process_rid, "region_blend", terrain.material.region_blend)
+				RenderingServer.material_set_param(process_rid, "ground_level", terrain.material.get_shader_param("ground_level"))
+				RenderingServer.material_set_param(process_rid, "region_blend", terrain.material.get_shader_param("region_blend"))
 			RenderingServer.material_set_param(process_rid, "_vertex_spacing", terrain.vertex_spacing)
 			RenderingServer.material_set_param(process_rid, "_vertex_density", 1.0 / terrain.vertex_spacing)
 			RenderingServer.material_set_param(process_rid, "_region_size", terrain.region_size)
@@ -233,6 +233,8 @@ func _update_process_parameters() -> void:
 			RenderingServer.material_set_param(process_rid, "_height_maps", terrain.data.get_height_maps_rid())
 			RenderingServer.material_set_param(process_rid, "_control_maps", terrain.data.get_control_maps_rid())
 			RenderingServer.material_set_param(process_rid, "_color_maps", terrain.data.get_color_maps_rid())
+			RenderingServer.material_set_param(process_rid, "_control_maps_implicit", terrain.data.are_control_maps_implicit())
+			RenderingServer.material_set_param(process_rid, "_color_maps_implicit", terrain.data.are_color_maps_implicit())
 			RenderingServer.material_set_param(process_rid, "instance_spacing", instance_spacing)
 			RenderingServer.material_set_param(process_rid, "instance_rows", rows)
 			RenderingServer.material_set_param(process_rid, "max_dist", calculated_distance)

@@ -1,0 +1,149 @@
+// Authoritative Terrain3D Xbox 360 Experimental performance profile.
+//
+// This file is intentionally data-only. Native Terrain3D/Terrain3DMaterial code,
+// editor diagnostics, report tooling, documentation checks, and regressions all
+// consume these rows rather than maintaining independent value tables.
+//
+// Macro shape: T3D_PROFILE_<OWNER>_<TYPE>("property", value)
+
+// Terrain3D geometry and runtime tier layout.
+T3D_PROFILE_TERRAIN_INT( "region_size", 128 )
+T3D_PROFILE_TERRAIN_FLOAT( "vertex_spacing", 1.0 )
+T3D_PROFILE_TERRAIN_INT( "tessellation_level", 0 )
+T3D_PROFILE_TERRAIN_INT( "mesh_size", 28 )
+T3D_PROFILE_TERRAIN_INT( "mesh_lods", 7 )
+T3D_PROFILE_TERRAIN_INT( "shadow_lod_count", 2 )
+T3D_PROFILE_TERRAIN_BOOL( "near_shadow_enabled", true )
+T3D_PROFILE_TERRAIN_BOOL( "middle_shadow_enabled", true )
+T3D_PROFILE_TERRAIN_BOOL( "far_shadow_enabled", true )
+T3D_PROFILE_TERRAIN_INT( "gi_mode", 0 )
+T3D_PROFILE_TERRAIN_BOOL( "runtime_shader_tiering_enabled", true )
+T3D_PROFILE_TERRAIN_INT( "runtime_near_shader_lods", 2 )
+T3D_PROFILE_TERRAIN_INT( "runtime_middle_shader_lods", 3 )
+T3D_PROFILE_TERRAIN_INT( "runtime_clipmap_update_budget", 2 )
+T3D_PROFILE_TERRAIN_INT( "runtime_page_prepare_threads", 2 )
+T3D_PROFILE_TERRAIN_BOOL( "runtime_sync_detail_lods", true )
+
+// Unified region streaming footprint. These radii are authoritative for all
+// residency consumers; subsystem budgets only control work performed inside it.
+T3D_PROFILE_TERRAIN_INT( "streaming_active_radius", 1 )
+T3D_PROFILE_TERRAIN_INT( "streaming_hot_radius", 8 )
+T3D_PROFILE_TERRAIN_INT( "streaming_cold_radius", 12 )
+T3D_PROFILE_TERRAIN_INT( "streaming_unload_guard", 2 )
+T3D_PROFILE_TERRAIN_BOOL( "streaming_prediction_enabled", true )
+T3D_PROFILE_TERRAIN_FLOAT( "streaming_prediction_lookahead", 0.75 )
+T3D_PROFILE_TERRAIN_INT( "streaming_prediction_maximum_regions", 4 )
+
+// Terrain3D total memory budget and managed-residency policy.
+T3D_PROFILE_TERRAIN_INT( "total_memory_budget_mb", 128 )
+T3D_PROFILE_TERRAIN_INT( "memory_transient_reserve_mb", 16 )
+T3D_PROFILE_TERRAIN_BOOL( "gpu_region_cache_budget_auto", true )
+T3D_PROFILE_TERRAIN_BOOL( "cpu_region_cache_budget_auto", true )
+T3D_PROFILE_TERRAIN_BOOL( "instance_region_cache_budget_auto", true )
+T3D_PROFILE_TERRAIN_BOOL( "lightmap_residency_budget_auto", true )
+T3D_PROFILE_TERRAIN_BOOL( "shader_cache_budget_auto", true )
+
+// Terrain3D GPU terrain residency.
+T3D_PROFILE_TERRAIN_BOOL( "gpu_region_cache_enabled", true )
+T3D_PROFILE_TERRAIN_INT( "gpu_region_upload_budget_layers", 4 )
+T3D_PROFILE_TERRAIN_INT( "gpu_region_upload_budget_mb", 2 )
+T3D_PROFILE_TERRAIN_INT( "gpu_region_spare_pages", 12 )
+T3D_PROFILE_TERRAIN_INT( "gpu_region_retire_frames", 4 )
+T3D_PROFILE_TERRAIN_INT( "gpu_region_detail_lods", 2 )
+T3D_PROFILE_TERRAIN_INT( "gpu_region_hysteresis_ticks", 30 )
+T3D_PROFILE_TERRAIN_INT( "gpu_region_color_resolution_divisor", 2 )
+T3D_PROFILE_TERRAIN_INT( "gpu_region_derived_resolution_divisor", 2 )
+T3D_PROFILE_TERRAIN_INT( "gpu_middle_height_resolution_divisor", 4 )
+T3D_PROFILE_TERRAIN_INT( "editor_gpu_region_cache_pages", 96 )
+T3D_PROFILE_TERRAIN_INT( "gpu_far_quality_divisor", 4 )
+T3D_PROFILE_TERRAIN_BOOL( "gpu_region_cooked_pages_enabled", true )
+T3D_PROFILE_TERRAIN_BOOL( "gpu_region_cook_on_save", true )
+T3D_PROFILE_TERRAIN_BOOL( "runtime_material_streaming_enabled", true )
+T3D_PROFILE_TERRAIN_INT( "runtime_material_cache_layers", 12 )
+T3D_PROFILE_TERRAIN_INT( "runtime_material_upload_budget_layers", 2 )
+T3D_PROFILE_TERRAIN_BOOL( "runtime_material_release_source_textures", true )
+
+// Terrain3D CPU/static-instance residency.
+T3D_PROFILE_TERRAIN_BOOL( "cpu_region_cache_enabled", true )
+T3D_PROFILE_TERRAIN_INT( "cpu_region_load_budget_layers", 4 )
+T3D_PROFILE_TERRAIN_INT( "cpu_region_load_budget_mb", 2 )
+T3D_PROFILE_TERRAIN_BOOL( "instance_region_cache_enabled", true )
+T3D_PROFILE_TERRAIN_INT( "instance_region_load_budget_pages", 4 )
+T3D_PROFILE_TERRAIN_INT( "instance_region_load_budget_mb", 2 )
+
+// Terrain3D instancer and dynamic-node streaming.
+T3D_PROFILE_TERRAIN_INT( "instancer_cell_size", 32 )
+T3D_PROFILE_TERRAIN_BOOL( "instancer_cell_streaming_enabled", true )
+T3D_PROFILE_TERRAIN_BOOL( "instancer_single_lod_buffers", true )
+T3D_PROFILE_TERRAIN_INT( "instancer_update_cell_budget", 32 )
+T3D_PROFILE_TERRAIN_BOOL( "dynamic_node_streaming_enabled", true )
+T3D_PROFILE_TERRAIN_INT( "dynamic_node_load_region_budget", 2 )
+T3D_PROFILE_TERRAIN_INT( "dynamic_node_load_node_budget", 16 )
+T3D_PROFILE_TERRAIN_INT( "dynamic_node_unload_region_budget", 4 )
+
+// Terrain3D adaptive scheduling and boundary phasing.
+T3D_PROFILE_TERRAIN_BOOL( "runtime_adaptive_work_budgets_enabled", false )
+T3D_PROFILE_TERRAIN_FLOAT( "runtime_adaptive_target_ms", 1.0 )
+T3D_PROFILE_TERRAIN_FLOAT( "runtime_adaptive_hard_max_ms", 2.0 )
+T3D_PROFILE_TERRAIN_INT( "runtime_adaptive_adjustment_window_frames", 4 )
+T3D_PROFILE_TERRAIN_INT( "runtime_adaptive_min_gpu_pages", 1 )
+T3D_PROFILE_TERRAIN_INT( "runtime_adaptive_min_cpu_pages", 1 )
+T3D_PROFILE_TERRAIN_INT( "runtime_adaptive_min_instance_pages", 1 )
+T3D_PROFILE_TERRAIN_INT( "runtime_adaptive_min_instancer_cells", 4 )
+T3D_PROFILE_TERRAIN_INT( "runtime_adaptive_min_node_load_regions", 1 )
+T3D_PROFILE_TERRAIN_INT( "runtime_adaptive_min_node_unload_regions", 1 )
+T3D_PROFILE_TERRAIN_BOOL( "runtime_boundary_work_phasing_enabled", true )
+T3D_PROFILE_TERRAIN_INT( "runtime_boundary_node_delay_frames", 1 )
+T3D_PROFILE_TERRAIN_INT( "runtime_boundary_instancer_delay_frames", 2 )
+
+// Terrain3DMaterial global shader policy owned by the Xbox profile.
+T3D_PROFILE_MATERIAL_INT( "projection_mode", 0 )
+T3D_PROFILE_MATERIAL_INT( "tessellation_material_mode", 0 )
+T3D_PROFILE_MATERIAL_INT( "world_noise_shader_mode", 1 )
+T3D_PROFILE_MATERIAL_BOOL( "auto_shader_enabled", false )
+T3D_PROFILE_MATERIAL_BOOL( "dual_scaling_enabled", false )
+T3D_PROFILE_MATERIAL_BOOL( "macro_variation_enabled", false )
+T3D_PROFILE_MATERIAL_BOOL( "output_albedo", true )
+T3D_PROFILE_MATERIAL_BOOL( "output_roughness", true )
+T3D_PROFILE_MATERIAL_BOOL( "output_specular", false )
+T3D_PROFILE_MATERIAL_BOOL( "output_normal_map", true )
+T3D_PROFILE_MATERIAL_BOOL( "output_ambient_occlusion", true )
+
+// Near quality: canonical PATCH-02 11-row schema.
+T3D_PROFILE_MATERIAL_INT( "near_texture_filtering", 1 )
+T3D_PROFILE_MATERIAL_INT( "near_material_sampling_quality", 0 )
+T3D_PROFILE_MATERIAL_INT( "near_terrain_normal_quality", 1 )
+T3D_PROFILE_MATERIAL_INT( "near_terrain_color_quality", 0 )
+T3D_PROFILE_MATERIAL_INT( "near_surface_response_quality", 1 )
+T3D_PROFILE_MATERIAL_INT( "near_texture_surface_mode", 0 )
+T3D_PROFILE_MATERIAL_INT( "near_lighting_model", 2 )
+T3D_PROFILE_MATERIAL_INT( "near_detiling_quality", 0 )
+T3D_PROFILE_MATERIAL_FLOAT( "near_authored_color_contribution", 1.0 )
+T3D_PROFILE_MATERIAL_FLOAT( "near_wetness_contribution", 1.0 )
+T3D_PROFILE_MATERIAL_FLOAT( "near_material_lod_bias", 0.0 )
+
+// Middle quality: canonical PATCH-02 11-row schema.
+T3D_PROFILE_MATERIAL_INT( "middle_texture_filtering", 1 )
+T3D_PROFILE_MATERIAL_INT( "middle_material_sampling_quality", 0 )
+T3D_PROFILE_MATERIAL_INT( "middle_terrain_normal_quality", 1 )
+T3D_PROFILE_MATERIAL_INT( "middle_terrain_color_quality", 0 )
+T3D_PROFILE_MATERIAL_INT( "middle_surface_response_quality", 0 )
+T3D_PROFILE_MATERIAL_INT( "middle_texture_surface_mode", 0 )
+T3D_PROFILE_MATERIAL_INT( "middle_lighting_model", 2 )
+T3D_PROFILE_MATERIAL_INT( "middle_detiling_quality", 0 )
+T3D_PROFILE_MATERIAL_FLOAT( "middle_authored_color_contribution", 1.0 )
+T3D_PROFILE_MATERIAL_FLOAT( "middle_wetness_contribution", 1.0 )
+T3D_PROFILE_MATERIAL_FLOAT( "middle_material_lod_bias", 0.25 )
+
+// Far quality: canonical PATCH-02 11-row schema. Far remains atlas-authoritative.
+T3D_PROFILE_MATERIAL_INT( "far_texture_filtering", 1 )
+T3D_PROFILE_MATERIAL_INT( "far_material_sampling_quality", 1 )
+T3D_PROFILE_MATERIAL_INT( "far_terrain_normal_quality", 1 )
+T3D_PROFILE_MATERIAL_INT( "far_terrain_color_quality", 0 )
+T3D_PROFILE_MATERIAL_INT( "far_surface_response_quality", 0 )
+T3D_PROFILE_MATERIAL_INT( "far_texture_surface_mode", 0 )
+T3D_PROFILE_MATERIAL_INT( "far_lighting_model", 1 )
+T3D_PROFILE_MATERIAL_INT( "far_detiling_quality", 0 )
+T3D_PROFILE_MATERIAL_FLOAT( "far_authored_color_contribution", 1.0 )
+T3D_PROFILE_MATERIAL_FLOAT( "far_wetness_contribution", 1.0 )
+T3D_PROFILE_MATERIAL_FLOAT( "far_material_lod_bias", -0.5 )

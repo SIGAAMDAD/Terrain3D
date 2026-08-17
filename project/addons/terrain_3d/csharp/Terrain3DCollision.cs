@@ -177,6 +177,8 @@ public partial class Terrain3DCollision : GodotObject
 		/// Cached name for the 'get_rid' member.
 		/// </summary>
 		public new static readonly StringName GetRid = "get_rid";
+		/// <summary>Cached name for live collision diagnostics.</summary>
+		public new static readonly StringName GetStats = "get_stats";
 	}
 
 	public new void Build() => 
@@ -199,6 +201,9 @@ public partial class Terrain3DCollision : GodotObject
 
 	public new Rid GetRid() => 
 		Call(GDExtensionMethodName.GetRid, []).As<Rid>();
+
+	public new Godot.Collections.Dictionary GetStats() =>
+		Call(GDExtensionMethodName.GetStats, []).As<Godot.Collections.Dictionary>();
 
 }
 

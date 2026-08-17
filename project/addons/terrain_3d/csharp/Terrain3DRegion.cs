@@ -68,6 +68,32 @@ public partial class Terrain3DRegion : Resource
 		Max = 3,
 	}
 
+	[Flags]
+	public enum ChannelFlag
+	{
+		None = 0,
+		Control = 1 << 0,
+		Color = 1 << 1,
+		Derived = 1 << 2,
+	}
+
+	public enum EnvironmentLightingClass
+	{
+		Terrain = 0,
+		FoliageClutter = 1,
+		MediumObstacle = 2,
+		LargeOccluder = 3,
+		RegionalOccluder = 4,
+	}
+
+	public enum BakedLightingMode
+	{
+		Disabled = 0,
+		Lightmap = 1,
+		Probe = 2,
+		MaterialOnly = 3,
+	}
+
 	public new class GDExtensionSignalName : Resource.SignalName
 	{
 	}
@@ -102,10 +128,14 @@ public partial class Terrain3DRegion : Resource
 		/// Cached name for the 'color_map' member.
 		/// </summary>
 		public new static readonly StringName ColorMap = "color_map";
+		/// <summary>Cached name for persistent sparse-channel metadata.</summary>
+		public new static readonly StringName ChannelFlags = "channel_flags";
 		/// <summary>
 		/// Cached name for the 'instances' member.
 		/// </summary>
 		public new static readonly StringName Instances = "instances";
+		/// <summary>Cached name for the region/cluster baked-lighting package.</summary>
+		public new static readonly StringName Lighting = "lighting";
 		/// <summary>
 		/// Cached name for the 'edited' member.
 		/// </summary>
@@ -166,10 +196,23 @@ public partial class Terrain3DRegion : Resource
 		set => Set(GDExtensionPropertyName.ColorMap, value);
 	}
 
+	/// <summary>Persistent presence flags retained when paged map images are evicted.</summary>
+	public new Terrain3DRegion.ChannelFlag ChannelFlags
+	{
+		get => Get(GDExtensionPropertyName.ChannelFlags).As<Terrain3DRegion.ChannelFlag>();
+		set => Set(GDExtensionPropertyName.ChannelFlags, Variant.From(value));
+	}
+
 	public new Godot.Collections.Dictionary Instances
 	{
 		get => Get(GDExtensionPropertyName.Instances).As<Godot.Collections.Dictionary>();
 		set => Set(GDExtensionPropertyName.Instances, value);
+	}
+
+	public new Resource Lighting
+	{
+		get => Get(GDExtensionPropertyName.Lighting).As<Resource>();
+		set => Set(GDExtensionPropertyName.Lighting, value);
 	}
 
 	public new bool Edited

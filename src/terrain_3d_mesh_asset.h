@@ -1,7 +1,12 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#pragma once
+
 #ifndef TERRAIN3D_MESH_ASSET_CLASS_H
 #define TERRAIN3D_MESH_ASSET_CLASS_H
+
+#include "eastl_config.h"
+#include <EASTL/array.h>
 
 #include <godot_cpp/classes/array_mesh.hpp>
 #include <godot_cpp/classes/material.hpp>
@@ -10,13 +15,10 @@
 #include <godot_cpp/classes/resource.hpp>
 #include <godot_cpp/classes/texture2d.hpp>
 
-#include "constants.h"
+#include "Terrain3DConstants.h"
 #include "terrain_3d_asset_resource.h"
 
 using ShadowCasting = RenderingServer::ShadowCastingSetting;
-constexpr ShadowCasting SHADOWS_ON = RenderingServer::SHADOW_CASTING_SETTING_ON;
-constexpr ShadowCasting SHADOWS_OFF = RenderingServer::SHADOW_CASTING_SETTING_OFF;
-constexpr ShadowCasting SHADOWS_ONLY = RenderingServer::SHADOW_CASTING_SETTING_SHADOWS_ONLY;
 
 /* This class requires a bit of special care because:
  * - We want custom defaults depending on if it's a texture card or a scene file
@@ -36,151 +38,244 @@ constexpr ShadowCasting SHADOWS_ONLY = RenderingServer::SHADOW_CASTING_SETTING_S
  * when the mesh list is empty.
  */
 
-class Terrain3DMeshAsset : public Terrain3DAssetResource {
-	GDCLASS(Terrain3DMeshAsset, Terrain3DAssetResource);
+
+class T3DMeshAsset : public T3DAssetResource {
+	using Terrain3DMeshAsset = T3DMeshAsset;
+	GDCLASS( Terrain3DMeshAsset, T3DAssetResource );
 	CLASS_NAME();
 
 public:
-	enum GenType {
+	typedef enum t3dgenType_e {
 		TYPE_NONE,
 		TYPE_TEXTURE_CARD,
 		TYPE_MAX,
-	};
-
-	static constexpr int MAX_LOD_COUNT = 10;
-	static constexpr int SHADOW_LOD_ID = -1; // ID used for the shadow lod in instancer
-
+	} t3dgenType_t;
 private:
 	// Saved data
-	bool _enabled = true;
-	Ref<PackedScene> _packed_scene;
-	GenType _generated_type = TYPE_NONE;
-	int _generated_faces = 2;
-	Vector2 _generated_size = V2(1.f);
-	real_t _height_offset = 0.f;
-	real_t _density = 0.f;
-	ShadowCasting _cast_shadows = SHADOWS_ON;
-	uint32_t _visibility_layers = 1;
-	Ref<Material> _material_override;
-	Ref<Material> _material_overlay;
-	int _last_lod = MAX_LOD_COUNT - 1;
-	int _last_shadow_lod = MAX_LOD_COUNT - 1;
-	int _shadow_impostor = 0;
-	PackedFloat32Array _lod_ranges;
-	real_t _fade_margin = 0.f;
+	bool m_bEnabled = true;
+	Ref<PackedScene> m_pPackedScene;
+	t3dgenType_t m_generatedType = TYPE_NONE;
+	int m_nGeneratedFaces = 2;
+	Vector2 m_generatedSize = V2( 1.f );
+	real_t m_fHeightOffset = 0.f;
+	real_t m_fDensity = 0.f;
+	ShadowCasting m_castShadows = TERRAIN3D_SHADOW_CASTING_ON;
+	uint32_t m_visibilityLayers = 1;
+	Ref<Material> m_pMaterialOverride;
+	Ref<Material> m_pMaterialOverlay;
+	int m_iLastLod = TERRAIN3D_MESH_MAX_LOD_COUNT - 1;
+	int m_iLastShadowLod = TERRAIN3D_MESH_MAX_LOD_COUNT - 1;
+	int m_shadowImpostor = 0;
+	eastl::array<float, TERRAIN3D_MESH_MAX_LOD_COUNT> m_fLodRanges{};
+	real_t m_fFadeMargin = 0.f;
 
 	// Working data
-	Ref<Material> _highlight_mat;
-	TypedArray<Mesh> _meshes;
-	TypedArray<Mesh> _pending_meshes; // Queue to avoid warnings from RS on mesh swap
-	uint32_t _instance_count = 0;
+	Ref<Material> m_pHighlightMat;
+	TypedArray<Mesh> m_meshes;
+	TypedArray<Mesh> m_pendingMeshes; // Queue to avoid warnings from RS on mesh swap
+	uint32_t m_nInstanceCount = 0;
 
-	void _clear_lod_ranges();
-	static bool _sort_lod_nodes(const Node *a, const Node *b);
-	Ref<ArrayMesh> _create_generated_mesh(const GenType p_type = TYPE_TEXTURE_CARD) const;
-	void _assign_generated_mesh();
-	Ref<Material> _get_material();
-	TypedArray<Mesh> _get_meshes() const;
+	void clearLodRanges( void );
+	static bool sortLodNodes( const Node *pA, const Node *pB );
+	Ref<ArrayMesh> createGeneratedMesh( const t3dgenType_t type = TYPE_TEXTURE_CARD ) const;
+	void assignGeneratedMesh( void );
+	void invalidateThumbnail( void ) {
+		m_pThumbnail.unref();
+	}
+	Ref<Material> getMaterial( void );
+	TypedArray<Mesh> getMeshes( void ) const;
 
 public:
-	Terrain3DMeshAsset() { clear(); }
-	~Terrain3DMeshAsset() {}
-	void initialize() override;
-	void clear() override;
+	T3DMeshAsset( void ) {
+		clear();
+	}
+	~T3DMeshAsset( void ) {}
+	void initialize( void ) override;
+	void clear( void ) override;
 
-	void set_name(const String &p_name) override;
-	String get_name() const override { return _name; }
-	void set_id(const int p_new_id) override;
-	int get_id() const override { return _id; }
-	void set_highlighted(const bool p_highlighted) override;
-	bool is_highlighted() const override { return _highlighted; }
-	Ref<Material> get_highlight_material() const { return _highlighted ? _highlight_mat : Ref<Material>(); }
-	Color get_highlight_color() const override;
-	Ref<Texture2D> get_thumbnail() const override { return _thumbnail; }
+	void setName( const String &rName ) override;
+	String getName( void ) const override {
+		return m_name;
+	}
+	void setId( const int nNewId ) override;
+	int getId( void ) const override {
+		return m_nId;
+	}
+	void setHighlighted( const bool bHighlighted ) override;
+	bool isHighlighted( void ) const override {
+		return m_bHighlighted;
+	}
+	Ref<Material> getHighlightMaterial( void ) const {
+		return m_bHighlighted ? m_pHighlightMat : Ref<Material>();
+	}
+	Color getHighlightColor( void ) const override;
+	Ref<Texture2D> getThumbnail( void ) const override {
+		return m_pThumbnail;
+	}
 
-	void set_enabled(const bool p_enabled);
-	bool is_enabled() const { return _enabled; }
+	void setEnabled( const bool bEnabled );
+	bool isEnabled( void ) const {
+		return m_bEnabled;
+	}
 
-	void update_instance_count(const int p_amount);
-	void set_instance_count(const uint32_t p_amount);
-	uint32_t get_instance_count() const { return _instance_count; }
+	void updateInstanceCount( const int64_t nAmount );
+	void setInstanceCount( const uint32_t nAmount );
+	uint32_t getInstanceCount( void ) const {
+		return m_nInstanceCount;
+	}
 
-	void set_scene_file(const Ref<PackedScene> &p_scene_file);
-	Ref<PackedScene> get_scene_file() const { return _packed_scene; }
-	bool is_scene_file_pending() const { return _pending_meshes.size() > 0; }
-	void commit_meshes();
-	void set_generated_type(const GenType p_type);
-	GenType get_generated_type() const { return _generated_type; }
-	Ref<Mesh> get_mesh(const int p_lod = 0) const;
-	void set_thumbnail(Ref<Texture2D> p_tex) { _thumbnail = p_tex; }
-	void set_height_offset(const real_t p_offset);
-	real_t get_height_offset() const { return _height_offset; }
-	void set_density(const real_t p_density);
-	real_t get_density() const { return _density; }
-	void set_cast_shadows(const ShadowCasting p_cast_shadows);
-	ShadowCasting get_cast_shadows() const { return _cast_shadows; }
-	ShadowCasting get_lod_cast_shadows(const int p_lod_id) const;
-	void set_visibility_layers(const uint32_t p_layers);
-	uint32_t get_visibility_layers() const { return _visibility_layers; }
-	void set_material_override(const Ref<Material> &p_material);
-	Ref<Material> get_material_override() const { return _material_override; }
-	void set_material_overlay(const Ref<Material> &p_material);
-	Ref<Material> get_material_overlay() const { return _material_overlay; }
+	void setSceneFile( const Ref<PackedScene> &rSceneFile );
+	Ref<PackedScene> getSceneFile( void ) const {
+		return m_pPackedScene;
+	}
+	bool isSceneFilePending( void ) const {
+		return m_pendingMeshes.size() > 0;
+	}
+	void commitMeshes( void );
+	void setGeneratedType( const t3dgenType_t type );
+	t3dgenType_t getGeneratedType( void ) const {
+		return m_generatedType;
+	}
+	Ref<Mesh> getMesh( const int nLod = 0 ) const;
+	void setThumbnail( const Ref<Texture2D> tex ) {
+		m_pThumbnail = tex;
+	}
+	void setHeightOffset( const real_t fOffset );
+	real_t getHeightOffset( void ) const {
+		return m_fHeightOffset;
+	}
+	void setDensity( const real_t fDensity );
+	real_t getDensity( void ) const {
+		return m_fDensity;
+	}
+	void setCastShadows( const ShadowCasting castShadows );
+	ShadowCasting getCastShadows( void ) const {
+		return m_castShadows;
+	}
+	ShadowCasting getLodCastShadows( const int nLodId ) const;
+	void setVisibilityLayers( const uint32_t nLayers );
+	uint32_t getVisibilityLayers( void ) const {
+		return m_visibilityLayers;
+	}
+	void setMaterialOverride( const Ref<Material> &rMaterial );
+	Ref<Material> getMaterialOverride( void ) const {
+		return m_pMaterialOverride;
+	}
+	void setMaterialOverlay( const Ref<Material> &rMaterial );
+	Ref<Material> getMaterialOverlay( void ) const {
+		return m_pMaterialOverlay;
+	}
 
-	void set_generated_faces(const int p_count);
-	int get_generated_faces() const { return _generated_faces; }
-	void set_generated_size(const Vector2 &p_size);
-	Vector2 get_generated_size() const { return _generated_size; }
+	void setGeneratedFaces( const int nCount );
+	int getGeneratedFaces( void ) const {
+		return m_nGeneratedFaces;
+	}
+	void setGeneratedSize( const Vector2 &rSize );
+	Vector2 getGeneratedSize( void ) const {
+		return m_generatedSize;
+	}
 
-	int get_lod_count() const { return _get_meshes().size(); }
-	void set_last_lod(const int p_lod);
-	int get_last_lod() const { return _last_lod; }
-	void set_last_shadow_lod(const int p_lod);
-	int get_last_shadow_lod() const { return _last_shadow_lod; }
-	void set_shadow_impostor(const int p_lod);
-	int get_shadow_impostor() const { return _shadow_impostor; }
+	int getLodCount( void ) const {
+		return getMeshes().size();
+	}
+	void setLastLod( const int nLod );
+	int getLastLod( void ) const {
+		return m_iLastLod;
+	}
+	void setLastShadowLod( const int nLod );
+	int getLastShadowLod( void ) const {
+		return m_iLastShadowLod;
+	}
+	void setShadowImpostor( const int nLod );
+	int getShadowImpostor( void ) const {
+		return m_shadowImpostor;
+	}
 
-	void set_lod_range(const int p_lod, const real_t p_distance);
-	real_t get_lod_range(const int p_lod) const;
-	real_t get_lod_range_begin(const int p_lod) const;
-	real_t get_lod_range_end(const int p_lod) const;
-	void set_lod0_range(const real_t p_distance) { set_lod_range(0, p_distance); }
-	real_t get_lod0_range() const { return _lod_ranges[0]; }
-	void set_lod1_range(const real_t p_distance) { set_lod_range(1, p_distance); }
-	real_t get_lod1_range() const { return _lod_ranges[1]; }
-	void set_lod2_range(const real_t p_distance) { set_lod_range(2, p_distance); }
-	real_t get_lod2_range() const { return _lod_ranges[2]; }
-	void set_lod3_range(const real_t p_distance) { set_lod_range(3, p_distance); }
-	real_t get_lod3_range() const { return _lod_ranges[3]; }
-	void set_lod4_range(const real_t p_distance) { set_lod_range(4, p_distance); }
-	real_t get_lod4_range() const { return _lod_ranges[4]; }
-	void set_lod5_range(const real_t p_distance) { set_lod_range(5, p_distance); }
-	real_t get_lod5_range() const { return _lod_ranges[5]; }
-	void set_lod6_range(const real_t p_distance) { set_lod_range(6, p_distance); }
-	real_t get_lod6_range() const { return _lod_ranges[6]; }
-	void set_lod7_range(const real_t p_distance) { set_lod_range(7, p_distance); }
-	real_t get_lod7_range() const { return _lod_ranges[7]; }
-	void set_lod8_range(const real_t p_distance) { set_lod_range(8, p_distance); }
-	real_t get_lod8_range() const { return _lod_ranges[8]; }
-	void set_lod9_range(const real_t p_distance) { set_lod_range(9, p_distance); }
-	real_t get_lod9_range() const { return _lod_ranges[9]; }
-	void set_fade_margin(const real_t p_fade_margin);
-	real_t get_fade_margin() const { return _fade_margin; }
+	void setLodRange( const int nLod, const real_t fDistance );
+	real_t getLodRange( const int nLod ) const;
+	real_t getLodRangeBegin( const int nLod ) const;
+	real_t getLodRangeEnd( const int nLod ) const;
+	void setLod0Range( const real_t fDistance ) {
+		setLodRange( 0, fDistance );
+	}
+	real_t getLod0Range( void ) const {
+		return m_fLodRanges[0];
+	}
+	void setLod1Range( const real_t fDistance ) {
+		setLodRange( 1, fDistance );
+	}
+	real_t getLod1Range( void ) const {
+		return m_fLodRanges[1];
+	}
+	void setLod2Range( const real_t fDistance ) {
+		setLodRange( 2, fDistance );
+	}
+	real_t getLod2Range( void ) const {
+		return m_fLodRanges[2];
+	}
+	void setLod3Range( const real_t fDistance ) {
+		setLodRange( 3, fDistance );
+	}
+	real_t getLod3Range( void ) const {
+		return m_fLodRanges[3];
+	}
+	void setLod4Range( const real_t fDistance ) {
+		setLodRange( 4, fDistance );
+	}
+	real_t getLod4Range( void ) const {
+		return m_fLodRanges[4];
+	}
+	void setLod5Range( const real_t fDistance ) {
+		setLodRange( 5, fDistance );
+	}
+	real_t getLod5Range( void ) const {
+		return m_fLodRanges[5];
+	}
+	void setLod6Range( const real_t fDistance ) {
+		setLodRange( 6, fDistance );
+	}
+	real_t getLod6Range( void ) const {
+		return m_fLodRanges[6];
+	}
+	void setLod7Range( const real_t fDistance ) {
+		setLodRange( 7, fDistance );
+	}
+	real_t getLod7Range( void ) const {
+		return m_fLodRanges[7];
+	}
+	void setLod8Range( const real_t fDistance ) {
+		setLodRange( 8, fDistance );
+	}
+	real_t getLod8Range( void ) const {
+		return m_fLodRanges[8];
+	}
+	void setLod9Range( const real_t fDistance ) {
+		setLodRange( 9, fDistance );
+	}
+	real_t getLod9Range( void ) const {
+		return m_fLodRanges[9];
+	}
+	void setFadeMargin( const real_t fFadeMargin );
+	real_t getFadeMargin( void ) const {
+		return m_fFadeMargin;
+	}
 
 protected:
-	void _validate_property(PropertyInfo &p_property) const;
-	bool _property_can_revert(const StringName &p_name) const;
-	bool _property_get_revert(const StringName &p_name, Variant &r_property) const;
-	static void _bind_methods();
+	void _validate_property( PropertyInfo &rProperty ) const;
+	bool _property_can_revert( const StringName &rName ) const;
+	bool _property_get_revert( const StringName &rName, Variant &rProperty ) const;
+	static void _bind_methods( void );
 };
 
-VARIANT_ENUM_CAST(Terrain3DMeshAsset::GenType);
+VARIANT_ENUM_CAST( T3DMeshAsset::t3dgenType_t );
 
-inline TypedArray<Mesh> Terrain3DMeshAsset::_get_meshes() const {
-	if (!_pending_meshes.is_empty()) {
-		return _pending_meshes;
+inline TypedArray<Mesh> T3DMeshAsset::getMeshes( void ) const {
+	if ( !m_pendingMeshes.is_empty() ) {
+		return m_pendingMeshes;
 	}
-	return _meshes;
+	return m_meshes;
 }
+
+using Terrain3DMeshAsset = T3DMeshAsset;
 
 #endif // TERRAIN3D_MESH_ASSET_CLASS_H

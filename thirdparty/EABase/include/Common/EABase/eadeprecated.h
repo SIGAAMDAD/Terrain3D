@@ -1,0 +1,9 @@
+#ifndef EABASE_EADEPRECATED_H
+#define EABASE_EADEPRECATED_H
+#ifndef EA_DEPRECATED
+#define EA_DEPRECATED
+#endif
+#ifndef EA_DEPRECATED_MESSAGE
+#define EA_DEPRECATED_MESSAGE(msg)
+#endif
+#endif

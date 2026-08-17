@@ -28,7 +28,7 @@ void fragment() {
 	highp float r = (floor(scaledDepth * 127.0) + 128.0) / 255.0;
 	highp float g = (floor(fract(scaledDepth * 127.0) * 127.0) + 128.0) / 255.0;
 	highp float b = (floor(fract(scaledDepth * 127.0 * 127.0) * 127.0) + 128.0) / 255.0;
-		
+
 	ALBEDO = vec3(r, g, b); // Return encoded value, required for Mobile & Compatibility renderers
 
 }

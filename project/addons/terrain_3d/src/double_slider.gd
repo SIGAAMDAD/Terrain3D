@@ -5,14 +5,14 @@
 class_name DoubleSlider
 extends Control
 
-signal value_changed(Vector2)
+signal value_changed(value: Vector2)
 var label: Label
 var suffix: String
 var grabbed_handle: int = 0 # -1 left, 0 none, 1 right
 var min_value: float = 0.0
 var max_value: float = 100.0
 var step: float = 1.0
-var range := Vector2(0, 100) 
+var range := Vector2(0, 100)
 var display_scale: float = 1.
 var position_x: float = 0.
 var minimum_x: float = 60.
@@ -43,8 +43,8 @@ func set_min(p_value: float) -> void:
 
 func get_min() -> float:
 	return min_value
-	
-	
+
+
 func set_max(p_value: float) -> void:
 	max_value = p_value
 	if range.y == 0 or range.y >= max_value:
@@ -55,19 +55,19 @@ func set_max(p_value: float) -> void:
 
 func get_max() -> float:
 	return max_value
-	
-	
+
+
 func set_step(p_step: float) -> void:
 	step = p_step
-	
+
 
 func get_step() -> float:
 	return step
-	
+
 
 func set_value(p_range: Vector2) -> void:
-	range.x = clamp(p_range.x, min_value, max_value)
-	range.y = clamp(p_range.y, min_value, max_value)
+	range.x = clampf(p_range.x, min_value, max_value)
+	range.y = clampf(p_range.y, min_value, max_value)
 	if range.y < range.x:
 		var tmp: float = range.x
 		range.x = range.y
@@ -97,35 +97,33 @@ func _get_handle() -> int:
 
 
 func _gui_input(p_event: InputEvent) -> void:
-	if p_event is InputEventMouseButton:
-		var button: int = p_event.get_button_index()
-		if button in [ MOUSE_BUTTON_LEFT, MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN ]:
-			if p_event.is_pressed():
-				var mid_point = (range.x + range.y) / 2.0
-				var xpos: float = p_event.get_position().x * 2.0
-				if xpos >= mid_point:
-					grabbed_handle = 1
-				else:
-					grabbed_handle = -1
+	var mouse_button: InputEventMouseButton = p_event as InputEventMouseButton
+	if mouse_button:
+		var button: int = mouse_button.button_index
+		if button in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+			if mouse_button.pressed:
+				var mid_point: float = (range.x + range.y) / 2.0
+				var xpos: float = mouse_button.position.x * 2.0
+				grabbed_handle = 1 if xpos >= mid_point else -1
 				match button:
 					MOUSE_BUTTON_LEFT:
-						set_slider(p_event.get_position().x)
+						set_slider(mouse_button.position.x)
 					MOUSE_BUTTON_WHEEL_DOWN:
-						set_slider(-1., true)
+						set_slider(-1.0, true)
 					MOUSE_BUTTON_WHEEL_UP:
-						set_slider(1., true)
+						set_slider(1.0, true)
 			else:
 				grabbed_handle = 0
-			
-	if p_event is InputEventMouseMotion:
-		if grabbed_handle != 0:
-			set_slider(p_event.get_position().x)
-	
-	
+
+	var mouse_motion: InputEventMouseMotion = p_event as InputEventMouseMotion
+	if mouse_motion and grabbed_handle != 0:
+		set_slider(mouse_motion.position.x)
+
+
 func set_slider(p_xpos: float, p_relative: bool = false) -> void:
 	if grabbed_handle == 0:
 		return
-	var xpos_step: float = clamp(snappedf((p_xpos / size.x) * max_value, step), min_value, max_value)
+	var xpos_step: float = clampf(snappedf((p_xpos / size.x) * max_value, step), min_value, max_value)
 	if(grabbed_handle < 0):
 		if p_relative:
 			range.x += p_xpos
@@ -135,7 +133,7 @@ func set_slider(p_xpos: float, p_relative: bool = false) -> void:
 		if p_relative:
 			range.y += p_xpos
 		else:
-			range.y = xpos_step	
+			range.y = xpos_step
 	set_value(range)
 
 
@@ -146,19 +144,19 @@ func _notification(p_what: int) -> void:
 		var bg_height: float = bg.get_minimum_size().y
 		var mid_y: float = (size.y - bg_height) / 2.0
 		draw_style_box(bg, Rect2(Vector2(0, mid_y), Vector2(size.x, bg_height)))
-		
+
 		# Draw foreground bar
 		var handle: Texture2D = get_theme_icon("grabber", "HSlider")
 		var area: StyleBox = get_theme_stylebox("grabber_area", "HSlider")
 		var startx: float = (range.x / max_value) * size.x
 		var endx: float = (range.y / max_value) * size.x
 		draw_style_box(area, Rect2(Vector2(startx, mid_y), Vector2(endx - startx, bg_height)))
-		
+
 		# Draw handles, slightly in so they don't get on the outside edges
 		var handle_pos: Vector2
-		handle_pos.x = clamp(startx - handle.get_size().x/2, -10, size.x)
-		handle_pos.y = clamp(endx - handle.get_size().x/2, 0, size.x - 10)
+		handle_pos.x = clampf(startx - handle.get_size().x/2, -10.0, size.x)
+		handle_pos.y = clampf(endx - handle.get_size().x/2, 0.0, size.x - 10.0)
 		draw_texture(handle, Vector2(handle_pos.x, -mid_y - 10 * (display_scale - 1.)))
 		draw_texture(handle, Vector2(handle_pos.y, -mid_y - 10 * (display_scale - 1.)))
-		
+
 		update_label()

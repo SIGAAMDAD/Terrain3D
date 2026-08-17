@@ -1,5 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#pragma once
+
 #ifndef TERRAIN3D_REGISTER_TYPES_H
 #define TERRAIN3D_REGISTER_TYPES_H
 
@@ -11,7 +13,7 @@ using namespace godot;
 #endif
 
 // NOTE: These have module ending for custom module build compatibility.
-void initialize_terrain_3d_module(ModuleInitializationLevel p_level);
-void uninitialize_terrain_3d_module(ModuleInitializationLevel p_level);
+void initializeTerrain3dModule( ModuleInitializationLevel level );
+void uninitializeTerrain3dModule( ModuleInitializationLevel level );
 
 #endif // TERRAIN3D_REGISTER_TYPES_H

@@ -1,46 +1,52 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#pragma once
+
 #ifndef TARGET_NODE3D_CLASS_H
 #define TARGET_NODE3D_CLASS_H
 
 #include <godot_cpp/classes/node3d.hpp>
 
-#include "constants.h"
+#include "Terrain3DConstants.h"
 
-class TargetNode3D {
-	CLASS_NAME_STATIC("Terrain3DTargetNode3D");
+class T3DTargetNode3D {
+	CLASS_NAME_STATIC( "Terrain3DTargetNode3D" );
 
 private:
-	uint64_t _instance_id = 0;
+	uint64_t m_instanceId = 0;
 
 public:
-	void clear() { _instance_id = 0; }
+	void clear( void ) {
+		m_instanceId = 0;
+	}
 
-	void set_target(Node3D *p_node) {
-		if (p_node && !p_node->is_queued_for_deletion()) {
-			_instance_id = p_node->get_instance_id();
+	void setTarget( Node3D *const pNode ) {
+		if ( pNode && !pNode->is_queued_for_deletion() ) {
+			m_instanceId = pNode->get_instance_id();
 		} else {
 			clear();
 		}
 	}
 
-	Node3D *get_target() const {
-		if (_instance_id == 0) {
+	Node3D *getTarget( void ) const {
+		if ( m_instanceId == 0 ) {
 			return nullptr;
 		}
-		Object *obj = ObjectDB::get_instance(_instance_id);
-		return obj ? Object::cast_to<Node3D>(obj) : nullptr;
+		Object *obj = ObjectDB::get_instance( m_instanceId );
+		return obj ? Object::cast_to<Node3D>( obj ) : nullptr;
 	}
 
-	Node3D *ptr() const { return get_target(); }
+	Node3D *ptr( void ) const {
+		return getTarget();
+	}
 
-	bool is_valid() const {
-		Node3D *node = get_target();
+	bool isValid( void ) const {
+		Node3D *node = getTarget();
 		return node && node->is_inside_tree() && !node->is_queued_for_deletion();
 	}
 
-	bool is_null() const {
-		return !is_valid();
+	bool isNull( void ) const {
+		return !isValid();
 	}
 };
 

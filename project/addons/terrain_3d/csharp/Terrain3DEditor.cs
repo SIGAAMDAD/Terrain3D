@@ -160,6 +160,7 @@ public partial class Terrain3DEditor : GodotObject
 	public new void SetBrushData(Godot.Collections.Dictionary data) => 
 		Call(GDExtensionMethodName.SetBrushData, [data]);
 
+
 	public new void SetTool(Terrain3DEditor.Tool tool) => 
 		Call(GDExtensionMethodName.SetTool, [Variant.From(tool)]);
 

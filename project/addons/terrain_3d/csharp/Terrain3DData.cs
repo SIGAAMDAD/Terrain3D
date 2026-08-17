@@ -386,6 +386,12 @@ public partial class Terrain3DData : GodotObject
 		/// </summary>
 		public new static readonly StringName SaveRegion = "save_region";
 		/// <summary>
+		/// Cached name for the 'cook_gpu_region_pages' member.
+		/// </summary>
+		public new static readonly StringName CookGpuRegionPages = "cook_gpu_region_pages";
+		/// <summary>Cached name for the live region residency grid.</summary>
+		public new static readonly StringName GetRuntimeResidencyGrid = "get_runtime_residency_grid";
+		/// <summary>
 		/// Cached name for the 'load_directory' member.
 		/// </summary>
 		public new static readonly StringName LoadDirectory = "load_directory";
@@ -401,6 +407,8 @@ public partial class Terrain3DData : GodotObject
 		/// Cached name for the 'update_maps' member.
 		/// </summary>
 		public new static readonly StringName UpdateMaps = "update_maps";
+		/// <summary>Cached name for the 'create_erosion_job' member.</summary>
+		public new static readonly StringName CreateErosionJob = "create_erosion_job";
 		/// <summary>
 		/// Cached name for the 'get_height_maps_rid' member.
 		/// </summary>
@@ -637,6 +645,12 @@ public partial class Terrain3DData : GodotObject
 	public new void SaveRegion(Vector2I regionLocation, string directory, bool save16Bit = false) => 
 		Call(GDExtensionMethodName.SaveRegion, [regionLocation, directory, save16Bit]);
 
+	public new Godot.Collections.Dictionary CookGpuRegionPages() =>
+		Call(GDExtensionMethodName.CookGpuRegionPages).As<Godot.Collections.Dictionary>();
+
+	public new Godot.Collections.Dictionary GetRuntimeResidencyGrid(long radius = 6) =>
+		Call(GDExtensionMethodName.GetRuntimeResidencyGrid, [radius]).As<Godot.Collections.Dictionary>();
+
 	public new void LoadDirectory(string directory) => 
 		Call(GDExtensionMethodName.LoadDirectory, [directory]);
 
@@ -648,6 +662,9 @@ public partial class Terrain3DData : GodotObject
 
 	public new void UpdateMaps(Terrain3DRegion.MapType mapType = Terrain3DRegion.MapType.Max, bool allRegions = true, bool generateMipmaps = false) => 
 		Call(GDExtensionMethodName.UpdateMaps, [Variant.From(mapType), allRegions, generateMipmaps]);
+
+	public new Terrain3DErosionJob CreateErosionJob(Terrain3DErosionSettings settings) =>
+		Terrain3DErosionJob.Bind(Call(GDExtensionMethodName.CreateErosionJob, [settings]).As<GodotObject>());
 
 	public new Rid GetHeightMapsRid() => 
 		Call(GDExtensionMethodName.GetHeightMapsRid, []).As<Rid>();

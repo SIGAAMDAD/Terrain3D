@@ -26,8 +26,9 @@ render_mode blend_mix,depth_draw_opaque,cull_back,diffuse_burley,specular_schlic
 #define DECODE_OVER(control) int(control >>22u & 0x1Fu)
 #define DECODE_HOLE(control) bool(control >>2u & 0x1u)
 
+#define fma(a, b, c) ((a) * (b) + (c))
+
 #if CURRENT_RENDERER == RENDERER_COMPATIBILITY
-    #define fma(a, b, c) ((a) * (b) + (c))
     #define dFdxCoarse(a) dFdx(a)
     #define dFdyCoarse(a) dFdy(a)
 #endif
@@ -44,7 +45,7 @@ uniform float _subdiv = 1.0;
 uniform float _region_size = 1024.0;
 uniform float _region_texel_size = 0.0009765625; // = 1./region_size
 uniform int _region_map_size = 32;
-uniform int _region_map[1024];
+uniform sampler2D _region_map_texture : filter_nearest, repeat_disable;
 uniform vec2 _region_locations[1024];
 uniform float _texture_normal_depth_array[32];
 uniform float _texture_ao_strength_array[32];
@@ -52,7 +53,12 @@ uniform float _texture_ao_affect_array[32];
 uniform float _texture_roughness_mod_array[32];
 uniform float _texture_uv_scale_array[32];
 uniform vec4 _texture_color_array[32];
+uniform vec2 _height_decode = vec2(-384.0, 1152.0);
 uniform highp sampler2DArray _height_maps : repeat_disable;
+
+float decode_terrain_height(float encoded) {
+	return fma(encoded, _height_decode.y, _height_decode.x);
+}
 uniform highp sampler2DArray _control_maps : repeat_disable;
 uniform highp sampler2DArray _color_maps : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
 uniform highp sampler2DArray _texture_array_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -106,7 +112,7 @@ ivec3 get_index_coord(const vec2 uv) {
 	vec2 r_uv = round(uv);
 	ivec2 pos = ivec2(floor(r_uv * _region_texel_size)) + (_region_map_size / 2);
 	int bounds = int(uint(pos.x | pos.y) < uint(_region_map_size));
-	int layer_index = _region_map[pos.y * _region_map_size + pos.x] * bounds - 1;
+	int layer_index = (int(round(texelFetch(_region_map_texture, pos, 0).r * 65535.0)) * bounds) - 1;
 	return ivec3(ivec2(mod(r_uv, _region_size)), layer_index);
 }
 
@@ -116,7 +122,7 @@ ivec3 get_index_coord(const vec2 uv) {
 vec3 get_index_uv(const vec2 uv2) {
 	ivec2 pos = ivec2(floor(uv2)) + (_region_map_size / 2);
 	int bounds = int(uint(pos.x | pos.y) < uint(_region_map_size));
-	int layer_index = _region_map[ pos.y * _region_map_size + pos.x ] * bounds - 1;
+	int layer_index = (int(round(texelFetch(_region_map_texture, pos, 0).r * 65535.0)) * bounds) - 1;
 	return vec3(uv2 - _region_locations[layer_index], float(layer_index));
 }
 
@@ -135,7 +141,7 @@ float check_region(const vec2 uv2) {
 	ivec2 pos = ivec2(floor(uv2)) + (_region_map_size / 2);
 	int layer_index = 0;
 	if (uint(pos.x | pos.y) < uint(_region_map_size)) {
-		layer_index = clamp(_region_map[ pos.y * _region_map_size + pos.x ] - 1, -1, 0) + 1;
+		layer_index = clamp(int(round(texelFetch(_region_map_texture, pos, 0).r * 65535.0)) - 1, -1, 0) + 1;
 	}
 	return float(layer_index);
 }
@@ -161,10 +167,10 @@ float interpolated_height(vec2 pos) {
 	index[1] = get_index_coord(index_id + offsets.yy);
 	index[2] = get_index_coord(index_id + offsets.yx);
 	index[3] = get_index_coord(index_id + offsets.xx);
-	float h0 = texelFetch(_height_maps, index[0], 0).r;
-	float h1 = texelFetch(_height_maps, index[1], 0).r;
-	float h2 = texelFetch(_height_maps, index[2], 0).r;
-	float h3 = texelFetch(_height_maps, index[3], 0).r;
+	float h0 = decode_terrain_height(texelFetch(_height_maps, index[0], 0).r);
+	float h1 = decode_terrain_height(texelFetch(_height_maps, index[1], 0).r);
+	float h2 = decode_terrain_height(texelFetch(_height_maps, index[2], 0).r);
+	float h3 = decode_terrain_height(texelFetch(_height_maps, index[3], 0).r);
 	vec2 f = fract(pos);
 	vec2 i = 1.0 - f;
 	vec4 w = vec4(i.x * f.y, f.x * f.y, f.x * i.y, i.x * i.y);
@@ -231,9 +237,9 @@ void vertex() {
 			ivec3 coord_ub = get_index_coord(end_pos + vec2(1, 0));
 			ivec3 coord_va = get_index_coord(start_pos + vec2(0, 1));
 			ivec3 coord_vb = get_index_coord(end_pos + vec2(0, 1));
-			h = mix(texelFetch(_height_maps, coord_a, 0).r, texelFetch(_height_maps, coord_b, 0).r, vertex_lerp);
-			u = mix(texelFetch(_height_maps, coord_ua, 0).r, texelFetch(_height_maps, coord_ub, 0).r, vertex_lerp);
-			v = mix(texelFetch(_height_maps, coord_va, 0).r, texelFetch(_height_maps, coord_vb, 0).r, vertex_lerp);
+			h = mix(decode_terrain_height(texelFetch(_height_maps, coord_a, 0).r), decode_terrain_height(texelFetch(_height_maps, coord_b, 0).r), vertex_lerp);
+			u = mix(decode_terrain_height(texelFetch(_height_maps, coord_ua, 0).r), decode_terrain_height(texelFetch(_height_maps, coord_ub, 0).r), vertex_lerp);
+			v = mix(decode_terrain_height(texelFetch(_height_maps, coord_va, 0).r), decode_terrain_height(texelFetch(_height_maps, coord_vb, 0).r), vertex_lerp);
 		}
 
 		// Apply background ground level and region blend
@@ -438,7 +444,7 @@ void fragment() {
 	// Apply PBR
 	ALBEDO = albedo_height.rgb * color_map.rgb * macrov;
 	ROUGHNESS = roughness;
-	SPECULAR = 1. - normal_rough.a;
+	SPECULAR = 1. - roughness;
 	// Repack final normal map value.
 	NORMAL_MAP = fma(normalize(normal_rough.xzy), vec3(0.5), vec3(0.5));
 	NORMAL_MAP_DEPTH = normal_map_depth;

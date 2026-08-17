@@ -24,8 +24,8 @@ extends Terrain3D
 
 @export var simple_grass_textured: MultiMeshInstance3D
 @export var assign_mesh_id: int
-@export_tool_button("Import") var import = import_sgt
-@export_tool_button("Clear Instances") var clear_instances = clear_multimeshes
+@export_tool_button("Import") var import: Callable = import_sgt
+@export_tool_button("Clear Instances") var clear_instances: Callable = clear_multimeshes
 
 
 func clear_multimeshes() -> void:

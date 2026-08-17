@@ -90,7 +90,7 @@
 	#var gt_inverse := gt.affine_inverse()
 	#var new_transforms_array: Array[Transform3D] = []
 	#var remapped_max_slope: float = remap(max_slope, 0.0, 90.0, 0.0, 1.0)
-	#for i in transforms.list.size():
+	#for i: int in transforms.list.size():
 		#var t: Transform3D = transforms.list[i]
 		#
 		#var location: Vector3 = (gt * t).origin

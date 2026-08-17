@@ -1,48 +1,63 @@
 [gd_scene format=3 uid="uid://by3kr2nqbqr67"]
 
 [node name="DirectorySetup" type="ConfirmationDialog"]
-title = "Terrain3D Data Directory Setup"
-position = Vector2i(0, 36)
-size = Vector2i(750, 330)
+title = "Terrain3D Data Directory"
+size = Vector2i(680, 350)
+min_size = Vector2i(520, 300)
 visible = true
+ok_button_text = "Use Directory"
 
 [node name="Margin" type="MarginContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
 offset_left = 8.0
 offset_top = 8.0
-offset_right = 742.0
-offset_bottom = 281.0
-theme_override_constants/margin_left = 20
-theme_override_constants/margin_top = 20
-theme_override_constants/margin_right = 20
-theme_override_constants/margin_bottom = 20
+offset_right = -8.0
+offset_bottom = -58.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 14
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 14
 
 [node name="VBox" type="VBoxContainer" parent="Margin"]
 layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Heading" type="Label" parent="Margin/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Choose where Terrain3D stores region data"
 
 [node name="Instructions" type="Label" parent="Margin/VBox"]
-custom_minimum_size = Vector2(400, 0)
 layout_mode = 2
-text = "Terrain3D now stores data in a directory instead of a single file. Each region is stored in a separate file named `terrain3d[-_]##[-_]##.res`. For instance, the region at location (-1, 1) would be named `terrain3d-01_01.res`. Enable Terrain3D / Debug / Show Region Labels for a visual display."
+text = "Each 128 m region is stored as a separate terrain3d_XX_YY.res file. Existing compatible region files in the selected directory are loaded automatically."
 autowrap_mode = 3
 
 [node name="DirectoryLabel" type="Label" parent="Margin/VBox"]
-custom_minimum_size = Vector2(400, 0)
 layout_mode = 2
-text = "
-Specify the directory to store your data. Any existing region files will be loaded."
-autowrap_mode = 3
+text = "Data directory"
 
 [node name="DirHBox" type="HBoxContainer" parent="Margin/VBox"]
 layout_mode = 2
+theme_override_constants/separation = 8
 
 [node name="LineEdit" type="LineEdit" parent="Margin/VBox/DirHBox"]
 layout_mode = 2
 size_flags_horizontal = 3
-placeholder_text = "Data directory"
+custom_minimum_size = Vector2(0, 34)
+placeholder_text = "res://terrain_data"
+clear_button_enabled = true
 
 [node name="SelectDir" type="Button" parent="Margin/VBox/DirHBox"]
 layout_mode = 2
+custom_minimum_size = Vector2(42, 34)
+tooltip_text = "Browse for a directory."
 
-[node name="Spacer" type="Control" parent="Margin/VBox"]
-custom_minimum_size = Vector2(0, 40)
+[node name="ValidationLabel" type="Label" parent="Margin/VBox"]
+unique_name_in_owner = true
 layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.45, 0.38, 1)
+autowrap_mode = 3

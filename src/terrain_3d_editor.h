@@ -1,20 +1,30 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#pragma once
+
 #ifndef TERRAIN3D_EDITOR_CLASS_H
 #define TERRAIN3D_EDITOR_CLASS_H
 
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/image_texture.hpp>
 
+#include "eastl_config.h"
+#include <EASTL/array.h>
+#include <EASTL/vector.h>
+
 #include "terrain_3d.h"
+#include "terrain_3d_compute.h"
 #include "terrain_3d_region.h"
 
-class Terrain3DEditor : public Object {
-	GDCLASS(Terrain3DEditor, Object);
+class T3DSampler;
+
+class T3DEditor : public Object {
+	using Terrain3DEditor = T3DEditor;
+	GDCLASS( Terrain3DEditor, Object );
 	CLASS_NAME();
 
 public: // Constants
-	enum Tool {
+	typedef enum t3dtool_e {
 		REGION,
 		SCULPT,
 		HEIGHT,
@@ -27,115 +37,192 @@ public: // Constants
 		INSTANCER,
 		ANGLE, // used for picking, TODO change to a picking tool
 		SCALE, // used for picking
+		LANDFORM,
 		TOOL_MAX,
-	};
+	} t3dtool_t;
 
-	static inline const char *TOOLNAME[] = {
-		"Region",
-		"Sculpt",
-		"Height",
-		"Texture",
-		"Color",
-		"Roughness",
-		"Auto Shader",
-		"Holes",
-		"Navigation",
-		"Instancer",
-		"Angle",
-		"Scale",
-		"TOOL_MAX",
-	};
 
-	enum Operation {
+	typedef enum t3doperation_e {
 		ADD,
 		SUBTRACT,
 		REPLACE,
 		AVERAGE,
 		GRADIENT,
 		OP_MAX,
-	};
+	} t3doperation_t;
 
-	static inline const char *OPNAME[] = {
-		"Add",
-		"Subtract",
-		"Replace",
-		"Average",
-		"Gradient",
-		"OP_MAX",
-	};
 
-	enum AverageMode {
+	typedef enum t3daverageMode_e {
 		AVG_HEIGHT,
 		AVG_BLEND,
 		AVG_ROUGHNESS,
-	};
+	} t3daverageMode_t;
 
 private:
-	Terrain3D *_terrain = nullptr;
+	T3DTerrain *m_pTerrain = nullptr;
 
 	// Painter settings & variables
-	Tool _tool = REGION;
-	Operation _operation = ADD;
-	Dictionary _brush_data;
-	Vector3 _operation_position = V3_ZERO;
-	Vector3 _operation_movement = V3_ZERO;
-	Array _operation_movement_history;
-	bool _is_operating = false;
-	uint64_t _last_region_bounds_error = 0;
-	TypedArray<Terrain3DRegion> _original_regions; // Queue for undo
-	TypedArray<Terrain3DRegion> _edited_regions; // Queue for redo
-	TypedArray<Vector2i> _added_removed_locations; // Queue for added/removed locations
-	AABB _modified_area;
-	Dictionary _undo_data; // See _get_undo_data for definition
-	uint64_t _last_pen_tick = 0;
+	t3dtool_t m_tool = REGION;
+	t3doperation_t m_operation = ADD;
+	Dictionary m_brushData;
+	Vector3 m_operationPosition = V3_ZERO;
+	Vector3 m_operationMovement = V3_ZERO;
+	Array m_operationMovementHistory;
+	bool m_bIsOperating = false;
+	uint64_t m_nLastRegionBoundsError = 0;
+	TypedArray<T3DRegion> m_originalRegions; // Queue for undo
+	TypedArray<T3DRegion> m_editedRegions;   // Queue for redo
+	Array m_originalEditSnapshots;				   // Targeted map/instance snapshots for undo
+	Array m_editedEditSnapshots;				   // Targeted map/instance snapshots for redo
+	TypedArray<Vector2i> m_addedRemovedLocations; // Queue for added/removed locations
+	AABB m_modifiedArea;
+	Dictionary m_undoData; // See _get_undo_data for definition
+	uint64_t m_lastPenTick = 0;
 
-	void _send_region_aabb(const Vector2i &p_region_loc, const Vector2 &p_height_range = V2_ZERO);
-	Ref<Terrain3DRegion> _operate_region(const Vector2i &p_region_loc);
-	void _operate_map(const Vector3 &p_global_position, const real_t p_camera_direction);
-	MapType _get_map_type() const;
-	bool _is_in_bounds(const Point2i &p_pixel, const Point2i &p_size) const;
-	Vector2 _get_uv_position(const Vector3 &p_global_position, const int p_region_size, const real_t p_vertex_spacing) const;
-	Vector2 _get_rotated_uv(const Vector2 &p_uv, const real_t p_angle) const;
-	void _store_undo();
-	void _apply_undo(const Dictionary &p_data);
-	float _average(const AverageMode p_mode, const Vector3 &p_global_position, const float p_base, const float p_nan_val = 0.f, bool p_alt = false) const;
-	Color _average(const Vector3 &p_global_position, const Color &p_base) const;
+	// Large brushes revisit the same source brush pixels millions of times. Cache gamma-adjusted
+	// alpha values and invalidate the cache whenever brush settings are replaced.
+	Image *m_pCachedBrushImage = nullptr;
+	Vector2i m_cachedBrushImageSize = V2I_ZERO;
+	real_t m_fCachedBrushGamma = -1.f;
+	eastl::vector<float> m_fBrushAlphaCache;
+
+	typedef struct t3daxisSample_s {
+		real_t fOffset = 0.f;
+		real_t fGlobalPosition = 0.f;
+		int32_t regionLocation = 0;
+		int32_t mapPixel = 0;
+		real_t fCenteredUv = 0.f;
+	} t3daxisSample_t;
+
+	typedef struct t3dregionMapCache_s {
+		Ref<T3DRegion> pRegion;
+		Image *pMap = nullptr;
+		Image *pControlMap = nullptr;
+		PackedByteArray mapData;
+		PackedByteArray controlData;
+		uint8_t *pMapBytes = nullptr;
+		const uint8_t *pControlBytes = nullptr;
+		Vector2i location = V2I_ZERO;
+		Image::Format mapFormat = Image::FORMAT_MAX;
+		bool bMapHasMipmaps = false;
+		bool bMapWasImplicit = false;
+		bool bDirectAccess = false;
+		bool bModified = false;
+	} t3dregionMapCache_t;
+
+	typedef struct t3dcomputeWrite_s {
+		size_t iRegionIndex = 0u;
+		Vector2i mapPixel = V2I_ZERO;
+		uint32_t sourceValue = 0u;
+		Vector3 worldPosition = V3_ZERO;
+	} t3dcomputeWrite_t;
+
+	// Reused for every stamp in one stroke. Ordinary brushes perform no heap
+	// allocation after their first stamp; pathological compute capacities are
+	// released at stroke end instead of becoming permanent editor memory.
+	eastl::vector<t3daxisSample_t> m_xAxisScratch;
+	eastl::vector<t3daxisSample_t> m_zAxisScratch;
+	eastl::vector<t3dregionMapCache_t> m_regionCacheScratch;
+	eastl::vector<T3DCompute::t3dbrushElement_t> m_computeElementScratch;
+	eastl::vector<t3dcomputeWrite_t> m_computeWriteScratch;
+	eastl::vector<Vector2i> m_modifiedRegionScratch;
+
+	void trimBrushScratch( void );
+	void updateBrushAlphaCache( Image *pBrushImage, const Vector2i &rImageSize, const real_t fGamma );
+	static bool isBrushSlopeAllowed(
+		T3DSampler &rSampler, bool bUnrestricted,
+		const Vector2 &rSlopeRange, const Vector3 &rPosition
+	);
+	static uint32_t packColorRgba8( const Color &rColor );
+	static Color unpackColorRgba8( uint32_t nValue );
+	static uint32_t readU32( const uint8_t *pBytes, size_t iIndex );
+	static Color readMapPixel(
+		const t3dregionMapCache_t &rEntry, size_t iIndex, const Vector2i &rPixel,
+		t3dmapType_t mapType
+	);
+	static uint32_t readControlBits( const t3dregionMapCache_t &rEntry, size_t iIndex, const Vector2i &rPixel );
+	static void writeMapPixel(
+		t3dregionMapCache_t &rEntry, size_t iIndex, const Vector2i &rPixel,
+		const Color &clrValue, t3dmapType_t mapType
+	);
+	static bool locationLess( const Vector2i &rA, const Vector2i &rB );
+	Dictionary captureEditSnapshot(
+		const Ref<T3DRegion> &rRegion,
+		const Dictionary &rTemplate = Dictionary(),
+		bool bMapWasImplicit = false
+	) const;
+	void applyEditSnapshot(
+		const Dictionary &rSnapshot, eastl::array<eastl::vector<Vector2i>, T3DRegion::TYPE_MAX> &rMapUpdates,
+		bool &bInstancesChanged
+	);
+
+	void sendRegionAabb( const Vector2i &rRegionLoc, const Vector2 &rHeightRange = V2_ZERO );
+	Ref<T3DRegion> operateRegion( const Vector2i &rRegionLoc );
+	void operateMap( const Vector3 &rGlobalPosition, const real_t fCameraDirection );
+	t3dmapType_t getMapType( void ) const;
+	bool isInBounds( const Point2i &rPixel, const Point2i &rSize ) const;
+	Vector2 getUvPosition(
+		const Vector3 &rGlobalPosition, const int nRegionSize,
+		const real_t fVertexSpacing
+	) const;
+	Vector2 getRotatedUv( const Vector2 &rUv, const real_t fAngle ) const;
+	void storeUndo( void );
+	void applyUndo( const Dictionary &rData );
+	float average(
+		const t3daverageMode_t mode, const Vector3 &rGlobalPosition, const float fBase,
+		const float fNanVal = 0.f, bool bAlt = false
+	) const;
+	Color average( const Vector3 &rGlobalPosition, const Color &clrBase ) const;
 
 public:
-	Terrain3DEditor() {}
-	~Terrain3DEditor() {}
+	T3DEditor( void ) {}
+	~T3DEditor( void ) {}
 
-	void set_terrain(Terrain3D *p_terrain) { _terrain = p_terrain; }
-	Terrain3D *get_terrain() const { return _terrain; }
+	void setTerrain( T3DTerrain *const pTerrain ) {
+		m_pTerrain = pTerrain;
+	}
+	T3DTerrain *getTerrain( void ) const {
+		return m_pTerrain;
+	}
 
-	void set_brush_data(const Dictionary &p_data);
-	Dictionary get_brush_data() const { return _brush_data; }
-	void set_tool(const Tool p_tool);
-	Tool get_tool() const { return _tool; }
-	void set_operation(const Operation p_operation);
-	Operation get_operation() const { return _operation; }
+	void setBrushData( const Dictionary &rData );
+	Dictionary getBrushData( void ) const {
+		return m_brushData;
+	}
+	void setTool( const t3dtool_t tool );
+	t3dtool_t getTool( void ) const {
+		return m_tool;
+	}
+	void setOperation( const t3doperation_t operation );
+	t3doperation_t getOperation( void ) const {
+		return m_operation;
+	}
 
-	void start_operation(const Vector3 &p_global_position);
-	bool is_operating() const { return _is_operating; }
-	void operate(const Vector3 &p_global_position, const real_t p_camera_direction);
-	void backup_region(const Ref<Terrain3DRegion> &p_region);
-	void stop_operation();
+	void startOperation( const Vector3 &rGlobalPosition );
+	bool isOperating( void ) const {
+		return m_bIsOperating;
+	}
+	void operate( const Vector3 &rGlobalPosition, const real_t fCameraDirection );
+	void backupRegion( const Ref<T3DRegion> &rRegion, bool bMapWasImplicit = false );
+	void backupRegionFull( const Ref<T3DRegion> &rRegion );
+	void stopOperation( void );
 
 protected:
-	static void _bind_methods();
+	static void _bind_methods( void );
 };
 
-VARIANT_ENUM_CAST(Terrain3DEditor::Operation);
-VARIANT_ENUM_CAST(Terrain3DEditor::Tool);
+VARIANT_ENUM_CAST( T3DEditor::t3doperation_t );
+VARIANT_ENUM_CAST( T3DEditor::t3dtool_t );
 
 // Inline functions
 
-inline MapType Terrain3DEditor::_get_map_type() const {
-	switch (_tool) {
+inline t3dmapType_t T3DEditor::getMapType( void ) const {
+	switch ( m_tool ) {
 		case SCULPT:
 		case HEIGHT:
 		case INSTANCER:
-			return TYPE_HEIGHT;
+		case LANDFORM:
+			return T3DRegion::TYPE_HEIGHT;
 			break;
 		case TEXTURE:
 		case AUTOSHADER:
@@ -143,35 +230,40 @@ inline MapType Terrain3DEditor::_get_map_type() const {
 		case NAVIGATION:
 		case ANGLE:
 		case SCALE:
-			return TYPE_CONTROL;
+			return T3DRegion::TYPE_CONTROL;
 			break;
 		case COLOR:
 		case ROUGHNESS:
-			return TYPE_COLOR;
+			return T3DRegion::TYPE_COLOR;
 			break;
 		default:
-			return TYPE_MAX;
+			return T3DRegion::TYPE_MAX;
 	}
 }
 
-inline bool Terrain3DEditor::_is_in_bounds(const Point2i &p_pixel, const Point2i &p_size) const {
-	bool positive = p_pixel.x >= 0 && p_pixel.y >= 0;
-	bool less_than_max = p_pixel.x < p_size.x && p_pixel.y < p_size.y;
-	return positive && less_than_max;
+inline bool T3DEditor::isInBounds( const Point2i &rPixel, const Point2i &rSize ) const {
+	const bool bPositive = rPixel.x >= 0 && rPixel.y >= 0;
+	const bool bLessThanMax = rPixel.x < rSize.x && rPixel.y < rSize.y;
+	return bPositive && bLessThanMax;
 }
 
-inline Vector2 Terrain3DEditor::_get_uv_position(const Vector3 &p_global_position, const int p_region_size, const real_t p_vertex_spacing) const {
-	Vector2 descaled_position_2d = Vector2(p_global_position.x, p_global_position.z) / p_vertex_spacing;
-	Vector2 region_position = descaled_position_2d / real_t(p_region_size);
+inline Vector2 T3DEditor::getUvPosition(
+	const Vector3 &rGlobalPosition, const int nRegionSize,
+	const real_t fVertexSpacing
+) const {
+	const Vector2 descaled_position_2d = Vector2( rGlobalPosition.x, rGlobalPosition.z ) / fVertexSpacing;
+	Vector2 region_position = descaled_position_2d / ( real_t ) ( nRegionSize );
 	region_position = region_position.floor();
-	Vector2 uv_position = (descaled_position_2d / real_t(p_region_size)) - region_position;
+	Vector2 uv_position = ( descaled_position_2d / ( real_t ) ( nRegionSize ) ) - region_position;
 	return uv_position;
 }
 
-inline Vector2 Terrain3DEditor::_get_rotated_uv(const Vector2 &p_uv, const real_t p_angle) const {
-	Vector2 rotation_offset = V2(0.5f);
-	Vector2 uv = (p_uv - rotation_offset).rotated(p_angle) + rotation_offset;
-	return uv.clamp(V2_ZERO, V2(1.f));
+inline Vector2 T3DEditor::getRotatedUv( const Vector2 &rUv, const real_t fAngle ) const {
+	const Vector2 rotation_offset = V2( 0.5f );
+	Vector2 uv = ( rUv - rotation_offset ).rotated( fAngle ) + rotation_offset;
+	return uv.clamp( V2_ZERO, V2( 1.f ) );
 }
+
+using Terrain3DEditor = T3DEditor;
 
 #endif // TERRAIN3D_EDITOR_CLASS_H

@@ -18,7 +18,7 @@ corner_radius_bottom_right = 5
 corner_radius_bottom_left = 5
 
 [sub_resource type="LabelSettings" id="LabelSettings_pxdc5"]
-font_size = 24
+font_size = 18
 
 [sub_resource type="LabelSettings" id="LabelSettings_mbo40"]
 font_color = Color(1, 1, 1, 0.705882)
@@ -44,19 +44,20 @@ shadow_color = Color(0, 0, 0, 1)
 [sub_resource type="ButtonGroup" id="ButtonGroup_wnxik"]
 
 [sub_resource type="LabelSettings" id="LabelSettings_nt754"]
-font_size = 24
+font_size = 18
 
 [sub_resource type="ButtonGroup" id="ButtonGroup_47nos"]
 
 [sub_resource type="ButtonGroup" id="ButtonGroup_mbo40"]
 
 [sub_resource type="LabelSettings" id="LabelSettings_3c3a7"]
-font_size = 24
+font_size = 18
 
 [node name="Window" type="Window"]
 title = "Terrain3D Channel Packer"
 initial_position = 1
-size = Vector2i(1446, 730)
+size = Vector2i(1100, 760)
+min_size = Vector2i(720, 560)
 wrap_controls = true
 always_on_top = true
 
@@ -76,16 +77,20 @@ layout_mode = 2
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 0
-theme_override_constants/margin_left = 5
-theme_override_constants/margin_top = 5
-theme_override_constants/margin_right = 5
-theme_override_constants/margin_bottom = 0
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
 
 [node name="FlowContainer" type="HFlowContainer" parent="PanelContainer/ScrollContainer/MarginContainer"]
 layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/h_separation = 12
+theme_override_constants/v_separation = 12
 
 [node name="Albedo_Height" type="PanelContainer" parent="PanelContainer/ScrollContainer/MarginContainer/FlowContainer"]
 layout_mode = 2
+custom_minimum_size = Vector2(320, 0)
 size_flags_horizontal = 3
 theme_override_styles/panel = SubResource("StyleBoxFlat_mbo40")
 
@@ -126,7 +131,7 @@ layout_mode = 2
 layout_mode = 2
 
 [node name="AlbedoMapHBox" type="HBoxContainer" parent="PanelContainer/ScrollContainer/MarginContainer/FlowContainer/Albedo_Height/VBox/AlbedoVBox"]
-custom_minimum_size = Vector2(400, 0)
+custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
@@ -190,7 +195,7 @@ theme_override_constants/separation = 5
 [node name="LuminanceAsHeightButton" type="Button" parent="PanelContainer/ScrollContainer/MarginContainer/FlowContainer/Albedo_Height/VBox/AlbedoVBox/AlbedoMapHBox/VBox"]
 unique_name_in_owner = true
 layout_mode = 2
-text = " Generate Height from Luminance"
+text = "Generate Height from Luminance"
 icon_alignment = 2
 
 [node name="HSeparator2" type="HSeparator" parent="PanelContainer/ScrollContainer/MarginContainer/FlowContainer/Albedo_Height/VBox"]
@@ -222,7 +227,7 @@ layout_mode = 2
 layout_mode = 2
 
 [node name="HeightMapHBox" type="HBoxContainer" parent="PanelContainer/ScrollContainer/MarginContainer/FlowContainer/Albedo_Height/VBox/HeightVBox"]
-custom_minimum_size = Vector2(400, 0)
+custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
@@ -339,6 +344,7 @@ layout_mode = 2
 
 [node name="Normal_Roughness" type="PanelContainer" parent="PanelContainer/ScrollContainer/MarginContainer/FlowContainer"]
 layout_mode = 2
+custom_minimum_size = Vector2(320, 0)
 size_flags_horizontal = 3
 theme_override_styles/panel = SubResource("StyleBoxFlat_mbo40")
 
@@ -379,7 +385,7 @@ layout_mode = 2
 layout_mode = 2
 
 [node name="NormalMapHBox" type="HBoxContainer" parent="PanelContainer/ScrollContainer/MarginContainer/FlowContainer/Normal_Roughness/VBox/NormalVBox"]
-custom_minimum_size = Vector2(400, 0)
+custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
@@ -480,7 +486,7 @@ layout_mode = 2
 layout_mode = 2
 
 [node name="RoughnessMapHBox" type="HBoxContainer" parent="PanelContainer/ScrollContainer/MarginContainer/FlowContainer/Normal_Roughness/VBox/RoughnessVBox"]
-custom_minimum_size = Vector2(400, 0)
+custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
@@ -614,7 +620,7 @@ layout_mode = 2
 layout_mode = 2
 
 [node name="AOMapHBox" type="HBoxContainer" parent="PanelContainer/ScrollContainer/MarginContainer/FlowContainer/Normal_Roughness/VBox/AOVBox"]
-custom_minimum_size = Vector2(400, 0)
+custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
@@ -719,6 +725,7 @@ layout_mode = 2
 
 [node name="Packing" type="PanelContainer" parent="PanelContainer/ScrollContainer/MarginContainer/FlowContainer"]
 layout_mode = 2
+custom_minimum_size = Vector2(280, 0)
 size_flags_horizontal = 3
 theme_override_styles/panel = SubResource("StyleBoxFlat_mbo40")
 
@@ -765,6 +772,21 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Import High Quality"
 
+[node name="OutputFormatLabel" type="Label" parent="PanelContainer/ScrollContainer/MarginContainer/FlowContainer/Packing/VBox/VBox"]
+layout_mode = 2
+text = "Output Format"
+
+[node name="OutputFormatOption" type="OptionButton" parent="PanelContainer/ScrollContainer/MarginContainer/FlowContainer/Packing/VBox/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "PNG uses Godot import settings. DDS writes GPU-native compressed images that can remain compressed in Terrain3D texture arrays."
+
+[node name="OutputMemoryLabel" type="Label" parent="PanelContainer/ScrollContainer/MarginContainer/FlowContainer/Packing/VBox/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Estimated output: pending source images"
+autowrap_mode = 3
+
 [node name="Instructions" type="Label" parent="PanelContainer/ScrollContainer/MarginContainer/FlowContainer/Packing/VBox"]
 custom_minimum_size = Vector2(150, 0)
 layout_mode = 2
@@ -775,7 +797,7 @@ autowrap_mode = 3
 [node name="PackButton" type="Button" parent="PanelContainer/ScrollContainer/MarginContainer/FlowContainer/Packing/VBox"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Pack textures as..."
+text = "Pack Textures…"
 
 [node name="StatusLabel" type="Label" parent="PanelContainer/ScrollContainer/MarginContainer/FlowContainer/Packing/VBox"]
 unique_name_in_owner = true

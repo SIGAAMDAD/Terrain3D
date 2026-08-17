@@ -4,8 +4,9 @@
 shader_type spatial;
 render_mode blend_mix,depth_draw_opaque,cull_back,diffuse_burley,specular_schlick_ggx,skip_vertex_transform;
 
+#define fma(a, b, c) ((a) * (b) + (c))
+
 #if CURRENT_RENDERER == RENDERER_COMPATIBILITY
-    #define fma(a, b, c) ((a) * (b) + (c))
     #define dFdxCoarse(a) dFdx(a)
     #define dFdyCoarse(a) dFdy(a)
 #endif
@@ -23,7 +24,7 @@ uniform float _vertex_density = 1.0; // = 1./_vertex_spacing
 uniform float _region_size = 1024.0;
 uniform float _region_texel_size = 0.0009765625; // = 1./region_size
 uniform int _region_map_size = 32;
-uniform int _region_map[1024];
+uniform sampler2D _region_map_texture : filter_nearest, repeat_disable;
 //uniform vec2 _region_locations[1024];
 //uniform float _texture_normal_depth_array[32];
 //uniform float _texture_ao_strength_array[32];
@@ -32,7 +33,12 @@ uniform int _region_map[1024];
 //uniform float _texture_uv_scale_array[32];
 //uniform vec2 _texture_detile_array[32];
 //uniform vec4 _texture_color_array[32];
+uniform vec2 _height_decode = vec2(-384.0, 1152.0);
 uniform highp sampler2DArray _height_maps : repeat_disable;
+
+float decode_terrain_height(float encoded) {
+	return fma(encoded, _height_decode.y, _height_decode.x);
+}
 uniform highp sampler2DArray _control_maps : repeat_disable;
 //uniform highp sampler2DArray _color_maps : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
 //uniform highp sampler2DArray _texture_array_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -62,7 +68,7 @@ ivec3 get_index_coord(const vec2 uv) {
 	vec2 r_uv = round(uv);
 	ivec2 pos = ivec2(floor(r_uv * _region_texel_size)) + (_region_map_size / 2);
 	int bounds = int(uint(pos.x | pos.y) < uint(_region_map_size));
-	int layer_index = _region_map[pos.y * _region_map_size + pos.x] * bounds - 1;
+	int layer_index = (int(round(texelFetch(_region_map_texture, pos, 0).r * 65535.0)) * bounds) - 1;
 	return ivec3(ivec2(mod(r_uv, _region_size)), layer_index);
 }
 
@@ -84,10 +90,10 @@ float interpolated_height(vec2 pos) {
 	index[1] = get_index_coord(index_id + offsets.yy);
 	index[2] = get_index_coord(index_id + offsets.yx);
 	index[3] = get_index_coord(index_id + offsets.xx);
-	float h0 = texelFetch(_height_maps, index[0], 0).r;
-	float h1 = texelFetch(_height_maps, index[1], 0).r;
-	float h2 = texelFetch(_height_maps, index[2], 0).r;
-	float h3 = texelFetch(_height_maps, index[3], 0).r;
+	float h0 = decode_terrain_height(texelFetch(_height_maps, index[0], 0).r);
+	float h1 = decode_terrain_height(texelFetch(_height_maps, index[1], 0).r);
+	float h2 = decode_terrain_height(texelFetch(_height_maps, index[2], 0).r);
+	float h3 = decode_terrain_height(texelFetch(_height_maps, index[3], 0).r);
 	vec2 f = fract(pos);
 	vec2 i = 1.0 - f;
 	vec4 w = vec4(i.x * f.y, f.x * f.y, f.x * i.y, i.x * i.y);
@@ -148,7 +154,7 @@ void vertex() {
 		} else {
 			ivec3 coord_a = get_index_coord(start_pos);
 			ivec3 coord_b = get_index_coord(end_pos);
-			h = mix(texelFetch(_height_maps, coord_a, 0).r,texelFetch(_height_maps, coord_b, 0).r,vertex_lerp);
+			h = mix(decode_terrain_height(texelFetch(_height_maps, coord_a, 0).r),decode_terrain_height(texelFetch(_height_maps, coord_b, 0).r),vertex_lerp);
 		}
 		v_vertex.y = h;
 	}
@@ -204,9 +210,9 @@ void fragment() {
 	float v = 0.0;
 
 	// Re-use index[] for the first lookups, skipping some math. 3 lookups
-	h[3] = texelFetch(_height_maps, index[3], 0).r; // 0 (0,0)
-	h[2] = texelFetch(_height_maps, index[2], 0).r; // 1 (1,0)
-	h[0] = texelFetch(_height_maps, index[0], 0).r; // 2 (0,1)
+	h[3] = decode_terrain_height(texelFetch(_height_maps, index[3], 0).r); // 0 (0,0)
+	h[2] = decode_terrain_height(texelFetch(_height_maps, index[2], 0).r); // 1 (1,0)
+	h[0] = decode_terrain_height(texelFetch(_height_maps, index[0], 0).r); // 2 (0,1)
 	index_normal[3] = normalize(vec3(h[3] - h[2] + u, _vertex_spacing, h[3] - h[0] + v));
 
 	// Set flat world normal - overriden if bilerp is true
@@ -216,11 +222,11 @@ void fragment() {
 	if (bilerp) {
 		// 5 lookups
 		// Fetch the additional required height values for smooth normals
-		h[1] = texelFetch(_height_maps, index[1], 0).r; // 3 (1,1)
-		float h_4 = texelFetch(_height_maps, get_index_coord(index_id + offsets.yz), 0).r; // 4 (1,2)
-		float h_5 = texelFetch(_height_maps, get_index_coord(index_id + offsets.zy), 0).r; // 5 (2,1)
-		float h_6 = texelFetch(_height_maps, get_index_coord(index_id + offsets.zx), 0).r; // 6 (2,0)
-		float h_7 = texelFetch(_height_maps, get_index_coord(index_id + offsets.xz), 0).r; // 7 (0,2)
+		h[1] = decode_terrain_height(texelFetch(_height_maps, index[1], 0).r); // 3 (1,1)
+		float h_4 = decode_terrain_height(texelFetch(_height_maps, get_index_coord(index_id + offsets.yz), 0).r); // 4 (1,2)
+		float h_5 = decode_terrain_height(texelFetch(_height_maps, get_index_coord(index_id + offsets.zy), 0).r); // 5 (2,1)
+		float h_6 = decode_terrain_height(texelFetch(_height_maps, get_index_coord(index_id + offsets.zx), 0).r); // 6 (2,0)
+		float h_7 = decode_terrain_height(texelFetch(_height_maps, get_index_coord(index_id + offsets.xz), 0).r); // 7 (0,2)
 
 		// Calculate the normal for the remaining index ids.
 		index_normal[0] = normalize(vec3(h[0] - h[1] + u, _vertex_spacing, h[0] - h_7 + v));

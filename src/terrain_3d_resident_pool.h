@@ -1,0 +1,189 @@
+// Fixed-residency pool backed by one contiguous map slab and fixed slot metadata.
+#pragma once
+
+#ifndef TERRAIN3D_RESIDENT_POOL_H
+#define TERRAIN3D_RESIDENT_POOL_H
+
+#include "Terrain3DConstants.h"
+
+#include <cstddef>
+#include <cstdint>
+#include <mutex>
+
+#include <godot_cpp/variant/vector2i.hpp>
+
+#include "terrain_3d_limits.h"
+#include "terrain_3d_region.h"
+
+#if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
+using namespace godot;
+#endif
+
+typedef struct t3dresidentMapView_s {
+	const uint16_t *pHeight = nullptr;
+	const uint32_t *pControl = nullptr;
+	const uint32_t *pColor = nullptr;
+	const uint8_t *pDerived = nullptr;
+	uint32_t nGeneration = 0;
+	bool valid( void ) const {
+		return pHeight != nullptr;
+	}
+} t3dresidentMapView_t;
+
+class T3DResidentRegionPool;
+
+class T3DResidentMapLease {
+public:
+	T3DResidentMapLease( void ) = default;
+	~T3DResidentMapLease( void );
+	T3DResidentMapLease( const T3DResidentMapLease & ) = delete;
+	T3DResidentMapLease &operator=( const T3DResidentMapLease & ) = delete;
+	T3DResidentMapLease( T3DResidentMapLease &&rOther ) noexcept;
+	T3DResidentMapLease &operator=( T3DResidentMapLease &&rOther ) noexcept;
+
+	bool valid( void ) const {
+		return m_view.valid();
+	}
+	const t3dresidentMapView_t &getView( void ) const {
+		return m_view;
+	}
+	void reset( void );
+
+private:
+	friend class T3DResidentRegionPool;
+	T3DResidentRegionPool *m_pPool = nullptr;
+	int16_t m_iSlot = -1;
+	uint32_t m_nGeneration = 0u;
+	t3dresidentMapView_t m_view;
+
+	T3DResidentMapLease(
+		T3DResidentRegionPool *pPool, int iSlot, uint32_t nGeneration,
+		const t3dresidentMapView_t &rView
+	);
+};
+
+
+class T3DResidentRegionPool {
+	friend class T3DResidentMapLease;
+
+public:
+
+	typedef enum t3dchannel_e : uint32_t {
+		CHANNEL_HEIGHT = 1u << 0u,
+		CHANNEL_CONTROL = 1u << 1u,
+		CHANNEL_COLOR = 1u << 2u,
+		CHANNEL_DERIVED = 1u << 3u,
+	} t3dchannel_t;
+
+	T3DResidentRegionPool( void ) = default;
+	~T3DResidentRegionPool( void );
+	T3DResidentRegionPool( const T3DResidentRegionPool & ) = delete;
+	T3DResidentRegionPool &operator=( const T3DResidentRegionPool & ) = delete;
+
+	static size_t estimateSlotBytes( int nRegionSize, uint32_t nChannels );
+	bool configure( int nRegionSize, int nCapacity, uint32_t nChannels );
+	void clear( void );
+	void resetResidency( void );
+	T3DResidentMapLease acquire( const Vector2i &rLocation, const T3DRegion *pRegion );
+	void syncMap(
+		const Vector2i &rLocation, const T3DRegion *pRegion, t3dmapType_t type,
+		const Rect2i &rDirtyRect = Rect2i()
+	);
+	void syncDerived(
+		const Vector2i &rLocation, const T3DRegion *pRegion,
+		const Rect2i &rDirtyRect = Rect2i()
+	);
+	void invalidate( const Vector2i &rLocation );
+	int getCapacity( void ) const {
+		return m_nCapacity;
+	}
+	int getRegionSize( void ) const {
+		return m_nRegionSize;
+	}
+	uint32_t getChannels( void ) const {
+		return m_channels;
+	}
+	size_t getReservedBytes( void ) const {
+		return m_nReservedBytes;
+	}
+	size_t getSlotHunkBytes( void ) const {
+		return m_iSlotLayout.stride;
+	}
+
+private:
+typedef struct t3dalignedAllocation_s {
+		void *pRaw = nullptr;
+		uint8_t *pAligned = nullptr;
+		size_t nBytes = 0u;
+		bool allocate( size_t nRequestedBytes, size_t nAlignment );
+		void release( void );
+	} t3dalignedAllocation_t;
+
+	typedef struct t3dslotLayout_s {
+		size_t iHeightOffset = TERRAIN3D_RESIDENT_INVALID_OFFSET;
+		size_t stride = 0u;
+	} t3dslotLayout_t;
+
+	// Replacement and lookup touch only the prefix below. Keep it in the first
+	// cacheline and prevent adjacent slot metadata from sharing that line; sparse
+	// allocation ownership and plane pointers are cold outside acquire/sync.
+	typedef struct alignas( TERRAIN3D_RESIDENT_CACHE_ALIGNMENT ) t3dslot_s {
+		Vector2i location = Vector2i( INT32_MAX, INT32_MAX );
+		uint32_t nGeneration = 1u;
+		uint32_t nPinCount = 0u;
+		bool bReferenced = false;
+		bool bPendingInvalidate = false;
+		bool bDerivedValid = false;
+		bool bOccupied = false;
+		uint16_t *pHeight = nullptr;
+		uint32_t *pControl = nullptr;
+		uint32_t *pColor = nullptr;
+		uint8_t *pDerived = nullptr;
+		t3dalignedAllocation_t controlMemory;
+		t3dalignedAllocation_t colorMemory;
+		t3dalignedAllocation_t derivedMemory;
+	} t3dslot_t;
+
+	int m_nRegionSize = 0;
+	int m_nCapacity = 0;
+	uint32_t m_channels = 0u;
+	size_t m_nTexelCount = 0u;
+	size_t m_nReservedBytes = 0u;
+	t3dslotLayout_t m_iSlotLayout;
+	t3dalignedAllocation_t m_mapMemory;
+	t3dslot_t *m_pSlots = nullptr;
+	int16_t m_szLocationToSlot[TERRAIN3D_RESIDENT_WORLD_SLOT_COUNT] = {};
+	mutable std::mutex m_mutex;
+	int m_iClockHand = 0;
+
+	static bool alignUp( size_t nValue, size_t nAlignment, size_t &nAligned );
+	static bool buildSlotLayout(
+		int nRegionSize, uint32_t nChannels, t3dslotLayout_t &rLayout,
+		size_t &nTexelCount
+	);
+	static bool addEstimatedOptionalBytes(
+		uint32_t nChannels, uint32_t nChannel, size_t nTexelCount,
+		size_t nBytesPerTexel, size_t &nTotal
+	);
+	static int locationIndex( const Vector2i &rLocation );
+	bool allocateSlotsUnlocked( int nCapacity );
+	bool hasPinnedSlotsUnlocked( void ) const;
+	void releaseSlotsUnlocked( void );
+	void releaseSparseStorageUnlocked( t3dslot_t &iSlot );
+	bool allocateSparsePlaneUnlocked( t3dalignedAllocation_t &rMemory, size_t nBytes, void *&pPlane );
+	void releaseSparsePlaneUnlocked( t3dalignedAllocation_t &rMemory, void *&pPlane );
+	void clearUnlocked( void );
+	int chooseReplacementSlotUnlocked( void );
+	int findSlotUnlocked( const Vector2i &rLocation ) const;
+	bool resetSlotStorage( int iSlot, bool bZero );
+	void assignSlot( int iSlot, const Vector2i &rLocation );
+	void retireSlotUnlocked( int iSlot );
+	void releaseLease( int iSlot, uint32_t nGeneration );
+	bool copyMap( int iSlot, const T3DRegion *pRegion, t3dmapType_t type );
+	bool copyMapRect( int iSlot, const T3DRegion *pRegion, t3dmapType_t type, const Rect2i &rDirtyRect );
+	bool copyDerived( int iSlot, const T3DRegion *pRegion );
+	bool copyDerivedRect( int iSlot, const T3DRegion *pRegion, const Rect2i &rDirtyRect );
+	t3dresidentMapView_t getView( int iSlot ) const;
+};
+
+#endif // TERRAIN3D_RESIDENT_POOL_H

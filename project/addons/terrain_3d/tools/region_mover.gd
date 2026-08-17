@@ -1,6 +1,6 @@
-# This script can be used to move your regions by an offset. 
+# This script can be used to move your regions by an offset.
 # Eventually this tool will find its way into a built in UI
-# 
+#
 # Attach it to your Terrain3D node
 # Save and reload your scene
 # Select your Terrain3D node
@@ -15,13 +15,13 @@ extends Terrain3D
 
 
 @export var offset: Vector2i
-@export_tool_button("Run") var run = start_rename
+@export_tool_button("Run") var run: Callable = start_rename
 
 
 func start_rename() -> void:
 	if offset == Vector2i.ZERO:
 		return
-		
+
 	var dir_name: String = data_directory
 	data_directory = ""
 	var dir := DirAccess.open(dir_name)
@@ -31,7 +31,7 @@ func start_rename() -> void:
 
 	var affected_files: PackedStringArray
 	var files: PackedStringArray = dir.get_files()
-	for file_name in files:
+	for file_name: String in files:
 		if file_name.match("terrain3d*.res") and not dir.current_is_dir():
 			var region_loc: Vector2i = Terrain3DUtil.filename_to_location(file_name)
 			var new_loc: Vector2i = region_loc + offset
@@ -42,11 +42,11 @@ func start_rename() -> void:
 			dir.rename(file_name, new_name)
 			affected_files.push_back(new_name)
 			print("File: %s renamed to: %s" % [ file_name, new_name ])
-				
-	for file_name in affected_files:
+
+	for file_name: String in affected_files:
 		var new_name: String = file_name.trim_prefix("tmp_")
 		dir.rename(file_name, new_name)
 		print("File: %s renamed to: %s" % [ file_name, new_name ])
-		
+
 	data_directory = dir_name
-	EditorInterface.get_resource_filesystem().scan()	
+	EditorInterface.get_resource_filesystem().scan()

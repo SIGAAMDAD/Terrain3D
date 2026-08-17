@@ -52,11 +52,31 @@ uniform float _vertex_density = 1.0; // = 1/_vertex_spacing
 uniform float _region_size = 1024.0;
 uniform float _region_texel_size = 0.0009765625; // = 1/REGION_SIZE
 uniform int _region_map_size = 32;
-uniform int _region_map[1024];
+uniform sampler2D _region_map_texture : filter_nearest, repeat_disable;
 uniform vec2 _region_locations[1024];
+uniform vec2 _height_decode = vec2(-384.0, 1152.0);
 uniform highp sampler2DArray _height_maps : repeat_disable;
+
+#define fma(a, b, c) ((a) * (b) + (c))
+
+float decode_terrain_height(float encoded) {
+	return fma(encoded, _height_decode.y, _height_decode.x);
+}
 uniform highp sampler2DArray _control_maps : repeat_disable;
 uniform highp sampler2DArray _color_maps : repeat_disable;
+uniform bool _control_maps_implicit = false;
+uniform bool _color_maps_implicit = false;
+
+uint read_terrain_control(ivec3 index) {
+	return _control_maps_implicit ? 1u :
+		(index.z >= 0 ? floatBitsToUint(texelFetch(_control_maps, index, 0).r) : 1u);
+}
+
+vec4 read_terrain_color(ivec3 index) {
+	const vec4 default_color = vec4(1.0, 1.0, 1.0, 0.5);
+	return _color_maps_implicit ? default_color :
+		(index.z >= 0 ? texelFetch(_color_maps, index, 0) : default_color);
+}
 
 // Takes in world space XZ (UV) coordinates
 // Returns ivec3 with:
@@ -66,20 +86,17 @@ ivec3 get_index_coord(const vec2 uv) {
 	vec2 r_uv = round(uv);
 	ivec2 pos = ivec2(floor(r_uv * _region_texel_size)) + (_region_map_size / 2);
 	int bounds = int(uint(pos.x | pos.y) < uint(_region_map_size));
-	int layer_index = _region_map[pos.y * _region_map_size + pos.x] * bounds - 1;
+	int layer_index = (int(round(texelFetch(_region_map_texture, pos, 0).r * 65535.0)) * bounds) - 1;
 	return ivec3(ivec2(mod(r_uv, _region_size)), layer_index);
 }
 
-#if CURRENT_RENDERER == RENDERER_COMPATIBILITY
-	#define fma(a, b, c) ((a) * (b) + (c))
-#endif
 
 // Takes in UV2 region space coordinates, returns 1.0 or 0.0 if a region is present or not.
 float check_region(const vec2 uv2) {
 	ivec2 pos = ivec2(floor(uv2)) + (_region_map_size / 2);
 	int layer_index = 0;
 	if (uint(pos.x | pos.y) < uint(_region_map_size)) {
-		layer_index = clamp(_region_map[ pos.y * _region_map_size + pos.x ] - 1, -1, 0) + 1;
+		layer_index = clamp(int(round(texelFetch(_region_map_texture, pos, 0).r * 65535.0)) - 1, -1, 0) + 1;
 	}
 	return float(layer_index);
 }
@@ -100,7 +117,7 @@ float get_region_blend(vec2 uv2) {
 }
 
 float get_height(vec2 index_id, vec2 offset) {
-	float height = texelFetch(_height_maps, get_index_coord(index_id + offset), 0).r;
+	float height = decode_terrain_height(texelFetch(_height_maps, get_index_coord(index_id + offset), 0).r);
 	if (_background_mode != 0u) {
 		float blend = get_region_blend(index_id * _region_texel_size + offset * _region_texel_size);
 		height = mix(height, ground_level, smoothstep(0., 1., blend));
@@ -243,13 +260,13 @@ void start() {
 		pos.xz = vec2(100000.0);
 	}
 
-	// Read color map
+	// Read color map. Fully implicit terrain binds one shared default layer,
+	// so the external particle shader must bypass region-layer indexing.
 	highp vec4 c[4];
-	#define COLOR_MAP vec4(1., 1., 1., 0.5)
-	c[0] = index[0].z >= 0 ? texelFetch(_color_maps, index[0], 0) : COLOR_MAP; // 0 (0,1)
-	c[1] = index[1].z >= 0 ? texelFetch(_color_maps, index[1], 0) : COLOR_MAP; // 1 (1,1)
-	c[2] = index[2].z >= 0 ? texelFetch(_color_maps, index[2], 0) : COLOR_MAP; // 2 (1,0)
-	c[3] = index[3].z >= 0 ? texelFetch(_color_maps, index[3], 0) : COLOR_MAP; // 3 (0,0)
+	c[0] = read_terrain_color(index[0]); // 0 (0,1)
+	c[1] = read_terrain_color(index[1]); // 1 (1,1)
+	c[2] = read_terrain_color(index[2]); // 2 (1,0)
+	c[3] = read_terrain_color(index[3]); // 3 (0,0)
 	vec4 color_map =
 		c[0] * weights[0] +
 		c[1] * weights[1] +
@@ -260,10 +277,10 @@ void start() {
 
 	// Read control maps
 	uvec4 control = uvec4(
-		floatBitsToUint(texelFetch(_control_maps, index[0], 0).r),
-		floatBitsToUint(texelFetch(_control_maps, index[1], 0).r),
-		floatBitsToUint(texelFetch(_control_maps, index[2], 0).r),
-		floatBitsToUint(texelFetch(_control_maps, index[3], 0).r));
+		read_terrain_control(index[0]),
+		read_terrain_control(index[1]),
+		read_terrain_control(index[2]),
+		read_terrain_control(index[3]));
 	bool hole = any(bvec4(control >> uvec4(2u) & uvec4(0x1u)));
 	bool auto = any(bvec4(control & uvec4(0x1u)));
 	int base = int(control[3] >> 27u & 0x1Fu);

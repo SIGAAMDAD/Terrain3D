@@ -76,12 +76,66 @@ public partial class Terrain3DInstancer : GodotObject
 		/// Cached name for the 'mode' member.
 		/// </summary>
 		public new static readonly StringName Mode = "mode";
+		/// <summary>Cached name for the scalable region-to-mesh-to-cell size.</summary>
+		public new static readonly StringName CellSize = "cell_size";
+		/// <summary>Cached name for distance-based cell streaming.</summary>
+		public new static readonly StringName CellStreamingEnabled = "cell_streaming_enabled";
+		/// <summary>Cached name for single-LOD MultiMesh buffer residency.</summary>
+		public new static readonly StringName SingleLodInstanceBuffers = "single_lod_instance_buffers";
+		/// <summary>Cached name for the cell streaming retention margin.</summary>
+		public new static readonly StringName CellStreamingMargin = "cell_streaming_margin";
+		/// <summary>Cached name for the stream-target movement threshold.</summary>
+		public new static readonly StringName CellStreamingUpdateDistance = "cell_streaming_update_distance";
+		/// <summary>Cached name for the per-update cell publication budget.</summary>
+		public new static readonly StringName UpdateCellBudget = "update_cell_budget";
 	}
 
 	public new Terrain3DInstancer.InstancerMode Mode
 	{
 		get => Get(GDExtensionPropertyName.Mode).As<Terrain3DInstancer.InstancerMode>();
 		set => Set(GDExtensionPropertyName.Mode, Variant.From(value));
+	}
+
+	/// <summary>Width and depth, in terrain samples, of one static-instance cell.</summary>
+	public new long CellSize
+	{
+		get => Get(GDExtensionPropertyName.CellSize).As<long>();
+		set => Set(GDExtensionPropertyName.CellSize, value);
+	}
+
+	/// <summary>Enables camera-relative MultiMesh cell residency.</summary>
+	public new bool CellStreamingEnabled
+	{
+		get => Get(GDExtensionPropertyName.CellStreamingEnabled).As<bool>();
+		set => Set(GDExtensionPropertyName.CellStreamingEnabled, value);
+	}
+
+	/// <summary>Keeps only the selected LOD buffer resident for each cell.</summary>
+	public new bool SingleLodInstanceBuffers
+	{
+		get => Get(GDExtensionPropertyName.SingleLodInstanceBuffers).As<bool>();
+		set => Set(GDExtensionPropertyName.SingleLodInstanceBuffers, value);
+	}
+
+	/// <summary>Additional world-space range retained beyond mesh visibility.</summary>
+	public new double CellStreamingMargin
+	{
+		get => Get(GDExtensionPropertyName.CellStreamingMargin).As<double>();
+		set => Set(GDExtensionPropertyName.CellStreamingMargin, value);
+	}
+
+	/// <summary>Minimum target movement before cell selection is recalculated.</summary>
+	public new double CellStreamingUpdateDistance
+	{
+		get => Get(GDExtensionPropertyName.CellStreamingUpdateDistance).As<double>();
+		set => Set(GDExtensionPropertyName.CellStreamingUpdateDistance, value);
+	}
+
+	/// <summary>Maximum dirty or newly resident cells published per pre-draw update.</summary>
+	public new long UpdateCellBudget
+	{
+		get => Get(GDExtensionPropertyName.UpdateCellBudget).As<long>();
+		set => Set(GDExtensionPropertyName.UpdateCellBudget, value);
 	}
 
 	public new class GDExtensionMethodName : GodotObject.MethodName
@@ -142,6 +196,8 @@ public partial class Terrain3DInstancer : GodotObject
 		/// Cached name for the 'swap_ids' member.
 		/// </summary>
 		public new static readonly StringName SwapIds = "swap_ids";
+		/// <summary>Cached name for live instancer diagnostics.</summary>
+		public new static readonly StringName GetStats = "get_stats";
 	}
 
 	public new void ClearByMesh(long meshId) => 
@@ -185,6 +241,9 @@ public partial class Terrain3DInstancer : GodotObject
 
 	public new void SwapIds(long srcId, long destId) => 
 		Call(GDExtensionMethodName.SwapIds, [srcId, destId]);
+
+	public new Godot.Collections.Dictionary GetStats() =>
+		Call(GDExtensionMethodName.GetStats, []).As<Godot.Collections.Dictionary>();
 
 }
 

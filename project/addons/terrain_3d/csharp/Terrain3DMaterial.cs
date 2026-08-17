@@ -75,6 +75,114 @@ public partial class Terrain3DMaterial : Resource
 		Nearest = 3,
 	}
 
+	public enum ShaderVariantModeEnum
+	{
+		Disabled = 0,
+		OnDemand = 1,
+		PrewarmActiveBranches = 2,
+		PrewarmCommon = 2,
+		PrewarmActiveAndRecent = 3,
+		PrewarmFeatureMatrix = PrewarmActiveAndRecent,
+	}
+
+	public enum ShaderPerformancePresetEnum
+	{
+		Custom = 0,
+		Cinematic = 1,
+		High = 2,
+		Runtime360 = 3,
+		Low = 4,
+		Minimum = 5,
+		Xbox360Authentic = 6,
+		BranchlessQuality = Cinematic,
+		Xbox360Styled = Runtime360,
+		Xbox360 = Xbox360Styled,
+		Fastest = Minimum,
+	}
+
+	public enum TerrainSamplingModeEnum
+	{
+		Adaptive = 0,
+		AlwaysSmooth = 1,
+		SingleSample = 2,
+		AdaptiveWeighted = 3,
+		DistanceAdaptive = 4,
+		Adaptive2Corner = 5,
+	}
+
+	public enum TerrainNormalModeEnum
+	{
+		Adaptive = 0,
+		Height8Tap = 1,
+		GeometryDerivative = 2,
+		DerivedTexture = 3,
+		Height3Tap = 4,
+		Smooth = Height8Tap,
+		Flat = GeometryDerivative,
+	}
+
+	public enum ColorSamplingModeEnum
+	{
+		Auto = 0,
+		HardwareFiltered = 1,
+		Exact4Tap = 2,
+	}
+
+	public enum ProjectionModeEnum
+	{
+		Disabled = 0,
+		SharedFragment = 1,
+		ExactPerCorner = 2,
+	}
+
+	public enum TessellationMaterialModeEnum
+	{
+		GeometryOnly = 0,
+		GeometryAndMaterialHeight = 1,
+	}
+
+	public enum SurfaceDataModeEnum
+	{
+		Auto = 0,
+		Full = 1,
+		AlbedoOnly = 2,
+	}
+
+	public enum TerrainShadingModeEnum
+	{
+		BurleyGgx = 0,
+		LambertGgx = 1,
+		LambertDiffuseOnly = 2,
+		Unshaded = 3,
+		LambertVertex = 4,
+		Xbox360BlinnPhong = 5,
+	}
+
+	public enum TextureSurfaceModeEnum
+	{
+		Textured = 0,
+		Silhouette = 1,
+	}
+
+	public enum DetilingModeEnum
+	{
+		Continuous = 0,
+		Discrete8 = 1,
+		Disabled = 2,
+		TranslationOnly = 3,
+		Discrete4 = 4,
+		Discrete16 = 5,
+	}
+
+	public enum WorldNoiseShaderModeEnum
+	{
+		Dynamic = 0,
+		CachedVertexNormals = 1,
+		CachedFragmentNormals = 2,
+		ProceduralVertexNormals = 3,
+		ProceduralFragmentNormals = 4,
+	}
+
 	public enum UpdateFlags
 	{
 		UniformsOnly = 0,
@@ -99,6 +207,60 @@ public partial class Terrain3DMaterial : Resource
 		/// </summary>
 		public new static readonly StringName TextureFiltering = "texture_filtering";
 		/// <summary>
+		/// Cached name for the 'shader_variant_mode' member.
+		/// </summary>
+		public new static readonly StringName ShaderVariantMode = "shader_variant_mode";
+		/// <summary>Cached name for the 'shader_variant_cache_limit' member.</summary>
+		public new static readonly StringName ShaderVariantCacheLimit = "shader_variant_cache_limit";
+		/// <summary>Cached name for the 'shader_variant_prewarm_limit' member.</summary>
+		public new static readonly StringName ShaderVariantPrewarmLimit = "shader_variant_prewarm_limit";
+		/// <summary>Cached name for the 'shader_variant_source_budget_mb' member.</summary>
+		public new static readonly StringName ShaderVariantSourceBudgetMb = "shader_variant_source_budget_mb";
+		/// <summary>Cached name for the 'shader_performance_preset' member.</summary>
+		public new static readonly StringName ShaderPerformancePreset = "shader_performance_preset";
+		/// <summary>Cached name for the 'terrain_sampling_mode' member.</summary>
+		public new static readonly StringName TerrainSamplingMode = "terrain_sampling_mode";
+		public new static readonly StringName MiddleTextureFiltering = "middle_texture_filtering";
+		public new static readonly StringName MiddleTerrainSamplingMode = "middle_terrain_sampling_mode";
+		public new static readonly StringName MiddleTerrainNormalMode = "middle_terrain_normal_mode";
+		public new static readonly StringName MiddleColorSamplingMode = "middle_color_sampling_mode";
+		public new static readonly StringName MiddleSurfaceDataMode = "middle_surface_data_mode";
+		public new static readonly StringName MiddleTextureSurfaceMode = "middle_texture_surface_mode";
+		public new static readonly StringName MiddleTerrainShadingMode = "middle_terrain_shading_mode";
+		public new static readonly StringName MiddleDetilingMode = "middle_detiling_mode";
+		public new static readonly StringName MiddleAutoShaderEnabled = "middle_auto_shader_enabled";
+		public new static readonly StringName MiddleAuthoredColorEnabled = "middle_authored_color_enabled";
+		public new static readonly StringName MiddleWetnessEnabled = "middle_wetness_enabled";
+		public new static readonly StringName MiddleMaterialLodBias = "middle_material_lod_bias";
+		public new static readonly StringName FarTextureFiltering = "far_texture_filtering";
+		public new static readonly StringName FarTextureSurfaceMode = "far_texture_surface_mode";
+		public new static readonly StringName FarTerrainShadingMode = "far_terrain_shading_mode";
+		public new static readonly StringName FarMaterialLod = "far_material_lod";
+		public new static readonly StringName FarAuthoredColorEnabled = "far_authored_color_enabled";
+		public new static readonly StringName FarWetnessEnabled = "far_wetness_enabled";
+		/// <summary>Cached name for the 'terrain_normal_mode' member.</summary>
+		public new static readonly StringName TerrainNormalMode = "terrain_normal_mode";
+		/// <summary>Cached name for the 'color_sampling_mode' member.</summary>
+		public new static readonly StringName ColorSamplingMode = "color_sampling_mode";
+		/// <summary>Cached name for the 'projection_mode' member.</summary>
+		public new static readonly StringName ProjectionMode = "projection_mode";
+		/// <summary>Cached name for the 'tessellation_material_mode' member.</summary>
+		public new static readonly StringName TessellationMaterialMode = "tessellation_material_mode";
+		/// <summary>Cached name for the 'surface_data_mode' member.</summary>
+		public new static readonly StringName SurfaceDataMode = "surface_data_mode";
+		/// <summary>Cached name for the 'terrain_shading_mode' member.</summary>
+		public new static readonly StringName TerrainShadingMode = "terrain_shading_mode";
+		/// <summary>Cached name for the 'texture_surface_mode' member.</summary>
+		public new static readonly StringName TextureSurfaceMode = "texture_surface_mode";
+		/// <summary>Cached name for the 'detiling_mode' member.</summary>
+		public new static readonly StringName DetilingMode = "detiling_mode";
+		/// <summary>Cached name for the 'world_noise_shader_mode' member.</summary>
+		public new static readonly StringName WorldNoiseShaderMode = "world_noise_shader_mode";
+		/// <summary>
+		/// Cached name for the 'packed_pbr_single_fetch' member.
+		/// </summary>
+		public new static readonly StringName PackedPbrSingleFetch = "packed_pbr_single_fetch";
+		/// <summary>
 		/// Cached name for the 'auto_shader_enabled' member.
 		/// </summary>
 		public new static readonly StringName AutoShaderEnabled = "auto_shader_enabled";
@@ -122,6 +284,10 @@ public partial class Terrain3DMaterial : Resource
 		/// Cached name for the 'output_roughness' member.
 		/// </summary>
 		public new static readonly StringName OutputRoughness = "output_roughness";
+		/// <summary>
+		/// Cached name for the 'output_specular' member.
+		/// </summary>
+		public new static readonly StringName OutputSpecular = "output_specular";
 		/// <summary>
 		/// Cached name for the 'output_normal_map' member.
 		/// </summary>
@@ -256,6 +422,210 @@ public partial class Terrain3DMaterial : Resource
 		set => Set(GDExtensionPropertyName.TextureFiltering, Variant.From(value));
 	}
 
+	public new Terrain3DMaterial.ShaderVariantModeEnum ShaderVariantMode
+	{
+		get => Get(GDExtensionPropertyName.ShaderVariantMode).As<Terrain3DMaterial.ShaderVariantModeEnum>();
+		set => Set(GDExtensionPropertyName.ShaderVariantMode, Variant.From(value));
+	}
+
+	public new long ShaderVariantCacheLimit
+	{
+		get => Get(GDExtensionPropertyName.ShaderVariantCacheLimit).As<long>();
+		set => Set(GDExtensionPropertyName.ShaderVariantCacheLimit, value);
+	}
+
+	public new long ShaderVariantPrewarmLimit
+	{
+		get => Get(GDExtensionPropertyName.ShaderVariantPrewarmLimit).As<long>();
+		set => Set(GDExtensionPropertyName.ShaderVariantPrewarmLimit, value);
+	}
+
+	public new long ShaderVariantSourceBudgetMb
+	{
+		get => Get(GDExtensionPropertyName.ShaderVariantSourceBudgetMb).As<long>();
+		set => Set(GDExtensionPropertyName.ShaderVariantSourceBudgetMb, value);
+	}
+
+	public new Terrain3DMaterial.ShaderPerformancePresetEnum ShaderPerformancePreset
+	{
+		get => Get(GDExtensionPropertyName.ShaderPerformancePreset).As<Terrain3DMaterial.ShaderPerformancePresetEnum>();
+		set => Set(GDExtensionPropertyName.ShaderPerformancePreset, Variant.From(value));
+	}
+
+	public new Terrain3DMaterial.TerrainSamplingModeEnum TerrainSamplingMode
+	{
+		get => Get(GDExtensionPropertyName.TerrainSamplingMode).As<Terrain3DMaterial.TerrainSamplingModeEnum>();
+		set => Set(GDExtensionPropertyName.TerrainSamplingMode, Variant.From(value));
+	}
+
+	public new Terrain3DMaterial.TextureFilteringEnum MiddleTextureFiltering
+	{
+		get => Get(GDExtensionPropertyName.MiddleTextureFiltering).As<Terrain3DMaterial.TextureFilteringEnum>();
+		set => Set(GDExtensionPropertyName.MiddleTextureFiltering, Variant.From(value));
+	}
+
+	public new Terrain3DMaterial.TerrainSamplingModeEnum MiddleTerrainSamplingMode
+	{
+		get => Get(GDExtensionPropertyName.MiddleTerrainSamplingMode).As<Terrain3DMaterial.TerrainSamplingModeEnum>();
+		set => Set(GDExtensionPropertyName.MiddleTerrainSamplingMode, Variant.From(value));
+	}
+
+	public new Terrain3DMaterial.TerrainNormalModeEnum MiddleTerrainNormalMode
+	{
+		get => Get(GDExtensionPropertyName.MiddleTerrainNormalMode).As<Terrain3DMaterial.TerrainNormalModeEnum>();
+		set => Set(GDExtensionPropertyName.MiddleTerrainNormalMode, Variant.From(value));
+	}
+
+	public new Terrain3DMaterial.ColorSamplingModeEnum MiddleColorSamplingMode
+	{
+		get => Get(GDExtensionPropertyName.MiddleColorSamplingMode).As<Terrain3DMaterial.ColorSamplingModeEnum>();
+		set => Set(GDExtensionPropertyName.MiddleColorSamplingMode, Variant.From(value));
+	}
+
+	public new Terrain3DMaterial.SurfaceDataModeEnum MiddleSurfaceDataMode
+	{
+		get => Get(GDExtensionPropertyName.MiddleSurfaceDataMode).As<Terrain3DMaterial.SurfaceDataModeEnum>();
+		set => Set(GDExtensionPropertyName.MiddleSurfaceDataMode, Variant.From(value));
+	}
+
+	public new Terrain3DMaterial.TextureSurfaceModeEnum MiddleTextureSurfaceMode
+	{
+		get => Get(GDExtensionPropertyName.MiddleTextureSurfaceMode).As<Terrain3DMaterial.TextureSurfaceModeEnum>();
+		set => Set(GDExtensionPropertyName.MiddleTextureSurfaceMode, Variant.From(value));
+	}
+
+	public new Terrain3DMaterial.TerrainShadingModeEnum MiddleTerrainShadingMode
+	{
+		get => Get(GDExtensionPropertyName.MiddleTerrainShadingMode).As<Terrain3DMaterial.TerrainShadingModeEnum>();
+		set => Set(GDExtensionPropertyName.MiddleTerrainShadingMode, Variant.From(value));
+	}
+
+	public new Terrain3DMaterial.DetilingModeEnum MiddleDetilingMode
+	{
+		get => Get(GDExtensionPropertyName.MiddleDetilingMode).As<Terrain3DMaterial.DetilingModeEnum>();
+		set => Set(GDExtensionPropertyName.MiddleDetilingMode, Variant.From(value));
+	}
+
+	public new bool MiddleAutoShaderEnabled
+	{
+		get => Get(GDExtensionPropertyName.MiddleAutoShaderEnabled).As<bool>();
+		set => Set(GDExtensionPropertyName.MiddleAutoShaderEnabled, value);
+	}
+
+	public new bool MiddleAuthoredColorEnabled
+	{
+		get => Get(GDExtensionPropertyName.MiddleAuthoredColorEnabled).As<bool>();
+		set => Set(GDExtensionPropertyName.MiddleAuthoredColorEnabled, value);
+	}
+
+	public new bool MiddleWetnessEnabled
+	{
+		get => Get(GDExtensionPropertyName.MiddleWetnessEnabled).As<bool>();
+		set => Set(GDExtensionPropertyName.MiddleWetnessEnabled, value);
+	}
+
+	public new double MiddleMaterialLodBias
+	{
+		get => Get(GDExtensionPropertyName.MiddleMaterialLodBias).As<double>();
+		set => Set(GDExtensionPropertyName.MiddleMaterialLodBias, value);
+	}
+
+	public new Terrain3DMaterial.TextureFilteringEnum FarTextureFiltering
+	{
+		get => Get(GDExtensionPropertyName.FarTextureFiltering).As<Terrain3DMaterial.TextureFilteringEnum>();
+		set => Set(GDExtensionPropertyName.FarTextureFiltering, Variant.From(value));
+	}
+
+	public new Terrain3DMaterial.TextureSurfaceModeEnum FarTextureSurfaceMode
+	{
+		get => Get(GDExtensionPropertyName.FarTextureSurfaceMode).As<Terrain3DMaterial.TextureSurfaceModeEnum>();
+		set => Set(GDExtensionPropertyName.FarTextureSurfaceMode, Variant.From(value));
+	}
+
+	public new Terrain3DMaterial.TerrainShadingModeEnum FarTerrainShadingMode
+	{
+		get => Get(GDExtensionPropertyName.FarTerrainShadingMode).As<Terrain3DMaterial.TerrainShadingModeEnum>();
+		set => Set(GDExtensionPropertyName.FarTerrainShadingMode, Variant.From(value));
+	}
+
+	public new double FarMaterialLod
+	{
+		get => Get(GDExtensionPropertyName.FarMaterialLod).As<double>();
+		set => Set(GDExtensionPropertyName.FarMaterialLod, value);
+	}
+
+	public new bool FarAuthoredColorEnabled
+	{
+		get => Get(GDExtensionPropertyName.FarAuthoredColorEnabled).As<bool>();
+		set => Set(GDExtensionPropertyName.FarAuthoredColorEnabled, value);
+	}
+
+	public new bool FarWetnessEnabled
+	{
+		get => Get(GDExtensionPropertyName.FarWetnessEnabled).As<bool>();
+		set => Set(GDExtensionPropertyName.FarWetnessEnabled, value);
+	}
+
+	public new Terrain3DMaterial.TerrainNormalModeEnum TerrainNormalMode
+	{
+		get => Get(GDExtensionPropertyName.TerrainNormalMode).As<Terrain3DMaterial.TerrainNormalModeEnum>();
+		set => Set(GDExtensionPropertyName.TerrainNormalMode, Variant.From(value));
+	}
+
+	public new Terrain3DMaterial.ColorSamplingModeEnum ColorSamplingMode
+	{
+		get => Get(GDExtensionPropertyName.ColorSamplingMode).As<Terrain3DMaterial.ColorSamplingModeEnum>();
+		set => Set(GDExtensionPropertyName.ColorSamplingMode, Variant.From(value));
+	}
+
+	public new Terrain3DMaterial.ProjectionModeEnum ProjectionMode
+	{
+		get => Get(GDExtensionPropertyName.ProjectionMode).As<Terrain3DMaterial.ProjectionModeEnum>();
+		set => Set(GDExtensionPropertyName.ProjectionMode, Variant.From(value));
+	}
+
+	public new Terrain3DMaterial.TessellationMaterialModeEnum TessellationMaterialMode
+	{
+		get => Get(GDExtensionPropertyName.TessellationMaterialMode).As<Terrain3DMaterial.TessellationMaterialModeEnum>();
+		set => Set(GDExtensionPropertyName.TessellationMaterialMode, Variant.From(value));
+	}
+
+	public new Terrain3DMaterial.SurfaceDataModeEnum SurfaceDataMode
+	{
+		get => Get(GDExtensionPropertyName.SurfaceDataMode).As<Terrain3DMaterial.SurfaceDataModeEnum>();
+		set => Set(GDExtensionPropertyName.SurfaceDataMode, Variant.From(value));
+	}
+
+	public new Terrain3DMaterial.TerrainShadingModeEnum TerrainShadingMode
+	{
+		get => Get(GDExtensionPropertyName.TerrainShadingMode).As<Terrain3DMaterial.TerrainShadingModeEnum>();
+		set => Set(GDExtensionPropertyName.TerrainShadingMode, Variant.From(value));
+	}
+
+	public new Terrain3DMaterial.TextureSurfaceModeEnum TextureSurfaceMode
+	{
+		get => Get(GDExtensionPropertyName.TextureSurfaceMode).As<Terrain3DMaterial.TextureSurfaceModeEnum>();
+		set => Set(GDExtensionPropertyName.TextureSurfaceMode, Variant.From(value));
+	}
+
+	public new Terrain3DMaterial.DetilingModeEnum DetilingMode
+	{
+		get => Get(GDExtensionPropertyName.DetilingMode).As<Terrain3DMaterial.DetilingModeEnum>();
+		set => Set(GDExtensionPropertyName.DetilingMode, Variant.From(value));
+	}
+
+	public new Terrain3DMaterial.WorldNoiseShaderModeEnum WorldNoiseShaderMode
+	{
+		get => Get(GDExtensionPropertyName.WorldNoiseShaderMode).As<Terrain3DMaterial.WorldNoiseShaderModeEnum>();
+		set => Set(GDExtensionPropertyName.WorldNoiseShaderMode, Variant.From(value));
+	}
+
+	public new bool PackedPbrSingleFetch
+	{
+		get => Get(GDExtensionPropertyName.PackedPbrSingleFetch).As<bool>();
+		set => Set(GDExtensionPropertyName.PackedPbrSingleFetch, value);
+	}
+
 	public new bool AutoShaderEnabled
 	{
 		get => Get(GDExtensionPropertyName.AutoShaderEnabled).As<bool>();
@@ -290,6 +660,12 @@ public partial class Terrain3DMaterial : Resource
 	{
 		get => Get(GDExtensionPropertyName.OutputRoughness).As<bool>();
 		set => Set(GDExtensionPropertyName.OutputRoughness, value);
+	}
+
+	public new bool OutputSpecular
+	{
+		get => Get(GDExtensionPropertyName.OutputSpecular).As<bool>();
+		set => Set(GDExtensionPropertyName.OutputSpecular, value);
 	}
 
 	public new bool OutputNormalMap
@@ -495,6 +871,40 @@ public partial class Terrain3DMaterial : Resource
 		/// </summary>
 		public new static readonly StringName GetBufferShaderRid = "get_buffer_shader_rid";
 		/// <summary>
+		/// Cached name for the 'prewarm_shader_variants' member.
+		/// </summary>
+		public new static readonly StringName PrewarmShaderVariants = "prewarm_shader_variants";
+		/// <summary>
+		/// Cached name for the 'clear_shader_variant_cache' member.
+		/// </summary>
+		public new static readonly StringName ClearShaderVariantCache = "clear_shader_variant_cache";
+		/// <summary>
+		/// Cached name for the 'get_shader_variant_count' member.
+		/// </summary>
+		public new static readonly StringName GetShaderVariantCount = "get_shader_variant_count";
+		/// <summary>Cached name for the 'get_runtime_shader_variant_count' member.</summary>
+		public new static readonly StringName GetRuntimeShaderVariantCount = "get_runtime_shader_variant_count";
+		/// <summary>Cached name for the 'get_editor_shader_variant_count' member.</summary>
+		public new static readonly StringName GetEditorShaderVariantCount = "get_editor_shader_variant_count";
+		/// <summary>
+		/// Cached name for the 'get_buffer_shader_variant_count' member.
+		/// </summary>
+		public new static readonly StringName GetBufferShaderVariantCount = "get_buffer_shader_variant_count";
+		/// <summary>Cached name for the 'get_speculative_shader_variant_count' member.</summary>
+		public new static readonly StringName GetSpeculativeShaderVariantCount = "get_speculative_shader_variant_count";
+		/// <summary>Cached name for the 'get_shader_variant_source_bytes' member.</summary>
+		public new static readonly StringName GetShaderVariantSourceBytes = "get_shader_variant_source_bytes";
+		/// <summary>Cached name for the 'get_last_prewarm_variant_count' member.</summary>
+		public new static readonly StringName GetLastPrewarmVariantCount = "get_last_prewarm_variant_count";
+		/// <summary>Cached name for the 'get_last_prewarm_skipped_count' member.</summary>
+		public new static readonly StringName GetLastPrewarmSkippedCount = "get_last_prewarm_skipped_count";
+		/// <summary>Cached name for the 'get_theoretical_shader_variant_count' member.</summary>
+		public new static readonly StringName GetTheoreticalShaderVariantCount = "get_theoretical_shader_variant_count";
+		/// <summary>Cached name for the 'get_shader_variant_diagnostics' member.</summary>
+		public new static readonly StringName GetShaderVariantDiagnostics = "get_shader_variant_diagnostics";
+		/// <summary>Cached name for the 'reset_shader_variant_diagnostics' member.</summary>
+		public new static readonly StringName ResetShaderVariantDiagnostics = "reset_shader_variant_diagnostics";
+		/// <summary>
 		/// Cached name for the 'set_shader_param' member.
 		/// </summary>
 		public new static readonly StringName SetShaderParam = "set_shader_param";
@@ -508,28 +918,67 @@ public partial class Terrain3DMaterial : Resource
 		public new static readonly StringName Save = "save";
 	}
 
-	public new void Update(long flags = 0) => 
+	public new void Update(long flags = 0) =>
 		Call(GDExtensionMethodName.Update, [flags]);
 
-	public new Rid GetMaterialRid() => 
+	public new Rid GetMaterialRid() =>
 		Call(GDExtensionMethodName.GetMaterialRid, []).As<Rid>();
 
-	public new Rid GetShaderRid() => 
+	public new Rid GetShaderRid() =>
 		Call(GDExtensionMethodName.GetShaderRid, []).As<Rid>();
 
-	public new Rid GetBufferMaterialRid() => 
+	public new Rid GetBufferMaterialRid() =>
 		Call(GDExtensionMethodName.GetBufferMaterialRid, []).As<Rid>();
 
-	public new Rid GetBufferShaderRid() => 
+	public new Rid GetBufferShaderRid() =>
 		Call(GDExtensionMethodName.GetBufferShaderRid, []).As<Rid>();
 
-	public new void SetShaderParam(StringName name, Variant value) => 
+	public new void PrewarmShaderVariants() =>
+		Call(GDExtensionMethodName.PrewarmShaderVariants, []);
+
+	public new void ClearShaderVariantCache() =>
+		Call(GDExtensionMethodName.ClearShaderVariantCache, []);
+
+	public new long GetShaderVariantCount() =>
+		Call(GDExtensionMethodName.GetShaderVariantCount, []).As<long>();
+
+	public new long GetRuntimeShaderVariantCount() =>
+		Call(GDExtensionMethodName.GetRuntimeShaderVariantCount, []).As<long>();
+
+	public new long GetEditorShaderVariantCount() =>
+		Call(GDExtensionMethodName.GetEditorShaderVariantCount, []).As<long>();
+
+	public new long GetBufferShaderVariantCount() =>
+		Call(GDExtensionMethodName.GetBufferShaderVariantCount, []).As<long>();
+
+	public new long GetSpeculativeShaderVariantCount() =>
+		Call(GDExtensionMethodName.GetSpeculativeShaderVariantCount, []).As<long>();
+
+	public new long GetShaderVariantSourceBytes() =>
+		Call(GDExtensionMethodName.GetShaderVariantSourceBytes, []).As<long>();
+
+	public new long GetLastPrewarmVariantCount() =>
+		Call(GDExtensionMethodName.GetLastPrewarmVariantCount, []).As<long>();
+
+	public new long GetLastPrewarmSkippedCount() =>
+		Call(GDExtensionMethodName.GetLastPrewarmSkippedCount, []).As<long>();
+
+	public new long GetTheoreticalShaderVariantCount() =>
+		Call(GDExtensionMethodName.GetTheoreticalShaderVariantCount, []).As<long>();
+
+	public new Godot.Collections.Dictionary GetShaderVariantDiagnostics() =>
+		Call(GDExtensionMethodName.GetShaderVariantDiagnostics, []).As<Godot.Collections.Dictionary>();
+
+	public new void ResetShaderVariantDiagnostics() =>
+		Call(GDExtensionMethodName.ResetShaderVariantDiagnostics, []);
+
+	public new void SetShaderParam(StringName name, Variant value) =>
 		Call(GDExtensionMethodName.SetShaderParam, [name, value]);
 
-	public new void GetShaderParam(StringName name) => 
+	public new void GetShaderParam(StringName name) =>
 		Call(GDExtensionMethodName.GetShaderParam, [name]);
 
-	public new Error Save(string path = "") => 
+	public new Error Save(string path = "") =>
 		Call(GDExtensionMethodName.Save, [path]).As<Error>();
 
 }
@@ -555,6 +1004,60 @@ public static int SafeAsInt32(this Terrain3DMaterial.TextureFilteringEnum enumVa
 Convert.ToInt32(enumValue);
 
 public static int SafeAsInt32(this Terrain3DMaterial.TextureFilteringEnum? enumValue, int defaultValue = 0) =>
+enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
+}
+
+file static class ShaderPerformancePresetEnumExtensions
+{
+public static int SafeAsInt32(this Terrain3DMaterial.ShaderPerformancePresetEnum enumValue) => Convert.ToInt32(enumValue);
+public static int SafeAsInt32(this Terrain3DMaterial.ShaderPerformancePresetEnum enumValue, int defaultValue) => Convert.ToInt32(enumValue);
+public static int SafeAsInt32(this Terrain3DMaterial.ShaderPerformancePresetEnum? enumValue, int defaultValue = 0) => enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
+}
+
+file static class TerrainSamplingModeEnumExtensions
+{
+public static int SafeAsInt32(this Terrain3DMaterial.TerrainSamplingModeEnum enumValue) => Convert.ToInt32(enumValue);
+public static int SafeAsInt32(this Terrain3DMaterial.TerrainSamplingModeEnum enumValue, int defaultValue) => Convert.ToInt32(enumValue);
+public static int SafeAsInt32(this Terrain3DMaterial.TerrainSamplingModeEnum? enumValue, int defaultValue = 0) => enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
+}
+
+file static class TerrainNormalModeEnumExtensions
+{
+public static int SafeAsInt32(this Terrain3DMaterial.TerrainNormalModeEnum enumValue) => Convert.ToInt32(enumValue);
+public static int SafeAsInt32(this Terrain3DMaterial.TerrainNormalModeEnum enumValue, int defaultValue) => Convert.ToInt32(enumValue);
+public static int SafeAsInt32(this Terrain3DMaterial.TerrainNormalModeEnum? enumValue, int defaultValue = 0) => enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
+}
+
+file static class TextureSurfaceModeEnumExtensions
+{
+public static int SafeAsInt32(this Terrain3DMaterial.TextureSurfaceModeEnum enumValue) => Convert.ToInt32(enumValue);
+public static int SafeAsInt32(this Terrain3DMaterial.TextureSurfaceModeEnum enumValue, int defaultValue) => Convert.ToInt32(enumValue);
+public static int SafeAsInt32(this Terrain3DMaterial.TextureSurfaceModeEnum? enumValue, int defaultValue = 0) => enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
+}
+
+file static class DetilingModeEnumExtensions
+{
+public static int SafeAsInt32(this Terrain3DMaterial.DetilingModeEnum enumValue) => Convert.ToInt32(enumValue);
+public static int SafeAsInt32(this Terrain3DMaterial.DetilingModeEnum enumValue, int defaultValue) => Convert.ToInt32(enumValue);
+public static int SafeAsInt32(this Terrain3DMaterial.DetilingModeEnum? enumValue, int defaultValue = 0) => enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
+}
+
+file static class WorldNoiseShaderModeEnumExtensions
+{
+public static int SafeAsInt32(this Terrain3DMaterial.WorldNoiseShaderModeEnum enumValue) => Convert.ToInt32(enumValue);
+public static int SafeAsInt32(this Terrain3DMaterial.WorldNoiseShaderModeEnum enumValue, int defaultValue) => Convert.ToInt32(enumValue);
+public static int SafeAsInt32(this Terrain3DMaterial.WorldNoiseShaderModeEnum? enumValue, int defaultValue = 0) => enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
+}
+
+file static class ShaderVariantModeEnumExtensions
+{
+public static int SafeAsInt32(this Terrain3DMaterial.ShaderVariantModeEnum enumValue) =>
+Convert.ToInt32(enumValue);
+
+public static int SafeAsInt32(this Terrain3DMaterial.ShaderVariantModeEnum enumValue, int defaultValue) =>
+Convert.ToInt32(enumValue);
+
+public static int SafeAsInt32(this Terrain3DMaterial.ShaderVariantModeEnum? enumValue, int defaultValue = 0) =>
 enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
 }
 

@@ -66,6 +66,16 @@ public partial class Terrain3DAssets : Resource
 		Mesh = 1,
 	}
 
+	public enum TexturePackingMode
+	{
+		Legacy = 0,
+		PackedPbrR8 = 1,
+		[Obsolete("Use PackedPbrR8.")]
+		SurfaceR16 = PackedPbrR8,
+		[Obsolete("Use PackedPbrR8.")]
+		PbrRgba16Ui = PackedPbrR8,
+	}
+
 	public new class GDExtensionSignalName : Resource.SignalName
 	{
 		/// <summary>
@@ -136,6 +146,10 @@ public partial class Terrain3DAssets : Resource
 		/// Cached name for the 'texture_list' member.
 		/// </summary>
 		public new static readonly StringName TextureList = "texture_list";
+		/// <summary>
+		/// Cached name for the 'texture_packing_mode' member.
+		/// </summary>
+		public new static readonly StringName TexturePackingModeValue = "texture_packing_mode";
 	}
 
 	public new Godot.Collections.Array MeshList
@@ -148,6 +162,12 @@ public partial class Terrain3DAssets : Resource
 	{
 		get => Get(GDExtensionPropertyName.TextureList).As<Godot.Collections.Array>();
 		set => Set(GDExtensionPropertyName.TextureList, value);
+	}
+
+	public new TexturePackingMode TexturePackingModeValue
+	{
+		get => (TexturePackingMode)Get(GDExtensionPropertyName.TexturePackingModeValue).As<long>();
+		set => Set(GDExtensionPropertyName.TexturePackingModeValue, (long)value);
 	}
 
 	public new class GDExtensionMethodName : Resource.MethodName
@@ -173,6 +193,24 @@ public partial class Terrain3DAssets : Resource
 		/// </summary>
 		public new static readonly StringName GetNormalArrayRid = "get_normal_array_rid";
 		/// <summary>
+		/// Cached name for the 'get_pbr_array_rid' member.
+		/// </summary>
+		public new static readonly StringName GetSurfaceArrayRid = "get_surface_array_rid";
+		public new static readonly StringName GetDisplacementArrayRid = "get_displacement_array_rid";
+		public new static readonly StringName GetPbrArrayRid = "get_pbr_array_rid";
+		/// <summary>
+		/// Cached name for the 'set_texture_packing_mode' member.
+		/// </summary>
+		public new static readonly StringName SetTexturePackingMode = "set_texture_packing_mode";
+		/// <summary>
+		/// Cached name for the 'get_texture_packing_mode' member.
+		/// </summary>
+		public new static readonly StringName GetTexturePackingMode = "get_texture_packing_mode";
+		/// <summary>
+		/// Cached name for the 'get_packed_pbr_mipmap_count' member.
+		/// </summary>
+		public new static readonly StringName GetPackedPbrMipmapCount = "get_packed_pbr_mipmap_count";
+		/// <summary>
 		/// Cached name for the 'get_texture_colors' member.
 		/// </summary>
 		public new static readonly StringName GetTextureColors = "get_texture_colors";
@@ -192,6 +230,7 @@ public partial class Terrain3DAssets : Resource
 		/// Cached name for the 'get_texture_roughness_mods' member.
 		/// </summary>
 		public new static readonly StringName GetTextureRoughnessMods = "get_texture_roughness_mods";
+		public new static readonly StringName GetTextureMetallics = "get_texture_metallics";
 		/// <summary>
 		/// Cached name for the 'get_texture_uv_scales' member.
 		/// </summary>
@@ -253,6 +292,25 @@ public partial class Terrain3DAssets : Resource
 	public new Rid GetNormalArrayRid() => 
 		Call(GDExtensionMethodName.GetNormalArrayRid, []).As<Rid>();
 
+	public new Rid GetSurfaceArrayRid() =>
+		Call(GDExtensionMethodName.GetSurfaceArrayRid, []).As<Rid>();
+
+	public new Rid GetDisplacementArrayRid() =>
+		Call(GDExtensionMethodName.GetDisplacementArrayRid, []).As<Rid>();
+
+	[Obsolete("Use GetSurfaceArrayRid().")]
+	public new Rid GetPbrArrayRid() =>
+		Call(GDExtensionMethodName.GetPbrArrayRid, []).As<Rid>();
+
+	public new void SetTexturePackingMode(TexturePackingMode mode) =>
+		Call(GDExtensionMethodName.SetTexturePackingMode, [(long)mode]);
+
+	public new TexturePackingMode GetTexturePackingMode() =>
+		(TexturePackingMode)Call(GDExtensionMethodName.GetTexturePackingMode, []).As<long>();
+
+	public new long GetPackedPbrMipmapCount() =>
+		Call(GDExtensionMethodName.GetPackedPbrMipmapCount, []).As<long>();
+
 	public new Color[] GetTextureColors() => 
 		Call(GDExtensionMethodName.GetTextureColors, []).As<Color[]>();
 
@@ -267,6 +325,9 @@ public partial class Terrain3DAssets : Resource
 
 	public new float[] GetTextureRoughnessMods() => 
 		Call(GDExtensionMethodName.GetTextureRoughnessMods, []).As<float[]>();
+
+	public new float[] GetTextureMetallics() =>
+		Call(GDExtensionMethodName.GetTextureMetallics, []).As<float[]>();
 
 	public new float[] GetTextureUvScales() => 
 		Call(GDExtensionMethodName.GetTextureUvScales, []).As<float[]>();
@@ -312,5 +373,17 @@ public static int SafeAsInt32(this Terrain3DAssets.AssetType enumValue, int defa
 Convert.ToInt32(enumValue);
 
 public static int SafeAsInt32(this Terrain3DAssets.AssetType? enumValue, int defaultValue = 0) =>
+enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
+}
+
+file static class TexturePackingModeExtensions
+{
+public static int SafeAsInt32(this Terrain3DAssets.TexturePackingMode enumValue) =>
+Convert.ToInt32(enumValue);
+
+public static int SafeAsInt32(this Terrain3DAssets.TexturePackingMode enumValue, int defaultValue) =>
+Convert.ToInt32(enumValue);
+
+public static int SafeAsInt32(this Terrain3DAssets.TexturePackingMode? enumValue, int defaultValue = 0) =>
 enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
 }

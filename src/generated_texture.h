@@ -1,30 +1,67 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#pragma once
+
 #ifndef GENERATEDTEXTURE_CLASS_H
 #define GENERATEDTEXTURE_CLASS_H
 
+#include <cstddef>
+
 #include <godot_cpp/classes/image.hpp>
 
-#include "constants.h"
+#include "Terrain3DConstants.h"
 
-class GeneratedTexture {
-	CLASS_NAME_STATIC("Terrain3DGenTex");
+class T3DGeneratedTexture {
+	CLASS_NAME_STATIC( "Terrain3DGenTex" );
 
 private:
-	RID _rid = RID();
-	Ref<Image> _image;
-	bool _dirty = false;
-	int _size = 0;
+	RID m_rid = RID();
+	Ref<Image> m_pImage;
+	bool m_bDirty = false;
+	int m_nSize = 0;
+	int m_nWidth = 0;
+	int m_nHeight = 0;
+	int m_format = -1;
+	bool m_bMipmaps = false;
+	bool m_bLayered = false;
+	size_t m_nPayloadBytes = 0u;
+
+	bool matchesLayout( const Ref<Image> &rImage ) const;
 
 public:
-	void clear();
-	bool is_dirty() const { return _dirty; }
-	RID create(const TypedArray<Image> &p_layers);
-	void update(const Ref<Image> &p_image, const int p_layer);
-	RID create(const Ref<Image> &p_image);
-	Ref<Image> get_image() const { return _image; }
-	RID get_rid() const { return _rid; }
-	int size() const { return _size; }
+	void clear( void );
+	void swap( T3DGeneratedTexture &rOther );
+	bool isDirty( void ) const {
+		return m_bDirty;
+	}
+	RID create( const TypedArray<Image> &rLayers );
+	bool update( const Ref<Image> &rImage, const int nLayer );
+	RID create( const Ref<Image> &rImage );
+	bool update2d( const Ref<Image> &rImage );
+	Ref<Image> getImage( void ) const {
+		return m_pImage;
+	}
+	RID getRid( void ) const {
+		return m_rid;
+	}
+	int size( void ) const {
+		return m_nSize;
+	}
+	int maxMipmapLevel( void ) const {
+		if ( !m_bMipmaps || m_nWidth <= 0 || m_nHeight <= 0 ) {
+			return 0;
+		}
+		int dimension = m_nWidth > m_nHeight ? m_nWidth : m_nHeight;
+		int level = 0;
+		while ( dimension > 1 ) {
+			dimension >>= 1;
+			++level;
+		}
+		return level;
+	}
+	size_t payloadBytes( void ) const {
+		return m_nPayloadBytes;
+	}
 };
 
 #endif // GENERATEDTEXTURE_CLASS_H
