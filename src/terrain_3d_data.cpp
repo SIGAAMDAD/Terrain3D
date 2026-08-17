@@ -1828,6 +1828,12 @@ bool T3DData::writeGpuRuntimePage( T3DRegion *const pRegion ) {
 	if ( bHadPrevious ) {
 		DirAccess::remove_absolute( backup_path );
 	}
+	if ( IS_EDITOR && page_path.begins_with( "res://" ) ) {
+		EditorFileSystem *const pFilesystem = EditorInterface::get_singleton()->get_resource_filesystem();
+		if ( pFilesystem && !pFilesystem->is_scanning() ) {
+			pFilesystem->update_file( page_path );
+		}
+	}
 	return true;
 }
 
@@ -2556,7 +2562,16 @@ bool T3DData::loadCookedGpuFarAtlases( void ) {
 
 bool T3DData::writeCookedGpuFarAtlases( const String &rDirectory ) {
 	const String path = getGpuFarAtlasPath( rDirectory );
-	if ( path.is_empty() || !initializeGpuFarAtlasImages() ) {
+	if ( path.is_empty() ) {
+		return false;
+	}
+	// A loaded/saved clean atlas is already authoritative. Do not rewrite a large
+	// generated file merely because the scene itself was saved.
+	if ( !m_bGpuFarHeightDirty && !m_bGpuFarColorDirty &&
+		( m_bGpuFarCookedLoaded || m_bGpuFarCookedSaved ) && FileAccess::file_exists( path ) ) {
+		return true;
+	}
+	if ( !initializeGpuFarAtlasImages() ) {
 		return false;
 	}
 	if ( m_bGpuFarHeightDirty && !rebuildGpuFarHeightAtlas() ) {
@@ -2616,6 +2631,12 @@ bool T3DData::writeCookedGpuFarAtlases( const String &rDirectory ) {
 	}
 	m_bGpuFarCookedSaved = true;
 	m_bGpuFarCookedLoaded = false;
+	if ( IS_EDITOR && path.begins_with( "res://" ) ) {
+		EditorFileSystem *const pFilesystem = EditorInterface::get_singleton()->get_resource_filesystem();
+		if ( pFilesystem && !pFilesystem->is_scanning() ) {
+			pFilesystem->update_file( path );
+		}
+	}
 	m_nGpuFarCookIoUsecLast = Time::get_singleton()->get_ticks_usec() - started_usec;
 	return true;
 }
@@ -7089,9 +7110,10 @@ void T3DData::saveDirectory( const String &rDir ) {
 	if ( m_pTerrain && m_pTerrain->isGpuRegionCookOnSave() && !writeCookedGpuFarAtlases( rDir ) ) {
 		LOG( T3DTerrain::ERROR, "Terrain regions saved, but cooked far-atlas generation failed" );
 	}
-	if ( IS_EDITOR && !EditorInterface::get_singleton()->get_resource_filesystem()->is_scanning() ) {
-		EditorInterface::get_singleton()->get_resource_filesystem()->scan();
-	}
+	// saveRegion() updates only the exact resource paths Terrain3D changed. Do
+	// not force a project-wide EditorFileSystem scan from a scene-save callback:
+	// scans are allowed to reload changed resources and make save-on-focus-loss
+	// turn every editor refocus into unnecessary reload work.
 }
 
 // You may need to do a file system scan to update FileSystem panel
@@ -7130,6 +7152,12 @@ void T3DData::saveRegion( const Vector2i &rRegionLoc, const String &rDir, const 
 		const String page_path = path.get_basename() + String( ".t3dpage" );
 		if ( FileAccess::file_exists( page_path ) ) {
 			DirAccess::remove_absolute( page_path );
+			if ( IS_EDITOR && page_path.begins_with( "res://" ) ) {
+				EditorFileSystem *const pFilesystem = EditorInterface::get_singleton()->get_resource_filesystem();
+				if ( pFilesystem && !pFilesystem->is_scanning() ) {
+					pFilesystem->update_file( page_path );
+				}
+			}
 		}
 		if ( m_pTerrain && m_pTerrain->isGpuRegionCookOnSave() ) {
 			// Deleting one source changes the compiled two-texel control halo of all
@@ -7156,6 +7184,12 @@ void T3DData::saveRegion( const Vector2i &rRegionLoc, const String &rDir, const 
 				}
 			}
 		}
+		if ( IS_EDITOR && path.begins_with( "res://" ) ) {
+			EditorFileSystem *const pFilesystem = EditorInterface::get_singleton()->get_resource_filesystem();
+			if ( pFilesystem && !pFilesystem->is_scanning() ) {
+				pFilesystem->update_file( path );
+			}
+		}
 		return;
 	}
 	if ( !pRegion->isModified() ) {
@@ -7168,7 +7202,16 @@ void T3DData::saveRegion( const Vector2i &rRegionLoc, const String &rDir, const 
 	const Error err = pRegion->save( path, b16Bit );
 	if ( !( err == OK || err == ERR_SKIP ) ) {
 		LOG( T3DTerrain::ERROR, "Could not save file: ", path, ", error: ", UtilityFunctions::error_string( err ), " (", err, ")" );
-	} else if ( err == OK && m_pTerrain && m_pTerrain->isGpuRegionCookOnSave() ) {
+	} else if ( err == OK ) {
+		if ( IS_EDITOR && path.begins_with( "res://" ) ) {
+			EditorFileSystem *const pFilesystem = EditorInterface::get_singleton()->get_resource_filesystem();
+			if ( pFilesystem && !pFilesystem->is_scanning() ) {
+				pFilesystem->update_file( path );
+			}
+		}
+		if ( !( m_pTerrain && m_pTerrain->isGpuRegionCookOnSave() ) ) {
+			return;
+		}
 		// The compiled render-control field uses a two-texel cross-region halo. A
 		// source edit can therefore change the transition field of any immediate
 		// neighbor even though that neighbor's authored resource did not change.
