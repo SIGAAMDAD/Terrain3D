@@ -29,29 +29,6 @@ const META_SHADOWMASK_EXPECTED: StringName = &"terrain3d_lightmap_shadowmask_exp
 const META_BAKE_SIGNATURE: StringName = &"terrain3d_lightmap_bake_signature"
 
 var plugin: EditorPlugin
-var _dialog: ConfirmationDialog
-var _region_list: ItemList
-var _status_label: Label
-var _available_locations: Array[Vector2i] = []
-
-
-func prepare_active_bake() -> bool:
-	return open_dialog()
-
-
-func open_dialog() -> bool:
-	var terrain: Terrain3D = _get_active_terrain()
-	if not _validate_source_terrain(terrain):
-		return false
-	_ensure_dialog()
-	_populate_region_list(terrain)
-	if _available_locations.is_empty():
-		push_error("The selected Terrain3D data set has no authored regions to bake")
-		return false
-	var location: Vector2i = _get_default_region_location(terrain)
-	_select_location(location)
-	_dialog.popup_centered(Vector2i(620, 520))
-	return true
 
 
 func prepare_region_bake(location: Vector2i) -> bool:
@@ -149,23 +126,12 @@ func prepare_region_bake(location: Vector2i) -> bool:
 		root, terrain, location, DEFAULT_PROXY_LOD, DEFAULT_CONTEXT_RADIUS,
 		DEFAULT_TEXEL_SIZE, SHADOWMASK_OVERLAY))
 
-	EditorInterface.get_selection().clear()
-	EditorInterface.get_selection().add_node(lightmap)
-	if Engine.has_singleton("TerrainLightmapBakeBridge"):
-		var bridge: Object = Engine.get_singleton("TerrainLightmapBakeBridge")
-		if bridge.has_method("bake_lightmap"):
-			var result: Variant = bridge.call("bake_lightmap", lightmap)
-			if result is int and int(result) != OK:
-				push_error("TerrainLightmapBakeBridge failed for region %s: %s" % [location, error_string(int(result))])
-				return false
-			print("Terrain3D: region %s lightmap submitted through TerrainLightmapBakeBridge" % location)
-			return true
-
-	print("Terrain3D: prepared lightmap bake for region %s in the active Terrain3D scene. Run Godot's Bake Lightmaps command, then Finalize Region Lightmap Bake." % location)
+	select_prepared_lightmap()
+	print("Terrain3D: prepared lightmap bake for region %s in the active Terrain3D scene. Run Godot's Bake Lightmaps command, then finalize it from Regional Lightmap Baking." % location)
 	return true
 
 
-func finalize_active_bake() -> bool:
+func finalize_prepared_bake() -> bool:
 	var root: Node = EditorInterface.get_edited_scene_root()
 	var terrain: Terrain3D = _get_active_terrain()
 	if not is_instance_valid(root) or not _validate_source_terrain(terrain):
@@ -259,93 +225,40 @@ func finalize_active_bake() -> bool:
 	return true
 
 
-func _ensure_dialog() -> void:
-	if is_instance_valid(_dialog):
-		return
-	_dialog = ConfirmationDialog.new()
-	_dialog.title = "Prepare Terrain3D Region Lightmap Bake"
-	_dialog.ok_button_text = "Prepare Bake"
-	_dialog.cancel_button_text = "Cancel"
-	_dialog.min_size = Vector2i(560, 460)
-	_dialog.confirmed.connect(_on_dialog_confirmed)
-	add_child(_dialog)
-
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 12)
-	margin.add_theme_constant_override("margin_right", 12)
-	margin.add_theme_constant_override("margin_top", 8)
-	margin.add_theme_constant_override("margin_bottom", 8)
-	_dialog.add_child(margin)
-	var content := VBoxContainer.new()
-	content.add_theme_constant_override("separation", 8)
-	margin.add_child(content)
-	var explanation := Label.new()
-	explanation.text = "Choose one authored terrain region. Terrain3D builds an isolated bake subtree inside the current scene, uses neighboring regions only as lighting context, and publishes one independent lighting package for the selected region."
-	explanation.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	content.add_child(explanation)
-	_region_list = ItemList.new()
-	_region_list.select_mode = ItemList.SELECT_SINGLE
-	_region_list.allow_reselect = true
-	_region_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_region_list.custom_minimum_size = Vector2(500, 300)
-	_region_list.item_selected.connect(_on_region_selected)
-	content.add_child(_region_list)
-	_status_label = Label.new()
-	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_status_label.custom_minimum_size = Vector2(500, 48)
-	content.add_child(_status_label)
+func get_prepared_region() -> Variant:
+	var root: Node = EditorInterface.get_edited_scene_root()
+	if not is_instance_valid(root):
+		return null
+	var bake_world: Node = root.get_node_or_null(NodePath(String(BAKE_WORLD_NAME)))
+	if not is_instance_valid(bake_world):
+		return null
+	var location: Variant = bake_world.get_meta(META_REGION_LOCATION, null)
+	return location if location is Vector2i else null
 
 
-func _populate_region_list(terrain: Terrain3D) -> void:
-	_available_locations.clear()
-	_available_locations.assign(terrain.data.get_region_locations())
-	_available_locations.sort_custom(_region_location_less)
-	_region_list.clear()
-	for location: Vector2i in _available_locations:
-		var region: Terrain3DRegion = terrain.data.get_region(location)
-		var suffix: String = ""
-		if is_instance_valid(region) and is_instance_valid(region.get_lighting()):
-			suffix = "  • baked"
-		var index: int = _region_list.add_item("%d, %d%s" % [location.x, location.y, suffix])
-		_region_list.set_item_tooltip(index, "Terrain3D region (%d, %d)" % [location.x, location.y])
+func get_prepared_lightmap() -> LightmapGI:
+	var root: Node = EditorInterface.get_edited_scene_root()
+	if not is_instance_valid(root):
+		return null
+	var bake_world: Node = root.get_node_or_null(NodePath(String(BAKE_WORLD_NAME)))
+	if not is_instance_valid(bake_world):
+		return null
+	return bake_world.get_node_or_null(NodePath(String(LIGHTMAP_NAME))) as LightmapGI
 
 
-func _select_location(location: Vector2i) -> void:
-	var index: int = _available_locations.find(location)
-	if index < 0:
-		index = 0
-	_region_list.select(index)
-	_region_list.ensure_current_is_visible()
-	_update_dialog_status(index)
+func is_prepared_bake_complete() -> bool:
+	var lightmap: LightmapGI = get_prepared_lightmap()
+	return is_instance_valid(lightmap) and is_instance_valid(lightmap.light_data) \
+		and not lightmap.light_data.lightmap_textures.is_empty()
 
 
-func _on_region_selected(index: int) -> void:
-	_update_dialog_status(index)
-
-
-func _update_dialog_status(index: int) -> void:
-	if index < 0 or index >= _available_locations.size():
-		_dialog.get_ok_button().disabled = true
-		_status_label.text = "Choose an authored region."
-		return
-	_dialog.get_ok_button().disabled = false
-	var terrain: Terrain3D = _get_active_terrain()
-	var location: Vector2i = _available_locations[index]
-	var region: Terrain3DRegion = terrain.data.get_region(location) if is_instance_valid(terrain) and terrain.data != null else null
-	if is_instance_valid(region) and is_instance_valid(region.get_lighting()):
-		_status_label.text = "Region %s already has baked lighting. Finalizing this bake replaces that region's lighting package." % location
-	else:
-		_status_label.text = "Region %s will receive its own .lmbake and Terrain3DRegionLighting package." % location
-
-
-func _on_dialog_confirmed() -> void:
-	var selected: PackedInt32Array = _region_list.get_selected_items()
-	if selected.is_empty():
-		return
-	var index: int = int(selected[0])
-	if index < 0 or index >= _available_locations.size():
-		return
-	prepare_region_bake(_available_locations[index])
+func select_prepared_lightmap() -> bool:
+	var lightmap: LightmapGI = get_prepared_lightmap()
+	if not is_instance_valid(lightmap):
+		return false
+	EditorInterface.get_selection().clear()
+	EditorInterface.get_selection().add_node(lightmap)
+	return true
 
 
 func _validate_source_terrain(terrain: Terrain3D) -> bool:
@@ -366,17 +279,6 @@ func _get_active_terrain() -> Terrain3D:
 		return plugin.get("terrain") as Terrain3D
 	var root: Node = EditorInterface.get_edited_scene_root()
 	return _find_terrain(root) if is_instance_valid(root) else null
-
-
-func _get_default_region_location(terrain: Terrain3D) -> Vector2i:
-	if is_instance_valid(plugin):
-		var mouse_position: Variant = plugin.get("mouse_global_position")
-		if mouse_position is Vector3:
-			var mouse_location: Vector2i = terrain.data.get_region_location(mouse_position)
-			if is_instance_valid(terrain.data.get_region(mouse_location)):
-				return mouse_location
-	var locations: Array[Vector2i] = terrain.data.get_region_locations()
-	return locations[0] if not locations.is_empty() else Vector2i.ZERO
 
 
 func _region_output_paths(terrain: Terrain3D, location: Vector2i) -> Dictionary:
@@ -670,7 +572,3 @@ func _find_terrain(node: Node) -> Terrain3D:
 		if is_instance_valid(found):
 			return found
 	return null
-
-
-func _region_location_less(a: Vector2i, b: Vector2i) -> bool:
-	return a.y < b.y or (a.y == b.y and a.x < b.x)
