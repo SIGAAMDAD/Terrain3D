@@ -2523,11 +2523,31 @@ void T3DTerrain::setSave16Bit( const bool bEnabled ) {
 }
 
 void T3DTerrain::setEditorRuntimeStreamingPreview( const bool bEnabled ) {
+	if ( bEnabled ) {
+		setEditorNodeStreamingPreview( false );
+	}
 	setEditorExecutionMode( bEnabled ? EDITOR_EXECUTION_RUNTIME_PROFILE : EDITOR_EXECUTION_AUTHORING );
 }
 
+void T3DTerrain::setEditorNodeStreamingPreview( const bool bEnabled ) {
+	if ( m_bEditorNodeStreamingPreview == bEnabled ) {
+		return;
+	}
+	m_bEditorNodeStreamingPreview = bEnabled;
+	if ( m_pNodeStreamer ) {
+		m_pNodeStreamer->invalidateResidency();
+	}
+	emit_signal( "editor_execution_mode_changed", ( int ) ( m_editorExecutionMode ) );
+}
+
 void T3DTerrain::setEditorExecutionMode( const t3deditorExecutionMode_t mode ) {
-	if ( !terrain3dEditorExecutionModeIsValid( ( int ) ( mode ) ) || m_editorExecutionMode == mode ) {
+	if ( !terrain3dEditorExecutionModeIsValid( ( int ) ( mode ) ) ) {
+		return;
+	}
+	if ( mode == EDITOR_EXECUTION_RUNTIME_PROFILE ) {
+		m_bEditorNodeStreamingPreview = false;
+	}
+	if ( m_editorExecutionMode == mode ) {
 		return;
 	}
 	m_editorExecutionMode = mode;
@@ -6246,6 +6266,12 @@ void T3DTerrain::_bind_methods( void ) {
 		&T3DTerrain::setEditorRuntimeStreamingPreview );
 	ClassDB::bind_method( D_METHOD( "is_editor_runtime_streaming_preview" ),
 		&T3DTerrain::isEditorRuntimeStreamingPreview );
+	ClassDB::bind_method( D_METHOD( "set_editor_node_streaming_preview", "enabled" ),
+		&T3DTerrain::setEditorNodeStreamingPreview );
+	ClassDB::bind_method( D_METHOD( "is_editor_node_streaming_preview_enabled" ),
+		&T3DTerrain::isEditorNodeStreamingPreviewEnabled );
+	ClassDB::bind_method( D_METHOD( "is_editor_node_streaming_preview_active" ),
+		&T3DTerrain::isEditorNodeStreamingPreviewActive );
 	ClassDB::bind_method( D_METHOD( "set_editor_execution_mode", "mode" ), &T3DTerrain::setEditorExecutionMode );
 	ClassDB::bind_method( D_METHOD( "get_editor_execution_mode" ), &T3DTerrain::getEditorExecutionMode );
 	ClassDB::bind_method( D_METHOD( "get_memory_estimate" ), &T3DTerrain::getMemoryEstimate );

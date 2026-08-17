@@ -148,6 +148,9 @@ private:
 	// Runtime settings remain stored in every mode. Authoring changes only the
 	// effective editor residency policy; profiling uses the exact runtime path.
 	t3deditorExecutionMode_t m_editorExecutionMode = EDITOR_EXECUTION_AUTHORING;
+	// Editor-only node preview keeps terrain authoring residency intact while
+	// exercising the shipping dynamic-node streamer around the editor camera.
+	bool m_bEditorNodeStreamingPreview = false;
 
 	// Unified logical region-streaming policy. Every subsystem consumes this map;
 	// no renderer/object cache is allowed to invent a separate world footprint.
@@ -590,8 +593,8 @@ private:
 	) const;
 
 public:
-	static constexpr int64_t NATIVE_API_REVISION = 2026081703LL;
-	static constexpr const char *NATIVE_BUILD_ID = "a2.8.2-per-region-lightmap-main-scene";
+	static constexpr int64_t NATIVE_API_REVISION = 2026081705LL;
+	static constexpr const char *NATIVE_BUILD_ID = "a2.8.4-node-stream-preview-refocus";
 	static t3ddebugLevel_t s_debugLevel; // Initialized in terrain_3d.cpp
 
 	T3DTerrain( void );
@@ -695,6 +698,13 @@ public:
 	void setEditorRuntimeStreamingPreview( bool bEnabled );
 	bool isEditorRuntimeStreamingPreview( void ) const {
 		return m_editorExecutionMode == EDITOR_EXECUTION_RUNTIME_PROFILE;
+	}
+	void setEditorNodeStreamingPreview( bool bEnabled );
+	bool isEditorNodeStreamingPreviewEnabled( void ) const {
+		return m_bEditorNodeStreamingPreview;
+	}
+	bool isEditorNodeStreamingPreviewActive( void ) const {
+		return isEditorAuthoringModeInternal() && m_bEditorNodeStreamingPreview;
 	}
 	bool isEditorAuthoringMode( void ) const {
 		return isEditorAuthoringModeInternal();
