@@ -1505,6 +1505,12 @@ public partial class Terrain3D : Node3D
 		public new static readonly StringName SetEditorExecutionMode = "set_editor_execution_mode";
 		/// <summary>Cached name for reading the editor execution policy.</summary>
 		public new static readonly StringName GetEditorExecutionMode = "get_editor_execution_mode";
+		/// <summary>Cached name for toggling isolated dynamic-node streaming preview in the editor.</summary>
+		public new static readonly StringName SetEditorNodeStreamingPreview = "set_editor_node_streaming_preview";
+		/// <summary>Cached name for querying whether isolated dynamic-node preview is enabled.</summary>
+		public new static readonly StringName IsEditorNodeStreamingPreviewEnabled = "is_editor_node_streaming_preview_enabled";
+		/// <summary>Cached name for querying whether isolated dynamic-node preview is currently active.</summary>
+		public new static readonly StringName IsEditorNodeStreamingPreviewActive = "is_editor_node_streaming_preview_active";
 		/// <summary>Cached name for retrieving the live nested diagnostics snapshot.</summary>
 		public new static readonly StringName GetRuntimeDiagnostics = "get_runtime_diagnostics";
 		/// <summary>Cached name for retrieving the current Terrain3D-owned memory estimate.</summary>
@@ -1597,6 +1603,15 @@ public partial class Terrain3D : Node3D
 
 	public new EditorExecutionModeEnum GetEditorExecutionMode() =>
 		Call(GDExtensionMethodName.GetEditorExecutionMode, []).As<EditorExecutionModeEnum>();
+
+	public new void SetEditorNodeStreamingPreview(bool enabled) =>
+		Call(GDExtensionMethodName.SetEditorNodeStreamingPreview, [enabled]);
+
+	public new bool IsEditorNodeStreamingPreviewEnabled() =>
+		Call(GDExtensionMethodName.IsEditorNodeStreamingPreviewEnabled, []).As<bool>();
+
+	public new bool IsEditorNodeStreamingPreviewActive() =>
+		Call(GDExtensionMethodName.IsEditorNodeStreamingPreviewActive, []).As<bool>();
 
 	public new Godot.Collections.Dictionary GetRuntimeDiagnostics() =>
 		Call(GDExtensionMethodName.GetRuntimeDiagnostics, []).As<Godot.Collections.Dictionary>();
