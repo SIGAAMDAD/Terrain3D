@@ -162,8 +162,8 @@ void T3DTextureAsset::setHighlighted( const bool bHighlighted ) {
 	LOG( T3DTerrain::INFO, "Set mesh ID ", m_nId, " highlight: ", bHighlighted );
 	const real_t fRandomFloat = ( real_t ) ( rand() ) / ( real_t ) ( RAND_MAX );
 	m_highlightColor.set_hsv( fRandomFloat, 1.f, 1.f, 1.f );
-	LOG( T3DTerrain::DEBUG, "Emitting setting_changed" );
-	emit_signal( "setting_changed" );
+	LOG( T3DTerrain::DEBUG, "Emitting preview_changed" );
+	emit_signal( "preview_changed" );
 }
 
 void T3DTextureAsset::setAlbedoColor( const Color &rColor ) {
@@ -501,6 +501,7 @@ void T3DTextureAsset::_bind_methods( void ) {
 	ADD_SIGNAL( MethodInfo( "id_changed" ) );
 	ADD_SIGNAL( MethodInfo( "file_changed" ) );
 	ADD_SIGNAL( MethodInfo( "setting_changed" ) );
+	ADD_SIGNAL( MethodInfo( "preview_changed" ) );
 
 	ClassDB::bind_method( D_METHOD( "clear" ), &T3DTextureAsset::clear );
 	ClassDB::bind_method( D_METHOD( "set_name", "name" ), &T3DTextureAsset::setName );

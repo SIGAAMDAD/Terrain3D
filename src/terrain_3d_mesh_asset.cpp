@@ -207,8 +207,8 @@ void T3DMeshAsset::setHighlighted( const bool bHighlighted ) {
 		pMat->set_albedo( color );
 		m_pHighlightMat = pMat;
 	}
-	LOG( T3DTerrain::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
-	emit_signal( "instancer_setting_changed", m_nId );
+	LOG( T3DTerrain::DEBUG, "Emitting preview_changed, ID: ", m_nId );
+	emit_signal( "preview_changed", m_nId );
 }
 
 Color T3DMeshAsset::getHighlightColor( void ) const {
@@ -604,6 +604,7 @@ void T3DMeshAsset::_bind_methods( void ) {
 	ADD_SIGNAL( MethodInfo( "id_changed" ) );
 	ADD_SIGNAL( MethodInfo( "setting_changed" ) );
 	ADD_SIGNAL( MethodInfo( "instancer_setting_changed" ) );
+	ADD_SIGNAL( MethodInfo( "preview_changed" ) );
 	ADD_SIGNAL( MethodInfo( "instance_count_changed" ) );
 
 	ClassDB::bind_method( D_METHOD( "clear" ), &T3DMeshAsset::clear );
