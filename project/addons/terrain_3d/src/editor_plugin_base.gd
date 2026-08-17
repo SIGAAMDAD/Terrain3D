@@ -47,12 +47,12 @@ func open_autoshader_baker() -> void:
 
 
 
-func prepare_region_lightmap_bake() -> void:
+func open_region_lightmap_baker() -> void:
 	pass
 
 
-func finalize_region_lightmap_bake() -> void:
-	pass
+func get_region_lightmap_baker() -> Node:
+	return null
 
 
 func get_terrain() -> Terrain3D:

@@ -26,8 +26,7 @@ var _runtime_page_cook_result: AcceptDialog
 # These are IDs and order must remain consistent with add_item and set_disabled calls.
 enum {
 	MENU_DIRECTORY_SETUP,
-	MENU_PREPARE_REGION_LIGHTMAP,
-	MENU_FINALIZE_REGION_LIGHTMAP,
+	MENU_REGION_LIGHTMAP,
 	MENU_COOK_RUNTIME_DATASET,
 	MENU_PACK_TEXTURES,
 	MENU_SEPARATOR,
@@ -69,8 +68,7 @@ func _enter_tree() -> void:
 
 	var popup: PopupMenu = get_popup()
 	popup.add_item("Data Directory…", MENU_DIRECTORY_SETUP)
-	popup.add_item("Prepare Region Lightmap Bake…", MENU_PREPARE_REGION_LIGHTMAP)
-	popup.add_item("Finalize Region Lightmap Bake", MENU_FINALIZE_REGION_LIGHTMAP)
+	popup.add_item("Regional Lightmap Baking…", MENU_REGION_LIGHTMAP)
 	popup.add_item("Cook Runtime Dataset…", MENU_COOK_RUNTIME_DATASET)
 	popup.add_item("Channel Packer…", MENU_PACK_TEXTURES)
 	popup.add_separator("", MENU_SEPARATOR)
@@ -86,8 +84,7 @@ func _enter_tree() -> void:
 	popup.add_item("Open Brush Directory…", MENU_BRUSH_DIRECTORY)
 
 	_set_item_tooltip(popup, MENU_DIRECTORY_SETUP, "Choose the directory containing Terrain3D region resources.")
-	_set_item_tooltip(popup, MENU_PREPARE_REGION_LIGHTMAP, "Choose one authored terrain region and build its temporary LightmapGI bake hierarchy directly in the active Terrain3D scene.")
-	_set_item_tooltip(popup, MENU_FINALIZE_REGION_LIGHTMAP, "Publish the prepared region bake as that region's independent .lmbake and Terrain3DRegionLighting package.")
+	_set_item_tooltip(popup, MENU_REGION_LIGHTMAP, "Open the persistent per-region lightmap baking UI for the active Terrain3D scene.")
 	_set_item_tooltip(popup, MENU_COOK_RUNTIME_DATASET, "Compile and reload-validate every authored terrain region as a .t3dpage runtime page, then rebuild the far atlas.")
 	_set_item_tooltip(popup, MENU_PACK_TEXTURES, "Pack albedo/height and normal/roughness textures.")
 	_set_item_tooltip(popup, MENU_BAKE_ARRAY_MESH, "Create a MeshInstance3D from terrain geometry.")
@@ -119,10 +116,8 @@ func _on_menu_pressed(p_id: int) -> void:
 	match p_id:
 		MENU_DIRECTORY_SETUP:
 			directory_setup.directory_setup_popup()
-		MENU_PREPARE_REGION_LIGHTMAP:
-			plugin.prepare_region_lightmap_bake()
-		MENU_FINALIZE_REGION_LIGHTMAP:
-			plugin.finalize_region_lightmap_bake()
+		MENU_REGION_LIGHTMAP:
+			plugin.open_region_lightmap_baker()
 		MENU_COOK_RUNTIME_DATASET:
 			_open_runtime_page_cook_confirmation()
 		MENU_PACK_TEXTURES:
@@ -198,8 +193,7 @@ func _on_menu_about_to_popup() -> void:
 	var has_terrain: bool = is_instance_valid(plugin) and is_instance_valid(plugin.terrain)
 	var popup: PopupMenu = get_popup()
 	popup.set_item_disabled(MENU_DIRECTORY_SETUP, not has_terrain)
-	popup.set_item_disabled(MENU_PREPARE_REGION_LIGHTMAP, not has_terrain)
-	popup.set_item_disabled(MENU_FINALIZE_REGION_LIGHTMAP, not has_terrain)
+	popup.set_item_disabled(MENU_REGION_LIGHTMAP, not has_terrain)
 	popup.set_item_disabled(MENU_COOK_RUNTIME_DATASET, not has_terrain)
 	popup.set_item_disabled(MENU_PACK_TEXTURES, not has_terrain)
 	popup.set_item_disabled(MENU_BAKE_ARRAY_MESH, not has_terrain)

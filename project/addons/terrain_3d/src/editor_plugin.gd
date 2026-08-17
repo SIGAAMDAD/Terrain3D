@@ -12,15 +12,15 @@ const ShaderPerformancePanel = preload("res://addons/terrain_3d/src/shader_perfo
 const AutoShaderPanel = preload("res://addons/terrain_3d/src/autoshader_panel.gd")
 const StreamingConverter = preload("res://addons/terrain_3d/tools/streaming_converter.gd")
 const RegionLightmapBaker = preload("res://addons/terrain_3d/tools/region_lightmap_baker.gd")
+const RegionLightmapPanel = preload("res://addons/terrain_3d/tools/region_lightmap_panel.gd")
 const TOOL_MENU_OPEN: String = "Terrain3D: Open Tools Menu"
 const TOOL_MENU_EROSION: String = "Terrain3D: Show Erosion in Inspector"
 const TOOL_MENU_SHADER: String = "Terrain3D: Runtime Shader Quality"
 const TOOL_MENU_AUTOSHADER: String = "Terrain3D: Material Rules"
 const TOOL_MENU_CONVERT_STREAMING: String = "Terrain3D: Convert Selected Objects to Region Streaming"
-const TOOL_MENU_PREPARE_LIGHTMAP: String = "Terrain3D: Prepare Region Lightmap Bake"
-const TOOL_MENU_FINALIZE_LIGHTMAP: String = "Terrain3D: Finalize Region Lightmap Bake"
-const EXPECTED_NATIVE_API_REVISION: int = 2026081703
-const EXPECTED_NATIVE_BUILD_ID: String = "a2.8.2-per-region-lightmap-main-scene"
+const TOOL_MENU_LIGHTMAP: String = "Terrain3D: Regional Lightmap Baking"
+const EXPECTED_NATIVE_API_REVISION: int = 2026081705
+const EXPECTED_NATIVE_BUILD_ID: String = "a2.8.4-node-stream-preview-refocus"
 
 # Editor Plugin
 var ui: Terrain3DUI
@@ -30,6 +30,7 @@ var shader_performance_panel: ShaderPerformancePanel
 var autoshader_panel: AutoShaderPanel
 var streaming_converter: StreamingConverter
 var region_lightmap_baker: RegionLightmapBaker
+var region_lightmap_panel: RegionLightmapPanel
 
 class ErosionSettingsCacheEntry extends RefCounted:
 	var terrain_ref: WeakRef
@@ -89,14 +90,17 @@ func _enter_tree() -> void:
 	region_lightmap_baker = RegionLightmapBaker.new()
 	region_lightmap_baker.plugin = self
 	add_child(region_lightmap_baker)
+	region_lightmap_panel = RegionLightmapPanel.new()
+	region_lightmap_panel.plugin = self
+	region_lightmap_panel.baker = region_lightmap_baker
+	add_child(region_lightmap_panel)
 
 	add_tool_menu_item(TOOL_MENU_OPEN, _open_terrain_tools_menu)
 	add_tool_menu_item(TOOL_MENU_EROSION, open_erosion_simulator)
 	add_tool_menu_item(TOOL_MENU_SHADER, open_shader_performance)
 	add_tool_menu_item(TOOL_MENU_AUTOSHADER, open_autoshader_baker)
 	add_tool_menu_item(TOOL_MENU_CONVERT_STREAMING, convert_selected_to_region_streaming)
-	add_tool_menu_item(TOOL_MENU_PREPARE_LIGHTMAP, prepare_region_lightmap_bake)
-	add_tool_menu_item(TOOL_MENU_FINALIZE_LIGHTMAP, finalize_region_lightmap_bake)
+	add_tool_menu_item(TOOL_MENU_LIGHTMAP, open_region_lightmap_baker)
 	_connect_editor_signals()
 
 
@@ -111,8 +115,7 @@ func _exit_tree() -> void:
 	remove_tool_menu_item(TOOL_MENU_SHADER)
 	remove_tool_menu_item(TOOL_MENU_AUTOSHADER)
 	remove_tool_menu_item(TOOL_MENU_CONVERT_STREAMING)
-	remove_tool_menu_item(TOOL_MENU_PREPARE_LIGHTMAP)
-	remove_tool_menu_item(TOOL_MENU_FINALIZE_LIGHTMAP)
+	remove_tool_menu_item(TOOL_MENU_LIGHTMAP)
 	if erosion_inspector_plugin:
 		remove_inspector_plugin(erosion_inspector_plugin)
 		erosion_inspector_plugin = null
@@ -127,6 +130,9 @@ func _exit_tree() -> void:
 	if is_instance_valid(streaming_converter):
 		streaming_converter.queue_free()
 		streaming_converter = null
+	if is_instance_valid(region_lightmap_panel):
+		region_lightmap_panel.queue_free()
+		region_lightmap_panel = null
 	if is_instance_valid(region_lightmap_baker):
 		region_lightmap_baker.queue_free()
 		region_lightmap_baker = null
@@ -145,13 +151,14 @@ func _exit_tree() -> void:
 
 
 func _connect_editor_signals() -> void:
-	# Connect only after all editor helpers are initialized so focus/scene callbacks
-	# cannot observe a partially constructed plugin.
+	# Connect only after all editor helpers are initialized so scene/inspector callbacks
+	# cannot observe a partially constructed plugin. Terrain3D deliberately does not
+	# subscribe to editor-window focus changes.
 	if not scene_changed.is_connected(_on_scene_changed):
 		scene_changed.connect(_on_scene_changed)
+	# Retained for AssetDock focus handoff only. No focus-entered callback is
+	# connected here; Terrain3D has no work to perform merely because Godot regained focus.
 	godot_editor_window = EditorInterface.get_base_control().get_window()
-	if is_instance_valid(godot_editor_window) and not godot_editor_window.focus_entered.is_connected(_on_godot_focus_entered):
-		godot_editor_window.focus_entered.connect(_on_godot_focus_entered)
 	var inspector := EditorInterface.get_inspector()
 	if is_instance_valid(inspector) and not inspector.mouse_entered.is_connected(_on_inspector_mouse_entered):
 		inspector.mouse_entered.connect(_on_inspector_mouse_entered)
@@ -162,8 +169,6 @@ func _disconnect_editor_signals() -> void:
 	# that are being removed below.
 	if scene_changed.is_connected(_on_scene_changed):
 		scene_changed.disconnect(_on_scene_changed)
-	if is_instance_valid(godot_editor_window) and godot_editor_window.focus_entered.is_connected(_on_godot_focus_entered):
-		godot_editor_window.focus_entered.disconnect(_on_godot_focus_entered)
 	var inspector := EditorInterface.get_inspector()
 	if is_instance_valid(inspector) and inspector.mouse_entered.is_connected(_on_inspector_mouse_entered):
 		inspector.mouse_entered.disconnect(_on_inspector_mouse_entered)
@@ -224,14 +229,16 @@ func convert_selected_to_region_streaming() -> void:
 		streaming_converter.convert_selected()
 
 
-func prepare_region_lightmap_bake() -> void:
-	if is_instance_valid(region_lightmap_baker):
-		region_lightmap_baker.prepare_active_bake()
+func open_region_lightmap_baker() -> void:
+	if not is_instance_valid(terrain):
+		push_error("Select a Terrain3D node before opening regional lightmap baking")
+		return
+	if is_instance_valid(region_lightmap_panel):
+		region_lightmap_panel.open(terrain)
 
 
-func finalize_region_lightmap_bake() -> void:
-	if is_instance_valid(region_lightmap_baker):
-		region_lightmap_baker.finalize_active_bake()
+func get_region_lightmap_baker() -> Node:
+	return region_lightmap_baker
 
 
 
@@ -254,13 +261,6 @@ func _open_terrain_tools_menu() -> void:
 	ui.terrain_menu.show()
 	ui.terrain_menu.call_deferred("open_menu")
 
-
-func _on_godot_focus_entered() -> void:
-	if debug > 1:
-		print("Terrain3DEditorPlugin: _on_godot_focus_entered")
-	if not is_instance_valid(ui) or not is_instance_valid(editor) or not is_instance_valid(editor_settings):
-		return
-	_read_input()
 
 
 func _on_inspector_mouse_entered() -> void:

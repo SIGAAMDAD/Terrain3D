@@ -7,6 +7,7 @@ const RUNTIME_PROFILER_WINDOW_PATH: String = "res://addons/terrain_3d/src/runtim
 
 const MENU_AUTHORING: int = 0
 const MENU_RUNTIME_PROFILE: int = 1
+const MENU_NODE_STREAM_PREVIEW: int = 2
 const MENU_OPEN_PROFILER: int = 10
 const MENU_RESET_PROFILER: int = 11
 const MENU_EXPORT_SNAPSHOT: int = 12
@@ -29,6 +30,7 @@ func _enter_tree() -> void:
 	var popup: PopupMenu = get_popup()
 	popup.clear()
 	popup.add_radio_check_item("Authoring — Full Residency", MENU_AUTHORING)
+	popup.add_radio_check_item("Node Streaming Preview", MENU_NODE_STREAM_PREVIEW)
 	popup.add_radio_check_item("Runtime Profile", MENU_RUNTIME_PROFILE)
 	popup.add_separator()
 	popup.add_item("Open Live Profiler...", MENU_OPEN_PROFILER)
@@ -96,16 +98,22 @@ func _sync_state() -> void:
 		return
 
 	var mode: int = terrain.get_editor_execution_mode()
-	text = "Runtime Profile" if mode == Terrain3D.EDITOR_EXECUTION_RUNTIME_PROFILE else "Authoring"
-	tooltip_text = (
-		"Exact shipping ACTIVE/HOT/COLD/UNLOADED residency policy with runtime budgets and prediction" if mode == Terrain3D.EDITOR_EXECUTION_RUNTIME_PROFILE else
-		"Full Residency: pin the complete authored terrain, instances, streamed nodes, collision, and authoring-relevant lighting"
-	)
+	var node_preview: bool = terrain.is_editor_node_streaming_preview_active()
+	if mode == Terrain3D.EDITOR_EXECUTION_RUNTIME_PROFILE:
+		text = "Runtime Profile"
+		tooltip_text = "Exact shipping ACTIVE/HOT/COLD/UNLOADED residency policy with runtime budgets and prediction"
+	elif node_preview:
+		text = "Node Preview"
+		tooltip_text = "Keep terrain authoring residency while streaming real node scenes around the editor camera using dynamic_node_stream_radius and node budgets"
+	else:
+		text = "Authoring"
+		tooltip_text = "Full Residency: pin the complete authored terrain, instances, streamed nodes, collision, and authoring-relevant lighting"
 	if not _menu_initialized:
 		return
 
 	var popup: PopupMenu = get_popup()
-	popup.set_item_checked(popup.get_item_index(MENU_AUTHORING), mode == Terrain3D.EDITOR_EXECUTION_AUTHORING)
+	popup.set_item_checked(popup.get_item_index(MENU_AUTHORING), mode == Terrain3D.EDITOR_EXECUTION_AUTHORING and not node_preview)
+	popup.set_item_checked(popup.get_item_index(MENU_NODE_STREAM_PREVIEW), mode == Terrain3D.EDITOR_EXECUTION_AUTHORING and node_preview)
 	popup.set_item_checked(popup.get_item_index(MENU_RUNTIME_PROFILE), mode == Terrain3D.EDITOR_EXECUTION_RUNTIME_PROFILE)
 
 
@@ -114,8 +122,13 @@ func _on_menu_pressed(p_id: int) -> void:
 		return
 	match p_id:
 		MENU_AUTHORING:
+			terrain.set_editor_node_streaming_preview(false)
 			terrain.set_editor_execution_mode(int(Terrain3D.EDITOR_EXECUTION_AUTHORING))
+		MENU_NODE_STREAM_PREVIEW:
+			terrain.set_editor_execution_mode(int(Terrain3D.EDITOR_EXECUTION_AUTHORING))
+			terrain.set_editor_node_streaming_preview(true)
 		MENU_RUNTIME_PROFILE:
+			terrain.set_editor_node_streaming_preview(false)
 			terrain.set_editor_execution_mode(int(Terrain3D.EDITOR_EXECUTION_RUNTIME_PROFILE))
 		MENU_OPEN_PROFILER:
 			var profiler_window: Terrain3DRuntimeProfilerWindowBase = _get_or_create_profiler_window()
