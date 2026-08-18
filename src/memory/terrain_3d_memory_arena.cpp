@@ -1,8 +1,8 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#include "terrain_3d_memory_arena.h"
+#include "memory/terrain_3d_memory_arena.h"
 
-#include "terrain_3d_memory.h"
+#include "memory/terrain_3d_memory.h"
 
 #include <algorithm>
 #include <cstring>

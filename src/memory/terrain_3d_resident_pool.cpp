@@ -1,5 +1,5 @@
 #include "Terrain3DConstants.h"
-#include "terrain_3d_resident_pool.h"
+#include "memory/terrain_3d_resident_pool.h"
 
 #include <algorithm>
 #include <cstring>
@@ -8,9 +8,9 @@
 
 #include <godot_cpp/classes/image.hpp>
 
-#include "terrain_3d_linear_arena.h"
-#include "terrain_3d_memory.h"
-#include "terrain_3d_region_codec.h"
+#include "memory/terrain_3d_linear_arena.h"
+#include "memory/terrain_3d_memory.h"
+#include "data/terrain_3d_region_codec.h"
 
 namespace {
 }

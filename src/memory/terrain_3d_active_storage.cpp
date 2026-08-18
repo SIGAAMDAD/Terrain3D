@@ -1,9 +1,9 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#include "terrain_3d_active_storage.h"
+#include "memory/terrain_3d_active_storage.h"
 
-#include "terrain_3d_active_access.h"
-#include "terrain_3d_memory.h"
+#include "memory/terrain_3d_active_access.h"
+#include "memory/terrain_3d_memory.h"
 
 #include <algorithm>
 #include <atomic>
@@ -14,7 +14,7 @@
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
 
-#include "terrain_3d_region_codec.h"
+#include "data/terrain_3d_region_codec.h"
 
 namespace {
 

@@ -13,8 +13,8 @@
 #include <godot_cpp/variant/rect2i.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
 
-#include "terrain_3d_limits.h"
-#include "terrain_3d_region.h"
+#include "core/terrain_3d_limits.h"
+#include "data/terrain_3d_region.h"
 
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
 using namespace godot;

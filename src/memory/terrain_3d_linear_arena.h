@@ -5,7 +5,7 @@
 #ifndef TERRAIN3D_LINEAR_ARENA_H
 #define TERRAIN3D_LINEAR_ARENA_H
 
-#include "terrain_3d_memory_constants.h"
+#include "memory/terrain_3d_memory_constants.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -15,7 +15,7 @@
 #include <type_traits>
 #include <utility>
 
-#include "terrain_3d_memory.h"
+#include "memory/terrain_3d_memory.h"
 
 
 class T3DLinearArenaLayout {

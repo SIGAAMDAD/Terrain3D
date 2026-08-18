@@ -5,7 +5,7 @@
 #ifndef TERRAIN3D_MEMORY_ARENA_H
 #define TERRAIN3D_MEMORY_ARENA_H
 
-#include "terrain_3d_memory_constants.h"
+#include "memory/terrain_3d_memory_constants.h"
 
 #include <cstddef>
 #include <cstdint>
