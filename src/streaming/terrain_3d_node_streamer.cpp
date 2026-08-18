@@ -1,6 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#include "terrain_3d_node_streamer.h"
+#include "streaming/terrain_3d_node_streamer.h"
 
 #include <limits>
 
@@ -11,11 +11,11 @@
 #include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/core/memory.hpp>
 
-#include "logger.h"
+#include "core/logger.h"
 #include "terrain_3d.h"
-#include "terrain_3d_data.h"
-#include "terrain_3d_lighting_policy.h"
-#include "terrain_3d_region.h"
+#include "data/terrain_3d_data.h"
+#include "lighting/terrain_3d_lighting_policy.h"
+#include "data/terrain_3d_region.h"
 
 namespace {
 
