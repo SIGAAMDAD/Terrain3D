@@ -7,8 +7,8 @@
 #include "Terrain3DConstants.h"
 
 #include "eastl_config.h"
-#include "terrain_3d_instance_layout.h"
-#include "terrain_3d_packed_transform.h"
+#include "instances/terrain_3d_instance_layout.h"
+#include "data/terrain_3d_packed_transform.h"
 #include <EASTL/algorithm.h>
 #include <EASTL/sort.h>
 #include <EASTL/utility.h>

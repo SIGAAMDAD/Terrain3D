@@ -7,13 +7,13 @@
 #include <godot_cpp/classes/world3d.hpp>
 
 #include "Terrain3DConstants.h"
-#include "logger.h"
-#include "terrain_3d_editor.h"
-#include "terrain_3d_instancer.h"
-#include "terrain_3d_region.h"
-#include "terrain_3d_simd.h"
-#include "terrain_3d_sampler.h"
-#include "terrain_3d_util.h"
+#include "core/logger.h"
+#include "authoring/terrain_3d_editor.h"
+#include "instances/terrain_3d_instancer.h"
+#include "data/terrain_3d_region.h"
+#include "simd/terrain_3d_simd.h"
+#include "data/terrain_3d_sampler.h"
+#include "core/terrain_3d_util.h"
 
 static_assert( TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY == ( size_t ) ( TERRAIN3D_MAX_REGION_SLOTS ),
 	"Instancer region tables must cover every Terrain3DData region slot" );

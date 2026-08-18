@@ -9,8 +9,8 @@
 
 #include <godot_cpp/variant/packed_byte_array.hpp>
 
-#include "terrain_3d_assets.h"
-#include "terrain_3d_instance_store.h"
+#include "assets/terrain_3d_assets.h"
+#include "instances/terrain_3d_instance_store.h"
 
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
 using namespace godot;

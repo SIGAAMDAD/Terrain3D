@@ -1,6 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#include "terrain_3d_instance_page_codec.h"
+#include "instances/terrain_3d_instance_page_codec.h"
 
 #include <cstring>
 #include <limits>

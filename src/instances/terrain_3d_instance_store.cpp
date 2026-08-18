@@ -1,4 +1,4 @@
-#include "terrain_3d_instance_store.h"
+#include "instances/terrain_3d_instance_store.h"
 
 T3DInstanceStore::T3DInstanceStore( void ) {
 }

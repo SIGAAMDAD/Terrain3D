@@ -16,9 +16,9 @@
 #include <EASTL/vector.h>
 
 #include "Terrain3DConstants.h"
-#include "terrain_3d_instance_layout.h"
-#include "terrain_3d_limits.h"
-#include "terrain_3d_region.h"
+#include "instances/terrain_3d_instance_layout.h"
+#include "core/terrain_3d_limits.h"
+#include "data/terrain_3d_region.h"
 
 class T3DTerrain;
 class T3DAssets;
