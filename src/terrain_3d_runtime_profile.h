@@ -56,6 +56,7 @@ typedef struct t3druntimeProfileSample_s {
 	uint64_t frameSequence = 0u;
 	uint64_t nPhysicsTotalUsec = 0u;
 	uint64_t nDataResidencyUsec = 0u;
+	uint64_t nHlodStreamingUsec = 0u;
 	uint64_t nNodeStreamingUsec = 0u;
 	uint64_t nClipmapUsec = 0u;
 	uint64_t nOceanUsec = 0u;
@@ -167,6 +168,8 @@ typedef struct t3druntimeProfileAccumulator_s {
 	uint64_t nPhysicsPeakUsec = 0u;
 	uint64_t nDataResidencyTotalUsec = 0u;
 	uint64_t nDataResidencyPeakUsec = 0u;
+	uint64_t nHlodStreamingTotalUsec = 0u;
+	uint64_t nHlodStreamingPeakUsec = 0u;
 	uint64_t nNodeStreamingTotalUsec = 0u;
 	uint64_t nNodeStreamingPeakUsec = 0u;
 	uint64_t nClipmapTotalUsec = 0u;
@@ -227,6 +230,8 @@ typedef struct t3druntimeProfileAccumulator_s {
 		nPhysicsPeakUsec = std::max( nPhysicsPeakUsec, rSample.nPhysicsTotalUsec );
 		nDataResidencyTotalUsec += rSample.nDataResidencyUsec;
 		nDataResidencyPeakUsec = std::max( nDataResidencyPeakUsec, rSample.nDataResidencyUsec );
+		nHlodStreamingTotalUsec += rSample.nHlodStreamingUsec;
+		nHlodStreamingPeakUsec = std::max( nHlodStreamingPeakUsec, rSample.nHlodStreamingUsec );
 		nNodeStreamingTotalUsec += rSample.nNodeStreamingUsec;
 		nNodeStreamingPeakUsec = std::max( nNodeStreamingPeakUsec, rSample.nNodeStreamingUsec );
 		nClipmapTotalUsec += rSample.nClipmapUsec;

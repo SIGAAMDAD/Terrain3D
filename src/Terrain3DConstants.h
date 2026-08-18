@@ -70,7 +70,7 @@ static constexpr const char *TERRAIN3D_CACHE_THRASH_SUBSYSTEM_NAMES[] = {
 	"gpu_terrain_pages", "cpu_terrain_pages", "instance_pages",
 };
 static constexpr const char *TERRAIN3D_MEMORY_SUBSYSTEM_NAMES[] = {
-	"gpu_terrain_pages", "cpu_terrain_pages", "instance_pages", "baked_lighting", "shader_cache",
+	"gpu_terrain_pages", "cpu_terrain_pages", "instance_pages", "baked_lighting", "hlod_proxies", "shader_cache",
 };
 static constexpr size_t TERRAIN3D_MEMORY_SUBSYSTEM_NAME_COUNT =
 	sizeof( TERRAIN3D_MEMORY_SUBSYSTEM_NAMES ) / sizeof( TERRAIN3D_MEMORY_SUBSYSTEM_NAMES[0] );
