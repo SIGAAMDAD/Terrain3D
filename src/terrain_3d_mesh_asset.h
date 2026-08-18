@@ -45,6 +45,11 @@ class T3DMeshAsset : public T3DAssetResource {
 	CLASS_NAME();
 
 public:
+	typedef enum t3dhlodContribution_e {
+		HLOD_AUTO = 0,
+		HLOD_INCLUDE = 1,
+		HLOD_EXCLUDE = 2,
+	} t3dhlodContribution_t;
 	typedef enum t3dgenType_e {
 		TYPE_NONE,
 		TYPE_TEXTURE_CARD,
@@ -55,6 +60,8 @@ private:
 	bool m_bEnabled = true;
 	Ref<PackedScene> m_pPackedScene;
 	t3dgenType_t m_generatedType = TYPE_NONE;
+	t3dhlodContribution_t m_hlodContribution = HLOD_AUTO;
+	int m_nHlodMinLevel = 1;
 	int m_nGeneratedFaces = 2;
 	Vector2 m_generatedSize = V2( 1.f );
 	real_t m_fHeightOffset = 0.f;
@@ -132,6 +139,15 @@ public:
 		return m_pendingMeshes.size() > 0;
 	}
 	void commitMeshes( void );
+	void setHlodContribution( t3dhlodContribution_t mode );
+	t3dhlodContribution_t getHlodContribution( void ) const { return m_hlodContribution; }
+	void setHlodMinLevel( int nLevel );
+	int getHlodMinLevel( void ) const { return m_nHlodMinLevel; }
+	bool isHlodEligible( void ) const {
+		if ( m_hlodContribution == HLOD_EXCLUDE ) { return false; }
+		return m_hlodContribution == HLOD_INCLUDE || m_generatedType == TYPE_NONE;
+	}
+
 	void setGeneratedType( const t3dgenType_t type );
 	t3dgenType_t getGeneratedType( void ) const {
 		return m_generatedType;
@@ -268,6 +284,7 @@ protected:
 };
 
 VARIANT_ENUM_CAST( T3DMeshAsset::t3dgenType_t );
+VARIANT_ENUM_CAST( T3DMeshAsset::t3dhlodContribution_t );
 
 inline TypedArray<Mesh> T3DMeshAsset::getMeshes( void ) const {
 	if ( !m_pendingMeshes.is_empty() ) {

@@ -596,7 +596,31 @@ bool T3DMeshAsset::_property_get_revert( const StringName &rName, Variant &rProp
 	return false;
 }
 
+void T3DMeshAsset::setHlodContribution( const t3dhlodContribution_t mode ) {
+	const t3dhlodContribution_t value = ( t3dhlodContribution_t ) CLAMP( ( int ) mode, ( int ) HLOD_AUTO, ( int ) HLOD_EXCLUDE );
+	if ( m_hlodContribution == value ) { return; }
+	m_hlodContribution = value;
+	emit_signal( "setting_changed" );
+	emit_changed();
+}
+
+void T3DMeshAsset::setHlodMinLevel( const int nLevel ) {
+	const int value = CLAMP( nLevel, 1, 6 );
+	if ( m_nHlodMinLevel == value ) { return; }
+	m_nHlodMinLevel = value;
+	emit_signal( "setting_changed" );
+	emit_changed();
+}
+
 void T3DMeshAsset::_bind_methods( void ) {
+	BIND_ENUM_CONSTANT( HLOD_AUTO );
+	BIND_ENUM_CONSTANT( HLOD_INCLUDE );
+	BIND_ENUM_CONSTANT( HLOD_EXCLUDE );
+	ClassDB::bind_method( D_METHOD( "set_hlod_contribution", "mode" ), &T3DMeshAsset::setHlodContribution );
+	ClassDB::bind_method( D_METHOD( "get_hlod_contribution" ), &T3DMeshAsset::getHlodContribution );
+	ClassDB::bind_method( D_METHOD( "set_hlod_min_level", "level" ), &T3DMeshAsset::setHlodMinLevel );
+	ClassDB::bind_method( D_METHOD( "get_hlod_min_level" ), &T3DMeshAsset::getHlodMinLevel );
+	ClassDB::bind_method( D_METHOD( "is_hlod_eligible" ), &T3DMeshAsset::isHlodEligible );
 	BIND_ENUM_CONSTANT( TYPE_NONE );
 	BIND_ENUM_CONSTANT( TYPE_TEXTURE_CARD );
 	BIND_ENUM_CONSTANT( TYPE_MAX );
@@ -677,6 +701,10 @@ void T3DMeshAsset::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_fade_margin" ), &T3DMeshAsset::getFadeMargin );
 
 	ClassDB::bind_method( D_METHOD( "get_instance_count" ), &T3DMeshAsset::getInstanceCount );
+
+	ADD_GROUP( "HLOD", "hlod_" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "hlod_contribution", PROPERTY_HINT_ENUM, "Auto,Include,Exclude" ), "set_hlod_contribution", "get_hlod_contribution" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "hlod_min_level", PROPERTY_HINT_RANGE, "1,6,1" ), "set_hlod_min_level", "get_hlod_min_level" );
 
 	ADD_GROUP( "General", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::STRING, "name", PROPERTY_HINT_NONE ), "set_name", "get_name" );
