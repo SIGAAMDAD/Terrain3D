@@ -41,6 +41,8 @@ public:
 		// Static streamed nodes never participate in transform-based ownership migration.
 		// The default remains movable to preserve serialized behavior from older scenes.
 		NODE_FLAG_STATIC = 1 << 1,
+		// Static/render-only scene that may be replaced by an HLOD proxy.
+		NODE_FLAG_HLOD_VISUAL = 1 << 2,
 	} t3dstreamedNodeFlags_t;
 
 private:
@@ -136,10 +138,12 @@ private:
 		T3DRegion *pRegion, t3dregionRuntime_t &rRuntime,
 		const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t &rSpawn
 	);
-	void requestRegionScenes( const eastl::vector<T3DRegion::t3dstreamedNodeRuntimeDescriptor_t> &rSpawns );
+	void requestRegionScenes( const Vector2i &rOwnerLocation, const eastl::vector<T3DRegion::t3dstreamedNodeRuntimeDescriptor_t> &rSpawns );
+	bool isHlodVisualSuppressed( const Vector2i &rOwnerLocation, const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t &rSpawn ) const;
+	bool streamedSpawnCoverageIntersects( const Vector2i &rOwnerLocation, const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t &rSpawn, const Vector2i &rTargetMin, const Vector2i &rTargetMax ) const;
 	int64_t addStreamedSceneInternal(
 		const Ref<PackedScene> &rScene, const String &rScenePath,
-		const Transform3D &rGlobalTransform, const Dictionary &rState, int nFlags
+		const Transform3D &rGlobalTransform, const Dictionary &rState, int nFlags, int nHlodMinLevel
 	);
 	void buildDesiredSet( const Vector2i &rCenter );
 	bool usesFullAuthoringResidency( void ) const;
@@ -214,12 +218,14 @@ public:
 
 	int64_t addStreamedScene(
 		const Ref<PackedScene> &rScene, const Transform3D &rGlobalTransform,
-		const Dictionary &rState = Dictionary(), int nFlags = NODE_FLAG_NONE
+		const Dictionary &rState = Dictionary(), int nFlags = NODE_FLAG_NONE, int nHlodMinLevel = 1
 	);
 	int64_t addStreamedScenePath(
 		const String &rScenePath, const Transform3D &rGlobalTransform,
-		const Dictionary &rState = Dictionary(), int nFlags = NODE_FLAG_NONE
+		const Dictionary &rState = Dictionary(), int nFlags = NODE_FLAG_NONE, int nHlodMinLevel = 1
 	);
+	void onHlodRepresentationChanged( const Vector2i &rRegion );
+	bool areHlodVisualRegionsReady( const Vector2i &rRegionMin, const Vector2i &rRegionMax ) const;
 	bool removeStreamedScene( int64_t nSpawnId );
 	Dictionary getStats( void ) const;
 	size_t getRetainedCapacityBytes( void ) const;

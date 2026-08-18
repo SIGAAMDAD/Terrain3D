@@ -672,6 +672,33 @@ bool T3DInstancer::hasPendingUpdates( void ) const {
 		   m_dirtyLogicalMeshCounts.any();
 }
 
+bool T3DInstancer::hasPendingUpdatesForRegion( const Vector2i &rRegion ) const {
+	// Global renderer changes can affect every detailed HLOD source. For ordinary
+	// streaming churn, however, readiness must be scoped to the region being
+	// handed off or a moving camera elsewhere could prevent a proxy from ever
+	// retiring.
+	if ( m_bRebuildAll || m_bUpdateAll || m_globalMeshUpdates.any() ) { return true; }
+	const int region_index = getRegionTableIndex( rRegion );
+	if ( region_index < 0 ) { return false; }
+	if ( m_regionUpdateMask.test( ( size_t ) region_index ) ||
+		m_activeRegionUpdateMask.test( ( size_t ) region_index ) ) {
+		return true;
+	}
+	for ( const t3dcellUpdateKey_t &key : m_streamingUpdates ) {
+		if ( key.pRegion == rRegion ) { return true; }
+	}
+	for ( const t3dcellUpdateKey_t &key : m_activeStreamingUpdates ) {
+		if ( key.pRegion == rRegion ) { return true; }
+	}
+	for ( size_t i = m_iPendingCellUpdateCursor; i < m_pendingCellUpdates.size(); ++i ) {
+		if ( m_pendingCellUpdates[i].pRegion == rRegion ) { return true; }
+	}
+	for ( const t3dcellUpdateKey_t &key : m_buildingCellUpdates ) {
+		if ( key.pRegion == rRegion ) { return true; }
+	}
+	return false;
+}
+
 void T3DInstancer::scheduleUpdateProcessing( void ) {
 	const Callable callback = callable_mp( this, &T3DInstancer::processUpdates );
 	if ( !RS->is_connected( "frame_pre_draw", callback ) ) {
@@ -725,7 +752,20 @@ bool T3DInstancer::cellShouldBeResidentAt(
 	const Vector2i &region, const Vector2i &cell, const int nMeshId,
 	const Vector3 &rTargetPosition
 ) const {
-	if ( !m_bCellStreamingEnabled || nMeshId < 0 || nMeshId >= TERRAIN3D_MAX_MESH_ASSETS ) {
+	if ( nMeshId < 0 || nMeshId >= TERRAIN3D_MAX_MESH_ASSETS ) {
+		return true;
+	}
+	// HLOD is a representation decision above ordinary cell streaming. It must
+	// suppress represented detail even when runtime cell streaming is disabled
+	// (including the editor HLOD preview, which intentionally keeps authoring
+	// residency semantics for the rest of Terrain3D).
+	if ( m_pTerrain ) {
+		const uint8_t hlod_min = m_pTerrain->getHlodInstancerMinimumLevel( region, nMeshId );
+		if ( hlod_min > 0 && m_pTerrain->isHlodRegionSuppressed( region, hlod_min ) ) {
+			return false;
+		}
+	}
+	if ( !m_bCellStreamingEnabled ) {
 		return true;
 	}
 	// Asset visibility still decides which cells inside a resident region are

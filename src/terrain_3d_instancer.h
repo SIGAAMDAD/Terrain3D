@@ -257,6 +257,7 @@ t3dregionUpdateState_t m_szRegionUpdates[TERRAIN3D_INSTANCE_REGION_UPDATE_CAPACI
 	void reconcileLogicalRegion( T3DRegion *pRegion, int nMeshId );
 	void swapLogicalMeshIds( int nSrcId, int nDstId );
 	bool hasPendingUpdates( void ) const;
+	bool hasPendingUpdatesForRegion( const Vector2i &rRegion ) const;
 	void clearRegionUpdates( bool bActive );
 	void snapshotRegionUpdates( void );
 	t3dregionUpdateState_t *getRegionUpdate( const Vector2i &vRegion );
@@ -451,6 +452,14 @@ public:
 		const size_t pending_count = m_pendingCellUpdates.size() > m_iPendingCellUpdateCursor ?
 			m_pendingCellUpdates.size() - m_iPendingCellUpdateCursor : 0u;
 		return ( int ) ( m_streamingUpdates.size() + m_activeStreamingUpdates.size() + pending_count );
+	}
+	bool areHlodDetailRegionsReady( const Vector2i &rRegionMin, const Vector2i &rRegionMax ) const {
+		for ( int z = rRegionMin.y; z <= rRegionMax.y; ++z ) {
+			for ( int x = rRegionMin.x; x <= rRegionMax.x; ++x ) {
+				if ( hasPendingUpdatesForRegion( Vector2i( x, z ) ) ) { return false; }
+			}
+		}
+		return true;
 	}
 	Dictionary getStats( void ) const;
 	Dictionary debugValidateSingleLodTransitionCandidates(
