@@ -26,21 +26,21 @@
 #include <utility>
 
 #include "eastl_config.h"
-#include "logger.h"
+#include "core/logger.h"
 #include "terrain_3d.h"
-#include "terrain_3d_compute.h"
-#include "terrain_3d_editor.h"
-#include "terrain_3d_linear_arena.h"
-#include "terrain_3d_lightmap_streamer.h"
-#include "terrain_3d_hlod_streamer.h"
-#include "terrain_3d_lighting_policy.h"
-#include "terrain_3d_node_streamer.h"
-#include "terrain_3d_parallel.h"
-#include "terrain_3d_performance_profile.h"
-#include "terrain_3d_region_codec.h"
-#include "terrain_3d_streaming_policy.h"
-#include "terrain_3d_upload_bridge.h"
-#include "terrain_3d_util.h"
+#include "rendering/terrain_3d_compute.h"
+#include "authoring/terrain_3d_editor.h"
+#include "memory/terrain_3d_linear_arena.h"
+#include "lighting/terrain_3d_lightmap_streamer.h"
+#include "hlod/terrain_3d_hlod_streamer.h"
+#include "lighting/terrain_3d_lighting_policy.h"
+#include "streaming/terrain_3d_node_streamer.h"
+#include "simd/terrain_3d_parallel.h"
+#include "streaming/terrain_3d_performance_profile.h"
+#include "data/terrain_3d_region_codec.h"
+#include "streaming/terrain_3d_streaming_policy.h"
+#include "streaming/terrain_3d_upload_bridge.h"
+#include "core/terrain_3d_util.h"
 
 namespace {
 
@@ -6204,7 +6204,7 @@ void T3DTerrain::_notification( const int nWhat ) {
 			// Node is ready
 			LOG( T3DTerrain::INFO, "NOTIFICATION_READY" );
 			// Optional: Run the testing suite
-			// #include "unit_testing.h"
+			// #include "core/unit_testing.h"
 			// test_differs();
 
 			// Clear editor textures - also see ENTER_TREE

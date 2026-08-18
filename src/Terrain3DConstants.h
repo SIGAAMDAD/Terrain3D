@@ -10,7 +10,9 @@
 #include <numeric>
 #include <limits>
 
-#include "terrain_3d_memory_constants.h"
+#include "core/terrain_3d_numeric_constants.h"
+#include "data/terrain_3d_runtime_page_constants.h"
+#include "memory/terrain_3d_memory_constants.h"
 
 #include <EASTL/functional.h>
 #include <EASTL/utility.h>
@@ -47,9 +49,6 @@ static constexpr const char *TERRAIN3D_PROFILE_KEY = "xbox360_experimental";
 static constexpr const char *TERRAIN3D_PROFILE_DISPLAY_NAME = "Xbox 360 Experimental";
 static constexpr uint64_t TERRAIN3D_PROFILE_FNV_OFFSET = 1469598103934665603ull;
 static constexpr uint64_t TERRAIN3D_PROFILE_FNV_PRIME = 1099511628211ull;
-static constexpr float TERRAIN3D_BYTE_MAX_FLOAT = 255.0f;
-static constexpr float TERRAIN3D_BYTE_MIDPOINT_FLOAT = 127.5f;
-static constexpr float TERRAIN3D_BYTE_INV_MAX_FLOAT = 1.0f / TERRAIN3D_BYTE_MAX_FLOAT;
 static constexpr uint32_t TERRAIN3D_HASH_GOLDEN_RATIO_32 = 0x9e3779b9u;
 static constexpr uint32_t TERRAIN3D_HASH_MIX_32 = 0x85ebca6bu;
 static constexpr uint32_t TERRAIN3D_HASH_MIX_32_SECONDARY = 0xc2b2ae35u;
@@ -249,13 +248,6 @@ static constexpr uint32_t TERRAIN3D_RENDER_CONTROL_MATERIAL_MASK =
 static constexpr size_t TERRAIN3D_RESIDENT_CACHE_ALIGNMENT = 64u;
 static constexpr size_t TERRAIN3D_RESIDENT_INVALID_OFFSET = ( size_t ) ( -1 );
 static constexpr int TERRAIN3D_RING_TILE_INSTANCES = 12;
-static constexpr uint32_t TERRAIN3D_RUNTIME_PAGE_ALIGNMENT = 16u;
-static constexpr uint32_t TERRAIN3D_RUNTIME_PAGE_BLEND_RECIPE_VERSION = 3u;
-static constexpr uint32_t TERRAIN3D_RUNTIME_PAGE_CHANNEL_COUNT = 5u;
-static constexpr uint32_t TERRAIN3D_RUNTIME_PAGE_HEADER_BYTES = 192u;
-static constexpr uint32_t TERRAIN3D_RUNTIME_PAGE_MAGIC = 0x47503354u;
-static constexpr uint32_t TERRAIN3D_RUNTIME_PAGE_MAX_BYTES = 256u * 1024u * 1024u;
-static constexpr uint32_t TERRAIN3D_RUNTIME_PAGE_VERSION = 4u;
 static constexpr size_t TERRAIN3D_RUNTIME_PROFILE_HISTORY_CAPACITY = 600u;
 static constexpr int TERRAIN3D_SAMPLER_CACHE_SIZE = 8;
 static constexpr uint32_t TERRAIN3D_TOOL_AUTOSHADER_VALUE = 6u;
@@ -335,7 +327,7 @@ typedef struct t3dsetting_s {
 #define T3D_PROFILE_MATERIAL_BOOL( name, value ) { OWNER_MATERIAL, VALUE_BOOL, name, 0, 0.0, ( bool ) ( value ) },
 
 inline constexpr t3dsetting_t XBOX360_EXPERIMENTAL_SETTINGS[] = {
-#include "terrain_3d_performance_profile_manifest.inc"
+#include "streaming/terrain_3d_performance_profile_manifest.inc"
 };
 inline constexpr size_t XBOX360_EXPERIMENTAL_SETTING_COUNT =
 	sizeof( XBOX360_EXPERIMENTAL_SETTINGS ) / sizeof( XBOX360_EXPERIMENTAL_SETTINGS[0] );

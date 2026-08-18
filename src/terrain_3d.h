@@ -24,19 +24,19 @@
 #include <EASTL/vector.h>
 
 #include "Terrain3DConstants.h"
-#include "target_node_3d.h"
-#include "terrain_3d_adaptive_budget_policy.h"
-#include "terrain_3d_boundary_phase_policy.h"
-#include "terrain_3d_assets.h"
-#include "terrain_3d_collision.h"
-#include "terrain_3d_compute.h"
-#include "terrain_3d_data.h"
-#include "terrain_3d_diagnostics.h"
-#include "terrain_3d_instancer.h"
-#include "terrain_3d_material.h"
-#include "terrain_3d_memory_budget.h"
-#include "terrain_3d_mesher.h"
-#include "terrain_3d_streaming_policy.h"
+#include "core/target_node_3d.h"
+#include "streaming/terrain_3d_adaptive_budget_policy.h"
+#include "streaming/terrain_3d_boundary_phase_policy.h"
+#include "assets/terrain_3d_assets.h"
+#include "physics/terrain_3d_collision.h"
+#include "rendering/terrain_3d_compute.h"
+#include "data/terrain_3d_data.h"
+#include "core/terrain_3d_diagnostics.h"
+#include "instances/terrain_3d_instancer.h"
+#include "rendering/terrain_3d_material.h"
+#include "memory/terrain_3d_memory_budget.h"
+#include "rendering/terrain_3d_mesher.h"
+#include "streaming/terrain_3d_streaming_policy.h"
 
 class T3DEditor;
 class T3DNodeStreamer;

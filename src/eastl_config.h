@@ -10,7 +10,7 @@
 #include <limits>
 #include <new>
 
-#include "terrain_3d_memory.h"
+#include "memory/terrain_3d_memory.h"
 
 // EASTL is used only in Terrain3D internals. Public Godot APIs remain Godot types.
 #define EASTL_EABASE_DISABLED 1
