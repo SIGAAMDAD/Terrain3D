@@ -10,6 +10,7 @@ var scene: PackedScene
 var transform: Transform3D = Transform3D.IDENTITY
 var state: Dictionary[StringName, Variant] = {}
 var flags: int = 0
+var hlod_min_level: int = 1
 var boundary_policy: int = BOUNDARY_POLICY_BOUNDS
 var coverage_min: Vector2i = Vector2i.ZERO
 var coverage_max: Vector2i = Vector2i.ZERO
@@ -37,6 +38,7 @@ static func from_value(p_value: Variant) -> Terrain3DRegionNodeDescriptor:
 		for key: String in state_map.keys():
 			descriptor.state[StringName(key)] = state_map.raw_value(key)
 	descriptor.flags = values.int_value("flags")
+	descriptor.hlod_min_level = clampi(values.int_value("hlod_min_level", 1), 1, 6)
 	descriptor.boundary_policy = values.int_value("boundary_policy", BOUNDARY_POLICY_BOUNDS)
 	descriptor.coverage_min = values.vector2i_value("coverage_min", Vector2i.ZERO)
 	descriptor.coverage_max = values.vector2i_value("coverage_max", Vector2i.ZERO)
@@ -75,6 +77,7 @@ func to_dictionary() -> Dictionary[String, Variant]:
 		"transform": transform,
 		"state": state,
 		"flags": flags,
+		"hlod_min_level": hlod_min_level,
 		"boundary_policy": boundary_policy,
 		"coverage_min": coverage_min,
 		"coverage_max": coverage_max,

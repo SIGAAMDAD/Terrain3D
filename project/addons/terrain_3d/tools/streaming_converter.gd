@@ -6,6 +6,8 @@ class_name Terrain3DStreamingConverter
 const MODE_META: StringName = &"terrain3d_stream_mode"
 const MODE_STATIC: StringName = &"static"
 const MODE_DYNAMIC: StringName = &"dynamic"
+const MODE_HLOD_VISUAL: StringName = &"hlod_visual"
+const HLOD_MIN_LEVEL_META: StringName = &"terrain3d_hlod_min_level"
 const MODE_IGNORE: StringName = &"ignore"
 
 
@@ -31,6 +33,7 @@ class DynamicDescriptor extends RefCounted:
 	var transform: Transform3D = Transform3D.IDENTITY
 	var state: Dictionary[StringName, Variant] = {}
 	var flags: int = 0
+	var hlod_min_level: int = 1
 
 
 class ConversionRecord extends RefCounted:
@@ -50,6 +53,14 @@ var _records: Dictionary[int, ConversionRecord] = {}
 
 
 func convert_selected() -> void:
+	_convert_selected_with_root_mode(&"", 1)
+
+
+func convert_selected_as_hlod_visual(min_level: int = 1) -> void:
+	_convert_selected_with_root_mode(MODE_HLOD_VISUAL, clampi(min_level, 1, 6))
+
+
+func _convert_selected_with_root_mode(root_mode: StringName, hlod_min_level: int) -> void:
 	var terrain: Terrain3D = plugin.terrain if is_instance_valid(plugin) else null
 	if not is_instance_valid(terrain) or not is_instance_valid(terrain.instancer):
 		push_error("Select a Terrain3D node before converting streamed objects")
@@ -78,17 +89,28 @@ func convert_selected() -> void:
 		if not parent:
 			continue
 		record.roots.push_back(SourceRecord.new(root, parent, root.get_index()))
-		_scan_node(
-			root,
-			terrain,
-			record.static_groups,
-			record.planned_assets,
-			record.dynamic_nodes,
-			record.unsupported
-		)
+		if root_mode == MODE_HLOD_VISUAL:
+			var reason: String = _validate_hlod_visual(root)
+			if not reason.is_empty():
+				record.unsupported.push_back(str(root.get_path()) + " [HLOD visual: " + reason + "]")
+			elif _append_dynamic(root, record.dynamic_nodes):
+				var descriptor: DynamicDescriptor = record.dynamic_nodes.back()
+				descriptor.flags = Terrain3DNodeStreamer.NODE_FLAG_STATIC | Terrain3DNodeStreamer.NODE_FLAG_HLOD_VISUAL
+				descriptor.hlod_min_level = hlod_min_level
+			else:
+				record.unsupported.push_back(str(root.get_path()) + " [HLOD visual scene packing failed]")
+		else:
+			_scan_node(
+				root,
+				terrain,
+				record.static_groups,
+				record.planned_assets,
+				record.dynamic_nodes,
+				record.unsupported
+			)
 	if not record.unsupported.is_empty():
 		push_error("Terrain3D streaming conversion stopped because these nodes need an explicit " +
-			"terrain3d_stream_mode of dynamic or ignore:\n" + "\n".join(record.unsupported))
+			"terrain3d_stream_mode of dynamic, hlod_visual, or ignore:\n" + "\n".join(record.unsupported))
 		return
 	if record.static_groups.is_empty() and record.dynamic_nodes.is_empty():
 		push_error("The selection contains no convertible meshes or dynamic Node3D scenes")
@@ -122,6 +144,18 @@ func _scan_node(
 			if _append_dynamic(node as Node3D, dynamic_nodes):
 				return true
 			unsupported.push_back(str(node.get_path()) + " [dynamic scene packing failed]")
+			return false
+		if explicit_mode == MODE_HLOD_VISUAL and node is Node3D:
+			var reason: String = _validate_hlod_visual(node)
+			if not reason.is_empty():
+				unsupported.push_back(str(node.get_path()) + " [HLOD visual: " + reason + "]")
+				return false
+			if _append_dynamic(node as Node3D, dynamic_nodes):
+				var descriptor: DynamicDescriptor = dynamic_nodes.back()
+				descriptor.flags = Terrain3DNodeStreamer.NODE_FLAG_STATIC | Terrain3DNodeStreamer.NODE_FLAG_HLOD_VISUAL
+				descriptor.hlod_min_level = clampi(int(node.get_meta(HLOD_MIN_LEVEL_META, 1)), 1, 6)
+				return true
+			unsupported.push_back(str(node.get_path()) + " [HLOD visual scene packing failed]")
 			return false
 		if explicit_mode == MODE_STATIC and node is MeshInstance3D:
 			if not _append_static_mesh(node as MeshInstance3D, terrain, static_groups, planned_assets):
@@ -248,6 +282,36 @@ func _append_static_record(
 	var group: StaticGroup = static_groups[mesh_id]
 	group.transforms.push_back(transform)
 	group.colors.push_back(color)
+
+
+func _validate_hlod_visual(node: Node) -> String:
+	if node.get_script() != null:
+		return "scripted nodes are behavioral"
+	if node is CollisionObject3D or node is CollisionShape3D or node is CollisionPolygon3D:
+		return "physics/collision nodes must remain detailed"
+	if node is AnimationPlayer or node is AnimationTree or node is Skeleton3D:
+		return "animated/skeletal content is unsupported"
+	if node is AudioStreamPlayer3D or node is GPUParticles3D or node is CPUParticles3D:
+		return "audio/particle content is not render-only"
+	if node is NavigationRegion3D or node is NavigationLink3D or node is NavigationObstacle3D:
+		return "navigation content must remain detailed"
+	if node is Light3D:
+		return "lights are not HLOD proxy geometry"
+	if node is MultiMeshInstance3D:
+		return "MultiMesh content should use Terrain3D instancer HLOD"
+	if node is MeshInstance3D:
+		var mesh_node := node as MeshInstance3D
+		if not is_instance_valid(mesh_node.mesh):
+			return "MeshInstance3D has no mesh"
+		if mesh_node.mesh.get_blend_shape_count() > 0:
+			return "blend shapes are unsupported"
+		if is_instance_valid(mesh_node.material_overlay):
+			return "material overlays are unsupported by HLOD proxy baking"
+	for child: Node in node.get_children():
+		var reason: String = _validate_hlod_visual(child)
+		if not reason.is_empty():
+			return reason
+	return ""
 
 
 func _append_dynamic(node: Node3D, dynamic_nodes: Array[DynamicDescriptor]) -> bool:
@@ -399,14 +463,16 @@ func _apply_conversion(token: int) -> void:
 				descriptor.scene_path,
 				descriptor.transform,
 				descriptor.state,
-				descriptor.flags
+				descriptor.flags,
+				descriptor.hlod_min_level
 			)
 		else:
 			spawn_id = terrain.add_streamed_scene(
 				descriptor.scene,
 				descriptor.transform,
 				descriptor.state,
-				descriptor.flags
+				descriptor.flags,
+				descriptor.hlod_min_level
 			)
 		if spawn_id > 0:
 			spawn_ids.push_back(spawn_id)

@@ -808,6 +808,7 @@ func _initialize_metric_rows() -> void:
 	var frame_entries: Array[PackedStringArray] = [
 		PackedStringArray(["physics_total_usec", "Terrain total"]),
 		PackedStringArray(["data_residency_usec", "Data residency"]),
+		PackedStringArray(["hlod_streaming_usec", "HLOD streaming"]),
 		PackedStringArray(["node_streaming_usec", "Node streaming"]),
 		PackedStringArray(["clipmap_usec", "Clipmap"]),
 		PackedStringArray(["ocean_usec", "Ocean"]),
