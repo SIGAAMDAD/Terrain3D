@@ -850,6 +850,7 @@ void T3DRegion::rebuildStreamedNodeRuntime( void ) {
 		descriptor.state = entry.has( "state" ) && Variant( entry["state"] ).get_type() == Variant::DICTIONARY ?
 			Dictionary( entry["state"] ) : Dictionary();
 		descriptor.flags = entry.has( "flags" ) ? ( int ) ( entry["flags"] ) : 0;
+		descriptor.hlodMinLevel = CLAMP( entry.has( "hlod_min_level" ) ? ( int ) entry["hlod_min_level"] : 1, 1, 6 );
 		descriptor.boundaryPolicy = entry.has( "boundary_policy" ) ?
 			normalizeStreamedNodeBoundaryPolicy( ( int ) ( entry["boundary_policy"] ) ) :
 			STREAMED_NODE_BOUNDARY_ANCHOR;
@@ -966,6 +967,7 @@ void T3DRegion::setStreamedNodes( const Array &rNodes ) {
 		entry["state"] = source.has( "state" ) && Variant( source["state"] ).get_type() == Variant::DICTIONARY ?
 			Dictionary( source["state"] ).duplicate( true ) : Dictionary();
 		entry["flags"] = source.has( "flags" ) ? ( int ) ( source["flags"] ) : 0;
+		entry["hlod_min_level"] = CLAMP( source.has( "hlod_min_level" ) ? ( int ) source["hlod_min_level"] : 1, 1, 6 );
 		storeStreamedNodeBoundary( entry,
 			source.has( "boundary_policy" ) ? ( int ) ( source["boundary_policy"] ) : STREAMED_NODE_BOUNDARY_ANCHOR,
 			source.has( "coverage_min" ) ? Vector2i( source["coverage_min"] ) : V2I_ZERO,
@@ -982,7 +984,7 @@ void T3DRegion::setStreamedNodes( const Array &rNodes ) {
 int64_t T3DRegion::addStreamedNode(
 	const Ref<PackedScene> &rScene, const Transform3D &rLocalTransform,
 	const Dictionary &rState, const int nFlags, const int64_t nId, const int nBoundaryPolicy,
-	const Vector2i &rCoverageMin, const Vector2i &rCoverageMax
+	const Vector2i &rCoverageMin, const Vector2i &rCoverageMax, const int nHlodMinLevel
 ) {
 	if ( rScene.is_null() ) {
 		return 0;
@@ -997,6 +999,7 @@ int64_t T3DRegion::addStreamedNode(
 	entry["transform"] = rLocalTransform;
 	entry["state"] = rState.duplicate( true );
 	entry["flags"] = nFlags;
+	entry["hlod_min_level"] = CLAMP( nHlodMinLevel, 1, 6 );
 	storeStreamedNodeBoundary( entry, nBoundaryPolicy, rCoverageMin, rCoverageMax );
 	storeStreamedNodeLighting( entry, Dictionary() );
 	m_streamedNodes.push_back( entry );
@@ -1009,7 +1012,7 @@ int64_t T3DRegion::addStreamedNode(
 int64_t T3DRegion::addStreamedNodePath(
 	const String &rScenePath,
 	const Transform3D &rLocalTransform, const Dictionary &rState, const int nFlags, const int64_t nId,
-	const int nBoundaryPolicy, const Vector2i &rCoverageMin, const Vector2i &rCoverageMax
+	const int nBoundaryPolicy, const Vector2i &rCoverageMin, const Vector2i &rCoverageMax, const int nHlodMinLevel
 ) {
 	if ( rScenePath.is_empty() ) {
 		return 0;
@@ -1024,6 +1027,7 @@ int64_t T3DRegion::addStreamedNodePath(
 	entry["transform"] = rLocalTransform;
 	entry["state"] = rState.duplicate( true );
 	entry["flags"] = nFlags;
+	entry["hlod_min_level"] = CLAMP( nHlodMinLevel, 1, 6 );
 	storeStreamedNodeBoundary( entry, nBoundaryPolicy, rCoverageMin, rCoverageMax );
 	storeStreamedNodeLighting( entry, Dictionary() );
 	m_streamedNodes.push_back( entry );
@@ -1349,16 +1353,16 @@ void T3DRegion::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_streamed_nodes" ), &T3DRegion::getStreamedNodes );
 	ClassDB::bind_method( D_METHOD(
 		"add_streamed_node", "scene", "local_transform", "state", "flags", "id",
-		"boundary_policy", "coverage_min", "coverage_max"
+		"boundary_policy", "coverage_min", "coverage_max", "hlod_min_level"
 	), &T3DRegion::addStreamedNode,
 		DEFVAL( Dictionary() ), DEFVAL( 0 ), DEFVAL( 0 ), DEFVAL( STREAMED_NODE_BOUNDARY_ANCHOR ),
-		DEFVAL( V2I_ZERO ), DEFVAL( V2I_ZERO ) );
+		DEFVAL( V2I_ZERO ), DEFVAL( V2I_ZERO ), DEFVAL( 1 ) );
 	ClassDB::bind_method( D_METHOD(
 		"add_streamed_node_path", "scene_path", "local_transform", "state", "flags", "id",
-		"boundary_policy", "coverage_min", "coverage_max"
+		"boundary_policy", "coverage_min", "coverage_max", "hlod_min_level"
 	), &T3DRegion::addStreamedNodePath,
 		DEFVAL( Dictionary() ), DEFVAL( 0 ), DEFVAL( 0 ), DEFVAL( STREAMED_NODE_BOUNDARY_ANCHOR ),
-		DEFVAL( V2I_ZERO ), DEFVAL( V2I_ZERO ) );
+		DEFVAL( V2I_ZERO ), DEFVAL( V2I_ZERO ), DEFVAL( 1 ) );
 	ClassDB::bind_method( D_METHOD( "remove_streamed_node", "id" ), &T3DRegion::removeStreamedNode );
 	ClassDB::bind_method( D_METHOD( "get_streamed_node_count" ), &T3DRegion::getStreamedNodeCount );
 	ClassDB::bind_method( D_METHOD( "set_lighting", "lighting" ), &T3DRegion::setLighting );

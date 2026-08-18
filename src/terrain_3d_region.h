@@ -74,6 +74,7 @@ public: // Constants
 		Transform3D transform;
 		Dictionary state;
 		int flags = 0;
+		int hlodMinLevel = 1;
 		int boundaryPolicy = STREAMED_NODE_BOUNDARY_ANCHOR;
 		Vector2i coverageMin = V2I_ZERO;
 		Vector2i coverageMax = V2I_ZERO;
@@ -299,13 +300,15 @@ public:
 		const Ref<PackedScene> &rScene, const Transform3D &rLocalTransform,
 		const Dictionary &rState = Dictionary(), const int nFlags = 0, const int64_t nId = 0,
 		const int nBoundaryPolicy = STREAMED_NODE_BOUNDARY_ANCHOR,
-		const Vector2i &rCoverageMin = V2I_ZERO, const Vector2i &rCoverageMax = V2I_ZERO
+		const Vector2i &rCoverageMin = V2I_ZERO, const Vector2i &rCoverageMax = V2I_ZERO,
+		const int nHlodMinLevel = 1
 	);
 	int64_t addStreamedNodePath(
 		const String &rScenePath, const Transform3D &rLocalTransform,
 		const Dictionary &rState = Dictionary(), const int nFlags = 0, const int64_t nId = 0,
 		const int nBoundaryPolicy = STREAMED_NODE_BOUNDARY_ANCHOR,
-		const Vector2i &rCoverageMin = V2I_ZERO, const Vector2i &rCoverageMax = V2I_ZERO
+		const Vector2i &rCoverageMin = V2I_ZERO, const Vector2i &rCoverageMax = V2I_ZERO,
+		const int nHlodMinLevel = 1
 	);
 	bool removeStreamedNode( const int64_t nId );
 	bool updateStreamedNodeState(
