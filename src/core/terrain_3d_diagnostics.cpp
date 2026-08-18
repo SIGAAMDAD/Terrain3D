@@ -1,6 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#include "terrain_3d_diagnostics.h"
+#include "core/terrain_3d_diagnostics.h"
 
 #include <godot_cpp/core/class_db.hpp>
 

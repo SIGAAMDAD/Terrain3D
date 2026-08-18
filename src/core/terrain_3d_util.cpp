@@ -11,9 +11,9 @@
 #include "eastl_config.h"
 #include <EASTL/vector.h>
 
-#include "logger.h"
-#include "terrain_3d_util.h"
-#include "terrain_3d_parallel.h"
+#include "core/logger.h"
+#include "core/terrain_3d_util.h"
+#include "simd/terrain_3d_parallel.h"
 
 namespace {
 

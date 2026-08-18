@@ -11,7 +11,7 @@
 #include <godot_cpp/variant/utility_functions.hpp>
 
 #include "Terrain3DConstants.h"
-#include "generated_texture.h"
+#include "assets/generated_texture.h"
 
 class T3DTerrain;
 
