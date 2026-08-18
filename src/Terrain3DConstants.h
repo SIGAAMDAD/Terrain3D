@@ -10,6 +10,8 @@
 #include <numeric>
 #include <limits>
 
+#include "terrain_3d_memory_constants.h"
+
 #include <EASTL/functional.h>
 #include <EASTL/utility.h>
 
@@ -151,8 +153,6 @@ static constexpr uint16_t TERRAIN3D_INSTANCE_PAGE_CELL_FLAGS = TERRAIN3D_INSTANC
 static constexpr uint32_t TERRAIN3D_ACTIVE_ACCESS_READER_MASK = 0x7fffffffu;
 static constexpr uint32_t TERRAIN3D_ACTIVE_ACCESS_WRITER_BIT = 0x80000000u;
 static constexpr size_t TERRAIN3D_ACTIVE_STORAGE_ALIGNMENT = 64u;
-static constexpr size_t TERRAIN3D_ARENA_CACHELINE_ALIGNMENT = 64u;
-static constexpr size_t TERRAIN3D_ARENA_DEFAULT_BASE_ALIGNMENT = 64u;
 static constexpr int TERRAIN3D_AUTOSHADER_MODE_LEGACY_RUNTIME = 0;
 static constexpr size_t TERRAIN3D_BAKE_CACHELINE_BYTES = 64u;
 static constexpr size_t TERRAIN3D_COMPUTE_SCRATCH_RETAIN_LIMIT = 32u * 1024u * 1024u;
