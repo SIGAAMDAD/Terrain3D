@@ -250,6 +250,11 @@ private:
 	int m_nLightmapStreamRadius = 1;
 	int m_nLightmapLoadBudget = 2;
 	int m_nLightmapUnloadBudget = 4;
+	int m_nRegionLightmapProxyLod = 2;
+	int m_nRegionLightmapContextRadius = 1;
+	real_t m_fRegionLightmapTexelSize = 1.0f;
+	int m_nRegionLightmapBakeQuality = 2;
+	int m_nRegionLightmapShadowmaskMode = 2;
 	bool m_bHlodEnabled = true;
 	String m_hlodManifestPath;
 	real_t m_fHlodTargetErrorPixels = 3.0f;
@@ -610,8 +615,8 @@ private:
 	) const;
 
 public:
-	static constexpr int64_t NATIVE_API_REVISION = 2026081706LL;
-	static constexpr const char *NATIVE_BUILD_ID = "a2.8.5-hlod";
+	static constexpr int64_t NATIVE_API_REVISION = 2026081801LL;
+	static constexpr const char *NATIVE_BUILD_ID = "a2.8.6-fixed-memory-arena";
 	static t3ddebugLevel_t s_debugLevel; // Initialized in terrain_3d.cpp
 
 	T3DTerrain( void );
@@ -989,6 +994,16 @@ public:
 	void setLightmapUnloadBudget( int nBudget );
 	int getLightmapUnloadBudget( void ) const { return m_nLightmapUnloadBudget; }
 	Dictionary getLightmapStreamingStats( void ) const;
+	void setRegionLightmapProxyLod( int nLod );
+	int getRegionLightmapProxyLod( void ) const { return m_nRegionLightmapProxyLod; }
+	void setRegionLightmapContextRadius( int nRadius );
+	int getRegionLightmapContextRadius( void ) const { return m_nRegionLightmapContextRadius; }
+	void setRegionLightmapTexelSize( real_t fTexelSize );
+	real_t getRegionLightmapTexelSize( void ) const { return m_fRegionLightmapTexelSize; }
+	void setRegionLightmapBakeQuality( int nQuality );
+	int getRegionLightmapBakeQuality( void ) const { return m_nRegionLightmapBakeQuality; }
+	void setRegionLightmapShadowmaskMode( int nMode );
+	int getRegionLightmapShadowmaskMode( void ) const { return m_nRegionLightmapShadowmaskMode; }
 	void setHlodEnabled( bool bEnabled );
 	bool isHlodEnabled( void ) const { return m_bHlodEnabled; }
 	void setHlodManifestPath( const String &rPath );

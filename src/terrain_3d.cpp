@@ -4993,6 +4993,26 @@ Dictionary T3DTerrain::getLightmapStreamingStats( void ) const {
 	return m_pLightmapStreamer ? m_pLightmapStreamer->getStats() : Dictionary();
 }
 
+void T3DTerrain::setRegionLightmapProxyLod( const int nLod ) {
+	m_nRegionLightmapProxyLod = CLAMP( nLod, 0, 8 );
+}
+
+void T3DTerrain::setRegionLightmapContextRadius( const int nRadius ) {
+	m_nRegionLightmapContextRadius = CLAMP( nRadius, 0, 4 );
+}
+
+void T3DTerrain::setRegionLightmapTexelSize( const real_t fTexelSize ) {
+	m_fRegionLightmapTexelSize = CLAMP( fTexelSize, 0.05f, 16.0f );
+}
+
+void T3DTerrain::setRegionLightmapBakeQuality( const int nQuality ) {
+	m_nRegionLightmapBakeQuality = CLAMP( nQuality, 0, 3 );
+}
+
+void T3DTerrain::setRegionLightmapShadowmaskMode( const int nMode ) {
+	m_nRegionLightmapShadowmaskMode = CLAMP( nMode, 0, 2 );
+}
+
 void T3DTerrain::setHlodEnabled( const bool bEnabled ) {
 	if ( m_bHlodEnabled == bEnabled ) { return; }
 	m_bHlodEnabled = bEnabled; markMemoryBudgetDirty();
@@ -6689,6 +6709,16 @@ void T3DTerrain::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "set_lightmap_unload_budget", "budget" ), &T3DTerrain::setLightmapUnloadBudget );
 	ClassDB::bind_method( D_METHOD( "get_lightmap_unload_budget" ), &T3DTerrain::getLightmapUnloadBudget );
 	ClassDB::bind_method( D_METHOD( "get_lightmap_streaming_stats" ), &T3DTerrain::getLightmapStreamingStats );
+	ClassDB::bind_method( D_METHOD( "set_region_lightmap_proxy_lod", "lod" ), &T3DTerrain::setRegionLightmapProxyLod );
+	ClassDB::bind_method( D_METHOD( "get_region_lightmap_proxy_lod" ), &T3DTerrain::getRegionLightmapProxyLod );
+	ClassDB::bind_method( D_METHOD( "set_region_lightmap_context_radius", "radius" ), &T3DTerrain::setRegionLightmapContextRadius );
+	ClassDB::bind_method( D_METHOD( "get_region_lightmap_context_radius" ), &T3DTerrain::getRegionLightmapContextRadius );
+	ClassDB::bind_method( D_METHOD( "set_region_lightmap_texel_size", "texel_size" ), &T3DTerrain::setRegionLightmapTexelSize );
+	ClassDB::bind_method( D_METHOD( "get_region_lightmap_texel_size" ), &T3DTerrain::getRegionLightmapTexelSize );
+	ClassDB::bind_method( D_METHOD( "set_region_lightmap_bake_quality", "quality" ), &T3DTerrain::setRegionLightmapBakeQuality );
+	ClassDB::bind_method( D_METHOD( "get_region_lightmap_bake_quality" ), &T3DTerrain::getRegionLightmapBakeQuality );
+	ClassDB::bind_method( D_METHOD( "set_region_lightmap_shadowmask_mode", "mode" ), &T3DTerrain::setRegionLightmapShadowmaskMode );
+	ClassDB::bind_method( D_METHOD( "get_region_lightmap_shadowmask_mode" ), &T3DTerrain::getRegionLightmapShadowmaskMode );
 	ClassDB::bind_method( D_METHOD( "set_hlod_enabled", "enabled" ), &T3DTerrain::setHlodEnabled );
 	ClassDB::bind_method( D_METHOD( "is_hlod_enabled" ), &T3DTerrain::isHlodEnabled );
 	ClassDB::bind_method( D_METHOD( "set_hlod_manifest_path", "path" ), &T3DTerrain::setHlodManifestPath );
@@ -6994,6 +7024,18 @@ void T3DTerrain::_bind_methods( void ) {
 	// the selected base profile before a serialized material resource and its overrides.
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "_performance_target_storage", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
 				 "set_performance_target", "get_performance_target" );
+
+	ADD_SUBGROUP( "Regional Lightmap Baking", "region_lightmap_" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "region_lightmap_proxy_lod", PROPERTY_HINT_RANGE,
+		"0,8,1" ), "set_region_lightmap_proxy_lod", "get_region_lightmap_proxy_lod" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "region_lightmap_context_radius", PROPERTY_HINT_RANGE,
+		"0,4,1,suffix: regions" ), "set_region_lightmap_context_radius", "get_region_lightmap_context_radius" );
+	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "region_lightmap_texel_size", PROPERTY_HINT_RANGE,
+		"0.05,16,0.05,suffix: m/texel" ), "set_region_lightmap_texel_size", "get_region_lightmap_texel_size" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "region_lightmap_bake_quality", PROPERTY_HINT_ENUM,
+		"Low,Medium,High,Ultra" ), "set_region_lightmap_bake_quality", "get_region_lightmap_bake_quality" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "region_lightmap_shadowmask_mode", PROPERTY_HINT_ENUM,
+		"None,Replace,Overlay" ), "set_region_lightmap_shadowmask_mode", "get_region_lightmap_shadowmask_mode" );
 
 	ADD_GROUP( "Resources", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "material", PROPERTY_HINT_RESOURCE_TYPE, "Terrain3DMaterial" ),
