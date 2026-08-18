@@ -1,4 +1,4 @@
-#include "terrain_3d_hlod_manifest.h"
+#include "hlod/terrain_3d_hlod_manifest.h"
 #include <godot_cpp/core/class_db.hpp>
 
 #define HLOD_SET(method, field, type, normalized) \

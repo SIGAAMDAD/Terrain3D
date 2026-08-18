@@ -1,12 +1,12 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
-#include "terrain_3d_hlod_builder.h"
+#include "hlod/terrain_3d_hlod_builder.h"
 
 #include "eastl_config.h"
 #include "terrain_3d.h"
-#include "terrain_3d_assets.h"
-#include "terrain_3d_instance_store.h"
-#include "terrain_3d_mesh_asset.h"
-#include "terrain_3d_region.h"
+#include "assets/terrain_3d_assets.h"
+#include "instances/terrain_3d_instance_store.h"
+#include "assets/terrain_3d_mesh_asset.h"
+#include "data/terrain_3d_region.h"
 
 #include <EASTL/algorithm.h>
 #include <EASTL/sort.h>

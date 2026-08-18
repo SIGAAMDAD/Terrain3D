@@ -14,8 +14,8 @@
 #include <godot_cpp/variant/vector2i.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 #include "Terrain3DConstants.h"
-#include "terrain_3d_hlod_manifest.h"
-#include "terrain_3d_hlod_package.h"
+#include "hlod/terrain_3d_hlod_manifest.h"
+#include "hlod/terrain_3d_hlod_package.h"
 
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
 using namespace godot;

@@ -1,5 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
-#include "terrain_3d_hlod_streamer.h"
+#include "hlod/terrain_3d_hlod_streamer.h"
 #include <cmath>
 #include <cstring>
 #include <godot_cpp/classes/camera3d.hpp>
@@ -9,7 +9,7 @@
 #include <godot_cpp/classes/world3d.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include "terrain_3d.h"
-#include "terrain_3d_data.h"
+#include "data/terrain_3d_data.h"
 
 T3DHLODStreamer::~T3DHLODStreamer( void ) { destroy(); }
 
