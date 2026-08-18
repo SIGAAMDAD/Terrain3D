@@ -385,6 +385,8 @@ public partial class Terrain3DData : GodotObject
 		/// Cached name for the 'save_region' member.
 		/// </summary>
 		public new static readonly StringName SaveRegion = "save_region";
+		/// <summary>Cached name for inspecting runtime GPU page coverage.</summary>
+		public new static readonly StringName InspectGpuRegionPages = "inspect_gpu_region_pages";
 		/// <summary>
 		/// Cached name for the 'cook_gpu_region_pages' member.
 		/// </summary>
@@ -644,6 +646,9 @@ public partial class Terrain3DData : GodotObject
 
 	public new void SaveRegion(Vector2I regionLocation, string directory, bool save16Bit = false) => 
 		Call(GDExtensionMethodName.SaveRegion, [regionLocation, directory, save16Bit]);
+
+	public new Godot.Collections.Dictionary InspectGpuRegionPages() =>
+		Call(GDExtensionMethodName.InspectGpuRegionPages).As<Godot.Collections.Dictionary>();
 
 	public new Godot.Collections.Dictionary CookGpuRegionPages() =>
 		Call(GDExtensionMethodName.CookGpuRegionPages).As<Godot.Collections.Dictionary>();

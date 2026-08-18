@@ -318,6 +318,16 @@ public partial class Terrain3D : Node3D
 		public new static readonly StringName LightmapLoadBudget = "lightmap_load_budget";
 		/// <summary>Cached name for per-update baked-lighting package retirement budget.</summary>
 		public new static readonly StringName LightmapUnloadBudget = "lightmap_unload_budget";
+		/// <summary>Cached name for regional lightmap terrain proxy LOD.</summary>
+		public new static readonly StringName RegionLightmapProxyLod = "region_lightmap_proxy_lod";
+		/// <summary>Cached name for regional lightmap context radius.</summary>
+		public new static readonly StringName RegionLightmapContextRadius = "region_lightmap_context_radius";
+		/// <summary>Cached name for regional lightmap terrain texel size.</summary>
+		public new static readonly StringName RegionLightmapTexelSize = "region_lightmap_texel_size";
+		/// <summary>Cached name for regional LightmapGI bake quality.</summary>
+		public new static readonly StringName RegionLightmapBakeQuality = "region_lightmap_bake_quality";
+		/// <summary>Cached name for regional LightmapGI shadowmask mode.</summary>
+		public new static readonly StringName RegionLightmapShadowmaskMode = "region_lightmap_shadowmask_mode";
 		/// <summary>Cached name for semantic environment shadow-caster policy.</summary>
 		public new static readonly StringName SemanticShadowPolicyEnabled = "semantic_shadow_policy_enabled";
 		/// <summary>Cached name for semantic environment shadow quality.</summary>
@@ -1086,6 +1096,36 @@ public partial class Terrain3D : Node3D
 	{
 		get => Get(GDExtensionPropertyName.LightmapUnloadBudget).As<long>();
 		set => Set(GDExtensionPropertyName.LightmapUnloadBudget, value);
+	}
+
+	public new long RegionLightmapProxyLod
+	{
+		get => Get(GDExtensionPropertyName.RegionLightmapProxyLod).As<long>();
+		set => Set(GDExtensionPropertyName.RegionLightmapProxyLod, value);
+	}
+
+	public new long RegionLightmapContextRadius
+	{
+		get => Get(GDExtensionPropertyName.RegionLightmapContextRadius).As<long>();
+		set => Set(GDExtensionPropertyName.RegionLightmapContextRadius, value);
+	}
+
+	public new double RegionLightmapTexelSize
+	{
+		get => Get(GDExtensionPropertyName.RegionLightmapTexelSize).As<double>();
+		set => Set(GDExtensionPropertyName.RegionLightmapTexelSize, value);
+	}
+
+	public new long RegionLightmapBakeQuality
+	{
+		get => Get(GDExtensionPropertyName.RegionLightmapBakeQuality).As<long>();
+		set => Set(GDExtensionPropertyName.RegionLightmapBakeQuality, value);
+	}
+
+	public new long RegionLightmapShadowmaskMode
+	{
+		get => Get(GDExtensionPropertyName.RegionLightmapShadowmaskMode).As<long>();
+		set => Set(GDExtensionPropertyName.RegionLightmapShadowmaskMode, value);
 	}
 
 	public new bool SemanticShadowPolicyEnabled
