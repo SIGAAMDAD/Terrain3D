@@ -286,6 +286,30 @@ public partial class Terrain3D : Node3D
 		public new static readonly StringName DynamicNodeLoadNodeBudget = "dynamic_node_load_node_budget";
 		/// <summary>Cached name for per-tick dynamic-node region unloads.</summary>
 		public new static readonly StringName DynamicNodeUnloadRegionBudget = "dynamic_node_unload_region_budget";
+		/// <summary>Cached name for HLOD runtime enablement.</summary>
+		public new static readonly StringName HlodEnabled = "hlod_enabled";
+		/// <summary>Cached name for the derived HLOD manifest path.</summary>
+		public new static readonly StringName HlodManifestPath = "hlod_manifest_path";
+		/// <summary>Cached name for projected HLOD error threshold.</summary>
+		public new static readonly StringName HlodTargetErrorPixels = "hlod_target_error_pixels";
+		/// <summary>Cached name for HLOD transition hysteresis.</summary>
+		public new static readonly StringName HlodHysteresis = "hlod_hysteresis";
+		/// <summary>Cached name for maximum HLOD hierarchy level.</summary>
+		public new static readonly StringName HlodMaxLevel = "hlod_max_level";
+		/// <summary>Cached name for per-update HLOD package load budget.</summary>
+		public new static readonly StringName HlodLoadBudget = "hlod_load_budget";
+		/// <summary>Cached name for per-update HLOD package unload budget.</summary>
+		public new static readonly StringName HlodUnloadBudget = "hlod_unload_budget";
+		/// <summary>Cached name for automatic HLOD memory budgeting.</summary>
+		public new static readonly StringName HlodMemoryBudgetAuto = "hlod_memory_budget_auto";
+		/// <summary>Cached name for requested HLOD proxy memory.</summary>
+		public new static readonly StringName HlodMemoryBudgetMb = "hlod_memory_budget_mb";
+		/// <summary>Cached name for effective HLOD proxy memory.</summary>
+		public new static readonly StringName HlodMemoryEffectiveMb = "hlod_memory_effective_mb";
+		/// <summary>Cached name for maximum HLOD level that casts shadows.</summary>
+		public new static readonly StringName HlodMaxShadowLevel = "hlod_max_shadow_level";
+		/// <summary>Cached name for forced HLOD debug level.</summary>
+		public new static readonly StringName HlodForcedDebugLevel = "hlod_forced_debug_level";
 		/// <summary>Cached name for streamed LightmapGI package residency.</summary>
 		public new static readonly StringName LightmapStreamingEnabled = "lightmap_streaming_enabled";
 		/// <summary>Cached name for regional baked-lighting request radius.</summary>
@@ -972,6 +996,74 @@ public partial class Terrain3D : Node3D
 		set => Set(GDExtensionPropertyName.DynamicNodeUnloadRegionBudget, value);
 	}
 
+	public new bool HlodEnabled
+	{
+		get => Get(GDExtensionPropertyName.HlodEnabled).As<bool>();
+		set => Set(GDExtensionPropertyName.HlodEnabled, value);
+	}
+
+	public new string HlodManifestPath
+	{
+		get => Get(GDExtensionPropertyName.HlodManifestPath).As<string>();
+		set => Set(GDExtensionPropertyName.HlodManifestPath, value);
+	}
+
+	public new double HlodTargetErrorPixels
+	{
+		get => Get(GDExtensionPropertyName.HlodTargetErrorPixels).As<double>();
+		set => Set(GDExtensionPropertyName.HlodTargetErrorPixels, value);
+	}
+
+	public new double HlodHysteresis
+	{
+		get => Get(GDExtensionPropertyName.HlodHysteresis).As<double>();
+		set => Set(GDExtensionPropertyName.HlodHysteresis, value);
+	}
+
+	public new long HlodMaxLevel
+	{
+		get => Get(GDExtensionPropertyName.HlodMaxLevel).As<long>();
+		set => Set(GDExtensionPropertyName.HlodMaxLevel, value);
+	}
+
+	public new long HlodLoadBudget
+	{
+		get => Get(GDExtensionPropertyName.HlodLoadBudget).As<long>();
+		set => Set(GDExtensionPropertyName.HlodLoadBudget, value);
+	}
+
+	public new long HlodUnloadBudget
+	{
+		get => Get(GDExtensionPropertyName.HlodUnloadBudget).As<long>();
+		set => Set(GDExtensionPropertyName.HlodUnloadBudget, value);
+	}
+
+	public new bool HlodMemoryBudgetAuto
+	{
+		get => Get(GDExtensionPropertyName.HlodMemoryBudgetAuto).As<bool>();
+		set => Set(GDExtensionPropertyName.HlodMemoryBudgetAuto, value);
+	}
+
+	public new long HlodMemoryBudgetMb
+	{
+		get => Get(GDExtensionPropertyName.HlodMemoryBudgetMb).As<long>();
+		set => Set(GDExtensionPropertyName.HlodMemoryBudgetMb, value);
+	}
+
+	public new long HlodMemoryEffectiveMb => Get(GDExtensionPropertyName.HlodMemoryEffectiveMb).As<long>();
+
+	public new long HlodMaxShadowLevel
+	{
+		get => Get(GDExtensionPropertyName.HlodMaxShadowLevel).As<long>();
+		set => Set(GDExtensionPropertyName.HlodMaxShadowLevel, value);
+	}
+
+	public new long HlodForcedDebugLevel
+	{
+		get => Get(GDExtensionPropertyName.HlodForcedDebugLevel).As<long>();
+		set => Set(GDExtensionPropertyName.HlodForcedDebugLevel, value);
+	}
+
 	public new bool LightmapStreamingEnabled
 	{
 		get => Get(GDExtensionPropertyName.LightmapStreamingEnabled).As<bool>();
@@ -1515,6 +1607,13 @@ public partial class Terrain3D : Node3D
 		public new static readonly StringName GetRuntimeDiagnostics = "get_runtime_diagnostics";
 		/// <summary>Cached name for retrieving the current Terrain3D-owned memory estimate.</summary>
 		public new static readonly StringName GetMemoryEstimate = "get_memory_estimate";
+		/// <summary>Cached name for toggling editor HLOD preview.</summary>
+		public new static readonly StringName SetEditorHlodPreview = "set_editor_hlod_preview";
+		public new static readonly StringName IsEditorHlodPreviewEnabled = "is_editor_hlod_preview_enabled";
+		public new static readonly StringName IsEditorHlodPreviewActive = "is_editor_hlod_preview_active";
+		public new static readonly StringName ReloadHlodManifest = "reload_hlod_manifest";
+		public new static readonly StringName GetHlodStreamingStats = "get_hlod_streaming_stats";
+		public new static readonly StringName GetHlodDebugEntries = "get_hlod_debug_entries";
 		/// <summary>Cached name for regional baked-lighting residency diagnostics.</summary>
 		public new static readonly StringName GetLightmapStreamingStats = "get_lightmap_streaming_stats";
 		/// <summary>Cached name for generating temporary regional Terrain3D bake geometry with UV2.</summary>
@@ -1618,6 +1717,24 @@ public partial class Terrain3D : Node3D
 
 	public new Godot.Collections.Dictionary GetMemoryEstimate() =>
 		Call(GDExtensionMethodName.GetMemoryEstimate, []).As<Godot.Collections.Dictionary>();
+
+	public new void SetEditorHlodPreview(bool enabled) =>
+		Call(GDExtensionMethodName.SetEditorHlodPreview, [enabled]);
+
+	public new bool IsEditorHlodPreviewEnabled() =>
+		Call(GDExtensionMethodName.IsEditorHlodPreviewEnabled, []).As<bool>();
+
+	public new bool IsEditorHlodPreviewActive() =>
+		Call(GDExtensionMethodName.IsEditorHlodPreviewActive, []).As<bool>();
+
+	public new void ReloadHlodManifest() =>
+		Call(GDExtensionMethodName.ReloadHlodManifest, []);
+
+	public new Godot.Collections.Dictionary GetHlodStreamingStats() =>
+		Call(GDExtensionMethodName.GetHlodStreamingStats, []).As<Godot.Collections.Dictionary>();
+
+	public new Godot.Collections.Array GetHlodDebugEntries() =>
+		Call(GDExtensionMethodName.GetHlodDebugEntries, []).As<Godot.Collections.Array>();
 
 	public new Godot.Collections.Dictionary GetLightmapStreamingStats() =>
 		Call(GDExtensionMethodName.GetLightmapStreamingStats, []).As<Godot.Collections.Dictionary>();

@@ -67,6 +67,13 @@ public partial class Terrain3DMeshAsset : Resource
 		Max = 2,
 	}
 
+	public enum HlodContribution
+	{
+		Auto = 0,
+		Include = 1,
+		Exclude = 2,
+	}
+
 	public new class GDExtensionSignalName : Resource.SignalName
 	{
 		/// <summary>
@@ -205,6 +212,10 @@ public partial class Terrain3DMeshAsset : Resource
 		/// Cached name for the 'generated_type' member.
 		/// </summary>
 		public new static readonly StringName GeneratedType = "generated_type";
+		/// <summary>Cached name for HLOD contribution policy.</summary>
+		public new static readonly StringName HlodContribution = "hlod_contribution";
+		/// <summary>Cached name for minimum legal HLOD representation level.</summary>
+		public new static readonly StringName HlodMinLevel = "hlod_min_level";
 		/// <summary>
 		/// Cached name for the 'height_offset' member.
 		/// </summary>
@@ -327,6 +338,18 @@ public partial class Terrain3DMeshAsset : Resource
 	{
 		get => Get(GDExtensionPropertyName.GeneratedType).As<Terrain3DMeshAsset.GenType>();
 		set => Set(GDExtensionPropertyName.GeneratedType, Variant.From(value));
+	}
+
+	public new HlodContribution HlodContributionMode
+	{
+		get => Get(GDExtensionPropertyName.HlodContribution).As<HlodContribution>();
+		set => Set(GDExtensionPropertyName.HlodContribution, Variant.From(value));
+	}
+
+	public new long HlodMinLevel
+	{
+		get => Get(GDExtensionPropertyName.HlodMinLevel).As<long>();
+		set => Set(GDExtensionPropertyName.HlodMinLevel, value);
 	}
 
 	public new double HeightOffset
