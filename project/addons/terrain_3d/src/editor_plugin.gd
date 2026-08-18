@@ -13,14 +13,17 @@ const AutoShaderPanel = preload("res://addons/terrain_3d/src/autoshader_panel.gd
 const StreamingConverter = preload("res://addons/terrain_3d/tools/streaming_converter.gd")
 const RegionLightmapBaker = preload("res://addons/terrain_3d/tools/region_lightmap_baker.gd")
 const RegionLightmapPanel = preload("res://addons/terrain_3d/tools/region_lightmap_panel.gd")
+const HLODBaker = preload("res://addons/terrain_3d/tools/hlod_baker.gd")
+const HLODPanel = preload("res://addons/terrain_3d/tools/hlod_panel.gd")
 const TOOL_MENU_OPEN: String = "Terrain3D: Open Tools Menu"
 const TOOL_MENU_EROSION: String = "Terrain3D: Show Erosion in Inspector"
 const TOOL_MENU_SHADER: String = "Terrain3D: Runtime Shader Quality"
 const TOOL_MENU_AUTOSHADER: String = "Terrain3D: Material Rules"
 const TOOL_MENU_CONVERT_STREAMING: String = "Terrain3D: Convert Selected Objects to Region Streaming"
 const TOOL_MENU_LIGHTMAP: String = "Terrain3D: Regional Lightmap Baking"
-const EXPECTED_NATIVE_API_REVISION: int = 2026081705
-const EXPECTED_NATIVE_BUILD_ID: String = "a2.8.4-node-stream-preview-refocus"
+const TOOL_MENU_HLOD: String = "Terrain3D: HLOD"
+const EXPECTED_NATIVE_API_REVISION: int = 2026081706
+const EXPECTED_NATIVE_BUILD_ID: String = "a2.8.5-hlod"
 
 # Editor Plugin
 var ui: Terrain3DUI
@@ -31,6 +34,8 @@ var autoshader_panel: AutoShaderPanel
 var streaming_converter: StreamingConverter
 var region_lightmap_baker: RegionLightmapBaker
 var region_lightmap_panel: RegionLightmapPanel
+var hlod_baker: HLODBaker
+var hlod_panel: HLODPanel
 
 class ErosionSettingsCacheEntry extends RefCounted:
 	var terrain_ref: WeakRef
@@ -94,6 +99,11 @@ func _enter_tree() -> void:
 	region_lightmap_panel.plugin = self
 	region_lightmap_panel.baker = region_lightmap_baker
 	add_child(region_lightmap_panel)
+	hlod_baker = HLODBaker.new()
+	hlod_panel = HLODPanel.new()
+	hlod_panel.plugin = self
+	hlod_panel.baker = hlod_baker
+	add_child(hlod_panel)
 
 	add_tool_menu_item(TOOL_MENU_OPEN, _open_terrain_tools_menu)
 	add_tool_menu_item(TOOL_MENU_EROSION, open_erosion_simulator)
@@ -101,6 +111,7 @@ func _enter_tree() -> void:
 	add_tool_menu_item(TOOL_MENU_AUTOSHADER, open_autoshader_baker)
 	add_tool_menu_item(TOOL_MENU_CONVERT_STREAMING, convert_selected_to_region_streaming)
 	add_tool_menu_item(TOOL_MENU_LIGHTMAP, open_region_lightmap_baker)
+	add_tool_menu_item(TOOL_MENU_HLOD, open_hlod_panel)
 	_connect_editor_signals()
 
 
@@ -116,6 +127,7 @@ func _exit_tree() -> void:
 	remove_tool_menu_item(TOOL_MENU_AUTOSHADER)
 	remove_tool_menu_item(TOOL_MENU_CONVERT_STREAMING)
 	remove_tool_menu_item(TOOL_MENU_LIGHTMAP)
+	remove_tool_menu_item(TOOL_MENU_HLOD)
 	if erosion_inspector_plugin:
 		remove_inspector_plugin(erosion_inspector_plugin)
 		erosion_inspector_plugin = null
@@ -136,6 +148,10 @@ func _exit_tree() -> void:
 	if is_instance_valid(region_lightmap_baker):
 		region_lightmap_baker.queue_free()
 		region_lightmap_baker = null
+	if is_instance_valid(hlod_panel):
+		hlod_panel.queue_free()
+		hlod_panel = null
+	hlod_baker = null
 	if is_instance_valid(ui) and is_instance_valid(ui.toolbar) and is_instance_valid(asset_dock):
 		if ui.toolbar.tool_changed.is_connected(asset_dock._on_tool_changed):
 			ui.toolbar.tool_changed.disconnect(asset_dock._on_tool_changed)
@@ -229,12 +245,28 @@ func convert_selected_to_region_streaming() -> void:
 		streaming_converter.convert_selected()
 
 
+func convert_selected_to_hlod_visual(min_level: int = 1) -> void:
+	if not is_instance_valid(terrain):
+		push_error("Select a Terrain3D node before converting HLOD visual scenes")
+		return
+	if is_instance_valid(streaming_converter):
+		streaming_converter.convert_selected_as_hlod_visual(min_level)
+
+
 func open_region_lightmap_baker() -> void:
 	if not is_instance_valid(terrain):
 		push_error("Select a Terrain3D node before opening regional lightmap baking")
 		return
 	if is_instance_valid(region_lightmap_panel):
 		region_lightmap_panel.open(terrain)
+
+
+func open_hlod_panel() -> void:
+	if not is_instance_valid(terrain):
+		push_error("Select a Terrain3D node before opening HLOD tools")
+		return
+	if is_instance_valid(hlod_panel):
+		hlod_panel.open(terrain)
 
 
 func get_region_lightmap_baker() -> Node:

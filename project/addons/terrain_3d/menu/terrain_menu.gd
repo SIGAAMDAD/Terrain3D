@@ -27,6 +27,7 @@ var _runtime_page_cook_result: AcceptDialog
 enum {
 	MENU_DIRECTORY_SETUP,
 	MENU_REGION_LIGHTMAP,
+	MENU_HLOD,
 	MENU_COOK_RUNTIME_DATASET,
 	MENU_PACK_TEXTURES,
 	MENU_SEPARATOR,
@@ -69,6 +70,7 @@ func _enter_tree() -> void:
 	var popup: PopupMenu = get_popup()
 	popup.add_item("Data Directory…", MENU_DIRECTORY_SETUP)
 	popup.add_item("Regional Lightmap Baking…", MENU_REGION_LIGHTMAP)
+	popup.add_item("Hierarchical LOD…", MENU_HLOD)
 	popup.add_item("Cook Runtime Dataset…", MENU_COOK_RUNTIME_DATASET)
 	popup.add_item("Channel Packer…", MENU_PACK_TEXTURES)
 	popup.add_separator("", MENU_SEPARATOR)
@@ -85,6 +87,7 @@ func _enter_tree() -> void:
 
 	_set_item_tooltip(popup, MENU_DIRECTORY_SETUP, "Choose the directory containing Terrain3D region resources.")
 	_set_item_tooltip(popup, MENU_REGION_LIGHTMAP, "Open the persistent per-region lightmap baking UI for the active Terrain3D scene.")
+	_set_item_tooltip(popup, MENU_HLOD, "Analyze, bake, validate, and preview Terrain3D hierarchical LOD proxies.")
 	_set_item_tooltip(popup, MENU_COOK_RUNTIME_DATASET, "Compile and reload-validate every authored terrain region as a .t3dpage runtime page, then rebuild the far atlas.")
 	_set_item_tooltip(popup, MENU_PACK_TEXTURES, "Pack albedo/height and normal/roughness textures.")
 	_set_item_tooltip(popup, MENU_BAKE_ARRAY_MESH, "Create a MeshInstance3D from terrain geometry.")
@@ -118,6 +121,8 @@ func _on_menu_pressed(p_id: int) -> void:
 			directory_setup.directory_setup_popup()
 		MENU_REGION_LIGHTMAP:
 			plugin.open_region_lightmap_baker()
+		MENU_HLOD:
+			plugin.open_hlod_panel()
 		MENU_COOK_RUNTIME_DATASET:
 			_open_runtime_page_cook_confirmation()
 		MENU_PACK_TEXTURES:
@@ -194,6 +199,7 @@ func _on_menu_about_to_popup() -> void:
 	var popup: PopupMenu = get_popup()
 	popup.set_item_disabled(MENU_DIRECTORY_SETUP, not has_terrain)
 	popup.set_item_disabled(MENU_REGION_LIGHTMAP, not has_terrain)
+	popup.set_item_disabled(MENU_HLOD, not has_terrain)
 	popup.set_item_disabled(MENU_COOK_RUNTIME_DATASET, not has_terrain)
 	popup.set_item_disabled(MENU_PACK_TEXTURES, not has_terrain)
 	popup.set_item_disabled(MENU_BAKE_ARRAY_MESH, not has_terrain)
