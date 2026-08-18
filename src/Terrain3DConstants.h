@@ -12,6 +12,8 @@
 
 #include "core/terrain_3d_numeric_constants.h"
 #include "data/terrain_3d_runtime_page_constants.h"
+#include "instances/terrain_3d_instance_cache_constants.h"
+#include "streaming/terrain_3d_gpu_cache_constants.h"
 #include "memory/terrain_3d_memory_constants.h"
 
 #include <EASTL/functional.h>
@@ -44,7 +46,7 @@ using namespace godot;
 // Constants
 
 // Centralized native compile-time constants. Keep tunable limits and format constants here.
-static constexpr uint32_t TERRAIN3D_PROFILE_VERSION = 3u;
+static constexpr uint32_t TERRAIN3D_PROFILE_VERSION = 5u;
 static constexpr const char *TERRAIN3D_PROFILE_KEY = "xbox360_experimental";
 static constexpr const char *TERRAIN3D_PROFILE_DISPLAY_NAME = "Xbox 360 Experimental";
 static constexpr uint64_t TERRAIN3D_PROFILE_FNV_OFFSET = 1469598103934665603ull;
@@ -173,21 +175,6 @@ static constexpr uint32_t TERRAIN3D_FEATURE_ANGLE_VALUE = 1u << 3u;
 static constexpr uint32_t TERRAIN3D_FEATURE_CENTER_VALID_VALUE = 1u << 1u;
 static constexpr uint32_t TERRAIN3D_FEATURE_SCALE_VALUE = 1u << 4u;
 static constexpr uint32_t TERRAIN3D_FEATURE_TEXTURE_VALUE = 1u << 2u;
-static constexpr int TERRAIN3D_GPU_CACHE_DEFAULT_GUARD_REGIONS = 1;
-static constexpr int TERRAIN3D_GPU_CACHE_DEFAULT_HYSTERESIS_RESERVE = 4;
-static constexpr int TERRAIN3D_GPU_CACHE_DEFAULT_HYSTERESIS_TICKS = 30;
-static constexpr int TERRAIN3D_GPU_CACHE_DEFAULT_PREFETCH_ROWS = 1;
-static constexpr int TERRAIN3D_GPU_CACHE_DEFAULT_RETIRE_FRAMES = 4;
-static constexpr int TERRAIN3D_GPU_CACHE_DEFAULT_SPARE_LAYERS = 12;
-static constexpr int TERRAIN3D_GPU_CACHE_FAR_HEIGHT_SIDE = 512;
-static constexpr int TERRAIN3D_GPU_CACHE_RUNTIME_MAX_LAYERS = 64;
-static constexpr int TERRAIN3D_GPU_CACHE_EDITOR_MAX_LAYERS = 256;
-// Storage ceiling. Runtime remains capped at 64; Authoring may pin the supplied 240-region world.
-static constexpr int TERRAIN3D_GPU_CACHE_MAX_LAYERS = TERRAIN3D_GPU_CACHE_EDITOR_MAX_LAYERS;
-static constexpr size_t TERRAIN3D_GPU_CACHE_MAX_PAGE_TABLE_BYTES =
-	64u * 64u * 3u;
-static constexpr size_t TERRAIN3D_GPU_CACHE_MIB = 1024u * 1024u;
-static constexpr int TERRAIN3D_GPU_CACHE_MIN_SPARE_LAYERS = 2;
 static constexpr int TERRAIN3D_GPU_HEIGHT_CACHE_MAX_LAYERS = 512;
 static constexpr int TERRAIN3D_GPU_HEIGHT_CACHE_MIN_SPARE_LAYERS = 8;
 static constexpr uint64_t TERRAIN3D_GPU_FAR_ATLAS_HEADER_BYTES = 52u;
@@ -197,8 +184,6 @@ static constexpr int TERRAIN3D_GPU_REGION_CACHE_MAX_BUDGET_MB = 128;
 static constexpr int TERRAIN3D_GPU_REGION_CACHE_MIN_BUDGET_MB = 1;
 static constexpr int TERRAIN3D_GPU_REGION_UPLOAD_MAX_BUDGET_MB = 64;
 static constexpr int TERRAIN3D_GPU_REGION_UPLOAD_MAX_LAYERS = 64;
-static constexpr int TERRAIN3D_INSTANCE_CACHE_MAX_PAGES = 64;
-static constexpr size_t TERRAIN3D_INSTANCE_CACHE_MIB = 1024u * 1024u;
 static constexpr int TERRAIN3D_INSTANCE_DEFAULT_CELL_SIZE = 32;
 static constexpr int TERRAIN3D_INSTANCE_MAX_CELLS_PER_AXIS = 256;
 static constexpr int TERRAIN3D_INSTANCE_MAX_CELL_SIZE = 128;
