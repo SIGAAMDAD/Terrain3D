@@ -3,10 +3,10 @@
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/image.hpp>
 
-#include "logger.h"
+#include "core/logger.h"
 #include "terrain_3d.h"
-#include "terrain_3d_util.h"
-#include "terrain_3d_texture_asset.h"
+#include "core/terrain_3d_util.h"
+#include "assets/terrain_3d_texture_asset.h"
 
 ///////////////////////////
 // Private Functions

@@ -9,9 +9,9 @@
 #include <EASTL/array.h>
 
 #include "Terrain3DConstants.h"
-#include "generated_texture.h"
-#include "terrain_3d_mesh_asset.h"
-#include "terrain_3d_texture_asset.h"
+#include "assets/generated_texture.h"
+#include "assets/terrain_3d_mesh_asset.h"
+#include "assets/terrain_3d_texture_asset.h"
 
 class T3DTerrain;
 class T3DInstancer;

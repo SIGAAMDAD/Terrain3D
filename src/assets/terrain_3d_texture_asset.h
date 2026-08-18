@@ -8,8 +8,8 @@
 #include <godot_cpp/classes/texture2d.hpp>
 
 #include "Terrain3DConstants.h"
-#include "terrain_3d_asset_resource.h"
-#include "terrain_3d_packed_pbr_texture.h"
+#include "assets/terrain_3d_asset_resource.h"
+#include "assets/terrain_3d_packed_pbr_texture.h"
 
 class T3DTextureAsset : public T3DAssetResource {
 	using Terrain3DTextureAsset = T3DTextureAsset;

@@ -4,10 +4,10 @@
 
 #include <utility>
 
-#include "generated_texture.h"
-#include "logger.h"
+#include "assets/generated_texture.h"
+#include "core/logger.h"
 #include "terrain_3d.h"
-#include "terrain_3d_upload_bridge.h"
+#include "streaming/terrain_3d_upload_bridge.h"
 
 ///////////////////////////
 // Private Functions

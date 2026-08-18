@@ -3,9 +3,9 @@
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/core/class_db.hpp>
 
-#include "logger.h"
-#include "terrain_3d_packed_pbr_texture.h"
-#include "terrain_3d_util.h"
+#include "core/logger.h"
+#include "assets/terrain_3d_packed_pbr_texture.h"
+#include "core/terrain_3d_util.h"
 
 namespace {
 

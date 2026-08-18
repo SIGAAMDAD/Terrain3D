@@ -9,8 +9,8 @@
 #include <godot_cpp/classes/quad_mesh.hpp>
 #include <godot_cpp/classes/standard_material3d.hpp>
 
-#include "logger.h"
-#include "terrain_3d_mesh_asset.h"
+#include "core/logger.h"
+#include "assets/terrain_3d_mesh_asset.h"
 
 ///////////////////////////
 // Private Functions

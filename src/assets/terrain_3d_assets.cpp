@@ -16,10 +16,10 @@
 #include <EASTL/bitset.h>
 #include <vector>
 
-#include "logger.h"
-#include "terrain_3d_assets.h"
-#include "terrain_3d_owner.h"
-#include "terrain_3d_util.h"
+#include "core/logger.h"
+#include "assets/terrain_3d_assets.h"
+#include "core/terrain_3d_owner.h"
+#include "core/terrain_3d_util.h"
 
 ///////////////////////////
 // Private Functions

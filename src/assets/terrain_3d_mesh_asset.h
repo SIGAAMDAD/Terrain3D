@@ -16,7 +16,7 @@
 #include <godot_cpp/classes/texture2d.hpp>
 
 #include "Terrain3DConstants.h"
-#include "terrain_3d_asset_resource.h"
+#include "assets/terrain_3d_asset_resource.h"
 
 using ShadowCasting = RenderingServer::ShadowCastingSetting;
 
