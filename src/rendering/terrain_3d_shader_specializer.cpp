@@ -1,6 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#include "terrain_3d_shader_specializer.h"
+#include "rendering/terrain_3d_shader_specializer.h"
 #include "Terrain3DConstants.h"
 
 #include <godot_cpp/classes/file_access.hpp>

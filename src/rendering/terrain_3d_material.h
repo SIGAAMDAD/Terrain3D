@@ -15,7 +15,7 @@
 #include <godot_cpp/variant/packed_string_array.hpp>
 
 #include "Terrain3DConstants.h"
-#include "generated_texture.h"
+#include "assets/generated_texture.h"
 
 class T3DTerrain;
 

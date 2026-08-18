@@ -8,10 +8,10 @@
 #include <algorithm>
 #include <unordered_map>
 
-#include "logger.h"
+#include "core/logger.h"
 #include "terrain_3d.h"
-#include "terrain_3d_clipmap_bounds.h"
-#include "terrain_3d_mesher.h"
+#include "rendering/terrain_3d_clipmap_bounds.h"
+#include "rendering/terrain_3d_mesher.h"
 
 typedef struct t3dclipmapVertexKey_s {
 	int32_t x = 0;

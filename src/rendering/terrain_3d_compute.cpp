@@ -1,7 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "Terrain3DConstants.h"
-#include "terrain_3d_compute.h"
+#include "rendering/terrain_3d_compute.h"
 
 #include <algorithm>
 #include <cstring>
@@ -17,13 +17,13 @@
 #include <godot_cpp/classes/resource_loader.hpp>
 #include <godot_cpp/core/memory.hpp>
 
-#include "logger.h"
+#include "core/logger.h"
 #include "terrain_3d.h"
-#include "terrain_3d_assets.h"
-#include "terrain_3d_data.h"
-#include "terrain_3d_material.h"
-#include "terrain_3d_region_codec.h"
-#include "terrain_3d_upload_bridge.h"
+#include "assets/terrain_3d_assets.h"
+#include "data/terrain_3d_data.h"
+#include "rendering/terrain_3d_material.h"
+#include "data/terrain_3d_region_codec.h"
+#include "streaming/terrain_3d_upload_bridge.h"
 
 namespace {
 #define TERRAIN3D_CLAMP01( value ) std::clamp( ( value ), 0.0f, 1.0f )

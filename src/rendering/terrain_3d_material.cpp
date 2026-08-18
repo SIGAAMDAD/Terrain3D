@@ -17,14 +17,14 @@
 #include <cstring>
 #include <utility>
 
-#include "logger.h"
-#include "terrain_3d_editor.h"
-#include "terrain_3d_material.h"
-#include "terrain_3d_performance_profile.h"
-#include "terrain_3d_owner.h"
-#include "terrain_3d_region_codec.h"
-#include "terrain_3d_shader_specializer.h"
-#include "terrain_3d_util.h"
+#include "core/logger.h"
+#include "authoring/terrain_3d_editor.h"
+#include "rendering/terrain_3d_material.h"
+#include "streaming/terrain_3d_performance_profile.h"
+#include "core/terrain_3d_owner.h"
+#include "data/terrain_3d_region_codec.h"
+#include "rendering/terrain_3d_shader_specializer.h"
+#include "core/terrain_3d_util.h"
 
 namespace {
 
