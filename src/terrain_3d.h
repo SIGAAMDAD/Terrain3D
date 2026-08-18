@@ -41,6 +41,7 @@
 class T3DEditor;
 class T3DNodeStreamer;
 class T3DLightmapStreamer;
+class T3DHLODStreamer;
 
 class T3DTerrain : public Node3D {
 	using Terrain3D = T3DTerrain;
@@ -135,6 +136,7 @@ private:
 	T3DInstancer *m_pInstancer = nullptr;
 	T3DNodeStreamer *m_pNodeStreamer = nullptr;
 	T3DLightmapStreamer *m_pLightmapStreamer = nullptr;
+	T3DHLODStreamer *m_pHlodStreamer = nullptr;
 	T3DEditor *m_pEditor = nullptr;
 	Object *m_pEditorPlugin = nullptr;
 
@@ -151,6 +153,8 @@ private:
 	// Editor-only node preview keeps terrain authoring residency intact while
 	// exercising the shipping dynamic-node streamer around the editor camera.
 	bool m_bEditorNodeStreamingPreview = false;
+	// HLOD preview uses shipping representation selection while terrain stays in Authoring mode.
+	bool m_bEditorHlodPreview = false;
 
 	// Unified logical region-streaming policy. Every subsystem consumes this map;
 	// no renderer/object cache is allowed to invent a separate world footprint.
@@ -246,6 +250,16 @@ private:
 	int m_nLightmapStreamRadius = 1;
 	int m_nLightmapLoadBudget = 2;
 	int m_nLightmapUnloadBudget = 4;
+	bool m_bHlodEnabled = true;
+	String m_hlodManifestPath;
+	real_t m_fHlodTargetErrorPixels = 3.0f;
+	real_t m_fHlodHysteresis = 0.20f;
+	int m_nHlodMaxLevel = 6;
+	int m_nHlodLoadBudget = 2;
+	int m_nHlodUnloadBudget = 4;
+	int m_nHlodMemoryBudgetMb = 64;
+	int m_nHlodMaxShadowLevel = 3;
+	int m_nHlodForcedDebugLevel = -1;
 
 	// PATCH-07 native total-memory coordinator. Requested subsystem budgets are
 	// retained as manual override values; effective budgets are derived at the
@@ -256,12 +270,14 @@ private:
 	bool m_bCpuRegionCacheBudgetAuto = true;
 	bool m_bInstanceRegionCacheBudgetAuto = true;
 	bool m_bLightmapResidencyBudgetAuto = true;
+	bool m_bHlodMemoryBudgetAuto = true;
 	bool m_bShaderCacheBudgetAuto = true;
 	int m_nLightmapResidencyBudgetMb = 16;
 	int m_nEffectiveGpuRegionCacheBudgetMb = 16;
 	int m_nEffectiveCpuRegionCacheBudgetMb = 16;
 	int m_nEffectiveInstanceRegionCacheBudgetMb = 16;
 	int m_nEffectiveLightmapResidencyBudgetMb = 16;
+	int m_nEffectiveHlodMemoryBudgetMb = 16;
 	int m_nEffectiveShaderCacheBudgetMb = 8;
 	bool m_bMemoryBudgetPolicyDirty = true;
 	uint64_t m_nMemoryBudgetPolicyFrame = 0u;
@@ -272,7 +288,7 @@ private:
 	mutable uint64_t m_nDiagnosticsCollectionUsecTotal = 0u;
 	mutable uint64_t m_nDiagnosticsCollectionUsecPeak = 0u;
 	mutable uint64_t m_nDiagnosticsCollectionCount = 0u;
-	mutable eastl::array<uint64_t, 6> m_szDiagnosticCachePeakBytes{};
+	mutable eastl::array<uint64_t, 7> m_szDiagnosticCachePeakBytes{};
 	bool m_bMemoryPressureEventState = false;
 	bool m_bMemoryOvercommitEventState = false;
 	eastl::array<bool, 3> m_bCacheThrashEventState{};
@@ -459,6 +475,7 @@ private:
 	void destroyInstancer( void );
 	void destroyNodeStreamer( bool bCaptureState = true );
 	void destroyLightmapStreamer( void );
+	void destroyHlodStreamer( void );
 
 	typedef struct t3dtriangleBuffer_s {
 		eastl::vector<Vector3> ownedVertices;
@@ -593,8 +610,8 @@ private:
 	) const;
 
 public:
-	static constexpr int64_t NATIVE_API_REVISION = 2026081705LL;
-	static constexpr const char *NATIVE_BUILD_ID = "a2.8.4-node-stream-preview-refocus";
+	static constexpr int64_t NATIVE_API_REVISION = 2026081706LL;
+	static constexpr const char *NATIVE_BUILD_ID = "a2.8.5-hlod";
 	static t3ddebugLevel_t s_debugLevel; // Initialized in terrain_3d.cpp
 
 	T3DTerrain( void );
@@ -649,6 +666,7 @@ public:
 	T3DLightmapStreamer *getLightmapStreamer( void ) const {
 		return m_pLightmapStreamer;
 	}
+	T3DHLODStreamer *getHlodStreamer( void ) const { return m_pHlodStreamer; }
 	void setEditor( T3DEditor *pEditor );
 	T3DEditor *getEditor( void ) const {
 		return m_pEditor;
@@ -772,12 +790,15 @@ public:
 	bool isLightmapResidencyBudgetAuto( void ) const { return m_bLightmapResidencyBudgetAuto; }
 	void setLightmapResidencyBudgetMb( int nBudgetMb );
 	int getLightmapResidencyBudgetMb( void ) const { return m_nLightmapResidencyBudgetMb; }
+	void setHlodMemoryBudgetAuto( bool bEnabled );
+	bool isHlodMemoryBudgetAuto( void ) const { return m_bHlodMemoryBudgetAuto; }
 	void setShaderCacheBudgetAuto( bool bEnabled );
 	bool isShaderCacheBudgetAuto( void ) const { return m_bShaderCacheBudgetAuto; }
 	int getEffectiveGpuRegionCacheBudgetMb( void ) const { return effectiveGpuRegionCacheEnabled() ? m_nEffectiveGpuRegionCacheBudgetMb : 0; }
 	int getEffectiveCpuRegionCacheBudgetMb( void ) const { return effectiveCpuRegionCacheEnabled() ? m_nEffectiveCpuRegionCacheBudgetMb : 0; }
 	int getEffectiveInstanceRegionCacheBudgetMb( void ) const { return effectiveInstanceRegionCacheEnabled() ? m_nEffectiveInstanceRegionCacheBudgetMb : 0; }
 	int getEffectiveLightmapResidencyBudgetMb( void ) const { return m_bLightmapStreamingEnabled ? m_nEffectiveLightmapResidencyBudgetMb : 0; }
+	int getEffectiveHlodMemoryBudgetMb( void ) const { return m_bHlodEnabled ? m_nEffectiveHlodMemoryBudgetMb : 0; }
 	int getEffectiveShaderCacheBudgetMb( void ) const { return m_nEffectiveShaderCacheBudgetMb; }
 	int64_t getMemoryBudgetPolicyGeneration( void ) const { return ( int64_t ) ( m_nMemoryBudgetPolicyGeneration ); }
 	bool isMemoryBudgetOvercommitted( void ) const { return m_nMemoryBudgetResult.bHardOvercommit; }
@@ -968,13 +989,40 @@ public:
 	void setLightmapUnloadBudget( int nBudget );
 	int getLightmapUnloadBudget( void ) const { return m_nLightmapUnloadBudget; }
 	Dictionary getLightmapStreamingStats( void ) const;
+	void setHlodEnabled( bool bEnabled );
+	bool isHlodEnabled( void ) const { return m_bHlodEnabled; }
+	void setHlodManifestPath( const String &rPath );
+	String getHlodManifestPath( void ) const { return m_hlodManifestPath; }
+	void setHlodTargetErrorPixels( real_t fPixels );
+	real_t getHlodTargetErrorPixels( void ) const { return m_fHlodTargetErrorPixels; }
+	void setHlodHysteresis( real_t fRatio );
+	real_t getHlodHysteresis( void ) const { return m_fHlodHysteresis; }
+	void setHlodMaxLevel( int nLevel ); int getHlodMaxLevel( void ) const { return m_nHlodMaxLevel; }
+	void setHlodLoadBudget( int nBudget ); int getHlodLoadBudget( void ) const { return m_nHlodLoadBudget; }
+	void setHlodUnloadBudget( int nBudget ); int getHlodUnloadBudget( void ) const { return m_nHlodUnloadBudget; }
+	void setHlodMemoryBudgetMb( int nBudgetMb ); int getHlodMemoryBudgetMb( void ) const { return m_nHlodMemoryBudgetMb; }
+	void setHlodMaxShadowLevel( int nLevel ); int getHlodMaxShadowLevel( void ) const { return m_nHlodMaxShadowLevel; }
+	void setHlodForcedDebugLevel( int nLevel ); int getHlodForcedDebugLevel( void ) const { return m_nHlodForcedDebugLevel; }
+	void setEditorHlodPreview( bool bEnabled );
+	bool isEditorHlodPreviewEnabled( void ) const { return m_bEditorHlodPreview; }
+	bool isEditorHlodPreviewActive( void ) const { return isEditorAuthoringModeInternal() && m_bEditorHlodPreview; }
+	bool reloadHlodManifest( void );
+	Dictionary getHlodStreamingStats( void ) const;
+	Array getHlodDebugEntries( void ) const;
+	bool isHlodRegionSuppressed( const Vector2i &rRegion, int nMinimumLevel = 1 ) const;
+	bool isHlodRegionDetailRequired( const Vector2i &rRegion ) const;
+	bool isHlodRegionManaged( const Vector2i &rRegion ) const;
+	uint8_t getHlodInstancerMinimumLevel( const Vector2i &rRegion, int nMeshId ) const;
+	uint8_t getHlodNodeMinimumLevel( const Vector2i &rRegion, int64_t nSpawnId ) const;
+	void onHlodRegionRepresentationChanged( const Vector2i &rRegion );
+	bool isHlodDetailReady( const Vector2i &rRegionMin, const Vector2i &rRegionMax ) const;
 	int64_t addStreamedScene(
 		const Ref<PackedScene> &rScene, const Transform3D &rGlobalTransform,
-		const Dictionary &rState = Dictionary(), int nFlags = 0
+		const Dictionary &rState = Dictionary(), int nFlags = 0, int nHlodMinLevel = 1
 	);
 	int64_t addStreamedScenePath(
 		const String &rScenePath, const Transform3D &rGlobalTransform,
-		const Dictionary &rState = Dictionary(), int nFlags = 0
+		const Dictionary &rState = Dictionary(), int nFlags = 0, int nHlodMinLevel = 1
 	);
 	bool removeStreamedScene( int64_t nSpawnId );
 	int allocateStreamOwnerId( void );

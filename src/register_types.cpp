@@ -15,6 +15,10 @@
 #include "terrain_3d_erosion_settings.h"
 #include "terrain_3d_landform_baker.h"
 #include "terrain_3d_lightmap_streamer.h"
+#include "terrain_3d_hlod_builder.h"
+#include "terrain_3d_hlod_manifest.h"
+#include "terrain_3d_hlod_package.h"
+#include "terrain_3d_hlod_streamer.h"
 #include "terrain_3d_node_streamer.h"
 #include "terrain_3d_region_lighting.h"
 #include "terrain_3d_packed_pbr_texture.h"
@@ -38,6 +42,10 @@ void initializeTerrain3dModule( ModuleInitializationLevel level ) {
 	ClassDB::register_class<T3DCollision>();
 	ClassDB::register_class<T3DInstancer>();
 	ClassDB::register_class<T3DLightmapStreamer>();
+	ClassDB::register_class<T3DHLODBuilder>();
+	ClassDB::register_class<T3DHLODPackage>();
+	ClassDB::register_class<T3DHLODManifest>();
+	ClassDB::register_class<T3DHLODStreamer>();
 	ClassDB::register_class<T3DNodeStreamer>();
 	ClassDB::register_class<T3DMaterial>();
 	ClassDB::register_class<T3DMeshAsset>();

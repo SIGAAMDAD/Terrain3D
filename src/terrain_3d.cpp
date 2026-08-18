@@ -32,6 +32,7 @@
 #include "terrain_3d_editor.h"
 #include "terrain_3d_linear_arena.h"
 #include "terrain_3d_lightmap_streamer.h"
+#include "terrain_3d_hlod_streamer.h"
 #include "terrain_3d_lighting_policy.h"
 #include "terrain_3d_node_streamer.h"
 #include "terrain_3d_parallel.h"
@@ -1021,6 +1022,10 @@ void T3DTerrain::initializeInternal( void ) {
 		LOG( T3DTerrain::DEBUG, "Creating lightmap streamer" );
 		m_pLightmapStreamer = memnew( T3DLightmapStreamer );
 	}
+	if ( !m_pHlodStreamer ) {
+		LOG( T3DTerrain::DEBUG, "Creating HLOD streamer" );
+		m_pHlodStreamer = memnew( T3DHLODStreamer );
+	}
 	// Connect signals
 	// Any region was changed, update region labels
 	if ( !m_pData->is_connected( "region_map_changed", callable_mp( this, &T3DTerrain::updateRegionLabels ) ) ) {
@@ -1097,6 +1102,20 @@ void T3DTerrain::initializeInternal( void ) {
 		m_pLightmapStreamer->setRadiusRegions( m_nLightmapStreamRadius );
 		m_pLightmapStreamer->setLoadBudget( m_nLightmapLoadBudget );
 		m_pLightmapStreamer->setUnloadBudget( m_nLightmapUnloadBudget );
+		if ( m_hlodManifestPath.is_empty() && !m_dataDirectory.is_empty() ) {
+			m_hlodManifestPath = m_dataDirectory.path_join( "terrain3d_hlod_manifest.tres" );
+		}
+		m_pHlodStreamer->setManifestPath( m_hlodManifestPath );
+		m_pHlodStreamer->setEnabled( m_bHlodEnabled );
+		m_pHlodStreamer->setTargetErrorPixels( m_fHlodTargetErrorPixels );
+		m_pHlodStreamer->setHysteresis( m_fHlodHysteresis );
+		m_pHlodStreamer->setMaxLevel( m_nHlodMaxLevel );
+		m_pHlodStreamer->setLoadBudget( m_nHlodLoadBudget );
+		m_pHlodStreamer->setUnloadBudget( m_nHlodUnloadBudget );
+		m_pHlodStreamer->setMemoryBudgetMb( m_nEffectiveHlodMemoryBudgetMb );
+		m_pHlodStreamer->setMaxShadowLevel( m_nHlodMaxShadowLevel );
+		m_pHlodStreamer->setForcedDebugLevel( m_nHlodForcedDebugLevel );
+		m_pHlodStreamer->initialize( this );
 		applyRuntimeAdaptiveWorkBudgets();
 		setupTerrainMesher();
 		setupOceanMesher();
@@ -1116,6 +1135,7 @@ void T3DTerrain::deactivateRuntime( void ) {
 	set_physics_process( false );
 	destroyTerrainMesher();
 	destroyOceanMesher();
+	destroyHlodStreamer();
 	destroyLightmapStreamer();
 	destroyNodeStreamer( true );
 	destroyInstancer();
@@ -1212,6 +1232,16 @@ void T3DTerrain::physicsProcess( const double fDelta ) {
 		profile_sample.nDataResidencyUsec = now - phase_started_usec;
 		phase_started_usec = now;
 	}
+	const bool hlod_active = m_bHlodEnabled && ( !Engine::get_singleton()->is_editor_hint() || !isEditorAuthoringModeInternal() || m_bEditorHlodPreview );
+	if ( m_pHlodStreamer ) {
+		if ( hlod_active ) { m_pHlodStreamer->updateResidency( clipmap_target_position, false ); }
+		else { m_pHlodStreamer->suspend(); }
+	}
+	if ( bProfileFrame ) {
+		const uint64_t now = Time::get_singleton()->get_ticks_usec();
+		profile_sample.nHlodStreamingUsec = now - phase_started_usec;
+		phase_started_usec = now;
+	}
 	if ( m_pNodeStreamer && effectiveDynamicNodeStreamingEnabled() ) {
 		if ( m_bRuntimeBoundaryNodeDeferredLastTick ) {
 			m_pNodeStreamer->deferUpdateForFrame();
@@ -1297,7 +1327,7 @@ void T3DTerrain::physicsProcess( const double fDelta ) {
 		if ( bProfileFrame ) {
 			profile_sample.nCollisionUsec = now - phase_started_usec;
 			profile_sample.nPhysicsTotalUsec = measured_usec;
-			profile_sample.nStreamingUsec = profile_sample.nDataResidencyUsec +
+			profile_sample.nStreamingUsec = profile_sample.nDataResidencyUsec + profile_sample.nHlodStreamingUsec +
 				profile_sample.nNodeStreamingUsec + profile_sample.nLightmapStreamingUsec + profile_sample.nInstancerUsec;
 			sampleRuntimeProfile( profile_sample );
 		}
@@ -1792,6 +1822,14 @@ void T3DTerrain::destroyLightmapStreamer( void ) {
 		m_pLightmapStreamer->destroy();
 		memdelete( m_pLightmapStreamer );
 		m_pLightmapStreamer = nullptr;
+	}
+}
+
+void T3DTerrain::destroyHlodStreamer( void ) {
+	if ( m_pHlodStreamer ) {
+		m_pHlodStreamer->destroy();
+		memdelete( m_pHlodStreamer );
+		m_pHlodStreamer = nullptr;
 	}
 }
 
@@ -2321,6 +2359,7 @@ void T3DTerrain::setDataDirectory( const String dir ) {
 		m_bInitialized = false;
 		destroyTerrainMesher();
 		destroyOceanMesher();
+		destroyHlodStreamer();
 		destroyLightmapStreamer();
 		destroyNodeStreamer( false );
 		destroyInstancer();
@@ -2540,12 +2579,24 @@ void T3DTerrain::setEditorNodeStreamingPreview( const bool bEnabled ) {
 	emit_signal( "editor_execution_mode_changed", ( int ) ( m_editorExecutionMode ) );
 }
 
+void T3DTerrain::setEditorHlodPreview( const bool bEnabled ) {
+	if ( m_bEditorHlodPreview == bEnabled ) { return; }
+	m_bEditorHlodPreview = bEnabled;
+	if ( m_pHlodStreamer ) {
+		if ( bEnabled ) { m_pHlodStreamer->reloadManifest(); }
+		else { m_pHlodStreamer->suspend(); }
+	}
+	if ( m_pNodeStreamer ) { m_pNodeStreamer->invalidateResidency(); }
+	emit_signal( "editor_execution_mode_changed", ( int ) m_editorExecutionMode );
+}
+
 void T3DTerrain::setEditorExecutionMode( const t3deditorExecutionMode_t mode ) {
 	if ( !terrain3dEditorExecutionModeIsValid( ( int ) ( mode ) ) ) {
 		return;
 	}
 	if ( mode == EDITOR_EXECUTION_RUNTIME_PROFILE ) {
 		m_bEditorNodeStreamingPreview = false;
+		m_bEditorHlodPreview = false;
 	}
 	if ( m_editorExecutionMode == mode ) {
 		return;
@@ -2570,6 +2621,7 @@ Dictionary T3DTerrain::runtimeProfileSampleToDictionary( const t3druntimeProfile
 	sample["sequence"] = ( int64_t ) ( rSample.frameSequence );
 	sample["physics_total_usec"] = ( int64_t ) ( rSample.nPhysicsTotalUsec );
 	sample["data_residency_usec"] = ( int64_t ) ( rSample.nDataResidencyUsec );
+	sample["hlod_streaming_usec"] = ( int64_t ) ( rSample.nHlodStreamingUsec );
 	sample["node_streaming_usec"] = ( int64_t ) ( rSample.nNodeStreamingUsec );
 	sample["lightmap_streaming_usec"] = ( int64_t ) ( rSample.nLightmapStreamingUsec );
 	sample["clipmap_usec"] = ( int64_t ) ( rSample.nClipmapUsec );
@@ -2852,6 +2904,12 @@ Dictionary T3DTerrain::getRuntimeProfileAggregate( void ) const {
 	data_residency["average_usec"] = stats.nSampledTicks > 0u ?
 		( double ) ( stats.nDataResidencyTotalUsec ) / ( double ) ( stats.nSampledTicks ) : 0.0;
 	timing["data_residency"] = data_residency;
+	Dictionary hlod_streaming;
+	hlod_streaming["total_usec"] = ( int64_t ) ( stats.nHlodStreamingTotalUsec );
+	hlod_streaming["peak_usec"] = ( int64_t ) ( stats.nHlodStreamingPeakUsec );
+	hlod_streaming["average_usec"] = stats.nSampledTicks > 0u ?
+		( double ) ( stats.nHlodStreamingTotalUsec ) / ( double ) ( stats.nSampledTicks ) : 0.0;
+	timing["hlod_streaming"] = hlod_streaming;
 	Dictionary node_streaming;
 	node_streaming["total_usec"] = ( int64_t ) ( stats.nNodeStreamingTotalUsec );
 	node_streaming["peak_usec"] = ( int64_t ) ( stats.nNodeStreamingPeakUsec );
@@ -3061,6 +3119,14 @@ t3dmemoryBudgetInput_t T3DTerrain::buildMemoryBudgetInput( void ) const {
 	lighting.nHardCapBytes = 1024u * TERRAIN3D_MEMORY_MIB;
 	lighting.weight = 2u;
 
+	t3dmemorySubsystemInput_t &hlod = input.subsystems[TERRAIN3D_MEMORY_HLOD_PROXIES];
+	hlod.bEnabled = m_bHlodEnabled;
+	hlod.bAutomatic = m_bHlodMemoryBudgetAuto;
+	hlod.nManualBytes = ( uint64_t ) ( m_nHlodMemoryBudgetMb ) * TERRAIN3D_MEMORY_MIB;
+	hlod.nMinimumBytes = 4u * TERRAIN3D_MEMORY_MIB;
+	hlod.nHardCapBytes = 4096u * TERRAIN3D_MEMORY_MIB;
+	hlod.weight = 2u;
+
 	t3dmemorySubsystemInput_t &shader = input.subsystems[TERRAIN3D_MEMORY_SHADER_CACHE];
 	shader.bEnabled = m_pMaterial.is_valid();
 	shader.bAutomatic = m_bShaderCacheBudgetAuto;
@@ -3077,6 +3143,7 @@ void T3DTerrain::applyMemoryBudgetResult( const t3dmemoryBudgetResult_t &rResult
 		m_nEffectiveCpuRegionCacheBudgetMb,
 		m_nEffectiveInstanceRegionCacheBudgetMb,
 		m_nEffectiveLightmapResidencyBudgetMb,
+		m_nEffectiveHlodMemoryBudgetMb,
 		m_nEffectiveShaderCacheBudgetMb,
 	};
 	const uint64_t fixed_far_bytes = getGpuFarAtlasBytes();
@@ -3085,6 +3152,7 @@ void T3DTerrain::applyMemoryBudgetResult( const t3dmemoryBudgetResult_t &rResult
 	const int cpu_mb = MAX( 1, ( int ) ( ( rResult.subsystems[TERRAIN3D_MEMORY_CPU_TERRAIN_PAGES].nEffectiveBytes + TERRAIN3D_MEMORY_MIB - 1u ) / TERRAIN3D_MEMORY_MIB ) );
 	const int instance_mb = MAX( 1, ( int ) ( ( rResult.subsystems[TERRAIN3D_MEMORY_INSTANCE_PAGES].nEffectiveBytes + TERRAIN3D_MEMORY_MIB - 1u ) / TERRAIN3D_MEMORY_MIB ) );
 	const int lightmap_mb = MAX( 1, ( int ) ( ( rResult.subsystems[TERRAIN3D_MEMORY_BAKED_LIGHTING].nEffectiveBytes + TERRAIN3D_MEMORY_MIB - 1u ) / TERRAIN3D_MEMORY_MIB ) );
+	const int hlod_mb = MAX( 1, ( int ) ( ( rResult.subsystems[TERRAIN3D_MEMORY_HLOD_PROXIES].nEffectiveBytes + TERRAIN3D_MEMORY_MIB - 1u ) / TERRAIN3D_MEMORY_MIB ) );
 	const int shader_mb = MAX( 1, ( int ) ( ( rResult.subsystems[TERRAIN3D_MEMORY_SHADER_CACHE].nEffectiveBytes + TERRAIN3D_MEMORY_MIB - 1u ) / TERRAIN3D_MEMORY_MIB ) );
 
 	const int hysteresis_mb = ( int ) ( TERRAIN3D_MEMORY_POLICY_HYSTERESIS_BYTES / TERRAIN3D_MEMORY_MIB );
@@ -3092,6 +3160,7 @@ void T3DTerrain::applyMemoryBudgetResult( const t3dmemoryBudgetResult_t &rResult
 	const bool bCpuChanged = bForce || std::abs( cpu_mb - m_nEffectiveCpuRegionCacheBudgetMb ) >= hysteresis_mb;
 	const bool bInstanceChanged = bForce || std::abs( instance_mb - m_nEffectiveInstanceRegionCacheBudgetMb ) >= hysteresis_mb;
 	const bool bLightmapChanged = bForce || std::abs( lightmap_mb - m_nEffectiveLightmapResidencyBudgetMb ) >= hysteresis_mb;
+	const bool bHlodChanged = bForce || std::abs( hlod_mb - m_nEffectiveHlodMemoryBudgetMb ) >= hysteresis_mb;
 	const bool bShaderChanged = bForce || std::abs( shader_mb - m_nEffectiveShaderCacheBudgetMb ) >= hysteresis_mb;
 
 	if ( bGpuChanged ) {
@@ -3122,6 +3191,10 @@ void T3DTerrain::applyMemoryBudgetResult( const t3dmemoryBudgetResult_t &rResult
 			m_pLightmapStreamer->setResidencyBudgetMb( m_nEffectiveLightmapResidencyBudgetMb );
 		}
 	}
+	if ( bHlodChanged ) {
+		m_nEffectiveHlodMemoryBudgetMb = hlod_mb;
+		if ( m_pHlodStreamer ) { m_pHlodStreamer->setMemoryBudgetMb( m_nEffectiveHlodMemoryBudgetMb ); }
+	}
 	if ( bShaderChanged ) {
 		m_nEffectiveShaderCacheBudgetMb = shader_mb;
 		if ( m_pMaterial.is_valid() ) {
@@ -3134,6 +3207,7 @@ void T3DTerrain::applyMemoryBudgetResult( const t3dmemoryBudgetResult_t &rResult
 		m_nEffectiveCpuRegionCacheBudgetMb,
 		m_nEffectiveInstanceRegionCacheBudgetMb,
 		m_nEffectiveLightmapResidencyBudgetMb,
+		m_nEffectiveHlodMemoryBudgetMb,
 		m_nEffectiveShaderCacheBudgetMb,
 	};
 	for ( int index = 0; index < TERRAIN3D_MEMORY_SUBSYSTEM_COUNT; ++index ) {
@@ -3255,6 +3329,15 @@ void T3DTerrain::setLightmapResidencyBudgetMb( const int nBudgetMb ) {
 	}
 }
 
+void T3DTerrain::setHlodMemoryBudgetAuto( const bool bEnabled ) {
+	if ( m_bHlodMemoryBudgetAuto == bEnabled ) { return; }
+	m_bHlodMemoryBudgetAuto = bEnabled;
+	notify_property_list_changed();
+	markMemoryBudgetDirty();
+	refreshPerformanceProfileConformity();
+	if ( m_bInitialized ) { serviceMemoryBudgetPolicy( true ); }
+}
+
 void T3DTerrain::setShaderCacheBudgetAuto( const bool bEnabled ) {
 	if ( m_bShaderCacheBudgetAuto == bEnabled ) {
 		return;
@@ -3299,6 +3382,7 @@ Dictionary T3DTerrain::getMemoryBudgetStats( void ) const {
 	stats["cpu_auto"] = m_bCpuRegionCacheBudgetAuto;
 	stats["instance_auto"] = m_bInstanceRegionCacheBudgetAuto;
 	stats["lightmap_auto"] = m_bLightmapResidencyBudgetAuto;
+	stats["hlod_auto"] = m_bHlodMemoryBudgetAuto;
 	stats["shader_auto"] = m_bShaderCacheBudgetAuto;
 	stats["gpu_requested_mb"] = m_nGpuRegionCacheBudgetMb;
 	stats["gpu_effective_mb"] = m_nEffectiveGpuRegionCacheBudgetMb;
@@ -3308,6 +3392,8 @@ Dictionary T3DTerrain::getMemoryBudgetStats( void ) const {
 	stats["instance_effective_mb"] = m_nEffectiveInstanceRegionCacheBudgetMb;
 	stats["lightmap_requested_mb"] = m_nLightmapResidencyBudgetMb;
 	stats["lightmap_effective_mb"] = m_nEffectiveLightmapResidencyBudgetMb;
+	stats["hlod_requested_mb"] = m_nHlodMemoryBudgetMb;
+	stats["hlod_effective_mb"] = m_nEffectiveHlodMemoryBudgetMb;
 	stats["shader_requested_mb"] = m_pMaterial.is_valid() ? m_pMaterial->getShaderVariantSourceBudgetMb() : 0;
 	stats["shader_effective_mb"] = m_nEffectiveShaderCacheBudgetMb;
 	return stats;
@@ -3320,8 +3406,9 @@ Dictionary T3DTerrain::getTrackedCurrentResidency( void ) const {
 	const uint64_t cpu_page_bytes = m_pData ? ( uint64_t ) ( m_pData->getCpuRegionCacheReservedBytes() ) : 0u;
 	const uint64_t instance_page_bytes = m_pData ? ( uint64_t ) ( m_pData->getInstanceRegionCacheReservedBytes() ) : 0u;
 	const uint64_t lightmap_bytes = m_pLightmapStreamer ? ( uint64_t ) ( m_pLightmapStreamer->getResidentEstimatedBytes() ) : 0u;
+	const uint64_t hlod_bytes = m_pHlodStreamer ? ( uint64_t ) ( m_pHlodStreamer->getResidentEstimatedBytes() ) : 0u;
 	const uint64_t shader_source_bytes = m_pMaterial.is_valid() ? ( uint64_t ) ( m_pMaterial->getShaderVariantSourceBytesNative() ) : 0u;
-	const uint64_t managed_bytes = gpu_page_bytes + middle_height_bytes + cpu_page_bytes + instance_page_bytes + lightmap_bytes + shader_source_bytes;
+	const uint64_t managed_bytes = gpu_page_bytes + middle_height_bytes + cpu_page_bytes + instance_page_bytes + lightmap_bytes + hlod_bytes + shader_source_bytes;
 	const uint64_t fixed_bytes = calculateFixedMemoryBytes();
 	const uint64_t transient_bytes = calculateTransientMemoryBytes();
 	const uint64_t tracked_bytes = fixed_bytes + managed_bytes + transient_bytes;
@@ -3349,6 +3436,7 @@ Dictionary T3DTerrain::getTrackedCurrentResidency( void ) const {
 	managed["cpu_terrain_page_cache_bytes"] = ( int64_t ) ( cpu_page_bytes );
 	managed["instance_region_page_bytes"] = ( int64_t ) ( instance_page_bytes );
 	managed["baked_lighting_estimated_bytes"] = ( int64_t ) ( lightmap_bytes );
+	managed["hlod_proxy_estimated_bytes"] = ( int64_t ) ( hlod_bytes );
 	managed["shader_source_cache_bytes"] = ( int64_t ) ( shader_source_bytes );
 	memory["managed_resident"] = managed;
 
@@ -3404,8 +3492,9 @@ Dictionary T3DTerrain::getRuntimeMemoryStatsFast( void ) const {
 	const uint64_t cpu_page_bytes = m_pData ? ( uint64_t ) ( m_pData->getCpuRegionCacheReservedBytes() ) : 0u;
 	const uint64_t instance_page_bytes = m_pData ? ( uint64_t ) ( m_pData->getInstanceRegionCacheReservedBytes() ) : 0u;
 	const uint64_t lightmap_bytes = m_pLightmapStreamer ? ( uint64_t ) ( m_pLightmapStreamer->getResidentEstimatedBytes() ) : 0u;
+	const uint64_t hlod_bytes = m_pHlodStreamer ? ( uint64_t ) ( m_pHlodStreamer->getResidentEstimatedBytes() ) : 0u;
 	const uint64_t shader_source_bytes = m_pMaterial.is_valid() ? ( uint64_t ) ( m_pMaterial->getShaderVariantSourceBytesNative() ) : 0u;
-	const uint64_t managed_bytes = gpu_page_bytes + middle_height_bytes + cpu_page_bytes + instance_page_bytes + lightmap_bytes + shader_source_bytes;
+	const uint64_t managed_bytes = gpu_page_bytes + middle_height_bytes + cpu_page_bytes + instance_page_bytes + lightmap_bytes + hlod_bytes + shader_source_bytes;
 	const uint64_t fixed_bytes = m_nMemoryBudgetResult.nFixedBytes;
 	const uint64_t transient_bytes = calculateTransientMemoryBytes();
 	const uint64_t tracked_bytes = fixed_bytes + managed_bytes + transient_bytes;
@@ -3429,7 +3518,7 @@ Dictionary T3DTerrain::getRuntimeMemoryStatsFast( void ) const {
 
 	const bool bAutomatic[TERRAIN3D_MEMORY_SUBSYSTEM_COUNT] = {
 		m_bGpuRegionCacheBudgetAuto, m_bCpuRegionCacheBudgetAuto, m_bInstanceRegionCacheBudgetAuto,
-		m_bLightmapResidencyBudgetAuto, m_bShaderCacheBudgetAuto
+		m_bLightmapResidencyBudgetAuto, m_bHlodMemoryBudgetAuto, m_bShaderCacheBudgetAuto
 	};
 	Array reallocations;
 	Array constrained;
@@ -4904,17 +4993,66 @@ Dictionary T3DTerrain::getLightmapStreamingStats( void ) const {
 	return m_pLightmapStreamer ? m_pLightmapStreamer->getStats() : Dictionary();
 }
 
+void T3DTerrain::setHlodEnabled( const bool bEnabled ) {
+	if ( m_bHlodEnabled == bEnabled ) { return; }
+	m_bHlodEnabled = bEnabled; markMemoryBudgetDirty();
+	if ( m_pHlodStreamer ) { m_pHlodStreamer->setEnabled( bEnabled ); }
+}
+void T3DTerrain::setHlodManifestPath( const String &rPath ) {
+	const String value = rPath.strip_edges(); if ( m_hlodManifestPath == value ) { return; }
+	m_hlodManifestPath = value; if ( m_pHlodStreamer ) { m_pHlodStreamer->setManifestPath( value ); }
+}
+void T3DTerrain::setHlodTargetErrorPixels( const real_t fPixels ) { m_fHlodTargetErrorPixels = CLAMP( fPixels, 0.25f, 64.0f ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setTargetErrorPixels( m_fHlodTargetErrorPixels ); } }
+void T3DTerrain::setHlodHysteresis( const real_t fRatio ) { m_fHlodHysteresis = CLAMP( fRatio, 0.0f, 0.75f ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setHysteresis( m_fHlodHysteresis ); } }
+void T3DTerrain::setHlodMaxLevel( const int nLevel ) { m_nHlodMaxLevel = CLAMP( nLevel, 1, 6 ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setMaxLevel( m_nHlodMaxLevel ); } }
+void T3DTerrain::setHlodLoadBudget( const int nBudget ) { m_nHlodLoadBudget = CLAMP( nBudget, 0, 64 ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setLoadBudget( m_nHlodLoadBudget ); } }
+void T3DTerrain::setHlodUnloadBudget( const int nBudget ) { m_nHlodUnloadBudget = CLAMP( nBudget, 0, 64 ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setUnloadBudget( m_nHlodUnloadBudget ); } }
+void T3DTerrain::setHlodMemoryBudgetMb( const int nBudgetMb ) {
+	m_nHlodMemoryBudgetMb = CLAMP( nBudgetMb, 1, 4096 ); markMemoryBudgetDirty();
+	if ( !m_bHlodMemoryBudgetAuto && m_bInitialized ) { serviceMemoryBudgetPolicy( true ); }
+}
+void T3DTerrain::setHlodMaxShadowLevel( const int nLevel ) { m_nHlodMaxShadowLevel = CLAMP( nLevel, 0, 6 ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setMaxShadowLevel( m_nHlodMaxShadowLevel ); } }
+void T3DTerrain::setHlodForcedDebugLevel( const int nLevel ) { m_nHlodForcedDebugLevel = CLAMP( nLevel, -1, 6 ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setForcedDebugLevel( m_nHlodForcedDebugLevel ); } }
+bool T3DTerrain::reloadHlodManifest( void ) { return m_pHlodStreamer && m_pHlodStreamer->reloadManifest(); }
+Dictionary T3DTerrain::getHlodStreamingStats( void ) const { return m_pHlodStreamer ? m_pHlodStreamer->getStats() : Dictionary(); }
+Array T3DTerrain::getHlodDebugEntries( void ) const { return m_pHlodStreamer ? m_pHlodStreamer->getDebugEntries() : Array(); }
+bool T3DTerrain::isHlodRegionSuppressed( const Vector2i &rRegion, const int nMinimumLevel ) const { return m_pHlodStreamer && m_pHlodStreamer->isRegionSuppressed( rRegion, nMinimumLevel ); }
+bool T3DTerrain::isHlodRegionDetailRequired( const Vector2i &rRegion ) const { return !m_pHlodStreamer || m_pHlodStreamer->isRegionDetailRequired( rRegion ); }
+bool T3DTerrain::isHlodRegionManaged( const Vector2i &rRegion ) const { return m_pHlodStreamer && m_pHlodStreamer->isRegionManaged( rRegion ); }
+uint8_t T3DTerrain::getHlodInstancerMinimumLevel( const Vector2i &rRegion, const int nMeshId ) const { return m_pHlodStreamer ? m_pHlodStreamer->getInstancerMinimumLevel( rRegion, nMeshId ) : 0; }
+uint8_t T3DTerrain::getHlodNodeMinimumLevel( const Vector2i &rRegion, const int64_t nSpawnId ) const { return m_pHlodStreamer ? m_pHlodStreamer->getNodeMinimumLevel( rRegion, nSpawnId ) : 0; }
+void T3DTerrain::onHlodRegionRepresentationChanged( const Vector2i &rRegion ) {
+	if ( m_pInstancer ) { m_pInstancer->updateMmis( -1, rRegion, false ); }
+	if ( m_pNodeStreamer ) { m_pNodeStreamer->onHlodRepresentationChanged( rRegion ); }
+}
+bool T3DTerrain::isHlodDetailReady( const Vector2i &rRegionMin, const Vector2i &rRegionMax ) const {
+	if ( m_pHlodStreamer ) {
+		for ( int z = rRegionMin.y; z <= rRegionMax.y; ++z ) {
+			for ( int x = rRegionMin.x; x <= rRegionMax.x; ++x ) {
+				const Vector2i region( x, z );
+				if ( m_pHlodStreamer->isRegionManaged( region ) &&
+					getRegionStreamingStateInternal( region ) < TERRAIN3D_REGION_STREAMING_HOT ) {
+					return false;
+				}
+			}
+		}
+	}
+	const bool instances_ready = !m_pInstancer || m_pInstancer->areHlodDetailRegionsReady( rRegionMin, rRegionMax );
+	const bool nodes_ready = !m_pNodeStreamer || m_pNodeStreamer->areHlodVisualRegionsReady( rRegionMin, rRegionMax );
+	return instances_ready && nodes_ready;
+}
+
 int64_t T3DTerrain::addStreamedScene(
 	const Ref<PackedScene> &rScene, const Transform3D &rGlobalTransform,
-	const Dictionary &rState, const int nFlags
+	const Dictionary &rState, const int nFlags, const int nHlodMinLevel
 ) {
-	return m_pNodeStreamer ? m_pNodeStreamer->addStreamedScene( rScene, rGlobalTransform, rState, nFlags ) : 0;
+	return m_pNodeStreamer ? m_pNodeStreamer->addStreamedScene( rScene, rGlobalTransform, rState, nFlags, nHlodMinLevel ) : 0;
 }
 int64_t T3DTerrain::addStreamedScenePath(
 	const String &rScenePath, const Transform3D &rGlobalTransform,
-	const Dictionary &rState, const int nFlags
+	const Dictionary &rState, const int nFlags, const int nHlodMinLevel
 ) {
-	return m_pNodeStreamer ? m_pNodeStreamer->addStreamedScenePath( rScenePath, rGlobalTransform, rState, nFlags ) : 0;
+	return m_pNodeStreamer ? m_pNodeStreamer->addStreamedScenePath( rScenePath, rGlobalTransform, rState, nFlags, nHlodMinLevel ) : 0;
 }
 bool T3DTerrain::removeStreamedScene( const int64_t nSpawnId ) {
 	return m_pNodeStreamer && m_pNodeStreamer->removeStreamedScene( nSpawnId );
@@ -6169,7 +6307,8 @@ void T3DTerrain::_notification( const int nWhat ) {
 			deactivateRuntime();
 			destroyTerrainMesher( true );
 			destroyOceanMesher( true );
-			destroyLightmapStreamer();
+			destroyHlodStreamer();
+		destroyLightmapStreamer();
 		destroyNodeStreamer( false );
 			destroyInstancer();
 			destroyCollision( true );
@@ -6206,7 +6345,8 @@ void T3DTerrain::_validate_property( PropertyInfo &rProperty ) const {
 	if ( ( m_bGpuRegionCacheBudgetAuto && rProperty.name == StringName( "gpu_region_cache_budget_mb" ) ) ||
 		( m_bCpuRegionCacheBudgetAuto && rProperty.name == StringName( "cpu_region_cache_budget_mb" ) ) ||
 		( m_bInstanceRegionCacheBudgetAuto && rProperty.name == StringName( "instance_region_cache_budget_mb" ) ) ||
-		( m_bLightmapResidencyBudgetAuto && rProperty.name == StringName( "lightmap_residency_budget_mb" ) ) ) {
+		( m_bLightmapResidencyBudgetAuto && rProperty.name == StringName( "lightmap_residency_budget_mb" ) ) ||
+		( m_bHlodMemoryBudgetAuto && rProperty.name == StringName( "hlod_memory_budget_mb" ) ) ) {
 		rProperty.usage |= PROPERTY_USAGE_READ_ONLY;
 	}
 }
@@ -6272,6 +6412,9 @@ void T3DTerrain::_bind_methods( void ) {
 		&T3DTerrain::isEditorNodeStreamingPreviewEnabled );
 	ClassDB::bind_method( D_METHOD( "is_editor_node_streaming_preview_active" ),
 		&T3DTerrain::isEditorNodeStreamingPreviewActive );
+	ClassDB::bind_method( D_METHOD( "set_editor_hlod_preview", "enabled" ), &T3DTerrain::setEditorHlodPreview );
+	ClassDB::bind_method( D_METHOD( "is_editor_hlod_preview_enabled" ), &T3DTerrain::isEditorHlodPreviewEnabled );
+	ClassDB::bind_method( D_METHOD( "is_editor_hlod_preview_active" ), &T3DTerrain::isEditorHlodPreviewActive );
 	ClassDB::bind_method( D_METHOD( "set_editor_execution_mode", "mode" ), &T3DTerrain::setEditorExecutionMode );
 	ClassDB::bind_method( D_METHOD( "get_editor_execution_mode" ), &T3DTerrain::getEditorExecutionMode );
 	ClassDB::bind_method( D_METHOD( "get_memory_estimate" ), &T3DTerrain::getMemoryEstimate );
@@ -6289,6 +6432,8 @@ void T3DTerrain::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "is_instance_region_cache_budget_auto" ), &T3DTerrain::isInstanceRegionCacheBudgetAuto );
 	ClassDB::bind_method( D_METHOD( "set_lightmap_residency_budget_auto", "enabled" ), &T3DTerrain::setLightmapResidencyBudgetAuto );
 	ClassDB::bind_method( D_METHOD( "is_lightmap_residency_budget_auto" ), &T3DTerrain::isLightmapResidencyBudgetAuto );
+	ClassDB::bind_method( D_METHOD( "set_hlod_memory_budget_auto", "enabled" ), &T3DTerrain::setHlodMemoryBudgetAuto );
+	ClassDB::bind_method( D_METHOD( "is_hlod_memory_budget_auto" ), &T3DTerrain::isHlodMemoryBudgetAuto );
 	ClassDB::bind_method( D_METHOD( "set_lightmap_residency_budget_mb", "budget_mb" ), &T3DTerrain::setLightmapResidencyBudgetMb );
 	ClassDB::bind_method( D_METHOD( "get_lightmap_residency_budget_mb" ), &T3DTerrain::getLightmapResidencyBudgetMb );
 	ClassDB::bind_method( D_METHOD( "set_shader_cache_budget_auto", "enabled" ), &T3DTerrain::setShaderCacheBudgetAuto );
@@ -6297,6 +6442,7 @@ void T3DTerrain::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_effective_cpu_region_cache_budget_mb" ), &T3DTerrain::getEffectiveCpuRegionCacheBudgetMb );
 	ClassDB::bind_method( D_METHOD( "get_effective_instance_region_cache_budget_mb" ), &T3DTerrain::getEffectiveInstanceRegionCacheBudgetMb );
 	ClassDB::bind_method( D_METHOD( "get_effective_lightmap_residency_budget_mb" ), &T3DTerrain::getEffectiveLightmapResidencyBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_effective_hlod_memory_budget_mb" ), &T3DTerrain::getEffectiveHlodMemoryBudgetMb );
 	ClassDB::bind_method( D_METHOD( "get_effective_shader_cache_budget_mb" ), &T3DTerrain::getEffectiveShaderCacheBudgetMb );
 	ClassDB::bind_method( D_METHOD( "get_memory_budget_policy_generation" ), &T3DTerrain::getMemoryBudgetPolicyGeneration );
 	ClassDB::bind_method( D_METHOD( "is_memory_budget_overcommitted" ), &T3DTerrain::isMemoryBudgetOvercommitted );
@@ -6543,6 +6689,29 @@ void T3DTerrain::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "set_lightmap_unload_budget", "budget" ), &T3DTerrain::setLightmapUnloadBudget );
 	ClassDB::bind_method( D_METHOD( "get_lightmap_unload_budget" ), &T3DTerrain::getLightmapUnloadBudget );
 	ClassDB::bind_method( D_METHOD( "get_lightmap_streaming_stats" ), &T3DTerrain::getLightmapStreamingStats );
+	ClassDB::bind_method( D_METHOD( "set_hlod_enabled", "enabled" ), &T3DTerrain::setHlodEnabled );
+	ClassDB::bind_method( D_METHOD( "is_hlod_enabled" ), &T3DTerrain::isHlodEnabled );
+	ClassDB::bind_method( D_METHOD( "set_hlod_manifest_path", "path" ), &T3DTerrain::setHlodManifestPath );
+	ClassDB::bind_method( D_METHOD( "get_hlod_manifest_path" ), &T3DTerrain::getHlodManifestPath );
+	ClassDB::bind_method( D_METHOD( "set_hlod_target_error_pixels", "pixels" ), &T3DTerrain::setHlodTargetErrorPixels );
+	ClassDB::bind_method( D_METHOD( "get_hlod_target_error_pixels" ), &T3DTerrain::getHlodTargetErrorPixels );
+	ClassDB::bind_method( D_METHOD( "set_hlod_hysteresis", "ratio" ), &T3DTerrain::setHlodHysteresis );
+	ClassDB::bind_method( D_METHOD( "get_hlod_hysteresis" ), &T3DTerrain::getHlodHysteresis );
+	ClassDB::bind_method( D_METHOD( "set_hlod_max_level", "level" ), &T3DTerrain::setHlodMaxLevel );
+	ClassDB::bind_method( D_METHOD( "get_hlod_max_level" ), &T3DTerrain::getHlodMaxLevel );
+	ClassDB::bind_method( D_METHOD( "set_hlod_load_budget", "budget" ), &T3DTerrain::setHlodLoadBudget );
+	ClassDB::bind_method( D_METHOD( "get_hlod_load_budget" ), &T3DTerrain::getHlodLoadBudget );
+	ClassDB::bind_method( D_METHOD( "set_hlod_unload_budget", "budget" ), &T3DTerrain::setHlodUnloadBudget );
+	ClassDB::bind_method( D_METHOD( "get_hlod_unload_budget" ), &T3DTerrain::getHlodUnloadBudget );
+	ClassDB::bind_method( D_METHOD( "set_hlod_memory_budget_mb", "budget_mb" ), &T3DTerrain::setHlodMemoryBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_hlod_memory_budget_mb" ), &T3DTerrain::getHlodMemoryBudgetMb );
+	ClassDB::bind_method( D_METHOD( "set_hlod_max_shadow_level", "level" ), &T3DTerrain::setHlodMaxShadowLevel );
+	ClassDB::bind_method( D_METHOD( "get_hlod_max_shadow_level" ), &T3DTerrain::getHlodMaxShadowLevel );
+	ClassDB::bind_method( D_METHOD( "set_hlod_forced_debug_level", "level" ), &T3DTerrain::setHlodForcedDebugLevel );
+	ClassDB::bind_method( D_METHOD( "get_hlod_forced_debug_level" ), &T3DTerrain::getHlodForcedDebugLevel );
+	ClassDB::bind_method( D_METHOD( "reload_hlod_manifest" ), &T3DTerrain::reloadHlodManifest );
+	ClassDB::bind_method( D_METHOD( "get_hlod_streaming_stats" ), &T3DTerrain::getHlodStreamingStats );
+	ClassDB::bind_method( D_METHOD( "get_hlod_debug_entries" ), &T3DTerrain::getHlodDebugEntries );
 	ClassDB::bind_method( D_METHOD( "set_dynamic_node_stream_radius", "radius" ), &T3DTerrain::setDynamicNodeStreamRadius );
 	ClassDB::bind_method( D_METHOD( "get_dynamic_node_stream_radius" ), &T3DTerrain::getDynamicNodeStreamRadius );
 	ClassDB::bind_method( D_METHOD( "set_dynamic_node_load_region_budget", "budget" ), &T3DTerrain::setDynamicNodeLoadRegionBudget );
@@ -6551,8 +6720,8 @@ void T3DTerrain::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_dynamic_node_load_node_budget" ), &T3DTerrain::getDynamicNodeLoadNodeBudget );
 	ClassDB::bind_method( D_METHOD( "set_dynamic_node_unload_region_budget", "budget" ), &T3DTerrain::setDynamicNodeUnloadRegionBudget );
 	ClassDB::bind_method( D_METHOD( "get_dynamic_node_unload_region_budget" ), &T3DTerrain::getDynamicNodeUnloadRegionBudget );
-	ClassDB::bind_method( D_METHOD( "add_streamed_scene", "scene", "global_transform", "state", "flags" ), &T3DTerrain::addStreamedScene, DEFVAL( Dictionary() ), DEFVAL( 0 ) );
-	ClassDB::bind_method( D_METHOD( "add_streamed_scene_path", "scene_path", "global_transform", "state", "flags" ), &T3DTerrain::addStreamedScenePath, DEFVAL( Dictionary() ), DEFVAL( 0 ) );
+	ClassDB::bind_method( D_METHOD( "add_streamed_scene", "scene", "global_transform", "state", "flags", "hlod_min_level" ), &T3DTerrain::addStreamedScene, DEFVAL( Dictionary() ), DEFVAL( 0 ), DEFVAL( 1 ) );
+	ClassDB::bind_method( D_METHOD( "add_streamed_scene_path", "scene_path", "global_transform", "state", "flags", "hlod_min_level" ), &T3DTerrain::addStreamedScenePath, DEFVAL( Dictionary() ), DEFVAL( 0 ), DEFVAL( 1 ) );
 	ClassDB::bind_method( D_METHOD( "remove_streamed_scene", "spawn_id" ), &T3DTerrain::removeStreamedScene );
 	ClassDB::bind_method( D_METHOD( "allocate_stream_owner_id" ), &T3DTerrain::allocateStreamOwnerId );
 	ClassDB::bind_method( D_METHOD( "set_next_stream_owner_id", "owner_id" ), &T3DTerrain::setNextStreamOwnerId );
@@ -7058,7 +7227,22 @@ void T3DTerrain::_bind_methods( void ) {
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "lightmap_stream_radius", PROPERTY_HINT_RANGE, "0,16,1,suffix: regions" ), "set_lightmap_stream_radius", "get_lightmap_stream_radius" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "lightmap_load_budget", PROPERTY_HINT_RANGE, "0,64,1,suffix: packages/update" ), "set_lightmap_load_budget", "get_lightmap_load_budget" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "lightmap_unload_budget", PROPERTY_HINT_RANGE, "0,64,1,suffix: packages/update" ), "set_lightmap_unload_budget", "get_lightmap_unload_budget" );
+
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "stream_owner_counter", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_next_stream_owner_id", "get_next_stream_owner_id" );
+
+	ADD_SUBGROUP( "HLOD", "hlod_" );
+	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "hlod_enabled" ), "set_hlod_enabled", "is_hlod_enabled" );
+	ADD_PROPERTY( PropertyInfo( Variant::STRING, "hlod_manifest_path", PROPERTY_HINT_FILE, "*.tres,*.res" ), "set_hlod_manifest_path", "get_hlod_manifest_path" );
+	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "hlod_target_error_pixels", PROPERTY_HINT_RANGE, "0.25,64,0.25,suffix:px" ), "set_hlod_target_error_pixels", "get_hlod_target_error_pixels" );
+	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "hlod_hysteresis", PROPERTY_HINT_RANGE, "0,0.75,0.01" ), "set_hlod_hysteresis", "get_hlod_hysteresis" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "hlod_max_level", PROPERTY_HINT_RANGE, "1,6,1" ), "set_hlod_max_level", "get_hlod_max_level" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "hlod_load_budget", PROPERTY_HINT_RANGE, "0,64,1,suffix: packages/update" ), "set_hlod_load_budget", "get_hlod_load_budget" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "hlod_unload_budget", PROPERTY_HINT_RANGE, "0,64,1,suffix: packages/update" ), "set_hlod_unload_budget", "get_hlod_unload_budget" );
+	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "hlod_memory_budget_auto" ), "set_hlod_memory_budget_auto", "is_hlod_memory_budget_auto" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "hlod_memory_budget_mb", PROPERTY_HINT_RANGE, "1,4096,1,suffix: MiB" ), "set_hlod_memory_budget_mb", "get_hlod_memory_budget_mb" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "hlod_memory_effective_mb", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "", "get_effective_hlod_memory_budget_mb" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "hlod_max_shadow_level", PROPERTY_HINT_RANGE, "0,6,1" ), "set_hlod_max_shadow_level", "get_hlod_max_shadow_level" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "hlod_forced_debug_level", PROPERTY_HINT_RANGE, "-1,6,1" ), "set_hlod_forced_debug_level", "get_hlod_forced_debug_level" );
 
 	ADD_GROUP( "Runtime Scheduling - Advanced", "" );
 
