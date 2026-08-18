@@ -1099,6 +1099,7 @@ uint64_t T3DData::computeGpuRuntimePageSourceSignature( const T3DRegion *pRegion
 	}
 	uint64_t hash = 1469598103934665603ull;
 	terrain3dFnv1a64AppendU32( hash, ( uint32_t ) ( m_nRegionSize ) );
+	terrain3dFnv1a64AppendF32( hash, ( float ) ( m_fVertexSpacing ) );
 	terrain3dFnv1a64AppendU32( hash, ( uint32_t ) ( m_nGpuRegionColorDivisor ) );
 	terrain3dFnv1a64AppendU32( hash, ( uint32_t ) ( m_nGpuRegionDerivedDivisor ) );
 	terrain3dFnv1a64AppendU32( hash, ( uint32_t ) ( m_pTerrain ? MAX( 1, m_pTerrain->getGpuMiddleHeightResolutionDivisor() ) : 1 ) );
@@ -1194,7 +1195,15 @@ bool T3DData::readGpuRuntimePageSourceSignature( const String &rPagePath, uint64
 }
 
 String T3DData::getGpuRuntimePagePath( const T3DRegion *pRegion ) const {
-	if ( !pRegion || pRegion->get_path().is_empty() ) {
+	if ( !pRegion ) {
+		return String();
+	}
+	if ( m_pTerrain && !m_pTerrain->getDataDirectory().is_empty() ) {
+		const String source_path = m_pTerrain->getDataDirectory().trim_suffix( "/" ) + String( "/" ) +
+			Util::locationToFilename( pRegion->getLocation() );
+		return source_path.get_basename() + String( ".t3dpage" );
+	}
+	if ( pRegion->get_path().is_empty() ) {
 		return String();
 	}
 	return pRegion->get_path().get_basename() + String( ".t3dpage" );
@@ -1701,37 +1710,46 @@ bool T3DData::takePreparedGpuRuntimePage(
 }
 
 
-bool T3DData::writeGpuRuntimePage( T3DRegion *const pRegion ) {
-	if ( !pRegion || pRegion->isDeleted() || !m_pTerrain ) {
+bool T3DData::writeGpuRuntimePage( T3DRegion *const pRegion, String *const pError ) {
+	if ( pError ) {
+		*pError = String();
+	}
+	auto fail = [pError]( const String &rMessage ) -> bool {
+		if ( pError ) {
+			*pError = rMessage;
+		}
 		return false;
+	};
+	if ( !pRegion || pRegion->isDeleted() || !m_pTerrain ) {
+		return fail( "region/terrain owner is unavailable" );
 	}
 	const String page_path = getGpuRuntimePagePath( pRegion );
 	if ( page_path.is_empty() ) {
-		return false;
+		return fail( "runtime page path is empty" );
 	}
 	const Ref<Image> pHeight = pRegion->getHeightMap();
 	if ( pHeight.is_null() || pHeight->get_width() != m_nRegionSize || pHeight->get_height() != m_nRegionSize ||
 		pHeight->get_format() != Image::FORMAT_R16 || pHeight->has_mipmaps() ) {
-		return false;
+		return fail( "height source is missing or has an invalid size/format" );
 	}
 	Ref<Image> pControl;
 	if ( pRegion->hasChannel( T3DRegion::T3DRegion::TYPE_CONTROL ) ) {
 		pControl = makeGpuRenderControlImage( pRegion->getLocation() );
 		if ( pControl.is_null() || pControl->get_width() != m_nRegionSize || pControl->get_height() != m_nRegionSize ||
 			pControl->get_format() != Image::FORMAT_RF || pControl->has_mipmaps() ) {
-			return false;
+			return fail( "render-control page synthesis failed" );
 		}
 	}
 	Ref<Image> pColor;
 	if ( pRegion->hasChannel( T3DRegion::T3DRegion::TYPE_COLOR ) ) {
 		pColor = makeGpuColorImage( pRegion->getColorMap() );
 		if ( pColor.is_null() ) {
-			return false;
+			return fail( "color page synthesis failed" );
 		}
 	}
 	Ref<Image> pMiddleHeight = makeMiddleHeightImage( pRegion->getLocation(), true );
 	if ( pMiddleHeight.is_null() || pMiddleHeight->is_empty() ) {
-		return false;
+		return fail( "middle-height page synthesis failed" );
 	}
 	Ref<Image> pDerived = pRegion->getDerivedNormalSlopeMap();
 	if ( pDerived.is_null() ) {
@@ -1740,7 +1758,7 @@ bool T3DData::writeGpuRuntimePage( T3DRegion *const pRegion ) {
 	}
 	pDerived = makeGpuDerivedImage( pDerived );
 	if ( pDerived.is_null() ) {
-		return false;
+		return fail( "derived normal/slope page synthesis failed" );
 	}
 
 	t3druntimePageHeader_t header;
@@ -1751,7 +1769,7 @@ bool T3DData::writeGpuRuntimePage( T3DRegion *const pRegion ) {
 		( uint32_t ) ( T3DRegion::CHANNEL_DERIVED );
 	const uint64_t source_signature = computeGpuRuntimePageSourceSignature( pRegion );
 	if ( source_signature == 0u ) {
-		return false;
+		return fail( "source signature generation failed" );
 	}
 	header.sourceSignatureLo = ( uint32_t ) ( source_signature & 0xffffffffu );
 	header.sourceSignatureHi = ( uint32_t ) ( source_signature >> 32u );
@@ -1768,11 +1786,11 @@ bool T3DData::writeGpuRuntimePage( T3DRegion *const pRegion ) {
 			TERRAIN3D_RUNTIME_PAGE_COLOR, pColor ) ) ||
 		!terrain3dRuntimePageAddChannel( file_bytes, header, TERRAIN3D_RUNTIME_PAGE_DERIVED, pDerived ) ||
 		!terrain3dRuntimePageAddChannel( file_bytes, header, TERRAIN3D_RUNTIME_PAGE_MIDDLE_HEIGHT, pMiddleHeight ) ) {
-		return false;
+		return fail( "runtime page channel serialization failed" );
 	}
 	terrain3dRuntimePageEncodeHeader( file_bytes, header );
 	if ( !terrain3dRuntimePageValidateHeader( header, ( uint64_t ) ( file_bytes.size() ) ) ) {
-		return false;
+		return fail( "generated runtime page header failed validation" );
 	}
 
 	const String temporary_path = page_path + String( ".tmp" );
@@ -1782,14 +1800,14 @@ bool T3DData::writeGpuRuntimePage( T3DRegion *const pRegion ) {
 	}
 	Ref<FileAccess> pFile = FileAccess::open( temporary_path, FileAccess::WRITE );
 	if ( pFile.is_null() ) {
-		return false;
+		return fail( "temporary runtime page could not be opened for writing" );
 	}
 	pFile->store_buffer( file_bytes );
 	const Error write_error = pFile->get_error();
 	pFile->close();
 	if ( write_error != OK ) {
 		DirAccess::remove_absolute( temporary_path );
-		return false;
+		return fail( "temporary runtime page write failed" );
 	}
 	const bool bHadPrevious = FileAccess::file_exists( page_path );
 	if ( FileAccess::file_exists( backup_path ) ) {
@@ -1797,14 +1815,14 @@ bool T3DData::writeGpuRuntimePage( T3DRegion *const pRegion ) {
 	}
 	if ( bHadPrevious && DirAccess::rename_absolute( page_path, backup_path ) != OK ) {
 		DirAccess::remove_absolute( temporary_path );
-		return false;
+		return fail( "existing runtime page could not be moved to backup" );
 	}
 	if ( DirAccess::rename_absolute( temporary_path, page_path ) != OK ) {
 		if ( bHadPrevious ) {
 			DirAccess::rename_absolute( backup_path, page_path );
 		}
 		DirAccess::remove_absolute( temporary_path );
-		return false;
+		return fail( "temporary runtime page could not be published" );
 	}
 
 	// A successful write is not a successful cook until the published page can
@@ -1823,7 +1841,7 @@ bool T3DData::writeGpuRuntimePage( T3DRegion *const pRegion ) {
 		if ( bHadPrevious ) {
 			DirAccess::rename_absolute( backup_path, page_path );
 		}
-		return false;
+		return fail( "published runtime page failed reload validation" );
 	}
 	if ( bHadPrevious ) {
 		DirAccess::remove_absolute( backup_path );
@@ -3634,8 +3652,24 @@ int T3DData::findMiddleHeightSlot( const Vector2i &vLocation ) const {
 
 Ref<Image> T3DData::makeMiddleHeightImage( const Vector2i &vLocation, const bool bRuntimeResolution ) const {
 	T3DActiveMapLease lease = acquireActiveMap( vLocation );
-	if ( !lease.valid() || lease.view().nRegionSize != m_nRegionSize || !lease.view().pHeight ) {
-		return Ref<Image>();
+	const uint16_t *pActiveHeight = nullptr;
+	PackedByteArray source_bytes;
+	const uint8_t *pSourceBytes = nullptr;
+	if ( lease.valid() && lease.view().nRegionSize == m_nRegionSize && lease.view().pHeight ) {
+		pActiveHeight = lease.view().pHeight;
+	} else {
+		const T3DRegion *const pRegion = getRegionPtr( vLocation );
+		const Ref<Image> pHeight = pRegion && !pRegion->isDeleted() ? pRegion->getHeightMap() : Ref<Image>();
+		if ( pHeight.is_null() || pHeight->get_width() != m_nRegionSize || pHeight->get_height() != m_nRegionSize ||
+			pHeight->get_format() != Image::FORMAT_R16 || pHeight->has_mipmaps() ) {
+			return Ref<Image>();
+		}
+		source_bytes = pHeight->get_data();
+		const size_t expected_source_bytes = ( size_t ) ( m_nRegionSize ) * ( size_t ) ( m_nRegionSize ) * sizeof( uint16_t );
+		if ( ( size_t ) ( source_bytes.size() ) != expected_source_bytes ) {
+			return Ref<Image>();
+		}
+		pSourceBytes = source_bytes.ptr();
 	}
 	const bool use_runtime_resolution = bRuntimeResolution || ( m_pTerrain && !m_pTerrain->isEditorAuthoringMode() );
 	const int divisor = m_pTerrain && use_runtime_resolution ?
@@ -3649,13 +3683,23 @@ Ref<Image> T3DData::makeMiddleHeightImage( const Vector2i &vLocation, const bool
 		return Ref<Image>();
 	}
 	if ( divisor == 1 ) {
-		std::memcpy( pWrite, lease.view().pHeight, byte_count );
+		if ( pActiveHeight ) {
+			std::memcpy( pWrite, pActiveHeight, byte_count );
+		} else {
+			std::memcpy( pWrite, pSourceBytes, byte_count );
+		}
 	} else {
 		for ( int y = 0; y < side; ++y ) {
 			const int source_y = MIN( y * divisor, m_nRegionSize - 1 );
 			for ( int x = 0; x < side; ++x ) {
 				const int source_x = MIN( x * divisor, m_nRegionSize - 1 );
-				const uint16_t value = lease.view().pHeight[source_y * m_nRegionSize + source_x];
+				const size_t source_offset = ( size_t ) ( source_y * m_nRegionSize + source_x ) * sizeof( uint16_t );
+				uint16_t value = 0u;
+				if ( pActiveHeight ) {
+					value = pActiveHeight[source_y * m_nRegionSize + source_x];
+				} else {
+					std::memcpy( &value, pSourceBytes + source_offset, sizeof( value ) );
+				}
 				std::memcpy( pWrite + ( size_t ) ( y * side + x ) * sizeof( uint16_t ),
 					&value, sizeof( value ) );
 			}
@@ -7234,25 +7278,224 @@ void T3DData::saveRegion( const Vector2i &rRegionLoc, const String &rDir, const 
 	}
 }
 
+bool T3DData::collectGpuRegionPageSources(
+	String &rDataDirectory, PackedStringArray &rSourceFiles,
+	eastl::vector<Vector2i> &rLocations, PackedStringArray &rErrors
+) const {
+	rDataDirectory = m_pTerrain ? m_pTerrain->getDataDirectory().trim_suffix( "/" ) : String();
+	rSourceFiles.clear();
+	rLocations.clear();
+	rErrors.clear();
+	if ( !m_pTerrain ) {
+		rErrors.push_back( "Terrain3D owner is unavailable" );
+		return false;
+	}
+	if ( rDataDirectory.is_empty() ) {
+		rErrors.push_back( "Terrain3D data_directory is empty" );
+		return false;
+	}
+
+	rSourceFiles = Util::getFiles( rDataDirectory, "terrain3d*.res" );
+	rSourceFiles.sort();
+	if ( rSourceFiles.is_empty() ) {
+		rErrors.push_back( "No Terrain3D region .res sources were found in " + rDataDirectory );
+		return false;
+	}
+
+	eastl::bitset<TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE * TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE> source_locations;
+	rLocations.reserve( ( size_t ) ( rSourceFiles.size() ) );
+	for ( const String &fname : rSourceFiles ) {
+		const Vector2i location = Util::filenameToLocation( fname );
+		const int map_index = getRegionMapIndex( location );
+		if ( map_index < 0 || Util::locationToFilename( location ) != fname ) {
+			rErrors.push_back( "Malformed or out-of-range Terrain3D region source: " + fname );
+			continue;
+		}
+		if ( source_locations.test( ( size_t ) ( map_index ) ) ) {
+			rErrors.push_back( "Duplicate Terrain3D region source location " + String( location ) );
+			continue;
+		}
+		source_locations.set( ( size_t ) ( map_index ) );
+
+		T3DRegion *const pRegion = getRegionPtr( location );
+		if ( !pRegion || pRegion->isDeleted() ) {
+			rErrors.push_back( "Region source " + fname + " exists in the data directory but is not loaded" );
+			continue;
+		}
+		const String expected_path = rDataDirectory.path_join( fname ).simplify_path();
+		const String loaded_path = pRegion->get_path().simplify_path();
+		if ( loaded_path != expected_path ) {
+			rErrors.push_back( "Region " + String( location ) + " is loaded from " +
+				( loaded_path.is_empty() ? String( "<unsaved resource>" ) : loaded_path ) +
+				" instead of data-directory source " + expected_path );
+			continue;
+		}
+		rLocations.push_back( location );
+	}
+
+	const TypedArray<Vector2i> loaded_locations = getRegionLocations();
+	for ( const Vector2i location : loaded_locations ) {
+		const int map_index = getRegionMapIndex( location );
+		if ( map_index < 0 || !source_locations.test( ( size_t ) ( map_index ) ) ) {
+			rErrors.push_back( "Loaded region " + String( location ) +
+				" has no matching .res source in " + rDataDirectory );
+		}
+	}
+	return rErrors.is_empty();
+}
+
+Dictionary T3DData::inspectGpuRegionPages( void ) {
+	Dictionary result;
+	PackedStringArray source_files;
+	PackedStringArray errors;
+	eastl::vector<Vector2i> locations;
+	String data_dir;
+	const bool preflight_ok = collectGpuRegionPageSources( data_dir, source_files, locations, errors );
+	const int discovered = source_files.size();
+
+	result["data_directory"] = data_dir;
+	result["discovered"] = discovered;
+	result["valid"] = ( int ) ( locations.size() );
+	result["preflight_failed"] = !preflight_ok;
+	if ( !preflight_ok ) {
+		result["current"] = 0;
+		result["missing"] = 0;
+		result["stale"] = 0;
+		result["invalid"] = 0;
+		result["source_unavailable"] = errors.size();
+		result["needs_cook"] = discovered;
+		result["orphan_count"] = 0;
+		result["orphan_pages"] = PackedStringArray();
+		result["needs_cook_regions"] = PackedStringArray();
+		result["errors"] = errors;
+		result["complete"] = false;
+		return result;
+	}
+
+	PackedStringArray needs_cook_regions;
+	PackedStringArray orphan_pages;
+	int current = 0;
+	int missing = 0;
+	int stale = 0;
+	int invalid = 0;
+	int source_unavailable = 0;
+	for ( const Vector2i location : locations ) {
+		T3DRegion *const pRegion = getRegionPtr( location );
+		const String source_path = data_dir.path_join( Util::locationToFilename( location ) );
+		const String page_path = source_path.get_basename() + String( ".t3dpage" );
+		if ( m_bCpuRegionCacheEnabled && !ensureCpuRegionResidentInternal( location, true ) ) {
+			++source_unavailable;
+			needs_cook_regions.push_back( String( location ) );
+			errors.push_back( "Region " + String( location ) + ": unable to materialize source maps" );
+			continue;
+		}
+
+		const uint64_t expected_signature = computeGpuRuntimePageSourceSignature( pRegion );
+		if ( expected_signature == 0u ) {
+			++source_unavailable;
+			needs_cook_regions.push_back( String( location ) );
+			errors.push_back( "Region " + String( location ) + ": source signature generation failed" );
+			continue;
+		}
+		if ( !FileAccess::file_exists( page_path ) ) {
+			++missing;
+			needs_cook_regions.push_back( String( location ) );
+			continue;
+		}
+
+		uint64_t existing_signature = 0u;
+		if ( !readGpuRuntimePageSourceSignature( page_path, existing_signature ) ) {
+			++invalid;
+			needs_cook_regions.push_back( String( location ) );
+			continue;
+		}
+		if ( existing_signature != expected_signature ) {
+			++stale;
+			needs_cook_regions.push_back( String( location ) );
+			continue;
+		}
+
+		t3dpreparedGpuRuntimePage_t validation_page;
+		validation_page.location = location;
+		validation_page.pagePath = page_path;
+		validation_page.sourcePath = source_path;
+		validation_page.expectedChannelFlags = ( uint32_t ) ( pRegion->getChannelFlags() );
+		validation_page.nRegionSize = m_nRegionSize;
+		validation_page.colorDivisor = m_nGpuRegionColorDivisor;
+		validation_page.derivedDivisor = m_nGpuRegionDerivedDivisor;
+		validation_page.middleHeightDivisor = MAX( 1, m_pTerrain->getGpuMiddleHeightResolutionDivisor() );
+		if ( !loadGpuRuntimePageSnapshot( validation_page ) ) {
+			++invalid;
+			needs_cook_regions.push_back( String( location ) );
+			continue;
+		}
+		++current;
+	}
+
+	PackedStringArray page_files = Util::getFiles( data_dir, "terrain3d*.t3dpage" );
+	page_files.sort();
+	for ( const String &fname : page_files ) {
+		const String source_name = fname.get_basename() + String( ".res" );
+		const String source_path = data_dir.path_join( source_name );
+		if ( !FileAccess::file_exists( source_path ) ) {
+			orphan_pages.push_back( data_dir.path_join( fname ) );
+		}
+	}
+
+	releaseUntrackedCpuMaps();
+	const int needs_cook = missing + stale + invalid + source_unavailable;
+	result["current"] = current;
+	result["missing"] = missing;
+	result["stale"] = stale;
+	result["invalid"] = invalid;
+	result["source_unavailable"] = source_unavailable;
+	result["needs_cook"] = needs_cook;
+	result["orphan_count"] = orphan_pages.size();
+	result["orphan_pages"] = orphan_pages;
+	result["needs_cook_regions"] = needs_cook_regions;
+	result["errors"] = errors;
+	result["complete"] = source_unavailable == 0 && current + missing + stale + invalid == discovered;
+	return result;
+}
+
 Dictionary T3DData::cookGpuRegionPages( void ) {
 	Dictionary result;
-	int discovered = 0;
-	int valid = 0;
+	PackedStringArray source_files;
+	PackedStringArray errors;
+	eastl::vector<Vector2i> locations;
+	String data_dir;
+	const bool preflight_ok = collectGpuRegionPageSources( data_dir, source_files, locations, errors );
+	const int discovered = source_files.size();
+	const int valid = ( int ) ( locations.size() );
+	if ( !preflight_ok ) {
+		releaseUntrackedCpuMaps();
+		result["data_directory"] = data_dir;
+		result["far_atlas_cooked"] = false;
+		result["material_cache"] = Dictionary();
+		result["material_cache_cooked"] = false;
+		result["preflight_failed"] = true;
+		result["discovered"] = discovered;
+		result["valid"] = valid;
+		result["cooked"] = 0;
+		result["unchanged"] = 0;
+		result["usable"] = 0;
+		result["skipped"] = 0;
+		result["failed"] = errors.size();
+		result["orphan_removed"] = 0;
+		result["orphan_failed"] = 0;
+		result["region_count"] = m_nActiveRegionCount;
+		result["complete"] = false;
+		result["errors"] = errors;
+		return result;
+	}
+
 	int cooked = 0;
 	int unchanged = 0;
 	int failed = 0;
-	int skipped = 0;
-	PackedStringArray errors;
-
-	Array locations = m_regions.keys();
-	discovered = locations.size();
+	int orphan_removed = 0;
+	int orphan_failed = 0;
 	for ( const Vector2i location : locations ) {
 		T3DRegion *const pRegion = getRegionPtr( location );
-		if ( !pRegion || pRegion->isDeleted() ) {
-			++skipped;
-			continue;
-		}
-		++valid;
 		if ( m_bCpuRegionCacheEnabled && !ensureCpuRegionResidentInternal( location, true ) ) {
 			++failed;
 			errors.push_back( "Region " + String( location ) + ": unable to materialize source maps" );
@@ -7265,7 +7508,8 @@ Dictionary T3DData::cookGpuRegionPages( void ) {
 			errors.push_back( "Region " + String( location ) + ": source signature generation failed" );
 			continue;
 		}
-		const String page_path = getGpuRuntimePagePath( pRegion );
+		const String source_path = data_dir.path_join( Util::locationToFilename( location ) );
+		const String page_path = source_path.get_basename() + String( ".t3dpage" );
 		uint64_t existing_signature = 0u;
 		bool bCurrent = readGpuRuntimePageSourceSignature( page_path, existing_signature ) &&
 			existing_signature == expected_signature;
@@ -7273,7 +7517,7 @@ Dictionary T3DData::cookGpuRegionPages( void ) {
 			t3dpreparedGpuRuntimePage_t validation_page;
 			validation_page.location = location;
 			validation_page.pagePath = page_path;
-			validation_page.sourcePath = pRegion->get_path();
+			validation_page.sourcePath = source_path;
 			validation_page.expectedChannelFlags = ( uint32_t ) ( pRegion->getChannelFlags() );
 			validation_page.nRegionSize = m_nRegionSize;
 			validation_page.colorDivisor = m_nGpuRegionColorDivisor;
@@ -7285,11 +7529,30 @@ Dictionary T3DData::cookGpuRegionPages( void ) {
 			++unchanged;
 			continue;
 		}
-		if ( writeGpuRuntimePage( pRegion ) ) {
+		String cook_error;
+		if ( writeGpuRuntimePage( pRegion, &cook_error ) ) {
 			++cooked;
 		} else {
 			++failed;
-			errors.push_back( "Region " + String( location ) + ": cook or reload validation failed" );
+			errors.push_back( "Region " + String( location ) + ": " +
+				( cook_error.is_empty() ? String( "cook failed" ) : cook_error ) );
+		}
+	}
+
+	PackedStringArray page_files = Util::getFiles( data_dir, "terrain3d*.t3dpage" );
+	for ( const String &fname : page_files ) {
+		const String source_name = fname.get_basename() + String( ".res" );
+		const String source_path = data_dir.path_join( source_name );
+		if ( FileAccess::file_exists( source_path ) ) {
+			continue;
+		}
+		const String orphan_path = data_dir.path_join( fname );
+		const Error remove_error = DirAccess::remove_absolute( orphan_path );
+		if ( remove_error == OK ) {
+			++orphan_removed;
+		} else {
+			++orphan_failed;
+			errors.push_back( "Unable to remove orphan runtime page: " + orphan_path );
 		}
 	}
 
@@ -7312,18 +7575,23 @@ Dictionary T3DData::cookGpuRegionPages( void ) {
 	}
 	releaseUntrackedCpuMaps();
 	const int usable = cooked + unchanged;
+	result["data_directory"] = data_dir;
 	result["far_atlas_cooked"] = bFarAtlasCooked;
 	result["material_cache"] = material_cache_result;
 	result["material_cache_cooked"] = bMaterialCacheCooked;
+	result["preflight_failed"] = false;
 	result["discovered"] = discovered;
 	result["valid"] = valid;
 	result["cooked"] = cooked;
 	result["unchanged"] = unchanged;
 	result["usable"] = usable;
-	result["skipped"] = skipped;
+	result["skipped"] = 0;
 	result["failed"] = failed;
+	result["orphan_removed"] = orphan_removed;
+	result["orphan_failed"] = orphan_failed;
 	result["region_count"] = m_nActiveRegionCount;
-	result["complete"] = failed == 0 && usable == valid && bFarAtlasCooked && bMaterialCacheCooked;
+	result["complete"] = failed == 0 && usable == valid && valid == discovered &&
+		orphan_failed == 0 && bFarAtlasCooked && bMaterialCacheCooked;
 	result["errors"] = errors;
 	return result;
 }
@@ -9243,6 +9511,7 @@ void T3DData::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "save_directory", "directory" ), &T3DData::saveDirectory );
 	ClassDB::bind_method( D_METHOD( "save_region", "region_location", "directory", "save_16_bit" ),
 						 &T3DData::saveRegion, DEFVAL( false ) );
+	ClassDB::bind_method( D_METHOD( "inspect_gpu_region_pages" ), &T3DData::inspectGpuRegionPages );
 	ClassDB::bind_method( D_METHOD( "cook_gpu_region_pages" ), &T3DData::cookGpuRegionPages );
 	ClassDB::bind_method( D_METHOD( "load_directory", "directory" ), &T3DData::loadDirectory );
 	ClassDB::bind_method( D_METHOD( "load_region", "region_location", "directory", "update" ), &T3DData::loadRegion,

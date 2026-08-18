@@ -433,6 +433,10 @@ private:
 	uint64_t computeGpuRuntimePageSourceSignature( const T3DRegion *pRegion ) const;
 	bool readGpuRuntimePageSourceSignature( const String &rPagePath, uint64_t &nSignature ) const;
 	String getGpuRuntimePagePath( const T3DRegion *pRegion ) const;
+	bool collectGpuRegionPageSources(
+		String &rDataDirectory, PackedStringArray &rSourceFiles,
+		eastl::vector<Vector2i> &rLocations, PackedStringArray &rErrors
+	) const;
 	bool loadGpuRuntimePage(
 		T3DRegion *pRegion, Ref<Image> &rHeight,
 		Ref<Image> &rControl, Ref<Image> &rColor, Ref<Image> &rDerived
@@ -452,7 +456,7 @@ private:
 		Ref<Image> &rControl, Ref<Image> &rColor, Ref<Image> &rDerived,
 		uint32_t &rMaterialMask, bool &bAttempted
 	);
-	bool writeGpuRuntimePage( T3DRegion *pRegion );
+	bool writeGpuRuntimePage( T3DRegion *pRegion, String *pError = nullptr );
 	bool hasMaterializedMap( t3dmapType_t mapType ) const;
 	bool refreshImplicitMapState( void );
 	int getRegionSlotReserve( void ) const;
@@ -776,6 +780,7 @@ public:
 	void invalidateGpuFarSurface( void );
 	void invalidateGpuFarAtlasLayout( void );
 	bool ensureFarAtlases( void );
+	Dictionary inspectGpuRegionPages( void );
 	Dictionary cookGpuRegionPages( void );
 	Dictionary getCpuRegionCacheStats( void ) const;
 	Dictionary getCpuRegionCacheStatsFast( void ) const;
