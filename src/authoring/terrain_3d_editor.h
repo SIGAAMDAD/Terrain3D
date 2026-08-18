@@ -13,8 +13,8 @@
 #include <EASTL/vector.h>
 
 #include "terrain_3d.h"
-#include "terrain_3d_compute.h"
-#include "terrain_3d_region.h"
+#include "rendering/terrain_3d_compute.h"
+#include "data/terrain_3d_region.h"
 
 class T3DSampler;
 

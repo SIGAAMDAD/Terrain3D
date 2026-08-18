@@ -1,8 +1,8 @@
 #include <godot_cpp/classes/os.hpp>
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#include "terrain_3d_erosion_job.h"
-#include "terrain_3d_cpp17_compat.h"
+#include "authoring/terrain_3d_erosion_job.h"
+#include "core/terrain_3d_cpp17_compat.h"
 
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
@@ -13,20 +13,20 @@
 #include <limits>
 #include <numeric>
 
-#include "logger.h"
+#include "core/logger.h"
 #include "terrain_3d.h"
-#include "terrain_3d_assets.h"
-#include "terrain_3d_collision.h"
-#include "terrain_3d_data.h"
-#include "terrain_3d_material.h"
-#include "terrain_3d_instancer.h"
-#include "terrain_3d_parallel.h"
-#include "terrain_3d_simd.h"
-#include "terrain_3d_region.h"
-#include "terrain_3d_region_codec.h"
-#include "terrain_3d_resident_pool.h"
-#include "terrain_3d_texture_asset.h"
-#include "terrain_3d_util.h"
+#include "assets/terrain_3d_assets.h"
+#include "physics/terrain_3d_collision.h"
+#include "data/terrain_3d_data.h"
+#include "rendering/terrain_3d_material.h"
+#include "instances/terrain_3d_instancer.h"
+#include "simd/terrain_3d_parallel.h"
+#include "simd/terrain_3d_simd.h"
+#include "data/terrain_3d_region.h"
+#include "data/terrain_3d_region_codec.h"
+#include "memory/terrain_3d_resident_pool.h"
+#include "assets/terrain_3d_texture_asset.h"
+#include "core/terrain_3d_util.h"
 
 namespace {
 typedef struct alignas( 64 ) t3ddecodedHalfBlock_s {

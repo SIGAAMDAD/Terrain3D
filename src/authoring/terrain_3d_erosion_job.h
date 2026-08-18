@@ -18,9 +18,9 @@
 #include <EASTL/vector.h>
 
 #include "Terrain3DConstants.h"
-#include "terrain_3d_erosion_settings.h"
-#include "terrain_3d_half_buffer.h"
-#include "terrain_3d_linear_arena.h"
+#include "authoring/terrain_3d_erosion_settings.h"
+#include "data/terrain_3d_half_buffer.h"
+#include "memory/terrain_3d_linear_arena.h"
 
 class T3DData;
 typedef struct t3derosionKernels_s t3derosionKernels_t;

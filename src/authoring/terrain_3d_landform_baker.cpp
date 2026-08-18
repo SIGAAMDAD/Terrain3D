@@ -1,6 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#include "terrain_3d_landform_baker.h"
+#include "authoring/terrain_3d_landform_baker.h"
 
 #include <algorithm>
 #include <atomic>
@@ -20,19 +20,19 @@
 #include <godot_cpp/core/class_db.hpp>
 
 #include "Terrain3DConstants.h"
-#include "logger.h"
+#include "core/logger.h"
 #include "terrain_3d.h"
-#include "terrain_3d_assets.h"
-#include "terrain_3d_collision.h"
-#include "terrain_3d_mesh_asset.h"
-#include "terrain_3d_parallel.h"
-#include "terrain_3d_data.h"
-#include "terrain_3d_editor.h"
-#include "terrain_3d_region.h"
-#include "terrain_3d_region_codec.h"
-#include "terrain_3d_sampler.h"
-#include "terrain_3d_texture_asset.h"
-#include "terrain_3d_util.h"
+#include "assets/terrain_3d_assets.h"
+#include "physics/terrain_3d_collision.h"
+#include "assets/terrain_3d_mesh_asset.h"
+#include "simd/terrain_3d_parallel.h"
+#include "data/terrain_3d_data.h"
+#include "authoring/terrain_3d_editor.h"
+#include "data/terrain_3d_region.h"
+#include "data/terrain_3d_region_codec.h"
+#include "data/terrain_3d_sampler.h"
+#include "assets/terrain_3d_texture_asset.h"
+#include "core/terrain_3d_util.h"
 
 namespace {
 typedef struct t3dsettings_s {

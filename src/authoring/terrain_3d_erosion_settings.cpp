@@ -1,6 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#include "terrain_3d_erosion_settings.h"
+#include "authoring/terrain_3d_erosion_settings.h"
 
 #include <godot_cpp/core/class_db.hpp>
 

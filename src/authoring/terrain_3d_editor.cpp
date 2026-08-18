@@ -9,14 +9,14 @@
 #include <EASTL/array.h>
 
 #include "Terrain3DConstants.h"
-#include "logger.h"
+#include "core/logger.h"
 #include "terrain_3d.h"
-#include "terrain_3d_data.h"
-#include "terrain_3d_compute.h"
-#include "terrain_3d_editor.h"
-#include "terrain_3d_region_codec.h"
-#include "terrain_3d_sampler.h"
-#include "terrain_3d_util.h"
+#include "data/terrain_3d_data.h"
+#include "rendering/terrain_3d_compute.h"
+#include "authoring/terrain_3d_editor.h"
+#include "data/terrain_3d_region_codec.h"
+#include "data/terrain_3d_sampler.h"
+#include "core/terrain_3d_util.h"
 
 namespace {
 

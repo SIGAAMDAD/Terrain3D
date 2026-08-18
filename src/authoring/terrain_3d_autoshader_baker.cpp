@@ -1,8 +1,8 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#include "terrain_3d_autoshader_baker.h"
+#include "authoring/terrain_3d_autoshader_baker.h"
 
-#include "terrain_3d_autoshader_math.h"
+#include "authoring/terrain_3d_autoshader_math.h"
 
 #include <algorithm>
 #include <cmath>
@@ -22,14 +22,14 @@
 #include <godot_cpp/variant/utility_functions.hpp>
 
 #include "terrain_3d.h"
-#include "terrain_3d_assets.h"
-#include "terrain_3d_data.h"
-#include "terrain_3d_linear_arena.h"
-#include "terrain_3d_parallel.h"
-#include "terrain_3d_region.h"
-#include "terrain_3d_region_codec.h"
-#include "terrain_3d_sampler.h"
-#include "terrain_3d_util.h"
+#include "assets/terrain_3d_assets.h"
+#include "data/terrain_3d_data.h"
+#include "memory/terrain_3d_linear_arena.h"
+#include "simd/terrain_3d_parallel.h"
+#include "data/terrain_3d_region.h"
+#include "data/terrain_3d_region_codec.h"
+#include "data/terrain_3d_sampler.h"
+#include "core/terrain_3d_util.h"
 
 namespace {
 static bool terrain3dTextureSlotIsPopulated( const Ref<T3DAssets> &rAssets, const uint8_t nTextureId ) {
