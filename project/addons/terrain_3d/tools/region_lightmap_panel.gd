@@ -1,5 +1,6 @@
 # Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
-# Persistent editor UI for baking one Terrain3D region at a time from the active scene.
+# Batch editor UI for baking independent lightmap packages for every Terrain3D
+# region authored in the configured data directory.
 @tool
 class_name Terrain3DRegionLightmapPanel
 extends Window
@@ -8,38 +9,51 @@ var plugin: Terrain3DEditorPluginBase
 var baker: Terrain3DRegionLightmapBaker
 var terrain: Terrain3D
 
-var _region_selector: OptionButton
-var _region_status: Label
+var _dataset_summary: Label
+var _settings_summary: Label
 var _workflow_status: Label
-var _prepare_button: Button
+var _progress: ProgressBar
+var _bake_all_button: Button
+var _stop_button: Button
 var _select_lightmap_button: Button
-var _finalize_button: Button
-var _available_locations: Array[Vector2i] = []
+var _finalize_continue_button: Button
 var _poll_timer: Timer
+
+var _batch_locations: Array[Vector2i] = []
+var _next_index: int = 0
+var _completed_count: int = 0
+var _failed_count: int = 0
+var _is_running: bool = false
+var _cancel_requested: bool = false
+var _waiting_for_manual_bake: bool = false
 
 
 func _ready() -> void:
-	title = "Terrain3D Regional Lightmap Baking"
+	title = "Bake Terrain3D Region Lightmaps"
 	initial_position = Window.WINDOW_INITIAL_POSITION_CENTER_MAIN_WINDOW_SCREEN
-	min_size = Vector2i(620, 390)
-	size = Vector2i(680, 440)
+	min_size = Vector2i(650, 360)
+	size = Vector2i(720, 420)
 	unresizable = false
 	transient = true
 	exclusive = false
-	close_requested.connect(hide)
+	close_requested.connect(_on_close_requested)
 	_build_ui()
 
 	_poll_timer = Timer.new()
-	_poll_timer.wait_time = 0.5
+	_poll_timer.wait_time = 0.35
 	_poll_timer.one_shot = false
-	_poll_timer.timeout.connect(_refresh_workflow_state)
+	_poll_timer.timeout.connect(_refresh_recovery_state)
 	add_child(_poll_timer)
+	# Window nodes default visible. This tool must only appear after the explicit
+	# Terrain3D menu command is invoked.
+	hide()
 
 
 func open(p_terrain: Terrain3D) -> void:
 	terrain = p_terrain
-	_refresh_regions()
-	_refresh_workflow_state()
+	_refresh_dataset_summary()
+	_refresh_settings_summary()
+	_refresh_recovery_state()
 	popup()
 	_poll_timer.start()
 
@@ -54,10 +68,10 @@ func _notification(p_what: int) -> void:
 
 func _build_ui() -> void:
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 14)
-	margin.add_theme_constant_override("margin_right", 14)
-	margin.add_theme_constant_override("margin_top", 12)
-	margin.add_theme_constant_override("margin_bottom", 12)
+	margin.add_theme_constant_override("margin_left", 16)
+	margin.add_theme_constant_override("margin_right", 16)
+	margin.add_theme_constant_override("margin_top", 14)
+	margin.add_theme_constant_override("margin_bottom", 14)
 	add_child(margin)
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
@@ -66,234 +80,273 @@ func _build_ui() -> void:
 	margin.add_child(content)
 
 	var heading := Label.new()
-	heading.text = "Regional Lightmap Baking"
+	heading.text = "Bake Region Lightmaps"
 	heading.add_theme_font_size_override("font_size", 18)
 	content.add_child(heading)
 
 	var explanation := Label.new()
-	explanation.text = "Bake one authored Terrain3D region at a time from this scene. Neighboring regions are used only as temporary lighting context; finalizing changes only the selected region's lighting package."
+	explanation.text = "Bakes every authored Terrain3D region in the active data directory. Each region keeps its own streamable lighting package; neighboring regions are temporary lighting context only."
 	explanation.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(explanation)
 
-	var region_row := HBoxContainer.new()
-	region_row.add_theme_constant_override("separation", 8)
-	content.add_child(region_row)
+	_dataset_summary = Label.new()
+	_dataset_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_dataset_summary.custom_minimum_size = Vector2(0, 42)
+	content.add_child(_dataset_summary)
 
-	var region_label := Label.new()
-	region_label.text = "Region"
-	region_row.add_child(region_label)
+	_settings_summary = Label.new()
+	_settings_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	content.add_child(_settings_summary)
 
-	_region_selector = OptionButton.new()
-	_region_selector.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_region_selector.item_selected.connect(_on_region_selected)
-	region_row.add_child(_region_selector)
+	var settings_row := HBoxContainer.new()
+	settings_row.add_theme_constant_override("separation", 8)
+	content.add_child(settings_row)
 
-	var cursor_button := Button.new()
-	cursor_button.text = "Use Cursor Region"
-	cursor_button.tooltip_text = "Select the authored region currently under the Terrain3D editor cursor."
-	cursor_button.pressed.connect(_select_cursor_region)
-	region_row.add_child(cursor_button)
+	var settings_button := Button.new()
+	settings_button.text = "Edit Bake Settings in Inspector"
+	settings_button.tooltip_text = "Select the Terrain3D node. Regional Lightmap Baking settings live under General / Data & Authoring in its Inspector."
+	settings_button.pressed.connect(_select_terrain_for_settings)
+	settings_row.add_child(settings_button)
 
 	var refresh_button := Button.new()
-	refresh_button.text = "Refresh"
-	refresh_button.pressed.connect(_refresh_regions)
-	region_row.add_child(refresh_button)
+	refresh_button.text = "Refresh Region List"
+	refresh_button.tooltip_text = "Re-enumerate terrain3d*.res files from the configured data directory."
+	refresh_button.pressed.connect(_refresh_all)
+	settings_row.add_child(refresh_button)
 
-	_region_status = Label.new()
-	_region_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_region_status.custom_minimum_size = Vector2(0, 44)
-	content.add_child(_region_status)
+	content.add_child(HSeparator.new())
 
-	var separator := HSeparator.new()
-	content.add_child(separator)
+	var action_row := HBoxContainer.new()
+	action_row.add_theme_constant_override("separation", 8)
+	content.add_child(action_row)
 
-	var workflow_heading := Label.new()
-	workflow_heading.text = "Bake workflow"
-	workflow_heading.add_theme_font_size_override("font_size", 15)
-	content.add_child(workflow_heading)
+	_bake_all_button = Button.new()
+	_bake_all_button.text = "Bake All Region Lightmaps"
+	_bake_all_button.tooltip_text = "Sequentially bake and publish an independent lightmap package for every authored region in the Terrain3D data directory."
+	_bake_all_button.pressed.connect(_start_batch)
+	action_row.add_child(_bake_all_button)
 
-	var workflow_help := Label.new()
-	workflow_help.text = "1. Prepare the selected region.  2. With the generated LightmapGI selected, run Godot's Bake Lightmaps command.  3. Finalize here to publish the bake to that Terrain3D region."
-	workflow_help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	content.add_child(workflow_help)
+	_stop_button = Button.new()
+	_stop_button.text = "Stop After Current Region"
+	_stop_button.tooltip_text = "Finish the region currently being baked, then stop before preparing another one."
+	_stop_button.disabled = true
+	_stop_button.pressed.connect(_request_stop)
+	action_row.add_child(_stop_button)
 
-	var button_row := HBoxContainer.new()
-	button_row.add_theme_constant_override("separation", 8)
-	content.add_child(button_row)
-
-	_prepare_button = Button.new()
-	_prepare_button.text = "Prepare Selected Region"
-	_prepare_button.tooltip_text = "Build the temporary per-region LightmapGI hierarchy in this scene."
-	_prepare_button.pressed.connect(_prepare_selected_region)
-	button_row.add_child(_prepare_button)
-
-	_select_lightmap_button = Button.new()
-	_select_lightmap_button.text = "Select Prepared LightmapGI"
-	_select_lightmap_button.tooltip_text = "Select the generated LightmapGI so Godot's Bake Lightmaps command targets this regional bake."
-	_select_lightmap_button.pressed.connect(_select_prepared_lightmap)
-	button_row.add_child(_select_lightmap_button)
-
-	_finalize_button = Button.new()
-	_finalize_button.text = "Finalize Baked Region"
-	_finalize_button.tooltip_text = "Publish the completed LightmapGIData and attach it only to the prepared Terrain3D region."
-	_finalize_button.pressed.connect(_finalize_prepared_region)
-	button_row.add_child(_finalize_button)
+	_progress = ProgressBar.new()
+	_progress.min_value = 0.0
+	_progress.max_value = 1.0
+	_progress.value = 0.0
+	_progress.show_percentage = false
+	content.add_child(_progress)
 
 	_workflow_status = Label.new()
 	_workflow_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_workflow_status.custom_minimum_size = Vector2(0, 72)
+	_workflow_status.custom_minimum_size = Vector2(0, 68)
 	content.add_child(_workflow_status)
 
+	var recovery_row := HBoxContainer.new()
+	recovery_row.add_theme_constant_override("separation", 8)
+	content.add_child(recovery_row)
 
-func _refresh_regions() -> void:
-	var previous: Variant = _selected_location()
-	_available_locations.clear()
-	_region_selector.clear()
-	if not _is_terrain_ready():
-		_region_status.text = "Select a Terrain3D node with loaded authored data."
-		_prepare_button.disabled = true
+	_select_lightmap_button = Button.new()
+	_select_lightmap_button.text = "Select Prepared LightmapGI"
+	_select_lightmap_button.tooltip_text = "Recovery control: select the current prepared region if Godot's automatic editor bake action is unavailable or a bake needs inspection."
+	_select_lightmap_button.disabled = true
+	_select_lightmap_button.pressed.connect(_select_prepared_lightmap)
+	recovery_row.add_child(_select_lightmap_button)
+
+	_finalize_continue_button = Button.new()
+	_finalize_continue_button.text = "Finalize & Continue"
+	_finalize_continue_button.tooltip_text = "Recovery control: publish a manually completed LightmapGI bake, then resume the remaining regions."
+	_finalize_continue_button.disabled = true
+	_finalize_continue_button.pressed.connect(_finalize_and_continue)
+	recovery_row.add_child(_finalize_continue_button)
+
+
+func _refresh_all() -> void:
+	_sync_active_terrain()
+	_refresh_dataset_summary()
+	_refresh_settings_summary()
+	_refresh_recovery_state()
+
+
+func _refresh_dataset_summary() -> void:
+	if not _is_terrain_ready() or not is_instance_valid(baker):
+		_dataset_summary.text = "Select a Terrain3D node with a valid data directory and loaded authored data."
+		_bake_all_button.disabled = true
 		return
-	_available_locations.assign(terrain.data.get_region_locations())
-	_available_locations.sort_custom(_region_location_less)
-	for location: Vector2i in _available_locations:
+	var locations: Array[Vector2i] = baker.get_data_directory_regions(terrain)
+	var baked_count: int = 0
+	for location: Vector2i in locations:
 		var region: Terrain3DRegion = terrain.data.get_region(location)
-		var suffix: String = ""
 		if is_instance_valid(region) and is_instance_valid(region.get_lighting()):
-			suffix = "  • baked"
-		_region_selector.add_item("%d, %d%s" % [location.x, location.y, suffix])
+			baked_count += 1
+	_dataset_summary.text = "%d authored regions found in %s. %d currently have regional lighting packages." % [
+		locations.size(), terrain.data_directory, baked_count]
+	_bake_all_button.text = "Bake All %d Region Lightmaps" % locations.size() if not locations.is_empty() else "Bake All Region Lightmaps"
+	_bake_all_button.disabled = locations.is_empty() or _is_running or _waiting_for_manual_bake
 
-	if _available_locations.is_empty():
-		_region_status.text = "This Terrain3D data set has no authored regions."
-		_prepare_button.disabled = true
+
+func _refresh_settings_summary() -> void:
+	if not _is_terrain_ready():
+		_settings_summary.text = ""
 		return
-
-	var select_index: int = 0
-	if previous is Vector2i:
-		var previous_index: int = _available_locations.find(previous)
-		if previous_index >= 0:
-			select_index = previous_index
-	else:
-		var cursor_location: Variant = _cursor_region_location()
-		if cursor_location is Vector2i:
-			var cursor_index: int = _available_locations.find(cursor_location)
-			if cursor_index >= 0:
-				select_index = cursor_index
-	_region_selector.select(select_index)
-	_prepare_button.disabled = false
-	_refresh_region_status()
+	var quality_names: PackedStringArray = PackedStringArray(["Low", "Medium", "High", "Ultra"])
+	var shadowmask_names: PackedStringArray = PackedStringArray(["None", "Replace", "Overlay"])
+	var quality: int = clampi(int(terrain.get("region_lightmap_bake_quality")), 0, quality_names.size() - 1)
+	var shadowmask: int = clampi(int(terrain.get("region_lightmap_shadowmask_mode")), 0, shadowmask_names.size() - 1)
+	_settings_summary.text = "Settings: proxy LOD %d · context radius %d · %.2f m/texel · %s quality · %s shadowmask" % [
+		int(terrain.get("region_lightmap_proxy_lod")),
+		int(terrain.get("region_lightmap_context_radius")),
+		float(terrain.get("region_lightmap_texel_size")),
+		quality_names[quality], shadowmask_names[shadowmask]]
 
 
-func _on_region_selected(_p_index: int) -> void:
-	_refresh_region_status()
-
-
-func _refresh_region_status() -> void:
-	var location: Variant = _selected_location()
-	if not (location is Vector2i) or not _is_terrain_ready():
-		_region_status.text = "Choose an authored terrain region."
-		return
-	var region: Terrain3DRegion = terrain.data.get_region(location)
-	if is_instance_valid(region) and is_instance_valid(region.get_lighting()):
-		var lighting: Resource = region.get_lighting()
-		var data_path: String = String(lighting.get("light_data_path"))
-		_region_status.text = "Region %s has baked lighting. Re-preparing and finalizing replaces this region's package.\n%s" % [location, data_path]
-	else:
-		_region_status.text = "Region %s has no baked lighting yet." % location
-
-
-func _refresh_workflow_state() -> void:
+func _start_batch() -> void:
 	_sync_active_terrain()
-	if not is_instance_valid(baker):
-		_select_lightmap_button.disabled = true
-		_finalize_button.disabled = true
-		_workflow_status.text = "Regional lightmap baker is unavailable."
+	if _is_running or _waiting_for_manual_bake or not _is_terrain_ready() or not is_instance_valid(baker):
 		return
-	var prepared: Variant = baker.get_prepared_region()
-	if not (prepared is Vector2i):
-		_select_lightmap_button.disabled = true
-		_finalize_button.disabled = true
-		_workflow_status.text = "No regional bake is prepared in the active scene."
+	_batch_locations = baker.get_data_directory_regions(terrain)
+	if _batch_locations.is_empty():
+		_workflow_status.text = "No authored terrain3d*.res regions were found in the configured data directory."
 		return
+	_next_index = 0
+	_completed_count = 0
+	_failed_count = 0
+	_cancel_requested = false
+	_waiting_for_manual_bake = false
+	_progress.max_value = float(_batch_locations.size())
+	_progress.value = 0.0
+	_run_batch()
+
+
+func _run_batch() -> void:
+	_is_running = true
+	_bake_all_button.disabled = true
+	_stop_button.disabled = false
+	_select_lightmap_button.disabled = true
+	_finalize_continue_button.disabled = true
+
+	while _next_index < _batch_locations.size():
+		if _cancel_requested:
+			_finish_batch("Stopped after %d of %d regions." % [_completed_count, _batch_locations.size()])
+			return
+		var location: Vector2i = _batch_locations[_next_index]
+		_workflow_status.text = "Region %d/%d — preparing %s…" % [
+			_next_index + 1, _batch_locations.size(), location]
+		await get_tree().process_frame
+		if not baker.prepare_region_bake(location):
+			_failed_count += 1
+			_next_index += 1
+			_progress.value = float(_next_index)
+			continue
+
+		_workflow_status.text = "Region %d/%d — baking %s with Godot LightmapGI…" % [
+			_next_index + 1, _batch_locations.size(), location]
+		var bake_result: Dictionary = await baker.bake_prepared_with_editor()
+		if not bool(bake_result.get("ok", false)):
+			_pause_for_manual_bake(location, String(bake_result.get("error", "Lightmap bake failed.")))
+			return
+
+		_workflow_status.text = "Region %d/%d — publishing %s…" % [
+			_next_index + 1, _batch_locations.size(), location]
+		if not baker.finalize_prepared_bake():
+			_pause_for_manual_bake(location, "The bake completed, but Terrain3D could not publish the regional package. The prepared LightmapGI was left in the scene for inspection.")
+			return
+		_completed_count += 1
+		_next_index += 1
+		_progress.value = float(_next_index)
+		await get_tree().process_frame
+
+	_finish_batch("Finished %d region lightmaps%s." % [
+		_completed_count,
+		" with %d preparation failures" % _failed_count if _failed_count > 0 else ""])
+
+
+func _pause_for_manual_bake(location: Vector2i, reason: String) -> void:
+	_is_running = false
+	_waiting_for_manual_bake = true
+	_stop_button.disabled = true
 	_select_lightmap_button.disabled = false
-	var baked: bool = baker.is_prepared_bake_complete()
-	_finalize_button.disabled = not baked
-	if baked:
-		_workflow_status.text = "Region %s is baked and ready to finalize. Finalize publishes only this region's lighting package and removes the temporary bake subtree." % prepared
-	else:
-		_workflow_status.text = "Region %s is prepared. Run Godot's Bake Lightmaps command for the selected Terrain3DRegionalLightmapGI, then return here to finalize." % prepared
+	_finalize_continue_button.disabled = not baker.is_prepared_bake_complete()
+	_workflow_status.text = "%s\nRegion %s remains prepared. If needed, use Godot's Bake Lightmaps command, then press Finalize & Continue." % [reason, location]
 
 
-func _prepare_selected_region() -> void:
-	_sync_active_terrain()
-	var location: Variant = _selected_location()
-	if not (location is Vector2i) or not is_instance_valid(baker):
+func _finalize_and_continue() -> void:
+	if not _waiting_for_manual_bake or not is_instance_valid(baker):
 		return
-	if baker.prepare_region_bake(location):
-		baker.select_prepared_lightmap()
-	_refresh_workflow_state()
+	if not baker.is_prepared_bake_complete():
+		_workflow_status.text = "The prepared LightmapGI still has no baked textures. Run Godot's Bake Lightmaps command first."
+		return
+	if not baker.finalize_prepared_bake():
+		_workflow_status.text = "Terrain3D could not publish the prepared regional lightmap package. The prepared bake remains available for inspection."
+		return
+	_completed_count += 1
+	_next_index += 1
+	_progress.value = float(_next_index)
+	_waiting_for_manual_bake = false
+	_cancel_requested = false
+	_refresh_dataset_summary()
+	_run_batch()
+
+
+func _finish_batch(message: String) -> void:
+	_is_running = false
+	_waiting_for_manual_bake = false
+	_stop_button.disabled = true
+	_select_lightmap_button.disabled = true
+	_finalize_continue_button.disabled = true
+	_workflow_status.text = message
+	_refresh_dataset_summary()
+
+
+func _request_stop() -> void:
+	_cancel_requested = true
+	_stop_button.disabled = true
+	_workflow_status.text = "Stop requested. The current region will finish before the batch stops."
 
 
 func _select_prepared_lightmap() -> void:
 	if is_instance_valid(baker):
 		baker.select_prepared_lightmap()
-	_refresh_workflow_state()
+	_refresh_recovery_state()
 
 
-func _finalize_prepared_region() -> void:
+func _refresh_recovery_state() -> void:
+	_sync_active_terrain()
 	if not is_instance_valid(baker):
 		return
-	if baker.finalize_prepared_bake():
-		_refresh_regions()
-	_refresh_workflow_state()
+	var prepared: Variant = baker.get_prepared_region()
+	var has_prepared: bool = prepared is Vector2i
+	_select_lightmap_button.disabled = not has_prepared or _is_running
+	if _waiting_for_manual_bake:
+		_finalize_continue_button.disabled = not baker.is_prepared_bake_complete()
+	elif not _is_running:
+		_finalize_continue_button.disabled = true
 
 
-func _select_cursor_region() -> void:
-	var location: Variant = _cursor_region_location()
-	if not (location is Vector2i):
+func _select_terrain_for_settings() -> void:
+	_sync_active_terrain()
+	if not _is_terrain_ready():
 		return
-	var index: int = _available_locations.find(location)
-	if index < 0:
-		_region_status.text = "The editor cursor is not over an authored Terrain3D region."
-		return
-	_region_selector.select(index)
-	_refresh_region_status()
+	EditorInterface.get_selection().clear()
+	EditorInterface.get_selection().add_node(terrain)
+	_refresh_settings_summary()
 
 
-func _selected_location() -> Variant:
-	if not is_instance_valid(_region_selector):
-		return null
-	var index: int = _region_selector.selected
-	if index < 0 or index >= _available_locations.size():
-		return null
-	return _available_locations[index]
-
-
-func _cursor_region_location() -> Variant:
-	if not _is_terrain_ready() or not is_instance_valid(plugin):
-		return null
-	var mouse_position: Variant = plugin.get("mouse_global_position")
-	if not (mouse_position is Vector3):
-		return null
-	var location: Vector2i = terrain.data.get_region_location(mouse_position)
-	return location if is_instance_valid(terrain.data.get_region(location)) else null
+func _on_close_requested() -> void:
+	if _is_running:
+		_cancel_requested = true
+	hide()
 
 
 func _sync_active_terrain() -> void:
-	if not is_instance_valid(plugin):
-		return
-	var active: Terrain3D = plugin.get_terrain()
-	# Selecting the generated LightmapGI can hide the Terrain3D editor plugin without
-	# invalidating the source terrain. Keep the current source in that case so the
-	# persistent bake window remains usable through the Godot bake step.
-	if not is_instance_valid(active) or active == terrain:
-		return
-	terrain = active
-	_refresh_regions()
+	if is_instance_valid(plugin):
+		var active_terrain: Variant = plugin.get("terrain")
+		if active_terrain is Terrain3D and active_terrain != terrain:
+			terrain = active_terrain
 
 
 func _is_terrain_ready() -> bool:
 	return is_instance_valid(terrain) and terrain.data != null and not terrain.data_directory.is_empty()
-
-
-func _region_location_less(a: Vector2i, b: Vector2i) -> bool:
-	return a.y < b.y or (a.y == b.y and a.x < b.x)

@@ -31,13 +31,63 @@ const META_BAKE_SIGNATURE: StringName = &"terrain3d_lightmap_bake_signature"
 var plugin: EditorPlugin
 
 
+func get_data_directory_regions(terrain: Terrain3D = null) -> Array[Vector2i]:
+	var source_terrain: Terrain3D = terrain if is_instance_valid(terrain) else _get_active_terrain()
+	var locations: Array[Vector2i] = []
+	if not _validate_source_terrain(source_terrain, false):
+		return locations
+	var directory := DirAccess.open(source_terrain.data_directory)
+	if directory == null:
+		return locations
+	var files: PackedStringArray = directory.get_files()
+	files.sort()
+	for file_name: String in files:
+		if not file_name.begins_with("terrain3d") or not file_name.ends_with(".res"):
+			continue
+		var location: Vector2i = Terrain3DUtil.filename_to_location(file_name)
+		if location == Vector2i(2147483647, 2147483647):
+			continue
+		locations.append(location)
+	locations.sort_custom(_region_location_less)
+	return locations
+
+
+func bake_prepared_with_editor() -> Dictionary:
+	var lightmap: LightmapGI = get_prepared_lightmap()
+	if not is_instance_valid(lightmap):
+		return {"ok": false, "automatic": false, "error": "No prepared LightmapGI exists."}
+	if not select_prepared_lightmap():
+		return {"ok": false, "automatic": false, "error": "Unable to select the prepared LightmapGI."}
+	# Selection drives Godot's built-in LightmapGI editor plugin. Give the editor one
+	# frame to process the selection before invoking the same bound action as its
+	# Bake Lightmaps toolbar button.
+	await get_tree().process_frame
+	var tree: SceneTree = EditorInterface.get_base_control().get_tree()
+	var editor_baker: Node = _find_editor_lightmap_plugin(tree.root)
+	if not is_instance_valid(editor_baker):
+		return {
+			"ok": false,
+			"automatic": false,
+			"error": "Godot's LightmapGI editor baker could not be located. The prepared region is still selected for manual baking.",
+		}
+	editor_baker.call("_bake")
+	await get_tree().process_frame
+	if not is_prepared_bake_complete():
+		return {
+			"ok": false,
+			"automatic": true,
+			"error": "Godot finished the bake command without producing lightmap textures. Review the editor bake error before continuing.",
+		}
+	return {"ok": true, "automatic": true, "error": ""}
+
+
 func prepare_region_bake(location: Vector2i) -> bool:
 	var root: Node = EditorInterface.get_edited_scene_root()
 	var terrain: Terrain3D = _get_active_terrain()
 	if not is_instance_valid(root) or not _validate_source_terrain(terrain):
 		return false
-	if not is_instance_valid(terrain.data.get_region(location)):
-		push_error("Terrain3D region %s does not exist in the active data set" % location)
+	if not _ensure_region_loaded(terrain, location):
+		push_error("Terrain3D region %s exists in the data directory but could not be loaded for baking" % location)
 		return false
 	if root.scene_file_path.is_empty():
 		push_error("Save the Terrain3D scene before preparing a regional lightmap bake")
@@ -48,6 +98,12 @@ func prepare_region_bake(location: Vector2i) -> bool:
 		return false
 
 	_remove_existing_bake_world(root)
+	var settings: Dictionary = _get_bake_settings(terrain)
+	var proxy_lod: int = int(settings["proxy_lod"])
+	var context_radius: int = int(settings["context_radius"])
+	var texel_size: float = float(settings["texel_size"])
+	var bake_quality: int = int(settings["bake_quality"])
+	var shadowmask_mode: int = int(settings["shadowmask_mode"])
 	var output_paths: Dictionary = _region_output_paths(terrain, location)
 	var output_dir: String = String(output_paths["output_dir"])
 	var mkdir_error: Error = DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(output_dir))
@@ -60,9 +116,9 @@ func prepare_region_bake(location: Vector2i) -> bool:
 	var bake_world := Node3D.new()
 	bake_world.name = BAKE_WORLD_NAME
 	bake_world.set_meta(META_REGION_LOCATION, location)
-	bake_world.set_meta(META_PROXY_LOD, DEFAULT_PROXY_LOD)
-	bake_world.set_meta(META_CONTEXT_RADIUS, DEFAULT_CONTEXT_RADIUS)
-	bake_world.set_meta(META_SHADOWMASK_MODE, SHADOWMASK_OVERLAY)
+	bake_world.set_meta(META_PROXY_LOD, proxy_lod)
+	bake_world.set_meta(META_CONTEXT_RADIUS, context_radius)
+	bake_world.set_meta(META_SHADOWMASK_MODE, shadowmask_mode)
 	bake_world.set_meta(META_FINAL_DATA_PATH, light_data_path)
 	bake_world.set_meta(META_PACKAGE_PATH, String(output_paths["package"]))
 	root.add_child(bake_world)
@@ -73,8 +129,8 @@ func prepare_region_bake(location: Vector2i) -> bool:
 	lightmap.name = LIGHTMAP_NAME
 	lightmap.directional = true
 	lightmap.environment_mode = LightmapGI.ENVIRONMENT_MODE_SCENE
-	lightmap.quality = LightmapGI.BAKE_QUALITY_HIGH
-	lightmap.shadowmask_mode = SHADOWMASK_OVERLAY
+	lightmap.quality = bake_quality
+	lightmap.shadowmask_mode = shadowmask_mode
 	bake_world.add_child(lightmap)
 	lightmap.owner = root
 
@@ -87,7 +143,7 @@ func prepare_region_bake(location: Vector2i) -> bool:
 	lightmap.light_data = light_data
 
 	var proxy_mesh: Mesh = terrain.bake_region_lightmap_mesh(
-		location, DEFAULT_PROXY_LOD, DEFAULT_CONTEXT_RADIUS, DEFAULT_TEXEL_SIZE)
+		location, proxy_lod, context_radius, texel_size)
 	if not is_instance_valid(proxy_mesh):
 		push_error("Terrain3D did not generate a lightmap proxy mesh for region %s" % location)
 		_remove_existing_bake_world(root)
@@ -116,18 +172,18 @@ func prepare_region_bake(location: Vector2i) -> bool:
 
 	var lighting_context: Dictionary = _copy_scene_lighting_context(bake_world, root, terrain)
 	var geometry_context_count: int = _populate_geometry_context(
-		bake_world, terrain, location, DEFAULT_CONTEXT_RADIUS)
+		bake_world, terrain, location, context_radius)
 	bake_world.set_meta(META_CONTRIBUTOR_COUNT,
 		int(lighting_context.get("count", 0)) + geometry_context_count + 1)
 	bake_world.set_meta(META_RECEIVER_COUNT, receiver_count)
 	bake_world.set_meta(META_SHADOWMASK_EXPECTED,
 		bool(lighting_context.get("shadowmask_expected", false)))
 	bake_world.set_meta(META_BAKE_SIGNATURE, _build_bake_signature(
-		root, terrain, location, DEFAULT_PROXY_LOD, DEFAULT_CONTEXT_RADIUS,
-		DEFAULT_TEXEL_SIZE, SHADOWMASK_OVERLAY))
+		root, terrain, location, proxy_lod, context_radius, texel_size, shadowmask_mode))
 
 	select_prepared_lightmap()
-	print("Terrain3D: prepared lightmap bake for region %s in the active Terrain3D scene. Run Godot's Bake Lightmaps command, then finalize it from Regional Lightmap Baking." % location)
+	print("Terrain3D: prepared regional lightmap bake for %s (LOD %d, context %d, %.2f m/texel)." % [
+		location, proxy_lod, context_radius, texel_size])
 	return true
 
 
@@ -261,15 +317,18 @@ func select_prepared_lightmap() -> bool:
 	return true
 
 
-func _validate_source_terrain(terrain: Terrain3D) -> bool:
+func _validate_source_terrain(terrain: Terrain3D, report_error: bool = true) -> bool:
 	if not is_instance_valid(terrain):
-		push_error("Select a Terrain3D node before preparing a regional lightmap bake")
+		if report_error:
+			push_error("Select a Terrain3D node before preparing regional lightmaps")
 		return false
 	if terrain.data == null:
-		push_error("The selected Terrain3D node has no loaded terrain data")
+		if report_error:
+			push_error("The selected Terrain3D node has no loaded terrain data")
 		return false
 	if terrain.data_directory.is_empty():
-		push_error("The selected Terrain3D node has no data directory")
+		if report_error:
+			push_error("The selected Terrain3D node has no data directory")
 		return false
 	return true
 
@@ -279,6 +338,37 @@ func _get_active_terrain() -> Terrain3D:
 		return plugin.get("terrain") as Terrain3D
 	var root: Node = EditorInterface.get_edited_scene_root()
 	return _find_terrain(root) if is_instance_valid(root) else null
+
+
+func _ensure_region_loaded(terrain: Terrain3D, location: Vector2i) -> bool:
+	if is_instance_valid(terrain.data.get_region(location)):
+		return true
+	terrain.data.load_region(location, terrain.data_directory, true)
+	return is_instance_valid(terrain.data.get_region(location))
+
+
+func _get_bake_settings(terrain: Terrain3D) -> Dictionary:
+	return {
+		"proxy_lod": clampi(int(terrain.get("region_lightmap_proxy_lod")), 0, 8),
+		"context_radius": clampi(int(terrain.get("region_lightmap_context_radius")), 0, 4),
+		"texel_size": clampf(float(terrain.get("region_lightmap_texel_size")), 0.05, 16.0),
+		"bake_quality": clampi(int(terrain.get("region_lightmap_bake_quality")), 0, 3),
+		"shadowmask_mode": clampi(int(terrain.get("region_lightmap_shadowmask_mode")), 0, 2),
+	}
+
+
+func _find_editor_lightmap_plugin(node: Node) -> Node:
+	if node.get_class() == "LightmapGIEditorPlugin" and node.has_method("_bake"):
+		return node
+	for child: Node in node.get_children():
+		var found: Node = _find_editor_lightmap_plugin(child)
+		if is_instance_valid(found):
+			return found
+	return null
+
+
+func _region_location_less(a: Vector2i, b: Vector2i) -> bool:
+	return a.y < b.y or (a.y == b.y and a.x < b.x)
 
 
 func _region_output_paths(terrain: Terrain3D, location: Vector2i) -> Dictionary:

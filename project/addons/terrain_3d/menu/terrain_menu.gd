@@ -69,7 +69,7 @@ func _enter_tree() -> void:
 
 	var popup: PopupMenu = get_popup()
 	popup.add_item("Data Directory…", MENU_DIRECTORY_SETUP)
-	popup.add_item("Regional Lightmap Baking…", MENU_REGION_LIGHTMAP)
+	popup.add_item("Bake Region Lightmaps…", MENU_REGION_LIGHTMAP)
 	popup.add_item("Hierarchical LOD…", MENU_HLOD)
 	popup.add_item("Cook Runtime Dataset…", MENU_COOK_RUNTIME_DATASET)
 	popup.add_item("Channel Packer…", MENU_PACK_TEXTURES)
@@ -86,7 +86,7 @@ func _enter_tree() -> void:
 	popup.add_item("Open Brush Directory…", MENU_BRUSH_DIRECTORY)
 
 	_set_item_tooltip(popup, MENU_DIRECTORY_SETUP, "Choose the directory containing Terrain3D region resources.")
-	_set_item_tooltip(popup, MENU_REGION_LIGHTMAP, "Open the persistent per-region lightmap baking UI for the active Terrain3D scene.")
+	_set_item_tooltip(popup, MENU_REGION_LIGHTMAP, "Bake independent lightmaps for every authored Terrain3D region in the active data directory.")
 	_set_item_tooltip(popup, MENU_HLOD, "Analyze, bake, validate, and preview Terrain3D hierarchical LOD proxies.")
 	_set_item_tooltip(popup, MENU_COOK_RUNTIME_DATASET, "Compile and reload-validate every authored terrain region as a .t3dpage runtime page, then rebuild the far atlas.")
 	_set_item_tooltip(popup, MENU_PACK_TEXTURES, "Pack albedo/height and normal/roughness textures.")
@@ -151,15 +151,42 @@ func _open_runtime_page_cook_confirmation() -> void:
 	if not is_instance_valid(plugin) or not is_instance_valid(plugin.terrain) or plugin.terrain.data == null:
 		push_error("Select a Terrain3D node with loaded terrain data before cooking runtime pages")
 		return
+	var inspection: Dictionary = plugin.terrain.data.inspect_gpu_region_pages()
+	if not bool(inspection.get("complete", false)) and inspection.has("error"):
+		push_error("Unable to inspect Terrain3D runtime pages: %s" % String(inspection.get("error", "unknown error")))
+		return
+	if bool(inspection.get("preflight_failed", false)):
+		var preflight_lines: PackedStringArray = PackedStringArray([
+			"Terrain3D could not build a safe runtime-page bake set from the configured data directory.",
+			"",
+		])
+		var preflight_errors: PackedStringArray = inspection.get("errors", PackedStringArray())
+		for error_text: String in preflight_errors:
+			preflight_lines.append("• %s" % error_text)
+		_show_runtime_page_result("Runtime Dataset Needs Attention", "\n".join(preflight_lines))
+		return
+	var discovered: int = int(inspection.get("discovered", 0))
+	var needs_cook: int = int(inspection.get("needs_cook", 0))
+	var orphan_count: int = int(inspection.get("orphan_count", 0))
 	if not is_instance_valid(_runtime_page_cook_confirm):
 		_runtime_page_cook_confirm = ConfirmationDialog.new()
 		_runtime_page_cook_confirm.title = "Cook Terrain Runtime Dataset"
-		_runtime_page_cook_confirm.ok_button_text = "Cook Dataset"
 		_runtime_page_cook_confirm.cancel_button_text = "Cancel"
-		_runtime_page_cook_confirm.dialog_text = "Compile every valid authored terrain region into a transactional .t3dpage, reload and validate each page, and rebuild the whole-world far atlas. Existing pages whose source signature is current are validated and reused."
-		_runtime_page_cook_confirm.min_size = Vector2i(560, 180)
+		_runtime_page_cook_confirm.min_size = Vector2i(600, 260)
 		_runtime_page_cook_confirm.confirmed.connect(_cook_runtime_dataset)
 		add_child(_runtime_page_cook_confirm)
+	_runtime_page_cook_confirm.ok_button_text = "Cook %d Page%s" % [needs_cook, "" if needs_cook == 1 else "s"] if needs_cook > 0 else "Validate / Rebuild Dataset"
+	_runtime_page_cook_confirm.dialog_text = "\n".join(PackedStringArray([
+		"Source of truth: %s" % String(inspection.get("data_directory", plugin.terrain.data_directory)),
+		"Authored regions: %d" % discovered,
+		"Current pages: %d" % int(inspection.get("current", 0)),
+		"Need cooking: %d  (missing %d · stale %d · invalid %d · unavailable %d)" % [
+			needs_cook, int(inspection.get("missing", 0)), int(inspection.get("stale", 0)),
+			int(inspection.get("invalid", 0)), int(inspection.get("source_unavailable", 0))],
+		"Orphan pages to remove: %d" % orphan_count,
+		"",
+		"Cooking validates/rebuilds .t3dpage files against every terrain3d*.res file in this directory, then rebuilds the whole-world far atlas.",
+	]))
 	_runtime_page_cook_confirm.popup_centered()
 
 
@@ -171,12 +198,14 @@ func _cook_runtime_dataset() -> void:
 	var complete: bool = bool(result.get("complete", false))
 	var lines: PackedStringArray = PackedStringArray([
 		"Status: %s" % ("COMPLETE" if complete else "INCOMPLETE"),
-		"Valid regions: %d" % int(result.get("valid", 0)),
+		"Authored regions discovered: %d" % int(result.get("discovered", 0)),
 		"Cooked now: %d" % int(result.get("cooked", 0)),
 		"Validated unchanged: %d" % int(result.get("unchanged", 0)),
 		"Usable pages: %d" % int(result.get("usable", 0)),
 		"Failures: %d" % int(result.get("failed", 0)),
-		"Skipped deleted/invalid entries: %d" % int(result.get("skipped", 0)),
+		"Unavailable source entries: %d" % int(result.get("skipped", 0)),
+		"Orphan pages removed: %d" % int(result.get("orphan_removed", 0)),
+		"Orphan removal failures: %d" % int(result.get("orphan_failed", 0)),
 		"Far atlas: %s" % ("OK" if bool(result.get("far_atlas_cooked", false)) else "FAILED"),
 	])
 	var errors: PackedStringArray = result.get("errors", PackedStringArray())
@@ -185,12 +214,16 @@ func _cook_runtime_dataset() -> void:
 		lines.append("Errors:")
 		for error_text in errors:
 			lines.append("• %s" % error_text)
+	_show_runtime_page_result("Terrain Runtime Dataset Cook", "\n".join(lines))
+
+
+func _show_runtime_page_result(dialog_title: String, dialog_text: String) -> void:
 	if not is_instance_valid(_runtime_page_cook_result):
 		_runtime_page_cook_result = AcceptDialog.new()
-		_runtime_page_cook_result.title = "Terrain Runtime Dataset Cook"
 		_runtime_page_cook_result.min_size = Vector2i(600, 300)
 		add_child(_runtime_page_cook_result)
-	_runtime_page_cook_result.dialog_text = "\n".join(lines)
+	_runtime_page_cook_result.title = dialog_title
+	_runtime_page_cook_result.dialog_text = dialog_text
 	_runtime_page_cook_result.popup_centered()
 
 

@@ -20,10 +20,10 @@ const TOOL_MENU_EROSION: String = "Terrain3D: Show Erosion in Inspector"
 const TOOL_MENU_SHADER: String = "Terrain3D: Runtime Shader Quality"
 const TOOL_MENU_AUTOSHADER: String = "Terrain3D: Material Rules"
 const TOOL_MENU_CONVERT_STREAMING: String = "Terrain3D: Convert Selected Objects to Region Streaming"
-const TOOL_MENU_LIGHTMAP: String = "Terrain3D: Regional Lightmap Baking"
+const TOOL_MENU_LIGHTMAP: String = "Terrain3D: Bake Region Lightmaps"
 const TOOL_MENU_HLOD: String = "Terrain3D: HLOD"
-const EXPECTED_NATIVE_API_REVISION: int = 2026081706
-const EXPECTED_NATIVE_BUILD_ID: String = "a2.8.5-hlod"
+const EXPECTED_NATIVE_API_REVISION: int = 2026081801
+const EXPECTED_NATIVE_BUILD_ID: String = "a2.8.6-fixed-memory-arena"
 
 # Editor Plugin
 var ui: Terrain3DUI
@@ -96,6 +96,7 @@ func _enter_tree() -> void:
 	region_lightmap_baker.plugin = self
 	add_child(region_lightmap_baker)
 	region_lightmap_panel = RegionLightmapPanel.new()
+	region_lightmap_panel.visible = false
 	region_lightmap_panel.plugin = self
 	region_lightmap_panel.baker = region_lightmap_baker
 	add_child(region_lightmap_panel)
@@ -255,7 +256,7 @@ func convert_selected_to_hlod_visual(min_level: int = 1) -> void:
 
 func open_region_lightmap_baker() -> void:
 	if not is_instance_valid(terrain):
-		push_error("Select a Terrain3D node before opening regional lightmap baking")
+		push_error("Select a Terrain3D node before baking region lightmaps")
 		return
 	if is_instance_valid(region_lightmap_panel):
 		region_lightmap_panel.open(terrain)
