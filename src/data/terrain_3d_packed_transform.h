@@ -12,7 +12,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "terrain_3d_half_buffer.h"
+#include "data/terrain_3d_half_buffer.h"
 
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
 using namespace godot;

@@ -16,8 +16,8 @@
 #include <godot_cpp/variant/vector2i.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 
-#include "terrain_3d_active_storage.h"
-#include "terrain_3d_resident_pool.h"
+#include "memory/terrain_3d_active_storage.h"
+#include "memory/terrain_3d_resident_pool.h"
 
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
 using namespace godot;

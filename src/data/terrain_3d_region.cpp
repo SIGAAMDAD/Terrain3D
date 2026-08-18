@@ -4,11 +4,11 @@
 
 #include <cstring>
 
-#include "logger.h"
-#include "terrain_3d_data.h"
-#include "terrain_3d_instance_page_codec.h"
-#include "terrain_3d_region.h"
-#include "terrain_3d_util.h"
+#include "core/logger.h"
+#include "data/terrain_3d_data.h"
+#include "instances/terrain_3d_instance_page_codec.h"
+#include "data/terrain_3d_region.h"
+#include "core/terrain_3d_util.h"
 
 namespace {
 

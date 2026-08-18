@@ -5,7 +5,7 @@
 #ifndef TERRAIN3D_RUNTIME_PAGE_FORMAT_H
 #define TERRAIN3D_RUNTIME_PAGE_FORMAT_H
 
-#include "Terrain3DConstants.h"
+#include "data/terrain_3d_runtime_page_constants.h"
 
 #include <cstddef>
 #include <cstdint>

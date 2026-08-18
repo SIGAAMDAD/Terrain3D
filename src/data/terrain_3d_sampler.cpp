@@ -1,7 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#include "terrain_3d_sampler.h"
-#include "terrain_3d_cpp17_compat.h"
+#include "data/terrain_3d_sampler.h"
+#include "core/terrain_3d_cpp17_compat.h"
 
 #include <algorithm>
 #include <cmath>
@@ -11,9 +11,9 @@
 #include <godot_cpp/classes/image.hpp>
 
 #include "Terrain3DConstants.h"
-#include "terrain_3d_data.h"
-#include "terrain_3d_region.h"
-#include "terrain_3d_region_codec.h"
+#include "data/terrain_3d_data.h"
+#include "data/terrain_3d_region.h"
+#include "data/terrain_3d_region_codec.h"
 
 namespace {
 static bool terrain3dSamplerIsExactVertex( const double fGridX, const double fGridZ, const float fVertexSpacing ) {

@@ -9,7 +9,7 @@
 #include <cstdint>
 #include <cstring>
 
-#include "terrain_3d_linear_arena.h"
+#include "memory/terrain_3d_linear_arena.h"
 
 namespace terrain3d_half {
 

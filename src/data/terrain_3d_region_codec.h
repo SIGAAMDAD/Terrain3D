@@ -13,7 +13,7 @@
 #include <godot_cpp/classes/image.hpp>
 
 #include "Terrain3DConstants.h"
-#include "terrain_3d_util.h"
+#include "core/terrain_3d_util.h"
 
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
 using namespace godot;

@@ -8,13 +8,13 @@
 #include "Terrain3DConstants.h"
 
 #include <godot_cpp/classes/worker_thread_pool.hpp>
-#include "generated_texture.h"
-#include "terrain_3d_active_storage.h"
-#include "terrain_3d_cpu_cache_policy.h"
-#include "terrain_3d_gpu_cache_policy.h"
-#include "terrain_3d_instance_cache_policy.h"
-#include "terrain_3d_region.h"
-#include "terrain_3d_runtime_profile.h"
+#include "assets/generated_texture.h"
+#include "memory/terrain_3d_active_storage.h"
+#include "streaming/terrain_3d_cpu_cache_policy.h"
+#include "streaming/terrain_3d_gpu_cache_policy.h"
+#include "instances/terrain_3d_instance_cache_policy.h"
+#include "data/terrain_3d_region.h"
+#include "streaming/terrain_3d_runtime_profile.h"
 
 #include "eastl_config.h"
 #include <EASTL/array.h>

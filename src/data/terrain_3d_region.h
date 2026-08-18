@@ -16,11 +16,11 @@
 #include <EASTL/vector.h>
 
 #include "Terrain3DConstants.h"
-#include "terrain_3d_util.h"
-#include "terrain_3d_region_codec.h"
-#include "terrain_3d_instance_store.h"
-#include "terrain_3d_assets.h"
-#include "terrain_3d_region_lighting.h"
+#include "core/terrain_3d_util.h"
+#include "data/terrain_3d_region_codec.h"
+#include "instances/terrain_3d_instance_store.h"
+#include "assets/terrain_3d_assets.h"
+#include "lighting/terrain_3d_region_lighting.h"
 
 class T3DRegion : public Resource {
 	using Terrain3DRegion = T3DRegion;
