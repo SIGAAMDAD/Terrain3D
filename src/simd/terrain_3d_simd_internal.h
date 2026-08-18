@@ -3,7 +3,8 @@
 #ifndef TERRAIN3D_SIMD_INTERNAL_H
 #define TERRAIN3D_SIMD_INTERNAL_H
 
-#include "terrain_3d_simd.h"
+#include "core/terrain_3d_numeric_constants.h"
+#include "simd/terrain_3d_simd.h"
 
 namespace terrain3d_simd::detail {
 

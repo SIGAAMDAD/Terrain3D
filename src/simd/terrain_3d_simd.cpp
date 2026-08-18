@@ -1,9 +1,9 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
-#include "terrain_3d_simd.h"
+#include "simd/terrain_3d_simd.h"
 
-#include "terrain_3d_half_buffer.h"
-#include "terrain_3d_packed_transform.h"
-#include "terrain_3d_simd_internal.h"
+#include "data/terrain_3d_half_buffer.h"
+#include "data/terrain_3d_packed_transform.h"
+#include "simd/terrain_3d_simd_internal.h"
 
 #include <algorithm>
 #include <atomic>

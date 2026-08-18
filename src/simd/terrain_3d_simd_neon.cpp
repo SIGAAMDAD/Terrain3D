@@ -1,10 +1,10 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 // Baseline NEON implementation. It deliberately does not require ARMv8.2 FP16
 // arithmetic, preserving compatibility with older ARMv7 NEON and ARMv8 CPUs.
-#include "terrain_3d_simd_internal.h"
+#include "simd/terrain_3d_simd_internal.h"
 
-#include "terrain_3d_half_buffer.h"
-#include "terrain_3d_packed_transform.h"
+#include "data/terrain_3d_half_buffer.h"
+#include "data/terrain_3d_packed_transform.h"
 
 #if defined( __ARM_NEON ) || defined( __ARM_NEON__ ) || defined( __aarch64__ ) || defined( _M_ARM64 )
 #include <arm_neon.h>
@@ -34,17 +34,17 @@ inline float32x4_t decode4Exact( const uint16_t *pSource ) {
 		for ( int lane = 0; lane < 4; ++lane ) {
 			fValues[lane] = terrain3d_half::decode( pSource[lane] );
 		}
-		return vld1qF32( fValues );
+		return vld1q_f32( fValues );
 	}
 	const uint32x4_t sign = vshlq_n_u32( vandq_u32( half32, vdupq_n_u32( 0x8000u ) ), 16 );
 	const uint32x4_t magnitude = vshlq_n_u32( vandq_u32( half32, vdupq_n_u32( 0x7fffu ) ), 13 );
 	const uint32x4_t bits = vorrq_u32( sign, vaddq_u32( magnitude, vdupq_n_u32( ( uint32_t ) ( 127 - 15 ) << 23u ) ) );
-	return vreinterpretqF32U32( bits );
+	return vreinterpretq_f32_u32( bits );
 }
 
 inline float32x4_t reciprocalSqrt( const float32x4_t value ) {
 #if defined( __aarch64__ ) || defined( _M_ARM64 )
-	return vdivqF32( vdupq_n_f32( 1.0f ), vsqrtq_f32( value ) );
+	return vdivq_f32( vdupq_n_f32( 1.0f ), vsqrtq_f32( value ) );
 #else
 	float32x4_t estimate = vrsqrteq_f32( value );
 	estimate = vmulq_f32( vrsqrtsq_f32( vmulq_f32( value, estimate ), estimate ), estimate );
@@ -153,9 +153,9 @@ void neonDerivedNormals(
 		uint8_t *pOut = pDestination + ( size_t ) ( y ) * ( size_t ) ( nWidth ) * 2u;
 		int x = 0;
 		for ( ; nWidth - x >= 4; x += 4 ) {
-			const float32x4_t center = vld1qF32( pCenterRow + x );
-			const float32x4_t dx = vsubq_f32( center, vld1qF32( pCenterRow + x + 1 ) );
-			const float32x4_t dz = vsubq_f32( center, vld1qF32( pDownRow + x ) );
+			const float32x4_t center = vld1q_f32( pCenterRow + x );
+			const float32x4_t dx = vsubq_f32( center, vld1q_f32( pCenterRow + x + 1 ) );
+			const float32x4_t dz = vsubq_f32( center, vld1q_f32( pDownRow + x ) );
 			const float32x4_t length_sq = vaddq_f32( spacing_sq,
 				vaddq_f32( vmulq_f32( dx, dx ), vmulq_f32( dz, dz ) ) );
 			const float32x4_t inverse = reciprocalSqrt( length_sq );
@@ -187,9 +187,9 @@ void neonUpdateCumulativeErosion(
 			const size_t lane_index = index + ( size_t ) ( half ) * 4u;
 			const uint32x4_t mask = vcgtq_u32( half == 0 ? active_lo : active_hi, vdupq_n_u32( 0u ) );
 			const float32x4_t raw_delta =
-				vsubq_f32( vld1qF32( pInitialHeight + lane_index ), vld1qF32( pHeight + lane_index ) );
+				vsubq_f32( vld1q_f32( pInitialHeight + lane_index ), vld1q_f32( pHeight + lane_index ) );
 			const float32x4_t delta = vbslq_f32( vcgtq_f32( raw_delta, zero ), raw_delta, zero );
-			const float32x4_t current = vld1qF32( pCumulativeErosion + lane_index );
+			const float32x4_t current = vld1q_f32( pCumulativeErosion + lane_index );
 			const float32x4_t updated = vbslq_f32( vcltq_f32( current, delta ), delta, current );
 			vst1q_f32( pCumulativeErosion + lane_index,
 				vbslq_f32( mask, updated, current ) );

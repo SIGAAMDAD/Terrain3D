@@ -1,10 +1,10 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 // AVX2/F16C backend. Kept in a separate translation unit so the baseline binary
 // remains executable on pre-AVX hardware.
-#include "terrain_3d_simd_internal.h"
+#include "simd/terrain_3d_simd_internal.h"
 
-#include "terrain_3d_half_buffer.h"
-#include "terrain_3d_packed_transform.h"
+#include "data/terrain_3d_half_buffer.h"
+#include "data/terrain_3d_packed_transform.h"
 
 #if defined( TERRAIN3D_ENABLE_AVX2_BACKEND ) && ( ( defined( __AVX2__ ) && defined( __F16C__ ) ) || ( defined( _MSC_VER ) && ( defined( _M_X64 ) || defined( _M_IX86 ) ) ) )
 #include <immintrin.h>
