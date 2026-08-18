@@ -1,7 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "Terrain3DConstants.h"
-#include "terrain_3d_lightmap_streamer.h"
+#include "lighting/terrain_3d_lightmap_streamer.h"
 
 #include <EASTL/sort.h>
 
@@ -12,9 +12,9 @@
 #include <godot_cpp/variant/rect2.hpp>
 
 #include "terrain_3d.h"
-#include "terrain_3d_data.h"
-#include "terrain_3d_node_streamer.h"
-#include "terrain_3d_region.h"
+#include "data/terrain_3d_data.h"
+#include "streaming/terrain_3d_node_streamer.h"
+#include "data/terrain_3d_region.h"
 
 // Godot renders at most eight LightmapGI instances reliably in one camera view.
 // Per-region packages therefore remain independent on disk, while residency is

@@ -12,7 +12,7 @@
 #include <godot_cpp/variant/vector2i.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 
-#include "terrain_3d_region_lighting.h"
+#include "lighting/terrain_3d_region_lighting.h"
 
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
 using namespace godot;
