@@ -206,6 +206,7 @@ void T3DMaterial::preloadShaders( void ) {
 		{ "main", "res://addons/terrain_3d/shaders/main.gdshaderinc" },
 		{ "main_middle", "res://addons/terrain_3d/shaders/main_middle.gdshaderinc" },
 		{ "main_far", "res://addons/terrain_3d/shaders/main_far.gdshaderinc" },
+		{ "main_shadow", "res://addons/terrain_3d/shaders/main_shadow.gdshaderinc" },
 		{ "displacement_buffer", "res://addons/terrain_3d/shaders/displacement_buffer.gdshaderinc" },
 	};
 
@@ -1042,10 +1043,15 @@ T3DMaterial::t3dshaderValidationResult_t T3DMaterial::validateShaderVariant(
 	if ( tier == SHADER_TIER_MIDDLE &&
 		( !terrain3dRequireShaderParameter( parameter_list, "_derived_maps", result.failureSummary ) ||
 			!terrain3dRequireShaderParameter( parameter_list, "_middle_height_region_map_texture", result.failureSummary ) ||
-			!terrain3dRequireShaderParameter( parameter_list, "_middle_height_maps", result.failureSummary ) ) ) {
+			!terrain3dRequireShaderParameter( parameter_list, "_middle_height_maps", result.failureSummary ) ||
+			( m_middleQuality.materialSamplingQuality == MATERIAL_SAMPLING_FAST &&
+				!terrain3dRequireShaderParameter( parameter_list, "_middle_composite_maps", result.failureSummary ) ) ) ) {
 		return result;
 	}
-	if ( !terrain3dRequireShaderParameter( parameter_list, "_texture_array_albedo", result.failureSummary ) ) {
+	const bool bBakedMiddle = tier == SHADER_TIER_MIDDLE &&
+		m_middleQuality.materialSamplingQuality == MATERIAL_SAMPLING_FAST;
+	const char *const albedo_parameter = tier == SHADER_TIER_FAR ? "_far_albedo_array" : "_texture_array_albedo";
+	if ( !bBakedMiddle && !terrain3dRequireShaderParameter( parameter_list, albedo_parameter, result.failureSummary ) ) {
 		return result;
 	}
 	if ( tier == SHADER_TIER_FAR ) {
@@ -2700,6 +2706,65 @@ void T3DMaterial::updateFarAtlasUniforms( const RID &rMaterial ) {
 		far_color_rid.is_valid() ? far_color_rid : m_generatedFarColorDummy.getRid() );
 }
 
+void T3DMaterial::ensureShadowMaterials( void ) {
+	if ( m_pShadowShader.is_null() ) {
+		if ( !m_shaderTemplates.has( "main_shadow" ) ) {
+			return;
+		}
+		const t3dshaderVariantState_t state = captureVariantState();
+		const String code = prepareShaderSource(
+			m_shaderTemplates["main_shadow"], state, Array(), SHADER_TIER_FAR, false );
+		if ( code.is_empty() ) {
+			return;
+		}
+		m_pShadowShader.instantiate();
+		submitShaderSource( m_pShadowShader, code );
+	}
+	for ( int tier = SHADER_TIER_NEAR; tier < SHADER_TIER_COUNT; ++tier ) {
+		if ( !m_szShadowMaterials[tier].is_valid() ) {
+			m_szShadowMaterials[tier] = RS->material_create();
+		}
+		RS->material_set_shader( m_szShadowMaterials[tier], m_pShadowShader->get_rid() );
+		RS->material_set_param( m_szShadowMaterials[tier], "_shadow_height_source", tier );
+	}
+}
+
+void T3DMaterial::updateShadowUniforms( void ) {
+	if ( !m_pTerrain || !m_pTerrain->getData() || m_pShadowShader.is_null() ) {
+		return;
+	}
+	T3DData *const pData = m_pTerrain->getData();
+	const RID detail_height = pData->getHeightMapsRid();
+	const RID middle_height = pData->getMiddleHeightMapsRid();
+	const RID middle_map = pData->getMiddleHeightRegionMapRid();
+	const RID far_height = pData->getFarHeightMapRid();
+	for ( int tier = SHADER_TIER_NEAR; tier < SHADER_TIER_COUNT; ++tier ) {
+		const RID material = m_szShadowMaterials[tier];
+		if ( !material.is_valid() ) {
+			continue;
+		}
+		RS->material_set_param( material, "_region_map_texture", isRegionPageTableValid() ?
+			m_generatedRegionMap.getRid() : m_generatedDummy.getRid() );
+		RS->material_set_param( material, "_middle_height_region_map_texture", middle_map.is_valid() ?
+			middle_map : m_generatedDummy.getRid() );
+		RS->material_set_param( material, "_height_maps", detail_height.is_valid() ?
+			detail_height : m_generatedDummy.getRid() );
+		RS->material_set_param( material, "_middle_height_maps", middle_height.is_valid() ?
+			middle_height : m_generatedDummy.getRid() );
+		RS->material_set_param( material, "_far_height_map", far_height.is_valid() ?
+			far_height : m_generatedFarHeightDummy.getRid() );
+		RS->material_set_param( material, "_region_map_size", MAX( 1, m_nRegionMapTextureSize ) );
+		RS->material_set_param( material, "_region_size", ( real_t ) ( m_pTerrain->getRegionSize() ) );
+		RS->material_set_param( material, "_region_texel_size", 1.0f / ( real_t ) ( m_pTerrain->getRegionSize() ) );
+		RS->material_set_param( material, "_height_decode",
+			Vector2( TERRAIN3D_REGION_HEIGHT_MIN, TERRAIN3D_REGION_HEIGHT_RANGE ) );
+		RS->material_set_param( material, "_vertex_spacing", m_pTerrain->getVertexSpacing() );
+		RS->material_set_param( material, "_vertex_density", 1.0f / m_pTerrain->getVertexSpacing() );
+		RS->material_set_param( material, "_mesh_size", ( real_t ) ( m_pTerrain->getMeshSize() ) );
+		RS->material_set_param( material, "_subdiv", ( real_t ) ( 1 << m_pTerrain->getTessellationLevel() ) );
+	}
+}
+
 void T3DMaterial::updateUniforms( const RID &rMaterial, const uint32_t nFlags ) {
 	IS_DATA_INIT( VOID );
 	LOG( T3DTerrain::EXTREME, "Updating uniforms in shader" );
@@ -2745,6 +2810,7 @@ void T3DMaterial::updateUniforms( const RID &rMaterial, const uint32_t nFlags ) 
 			RS->material_set_param( rMaterial, "_control_maps", pData->getControlMapsRid() );
 			RS->material_set_param( rMaterial, "_color_maps", pData->getColorMapsRid() );
 			RS->material_set_param( rMaterial, "_derived_maps", pData->getDerivedMapsRid() );
+			RS->material_set_param( rMaterial, "_middle_composite_maps", pData->getMiddleCompositeMapsRid() );
 			updateFarAtlasUniforms( rMaterial );
 			LOG( T3DTerrain::EXTREME, "Height map RID: ", pData->getHeightMapsRid() );
 			LOG( T3DTerrain::EXTREME, "Control map RID: ", pData->getControlMapsRid() );
@@ -2755,6 +2821,7 @@ void T3DMaterial::updateUniforms( const RID &rMaterial, const uint32_t nFlags ) 
 			RS->material_set_param( rMaterial, "_control_maps", m_generatedDummy.getRid() );
 			RS->material_set_param( rMaterial, "_color_maps", m_generatedDummy.getRid() );
 			RS->material_set_param( rMaterial, "_derived_maps", m_generatedDummy.getRid() );
+			RS->material_set_param( rMaterial, "_middle_composite_maps", m_generatedDummy.getRid() );
 			RS->material_set_param( rMaterial, "_far_height_map", m_generatedFarHeightDummy.getRid() );
 			RS->material_set_param( rMaterial, "_far_color_map", m_generatedFarColorDummy.getRid() );
 		}
@@ -2814,7 +2881,12 @@ void T3DMaterial::updateUniforms( const RID &rMaterial, const uint32_t nFlags ) 
 			terrain3dMakeTextureColorUniforms( bAssetsReady ? pAssetList->getTextureColors() : PackedColorArray() ) );
 		if ( rMaterial == m_szTierMaterials[SHADER_TIER_FAR] ) {
 			RS->material_set_param( rMaterial, "_far_material_max_lod",
-				bAssetsReady ? ( real_t ) ( pAssetList->getAlbedoArrayMaxLod() ) : ( real_t ) ( 0.0 ) );
+				bAssetsReady ? ( real_t ) ( pAssetList->getFarAlbedoArrayMaxLod() ) : ( real_t ) ( 0.0 ) );
+			RS->material_set_param( rMaterial, "_far_albedo_layer_count",
+				bAssetsReady ? MAX( pAssetList->getFarAlbedoArraySize(), 1 ) : 1 );
+			RS->material_set_param( rMaterial, "_far_albedo_array",
+				bAssetsReady && pAssetList->getFarAlbedoArrayRid().is_valid() ?
+					pAssetList->getFarAlbedoArrayRid() : m_generatedDummy.getRid() );
 			const int nFarDivisor = m_pTerrain->getGpuFarQualityDivisor();
 			const real_t fFarQualityLodOffset = nFarDivisor >= 8 ? 3.0f :
 				( nFarDivisor >= 4 ? 2.0f : ( nFarDivisor >= 2 ? 1.0f : 0.0f ) );
@@ -2824,13 +2896,15 @@ void T3DMaterial::updateUniforms( const RID &rMaterial, const uint32_t nFlags ) 
 	if ( !bAssetsReady ) {
 		LOG( T3DTerrain::INFO, "Asset list is not initialized; installing safe compact-tier fallbacks" );
 		if ( nFlags & TEXTURE_ARRAYS ) {
-			RS->material_set_param( rMaterial, "_texture_array_layer_count", 1 );
-			PackedInt32Array fallback_layer_map;
-			fallback_layer_map.resize( TERRAIN3D_MAX_TEXTURE_ASSETS );
-			RS->material_set_param( rMaterial, "_texture_layer_map", fallback_layer_map );
-			if ( rMaterial == m_szTierMaterials[SHADER_TIER_NEAR] ||
-				rMaterial == m_szTierMaterials[SHADER_TIER_MIDDLE] ||
-				rMaterial == m_szTierMaterials[SHADER_TIER_FAR] ) {
+			const bool bFarTier = rMaterial == m_szTierMaterials[SHADER_TIER_FAR];
+			if ( bFarTier ) {
+				RS->material_set_param( rMaterial, "_far_albedo_layer_count", 1 );
+				RS->material_set_param( rMaterial, "_far_albedo_array", m_generatedDummy.getRid() );
+			} else {
+				RS->material_set_param( rMaterial, "_texture_array_layer_count", 1 );
+				PackedInt32Array fallback_layer_map;
+				fallback_layer_map.resize( TERRAIN3D_MAX_TEXTURE_ASSETS );
+				RS->material_set_param( rMaterial, "_texture_layer_map", fallback_layer_map );
 				RS->material_set_param( rMaterial, "_runtime_material_streaming_active", false );
 				PackedColorArray fallback_averages;
 				fallback_averages.resize( TERRAIN3D_MAX_TEXTURE_ASSETS );
@@ -2838,11 +2912,11 @@ void T3DMaterial::updateUniforms( const RID &rMaterial, const uint32_t nFlags ) 
 					fallback_averages.set( index, COLOR_WHITE );
 				}
 				RS->material_set_param( rMaterial, "_runtime_material_average_albedo", fallback_averages );
+				RS->material_set_param( rMaterial, "_texture_array_albedo", m_generatedDummy.getRid() );
+				RS->material_set_param( rMaterial, "_texture_array_surface", m_generatedSurfaceDummy.getRid() );
+				RS->material_set_param( rMaterial, "_texture_array_normal", m_generatedDummy.getRid() );
+				RS->material_set_param( rMaterial, "_texture_array_displacement", m_generatedDisplacementDummy.getRid() );
 			}
-			RS->material_set_param( rMaterial, "_texture_array_albedo", m_generatedDummy.getRid() );
-			RS->material_set_param( rMaterial, "_texture_array_surface", m_generatedSurfaceDummy.getRid() );
-			RS->material_set_param( rMaterial, "_texture_array_normal", m_generatedDummy.getRid() );
-			RS->material_set_param( rMaterial, "_texture_array_displacement", m_generatedDisplacementDummy.getRid() );
 			if ( !m_bDebugViewCheckered ) {
 				setShowCheckered( true );
 			}
@@ -2852,38 +2926,50 @@ void T3DMaterial::updateUniforms( const RID &rMaterial, const uint32_t nFlags ) 
 
 	if ( nFlags & TEXTURE_ARRAYS ) {
 		const bool bSurfacePacked = pAssetList->usesPackedPbr();
-		RS->material_set_param( rMaterial, "_texture_array_layer_count",
-			MAX( pAssetList->getTextureCount(), 1 ) );
-		RS->material_set_param( rMaterial, "_texture_layer_map", pAssetList->getTextureLayerMap() );
-		if ( rMaterial == m_szTierMaterials[SHADER_TIER_NEAR] ||
-			rMaterial == m_szTierMaterials[SHADER_TIER_MIDDLE] ||
-			rMaterial == m_szTierMaterials[SHADER_TIER_FAR] ) {
+		const bool bFarTier = rMaterial == m_szTierMaterials[SHADER_TIER_FAR];
+		if ( !bFarTier ) {
+			RS->material_set_param( rMaterial, "_texture_array_layer_count",
+				MAX( pAssetList->getTextureCount(), 1 ) );
+			RS->material_set_param( rMaterial, "_texture_layer_map", pAssetList->getTextureLayerMap() );
 			RS->material_set_param( rMaterial, "_runtime_material_streaming_active", pAssetList->isRuntimeMaterialCacheActive() );
 			RS->material_set_param( rMaterial, "_runtime_material_average_albedo", pAssetList->getRuntimeMaterialAverageAlbedo() );
 		}
 		if ( pAssetList->getGeneratedArraySize() > 0 ) {
-			RS->material_set_param( rMaterial, "_texture_array_albedo", pAssetList->getAlbedoArrayRid() );
-			if ( bSurfacePacked ) {
+			if ( rMaterial == m_szTierMaterials[SHADER_TIER_FAR] ) {
+				RS->material_set_param( rMaterial, "_far_albedo_layer_count",
+					MAX( pAssetList->getFarAlbedoArraySize(), 1 ) );
+				RS->material_set_param( rMaterial, "_far_albedo_array",
+					pAssetList->getFarAlbedoArrayRid().is_valid() ?
+						pAssetList->getFarAlbedoArrayRid() : m_generatedDummy.getRid() );
+			} else {
+				RS->material_set_param( rMaterial, "_texture_array_albedo", pAssetList->getAlbedoArrayRid() );
+			}
+			if ( rMaterial != m_szTierMaterials[SHADER_TIER_FAR] && bSurfacePacked ) {
 				RS->material_set_param( rMaterial, "_texture_array_surface", pAssetList->getSurfaceArrayRid() );
 				if ( m_pTerrain->getTessellationLevel() > 0 ) {
 					RS->material_set_param( rMaterial, "_texture_array_displacement",
 										   pAssetList->getDisplacementArrayRid() );
 				}
-			} else {
+			} else if ( rMaterial != m_szTierMaterials[SHADER_TIER_FAR] ) {
 				RS->material_set_param( rMaterial, "_texture_array_normal", pAssetList->getNormalArrayRid() );
 			}
 			setShowCheckered( false );
 			LOG( T3DTerrain::DEBUG, "Texture count >0: ", pAssetList->getGeneratedArraySize(), ", disabling checkered view" );
 		} else {
 			// Send type-correct dummy texture arrays to stop sampler validation errors.
-			RS->material_set_param( rMaterial, "_texture_array_albedo", m_generatedDummy.getRid() );
-			if ( bSurfacePacked ) {
+			if ( rMaterial == m_szTierMaterials[SHADER_TIER_FAR] ) {
+				RS->material_set_param( rMaterial, "_far_albedo_layer_count", 1 );
+				RS->material_set_param( rMaterial, "_far_albedo_array", m_generatedDummy.getRid() );
+			} else {
+				RS->material_set_param( rMaterial, "_texture_array_albedo", m_generatedDummy.getRid() );
+			}
+			if ( rMaterial != m_szTierMaterials[SHADER_TIER_FAR] && bSurfacePacked ) {
 				RS->material_set_param( rMaterial, "_texture_array_surface", m_generatedSurfaceDummy.getRid() );
 				if ( m_pTerrain->getTessellationLevel() > 0 ) {
 					RS->material_set_param( rMaterial, "_texture_array_displacement",
 										   m_generatedDisplacementDummy.getRid() );
 				}
-			} else {
+			} else if ( rMaterial != m_szTierMaterials[SHADER_TIER_FAR] ) {
 				RS->material_set_param( rMaterial, "_texture_array_normal", m_generatedDummy.getRid() );
 			}
 
@@ -2899,14 +2985,16 @@ void T3DMaterial::updateUniforms( const RID &rMaterial, const uint32_t nFlags ) 
 			RS->material_set_param( rMaterial, "_texture_color_count",
 				MIN( pAssetList->getTextureColors().size(), TERRAIN3D_MAX_TEXTURE_ASSETS ) );
 		}
-		RS->material_set_param( rMaterial, "_texture_normal_depth_array", pAssetList->getTextureNormalDepths() );
-		RS->material_set_param( rMaterial, "_texture_ao_strength_array", pAssetList->getTextureAoStrengths() );
-		RS->material_set_param( rMaterial, "_texture_ao_affect_array", pAssetList->getTextureAoLightAffects() );
-		RS->material_set_param( rMaterial, "_texture_roughness_mod_array", pAssetList->getTextureRoughnessMods() );
-		RS->material_set_param( rMaterial, "_texture_metallic_array", pAssetList->getTextureMetallics() );
 		RS->material_set_param( rMaterial, "_texture_uv_scale_array", pAssetList->getTextureUvScales() );
-		RS->material_set_param( rMaterial, "_texture_detile_array", pAssetList->getTextureDetiles() );
-		RS->material_set_param( rMaterial, "_texture_displacement_array", pAssetList->getTextureDisplacements() );
+		if ( rMaterial != m_szTierMaterials[SHADER_TIER_FAR] ) {
+			RS->material_set_param( rMaterial, "_texture_normal_depth_array", pAssetList->getTextureNormalDepths() );
+			RS->material_set_param( rMaterial, "_texture_ao_strength_array", pAssetList->getTextureAoStrengths() );
+			RS->material_set_param( rMaterial, "_texture_ao_affect_array", pAssetList->getTextureAoLightAffects() );
+			RS->material_set_param( rMaterial, "_texture_roughness_mod_array", pAssetList->getTextureRoughnessMods() );
+			RS->material_set_param( rMaterial, "_texture_metallic_array", pAssetList->getTextureMetallics() );
+			RS->material_set_param( rMaterial, "_texture_detile_array", pAssetList->getTextureDetiles() );
+			RS->material_set_param( rMaterial, "_texture_displacement_array", pAssetList->getTextureDisplacements() );
+		}
 	}
 }
 
@@ -2945,6 +3033,11 @@ void T3DMaterial::initialize( T3DTerrain *pTerrain ) {
 	for ( int tier = SHADER_TIER_MIDDLE; tier < SHADER_TIER_COUNT; ++tier ) {
 		if ( !m_szTierMaterials[tier].is_valid() ) {
 			m_szTierMaterials[tier] = RS->material_create();
+		}
+	}
+	for ( int tier = SHADER_TIER_NEAR; tier < SHADER_TIER_COUNT; ++tier ) {
+		if ( !m_szShadowMaterials[tier].is_valid() ) {
+			m_szShadowMaterials[tier] = RS->material_create();
 		}
 	}
 	if ( !m_bufferMaterial.is_valid() ) {
@@ -3008,6 +3101,7 @@ void T3DMaterial::destroy( void ) {
 	for ( int tier = SHADER_TIER_NEAR; tier < SHADER_TIER_COUNT; ++tier ) {
 		m_szTierShaders[tier].unref();
 	}
+	m_pShadowShader.unref();
 	m_shaderTemplates.clear();
 	for ( int index = 0; index < m_nRuntimeShaderVariantCount; ++index ) {
 		m_szRuntimeShaderVariantEntries[index] = t3dshaderVariantEntry_t{};
@@ -3046,6 +3140,12 @@ void T3DMaterial::destroy( void ) {
 		if ( m_szTierMaterials[tier].is_valid() ) {
 			RS->free_rid( m_szTierMaterials[tier] );
 			m_szTierMaterials[tier] = RID();
+		}
+	}
+	for ( int tier = SHADER_TIER_NEAR; tier < SHADER_TIER_COUNT; ++tier ) {
+		if ( m_szShadowMaterials[tier].is_valid() ) {
+			RS->free_rid( m_szShadowMaterials[tier] );
+			m_szShadowMaterials[tier] = RID();
 		}
 	}
 	if ( m_pMaterial.is_valid() ) {
@@ -3098,6 +3198,8 @@ void T3DMaterial::update( const uint32_t nFlags ) {
 			updateUniforms( m_szTierMaterials[tier], nFlags );
 		}
 	}
+	ensureShadowMaterials();
+	updateShadowUniforms();
 	IS_INIT( VOID );
 	if ( m_pTerrain->getTessellationLevel() > 0 ) {
 		updateUniforms( m_bufferMaterial, nFlags );
@@ -3137,6 +3239,22 @@ void T3DMaterial::updateRegionPageTable( void ) {
 	if ( m_pTerrain->getTessellationLevel() > 0 ) {
 		bindRegionPageTableUniforms( m_bufferMaterial );
 	}
+	updateShadowUniforms();
+}
+
+void T3DMaterial::updateRuntimeMaterialLayerMap( void ) {
+	if ( !m_pTerrain ) { return; }
+	const Ref<T3DAssets> pAssets = m_pTerrain->getAssets();
+	if ( pAssets.is_null() ) { return; }
+	static const StringName s_layerMap( "_texture_layer_map" );
+	const PackedInt32Array layerMap = pAssets->getTextureLayerMap();
+	if ( m_pMaterial.is_valid() ) { RS->material_set_param( m_pMaterial, s_layerMap, layerMap ); }
+	for ( int tier = SHADER_TIER_MIDDLE; tier < SHADER_TIER_COUNT; ++tier ) {
+		if ( m_szTierMaterials[tier].is_valid() ) { RS->material_set_param( m_szTierMaterials[tier], s_layerMap, layerMap ); }
+	}
+	if ( m_pTerrain->getTessellationLevel() > 0 && m_bufferMaterial.is_valid() ) {
+		RS->material_set_param( m_bufferMaterial, s_layerMap, layerMap );
+	}
 }
 
 void T3DMaterial::updateFarAtlasTextures( void ) {
@@ -3152,6 +3270,7 @@ void T3DMaterial::updateFarAtlasTextures( void ) {
 	if ( m_pTerrain->getTessellationLevel() > 0 && m_bufferMaterial.is_valid() ) {
 		updateFarAtlasUniforms( m_bufferMaterial );
 	}
+	updateShadowUniforms();
 }
 
 void T3DMaterial::setDisplacementScale( const real_t fDisplacementScale ) {
@@ -3793,9 +3912,9 @@ Dictionary T3DMaterial::getShaderVariantDiagnostics( void ) const {
 	Ref<T3DAssets> pAssets = m_pTerrain ? m_pTerrain->getAssets() : Ref<T3DAssets>();
 	T3DData *const pData = m_pTerrain ? m_pTerrain->getData() : nullptr;
 	const bool bFarAssetsReady = pAssets.is_valid() && pAssets->isInitialized();
-	const int far_albedo_layers = bFarAssetsReady ? pAssets->getGeneratedArraySize() : 0;
-	const int far_albedo_max_lod = bFarAssetsReady ? pAssets->getAlbedoArrayMaxLod() : 0;
-	const RID far_albedo_rid = bFarAssetsReady ? pAssets->getAlbedoArrayRid() : RID();
+	const int far_albedo_layers = bFarAssetsReady ? pAssets->getFarAlbedoArraySize() : 0;
+	const int far_albedo_max_lod = bFarAssetsReady ? pAssets->getFarAlbedoArrayMaxLod() : 0;
+	const RID far_albedo_rid = bFarAssetsReady ? pAssets->getFarAlbedoArrayRid() : RID();
 	const RID far_height_rid = pData ? pData->getFarHeightMapRid() : RID();
 	const RID far_color_rid = pData ? pData->getFarColorMapRid() : RID();
 	diagnostics["page_table_rid"] = ( int64_t ) ( m_generatedRegionMap.getRid().get_id() );
@@ -3806,7 +3925,8 @@ Dictionary T3DMaterial::getShaderVariantDiagnostics( void ) const {
 	diagnostics["far_albedo_array_rid"] = ( int64_t ) ( far_albedo_rid.get_id() );
 	diagnostics["far_albedo_layers"] = far_albedo_layers;
 	diagnostics["far_albedo_max_lod"] = far_albedo_max_lod;
-	diagnostics["far_requested_material_lod"] = m_farQuality.fMaterialLodBias + 4.0f;
+	diagnostics["far_requested_material_lod"] = m_farQuality.fMaterialLodBias;
+	diagnostics["far_material_resolution"] = m_pTerrain ? m_pTerrain->getFarMaterialResolution() : 128;
 	diagnostics["far_material_lod_bias"] = m_farQuality.fMaterialLodBias;
 	diagnostics["far_quality_divisor"] = m_pTerrain ? m_pTerrain->getGpuFarQualityDivisor() : 1;
 	diagnostics["far_height_atlas_side"] = m_pTerrain ? m_pTerrain->getGpuFarHeightAtlasSide() : TERRAIN3D_GPU_CACHE_FAR_HEIGHT_SIDE;
@@ -4664,6 +4784,8 @@ void T3DMaterial::_bind_methods( void ) {
 
 	ClassDB::bind_method( D_METHOD( "set_middle_material_sampling_quality", "quality" ), &T3DMaterial::setMiddleMaterialSamplingQuality );
 	ClassDB::bind_method( D_METHOD( "get_middle_material_sampling_quality" ), &T3DMaterial::getMiddleMaterialSamplingQuality );
+	ClassDB::bind_method( D_METHOD( "set_middle_surface_source", "source" ), &T3DMaterial::setMiddleSurfaceSource );
+	ClassDB::bind_method( D_METHOD( "get_middle_surface_source" ), &T3DMaterial::getMiddleSurfaceSource );
 	ClassDB::bind_method( D_METHOD( "set_middle_terrain_normal_quality", "quality" ), &T3DMaterial::setMiddleTerrainNormalQuality );
 	ClassDB::bind_method( D_METHOD( "get_middle_terrain_normal_quality" ), &T3DMaterial::getMiddleTerrainNormalQuality );
 	ClassDB::bind_method( D_METHOD( "set_middle_terrain_color_quality", "quality" ), &T3DMaterial::setMiddleTerrainColorQuality );
@@ -4965,6 +5087,8 @@ void T3DMaterial::_bind_methods( void ) {
 		"set_middle_texture_filtering", "get_middle_texture_filtering" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_material_sampling_quality", PROPERTY_HINT_ENUM, "Fast,Full" ),
 		"set_middle_material_sampling_quality", "get_middle_material_sampling_quality" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_surface_source", PROPERTY_HINT_ENUM,
+		"Baked Composite,Runtime Material" ), "set_middle_surface_source", "get_middle_surface_source" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_terrain_normal_quality", PROPERTY_HINT_ENUM, "Geometry,Detailed" ),
 		"set_middle_terrain_normal_quality", "get_middle_terrain_normal_quality" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_terrain_color_quality", PROPERTY_HINT_ENUM, "Fast,Exact" ),

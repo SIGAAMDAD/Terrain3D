@@ -181,6 +181,11 @@ public: // Constants
 		MATERIAL_SAMPLING_FULL,
 	} t3dmaterialSamplingQuality_t;
 
+	typedef enum t3dmiddleSurfaceSource_e {
+		MIDDLE_SURFACE_BAKED_COMPOSITE,
+		MIDDLE_SURFACE_RUNTIME_MATERIAL,
+	} t3dmiddleSurfaceSource_t;
+
 	typedef enum t3dterrainNormalQuality_e {
 		TERRAIN_NORMAL_QUALITY_GEOMETRY,
 		TERRAIN_NORMAL_QUALITY_DETAILED,
@@ -344,9 +349,11 @@ typedef enum t3dshaderVariantDomain_e {
 
 	RID m_pMaterial;
 	RID m_szTierMaterials[SHADER_TIER_COUNT] = {};
+	RID m_szShadowMaterials[SHADER_TIER_COUNT] = {};
 	Ref<Shader> m_pShader;	 // Active near shader
 	bool m_bNearShaderReady = false;
 	Ref<Shader> m_szTierShaders[SHADER_TIER_COUNT];
+	Ref<Shader> m_pShadowShader;
 	Dictionary m_shaderTemplates; // External root shader templates loaded from the addon
 	t3dshaderVariantEntry_t m_szRuntimeShaderVariantEntries[TERRAIN3D_MAX_SHADER_VARIANT_CACHE_LIMIT] = {};
 	t3dshaderVariantEntry_t m_szEditorShaderVariantEntries[TERRAIN3D_MAX_EDITOR_SHADER_VARIANT_CACHE_LIMIT] = {};
@@ -589,6 +596,8 @@ typedef enum t3dshaderVariantDomain_e {
 	t3dpageTableBuildResult_t prepareRegionPageTables( void );
 	void bindRegionPageTableUniforms( const RID &rMaterial );
 	void updateFarAtlasUniforms( const RID &rMaterial );
+	void ensureShadowMaterials( void );
+	void updateShadowUniforms( void );
 	void updateUniforms( const RID &rMaterial, const uint32_t nUpdate = UNIFORMS_ONLY );
 	void setShaderParameters( const Dictionary &rDict );
 	Dictionary getShaderParameters( void ) const {
@@ -624,6 +633,7 @@ public:
 			m_nRegionMapTextureSize > 0 && m_nLogicalRegionMapTextureSize == m_nRegionMapTextureSize;
 	}
 	void updateFarAtlasTextures( void );
+	void updateRuntimeMaterialLayerMap( void );
 	RID getMaterialRid( void ) const {
 		return m_pMaterial;
 	}
@@ -632,6 +642,12 @@ public:
 			return m_pMaterial;
 		}
 		return m_szTierMaterials[tier];
+	}
+	RID getShadowMaterialRidForTier( const t3dshaderTier_t tier ) const {
+		if ( tier < SHADER_TIER_NEAR || tier >= SHADER_TIER_COUNT || !m_szShadowMaterials[tier].is_valid() ) {
+			return getMaterialRidForTier( tier );
+		}
+		return m_szShadowMaterials[tier];
 	}
 	RID getShaderRidForTier( const t3dshaderTier_t tier ) const {
 		if ( tier <= SHADER_TIER_NEAR || tier >= SHADER_TIER_COUNT || m_szTierShaders[tier].is_null() ) {
@@ -689,6 +705,14 @@ public:
 
 	void setMiddleMaterialSamplingQuality( t3dmaterialSamplingQuality_t eQuality );
 	t3dmaterialSamplingQuality_t getMiddleMaterialSamplingQuality( void ) const { return m_middleQuality.materialSamplingQuality; }
+	void setMiddleSurfaceSource( t3dmiddleSurfaceSource_t eSource ) {
+		setMiddleMaterialSamplingQuality( eSource == MIDDLE_SURFACE_BAKED_COMPOSITE ?
+			MATERIAL_SAMPLING_FAST : MATERIAL_SAMPLING_FULL );
+	}
+	t3dmiddleSurfaceSource_t getMiddleSurfaceSource( void ) const {
+		return m_middleQuality.materialSamplingQuality == MATERIAL_SAMPLING_FAST ?
+			MIDDLE_SURFACE_BAKED_COMPOSITE : MIDDLE_SURFACE_RUNTIME_MATERIAL;
+	}
 	void setMiddleTerrainNormalQuality( t3dterrainNormalQuality_t eQuality );
 	t3dterrainNormalQuality_t getMiddleTerrainNormalQuality( void ) const { return m_middleQuality.terrainNormalQuality; }
 	void setMiddleTerrainColorQuality( t3dterrainColorQuality_t eQuality );
@@ -1092,6 +1116,7 @@ VARIANT_ENUM_CAST( T3DMaterial::t3dtextureSurfaceMode_t );
 VARIANT_ENUM_CAST( T3DMaterial::t3dterrainShadingMode_t );
 VARIANT_ENUM_CAST( T3DMaterial::t3ddetilingMode_t );
 VARIANT_ENUM_CAST( T3DMaterial::t3dmaterialSamplingQuality_t );
+VARIANT_ENUM_CAST( T3DMaterial::t3dmiddleSurfaceSource_t );
 VARIANT_ENUM_CAST( T3DMaterial::t3dterrainNormalQuality_t );
 VARIANT_ENUM_CAST( T3DMaterial::t3dterrainColorQuality_t );
 VARIANT_ENUM_CAST( T3DMaterial::t3dsurfaceResponseQuality_t );
