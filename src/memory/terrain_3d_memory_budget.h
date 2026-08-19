@@ -4,8 +4,6 @@
 #ifndef TERRAIN3D_MEMORY_BUDGET_H
 #define TERRAIN3D_MEMORY_BUDGET_H
 
-#include "Terrain3DConstants.h"
-
 #include "eastl_config.h"
 #include <EASTL/array.h>
 #include <cstddef>

@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <atomic>
 #include <mutex>
 
 #include <godot_cpp/variant/vector2i.hpp>
@@ -81,10 +82,15 @@ public:
 	T3DResidentRegionPool &operator=( const T3DResidentRegionPool & ) = delete;
 
 	static size_t estimateSlotBytes( int nRegionSize, uint32_t nChannels );
+	static size_t estimateMetadataBytes( int nCapacity );
+	static size_t estimateBackingBytes( int nRegionSize, int nCapacity, uint32_t nChannels );
 	bool configure( int nRegionSize, int nCapacity, uint32_t nChannels );
+	bool bind( int nRegionSize, int nCapacity, uint32_t nChannels,
+		void *pMetadata, size_t nMetadataBytes, void *pBacking, size_t nBackingBytes );
 	void clear( void );
 	void resetResidency( void );
 	T3DResidentMapLease acquire( const Vector2i &rLocation, const T3DRegion *pRegion );
+	bool ensureResident( const Vector2i &rLocation, const T3DRegion *pRegion );
 	void syncMap(
 		const Vector2i &rLocation, const T3DRegion *pRegion, t3dmapType_t type,
 		const Rect2i &rDirtyRect = Rect2i()
@@ -115,12 +121,17 @@ typedef struct t3dalignedAllocation_s {
 		void *pRaw = nullptr;
 		uint8_t *pAligned = nullptr;
 		size_t nBytes = 0u;
+		bool bOwned = false;
 		bool allocate( size_t nRequestedBytes, size_t nAlignment );
+		bool bind( void *pBacking, size_t nBackingBytes, size_t nAlignment );
 		void release( void );
 	} t3dalignedAllocation_t;
 
 	typedef struct t3dslotLayout_s {
-		size_t iHeightOffset = TERRAIN3D_RESIDENT_INVALID_OFFSET;
+		size_t nHeightSlotBytes = 0u;
+		size_t nControlSlotBytes = 0u;
+		size_t nColorSlotBytes = 0u;
+		size_t nDerivedSlotBytes = 0u;
 		size_t stride = 0u;
 	} t3dslotLayout_t;
 
@@ -129,19 +140,15 @@ typedef struct t3dalignedAllocation_s {
 	// allocation ownership and plane pointers are cold outside acquire/sync.
 	typedef struct alignas( TERRAIN3D_RESIDENT_CACHE_ALIGNMENT ) t3dslot_s {
 		Vector2i location = Vector2i( INT32_MAX, INT32_MAX );
-		uint32_t nGeneration = 1u;
-		uint32_t nPinCount = 0u;
-		bool bReferenced = false;
-		bool bPendingInvalidate = false;
-		bool bDerivedValid = false;
-		bool bOccupied = false;
+		std::atomic<uint32_t> nGeneration{1u};
+		std::atomic<uint32_t> nPinCount{0u};
+		std::atomic<uint8_t> nState{0u};
+		std::atomic<uint8_t> nValidChannels{0u};
+		std::atomic_bool bReferenced{false};
 		uint16_t *pHeight = nullptr;
 		uint32_t *pControl = nullptr;
 		uint32_t *pColor = nullptr;
 		uint8_t *pDerived = nullptr;
-		t3dalignedAllocation_t controlMemory;
-		t3dalignedAllocation_t colorMemory;
-		t3dalignedAllocation_t derivedMemory;
 	} t3dslot_t;
 
 	int m_nRegionSize = 0;
@@ -152,7 +159,8 @@ typedef struct t3dalignedAllocation_s {
 	t3dslotLayout_t m_iSlotLayout;
 	t3dalignedAllocation_t m_mapMemory;
 	t3dslot_t *m_pSlots = nullptr;
-	int16_t m_szLocationToSlot[TERRAIN3D_RESIDENT_WORLD_SLOT_COUNT] = {};
+	bool m_bSlotsOwned = false;
+	std::atomic<int16_t> m_szLocationToSlot[TERRAIN3D_RESIDENT_WORLD_SLOT_COUNT] = {};
 	mutable std::mutex m_mutex;
 	int m_iClockHand = 0;
 
@@ -167,16 +175,15 @@ typedef struct t3dalignedAllocation_s {
 	);
 	static int locationIndex( const Vector2i &rLocation );
 	bool allocateSlotsUnlocked( int nCapacity );
+	bool assignMapBankPointersUnlocked( void );
 	bool hasPinnedSlotsUnlocked( void ) const;
 	void releaseSlotsUnlocked( void );
-	void releaseSparseStorageUnlocked( t3dslot_t &iSlot );
-	bool allocateSparsePlaneUnlocked( t3dalignedAllocation_t &rMemory, size_t nBytes, void *&pPlane );
-	void releaseSparsePlaneUnlocked( t3dalignedAllocation_t &rMemory, void *&pPlane );
 	void clearUnlocked( void );
 	int chooseReplacementSlotUnlocked( void );
 	int findSlotUnlocked( const Vector2i &rLocation ) const;
 	bool resetSlotStorage( int iSlot, bool bZero );
 	void assignSlot( int iSlot, const Vector2i &rLocation );
+	void publishSlot( int iSlot );
 	void retireSlotUnlocked( int iSlot );
 	void releaseLease( int iSlot, uint32_t nGeneration );
 	bool copyMap( int iSlot, const T3DRegion *pRegion, t3dmapType_t type );
