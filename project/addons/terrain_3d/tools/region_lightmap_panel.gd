@@ -104,7 +104,7 @@ func _build_ui() -> void:
 
 	var settings_button := Button.new()
 	settings_button.text = "Edit Bake Settings in Inspector"
-	settings_button.tooltip_text = "Select the Terrain3D node. Regional Lightmap Baking settings live under General / Data & Authoring in its Inspector."
+	settings_button.tooltip_text = "Select the Terrain3D node. Regional Lightmap Baking settings, including the persistent output directory, live under General / Data & Authoring in its Inspector."
 	settings_button.pressed.connect(_select_terrain_for_settings)
 	settings_row.add_child(settings_button)
 
@@ -113,6 +113,12 @@ func _build_ui() -> void:
 	refresh_button.tooltip_text = "Re-enumerate terrain3d*.res files from the configured data directory."
 	refresh_button.pressed.connect(_refresh_all)
 	settings_row.add_child(refresh_button)
+
+	var audit_button := Button.new()
+	audit_button.text = "Audit Packages"
+	audit_button.tooltip_text = "Compare every authored region with its deterministic package, source signature, light signature, and shadowmask mode."
+	audit_button.pressed.connect(_audit_packages)
+	settings_row.add_child(audit_button)
 
 	content.add_child(HSeparator.new())
 
@@ -182,8 +188,10 @@ func _refresh_dataset_summary() -> void:
 		var region: Terrain3DRegion = terrain.data.get_region(location)
 		if is_instance_valid(region) and is_instance_valid(region.get_lighting()):
 			baked_count += 1
-	_dataset_summary.text = "%d authored regions found in %s. %d currently have regional lighting packages." % [
-		locations.size(), terrain.data_directory, baked_count]
+	var output_directory: String = String(terrain.get("region_lightmap_output_directory")).strip_edges()
+	_dataset_summary.text = "%d authored regions found in %s. %d currently have regional lighting packages. Output: %s" % [
+		locations.size(), terrain.data_directory, baked_count,
+		output_directory if not output_directory.is_empty() else "not configured"]
 	_bake_all_button.text = "Bake All %d Region Lightmaps" % locations.size() if not locations.is_empty() else "Bake All Region Lightmaps"
 	_bake_all_button.disabled = locations.is_empty() or _is_running or _waiting_for_manual_bake
 
@@ -196,7 +204,9 @@ func _refresh_settings_summary() -> void:
 	var shadowmask_names: PackedStringArray = PackedStringArray(["None", "Replace", "Overlay"])
 	var quality: int = clampi(int(terrain.get("region_lightmap_bake_quality")), 0, quality_names.size() - 1)
 	var shadowmask: int = clampi(int(terrain.get("region_lightmap_shadowmask_mode")), 0, shadowmask_names.size() - 1)
-	_settings_summary.text = "Settings: proxy LOD %d · context radius %d · %.2f m/texel · %s quality · %s shadowmask" % [
+	var output_directory: String = String(terrain.get("region_lightmap_output_directory")).strip_edges()
+	_settings_summary.text = "Output: %s\nSettings: proxy LOD %d · context radius %d · %.2f m/texel · %s quality · %s shadowmask" % [
+		output_directory if not output_directory.is_empty() else "not configured",
 		int(terrain.get("region_lightmap_proxy_lod")),
 		int(terrain.get("region_lightmap_context_radius")),
 		float(terrain.get("region_lightmap_texel_size")),
@@ -206,6 +216,10 @@ func _refresh_settings_summary() -> void:
 func _start_batch() -> void:
 	_sync_active_terrain()
 	if _is_running or _waiting_for_manual_bake or not _is_terrain_ready() or not is_instance_valid(baker):
+		return
+	var output_ready: Dictionary = baker.prepare_output_directory(terrain)
+	if not bool(output_ready.get("ok", false)):
+		_workflow_status.text = "Cannot start regional lightmap bake: %s" % String(output_ready.get("error", "Output path unavailable."))
 		return
 	_batch_locations = baker.get_data_directory_regions(terrain)
 	if _batch_locations.is_empty():
@@ -219,6 +233,21 @@ func _start_batch() -> void:
 	_progress.max_value = float(_batch_locations.size())
 	_progress.value = 0.0
 	_run_batch()
+
+
+func _audit_packages() -> void:
+	if not _is_terrain_ready() or not is_instance_valid(baker):
+		return
+	_workflow_status.text = "Auditing regional lightmap packages…"
+	var report: Dictionary = baker.audit_region_packages(terrain)
+	_workflow_status.text = ("Package audit: %d expected, %d current, %d missing, %d stale, " +
+		"%d light-signature mismatches, %d shadowmask mismatches, %d orphans.") % [
+		int(report.get("expected", 0)), int(report.get("current", 0)),
+		(report.get("missing", []) as Array).size(),
+		(report.get("stale_source_signatures", []) as Array).size(),
+		(report.get("incompatible_light_signature", []) as Array).size(),
+		(report.get("incompatible_shadowmask_mode", []) as Array).size(),
+		(report.get("orphans", []) as Array).size()]
 
 
 func _run_batch() -> void:

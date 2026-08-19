@@ -21,12 +21,14 @@ const META_REGION_LOCATION: StringName = &"terrain3d_lightmap_region_location"
 const META_PROXY_LOD: StringName = &"terrain3d_lightmap_proxy_lod"
 const META_CONTEXT_RADIUS: StringName = &"terrain3d_lightmap_context_radius"
 const META_SHADOWMASK_MODE: StringName = &"terrain3d_lightmap_shadowmask_mode"
+const META_WORKING_DATA_PATH: StringName = &"terrain3d_lightmap_working_data_path"
 const META_FINAL_DATA_PATH: StringName = &"terrain3d_lightmap_data_path"
 const META_PACKAGE_PATH: StringName = &"terrain3d_lightmap_package_path"
 const META_CONTRIBUTOR_COUNT: StringName = &"terrain3d_lightmap_contributor_count"
 const META_RECEIVER_COUNT: StringName = &"terrain3d_lightmap_receiver_count"
 const META_SHADOWMASK_EXPECTED: StringName = &"terrain3d_lightmap_shadowmask_expected"
 const META_BAKE_SIGNATURE: StringName = &"terrain3d_lightmap_bake_signature"
+const META_DIRECTIONAL_LIGHT_SIGNATURE: StringName = &"terrain3d_directional_light_signature"
 
 var plugin: EditorPlugin
 
@@ -50,6 +52,82 @@ func get_data_directory_regions(terrain: Terrain3D = null) -> Array[Vector2i]:
 		locations.append(location)
 	locations.sort_custom(_region_location_less)
 	return locations
+
+
+func prepare_output_directory(terrain: Terrain3D = null) -> Dictionary:
+	var source_terrain: Terrain3D = terrain if is_instance_valid(terrain) else _get_active_terrain()
+	if not _validate_source_terrain(source_terrain):
+		return {"ok": false, "path": "", "error": "Terrain3D data is unavailable."}
+	var configured: String = String(source_terrain.get("region_lightmap_output_directory")).strip_edges()
+	if configured.is_empty():
+		configured = source_terrain.data_directory.trim_suffix("/").path_join("lighting")
+		source_terrain.set("region_lightmap_output_directory", configured)
+	var normalized: String = configured.simplify_path().trim_suffix("/")
+	if normalized.is_empty():
+		return {"ok": false, "path": "", "error": "The regional lightmap output path is empty."}
+	var mkdir_error: Error = DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(normalized))
+	if mkdir_error != OK:
+		return {"ok": false, "path": normalized, "error": error_string(mkdir_error)}
+	var probe_path: String = normalized.path_join(".terrain3d-lightmap-write-test.tmp")
+	var probe: FileAccess = FileAccess.open(probe_path, FileAccess.WRITE)
+	if probe == null:
+		return {"ok": false, "path": normalized, "error": "The output directory is not writable."}
+	probe.store_8(0)
+	probe.close()
+	_remove_file_if_present(probe_path)
+	_cleanup_interrupted_publications(normalized)
+	return {"ok": true, "path": normalized, "error": ""}
+
+
+func audit_region_packages(terrain: Terrain3D = null) -> Dictionary:
+	var source_terrain: Terrain3D = terrain if is_instance_valid(terrain) else _get_active_terrain()
+	var report: Dictionary = {
+		"expected": 0, "current": 0, "missing": [], "stale_source_signatures": [],
+		"incompatible_light_signature": [], "incompatible_shadowmask_mode": [], "orphans": [],
+	}
+	if not _validate_source_terrain(source_terrain, false):
+		return report
+	var output: Dictionary = prepare_output_directory(source_terrain)
+	if not bool(output.get("ok", false)):
+		return report
+	var locations: Array[Vector2i] = get_data_directory_regions(source_terrain)
+	report["expected"] = locations.size()
+	var expected_files: Dictionary = {}
+	var scene_root: Node = EditorInterface.get_edited_scene_root()
+	var settings: Dictionary = _get_bake_settings(source_terrain)
+	var active_light_signature: String = _find_primary_directional_signature(scene_root)
+	for location: Vector2i in locations:
+		var paths: Dictionary = _region_output_paths(source_terrain, location)
+		var package_path: String = String(paths["package"])
+		expected_files[package_path.get_file()] = true
+		if not FileAccess.file_exists(package_path) or not FileAccess.file_exists(String(paths["data"])):
+			(report["missing"] as Array).append(location)
+			continue
+		var package: Resource = ResourceLoader.load(package_path, "Terrain3DRegionLighting", ResourceLoader.CACHE_MODE_IGNORE)
+		if not is_instance_valid(package):
+			(report["missing"] as Array).append(location)
+			continue
+		report["current"] = int(report["current"]) + 1
+		if int(package.get("shadowmask_mode")) != int(settings["shadowmask_mode"]):
+			(report["incompatible_shadowmask_mode"] as Array).append(location)
+		var package_light_signature: String = String(package.get("directional_light_signature"))
+		if not active_light_signature.is_empty() and package_light_signature != active_light_signature:
+			(report["incompatible_light_signature"] as Array).append(location)
+		if not _ensure_region_loaded(source_terrain, location):
+			(report["stale_source_signatures"] as Array).append(location)
+			continue
+		var expected_signature: int = _build_bake_signature(
+			scene_root, source_terrain, location, int(settings["proxy_lod"]),
+			int(settings["context_radius"]), float(settings["texel_size"]), int(settings["shadowmask_mode"]))
+		if int(package.get("bake_signature")) != expected_signature:
+			(report["stale_source_signatures"] as Array).append(location)
+	var output_dir: DirAccess = DirAccess.open(String(output["path"]))
+	if output_dir != null:
+		for file_name: String in output_dir.get_files():
+			if file_name.begins_with("Region_[") and file_name.ends_with(".t3dlight.tres") \
+					and not expected_files.has(file_name):
+				(report["orphans"] as Array).append(file_name)
+	return report
 
 
 func bake_prepared_with_editor() -> Dictionary:
@@ -106,12 +184,14 @@ func prepare_region_bake(location: Vector2i) -> bool:
 	var shadowmask_mode: int = int(settings["shadowmask_mode"])
 	var output_paths: Dictionary = _region_output_paths(terrain, location)
 	var output_dir: String = String(output_paths["output_dir"])
-	var mkdir_error: Error = DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(output_dir))
-	if mkdir_error != OK:
-		push_error("Unable to create Terrain3D lighting directory %s: %s" % [output_dir, error_string(mkdir_error)])
+	var output_ready: Dictionary = prepare_output_directory(terrain)
+	if not bool(output_ready.get("ok", false)):
+		push_error("Unable to prepare Terrain3D lighting directory %s: %s" % [
+			String(output_ready.get("path", output_dir)), String(output_ready.get("error", "Unknown error"))])
 		return false
+	var working_data_path: String = String(output_paths["working_data"])
 	var light_data_path: String = String(output_paths["data"])
-	_remove_file_if_present(light_data_path)
+	_remove_file_if_present(working_data_path)
 
 	var bake_world := Node3D.new()
 	bake_world.name = BAKE_WORLD_NAME
@@ -119,6 +199,7 @@ func prepare_region_bake(location: Vector2i) -> bool:
 	bake_world.set_meta(META_PROXY_LOD, proxy_lod)
 	bake_world.set_meta(META_CONTEXT_RADIUS, context_radius)
 	bake_world.set_meta(META_SHADOWMASK_MODE, shadowmask_mode)
+	bake_world.set_meta(META_WORKING_DATA_PATH, working_data_path)
 	bake_world.set_meta(META_FINAL_DATA_PATH, light_data_path)
 	bake_world.set_meta(META_PACKAGE_PATH, String(output_paths["package"]))
 	root.add_child(bake_world)
@@ -135,7 +216,7 @@ func prepare_region_bake(location: Vector2i) -> bool:
 	lightmap.owner = root
 
 	var light_data := LightmapGIData.new()
-	var data_save_error: Error = ResourceSaver.save(light_data, light_data_path)
+	var data_save_error: Error = ResourceSaver.save(light_data, working_data_path)
 	if data_save_error != OK:
 		push_error("Unable to create regional LightmapGIData: %s" % error_string(data_save_error))
 		_remove_existing_bake_world(root)
@@ -178,6 +259,8 @@ func prepare_region_bake(location: Vector2i) -> bool:
 	bake_world.set_meta(META_RECEIVER_COUNT, receiver_count)
 	bake_world.set_meta(META_SHADOWMASK_EXPECTED,
 		bool(lighting_context.get("shadowmask_expected", false)))
+	bake_world.set_meta(META_DIRECTIONAL_LIGHT_SIGNATURE,
+		String(lighting_context.get("directional_light_signature", "")))
 	bake_world.set_meta(META_BAKE_SIGNATURE, _build_bake_signature(
 		root, terrain, location, proxy_lod, context_radius, texel_size, shadowmask_mode))
 
@@ -218,13 +301,16 @@ func finalize_prepared_bake() -> bool:
 		"Terrain3DBakeProxy", String(GEOMETRY_CONTEXT_NAME)]))
 	var baked_user_data: Array = filtered_result["users"]
 	var removed_temporary_users: int = int(filtered_result["removed"])
+	if _contains_temporary_baked_users(baked_user_data):
+		push_error("Regional LightmapGIData still contains temporary Terrain3D bake users after filtering")
+		return false
 	_rebuild_lightmap_users(light_data, baked_user_data)
 
 	var final_data_path: String = String(bake_world.get_meta(META_FINAL_DATA_PATH, ""))
 	if final_data_path.is_empty():
 		push_error("The prepared bake has no final LightmapGIData path")
 		return false
-	var light_data_save_error: Error = ResourceSaver.save(light_data, final_data_path)
+	var light_data_save_error: Error = _publish_light_data_transactionally(light_data, final_data_path)
 	if light_data_save_error != OK:
 		push_error("Unable to publish regional LightmapGIData: %s" % error_string(light_data_save_error))
 		return false
@@ -243,6 +329,8 @@ func finalize_prepared_bake() -> bool:
 	package.set("context_radius_regions", int(bake_world.get_meta(META_CONTEXT_RADIUS, DEFAULT_CONTEXT_RADIUS)))
 	package.set("shadowmask_mode", int(lightmap.shadowmask_mode))
 	package.set("bake_signature", int(bake_world.get_meta(META_BAKE_SIGNATURE, 0)))
+	package.set("directional_light_signature", String(
+		bake_world.get_meta(META_DIRECTIONAL_LIGHT_SIGNATURE, "")))
 	package.set("baked_unix", int(Time.get_unix_time_from_system()))
 	package.set("receiver_count", int(baked_user_data.size() / 4))
 	package.set("contributor_count", int(bake_world.get_meta(META_CONTRIBUTOR_COUNT, 1)))
@@ -265,10 +353,13 @@ func finalize_prepared_bake() -> bool:
 	if package_path.is_empty():
 		push_error("The prepared bake has no regional lighting package path")
 		return false
-	var package_error: Error = ResourceSaver.save(package, package_path)
+	var package_error: Error = _publish_package_transactionally(package, package_path)
 	if package_error != OK:
 		push_error("Unable to save regional lighting package: %s" % error_string(package_error))
 		return false
+	var working_data_path: String = String(bake_world.get_meta(META_WORKING_DATA_PATH, ""))
+	if not working_data_path.is_empty() and working_data_path != final_data_path:
+		_remove_file_if_present(working_data_path)
 
 	region.set_lighting(package)
 	terrain.data.save_region(location, terrain.data_directory, terrain.save_16_bit)
@@ -349,6 +440,7 @@ func _ensure_region_loaded(terrain: Terrain3D, location: Vector2i) -> bool:
 
 func _get_bake_settings(terrain: Terrain3D) -> Dictionary:
 	return {
+		"output_directory": String(terrain.get("region_lightmap_output_directory")).strip_edges().trim_suffix("/"),
 		"proxy_lod": clampi(int(terrain.get("region_lightmap_proxy_lod")), 0, 8),
 		"context_radius": clampi(int(terrain.get("region_lightmap_context_radius")), 0, 4),
 		"texel_size": clampf(float(terrain.get("region_lightmap_texel_size")), 0.05, 16.0),
@@ -372,12 +464,15 @@ func _region_location_less(a: Vector2i, b: Vector2i) -> bool:
 
 
 func _region_output_paths(terrain: Terrain3D, location: Vector2i) -> Dictionary:
-	var output_dir: String = terrain.data_directory.trim_suffix("/").path_join("lighting")
-	var base_name: String = "region_%d_%d" % [location.x, location.y]
-	var bake_token: String = "%d_%d" % [int(Time.get_unix_time_from_system()), Time.get_ticks_msec()]
+	var output_dir: String = String(terrain.get("region_lightmap_output_directory")).strip_edges()
+	if output_dir.is_empty():
+		output_dir = terrain.data_directory.trim_suffix("/").path_join("lighting")
+	output_dir = output_dir.simplify_path().trim_suffix("/")
+	var base_name: String = "Region_[%d_%d]" % [location.x, location.y]
 	return {
 		"output_dir": output_dir,
-		"data": output_dir.path_join(base_name + "_bake_" + bake_token + ".lmbake"),
+		"working_data": output_dir.path_join(base_name + ".working.lmbake"),
+		"data": output_dir.path_join(base_name + ".lmbake"),
 		"package": output_dir.path_join(base_name + ".t3dlight.tres"),
 	}
 
@@ -488,6 +583,7 @@ func _copy_scene_lighting_context(bake_world: Node3D, scene_root: Node,
 		"count": 0,
 		"shadowmask_expected": false,
 		"primary_directional_assigned": false,
+		"directional_light_signature": "",
 		"terrain_inverse": terrain.global_transform.affine_inverse(),
 		"bake_world": bake_world,
 	}
@@ -497,6 +593,7 @@ func _copy_scene_lighting_context(bake_world: Node3D, scene_root: Node,
 	return {
 		"count": int(state["count"]),
 		"shadowmask_expected": bool(state["shadowmask_expected"]),
+		"directional_light_signature": String(state["directional_light_signature"]),
 	}
 
 
@@ -515,6 +612,7 @@ func _copy_lighting_nodes_recursive(source: Node, context: Node3D, state: Dictio
 				clone_light.light_bake_mode = Light3D.BAKE_DYNAMIC
 				state["primary_directional_assigned"] = true
 				state["shadowmask_expected"] = true
+				state["directional_light_signature"] = _directional_light_signature(source as DirectionalLight3D)
 			context.add_child(clone_light)
 			clone_light.owner = context.owner
 			state["count"] = int(state["count"]) + 1
@@ -541,6 +639,39 @@ func _copy_lighting_nodes_recursive(source: Node, context: Node3D, state: Dictio
 			probe_clone.free()
 	for child: Node in source.get_children():
 		_copy_lighting_nodes_recursive(child, context, state)
+
+
+func _directional_light_signature(light: DirectionalLight3D) -> String:
+	if not is_instance_valid(light):
+		return ""
+	var direction: Vector3 = light.global_transform.basis.z.normalized()
+	var effective_color: Color = light.light_color * light.light_energy
+	return "dir=%.6f,%.6f,%.6f;color=%.6f,%.6f,%.6f,%.6f;shadow=%d" % [
+		direction.x, direction.y, direction.z,
+		effective_color.r, effective_color.g, effective_color.b, effective_color.a,
+		1 if light.shadow_enabled else 0]
+
+
+func _find_primary_directional_signature(node: Node) -> String:
+	if not is_instance_valid(node):
+		return ""
+	if node is DirectionalLight3D:
+		var light := node as DirectionalLight3D
+		if light.visible and light.shadow_enabled:
+			return _directional_light_signature(light)
+	for child: Node in node.get_children():
+		var signature: String = _find_primary_directional_signature(child)
+		if not signature.is_empty():
+			return signature
+	return ""
+
+
+func _contains_temporary_baked_users(users: Array) -> bool:
+	for index: int in range(0, users.size(), 4):
+		var path_text: String = String(users[index])
+		if path_text.contains("Terrain3DBakeProxy") or path_text.contains(String(GEOMETRY_CONTEXT_NAME)):
+			return true
+	return false
 
 
 func _build_bake_signature(scene_root: Node, terrain: Terrain3D, location: Vector2i,
@@ -634,10 +765,91 @@ func _remove_existing_bake_world(root: Node) -> void:
 		old.free()
 
 
+func _publish_light_data_transactionally(light_data: LightmapGIData, final_path: String) -> Error:
+	var directory: String = final_path.get_base_dir()
+	var base_name: String = final_path.get_file().get_basename()
+	var staging_path: String = directory.path_join(base_name + ".publishing.lmbake")
+	var previous_path: String = directory.path_join(base_name + ".previous.lmbake")
+	for cleanup_path: String in [staging_path, previous_path]:
+		_remove_file_if_present(cleanup_path)
+	var save_error: Error = ResourceSaver.save(light_data, staging_path)
+	if save_error != OK:
+		return save_error
+	var validation := ResourceLoader.load(staging_path, "LightmapGIData", ResourceLoader.CACHE_MODE_IGNORE) as LightmapGIData
+	if not is_instance_valid(validation) or validation.lightmap_textures.is_empty():
+		_remove_file_if_present(staging_path)
+		return ERR_FILE_CORRUPT
+	var absolute_final: String = ProjectSettings.globalize_path(final_path)
+	var absolute_staging: String = ProjectSettings.globalize_path(staging_path)
+	var absolute_previous: String = ProjectSettings.globalize_path(previous_path)
+	var had_previous: bool = FileAccess.file_exists(final_path)
+	if had_previous:
+		var backup_error: Error = DirAccess.rename_absolute(absolute_final, absolute_previous)
+		if backup_error != OK:
+			_remove_file_if_present(staging_path)
+			return backup_error
+	var publish_error: Error = DirAccess.rename_absolute(absolute_staging, absolute_final)
+	if publish_error != OK:
+		if had_previous:
+			DirAccess.rename_absolute(absolute_previous, absolute_final)
+		_remove_file_if_present(staging_path)
+		return publish_error
+	if had_previous:
+		_remove_file_if_present(previous_path)
+	return OK
+
+
+func _publish_package_transactionally(package: Resource, final_path: String) -> Error:
+	var directory: String = final_path.get_base_dir()
+	var base_name: String = final_path.get_file().trim_suffix(".t3dlight.tres")
+	var staging_path: String = directory.path_join(base_name + ".publishing.t3dlight.tres")
+	var previous_path: String = directory.path_join(base_name + ".previous.t3dlight.tres")
+	for cleanup_path: String in [staging_path, previous_path]:
+		_remove_file_if_present(cleanup_path)
+	var save_error: Error = ResourceSaver.save(package, staging_path)
+	if save_error != OK:
+		return save_error
+	var validation: Resource = ResourceLoader.load(
+		staging_path, "Terrain3DRegionLighting", ResourceLoader.CACHE_MODE_IGNORE)
+	if not is_instance_valid(validation) or String(validation.get("light_data_path")).is_empty():
+		_remove_file_if_present(staging_path)
+		return ERR_FILE_CORRUPT
+	var absolute_final: String = ProjectSettings.globalize_path(final_path)
+	var absolute_staging: String = ProjectSettings.globalize_path(staging_path)
+	var absolute_previous: String = ProjectSettings.globalize_path(previous_path)
+	var had_previous: bool = FileAccess.file_exists(final_path)
+	if had_previous:
+		var backup_error: Error = DirAccess.rename_absolute(absolute_final, absolute_previous)
+		if backup_error != OK:
+			_remove_file_if_present(staging_path)
+			return backup_error
+	var publish_error: Error = DirAccess.rename_absolute(absolute_staging, absolute_final)
+	if publish_error != OK:
+		if had_previous:
+			DirAccess.rename_absolute(absolute_previous, absolute_final)
+		_remove_file_if_present(staging_path)
+		return publish_error
+	if had_previous:
+		_remove_file_if_present(previous_path)
+	return OK
+
+
 func _remove_file_if_present(path: String) -> Error:
 	if path.is_empty() or not FileAccess.file_exists(path):
 		return OK
 	return DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+func _cleanup_interrupted_publications(directory: String) -> void:
+	var output_dir: DirAccess = DirAccess.open(directory)
+	if output_dir == null:
+		return
+	for file_name: String in output_dir.get_files():
+		if not file_name.begins_with("Region_["):
+			continue
+		if (file_name.ends_with(".working.lmbake") or file_name.ends_with(".publishing.lmbake")
+				or file_name.ends_with(".publishing.t3dlight.tres")):
+			_remove_file_if_present(directory.path_join(file_name))
 
 
 func _set_owner_recursive(node: Node, scene_owner: Node) -> void:
