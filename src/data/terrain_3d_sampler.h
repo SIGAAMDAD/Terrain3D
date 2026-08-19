@@ -58,8 +58,8 @@ public:
 	);
 
 private:
-// Cache probes and successful samples use only this cacheline-aligned prefix.
-	// Ownership containers remain cold unless a view is bLoaded or invalidated.
+	// Cache probes and successful samples touch only this cacheline-aligned hot
+	// descriptor. Ownership and fallback containers live in the parallel cold bank.
 	typedef struct alignas( 64 ) t3dregionView_s {
 		Vector2i location = Vector2i( INT32_MAX, INT32_MAX );
 		uint32_t nStamp = 0;
@@ -71,6 +71,9 @@ private:
 		const uint8_t *pHeightBytes = nullptr;
 		const uint8_t *pControlBytes = nullptr;
 		const uint8_t *pDerivedBytes = nullptr;
+	} t3dregionView_t;
+
+	typedef struct t3dregionCold_s {
 		T3DActiveMapLease activeLease;
 		T3DResidentMapLease lease;
 		PackedByteArray heightData;
@@ -78,10 +81,11 @@ private:
 		PackedByteArray derivedData;
 
 		void reset( void );
-	} t3dregionView_t;
+	} t3dregionCold_t;
 
 	const T3DData *m_pData = nullptr;
 	eastl::array<t3dregionView_t, TERRAIN3D_SAMPLER_CACHE_SIZE> m_szCache{};
+	eastl::array<t3dregionCold_t, TERRAIN3D_SAMPLER_CACHE_SIZE> m_szCacheCold{};
 	t3dregionView_t *m_pLastView = nullptr;
 	uint32_t m_stamp = 1;
 	uint32_t m_operation = 1u;
@@ -102,6 +106,7 @@ private:
 	Vector3 sampleNormalUnchecked( const Vector3 &rGlobalPosition, float *pHeight = nullptr );
 	Vector3 sampleSlopeNormalUnchecked( const Vector3 &rGlobalPosition );
 	void resetCache( uint64_t nGeneration );
+	void resetView( t3dregionView_t *pView );
 	static int64_t floorDiv( int64_t nValue, int64_t nDivisor );
 	void resolveAxis( int64_t nGrid, int64_t &nRegion, int &nLocal ) const;
 	static float readHeight( const uint8_t *pBytes, int iIndex );

@@ -373,18 +373,19 @@ PackedStringArray T3DUtil::getFiles( const String &rDir, const String &rGlob ) {
 }
 
 Ref<Image> T3DUtil::blackToAlpha( const Ref<Image> &rImage ) {
-	if ( rImage.is_null() ) {
+	const Ref<Image> pSource = prepareSourceImage( rImage );
+	if ( pSource.is_null() ) {
 		return Ref<Image>();
 	}
-	Ref<Image> pImg = Image::create_empty( rImage->get_width(), rImage->get_height(), false, Image::FORMAT_RGBAF );
+	Ref<Image> pImg = Image::create_empty( pSource->get_width(), pSource->get_height(), false, Image::FORMAT_RGBAF );
 	for ( int y = 0; y < pImg->get_height(); y++ ) {
 		for ( int x = 0; x < pImg->get_width(); x++ ) {
-			Color pixel = rImage->get_pixel( x, y );
+			Color pixel = pSource->get_pixel( x, y );
 			pixel.a = pixel.get_luminance();
 			pImg->set_pixel( x, y, pixel );
 		}
 	}
-	if ( rImage->has_mipmaps() ) {
+	if ( pSource->has_mipmaps() ) {
 		pImg->generate_mipmaps();
 	}
 	return pImg;
@@ -402,11 +403,16 @@ Vector2 T3DUtil::getMinMax( const Ref<Image> &rImage ) {
 		return V2( INFINITY );
 	}
 
+	const Ref<Image> pSource = prepareSourceImage( rImage );
+	if ( pSource.is_null() ) {
+		LOG( T3DTerrain::ERROR, "Provided image could not be decompressed. Nothing to analyze" );
+		return V2( INFINITY );
+	}
 	Vector2 min_max = Vector2( FLT_MAX, -FLT_MAX );
 
-	for ( int y = 0; y < rImage->get_height(); y++ ) {
-		for ( int x = 0; x < rImage->get_width(); x++ ) {
-			const Color col = rImage->get_pixel( x, y );
+	for ( int y = 0; y < pSource->get_height(); y++ ) {
+		for ( int x = 0; x < pSource->get_width(); x++ ) {
+			const Color col = pSource->get_pixel( x, y );
 			if ( col.r < min_max.x ) {
 				min_max.x = col.r;
 			}
@@ -436,9 +442,11 @@ Ref<Image> T3DUtil::getThumbnail( const Ref<Image> &rImage, const Vector2i &rSiz
 
 	LOG( T3DTerrain::INFO, "Drawing a thumbnail sized: ", size );
 	// Create a temporary work image scaled to desired width
-	Ref<Image> pImg;
-	pImg.instantiate();
-	pImg->copy_from( rImage );
+	Ref<Image> pImg = prepareSourceImage( rImage );
+	if ( pImg.is_null() ) {
+		LOG( T3DTerrain::ERROR, "Provided image could not be decompressed. Cannot create thumbnail" );
+		return Ref<Image>();
+	}
 	pImg->resize( size.x, size.y, Image::INTERPOLATE_LANCZOS );
 
 	// Get minimum and maximum height values on the scaled image
@@ -630,6 +638,13 @@ Ref<Image> T3DUtil::packImage(
 		LOG( T3DTerrain::ERROR, "Provided images are not valid. Cannot pack" );
 		return Ref<Image>();
 	}
+	const Ref<Image> pSrcRgb = prepareSourceImage( rSrcRgb );
+	const Ref<Image> pSrcA = prepareSourceImage( rSrcA );
+	const Ref<Image> pSrcAo = rSrcAo.is_valid() ? prepareSourceImage( rSrcAo ) : Ref<Image>();
+	if ( pSrcRgb.is_null() || pSrcA.is_null() || ( rSrcAo.is_valid() && pSrcAo.is_null() ) ) {
+		LOG( T3DTerrain::ERROR, "A source image could not be decompressed. Cannot pack" );
+		return Ref<Image>();
+	}
 	if ( rSrcRgb->get_size() != rSrcA->get_size() ) {
 		LOG( T3DTerrain::ERROR, "Provided images are not the same size. Cannot pack" );
 		return Ref<Image>();
@@ -643,7 +658,7 @@ Ref<Image> T3DUtil::packImage(
 		return Ref<Image>();
 	}
 
-	const bool bPackAo = rSrcAo.is_valid();
+	const bool bPackAo = pSrcAo.is_valid();
 	if ( bPackAo ) {
 		if ( rSrcRgb->get_size() != rSrcAo->get_size() ) {
 			LOG( T3DTerrain::ERROR, "Provided AO and normal images are not the same size. Cannot pack" );
@@ -659,7 +674,7 @@ Ref<Image> T3DUtil::packImage(
 		// Calculate contrast and offset so that we can make full use of the height channel range.
 		for ( int y = 0; y < rSrcRgb->get_height(); y++ ) {
 			for ( int x = 0; x < rSrcRgb->get_width(); x++ ) {
-				const real_t fH = rSrcA->get_pixel( x, y )[nAlphaChannel];
+				const real_t fH = pSrcA->get_pixel( x, y )[nAlphaChannel];
 				fAMax = MAX( fH, fAMax );
 				fAMin = MIN( fH, fAMin );
 			}
@@ -671,8 +686,8 @@ Ref<Image> T3DUtil::packImage(
 	LOG( T3DTerrain::INFO, "Creating image from source RGB + source channel images" );
 	for ( int y = 0; y < rSrcRgb->get_height(); y++ ) {
 		for ( int x = 0; x < rSrcRgb->get_width(); x++ ) {
-			Color col = rSrcRgb->get_pixel( x, y );
-			col.a = rSrcA->get_pixel( x, y )[nAlphaChannel];
+			Color col = pSrcRgb->get_pixel( x, y );
+			col.a = pSrcA->get_pixel( x, y )[nAlphaChannel];
 			if ( bNormalizeAlpha ) {
 				col.a = CLAMP( ( col.a - fAMin ) * fContrast, 0.0f, 1.0f );
 			}
@@ -685,7 +700,7 @@ Ref<Image> T3DUtil::packImage(
 			if ( bPackAo ) {
 				// Compress range to avoid low AO values completely destroying normal vector precision - recovered in
 				// shader.
-				const real_t fAo = sqrt( rSrcAo->get_pixel( x, y )[nAoChannel] ) * 0.5 + 0.5;
+				const real_t fAo = sqrt( pSrcAo->get_pixel( x, y )[nAoChannel] ) * 0.5 + 0.5;
 				col.r = col.r * fAo + ( 1.0f - fAo ) * 0.5f;
 				col.g = col.g * fAo + ( 1.0f - fAo ) * 0.5f;
 				col.b = col.b * fAo + ( 1.0f - fAo ) * 0.5f;
@@ -1060,23 +1075,28 @@ Ref<Image> T3DUtil::luminanceToHeight( const Ref<Image> &rSrcRgb ) {
 		LOG( T3DTerrain::ERROR, "Provided images are empty. Cannot pack" );
 		return Ref<Image>();
 	}
+	const Ref<Image> pSource = prepareSourceImage( rSrcRgb );
+	if ( pSource.is_null() ) {
+		LOG( T3DTerrain::ERROR, "Provided image could not be decompressed. Cannot pack" );
+		return Ref<Image>();
+	}
 	real_t fLumContrast;
 	real_t fLMax = 0.0f;
 	real_t fLMin = 1.0f;
 	// Calculate contrast and offset so that we can make the most use of the height channel range.
-	for ( int y = 0; y < rSrcRgb->get_height(); y++ ) {
-		for ( int x = 0; x < rSrcRgb->get_width(); x++ ) {
-			const Color col = rSrcRgb->get_pixel( x, y );
+	for ( int y = 0; y < pSource->get_height(); y++ ) {
+		for ( int x = 0; x < pSource->get_width(); x++ ) {
+			const Color col = pSource->get_pixel( x, y );
 			const real_t fL = 0.299f * col.r + 0.587f * col.g + 0.114f * col.b;
 			fLMax = MAX( fL, fLMax );
 			fLMin = MIN( fL, fLMin );
 		}
 	}
 	fLumContrast = 1.0f / MAX( fLMax - fLMin, 1e-6 );
-	Ref<Image> pDst = Image::create_empty( rSrcRgb->get_width(), rSrcRgb->get_height(), false, Image::FORMAT_RGB8 );
-	for ( int y = 0; y < rSrcRgb->get_height(); y++ ) {
-		for ( int x = 0; x < rSrcRgb->get_width(); x++ ) {
-			Color col = rSrcRgb->get_pixel( x, y );
+	Ref<Image> pDst = Image::create_empty( pSource->get_width(), pSource->get_height(), false, Image::FORMAT_RGB8 );
+	for ( int y = 0; y < pSource->get_height(); y++ ) {
+		for ( int x = 0; x < pSource->get_width(); x++ ) {
+			Color col = pSource->get_pixel( x, y );
 			real_t fLum = 0.299f * col.r + 0.587f * col.g + 0.114f * col.b;
 			fLum = CLAMP( ( fLum * fLumContrast - fLMin ), 0.0f, 1.0f );
 			// some shaping

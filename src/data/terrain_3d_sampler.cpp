@@ -35,22 +35,12 @@ static float terrain3dSamplerBilerp3x3(
 }
 } // namespace
 
-void T3DSampler::t3dregionView_t::reset( void ) {
+void T3DSampler::t3dregionCold_t::reset( void ) {
 	activeLease.reset();
 	lease.reset();
-	location = Vector2i( INT32_MAX, INT32_MAX );
 	heightData.clear();
 	controlData.clear();
 	derivedData.clear();
-	pHeightBytes = nullptr;
-	pControlBytes = nullptr;
-	pDerivedBytes = nullptr;
-	nStamp = 0u;
-	nRegionGeneration = 0u;
-	nValidatedOperation = 0u;
-	bLoaded = false;
-	bValid = false;
-	bControlResolved = false;
 }
 
 T3DSampler::T3DSampler( const T3DData *pData )
@@ -68,8 +58,9 @@ T3DSampler::T3DSampler( const T3DData *pData )
 }
 
 void T3DSampler::resetCache( const uint64_t nGeneration ) {
-	for ( t3dregionView_t &entry : m_szCache ) {
-		entry.reset();
+	for ( int index = 0; index < TERRAIN3D_SAMPLER_CACHE_SIZE; ++index ) {
+		m_szCacheCold[( size_t ) ( index )].reset();
+		m_szCache[( size_t ) ( index )] = t3dregionView_t{};
 	}
 	m_pLastView = nullptr;
 	m_stamp = 1u;
@@ -82,6 +73,18 @@ void T3DSampler::resetCache( const uint64_t nGeneration ) {
 	m_nRegionMask = m_nRegionShift >= 0 ? ( int64_t ) ( m_nRegionSize - 1 ) : 0;
 	m_fVertexSpacing = m_pData ? m_pData->getVertexSpacingInternal() : 0.0f;
 	m_fInverseVertexSpacing = m_fVertexSpacing > 0.0f ? 1.0 / ( double ) ( m_fVertexSpacing ) : 0.0;
+}
+
+void T3DSampler::resetView( t3dregionView_t *const pView ) {
+	if ( !pView ) {
+		return;
+	}
+	const ptrdiff_t index = pView - m_szCache.data();
+	if ( index < 0 || index >= TERRAIN3D_SAMPLER_CACHE_SIZE ) {
+		return;
+	}
+	m_szCacheCold[( size_t ) ( index )].reset();
+	*pView = t3dregionView_t{};
 }
 
 bool T3DSampler::validateEpoch( void ) {
@@ -155,7 +158,7 @@ T3DSampler::t3dregionView_t *T3DSampler::validateCachedView(
 	if ( pView->nValidatedOperation != m_operation ) {
 		const uint32_t generation = m_pData->getRegionSamplingGenerationInternal( rLocation );
 		if ( generation == 0u || generation != pView->nRegionGeneration ) {
-			pView->reset();
+			resetView( pView );
 			if ( m_pLastView == pView ) {
 				m_pLastView = nullptr;
 			}
@@ -197,7 +200,9 @@ T3DSampler::t3dregionView_t *T3DSampler::getRegionViewUnchecked( const Vector2i 
 		return nullptr;
 	}
 
-	pReplacement->reset();
+	resetView( pReplacement );
+	const size_t replacement_index = ( size_t ) ( pReplacement - m_szCache.data() );
+	t3dregionCold_t &rCold = m_szCacheCold[replacement_index];
 	pReplacement->location = rLocation;
 	pReplacement->nStamp = ++m_stamp;
 	pReplacement->bLoaded = true;
@@ -209,7 +214,7 @@ T3DSampler::t3dregionView_t *T3DSampler::getRegionViewUnchecked( const Vector2i 
 	if ( active.valid() ) {
 		const t3dactiveMapView_t &view = active.view();
 		pReplacement->pHeightBytes = ( const uint8_t * ) ( view.pHeight );
-		pReplacement->activeLease = std::move( active );
+		rCold.activeLease = std::move( active );
 	} else {
 		T3DResidentMapLease pooled = m_pData->acquireResidentMap( rLocation, pRegion );
 		if ( pooled.valid() ) {
@@ -217,30 +222,30 @@ T3DSampler::t3dregionView_t *T3DSampler::getRegionViewUnchecked( const Vector2i 
 			pReplacement->pHeightBytes = ( const uint8_t * ) ( view.pHeight );
 			pReplacement->pControlBytes = ( const uint8_t * ) ( view.pControl );
 			pReplacement->pDerivedBytes = ( const uint8_t * ) ( view.pDerived );
-			pReplacement->lease = std::move( pooled );
+			rCold.lease = std::move( pooled );
 		} else {
 		Image *const height = pRegion->getMapPtr( T3DRegion::TYPE_HEIGHT );
 		Image *const control = pRegion->getMapPtr( T3DRegion::TYPE_CONTROL );
 		if ( !height || height->get_format() != Image::FORMAT_R16 ) {
 			return nullptr;
 		}
-		pReplacement->heightData = height->get_data();
-		const int texels = m_nRegionSize * m_nRegionSize;
-		if ( pReplacement->heightData.size() < texels * ( int ) ( sizeof( uint16_t ) ) ) {
-			pReplacement->heightData.clear();
-			return nullptr;
-		}
-		pReplacement->pHeightBytes = pReplacement->heightData.ptr();
+			rCold.heightData = height->get_data();
+			const int texels = m_nRegionSize * m_nRegionSize;
+			if ( rCold.heightData.size() < texels * ( int ) ( sizeof( uint16_t ) ) ) {
+				rCold.heightData.clear();
+				return nullptr;
+			}
+			pReplacement->pHeightBytes = rCold.heightData.ptr();
 			if ( control ) {
 				if ( control->get_format() != Image::FORMAT_RF ) {
 					return nullptr;
 				}
-				pReplacement->controlData = control->get_data();
-				if ( pReplacement->controlData.size() < texels * ( int ) ( sizeof( uint32_t ) ) ) {
-					pReplacement->controlData.clear();
+				rCold.controlData = control->get_data();
+				if ( rCold.controlData.size() < texels * ( int ) ( sizeof( uint32_t ) ) ) {
+					rCold.controlData.clear();
 					return nullptr;
 				}
-				pReplacement->pControlBytes = pReplacement->controlData.ptr();
+				pReplacement->pControlBytes = rCold.controlData.ptr();
 			}
 		}
 	}
@@ -251,25 +256,25 @@ T3DSampler::t3dregionView_t *T3DSampler::getRegionViewUnchecked( const Vector2i 
 			if ( control->get_format() != Image::FORMAT_RF ) {
 				return nullptr;
 			}
-			pReplacement->controlData = control->get_data();
+			rCold.controlData = control->get_data();
 			const int texels = m_nRegionSize * m_nRegionSize;
-			if ( pReplacement->controlData.size() < texels * ( int ) ( sizeof( uint32_t ) ) ) {
-				pReplacement->controlData.clear();
+			if ( rCold.controlData.size() < texels * ( int ) ( sizeof( uint32_t ) ) ) {
+				rCold.controlData.clear();
 				return nullptr;
 			}
-			pReplacement->pControlBytes = pReplacement->controlData.ptr();
+			pReplacement->pControlBytes = rCold.controlData.ptr();
 		}
 	}
 
 	if ( !pReplacement->pDerivedBytes && pRegion->hasValidDerivedNormalSlopeMap() ) {
 		const Ref<Image> derived = pRegion->getDerivedNormalSlopeMap();
 		if ( derived.is_valid() && derived->get_format() == Image::FORMAT_RG8 ) {
-			pReplacement->derivedData = derived->get_data();
+			rCold.derivedData = derived->get_data();
 		}
 	}
 	const int expected_derived_bytes = m_nRegionSize * m_nRegionSize * 2;
-	if ( !pReplacement->pDerivedBytes && pReplacement->derivedData.size() >= expected_derived_bytes ) {
-		pReplacement->pDerivedBytes = pReplacement->derivedData.ptr();
+	if ( !pReplacement->pDerivedBytes && rCold.derivedData.size() >= expected_derived_bytes ) {
+		pReplacement->pDerivedBytes = rCold.derivedData.ptr();
 	}
 	pReplacement->bValid = true;
 	m_pLastView = pReplacement;
