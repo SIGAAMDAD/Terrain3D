@@ -1,6 +1,6 @@
 {
   "metadata_version": 1,
-  "profile_manifest_version": 3,
+  "profile_manifest_version": 5,
   "properties": {
     "Terrain3D._performance_target_storage": {
       "class_name": "Terrain3D",
@@ -523,6 +523,32 @@
       "tooltip": "Purpose: Configures Environment Shadow Quality for the terrain core subsystem; the fields below state its concrete visual, CPU, GPU, memory, and change-time contract.\nVisual: Changes terrain geometry, render participation, or editor visualization as described by Purpose.\nGPU: May change submitted geometry, render state, or GPU residency according to Purpose.\nCPU: Change-time/runtime CPU work is limited to the owning subsystem described by Purpose; no metadata polling is added.\nMemory: No dedicated allocation is owned by this setting; memory changes only through the selected downstream resource/residency policy.\nChange cost: Configuration update in the owning subsystem; no unrelated rebuild is implied.\nRuntime: Live/editor-safe through the bound setter; downstream work follows Change cost.\nDependencies/conflicts: None declared beyond the owning subsystem and Purpose above.\nProfile ownership: None\nSubsystem/tier: Terrain Core / Global\nState: Editable; visibility=basic",
       "visibility": "basic"
     },
+    "Terrain3D.far_control_resolution": {
+      "class_name": "Terrain3D",
+      "display_name": "Far Control Resolution",
+      "group_path": "Streaming & Residency / GPU Terrain Pages",
+      "key": "Terrain3D.far_control_resolution",
+      "profile_ownership": "xbox360_experimental",
+      "property_name": "far_control_resolution",
+      "state": "editable",
+      "subsystem": "terrain_cache_streaming",
+      "tier": "far",
+      "tooltip": "Purpose: Selects the independently cooked 64, 128, or 256 texel Far control representation.\nVisual: Changes distant material transition fidelity.\nGPU: Controls Far control bandwidth and atlas resolution.\nCPU: Changes bake and upload work only when the Far representation is rebuilt.\nMemory: Scales the reduced Far-control allocation quadratically.\nChange cost: Rebakes or republishes the reduced Far control representation.\nRuntime: Live/editor-safe through a bounded Far-cache rebuild.\nDependencies/conflicts: Owned by Xbox 360 Experimental; must match cooked Far-control page metadata.\nProfile ownership: Xbox 360 Experimental\nSubsystem/tier: Terrain Cache Streaming / Far\nState: Editable; visibility=advanced",
+      "visibility": "advanced"
+    },
+    "Terrain3D.far_material_resolution": {
+      "class_name": "Terrain3D",
+      "display_name": "Far Material Resolution",
+      "group_path": "Streaming & Residency / GPU Terrain Pages",
+      "key": "Terrain3D.far_material_resolution",
+      "profile_ownership": "xbox360_experimental",
+      "property_name": "far_material_resolution",
+      "state": "editable",
+      "subsystem": "terrain_cache_streaming",
+      "tier": "far",
+      "tooltip": "Purpose: Selects the independently generated 64, 128, or 256 texel Far albedo mip-tail layers.\nVisual: Changes distant albedo fidelity.\nGPU: Controls Far-only albedo bandwidth and storage.\nCPU: Changes source resize work during Far material-cache construction.\nMemory: Scales the Far-only albedo array quadratically.\nChange cost: Rebuilds the Far-only material mip-tail array.\nRuntime: Live/editor-safe through a bounded Far material-array rebuild.\nDependencies/conflicts: Owned by Xbox 360 Experimental; independent from detailed runtime material layers.\nProfile ownership: Xbox 360 Experimental\nSubsystem/tier: Terrain Cache Streaming / Far\nState: Editable; visibility=advanced",
+      "visibility": "advanced"
+    },
     "Terrain3D.far_shadow_enabled": {
       "class_name": "Terrain3D",
       "display_name": "Far Shadow Enabled",
@@ -535,6 +561,19 @@
       "tier": "far",
       "tooltip": "Purpose: Allows Far-tier clipmap levels within shadow_lod_count to cast terrain shadows independently of Near and Middle. Enabled by default; actual Far shadow coverage still depends on shadow_lod_count reaching the Far tier.\nVisual: Changes terrain geometry, render participation, or editor visualization as described by Purpose.\nGPU: May change submitted geometry, render state, or GPU residency according to Purpose.\nCPU: Change-time/runtime CPU work is limited to the owning subsystem described by Purpose; no metadata polling is added.\nMemory: No dedicated allocation is owned by this setting; memory changes only through the selected downstream resource/residency policy.\nChange cost: Configuration update in the owning subsystem; no unrelated rebuild is implied.\nRuntime: Live/editor-safe through the bound setter; downstream work follows Change cost.\nDependencies/conflicts: Owned by Xbox 360 Experimental. Changing this value marks that selected base profile Modified until the profile value is restored.\nProfile ownership: Xbox 360 Experimental\nSubsystem/tier: Terrain Rendering / Far\nState: Editable; visibility=basic",
       "visibility": "basic"
+    },
+    "Terrain3D.far_shadow_lod_count": {
+      "class_name": "Terrain3D",
+      "display_name": "Far Shadow LOD Count",
+      "group_path": "Terrain Rendering / Shadows & GI",
+      "key": "Terrain3D.far_shadow_lod_count",
+      "profile_ownership": "xbox360_experimental",
+      "property_name": "far_shadow_lod_count",
+      "state": "editable",
+      "subsystem": "terrain_rendering",
+      "tier": "far",
+      "tooltip": "Purpose: Sets the explicit number of Far LODs submitted through the height-only shadow path.\nVisual: Changes long-range dynamic terrain shadow coverage.\nGPU: Controls coarse height-only Far caster submissions.\nCPU: Changes shadow batch setup only when edited.\nMemory: No dedicated allocation beyond the selected shadow batches.\nChange cost: Rebuilds shadow-only Far clipmap batches.\nRuntime: Live/editor-safe through a shadow-batch rebuild.\nDependencies/conflicts: Owned by Xbox 360 Experimental and bounded by the visible Far LOD range.\nProfile ownership: Xbox 360 Experimental\nSubsystem/tier: Terrain Rendering / Far\nState: Editable; visibility=advanced",
+      "visibility": "advanced"
     },
     "Terrain3D.free_editor_textures": {
       "class_name": "Terrain3D",
@@ -1489,6 +1528,19 @@
       "tooltip": "Purpose: Allows Middle-tier clipmap levels within shadow_lod_count to cast terrain shadows independently of Near and Far. Enabled by default and serialized with the scene.\nVisual: Changes terrain geometry, render participation, or editor visualization as described by Purpose.\nGPU: May change submitted geometry, render state, or GPU residency according to Purpose.\nCPU: Change-time/runtime CPU work is limited to the owning subsystem described by Purpose; no metadata polling is added.\nMemory: No dedicated allocation is owned by this setting; memory changes only through the selected downstream resource/residency policy.\nChange cost: Configuration update in the owning subsystem; no unrelated rebuild is implied.\nRuntime: Live/editor-safe through the bound setter; downstream work follows Change cost.\nDependencies/conflicts: Owned by Xbox 360 Experimental. Changing this value marks that selected base profile Modified until the profile value is restored.\nProfile ownership: Xbox 360 Experimental\nSubsystem/tier: Terrain Rendering / Middle\nState: Editable; visibility=basic",
       "visibility": "basic"
     },
+    "Terrain3D.middle_shadow_lod_count": {
+      "class_name": "Terrain3D",
+      "display_name": "Middle Shadow LOD Count",
+      "group_path": "Terrain Rendering / Shadows & GI",
+      "key": "Terrain3D.middle_shadow_lod_count",
+      "profile_ownership": "xbox360_experimental",
+      "property_name": "middle_shadow_lod_count",
+      "state": "editable",
+      "subsystem": "terrain_rendering",
+      "tier": "middle",
+      "tooltip": "Purpose: Sets the explicit number of Middle LODs submitted through the height-only shadow path.\nVisual: Changes medium-range dynamic terrain shadow coverage.\nGPU: Controls reduced-height Middle caster submissions.\nCPU: Changes shadow batch setup only when edited.\nMemory: No dedicated allocation beyond the selected shadow batches.\nChange cost: Rebuilds shadow-only Middle clipmap batches.\nRuntime: Live/editor-safe through a shadow-batch rebuild.\nDependencies/conflicts: Owned by Xbox 360 Experimental and bounded by the visible Middle LOD range.\nProfile ownership: Xbox 360 Experimental\nSubsystem/tier: Terrain Rendering / Middle\nState: Editable; visibility=advanced",
+      "visibility": "advanced"
+    },
     "Terrain3D.mouse_layer": {
       "class_name": "Terrain3D",
       "display_name": "Mouse Layer",
@@ -1514,6 +1566,19 @@
       "tier": "near",
       "tooltip": "Purpose: Allows Near-tier clipmap levels within shadow_lod_count to cast terrain shadows. Enabled by default; disabling it can reduce shadow submissions but removes near terrain shadow coverage.\nVisual: Changes terrain geometry, render participation, or editor visualization as described by Purpose.\nGPU: May change submitted geometry, render state, or GPU residency according to Purpose.\nCPU: Change-time/runtime CPU work is limited to the owning subsystem described by Purpose; no metadata polling is added.\nMemory: No dedicated allocation is owned by this setting; memory changes only through the selected downstream resource/residency policy.\nChange cost: Configuration update in the owning subsystem; no unrelated rebuild is implied.\nRuntime: Live/editor-safe through the bound setter; downstream work follows Change cost.\nDependencies/conflicts: Owned by Xbox 360 Experimental. Changing this value marks that selected base profile Modified until the profile value is restored.\nProfile ownership: Xbox 360 Experimental\nSubsystem/tier: Terrain Rendering / Near\nState: Editable; visibility=basic",
       "visibility": "basic"
+    },
+    "Terrain3D.near_shadow_lod_count": {
+      "class_name": "Terrain3D",
+      "display_name": "Near Shadow LOD Count",
+      "group_path": "Terrain Rendering / Shadows & GI",
+      "key": "Terrain3D.near_shadow_lod_count",
+      "profile_ownership": "xbox360_experimental",
+      "property_name": "near_shadow_lod_count",
+      "state": "editable",
+      "subsystem": "terrain_rendering",
+      "tier": "near",
+      "tooltip": "Purpose: Sets the explicit number of Near LODs submitted through the height-only shadow path.\nVisual: Changes detailed dynamic terrain shadow coverage.\nGPU: Controls detailed-height Near caster submissions.\nCPU: Changes shadow batch setup only when edited.\nMemory: No dedicated allocation beyond the selected shadow batches.\nChange cost: Rebuilds shadow-only Near clipmap batches.\nRuntime: Live/editor-safe through a shadow-batch rebuild.\nDependencies/conflicts: Owned by Xbox 360 Experimental and bounded by the visible Near LOD range.\nProfile ownership: Xbox 360 Experimental\nSubsystem/tier: Terrain Rendering / Near\nState: Editable; visibility=advanced",
+      "visibility": "advanced"
     },
     "Terrain3D.node_streamer": {
       "class_name": "Terrain3D",
@@ -1838,6 +1903,19 @@
       "subsystem": "region_authoring",
       "tier": "global",
       "tooltip": "Purpose: Number of neighboring Terrain3D regions included as temporary lighting context around each baked region.\nVisual: Larger radii increase temporary bake geometry and contributor counts.\nGPU: Affects offline LightmapGI bake quality or generated texel density; no direct steady-state renderer toggle.\nCPU: Editor-only bake configuration; no steady-state runtime CPU cost.\nMemory: Can change temporary bake memory and final baked-lightmap size.\nChange cost: Changes which neighboring authored regions are instantiated for the next regional bake.\nRuntime: Editor-safe; changes apply to subsequent regional lightmap bakes.\nDependencies/conflicts: Used by the Terrain3D regional lightmap bake tool; does not mutate existing baked packages until a bake is run.\nProfile ownership: None\nSubsystem/tier: Region Authoring / Global\nState: Editable; visibility=basic",
+      "visibility": "basic"
+    },
+    "Terrain3D.region_lightmap_output_directory": {
+      "class_name": "Terrain3D",
+      "display_name": "Region Lightmap Output Directory",
+      "group_path": "General / Data & Authoring / Regional Lightmap Baking",
+      "key": "Terrain3D.region_lightmap_output_directory",
+      "profile_ownership": "none",
+      "property_name": "region_lightmap_output_directory",
+      "state": "editable",
+      "subsystem": "region_authoring",
+      "tier": "global",
+      "tooltip": "Purpose: Persistent output directory for deterministic per-region LightmapGI data and Terrain3D lighting packages.\nVisual: None by itself; visual output changes only after regions are rebaked into the selected destination.\nGPU: None at runtime; controls where offline regional LightmapGI payloads are published.\nCPU: Editor-only bake destination configuration; no steady-state runtime CPU cost.\nMemory: No runtime memory impact; selected directory contains persistent baked lightmap payloads and packages.\nChange cost: No immediate bake or runtime rebuild; the new destination is used on the next regional bake.\nRuntime: Editor-safe; changes the destination used by subsequent regional lightmap bakes.\nDependencies/conflicts: The batch baker writes deterministic Region_[X_Y] payloads here. Existing region packages keep their stored paths until rebaked.\nProfile ownership: None\nSubsystem/tier: Region Authoring / Global\nState: Editable; visibility=basic",
       "visibility": "basic"
     },
     "Terrain3D.region_lightmap_proxy_lod": {
@@ -5753,6 +5831,19 @@
       "tooltip": "Purpose: Selects simple versus detailed surface-response data use for this tier.\nVisual: Changes the rendered appearance of the Middle terrain tier.\nGPU: Changes compiled shader sampling/ALU or lighting behavior for this tier.\nCPU: No steady-state CPU cost change; changing the value regenerates the affected shader configuration.\nMemory: May replace/create a shader variant; no terrain residency allocation change.\nChange cost: Shader source regeneration and variant compile/validation at change time.\nRuntime: Live-safe; regenerates the affected shader variant at change time.\nDependencies/conflicts: Owned by Xbox 360 Experimental. Changing this value marks that selected base profile Modified until the profile value is restored.\nProfile ownership: Xbox 360 Experimental\nSubsystem/tier: Material Shader / Middle\nState: Editable; visibility=basic",
       "visibility": "basic"
     },
+    "Terrain3DMaterial.middle_surface_source": {
+      "class_name": "Terrain3DMaterial",
+      "display_name": "Middle Surface Source",
+      "group_path": "Middle Quality",
+      "key": "Terrain3DMaterial.middle_surface_source",
+      "profile_ownership": "none",
+      "property_name": "middle_surface_source",
+      "state": "editable",
+      "subsystem": "material_shader_compile",
+      "tier": "middle",
+      "tooltip": "Purpose: Selects the baked composite or runtime-material source used by the Middle terrain tier.\nVisual: Trades exact live material composition for the precomputed Middle surface.\nGPU: Selects one baked composite sample or detailed runtime material composition.\nCPU: Baked Composite removes runtime material composition; Runtime Material retains it.\nMemory: Baked Composite consumes one regional composite cache layer while avoiding detailed Middle material residency.\nChange cost: Rebuilds the specialized Middle shader and its texture bindings.\nRuntime: Live/editor-safe through a tier shader rebuild.\nDependencies/conflicts: Baked Composite requires valid runtime-page Middle composite channels.\nProfile ownership: None\nSubsystem/tier: Material Shader Compile / Middle\nState: Editable; visibility=basic",
+      "visibility": "basic"
+    },
     "Terrain3DMaterial.middle_terrain_color_quality": {
       "class_name": "Terrain3DMaterial",
       "display_name": "Middle Terrain Color Quality",
@@ -7571,6 +7662,19 @@
       "subsystem": "baked_lighting",
       "tier": "global",
       "tooltip": "Purpose: Number of contributor entries or stages used by this resource.\nVisual: Baked lighting\nGPU: May change lightmap/shadowmask sampling or GPU package residency.\nCPU: On-demand read-only query only.\nMemory: May change resident baked-lighting package memory.\nChange cost: Read-only query; no mutation or rebuild occurs.\nRuntime: Generated/read-only; cannot be authored.\nDependencies/conflicts: Generated from live resource/runtime state. Read-only and not an authoring input.\nProfile ownership: None\nSubsystem/tier: Baked Lighting / Global\nState: Generated/read-only; visibility=basic",
+      "visibility": "basic"
+    },
+    "Terrain3DRegionLighting.directional_light_signature": {
+      "class_name": "Terrain3DRegionLighting",
+      "display_name": "Directional Light Signature",
+      "group_path": "Generated Bake Metadata",
+      "key": "Terrain3DRegionLighting.directional_light_signature",
+      "profile_ownership": "none",
+      "property_name": "directional_light_signature",
+      "state": "generated_read_only",
+      "subsystem": "baked_lighting",
+      "tier": "global",
+      "tooltip": "Purpose: Records the directional-light state used by the regional bake so runtime residency can prevent incompatible adjacent packages from being active together.\nVisual: Protects against regional shadowmask or lighting discontinuities caused by mixing packages baked against different directional-light state.\nGPU: Prevents simultaneously active lightmap/shadowmask packages baked against incompatible directional-light state.\nCPU: Compared only when regional lighting packages become residency candidates.\nMemory: Small serialized metadata string only.\nChange cost: Read-only query; no mutation or rebuild occurs.\nRuntime: Generated/read-only; cannot be authored.\nDependencies/conflicts: Generated by the regional bake from the primary visible shadow-casting directional light and used to reject incompatible simultaneous packages.\nProfile ownership: None\nSubsystem/tier: Baked Lighting / Global\nState: Generated/read-only; visibility=basic",
       "visibility": "basic"
     },
     "Terrain3DRegionLighting.disk_bytes": {
