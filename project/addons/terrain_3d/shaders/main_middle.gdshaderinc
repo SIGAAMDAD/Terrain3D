@@ -35,12 +35,15 @@ uniform highp sampler2DArray _middle_height_maps : filter_linear, repeat_disable
 #if !T3D_CONTROL_MAPS_IMPLICIT
 uniform highp sampler2DArray _control_maps : repeat_disable;
 #endif
-#if !T3D_COLOR_MAPS_IMPLICIT
+#if T3D_TERRAIN_SAMPLING_MODE != 2 && !T3D_COLOR_MAPS_IMPLICIT
 uniform highp sampler2DArray _color_maps : source_color, FILTER_METHOD, repeat_disable;
 #endif
 uniform highp sampler2DArray _derived_maps : FILTER_METHOD, repeat_disable;
 uniform highp sampler2D _far_height_map : filter_linear, repeat_disable;
 uniform highp sampler2D _far_color_map : source_color, filter_nearest, repeat_disable;
+#if T3D_TERRAIN_SAMPLING_MODE == 2
+uniform highp sampler2DArray _middle_composite_maps : source_color, filter_nearest, repeat_disable;
+#else
 uniform highp sampler2DArray _texture_array_albedo : source_color, FILTER_METHOD, repeat_enable;
 uniform vec2 _control_rotation_cs[16];
 uniform vec4 _texture_color_array[32];
@@ -50,11 +53,10 @@ uniform int _texture_array_layer_count = 1;
 uniform float _material_max_lod = 0.0;
 #include "res://addons/terrain_3d/shaders/includes/runtime_material_streaming.gdshaderinc"
 #include "res://addons/terrain_3d/shaders/includes/material_layer_map.gdshaderinc"
+#endif
 uniform float _tier_material_lod_bias : hint_range(-2.0, 4.0, 0.25) = 0.0;
 uniform float _tier_authored_color_contribution : hint_range(0.0, 1.0, 0.01) = 1.0;
 uniform float _tier_wetness_contribution : hint_range(0.0, 1.0, 0.01) = 1.0;
-uniform float _tier_ambient_floor : hint_range(0.0, 0.5, 0.01) = 0.08;
-uniform float _tier_shadow_floor : hint_range(0.0, 1.0, 0.01) = 0.20;
 uniform vec4 silhouette_color : source_color = vec4(0.04, 0.04, 0.04, 1.0);
 #if T3D_AUTO_SHADER_ENABLED
 group_uniforms shader_uniforms.auto_shader;
@@ -152,10 +154,14 @@ float decode_far_surface_alpha(const float packed_alpha) {
 }
 
 vec3 sample_texture_tint(const int texture_id) {
+#if T3D_TERRAIN_SAMPLING_MODE == 2
+	return vec3(1.0);
+#else
 	if (texture_id < 0 || texture_id >= _texture_color_count) {
 		return vec3(1.0);
 	}
 	return _texture_color_array[texture_id].rgb;
+#endif
 }
 
 vec3 missing_texture_checker(const vec2 world_texel) {
@@ -173,6 +179,9 @@ vec2 rotate_compact_uv(const vec2 uv, const vec2 cs) {
 }
 
 vec3 sample_middle_material(const int texture_id, const vec2 world_texel, const float control_scale, const vec2 control_rotation) {
+#if T3D_TERRAIN_SAMPLING_MODE == 2
+	return vec3(1.0);
+#else
 	if (_texture_array_layer_count <= 0) {
 		return missing_texture_checker(world_texel);
 	}
@@ -185,9 +194,13 @@ vec3 sample_middle_material(const int texture_id, const vec2 world_texel, const 
 	vec2 world_xz = world_texel * _vertex_spacing;
 	vec2 uv = rotate_compact_uv(world_xz * control_scale, control_rotation) * asset_scale;
 	return texture(_texture_array_albedo, vec3(uv, float(t3d_mat_layer(id))), _tier_material_lod_bias).rgb * tint;
+#endif
 }
 
 vec3 sample_middle_far_material(const int texture_id, const vec2 world_texel) {
+#if T3D_TERRAIN_SAMPLING_MODE == 2
+	return vec3(1.0);
+#else
 	if (_texture_array_layer_count <= 0) {
 		return missing_texture_checker(world_texel);
 	}
@@ -199,6 +212,7 @@ vec3 sample_middle_far_material(const int texture_id, const vec2 world_texel) {
 	vec2 uv = world_texel * (_vertex_spacing * _texture_uv_scale_array[id]);
 	float material_lod = clamp(max(2.0, 3.0 + _tier_material_lod_bias), 0.0, max(_material_max_lod, 0.0));
 	return textureLod(_texture_array_albedo, vec3(uv, float(t3d_mat_layer(id))), material_lod).rgb * tint;
+#endif
 }
 
 vec3 sample_far_normal(const vec2 world_texel, const float sample_step) {
@@ -247,63 +261,9 @@ vec3 get_index_uv(const vec2 uv2) {
 	return vec3(uv2 - region_pos, float(get_region_layer(map_pos)));
 }
 
-vec4 read_terrain_color_exact_texel(ivec2 local_coord, ivec2 region_cell, const ivec2 map_size) {
-#if T3D_COLOR_MAPS_IMPLICIT
-	return COLOR_MAP_DEF;
-#else
-	ivec2 region_delta = ivec2(0);
-	if (local_coord.x < 0) {
-		local_coord.x += map_size.x;
-		region_delta.x = -1;
-	} else if (local_coord.x >= map_size.x) {
-		local_coord.x -= map_size.x;
-		region_delta.x = 1;
-	}
-	if (local_coord.y < 0) {
-		local_coord.y += map_size.y;
-		region_delta.y = -1;
-	} else if (local_coord.y >= map_size.y) {
-		local_coord.y -= map_size.y;
-		region_delta.y = 1;
-	}
-	int layer = get_region_layer(region_cell + region_delta + (_region_map_size / 2));
-	return layer >= 0 ? texelFetch(_color_maps, ivec3(local_coord, layer), 0) : COLOR_MAP_DEF;
+#if T3D_TERRAIN_SAMPLING_MODE != 2
+#include "res://addons/terrain_3d/shaders/includes/middle_color_functions.gdshaderinc"
 #endif
-}
-
-vec4 sample_terrain_color_exact(const vec2 world_region_uv) {
-#if T3D_COLOR_MAPS_IMPLICIT
-	return COLOR_MAP_DEF;
-#else
-	ivec2 map_size = textureSize(_color_maps, 0).xy;
-	vec2 region_pos = floor(world_region_uv);
-	vec2 local_uv = world_region_uv - region_pos;
-	vec2 texel = local_uv * vec2(map_size) - vec2(0.5);
-	ivec2 base = ivec2(floor(texel));
-	vec2 f = fract(texel);
-	ivec2 region_cell = ivec2(region_pos);
-	vec4 c00 = read_terrain_color_exact_texel(base, region_cell, map_size);
-	vec4 c10 = read_terrain_color_exact_texel(base + ivec2(1, 0), region_cell, map_size);
-	vec4 c01 = read_terrain_color_exact_texel(base + ivec2(0, 1), region_cell, map_size);
-	vec4 c11 = read_terrain_color_exact_texel(base + ivec2(1, 1), region_cell, map_size);
-	return mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y);
-#endif
-}
-
-vec4 sample_terrain_color(const vec2 world_region_uv, const vec3 region_uv) {
-#if T3D_COLOR_MAPS_IMPLICIT
-	return COLOR_MAP_DEF;
-#else
-	if (region_uv.z < 0.0) {
-		return COLOR_MAP_DEF;
-	}
-#if T3D_COLOR_SAMPLING_MODE == 2
-	return sample_terrain_color_exact(world_region_uv);
-#else
-	return texture(_color_maps, region_uv);
-#endif
-#endif
-}
 
 float sample_terrain_height(const ivec3 index, const vec2 world_texel) {
 	vec2 rounded_uv = round(world_texel);
@@ -312,10 +272,10 @@ float sample_terrain_height(const ivec3 index, const vec2 world_texel) {
 	if (height_layer >= 0) {
 		ivec2 local_coord = ivec2(mod(rounded_uv, _region_size));
 		ivec2 height_size = textureSize(_middle_height_maps, 0).xy;
-		if (height_size.x == region_size && height_size.y == region_size) {
+		if (height_size.x == int(_region_size) && height_size.y == int(_region_size)) {
 			return decode_terrain_height(texelFetch(_middle_height_maps, ivec3(local_coord, height_layer), 0).r);
 		}
-		vec2 reduced_texel = vec2(local_coord) * vec2(height_size) / float(region_size);
+		vec2 reduced_texel = vec2(local_coord) * vec2(height_size) / _region_size;
 		vec2 reduced_uv = (reduced_texel + vec2(0.5)) / vec2(height_size);
 		return decode_terrain_height(textureLod(_middle_height_maps, vec3(reduced_uv, float(height_layer)), 0.0).r);
 	}
@@ -415,7 +375,11 @@ void fragment() {
 		logical_region_present = get_logical_region_present(logical_map_pos);
 #include "res://addons/terrain_3d/shaders/includes/middle_none_fragment.gdshaderinc"
 	}
+#if T3D_TERRAIN_SAMPLING_MODE == 2
+	vec4 macro_surface = region_uv.z >= 0.0 ? vec4(1.0) : sample_far_color(fragment_uv);
+#else
 	vec4 macro_surface = region_uv.z >= 0.0 ? sample_terrain_color(fragment_uv2, region_uv) : sample_far_color(fragment_uv);
+#endif
 #if T3D_TERRAIN_NORMAL_MODE == 2
 	NORMAL = normalize(cross(dFdyCoarse(VERTEX), dFdxCoarse(VERTEX)));
 #else
@@ -436,12 +400,27 @@ void fragment() {
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.0;
 	AO = 1.0;
-	float hemisphere = mix(0.65, 1.0, clamp(v_middle_normal.y * 0.5 + 0.5, 0.0, 1.0));
-	EMISSION = ALBEDO * (_tier_ambient_floor * hemisphere);
 #else
 	vec3 surface_material = vec3(1.0);
 	float surface_alpha = macro_surface.a;
 
+#if T3D_TERRAIN_SAMPLING_MODE == 2
+	if (region_uv.z >= 0.0) {
+		vec4 baked_surface = texture(_middle_composite_maps, region_uv);
+		uint baked_surface_bits = uint(round(clamp(baked_surface.a, 0.0, 1.0) * 255.0));
+		if (!(CAMERA_VISIBLE_LAYERS == _mouse_layer) && (baked_surface_bits & 0x80u) == 0u) {
+			discard;
+		}
+		ALBEDO = baked_surface.rgb;
+		surface_alpha = float(baked_surface_bits & 0x7Fu) * (1.0 / 127.0);
+	} else {
+		if (!(CAMERA_VISIBLE_LAYERS == _mouse_layer) && logical_region_present &&
+			!far_surface_is_solid(macro_surface.a)) {
+			discard;
+		}
+		ALBEDO = macro_surface.rgb;
+	}
+#else
 	if (region_uv.z >= 0.0) {
 		ivec3 control_index = get_index_coord(floor(fragment_uv));
 		uint control = read_terrain_control(control_index);
@@ -491,11 +470,16 @@ void fragment() {
 		int coarse_material_id = coarse_surface_present ? decode_far_material_id(macro_surface.a) : 0;
 		surface_material = sample_middle_far_material(coarse_material_id, fragment_uv);
 	}
+#endif
 
 	float wetness = fma(surface_alpha, -2.0, 1.0) * _tier_wetness_contribution;
 	float wet_amount = clamp(wetness, 0.0, 1.0);
+#if T3D_TERRAIN_SAMPLING_MODE != 2
 	vec3 authored_color = mix(vec3(1.0), macro_surface.rgb, _tier_authored_color_contribution);
 	ALBEDO = authored_color * surface_material * mix(1.0, 0.86, wet_amount);
+#else
+	ALBEDO *= mix(1.0, 0.86, wet_amount);
+#endif
 #if T3D_SAMPLE_SURFACE_DATA
 	ROUGHNESS = clamp(0.9 - wetness, 0.0, 1.0);
 #else
@@ -503,8 +487,6 @@ void fragment() {
 #endif
 	SPECULAR = 0.0;
 	AO = 1.0;
-	float hemisphere = mix(0.65, 1.0, clamp(v_middle_normal.y * 0.5 + 0.5, 0.0, 1.0));
-	EMISSION = ALBEDO * (_tier_ambient_floor * hemisphere);
 #endif
 #include "res://addons/terrain_3d/shaders/includes/editor_fragment.gdshaderinc"
 
@@ -513,16 +495,14 @@ void fragment() {
 #if T3D_SHADING_MODE == 2
 void light() {
 	float ndotl = max(dot(NORMAL, LIGHT), 0.0);
-	float wrapped_diffuse = clamp((ndotl + 0.16) / 1.16, 0.0, 1.0);
-	float shadow_attenuation = max(ATTENUATION, _tier_shadow_floor);
-	DIFFUSE_LIGHT += LIGHT_COLOR * wrapped_diffuse * shadow_attenuation / PI;
+	float wrapped_diffuse = clamp((ndotl + 0.12) / 1.12, 0.0, 1.0);
+	DIFFUSE_LIGHT += LIGHT_COLOR * wrapped_diffuse * ATTENUATION / PI;
 }
 #elif T3D_SHADING_MODE == 5
 void light() {
 	float ndotl = max(dot(NORMAL, LIGHT), 0.0);
-	float wrapped_diffuse = clamp((ndotl + 0.16) / 1.16, 0.0, 1.0);
-	float shadow_attenuation = max(ATTENUATION, _tier_shadow_floor);
-	DIFFUSE_LIGHT += LIGHT_COLOR * wrapped_diffuse * shadow_attenuation / PI;
+	float wrapped_diffuse = clamp((ndotl + 0.12) / 1.12, 0.0, 1.0);
+	DIFFUSE_LIGHT += LIGHT_COLOR * wrapped_diffuse * ATTENUATION / PI;
 	vec3 half_vector = normalize(LIGHT + VIEW);
 	float nh = max(dot(NORMAL, half_vector), 0.0);
 	float nh2 = nh * nh;
@@ -531,7 +511,7 @@ void light() {
 	float nh16 = nh8 * nh8;
 	float gloss = clamp(1.0 - ROUGHNESS, 0.0, 1.0);
 	float highlight = mix(nh8, nh16, gloss);
-	SPECULAR_LIGHT += LIGHT_COLOR * highlight * mix(0.025, 0.16, gloss) * shadow_attenuation / PI;
+	SPECULAR_LIGHT += LIGHT_COLOR * highlight * mix(0.025, 0.16, gloss) * ATTENUATION / PI;
 }
 #endif
 #endif // T3D_TEMPLATE_CONTEXT
