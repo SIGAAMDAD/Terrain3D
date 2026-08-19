@@ -49,6 +49,7 @@ private:
 	T3DGeneratedTexture m_generatedNormalTextures;
 	T3DGeneratedTexture m_generatedSurfaceTextures;
 	T3DGeneratedTexture m_generatedDisplacementTextures;
+	T3DGeneratedTexture m_generatedFarAlbedoTextures;
 	t3dtexturePackingMode_t m_texturePackingMode = TEXTURE_PACKING_LEGACY;
 	typedef struct t3dtextureSettingsBlock_s {
 		eastl::array<Color, TERRAIN3D_MAX_TEXTURE_ASSETS> colors{};
@@ -78,7 +79,8 @@ private:
 		RUNTIME_MATERIAL_CHANNEL_NORMAL = 1,
 		RUNTIME_MATERIAL_CHANNEL_SURFACE = 2,
 		RUNTIME_MATERIAL_CHANNEL_DISPLACEMENT = 3,
-		RUNTIME_MATERIAL_CHANNEL_COUNT = 4,
+		RUNTIME_MATERIAL_CHANNEL_FAR_ALBEDO = 4,
+		RUNTIME_MATERIAL_CHANNEL_COUNT = 5,
 	} t3druntimeMaterialChannel_t;
 	typedef struct t3druntimeMaterialImageInfo_s {
 		uint64_t nOffset = 0u;
@@ -107,6 +109,7 @@ private:
 	int m_nRuntimeMaterialEvictionsLastTick = 0;
 	bool m_bRuntimeMaterialCacheActive = false;
 	bool m_bRuntimeMaterialCookedValid = false;
+	bool m_bRuntimeMaterialSourceTexturesReleased = false;
 
 	typedef struct t3dtextureArrayLayout_s {
 		Vector2i vSize = V2I_ZERO;
@@ -152,7 +155,9 @@ private:
 	bool loadRuntimeMaterialCookedIndex( void );
 	Ref<Image> loadRuntimeMaterialCookedImage( int nLogicalId, int nChannel ) const;
 	bool initializeRuntimeMaterialPhysicalArrays( int nLayerLimit = -1 );
+	bool initializeFarMaterialArray( void );
 	bool publishRuntimeMaterialLayer( int nLogicalId, int nPhysicalLayer );
+	void updateRuntimeMaterialResidencyInternal( const uint8_t *pPriorityIds, int nPriorityCount, int nUploadBudget );
 	void releaseRuntimeMaterialSourceTextures( void );
 	void resetRuntimeMaterialCacheState( bool bClearGeneratedArrays );
 
@@ -187,6 +192,9 @@ public:
 	RID getAlbedoArrayRid( void ) const {
 		return m_generatedAlbedoTextures.getRid();
 	}
+	RID getFarAlbedoArrayRid( void ) const { return m_generatedFarAlbedoTextures.getRid(); }
+	int getFarAlbedoArraySize( void ) const { return m_generatedFarAlbedoTextures.size(); }
+	int getFarAlbedoArrayMaxLod( void ) const { return m_generatedFarAlbedoTextures.maxMipmapLevel(); }
 	int getAlbedoArrayMaxLod( void ) const {
 		return m_generatedAlbedoTextures.maxMipmapLevel();
 	}
@@ -201,7 +209,8 @@ public:
 	}
 	size_t getGeneratedTexturePayloadBytes( void ) const {
 		return m_generatedAlbedoTextures.payloadBytes() + m_generatedNormalTextures.payloadBytes() +
-			m_generatedSurfaceTextures.payloadBytes() + m_generatedDisplacementTextures.payloadBytes();
+			m_generatedSurfaceTextures.payloadBytes() + m_generatedDisplacementTextures.payloadBytes() +
+			m_generatedFarAlbedoTextures.payloadBytes();
 	}
 	// Deprecated compatibility alias.
 	RID getPbrArrayRid( void ) const {
@@ -256,7 +265,10 @@ public:
 	PackedInt32Array getTextureLayerMap( void ) const;
 	PackedColorArray getRuntimeMaterialAverageAlbedo( void ) const;
 	Dictionary getRuntimeMaterialCacheStats( void ) const;
+	uint64_t getRuntimeMaterialSourceSignature( void ) const { return computeRuntimeMaterialSourceSignature(); }
 	bool isRuntimeMaterialCacheActive( void ) const { return m_bRuntimeMaterialCacheActive; }
+	bool areRuntimeMaterialSourceTexturesReleased( void ) const { return m_bRuntimeMaterialSourceTexturesReleased; }
+	void invalidateRuntimeMaterialCache( void ) { resetRuntimeMaterialCacheState( false ); }
 
 	void setMeshAsset( const int nId, const Ref<T3DMeshAsset> &rMeshAsset );
 	Ref<T3DMeshAsset> getMeshAsset( const int nId ) const;
