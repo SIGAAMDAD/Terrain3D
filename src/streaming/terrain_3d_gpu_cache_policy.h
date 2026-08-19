@@ -5,7 +5,7 @@
 #ifndef TERRAIN3D_GPU_CACHE_POLICY_H
 #define TERRAIN3D_GPU_CACHE_POLICY_H
 
-#include "Terrain3DConstants.h"
+#include "streaming/terrain_3d_gpu_cache_constants.h"
 
 #include <cmath>
 #include <cstddef>

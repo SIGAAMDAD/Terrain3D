@@ -2,6 +2,7 @@
 
 #include "streaming/terrain_3d_node_streamer.h"
 
+#include <algorithm>
 #include <limits>
 
 #include <godot_cpp/classes/geometry_instance3d.hpp>
@@ -279,12 +280,28 @@ bool T3DNodeStreamer::migrateActiveNodes( void ) {
 			}
 			continue;
 		}
-		++m_nGlobalTransformsReadLastTick;
-		const Transform3D terrain_local = terrain_inverse * pNode->get_global_transform();
-		const Vector2i destinationLocation(
-			( int ) ( Math::floor( terrain_local.origin.x / fRegionWorldSize ) ),
-			( int ) ( Math::floor( terrain_local.origin.z / fRegionWorldSize ) )
-		);
+		Transform3D terrain_local;
+		Vector2i destinationLocation;
+		if ( pNode->get_parent() == source_runtime.pRoot ) {
+			// The normal streamed-node topology already gives us terrain-local motion:
+			// the region root is positioned at the region origin. Avoid a global
+			// transform fetch and terrain inverse multiply for every movable node.
+			terrain_local = pNode->get_transform();
+			const Vector2i source_location = pSourceRegion->getLocation();
+			destinationLocation = source_location + Vector2i(
+				( int ) ( Math::floor( terrain_local.origin.x / fRegionWorldSize ) ),
+				( int ) ( Math::floor( terrain_local.origin.z / fRegionWorldSize ) )
+			);
+			terrain_local.origin.x += ( real_t ) ( source_location.x ) * fRegionWorldSize;
+			terrain_local.origin.z += ( real_t ) ( source_location.y ) * fRegionWorldSize;
+		} else {
+			++m_nGlobalTransformsReadLastTick;
+			terrain_local = terrain_inverse * pNode->get_global_transform();
+			destinationLocation = Vector2i(
+				( int ) ( Math::floor( terrain_local.origin.x / fRegionWorldSize ) ),
+				( int ) ( Math::floor( terrain_local.origin.z / fRegionWorldSize ) )
+			);
+		}
 		const int destination_index = indexFromLocation( destinationLocation );
 		if ( destination_index < 0 || destination_index == source_index ) {
 			continue;
@@ -825,6 +842,13 @@ void T3DNodeStreamer::buildDesiredSet( const Vector2i &rCenter ) {
 			}
 		}
 	}
+	std::sort( m_desiredRegionIndices.begin(), m_desiredRegionIndices.end(), [rCenter]( const int a, const int b ) {
+		const Vector2i location_a = locationFromIndex( a );
+		const Vector2i location_b = locationFromIndex( b );
+		const int distance_a = MAX( Math::abs( location_a.x - rCenter.x ), Math::abs( location_a.y - rCenter.y ) );
+		const int distance_b = MAX( Math::abs( location_b.x - rCenter.x ), Math::abs( location_b.y - rCenter.y ) );
+		return distance_a != distance_b ? distance_a < distance_b : a < b;
+	} );
 }
 
 
@@ -940,43 +964,12 @@ void T3DNodeStreamer::updateResidency( const Vector3 &rTargetPosition, const boo
 		MAX( 1, getEffectiveLoadRegionBudget() ) : getEffectiveLoadRegionBudget();
 	int region_budget = effective_load_budget;
 	int node_budget = authoring_full_residency ? MAX( 1, m_nLoadNodeBudget ) : m_nLoadNodeBudget;
-	const int residency_radius = getEffectiveRadiusRegions();
-	for ( int radius = 0; radius <= residency_radius && node_budget > 0; ++radius ) {
-		for ( int z = -radius; z <= radius && node_budget > 0; ++z ) {
-			for ( int x = -radius; x <= radius && node_budget > 0; ++x ) {
-				if ( MAX( Math::abs( x ), Math::abs( z ) ) != radius ) {
-					continue;
-				}
-				const int index = indexFromLocation( center + Vector2i( x, z ) );
-				if ( index < 0 || !m_desiredRegions.test( ( size_t ) ( index ) ) ) {
-					continue;
-				}
-				t3dregionRuntime_t &runtime = m_szRegions[index];
-				if ( !runtime.pRoot && region_budget <= 0 ) {
-					m_bLoadRegionBudgetLimitedLastTick = true;
-					m_bHasPendingActivation = true;
-					continue;
-				}
-				const bool bHadRoot = runtime.pRoot != nullptr;
-				if ( activateRegion( index, node_budget ) ) {
-					if ( !bHadRoot ) {
-						--region_budget;
-						++m_nLoadsLastTick;
-					}
-				}
-			}
-		}
-	}
-	// Extended bounds coverage can make an owner region desired even when the
-	// owner/pivot itself is outside the ordinary radius. Iterate only the compact
-	// desired owner list so this path never walks the 4096-slot logical plane.
+	// Desired owners are rebuilt only when selection changes and are sorted nearest
+	// first. Service that compact list directly instead of re-walking every square
+	// inside every radius on each activation tick.
 	for ( const int index : m_desiredRegionIndices ) {
 		if ( node_budget <= 0 ) {
 			break;
-		}
-		const Vector2i location = locationFromIndex( index );
-		if ( MAX( Math::abs( location.x - center.x ), Math::abs( location.y - center.y ) ) <= residency_radius ) {
-			continue;
 		}
 		t3dregionRuntime_t &runtime = m_szRegions[index];
 		if ( !runtime.pRoot && region_budget <= 0 ) {
