@@ -42,6 +42,30 @@ typedef struct t3dfarSurfaceBakeData_s {
 
 namespace {
 
+template <typename Callback>
+static bool terrain3dForEachSquareRing( const Vector2i &rCenter, const int nMaxRadius, Callback &&rCallback ) {
+	for ( int radius = 0; radius < nMaxRadius; ++radius ) {
+		if ( radius == 0 ) {
+			if ( !rCallback( rCenter ) ) {
+				return false;
+			}
+			continue;
+		}
+		for ( int x = -radius; x <= radius; ++x ) {
+			if ( !rCallback( rCenter + Vector2i( x, -radius ) ) ||
+				!rCallback( rCenter + Vector2i( x, radius ) ) ) {
+				return false;
+			}
+		}
+		for ( int y = -radius + 1; y <= radius - 1; ++y ) {
+			if ( !rCallback( rCenter + Vector2i( -radius, y ) ) ||
+				!rCallback( rCenter + Vector2i( radius, y ) ) ) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
 
 typedef struct t3dcontrolCookSource_s {
 	PackedByteArray nBytes;
@@ -158,17 +182,22 @@ class T3DLastScopeTimer {
 	uint64_t *_elapsed_usec = nullptr;
 
 public:
-	explicit T3DLastScopeTimer( uint64_t &nElapsedUsec ) : _elapsed_usec( &nElapsedUsec ) {
+	T3DLastScopeTimer( uint64_t &nElapsedUsec, const bool bEnabled ) {
+		nElapsedUsec = 0u;
+		if ( !bEnabled ) {
+			return;
+		}
+		_elapsed_usec = &nElapsedUsec;
 		Time *time = Time::get_singleton();
 		_started_usec = time ? time->get_ticks_usec() : 0u;
-		nElapsedUsec = 0u;
 	}
 	~T3DLastScopeTimer( void ) {
+		if ( !_elapsed_usec ) {
+			return;
+		}
 		Time *time = Time::get_singleton();
 		const uint64_t finished_usec = time ? time->get_ticks_usec() : _started_usec;
-		if ( _elapsed_usec ) {
-			*_elapsed_usec = finished_usec >= _started_usec ? finished_usec - _started_usec : 0u;
-		}
+		*_elapsed_usec = finished_usec >= _started_usec ? finished_usec - _started_usec : 0u;
 	}
 };
 
@@ -366,21 +395,35 @@ static void terrain3dRuntimePageEncodeHeader(
 	offset += 4u;
 	terrain3dRuntimePageWriteU32( nBytes, offset, rHeader.nTotalBytes );
 	offset += 4u;
+	terrain3dRuntimePageWriteU32( nBytes, offset, rHeader.channelCount );
+	offset += 4u;
+	terrain3dRuntimePageWriteU32( nBytes, offset, rHeader.channelTableOffset );
+	offset += 4u;
 	for ( uint32_t channel = 0u; channel < TERRAIN3D_RUNTIME_PAGE_CHANNEL_COUNT; ++channel ) {
 		const t3druntimePageChannelInfo_t &info = rHeader.szChannels[channel];
-		terrain3dRuntimePageWriteU32( nBytes, offset, info.iOffset );
-		offset += 4u;
-		terrain3dRuntimePageWriteU32( nBytes, offset, info.nSize );
-		offset += 4u;
-		terrain3dRuntimePageWriteU32( nBytes, offset, info.checksum );
+		terrain3dRuntimePageWriteU32( nBytes, offset, info.type );
 		offset += 4u;
 		terrain3dRuntimePageWriteU32( nBytes, offset, info.format );
+		offset += 4u;
+		terrain3dRuntimePageWriteU32( nBytes, offset, info.compression );
+		offset += 4u;
+		terrain3dRuntimePageWriteU32( nBytes, offset, info.iOffset );
+		offset += 4u;
+		terrain3dRuntimePageWriteU32( nBytes, offset, info.compressedBytes );
+		offset += 4u;
+		terrain3dRuntimePageWriteU32( nBytes, offset, info.uncompressedBytes );
 		offset += 4u;
 		terrain3dRuntimePageWriteU32( nBytes, offset, info.nWidth );
 		offset += 4u;
 		terrain3dRuntimePageWriteU32( nBytes, offset, info.height );
 		offset += 4u;
-		terrain3dRuntimePageWriteU32( nBytes, offset, info.mipmaps );
+		terrain3dRuntimePageWriteU32( nBytes, offset, info.mipCount );
+		offset += 4u;
+		terrain3dRuntimePageWriteU32( nBytes, offset, info.alignment );
+		offset += 4u;
+		terrain3dRuntimePageWriteU32( nBytes, offset, info.checksum );
+		offset += 4u;
+		terrain3dRuntimePageWriteU32( nBytes, offset, info.signature );
 		offset += 4u;
 	}
 	terrain3dRuntimePageWriteU32( nBytes, offset, rHeader.sourceSignatureLo );
@@ -392,6 +435,18 @@ static void terrain3dRuntimePageEncodeHeader(
 	terrain3dRuntimePageWriteU32( nBytes, offset, rHeader.materialMask );
 	offset += 4u;
 	terrain3dRuntimePageWriteU32( nBytes, offset, rHeader.middleHeightDivisor );
+	offset += 4u;
+	terrain3dRuntimePageWriteU32( nBytes, offset, rHeader.worldSignatureLo );
+	offset += 4u;
+	terrain3dRuntimePageWriteU32( nBytes, offset, rHeader.worldSignatureHi );
+	offset += 4u;
+	terrain3dRuntimePageWriteU32( nBytes, offset, ( uint32_t ) ( rHeader.regionX ) );
+	offset += 4u;
+	terrain3dRuntimePageWriteU32( nBytes, offset, ( uint32_t ) ( rHeader.regionZ ) );
+	offset += 4u;
+	terrain3dRuntimePageWriteU32( nBytes, offset, rHeader.boundsMinYBits );
+	offset += 4u;
+	terrain3dRuntimePageWriteU32( nBytes, offset, rHeader.boundsMaxYBits );
 }
 
 static t3druntimePageHeader_t terrain3dRuntimePageDecodeHeader( const PackedByteArray &arrBytes ) {
@@ -413,21 +468,35 @@ static t3druntimePageHeader_t terrain3dRuntimePageDecodeHeader( const PackedByte
 	offset += 4u;
 	header.nTotalBytes = terrain3dRuntimePageReadU32( arrBytes, offset );
 	offset += 4u;
+	header.channelCount = terrain3dRuntimePageReadU32( arrBytes, offset );
+	offset += 4u;
+	header.channelTableOffset = terrain3dRuntimePageReadU32( arrBytes, offset );
+	offset += 4u;
 	for ( uint32_t channel = 0u; channel < TERRAIN3D_RUNTIME_PAGE_CHANNEL_COUNT; ++channel ) {
 		t3druntimePageChannelInfo_t &info = header.szChannels[channel];
-		info.iOffset = terrain3dRuntimePageReadU32( arrBytes, offset );
-		offset += 4u;
-		info.nSize = terrain3dRuntimePageReadU32( arrBytes, offset );
-		offset += 4u;
-		info.checksum = terrain3dRuntimePageReadU32( arrBytes, offset );
+		info.type = terrain3dRuntimePageReadU32( arrBytes, offset );
 		offset += 4u;
 		info.format = terrain3dRuntimePageReadU32( arrBytes, offset );
+		offset += 4u;
+		info.compression = terrain3dRuntimePageReadU32( arrBytes, offset );
+		offset += 4u;
+		info.iOffset = terrain3dRuntimePageReadU32( arrBytes, offset );
+		offset += 4u;
+		info.compressedBytes = terrain3dRuntimePageReadU32( arrBytes, offset );
+		offset += 4u;
+		info.uncompressedBytes = terrain3dRuntimePageReadU32( arrBytes, offset );
 		offset += 4u;
 		info.nWidth = terrain3dRuntimePageReadU32( arrBytes, offset );
 		offset += 4u;
 		info.height = terrain3dRuntimePageReadU32( arrBytes, offset );
 		offset += 4u;
-		info.mipmaps = terrain3dRuntimePageReadU32( arrBytes, offset );
+		info.mipCount = terrain3dRuntimePageReadU32( arrBytes, offset );
+		offset += 4u;
+		info.alignment = terrain3dRuntimePageReadU32( arrBytes, offset );
+		offset += 4u;
+		info.checksum = terrain3dRuntimePageReadU32( arrBytes, offset );
+		offset += 4u;
+		info.signature = terrain3dRuntimePageReadU32( arrBytes, offset );
 		offset += 4u;
 	}
 	header.sourceSignatureLo = terrain3dRuntimePageReadU32( arrBytes, offset );
@@ -439,6 +508,18 @@ static t3druntimePageHeader_t terrain3dRuntimePageDecodeHeader( const PackedByte
 	header.materialMask = terrain3dRuntimePageReadU32( arrBytes, offset );
 	offset += 4u;
 	header.middleHeightDivisor = terrain3dRuntimePageReadU32( arrBytes, offset );
+	offset += 4u;
+	header.worldSignatureLo = terrain3dRuntimePageReadU32( arrBytes, offset );
+	offset += 4u;
+	header.worldSignatureHi = terrain3dRuntimePageReadU32( arrBytes, offset );
+	offset += 4u;
+	header.regionX = ( int32_t ) ( terrain3dRuntimePageReadU32( arrBytes, offset ) );
+	offset += 4u;
+	header.regionZ = ( int32_t ) ( terrain3dRuntimePageReadU32( arrBytes, offset ) );
+	offset += 4u;
+	header.boundsMinYBits = terrain3dRuntimePageReadU32( arrBytes, offset );
+	offset += 4u;
+	header.boundsMaxYBits = terrain3dRuntimePageReadU32( arrBytes, offset );
 	return header;
 }
 
@@ -466,16 +547,81 @@ static bool terrain3dRuntimePageAddChannel(
 		std::memset( nFileBytes.ptrw() + previous_bytes, 0, aligned_offset - previous_bytes );
 	}
 	std::memcpy( nFileBytes.ptrw() + aligned_offset, image_bytes.ptr(), ( size_t ) ( image_bytes.size() ) );
-	t3druntimePageChannelInfo_t &info = rHeader.szChannels[( uint32_t ) ( channel )];
-	info.iOffset = aligned_offset;
-	info.nSize = ( uint32_t ) ( image_bytes.size() );
-	info.checksum = terrain3dRuntimePageChecksum( image_bytes.ptr(), ( size_t ) ( image_bytes.size() ) );
+	if ( rHeader.channelCount >= TERRAIN3D_RUNTIME_PAGE_CHANNEL_COUNT ||
+		terrain3dRuntimePageFindChannel( rHeader, channel ) ) {
+		return false;
+	}
+	t3druntimePageChannelInfo_t &info = rHeader.szChannels[rHeader.channelCount++];
+	info.type = ( uint32_t ) ( channel );
 	info.format = ( uint32_t ) ( rImage->get_format() );
+	info.compression = TERRAIN3D_RUNTIME_PAGE_COMPRESSION_NONE;
+	info.iOffset = aligned_offset;
+	info.compressedBytes = ( uint32_t ) ( image_bytes.size() );
+	info.uncompressedBytes = ( uint32_t ) ( image_bytes.size() );
+	info.checksum = terrain3dRuntimePageChecksum( image_bytes.ptr(), ( size_t ) ( image_bytes.size() ) );
 	info.nWidth = ( uint32_t ) ( rImage->get_width() );
 	info.height = ( uint32_t ) ( rImage->get_height() );
-	info.mipmaps = rImage->has_mipmaps() ? 1u : 0u;
+	info.mipCount = rImage->has_mipmaps() ? ( uint32_t ) ( rImage->get_mipmap_count() + 1 ) : 1u;
+	info.alignment = TERRAIN3D_RUNTIME_PAGE_ALIGNMENT;
+	info.signature = info.checksum;
 	rHeader.nTotalBytes = total_bytes;
 	return true;
+}
+
+static bool terrain3dRuntimePageAddBlob(
+	PackedByteArray &nFileBytes, t3druntimePageHeader_t &rHeader,
+	const t3druntimePageChannel_t channel, const PackedByteArray &rPayload
+) {
+	if ( rPayload.is_empty() || rHeader.channelCount >= TERRAIN3D_RUNTIME_PAGE_CHANNEL_COUNT ||
+		terrain3dRuntimePageFindChannel( rHeader, channel ) ) {
+		return false;
+	}
+	const uint32_t aligned_offset = terrain3dRuntimePageAlign( ( uint32_t ) ( nFileBytes.size() ) );
+	if ( aligned_offset == 0u || ( uint64_t ) ( aligned_offset ) + ( uint64_t ) ( rPayload.size() ) >
+		TERRAIN3D_RUNTIME_PAGE_MAX_BYTES ) {
+		return false;
+	}
+	const uint32_t previous_bytes = ( uint32_t ) ( nFileBytes.size() );
+	const uint32_t payload_bytes = ( uint32_t ) ( rPayload.size() );
+	nFileBytes.resize( aligned_offset + payload_bytes );
+	if ( aligned_offset > previous_bytes ) {
+		std::memset( nFileBytes.ptrw() + previous_bytes, 0, aligned_offset - previous_bytes );
+	}
+	std::memcpy( nFileBytes.ptrw() + aligned_offset, rPayload.ptr(), payload_bytes );
+	t3druntimePageChannelInfo_t &info = rHeader.szChannels[rHeader.channelCount++];
+	info.type = ( uint32_t ) ( channel );
+	info.format = UINT32_MAX;
+	info.iOffset = aligned_offset;
+	info.compressedBytes = payload_bytes;
+	info.uncompressedBytes = payload_bytes;
+	info.nWidth = payload_bytes;
+	info.height = 1u;
+	info.mipCount = 1u;
+	info.checksum = terrain3dRuntimePageChecksum( rPayload.ptr(), payload_bytes );
+	info.signature = info.checksum;
+	rHeader.nTotalBytes = aligned_offset + payload_bytes;
+	return true;
+}
+
+static PackedByteArray terrain3dRuntimePageReadBlob(
+	const Ref<FileAccess> &rFile, const t3druntimePageChannelInfo_t &rInfo,
+	uint64_t &nReadUsec, uint64_t &nValidationUsec
+) {
+	if ( rFile.is_null() || rInfo.format != UINT32_MAX ||
+		rInfo.compression != TERRAIN3D_RUNTIME_PAGE_COMPRESSION_NONE ||
+		rInfo.compressedBytes == 0u || rInfo.compressedBytes != rInfo.uncompressedBytes ) {
+		return PackedByteArray();
+	}
+	Time *const pTime = Time::get_singleton();
+	const uint64_t read_started = pTime ? pTime->get_ticks_usec() : 0u;
+	rFile->seek( rInfo.iOffset );
+	PackedByteArray bytes = rFile->get_buffer( rInfo.compressedBytes );
+	nReadUsec += ( pTime ? pTime->get_ticks_usec() : read_started ) - read_started;
+	const uint64_t validation_started = pTime ? pTime->get_ticks_usec() : 0u;
+	const bool valid = bytes.size() == ( int64_t ) ( rInfo.compressedBytes ) &&
+		terrain3dRuntimePageChecksum( bytes.ptr(), ( size_t ) ( bytes.size() ) ) == rInfo.checksum;
+	nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
+	return valid ? bytes : PackedByteArray();
 }
 
 static bool terrain3dRuntimePageExpectedImageBytes(
@@ -494,7 +640,7 @@ static bool terrain3dRuntimePageExpectedImageBytes(
 		default:
 			return false;
 	}
-	if ( rInfo.nWidth == 0u || rInfo.height == 0u || rInfo.mipmaps > 1u ) {
+	if ( rInfo.nWidth == 0u || rInfo.height == 0u || rInfo.mipCount == 0u ) {
 		return false;
 	}
 	uint32_t width = rInfo.nWidth;
@@ -506,7 +652,7 @@ static bool terrain3dRuntimePageExpectedImageBytes(
 			return false;
 		}
 		total += level_bytes;
-		if ( rInfo.mipmaps == 0u || ( width == 1u && height == 1u ) ) {
+		if ( rInfo.mipCount == 1u || ( width == 1u && height == 1u ) ) {
 			break;
 		}
 		width = MAX( 1u, width >> 1u );
@@ -519,33 +665,38 @@ static bool terrain3dRuntimePageExpectedImageBytes(
 static Ref<Image> terrain3dRuntimePageReadImage(
 	const Ref<FileAccess> &rFile,
 	const t3druntimePageChannelInfo_t &rInfo, uint64_t &nReadUsec,
-	uint64_t &nValidationUsec, uint64_t &nMaterializeUsec
+	uint64_t &nValidationUsec, uint64_t &nMaterializeUsec,
+	PackedByteArray *const pValidatedNativeBytes = nullptr
 ) {
-	if ( rFile.is_null() || rInfo.nSize == 0u ) {
+	if ( rFile.is_null() || rInfo.compressedBytes == 0u ||
+		rInfo.compression != TERRAIN3D_RUNTIME_PAGE_COMPRESSION_NONE ) {
 		return Ref<Image>();
 	}
 	Time *pTime = Time::get_singleton();
 	const uint64_t read_started = pTime ? pTime->get_ticks_usec() : 0u;
 	rFile->seek( rInfo.iOffset );
-	const PackedByteArray image_bytes = rFile->get_buffer( rInfo.nSize );
+	const PackedByteArray image_bytes = rFile->get_buffer( rInfo.compressedBytes );
 	const uint64_t read_finished = pTime ? pTime->get_ticks_usec() : read_started;
 	nReadUsec += read_finished - read_started;
 	const uint64_t validation_started = read_finished;
 	uint64_t expected_bytes = 0u;
 	const bool bPayloadShapeValid = terrain3dRuntimePageExpectedImageBytes( rInfo, expected_bytes ) &&
-		expected_bytes == ( uint64_t ) ( rInfo.nSize );
-	const bool bPayloadValid = bPayloadShapeValid && image_bytes.size() == ( int64_t ) ( rInfo.nSize ) &&
+		expected_bytes == ( uint64_t ) ( rInfo.uncompressedBytes );
+	const bool bPayloadValid = bPayloadShapeValid && image_bytes.size() == ( int64_t ) ( rInfo.compressedBytes ) &&
 		terrain3dRuntimePageChecksum( image_bytes.ptr(), ( size_t ) ( image_bytes.size() ) ) == rInfo.checksum;
 	const uint64_t validation_finished = pTime ? pTime->get_ticks_usec() : validation_started;
 	nValidationUsec += validation_finished - validation_started;
 	if ( !bPayloadValid ) {
 		return Ref<Image>();
 	}
+	if ( pValidatedNativeBytes ) {
+		*pValidatedNativeBytes = image_bytes;
+	}
 	const uint64_t materialize_started = validation_finished;
 	const Ref<Image> pImage = Image::create_from_data( ( int ) ( rInfo.nWidth ), ( int ) ( rInfo.height ),
-		rInfo.mipmaps != 0u, Image::Format( rInfo.format ), image_bytes );
+		rInfo.mipCount > 1u, Image::Format( rInfo.format ), image_bytes );
 	const bool bImageValid = pImage.is_valid() && !pImage->is_empty() &&
-		pImage->get_data().size() == ( int64_t ) ( rInfo.nSize );
+		pImage->get_data().size() == ( int64_t ) ( rInfo.uncompressedBytes );
 	const uint64_t materialize_finished = pTime ? pTime->get_ticks_usec() : materialize_started;
 	nMaterializeUsec += materialize_finished - materialize_started;
 	if ( !bImageValid ) {
@@ -560,11 +711,6 @@ bool terrain3dRegionLocationValid( const Vector2i &vLocation, const int nMapSize
 	}
 	const int half = nMapSize / 2;
 	return vLocation.x >= -half && vLocation.x < half && vLocation.y >= -half && vLocation.y < half;
-}
-
-bool terrain3dGpuCacheRegionActive( const int iX, const int iY, const void *pContext ) {
-	const T3DData *pData = ( const T3DData * ) ( pContext );
-	return pData && pData->hasRegion( Vector2i( iX, iY ) );
 }
 
 // Returns the half-open region-coordinate bounds touched by a positive-sized
@@ -702,76 +848,16 @@ Error T3DData::rehydrateActiveStorage( void ) {
 		return ERR_UNCONFIGURED;
 	}
 
-	rebuildRegionMapFromSlots();
-	eastl::vector<PackedByteArray> height_payloads;
-	eastl::vector<int> active_slots;
-	height_payloads.reserve( ( size_t ) ( m_nActiveRegionCount ) );
-	active_slots.reserve( ( size_t ) ( m_nActiveRegionCount ) );
-	const int expected_bytes = m_nRegionSize * m_nRegionSize * ( int ) ( sizeof( uint16_t ) );
-
-	for ( int slot = 0; slot < m_nRegionLocationCount; ++slot ) {
-		const Vector2i location = m_szRegionLocations[slot];
-		if ( location == V2I_MAX ) {
-			continue;
-		}
-		T3DRegion *const pRegion = getRegionPtr( location );
-		if ( !pRegion || pRegion->isDeleted() ) {
-			continue;
-		}
-
-		Ref<Image> pHeight = pRegion->getHeightMap();
-		if ( pHeight.is_null() ) {
-			Ref<Image> pControl;
-			Ref<Image> pColor;
-			Ref<Image> pDerived;
-			if ( !loadGpuRuntimePage( pRegion, pHeight, pControl, pColor, pDerived ) ) {
-				Ref<T3DRegion> pSource;
-				if ( !loadCpuRegionSource( location, pSource ) ) {
-					LOG( T3DTerrain::ERROR, "Unable to rehydrate active terrain storage for region ", location,
-						"; no retained, cooked, or authored height payload is available" );
-					return ERR_FILE_CORRUPT;
-				}
-				pHeight = pSource->getHeightMap();
-			}
-		}
-
-		if ( pHeight.is_null() || pHeight->get_width() != m_nRegionSize || pHeight->get_height() != m_nRegionSize ||
-			pHeight->get_format() != Image::FORMAT_R16 ) {
-			LOG( T3DTerrain::ERROR, "Unable to rehydrate active terrain storage for region ", location,
-				"; height payload is invalid" );
-			return ERR_FILE_CORRUPT;
-		}
-		PackedByteArray bytes = pHeight->get_data();
-		if ( bytes.size() != expected_bytes ) {
-			LOG( T3DTerrain::ERROR, "Unable to rehydrate active terrain storage for region ", location,
-				"; expected ", expected_bytes, " height bytes, received ", bytes.size() );
-			return ERR_FILE_CORRUPT;
-		}
-		const int active_half = m_nRegionMapSize / 2;
-		const int active_x = location.x + active_half;
-		const int active_y = location.y + active_half;
-		if ( ( uint32_t ) ( active_x ) >= ( uint32_t ) ( m_nRegionMapSize ) ||
-			( uint32_t ) ( active_y ) >= ( uint32_t ) ( m_nRegionMapSize ) ) {
-			LOG( T3DTerrain::ERROR, "Unable to rehydrate active terrain storage for region ", location,
-				"; location is outside the active ", m_nRegionMapSize, "x", m_nRegionMapSize, " bank" );
-			return ERR_INVALID_DATA;
-		}
-		const int active_slot = active_y * m_nRegionMapSize + active_x;
-		height_payloads.push_back( bytes );
-		active_slots.push_back( active_slot );
-	}
-
-	const uint8_t *height_pages[TERRAIN3D_MAX_REGION_SLOTS] = {};
-	int page_slots[TERRAIN3D_MAX_REGION_SLOTS] = {};
-	for ( size_t index = 0; index < height_payloads.size(); ++index ) {
-		height_pages[index] = height_payloads[index].ptr();
-		page_slots[index] = active_slots[index];
-	}
-	if ( !terrain3dActiveStorageReplaceHeightPages( this, m_nRegionSize, height_pages, page_slots, height_payloads.size() ) ) {
-		LOG( T3DTerrain::ERROR, "Failed to repopulate process-static active terrain storage during scene activation" );
+	// The physical bank is intentionally smaller than the logical world. Clear its
+	// descriptors here and let the normal spatial residency pass publish only the
+	// current working set. This avoids a synchronous all-world Image -> byte-array
+	// rebuild during scene activation.
+	if ( !terrain3dActiveStorageReplaceHeightPages( this, m_nRegionSize, nullptr, nullptr, 0u ) ) {
+		LOG( T3DTerrain::ERROR, "Failed to reset active terrain page descriptors during scene activation" );
 		return ERR_CANT_ACQUIRE_RESOURCE;
 	}
 	m_nActiveStorageGeneration = terrain3dActiveStorageGetOwnerGeneration( this );
+	m_bActiveHeightResidencyDirty = true;
 	return OK;
 }
 
@@ -818,6 +904,7 @@ void T3DData::clear( void ) {
 	m_generatedControlMaps.clear();
 	m_generatedColorMaps.clear();
 	m_generatedDerivedMaps.clear();
+	m_generatedMiddleCompositeMaps.clear();
 	resetGpuRegionCache( false );
 	m_generatedFarHeightMap.clear();
 	m_generatedFarColorMap.clear();
@@ -979,6 +1066,115 @@ Ref<Image> T3DData::makeGpuDerivedImage( const Ref<Image> &rImage ) const {
 	return pGpuImage;
 }
 
+Ref<Image> T3DData::makeMiddleCompositeImage(
+	const Vector2i &rLocation, const Ref<Image> &rControl, const Ref<Image> &rColor
+) const {
+	if ( rControl.is_null() || rColor.is_null() || rControl->get_format() != Image::FORMAT_RF ||
+		rColor->get_format() != Image::FORMAT_RGBA8 ) {
+		return Ref<Image>();
+	}
+	const int width = rColor->get_width();
+	const int height = rColor->get_height();
+	if ( width <= 0 || height <= 0 ) {
+		return Ref<Image>();
+	}
+	const PackedByteArray control_bytes = rControl->get_data();
+	const PackedByteArray color_bytes = rColor->get_data();
+	if ( control_bytes.size() < ( int64_t ) ( rControl->get_width() ) * rControl->get_height() * 4 ||
+		color_bytes.size() < ( int64_t ) ( width ) * height * 4 ) {
+		return Ref<Image>();
+	}
+	PackedColorArray material_colors;
+	const Ref<T3DAssets> pAssets = m_pTerrain ? m_pTerrain->getAssets() : Ref<T3DAssets>();
+	if ( pAssets.is_valid() ) {
+		material_colors = pAssets->getTextureColors();
+	}
+	const PackedFloat32Array material_scales = pAssets.is_valid() ?
+		pAssets->getTextureUvScales() : PackedFloat32Array();
+	eastl::array<Ref<Image>, TERRAIN3D_MAX_TEXTURE_ASSETS> material_images;
+	if ( pAssets.is_valid() ) {
+		for ( int material = 0; material < MIN( pAssets->getTextureCount(), TERRAIN3D_MAX_TEXTURE_ASSETS ); ++material ) {
+			const Ref<T3DTextureAsset> pAsset = pAssets->getTextureAsset( material );
+			const Ref<Texture2D> pTexture = pAsset.is_valid() ? pAsset->getAlbedoTexture() : Ref<Texture2D>();
+			Ref<Image> pMaterialImage = pTexture.is_valid() ? pTexture->get_image() : Ref<Image>();
+			// Imported DDS/VRAM textures commonly expose compressed Images. get_pixel()
+			// rejects those and logs once per sample, so prepare one private readable
+			// copy per material before entering the composite's texel loops. If the
+			// platform cannot decompress that format, the bake falls back to its tint.
+			if ( pMaterialImage.is_valid() && pMaterialImage->is_compressed() ) {
+				pMaterialImage = pMaterialImage->duplicate();
+				if ( pMaterialImage->decompress() != OK ) {
+					pMaterialImage.unref();
+				}
+			}
+			if ( pMaterialImage.is_valid() && pMaterialImage->is_empty() ) {
+				pMaterialImage.unref();
+			}
+			material_images[( size_t ) ( material )] = pMaterialImage;
+		}
+	}
+	PackedByteArray output;
+	output.resize( width * height * 4 );
+	uint8_t *const pWrite = output.ptrw();
+	const uint8_t *const pControl = control_bytes.ptr();
+	const uint8_t *const pColor = color_bytes.ptr();
+	for ( int y = 0; y < height; ++y ) {
+		const int control_y = MIN( rControl->get_height() - 1, y * rControl->get_height() / height );
+		for ( int x = 0; x < width; ++x ) {
+			const int control_x = MIN( rControl->get_width() - 1, x * rControl->get_width() / width );
+			const uint32_t control = terrain3dReadU32Unaligned( pControl,
+				( size_t ) ( control_y * rControl->get_width() + control_x ) * 4u );
+			const int base = ( int ) ( getBase( control ) );
+			const int overlay = ( int ) ( getOverlay( control ) );
+			const Color base_color = base < material_colors.size() ? material_colors[base] : COLOR_WHITE;
+			const Color overlay_color = overlay < material_colors.size() ? material_colors[overlay] : base_color;
+			const float control_scale = 0.9f - ( float ) ( ( ( getUvScale( control ) + 3u ) % 8u ) + 1u ) * 0.1f;
+			const float angle = ( float ) ( getUvRotation( control ) ) * Math_TAU / 16.0f;
+			const float cs = Math::cos( angle );
+			const float sn = Math::sin( angle );
+			const float local_x = ( ( float ) ( x ) + 0.5f ) * ( float ) ( m_nRegionSize ) / ( float ) ( width );
+			const float local_y = ( ( float ) ( y ) + 0.5f ) * ( float ) ( m_nRegionSize ) / ( float ) ( height );
+			const float world_x = ( ( float ) ( rLocation.x * m_nRegionSize ) + local_x ) * ( float ) ( m_fVertexSpacing );
+			const float world_y = ( ( float ) ( rLocation.y * m_nRegionSize ) + local_y ) * ( float ) ( m_fVertexSpacing );
+			auto sample_material = [&]( const int material_id, const Color &rTint ) -> Color {
+				if ( material_id < 0 || material_id >= TERRAIN3D_MAX_TEXTURE_ASSETS ||
+					material_images[( size_t ) ( material_id )].is_null() ) {
+					return rTint;
+				}
+				const Ref<Image> &pImage = material_images[( size_t ) ( material_id )];
+				const float asset_scale = material_id < material_scales.size() ? material_scales[material_id] : 0.1f;
+				const float source_u = ( cs * world_x + sn * world_y ) * control_scale * asset_scale;
+				const float source_v = ( cs * world_y - sn * world_x ) * control_scale * asset_scale;
+				const float wrapped_u = source_u - Math::floor( source_u );
+				const float wrapped_v = source_v - Math::floor( source_v );
+				const int source_x = CLAMP( ( int ) ( wrapped_u * pImage->get_width() ), 0, pImage->get_width() - 1 );
+				const int source_y = CLAMP( ( int ) ( wrapped_v * pImage->get_height() ), 0, pImage->get_height() - 1 );
+				return pImage->get_pixel( source_x, source_y ) * rTint;
+			};
+			const Color base_sample = sample_material( base, base_color );
+			const Color overlay_sample = sample_material( overlay, overlay_color );
+			float blend = ( float ) ( getBlend( control ) ) / 255.0f;
+			blend = CLAMP( ( blend - 0.12f ) / 0.76f, 0.0f, 1.0f );
+			blend = blend * blend * ( 3.0f - 2.0f * blend );
+			const Color material_color = base_sample.lerp( overlay_sample, blend );
+			const size_t offset = ( size_t ) ( y * width + x ) * 4u;
+			const float authored_r = ( float ) ( pColor[offset] ) / 255.0f;
+			const float authored_g = ( float ) ( pColor[offset + 1u] ) / 255.0f;
+			const float authored_b = ( float ) ( pColor[offset + 2u] ) / 255.0f;
+			pWrite[offset] = terrain3dColorToByte( authored_r * material_color.r );
+			pWrite[offset + 1u] = terrain3dColorToByte( authored_g * material_color.g );
+			pWrite[offset + 2u] = terrain3dColorToByte( authored_b * material_color.b );
+			pWrite[offset + 3u] = isHole( control ) ? 0u :
+				( uint8_t ) ( 0x80u | ( ( uint32_t ) ( pColor[offset + 3u] ) * 127u + 127u ) / 255u );
+		}
+	}
+	Ref<Image> pComposite = Image::create_from_data( width, height, false, Image::FORMAT_RGBA8, output );
+	if ( pComposite.is_null() || pComposite->generate_mipmaps() != OK ) {
+		return Ref<Image>();
+	}
+	return pComposite;
+}
+
 Ref<Image> T3DData::makeGpuRenderControlImage( const Vector2i &vLocation ) const {
 	eastl::array<t3dcontrolCookSource_t, 9> sources;
 	for ( int dz = -1; dz <= 1; ++dz ) {
@@ -1104,6 +1300,8 @@ uint64_t T3DData::computeGpuRuntimePageSourceSignature( const T3DRegion *pRegion
 	terrain3dFnv1a64AppendU32( hash, ( uint32_t ) ( m_nGpuRegionDerivedDivisor ) );
 	terrain3dFnv1a64AppendU32( hash, ( uint32_t ) ( m_pTerrain ? MAX( 1, m_pTerrain->getGpuMiddleHeightResolutionDivisor() ) : 1 ) );
 	terrain3dFnv1a64AppendU32( hash, TERRAIN3D_RUNTIME_PAGE_BLEND_RECIPE_VERSION );
+	const Ref<T3DAssets> pAssets = m_pTerrain ? m_pTerrain->getAssets() : Ref<T3DAssets>();
+	terrain3dFnv1a64AppendU64( hash, pAssets.is_valid() ? pAssets->getRuntimeMaterialSourceSignature() : 0u );
 	terrain3dFnv1a64AppendU32( hash, ( uint32_t ) ( pRegion->getLocation().x ) );
 	terrain3dFnv1a64AppendU32( hash, ( uint32_t ) ( pRegion->getLocation().y ) );
 
@@ -1124,6 +1322,10 @@ uint64_t T3DData::computeGpuRuntimePageSourceSignature( const T3DRegion *pRegion
 	if ( pColor.is_valid() ) {
 		const PackedByteArray bytes = pColor->get_data();
 		terrain3dFnv1a64Append( hash, bytes.ptr(), ( size_t ) ( bytes.size() ) );
+	}
+	const PackedByteArray instance_page = pOwner->getInstancePage();
+	if ( !instance_page.is_empty() ) {
+		terrain3dFnv1a64Append( hash, instance_page.ptr(), ( size_t ) ( instance_page.size() ) );
 	}
 
 	// Derived normals use forward differences, so this page depends only on the
@@ -1211,10 +1413,13 @@ String T3DData::getGpuRuntimePagePath( const T3DRegion *pRegion ) const {
 
 bool T3DData::loadGpuRuntimePageSnapshot( t3dpreparedGpuRuntimePage_t &rPage ) {
 	rPage.height.unref();
+	rPage.heightBytes.clear();
 	rPage.pControl.unref();
 	rPage.pColor.unref();
 	rPage.pDerived.unref();
 	rPage.pMiddleHeight.unref();
+	rPage.pMiddleComposite.unref();
+	rPage.instancePage.clear();
 	rPage.materialMask = 1u;
 	rPage.nFileOpenUsec = 0u;
 	rPage.nFileReadUsec = 0u;
@@ -1263,6 +1468,7 @@ bool T3DData::loadGpuRuntimePageSnapshot( t3dpreparedGpuRuntimePage_t &rPage ) {
 		header.colorDivisor != ( uint32_t ) ( rPage.colorDivisor ) ||
 		header.derivedDivisor != ( uint32_t ) ( rPage.derivedDivisor ) ||
 		header.middleHeightDivisor != ( uint32_t ) ( rPage.middleHeightDivisor ) ||
+		header.regionX != rPage.location.x || header.regionZ != rPage.location.y ||
 		header.blendRecipeVersion != TERRAIN3D_RUNTIME_PAGE_BLEND_RECIPE_VERSION ||
 		( header.sourceSignatureLo == 0u && header.sourceSignatureHi == 0u ) ) {
 		rPage.nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
@@ -1277,25 +1483,58 @@ bool T3DData::loadGpuRuntimePageSnapshot( t3dpreparedGpuRuntimePage_t &rPage ) {
 	}
 	rPage.nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
 
+	const t3druntimePageChannelInfo_t *const pHeightChannel =
+		terrain3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_HEIGHT );
+	const t3druntimePageChannelInfo_t *const pDerivedChannel =
+		terrain3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_DERIVED );
+	const t3druntimePageChannelInfo_t *const pMiddleHeightChannel =
+		terrain3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_MIDDLE_HEIGHT );
+	const t3druntimePageChannelInfo_t *const pMiddleCompositeChannel =
+		terrain3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_MIDDLE_COMPOSITE );
+	if ( !pHeightChannel || !pDerivedChannel || !pMiddleHeightChannel || !pMiddleCompositeChannel ) {
+		return false;
+	}
 	rPage.height = terrain3dRuntimePageReadImage( pFile,
-		header.szChannels[TERRAIN3D_RUNTIME_PAGE_HEIGHT], rPage.nFileReadUsec,
-		rPage.nValidationUsec, rPage.nMaterializeUsec );
+		*pHeightChannel, rPage.nFileReadUsec,
+		rPage.nValidationUsec, rPage.nMaterializeUsec, &rPage.heightBytes );
 	rPage.pDerived = terrain3dRuntimePageReadImage( pFile,
-		header.szChannels[TERRAIN3D_RUNTIME_PAGE_DERIVED], rPage.nFileReadUsec,
+		*pDerivedChannel, rPage.nFileReadUsec,
 		rPage.nValidationUsec, rPage.nMaterializeUsec );
 	rPage.pMiddleHeight = terrain3dRuntimePageReadImage( pFile,
-		header.szChannels[TERRAIN3D_RUNTIME_PAGE_MIDDLE_HEIGHT], rPage.nFileReadUsec,
+		*pMiddleHeightChannel, rPage.nFileReadUsec,
+		rPage.nValidationUsec, rPage.nMaterializeUsec );
+	rPage.pMiddleComposite = terrain3dRuntimePageReadImage( pFile,
+		*pMiddleCompositeChannel, rPage.nFileReadUsec,
 		rPage.nValidationUsec, rPage.nMaterializeUsec );
 	rPage.materialMask = header.materialMask;
 	if ( ( expected_flags & ( uint32_t ) ( T3DRegion::CHANNEL_CONTROL ) ) != 0u ) {
+		const t3druntimePageChannelInfo_t *const pControlChannel =
+			terrain3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_CONTROL );
+		if ( !pControlChannel ) {
+			return false;
+		}
 		rPage.pControl = terrain3dRuntimePageReadImage( pFile,
-			header.szChannels[TERRAIN3D_RUNTIME_PAGE_CONTROL], rPage.nFileReadUsec,
+			*pControlChannel, rPage.nFileReadUsec,
 			rPage.nValidationUsec, rPage.nMaterializeUsec );
 	}
 	if ( ( expected_flags & ( uint32_t ) ( T3DRegion::CHANNEL_COLOR ) ) != 0u ) {
+		const t3druntimePageChannelInfo_t *const pColorChannel =
+			terrain3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_COLOR );
+		if ( !pColorChannel ) {
+			return false;
+		}
 		rPage.pColor = terrain3dRuntimePageReadImage( pFile,
-			header.szChannels[TERRAIN3D_RUNTIME_PAGE_COLOR], rPage.nFileReadUsec,
+			*pColorChannel, rPage.nFileReadUsec,
 			rPage.nValidationUsec, rPage.nMaterializeUsec );
+	}
+	const t3druntimePageChannelInfo_t *const pInstanceChannel =
+		terrain3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_STATIC_INSTANCES );
+	if ( pInstanceChannel ) {
+		rPage.instancePage = terrain3dRuntimePageReadBlob(
+			pFile, *pInstanceChannel, rPage.nFileReadUsec, rPage.nValidationUsec );
+		if ( rPage.instancePage.is_empty() ) {
+			return false;
+		}
 	}
 	validation_started = pTime ? pTime->get_ticks_usec() : 0u;
 	const int color_size = MAX( 1, rPage.nRegionSize / rPage.colorDivisor );
@@ -1310,7 +1549,11 @@ bool T3DData::loadGpuRuntimePageSnapshot( t3dpreparedGpuRuntimePage_t &rPage ) {
 		rPage.pMiddleHeight->get_width() != middle_height_size ||
 		rPage.pMiddleHeight->get_height() != middle_height_size ||
 		rPage.pMiddleHeight->get_format() != Image::FORMAT_R16 ||
-		rPage.pMiddleHeight->has_mipmaps() ) {
+		rPage.pMiddleHeight->has_mipmaps() || rPage.pMiddleComposite.is_null() ||
+		rPage.pMiddleComposite->get_width() != color_size ||
+		rPage.pMiddleComposite->get_height() != color_size ||
+		rPage.pMiddleComposite->get_format() != Image::FORMAT_RGBA8 ||
+		!rPage.pMiddleComposite->has_mipmaps() ) {
 		rPage.nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
 		return false;
 	}
@@ -1417,6 +1660,9 @@ void T3DData::pollGpuRuntimePagePrepare( const bool bWait ) {
 		const int map_index = getRegionMapIndex( work_page.location );
 		if ( map_index >= 0 ) {
 			work_page.consumerMask |= m_szRuntimePagePrepareConsumers[map_index];
+			if ( m_szRuntimePagePrepareConsumers[map_index] != 0u ) {
+				m_nRuntimePagePrepareQueuedCount = MAX( 0, m_nRuntimePagePrepareQueuedCount - 1 );
+			}
 			m_szRuntimePagePrepareConsumers[map_index] = 0u;
 			m_szRuntimePagePreparePriorities[map_index] = 0u;
 		}
@@ -1479,6 +1725,9 @@ void T3DData::requestGpuRuntimePage(
 	if ( map_index < 0 ) {
 		return;
 	}
+	if ( m_szRuntimePagePrepareConsumers[map_index] == 0u ) {
+		++m_nRuntimePagePrepareQueuedCount;
+	}
 	m_szRuntimePagePrepareConsumers[map_index] |= nConsumers;
 	const uint8_t priority = MAX( ( uint8_t ) ( 1u ), nPriority );
 	if ( m_szRuntimePagePreparePriorities[map_index] == 0u ||
@@ -1493,10 +1742,12 @@ void T3DData::serviceGpuRuntimePagePrepare( void ) {
 		return;
 	}
 
-	// Direction changes can invalidate speculative demand while an asynchronous
-	// batch is in flight. Drop stale queued/ready consumers so a long traversal
-	// cannot gradually fill the fixed ready pool with pages that nobody needs.
-	if ( !m_pTerrain->isEditorAuthoringMode() ) {
+	const uint64_t streaming_generation = m_pTerrain->getRegionStreamingGeneration();
+	if ( !m_pTerrain->isEditorAuthoringMode() &&
+		streaming_generation != m_nRuntimePagePrepareStreamingGenerationLast ) {
+		// Direction/state changes can invalidate speculative demand while an asynchronous
+		// batch is in flight. Sweep only on a streaming-generation change; stationary
+		// frames with an empty queue now do no fixed-table work here.
 		for ( int map_index = 0; map_index < TERRAIN3D_MAX_REGION_SLOTS; ++map_index ) {
 			if ( m_szRuntimePagePrepareConsumers[map_index] == 0u ) {
 				continue;
@@ -1511,6 +1762,7 @@ void T3DData::serviceGpuRuntimePagePrepare( void ) {
 			if ( !wanted ) {
 				m_szRuntimePagePrepareConsumers[map_index] = 0u;
 				m_szRuntimePagePreparePriorities[map_index] = 0u;
+				m_nRuntimePagePrepareQueuedCount = MAX( 0, m_nRuntimePagePrepareQueuedCount - 1 );
 			}
 		}
 		for ( int ready_index = m_nGpuPreparedPageCount - 1; ready_index >= 0; --ready_index ) {
@@ -1527,7 +1779,8 @@ void T3DData::serviceGpuRuntimePagePrepare( void ) {
 			--m_nGpuPreparedPageCount;
 		}
 	}
-	if ( m_bGpuPrepareJobActive ) {
+	m_nRuntimePagePrepareStreamingGenerationLast = streaming_generation;
+	if ( m_bGpuPrepareJobActive || m_nRuntimePagePrepareQueuedCount <= 0 ) {
 		return;
 	}
 	const int free_ready_slots = TERRAIN3D_GPU_CACHE_MAX_LAYERS - m_nGpuPreparedPageCount;
@@ -1538,53 +1791,66 @@ void T3DData::serviceGpuRuntimePagePrepare( void ) {
 		MAX( 2, MAX( 1, m_pTerrain->getRuntimePagePrepareThreads() ) * 2 ) ) );
 	m_nGpuPrepareWorkPageCount = 0;
 	const Vector2i predicted_center = m_pTerrain->getRegionStreamingPredictedCenterInternal();
-	for ( uint8_t wanted_priority = 1u; wanted_priority <= 4u &&
-		m_nGpuPrepareWorkPageCount < batch_limit; ++wanted_priority ) {
-		// Scan concentric grid rings rather than repeatedly scanning the full authored
-		// region list for each distance. This preserves near-first priority and keeps
-		// scheduler work bounded by the logical map area (maximum 64x64).
-		for ( int radius = 0; radius < m_nRegionMapSize && m_nGpuPrepareWorkPageCount < batch_limit; ++radius ) {
-			for ( int y = -radius; y <= radius && m_nGpuPrepareWorkPageCount < batch_limit; ++y ) {
-				for ( int x = -radius; x <= radius && m_nGpuPrepareWorkPageCount < batch_limit; ++x ) {
-					if ( MAX( Math::abs( x ), Math::abs( y ) ) != radius ) {
-						continue;
-					}
-					const Vector2i location = predicted_center + Vector2i( x, y );
-					if ( !isRegionLocationValidInternal( location ) || !hasRegion( location ) ) {
-						continue;
-					}
-					const int map_index = getRegionMapIndex( location );
-					if ( map_index < 0 || m_szRuntimePagePrepareConsumers[map_index] == 0u ||
-						m_szRuntimePagePreparePriorities[map_index] != wanted_priority ||
-						isGpuRuntimePagePreparePending( location ) ) {
-						continue;
-					}
-					T3DRegion *const pRegion = getRegionPtr( location );
-					if ( !pRegion || pRegion->isDeleted() || !pRegion->runtimeMapsEvictable() ) {
-						m_szRuntimePagePrepareConsumers[map_index] = 0u;
-						m_szRuntimePagePreparePriorities[map_index] = 0u;
-						continue;
-					}
-					t3dpreparedGpuRuntimePage_t &page =
-						m_szGpuPrepareWorkPages[( size_t ) ( m_nGpuPrepareWorkPageCount++ )];
-					page = t3dpreparedGpuRuntimePage_t{};
-					page.location = location;
-					page.pagePath = getGpuRuntimePagePath( pRegion );
-					page.sourcePath = pRegion->get_path();
-					page.expectedChannelFlags = ( uint32_t ) ( pRegion->getChannelFlags() );
-					page.nRegionSize = m_nRegionSize;
-					page.colorDivisor = m_nGpuRegionColorDivisor;
-					page.derivedDivisor = m_nGpuRegionDerivedDivisor;
-					page.middleHeightDivisor = MAX( 1, m_pTerrain->getGpuMiddleHeightResolutionDivisor() );
-					page.instancePage = !m_pTerrain->isEditorAuthoringMode() && pRegion->hasInstances() ?
-						pRegion->getInstancePage() : PackedByteArray();
-					page.consumerMask = m_szRuntimePagePrepareConsumers[map_index];
-					page.nRequestedUsec = Time::get_singleton()->get_ticks_usec();
-					m_szRuntimePagePrepareConsumers[map_index] = 0u;
-					m_szRuntimePagePreparePriorities[map_index] = 0u;
-				}
+	// Pending page work is sparse. Select directly from authored regions instead of
+	// probing every coordinate in successively larger logical-map rings. This keeps
+	// service cost proportional to actual terrain content and the small batch limit.
+	while ( m_nGpuPrepareWorkPageCount < batch_limit && m_nRuntimePagePrepareQueuedCount > 0 ) {
+		int best_slot = -1;
+		int best_map_index = -1;
+		uint8_t best_priority = UINT8_MAX;
+		int best_distance = INT32_MAX;
+		for ( int slot = 0; slot < m_nRegionLocationCount; ++slot ) {
+			const Vector2i location = m_szRegionLocations[slot];
+			if ( location == V2I_MAX ) {
+				continue;
+			}
+			const int map_index = getRegionMapIndex( location );
+			if ( map_index < 0 || m_szRuntimePagePrepareConsumers[map_index] == 0u ||
+				isGpuRuntimePagePreparePending( location ) ) {
+				continue;
+			}
+			T3DRegion *const pRegion = getRegionPtr( location );
+			if ( !pRegion || pRegion->isDeleted() || !pRegion->runtimeMapsEvictable() ) {
+				m_szRuntimePagePrepareConsumers[map_index] = 0u;
+				m_szRuntimePagePreparePriorities[map_index] = 0u;
+				m_nRuntimePagePrepareQueuedCount = MAX( 0, m_nRuntimePagePrepareQueuedCount - 1 );
+				continue;
+			}
+			const uint8_t priority = m_szRuntimePagePreparePriorities[map_index];
+			const int distance = MAX( Math::abs( location.x - predicted_center.x ),
+				Math::abs( location.y - predicted_center.y ) );
+			if ( priority < best_priority || ( priority == best_priority && distance < best_distance ) ||
+				( priority == best_priority && distance == best_distance && map_index < best_map_index ) ) {
+				best_slot = slot;
+				best_map_index = map_index;
+				best_priority = priority;
+				best_distance = distance;
 			}
 		}
+		if ( best_slot < 0 || best_map_index < 0 ) {
+			break;
+		}
+
+		const Vector2i location = m_szRegionLocations[best_slot];
+		T3DRegion *const pRegion = getRegionPtr( location );
+		t3dpreparedGpuRuntimePage_t &page =
+			m_szGpuPrepareWorkPages[( size_t ) ( m_nGpuPrepareWorkPageCount++ )];
+		page = t3dpreparedGpuRuntimePage_t{};
+		page.location = location;
+		page.pagePath = getGpuRuntimePagePath( pRegion );
+		page.sourcePath = pRegion->get_path();
+		page.expectedChannelFlags = ( uint32_t ) ( pRegion->getChannelFlags() );
+		page.nRegionSize = m_nRegionSize;
+		page.colorDivisor = m_nGpuRegionColorDivisor;
+		page.derivedDivisor = m_nGpuRegionDerivedDivisor;
+		page.middleHeightDivisor = MAX( 1, m_pTerrain->getGpuMiddleHeightResolutionDivisor() );
+		page.instancePage = !m_pTerrain->isEditorAuthoringMode() && pRegion->hasInstances() ?
+			pRegion->getInstancePage() : PackedByteArray();
+		page.consumerMask = m_szRuntimePagePrepareConsumers[best_map_index];
+		page.nRequestedUsec = Time::get_singleton()->get_ticks_usec();
+		m_szRuntimePagePrepareConsumers[best_map_index] = 0u;
+		m_szRuntimePagePreparePriorities[best_map_index] = 0u;
+		m_nRuntimePagePrepareQueuedCount = MAX( 0, m_nRuntimePagePrepareQueuedCount - 1 );
 	}
 	if ( m_nGpuPrepareWorkPageCount <= 0 ) {
 		return;
@@ -1619,11 +1885,16 @@ void T3DData::serviceGpuRuntimePagePrepare( void ) {
 	m_bGpuPrepareJobActive = true;
 }
 
+
 bool T3DData::takePreparedRuntimeHeight(
-	const Vector2i &vLocation, const uint8_t nConsumer, Ref<Image> &rHeight, const bool bMiddle
+	const Vector2i &vLocation, const uint8_t nConsumer, Ref<Image> &rHeight, const bool bMiddle,
+	PackedByteArray *const pNativeHeightBytes
 ) {
 	pollGpuRuntimePagePrepare( false );
 	rHeight.unref();
+	if ( pNativeHeightBytes ) {
+		pNativeHeightBytes->clear();
+	}
 	for ( int index = 0; index < m_nGpuPreparedPageCount; ++index ) {
 		t3dpreparedGpuRuntimePage_t &page = m_szGpuPreparedPages[( size_t ) ( index )];
 		if ( page.location != vLocation || ( page.consumerMask & nConsumer ) == 0u ) {
@@ -1631,9 +1902,13 @@ bool T3DData::takePreparedRuntimeHeight(
 		}
 		if ( page.bLoaded ) {
 			rHeight = bMiddle ? page.pMiddleHeight : page.height;
+			if ( pNativeHeightBytes && !bMiddle ) {
+				*pNativeHeightBytes = page.heightBytes;
+			}
 		}
 		page.consumerMask &= ( uint8_t ) ( ~nConsumer );
-		const bool loaded = page.bLoaded && rHeight.is_valid();
+		const bool loaded = page.bLoaded && rHeight.is_valid() &&
+			( !pNativeHeightBytes || bMiddle || !pNativeHeightBytes->is_empty() );
 		if ( page.consumerMask == 0u ) {
 			m_szGpuPreparedPages[( size_t ) ( index )] =
 				std::move( m_szGpuPreparedPages[( size_t ) ( m_nGpuPreparedPageCount - 1 )] );
@@ -1671,7 +1946,7 @@ bool T3DData::takePreparedRuntimeInstance( const Vector2i &vLocation, T3DInstanc
 
 bool T3DData::takePreparedGpuRuntimePage(
 	const Vector2i &vLocation, Ref<Image> &rHeight,
-	Ref<Image> &rControl, Ref<Image> &rColor, Ref<Image> &rDerived,
+	Ref<Image> &rControl, Ref<Image> &rColor, Ref<Image> &rDerived, Ref<Image> &rMiddleComposite,
 	uint32_t &rMaterialMask, bool &bAttempted
 ) {
 	pollGpuRuntimePagePrepare( false );
@@ -1694,6 +1969,7 @@ bool T3DData::takePreparedGpuRuntimePage(
 			rControl = page.pControl;
 			rColor = page.pColor;
 			rDerived = page.pDerived;
+			rMiddleComposite = page.pMiddleComposite;
 			rMaterialMask = page.materialMask;
 		}
 		const bool loaded = page.bLoaded;
@@ -1760,6 +2036,12 @@ bool T3DData::writeGpuRuntimePage( T3DRegion *const pRegion, String *const pErro
 	if ( pDerived.is_null() ) {
 		return fail( "derived normal/slope page synthesis failed" );
 	}
+	const Ref<Image> pMiddleComposite = makeMiddleCompositeImage( pRegion->getLocation(),
+		pControl.is_valid() ? pControl : m_pDefaultControlMap,
+		pColor.is_valid() ? pColor : makeGpuColorImage( m_pDefaultColorMap ) );
+	if ( pMiddleComposite.is_null() ) {
+		return fail( "Middle composite page synthesis failed" );
+	}
 
 	t3druntimePageHeader_t header;
 	header.nRegionSize = ( uint32_t ) ( m_nRegionSize );
@@ -1776,16 +2058,34 @@ bool T3DData::writeGpuRuntimePage( T3DRegion *const pRegion, String *const pErro
 	header.blendRecipeVersion = TERRAIN3D_RUNTIME_PAGE_BLEND_RECIPE_VERSION;
 	header.materialMask = pControl.is_valid() ? terrain3dMaterialMaskFromControlImage( pControl ) : 1u;
 	header.middleHeightDivisor = ( uint32_t ) ( MAX( 1, m_pTerrain->getGpuMiddleHeightResolutionDivisor() ) );
+	uint64_t world_signature = 1469598103934665603ULL;
+	terrain3dFnv1a64AppendU32( world_signature, ( uint32_t ) ( m_nRegionSize ) );
+	terrain3dFnv1a64AppendU32( world_signature, ( uint32_t ) ( m_nGpuRegionColorDivisor ) );
+	terrain3dFnv1a64AppendU32( world_signature, ( uint32_t ) ( m_nGpuRegionDerivedDivisor ) );
+	terrain3dFnv1a64AppendU32( world_signature, TERRAIN3D_RUNTIME_PAGE_BLEND_RECIPE_VERSION );
+	header.worldSignatureLo = ( uint32_t ) ( world_signature & 0xffffffffu );
+	header.worldSignatureHi = ( uint32_t ) ( world_signature >> 32u );
+	header.regionX = pRegion->getLocation().x;
+	header.regionZ = pRegion->getLocation().y;
+	const Vector2 height_range = pRegion->getHeightRange();
+	const float min_height = ( float ) ( height_range.x );
+	const float max_height = ( float ) ( height_range.y );
+	std::memcpy( &header.boundsMinYBits, &min_height, sizeof( uint32_t ) );
+	std::memcpy( &header.boundsMaxYBits, &max_height, sizeof( uint32_t ) );
 	PackedByteArray file_bytes;
 	file_bytes.resize( TERRAIN3D_RUNTIME_PAGE_HEADER_BYTES );
 	std::memset( file_bytes.ptrw(), 0, TERRAIN3D_RUNTIME_PAGE_HEADER_BYTES );
+	const PackedByteArray instance_page = pRegion->getInstancePage();
 	if ( !terrain3dRuntimePageAddChannel( file_bytes, header, TERRAIN3D_RUNTIME_PAGE_HEIGHT, pHeight ) ||
 		( pControl.is_valid() && !terrain3dRuntimePageAddChannel( file_bytes, header,
 			TERRAIN3D_RUNTIME_PAGE_CONTROL, pControl ) ) ||
 		( pColor.is_valid() && !terrain3dRuntimePageAddChannel( file_bytes, header,
 			TERRAIN3D_RUNTIME_PAGE_COLOR, pColor ) ) ||
 		!terrain3dRuntimePageAddChannel( file_bytes, header, TERRAIN3D_RUNTIME_PAGE_DERIVED, pDerived ) ||
-		!terrain3dRuntimePageAddChannel( file_bytes, header, TERRAIN3D_RUNTIME_PAGE_MIDDLE_HEIGHT, pMiddleHeight ) ) {
+		!terrain3dRuntimePageAddChannel( file_bytes, header, TERRAIN3D_RUNTIME_PAGE_MIDDLE_HEIGHT, pMiddleHeight ) ||
+		!terrain3dRuntimePageAddChannel( file_bytes, header, TERRAIN3D_RUNTIME_PAGE_MIDDLE_COMPOSITE, pMiddleComposite ) ||
+		( !instance_page.is_empty() && !terrain3dRuntimePageAddBlob( file_bytes, header,
+			TERRAIN3D_RUNTIME_PAGE_STATIC_INSTANCES, instance_page ) ) ) {
 		return fail( "runtime page channel serialization failed" );
 	}
 	terrain3dRuntimePageEncodeHeader( file_bytes, header );
@@ -1829,6 +2129,7 @@ bool T3DData::writeGpuRuntimePage( T3DRegion *const pRegion, String *const pErro
 	// be parsed, checksum-validated, and materialized through the same loader used
 	// by runtime streaming. Restore the previous known-good page on validation failure.
 	t3dpreparedGpuRuntimePage_t validation_page;
+	validation_page.location = pRegion->getLocation();
 	validation_page.pagePath = page_path;
 	validation_page.sourcePath = pRegion->get_path();
 	validation_page.expectedChannelFlags = ( uint32_t ) ( pRegion->getChannelFlags() );
@@ -2213,6 +2514,8 @@ void T3DData::resetGpuRegionCache( const bool bClearTextures ) {
 	pollGpuRuntimePagePrepare( true );
 	m_nGpuPreparedPageCount = 0;
 	m_nGpuPrepareWorkPageCount = 0;
+	m_nRuntimePagePrepareQueuedCount = 0;
+	m_nRuntimePagePrepareStreamingGenerationLast = 0u;
 	std::fill_n( m_szRuntimePagePrepareConsumers, TERRAIN3D_MAX_REGION_SLOTS, ( uint8_t ) ( 0 ) );
 	std::fill_n( m_szRuntimePagePreparePriorities, TERRAIN3D_MAX_REGION_SLOTS, ( uint8_t ) ( 0 ) );
 	std::fill_n( m_szGpuRegionMap, TERRAIN3D_MAX_REGION_SLOTS, ( uint16_t ) ( 0 ) );
@@ -2294,6 +2597,7 @@ void T3DData::resetGpuRegionCache( const bool bClearTextures ) {
 		m_generatedControlMaps.clear();
 		m_generatedColorMaps.clear();
 		m_generatedDerivedMaps.clear();
+		m_generatedMiddleCompositeMaps.clear();
 		if ( !isFarAtlasRequired() ) {
 			m_generatedFarHeightMap.clear();
 			m_generatedFarColorMap.clear();
@@ -2331,6 +2635,7 @@ bool T3DData::rebuildGpuRegionCacheTextures( void ) {
 	const int color_layers = bColorChannelEnabled ? m_nGpuRegionPhysicalLayerCount : 1;
 	m_gpuControlMaps.resize( control_layers );
 	m_gpuColorMaps.resize( color_layers );
+	m_gpuMiddleCompositeMaps.resize( m_nGpuRegionPhysicalLayerCount );
 	const Ref<Image> pDefaultGpuColor = makeGpuColorImage( m_pDefaultColorMap );
 	const Ref<Image> pDefaultGpuDerived = makeGpuDerivedImage( m_pDefaultDerivedMap );
 	if ( pDefaultGpuColor.is_null() || pDefaultGpuDerived.is_null() ) {
@@ -2348,23 +2653,32 @@ bool T3DData::rebuildGpuRegionCacheTextures( void ) {
 	for ( int layer = 0; layer < color_layers; ++layer ) {
 		m_gpuColorMaps[layer] = pDefaultGpuColor;
 	}
+	const Ref<Image> pDefaultMiddleComposite = makeMiddleCompositeImage( V2I_ZERO, m_pDefaultControlMap, pDefaultGpuColor );
+	if ( pDefaultMiddleComposite.is_null() ) {
+		return false;
+	}
+	for ( int layer = 0; layer < m_nGpuRegionPhysicalLayerCount; ++layer ) {
+		m_gpuMiddleCompositeMaps[layer] = pDefaultMiddleComposite;
+	}
 
 	const bool bHeightOk = m_generatedHeightMaps.create( m_gpuHeightMaps ).is_valid();
 	const bool bControlOk = m_generatedControlMaps.create( m_gpuControlMaps ).is_valid();
 	const bool bColorOk = m_generatedColorMaps.create( m_gpuColorMaps ).is_valid();
 	const bool bDerivedOk = m_generatedDerivedMaps.create( m_gpuDerivedMaps ).is_valid();
+	const bool bMiddleCompositeOk = m_generatedMiddleCompositeMaps.create( m_gpuMiddleCompositeMaps ).is_valid();
 	// RenderingServer owns the uploaded layers. Retaining these Image arrays would
 	// duplicate the physical GPU cache on the CPU side and defeat bounded residency.
 	m_gpuHeightMaps.clear();
 	m_gpuControlMaps.clear();
 	m_gpuColorMaps.clear();
 	m_gpuDerivedMaps.clear();
-	m_bGpuRegionCacheTexturesReady = bHeightOk && bControlOk && bColorOk && bDerivedOk;
+	m_gpuMiddleCompositeMaps.clear();
+	m_bGpuRegionCacheTexturesReady = bHeightOk && bControlOk && bColorOk && bDerivedOk && bMiddleCompositeOk;
 	if ( m_bGpuRegionCacheTexturesReady ) {
 		m_nGpuRegionLastPublicationTick = m_nGpuRegionTick;
 	}
 	LOG( T3DTerrain::DEBUG, "[gpu-cache] Physical arrays uploaded: height=", bHeightOk, "; control=", bControlOk,
-		"; color=", bColorOk, "; derived=", bDerivedOk,
+		"; color=", bColorOk, "; derived=", bDerivedOk, "; middle_composite=", bMiddleCompositeOk,
 		"; physical_layers=", m_nGpuRegionPhysicalLayerCount );
 	if ( !m_bGpuRegionCacheTexturesReady ) {
 		LOG( T3DTerrain::ERROR, "Failed to create bounded GPU region cache with ", capacity, " physical layers" );
@@ -3060,13 +3374,17 @@ bool T3DData::rebuildGpuFarColorAtlas( void ) {
 }
 
 int T3DData::findGpuRegionSlot( const Vector2i &vLocation ) const {
-	for ( int layer = 0; layer < m_nGpuRegionPhysicalLayerCount; ++layer ) {
-		if ( m_szGpuRegionSlotStates[layer] == TERRAIN3D_GPU_SLOT_MAPPED &&
-			m_szGpuRegionLocations[layer] == vLocation ) {
-			return layer;
-		}
+	const int map_index = getRegionMapIndex( vLocation );
+	if ( map_index < 0 ) {
+		return -1;
 	}
-	return -1;
+	const int layer = ( int ) ( m_szGpuRegionMap[map_index] ) - 1;
+	if ( layer < 0 || layer >= m_nGpuRegionPhysicalLayerCount ||
+		m_szGpuRegionSlotStates[layer] != TERRAIN3D_GPU_SLOT_MAPPED ||
+		m_szGpuRegionLocations[layer] != vLocation ) {
+		return -1;
+	}
+	return layer;
 }
 
 int T3DData::findFreeGpuRegionSlot( void ) const {
@@ -3191,6 +3509,7 @@ bool T3DData::uploadGpuRegionLayer(
 	Ref<Image> pDerived;
 	Ref<Image> pControl;
 	Ref<Image> pColor;
+	Ref<Image> pMiddleComposite;
 	const uint8_t previous_state = m_szGpuRegionSlotStates[nLayer];
 	m_szGpuRegionSlotStates[nLayer] = TERRAIN3D_GPU_SLOT_STAGING;
 
@@ -3199,7 +3518,7 @@ bool T3DData::uploadGpuRegionLayer(
 	if ( eMapType == T3DRegion::TYPE_MAX && pRegion->runtimeMapsEvictable() && m_pTerrain &&
 		m_pTerrain->isGpuRegionCookedPagesEnabled() ) {
 		bool bPreparedAttempted = false;
-		bCookedPage = takePreparedGpuRuntimePage( vLocation, pHeight, pControl, pColor, pDerived,
+		bCookedPage = takePreparedGpuRuntimePage( vLocation, pHeight, pControl, pColor, pDerived, pMiddleComposite,
 			cooked_material_mask, bPreparedAttempted );
 		if ( !bPreparedAttempted && isGpuRuntimePagePreparePending( vLocation ) ) {
 			m_nGpuRegionStallFlagsLastTick |= TERRAIN3D_PROFILE_STALL_GPU_PREPARE_PENDING;
@@ -3282,6 +3601,21 @@ bool T3DData::uploadGpuRegionLayer(
 			return false;
 		}
 	}
+	if ( eMapType == T3DRegion::TYPE_MAX && pMiddleComposite.is_null() ) {
+		Ref<Image> pCompositeControl = pControl;
+		if ( pCompositeControl.is_null() ) {
+			pCompositeControl = makeGpuRenderControlImage( vLocation );
+		}
+		Ref<Image> pCompositeColor = pColor;
+		if ( pCompositeColor.is_null() ) {
+			pCompositeColor = makeGpuColorImage( getRegionMapOrDefault( pRegion, T3DRegion::TYPE_COLOR ) );
+		}
+		pMiddleComposite = makeMiddleCompositeImage( vLocation, pCompositeControl, pCompositeColor );
+		if ( pMiddleComposite.is_null() ) {
+			m_szGpuRegionSlotStates[nLayer] = previous_state;
+			return false;
+		}
+	}
 
 	bool bUploadOk = true;
 	if ( bUploadHeight ) {
@@ -3321,6 +3655,12 @@ bool T3DData::uploadGpuRegionLayer(
 			const size_t bytes = terrain3dGpuImageBytes( pColor );
 			m_nGpuRegionColorBytesLastTick += bytes;
 			m_nGpuRegionUploadBytesLastTick += bytes;
+		}
+	}
+	if ( bUploadOk && eMapType == T3DRegion::TYPE_MAX ) {
+		bUploadOk = m_generatedMiddleCompositeMaps.update( pMiddleComposite, nLayer );
+		if ( bUploadOk ) {
+			m_nGpuRegionUploadBytesLastTick += terrain3dGpuImageBytes( pMiddleComposite );
 		}
 	}
 	if ( !bUploadOk ) {
@@ -3455,30 +3795,26 @@ int T3DData::collectDesiredGpuRegions(
 	}
 	const int capacity = MIN( nCapacity, TERRAIN3D_GPU_CACHE_MAX_LAYERS );
 	int output_count = 0;
-	auto contains = [&]( const Vector2i &location ) {
-		for ( int index = 0; index < output_count; ++index ) {
-			if ( pLocations[index] == location ) {
-				return true;
-			}
+	uint8_t selected_map[TERRAIN3D_MAX_REGION_SLOTS] = {};
+	auto append_location = [&]( const Vector2i &location, const t3dregionStreamingState_t wanted ) {
+		if ( output_count >= capacity ) {
+			return false;
 		}
-		return false;
+		if ( !isRegionLocationValidInternal( location ) || !hasRegion( location ) ||
+			m_pTerrain->getRegionStreamingStateInternal( location ) != wanted ) {
+			return true;
+		}
+		const int map_index = getRegionMapIndex( location );
+		if ( map_index < 0 || selected_map[map_index] != 0u ) {
+			return true;
+		}
+		pLocations[output_count++] = location;
+		selected_map[map_index] = 1u;
+		return output_count < capacity;
 	};
 	auto append_state = [&]( const t3dregionStreamingState_t wanted ) {
-		for ( int radius = 0; radius < m_nRegionMapSize && output_count < capacity; ++radius ) {
-			for ( int y = -radius; y <= radius && output_count < capacity; ++y ) {
-				for ( int x = -radius; x <= radius && output_count < capacity; ++x ) {
-					if ( MAX( Math::abs( x ), Math::abs( y ) ) != radius ) {
-						continue;
-					}
-					const Vector2i location = rCenter + Vector2i( x, y );
-					if ( !isRegionLocationValidInternal( location ) || !hasRegion( location ) ||
-						m_pTerrain->getRegionStreamingStateInternal( location ) != wanted || contains( location ) ) {
-						continue;
-					}
-					pLocations[output_count++] = location;
-				}
-			}
-		}
+		terrain3dForEachSquareRing( rCenter, m_nRegionMapSize,
+			[&]( const Vector2i &location ) { return append_location( location, wanted ); } );
 	};
 
 	// Full surface pages are mandatory only for ACTIVE. HOT geometry is served by
@@ -3490,11 +3826,13 @@ int T3DData::collectDesiredGpuRegions(
 	const int prefetch_begin = output_count;
 	for ( int slot = 0; slot < m_nRegionLocationCount && output_count < capacity; ++slot ) {
 		const Vector2i location = m_szRegionLocations[slot];
-		if ( location == V2I_MAX || !hasRegion( location ) || contains( location ) ||
+		const int map_index = location == V2I_MAX ? -1 : getRegionMapIndex( location );
+		if ( map_index < 0 || selected_map[map_index] != 0u || !hasRegion( location ) ||
 			!m_pTerrain->isRegionStreamingPrefetchInternal( location ) ) {
 			continue;
 		}
 		pLocations[output_count++] = location;
+		selected_map[map_index] = 1u;
 	}
 	rStats.prefetch = output_count - prefetch_begin;
 	rStats.written = output_count;
@@ -3502,29 +3840,41 @@ int T3DData::collectDesiredGpuRegions(
 }
 
 void T3DData::updateActiveHeightResidency( const bool bForce ) {
-	( void ) bForce;
+	m_nActiveHeightReconciliationsLastTick = 0;
+	m_nActiveHeightSlotsExaminedLastTick = 0;
 	if ( !m_pTerrain || !m_bOwnsActiveStorage || !terrain3dActiveStorageIsOwner( this ) ) {
 		return;
 	}
 	const bool authoring = m_pTerrain->isEditorAuthoringMode();
+	const uint64_t streaming_generation = m_pTerrain->getRegionStreamingGeneration();
+	const Vector2i active_center = getRegionLocation( m_pTerrain->getClipmapTargetPosition() );
+	if ( !bForce && !m_bActiveHeightResidencyDirty &&
+		streaming_generation == m_nActiveHeightStreamingGenerationLast &&
+		active_center == m_activeHeightCenter ) {
+		return;
+	}
+	m_nActiveHeightReconciliationsLastTick = 1;
 	const bool cooked_runtime = !authoring && m_pTerrain->isGpuRegionCookedPagesEnabled();
+	const int active_radius = 2; // 5x5 working set; bounded below the 32-page bank.
+	bool bAllRequiredResident = true;
 	for ( int slot = 0; slot < m_nRegionLocationCount; ++slot ) {
+		++m_nActiveHeightSlotsExaminedLastTick;
 		const Vector2i location = m_szRegionLocations[slot];
 		if ( location == V2I_MAX || !hasRegion( location ) ) {
 			continue;
 		}
-		const bool required = authoring ||
-			m_pTerrain->getRegionStreamingStateInternal( location ) >= TERRAIN3D_REGION_STREAMING_HOT;
+		const Vector2i active_delta = location - active_center;
+		const bool inside_active_bank =
+			MAX( ABS( active_delta.x ), ABS( active_delta.y ) ) <= active_radius;
+		const bool required = inside_active_bank && ( authoring ||
+			m_pTerrain->getRegionStreamingStateInternal( location ) >= TERRAIN3D_REGION_STREAMING_HOT );
 		const bool predicted = !authoring && m_pTerrain->isRegionStreamingPrefetchInternal( location );
-		if ( cooked_runtime && ( required || predicted ) ) {
-			requestGpuRuntimePage( location, RUNTIME_PAGE_CONSUMER_ACTIVE_HEIGHT, required ? 1u : 3u );
-		}
-		T3DActiveMapLease existing = acquireActiveMap( location );
-		const bool resident = existing.valid();
-		existing.reset();
+		const bool resident = terrain3dActiveStorageContains( this, location );
 		if ( !required ) {
 			if ( resident ) {
 				terrain3dActiveStorageInvalidate( this, location );
+			} else if ( cooked_runtime && predicted ) {
+				requestGpuRuntimePage( location, RUNTIME_PAGE_CONSUMER_ACTIVE_HEIGHT, 3u );
 			}
 			continue;
 		}
@@ -3533,26 +3883,32 @@ void T3DData::updateActiveHeightResidency( const bool bForce ) {
 		}
 		T3DRegion *const pRegion = getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() ) {
+			bAllRequiredResident = false;
 			continue;
 		}
 
+		bool published = false;
 		if ( cooked_runtime ) {
+			requestGpuRuntimePage( location, RUNTIME_PAGE_CONSUMER_ACTIVE_HEIGHT, 1u );
 			Ref<Image> pPreparedHeight;
+			PackedByteArray prepared_height_bytes;
 			if ( takePreparedRuntimeHeight( location, RUNTIME_PAGE_CONSUMER_ACTIVE_HEIGHT,
-				pPreparedHeight, false ) && pPreparedHeight.is_valid() ) {
-				const PackedByteArray bytes = pPreparedHeight->get_data();
-				if ( terrain3dActiveStorageSyncHeightPage( this, location, bytes.ptr(), ( size_t ) ( bytes.size() ) ) ) {
-					continue;
-				}
+				pPreparedHeight, false, &prepared_height_bytes ) && pPreparedHeight.is_valid() ) {
+				published = terrain3dActiveStorageSyncHeightPage(
+					this, location, prepared_height_bytes.ptr(), ( size_t ) ( prepared_height_bytes.size() ) );
 			}
 		}
 
 		// Already-resident authoritative data can still publish immediately. Runtime
 		// never forces a synchronous source restore here; the CPU cache prewarms that
 		// resource independently and the cooked page supplies height in the meantime.
-		if ( pRegion->getHeightMap().is_valid() && syncActiveRegion( location, pRegion ) ) {
+		if ( !published && pRegion->getHeightMap().is_valid() ) {
+			published = syncActiveRegion( location, pRegion );
+		}
+		if ( published ) {
 			continue;
 		}
+		bAllRequiredResident = false;
 		if ( m_bCpuRegionCacheEnabled && !authoring ) {
 			requestCpuRegionSourceAsync( location );
 			continue;
@@ -3562,6 +3918,9 @@ void T3DData::updateActiveHeightResidency( const bool bForce ) {
 				"Terrain3D: Failed to publish required authoring height payload for region %s.", location ) );
 		}
 	}
+	m_nActiveHeightStreamingGenerationLast = streaming_generation;
+	m_activeHeightCenter = active_center;
+	m_bActiveHeightResidencyDirty = !bAllRequiredResident;
 }
 
 
@@ -3585,6 +3944,8 @@ void T3DData::resetMiddleHeightCache( void ) {
 	m_middleHeightCenter = V2I_MAX;
 	m_bMiddleHeightTexturesReady = false;
 	m_bMiddleHeightPageTableDirty = true;
+	m_bMiddleHeightSelectionDirty = true;
+	m_nMiddleHeightStreamingGenerationLast = 0u;
 }
 
 bool T3DData::configureMiddleHeightCache( void ) {
@@ -3641,13 +4002,17 @@ bool T3DData::configureMiddleHeightCache( void ) {
 }
 
 int T3DData::findMiddleHeightSlot( const Vector2i &vLocation ) const {
-	for ( int layer = 0; layer < m_nMiddleHeightPhysicalLayerCount; ++layer ) {
-		if ( m_szMiddleHeightSlotStates[layer] == TERRAIN3D_GPU_SLOT_MAPPED &&
-			m_szMiddleHeightLocations[layer] == vLocation ) {
-			return layer;
-		}
+	const int map_index = getRegionMapIndex( vLocation );
+	if ( map_index < 0 ) {
+		return -1;
 	}
-	return -1;
+	const int layer = ( int ) ( m_szMiddleHeightRegionMap[map_index] ) - 1;
+	if ( layer < 0 || layer >= m_nMiddleHeightPhysicalLayerCount ||
+		m_szMiddleHeightSlotStates[layer] != TERRAIN3D_GPU_SLOT_MAPPED ||
+		m_szMiddleHeightLocations[layer] != vLocation ) {
+		return -1;
+	}
+	return layer;
 }
 
 Ref<Image> T3DData::makeMiddleHeightImage( const Vector2i &vLocation, const bool bRuntimeResolution ) const {
@@ -3736,41 +4101,37 @@ int T3DData::collectDesiredMiddleHeightRegions(
 	}
 	const int capacity = MIN( nCapacity, TERRAIN3D_GPU_HEIGHT_CACHE_MAX_LAYERS );
 	int output_count = 0;
-	auto contains = [&]( const Vector2i &location ) {
-		for ( int index = 0; index < output_count; ++index ) {
-			if ( pLocations[index] == location ) {
-				return true;
-			}
-		}
-		return false;
-	};
+	uint8_t selected_map[TERRAIN3D_MAX_REGION_SLOTS] = {};
 	for ( int state_value = ( int ) ( TERRAIN3D_REGION_STREAMING_ACTIVE );
 		state_value >= ( int ) ( TERRAIN3D_REGION_STREAMING_HOT ) && output_count < capacity; --state_value ) {
 		const t3dregionStreamingState_t wanted = ( t3dregionStreamingState_t ) ( state_value );
-		for ( int radius = 0; radius < m_nRegionMapSize && output_count < capacity; ++radius ) {
-			for ( int y = -radius; y <= radius && output_count < capacity; ++y ) {
-				for ( int x = -radius; x <= radius && output_count < capacity; ++x ) {
-					if ( MAX( Math::abs( x ), Math::abs( y ) ) != radius ) {
-						continue;
-					}
-					const Vector2i location = rCenter + Vector2i( x, y );
-					if ( !isRegionLocationValidInternal( location ) || !hasRegion( location ) ||
-						m_pTerrain->getRegionStreamingStateInternal( location ) != wanted || contains( location ) ) {
-						continue;
-					}
-					pLocations[output_count++] = location;
-				}
+		terrain3dForEachSquareRing( rCenter, m_nRegionMapSize, [&]( const Vector2i &location ) {
+			if ( output_count >= capacity ) {
+				return false;
 			}
-		}
+			if ( !isRegionLocationValidInternal( location ) || !hasRegion( location ) ||
+				m_pTerrain->getRegionStreamingStateInternal( location ) != wanted ) {
+				return true;
+			}
+			const int map_index = getRegionMapIndex( location );
+			if ( map_index < 0 || selected_map[map_index] != 0u ) {
+				return true;
+			}
+			pLocations[output_count++] = location;
+			selected_map[map_index] = 1u;
+			return output_count < capacity;
+		} );
 	}
 	rRequiredCount = output_count;
 	for ( int slot = 0; slot < m_nRegionLocationCount && output_count < capacity; ++slot ) {
 		const Vector2i location = m_szRegionLocations[slot];
-		if ( location == V2I_MAX || !hasRegion( location ) || contains( location ) ||
+		const int map_index = location == V2I_MAX ? -1 : getRegionMapIndex( location );
+		if ( map_index < 0 || selected_map[map_index] != 0u || !hasRegion( location ) ||
 			!m_pTerrain->isRegionStreamingPrefetchInternal( location ) ) {
 			continue;
 		}
 		pLocations[output_count++] = location;
+		selected_map[map_index] = 1u;
 	}
 	return output_count;
 }
@@ -3826,6 +4187,19 @@ void T3DData::updateMiddleHeightResidency( const Vector2i &rCenter, const bool b
 		return;
 	}
 	++m_nMiddleHeightTick;
+	const uint64_t streaming_generation = m_pTerrain->getRegionStreamingGeneration();
+	bool bRetirementPending = false;
+	for ( int layer = 0; layer < m_nMiddleHeightPhysicalLayerCount; ++layer ) {
+		if ( m_szMiddleHeightSlotStates[layer] == TERRAIN3D_GPU_SLOT_RETIRED ) {
+			bRetirementPending = true;
+			break;
+		}
+	}
+	if ( !bForce && m_bMiddleHeightTexturesReady && rCenter == m_middleHeightCenter &&
+		streaming_generation == m_nMiddleHeightStreamingGenerationLast &&
+		!m_bMiddleHeightSelectionDirty && !m_bMiddleHeightPageTableDirty && !bRetirementPending ) {
+		return;
+	}
 	const bool large_jump = m_middleHeightCenter != V2I_MAX &&
 		MAX( Math::abs( rCenter.x - m_middleHeightCenter.x ), Math::abs( rCenter.y - m_middleHeightCenter.y ) ) > 1;
 	if ( !m_bMiddleHeightTexturesReady ) {
@@ -3842,15 +4216,20 @@ void T3DData::updateMiddleHeightResidency( const Vector2i &rCenter, const bool b
 		m_bMiddleHeightPageTableDirty = true;
 	}
 	m_middleHeightCenter = rCenter;
+	m_nMiddleHeightStreamingGenerationLast = streaming_generation;
 
 	Engine *const pEngine = Engine::get_singleton();
 	const uint64_t frame = pEngine ? ( uint64_t ) ( pEngine->get_frames_drawn() ) : m_nMiddleHeightTick;
+	bRetirementPending = false;
 	for ( int layer = 0; layer < m_nMiddleHeightPhysicalLayerCount; ++layer ) {
-		if ( m_szMiddleHeightSlotStates[layer] == TERRAIN3D_GPU_SLOT_RETIRED &&
-			frame >= m_szMiddleHeightRetireAfterFrame[layer] ) {
-			m_szMiddleHeightSlotStates[layer] = TERRAIN3D_GPU_SLOT_FREE;
-			m_szMiddleHeightLocations[layer] = V2I_MAX;
-			m_szMiddleHeightRetireAfterFrame[layer] = 0u;
+		if ( m_szMiddleHeightSlotStates[layer] == TERRAIN3D_GPU_SLOT_RETIRED ) {
+			if ( frame >= m_szMiddleHeightRetireAfterFrame[layer] ) {
+				m_szMiddleHeightSlotStates[layer] = TERRAIN3D_GPU_SLOT_FREE;
+				m_szMiddleHeightLocations[layer] = V2I_MAX;
+				m_szMiddleHeightRetireAfterFrame[layer] = 0u;
+			} else {
+				bRetirementPending = true;
+			}
 		}
 	}
 
@@ -3859,25 +4238,24 @@ void T3DData::updateMiddleHeightResidency( const Vector2i &rCenter, const bool b
 	const int desired_count = collectDesiredMiddleHeightRegions( rCenter, desired,
 		m_nMiddleHeightMappedCapacity, required_count );
 	m_nMiddleHeightDesiredLastTick = desired_count;
-	auto desired_contains = [&]( const Vector2i &location ) {
-		for ( int index = 0; index < desired_count; ++index ) {
-			if ( desired[index] == location ) {
-				return true;
-			}
+	uint8_t desired_map[TERRAIN3D_MAX_REGION_SLOTS] = {};
+	for ( int index = 0; index < desired_count; ++index ) {
+		const int map_index = getRegionMapIndex( desired[index] );
+		if ( map_index >= 0 ) {
+			desired_map[map_index] = 1u;
 		}
-		return false;
-	};
+	}
 
 	for ( int layer = 0; layer < m_nMiddleHeightPhysicalLayerCount; ++layer ) {
 		if ( m_szMiddleHeightSlotStates[layer] != TERRAIN3D_GPU_SLOT_MAPPED ) {
 			continue;
 		}
 		const Vector2i location = m_szMiddleHeightLocations[layer];
-		if ( desired_contains( location ) ) {
+		const int map_index = getRegionMapIndex( location );
+		if ( map_index >= 0 && desired_map[map_index] != 0u ) {
 			m_szMiddleHeightLastUseTick[layer] = m_nMiddleHeightTick;
 			continue;
 		}
-		const int map_index = getRegionMapIndex( location );
 		if ( map_index >= 0 ) {
 			m_szMiddleHeightRegionMap[map_index] = 0u;
 		}
@@ -3886,16 +4264,19 @@ void T3DData::updateMiddleHeightResidency( const Vector2i &rCenter, const bool b
 		m_nMiddleHeightResidentCount = MAX( 0, m_nMiddleHeightResidentCount - 1 );
 		++m_nMiddleHeightEvictionsLastTick;
 		m_bMiddleHeightPageTableDirty = true;
+		bRetirementPending = true;
 	}
 
 	const int upload_budget = bForce ? TERRAIN3D_GPU_HEIGHT_CACHE_MAX_LAYERS :
 		MAX( 1, getEffectiveGpuRegionUploadBudgetLayers() );
 	const bool cooked_runtime = m_pTerrain->isGpuRegionCookedPagesEnabled();
+	bool bAllDesiredResident = true;
 	for ( int index = 0; index < desired_count; ++index ) {
 		const Vector2i location = desired[index];
 		if ( findMiddleHeightSlot( location ) >= 0 ) {
 			continue;
 		}
+		bAllDesiredResident = false;
 		const bool required = index < required_count;
 		if ( cooked_runtime ) {
 			requestGpuRuntimePage( location, RUNTIME_PAGE_CONSUMER_MIDDLE_HEIGHT, required ? 2u : 3u );
@@ -3944,9 +4325,19 @@ void T3DData::updateMiddleHeightResidency( const Vector2i &rCenter, const bool b
 		++m_nMiddleHeightResidentCount;
 		m_bMiddleHeightPageTableDirty = true;
 	}
+	if ( !bAllDesiredResident ) {
+		bAllDesiredResident = true;
+		for ( int index = 0; index < desired_count; ++index ) {
+			if ( findMiddleHeightSlot( desired[index] ) < 0 ) {
+				bAllDesiredResident = false;
+				break;
+			}
+		}
+	}
 	if ( m_bMiddleHeightPageTableDirty || bForce ) {
 		updateMiddleHeightPageTableTexture();
 	}
+	m_bMiddleHeightSelectionDirty = !bAllDesiredResident || bRetirementPending || m_bMiddleHeightPageTableDirty;
 }
 
 
@@ -4048,6 +4439,8 @@ void T3DData::resetCpuRegionCache( const bool bReleaseCleanMaps ) {
 	m_nCpuRegionAsyncRequestsLastTick = 0;
 	m_nCpuRegionAsyncReadyLastTick = 0;
 	m_nCpuRegionAsyncPendingLastTick = 0;
+	m_nCpuRegionAsyncOutstanding = 0;
+	m_nCpuRegionPrefetchStreamingGenerationLast = 0u;
 	std::fill_n( m_szCpuRegionAsyncState, TERRAIN3D_MAX_REGION_SLOTS, ( uint8_t ) ( 0 ) );
 	m_cpuRegionCacheCenter = V2I_MAX;
 	m_bCpuRegionCacheSelectionDirty = true;
@@ -4134,6 +4527,7 @@ bool T3DData::requestCpuRegionSourceAsync( const Vector2i &vLocation ) {
 		return false;
 	}
 	m_szCpuRegionAsyncState[map_index] = 1u;
+	++m_nCpuRegionAsyncOutstanding;
 	++m_nCpuRegionAsyncRequestsLastTick;
 	return true;
 }
@@ -4165,11 +4559,13 @@ bool T3DData::takeCpuRegionSourceAsync( const Vector2i &vLocation, Ref<T3DRegion
 	}
 	if ( status != ResourceLoader::THREAD_LOAD_LOADED ) {
 		m_szCpuRegionAsyncState[map_index] = 2u;
+		m_nCpuRegionAsyncOutstanding = MAX( 0, m_nCpuRegionAsyncOutstanding - 1 );
 		return false;
 	}
 	const Ref<Resource> pResource = loader->load_threaded_get( path );
 	Ref<T3DRegion> pLoaded = pResource;
 	m_szCpuRegionAsyncState[map_index] = 0u;
+	m_nCpuRegionAsyncOutstanding = MAX( 0, m_nCpuRegionAsyncOutstanding - 1 );
 	if ( pLoaded.is_null() || pLoaded->getRegionSize() != m_nRegionSize ) {
 		return false;
 	}
@@ -4208,7 +4604,7 @@ void T3DData::prewarmCpuRegionSources( void ) {
 }
 
 void T3DData::reapCpuRegionSourceAsync( void ) {
-	if ( !m_pTerrain || m_pTerrain->isEditorAuthoringMode() ) {
+	if ( m_nCpuRegionAsyncOutstanding <= 0 || !m_pTerrain || m_pTerrain->isEditorAuthoringMode() ) {
 		return;
 	}
 	ResourceLoader *const loader = ResourceLoader::get_singleton();
@@ -4217,7 +4613,7 @@ void T3DData::reapCpuRegionSourceAsync( void ) {
 	}
 	const Vector2i predicted_center = m_pTerrain->getRegionStreamingPredictedCenterInternal();
 	const int active_radius = MAX( 0, m_pTerrain->getStreamingActiveRadius() );
-	for ( int slot = 0; slot < m_nRegionLocationCount; ++slot ) {
+	for ( int slot = 0; slot < m_nRegionLocationCount && m_nCpuRegionAsyncOutstanding > 0; ++slot ) {
 		const Vector2i location = m_szRegionLocations[slot];
 		const int map_index = location == V2I_MAX ? -1 : getRegionMapIndex( location );
 		if ( map_index < 0 || m_szCpuRegionAsyncState[map_index] == 0u ) {
@@ -4230,13 +4626,10 @@ void T3DData::reapCpuRegionSourceAsync( void ) {
 		if ( active_now || predicted_active ) {
 			continue;
 		}
-		if ( m_szCpuRegionAsyncState[map_index] == 2u ) {
-			m_szCpuRegionAsyncState[map_index] = 0u;
-			continue;
-		}
 		T3DRegion *const pRegion = getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() || pRegion->get_path().is_empty() ) {
 			m_szCpuRegionAsyncState[map_index] = 0u;
+			m_nCpuRegionAsyncOutstanding = MAX( 0, m_nCpuRegionAsyncOutstanding - 1 );
 			continue;
 		}
 		const String path = pRegion->get_path();
@@ -4245,14 +4638,15 @@ void T3DData::reapCpuRegionSourceAsync( void ) {
 			continue;
 		}
 		if ( status == ResourceLoader::THREAD_LOAD_LOADED ) {
-			// Collect and immediately release stale completed requests. This prevents
-			// direction changes from retaining completed threaded resources forever.
+			// Collect and immediately release stale completed requests.
 			const Ref<Resource> discard = loader->load_threaded_get( path );
 			( void ) discard;
 		}
 		m_szCpuRegionAsyncState[map_index] = 0u;
+		m_nCpuRegionAsyncOutstanding = MAX( 0, m_nCpuRegionAsyncOutstanding - 1 );
 	}
 }
+
 
 bool T3DData::publishCpuRegionSlot(
 	const int iSlot, const Vector2i &vLocation,
@@ -4420,21 +4814,17 @@ int T3DData::collectDesiredCpuRegions(
 	}
 	const int capacity = MIN( nCapacity, TERRAIN3D_CPU_CACHE_MAX_LAYERS );
 	int output_count = 0;
-	for ( int radius = 0; radius < m_nRegionMapSize && output_count < capacity; ++radius ) {
-		for ( int y = -radius; y <= radius && output_count < capacity; ++y ) {
-			for ( int x = -radius; x <= radius && output_count < capacity; ++x ) {
-				if ( MAX( Math::abs( x ), Math::abs( y ) ) != radius ) {
-					continue;
-				}
-				const Vector2i location = rCenter + Vector2i( x, y );
-				if ( !isRegionLocationValidInternal( location ) || !hasRegion( location ) ||
-					m_pTerrain->getRegionStreamingStateInternal( location ) != TERRAIN3D_REGION_STREAMING_ACTIVE ) {
-					continue;
-				}
-				pLocations[output_count++] = location;
-			}
+	terrain3dForEachSquareRing( rCenter, m_nRegionMapSize, [&]( const Vector2i &location ) {
+		if ( output_count >= capacity ) {
+			return false;
 		}
-	}
+		if ( !isRegionLocationValidInternal( location ) || !hasRegion( location ) ||
+			m_pTerrain->getRegionStreamingStateInternal( location ) != TERRAIN3D_REGION_STREAMING_ACTIVE ) {
+			return true;
+		}
+		pLocations[output_count++] = location;
+		return output_count < capacity;
+	} );
 	return output_count;
 }
 
@@ -4542,7 +4932,8 @@ bool T3DData::ensureCpuSampleArea( const Vector3 &rWorldPosition, const int nRad
 }
 
 void T3DData::updateCpuRegionResidency( const Vector3 &rWorldPosition, const bool bForce ) {
-	const T3DLastScopeTimer serviceTimer( m_nCpuRegionServiceUsecLast );
+	const T3DLastScopeTimer serviceTimer( m_nCpuRegionServiceUsecLast,
+		m_pTerrain && m_pTerrain->isRuntimeProfilingEnabled() );
 	m_nCpuRegionLoadsLastTick = 0;
 	m_nCpuRegionStallFlagsLastTick = TERRAIN3D_PROFILE_STALL_NONE;
 	m_nCpuRegionEvictionsLastTick = 0;
@@ -4556,10 +4947,14 @@ void T3DData::updateCpuRegionResidency( const Vector3 &rWorldPosition, const boo
 		return;
 	}
 
-	// Predictive CPU requests are intentionally issued before the discrete region
-	// center changes. Crossing a boundary should normally promote an already-loaded
+	// Predictive CPU requests only need to be reconsidered when the shared streaming
+	// policy changes. Crossing a boundary should normally promote an already-loaded
 	// Terrain3DRegion resource instead of invoking ResourceLoader::load() in physics.
-	prewarmCpuRegionSources();
+	const uint64_t streaming_generation = m_pTerrain ? m_pTerrain->getRegionStreamingGeneration() : 0u;
+	if ( bForce || streaming_generation != m_nCpuRegionPrefetchStreamingGenerationLast ) {
+		prewarmCpuRegionSources();
+		m_nCpuRegionPrefetchStreamingGenerationLast = streaming_generation;
+	}
 	reapCpuRegionSourceAsync();
 
 	const Vector2i raw_center = getRegionLocation( rWorldPosition );
@@ -4695,6 +5090,13 @@ Dictionary T3DData::getCpuRegionCacheStatsFast( void ) const {
 	stats["service_cpu_usec_last"] = ( int64_t ) ( m_nCpuRegionServiceUsecLast );
 	stats["selection_pending"] = m_bCpuRegionCacheSelectionDirty;
 	stats["reserved_bytes"] = ( int64_t ) ( getCpuRegionCacheReservedBytes() );
+	stats["active_height_bytes"] = ( int64_t ) ( getActiveStorageReservedBytes() );
+	stats["active_height_physical_capacity"] = terrain3dActiveStorageGetPhysicalCapacity();
+	stats["active_height_reconciliations_last_tick"] = m_nActiveHeightReconciliationsLastTick;
+	stats["active_height_slots_examined_last_tick"] = m_nActiveHeightSlotsExaminedLastTick;
+	stats["active_height_reader_retries"] = ( int64_t ) ( terrain3dActiveStorageGetReaderRetryCount() );
+	stats["active_height_reader_mutexes"] = ( int64_t ) ( terrain3dActiveStorageGetReaderMutexCount() );
+	stats["active_height_publications"] = ( int64_t ) ( terrain3dActiveStorageGetPublicationCount() );
 	return stats;
 }
 
@@ -4746,6 +5148,12 @@ Dictionary T3DData::getCpuRegionCacheStats( void ) const {
 	stats["estimated_payload_bytes"] = ( int64_t ) ( payload_bytes );
 	stats["estimated_pinned_bytes"] = ( int64_t ) ( pinned_bytes );
 	stats["active_height_bytes"] = ( int64_t ) ( active_height_bytes );
+	stats["active_height_physical_capacity"] = terrain3dActiveStorageGetPhysicalCapacity();
+	stats["active_height_reconciliations_last_tick"] = m_nActiveHeightReconciliationsLastTick;
+	stats["active_height_slots_examined_last_tick"] = m_nActiveHeightSlotsExaminedLastTick;
+	stats["active_height_reader_retries"] = ( int64_t ) ( terrain3dActiveStorageGetReaderRetryCount() );
+	stats["active_height_reader_mutexes"] = ( int64_t ) ( terrain3dActiveStorageGetReaderMutexCount() );
+	stats["active_height_publications"] = ( int64_t ) ( terrain3dActiveStorageGetPublicationCount() );
 	stats["default_map_bytes"] = ( int64_t ) ( default_map_bytes );
 	stats["estimated_total_map_bytes"] = ( int64_t ) ( total_map_bytes );
 	stats["target_map_ceiling_bytes"] = ( int64_t ) ( TERRAIN3D_XBOX360_CPU_MAP_CEILING_BYTES );
@@ -4791,6 +5199,7 @@ void T3DData::resetInstanceRegionCache( const bool bRestoreAll ) {
 	m_nInstanceRegionLoadBytesLastTick = 0u;
 	m_nInstanceRegionResidentBytes = 0u;
 	m_instanceRegionCacheCenter = V2I_MAX;
+	m_nInstancePrefetchStreamingGenerationLast = 0u;
 	m_bInstanceRegionCacheSelectionDirty = true;
 }
 
@@ -4951,24 +5360,20 @@ int T3DData::collectDesiredInstanceRegions(
 	for ( int state_value = ( int ) ( TERRAIN3D_REGION_STREAMING_ACTIVE );
 		state_value >= ( int ) ( TERRAIN3D_REGION_STREAMING_HOT ) && output_count < capacity; --state_value ) {
 		const t3dregionStreamingState_t wanted = ( t3dregionStreamingState_t ) ( state_value );
-		for ( int radius = 0; radius < m_nRegionMapSize && output_count < capacity; ++radius ) {
-			for ( int y = -radius; y <= radius && output_count < capacity; ++y ) {
-				for ( int x = -radius; x <= radius && output_count < capacity; ++x ) {
-					if ( MAX( Math::abs( x ), Math::abs( y ) ) != radius ) {
-						continue;
-					}
-					const Vector2i location = rCenter + Vector2i( x, y );
-					if ( !isRegionLocationValidInternal( location ) || !hasRegion( location ) ||
-						m_pTerrain->getRegionStreamingStateInternal( location ) != wanted ) {
-						continue;
-					}
-					const T3DRegion *pRegion = getRegionPtr( location );
-					if ( pRegion && pRegion->hasInstances() ) {
-						pLocations[output_count++] = location;
-					}
-				}
+		terrain3dForEachSquareRing( rCenter, m_nRegionMapSize, [&]( const Vector2i &location ) {
+			if ( output_count >= capacity ) {
+				return false;
 			}
-		}
+			if ( !isRegionLocationValidInternal( location ) || !hasRegion( location ) ||
+				m_pTerrain->getRegionStreamingStateInternal( location ) != wanted ) {
+				return true;
+			}
+			const T3DRegion *pRegion = getRegionPtr( location );
+			if ( pRegion && pRegion->hasInstances() ) {
+				pLocations[output_count++] = location;
+			}
+			return output_count < capacity;
+		} );
 	}
 	return output_count;
 }
@@ -4994,7 +5399,8 @@ void T3DData::configureInstanceRegionCache(
 }
 
 void T3DData::updateInstanceRegionResidency( const Vector3 &rWorldPosition, const bool bForce ) {
-	const T3DLastScopeTimer serviceTimer( m_nInstanceRegionServiceUsecLast );
+	const T3DLastScopeTimer serviceTimer( m_nInstanceRegionServiceUsecLast,
+		m_pTerrain && m_pTerrain->isRuntimeProfilingEnabled() );
 	m_nInstanceRegionLoadsLastTick = 0;
 	m_nInstanceRegionStallFlagsLastTick = TERRAIN3D_PROFILE_STALL_NONE;
 	m_nInstanceRegionEvictionsLastTick = 0;
@@ -5004,10 +5410,10 @@ void T3DData::updateInstanceRegionResidency( const Vector3 &rWorldPosition, cons
 	}
 	const bool async_runtime = m_pTerrain && !m_pTerrain->isEditorAuthoringMode() &&
 		m_pTerrain->isGpuRegionCookedPagesEnabled();
-	if ( async_runtime ) {
-		// Decode instance pages on the same worker batch that prepares terrain data.
-		// Prefetch consumers are submitted even while the discrete cache center is
-		// unchanged so a boundary crossing promotes an already-decoded store.
+	const uint64_t streaming_generation = m_pTerrain ? m_pTerrain->getRegionStreamingGeneration() : 0u;
+	if ( async_runtime && ( bForce || streaming_generation != m_nInstancePrefetchStreamingGenerationLast ) ) {
+		// Predictive instance demand changes only when the streaming generation changes.
+		// Avoid walking the authored region table on stationary frames.
 		for ( int slot = 0; slot < m_nRegionLocationCount; ++slot ) {
 			const Vector2i location = m_szRegionLocations[slot];
 			T3DRegion *const pRegion = location == V2I_MAX ? nullptr : getRegionPtr( location );
@@ -5018,6 +5424,7 @@ void T3DData::updateInstanceRegionResidency( const Vector3 &rWorldPosition, cons
 			}
 			requestGpuRuntimePage( location, RUNTIME_PAGE_CONSUMER_INSTANCE_STORE, 3u );
 		}
+		m_nInstancePrefetchStreamingGenerationLast = streaming_generation;
 	}
 	const Vector2i raw_center = getRegionLocation( rWorldPosition );
 	const t3dgpuCacheCoord_t clamped = terrain3dGpuCacheClampCenter(
@@ -5576,7 +5983,8 @@ void T3DData::configureGpuRegionCache(
 }
 
 void T3DData::updateGpuRegionResidency( const Vector3 &rWorldPosition, const bool bForce ) {
-	const T3DLastScopeTimer serviceTimer( m_nGpuRegionServiceUsecLast );
+	const T3DLastScopeTimer serviceTimer( m_nGpuRegionServiceUsecLast,
+		m_pTerrain && m_pTerrain->isRuntimeProfilingEnabled() );
 	m_nGpuRegionStallFlagsLastTick = TERRAIN3D_PROFILE_STALL_NONE;
 	m_nGpuPrepareLatencyUsecLast = 0u;
 	m_nGpuPrepareQueueWaitUsecLast = 0u;
@@ -9121,20 +9529,29 @@ void T3DData::importImages(
 
 	for ( int i = 0; i < T3DRegion::TYPE_MAX; i++ ) {
 		const Ref<Image> pImg = rImages[i];
-		src_images[i] = pImg;
 		if ( pImg.is_null() ) {
+			src_images[i] = pImg;
 			continue;
 		}
+		Ref<Image> pReadable = pImg;
+		if ( pReadable->is_compressed() ) {
+			pReadable = pReadable->duplicate();
+			if ( pReadable->decompress() != OK ) {
+				LOG( T3DTerrain::ERROR, "Unable to decompress imported ", TERRAIN3D_REGION_MAP_TYPE_NAMES[i], " image" );
+				return;
+			}
+		}
+		src_images[i] = pReadable;
 
 		// Apply scale and offsets to the heightmap and filter out invalid data
 		if ( i == T3DRegion::TYPE_HEIGHT ) {
 			LOG( T3DTerrain::DEBUG, "Creating new temp image to adjust scale: ", fScale, " offset: ", fOffset );
-			Ref<Image> pNewimg = Image::create_empty( pImg->get_size().x, pImg->get_size().y, false, Image::FORMAT_RF );
-			for ( int y = 0; y < pImg->get_height(); y++ ) {
-				for ( int x = 0; x < pImg->get_width(); x++ ) {
+			Ref<Image> pNewimg = Image::create_empty( pReadable->get_size().x, pReadable->get_size().y, false, Image::FORMAT_RF );
+			for ( int y = 0; y < pReadable->get_height(); y++ ) {
+				for ( int x = 0; x < pReadable->get_width(); x++ ) {
 					// Import sources retain their ordinary normalized/channel semantics.
 					// Only region-owned R16 images use the fixed Terrain3D world-height codec.
-					const float fSourceHeight = pImg->get_pixel( x, y ).r;
+					const float fSourceHeight = pReadable->get_pixel( x, y ).r;
 					const float fHeight = std::isfinite( fSourceHeight ) ? fSourceHeight * fScale + fOffset : fOffset;
 					pNewimg->set_pixel( x, y, Color( fHeight, 0.0f, 0.0f, 1.0f ) );
 				}

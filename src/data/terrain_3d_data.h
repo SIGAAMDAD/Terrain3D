@@ -150,6 +150,7 @@ private:
 	T3DGeneratedTexture m_generatedControlMaps;
 	T3DGeneratedTexture m_generatedColorMaps;
 	T3DGeneratedTexture m_generatedDerivedMaps;
+	T3DGeneratedTexture m_generatedMiddleCompositeMaps;
 	// Height-only residency for Middle geometry. This cache is independent of
 	// full surface pages so control/color/derived eviction cannot move vertices.
 	T3DGeneratedTexture m_generatedMiddleHeightMaps;
@@ -170,6 +171,8 @@ private:
 	Vector2i m_middleHeightCenter = V2I_MAX;
 	bool m_bMiddleHeightTexturesReady = false;
 	bool m_bMiddleHeightPageTableDirty = true;
+	bool m_bMiddleHeightSelectionDirty = true;
+	uint64_t m_nMiddleHeightStreamingGenerationLast = 0u;
 
 	T3DGeneratedTexture m_generatedFarHeightMap;
 	T3DGeneratedTexture m_generatedFarColorMap;
@@ -287,6 +290,7 @@ private:
 	TypedArray<Image> m_gpuControlMaps;
 	TypedArray<Image> m_gpuColorMaps;
 	TypedArray<Image> m_gpuDerivedMaps;
+	TypedArray<Image> m_gpuMiddleCompositeMaps;
 
 	typedef struct t3dpreparedGpuRuntimePage_s {
 		Vector2i location = V2I_MAX;
@@ -299,11 +303,15 @@ private:
 		int middleHeightDivisor = 1;
 		uint32_t materialMask = 1u;
 		uint8_t consumerMask = 0u;
+		// Retain the validated native height payload alongside the Image wrapper so
+		// active-height publication never round-trips through Image::get_data().
+		PackedByteArray heightBytes;
 		Ref<Image> height;
 		Ref<Image> pControl;
 		Ref<Image> pColor;
 		Ref<Image> pDerived;
 		Ref<Image> pMiddleHeight;
+		Ref<Image> pMiddleComposite;
 		PackedByteArray instancePage;
 		T3DInstanceStore preparedInstanceStore;
 		uint64_t nRequestedUsec = 0u;
@@ -345,6 +353,13 @@ private:
 	int m_nGpuPrepareJobWorkers = 0;
 	uint8_t m_szRuntimePagePrepareConsumers[TERRAIN3D_MAX_REGION_SLOTS] = {};
 	uint8_t m_szRuntimePagePreparePriorities[TERRAIN3D_MAX_REGION_SLOTS] = {};
+	int m_nRuntimePagePrepareQueuedCount = 0;
+	uint64_t m_nRuntimePagePrepareStreamingGenerationLast = 0u;
+	bool m_bActiveHeightResidencyDirty = true;
+	uint64_t m_nActiveHeightStreamingGenerationLast = 0u;
+	Vector2i m_activeHeightCenter = V2I_MAX;
+	int m_nActiveHeightReconciliationsLastTick = 0;
+	int m_nActiveHeightSlotsExaminedLastTick = 0;
 
 	// Experimental bounded CPU map residency. Region resources retain metadata
 	// and instances, while clean map payloads outside this fixed window are
@@ -366,9 +381,11 @@ private:
 	int m_nCpuRegionDemandLoads = 0;
 	size_t m_nCpuRegionLoadBytesLastTick = 0u;
 	uint64_t m_nCpuRegionServiceUsecLast = 0u;
+	uint64_t m_nCpuRegionPrefetchStreamingGenerationLast = 0u;
 	int m_nCpuRegionAsyncRequestsLastTick = 0;
 	int m_nCpuRegionAsyncReadyLastTick = 0;
 	int m_nCpuRegionAsyncPendingLastTick = 0;
+	int m_nCpuRegionAsyncOutstanding = 0;
 	uint8_t m_szCpuRegionAsyncState[TERRAIN3D_MAX_REGION_SLOTS] = {};
 	Vector2i m_cpuRegionCacheCenter = V2I_MAX;
 	Vector2i m_szCpuRegionLocations[TERRAIN3D_CPU_CACHE_MAX_LAYERS] = {};
@@ -393,6 +410,7 @@ private:
 	size_t m_nInstanceRegionResidentBytes = 0u;
 	size_t m_nInstanceRegionLoadBytesLastTick = 0u;
 	uint64_t m_nInstanceRegionServiceUsecLast = 0u;
+	uint64_t m_nInstancePrefetchStreamingGenerationLast = 0u;
 	Vector2i m_instanceRegionCacheCenter = V2I_MAX;
 	Vector2i m_szInstanceRegionLocations[TERRAIN3D_INSTANCE_CACHE_MAX_PAGES] = {};
 	uint8_t m_szInstanceRegionMap[TERRAIN3D_MAX_REGION_SLOTS] = {};
@@ -430,6 +448,8 @@ private:
 	Ref<Image> makeGpuColorImage( const Ref<Image> &rImage ) const;
 	Ref<Image> makeGpuDerivedImage( const Ref<Image> &rImage ) const;
 	Ref<Image> makeGpuRenderControlImage( const Vector2i &vLocation ) const;
+	Ref<Image> makeMiddleCompositeImage( const Vector2i &rLocation,
+		const Ref<Image> &rControl, const Ref<Image> &rColor ) const;
 	uint64_t computeGpuRuntimePageSourceSignature( const T3DRegion *pRegion ) const;
 	bool readGpuRuntimePageSourceSignature( const String &rPagePath, uint64_t &nSignature ) const;
 	String getGpuRuntimePagePath( const T3DRegion *pRegion ) const;
@@ -448,12 +468,13 @@ private:
 	void serviceGpuRuntimePagePrepare( void );
 	bool isGpuRuntimePagePreparePending( const Vector2i &vLocation ) const;
 	bool takePreparedRuntimeHeight(
-		const Vector2i &vLocation, uint8_t nConsumer, Ref<Image> &rHeight, bool bMiddle
+		const Vector2i &vLocation, uint8_t nConsumer, Ref<Image> &rHeight, bool bMiddle,
+		PackedByteArray *pNativeHeightBytes = nullptr
 	);
 	bool takePreparedRuntimeInstance( const Vector2i &vLocation, T3DInstanceStore &rStore );
 	bool takePreparedGpuRuntimePage(
 		const Vector2i &vLocation, Ref<Image> &rHeight,
-		Ref<Image> &rControl, Ref<Image> &rColor, Ref<Image> &rDerived,
+		Ref<Image> &rControl, Ref<Image> &rColor, Ref<Image> &rDerived, Ref<Image> &rMiddleComposite,
 		uint32_t &rMaterialMask, bool &bAttempted
 	);
 	bool writeGpuRuntimePage( T3DRegion *pRegion, String *pError = nullptr );
@@ -823,6 +844,7 @@ public:
 	RID getColorMapsRid( void ) const {
 		return m_generatedColorMaps.getRid();
 	}
+	RID getMiddleCompositeMapsRid( void ) const { return m_generatedMiddleCompositeMaps.getRid(); }
 	RID getMiddleHeightMapsRid( void ) const { return m_generatedMiddleHeightMaps.getRid(); }
 	RID getMiddleHeightRegionMapRid( void ) const { return m_generatedMiddleHeightRegionMap.getRid(); }
 	int getMiddleHeightResidentCount( void ) const { return m_nMiddleHeightResidentCount; }
