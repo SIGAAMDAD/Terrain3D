@@ -22,8 +22,8 @@ const TOOL_MENU_AUTOSHADER: String = "Terrain3D: Material Rules"
 const TOOL_MENU_CONVERT_STREAMING: String = "Terrain3D: Convert Selected Objects to Region Streaming"
 const TOOL_MENU_LIGHTMAP: String = "Terrain3D: Bake Region Lightmaps"
 const TOOL_MENU_HLOD: String = "Terrain3D: HLOD"
-const EXPECTED_NATIVE_API_REVISION: int = 2026081801
-const EXPECTED_NATIVE_BUILD_ID: String = "a2.8.6-fixed-memory-arena"
+const EXPECTED_NATIVE_API_REVISION: int = 2026081802
+const EXPECTED_NATIVE_BUILD_ID: String = "a2.8.6-memory-zone"
 
 # Editor Plugin
 var ui: Terrain3DUI
