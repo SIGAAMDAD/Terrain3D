@@ -50,6 +50,10 @@ Node *terrain3dResolveLightmapReceiver( T3DTerrain *pTerrain, const NodePath &rB
 	if ( path.begins_with( "../" ) ) {
 		path = path.substr( 3 );
 	}
+	static const String stream_host( "Terrain3DNodeStreamHost" );
+	if ( path != stream_host && !path.begins_with( String( "Terrain3DNodeStreamHost/" ) ) ) {
+		return nullptr;
+	}
 	return pTerrain->get_node_or_null( NodePath( path ) );
 }
 } // namespace
@@ -191,6 +195,24 @@ T3DLightmapStreamer::t3dsourceLoadResult_t T3DLightmapStreamer::requestSourceDat
 	return SOURCE_LOAD_READY;
 }
 
+bool T3DLightmapStreamer::collectReceiverState(
+	const Ref<T3DRegionLighting> &rPackage, uint64_t &nSignature, int &nReceiverCount
+) const {
+	nSignature = TERRAIN3D_LIGHTMAP_FNV_OFFSET;
+	nReceiverCount = 0;
+	if ( m_pTerrain == nullptr || rPackage.is_null() ) { return false; }
+	const Array &raw = rPackage->getBakedUserDataInternal();
+	if ( raw.is_empty() || ( raw.size() % 4 ) != 0 ) { return rPackage->hasProbeData(); }
+	for ( int index = 0; index < raw.size(); index += 4 ) {
+		const NodePath path = raw[index];
+		Node *const pReceiver = terrain3dResolveLightmapReceiver( m_pTerrain, path );
+		if ( pReceiver == nullptr || !pReceiver->is_inside_tree() ) { continue; }
+		nSignature = terrain3dHashReceiver( nSignature, path, pReceiver->get_instance_id() );
+		++nReceiverCount;
+	}
+	return nReceiverCount > 0 || rPackage->hasProbeData();
+}
+
 bool T3DLightmapStreamer::buildRuntimeData(
 	const Ref<T3DRegionLighting> &rPackage,
 	const Ref<LightmapGIData> &rSource, Ref<LightmapGIData> &rData,
@@ -230,6 +252,26 @@ bool T3DLightmapStreamer::buildRuntimeData(
 		return false;
 	}
 	rData = pRuntimeData;
+	return true;
+}
+
+bool T3DLightmapStreamer::isPackageCompatibleWithActive( const Ref<T3DRegionLighting> &rPackage ) const {
+	if ( rPackage.is_null() ) {
+		return false;
+	}
+	const String signature = rPackage->getDirectionalLightSignature();
+	for ( const t3dactivePackage_t &active : m_active ) {
+		if ( active.pPackage.is_null() ) {
+			continue;
+		}
+		if ( active.pPackage->getShadowmaskMode() != rPackage->getShadowmaskMode() ) {
+			return false;
+		}
+		const String active_signature = active.pPackage->getDirectionalLightSignature();
+		if ( !signature.is_empty() && !active_signature.is_empty() && signature != active_signature ) {
+			return false;
+		}
+	}
 	return true;
 }
 
@@ -427,6 +469,14 @@ void T3DLightmapStreamer::markDesired( const Vector2i &rCenter ) {
 		Ref<LightmapGIData> pRuntimeData;
 		uint64_t receiver_signature = 0u;
 		int receiver_count = 0;
+		if ( pActive != nullptr ) {
+			const bool bHasActiveReceivers = collectReceiverState( package, receiver_signature, receiver_count );
+			if ( bHasActiveReceivers && pActive->pNode != nullptr &&
+				pActive->receiverSignature == receiver_signature && pActive->nReceiverCount == receiver_count ) {
+				pActive->bDesired = true;
+				continue;
+			}
+		}
 		const bool bHasActiveReceivers = buildRuntimeData( package, source_data, pRuntimeData,
 			receiver_signature, receiver_count );
 		if ( pActive != nullptr ) {
@@ -449,6 +499,14 @@ void T3DLightmapStreamer::markDesired( const Vector2i &rCenter ) {
 		if ( remaining_loads <= 0 ) {
 			m_bHasPendingActivation = true;
 			++m_nPendingPackagesLastTick;
+			continue;
+		}
+		if ( !isPackageCompatibleWithActive( package ) ) {
+			++m_nCompatibilityFailuresLastTick;
+			++m_nCompatibilityFailuresTotal;
+			m_bHasPendingActivation = true;
+			++m_nPendingPackagesLastTick;
+			ERR_PRINT_ONCE( "Terrain3D regional lightmap packages with incompatible shadowmask modes or directional-light signatures cannot be active together" );
 			continue;
 		}
 		const int active_limit = TERRAIN3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT;
@@ -474,6 +532,7 @@ void T3DLightmapStreamer::updateResidency( const Vector3 &rTargetPosition, const
 	m_nRefreshesLastTick = 0;
 	m_nResourceRequestsLastTick = 0;
 	m_nResourceFailuresLastTick = 0;
+	m_nCompatibilityFailuresLastTick = 0;
 	if ( !m_bEnabled || m_pTerrain == nullptr || m_pTerrain->getData() == nullptr ) {
 		return;
 	}
@@ -509,6 +568,8 @@ Dictionary T3DLightmapStreamer::getStatsFast( void ) const {
 	stats["max_active_packages"] = TERRAIN3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT;
 	stats["pending_packages"] = m_nPendingPackagesLastTick;
 	stats["capacity_deferred"] = m_nCapacityDeferredLastTick;
+	stats["compatibility_failures_last_tick"] = m_nCompatibilityFailuresLastTick;
+	stats["compatibility_failures_total"] = ( int64_t ) ( m_nCompatibilityFailuresTotal );
 	stats["estimated_gpu_bytes"] = ( int64_t ) ( m_nResidentEstimatedBytes );
 	stats["residency_budget_mb"] = m_nResidencyBudgetMb;
 	stats["effective_residency_budget_mb"] = getEffectiveResidencyBudgetMb();
@@ -548,6 +609,8 @@ Dictionary T3DLightmapStreamer::getStats( void ) const {
 	stats["active_receivers"] = active_receivers;
 	stats["pending_packages"] = m_nPendingPackagesLastTick;
 	stats["capacity_deferred"] = m_nCapacityDeferredLastTick;
+	stats["compatibility_failures_last_tick"] = m_nCompatibilityFailuresLastTick;
+	stats["compatibility_failures_total"] = ( int64_t ) ( m_nCompatibilityFailuresTotal );
 	stats["lightmap_textures"] = lightmap_textures;
 	stats["shadowmask_textures"] = shadowmask_textures;
 	stats["estimated_gpu_bytes"] = estimated_gpu_bytes;

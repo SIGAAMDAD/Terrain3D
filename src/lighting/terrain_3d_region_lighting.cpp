@@ -72,6 +72,15 @@ void T3DRegionLighting::setShadowmaskMode( const int nMode ) {
 }
 
 T3D_SET_VALUE( bake_signature, setBakeSignature, m_bakeSignature, int64_t )
+
+void T3DRegionLighting::setDirectionalLightSignature( const String &rSignature ) {
+	const String signature = rSignature.strip_edges();
+	if ( m_directionalLightSignature == signature ) {
+		return;
+	}
+	m_directionalLightSignature = signature;
+	emit_changed();
+}
 T3D_SET_VALUE( baked_unix, setBakedUnix, m_bakedUnix, int64_t )
 
 void T3DRegionLighting::setReceiverCount( const int nCount ) {
@@ -186,6 +195,8 @@ void T3DRegionLighting::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_shadowmask_mode" ), &T3DRegionLighting::getShadowmaskMode );
 	ClassDB::bind_method( D_METHOD( "set_bake_signature", "signature" ), &T3DRegionLighting::setBakeSignature );
 	ClassDB::bind_method( D_METHOD( "get_bake_signature" ), &T3DRegionLighting::getBakeSignature );
+	ClassDB::bind_method( D_METHOD( "set_directional_light_signature", "signature" ), &T3DRegionLighting::setDirectionalLightSignature );
+	ClassDB::bind_method( D_METHOD( "get_directional_light_signature" ), &T3DRegionLighting::getDirectionalLightSignature );
 	ClassDB::bind_method( D_METHOD( "set_baked_unix", "unix_time" ), &T3DRegionLighting::setBakedUnix );
 	ClassDB::bind_method( D_METHOD( "get_baked_unix" ), &T3DRegionLighting::getBakedUnix );
 	ClassDB::bind_method( D_METHOD( "set_receiver_count", "count" ), &T3DRegionLighting::setReceiverCount );
@@ -222,6 +233,7 @@ void T3DRegionLighting::_bind_methods( void ) {
 	ADD_PROPERTY( PropertyInfo( Variant::VECTOR2I, "region_min", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_region_min", "get_region_min" );
 	ADD_PROPERTY( PropertyInfo( Variant::VECTOR2I, "region_max", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_region_max", "get_region_max" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "bake_signature", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_bake_signature", "get_bake_signature" );
+	ADD_PROPERTY( PropertyInfo( Variant::STRING, "directional_light_signature", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_directional_light_signature", "get_directional_light_signature" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "baked_unix", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_baked_unix", "get_baked_unix" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "receiver_count", PROPERTY_HINT_RANGE, "0,1000000,1", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_receiver_count", "get_receiver_count" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "contributor_count", PROPERTY_HINT_RANGE, "0,1000000,1", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_contributor_count", "get_contributor_count" );

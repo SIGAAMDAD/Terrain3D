@@ -66,6 +66,8 @@ class T3DLightmapStreamer : public Object {
 	bool m_bHasPendingActivation = false;
 	int m_nPendingPackagesLastTick = 0;
 	int m_nCapacityDeferredLastTick = 0;
+	int m_nCompatibilityFailuresLastTick = 0;
+	uint64_t m_nCompatibilityFailuresTotal = 0u;
 	size_t m_nResidentEstimatedBytes = 0u;
 
 	t3dactivePackage_t *findActive( const Ref<T3DRegionLighting> &rPackage );
@@ -74,6 +76,9 @@ class T3DLightmapStreamer : public Object {
 		const Ref<T3DRegionLighting> &rPackage,
 		Ref<LightmapGIData> &rData
 	);
+	bool collectReceiverState(
+		const Ref<T3DRegionLighting> &rPackage, uint64_t &nSignature, int &nReceiverCount
+	) const;
 	bool buildRuntimeData(
 		const Ref<T3DRegionLighting> &rPackage,
 		const Ref<LightmapGIData> &rSource, Ref<LightmapGIData> &rData,
@@ -87,6 +92,7 @@ class T3DLightmapStreamer : public Object {
 		t3dactivePackage_t &rActive, const Ref<LightmapGIData> &rRuntimeData,
 		uint64_t nSignature, int nReceiverCount
 	);
+	bool isPackageCompatibleWithActive( const Ref<T3DRegionLighting> &rPackage ) const;
 	void deactivate( size_t iIndex );
 	void markDesired( const Vector2i &rCenter );
 	int getEffectiveResidencyBudgetMb( void ) const;

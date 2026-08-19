@@ -31,6 +31,7 @@ private:
 	int m_nContextRadiusRegions = 1;
 	int m_nShadowmaskMode = LightmapGIData::SHADOWMASK_MODE_OVERLAY;
 	int64_t m_bakeSignature = 0;
+	String m_directionalLightSignature;
 	int64_t m_bakedUnix = 0;
 	int m_nReceiverCount = 0;
 	int m_nContributorCount = 0;
@@ -69,6 +70,8 @@ public:
 	int getShadowmaskMode( void ) const { return m_nShadowmaskMode; }
 	void setBakeSignature( int64_t nSignature );
 	int64_t getBakeSignature( void ) const { return m_bakeSignature; }
+	void setDirectionalLightSignature( const String &rSignature );
+	String getDirectionalLightSignature( void ) const { return m_directionalLightSignature; }
 	void setBakedUnix( int64_t nUnix );
 	int64_t getBakedUnix( void ) const { return m_bakedUnix; }
 	void setReceiverCount( int nCount );
