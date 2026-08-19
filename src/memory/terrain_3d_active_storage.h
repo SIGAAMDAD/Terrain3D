@@ -21,10 +21,11 @@ using namespace godot;
 #endif
 
 
-// Height hot storage is sparse by logical region slot. Each present region owns
-// one contiguous, cache-aligned R16 page and acquisition is direct integer-indexed
-// slot -> pointer lookup. There is no hash lookup or allocation in the sample path.
-// Control, color, and derived maps remain authoritative in Terrain3DRegion.
+// Height hot storage is a fixed 32-page, cache-aligned R16 bank. Logical region
+// descriptors publish immutable physical pages atomically; leases pin a page while
+// readers use it. Writers stage into an unpinned page and never mutate published
+// bytes in place. Control, color, and derived maps remain authoritative in
+// Terrain3DRegion.
 typedef struct t3dactiveMapView_s {
 	const uint16_t *pHeight = nullptr;
 	uint32_t nOwnerGeneration = 0u;
@@ -63,6 +64,8 @@ private:
 };
 
 bool terrain3dActiveStorageClaim( const void *pOwner, int nRegionSize );
+size_t terrain3dActiveStorageRequiredBytes( int nRegionSize );
+bool terrain3dActiveStorageBind( const void *pOwner, int nRegionSize, void *pBacking, size_t nBackingBytes );
 bool terrain3dActiveStorageReconfigure( const void *pOwner, int nRegionSize );
 void terrain3dActiveStorageRelease( const void *pOwner );
 void terrain3dActiveStorageReset( const void *pOwner );
@@ -70,6 +73,11 @@ bool terrain3dActiveStorageIsOwner( const void *pOwner );
 int terrain3dActiveStorageGetRegionMapSize( const void *pOwner );
 uint32_t terrain3dActiveStorageGetOwnerGeneration( const void *pOwner );
 size_t terrain3dActiveStorageGetReservedBytes( void );
+int terrain3dActiveStorageGetPhysicalCapacity( void );
+uint64_t terrain3dActiveStorageGetReaderRetryCount( void );
+uint64_t terrain3dActiveStorageGetReaderMutexCount( void );
+uint64_t terrain3dActiveStorageGetPublicationCount( void );
+bool terrain3dActiveStorageContains( const void *pOwner, const Vector2i &rLocation );
 
 T3DActiveMapLease terrain3dActiveStorageAcquire( const void *pOwner, const Vector2i &rLocation );
 bool terrain3dActiveStorageSyncRegion(
