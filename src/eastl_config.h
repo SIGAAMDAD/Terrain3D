@@ -11,6 +11,7 @@
 #include <new>
 
 #include "memory/terrain_3d_memory.h"
+#include "memory/terrain_3d_zone_allocator.h"
 
 // EASTL is used only in Terrain3D internals. Public Godot APIs remain Godot types.
 #define EASTL_EABASE_DISABLED 1
@@ -42,6 +43,8 @@ typedef struct t3deastlAllocationStats_s {
 
 typedef struct t3deastlAllocationHeader_s {
 	void *pRaw = nullptr;
+	T3DMemoryZone *pZone = nullptr;
+	uint8_t nOrigin = TERRAIN3D_ALLOCATION_BOOTSTRAP;
 #if EASTL_ASSERT_ENABLED
 	size_t nSize = 0;
 #endif
@@ -95,7 +98,8 @@ public:
 			return nullptr;
 		}
 		const size_t extra = header_size + alignment_slack;
-		void *const pRaw = terrain3d_memory::allocate( n + extra );
+		T3DMemoryZone *const pZone = T3DZoneAllocatorRouter::zone();
+		void *const pRaw = pZone ? pZone->allocate( n + extra, alignment ) : terrain3d_memory::allocate( n + extra );
 		if ( !pRaw ) {
 			return nullptr;
 		}
@@ -105,6 +109,8 @@ public:
 		aligned -= effective_offset;
 		AllocationHeader header;
 		header.pRaw = pRaw;
+		header.pZone = pZone;
+		header.nOrigin = pZone ? TERRAIN3D_ALLOCATION_ZONE : TERRAIN3D_ALLOCATION_BOOTSTRAP;
 #if EASTL_ASSERT_ENABLED
 		header.nSize = n;
 		recordAllocation( n );
@@ -125,7 +131,11 @@ public:
 		s_nLiveBytes.fetch_sub( header.nSize, std::memory_order_relaxed );
 		s_nLiveAllocations.fetch_sub( 1, std::memory_order_relaxed );
 #endif
-		terrain3d_memory::release( header.pRaw );
+		if ( header.nOrigin == TERRAIN3D_ALLOCATION_ZONE && header.pZone ) {
+			header.pZone->deallocate( header.pRaw );
+		} else {
+			terrain3d_memory::release( header.pRaw );
+		}
 	}
 
 	static t3deastlAllocationStats_t getAllocationStats( void ) {
