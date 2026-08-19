@@ -111,19 +111,26 @@ inline Ref<Image> convertHeightToR16(
 		rSource->get_format() == Image::FORMAT_R16 ) {
 		return hasValidHeightPayload( rSource, nSize ) ? rSource : Ref<Image>();
 	}
+	Ref<Image> pReadableSource = rSource;
+	if ( pReadableSource.is_valid() && pReadableSource->is_compressed() ) {
+		pReadableSource = pReadableSource->duplicate();
+		if ( pReadableSource->decompress() != OK ) {
+			pReadableSource.unref();
+		}
+	}
 
 	const size_t texel_count = ( size_t ) ( nSize ) * ( size_t ) ( nSize );
 	PackedByteArray output;
 	output.resize( ( int64_t ) ( texel_count * sizeof( uint16_t ) ) );
 	uint8_t *pWrite = output.ptrw();
 
-	const bool bDirectRf32 = rSource.is_valid() && rSource->get_width() == nSize &&
-		rSource->get_height() == nSize && rSource->get_format() == Image::FORMAT_RF &&
-		hasValidHeightPayload( rSource, nSize );
+	const bool bDirectRf32 = pReadableSource.is_valid() && pReadableSource->get_width() == nSize &&
+		pReadableSource->get_height() == nSize && pReadableSource->get_format() == Image::FORMAT_RF &&
+		hasValidHeightPayload( pReadableSource, nSize );
 	PackedByteArray source_bytes;
 	const uint8_t *pRead = nullptr;
 	if ( bDirectRf32 ) {
-		source_bytes = rSource->get_data();
+		source_bytes = pReadableSource->get_data();
 		pRead = source_bytes.ptr();
 	}
 
@@ -131,11 +138,11 @@ inline Ref<Image> convertHeightToR16(
 		float fHeight = 0.0f;
 		if ( bDirectRf32 ) {
 			std::memcpy( &fHeight, pRead + index * sizeof( float ), sizeof( float ) );
-		} else if ( rSource.is_valid() ) {
+		} else if ( pReadableSource.is_valid() ) {
 			const int x = ( int ) ( index % ( size_t ) ( nSize ) );
 			const int y = ( int ) ( index / ( size_t ) ( nSize ) );
-			if ( x < rSource->get_width() && y < rSource->get_height() ) {
-				fHeight = rSource->get_pixel( x, y ).r;
+			if ( x < pReadableSource->get_width() && y < pReadableSource->get_height() ) {
+				fHeight = pReadableSource->get_pixel( x, y ).r;
 			}
 		}
 
