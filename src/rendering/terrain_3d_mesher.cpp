@@ -274,8 +274,14 @@ size_t T3DMesher::getVisibleGeometryPayloadBytes( void ) const {
 }
 
 size_t T3DMesher::getShadowGeometryPayloadBytes( void ) const {
-	return m_bSeparateShadowStateBatch && m_shadowStateBatch.bOwnsMesh ?
-		estimateGeometryPayloadBytes( m_shadowStateBatch.firstLod, m_shadowStateBatch.lastLod, false ) : 0u;
+	size_t bytes = 0u;
+	for ( int index = 0; index < m_nShadowBatchCount; ++index ) {
+		const t3dclipmapBatch_t &batch = m_szShadowStateBatches[( size_t ) ( index )];
+		if ( batch.bOwnsMesh ) {
+			bytes += estimateGeometryPayloadBytes( batch.firstLod, batch.lastLod, false );
+		}
+	}
+	return bytes;
 }
 
 size_t T3DMesher::getStreamingBufferBytes( void ) const {
@@ -283,7 +289,9 @@ size_t T3DMesher::getStreamingBufferBytes( void ) const {
 	for ( int batch_index = 0; batch_index < m_nRenderBatchCount; ++batch_index ) {
 		bytes += ( size_t ) ( m_szRenderBatches[( size_t ) ( batch_index )].transformBuffer.size() ) * sizeof( float );
 	}
-	bytes += ( size_t ) ( m_shadowStateBatch.transformBuffer.size() ) * sizeof( float );
+	for ( int index = 0; index < m_nShadowBatchCount; ++index ) {
+		bytes += ( size_t ) ( m_szShadowStateBatches[( size_t ) ( index )].transformBuffer.size() ) * sizeof( float );
+	}
 	return bytes;
 }
 
@@ -403,44 +411,57 @@ int T3DMesher::getLodTier( const int nLod ) const {
 }
 
 bool T3DMesher::lodCastsShadows( const int nLod ) const {
-	if ( m_castShadows == RenderingServer::SHADOW_CASTING_SETTING_OFF || nLod < 0 ||
-		nLod >= m_nShadowLodCount ) {
+	if ( m_castShadows == RenderingServer::SHADOW_CASTING_SETTING_OFF || nLod < 0 ) {
 		return false;
 	}
-	return m_bTierShadowEnabled[( size_t ) ( getLodTier( nLod ) )];
+	const int tier = getLodTier( nLod );
+	if ( !m_bTierShadowEnabled[( size_t ) ( tier )] ) {
+		return false;
+	}
+	const int explicit_count = m_nTierShadowLodCounts[( size_t ) ( tier )];
+	if ( explicit_count < 0 ) {
+		return nLod < m_nShadowLodCount;
+	}
+	const int tier_first = tier == 0 ? 0 :
+		( tier == 1 ? m_nNearShaderLodCount : m_nNearShaderLodCount + m_nMiddleShaderLodCount );
+	return nLod >= tier_first && nLod < tier_first + explicit_count;
+}
+
+bool T3DMesher::usesDedicatedShadowBatches( void ) const {
+	const bool any_explicit = m_nTierShadowLodCounts[0] > 0 ||
+		m_nTierShadowLodCounts[1] > 0 || m_nTierShadowLodCounts[2] > 0;
+	return m_bStateMeshBatching && ( m_nShadowLodCount > 0 || any_explicit ) &&
+		( m_castShadows == RenderingServer::SHADOW_CASTING_SETTING_ON ||
+			m_castShadows == RenderingServer::SHADOW_CASTING_SETTING_SHADOWS_ONLY );
 }
 
 void T3DMesher::rebuildRenderBatches( void ) {
-	// The optimized shadow batch may borrow the Near state mesh. Free its
-	// instance before freeing the visible batch that owns that mesh RID.
-	freeBatch( m_shadowStateBatch );
+	// Shadow-only batches may borrow visible state meshes. Free their instances
+	// before freeing the visible batches that own those mesh RIDs.
+	for ( t3dclipmapBatch_t &batch : m_szShadowStateBatches ) {
+		freeBatch( batch );
+	}
 	for ( t3dclipmapBatch_t &batch : m_szRenderBatches ) {
 		freeBatch( batch );
 	}
 	m_nRenderBatchCount = 0;
 	m_bBatchDirty.fill( false );
-	m_bShadowStateBatchDirty = false;
+	m_bShadowStateBatchDirty.fill( false );
+	m_nShadowBatchCount = 0;
 	for ( t3dlodBatchSlot_t &slot : m_szLodBatchSlots ) {
 		slot = t3dlodBatchSlot_t{};
 	}
 
-	// When normal single-sided shadow LODs fit entirely inside the Near tier,
-	// keep visible batching purely shader-based and submit one exact shadows-only
-	// state mesh for that subset. This removes the authoring shadow-state split
-	// while preserving the requested shadow LOD count and cascade coverage.
-	m_bSeparateShadowStateBatch = m_bStateMeshBatching && m_bTierShadowEnabled[0] && m_nShadowLodCount > 0 &&
-		m_nShadowLodCount <= m_nNearShaderLodCount &&
-		( m_castShadows == RenderingServer::SHADOW_CASTING_SETTING_ON ||
-			m_castShadows == RenderingServer::SHADOW_CASTING_SETTING_SHADOWS_ONLY );
+	const bool dedicated_shadows = usesDedicatedShadowBatches();
 
 	int lod = 0;
 	while ( lod < m_nClipmapLevelCount ) {
 		const bool bLod0 = lod == 0;
 		const int tier = getLodTier( lod );
-		const bool casts_shadows = !m_bSeparateShadowStateBatch && lodCastsShadows( lod );
+		const bool casts_shadows = !dedicated_shadows && lodCastsShadows( lod );
 		int end_lod = lod;
 		while ( end_lod + 1 < m_nClipmapLevelCount && getLodTier( end_lod + 1 ) == tier &&
-			( m_bSeparateShadowStateBatch || ( lodCastsShadows( end_lod + 1 ) == casts_shadows ) ) &&
+			( dedicated_shadows || ( lodCastsShadows( end_lod + 1 ) == casts_shadows ) ) &&
 			( m_bStateMeshBatching || !bLod0 ) ) {
 			++end_lod;
 		}
@@ -469,33 +490,54 @@ void T3DMesher::rebuildRenderBatches( void ) {
 		lod = end_lod + 1;
 	}
 
-	if ( m_bSeparateShadowStateBatch ) {
-		const int last_shadow_lod = MIN( m_nShadowLodCount, m_nClipmapLevelCount ) - 1;
-		if ( last_shadow_lod >= 0 ) {
-			const t3dclipmapBatch_t &near_batch = m_szRenderBatches[0];
-			if ( near_batch.firstLod == 0 && near_batch.lastLod == last_shadow_lod && near_batch.mesh.is_valid() ) {
-				m_shadowStateBatch.mesh = near_batch.mesh;
-				m_shadowStateBatch.bOwnsMesh = false;
-				m_shadowStateBatch.instance = RS->instance_create2( m_shadowStateBatch.mesh, m_scenario );
-				m_shadowStateBatch.nCount = ( uint8_t ) ( last_shadow_lod + 1 );
-				m_shadowStateBatch.firstLod = 0;
-				m_shadowStateBatch.lastLod = ( uint8_t ) ( last_shadow_lod );
-				m_shadowStateBatch.tier = 0;
-				m_shadowStateBatch.bCastsShadows = true;
-			} else {
-				m_shadowStateBatch = createStateBatch( 0, last_shadow_lod, 0, true );
+	if ( dedicated_shadows ) {
+		const int shadow_end = MIN( m_nShadowLodCount, m_nClipmapLevelCount ) - 1;
+		for ( int tier = 0; tier < 3 && m_nShadowBatchCount < 3; ++tier ) {
+			if ( !m_bTierShadowEnabled[( size_t ) ( tier )] ) {
+				continue;
 			}
-			if ( !m_shadowStateBatch.instance.is_valid() ) {
-				LOG( T3DTerrain::ERROR, "Failed to create optimized clipmap shadow state batch" );
-				m_bSeparateShadowStateBatch = false;
-			} else {
-				m_bShadowStateBatchDirty = true;
+			const int tier_first = tier == 0 ? 0 : ( tier == 1 ? m_nNearShaderLodCount : m_nNearShaderLodCount + m_nMiddleShaderLodCount );
+			const int tier_last = tier == 0 ? m_nNearShaderLodCount - 1 :
+				( tier == 1 ? m_nNearShaderLodCount + m_nMiddleShaderLodCount - 1 : m_nClipmapLevelCount - 1 );
+			const int first_lod = CLAMP( tier_first, 0, m_nClipmapLevelCount );
+			const int explicit_count = m_nTierShadowLodCounts[( size_t ) ( tier )];
+			const int last_lod = explicit_count >= 0 ?
+				MIN( tier_last, first_lod + explicit_count - 1 ) : MIN( tier_last, shadow_end );
+			if ( first_lod > last_lod ) {
+				continue;
 			}
+
+			t3dclipmapBatch_t shadow_batch;
+			for ( int visible_index = 0; visible_index < m_nRenderBatchCount; ++visible_index ) {
+				const t3dclipmapBatch_t &visible = m_szRenderBatches[( size_t ) ( visible_index )];
+				if ( visible.firstLod == first_lod && visible.lastLod == last_lod && visible.mesh.is_valid() ) {
+					shadow_batch.mesh = visible.mesh;
+					shadow_batch.bOwnsMesh = false;
+					shadow_batch.instance = RS->instance_create2( shadow_batch.mesh, m_scenario );
+					shadow_batch.nCount = ( uint8_t ) ( last_lod - first_lod + 1 );
+					shadow_batch.firstLod = ( uint8_t ) ( first_lod );
+					shadow_batch.lastLod = ( uint8_t ) ( last_lod );
+					shadow_batch.tier = ( uint8_t ) ( tier );
+					shadow_batch.bCastsShadows = true;
+					break;
+				}
+			}
+			if ( !shadow_batch.instance.is_valid() ) {
+				shadow_batch = createStateBatch( first_lod, last_lod, tier, true );
+			}
+			if ( !shadow_batch.instance.is_valid() ) {
+				LOG( T3DTerrain::ERROR, "Failed to create clipmap shadow state batch for tier ", tier,
+					" LODs ", first_lod, "-", last_lod );
+				continue;
+			}
+			m_szShadowStateBatches[( size_t ) ( m_nShadowBatchCount )] = shadow_batch;
+			m_bShadowStateBatchDirty[( size_t ) ( m_nShadowBatchCount )] = true;
+			++m_nShadowBatchCount;
 		}
 	}
 
 	LOG( T3DTerrain::INFO, "Clipmap render batching: ", m_nClipmapLevelCount, " LODs -> ", m_nRenderBatchCount,
-		" visible state batches + ", m_bSeparateShadowStateBatch ? 1 : 0, " shadow state batch using ",
+		" visible state batches + ", m_nShadowBatchCount, " shadow state batches using ",
 		getBaseMeshCount(), " mesh resources; mode=", m_bStateMeshBatching ? "combined-state" : "multimesh-fallback" );
 }
 
@@ -545,6 +587,11 @@ void T3DMesher::configureStateMaterials( void ) {
 			RS->material_set_param( material, s_lodStatesParameter, m_lodStateBuffer );
 		}
 	}
+	for ( const RID &material : m_szShadowMaterials ) {
+		if ( material.is_valid() ) {
+			RS->material_set_param( material, s_lodStatesParameter, m_lodStateBuffer );
+		}
+	}
 }
 
 void T3DMesher::refreshStateBatch( const int iBatchIndex, eastl::array<bool, 3> &bDirtyTiers ) {
@@ -578,23 +625,27 @@ void T3DMesher::refreshStateBatch( const int iBatchIndex, eastl::array<bool, 3> 
 	++m_nTeleportsLastSnap;
 }
 
-void T3DMesher::refreshShadowStateBatch( void ) {
-	if ( !m_bSeparateShadowStateBatch || !m_shadowStateBatch.instance.is_valid() ) {
+void T3DMesher::refreshShadowStateBatch( const int nIndex ) {
+	if ( nIndex < 0 || nIndex >= m_nShadowBatchCount ) {
 		return;
 	}
-	const Vector2 anchor = m_szLastLodPositions[0];
+	t3dclipmapBatch_t &batch = m_szShadowStateBatches[( size_t ) ( nIndex )];
+	if ( !batch.instance.is_valid() ) {
+		return;
+	}
+	const Vector2 anchor = m_szLastLodPositions[( size_t ) ( batch.firstLod )];
 	if ( anchor == V2_MAX ) {
 		return;
 	}
-	if ( m_shadowStateBatch.anchorPosition != anchor ) {
+	if ( batch.anchorPosition != anchor ) {
 		Transform3D transform;
 		transform.origin = Vector3( anchor.x, 0.0f, anchor.y );
-		RS->instance_set_transform( m_shadowStateBatch.instance, transform );
-		m_shadowStateBatch.anchorPosition = anchor;
+		RS->instance_set_transform( batch.instance, transform );
+		batch.anchorPosition = anchor;
 	}
 	bool bHasAabb = false;
 	AABB combined;
-	for ( int lod = 0; lod <= m_shadowStateBatch.lastLod; ++lod ) {
+	for ( int lod = batch.firstLod; lod <= batch.lastLod; ++lod ) {
 		const Vector2 position = m_szLastLodPositions[( size_t ) ( lod )];
 		if ( position == V2_MAX ) {
 			continue;
@@ -612,10 +663,10 @@ void T3DMesher::refreshShadowStateBatch( void ) {
 			combined.merge_with( lodAabb );
 		}
 	}
-	if ( bHasAabb && m_shadowStateBatch.mesh.is_valid() ) {
-		RS->mesh_set_custom_aabb( m_shadowStateBatch.mesh, combined );
+	if ( bHasAabb && batch.mesh.is_valid() ) {
+		RS->mesh_set_custom_aabb( batch.mesh, combined );
 	}
-	RS->instance_teleport( m_shadowStateBatch.instance );
+	RS->instance_teleport( batch.instance );
 	++m_nTeleportsLastSnap;
 }
 
@@ -630,9 +681,12 @@ void T3DMesher::flushDirtyBatches( void ) {
 			m_bBatchDirty[( size_t ) ( batch_index )] = false;
 		}
 		static const StringName s_lodStatesParameter( "_clipmap_lod_states" );
-		if ( m_bShadowStateBatchDirty ) {
-			refreshShadowStateBatch();
-			m_bShadowStateBatchDirty = false;
+		for ( int shadow_index = 0; shadow_index < m_nShadowBatchCount; ++shadow_index ) {
+			if ( !m_bShadowStateBatchDirty[( size_t ) ( shadow_index )] ) {
+				continue;
+			}
+			refreshShadowStateBatch( shadow_index );
+			m_bShadowStateBatchDirty[( size_t ) ( shadow_index )] = false;
 		}
 		for ( int tier = 0; tier < 3; ++tier ) {
 			if ( !dirty_tiers[( size_t ) ( tier )] ) {
@@ -641,6 +695,11 @@ void T3DMesher::flushDirtyBatches( void ) {
 			const RID material = m_szMaterials[( size_t ) ( tier )].is_valid() ? m_szMaterials[( size_t ) ( tier )] : m_szMaterials[0];
 			if ( material.is_valid() ) {
 				RS->material_set_param( material, s_lodStatesParameter, m_lodStateBuffer );
+				++m_nBufferUploadsLastSnap;
+			}
+			const RID shadow_material = m_szShadowMaterials[( size_t ) ( tier )];
+			if ( shadow_material.is_valid() ) {
+				RS->material_set_param( shadow_material, s_lodStatesParameter, m_lodStateBuffer );
 				++m_nBufferUploadsLastSnap;
 			}
 		}
@@ -723,14 +782,16 @@ void T3DMesher::generateLodCache( void ) {
 
 void T3DMesher::clearClipmap( void ) {
 	LOG( T3DTerrain::INFO, "Freeing clipmap render batches" );
-	// Free the shadows-only instance first because it may borrow a visible
-	// Near mesh rather than owning a duplicate geometry resource.
-	freeBatch( m_shadowStateBatch );
+	// Free shadows-only instances first because they may borrow visible state
+	// meshes rather than owning duplicate geometry resources.
+	for ( t3dclipmapBatch_t &batch : m_szShadowStateBatches ) {
+		freeBatch( batch );
+	}
 	for ( t3dclipmapBatch_t &batch : m_szRenderBatches ) {
 		freeBatch( batch );
 	}
-	m_bShadowStateBatchDirty = false;
-	m_bSeparateShadowStateBatch = false;
+	m_bShadowStateBatchDirty.fill( false );
+	m_nShadowBatchCount = 0;
 	m_nRenderBatchCount = 0;
 	m_bBatchDirty.fill( false );
 	for ( t3dlodBatchSlot_t &slot : m_szLodBatchSlots ) {
@@ -767,11 +828,13 @@ void T3DMesher::clearMeshTypes( void ) {
 void T3DMesher::initialize(
 	T3DTerrain *const pTerrain, const int nMeshSize, const int nLods,
 	const int nTessellationLevel, const real_t fVertexSpacing, const eastl::array<RID, 3> &rMaterials,
+	const eastl::array<RID, 3> &rShadowMaterials,
 	const int nNearShaderLodCount, const int nMiddleShaderLodCount,
 	const int nClipmapUpdateBudget, const uint32_t nRenderLayers,
 	const RenderingServer::ShadowCastingSetting castShadows,
 	const GeometryInstance3D::GIMode giMode, const int nShadowLodCount,
-	const eastl::array<bool, 3> &bTierShadowEnabled, const bool bStateMeshBatching
+	const eastl::array<bool, 3> &bTierShadowEnabled,
+	const eastl::array<int, 3> &nTierShadowLodCounts, const bool bStateMeshBatching
 ) {
 	if ( !pTerrain ) {
 		return;
@@ -784,6 +847,7 @@ void T3DMesher::initialize(
 	LOG( T3DTerrain::INFO, "Initializing GeoMesh" );
 	m_scenario = m_pTerrain->get_world_3d()->get_scenario();
 	m_szMaterials = rMaterials;
+	m_szShadowMaterials = rShadowMaterials;
 	m_bStateMeshBatching = bStateMeshBatching;
 	m_lodStateBuffer.resize( TERRAIN3D_MAX_CLIPMAP_LEVELS );
 	m_lodStateBuffer.fill( Vector4( 0.0f, 0.0f, 1.0f, 4.0f ) );
@@ -802,6 +866,7 @@ void T3DMesher::initialize(
 	m_giMode = giMode;
 	m_nShadowLodCount = CLAMP( nShadowLodCount, 0, TERRAIN3D_MAX_CLIPMAP_LEVELS );
 	m_bTierShadowEnabled = bTierShadowEnabled;
+	m_nTierShadowLodCounts = nTierShadowLodCounts;
 	generateClipmap();
 	generateLodCache();
 	m_iDeferredLodCursor = getImmediateLodCount();
@@ -857,25 +922,11 @@ void T3DMesher::setCastShadows( const RenderingServer::ShadowCastingSetting cast
 	if ( m_castShadows == castShadows ) {
 		return;
 	}
-	const bool bOldEnabled = m_castShadows != RenderingServer::SHADOW_CASTING_SETTING_OFF;
-	const bool bNewEnabled = castShadows != RenderingServer::SHADOW_CASTING_SETTING_OFF;
-	const bool bOldSeparateEligible = m_bStateMeshBatching && m_nShadowLodCount > 0 &&
-		m_nShadowLodCount <= m_nNearShaderLodCount &&
-		( m_castShadows == RenderingServer::SHADOW_CASTING_SETTING_ON ||
-			m_castShadows == RenderingServer::SHADOW_CASTING_SETTING_SHADOWS_ONLY );
-	const bool bNewSeparateEligible = m_bStateMeshBatching && m_nShadowLodCount > 0 &&
-		m_nShadowLodCount <= m_nNearShaderLodCount &&
-		( castShadows == RenderingServer::SHADOW_CASTING_SETTING_ON ||
-			castShadows == RenderingServer::SHADOW_CASTING_SETTING_SHADOWS_ONLY );
 	m_castShadows = castShadows;
-	if ( bOldEnabled != bNewEnabled || bOldSeparateEligible != bNewSeparateEligible ) {
-		rebuildRenderBatches();
-		resetTargetPosition();
-		update();
-		snap();
-		return;
-	}
+	rebuildRenderBatches();
+	resetTargetPosition();
 	update();
+	snap();
 }
 
 void T3DMesher::setShadowLodCount( const int nCount ) {
@@ -898,6 +949,24 @@ void T3DMesher::setTierShadowEnabled( const eastl::array<bool, 3> &bEnabled ) {
 		return;
 	}
 	m_bTierShadowEnabled = bEnabled;
+	if ( m_castShadows == RenderingServer::SHADOW_CASTING_SETTING_OFF ) {
+		return;
+	}
+	rebuildRenderBatches();
+	resetTargetPosition();
+	update();
+	snap();
+}
+
+void T3DMesher::setTierShadowLodCounts( const eastl::array<int, 3> &nCounts ) {
+	eastl::array<int, 3> counts{};
+	for ( int tier = 0; tier < 3; ++tier ) {
+		counts[( size_t ) ( tier )] = CLAMP( nCounts[( size_t ) ( tier )], -1, TERRAIN3D_MAX_CLIPMAP_LEVELS );
+	}
+	if ( m_nTierShadowLodCounts == counts ) {
+		return;
+	}
+	m_nTierShadowLodCounts = counts;
 	if ( m_castShadows == RenderingServer::SHADOW_CASTING_SETTING_OFF ) {
 		return;
 	}
@@ -953,8 +1022,11 @@ bool T3DMesher::snapLevel( const int nLod, const Vector3 &rSnappedTarget ) {
 		setBatchInstance( batch, slot.instance, transform, test_x, test_z );
 	}
 	m_bBatchDirty[( size_t ) ( slot.batch )] = true;
-	if ( m_bSeparateShadowStateBatch && nLod < m_nShadowLodCount ) {
-		m_bShadowStateBatchDirty = true;
+	for ( int shadow_index = 0; shadow_index < m_nShadowBatchCount; ++shadow_index ) {
+		const t3dclipmapBatch_t &shadow_batch = m_szShadowStateBatches[( size_t ) ( shadow_index )];
+		if ( nLod >= shadow_batch.firstLod && nLod <= shadow_batch.lastLod ) {
+			m_bShadowStateBatchDirty[( size_t ) ( shadow_index )] = true;
+		}
 	}
 
 	const int tier = getLodTier( nLod );
@@ -973,6 +1045,11 @@ void T3DMesher::snap( const Vector3 &rTargetPos ) {
 	if ( rTargetPos != m_lastShaderTargetPosition ) {
 		static const StringName s_targetPositionParameter( "_target_pos" );
 		for ( const RID &material : m_szMaterials ) {
+			if ( material.is_valid() ) {
+				RS->material_set_param( material, s_targetPositionParameter, rTargetPos );
+			}
+		}
+		for ( const RID &material : m_szShadowMaterials ) {
 			if ( material.is_valid() ) {
 				RS->material_set_param( material, s_targetPositionParameter, rTargetPos );
 			}
@@ -1059,12 +1136,17 @@ void T3DMesher::update( void ) {
 	for ( int batch_index = 0; batch_index < m_nRenderBatchCount; ++batch_index ) {
 		const t3dclipmapBatch_t &batch = m_szRenderBatches[( size_t ) ( batch_index )];
 		const RID material = m_szMaterials[( size_t ) ( batch.tier )].is_valid() ? m_szMaterials[( size_t ) ( batch.tier )] : m_szMaterials[0];
-		const RenderingServer::ShadowCastingSetting shadows = !m_bSeparateShadowStateBatch && batch.bCastsShadows ?
-			m_castShadows : RenderingServer::SHADOW_CASTING_SETTING_OFF;
+		const RenderingServer::ShadowCastingSetting shadows = batch.bCastsShadows ? m_castShadows :
+			RenderingServer::SHADOW_CASTING_SETTING_OFF;
 		updateInstanceRid( batch.instance, material, shadows, bVisibleSurface, bBakedLight, bDynamicGi );
 	}
-	if ( m_bSeparateShadowStateBatch && m_shadowStateBatch.instance.is_valid() ) {
-		updateInstanceRid( m_shadowStateBatch.instance, m_szMaterials[0],
+	for ( int shadow_index = 0; shadow_index < m_nShadowBatchCount; ++shadow_index ) {
+		const t3dclipmapBatch_t &batch = m_szShadowStateBatches[( size_t ) ( shadow_index )];
+		const RID material = m_szShadowMaterials[( size_t ) ( batch.tier )].is_valid() ?
+			m_szShadowMaterials[( size_t ) ( batch.tier )] :
+			( m_szMaterials[( size_t ) ( batch.tier )].is_valid() ?
+				m_szMaterials[( size_t ) ( batch.tier )] : m_szMaterials[0] );
+		updateInstanceRid( batch.instance, material,
 			RenderingServer::SHADOW_CASTING_SETTING_SHADOWS_ONLY, bTerrainVisible, false, false );
 	}
 }
@@ -1091,7 +1173,7 @@ void T3DMesher::updateAabbs( const real_t fCullMargin, const Vector2 &rHeightRan
 	for ( int batch_index = 0; batch_index < m_nRenderBatchCount; ++batch_index ) {
 		updateBatchCustomAabb( batch_index );
 	}
-	if ( m_bSeparateShadowStateBatch ) {
-		refreshShadowStateBatch();
+	for ( int shadow_index = 0; shadow_index < m_nShadowBatchCount; ++shadow_index ) {
+		refreshShadowStateBatch( shadow_index );
 	}
 }

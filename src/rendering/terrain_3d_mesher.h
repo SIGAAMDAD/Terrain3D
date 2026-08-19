@@ -66,9 +66,9 @@ private:
 	eastl::array<t3dclipmapBatch_t, TERRAIN3D_MAX_RENDER_BATCHES> m_szRenderBatches{};
 	eastl::array<t3dlodBatchSlot_t, TERRAIN3D_MAX_CLIPMAP_LEVELS> m_szLodBatchSlots{};
 	eastl::array<bool, TERRAIN3D_MAX_RENDER_BATCHES> m_bBatchDirty{};
-	t3dclipmapBatch_t m_shadowStateBatch{};
-	bool m_bShadowStateBatchDirty = false;
-	bool m_bSeparateShadowStateBatch = false;
+	eastl::array<t3dclipmapBatch_t, 3> m_szShadowStateBatches{};
+	eastl::array<bool, 3> m_bShadowStateBatchDirty{};
+	int m_nShadowBatchCount = 0;
 	int m_nRenderBatchCount = 0;
 	int m_nClipmapLevelCount = 0;
 	bool m_bStateMeshBatching = false;
@@ -85,6 +85,7 @@ private:
 	eastl::array<Vector3, TERRAIN3D_PAIR_INSTANCES> m_szEdgePos{};
 
 	eastl::array<RID, 3> m_szMaterials{};
+	eastl::array<RID, 3> m_szShadowMaterials{};
 	int m_nNearShaderLodCount = TERRAIN3D_MAX_CLIPMAP_LEVELS;
 	int m_nMiddleShaderLodCount = 0;
 	int m_nClipmapUpdateBudget = TERRAIN3D_MAX_CLIPMAP_LEVELS;
@@ -105,6 +106,7 @@ private:
 	RenderingServer::ShadowCastingSetting m_castShadows = RenderingServer::SHADOW_CASTING_SETTING_OFF;
 	GeometryInstance3D::GIMode m_giMode = GeometryInstance3D::GI_MODE_DISABLED;
 	int m_nShadowLodCount = 0;
+	eastl::array<int, 3> m_nTierShadowLodCounts{ -1, -1, -1 };
 	eastl::array<bool, 3> m_bTierShadowEnabled{ true, true, true };
 
 	void generateMeshTypes( void );
@@ -131,7 +133,7 @@ private:
 	);
 	void flushDirtyBatches( void );
 	void refreshStateBatch( int iBatchIndex, eastl::array<bool, 3> &bDirtyTiers );
-	void refreshShadowStateBatch( void );
+	void refreshShadowStateBatch( int nTier );
 	void updateBatchCustomAabb( int iBatchIndex );
 	void configureStateMaterials( void );
 	void rebuildRenderBatches( void );
@@ -150,6 +152,7 @@ private:
 	int getImmediateLodCount( void ) const;
 	int getLodTier( int nLod ) const;
 	bool lodCastsShadows( int nLod ) const;
+	bool usesDedicatedShadowBatches( void ) const;
 	size_t estimateGeometryPayloadBytes( int nFirstLod, int nLastLod, bool bIncludeBasis ) const;
 
 public:
@@ -161,11 +164,13 @@ public:
 	void initialize(
 		T3DTerrain *pTerrain, const int nMeshSize, const int nLods, const int nTessellationLevel,
 		const real_t fVertexSpacing, const eastl::array<RID, 3> &rMaterials,
+		const eastl::array<RID, 3> &rShadowMaterials,
 		const int nNearShaderLodCount, const int nMiddleShaderLodCount,
 		const int nClipmapUpdateBudget, const uint32_t nRenderLayers,
 		const RenderingServer::ShadowCastingSetting castShadows,
 		const GeometryInstance3D::GIMode giMode, const int nShadowLodCount,
-		const eastl::array<bool, 3> &bTierShadowEnabled, const bool bStateMeshBatching = false
+		const eastl::array<bool, 3> &bTierShadowEnabled,
+		const eastl::array<int, 3> &nTierShadowLodCounts, const bool bStateMeshBatching = false
 	);
 	void destroy( void );
 
@@ -182,6 +187,12 @@ public:
 
 	void setMaterials( const eastl::array<RID, 3> &rMaterials ) {
 		m_szMaterials = rMaterials;
+		m_lastShaderTargetPosition = V3_MAX;
+		configureStateMaterials();
+		update();
+	}
+	void setShadowMaterials( const eastl::array<RID, 3> &rMaterials ) {
+		m_szShadowMaterials = rMaterials;
 		m_lastShaderTargetPosition = V3_MAX;
 		configureStateMaterials();
 		update();
@@ -208,14 +219,30 @@ public:
 			const t3dclipmapBatch_t &batch = m_szRenderBatches[( size_t ) ( index )];
 			count += ( int ) ( batch.tier ) == nTier && batch.bCastsShadows ? 1 : 0;
 		}
-		if ( m_bSeparateShadowStateBatch && ( int ) ( m_shadowStateBatch.tier ) == nTier ) {
-			++count;
+		for ( int index = 0; index < m_nShadowBatchCount; ++index ) {
+			count += ( int ) ( m_szShadowStateBatches[( size_t ) ( index )].tier ) == nTier ? 1 : 0;
 		}
 		return count;
 	}
-	int getShadowBatchCount( void ) const { return m_bSeparateShadowStateBatch ? 1 : 0; }
+	int getShadowBatchCount( void ) const {
+		if ( m_nShadowBatchCount > 0 ) {
+			return m_nShadowBatchCount;
+		}
+		int count = 0;
+		for ( int index = 0; index < m_nRenderBatchCount; ++index ) {
+			count += m_szRenderBatches[( size_t ) ( index )].bCastsShadows ? 1 : 0;
+		}
+		return count;
+	}
 	int getBaseMeshCount( void ) const {
-		return m_bStateMeshBatching ? m_nRenderBatchCount + ( ( m_bSeparateShadowStateBatch && m_shadowStateBatch.bOwnsMesh ) ? 1 : 0 ) : MESH_TYPE_COUNT;
+		if ( !m_bStateMeshBatching ) {
+			return MESH_TYPE_COUNT;
+		}
+		int count = m_nRenderBatchCount;
+		for ( int index = 0; index < m_nShadowBatchCount; ++index ) {
+			count += m_szShadowStateBatches[( size_t ) ( index )].bOwnsMesh ? 1 : 0;
+		}
+		return count;
 	}
 	size_t getVisibleGeometryPayloadBytes( void ) const;
 	size_t getShadowGeometryPayloadBytes( void ) const;
@@ -261,6 +288,7 @@ public:
 	}
 	void setShadowLodCount( int nCount );
 	void setTierShadowEnabled( const eastl::array<bool, 3> &bEnabled );
+	void setTierShadowLodCounts( const eastl::array<int, 3> &nCounts );
 };
 
 #endif // TERRAIN3D_MESHER_CLASS_H
