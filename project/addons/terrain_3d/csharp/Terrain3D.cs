@@ -260,6 +260,10 @@ public partial class Terrain3D : Node3D
 		/// Cached name for the 'gpu_region_cook_on_save' property.
 		/// </summary>
 		public new static readonly StringName GpuRegionCookOnSave = "gpu_region_cook_on_save";
+		/// <summary>Cached name for the independently baked Far material array side length.</summary>
+		public new static readonly StringName FarMaterialResolution = "far_material_resolution";
+		/// <summary>Cached name for the independently baked Far control atlas resolution per region.</summary>
+		public new static readonly StringName FarControlResolution = "far_control_resolution";
 		/// <summary>Cached name for CPU terrain-region eviction.</summary>
 		public new static readonly StringName CpuRegionCacheEnabled = "cpu_region_cache_enabled";
 		/// <summary>Cached name for CPU terrain-region cache memory.</summary>
@@ -318,6 +322,8 @@ public partial class Terrain3D : Node3D
 		public new static readonly StringName LightmapLoadBudget = "lightmap_load_budget";
 		/// <summary>Cached name for per-update baked-lighting package retirement budget.</summary>
 		public new static readonly StringName LightmapUnloadBudget = "lightmap_unload_budget";
+		/// <summary>Cached name for regional lightmap bake output directory.</summary>
+		public new static readonly StringName RegionLightmapOutputDirectory = "region_lightmap_output_directory";
 		/// <summary>Cached name for regional lightmap terrain proxy LOD.</summary>
 		public new static readonly StringName RegionLightmapProxyLod = "region_lightmap_proxy_lod";
 		/// <summary>Cached name for regional lightmap context radius.</summary>
@@ -459,6 +465,9 @@ public partial class Terrain3D : Node3D
 		public new static readonly StringName NearShadowEnabled = "near_shadow_enabled";
 		public new static readonly StringName MiddleShadowEnabled = "middle_shadow_enabled";
 		public new static readonly StringName FarShadowEnabled = "far_shadow_enabled";
+		public new static readonly StringName NearShadowLodCount = "near_shadow_lod_count";
+		public new static readonly StringName MiddleShadowLodCount = "middle_shadow_lod_count";
+		public new static readonly StringName FarShadowLodCount = "far_shadow_lod_count";
 		/// <summary>
 		/// Cached name for the 'gi_mode' member.
 		/// </summary>
@@ -928,6 +937,20 @@ public partial class Terrain3D : Node3D
 		set => Set(GDExtensionPropertyName.GpuRegionCookOnSave, value);
 	}
 
+	/// <summary>Side length of every baked Far-only albedo layer (64, 128, or 256).</summary>
+	public new long FarMaterialResolution
+	{
+		get => Get(GDExtensionPropertyName.FarMaterialResolution).As<long>();
+		set => Set(GDExtensionPropertyName.FarMaterialResolution, value);
+	}
+
+	/// <summary>Far control/material-id resolution per region (64, 128, or 256).</summary>
+	public new long FarControlResolution
+	{
+		get => Get(GDExtensionPropertyName.FarControlResolution).As<long>();
+		set => Set(GDExtensionPropertyName.FarControlResolution, value);
+	}
+
 	public new bool CpuRegionCacheEnabled
 	{
 		get => Get(GDExtensionPropertyName.CpuRegionCacheEnabled).As<bool>();
@@ -1096,6 +1119,12 @@ public partial class Terrain3D : Node3D
 	{
 		get => Get(GDExtensionPropertyName.LightmapUnloadBudget).As<long>();
 		set => Set(GDExtensionPropertyName.LightmapUnloadBudget, value);
+	}
+
+	public new string RegionLightmapOutputDirectory
+	{
+		get => Get(GDExtensionPropertyName.RegionLightmapOutputDirectory).As<string>();
+		set => Set(GDExtensionPropertyName.RegionLightmapOutputDirectory, value);
 	}
 
 	public new long RegionLightmapProxyLod
@@ -1385,6 +1414,24 @@ public partial class Terrain3D : Node3D
 		set => Set(GDExtensionPropertyName.FarShadowEnabled, value);
 	}
 
+	public new long NearShadowLodCount
+	{
+		get => Get(GDExtensionPropertyName.NearShadowLodCount).As<long>();
+		set => Set(GDExtensionPropertyName.NearShadowLodCount, value);
+	}
+
+	public new long MiddleShadowLodCount
+	{
+		get => Get(GDExtensionPropertyName.MiddleShadowLodCount).As<long>();
+		set => Set(GDExtensionPropertyName.MiddleShadowLodCount, value);
+	}
+
+	public new long FarShadowLodCount
+	{
+		get => Get(GDExtensionPropertyName.FarShadowLodCount).As<long>();
+		set => Set(GDExtensionPropertyName.FarShadowLodCount, value);
+	}
+
 	public new GeometryInstance3D.GIModeEnum GiMode
 	{
 		get => Get(GDExtensionPropertyName.GiMode).As<GeometryInstance3D.GIModeEnum>();
@@ -1645,6 +1692,8 @@ public partial class Terrain3D : Node3D
 		public new static readonly StringName IsEditorNodeStreamingPreviewActive = "is_editor_node_streaming_preview_active";
 		/// <summary>Cached name for retrieving the live nested diagnostics snapshot.</summary>
 		public new static readonly StringName GetRuntimeDiagnostics = "get_runtime_diagnostics";
+		/// <summary>Cached name for retrieving the shipping/runtime-profile parity state.</summary>
+		public new static readonly StringName GetRuntimeParitySnapshot = "get_runtime_parity_snapshot";
 		/// <summary>Cached name for retrieving the current Terrain3D-owned memory estimate.</summary>
 		public new static readonly StringName GetMemoryEstimate = "get_memory_estimate";
 		/// <summary>Cached name for toggling editor HLOD preview.</summary>
@@ -1754,6 +1803,9 @@ public partial class Terrain3D : Node3D
 
 	public new Godot.Collections.Dictionary GetRuntimeDiagnostics() =>
 		Call(GDExtensionMethodName.GetRuntimeDiagnostics, []).As<Godot.Collections.Dictionary>();
+
+	public new Godot.Collections.Dictionary GetRuntimeParitySnapshot() =>
+		Call(GDExtensionMethodName.GetRuntimeParitySnapshot, []).As<Godot.Collections.Dictionary>();
 
 	public new Godot.Collections.Dictionary GetMemoryEstimate() =>
 		Call(GDExtensionMethodName.GetMemoryEstimate, []).As<Godot.Collections.Dictionary>();
@@ -1894,4 +1946,3 @@ Convert.ToInt32(enumValue);
 public static int SafeAsInt32(this Terrain3D.EditorExecutionModeEnum? enumValue, int defaultValue = 0) =>
 enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
 }
-

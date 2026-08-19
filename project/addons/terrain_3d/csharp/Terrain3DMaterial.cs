@@ -110,6 +110,12 @@ public partial class Terrain3DMaterial : Resource
 		Adaptive2Corner = 5,
 	}
 
+	public enum MiddleSurfaceSourceEnum
+	{
+		BakedComposite = 0,
+		RuntimeMaterial = 1,
+	}
+
 	public enum TerrainNormalModeEnum
 	{
 		Adaptive = 0,
@@ -222,6 +228,7 @@ public partial class Terrain3DMaterial : Resource
 		public new static readonly StringName TerrainSamplingMode = "terrain_sampling_mode";
 		public new static readonly StringName MiddleTextureFiltering = "middle_texture_filtering";
 		public new static readonly StringName MiddleTerrainSamplingMode = "middle_terrain_sampling_mode";
+		public new static readonly StringName MiddleSurfaceSource = "middle_surface_source";
 		public new static readonly StringName MiddleTerrainNormalMode = "middle_terrain_normal_mode";
 		public new static readonly StringName MiddleColorSamplingMode = "middle_color_sampling_mode";
 		public new static readonly StringName MiddleSurfaceDataMode = "middle_surface_data_mode";
@@ -468,6 +475,12 @@ public partial class Terrain3DMaterial : Resource
 	{
 		get => Get(GDExtensionPropertyName.MiddleTerrainSamplingMode).As<Terrain3DMaterial.TerrainSamplingModeEnum>();
 		set => Set(GDExtensionPropertyName.MiddleTerrainSamplingMode, Variant.From(value));
+	}
+
+	public new Terrain3DMaterial.MiddleSurfaceSourceEnum MiddleSurfaceSource
+	{
+		get => Get(GDExtensionPropertyName.MiddleSurfaceSource).As<Terrain3DMaterial.MiddleSurfaceSourceEnum>();
+		set => Set(GDExtensionPropertyName.MiddleSurfaceSource, Variant.From(value));
 	}
 
 	public new Terrain3DMaterial.TerrainNormalModeEnum MiddleTerrainNormalMode
