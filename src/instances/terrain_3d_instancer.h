@@ -192,6 +192,7 @@ t3dregionUpdateState_t m_szRegionUpdates[TERRAIN3D_INSTANCE_REGION_UPDATE_CAPACI
 	// prevents global asset or region changes from becoming one unbounded hitch.
 	eastl::vector<t3dcellUpdateKey_t> m_pendingCellUpdates;
 	eastl::vector<t3dcellUpdateKey_t> m_buildingCellUpdates;
+	eastl::bitset<TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY> m_pendingRegionWorkMask;
 	size_t m_iPendingCellUpdateCursor = 0;
 	bool m_bMaterializingUpdates = false;
 	bool m_bProcessingPendingUpdates = false;
@@ -258,6 +259,8 @@ t3dregionUpdateState_t m_szRegionUpdates[TERRAIN3D_INSTANCE_REGION_UPDATE_CAPACI
 	void swapLogicalMeshIds( int nSrcId, int nDstId );
 	bool hasPendingUpdates( void ) const;
 	bool hasPendingUpdatesForRegion( const Vector2i &rRegion ) const;
+	void markPendingRegionWork( const Vector2i &rRegion );
+	void rebuildPendingRegionWorkMask( void );
 	void clearRegionUpdates( bool bActive );
 	void snapshotRegionUpdates( void );
 	t3dregionUpdateState_t *getRegionUpdate( const Vector2i &vRegion );

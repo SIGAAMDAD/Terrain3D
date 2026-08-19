@@ -61,6 +61,8 @@ void T3DHLODStreamer::clearRuntime( const bool bNotify ) {
 	m_managedRegions.reset();
 	m_detailRequiredRegions.reset();
 	m_nResidentEstimatedBytes = 0;
+	m_bHasSelectionContext = false;
+	m_bSelectionDirty = true;
 	if ( bNotify && m_pTerrain ) { notifyRepresentationChanges( old ); }
 }
 
@@ -287,6 +289,7 @@ bool T3DHLODStreamer::requestOrActivate( const int index ) {
 	rs->instance_set_transform( entry.instance, m_pTerrain->get_global_transform() * local );
 	rs->instance_geometry_set_cast_shadows_setting( entry.instance, entry.level <= m_nMaxShadowLevel ? RenderingServer::SHADOW_CASTING_SETTING_ON : RenderingServer::SHADOW_CASTING_SETTING_OFF );
 	entry.active = true; entry.retiring = false; entry.retireReadyFrames = 0;
+	m_bSelectionDirty = true;
 	// Fallback descendants were marked desired only while this proxy was not
 	// ready. Once the replacement exists they must immediately become retirement
 	// candidates instead of rendering on top of their parent for another tick.
@@ -304,6 +307,7 @@ void T3DHLODStreamer::deactivate( const int index ) {
 		m_nResidentEstimatedBytes = MAX<int64_t>( m_nResidentEstimatedBytes - MAX<int64_t>( bytes, 0 ), 0 );
 	}
 	entry.active = false; entry.retiring = false; entry.retireReadyFrames = 0; entry.package.unref(); entry.requestStarted = false;
+	m_bSelectionDirty = true;
 }
 
 void T3DHLODStreamer::publishRepresentationMap( void ) {
@@ -327,38 +331,94 @@ void T3DHLODStreamer::notifyRepresentationChanges( const uint8_t *pOldLevels ) {
 }
 
 void T3DHLODStreamer::updateResidency( const Vector3 &rTargetPosition, const bool bForce ) {
-	( void ) bForce;
 	m_nLoadsLastTick = m_nUnloadsLastTick = m_nRequestsLastTick = m_nFailuresLastTick = m_nCapacityDeferredLastTick = 0;
 	m_nTransitionOvercommitBytesLastTick = 0;
 	if ( !m_bEnabled || !m_pTerrain || m_manifest.is_null() ) { suspend(); return; }
-	for ( t3dentry_t &entry : m_entries ) { entry.desired = false; }
+
 	const Vector3 localTarget = m_pTerrain->get_global_transform().affine_inverse().xform( rTargetPosition );
-	for ( const int root : m_roots ) { selectRecursive( root, localTarget ); }
+	real_t projectionValue = 0.0f;
+	real_t viewportHeight = 1080.0f;
+	int projection = -1;
+	if ( Camera3D *camera = m_pTerrain->getCamera() ) {
+		projection = ( int ) camera->get_projection();
+		projectionValue = projection == ( int ) Camera3D::PROJECTION_ORTHOGONAL ? camera->get_size() : camera->get_fov();
+		if ( camera->get_viewport() ) { viewportHeight = MAX( camera->get_viewport()->get_visible_rect().size.y, 1.0f ); }
+	}
+	const bool selectionContextChanged = !m_bHasSelectionContext ||
+		localTarget != m_lastSelectionTarget ||
+		projection != m_nLastSelectionProjection ||
+		!Math::is_equal_approx( projectionValue, m_fLastSelectionProjectionValue ) ||
+		!Math::is_equal_approx( viewportHeight, m_fLastSelectionViewportHeight );
+	const bool rebuildSelection = bForce || m_bSelectionDirty || selectionContextChanged;
+
+	if ( rebuildSelection ) {
+		for ( t3dentry_t &entry : m_entries ) { entry.desired = false; }
+		for ( const int root : m_roots ) { selectRecursive( root, localTarget ); }
+		m_lastSelectionTarget = localTarget;
+		m_fLastSelectionProjectionValue = projectionValue;
+		m_fLastSelectionViewportHeight = viewportHeight;
+		m_nLastSelectionProjection = projection;
+		m_bHasSelectionContext = true;
+		m_bSelectionDirty = false;
+	} else {
+		bool hasTransitionWork = false;
+		for ( const t3dentry_t &entry : m_entries ) {
+			if ( ( entry.desired && !entry.active && !entry.loadFailed ) || entry.retiring || ( entry.active && !entry.desired ) ) {
+				hasTransitionWork = true;
+				break;
+			}
+		}
+		if ( !hasTransitionWork ) { return; }
+	}
+
+	bool representationDirty = rebuildSelection;
 	int loadBudget = m_nLoadBudget;
-	// Higher levels were authored parent-first or child-first; order is irrelevant to safety because active children remain fallbacks.
 	for ( int i = 0; i < ( int ) m_entries.size() && loadBudget > 0; ++i ) {
 		t3dentry_t &entry = m_entries[( size_t ) i];
-		if ( entry.desired && !entry.active && !entry.loadFailed ) { const bool wasRequested = entry.requestStarted; const bool active = requestOrActivate( i ); if ( active || (!wasRequested && entry.requestStarted) ) { --loadBudget; } }
+		if ( entry.desired && !entry.active && !entry.loadFailed ) {
+			const bool wasRequested = entry.requestStarted;
+			const bool active = requestOrActivate( i );
+			if ( active ) { representationDirty = true; }
+			if ( active || ( !wasRequested && entry.requestStarted ) ) { --loadBudget; }
+		}
 	}
-	publishRepresentationMap();
+
+	// Mark retirement/cancellation first, then publish once. The representation
+	// map must exclude newly retiring proxies before replacementReady() is tested.
+	for ( t3dentry_t &entry : m_entries ) {
+		if ( !entry.active || entry.desired ) {
+			if ( entry.retiring ) { representationDirty = true; }
+			entry.retiring = false;
+			entry.retireReadyFrames = 0;
+			continue;
+		}
+		if ( !entry.retiring ) {
+			entry.retiring = true;
+			entry.retireReadyFrames = 0;
+			representationDirty = true;
+		}
+	}
+	if ( representationDirty ) { publishRepresentationMap(); }
+
 	int unloadBudget = m_nUnloadBudget;
 	for ( int i = 0; i < ( int ) m_entries.size() && unloadBudget > 0; ++i ) {
 		t3dentry_t &entry = m_entries[( size_t ) i];
-		if ( !entry.active || entry.desired ) { entry.retiring = false; entry.retireReadyFrames = 0; continue; }
-		if ( !entry.retiring ) { entry.retiring = true; entry.retireReadyFrames = 0; publishRepresentationMap(); }
+		if ( !entry.active || !entry.retiring ) { continue; }
 		if ( replacementReady( entry ) ) {
 			entry.retireReadyFrames = MIN<uint8_t>( ( uint8_t ) ( entry.retireReadyFrames + 1 ), 3 );
 			if ( entry.retireReadyFrames >= 2 ) { deactivate( i ); --unloadBudget; }
-		} else { entry.retireReadyFrames = 0; }
+		} else {
+			entry.retireReadyFrames = 0;
+		}
 	}
 }
 
 void T3DHLODStreamer::setEnabled( const bool bEnabled ) { if ( m_bEnabled == bEnabled ) { return; } m_bEnabled = bEnabled; if ( !bEnabled ) { suspend(); } else if ( m_manifest.is_null() || m_entries.empty() ) { reloadManifest(); } }
 void T3DHLODStreamer::setManifestPath( const String &rPath ) { const String path = rPath.strip_edges(); if ( path == m_manifestPath ) { return; } m_manifestPath = path; if ( m_pTerrain ) { reloadManifest(); } }
-void T3DHLODStreamer::setTargetErrorPixels( const real_t fPixels ) { m_fTargetErrorPixels = CLAMP( fPixels, 0.25f, 64.0f ); }
-void T3DHLODStreamer::setHysteresis( const real_t fRatio ) { m_fHysteresis = CLAMP( fRatio, 0.0f, 0.75f ); }
-void T3DHLODStreamer::setMaxLevel( const int nLevel ) { m_nMaxLevel = CLAMP( nLevel, 1, 6 ); }
-void T3DHLODStreamer::setForcedDebugLevel( const int nLevel ) { m_nForcedDebugLevel = CLAMP( nLevel, -1, 6 ); }
+void T3DHLODStreamer::setTargetErrorPixels( const real_t fPixels ) { const real_t value = CLAMP( fPixels, 0.25f, 64.0f ); if ( Math::is_equal_approx( m_fTargetErrorPixels, value ) ) { return; } m_fTargetErrorPixels = value; m_bSelectionDirty = true; }
+void T3DHLODStreamer::setHysteresis( const real_t fRatio ) { const real_t value = CLAMP( fRatio, 0.0f, 0.75f ); if ( Math::is_equal_approx( m_fHysteresis, value ) ) { return; } m_fHysteresis = value; m_bSelectionDirty = true; }
+void T3DHLODStreamer::setMaxLevel( const int nLevel ) { const int value = CLAMP( nLevel, 1, 6 ); if ( m_nMaxLevel == value ) { return; } m_nMaxLevel = value; m_bSelectionDirty = true; }
+void T3DHLODStreamer::setForcedDebugLevel( const int nLevel ) { const int value = CLAMP( nLevel, -1, 6 ); if ( m_nForcedDebugLevel == value ) { return; } m_nForcedDebugLevel = value; m_bSelectionDirty = true; }
 bool T3DHLODStreamer::isRegionManaged( const Vector2i &rRegion ) const { const int i = regionIndex( rRegion ); return i >= 0 && m_managedRegions.test( ( size_t ) i ); }
 bool T3DHLODStreamer::isRegionDetailRequired( const Vector2i &rRegion ) const { const int i = regionIndex( rRegion ); return i < 0 || !m_managedRegions.test( ( size_t ) i ) || m_detailRequiredRegions.test( ( size_t ) i ); }
 uint8_t T3DHLODStreamer::getRegionRepresentationLevel( const Vector2i &rRegion ) const { const int i = regionIndex( rRegion ); return i >= 0 ? m_regionRepresentationLevel[i] : 0; }

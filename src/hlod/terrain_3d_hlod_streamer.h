@@ -81,6 +81,12 @@ class T3DHLODStreamer : public Object {
 	int m_nFailuresLastTick = 0;
 	int m_nCapacityDeferredLastTick = 0;
 	int64_t m_nTransitionOvercommitBytesLastTick = 0;
+	Vector3 m_lastSelectionTarget = Vector3();
+	real_t m_fLastSelectionProjectionValue = -1.0f;
+	real_t m_fLastSelectionViewportHeight = -1.0f;
+	int m_nLastSelectionProjection = -1;
+	bool m_bHasSelectionContext = false;
+	bool m_bSelectionDirty = true;
 
 	static int floorDiv( int value, int divisor );
 	static int regionIndex( const Vector2i &rRegion );

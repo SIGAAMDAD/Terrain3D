@@ -4,7 +4,7 @@
 #ifndef TERRAIN3D_INSTANCE_CACHE_POLICY_H
 #define TERRAIN3D_INSTANCE_CACHE_POLICY_H
 
-#include "Terrain3DConstants.h"
+#include "instances/terrain_3d_instance_cache_constants.h"
 
 #include <cstddef>
 #include <cstdint>

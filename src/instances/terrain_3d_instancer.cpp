@@ -672,6 +672,29 @@ bool T3DInstancer::hasPendingUpdates( void ) const {
 		   m_dirtyLogicalMeshCounts.any();
 }
 
+void T3DInstancer::markPendingRegionWork( const Vector2i &rRegion ) {
+	const int region_index = getRegionTableIndex( rRegion );
+	if ( region_index >= 0 ) {
+		m_pendingRegionWorkMask.set( ( size_t ) ( region_index ) );
+	}
+}
+
+void T3DInstancer::rebuildPendingRegionWorkMask( void ) {
+	m_pendingRegionWorkMask.reset();
+	for ( const t3dcellUpdateKey_t &key : m_streamingUpdates ) {
+		markPendingRegionWork( key.pRegion );
+	}
+	for ( const t3dcellUpdateKey_t &key : m_activeStreamingUpdates ) {
+		markPendingRegionWork( key.pRegion );
+	}
+	for ( size_t i = m_iPendingCellUpdateCursor; i < m_pendingCellUpdates.size(); ++i ) {
+		markPendingRegionWork( m_pendingCellUpdates[i].pRegion );
+	}
+	for ( const t3dcellUpdateKey_t &key : m_buildingCellUpdates ) {
+		markPendingRegionWork( key.pRegion );
+	}
+}
+
 bool T3DInstancer::hasPendingUpdatesForRegion( const Vector2i &rRegion ) const {
 	// Global renderer changes can affect every detailed HLOD source. For ordinary
 	// streaming churn, however, readiness must be scoped to the region being
@@ -684,19 +707,7 @@ bool T3DInstancer::hasPendingUpdatesForRegion( const Vector2i &rRegion ) const {
 		m_activeRegionUpdateMask.test( ( size_t ) region_index ) ) {
 		return true;
 	}
-	for ( const t3dcellUpdateKey_t &key : m_streamingUpdates ) {
-		if ( key.pRegion == rRegion ) { return true; }
-	}
-	for ( const t3dcellUpdateKey_t &key : m_activeStreamingUpdates ) {
-		if ( key.pRegion == rRegion ) { return true; }
-	}
-	for ( size_t i = m_iPendingCellUpdateCursor; i < m_pendingCellUpdates.size(); ++i ) {
-		if ( m_pendingCellUpdates[i].pRegion == rRegion ) { return true; }
-	}
-	for ( const t3dcellUpdateKey_t &key : m_buildingCellUpdates ) {
-		if ( key.pRegion == rRegion ) { return true; }
-	}
-	return false;
+	return m_pendingRegionWorkMask.test( ( size_t ) region_index );
 }
 
 void T3DInstancer::scheduleUpdateProcessing( void ) {
@@ -992,6 +1003,7 @@ void T3DInstancer::queueSingleLodTransitions(
 				const size_t before = m_streamingUpdates.size();
 				m_streamingUpdates.insert( cell_key );
 				if ( m_streamingUpdates.size() != before ) {
+					markPendingRegionWork( cell_key.pRegion );
 					++m_nTransitionsQueuedLastScan;
 				}
 			}
@@ -1009,6 +1021,7 @@ void T3DInstancer::cancelPendingCellUpdates( void ) {
 	m_buildingCellUpdates.clear();
 	m_iPendingCellUpdateCursor = 0;
 	m_bPendingCancelRequested = false;
+	rebuildPendingRegionWorkMask();
 }
 
 void T3DInstancer::enqueueRegionMeshUpdates( T3DRegion *const pRegion, const int nMeshId ) {
@@ -1035,6 +1048,9 @@ void T3DInstancer::enqueueRegionMeshUpdates( T3DRegion *const pRegion, const int
 	m_buildingCellUpdates.reserve( m_buildingCellUpdates.size() + pNativeMesh->cells.size() );
 	for ( const t3dinstanceCell_t &cell : pNativeMesh->cells ) {
 		m_buildingCellUpdates.push_back( t3dcellUpdateKey_t{regionLocation, cell.location, nMeshId} );
+	}
+	if ( !pNativeMesh->cells.empty() ) {
+		markPendingRegionWork( regionLocation );
 	}
 }
 
@@ -1349,6 +1365,7 @@ void T3DInstancer::materializePendingUpdates( void ) {
 			continue;
 		}
 		m_buildingCellUpdates.push_back( update );
+		markPendingRegionWork( update.pRegion );
 	}
 
 	m_bMaterializingUpdates = false;
@@ -1359,10 +1376,12 @@ void T3DInstancer::materializePendingUpdates( void ) {
 		m_pendingCellUpdates.clear();
 		m_iPendingCellUpdateCursor = 0;
 		m_bPendingCancelRequested = false;
+		rebuildPendingRegionWorkMask();
 		return;
 	}
 	m_pendingCellUpdates.swap( m_buildingCellUpdates );
 	m_iPendingCellUpdateCursor = 0;
+	rebuildPendingRegionWorkMask();
 }
 
 // Creates MMIs based on native data stored in Terrain3DRegions. Authoritative
@@ -1407,6 +1426,7 @@ void T3DInstancer::processUpdates( void ) {
 		++m_nProcessedCellUpdatesLastFrame;
 	}
 	m_bProcessingPendingUpdates = false;
+	rebuildPendingRegionWorkMask();
 	flushLogicalMeshCounts();
 
 	if ( m_bPendingCancelRequested ) {
@@ -3106,6 +3126,7 @@ void T3DInstancer::queueStreamingCell(
 	);
 	if ( pRegion->getInstanceStore().findCell( nMeshId, localCell ) ) {
 		m_streamingUpdates.insert( t3dcellUpdateKey_t{regionLocation, localCell, nMeshId} );
+		markPendingRegionWork( regionLocation );
 	}
 }
 
@@ -3403,6 +3424,7 @@ void T3DInstancer::updateMmis( const int nMeshId, const Vector2i &rRegionLoc, co
 		m_globalMeshUpdates.reset();
 		clearRegionUpdates( false );
 		m_streamingUpdates.clear();
+		rebuildPendingRegionWorkMask();
 		for ( uint32_t &revision : m_szMeshSettingsRevision ) {
 			if ( ++revision == 0 ) {
 				revision = 1;
@@ -3415,6 +3437,7 @@ void T3DInstancer::updateMmis( const int nMeshId, const Vector2i &rRegionLoc, co
 			m_globalMeshUpdates.reset();
 			clearRegionUpdates( false );
 			m_streamingUpdates.clear();
+			rebuildPendingRegionWorkMask();
 		}
 	} else if ( rRegionLoc == V2I_MAX ) {
 		m_bStreamingCacheDirty = true;
