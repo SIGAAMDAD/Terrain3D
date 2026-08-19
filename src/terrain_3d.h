@@ -35,6 +35,8 @@
 #include "instances/terrain_3d_instancer.h"
 #include "rendering/terrain_3d_material.h"
 #include "memory/terrain_3d_memory_budget.h"
+#include "memory/terrain_3d_memory_arena.h"
+#include "memory/terrain_3d_memory_zone.h"
 #include "rendering/terrain_3d_mesher.h"
 #include "streaming/terrain_3d_streaming_policy.h"
 
@@ -127,6 +129,13 @@ private:
 	bool m_bIsInsideWorld = false;
 	bool m_bInitialized = false;
 	uint8_t m_nWarnings = 0u;
+	// M1/M2 ownership root. Declare these before containers so reverse member
+	// destruction drains all zone-backed allocations before the arena is released.
+	T3DMemoryArena m_runtimeMemoryArena;
+	T3DMemoryZone m_runtimeMemoryZone;
+	t3dmemoryArenaSlice_t m_runtimeActiveHeightSlice;
+	t3dmemoryArenaSlice_t m_runtimeZoneSlice;
+	bool m_bRuntimeMemoryReady = false;
 
 	// Object references
 	T3DData *m_pData = nullptr;
@@ -221,6 +230,8 @@ private:
 	int m_nGpuMiddleHeightResolutionDivisor = 1;
 	int m_nEditorGpuRegionCachePages = 96;
 	int m_nGpuFarQualityDivisor = 1;
+	int m_nFarMaterialResolution = 128;
+	int m_nFarControlResolution = 128;
 	bool m_bGpuRegionCookedPagesEnabled = false;
 	bool m_bGpuRegionCookOnSave = false;
 	bool m_bRuntimeMaterialStreamingEnabled = false;
@@ -250,6 +261,7 @@ private:
 	int m_nLightmapStreamRadius = 1;
 	int m_nLightmapLoadBudget = 2;
 	int m_nLightmapUnloadBudget = 4;
+	String m_regionLightmapOutputDirectory;
 	int m_nRegionLightmapProxyLod = 2;
 	int m_nRegionLightmapContextRadius = 1;
 	real_t m_fRegionLightmapTexelSize = 1.0f;
@@ -329,6 +341,9 @@ private:
 	real_t m_fCullMargin = 0.0f;
 	RenderingServer::ShadowCastingSetting m_castShadows = RenderingServer::SHADOW_CASTING_SETTING_ON;
 	int m_nShadowLodCount = 2;
+	int m_nNearShadowLodCount = -1;
+	int m_nMiddleShadowLodCount = -1;
+	int m_nFarShadowLodCount = -1;
 	bool m_bNearShadowEnabled = true;
 	bool m_bMiddleShadowEnabled = true;
 	bool m_bFarShadowEnabled = true;
@@ -389,6 +404,7 @@ private:
 	Node3D *m_pLabelParent = nullptr;
 
 	void initializeInternal( void );
+	bool initializeRuntimeMemory( void );
 	void deactivateRuntime( void );
 	bool isEditorAuthoringModeInternal( void ) const;
 	bool effectiveGpuRegionCacheEnabled( void ) const;
@@ -615,8 +631,8 @@ private:
 	) const;
 
 public:
-	static constexpr int64_t NATIVE_API_REVISION = 2026081801LL;
-	static constexpr const char *NATIVE_BUILD_ID = "a2.8.6-fixed-memory-arena";
+	static constexpr int64_t NATIVE_API_REVISION = 2026081802LL;
+	static constexpr const char *NATIVE_BUILD_ID = "a2.8.6-memory-zone";
 	static t3ddebugLevel_t s_debugLevel; // Initialized in terrain_3d.cpp
 
 	T3DTerrain( void );
@@ -810,6 +826,7 @@ public:
 	int64_t getMemoryBudgetHeadroomBytes( void ) const { return ( int64_t ) ( m_nMemoryBudgetResult.nHeadroomBytes ); }
 	void forceMemoryBudgetRebalance( void );
 	Dictionary getRuntimeDiagnostics( bool bDeep = false ) const;
+	Dictionary getRuntimeParitySnapshot( void ) const;
 	Ref<T3DMemoryStats> getMemoryStatsSnapshot( void ) const;
 	TypedArray<T3DShaderTierStats> getShaderTierStatsSnapshot( void ) const;
 	TypedArray<T3DCacheStats> getCacheStatsSnapshot( bool bDeep = false ) const;
@@ -918,6 +935,10 @@ public:
 	int getGpuFarQualityDivisor( void ) const {
 		return m_nGpuFarQualityDivisor;
 	}
+	void setFarMaterialResolution( int nResolution );
+	int getFarMaterialResolution( void ) const { return m_nFarMaterialResolution; }
+	void setFarControlResolution( int nResolution );
+	int getFarControlResolution( void ) const { return m_nFarControlResolution; }
 	int getGpuFarHeightAtlasSide( void ) const;
 	int getGpuFarSurfaceAtlasSide( void ) const;
 	int getGpuFarAtlasSide( void ) const { return getGpuFarHeightAtlasSide(); }
@@ -994,6 +1015,8 @@ public:
 	void setLightmapUnloadBudget( int nBudget );
 	int getLightmapUnloadBudget( void ) const { return m_nLightmapUnloadBudget; }
 	Dictionary getLightmapStreamingStats( void ) const;
+	void setRegionLightmapOutputDirectory( const String &rDirectory );
+	String getRegionLightmapOutputDirectory( void ) const { return m_regionLightmapOutputDirectory; }
 	void setRegionLightmapProxyLod( int nLod );
 	int getRegionLightmapProxyLod( void ) const { return m_nRegionLightmapProxyLod; }
 	void setRegionLightmapContextRadius( int nRadius );
@@ -1188,6 +1211,12 @@ public:
 	bool getMiddleShadowEnabled( void ) const { return m_bMiddleShadowEnabled; }
 	void setFarShadowEnabled( bool bEnabled );
 	bool getFarShadowEnabled( void ) const { return m_bFarShadowEnabled; }
+	void setNearShadowLodCount( int nCount );
+	int getNearShadowLodCount( void ) const { return m_nNearShadowLodCount; }
+	void setMiddleShadowLodCount( int nCount );
+	int getMiddleShadowLodCount( void ) const { return m_nMiddleShadowLodCount; }
+	void setFarShadowLodCount( int nCount );
+	int getFarShadowLodCount( void ) const { return m_nFarShadowLodCount; }
 	void setGiMode( const GeometryInstance3D::GIMode giMode );
 	GeometryInstance3D::GIMode getGiMode( void ) const {
 		return m_giMode;
