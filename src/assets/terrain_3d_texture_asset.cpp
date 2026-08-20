@@ -3,6 +3,7 @@
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/image.hpp>
 
+#include "core/terrain_3d_compiler.h"
 #include "core/logger.h"
 #include "terrain_3d.h"
 #include "core/terrain_3d_util.h"
@@ -14,10 +15,7 @@
 
 namespace {
 
-bool terrain3dIsPackedSurfaceFormat( const Image::Format format ) {
-	return format == Image::FORMAT_RGBA8 || format == Image::FORMAT_DXT5 ||
-		format == Image::FORMAT_BPTC_RGBA;
-}
+EA_FORCE_INLINE bool terrain3dIsPackedSurfaceFormat( const Image::Format format ) { return format == Image::FORMAT_RGBA8 || format == Image::FORMAT_DXT5 || format == Image::FORMAT_BPTC_RGBA; }
 
 } // namespace
 

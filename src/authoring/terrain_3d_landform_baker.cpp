@@ -116,14 +116,9 @@ typedef struct t3dlandformModuleCandidate_s {
 	float fScore = std::numeric_limits<float>::max();
 } t3dlandformModuleCandidate_t;
 
-static bool landformModuleCandidateLess( const t3dlandformModuleCandidate_t &rA, const t3dlandformModuleCandidate_t &rB ) {
-	return rA.fScore < rB.fScore;
-}
+EA_FORCE_INLINE static bool landformModuleCandidateLess( const t3dlandformModuleCandidate_t &rA, const t3dlandformModuleCandidate_t &rB ) { return rA.fScore < rB.fScore; }
 
-static float sampleHeightOr( T3DSampler &rSampler, const Vector2 &rPosition, const float fFallback ) {
-	const float fSampled = rSampler.sampleHeight( Vector3( rPosition.x, 0.0f, rPosition.y ) );
-	return std::isfinite( fSampled ) ? fSampled : fFallback;
-}
+EA_FORCE_INLINE static float sampleHeightOr( T3DSampler &rSampler, const Vector2 &rPosition, const float fFallback ) { const float fSampled = rSampler.sampleHeight( Vector3( rPosition.x, 0.0f, rPosition.y ) ); return std::isfinite( fSampled ) ? fSampled : fFallback; }
 
 static eastl::vector<int> parseMeshIds( const Variant &rValue ) {
 	eastl::vector<int> result;
@@ -204,26 +199,11 @@ static t3dsettings_t parseSettings( const Dictionary &rDictionary ) {
 	return settings;
 }
 
-static uint32_t hashU32( uint32_t nValue ) {
-	nValue ^= nValue >> 16u;
-	nValue *= 0x7feb352du;
-	nValue ^= nValue >> 15u;
-	nValue *= 0x846ca68bu;
-	nValue ^= nValue >> 16u;
-	return nValue;
-}
+EA_FORCE_INLINE static uint32_t hashU32( uint32_t nValue ) { nValue ^= nValue >> 16u; nValue *= 0x7feb352du; nValue ^= nValue >> 15u; nValue *= 0x846ca68bu; nValue ^= nValue >> 16u; return nValue; }
 
-static float signedNoise( const int iX, const int iZ, const int nSeed ) {
-	const uint32_t x = ( uint32_t ) ( iX ) * TERRAIN3D_HASH_GOLDEN_RATIO_32;
-	const uint32_t z = ( uint32_t ) ( iZ ) * TERRAIN3D_HASH_MIX_32;
-	const uint32_t value = hashU32( x ^ z ^ ( uint32_t ) ( nSeed ) );
-	return ( float ) ( value & 0x00ffffffu ) / ( float ) ( 0x007fffffu ) - 1.0f;
-}
+EA_FORCE_INLINE static float signedNoise( const int iX, const int iZ, const int nSeed ) { const uint32_t x = ( uint32_t ) ( iX ) * TERRAIN3D_HASH_GOLDEN_RATIO_32; const uint32_t z = ( uint32_t ) ( iZ ) * TERRAIN3D_HASH_MIX_32; const uint32_t value = hashU32( x ^ z ^ ( uint32_t ) ( nSeed ) ); return ( float ) ( value & 0x00ffffffu ) / ( float ) ( 0x007fffffu ) - 1.0f; }
 
-static float smooth01( const float fValue ) {
-	const float value = CLAMP( fValue, 0.0f, 1.0f );
-	return value * value * ( 3.0f - 2.0f * value );
-}
+EA_FORCE_INLINE static float smooth01( const float fValue ) { const float value = CLAMP( fValue, 0.0f, 1.0f ); return value * value * ( 3.0f - 2.0f * value ); }
 
 static float profileWeight(
 	const float fDistance, const float fHalfWidth, const float fCrestWidth,
@@ -242,9 +222,7 @@ static float profileWeight(
 	return smooth01( fEdge );
 }
 
-static float segmentLengthXz( const Vector3 &vA, const Vector3 &rB ) {
-	return Vector2( rB.x - vA.x, rB.z - vA.z ).length();
-}
+EA_FORCE_INLINE static float segmentLengthXz( const Vector3 &vA, const Vector3 &rB ) { return Vector2( rB.x - vA.x, rB.z - vA.z ).length(); }
 
 static t3dpathProjection_t projectToPath( const PackedVector3Array &arrPath, const Vector2 &rPoint ) {
 	t3dpathProjection_t best;
@@ -683,26 +661,13 @@ static PackedVector3Array resamplePath( const PackedVector3Array &arrPath, const
 	return result;
 }
 
-static void addTriangle(
-	const Ref<SurfaceTool> &rSurface, const Vector3 &vA, const Vector3 &rB,
-	const Vector3 &rC, const Vector2 &rUvA, const Vector2 &rUvB, const Vector2 &rUvC
-) {
-	rSurface->set_uv( rUvA );
-	rSurface->add_vertex( vA );
-	rSurface->set_uv( rUvB );
-	rSurface->add_vertex( rB );
-	rSurface->set_uv( rUvC );
-	rSurface->add_vertex( rC );
-}
+EA_FORCE_INLINE static void addTriangle( const Ref<SurfaceTool> &rSurface, const Vector3 &vA, const Vector3 &rB, const Vector3 &rC, const Vector2 &rUvA, const Vector2 &rUvB, const Vector2 &rUvC ) { rSurface->set_uv( rUvA ); rSurface->add_vertex( vA ); rSurface->set_uv( rUvB ); rSurface->add_vertex( rB ); rSurface->set_uv( rUvC ); rSurface->add_vertex( rC ); }
 
-static void addQuad(
+EA_FORCE_INLINE static void addQuad(
 	const Ref<SurfaceTool> &rSurface, const Vector3 &rATop, const Vector3 &rABottom,
 	const Vector3 &rBBottom, const Vector3 &rBTop, const Vector2 &rUvATop,
 	const Vector2 &rUvABottom, const Vector2 &rUvBBottom, const Vector2 &rUvBTop
-) {
-	addTriangle( rSurface, rATop, rABottom, rBBottom, rUvATop, rUvABottom, rUvBBottom );
-	addTriangle( rSurface, rATop, rBBottom, rBTop, rUvATop, rUvBBottom, rUvBTop );
-}
+) { addTriangle( rSurface, rATop, rABottom, rBBottom, rUvATop, rUvABottom, rUvBBottom ); addTriangle( rSurface, rATop, rBBottom, rBTop, rUvATop, rUvBBottom, rUvBTop ); }
 
 static Ref<StandardMaterial3D> createCliffMaterial(
 	T3DTerrain *pTerrain, const t3dsettings_t &rSettings,

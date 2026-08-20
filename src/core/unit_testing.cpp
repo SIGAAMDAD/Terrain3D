@@ -1,15 +1,11 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "core/terrain_3d_compiler.h"
 #include "core/unit_testing.h"
 #include "core/terrain_3d_util.h"
 
 namespace {
-template <typename TLeft, typename TRight>
-void terrain3dLogDiffers( const TLeft &rA, const TRight &rB, const String &rDescription, const bool bExpected ) {
-	const bool bDiffersResult = differs( rA, rB );
-	const String result = bDiffersResult == bExpected ? "PASSED" : "FAILED";
-	UtilityFunctions::print( rDescription, ": differs(", rA, ", ", rB, ") = ", bDiffersResult, " - ", result );
-}
+template <typename TLeft, typename TRight> EA_FORCE_INLINE void terrain3dLogDiffers( const TLeft &rA, const TRight &rB, const String &rDescription, const bool bExpected ) { const bool bDiffersResult = differs( rA, rB ); const String result = bDiffersResult == bExpected ? "PASSED" : "FAILED"; UtilityFunctions::print( rDescription, ": differs(", rA, ", ", rB, ") = ", bDiffersResult, " - ", result ); }
 }
 
 void testDiffers( void ) {

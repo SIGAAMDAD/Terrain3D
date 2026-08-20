@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "core/terrain_3d_compiler.h"
 #include "data/terrain_3d_runtime_bake_codec.h"
 
 #include "core/terrain_3d_util.h"
@@ -25,29 +26,20 @@ static constexpr uint32_t LIGHTING_MAGIC = 0x3154474cu; // LGT1
 static constexpr uint32_t MULTIMESH_MAGIC = 0x31494d4du; // MMI1
 static constexpr uint16_t BLOB_VERSION = 1u;
 
-static void appendU16( PackedByteArray &rBytes, const uint16_t nValue ) {
-	const int64_t old = rBytes.size(); rBytes.resize( old + 2 ); uint8_t *p = rBytes.ptrw() + old;
-	p[0] = ( uint8_t ) ( nValue & 0xffu ); p[1] = ( uint8_t ) ( nValue >> 8u );
-}
+EA_FORCE_INLINE static void appendU16( PackedByteArray &rBytes, const uint16_t nValue ) { const int64_t old = rBytes.size(); rBytes.resize( old + 2 ); uint8_t *p = rBytes.ptrw() + old; p[0] = ( uint8_t ) ( nValue & 0xffu ); p[1] = ( uint8_t ) ( nValue >> 8u ); }
 static void appendU32( PackedByteArray &rBytes, const uint32_t nValue ) {
 	const int64_t old = rBytes.size(); rBytes.resize( old + 4 ); uint8_t *p = rBytes.ptrw() + old;
 	p[0] = ( uint8_t ) ( nValue & 0xffu ); p[1] = ( uint8_t ) ( nValue >> 8u );
 	p[2] = ( uint8_t ) ( nValue >> 16u ); p[3] = ( uint8_t ) ( nValue >> 24u );
 }
-static void appendI32( PackedByteArray &rBytes, const int32_t nValue ) { appendU32( rBytes, ( uint32_t ) nValue ); }
-static void appendU64( PackedByteArray &rBytes, const uint64_t nValue ) {
-	appendU32( rBytes, ( uint32_t ) nValue ); appendU32( rBytes, ( uint32_t ) ( nValue >> 32u ) );
-}
-static void appendF32( PackedByteArray &rBytes, const float fValue ) {
-	uint32_t bits = 0u; std::memcpy( &bits, &fValue, 4 ); appendU32( rBytes, bits );
-}
-static uint16_t readU16( const uint8_t *p ) { return ( uint16_t ) ( p[0] | ( ( uint16_t ) p[1] << 8u ) ); }
-static uint32_t readU32( const uint8_t *p ) {
-	return ( uint32_t ) p[0] | ( ( uint32_t ) p[1] << 8u ) | ( ( uint32_t ) p[2] << 16u ) | ( ( uint32_t ) p[3] << 24u );
-}
-static int32_t readI32( const uint8_t *p ) { return ( int32_t ) readU32( p ); }
-static uint64_t readU64( const uint8_t *p ) { return ( uint64_t ) readU32( p ) | ( ( uint64_t ) readU32( p + 4 ) << 32u ); }
-static float readF32( const uint8_t *p ) { const uint32_t bits = readU32( p ); float v = 0.f; std::memcpy( &v, &bits, 4 ); return v; }
+EA_FORCE_INLINE static void appendI32( PackedByteArray &rBytes, const int32_t nValue ) { appendU32( rBytes, ( uint32_t ) nValue ); }
+EA_FORCE_INLINE static void appendU64( PackedByteArray &rBytes, const uint64_t nValue ) { appendU32( rBytes, ( uint32_t ) nValue ); appendU32( rBytes, ( uint32_t ) ( nValue >> 32u ) ); }
+EA_FORCE_INLINE static void appendF32( PackedByteArray &rBytes, const float fValue ) { uint32_t bits = 0u; std::memcpy( &bits, &fValue, 4 ); appendU32( rBytes, bits ); }
+EA_FORCE_INLINE static uint16_t readU16( const uint8_t *p ) { return ( uint16_t ) ( p[0] | ( ( uint16_t ) p[1] << 8u ) ); }
+EA_FORCE_INLINE static uint32_t readU32( const uint8_t *p ) { return ( uint32_t ) p[0] | ( ( uint32_t ) p[1] << 8u ) | ( ( uint32_t ) p[2] << 16u ) | ( ( uint32_t ) p[3] << 24u ); }
+EA_FORCE_INLINE static int32_t readI32( const uint8_t *p ) { return ( int32_t ) readU32( p ); }
+EA_FORCE_INLINE static uint64_t readU64( const uint8_t *p ) { return ( uint64_t ) readU32( p ) | ( ( uint64_t ) readU32( p + 4 ) << 32u ); }
+EA_FORCE_INLINE static float readF32( const uint8_t *p ) { const uint32_t bits = readU32( p ); float v = 0.f; std::memcpy( &v, &bits, 4 ); return v; }
 
 static uint32_t readControlPixel( const Ref<Image> &rControl, const int nIndex ) {
 	if ( rControl.is_null() ) return TERRAIN3D_REGION_DEFAULT_CONTROL;
@@ -56,18 +48,10 @@ static uint32_t readControlPixel( const Ref<Image> &rControl, const int nIndex )
 	uint32_t value = 0u; std::memcpy( &value, bytes.ptr() + ( size_t ) nIndex * 4u, 4u ); return value;
 }
 
-static void setBit( PackedByteArray &rBytes, const int64_t nBase, const uint32_t nIndex ) {
-	rBytes.ptrw()[nBase + nIndex / 8u] |= ( uint8_t ) ( 1u << ( nIndex & 7u ) );
-}
+EA_FORCE_INLINE static void setBit( PackedByteArray &rBytes, const int64_t nBase, const uint32_t nIndex ) { rBytes.ptrw()[nBase + nIndex / 8u] |= ( uint8_t ) ( 1u << ( nIndex & 7u ) ); }
 
-static String descriptorScenePath( const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t &rDescriptor ) {
-	if ( !rDescriptor.scenePath.is_empty() ) return rDescriptor.scenePath;
-	return rDescriptor.pScene.is_valid() ? rDescriptor.pScene->get_path() : String();
-}
-static String descriptorShadowPath( const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t &rDescriptor ) {
-	if ( !rDescriptor.shadowProxyScenePath.is_empty() ) return rDescriptor.shadowProxyScenePath;
-	return rDescriptor.pShadowProxyScene.is_valid() ? rDescriptor.pShadowProxyScene->get_path() : String();
-}
+EA_FORCE_INLINE static String descriptorScenePath( const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t &rDescriptor ) { if ( !rDescriptor.scenePath.is_empty() ) return rDescriptor.scenePath; return rDescriptor.pScene.is_valid() ? rDescriptor.pScene->get_path() : String(); }
+EA_FORCE_INLINE static String descriptorShadowPath( const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t &rDescriptor ) { if ( !rDescriptor.shadowProxyScenePath.is_empty() ) return rDescriptor.shadowProxyScenePath; return rDescriptor.pShadowProxyScene.is_valid() ? rDescriptor.pShadowProxyScene->get_path() : String(); }
 }
 
 PackedByteArray T3DRuntimeBakeCodec::encodeHoleMask( const Ref<Image> &rControl, const int nRegionSize ) {

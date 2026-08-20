@@ -113,9 +113,7 @@ private:
 	typedef struct t3dcellInterval_s {
 		int first = 1;
 		int last = 0;
-		bool valid( void ) const {
-			return first <= last;
-		}
+		EA_FORCE_INLINE bool valid( void ) const { return first <= last; }
 	} t3dcellInterval_t;
 	typedef struct t3dtransitionBucketKey_s {
 		Vector2i bucket;
@@ -392,10 +390,8 @@ t3dregionUpdateState_t m_szRegionUpdates[TERRAIN3D_INSTANCE_REGION_UPDATE_CAPACI
 	) const;
 
 public:
-	T3DInstancer( void ) {}
-	~T3DInstancer( void ) {
-		destroy();
-	}
+	EA_FORCE_INLINE T3DInstancer( void ) {}
+	EA_FORCE_INLINE ~T3DInstancer( void ) { destroy(); }
 
 	void initialize( T3DTerrain *pTerrain );
 	void destroy( void );
@@ -409,12 +405,8 @@ public:
 	void destroyRegionMmis( const Vector2i &rRegionLoc );
 
 	void setMode( const t3dinstancerMode_t mode );
-	t3dinstancerMode_t getMode( void ) const {
-		return m_mode;
-	}
-	bool isEnabled( void ) const {
-		return m_mode != DISABLED;
-	}
+	EA_FORCE_INLINE t3dinstancerMode_t getMode( void ) const { return m_mode; }
+	EA_FORCE_INLINE bool isEnabled( void ) const { return m_mode != DISABLED; }
 
 	void addInstances( const Vector3 &rGlobalPosition, const Dictionary &rParams );
 	void removeInstances( const Vector3 &rGlobalPosition, const Dictionary &rParams );
@@ -443,18 +435,10 @@ public:
 	);
 	void updateTransforms( const AABB &rAabb );
 	void updateStreaming( const Vector3 &rTargetPosition );
-	void deferStreamingSelectionForFrame( void ) { m_bStreamingSelectionDeferredLastFrame = true; }
-	void resetStreamingResidency( void ) {
-		suspendRendering();
-	}
-	int getRenderCellCount( void ) const {
-		return ( int ) ( m_renderCells.size() );
-	}
-	int getPendingStreamingUpdateCount( void ) const {
-		const size_t pending_count = m_pendingCellUpdates.size() > m_iPendingCellUpdateCursor ?
-			m_pendingCellUpdates.size() - m_iPendingCellUpdateCursor : 0u;
-		return ( int ) ( m_streamingUpdates.size() + m_activeStreamingUpdates.size() + pending_count );
-	}
+	EA_FORCE_INLINE void deferStreamingSelectionForFrame( void ) { m_bStreamingSelectionDeferredLastFrame = true; }
+	EA_FORCE_INLINE void resetStreamingResidency( void ) { suspendRendering(); }
+	EA_FORCE_INLINE int getRenderCellCount( void ) const { return ( int ) ( m_renderCells.size() ); }
+	EA_FORCE_INLINE int getPendingStreamingUpdateCount( void ) const { const size_t pending_count = m_pendingCellUpdates.size() > m_iPendingCellUpdateCursor ? m_pendingCellUpdates.size() - m_iPendingCellUpdateCursor : 0u; return ( int ) ( m_streamingUpdates.size() + m_activeStreamingUpdates.size() + pending_count ); }
 	bool areHlodDetailRegionsReady( const Vector2i &rRegionMin, const Vector2i &rRegionMax ) const {
 		for ( int z = rRegionMin.y; z <= rRegionMax.y; ++z ) {
 			for ( int x = rRegionMin.x; x <= rRegionMax.x; ++x ) {
@@ -472,39 +456,21 @@ public:
 	size_t getRetainedContainerBytes( void ) const;
 	size_t getActiveMultimeshBytes( void ) const;
 	void setCellSize( int nCellSize );
-	int getCellSize( void ) const {
-		return m_nCellSize;
-	}
+	EA_FORCE_INLINE int getCellSize( void ) const { return m_nCellSize; }
 	int getCellsPerRegionAxis( void ) const;
 	bool ensureRegionLayout( T3DRegion *pRegion );
 	bool refreshResidentRegionLayouts( void );
 	void setCellStreamingEnabled( bool bEnabled );
-	bool isCellStreamingEnabled( void ) const {
-		return m_bCellStreamingEnabled;
-	}
+	EA_FORCE_INLINE bool isCellStreamingEnabled( void ) const { return m_bCellStreamingEnabled; }
 	void setSingleLodInstanceBuffers( bool bEnabled );
-	bool isSingleLodInstanceBuffers( void ) const {
-		return m_bSingleLodInstanceBuffers;
-	}
+	EA_FORCE_INLINE bool isSingleLodInstanceBuffers( void ) const { return m_bSingleLodInstanceBuffers; }
 	void setCellStreamingMargin( real_t fMargin );
-	real_t getCellStreamingMargin( void ) const {
-		return m_fCellStreamingMargin;
-	}
-	void setCellStreamingStep( const real_t fStep ) {
-		m_fCellStreamingStep = CLAMP( fStep, 1.f, 256.f );
-	}
-	real_t getCellStreamingStep( void ) const {
-		return m_fCellStreamingStep;
-	}
-	void setUpdateCellBudget( const int nBudget ) {
-		m_nUpdateCellBudget = ( uint32_t ) ( CLAMP( nBudget, 0, 65536 ) );
-	}
-	uint32_t getUpdateCellBudget( void ) const {
-		return m_nUpdateCellBudget;
-	}
-	void setRuntimeUpdateCellBudgetOverride( const int nBudget ) {
-		m_nRuntimeUpdateCellBudgetOverride = nBudget < 0 ? -1 : CLAMP( nBudget, 0, 65536 );
-	}
+	EA_FORCE_INLINE real_t getCellStreamingMargin( void ) const { return m_fCellStreamingMargin; }
+	EA_FORCE_INLINE void setCellStreamingStep( const real_t fStep ) { m_fCellStreamingStep = CLAMP( fStep, 1.f, 256.f ); }
+	EA_FORCE_INLINE real_t getCellStreamingStep( void ) const { return m_fCellStreamingStep; }
+	EA_FORCE_INLINE void setUpdateCellBudget( const int nBudget ) { m_nUpdateCellBudget = ( uint32_t ) ( CLAMP( nBudget, 0, 65536 ) ); }
+	EA_FORCE_INLINE uint32_t getUpdateCellBudget( void ) const { return m_nUpdateCellBudget; }
+	EA_FORCE_INLINE void setRuntimeUpdateCellBudgetOverride( const int nBudget ) { m_nRuntimeUpdateCellBudgetOverride = nBudget < 0 ? -1 : CLAMP( nBudget, 0, 65536 ); }
 	int getEffectiveUpdateCellBudget( void ) const {
 		if ( m_nRuntimeUpdateCellBudgetOverride < 0 ) {
 			return ( int ) ( m_nUpdateCellBudget );
@@ -512,11 +478,7 @@ public:
 		return m_nUpdateCellBudget == 0u ? m_nRuntimeUpdateCellBudgetOverride :
 			MIN( ( int ) ( m_nUpdateCellBudget ), m_nRuntimeUpdateCellBudgetOverride );
 	}
-	bool isUpdateBudgetLimitedLastFrame( void ) const {
-		const int effective_budget = getEffectiveUpdateCellBudget();
-		return effective_budget > 0 && m_nProcessedCellUpdatesLastFrame >= ( uint32_t ) ( effective_budget ) &&
-			m_nQueueAfterLastFrame > 0u;
-	}
+	EA_FORCE_INLINE bool isUpdateBudgetLimitedLastFrame( void ) const { const int effective_budget = getEffectiveUpdateCellBudget(); return effective_budget > 0 && m_nProcessedCellUpdatesLastFrame >= ( uint32_t ) ( effective_budget ) && m_nQueueAfterLastFrame > 0u; }
 	int getClosestMeshId( const Vector3 &rGlobalPosition ) const;
 	void copyPasteDfr(
 		const T3DRegion *pSrcRegion, const Rect2i &rSrcRect,
@@ -533,9 +495,7 @@ public:
 		const PackedColorArray &rColors = PackedColorArray()
 	) const;
 
-	void resetDensityCounter( void ) {
-		m_nDensityCounter = 0;
-	}
+	EA_FORCE_INLINE void resetDensityCounter( void ) { m_nDensityCounter = 0; }
 
 protected:
 	static void _bind_methods( void );

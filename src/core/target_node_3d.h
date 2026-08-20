@@ -7,6 +7,7 @@
 
 #include <godot_cpp/classes/node3d.hpp>
 
+#include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
 
 class T3DTargetNode3D {
@@ -16,9 +17,7 @@ private:
 	uint64_t m_instanceId = 0;
 
 public:
-	void clear( void ) {
-		m_instanceId = 0;
-	}
+	EA_FORCE_INLINE void clear( void ) { m_instanceId = 0; }
 
 	void setTarget( Node3D *const pNode ) {
 		if ( pNode && !pNode->is_queued_for_deletion() ) {
@@ -36,18 +35,11 @@ public:
 		return obj ? Object::cast_to<Node3D>( obj ) : nullptr;
 	}
 
-	Node3D *ptr( void ) const {
-		return getTarget();
-	}
+	EA_FORCE_INLINE Node3D *ptr( void ) const { return getTarget(); }
 
-	bool isValid( void ) const {
-		Node3D *node = getTarget();
-		return node && node->is_inside_tree() && !node->is_queued_for_deletion();
-	}
+	EA_FORCE_INLINE bool isValid( void ) const { Node3D *node = getTarget(); return node && node->is_inside_tree() && !node->is_queued_for_deletion(); }
 
-	bool isNull( void ) const {
-		return !isValid();
-	}
+	EA_FORCE_INLINE bool isNull( void ) const { return !isValid(); }
 };
 
 #endif // TARGET_NODE3D_CLASS_H

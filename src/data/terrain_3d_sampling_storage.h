@@ -22,9 +22,7 @@ struct T3DSamplingSource {
 	const T3DRegionRepository *pRepository = nullptr;
 	const class T3DSamplingStorage *pStorage = nullptr;
 
-	bool valid( void ) const {
-		return pRepository != nullptr && pStorage != nullptr;
-	}
+	EA_FORCE_INLINE bool valid( void ) const { return pRepository != nullptr && pStorage != nullptr; }
 };
 
 // Owns the CPU publication mechanisms used by terrain sampling. Spatial policy
@@ -41,15 +39,11 @@ public:
 	bool bindActive( int nRegionSize, void *pBacking, size_t nBackingBytes );
 	void releaseActive( void );
 	void resetActive( void );
-	bool isActiveOwner( void ) const {
-		return terrain3dActiveStorageIsOwner( this );
-	}
+	EA_FORCE_INLINE bool isActiveOwner( void ) const { return terrain3dActiveStorageIsOwner( this ); }
 	uint32_t refreshActiveGeneration( void );
-	uint32_t getActiveGeneration( void ) const { return m_nActiveStorageGeneration; }
+	EA_FORCE_INLINE uint32_t getActiveGeneration( void ) const { return m_nActiveStorageGeneration; }
 
-	T3DActiveMapLease acquireActive( const Vector2i &rLocation ) const {
-		return isActiveOwner() ? terrain3dActiveStorageAcquire( this, rLocation ) : T3DActiveMapLease();
-	}
+	EA_FORCE_INLINE T3DActiveMapLease acquireActive( const Vector2i &rLocation ) const { return isActiveOwner() ? terrain3dActiveStorageAcquire( this, rLocation ) : T3DActiveMapLease(); }
 	bool containsActive( const Vector2i &rLocation ) const;
 	bool syncActiveRegion( const Vector2i &rLocation, const T3DRegion *pRegion );
 	bool syncActiveHeightPage( const Vector2i &rLocation, const uint8_t *pHeightBytes, size_t nHeightBytes );
@@ -80,15 +74,8 @@ public:
 
 	void invalidateAllSamplers( void );
 	void publishRegionGeneration( const Vector2i &rLocation );
-	uint64_t getSamplingGeneration( void ) const {
-		return m_nSamplingGeneration.load( std::memory_order_acquire );
-	}
-	uint32_t getRegionGeneration( const Vector2i &rLocation ) const {
-		const int index = locationIndex( rLocation );
-		return index >= 0
-			? m_szRegionSamplingGenerations[( size_t ) ( index )].load( std::memory_order_acquire )
-			: 0u;
-	}
+	EA_FORCE_INLINE uint64_t getSamplingGeneration( void ) const { return m_nSamplingGeneration.load( std::memory_order_acquire ); }
+	EA_FORCE_INLINE uint32_t getRegionGeneration( const Vector2i &rLocation ) const { const int index = locationIndex( rLocation ); return index >= 0 ? m_szRegionSamplingGenerations[( size_t ) ( index )].load( std::memory_order_acquire ) : 0u; }
 
 private:
 	uint32_t m_nActiveStorageGeneration = 0u;

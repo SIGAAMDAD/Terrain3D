@@ -36,19 +36,11 @@ void fnv1a64Append( uint64_t &nHash, const uint8_t *pData, const size_t nSize ) 
 	}
 }
 
-void fnv1a64AppendU32( uint64_t &nHash, const uint32_t nValue ) {
-	fnv1a64Append( nHash, ( const uint8_t * ) ( &nValue ), sizeof( nValue ) );
-}
+EA_FORCE_INLINE void fnv1a64AppendU32( uint64_t &nHash, const uint32_t nValue ) { fnv1a64Append( nHash, ( const uint8_t * ) ( &nValue ), sizeof( nValue ) ); }
 
-void fnv1a64AppendU64( uint64_t &nHash, const uint64_t nValue ) {
-	fnv1a64Append( nHash, ( const uint8_t * ) ( &nValue ), sizeof( nValue ) );
-}
+EA_FORCE_INLINE void fnv1a64AppendU64( uint64_t &nHash, const uint64_t nValue ) { fnv1a64Append( nHash, ( const uint8_t * ) ( &nValue ), sizeof( nValue ) ); }
 
-void fnv1a64AppendF32( uint64_t &nHash, const float fValue ) {
-	uint32_t bits = 0u;
-	std::memcpy( &bits, &fValue, sizeof( bits ) );
-	fnv1a64AppendU32( nHash, bits );
-}
+EA_FORCE_INLINE void fnv1a64AppendF32( uint64_t &nHash, const float fValue ) { uint32_t bits = 0u; std::memcpy( &bits, &fValue, sizeof( bits ) ); fnv1a64AppendU32( nHash, bits ); }
 
 uint32_t readU32Unaligned( const uint8_t *pBytes, const size_t nOffset ) {
 	uint32_t value = 0u;
@@ -66,9 +58,7 @@ uint16_t readU16Unaligned( const uint8_t *pBytes, const size_t nOffset ) {
 	return value;
 }
 
-uint8_t colorToByte( const float fValue ) {
-	return ( uint8_t ) ( CLAMP( Math::round( fValue * TERRAIN3D_BYTE_MAX_FLOAT ), 0.0f, TERRAIN3D_BYTE_MAX_FLOAT ) );
-}
+EA_FORCE_INLINE uint8_t colorToByte( const float fValue ) { return ( uint8_t ) ( CLAMP( Math::round( fValue * TERRAIN3D_BYTE_MAX_FLOAT ), 0.0f, TERRAIN3D_BYTE_MAX_FLOAT ) ); }
 
 void fillFarSurfaceEmpty( PackedByteArray &rBytes ) {
 	uint8_t *pWrite = rBytes.ptrw();

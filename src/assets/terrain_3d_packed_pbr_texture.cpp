@@ -3,16 +3,14 @@
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/core/class_db.hpp>
 
+#include "core/terrain_3d_compiler.h"
 #include "core/logger.h"
 #include "assets/terrain_3d_packed_pbr_texture.h"
 #include "core/terrain_3d_util.h"
 
 namespace {
 
-bool terrain3dIsPackedSurfaceFormat( const Image::Format format ) {
-	return format == Image::FORMAT_RGBA8 || format == Image::FORMAT_DXT5 ||
-		format == Image::FORMAT_BPTC_RGBA;
-}
+EA_FORCE_INLINE bool terrain3dIsPackedSurfaceFormat( const Image::Format format ) { return format == Image::FORMAT_RGBA8 || format == Image::FORMAT_DXT5 || format == Image::FORMAT_BPTC_RGBA; }
 
 } // namespace
 
@@ -238,10 +236,7 @@ void T3DPackedPBRTexture::setInvertNormalGreen( const bool bEnabled ) {
 	invalidate();
 }
 
-static int32_t sanitizeSurfaceChannel( int32_t nChannel ) {
-	return CLAMP( nChannel, ( int32_t ) ( T3DPackedPBRTexture::CHANNEL_RED ),
-				 ( int32_t ) ( T3DPackedPBRTexture::CHANNEL_ALPHA ) );
-}
+EA_FORCE_INLINE static int32_t sanitizeSurfaceChannel( int32_t nChannel ) { return CLAMP( nChannel, ( int32_t ) ( T3DPackedPBRTexture::CHANNEL_RED ), ( int32_t ) ( T3DPackedPBRTexture::CHANNEL_ALPHA ) ); }
 
 void T3DPackedPBRTexture::setRoughnessChannel( const int32_t nChannel ) {
 	const int32_t channel = sanitizeSurfaceChannel( nChannel );

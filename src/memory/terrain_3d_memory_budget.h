@@ -66,9 +66,7 @@ typedef struct t3dmemoryBudgetResult_s {
 } t3dmemoryBudgetResult_t;
 
 class T3DMemoryBudgetCoordinator {
-	static uint64_t clampToCap( const uint64_t nBytes, const uint64_t nCap ) {
-		return nBytes > nCap ? nCap : nBytes;
-	}
+	EA_FORCE_INLINE static uint64_t clampToCap( const uint64_t nBytes, const uint64_t nCap ) { return nBytes > nCap ? nCap : nBytes; }
 
 public:
 	static t3dmemoryBudgetResult_t calculate( const t3dmemoryBudgetInput_t &rInput ) {

@@ -5,6 +5,7 @@
 #ifndef TERRAIN3D_GPU_REGION_CACHE_H
 #define TERRAIN3D_GPU_REGION_CACHE_H
 
+#include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
 #include "assets/generated_texture.h"
 #include "streaming/terrain_3d_gpu_cache_constants.h"
@@ -87,7 +88,7 @@ public:
 		T3DCpuRegionCache &rCpuRegionCache
 	);
 
-	void setTerrain( T3DTerrain *pTerrain ) { m_pTerrain = pTerrain; }
+	EA_FORCE_INLINE void setTerrain( T3DTerrain *pTerrain ) { m_pTerrain = pTerrain; }
 	void setDefaultMaps(
 		const Ref<Image> &rHeight, const Ref<Image> &rControl,
 		const Ref<Image> &rColor, const Ref<Image> &rDerived,
@@ -111,20 +112,20 @@ public:
 		T3DCompute *pCompute = nullptr
 	);
 	void armPendingRetirements( void );
-	void markSelectionDirty( void ) { m_bGpuRegionCacheSelectionDirty = true; }
+	EA_FORCE_INLINE void markSelectionDirty( void ) { m_bGpuRegionCacheSelectionDirty = true; }
 
-	bool isEnabled( void ) const { return m_bGpuRegionCacheEnabled; }
-	bool isTexturesReady( void ) const { return m_bGpuRegionCacheTexturesReady; }
-	bool isSelectionDirty( void ) const { return m_bGpuRegionCacheSelectionDirty; }
-	bool isResident( const Vector2i &vLocation ) const { return findGpuRegionSlot( vLocation ) >= 0; }
-	int getLayerForLocation( const Vector2i &vLocation ) const { return findGpuRegionSlot( vLocation ); }
-	int getCapacity( void ) const { return m_nGpuRegionCacheCapacity; }
-	int getPhysicalLayerCount( void ) const { return m_nGpuRegionPhysicalLayerCount; }
-	int getResidentCount( void ) const { return m_nGpuRegionResidentCount; }
-	int getRequiredRadius( void ) const { return calculateGpuRegionRequiredRadius(); }
-	int getAuthoringBudgetMb( void ) const { return calculateAuthoringGpuRegionBudgetMb(); }
-	int getUploadBudgetLayers( void ) const { return m_nGpuRegionUploadBudgetLayers; }
-	uint32_t getStallFlagsLastTick( void ) const { return m_nGpuRegionStallFlagsLastTick; }
+	EA_FORCE_INLINE bool isEnabled( void ) const { return m_bGpuRegionCacheEnabled; }
+	EA_FORCE_INLINE bool isTexturesReady( void ) const { return m_bGpuRegionCacheTexturesReady; }
+	EA_FORCE_INLINE bool isSelectionDirty( void ) const { return m_bGpuRegionCacheSelectionDirty; }
+	EA_FORCE_INLINE bool isResident( const Vector2i &vLocation ) const { return findGpuRegionSlot( vLocation ) >= 0; }
+	EA_FORCE_INLINE int getLayerForLocation( const Vector2i &vLocation ) const { return findGpuRegionSlot( vLocation ); }
+	EA_FORCE_INLINE int getCapacity( void ) const { return m_nGpuRegionCacheCapacity; }
+	EA_FORCE_INLINE int getPhysicalLayerCount( void ) const { return m_nGpuRegionPhysicalLayerCount; }
+	EA_FORCE_INLINE int getResidentCount( void ) const { return m_nGpuRegionResidentCount; }
+	EA_FORCE_INLINE int getRequiredRadius( void ) const { return calculateGpuRegionRequiredRadius(); }
+	EA_FORCE_INLINE int getAuthoringBudgetMb( void ) const { return calculateAuthoringGpuRegionBudgetMb(); }
+	EA_FORCE_INLINE int getUploadBudgetLayers( void ) const { return m_nGpuRegionUploadBudgetLayers; }
+	EA_FORCE_INLINE uint32_t getStallFlagsLastTick( void ) const { return m_nGpuRegionStallFlagsLastTick; }
 	bool isColorChannelEnabled( void ) const;
 	bool isDerivedChannelEnabled( void ) const;
 	int calculateRequiredCorePagesForLods( int nDetailLods ) const;
@@ -133,14 +134,14 @@ public:
 	bool isAuthoringReadbackSafe( void ) const;
 	int fillMaterialPriorityIds( uint8_t *pIds, int nCapacity ) const;
 
-	RID getHeightMapsRid( void ) const { return m_generatedHeightMaps.getRid(); }
-	RID getControlMapsRid( void ) const { return m_generatedControlMaps.getRid(); }
-	RID getColorMapsRid( void ) const { return m_generatedColorMaps.getRid(); }
-	RID getDerivedMapsRid( void ) const { return m_generatedDerivedMaps.getRid(); }
-	RID getMiddleCompositeMapsRid( void ) const { return m_generatedMiddleCompositeMaps.getRid(); }
+	EA_FORCE_INLINE RID getHeightMapsRid( void ) const { return m_generatedHeightMaps.getRid(); }
+	EA_FORCE_INLINE RID getControlMapsRid( void ) const { return m_generatedControlMaps.getRid(); }
+	EA_FORCE_INLINE RID getColorMapsRid( void ) const { return m_generatedColorMaps.getRid(); }
+	EA_FORCE_INLINE RID getDerivedMapsRid( void ) const { return m_generatedDerivedMaps.getRid(); }
+	EA_FORCE_INLINE RID getMiddleCompositeMapsRid( void ) const { return m_generatedMiddleCompositeMaps.getRid(); }
 	TypedArray<Vector2i> getRenderRegionSlots( void ) const;
 	int getSlotStateForLocation( const Vector2i &vLocation ) const;
-	const uint16_t *getRegionMapData( void ) const { return m_szGpuRegionMap; }
+	EA_FORCE_INLINE const uint16_t *getRegionMapData( void ) const { return m_szGpuRegionMap; }
 
 	size_t estimateLayerBytes( void ) const;
 	size_t estimateSharedBytes( void ) const;
@@ -149,7 +150,7 @@ public:
 	size_t getHardCapBytes( void ) const;
 	T3DGpuRegionCacheStats getStats( void ) const;
 	Dictionary getStatsDictionary( bool bDetailed ) const;
-	void recordPageTableUpdate( void ) { ++m_nGpuRegionPageTableUpdatesLastTick; }
+	EA_FORCE_INLINE void recordPageTableUpdate( void ) { ++m_nGpuRegionPageTableUpdatesLastTick; }
 
 private:
 	T3DRegionRepository &m_regionRepository;
@@ -286,7 +287,7 @@ private:
 	) const;
 	bool serviceRuntimePages( const T3DResidencyFrameState &rFrame );
 	static bool isRuntimePageWanted( void *pContext, const Vector2i &rLocation );
-	void notePageTableChanged( void ) { m_bPageTableChangedThisTick = true; }
+	EA_FORCE_INLINE void notePageTableChanged( void ) { m_bPageTableChangedThisTick = true; }
 };
 
 #endif // TERRAIN3D_GPU_REGION_CACHE_H

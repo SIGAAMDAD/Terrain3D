@@ -1,6 +1,7 @@
 #include <godot_cpp/classes/os.hpp>
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "core/terrain_3d_compiler.h"
 #include "authoring/terrain_3d_erosion_job.h"
 #include "core/terrain_3d_cpp17_compat.h"
 
@@ -44,13 +45,9 @@ typedef struct alignas( 64 ) t3ddecodedHalfBlock_s {
 	}
 } t3ddecodedHalfBlock_t;
 
-inline float clamp01( float fValue ) {
-	return CLAMP( fValue, 0.0f, 1.0f );
-}
+EA_FORCE_INLINE float clamp01( float fValue ) { return CLAMP( fValue, 0.0f, 1.0f ); }
 
-inline float safeDivide( float fNumerator, float fDenominator ) {
-	return fDenominator > TERRAIN3D_EROSION_EPSILON ? fNumerator / fDenominator : 0.0f;
-}
+EA_FORCE_INLINE float safeDivide( float fNumerator, float fDenominator ) { return fDenominator > TERRAIN3D_EROSION_EPSILON ? fNumerator / fDenominator : 0.0f; }
 
 inline uint32_t hashU32( uint64_t nSeed, uint64_t iIndex, uint64_t nStep = 0 ) {
 	uint64_t value = nSeed ^ ( iIndex + TERRAIN3D_HASH_GOLDEN_RATIO_64 + ( nSeed << 6 ) + ( nSeed >> 2 ) );
@@ -63,19 +60,11 @@ inline uint32_t hashU32( uint64_t nSeed, uint64_t iIndex, uint64_t nStep = 0 ) {
 	return ( uint32_t ) ( value & 0xffffffffULL );
 }
 
-inline float hashUnit( uint64_t nSeed, uint64_t iIndex, uint64_t nStep = 0 ) {
-	return ( float ) ( hashU32( nSeed, iIndex, nStep ) ) / ( float ) ( std::numeric_limits<uint32_t>::max() );
-}
+EA_FORCE_INLINE float hashUnit( uint64_t nSeed, uint64_t iIndex, uint64_t nStep = 0 ) { return ( float ) ( hashU32( nSeed, iIndex, nStep ) ) / ( float ) ( std::numeric_limits<uint32_t>::max() ); }
 
-inline float readRf( const uint8_t *pBytes, size_t iIndex ) {
-	float fValue = 0.0f;
-	std::memcpy( &fValue, pBytes + iIndex * sizeof( float ), sizeof( float ) );
-	return fValue;
-}
+EA_FORCE_INLINE float readRf( const uint8_t *pBytes, size_t iIndex ) { float fValue = 0.0f; std::memcpy( &fValue, pBytes + iIndex * sizeof( float ), sizeof( float ) ); return fValue; }
 
-inline void writeRf( uint8_t *pBytes, size_t iIndex, float fValue ) {
-	std::memcpy( pBytes + iIndex * sizeof( float ), &fValue, sizeof( float ) );
-}
+EA_FORCE_INLINE void writeRf( uint8_t *pBytes, size_t iIndex, float fValue ) { std::memcpy( pBytes + iIndex * sizeof( float ), &fValue, sizeof( float ) ); }
 
 inline int32_t resolveThreadCount( int32_t nRequested ) {
 #if defined( __EMSCRIPTEN__ ) && !defined( __EMSCRIPTEN_PTHREADS__ )
@@ -98,9 +87,7 @@ inline void addMapBytes(
 	}
 }
 
-inline void keepValid( const bool bOperationSucceeded, bool &bValid ) {
-	bValid = bOperationSucceeded && bValid;
-}
+EA_FORCE_INLINE void keepValid( const bool bOperationSucceeded, bool &bValid ) { bValid = bOperationSucceeded && bValid; }
 
 inline bool checkedScaledCount( const size_t nCellCount, const size_t nMultiplier, size_t &nCount ) {
 	if ( nMultiplier == 0u || nCellCount > std::numeric_limits<size_t>::max() / nMultiplier ) {
@@ -121,17 +108,11 @@ inline bool planFloatBuffer(
 	return checkedScaledCount( nCellCount, nMultiplier, count ) && rLayout.addArray<float>( count );
 }
 
-inline bool planHalfBuffer( T3DLinearArenaLayout &rLayout, const bool bEnabled, const size_t nCellCount ) {
-	return !bEnabled || rLayout.addArray<uint16_t>( nCellCount );
-}
+EA_FORCE_INLINE bool planHalfBuffer( T3DLinearArenaLayout &rLayout, const bool bEnabled, const size_t nCellCount ) { return !bEnabled || rLayout.addArray<uint16_t>( nCellCount ); }
 
-inline bool planByteBuffer( T3DLinearArenaLayout &rLayout, const bool bEnabled, const size_t nCellCount ) {
-	return !bEnabled || rLayout.addArray<uint8_t>( nCellCount );
-}
+EA_FORCE_INLINE bool planByteBuffer( T3DLinearArenaLayout &rLayout, const bool bEnabled, const size_t nCellCount ) { return !bEnabled || rLayout.addArray<uint8_t>( nCellCount ); }
 
-inline bool planIndexBuffer( T3DLinearArenaLayout &rLayout, const bool bEnabled, const size_t nCellCount ) {
-	return !bEnabled || rLayout.addArray<int64_t>( nCellCount );
-}
+EA_FORCE_INLINE bool planIndexBuffer( T3DLinearArenaLayout &rLayout, const bool bEnabled, const size_t nCellCount ) { return !bEnabled || rLayout.addArray<int64_t>( nCellCount ); }
 
 inline bool assignFloatBuffer(
 	T3DLinearArena &rArena, T3DArenaBuffer<float> &fBuffer,
@@ -224,13 +205,9 @@ inline void clearFloatBufferIfZero( T3DArenaBuffer<float> &fBuffer ) {
 	}
 }
 
-inline bool planResultFloat( T3DLinearArenaLayout &rLayout, const T3DArenaBuffer<float> &fSource ) {
-	return fSource.empty() || rLayout.addArray<float>( fSource.size() );
-}
+EA_FORCE_INLINE bool planResultFloat( T3DLinearArenaLayout &rLayout, const T3DArenaBuffer<float> &fSource ) { return fSource.empty() || rLayout.addArray<float>( fSource.size() ); }
 
-inline bool planResultByte( T3DLinearArenaLayout &rLayout, const T3DArenaBuffer<uint8_t> &nSource ) {
-	return nSource.empty() || rLayout.addArray<uint8_t>( nSource.size() );
-}
+EA_FORCE_INLINE bool planResultByte( T3DLinearArenaLayout &rLayout, const T3DArenaBuffer<uint8_t> &nSource ) { return nSource.empty() || rLayout.addArray<uint8_t>( nSource.size() ); }
 
 inline bool copyResultFloat(
 	T3DLinearArena &rArena, const T3DArenaBuffer<float> &fSource,
@@ -262,21 +239,13 @@ inline void fnvHashBytes( uint64_t &nHash, const void *pData, const size_t nSize
 	}
 }
 
-inline void fnvHashPackedBytes( uint64_t &nHash, const PackedByteArray &arrData ) {
-	fnvHashBytes( nHash, arrData.ptr(), ( size_t ) ( arrData.size() ) );
-}
+EA_FORCE_INLINE void fnvHashPackedBytes( uint64_t &nHash, const PackedByteArray &arrData ) { fnvHashBytes( nHash, arrData.ptr(), ( size_t ) ( arrData.size() ) ); }
 
-inline void fnvHashU8( uint64_t &nHash, const uint8_t nValue ) {
-	fnvHashBytes( nHash, &nValue, sizeof( nValue ) );
-}
+EA_FORCE_INLINE void fnvHashU8( uint64_t &nHash, const uint8_t nValue ) { fnvHashBytes( nHash, &nValue, sizeof( nValue ) ); }
 
-inline void fnvHashI32( uint64_t &nHash, const int32_t nValue ) {
-	fnvHashBytes( nHash, &nValue, sizeof( nValue ) );
-}
+EA_FORCE_INLINE void fnvHashI32( uint64_t &nHash, const int32_t nValue ) { fnvHashBytes( nHash, &nValue, sizeof( nValue ) ); }
 
-inline void fnvHashF64( uint64_t &nHash, const double fValue ) {
-	fnvHashBytes( nHash, &fValue, sizeof( fValue ) );
-}
+EA_FORCE_INLINE void fnvHashF64( uint64_t &nHash, const double fValue ) { fnvHashBytes( nHash, &fValue, sizeof( fValue ) ); }
 
 inline bool addImageSnapshotBytes( uint64_t &nTotal, const Ref<Image> &rImage ) {
 	if ( rImage.is_null() ) {
@@ -455,9 +424,7 @@ typedef struct t3derosionKernels_s {
 		}
 	}
 
-	static void dispatchDynamic( void *pContext, const size_t nBegin, const size_t nEnd ) {
-		dispatchStatic( pContext, nBegin, nEnd, 0 );
-	}
+	EA_FORCE_INLINE static void dispatchDynamic( void *pContext, const size_t nBegin, const size_t nEnd ) { dispatchStatic( pContext, nBegin, nEnd, 0 ); }
 
 	static void prepareStep(
 		t3derosionKernelContext_t &rContext, const int32_t nStep,
@@ -1395,14 +1362,7 @@ typedef struct t3derosionKernels_s {
 		}
 
 	}
-	static void stratigraphy( t3derosionKernelContext_t *pContext, const size_t begin, const size_t end, const int32_t iWorkerIndex ) {
-		T3DErosionJob *job = pContext->job;
-		( void ) iWorkerIndex;
-
-		terrain3d_simd::updateCumulativeErosion( job->m_active.data() + begin, job->m_initialHeight.data() + begin,
-			job->m_height.data() + begin, job->m_cumulativeErosion.data() + begin, end - begin );
-
-	}
+	EA_FORCE_INLINE static void stratigraphy( t3derosionKernelContext_t *pContext, const size_t begin, const size_t end, const int32_t iWorkerIndex ) { T3DErosionJob *job = pContext->job; ( void ) iWorkerIndex; terrain3d_simd::updateCumulativeErosion( job->m_active.data() + begin, job->m_initialHeight.data() + begin, job->m_height.data() + begin, job->m_cumulativeErosion.data() + begin, end - begin ); }
 	static void exposure( t3derosionKernelContext_t *pContext, const size_t begin, const size_t end, const int32_t iWorkerIndex ) {
 		T3DErosionJob *job = pContext->job;
 		( void ) iWorkerIndex;
@@ -1536,21 +1496,9 @@ typedef struct t3derosionKernels_s {
 	}
 } t3derosionKernels_t;
 
-static void runStaticErosionKernel(
-	const ParallelExecutor &rExecutor, t3derosionKernelContext_t &rContext,
-	const t3derosionKernel_t kernel, const size_t nCount, const size_t nAlignment
-) {
-	rContext.kernel = kernel;
-	rExecutor.runStatic( nCount, nAlignment, t3derosionKernels_t::dispatchStatic, &rContext );
-}
+EA_FORCE_INLINE static void runStaticErosionKernel( const ParallelExecutor &rExecutor, t3derosionKernelContext_t &rContext, const t3derosionKernel_t kernel, const size_t nCount, const size_t nAlignment ) { rContext.kernel = kernel; rExecutor.runStatic( nCount, nAlignment, t3derosionKernels_t::dispatchStatic, &rContext ); }
 
-static void runDynamicErosionKernel(
-	const ParallelExecutor &rExecutor, t3derosionKernelContext_t &rContext,
-	const t3derosionKernel_t kernel, const size_t nCount, const size_t nGrain
-) {
-	rContext.kernel = kernel;
-	rExecutor.run( nCount, nGrain, t3derosionKernels_t::dispatchDynamic, &rContext );
-}
+EA_FORCE_INLINE static void runDynamicErosionKernel( const ParallelExecutor &rExecutor, t3derosionKernelContext_t &rContext, const t3derosionKernel_t kernel, const size_t nCount, const size_t nGrain ) { rContext.kernel = kernel; rExecutor.run( nCount, nGrain, t3derosionKernels_t::dispatchDynamic, &rContext ); }
 
 T3DErosionJob::T3DErosionJob( void ) {
 	std::fill_n( m_szRegionLookup, 1024, ( int32_t ) ( -1 ) );

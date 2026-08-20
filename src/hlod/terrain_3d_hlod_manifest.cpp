@@ -2,21 +2,6 @@
 #include "hlod/terrain_3d_hlod_runtime_codec.h"
 #include <godot_cpp/core/class_db.hpp>
 
-#define HLOD_SET(method, field, type, normalized) \
-void T3DHLODManifest::method( type value ) { auto v = ( normalized ); if ( field == v ) { return; } field = v; emit_changed(); }
-HLOD_SET( setFormat, m_nFormat, int, MAX( value, 1 ) )
-HLOD_SET( setRegionMapSize, m_nRegionMapSize, int, MAX( value, 1 ) )
-HLOD_SET( setRegionSize, m_nRegionSize, int, MAX( value, 1 ) )
-HLOD_SET( setVertexSpacing, m_fVertexSpacing, real_t, MAX( value, 0.001f ) )
-HLOD_SET( setMaxLevel, m_nMaxLevel, int, CLAMP( value, 1, 6 ) )
-HLOD_SET( setBuildSignature, m_nBuildSignature, int64_t, value )
-HLOD_SET( setBuiltUnix, m_nBuiltUnix, int64_t, MAX<int64_t>( value, 0 ) )
-void T3DHLODManifest::setEntries( const Array &rValue ) { m_entries = rValue.duplicate( true ); m_runtimeBlob.clear(); emit_changed(); }
-void T3DHLODManifest::setInstancerMinLevels( const PackedByteArray &rValue ) { m_instancerMinLevels = rValue; m_runtimeBlob.clear(); emit_changed(); }
-void T3DHLODManifest::setNodeRegionIndices( const PackedInt32Array &rValue ) { m_nodeRegionIndices = rValue; m_runtimeBlob.clear(); emit_changed(); }
-void T3DHLODManifest::setNodeSpawnIds( const PackedInt64Array &rValue ) { m_nodeSpawnIds = rValue; m_runtimeBlob.clear(); emit_changed(); }
-void T3DHLODManifest::setNodeMinLevels( const PackedByteArray &rValue ) { m_nodeMinLevels = rValue; m_runtimeBlob.clear(); emit_changed(); }
-void T3DHLODManifest::setRuntimeBlob( const PackedByteArray &rValue ) { m_runtimeBlob = rValue; emit_changed(); }
 bool T3DHLODManifest::compileRuntimeBlob( void ) {
 	PackedByteArray compiled = T3DHLODRuntimeCodec::encode( m_entries, m_instancerMinLevels, m_nodeRegionIndices, m_nodeSpawnIds, m_nodeMinLevels );
 	if ( compiled.is_empty() ) return false;

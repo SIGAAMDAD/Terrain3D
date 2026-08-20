@@ -152,7 +152,7 @@ private:
 	void refreshSpawnId( void );
 
 public:
-	T3DNodeStreamer( void ) {}
+	EA_FORCE_INLINE T3DNodeStreamer( void ) {}
 	~T3DNodeStreamer( void );
 
 	void initialize( T3DTerrain *pTerrain );
@@ -160,12 +160,10 @@ public:
 	void updateResidency( const Vector3 &rTargetPosition, bool bForce = false );
 	void deferUpdateForFrame( void );
 	void suspend( void );
-	void invalidateResidency( void ) { m_center = V2I_MAX; }
+	EA_FORCE_INLINE void invalidateResidency( void ) { m_center = V2I_MAX; }
 
 	void setEnabled( bool bEnabled );
-	bool isEnabled( void ) const {
-		return m_bEnabled;
-	}
+	EA_FORCE_INLINE bool isEnabled( void ) const { return m_bEnabled; }
 	void setRadiusRegions( const int nRadius ) {
 		const int radius = CLAMP( nRadius, 0, 16 );
 		if ( m_nRadiusRegions != radius ) {
@@ -173,47 +171,19 @@ public:
 			m_center = V2I_MAX;
 		}
 	}
-	int getRadiusRegions( void ) const {
-		return m_nRadiusRegions;
-	}
-	void setLoadRegionBudget( const int nBudget ) {
-		m_nLoadRegionBudget = CLAMP( nBudget, 0, 64 );
-	}
-	int getLoadRegionBudget( void ) const {
-		return m_nLoadRegionBudget;
-	}
-	void setRuntimeLoadRegionBudgetOverride( const int nBudget ) {
-		m_nRuntimeLoadRegionBudgetOverride = nBudget < 0 ? -1 : CLAMP( nBudget, 0, 64 );
-	}
-	int getEffectiveLoadRegionBudget( void ) const {
-		return m_nRuntimeLoadRegionBudgetOverride < 0 ? m_nLoadRegionBudget :
-			MIN( m_nLoadRegionBudget, m_nRuntimeLoadRegionBudgetOverride );
-	}
-	void setLoadNodeBudget( const int nBudget ) {
-		m_nLoadNodeBudget = CLAMP( nBudget, 0, 4096 );
-	}
-	int getLoadNodeBudget( void ) const {
-		return m_nLoadNodeBudget;
-	}
-	void setUnloadRegionBudget( const int nBudget ) {
-		m_nUnloadRegionBudget = CLAMP( nBudget, 0, 64 );
-	}
-	int getUnloadRegionBudget( void ) const {
-		return m_nUnloadRegionBudget;
-	}
-	void setRuntimeUnloadRegionBudgetOverride( const int nBudget ) {
-		m_nRuntimeUnloadRegionBudgetOverride = nBudget < 0 ? -1 : CLAMP( nBudget, 0, 64 );
-	}
-	int getEffectiveUnloadRegionBudget( void ) const {
-		return m_nRuntimeUnloadRegionBudgetOverride < 0 ? m_nUnloadRegionBudget :
-			MIN( m_nUnloadRegionBudget, m_nRuntimeUnloadRegionBudgetOverride );
-	}
-	bool isLoadRegionBudgetLimitedLastTick( void ) const {
-		return m_bLoadRegionBudgetLimitedLastTick;
-	}
-	bool isUnloadRegionBudgetLimitedLastTick( void ) const {
-		return m_bUnloadRegionBudgetLimitedLastTick;
-	}
+	EA_FORCE_INLINE int getRadiusRegions( void ) const { return m_nRadiusRegions; }
+	EA_FORCE_INLINE void setLoadRegionBudget( const int nBudget ) { m_nLoadRegionBudget = CLAMP( nBudget, 0, 64 ); }
+	EA_FORCE_INLINE int getLoadRegionBudget( void ) const { return m_nLoadRegionBudget; }
+	EA_FORCE_INLINE void setRuntimeLoadRegionBudgetOverride( const int nBudget ) { m_nRuntimeLoadRegionBudgetOverride = nBudget < 0 ? -1 : CLAMP( nBudget, 0, 64 ); }
+	EA_FORCE_INLINE int getEffectiveLoadRegionBudget( void ) const { return m_nRuntimeLoadRegionBudgetOverride < 0 ? m_nLoadRegionBudget : MIN( m_nLoadRegionBudget, m_nRuntimeLoadRegionBudgetOverride ); }
+	EA_FORCE_INLINE void setLoadNodeBudget( const int nBudget ) { m_nLoadNodeBudget = CLAMP( nBudget, 0, 4096 ); }
+	EA_FORCE_INLINE int getLoadNodeBudget( void ) const { return m_nLoadNodeBudget; }
+	EA_FORCE_INLINE void setUnloadRegionBudget( const int nBudget ) { m_nUnloadRegionBudget = CLAMP( nBudget, 0, 64 ); }
+	EA_FORCE_INLINE int getUnloadRegionBudget( void ) const { return m_nUnloadRegionBudget; }
+	EA_FORCE_INLINE void setRuntimeUnloadRegionBudgetOverride( const int nBudget ) { m_nRuntimeUnloadRegionBudgetOverride = nBudget < 0 ? -1 : CLAMP( nBudget, 0, 64 ); }
+	EA_FORCE_INLINE int getEffectiveUnloadRegionBudget( void ) const { return m_nRuntimeUnloadRegionBudgetOverride < 0 ? m_nUnloadRegionBudget : MIN( m_nUnloadRegionBudget, m_nRuntimeUnloadRegionBudgetOverride ); }
+	EA_FORCE_INLINE bool isLoadRegionBudgetLimitedLastTick( void ) const { return m_bLoadRegionBudgetLimitedLastTick; }
+	EA_FORCE_INLINE bool isUnloadRegionBudgetLimitedLastTick( void ) const { return m_bUnloadRegionBudgetLimitedLastTick; }
 
 	int64_t addStreamedScene(
 		const Ref<PackedScene> &rScene, const Transform3D &rGlobalTransform,
@@ -228,34 +198,15 @@ public:
 	bool removeStreamedScene( int64_t nSpawnId );
 	Dictionary getStats( void ) const;
 	size_t getRetainedCapacityBytes( void ) const;
-	int getActiveRegionCount( void ) const {
-		return m_nActiveRegionCount;
-	}
-	int getActiveNodeCount( void ) const {
-		return m_nActiveNodeCount;
-	}
-	int getLoadingRegionCount( void ) const {
-		return m_nLoadingRegionCount;
-	}
-	bool isResidencyIdle( void ) const {
-		return m_nLoadingRegionCount == 0 && m_nLoadsLastTick == 0 &&
-			m_nNodesActivatedLastTick == 0;
-	}
-	int getMovableNodeCount( void ) const {
-		return ( int ) ( m_movableNodes.size() );
-	}
-	int getLoadsLastTick( void ) const {
-		return m_nLoadsLastTick;
-	}
-	int getUnloadsLastTick( void ) const {
-		return m_nUnloadsLastTick;
-	}
-	int getSceneLoadFailuresLastTick( void ) const {
-		return m_nSceneLoadFailuresLastTick;
-	}
-	uint64_t getRuntimeGeneration( void ) const {
-		return m_nRuntimeGeneration;
-	}
+	EA_FORCE_INLINE int getActiveRegionCount( void ) const { return m_nActiveRegionCount; }
+	EA_FORCE_INLINE int getActiveNodeCount( void ) const { return m_nActiveNodeCount; }
+	EA_FORCE_INLINE int getLoadingRegionCount( void ) const { return m_nLoadingRegionCount; }
+	EA_FORCE_INLINE bool isResidencyIdle( void ) const { return m_nLoadingRegionCount == 0 && m_nLoadsLastTick == 0 && m_nNodesActivatedLastTick == 0; }
+	EA_FORCE_INLINE int getMovableNodeCount( void ) const { return ( int ) ( m_movableNodes.size() ); }
+	EA_FORCE_INLINE int getLoadsLastTick( void ) const { return m_nLoadsLastTick; }
+	EA_FORCE_INLINE int getUnloadsLastTick( void ) const { return m_nUnloadsLastTick; }
+	EA_FORCE_INLINE int getSceneLoadFailuresLastTick( void ) const { return m_nSceneLoadFailuresLastTick; }
+	EA_FORCE_INLINE uint64_t getRuntimeGeneration( void ) const { return m_nRuntimeGeneration; }
 	bool isRegionDesired( const Vector2i &rLocation ) const;
 
 protected:

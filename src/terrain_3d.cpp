@@ -95,9 +95,7 @@ bool terrain3dPerformanceProfileValueMatches(
 	return false;
 }
 
-String terrain3dPerformanceProfileOwnerName( const terrain_3d_profile::t3downer_t owner ) {
-	return owner == terrain_3d_profile::OWNER_MATERIAL ? "T3DMaterial" : "T3DTerrain";
-}
+EA_FORCE_INLINE String terrain3dPerformanceProfileOwnerName( const terrain_3d_profile::t3downer_t owner ) { return owner == terrain_3d_profile::OWNER_MATERIAL ? "T3DMaterial" : "T3DTerrain"; }
 
 #define TERRAIN3D_ALIGN_BAKE_TASK_OFFSET( value ) \
 	( ( ( value ) + TERRAIN3D_BAKE_TASK_ALIGNMENT_ELEMENTS - 1u ) & ~( TERRAIN3D_BAKE_TASK_ALIGNMENT_ELEMENTS - 1u ) )
@@ -2387,10 +2385,7 @@ void T3DTerrain::setDebugLevel( const t3ddebugLevel_t level ) {
 	LOG( T3DTerrain::INFO, "t3dsetting_t debug level: ", s_debugLevel );
 }
 
-static String terrain3dDefaultRegionLightmapOutputDirectory( const String &rDataDirectory ) {
-	const String directory = rDataDirectory.strip_edges().trim_suffix( "/" );
-	return directory.is_empty() ? String() : directory.path_join( "lighting" );
-}
+EA_FORCE_INLINE static String terrain3dDefaultRegionLightmapOutputDirectory( const String &rDataDirectory ) { const String directory = rDataDirectory.strip_edges().trim_suffix( "/" ); return directory.is_empty() ? String() : directory.path_join( "lighting" ); }
 
 void T3DTerrain::setDataDirectory( const String dir ) {
 	if ( m_dataDirectory == dir ) {
@@ -5206,25 +5201,55 @@ void T3DTerrain::setHlodManifestPath( const String &rPath ) {
 	const String value = rPath.strip_edges(); if ( m_hlodManifestPath == value ) { return; }
 	m_hlodManifestPath = value; if ( m_pHlodStreamer ) { m_pHlodStreamer->setManifestPath( value ); }
 }
-void T3DTerrain::setHlodTargetErrorPixels( const real_t fPixels ) { m_fHlodTargetErrorPixels = CLAMP( fPixels, 0.25f, 64.0f ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setTargetErrorPixels( m_fHlodTargetErrorPixels ); } }
-void T3DTerrain::setHlodHysteresis( const real_t fRatio ) { m_fHlodHysteresis = CLAMP( fRatio, 0.0f, 0.75f ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setHysteresis( m_fHlodHysteresis ); } }
-void T3DTerrain::setHlodMaxLevel( const int nLevel ) { m_nHlodMaxLevel = CLAMP( nLevel, 1, 6 ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setMaxLevel( m_nHlodMaxLevel ); } }
-void T3DTerrain::setHlodLoadBudget( const int nBudget ) { m_nHlodLoadBudget = CLAMP( nBudget, 0, 64 ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setLoadBudget( m_nHlodLoadBudget ); } }
-void T3DTerrain::setHlodUnloadBudget( const int nBudget ) { m_nHlodUnloadBudget = CLAMP( nBudget, 0, 64 ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setUnloadBudget( m_nHlodUnloadBudget ); } }
+void T3DTerrain::setHlodTargetErrorPixels( const real_t fPixels ) {
+	m_fHlodTargetErrorPixels = CLAMP( fPixels, 0.25f, 64.0f ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setTargetErrorPixels( m_fHlodTargetErrorPixels ); }
+}
+void T3DTerrain::setHlodHysteresis( const real_t fRatio ) {
+	m_fHlodHysteresis = CLAMP( fRatio, 0.0f, 0.75f ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setHysteresis( m_fHlodHysteresis ); }
+}
+void T3DTerrain::setHlodMaxLevel( const int nLevel ) {
+	m_nHlodMaxLevel = CLAMP( nLevel, 1, 6 ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setMaxLevel( m_nHlodMaxLevel ); }
+}
+void T3DTerrain::setHlodLoadBudget( const int nBudget ) {
+	m_nHlodLoadBudget = CLAMP( nBudget, 0, 64 ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setLoadBudget( m_nHlodLoadBudget ); }
+}
+void T3DTerrain::setHlodUnloadBudget( const int nBudget ) {
+	m_nHlodUnloadBudget = CLAMP( nBudget, 0, 64 ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setUnloadBudget( m_nHlodUnloadBudget ); }
+}
 void T3DTerrain::setHlodMemoryBudgetMb( const int nBudgetMb ) {
 	m_nHlodMemoryBudgetMb = CLAMP( nBudgetMb, 1, 4096 ); markMemoryBudgetDirty();
 	if ( !m_bHlodMemoryBudgetAuto && m_bInitialized ) { serviceMemoryBudgetPolicy( true ); }
 }
-void T3DTerrain::setHlodMaxShadowLevel( const int nLevel ) { m_nHlodMaxShadowLevel = CLAMP( nLevel, 0, 6 ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setMaxShadowLevel( m_nHlodMaxShadowLevel ); } }
-void T3DTerrain::setHlodForcedDebugLevel( const int nLevel ) { m_nHlodForcedDebugLevel = CLAMP( nLevel, -1, 6 ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setForcedDebugLevel( m_nHlodForcedDebugLevel ); } }
-bool T3DTerrain::reloadHlodManifest( void ) { return m_pHlodStreamer && m_pHlodStreamer->reloadManifest(); }
-Dictionary T3DTerrain::getHlodStreamingStats( void ) const { return m_pHlodStreamer ? m_pHlodStreamer->getStats() : Dictionary(); }
-Array T3DTerrain::getHlodDebugEntries( void ) const { return m_pHlodStreamer ? m_pHlodStreamer->getDebugEntries() : Array(); }
-bool T3DTerrain::isHlodRegionSuppressed( const Vector2i &rRegion, const int nMinimumLevel ) const { return m_pHlodStreamer && m_pHlodStreamer->isRegionSuppressed( rRegion, nMinimumLevel ); }
-bool T3DTerrain::isHlodRegionDetailRequired( const Vector2i &rRegion ) const { return !m_pHlodStreamer || m_pHlodStreamer->isRegionDetailRequired( rRegion ); }
-bool T3DTerrain::isHlodRegionManaged( const Vector2i &rRegion ) const { return m_pHlodStreamer && m_pHlodStreamer->isRegionManaged( rRegion ); }
-uint8_t T3DTerrain::getHlodInstancerMinimumLevel( const Vector2i &rRegion, const int nMeshId ) const { return m_pHlodStreamer ? m_pHlodStreamer->getInstancerMinimumLevel( rRegion, nMeshId ) : 0; }
-uint8_t T3DTerrain::getHlodNodeMinimumLevel( const Vector2i &rRegion, const int64_t nSpawnId ) const { return m_pHlodStreamer ? m_pHlodStreamer->getNodeMinimumLevel( rRegion, nSpawnId ) : 0; }
+void T3DTerrain::setHlodMaxShadowLevel( const int nLevel ) {
+	m_nHlodMaxShadowLevel = CLAMP( nLevel, 0, 6 ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setMaxShadowLevel( m_nHlodMaxShadowLevel ); }
+}
+void T3DTerrain::setHlodForcedDebugLevel( const int nLevel ) {
+	m_nHlodForcedDebugLevel = CLAMP( nLevel, -1, 6 ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setForcedDebugLevel( m_nHlodForcedDebugLevel ); }
+}
+bool T3DTerrain::reloadHlodManifest( void ) {
+	return m_pHlodStreamer && m_pHlodStreamer->reloadManifest();
+}
+Dictionary T3DTerrain::getHlodStreamingStats( void ) const {
+	return m_pHlodStreamer ? m_pHlodStreamer->getStats() : Dictionary();
+}
+Array T3DTerrain::getHlodDebugEntries( void ) const {
+	return m_pHlodStreamer ? m_pHlodStreamer->getDebugEntries() : Array();
+}
+bool T3DTerrain::isHlodRegionSuppressed( const Vector2i &rRegion, const int nMinimumLevel ) const {
+	return m_pHlodStreamer && m_pHlodStreamer->isRegionSuppressed( rRegion, nMinimumLevel );
+}
+bool T3DTerrain::isHlodRegionDetailRequired( const Vector2i &rRegion ) const {
+	return !m_pHlodStreamer || m_pHlodStreamer->isRegionDetailRequired( rRegion );
+}
+bool T3DTerrain::isHlodRegionManaged( const Vector2i &rRegion ) const {
+	return m_pHlodStreamer && m_pHlodStreamer->isRegionManaged( rRegion );
+}
+uint8_t T3DTerrain::getHlodInstancerMinimumLevel( const Vector2i &rRegion, const int nMeshId ) const {
+	return m_pHlodStreamer ? m_pHlodStreamer->getInstancerMinimumLevel( rRegion, nMeshId ) : 0;
+}
+uint8_t T3DTerrain::getHlodNodeMinimumLevel( const Vector2i &rRegion, const int64_t nSpawnId ) const {
+	return m_pHlodStreamer ? m_pHlodStreamer->getNodeMinimumLevel( rRegion, nSpawnId ) : 0;
+}
 void T3DTerrain::onHlodRegionRepresentationChanged( const Vector2i &rRegion ) {
 	if ( m_pInstancer ) { m_pInstancer->updateMmis( -1, rRegion, false ); }
 	if ( m_pNodeStreamer ) { m_pNodeStreamer->onHlodRepresentationChanged( rRegion ); }

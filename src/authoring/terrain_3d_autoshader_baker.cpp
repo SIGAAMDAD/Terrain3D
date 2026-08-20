@@ -32,9 +32,7 @@
 #include "core/terrain_3d_util.h"
 
 namespace {
-static bool terrain3dTextureSlotIsPopulated( const Ref<T3DAssets> &rAssets, const uint8_t nTextureId ) {
-	return rAssets.is_valid() && rAssets->getTextureAsset( ( int ) ( nTextureId ) ).is_valid();
-}
+EA_FORCE_INLINE static bool terrain3dTextureSlotIsPopulated( const Ref<T3DAssets> &rAssets, const uint8_t nTextureId ) { return rAssets.is_valid() && rAssets->getTextureAsset( ( int ) ( nTextureId ) ).is_valid(); }
 
 typedef struct t3dmaskSource_s {
 	Ref<Image> pImage;
@@ -45,10 +43,7 @@ typedef struct t3dmaskSource_s {
 	int channel = 0;
 	bool bInvert = false;
 
-	bool valid( void ) const {
-		return nWidth > 0 && nHeight > 0 && !rgba_float_data.is_empty() &&
-			world_rect.size.x != 0.0f && world_rect.size.y != 0.0f;
-	}
+	EA_FORCE_INLINE bool valid( void ) const { return nWidth > 0 && nHeight > 0 && !rgba_float_data.is_empty() && world_rect.size.x != 0.0f && world_rect.size.y != 0.0f; }
 } t3dmaskSource_t;
 
 typedef struct t3druleConfig_s {
@@ -116,9 +111,7 @@ typedef struct t3dclearRegionWork_s {
 	bool changed = false;
 } t3dclearRegionWork_t;
 
-static bool terrain3dRulePriorityGreater( const t3druleConfig_t &rA, const t3druleConfig_t &rB ) {
-	return rA.priority > rB.priority;
-}
+EA_FORCE_INLINE static bool terrain3dRulePriorityGreater( const t3druleConfig_t &rA, const t3druleConfig_t &rB ) { return rA.priority > rB.priority; }
 
 typedef struct t3dmetricNeeds_s {
 	bool bSlope = false;
@@ -179,10 +172,7 @@ typedef struct t3dflowOrderHeightGreater_s {
 	}
 } t3dflowOrderHeightGreater_t;
 
-static Vector2 dictionaryRange( const Dictionary &rDictionary, const StringName &rName, const Vector2 &vDefault ) {
-	const Variant value = rDictionary.get( rName, vDefault );
-	return value.get_type() == Variant::VECTOR2 ? Vector2( value ) : vDefault;
-}
+EA_FORCE_INLINE static Vector2 dictionaryRange( const Dictionary &rDictionary, const StringName &rName, const Vector2 &vDefault ) { const Variant value = rDictionary.get( rName, vDefault ); return value.get_type() == Variant::VECTOR2 ? Vector2( value ) : vDefault; }
 
 static t3dmaskSource_t parseMask( const Dictionary &rProfile, const StringName &rPrefix ) {
 	t3dmaskSource_t result;
@@ -343,16 +333,9 @@ static t3dmetricNeeds_t getMetricNeeds( const eastl::vector<t3druleConfig_t> &rR
 	return needs;
 }
 
-static bool addMetricLayout( T3DLinearArenaLayout &rLayout, const bool bEnabled, const size_t nCount ) {
-	return !bEnabled || rLayout.addArray<float>( nCount );
-}
+EA_FORCE_INLINE static bool addMetricLayout( T3DLinearArenaLayout &rLayout, const bool bEnabled, const size_t nCount ) { return !bEnabled || rLayout.addArray<float>( nCount ); }
 
-static bool allocateMetric(
-	T3DArenaBuffer<float> &fBuffer, T3DLinearArena &rArena, const bool bEnabled,
-	const size_t nCount
-) {
-	return !bEnabled || fBuffer.allocateUninitialized( rArena, nCount );
-}
+EA_FORCE_INLINE static bool allocateMetric( T3DArenaBuffer<float> &fBuffer, T3DLinearArena &rArena, const bool bEnabled, const size_t nCount ) { return !bEnabled || fBuffer.allocateUninitialized( rArena, nCount ); }
 
 static void computeChamferDistance( float *pValues, const int nSize, const float fSpacing ) {
 	for ( int y = 0; y < nSize; ++y ) {
@@ -535,8 +518,7 @@ static bool buildMetrics(
 				rMetrics.flow[index] = 1.0f;
 				rMetrics.flow_order[index] = ( int32_t ) ( index );
 			}
-			std::sort( rMetrics.flow_order.begin(), rMetrics.flow_order.end(),
-				t3dflowOrderHeightGreater_t{rMetrics.height.data()} );
+			EA_FORCE_INLINE std::sort( rMetrics.flow_order.begin(), rMetrics.flow_order.end(), t3dflowOrderHeightGreater_t { rMetrics.height.data() } );
 			float fMaximumFlow = 1.0f;
 			for ( size_t order_index = 0; order_index < count; ++order_index ) {
 				const int index = rMetrics.flow_order[order_index];

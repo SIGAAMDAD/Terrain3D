@@ -7,26 +7,17 @@
 
 #include <cmath>
 #include <cstdint>
+#include "core/terrain_3d_compiler.h"
 
 namespace terrain3d_autoshader_math {
 
-inline float clamp01( const float fValue ) {
-	return fValue < 0.0f ? 0.0f : ( fValue > 1.0f ? 1.0f : fValue );
-}
+EA_FORCE_INLINE float clamp01( const float fValue ) { return fValue < 0.0f ? 0.0f : ( fValue > 1.0f ? 1.0f : fValue ); }
 
-inline float lerp( const float fA, const float fB, const float fWeight ) {
-	return fA + ( fB - fA ) * fWeight;
-}
+EA_FORCE_INLINE float lerp( const float fA, const float fB, const float fWeight ) { return fA + ( fB - fA ) * fWeight; }
 
-inline float smoothCurve( const float fValue ) {
-	const float value = clamp01( fValue );
-	return value * value * ( 3.0f - 2.0f * value );
-}
+EA_FORCE_INLINE float smoothCurve( const float fValue ) { const float value = clamp01( fValue ); return value * value * ( 3.0f - 2.0f * value ); }
 
-inline float smootherCurve( const float fValue ) {
-	const float value = clamp01( fValue );
-	return value * value * value * ( value * ( value * 6.0f - 15.0f ) + 10.0f );
-}
+EA_FORCE_INLINE float smootherCurve( const float fValue ) { const float value = clamp01( fValue ); return value * value * value * ( value * ( value * 6.0f - 15.0f ) + 10.0f ); }
 
 inline float rangeWeight(
 	const float fValue, const float fMinimum, const float fMaximum,
@@ -44,12 +35,7 @@ inline float rangeWeight(
 	return smoothCurve( 1.0f - fDistance / fFalloff );
 }
 
-inline bool ruleCanProcessPixel(
-	const bool bAutoPixel, const bool bOnlyAutoPixels,
-	const bool bOverwriteManual
-) {
-	return bAutoPixel || !bOnlyAutoPixels || bOverwriteManual;
-}
+EA_FORCE_INLINE bool ruleCanProcessPixel( const bool bAutoPixel, const bool bOnlyAutoPixels, const bool bOverwriteManual ) { return bAutoPixel || !bOnlyAutoPixels || bOverwriteManual; }
 
 inline float angleDistanceDegrees( const float fA, const float fB ) {
 	float fDelta = std::fmod( std::fabs( fA - fB ), 360.0f );
@@ -59,20 +45,9 @@ inline float angleDistanceDegrees( const float fA, const float fB ) {
 	return fDelta > 180.0f ? 360.0f - fDelta : fDelta;
 }
 
-inline uint32_t hashU32( uint32_t nValue ) {
-	nValue ^= nValue >> 16u;
-	nValue *= 0x7feb352du;
-	nValue ^= nValue >> 15u;
-	nValue *= 0x846ca68bu;
-	nValue ^= nValue >> 16u;
-	return nValue;
-}
+EA_FORCE_INLINE uint32_t hashU32( uint32_t nValue ) { nValue ^= nValue >> 16u; nValue *= 0x7feb352du; nValue ^= nValue >> 15u; nValue *= 0x846ca68bu; nValue ^= nValue >> 16u; return nValue; }
 
-inline float hash01( const int32_t iX, const int32_t iY, const uint32_t nSeed ) {
-	const uint32_t x = ( uint32_t ) ( iX );
-	const uint32_t y = ( uint32_t ) ( iY );
-	return ( float ) ( hashU32( x * TERRAIN3D_HASH_GOLDEN_RATIO_32 ^ y * TERRAIN3D_HASH_MIX_32 ^ nSeed ) ) / TERRAIN3D_UINT32_MAX_FLOAT;
-}
+EA_FORCE_INLINE float hash01( const int32_t iX, const int32_t iY, const uint32_t nSeed ) { const uint32_t x = ( uint32_t ) ( iX ); const uint32_t y = ( uint32_t ) ( iY ); return ( float ) ( hashU32( x * TERRAIN3D_HASH_GOLDEN_RATIO_32 ^ y * TERRAIN3D_HASH_MIX_32 ^ nSeed ) ) / TERRAIN3D_UINT32_MAX_FLOAT; }
 
 inline float valueNoise( const float fX, const float fY, const uint32_t nSeed ) {
 	const int32_t x0 = ( int32_t ) ( std::floor( fX ) );

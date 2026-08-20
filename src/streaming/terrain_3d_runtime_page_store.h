@@ -161,12 +161,12 @@ public:
 	);
 
 	T3DRuntimePageStats getStats( void ) const;
-	int getPreparedPageCount( void ) const { return m_nPreparedPageCount; }
-	int getPendingPageCount( void ) const { return m_bPrepareJobActive ? m_nPrepareWorkPageCount : 0; }
-	int getQueuedPageCount( void ) const { return m_nQueuedCount; }
-	int getPrepareWorkerCount( void ) const { return m_bPrepareJobActive ? m_nPrepareJobWorkers : 0; }
-	bool isPrepareJobActive( void ) const { return m_bPrepareJobActive; }
-	int getTransientPageCount( void ) const { return m_nPreparedPageCount + m_nPrepareWorkPageCount; }
+	EA_FORCE_INLINE int getPreparedPageCount( void ) const { return m_nPreparedPageCount; }
+	EA_FORCE_INLINE int getPendingPageCount( void ) const { return m_bPrepareJobActive ? m_nPrepareWorkPageCount : 0; }
+	EA_FORCE_INLINE int getQueuedPageCount( void ) const { return m_nQueuedCount; }
+	EA_FORCE_INLINE int getPrepareWorkerCount( void ) const { return m_bPrepareJobActive ? m_nPrepareJobWorkers : 0; }
+	EA_FORCE_INLINE bool isPrepareJobActive( void ) const { return m_bPrepareJobActive; }
+	EA_FORCE_INLINE int getTransientPageCount( void ) const { return m_nPreparedPageCount + m_nPrepareWorkPageCount; }
 
 private:
 	struct PreparedPage {

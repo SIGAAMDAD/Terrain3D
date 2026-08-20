@@ -137,58 +137,34 @@ private:
 	bool shapeAllowsCollision( const Vector2i &rPosition, const int nSize ) const;
 
 public:
-	T3DCollision( void ) {}
-	~T3DCollision( void ) {
-		destroy();
-	}
+	EA_FORCE_INLINE T3DCollision( void ) {}
+	EA_FORCE_INLINE ~T3DCollision( void ) { destroy(); }
 	void initialize( T3DTerrain *pTerrain );
 
 	void build( void );
 	void onRegionMapChanged( void );
-	void resetTargetPosition( void ) {
-		m_lastSnappedPos = V2I_MAX;
-	}
+	EA_FORCE_INLINE void resetTargetPosition( void ) { m_lastSnappedPos = V2I_MAX; }
 	void update( const Vector2i &rRegionLoc = V2I_MAX, const bool bRebuild = false );
 	void destroy( void );
 
 	void setMode( const t3dcollisionMode_t mode );
-	t3dcollisionMode_t getMode( void ) const {
-		return m_mode;
-	}
-	bool isEnabled( void ) const {
-		return m_mode > DISABLED;
-	}
-	bool isEditorMode( void ) const {
-		return m_mode == DYNAMIC_EDITOR || m_mode == FULL_EDITOR;
-	}
-	bool isDynamicMode( void ) const {
-		return m_mode == DYNAMIC_GAME || m_mode == DYNAMIC_EDITOR;
-	}
+	EA_FORCE_INLINE t3dcollisionMode_t getMode( void ) const { return m_mode; }
+	EA_FORCE_INLINE bool isEnabled( void ) const { return m_mode > DISABLED; }
+	EA_FORCE_INLINE bool isEditorMode( void ) const { return m_mode == DYNAMIC_EDITOR || m_mode == FULL_EDITOR; }
+	EA_FORCE_INLINE bool isDynamicMode( void ) const { return m_mode == DYNAMIC_GAME || m_mode == DYNAMIC_EDITOR; }
 
 	void setShapeSize( const uint16_t nSize );
-	uint16_t getShapeSize( void ) const {
-		return m_nShapeSize;
-	}
+	EA_FORCE_INLINE uint16_t getShapeSize( void ) const { return m_nShapeSize; }
 	void setRadius( const uint16_t nRadius );
-	uint16_t getRadius( void ) const {
-		return m_nRadius;
-	}
+	EA_FORCE_INLINE uint16_t getRadius( void ) const { return m_nRadius; }
 	void setLayer( const uint32_t nLayers );
-	uint32_t getLayer( void ) const {
-		return m_layer;
-	}
+	EA_FORCE_INLINE uint32_t getLayer( void ) const { return m_layer; }
 	void setMask( const uint32_t nMask );
-	uint32_t getMask( void ) const {
-		return m_nMask;
-	}
+	EA_FORCE_INLINE uint32_t getMask( void ) const { return m_nMask; }
 	void setPriority( const real_t fPriority );
-	real_t getPriority( void ) const {
-		return m_fPriority;
-	}
+	EA_FORCE_INLINE real_t getPriority( void ) const { return m_fPriority; }
 	void setPhysicsMaterial( const Ref<PhysicsMaterial> &rMat );
-	Ref<PhysicsMaterial> getPhysicsMaterial( void ) const {
-		return m_pPhysicsMaterial;
-	}
+	EA_FORCE_INLINE Ref<PhysicsMaterial> getPhysicsMaterial( void ) const { return m_pPhysicsMaterial; }
 	Dictionary getStats( void ) const;
 	size_t getRetainedBufferBytes( void ) const;
 	RID getRid( void ) const;
@@ -200,13 +176,7 @@ protected:
 using t3dcollisionMode_t = T3DCollision::t3dcollisionMode_t;
 VARIANT_ENUM_CAST( T3DCollision::t3dcollisionMode_t );
 
-inline Vector2i T3DCollision::snapToGrid( const Vector2i &rPos ) const {
-	return Vector2i( intRoundMult( rPos.x, ( int32_t ) ( m_nShapeSize ) ), intRoundMult( rPos.y, ( int32_t ) ( m_nShapeSize ) ) );
-}
+EA_FORCE_INLINE Vector2i T3DCollision::snapToGrid( const Vector2i &rPos ) const { return Vector2i( intRoundMult( rPos.x, ( int32_t ) ( m_nShapeSize ) ), intRoundMult( rPos.y, ( int32_t ) ( m_nShapeSize ) ) ); }
 
-inline Vector2i T3DCollision::snapToGrid( const Vector3 &rPos ) const {
-	return Vector2i( Math::floor( rPos.x / ( real_t ) ( m_nShapeSize ) + 0.5f ),
-					Math::floor( rPos.z / ( real_t ) ( m_nShapeSize ) + 0.5f ) ) *
-		   m_nShapeSize;
-}
+EA_FORCE_INLINE Vector2i T3DCollision::snapToGrid( const Vector3 &rPos ) const { return Vector2i( Math::floor( rPos.x / ( real_t ) ( m_nShapeSize ) + 0.5f ), Math::floor( rPos.z / ( real_t ) ( m_nShapeSize ) + 0.5f ) ) * m_nShapeSize; }
 #endif // TERRAIN3D_COLLISION_CLASS_H

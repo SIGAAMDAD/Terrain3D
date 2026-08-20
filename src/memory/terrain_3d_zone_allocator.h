@@ -4,6 +4,7 @@
 #ifndef TERRAIN3D_ZONE_ALLOCATOR_H
 #define TERRAIN3D_ZONE_ALLOCATOR_H
 
+#include "core/terrain_3d_compiler.h"
 #include "memory/terrain_3d_memory.h"
 #include "memory/terrain_3d_memory_zone.h"
 
@@ -24,8 +25,8 @@ struct alignas( 16 ) t3dzoneOriginHeader_t {
 
 class T3DZoneAllocatorRouter {
 public:
-	static void install( T3DMemoryZone *pZone ) { s_pZone.store( pZone, std::memory_order_release ); }
-	static T3DMemoryZone *zone() { return s_pZone.load( std::memory_order_acquire ); }
+	EA_FORCE_INLINE static void install( T3DMemoryZone *pZone ) { s_pZone.store( pZone, std::memory_order_release ); }
+	EA_FORCE_INLINE static T3DMemoryZone *zone() { return s_pZone.load( std::memory_order_acquire ); }
 	static void *allocate( size_t nBytes, size_t nAlignment ) {
 		if ( nBytes == 0u || nAlignment == 0u || ( nAlignment & ( nAlignment - 1u ) ) != 0u ||
 			nBytes > std::numeric_limits<size_t>::max() - sizeof( t3dzoneOriginHeader_t ) - nAlignment ) return nullptr;
@@ -62,14 +63,11 @@ class T3DZoneAllocator {
 public:
 	using value_type = T;
 	T3DZoneAllocator() = default;
-	template <typename U> T3DZoneAllocator( const T3DZoneAllocator<U> & ) {}
-	T *allocate( const size_t nCount ) {
-		if ( nCount > std::numeric_limits<size_t>::max() / sizeof( T ) ) return nullptr;
-		return static_cast<T *>( T3DZoneAllocatorRouter::allocate( nCount * sizeof( T ), alignof( T ) ) );
-	}
-	void deallocate( T *pMemory, size_t ) { T3DZoneAllocatorRouter::deallocate( pMemory ); }
-	template <typename U> bool operator==( const T3DZoneAllocator<U> & ) const { return true; }
-	template <typename U> bool operator!=( const T3DZoneAllocator<U> & ) const { return false; }
+	template <typename U> EA_FORCE_INLINE T3DZoneAllocator( const T3DZoneAllocator<U> & ) {}
+	EA_FORCE_INLINE T *allocate( const size_t nCount ) { if ( nCount > std::numeric_limits<size_t>::max() / sizeof( T ) ) return nullptr; return static_cast<T *>( T3DZoneAllocatorRouter::allocate( nCount * sizeof( T ), alignof( T ) ) ); }
+	EA_FORCE_INLINE void deallocate( T *pMemory, size_t ) { T3DZoneAllocatorRouter::deallocate( pMemory ); }
+	template <typename U> EA_FORCE_INLINE bool operator==( const T3DZoneAllocator<U> & ) const { return true; }
+	template <typename U> EA_FORCE_INLINE bool operator!=( const T3DZoneAllocator<U> & ) const { return false; }
 };
 
 #endif

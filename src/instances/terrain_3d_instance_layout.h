@@ -4,6 +4,7 @@
 #ifndef TERRAIN3D_INSTANCE_LAYOUT_H
 #define TERRAIN3D_INSTANCE_LAYOUT_H
 
+#include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
 
 #include <cstdint>
@@ -23,13 +24,9 @@ typedef struct t3dinstanceLayout_s {
 			( uint32_t ) ( nCellSize ) * ( uint32_t ) ( cellsPerAxis ) <= TERRAIN3D_INSTANCE_MAX_REGION_SIZE;
 	}
 
-	bool contains( const int iX, const int iY ) const {
-		return iX >= 0 && iY >= 0 && iX < ( int ) ( cellsPerAxis ) && iY < ( int ) ( cellsPerAxis );
-	}
+	EA_FORCE_INLINE bool contains( const int iX, const int iY ) const { return iX >= 0 && iY >= 0 && iX < ( int ) ( cellsPerAxis ) && iY < ( int ) ( cellsPerAxis ); }
 
-	uint32_t maximumCellCount( void ) const {
-		return ( uint32_t ) ( cellsPerAxis ) * ( uint32_t ) ( cellsPerAxis );
-	}
+	EA_FORCE_INLINE uint32_t maximumCellCount( void ) const { return ( uint32_t ) ( cellsPerAxis ) * ( uint32_t ) ( cellsPerAxis ); }
 } t3dinstanceLayout_t;
 
 inline bool terrain3dInstanceLayoutForRegion(

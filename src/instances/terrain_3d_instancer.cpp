@@ -6,6 +6,7 @@
 #include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/classes/world3d.hpp>
 
+#include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
 #include "core/logger.h"
 #include "authoring/terrain_3d_editor.h"
@@ -887,23 +888,9 @@ void T3DInstancer::clearSingleLodTransitionBuckets( void ) {
 	m_singleLodTransitionBuckets.clear();
 }
 
-static real_t terrain3dPointRectMinDistanceSquared(
-	const Vector2 &rPoint, const Vector2 &rMin,
-	const Vector2 &rMax
-) {
-	const real_t fDx = rPoint.x < rMin.x ? rMin.x - rPoint.x : ( rPoint.x > rMax.x ? rPoint.x - rMax.x : 0.0f );
-	const real_t fDy = rPoint.y < rMin.y ? rMin.y - rPoint.y : ( rPoint.y > rMax.y ? rPoint.y - rMax.y : 0.0f );
-	return fDx * fDx + fDy * fDy;
-}
+EA_FORCE_INLINE static real_t terrain3dPointRectMinDistanceSquared( const Vector2 &rPoint, const Vector2 &rMin, const Vector2 &rMax ) { const real_t fDx = rPoint.x < rMin.x ? rMin.x - rPoint.x : ( rPoint.x > rMax.x ? rPoint.x - rMax.x : 0.0f ); const real_t fDy = rPoint.y < rMin.y ? rMin.y - rPoint.y : ( rPoint.y > rMax.y ? rPoint.y - rMax.y : 0.0f ); return fDx * fDx + fDy * fDy; }
 
-static real_t terrain3dPointRectMaxDistanceSquared(
-	const Vector2 &rPoint, const Vector2 &rMin,
-	const Vector2 &rMax
-) {
-	const real_t fDx = MAX( Math::abs( rPoint.x - rMin.x ), Math::abs( rPoint.x - rMax.x ) );
-	const real_t fDy = MAX( Math::abs( rPoint.y - rMin.y ), Math::abs( rPoint.y - rMax.y ) );
-	return fDx * fDx + fDy * fDy;
-}
+EA_FORCE_INLINE static real_t terrain3dPointRectMaxDistanceSquared( const Vector2 &rPoint, const Vector2 &rMin, const Vector2 &rMax ) { const real_t fDx = MAX( Math::abs( rPoint.x - rMin.x ), Math::abs( rPoint.x - rMax.x ) ); const real_t fDy = MAX( Math::abs( rPoint.y - rMin.y ), Math::abs( rPoint.y - rMax.y ) ); return fDx * fDx + fDy * fDy; }
 
 bool T3DInstancer::transitionBucketMayCrossBoundary(
 	const t3dtransitionBucketKey_t &rBucket,

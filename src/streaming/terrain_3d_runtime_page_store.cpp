@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "core/terrain_3d_compiler.h"
 #include "streaming/terrain_3d_runtime_page_store.h"
 
 #include "data/terrain_3d_region.h"
@@ -30,20 +31,11 @@ static void fnv1a64Append( uint64_t &nHash, const uint8_t *pData, const size_t n
 	}
 }
 
-static void fnv1a64AppendU32( uint64_t &nHash, const uint32_t nValue ) {
-	fnv1a64Append( nHash, ( const uint8_t * ) ( &nValue ), sizeof( nValue ) );
-}
+EA_FORCE_INLINE static void fnv1a64AppendU32( uint64_t &nHash, const uint32_t nValue ) { fnv1a64Append( nHash, ( const uint8_t * ) ( &nValue ), sizeof( nValue ) ); }
 
-static void fnv1a64AppendU64( uint64_t &nHash, const uint64_t nValue ) {
-	fnv1a64Append( nHash, ( const uint8_t * ) ( &nValue ), sizeof( nValue ) );
-}
+EA_FORCE_INLINE static void fnv1a64AppendU64( uint64_t &nHash, const uint64_t nValue ) { fnv1a64Append( nHash, ( const uint8_t * ) ( &nValue ), sizeof( nValue ) ); }
 
-static void fnv1a64AppendF32( uint64_t &nHash, const float fValue ) {
-	uint32_t bits = 0u;
-	static_assert( sizeof( bits ) == sizeof( fValue ) );
-	std::memcpy( &bits, &fValue, sizeof( bits ) );
-	fnv1a64AppendU32( nHash, bits );
-}
+EA_FORCE_INLINE static void fnv1a64AppendF32( uint64_t &nHash, const float fValue ) { uint32_t bits = 0u; static_assert( sizeof( bits ) == sizeof( fValue ) ); std::memcpy( &bits, &fValue, sizeof( bits ) ); fnv1a64AppendU32( nHash, bits ); }
 
 static void fnv1a64AppendString( uint64_t &nHash, const String &rValue ) {
 	const CharString utf8 = rValue.utf8();
@@ -442,14 +434,7 @@ static Ref<Image> readImage(
 	return bImageValid ? pImage : Ref<Image>();
 }
 
-static bool validImage(
-	const Ref<Image> &rImage, const int nWidth, const int nHeight,
-	const Image::Format eFormat, const bool bMipmaps
-) {
-	return rImage.is_valid() && !rImage->is_empty() && rImage->get_width() == nWidth &&
-		rImage->get_height() == nHeight && rImage->get_format() == eFormat &&
-		rImage->has_mipmaps() == bMipmaps;
-}
+EA_FORCE_INLINE static bool validImage( const Ref<Image> &rImage, const int nWidth, const int nHeight, const Image::Format eFormat, const bool bMipmaps ) { return rImage.is_valid() && !rImage->is_empty() && rImage->get_width() == nWidth && rImage->get_height() == nHeight && rImage->get_format() == eFormat && rImage->has_mipmaps() == bMipmaps; }
 
 static void updateEditorFile( const String &rPath ) {
 	if ( !IS_EDITOR || !rPath.begins_with( "res://" ) ) {

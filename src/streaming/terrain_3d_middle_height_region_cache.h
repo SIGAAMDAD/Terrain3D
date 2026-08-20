@@ -5,6 +5,7 @@
 #ifndef TERRAIN3D_MIDDLE_HEIGHT_REGION_CACHE_H
 #define TERRAIN3D_MIDDLE_HEIGHT_REGION_CACHE_H
 
+#include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
 #include "assets/generated_texture.h"
 #include "streaming/terrain_3d_gpu_cache_constants.h"
@@ -53,15 +54,15 @@ public:
 	void update( const T3DResidencyFrameState &rFrame, bool bForce, int nEffectiveUploadLayers,
 		const T3DMiddleHeightRegionCacheConfig &rConfig );
 	void invalidate( const Vector2i &vLocation );
-	void markSelectionDirty( void ) { m_bSelectionDirty = true; }
+	EA_FORCE_INLINE void markSelectionDirty( void ) { m_bSelectionDirty = true; }
 
-	RID getHeightMapsRid( void ) const { return m_generatedHeightMaps.getRid(); }
-	RID getRegionMapRid( void ) const { return m_generatedRegionMap.getRid(); }
-	int getResidentCount( void ) const { return m_nResidentCount; }
-	int getMissingRequiredLastTick( void ) const { return m_nMissingRequiredLastTick; }
-	bool isResident( const Vector2i &vLocation ) const { return findSlot( vLocation ) >= 0; }
-	bool isReady( void ) const { return m_bTexturesReady; }
-	bool isSelectionDirty( void ) const { return m_bSelectionDirty; }
+	EA_FORCE_INLINE RID getHeightMapsRid( void ) const { return m_generatedHeightMaps.getRid(); }
+	EA_FORCE_INLINE RID getRegionMapRid( void ) const { return m_generatedRegionMap.getRid(); }
+	EA_FORCE_INLINE int getResidentCount( void ) const { return m_nResidentCount; }
+	EA_FORCE_INLINE int getMissingRequiredLastTick( void ) const { return m_nMissingRequiredLastTick; }
+	EA_FORCE_INLINE bool isResident( const Vector2i &vLocation ) const { return findSlot( vLocation ) >= 0; }
+	EA_FORCE_INLINE bool isReady( void ) const { return m_bTexturesReady; }
+	EA_FORCE_INLINE bool isSelectionDirty( void ) const { return m_bSelectionDirty; }
 	Ref<Image> makeHeightImage( const Vector2i &vLocation, bool bRuntimeResolution = false ) const;
 	T3DMiddleHeightRegionCacheStats getStats( void ) const;
 	Dictionary getStatsDictionary( void ) const;

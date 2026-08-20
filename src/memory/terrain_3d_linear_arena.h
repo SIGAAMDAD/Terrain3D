@@ -5,6 +5,7 @@
 #ifndef TERRAIN3D_LINEAR_ARENA_H
 #define TERRAIN3D_LINEAR_ARENA_H
 
+#include "core/terrain_3d_compiler.h"
 #include "memory/terrain_3d_memory_constants.h"
 
 #include <algorithm>
@@ -48,13 +49,9 @@ bool add( const size_t nBytes, const size_t nAlignment, size_t *pOffset = nullpt
 		return add( nCount * sizeof( T ), std::max<size_t>( alignof( T ), TERRAIN3D_ARENA_CACHELINE_ALIGNMENT ) );
 	}
 
-	size_t size( void ) const {
-		return m_nSize;
-	}
+	EA_FORCE_INLINE size_t size( void ) const { return m_nSize; }
 
-	bool valid( void ) const {
-		return m_bValid;
-	}
+	EA_FORCE_INLINE bool valid( void ) const { return m_bValid; }
 
 private:
 	size_t m_nSize = 0u;
@@ -76,9 +73,7 @@ private:
 class T3DLinearArena {
 public:
 	T3DLinearArena( void ) = default;
-	~T3DLinearArena( void ) {
-		release();
-	}
+	EA_FORCE_INLINE ~T3DLinearArena( void ) { release(); }
 	T3DLinearArena( const T3DLinearArena & ) = delete;
 	T3DLinearArena &operator=( const T3DLinearArena & ) = delete;
 
@@ -131,9 +126,7 @@ public:
 		m_bOwnsBacking = false;
 	}
 
-	void reset( void ) {
-		m_iOffset = 0u;
-	}
+	EA_FORCE_INLINE void reset( void ) { m_iOffset = 0u; }
 
 	void *allocate( const size_t nBytes, const size_t nAlignment ) {
 		if ( nBytes == 0u ) {
@@ -164,9 +157,7 @@ public:
 			nCount * sizeof( T ), std::max<size_t>( alignof( T ), TERRAIN3D_ARENA_CACHELINE_ALIGNMENT ) ) );
 	}
 
-	size_t mark( void ) const {
-		return m_iOffset;
-	}
+	EA_FORCE_INLINE size_t mark( void ) const { return m_iOffset; }
 
 	bool rewind( const size_t nMark ) {
 		if ( nMark > m_iOffset ) {
@@ -176,21 +167,13 @@ public:
 		return true;
 	}
 
-	size_t capacity( void ) const {
-		return m_nCapacity;
-	}
+	EA_FORCE_INLINE size_t capacity( void ) const { return m_nCapacity; }
 
-	size_t used( void ) const {
-		return m_iOffset;
-	}
+	EA_FORCE_INLINE size_t used( void ) const { return m_iOffset; }
 
-	size_t remaining( void ) const {
-		return m_nCapacity - m_iOffset;
-	}
+	EA_FORCE_INLINE size_t remaining( void ) const { return m_nCapacity - m_iOffset; }
 
-	bool valid( void ) const {
-		return m_pBase != nullptr || m_nCapacity == 0u;
-	}
+	EA_FORCE_INLINE bool valid( void ) const { return m_pBase != nullptr || m_nCapacity == 0u; }
 
 private:
 	void *m_pRaw = nullptr;
@@ -237,15 +220,9 @@ public:
 		return true;
 	}
 
-	void clear( void ) {
-		m_pData = nullptr;
-		m_nSize = 0u;
-	}
+	EA_FORCE_INLINE void clear( void ) { m_pData = nullptr; m_nSize = 0u; }
 
-	void swap( T3DArenaBuffer &rOther ) noexcept {
-		std::swap( m_pData, rOther.m_pData );
-		std::swap( m_nSize, rOther.m_nSize );
-	}
+	EA_FORCE_INLINE void swap( T3DArenaBuffer &rOther ) noexcept { std::swap( m_pData, rOther.m_pData ); std::swap( m_nSize, rOther.m_nSize ); }
 
 	bool copyFrom( const T3DArenaBuffer &rOther ) {
 		if ( m_nSize != rOther.m_nSize ) {
@@ -265,37 +242,21 @@ public:
 		return m_pData[iIndex];
 	}
 
-	T *data( void ) {
-		return m_pData;
-	}
+	EA_FORCE_INLINE T *data( void ) { return m_pData; }
 
-	const T *data( void ) const {
-		return m_pData;
-	}
+	EA_FORCE_INLINE const T *data( void ) const { return m_pData; }
 
-	iterator begin( void ) {
-		return m_pData;
-	}
+	EA_FORCE_INLINE iterator begin( void ) { return m_pData; }
 
-	const_iterator begin( void ) const {
-		return m_pData;
-	}
+	EA_FORCE_INLINE const_iterator begin( void ) const { return m_pData; }
 
-	iterator end( void ) {
-		return m_pData ? m_pData + m_nSize : nullptr;
-	}
+	EA_FORCE_INLINE iterator end( void ) { return m_pData ? m_pData + m_nSize : nullptr; }
 
-	const_iterator end( void ) const {
-		return m_pData ? m_pData + m_nSize : nullptr;
-	}
+	EA_FORCE_INLINE const_iterator end( void ) const { return m_pData ? m_pData + m_nSize : nullptr; }
 
-	size_t size( void ) const {
-		return m_nSize;
-	}
+	EA_FORCE_INLINE size_t size( void ) const { return m_nSize; }
 
-	bool empty( void ) const {
-		return m_nSize == 0u;
-	}
+	EA_FORCE_INLINE bool empty( void ) const { return m_nSize == 0u; }
 
 private:
 	T *m_pData = nullptr;

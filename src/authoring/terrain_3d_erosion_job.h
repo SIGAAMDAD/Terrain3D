@@ -111,14 +111,8 @@ typedef enum t3dmaterialTransitionKind_e : uint8_t {
 		Vector2i nSize;
 		PackedByteArray rfData;
 
-		bool isValid( void ) const {
-			return nSize.x > 0 && nSize.y > 0 &&
-				   rfData.size() >= ( int64_t ) ( nSize.x ) * ( int64_t ) ( nSize.y ) * ( int64_t ) ( sizeof( float ) );
-		}
-		void clear( void ) {
-			nSize = Vector2i();
-			rfData.clear();
-		}
+		EA_FORCE_INLINE bool isValid( void ) const { return nSize.x > 0 && nSize.y > 0 && rfData.size() >= ( int64_t ) ( nSize.x ) * ( int64_t ) ( nSize.y ) * ( int64_t ) ( sizeof( float ) ); }
+		EA_FORCE_INLINE void clear( void ) { nSize = Vector2i(); rfData.clear(); }
 	} t3dimageSnapshot_t;
 
 	using FloatBuffer = T3DArenaBuffer<float>;
@@ -509,49 +503,23 @@ public:
 	void setPreviewPaused( bool bPaused );
 	void requestPreviewStep( void );
 	Error apply( T3DData *pData, bool bForce = false );
-	t3djobState_t getState( void ) const {
-		return ( t3djobState_t ) ( m_state.load() );
-	}
-	float getProgress( void ) const {
-		return m_fProgress.load();
-	}
+	EA_FORCE_INLINE t3djobState_t getState( void ) const { return ( t3djobState_t ) ( m_state.load() ); }
+	EA_FORCE_INLINE float getProgress( void ) const { return m_fProgress.load(); }
 	String getStageName( void ) const;
 	String getErrorMessage( void ) const;
 	bool isComplete( void ) const;
 	bool isSourceUnchanged( T3DData *pData ) const;
-	bool wasCancelled( void ) const {
-		return m_state.load() == STATE_CANCELLED;
-	}
-	int32_t getEffectiveResolutionScale( void ) const {
-		return m_resolutionScale;
-	}
-	int32_t getCompletedSteps( void ) const {
-		return m_nCompletedSteps.load();
-	}
-	bool isLivePreviewEnabled( void ) const {
-		return m_config.bLivePreviewEnabled;
-	}
-	bool isPreviewPaused( void ) const {
-		return m_bPreviewPaused.load();
-	}
-	bool isPreviewWaiting( void ) const {
-		return m_bPreviewWaiting.load();
-	}
-	int32_t getPreviewRevision( void ) const {
-		return m_previewRevision.load();
-	}
-	int32_t getPreviewStep( void ) const {
-		return m_previewStep.load();
-	}
-	int32_t getSimulationSteps( void ) const {
-		return m_config.simulationSteps;
-	}
-	int32_t getSimulationRegionSize( void ) const {
-		return m_nSimulationRegionSize;
-	}
-	float getPreviewCellSize( void ) const {
-		return m_fCellSize;
-	}
+	EA_FORCE_INLINE bool wasCancelled( void ) const { return m_state.load() == STATE_CANCELLED; }
+	EA_FORCE_INLINE int32_t getEffectiveResolutionScale( void ) const { return m_resolutionScale; }
+	EA_FORCE_INLINE int32_t getCompletedSteps( void ) const { return m_nCompletedSteps.load(); }
+	EA_FORCE_INLINE bool isLivePreviewEnabled( void ) const { return m_config.bLivePreviewEnabled; }
+	EA_FORCE_INLINE bool isPreviewPaused( void ) const { return m_bPreviewPaused.load(); }
+	EA_FORCE_INLINE bool isPreviewWaiting( void ) const { return m_bPreviewWaiting.load(); }
+	EA_FORCE_INLINE int32_t getPreviewRevision( void ) const { return m_previewRevision.load(); }
+	EA_FORCE_INLINE int32_t getPreviewStep( void ) const { return m_previewStep.load(); }
+	EA_FORCE_INLINE int32_t getSimulationSteps( void ) const { return m_config.simulationSteps; }
+	EA_FORCE_INLINE int32_t getSimulationRegionSize( void ) const { return m_nSimulationRegionSize; }
+	EA_FORCE_INLINE float getPreviewCellSize( void ) const { return m_fCellSize; }
 	Dictionary getStatistics( void ) const;
 	TypedArray<Vector2i> getRegionLocations( void ) const;
 	Ref<Image> getInitialRegionHeightMap( const Vector2i &rRegionLocation, bool bFullResolution = false ) const;

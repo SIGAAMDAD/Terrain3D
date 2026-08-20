@@ -39,7 +39,7 @@ struct T3DStagedRepository {
 	bool bBoundedCpuLoad = false;
 
 	void reset( void );
-	int getRegionCount( void ) const { return ( int ) ( regions.size() ); }
+	EA_FORCE_INLINE int getRegionCount( void ) const { return ( int ) ( regions.size() ); }
 };
 
 struct T3DRegionLoadResult {
@@ -49,7 +49,7 @@ struct T3DRegionLoadResult {
 	Ref<T3DRegion> pRegion;
 	bool bStorageUpgrade = false;
 
-	bool succeeded( void ) const { return error == OK && pRegion.is_valid(); }
+	EA_FORCE_INLINE bool succeeded( void ) const { return error == OK && pRegion.is_valid(); }
 };
 
 struct T3DRegionSaveResult {
@@ -62,7 +62,7 @@ struct T3DRegionSaveResult {
 	bool bSaved = false;
 	bool bSkipped = false;
 
-	bool succeeded( void ) const { return error == OK || error == ERR_SKIP; }
+	EA_FORCE_INLINE bool succeeded( void ) const { return error == OK || error == ERR_SKIP; }
 };
 
 struct T3DDirectorySaveResult {
@@ -121,7 +121,7 @@ public:
 		EnsureRegionResidentFn pEnsureResident = nullptr, void *pResidentContext = nullptr
 	);
 
-	const T3DStartupLoadStats &getStartupLoadStats( void ) const { return m_startupLoadStats; }
+	EA_FORCE_INLINE const T3DStartupLoadStats &getStartupLoadStats( void ) const { return m_startupLoadStats; }
 	Dictionary getStartupLoadStatsDictionary( void ) const;
 
 private:

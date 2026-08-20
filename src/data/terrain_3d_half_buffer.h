@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <cstring>
 
+#include "core/terrain_3d_compiler.h"
 #include "memory/terrain_3d_linear_arena.h"
 
 namespace terrain3d_half {
@@ -91,7 +92,7 @@ public:
 
 	class T3DReference {
 	public:
-		explicit T3DReference( uint16_t *const pStorage ) : m_pStorage( pStorage ) {}
+		EA_FORCE_INLINE explicit T3DReference( uint16_t *const pStorage ) : m_pStorage( pStorage ) {}
 
 		T3DReference &operator=( const float fValue ) {
 			*m_pStorage = terrain3d_half::encode( fValue );
@@ -102,9 +103,7 @@ public:
 			return operator=( ( float ) ( rOther ) );
 		}
 
-		operator float( void ) const {
-			return terrain3d_half::decode( *m_pStorage );
-		}
+		EA_FORCE_INLINE operator float( void ) const { return terrain3d_half::decode( *m_pStorage ); }
 
 	private:
 		uint16_t *m_pStorage = nullptr;
@@ -125,10 +124,7 @@ public:
 		return true;
 	}
 
-	void clear( void ) {
-		m_pData = nullptr;
-		m_nSize = 0u;
-	}
+	EA_FORCE_INLINE void clear( void ) { m_pData = nullptr; m_nSize = 0u; }
 
 	T3DReference operator[]( const size_t iIndex ) {
 		return T3DReference( m_pData + iIndex );
@@ -138,21 +134,13 @@ public:
 		return terrain3d_half::decode( m_pData[iIndex] );
 	}
 
-	size_t size( void ) const {
-		return m_nSize;
-	}
+	EA_FORCE_INLINE size_t size( void ) const { return m_nSize; }
 
-	bool empty( void ) const {
-		return m_nSize == 0u;
-	}
+	EA_FORCE_INLINE bool empty( void ) const { return m_nSize == 0u; }
 
-	uint16_t *data( void ) {
-		return m_pData;
-	}
+	EA_FORCE_INLINE uint16_t *data( void ) { return m_pData; }
 
-	const uint16_t *data( void ) const {
-		return m_pData;
-	}
+	EA_FORCE_INLINE const uint16_t *data( void ) const { return m_pData; }
 
 private:
 	uint16_t *m_pData = nullptr;

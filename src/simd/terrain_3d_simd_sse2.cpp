@@ -1,4 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
+#include "core/terrain_3d_compiler.h"
 #include "simd/terrain_3d_simd_internal.h"
 
 #include "data/terrain_3d_half_buffer.h"
@@ -80,7 +81,7 @@ inline void writeTransform(
 	const t3dpackedTransform_t &rTransform, const uint32_t nColor, const int nStride,
 	float *pDestination
 ) {
-	alignas( 16 ) float fBasis[12] = {};
+	EA_FORCE_INLINE alignas( 16 ) float fBasis[12] = {};
 	_mm_store_ps( fBasis, decode4Exact( rTransform.basis ) );
 	_mm_store_ps( fBasis + 4, decode4Exact( rTransform.basis + 4 ) );
 	fBasis[8] = terrain3d_half::decode( rTransform.basis[8] );

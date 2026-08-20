@@ -5,6 +5,7 @@
 #ifndef TERRAIN3D_INSTANCE_REGION_CACHE_H
 #define TERRAIN3D_INSTANCE_REGION_CACHE_H
 
+#include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
 #include "instances/terrain_3d_instance_cache_constants.h"
 #include "streaming/terrain_3d_residency_state.h"
@@ -55,13 +56,13 @@ public:
 	void update( const T3DResidencyFrameState &rFrame, bool bForce, int nEffectiveLoadPages,
 		T3DInstanceRegionCacheChanges &rChanges );
 
-	bool isEnabled( void ) const { return m_bEnabled; }
-	bool isResident( const Vector2i &vLocation ) const { return !m_bEnabled || findSlot( vLocation ) >= 0; }
-	int getLoadBudgetPages( void ) const { return m_nLoadBudgetPages; }
-	uint32_t getStallFlagsLastTick( void ) const { return m_nStallFlagsLastTick; }
-	bool isSelectionDirty( void ) const { return m_bSelectionDirty; }
-	void markSelectionDirty( void ) { m_bSelectionDirty = true; }
-	size_t getReservedBytes( void ) const { return m_nResidentBytes; }
+	EA_FORCE_INLINE bool isEnabled( void ) const { return m_bEnabled; }
+	EA_FORCE_INLINE bool isResident( const Vector2i &vLocation ) const { return !m_bEnabled || findSlot( vLocation ) >= 0; }
+	EA_FORCE_INLINE int getLoadBudgetPages( void ) const { return m_nLoadBudgetPages; }
+	EA_FORCE_INLINE uint32_t getStallFlagsLastTick( void ) const { return m_nStallFlagsLastTick; }
+	EA_FORCE_INLINE bool isSelectionDirty( void ) const { return m_bSelectionDirty; }
+	EA_FORCE_INLINE void markSelectionDirty( void ) { m_bSelectionDirty = true; }
+	EA_FORCE_INLINE size_t getReservedBytes( void ) const { return m_nResidentBytes; }
 	T3DInstanceRegionCacheStats getStats( void ) const;
 	Dictionary getStatsDictionary( bool bDetailed, int nEffectiveLoadPages ) const;
 

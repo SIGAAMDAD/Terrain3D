@@ -160,13 +160,9 @@ public:
 
 	void clear( void );
 	void setVersion( const real_t fVersion );
-	real_t getVersion( void ) const {
-		return m_fVersion;
-	}
+	EA_FORCE_INLINE real_t getVersion( void ) const { return m_fVersion; }
 	void setRegionSize( const int nRegionSize );
-	int getRegionSize( void ) const {
-		return m_nRegionSize;
-	}
+	EA_FORCE_INLINE int getRegionSize( void ) const { return m_nRegionSize; }
 
 	// Maps
 	void setMap( const t3dmapType_t mapType, const Ref<Image> &rImage );
@@ -175,26 +171,16 @@ public:
 	void setMaps( const TypedArray<Image> &rMaps );
 	TypedArray<Image> getMaps( void ) const;
 	void setHeightMap( const Ref<Image> &rMap );
-	Ref<Image> getHeightMap( void ) const {
-		return m_pHeightMap;
-	}
+	EA_FORCE_INLINE Ref<Image> getHeightMap( void ) const { return m_pHeightMap; }
 	void setControlMap( const Ref<Image> &rMap );
-	Ref<Image> getControlMap( void ) const {
-		return m_pControlMap;
-	}
+	EA_FORCE_INLINE Ref<Image> getControlMap( void ) const { return m_pControlMap; }
 	void setColorMap( const Ref<Image> &rMap );
-	Ref<Image> getColorMap( void ) const {
-		return m_pColorMap;
-	}
+	EA_FORCE_INLINE Ref<Image> getColorMap( void ) const { return m_pColorMap; }
 	Image *getMapPtrForWrite( const t3dmapType_t mapType );
 	Ref<Image> materializeMap( const t3dmapType_t mapType );
-	bool hasMap( const t3dmapType_t mapType ) const {
-		return getMap( mapType ).is_valid();
-	}
+	EA_FORCE_INLINE bool hasMap( const t3dmapType_t mapType ) const { return getMap( mapType ).is_valid(); }
 	void setChannelFlags( const int nFlags );
-	int getChannelFlags( void ) const {
-		return ( int ) ( m_nChannelFlags );
-	}
+	EA_FORCE_INLINE int getChannelFlags( void ) const { return ( int ) ( m_nChannelFlags ); }
 	bool hasChannel( const t3dmapType_t mapType ) const {
 		if ( mapType == TYPE_HEIGHT ) {
 			return true;
@@ -207,19 +193,11 @@ public:
 		}
 		return false;
 	}
-	bool hasDerivedChannel( void ) const {
-		return ( m_nChannelFlags & CHANNEL_DERIVED ) != 0u;
-	}
-	Ref<Image> getDerivedNormalSlopeMap( void ) const {
-		return m_pDerivedNormalSlopeMap;
-	}
-	bool hasValidDerivedNormalSlopeMap( void ) const {
-		return m_bDerivedNormalSlopeValid && m_pDerivedNormalSlopeMap.is_valid();
-	}
+	EA_FORCE_INLINE bool hasDerivedChannel( void ) const { return ( m_nChannelFlags & CHANNEL_DERIVED ) != 0u; }
+	EA_FORCE_INLINE Ref<Image> getDerivedNormalSlopeMap( void ) const { return m_pDerivedNormalSlopeMap; }
+	EA_FORCE_INLINE bool hasValidDerivedNormalSlopeMap( void ) const { return m_bDerivedNormalSlopeValid && m_pDerivedNormalSlopeMap.is_valid(); }
 	void setDerivedNormalSlopeMapInternal( const Ref<Image> &rMap );
-	void invalidateDerivedNormalSlopeMap( void ) {
-		m_bDerivedNormalSlopeValid = false;
-	}
+	EA_FORCE_INLINE void invalidateDerivedNormalSlopeMap( void ) { m_bDerivedNormalSlopeValid = false; }
 	void sanitizeMaps( void );
 	bool isMapDefault( const t3dmapType_t mapType ) const;
 	bool compactMapIfDefault( const t3dmapType_t mapType, const bool bMarkModified = true );
@@ -231,9 +209,7 @@ public:
 	bool validateMapSize( const Ref<Image> &rMap ) const;
 
 	void setHeightRange( const Vector2 &rRange );
-	Vector2 getHeightRange( void ) const {
-		return m_heightRange;
-	}
+	EA_FORCE_INLINE Vector2 getHeightRange( void ) const { return m_heightRange; }
 	void updateHeight( const real_t fHeight );
 	void updateHeights( const Vector2 &rLowHigh );
 	void calcHeightRange( void );
@@ -249,29 +225,22 @@ public:
 	bool evictInstanceStore( void );
 	void adoptPreparedInstanceStoreInternal( T3DInstanceStore &&rStore );
 	void adoptCookedInstanceAccelerationInternal( const PackedByteArray &rMetadata, const PackedByteArray &rFastStart );
-	const PackedByteArray &getCookedInstanceMetadataInternal( void ) const { return m_cookedInstanceMetadata; }
-	const PackedByteArray &getCookedMultimeshFastStartInternal( void ) const { return m_cookedMultimeshFastStart; }
-	void setCookedPageSourceSignatureInternal( const uint64_t nSignature ) { m_nCookedPageSourceSignature = nSignature; }
-	uint64_t getCookedPageSourceSignatureInternal( void ) const { return m_nCookedPageSourceSignature; }
+	EA_FORCE_INLINE const PackedByteArray &getCookedInstanceMetadataInternal( void ) const { return m_cookedInstanceMetadata; }
+	EA_FORCE_INLINE const PackedByteArray &getCookedMultimeshFastStartInternal( void ) const { return m_cookedMultimeshFastStart; }
+	EA_FORCE_INLINE void setCookedPageSourceSignatureInternal( const uint64_t nSignature ) { m_nCookedPageSourceSignature = nSignature; }
+	EA_FORCE_INLINE uint64_t getCookedPageSourceSignatureInternal( void ) const { return m_nCookedPageSourceSignature; }
 	void setCookedInstanceMetadataInternal( const uint32_t *pMeshCounts, uint32_t nInstanceCount, uint16_t nMeshCount );
 	void setCookedStreamedNodeMetadataInternal( uint16_t nCount, const Vector2i &rCoverageMin, const Vector2i &rCoverageMax );
 	void adoptCookedStreamedNodeRuntimeInternal( eastl::vector<t3dstreamedNodeRuntimeDescriptor_t> &&rNodes );
 	void adoptCookedRuntimeMapsInternal( const Ref<Image> &rHeight, const Ref<Image> &rControl, const Ref<Image> &rColor, const Ref<Image> &rDerived );
-	void importRuntimeMapsUnmodifiedInternal( const T3DRegion *pSource ) { importRuntimeMapsUnmodified( pSource ); }
-	void releaseRuntimeMapsUnmodifiedInternal( void ) { releaseRuntimeMapsUnmodified(); }
-	bool hasRuntimeMapPayloadInternal( void ) const { return hasRuntimeMapPayload(); }
-	bool runtimeMapsEvictableInternal( void ) const { return runtimeMapsEvictable(); }
-	void markRuntimeMapsCleanInternal( void ) { markRuntimeMapsClean(); }
-	bool isInstanceStoreResident( void ) const {
-		return m_bInstanceStoreResident;
-	}
-	size_t getInstanceResidentBytes( void ) const {
-		return m_bInstanceStoreResident ? m_instanceStore.residentBytes() +
-			( size_t ) m_cookedInstanceMetadata.size() + ( size_t ) m_cookedMultimeshFastStart.size() : 0u;
-	}
-	size_t getInstancePageBytes( void ) const {
-		return ( size_t ) ( m_instancePage.size() );
-	}
+	EA_FORCE_INLINE void importRuntimeMapsUnmodifiedInternal( const T3DRegion *pSource ) { importRuntimeMapsUnmodified( pSource ); }
+	EA_FORCE_INLINE void releaseRuntimeMapsUnmodifiedInternal( void ) { releaseRuntimeMapsUnmodified(); }
+	EA_FORCE_INLINE bool hasRuntimeMapPayloadInternal( void ) const { return hasRuntimeMapPayload(); }
+	EA_FORCE_INLINE bool runtimeMapsEvictableInternal( void ) const { return runtimeMapsEvictable(); }
+	EA_FORCE_INLINE void markRuntimeMapsCleanInternal( void ) { markRuntimeMapsClean(); }
+	EA_FORCE_INLINE bool isInstanceStoreResident( void ) const { return m_bInstanceStoreResident; }
+	EA_FORCE_INLINE size_t getInstanceResidentBytes( void ) const { return m_bInstanceStoreResident ? m_instanceStore.residentBytes() + ( size_t ) m_cookedInstanceMetadata.size() + ( size_t ) m_cookedMultimeshFastStart.size() : 0u; }
+	EA_FORCE_INLINE size_t getInstancePageBytes( void ) const { return ( size_t ) ( m_instancePage.size() ); }
 	uint32_t getInstanceCount( const int nMeshId = -1 ) const {
 		if ( m_bInstanceStoreResident ) {
 			const size_t count = m_instanceStore.instanceCount( nMeshId );
@@ -286,36 +255,17 @@ public:
 		}
 		return m_nInstanceMeshCount;
 	}
-	const T3DInstanceStore &getInstanceStore( void ) const {
-		ensureInstanceStoreResident();
-		return m_instanceStore;
-	}
-	T3DInstanceStore &getInstanceStoreMut( void ) {
-		ensureInstanceStoreResident();
-		m_bModified = true;
-		m_bInstanceStoreModified = true;
-		return m_instanceStore;
-	}
-	T3DInstanceStore &getInstanceStoreInternal( void ) {
-		ensureInstanceStoreResident();
-		return m_instanceStore;
-	}
-	bool hasInstances( void ) const {
-		return m_bInstanceStoreResident ? !m_instanceStore.empty() : m_nInstanceCount > 0u;
-	}
+	EA_FORCE_INLINE const T3DInstanceStore &getInstanceStore( void ) const { ensureInstanceStoreResident(); return m_instanceStore; }
+	EA_FORCE_INLINE T3DInstanceStore &getInstanceStoreMut( void ) { ensureInstanceStoreResident(); m_bModified = true; m_bInstanceStoreModified = true; return m_instanceStore; }
+	EA_FORCE_INLINE T3DInstanceStore &getInstanceStoreInternal( void ) { ensureInstanceStoreResident(); return m_instanceStore; }
+	EA_FORCE_INLINE bool hasInstances( void ) const { return m_bInstanceStoreResident ? !m_instanceStore.empty() : m_nInstanceCount > 0u; }
 
 	// Dynamic streamed-node descriptors. Each entry stores id, PackedScene,
 	// region-local transform, state Dictionary, and flags.
 	void setStreamedNodes( const Array &rNodes );
-	Array getStreamedNodes( void ) const {
-		return m_streamedNodes.duplicate( true );
-	}
-	const Array &getStreamedNodesInternal( void ) const {
-		return m_streamedNodes;
-	}
-	const eastl::vector<t3dstreamedNodeRuntimeDescriptor_t> &getStreamedNodesRuntimeInternal( void ) const {
-		return m_streamedNodeRuntime;
-	}
+	EA_FORCE_INLINE Array getStreamedNodes( void ) const { return m_streamedNodes.duplicate( true ); }
+	EA_FORCE_INLINE const Array &getStreamedNodesInternal( void ) const { return m_streamedNodes; }
+	EA_FORCE_INLINE const eastl::vector<t3dstreamedNodeRuntimeDescriptor_t> &getStreamedNodesRuntimeInternal( void ) const { return m_streamedNodeRuntime; }
 	const t3dstreamedNodeRuntimeDescriptor_t *findStreamedNodeRuntimeInternal( const int64_t nId ) const;
 	int64_t addStreamedNode(
 		const Ref<PackedScene> &rScene, const Transform3D &rLocalTransform,
@@ -336,54 +286,33 @@ public:
 		const int64_t nId, const Transform3D &rLocalTransform,
 		const Dictionary &rState, const int nFlags
 	);
-	int getStreamedNodeCount( void ) const {
-		return m_streamedNodeRuntime.empty() ? ( int ) ( m_nCookedStreamedNodeCount ) : ( int ) ( m_streamedNodeRuntime.size() );
-	}
+	EA_FORCE_INLINE int getStreamedNodeCount( void ) const { return m_streamedNodeRuntime.empty() ? ( int ) ( m_nCookedStreamedNodeCount ) : ( int ) ( m_streamedNodeRuntime.size() ); }
 	bool streamedNodeCoverageIntersects(
 		const Vector2i &rOwnerLocation,
 		const Vector2i &rTargetMin, const Vector2i &rTargetMax
 	) const;
-	bool hasExtendedStreamedNodeCoverage( void ) const {
-		return m_bStreamedNodeHasExtendedCoverage || m_nCookedStreamedNodeCount > 0u &&
-			( m_cookedStreamedNodeCoverageMin != V2I_ZERO || m_cookedStreamedNodeCoverageMax != V2I_ZERO );
-	}
+	EA_FORCE_INLINE bool hasExtendedStreamedNodeCoverage( void ) const { return m_bStreamedNodeHasExtendedCoverage || m_nCookedStreamedNodeCount > 0u && ( m_cookedStreamedNodeCoverageMin != V2I_ZERO || m_cookedStreamedNodeCoverageMax != V2I_ZERO ); }
 
 	void setLighting( const Ref<T3DRegionLighting> &rLighting );
-	Ref<T3DRegionLighting> getLighting( void ) const { return m_pLighting; }
-	bool hasLighting( void ) const { return m_pLighting.is_valid() && m_pLighting->hasLightData(); }
-	void setVertexSpacing( const real_t fVertexSpacing ) {
-		m_fVertexSpacing = CLAMP( fVertexSpacing, 0.25f, 100.f );
-	}
-	real_t getVertexSpacing( void ) const {
-		return m_fVertexSpacing;
-	}
+	EA_FORCE_INLINE Ref<T3DRegionLighting> getLighting( void ) const { return m_pLighting; }
+	EA_FORCE_INLINE bool hasLighting( void ) const { return m_pLighting.is_valid() && m_pLighting->hasLightData(); }
+	EA_FORCE_INLINE void setVertexSpacing( const real_t fVertexSpacing ) { m_fVertexSpacing = CLAMP( fVertexSpacing, 0.25f, 100.f ); }
+	EA_FORCE_INLINE real_t getVertexSpacing( void ) const { return m_fVertexSpacing; }
 
 	// Working Data
-	void setDeleted( const bool bDeleted ) {
-		m_bDeleted = bDeleted;
-	}
-	bool isDeleted( void ) const {
-		return m_bDeleted;
-	}
-	void setEdited( const bool bEdited ) {
-		m_bEdited = bEdited;
-	}
-	bool isEdited( void ) const {
-		return m_bEdited;
-	}
+	EA_FORCE_INLINE void setDeleted( const bool bDeleted ) { m_bDeleted = bDeleted; }
+	EA_FORCE_INLINE bool isDeleted( void ) const { return m_bDeleted; }
+	EA_FORCE_INLINE void setEdited( const bool bEdited ) { m_bEdited = bEdited; }
+	EA_FORCE_INLINE bool isEdited( void ) const { return m_bEdited; }
 	void setModified( const bool bModified ) {
 		m_bModified = bModified;
 		if ( !bModified ) {
 			m_bRuntimeMapsModified = false;
 		}
 	}
-	bool isModified( void ) const {
-		return m_bModified;
-	}
+	EA_FORCE_INLINE bool isModified( void ) const { return m_bModified; }
 	void setLocation( const Vector2i &rLocation );
-	Vector2i getLocation( void ) const {
-		return m_location;
-	}
+	EA_FORCE_INLINE Vector2i getLocation( void ) const { return m_location; }
 
 	// File I/O
 	Error save( const String &rPath = "", const bool b16Bit = false );

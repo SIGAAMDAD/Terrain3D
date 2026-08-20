@@ -38,37 +38,21 @@ Vector2i location;
 	uint32_t nCachedAabbGeneration = 0;
 	bool bCachedAabbValid = false;
 
-	bool usesColors( void ) const {
-		return !colors.empty();
-	}
+	EA_FORCE_INLINE bool usesColors( void ) const { return !colors.empty(); }
 
-	bool usesOwners( void ) const {
-		return !owners.empty();
-	}
+	EA_FORCE_INLINE bool usesOwners( void ) const { return !owners.empty(); }
 
-	uint32_t getOwner( const size_t iIndex ) const {
-		return owners.empty() || iIndex >= owners.size() ? 0u : owners[iIndex];
-	}
+	EA_FORCE_INLINE uint32_t getOwner( const size_t iIndex ) const { return owners.empty() || iIndex >= owners.size() ? 0u : owners[iIndex]; }
 
-	static uint32_t packColor( const Color &clrColor ) {
-		return clrColor.to_rgba32();
-	}
+	EA_FORCE_INLINE static uint32_t packColor( const Color &clrColor ) { return clrColor.to_rgba32(); }
 
-	static Color unpackColor( const uint32_t nColor ) {
-		return Color::hex( nColor );
-	}
+	EA_FORCE_INLINE static Color unpackColor( const uint32_t nColor ) { return Color::hex( nColor ); }
 
-	Color getColor( const size_t iIndex ) const {
-		return colors.empty() || iIndex >= colors.size() ? Color( 1, 1, 1, 1 ) : unpackColor( colors[iIndex] );
-	}
+	EA_FORCE_INLINE Color getColor( const size_t iIndex ) const { return colors.empty() || iIndex >= colors.size() ? Color( 1, 1, 1, 1 ) : unpackColor( colors[iIndex] ); }
 
-	void setColor( const size_t iIndex, const Color &clrColor ) {
-		colors[iIndex] = packColor( clrColor );
-	}
+	EA_FORCE_INLINE void setColor( const size_t iIndex, const Color &clrColor ) { colors[iIndex] = packColor( clrColor ); }
 
-	void pushColor( const Color &clrColor ) {
-		colors.push_back( packColor( clrColor ) );
-	}
+	EA_FORCE_INLINE void pushColor( const Color &clrColor ) { colors.push_back( packColor( clrColor ) ); }
 
 	void reserve( size_t nCount, bool bColorData, bool bOwnerData = false ) {
 		transforms.reserve( nCount );
@@ -110,11 +94,7 @@ Vector2i location;
 		owners.shrink_to_fit();
 	}
 
-	void compactStorage( void ) {
-		transforms.shrinkToFit();
-		colors.shrink_to_fit();
-		owners.shrink_to_fit();
-	}
+	EA_FORCE_INLINE void compactStorage( void ) { transforms.shrinkToFit(); colors.shrink_to_fit(); owners.shrink_to_fit(); }
 
 	void touch( void ) {
 		bModified = true;
@@ -152,36 +132,20 @@ public:
 	void clear( void );
 	void compactStorage( void );
 
-	void setLayout( const t3dinstanceLayout_t &rLayout ) {
-		m_layout = rLayout;
-	}
-	const t3dinstanceLayout_t &getLayout( void ) const {
-		return m_layout;
-	}
-	bool isValidCell( const Vector2i &rLocation ) const {
-		return m_layout.contains( rLocation.x, rLocation.y );
-	}
-	bool empty( void ) const {
-		return m_meshes.empty();
-	}
-	size_t meshCount( void ) const {
-		return m_meshes.size();
-	}
-	const eastl::vector<t3dinstanceMesh_t> &meshes( void ) const {
-		return m_meshes;
-	}
-	eastl::vector<t3dinstanceMesh_t> &meshesMut( void ) {
-		return m_meshes;
-	}
+	EA_FORCE_INLINE void setLayout( const t3dinstanceLayout_t &rLayout ) { m_layout = rLayout; }
+	EA_FORCE_INLINE const t3dinstanceLayout_t &getLayout( void ) const { return m_layout; }
+	EA_FORCE_INLINE bool isValidCell( const Vector2i &rLocation ) const { return m_layout.contains( rLocation.x, rLocation.y ); }
+	EA_FORCE_INLINE bool empty( void ) const { return m_meshes.empty(); }
+	EA_FORCE_INLINE size_t meshCount( void ) const { return m_meshes.size(); }
+	EA_FORCE_INLINE const eastl::vector<t3dinstanceMesh_t> &meshes( void ) const { return m_meshes; }
+	EA_FORCE_INLINE eastl::vector<t3dinstanceMesh_t> &meshesMut( void ) { return m_meshes; }
 
 	const t3dinstanceMesh_t *findMesh( int nMeshId ) const;
 	t3dinstanceMesh_t *findMesh( int nMeshId );
 	t3dinstanceMesh_t &getOrCreateMesh( int nMeshId, size_t nReserveCells = 0 );
 	bool eraseMesh( int nMeshId );
 	void swapMeshIds( int nSrcId, int nDstId );
-	bool hasMesh( const int nMeshId ) const {
-		return findMesh( nMeshId ) != nullptr;
-	}
+	EA_FORCE_INLINE bool hasMesh( const int nMeshId ) const { return findMesh( nMeshId ) != nullptr; }
 
 	const t3dinstanceCell_t *findCell( int nMeshId, const Vector2i &cell ) const;
 	t3dinstanceCell_t *findCell( int nMeshId, const Vector2i &cell );

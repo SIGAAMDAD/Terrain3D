@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "core/terrain_3d_compiler.h"
 #include "data/terrain_3d_sampler.h"
 #include "core/terrain_3d_cpp17_compat.h"
 
@@ -25,15 +26,7 @@ static bool terrain3dSamplerIsExactVertex( const double fGridX, const double fGr
 	return fDx * fDx + fDz * fDz < 0.0001;
 }
 
-static float terrain3dSamplerBilerp3x3(
-	const float fHeights[3][3], const int iX, const int iZ,
-	const real_t fFx, const real_t fFz
-) {
-	return Math::lerp(
-		Math::lerp( fHeights[iZ][iX], fHeights[iZ][iX + 1], fFx ),
-		Math::lerp( fHeights[iZ + 1][iX], fHeights[iZ + 1][iX + 1], fFx ), fFz
-	);
-}
+EA_FORCE_INLINE static float terrain3dSamplerBilerp3x3( const float fHeights[3][3], const int iX, const int iZ, const real_t fFx, const real_t fFz ) { return Math::lerp( Math::lerp( fHeights[iZ][iX], fHeights[iZ][iX + 1], fFx ), Math::lerp( fHeights[iZ + 1][iX], fHeights[iZ + 1][iX + 1], fFx ), fFz ); }
 } // namespace
 
 void T3DSampler::t3dregionCold_t::reset( void ) {

@@ -11,6 +11,7 @@
 #include <limits>
 
 #include <godot_cpp/classes/worker_thread_pool.hpp>
+#include "core/terrain_3d_compiler.h"
 
 namespace terrain3d_parallel_detail {
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
@@ -55,9 +56,7 @@ private:
 			}
 		}
 
-		static void worker( void *const pUserdata, uint32_t ) {
-			( ( t3ddispatch_s * ) ( pUserdata ) )->process();
-		}
+		EA_FORCE_INLINE static void worker( void *const pUserdata, uint32_t ) { ( ( t3ddispatch_s * ) ( pUserdata ) )->process(); }
 	} t3ddispatch_t;
 
 	typedef struct t3dstaticDispatch_s {
@@ -67,11 +66,7 @@ private:
 		StaticRangeTask task = nullptr;
 		void *pContext = nullptr;
 
-		static size_t partitionPoint( const size_t nCount, const size_t nPart, const size_t nParts ) {
-			const size_t base = nCount / nParts;
-			const size_t extra = nCount % nParts;
-			return base * nPart + std::min( nPart, extra );
-		}
+		EA_FORCE_INLINE static size_t partitionPoint( const size_t nCount, const size_t nPart, const size_t nParts ) { const size_t base = nCount / nParts; const size_t extra = nCount % nParts; return base * nPart + std::min( nPart, extra ); }
 
 		static size_t alignedOffset( const size_t nChunk, const size_t nAlignment, const size_t nLimit ) {
 			if ( nChunk >= nLimit / nAlignment + ( size_t ) ( nLimit % nAlignment != 0u ) ) {
@@ -93,9 +88,7 @@ private:
 			}
 		}
 
-		static void worker( void *const pUserdata, const uint32_t iIndex ) {
-			( ( t3dstaticDispatch_s * ) ( pUserdata ) )->process( ( int32_t ) ( iIndex ) );
-		}
+		EA_FORCE_INLINE static void worker( void *const pUserdata, const uint32_t iIndex ) { ( ( t3dstaticDispatch_s * ) ( pUserdata ) )->process( ( int32_t ) ( iIndex ) ); }
 	} t3dstaticDispatch_t;
 
 	typedef struct t3dtileDispatchContext_s {
@@ -123,8 +116,7 @@ private:
 	}
 
 public:
-	explicit T3DParallelExecutor( const int32_t nTaskLimit )
-		: m_nTaskLimit( std::max( 1, nTaskLimit ) ) {}
+	EA_FORCE_INLINE explicit T3DParallelExecutor( const int32_t nTaskLimit ) : m_nTaskLimit( std::max( 1, nTaskLimit ) ) {}
 
 	void run( const size_t nCount, const size_t nGrain, const RangeTask task, void *const pContext ) const {
 		if ( nCount == 0u || task == nullptr ) {

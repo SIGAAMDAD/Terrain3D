@@ -5,6 +5,7 @@
 #ifndef TERRAIN3D_GPU_CACHE_POLICY_H
 #define TERRAIN3D_GPU_CACHE_POLICY_H
 
+#include "core/terrain_3d_compiler.h"
 #include "streaming/terrain_3d_gpu_cache_constants.h"
 
 #include <cmath>
@@ -28,12 +29,7 @@ typedef struct t3dgpuCacheSelectionStats_s {
 
 typedef bool ( *T3DGpuCacheActiveFn )( int iX, int iY, const void *pContext );
 
-inline bool terrain3dGpuCacheOptionalChannelNeedsUpdate(
-	const uint8_t nSourceFlags,
-	const uint8_t nPhysicalFlags, const uint8_t nChannelMask
-) {
-	return ( ( nSourceFlags | nPhysicalFlags ) & nChannelMask ) != 0u;
-}
+EA_FORCE_INLINE bool terrain3dGpuCacheOptionalChannelNeedsUpdate( const uint8_t nSourceFlags, const uint8_t nPhysicalFlags, const uint8_t nChannelMask ) { return ( ( nSourceFlags | nPhysicalFlags ) & nChannelMask ) != 0u; }
 
 inline size_t terrain3dGpuCacheTexelCount( const int nRegionSize, const int nDivisor ) {
 	if ( nRegionSize <= 0 || nDivisor <= 0 ) {

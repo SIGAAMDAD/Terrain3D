@@ -9,6 +9,7 @@
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/resource.hpp>
 
+#include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
 
 class T3DErosionSettings : public Resource {
@@ -216,661 +217,337 @@ public:
 	~T3DErosionSettings( void ) = default;
 
 	void setSimulationYears( double fValue );
-	double getSimulationYears( void ) const {
-		return m_fSimulationYears;
-	}
+	EA_FORCE_INLINE double getSimulationYears( void ) const { return m_fSimulationYears; }
 	void setSimulationSteps( int32_t nValue );
-	int32_t getSimulationSteps( void ) const {
-		return m_nSimulationSteps;
-	}
+	EA_FORCE_INLINE int32_t getSimulationSteps( void ) const { return m_nSimulationSteps; }
 	void setResolutionScale( int32_t nValue );
-	int32_t getResolutionScale( void ) const {
-		return m_resolutionScale;
-	}
+	EA_FORCE_INLINE int32_t getResolutionScale( void ) const { return m_resolutionScale; }
 	void setAutoAdjustResolution( bool bValue );
-	bool getAutoAdjustResolution( void ) const {
-		return m_bAutoAdjustResolution;
-	}
+	EA_FORCE_INLINE bool getAutoAdjustResolution( void ) const { return m_bAutoAdjustResolution; }
 	void setMemoryBudgetMb( int32_t nValue );
-	int32_t getMemoryBudgetMb( void ) const {
-		return m_nMemoryBudgetMb;
-	}
+	EA_FORCE_INLINE int32_t getMemoryBudgetMb( void ) const { return m_nMemoryBudgetMb; }
 	void setLivePreviewEnabled( bool bValue );
-	bool getLivePreviewEnabled( void ) const {
-		return m_bLivePreviewEnabled;
-	}
+	EA_FORCE_INLINE bool getLivePreviewEnabled( void ) const { return m_bLivePreviewEnabled; }
 	void setLivePreviewIntervalSteps( int32_t nValue );
-	int32_t getLivePreviewIntervalSteps( void ) const {
-		return m_nLivePreviewIntervalSteps;
-	}
+	EA_FORCE_INLINE int32_t getLivePreviewIntervalSteps( void ) const { return m_nLivePreviewIntervalSteps; }
 	void setLivePreviewStartPaused( bool bValue );
-	bool getLivePreviewStartPaused( void ) const {
-		return m_bLivePreviewStartPaused;
-	}
+	EA_FORCE_INLINE bool getLivePreviewStartPaused( void ) const { return m_bLivePreviewStartPaused; }
 	void setThreadCount( int32_t nValue );
-	int32_t getThreadCount( void ) const {
-		return m_nThreadCount;
-	}
+	EA_FORCE_INLINE int32_t getThreadCount( void ) const { return m_nThreadCount; }
 	void setSeed( int64_t nValue );
-	int64_t getSeed( void ) const {
-		return m_seed;
-	}
+	EA_FORCE_INLINE int64_t getSeed( void ) const { return m_seed; }
 	void setBoundaryMode( t3dboundaryMode_t eValue );
-	t3dboundaryMode_t getBoundaryMode( void ) const {
-		return m_boundaryMode;
-	}
+	EA_FORCE_INLINE t3dboundaryMode_t getBoundaryMode( void ) const { return m_boundaryMode; }
 	void setMaxHeightChangePerStep( float fValue );
-	float getMaxHeightChangePerStep( void ) const {
-		return m_fMaxHeightChangePerStep;
-	}
+	EA_FORCE_INLINE float getMaxHeightChangePerStep( void ) const { return m_fMaxHeightChangePerStep; }
 	void setPreserveHoles( bool bValue );
-	bool getPreserveHoles( void ) const {
-		return m_bPreserveHoles;
-	}
+	EA_FORCE_INLINE bool getPreserveHoles( void ) const { return m_bPreserveHoles; }
 	void setApplyHeight( bool bValue );
-	bool getApplyHeight( void ) const {
-		return m_bApplyHeight;
-	}
+	EA_FORCE_INLINE bool getApplyHeight( void ) const { return m_bApplyHeight; }
 	void setHeightOutputStrength( float fValue );
-	float getHeightOutputStrength( void ) const {
-		return m_fHeightOutputStrength;
-	}
+	EA_FORCE_INLINE float getHeightOutputStrength( void ) const { return m_fHeightOutputStrength; }
 	void setGlobalIntensity( float fValue );
-	float getGlobalIntensity( void ) const {
-		return m_fGlobalIntensity;
-	}
+	EA_FORCE_INLINE float getGlobalIntensity( void ) const { return m_fGlobalIntensity; }
 	void setSimulationMask( const Ref<Image> &rValue );
-	Ref<Image> getSimulationMask( void ) const {
-		return m_pSimulationMask;
-	}
+	EA_FORCE_INLINE Ref<Image> getSimulationMask( void ) const { return m_pSimulationMask; }
 	void setSimulationMaskWorldRect( const Rect2 &rValue );
-	Rect2 getSimulationMaskWorldRect( void ) const {
-		return m_simulationMaskWorldRect;
-	}
+	EA_FORCE_INLINE Rect2 getSimulationMaskWorldRect( void ) const { return m_simulationMaskWorldRect; }
 	void setInvertSimulationMask( bool bValue );
-	bool getInvertSimulationMask( void ) const {
-		return m_bInvertSimulationMask;
-	}
+	EA_FORCE_INLINE bool getInvertSimulationMask( void ) const { return m_bInvertSimulationMask; }
 	void setEdgeFadeDistanceM( float fValue );
-	float getEdgeFadeDistanceM( void ) const {
-		return m_fEdgeFadeDistanceM;
-	}
+	EA_FORCE_INLINE float getEdgeFadeDistanceM( void ) const { return m_fEdgeFadeDistanceM; }
 	void setHeightRangeEnabled( bool bValue );
-	bool getHeightRangeEnabled( void ) const {
-		return m_bHeightRangeEnabled;
-	}
+	EA_FORCE_INLINE bool getHeightRangeEnabled( void ) const { return m_bHeightRangeEnabled; }
 	void setMinimumHeightM( float fValue );
-	float getMinimumHeightM( void ) const {
-		return m_fMinimumHeightM;
-	}
+	EA_FORCE_INLINE float getMinimumHeightM( void ) const { return m_fMinimumHeightM; }
 	void setMaximumHeightM( float fValue );
-	float getMaximumHeightM( void ) const {
-		return m_fMaximumHeightM;
-	}
+	EA_FORCE_INLINE float getMaximumHeightM( void ) const { return m_fMaximumHeightM; }
 	void setHeightRangeFalloffM( float fValue );
-	float getHeightRangeFalloffM( void ) const {
-		return m_fHeightRangeFalloffM;
-	}
+	EA_FORCE_INLINE float getHeightRangeFalloffM( void ) const { return m_fHeightRangeFalloffM; }
 
 	void setHydraulicEnabled( bool bValue );
-	bool getHydraulicEnabled( void ) const {
-		return m_bHydraulicEnabled;
-	}
+	EA_FORCE_INLINE bool getHydraulicEnabled( void ) const { return m_bHydraulicEnabled; }
 	void setRainfallMPerYear( float fValue );
-	float getRainfallMPerYear( void ) const {
-		return m_fRainfallMPerYear;
-	}
+	EA_FORCE_INLINE float getRainfallMPerYear( void ) const { return m_fRainfallMPerYear; }
 	void setRainfallVariation( float fValue );
-	float getRainfallVariation( void ) const {
-		return m_fRainfallVariation;
-	}
+	EA_FORCE_INLINE float getRainfallVariation( void ) const { return m_fRainfallVariation; }
 	void setEvaporationFraction( float fValue );
-	float getEvaporationFraction( void ) const {
-		return m_fEvaporationFraction;
-	}
+	EA_FORCE_INLINE float getEvaporationFraction( void ) const { return m_fEvaporationFraction; }
 	void setInfiltrationFraction( float fValue );
-	float getInfiltrationFraction( void ) const {
-		return m_fInfiltrationFraction;
-	}
+	EA_FORCE_INLINE float getInfiltrationFraction( void ) const { return m_fInfiltrationFraction; }
 	void setFlowRate( float fValue );
-	float getFlowRate( void ) const {
-		return m_fFlowRate;
-	}
+	EA_FORCE_INLINE float getFlowRate( void ) const { return m_fFlowRate; }
 	void setSedimentCapacity( float fValue );
-	float getSedimentCapacity( void ) const {
-		return m_fSedimentCapacity;
-	}
+	EA_FORCE_INLINE float getSedimentCapacity( void ) const { return m_fSedimentCapacity; }
 	void setHydraulicErosionMPerYear( float fValue );
-	float getHydraulicErosionMPerYear( void ) const {
-		return m_fHydraulicErosionMPerYear;
-	}
+	EA_FORCE_INLINE float getHydraulicErosionMPerYear( void ) const { return m_fHydraulicErosionMPerYear; }
 	void setHydraulicDepositionRate( float fValue );
-	float getHydraulicDepositionRate( void ) const {
-		return m_fHydraulicDepositionRate;
-	}
+	EA_FORCE_INLINE float getHydraulicDepositionRate( void ) const { return m_fHydraulicDepositionRate; }
 	void setMinimumSlope( float fValue );
-	float getMinimumSlope( void ) const {
-		return m_fMinimumSlope;
-	}
+	EA_FORCE_INLINE float getMinimumSlope( void ) const { return m_fMinimumSlope; }
 	void setStormFrequency( float fValue );
-	float getStormFrequency( void ) const {
-		return m_fStormFrequency;
-	}
+	EA_FORCE_INLINE float getStormFrequency( void ) const { return m_fStormFrequency; }
 	void setStormIntensity( float fValue );
-	float getStormIntensity( void ) const {
-		return m_fStormIntensity;
-	}
+	EA_FORCE_INLINE float getStormIntensity( void ) const { return m_fStormIntensity; }
 	void setChannelIncisionStrength( float fValue );
-	float getChannelIncisionStrength( void ) const {
-		return m_fChannelIncisionStrength;
-	}
+	EA_FORCE_INLINE float getChannelIncisionStrength( void ) const { return m_fChannelIncisionStrength; }
 	void setStandingWaterDepositionRate( float fValue );
-	float getStandingWaterDepositionRate( void ) const {
-		return m_fStandingWaterDepositionRate;
-	}
+	EA_FORCE_INLINE float getStandingWaterDepositionRate( void ) const { return m_fStandingWaterDepositionRate; }
 	void setSedimentSortingEnabled( bool bValue );
-	bool getSedimentSortingEnabled( void ) const {
-		return m_bSedimentSortingEnabled;
-	}
+	EA_FORCE_INLINE bool getSedimentSortingEnabled( void ) const { return m_bSedimentSortingEnabled; }
 	void setCoarseTransportMultiplier( float fValue );
-	float getCoarseTransportMultiplier( void ) const {
-		return m_fCoarseTransportMultiplier;
-	}
+	EA_FORCE_INLINE float getCoarseTransportMultiplier( void ) const { return m_fCoarseTransportMultiplier; }
 	void setSandTransportMultiplier( float fValue );
-	float getSandTransportMultiplier( void ) const {
-		return m_fSandTransportMultiplier;
-	}
+	EA_FORCE_INLINE float getSandTransportMultiplier( void ) const { return m_fSandTransportMultiplier; }
 	void setFineTransportMultiplier( float fValue );
-	float getFineTransportMultiplier( void ) const {
-		return m_fFineTransportMultiplier;
-	}
+	EA_FORCE_INLINE float getFineTransportMultiplier( void ) const { return m_fFineTransportMultiplier; }
 	void setCoarseSettlingRate( float fValue );
-	float getCoarseSettlingRate( void ) const {
-		return m_fCoarseSettlingRate;
-	}
+	EA_FORCE_INLINE float getCoarseSettlingRate( void ) const { return m_fCoarseSettlingRate; }
 	void setSandSettlingRate( float fValue );
-	float getSandSettlingRate( void ) const {
-		return m_fSandSettlingRate;
-	}
+	EA_FORCE_INLINE float getSandSettlingRate( void ) const { return m_fSandSettlingRate; }
 	void setFineSettlingRate( float fValue );
-	float getFineSettlingRate( void ) const {
-		return m_fFineSettlingRate;
-	}
+	EA_FORCE_INLINE float getFineSettlingRate( void ) const { return m_fFineSettlingRate; }
 	void setAlluvialFanEnabled( bool bValue );
-	bool getAlluvialFanEnabled( void ) const {
-		return m_bAlluvialFanEnabled;
-	}
+	EA_FORCE_INLINE bool getAlluvialFanEnabled( void ) const { return m_bAlluvialFanEnabled; }
 	void setAlluvialFanStrength( float fValue );
-	float getAlluvialFanStrength( void ) const {
-		return m_fAlluvialFanStrength;
-	}
+	EA_FORCE_INLINE float getAlluvialFanStrength( void ) const { return m_fAlluvialFanStrength; }
 	void setAlluvialFanSlopeDrop( float fValue );
-	float getAlluvialFanSlopeDrop( void ) const {
-		return m_fAlluvialFanSlopeDrop;
-	}
+	EA_FORCE_INLINE float getAlluvialFanSlopeDrop( void ) const { return m_fAlluvialFanSlopeDrop; }
 	void setAlluvialFanSpread( float fValue );
-	float getAlluvialFanSpread( void ) const {
-		return m_fAlluvialFanSpread;
-	}
+	EA_FORCE_INLINE float getAlluvialFanSpread( void ) const { return m_fAlluvialFanSpread; }
 	void setDebrisFlowEnabled( bool bValue );
-	bool getDebrisFlowEnabled( void ) const {
-		return m_bDebrisFlowEnabled;
-	}
+	EA_FORCE_INLINE bool getDebrisFlowEnabled( void ) const { return m_bDebrisFlowEnabled; }
 	void setDebrisFlowConcentrationThreshold( float fValue );
-	float getDebrisFlowConcentrationThreshold( void ) const {
-		return m_fDebrisFlowConcentrationThreshold;
-	}
+	EA_FORCE_INLINE float getDebrisFlowConcentrationThreshold( void ) const { return m_fDebrisFlowConcentrationThreshold; }
 	void setDebrisFlowSlopeThreshold( float fValue );
-	float getDebrisFlowSlopeThreshold( void ) const {
-		return m_fDebrisFlowSlopeThreshold;
-	}
+	EA_FORCE_INLINE float getDebrisFlowSlopeThreshold( void ) const { return m_fDebrisFlowSlopeThreshold; }
 	void setDebrisFlowRate( float fValue );
-	float getDebrisFlowRate( void ) const {
-		return m_fDebrisFlowRate;
-	}
+	EA_FORCE_INLINE float getDebrisFlowRate( void ) const { return m_fDebrisFlowRate; }
 	void setDebrisFlowDepositionRate( float fValue );
-	float getDebrisFlowDepositionRate( void ) const {
-		return m_fDebrisFlowDepositionRate;
-	}
+	EA_FORCE_INLINE float getDebrisFlowDepositionRate( void ) const { return m_fDebrisFlowDepositionRate; }
 	void setDebrisFlowRunoutCells( int32_t nValue );
-	int32_t getDebrisFlowRunoutCells( void ) const {
-		return m_nDebrisFlowRunoutCells;
-	}
+	EA_FORCE_INLINE int32_t getDebrisFlowRunoutCells( void ) const { return m_nDebrisFlowRunoutCells; }
 
 	void setWeatheringEnabled( bool bValue );
-	bool getWeatheringEnabled( void ) const {
-		return m_bWeatheringEnabled;
-	}
+	EA_FORCE_INLINE bool getWeatheringEnabled( void ) const { return m_bWeatheringEnabled; }
 	void setPhysicalWeatheringMPerYear( float fValue );
-	float getPhysicalWeatheringMPerYear( void ) const {
-		return m_fPhysicalWeatheringMPerYear;
-	}
+	EA_FORCE_INLINE float getPhysicalWeatheringMPerYear( void ) const { return m_fPhysicalWeatheringMPerYear; }
 	void setChemicalWeatheringMPerYear( float fValue );
-	float getChemicalWeatheringMPerYear( void ) const {
-		return m_fChemicalWeatheringMPerYear;
-	}
+	EA_FORCE_INLINE float getChemicalWeatheringMPerYear( void ) const { return m_fChemicalWeatheringMPerYear; }
 	void setFreezeThawStrength( float fValue );
-	float getFreezeThawStrength( void ) const {
-		return m_fFreezeThawStrength;
-	}
+	EA_FORCE_INLINE float getFreezeThawStrength( void ) const { return m_fFreezeThawStrength; }
 	void setTalusAngleDegrees( float fValue );
-	float getTalusAngleDegrees( void ) const {
-		return m_fTalusAngleDegrees;
-	}
+	EA_FORCE_INLINE float getTalusAngleDegrees( void ) const { return m_fTalusAngleDegrees; }
 	void setThermalCreepRate( float fValue );
-	float getThermalCreepRate( void ) const {
-		return m_fThermalCreepRate;
-	}
+	EA_FORCE_INLINE float getThermalCreepRate( void ) const { return m_fThermalCreepRate; }
 	void setBaseHardness( float fValue );
-	float getBaseHardness( void ) const {
-		return m_fBaseHardness;
-	}
+	EA_FORCE_INLINE float getBaseHardness( void ) const { return m_fBaseHardness; }
 	void setHardnessVariation( float fValue );
-	float getHardnessVariation( void ) const {
-		return m_fHardnessVariation;
-	}
+	EA_FORCE_INLINE float getHardnessVariation( void ) const { return m_fHardnessVariation; }
 	void setOxidationEnabled( bool bValue );
-	bool getOxidationEnabled( void ) const {
-		return m_bOxidationEnabled;
-	}
+	EA_FORCE_INLINE bool getOxidationEnabled( void ) const { return m_bOxidationEnabled; }
 	void setOxidationRatePerYear( float fValue );
-	float getOxidationRatePerYear( void ) const {
-		return m_fOxidationRatePerYear;
-	}
+	EA_FORCE_INLINE float getOxidationRatePerYear( void ) const { return m_fOxidationRatePerYear; }
 	void setOxidationWeakening( float fValue );
-	float getOxidationWeakening( void ) const {
-		return m_fOxidationWeakening;
-	}
+	EA_FORCE_INLINE float getOxidationWeakening( void ) const { return m_fOxidationWeakening; }
 	void setWeatheringSlopeBias( float fValue );
-	float getWeatheringSlopeBias( void ) const {
-		return m_fWeatheringSlopeBias;
-	}
+	EA_FORCE_INLINE float getWeatheringSlopeBias( void ) const { return m_fWeatheringSlopeBias; }
 	void setChemicalMoistureExponent( float fValue );
-	float getChemicalMoistureExponent( void ) const {
-		return m_fChemicalMoistureExponent;
-	}
+	EA_FORCE_INLINE float getChemicalMoistureExponent( void ) const { return m_fChemicalMoistureExponent; }
 	void setFreezePoint( float fValue );
-	float getFreezePoint( void ) const {
-		return m_fFreezePoint;
-	}
+	EA_FORCE_INLINE float getFreezePoint( void ) const { return m_fFreezePoint; }
 	void setWetDryEnabled( bool bValue );
-	bool getWetDryEnabled( void ) const {
-		return m_bWetDryEnabled;
-	}
+	EA_FORCE_INLINE bool getWetDryEnabled( void ) const { return m_bWetDryEnabled; }
 	void setWetDryWeatheringMPerCycle( float fValue );
-	float getWetDryWeatheringMPerCycle( void ) const {
-		return m_fWetDryWeatheringMPerCycle;
-	}
+	EA_FORCE_INLINE float getWetDryWeatheringMPerCycle( void ) const { return m_fWetDryWeatheringMPerCycle; }
 	void setWetThreshold( float fValue );
-	float getWetThreshold( void ) const {
-		return m_fWetThreshold;
-	}
+	EA_FORCE_INLINE float getWetThreshold( void ) const { return m_fWetThreshold; }
 	void setDryThreshold( float fValue );
-	float getDryThreshold( void ) const {
-		return m_fDryThreshold;
-	}
+	EA_FORCE_INLINE float getDryThreshold( void ) const { return m_fDryThreshold; }
 	void setSaltWeatheringEnabled( bool bValue );
-	bool getSaltWeatheringEnabled( void ) const {
-		return m_bSaltWeatheringEnabled;
-	}
+	EA_FORCE_INLINE bool getSaltWeatheringEnabled( void ) const { return m_bSaltWeatheringEnabled; }
 	void setSalinityMask( const Ref<Image> &rValue );
-	Ref<Image> getSalinityMask( void ) const {
-		return m_pSalinityMask;
-	}
+	EA_FORCE_INLINE Ref<Image> getSalinityMask( void ) const { return m_pSalinityMask; }
 	void setSalinityWorldRect( const Rect2 &rValue );
-	Rect2 getSalinityWorldRect( void ) const {
-		return m_salinityWorldRect;
-	}
+	EA_FORCE_INLINE Rect2 getSalinityWorldRect( void ) const { return m_salinityWorldRect; }
 	void setBackgroundSalinity( float fValue );
-	float getBackgroundSalinity( void ) const {
-		return m_fBackgroundSalinity;
-	}
+	EA_FORCE_INLINE float getBackgroundSalinity( void ) const { return m_fBackgroundSalinity; }
 	void setSaltWeatheringMPerYear( float fValue );
-	float getSaltWeatheringMPerYear( void ) const {
-		return m_fSaltWeatheringMPerYear;
-	}
+	EA_FORCE_INLINE float getSaltWeatheringMPerYear( void ) const { return m_fSaltWeatheringMPerYear; }
 	void setSaltCrystallizationStrength( float fValue );
-	float getSaltCrystallizationStrength( void ) const {
-		return m_fSaltCrystallizationStrength;
-	}
+	EA_FORCE_INLINE float getSaltCrystallizationStrength( void ) const { return m_fSaltCrystallizationStrength; }
 	void setSaltEvaporationBias( float fValue );
-	float getSaltEvaporationBias( void ) const {
-		return m_fSaltEvaporationBias;
-	}
+	EA_FORCE_INLINE float getSaltEvaporationBias( void ) const { return m_fSaltEvaporationBias; }
 	void setSaltCohesionLoss( float fValue );
-	float getSaltCohesionLoss( void ) const {
-		return m_fSaltCohesionLoss;
-	}
+	EA_FORCE_INLINE float getSaltCohesionLoss( void ) const { return m_fSaltCohesionLoss; }
 	void setExposureAgeEnabled( bool bValue );
-	bool getExposureAgeEnabled( void ) const {
-		return m_bExposureAgeEnabled;
-	}
+	EA_FORCE_INLINE bool getExposureAgeEnabled( void ) const { return m_bExposureAgeEnabled; }
 	void setVarnishMaturationYears( float fValue );
-	float getVarnishMaturationYears( void ) const {
-		return m_fVarnishMaturationYears;
-	}
+	EA_FORCE_INLINE float getVarnishMaturationYears( void ) const { return m_fVarnishMaturationYears; }
 	void setExposureResetDepthM( float fValue );
-	float getExposureResetDepthM( void ) const {
-		return m_fExposureResetDepthM;
-	}
+	EA_FORCE_INLINE float getExposureResetDepthM( void ) const { return m_fExposureResetDepthM; }
 	void setVarnishStabilitySlope( float fValue );
-	float getVarnishStabilitySlope( void ) const {
-		return m_fVarnishStabilitySlope;
-	}
+	EA_FORCE_INLINE float getVarnishStabilitySlope( void ) const { return m_fVarnishStabilitySlope; }
 	void setVarnishOxidationMultiplier( float fValue );
-	float getVarnishOxidationMultiplier( void ) const {
-		return m_fVarnishOxidationMultiplier;
-	}
+	EA_FORCE_INLINE float getVarnishOxidationMultiplier( void ) const { return m_fVarnishOxidationMultiplier; }
 	void setSnowmeltEnabled( bool bValue );
-	bool getSnowmeltEnabled( void ) const {
-		return m_bSnowmeltEnabled;
-	}
+	EA_FORCE_INLINE bool getSnowmeltEnabled( void ) const { return m_bSnowmeltEnabled; }
 	void setSnowfallFraction( float fValue );
-	float getSnowfallFraction( void ) const {
-		return m_fSnowfallFraction;
-	}
+	EA_FORCE_INLINE float getSnowfallFraction( void ) const { return m_fSnowfallFraction; }
 	void setSnowAccumulationTemperature( float fValue );
-	float getSnowAccumulationTemperature( void ) const {
-		return m_fSnowAccumulationTemperature;
-	}
+	EA_FORCE_INLINE float getSnowAccumulationTemperature( void ) const { return m_fSnowAccumulationTemperature; }
 	void setSnowMeltTemperature( float fValue );
-	float getSnowMeltTemperature( void ) const {
-		return m_fSnowMeltTemperature;
-	}
+	EA_FORCE_INLINE float getSnowMeltTemperature( void ) const { return m_fSnowMeltTemperature; }
 	void setSnowMeltFractionPerStep( float fValue );
-	float getSnowMeltFractionPerStep( void ) const {
-		return m_fSnowMeltFractionPerStep;
-	}
+	EA_FORCE_INLINE float getSnowMeltFractionPerStep( void ) const { return m_fSnowMeltFractionPerStep; }
 	void setSnowSublimationFraction( float fValue );
-	float getSnowSublimationFraction( void ) const {
-		return m_fSnowSublimationFraction;
-	}
+	EA_FORCE_INLINE float getSnowSublimationFraction( void ) const { return m_fSnowSublimationFraction; }
 
 	void setWindEnabled( bool bValue );
-	bool getWindEnabled( void ) const {
-		return m_bWindEnabled;
-	}
+	EA_FORCE_INLINE bool getWindEnabled( void ) const { return m_bWindEnabled; }
 	void setWindDirection( const Vector2 &vValue );
-	Vector2 getWindDirection( void ) const {
-		return m_windDirection;
-	}
+	EA_FORCE_INLINE Vector2 getWindDirection( void ) const { return m_windDirection; }
 	void setWindStrength( float fValue );
-	float getWindStrength( void ) const {
-		return m_fWindStrength;
-	}
+	EA_FORCE_INLINE float getWindStrength( void ) const { return m_fWindStrength; }
 	void setWindVariation( float fValue );
-	float getWindVariation( void ) const {
-		return m_fWindVariation;
-	}
+	EA_FORCE_INLINE float getWindVariation( void ) const { return m_fWindVariation; }
 	void setWindErosionMPerYear( float fValue );
-	float getWindErosionMPerYear( void ) const {
-		return m_fWindErosionMPerYear;
-	}
+	EA_FORCE_INLINE float getWindErosionMPerYear( void ) const { return m_fWindErosionMPerYear; }
 	void setWindTransportRate( float fValue );
-	float getWindTransportRate( void ) const {
-		return m_fWindTransportRate;
-	}
+	EA_FORCE_INLINE float getWindTransportRate( void ) const { return m_fWindTransportRate; }
 	void setWindDepositionRate( float fValue );
-	float getWindDepositionRate( void ) const {
-		return m_fWindDepositionRate;
-	}
+	EA_FORCE_INLINE float getWindDepositionRate( void ) const { return m_fWindDepositionRate; }
 	void setWindShelterStrength( float fValue );
-	float getWindShelterStrength( void ) const {
-		return m_fWindShelterStrength;
-	}
+	EA_FORCE_INLINE float getWindShelterStrength( void ) const { return m_fWindShelterStrength; }
 	void setWindThreshold( float fValue );
-	float getWindThreshold( void ) const {
-		return m_fWindThreshold;
-	}
+	EA_FORCE_INLINE float getWindThreshold( void ) const { return m_fWindThreshold; }
 	void setWindTransportDistanceCells( int32_t nValue );
-	int32_t getWindTransportDistanceCells( void ) const {
-		return m_nWindTransportDistanceCells;
-	}
+	EA_FORCE_INLINE int32_t getWindTransportDistanceCells( void ) const { return m_nWindTransportDistanceCells; }
 	void setWindDepositionSlopeBias( float fValue );
-	float getWindDepositionSlopeBias( void ) const {
-		return m_fWindDepositionSlopeBias;
-	}
+	EA_FORCE_INLINE float getWindDepositionSlopeBias( void ) const { return m_fWindDepositionSlopeBias; }
 	void setDuneEnabled( bool bValue );
-	bool getDuneEnabled( void ) const {
-		return m_bDuneEnabled;
-	}
+	EA_FORCE_INLINE bool getDuneEnabled( void ) const { return m_bDuneEnabled; }
 	void setSandReposeAngleDegrees( float fValue );
-	float getSandReposeAngleDegrees( void ) const {
-		return m_fSandReposeAngleDegrees;
-	}
+	EA_FORCE_INLINE float getSandReposeAngleDegrees( void ) const { return m_fSandReposeAngleDegrees; }
 	void setDuneAvalancheRate( float fValue );
-	float getDuneAvalancheRate( void ) const {
-		return m_fDuneAvalancheRate;
-	}
+	EA_FORCE_INLINE float getDuneAvalancheRate( void ) const { return m_fDuneAvalancheRate; }
 	void setDuneRelaxationIterations( int32_t nValue );
-	int32_t getDuneRelaxationIterations( void ) const {
-		return m_nDuneRelaxationIterations;
-	}
+	EA_FORCE_INLINE int32_t getDuneRelaxationIterations( void ) const { return m_nDuneRelaxationIterations; }
 	void setDuneMinSandDepthM( float fValue );
-	float getDuneMinSandDepthM( void ) const {
-		return m_fDuneMinSandDepthM;
-	}
+	EA_FORCE_INLINE float getDuneMinSandDepthM( void ) const { return m_fDuneMinSandDepthM; }
 	void setDesertPavementEnabled( bool bValue );
-	bool getDesertPavementEnabled( void ) const {
-		return m_bDesertPavementEnabled;
-	}
+	EA_FORCE_INLINE bool getDesertPavementEnabled( void ) const { return m_bDesertPavementEnabled; }
 	void setPavementFormationRate( float fValue );
-	float getPavementFormationRate( void ) const {
-		return m_fPavementFormationRate;
-	}
+	EA_FORCE_INLINE float getPavementFormationRate( void ) const { return m_fPavementFormationRate; }
 	void setPavementFineRemovalThreshold( float fValue );
-	float getPavementFineRemovalThreshold( void ) const {
-		return m_fPavementFineRemovalThreshold;
-	}
+	EA_FORCE_INLINE float getPavementFineRemovalThreshold( void ) const { return m_fPavementFineRemovalThreshold; }
 	void setPavementArmorStrength( float fValue );
-	float getPavementArmorStrength( void ) const {
-		return m_fPavementArmorStrength;
-	}
+	EA_FORCE_INLINE float getPavementArmorStrength( void ) const { return m_fPavementArmorStrength; }
 	void setPavementInfiltrationReduction( float fValue );
-	float getPavementInfiltrationReduction( void ) const {
-		return m_fPavementInfiltrationReduction;
-	}
+	EA_FORCE_INLINE float getPavementInfiltrationReduction( void ) const { return m_fPavementInfiltrationReduction; }
 
 	void setWaveEnabled( bool bValue );
-	bool getWaveEnabled( void ) const {
-		return m_bWaveEnabled;
-	}
+	EA_FORCE_INLINE bool getWaveEnabled( void ) const { return m_bWaveEnabled; }
 	void setSeaLevel( float fValue );
-	float getSeaLevel( void ) const {
-		return m_fSeaLevel;
-	}
+	EA_FORCE_INLINE float getSeaLevel( void ) const { return m_fSeaLevel; }
 	void setTidalRange( float fValue );
-	float getTidalRange( void ) const {
-		return m_fTidalRange;
-	}
+	EA_FORCE_INLINE float getTidalRange( void ) const { return m_fTidalRange; }
 	void setWaveDirection( const Vector2 &vValue );
-	Vector2 getWaveDirection( void ) const {
-		return m_waveDirection;
-	}
+	EA_FORCE_INLINE Vector2 getWaveDirection( void ) const { return m_waveDirection; }
 	void setWaveStrength( float fValue );
-	float getWaveStrength( void ) const {
-		return m_fWaveStrength;
-	}
+	EA_FORCE_INLINE float getWaveStrength( void ) const { return m_fWaveStrength; }
 	void setWaveErosionMPerYear( float fValue );
-	float getWaveErosionMPerYear( void ) const {
-		return m_fWaveErosionMPerYear;
-	}
+	EA_FORCE_INLINE float getWaveErosionMPerYear( void ) const { return m_fWaveErosionMPerYear; }
 	void setWaveDepositionRate( float fValue );
-	float getWaveDepositionRate( void ) const {
-		return m_fWaveDepositionRate;
-	}
+	EA_FORCE_INLINE float getWaveDepositionRate( void ) const { return m_fWaveDepositionRate; }
 	void setCoastlineBandM( float fValue );
-	float getCoastlineBandM( void ) const {
-		return m_fCoastlineBandM;
-	}
+	EA_FORCE_INLINE float getCoastlineBandM( void ) const { return m_fCoastlineBandM; }
 	void setWaveFetchDistanceM( float fValue );
-	float getWaveFetchDistanceM( void ) const {
-		return m_fWaveFetchDistanceM;
-	}
+	EA_FORCE_INLINE float getWaveFetchDistanceM( void ) const { return m_fWaveFetchDistanceM; }
 	void setWaveUndercutBias( float fValue );
-	float getWaveUndercutBias( void ) const {
-		return m_fWaveUndercutBias;
-	}
+	EA_FORCE_INLINE float getWaveUndercutBias( void ) const { return m_fWaveUndercutBias; }
 	void setBeachSmoothing( float fValue );
-	float getBeachSmoothing( void ) const {
-		return m_fBeachSmoothing;
-	}
+	EA_FORCE_INLINE float getBeachSmoothing( void ) const { return m_fBeachSmoothing; }
 
 	void setTrafficEnabled( bool bValue );
-	bool getTrafficEnabled( void ) const {
-		return m_bTrafficEnabled;
-	}
+	EA_FORCE_INLINE bool getTrafficEnabled( void ) const { return m_bTrafficEnabled; }
 	void setTrafficMask( const Ref<Image> &rValue );
-	Ref<Image> getTrafficMask( void ) const {
-		return m_pTrafficMask;
-	}
+	EA_FORCE_INLINE Ref<Image> getTrafficMask( void ) const { return m_pTrafficMask; }
 	void setTrafficWorldRect( const Rect2 &rValue );
-	Rect2 getTrafficWorldRect( void ) const {
-		return m_trafficWorldRect;
-	}
+	EA_FORCE_INLINE Rect2 getTrafficWorldRect( void ) const { return m_trafficWorldRect; }
 	void setTrafficErosionMPerYear( float fValue );
-	float getTrafficErosionMPerYear( void ) const {
-		return m_fTrafficErosionMPerYear;
-	}
+	EA_FORCE_INLINE float getTrafficErosionMPerYear( void ) const { return m_fTrafficErosionMPerYear; }
 	void setTrafficCompaction( float fValue );
-	float getTrafficCompaction( void ) const {
-		return m_fTrafficCompaction;
-	}
+	EA_FORCE_INLINE float getTrafficCompaction( void ) const { return m_fTrafficCompaction; }
 	void setTrafficSmoothing( float fValue );
-	float getTrafficSmoothing( void ) const {
-		return m_fTrafficSmoothing;
-	}
+	EA_FORCE_INLINE float getTrafficSmoothing( void ) const { return m_fTrafficSmoothing; }
 	void setTrafficRunoffMultiplier( float fValue );
-	float getTrafficRunoffMultiplier( void ) const {
-		return m_fTrafficRunoffMultiplier;
-	}
+	EA_FORCE_INLINE float getTrafficRunoffMultiplier( void ) const { return m_fTrafficRunoffMultiplier; }
 	void setTrafficThreshold( float fValue );
-	float getTrafficThreshold( void ) const {
-		return m_fTrafficThreshold;
-	}
+	EA_FORCE_INLINE float getTrafficThreshold( void ) const { return m_fTrafficThreshold; }
 	void setTrafficWideningCells( int32_t nValue );
-	int32_t getTrafficWideningCells( void ) const {
-		return m_nTrafficWideningCells;
-	}
+	EA_FORCE_INLINE int32_t getTrafficWideningCells( void ) const { return m_nTrafficWideningCells; }
 
 	void setStratigraphyEnabled( bool bValue );
-	bool getStratigraphyEnabled( void ) const {
-		return m_bStratigraphyEnabled;
-	}
+	EA_FORCE_INLINE bool getStratigraphyEnabled( void ) const { return m_bStratigraphyEnabled; }
 	void setSurfaceLayerDepthM( float fValue );
-	float getSurfaceLayerDepthM( void ) const {
-		return m_fSurfaceLayerDepthM;
-	}
+	EA_FORCE_INLINE float getSurfaceLayerDepthM( void ) const { return m_fSurfaceLayerDepthM; }
 	void setSurfaceLayerDepthMap( const Ref<Image> &rValue );
-	Ref<Image> getSurfaceLayerDepthMap( void ) const {
-		return m_pSurfaceLayerDepthMap;
-	}
+	EA_FORCE_INLINE Ref<Image> getSurfaceLayerDepthMap( void ) const { return m_pSurfaceLayerDepthMap; }
 	void setSurfaceLayerDepthWorldRect( const Rect2 &rValue );
-	Rect2 getSurfaceLayerDepthWorldRect( void ) const {
-		return m_surfaceLayerDepthWorldRect;
-	}
+	EA_FORCE_INLINE Rect2 getSurfaceLayerDepthWorldRect( void ) const { return m_surfaceLayerDepthWorldRect; }
 	void setBedrockHardness( float fValue );
-	float getBedrockHardness( void ) const {
-		return m_fBedrockHardness;
-	}
+	EA_FORCE_INLINE float getBedrockHardness( void ) const { return m_fBedrockHardness; }
 	void setBedrockHardnessMap( const Ref<Image> &rValue );
-	Ref<Image> getBedrockHardnessMap( void ) const {
-		return m_pBedrockHardnessMap;
-	}
+	EA_FORCE_INLINE Ref<Image> getBedrockHardnessMap( void ) const { return m_pBedrockHardnessMap; }
 	void setBedrockHardnessWorldRect( const Rect2 &rValue );
-	Rect2 getBedrockHardnessWorldRect( void ) const {
-		return m_bedrockHardnessWorldRect;
-	}
+	EA_FORCE_INLINE Rect2 getBedrockHardnessWorldRect( void ) const { return m_bedrockHardnessWorldRect; }
 	void setStratigraphyTransitionWidthM( float fValue );
-	float getStratigraphyTransitionWidthM( void ) const {
-		return m_fStratigraphyTransitionWidthM;
-	}
+	EA_FORCE_INLINE float getStratigraphyTransitionWidthM( void ) const { return m_fStratigraphyTransitionWidthM; }
 
 	void setMaterialOutputEnabled( bool bValue );
-	bool getMaterialOutputEnabled( void ) const {
-		return m_bMaterialOutputEnabled;
-	}
+	EA_FORCE_INLINE bool getMaterialOutputEnabled( void ) const { return m_bMaterialOutputEnabled; }
 	void setPreserveControlFlags( bool bValue );
-	bool getPreserveControlFlags( void ) const {
-		return m_bPreserveControlFlags;
-	}
+	EA_FORCE_INLINE bool getPreserveControlFlags( void ) const { return m_bPreserveControlFlags; }
 	void setResolveAutoMaterials( bool bValue );
-	bool getResolveAutoMaterials( void ) const {
-		return m_bResolveAutoMaterials;
-	}
+	EA_FORCE_INLINE bool getResolveAutoMaterials( void ) const { return m_bResolveAutoMaterials; }
 	void setMaterialTransitionStrength( float fValue );
-	float getMaterialTransitionStrength( void ) const {
-		return m_fMaterialTransitionStrength;
-	}
+	EA_FORCE_INLINE float getMaterialTransitionStrength( void ) const { return m_fMaterialTransitionStrength; }
 	void setMaterialTransitionThreshold( float fValue );
-	float getMaterialTransitionThreshold( void ) const {
-		return m_fMaterialTransitionThreshold;
-	}
+	EA_FORCE_INLINE float getMaterialTransitionThreshold( void ) const { return m_fMaterialTransitionThreshold; }
 	void setMaterialTransitionDepthM( float fValue );
-	float getMaterialTransitionDepthM( void ) const {
-		return m_fMaterialTransitionDepthM;
-	}
+	EA_FORCE_INLINE float getMaterialTransitionDepthM( void ) const { return m_fMaterialTransitionDepthM; }
 	void setOxidationColorEnabled( bool bValue );
-	bool getOxidationColorEnabled( void ) const {
-		return m_bOxidationColorEnabled;
-	}
+	EA_FORCE_INLINE bool getOxidationColorEnabled( void ) const { return m_bOxidationColorEnabled; }
 	void setOxidationTint( const Color &clrValue );
-	Color getOxidationTint( void ) const {
-		return m_oxidationTint;
-	}
+	EA_FORCE_INLINE Color getOxidationTint( void ) const { return m_oxidationTint; }
 	void setOxidationTintStrength( float fValue );
-	float getOxidationTintStrength( void ) const {
-		return m_fOxidationTintStrength;
-	}
+	EA_FORCE_INLINE float getOxidationTintStrength( void ) const { return m_fOxidationTintStrength; }
 
 	void setMasterIntensityCurve( const Ref<Curve> &rValue );
-	Ref<Curve> getMasterIntensityCurve( void ) const {
-		return m_pMasterIntensityCurve;
-	}
+	EA_FORCE_INLINE Ref<Curve> getMasterIntensityCurve( void ) const { return m_pMasterIntensityCurve; }
 	void setRainfallCurve( const Ref<Curve> &rValue );
-	Ref<Curve> getRainfallCurve( void ) const {
-		return m_pRainfallCurve;
-	}
+	EA_FORCE_INLINE Ref<Curve> getRainfallCurve( void ) const { return m_pRainfallCurve; }
 	void setWeatheringCurve( const Ref<Curve> &rValue );
-	Ref<Curve> getWeatheringCurve( void ) const {
-		return m_pWeatheringCurve;
-	}
+	EA_FORCE_INLINE Ref<Curve> getWeatheringCurve( void ) const { return m_pWeatheringCurve; }
 	void setOxidationCurve( const Ref<Curve> &rValue );
-	Ref<Curve> getOxidationCurve( void ) const {
-		return m_pOxidationCurve;
-	}
+	EA_FORCE_INLINE Ref<Curve> getOxidationCurve( void ) const { return m_pOxidationCurve; }
 	void setWindCurve( const Ref<Curve> &rValue );
-	Ref<Curve> getWindCurve( void ) const {
-		return m_pWindCurve;
-	}
+	EA_FORCE_INLINE Ref<Curve> getWindCurve( void ) const { return m_pWindCurve; }
 	void setWaveCurve( const Ref<Curve> &rValue );
-	Ref<Curve> getWaveCurve( void ) const {
-		return m_pWaveCurve;
-	}
+	EA_FORCE_INLINE Ref<Curve> getWaveCurve( void ) const { return m_pWaveCurve; }
 	void setTrafficCurve( const Ref<Curve> &rValue );
-	Ref<Curve> getTrafficCurve( void ) const {
-		return m_pTrafficCurve;
-	}
+	EA_FORCE_INLINE Ref<Curve> getTrafficCurve( void ) const { return m_pTrafficCurve; }
 	void setTemperatureCurve( const Ref<Curve> &rValue );
-	Ref<Curve> getTemperatureCurve( void ) const {
-		return m_pTemperatureCurve;
-	}
+	EA_FORCE_INLINE Ref<Curve> getTemperatureCurve( void ) const { return m_pTemperatureCurve; }
 	void setSeaLevelCurve( const Ref<Curve> &rValue );
-	Ref<Curve> getSeaLevelCurve( void ) const {
-		return m_pSeaLevelCurve;
-	}
+	EA_FORCE_INLINE Ref<Curve> getSeaLevelCurve( void ) const { return m_pSeaLevelCurve; }
 	void setSnowmeltCurve( const Ref<Curve> &rValue );
-	Ref<Curve> getSnowmeltCurve( void ) const {
-		return m_pSnowmeltCurve;
-	}
+	EA_FORCE_INLINE Ref<Curve> getSnowmeltCurve( void ) const { return m_pSnowmeltCurve; }
 	void setSaltWeatheringCurve( const Ref<Curve> &rValue );
-	Ref<Curve> getSaltWeatheringCurve( void ) const {
-		return m_pSaltWeatheringCurve;
-	}
+	EA_FORCE_INLINE Ref<Curve> getSaltWeatheringCurve( void ) const { return m_pSaltWeatheringCurve; }
 	void setDebrisFlowCurve( const Ref<Curve> &rValue );
-	Ref<Curve> getDebrisFlowCurve( void ) const {
-		return m_pDebrisFlowCurve;
-	}
+	EA_FORCE_INLINE Ref<Curve> getDebrisFlowCurve( void ) const { return m_pDebrisFlowCurve; }
 
 protected:
 	void _validate_property( PropertyInfo &rProperty ) const;

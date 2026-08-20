@@ -12,7 +12,6 @@
 #include "terrain_3d.h"
 #include "data/terrain_3d_data.h"
 
-T3DHLODStreamer::~T3DHLODStreamer( void ) { destroy(); }
 
 int T3DHLODStreamer::floorDiv( const int value, const int divisor ) {
 	if ( divisor <= 0 ) { return 0; }
@@ -20,7 +19,9 @@ int T3DHLODStreamer::floorDiv( const int value, const int divisor ) {
 	if ( value < 0 && ( value % divisor ) != 0 ) { --quotient; }
 	return quotient;
 }
-int T3DHLODStreamer::regionIndex( const Vector2i &rRegion ) { return T3DData::getRegionMapIndex( rRegion ); }
+int T3DHLODStreamer::regionIndex( const Vector2i &rRegion ) {
+	return T3DData::getRegionMapIndex( rRegion );
+}
 Vector2i T3DHLODStreamer::regionFromIndex( const int index ) {
 	const int size = TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE;
 	return Vector2i( index % size - size / 2, index / size - size / 2 );
@@ -454,20 +455,6 @@ void T3DHLODStreamer::updateResidency( const Vector3 &rTargetPosition, const boo
 	}
 }
 
-void T3DHLODStreamer::setEnabled( const bool bEnabled ) { if ( m_bEnabled == bEnabled ) { return; } m_bEnabled = bEnabled; if ( !bEnabled ) { suspend(); } else if ( m_manifest.is_null() || m_entries.empty() ) { reloadManifest(); } }
-void T3DHLODStreamer::setManifestPath( const String &rPath ) { const String path = rPath.strip_edges(); if ( path == m_manifestPath ) { return; } m_manifestPath = path; if ( m_pTerrain ) { reloadManifest(); } }
-void T3DHLODStreamer::setTargetErrorPixels( const real_t fPixels ) { const real_t value = CLAMP( fPixels, 0.25f, 64.0f ); if ( Math::is_equal_approx( m_fTargetErrorPixels, value ) ) { return; } m_fTargetErrorPixels = value; m_bSelectionDirty = true; }
-void T3DHLODStreamer::setHysteresis( const real_t fRatio ) { const real_t value = CLAMP( fRatio, 0.0f, 0.75f ); if ( Math::is_equal_approx( m_fHysteresis, value ) ) { return; } m_fHysteresis = value; m_bSelectionDirty = true; }
-void T3DHLODStreamer::setMaxLevel( const int nLevel ) { const int value = CLAMP( nLevel, 1, 6 ); if ( m_nMaxLevel == value ) { return; } m_nMaxLevel = value; m_bSelectionDirty = true; }
-void T3DHLODStreamer::setForcedDebugLevel( const int nLevel ) { const int value = CLAMP( nLevel, -1, 6 ); if ( m_nForcedDebugLevel == value ) { return; } m_nForcedDebugLevel = value; m_bSelectionDirty = true; }
-bool T3DHLODStreamer::isRegionManaged( const Vector2i &rRegion ) const { const int i = regionIndex( rRegion ); return i >= 0 && m_managedRegions.test( ( size_t ) i ); }
-bool T3DHLODStreamer::isRegionDetailRequired( const Vector2i &rRegion ) const { const int i = regionIndex( rRegion ); return i < 0 || !m_managedRegions.test( ( size_t ) i ) || m_detailRequiredRegions.test( ( size_t ) i ); }
-uint8_t T3DHLODStreamer::getRegionRepresentationLevel( const Vector2i &rRegion ) const { const int i = regionIndex( rRegion ); return i >= 0 ? m_regionRepresentationLevel[i] : 0; }
-bool T3DHLODStreamer::isRegionSuppressed( const Vector2i &rRegion, const int nMinimumLevel ) const { return getRegionRepresentationLevel( rRegion ) >= CLAMP( nMinimumLevel, 1, 6 ); }
-uint8_t T3DHLODStreamer::getInstancerMinimumLevel( const Vector2i &rRegion, const int nMeshId ) const {
-	const int region = regionIndex( rRegion ); if ( region < 0 || nMeshId < 0 || nMeshId >= TERRAIN3D_MAX_MESH_ASSETS ) { return 0; }
-	const size_t offset = ( size_t ) region * TERRAIN3D_MAX_MESH_ASSETS + ( size_t ) nMeshId; return offset < m_instancerMinLevels.size() ? m_instancerMinLevels[offset] : 0;
-}
 uint8_t T3DHLODStreamer::getNodeMinimumLevel( const Vector2i &rRegion, const int64_t nSpawnId ) const {
 	const int region = regionIndex( rRegion ); if ( region < 0 ) return 0;
 	const uint32_t begin = m_nodePolicyOffsets[( size_t ) region];

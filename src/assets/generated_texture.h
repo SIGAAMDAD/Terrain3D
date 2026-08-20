@@ -9,6 +9,7 @@
 
 #include <godot_cpp/classes/image.hpp>
 
+#include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
 
 class T3DGeneratedTexture {
@@ -31,22 +32,14 @@ private:
 public:
 	void clear( void );
 	void swap( T3DGeneratedTexture &rOther );
-	bool isDirty( void ) const {
-		return m_bDirty;
-	}
+	EA_FORCE_INLINE bool isDirty( void ) const { return m_bDirty; }
 	RID create( const TypedArray<Image> &rLayers );
 	bool update( const Ref<Image> &rImage, const int nLayer );
 	RID create( const Ref<Image> &rImage );
 	bool update2d( const Ref<Image> &rImage );
-	Ref<Image> getImage( void ) const {
-		return m_pImage;
-	}
-	RID getRid( void ) const {
-		return m_rid;
-	}
-	int size( void ) const {
-		return m_nSize;
-	}
+	EA_FORCE_INLINE Ref<Image> getImage( void ) const { return m_pImage; }
+	EA_FORCE_INLINE RID getRid( void ) const { return m_rid; }
+	EA_FORCE_INLINE int size( void ) const { return m_nSize; }
 	int maxMipmapLevel( void ) const {
 		if ( !m_bMipmaps || m_nWidth <= 0 || m_nHeight <= 0 ) {
 			return 0;
@@ -59,9 +52,7 @@ public:
 		}
 		return level;
 	}
-	size_t payloadBytes( void ) const {
-		return m_nPayloadBytes;
-	}
+	EA_FORCE_INLINE size_t payloadBytes( void ) const { return m_nPayloadBytes; }
 };
 
 #endif // GENERATEDTEXTURE_CLASS_H

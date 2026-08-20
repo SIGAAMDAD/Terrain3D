@@ -10,6 +10,7 @@
 #include <limits>
 #include <new>
 
+#include "core/terrain_3d_compiler.h"
 #include "memory/terrain_3d_memory.h"
 #include "memory/terrain_3d_zone_allocator.h"
 
@@ -73,18 +74,14 @@ class T3DEastlAllocator {
 #endif
 
 public:
-	T3DEastlAllocator( const char * = EASTL_ALLOCATOR_DEFAULT_NAME ) {}
+	EA_FORCE_INLINE T3DEastlAllocator( const char * = EASTL_ALLOCATOR_DEFAULT_NAME ) {}
 	T3DEastlAllocator( const T3DEastlAllocator & ) = default;
-	T3DEastlAllocator( const T3DEastlAllocator &, const char * ) {}
+	EA_FORCE_INLINE T3DEastlAllocator( const T3DEastlAllocator &, const char * ) {}
 	T3DEastlAllocator &operator=( const T3DEastlAllocator & ) = default;
-	const char *getName( void ) const {
-		return EASTL_ALLOCATOR_DEFAULT_NAME;
-	}
-	void setName( const char * ) {}
+	EA_FORCE_INLINE const char *getName( void ) const { return EASTL_ALLOCATOR_DEFAULT_NAME; }
+	EA_FORCE_INLINE void setName( const char * ) {}
 
-	void *allocate( const size_t n, int = 0 ) {
-		return allocate( n, alignof( std::max_align_t ), 0, 0 );
-	}
+	EA_FORCE_INLINE void *allocate( const size_t n, int = 0 ) { return allocate( n, alignof( std::max_align_t ), 0, 0 ); }
 	void *allocate( const size_t n, size_t alignment, const size_t alignment_offset, int = 0 ) {
 		if ( alignment < alignof( void * ) ) {
 			alignment = alignof( void * );
@@ -157,10 +154,7 @@ public:
 	}
 };
 #define EASTLAllocatorType T3DEastlAllocator
-static inline T3DEastlAllocator *T3DGetDefaultEastlAllocator( void ) {
-	static T3DEastlAllocator s_allocator;
-	return &s_allocator;
-}
+EA_FORCE_INLINE static T3DEastlAllocator *T3DGetDefaultEastlAllocator( void ) { static T3DEastlAllocator s_allocator; return &s_allocator; }
 #define EASTLAllocatorDefault T3DGetDefaultEastlAllocator
 
 #if defined( _MSC_VER )
@@ -222,10 +216,8 @@ static inline T3DEastlAllocator *T3DGetDefaultEastlAllocator( void ) {
 #define EA_FINAL final
 #define EA_CONSTEXPR_OR_CONST constexpr
 #if defined( _MSC_VER )
-#define EA_FORCE_INLINE __forceinline
 #define EA_GET_INSTRUCTION_POINTER() _ReturnAddress()
 #else
-#define EA_FORCE_INLINE inline __attribute__( ( always_inline ) )
 #define EA_GET_INSTRUCTION_POINTER() __builtin_return_address( 0 )
 #endif
 #define EA_ALIGN_OF( type ) alignof( type )

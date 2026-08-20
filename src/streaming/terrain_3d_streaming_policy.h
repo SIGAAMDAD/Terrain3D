@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include "core/terrain_3d_compiler.h"
 
 // Editor execution mode selects whether the authored repository is fully pinned
 // or the shipping residency policy is exercised exactly.
@@ -46,45 +47,17 @@ typedef struct t3dregionStreamingPrediction_s {
 	t3dstreamingCoord_t predictedCenter;
 } t3dregionStreamingPrediction_t;
 
-constexpr bool terrain3dEditorExecutionModeIsValid( const int nMode ) noexcept {
-	return nMode >= TERRAIN3D_EDITOR_EXECUTION_AUTHORING &&
-		nMode <= TERRAIN3D_EDITOR_EXECUTION_RUNTIME_PROFILE;
-}
+EA_FORCE_INLINE constexpr bool terrain3dEditorExecutionModeIsValid( const int nMode ) noexcept { return nMode >= TERRAIN3D_EDITOR_EXECUTION_AUTHORING && nMode <= TERRAIN3D_EDITOR_EXECUTION_RUNTIME_PROFILE; }
 
-constexpr bool terrain3dIsEditorAuthoringMode(
-	const bool bEditorHint,
-	const int nExecutionMode
-) noexcept {
-	return bEditorHint && nExecutionMode == TERRAIN3D_EDITOR_EXECUTION_AUTHORING;
-}
+EA_FORCE_INLINE constexpr bool terrain3dIsEditorAuthoringMode( const bool bEditorHint, const int nExecutionMode ) noexcept { return bEditorHint && nExecutionMode == TERRAIN3D_EDITOR_EXECUTION_AUTHORING; }
 
-constexpr bool terrain3dIsRuntimeProfileMode(
-	const bool bEditorHint,
-	const int nExecutionMode
-) noexcept {
-	return bEditorHint && nExecutionMode == TERRAIN3D_EDITOR_EXECUTION_RUNTIME_PROFILE;
-}
+EA_FORCE_INLINE constexpr bool terrain3dIsRuntimeProfileMode( const bool bEditorHint, const int nExecutionMode ) noexcept { return bEditorHint && nExecutionMode == TERRAIN3D_EDITOR_EXECUTION_RUNTIME_PROFILE; }
 
-constexpr bool terrain3dIsGpuPagingEffectivelyEnabled( const bool bConfiguredEnabled ) noexcept {
-	return bConfiguredEnabled;
-}
+EA_FORCE_INLINE constexpr bool terrain3dIsGpuPagingEffectivelyEnabled( const bool bConfiguredEnabled ) noexcept { return bConfiguredEnabled; }
 
-constexpr bool terrain3dIsStreamingEffectivelyEnabled(
-	const bool bConfiguredEnabled,
-	const bool bEditorHint, const int nExecutionMode
-) noexcept {
-	return bConfiguredEnabled &&
-		!terrain3dIsEditorAuthoringMode( bEditorHint, nExecutionMode );
-}
+EA_FORCE_INLINE constexpr bool terrain3dIsStreamingEffectivelyEnabled( const bool bConfiguredEnabled, const bool bEditorHint, const int nExecutionMode ) noexcept { return bConfiguredEnabled && !terrain3dIsEditorAuthoringMode( bEditorHint, nExecutionMode ); }
 
-constexpr int terrain3dStreamingChebyshevDistance(
-	const t3dstreamingCoord_t a,
-	const t3dstreamingCoord_t b
-) noexcept {
-	const int dx = a.x >= b.x ? a.x - b.x : b.x - a.x;
-	const int dy = a.y >= b.y ? a.y - b.y : b.y - a.y;
-	return dx > dy ? dx : dy;
-}
+EA_FORCE_INLINE constexpr int terrain3dStreamingChebyshevDistance( const t3dstreamingCoord_t a, const t3dstreamingCoord_t b ) noexcept { const int dx = a.x >= b.x ? a.x - b.x : b.x - a.x; const int dy = a.y >= b.y ? a.y - b.y : b.y - a.y; return dx > dy ? dx : dy; }
 
 constexpr t3dregionStreamingConfig_t terrain3dStreamingSanitizeConfig(
 	const t3dregionStreamingConfig_t config
@@ -101,11 +74,7 @@ constexpr t3dregionStreamingConfig_t terrain3dStreamingSanitizeConfig(
 	return result;
 }
 
-constexpr bool terrain3dStreamingConfigIsValid( const t3dregionStreamingConfig_t config ) noexcept {
-	return config.activeRadius >= 0 && config.hotRadius >= config.activeRadius &&
-		config.coldRadius >= config.hotRadius && config.unloadGuard >= 0 && config.unloadGuard <= 4 &&
-		config.fPredictionLookaheadSeconds >= 0.0 && config.predictionMaximumRegions >= 0;
-}
+EA_FORCE_INLINE constexpr bool terrain3dStreamingConfigIsValid( const t3dregionStreamingConfig_t config ) noexcept { return config.activeRadius >= 0 && config.hotRadius >= config.activeRadius && config.coldRadius >= config.hotRadius && config.unloadGuard >= 0 && config.unloadGuard <= 4 && config.fPredictionLookaheadSeconds >= 0.0 && config.predictionMaximumRegions >= 0; }
 
 constexpr t3dregionStreamingState_t terrain3dStreamingClassify(
 	const t3dstreamingCoord_t location,
@@ -120,14 +89,7 @@ constexpr t3dregionStreamingState_t terrain3dStreamingClassify(
 				TERRAIN3D_REGION_STREAMING_UNLOADED ) );
 }
 
-constexpr bool terrain3dStreamingInsideUnloadGuard(
-	const t3dstreamingCoord_t location,
-	const t3dstreamingCoord_t center,
-	const t3dregionStreamingConfig_t rawConfig
-) noexcept {
-	const t3dregionStreamingConfig_t config = terrain3dStreamingSanitizeConfig( rawConfig );
-	return terrain3dStreamingChebyshevDistance( location, center ) <= config.coldRadius + config.unloadGuard;
-}
+EA_FORCE_INLINE constexpr bool terrain3dStreamingInsideUnloadGuard( const t3dstreamingCoord_t location, const t3dstreamingCoord_t center, const t3dregionStreamingConfig_t rawConfig ) noexcept { const t3dregionStreamingConfig_t config = terrain3dStreamingSanitizeConfig( rawConfig ); return terrain3dStreamingChebyshevDistance( location, center ) <= config.coldRadius + config.unloadGuard; }
 
 inline t3dstreamingCoord_t terrain3dStreamingClampCenter(
 	const t3dstreamingCoord_t center,

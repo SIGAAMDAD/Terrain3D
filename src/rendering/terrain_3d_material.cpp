@@ -18,6 +18,7 @@
 #include <cstring>
 #include <utility>
 
+#include "core/terrain_3d_compiler.h"
 #include "core/logger.h"
 #include "authoring/terrain_3d_editor.h"
 #include "rendering/terrain_3d_material.h"
@@ -29,20 +30,12 @@
 
 namespace {
 
-inline void mixShaderSignature( uint64_t &nSignature, const uint64_t nValue ) {
-	nSignature ^= nValue;
-	nSignature *= 1099511628211ULL;
-}
+EA_FORCE_INLINE void mixShaderSignature( uint64_t &nSignature, const uint64_t nValue ) { nSignature ^= nValue; nSignature *= 1099511628211ULL; }
 
 static constexpr uint64_t TERRAIN3D_SHADER_PACK_MAGIC = 0x314b504853443354ull; // T3DSHPK1
 static constexpr uint32_t TERRAIN3D_SHADER_PACK_VERSION = 1u;
 
-static void terrain3dStoreShaderPackString( const Ref<FileAccess> &rFile, const String &rValue ) {
-	const CharString utf8 = rValue.utf8();
-	const uint32_t bytes = ( uint32_t ) MAX( 0, utf8.length() );
-	rFile->store_32( bytes );
-	if ( bytes > 0u ) rFile->store_buffer( reinterpret_cast<const uint8_t *>( utf8.get_data() ), bytes );
-}
+EA_FORCE_INLINE static void terrain3dStoreShaderPackString( const Ref<FileAccess> &rFile, const String &rValue ) { const CharString utf8 = rValue.utf8(); const uint32_t bytes = ( uint32_t ) MAX( 0, utf8.length() ); rFile->store_32( bytes ); if ( bytes > 0u ) rFile->store_buffer( reinterpret_cast<const uint8_t *>( utf8.get_data() ), bytes ); }
 
 static bool terrain3dReadShaderPackString( const Ref<FileAccess> &rFile, String &rValue ) {
 	if ( rFile.is_null() || rFile->get_position() + 4u > rFile->get_length() ) return false;
@@ -148,13 +141,9 @@ static PackedColorArray terrain3dMakeTextureColorUniforms( const PackedColorArra
 	return colors;
 }
 
-static void terrain3dAppendDefine( PackedStringArray &rLines, const String &strName, const String &strValue ) {
-	rLines.push_back( "#define " + strName + " " + strValue );
-}
+EA_FORCE_INLINE static void terrain3dAppendDefine( PackedStringArray &rLines, const String &strName, const String &strValue ) { rLines.push_back( "#define " + strName + " " + strValue ); }
 
-static char32_t terrain3dCommentPeek( const String &rCode, const int iIndex ) {
-	return iIndex < rCode.length() ? rCode[iIndex] : 0;
-}
+EA_FORCE_INLINE static char32_t terrain3dCommentPeek( const String &rCode, const int iIndex ) { return iIndex < rCode.length() ? rCode[iIndex] : 0; }
 
 static bool terrain3dCommentAdvance(
 	const String &rCode, int &iIndex, int &nLine,

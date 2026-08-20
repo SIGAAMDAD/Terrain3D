@@ -4,6 +4,7 @@
 #ifndef TERRAIN3D_RESIDENT_POOL_H
 #define TERRAIN3D_RESIDENT_POOL_H
 
+#include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
 
 #include <cstddef>
@@ -26,9 +27,7 @@ typedef struct t3dresidentMapView_s {
 	const uint32_t *pColor = nullptr;
 	const uint8_t *pDerived = nullptr;
 	uint32_t nGeneration = 0;
-	bool valid( void ) const {
-		return pHeight != nullptr;
-	}
+	EA_FORCE_INLINE bool valid( void ) const { return pHeight != nullptr; }
 } t3dresidentMapView_t;
 
 class T3DResidentRegionPool;
@@ -42,12 +41,8 @@ public:
 	T3DResidentMapLease( T3DResidentMapLease &&rOther ) noexcept;
 	T3DResidentMapLease &operator=( T3DResidentMapLease &&rOther ) noexcept;
 
-	bool valid( void ) const {
-		return m_view.valid();
-	}
-	const t3dresidentMapView_t &getView( void ) const {
-		return m_view;
-	}
+	EA_FORCE_INLINE bool valid( void ) const { return m_view.valid(); }
+	EA_FORCE_INLINE const t3dresidentMapView_t &getView( void ) const { return m_view; }
 	void reset( void );
 
 private:
@@ -100,21 +95,11 @@ public:
 		const Rect2i &rDirtyRect = Rect2i()
 	);
 	void invalidate( const Vector2i &rLocation );
-	int getCapacity( void ) const {
-		return m_nCapacity;
-	}
-	int getRegionSize( void ) const {
-		return m_nRegionSize;
-	}
-	uint32_t getChannels( void ) const {
-		return m_channels;
-	}
-	size_t getReservedBytes( void ) const {
-		return m_nReservedBytes;
-	}
-	size_t getSlotHunkBytes( void ) const {
-		return m_iSlotLayout.stride;
-	}
+	EA_FORCE_INLINE int getCapacity( void ) const { return m_nCapacity; }
+	EA_FORCE_INLINE int getRegionSize( void ) const { return m_nRegionSize; }
+	EA_FORCE_INLINE uint32_t getChannels( void ) const { return m_channels; }
+	EA_FORCE_INLINE size_t getReservedBytes( void ) const { return m_nReservedBytes; }
+	EA_FORCE_INLINE size_t getSlotHunkBytes( void ) const { return m_iSlotLayout.stride; }
 
 private:
 typedef struct t3dalignedAllocation_s {

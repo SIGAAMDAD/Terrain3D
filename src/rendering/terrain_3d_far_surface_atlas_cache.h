@@ -85,9 +85,9 @@ public:
 	bool ensure( void );
 	bool writeCooked( const String &rDirectory = String() );
 
-	RID getHeightMapRid( void ) const { return m_generatedHeightMap.getRid(); }
-	RID getColorMapRid( void ) const { return m_generatedColorMap.getRid(); }
-	bool isReady( void ) const { return m_generatedHeightMap.getRid().is_valid() && m_generatedColorMap.getRid().is_valid(); }
+	EA_FORCE_INLINE RID getHeightMapRid( void ) const { return m_generatedHeightMap.getRid(); }
+	EA_FORCE_INLINE RID getColorMapRid( void ) const { return m_generatedColorMap.getRid(); }
+	EA_FORCE_INLINE bool isReady( void ) const { return m_generatedHeightMap.getRid().is_valid() && m_generatedColorMap.getRid().is_valid(); }
 	bool isRegionHeightDirty( const Vector2i &vLocation ) const;
 	bool isRegionColorDirty( const Vector2i &vLocation ) const;
 	int getDirtyRegionCount( void ) const;

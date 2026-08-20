@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "core/terrain_3d_compiler.h"
 #include "data/terrain_3d_runtime_world_manifest.h"
 
 #include "core/logger.h"
@@ -29,9 +30,7 @@ static void hashBytes( uint64_t &nHash, const void *pData, const size_t nBytes )
 	}
 }
 
-static void hashU32( uint64_t &nHash, const uint32_t nValue ) {
-	hashBytes( nHash, &nValue, sizeof( nValue ) );
-}
+EA_FORCE_INLINE static void hashU32( uint64_t &nHash, const uint32_t nValue ) { hashBytes( nHash, &nValue, sizeof( nValue ) ); }
 
 static void storeString( const Ref<FileAccess> &rFile, const String &rValue ) {
 	const CharString utf8 = rValue.utf8();

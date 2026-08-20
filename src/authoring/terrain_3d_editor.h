@@ -174,33 +174,21 @@ private:
 	Color average( const Vector3 &rGlobalPosition, const Color &clrBase ) const;
 
 public:
-	T3DEditor( void ) {}
-	~T3DEditor( void ) {}
+	EA_FORCE_INLINE T3DEditor( void ) {}
+	EA_FORCE_INLINE ~T3DEditor( void ) {}
 
-	void setTerrain( T3DTerrain *const pTerrain ) {
-		m_pTerrain = pTerrain;
-	}
-	T3DTerrain *getTerrain( void ) const {
-		return m_pTerrain;
-	}
+	EA_FORCE_INLINE void setTerrain( T3DTerrain *const pTerrain ) { m_pTerrain = pTerrain; }
+	EA_FORCE_INLINE T3DTerrain *getTerrain( void ) const { return m_pTerrain; }
 
 	void setBrushData( const Dictionary &rData );
-	Dictionary getBrushData( void ) const {
-		return m_brushData;
-	}
+	EA_FORCE_INLINE Dictionary getBrushData( void ) const { return m_brushData; }
 	void setTool( const t3dtool_t tool );
-	t3dtool_t getTool( void ) const {
-		return m_tool;
-	}
+	EA_FORCE_INLINE t3dtool_t getTool( void ) const { return m_tool; }
 	void setOperation( const t3doperation_t operation );
-	t3doperation_t getOperation( void ) const {
-		return m_operation;
-	}
+	EA_FORCE_INLINE t3doperation_t getOperation( void ) const { return m_operation; }
 
 	void startOperation( const Vector3 &rGlobalPosition );
-	bool isOperating( void ) const {
-		return m_bIsOperating;
-	}
+	EA_FORCE_INLINE bool isOperating( void ) const { return m_bIsOperating; }
 	void operate( const Vector3 &rGlobalPosition, const real_t fCameraDirection );
 	void backupRegion( const Ref<T3DRegion> &rRegion, bool bMapWasImplicit = false );
 	void backupRegionFull( const Ref<T3DRegion> &rRegion );
@@ -240,11 +228,7 @@ inline t3dmapType_t T3DEditor::getMapType( void ) const {
 	}
 }
 
-inline bool T3DEditor::isInBounds( const Point2i &rPixel, const Point2i &rSize ) const {
-	const bool bPositive = rPixel.x >= 0 && rPixel.y >= 0;
-	const bool bLessThanMax = rPixel.x < rSize.x && rPixel.y < rSize.y;
-	return bPositive && bLessThanMax;
-}
+EA_FORCE_INLINE bool T3DEditor::isInBounds( const Point2i &rPixel, const Point2i &rSize ) const { const bool bPositive = rPixel.x >= 0 && rPixel.y >= 0; const bool bLessThanMax = rPixel.x < rSize.x && rPixel.y < rSize.y; return bPositive && bLessThanMax; }
 
 inline Vector2 T3DEditor::getUvPosition(
 	const Vector3 &rGlobalPosition, const int nRegionSize,
@@ -257,9 +241,5 @@ inline Vector2 T3DEditor::getUvPosition(
 	return uv_position;
 }
 
-inline Vector2 T3DEditor::getRotatedUv( const Vector2 &rUv, const real_t fAngle ) const {
-	const Vector2 rotation_offset = V2( 0.5f );
-	Vector2 uv = ( rUv - rotation_offset ).rotated( fAngle ) + rotation_offset;
-	return uv.clamp( V2_ZERO, V2( 1.f ) );
-}
+EA_FORCE_INLINE Vector2 T3DEditor::getRotatedUv( const Vector2 &rUv, const real_t fAngle ) const { const Vector2 rotation_offset = V2( 0.5f ); Vector2 uv = ( rUv - rotation_offset ).rotated( fAngle ) + rotation_offset; return uv.clamp( V2_ZERO, V2( 1.f ) ); }
 #endif // TERRAIN3D_EDITOR_CLASS_H

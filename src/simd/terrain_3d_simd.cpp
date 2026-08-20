@@ -1,4 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
+#include "core/terrain_3d_compiler.h"
 #include "simd/terrain_3d_simd.h"
 
 #include "data/terrain_3d_half_buffer.h"
@@ -192,9 +193,7 @@ static bool parseEnvironmentOverride( t3dbackend_t &rBackend ) {
 	return false;
 }
 
-static const t3ddispatch_t *dispatchTable( const t3dbackend_t backend ) {
-	return &s_szDispatchTables[( size_t ) ( backend )];
-}
+EA_FORCE_INLINE static const t3ddispatch_t *dispatchTable( const t3dbackend_t backend ) { return &s_szDispatchTables[( size_t ) ( backend )]; }
 
 static t3dbackend_t bestSupportedBackend( void ) {
 	if ( backendSupported( t3dbackend_t::AVX2_F16C ) ) {
@@ -226,14 +225,9 @@ static void initialize( void ) {
 	s_pActiveDispatch.store( dispatchTable( selected ), std::memory_order_release );
 }
 
-static void ensureInitialized( void ) {
-	std::call_once( s_initializeOnce, initialize );
-}
+EA_FORCE_INLINE static void ensureInitialized( void ) { std::call_once( s_initializeOnce, initialize ); }
 
-static uint8_t encodeNormalComponent( const float fValue ) {
-	const float fEncoded = std::max( 0.0f, std::min( TERRAIN3D_BYTE_MAX_FLOAT, ( fValue * 0.5f + 0.5f ) * TERRAIN3D_BYTE_MAX_FLOAT ) );
-	return ( uint8_t ) ( std::floor( fEncoded + 0.5f ) );
-}
+EA_FORCE_INLINE static uint8_t encodeNormalComponent( const float fValue ) { const float fEncoded = std::max( 0.0f, std::min( TERRAIN3D_BYTE_MAX_FLOAT, ( fValue * 0.5f + 0.5f ) * TERRAIN3D_BYTE_MAX_FLOAT ) ); return ( uint8_t ) ( std::floor( fEncoded + 0.5f ) ); }
 
 } // namespace
 

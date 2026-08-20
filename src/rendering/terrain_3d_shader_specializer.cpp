@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "core/terrain_3d_compiler.h"
 #include "rendering/terrain_3d_shader_specializer.h"
 #include "Terrain3DConstants.h"
 
@@ -209,8 +210,7 @@ class T3DStaticExpressionParser {
 	}
 
 public:
-	T3DStaticExpressionParser( const String &rExpression, const t3dshaderStaticState_t &rState ) :
-		m_expression( rExpression ), m_state( rState ) {}
+	EA_FORCE_INLINE T3DStaticExpressionParser( const String &rExpression, const t3dshaderStaticState_t &rState ) : m_expression( rExpression ), m_state( rState ) {}
 
 	bool evaluate( bool &bValue, String &rFailureSummary ) {
 		if ( !parseOr( bValue ) ) {
@@ -236,13 +236,9 @@ bool containsEnabledFeature( const PackedStringArray &rFeatures, const String &r
 	return false;
 }
 
-bool isTerrain3dFeatureMacro( const String &rName ) {
-	return rName.begins_with( "T3D_ENABLE_" );
-}
+EA_FORCE_INLINE bool isTerrain3dFeatureMacro( const String &rName ) { return rName.begins_with( "T3D_ENABLE_" ); }
 
-bool isTerrain3dStaticExpression( const String &rExpression ) {
-	return rExpression.find( "T3D_" ) >= 0;
-}
+EA_FORCE_INLINE bool isTerrain3dStaticExpression( const String &rExpression ) { return rExpression.find( "T3D_" ) >= 0; }
 
 String getShaderDirectiveCode( const String &rLine ) {
 	String directive = rLine.strip_edges();

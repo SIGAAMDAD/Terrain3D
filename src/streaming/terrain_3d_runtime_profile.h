@@ -145,21 +145,11 @@ typedef struct t3druntimeProfileHistory_s {
 	size_t iWriteIndex = 0u;
 	size_t nCount = 0u;
 
-	void reset( void ) noexcept {
-		iWriteIndex = 0u;
-		nCount = 0u;
-	}
+	EA_FORCE_INLINE void reset( void ) noexcept { iWriteIndex = 0u; nCount = 0u; }
 
-	void push( const t3druntimeProfileSample_t &rSample ) noexcept {
-		samples[iWriteIndex] = rSample;
-		iWriteIndex = ( iWriteIndex + 1u ) % samples.size();
-		nCount = std::min( nCount + 1u, samples.size() );
-	}
+	EA_FORCE_INLINE void push( const t3druntimeProfileSample_t &rSample ) noexcept { samples[iWriteIndex] = rSample; iWriteIndex = ( iWriteIndex + 1u ) % samples.size(); nCount = std::min( nCount + 1u, samples.size() ); }
 
-	const t3druntimeProfileSample_t &getOldest( const size_t iIndex ) const noexcept {
-		const size_t oldest = ( iWriteIndex + samples.size() - nCount ) % samples.size();
-		return samples[( oldest + iIndex ) % samples.size()];
-	}
+	EA_FORCE_INLINE const t3druntimeProfileSample_t &getOldest( const size_t iIndex ) const noexcept { const size_t oldest = ( iWriteIndex + samples.size() - nCount ) % samples.size(); return samples[( oldest + iIndex ) % samples.size()]; }
 } t3druntimeProfileHistory_t;
 
 typedef struct t3druntimeProfileAccumulator_s {

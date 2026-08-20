@@ -111,36 +111,42 @@ class T3DHLODStreamer : public Object {
 
 public:
 	T3DHLODStreamer( void ) = default;
-	~T3DHLODStreamer( void );
+	EA_FORCE_INLINE ~T3DHLODStreamer( void ) { destroy(); }
 	void initialize( T3DTerrain *pTerrain );
 	void destroy( void );
 	void suspend( void );
 	bool reloadManifest( void );
 	void updateResidency( const Vector3 &rTargetPosition, bool bForce = false );
 
-	void setEnabled( bool bEnabled ); bool isEnabled( void ) const { return m_bEnabled; }
-	void setManifestPath( const String &rPath ); String getManifestPath( void ) const { return m_manifestPath; }
-	void setTargetErrorPixels( real_t fPixels ); real_t getTargetErrorPixels( void ) const { return m_fTargetErrorPixels; }
-	void setHysteresis( real_t fRatio ); real_t getHysteresis( void ) const { return m_fHysteresis; }
-	void setMaxLevel( int nLevel ); int getMaxLevel( void ) const { return m_nMaxLevel; }
-	void setLoadBudget( int nBudget ) { m_nLoadBudget = CLAMP( nBudget, 0, 64 ); }
-	int getLoadBudget( void ) const { return m_nLoadBudget; }
-	void setUnloadBudget( int nBudget ) { m_nUnloadBudget = CLAMP( nBudget, 0, 64 ); }
-	int getUnloadBudget( void ) const { return m_nUnloadBudget; }
-	void setMemoryBudgetMb( int nMb ) { m_nMemoryBudgetMb = CLAMP( nMb, 1, 4096 ); }
-	int getMemoryBudgetMb( void ) const { return m_nMemoryBudgetMb; }
-	void setMaxShadowLevel( int nLevel ) { m_nMaxShadowLevel = CLAMP( nLevel, 0, 6 ); }
-	int getMaxShadowLevel( void ) const { return m_nMaxShadowLevel; }
-	void setForcedDebugLevel( int nLevel ); int getForcedDebugLevel( void ) const { return m_nForcedDebugLevel; }
+	EA_FORCE_INLINE void setEnabled( bool bEnabled ) { if ( m_bEnabled == bEnabled ) { return; } m_bEnabled = bEnabled; if ( !bEnabled ) { suspend(); } else if ( m_manifest.is_null() || m_entries.empty() ) { reloadManifest(); } }
+	EA_FORCE_INLINE bool isEnabled( void ) const { return m_bEnabled; }
+	EA_FORCE_INLINE void setManifestPath( const String &rPath ) { const String path = rPath.strip_edges(); if ( path == m_manifestPath ) { return; } m_manifestPath = path; if ( m_pTerrain ) { reloadManifest(); } }
+	EA_FORCE_INLINE String getManifestPath( void ) const { return m_manifestPath; }
+	EA_FORCE_INLINE void setTargetErrorPixels( real_t fPixels ) { const real_t value = CLAMP( fPixels, 0.25f, 64.0f ); if ( Math::is_equal_approx( m_fTargetErrorPixels, value ) ) { return; } m_fTargetErrorPixels = value; m_bSelectionDirty = true; }
+	EA_FORCE_INLINE real_t getTargetErrorPixels( void ) const { return m_fTargetErrorPixels; }
+	EA_FORCE_INLINE void setHysteresis( real_t fRatio ) { const real_t value = CLAMP( fRatio, 0.0f, 0.75f ); if ( Math::is_equal_approx( m_fHysteresis, value ) ) { return; } m_fHysteresis = value; m_bSelectionDirty = true; }
+	EA_FORCE_INLINE real_t getHysteresis( void ) const { return m_fHysteresis; }
+	EA_FORCE_INLINE void setMaxLevel( int nLevel ) { const int value = CLAMP( nLevel, 1, 6 ); if ( m_nMaxLevel == value ) { return; } m_nMaxLevel = value; m_bSelectionDirty = true; }
+	EA_FORCE_INLINE int getMaxLevel( void ) const { return m_nMaxLevel; }
+	EA_FORCE_INLINE void setLoadBudget( int nBudget ) { m_nLoadBudget = CLAMP( nBudget, 0, 64 ); }
+	EA_FORCE_INLINE int getLoadBudget( void ) const { return m_nLoadBudget; }
+	EA_FORCE_INLINE void setUnloadBudget( int nBudget ) { m_nUnloadBudget = CLAMP( nBudget, 0, 64 ); }
+	EA_FORCE_INLINE int getUnloadBudget( void ) const { return m_nUnloadBudget; }
+	EA_FORCE_INLINE void setMemoryBudgetMb( int nMb ) { m_nMemoryBudgetMb = CLAMP( nMb, 1, 4096 ); }
+	EA_FORCE_INLINE int getMemoryBudgetMb( void ) const { return m_nMemoryBudgetMb; }
+	EA_FORCE_INLINE void setMaxShadowLevel( int nLevel ) { m_nMaxShadowLevel = CLAMP( nLevel, 0, 6 ); }
+	EA_FORCE_INLINE int getMaxShadowLevel( void ) const { return m_nMaxShadowLevel; }
+	EA_FORCE_INLINE void setForcedDebugLevel( int nLevel ) { const int value = CLAMP( nLevel, -1, 6 ); if ( m_nForcedDebugLevel == value ) { return; } m_nForcedDebugLevel = value; m_bSelectionDirty = true; }
+	EA_FORCE_INLINE int getForcedDebugLevel( void ) const { return m_nForcedDebugLevel; }
 
-	bool isRegionManaged( const Vector2i &rRegion ) const;
-	bool isRegionDetailRequired( const Vector2i &rRegion ) const;
-	bool isRegionSuppressed( const Vector2i &rRegion, int nMinimumLevel = 1 ) const;
-	uint8_t getInstancerMinimumLevel( const Vector2i &rRegion, int nMeshId ) const;
+	EA_FORCE_INLINE bool isRegionManaged( const Vector2i &rRegion ) const { const int index = regionIndex( rRegion ); return index >= 0 && m_managedRegions.test( ( size_t ) index ); }
+	EA_FORCE_INLINE bool isRegionDetailRequired( const Vector2i &rRegion ) const { const int index = regionIndex( rRegion ); return index < 0 || !m_managedRegions.test( ( size_t ) index ) || m_detailRequiredRegions.test( ( size_t ) index ); }
+	EA_FORCE_INLINE bool isRegionSuppressed( const Vector2i &rRegion, int nMinimumLevel = 1 ) const { return getRegionRepresentationLevel( rRegion ) >= CLAMP( nMinimumLevel, 1, 6 ); }
+	EA_FORCE_INLINE uint8_t getInstancerMinimumLevel( const Vector2i &rRegion, int nMeshId ) const { const int region = regionIndex( rRegion ); if ( region < 0 || nMeshId < 0 || nMeshId >= TERRAIN3D_MAX_MESH_ASSETS ) { return 0; } const size_t offset = ( size_t ) region * TERRAIN3D_MAX_MESH_ASSETS + ( size_t ) nMeshId; return offset < m_instancerMinLevels.size() ? m_instancerMinLevels[offset] : 0; }
 	uint8_t getNodeMinimumLevel( const Vector2i &rRegion, int64_t nSpawnId ) const;
-	uint8_t getRegionRepresentationLevel( const Vector2i &rRegion ) const;
-	int64_t getResidentEstimatedBytes( void ) const { return m_nResidentEstimatedBytes; }
-	bool isResidencyIdle( void ) const { return m_nLoadsLastTick == 0 && m_nRequestsLastTick == 0 && m_nUnloadsLastTick == 0; }
+	EA_FORCE_INLINE uint8_t getRegionRepresentationLevel( const Vector2i &rRegion ) const { const int index = regionIndex( rRegion ); return index >= 0 ? m_regionRepresentationLevel[index] : 0; }
+	EA_FORCE_INLINE int64_t getResidentEstimatedBytes( void ) const { return m_nResidentEstimatedBytes; }
+	EA_FORCE_INLINE bool isResidencyIdle( void ) const { return m_nLoadsLastTick == 0 && m_nRequestsLastTick == 0 && m_nUnloadsLastTick == 0; }
 	Dictionary getStats( void ) const;
 	Array getDebugEntries( void ) const;
 

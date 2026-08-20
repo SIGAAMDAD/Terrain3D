@@ -8,6 +8,7 @@
 #include <godot_cpp/classes/resource.hpp>
 #include <godot_cpp/classes/texture2d.hpp>
 
+#include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
 
 class T3DAssets;
@@ -17,8 +18,8 @@ class T3DAssetResource : public Resource {
 	friend class T3DAssets;
 
 public:
-	T3DAssetResource( void ) {}
-	~T3DAssetResource( void ) {}
+	EA_FORCE_INLINE T3DAssetResource( void ) {}
+	EA_FORCE_INLINE ~T3DAssetResource( void ) {}
 
 	virtual void initialize( void ) = 0;
 	virtual void clear( void ) = 0;

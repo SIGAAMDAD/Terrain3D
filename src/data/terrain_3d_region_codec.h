@@ -12,6 +12,7 @@
 
 #include <godot_cpp/classes/image.hpp>
 
+#include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
 #include "core/terrain_3d_util.h"
 
@@ -26,21 +27,13 @@ using namespace godot;
 // absolute heights. R16_UNORM over this fixed range retains ~1.76 cm precision.
 namespace T3DRegionCodec {
 
-inline float encodeHeightNormalized( const float fHeight ) {
-	return CLAMP( ( fHeight - TERRAIN3D_REGION_HEIGHT_MIN ) * TERRAIN3D_REGION_HEIGHT_INV_RANGE, 0.0f, 1.0f );
-}
+EA_FORCE_INLINE float encodeHeightNormalized( const float fHeight ) { return CLAMP( ( fHeight - TERRAIN3D_REGION_HEIGHT_MIN ) * TERRAIN3D_REGION_HEIGHT_INV_RANGE, 0.0f, 1.0f ); }
 
-inline float decodeHeightNormalized( const float fNormalized ) {
-	return TERRAIN3D_REGION_HEIGHT_MIN + CLAMP( fNormalized, 0.0f, 1.0f ) * TERRAIN3D_REGION_HEIGHT_RANGE;
-}
+EA_FORCE_INLINE float decodeHeightNormalized( const float fNormalized ) { return TERRAIN3D_REGION_HEIGHT_MIN + CLAMP( fNormalized, 0.0f, 1.0f ) * TERRAIN3D_REGION_HEIGHT_RANGE; }
 
-inline uint16_t encodeHeightU16( const float fHeight ) {
-	return ( uint16_t ) ( CLAMP( Math::round( encodeHeightNormalized( fHeight ) * TERRAIN3D_REGION_HEIGHT_U16_SCALE ), 0.0f, TERRAIN3D_REGION_HEIGHT_U16_SCALE ) );
-}
+EA_FORCE_INLINE uint16_t encodeHeightU16( const float fHeight ) { return ( uint16_t ) ( CLAMP( Math::round( encodeHeightNormalized( fHeight ) * TERRAIN3D_REGION_HEIGHT_U16_SCALE ), 0.0f, TERRAIN3D_REGION_HEIGHT_U16_SCALE ) ); }
 
-inline float decodeHeightU16( const uint16_t nValue ) {
-	return TERRAIN3D_REGION_HEIGHT_MIN + ( ( float ) ( nValue ) / TERRAIN3D_REGION_HEIGHT_U16_SCALE ) * TERRAIN3D_REGION_HEIGHT_RANGE;
-}
+EA_FORCE_INLINE float decodeHeightU16( const uint16_t nValue ) { return TERRAIN3D_REGION_HEIGHT_MIN + ( ( float ) ( nValue ) / TERRAIN3D_REGION_HEIGHT_U16_SCALE ) * TERRAIN3D_REGION_HEIGHT_RANGE; }
 
 inline float readHeightPixel( const Image *pImage, const Vector2i &rPosition ) {
 	if ( !pImage ) {
@@ -160,11 +153,7 @@ inline Ref<Image> convertHeightToR16(
 	return Image::create_from_data( nSize, nSize, false, Image::FORMAT_R16, output );
 }
 
-inline Ref<Image> convertHeightToR16( const Ref<Image> &rSource, const int nSize ) {
-	uint32_t clamped_count = 0u;
-	uint32_t non_finite_count = 0u;
-	return convertHeightToR16( rSource, nSize, clamped_count, non_finite_count );
-}
+EA_FORCE_INLINE Ref<Image> convertHeightToR16( const Ref<Image> &rSource, const int nSize ) { uint32_t clamped_count = 0u; uint32_t non_finite_count = 0u; return convertHeightToR16( rSource, nSize, clamped_count, non_finite_count ); }
 
 inline Vector2 getHeightMinMax( const Ref<Image> &rImage ) {
 	if ( rImage.is_null() || rImage->is_empty() ) {
@@ -186,9 +175,7 @@ inline Vector2 getHeightMinMax( const Ref<Image> &rImage ) {
 	return std::isfinite( fMinimum ) && std::isfinite( fMaximum ) ? Vector2( fMinimum, fMaximum ) : V2_ZERO;
 }
 
-inline Color defaultHeightColor( void ) {
-	return Color( encodeHeightNormalized( 0.0f ), 0.0f, 0.0f, 1.0f );
-}
+EA_FORCE_INLINE Color defaultHeightColor( void ) { return Color( encodeHeightNormalized( 0.0f ), 0.0f, 0.0f, 1.0f ); }
 
 } // namespace T3DRegionCodec
 

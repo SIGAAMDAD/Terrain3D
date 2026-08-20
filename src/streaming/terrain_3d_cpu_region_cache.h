@@ -5,6 +5,7 @@
 #ifndef TERRAIN3D_CPU_REGION_CACHE_H
 #define TERRAIN3D_CPU_REGION_CACHE_H
 
+#include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
 #include "streaming/terrain_3d_residency_state.h"
 #include "streaming/terrain_3d_runtime_page_store.h"
@@ -55,13 +56,13 @@ public:
 	bool ensureSampleArea( const Vector3 &rWorldPosition, int nRadiusTexels );
 	void update( const T3DResidencyFrameState &rFrame, bool bForce, int nEffectiveLoadLayers );
 
-	bool isEnabled( void ) const { return m_bEnabled; }
-	int getCapacity( void ) const { return m_nCapacity; }
-	int getLoadBudgetLayers( void ) const { return m_nLoadBudgetLayers; }
-	uint32_t getStallFlagsLastTick( void ) const { return m_nStallFlagsLastTick; }
-	bool isResident( const Vector2i &vLocation ) const { return findSlot( vLocation ) >= 0; }
-	bool isSelectionDirty( void ) const { return m_bSelectionDirty; }
-	void markSelectionDirty( void ) { m_bSelectionDirty = true; }
+	EA_FORCE_INLINE bool isEnabled( void ) const { return m_bEnabled; }
+	EA_FORCE_INLINE int getCapacity( void ) const { return m_nCapacity; }
+	EA_FORCE_INLINE int getLoadBudgetLayers( void ) const { return m_nLoadBudgetLayers; }
+	EA_FORCE_INLINE uint32_t getStallFlagsLastTick( void ) const { return m_nStallFlagsLastTick; }
+	EA_FORCE_INLINE bool isResident( const Vector2i &vLocation ) const { return findSlot( vLocation ) >= 0; }
+	EA_FORCE_INLINE bool isSelectionDirty( void ) const { return m_bSelectionDirty; }
+	EA_FORCE_INLINE void markSelectionDirty( void ) { m_bSelectionDirty = true; }
 
 	size_t estimateLayerBytes( void ) const;
 	size_t getReservedBytes( void ) const;

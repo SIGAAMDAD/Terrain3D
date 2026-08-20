@@ -5,6 +5,7 @@
 #ifndef TERRAIN3D_CPU_CACHE_POLICY_H
 #define TERRAIN3D_CPU_CACHE_POLICY_H
 
+#include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
 
 #include <cstddef>
@@ -56,13 +57,6 @@ static inline int terrain3dCpuCacheCalculateCapacity(
 	return ( int ) ( legal_capacity > ( size_t ) ( nMaxLayers ) ? ( size_t ) ( nMaxLayers ) : legal_capacity );
 }
 
-static inline int terrain3dCpuCacheDistance(
-	const t3dcpuCacheCoord_t &rA,
-	const t3dcpuCacheCoord_t &rB
-) {
-	const int dx = rA.x >= rB.x ? rA.x - rB.x : rB.x - rA.x;
-	const int dy = rA.y >= rB.y ? rA.y - rB.y : rB.y - rA.y;
-	return dx > dy ? dx : dy;
-}
+EA_FORCE_INLINE static int terrain3dCpuCacheDistance( const t3dcpuCacheCoord_t &rA, const t3dcpuCacheCoord_t &rB ) { const int dx = rA.x >= rB.x ? rA.x - rB.x : rB.x - rA.x; const int dy = rA.y >= rB.y ? rA.y - rB.y : rB.y - rA.y; return dx > dy ? dx : dy; }
 
 #endif // TERRAIN3D_CPU_CACHE_POLICY_H

@@ -5,6 +5,7 @@
 #ifndef TERRAIN3D_ACTIVE_STORAGE_H
 #define TERRAIN3D_ACTIVE_STORAGE_H
 
+#include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
 
 #include <cstddef>
@@ -33,9 +34,7 @@ typedef struct t3dactiveMapView_s {
 	int nRegionSize = 0;
 	int iSlot = -1;
 
-	bool valid( void ) const {
-		return pHeight != nullptr && iSlot >= 0;
-	}
+	EA_FORCE_INLINE bool valid( void ) const { return pHeight != nullptr && iSlot >= 0; }
 } t3dactiveMapView_t;
 
 class T3DActiveMapLease {
@@ -47,12 +46,8 @@ public:
 	T3DActiveMapLease( T3DActiveMapLease &&rOther ) noexcept;
 	T3DActiveMapLease &operator=( T3DActiveMapLease &&rOther ) noexcept;
 
-	bool valid( void ) const {
-		return m_view.valid();
-	}
-	const t3dactiveMapView_t &view( void ) const {
-		return m_view;
-	}
+	EA_FORCE_INLINE bool valid( void ) const { return m_view.valid(); }
+	EA_FORCE_INLINE const t3dactiveMapView_t &view( void ) const { return m_view; }
 	void reset( void );
 
 private:

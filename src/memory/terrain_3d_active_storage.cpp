@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "core/terrain_3d_compiler.h"
 #include "memory/terrain_3d_active_storage.h"
 
 #include "memory/terrain_3d_memory.h"
@@ -58,17 +59,9 @@ static std::atomic<uint64_t> s_nActivePublications{0u};
 static uint32_t s_nClockHand = 0u;
 static std::mutex s_activeWriterMutex;
 
-static bool terrain3dActiveValidRegionSize( const int nRegionSize ) {
-	return nRegionSize >= TERRAIN3D_ACTIVE_MIN_REGION_SIZE &&
-		nRegionSize <= TERRAIN3D_ACTIVE_WORLD_TEXELS &&
-		( nRegionSize & ( nRegionSize - 1 ) ) == 0 &&
-		TERRAIN3D_ACTIVE_WORLD_TEXELS % nRegionSize == 0;
-}
+EA_FORCE_INLINE static bool terrain3dActiveValidRegionSize( const int nRegionSize ) { return nRegionSize >= TERRAIN3D_ACTIVE_MIN_REGION_SIZE && nRegionSize <= TERRAIN3D_ACTIVE_WORLD_TEXELS && ( nRegionSize & ( nRegionSize - 1 ) ) == 0 && TERRAIN3D_ACTIVE_WORLD_TEXELS % nRegionSize == 0; }
 
-static size_t terrain3dActivePageBytes( const int nRegionSize ) {
-	const size_t size = nRegionSize > 0 ? ( size_t ) ( nRegionSize ) : 0u;
-	return size * size * sizeof( uint16_t );
-}
+EA_FORCE_INLINE static size_t terrain3dActivePageBytes( const int nRegionSize ) { const size_t size = nRegionSize > 0 ? ( size_t ) ( nRegionSize ) : 0u; return size * size * sizeof( uint16_t ); }
 
 static int terrain3dActiveLocationToSlot( const Vector2i &rLocation, const int nMapSize ) {
 	if ( nMapSize <= 0 || nMapSize > TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE ) {
@@ -91,10 +84,7 @@ static void terrain3dActiveBumpGeneration( std::atomic<uint32_t> &rGeneration ) 
 	}
 }
 
-static bool terrain3dActiveOwnerMatches( const void *pOwner ) {
-	return pOwner && s_nActiveOwnerState.load( std::memory_order_acquire ) == TERRAIN3D_ACTIVE_OWNER_OWNED &&
-		s_pActiveOwner.load( std::memory_order_acquire ) == pOwner;
-}
+EA_FORCE_INLINE static bool terrain3dActiveOwnerMatches( const void *pOwner ) { return pOwner && s_nActiveOwnerState.load( std::memory_order_acquire ) == TERRAIN3D_ACTIVE_OWNER_OWNED && s_pActiveOwner.load( std::memory_order_acquire ) == pOwner; }
 
 static void terrain3dActiveClearMappingsUnsafe( void ) {
 	for ( int slot = 0; slot < TERRAIN3D_ACTIVE_MAX_REGION_SLOTS; ++slot ) {

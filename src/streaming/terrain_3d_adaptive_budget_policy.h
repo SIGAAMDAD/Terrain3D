@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include "core/terrain_3d_compiler.h"
 
 typedef struct t3dadaptiveBudgetValues_s {
 	int nGpuPages = 4;
@@ -51,10 +52,7 @@ typedef struct t3dadaptiveBudgetState_s {
 	bool bInitialized = false;
 } t3dadaptiveBudgetState_t;
 
-inline int terrain3dAdaptiveClampValue( const int nValue, const int nMinimum, const int nMaximum ) {
-	const int maximum = std::max( nMinimum, nMaximum );
-	return std::max( nMinimum, std::min( nValue, maximum ) );
-}
+EA_FORCE_INLINE int terrain3dAdaptiveClampValue( const int nValue, const int nMinimum, const int nMaximum ) { const int maximum = std::max( nMinimum, nMaximum ); return std::max( nMinimum, std::min( nValue, maximum ) ); }
 
 inline void terrain3dAdaptiveSanitizeLimits( t3dadaptiveBudgetLimits_t &rLimits ) {
 	rLimits.maximum.nGpuPages = std::max( 0, rLimits.maximum.nGpuPages );
@@ -80,16 +78,7 @@ inline void terrain3dAdaptiveSanitizeLimits( t3dadaptiveBudgetLimits_t &rLimits 
 	rLimits.nAdjustmentWindowFrames = std::max( 1, rLimits.nAdjustmentWindowFrames );
 }
 
-inline void terrain3dAdaptiveReset(
-	const t3dadaptiveBudgetLimits_t &rLimits,
-	t3dadaptiveBudgetState_t &rState, const t3dadaptiveBudgetReason_t reason
-) {
-	rState.effective = rLimits.maximum;
-	rState.overBudgetStreak = 0;
-	rState.underBudgetStreak = 0;
-	rState.reason = reason;
-	rState.bInitialized = true;
-}
+EA_FORCE_INLINE void terrain3dAdaptiveReset( const t3dadaptiveBudgetLimits_t &rLimits, t3dadaptiveBudgetState_t &rState, const t3dadaptiveBudgetReason_t reason ) { rState.effective = rLimits.maximum; rState.overBudgetStreak = 0; rState.underBudgetStreak = 0; rState.reason = reason; rState.bInitialized = true; }
 
 inline int terrain3dAdaptiveDecrease( const int nValue, const int nMinimum ) {
 	if ( nValue <= nMinimum ) {

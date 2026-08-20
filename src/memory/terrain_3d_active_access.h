@@ -5,6 +5,7 @@
 #ifndef TERRAIN3D_ACTIVE_ACCESS_H
 #define TERRAIN3D_ACTIVE_ACCESS_H
 
+#include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
 
 #include <atomic>
@@ -64,9 +65,7 @@ typedef struct t3dactiveAccessGate_s {
 		}
 	}
 
-	void releaseWrite( void ) {
-		m_state.store( 0u, std::memory_order_release );
-	}
+	EA_FORCE_INLINE void releaseWrite( void ) { m_state.store( 0u, std::memory_order_release ); }
 
 	void waitIdle( void ) const {
 		while ( m_state.load( std::memory_order_acquire ) != 0u ) {
@@ -74,13 +73,9 @@ typedef struct t3dactiveAccessGate_s {
 		}
 	}
 
-	void resetUnsafe( void ) {
-		m_state.store( 0u, std::memory_order_relaxed );
-	}
+	EA_FORCE_INLINE void resetUnsafe( void ) { m_state.store( 0u, std::memory_order_relaxed ); }
 
-	uint32_t load( void ) const {
-		return m_state.load( std::memory_order_acquire );
-	}
+	EA_FORCE_INLINE uint32_t load( void ) const { return m_state.load( std::memory_order_acquire ); }
 
 private:
 	std::atomic<uint32_t> m_state{0u};

@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "core/terrain_3d_compiler.h"
 #include "instances/terrain_3d_instance_page_codec.h"
 
 #include <cstring>
@@ -23,43 +24,19 @@ bool terrain3dSizeMul( const size_t nA, const size_t nB, size_t &nValue ) {
 	return true;
 }
 
-void terrain3dWriteU16( uint8_t *pDst, const uint16_t nValue ) {
-	pDst[0] = ( uint8_t ) ( nValue & 0xffu );
-	pDst[1] = ( uint8_t ) ( ( nValue >> 8u ) & 0xffu );
-}
+EA_FORCE_INLINE void terrain3dWriteU16( uint8_t *pDst, const uint16_t nValue ) { pDst[0] = ( uint8_t ) ( nValue & 0xffu ); pDst[1] = ( uint8_t ) ( ( nValue >> 8u ) & 0xffu ); }
 
-void terrain3dWriteU32( uint8_t *pDst, const uint32_t nValue ) {
-	pDst[0] = ( uint8_t ) ( nValue & 0xffu );
-	pDst[1] = ( uint8_t ) ( ( nValue >> 8u ) & 0xffu );
-	pDst[2] = ( uint8_t ) ( ( nValue >> 16u ) & 0xffu );
-	pDst[3] = ( uint8_t ) ( ( nValue >> 24u ) & 0xffu );
-}
+EA_FORCE_INLINE void terrain3dWriteU32( uint8_t *pDst, const uint32_t nValue ) { pDst[0] = ( uint8_t ) ( nValue & 0xffu ); pDst[1] = ( uint8_t ) ( ( nValue >> 8u ) & 0xffu ); pDst[2] = ( uint8_t ) ( ( nValue >> 16u ) & 0xffu ); pDst[3] = ( uint8_t ) ( ( nValue >> 24u ) & 0xffu ); }
 
-uint16_t terrain3dReadU16( const uint8_t *pSrc ) {
-	return ( uint16_t ) ( ( uint16_t ) ( pSrc[0] ) | ( ( uint16_t ) ( pSrc[1] ) << 8u ) );
-}
+EA_FORCE_INLINE uint16_t terrain3dReadU16( const uint8_t *pSrc ) { return ( uint16_t ) ( ( uint16_t ) ( pSrc[0] ) | ( ( uint16_t ) ( pSrc[1] ) << 8u ) ); }
 
-uint32_t terrain3dReadU32( const uint8_t *pSrc ) {
-	return ( uint32_t ) ( pSrc[0] ) | ( ( uint32_t ) ( pSrc[1] ) << 8u ) | ( ( uint32_t ) ( pSrc[2] ) << 16u ) |
-		( ( uint32_t ) ( pSrc[3] ) << 24u );
-}
+EA_FORCE_INLINE uint32_t terrain3dReadU32( const uint8_t *pSrc ) { return ( uint32_t ) ( pSrc[0] ) | ( ( uint32_t ) ( pSrc[1] ) << 8u ) | ( ( uint32_t ) ( pSrc[2] ) << 16u ) | ( ( uint32_t ) ( pSrc[3] ) << 24u ); }
 
-void terrain3dWriteF32( uint8_t *pDst, const float fValue ) {
-	uint32_t bits = 0u;
-	std::memcpy( &bits, &fValue, sizeof( bits ) );
-	terrain3dWriteU32( pDst, bits );
-}
+EA_FORCE_INLINE void terrain3dWriteF32( uint8_t *pDst, const float fValue ) { uint32_t bits = 0u; std::memcpy( &bits, &fValue, sizeof( bits ) ); terrain3dWriteU32( pDst, bits ); }
 
-float terrain3dReadF32( const uint8_t *pSrc ) {
-	const uint32_t bits = terrain3dReadU32( pSrc );
-	float fValue = 0.0f;
-	std::memcpy( &fValue, &bits, sizeof( fValue ) );
-	return fValue;
-}
+EA_FORCE_INLINE float terrain3dReadF32( const uint8_t *pSrc ) { const uint32_t bits = terrain3dReadU32( pSrc ); float fValue = 0.0f; std::memcpy( &fValue, &bits, sizeof( fValue ) ); return fValue; }
 
-bool terrain3dPageHas( const size_t nOffset, const size_t nBytes, const size_t nSize ) {
-	return nOffset <= nSize && nBytes <= nSize - nOffset;
-}
+EA_FORCE_INLINE bool terrain3dPageHas( const size_t nOffset, const size_t nBytes, const size_t nSize ) { return nOffset <= nSize && nBytes <= nSize - nOffset; }
 
 void terrain3dClearMeshCounts( uint32_t *pMeshCounts ) {
 	if ( pMeshCounts ) {

@@ -10,6 +10,7 @@
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
 
+#include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
 
 class T3DRegionLighting : public Resource {
@@ -47,54 +48,54 @@ public:
 	~T3DRegionLighting( void ) = default;
 
 	void setLightDataPath( const String &rPath );
-	String getLightDataPath( void ) const { return m_lightDataPath; }
-	bool hasLightData( void ) const { return !m_lightDataPath.is_empty(); }
+	EA_FORCE_INLINE String getLightDataPath( void ) const { return m_lightDataPath; }
+	EA_FORCE_INLINE bool hasLightData( void ) const { return !m_lightDataPath.is_empty(); }
 	void setTerrainShadowMaskPath( const String &rPath );
-	String getTerrainShadowMaskPath( void ) const { return m_terrainShadowMaskPath; }
-	bool hasTerrainShadowMask( void ) const { return !m_terrainShadowMaskPath.is_empty(); }
+	EA_FORCE_INLINE String getTerrainShadowMaskPath( void ) const { return m_terrainShadowMaskPath; }
+	EA_FORCE_INLINE bool hasTerrainShadowMask( void ) const { return !m_terrainShadowMaskPath.is_empty(); }
 
 	void setBakedUserData( const Array &rData );
-	Array getBakedUserData( void ) const { return m_bakedUserData.duplicate( true ); }
-	const Array &getBakedUserDataInternal( void ) const { return m_bakedUserData; }
+	EA_FORCE_INLINE Array getBakedUserData( void ) const { return m_bakedUserData.duplicate( true ); }
+	EA_FORCE_INLINE const Array &getBakedUserDataInternal( void ) const { return m_bakedUserData; }
 
 	void setClusterLocation( const Vector2i &rLocation );
-	Vector2i getClusterLocation( void ) const { return m_clusterLocation; }
+	EA_FORCE_INLINE Vector2i getClusterLocation( void ) const { return m_clusterLocation; }
 	void setRegionMin( const Vector2i &rLocation );
-	Vector2i getRegionMin( void ) const { return m_regionMin; }
+	EA_FORCE_INLINE Vector2i getRegionMin( void ) const { return m_regionMin; }
 	void setRegionMax( const Vector2i &rLocation );
-	Vector2i getRegionMax( void ) const { return m_regionMax; }
+	EA_FORCE_INLINE Vector2i getRegionMax( void ) const { return m_regionMax; }
 	void setClusterSizeRegions( int nSize );
-	int getClusterSizeRegions( void ) const { return m_nClusterSizeRegions; }
+	EA_FORCE_INLINE int getClusterSizeRegions( void ) const { return m_nClusterSizeRegions; }
 	void setTerrainProxyLod( int nLod );
-	int getTerrainProxyLod( void ) const { return m_nTerrainProxyLod; }
+	EA_FORCE_INLINE int getTerrainProxyLod( void ) const { return m_nTerrainProxyLod; }
 	void setContextRadiusRegions( int nRadius );
-	int getContextRadiusRegions( void ) const { return m_nContextRadiusRegions; }
+	EA_FORCE_INLINE int getContextRadiusRegions( void ) const { return m_nContextRadiusRegions; }
 	void setShadowmaskMode( int nMode );
-	int getShadowmaskMode( void ) const { return m_nShadowmaskMode; }
+	EA_FORCE_INLINE int getShadowmaskMode( void ) const { return m_nShadowmaskMode; }
 	void setBakeSignature( int64_t nSignature );
-	int64_t getBakeSignature( void ) const { return m_bakeSignature; }
+	EA_FORCE_INLINE int64_t getBakeSignature( void ) const { return m_bakeSignature; }
 	void setDirectionalLightSignature( const String &rSignature );
-	String getDirectionalLightSignature( void ) const { return m_directionalLightSignature; }
+	EA_FORCE_INLINE String getDirectionalLightSignature( void ) const { return m_directionalLightSignature; }
 	void setBakedUnix( int64_t nUnix );
-	int64_t getBakedUnix( void ) const { return m_bakedUnix; }
+	EA_FORCE_INLINE int64_t getBakedUnix( void ) const { return m_bakedUnix; }
 	void setReceiverCount( int nCount );
-	int getReceiverCount( void ) const { return m_nReceiverCount; }
+	EA_FORCE_INLINE int getReceiverCount( void ) const { return m_nReceiverCount; }
 	void setContributorCount( int nCount );
-	int getContributorCount( void ) const { return m_nContributorCount; }
+	EA_FORCE_INLINE int getContributorCount( void ) const { return m_nContributorCount; }
 	void setLightmapTextureCount( int nCount );
-	int getLightmapTextureCount( void ) const { return m_nLightmapTextureCount; }
+	EA_FORCE_INLINE int getLightmapTextureCount( void ) const { return m_nLightmapTextureCount; }
 	void setShadowmaskTextureCount( int nCount );
-	int getShadowmaskTextureCount( void ) const { return m_nShadowmaskTextureCount; }
+	EA_FORCE_INLINE int getShadowmaskTextureCount( void ) const { return m_nShadowmaskTextureCount; }
 	void setHasProbeData( bool bHasProbes );
-	bool hasProbeData( void ) const { return m_bHasProbeData; }
+	EA_FORCE_INLINE bool hasProbeData( void ) const { return m_bHasProbeData; }
 	void setDiskBytes( int64_t nBytes );
-	int64_t getDiskBytes( void ) const { return m_nDiskBytes; }
+	EA_FORCE_INLINE int64_t getDiskBytes( void ) const { return m_nDiskBytes; }
 	void setEstimatedGpuBytes( int64_t nBytes );
-	int64_t getEstimatedGpuBytes( void ) const { return m_nEstimatedGpuBytes; }
+	EA_FORCE_INLINE int64_t getEstimatedGpuBytes( void ) const { return m_nEstimatedGpuBytes; }
 	void setSourceScene( const String &rPath );
-	String getSourceScene( void ) const { return m_sourceScene; }
+	EA_FORCE_INLINE String getSourceScene( void ) const { return m_sourceScene; }
 
-	bool hasShadowmask( void ) const { return m_nShadowmaskTextureCount > 0; }
+	EA_FORCE_INLINE bool hasShadowmask( void ) const { return m_nShadowmaskTextureCount > 0; }
 	int stripBakedUsersWithPathFragment( const String &rFragment );
 
 protected:

@@ -43,9 +43,7 @@ struct HlodBvhNode {
 	int count = 0;
 };
 
-static AABB boundsFromPoint( const Vector3 &p ) {
-	return AABB( p, Vector3() );
-}
+EA_FORCE_INLINE static AABB boundsFromPoint( const Vector3 &p ) { return AABB( p, Vector3() ); }
 
 static real_t pointAabbDistanceSquared( const Vector3 &p, const AABB &b ) {
 	const Vector3 end = b.get_end();
@@ -118,9 +116,7 @@ static int largestAxis( const Vector3 &size ) {
 	return size.y >= size.z ? 1 : 2;
 }
 
-static real_t component( const Vector3 &v, const int axis ) {
-	return axis == 0 ? v.x : ( axis == 1 ? v.y : v.z );
-}
+EA_FORCE_INLINE static real_t component( const Vector3 &v, const int axis ) { return axis == 0 ? v.x : ( axis == 1 ? v.y : v.z ); }
 
 static int buildBvhRecursive(
 	const eastl::vector<HlodTriangle> &triangles,

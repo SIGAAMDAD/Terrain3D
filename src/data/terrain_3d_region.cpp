@@ -4,6 +4,7 @@
 
 #include <cstring>
 
+#include "core/terrain_3d_compiler.h"
 #include "core/logger.h"
 #include "data/terrain_3d_data.h"
 #include "instances/terrain_3d_instance_page_codec.h"
@@ -56,11 +57,7 @@ bool imageIsDefaultColor( const Ref<Image> &rMap, const int nRegionSize ) {
 	return true;
 }
 
-int normalizeStreamedNodeBoundaryPolicy( const int nPolicy ) {
-	return nPolicy == T3DRegion::STREAMED_NODE_BOUNDARY_COVERAGE ?
-		T3DRegion::STREAMED_NODE_BOUNDARY_COVERAGE :
-		T3DRegion::STREAMED_NODE_BOUNDARY_ANCHOR;
-}
+EA_FORCE_INLINE int normalizeStreamedNodeBoundaryPolicy( const int nPolicy ) { return nPolicy == T3DRegion::STREAMED_NODE_BOUNDARY_COVERAGE ? T3DRegion::STREAMED_NODE_BOUNDARY_COVERAGE : T3DRegion::STREAMED_NODE_BOUNDARY_ANCHOR; }
 
 void normalizeStreamedNodeCoverage(
 	const int nPolicy, const Vector2i &rInputMin, const Vector2i &rInputMax,
@@ -77,13 +74,9 @@ void normalizeStreamedNodeCoverage(
 	rOutputMax = Vector2i( MAX( inputMin.x, inputMax.x ), MAX( inputMin.y, inputMax.y ) );
 }
 
-int normalizeLightingClass( const int nClass ) {
-	return CLAMP( nClass, ( int ) ( T3DRegion::LIGHTING_CLASS_TERRAIN ), ( int ) ( T3DRegion::LIGHTING_CLASS_REGIONAL_OCCLUDER ) );
-}
+EA_FORCE_INLINE int normalizeLightingClass( const int nClass ) { return CLAMP( nClass, ( int ) ( T3DRegion::LIGHTING_CLASS_TERRAIN ), ( int ) ( T3DRegion::LIGHTING_CLASS_REGIONAL_OCCLUDER ) ); }
 
-int normalizeBakedLightingMode( const int nMode ) {
-	return CLAMP( nMode, ( int ) ( T3DRegion::BAKED_LIGHTING_DISABLED ), ( int ) ( T3DRegion::BAKED_LIGHTING_MATERIAL_ONLY ) );
-}
+EA_FORCE_INLINE int normalizeBakedLightingMode( const int nMode ) { return CLAMP( nMode, ( int ) ( T3DRegion::BAKED_LIGHTING_DISABLED ), ( int ) ( T3DRegion::BAKED_LIGHTING_MATERIAL_ONLY ) ); }
 
 void storeStreamedNodeLighting( Dictionary &rEntry, const Dictionary &dictSource ) {
 	rEntry["lighting_class"] = normalizeLightingClass( dictSource.has( "lighting_class" ) ? ( int ) ( dictSource["lighting_class"] ) : ( int ) ( T3DRegion::LIGHTING_CLASS_MEDIUM_OBSTACLE ) );

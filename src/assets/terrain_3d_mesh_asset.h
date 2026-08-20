@@ -85,195 +85,103 @@ private:
 	static bool sortLodNodes( const Node *pA, const Node *pB );
 	Ref<ArrayMesh> createGeneratedMesh( const t3dgenType_t type = TYPE_TEXTURE_CARD ) const;
 	void assignGeneratedMesh( void );
-	void invalidateThumbnail( void ) {
-		m_pThumbnail.unref();
-	}
+	EA_FORCE_INLINE void invalidateThumbnail( void ) { m_pThumbnail.unref(); }
 	Ref<Material> getMaterial( void );
 	TypedArray<Mesh> getMeshes( void ) const;
 
 public:
-	T3DMeshAsset( void ) {
-		clear();
-	}
-	~T3DMeshAsset( void ) {}
+	EA_FORCE_INLINE T3DMeshAsset( void ) { clear(); }
+	EA_FORCE_INLINE ~T3DMeshAsset( void ) {}
 	void initialize( void ) override;
 	void clear( void ) override;
 
 	void setName( const String &rName ) override;
-	String getName( void ) const override {
-		return m_name;
-	}
+	EA_FORCE_INLINE String getName( void ) const override { return m_name; }
 	void setId( const int nNewId ) override;
-	int getId( void ) const override {
-		return m_nId;
-	}
+	EA_FORCE_INLINE int getId( void ) const override { return m_nId; }
 	void setHighlighted( const bool bHighlighted ) override;
-	bool isHighlighted( void ) const override {
-		return m_bHighlighted;
-	}
-	Ref<Material> getHighlightMaterial( void ) const {
-		return m_bHighlighted ? m_pHighlightMat : Ref<Material>();
-	}
+	EA_FORCE_INLINE bool isHighlighted( void ) const override { return m_bHighlighted; }
+	EA_FORCE_INLINE Ref<Material> getHighlightMaterial( void ) const { return m_bHighlighted ? m_pHighlightMat : Ref<Material>(); }
 	Color getHighlightColor( void ) const override;
-	Ref<Texture2D> getThumbnail( void ) const override {
-		return m_pThumbnail;
-	}
+	EA_FORCE_INLINE Ref<Texture2D> getThumbnail( void ) const override { return m_pThumbnail; }
 
 	void setEnabled( const bool bEnabled );
-	bool isEnabled( void ) const {
-		return m_bEnabled;
-	}
+	EA_FORCE_INLINE bool isEnabled( void ) const { return m_bEnabled; }
 
 	void updateInstanceCount( const int64_t nAmount );
 	void setInstanceCount( const uint32_t nAmount );
-	uint32_t getInstanceCount( void ) const {
-		return m_nInstanceCount;
-	}
+	EA_FORCE_INLINE uint32_t getInstanceCount( void ) const { return m_nInstanceCount; }
 
 	void setSceneFile( const Ref<PackedScene> &rSceneFile );
-	Ref<PackedScene> getSceneFile( void ) const {
-		return m_pPackedScene;
-	}
-	bool isSceneFilePending( void ) const {
-		return m_pendingMeshes.size() > 0;
-	}
+	EA_FORCE_INLINE Ref<PackedScene> getSceneFile( void ) const { return m_pPackedScene; }
+	EA_FORCE_INLINE bool isSceneFilePending( void ) const { return m_pendingMeshes.size() > 0; }
 	void commitMeshes( void );
 	void setHlodContribution( t3dhlodContribution_t mode );
-	t3dhlodContribution_t getHlodContribution( void ) const { return m_hlodContribution; }
+	EA_FORCE_INLINE t3dhlodContribution_t getHlodContribution( void ) const { return m_hlodContribution; }
 	void setHlodMinLevel( int nLevel );
-	int getHlodMinLevel( void ) const { return m_nHlodMinLevel; }
+	EA_FORCE_INLINE int getHlodMinLevel( void ) const { return m_nHlodMinLevel; }
 	bool isHlodEligible( void ) const {
 		if ( m_hlodContribution == HLOD_EXCLUDE ) { return false; }
 		return m_hlodContribution == HLOD_INCLUDE || m_generatedType == TYPE_NONE;
 	}
 
 	void setGeneratedType( const t3dgenType_t type );
-	t3dgenType_t getGeneratedType( void ) const {
-		return m_generatedType;
-	}
+	EA_FORCE_INLINE t3dgenType_t getGeneratedType( void ) const { return m_generatedType; }
 	Ref<Mesh> getMesh( const int nLod = 0 ) const;
-	void setThumbnail( const Ref<Texture2D> tex ) {
-		m_pThumbnail = tex;
-	}
+	EA_FORCE_INLINE void setThumbnail( const Ref<Texture2D> tex ) { m_pThumbnail = tex; }
 	void setHeightOffset( const real_t fOffset );
-	real_t getHeightOffset( void ) const {
-		return m_fHeightOffset;
-	}
+	EA_FORCE_INLINE real_t getHeightOffset( void ) const { return m_fHeightOffset; }
 	void setDensity( const real_t fDensity );
-	real_t getDensity( void ) const {
-		return m_fDensity;
-	}
+	EA_FORCE_INLINE real_t getDensity( void ) const { return m_fDensity; }
 	void setCastShadows( const ShadowCasting castShadows );
-	ShadowCasting getCastShadows( void ) const {
-		return m_castShadows;
-	}
+	EA_FORCE_INLINE ShadowCasting getCastShadows( void ) const { return m_castShadows; }
 	ShadowCasting getLodCastShadows( const int nLodId ) const;
 	void setVisibilityLayers( const uint32_t nLayers );
-	uint32_t getVisibilityLayers( void ) const {
-		return m_visibilityLayers;
-	}
+	EA_FORCE_INLINE uint32_t getVisibilityLayers( void ) const { return m_visibilityLayers; }
 	void setMaterialOverride( const Ref<Material> &rMaterial );
-	Ref<Material> getMaterialOverride( void ) const {
-		return m_pMaterialOverride;
-	}
+	EA_FORCE_INLINE Ref<Material> getMaterialOverride( void ) const { return m_pMaterialOverride; }
 	void setMaterialOverlay( const Ref<Material> &rMaterial );
-	Ref<Material> getMaterialOverlay( void ) const {
-		return m_pMaterialOverlay;
-	}
+	EA_FORCE_INLINE Ref<Material> getMaterialOverlay( void ) const { return m_pMaterialOverlay; }
 
 	void setGeneratedFaces( const int nCount );
-	int getGeneratedFaces( void ) const {
-		return m_nGeneratedFaces;
-	}
+	EA_FORCE_INLINE int getGeneratedFaces( void ) const { return m_nGeneratedFaces; }
 	void setGeneratedSize( const Vector2 &rSize );
-	Vector2 getGeneratedSize( void ) const {
-		return m_generatedSize;
-	}
+	EA_FORCE_INLINE Vector2 getGeneratedSize( void ) const { return m_generatedSize; }
 
-	int getLodCount( void ) const {
-		return getMeshes().size();
-	}
+	EA_FORCE_INLINE int getLodCount( void ) const { return getMeshes().size(); }
 	void setLastLod( const int nLod );
-	int getLastLod( void ) const {
-		return m_iLastLod;
-	}
+	EA_FORCE_INLINE int getLastLod( void ) const { return m_iLastLod; }
 	void setLastShadowLod( const int nLod );
-	int getLastShadowLod( void ) const {
-		return m_iLastShadowLod;
-	}
+	EA_FORCE_INLINE int getLastShadowLod( void ) const { return m_iLastShadowLod; }
 	void setShadowImpostor( const int nLod );
-	int getShadowImpostor( void ) const {
-		return m_shadowImpostor;
-	}
+	EA_FORCE_INLINE int getShadowImpostor( void ) const { return m_shadowImpostor; }
 
 	void setLodRange( const int nLod, const real_t fDistance );
 	real_t getLodRange( const int nLod ) const;
 	real_t getLodRangeBegin( const int nLod ) const;
 	real_t getLodRangeEnd( const int nLod ) const;
-	void setLod0Range( const real_t fDistance ) {
-		setLodRange( 0, fDistance );
-	}
-	real_t getLod0Range( void ) const {
-		return m_fLodRanges[0];
-	}
-	void setLod1Range( const real_t fDistance ) {
-		setLodRange( 1, fDistance );
-	}
-	real_t getLod1Range( void ) const {
-		return m_fLodRanges[1];
-	}
-	void setLod2Range( const real_t fDistance ) {
-		setLodRange( 2, fDistance );
-	}
-	real_t getLod2Range( void ) const {
-		return m_fLodRanges[2];
-	}
-	void setLod3Range( const real_t fDistance ) {
-		setLodRange( 3, fDistance );
-	}
-	real_t getLod3Range( void ) const {
-		return m_fLodRanges[3];
-	}
-	void setLod4Range( const real_t fDistance ) {
-		setLodRange( 4, fDistance );
-	}
-	real_t getLod4Range( void ) const {
-		return m_fLodRanges[4];
-	}
-	void setLod5Range( const real_t fDistance ) {
-		setLodRange( 5, fDistance );
-	}
-	real_t getLod5Range( void ) const {
-		return m_fLodRanges[5];
-	}
-	void setLod6Range( const real_t fDistance ) {
-		setLodRange( 6, fDistance );
-	}
-	real_t getLod6Range( void ) const {
-		return m_fLodRanges[6];
-	}
-	void setLod7Range( const real_t fDistance ) {
-		setLodRange( 7, fDistance );
-	}
-	real_t getLod7Range( void ) const {
-		return m_fLodRanges[7];
-	}
-	void setLod8Range( const real_t fDistance ) {
-		setLodRange( 8, fDistance );
-	}
-	real_t getLod8Range( void ) const {
-		return m_fLodRanges[8];
-	}
-	void setLod9Range( const real_t fDistance ) {
-		setLodRange( 9, fDistance );
-	}
-	real_t getLod9Range( void ) const {
-		return m_fLodRanges[9];
-	}
+	EA_FORCE_INLINE void setLod0Range( const real_t fDistance ) { setLodRange( 0, fDistance ); }
+	EA_FORCE_INLINE real_t getLod0Range( void ) const { return m_fLodRanges[0]; }
+	EA_FORCE_INLINE void setLod1Range( const real_t fDistance ) { setLodRange( 1, fDistance ); }
+	EA_FORCE_INLINE real_t getLod1Range( void ) const { return m_fLodRanges[1]; }
+	EA_FORCE_INLINE void setLod2Range( const real_t fDistance ) { setLodRange( 2, fDistance ); }
+	EA_FORCE_INLINE real_t getLod2Range( void ) const { return m_fLodRanges[2]; }
+	EA_FORCE_INLINE void setLod3Range( const real_t fDistance ) { setLodRange( 3, fDistance ); }
+	EA_FORCE_INLINE real_t getLod3Range( void ) const { return m_fLodRanges[3]; }
+	EA_FORCE_INLINE void setLod4Range( const real_t fDistance ) { setLodRange( 4, fDistance ); }
+	EA_FORCE_INLINE real_t getLod4Range( void ) const { return m_fLodRanges[4]; }
+	EA_FORCE_INLINE void setLod5Range( const real_t fDistance ) { setLodRange( 5, fDistance ); }
+	EA_FORCE_INLINE real_t getLod5Range( void ) const { return m_fLodRanges[5]; }
+	EA_FORCE_INLINE void setLod6Range( const real_t fDistance ) { setLodRange( 6, fDistance ); }
+	EA_FORCE_INLINE real_t getLod6Range( void ) const { return m_fLodRanges[6]; }
+	EA_FORCE_INLINE void setLod7Range( const real_t fDistance ) { setLodRange( 7, fDistance ); }
+	EA_FORCE_INLINE real_t getLod7Range( void ) const { return m_fLodRanges[7]; }
+	EA_FORCE_INLINE void setLod8Range( const real_t fDistance ) { setLodRange( 8, fDistance ); }
+	EA_FORCE_INLINE real_t getLod8Range( void ) const { return m_fLodRanges[8]; }
+	EA_FORCE_INLINE void setLod9Range( const real_t fDistance ) { setLodRange( 9, fDistance ); }
+	EA_FORCE_INLINE real_t getLod9Range( void ) const { return m_fLodRanges[9]; }
 	void setFadeMargin( const real_t fFadeMargin );
-	real_t getFadeMargin( void ) const {
-		return m_fFadeMargin;
-	}
+	EA_FORCE_INLINE real_t getFadeMargin( void ) const { return m_fFadeMargin; }
 
 protected:
 	void _validate_property( PropertyInfo &rProperty ) const;

@@ -158,10 +158,8 @@ private:
 	size_t estimateGeometryPayloadBytes( int nFirstLod, int nLastLod, bool bIncludeBasis ) const;
 
 public:
-	T3DMesher( void ) {}
-	~T3DMesher( void ) {
-		destroy();
-	}
+	EA_FORCE_INLINE T3DMesher( void ) {}
+	EA_FORCE_INLINE ~T3DMesher( void ) { destroy(); }
 
 	void initialize(
 		T3DTerrain *pTerrain, const int nMeshSize, const int nLods, const int nTessellationLevel,
@@ -189,27 +187,15 @@ public:
 		int nClipmapUpdateBudget, bool bForceFullSnap = true
 	);
 
-	void setMaterials( const eastl::array<RID, 3> &rMaterials ) {
-		m_szMaterials = rMaterials;
-		m_lastShaderTargetPosition = V3_MAX;
-		configureStateMaterials();
-		update();
-	}
-	void setShadowMaterials( const eastl::array<RID, 3> &rMaterials ) {
-		m_szShadowMaterials = rMaterials;
-		m_lastShaderTargetPosition = V3_MAX;
-		configureStateMaterials();
-		update();
-	}
-	RID getMaterial( void ) const {
-		return m_szMaterials[0];
-	}
-	uint32_t getNearUpdatesLastSnap( void ) const { return m_nNearUpdatesLastSnap; }
-	uint32_t getMiddleUpdatesLastSnap( void ) const { return m_nMiddleUpdatesLastSnap; }
-	uint32_t getFarUpdatesLastSnap( void ) const { return m_nFarUpdatesLastSnap; }
-	uint32_t getTeleportsLastSnap( void ) const { return m_nTeleportsLastSnap; }
-	uint32_t getBufferUploadsLastSnap( void ) const { return m_nBufferUploadsLastSnap; }
-	int getRenderBatchCount( void ) const { return m_nRenderBatchCount; }
+	EA_FORCE_INLINE void setMaterials( const eastl::array<RID, 3> &rMaterials ) { m_szMaterials = rMaterials; m_lastShaderTargetPosition = V3_MAX; configureStateMaterials(); update(); }
+	EA_FORCE_INLINE void setShadowMaterials( const eastl::array<RID, 3> &rMaterials ) { m_szShadowMaterials = rMaterials; m_lastShaderTargetPosition = V3_MAX; configureStateMaterials(); update(); }
+	EA_FORCE_INLINE RID getMaterial( void ) const { return m_szMaterials[0]; }
+	EA_FORCE_INLINE uint32_t getNearUpdatesLastSnap( void ) const { return m_nNearUpdatesLastSnap; }
+	EA_FORCE_INLINE uint32_t getMiddleUpdatesLastSnap( void ) const { return m_nMiddleUpdatesLastSnap; }
+	EA_FORCE_INLINE uint32_t getFarUpdatesLastSnap( void ) const { return m_nFarUpdatesLastSnap; }
+	EA_FORCE_INLINE uint32_t getTeleportsLastSnap( void ) const { return m_nTeleportsLastSnap; }
+	EA_FORCE_INLINE uint32_t getBufferUploadsLastSnap( void ) const { return m_nBufferUploadsLastSnap; }
+	EA_FORCE_INLINE int getRenderBatchCount( void ) const { return m_nRenderBatchCount; }
 	int getRenderBatchCountForTier( const int nTier ) const {
 		int count = 0;
 		for ( int index = 0; index < m_nRenderBatchCount; ++index ) {
@@ -251,30 +237,14 @@ public:
 	size_t getVisibleGeometryPayloadBytes( void ) const;
 	size_t getShadowGeometryPayloadBytes( void ) const;
 	size_t getStreamingBufferBytes( void ) const;
-	void setLods( const int nLods ) {
-		m_nLods = nLods;
-	}
-	int getLods( void ) const {
-		return m_nLods;
-	}
-	void setTessellationLevel( const int nLevel ) {
-		m_tessellationLevel = nLevel;
-	}
-	int getTessellationLevel( void ) const {
-		return m_tessellationLevel;
-	}
-	void setMeshSize( const int nSize ) {
-		m_nMeshSize = nSize;
-	}
-	int getMeshSize( void ) const {
-		return m_nMeshSize;
-	}
-	void setVertexSpacing( const real_t fSpacing ) {
-		m_fVertexSpacing = fSpacing;
-	}
-	real_t getVertexSpacing( void ) const {
-		return m_fVertexSpacing;
-	}
+	EA_FORCE_INLINE void setLods( const int nLods ) { m_nLods = nLods; }
+	EA_FORCE_INLINE int getLods( void ) const { return m_nLods; }
+	EA_FORCE_INLINE void setTessellationLevel( const int nLevel ) { m_tessellationLevel = nLevel; }
+	EA_FORCE_INLINE int getTessellationLevel( void ) const { return m_tessellationLevel; }
+	EA_FORCE_INLINE void setMeshSize( const int nSize ) { m_nMeshSize = nSize; }
+	EA_FORCE_INLINE int getMeshSize( void ) const { return m_nMeshSize; }
+	EA_FORCE_INLINE void setVertexSpacing( const real_t fSpacing ) { m_fVertexSpacing = fSpacing; }
+	EA_FORCE_INLINE real_t getVertexSpacing( void ) const { return m_fVertexSpacing; }
 	void setRenderLayers( const uint32_t nLayers ) {
 		if ( m_renderLayers == nLayers ) {
 			return;
@@ -282,14 +252,9 @@ public:
 		m_renderLayers = nLayers;
 		update();
 	}
-	uint32_t getRenderLayers( void ) const {
-		return m_renderLayers;
-	}
+	EA_FORCE_INLINE uint32_t getRenderLayers( void ) const { return m_renderLayers; }
 	void setCastShadows( RenderingServer::ShadowCastingSetting castShadows );
-	void setGiMode( const GeometryInstance3D::GIMode giMode ) {
-		m_giMode = giMode;
-		update();
-	}
+	EA_FORCE_INLINE void setGiMode( const GeometryInstance3D::GIMode giMode ) { m_giMode = giMode; update(); }
 	void setShadowLodCount( int nCount );
 	void setTierShadowEnabled( const eastl::array<bool, 3> &bEnabled );
 	void setTierShadowLodCounts( const eastl::array<int, 3> &nCounts );

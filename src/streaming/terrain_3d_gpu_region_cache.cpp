@@ -119,9 +119,7 @@ static uint32_t terrain3dMaterialMaskFromControlImage( const Ref<Image> &rContro
 	return mask != 0u ? mask : 1u;
 }
 
-static uint8_t terrain3dColorToByte( const float fValue ) {
-	return ( uint8_t ) ( CLAMP( Math::round( fValue * TERRAIN3D_BYTE_MAX_FLOAT ), 0.0f, TERRAIN3D_BYTE_MAX_FLOAT ) );
-}
+EA_FORCE_INLINE static uint8_t terrain3dColorToByte( const float fValue ) { return ( uint8_t ) ( CLAMP( Math::round( fValue * TERRAIN3D_BYTE_MAX_FLOAT ), 0.0f, TERRAIN3D_BYTE_MAX_FLOAT ) ); }
 
 static int terrain3dMaterialIntParam( T3DMaterial *pMaterial, const char *pszName, const int nDefault ) {
 	if ( !pMaterial ) {
@@ -131,9 +129,7 @@ static int terrain3dMaterialIntParam( T3DMaterial *pMaterial, const char *pszNam
 	return value.get_type() == Variant::NIL ? nDefault : ( int ) ( value );
 }
 
-static size_t terrain3dGpuImageBytes( const Ref<Image> &rImage ) {
-	return rImage.is_valid() ? ( size_t ) ( rImage->get_data().size() ) : 0u;
-}
+EA_FORCE_INLINE static size_t terrain3dGpuImageBytes( const Ref<Image> &rImage ) { return rImage.is_valid() ? ( size_t ) ( rImage->get_data().size() ) : 0u; }
 
 class T3DLastScopeTimer {
 	uint64_t m_nStartedUsec = 0u;
@@ -166,11 +162,7 @@ class T3DProfileScopeTimer {
 	uint64_t *m_pEndToEndUsec = nullptr;
 
 public:
-	T3DProfileScopeTimer( uint64_t &nElapsedUsec, const uint64_t &nRequestUsec, uint64_t &nEndToEndUsec ) :
-			m_pElapsedUsec( &nElapsedUsec ), m_pRequestUsec( &nRequestUsec ), m_pEndToEndUsec( &nEndToEndUsec ) {
-		Time *time = Time::get_singleton();
-		m_nStartedUsec = time ? time->get_ticks_usec() : 0u;
-	}
+	EA_FORCE_INLINE T3DProfileScopeTimer( uint64_t &nElapsedUsec, const uint64_t &nRequestUsec, uint64_t &nEndToEndUsec ) : m_pElapsedUsec( &nElapsedUsec ), m_pRequestUsec( &nRequestUsec ), m_pEndToEndUsec( &nEndToEndUsec ) { Time *time = Time::get_singleton(); m_nStartedUsec = time ? time->get_ticks_usec() : 0u; }
 	~T3DProfileScopeTimer( void ) {
 		Time *time = Time::get_singleton();
 		const uint64_t finished = time ? time->get_ticks_usec() : m_nStartedUsec;

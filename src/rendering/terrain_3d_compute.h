@@ -86,10 +86,7 @@ public:
 	T3DCompute &operator=( const T3DCompute & ) = delete;
 
 	bool isAvailable( void );
-	String getLastError( void ) const {
-		std::lock_guard<std::mutex> lock( m_errorMutex );
-		return m_lastError;
-	}
+	EA_FORCE_INLINE String getLastError( void ) const { std::lock_guard<std::mutex> lock( m_errorMutex ); return m_lastError; }
 
 	bool processBrush( eastl::vector<t3dbrushElement_t> &rElements, const t3dbrushParams_t &rParams );
 	static void processBrushCpu( eastl::vector<t3dbrushElement_t> &rElements, const t3dbrushParams_t &rParams );
@@ -166,10 +163,7 @@ private:
 	void freeRenderPipeline( t3dpipeline_t &rPipeline );
 	void freeDisplacementTexture( void );
 	void shutdown( void );
-	void setError( const String &rError ) {
-		std::lock_guard<std::mutex> lock( m_errorMutex );
-		m_lastError = rError;
-	}
+	EA_FORCE_INLINE void setError( const String &rError ) { std::lock_guard<std::mutex> lock( m_errorMutex ); m_lastError = rError; }
 	static uint32_t growthCapacity( uint32_t nRequired );
 	static PackedByteArray copyToBytes( const void *pData, size_t nSize );
 };

@@ -80,11 +80,7 @@ static bool terrain3dIsNativePackedSurfaceFormat( const Image::Format format ) {
 		format == Image::FORMAT_BPTC_RGBA;
 }
 
-static bool terrain3dIsSupportedNativeArrayFormat( const Image::Format format ) {
-	return format == Image::FORMAT_DXT1 || format == Image::FORMAT_DXT5 ||
-		format == Image::FORMAT_BPTC_RGBA || format == Image::FORMAT_RGTC_R ||
-		format == Image::FORMAT_RGTC_RG;
-}
+EA_FORCE_INLINE static bool terrain3dIsSupportedNativeArrayFormat( const Image::Format format ) { return format == Image::FORMAT_DXT1 || format == Image::FORMAT_DXT5 || format == Image::FORMAT_BPTC_RGBA || format == Image::FORMAT_RGTC_R || format == Image::FORMAT_RGTC_RG; }
 
 static Error terrain3dCompressArrayImageToFormat( const Ref<Image> &rImage, const Image::Format format ) {
 	if ( rImage.is_null() ) {
@@ -179,15 +175,7 @@ static Ref<Image> terrain3dPrepareArrayImage(
 		pImage : Ref<Image>();
 }
 
-static void terrain3dReleaseGeneratedReplacements(
-	T3DGeneratedTexture &rAlbedo, T3DGeneratedTexture &rNormal,
-	T3DGeneratedTexture &rSurface, T3DGeneratedTexture &rDisplacement
-) {
-	rAlbedo.clear();
-	rNormal.clear();
-	rSurface.clear();
-	rDisplacement.clear();
-}
+EA_FORCE_INLINE static void terrain3dReleaseGeneratedReplacements( T3DGeneratedTexture &rAlbedo, T3DGeneratedTexture &rNormal, T3DGeneratedTexture &rSurface, T3DGeneratedTexture &rDisplacement ) { rAlbedo.clear(); rNormal.clear(); rSurface.clear(); rDisplacement.clear(); }
 
 } // namespace
 

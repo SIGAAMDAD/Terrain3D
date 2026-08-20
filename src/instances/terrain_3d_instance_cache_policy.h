@@ -4,6 +4,7 @@
 #ifndef TERRAIN3D_INSTANCE_CACHE_POLICY_H
 #define TERRAIN3D_INSTANCE_CACHE_POLICY_H
 
+#include "core/terrain_3d_compiler.h"
 #include "instances/terrain_3d_instance_cache_constants.h"
 
 #include <cstddef>
@@ -41,8 +42,6 @@ inline bool terrain3dInstanceCacheCanStream(
 	return nIncomingBytes <= nBudgetBytes - nResidentBytes;
 }
 
-inline bool terrain3dInstanceCacheIndexValid( const int iIndex, const int nCapacity ) {
-	return iIndex >= 0 && nCapacity > 0 && nCapacity <= TERRAIN3D_INSTANCE_CACHE_MAX_PAGES && iIndex < nCapacity;
-}
+EA_FORCE_INLINE bool terrain3dInstanceCacheIndexValid( const int iIndex, const int nCapacity ) { return iIndex >= 0 && nCapacity > 0 && nCapacity <= TERRAIN3D_INSTANCE_CACHE_MAX_PAGES && iIndex < nCapacity; }
 
 #endif // TERRAIN3D_INSTANCE_CACHE_POLICY_H

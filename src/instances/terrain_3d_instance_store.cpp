@@ -1,3 +1,4 @@
+#include "core/terrain_3d_compiler.h"
 #include "instances/terrain_3d_instance_store.h"
 
 T3DInstanceStore::T3DInstanceStore( void ) {
@@ -48,9 +49,7 @@ size_t T3DInstanceStore::cellLowerBound(
 }
 
 namespace {
-static bool terrain3dInstanceMeshIdLess( const t3dinstanceMesh_t &rA, const t3dinstanceMesh_t &rB ) {
-	return rA.id < rB.id;
-}
+EA_FORCE_INLINE static bool terrain3dInstanceMeshIdLess( const t3dinstanceMesh_t &rA, const t3dinstanceMesh_t &rB ) { return rA.id < rB.id; }
 }
 
 size_t T3DInstanceStore::findCellIndex( const t3dinstanceMesh_t &mesh, const Vector2i &location ) {

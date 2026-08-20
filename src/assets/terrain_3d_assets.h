@@ -172,20 +172,12 @@ private:
 	void resetRuntimeMaterialCacheState( bool bClearGeneratedArrays );
 
 public:
-	T3DAssets( void ) {}
-	~T3DAssets( void ) {
-		destroy();
-	}
+	EA_FORCE_INLINE T3DAssets( void ) {}
+	EA_FORCE_INLINE ~T3DAssets( void ) { destroy(); }
 	void initialize( T3DTerrain *pTerrain );
-	bool isInitialized( void ) const {
-		return m_pTerrain != nullptr;
-	}
-	bool isInitializedFor( const T3DTerrain *pTerrain ) const {
-		return m_pTerrain == pTerrain;
-	}
-	T3DTerrain *getTerrainOwner( void ) const {
-		return m_pTerrain;
-	}
+	EA_FORCE_INLINE bool isInitialized( void ) const { return m_pTerrain != nullptr; }
+	EA_FORCE_INLINE bool isInitializedFor( const T3DTerrain *pTerrain ) const { return m_pTerrain == pTerrain; }
+	EA_FORCE_INLINE T3DTerrain *getTerrainOwner( void ) const { return m_pTerrain; }
 	void uninitialize( T3DTerrain *pTerrain );
 	void destroy( void );
 
@@ -193,80 +185,34 @@ public:
 	Ref<T3DTextureAsset> getTextureAsset( const int nId ) const;
 	void setTextureList( const TypedArray<T3DTextureAsset> &rTextureList );
 	TypedArray<T3DTextureAsset> getTextureList( void ) const;
-	int getTextureCount( void ) const {
-		return m_textureList.size();
-	}
-	int getGeneratedArraySize( void ) const {
-		return m_generatedAlbedoTextures.size();
-	}
-	RID getAlbedoArrayRid( void ) const {
-		return m_generatedAlbedoTextures.getRid();
-	}
-	RID getFarAlbedoArrayRid( void ) const { return m_generatedFarAlbedoTextures.getRid(); }
-	int getFarAlbedoArraySize( void ) const { return m_generatedFarAlbedoTextures.size(); }
-	int getFarAlbedoArrayMaxLod( void ) const { return m_generatedFarAlbedoTextures.maxMipmapLevel(); }
-	int getAlbedoArrayMaxLod( void ) const {
-		return m_generatedAlbedoTextures.maxMipmapLevel();
-	}
-	RID getNormalArrayRid( void ) const {
-		return m_generatedNormalTextures.getRid();
-	}
-	RID getSurfaceArrayRid( void ) const {
-		return m_generatedSurfaceTextures.getRid();
-	}
-	RID getDisplacementArrayRid( void ) const {
-		return m_generatedDisplacementTextures.getRid();
-	}
-	size_t getGeneratedTexturePayloadBytes( void ) const {
-		return m_generatedAlbedoTextures.payloadBytes() + m_generatedNormalTextures.payloadBytes() +
-			m_generatedSurfaceTextures.payloadBytes() + m_generatedDisplacementTextures.payloadBytes() +
-			m_generatedFarAlbedoTextures.payloadBytes();
-	}
+	EA_FORCE_INLINE int getTextureCount( void ) const { return m_textureList.size(); }
+	EA_FORCE_INLINE int getGeneratedArraySize( void ) const { return m_generatedAlbedoTextures.size(); }
+	EA_FORCE_INLINE RID getAlbedoArrayRid( void ) const { return m_generatedAlbedoTextures.getRid(); }
+	EA_FORCE_INLINE RID getFarAlbedoArrayRid( void ) const { return m_generatedFarAlbedoTextures.getRid(); }
+	EA_FORCE_INLINE int getFarAlbedoArraySize( void ) const { return m_generatedFarAlbedoTextures.size(); }
+	EA_FORCE_INLINE int getFarAlbedoArrayMaxLod( void ) const { return m_generatedFarAlbedoTextures.maxMipmapLevel(); }
+	EA_FORCE_INLINE int getAlbedoArrayMaxLod( void ) const { return m_generatedAlbedoTextures.maxMipmapLevel(); }
+	EA_FORCE_INLINE RID getNormalArrayRid( void ) const { return m_generatedNormalTextures.getRid(); }
+	EA_FORCE_INLINE RID getSurfaceArrayRid( void ) const { return m_generatedSurfaceTextures.getRid(); }
+	EA_FORCE_INLINE RID getDisplacementArrayRid( void ) const { return m_generatedDisplacementTextures.getRid(); }
+	EA_FORCE_INLINE size_t getGeneratedTexturePayloadBytes( void ) const { return m_generatedAlbedoTextures.payloadBytes() + m_generatedNormalTextures.payloadBytes() + m_generatedSurfaceTextures.payloadBytes() + m_generatedDisplacementTextures.payloadBytes() + m_generatedFarAlbedoTextures.payloadBytes(); }
 	// Deprecated compatibility alias.
-	RID getPbrArrayRid( void ) const {
-		return getSurfaceArrayRid();
-	}
+	EA_FORCE_INLINE RID getPbrArrayRid( void ) const { return getSurfaceArrayRid(); }
 	void setTexturePackingMode( const t3dtexturePackingMode_t mode );
-	t3dtexturePackingMode_t getTexturePackingMode( void ) const {
-		return m_texturePackingMode;
-	}
-	bool usesPackedPbr( void ) const {
-		return m_texturePackingMode == TEXTURE_PACKING_PACKED_PBR_R8;
-	}
+	EA_FORCE_INLINE t3dtexturePackingMode_t getTexturePackingMode( void ) const { return m_texturePackingMode; }
+	EA_FORCE_INLINE bool usesPackedPbr( void ) const { return m_texturePackingMode == TEXTURE_PACKING_PACKED_PBR_R8; }
 	// Deprecated compatibility name. The displacement plane is R8.
-	bool usesSurfaceR16( void ) const {
-		return usesPackedPbr();
-	}
-	int getPackedPbrMipmapCount( void ) const {
-		return 1;
-	}
-	PackedColorArray getTextureColors( void ) const {
-		return m_textureColors;
-	}
-	PackedFloat32Array getTextureNormalDepths( void ) const {
-		return m_textureNormalDepths;
-	}
-	PackedFloat32Array getTextureAoStrengths( void ) const {
-		return m_textureAoStrengths;
-	}
-	PackedFloat32Array getTextureAoLightAffects( void ) const {
-		return m_textureAoLightAffects;
-	}
-	PackedFloat32Array getTextureRoughnessMods( void ) const {
-		return m_textureRoughnessMods;
-	}
-	PackedFloat32Array getTextureMetallics( void ) const {
-		return m_textureMetallics;
-	}
-	PackedFloat32Array getTextureUvScales( void ) const {
-		return m_textureUvScales;
-	}
-	PackedVector2Array getTextureDetiles( void ) const {
-		return m_textureDetiles;
-	}
-	PackedVector2Array getTextureDisplacements( void ) const {
-		return m_textureDisplacements;
-	}
+	EA_FORCE_INLINE bool usesSurfaceR16( void ) const { return usesPackedPbr(); }
+	EA_FORCE_INLINE int getPackedPbrMipmapCount( void ) const { return 1; }
+	EA_FORCE_INLINE PackedColorArray getTextureColors( void ) const { return m_textureColors; }
+	EA_FORCE_INLINE PackedFloat32Array getTextureNormalDepths( void ) const { return m_textureNormalDepths; }
+	EA_FORCE_INLINE PackedFloat32Array getTextureAoStrengths( void ) const { return m_textureAoStrengths; }
+	EA_FORCE_INLINE PackedFloat32Array getTextureAoLightAffects( void ) const { return m_textureAoLightAffects; }
+	EA_FORCE_INLINE PackedFloat32Array getTextureRoughnessMods( void ) const { return m_textureRoughnessMods; }
+	EA_FORCE_INLINE PackedFloat32Array getTextureMetallics( void ) const { return m_textureMetallics; }
+	EA_FORCE_INLINE PackedFloat32Array getTextureUvScales( void ) const { return m_textureUvScales; }
+	EA_FORCE_INLINE PackedVector2Array getTextureDetiles( void ) const { return m_textureDetiles; }
+	EA_FORCE_INLINE PackedVector2Array getTextureDisplacements( void ) const { return m_textureDisplacements; }
 	void clearTextures( const bool bUpdate = false );
 	void updateTextureList( void );
 	bool configureRuntimeMaterialCache( void );
@@ -275,18 +221,16 @@ public:
 	PackedInt32Array getTextureLayerMap( void ) const;
 	PackedColorArray getRuntimeMaterialAverageAlbedo( void ) const;
 	Dictionary getRuntimeMaterialCacheStats( void ) const;
-	uint64_t getRuntimeMaterialSourceSignature( void ) const { return computeRuntimeMaterialSourceSignature(); }
-	bool isRuntimeMaterialCacheActive( void ) const { return m_bRuntimeMaterialCacheActive; }
-	bool areRuntimeMaterialSourceTexturesReleased( void ) const { return m_bRuntimeMaterialSourceTexturesReleased; }
-	void invalidateRuntimeMaterialCache( void ) { resetRuntimeMaterialCacheState( false ); }
+	EA_FORCE_INLINE uint64_t getRuntimeMaterialSourceSignature( void ) const { return computeRuntimeMaterialSourceSignature(); }
+	EA_FORCE_INLINE bool isRuntimeMaterialCacheActive( void ) const { return m_bRuntimeMaterialCacheActive; }
+	EA_FORCE_INLINE bool areRuntimeMaterialSourceTexturesReleased( void ) const { return m_bRuntimeMaterialSourceTexturesReleased; }
+	EA_FORCE_INLINE void invalidateRuntimeMaterialCache( void ) { resetRuntimeMaterialCacheState( false ); }
 
 	void setMeshAsset( const int nId, const Ref<T3DMeshAsset> &rMeshAsset );
 	Ref<T3DMeshAsset> getMeshAsset( const int nId ) const;
 	void setMeshList( const TypedArray<T3DMeshAsset> &rMeshList );
 	TypedArray<T3DMeshAsset> getMeshList( void ) const;
-	int getMeshCount( void ) const {
-		return m_meshList.size();
-	}
+	EA_FORCE_INLINE int getMeshCount( void ) const { return m_meshList.size(); }
 	void createMeshThumbnails( const int nId = -1, const Vector2i &rSize = V2I( 256 ), const bool bForce = false );
 	void updateMeshList( void );
 	void loadPendingMeshes( void );

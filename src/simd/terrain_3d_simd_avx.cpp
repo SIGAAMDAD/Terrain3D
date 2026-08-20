@@ -1,6 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 // This translation unit must be compiled with AVX and F16C enabled. Runtime
 // dispatch guarantees it is never entered on unsupported CPUs or OS contexts.
+#include "core/terrain_3d_compiler.h"
 #include "simd/terrain_3d_simd_internal.h"
 
 #include "data/terrain_3d_half_buffer.h"
@@ -22,9 +23,7 @@ namespace terrain3d_simd::detail {
 #if TERRAIN3D_COMPILED_AVX_F16C
 namespace {
 
-inline __m256 decode8( const uint16_t *pSource ) {
-	return _mm256_cvtph_ps( _mm_loadu_si128( ( const __m128i * ) ( pSource ) ) );
-}
+EA_FORCE_INLINE __m256 decode8( const uint16_t *pSource ) { return _mm256_cvtph_ps( _mm_loadu_si128( ( const __m128i * ) ( pSource ) ) ); }
 
 inline void encodeNormal8( const __m256 argX, const __m256 argZ, uint8_t *pDestination ) {
 	const __m256 scale = _mm256_set1_ps( TERRAIN3D_BYTE_MIDPOINT_FLOAT );

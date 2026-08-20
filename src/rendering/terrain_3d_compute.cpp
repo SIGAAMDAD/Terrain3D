@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
 #include "rendering/terrain_3d_compute.h"
 
@@ -31,33 +32,15 @@ namespace {
 #define TERRAIN3D_UNPACK_COLOR( value, shift ) ( ( float ) ( ( ( value ) >> ( shift ) ) & 0xffu ) / TERRAIN3D_BYTE_MAX_FLOAT )
 #define TERRAIN3DQUANTIZECOLOR( value ) ( uint32_t ) ( std::clamp( std::round( ( value ) * TERRAIN3D_BYTE_MAX_FLOAT ), 0.0f, TERRAIN3D_BYTE_MAX_FLOAT ) )
 
-static float terrain3dBitsToFloat( const uint32_t nBits ) {
-	float fValue = 0.0f;
-	std::memcpy( &fValue, &nBits, sizeof( fValue ) );
-	return fValue;
-}
+EA_FORCE_INLINE static float terrain3dBitsToFloat( const uint32_t nBits ) { float fValue = 0.0f; std::memcpy( &fValue, &nBits, sizeof( fValue ) ); return fValue; }
 
-static uint32_t terrain3dFloatToBits( const float fValue ) {
-	uint32_t bits = 0u;
-	std::memcpy( &bits, &fValue, sizeof( bits ) );
-	return bits;
-}
+EA_FORCE_INLINE static uint32_t terrain3dFloatToBits( const float fValue ) { uint32_t bits = 0u; std::memcpy( &bits, &fValue, sizeof( bits ) ); return bits; }
 
-static uint32_t terrain3dPackColor( const float fR, const float fG, const float fB, const float fA ) {
-	return TERRAIN3DQUANTIZECOLOR( fR ) | ( TERRAIN3DQUANTIZECOLOR( fG ) << 8u ) |
-		( TERRAIN3DQUANTIZECOLOR( fB ) << 16u ) | ( TERRAIN3DQUANTIZECOLOR( fA ) << 24u );
-}
+EA_FORCE_INLINE static uint32_t terrain3dPackColor( const float fR, const float fG, const float fB, const float fA ) { return TERRAIN3DQUANTIZECOLOR( fR ) | ( TERRAIN3DQUANTIZECOLOR( fG ) << 8u ) | ( TERRAIN3DQUANTIZECOLOR( fB ) << 16u ) | ( TERRAIN3DQUANTIZECOLOR( fA ) << 24u ); }
 static_assert( sizeof( T3DCompute::t3dbrushElement_t ) == 16u, "t3dbrushElement_t must match GLSL std430 uvec4 layout" );
 static_assert( sizeof( T3DCompute::t3dbrushParams_t ) == 52u, "t3dbrushParams_t must match GLSL push-constant layout" );
 
-Ref<RDUniform> makeStorageUniform( const int nBinding, const RID &rBuffer ) {
-	Ref<RDUniform> pUniform;
-	pUniform.instantiate();
-	pUniform->set_uniform_type( RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER );
-	pUniform->set_binding( nBinding );
-	pUniform->add_id( rBuffer );
-	return pUniform;
-}
+EA_FORCE_INLINE Ref<RDUniform> makeStorageUniform( const int nBinding, const RID &rBuffer ) { Ref<RDUniform> pUniform; pUniform.instantiate(); pUniform->set_uniform_type( RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER ); pUniform->set_binding( nBinding ); pUniform->add_id( rBuffer ); return pUniform; }
 
 Ref<RDUniform> makeSampledTextureUniform( const int nBinding, const RID &rSampler, const RID &rTexture ) {
 	Ref<RDUniform> pUniform;
@@ -69,14 +52,7 @@ Ref<RDUniform> makeSampledTextureUniform( const int nBinding, const RID &rSample
 	return pUniform;
 }
 
-Ref<RDUniform> makeImageUniform( const int nBinding, const RID &rTexture ) {
-	Ref<RDUniform> pUniform;
-	pUniform.instantiate();
-	pUniform->set_uniform_type( RenderingDevice::UNIFORM_TYPE_IMAGE );
-	pUniform->set_binding( nBinding );
-	pUniform->add_id( rTexture );
-	return pUniform;
-}
+EA_FORCE_INLINE Ref<RDUniform> makeImageUniform( const int nBinding, const RID &rTexture ) { Ref<RDUniform> pUniform; pUniform.instantiate(); pUniform->set_uniform_type( RenderingDevice::UNIFORM_TYPE_IMAGE ); pUniform->set_binding( nBinding ); pUniform->add_id( rTexture ); return pUniform; }
 
 uint64_t hashBytes( const uint8_t *pData, const size_t nSize ) {
 	uint64_t hash = 1469598103934665603ULL;

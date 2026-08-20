@@ -25,13 +25,9 @@ typedef struct alignas( 32 ) t3dpackedTransform_s {
 	uint16_t basis[9] = {};
 	uint16_t reserved = 0u;
 
-	t3dpackedTransform_s( void ) {
-		set( Transform3D() );
-	}
+	EA_FORCE_INLINE t3dpackedTransform_s( void ) { set( Transform3D() ); }
 
-	explicit t3dpackedTransform_s( const Transform3D &rTransform ) {
-		set( rTransform );
-	}
+	EA_FORCE_INLINE explicit t3dpackedTransform_s( const Transform3D &rTransform ) { set( rTransform ); }
 
 	void set( const Transform3D &rTransform ) {
 		origin[0] = ( float ) ( rTransform.origin.x );
@@ -63,7 +59,7 @@ class T3DTransformArray {
 public:
 	class T3DReference {
 	public:
-		explicit T3DReference( t3dpackedTransform_t *const pTransform ) : m_pTransform( pTransform ) {}
+		EA_FORCE_INLINE explicit T3DReference( t3dpackedTransform_t *const pTransform ) : m_pTransform( pTransform ) {}
 
 		T3DReference &operator=( const Transform3D &rTransform ) {
 			m_pTransform->set( rTransform );
@@ -74,45 +70,27 @@ public:
 			return operator=( Transform3D( rOther ) );
 		}
 
-		operator Transform3D( void ) const {
-			return m_pTransform->get();
-		}
+		EA_FORCE_INLINE operator Transform3D( void ) const { return m_pTransform->get(); }
 
 	private:
 		t3dpackedTransform_t *m_pTransform = nullptr;
 	};
 
-	void reserve( const size_t nCount ) {
-		m_storage.reserve( nCount );
-	}
+	EA_FORCE_INLINE void reserve( const size_t nCount ) { m_storage.reserve( nCount ); }
 
-	void resize( const size_t nCount ) {
-		m_storage.resize( nCount );
-	}
+	EA_FORCE_INLINE void resize( const size_t nCount ) { m_storage.resize( nCount ); }
 
-	void clear( void ) {
-		m_storage.clear();
-	}
+	EA_FORCE_INLINE void clear( void ) { m_storage.clear(); }
 
-	void shrinkToFit( void ) {
-		m_storage.shrink_to_fit();
-	}
+	EA_FORCE_INLINE void shrinkToFit( void ) { m_storage.shrink_to_fit(); }
 
-	void pushBack( const Transform3D &rTransform ) {
-		m_storage.emplace_back( rTransform );
-	}
+	EA_FORCE_INLINE void pushBack( const Transform3D &rTransform ) { m_storage.emplace_back( rTransform ); }
 
-	size_t size( void ) const {
-		return m_storage.size();
-	}
+	EA_FORCE_INLINE size_t size( void ) const { return m_storage.size(); }
 
-	size_t capacity( void ) const {
-		return m_storage.capacity();
-	}
+	EA_FORCE_INLINE size_t capacity( void ) const { return m_storage.capacity(); }
 
-	bool empty( void ) const {
-		return m_storage.empty();
-	}
+	EA_FORCE_INLINE bool empty( void ) const { return m_storage.empty(); }
 
 	T3DReference operator[]( const size_t iIndex ) {
 		return T3DReference( &m_storage[iIndex] );
@@ -122,34 +100,17 @@ public:
 		return m_storage[iIndex].get();
 	}
 
-	const t3dpackedTransform_t *data( void ) const {
-		return m_storage.data();
-	}
+	EA_FORCE_INLINE const t3dpackedTransform_t *data( void ) const { return m_storage.data(); }
 
-	t3dpackedTransform_t *data( void ) {
-		return m_storage.data();
-	}
+	EA_FORCE_INLINE t3dpackedTransform_t *data( void ) { return m_storage.data(); }
 
-	Vector3 getOrigin( const size_t iIndex ) const {
-		const t3dpackedTransform_t &packed = m_storage[iIndex];
-		return Vector3( packed.origin[0], packed.origin[1], packed.origin[2] );
-	}
+	EA_FORCE_INLINE Vector3 getOrigin( const size_t iIndex ) const { const t3dpackedTransform_t &packed = m_storage[iIndex]; return Vector3( packed.origin[0], packed.origin[1], packed.origin[2] ); }
 
-	Vector3 getUpAxis( const size_t iIndex ) const {
-		const t3dpackedTransform_t &packed = m_storage[iIndex];
-		return Vector3( terrain3d_half::decode( packed.basis[1] ), terrain3d_half::decode( packed.basis[4] ),
-			terrain3d_half::decode( packed.basis[7] ) );
-	}
+	EA_FORCE_INLINE Vector3 getUpAxis( const size_t iIndex ) const { const t3dpackedTransform_t &packed = m_storage[iIndex]; return Vector3( terrain3d_half::decode( packed.basis[1] ), terrain3d_half::decode( packed.basis[4] ), terrain3d_half::decode( packed.basis[7] ) ); }
 
-	void setOriginY( const size_t iIndex, const real_t fY ) {
-		m_storage[iIndex].origin[1] = ( float ) ( fY );
-	}
+	EA_FORCE_INLINE void setOriginY( const size_t iIndex, const real_t fY ) { m_storage[iIndex].origin[1] = ( float ) ( fY ); }
 
-	void rescaleOriginXz( const size_t iIndex, const real_t fOldSpacing, const real_t fNewSpacing ) {
-		t3dpackedTransform_t &packed = m_storage[iIndex];
-		packed.origin[0] = ( float ) ( ( real_t ) ( packed.origin[0] ) / fOldSpacing * fNewSpacing );
-		packed.origin[2] = ( float ) ( ( real_t ) ( packed.origin[2] ) / fOldSpacing * fNewSpacing );
-	}
+	EA_FORCE_INLINE void rescaleOriginXz( const size_t iIndex, const real_t fOldSpacing, const real_t fNewSpacing ) { t3dpackedTransform_t &packed = m_storage[iIndex]; packed.origin[0] = ( float ) ( ( real_t ) ( packed.origin[0] ) / fOldSpacing * fNewSpacing ); packed.origin[2] = ( float ) ( ( real_t ) ( packed.origin[2] ) / fOldSpacing * fNewSpacing ); }
 
 private:
 	eastl::vector<t3dpackedTransform_t> m_storage;

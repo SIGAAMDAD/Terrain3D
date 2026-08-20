@@ -38,9 +38,7 @@ struct T3DMapMutation {
 	eastl::vector<Vector2i> derivedLocations;
 	eastl::vector<T3DDerivedMapUpdate> derivedUpdates;
 
-	bool valid( void ) const {
-		return mapType >= T3DRegion::TYPE_HEIGHT && mapType < T3DRegion::TYPE_MAX && !changedLocations.empty();
-	}
+	EA_FORCE_INLINE bool valid( void ) const { return mapType >= T3DRegion::TYPE_HEIGHT && mapType < T3DRegion::TYPE_MAX && !changedLocations.empty(); }
 };
 
 // Owns authoritative terrain-map mutation mechanics and edit bookkeeping.
@@ -80,11 +78,11 @@ public:
 	) const;
 
 	void addEditedArea( const AABB &rArea );
-	void clearEditedArea( void ) { m_editedArea = AABB(); }
-	const AABB &getEditedArea( void ) const { return m_editedArea; }
+	EA_FORCE_INLINE void clearEditedArea( void ) { m_editedArea = AABB(); }
+	EA_FORCE_INLINE const AABB &getEditedArea( void ) const { return m_editedArea; }
 
-	void resetHeightRange( void ) { m_masterHeightRange = V2_ZERO; }
-	const Vector2 &getHeightRange( void ) const { return m_masterHeightRange; }
+	EA_FORCE_INLINE void resetHeightRange( void ) { m_masterHeightRange = V2_ZERO; }
+	EA_FORCE_INLINE const Vector2 &getHeightRange( void ) const { return m_masterHeightRange; }
 	void updateMasterHeight( real_t fHeight );
 	void updateMasterHeights( const Vector2 &rLowHigh );
 	void calculateHeightRange(

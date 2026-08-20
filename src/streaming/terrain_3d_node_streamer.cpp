@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "core/terrain_3d_compiler.h"
 #include "streaming/terrain_3d_node_streamer.h"
 
 #include <algorithm>
@@ -23,21 +24,13 @@ namespace {
 // Godot Variant types must not be constructed at shared-library load time:
 // GDExtension function pointers are installed only after dlopen() completes.
 // These accessors defer StringName construction until the streamer is used.
-static StringName terrain3dNodeMethodActivate( void ) {
-	return StringName( "terrain3d_stream_activate" );
-}
+EA_FORCE_INLINE static StringName terrain3dNodeMethodActivate( void ) { return StringName( "terrain3d_stream_activate" ); }
 
-static StringName terrain3dNodeMethodDeactivate( void ) {
-	return StringName( "terrain3d_stream_deactivate" );
-}
+EA_FORCE_INLINE static StringName terrain3dNodeMethodDeactivate( void ) { return StringName( "terrain3d_stream_deactivate" ); }
 
-static StringName terrain3dNodeMethodLoadState( void ) {
-	return StringName( "terrain3d_stream_load_state" );
-}
+EA_FORCE_INLINE static StringName terrain3dNodeMethodLoadState( void ) { return StringName( "terrain3d_stream_load_state" ); }
 
-static StringName terrain3dNodeMethodSaveState( void ) {
-	return StringName( "terrain3d_stream_save_state" );
-}
+EA_FORCE_INLINE static StringName terrain3dNodeMethodSaveState( void ) { return StringName( "terrain3d_stream_save_state" ); }
 
 static void terrain3dApplyStreamedLightingMetadata(
 	Node *pNode,

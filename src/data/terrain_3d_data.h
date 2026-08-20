@@ -110,15 +110,13 @@ private:
 	T3DCompute *m_pCompute = nullptr;
 	// Functions
 	void clear( void );
-	void invalidateSamplingCache( void ) { m_samplingStorage.invalidateAllSamplers(); }
-	void publishRegionSamplingGeneration( const Vector2i &vLocation ) { m_samplingStorage.publishRegionGeneration( vLocation ); }
+	EA_FORCE_INLINE void invalidateSamplingCache( void ) { m_samplingStorage.invalidateAllSamplers(); }
+	EA_FORCE_INLINE void publishRegionSamplingGeneration( const Vector2i &vLocation ) { m_samplingStorage.publishRegionGeneration( vLocation ); }
 	void ensureDefaultMaps( void );
 	bool setRegionSizeInternal( int nRegionSize );
-	bool bindActiveStorageInternal( int nRegionSize, void *pBacking, size_t nBackingBytes ) {
-		return m_samplingStorage.bindActive( nRegionSize, pBacking, nBackingBytes );
-	}
-	bool isActiveStorageOwnerInternal( void ) const { return m_samplingStorage.isActiveOwner(); }
-	void resetResidentSamplingPoolInternal( void ) { m_samplingStorage.resetResidentPool(); }
+	EA_FORCE_INLINE bool bindActiveStorageInternal( int nRegionSize, void *pBacking, size_t nBackingBytes ) { return m_samplingStorage.bindActive( nRegionSize, pBacking, nBackingBytes ); }
+	EA_FORCE_INLINE bool isActiveStorageOwnerInternal( void ) const { return m_samplingStorage.isActiveOwner(); }
+	EA_FORCE_INLINE void resetResidentSamplingPoolInternal( void ) { m_samplingStorage.resetResidentPool(); }
 	Error rehydrateActiveStorage( void );
 	bool syncActiveRegion( const Vector2i &vLocation, const T3DRegion *pRegion );
 	Ref<Image> getRegionMapOrDefault( const T3DRegion *pRegion, t3dmapType_t mapType ) const;
@@ -200,77 +198,40 @@ public:
 	Error initialize( T3DTerrain *pTerrain );
 	void deactivateRuntimeStorage( T3DTerrain *pTerrain );
 	~T3DData( void );
-	bool isInitializedFor( const T3DTerrain *pTerrain ) const {
-		return m_bRuntimeActive && m_pTerrain == pTerrain;
-	}
-	bool isRuntimeReady( void ) const {
-		return m_bRuntimeActive && m_samplingStorage.isActiveOwner() && m_regionRepository.getRegionMapSize() > 0;
-	}
-	bool isRepositoryLoaded( void ) const {
-		return m_regionRepository.isLoaded();
-	}
-	uint32_t getActiveStorageGeneration( void ) const {
-		return isRuntimeReady() ? m_samplingStorage.getActiveGeneration() : 0u;
-	}
+	EA_FORCE_INLINE bool isInitializedFor( const T3DTerrain *pTerrain ) const { return m_bRuntimeActive && m_pTerrain == pTerrain; }
+	EA_FORCE_INLINE bool isRuntimeReady( void ) const { return m_bRuntimeActive && m_samplingStorage.isActiveOwner() && m_regionRepository.getRegionMapSize() > 0; }
+	EA_FORCE_INLINE bool isRepositoryLoaded( void ) const { return m_regionRepository.isLoaded(); }
+	EA_FORCE_INLINE uint32_t getActiveStorageGeneration( void ) const { return isRuntimeReady() ? m_samplingStorage.getActiveGeneration() : 0u; }
 	Dictionary getRuntimeState( void ) const;
 
 	// Regions
 
-	int getRegionCount( void ) const {
-		return m_regionRepository.getActiveRegionCount();
-	}
+	EA_FORCE_INLINE int getRegionCount( void ) const { return m_regionRepository.getActiveRegionCount(); }
 	void setRegionLocations( const TypedArray<Vector2i> &vLocations );
 	TypedArray<Vector2i> getRegionLocations( void ) const;
 	// Internal layer-ordered slots, including V2I_MAX spare entries. Custom
 	// shaders require this exact ordering to match the texture arrays.
 	TypedArray<Vector2i> getRegionSlots( void ) const;
 	TypedArray<Vector2i> getRenderRegionSlots( void ) const;
-	const Vector2i *getRegionSlotsInternal( void ) const {
-		return m_regionRepository.getSlotsData();
-	}
-	int getRegionSlotCountInternal( void ) const {
-		return m_regionRepository.getSlotCount();
-	}
-	T3DRegion *const *getRegionPtrMapInternal( void ) const {
-		return m_regionRepository.getRegionPtrMapData();
-	}
-	int getRegionSizeInternal( void ) const {
-		return m_regionRepository.getRegionSize();
-	}
-	int getRegionMapSizeInternal( void ) const {
-		return m_regionRepository.getRegionMapSize();
-	}
-	bool matchesRegionLayoutInternal( const int nRegionSize ) const {
-		return m_regionRepository.getRegionSize() == nRegionSize &&
-			m_regionRepository.getRegionSizeVector() == V2I( nRegionSize );
-	}
-	T3DRegionRepositoryView getRegionRepositoryViewInternal( void ) const {
-		return m_regionRepository.getView();
-	}
-	uint64_t getRegionTopologyGenerationInternal( void ) const {
-		return m_regionRepository.getTopologyGeneration();
-	}
-	void setVertexSpacingInternal( const real_t fVertexSpacing ) {
-		m_regionRepository.setVertexSpacing( fVertexSpacing );
-	}
-	bool isRegionLocationValidInternal( const Vector2i &vLocation ) const {
-		return m_regionRepository.isLocationValid( vLocation );
-	}
-	real_t getVertexSpacingInternal( void ) const {
-		return m_regionRepository.getVertexSpacing();
-	}
+	EA_FORCE_INLINE const Vector2i *getRegionSlotsInternal( void ) const { return m_regionRepository.getSlotsData(); }
+	EA_FORCE_INLINE int getRegionSlotCountInternal( void ) const { return m_regionRepository.getSlotCount(); }
+	EA_FORCE_INLINE T3DRegion *const *getRegionPtrMapInternal( void ) const { return m_regionRepository.getRegionPtrMapData(); }
+	EA_FORCE_INLINE int getRegionSizeInternal( void ) const { return m_regionRepository.getRegionSize(); }
+	EA_FORCE_INLINE int getRegionMapSizeInternal( void ) const { return m_regionRepository.getRegionMapSize(); }
+	EA_FORCE_INLINE bool matchesRegionLayoutInternal( const int nRegionSize ) const { return m_regionRepository.getRegionSize() == nRegionSize && m_regionRepository.getRegionSizeVector() == V2I( nRegionSize ); }
+	EA_FORCE_INLINE T3DRegionRepositoryView getRegionRepositoryViewInternal( void ) const { return m_regionRepository.getView(); }
+	EA_FORCE_INLINE uint64_t getRegionTopologyGenerationInternal( void ) const { return m_regionRepository.getTopologyGeneration(); }
+	EA_FORCE_INLINE void setVertexSpacingInternal( const real_t fVertexSpacing ) { m_regionRepository.setVertexSpacing( fVertexSpacing ); }
+	EA_FORCE_INLINE bool isRegionLocationValidInternal( const Vector2i &vLocation ) const { return m_regionRepository.isLocationValid( vLocation ); }
+	EA_FORCE_INLINE real_t getVertexSpacingInternal( void ) const { return m_regionRepository.getVertexSpacing(); }
 	T3DSamplingSource getSamplingSourceInternal( void ) const {
 		return T3DSamplingSource{ &m_regionRepository, &m_samplingStorage };
 	}
 	TypedArray<T3DRegion> getRegionsActive( const bool bCopy = false, const bool bDeep = false ) const;
-	Dictionary getRegionsAll( void ) const {
-		return m_regionRepository.getRegions();
-	}
+	EA_FORCE_INLINE Dictionary getRegionsAll( void ) const { return m_regionRepository.getRegions(); }
 	PackedInt32Array getRegionMap( void ) const;
 	PackedInt32Array getLogicalRegionMap( void ) const;
-	int getRegionMapSize( void ) const {
-		return m_regionRepository.getRegionMapSize();
-	}
+	EA_FORCE_INLINE int getRegionMapSize( void ) const { return m_regionRepository.getRegionMapSize(); }
 	static int getRegionMapIndex( const Vector2i &rRegionLoc );
 
 	void doForRegions( const Rect2i &rArea, const Callable &rCallback );
@@ -280,12 +241,8 @@ public:
 	int getRegionId( const Vector2i &rRegionLoc ) const;
 	int getRegionIdp( const Vector3 &rGlobalPosition ) const;
 
-	bool hasRegion( const Vector2i &rRegionLoc ) const {
-		return getRegionId( rRegionLoc ) != -1;
-	}
-	bool hasRegionp( const Vector3 &rGlobalPosition ) const {
-		return getRegionIdp( rGlobalPosition ) != -1;
-	}
+	EA_FORCE_INLINE bool hasRegion( const Vector2i &rRegionLoc ) const { return getRegionId( rRegionLoc ) != -1; }
+	EA_FORCE_INLINE bool hasRegionp( const Vector3 &rGlobalPosition ) const { return getRegionIdp( rGlobalPosition ) != -1; }
 	Ref<T3DRegion> getRegion( const Vector2i &rRegionLoc ) const;
 	T3DRegion *getRegionPtr( const Vector2i &rRegionLoc ) const;
 	template <typename T> // Catch invalid types. See note below in implementation.
@@ -333,9 +290,7 @@ public:
 		const Rect2i &rDirtyRect = Rect2i()
 	);
 	T3DCompute *getComputeBackend( void );
-	T3DCompute *getComputeBackendIfCreated( void ) const {
-		return m_pCompute;
-	}
+	EA_FORCE_INLINE T3DCompute *getComputeBackendIfCreated( void ) const { return m_pCompute; }
 	void configureResidentPool( int nCapacity = 64 );
 	void configureGpuRegionCache(
 		bool bEnabled, int nBudgetMb = 16, int nUploadLayers = 4,
@@ -358,20 +313,12 @@ public:
 	int getEffectiveGpuRegionUploadBudgetLayers( void ) const;
 	int getEffectiveCpuRegionLoadBudgetLayers( void ) const;
 	int getEffectiveInstanceRegionLoadBudgetPages( void ) const;
-	uint32_t getGpuRegionStallFlagsLastTick( void ) const {
-		return m_gpuRegionCache.getStallFlagsLastTick();
-	}
-	uint32_t getCpuRegionStallFlagsLastTick( void ) const {
-		return m_cpuRegionCache.getStallFlagsLastTick();
-	}
-	uint32_t getInstanceRegionStallFlagsLastTick( void ) const {
-		return m_instanceRegionCache.getStallFlagsLastTick();
-	}
+	EA_FORCE_INLINE uint32_t getGpuRegionStallFlagsLastTick( void ) const { return m_gpuRegionCache.getStallFlagsLastTick(); }
+	EA_FORCE_INLINE uint32_t getCpuRegionStallFlagsLastTick( void ) const { return m_cpuRegionCache.getStallFlagsLastTick(); }
+	EA_FORCE_INLINE uint32_t getInstanceRegionStallFlagsLastTick( void ) const { return m_instanceRegionCache.getStallFlagsLastTick(); }
 	bool ensureCpuRegionResident( const Vector2i &vLocation );
 
-	uint64_t getCookedWorldMaterialSignatureInternal( void ) const {
-		return m_runtimeWorldManifest.isLoaded() ? m_runtimeWorldManifest.getMaterialSignature() : 0u;
-	}
+	EA_FORCE_INLINE uint64_t getCookedWorldMaterialSignatureInternal( void ) const { return m_runtimeWorldManifest.isLoaded() ? m_runtimeWorldManifest.getMaterialSignature() : 0u; }
 
 	bool ensureCookedNodeDescriptors( const Vector2i &vLocation );
 	PackedStringArray getCookedSceneDependencies( const Vector2i &vLocation ) const;
@@ -392,25 +339,13 @@ public:
 	void updateRegionResidency( const Vector3 &rWorldPosition, bool bForce = false );
 	void resetRuntimeStreamingCaches( void );
 	void appendRuntimeProfileSample( t3druntimeProfileSample_t &rSample ) const;
-	bool isGpuRegionCacheEnabled( void ) const {
-		return m_gpuRegionCache.isEnabled();
-	}
-	int getGpuRegionCacheCapacity( void ) const {
-		return m_gpuRegionCache.getCapacity();
-	}
-	int getAuthoringGpuRegionBudgetMb( void ) const {
-		return m_gpuRegionCache.getAuthoringBudgetMb();
-	}
+	EA_FORCE_INLINE bool isGpuRegionCacheEnabled( void ) const { return m_gpuRegionCache.isEnabled(); }
+	EA_FORCE_INLINE int getGpuRegionCacheCapacity( void ) const { return m_gpuRegionCache.getCapacity(); }
+	EA_FORCE_INLINE int getAuthoringGpuRegionBudgetMb( void ) const { return m_gpuRegionCache.getAuthoringBudgetMb(); }
 	bool isAuthoringGpuFullResidencyPossible( void ) const;
 	bool isAuthoringGpuReadbackSafe( void ) const;
-	int getGpuRegionRequiredRadius( void ) const {
-		return m_gpuRegionCache.getRequiredRadius();
-	}
-	int getGpuRegionRequiredCorePages( void ) const {
-		const int radius = m_gpuRegionCache.getRequiredRadius();
-		const int diameter = radius * 2 + 1;
-		return MIN( diameter * diameter, m_regionRepository.getRegionMapSize() * m_regionRepository.getRegionMapSize() );
-	}
+	EA_FORCE_INLINE int getGpuRegionRequiredRadius( void ) const { return m_gpuRegionCache.getRequiredRadius(); }
+	EA_FORCE_INLINE int getGpuRegionRequiredCorePages( void ) const { const int radius = m_gpuRegionCache.getRequiredRadius(); const int diameter = radius * 2 + 1; return MIN( diameter * diameter, m_regionRepository.getRegionMapSize() * m_regionRepository.getRegionMapSize() ); }
 	int calculateGpuRegionRequiredCorePagesForLods( int nDetailLods ) const;
 	int calculateGpuRegionCapacityForLods( int nDetailLods ) const;
 	Dictionary getGpuRegionCacheStats( void ) const;
@@ -422,7 +357,7 @@ public:
 	size_t getCpuRegionCacheReservedBytes( void ) const;
 	size_t getCpuRegionCacheMinimumBytes( void ) const;
 	size_t getCpuRegionCacheHardCapBytes( void ) const;
-	size_t getInstanceRegionCacheReservedBytes( void ) const { return m_instanceRegionCache.getReservedBytes(); }
+	EA_FORCE_INLINE size_t getInstanceRegionCacheReservedBytes( void ) const { return m_instanceRegionCache.getReservedBytes(); }
 	size_t getMemoryTransientStagingBytes( void ) const;
 	size_t getMemoryFixedRepositoryBytes( void ) const;
 	Dictionary getRuntimeResidencyGrid( int nRadius = 6 ) const;
@@ -435,59 +370,33 @@ public:
 	Dictionary getCpuRegionCacheStatsFast( void ) const;
 	Dictionary getInstanceRegionCacheStats( void ) const;
 	Dictionary getInstanceRegionCacheStatsFast( void ) const;
-	bool isInstanceRegionCacheEnabled( void ) const {
-		return m_instanceRegionCache.isEnabled();
-	}
-	bool isInstanceRegionResident( const Vector2i &vLocation ) const {
-		return m_instanceRegionCache.isResident( vLocation );
-	}
-	bool ensureInstanceRegionResident( const Vector2i &vLocation ) {
-		return ensureInstanceRegionResidentInternal( vLocation, true );
-	}
+	EA_FORCE_INLINE bool isInstanceRegionCacheEnabled( void ) const { return m_instanceRegionCache.isEnabled(); }
+	EA_FORCE_INLINE bool isInstanceRegionResident( const Vector2i &vLocation ) const { return m_instanceRegionCache.isResident( vLocation ); }
+	EA_FORCE_INLINE bool ensureInstanceRegionResident( const Vector2i &vLocation ) { return ensureInstanceRegionResidentInternal( vLocation, true ); }
 	bool evictInstanceRegion( const Vector2i &vLocation );
-	bool isCpuRegionCacheEnabled( void ) const {
-		return m_cpuRegionCache.isEnabled();
-	}
-	int getCpuRegionCacheCapacity( void ) const {
-		return m_cpuRegionCache.getCapacity();
-	}
+	EA_FORCE_INLINE bool isCpuRegionCacheEnabled( void ) const { return m_cpuRegionCache.isEnabled(); }
+	EA_FORCE_INLINE int getCpuRegionCacheCapacity( void ) const { return m_cpuRegionCache.getCapacity(); }
 	void regenerateDerivedMaps( const eastl::vector<Vector2i> &rRegionLocations, const AABB &rEditedArea = AABB() );
 	void publishDerivedMapUpdates( const eastl::vector<T3DDerivedMapUpdate> &rUpdates );
 	Ref<T3DErosionJob> createErosionJob( const Ref<T3DErosionSettings> &rSettings );
-	RID getHeightMapsRid( void ) const {
-		return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getHeightMapsRid() : m_generatedHeightMaps.getRid();
-	}
-	RID getDerivedMapsRid( void ) const {
-		return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getDerivedMapsRid() : m_generatedDerivedMaps.getRid();
-	}
-	RID getControlMapsRid( void ) const {
-		return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getControlMapsRid() : m_generatedControlMaps.getRid();
-	}
-	RID getColorMapsRid( void ) const {
-		return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getColorMapsRid() : m_generatedColorMaps.getRid();
-	}
-	RID getMiddleCompositeMapsRid( void ) const { return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getMiddleCompositeMapsRid() : m_generatedMiddleCompositeMaps.getRid(); }
-	RID getMiddleHeightMapsRid( void ) const { return m_middleHeightRegionCache.getHeightMapsRid(); }
-	RID getMiddleHeightRegionMapRid( void ) const { return m_middleHeightRegionCache.getRegionMapRid(); }
-	int getMiddleHeightResidentCount( void ) const { return m_middleHeightRegionCache.getResidentCount(); }
-	int getMiddleHeightMissingRequiredLastTick( void ) const { return m_middleHeightRegionCache.getMissingRequiredLastTick(); }
-	bool isMiddleHeightRegionResident( const Vector2i &vLocation ) const { return m_middleHeightRegionCache.isResident( vLocation ); }
-	bool isGpuSurfaceRegionResident( const Vector2i &vLocation ) const { return m_gpuRegionCache.isResident( vLocation ); }
+	EA_FORCE_INLINE RID getHeightMapsRid( void ) const { return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getHeightMapsRid() : m_generatedHeightMaps.getRid(); }
+	EA_FORCE_INLINE RID getDerivedMapsRid( void ) const { return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getDerivedMapsRid() : m_generatedDerivedMaps.getRid(); }
+	EA_FORCE_INLINE RID getControlMapsRid( void ) const { return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getControlMapsRid() : m_generatedControlMaps.getRid(); }
+	EA_FORCE_INLINE RID getColorMapsRid( void ) const { return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getColorMapsRid() : m_generatedColorMaps.getRid(); }
+	EA_FORCE_INLINE RID getMiddleCompositeMapsRid( void ) const { return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getMiddleCompositeMapsRid() : m_generatedMiddleCompositeMaps.getRid(); }
+	EA_FORCE_INLINE RID getMiddleHeightMapsRid( void ) const { return m_middleHeightRegionCache.getHeightMapsRid(); }
+	EA_FORCE_INLINE RID getMiddleHeightRegionMapRid( void ) const { return m_middleHeightRegionCache.getRegionMapRid(); }
+	EA_FORCE_INLINE int getMiddleHeightResidentCount( void ) const { return m_middleHeightRegionCache.getResidentCount(); }
+	EA_FORCE_INLINE int getMiddleHeightMissingRequiredLastTick( void ) const { return m_middleHeightRegionCache.getMissingRequiredLastTick(); }
+	EA_FORCE_INLINE bool isMiddleHeightRegionResident( const Vector2i &vLocation ) const { return m_middleHeightRegionCache.isResident( vLocation ); }
+	EA_FORCE_INLINE bool isGpuSurfaceRegionResident( const Vector2i &vLocation ) const { return m_gpuRegionCache.isResident( vLocation ); }
 	Dictionary getMiddleHeightCacheStats( void ) const;
 	size_t getMiddleHeightCacheReservedBytes( void ) const;
 	int fillGpuMaterialPriorityIds( uint8_t *pIds, int nCapacity ) const;
-	RID getFarHeightMapRid( void ) const {
-		return m_farSurfaceAtlasCache.getHeightMapRid();
-	}
-	RID getFarColorMapRid( void ) const {
-		return m_farSurfaceAtlasCache.getColorMapRid();
-	}
-	bool areControlMapsImplicit( void ) const {
-		return m_bControlMapsImplicit;
-	}
-	bool areColorMapsImplicit( void ) const {
-		return m_bColorMapsImplicit;
-	}
+	EA_FORCE_INLINE RID getFarHeightMapRid( void ) const { return m_farSurfaceAtlasCache.getHeightMapRid(); }
+	EA_FORCE_INLINE RID getFarColorMapRid( void ) const { return m_farSurfaceAtlasCache.getColorMapRid(); }
+	EA_FORCE_INLINE bool areControlMapsImplicit( void ) const { return m_bControlMapsImplicit; }
+	EA_FORCE_INLINE bool areColorMapsImplicit( void ) const { return m_bColorMapsImplicit; }
 	bool isGpuRegionColorChannelEnabled( void ) const;
 	bool isGpuRegionDerivedChannelEnabled( void ) const;
 
@@ -534,16 +443,10 @@ public:
 	Vector3 getMeshVertex( const int32_t nLod, const t3dheightFilter_t filter, const Vector3 &rGlobalPosition ) const;
 
 	void addEditedArea( const AABB &rArea );
-	void clearEditedArea( void ) {
-		m_mapEditService.clearEditedArea();
-	}
-	AABB getEditedArea( void ) const {
-		return m_mapEditService.getEditedArea();
-	}
+	EA_FORCE_INLINE void clearEditedArea( void ) { m_mapEditService.clearEditedArea(); }
+	EA_FORCE_INLINE AABB getEditedArea( void ) const { return m_mapEditService.getEditedArea(); }
 
-	Vector2 getHeightRange( void ) const {
-		return m_mapEditService.getHeightRange();
-	}
+	EA_FORCE_INLINE Vector2 getHeightRange( void ) const { return m_mapEditService.getHeightRange(); }
 	void updateMasterHeight( const real_t fHeight );
 	void updateMasterHeights( const Vector2 &rLowHigh );
 	void calcHeightRange( const bool bRecursive = false );
@@ -569,104 +472,49 @@ VARIANT_ENUM_CAST( T3DData::t3dheightFilter_t );
 // Returns an index in the maximum 64x64 process-static region table.
 // Repository operations additionally enforce the active map size, which is
 // derived from the fixed 4096x4096 world resolution and current region size.
-inline int T3DData::getRegionMapIndex( const Vector2i &rRegionLoc ) {
-	return T3DRegionRepository::getRegionMapIndex( rRegionLoc );
-}
+EA_FORCE_INLINE int T3DData::getRegionMapIndex( const Vector2i &rRegionLoc ) { return T3DRegionRepository::getRegionMapIndex( rRegionLoc ); }
 
 // Returns a region location given a global position. No bounds checking nor data access.
-inline Vector2i T3DData::getRegionLocation( const Vector3 &rGlobalPosition ) const {
-	return m_regionRepository.getRegionLocation( rGlobalPosition );
-}
+EA_FORCE_INLINE Vector2i T3DData::getRegionLocation( const Vector3 &rGlobalPosition ) const { return m_regionRepository.getRegionLocation( rGlobalPosition ); }
 
-inline int T3DData::getRegionId( const Vector2i &rRegionLoc ) const {
-	return m_regionRepository.getRegionId( rRegionLoc );
-}
+EA_FORCE_INLINE int T3DData::getRegionId( const Vector2i &rRegionLoc ) const { return m_regionRepository.getRegionId( rRegionLoc ); }
 
-inline int T3DData::getRegionIdp( const Vector3 &rGlobalPosition ) const {
-	return m_regionRepository.getRegionId( m_regionRepository.getRegionLocation( rGlobalPosition ) );
-}
+EA_FORCE_INLINE int T3DData::getRegionIdp( const Vector3 &rGlobalPosition ) const { return m_regionRepository.getRegionId( m_regionRepository.getRegionLocation( rGlobalPosition ) ); }
 
-inline Ref<T3DRegion> T3DData::getRegion( const Vector2i &rRegionLoc ) const {
-	return m_regionRepository.getRegion( rRegionLoc );
-}
+EA_FORCE_INLINE Ref<T3DRegion> T3DData::getRegion( const Vector2i &rRegionLoc ) const { return m_regionRepository.getRegion( rRegionLoc ); }
 
-inline T3DRegion *T3DData::getRegionPtr( const Vector2i &rRegionLoc ) const {
-	return m_regionRepository.getRegionPtr( rRegionLoc );
-}
+EA_FORCE_INLINE T3DRegion *T3DData::getRegionPtr( const Vector2i &rRegionLoc ) const { return m_regionRepository.getRegionPtr( rRegionLoc ); }
 
-inline Ref<T3DRegion> T3DData::getRegionp( const Vector3 &rGlobalPosition ) const {
-	return m_regionRepository.getRegion( m_regionRepository.getRegionLocation( rGlobalPosition ) );
-}
+EA_FORCE_INLINE Ref<T3DRegion> T3DData::getRegionp( const Vector3 &rGlobalPosition ) const { return m_regionRepository.getRegion( m_regionRepository.getRegionLocation( rGlobalPosition ) ); }
 
 // Inline Map Functions
 
-inline void T3DData::setHeight( const Vector3 &rGlobalPosition, const real_t fHeight ) {
-	setPixel( T3DRegion::TYPE_HEIGHT, rGlobalPosition, Color( fHeight, 0.f, 0.f, 1.f ) );
-}
+EA_FORCE_INLINE void T3DData::setHeight( const Vector3 &rGlobalPosition, const real_t fHeight ) { setPixel( T3DRegion::TYPE_HEIGHT, rGlobalPosition, Color( fHeight, 0.f, 0.f, 1.f ) ); }
 
-inline void T3DData::setColor( const Vector3 &rGlobalPosition, const Color &rColor ) {
-	Color clr = rColor;
-	clr.a = getRoughness( rGlobalPosition );
-	setPixel( T3DRegion::TYPE_COLOR, rGlobalPosition, clr );
-}
+EA_FORCE_INLINE void T3DData::setColor( const Vector3 &rGlobalPosition, const Color &rColor ) { Color clr = rColor; clr.a = getRoughness( rGlobalPosition ); setPixel( T3DRegion::TYPE_COLOR, rGlobalPosition, clr ); }
 
-inline Color T3DData::getColor( const Vector3 &rGlobalPosition ) const {
-	Color clr = getPixel( T3DRegion::TYPE_COLOR, rGlobalPosition );
-	clr.a = 1.0f;
-	return clr;
-}
+EA_FORCE_INLINE Color T3DData::getColor( const Vector3 &rGlobalPosition ) const { Color clr = getPixel( T3DRegion::TYPE_COLOR, rGlobalPosition ); clr.a = 1.0f; return clr; }
 
-inline void T3DData::setControl( const Vector3 &rGlobalPosition, const uint32_t nControl ) {
-	setPixel( T3DRegion::TYPE_CONTROL, rGlobalPosition, Color( asFloat( nControl ), 0.f, 0.f, 1.f ) );
-}
+EA_FORCE_INLINE void T3DData::setControl( const Vector3 &rGlobalPosition, const uint32_t nControl ) { setPixel( T3DRegion::TYPE_CONTROL, rGlobalPosition, Color( asFloat( nControl ), 0.f, 0.f, 1.f ) ); }
 
-inline void T3DData::setControlBaseId( const Vector3 &rGlobalPosition, const uint8_t nBase ) {
-	const uint32_t control = getControl( rGlobalPosition );
-	const uint8_t base = CLAMP( nBase, ( uint8_t ) ( 0 ), ( uint8_t ) ( 31 ) );
-	setControl( rGlobalPosition, ( control & ~( 0x1F << 27 ) ) | encBase( base ) );
-}
+EA_FORCE_INLINE void T3DData::setControlBaseId( const Vector3 &rGlobalPosition, const uint8_t nBase ) { const uint32_t control = getControl( rGlobalPosition ); const uint8_t base = CLAMP( nBase, ( uint8_t ) ( 0 ), ( uint8_t ) ( 31 ) ); setControl( rGlobalPosition, ( control & ~( 0x1F << 27 ) ) | encBase( base ) ); }
 
-inline uint32_t T3DData::getControlBaseId( const Vector3 &rGlobalPosition ) const {
-	const uint32_t control = getControl( rGlobalPosition );
-	return control == UINT32_MAX ? UINT32_MAX : getBase( control );
-}
+EA_FORCE_INLINE uint32_t T3DData::getControlBaseId( const Vector3 &rGlobalPosition ) const { const uint32_t control = getControl( rGlobalPosition ); return control == UINT32_MAX ? UINT32_MAX : getBase( control ); }
 
-inline void T3DData::setControlOverlayId( const Vector3 &rGlobalPosition, const uint8_t nOverlay ) {
-	const uint32_t control = getControl( rGlobalPosition );
-	const uint8_t overlay = CLAMP( nOverlay, ( uint8_t ) ( 0 ), ( uint8_t ) ( 31 ) );
-	setControl( rGlobalPosition, ( control & ~( 0x1F << 22 ) ) | encOverlay( overlay ) );
-}
+EA_FORCE_INLINE void T3DData::setControlOverlayId( const Vector3 &rGlobalPosition, const uint8_t nOverlay ) { const uint32_t control = getControl( rGlobalPosition ); const uint8_t overlay = CLAMP( nOverlay, ( uint8_t ) ( 0 ), ( uint8_t ) ( 31 ) ); setControl( rGlobalPosition, ( control & ~( 0x1F << 22 ) ) | encOverlay( overlay ) ); }
 
-inline uint32_t T3DData::getControlOverlayId( const Vector3 &rGlobalPosition ) const {
-	const uint32_t control = getControl( rGlobalPosition );
-	return control == UINT32_MAX ? UINT32_MAX : getOverlay( control );
-}
+EA_FORCE_INLINE uint32_t T3DData::getControlOverlayId( const Vector3 &rGlobalPosition ) const { const uint32_t control = getControl( rGlobalPosition ); return control == UINT32_MAX ? UINT32_MAX : getOverlay( control ); }
 
 // Expects 0.0 to 1.0 range
-inline void T3DData::setControlBlend( const Vector3 &rGlobalPosition, const real_t fBlend ) {
-	const uint32_t control = getControl( rGlobalPosition );
-	const uint8_t blend = ( uint8_t ) ( CLAMP( Math::round( fBlend * 255.f ), 0.f, 255.f ) );
-	setControl( rGlobalPosition, ( control & ~( 0xFF << 14 ) ) | encBlend( blend ) );
-}
+EA_FORCE_INLINE void T3DData::setControlBlend( const Vector3 &rGlobalPosition, const real_t fBlend ) { const uint32_t control = getControl( rGlobalPosition ); const uint8_t blend = ( uint8_t ) ( CLAMP( Math::round( fBlend * 255.f ), 0.f, 255.f ) ); setControl( rGlobalPosition, ( control & ~( 0xFF << 14 ) ) | encBlend( blend ) ); }
 
-inline real_t T3DData::getControlBlend( const Vector3 &rGlobalPosition ) const {
-	const uint32_t control = getControl( rGlobalPosition );
-	return control == UINT32_MAX ? NAN : ( real_t ) ( getBlend( control ) ) / 255.f;
-}
+EA_FORCE_INLINE real_t T3DData::getControlBlend( const Vector3 &rGlobalPosition ) const { const uint32_t control = getControl( rGlobalPosition ); return control == UINT32_MAX ? NAN : ( real_t ) ( getBlend( control ) ) / 255.f; }
 
 // Expects angle in degrees
-inline void T3DData::setControlAngle( const Vector3 &rGlobalPosition, const real_t fAngle ) {
-	const uint32_t control = getControl( rGlobalPosition );
-	const uint8_t uvrotation = ( uint8_t ) ( CLAMP( Math::round( fAngle / 22.5f ), 0.f, 15.f ) );
-	setControl( rGlobalPosition, ( control & ~( 0xF << 10 ) ) | encUvRotation( uvrotation ) );
-}
+EA_FORCE_INLINE void T3DData::setControlAngle( const Vector3 &rGlobalPosition, const real_t fAngle ) { const uint32_t control = getControl( rGlobalPosition ); const uint8_t uvrotation = ( uint8_t ) ( CLAMP( Math::round( fAngle / 22.5f ), 0.f, 15.f ) ); setControl( rGlobalPosition, ( control & ~( 0xF << 10 ) ) | encUvRotation( uvrotation ) ); }
 
 // returns angle in degrees
-inline real_t T3DData::getControlAngle( const Vector3 &rGlobalPosition ) const {
-	const uint32_t control = getControl( rGlobalPosition );
-	const real_t fAngle = ( real_t ) ( getUvRotation( control ) ) * 22.5f;
-	return control == UINT32_MAX ? NAN : fAngle;
-}
+EA_FORCE_INLINE real_t T3DData::getControlAngle( const Vector3 &rGlobalPosition ) const { const uint32_t control = getControl( rGlobalPosition ); const real_t fAngle = ( real_t ) ( getUvRotation( control ) ) * 22.5f; return control == UINT32_MAX ? NAN : fAngle; }
 
 // Expects scale as a percentage modifier
 inline void T3DData::setControlScale( const Vector3 &rGlobalPosition, const real_t fScale ) {
@@ -683,51 +531,23 @@ inline real_t T3DData::getControlScale( const Vector3 &rGlobalPosition ) const {
 	return control == UINT32_MAX ? NAN : fScale;
 }
 
-inline void T3DData::setControlHole( const Vector3 &rGlobalPosition, const bool bHole ) {
-	const uint32_t control = getControl( rGlobalPosition );
-	setControl( rGlobalPosition, ( control & ~( 0x1 << 2 ) ) | encHole( bHole ) );
-}
+EA_FORCE_INLINE void T3DData::setControlHole( const Vector3 &rGlobalPosition, const bool bHole ) { const uint32_t control = getControl( rGlobalPosition ); setControl( rGlobalPosition, ( control & ~( 0x1 << 2 ) ) | encHole( bHole ) ); }
 
-inline bool T3DData::getControlHole( const Vector3 &rGlobalPosition ) const {
-	const uint32_t control = getControl( rGlobalPosition );
-	return control == UINT32_MAX ? false : isHole( control );
-}
+EA_FORCE_INLINE bool T3DData::getControlHole( const Vector3 &rGlobalPosition ) const { const uint32_t control = getControl( rGlobalPosition ); return control == UINT32_MAX ? false : isHole( control ); }
 
-inline void T3DData::setControlNavigation( const Vector3 &rGlobalPosition, const bool bNavigation ) {
-	const uint32_t control = getControl( rGlobalPosition );
-	setControl( rGlobalPosition, ( control & ~( 0x1 << 1 ) ) | encNav( bNavigation ) );
-}
+EA_FORCE_INLINE void T3DData::setControlNavigation( const Vector3 &rGlobalPosition, const bool bNavigation ) { const uint32_t control = getControl( rGlobalPosition ); setControl( rGlobalPosition, ( control & ~( 0x1 << 1 ) ) | encNav( bNavigation ) ); }
 
-inline bool T3DData::getControlNavigation( const Vector3 &rGlobalPosition ) const {
-	const uint32_t control = getControl( rGlobalPosition );
-	return control == UINT32_MAX ? false : isNav( control );
-}
+EA_FORCE_INLINE bool T3DData::getControlNavigation( const Vector3 &rGlobalPosition ) const { const uint32_t control = getControl( rGlobalPosition ); return control == UINT32_MAX ? false : isNav( control ); }
 
-inline void T3DData::setControlAuto( const Vector3 &rGlobalPosition, const bool bAuto ) {
-	const uint32_t control = getControl( rGlobalPosition );
-	setControl( rGlobalPosition, ( control & ~( 0x1 ) ) | encAuto( bAuto ) );
-}
+EA_FORCE_INLINE void T3DData::setControlAuto( const Vector3 &rGlobalPosition, const bool bAuto ) { const uint32_t control = getControl( rGlobalPosition ); setControl( rGlobalPosition, ( control & ~( 0x1 ) ) | encAuto( bAuto ) ); }
 
-inline bool T3DData::getControlAuto( const Vector3 &rGlobalPosition ) const {
-	const uint32_t control = getControl( rGlobalPosition );
-	return control == UINT32_MAX ? false : isAuto( control );
-}
+EA_FORCE_INLINE bool T3DData::getControlAuto( const Vector3 &rGlobalPosition ) const { const uint32_t control = getControl( rGlobalPosition ); return control == UINT32_MAX ? false : isAuto( control ); }
 
-inline void T3DData::setRoughness( const Vector3 &rGlobalPosition, const real_t fRoughness ) {
-	Color clr = getPixel( T3DRegion::TYPE_COLOR, rGlobalPosition );
-	clr.a = fRoughness;
-	setPixel( T3DRegion::TYPE_COLOR, rGlobalPosition, clr );
-}
+EA_FORCE_INLINE void T3DData::setRoughness( const Vector3 &rGlobalPosition, const real_t fRoughness ) { Color clr = getPixel( T3DRegion::TYPE_COLOR, rGlobalPosition ); clr.a = fRoughness; setPixel( T3DRegion::TYPE_COLOR, rGlobalPosition, clr ); }
 
-inline real_t T3DData::getRoughness( const Vector3 &rGlobalPosition ) const {
-	return getPixel( T3DRegion::TYPE_COLOR, rGlobalPosition ).a;
-}
+EA_FORCE_INLINE real_t T3DData::getRoughness( const Vector3 &rGlobalPosition ) const { return getPixel( T3DRegion::TYPE_COLOR, rGlobalPosition ).a; }
 
-inline void T3DData::updateMasterHeight( const real_t fHeight ) {
-	m_mapEditService.updateMasterHeight( fHeight );
-}
+EA_FORCE_INLINE void T3DData::updateMasterHeight( const real_t fHeight ) { m_mapEditService.updateMasterHeight( fHeight ); }
 
-inline void T3DData::updateMasterHeights( const Vector2 &rLowHigh ) {
-	m_mapEditService.updateMasterHeights( rLowHigh );
-}
+EA_FORCE_INLINE void T3DData::updateMasterHeights( const Vector2 &rLowHigh ) { m_mapEditService.updateMasterHeights( rLowHigh ); }
 #endif // TERRAIN3D_DATA_CLASS_H

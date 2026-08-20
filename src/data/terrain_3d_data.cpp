@@ -106,20 +106,11 @@ static void terrain3dFnv1a64Append( uint64_t &nHash, const uint8_t *pData, const
 	}
 }
 
-static void terrain3dFnv1a64AppendU32( uint64_t &nHash, const uint32_t nValue ) {
-	terrain3dFnv1a64Append( nHash, ( const uint8_t * ) ( &nValue ), sizeof( nValue ) );
-}
+EA_FORCE_INLINE static void terrain3dFnv1a64AppendU32( uint64_t &nHash, const uint32_t nValue ) { terrain3dFnv1a64Append( nHash, ( const uint8_t * ) ( &nValue ), sizeof( nValue ) ); }
 
-static void terrain3dFnv1a64AppendU64( uint64_t &nHash, const uint64_t nValue ) {
-	terrain3dFnv1a64Append( nHash, ( const uint8_t * ) ( &nValue ), sizeof( nValue ) );
-}
+EA_FORCE_INLINE static void terrain3dFnv1a64AppendU64( uint64_t &nHash, const uint64_t nValue ) { terrain3dFnv1a64Append( nHash, ( const uint8_t * ) ( &nValue ), sizeof( nValue ) ); }
 
-static void terrain3dFnv1a64AppendF32( uint64_t &nHash, const float fValue ) {
-	uint32_t bits = 0u;
-	static_assert( sizeof( bits ) == sizeof( fValue ) );
-	std::memcpy( &bits, &fValue, sizeof( bits ) );
-	terrain3dFnv1a64AppendU32( nHash, bits );
-}
+EA_FORCE_INLINE static void terrain3dFnv1a64AppendF32( uint64_t &nHash, const float fValue ) { uint32_t bits = 0u; static_assert( sizeof( bits ) == sizeof( fValue ) ); std::memcpy( &bits, &fValue, sizeof( bits ) ); terrain3dFnv1a64AppendU32( nHash, bits ); }
 
 class T3DLastScopeTimer {
 	uint64_t _started_usec = 0u;
@@ -152,15 +143,7 @@ class T3DProfileScopeTimer {
 	uint64_t *_end_to_end_usec = nullptr;
 
 public:
-	T3DProfileScopeTimer(
-		uint64_t &nElapsedUsec, const uint64_t &nRequestUsec,
-		uint64_t &nEndToEndUsec
-	) :
-			_elapsed_usec( &nElapsedUsec ), _request_usec( &nRequestUsec ),
-			_end_to_end_usec( &nEndToEndUsec ) {
-		Time *time = Time::get_singleton();
-		_started_usec = time ? time->get_ticks_usec() : 0u;
-	}
+	EA_FORCE_INLINE T3DProfileScopeTimer( uint64_t &nElapsedUsec, const uint64_t &nRequestUsec, uint64_t &nEndToEndUsec ) : _elapsed_usec( &nElapsedUsec ), _request_usec( &nRequestUsec ), _end_to_end_usec( &nEndToEndUsec ) { Time *time = Time::get_singleton(); _started_usec = time ? time->get_ticks_usec() : 0u; }
 
 	~T3DProfileScopeTimer( void ) {
 		Time *time = Time::get_singleton();
@@ -182,9 +165,7 @@ static uint32_t terrain3dReadU32Unaligned( const uint8_t *pBytes, const size_t n
 	return value;
 }
 
-static uint8_t terrain3dColorToByte( const float fValue ) {
-	return ( uint8_t ) ( CLAMP( Math::round( fValue * TERRAIN3D_BYTE_MAX_FLOAT ), 0.0f, TERRAIN3D_BYTE_MAX_FLOAT ) );
-}
+EA_FORCE_INLINE static uint8_t terrain3dColorToByte( const float fValue ) { return ( uint8_t ) ( CLAMP( Math::round( fValue * TERRAIN3D_BYTE_MAX_FLOAT ), 0.0f, TERRAIN3D_BYTE_MAX_FLOAT ) ); }
 
 bool terrain3dRegionLocationValid( const Vector2i &vLocation, const int nMapSize ) {
 	if ( nMapSize <= 0 ) {

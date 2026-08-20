@@ -1,4 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
+#include "core/terrain_3d_compiler.h"
 #include "hlod/terrain_3d_hlod_runtime_codec.h"
 
 #include <EASTL/sort.h>
@@ -12,26 +13,21 @@ namespace {
 static constexpr uint32_t HLOD_RUNTIME_MAGIC = 0x32444c48u; // HLD2
 static constexpr uint16_t HLOD_RUNTIME_VERSION = 1u;
 
-static int floorDiv( const int value, const int divisor ) {
-	if ( divisor <= 0 ) return 0;
-	int quotient = value / divisor;
-	if ( value < 0 && ( value % divisor ) != 0 ) --quotient;
-	return quotient;
-}
-static void u8( PackedByteArray &b, uint8_t v ) { const int64_t o=b.size(); b.resize(o+1); b.ptrw()[o]=v; }
-static void u16( PackedByteArray &b, uint16_t v ) { const int64_t o=b.size(); b.resize(o+2); auto*p=b.ptrw()+o; p[0]=(uint8_t)v; p[1]=(uint8_t)(v>>8); }
-static void u32( PackedByteArray &b, uint32_t v ) { const int64_t o=b.size(); b.resize(o+4); auto*p=b.ptrw()+o; for(int i=0;i<4;++i)p[i]=(uint8_t)(v>>(8*i)); }
-static void i32( PackedByteArray &b, int32_t v ) { u32(b,(uint32_t)v); }
-static void u64( PackedByteArray &b, uint64_t v ) { u32(b,(uint32_t)v); u32(b,(uint32_t)(v>>32)); }
-static void i64( PackedByteArray &b, int64_t v ) { u64(b,(uint64_t)v); }
-static void f32( PackedByteArray &b, float v ) { uint32_t bits=0; std::memcpy(&bits,&v,4); u32(b,bits); }
-static uint8_t ru8(const uint8_t*p){return p[0];}
-static uint16_t ru16(const uint8_t*p){return (uint16_t)(p[0]|((uint16_t)p[1]<<8));}
-static uint32_t ru32(const uint8_t*p){return (uint32_t)p[0]|((uint32_t)p[1]<<8)|((uint32_t)p[2]<<16)|((uint32_t)p[3]<<24);}
-static int32_t ri32(const uint8_t*p){return (int32_t)ru32(p);}
-static uint64_t ru64(const uint8_t*p){return (uint64_t)ru32(p)|((uint64_t)ru32(p+4)<<32);}
-static int64_t ri64(const uint8_t*p){return (int64_t)ru64(p);}
-static float rf32(const uint8_t*p){uint32_t bits=ru32(p); float v=0; std::memcpy(&v,&bits,4); return v;}
+EA_FORCE_INLINE static int floorDiv( const int value, const int divisor ) { if ( divisor <= 0 ) return 0; int quotient = value / divisor; if ( value < 0 && ( value % divisor ) != 0 ) --quotient; return quotient; }
+EA_FORCE_INLINE static void u8( PackedByteArray &b, uint8_t v ) { const int64_t o=b.size(); b.resize(o+1); b.ptrw()[o]=v; }
+EA_FORCE_INLINE static void u16( PackedByteArray &b, uint16_t v ) { const int64_t o=b.size(); b.resize(o+2); auto*p=b.ptrw()+o; p[0]=(uint8_t)v; p[1]=(uint8_t)(v>>8); }
+EA_FORCE_INLINE static void u32( PackedByteArray &b, uint32_t v ) { const int64_t o=b.size(); b.resize(o+4); auto*p=b.ptrw()+o; for(int i=0;i<4;++i)p[i]=(uint8_t)(v>>(8*i)); }
+EA_FORCE_INLINE static void i32( PackedByteArray &b, int32_t v ) { u32(b,(uint32_t)v); }
+EA_FORCE_INLINE static void u64( PackedByteArray &b, uint64_t v ) { u32(b,(uint32_t)v); u32(b,(uint32_t)(v>>32)); }
+EA_FORCE_INLINE static void i64( PackedByteArray &b, int64_t v ) { u64(b,(uint64_t)v); }
+EA_FORCE_INLINE static void f32( PackedByteArray &b, float v ) { uint32_t bits=0; std::memcpy(&bits,&v,4); u32(b,bits); }
+EA_FORCE_INLINE static uint8_t ru8(const uint8_t*p) { return p[0]; }
+EA_FORCE_INLINE static uint16_t ru16(const uint8_t*p) { return (uint16_t)(p[0]|((uint16_t)p[1]<<8)); }
+EA_FORCE_INLINE static uint32_t ru32(const uint8_t*p) { return (uint32_t)p[0]|((uint32_t)p[1]<<8)|((uint32_t)p[2]<<16)|((uint32_t)p[3]<<24); }
+EA_FORCE_INLINE static int32_t ri32(const uint8_t*p) { return (int32_t)ru32(p); }
+EA_FORCE_INLINE static uint64_t ru64(const uint8_t*p) { return (uint64_t)ru32(p)|((uint64_t)ru32(p+4)<<32); }
+EA_FORCE_INLINE static int64_t ri64(const uint8_t*p) { return (int64_t)ru64(p); }
+EA_FORCE_INLINE static float rf32(const uint8_t*p) { uint32_t bits=ru32(p); float v=0; std::memcpy(&v,&bits,4); return v; }
 
 static bool parseEntry( const Variant &rValue, T3DHLODRuntimeEntryRecord &rEntry ) {
 	if ( rValue.get_type() != Variant::DICTIONARY ) return false;

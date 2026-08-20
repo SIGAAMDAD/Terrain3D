@@ -28,11 +28,7 @@ void terrain3dEastlAssertLegacyAdapter( void *pInstructionPointer, const char *p
 	}
 }
 
-void terrain3dEastlAssertDefault( void *pInstructionPointer, const char *pszExpression, void *pContext ) {
-	EA_UNUSED( pInstructionPointer );
-	EA_UNUSED( pContext );
-	AssertionFailureFunctionDefault( pszExpression, nullptr );
-}
+EA_FORCE_INLINE void terrain3dEastlAssertDefault( void *pInstructionPointer, const char *pszExpression, void *pContext ) { EA_UNUSED( pInstructionPointer ); EA_UNUSED( pContext ); AssertionFailureFunctionDefault( pszExpression, nullptr ); }
 
 } // namespace
 

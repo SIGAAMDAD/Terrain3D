@@ -62,6 +62,7 @@ AllowShortFunctionsOnASingleLine: All
 # AlwaysBreakBeforeMultilineStrings: false
 # AlwaysBreakTemplateDeclarations: MultiLine
 AttributeMacros:
+  - EA_FORCE_INLINE
   - _ALWAYS_INLINE_
   - _FORCE_INLINE_
   - _NO_INLINE_

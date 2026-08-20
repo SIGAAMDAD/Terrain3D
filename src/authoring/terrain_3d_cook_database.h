@@ -4,6 +4,7 @@
 #ifndef TERRAIN3D_COOK_DATABASE_H
 #define TERRAIN3D_COOK_DATABASE_H
 
+#include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
 #include <array>
 #include <cstdint>
@@ -19,7 +20,7 @@ public:
 	void setRegion( const Vector2i &rLocation, uint64_t nSourceSignature );
 	void clearRegion( const Vector2i &rLocation );
 	String getPath( const String &rDataDirectory ) const;
-	bool isLoaded( void ) const { return m_bLoaded; }
+	EA_FORCE_INLINE bool isLoaded( void ) const { return m_bLoaded; }
 
 private:
 	bool m_bLoaded = false;

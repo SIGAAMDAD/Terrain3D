@@ -5,6 +5,7 @@
 #ifndef TERRAIN3D_ACTIVE_HEIGHT_RESIDENCY_H
 #define TERRAIN3D_ACTIVE_HEIGHT_RESIDENCY_H
 
+#include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
 #include "streaming/terrain_3d_residency_state.h"
 
@@ -51,10 +52,10 @@ public:
 	);
 
 	void reset( void );
-	void markDirty( void ) { m_bDirty = true; }
-	bool isDirty( void ) const { return m_bDirty; }
+	EA_FORCE_INLINE void markDirty( void ) { m_bDirty = true; }
+	EA_FORCE_INLINE bool isDirty( void ) const { return m_bDirty; }
 	T3DActiveHeightResidencyResult update( const T3DResidencyFrameState &rFrame, bool bForce );
-	const T3DActiveHeightResidencyStats &getStats( void ) const { return m_stats; }
+	EA_FORCE_INLINE const T3DActiveHeightResidencyStats &getStats( void ) const { return m_stats; }
 
 private:
 	static constexpr int ACTIVE_RADIUS = 2;

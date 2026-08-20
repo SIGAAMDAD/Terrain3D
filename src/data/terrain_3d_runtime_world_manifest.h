@@ -78,25 +78,22 @@ public:
 	bool stageRepository( const String &rDataDirectory, T3DStagedRepository &rStaged ) const;
 
 	String getPath( const String &rDataDirectory ) const;
-	bool isLoaded( void ) const { return m_bLoaded; }
-	int getRegionSize( void ) const { return m_nRegionSize; }
-	int getRegionCount( void ) const { return ( int ) ( m_regions.size() ); }
-	real_t getVertexSpacing( void ) const { return m_fVertexSpacing; }
-	Vector2i getWorldRegionMin( void ) const { return m_worldRegionMin; }
-	Vector2i getWorldRegionMax( void ) const { return m_worldRegionMax; }
+	EA_FORCE_INLINE bool isLoaded( void ) const { return m_bLoaded; }
+	EA_FORCE_INLINE int getRegionSize( void ) const { return m_nRegionSize; }
+	EA_FORCE_INLINE int getRegionCount( void ) const { return ( int ) ( m_regions.size() ); }
+	EA_FORCE_INLINE real_t getVertexSpacing( void ) const { return m_fVertexSpacing; }
+	EA_FORCE_INLINE Vector2i getWorldRegionMin( void ) const { return m_worldRegionMin; }
+	EA_FORCE_INLINE Vector2i getWorldRegionMax( void ) const { return m_worldRegionMax; }
 	bool hasRegion( const Vector2i &rLocation ) const;
-	uint64_t getWorldSignature( void ) const { return m_nWorldSignature; }
-	uint64_t getMaterialSignature( void ) const { return m_nMaterialSignature; }
-	Vector2 getWorldHeightRange( void ) const { return m_worldHeightRange; }
+	EA_FORCE_INLINE uint64_t getWorldSignature( void ) const { return m_nWorldSignature; }
+	EA_FORCE_INLINE uint64_t getMaterialSignature( void ) const { return m_nMaterialSignature; }
+	EA_FORCE_INLINE Vector2 getWorldHeightRange( void ) const { return m_worldHeightRange; }
 	const T3DRuntimeWorldRegionRecord *findRegion( const Vector2i &rLocation ) const;
-	uint8_t getRegionAdjacencyMask( const Vector2i &rLocation ) const {
-		const T3DRuntimeWorldRegionRecord *record = findRegion( rLocation );
-		return record ? ( uint8_t ) ( record->flags & 0xffu ) : 0u;
-	}
+	EA_FORCE_INLINE uint8_t getRegionAdjacencyMask( const Vector2i &rLocation ) const { const T3DRuntimeWorldRegionRecord *record = findRegion( rLocation ); return record ? ( uint8_t ) ( record->flags & 0xffu ) : 0u; }
 	int findSceneDependency( const String &rPath ) const;
 	const String &getSceneDependency( uint32_t nIndex ) const;
-	const eastl::vector<uint16_t> &getRegionSceneDependencies( void ) const { return m_regionSceneDependencies; }
-	const eastl::vector<T3DRuntimeWorldRegionRecord> &getRegions( void ) const { return m_regions; }
+	EA_FORCE_INLINE const eastl::vector<uint16_t> &getRegionSceneDependencies( void ) const { return m_regionSceneDependencies; }
+	EA_FORCE_INLINE const eastl::vector<T3DRuntimeWorldRegionRecord> &getRegions( void ) const { return m_regions; }
 
 private:
 	bool m_bLoaded = false;

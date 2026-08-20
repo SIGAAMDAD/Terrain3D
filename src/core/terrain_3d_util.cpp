@@ -47,11 +47,7 @@ Ref<Image> prepareRgbaFloatSource( const Ref<Image> &rImage ) {
 	return pImage;
 }
 
-_FORCE_INLINE_ float rgbaFloatChannel( const uint8_t *pBytes, const size_t nPixel, const int nChannel ) {
-	float fValue = 0.0f;
-	std::memcpy( &fValue, pBytes + ( nPixel * 4u + ( size_t ) ( nChannel ) ) * sizeof( float ), sizeof( float ) );
-	return fValue;
-}
+EA_FORCE_INLINE float rgbaFloatChannel( const uint8_t *pBytes, const size_t nPixel, const int nChannel ) { float fValue = 0.0f; std::memcpy( &fValue, pBytes + ( nPixel * 4u + ( size_t ) ( nChannel ) ) * sizeof( float ), sizeof( float ) ); return fValue; }
 
 T3DParallelExecutor authoringExecutor( const size_t nItemCount ) {
 	const uint32_t hardware_threads = MAX( 1u, ( uint32_t ) ( MAX( 1, OS::get_singleton()->get_processor_count() ) ) );
@@ -59,17 +55,11 @@ T3DParallelExecutor authoringExecutor( const size_t nItemCount ) {
 	return T3DParallelExecutor( ( int32_t ) ( MIN<size_t>( ( size_t ) ( hardware_threads ), useful_tasks ) ) );
 }
 
-_FORCE_INLINE_ uint16_t quantizeU16( const real_t fValue ) {
-	return ( uint16_t ) ( CLAMP( Math::round( CLAMP( fValue, ( real_t ) ( 0.0 ), ( real_t ) ( 1.0 ) ) * 65535.0 ), 0.0, 65535.0 ) );
-}
+EA_FORCE_INLINE uint16_t quantizeU16( const real_t fValue ) { return ( uint16_t ) ( CLAMP( Math::round( CLAMP( fValue, ( real_t ) ( 0.0 ), ( real_t ) ( 1.0 ) ) * 65535.0 ), 0.0, 65535.0 ) ); }
 
-_FORCE_INLINE_ uint8_t quantizeU8( const real_t fValue ) {
-	return ( uint8_t ) ( CLAMP( Math::round( CLAMP( fValue, ( real_t ) ( 0.0 ), ( real_t ) ( 1.0 ) ) * 255.0 ), 0.0, 255.0 ) );
-}
+EA_FORCE_INLINE uint8_t quantizeU8( const real_t fValue ) { return ( uint8_t ) ( CLAMP( Math::round( CLAMP( fValue, ( real_t ) ( 0.0 ), ( real_t ) ( 1.0 ) ) * 255.0 ), 0.0, 255.0 ) ); }
 
-_FORCE_INLINE_ int clampSourceCoord( const int nValue, const int nLimit ) {
-	return CLAMP( nValue, 0, MAX( nLimit - 1, 0 ) );
-}
+EA_FORCE_INLINE int clampSourceCoord( const int nValue, const int nLimit ) { return CLAMP( nValue, 0, MAX( nLimit - 1, 0 ) ); }
 
 t3dpackedPBRPixel_t averagePackedPbrPixels(
 	const eastl::vector<t3dpackedPBRPixel_t> &rSrc, const int nWidth,

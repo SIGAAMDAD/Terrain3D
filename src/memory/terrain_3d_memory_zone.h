@@ -9,6 +9,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
+#include "core/terrain_3d_compiler.h"
 
 class T3DMemoryZone {
 public:
@@ -20,7 +21,7 @@ public:
 	static constexpr uint32_t MAX_SMALL_PAGES = 1024u;
 
 	T3DMemoryZone() = default;
-	~T3DMemoryZone();
+	EA_FORCE_INLINE ~T3DMemoryZone() { release(); }
 	T3DMemoryZone( const T3DMemoryZone & ) = delete;
 	T3DMemoryZone &operator=( const T3DMemoryZone & ) = delete;
 
@@ -28,16 +29,16 @@ public:
 	void *allocate( size_t nBytes, size_t nAlignment = alignof( std::max_align_t ) );
 	void deallocate( void *pMemory );
 	void *reallocate( void *pMemory, size_t nBytes );
-	bool beginDraining();
+	EA_FORCE_INLINE bool beginDraining() { std::lock_guard<std::mutex> lock( m_mutex ); if ( m_state != ACTIVE ) { return false; } m_state = DRAINING; return true; }
 	bool waitUntilDrained( std::chrono::milliseconds timeout );
 	bool release();
 
-	State state() const;
-	size_t capacity() const { return m_nCapacity; }
-	size_t liveAllocations() const;
-	size_t liveBytes() const;
+	EA_FORCE_INLINE State state() const { std::lock_guard<std::mutex> lock( m_mutex ); return m_state; }
+	EA_FORCE_INLINE size_t capacity() const { return m_nCapacity; }
+	EA_FORCE_INLINE size_t liveAllocations() const { std::lock_guard<std::mutex> lock( m_mutex ); return m_nLiveAllocations; }
+	EA_FORCE_INLINE size_t liveBytes() const { std::lock_guard<std::mutex> lock( m_mutex ); return m_nLiveBytes; }
 	size_t freeBytes() const;
-	bool owns( const void *pMemory ) const;
+	EA_FORCE_INLINE bool owns( const void *pMemory ) const { return pMemory && m_pBase && static_cast<const uint8_t *>( pMemory ) > m_pBase && static_cast<const uint8_t *>( pMemory ) < m_pBase + m_nCapacity; }
 
 private:
 	struct Extent { size_t offset = 0u; size_t size = 0u; };
@@ -75,7 +76,7 @@ private:
 	mutable std::mutex m_mutex;
 	std::condition_variable m_drained;
 
-	static bool isPowerOfTwo( size_t nValue );
+	EA_FORCE_INLINE static bool isPowerOfTwo( size_t nValue ) { return nValue && ( nValue & ( nValue - 1u ) ) == 0u; }
 	static bool alignUp( size_t nValue, size_t nAlignment, size_t &rValue );
 	int classIndexFor( size_t nBytes, size_t nAlignment ) const;
 	bool insertFreeExtentUnlocked( size_t nOffset, size_t nBytes );

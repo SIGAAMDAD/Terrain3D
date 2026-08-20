@@ -8,9 +8,7 @@
 
 constexpr uint32_t T3DMemoryZone::SMALL_CLASSES[T3DMemoryZone::SMALL_CLASS_COUNT];
 
-T3DMemoryZone::~T3DMemoryZone() { release(); }
 
-bool T3DMemoryZone::isPowerOfTwo( const size_t nValue ) { return nValue && ( nValue & ( nValue - 1u ) ) == 0u; }
 
 bool T3DMemoryZone::alignUp( const size_t nValue, const size_t nAlignment, size_t &rValue ) {
 	if ( !isPowerOfTwo( nAlignment ) || nValue > std::numeric_limits<size_t>::max() - ( nAlignment - 1u ) ) return false;
@@ -242,7 +240,6 @@ void *T3DMemoryZone::reallocate( void *const pMemory, const size_t nBytes ) {
 	return replacement;
 }
 
-bool T3DMemoryZone::beginDraining() { std::lock_guard<std::mutex> lock( m_mutex ); if ( m_state != ACTIVE ) return false; m_state = DRAINING; return true; }
 
 bool T3DMemoryZone::waitUntilDrained( const std::chrono::milliseconds timeout ) {
 	std::unique_lock<std::mutex> lock( m_mutex );
@@ -257,8 +254,6 @@ bool T3DMemoryZone::release() {
 	m_pBase = nullptr; m_nCapacity = 0u; m_nFreeExtentCount = 0u; m_state = DEAD; return true;
 }
 
-T3DMemoryZone::State T3DMemoryZone::state() const { std::lock_guard<std::mutex> lock( m_mutex ); return m_state; }
-size_t T3DMemoryZone::liveAllocations() const { std::lock_guard<std::mutex> lock( m_mutex ); return m_nLiveAllocations; }
-size_t T3DMemoryZone::liveBytes() const { std::lock_guard<std::mutex> lock( m_mutex ); return m_nLiveBytes; }
-size_t T3DMemoryZone::freeBytes() const { std::lock_guard<std::mutex> lock( m_mutex ); size_t bytes = 0u; for ( uint32_t i = 0u; i < m_nFreeExtentCount; ++i ) bytes += m_szFreeExtents[i].size; return bytes; }
-bool T3DMemoryZone::owns( const void *const pMemory ) const { return pMemory && m_pBase && static_cast<const uint8_t *>( pMemory ) > m_pBase && static_cast<const uint8_t *>( pMemory ) < m_pBase + m_nCapacity; }
+size_t T3DMemoryZone::freeBytes() const {
+	std::lock_guard<std::mutex> lock( m_mutex ); size_t bytes = 0u; for ( uint32_t i = 0u; i < m_nFreeExtentCount; ++i ) bytes += m_szFreeExtents[i].size; return bytes;
+}

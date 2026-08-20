@@ -108,23 +108,21 @@ public:
 	void suspend( void );
 
 	void setEnabled( bool bEnabled );
-	bool isEnabled( void ) const { return m_bEnabled; }
+	EA_FORCE_INLINE bool isEnabled( void ) const { return m_bEnabled; }
 	void setRadiusRegions( int nRadius );
-	int getRadiusRegions( void ) const { return m_nRadiusRegions; }
-	void setLoadBudget( const int nBudget ) { m_nLoadBudget = CLAMP( nBudget, 0, 64 ); }
-	int getLoadBudget( void ) const { return m_nLoadBudget; }
-	void setUnloadBudget( const int nBudget ) { m_nUnloadBudget = CLAMP( nBudget, 0, 64 ); }
-	int getUnloadBudget( void ) const { return m_nUnloadBudget; }
+	EA_FORCE_INLINE int getRadiusRegions( void ) const { return m_nRadiusRegions; }
+	EA_FORCE_INLINE void setLoadBudget( const int nBudget ) { m_nLoadBudget = CLAMP( nBudget, 0, 64 ); }
+	EA_FORCE_INLINE int getLoadBudget( void ) const { return m_nLoadBudget; }
+	EA_FORCE_INLINE void setUnloadBudget( const int nBudget ) { m_nUnloadBudget = CLAMP( nBudget, 0, 64 ); }
+	EA_FORCE_INLINE int getUnloadBudget( void ) const { return m_nUnloadBudget; }
 	void setResidencyBudgetMb( int nBudgetMb );
-	int getResidencyBudgetMb( void ) const { return m_nResidencyBudgetMb; }
-	int getEffectiveResidencyBudgetMbForDiagnostics( void ) const { return getEffectiveResidencyBudgetMb(); }
-	size_t getResidentEstimatedBytes( void ) const { return m_nResidentEstimatedBytes; }
-	bool isResidencyIdle( void ) const {
-		return m_nLoadsLastTick == 0 && m_nRefreshesLastTick == 0;
-	}
+	EA_FORCE_INLINE int getResidencyBudgetMb( void ) const { return m_nResidencyBudgetMb; }
+	EA_FORCE_INLINE int getEffectiveResidencyBudgetMbForDiagnostics( void ) const { return getEffectiveResidencyBudgetMb(); }
+	EA_FORCE_INLINE size_t getResidentEstimatedBytes( void ) const { return m_nResidentEstimatedBytes; }
+	EA_FORCE_INLINE bool isResidencyIdle( void ) const { return m_nLoadsLastTick == 0 && m_nRefreshesLastTick == 0; }
 	Dictionary getStatsFast( void ) const;
 
-	int getActivePackageCount( void ) const { return ( int ) ( m_active.size() ); }
+	EA_FORCE_INLINE int getActivePackageCount( void ) const { return ( int ) ( m_active.size() ); }
 	Dictionary getStats( void ) const;
 
 protected:

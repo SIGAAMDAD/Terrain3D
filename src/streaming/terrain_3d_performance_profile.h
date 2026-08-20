@@ -8,18 +8,14 @@
 #include <cstdint>
 #include <cstring>
 
+#include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
 
 namespace terrain_3d_profile {
 
-inline constexpr size_t settingCount( void ) {
-	return XBOX360_EXPERIMENTAL_SETTING_COUNT;
-}
+EA_FORCE_INLINE constexpr size_t settingCount( void ) { return XBOX360_EXPERIMENTAL_SETTING_COUNT; }
 
-inline void signatureAppendByte( uint64_t &nHash, const uint8_t nByte ) {
-	nHash ^= ( uint64_t ) ( nByte );
-	nHash *= TERRAIN3D_PROFILE_FNV_PRIME;
-}
+EA_FORCE_INLINE void signatureAppendByte( uint64_t &nHash, const uint8_t nByte ) { nHash ^= ( uint64_t ) ( nByte ); nHash *= TERRAIN3D_PROFILE_FNV_PRIME; }
 
 inline void signatureAppendUint32( uint64_t &nHash, const uint32_t nValue ) {
 	for ( uint32_t shift = 0u; shift < 32u; shift += 8u ) {
@@ -67,10 +63,7 @@ inline uint64_t computeSignature( void ) {
 	return nHash;
 }
 
-inline uint64_t signature( void ) {
-	static const uint64_t s_nCachedSignature = computeSignature();
-	return s_nCachedSignature;
-}
+EA_FORCE_INLINE uint64_t signature( void ) { static const uint64_t s_nCachedSignature = computeSignature(); return s_nCachedSignature; }
 
 } // namespace terrain_3d_profile
 
