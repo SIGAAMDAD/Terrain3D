@@ -19,10 +19,9 @@
 using namespace godot;
 #endif
 
-class T3DTerrain;
+class Terrain3D;
 
-class T3DLandformBaker : public RefCounted {
-	using Terrain3DLandformBaker = T3DLandformBaker;
+class Terrain3DLandformBaker : public RefCounted {
 	GDCLASS( Terrain3DLandformBaker, RefCounted );
 	CLASS_NAME();
 
@@ -64,18 +63,18 @@ public:
 		GEOMETRY_MAX,
 	} t3dgeometryMode_t;
 
-	Dictionary apply( T3DTerrain *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings );
-	void restore( T3DTerrain *pTerrain, const Array &rSnapshots, const AABB &rEditedArea );
+	Dictionary apply( Terrain3D *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings );
+	void restore( Terrain3D *pTerrain, const Array &rSnapshots, const AABB &rEditedArea );
 	Ref<ArrayMesh> buildCliffMesh(
-		T3DTerrain *pTerrain, const PackedVector3Array &rPath,
+		Terrain3D *pTerrain, const PackedVector3Array &rPath,
 		const Dictionary &rSettings
 	) const;
 	Dictionary buildCliffModules(
-		T3DTerrain *pTerrain, const PackedVector3Array &rPath,
+		Terrain3D *pTerrain, const PackedVector3Array &rPath,
 		const Dictionary &rSettings
 	) const;
 	Ref<ArrayMesh> buildCliffCollisionMesh(
-		T3DTerrain *pTerrain, const PackedVector3Array &rPath,
+		Terrain3D *pTerrain, const PackedVector3Array &rPath,
 		const Dictionary &rSettings
 	) const;
 
@@ -83,10 +82,7 @@ protected:
 	static void _bind_methods( void );
 };
 
-VARIANT_ENUM_CAST( T3DLandformBaker::t3dmode_t );
-VARIANT_ENUM_CAST( T3DLandformBaker::t3dmorphologyMode_t );
-VARIANT_ENUM_CAST( T3DLandformBaker::t3dgeometryMode_t );
-
-using Terrain3DLandformBaker = T3DLandformBaker;
-
+VARIANT_ENUM_CAST( Terrain3DLandformBaker::t3dmode_t );
+VARIANT_ENUM_CAST( Terrain3DLandformBaker::t3dmorphologyMode_t );
+VARIANT_ENUM_CAST( Terrain3DLandformBaker::t3dgeometryMode_t );
 #endif // TERRAIN3D_LANDFORM_BAKER_H

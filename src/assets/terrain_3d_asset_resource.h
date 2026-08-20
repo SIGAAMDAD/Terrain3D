@@ -10,11 +10,11 @@
 
 #include "Terrain3DConstants.h"
 
-class T3DAssets;
+class Terrain3DAssets;
 
 // Parent class of Terrain3DMeshAsset and Terrain3DTextureAsset
 class T3DAssetResource : public Resource {
-	friend class T3DAssets;
+	friend class Terrain3DAssets;
 
 public:
 	T3DAssetResource( void ) {}

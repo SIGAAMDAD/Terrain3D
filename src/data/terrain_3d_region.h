@@ -22,10 +22,9 @@
 #include "assets/terrain_3d_assets.h"
 #include "lighting/terrain_3d_region_lighting.h"
 
-class T3DRegion : public Resource {
-	using Terrain3DRegion = T3DRegion;
+class Terrain3DRegion : public Resource {
 	GDCLASS( Terrain3DRegion, Resource );
-	friend class T3DData;
+	friend class Terrain3DData;
 	CLASS_NAME();
 
 public: // Constants
@@ -91,7 +90,7 @@ private:
 	// Import without persistence side effects. This is intentionally not bound to
 	// ClassDB; only trusted loading/reconstruction code may bypass mutation flags.
 	void importInstancesUnmodified( const Dictionary &rInstances );
-	void importRuntimeMapsUnmodified( const T3DRegion *pSource );
+	void importRuntimeMapsUnmodified( const Terrain3DRegion *pSource );
 	void releaseRuntimeMapsUnmodified( void );
 	void markRuntimeMapsClean( void );
 	bool hasRuntimeMapPayload( void ) const;
@@ -146,7 +145,7 @@ private:
 	Vector2i m_streamedNodeCoverageMin = V2I_ZERO;
 	Vector2i m_streamedNodeCoverageMax = V2I_ZERO;
 	bool m_bStreamedNodeHasExtendedCoverage = false;
-	Ref<T3DRegionLighting> m_pLighting;
+	Ref<Terrain3DRegionLighting> m_pLighting;
 	real_t m_fVertexSpacing = 1.f; // Spacing that instancer transforms are currently scaled by.
 
 	// Working data not saved to disk
@@ -156,8 +155,8 @@ private:
 	Vector2i m_location = V2I_MAX;
 
 public:
-	T3DRegion( void );
-	~T3DRegion( void );
+	Terrain3DRegion( void );
+	~Terrain3DRegion( void );
 
 	void clear( void );
 	void setVersion( const real_t fVersion );
@@ -258,7 +257,7 @@ public:
 	void setCookedStreamedNodeMetadataInternal( uint16_t nCount, const Vector2i &rCoverageMin, const Vector2i &rCoverageMax );
 	void adoptCookedStreamedNodeRuntimeInternal( eastl::vector<t3dstreamedNodeRuntimeDescriptor_t> &&rNodes );
 	void adoptCookedRuntimeMapsInternal( const Ref<Image> &rHeight, const Ref<Image> &rControl, const Ref<Image> &rColor, const Ref<Image> &rDerived );
-	void importRuntimeMapsUnmodifiedInternal( const T3DRegion *pSource ) { importRuntimeMapsUnmodified( pSource ); }
+	void importRuntimeMapsUnmodifiedInternal( const Terrain3DRegion *pSource ) { importRuntimeMapsUnmodified( pSource ); }
 	void releaseRuntimeMapsUnmodifiedInternal( void ) { releaseRuntimeMapsUnmodified(); }
 	bool hasRuntimeMapPayloadInternal( void ) const { return hasRuntimeMapPayload(); }
 	bool runtimeMapsEvictableInternal( void ) const { return runtimeMapsEvictable(); }
@@ -349,8 +348,8 @@ public:
 			( m_cookedStreamedNodeCoverageMin != V2I_ZERO || m_cookedStreamedNodeCoverageMax != V2I_ZERO );
 	}
 
-	void setLighting( const Ref<T3DRegionLighting> &rLighting );
-	Ref<T3DRegionLighting> getLighting( void ) const { return m_pLighting; }
+	void setLighting( const Ref<Terrain3DRegionLighting> &rLighting );
+	Ref<Terrain3DRegionLighting> getLighting( void ) const { return m_pLighting; }
 	bool hasLighting( void ) const { return m_pLighting.is_valid() && m_pLighting->hasLightData(); }
 	void setVertexSpacing( const real_t fVertexSpacing ) {
 		m_fVertexSpacing = CLAMP( fVertexSpacing, 0.25f, 100.f );
@@ -395,20 +394,17 @@ public:
 	// renderer, collision, and persistence reconciliation.
 	void setData( const Dictionary &rData );
 	Dictionary getData( void ) const;
-	Ref<T3DRegion> duplicate( const bool bDeep = false );
+	Ref<Terrain3DRegion> duplicate( const bool bDeep = false );
 	void dump( const bool bVerbose = false ) const;
 
 protected:
 	static void _bind_methods( void );
 };
 
-using t3dmapType_t = T3DRegion::t3dmapType_t;
-VARIANT_ENUM_CAST( T3DRegion::t3dmapType_t );
-VARIANT_ENUM_CAST( T3DRegion::t3dchannelFlag_t );
-VARIANT_ENUM_CAST( T3DRegion::t3dstreamedNodeBoundaryPolicy_t );
-VARIANT_ENUM_CAST( T3DRegion::t3denvironmentLightingClass_t );
-VARIANT_ENUM_CAST( T3DRegion::t3dbakedLightingMode_t );
-
-using Terrain3DRegion = T3DRegion;
-
+using t3dmapType_t = Terrain3DRegion::t3dmapType_t;
+VARIANT_ENUM_CAST( Terrain3DRegion::t3dmapType_t );
+VARIANT_ENUM_CAST( Terrain3DRegion::t3dchannelFlag_t );
+VARIANT_ENUM_CAST( Terrain3DRegion::t3dstreamedNodeBoundaryPolicy_t );
+VARIANT_ENUM_CAST( Terrain3DRegion::t3denvironmentLightingClass_t );
+VARIANT_ENUM_CAST( Terrain3DRegion::t3dbakedLightingMode_t );
 #endif // TERRAIN3D_REGION_CLASS_H

@@ -11,8 +11,7 @@
 #include "Terrain3DConstants.h"
 
 
-class T3DMemoryStats : public RefCounted {
-	using Terrain3DMemoryStats = T3DMemoryStats;
+class Terrain3DMemoryStats : public RefCounted {
 	GDCLASS( Terrain3DMemoryStats, RefCounted );
 	CLASS_NAME();
 
@@ -37,8 +36,7 @@ protected:
 	static void _bind_methods( void );
 };
 
-class T3DShaderTierStats : public RefCounted {
-	using Terrain3DShaderTierStats = T3DShaderTierStats;
+class Terrain3DShaderTierStats : public RefCounted {
 	GDCLASS( Terrain3DShaderTierStats, RefCounted );
 	CLASS_NAME();
 
@@ -64,8 +62,7 @@ protected:
 	static void _bind_methods( void );
 };
 
-class T3DCacheStats : public RefCounted {
-	using Terrain3DCacheStats = T3DCacheStats;
+class Terrain3DCacheStats : public RefCounted {
 	GDCLASS( Terrain3DCacheStats, RefCounted );
 	CLASS_NAME();
 
@@ -90,8 +87,7 @@ protected:
 	static void _bind_methods( void );
 };
 
-class T3DFrameStats : public RefCounted {
-	using Terrain3DFrameStats = T3DFrameStats;
+class Terrain3DFrameStats : public RefCounted {
 	GDCLASS( Terrain3DFrameStats, RefCounted );
 	CLASS_NAME();
 
@@ -109,10 +105,4 @@ public:
 protected:
 	static void _bind_methods( void );
 };
-
-using Terrain3DMemoryStats = T3DMemoryStats;
-using Terrain3DShaderTierStats = T3DShaderTierStats;
-using Terrain3DCacheStats = T3DCacheStats;
-using Terrain3DFrameStats = T3DFrameStats;
-
 #endif // TERRAIN3D_DIAGNOSTICS_H

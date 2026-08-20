@@ -39,8 +39,7 @@ using ShadowCasting = RenderingServer::ShadowCastingSetting;
  */
 
 
-class T3DMeshAsset : public T3DAssetResource {
-	using Terrain3DMeshAsset = T3DMeshAsset;
+class Terrain3DMeshAsset : public T3DAssetResource {
 	GDCLASS( Terrain3DMeshAsset, T3DAssetResource );
 	CLASS_NAME();
 
@@ -93,10 +92,10 @@ private:
 	TypedArray<Mesh> getMeshes( void ) const;
 
 public:
-	T3DMeshAsset( void ) {
+	Terrain3DMeshAsset( void ) {
 		clear();
 	}
-	~T3DMeshAsset( void ) {}
+	~Terrain3DMeshAsset( void ) {}
 	void initialize( void ) override;
 	void clear( void ) override;
 
@@ -283,16 +282,13 @@ protected:
 	static void _bind_methods( void );
 };
 
-VARIANT_ENUM_CAST( T3DMeshAsset::t3dgenType_t );
-VARIANT_ENUM_CAST( T3DMeshAsset::t3dhlodContribution_t );
+VARIANT_ENUM_CAST( Terrain3DMeshAsset::t3dgenType_t );
+VARIANT_ENUM_CAST( Terrain3DMeshAsset::t3dhlodContribution_t );
 
-inline TypedArray<Mesh> T3DMeshAsset::getMeshes( void ) const {
+inline TypedArray<Mesh> Terrain3DMeshAsset::getMeshes( void ) const {
 	if ( !m_pendingMeshes.is_empty() ) {
 		return m_pendingMeshes;
 	}
 	return m_meshes;
 }
-
-using Terrain3DMeshAsset = T3DMeshAsset;
-
 #endif // TERRAIN3D_MESH_ASSET_CLASS_H

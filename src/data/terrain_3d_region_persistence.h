@@ -22,7 +22,7 @@ class T3DRegionRepository;
 struct T3DStagedRegion {
 	Vector2i location = V2I_MAX;
 	String path;
-	Ref<T3DRegion> pRegion;
+	Ref<Terrain3DRegion> pRegion;
 	PackedByteArray stagedHeight;
 	int nActiveSlot = -1;
 };
@@ -32,7 +32,7 @@ struct T3DStagedRegion {
 struct T3DStagedRepository {
 	eastl::vector<T3DStagedRegion> regions;
 	Dictionary resources;
-	eastl::array<T3DRegion *, TERRAIN3D_MAX_REGION_SLOTS> regionPtrs = {};
+	eastl::array<Terrain3DRegion *, TERRAIN3D_MAX_REGION_SLOTS> regionPtrs = {};
 	eastl::array<Vector2i, TERRAIN3D_MAX_REGION_SLOTS> regionLocations = {};
 	eastl::array<uint16_t, TERRAIN3D_MAX_REGION_SLOTS> logicalRegionMap = {};
 	int nTargetRegionSize = 0;
@@ -46,7 +46,7 @@ struct T3DRegionLoadResult {
 	Error error = FAILED;
 	Vector2i location = V2I_MAX;
 	String path;
-	Ref<T3DRegion> pRegion;
+	Ref<Terrain3DRegion> pRegion;
 	bool bStorageUpgrade = false;
 
 	bool succeeded( void ) const { return error == OK && pRegion.is_valid(); }
@@ -106,10 +106,10 @@ public:
 	T3DRegionLoadResult loadRegion( const Vector2i &rLocation, const String &rDirectory ) const;
 	void publishLoadedRegionPath( const T3DRegionLoadResult &rResult ) const;
 	bool loadRuntimeRegionSource(
-		const String &rPath, int nExpectedRegionSize, Ref<T3DRegion> &rSource
+		const String &rPath, int nExpectedRegionSize, Ref<Terrain3DRegion> &rSource
 	) const;
 	bool prepareRuntimeRegionSource(
-		const Ref<T3DRegion> &rCandidate, int nExpectedRegionSize, Ref<T3DRegion> &rSource
+		const Ref<Terrain3DRegion> &rCandidate, int nExpectedRegionSize, Ref<Terrain3DRegion> &rSource
 	) const;
 
 	T3DRegionSaveResult saveRegion(
@@ -133,9 +133,9 @@ private:
 
 	void resetLoadStats( void );
 	static void updateEditorFile( const String &rPath );
-	static bool validateHeightPayload( const Ref<T3DRegion> &rRegion, const String &rPath );
+	static bool validateHeightPayload( const Ref<Terrain3DRegion> &rRegion, const String &rPath );
 	void normalizeLoadedRegion(
-		const Vector2i &rLocation, const Ref<T3DRegion> &rRegion,
+		const Vector2i &rLocation, const Ref<Terrain3DRegion> &rRegion,
 		bool bApplyRepositorySpacing, bool &rStorageUpgrade
 	) const;
 };

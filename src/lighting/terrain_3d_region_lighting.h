@@ -12,8 +12,7 @@
 
 #include "Terrain3DConstants.h"
 
-class T3DRegionLighting : public Resource {
-	using Terrain3DRegionLighting = T3DRegionLighting;
+class Terrain3DRegionLighting : public Resource {
 	GDCLASS( Terrain3DRegionLighting, Resource );
 	CLASS_NAME();
 
@@ -44,8 +43,8 @@ private:
 	String m_sourceScene;
 
 public:
-	T3DRegionLighting( void ) = default;
-	~T3DRegionLighting( void ) = default;
+	Terrain3DRegionLighting( void ) = default;
+	~Terrain3DRegionLighting( void ) = default;
 
 	void setLightDataPath( const String &rPath );
 	String getLightDataPath( void ) const { return m_lightDataPath; }
@@ -101,7 +100,4 @@ public:
 protected:
 	static void _bind_methods( void );
 };
-
-using Terrain3DRegionLighting = T3DRegionLighting;
-
 #endif // TERRAIN3D_REGION_LIGHTING_H

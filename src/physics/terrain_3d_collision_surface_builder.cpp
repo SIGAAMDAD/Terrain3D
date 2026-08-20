@@ -74,7 +74,7 @@ real_t T3DCollisionSurfaceBuilder::getRegionBlend(
 }
 
 bool T3DCollisionSurfaceBuilder::build(
-	const T3DData *const pData, const Ref<T3DMaterial> &rMaterial,
+	const Terrain3DData *const pData, const Ref<Terrain3DMaterial> &rMaterial,
 	const Vector2i &rPosition, const int nSize,
 	PackedFloat32Array &rHeights, float &rMinHeight, float &rMaxHeight
 ) {
@@ -86,14 +86,14 @@ bool T3DCollisionSurfaceBuilder::build(
 		return false;
 	}
 	const Vector2i origin_location = V2I_DIVIDE_FLOOR( rPosition, region_size );
-	const T3DRegion *const pOriginRegion = pData->getRegionPtr( origin_location );
+	const Terrain3DRegion *const pOriginRegion = pData->getRegionPtr( origin_location );
 	if ( !pOriginRegion || pOriginRegion->isDeleted() ) {
 		return false;
 	}
 
-	const T3DMaterial::t3dworldBackground_t background_mode = rMaterial->getWorldBackground();
-	const bool blend_background = background_mode == T3DMaterial::t3dworldBackground_t::FLAT ||
-		background_mode == T3DMaterial::t3dworldBackground_t::NOISE;
+	const Terrain3DMaterial::t3dworldBackground_t background_mode = rMaterial->getWorldBackground();
+	const bool blend_background = background_mode == Terrain3DMaterial::t3dworldBackground_t::FLAT ||
+		background_mode == Terrain3DMaterial::t3dworldBackground_t::NOISE;
 	const real_t ground_level = rMaterial->get( "ground_level" );
 	const real_t region_blend = rMaterial->get( "region_blend" );
 	const real_t region_texel_size = 1.0f / ( real_t ) ( region_size );
@@ -131,7 +131,7 @@ bool T3DCollisionSurfaceBuilder::build(
 		m_regionPresenceScratch.resize( ( size_t ) ( presence_width ) * ( size_t ) ( presence_height ) );
 		for ( int z = 0; z < presence_height; ++z ) {
 			for ( int x = 0; x < presence_width; ++x ) {
-				const T3DRegion *const pRegion = pData->getRegionPtr( Vector2i( min_blend_region_x + x, min_blend_region_z + z ) );
+				const Terrain3DRegion *const pRegion = pData->getRegionPtr( Vector2i( min_blend_region_x + x, min_blend_region_z + z ) );
 				m_regionPresenceScratch[( size_t ) ( z ) * ( size_t ) ( presence_width ) + ( size_t ) ( x )] =
 					pRegion && !pRegion->isDeleted() ? ( uint8_t ) ( 1 ) : ( uint8_t ) ( 0 );
 			}

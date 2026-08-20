@@ -40,7 +40,7 @@ void T3DRegionResidency::reset( void ) {
 }
 
 void T3DRegionResidency::update(
-	T3DData &rData,
+	Terrain3DData &rData,
 	const T3DResidencyFrameState &rFrame,
 	const bool bForce
 ) {
@@ -72,7 +72,7 @@ void T3DRegionResidency::update(
 	rData.serviceGpuRuntimePagePrepare( rFrame );
 }
 
-void T3DRegionResidency::resetRuntimeCaches( T3DData &rData ) {
+void T3DRegionResidency::resetRuntimeCaches( Terrain3DData &rData ) {
 	rData.resetCpuRegionCache( true );
 	if ( m_pCpuRegionCache ) {
 		m_pCpuRegionCache->refreshCapacity();
@@ -89,7 +89,7 @@ void T3DRegionResidency::resetRuntimeCaches( T3DData &rData ) {
 }
 
 void T3DRegionResidency::appendRuntimeProfileSample(
-	const T3DData &,
+	const Terrain3DData &,
 	t3druntimeProfileSample_t &rSample
 ) const {
 	const T3DRuntimePageStats runtimePageStats = m_pRuntimePageStore ?

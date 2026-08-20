@@ -22,15 +22,14 @@
 #include "data/terrain_3d_half_buffer.h"
 #include "memory/terrain_3d_linear_arena.h"
 
-class T3DData;
+class Terrain3DData;
 typedef struct t3derosionKernels_s t3derosionKernels_t;
 
 
-class T3DErosionJob : public RefCounted {
-	using Terrain3DErosionJob = T3DErosionJob;
+class Terrain3DErosionJob : public RefCounted {
 	GDCLASS( Terrain3DErosionJob, RefCounted );
 	CLASS_NAME();
-	friend class T3DData;
+	friend class Terrain3DData;
 	friend struct t3derosionKernels_s;
 
 public:
@@ -179,7 +178,7 @@ typedef enum t3dmaterialTransitionKind_e : uint8_t {
 		bool bLivePreviewStartPaused = false;
 		int32_t nThreadCount = 0;
 		uint64_t seed = 1;
-		T3DErosionSettings::t3dboundaryMode_t boundaryMode = T3DErosionSettings::BOUNDARY_CLOSED;
+		Terrain3DErosionSettings::t3dboundaryMode_t boundaryMode = Terrain3DErosionSettings::BOUNDARY_CLOSED;
 		float fMaxHeightChangePerStep = 0.5f;
 		bool bPreserveHoles = true;
 		bool bApplyHeight = true;
@@ -457,15 +456,15 @@ typedef enum t3dmaterialTransitionKind_e : uint8_t {
 	float m_fMaximumRaising = 0.0f;
 	std::atomic<int32_t> m_nCompletedSteps{0};
 
-	Error setup( T3DData *pData, const Ref<T3DErosionSettings> &rSettings );
-	void copyConfig( const Ref<T3DErosionSettings> &rSettings );
-	void sampleCurves( const Ref<T3DErosionSettings> &rSettings );
+	Error setup( Terrain3DData *pData, const Ref<Terrain3DErosionSettings> &rSettings );
+	void copyConfig( const Ref<Terrain3DErosionSettings> &rSettings );
+	void sampleCurves( const Ref<Terrain3DErosionSettings> &rSettings );
 	float sampleCurve( t3dcurveId_t curve, int32_t nStep ) const;
 	int32_t selectResolutionScale( int32_t nRegionCount ) const;
 	uint64_t estimateMemoryBytes( int32_t nRegionCount, int32_t nScale ) const;
 	bool allocateBuffers( void );
 	bool compactCompletedResults( void );
-	bool captureSourceRegions( T3DData *pData );
+	bool captureSourceRegions( Terrain3DData *pData );
 	static bool regionSnapshotLess( const t3dregionSnapshot_t &rA, const t3dregionSnapshot_t &rB );
 	static float sampleImageSnapshot(
 		const t3dimageSnapshot_t &rImage, const Rect2 &rWorldRect,
@@ -474,7 +473,7 @@ typedef enum t3dmaterialTransitionKind_e : uint8_t {
 	bool captureImageSnapshot( const Ref<Image> &rImage, t3dimageSnapshot_t &rSnapshot, const char *pszLabel );
 	bool buildSimulationSnapshot( void );
 	void releaseSourceSnapshots( void );
-	bool verifySourceUnchanged( T3DData *pData ) const;
+	bool verifySourceUnchanged( Terrain3DData *pData ) const;
 	uint64_t hashRegionImages( const Ref<Image> &rHeight, const Ref<Image> &rControl ) const;
 	int64_t neighborIndex( size_t iIndex, int32_t nDx, int32_t nDy ) const;
 	uint64_t stochasticIndex( size_t iIndex ) const;
@@ -484,8 +483,8 @@ typedef enum t3dmaterialTransitionKind_e : uint8_t {
 		int32_t iX, int32_t iY
 	) const;
 	float sampleOutput( const FloatBuffer &rMap, int32_t nRegionId, float fSourceX, float fSourceY ) const;
-	bool snapshotTextureProfiles( T3DData *pData );
-	uint64_t hashTextureProfiles( T3DData *pData ) const;
+	bool snapshotTextureProfiles( Terrain3DData *pData );
+	uint64_t hashTextureProfiles( Terrain3DData *pData ) const;
 	int32_t getTransitionTarget( int32_t nTextureId, t3dmaterialTransitionKind_t kind ) const;
 	void partitionMaterial( float fGrainSize, float fAmount, float &fCoarse, float &fSand, float &fFine ) const;
 	float getLooseMaterial( size_t iIndex ) const;
@@ -502,14 +501,14 @@ typedef enum t3dmaterialTransitionKind_e : uint8_t {
 	Ref<Image> makeHeightImage( const FloatBuffer &rSource, int32_t nRegionId, bool bFullResolution ) const;
 
 public:
-	T3DErosionJob( void );
-	~T3DErosionJob( void ) = default;
+	Terrain3DErosionJob( void );
+	~Terrain3DErosionJob( void ) = default;
 
 	void run( void );
 	void cancel( void );
 	void setPreviewPaused( bool bPaused );
 	void requestPreviewStep( void );
-	Error apply( T3DData *pData, bool bForce = false );
+	Error apply( Terrain3DData *pData, bool bForce = false );
 	t3djobState_t getState( void ) const {
 		return ( t3djobState_t ) ( m_state.load() );
 	}
@@ -519,7 +518,7 @@ public:
 	String getStageName( void ) const;
 	String getErrorMessage( void ) const;
 	bool isComplete( void ) const;
-	bool isSourceUnchanged( T3DData *pData ) const;
+	bool isSourceUnchanged( Terrain3DData *pData ) const;
 	bool wasCancelled( void ) const {
 		return m_state.load() == STATE_CANCELLED;
 	}
@@ -566,9 +565,6 @@ protected:
 	static void _bind_methods( void );
 };
 
-VARIANT_ENUM_CAST( T3DErosionJob::t3djobState_t );
-VARIANT_ENUM_CAST( T3DErosionJob::t3doutputMap_t );
-
-using Terrain3DErosionJob = T3DErosionJob;
-
+VARIANT_ENUM_CAST( Terrain3DErosionJob::t3djobState_t );
+VARIANT_ENUM_CAST( Terrain3DErosionJob::t3doutputMap_t );
 #endif // TERRAIN3D_EROSION_JOB_CLASS_H

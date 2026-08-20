@@ -29,17 +29,16 @@
 #include <cstdint>
 #include <EASTL/vector.h>
 
-class T3DTerrain;
-class T3DErosionJob;
-class T3DErosionSettings;
+class Terrain3D;
+class Terrain3DErosionJob;
+class Terrain3DErosionSettings;
 class T3DCompute;
 
-class T3DData : public Object {
-	using Terrain3DData = T3DData;
+class Terrain3DData : public Object {
 	GDCLASS( Terrain3DData, Object );
 	CLASS_NAME();
-	friend T3DTerrain;
-	friend class T3DErosionJob;
+	friend Terrain3D;
+	friend class Terrain3DErosionJob;
 	friend class T3DRegionResidency;
 
 public:														 // Constants
@@ -59,7 +58,7 @@ public:														 // Constants
 
 
 private:
-	T3DTerrain *m_pTerrain = nullptr;
+	Terrain3D *m_pTerrain = nullptr;
 
 	T3DRegionRepository m_regionRepository;
 	T3DSamplingStorage m_samplingStorage;
@@ -121,8 +120,8 @@ private:
 	bool isActiveStorageOwnerInternal( void ) const { return m_samplingStorage.isActiveOwner(); }
 	void resetResidentSamplingPoolInternal( void ) { m_samplingStorage.resetResidentPool(); }
 	Error rehydrateActiveStorage( void );
-	bool syncActiveRegion( const Vector2i &vLocation, const T3DRegion *pRegion );
-	Ref<Image> getRegionMapOrDefault( const T3DRegion *pRegion, t3dmapType_t mapType ) const;
+	bool syncActiveRegion( const Vector2i &vLocation, const Terrain3DRegion *pRegion );
+	Ref<Image> getRegionMapOrDefault( const Terrain3DRegion *pRegion, t3dmapType_t mapType ) const;
 	Ref<Image> makeGpuColorImage( const Ref<Image> &rImage ) const;
 	Ref<Image> makeGpuDerivedImage( const Ref<Image> &rImage ) const;
 	Ref<Image> makeGpuRenderControlImage( const Vector2i &vLocation ) const;
@@ -130,9 +129,9 @@ private:
 		const Ref<Image> &rControl, const Ref<Image> &rColor ) const;
 	T3DRuntimePageConfig getRuntimePageConfig( void ) const;
 	static bool isRuntimePageWanted( void *pContext, const Vector2i &rLocation );
-	uint64_t computeGpuRuntimePageSourceSignature( const T3DRegion *pRegion ) const;
+	uint64_t computeGpuRuntimePageSourceSignature( const Terrain3DRegion *pRegion ) const;
 	bool readGpuRuntimePageSourceSignature( const String &rPagePath, uint64_t &nSignature ) const;
-	String getGpuRuntimePagePath( const T3DRegion *pRegion ) const;
+	String getGpuRuntimePagePath( const Terrain3DRegion *pRegion ) const;
 	bool collectGpuRegionPageSources(
 		String &rDataDirectory, PackedStringArray &rSourceFiles,
 		eastl::vector<Vector2i> &rLocations, PackedStringArray &rErrors
@@ -151,7 +150,7 @@ private:
 		Ref<Image> &rControl, Ref<Image> &rColor, Ref<Image> &rDerived, Ref<Image> &rMiddleComposite,
 		uint32_t &rMaterialMask, bool &bAttempted, uint64_t *pRequestedUsec = nullptr
 	);
-	bool writeGpuRuntimePage( T3DRegion *pRegion, String *pError = nullptr );
+	bool writeGpuRuntimePage( Terrain3DRegion *pRegion, String *pError = nullptr );
 	bool hasMaterializedMap( t3dmapType_t mapType ) const;
 	bool refreshImplicitMapState( void );
 	int getRegionSlotReserve( void ) const;
@@ -185,10 +184,10 @@ private:
 	void emitRegionLayoutChanged( const bool bTextureLayersChanged );
 	TypedArray<Image> getActiveMaps( const t3dmapType_t mapType ) const;
 	void copyPasteDfr(
-		const T3DRegion *pSrcRegion, const Rect2i &rSrcRect, const Rect2i &rDstRect,
-		T3DRegion *pDstRegion
+		const Terrain3DRegion *pSrcRegion, const Rect2i &rSrcRect, const Rect2i &rDstRect,
+		Terrain3DRegion *pDstRegion
 	);
-	Error addRegionInternal( const Ref<T3DRegion> &rRegion, const bool bUpdate, const bool bSanitize );
+	Error addRegionInternal( const Ref<Terrain3DRegion> &rRegion, const bool bUpdate, const bool bSanitize );
 	void processRegionSaveResult( const T3DRegionSaveResult &rResult );
 	static bool ensurePersistenceRegionResident( void *pContext, const Vector2i &rLocation );
 	T3DResidencyFrameState makeResidencyFrameState( const Vector3 &rWorldPosition ) const;
@@ -197,11 +196,11 @@ private:
 	void updateGpuRegionResidencyInternal( const T3DResidencyFrameState &rFrame, bool bForce );
 
 public:
-	T3DData( void );
-	Error initialize( T3DTerrain *pTerrain );
-	void deactivateRuntimeStorage( T3DTerrain *pTerrain );
-	~T3DData( void );
-	bool isInitializedFor( const T3DTerrain *pTerrain ) const {
+	Terrain3DData( void );
+	Error initialize( Terrain3D *pTerrain );
+	void deactivateRuntimeStorage( Terrain3D *pTerrain );
+	~Terrain3DData( void );
+	bool isInitializedFor( const Terrain3D *pTerrain ) const {
 		return m_bRuntimeActive && m_pTerrain == pTerrain;
 	}
 	bool isRuntimeReady( void ) const {
@@ -232,7 +231,7 @@ public:
 	int getRegionSlotCountInternal( void ) const {
 		return m_regionRepository.getSlotCount();
 	}
-	T3DRegion *const *getRegionPtrMapInternal( void ) const {
+	Terrain3DRegion *const *getRegionPtrMapInternal( void ) const {
 		return m_regionRepository.getRegionPtrMapData();
 	}
 	int getRegionSizeInternal( void ) const {
@@ -263,7 +262,7 @@ public:
 	T3DSamplingSource getSamplingSourceInternal( void ) const {
 		return T3DSamplingSource{ &m_regionRepository, &m_samplingStorage };
 	}
-	TypedArray<T3DRegion> getRegionsActive( const bool bCopy = false, const bool bDeep = false ) const;
+	TypedArray<Terrain3DRegion> getRegionsActive( const bool bCopy = false, const bool bDeep = false ) const;
 	Dictionary getRegionsAll( void ) const {
 		return m_regionRepository.getRegions();
 	}
@@ -287,27 +286,27 @@ public:
 	bool hasRegionp( const Vector3 &rGlobalPosition ) const {
 		return getRegionIdp( rGlobalPosition ) != -1;
 	}
-	Ref<T3DRegion> getRegion( const Vector2i &rRegionLoc ) const;
-	T3DRegion *getRegionPtr( const Vector2i &rRegionLoc ) const;
+	Ref<Terrain3DRegion> getRegion( const Vector2i &rRegionLoc ) const;
+	Terrain3DRegion *getRegionPtr( const Vector2i &rRegionLoc ) const;
 	template <typename T> // Catch invalid types. See note below in implementation.
-	T3DRegion *getRegionPtr( const T &rRegionLoc ) const = delete;
-	Ref<T3DRegion> getRegionp( const Vector3 &rGlobalPosition ) const;
+	Terrain3DRegion *getRegionPtr( const T &rRegionLoc ) const = delete;
+	Ref<Terrain3DRegion> getRegionp( const Vector3 &rGlobalPosition ) const;
 
 	void setRegionModified( const Vector2i &rRegionLoc, const bool bModified = true );
 	bool isRegionModified( const Vector2i &rRegionLoc ) const;
 	void setRegionDeleted( const Vector2i &rRegionLoc, const bool bDeleted = true );
 	bool isRegionDeleted( const Vector2i &rRegionLoc ) const;
 
-	Ref<T3DRegion> addRegionBlankp( const Vector3 &rGlobalPosition, const bool bUpdate = true );
-	Ref<T3DRegion> addRegionBlank( const Vector2i &rRegionLoc, const bool bUpdate = true );
-	Error addRegion( const Ref<T3DRegion> &rRegion, const bool bUpdate = true );
+	Ref<Terrain3DRegion> addRegionBlankp( const Vector3 &rGlobalPosition, const bool bUpdate = true );
+	Ref<Terrain3DRegion> addRegionBlank( const Vector2i &rRegionLoc, const bool bUpdate = true );
+	Error addRegion( const Ref<Terrain3DRegion> &rRegion, const bool bUpdate = true );
 	// Applies a complete or partial snapshot through an authoritative region
 	// replacement transaction. This is the safe script-facing alternative to
 	// mutating Terrain3DRegion::setData() on an attached resource.
 	Error replaceRegionData( const Vector2i &rRegionLoc, const Dictionary &rData );
 	void removeRegionp( const Vector3 &rGlobalPosition, const bool bUpdate = true );
 	void removeRegionl( const Vector2i &rRegionLoc, const bool bUpdate = true );
-	void removeRegion( const Ref<T3DRegion> &rRegion, const bool bUpdate = true );
+	void removeRegion( const Ref<Terrain3DRegion> &rRegion, const bool bUpdate = true );
 
 	// File I/O
 	void saveDirectory( const String &rDir );
@@ -321,7 +320,7 @@ public:
 	TypedArray<Image> getColorMaps( void ) const;
 	TypedArray<Image> getMaps( const t3dmapType_t mapType ) const;
 	void updateMaps(
-		const t3dmapType_t mapType = T3DRegion::TYPE_MAX, const bool bAllRegions = true,
+		const t3dmapType_t mapType = Terrain3DRegion::TYPE_MAX, const bool bAllRegions = true,
 		const bool bGenerateMipmaps = false
 	);
 	void updateMapRegions( const t3dmapType_t mapType, const eastl::vector<Vector2i> &rRegionLocations );
@@ -454,7 +453,7 @@ public:
 	}
 	void regenerateDerivedMaps( const eastl::vector<Vector2i> &rRegionLocations, const AABB &rEditedArea = AABB() );
 	void publishDerivedMapUpdates( const eastl::vector<T3DDerivedMapUpdate> &rUpdates );
-	Ref<T3DErosionJob> createErosionJob( const Ref<T3DErosionSettings> &rSettings );
+	Ref<Terrain3DErosionJob> createErosionJob( const Ref<Terrain3DErosionSettings> &rSettings );
 	RID getHeightMapsRid( void ) const {
 		return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getHeightMapsRid() : m_generatedHeightMaps.getRid();
 	}
@@ -553,7 +552,7 @@ public:
 		const TypedArray<Image> &rImages, const Vector3 &rGlobalPosition = V3_ZERO,
 		const real_t fOffset = 0.f, const real_t fScale = 1.f
 	);
-	Error exportImage( const String &rFileName, const t3dmapType_t mapType = T3DRegion::TYPE_HEIGHT ) const;
+	Error exportImage( const String &rFileName, const t3dmapType_t mapType = Terrain3DRegion::TYPE_HEIGHT ) const;
 	Ref<Image> layeredToImage( const t3dmapType_t mapType ) const;
 
 	// Utility
@@ -563,175 +562,172 @@ protected:
 	static void _bind_methods( void );
 };
 
-VARIANT_ENUM_CAST( T3DData::t3dheightFilter_t );
+VARIANT_ENUM_CAST( Terrain3DData::t3dheightFilter_t );
 
 // Inline Region Functions
 
 // Returns an index in the maximum 64x64 process-static region table.
 // Repository operations additionally enforce the active map size, which is
 // derived from the fixed 4096x4096 world resolution and current region size.
-inline int T3DData::getRegionMapIndex( const Vector2i &rRegionLoc ) {
+inline int Terrain3DData::getRegionMapIndex( const Vector2i &rRegionLoc ) {
 	return T3DRegionRepository::getRegionMapIndex( rRegionLoc );
 }
 
 // Returns a region location given a global position. No bounds checking nor data access.
-inline Vector2i T3DData::getRegionLocation( const Vector3 &rGlobalPosition ) const {
+inline Vector2i Terrain3DData::getRegionLocation( const Vector3 &rGlobalPosition ) const {
 	return m_regionRepository.getRegionLocation( rGlobalPosition );
 }
 
-inline int T3DData::getRegionId( const Vector2i &rRegionLoc ) const {
+inline int Terrain3DData::getRegionId( const Vector2i &rRegionLoc ) const {
 	return m_regionRepository.getRegionId( rRegionLoc );
 }
 
-inline int T3DData::getRegionIdp( const Vector3 &rGlobalPosition ) const {
+inline int Terrain3DData::getRegionIdp( const Vector3 &rGlobalPosition ) const {
 	return m_regionRepository.getRegionId( m_regionRepository.getRegionLocation( rGlobalPosition ) );
 }
 
-inline Ref<T3DRegion> T3DData::getRegion( const Vector2i &rRegionLoc ) const {
+inline Ref<Terrain3DRegion> Terrain3DData::getRegion( const Vector2i &rRegionLoc ) const {
 	return m_regionRepository.getRegion( rRegionLoc );
 }
 
-inline T3DRegion *T3DData::getRegionPtr( const Vector2i &rRegionLoc ) const {
+inline Terrain3DRegion *Terrain3DData::getRegionPtr( const Vector2i &rRegionLoc ) const {
 	return m_regionRepository.getRegionPtr( rRegionLoc );
 }
 
-inline Ref<T3DRegion> T3DData::getRegionp( const Vector3 &rGlobalPosition ) const {
+inline Ref<Terrain3DRegion> Terrain3DData::getRegionp( const Vector3 &rGlobalPosition ) const {
 	return m_regionRepository.getRegion( m_regionRepository.getRegionLocation( rGlobalPosition ) );
 }
 
 // Inline Map Functions
 
-inline void T3DData::setHeight( const Vector3 &rGlobalPosition, const real_t fHeight ) {
-	setPixel( T3DRegion::TYPE_HEIGHT, rGlobalPosition, Color( fHeight, 0.f, 0.f, 1.f ) );
+inline void Terrain3DData::setHeight( const Vector3 &rGlobalPosition, const real_t fHeight ) {
+	setPixel( Terrain3DRegion::TYPE_HEIGHT, rGlobalPosition, Color( fHeight, 0.f, 0.f, 1.f ) );
 }
 
-inline void T3DData::setColor( const Vector3 &rGlobalPosition, const Color &rColor ) {
+inline void Terrain3DData::setColor( const Vector3 &rGlobalPosition, const Color &rColor ) {
 	Color clr = rColor;
 	clr.a = getRoughness( rGlobalPosition );
-	setPixel( T3DRegion::TYPE_COLOR, rGlobalPosition, clr );
+	setPixel( Terrain3DRegion::TYPE_COLOR, rGlobalPosition, clr );
 }
 
-inline Color T3DData::getColor( const Vector3 &rGlobalPosition ) const {
-	Color clr = getPixel( T3DRegion::TYPE_COLOR, rGlobalPosition );
+inline Color Terrain3DData::getColor( const Vector3 &rGlobalPosition ) const {
+	Color clr = getPixel( Terrain3DRegion::TYPE_COLOR, rGlobalPosition );
 	clr.a = 1.0f;
 	return clr;
 }
 
-inline void T3DData::setControl( const Vector3 &rGlobalPosition, const uint32_t nControl ) {
-	setPixel( T3DRegion::TYPE_CONTROL, rGlobalPosition, Color( asFloat( nControl ), 0.f, 0.f, 1.f ) );
+inline void Terrain3DData::setControl( const Vector3 &rGlobalPosition, const uint32_t nControl ) {
+	setPixel( Terrain3DRegion::TYPE_CONTROL, rGlobalPosition, Color( asFloat( nControl ), 0.f, 0.f, 1.f ) );
 }
 
-inline void T3DData::setControlBaseId( const Vector3 &rGlobalPosition, const uint8_t nBase ) {
+inline void Terrain3DData::setControlBaseId( const Vector3 &rGlobalPosition, const uint8_t nBase ) {
 	const uint32_t control = getControl( rGlobalPosition );
 	const uint8_t base = CLAMP( nBase, ( uint8_t ) ( 0 ), ( uint8_t ) ( 31 ) );
 	setControl( rGlobalPosition, ( control & ~( 0x1F << 27 ) ) | encBase( base ) );
 }
 
-inline uint32_t T3DData::getControlBaseId( const Vector3 &rGlobalPosition ) const {
+inline uint32_t Terrain3DData::getControlBaseId( const Vector3 &rGlobalPosition ) const {
 	const uint32_t control = getControl( rGlobalPosition );
 	return control == UINT32_MAX ? UINT32_MAX : getBase( control );
 }
 
-inline void T3DData::setControlOverlayId( const Vector3 &rGlobalPosition, const uint8_t nOverlay ) {
+inline void Terrain3DData::setControlOverlayId( const Vector3 &rGlobalPosition, const uint8_t nOverlay ) {
 	const uint32_t control = getControl( rGlobalPosition );
 	const uint8_t overlay = CLAMP( nOverlay, ( uint8_t ) ( 0 ), ( uint8_t ) ( 31 ) );
 	setControl( rGlobalPosition, ( control & ~( 0x1F << 22 ) ) | encOverlay( overlay ) );
 }
 
-inline uint32_t T3DData::getControlOverlayId( const Vector3 &rGlobalPosition ) const {
+inline uint32_t Terrain3DData::getControlOverlayId( const Vector3 &rGlobalPosition ) const {
 	const uint32_t control = getControl( rGlobalPosition );
 	return control == UINT32_MAX ? UINT32_MAX : getOverlay( control );
 }
 
 // Expects 0.0 to 1.0 range
-inline void T3DData::setControlBlend( const Vector3 &rGlobalPosition, const real_t fBlend ) {
+inline void Terrain3DData::setControlBlend( const Vector3 &rGlobalPosition, const real_t fBlend ) {
 	const uint32_t control = getControl( rGlobalPosition );
 	const uint8_t blend = ( uint8_t ) ( CLAMP( Math::round( fBlend * 255.f ), 0.f, 255.f ) );
 	setControl( rGlobalPosition, ( control & ~( 0xFF << 14 ) ) | encBlend( blend ) );
 }
 
-inline real_t T3DData::getControlBlend( const Vector3 &rGlobalPosition ) const {
+inline real_t Terrain3DData::getControlBlend( const Vector3 &rGlobalPosition ) const {
 	const uint32_t control = getControl( rGlobalPosition );
 	return control == UINT32_MAX ? NAN : ( real_t ) ( getBlend( control ) ) / 255.f;
 }
 
 // Expects angle in degrees
-inline void T3DData::setControlAngle( const Vector3 &rGlobalPosition, const real_t fAngle ) {
+inline void Terrain3DData::setControlAngle( const Vector3 &rGlobalPosition, const real_t fAngle ) {
 	const uint32_t control = getControl( rGlobalPosition );
 	const uint8_t uvrotation = ( uint8_t ) ( CLAMP( Math::round( fAngle / 22.5f ), 0.f, 15.f ) );
 	setControl( rGlobalPosition, ( control & ~( 0xF << 10 ) ) | encUvRotation( uvrotation ) );
 }
 
 // returns angle in degrees
-inline real_t T3DData::getControlAngle( const Vector3 &rGlobalPosition ) const {
+inline real_t Terrain3DData::getControlAngle( const Vector3 &rGlobalPosition ) const {
 	const uint32_t control = getControl( rGlobalPosition );
 	const real_t fAngle = ( real_t ) ( getUvRotation( control ) ) * 22.5f;
 	return control == UINT32_MAX ? NAN : fAngle;
 }
 
 // Expects scale as a percentage modifier
-inline void T3DData::setControlScale( const Vector3 &rGlobalPosition, const real_t fScale ) {
+inline void Terrain3DData::setControlScale( const Vector3 &rGlobalPosition, const real_t fScale ) {
 	const uint32_t control = getControl( rGlobalPosition );
 	eastl::array<uint32_t, 8> scale_align = {5, 6, 7, 0, 1, 2, 3, 4};
 	const uint8_t uvscale = scale_align[( uint8_t ) ( CLAMP( Math::round( ( fScale + 60.f ) / 20.f ), 0.f, 7.f ) )];
 	setControl( rGlobalPosition, ( control & ~( 0x7 << 7 ) ) | encUvScale( uvscale ) );
 }
 
-inline real_t T3DData::getControlScale( const Vector3 &rGlobalPosition ) const {
+inline real_t Terrain3DData::getControlScale( const Vector3 &rGlobalPosition ) const {
 	const uint32_t control = getControl( rGlobalPosition );
 	eastl::array<real_t, 8> scale_values = {0.0f, 20.0f, 40.0f, 60.0f, 80.0f, -60.0f, -40.0f, -20.0f};
 	const real_t fScale = scale_values[getUvScale( control )]; // select from array UI return values
 	return control == UINT32_MAX ? NAN : fScale;
 }
 
-inline void T3DData::setControlHole( const Vector3 &rGlobalPosition, const bool bHole ) {
+inline void Terrain3DData::setControlHole( const Vector3 &rGlobalPosition, const bool bHole ) {
 	const uint32_t control = getControl( rGlobalPosition );
 	setControl( rGlobalPosition, ( control & ~( 0x1 << 2 ) ) | encHole( bHole ) );
 }
 
-inline bool T3DData::getControlHole( const Vector3 &rGlobalPosition ) const {
+inline bool Terrain3DData::getControlHole( const Vector3 &rGlobalPosition ) const {
 	const uint32_t control = getControl( rGlobalPosition );
 	return control == UINT32_MAX ? false : isHole( control );
 }
 
-inline void T3DData::setControlNavigation( const Vector3 &rGlobalPosition, const bool bNavigation ) {
+inline void Terrain3DData::setControlNavigation( const Vector3 &rGlobalPosition, const bool bNavigation ) {
 	const uint32_t control = getControl( rGlobalPosition );
 	setControl( rGlobalPosition, ( control & ~( 0x1 << 1 ) ) | encNav( bNavigation ) );
 }
 
-inline bool T3DData::getControlNavigation( const Vector3 &rGlobalPosition ) const {
+inline bool Terrain3DData::getControlNavigation( const Vector3 &rGlobalPosition ) const {
 	const uint32_t control = getControl( rGlobalPosition );
 	return control == UINT32_MAX ? false : isNav( control );
 }
 
-inline void T3DData::setControlAuto( const Vector3 &rGlobalPosition, const bool bAuto ) {
+inline void Terrain3DData::setControlAuto( const Vector3 &rGlobalPosition, const bool bAuto ) {
 	const uint32_t control = getControl( rGlobalPosition );
 	setControl( rGlobalPosition, ( control & ~( 0x1 ) ) | encAuto( bAuto ) );
 }
 
-inline bool T3DData::getControlAuto( const Vector3 &rGlobalPosition ) const {
+inline bool Terrain3DData::getControlAuto( const Vector3 &rGlobalPosition ) const {
 	const uint32_t control = getControl( rGlobalPosition );
 	return control == UINT32_MAX ? false : isAuto( control );
 }
 
-inline void T3DData::setRoughness( const Vector3 &rGlobalPosition, const real_t fRoughness ) {
-	Color clr = getPixel( T3DRegion::TYPE_COLOR, rGlobalPosition );
+inline void Terrain3DData::setRoughness( const Vector3 &rGlobalPosition, const real_t fRoughness ) {
+	Color clr = getPixel( Terrain3DRegion::TYPE_COLOR, rGlobalPosition );
 	clr.a = fRoughness;
-	setPixel( T3DRegion::TYPE_COLOR, rGlobalPosition, clr );
+	setPixel( Terrain3DRegion::TYPE_COLOR, rGlobalPosition, clr );
 }
 
-inline real_t T3DData::getRoughness( const Vector3 &rGlobalPosition ) const {
-	return getPixel( T3DRegion::TYPE_COLOR, rGlobalPosition ).a;
+inline real_t Terrain3DData::getRoughness( const Vector3 &rGlobalPosition ) const {
+	return getPixel( Terrain3DRegion::TYPE_COLOR, rGlobalPosition ).a;
 }
 
-inline void T3DData::updateMasterHeight( const real_t fHeight ) {
+inline void Terrain3DData::updateMasterHeight( const real_t fHeight ) {
 	m_mapEditService.updateMasterHeight( fHeight );
 }
 
-inline void T3DData::updateMasterHeights( const Vector2 &rLowHigh ) {
+inline void Terrain3DData::updateMasterHeights( const Vector2 &rLowHigh ) {
 	m_mapEditService.updateMasterHeights( rLowHigh );
 }
-
-using Terrain3DData = T3DData;
-
 #endif // TERRAIN3D_DATA_CLASS_H

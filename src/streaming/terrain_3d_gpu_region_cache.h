@@ -21,11 +21,11 @@
 class T3DCompute;
 class T3DCpuRegionCache;
 class T3DMapEditService;
-class T3DRegion;
+class Terrain3DRegion;
 class T3DRegionRepository;
 class T3DRuntimePageStore;
 class T3DSamplingStorage;
-class T3DTerrain;
+class Terrain3D;
 
 struct T3DGpuRegionCacheStats {
 	bool bEnabled = false;
@@ -87,7 +87,7 @@ public:
 		T3DCpuRegionCache &rCpuRegionCache
 	);
 
-	void setTerrain( T3DTerrain *pTerrain ) { m_pTerrain = pTerrain; }
+	void setTerrain( Terrain3D *pTerrain ) { m_pTerrain = pTerrain; }
 	void setDefaultMaps(
 		const Ref<Image> &rHeight, const Ref<Image> &rControl,
 		const Ref<Image> &rColor, const Ref<Image> &rDerived,
@@ -157,7 +157,7 @@ private:
 	T3DMapEditService &m_mapEditService;
 	T3DRuntimePageStore &m_runtimePageStore;
 	T3DCpuRegionCache &m_cpuRegionCache;
-	T3DTerrain *m_pTerrain = nullptr;
+	Terrain3D *m_pTerrain = nullptr;
 	T3DCompute *m_pCompute = nullptr;
 
 	Ref<Image> m_pDefaultHeightMap;
@@ -261,8 +261,8 @@ private:
 	int calculateGpuRegionRequestedPages( void ) const;
 	int calculateGpuRegionPhysicalLayers( int nMappedCapacity ) const;
 	int calculateAuthoringGpuRegionBudgetMb( void ) const;
-	int estimateGpuRegionUploadCalls( const T3DRegion *pRegion, int nLayer ) const;
-	size_t estimateGpuRegionUploadBytes( const T3DRegion *pRegion, int nLayer ) const;
+	int estimateGpuRegionUploadCalls( const Terrain3DRegion *pRegion, int nLayer ) const;
+	size_t estimateGpuRegionUploadBytes( const Terrain3DRegion *pRegion, int nLayer ) const;
 	int getGpuRegionTextureUpdateCallsLastTick( void ) const;
 	bool rebuildTextures( void );
 	int findGpuRegionSlot( const Vector2i &vLocation ) const;
@@ -276,7 +276,7 @@ private:
 		const T3DResidencyFrameState &rFrame, const Vector2i &rCenter,
 		Vector2i *pLocations, int nCapacity, t3dgpuCacheSelectionStats_t &rStats
 	);
-	Ref<Image> getRegionMapOrDefault( const T3DRegion *pRegion, t3dmapType_t eMapType ) const;
+	Ref<Image> getRegionMapOrDefault( const Terrain3DRegion *pRegion, t3dmapType_t eMapType ) const;
 	Ref<Image> makeGpuColorImage( const Ref<Image> &rImage ) const;
 	Ref<Image> makeGpuDerivedImage( const Ref<Image> &rImage ) const;
 	Ref<Image> makeGpuRenderControlImage( const Vector2i &vLocation ) const;

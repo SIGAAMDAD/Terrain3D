@@ -256,9 +256,9 @@ static bool terrain3dActivePublishBytesUnsafe(
 	return true;
 }
 
-static bool terrain3dActiveCopyRegionUnsafe( const int iLogicalSlot, const T3DRegion *pRegion ) {
+static bool terrain3dActiveCopyRegionUnsafe( const int iLogicalSlot, const Terrain3DRegion *pRegion ) {
 	const int region_size = s_nActiveRegionSize.load( std::memory_order_acquire );
-	const Image *const pImage = pRegion ? pRegion->getMapPtr( T3DRegion::TYPE_HEIGHT ) : nullptr;
+	const Image *const pImage = pRegion ? pRegion->getMapPtr( Terrain3DRegion::TYPE_HEIGHT ) : nullptr;
 	PackedByteArray bytes;
 	if ( pImage && pImage->get_format() == Image::FORMAT_R16 &&
 		pImage->get_width() == region_size && pImage->get_height() == region_size ) {
@@ -540,7 +540,7 @@ T3DActiveMapLease terrain3dActiveStorageAcquire( const void *pOwner, const Vecto
 }
 
 bool terrain3dActiveStorageSyncRegion(
-	const void *pOwner, const Vector2i &rLocation, const T3DRegion *pRegion
+	const void *pOwner, const Vector2i &rLocation, const Terrain3DRegion *pRegion
 ) {
 	if ( !terrain3dActiveOwnerMatches( pOwner ) || !pRegion || pRegion->isDeleted() ||
 		pRegion->getRegionSize() != s_nActiveRegionSize.load( std::memory_order_acquire ) ) {
@@ -610,18 +610,18 @@ bool terrain3dActiveStorageReplaceHeightPages(
 }
 
 bool terrain3dActiveStorageSyncMap(
-	const void *pOwner, const Vector2i &rLocation, const T3DRegion *pRegion,
+	const void *pOwner, const Vector2i &rLocation, const Terrain3DRegion *pRegion,
 	const t3dmapType_t type, const Rect2i &
 ) {
-	if ( type < T3DRegion::TYPE_HEIGHT || type >= T3DRegion::TYPE_MAX ) {
+	if ( type < Terrain3DRegion::TYPE_HEIGHT || type >= Terrain3DRegion::TYPE_MAX ) {
 		return false;
 	}
-	return type == T3DRegion::TYPE_HEIGHT
+	return type == Terrain3DRegion::TYPE_HEIGHT
 		? terrain3dActiveStorageSyncRegion( pOwner, rLocation, pRegion ) : true;
 }
 
 bool terrain3dActiveStorageSyncDerived(
-	const void *pOwner, const Vector2i &rLocation, const T3DRegion *pRegion, const Rect2i &
+	const void *pOwner, const Vector2i &rLocation, const Terrain3DRegion *pRegion, const Rect2i &
 ) {
 	return terrain3dActiveOwnerMatches( pOwner ) && pRegion && !pRegion->isDeleted() &&
 		terrain3dActiveLocationToSlot( rLocation,

@@ -14,7 +14,7 @@
 #include "eastl_config.h"
 #include <EASTL/vector.h>
 
-class T3DRegion;
+class Terrain3DRegion;
 class T3DRuntimeWorldManifest;
 
 struct T3DRuntimeInstanceCellMetadata {
@@ -46,15 +46,15 @@ public:
 	static PackedByteArray encodeCollisionBounds( float fMinHeight, float fMaxHeight, int nWidth );
 	static bool decodeCollisionHeight( const PackedByteArray &rBlob, PackedFloat32Array &rHeights, int &nWidth );
 	static bool decodeCollisionBounds( const PackedByteArray &rBlob, float &fMinHeight, float &fMaxHeight, int &nWidth );
-	static PackedByteArray encodeNodeDescriptors( const T3DRegion &rRegion, const T3DRuntimeWorldManifest &rManifest );
+	static PackedByteArray encodeNodeDescriptors( const Terrain3DRegion &rRegion, const T3DRuntimeWorldManifest &rManifest );
 	static bool decodeNodeDescriptors(
-		const PackedByteArray &rBlob, const T3DRuntimeWorldManifest &rManifest, T3DRegion &rRegion );
-	static PackedByteArray encodeInstanceMetadata( const T3DRegion &rRegion );
+		const PackedByteArray &rBlob, const T3DRuntimeWorldManifest &rManifest, Terrain3DRegion &rRegion );
+	static PackedByteArray encodeInstanceMetadata( const Terrain3DRegion &rRegion );
 	static bool decodeInstanceMetadata( const PackedByteArray &rBlob,
 		eastl::vector<T3DRuntimeInstanceCellMetadata> &rCells );
-	static PackedByteArray encodeLightingReceivers( const T3DRegion &rRegion );
+	static PackedByteArray encodeLightingReceivers( const Terrain3DRegion &rRegion );
 	static bool decodeLightingReceivers( const PackedByteArray &rBlob, eastl::vector<T3DRuntimeLightingReceiverRecord> &rReceivers );
-	static PackedByteArray encodeMultimeshFastStart( const T3DRegion &rRegion, int nMinimumCellInstances = 256 );
+	static PackedByteArray encodeMultimeshFastStart( const Terrain3DRegion &rRegion, int nMinimumCellInstances = 256 );
 	static bool findMultimeshFastStart( const PackedByteArray &rBlob, uint16_t nMeshId,
 		const Vector2i &rCell, PackedFloat32Array &rBuffer, uint32_t &nInstanceCount );
 };

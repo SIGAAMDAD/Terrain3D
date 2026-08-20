@@ -26,7 +26,7 @@ using namespace godot;
 // - the renderer-owned global RenderingDevice for render-thread displacement generation.
 // The caller retains terrain mutation ownership and publishes results through the
 // existing Terrain3D transactions.
-class T3DTerrain;
+class Terrain3D;
 
 class T3DCompute {
 public:
@@ -101,7 +101,7 @@ public:
 	// The raw GLSL path is intentionally restricted to non-projected, non-detiled
 	// packed-PBR/R8 materials; all other variants retain the raster fallback.
 	bool prepareDisplacementRequest(
-		T3DTerrain *pTerrain, const Vector3 &rTargetPosition,
+		Terrain3D *pTerrain, const Vector3 &rTargetPosition,
 		t3ddisplacementRequest_t &rRequest
 	);
 	// Must execute through RenderingServer.call_on_render_thread().

@@ -16,8 +16,7 @@
 //   Packed PBR RGBA8: R=normal X, G=normal Y, B=roughness, A=AO
 //   Displacement R8_UNORM: R=height
 // Legacy separate-channel fields remain storage-only so old .tres resources load.
-class T3DPackedPBRTexture : public Resource {
-	using Terrain3DPackedPBRTexture = T3DPackedPBRTexture;
+class Terrain3DPackedPBRTexture : public Resource {
 	GDCLASS( Terrain3DPackedPBRTexture, Resource );
 	CLASS_NAME();
 
@@ -85,8 +84,8 @@ protected:
 	void _validate_property( PropertyInfo &rProperty ) const;
 
 public:
-	T3DPackedPBRTexture( void ) = default;
-	~T3DPackedPBRTexture( void ) = default;
+	Terrain3DPackedPBRTexture( void ) = default;
+	~Terrain3DPackedPBRTexture( void ) = default;
 
 
 	void setPackedTexture( const Ref<Texture2D> &rTexture );
@@ -186,8 +185,5 @@ public:
 	String getChannelLayout( void ) const;
 };
 
-VARIANT_ENUM_CAST( T3DPackedPBRTexture::t3dsourceChannel_t );
-
-using Terrain3DPackedPBRTexture = T3DPackedPBRTexture;
-
+VARIANT_ENUM_CAST( Terrain3DPackedPBRTexture::t3dsourceChannel_t );
 #endif // TERRAIN3D_PACKED_PBR_TEXTURE_H

@@ -550,12 +550,12 @@ void T3DResidentRegionPool::releaseLease( const int iSlot, const uint32_t nGener
 		pins, pins - 1u, std::memory_order_acq_rel, std::memory_order_acquire ) ) {}
 }
 
-bool T3DResidentRegionPool::copyMap( const int iSlot, const T3DRegion *pRegion, const t3dmapType_t eType ) {
+bool T3DResidentRegionPool::copyMap( const int iSlot, const Terrain3DRegion *pRegion, const t3dmapType_t eType ) {
 	return copyMapRect( iSlot, pRegion, eType, Rect2i( V2I_ZERO, V2I( m_nRegionSize ) ) );
 }
 
 bool T3DResidentRegionPool::copyMapRect(
-	const int iSlot, const T3DRegion *pRegion,
+	const int iSlot, const Terrain3DRegion *pRegion,
 	const t3dmapType_t eType, const Rect2i &rDirtyRect
 ) {
 	if ( !pRegion || iSlot < 0 || iSlot >= m_nCapacity ) {
@@ -568,7 +568,7 @@ bool T3DResidentRegionPool::copyMapRect(
 	}
 	t3dslot_t &slot = m_pSlots[( size_t ) ( iSlot )];
 	Image *const pImage = pRegion->getMapPtr( eType );
-	if ( eType == T3DRegion::TYPE_HEIGHT ) {
+	if ( eType == Terrain3DRegion::TYPE_HEIGHT ) {
 		if ( !slot.pHeight ) {
 			return true;
 		}
@@ -594,22 +594,22 @@ bool T3DResidentRegionPool::copyMapRect(
 		return true;
 	}
 
-	if ( eType != T3DRegion::TYPE_CONTROL && eType != T3DRegion::TYPE_COLOR ) {
+	if ( eType != Terrain3DRegion::TYPE_CONTROL && eType != Terrain3DRegion::TYPE_COLOR ) {
 		return false;
 	}
-	const uint32_t channel = eType == T3DRegion::TYPE_CONTROL ? CHANNEL_CONTROL : CHANNEL_COLOR;
+	const uint32_t channel = eType == Terrain3DRegion::TYPE_CONTROL ? CHANNEL_CONTROL : CHANNEL_COLOR;
 	if ( ( m_channels & channel ) == 0u ) {
 		return true;
 	}
-	uint32_t *const plane = eType == T3DRegion::TYPE_CONTROL ? slot.pControl : slot.pColor;
-	const uint8_t valid_bit = ( uint8_t ) ( eType == T3DRegion::TYPE_CONTROL ? CHANNEL_CONTROL : CHANNEL_COLOR );
+	uint32_t *const plane = eType == Terrain3DRegion::TYPE_CONTROL ? slot.pControl : slot.pColor;
+	const uint8_t valid_bit = ( uint8_t ) ( eType == Terrain3DRegion::TYPE_CONTROL ? CHANNEL_CONTROL : CHANNEL_COLOR );
 	const bool bPlaneValid = ( slot.nValidChannels.load( std::memory_order_acquire ) & valid_bit ) != 0u;
 	if ( !pImage ) {
 		slot.nValidChannels.fetch_and( ( uint8_t ) ~valid_bit, std::memory_order_release );
 		return true;
 	}
 	if ( !plane ) { return false; }
-	const Image::Format expected = eType == T3DRegion::TYPE_CONTROL ? Image::FORMAT_RF : Image::FORMAT_RGBA8;
+	const Image::Format expected = eType == Terrain3DRegion::TYPE_CONTROL ? Image::FORMAT_RF : Image::FORMAT_RGBA8;
 	if ( pImage->get_format() != expected || pImage->get_width() != m_nRegionSize || pImage->get_height() != m_nRegionSize ) {
 		return false;
 	}
@@ -632,12 +632,12 @@ bool T3DResidentRegionPool::copyMapRect(
 	return true;
 }
 
-bool T3DResidentRegionPool::copyDerived( const int iSlot, const T3DRegion *pRegion ) {
+bool T3DResidentRegionPool::copyDerived( const int iSlot, const Terrain3DRegion *pRegion ) {
 	return copyDerivedRect( iSlot, pRegion, Rect2i( V2I_ZERO, V2I( m_nRegionSize ) ) );
 }
 
 bool T3DResidentRegionPool::copyDerivedRect(
-	const int iSlot, const T3DRegion *pRegion,
+	const int iSlot, const Terrain3DRegion *pRegion,
 	const Rect2i &rDirtyRect
 ) {
 	if ( !pRegion || iSlot < 0 || iSlot >= m_nCapacity ) {
@@ -693,7 +693,7 @@ t3dresidentMapView_t T3DResidentRegionPool::getView( const int iSlot ) const {
 
 T3DResidentMapLease T3DResidentRegionPool::acquire(
 	const Vector2i &rLocation,
-	const T3DRegion *pRegion
+	const Terrain3DRegion *pRegion
 ) {
 	( void ) pRegion;
 	const int index = locationIndex( rLocation );
@@ -720,15 +720,15 @@ T3DResidentMapLease T3DResidentRegionPool::acquire(
 	return T3DResidentMapLease( this, existing, generation, view );
 }
 
-bool T3DResidentRegionPool::ensureResident( const Vector2i &rLocation, const T3DRegion *pRegion ) {
+bool T3DResidentRegionPool::ensureResident( const Vector2i &rLocation, const Terrain3DRegion *pRegion ) {
 	if ( !pRegion || pRegion->isDeleted() ) return false;
 	std::lock_guard<std::mutex> lock( m_mutex );
 	if ( findSlotUnlocked( rLocation ) >= 0 ) return true;
 	const int slot = chooseReplacementSlotUnlocked();
 	if ( slot < 0 ) return false;
 	assignSlot( slot, rLocation );
-	if ( !copyMap( slot, pRegion, T3DRegion::TYPE_HEIGHT ) || !copyMap( slot, pRegion, T3DRegion::TYPE_CONTROL ) ||
-		!copyMap( slot, pRegion, T3DRegion::TYPE_COLOR ) ) {
+	if ( !copyMap( slot, pRegion, Terrain3DRegion::TYPE_HEIGHT ) || !copyMap( slot, pRegion, Terrain3DRegion::TYPE_CONTROL ) ||
+		!copyMap( slot, pRegion, Terrain3DRegion::TYPE_COLOR ) ) {
 		retireSlotUnlocked( slot );
 		return false;
 	}
@@ -738,7 +738,7 @@ bool T3DResidentRegionPool::ensureResident( const Vector2i &rLocation, const T3D
 }
 
 void T3DResidentRegionPool::syncMap(
-	const Vector2i &rLocation, const T3DRegion *pRegion,
+	const Vector2i &rLocation, const Terrain3DRegion *pRegion,
 	const t3dmapType_t eType, const Rect2i &rDirtyRect
 ) {
 	std::lock_guard<std::mutex> lock( m_mutex );
@@ -761,7 +761,7 @@ void T3DResidentRegionPool::syncMap(
 }
 
 void T3DResidentRegionPool::syncDerived(
-	const Vector2i &rLocation, const T3DRegion *pRegion,
+	const Vector2i &rLocation, const Terrain3DRegion *pRegion,
 	const Rect2i &rDirtyRect
 ) {
 	std::lock_guard<std::mutex> lock( m_mutex );

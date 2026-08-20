@@ -506,17 +506,17 @@ void T3DRuntimePageStore::resetFrameStats( void ) {
 	m_nPrepareReadyWaitUsecLast = 0u;
 }
 
-bool T3DRuntimePageStore::loadSourceRegion( const Vector2i &rLocation, Ref<T3DRegion> &rSource ) const {
+bool T3DRuntimePageStore::loadSourceRegion( const Vector2i &rLocation, Ref<Terrain3DRegion> &rSource ) const {
 	rSource.unref();
 	if ( !m_pRepository ) {
 		return false;
 	}
-	T3DRegion *const pRegion = m_pRepository->getRegionPtr( rLocation );
+	Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( rLocation );
 	if ( !pRegion || pRegion->isDeleted() ) {
 		return false;
 	}
-	if ( pRegion->hasRuntimeMapPayload() ) {
-		rSource = Ref<T3DRegion>( pRegion );
+	if ( pRegion->hasRuntimeMapPayloadInternal() ) {
+		rSource = Ref<Terrain3DRegion>( pRegion );
 		return true;
 	}
 	return m_pPersistence && m_pPersistence->loadRuntimeRegionSource(
@@ -524,7 +524,7 @@ bool T3DRuntimePageStore::loadSourceRegion( const Vector2i &rLocation, Ref<T3DRe
 }
 
 String T3DRuntimePageStore::getPagePath(
-	const T3DRegion *const pRegion, const String &rDataDirectory
+	const Terrain3DRegion *const pRegion, const String &rDataDirectory
 ) const {
 	if ( !pRegion ) {
 		return String();
@@ -539,7 +539,7 @@ String T3DRuntimePageStore::getPagePath(
 }
 
 uint64_t T3DRuntimePageStore::computeSourceSignature(
-	const T3DRegion *const pRegion, const T3DRuntimePageConfig &rConfig
+	const Terrain3DRegion *const pRegion, const T3DRuntimePageConfig &rConfig
 ) const {
 	if ( !pRegion || !m_pRepository ) {
 		return 0u;
@@ -557,9 +557,9 @@ uint64_t T3DRuntimePageStore::computeSourceSignature(
 	fnv1a64AppendU32( hash, ( uint32_t ) ( pRegion->getLocation().x ) );
 	fnv1a64AppendU32( hash, ( uint32_t ) ( pRegion->getLocation().y ) );
 
-	Ref<T3DRegion> pLoadedOwner;
-	const T3DRegion *pOwner = pRegion;
-	if ( !pOwner->hasRuntimeMapPayload() && loadSourceRegion( pOwner->getLocation(), pLoadedOwner ) ) {
+	Ref<Terrain3DRegion> pLoadedOwner;
+	const Terrain3DRegion *pOwner = pRegion;
+	if ( !pOwner->hasRuntimeMapPayloadInternal() && loadSourceRegion( pOwner->getLocation(), pLoadedOwner ) ) {
 		pOwner = pLoadedOwner.ptr();
 	}
 	if ( !pOwner ) {
@@ -580,7 +580,7 @@ uint64_t T3DRuntimePageStore::computeSourceSignature(
 		fnv1a64Append( hash, instance_page.ptr(), ( size_t ) ( instance_page.size() ) );
 	}
 
-	const Ref<T3DRegionLighting> lighting = pOwner->getLighting();
+	const Ref<Terrain3DRegionLighting> lighting = pOwner->getLighting();
 	if ( lighting.is_valid() ) {
 		fnv1a64AppendU64( hash, ( uint64_t ) ( lighting->getBakeSignature() ) );
 		fnv1a64AppendU32( hash, ( uint32_t ) ( lighting->getShadowmaskMode() ) );
@@ -595,8 +595,8 @@ uint64_t T3DRuntimePageStore::computeSourceSignature(
 	};
 	for ( int dependency = 0; dependency < 3; ++dependency ) {
 		const Vector2i location = pRegion->getLocation() + height_dependency_offsets[dependency];
-		T3DRegion *region = m_pRepository->getRegionPtr( location );
-		Ref<T3DRegion> pLoadedSource;
+		Terrain3DRegion *region = m_pRepository->getRegionPtr( location );
+		Ref<Terrain3DRegion> pLoadedSource;
 		if ( ( !region || region->getHeightMap().is_null() ) && loadSourceRegion( location, pLoadedSource ) ) {
 			region = pLoadedSource.ptr();
 		}
@@ -615,8 +615,8 @@ uint64_t T3DRuntimePageStore::computeSourceSignature(
 	for ( int dz = -1; dz <= 1; ++dz ) {
 		for ( int dx = -1; dx <= 1; ++dx ) {
 			const Vector2i location = pRegion->getLocation() + Vector2i( dx, dz );
-			T3DRegion *region = m_pRepository->getRegionPtr( location );
-			Ref<T3DRegion> pLoadedSource;
+			Terrain3DRegion *region = m_pRepository->getRegionPtr( location );
+			Ref<Terrain3DRegion> pLoadedSource;
 			if ( ( !region || region->getControlMap().is_null() ) && loadSourceRegion( location, pLoadedSource ) ) {
 				region = pLoadedSource.ptr();
 			}
@@ -771,10 +771,10 @@ bool T3DRuntimePageStore::loadSnapshot( PreparedPage &rPage ) {
 		rPage.nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
 		return false;
 	}
-	const uint32_t optional_mask = ( uint32_t ) ( T3DRegion::CHANNEL_CONTROL | T3DRegion::CHANNEL_COLOR );
+	const uint32_t optional_mask = ( uint32_t ) ( Terrain3DRegion::CHANNEL_CONTROL | Terrain3DRegion::CHANNEL_COLOR );
 	const uint32_t expected_flags = rPage.expectedChannelFlags & optional_mask;
 	if ( ( header.channelFlags & optional_mask ) != expected_flags ||
-		( header.channelFlags & ( uint32_t ) ( T3DRegion::CHANNEL_DERIVED ) ) == 0u ||
+		( header.channelFlags & ( uint32_t ) ( Terrain3DRegion::CHANNEL_DERIVED ) ) == 0u ||
 		!terrain3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_HOLE_MASK ) ||
 		!terrain3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_COLLISION_HEIGHT ) ||
 		!terrain3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_COLLISION_BOUNDS ) ||
@@ -843,7 +843,7 @@ bool T3DRuntimePageStore::loadSnapshot( PreparedPage &rPage ) {
 			rPage.nValidationUsec, rPage.nMaterializeUsec );
 	}
 	if ( bNeedGpu || bNeedCpu ) {
-		if ( ( expected_flags & ( uint32_t ) ( T3DRegion::CHANNEL_CONTROL ) ) != 0u ) {
+		if ( ( expected_flags & ( uint32_t ) ( Terrain3DRegion::CHANNEL_CONTROL ) ) != 0u ) {
 			const t3druntimePageChannelInfo_t *const pControlChannel =
 				terrain3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_CONTROL );
 			if ( !pControlChannel ) {
@@ -852,7 +852,7 @@ bool T3DRuntimePageStore::loadSnapshot( PreparedPage &rPage ) {
 			rPage.pControl = readImage( pFile, *pControlChannel, rPage.nFileReadUsec,
 				rPage.nValidationUsec, rPage.nMaterializeUsec );
 		}
-		if ( ( expected_flags & ( uint32_t ) ( T3DRegion::CHANNEL_COLOR ) ) != 0u ) {
+		if ( ( expected_flags & ( uint32_t ) ( Terrain3DRegion::CHANNEL_COLOR ) ) != 0u ) {
 			const t3druntimePageChannelInfo_t *const pColorChannel =
 				terrain3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_COLOR );
 			if ( !pColorChannel ) {
@@ -924,7 +924,7 @@ bool T3DRuntimePageStore::loadSnapshot( PreparedPage &rPage ) {
 }
 
 bool T3DRuntimePageStore::validatePageForRegion(
-	const T3DRegion *const pRegion, const T3DRuntimePageConfig &rConfig
+	const Terrain3DRegion *const pRegion, const T3DRuntimePageConfig &rConfig
 ) const {
 	if ( !pRegion || !m_pRepository ) {
 		return false;
@@ -940,7 +940,7 @@ bool T3DRuntimePageStore::validatePageForRegion(
 	page.derivedDivisor = MAX( 1, rConfig.derivedDivisor );
 	page.middleHeightDivisor = MAX( 1, rConfig.middleHeightDivisor );
 	page.consumerMask = RUNTIME_PAGE_CONSUMER_GPU_DETAIL | RUNTIME_PAGE_CONSUMER_MIDDLE_HEIGHT;
-	const Ref<T3DRegionLighting> lighting = pRegion->getLighting();
+	const Ref<Terrain3DRegionLighting> lighting = pRegion->getLighting();
 	if ( lighting.is_valid() && lighting->hasTerrainShadowMask() ) {
 		page.consumerMask |= RUNTIME_PAGE_CONSUMER_TERRAIN_SHADOW;
 	}
@@ -954,7 +954,7 @@ bool T3DRuntimePageStore::loadCpuMapsNow(
 ) const {
 	rHeight.unref(); rControl.unref(); rColor.unref(); rDerived.unref();
 	if ( !m_pRepository || !rConfig.bCookedPagesEnabled ) return false;
-	T3DRegion *const pRegion = m_pRepository->getRegionPtr( rLocation );
+	Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( rLocation );
 	if ( !pRegion || pRegion->isDeleted() ) return false;
 	PreparedPage page;
 	page.location = rLocation;
@@ -979,7 +979,7 @@ bool T3DRuntimePageStore::loadCollisionNow(
 ) const {
 	rHeight.clear(); rBounds.clear(); rHoleMask.clear();
 	if ( !m_pRepository || !rConfig.bCookedPagesEnabled ) return false;
-	T3DRegion *const pRegion = m_pRepository->getRegionPtr( rLocation );
+	Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( rLocation );
 	if ( !pRegion || pRegion->isDeleted() ) return false;
 	PreparedPage page;
 	page.location = rLocation;
@@ -1005,7 +1005,7 @@ bool T3DRuntimePageStore::loadNavigationNow(
 ) const {
 	rNavigation.clear(); if ( pCollisionHeight ) pCollisionHeight->clear(); if ( pMinMaxHeight ) pMinMaxHeight->clear();
 	if ( !m_pRepository || !rConfig.bCookedPagesEnabled ) return false;
-	T3DRegion *const pRegion = m_pRepository->getRegionPtr( rLocation );
+	Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( rLocation );
 	if ( !pRegion || pRegion->isDeleted() ) return false;
 	PreparedPage page;
 	page.location = rLocation;
@@ -1033,7 +1033,7 @@ bool T3DRuntimePageStore::loadLightingReceiversNow(
 ) const {
 	rReceivers.clear();
 	if ( !m_pRepository || !rConfig.bCookedPagesEnabled ) return false;
-	T3DRegion *const pRegion = m_pRepository->getRegionPtr( rLocation );
+	Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( rLocation );
 	if ( !pRegion || pRegion->isDeleted() ) return false;
 	const String path = getPagePath( pRegion, rConfig.dataDirectory );
 	const Ref<FileAccess> pFile = FileAccess::open( path, FileAccess::READ );
@@ -1053,7 +1053,7 @@ bool T3DRuntimePageStore::loadLightingReceiversNow(
 }
 
 bool T3DRuntimePageStore::writePage(
-	T3DRegion *const pRegion, const T3DRuntimePageConfig &rConfig,
+	Terrain3DRegion *const pRegion, const T3DRuntimePageConfig &rConfig,
 	const T3DRuntimePageCookPayload &rPayload, String *const pError
 ) const {
 	if ( pError ) {
@@ -1100,9 +1100,9 @@ bool T3DRuntimePageStore::writePage(
 		return fail( "terrain shadow mask must be a square mipmapped L8 image" );
 	}
 	const uint32_t optional_flags = ( uint32_t ) ( pRegion->getChannelFlags() ) &
-		( uint32_t ) ( T3DRegion::CHANNEL_CONTROL | T3DRegion::CHANNEL_COLOR );
-	if ( ( ( optional_flags & T3DRegion::CHANNEL_CONTROL ) != 0u ) != rPayload.pControl.is_valid() ||
-		( ( optional_flags & T3DRegion::CHANNEL_COLOR ) != 0u ) != rPayload.pColor.is_valid() ) {
+		( uint32_t ) ( Terrain3DRegion::CHANNEL_CONTROL | Terrain3DRegion::CHANNEL_COLOR );
+	if ( ( ( optional_flags & Terrain3DRegion::CHANNEL_CONTROL ) != 0u ) != rPayload.pControl.is_valid() ||
+		( ( optional_flags & Terrain3DRegion::CHANNEL_COLOR ) != 0u ) != rPayload.pColor.is_valid() ) {
 		return fail( "optional cooked channels do not match region channel metadata" );
 	}
 	if ( rPayload.materialMask == 0u ) {
@@ -1123,7 +1123,7 @@ bool T3DRuntimePageStore::writePage(
 	header.colorDivisor = ( uint32_t ) ( MAX( 1, rConfig.colorDivisor ) );
 	header.derivedDivisor = ( uint32_t ) ( MAX( 1, rConfig.derivedDivisor ) );
 	header.channelFlags = ( uint32_t ) ( pRegion->getChannelFlags() ) |
-		( uint32_t ) ( T3DRegion::CHANNEL_DERIVED );
+		( uint32_t ) ( Terrain3DRegion::CHANNEL_DERIVED );
 	header.sourceSignatureLo = ( uint32_t ) ( source_signature & 0xffffffffu );
 	header.sourceSignatureHi = ( uint32_t ) ( source_signature >> 32u );
 	header.blendRecipeVersion = TERRAIN3D_RUNTIME_PAGE_BLEND_RECIPE_VERSION;
@@ -1261,7 +1261,7 @@ bool T3DRuntimePageStore::collectPageSources(
 		}
 		source_locations.set( ( size_t ) ( map_index ) );
 
-		T3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
+		Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() ) {
 			rErrors.push_back( "Region source " + fname + " exists in the data directory but is not loaded" );
 			continue;
@@ -1509,8 +1509,8 @@ void T3DRuntimePageStore::service( const T3DRuntimePageServiceState &rState ) {
 			if ( map_index < 0 || m_queuedConsumers[( size_t ) ( map_index )] == 0u || isPending( location ) ) {
 				continue;
 			}
-			T3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
-			if ( !pRegion || pRegion->isDeleted() || !pRegion->runtimeMapsEvictable() ) {
+			Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
+			if ( !pRegion || pRegion->isDeleted() || !pRegion->runtimeMapsEvictableInternal() ) {
 				m_queuedConsumers[( size_t ) ( map_index )] = 0u;
 				m_queuedPriorities[( size_t ) ( map_index )] = 0u;
 				m_nQueuedCount = MAX( 0, m_nQueuedCount - 1 );
@@ -1535,7 +1535,7 @@ void T3DRuntimePageStore::service( const T3DRuntimePageServiceState &rState ) {
 		}
 
 		const Vector2i location = m_pRepository->getSlotsData()[best_slot];
-		T3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
+		Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
 		PreparedPage &page = m_workPages[( size_t ) ( m_nPrepareWorkPageCount++ )];
 		page = PreparedPage{};
 		page.location = location;

@@ -17,11 +17,10 @@
 #include "Terrain3DConstants.h"
 #include "assets/generated_texture.h"
 
-class T3DTerrain;
+class Terrain3D;
 
 
-class T3DMaterial : public Resource {
-	using Terrain3DMaterial = T3DMaterial;
+class Terrain3DMaterial : public Resource {
 	GDCLASS( Terrain3DMaterial, Resource );
 	CLASS_NAME();
 
@@ -345,7 +344,7 @@ typedef enum t3dshaderVariantDomain_e {
 		bool bSpeculative = true;
 	} t3dshaderVariantEntry_t;
 
-	T3DTerrain *m_pTerrain = nullptr;
+	Terrain3D *m_pTerrain = nullptr;
 
 	RID m_pMaterial;
 	RID m_szTierMaterials[SHADER_TIER_COUNT] = {};
@@ -610,21 +609,21 @@ typedef enum t3dshaderVariantDomain_e {
 	}
 
 public:
-	T3DMaterial( void ) {}
-	~T3DMaterial( void ) {
+	Terrain3DMaterial( void ) {}
+	~Terrain3DMaterial( void ) {
 		destroy();
 	}
-	void initialize( T3DTerrain *pTerrain );
+	void initialize( Terrain3D *pTerrain );
 	bool isInitialized( void ) const {
 		return m_pTerrain != nullptr;
 	}
-	bool isInitializedFor( const T3DTerrain *pTerrain ) const {
+	bool isInitializedFor( const Terrain3D *pTerrain ) const {
 		return m_pTerrain == pTerrain;
 	}
-	T3DTerrain *getTerrainOwner( void ) const {
+	Terrain3D *getTerrainOwner( void ) const {
 		return m_pTerrain;
 	}
-	void uninitialize( T3DTerrain *pTerrain );
+	void uninitialize( Terrain3D *pTerrain );
 	void destroy( void );
 
 	void update( const uint32_t nFlags = UNIFORMS_ONLY );
@@ -1109,29 +1108,26 @@ protected:
 	static void _bind_methods( void );
 };
 
-VARIANT_ENUM_CAST( T3DMaterial::t3dworldBackground_t );
-VARIANT_ENUM_CAST( T3DMaterial::t3dtextureFiltering_t );
-VARIANT_ENUM_CAST( T3DMaterial::t3dupdateFlags_t );
-VARIANT_ENUM_CAST( T3DMaterial::t3dshaderVariantMode_t );
-VARIANT_ENUM_CAST( T3DMaterial::t3dshaderPerformancePreset_t );
-VARIANT_ENUM_CAST( T3DMaterial::t3dterrainSamplingMode_t );
-VARIANT_ENUM_CAST( T3DMaterial::t3dterrainNormalMode_t );
-VARIANT_ENUM_CAST( T3DMaterial::t3dcolorSamplingMode_t );
-VARIANT_ENUM_CAST( T3DMaterial::t3dprojectionMode_t );
-VARIANT_ENUM_CAST( T3DMaterial::t3dtessellationMaterialMode_t );
-VARIANT_ENUM_CAST( T3DMaterial::t3dsurfaceDataMode_t );
-VARIANT_ENUM_CAST( T3DMaterial::t3dtextureSurfaceMode_t );
-VARIANT_ENUM_CAST( T3DMaterial::t3dterrainShadingMode_t );
-VARIANT_ENUM_CAST( T3DMaterial::t3ddetilingMode_t );
-VARIANT_ENUM_CAST( T3DMaterial::t3dmaterialSamplingQuality_t );
-VARIANT_ENUM_CAST( T3DMaterial::t3dmiddleSurfaceSource_t );
-VARIANT_ENUM_CAST( T3DMaterial::t3dterrainNormalQuality_t );
-VARIANT_ENUM_CAST( T3DMaterial::t3dterrainColorQuality_t );
-VARIANT_ENUM_CAST( T3DMaterial::t3dsurfaceResponseQuality_t );
-VARIANT_ENUM_CAST( T3DMaterial::t3dtierLightingModel_t );
-VARIANT_ENUM_CAST( T3DMaterial::t3dtierDetilingQuality_t );
-VARIANT_ENUM_CAST( T3DMaterial::t3dworldNoiseShaderMode_t );
-
-using Terrain3DMaterial = T3DMaterial;
-
+VARIANT_ENUM_CAST( Terrain3DMaterial::t3dworldBackground_t );
+VARIANT_ENUM_CAST( Terrain3DMaterial::t3dtextureFiltering_t );
+VARIANT_ENUM_CAST( Terrain3DMaterial::t3dupdateFlags_t );
+VARIANT_ENUM_CAST( Terrain3DMaterial::t3dshaderVariantMode_t );
+VARIANT_ENUM_CAST( Terrain3DMaterial::t3dshaderPerformancePreset_t );
+VARIANT_ENUM_CAST( Terrain3DMaterial::t3dterrainSamplingMode_t );
+VARIANT_ENUM_CAST( Terrain3DMaterial::t3dterrainNormalMode_t );
+VARIANT_ENUM_CAST( Terrain3DMaterial::t3dcolorSamplingMode_t );
+VARIANT_ENUM_CAST( Terrain3DMaterial::t3dprojectionMode_t );
+VARIANT_ENUM_CAST( Terrain3DMaterial::t3dtessellationMaterialMode_t );
+VARIANT_ENUM_CAST( Terrain3DMaterial::t3dsurfaceDataMode_t );
+VARIANT_ENUM_CAST( Terrain3DMaterial::t3dtextureSurfaceMode_t );
+VARIANT_ENUM_CAST( Terrain3DMaterial::t3dterrainShadingMode_t );
+VARIANT_ENUM_CAST( Terrain3DMaterial::t3ddetilingMode_t );
+VARIANT_ENUM_CAST( Terrain3DMaterial::t3dmaterialSamplingQuality_t );
+VARIANT_ENUM_CAST( Terrain3DMaterial::t3dmiddleSurfaceSource_t );
+VARIANT_ENUM_CAST( Terrain3DMaterial::t3dterrainNormalQuality_t );
+VARIANT_ENUM_CAST( Terrain3DMaterial::t3dterrainColorQuality_t );
+VARIANT_ENUM_CAST( Terrain3DMaterial::t3dsurfaceResponseQuality_t );
+VARIANT_ENUM_CAST( Terrain3DMaterial::t3dtierLightingModel_t );
+VARIANT_ENUM_CAST( Terrain3DMaterial::t3dtierDetilingQuality_t );
+VARIANT_ENUM_CAST( Terrain3DMaterial::t3dworldNoiseShaderMode_t );
 #endif // TERRAIN3D_MATERIAL_CLASS_H

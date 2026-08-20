@@ -155,7 +155,7 @@ Ref<Image> T3DMiddleHeightRegionCache::makeHeightImage( const Vector2i &vLocatio
 	if ( lease.valid() && lease.view().nRegionSize == m_pRepository->getRegionSize() && lease.view().pHeight ) {
 		pActiveHeight = lease.view().pHeight;
 	} else {
-		const T3DRegion *const pRegion = m_pRepository->getRegionPtr( vLocation );
+		const Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( vLocation );
 		const Ref<Image> pHeight = pRegion && !pRegion->isDeleted() ? pRegion->getHeightMap() : Ref<Image>();
 		if ( pHeight.is_null() || pHeight->get_width() != m_pRepository->getRegionSize() ||
 			pHeight->get_height() != m_pRepository->getRegionSize() || pHeight->get_format() != Image::FORMAT_R16 ||

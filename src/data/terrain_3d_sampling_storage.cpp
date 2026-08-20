@@ -82,7 +82,7 @@ bool T3DSamplingStorage::containsActive( const Vector2i &rLocation ) const {
 	return isActiveOwner() && terrain3dActiveStorageContains( this, rLocation );
 }
 
-bool T3DSamplingStorage::syncActiveRegion( const Vector2i &rLocation, const T3DRegion *const pRegion ) {
+bool T3DSamplingStorage::syncActiveRegion( const Vector2i &rLocation, const Terrain3DRegion *const pRegion ) {
 	return isActiveOwner() && terrain3dActiveStorageSyncRegion( this, rLocation, pRegion );
 }
 
@@ -104,13 +104,13 @@ bool T3DSamplingStorage::replaceActiveHeightPages(
 }
 
 bool T3DSamplingStorage::syncActiveMap(
-	const Vector2i &rLocation, const T3DRegion *const pRegion, const t3dmapType_t eType, const Rect2i &rDirtyRect
+	const Vector2i &rLocation, const Terrain3DRegion *const pRegion, const t3dmapType_t eType, const Rect2i &rDirtyRect
 ) {
 	return isActiveOwner() && terrain3dActiveStorageSyncMap( this, rLocation, pRegion, eType, rDirtyRect );
 }
 
 bool T3DSamplingStorage::syncActiveDerived(
-	const Vector2i &rLocation, const T3DRegion *const pRegion, const Rect2i &rDirtyRect
+	const Vector2i &rLocation, const Terrain3DRegion *const pRegion, const Rect2i &rDirtyRect
 ) {
 	return isActiveOwner() && terrain3dActiveStorageSyncDerived( this, rLocation, pRegion, rDirtyRect );
 }
@@ -142,7 +142,7 @@ uint64_t T3DSamplingStorage::getActivePublicationCount( void ) const {
 }
 
 T3DResidentMapLease T3DSamplingStorage::acquireResident(
-	const Vector2i &rLocation, const T3DRegion *const pRegion
+	const Vector2i &rLocation, const Terrain3DRegion *const pRegion
 ) const {
 	if ( isActiveOwner() || m_residentPool.getCapacity() <= 0 || !pRegion || pRegion->isDeleted() ) {
 		return {};
@@ -202,7 +202,7 @@ void T3DSamplingStorage::invalidateResident( const Vector2i &rLocation ) {
 }
 
 void T3DSamplingStorage::syncResidentMap(
-	const Vector2i &rLocation, const T3DRegion *const pRegion, const t3dmapType_t eType, const Rect2i &rDirtyRect
+	const Vector2i &rLocation, const Terrain3DRegion *const pRegion, const t3dmapType_t eType, const Rect2i &rDirtyRect
 ) {
 	if ( m_residentPool.getCapacity() > 0 ) {
 		m_residentPool.syncMap( rLocation, pRegion, eType, rDirtyRect );
@@ -210,7 +210,7 @@ void T3DSamplingStorage::syncResidentMap(
 }
 
 void T3DSamplingStorage::syncResidentDerived(
-	const Vector2i &rLocation, const T3DRegion *const pRegion, const Rect2i &rDirtyRect
+	const Vector2i &rLocation, const Terrain3DRegion *const pRegion, const Rect2i &rDirtyRect
 ) {
 	if ( m_residentPool.getCapacity() > 0 ) {
 		m_residentPool.syncDerived( rLocation, pRegion, rDirtyRect );

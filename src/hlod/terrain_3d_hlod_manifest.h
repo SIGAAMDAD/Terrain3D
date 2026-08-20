@@ -15,8 +15,7 @@
 using namespace godot;
 #endif
 
-class T3DHLODManifest : public Resource {
-	using Terrain3DHLODManifest = T3DHLODManifest;
+class Terrain3DHLODManifest : public Resource {
 	GDCLASS( Terrain3DHLODManifest, Resource );
 	CLASS_NAME();
 
@@ -55,6 +54,4 @@ public:
 protected:
 	static void _bind_methods( void );
 };
-
-using Terrain3DHLODManifest = T3DHLODManifest;
 #endif

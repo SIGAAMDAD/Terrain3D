@@ -82,7 +82,7 @@ bool terrain3dActiveStorageContains( const void *pOwner, const Vector2i &rLocati
 T3DActiveMapLease terrain3dActiveStorageAcquire( const void *pOwner, const Vector2i &rLocation );
 bool terrain3dActiveStorageSyncRegion(
 	const void *pOwner, const Vector2i &rLocation,
-	const T3DRegion *pRegion
+	const Terrain3DRegion *pRegion
 );
 bool terrain3dActiveStorageSyncHeightPage(
 	const void *pOwner, const Vector2i &rLocation,
@@ -94,11 +94,11 @@ bool terrain3dActiveStorageReplaceHeightPages(
 );
 bool terrain3dActiveStorageSyncMap(
 	const void *pOwner, const Vector2i &rLocation,
-	const T3DRegion *pRegion, t3dmapType_t type, const Rect2i &rDirtyRect = Rect2i()
+	const Terrain3DRegion *pRegion, t3dmapType_t type, const Rect2i &rDirtyRect = Rect2i()
 );
 bool terrain3dActiveStorageSyncDerived(
 	const void *pOwner, const Vector2i &rLocation,
-	const T3DRegion *pRegion, const Rect2i &rDirtyRect = Rect2i()
+	const Terrain3DRegion *pRegion, const Rect2i &rDirtyRect = Rect2i()
 );
 void terrain3dActiveStorageInvalidate( const void *pOwner, const Vector2i &rLocation );
 

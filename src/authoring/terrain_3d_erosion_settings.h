@@ -11,8 +11,7 @@
 
 #include "Terrain3DConstants.h"
 
-class T3DErosionSettings : public Resource {
-	using Terrain3DErosionSettings = T3DErosionSettings;
+class Terrain3DErosionSettings : public Resource {
 	GDCLASS( Terrain3DErosionSettings, Resource );
 	CLASS_NAME();
 
@@ -213,8 +212,8 @@ private:
 	void setCurve( Ref<Curve> &rTargetCurve, const Ref<Curve> &rSourceCurve );
 
 public:
-	T3DErosionSettings( void );
-	~T3DErosionSettings( void ) = default;
+	Terrain3DErosionSettings( void );
+	~Terrain3DErosionSettings( void ) = default;
 
 	void setSimulationYears( double fValue );
 	double getSimulationYears( void ) const {
@@ -878,8 +877,5 @@ protected:
 	static void _bind_methods( void );
 };
 
-VARIANT_ENUM_CAST( T3DErosionSettings::t3dboundaryMode_t );
-
-using Terrain3DErosionSettings = T3DErosionSettings;
-
+VARIANT_ENUM_CAST( Terrain3DErosionSettings::t3dboundaryMode_t );
 #endif // TERRAIN3D_EROSION_SETTINGS_CLASS_H

@@ -11,7 +11,7 @@
 #include <EASTL/array.h>
 #include <cstdint>
 
-class T3DTerrain;
+class Terrain3D;
 
 
 class T3DMesher {
@@ -50,7 +50,7 @@ private:
 		int8_t instance = -1;
 	} t3dlodBatchSlot_t;
 
-	T3DTerrain *m_pTerrain = nullptr;
+	Terrain3D *m_pTerrain = nullptr;
 	RID m_scenario = RID();
 	eastl::array<Vector2, TERRAIN3D_MAX_CLIPMAP_LEVELS> m_szLastLodPositions{};
 	eastl::array<int, TERRAIN3D_MAX_CLIPMAP_LEVELS> m_szLastLodTestX{};
@@ -164,7 +164,7 @@ public:
 	}
 
 	void initialize(
-		T3DTerrain *pTerrain, const int nMeshSize, const int nLods, const int nTessellationLevel,
+		Terrain3D *pTerrain, const int nMeshSize, const int nLods, const int nTessellationLevel,
 		const real_t fVertexSpacing, const eastl::array<RID, 3> &rMaterials,
 		const eastl::array<RID, 3> &rShadowMaterials,
 		const int nNearShaderLodCount, const int nMiddleShaderLodCount,

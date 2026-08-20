@@ -14,8 +14,7 @@
 using namespace godot;
 #endif
 
-class T3DHLODPackage : public Resource {
-	using Terrain3DHLODPackage = T3DHLODPackage;
+class Terrain3DHLODPackage : public Resource {
 	GDCLASS( Terrain3DHLODPackage, Resource );
 	CLASS_NAME();
 
@@ -64,6 +63,4 @@ public:
 protected:
 	static void _bind_methods( void );
 };
-
-using Terrain3DHLODPackage = T3DHLODPackage;
 #endif

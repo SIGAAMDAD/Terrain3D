@@ -13,15 +13,14 @@
 #include "Terrain3DConstants.h"
 #include "assets/generated_texture.h"
 
-class T3DTerrain;
+class Terrain3D;
 
 // This file holds stateless utility functions for both C++ and GDScript
 // The class exposes static member and inline functions to GDscript
 // The inline functions below are not part of the class but are in the namespace, eg bilerp
 // However some of these inline functions are also exposed to GDScript
 
-class T3DUtil : public Object {
-	using Terrain3DUtil = T3DUtil;
+class Terrain3DUtil : public Object {
 	GDCLASS( Terrain3DUtil, Object );
 	CLASS_NAME_STATIC( "Terrain3DUtil" );
 
@@ -109,13 +108,13 @@ public:
 		return saveDisplacementR8Dds( rDisplacement, rPath );
 	}
 	static Ref<Image> luminanceToHeight( const Ref<Image> &rSrcRgb );
-	static void benchmark( T3DTerrain *pTerrain );
+	static void benchmark( Terrain3D *pTerrain );
 
 protected:
 	static void _bind_methods( void );
 };
 
-using Util = T3DUtil;
+using Util = Terrain3DUtil;
 
 // Inline Functions
 
@@ -460,7 +459,4 @@ template <typename T> _FORCE_INLINE_ bool differs( const T &a, const T &b ) {
 	} else {              \
 		return;           \
 	}
-
-using Terrain3DUtil = T3DUtil;
-
 #endif // TERRAIN3D_UTIL_CLASS_H

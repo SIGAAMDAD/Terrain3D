@@ -191,20 +191,20 @@ static void terrain3dReleaseGeneratedReplacements(
 
 } // namespace
 
-String T3DAssets::getRuntimeMaterialCachePath( void ) const {
+String Terrain3DAssets::getRuntimeMaterialCachePath( void ) const {
 	if ( !m_pTerrain || m_pTerrain->getDataDirectory().is_empty() ) {
 		return String();
 	}
 	return m_pTerrain->getDataDirectory().path_join( "terrain3d_materials.t3dmat" );
 }
 
-uint64_t T3DAssets::computeRuntimeMaterialSourceSignature( void ) const {
+uint64_t Terrain3DAssets::computeRuntimeMaterialSourceSignature( void ) const {
 	uint64_t hash = 1469598103934665603ull;
 	terrain3dMaterialHashU64( hash, ( uint64_t ) ( m_texturePackingMode ) );
 	terrain3dMaterialHashU64( hash, ( uint64_t ) ( m_textureList.size() ) );
 	terrain3dMaterialHashU64( hash, m_pTerrain ? ( uint64_t ) ( m_pTerrain->getFarMaterialResolution() ) : 128u );
 	for ( int index = 0; index < m_textureList.size(); ++index ) {
-		const Ref<T3DTextureAsset> pAsset = m_textureList[index];
+		const Ref<Terrain3DTextureAsset> pAsset = m_textureList[index];
 		terrain3dMaterialHashU64( hash, ( uint64_t ) ( index ) );
 		if ( pAsset.is_null() ) {
 			continue;
@@ -228,7 +228,7 @@ uint64_t T3DAssets::computeRuntimeMaterialSourceSignature( void ) const {
 	return hash;
 }
 
-void T3DAssets::resetRuntimeMaterialCacheState( const bool bClearGeneratedArrays ) {
+void Terrain3DAssets::resetRuntimeMaterialCacheState( const bool bClearGeneratedArrays ) {
 	m_bRuntimeMaterialCacheActive = false;
 	m_bRuntimeMaterialCookedValid = false;
 	m_runtimeMaterialCachePath = String();
@@ -255,7 +255,7 @@ void T3DAssets::resetRuntimeMaterialCacheState( const bool bClearGeneratedArrays
 	m_generatedFarAlbedoTextures.clear();
 }
 
-bool T3DAssets::initializeFarMaterialArray( void ) {
+bool Terrain3DAssets::initializeFarMaterialArray( void ) {
 	if ( !m_bRuntimeMaterialCookedValid || m_textureList.is_empty() ) {
 		return false;
 	}
@@ -277,7 +277,7 @@ bool T3DAssets::initializeFarMaterialArray( void ) {
 	return true;
 }
 
-bool T3DAssets::loadRuntimeMaterialCookedIndex( void ) {
+bool Terrain3DAssets::loadRuntimeMaterialCookedIndex( void ) {
 	const String path = getRuntimeMaterialCachePath();
 	if ( path.is_empty() || !FileAccess::file_exists( path ) ) {
 		return false;
@@ -294,7 +294,7 @@ bool T3DAssets::loadRuntimeMaterialCookedIndex( void ) {
 	const uint64_t signature = pFile->get_64();
 	( void ) ( flags );
 	bool source_resources_available = false;
-	for ( const Ref<T3DTextureAsset> pAsset : m_textureList ) {
+	for ( const Ref<Terrain3DTextureAsset> pAsset : m_textureList ) {
 		if ( pAsset.is_valid() && ( pAsset->m_pAlbedoTexture.is_valid() || pAsset->m_pNormalTexture.is_valid() ||
 			pAsset->m_pSurfaceTexture.is_valid() || pAsset->m_pDisplacementTexture.is_valid() ||
 			pAsset->m_pPackedPbrResource.is_valid() ) ) {
@@ -370,7 +370,7 @@ bool T3DAssets::loadRuntimeMaterialCookedIndex( void ) {
 	return true;
 }
 
-void T3DAssets::publishRuntimeMaterialCookedSettings( void ) {
+void Terrain3DAssets::publishRuntimeMaterialCookedSettings( void ) {
 	if ( !m_bRuntimeMaterialCookedValid ) {
 		return;
 	}
@@ -411,7 +411,7 @@ void T3DAssets::publishRuntimeMaterialCookedSettings( void ) {
 	std::copy_n( m_textureSettings.displacements.data(), count, m_textureDisplacements.ptrw() );
 }
 
-Ref<Image> T3DAssets::loadRuntimeMaterialCookedImage( const int nLogicalId, const int nChannel ) const {
+Ref<Image> Terrain3DAssets::loadRuntimeMaterialCookedImage( const int nLogicalId, const int nChannel ) const {
 	if ( !m_bRuntimeMaterialCookedValid || nLogicalId < 0 || nLogicalId >= m_textureList.size() ||
 		nChannel < 0 || nChannel >= RUNTIME_MATERIAL_CHANNEL_COUNT ) {
 		return Ref<Image>();
@@ -435,7 +435,7 @@ Ref<Image> T3DAssets::loadRuntimeMaterialCookedImage( const int nLogicalId, cons
 		( Image::Format ) ( info.nFormat ), bytes );
 }
 
-bool T3DAssets::initializeRuntimeMaterialPhysicalArrays( const int nLayerLimit ) {
+bool Terrain3DAssets::initializeRuntimeMaterialPhysicalArrays( const int nLayerLimit ) {
 	if ( !m_bRuntimeMaterialCookedValid || !m_pTerrain || m_textureList.is_empty() ) {
 		return false;
 	}
@@ -501,7 +501,7 @@ bool T3DAssets::initializeRuntimeMaterialPhysicalArrays( const int nLayerLimit )
 	return true;
 }
 
-bool T3DAssets::publishRuntimeMaterialLayer( const int nLogicalId, const int nPhysicalLayer ) {
+bool Terrain3DAssets::publishRuntimeMaterialLayer( const int nLogicalId, const int nPhysicalLayer ) {
 	if ( !m_bRuntimeMaterialCacheActive || nLogicalId < 0 || nLogicalId >= m_textureList.size() ||
 		nPhysicalLayer <= 0 || nPhysicalLayer >= m_nRuntimeMaterialPhysicalLayers ) {
 		return false;
@@ -528,11 +528,11 @@ bool T3DAssets::publishRuntimeMaterialLayer( const int nLogicalId, const int nPh
 	return true;
 }
 
-void T3DAssets::releaseRuntimeMaterialSourceTextures( void ) {
+void Terrain3DAssets::releaseRuntimeMaterialSourceTextures( void ) {
 	if ( IS_EDITOR ) {
 		return;
 	}
-	for ( const Ref<T3DTextureAsset> pAsset : m_textureList ) {
+	for ( const Ref<Terrain3DTextureAsset> pAsset : m_textureList ) {
 		if ( pAsset.is_null() ) {
 			continue;
 		}
@@ -547,15 +547,15 @@ void T3DAssets::releaseRuntimeMaterialSourceTextures( void ) {
 	m_bRuntimeMaterialSourceTexturesReleased = true;
 }
 
-bool T3DAssets::configureRuntimeMaterialCache( void ) {
+bool Terrain3DAssets::configureRuntimeMaterialCache( void ) {
 	if ( !m_pTerrain || m_textureList.is_empty() ) {
 		m_bRuntimeMaterialCacheActive = false;
 		return false;
 	}
 	auto refresh_material_bindings = [&]() {
-		const Ref<T3DMaterial> pMaterial = m_pTerrain->getMaterial();
+		const Ref<Terrain3DMaterial> pMaterial = m_pTerrain->getMaterial();
 		if ( pMaterial.is_valid() && pMaterial->isInitializedFor( m_pTerrain ) ) {
-			pMaterial->update( T3DMaterial::TEXTURE_ARRAYS );
+			pMaterial->update( Terrain3DMaterial::TEXTURE_ARRAYS );
 		}
 	};
 
@@ -580,12 +580,12 @@ bool T3DAssets::configureRuntimeMaterialCache( void ) {
 			return false;
 		}
 		if ( !m_bRuntimeMaterialCookedValid && !loadRuntimeMaterialCookedIndex() ) {
-			LOG( T3DTerrain::WARN,
+			LOG( Terrain3D::WARN,
 				"Cannot disable runtime material streaming because the cooked material bundle is unavailable; keeping the bounded cache active." );
 			return true;
 		}
 		if ( !initializeRuntimeMaterialPhysicalArrays( TERRAIN3D_MAX_TEXTURE_ASSETS ) ) {
-			LOG( T3DTerrain::WARN,
+			LOG( Terrain3D::WARN,
 				"Cannot rebuild full terrain material arrays from the cooked bundle; keeping the bounded runtime material cache active." );
 			return true;
 		}
@@ -598,20 +598,20 @@ bool T3DAssets::configureRuntimeMaterialCache( void ) {
 		!m_pTerrain->isEditorAuthoringMode();
 	if ( !m_bRuntimeMaterialCookedValid && !loadRuntimeMaterialCookedIndex() ) {
 		if ( strict_baked_runtime ) {
-			LOG( T3DTerrain::ERROR, "Strict baked runtime requires a valid terrain3d_materials.t3dmatcache artifact." );
+			LOG( Terrain3D::ERROR, "Strict baked runtime requires a valid terrain3d_materials.t3dmatcache artifact." );
 			m_bRuntimeMaterialCacheActive = false;
 			return false;
 		}
-		LOG( T3DTerrain::WARN, "Cooked runtime material cache unavailable or stale; retaining full terrain material arrays." );
+		LOG( Terrain3D::WARN, "Cooked runtime material cache unavailable or stale; retaining full terrain material arrays." );
 		return m_bRuntimeMaterialCacheActive;
 	}
 	if ( !initializeRuntimeMaterialPhysicalArrays() ) {
 		if ( strict_baked_runtime ) {
-			LOG( T3DTerrain::ERROR, "Strict baked runtime could not initialize material arrays from the cooked bundle." );
+			LOG( Terrain3D::ERROR, "Strict baked runtime could not initialize material arrays from the cooked bundle." );
 			m_bRuntimeMaterialCacheActive = false;
 			return false;
 		}
-		LOG( T3DTerrain::WARN, "Failed to rebuild the bounded runtime material cache; retaining the previous material arrays." );
+		LOG( Terrain3D::WARN, "Failed to rebuild the bounded runtime material cache; retaining the previous material arrays." );
 		return m_bRuntimeMaterialCacheActive;
 	}
 
@@ -633,7 +633,7 @@ bool T3DAssets::configureRuntimeMaterialCache( void ) {
 	return true;
 }
 
-void T3DAssets::updateRuntimeMaterialResidencyInternal(
+void Terrain3DAssets::updateRuntimeMaterialResidencyInternal(
 	const uint8_t *const pPriorityIds, const int nPriorityCount,
 	const int nUploadBudget
 ) {
@@ -717,19 +717,19 @@ void T3DAssets::updateRuntimeMaterialResidencyInternal(
 		mapping_changed = true;
 	}
 	if ( mapping_changed ) {
-		const Ref<T3DMaterial> pMaterial = m_pTerrain->getMaterial();
+		const Ref<Terrain3DMaterial> pMaterial = m_pTerrain->getMaterial();
 		if ( pMaterial.is_valid() && pMaterial->isInitializedFor( m_pTerrain ) ) {
 			pMaterial->updateRuntimeMaterialLayerMap();
 		}
 	}
 }
 
-void T3DAssets::updateRuntimeMaterialResidency( const uint8_t *const pPriorityIds, const int nPriorityCount ) {
+void Terrain3DAssets::updateRuntimeMaterialResidency( const uint8_t *const pPriorityIds, const int nPriorityCount ) {
 	const int upload_budget = m_pTerrain ? MAX( 1, m_pTerrain->getRuntimeMaterialUploadBudgetLayers() ) : 1;
 	updateRuntimeMaterialResidencyInternal( pPriorityIds, nPriorityCount, upload_budget );
 }
 
-PackedInt32Array T3DAssets::getTextureLayerMap( void ) const {
+PackedInt32Array Terrain3DAssets::getTextureLayerMap( void ) const {
 	PackedInt32Array map;
 	map.resize( TERRAIN3D_MAX_TEXTURE_ASSETS );
 	int32_t *const pWrite = map.ptrw();
@@ -740,7 +740,7 @@ PackedInt32Array T3DAssets::getTextureLayerMap( void ) const {
 	return map;
 }
 
-PackedColorArray T3DAssets::getRuntimeMaterialAverageAlbedo( void ) const {
+PackedColorArray Terrain3DAssets::getRuntimeMaterialAverageAlbedo( void ) const {
 	PackedColorArray averages;
 	averages.resize( TERRAIN3D_MAX_TEXTURE_ASSETS );
 	Color *const pWrite = averages.ptrw();
@@ -751,7 +751,7 @@ PackedColorArray T3DAssets::getRuntimeMaterialAverageAlbedo( void ) const {
 	return averages;
 }
 
-Dictionary T3DAssets::getRuntimeMaterialCacheStats( void ) const {
+Dictionary Terrain3DAssets::getRuntimeMaterialCacheStats( void ) const {
 	Dictionary stats;
 	stats["enabled"] = m_pTerrain && m_pTerrain->isRuntimeMaterialStreamingEnabled();
 	stats["active"] = m_bRuntimeMaterialCacheActive;
@@ -797,7 +797,7 @@ Dictionary T3DAssets::getRuntimeMaterialCacheStats( void ) const {
 	return stats;
 }
 
-Dictionary T3DAssets::cookRuntimeMaterialCache( void ) {
+Dictionary Terrain3DAssets::cookRuntimeMaterialCache( void ) {
 	Dictionary result;
 	result["complete"] = false;
 	result["materials"] = m_textureList.size();
@@ -853,7 +853,7 @@ Dictionary T3DAssets::cookRuntimeMaterialCache( void ) {
 	bool ok = true;
 	for ( int logical = 0; logical < m_textureList.size() && ok; ++logical ) {
 		t3druntimeMaterialLayerInfo_t &layer = descriptors[( size_t ) logical];
-		const Ref<T3DTextureAsset> pAsset = m_textureList[logical];
+		const Ref<Terrain3DTextureAsset> pAsset = m_textureList[logical];
 		if ( pAsset.is_valid() ) {
 			layer.albedoColor = pAsset->getAlbedoColor(); layer.normalDepth = pAsset->getNormalDepth();
 			layer.aoStrength = pAsset->getAoStrength(); layer.aoLightAffect = pAsset->getAoLightAffect();
@@ -1012,22 +1012,22 @@ Dictionary T3DAssets::cookRuntimeMaterialCache( void ) {
 	return result;
 }
 
-void T3DAssets::connectAssetSignals( const t3dassetType_t type, const Ref<T3DAssetResource> &rAsset ) {
+void Terrain3DAssets::connectAssetSignals( const t3dassetType_t type, const Ref<T3DAssetResource> &rAsset ) {
 	if ( rAsset.is_null() ) {
 		return;
 	}
-	const Callable id_callback = callable_mp( this, &T3DAssets::swapIds );
+	const Callable id_callback = callable_mp( this, &Terrain3DAssets::swapIds );
 	if ( !rAsset->is_connected( "id_changed", id_callback ) ) {
 		rAsset->connect( "id_changed", id_callback );
 	}
 	if ( type == TYPE_TEXTURE ) {
-		Ref<T3DTextureAsset> pTexture = rAsset;
+		Ref<Terrain3DTextureAsset> pTexture = rAsset;
 		if ( pTexture.is_null() ) {
 			return;
 		}
-		const Callable file_callback = callable_mp( this, &T3DAssets::updateTextureFiles );
-		const Callable setting_callback = callable_mp( this, &T3DAssets::updateTextureSettings );
-		const Callable preview_callback = callable_mp( this, &T3DAssets::updateTexturePreview );
+		const Callable file_callback = callable_mp( this, &Terrain3DAssets::updateTextureFiles );
+		const Callable setting_callback = callable_mp( this, &Terrain3DAssets::updateTextureSettings );
+		const Callable preview_callback = callable_mp( this, &Terrain3DAssets::updateTexturePreview );
 		if ( !pTexture->is_connected( "file_changed", file_callback ) ) {
 			pTexture->connect( "file_changed", file_callback );
 		}
@@ -1038,12 +1038,12 @@ void T3DAssets::connectAssetSignals( const t3dassetType_t type, const Ref<T3DAss
 			pTexture->connect( "preview_changed", preview_callback );
 		}
 	} else if ( type == TYPE_MESH ) {
-		Ref<T3DMeshAsset> pMesh = rAsset;
+		Ref<Terrain3DMeshAsset> pMesh = rAsset;
 		if ( pMesh.is_null() ) {
 			return;
 		}
-		const Callable settings_callback = callable_mp( this, &T3DAssets::updateMesh );
-		const Callable preview_callback = callable_mp( this, &T3DAssets::updateMeshPreview );
+		const Callable settings_callback = callable_mp( this, &Terrain3DAssets::updateMesh );
+		const Callable preview_callback = callable_mp( this, &Terrain3DAssets::updateMeshPreview );
 		if ( !pMesh->is_connected( "instancer_setting_changed", settings_callback ) ) {
 			pMesh->connect( "instancer_setting_changed", settings_callback );
 		}
@@ -1053,22 +1053,22 @@ void T3DAssets::connectAssetSignals( const t3dassetType_t type, const Ref<T3DAss
 	}
 }
 
-void T3DAssets::disconnectAssetSignals( const t3dassetType_t type, const Ref<T3DAssetResource> &rAsset ) {
+void Terrain3DAssets::disconnectAssetSignals( const t3dassetType_t type, const Ref<T3DAssetResource> &rAsset ) {
 	if ( rAsset.is_null() ) {
 		return;
 	}
-	const Callable id_callback = callable_mp( this, &T3DAssets::swapIds );
+	const Callable id_callback = callable_mp( this, &Terrain3DAssets::swapIds );
 	if ( rAsset->is_connected( "id_changed", id_callback ) ) {
 		rAsset->disconnect( "id_changed", id_callback );
 	}
 	if ( type == TYPE_TEXTURE ) {
-		Ref<T3DTextureAsset> pTexture = rAsset;
+		Ref<Terrain3DTextureAsset> pTexture = rAsset;
 		if ( pTexture.is_null() ) {
 			return;
 		}
-		const Callable file_callback = callable_mp( this, &T3DAssets::updateTextureFiles );
-		const Callable setting_callback = callable_mp( this, &T3DAssets::updateTextureSettings );
-		const Callable preview_callback = callable_mp( this, &T3DAssets::updateTexturePreview );
+		const Callable file_callback = callable_mp( this, &Terrain3DAssets::updateTextureFiles );
+		const Callable setting_callback = callable_mp( this, &Terrain3DAssets::updateTextureSettings );
+		const Callable preview_callback = callable_mp( this, &Terrain3DAssets::updateTexturePreview );
 		if ( pTexture->is_connected( "file_changed", file_callback ) ) {
 			pTexture->disconnect( "file_changed", file_callback );
 		}
@@ -1079,12 +1079,12 @@ void T3DAssets::disconnectAssetSignals( const t3dassetType_t type, const Ref<T3D
 			pTexture->disconnect( "preview_changed", preview_callback );
 		}
 	} else if ( type == TYPE_MESH ) {
-		Ref<T3DMeshAsset> pMesh = rAsset;
+		Ref<Terrain3DMeshAsset> pMesh = rAsset;
 		if ( pMesh.is_null() ) {
 			return;
 		}
-		const Callable settings_callback = callable_mp( this, &T3DAssets::updateMesh );
-		const Callable preview_callback = callable_mp( this, &T3DAssets::updateMeshPreview );
+		const Callable settings_callback = callable_mp( this, &Terrain3DAssets::updateMesh );
+		const Callable preview_callback = callable_mp( this, &Terrain3DAssets::updateMeshPreview );
 		if ( pMesh->is_connected( "instancer_setting_changed", settings_callback ) ) {
 			pMesh->disconnect( "instancer_setting_changed", settings_callback );
 		}
@@ -1094,14 +1094,14 @@ void T3DAssets::disconnectAssetSignals( const t3dassetType_t type, const Ref<T3D
 	}
 }
 
-Ref<T3DAssetResource> T3DAssets::makePlaceholderAsset( const t3dassetType_t type, const int nId ) const {
+Ref<T3DAssetResource> Terrain3DAssets::makePlaceholderAsset( const t3dassetType_t type, const int nId ) const {
 	Ref<T3DAssetResource> pAsset;
 	if ( type == TYPE_TEXTURE ) {
-		Ref<T3DTextureAsset> pTexture;
+		Ref<Terrain3DTextureAsset> pTexture;
 		pTexture.instantiate();
 		pAsset = pTexture;
 	} else if ( type == TYPE_MESH ) {
-		Ref<T3DMeshAsset> pMesh;
+		Ref<Terrain3DMeshAsset> pMesh;
 		pMesh.instantiate();
 		pAsset = pMesh;
 	}
@@ -1112,9 +1112,9 @@ Ref<T3DAssetResource> T3DAssets::makePlaceholderAsset( const t3dassetType_t type
 	return pAsset;
 }
 
-void T3DAssets::swapIds( const t3dassetType_t type, const int nSrcId, const int nDstId ) {
+void Terrain3DAssets::swapIds( const t3dassetType_t type, const int nSrcId, const int nDstId ) {
 	m_bPersistenceDirty = true;
-	LOG( T3DTerrain::INFO, "Swapping asset ID: ", nSrcId, " and ID: ", nDstId );
+	LOG( Terrain3D::INFO, "Swapping asset ID: ", nSrcId, " and ID: ", nDstId );
 	Array list;
 	switch ( type ) {
 		case TYPE_TEXTURE:
@@ -1127,12 +1127,12 @@ void T3DAssets::swapIds( const t3dassetType_t type, const int nSrcId, const int 
 			return;
 	}
 	if ( nSrcId < 0 || nSrcId >= list.size() ) {
-		LOG( T3DTerrain::ERROR, "Source ID out of range: ", nSrcId );
+		LOG( Terrain3D::ERROR, "Source ID out of range: ", nSrcId );
 		return;
 	}
 	Ref<T3DAssetResource> pResSrc = list[nSrcId];
 	if ( pResSrc.is_null() ) {
-		LOG( T3DTerrain::ERROR, "Source Asset is null at ID: ", nSrcId );
+		LOG( Terrain3D::ERROR, "Source Asset is null at ID: ", nSrcId );
 		return;
 	}
 	// User can type in any value, -1 means swap with first, >size means swap with last
@@ -1158,7 +1158,7 @@ void T3DAssets::swapIds( const t3dassetType_t type, const int nSrcId, const int 
 			if ( m_pTerrain ) {
 				m_pTerrain->getInstancer()->swapIds( nSrcId, dst_id );
 			} else {
-				LOG( T3DTerrain::ERROR, "Changing IDs before the terrain is initialized. Meshes on the ground may be wrong." );
+				LOG( Terrain3D::ERROR, "Changing IDs before the terrain is initialized. Meshes on the ground may be wrong." );
 			}
 			updateMeshList();
 			break;
@@ -1171,7 +1171,7 @@ void T3DAssets::swapIds( const t3dassetType_t type, const int nSrcId, const int 
  * _set_asset_list attempts to keep the asset ID as saved in the resource file.
  * But if an ID is invalid or already taken, the new ID is changed to the next available one
  */
-void T3DAssets::setAssetList( const t3dassetType_t type, const TypedArray<T3DAssetResource> &rList ) {
+void Terrain3DAssets::setAssetList( const t3dassetType_t type, const TypedArray<T3DAssetResource> &rList ) {
 	m_bPersistenceDirty = true;
 	const int max_size = type == TYPE_TEXTURE ? TERRAIN3D_MAX_TEXTURE_ASSETS : type == TYPE_MESH ? TERRAIN3D_MAX_MESH_ASSETS : 0;
 	if ( max_size == 0 ) {
@@ -1196,10 +1196,10 @@ void T3DAssets::setAssetList( const t3dassetType_t type, const TypedArray<T3DAss
 				++next_free;
 			}
 			if ( next_free >= array_size ) {
-				LOG( T3DTerrain::ERROR, "No free slot for asset: ", pAsset->get_name() );
+				LOG( Terrain3D::ERROR, "No free slot for asset: ", pAsset->get_name() );
 				continue;
 			}
-			LOG( T3DTerrain::WARN, pAsset->get_class(), " ID ", target_id, " is invalid or duplicated. Assigning slot ", next_free );
+			LOG( Terrain3D::WARN, pAsset->get_class(), " ID ", target_id, " is invalid or duplicated. Assigning slot ", next_free );
 			target_id = next_free;
 		}
 		pAsset->m_nId = target_id;
@@ -1217,13 +1217,13 @@ void T3DAssets::setAssetList( const t3dassetType_t type, const TypedArray<T3DAss
 	}
 
 	if ( type == TYPE_TEXTURE ) {
-		for ( const Ref<T3DTextureAsset> pOldAsset : m_textureList ) {
+		for ( const Ref<Terrain3DTextureAsset> pOldAsset : m_textureList ) {
 			disconnectAssetSignals( TYPE_TEXTURE, pOldAsset );
 		}
 		m_textureList.clear();
 		m_textureList.resize( array_size );
 		for ( int i = 0; i < array_size; ++i ) {
-			Ref<T3DTextureAsset> pAsset = replacement[i];
+			Ref<Terrain3DTextureAsset> pAsset = replacement[i];
 			m_textureList[i] = pAsset;
 			connectAssetSignals( TYPE_TEXTURE, pAsset );
 			if ( occupied.test( ( size_t ) ( i ) ) ) {
@@ -1231,13 +1231,13 @@ void T3DAssets::setAssetList( const t3dassetType_t type, const TypedArray<T3DAss
 			}
 		}
 	} else {
-		for ( const Ref<T3DMeshAsset> pOldAsset : m_meshList ) {
+		for ( const Ref<Terrain3DMeshAsset> pOldAsset : m_meshList ) {
 			disconnectAssetSignals( TYPE_MESH, pOldAsset );
 		}
 		m_meshList.clear();
 		m_meshList.resize( array_size );
 		for ( int i = 0; i < array_size; ++i ) {
-			Ref<T3DMeshAsset> pAsset = replacement[i];
+			Ref<Terrain3DMeshAsset> pAsset = replacement[i];
 			m_meshList[i] = pAsset;
 			connectAssetSignals( TYPE_MESH, pAsset );
 			if ( occupied.test( ( size_t ) ( i ) ) ) {
@@ -1247,12 +1247,12 @@ void T3DAssets::setAssetList( const t3dassetType_t type, const TypedArray<T3DAss
 	}
 }
 
-void T3DAssets::setAsset( const t3dassetType_t type, const int nId, const Ref<T3DAssetResource> &rAsset ) {
+void Terrain3DAssets::setAsset( const t3dassetType_t type, const int nId, const Ref<T3DAssetResource> &rAsset ) {
 	m_bPersistenceDirty = true;
-	LOG( T3DTerrain::INFO, "t3dsetting_t asset type: ", type, ", ID: ", nId, ", asset: ", rAsset );
+	LOG( Terrain3D::INFO, "t3dsetting_t asset type: ", type, ", ID: ", nId, ", asset: ", rAsset );
 	const int max_size = type == TYPE_TEXTURE ? TERRAIN3D_MAX_TEXTURE_ASSETS : type == TYPE_MESH ? TERRAIN3D_MAX_MESH_ASSETS : 0;
 	if ( max_size == 0 || nId < 0 || nId >= max_size ) {
-		LOG( T3DTerrain::ERROR, "Invalid asset id: ", nId, " range is 0-", max_size - 1 );
+		LOG( Terrain3D::ERROR, "Invalid asset id: ", nId, " range is 0-", max_size - 1 );
 		return;
 	}
 	Array list = type == TYPE_TEXTURE ? Array( m_textureList ) : Array( m_meshList );
@@ -1302,9 +1302,9 @@ void T3DAssets::setAsset( const t3dassetType_t type, const int nId, const Ref<T3
 	}
 }
 
-void T3DAssets::validateArrayMember(
+void Terrain3DAssets::validateArrayMember(
 	const Ref<Texture2D> &rTexture,
-	const Ref<T3DTextureAsset> &rAsset, const String &rLabel, t3dtextureArrayLayout_t &rLayout,
+	const Ref<Terrain3DTextureAsset> &rAsset, const String &rLabel, t3dtextureArrayLayout_t &rLayout,
 	const Image::Format eRequiredFormat,
 	const bool bAllowCompressedSurface
 ) {
@@ -1314,7 +1314,7 @@ void T3DAssets::validateArrayMember(
 	const Ref<Image> pImage = rTexture->get_image();
 	if ( pImage.is_null() || pImage->is_empty() ) {
 		m_pTerrain->setWarning( WARN_MISMATCHED_FORMAT, true );
-		LOG( T3DTerrain::ERROR, "Texture ID ", rAsset->getId(), " ", rLabel, " image is invalid or empty." );
+		LOG( Terrain3D::ERROR, "Texture ID ", rAsset->getId(), " ", rLabel, " image is invalid or empty." );
 		return;
 	}
 	const Vector2i vTextureSize = pImage->get_size();
@@ -1324,7 +1324,7 @@ void T3DAssets::validateArrayMember(
 		eRequiredFormat == Image::FORMAT_RGBA8 && terrain3dIsNativePackedSurfaceFormat( eFormat );
 	if ( eRequiredFormat != Image::FORMAT_MAX && eFormat != eRequiredFormat && !bAcceptedSurfaceCompression ) {
 		m_pTerrain->setWarning( WARN_MISMATCHED_FORMAT, true );
-		LOG( T3DTerrain::ERROR, "Texture ID ", rAsset->getId(), " ", rLabel, " must use format ", ( int ) ( eRequiredFormat ),
+		LOG( Terrain3D::ERROR, "Texture ID ", rAsset->getId(), " ", rLabel, " must use format ", ( int ) ( eRequiredFormat ),
 			" or a supported native compressed equivalent, received ", ( int ) ( eFormat ), "." );
 		return;
 	}
@@ -1338,26 +1338,26 @@ void T3DAssets::validateArrayMember(
 		rLayout.bNeedsNormalization = true;
 		rLayout.vSize.x = MAX( rLayout.vSize.x, vTextureSize.x );
 		rLayout.vSize.y = MAX( rLayout.vSize.y, vTextureSize.y );
-		LOG( T3DTerrain::WARN, "Texture ID ", rAsset->getId(), " ", rLabel, " size ", vTextureSize,
+		LOG( Terrain3D::WARN, "Texture ID ", rAsset->getId(), " ", rLabel, " size ", vTextureSize,
 			" differs from another layer in the same array and will be normalized to ", rLayout.vSize, "." );
 	}
 	if ( eFormat != rLayout.eFormat ) {
 		rLayout.bNeedsNormalization = true;
-		LOG( T3DTerrain::WARN, "Texture ID ", rAsset->getId(), " ", rLabel, " format ", ( int ) ( eFormat ),
+		LOG( Terrain3D::WARN, "Texture ID ", rAsset->getId(), " ", rLabel, " format ", ( int ) ( eFormat ),
 			" differs from another layer in the same array; the array will be normalized instead of rejected." );
 	}
 	if ( bMipmaps != rLayout.bMipmaps ) {
 		rLayout.bNeedsNormalization = true;
 		rLayout.bMipmaps = rLayout.bMipmaps || bMipmaps;
-		LOG( T3DTerrain::WARN, "Texture ID ", rAsset->getId(), " ", rLabel,
+		LOG( Terrain3D::WARN, "Texture ID ", rAsset->getId(), " ", rLabel,
 			" mipmap layout differs from another layer in the same array and will be normalized." );
 	}
 }
 
-void T3DAssets::updateTextureFiles( void ) {
+void Terrain3DAssets::updateTextureFiles( void ) {
 	m_bPersistenceDirty = true;
 	IS_INIT( VOID );
-	LOG( T3DTerrain::DEBUG, "Received texture_changed signal" );
+	LOG( Terrain3D::DEBUG, "Received texture_changed signal" );
 	if ( m_textureList.is_empty() ) {
 		resetRuntimeMaterialCacheState( false );
 		m_generatedAlbedoTextures.clear();
@@ -1377,7 +1377,7 @@ void T3DAssets::updateTextureFiles( void ) {
 	t3dtextureArrayLayout_t displacementLayout;
 	m_pTerrain->setWarning( WARN_ALL, false );
 
-	for ( const Ref<T3DTextureAsset> pAsset : m_textureList ) {
+	for ( const Ref<Terrain3DTextureAsset> pAsset : m_textureList ) {
 		if ( pAsset.is_null() ) {
 			continue;
 		}
@@ -1386,7 +1386,7 @@ void T3DAssets::updateTextureFiles( void ) {
 			const Ref<Texture2D> pSurface = pAsset->getEffectiveSurfaceTexture();
 			if ( pAsset->m_pPackedPbrResource.is_valid() && pSurface.is_null() ) {
 				m_pTerrain->setWarning( WARN_MISMATCHED_FORMAT, true );
-				LOG( T3DTerrain::ERROR, "Texture ID ", pAsset->getId(),
+				LOG( Terrain3D::ERROR, "Texture ID ", pAsset->getId(),
 					" packed-PBR/displacement compatibility resource failed to build: ", pAsset->m_pPackedPbrResource->getLastError() );
 			}
 			validateArrayMember( pSurface, pAsset, "surface", secondaryLayout, Image::FORMAT_RGBA8, true );
@@ -1456,13 +1456,13 @@ void T3DAssets::updateTextureFiles( void ) {
 
 	if ( albedoLayout.vSize != V2I_ZERO ) {
 		TypedArray<Image> layers;
-		for ( const Ref<T3DTextureAsset> pAsset : m_textureList ) {
+		for ( const Ref<Terrain3DTextureAsset> pAsset : m_textureList ) {
 			const Ref<Texture2D> pTexture = pAsset.is_valid() ? pAsset->m_pAlbedoTexture : Ref<Texture2D>();
 			const Ref<Image> pImage = terrain3dPrepareArrayImage( pTexture, albedoLayout.vSize, albedoLayout.eFormat,
 				albedoLayout.bMipmaps, COLOR_CHECKED );
 			if ( pImage.is_null() ) {
 				bReplacementOk = false;
-				LOG( T3DTerrain::ERROR, "Failed to normalize albedo texture layer ", layers.size(), "." );
+				LOG( Terrain3D::ERROR, "Failed to normalize albedo texture layer ", layers.size(), "." );
 				break;
 			}
 			layers.push_back( pImage );
@@ -1474,13 +1474,13 @@ void T3DAssets::updateTextureFiles( void ) {
 
 	if ( bReplacementOk && bPackedPbr && secondaryLayout.vSize != V2I_ZERO ) {
 		TypedArray<Image> surface_layers;
-		for ( const Ref<T3DTextureAsset> pAsset : m_textureList ) {
+		for ( const Ref<Terrain3DTextureAsset> pAsset : m_textureList ) {
 			const Ref<Texture2D> pTexture = pAsset.is_valid() ? pAsset->getEffectiveSurfaceTexture() : Ref<Texture2D>();
 			const Ref<Image> pImage = terrain3dPrepareArrayImage( pTexture, secondaryLayout.vSize, secondaryLayout.eFormat,
 				secondaryLayout.bMipmaps, Color( 0.5f, 0.5f, 1.0f, 1.0f ) );
 			if ( pImage.is_null() ) {
 				bReplacementOk = false;
-				LOG( T3DTerrain::ERROR, "Failed to normalize packed surface texture layer ", surface_layers.size(), "." );
+				LOG( Terrain3D::ERROR, "Failed to normalize packed surface texture layer ", surface_layers.size(), "." );
 				break;
 			}
 			surface_layers.push_back( pImage );
@@ -1491,13 +1491,13 @@ void T3DAssets::updateTextureFiles( void ) {
 
 		if ( bReplacementOk && bUseDisplacement ) {
 			TypedArray<Image> displacement_layers;
-			for ( const Ref<T3DTextureAsset> pAsset : m_textureList ) {
+			for ( const Ref<Terrain3DTextureAsset> pAsset : m_textureList ) {
 				const Ref<Texture2D> pTexture = pAsset.is_valid() ? pAsset->getEffectiveDisplacementTexture() : Ref<Texture2D>();
 				const Ref<Image> pImage = terrain3dPrepareArrayImage( pTexture, displacementLayout.vSize,
 					displacementLayout.eFormat, displacementLayout.bMipmaps, Color( 0.5f, 0.0f, 0.0f, 1.0f ) );
 				if ( pImage.is_null() ) {
 					bReplacementOk = false;
-					LOG( T3DTerrain::ERROR, "Failed to normalize displacement texture layer ", displacement_layers.size(), "." );
+					LOG( Terrain3D::ERROR, "Failed to normalize displacement texture layer ", displacement_layers.size(), "." );
 					break;
 				}
 				displacement_layers.push_back( pImage );
@@ -1508,13 +1508,13 @@ void T3DAssets::updateTextureFiles( void ) {
 		}
 	} else if ( bReplacementOk && !bPackedPbr && secondaryLayout.vSize != V2I_ZERO ) {
 		TypedArray<Image> layers;
-		for ( const Ref<T3DTextureAsset> pAsset : m_textureList ) {
+		for ( const Ref<Terrain3DTextureAsset> pAsset : m_textureList ) {
 			const Ref<Texture2D> pTexture = pAsset.is_valid() ? pAsset->m_pNormalTexture : Ref<Texture2D>();
 			const Ref<Image> pImage = terrain3dPrepareArrayImage( pTexture, secondaryLayout.vSize, secondaryLayout.eFormat,
 				secondaryLayout.bMipmaps, COLOR_NORMAL );
 			if ( pImage.is_null() ) {
 				bReplacementOk = false;
-				LOG( T3DTerrain::ERROR, "Failed to normalize normal texture layer ", layers.size(), "." );
+				LOG( Terrain3D::ERROR, "Failed to normalize normal texture layer ", layers.size(), "." );
 				break;
 			}
 			layers.push_back( pImage );
@@ -1527,7 +1527,7 @@ void T3DAssets::updateTextureFiles( void ) {
 	if ( !bReplacementOk ) {
 		terrain3dReleaseGeneratedReplacements( replacement_albedo, replacement_normal,
 			replacement_surface, replacement_displacement );
-		LOG( T3DTerrain::ERROR, "Terrain texture-array rebuild failed. Keeping the last complete generated texture set." );
+		LOG( Terrain3D::ERROR, "Terrain texture-array rebuild failed. Keeping the last complete generated texture set." );
 		return;
 	}
 
@@ -1549,7 +1549,7 @@ void T3DAssets::updateTextureFiles( void ) {
 	// Preserve the asset-level placeholder behavior of the original pipeline, but only
 	// after a complete replacement set has been committed. This keeps failed rebuilds
 	// transactional while editor previews and serialized asset state still see defaults.
-	for ( const Ref<T3DTextureAsset> pAsset : m_textureList ) {
+	for ( const Ref<Terrain3DTextureAsset> pAsset : m_textureList ) {
 		if ( pAsset.is_null() ) {
 			continue;
 		}
@@ -1593,7 +1593,7 @@ void T3DAssets::updateTextureFiles( void ) {
 	}
 }
 
-void T3DAssets::updateTextureSettingsInternal( const bool bPersistentChange ) {
+void Terrain3DAssets::updateTextureSettingsInternal( const bool bPersistentChange ) {
 	if ( bPersistentChange ) {
 		m_bPersistenceDirty = true;
 	}
@@ -1604,10 +1604,10 @@ void T3DAssets::updateTextureSettingsInternal( const bool bPersistentChange ) {
 		}
 		return;
 	}
-	LOG( T3DTerrain::DEBUG, "Received setting_changed signal" );
+	LOG( Terrain3D::DEBUG, "Received setting_changed signal" );
 	m_textureSettings.nCount = MIN( m_textureList.size(), TERRAIN3D_MAX_TEXTURE_ASSETS );
 	for ( int index = 0; index < m_textureSettings.nCount; ++index ) {
-		const Ref<T3DTextureAsset> pTa = m_textureList[index];
+		const Ref<Terrain3DTextureAsset> pTa = m_textureList[index];
 		if ( pTa.is_null() ) {
 			m_textureSettings.colors[( size_t ) ( index )] = COLOR_WHITE;
 			m_textureSettings.normal_depths[( size_t ) ( index )] = 1.0f;
@@ -1657,47 +1657,47 @@ void T3DAssets::updateTextureSettingsInternal( const bool bPersistentChange ) {
 		std::copy_n( m_textureSettings.displacements.data(), count, m_textureDisplacements.ptrw() );
 	}
 
-	LOG( T3DTerrain::DEBUG, "Emitting textures_changed" );
+	LOG( Terrain3D::DEBUG, "Emitting textures_changed" );
 	if ( !m_bSuppressTextureChanged ) {
 		emit_signal( "textures_changed" );
 	}
 }
 
-void T3DAssets::updateTextureSettings( void ) {
+void Terrain3DAssets::updateTextureSettings( void ) {
 	updateTextureSettingsInternal( true );
 }
 
-void T3DAssets::updateTexturePreview( void ) {
+void Terrain3DAssets::updateTexturePreview( void ) {
 	updateTextureSettingsInternal( false );
 }
 
-void T3DAssets::updateMeshInternal( const int nId, const bool bPersistentChange ) {
+void Terrain3DAssets::updateMeshInternal( const int nId, const bool bPersistentChange ) {
 	if ( bPersistentChange ) {
 		m_bPersistenceDirty = true;
 	}
 	if ( nId < 0 || nId >= m_meshList.size() ) {
-		LOG( T3DTerrain::ERROR, "Invalid mesh ID: ", nId );
+		LOG( Terrain3D::ERROR, "Invalid mesh ID: ", nId );
 		return;
 	}
 	IS_INSTANCER_INIT( VOID );
-	T3DInstancer *const pInstancer = m_pTerrain->getInstancer();
+	Terrain3DInstancer *const pInstancer = m_pTerrain->getInstancer();
 	pInstancer->updateMmis( nId, V2I_MAX, false );
 }
 
-void T3DAssets::updateMesh( const int nId ) {
+void Terrain3DAssets::updateMesh( const int nId ) {
 	updateMeshInternal( nId, true );
 }
 
-void T3DAssets::updateMeshPreview( const int nId ) {
+void Terrain3DAssets::updateMeshPreview( const int nId ) {
 	updateMeshInternal( nId, false );
 }
 
-void T3DAssets::setupThumbnailCreation( void ) {
+void Terrain3DAssets::setupThumbnailCreation( void ) {
 	IS_INIT( VOID );
 	if ( m_scenario.is_valid() ) {
 		return;
 	}
-	LOG( T3DTerrain::INFO, "t3dsetting_t up mesh thumbnail creation viewports" );
+	LOG( Terrain3D::INFO, "t3dsetting_t up mesh thumbnail creation viewports" );
 	// Setup Mesh preview environment
 	m_scenario = RS->scenario_create();
 
@@ -1731,7 +1731,7 @@ void T3DAssets::setupThumbnailCreation( void ) {
 // Public Functions
 ///////////////////////////
 
-void T3DAssets::destroyThumbnailCreation( void ) {
+void Terrain3DAssets::destroyThumbnailCreation( void ) {
 	if ( !m_scenario.is_valid() ) {
 		return;
 	}
@@ -1754,7 +1754,7 @@ void T3DAssets::destroyThumbnailCreation( void ) {
 	m_scenario = RID();
 }
 
-void T3DAssets::setTexturePackingMode( const t3dtexturePackingMode_t eMode ) {
+void Terrain3DAssets::setTexturePackingMode( const t3dtexturePackingMode_t eMode ) {
 	const t3dtexturePackingMode_t mode =
 		( t3dtexturePackingMode_t ) ( CLAMP( ( int ) ( eMode ), ( int ) ( TEXTURE_PACKING_LEGACY ), ( int ) ( TEXTURE_PACKING_PACKED_PBR_R8 ) ) );
 	if ( m_texturePackingMode == mode ) {
@@ -1762,7 +1762,7 @@ void T3DAssets::setTexturePackingMode( const t3dtexturePackingMode_t eMode ) {
 	}
 	m_texturePackingMode = mode;
 	m_bPersistenceDirty = true;
-	for ( const Ref<T3DTextureAsset> pAsset : m_textureList ) {
+	for ( const Ref<Terrain3DTextureAsset> pAsset : m_textureList ) {
 		if ( pAsset.is_valid() ) {
 			pAsset->setPackedPbrMode( usesPackedPbr() );
 		}
@@ -1771,28 +1771,28 @@ void T3DAssets::setTexturePackingMode( const t3dtexturePackingMode_t eMode ) {
 	m_generatedNormalTextures.clear();
 	m_generatedSurfaceTextures.clear();
 	m_generatedDisplacementTextures.clear();
-	LOG( T3DTerrain::INFO, "t3dsetting_t texture packing mode: ", ( int ) ( m_texturePackingMode ) );
+	LOG( Terrain3D::INFO, "t3dsetting_t texture packing mode: ", ( int ) ( m_texturePackingMode ) );
 	if ( m_pTerrain ) {
 		updateTextureList();
-		Ref<T3DMaterial> pMaterial = m_pTerrain->getMaterial();
+		Ref<Terrain3DMaterial> pMaterial = m_pTerrain->getMaterial();
 		if ( pMaterial.is_valid() && pMaterial->isInitialized() ) {
-			pMaterial->update( T3DMaterial::FULL_REBUILD );
+			pMaterial->update( Terrain3DMaterial::FULL_REBUILD );
 		}
 	}
 	emit_changed();
 }
 
-void T3DAssets::initialize( T3DTerrain *pTerrain ) {
+void Terrain3DAssets::initialize( Terrain3D *pTerrain ) {
 	if ( pTerrain ) {
-		T3DTerrain *previous_owner = Terrain3DOwnership::transfer( m_pTerrain, pTerrain );
+		Terrain3D *previous_owner = Terrain3DOwnership::transfer( m_pTerrain, pTerrain );
 		if ( previous_owner && previous_owner != pTerrain ) {
-			LOG( T3DTerrain::INFO, "Transferring asset runtime ownership from ", previous_owner, " to ", pTerrain );
+			LOG( Terrain3D::INFO, "Transferring asset runtime ownership from ", previous_owner, " to ", pTerrain );
 		}
 	} else {
-		LOG( T3DTerrain::ERROR, "Initialization failed, p_terrain is null" );
+		LOG( Terrain3D::ERROR, "Initialization failed, p_terrain is null" );
 		return;
 	}
-	LOG( T3DTerrain::INFO, "Initializing assets" );
+	LOG( Terrain3D::INFO, "Initializing assets" );
 
 	// Runtime/Profile mode can load the cooked physical material working set
 	// directly. Building the full logical arrays first would create a large
@@ -1801,7 +1801,7 @@ void T3DAssets::initialize( T3DTerrain *pTerrain ) {
 	const bool strict_baked_runtime = m_pTerrain->isGpuRegionCookedPagesEnabled() &&
 		!m_pTerrain->isEditorAuthoringMode();
 	if ( m_pTerrain->isRuntimeMaterialStreamingEnabled() && !m_pTerrain->isEditorAuthoringMode() ) {
-		for ( const Ref<T3DTextureAsset> pAsset : m_textureList ) {
+		for ( const Ref<Terrain3DTextureAsset> pAsset : m_textureList ) {
 			if ( pAsset.is_valid() ) {
 				pAsset->setPackedPbrMode( usesPackedPbr() );
 				connectAssetSignals( TYPE_TEXTURE, pAsset );
@@ -1814,7 +1814,7 @@ void T3DAssets::initialize( T3DTerrain *pTerrain ) {
 	}
 	if ( !runtime_materials_ready ) {
 		if ( strict_baked_runtime && m_pTerrain->isRuntimeMaterialStreamingEnabled() ) {
-			LOG( T3DTerrain::ERROR, "Strict baked runtime material initialization failed; source texture fallback is disabled." );
+			LOG( Terrain3D::ERROR, "Strict baked runtime material initialization failed; source texture fallback is disabled." );
 		} else {
 			updateTextureList();
 		}
@@ -1823,20 +1823,20 @@ void T3DAssets::initialize( T3DTerrain *pTerrain ) {
 	m_bPersistenceDirty = false;
 }
 
-void T3DAssets::uninitialize( T3DTerrain *pTerrain ) {
+void Terrain3DAssets::uninitialize( Terrain3D *pTerrain ) {
 	if ( !Terrain3DOwnership::release( m_pTerrain, pTerrain ) ) {
-		LOG( T3DTerrain::DEBUG, "Ignoring stale asset uninitialize request from ", pTerrain, "; current owner: ", m_pTerrain );
+		LOG( Terrain3D::DEBUG, "Ignoring stale asset uninitialize request from ", pTerrain, "; current owner: ", m_pTerrain );
 		return;
 	}
-	LOG( T3DTerrain::INFO, "Uninitializing assets" );
+	LOG( Terrain3D::INFO, "Uninitializing assets" );
 }
 
-void T3DAssets::destroy( void ) {
-	LOG( T3DTerrain::INFO, "Destroying assets" );
-	for ( const Ref<T3DTextureAsset> pAsset : m_textureList ) {
+void Terrain3DAssets::destroy( void ) {
+	LOG( Terrain3D::INFO, "Destroying assets" );
+	for ( const Ref<Terrain3DTextureAsset> pAsset : m_textureList ) {
 		disconnectAssetSignals( TYPE_TEXTURE, pAsset );
 	}
-	for ( const Ref<T3DMeshAsset> pAsset : m_meshList ) {
+	for ( const Ref<Terrain3DMeshAsset> pAsset : m_meshList ) {
 		disconnectAssetSignals( TYPE_MESH, pAsset );
 	}
 	m_pTerrain = nullptr;
@@ -1861,25 +1861,25 @@ void T3DAssets::destroy( void ) {
 }
 
 // Called when creating a new asset
-void T3DAssets::setTextureAsset( const int nId, const Ref<T3DTextureAsset> &rTexture ) {
+void Terrain3DAssets::setTextureAsset( const int nId, const Ref<Terrain3DTextureAsset> &rTexture ) {
 	if ( nId < 0 || nId >= TERRAIN3D_MAX_TEXTURE_ASSETS ) {
-		LOG( T3DTerrain::ERROR, "Invalid texture id: ", nId, " range is 0-", TERRAIN3D_MAX_TEXTURE_ASSETS - 1 );
+		LOG( Terrain3D::ERROR, "Invalid texture id: ", nId, " range is 0-", TERRAIN3D_MAX_TEXTURE_ASSETS - 1 );
 		return;
 	}
 	if ( nId < m_textureList.size() && m_textureList[nId] == rTexture ) {
 		return;
 	}
-	LOG( T3DTerrain::INFO, "t3dsetting_t texture id: ", nId );
+	LOG( Terrain3D::INFO, "t3dsetting_t texture id: ", nId );
 	setAsset( TYPE_TEXTURE, nId, rTexture );
 	updateTextureList();
 }
 
 // Called when loading a list of assets from an assets resource file on disk
-TypedArray<T3DTextureAsset> T3DAssets::getTextureList( void ) const {
-	TypedArray<T3DTextureAsset> result;
+TypedArray<Terrain3DTextureAsset> Terrain3DAssets::getTextureList( void ) const {
+	TypedArray<Terrain3DTextureAsset> result;
 	result.resize( m_textureList.size() );
 	for ( int i = 0; i < m_textureList.size(); ++i ) {
-		const Ref<T3DTextureAsset> pAsset = m_textureList[i];
+		const Ref<Terrain3DTextureAsset> pAsset = m_textureList[i];
 		if ( pAsset.is_valid() && !pAsset->m_bPlaceholder ) {
 			result[i] = pAsset;
 		}
@@ -1887,8 +1887,8 @@ TypedArray<T3DTextureAsset> T3DAssets::getTextureList( void ) const {
 	return result;
 }
 
-void T3DAssets::setTextureList( const TypedArray<T3DTextureAsset> &rTextureList ) {
-	LOG( T3DTerrain::INFO, "t3dsetting_t texture list with ", rTextureList.size(), " entries" );
+void Terrain3DAssets::setTextureList( const TypedArray<Terrain3DTextureAsset> &rTextureList ) {
+	LOG( Terrain3D::INFO, "t3dsetting_t texture list with ", rTextureList.size(), " entries" );
 	if ( !differs( getTextureList(), rTextureList ) ) {
 		return;
 	}
@@ -1896,10 +1896,10 @@ void T3DAssets::setTextureList( const TypedArray<T3DTextureAsset> &rTextureList 
 	updateTextureList();
 }
 
-void T3DAssets::clearTextures( const bool bUpdate ) {
+void Terrain3DAssets::clearTextures( const bool bUpdate ) {
 	m_bPersistenceDirty = true;
-	LOG( T3DTerrain::INFO, "Clearing texture list" );
-	for ( const Ref<T3DTextureAsset> pAsset : m_textureList ) {
+	LOG( Terrain3D::INFO, "Clearing texture list" );
+	for ( const Ref<Terrain3DTextureAsset> pAsset : m_textureList ) {
 		disconnectAssetSignals( TYPE_TEXTURE, pAsset );
 	}
 	m_textureList.clear();
@@ -1908,9 +1908,9 @@ void T3DAssets::clearTextures( const bool bUpdate ) {
 	}
 }
 
-void T3DAssets::updateTextureList( void ) {
-	LOG( T3DTerrain::INFO, "Refreshing texture registry" );
-	for ( const Ref<T3DTextureAsset> pAsset : m_textureList ) {
+void Terrain3DAssets::updateTextureList( void ) {
+	LOG( Terrain3D::INFO, "Refreshing texture registry" );
+	for ( const Ref<Terrain3DTextureAsset> pAsset : m_textureList ) {
 		if ( pAsset.is_valid() ) {
 			pAsset->setPackedPbrMode( usesPackedPbr() );
 		}
@@ -1924,15 +1924,15 @@ void T3DAssets::updateTextureList( void ) {
 }
 
 // Called when creating a new asset
-void T3DAssets::setMeshAsset( const int nId, const Ref<T3DMeshAsset> &rMeshAsset ) {
+void Terrain3DAssets::setMeshAsset( const int nId, const Ref<Terrain3DMeshAsset> &rMeshAsset ) {
 	if ( nId < 0 || nId >= TERRAIN3D_MAX_MESH_ASSETS ) {
-		LOG( T3DTerrain::ERROR, "Invalid mesh id: ", nId, " range is 0-", TERRAIN3D_MAX_MESH_ASSETS - 1 );
+		LOG( Terrain3D::ERROR, "Invalid mesh id: ", nId, " range is 0-", TERRAIN3D_MAX_MESH_ASSETS - 1 );
 		return;
 	}
 	if ( nId < m_meshList.size() && m_meshList[nId] == rMeshAsset ) {
 		return;
 	}
-	LOG( T3DTerrain::INFO, "t3dsetting_t mesh id: ", nId, ", ", rMeshAsset );
+	LOG( Terrain3D::INFO, "t3dsetting_t mesh id: ", nId, ", ", rMeshAsset );
 	if ( rMeshAsset.is_null() ) {
 		IS_INSTANCER_INIT( VOID );
 		m_pTerrain->getInstancer()->clearByMesh( nId );
@@ -1945,11 +1945,11 @@ void T3DAssets::setMeshAsset( const int nId, const Ref<T3DMeshAsset> &rMeshAsset
 }
 
 // Called when loading a list of assets from an assets resource file on disk
-TypedArray<T3DMeshAsset> T3DAssets::getMeshList( void ) const {
-	TypedArray<T3DMeshAsset> result;
+TypedArray<Terrain3DMeshAsset> Terrain3DAssets::getMeshList( void ) const {
+	TypedArray<Terrain3DMeshAsset> result;
 	result.resize( m_meshList.size() );
 	for ( int i = 0; i < m_meshList.size(); ++i ) {
-		const Ref<T3DMeshAsset> pAsset = m_meshList[i];
+		const Ref<Terrain3DMeshAsset> pAsset = m_meshList[i];
 		if ( pAsset.is_valid() && !pAsset->m_bPlaceholder ) {
 			result[i] = pAsset;
 		}
@@ -1957,8 +1957,8 @@ TypedArray<T3DMeshAsset> T3DAssets::getMeshList( void ) const {
 	return result;
 }
 
-void T3DAssets::setMeshList( const TypedArray<T3DMeshAsset> &rMeshList ) {
-	LOG( T3DTerrain::INFO, "t3dsetting_t mesh list with ", rMeshList.size(), " entries" );
+void Terrain3DAssets::setMeshList( const TypedArray<Terrain3DMeshAsset> &rMeshList ) {
+	LOG( Terrain3D::INFO, "t3dsetting_t mesh list with ", rMeshList.size(), " entries" );
 	if ( !differs( getMeshList(), rMeshList ) ) {
 		return;
 	}
@@ -1971,15 +1971,15 @@ void T3DAssets::setMeshList( const TypedArray<T3DMeshAsset> &rMeshList ) {
 
 // p_id = -1 for all meshes
 // Adapted from godot\editor\plugins\editor_preview_plugins.cpp:EditorMeshPreviewPlugin
-void T3DAssets::createMeshThumbnails( const int nId, const Vector2i &rSize, const bool bForce ) {
+void Terrain3DAssets::createMeshThumbnails( const int nId, const Vector2i &rSize, const bool bForce ) {
 	if ( !IS_EDITOR ) {
 		return;
 	}
 	if ( m_pTerrain && !m_pTerrain->isAuthoringResidencyReadbackSafe() ) {
-		LOG( T3DTerrain::DEBUG, "Deferring mesh thumbnail GPU readback until Authoring residency is idle" );
+		LOG( Terrain3D::DEBUG, "Deferring mesh thumbnail GPU readback until Authoring residency is idle" );
 		return;
 	}
-	LOG( T3DTerrain::INFO, "Creating mesh thumbnails for ID: ", nId, ", size: ", rSize );
+	LOG( Terrain3D::INFO, "Creating mesh thumbnails for ID: ", nId, ", size: ", rSize );
 	const int max = getMeshCount();
 	if ( nId < -1 || nId >= max ) {
 		return;
@@ -1994,30 +1994,30 @@ void T3DAssets::createMeshThumbnails( const int nId, const Vector2i &rSize, cons
 	}
 	const Vector2i size = CLAMP( rSize, V2I( 2 ), V2I( 4096 ) );
 
-	LOG( T3DTerrain::DEBUG, "Creating thumbnails for ids: ", start, " through ", end - 1 );
+	LOG( Terrain3D::DEBUG, "Creating thumbnails for ids: ", start, " through ", end - 1 );
 	for ( int i = start; i < end; i++ ) {
-		Ref<T3DMeshAsset> pMa = getMeshAsset( i );
-		LOG( T3DTerrain::EXTREME, i, ": Getting Terrain3DMeshAsset: ", ptrToStr( *pMa ) );
+		Ref<Terrain3DMeshAsset> pMa = getMeshAsset( i );
+		LOG( Terrain3D::EXTREME, i, ": Getting Terrain3DMeshAsset: ", ptrToStr( *pMa ) );
 		if ( pMa.is_null() ) {
-			LOG( T3DTerrain::ERROR, i, ": Terrain3DMeshAsset is null, skipping" );
+			LOG( Terrain3D::ERROR, i, ": Terrain3DMeshAsset is null, skipping" );
 			continue;
 		}
 		if ( !bForce && pMa->getThumbnail().is_valid() ) {
-			LOG( T3DTerrain::EXTREME, "Thumbnail already generated, skipping" );
+			LOG( Terrain3D::EXTREME, "Thumbnail already generated, skipping" );
 			continue;
 		}
 		// Setup mesh
 		if ( !m_meshInstance.is_valid() ) {
 			setupThumbnailCreation();
 			if ( !m_meshInstance.is_valid() ) {
-				LOG( T3DTerrain::ERROR, "Mesh thumbnail preview resources could not be created" );
+				LOG( Terrain3D::ERROR, "Mesh thumbnail preview resources could not be created" );
 				break;
 			}
 		}
 		const Ref<Mesh> pMesh = pMa->getMesh( 0 );
-		LOG( T3DTerrain::EXTREME, i, ": Getting Mesh 0: ", pMesh );
+		LOG( Terrain3D::EXTREME, i, ": Getting Mesh 0: ", pMesh );
 		if ( pMesh.is_null() ) {
-			LOG( T3DTerrain::ERROR, i, ": Mesh is null, skipping" );
+			LOG( Terrain3D::ERROR, i, ": Mesh is null, skipping" );
 			continue;
 		}
 		RS->instance_set_base( m_meshInstance, pMesh->get_rid() );
@@ -2056,48 +2056,48 @@ void T3DAssets::createMeshThumbnails( const int nId, const Vector2i &rSize, cons
 		const Ref<Image> pImg = RS->texture_2d_get( m_viewportTexture );
 		RS->instance_set_base( m_meshInstance, RID() ); // Clear mesh
 		if ( pImg.is_valid() ) {
-			LOG( T3DTerrain::EXTREME, i, ": Retrieving image: ", pImg, " size: ", pImg->get_size(), " format: ", pImg->get_format() );
+			LOG( Terrain3D::EXTREME, i, ": Retrieving image: ", pImg, " size: ", pImg->get_size(), " format: ", pImg->get_format() );
 			pMa->setThumbnail( ImageTexture::create_from_image( pImg ) );
 		} else {
-			LOG( T3DTerrain::ERROR, "_viewport_texture is null. Couldn't create thumbnail picture" );
+			LOG( Terrain3D::ERROR, "_viewport_texture is null. Couldn't create thumbnail picture" );
 		}
 	}
 	destroyThumbnailCreation();
 }
 
-void T3DAssets::updateMeshList( void ) {
+void Terrain3DAssets::updateMeshList( void ) {
 	m_bPersistenceDirty = true;
 	IS_INSTANCER_INIT( VOID );
-	LOG( T3DTerrain::INFO, "Updating mesh registry" );
+	LOG( Terrain3D::INFO, "Updating mesh registry" );
 	if ( m_meshList.is_empty() ) {
-		LOG( T3DTerrain::DEBUG, "Mesh list empty, clearing instancer and adding a default mesh" );
+		LOG( Terrain3D::DEBUG, "Mesh list empty, clearing instancer and adding a default mesh" );
 		m_pTerrain->getInstancer()->destroy();
-		Ref<T3DMeshAsset> pNewAsset;
+		Ref<Terrain3DMeshAsset> pNewAsset;
 		pNewAsset.instantiate();
 		setMeshAsset( 0, pNewAsset );
 		return;
 	}
-	for ( const Ref<T3DMeshAsset> pAsset : m_meshList ) {
+	for ( const Ref<Terrain3DMeshAsset> pAsset : m_meshList ) {
 		connectAssetSignals( TYPE_MESH, pAsset );
 	}
 	emit_signal( "meshes_changed" );
 }
 
-void T3DAssets::loadPendingMeshes( void ) {
+void Terrain3DAssets::loadPendingMeshes( void ) {
 	// Reload meshes for all mesh assets that have changed. Used by the instancer after clearing
-	for ( const Ref<T3DMeshAsset> pMa : m_meshList ) {
+	for ( const Ref<Terrain3DMeshAsset> pMa : m_meshList ) {
 		if ( pMa.is_valid() && pMa->isSceneFilePending() ) {
 			pMa->commitMeshes();
 		}
 	}
 }
 
-Error T3DAssets::save( const String &rPath ) {
+Error Terrain3DAssets::save( const String &rPath ) {
 	if ( rPath.is_empty() && get_path().is_empty() ) {
 		return ERR_FILE_NOT_FOUND;
 	}
 	if ( !rPath.is_empty() ) {
-		LOG( T3DTerrain::DEBUG, "t3dsetting_t file path to ", rPath );
+		LOG( Terrain3D::DEBUG, "t3dsetting_t file path to ", rPath );
 		take_over_path( rPath );
 	}
 	// Avoid rewriting clean asset resources during scene pre-save. The nested
@@ -2110,11 +2110,11 @@ Error T3DAssets::save( const String &rPath ) {
 		if ( !explicit_path && !m_bPersistenceDirty && FileAccess::file_exists( path ) ) {
 			return OK;
 		}
-		LOG( T3DTerrain::DEBUG, "Attempting to save external file: " + path );
+		LOG( Terrain3D::DEBUG, "Attempting to save external file: " + path );
 		err = ResourceSaver::get_singleton()->save( this, path, ResourceSaver::FLAG_COMPRESS );
 		if ( err == OK ) {
 			m_bPersistenceDirty = false;
-			LOG( T3DTerrain::INFO, "File saved successfully: ", path );
+			LOG( Terrain3D::INFO, "File saved successfully: ", path );
 			if ( IS_EDITOR && path.begins_with( "res://" ) ) {
 				EditorFileSystem *const pFilesystem = EditorInterface::get_singleton()->get_resource_filesystem();
 				if ( pFilesystem && !pFilesystem->is_scanning() ) {
@@ -2122,7 +2122,7 @@ Error T3DAssets::save( const String &rPath ) {
 				}
 			}
 		} else {
-			LOG( T3DTerrain::ERROR, "Cannot save file: ", path, ". Error code: ", T3DTerrain::ERROR,
+			LOG( Terrain3D::ERROR, "Cannot save file: ", path, ". Error code: ", Terrain3D::ERROR,
 				". Look up @GlobalScope Error enum in the Godot docs" );
 		}
 	}
@@ -2133,7 +2133,7 @@ Error T3DAssets::save( const String &rPath ) {
 // Protected Functions
 ///////////////////////////
 
-void T3DAssets::_bind_methods( void ) {
+void Terrain3DAssets::_bind_methods( void ) {
 	BIND_ENUM_CONSTANT( TYPE_TEXTURE );
 	BIND_ENUM_CONSTANT( TYPE_MESH );
 	BIND_ENUM_CONSTANT( TEXTURE_PACKING_LEGACY );
@@ -2143,41 +2143,41 @@ void T3DAssets::_bind_methods( void ) {
 	BIND_CONSTANT( TERRAIN3D_MAX_TEXTURE_ASSETS );
 	BIND_CONSTANT( TERRAIN3D_MAX_MESH_ASSETS );
 
-	ClassDB::bind_method( D_METHOD( "set_texture_asset", "id", "texture" ), &T3DAssets::setTextureAsset );
-	ClassDB::bind_method( D_METHOD( "get_texture_asset", "id" ), &T3DAssets::getTextureAsset );
-	ClassDB::bind_method( D_METHOD( "set_texture_list", "texture_list" ), &T3DAssets::setTextureList );
-	ClassDB::bind_method( D_METHOD( "get_texture_list" ), &T3DAssets::getTextureList );
-	ClassDB::bind_method( D_METHOD( "get_texture_count" ), &T3DAssets::getTextureCount );
-	ClassDB::bind_method( D_METHOD( "get_albedo_array_rid" ), &T3DAssets::getAlbedoArrayRid );
-	ClassDB::bind_method( D_METHOD( "get_normal_array_rid" ), &T3DAssets::getNormalArrayRid );
-	ClassDB::bind_method( D_METHOD( "get_surface_array_rid" ), &T3DAssets::getSurfaceArrayRid );
-	ClassDB::bind_method( D_METHOD( "get_displacement_array_rid" ), &T3DAssets::getDisplacementArrayRid );
-	ClassDB::bind_method( D_METHOD( "get_pbr_array_rid" ), &T3DAssets::getPbrArrayRid );
-	ClassDB::bind_method( D_METHOD( "set_texture_packing_mode", "mode" ), &T3DAssets::setTexturePackingMode );
-	ClassDB::bind_method( D_METHOD( "get_texture_packing_mode" ), &T3DAssets::getTexturePackingMode );
-	ClassDB::bind_method( D_METHOD( "get_packed_pbr_mipmap_count" ), &T3DAssets::getPackedPbrMipmapCount );
-	ClassDB::bind_method( D_METHOD( "get_texture_colors" ), &T3DAssets::getTextureColors );
-	ClassDB::bind_method( D_METHOD( "get_texture_normal_depths" ), &T3DAssets::getTextureNormalDepths );
-	ClassDB::bind_method( D_METHOD( "get_texture_ao_strengths" ), &T3DAssets::getTextureAoStrengths );
-	ClassDB::bind_method( D_METHOD( "get_texture_ao_light_affects" ), &T3DAssets::getTextureAoLightAffects );
-	ClassDB::bind_method( D_METHOD( "get_texture_roughness_mods" ), &T3DAssets::getTextureRoughnessMods );
-	ClassDB::bind_method( D_METHOD( "get_texture_metallics" ), &T3DAssets::getTextureMetallics );
-	ClassDB::bind_method( D_METHOD( "get_texture_uv_scales" ), &T3DAssets::getTextureUvScales );
-	ClassDB::bind_method( D_METHOD( "get_texture_detiles" ), &T3DAssets::getTextureDetiles );
-	ClassDB::bind_method( D_METHOD( "get_texture_displacements" ), &T3DAssets::getTextureDisplacements );
-	ClassDB::bind_method( D_METHOD( "clear_textures", "update" ), &T3DAssets::clearTextures, DEFVAL( false ) );
-	ClassDB::bind_method( D_METHOD( "update_texture_list" ), &T3DAssets::updateTextureList );
+	ClassDB::bind_method( D_METHOD( "set_texture_asset", "id", "texture" ), &Terrain3DAssets::setTextureAsset );
+	ClassDB::bind_method( D_METHOD( "get_texture_asset", "id" ), &Terrain3DAssets::getTextureAsset );
+	ClassDB::bind_method( D_METHOD( "set_texture_list", "texture_list" ), &Terrain3DAssets::setTextureList );
+	ClassDB::bind_method( D_METHOD( "get_texture_list" ), &Terrain3DAssets::getTextureList );
+	ClassDB::bind_method( D_METHOD( "get_texture_count" ), &Terrain3DAssets::getTextureCount );
+	ClassDB::bind_method( D_METHOD( "get_albedo_array_rid" ), &Terrain3DAssets::getAlbedoArrayRid );
+	ClassDB::bind_method( D_METHOD( "get_normal_array_rid" ), &Terrain3DAssets::getNormalArrayRid );
+	ClassDB::bind_method( D_METHOD( "get_surface_array_rid" ), &Terrain3DAssets::getSurfaceArrayRid );
+	ClassDB::bind_method( D_METHOD( "get_displacement_array_rid" ), &Terrain3DAssets::getDisplacementArrayRid );
+	ClassDB::bind_method( D_METHOD( "get_pbr_array_rid" ), &Terrain3DAssets::getPbrArrayRid );
+	ClassDB::bind_method( D_METHOD( "set_texture_packing_mode", "mode" ), &Terrain3DAssets::setTexturePackingMode );
+	ClassDB::bind_method( D_METHOD( "get_texture_packing_mode" ), &Terrain3DAssets::getTexturePackingMode );
+	ClassDB::bind_method( D_METHOD( "get_packed_pbr_mipmap_count" ), &Terrain3DAssets::getPackedPbrMipmapCount );
+	ClassDB::bind_method( D_METHOD( "get_texture_colors" ), &Terrain3DAssets::getTextureColors );
+	ClassDB::bind_method( D_METHOD( "get_texture_normal_depths" ), &Terrain3DAssets::getTextureNormalDepths );
+	ClassDB::bind_method( D_METHOD( "get_texture_ao_strengths" ), &Terrain3DAssets::getTextureAoStrengths );
+	ClassDB::bind_method( D_METHOD( "get_texture_ao_light_affects" ), &Terrain3DAssets::getTextureAoLightAffects );
+	ClassDB::bind_method( D_METHOD( "get_texture_roughness_mods" ), &Terrain3DAssets::getTextureRoughnessMods );
+	ClassDB::bind_method( D_METHOD( "get_texture_metallics" ), &Terrain3DAssets::getTextureMetallics );
+	ClassDB::bind_method( D_METHOD( "get_texture_uv_scales" ), &Terrain3DAssets::getTextureUvScales );
+	ClassDB::bind_method( D_METHOD( "get_texture_detiles" ), &Terrain3DAssets::getTextureDetiles );
+	ClassDB::bind_method( D_METHOD( "get_texture_displacements" ), &Terrain3DAssets::getTextureDisplacements );
+	ClassDB::bind_method( D_METHOD( "clear_textures", "update" ), &Terrain3DAssets::clearTextures, DEFVAL( false ) );
+	ClassDB::bind_method( D_METHOD( "update_texture_list" ), &Terrain3DAssets::updateTextureList );
 
-	ClassDB::bind_method( D_METHOD( "set_mesh_asset", "id", "mesh" ), &T3DAssets::setMeshAsset );
-	ClassDB::bind_method( D_METHOD( "get_mesh_asset", "id" ), &T3DAssets::getMeshAsset );
-	ClassDB::bind_method( D_METHOD( "set_mesh_list", "mesh_list" ), &T3DAssets::setMeshList );
-	ClassDB::bind_method( D_METHOD( "get_mesh_list" ), &T3DAssets::getMeshList );
-	ClassDB::bind_method( D_METHOD( "get_mesh_count" ), &T3DAssets::getMeshCount );
+	ClassDB::bind_method( D_METHOD( "set_mesh_asset", "id", "mesh" ), &Terrain3DAssets::setMeshAsset );
+	ClassDB::bind_method( D_METHOD( "get_mesh_asset", "id" ), &Terrain3DAssets::getMeshAsset );
+	ClassDB::bind_method( D_METHOD( "set_mesh_list", "mesh_list" ), &Terrain3DAssets::setMeshList );
+	ClassDB::bind_method( D_METHOD( "get_mesh_list" ), &Terrain3DAssets::getMeshList );
+	ClassDB::bind_method( D_METHOD( "get_mesh_count" ), &Terrain3DAssets::getMeshCount );
 	ClassDB::bind_method( D_METHOD( "create_mesh_thumbnails", "id", "size", "force" ),
-						 &T3DAssets::createMeshThumbnails, DEFVAL( -1 ), DEFVAL( V2I( 256 ) ), DEFVAL( false ) );
-	ClassDB::bind_method( D_METHOD( "update_mesh_list" ), &T3DAssets::updateMeshList );
+						 &Terrain3DAssets::createMeshThumbnails, DEFVAL( -1 ), DEFVAL( V2I( 256 ) ), DEFVAL( false ) );
+	ClassDB::bind_method( D_METHOD( "update_mesh_list" ), &Terrain3DAssets::updateMeshList );
 
-	ClassDB::bind_method( D_METHOD( "save", "path" ), &T3DAssets::save, DEFVAL( "" ) );
+	ClassDB::bind_method( D_METHOD( "save", "path" ), &Terrain3DAssets::save, DEFVAL( "" ) );
 
 	const int ro_flags = PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY;
 	ADD_GROUP( "Packing / Runtime Format", "" );

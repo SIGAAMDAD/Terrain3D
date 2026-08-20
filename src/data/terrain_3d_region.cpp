@@ -57,16 +57,16 @@ bool imageIsDefaultColor( const Ref<Image> &rMap, const int nRegionSize ) {
 }
 
 int normalizeStreamedNodeBoundaryPolicy( const int nPolicy ) {
-	return nPolicy == T3DRegion::STREAMED_NODE_BOUNDARY_COVERAGE ?
-		T3DRegion::STREAMED_NODE_BOUNDARY_COVERAGE :
-		T3DRegion::STREAMED_NODE_BOUNDARY_ANCHOR;
+	return nPolicy == Terrain3DRegion::STREAMED_NODE_BOUNDARY_COVERAGE ?
+		Terrain3DRegion::STREAMED_NODE_BOUNDARY_COVERAGE :
+		Terrain3DRegion::STREAMED_NODE_BOUNDARY_ANCHOR;
 }
 
 void normalizeStreamedNodeCoverage(
 	const int nPolicy, const Vector2i &rInputMin, const Vector2i &rInputMax,
 	Vector2i &rOutputMin, Vector2i &rOutputMax
 ) {
-	if ( nPolicy != T3DRegion::STREAMED_NODE_BOUNDARY_COVERAGE ) {
+	if ( nPolicy != Terrain3DRegion::STREAMED_NODE_BOUNDARY_COVERAGE ) {
 		rOutputMin = V2I_ZERO;
 		rOutputMax = V2I_ZERO;
 		return;
@@ -78,16 +78,16 @@ void normalizeStreamedNodeCoverage(
 }
 
 int normalizeLightingClass( const int nClass ) {
-	return CLAMP( nClass, ( int ) ( T3DRegion::LIGHTING_CLASS_TERRAIN ), ( int ) ( T3DRegion::LIGHTING_CLASS_REGIONAL_OCCLUDER ) );
+	return CLAMP( nClass, ( int ) ( Terrain3DRegion::LIGHTING_CLASS_TERRAIN ), ( int ) ( Terrain3DRegion::LIGHTING_CLASS_REGIONAL_OCCLUDER ) );
 }
 
 int normalizeBakedLightingMode( const int nMode ) {
-	return CLAMP( nMode, ( int ) ( T3DRegion::BAKED_LIGHTING_DISABLED ), ( int ) ( T3DRegion::BAKED_LIGHTING_MATERIAL_ONLY ) );
+	return CLAMP( nMode, ( int ) ( Terrain3DRegion::BAKED_LIGHTING_DISABLED ), ( int ) ( Terrain3DRegion::BAKED_LIGHTING_MATERIAL_ONLY ) );
 }
 
 void storeStreamedNodeLighting( Dictionary &rEntry, const Dictionary &dictSource ) {
-	rEntry["lighting_class"] = normalizeLightingClass( dictSource.has( "lighting_class" ) ? ( int ) ( dictSource["lighting_class"] ) : ( int ) ( T3DRegion::LIGHTING_CLASS_MEDIUM_OBSTACLE ) );
-	rEntry["baked_lighting_mode"] = normalizeBakedLightingMode( dictSource.has( "baked_lighting_mode" ) ? ( int ) ( dictSource["baked_lighting_mode"] ) : ( int ) ( T3DRegion::BAKED_LIGHTING_LIGHTMAP ) );
+	rEntry["lighting_class"] = normalizeLightingClass( dictSource.has( "lighting_class" ) ? ( int ) ( dictSource["lighting_class"] ) : ( int ) ( Terrain3DRegion::LIGHTING_CLASS_MEDIUM_OBSTACLE ) );
+	rEntry["baked_lighting_mode"] = normalizeBakedLightingMode( dictSource.has( "baked_lighting_mode" ) ? ( int ) ( dictSource["baked_lighting_mode"] ) : ( int ) ( Terrain3DRegion::BAKED_LIGHTING_LIGHTMAP ) );
 	rEntry["contribute_baked_gi"] = dictSource.has( "contribute_baked_gi" ) ? ( bool ) ( dictSource["contribute_baked_gi"] ) : true;
 	rEntry["receive_dynamic_directional"] = dictSource.has( "receive_dynamic_directional" ) ? ( bool ) ( dictSource["receive_dynamic_directional"] ) : true;
 	rEntry["dynamic_shadow_eligible"] = dictSource.has( "dynamic_shadow_eligible" ) ? ( bool ) ( dictSource["dynamic_shadow_eligible"] ) : true;
@@ -117,13 +117,13 @@ void storeStreamedNodeBoundary(
 // Public Functions
 /////////////////////
 
-T3DRegion::T3DRegion( void ) {
+Terrain3DRegion::Terrain3DRegion( void ) {
 }
 
-T3DRegion::~T3DRegion( void ) {
+Terrain3DRegion::~Terrain3DRegion( void ) {
 }
 
-void T3DRegion::clear( void ) {
+void Terrain3DRegion::clear( void ) {
 	m_fVersion = 0.8f;
 	m_nRegionSize = 0;
 	m_heightRange = V2_ZERO;
@@ -154,7 +154,7 @@ void T3DRegion::clear( void ) {
 	m_location = V2I_MAX;
 }
 
-void T3DRegion::setVersion( const real_t fVersion ) {
+void Terrain3DRegion::setVersion( const real_t fVersion ) {
 	const real_t version = CLAMP( fVersion, 0.8f, 100.f );
 	if ( m_fVersion == version ) {
 		return;
@@ -164,16 +164,16 @@ void T3DRegion::setVersion( const real_t fVersion ) {
 		m_bModified = true;
 	}
 	m_fVersion = version;
-	LOG( T3DTerrain::DEBUG, vformat( "%.3f", m_fVersion ) );
+	LOG( Terrain3D::DEBUG, vformat( "%.3f", m_fVersion ) );
 	if ( m_fVersion < TERRAIN3D_DATA_CURRENT_VERSION ) {
-		LOG( T3DTerrain::WARN, "Region Data ", get_path(), " version ", vformat( "%.3f", m_fVersion ), " will be updated to ",
+		LOG( Terrain3D::WARN, "Region Data ", get_path(), " version ", vformat( "%.3f", m_fVersion ), " will be updated to ",
 			vformat( "%.3f", TERRAIN3D_DATA_CURRENT_VERSION ), " upon save" );
 	}
 }
 
-void T3DRegion::setRegionSize( const int nRegionSize ) {
+void Terrain3DRegion::setRegionSize( const int nRegionSize ) {
 	if ( !isValidRegionSize( nRegionSize ) ) {
-		LOG( T3DTerrain::ERROR, "Invalid region size: ", nRegionSize, ". Must be power of 2, 64-2048" );
+		LOG( Terrain3D::ERROR, "Invalid region size: ", nRegionSize, ". Must be power of 2, 64-2048" );
 		return;
 	}
 	// Mark modified if already initialized and we get a new value
@@ -186,69 +186,69 @@ void T3DRegion::setRegionSize( const int nRegionSize ) {
 			nRegionSize, TERRAIN3D_INSTANCE_DEFAULT_CELL_SIZE, default_layout ) ) {
 		m_instanceStore.setLayout( default_layout );
 	}
-	LOG( T3DTerrain::DEBUG, "t3dsetting_t region ", m_location, " size: ", nRegionSize );
+	LOG( Terrain3D::DEBUG, "t3dsetting_t region ", m_location, " size: ", nRegionSize );
 }
 
-void T3DRegion::setMap( const t3dmapType_t mapType, const Ref<Image> &rImage ) {
+void Terrain3DRegion::setMap( const t3dmapType_t mapType, const Ref<Image> &rImage ) {
 	switch ( mapType ) {
-		case T3DRegion::TYPE_HEIGHT:
+		case Terrain3DRegion::TYPE_HEIGHT:
 			setHeightMap( rImage );
 			break;
-		case T3DRegion::TYPE_CONTROL:
+		case Terrain3DRegion::TYPE_CONTROL:
 			setControlMap( rImage );
 			break;
-		case T3DRegion::TYPE_COLOR:
+		case Terrain3DRegion::TYPE_COLOR:
 			setColorMap( rImage );
 			break;
 		default:
-			LOG( T3DTerrain::ERROR, "Requested map type is invalid" );
+			LOG( Terrain3D::ERROR, "Requested map type is invalid" );
 			break;
 	}
 }
 
-Ref<Image> T3DRegion::getMap( const t3dmapType_t mapType ) const {
+Ref<Image> Terrain3DRegion::getMap( const t3dmapType_t mapType ) const {
 	switch ( mapType ) {
-		case T3DRegion::TYPE_HEIGHT:
+		case Terrain3DRegion::TYPE_HEIGHT:
 			return getHeightMap();
-		case T3DRegion::TYPE_CONTROL:
+		case Terrain3DRegion::TYPE_CONTROL:
 			return getControlMap();
-		case T3DRegion::TYPE_COLOR:
+		case Terrain3DRegion::TYPE_COLOR:
 			return getColorMap();
 		default:
-			LOG( T3DTerrain::ERROR, "Requested map type ", mapType, ", is invalid" );
+			LOG( Terrain3D::ERROR, "Requested map type ", mapType, ", is invalid" );
 			return Ref<Image>();
 	}
 }
 
-Image *T3DRegion::getMapPtr( const t3dmapType_t mapType ) const {
+Image *Terrain3DRegion::getMapPtr( const t3dmapType_t mapType ) const {
 	switch ( mapType ) {
-		case T3DRegion::TYPE_HEIGHT:
+		case Terrain3DRegion::TYPE_HEIGHT:
 			return m_pHeightMap.is_valid() ? *m_pHeightMap : nullptr;
-		case T3DRegion::TYPE_CONTROL:
+		case Terrain3DRegion::TYPE_CONTROL:
 			return m_pControlMap.is_valid() ? *m_pControlMap : nullptr;
-		case T3DRegion::TYPE_COLOR:
+		case Terrain3DRegion::TYPE_COLOR:
 			return m_pColorMap.is_valid() ? *m_pColorMap : nullptr;
 		default:
-			LOG( T3DTerrain::ERROR, "Requested map type ", mapType, ", is invalid" );
+			LOG( Terrain3D::ERROR, "Requested map type ", mapType, ", is invalid" );
 			return nullptr;
 	}
 }
 
-Ref<Image> T3DRegion::materializeMap( const t3dmapType_t mapType ) {
+Ref<Image> Terrain3DRegion::materializeMap( const t3dmapType_t mapType ) {
 	Ref<Image> pMap = getMap( mapType );
 	if ( pMap.is_valid() ) {
 		return pMap;
 	}
 	if ( !isValidRegionSize( m_nRegionSize ) ) {
-		LOG( T3DTerrain::ERROR, "Cannot materialize map before region_size is valid" );
+		LOG( Terrain3D::ERROR, "Cannot materialize map before region_size is valid" );
 		return Ref<Image>();
 	}
-	if ( mapType == T3DRegion::TYPE_HEIGHT ) {
+	if ( mapType == Terrain3DRegion::TYPE_HEIGHT ) {
 		pMap = Util::getFilledImage( V2I( m_nRegionSize ), Terrain3DRegionCodec::defaultHeightColor(), false,
 							 Image::FORMAT_R16 );
-	} else if ( mapType == T3DRegion::TYPE_CONTROL ) {
+	} else if ( mapType == Terrain3DRegion::TYPE_CONTROL ) {
 		pMap = Util::getFilledImage( V2I( m_nRegionSize ), COLOR_CONTROL, false, Image::FORMAT_RF );
-	} else if ( mapType == T3DRegion::TYPE_COLOR ) {
+	} else if ( mapType == Terrain3DRegion::TYPE_COLOR ) {
 		// CPU region color maps retain only their base level. GPU publication creates
 		// a temporary mipmapped copy, avoiding 33% permanent CPU mip overhead.
 		pMap = Util::getFilledImage( V2I( m_nRegionSize ), COLOR_ROUGHNESS, false, Image::FORMAT_RGBA8 );
@@ -262,37 +262,37 @@ Ref<Image> T3DRegion::materializeMap( const t3dmapType_t mapType ) {
 	// persistent assignment but would make an implicit channel impossible to edit.
 	// Merely allocating the writable image is not itself an authored edit; callers
 	// commit or compact it after they know whether any texel actually changed.
-	if ( mapType == T3DRegion::TYPE_HEIGHT ) {
+	if ( mapType == Terrain3DRegion::TYPE_HEIGHT ) {
 		setHeightMap( pMap );
 		return getHeightMap();
-	} else if ( mapType == T3DRegion::TYPE_CONTROL ) {
+	} else if ( mapType == Terrain3DRegion::TYPE_CONTROL ) {
 		m_pControlMap = pMap;
 		m_nChannelFlags |= CHANNEL_CONTROL;
-	} else if ( mapType == T3DRegion::TYPE_COLOR ) {
+	} else if ( mapType == Terrain3DRegion::TYPE_COLOR ) {
 		m_pColorMap = pMap;
 		m_nChannelFlags |= CHANNEL_COLOR;
 	}
 	return pMap;
 }
 
-Image *T3DRegion::getMapPtrForWrite( const t3dmapType_t mapType ) {
+Image *Terrain3DRegion::getMapPtrForWrite( const t3dmapType_t mapType ) {
 	Ref<Image> pMap = materializeMap( mapType );
 	return pMap.is_valid() ? *pMap : nullptr;
 }
 
-void T3DRegion::setMaps( const TypedArray<Image> &rMaps ) {
-	if ( rMaps.size() != T3DRegion::TYPE_MAX ) {
-		LOG( T3DTerrain::ERROR, "Expected ", T3DRegion::TYPE_MAX - 1, " maps. Received ", rMaps.size() );
+void Terrain3DRegion::setMaps( const TypedArray<Image> &rMaps ) {
+	if ( rMaps.size() != Terrain3DRegion::TYPE_MAX ) {
+		LOG( Terrain3D::ERROR, "Expected ", Terrain3DRegion::TYPE_MAX - 1, " maps. Received ", rMaps.size() );
 		return;
 	}
 	m_nRegionSize = 0;
-	setHeightMap( rMaps[T3DRegion::TYPE_HEIGHT] );
-	setControlMap( rMaps[T3DRegion::TYPE_CONTROL] );
-	setColorMap( rMaps[T3DRegion::TYPE_COLOR] );
+	setHeightMap( rMaps[Terrain3DRegion::TYPE_HEIGHT] );
+	setControlMap( rMaps[Terrain3DRegion::TYPE_CONTROL] );
+	setColorMap( rMaps[Terrain3DRegion::TYPE_COLOR] );
 }
 
-TypedArray<Image> T3DRegion::getMaps( void ) const {
-	LOG( T3DTerrain::DEBUG, "Retrieving maps from region: ", m_location );
+TypedArray<Image> Terrain3DRegion::getMaps( void ) const {
+	LOG( Terrain3D::DEBUG, "Retrieving maps from region: ", m_location );
 	TypedArray<Image> maps;
 	maps.push_back( m_pHeightMap );
 	maps.push_back( m_pControlMap );
@@ -300,15 +300,15 @@ TypedArray<Image> T3DRegion::getMaps( void ) const {
 	return maps;
 }
 
-void T3DRegion::setHeightMap( const Ref<Image> &rMap ) {
-	LOG( T3DTerrain::DEBUG, "t3dsetting_t height map for region: ", ( m_location.x != INT32_MAX ) ? String( m_location ) : "(new)" );
+void Terrain3DRegion::setHeightMap( const Ref<Image> &rMap ) {
+	LOG( Terrain3D::DEBUG, "t3dsetting_t height map for region: ", ( m_location.x != INT32_MAX ) ? String( m_location ) : "(new)" );
 	if ( m_nRegionSize == 0 && rMap.is_valid() ) {
 		setRegionSize( rMap->get_width() );
 	}
 	const Ref<Image> pOldMap = m_pHeightMap;
-	const Ref<Image> pMap = sanitizeMap( T3DRegion::TYPE_HEIGHT, rMap );
+	const Ref<Image> pMap = sanitizeMap( Terrain3DRegion::TYPE_HEIGHT, rMap );
 	if ( rMap.is_valid() && pMap.is_null() ) {
-		LOG( T3DTerrain::ERROR, "Height map assignment was rejected; existing region storage remains unchanged" );
+		LOG( Terrain3D::ERROR, "Height map assignment was rejected; existing region storage remains unchanged" );
 		return;
 	}
 	if ( pOldMap == pMap ) {
@@ -321,13 +321,13 @@ void T3DRegion::setHeightMap( const Ref<Image> &rMap ) {
 	calcHeightRange();
 }
 
-void T3DRegion::setControlMap( const Ref<Image> &rMap ) {
-	LOG( T3DTerrain::DEBUG, "t3dsetting_t control map for region: ", ( m_location.x != INT32_MAX ) ? String( m_location ) : "(new)" );
+void Terrain3DRegion::setControlMap( const Ref<Image> &rMap ) {
+	LOG( Terrain3D::DEBUG, "t3dsetting_t control map for region: ", ( m_location.x != INT32_MAX ) ? String( m_location ) : "(new)" );
 	if ( m_nRegionSize == 0 && rMap.is_valid() ) {
 		setRegionSize( rMap->get_width() );
 	}
 	const Ref<Image> pOldMap = m_pControlMap;
-	Ref<Image> pMap = sanitizeMap( T3DRegion::TYPE_CONTROL, rMap );
+	Ref<Image> pMap = sanitizeMap( Terrain3DRegion::TYPE_CONTROL, rMap );
 	if ( imageIsDefaultControl( pMap, m_nRegionSize ) ) {
 		pMap.unref();
 	}
@@ -344,13 +344,13 @@ void T3DRegion::setControlMap( const Ref<Image> &rMap ) {
 	m_bModified = true;
 }
 
-void T3DRegion::setColorMap( const Ref<Image> &rMap ) {
-	LOG( T3DTerrain::DEBUG, "t3dsetting_t color map for region: ", ( m_location.x != INT32_MAX ) ? String( m_location ) : "(new)" );
+void Terrain3DRegion::setColorMap( const Ref<Image> &rMap ) {
+	LOG( Terrain3D::DEBUG, "t3dsetting_t color map for region: ", ( m_location.x != INT32_MAX ) ? String( m_location ) : "(new)" );
 	if ( m_nRegionSize == 0 && rMap.is_valid() ) {
 		setRegionSize( rMap->get_width() );
 	}
 	const Ref<Image> pOldMap = m_pColorMap;
-	Ref<Image> pMap = sanitizeMap( T3DRegion::TYPE_COLOR, rMap );
+	Ref<Image> pMap = sanitizeMap( Terrain3DRegion::TYPE_COLOR, rMap );
 	if ( imageIsDefaultColor( pMap, m_nRegionSize ) ) {
 		pMap.unref();
 	}
@@ -367,7 +367,7 @@ void T3DRegion::setColorMap( const Ref<Image> &rMap ) {
 	m_bModified = true;
 }
 
-void T3DRegion::setChannelFlags( const int nFlags ) {
+void Terrain3DRegion::setChannelFlags( const int nFlags ) {
 	uint8_t flags = ( uint8_t ) ( nFlags ) & CHANNEL_MASK;
 	// Image payloads are authoritative when present. This makes property load
 	// order irrelevant for old and new .res files.
@@ -383,7 +383,7 @@ void T3DRegion::setChannelFlags( const int nFlags ) {
 	m_nChannelFlags = flags;
 }
 
-void T3DRegion::setDerivedNormalSlopeMapInternal( const Ref<Image> &rMap ) {
+void Terrain3DRegion::setDerivedNormalSlopeMapInternal( const Ref<Image> &rMap ) {
 	if ( rMap.is_null() || rMap->get_width() != m_nRegionSize || rMap->get_height() != m_nRegionSize ||
 		rMap->get_format() != Image::FORMAT_RG8 ) {
 		m_pDerivedNormalSlopeMap.unref();
@@ -395,12 +395,12 @@ void T3DRegion::setDerivedNormalSlopeMapInternal( const Ref<Image> &rMap ) {
 	m_nChannelFlags |= CHANNEL_DERIVED;
 }
 
-void T3DRegion::sanitizeMaps( void ) {
+void Terrain3DRegion::sanitizeMaps( void ) {
 	if ( m_nRegionSize == 0 ) { // blank region, no set_*_map has been called
-		LOG( T3DTerrain::ERROR, "Set region_size first" );
+		LOG( Terrain3D::ERROR, "Set region_size first" );
 		return;
 	}
-	Ref<Image> pMap = sanitizeMap( T3DRegion::TYPE_HEIGHT, m_pHeightMap );
+	Ref<Image> pMap = sanitizeMap( Terrain3DRegion::TYPE_HEIGHT, m_pHeightMap );
 	if ( m_pHeightMap != pMap ) {
 		m_bRuntimeMapsModified = true;
 		m_bModified = true;
@@ -408,7 +408,7 @@ void T3DRegion::sanitizeMaps( void ) {
 	m_pHeightMap = pMap;
 	m_bDerivedNormalSlopeValid = false;
 	if ( m_pControlMap.is_valid() ) {
-		pMap = sanitizeMap( T3DRegion::TYPE_CONTROL, m_pControlMap );
+		pMap = sanitizeMap( Terrain3DRegion::TYPE_CONTROL, m_pControlMap );
 		if ( m_pControlMap != pMap ) {
 			m_bRuntimeMapsModified = true;
 			m_bModified = true;
@@ -416,7 +416,7 @@ void T3DRegion::sanitizeMaps( void ) {
 		m_pControlMap = pMap;
 	}
 	if ( m_pColorMap.is_valid() ) {
-		pMap = sanitizeMap( T3DRegion::TYPE_COLOR, m_pColorMap );
+		pMap = sanitizeMap( Terrain3DRegion::TYPE_COLOR, m_pColorMap );
 		if ( m_pColorMap != pMap ) {
 			m_bRuntimeMapsModified = true;
 			m_bModified = true;
@@ -427,24 +427,24 @@ void T3DRegion::sanitizeMaps( void ) {
 	compactDefaultMaps();
 }
 
-bool T3DRegion::isMapDefault( const t3dmapType_t mapType ) const {
+bool Terrain3DRegion::isMapDefault( const t3dmapType_t mapType ) const {
 	switch ( mapType ) {
-		case T3DRegion::TYPE_CONTROL:
+		case Terrain3DRegion::TYPE_CONTROL:
 			return m_pControlMap.is_null() || imageIsDefaultControl( m_pControlMap, m_nRegionSize );
-		case T3DRegion::TYPE_COLOR:
+		case Terrain3DRegion::TYPE_COLOR:
 			return m_pColorMap.is_null() || imageIsDefaultColor( m_pColorMap, m_nRegionSize );
 		default:
 			return false;
 	}
 }
 
-bool T3DRegion::compactMapIfDefault( const t3dmapType_t mapType, const bool bMarkModified ) {
+bool Terrain3DRegion::compactMapIfDefault( const t3dmapType_t mapType, const bool bMarkModified ) {
 	Ref<Image> *pMap = nullptr;
 	switch ( mapType ) {
-		case T3DRegion::TYPE_CONTROL:
+		case Terrain3DRegion::TYPE_CONTROL:
 			pMap = &m_pControlMap;
 			break;
-		case T3DRegion::TYPE_COLOR:
+		case Terrain3DRegion::TYPE_COLOR:
 			pMap = &m_pColorMap;
 			break;
 		default:
@@ -454,9 +454,9 @@ bool T3DRegion::compactMapIfDefault( const t3dmapType_t mapType, const bool bMar
 		return false;
 	}
 	pMap->unref();
-	if ( mapType == T3DRegion::TYPE_CONTROL ) {
+	if ( mapType == Terrain3DRegion::TYPE_CONTROL ) {
 		m_nChannelFlags &= ( uint8_t ) ( ~CHANNEL_CONTROL );
-	} else if ( mapType == T3DRegion::TYPE_COLOR ) {
+	} else if ( mapType == Terrain3DRegion::TYPE_COLOR ) {
 		m_nChannelFlags &= ( uint8_t ) ( ~CHANNEL_COLOR );
 	}
 	if ( bMarkModified ) {
@@ -466,41 +466,41 @@ bool T3DRegion::compactMapIfDefault( const t3dmapType_t mapType, const bool bMar
 	return true;
 }
 
-void T3DRegion::compactDefaultMaps( void ) {
-	compactMapIfDefault( T3DRegion::TYPE_CONTROL );
-	compactMapIfDefault( T3DRegion::TYPE_COLOR );
+void Terrain3DRegion::compactDefaultMaps( void ) {
+	compactMapIfDefault( Terrain3DRegion::TYPE_CONTROL );
+	compactMapIfDefault( Terrain3DRegion::TYPE_COLOR );
 }
 
-void T3DRegion::markMapEdited( const t3dmapType_t mapType, const bool bRecalculateHeightRange ) {
-	if ( mapType < T3DRegion::TYPE_HEIGHT || mapType >= T3DRegion::TYPE_MAX ) {
-		LOG( T3DTerrain::ERROR, "Invalid map type: ", mapType );
+void Terrain3DRegion::markMapEdited( const t3dmapType_t mapType, const bool bRecalculateHeightRange ) {
+	if ( mapType < Terrain3DRegion::TYPE_HEIGHT || mapType >= Terrain3DRegion::TYPE_MAX ) {
+		LOG( Terrain3D::ERROR, "Invalid map type: ", mapType );
 		return;
 	}
 	m_bRuntimeMapsModified = true;
 	m_bModified = true;
 	m_bEdited = true;
-	if ( mapType == T3DRegion::TYPE_HEIGHT ) {
+	if ( mapType == Terrain3DRegion::TYPE_HEIGHT ) {
 		m_bDerivedNormalSlopeValid = false;
 	}
-	if ( mapType == T3DRegion::TYPE_HEIGHT && bRecalculateHeightRange ) {
+	if ( mapType == Terrain3DRegion::TYPE_HEIGHT && bRecalculateHeightRange ) {
 		calcHeightRange();
 	}
 }
 
-Ref<Image> T3DRegion::sanitizeMap( const t3dmapType_t mapType, const Ref<Image> &rMap ) const {
-	LOG( T3DTerrain::DEBUG, "Sanitizing map type: ", mapType, ", map: ", rMap );
+Ref<Image> Terrain3DRegion::sanitizeMap( const t3dmapType_t mapType, const Ref<Image> &rMap ) const {
+	LOG( Terrain3D::DEBUG, "Sanitizing map type: ", mapType, ", map: ", rMap );
 	if ( !isValidRegionSize( m_nRegionSize ) ) {
-		LOG( T3DTerrain::ERROR, "Invalid region size: ", m_nRegionSize, ". Set it or set a map first. Must be power of 2, 64-2048" );
+		LOG( Terrain3D::ERROR, "Invalid region size: ", m_nRegionSize, ". Set it or set a map first. Must be power of 2, 64-2048" );
 		return Ref<Image>();
 	}
-	if ( mapType != T3DRegion::TYPE_HEIGHT && rMap.is_null() ) {
+	if ( mapType != Terrain3DRegion::TYPE_HEIGHT && rMap.is_null() ) {
 		// Missing control/color maps are implicit defaults until first write.
 		return Ref<Image>();
 	}
-	if ( mapType == T3DRegion::TYPE_HEIGHT ) {
+	if ( mapType == Terrain3DRegion::TYPE_HEIGHT ) {
 		if ( rMap.is_valid() && rMap->get_format() == Image::FORMAT_R16 &&
 			!Terrain3DRegionCodec::hasValidHeightPayload( rMap, m_nRegionSize ) ) {
-			LOG( T3DTerrain::ERROR, "Rejected malformed R16 height payload for region ", m_location, ": expected ",
+			LOG( Terrain3D::ERROR, "Rejected malformed R16 height payload for region ", m_location, ": expected ",
 				Terrain3DRegionCodec::expectedHeightByteCount( m_nRegionSize, Image::FORMAT_R16 ), " bytes, received ",
 				rMap->get_data().size() );
 			return Ref<Image>();
@@ -511,11 +511,11 @@ Ref<Image> T3DRegion::sanitizeMap( const t3dmapType_t mapType, const Ref<Image> 
 		Ref<Image> pConverted =
 			Terrain3DRegionCodec::convertHeightToR16( rMap, m_nRegionSize, clamped_count, non_finite_count );
 		if ( rMap.is_valid() && rMap->get_format() == Image::FORMAT_RF && pConverted.is_valid() ) {
-			LOG( T3DTerrain::INFO, "Converted internal RF32 height storage to R16 for region ", m_location, " (",
+			LOG( Terrain3D::INFO, "Converted internal RF32 height storage to R16 for region ", m_location, " (",
 				m_nRegionSize * m_nRegionSize, " samples)" );
 		}
 		if ( clamped_count > 0u || non_finite_count > 0u ) {
-			LOG( T3DTerrain::WARN, "R16 height conversion for region ", m_location, " clamped ", clamped_count,
+			LOG( Terrain3D::WARN, "R16 height conversion for region ", m_location, " clamped ", clamped_count,
 				" samples and replaced ", non_finite_count, " non-finite samples" );
 		}
 		return pConverted;
@@ -528,30 +528,30 @@ Ref<Image> T3DRegion::sanitizeMap( const t3dmapType_t mapType, const Ref<Image> 
 	if ( rMap.is_valid() ) {
 		if ( validateMapSize( rMap ) ) {
 			if ( rMap->get_format() == format ) {
-				LOG( T3DTerrain::DEBUG, "Map type ", type_str, " correct format, size. Mipmaps: ", rMap->has_mipmaps() );
+				LOG( Terrain3D::DEBUG, "Map type ", type_str, " correct format, size. Mipmaps: ", rMap->has_mipmaps() );
 				pMap = rMap;
 			} else {
-				LOG( T3DTerrain::DEBUG, "Provided ", type_str, " map wrong format: ", rMap->get_format(),
+				LOG( Terrain3D::DEBUG, "Provided ", type_str, " map wrong format: ", rMap->get_format(),
 					". Converting copy to: ", format );
 				pMap.instantiate();
 				pMap->copy_from( rMap );
 				pMap->convert( format );
 				if ( pMap->get_format() != format ) {
-					LOG( T3DTerrain::DEBUG, "Cannot convert image to format: ", format, ". Creating blank " );
+					LOG( Terrain3D::DEBUG, "Cannot convert image to format: ", format, ". Creating blank " );
 					pMap.unref();
 				}
 			}
 		} else {
-			LOG( T3DTerrain::DEBUG, "Provided ", type_str, " map wrong size: ", rMap->get_size(), ". Creating blank" );
+			LOG( Terrain3D::DEBUG, "Provided ", type_str, " map wrong size: ", rMap->get_size(), ". Creating blank" );
 		}
 	} else {
-		LOG( T3DTerrain::DEBUG, "No provided ", type_str, " map. Creating blank" );
+		LOG( Terrain3D::DEBUG, "No provided ", type_str, " map. Creating blank" );
 	}
 	if ( pMap.is_null() ) {
-		LOG( T3DTerrain::DEBUG, "Making new image of type: ", type_str );
+		LOG( Terrain3D::DEBUG, "Making new image of type: ", type_str );
 		return Util::getFilledImage( V2I( m_nRegionSize ), color, false, format );
 	}
-	if ( mapType == T3DRegion::TYPE_COLOR && pMap->has_mipmaps() ) {
+	if ( mapType == Terrain3DRegion::TYPE_COLOR && pMap->has_mipmaps() ) {
 		Ref<Image> pBaseOnly;
 		pBaseOnly.instantiate();
 		pBaseOnly->copy_from( pMap );
@@ -561,37 +561,37 @@ Ref<Image> T3DRegion::sanitizeMap( const t3dmapType_t mapType, const Ref<Image> 
 	return pMap;
 }
 
-bool T3DRegion::validateMapSize( const Ref<Image> &rMap ) const {
+bool Terrain3DRegion::validateMapSize( const Ref<Image> &rMap ) const {
 	const Vector2i region_sizev = rMap->get_size();
 	if ( region_sizev.x != region_sizev.y ) {
-		LOG( T3DTerrain::ERROR, "Image width doesn't match height: ", region_sizev );
+		LOG( Terrain3D::ERROR, "Image width doesn't match height: ", region_sizev );
 		return false;
 	}
 	if ( !isValidRegionSize( region_sizev.x ) || !isValidRegionSize( region_sizev.y ) ) {
-		LOG( T3DTerrain::ERROR, "Invalid image size: ", region_sizev, ". Must be power of 2, 64-2048 and square" );
+		LOG( Terrain3D::ERROR, "Invalid image size: ", region_sizev, ". Must be power of 2, 64-2048 and square" );
 		return false;
 	}
 	if ( m_nRegionSize != region_sizev.x || m_nRegionSize != region_sizev.y ) {
-		LOG( T3DTerrain::ERROR, "Image size doesn't match existing images in this region", region_sizev );
+		LOG( Terrain3D::ERROR, "Image size doesn't match existing images in this region", region_sizev );
 		return false;
 	}
 	return true;
 }
 
-void T3DRegion::setHeightRange( const Vector2 &rRange ) {
+void Terrain3DRegion::setHeightRange( const Vector2 &rRange ) {
 	if ( differs( m_heightRange, rRange ) ) {
 		// Mark modified if setting after initialization
 		if ( !m_heightRange.is_zero_approx() ) {
 			m_bModified = true;
 		}
 		m_heightRange = rRange;
-		LOG( T3DTerrain::DEBUG, vformat( "%.2v", rRange ) );
+		LOG( Terrain3D::DEBUG, vformat( "%.2v", rRange ) );
 	} else {
 		return;
 	};
 }
 
-void T3DRegion::updateHeight( const real_t fHeight ) {
+void Terrain3DRegion::updateHeight( const real_t fHeight ) {
 	if ( fHeight < m_heightRange.x ) {
 		m_heightRange.x = fHeight;
 		m_bModified = true;
@@ -601,7 +601,7 @@ void T3DRegion::updateHeight( const real_t fHeight ) {
 	}
 }
 
-void T3DRegion::updateHeights( const Vector2 &rLowHigh ) {
+void Terrain3DRegion::updateHeights( const Vector2 &rLowHigh ) {
 	if ( rLowHigh.x < m_heightRange.x ) {
 		m_heightRange.x = rLowHigh.x;
 		m_bModified = true;
@@ -612,17 +612,17 @@ void T3DRegion::updateHeights( const Vector2 &rLowHigh ) {
 	}
 }
 
-void T3DRegion::calcHeightRange( void ) {
+void Terrain3DRegion::calcHeightRange( void ) {
 	const Vector2 range = Terrain3DRegionCodec::getHeightMinMax( m_pHeightMap );
 	if ( m_heightRange != range ) {
 		m_heightRange = range;
 		m_bModified = true;
-		LOG( T3DTerrain::DEBUG, "Recalculated new height range: ", m_heightRange,
+		LOG( Terrain3D::DEBUG, "Recalculated new height range: ", m_heightRange,
 			" for region: ", ( m_location.x != INT32_MAX ) ? String( m_location ) : "(new)", ". Marking modified" );
 	}
 }
 
-void T3DRegion::adoptCookedRuntimeMapsInternal(
+void Terrain3DRegion::adoptCookedRuntimeMapsInternal(
 	const Ref<Image> &rHeight, const Ref<Image> &rControl, const Ref<Image> &rColor, const Ref<Image> &rDerived
 ) {
 	if ( rHeight.is_null() || rHeight->get_width() != m_nRegionSize || rHeight->get_height() != m_nRegionSize ) {
@@ -640,7 +640,7 @@ void T3DRegion::adoptCookedRuntimeMapsInternal(
 	m_bRuntimeMapsModified = false;
 }
 
-void T3DRegion::importRuntimeMapsUnmodified( const T3DRegion *pSource ) {
+void Terrain3DRegion::importRuntimeMapsUnmodified( const Terrain3DRegion *pSource ) {
 	if ( !pSource || pSource->m_nRegionSize != m_nRegionSize ) {
 		return;
 	}
@@ -656,7 +656,7 @@ void T3DRegion::importRuntimeMapsUnmodified( const T3DRegion *pSource ) {
 	}
 }
 
-void T3DRegion::releaseRuntimeMapsUnmodified( void ) {
+void Terrain3DRegion::releaseRuntimeMapsUnmodified( void ) {
 	m_pHeightMap.unref();
 	m_pControlMap.unref();
 	m_pColorMap.unref();
@@ -664,25 +664,25 @@ void T3DRegion::releaseRuntimeMapsUnmodified( void ) {
 	m_bDerivedNormalSlopeValid = false;
 }
 
-void T3DRegion::markRuntimeMapsClean( void ) {
+void Terrain3DRegion::markRuntimeMapsClean( void ) {
 	m_bRuntimeMapsModified = false;
 }
 
-bool T3DRegion::hasRuntimeMapPayload( void ) const {
+bool Terrain3DRegion::hasRuntimeMapPayload( void ) const {
 	return m_pHeightMap.is_valid();
 }
 
-bool T3DRegion::runtimeMapsEvictable( void ) const {
+bool Terrain3DRegion::runtimeMapsEvictable( void ) const {
 	return !m_bRuntimeMapsModified && !m_bEdited && !m_bDeleted && !get_path().is_empty();
 }
 
-void T3DRegion::clearInstanceMetadata( void ) const {
+void Terrain3DRegion::clearInstanceMetadata( void ) const {
 	std::memset( m_szInstanceMeshCounts, 0, sizeof( m_szInstanceMeshCounts ) );
 	m_nInstanceCount = 0u;
 	m_nInstanceMeshCount = 0u;
 }
 
-bool T3DRegion::encodeInstancePage( void ) const {
+bool Terrain3DRegion::encodeInstancePage( void ) const {
 	if ( !m_bInstanceStoreResident ) {
 		return true;
 	}
@@ -694,7 +694,7 @@ bool T3DRegion::encodeInstancePage( void ) const {
 	uint16_t mesh_count = 0u;
 	uint32_t mesh_counts[TERRAIN3D_MAX_MESH_ASSETS] = {};
 	if ( !T3DInstancePageCodec::encode( m_instanceStore, page, mesh_counts, instance_count, mesh_count ) ) {
-		LOG( T3DTerrain::ERROR, "Failed encoding instance page for region ", m_location );
+		LOG( Terrain3D::ERROR, "Failed encoding instance page for region ", m_location );
 		return false;
 	}
 	m_instancePage = page;
@@ -705,7 +705,7 @@ bool T3DRegion::encodeInstancePage( void ) const {
 	return true;
 }
 
-void T3DRegion::importInstancesUnmodified( const Dictionary &rInstances ) {
+void Terrain3DRegion::importInstancesUnmodified( const Dictionary &rInstances ) {
 	m_instanceStore.importDictionary( rInstances );
 	m_bInstanceStoreResident = true;
 	m_bInstanceStoreModified = true;
@@ -715,10 +715,10 @@ void T3DRegion::importInstancesUnmodified( const Dictionary &rInstances ) {
 	if ( !encodeInstancePage() ) {
 		clearInstanceMetadata();
 	}
-	LOG( T3DTerrain::DEBUG, "Region ", m_location, " imported ", ( int ) ( m_nInstanceCount ), " native instances" );
+	LOG( Terrain3D::DEBUG, "Region ", m_location, " imported ", ( int ) ( m_nInstanceCount ), " native instances" );
 }
 
-void T3DRegion::setInstances( const Dictionary &rInstances ) {
+void Terrain3DRegion::setInstances( const Dictionary &rInstances ) {
 	ensureInstanceStoreResident();
 	if ( m_instanceStore.equalsDictionary( rInstances ) ) {
 		return;
@@ -728,20 +728,20 @@ void T3DRegion::setInstances( const Dictionary &rInstances ) {
 	m_bModified = true;
 }
 
-Dictionary T3DRegion::getInstancesLegacyStorage( void ) const {
+Dictionary Terrain3DRegion::getInstancesLegacyStorage( void ) const {
 	// New saves use instance_page. Keep only the setter-backed legacy property so
 	// old .res files still load without writing a duplicate Dictionary payload.
 	return Dictionary();
 }
 
-Dictionary T3DRegion::getInstances( void ) const {
+Dictionary Terrain3DRegion::getInstances( void ) const {
 	if ( !ensureInstanceStoreResident() ) {
 		return Dictionary();
 	}
 	return m_instanceStore.exportDictionary();
 }
 
-void T3DRegion::setInstancePage( const PackedByteArray &rPage ) {
+void Terrain3DRegion::setInstancePage( const PackedByteArray &rPage ) {
 	if ( rPage == m_instancePage && !m_bInstanceStoreModified ) {
 		return;
 	}
@@ -749,7 +749,7 @@ void T3DRegion::setInstancePage( const PackedByteArray &rPage ) {
 	uint32_t instance_count = 0u;
 	uint16_t mesh_count = 0u;
 	if ( !T3DInstancePageCodec::inspect( rPage, mesh_counts, instance_count, mesh_count ) ) {
-		LOG( T3DTerrain::ERROR, "Rejected invalid instance page for region ", m_location );
+		LOG( Terrain3D::ERROR, "Rejected invalid instance page for region ", m_location );
 		return;
 	}
 	m_instancePage = rPage;
@@ -761,14 +761,14 @@ void T3DRegion::setInstancePage( const PackedByteArray &rPage ) {
 	m_nInstanceMeshCount = mesh_count;
 }
 
-PackedByteArray T3DRegion::getInstancePage( void ) const {
+PackedByteArray Terrain3DRegion::getInstancePage( void ) const {
 	if ( !encodeInstancePage() ) {
 		return PackedByteArray();
 	}
 	return m_instancePage;
 }
 
-bool T3DRegion::ensureInstanceStoreResident( void ) const {
+bool Terrain3DRegion::ensureInstanceStoreResident( void ) const {
 	if ( m_bInstanceStoreResident ) {
 		return true;
 	}
@@ -777,7 +777,7 @@ bool T3DRegion::ensureInstanceStoreResident( void ) const {
 	uint32_t instance_count = 0u;
 	uint16_t mesh_count = 0u;
 	if ( !T3DInstancePageCodec::decode( m_instancePage, decoded, mesh_counts, instance_count, mesh_count ) ) {
-		LOG( T3DTerrain::ERROR, "Failed decoding instance page for region ", m_location );
+		LOG( Terrain3D::ERROR, "Failed decoding instance page for region ", m_location );
 		return false;
 	}
 	m_instanceStore = eastl::move( decoded );
@@ -789,20 +789,20 @@ bool T3DRegion::ensureInstanceStoreResident( void ) const {
 	return true;
 }
 
-void T3DRegion::adoptPreparedInstanceStoreInternal( T3DInstanceStore &&rStore ) {
+void Terrain3DRegion::adoptPreparedInstanceStoreInternal( T3DInstanceStore &&rStore ) {
 	m_instanceStore = eastl::move( rStore );
 	m_bInstanceStoreResident = true;
 	m_bInstanceStoreModified = false;
 }
 
-void T3DRegion::adoptCookedInstanceAccelerationInternal(
+void Terrain3DRegion::adoptCookedInstanceAccelerationInternal(
 	const PackedByteArray &rMetadata, const PackedByteArray &rFastStart
 ) {
 	m_cookedInstanceMetadata = rMetadata;
 	m_cookedMultimeshFastStart = rFastStart;
 }
 
-void T3DRegion::setCookedInstanceMetadataInternal(
+void Terrain3DRegion::setCookedInstanceMetadataInternal(
 	const uint32_t *const pMeshCounts, const uint32_t nInstanceCount, const uint16_t nMeshCount
 ) {
 	if ( pMeshCounts ) {
@@ -820,7 +820,7 @@ void T3DRegion::setCookedInstanceMetadataInternal(
 	m_bInstanceStoreModified = false;
 }
 
-void T3DRegion::setCookedStreamedNodeMetadataInternal(
+void Terrain3DRegion::setCookedStreamedNodeMetadataInternal(
 	const uint16_t nCount, const Vector2i &rCoverageMin, const Vector2i &rCoverageMax
 ) {
 	m_nCookedStreamedNodeCount = nCount;
@@ -828,14 +828,14 @@ void T3DRegion::setCookedStreamedNodeMetadataInternal(
 	m_cookedStreamedNodeCoverageMax = rCoverageMax;
 }
 
-void T3DRegion::adoptCookedStreamedNodeRuntimeInternal( eastl::vector<t3dstreamedNodeRuntimeDescriptor_t> &&rNodes ) {
+void Terrain3DRegion::adoptCookedStreamedNodeRuntimeInternal( eastl::vector<t3dstreamedNodeRuntimeDescriptor_t> &&rNodes ) {
 	m_streamedNodeRuntime = eastl::move( rNodes );
 	m_nCookedStreamedNodeCount = ( uint16_t ) ( MIN( m_streamedNodeRuntime.size(), ( size_t ) ( UINT16_MAX ) ) );
 	refreshStreamedNodeCoverage();
 	m_bModified = false;
 }
 
-bool T3DRegion::evictInstanceStore( void ) {
+bool Terrain3DRegion::evictInstanceStore( void ) {
 	if ( !m_bInstanceStoreResident ) {
 		return true;
 	}
@@ -850,7 +850,7 @@ bool T3DRegion::evictInstanceStore( void ) {
 	return true;
 }
 
-bool T3DRegion::streamedNodeIdExists( const uint64_t nId ) const {
+bool Terrain3DRegion::streamedNodeIdExists( const uint64_t nId ) const {
 	if ( nId == 0u || nId > ( uint64_t ) ( INT64_MAX ) ) {
 		return false;
 	}
@@ -863,7 +863,7 @@ bool T3DRegion::streamedNodeIdExists( const uint64_t nId ) const {
 	return false;
 }
 
-int64_t T3DRegion::allocateStreamedNodeId( const int64_t nRequestedId ) {
+int64_t Terrain3DRegion::allocateStreamedNodeId( const int64_t nRequestedId ) {
 	if ( nRequestedId > 0 ) {
 		const uint64_t requested = ( uint64_t ) ( nRequestedId );
 		if ( streamedNodeIdExists( requested ) ) {
@@ -885,7 +885,7 @@ int64_t T3DRegion::allocateStreamedNodeId( const int64_t nRequestedId ) {
 	return 0;
 }
 
-void T3DRegion::refreshStreamedNodeId( void ) {
+void Terrain3DRegion::refreshStreamedNodeId( void ) {
 	uint64_t next_id = 1u;
 	for ( int index = 0; index < m_streamedNodes.size(); ++index ) {
 		const Dictionary entry = m_streamedNodes[index];
@@ -900,7 +900,7 @@ void T3DRegion::refreshStreamedNodeId( void ) {
 	m_nNextStreamedNodeId = next_id == 0u || next_id > ( uint64_t ) ( INT64_MAX ) ? 1u : next_id;
 }
 
-void T3DRegion::rebuildStreamedNodeRuntime( void ) {
+void Terrain3DRegion::rebuildStreamedNodeRuntime( void ) {
 	m_streamedNodeRuntime.clear();
 	m_streamedNodeRuntime.reserve( ( size_t ) ( m_streamedNodes.size() ) );
 	for ( int index = 0; index < m_streamedNodes.size(); ++index ) {
@@ -938,7 +938,7 @@ void T3DRegion::rebuildStreamedNodeRuntime( void ) {
 	}
 }
 
-void T3DRegion::refreshStreamedNodeCoverage( void ) {
+void Terrain3DRegion::refreshStreamedNodeCoverage( void ) {
 	m_streamedNodeCoverageMin = V2I_ZERO;
 	m_streamedNodeCoverageMax = V2I_ZERO;
 	m_bStreamedNodeHasExtendedCoverage = false;
@@ -958,7 +958,7 @@ void T3DRegion::refreshStreamedNodeCoverage( void ) {
 	}
 }
 
-bool T3DRegion::streamedNodeCoverageIntersects(
+bool Terrain3DRegion::streamedNodeCoverageIntersects(
 	const Vector2i &rOwnerLocation,
 	const Vector2i &rTargetMin, const Vector2i &vTargetMax
 ) const {
@@ -1000,7 +1000,7 @@ bool T3DRegion::streamedNodeCoverageIntersects(
 	return false;
 }
 
-const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t *T3DRegion::findStreamedNodeRuntimeInternal(
+const Terrain3DRegion::t3dstreamedNodeRuntimeDescriptor_t *Terrain3DRegion::findStreamedNodeRuntimeInternal(
 	const int64_t nId
 ) const {
 	for ( const t3dstreamedNodeRuntimeDescriptor_t &descriptor : m_streamedNodeRuntime ) {
@@ -1011,7 +1011,7 @@ const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t *T3DRegion::findStreamedNode
 	return nullptr;
 }
 
-void T3DRegion::setStreamedNodes( const Array &rNodes ) {
+void Terrain3DRegion::setStreamedNodes( const Array &rNodes ) {
 	m_nCookedStreamedNodeCount = 0u;
 	m_streamedNodes.clear();
 	m_nNextStreamedNodeId = 1u;
@@ -1031,7 +1031,7 @@ void T3DRegion::setStreamedNodes( const Array &rNodes ) {
 		const int64_t requested_id = source.has( "id" ) ? ( int64_t ) ( source["id"] ) : 0;
 		const int64_t id = allocateStreamedNodeId( requested_id );
 		if ( id <= 0 ) {
-			LOG( T3DTerrain::WARN, "Skipped duplicate streamed-node id ", requested_id, " in region ", m_location );
+			LOG( Terrain3D::WARN, "Skipped duplicate streamed-node id ", requested_id, " in region ", m_location );
 			continue;
 		}
 		Dictionary entry;
@@ -1059,7 +1059,7 @@ void T3DRegion::setStreamedNodes( const Array &rNodes ) {
 	m_bModified = true;
 }
 
-int64_t T3DRegion::addStreamedNode(
+int64_t Terrain3DRegion::addStreamedNode(
 	const Ref<PackedScene> &rScene, const Transform3D &rLocalTransform,
 	const Dictionary &rState, const int nFlags, const int64_t nId, const int nBoundaryPolicy,
 	const Vector2i &rCoverageMin, const Vector2i &rCoverageMax, const int nHlodMinLevel
@@ -1087,7 +1087,7 @@ int64_t T3DRegion::addStreamedNode(
 	return id;
 }
 
-int64_t T3DRegion::addStreamedNodePath(
+int64_t Terrain3DRegion::addStreamedNodePath(
 	const String &rScenePath,
 	const Transform3D &rLocalTransform, const Dictionary &rState, const int nFlags, const int64_t nId,
 	const int nBoundaryPolicy, const Vector2i &rCoverageMin, const Vector2i &rCoverageMax, const int nHlodMinLevel
@@ -1115,7 +1115,7 @@ int64_t T3DRegion::addStreamedNodePath(
 	return id;
 }
 
-bool T3DRegion::removeStreamedNode( const int64_t nId ) {
+bool Terrain3DRegion::removeStreamedNode( const int64_t nId ) {
 	for ( int index = 0; index < m_streamedNodes.size(); ++index ) {
 		const Dictionary entry = m_streamedNodes[index];
 		if ( entry.has( "id" ) && ( int64_t ) ( entry["id"] ) == nId ) {
@@ -1129,7 +1129,7 @@ bool T3DRegion::removeStreamedNode( const int64_t nId ) {
 	return false;
 }
 
-bool T3DRegion::updateStreamedNodeState(
+bool Terrain3DRegion::updateStreamedNodeState(
 	const int64_t nId, const Transform3D &rLocalTransform,
 	const Dictionary &rState, const int nFlags
 ) {
@@ -1155,7 +1155,7 @@ bool T3DRegion::updateStreamedNodeState(
 	return false;
 }
 
-void T3DRegion::setLighting( const Ref<T3DRegionLighting> &rLighting ) {
+void Terrain3DRegion::setLighting( const Ref<Terrain3DRegionLighting> &rLighting ) {
 	if ( m_pLighting == rLighting ) {
 		return;
 	}
@@ -1163,10 +1163,10 @@ void T3DRegion::setLighting( const Ref<T3DRegionLighting> &rLighting ) {
 	m_bModified = true;
 }
 
-void T3DRegion::setLocation( const Vector2i &rLocation ) {
+void Terrain3DRegion::setLocation( const Vector2i &rLocation ) {
 	// Locations are bounded by the fixed logical region map.
-	if ( T3DData::getRegionMapIndex( rLocation ) < 0 ) {
-		LOG( T3DTerrain::ERROR, "Location ", rLocation, " out of bounds. Max: ", -TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE / 2, " to ",
+	if ( Terrain3DData::getRegionMapIndex( rLocation ) < 0 ) {
+		LOG( Terrain3D::ERROR, "Location ", rLocation, " out of bounds. Max: ", -TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE / 2, " to ",
 			TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE / 2 - 1 );
 		return;
 	}
@@ -1175,10 +1175,10 @@ void T3DRegion::setLocation( const Vector2i &rLocation ) {
 		m_bModified = true;
 	}
 	SET_IF_DIFF( m_location, rLocation );
-	LOG( T3DTerrain::DEBUG, "Set location: ", rLocation );
+	LOG( Terrain3D::DEBUG, "Set location: ", rLocation );
 }
 
-Error T3DRegion::save( const String &rPath, const bool b16Bit ) {
+Error Terrain3DRegion::save( const String &rPath, const bool b16Bit ) {
 	compactDefaultMaps();
 	if ( m_bInstanceStoreResident ) {
 		m_instanceStore.compactStorage();
@@ -1188,43 +1188,43 @@ Error T3DRegion::save( const String &rPath, const bool b16Bit ) {
 	}
 	// Initiate save to external file. The scene will save itself.
 	if ( m_location.x == INT32_MAX ) {
-		LOG( T3DTerrain::ERROR, "Region has not been setup. Location is INT32_MAX. Skipping ", rPath );
+		LOG( Terrain3D::ERROR, "Region has not been setup. Location is INT32_MAX. Skipping ", rPath );
 	}
 	if ( !m_bModified ) {
-		LOG( T3DTerrain::DEBUG, "Region ", m_location, " not modified. Skipping ", rPath );
+		LOG( Terrain3D::DEBUG, "Region ", m_location, " not modified. Skipping ", rPath );
 		return ERR_SKIP;
 	}
 	if ( m_pHeightMap.is_null() ) {
-		LOG( T3DTerrain::ERROR, "Cannot save mapless region ", m_location,
+		LOG( Terrain3D::ERROR, "Cannot save mapless region ", m_location,
 			". Page it through Terrain3DData::ensure_cpu_region_resident() before direct region save." );
 		return ERR_UNAVAILABLE;
 	}
 	if ( rPath.is_empty() && get_path().is_empty() ) {
-		LOG( T3DTerrain::ERROR, "No valid path provided" );
+		LOG( Terrain3D::ERROR, "No valid path provided" );
 		return ERR_FILE_NOT_FOUND;
 	}
 	if ( !rPath.is_empty() ) {
-		LOG( T3DTerrain::DEBUG, "t3dsetting_t file path for region ", m_location, " to ", rPath );
+		LOG( Terrain3D::DEBUG, "t3dsetting_t file path for region ", m_location, " to ", rPath );
 		take_over_path( rPath );
 		// Set region path and take over the path from any other cached resources,
 		// incuding those in the undo queue
 	}
-	LOG( T3DTerrain::MESG, "Writing compact R16 region ", m_location, " to ", get_path() );
+	LOG( Terrain3D::MESG, "Writing compact R16 region ", m_location, " to ", get_path() );
 	setVersion( TERRAIN3D_DATA_CURRENT_VERSION );
 	( void ) b16Bit;
 	const Error err = ResourceSaver::get_singleton()->save( this, get_path(), ResourceSaver::FLAG_COMPRESS );
 	if ( err == OK ) {
 		m_bModified = false;
 		m_bRuntimeMapsModified = false;
-		LOG( T3DTerrain::INFO, "File saved successfully" );
+		LOG( Terrain3D::INFO, "File saved successfully" );
 	} else {
-		LOG( T3DTerrain::ERROR, "Cannot save region file: ", get_path(), ". Error code: ", T3DTerrain::ERROR,
+		LOG( Terrain3D::ERROR, "Cannot save region file: ", get_path(), ". Error code: ", Terrain3D::ERROR,
 			". Look up @GlobalScope Error enum in the Godot docs" );
 	}
 	return err;
 }
 
-void T3DRegion::setData( const Dictionary &rData ) {
+void Terrain3DRegion::setData( const Dictionary &rData ) {
 	// This is a public mutation API, not a deserializer. Route through validated
 	// setters and publish one conservative dirty result instead of copying raw
 	// internal fields with no downstream contract.
@@ -1273,7 +1273,7 @@ void T3DRegion::setData( const Dictionary &rData ) {
 	m_bModified = true;
 }
 
-Dictionary T3DRegion::getData( void ) const {
+Dictionary Terrain3DRegion::getData( void ) const {
 	Dictionary dict;
 	dict["location"] = m_location;
 	dict["deleted"] = m_bDeleted;
@@ -1294,8 +1294,8 @@ Dictionary T3DRegion::getData( void ) const {
 	return dict;
 }
 
-Ref<T3DRegion> T3DRegion::duplicate( const bool bDeep ) {
-	Ref<T3DRegion> pRegion;
+Ref<Terrain3DRegion> Terrain3DRegion::duplicate( const bool bDeep ) {
+	Ref<Terrain3DRegion> pRegion;
 	pRegion.instantiate();
 	pRegion->m_fVersion = m_fVersion;
 	pRegion->m_nRegionSize = m_nRegionSize;
@@ -1332,14 +1332,14 @@ Ref<T3DRegion> T3DRegion::duplicate( const bool bDeep ) {
 	return pRegion;
 }
 
-void T3DRegion::dump( const bool bVerbose ) const {
-	LOG( T3DTerrain::MESG, "Region: ", m_location, ", version: ", vformat( "%.2f", m_fVersion ), ", size: ", m_nRegionSize,
+void Terrain3DRegion::dump( const bool bVerbose ) const {
+	LOG( Terrain3D::MESG, "Region: ", m_location, ", version: ", vformat( "%.2f", m_fVersion ), ", size: ", m_nRegionSize,
 		", spacing: ", vformat( "%.1f", m_fVertexSpacing ), ", range: ", vformat( "%.2v", m_heightRange ), ", flags (",
 		m_bEdited ? "ed," : "", m_bModified ? "mod," : "", m_bDeleted ? "del" : "", ")" );
-	LOG( T3DTerrain::MESG, "Instances: mesh groups: ", ( int ) ( m_nInstanceMeshCount ), ", total: ", ( int ) ( m_nInstanceCount ),
+	LOG( Terrain3D::MESG, "Instances: mesh groups: ", ( int ) ( m_nInstanceMeshCount ), ", total: ", ( int ) ( m_nInstanceCount ),
 		m_bInstanceStoreResident ? ", resident" : ", paged", ", page bytes: ", m_instancePage.size() );
 	if ( !m_bInstanceStoreResident ) {
-		LOG( T3DTerrain::MESG, "Streamed dynamic nodes: ", m_streamedNodes.size() );
+		LOG( Terrain3D::MESG, "Streamed dynamic nodes: ", m_streamedNodes.size() );
 		return;
 	}
 	for ( const t3dinstanceMesh_t &mesh : m_instanceStore.meshes() ) {
@@ -1347,11 +1347,11 @@ void T3DRegion::dump( const bool bVerbose ) const {
 		for ( const t3dinstanceCell_t &cell : mesh.cells ) {
 			count += cell.transforms.size();
 			if ( bVerbose ) {
-				LOG( T3DTerrain::MESG, "Mesh ID: ", mesh.id, " cell: ", cell.location, " xforms: ", ( int ) ( cell.transforms.size() ),
+				LOG( Terrain3D::MESG, "Mesh ID: ", mesh.id, " cell: ", cell.location, " xforms: ", ( int ) ( cell.transforms.size() ),
 					cell.usesColors() ? ", colored" : ", uncolored", cell.bModified ? ", modified" : "" );
 			}
 		}
-		LOG( T3DTerrain::MESG, "Mesh ID: ", mesh.id, ", instance count: ", ( int ) ( count ) );
+		LOG( Terrain3D::MESG, "Mesh ID: ", mesh.id, ", instance count: ", ( int ) ( count ) );
 	}
 }
 
@@ -1359,7 +1359,7 @@ void T3DRegion::dump( const bool bVerbose ) const {
 // Protected Functions
 /////////////////////
 
-void T3DRegion::_bind_methods( void ) {
+void Terrain3DRegion::_bind_methods( void ) {
 	BIND_ENUM_CONSTANT( LIGHTING_CLASS_TERRAIN );
 	BIND_ENUM_CONSTANT( LIGHTING_CLASS_FOLIAGE_CLUTTER );
 	BIND_ENUM_CONSTANT( LIGHTING_CLASS_MEDIUM_OBSTACLE );
@@ -1380,91 +1380,91 @@ void T3DRegion::_bind_methods( void ) {
 	BIND_ENUM_CONSTANT( STREAMED_NODE_BOUNDARY_ANCHOR );
 	BIND_ENUM_CONSTANT( STREAMED_NODE_BOUNDARY_COVERAGE );
 
-	ClassDB::bind_method( D_METHOD( "clear" ), &T3DRegion::clear );
-	ClassDB::bind_method( D_METHOD( "set_version", "version" ), &T3DRegion::setVersion );
-	ClassDB::bind_method( D_METHOD( "get_version" ), &T3DRegion::getVersion );
-	ClassDB::bind_method( D_METHOD( "set_region_size", "region_size" ), &T3DRegion::setRegionSize );
-	ClassDB::bind_method( D_METHOD( "get_region_size" ), &T3DRegion::getRegionSize );
-	ClassDB::bind_method( D_METHOD( "set_vertex_spacing", "vertex_spacing" ), &T3DRegion::setVertexSpacing );
-	ClassDB::bind_method( D_METHOD( "get_vertex_spacing" ), &T3DRegion::getVertexSpacing );
+	ClassDB::bind_method( D_METHOD( "clear" ), &Terrain3DRegion::clear );
+	ClassDB::bind_method( D_METHOD( "set_version", "version" ), &Terrain3DRegion::setVersion );
+	ClassDB::bind_method( D_METHOD( "get_version" ), &Terrain3DRegion::getVersion );
+	ClassDB::bind_method( D_METHOD( "set_region_size", "region_size" ), &Terrain3DRegion::setRegionSize );
+	ClassDB::bind_method( D_METHOD( "get_region_size" ), &Terrain3DRegion::getRegionSize );
+	ClassDB::bind_method( D_METHOD( "set_vertex_spacing", "vertex_spacing" ), &Terrain3DRegion::setVertexSpacing );
+	ClassDB::bind_method( D_METHOD( "get_vertex_spacing" ), &Terrain3DRegion::getVertexSpacing );
 
-	ClassDB::bind_method( D_METHOD( "set_map", "map_type", "map" ), &T3DRegion::setMap );
-	ClassDB::bind_method( D_METHOD( "get_map", "map_type" ), &T3DRegion::getMap );
-	ClassDB::bind_method( D_METHOD( "set_maps", "maps" ), &T3DRegion::setMaps );
-	ClassDB::bind_method( D_METHOD( "get_maps" ), &T3DRegion::getMaps );
-	ClassDB::bind_method( D_METHOD( "set_height_map", "map" ), &T3DRegion::setHeightMap );
-	ClassDB::bind_method( D_METHOD( "get_height_map" ), &T3DRegion::getHeightMap );
-	ClassDB::bind_method( D_METHOD( "set_control_map", "map" ), &T3DRegion::setControlMap );
-	ClassDB::bind_method( D_METHOD( "get_control_map" ), &T3DRegion::getControlMap );
-	ClassDB::bind_method( D_METHOD( "set_color_map", "map" ), &T3DRegion::setColorMap );
-	ClassDB::bind_method( D_METHOD( "get_color_map" ), &T3DRegion::getColorMap );
-	ClassDB::bind_method( D_METHOD( "set_channel_flags", "flags" ), &T3DRegion::setChannelFlags );
-	ClassDB::bind_method( D_METHOD( "get_channel_flags" ), &T3DRegion::getChannelFlags );
-	ClassDB::bind_method( D_METHOD( "has_channel", "map_type" ), &T3DRegion::hasChannel );
-	ClassDB::bind_method( D_METHOD( "sanitize_maps" ), &T3DRegion::sanitizeMaps );
-	ClassDB::bind_method( D_METHOD( "is_map_default", "map_type" ), &T3DRegion::isMapDefault );
+	ClassDB::bind_method( D_METHOD( "set_map", "map_type", "map" ), &Terrain3DRegion::setMap );
+	ClassDB::bind_method( D_METHOD( "get_map", "map_type" ), &Terrain3DRegion::getMap );
+	ClassDB::bind_method( D_METHOD( "set_maps", "maps" ), &Terrain3DRegion::setMaps );
+	ClassDB::bind_method( D_METHOD( "get_maps" ), &Terrain3DRegion::getMaps );
+	ClassDB::bind_method( D_METHOD( "set_height_map", "map" ), &Terrain3DRegion::setHeightMap );
+	ClassDB::bind_method( D_METHOD( "get_height_map" ), &Terrain3DRegion::getHeightMap );
+	ClassDB::bind_method( D_METHOD( "set_control_map", "map" ), &Terrain3DRegion::setControlMap );
+	ClassDB::bind_method( D_METHOD( "get_control_map" ), &Terrain3DRegion::getControlMap );
+	ClassDB::bind_method( D_METHOD( "set_color_map", "map" ), &Terrain3DRegion::setColorMap );
+	ClassDB::bind_method( D_METHOD( "get_color_map" ), &Terrain3DRegion::getColorMap );
+	ClassDB::bind_method( D_METHOD( "set_channel_flags", "flags" ), &Terrain3DRegion::setChannelFlags );
+	ClassDB::bind_method( D_METHOD( "get_channel_flags" ), &Terrain3DRegion::getChannelFlags );
+	ClassDB::bind_method( D_METHOD( "has_channel", "map_type" ), &Terrain3DRegion::hasChannel );
+	ClassDB::bind_method( D_METHOD( "sanitize_maps" ), &Terrain3DRegion::sanitizeMaps );
+	ClassDB::bind_method( D_METHOD( "is_map_default", "map_type" ), &Terrain3DRegion::isMapDefault );
 	ClassDB::bind_method( D_METHOD( "compact_map_if_default", "map_type", "mark_modified" ),
-		&T3DRegion::compactMapIfDefault, DEFVAL( true ) );
-	ClassDB::bind_method( D_METHOD( "compact_default_maps" ), &T3DRegion::compactDefaultMaps );
+		&Terrain3DRegion::compactMapIfDefault, DEFVAL( true ) );
+	ClassDB::bind_method( D_METHOD( "compact_default_maps" ), &Terrain3DRegion::compactDefaultMaps );
 	ClassDB::bind_method( D_METHOD( "mark_map_edited", "map_type", "recalculate_height_range" ),
-						 &T3DRegion::markMapEdited, DEFVAL( true ) );
-	ClassDB::bind_method( D_METHOD( "sanitize_map", "map_type", "map" ), &T3DRegion::sanitizeMap );
-	ClassDB::bind_method( D_METHOD( "validate_map_size", "map" ), &T3DRegion::validateMapSize );
+						 &Terrain3DRegion::markMapEdited, DEFVAL( true ) );
+	ClassDB::bind_method( D_METHOD( "sanitize_map", "map_type", "map" ), &Terrain3DRegion::sanitizeMap );
+	ClassDB::bind_method( D_METHOD( "validate_map_size", "map" ), &Terrain3DRegion::validateMapSize );
 
-	ClassDB::bind_method( D_METHOD( "set_height_range", "range" ), &T3DRegion::setHeightRange );
-	ClassDB::bind_method( D_METHOD( "get_height_range" ), &T3DRegion::getHeightRange );
-	ClassDB::bind_method( D_METHOD( "update_height", "height" ), &T3DRegion::updateHeight );
-	ClassDB::bind_method( D_METHOD( "update_heights", "low_high" ), &T3DRegion::updateHeights );
-	ClassDB::bind_method( D_METHOD( "calc_height_range" ), &T3DRegion::calcHeightRange );
+	ClassDB::bind_method( D_METHOD( "set_height_range", "range" ), &Terrain3DRegion::setHeightRange );
+	ClassDB::bind_method( D_METHOD( "get_height_range" ), &Terrain3DRegion::getHeightRange );
+	ClassDB::bind_method( D_METHOD( "update_height", "height" ), &Terrain3DRegion::updateHeight );
+	ClassDB::bind_method( D_METHOD( "update_heights", "low_high" ), &Terrain3DRegion::updateHeights );
+	ClassDB::bind_method( D_METHOD( "calc_height_range" ), &Terrain3DRegion::calcHeightRange );
 
-	ClassDB::bind_method( D_METHOD( "set_instances", "instances" ), &T3DRegion::setInstances );
-	ClassDB::bind_method( D_METHOD( "get_instances" ), &T3DRegion::getInstances );
-	ClassDB::bind_method( D_METHOD( "_get_instances_legacy_storage" ), &T3DRegion::getInstancesLegacyStorage );
-	ClassDB::bind_method( D_METHOD( "set_instance_page", "page" ), &T3DRegion::setInstancePage );
-	ClassDB::bind_method( D_METHOD( "get_instance_page" ), &T3DRegion::getInstancePage );
-	ClassDB::bind_method( D_METHOD( "ensure_instance_store_resident" ), &T3DRegion::ensureInstanceStoreResident );
-	ClassDB::bind_method( D_METHOD( "evict_instance_store" ), &T3DRegion::evictInstanceStore );
-	ClassDB::bind_method( D_METHOD( "is_instance_store_resident" ), &T3DRegion::isInstanceStoreResident );
-	ClassDB::bind_method( D_METHOD( "get_instance_count", "mesh_id" ), &T3DRegion::getInstanceCount, DEFVAL( -1 ) );
-	ClassDB::bind_method( D_METHOD( "get_instance_page_bytes" ), &T3DRegion::getInstancePageBytes );
-	ClassDB::bind_method( D_METHOD( "set_streamed_nodes", "nodes" ), &T3DRegion::setStreamedNodes );
-	ClassDB::bind_method( D_METHOD( "get_streamed_nodes" ), &T3DRegion::getStreamedNodes );
+	ClassDB::bind_method( D_METHOD( "set_instances", "instances" ), &Terrain3DRegion::setInstances );
+	ClassDB::bind_method( D_METHOD( "get_instances" ), &Terrain3DRegion::getInstances );
+	ClassDB::bind_method( D_METHOD( "_get_instances_legacy_storage" ), &Terrain3DRegion::getInstancesLegacyStorage );
+	ClassDB::bind_method( D_METHOD( "set_instance_page", "page" ), &Terrain3DRegion::setInstancePage );
+	ClassDB::bind_method( D_METHOD( "get_instance_page" ), &Terrain3DRegion::getInstancePage );
+	ClassDB::bind_method( D_METHOD( "ensure_instance_store_resident" ), &Terrain3DRegion::ensureInstanceStoreResident );
+	ClassDB::bind_method( D_METHOD( "evict_instance_store" ), &Terrain3DRegion::evictInstanceStore );
+	ClassDB::bind_method( D_METHOD( "is_instance_store_resident" ), &Terrain3DRegion::isInstanceStoreResident );
+	ClassDB::bind_method( D_METHOD( "get_instance_count", "mesh_id" ), &Terrain3DRegion::getInstanceCount, DEFVAL( -1 ) );
+	ClassDB::bind_method( D_METHOD( "get_instance_page_bytes" ), &Terrain3DRegion::getInstancePageBytes );
+	ClassDB::bind_method( D_METHOD( "set_streamed_nodes", "nodes" ), &Terrain3DRegion::setStreamedNodes );
+	ClassDB::bind_method( D_METHOD( "get_streamed_nodes" ), &Terrain3DRegion::getStreamedNodes );
 	ClassDB::bind_method( D_METHOD(
 		"add_streamed_node", "scene", "local_transform", "state", "flags", "id",
 		"boundary_policy", "coverage_min", "coverage_max", "hlod_min_level"
-	), &T3DRegion::addStreamedNode,
+	), &Terrain3DRegion::addStreamedNode,
 		DEFVAL( Dictionary() ), DEFVAL( 0 ), DEFVAL( 0 ), DEFVAL( STREAMED_NODE_BOUNDARY_ANCHOR ),
 		DEFVAL( V2I_ZERO ), DEFVAL( V2I_ZERO ), DEFVAL( 1 ) );
 	ClassDB::bind_method( D_METHOD(
 		"add_streamed_node_path", "scene_path", "local_transform", "state", "flags", "id",
 		"boundary_policy", "coverage_min", "coverage_max", "hlod_min_level"
-	), &T3DRegion::addStreamedNodePath,
+	), &Terrain3DRegion::addStreamedNodePath,
 		DEFVAL( Dictionary() ), DEFVAL( 0 ), DEFVAL( 0 ), DEFVAL( STREAMED_NODE_BOUNDARY_ANCHOR ),
 		DEFVAL( V2I_ZERO ), DEFVAL( V2I_ZERO ), DEFVAL( 1 ) );
-	ClassDB::bind_method( D_METHOD( "remove_streamed_node", "id" ), &T3DRegion::removeStreamedNode );
-	ClassDB::bind_method( D_METHOD( "get_streamed_node_count" ), &T3DRegion::getStreamedNodeCount );
-	ClassDB::bind_method( D_METHOD( "set_lighting", "lighting" ), &T3DRegion::setLighting );
-	ClassDB::bind_method( D_METHOD( "get_lighting" ), &T3DRegion::getLighting );
-	ClassDB::bind_method( D_METHOD( "has_lighting" ), &T3DRegion::hasLighting );
+	ClassDB::bind_method( D_METHOD( "remove_streamed_node", "id" ), &Terrain3DRegion::removeStreamedNode );
+	ClassDB::bind_method( D_METHOD( "get_streamed_node_count" ), &Terrain3DRegion::getStreamedNodeCount );
+	ClassDB::bind_method( D_METHOD( "set_lighting", "lighting" ), &Terrain3DRegion::setLighting );
+	ClassDB::bind_method( D_METHOD( "get_lighting" ), &Terrain3DRegion::getLighting );
+	ClassDB::bind_method( D_METHOD( "has_lighting" ), &Terrain3DRegion::hasLighting );
 	ClassDB::bind_method( D_METHOD( "streamed_node_coverage_intersects", "owner_location", "target_min", "target_max" ),
-		&T3DRegion::streamedNodeCoverageIntersects );
+		&Terrain3DRegion::streamedNodeCoverageIntersects );
 	ClassDB::bind_method( D_METHOD( "has_extended_streamed_node_coverage" ),
-		&T3DRegion::hasExtendedStreamedNodeCoverage );
+		&Terrain3DRegion::hasExtendedStreamedNodeCoverage );
 
-	ClassDB::bind_method( D_METHOD( "save", "path", "save_16_bit" ), &T3DRegion::save, DEFVAL( "" ), DEFVAL( false ) );
+	ClassDB::bind_method( D_METHOD( "save", "path", "save_16_bit" ), &Terrain3DRegion::save, DEFVAL( "" ), DEFVAL( false ) );
 
-	ClassDB::bind_method( D_METHOD( "set_deleted", "deleted" ), &T3DRegion::setDeleted );
-	ClassDB::bind_method( D_METHOD( "is_deleted" ), &T3DRegion::isDeleted );
-	ClassDB::bind_method( D_METHOD( "set_edited", "edited" ), &T3DRegion::setEdited );
-	ClassDB::bind_method( D_METHOD( "is_edited" ), &T3DRegion::isEdited );
-	ClassDB::bind_method( D_METHOD( "set_modified", "modified" ), &T3DRegion::setModified );
-	ClassDB::bind_method( D_METHOD( "is_modified" ), &T3DRegion::isModified );
-	ClassDB::bind_method( D_METHOD( "set_location", "location" ), &T3DRegion::setLocation );
-	ClassDB::bind_method( D_METHOD( "get_location" ), &T3DRegion::getLocation );
+	ClassDB::bind_method( D_METHOD( "set_deleted", "deleted" ), &Terrain3DRegion::setDeleted );
+	ClassDB::bind_method( D_METHOD( "is_deleted" ), &Terrain3DRegion::isDeleted );
+	ClassDB::bind_method( D_METHOD( "set_edited", "edited" ), &Terrain3DRegion::setEdited );
+	ClassDB::bind_method( D_METHOD( "is_edited" ), &Terrain3DRegion::isEdited );
+	ClassDB::bind_method( D_METHOD( "set_modified", "modified" ), &Terrain3DRegion::setModified );
+	ClassDB::bind_method( D_METHOD( "is_modified" ), &Terrain3DRegion::isModified );
+	ClassDB::bind_method( D_METHOD( "set_location", "location" ), &Terrain3DRegion::setLocation );
+	ClassDB::bind_method( D_METHOD( "get_location" ), &Terrain3DRegion::getLocation );
 
-	ClassDB::bind_method( D_METHOD( "get_data" ), &T3DRegion::getData );
-	ClassDB::bind_method( D_METHOD( "duplicate", "deep" ), &T3DRegion::duplicate, DEFVAL( false ) );
-	ClassDB::bind_method( D_METHOD( "dump", "verbose" ), &T3DRegion::dump, DEFVAL( false ) );
+	ClassDB::bind_method( D_METHOD( "get_data" ), &Terrain3DRegion::getData );
+	ClassDB::bind_method( D_METHOD( "duplicate", "deep" ), &Terrain3DRegion::duplicate, DEFVAL( false ) );
+	ClassDB::bind_method( D_METHOD( "dump", "verbose" ), &Terrain3DRegion::dump, DEFVAL( false ) );
 
 	const int ro_flags = PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY;
 	ADD_GROUP( "Identity / Format", "" );

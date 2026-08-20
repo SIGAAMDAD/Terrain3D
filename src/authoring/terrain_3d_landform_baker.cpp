@@ -36,8 +36,8 @@
 
 namespace {
 typedef struct t3dsettings_s {
-	T3DLandformBaker::t3dmode_t mode = T3DLandformBaker::RIDGE;
-	T3DLandformBaker::t3dmorphologyMode_t morphology_mode = T3DLandformBaker::MORPH_EXPAND_PEAKS;
+	Terrain3DLandformBaker::t3dmode_t mode = Terrain3DLandformBaker::RIDGE;
+	Terrain3DLandformBaker::t3dmorphologyMode_t morphology_mode = Terrain3DLandformBaker::MORPH_EXPAND_PEAKS;
 	float fWidth = 32.0f;
 	float fAmplitude = 12.0f;
 	float fStrength = 1.0f;
@@ -64,7 +64,7 @@ typedef struct t3dsettings_s {
 	float fMaterialBlend = 0.0f;
 	bool bGenerateMesh = false;
 	bool bGenerateCollision = true;
-	T3DLandformBaker::t3dgeometryMode_t geometry_mode = T3DLandformBaker::GEOMETRY_PROCEDURAL_UNIQUE;
+	Terrain3DLandformBaker::t3dgeometryMode_t geometry_mode = Terrain3DLandformBaker::GEOMETRY_PROCEDURAL_UNIQUE;
 	float fMeshDepth = 5.0f;
 	float fMeshIrregularity = 0.28f;
 	float fMeshSampleSpacing = 3.0f;
@@ -98,7 +98,7 @@ typedef struct t3dbasinProfile_s {
 
 typedef struct t3dregionEdit_s {
 	Vector2i location = V2I_ZERO;
-	Ref<T3DRegion> pRegion;
+	Ref<Terrain3DRegion> pRegion;
 	Ref<Image> height;
 	Ref<Image> pControl;
 	eastl::vector<uint8_t> height_snapshot;
@@ -150,10 +150,10 @@ static eastl::vector<int> parseMeshIds( const Variant &rValue ) {
 
 static t3dsettings_t parseSettings( const Dictionary &rDictionary ) {
 	t3dsettings_t settings;
-	settings.mode = ( T3DLandformBaker::t3dmode_t ) ( CLAMP( ( int ) ( rDictionary.get( "mode", ( int ) ( settings.mode ) ) ), 0,
-														 ( int ) ( T3DLandformBaker::MODE_MAX ) - 1 ) );
-	settings.morphology_mode = ( T3DLandformBaker::t3dmorphologyMode_t ) ( CLAMP( ( int ) ( rDictionary.get( "morphology_mode", ( int ) ( settings.morphology_mode ) ) ), 0,
-			  ( int ) ( T3DLandformBaker::MORPH_MAX ) - 1 ) );
+	settings.mode = ( Terrain3DLandformBaker::t3dmode_t ) ( CLAMP( ( int ) ( rDictionary.get( "mode", ( int ) ( settings.mode ) ) ), 0,
+														 ( int ) ( Terrain3DLandformBaker::MODE_MAX ) - 1 ) );
+	settings.morphology_mode = ( Terrain3DLandformBaker::t3dmorphologyMode_t ) ( CLAMP( ( int ) ( rDictionary.get( "morphology_mode", ( int ) ( settings.morphology_mode ) ) ), 0,
+			  ( int ) ( Terrain3DLandformBaker::MORPH_MAX ) - 1 ) );
 	settings.fWidth = MAX( ( float ) ( rDictionary.get( "width", settings.fWidth ) ), 1.0f );
 	settings.fAmplitude = MAX( ( float ) ( rDictionary.get( "amplitude", settings.fAmplitude ) ), 0.0f );
 	settings.fStrength = CLAMP( ( float ) ( rDictionary.get( "strength", settings.fStrength ) ), 0.0f, 1.0f );
@@ -181,9 +181,9 @@ static t3dsettings_t parseSettings( const Dictionary &rDictionary ) {
 	settings.fMaterialBlend = CLAMP( ( float ) ( rDictionary.get( "material_blend", settings.fMaterialBlend ) ), 0.0f, 1.0f );
 	settings.bGenerateMesh = ( bool ) ( rDictionary.get( "generate_mesh", settings.bGenerateMesh ) );
 	settings.bGenerateCollision = ( bool ) ( rDictionary.get( "generate_collision", settings.bGenerateCollision ) );
-	settings.geometry_mode = ( T3DLandformBaker::t3dgeometryMode_t ) ( CLAMP(
+	settings.geometry_mode = ( Terrain3DLandformBaker::t3dgeometryMode_t ) ( CLAMP(
 		( int ) ( rDictionary.get( "geometry_mode", ( int ) ( settings.geometry_mode ) ) ), 0,
-		( int ) ( T3DLandformBaker::GEOMETRY_MAX ) - 1 ) );
+		( int ) ( Terrain3DLandformBaker::GEOMETRY_MAX ) - 1 ) );
 	settings.fMeshDepth = MAX( ( float ) ( rDictionary.get( "mesh_depth", settings.fMeshDepth ) ), 0.05f );
 	settings.fMeshIrregularity = CLAMP( ( float ) ( rDictionary.get( "mesh_irregularity", settings.fMeshIrregularity ) ), 0.0f, 1.0f );
 	settings.fMeshSampleSpacing = MAX( ( float ) ( rDictionary.get( "mesh_sample_spacing", settings.fMeshSampleSpacing ) ), 0.25f );
@@ -397,7 +397,7 @@ static bool validateControlMap( const Ref<Image> &rControl, const int nRegionSiz
 	return rControl->get_data().size() == expected_bytes;
 }
 
-static void removeCreatedRegions( T3DData *pData, const eastl::vector<t3dregionEdit_t> &rEdits ) {
+static void removeCreatedRegions( Terrain3DData *pData, const eastl::vector<t3dregionEdit_t> &rEdits ) {
 	if ( !pData ) {
 		return;
 	}
@@ -426,7 +426,7 @@ static float neighborValue(
 
 static float morphologyTarget(
 	const eastl::vector<float> &fValues, const int nSize, const int iX, const int iY,
-	const T3DLandformBaker::t3dmorphologyMode_t mode
+	const Terrain3DLandformBaker::t3dmorphologyMode_t mode
 ) {
 	const float fSource = fValues[( size_t ) ( iY * nSize + iX )];
 	float fMinimum = fSource;
@@ -444,15 +444,15 @@ static float morphologyTarget(
 	}
 	const float fAverage = fSum / ( float ) ( count );
 	switch ( mode ) {
-		case T3DLandformBaker::MORPH_FILL_PITS:
+		case Terrain3DLandformBaker::MORPH_FILL_PITS:
 			return fMaximum;
-		case T3DLandformBaker::MORPH_RIDGE_SHARPEN:
+		case Terrain3DLandformBaker::MORPH_RIDGE_SHARPEN:
 			return fSource + MAX( fSource - fAverage, 0.0f );
-		case T3DLandformBaker::MORPH_VALLEY_SHARPEN:
+		case Terrain3DLandformBaker::MORPH_VALLEY_SHARPEN:
 			return fSource - MAX( fAverage - fSource, 0.0f );
-		case T3DLandformBaker::MORPH_PLATEAU_CLEAN:
+		case Terrain3DLandformBaker::MORPH_PLATEAU_CLEAN:
 			return Math::abs( fSource - fAverage ) < 2.0f ? fAverage : fSource;
-		case T3DLandformBaker::MORPH_EXPAND_PEAKS:
+		case Terrain3DLandformBaker::MORPH_EXPAND_PEAKS:
 		default:
 			return fMaximum;
 	}
@@ -490,26 +490,26 @@ typedef enum t3dheightPolicy_e {
 
 static t3dheightPolicy_t getHeightPolicy( const t3dsettings_t &rSettings ) {
 	switch ( rSettings.mode ) {
-		case T3DLandformBaker::RIDGE:
-		case T3DLandformBaker::SCARP:
-		case T3DLandformBaker::PLATEAU:
-		case T3DLandformBaker::TALUS:
-		case T3DLandformBaker::DUNE:
-		case T3DLandformBaker::OCCLUSION:
+		case Terrain3DLandformBaker::RIDGE:
+		case Terrain3DLandformBaker::SCARP:
+		case Terrain3DLandformBaker::PLATEAU:
+		case Terrain3DLandformBaker::TALUS:
+		case Terrain3DLandformBaker::DUNE:
+		case Terrain3DLandformBaker::OCCLUSION:
 			return t3dheightPolicy_t::RAISE_ONLY;
-		case T3DLandformBaker::VALLEY:
-		case T3DLandformBaker::BASIN:
-		case T3DLandformBaker::PASS:
+		case Terrain3DLandformBaker::VALLEY:
+		case Terrain3DLandformBaker::BASIN:
+		case Terrain3DLandformBaker::PASS:
 			return t3dheightPolicy_t::LOWER_ONLY;
-		case T3DLandformBaker::MORPHOLOGY:
+		case Terrain3DLandformBaker::MORPHOLOGY:
 			switch ( rSettings.morphology_mode ) {
-				case T3DLandformBaker::MORPH_EXPAND_PEAKS:
-				case T3DLandformBaker::MORPH_FILL_PITS:
-				case T3DLandformBaker::MORPH_RIDGE_SHARPEN:
+				case Terrain3DLandformBaker::MORPH_EXPAND_PEAKS:
+				case Terrain3DLandformBaker::MORPH_FILL_PITS:
+				case Terrain3DLandformBaker::MORPH_RIDGE_SHARPEN:
 					return t3dheightPolicy_t::RAISE_ONLY;
-				case T3DLandformBaker::MORPH_VALLEY_SHARPEN:
+				case Terrain3DLandformBaker::MORPH_VALLEY_SHARPEN:
 					return t3dheightPolicy_t::LOWER_ONLY;
-				case T3DLandformBaker::MORPH_PLATEAU_CLEAN:
+				case Terrain3DLandformBaker::MORPH_PLATEAU_CLEAN:
 				default:
 					return t3dheightPolicy_t::FREE;
 			}
@@ -544,13 +544,13 @@ static float evaluateHeight(
 	float fTarget = fSource;
 
 	switch ( rSettings.mode ) {
-		case T3DLandformBaker::RIDGE:
+		case Terrain3DLandformBaker::RIDGE:
 			fTarget = fSource + rSettings.fAmplitude * fWeight * fNoiseFactor;
 			break;
-		case T3DLandformBaker::VALLEY:
+		case Terrain3DLandformBaker::VALLEY:
 			fTarget = fSource - rSettings.fAmplitude * fWeight * fNoiseFactor;
 			break;
-		case T3DLandformBaker::SCARP: {
+		case Terrain3DLandformBaker::SCARP: {
 			const float fTransition = MAX( 0.025f, 0.18f * ( 1.0f - Math::abs( rSettings.fAsymmetry ) * 0.75f ) );
 			const float fRaisedDistance = rProjection.fSignedDistance * rSettings.fCliffSide;
 			const float fSide = CLAMP( fRaisedDistance / fHalfWidth - rSettings.fAsymmetry * 0.25f, -1.0f, 1.0f );
@@ -558,7 +558,7 @@ static float evaluateHeight(
 			fTarget = fSource + fStep * rSettings.fAmplitude * fWeight * fNoiseFactor;
 			break;
 		}
-		case T3DLandformBaker::BASIN: {
+		case Terrain3DLandformBaker::BASIN: {
 			// The stroke is the basin spine. Its width creates a rounded capsule,
 			// while the fitted longitudinal grade removes local cursor-height noise.
 			// This produces one continuous floor instead of the old bounding-box
@@ -572,7 +572,7 @@ static float evaluateHeight(
 			}
 			break;
 		}
-		case T3DLandformBaker::PLATEAU: {
+		case Terrain3DLandformBaker::PLATEAU: {
 			const float normalized = rWorld.distance_to( rAreaCenter ) / MAX( fAreaRadius, 1.0f );
 			if ( normalized <= 1.0f ) {
 				const float fEdge = 1.0f - smooth01( MAX( 0.0f, normalized - rSettings.fCrestWidth ) /
@@ -581,39 +581,39 @@ static float evaluateHeight(
 			}
 			break;
 		}
-		case T3DLandformBaker::TERRACE: {
+		case Terrain3DLandformBaker::TERRACE: {
 			const float fBase = rProjection.fPathHeight;
 			const float fQuantized = fBase + Math::round( ( fSource - fBase ) / rSettings.fTerraceStep ) * rSettings.fTerraceStep;
 			fTarget = Math::lerp( fSource, fQuantized, fWeight );
 			break;
 		}
-		case T3DLandformBaker::ROAD: {
+		case Terrain3DLandformBaker::ROAD: {
 			const float fLateral = CLAMP( Math::abs( rProjection.fSignedDistance ) / fHalfWidth, 0.0f, 1.0f );
 			const float fCrown = rSettings.fRoadCrown * ( 1.0f - fLateral * fLateral );
 			fTarget = Math::lerp( fSource, rProjection.fPathHeight + fCrown, fWeight );
 			break;
 		}
-		case T3DLandformBaker::PASS:
+		case Terrain3DLandformBaker::PASS:
 			fTarget = Math::lerp( fSource, rProjection.fPathHeight - rSettings.fAmplitude, fWeight );
 			break;
-		case T3DLandformBaker::TALUS: {
+		case Terrain3DLandformBaker::TALUS: {
 			const float fPreferredSide = rSettings.fAsymmetry < 0.0f ? -1.0f : 1.0f;
 			const float fSide = MAX( 0.0f, rProjection.fSignedDistance * fPreferredSide / fHalfWidth );
 			const float fApron = ( 1.0f - CLAMP( fSide, 0.0f, 1.0f ) ) * fWeight;
 			fTarget = fSource + rSettings.fAmplitude * fApron * ( 0.7f + 0.3f * fNoiseFactor );
 			break;
 		}
-		case T3DLandformBaker::HYDRAULIC_CHANNEL: {
+		case Terrain3DLandformBaker::HYDRAULIC_CHANNEL: {
 			const float normalized = rProjection.distance / fHalfWidth;
 			const float fChannel = Math::exp( -normalized * normalized * 10.0f );
 			const float fBank = Math::exp( -Math::pow( normalized - 0.62f, 2.0f ) * 38.0f );
 			fTarget = fSource - rSettings.fAmplitude * fChannel * fNoiseFactor + rSettings.fAmplitude * 0.18f * fBank;
 			break;
 		}
-		case T3DLandformBaker::THERMAL_RELAXATION:
+		case Terrain3DLandformBaker::THERMAL_RELAXATION:
 			fTarget = Math::lerp( fSource, fNeighborTarget, fWeight );
 			break;
-		case T3DLandformBaker::DUNE: {
+		case Terrain3DLandformBaker::DUNE: {
 			const Vector2 wind = rProjection.tangent.length_squared() > TERRAIN3D_LANDFORM_EPSILON ? rProjection.tangent.normalized()
 																				 : Vector2( 1.0f, 0.0f );
 			float fPhase = Math::fmod( rWorld.dot( wind ) / rSettings.fDuneSpacing, 1.0f );
@@ -624,15 +624,15 @@ static float evaluateHeight(
 			fTarget = fSource + rSettings.fAmplitude * smooth01( fDune ) * fWeight * fNoiseFactor;
 			break;
 		}
-		case T3DLandformBaker::SHORELINE: {
+		case Terrain3DLandformBaker::SHORELINE: {
 			const float fDesired = rSettings.water_level + rProjection.fSignedDistance * rSettings.fShoreSlope;
 			fTarget = Math::lerp( fSource, fDesired, fWeight );
 			break;
 		}
-		case T3DLandformBaker::MORPHOLOGY:
+		case Terrain3DLandformBaker::MORPHOLOGY:
 			fTarget = Math::lerp( fSource, fNeighborTarget, fWeight );
 			break;
-		case T3DLandformBaker::OCCLUSION: {
+		case Terrain3DLandformBaker::OCCLUSION: {
 			const float fRidge = rSettings.fAmplitude * fWeight * fNoiseFactor;
 			const float fSide = CLAMP( rProjection.fSignedDistance / fHalfWidth, -1.0f, 1.0f );
 			fTarget = fSource + fRidge * ( 1.0f - 0.28f * MAX( fSide, 0.0f ) );
@@ -705,11 +705,11 @@ static void addQuad(
 }
 
 static Ref<StandardMaterial3D> createCliffMaterial(
-	T3DTerrain *pTerrain, const t3dsettings_t &rSettings,
+	Terrain3D *pTerrain, const t3dsettings_t &rSettings,
 	Dictionary &rCache
 ) {
 	String cache_key = "default";
-	Ref<T3DTextureAsset> pAsset;
+	Ref<Terrain3DTextureAsset> pAsset;
 	if ( pTerrain && pTerrain->getAssets().is_valid() ) {
 		pAsset = pTerrain->getAssets()->getTextureAsset( rSettings.base_texture );
 		cache_key = String::num_uint64( ( uint64_t ) ( pTerrain->get_instance_id() ) ) + ":" +
@@ -744,7 +744,7 @@ static Ref<StandardMaterial3D> createCliffMaterial(
 	return pMaterial;
 }
 
-static eastl::vector<int> getValidMeshIds( T3DTerrain *pTerrain, const eastl::vector<int> &nIds ) {
+static eastl::vector<int> getValidMeshIds( Terrain3D *pTerrain, const eastl::vector<int> &nIds ) {
 	eastl::vector<int> valid;
 	if ( !pTerrain || pTerrain->getAssets().is_null() ) {
 		return valid;
@@ -754,7 +754,7 @@ static eastl::vector<int> getValidMeshIds( T3DTerrain *pTerrain, const eastl::ve
 		if ( mesh_id < 0 || mesh_id >= pTerrain->getAssets()->getMeshCount() ) {
 			continue;
 		}
-		const Ref<T3DMeshAsset> pAsset = pTerrain->getAssets()->getMeshAsset( mesh_id );
+		const Ref<Terrain3DMeshAsset> pAsset = pTerrain->getAssets()->getMeshAsset( mesh_id );
 		if ( pAsset.is_valid() && pAsset->isEnabled() && pAsset->getMesh( 0 ).is_valid() ) {
 			valid.push_back( mesh_id );
 		}
@@ -774,7 +774,7 @@ static float moduleScalePenalty( const float fScale, const float fMinScale, cons
 }
 
 static int chooseModuleId(
-	T3DTerrain *pTerrain, const eastl::vector<int> &nPool, const float fTargetLength,
+	Terrain3D *pTerrain, const eastl::vector<int> &nPool, const float fTargetLength,
 	const float fTargetHeight, const float fTargetDepth, const float fMinScale,
 	const float fMaxScale, const int iSegmentIndex, const Vector3 &rCenter,
 	const int nSeed, const int nPreviousId
@@ -791,7 +791,7 @@ static int chooseModuleId(
 		( ( uint32_t ) ( iSegmentIndex ) * TERRAIN3D_HASH_MIX_32 ) ^ ( uint32_t ) ( nSeed ) );
 
 	for ( const int mesh_id : nPool ) {
-		const Ref<T3DMeshAsset> pAsset = pTerrain->getAssets()->getMeshAsset( mesh_id );
+		const Ref<Terrain3DMeshAsset> pAsset = pTerrain->getAssets()->getMeshAsset( mesh_id );
 		const Ref<Mesh> pSourceMesh = pAsset.is_valid() ? pAsset->getMesh( 0 ) : Ref<Mesh>();
 		if ( pSourceMesh.is_null() ) {
 			continue;
@@ -898,7 +898,7 @@ static void calculateLandformRegions( void *pContext, const size_t nBegin, const
 		const eastl::vector<float> &source_values = edit.source_values;
 		eastl::vector<float> working_values = source_values;
 		eastl::vector<float> next_values = working_values;
-		const int relaxation_passes = settings.mode == T3DLandformBaker::THERMAL_RELAXATION ? settings.iterations : 1;
+		const int relaxation_passes = settings.mode == Terrain3DLandformBaker::THERMAL_RELAXATION ? settings.iterations : 1;
 		for ( int pass = 0; pass < relaxation_passes; ++pass ) {
 			const eastl::vector<float> &pass_source = working_values;
 			next_values = working_values;
@@ -914,9 +914,9 @@ static void calculateLandformRegions( void *pContext, const size_t nBegin, const
 					const t3dpathProjection_t projection = projectToPath( operation_path, world );
 					const float fSource = pass_source[( size_t ) ( y * context->nRegionSize + x )];
 					float fNeighborTarget = fSource;
-					if ( settings.mode == T3DLandformBaker::THERMAL_RELAXATION ) {
+					if ( settings.mode == Terrain3DLandformBaker::THERMAL_RELAXATION ) {
 						fNeighborTarget = thermalTarget( pass_source, context->nRegionSize, x, y, context->fSpacing, settings.fAngleOfRepose );
-					} else if ( settings.mode == T3DLandformBaker::MORPHOLOGY ) {
+					} else if ( settings.mode == Terrain3DLandformBaker::MORPHOLOGY ) {
 						fNeighborTarget = morphologyTarget( pass_source, context->nRegionSize, x, y, settings.morphology_mode );
 					}
 					const float fEvaluated = evaluateHeight( settings, projection, world, context->areaCenter,
@@ -946,8 +946,8 @@ static void calculateLandformRegions( void *pContext, const size_t nBegin, const
 	}
 }
 
-Dictionary T3DLandformBaker::apply(
-	T3DTerrain *const pTerrain, const PackedVector3Array &arrPath,
+Dictionary Terrain3DLandformBaker::apply(
+	Terrain3D *const pTerrain, const PackedVector3Array &arrPath,
 	const Dictionary &dictSettings
 ) {
 	Dictionary result;
@@ -964,7 +964,7 @@ Dictionary T3DLandformBaker::apply(
 	const t3dsettings_t settings = parseSettings( dictSettings );
 	const PackedVector3Array operation_path = smoothPath( arrPath, 2 );
 	const t3dbasinProfile_t basin_profile = buildBasinProfile( operation_path );
-	T3DData *const data = pTerrain->getData();
+	Terrain3DData *const data = pTerrain->getData();
 	const int region_size = pTerrain->getRegionSize();
 	const float spacing = pTerrain->getVertexSpacing();
 	const float fWorldRegionSize = ( float ) ( region_size ) * spacing;
@@ -1000,7 +1000,7 @@ Dictionary T3DLandformBaker::apply(
 				result["error"] = "A terrain region could not be paged into the CPU map cache; no terrain was changed.";
 				return result;
 			}
-			const Ref<T3DRegion> region = data->getRegion( location );
+			const Ref<Terrain3DRegion> region = data->getRegion( location );
 			if ( region.is_null() || region->isDeleted() ) {
 				continue;
 			}
@@ -1023,7 +1023,7 @@ Dictionary T3DLandformBaker::apply(
 	// rebuild. The edit path below performs incremental layer uploads and therefore
 	// requires the slot arrays to be coherent before the first commit.
 	if ( bAddedRegions ) {
-		data->updateMaps( T3DRegion::TYPE_MAX, true, false );
+		data->updateMaps( Terrain3DRegion::TYPE_MAX, true, false );
 	}
 
 	// Snapshot engine-owned image bytes on the calling thread. Workers only touch
@@ -1031,7 +1031,7 @@ Dictionary T3DLandformBaker::apply(
 	// resource access.
 	const size_t pixel_count = ( size_t ) ( region_size ) * ( size_t ) ( region_size );
 	for ( t3dregionEdit_t &edit : edits ) {
-		Image *const pHeightMap = edit.pRegion->getMapPtrForWrite( T3DRegion::TYPE_HEIGHT );
+		Image *const pHeightMap = edit.pRegion->getMapPtrForWrite( Terrain3DRegion::TYPE_HEIGHT );
 		if ( !validateHeightMap( pHeightMap, region_size ) ) {
 			removeCreatedRegions( data, edits );
 			result["error"] = "The landform overlapped a region with invalid height-map storage; no terrain was changed.";
@@ -1122,8 +1122,8 @@ Dictionary T3DLandformBaker::apply(
 		if ( !edit.bHeightModified ) {
 			continue;
 		}
-		Image *const pHeightMap = edit.pRegion->getMapPtrForWrite( T3DRegion::TYPE_HEIGHT );
-		Image *const pControlMap = settings.bPaintMaterial ? edit.pRegion->getMapPtrForWrite( T3DRegion::TYPE_CONTROL ) : nullptr;
+		Image *const pHeightMap = edit.pRegion->getMapPtrForWrite( Terrain3DRegion::TYPE_HEIGHT );
+		Image *const pControlMap = settings.bPaintMaterial ? edit.pRegion->getMapPtrForWrite( Terrain3DRegion::TYPE_CONTROL ) : nullptr;
 		PackedByteArray height_bytes = pHeightMap->get_data();
 		uint8_t *const pHeightWrite = height_bytes.ptrw();
 		const Image::Format height_format = pHeightMap->get_format();
@@ -1164,13 +1164,13 @@ Dictionary T3DLandformBaker::apply(
 		}
 	}
 
-	uint32_t commit_flags = T3DData::MAP_EDIT_UPDATE_INSTANCES | T3DData::MAP_EDIT_SNAP;
-	if ( pTerrain->getCollisionMode() == T3DCollision::DYNAMIC_EDITOR ) {
-		commit_flags |= T3DData::MAP_EDIT_UPDATE_COLLISION;
+	uint32_t commit_flags = Terrain3DData::MAP_EDIT_UPDATE_INSTANCES | Terrain3DData::MAP_EDIT_SNAP;
+	if ( pTerrain->getCollisionMode() == Terrain3DCollision::DYNAMIC_EDITOR ) {
+		commit_flags |= Terrain3DData::MAP_EDIT_UPDATE_COLLISION;
 	}
-	data->commitMapEdits( T3DRegion::TYPE_HEIGHT, height_locations, edited_area, commit_flags );
+	data->commitMapEdits( Terrain3DRegion::TYPE_HEIGHT, height_locations, edited_area, commit_flags );
 	if ( !control_locations.empty() ) {
-		data->commitMapEdits( T3DRegion::TYPE_CONTROL, control_locations, edited_area, T3DData::MAP_EDIT_SNAP );
+		data->commitMapEdits( Terrain3DRegion::TYPE_CONTROL, control_locations, edited_area, Terrain3DData::MAP_EDIT_SNAP );
 	}
 
 	Array before;
@@ -1202,11 +1202,11 @@ Dictionary T3DLandformBaker::apply(
 	return result;
 }
 
-void T3DLandformBaker::restore( T3DTerrain *const pTerrain, const Array &rSnapshots, const AABB &rEditedArea ) {
+void Terrain3DLandformBaker::restore( Terrain3D *const pTerrain, const Array &rSnapshots, const AABB &rEditedArea ) {
 	if ( !pTerrain || !pTerrain->getData() ) {
 		return;
 	}
-	T3DData *const pData = pTerrain->getData();
+	Terrain3DData *const pData = pTerrain->getData();
 	eastl::vector<Vector2i> height_locations;
 	eastl::vector<Vector2i> control_locations;
 	bool bAddedRegions = false;
@@ -1227,7 +1227,7 @@ void T3DLandformBaker::restore( T3DTerrain *const pTerrain, const Array &rSnapsh
 			}
 			bAddedRegions = true;
 		}
-		Ref<T3DRegion> pRegion = pData->getRegion( location );
+		Ref<Terrain3DRegion> pRegion = pData->getRegion( location );
 		if ( pRegion.is_null() ) {
 			continue;
 		}
@@ -1253,22 +1253,22 @@ void T3DLandformBaker::restore( T3DTerrain *const pTerrain, const Array &rSnapsh
 		control_locations.push_back( location );
 	}
 	if ( bAddedRegions ) {
-		pData->updateMaps( T3DRegion::TYPE_MAX, true, false );
+		pData->updateMaps( Terrain3DRegion::TYPE_MAX, true, false );
 	}
 	if ( !height_locations.empty() ) {
-		uint32_t flags = T3DData::MAP_EDIT_UPDATE_INSTANCES | T3DData::MAP_EDIT_SNAP;
-		if ( pTerrain->getCollisionMode() == T3DCollision::DYNAMIC_EDITOR ) {
-			flags |= T3DData::MAP_EDIT_UPDATE_COLLISION;
+		uint32_t flags = Terrain3DData::MAP_EDIT_UPDATE_INSTANCES | Terrain3DData::MAP_EDIT_SNAP;
+		if ( pTerrain->getCollisionMode() == Terrain3DCollision::DYNAMIC_EDITOR ) {
+			flags |= Terrain3DData::MAP_EDIT_UPDATE_COLLISION;
 		}
-		pData->commitMapEdits( T3DRegion::TYPE_HEIGHT, height_locations, rEditedArea, flags );
+		pData->commitMapEdits( Terrain3DRegion::TYPE_HEIGHT, height_locations, rEditedArea, flags );
 	}
 	if ( !control_locations.empty() ) {
-		pData->commitMapEdits( T3DRegion::TYPE_CONTROL, control_locations, rEditedArea, T3DData::MAP_EDIT_SNAP );
+		pData->commitMapEdits( Terrain3DRegion::TYPE_CONTROL, control_locations, rEditedArea, Terrain3DData::MAP_EDIT_SNAP );
 	}
 }
 
-Dictionary T3DLandformBaker::buildCliffModules(
-	T3DTerrain *const pTerrain,
+Dictionary Terrain3DLandformBaker::buildCliffModules(
+	Terrain3D *const pTerrain,
 	const PackedVector3Array &arrPath,
 	const Dictionary &dictSettings
 ) const {
@@ -1352,7 +1352,7 @@ Dictionary T3DLandformBaker::buildCliffModules(
 		}
 		previous_mesh_id = mesh_id;
 
-		const Ref<T3DMeshAsset> pAsset = pTerrain->getAssets()->getMeshAsset( mesh_id );
+		const Ref<Terrain3DMeshAsset> pAsset = pTerrain->getAssets()->getMeshAsset( mesh_id );
 		const Ref<Mesh> pSourceMesh = pAsset.is_valid() ? pAsset->getMesh( 0 ) : Ref<Mesh>();
 		if ( pSourceMesh.is_null() ) {
 			continue;
@@ -1402,8 +1402,8 @@ Dictionary T3DLandformBaker::buildCliffModules(
 	return result;
 }
 
-Ref<ArrayMesh> T3DLandformBaker::buildCliffCollisionMesh(
-	T3DTerrain *const pTerrain,
+Ref<ArrayMesh> Terrain3DLandformBaker::buildCliffCollisionMesh(
+	Terrain3D *const pTerrain,
 	const PackedVector3Array &arrPath,
 	const Dictionary &dictSettings
 ) const {
@@ -1454,8 +1454,8 @@ Ref<ArrayMesh> T3DLandformBaker::buildCliffCollisionMesh(
 	return pSurface->commit();
 }
 
-Ref<ArrayMesh> T3DLandformBaker::buildCliffMesh(
-	T3DTerrain *const pTerrain, const PackedVector3Array &arrPath,
+Ref<ArrayMesh> Terrain3DLandformBaker::buildCliffMesh(
+	Terrain3D *const pTerrain, const PackedVector3Array &arrPath,
 	const Dictionary &dictSettings
 ) const {
 	if ( !pTerrain || !pTerrain->getData() || arrPath.size() < 2 ) {
@@ -1469,7 +1469,7 @@ Ref<ArrayMesh> T3DLandformBaker::buildCliffMesh(
 
 	float pFUvScale = 0.1f;
 	if ( pTerrain->getAssets().is_valid() ) {
-		const Ref<T3DTextureAsset> pAsset = pTerrain->getAssets()->getTextureAsset( settings.base_texture );
+		const Ref<Terrain3DTextureAsset> pAsset = pTerrain->getAssets()->getTextureAsset( settings.base_texture );
 		if ( pAsset.is_valid() ) {
 			pFUvScale = MAX( ( float ) ( pAsset->getUvScale() ), 0.001f );
 		}
@@ -1610,7 +1610,7 @@ Ref<ArrayMesh> T3DLandformBaker::buildCliffMesh(
 	return pMesh;
 }
 
-void T3DLandformBaker::_bind_methods( void ) {
+void Terrain3DLandformBaker::_bind_methods( void ) {
 	BIND_ENUM_CONSTANT( RIDGE );
 	BIND_ENUM_CONSTANT( VALLEY );
 	BIND_ENUM_CONSTANT( SCARP );
@@ -1640,12 +1640,12 @@ void T3DLandformBaker::_bind_methods( void ) {
 	BIND_ENUM_CONSTANT( GEOMETRY_PROCEDURAL_UNIQUE );
 	BIND_ENUM_CONSTANT( GEOMETRY_MAX );
 
-	ClassDB::bind_method( D_METHOD( "apply", "terrain", "path", "settings" ), &T3DLandformBaker::apply );
-	ClassDB::bind_method( D_METHOD( "restore", "terrain", "snapshots", "edited_area" ), &T3DLandformBaker::restore );
+	ClassDB::bind_method( D_METHOD( "apply", "terrain", "path", "settings" ), &Terrain3DLandformBaker::apply );
+	ClassDB::bind_method( D_METHOD( "restore", "terrain", "snapshots", "edited_area" ), &Terrain3DLandformBaker::restore );
 	ClassDB::bind_method( D_METHOD( "build_cliff_mesh", "terrain", "path", "settings" ),
-						 &T3DLandformBaker::buildCliffMesh );
+						 &Terrain3DLandformBaker::buildCliffMesh );
 	ClassDB::bind_method( D_METHOD( "build_cliff_modules", "terrain", "path", "settings" ),
-						 &T3DLandformBaker::buildCliffModules );
+						 &Terrain3DLandformBaker::buildCliffModules );
 	ClassDB::bind_method( D_METHOD( "build_cliff_collision_mesh", "terrain", "path", "settings" ),
-						 &T3DLandformBaker::buildCliffCollisionMesh );
+						 &Terrain3DLandformBaker::buildCliffCollisionMesh );
 }

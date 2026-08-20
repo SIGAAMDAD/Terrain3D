@@ -19,13 +19,12 @@
 using namespace godot;
 #endif
 
-class T3DTerrain;
+class Terrain3D;
 
 // Streams external LightmapGIData packages with terrain-region residency.
 // Region resources retain only package metadata; the heavy .lmbake payload and
 // its lightmap/shadowmask textures are requested when the cluster is desired.
-class T3DLightmapStreamer : public Object {
-	using Terrain3DLightmapStreamer = T3DLightmapStreamer;
+class Terrain3DLightmapStreamer : public Object {
 	GDCLASS( Terrain3DLightmapStreamer, Object );
 	CLASS_NAME();
 
@@ -36,7 +35,7 @@ class T3DLightmapStreamer : public Object {
 	} t3dsourceLoadResult_t;
 
 	typedef struct t3dactivePackage_s {
-		Ref<T3DRegionLighting> pPackage;
+		Ref<Terrain3DRegionLighting> pPackage;
 		Ref<LightmapGIData> pSourceData;
 		Ref<LightmapGIData> pRuntimeData;
 		LightmapGI *pNode = nullptr;
@@ -45,7 +44,7 @@ class T3DLightmapStreamer : public Object {
 		bool bDesired = false;
 	} t3dactivePackage_t;
 
-	T3DTerrain *m_pTerrain = nullptr;
+	Terrain3D *m_pTerrain = nullptr;
 	eastl::vector<t3dactivePackage_t> m_active;
 	bool m_bEnabled = true;
 	int m_nRadiusRegions = 1;
@@ -71,39 +70,39 @@ class T3DLightmapStreamer : public Object {
 	uint64_t m_nCompatibilityFailuresTotal = 0u;
 	size_t m_nResidentEstimatedBytes = 0u;
 
-	t3dactivePackage_t *findActive( const Ref<T3DRegionLighting> &rPackage );
-	const t3dactivePackage_t *findActive( const Ref<T3DRegionLighting> &rPackage ) const;
+	t3dactivePackage_t *findActive( const Ref<Terrain3DRegionLighting> &rPackage );
+	const t3dactivePackage_t *findActive( const Ref<Terrain3DRegionLighting> &rPackage ) const;
 	t3dsourceLoadResult_t requestSourceData(
-		const Ref<T3DRegionLighting> &rPackage,
+		const Ref<Terrain3DRegionLighting> &rPackage,
 		Ref<LightmapGIData> &rData
 	);
-	bool loadReceiverRecords( const Ref<T3DRegionLighting> &rPackage, eastl::vector<T3DRuntimeLightingReceiverRecord> &rReceivers ) const;
+	bool loadReceiverRecords( const Ref<Terrain3DRegionLighting> &rPackage, eastl::vector<T3DRuntimeLightingReceiverRecord> &rReceivers ) const;
 	bool collectReceiverState(
-		const Ref<T3DRegionLighting> &rPackage, uint64_t &nSignature, int &nReceiverCount
+		const Ref<Terrain3DRegionLighting> &rPackage, uint64_t &nSignature, int &nReceiverCount
 	) const;
 	bool buildRuntimeData(
-		const Ref<T3DRegionLighting> &rPackage,
+		const Ref<Terrain3DRegionLighting> &rPackage,
 		const Ref<LightmapGIData> &rSource, Ref<LightmapGIData> &rData,
 		uint64_t &nSignature, int &nReceiverCount
 	) const;
 	bool activate(
-		const Ref<T3DRegionLighting> &rPackage, const Ref<LightmapGIData> &rSourceData,
+		const Ref<Terrain3DRegionLighting> &rPackage, const Ref<LightmapGIData> &rSourceData,
 		const Ref<LightmapGIData> &rRuntimeData, uint64_t nSignature, int nReceiverCount
 	);
 	bool refreshActive(
 		t3dactivePackage_t &rActive, const Ref<LightmapGIData> &rRuntimeData,
 		uint64_t nSignature, int nReceiverCount
 	);
-	bool isPackageCompatibleWithActive( const Ref<T3DRegionLighting> &rPackage ) const;
+	bool isPackageCompatibleWithActive( const Ref<Terrain3DRegionLighting> &rPackage ) const;
 	void deactivate( size_t iIndex );
 	void markDesired( const Vector2i &rCenter );
 	int getEffectiveResidencyBudgetMb( void ) const;
 
 public:
-	T3DLightmapStreamer( void ) = default;
-	~T3DLightmapStreamer( void );
+	Terrain3DLightmapStreamer( void ) = default;
+	~Terrain3DLightmapStreamer( void );
 
-	void initialize( T3DTerrain *pTerrain );
+	void initialize( Terrain3D *pTerrain );
 	void destroy( void );
 	void updateResidency( const Vector3 &rTargetPosition, bool bForce = false );
 	void suspend( void );
@@ -131,7 +130,4 @@ public:
 protected:
 	static void _bind_methods( void );
 };
-
-using Terrain3DLightmapStreamer = T3DLightmapStreamer;
-
 #endif // TERRAIN3D_LIGHTMAP_STREAMER_H

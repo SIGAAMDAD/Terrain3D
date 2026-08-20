@@ -14,7 +14,7 @@
 #include <cstddef>
 #include <cstdint>
 
-class T3DRegion;
+class Terrain3DRegion;
 class T3DRegionPersistence;
 class T3DRegionRepository;
 class T3DSamplingStorage;
@@ -49,7 +49,7 @@ public:
 	void refreshCapacity( void );
 	void invalidate( const Vector2i &vLocation );
 
-	bool loadSource( const Vector2i &vLocation, Ref<T3DRegion> &rSource ) const;
+	bool loadSource( const Vector2i &vLocation, Ref<Terrain3DRegion> &rSource ) const;
 	bool requestSourceAsync( const Vector2i &vLocation );
 	bool ensureResident( const Vector2i &vLocation, bool bDemandLoad = true );
 	bool ensureSampleArea( const Vector3 &rWorldPosition, int nRadiusTexels );
@@ -105,10 +105,10 @@ private:
 
 	int calculateCapacity( void ) const;
 	int findSlot( const Vector2i &vLocation ) const;
-	bool takeSourceAsync( const Vector2i &vLocation, Ref<T3DRegion> &rSource );
+	bool takeSourceAsync( const Vector2i &vLocation, Ref<Terrain3DRegion> &rSource );
 	void prewarmSources( const T3DResidencyFrameState &rFrame );
 	void reapSourceAsync( const T3DResidencyFrameState &rFrame );
-	bool publishSlot( int iSlot, const Vector2i &vLocation, const Ref<T3DRegion> &rSource );
+	bool publishSlot( int iSlot, const Vector2i &vLocation, const Ref<Terrain3DRegion> &rSource );
 	bool publishCookedSlot( int iSlot, const Vector2i &vLocation, const Ref<Image> &rHeight,
 		const Ref<Image> &rControl, const Ref<Image> &rColor, const Ref<Image> &rDerived );
 	bool cookedRuntimeEnabled( void ) const;

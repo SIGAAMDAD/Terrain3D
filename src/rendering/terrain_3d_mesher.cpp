@@ -172,7 +172,7 @@ T3DMesher::t3dclipmapGeometry_t T3DMesher::generateCombinedGeometry( const bool 
 	weldClipmapGeometry( vertices, metadata, indices );
 	const real_t fRadius = m_fOffsetC + 2.0f;
 	geometry.aabb = AABB( Vector3( -fRadius, -0.1f, -fRadius ), Vector3( fRadius * 2.0f, 0.2f, fRadius * 2.0f ) );
-	LOG( T3DTerrain::INFO, "Generated ", bLod0 ? "LOD0" : "outer-ring", " clipmap geometry: ", vertices.size(),
+	LOG( Terrain3D::INFO, "Generated ", bLod0 ? "LOD0" : "outer-ring", " clipmap geometry: ", vertices.size(),
 		" welded vertices from ", source_vertex_count, " source vertices, ", indices.size() / 3, " triangles" );
 	return geometry;
 }
@@ -235,7 +235,7 @@ bool T3DMesher::loadRuntimeGeometryPack( const String &rDataDirectory ) {
 				geometry.vertices, geometry.metadata, geometry.indices, geometry.aabb );
 		}
 	}
-	LOG( T3DTerrain::INFO, "Loaded cooked clipmap geometry pack for mesh size ", m_nMeshSize );
+	LOG( Terrain3D::INFO, "Loaded cooked clipmap geometry pack for mesh size ", m_nMeshSize );
 	return true;
 }
 
@@ -305,7 +305,7 @@ bool T3DMesher::writeRuntimeGeometryPack( const String &rDataDirectory ) const {
 
 void T3DMesher::generateMeshTypes( void ) {
 	clearMeshTypes();
-	LOG( T3DTerrain::INFO, "Generating two immutable complete clipmap geometry templates for size ", m_nMeshSize );
+	LOG( Terrain3D::INFO, "Generating two immutable complete clipmap geometry templates for size ", m_nMeshSize );
 	m_szMeshGeometry[LOD0_MESH] = generateCombinedGeometry( true );
 	m_szMeshGeometry[OUTER_RING_MESH] = generateCombinedGeometry( false );
 	if ( !m_bStateMeshBatching ) {
@@ -368,7 +368,7 @@ RID T3DMesher::instantiateStateMesh( const int nFirstLod, const int nLastLod ) {
 		Vector3( -fRadius, m_fClipmapAabbMinY, -fRadius ),
 		Vector3( fRadius * 2.0f, m_fClipmapAabbSizeY, fRadius * 2.0f )
 	);
-	LOG( T3DTerrain::INFO, "Generated state clipmap mesh for LODs ", nFirstLod, "-", nLastLod, ": ", vertices.size(),
+	LOG( Terrain3D::INFO, "Generated state clipmap mesh for LODs ", nFirstLod, "-", nLastLod, ": ", vertices.size(),
 		" vertices, ", indices.size() / 3, " triangles" );
 	// Built-in terrain shaders derive their geometric normal/tangent basis from
 	// terrain data in fragment shading, so state meshes do not need static basis
@@ -435,13 +435,13 @@ T3DMesher::t3dclipmapBatch_t T3DMesher::createBatch(
 ) {
 	t3dclipmapBatch_t batch;
 	if ( !rMesh.is_valid() || nCount <= 0 || nCount > TERRAIN3D_MAX_BATCH_INSTANCES ) {
-		LOG( T3DTerrain::ERROR, "Invalid clipmap render batch request. Mesh valid: ", rMesh.is_valid(), ", count: ", nCount );
+		LOG( Terrain3D::ERROR, "Invalid clipmap render batch request. Mesh valid: ", rMesh.is_valid(), ", count: ", nCount );
 		return batch;
 	}
 
 	batch.multimesh = RS->multimesh_create();
 	if ( !batch.multimesh.is_valid() ) {
-		LOG( T3DTerrain::ERROR, "Failed to create clipmap MultiMesh" );
+		LOG( Terrain3D::ERROR, "Failed to create clipmap MultiMesh" );
 		return batch;
 	}
 	RS->multimesh_allocate_data( batch.multimesh, nCount, RenderingServer::MULTIMESH_TRANSFORM_3D,
@@ -452,7 +452,7 @@ T3DMesher::t3dclipmapBatch_t T3DMesher::createBatch(
 	batch.transformBuffer.fill( 0.0f );
 	batch.instance = RS->instance_create2( batch.multimesh, m_scenario );
 	if ( !batch.instance.is_valid() ) {
-		LOG( T3DTerrain::ERROR, "Failed to create clipmap MultiMesh instance" );
+		LOG( Terrain3D::ERROR, "Failed to create clipmap MultiMesh instance" );
 		RS->free_rid( batch.multimesh );
 		batch.multimesh = RID();
 		return batch;
@@ -471,7 +471,7 @@ T3DMesher::t3dclipmapBatch_t T3DMesher::createStateBatch(
 ) {
 	t3dclipmapBatch_t batch;
 	if ( nFirstLod < 0 || nLastLod < nFirstLod || nLastLod >= m_nClipmapLevelCount ) {
-		LOG( T3DTerrain::ERROR, "Invalid state clipmap batch range: ", nFirstLod, "-", nLastLod );
+		LOG( Terrain3D::ERROR, "Invalid state clipmap batch range: ", nFirstLod, "-", nLastLod );
 		return batch;
 	}
 	batch.mesh = instantiateStateMesh( nFirstLod, nLastLod );
@@ -512,7 +512,7 @@ void T3DMesher::setBatchInstance(
 ) {
 	if ( !rBatch.multimesh.is_valid() || iIndex < 0 || iIndex >= rBatch.nCount ||
 		rBatch.transformBuffer.size() != ( int64_t ) ( rBatch.nCount ) * TERRAIN3D_MULTIMESH_STRIDE_FLOATS ) {
-		LOG( T3DTerrain::ERROR, "Clipmap batch instance index out of bounds: ", iIndex, " / ", ( int ) ( rBatch.nCount ) );
+		LOG( Terrain3D::ERROR, "Clipmap batch instance index out of bounds: ", iIndex, " / ", ( int ) ( rBatch.nCount ) );
 		return;
 	}
 	float *pRecord = rBatch.transformBuffer.ptrw() + ( size_t ) ( iIndex ) * TERRAIN3D_MULTIMESH_STRIDE_FLOATS;
@@ -600,7 +600,7 @@ void T3DMesher::rebuildRenderBatches( void ) {
 			++end_lod;
 		}
 		if ( m_nRenderBatchCount >= TERRAIN3D_MAX_RENDER_BATCHES ) {
-			LOG( T3DTerrain::ERROR, "Clipmap batching exceeded fixed render batch capacity: ", TERRAIN3D_MAX_RENDER_BATCHES );
+			LOG( Terrain3D::ERROR, "Clipmap batching exceeded fixed render batch capacity: ", TERRAIN3D_MAX_RENDER_BATCHES );
 			return;
 		}
 		const int count = end_lod - lod + 1;
@@ -660,7 +660,7 @@ void T3DMesher::rebuildRenderBatches( void ) {
 				shadow_batch = createStateBatch( first_lod, last_lod, tier, true );
 			}
 			if ( !shadow_batch.instance.is_valid() ) {
-				LOG( T3DTerrain::ERROR, "Failed to create clipmap shadow state batch for tier ", tier,
+				LOG( Terrain3D::ERROR, "Failed to create clipmap shadow state batch for tier ", tier,
 					" LODs ", first_lod, "-", last_lod );
 				continue;
 			}
@@ -670,7 +670,7 @@ void T3DMesher::rebuildRenderBatches( void ) {
 		}
 	}
 
-	LOG( T3DTerrain::INFO, "Clipmap render batching: ", m_nClipmapLevelCount, " LODs -> ", m_nRenderBatchCount,
+	LOG( Terrain3D::INFO, "Clipmap render batching: ", m_nClipmapLevelCount, " LODs -> ", m_nRenderBatchCount,
 		" visible state batches + ", m_nShadowBatchCount, " shadow state batches using ",
 		getBaseMeshCount(), " mesh resources; mode=", m_bStateMeshBatching ? "combined-state" : "multimesh-fallback" );
 }
@@ -875,7 +875,7 @@ void T3DMesher::generateClipmap( void ) {
 }
 
 void T3DMesher::generateOffsetData( void ) {
-	LOG( T3DTerrain::INFO, "Computing fixed clipmap positioning offsets" );
+	LOG( Terrain3D::INFO, "Computing fixed clipmap positioning offsets" );
 	m_szTilePosLod0 = {
 		Vector3( 0, 0, m_nMeshSize ), Vector3( m_nMeshSize, 0, m_nMeshSize ), Vector3( m_nMeshSize, 0, 0 ),
 		Vector3( m_nMeshSize, 0, -m_nMeshSize ), Vector3( m_nMeshSize, 0, -m_nMeshSize * 2 ),
@@ -924,7 +924,7 @@ void T3DMesher::generateLodCache( void ) {
 }
 
 void T3DMesher::clearClipmap( void ) {
-	LOG( T3DTerrain::INFO, "Freeing clipmap render batches" );
+	LOG( Terrain3D::INFO, "Freeing clipmap render batches" );
 	// Free shadows-only instances first because they may borrow visible state
 	// meshes rather than owning duplicate geometry resources.
 	for ( t3dclipmapBatch_t &batch : m_szShadowStateBatches ) {
@@ -952,7 +952,7 @@ int T3DMesher::getImmediateLodCount( void ) const {
 }
 
 void T3DMesher::clearMeshTypes( void ) {
-	LOG( T3DTerrain::INFO, "Freeing shared clipmap meshes" );
+	LOG( Terrain3D::INFO, "Freeing shared clipmap meshes" );
 	for ( RID &rid : m_szMeshRids ) {
 		if ( rid.is_valid() ) {
 			RS->free_rid( rid );
@@ -969,7 +969,7 @@ void T3DMesher::clearMeshTypes( void ) {
 ///////////////////////////
 
 void T3DMesher::initialize(
-	T3DTerrain *const pTerrain, const int nMeshSize, const int nLods,
+	Terrain3D *const pTerrain, const int nMeshSize, const int nLods,
 	const int nTessellationLevel, const real_t fVertexSpacing, const eastl::array<RID, 3> &rMaterials,
 	const eastl::array<RID, 3> &rShadowMaterials,
 	const int nNearShaderLodCount, const int nMiddleShaderLodCount,
@@ -985,10 +985,10 @@ void T3DMesher::initialize(
 	}
 	m_pTerrain = pTerrain;
 	if ( !m_pTerrain->isInsideWorld() ) {
-		LOG( T3DTerrain::DEBUG, "Terrain3D's world3D is null" );
+		LOG( Terrain3D::DEBUG, "Terrain3D's world3D is null" );
 		return;
 	}
-	LOG( T3DTerrain::INFO, "Initializing GeoMesh" );
+	LOG( Terrain3D::INFO, "Initializing GeoMesh" );
 	m_scenario = m_pTerrain->get_world_3d()->get_scenario();
 	m_szMaterials = rMaterials;
 	m_szShadowMaterials = rShadowMaterials;
@@ -1022,7 +1022,7 @@ void T3DMesher::initialize(
 }
 
 void T3DMesher::destroy( void ) {
-	LOG( T3DTerrain::INFO, "Destroying clipmap" );
+	LOG( Terrain3D::INFO, "Destroying clipmap" );
 	clearClipmap();
 	clearMeshTypes();
 	m_szLastLodPositions.fill( V2_MAX );
@@ -1156,7 +1156,7 @@ bool T3DMesher::snapLevel( const int nLod, const Vector3 &rSnappedTarget ) {
 
 	const t3dlodBatchSlot_t slot = m_szLodBatchSlots[( size_t ) ( nLod )];
 	if ( slot.batch < 0 || slot.batch >= m_nRenderBatchCount ) {
-		LOG( T3DTerrain::ERROR, "Missing clipmap render batch for LOD ", nLod );
+		LOG( Terrain3D::ERROR, "Missing clipmap render batch for LOD ", nLod );
 		return false;
 	}
 	t3dclipmapBatch_t &batch = m_szRenderBatches[( size_t ) ( slot.batch )];
