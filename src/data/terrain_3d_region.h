@@ -128,9 +128,15 @@ private:
 	mutable PackedByteArray m_instancePage;
 	mutable bool m_bInstanceStoreResident = true;
 	mutable bool m_bInstanceStoreModified = false;
+	mutable PackedByteArray m_cookedInstanceMetadata;
+	mutable PackedByteArray m_cookedMultimeshFastStart;
 	mutable uint32_t m_szInstanceMeshCounts[TERRAIN3D_MAX_MESH_ASSETS] = {};
 	mutable uint32_t m_nInstanceCount = 0u;
 	mutable uint16_t m_nInstanceMeshCount = 0u;
+	uint64_t m_nCookedPageSourceSignature = 0u;
+	uint16_t m_nCookedStreamedNodeCount = 0u;
+	Vector2i m_cookedStreamedNodeCoverageMin = V2I_ZERO;
+	Vector2i m_cookedStreamedNodeCoverageMax = V2I_ZERO;
 
 	// Dynamic nodes remain as compact spawn/state descriptors while their owning
 	// region is dormant. Terrain3DNodeStreamer is the only runtime publisher.
@@ -243,6 +249,15 @@ public:
 	bool ensureInstanceStoreResident( void ) const;
 	bool evictInstanceStore( void );
 	void adoptPreparedInstanceStoreInternal( T3DInstanceStore &&rStore );
+	void adoptCookedInstanceAccelerationInternal( const PackedByteArray &rMetadata, const PackedByteArray &rFastStart );
+	const PackedByteArray &getCookedInstanceMetadataInternal( void ) const { return m_cookedInstanceMetadata; }
+	const PackedByteArray &getCookedMultimeshFastStartInternal( void ) const { return m_cookedMultimeshFastStart; }
+	void setCookedPageSourceSignatureInternal( const uint64_t nSignature ) { m_nCookedPageSourceSignature = nSignature; }
+	uint64_t getCookedPageSourceSignatureInternal( void ) const { return m_nCookedPageSourceSignature; }
+	void setCookedInstanceMetadataInternal( const uint32_t *pMeshCounts, uint32_t nInstanceCount, uint16_t nMeshCount );
+	void setCookedStreamedNodeMetadataInternal( uint16_t nCount, const Vector2i &rCoverageMin, const Vector2i &rCoverageMax );
+	void adoptCookedStreamedNodeRuntimeInternal( eastl::vector<t3dstreamedNodeRuntimeDescriptor_t> &&rNodes );
+	void adoptCookedRuntimeMapsInternal( const Ref<Image> &rHeight, const Ref<Image> &rControl, const Ref<Image> &rColor, const Ref<Image> &rDerived );
 	void importRuntimeMapsUnmodifiedInternal( const T3DRegion *pSource ) { importRuntimeMapsUnmodified( pSource ); }
 	void releaseRuntimeMapsUnmodifiedInternal( void ) { releaseRuntimeMapsUnmodified(); }
 	bool hasRuntimeMapPayloadInternal( void ) const { return hasRuntimeMapPayload(); }
@@ -252,7 +267,8 @@ public:
 		return m_bInstanceStoreResident;
 	}
 	size_t getInstanceResidentBytes( void ) const {
-		return m_bInstanceStoreResident ? m_instanceStore.residentBytes() : 0u;
+		return m_bInstanceStoreResident ? m_instanceStore.residentBytes() +
+			( size_t ) m_cookedInstanceMetadata.size() + ( size_t ) m_cookedMultimeshFastStart.size() : 0u;
 	}
 	size_t getInstancePageBytes( void ) const {
 		return ( size_t ) ( m_instancePage.size() );
@@ -322,14 +338,15 @@ public:
 		const Dictionary &rState, const int nFlags
 	);
 	int getStreamedNodeCount( void ) const {
-		return ( int ) ( m_streamedNodeRuntime.size() );
+		return m_streamedNodeRuntime.empty() ? ( int ) ( m_nCookedStreamedNodeCount ) : ( int ) ( m_streamedNodeRuntime.size() );
 	}
 	bool streamedNodeCoverageIntersects(
 		const Vector2i &rOwnerLocation,
 		const Vector2i &rTargetMin, const Vector2i &rTargetMax
 	) const;
 	bool hasExtendedStreamedNodeCoverage( void ) const {
-		return m_bStreamedNodeHasExtendedCoverage;
+		return m_bStreamedNodeHasExtendedCoverage || m_nCookedStreamedNodeCount > 0u &&
+			( m_cookedStreamedNodeCoverageMin != V2I_ZERO || m_cookedStreamedNodeCoverageMax != V2I_ZERO );
 	}
 
 	void setLighting( const Ref<T3DRegionLighting> &rLighting );

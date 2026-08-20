@@ -13,6 +13,7 @@
 #include <godot_cpp/variant/vector3.hpp>
 
 #include "lighting/terrain_3d_region_lighting.h"
+#include "data/terrain_3d_runtime_bake_codec.h"
 
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
 using namespace godot;
@@ -76,6 +77,7 @@ class T3DLightmapStreamer : public Object {
 		const Ref<T3DRegionLighting> &rPackage,
 		Ref<LightmapGIData> &rData
 	);
+	bool loadReceiverRecords( const Ref<T3DRegionLighting> &rPackage, eastl::vector<T3DRuntimeLightingReceiverRecord> &rReceivers ) const;
 	bool collectReceiverState(
 		const Ref<T3DRegionLighting> &rPackage, uint64_t &nSignature, int &nReceiverCount
 	) const;

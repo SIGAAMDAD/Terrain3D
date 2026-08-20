@@ -39,6 +39,7 @@
 #include "simd/terrain_3d_parallel.h"
 #include "streaming/terrain_3d_performance_profile.h"
 #include "data/terrain_3d_region_codec.h"
+#include "data/terrain_3d_runtime_bake_codec.h"
 #include "streaming/terrain_3d_streaming_policy.h"
 #include "streaming/terrain_3d_upload_bridge.h"
 #include "core/terrain_3d_util.h"
@@ -181,16 +182,25 @@ void T3DTerrain::disconnectAutoShaderProfileSignal( const Ref<Resource> &rProfil
 }
 
 void T3DTerrain::applyAutoShaderProfileMode( void ) {
-	if ( m_pMaterial.is_null() || m_pAutoShaderProfile.is_null() ) {
+	if ( m_pMaterial.is_null() ) return;
+	const bool strict_cooked = m_bGpuRegionCookedPagesEnabled && !isEditorAuthoringModeInternal();
+	if ( m_pAutoShaderProfile.is_null() ) {
+		if ( strict_cooked ) m_pMaterial->setAutoShaderEnabled( false );
 		return;
 	}
-
 	const Variant mode_value = m_pAutoShaderProfile->get( "mode" );
-	if ( mode_value.get_type() != Variant::INT ) {
+	if ( mode_value.get_type() != Variant::INT ) return;
+	const int mode = ( int ) mode_value;
+	if ( strict_cooked ) {
+		// Production cooked pages already contain resolved material classification.
+		// Never reactivate fragment-time procedural classification in this profile.
+		if ( mode == TERRAIN3D_AUTOSHADER_MODE_LEGACY_RUNTIME || mode == TERRAIN3D_AUTOSHADER_MODE_EDITOR_PREVIEW ) {
+			ERR_PRINT_ONCE( "Terrain3D strict cooked runtime ignores live/legacy autoshader classification; bake the profile into control maps before export." );
+		}
+		m_pMaterial->setAutoShaderEnabled( false );
 		return;
 	}
-
-	m_pMaterial->setAutoShaderEnabled( ( int ) ( mode_value ) == TERRAIN3D_AUTOSHADER_MODE_LEGACY_RUNTIME );
+	m_pMaterial->setAutoShaderEnabled( mode == TERRAIN3D_AUTOSHADER_MODE_LEGACY_RUNTIME );
 }
 
 void T3DTerrain::onAutoShaderProfileChanged( void ) {
@@ -1437,7 +1447,12 @@ void T3DTerrain::setupTerrainMesher( void ) {
 	};
 	m_pTerrainMesher->initialize( this, m_nMeshSize, m_nMeshLods, m_tessellationLevel, m_fVertexSpacing, materials, shadow_materials,
 		near_lods, middle_lods, update_budget, m_renderLayers, m_castShadows, m_giMode, m_nShadowLodCount,
-		tier_shadow_enabled, tier_shadow_lod_counts, bStateMeshBatching );
+		tier_shadow_enabled, tier_shadow_lod_counts, bStateMeshBatching,
+		isGpuRegionCookedPagesEnabled() && !isEditorAuthoringModeInternal() );
+}
+
+bool T3DTerrain::cookRuntimeClipmapGeometryPack( void ) const {
+	return m_pTerrainMesher && m_pTerrainMesher->writeRuntimeGeometryPack( getDataDirectory() );
 }
 
 void T3DTerrain::destroyTerrainMesher( const bool bFinal ) {
@@ -6308,7 +6323,107 @@ PackedVector3Array T3DTerrain::generateNavMeshSourceGeometry(
 ) const {
 	LOG( T3DTerrain::INFO, "Generating NavMesh source geometry from terrain" );
 	PackedVector3Array faces;
-	generateTriangles( faces, nullptr, 0, T3DData::HEIGHT_FILTER_NEAREST, bRequireNav, rGlobalAabb );
+	const bool strict_cooked = m_pData && isGpuRegionCookedPagesEnabled() && !isEditorAuthoringModeInternal();
+	if ( !strict_cooked ) {
+		generateTriangles( faces, nullptr, 0, T3DData::HEIGHT_FILTER_NEAREST, bRequireNav, rGlobalAabb );
+		return faces;
+	}
+
+	const int region_size = ( int ) m_nRegionSize;
+	const int expected_width = region_size + 1;
+	const TypedArray<Vector2i> locations = m_pData->getRegionLocations();
+	auto bit_set = []( const PackedByteArray &rBits, const int nIndex ) -> bool {
+		return nIndex >= 0 && nIndex / 8 < rBits.size() &&
+			( rBits[nIndex / 8] & ( uint8_t ) ( 1u << ( nIndex & 7 ) ) ) != 0u;
+	};
+	for ( const Vector2i location : locations ) {
+		const real_t region_world = ( real_t ) region_size * m_fVertexSpacing;
+		const real_t region_min_x = ( real_t ) location.x * region_world;
+		const real_t region_min_z = ( real_t ) location.y * region_world;
+		if ( rGlobalAabb.has_volume() ) {
+			if ( region_min_x + region_world < rGlobalAabb.position.x || region_min_x > rGlobalAabb.get_end().x ||
+				region_min_z + region_world < rGlobalAabb.position.z || region_min_z > rGlobalAabb.get_end().z ) {
+				continue;
+			}
+		}
+		PackedByteArray navigation_blob;
+		PackedByteArray collision_blob;
+		PackedByteArray minmax_blob;
+		PackedByteArray *const pMinMaxBlob = rGlobalAabb.has_volume() ? &minmax_blob : nullptr;
+		if ( !m_pData->loadCookedNavigationTileNow( location, navigation_blob, &collision_blob, pMinMaxBlob ) ) {
+			LOG( T3DTerrain::ERROR, "Missing/invalid baked navigation tile for region ", location );
+			continue;
+		}
+		PackedByteArray valid_bits;
+		PackedByteArray nav_bits;
+		PackedFloat32Array collision_heights;
+		eastl::vector<Vector2> minmax_ranges;
+		int nav_width = 0;
+		int collision_width = 0;
+		int minmax_source_side = 0;
+		int minmax_level_side = 0;
+		const bool use_minmax = pMinMaxBlob && T3DRuntimeBakeCodec::decodeMinMaxLevel(
+			minmax_blob, 16, minmax_source_side, minmax_level_side, minmax_ranges ) &&
+			minmax_source_side == region_size && minmax_level_side > 0;
+		if ( !T3DRuntimeBakeCodec::decodeNavigationMask( navigation_blob, nav_width, valid_bits, nav_bits ) ||
+			!T3DRuntimeBakeCodec::decodeCollisionHeight( collision_blob, collision_heights, collision_width ) ||
+			nav_width != expected_width || collision_width != expected_width || ( pMinMaxBlob && !use_minmax ) ) {
+			LOG( T3DTerrain::ERROR, "Baked navigation/collision acceleration data does not match region ", location );
+			continue;
+		}
+		auto height_at = [&]( const int x, const int z ) -> real_t {
+			return ( real_t ) collision_heights[x * collision_width + ( collision_width - 1 - z )];
+		};
+		const real_t aabb_min_y = rGlobalAabb.position.y;
+		const real_t aabb_max_y = rGlobalAabb.get_end().y;
+		for ( int z = 0; z < region_size; ++z ) {
+			for ( int x = 0; x < region_size; ++x ) {
+				if ( use_minmax && x + 1 < region_size && z + 1 < region_size ) {
+					const int coarse_x0 = x * minmax_level_side / minmax_source_side;
+					const int coarse_z0 = z * minmax_level_side / minmax_source_side;
+					const int coarse_x1 = ( x + 1 ) * minmax_level_side / minmax_source_side;
+					const int coarse_z1 = ( z + 1 ) * minmax_level_side / minmax_source_side;
+					if ( coarse_x0 == coarse_x1 && coarse_z0 == coarse_z1 ) {
+						const Vector2 range = minmax_ranges[( size_t ) ( coarse_z0 * minmax_level_side + coarse_x0 )];
+						if ( range.y < aabb_min_y || range.x > aabb_max_y ) {
+							continue;
+						}
+					}
+				}
+				const int i1 = z * nav_width + x;
+				const int i2 = z * nav_width + x + 1;
+				const int i3 = ( z + 1 ) * nav_width + x;
+				const int i4 = i3 + 1;
+				const bool valid1 = bit_set( valid_bits, i1 );
+				const bool valid2 = bit_set( valid_bits, i2 );
+				const bool valid3 = bit_set( valid_bits, i3 );
+				const bool valid4 = bit_set( valid_bits, i4 );
+				if ( !valid1 ) continue;
+				const bool nav1 = bit_set( nav_bits, i1 );
+				const bool nav2 = bit_set( nav_bits, i2 );
+				const bool nav3 = bit_set( nav_bits, i3 );
+				const bool nav4 = bit_set( nav_bits, i4 );
+				const int global_x = location.x * region_size + x;
+				const int global_z = location.y * region_size + z;
+				Vector3 v1( ( real_t ) global_x * m_fVertexSpacing, height_at( x, z ), ( real_t ) global_z * m_fVertexSpacing );
+				Vector3 v2( ( real_t ) ( global_x + 1 ) * m_fVertexSpacing, height_at( x + 1, z ), ( real_t ) global_z * m_fVertexSpacing );
+				Vector3 v3( ( real_t ) global_x * m_fVertexSpacing, height_at( x, z + 1 ), ( real_t ) ( global_z + 1 ) * m_fVertexSpacing );
+				Vector3 v4( ( real_t ) ( global_x + 1 ) * m_fVertexSpacing, height_at( x + 1, z + 1 ), ( real_t ) ( global_z + 1 ) * m_fVertexSpacing );
+				if ( rGlobalAabb.has_volume() && ( v1.y < rGlobalAabb.position.y || v1.y > rGlobalAabb.get_end().y ||
+					v1.x < rGlobalAabb.position.x || v1.x > rGlobalAabb.get_end().x ||
+					v1.z < rGlobalAabb.position.z || v1.z > rGlobalAabb.get_end().z ) ) continue;
+				if ( std::isnan( v2.y ) ) v2.y = v1.y;
+				if ( std::isnan( v3.y ) ) v3.y = v1.y;
+				if ( std::isnan( v4.y ) ) v4.y = !std::isnan( v2.y ) ? v2.y : ( !std::isnan( v3.y ) ? v3.y : v1.y );
+				if ( valid1 && valid4 && valid3 && ( !bRequireNav || ( nav1 && nav4 && nav3 ) ) ) {
+					faces.push_back( v1 ); faces.push_back( v4 ); faces.push_back( v3 );
+				}
+				if ( valid1 && valid2 && valid4 && ( !bRequireNav || ( nav1 && nav2 && nav4 ) ) ) {
+					faces.push_back( v1 ); faces.push_back( v2 ); faces.push_back( v4 );
+				}
+			}
+		}
+	}
 	return faces;
 }
 

@@ -14,6 +14,7 @@
 #include "terrain_3d.h"
 #include "physics/terrain_3d_collision.h"
 #include "data/terrain_3d_data.h"
+#include "data/terrain_3d_runtime_bake_codec.h"
 #include "data/terrain_3d_sampler.h"
 #include "core/terrain_3d_util.h"
 
@@ -381,7 +382,45 @@ void T3DCollision::updateFullShape( const int nShapeId, const Vector2i &rRegionL
 	const int region_size = m_pTerrain->getRegionSize();
 	const Vector2i shape_position = rRegionLoc * region_size;
 	t3dcollisionShapeRecord_t &record = m_shapeRecords[( size_t ) ( nShapeId )];
-	if ( !getShapeData( shape_position, region_size, record, m_fullHeightScratch ) ) {
+	const bool strict_cooked = m_pTerrain->isGpuRegionCookedPagesEnabled() &&
+		!( IS_EDITOR && m_pTerrain->getEditorExecutionMode() == T3DTerrain::EDITOR_EXECUTION_AUTHORING );
+	bool shape_ready = false;
+	if ( strict_cooked ) {
+		PackedByteArray height_blob;
+		PackedByteArray bounds_blob;
+		PackedByteArray hole_blob;
+		PackedFloat32Array baked_heights;
+		int baked_width = 0;
+		int bounds_width = 0;
+		float min_height = 0.0f;
+		float max_height = 0.0f;
+		if ( m_pTerrain->getData()->loadCookedCollisionTileNow(
+			rRegionLoc, height_blob, bounds_blob, hole_blob ) &&
+			T3DRuntimeBakeCodec::decodeCollisionHeight( height_blob, baked_heights, baked_width ) &&
+			T3DRuntimeBakeCodec::decodeCollisionBounds( bounds_blob, min_height, max_height, bounds_width ) &&
+			baked_width == region_size + 1 && bounds_width == baked_width ) {
+			m_fullHeightScratch.resize( baked_heights.size() );
+			real_t *const pWrite = m_fullHeightScratch.ptrw();
+			const float *const pRead = baked_heights.ptr();
+			for ( int index = 0; index < baked_heights.size(); ++index ) {
+				pWrite[index] = ( real_t ) pRead[index];
+			}
+			record.data.nWidth = baked_width;
+			record.data.depth = baked_width;
+			record.data.transform = Transform3D( Basis( V3_UP, Math_PI * 0.5f ),
+				v2iv3( shape_position + V2I( region_size / 2 ) ) );
+			record.data.fMinHeight = min_height;
+			record.data.fMaxHeight = max_height;
+			record.data.bValid = true;
+			shape_ready = true;
+		}
+	} else {
+		shape_ready = getShapeData( shape_position, region_size, record, m_fullHeightScratch );
+	}
+	if ( !shape_ready ) {
+		if ( strict_cooked ) {
+			LOG( T3DTerrain::ERROR, "Missing/invalid baked full-collision tile for region ", rRegionLoc );
+		}
 		deactivateShape( nShapeId );
 		++m_nShapesDeactivatedLastUpdate;
 		return;

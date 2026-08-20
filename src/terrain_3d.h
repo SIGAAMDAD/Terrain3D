@@ -662,6 +662,7 @@ public:
 	String getDataDirectory( void ) const {
 		return m_pData ? m_dataDirectory : "";
 	}
+	bool cookRuntimeClipmapGeometryPack( void ) const;
 
 	// Object references
 	T3DData *getData( void ) const {

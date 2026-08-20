@@ -1,6 +1,8 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include <godot_cpp/classes/rendering_server.hpp>
+#include <godot_cpp/classes/dir_access.hpp>
+#include <godot_cpp/classes/file_access.hpp>
 #include <EASTL/unordered_map.h>
 #include <godot_cpp/classes/world3d.hpp>
 #include <godot_cpp/core/version.hpp>
@@ -12,6 +14,12 @@
 #include "terrain_3d.h"
 #include "rendering/terrain_3d_clipmap_bounds.h"
 #include "rendering/terrain_3d_mesher.h"
+
+
+namespace {
+constexpr uint64_t TERRAIN3D_CLIPMAP_PACK_MAGIC = 0x314b504d504c4333ull; // 3CLMPPK1
+constexpr uint32_t TERRAIN3D_CLIPMAP_PACK_VERSION = 1u;
+}
 
 typedef struct t3dclipmapVertexKey_s {
 	int32_t x = 0;
@@ -167,6 +175,132 @@ T3DMesher::t3dclipmapGeometry_t T3DMesher::generateCombinedGeometry( const bool 
 	LOG( T3DTerrain::INFO, "Generated ", bLod0 ? "LOD0" : "outer-ring", " clipmap geometry: ", vertices.size(),
 		" welded vertices from ", source_vertex_count, " source vertices, ", indices.size() / 3, " triangles" );
 	return geometry;
+}
+
+bool T3DMesher::loadRuntimeGeometryPack( const String &rDataDirectory ) {
+	if ( rDataDirectory.is_empty() ) {
+		return false;
+	}
+	const String path = rDataDirectory.path_join( "terrain3d_clipmap.t3dmeshpack" );
+	Ref<FileAccess> file = FileAccess::open( path, FileAccess::READ );
+	if ( file.is_null() || file->get_length() < 24 ) {
+		return false;
+	}
+	if ( file->get_64() != TERRAIN3D_CLIPMAP_PACK_MAGIC ||
+		file->get_32() != TERRAIN3D_CLIPMAP_PACK_VERSION ||
+		( int ) file->get_32() != m_nMeshSize || file->get_32() != MESH_TYPE_COUNT ) {
+		return false;
+	}
+	file->get_32();
+	for ( int type = 0; type < MESH_TYPE_COUNT; ++type ) {
+		t3dclipmapGeometry_t geometry;
+		const uint32_t vertex_count = file->get_32();
+		const uint32_t metadata_count = file->get_32();
+		const uint32_t index_count = file->get_32();
+		file->get_32();
+		if ( vertex_count == 0u || metadata_count != vertex_count || index_count == 0u ||
+			vertex_count > 4000000u || index_count > 12000000u ) {
+			return false;
+		}
+		geometry.aabb.position = Vector3( file->get_float(), file->get_float(), file->get_float() );
+		geometry.aabb.size = Vector3( file->get_float(), file->get_float(), file->get_float() );
+		geometry.vertices.resize( ( int ) vertex_count );
+		geometry.metadata.resize( ( int ) metadata_count );
+		geometry.indices.resize( ( int ) index_count );
+		for ( uint32_t i = 0; i < vertex_count; ++i ) {
+			geometry.vertices.set( ( int ) i, Vector3( file->get_float(), file->get_float(), file->get_float() ) );
+		}
+		for ( uint32_t i = 0; i < metadata_count; ++i ) {
+			geometry.metadata.set( ( int ) i, Vector2( file->get_float(), file->get_float() ) );
+		}
+		for ( uint32_t i = 0; i < index_count; ++i ) {
+			const int32_t index = ( int32_t ) file->get_32();
+			if ( index < 0 || ( uint32_t ) index >= vertex_count ) {
+				return false;
+			}
+			geometry.indices.set( ( int ) i, index );
+		}
+		if ( file->get_error() != OK ) {
+			return false;
+		}
+		m_szMeshGeometry[( size_t ) type] = geometry;
+	}
+	if ( file->get_position() != file->get_length() ) {
+		return false;
+	}
+	if ( !m_bStateMeshBatching ) {
+		for ( int type = 0; type < MESH_TYPE_COUNT; ++type ) {
+			const t3dclipmapGeometry_t &geometry = m_szMeshGeometry[( size_t ) type];
+			m_szMeshRids[( size_t ) type] = instantiateMesh(
+				geometry.vertices, geometry.metadata, geometry.indices, geometry.aabb );
+		}
+	}
+	LOG( T3DTerrain::INFO, "Loaded cooked clipmap geometry pack for mesh size ", m_nMeshSize );
+	return true;
+}
+
+bool T3DMesher::writeRuntimeGeometryPack( const String &rDataDirectory ) const {
+	if ( rDataDirectory.is_empty() || m_nMeshSize <= 0 ) {
+		return false;
+	}
+	for ( const t3dclipmapGeometry_t &geometry : m_szMeshGeometry ) {
+		if ( geometry.vertices.is_empty() || geometry.metadata.size() != geometry.vertices.size() ||
+			geometry.indices.is_empty() ) {
+			return false;
+		}
+	}
+	const String path = rDataDirectory.path_join( "terrain3d_clipmap.t3dmeshpack" );
+	const String temporary = path + ".tmp";
+	Ref<FileAccess> file = FileAccess::open( temporary, FileAccess::WRITE );
+	if ( file.is_null() ) {
+		return false;
+	}
+	file->store_64( TERRAIN3D_CLIPMAP_PACK_MAGIC );
+	file->store_32( TERRAIN3D_CLIPMAP_PACK_VERSION );
+	file->store_32( ( uint32_t ) m_nMeshSize );
+	file->store_32( MESH_TYPE_COUNT );
+	file->store_32( 0u );
+	for ( const t3dclipmapGeometry_t &geometry : m_szMeshGeometry ) {
+		file->store_32( ( uint32_t ) geometry.vertices.size() );
+		file->store_32( ( uint32_t ) geometry.metadata.size() );
+		file->store_32( ( uint32_t ) geometry.indices.size() );
+		file->store_32( 0u );
+		file->store_float( geometry.aabb.position.x );
+		file->store_float( geometry.aabb.position.y );
+		file->store_float( geometry.aabb.position.z );
+		file->store_float( geometry.aabb.size.x );
+		file->store_float( geometry.aabb.size.y );
+		file->store_float( geometry.aabb.size.z );
+		for ( const Vector3 &vertex : geometry.vertices ) {
+			file->store_float( vertex.x ); file->store_float( vertex.y ); file->store_float( vertex.z );
+		}
+		for ( const Vector2 &metadata : geometry.metadata ) {
+			file->store_float( metadata.x ); file->store_float( metadata.y );
+		}
+		for ( const int32_t index : geometry.indices ) {
+			file->store_32( ( uint32_t ) index );
+		}
+	}
+	const Error error = file->get_error();
+	file->close();
+	if ( error != OK ) {
+		DirAccess::remove_absolute( temporary );
+		return false;
+	}
+	const String backup = path + ".bak";
+	DirAccess::remove_absolute( backup );
+	if ( FileAccess::file_exists( path ) && DirAccess::rename_absolute( path, backup ) != OK ) {
+		DirAccess::remove_absolute( temporary );
+		return false;
+	}
+	if ( DirAccess::rename_absolute( temporary, path ) != OK ) {
+		if ( FileAccess::file_exists( backup ) ) {
+			DirAccess::rename_absolute( backup, path );
+		}
+		return false;
+	}
+	DirAccess::remove_absolute( backup );
+	return true;
 }
 
 void T3DMesher::generateMeshTypes( void ) {
@@ -726,7 +860,16 @@ void T3DMesher::flushDirtyBatches( void ) {
 void T3DMesher::generateClipmap( void ) {
 	clearClipmap();
 	generateOffsetData();
-	generateMeshTypes();
+	clearMeshTypes();
+	if ( m_bRequireCookedGeometryPack ) {
+		if ( !m_pTerrain || !loadRuntimeGeometryPack( m_pTerrain->getDataDirectory() ) ) {
+			ERR_PRINT( "Terrain3D strict cooked runtime requires a valid terrain3d_clipmap.t3dmeshpack." );
+			m_nClipmapLevelCount = 0;
+			return;
+		}
+	} else {
+		generateMeshTypes();
+	}
 	m_nClipmapLevelCount = CLAMP( m_nLods + m_tessellationLevel, 0, TERRAIN3D_MAX_CLIPMAP_LEVELS );
 	rebuildRenderBatches();
 }
@@ -834,7 +977,8 @@ void T3DMesher::initialize(
 	const RenderingServer::ShadowCastingSetting castShadows,
 	const GeometryInstance3D::GIMode giMode, const int nShadowLodCount,
 	const eastl::array<bool, 3> &bTierShadowEnabled,
-	const eastl::array<int, 3> &nTierShadowLodCounts, const bool bStateMeshBatching
+	const eastl::array<int, 3> &nTierShadowLodCounts, const bool bStateMeshBatching,
+	const bool bRequireCookedGeometryPack
 ) {
 	if ( !pTerrain ) {
 		return;
@@ -849,6 +993,7 @@ void T3DMesher::initialize(
 	m_szMaterials = rMaterials;
 	m_szShadowMaterials = rShadowMaterials;
 	m_bStateMeshBatching = bStateMeshBatching;
+	m_bRequireCookedGeometryPack = bRequireCookedGeometryPack;
 	m_lodStateBuffer.resize( TERRAIN3D_MAX_CLIPMAP_LEVELS );
 	m_lodStateBuffer.fill( Vector4( 0.0f, 0.0f, 1.0f, 4.0f ) );
 	configureStateMaterials();

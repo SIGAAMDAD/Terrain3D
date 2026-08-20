@@ -15,6 +15,7 @@
 #include <godot_cpp/variant/vector3.hpp>
 #include "Terrain3DConstants.h"
 #include "hlod/terrain_3d_hlod_manifest.h"
+#include "hlod/terrain_3d_hlod_runtime_codec.h"
 #include "hlod/terrain_3d_hlod_package.h"
 
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
@@ -60,7 +61,8 @@ class T3DHLODStreamer : public Object {
 	eastl::vector<t3dentry_t> m_entries;
 	eastl::vector<int> m_roots;
 	eastl::vector<uint8_t> m_instancerMinLevels;
-	eastl::vector<t3dnodePolicy_t> m_nodePolicies[TERRAIN3D_MAX_REGION_SLOTS];
+	eastl::vector<t3dnodePolicy_t> m_nodePolicies;
+	eastl::array<uint32_t, TERRAIN3D_MAX_REGION_SLOTS + 1> m_nodePolicyOffsets{};
 	uint8_t m_regionRepresentationLevel[TERRAIN3D_MAX_REGION_SLOTS] = {};
 	eastl::bitset<TERRAIN3D_MAX_REGION_SLOTS> m_managedRegions;
 	eastl::bitset<TERRAIN3D_MAX_REGION_SLOTS> m_detailRequiredRegions;
@@ -94,6 +96,8 @@ class T3DHLODStreamer : public Object {
 	int findEntry( int level, const Vector2i &rCluster ) const;
 	void clearRuntime( bool bNotify );
 	bool compileManifest( const Ref<T3DHLODManifest> &rManifest );
+	bool compilePackedManifest( const Ref<T3DHLODManifest> &rManifest );
+	void compileLegacyNodePolicies( const Ref<T3DHLODManifest> &rManifest );
 	void buildHierarchy( void );
 	bool packageAcceptable( const t3dentry_t &rEntry, const Vector3 &rLocalTarget ) const;
 	void selectRecursive( int index, const Vector3 &rLocalTarget );

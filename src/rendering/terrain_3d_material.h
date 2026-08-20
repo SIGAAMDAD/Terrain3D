@@ -355,6 +355,10 @@ typedef enum t3dshaderVariantDomain_e {
 	Ref<Shader> m_szTierShaders[SHADER_TIER_COUNT];
 	Ref<Shader> m_pShadowShader;
 	Dictionary m_shaderTemplates; // External root shader templates loaded from the addon
+	bool m_bRuntimeShaderPackLoaded = false;
+	uint64_t m_nRuntimeShaderPackStateSignature = 0u;
+	String m_szRuntimeShaderPackTierSource[SHADER_TIER_COUNT];
+	String m_runtimeShaderPackBufferSource;
 	t3dshaderVariantEntry_t m_szRuntimeShaderVariantEntries[TERRAIN3D_MAX_SHADER_VARIANT_CACHE_LIMIT] = {};
 	t3dshaderVariantEntry_t m_szEditorShaderVariantEntries[TERRAIN3D_MAX_EDITOR_SHADER_VARIANT_CACHE_LIMIT] = {};
 	int m_nRuntimeShaderVariantCount = 0;
@@ -554,6 +558,7 @@ typedef enum t3dshaderVariantDomain_e {
 		const t3dshaderVariantState_t &rBase
 	) const;
 	void prewarmShaderVariantsInternal( const bool bForce = false );
+	uint64_t getVariantStateSignature( const t3dshaderVariantState_t &rState ) const;
 	uint64_t getPrewarmSignature( void ) const;
 	String generateShaderCode( void ) const;
 	String generateShaderCode( const t3dshaderVariantState_t &rState ) const;
@@ -879,6 +884,9 @@ public:
 		return m_worldNoiseShaderMode;
 	}
 	void prewarmShaderVariants( void );
+	Dictionary cookRuntimeShaderPack( void );
+	bool loadRuntimeShaderPack( void );
+	bool hasRuntimeShaderPack( void ) const { return m_bRuntimeShaderPackLoaded; }
 	void clearShaderVariantCache( void );
 	int getShaderVariantCount( void ) const {
 		return m_nRuntimeShaderVariantCount + m_nEditorShaderVariantCount;

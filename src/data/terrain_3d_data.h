@@ -18,6 +18,7 @@
 #include "streaming/terrain_3d_middle_height_region_cache.h"
 #include "data/terrain_3d_region.h"
 #include "data/terrain_3d_region_repository.h"
+#include "data/terrain_3d_runtime_world_manifest.h"
 #include "streaming/terrain_3d_runtime_profile.h"
 #include "streaming/terrain_3d_runtime_page_store.h"
 #include "streaming/terrain_3d_active_height_residency.h"
@@ -65,6 +66,7 @@ private:
 	T3DMapEditService m_mapEditService;
 	T3DRegionPersistence m_regionPersistence;
 	T3DRuntimePageStore m_runtimePageStore;
+	T3DRuntimeWorldManifest m_runtimeWorldManifest;
 	T3DCpuRegionCache m_cpuRegionCache;
 	T3DInstanceRegionCache m_instanceRegionCache;
 	T3DMiddleHeightRegionCache m_middleHeightRegionCache;
@@ -367,6 +369,22 @@ public:
 		return m_instanceRegionCache.getStallFlagsLastTick();
 	}
 	bool ensureCpuRegionResident( const Vector2i &vLocation );
+
+	uint64_t getCookedWorldMaterialSignatureInternal( void ) const {
+		return m_runtimeWorldManifest.isLoaded() ? m_runtimeWorldManifest.getMaterialSignature() : 0u;
+	}
+
+	bool ensureCookedNodeDescriptors( const Vector2i &vLocation );
+	PackedStringArray getCookedSceneDependencies( const Vector2i &vLocation ) const;
+	bool takeCookedCollisionTile( const Vector2i &vLocation, PackedByteArray &rHeight, PackedByteArray &rBounds, PackedByteArray &rHoleMask );
+	bool takeCookedNavigationTile( const Vector2i &vLocation, PackedByteArray &rNavigation );
+	bool loadCookedCollisionTileNow( const Vector2i &vLocation, PackedByteArray &rHeight,
+		PackedByteArray &rBounds, PackedByteArray &rHoleMask ) const;
+	bool loadCookedNavigationTileNow( const Vector2i &vLocation, PackedByteArray &rNavigation,
+		PackedByteArray *pCollisionHeight = nullptr, PackedByteArray *pMinMaxHeight = nullptr ) const;
+	bool loadCookedLightingReceiversNow( const Vector2i &vLocation, PackedByteArray &rReceivers ) const;
+	void requestCookedCollisionTile( const Vector2i &vLocation, uint8_t nPriority = 0u );
+	void requestCookedNavigationTile( const Vector2i &vLocation, uint8_t nPriority = 0u );
 	void updateCpuRegionResidency( const Vector3 &rWorldPosition, bool bForce = false );
 	void updateInstanceRegionResidency( const Vector3 &rWorldPosition, bool bForce = false );
 	void updateGpuRegionResidency( const Vector3 &rWorldPosition, bool bForce = false );

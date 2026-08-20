@@ -1,6 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include <godot_cpp/classes/engine.hpp>
+#include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/editor_file_system.hpp>
 #include <godot_cpp/classes/editor_interface.hpp>
 #include <godot_cpp/classes/file_access.hpp>
@@ -31,6 +32,26 @@ namespace {
 inline void mixShaderSignature( uint64_t &nSignature, const uint64_t nValue ) {
 	nSignature ^= nValue;
 	nSignature *= 1099511628211ULL;
+}
+
+static constexpr uint64_t TERRAIN3D_SHADER_PACK_MAGIC = 0x314b504853443354ull; // T3DSHPK1
+static constexpr uint32_t TERRAIN3D_SHADER_PACK_VERSION = 1u;
+
+static void terrain3dStoreShaderPackString( const Ref<FileAccess> &rFile, const String &rValue ) {
+	const CharString utf8 = rValue.utf8();
+	const uint32_t bytes = ( uint32_t ) MAX( 0, utf8.length() );
+	rFile->store_32( bytes );
+	if ( bytes > 0u ) rFile->store_buffer( reinterpret_cast<const uint8_t *>( utf8.get_data() ), bytes );
+}
+
+static bool terrain3dReadShaderPackString( const Ref<FileAccess> &rFile, String &rValue ) {
+	if ( rFile.is_null() || rFile->get_position() + 4u > rFile->get_length() ) return false;
+	const uint32_t bytes = rFile->get_32();
+	if ( bytes > 16u * 1024u * 1024u || rFile->get_position() + bytes > rFile->get_length() ) return false;
+	const PackedByteArray data = rFile->get_buffer( bytes );
+	if ( data.size() != bytes ) return false;
+	rValue = bytes > 0u ? String::utf8( reinterpret_cast<const char *>( data.ptr() ), ( int ) bytes ) : String();
+	return true;
 }
 
 static constexpr const char *TERRAIN3D_SHADER_FEATURES[] = {
@@ -1600,6 +1621,36 @@ void T3DMaterial::appendPotentialBranchStates(
 	}
 }
 
+uint64_t T3DMaterial::getVariantStateSignature( const t3dshaderVariantState_t &state ) const {
+	uint64_t signature = 1469598103934665603ULL;
+	mixShaderSignature( signature, ( uint64_t ) state.worldBackground );
+	mixShaderSignature( signature, ( uint64_t ) state.textureFiltering );
+	mixShaderSignature( signature, ( uint64_t ) state.terrainSamplingMode );
+	mixShaderSignature( signature, ( uint64_t ) state.terrainNormalMode );
+	mixShaderSignature( signature, ( uint64_t ) state.colorSamplingMode );
+	mixShaderSignature( signature, ( uint64_t ) state.projectionMode );
+	mixShaderSignature( signature, ( uint64_t ) state.tessellationMaterialMode );
+	mixShaderSignature( signature, ( uint64_t ) state.surfaceDataMode );
+	mixShaderSignature( signature, ( uint64_t ) state.terrainShadingMode );
+	mixShaderSignature( signature, ( uint64_t ) state.detilingMode );
+	mixShaderSignature( signature, ( uint64_t ) state.textureSurfaceMode );
+	mixShaderSignature( signature, ( uint64_t ) state.worldNoiseShaderMode );
+	mixShaderSignature( signature, ( uint64_t ) state.bAutoShaderEnabled );
+	mixShaderSignature( signature, ( uint64_t ) state.bDualScalingEnabled );
+	mixShaderSignature( signature, ( uint64_t ) state.bMacroVariationEnabled );
+	mixShaderSignature( signature, ( uint64_t ) state.bOutputAlbedoEnabled );
+	mixShaderSignature( signature, ( uint64_t ) state.bOutputRoughnessEnabled );
+	mixShaderSignature( signature, ( uint64_t ) state.bOutputSpecularEnabled );
+	mixShaderSignature( signature, ( uint64_t ) state.bOutputNormalMapEnabled );
+	mixShaderSignature( signature, ( uint64_t ) state.bOutputAmbientOcclusionEnabled );
+	mixShaderSignature( signature, ( uint64_t ) state.bFastBlendCurve );
+	mixShaderSignature( signature, ( uint64_t ) state.bTessellationEnabled );
+	mixShaderSignature( signature, ( uint64_t ) state.bSurfacePacked );
+	mixShaderSignature( signature, ( uint64_t ) state.bControlMapsImplicit );
+	mixShaderSignature( signature, ( uint64_t ) state.bColorMapsImplicit );
+	return signature;
+}
+
 uint64_t T3DMaterial::getPrewarmSignature( void ) const {
 	const t3dshaderVariantState_t state = captureVariantState();
 	uint64_t signature = 1469598103934665603ULL;
@@ -1810,6 +1861,19 @@ String T3DMaterial::generateShaderCode(
 	const t3dshaderVariantState_t &eState, const t3dshaderTier_t tier,
 	const bool bIncludeEditorFeatures
 ) const {
+	if ( !bIncludeEditorFeatures ) {
+		const bool strict_cooked_builtin = m_pTerrain && m_pTerrain->isGpuRegionCookedPagesEnabled() &&
+			!m_pTerrain->isEditorAuthoringMode() && !m_bShaderOverrideEnabled;
+		if ( m_bRuntimeShaderPackLoaded &&
+			getVariantStateSignature( eState ) == m_nRuntimeShaderPackStateSignature &&
+			tier >= SHADER_TIER_NEAR && tier < SHADER_TIER_COUNT && !m_szRuntimeShaderPackTierSource[tier].is_empty() ) {
+			return m_szRuntimeShaderPackTierSource[tier];
+		}
+		if ( strict_cooked_builtin ) {
+			ERR_PRINT_ONCE( "Terrain3D strict cooked runtime refused to regenerate built-in terrain shader source; recook terrain3d_shaders.t3dshaderpack." );
+			return String();
+		}
+	}
 	const t3dshaderVariantState_t tier_state = makeTierState( eState, tier );
 	LOG( T3DTerrain::INFO, "Generating terrain shader tier ", ( int ) ( tier ) );
 	Array excludes;
@@ -2025,6 +2089,16 @@ String T3DMaterial::generateBufferShaderCode( void ) const {
 }
 
 String T3DMaterial::generateBufferShaderCode( const t3dshaderVariantState_t &eState ) const {
+	if ( m_bRuntimeShaderPackLoaded && getVariantStateSignature( eState ) == m_nRuntimeShaderPackStateSignature &&
+		!m_runtimeShaderPackBufferSource.is_empty() ) {
+		return m_runtimeShaderPackBufferSource;
+	}
+	const bool strict_cooked_builtin = m_pTerrain && m_pTerrain->isGpuRegionCookedPagesEnabled() &&
+		!m_pTerrain->isEditorAuthoringMode() && !m_bBufferShaderOverrideEnabled;
+	if ( strict_cooked_builtin ) {
+		ERR_PRINT_ONCE( "Terrain3D strict cooked runtime refused to regenerate displacement shader source; recook terrain3d_shaders.t3dshaderpack." );
+		return String();
+	}
 	LOG( T3DTerrain::INFO, "Generating default displacement buffer shader code" );
 	// The displacement buffer does not consume terrain lighting, color sampling,
 	// material PBR outputs, dual scaling, or macro variation. Normalize those
@@ -3024,7 +3098,15 @@ void T3DMaterial::initialize( T3DTerrain *pTerrain ) {
 		return;
 	}
 	LOG( T3DTerrain::INFO, "Initializing material" );
-	preloadShaders();
+	const bool strict_cooked_builtin = m_pTerrain->isGpuRegionCookedPagesEnabled() &&
+		!m_pTerrain->isEditorAuthoringMode() && !m_bShaderOverrideEnabled;
+	if ( strict_cooked_builtin ) {
+		if ( !loadRuntimeShaderPack() ) {
+			ERR_PRINT( "Terrain3D strict cooked runtime requires a valid terrain3d_shaders.t3dshaderpack." );
+		}
+	} else {
+		preloadShaders();
+	}
 	if ( !m_pMaterial.is_valid() ) {
 		m_pMaterial = RS->material_create();
 	}
@@ -3102,6 +3184,12 @@ void T3DMaterial::destroy( void ) {
 	}
 	m_pShadowShader.unref();
 	m_shaderTemplates.clear();
+	m_bRuntimeShaderPackLoaded = false;
+	m_nRuntimeShaderPackStateSignature = 0u;
+	m_runtimeShaderPackBufferSource = String();
+	for ( String &source : m_szRuntimeShaderPackTierSource ) {
+		source = String();
+	}
 	for ( int index = 0; index < m_nRuntimeShaderVariantCount; ++index ) {
 		m_szRuntimeShaderVariantEntries[index] = t3dshaderVariantEntry_t{};
 	}
@@ -3786,6 +3874,82 @@ void T3DMaterial::setWorldNoiseShaderMode( const t3dworldNoiseShaderMode_t mode 
 	LOG( T3DTerrain::INFO, "t3dsetting_t world-noise shader mode: ", mode );
 	update( FULL_REBUILD );
 	emit_changed();
+}
+
+Dictionary T3DMaterial::cookRuntimeShaderPack( void ) {
+	Dictionary result;
+	result["complete"] = false;
+	if ( !m_pTerrain || m_pTerrain->getDataDirectory().is_empty() || m_bShaderOverrideEnabled ) {
+		result["error"] = "Terrain/material is unavailable or uses a custom shader override.";
+		return result;
+	}
+	const bool old_loaded = m_bRuntimeShaderPackLoaded;
+	m_bRuntimeShaderPackLoaded = false;
+	const t3dshaderVariantState_t base = captureVariantState();
+	const uint64_t state_signature = getVariantStateSignature( base );
+	struct Entry { uint8_t domain; uint8_t tier; String source; };
+	eastl::vector<Entry> entries;
+	for ( int tier = SHADER_TIER_NEAR; tier < SHADER_TIER_COUNT; ++tier ) {
+		entries.push_back( {0u, ( uint8_t ) tier, finalizeRuntimeShaderCode( generateShaderCode( base, ( t3dshaderTier_t ) tier, false ) )} );
+	}
+	if ( base.bTessellationEnabled ) entries.push_back( {1u, 0u, generateBufferShaderCode( base )} );
+	t3dshaderVariantState_t states[TERRAIN3D_MAX_SHADER_VARIANT_PREWARM_LIMIT] = {};
+	int state_count = 0; appendPotentialBranchStates( states, state_count, base );
+	t3dshaderVariantKey_t seen[TERRAIN3D_MAX_SHADER_VARIANT_PREWARM_LIMIT * 2] = {};
+	int seen_count = 0;
+	for ( int i = 0; i < state_count && ( int ) entries.size() < m_nShaderVariantPrewarmLimit + 4; ++i ) {
+		const String source = finalizeRuntimeShaderCode( generateShaderCode( states[i], SHADER_TIER_NEAR, false ) );
+		const t3dshaderVariantKey_t key = makeVariantCacheKey( source ); bool duplicate = false;
+		for ( int k = 0; k < seen_count; ++k ) if ( seen[k] == key ) { duplicate = true; break; }
+		if ( !duplicate ) { seen[seen_count++] = key; entries.push_back( {0u, ( uint8_t ) SHADER_TIER_NEAR, source} ); }
+		if ( states[i].bTessellationEnabled && ( int ) entries.size() < m_nShaderVariantPrewarmLimit + 4 ) {
+			const String buffer = generateBufferShaderCode( states[i] ); const t3dshaderVariantKey_t buffer_key = makeVariantCacheKey( buffer ); duplicate = false;
+			for ( int k = 0; k < seen_count; ++k ) if ( seen[k] == buffer_key ) { duplicate = true; break; }
+			if ( !duplicate && seen_count < TERRAIN3D_MAX_SHADER_VARIANT_PREWARM_LIMIT * 2 ) { seen[seen_count++] = buffer_key; entries.push_back( {1u, 0u, buffer} ); }
+		}
+	}
+	m_bRuntimeShaderPackLoaded = old_loaded;
+	const String path = m_pTerrain->getDataDirectory().path_join( "terrain3d_shaders.t3dshaderpack" );
+	const String temporary = path + ".tmp";
+	Ref<FileAccess> file = FileAccess::open( temporary, FileAccess::WRITE );
+	if ( file.is_null() ) { result["error"] = "Unable to open runtime shader pack."; return result; }
+	file->store_64( TERRAIN3D_SHADER_PACK_MAGIC ); file->store_32( TERRAIN3D_SHADER_PACK_VERSION ); file->store_32( ( uint32_t ) entries.size() ); file->store_64( state_signature );
+	for ( const Entry &entry : entries ) { file->store_8( entry.domain ); file->store_8( entry.tier ); file->store_16( 0u ); terrain3dStoreShaderPackString( file, entry.source ); }
+	const Error write_error = file->get_error(); file->close();
+	if ( write_error != OK ) { DirAccess::remove_absolute( temporary ); result["error"] = "Runtime shader pack write failed."; return result; }
+	const String backup = path + ".bak";
+	if ( FileAccess::file_exists( backup ) ) { DirAccess::remove_absolute( backup ); }
+	const bool had_previous = FileAccess::file_exists( path );
+	if ( had_previous && DirAccess::rename_absolute( path, backup ) != OK ) {
+		DirAccess::remove_absolute( temporary ); result["error"] = "Runtime shader pack backup failed."; return result;
+	}
+	if ( DirAccess::rename_absolute( temporary, path ) != OK ) {
+		if ( had_previous ) { DirAccess::rename_absolute( backup, path ); }
+		result["error"] = "Runtime shader pack publish failed."; return result;
+	}
+	if ( FileAccess::file_exists( backup ) ) { DirAccess::remove_absolute( backup ); }
+	result["complete"] = true; result["path"] = path; result["entry_count"] = ( int ) entries.size(); result["state_signature"] = String::num_uint64( state_signature, 16, true );
+	return result;
+}
+
+bool T3DMaterial::loadRuntimeShaderPack( void ) {
+	m_bRuntimeShaderPackLoaded = false; m_nRuntimeShaderPackStateSignature = 0u; m_runtimeShaderPackBufferSource = String();
+	for ( String &source : m_szRuntimeShaderPackTierSource ) source = String();
+	if ( !m_pTerrain || m_pTerrain->getDataDirectory().is_empty() ) return false;
+	const String path = m_pTerrain->getDataDirectory().path_join( "terrain3d_shaders.t3dshaderpack" );
+	Ref<FileAccess> file = FileAccess::open( path, FileAccess::READ ); if ( file.is_null() || file->get_length() < 24u ) return false;
+	if ( file->get_64() != TERRAIN3D_SHADER_PACK_MAGIC || file->get_32() != TERRAIN3D_SHADER_PACK_VERSION ) return false;
+	const uint32_t count = file->get_32(); const uint64_t signature = file->get_64();
+	if ( count < SHADER_TIER_COUNT || count > 128u || signature != getVariantStateSignature( captureVariantState() ) ) return false;
+	struct Entry { uint8_t domain; uint8_t tier; String source; }; eastl::vector<Entry> entries; entries.reserve( count );
+	for ( uint32_t i = 0; i < count; ++i ) { if ( file->get_position() + 4u > file->get_length() ) return false; Entry entry; entry.domain=file->get_8(); entry.tier=file->get_8(); file->get_16(); if(!terrain3dReadShaderPackString(file,entry.source)||entry.source.is_empty()) return false; entries.push_back(entry); }
+	if ( file->get_position() != file->get_length() ) return false;
+	for ( size_t i = 0; i < entries.size(); ++i ) { const Entry &entry=entries[i]; if ( entry.domain==0u && entry.tier<SHADER_TIER_COUNT && m_szRuntimeShaderPackTierSource[entry.tier].is_empty() ) m_szRuntimeShaderPackTierSource[entry.tier]=entry.source; else if(entry.domain==1u && m_runtimeShaderPackBufferSource.is_empty()) m_runtimeShaderPackBufferSource=entry.source; }
+	for ( int tier=SHADER_TIER_NEAR; tier<SHADER_TIER_COUNT; ++tier ) if(m_szRuntimeShaderPackTierSource[tier].is_empty()) return false;
+	m_nRuntimeShaderPackStateSignature=signature; m_bRuntimeShaderPackLoaded=true;
+	// Create engine shader objects in deterministic pack order; driver pipeline creation remains runtime-owned.
+	for ( const Entry &entry : entries ) { if(entry.domain==0u) getOrCreateShaderVariant(entry.source,SHADER_DOMAIN_RUNTIME,true,(t3dshaderTier_t)CLAMP((int)entry.tier,0,(int)SHADER_TIER_FAR)); else getOrCreateShaderVariant(entry.source,SHADER_DOMAIN_BUFFER,true); }
+	return true;
 }
 
 void T3DMaterial::prewarmShaderVariants( void ) {

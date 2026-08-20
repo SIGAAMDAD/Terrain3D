@@ -27,6 +27,10 @@ typedef enum t3druntimePageConsumer_e : uint8_t {
 	RUNTIME_PAGE_CONSUMER_MIDDLE_HEIGHT = 1u << 1,
 	RUNTIME_PAGE_CONSUMER_GPU_DETAIL = 1u << 2,
 	RUNTIME_PAGE_CONSUMER_INSTANCE_STORE = 1u << 3,
+	RUNTIME_PAGE_CONSUMER_CPU_MAPS = 1u << 4,
+	RUNTIME_PAGE_CONSUMER_NODE_DESCRIPTORS = 1u << 5,
+	RUNTIME_PAGE_CONSUMER_COLLISION = 1u << 6,
+	RUNTIME_PAGE_CONSUMER_NAVIGATION = 1u << 7,
 } t3druntimePageConsumer_t;
 
 struct T3DRuntimePageConfig {
@@ -47,6 +51,15 @@ struct T3DRuntimePageCookPayload {
 	Ref<Image> pDerived;
 	Ref<Image> pMiddleHeight;
 	Ref<Image> pMiddleComposite;
+	PackedByteArray holeMask;
+	PackedByteArray collisionHeight;
+	PackedByteArray collisionBounds;
+	PackedByteArray navigation;
+	PackedByteArray minMaxHeight;
+	PackedByteArray nodeDescriptors;
+	PackedByteArray instanceMetadata;
+	PackedByteArray lightingReceivers;
+	PackedByteArray multimeshFastStart;
 	uint32_t materialMask = 1u;
 };
 
@@ -98,9 +111,19 @@ public:
 	String getPagePath( const T3DRegion *pRegion, const String &rDataDirectory ) const;
 	uint64_t computeSourceSignature( const T3DRegion *pRegion, const T3DRuntimePageConfig &rConfig ) const;
 	bool readSourceSignature( const String &rPagePath, uint64_t &nSignature ) const;
+	uint32_t readMaterialMask( const String &rPagePath ) const;
 	bool removePageForSource( const String &rSourcePath ) const;
 	bool removePage( const String &rPagePath ) const;
 	bool validatePageForRegion( const T3DRegion *pRegion, const T3DRuntimePageConfig &rConfig ) const;
+	bool loadCpuMapsNow( const Vector2i &rLocation, const T3DRuntimePageConfig &rConfig,
+		Ref<Image> &rHeight, Ref<Image> &rControl, Ref<Image> &rColor, Ref<Image> &rDerived ) const;
+	bool loadCollisionNow( const Vector2i &rLocation, const T3DRuntimePageConfig &rConfig,
+		PackedByteArray &rHeight, PackedByteArray &rBounds, PackedByteArray &rHoleMask ) const;
+	bool loadNavigationNow( const Vector2i &rLocation, const T3DRuntimePageConfig &rConfig,
+		PackedByteArray &rNavigation, PackedByteArray *pCollisionHeight = nullptr,
+		PackedByteArray *pMinMaxHeight = nullptr ) const;
+	bool loadLightingReceiversNow( const Vector2i &rLocation, const T3DRuntimePageConfig &rConfig,
+		PackedByteArray &rReceivers ) const;
 	bool writePage(
 		T3DRegion *pRegion, const T3DRuntimePageConfig &rConfig,
 		const T3DRuntimePageCookPayload &rPayload, String *pError = nullptr
@@ -120,7 +143,12 @@ public:
 		const Vector2i &rLocation, uint8_t nConsumer, Ref<Image> &rHeight, bool bMiddle,
 		PackedByteArray *pNativeHeightBytes = nullptr
 	);
-	bool takeInstance( const Vector2i &rLocation, T3DInstanceStore &rStore );
+	bool takeInstance( const Vector2i &rLocation, T3DInstanceStore &rStore,
+		PackedByteArray *pInstanceMetadata = nullptr, PackedByteArray *pMultimeshFastStart = nullptr );
+	bool takeCpuMaps( const Vector2i &rLocation, Ref<Image> &rHeight, Ref<Image> &rControl, Ref<Image> &rColor, Ref<Image> &rDerived );
+	bool takeNodeDescriptors( const Vector2i &rLocation, PackedByteArray &rDescriptors );
+	bool takeCollision( const Vector2i &rLocation, PackedByteArray &rHeight, PackedByteArray &rBounds, PackedByteArray &rHoleMask );
+	bool takeNavigation( const Vector2i &rLocation, PackedByteArray &rNavigation );
 	bool takeGpuPage(
 		const Vector2i &rLocation, Ref<Image> &rHeight,
 		Ref<Image> &rControl, Ref<Image> &rColor, Ref<Image> &rDerived,
@@ -142,6 +170,7 @@ private:
 		String pagePath;
 		String sourcePath;
 		uint32_t expectedChannelFlags = 0u;
+		uint64_t expectedSourceSignature = 0u;
 		int nRegionSize = 0;
 		int colorDivisor = 1;
 		int derivedDivisor = 1;
@@ -156,6 +185,15 @@ private:
 		Ref<Image> pMiddleHeight;
 		Ref<Image> pMiddleComposite;
 		PackedByteArray instancePage;
+		PackedByteArray holeMask;
+		PackedByteArray collisionHeight;
+		PackedByteArray collisionBounds;
+		PackedByteArray navigation;
+		PackedByteArray minMaxHeight;
+		PackedByteArray nodeDescriptors;
+		PackedByteArray instanceMetadata;
+		PackedByteArray lightingReceivers;
+		PackedByteArray multimeshFastStart;
 		T3DInstanceStore preparedInstanceStore;
 		uint64_t nRequestedUsec = 0u;
 		uint64_t nWorkerStartedUsec = 0u;
@@ -168,6 +206,8 @@ private:
 		bool bLoaded = false;
 		bool bInstanceAttempted = false;
 		bool bInstanceLoaded = false;
+		bool bLoadMinMax = false;
+		bool bEditorAuthoring = false;
 	};
 
 	struct PrepareJobContext {

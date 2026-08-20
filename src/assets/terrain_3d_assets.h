@@ -94,6 +94,16 @@ private:
 	typedef struct t3druntimeMaterialLayerInfo_s {
 		eastl::array<t3druntimeMaterialImageInfo_t, RUNTIME_MATERIAL_CHANNEL_COUNT> channels{};
 		Color averageAlbedo = COLOR_WHITE;
+		Color albedoColor = COLOR_WHITE;
+		float normalDepth = 1.0f;
+		float aoStrength = 0.5f;
+		float aoLightAffect = 0.0f;
+		float roughness = 0.0f;
+		float metallic = 0.0f;
+		float uvScale = 0.1f;
+		Vector2 detile = Vector2();
+		Vector2 displacement = Vector2();
+		uint32_t nBundleIndex = 0u;
 	} t3druntimeMaterialLayerInfo_t;
 	eastl::array<t3druntimeMaterialLayerInfo_t, TERRAIN3D_MAX_TEXTURE_ASSETS> m_runtimeMaterialCookedLayers{};
 	eastl::array<int, TERRAIN3D_MAX_TEXTURE_ASSETS> m_runtimeMaterialLogicalToPhysical{};
@@ -153,6 +163,7 @@ private:
 	String getRuntimeMaterialCachePath( void ) const;
 	uint64_t computeRuntimeMaterialSourceSignature( void ) const;
 	bool loadRuntimeMaterialCookedIndex( void );
+	void publishRuntimeMaterialCookedSettings( void );
 	Ref<Image> loadRuntimeMaterialCookedImage( int nLogicalId, int nChannel ) const;
 	bool initializeRuntimeMaterialPhysicalArrays( int nLayerLimit = -1 );
 	bool initializeFarMaterialArray( void );

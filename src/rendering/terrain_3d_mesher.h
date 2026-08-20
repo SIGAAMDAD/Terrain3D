@@ -72,6 +72,7 @@ private:
 	int m_nRenderBatchCount = 0;
 	int m_nClipmapLevelCount = 0;
 	bool m_bStateMeshBatching = false;
+	bool m_bRequireCookedGeometryPack = false;
 
 	eastl::array<Vector3, TERRAIN3D_PAIR_INSTANCES> m_szTrimAPos{};
 	eastl::array<Vector3, TERRAIN3D_PAIR_INSTANCES> m_szTrimBPos{};
@@ -110,6 +111,7 @@ private:
 	eastl::array<bool, 3> m_bTierShadowEnabled{ true, true, true };
 
 	void generateMeshTypes( void );
+	bool loadRuntimeGeometryPack( const String &rDataDirectory );
 	t3dclipmapGeometry_t generateCombinedGeometry( bool bLod0 );
 	void appendGrid(
 		PackedVector3Array &rVertices, PackedVector2Array &rMetadata,
@@ -170,9 +172,11 @@ public:
 		const RenderingServer::ShadowCastingSetting castShadows,
 		const GeometryInstance3D::GIMode giMode, const int nShadowLodCount,
 		const eastl::array<bool, 3> &bTierShadowEnabled,
-		const eastl::array<int, 3> &nTierShadowLodCounts, const bool bStateMeshBatching = false
+		const eastl::array<int, 3> &nTierShadowLodCounts, const bool bStateMeshBatching = false,
+		const bool bRequireCookedGeometryPack = false
 	);
 	void destroy( void );
+	bool writeRuntimeGeometryPack( const String &rDataDirectory ) const;
 
 	void snap( void );
 	void snap( const Vector3 &rTargetPosition );

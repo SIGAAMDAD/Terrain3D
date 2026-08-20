@@ -734,6 +734,29 @@ bool T3DNodeStreamer::activateRegion( const int iIndex, int &nNodeBudget ) {
 		return false;
 	}
 	t3dregionRuntime_t &runtime = m_szRegions[iIndex];
+	T3DData *const pData = m_pTerrain->getData();
+	if ( pRegion->getStreamedNodesRuntimeInternal().empty() && pRegion->getStreamedNodeCount() > 0 ) {
+		if ( !runtime.bRequestsStarted ) {
+			ResourceLoader *const pLoader = ResourceLoader::get_singleton();
+			if ( pLoader ) {
+				const PackedStringArray dependencies = pData->getCookedSceneDependencies( pRegion->getLocation() );
+				for ( const String &path : dependencies ) {
+					if ( !path.is_empty() && pLoader->load_threaded_get_status( path ) == ResourceLoader::THREAD_LOAD_INVALID_RESOURCE ) {
+						if ( pLoader->load_threaded_request( path, "PackedScene", true, ResourceLoader::CACHE_MODE_REUSE ) == OK ) {
+							++m_nSceneRequestsLastTick;
+						}
+					}
+				}
+			}
+			runtime.bRequestsStarted = true;
+		}
+		if ( !pData->ensureCookedNodeDescriptors( pRegion->getLocation() ) ) {
+			setRegionLoading( runtime, true );
+			m_bHasPendingActivation = true;
+			return true;
+		}
+		runtime.bRequestsStarted = false;
+	}
 	if ( !ensureRegionRoot( iIndex, pRegion ) ) {
 		return false;
 	}

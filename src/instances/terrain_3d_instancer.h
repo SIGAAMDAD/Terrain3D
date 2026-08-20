@@ -377,7 +377,7 @@ t3dregionUpdateState_t m_szRegionUpdates[TERRAIN3D_INSTANCE_REGION_UPDATE_CAPACI
 	void backupRegion( const Ref<T3DRegion> &rRegion );
 	t3dmultiMeshUpdateResult_t updateMultimesh(
 		const int nMeshId, const int nLod, const t3dinstanceCell_t &rCell,
-		t3drenderCell_t &rRender, bool bLayoutChanged,
+		t3drenderCell_t &rRender, bool bUseColors,
 		const PackedFloat32Array &rUploadBuffer
 	);
 	void fillMultimeshBuffer(

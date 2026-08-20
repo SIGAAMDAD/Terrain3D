@@ -11,6 +11,7 @@
 #include "authoring/terrain_3d_editor.h"
 #include "instances/terrain_3d_instancer.h"
 #include "data/terrain_3d_region.h"
+#include "data/terrain_3d_runtime_bake_codec.h"
 #include "simd/terrain_3d_simd.h"
 #include "data/terrain_3d_sampler.h"
 #include "core/terrain_3d_util.h"
@@ -1533,7 +1534,34 @@ void T3DInstancer::updateMmiCell(
 	const bool bRebuildAabb = !rCell.bCachedAabbValid || rCell.nCachedAabbRevision != rCell.nRevision ||
 		bSourceMeshChanged;
 	bool bUploadBufferReady = false;
-
+	PackedFloat32Array cooked_fast_start_buffer;
+	uint32_t cooked_fast_start_count = 0u;
+	const bool bCookedFastStart = !rCell.bModified &&
+		T3DRuntimeBakeCodec::findMultimeshFastStart(
+			pRegion->getCookedMultimeshFastStartInternal(), ( uint16_t ) nMeshId, cell_location,
+			cooked_fast_start_buffer, cooked_fast_start_count ) &&
+		cooked_fast_start_count == rCell.transforms.size();
+	if ( bCookedFastStart && bRebuildAabb ) {
+		bool initialized = false;
+		AABB cooked_aabb;
+		const float *const values = cooked_fast_start_buffer.ptr();
+		for ( uint32_t instance = 0u; instance < cooked_fast_start_count; ++instance ) {
+			const float *const record = values + ( size_t ) instance * 16u;
+			Basis basis;
+			basis[0] = Vector3( record[0], record[1], record[2] );
+			basis[1] = Vector3( record[4], record[5], record[6] );
+			basis[2] = Vector3( record[8], record[9], record[10] );
+			const AABB transformed = Transform3D( basis, Vector3( record[3], record[7], record[11] ) )
+				.xform( source_mesh_aabb );
+			if ( !initialized ) { cooked_aabb = transformed; initialized = true; }
+			else { cooked_aabb.merge_with( transformed ); }
+		}
+		rCell.cachedAabb = initialized ? cooked_aabb : AABB();
+		rCell.cachedSourceMeshAabb = source_mesh_aabb;
+		rCell.nCachedAabbRevision = rCell.nRevision;
+		if ( ++rCell.nCachedAabbGeneration == 0 ) { rCell.nCachedAabbGeneration = 1; }
+		rCell.bCachedAabbValid = true;
+	}
 
 	RID shadow_source;
 	for ( int lod = rAsset->getLastLod(); lod >= TERRAIN3D_MESH_SHADOW_LOD_ID; --lod ) {
@@ -1589,30 +1617,36 @@ void T3DInstancer::updateMmiCell(
 
 		if ( lod == TERRAIN3D_MESH_SHADOW_LOD_ID ) {
 			pRender.multimesh = shadow_source;
-		} else if ( !pRender.multimesh.is_valid() || rCell.bModified || pRender.nUploadedRevision != rCell.nRevision ||
-				   pRender.bUsesColors != rCell.usesColors() ) {
-			ensureUploadBuffer( rCell, pMasterMesh, source_mesh_aabb, bRebuildAabb, bUploadBufferReady );
-			const t3dmultiMeshUpdateResult_t result =
-				updateMultimesh( nMeshId, lod, rCell, pRender, pRender.bUsesColors != rCell.usesColors(),
-					m_uploadBuffer );
-			if ( result != t3dmultiMeshUpdateResult_t::UPDATED ) {
-				eraseRenderCell( regionLocation, nMeshId, lod, cell_location );
-				continue;
-			}
-			++m_nMultimeshUploadsLastFrame;
-			m_nInstanceRecordsUploadedLastFrame += ( uint64_t ) ( rCell.transforms.size() );
-			m_nMultimeshUploadBytesLastFrame += ( uint64_t ) ( m_uploadBuffer.size() ) * sizeof( float );
-			pRender.nUploadedRevision = rCell.nRevision;
-			pRender.bUsesColors = rCell.usesColors();
-		} else if ( bSettingsChanged ) {
-			const Ref<Mesh> pMesh = rAsset->getMesh( lod );
-			if ( pMesh.is_null() ) {
-				eraseRenderCell( regionLocation, nMeshId, lod, cell_location );
-				continue;
-			}
-			if ( pRender.boundMesh != pMesh->get_rid() ) {
-				RS->multimesh_set_mesh( pRender.multimesh, pMesh->get_rid() );
-				pRender.boundMesh = pMesh->get_rid();
+		} else {
+			const bool bUploadUsesColors = bCookedFastStart ? true : rCell.usesColors();
+			if ( !pRender.multimesh.is_valid() || rCell.bModified || pRender.nUploadedRevision != rCell.nRevision ||
+				pRender.bUsesColors != bUploadUsesColors ) {
+				const PackedFloat32Array *pUpload = &cooked_fast_start_buffer;
+				if ( !bCookedFastStart ) {
+					ensureUploadBuffer( rCell, pMasterMesh, source_mesh_aabb, bRebuildAabb, bUploadBufferReady );
+					pUpload = &m_uploadBuffer;
+				}
+				const t3dmultiMeshUpdateResult_t result =
+					updateMultimesh( nMeshId, lod, rCell, pRender, bUploadUsesColors, *pUpload );
+				if ( result != t3dmultiMeshUpdateResult_t::UPDATED ) {
+					eraseRenderCell( regionLocation, nMeshId, lod, cell_location );
+					continue;
+				}
+				++m_nMultimeshUploadsLastFrame;
+				m_nInstanceRecordsUploadedLastFrame += ( uint64_t ) ( rCell.transforms.size() );
+				m_nMultimeshUploadBytesLastFrame += ( uint64_t ) ( pUpload->size() ) * sizeof( float );
+				pRender.nUploadedRevision = rCell.nRevision;
+				pRender.bUsesColors = bUploadUsesColors;
+			} else if ( bSettingsChanged ) {
+				const Ref<Mesh> pMesh = rAsset->getMesh( lod );
+				if ( pMesh.is_null() ) {
+					eraseRenderCell( regionLocation, nMeshId, lod, cell_location );
+					continue;
+				}
+				if ( pRender.boundMesh != pMesh->get_rid() ) {
+					RS->multimesh_set_mesh( pRender.multimesh, pMesh->get_rid() );
+					pRender.boundMesh = pMesh->get_rid();
+				}
 			}
 		}
 		if ( lod == TERRAIN3D_MESH_SHADOW_LOD_ID && !pRender.multimesh.is_valid() ) {
@@ -1628,7 +1662,7 @@ void T3DInstancer::updateMmiCell(
 		}
 	}
 	rCell.bModified = false;
-	if ( bRebuildAabb && !bUploadBufferReady ) {
+	if ( bRebuildAabb && !bUploadBufferReady && !bCookedFastStart ) {
 		ensureUploadBuffer( rCell, pMasterMesh, source_mesh_aabb, bRebuildAabb, bUploadBufferReady );
 	}
 
@@ -1885,7 +1919,7 @@ T3DInstancer::t3dmultiMeshUpdateResult_t T3DInstancer::updateMultimesh(
 	const int nMeshId, const int nLod,
 	const t3dinstanceCell_t &rCell,
 	t3drenderCell_t &rRender,
-	const bool bLayoutChanged,
+	const bool bUseColors,
 	const PackedFloat32Array &rUploadBuffer
 ) {
 	if ( rCell.transforms.empty() ) {
@@ -1906,9 +1940,9 @@ T3DInstancer::t3dmultiMeshUpdateResult_t T3DInstancer::updateMultimesh(
 	}
 	// Reallocate only when capacity/layout must change. Transform-only updates
 	// with a stable count become one packed buffer upload on the retained RID.
-	if ( bNewMultimesh || bLayoutChanged || rRender.nUploadedCount != instance_count ) {
+	if ( bNewMultimesh || rRender.bUsesColors != bUseColors || rRender.nUploadedCount != instance_count ) {
 		RS->multimesh_allocate_data( rRender.multimesh, instance_count, RenderingServer::MULTIMESH_TRANSFORM_3D,
-									rCell.usesColors(), false, false );
+									bUseColors, false, false );
 		rRender.nUploadedCount = instance_count;
 	}
 	const RID mesh_rid = pMesh->get_rid();

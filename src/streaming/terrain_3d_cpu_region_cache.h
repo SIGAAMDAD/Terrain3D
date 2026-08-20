@@ -7,6 +7,7 @@
 
 #include "Terrain3DConstants.h"
 #include "streaming/terrain_3d_residency_state.h"
+#include "streaming/terrain_3d_runtime_page_store.h"
 
 #include <godot_cpp/variant/dictionary.hpp>
 
@@ -17,6 +18,7 @@ class T3DRegion;
 class T3DRegionPersistence;
 class T3DRegionRepository;
 class T3DSamplingStorage;
+
 
 struct T3DCpuRegionCacheStats {
 	bool bEnabled = false;
@@ -37,10 +39,12 @@ public:
 	T3DCpuRegionCache(
 		T3DRegionRepository *pRepository,
 		T3DRegionPersistence *pPersistence,
-		T3DSamplingStorage *pSamplingStorage
+		T3DSamplingStorage *pSamplingStorage,
+		T3DRuntimePageStore *pRuntimePageStore
 	);
 
 	bool configure( bool bEnabled, int nBudgetMb, int nLoadLayers, int nLoadBudgetMb );
+	void setRuntimePageConfig( const T3DRuntimePageConfig &rConfig );
 	void reset( bool bReleaseCleanMaps );
 	void refreshCapacity( void );
 	void invalidate( const Vector2i &vLocation );
@@ -70,6 +74,8 @@ private:
 	T3DRegionRepository *m_pRepository = nullptr;
 	T3DRegionPersistence *m_pPersistence = nullptr;
 	T3DSamplingStorage *m_pSamplingStorage = nullptr;
+	T3DRuntimePageStore *m_pRuntimePageStore = nullptr;
+	T3DRuntimePageConfig m_runtimePageConfig;
 
 	bool m_bEnabled = false;
 	bool m_bSelectionDirty = true;
@@ -103,6 +109,10 @@ private:
 	void prewarmSources( const T3DResidencyFrameState &rFrame );
 	void reapSourceAsync( const T3DResidencyFrameState &rFrame );
 	bool publishSlot( int iSlot, const Vector2i &vLocation, const Ref<T3DRegion> &rSource );
+	bool publishCookedSlot( int iSlot, const Vector2i &vLocation, const Ref<Image> &rHeight,
+		const Ref<Image> &rControl, const Ref<Image> &rColor, const Ref<Image> &rDerived );
+	bool cookedRuntimeEnabled( void ) const;
+	bool loadCookedMapsNow( const Vector2i &vLocation, Ref<Image> &rHeight, Ref<Image> &rControl, Ref<Image> &rColor, Ref<Image> &rDerived ) const;
 	bool evictSlot( int iSlot );
 	void releaseUntrackedMaps( void );
 	bool restoreAllMaps( void );

@@ -32,6 +32,7 @@ class T3DHLODManifest : public Resource {
 	PackedInt32Array m_nodeRegionIndices;
 	PackedInt64Array m_nodeSpawnIds;
 	PackedByteArray m_nodeMinLevels;
+	PackedByteArray m_runtimeBlob;
 
 public:
 	void setFormat( int nValue ); int getFormat( void ) const { return m_nFormat; }
@@ -47,6 +48,8 @@ public:
 	void setNodeRegionIndices( const PackedInt32Array &rValue ); PackedInt32Array getNodeRegionIndices( void ) const { return m_nodeRegionIndices; }
 	void setNodeSpawnIds( const PackedInt64Array &rValue ); PackedInt64Array getNodeSpawnIds( void ) const { return m_nodeSpawnIds; }
 	void setNodeMinLevels( const PackedByteArray &rValue ); PackedByteArray getNodeMinLevels( void ) const { return m_nodeMinLevels; }
+	void setRuntimeBlob( const PackedByteArray &rValue ); PackedByteArray getRuntimeBlob( void ) const { return m_runtimeBlob; }
+	bool compileRuntimeBlob( void );
 	int getEntryCount( void ) const { return m_entries.size(); }
 
 protected:

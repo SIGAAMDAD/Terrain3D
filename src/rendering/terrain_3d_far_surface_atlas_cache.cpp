@@ -356,7 +356,7 @@ bool T3DFarSurfaceAtlasCache::loadCooked( void ) {
 		pFile->get_length() != TERRAIN3D_GPU_FAR_ATLAS_HEADER_BYTES + ( uint64_t ) ( height_size ) + ( uint64_t ) ( color_size ) ) {
 		return false;
 	}
-	if ( source_signature == 0u || source_signature != computeSourceSignature() ) {
+	if ( source_signature == 0u || ( !m_config.bStrictCooked && source_signature != computeSourceSignature() ) ) {
 		return false;
 	}
 	const PackedByteArray height_bytes = pFile->get_buffer( height_size );
@@ -851,6 +851,9 @@ bool T3DFarSurfaceAtlasCache::ensure( void ) {
 		return false;
 	}
 	if ( ( m_pHeightImage.is_null() || m_pColorImage.is_null() ) && !loadCooked() ) {
+		if ( m_config.bStrictCooked ) {
+			return false;
+		}
 		markAllDirty( T3DRegion::TYPE_MAX );
 	}
 	if ( ( m_bHeightDirty || !m_generatedHeightMap.getRid().is_valid() ) && !rebuildHeightAtlas() ) {

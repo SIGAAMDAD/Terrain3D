@@ -217,6 +217,8 @@ func bake(terrain: Terrain3D, dirty_only: bool = true) -> Dictionary:
 		})
 	manifest.entries = entries
 	_populate_source_policy(manifest, sources)
+	if not manifest.compile_runtime_blob():
+		return _failure("Unable to compile packed HLOD runtime hierarchy")
 
 	# Packages are complete before the fixed manifest is published. A failed
 	# package write therefore cannot make runtime detail suppression point at a

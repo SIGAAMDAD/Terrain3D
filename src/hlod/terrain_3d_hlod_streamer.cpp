@@ -1,6 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 #include "hlod/terrain_3d_hlod_streamer.h"
 #include <cmath>
+#include <EASTL/sort.h>
 #include <cstring>
 #include <godot_cpp/classes/camera3d.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
@@ -56,7 +57,8 @@ void T3DHLODStreamer::clearRuntime( const bool bNotify ) {
 	eastl::vector<t3dentry_t>().swap( m_entries );
 	eastl::vector<int>().swap( m_roots );
 	eastl::vector<uint8_t>().swap( m_instancerMinLevels );
-	for ( int i = 0; i < TERRAIN3D_MAX_REGION_SLOTS; ++i ) { eastl::vector<t3dnodePolicy_t>().swap( m_nodePolicies[i] ); }
+	eastl::vector<t3dnodePolicy_t>().swap( m_nodePolicies );
+	m_nodePolicyOffsets.fill( 0u );
 	std::memset( m_regionRepresentationLevel, 0, sizeof( m_regionRepresentationLevel ) );
 	m_managedRegions.reset();
 	m_detailRequiredRegions.reset();
@@ -88,6 +90,60 @@ void T3DHLODStreamer::buildHierarchy( void ) {
 	}
 }
 
+void T3DHLODStreamer::compileLegacyNodePolicies( const Ref<T3DHLODManifest> &rManifest ) {
+	m_nodePolicies.clear();
+	m_nodePolicyOffsets.fill( 0u );
+	const PackedInt32Array nodeRegions = rManifest->getNodeRegionIndices();
+	const PackedInt64Array nodeIds = rManifest->getNodeSpawnIds();
+	const PackedByteArray nodeLevels = rManifest->getNodeMinLevels();
+	const int nodeCount = MIN( nodeRegions.size(), MIN( nodeIds.size(), nodeLevels.size() ) );
+	struct IndexedPolicy { int region = 0; t3dnodePolicy_t policy; };
+	eastl::vector<IndexedPolicy> policies;
+	policies.reserve( ( size_t ) nodeCount );
+	for ( int i = 0; i < nodeCount; ++i ) {
+		const int region = nodeRegions[i];
+		if ( region < 0 || region >= TERRAIN3D_MAX_REGION_SLOTS || nodeLevels[i] == 0 ) continue;
+		policies.push_back( {region, {nodeIds[i], nodeLevels[i]}} );
+	}
+	eastl::sort( policies.begin(), policies.end(), []( const IndexedPolicy &a, const IndexedPolicy &b ) {
+		return a.region < b.region || ( a.region == b.region && a.policy.spawnId < b.policy.spawnId );
+	} );
+	m_nodePolicies.reserve( policies.size() );
+	for ( const IndexedPolicy &indexed : policies ) {
+		++m_nodePolicyOffsets[( size_t ) indexed.region + 1u];
+		m_nodePolicies.push_back( indexed.policy );
+	}
+	for ( int region = 0; region < TERRAIN3D_MAX_REGION_SLOTS; ++region ) {
+		m_nodePolicyOffsets[( size_t ) region + 1u] += m_nodePolicyOffsets[( size_t ) region];
+	}
+}
+
+bool T3DHLODStreamer::compilePackedManifest( const Ref<T3DHLODManifest> &rManifest ) {
+	const PackedByteArray blob = rManifest->getRuntimeBlob();
+	if ( blob.is_empty() ) return false;
+	T3DHLODRuntimeData runtime;
+	if ( !T3DHLODRuntimeCodec::decode( blob, runtime ) ) return false;
+	m_entries.reserve( runtime.entries.size() );
+	for ( const T3DHLODRuntimeEntryRecord &source : runtime.entries ) {
+		t3dentry_t entry;
+		entry.level = source.level; entry.cluster = source.cluster; entry.regionMin = source.regionMin; entry.regionMax = source.regionMax;
+		entry.localBounds = source.localBounds; entry.packagePath = source.packagePath; entry.geometricError = source.geometricError;
+		entry.sourceSignature = source.sourceSignature; entry.buildSignature = source.buildSignature; entry.estimatedGpuBytes = source.estimatedGpuBytes;
+		entry.parent = source.parent; for ( int child = 0; child < 4; ++child ) entry.children[child] = source.children[child];
+		m_entries.push_back( entry );
+		for ( int z = entry.regionMin.y; z <= entry.regionMax.y; ++z ) for ( int x = entry.regionMin.x; x <= entry.regionMax.x; ++x ) {
+			const int index = regionIndex( Vector2i( x, z ) ); if ( index >= 0 ) m_managedRegions.set( ( size_t ) index );
+		}
+	}
+	m_roots = eastl::move( runtime.roots );
+	m_instancerMinLevels = eastl::move( runtime.instancerMinLevels );
+	m_nodePolicies.reserve( runtime.nodePolicies.size() );
+	for ( const T3DHLODRuntimeNodePolicyRecord &policy : runtime.nodePolicies ) m_nodePolicies.push_back( {policy.spawnId, policy.minLevel} );
+	m_nodePolicyOffsets = runtime.nodePolicyOffsets;
+	m_manifest = rManifest;
+	return true;
+}
+
 bool T3DHLODStreamer::compileManifest( const Ref<T3DHLODManifest> &rManifest ) {
 	if ( rManifest.is_null() || !m_pTerrain || rManifest->getFormat() != 1 ||
 		rManifest->getRegionMapSize() != TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE ||
@@ -95,42 +151,27 @@ bool T3DHLODStreamer::compileManifest( const Ref<T3DHLODManifest> &rManifest ) {
 		!Math::is_equal_approx( rManifest->getVertexSpacing(), m_pTerrain->getVertexSpacing() ) ) {
 		return false;
 	}
+	if ( compilePackedManifest( rManifest ) ) return true;
+	if ( !m_pTerrain->isEditorAuthoringMode() ) return false;
+
 	const Array &entries = rManifest->getEntriesInternal();
 	m_entries.reserve( ( size_t ) entries.size() );
 	for ( int i = 0; i < entries.size(); ++i ) {
-		if ( Variant( entries[i] ).get_type() != Variant::DICTIONARY ) { continue; }
+		if ( Variant( entries[i] ).get_type() != Variant::DICTIONARY ) continue;
 		const Dictionary data = entries[i];
-		if ( !data.has( "level" ) || !data.has( "cluster" ) || !data.has( "region_min" ) ||
-			!data.has( "region_max" ) || !data.has( "package_path" ) ) { continue; }
+		if ( !data.has( "level" ) || !data.has( "cluster" ) || !data.has( "region_min" ) || !data.has( "region_max" ) || !data.has( "package_path" ) ) continue;
 		t3dentry_t entry;
-		entry.level = CLAMP( ( int ) data["level"], 1, 6 );
-		entry.cluster = data["cluster"];
-		entry.regionMin = data["region_min"];
-		entry.regionMax = data["region_max"];
-		entry.localBounds = data.get( "local_bounds", AABB() );
-		entry.packagePath = String( data["package_path"] );
-		entry.geometricError = MAX( ( real_t ) data.get( "geometric_error", 1.0 ), 0.001f );
-		entry.sourceSignature = ( int64_t ) data.get( "source_signature", 0 );
-		entry.buildSignature = ( int64_t ) data.get( "build_signature", 0 );
-		entry.estimatedGpuBytes = MAX<int64_t>( ( int64_t ) data.get( "estimated_gpu_bytes", 0 ), 0 );
+		entry.level = CLAMP( ( int ) data["level"], 1, 6 ); entry.cluster = data["cluster"]; entry.regionMin = data["region_min"]; entry.regionMax = data["region_max"];
+		entry.localBounds = data.get( "local_bounds", AABB() ); entry.packagePath = String( data["package_path"] ); entry.geometricError = MAX( ( real_t ) data.get( "geometric_error", 1.0 ), 0.001f );
+		entry.sourceSignature = ( int64_t ) data.get( "source_signature", 0 ); entry.buildSignature = ( int64_t ) data.get( "build_signature", 0 ); entry.estimatedGpuBytes = MAX<int64_t>( ( int64_t ) data.get( "estimated_gpu_bytes", 0 ), 0 );
 		m_entries.push_back( entry );
-		for ( int z = entry.regionMin.y; z <= entry.regionMax.y; ++z ) for ( int x = entry.regionMin.x; x <= entry.regionMax.x; ++x ) {
-			const int index = regionIndex( Vector2i( x, z ) ); if ( index >= 0 ) { m_managedRegions.set( ( size_t ) index ); }
-		}
+		for ( int z = entry.regionMin.y; z <= entry.regionMax.y; ++z ) for ( int x = entry.regionMin.x; x <= entry.regionMax.x; ++x ) { const int index = regionIndex( Vector2i( x, z ) ); if ( index >= 0 ) m_managedRegions.set( ( size_t ) index ); }
 	}
 	const PackedByteArray meshPolicy = rManifest->getInstancerMinLevels();
 	const int expected = TERRAIN3D_MAX_REGION_SLOTS * TERRAIN3D_MAX_MESH_ASSETS;
 	m_instancerMinLevels.resize( ( size_t ) expected );
-	for ( int i = 0; i < expected; ++i ) { m_instancerMinLevels[( size_t ) i] = i < meshPolicy.size() ? meshPolicy[i] : 0; }
-	const PackedInt32Array nodeRegions = rManifest->getNodeRegionIndices();
-	const PackedInt64Array nodeIds = rManifest->getNodeSpawnIds();
-	const PackedByteArray nodeLevels = rManifest->getNodeMinLevels();
-	const int nodeCount = MIN( nodeRegions.size(), MIN( nodeIds.size(), nodeLevels.size() ) );
-	for ( int i = 0; i < nodeCount; ++i ) {
-		const int region = nodeRegions[i];
-		if ( region < 0 || region >= TERRAIN3D_MAX_REGION_SLOTS || nodeLevels[i] == 0 ) { continue; }
-		m_nodePolicies[region].push_back( { nodeIds[i], nodeLevels[i] } );
-	}
+	for ( int i = 0; i < expected; ++i ) m_instancerMinLevels[( size_t ) i] = i < meshPolicy.size() ? meshPolicy[i] : 0;
+	compileLegacyNodePolicies( rManifest );
 	buildHierarchy();
 	m_manifest = rManifest;
 	return true;
@@ -428,8 +469,12 @@ uint8_t T3DHLODStreamer::getInstancerMinimumLevel( const Vector2i &rRegion, cons
 	const size_t offset = ( size_t ) region * TERRAIN3D_MAX_MESH_ASSETS + ( size_t ) nMeshId; return offset < m_instancerMinLevels.size() ? m_instancerMinLevels[offset] : 0;
 }
 uint8_t T3DHLODStreamer::getNodeMinimumLevel( const Vector2i &rRegion, const int64_t nSpawnId ) const {
-	const int region = regionIndex( rRegion ); if ( region < 0 ) { return 0; }
-	for ( const t3dnodePolicy_t &policy : m_nodePolicies[region] ) { if ( policy.spawnId == nSpawnId ) { return policy.minLevel; } }
+	const int region = regionIndex( rRegion ); if ( region < 0 ) return 0;
+	const uint32_t begin = m_nodePolicyOffsets[( size_t ) region];
+	const uint32_t end = m_nodePolicyOffsets[( size_t ) region + 1u];
+	for ( uint32_t index = begin; index < end && index < m_nodePolicies.size(); ++index ) {
+		const t3dnodePolicy_t &policy = m_nodePolicies[index]; if ( policy.spawnId == nSpawnId ) return policy.minLevel;
+	}
 	return 0;
 }
 Dictionary T3DHLODStreamer::getStats( void ) const {

@@ -195,19 +195,44 @@ T3DLightmapStreamer::t3dsourceLoadResult_t T3DLightmapStreamer::requestSourceDat
 	return SOURCE_LOAD_READY;
 }
 
+bool T3DLightmapStreamer::loadReceiverRecords(
+	const Ref<T3DRegionLighting> &rPackage, eastl::vector<T3DRuntimeLightingReceiverRecord> &rReceivers
+) const {
+	rReceivers.clear();
+	if ( m_pTerrain == nullptr || rPackage.is_null() ) return false;
+	if ( !m_pTerrain->isEditorAuthoringMode() ) {
+		T3DData *const pData = m_pTerrain->getData();
+		PackedByteArray blob;
+		if ( pData == nullptr || !pData->loadCookedLightingReceiversNow( rPackage->getClusterLocation(), blob ) ) {
+			return rPackage->getReceiverCount() == 0;
+		}
+		return T3DRuntimeBakeCodec::decodeLightingReceivers( blob, rReceivers );
+	}
+	const Array &raw = rPackage->getBakedUserDataInternal();
+	if ( raw.is_empty() ) return rPackage->getReceiverCount() == 0;
+	if ( ( raw.size() % 4 ) != 0 ) return false;
+	rReceivers.reserve( ( size_t ) ( raw.size() / 4 ) );
+	for ( int index = 0; index < raw.size(); index += 4 ) {
+		T3DRuntimeLightingReceiverRecord receiver;
+		receiver.path = raw[index]; receiver.uvScale = raw[index + 1];
+		receiver.sliceIndex = ( int ) raw[index + 2]; receiver.subInstance = ( int ) raw[index + 3];
+		rReceivers.push_back( receiver );
+	}
+	return true;
+}
+
 bool T3DLightmapStreamer::collectReceiverState(
 	const Ref<T3DRegionLighting> &rPackage, uint64_t &nSignature, int &nReceiverCount
 ) const {
 	nSignature = TERRAIN3D_LIGHTMAP_FNV_OFFSET;
 	nReceiverCount = 0;
-	if ( m_pTerrain == nullptr || rPackage.is_null() ) { return false; }
-	const Array &raw = rPackage->getBakedUserDataInternal();
-	if ( raw.is_empty() || ( raw.size() % 4 ) != 0 ) { return rPackage->hasProbeData(); }
-	for ( int index = 0; index < raw.size(); index += 4 ) {
-		const NodePath path = raw[index];
-		Node *const pReceiver = terrain3dResolveLightmapReceiver( m_pTerrain, path );
-		if ( pReceiver == nullptr || !pReceiver->is_inside_tree() ) { continue; }
-		nSignature = terrain3dHashReceiver( nSignature, path, pReceiver->get_instance_id() );
+	if ( m_pTerrain == nullptr || rPackage.is_null() ) return false;
+	eastl::vector<T3DRuntimeLightingReceiverRecord> receivers;
+	if ( !loadReceiverRecords( rPackage, receivers ) ) return false;
+	for ( const T3DRuntimeLightingReceiverRecord &receiver : receivers ) {
+		Node *const pReceiver = terrain3dResolveLightmapReceiver( m_pTerrain, receiver.path );
+		if ( pReceiver == nullptr || !pReceiver->is_inside_tree() ) continue;
+		nSignature = terrain3dHashReceiver( nSignature, receiver.path, pReceiver->get_instance_id() );
 		++nReceiverCount;
 	}
 	return nReceiverCount > 0 || rPackage->hasProbeData();
@@ -218,39 +243,22 @@ bool T3DLightmapStreamer::buildRuntimeData(
 	const Ref<LightmapGIData> &rSource, Ref<LightmapGIData> &rData,
 	uint64_t &nSignature, int &nReceiverCount
 ) const {
-	rData.unref();
-	nSignature = TERRAIN3D_LIGHTMAP_FNV_OFFSET;
-	nReceiverCount = 0;
-	if ( m_pTerrain == nullptr || rPackage.is_null() || rSource.is_null() ) {
-		return false;
-	}
-	const Array &raw = rPackage->getBakedUserDataInternal();
-	if ( raw.is_empty() || ( raw.size() % 4 ) != 0 ) {
-		return false;
-	}
-
+	rData.unref(); nSignature = TERRAIN3D_LIGHTMAP_FNV_OFFSET; nReceiverCount = 0;
+	if ( m_pTerrain == nullptr || rPackage.is_null() || rSource.is_null() ) return false;
+	eastl::vector<T3DRuntimeLightingReceiverRecord> receivers;
+	if ( !loadReceiverRecords( rPackage, receivers ) ) return false;
 	const Ref<Resource> pDuplicated = rSource->duplicate( false );
 	Ref<LightmapGIData> pRuntimeData = pDuplicated;
-	if ( pRuntimeData.is_null() ) {
-		return false;
-	}
+	if ( pRuntimeData.is_null() ) return false;
 	pRuntimeData->clear_users();
-	for ( int index = 0; index < raw.size(); index += 4 ) {
-		const NodePath path = raw[index];
-		Node *const pReceiver = terrain3dResolveLightmapReceiver( m_pTerrain, path );
-		if ( pReceiver == nullptr || !pReceiver->is_inside_tree() ) {
-			continue;
-		}
-		const Rect2 uv_scale = raw[index + 1];
-		const int slice_index = ( int ) ( raw[index + 2] );
-		const int sub_instance = ( int ) ( raw[index + 3] );
-		pRuntimeData->add_user( path, uv_scale, slice_index, sub_instance );
-		nSignature = terrain3dHashReceiver( nSignature, path, pReceiver->get_instance_id() );
+	for ( const T3DRuntimeLightingReceiverRecord &receiver : receivers ) {
+		Node *const pReceiver = terrain3dResolveLightmapReceiver( m_pTerrain, receiver.path );
+		if ( pReceiver == nullptr || !pReceiver->is_inside_tree() ) continue;
+		pRuntimeData->add_user( receiver.path, receiver.uvScale, receiver.sliceIndex, receiver.subInstance );
+		nSignature = terrain3dHashReceiver( nSignature, receiver.path, pReceiver->get_instance_id() );
 		++nReceiverCount;
 	}
-	if ( nReceiverCount == 0 && !rPackage->hasProbeData() ) {
-		return false;
-	}
+	if ( nReceiverCount == 0 && !rPackage->hasProbeData() ) return false;
 	rData = pRuntimeData;
 	return true;
 }

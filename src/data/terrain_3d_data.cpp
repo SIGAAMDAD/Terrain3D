@@ -21,6 +21,7 @@
 #include "authoring/terrain_3d_erosion_job.h"
 #include "authoring/terrain_3d_erosion_settings.h"
 #include "authoring/terrain_3d_editor.h"
+#include "authoring/terrain_3d_cook_database.h"
 #include "rendering/terrain_3d_material.h"
 #include "assets/terrain_3d_assets.h"
 #include "instances/terrain_3d_instancer.h"
@@ -28,6 +29,7 @@
 #include "data/terrain_3d_sampler.h"
 #include "data/terrain_3d_region_codec.h"
 #include "data/terrain_3d_runtime_page_format.h"
+#include "data/terrain_3d_runtime_bake_codec.h"
 
 namespace {
 
@@ -380,6 +382,8 @@ void T3DData::syncCacheDefaultMaps( void ) {
 T3DFarSurfaceAtlasConfig T3DData::getFarSurfaceAtlasConfig( void ) const {
 	T3DFarSurfaceAtlasConfig config;
 	config.bRequired = isFarAtlasRequired();
+	config.bStrictCooked = m_pTerrain && m_pTerrain->isGpuRegionCookedPagesEnabled() &&
+		!m_pTerrain->isEditorAuthoringMode();
 	config.nHeightAtlasSide = m_pTerrain ? m_pTerrain->getGpuFarHeightAtlasSide() : TERRAIN3D_GPU_CACHE_FAR_HEIGHT_SIDE;
 	config.nSurfaceAtlasSide = m_pTerrain ? m_pTerrain->getGpuFarSurfaceAtlasSide() : TERRAIN3D_GPU_CACHE_FAR_HEIGHT_SIDE;
 	config.dataDirectory = m_pTerrain ? m_pTerrain->getDataDirectory() : String();
@@ -800,6 +804,68 @@ bool T3DData::takePreparedGpuRuntimePage(
 		rMaterialMask, bAttempted, pRequestedUsec );
 }
 
+bool T3DData::ensureCookedNodeDescriptors( const Vector2i &vLocation ) {
+	T3DRegion *const pRegion = getRegionPtr( vLocation );
+	if ( !pRegion || pRegion->isDeleted() ) return false;
+	if ( pRegion->getStreamedNodeCount() == 0 || !pRegion->getStreamedNodesRuntimeInternal().empty() ) return true;
+	requestGpuRuntimePage( vLocation, RUNTIME_PAGE_CONSUMER_NODE_DESCRIPTORS, 0u );
+	PackedByteArray descriptors;
+	if ( !m_runtimePageStore.takeNodeDescriptors( vLocation, descriptors ) ) return false;
+	if ( descriptors.is_empty() ) return pRegion->getStreamedNodeCount() == 0;
+	return T3DRuntimeBakeCodec::decodeNodeDescriptors( descriptors, m_runtimeWorldManifest, *pRegion );
+}
+
+PackedStringArray T3DData::getCookedSceneDependencies( const Vector2i &vLocation ) const {
+	PackedStringArray dependencies;
+	const T3DRuntimeWorldRegionRecord *const pRecord = m_runtimeWorldManifest.findRegion( vLocation );
+	if ( !pRecord ) return dependencies;
+	const eastl::vector<uint16_t> &ids = m_runtimeWorldManifest.getRegionSceneDependencies();
+	const uint32_t end = pRecord->sceneDependencyFirst + pRecord->sceneDependencyCount;
+	for ( uint32_t index = pRecord->sceneDependencyFirst; index < end && index < ids.size(); ++index ) {
+		const String &path = m_runtimeWorldManifest.getSceneDependency( ids[index] );
+		if ( !path.is_empty() ) dependencies.push_back( path );
+	}
+	return dependencies;
+}
+
+void T3DData::requestCookedCollisionTile( const Vector2i &vLocation, const uint8_t nPriority ) {
+	requestGpuRuntimePage( vLocation, RUNTIME_PAGE_CONSUMER_COLLISION, nPriority );
+}
+
+bool T3DData::takeCookedCollisionTile(
+	const Vector2i &vLocation, PackedByteArray &rHeight, PackedByteArray &rBounds, PackedByteArray &rHoleMask
+) {
+	return m_runtimePageStore.takeCollision( vLocation, rHeight, rBounds, rHoleMask );
+}
+
+void T3DData::requestCookedNavigationTile( const Vector2i &vLocation, const uint8_t nPriority ) {
+	requestGpuRuntimePage( vLocation, RUNTIME_PAGE_CONSUMER_NAVIGATION, nPriority );
+}
+
+bool T3DData::takeCookedNavigationTile( const Vector2i &vLocation, PackedByteArray &rNavigation ) {
+	return m_runtimePageStore.takeNavigation( vLocation, rNavigation );
+}
+
+bool T3DData::loadCookedCollisionTileNow(
+	const Vector2i &vLocation, PackedByteArray &rHeight, PackedByteArray &rBounds, PackedByteArray &rHoleMask
+) const {
+	return m_runtimePageStore.loadCollisionNow( vLocation, getRuntimePageConfig(), rHeight, rBounds, rHoleMask );
+}
+
+bool T3DData::loadCookedNavigationTileNow(
+	const Vector2i &vLocation, PackedByteArray &rNavigation, PackedByteArray *const pCollisionHeight,
+	PackedByteArray *const pMinMaxHeight
+) const {
+	return m_runtimePageStore.loadNavigationNow(
+		vLocation, getRuntimePageConfig(), rNavigation, pCollisionHeight, pMinMaxHeight );
+}
+
+bool T3DData::loadCookedLightingReceiversNow(
+	const Vector2i &vLocation, PackedByteArray &rReceivers
+) const {
+	return m_runtimePageStore.loadLightingReceiversNow( vLocation, getRuntimePageConfig(), rReceivers );
+}
+
 bool T3DData::writeGpuRuntimePage( T3DRegion *const pRegion, String *const pError ) {
 	if ( !pRegion || pRegion->isDeleted() || !m_pTerrain ) {
 		if ( pError ) {
@@ -808,27 +874,124 @@ bool T3DData::writeGpuRuntimePage( T3DRegion *const pRegion, String *const pErro
 		return false;
 	}
 
+	const int region_size = m_regionRepository.getRegionSize();
+	const Vector2i location = pRegion->getLocation();
+	// Collision and edge-derived cook data can touch the positive X/Z neighbor
+	// border. Keep only that 2x2 source footprint resident while the page is built.
+	if ( m_cpuRegionCache.isEnabled() ) {
+		for ( int dz = 0; dz <= 1; ++dz ) {
+			for ( int dx = 0; dx <= 1; ++dx ) {
+				const Vector2i neighbor = location + Vector2i( dx, dz );
+				T3DRegion *const pNeighbor = getRegionPtr( neighbor );
+				if ( pNeighbor && !pNeighbor->isDeleted() && !ensureCpuRegionResidentInternal( neighbor, true ) ) {
+					if ( pError ) {
+						*pError = "collision bake neighbor could not be made CPU-resident: " + String( neighbor );
+					}
+					return false;
+				}
+			}
+		}
+	}
+
 	T3DRuntimePageCookPayload payload;
 	payload.height = pRegion->getHeightMap();
+	const Ref<Image> authored_control = pRegion->getControlMap();
 	if ( pRegion->hasChannel( T3DRegion::TYPE_CONTROL ) ) {
-		payload.pControl = makeGpuRenderControlImage( pRegion->getLocation() );
+		payload.pControl = makeGpuRenderControlImage( location );
 	}
 	if ( pRegion->hasChannel( T3DRegion::TYPE_COLOR ) ) {
 		payload.pColor = makeGpuColorImage( pRegion->getColorMap() );
 	}
-	payload.pMiddleHeight = m_middleHeightRegionCache.makeHeightImage( pRegion->getLocation(), true );
+	payload.pMiddleHeight = m_middleHeightRegionCache.makeHeightImage( location, true );
 	payload.pDerived = pRegion->getDerivedNormalSlopeMap();
 	if ( payload.pDerived.is_null() ) {
-		regenerateDerivedMaps( {pRegion->getLocation()} );
+		regenerateDerivedMaps( {location} );
 		payload.pDerived = pRegion->getDerivedNormalSlopeMap();
 	}
 	payload.pDerived = makeGpuDerivedImage( payload.pDerived );
 	payload.pMiddleComposite = makeMiddleCompositeImage(
-		pRegion->getLocation(),
+		location,
 		payload.pControl.is_valid() ? payload.pControl : m_pDefaultControlMap,
 		payload.pColor.is_valid() ? payload.pColor : makeGpuColorImage( m_pDefaultColorMap )
 	);
 	payload.materialMask = payload.pControl.is_valid() ? terrain3dMaterialMaskFromControlImage( payload.pControl ) : 1u;
+
+	// Bake compact logical masks from authored control data, not the render halo.
+	payload.holeMask = T3DRuntimeBakeCodec::encodeHoleMask( authored_control, region_size );
+	payload.minMaxHeight = T3DRuntimeBakeCodec::encodeMinMaxHierarchy( payload.height, region_size );
+
+	// Navigation classification uses the same positive border as collision so each
+	// region page can generate all of its quads without consulting a neighbor page.
+	const int collision_width = region_size + 1;
+	PackedInt32Array navigation_controls;
+	navigation_controls.resize( collision_width * collision_width );
+	T3DSampler sampler( getSamplingSourceInternal() );
+	const int grid_x = location.x * region_size;
+	const int grid_z = location.y * region_size;
+	for ( int z = 0; z < collision_width; ++z ) {
+		for ( int x = 0; x < collision_width; ++x ) {
+			navigation_controls.set( z * collision_width + x,
+				( int32_t ) sampler.sampleControlGrid( grid_x + x, grid_z + z ) );
+		}
+	}
+	payload.navigation = T3DRuntimeBakeCodec::encodeNavigationMask( navigation_controls, collision_width );
+
+	// Store collision in HeightMapShape3D's final rotated consumer layout so full
+	// collision can upload without sampling/transposition at runtime.
+	PackedFloat32Array row_major;
+	row_major.resize( collision_width * collision_width );
+	if ( !sampler.copyHeightRect(
+		grid_x, grid_z, collision_width, collision_width,
+		row_major.ptrw(), collision_width, true ) ) {
+		if ( pError ) {
+			*pError = "collision height snapshot could not be sampled";
+		}
+		return false;
+	}
+	PackedFloat32Array collision_heights;
+	collision_heights.resize( collision_width * collision_width );
+	float collision_min = FLT_MAX;
+	float collision_max = -FLT_MAX;
+	for ( int x = 0; x < collision_width; ++x ) {
+		const int destination_base = x * collision_width;
+		for ( int z = collision_width - 1, destination = 0; z >= 0; --z, ++destination ) {
+			const float height = row_major[z * collision_width + x];
+			collision_heights.set( destination_base + destination, height );
+			if ( !std::isnan( height ) ) {
+				collision_min = MIN( collision_min, height );
+				collision_max = MAX( collision_max, height );
+			}
+		}
+	}
+	if ( collision_min == FLT_MAX ) {
+		collision_min = 0.0f;
+		collision_max = 0.0f;
+	}
+	payload.collisionHeight = T3DRuntimeBakeCodec::encodeCollisionHeight( collision_heights, collision_width );
+	payload.collisionBounds = T3DRuntimeBakeCodec::encodeCollisionBounds( collision_min, collision_max, collision_width );
+
+	if ( pRegion->getStreamedNodeCount() > 0 ) {
+		payload.nodeDescriptors = T3DRuntimeBakeCodec::encodeNodeDescriptors( *pRegion, m_runtimeWorldManifest );
+		if ( payload.nodeDescriptors.is_empty() ) {
+			if ( pError ) {
+				*pError = "streamed-node descriptor bake failed";
+			}
+			return false;
+		}
+	}
+	if ( pRegion->hasInstances() ) {
+		payload.instanceMetadata = T3DRuntimeBakeCodec::encodeInstanceMetadata( *pRegion );
+		payload.multimeshFastStart = T3DRuntimeBakeCodec::encodeMultimeshFastStart( *pRegion );
+	}
+	payload.lightingReceivers = T3DRuntimeBakeCodec::encodeLightingReceivers( *pRegion );
+
+	if ( payload.holeMask.is_empty() || payload.navigation.is_empty() || payload.minMaxHeight.is_empty() ||
+		payload.collisionHeight.is_empty() || payload.collisionBounds.is_empty() ) {
+		if ( pError ) {
+			*pError = "mandatory baked runtime metadata generation failed";
+		}
+		return false;
+	}
 	return m_runtimePageStore.writePage( pRegion, getRuntimePageConfig(), payload, pError );
 }
 
@@ -1419,7 +1582,7 @@ T3DData::T3DData( void ) :
 		m_mapEditService( &m_regionRepository, &m_samplingStorage ),
 		m_regionPersistence( &m_regionRepository ),
 		m_runtimePageStore( &m_regionRepository, &m_regionPersistence ),
-		m_cpuRegionCache( &m_regionRepository, &m_regionPersistence, &m_samplingStorage ),
+		m_cpuRegionCache( &m_regionRepository, &m_regionPersistence, &m_samplingStorage, &m_runtimePageStore ),
 		m_instanceRegionCache( &m_regionRepository, &m_runtimePageStore ),
 		m_middleHeightRegionCache( &m_regionRepository, &m_samplingStorage, &m_runtimePageStore ),
 		m_gpuRegionCache( m_regionRepository, m_samplingStorage, m_mapEditService, m_runtimePageStore, m_cpuRegionCache ),
@@ -2438,22 +2601,44 @@ void T3DData::processRegionSaveResult( const T3DRegionSaveResult &rResult ) {
 
 void T3DData::saveDirectory( const String &rDir ) {
 	LOG( T3DTerrain::INFO, "Saving data files to ", rDir );
+	const bool cook_on_save = m_pTerrain && m_pTerrain->isGpuRegionCookOnSave();
+	if ( cook_on_save && !m_runtimeWorldManifest.buildAuthoringIndex( m_regionRepository ) ) {
+		LOG( T3DTerrain::ERROR, "Failed to build runtime-world dependency index before save-time cooking" );
+	}
 	const T3DDirectorySaveResult saveResult = m_regionPersistence.saveDirectory(
 		rDir, m_pTerrain->getSave16Bit(), &T3DData::ensurePersistenceRegionResident, this );
 	for ( const T3DRegionSaveResult &regionResult : saveResult.regions ) {
 		processRegionSaveResult( regionResult );
 	}
-	if ( m_pTerrain && m_pTerrain->isGpuRegionCookOnSave() && !writeCookedGpuFarAtlases( rDir ) ) {
+	if ( cook_on_save && !writeCookedGpuFarAtlases( rDir ) ) {
 		LOG( T3DTerrain::ERROR, "Terrain regions saved, but cooked far-atlas generation failed" );
+	}
+	if ( cook_on_save ) {
+		PackedStringArray manifest_errors;
+		if ( !m_runtimeWorldManifest.buildAuthoringIndex( m_regionRepository ) ||
+			!m_runtimeWorldManifest.write( rDir, m_regionRepository, m_runtimePageStore, getRuntimePageConfig(), &manifest_errors ) ) {
+			LOG( T3DTerrain::ERROR, "Terrain regions saved, but runtime-world manifest publication failed: ", manifest_errors );
+		}
 	}
 	// Persistence updates only the exact resource paths Terrain3D changed. Do not
 	// force a project-wide EditorFileSystem scan from a scene-save callback.
 }
 
 void T3DData::saveRegion( const Vector2i &rRegionLoc, const String &rDir, const bool b16Bit ) {
+	const bool cook_on_save = m_pTerrain && m_pTerrain->isGpuRegionCookOnSave();
+	if ( cook_on_save ) {
+		m_runtimeWorldManifest.buildAuthoringIndex( m_regionRepository );
+	}
 	const T3DRegionSaveResult result = m_regionPersistence.saveRegion(
 		rRegionLoc, rDir, b16Bit, &T3DData::ensurePersistenceRegionResident, this );
 	processRegionSaveResult( result );
+	if ( cook_on_save ) {
+		PackedStringArray manifest_errors;
+		if ( !m_runtimeWorldManifest.buildAuthoringIndex( m_regionRepository ) ||
+			!m_runtimeWorldManifest.write( rDir, m_regionRepository, m_runtimePageStore, getRuntimePageConfig(), &manifest_errors ) ) {
+			LOG( T3DTerrain::ERROR, "Region saved, but runtime-world manifest publication failed: ", manifest_errors );
+		}
+	}
 }
 
 bool T3DData::collectGpuRegionPageSources(
@@ -2607,6 +2792,19 @@ Dictionary T3DData::cookGpuRegionPages( void ) {
 		return result;
 	}
 
+	if ( !m_runtimeWorldManifest.buildAuthoringIndex( m_regionRepository ) ) {
+		errors.push_back( "World manifest dependency index could not be built before page cooking" );
+		releaseUntrackedCpuMaps();
+		result["complete"] = false;
+		result["errors"] = errors;
+		return result;
+	}
+
+	const T3DRuntimePageConfig runtime_page_config = getRuntimePageConfig();
+	T3DCookDatabase cook_database;
+	const bool bCookDatabaseLoaded = cook_database.load(
+		data_dir, m_regionRepository.getRegionSize(), runtime_page_config.materialSourceSignature );
+
 	int cooked = 0;
 	int unchanged = 0;
 	int failed = 0;
@@ -2626,22 +2824,28 @@ Dictionary T3DData::cookGpuRegionPages( void ) {
 			errors.push_back( "Region " + String( location ) + ": source signature generation failed" );
 			continue;
 		}
-		const String source_path = data_dir.path_join( Util::locationToFilename( location ) );
 		const String page_path = getGpuRuntimePagePath( pRegion );
-		uint64_t existing_signature = 0u;
-		bool bCurrent = readGpuRuntimePageSourceSignature( page_path, existing_signature ) &&
-			existing_signature == expected_signature;
-		if ( bCurrent ) {
-			bCurrent = m_runtimePageStore.validatePageForRegion( pRegion, getRuntimePageConfig() );
+		bool bCurrent = bCookDatabaseLoaded && FileAccess::file_exists( page_path ) &&
+			cook_database.hasCurrentRegion( location, expected_signature );
+		if ( !bCurrent ) {
+			uint64_t existing_signature = 0u;
+			bCurrent = readGpuRuntimePageSourceSignature( page_path, existing_signature ) &&
+				existing_signature == expected_signature;
+			if ( bCurrent ) {
+				bCurrent = m_runtimePageStore.validatePageForRegion( pRegion, runtime_page_config );
+			}
 		}
 		if ( bCurrent ) {
+			cook_database.setRegion( location, expected_signature );
 			++unchanged;
 			continue;
 		}
 		String cook_error;
 		if ( writeGpuRuntimePage( pRegion, &cook_error ) ) {
+			cook_database.setRegion( location, expected_signature );
 			++cooked;
 		} else {
+			cook_database.clearRegion( location );
 			++failed;
 			errors.push_back( "Region " + String( location ) + ": " +
 				( cook_error.is_empty() ? String( "cook failed" ) : cook_error ) );
@@ -2650,13 +2854,14 @@ Dictionary T3DData::cookGpuRegionPages( void ) {
 
 	PackedStringArray page_files = Util::getFiles( data_dir, "terrain3d*.t3dpage" );
 	for ( const String &fname : page_files ) {
-		const String source_name = fname.get_basename() + String( ".res" );
-		const String source_path = data_dir.path_join( source_name );
-		if ( FileAccess::file_exists( source_path ) ) {
+		const Vector2i page_location = Util::filenameToLocation( fname.get_basename() + String( ".res" ) );
+		T3DRegion *const pPageRegion = getRegionPtr( page_location );
+		if ( pPageRegion && !pPageRegion->isDeleted() ) {
 			continue;
 		}
 		const String orphan_path = data_dir.path_join( fname );
 		if ( m_runtimePageStore.removePage( orphan_path ) ) {
+			cook_database.clearRegion( page_location );
 			++orphan_removed;
 		} else {
 			++orphan_failed;
@@ -2681,12 +2886,115 @@ Dictionary T3DData::cookGpuRegionPages( void ) {
 			}
 		}
 	}
+	Dictionary shader_pack_result;
+	bool bShaderPackCooked = true;
+	if ( m_pTerrain ) {
+		const Ref<T3DMaterial> material = m_pTerrain->getMaterial();
+		if ( material.is_valid() && !material->isShaderOverrideEnabled() ) {
+			shader_pack_result = material->cookRuntimeShaderPack();
+			bShaderPackCooked = ( bool ) shader_pack_result.get( "complete", false );
+			if ( !bShaderPackCooked ) {
+				errors.push_back( "Runtime shader pack cook failed: " +
+					String( shader_pack_result.get( "error", "unknown error" ) ) );
+			}
+		}
+	}
+	const bool bClipmapPackCooked = m_pTerrain && m_pTerrain->cookRuntimeClipmapGeometryPack();
+	if ( !bClipmapPackCooked ) {
+		errors.push_back( "Runtime clipmap geometry pack cook failed" );
+	}
+	const bool bWorldManifestCooked = failed == 0 &&
+		m_runtimeWorldManifest.write( data_dir, m_regionRepository, m_runtimePageStore, runtime_page_config, &errors );
+	if ( !bWorldManifestCooked ) {
+		errors.push_back( "Cooked world manifest generation failed" );
+	}
+	PackedStringArray strip_safe_sources;
+	auto append_strip_source = [&]( const String &rPath ) {
+		if ( rPath.is_empty() ) {
+			return;
+		}
+		for ( const String &existing : strip_safe_sources ) {
+			if ( existing == rPath ) {
+				return;
+			}
+		}
+		strip_safe_sources.push_back( rPath );
+	};
+	PackedStringArray region_strip_sources;
+	for ( const String &source_file : source_files ) {
+		const String path = data_dir.path_join( source_file );
+		region_strip_sources.push_back( path );
+		append_strip_source( path );
+	}
+	PackedStringArray material_strip_sources;
+	if ( bMaterialCacheCooked && m_pTerrain && m_pTerrain->isRuntimeMaterialStreamingEnabled() ) {
+		const Ref<T3DAssets> pAssets = m_pTerrain->getAssets();
+		if ( pAssets.is_valid() ) {
+			const TypedArray<T3DTextureAsset> textures = pAssets->getTextureList();
+			for ( int index = 0; index < textures.size(); ++index ) {
+				const Ref<T3DTextureAsset> asset = textures[index];
+				if ( asset.is_null() ) {
+					continue;
+				}
+				const Ref<Texture2D> source_textures[] = {
+					asset->getAlbedoTexture(), asset->getNormalTexture(), asset->getSurfaceTexture(),
+					asset->getDisplacementTexture(), asset->getPbrTexture()
+				};
+				for ( const Ref<Texture2D> &texture : source_textures ) {
+					if ( texture.is_null() || texture->get_path().is_empty() ) {
+						continue;
+					}
+					bool duplicate = false;
+					for ( const String &existing : material_strip_sources ) {
+						if ( existing == texture->get_path() ) { duplicate = true; break; }
+					}
+					if ( !duplicate ) { material_strip_sources.push_back( texture->get_path() ); }
+					append_strip_source( texture->get_path() );
+				}
+			}
+		}
+	}
+	const String strip_manifest_path = data_dir.path_join( "terrain3d_runtime_sources.txt" );
+	if ( bWorldManifestCooked ) {
+		Ref<FileAccess> pStripFile = FileAccess::open( strip_manifest_path, FileAccess::WRITE );
+		if ( pStripFile.is_valid() ) {
+			pStripFile->store_line( "# Terrain3D cooked-runtime source-strip manifest" );
+			pStripFile->store_line( "# Runtime authority: terrain3d_world.t3dmanifest + .t3dpage region artifacts" );
+			pStripFile->store_line( "[region_resources]" );
+			for ( const String &path : region_strip_sources ) { pStripFile->store_line( path ); }
+			if ( !material_strip_sources.is_empty() ) {
+				pStripFile->store_line( "[material_source_textures]" );
+				for ( const String &path : material_strip_sources ) { pStripFile->store_line( path ); }
+			}
+			pStripFile->store_line( "[runtime_artifact_authority]" );
+			pStripFile->store_line( "shader_source=terrain3d_shaders.t3dshaderpack" );
+			pStripFile->store_line( "clipmap_geometry=terrain3d_clipmap.t3dmeshpack" );
+			pStripFile->store_line( "far_surface=terrain3d_far.t3dfar" );
+			if ( bMaterialCacheCooked ) { pStripFile->store_line( "material_images=terrain3d_materials.t3dmatcache" ); }
+		}
+	}
+	const bool bCookDatabaseWritten = failed == 0 && orphan_failed == 0 && bFarAtlasCooked &&
+		bMaterialCacheCooked && bShaderPackCooked && bClipmapPackCooked && bWorldManifestCooked &&
+		cook_database.write( data_dir, m_regionRepository.getRegionSize(), runtime_page_config.materialSourceSignature );
+	if ( !bCookDatabaseWritten ) {
+		errors.push_back( "Persistent cook database publish failed or was withheld because another cooked artifact failed" );
+	}
 	releaseUntrackedCpuMaps();
 	const int usable = cooked + unchanged;
 	result["data_directory"] = data_dir;
 	result["far_atlas_cooked"] = bFarAtlasCooked;
 	result["material_cache"] = material_cache_result;
 	result["material_cache_cooked"] = bMaterialCacheCooked;
+	result["shader_pack"] = shader_pack_result;
+	result["shader_pack_cooked"] = bShaderPackCooked;
+	result["clipmap_pack_cooked"] = bClipmapPackCooked;
+	result["cook_database_loaded"] = bCookDatabaseLoaded;
+	result["cook_database_written"] = bCookDatabaseWritten;
+	result["cook_database_path"] = cook_database.getPath( data_dir );
+	result["world_manifest_cooked"] = bWorldManifestCooked;
+	result["world_manifest_path"] = m_runtimeWorldManifest.getPath( data_dir );
+	result["strip_safe_sources"] = strip_safe_sources;
+	result["strip_manifest_path"] = strip_manifest_path;
 	result["preflight_failed"] = false;
 	result["discovered"] = discovered;
 	result["valid"] = valid;
@@ -2699,7 +3007,8 @@ Dictionary T3DData::cookGpuRegionPages( void ) {
 	result["orphan_failed"] = orphan_failed;
 	result["region_count"] = m_regionRepository.getActiveRegionCount();
 	result["complete"] = failed == 0 && usable == valid && valid == discovered &&
-		orphan_failed == 0 && bFarAtlasCooked && bMaterialCacheCooked;
+		orphan_failed == 0 && bFarAtlasCooked && bMaterialCacheCooked && bShaderPackCooked &&
+		bClipmapPackCooked && bWorldManifestCooked && bCookDatabaseWritten;
 	result["errors"] = errors;
 	return result;
 }
@@ -2710,7 +3019,27 @@ Error T3DData::loadDirectory( const String &rDir ) {
 	LOG( T3DTerrain::INFO, "[terrain-data] Candidate repository load; CPU cache ",
 		bBoundedCpuLoad ? "bounded" : "authoring/unbounded", "; GPU cache ",
 		m_gpuRegionCache.isEnabled() ? "enabled" : "disabled" );
-	const Error stageError = m_regionPersistence.stageDirectory( rDir, bBoundedCpuLoad, staged );
+	const T3DRuntimePageConfig runtime_page_config = getRuntimePageConfig();
+	m_cpuRegionCache.setRuntimePageConfig( runtime_page_config );
+	const bool bCookedRuntimeManifest = bBoundedCpuLoad && runtime_page_config.bCookedPagesEnabled &&
+		!runtime_page_config.bEditorAuthoring;
+	Error stageError = OK;
+	if ( bCookedRuntimeManifest ) {
+		PackedStringArray manifest_errors;
+		if ( !m_runtimeWorldManifest.load( rDir, &manifest_errors ) ||
+			!m_runtimeWorldManifest.stageRepository( rDir, staged ) ) {
+			for ( const String &error : manifest_errors ) {
+				LOG( T3DTerrain::ERROR, error );
+			}
+			LOG( T3DTerrain::ERROR, "Cooked runtime profile requires a valid terrain3d_world.t3dmanifest." );
+			return ERR_FILE_CORRUPT;
+		}
+		LOG( T3DTerrain::INFO, "Loaded cooked world manifest with ", staged.getRegionCount(),
+			" regions; authored Terrain3DRegion resources were not deserialized." );
+	} else {
+		m_runtimeWorldManifest.reset();
+		stageError = m_regionPersistence.stageDirectory( rDir, bBoundedCpuLoad, staged );
+	}
 	if ( stageError != OK ) {
 		return stageError;
 	}
@@ -2727,16 +3056,18 @@ Error T3DData::loadDirectory( const String &rDir ) {
 		const uint8_t *pStagedHeightPages[TERRAIN3D_MAX_REGION_SLOTS] = {};
 		int stagedHeightSlots[TERRAIN3D_MAX_REGION_SLOTS] = {};
 		size_t stagedHeightCount = 0u;
-		for ( const T3DStagedRegion &entry : staged.regions ) {
-			if ( entry.nActiveSlot < 0 || entry.stagedHeight.is_empty() ) {
-				LOG( T3DTerrain::ERROR, "Missing staged height payload for region ", entry.location );
-				m_regionPersistence.finishPublication( 0 );
-				m_regionPersistence.finishDirectoryLoad( false );
-				return ERR_FILE_CORRUPT;
+		if ( !bCookedRuntimeManifest ) {
+			for ( const T3DStagedRegion &entry : staged.regions ) {
+				if ( entry.nActiveSlot < 0 || entry.stagedHeight.is_empty() ) {
+					LOG( T3DTerrain::ERROR, "Missing staged height payload for region ", entry.location );
+					m_regionPersistence.finishPublication( 0 );
+					m_regionPersistence.finishDirectoryLoad( false );
+					return ERR_FILE_CORRUPT;
+				}
+				pStagedHeightPages[stagedHeightCount] = entry.stagedHeight.ptr();
+				stagedHeightSlots[stagedHeightCount] = entry.nActiveSlot;
+				++stagedHeightCount;
 			}
-			pStagedHeightPages[stagedHeightCount] = entry.stagedHeight.ptr();
-			stagedHeightSlots[stagedHeightCount] = entry.nActiveSlot;
-			++stagedHeightCount;
 		}
 		activeStorageReady = m_samplingStorage.replaceActiveHeightPages(
 			staged.nTargetRegionSize, pStagedHeightPages, stagedHeightSlots, stagedHeightCount );
@@ -2804,7 +3135,9 @@ Error T3DData::loadDirectory( const String &rDir ) {
 
 	// Path takeover happens only after the repository owns every staged resource.
 	// Validation therefore cannot steal paths from the active repository.
-	m_regionPersistence.publishStagedPaths( staged );
+	if ( !bCookedRuntimeManifest ) {
+		m_regionPersistence.publishStagedPaths( staged );
+	}
 	m_regionPersistence.finishPublication( m_regionRepository.getActiveRegionCount() );
 	LOG( T3DTerrain::DEBUG, "[terrain-data] Phase 3/4 complete: ",
 		m_regionRepository.getActiveRegionCount(),
@@ -2835,7 +3168,8 @@ Error T3DData::loadDirectory( const String &rDir ) {
 	LOG( T3DTerrain::INFO, "Loaded ", m_regionRepository.getActiveRegionCount(), " terrain regions (",
 		m_regionRepository.getSlotCount(), " texture layers) in ", vformat( "%.2f", elapsedMs ),
 		" ms; synchronous Resource deserialize ",
-		vformat( "%.2f", ( double ) ( loadStats.nDeserializeUsecLast ) / 1000.0 ), " ms" );
+		vformat( "%.2f", ( double ) ( loadStats.nDeserializeUsecLast ) / 1000.0 ), " ms",
+		bCookedRuntimeManifest ? "; cooked manifest startup" : "" );
 	return OK;
 }
 

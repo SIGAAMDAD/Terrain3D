@@ -1,4 +1,5 @@
 #include "hlod/terrain_3d_hlod_manifest.h"
+#include "hlod/terrain_3d_hlod_runtime_codec.h"
 #include <godot_cpp/core/class_db.hpp>
 
 #define HLOD_SET(method, field, type, normalized) \
@@ -10,11 +11,17 @@ HLOD_SET( setVertexSpacing, m_fVertexSpacing, real_t, MAX( value, 0.001f ) )
 HLOD_SET( setMaxLevel, m_nMaxLevel, int, CLAMP( value, 1, 6 ) )
 HLOD_SET( setBuildSignature, m_nBuildSignature, int64_t, value )
 HLOD_SET( setBuiltUnix, m_nBuiltUnix, int64_t, MAX<int64_t>( value, 0 ) )
-void T3DHLODManifest::setEntries( const Array &rValue ) { m_entries = rValue.duplicate( true ); emit_changed(); }
-void T3DHLODManifest::setInstancerMinLevels( const PackedByteArray &rValue ) { m_instancerMinLevels = rValue; emit_changed(); }
-void T3DHLODManifest::setNodeRegionIndices( const PackedInt32Array &rValue ) { m_nodeRegionIndices = rValue; emit_changed(); }
-void T3DHLODManifest::setNodeSpawnIds( const PackedInt64Array &rValue ) { m_nodeSpawnIds = rValue; emit_changed(); }
-void T3DHLODManifest::setNodeMinLevels( const PackedByteArray &rValue ) { m_nodeMinLevels = rValue; emit_changed(); }
+void T3DHLODManifest::setEntries( const Array &rValue ) { m_entries = rValue.duplicate( true ); m_runtimeBlob.clear(); emit_changed(); }
+void T3DHLODManifest::setInstancerMinLevels( const PackedByteArray &rValue ) { m_instancerMinLevels = rValue; m_runtimeBlob.clear(); emit_changed(); }
+void T3DHLODManifest::setNodeRegionIndices( const PackedInt32Array &rValue ) { m_nodeRegionIndices = rValue; m_runtimeBlob.clear(); emit_changed(); }
+void T3DHLODManifest::setNodeSpawnIds( const PackedInt64Array &rValue ) { m_nodeSpawnIds = rValue; m_runtimeBlob.clear(); emit_changed(); }
+void T3DHLODManifest::setNodeMinLevels( const PackedByteArray &rValue ) { m_nodeMinLevels = rValue; m_runtimeBlob.clear(); emit_changed(); }
+void T3DHLODManifest::setRuntimeBlob( const PackedByteArray &rValue ) { m_runtimeBlob = rValue; emit_changed(); }
+bool T3DHLODManifest::compileRuntimeBlob( void ) {
+	PackedByteArray compiled = T3DHLODRuntimeCodec::encode( m_entries, m_instancerMinLevels, m_nodeRegionIndices, m_nodeSpawnIds, m_nodeMinLevels );
+	if ( compiled.is_empty() ) return false;
+	m_runtimeBlob = compiled; emit_changed(); return true;
+}
 
 void T3DHLODManifest::_bind_methods( void ) {
 #define BIND_RW(name, setter, getter) ClassDB::bind_method( D_METHOD( setter, "value" ), &T3DHLODManifest::name ); ClassDB::bind_method( D_METHOD( getter ), &T3DHLODManifest::get##name )
@@ -30,6 +37,8 @@ void T3DHLODManifest::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "set_node_region_indices", "value" ), &T3DHLODManifest::setNodeRegionIndices ); ClassDB::bind_method( D_METHOD( "get_node_region_indices" ), &T3DHLODManifest::getNodeRegionIndices );
 	ClassDB::bind_method( D_METHOD( "set_node_spawn_ids", "value" ), &T3DHLODManifest::setNodeSpawnIds ); ClassDB::bind_method( D_METHOD( "get_node_spawn_ids" ), &T3DHLODManifest::getNodeSpawnIds );
 	ClassDB::bind_method( D_METHOD( "set_node_min_levels", "value" ), &T3DHLODManifest::setNodeMinLevels ); ClassDB::bind_method( D_METHOD( "get_node_min_levels" ), &T3DHLODManifest::getNodeMinLevels );
+	ClassDB::bind_method( D_METHOD( "set_runtime_blob", "value" ), &T3DHLODManifest::setRuntimeBlob ); ClassDB::bind_method( D_METHOD( "get_runtime_blob" ), &T3DHLODManifest::getRuntimeBlob );
+	ClassDB::bind_method( D_METHOD( "compile_runtime_blob" ), &T3DHLODManifest::compileRuntimeBlob );
 	ClassDB::bind_method( D_METHOD( "get_entry_count" ), &T3DHLODManifest::getEntryCount );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "format" ), "set_format", "get_format" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "region_map_size" ), "set_region_map_size", "get_region_map_size" );
@@ -43,4 +52,5 @@ void T3DHLODManifest::_bind_methods( void ) {
 	ADD_PROPERTY( PropertyInfo( Variant::PACKED_INT32_ARRAY, "node_region_indices" ), "set_node_region_indices", "get_node_region_indices" );
 	ADD_PROPERTY( PropertyInfo( Variant::PACKED_INT64_ARRAY, "node_spawn_ids" ), "set_node_spawn_ids", "get_node_spawn_ids" );
 	ADD_PROPERTY( PropertyInfo( Variant::PACKED_BYTE_ARRAY, "node_min_levels" ), "set_node_min_levels", "get_node_min_levels" );
+	ADD_PROPERTY( PropertyInfo( Variant::PACKED_BYTE_ARRAY, "runtime_blob", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_runtime_blob", "get_runtime_blob" );
 }

@@ -138,6 +138,7 @@ void T3DRegion::clear( void ) {
 	m_instancePage.clear();
 	m_bInstanceStoreResident = true;
 	m_bInstanceStoreModified = false;
+	m_nCookedPageSourceSignature = 0u;
 	clearInstanceMetadata();
 	m_streamedNodes.clear();
 	m_streamedNodeRuntime.clear();
@@ -621,6 +622,24 @@ void T3DRegion::calcHeightRange( void ) {
 	}
 }
 
+void T3DRegion::adoptCookedRuntimeMapsInternal(
+	const Ref<Image> &rHeight, const Ref<Image> &rControl, const Ref<Image> &rColor, const Ref<Image> &rDerived
+) {
+	if ( rHeight.is_null() || rHeight->get_width() != m_nRegionSize || rHeight->get_height() != m_nRegionSize ) {
+		return;
+	}
+	m_pHeightMap = rHeight;
+	m_pControlMap = rControl;
+	m_pColorMap = rColor;
+	m_pDerivedNormalSlopeMap = rDerived;
+	m_bDerivedNormalSlopeValid = rDerived.is_valid();
+	m_nChannelFlags |= CHANNEL_HEIGHT;
+	if ( rControl.is_valid() ) m_nChannelFlags |= CHANNEL_CONTROL; else m_nChannelFlags &= ~CHANNEL_CONTROL;
+	if ( rColor.is_valid() ) m_nChannelFlags |= CHANNEL_COLOR; else m_nChannelFlags &= ~CHANNEL_COLOR;
+	if ( rDerived.is_valid() ) m_nChannelFlags |= CHANNEL_DERIVED; else m_nChannelFlags &= ~CHANNEL_DERIVED;
+	m_bRuntimeMapsModified = false;
+}
+
 void T3DRegion::importRuntimeMapsUnmodified( const T3DRegion *pSource ) {
 	if ( !pSource || pSource->m_nRegionSize != m_nRegionSize ) {
 		return;
@@ -691,6 +710,8 @@ void T3DRegion::importInstancesUnmodified( const Dictionary &rInstances ) {
 	m_bInstanceStoreResident = true;
 	m_bInstanceStoreModified = true;
 	m_instancePage.clear();
+	m_cookedInstanceMetadata.clear();
+	m_cookedMultimeshFastStart.clear();
 	if ( !encodeInstancePage() ) {
 		clearInstanceMetadata();
 	}
@@ -774,6 +795,46 @@ void T3DRegion::adoptPreparedInstanceStoreInternal( T3DInstanceStore &&rStore ) 
 	m_bInstanceStoreModified = false;
 }
 
+void T3DRegion::adoptCookedInstanceAccelerationInternal(
+	const PackedByteArray &rMetadata, const PackedByteArray &rFastStart
+) {
+	m_cookedInstanceMetadata = rMetadata;
+	m_cookedMultimeshFastStart = rFastStart;
+}
+
+void T3DRegion::setCookedInstanceMetadataInternal(
+	const uint32_t *const pMeshCounts, const uint32_t nInstanceCount, const uint16_t nMeshCount
+) {
+	if ( pMeshCounts ) {
+		std::memcpy( m_szInstanceMeshCounts, pMeshCounts, sizeof( m_szInstanceMeshCounts ) );
+	} else {
+		std::memset( m_szInstanceMeshCounts, 0, sizeof( m_szInstanceMeshCounts ) );
+	}
+	m_nInstanceCount = nInstanceCount;
+	m_nInstanceMeshCount = nMeshCount;
+	m_instanceStore.clear();
+	m_instancePage.clear();
+	m_cookedInstanceMetadata.clear();
+	m_cookedMultimeshFastStart.clear();
+	m_bInstanceStoreResident = nInstanceCount == 0u;
+	m_bInstanceStoreModified = false;
+}
+
+void T3DRegion::setCookedStreamedNodeMetadataInternal(
+	const uint16_t nCount, const Vector2i &rCoverageMin, const Vector2i &rCoverageMax
+) {
+	m_nCookedStreamedNodeCount = nCount;
+	m_cookedStreamedNodeCoverageMin = rCoverageMin;
+	m_cookedStreamedNodeCoverageMax = rCoverageMax;
+}
+
+void T3DRegion::adoptCookedStreamedNodeRuntimeInternal( eastl::vector<t3dstreamedNodeRuntimeDescriptor_t> &&rNodes ) {
+	m_streamedNodeRuntime = eastl::move( rNodes );
+	m_nCookedStreamedNodeCount = ( uint16_t ) ( MIN( m_streamedNodeRuntime.size(), ( size_t ) ( UINT16_MAX ) ) );
+	refreshStreamedNodeCoverage();
+	m_bModified = false;
+}
+
 bool T3DRegion::evictInstanceStore( void ) {
 	if ( !m_bInstanceStoreResident ) {
 		return true;
@@ -783,6 +844,8 @@ bool T3DRegion::evictInstanceStore( void ) {
 	}
 	T3DInstanceStore empty;
 	m_instanceStore = eastl::move( empty );
+	m_cookedInstanceMetadata.clear();
+	m_cookedMultimeshFastStart.clear();
 	m_bInstanceStoreResident = false;
 	return true;
 }
@@ -900,7 +963,15 @@ bool T3DRegion::streamedNodeCoverageIntersects(
 	const Vector2i &rTargetMin, const Vector2i &vTargetMax
 ) const {
 	if ( m_streamedNodeRuntime.empty() ) {
-		return false;
+		if ( m_nCookedStreamedNodeCount == 0u ) {
+			return false;
+		}
+		const Vector2i cooked_min = rOwnerLocation + m_cookedStreamedNodeCoverageMin;
+		const Vector2i cooked_max = rOwnerLocation + m_cookedStreamedNodeCoverageMax;
+		return rOwnerLocation.x >= rTargetMin.x && rOwnerLocation.x <= vTargetMax.x &&
+			rOwnerLocation.y >= rTargetMin.y && rOwnerLocation.y <= vTargetMax.y ||
+			( cooked_min.x <= vTargetMax.x && cooked_max.x >= rTargetMin.x &&
+				cooked_min.y <= vTargetMax.y && cooked_max.y >= rTargetMin.y );
 	}
 	if ( rOwnerLocation.x >= rTargetMin.x && rOwnerLocation.x <= vTargetMax.x &&
 		rOwnerLocation.y >= rTargetMin.y && rOwnerLocation.y <= vTargetMax.y ) {
@@ -941,6 +1012,7 @@ const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t *T3DRegion::findStreamedNode
 }
 
 void T3DRegion::setStreamedNodes( const Array &rNodes ) {
+	m_nCookedStreamedNodeCount = 0u;
 	m_streamedNodes.clear();
 	m_nNextStreamedNodeId = 1u;
 	for ( int index = 0; index < rNodes.size(); ++index ) {

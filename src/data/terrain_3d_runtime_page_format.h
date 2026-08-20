@@ -31,10 +31,14 @@ typedef enum t3druntimePageChannel_e : uint32_t {
 	TERRAIN3D_RUNTIME_PAGE_NODE_DESCRIPTORS = 15u,
 	TERRAIN3D_RUNTIME_PAGE_HLOD = 16u,
 	TERRAIN3D_RUNTIME_PAGE_NAVIGATION = 17u,
+	TERRAIN3D_RUNTIME_PAGE_INSTANCE_METADATA = 18u,
+	TERRAIN3D_RUNTIME_PAGE_LIGHTING_RECEIVERS = 19u,
+	TERRAIN3D_RUNTIME_PAGE_MULTIMESH_FAST_START = 20u,
 } t3druntimePageChannel_t;
 
 typedef enum t3druntimePageCompression_e : uint32_t {
 	TERRAIN3D_RUNTIME_PAGE_COMPRESSION_NONE = 0u,
+	TERRAIN3D_RUNTIME_PAGE_COMPRESSION_RLE = 1u,
 } t3druntimePageCompression_t;
 
 typedef struct t3druntimePageChannelInfo_s {
@@ -137,8 +141,10 @@ inline bool terrain3dRuntimePageValidateHeader(
 	for ( uint32_t channel = 0u; channel < rHeader.channelCount; ++channel ) {
 		const t3druntimePageChannelInfo_t &info = rHeader.szChannels[channel];
 		if ( info.type == 0u || info.compressedBytes == 0u || info.uncompressedBytes == 0u ||
-			info.compression != TERRAIN3D_RUNTIME_PAGE_COMPRESSION_NONE ||
-			info.compressedBytes != info.uncompressedBytes || info.alignment != TERRAIN3D_RUNTIME_PAGE_ALIGNMENT ) {
+			( info.compression != TERRAIN3D_RUNTIME_PAGE_COMPRESSION_NONE &&
+				info.compression != TERRAIN3D_RUNTIME_PAGE_COMPRESSION_RLE ) ||
+			( info.compression == TERRAIN3D_RUNTIME_PAGE_COMPRESSION_NONE &&
+				info.compressedBytes != info.uncompressedBytes ) || info.alignment != TERRAIN3D_RUNTIME_PAGE_ALIGNMENT ) {
 			return false;
 		}
 		for ( uint32_t previous = 0u; previous < channel; ++previous ) {

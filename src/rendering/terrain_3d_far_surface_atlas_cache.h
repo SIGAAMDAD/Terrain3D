@@ -28,6 +28,7 @@ class T3DSamplingStorage;
 
 struct T3DFarSurfaceAtlasConfig {
 	bool bRequired = false;
+	bool bStrictCooked = false;
 	int nHeightAtlasSide = TERRAIN3D_GPU_CACHE_FAR_HEIGHT_SIDE;
 	int nSurfaceAtlasSide = TERRAIN3D_GPU_CACHE_FAR_HEIGHT_SIDE;
 	String dataDirectory;

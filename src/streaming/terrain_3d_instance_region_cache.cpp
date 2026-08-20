@@ -4,6 +4,7 @@
 
 #include "data/terrain_3d_region.h"
 #include "data/terrain_3d_region_repository.h"
+#include "data/terrain_3d_runtime_bake_codec.h"
 #include "instances/terrain_3d_instance_cache_policy.h"
 #include "streaming/terrain_3d_runtime_page_store.h"
 #include "streaming/terrain_3d_runtime_profile.h"
@@ -436,10 +437,28 @@ void T3DInstanceRegionCache::update(
 				TERRAIN3D_REGION_STREAMING_ACTIVE ? 1u : 2u;
 			m_pRuntimePageStore->request( location, RUNTIME_PAGE_CONSUMER_INSTANCE_STORE, priority, true );
 			T3DInstanceStore preparedStore;
-			if ( !m_pRuntimePageStore->takeInstance( location, preparedStore ) ) {
+			PackedByteArray instance_metadata;
+			PackedByteArray multimesh_fast_start;
+			if ( !m_pRuntimePageStore->takeInstance( location, preparedStore,
+				&instance_metadata, &multimesh_fast_start ) ) {
 				continue;
 			}
+			bool acceleration_valid = true;
+			if ( !instance_metadata.is_empty() ) {
+				eastl::vector<T3DRuntimeInstanceCellMetadata> cells;
+				acceleration_valid = T3DRuntimeBakeCodec::decodeInstanceMetadata( instance_metadata, cells );
+				uint64_t decoded_count = 0u;
+				for ( const T3DRuntimeInstanceCellMetadata &cell : cells ) {
+					decoded_count += cell.instanceCount;
+				}
+				acceleration_valid = acceleration_valid && decoded_count == preparedStore.instanceCount();
+			}
+			if ( !acceleration_valid ) {
+				instance_metadata.clear();
+				multimesh_fast_start.clear();
+			}
 			pRegion->adoptPreparedInstanceStoreInternal( eastl::move( preparedStore ) );
+			pRegion->adoptCookedInstanceAccelerationInternal( instance_metadata, multimesh_fast_start );
 		}
 		if ( ensureResident( location, false, &rChanges ) ) {
 			++m_nLoadsLastTick;
