@@ -7,7 +7,11 @@ import os
 env = SConscript("godot-cpp/SConstruct")
 
 # Add source files.
-env.Append(CPPPATH=["src/"])
+env.Append(CPPPATH=[
+    "src/",
+    "thirdparty/EASTL/include",
+    "thirdparty/EABase/include/Common",
+])
 sources = [
     env.File(path)
     for path in sorted(glob("src/**/*.cpp", recursive=True))

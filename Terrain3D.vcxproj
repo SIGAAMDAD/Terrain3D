@@ -74,7 +74,7 @@
     <NMakeBuildCommandLine>scons dev_build=yes</NMakeBuildCommandLine>
     <NMakeReBuildCommandLine>scons dev_build=yes</NMakeReBuildCommandLine>
     <NMakeCleanCommandLine>scons --clean</NMakeCleanCommandLine>
-    <NMakeIncludeSearchPath>$(SolutionDir)\src;$(SolutionDir)\godot-cpp\gdextension;$(SolutionDir)\godot-cpp\gen\include;$(SolutionDir)\godot-cpp\include</NMakeIncludeSearchPath>
+    <NMakeIncludeSearchPath>$(SolutionDir)\src;$(SolutionDir)\thirdparty\EASTL\include;$(SolutionDir)\thirdparty\EABase\include\Common;$(SolutionDir)\godot-cpp\gdextension;$(SolutionDir)\godot-cpp\gen\include;$(SolutionDir)\godot-cpp\include</NMakeIncludeSearchPath>
     <AdditionalOptions>/std:c++17</AdditionalOptions>
     <OutDir>.vs</OutDir>
     <IntDir>.vs</IntDir>
