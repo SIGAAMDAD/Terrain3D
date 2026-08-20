@@ -9,34 +9,34 @@ using Godot.Collections;
 namespace TokisanGames;
 
 [Tool]
-public partial class Terrain3DMaterial : Resource
+public partial class T3DMaterial : Resource
 {
 
-	private new static readonly StringName NativeName = new StringName("Terrain3DMaterial");
+	private new static readonly StringName NativeName = new StringName("T3DMaterial");
 
-	[Obsolete("Wrapper types cannot be constructed with constructors (it only instantiate the underlying Terrain3DMaterial object), please use the Instantiate() method instead.")]
-	protected Terrain3DMaterial() { }
+	[Obsolete("Wrapper types cannot be constructed with constructors (it only instantiate the underlying T3DMaterial object), please use the Instantiate() method instead.")]
+	protected T3DMaterial() { }
 
 	private static CSharpScript _wrapperScriptAsset;
 
 	/// <summary>
-	/// Try to cast the script on the supplied <paramref name="godotObject"/> to the <see cref="Terrain3DMaterial"/> wrapper type,
-	/// if no script has attached to the type, or the script attached to the type does not inherit the <see cref="Terrain3DMaterial"/> wrapper type,
-	/// a new instance of the <see cref="Terrain3DMaterial"/> wrapper script will get attaches to the <paramref name="godotObject"/>.
+	/// Try to cast the script on the supplied <paramref name="godotObject"/> to the <see cref="T3DMaterial"/> wrapper type,
+	/// if no script has attached to the type, or the script attached to the type does not inherit the <see cref="T3DMaterial"/> wrapper type,
+	/// a new instance of the <see cref="T3DMaterial"/> wrapper script will get attaches to the <paramref name="godotObject"/>.
 	/// </summary>
 	/// <remarks>The developer should only supply the <paramref name="godotObject"/> that represents the correct underlying GDExtension type.</remarks>
 	/// <param name="godotObject">The <paramref name="godotObject"/> that represents the correct underlying GDExtension type.</param>
-	/// <returns>The existing or a new instance of the <see cref="Terrain3DMaterial"/> wrapper script attached to the supplied <paramref name="godotObject"/>.</returns>
-	public new static Terrain3DMaterial Bind(GodotObject godotObject)
+	/// <returns>The existing or a new instance of the <see cref="T3DMaterial"/> wrapper script attached to the supplied <paramref name="godotObject"/>.</returns>
+	public new static T3DMaterial Bind(GodotObject godotObject)
 	{
 		if (!IsInstanceValid(godotObject))
 			return null;
 
-		if (godotObject is Terrain3DMaterial wrapperScriptInstance)
+		if (godotObject is T3DMaterial wrapperScriptInstance)
 			return wrapperScriptInstance;
 
 #if DEBUG
-		var expectedType = typeof(Terrain3DMaterial);
+		var expectedType = typeof(T3DMaterial);
 		var currentObjectClassName = godotObject.GetClass();
 		if (!ClassDB.IsParentClass(expectedType.Name, currentObjectClassName))
 			throw new InvalidOperationException($"The supplied GodotObject ({currentObjectClassName}) is not the {expectedType.Name} type.");
@@ -44,21 +44,21 @@ public partial class Terrain3DMaterial : Resource
 
 		if (_wrapperScriptAsset is null)
 		{
-			var scriptPathAttribute = typeof(Terrain3DMaterial).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
+			var scriptPathAttribute = typeof(T3DMaterial).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
 			if (scriptPathAttribute is null) throw new UnreachableException();
 			_wrapperScriptAsset = ResourceLoader.Load<CSharpScript>(scriptPathAttribute.Path);
 		}
 
 		var instanceId = godotObject.GetInstanceId();
 		godotObject.SetScript(_wrapperScriptAsset);
-		return (Terrain3DMaterial)InstanceFromId(instanceId);
+		return (T3DMaterial)InstanceFromId(instanceId);
 	}
 
 	/// <summary>
-	/// Creates an instance of the GDExtension <see cref="Terrain3DMaterial"/> type, and attaches a wrapper script instance to it.
+	/// Creates an instance of the GDExtension <see cref="T3DMaterial"/> type, and attaches a wrapper script instance to it.
 	/// </summary>
-	/// <returns>The wrapper instance linked to the underlying GDExtension "Terrain3DMaterial" type.</returns>
-	public new static Terrain3DMaterial Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
+	/// <returns>The wrapper instance linked to the underlying GDExtension "T3DMaterial" type.</returns>
+	public new static T3DMaterial Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
 
 	public enum WorldBackgroundEnum
 	{
@@ -417,21 +417,21 @@ public partial class Terrain3DMaterial : Resource
 		public new static readonly StringName ShowDisplacementBuffer = "show_displacement_buffer";
 	}
 
-	public new Terrain3DMaterial.WorldBackgroundEnum WorldBackground
+	public new T3DMaterial.WorldBackgroundEnum WorldBackground
 	{
-		get => Get(GDExtensionPropertyName.WorldBackground).As<Terrain3DMaterial.WorldBackgroundEnum>();
+		get => Get(GDExtensionPropertyName.WorldBackground).As<T3DMaterial.WorldBackgroundEnum>();
 		set => Set(GDExtensionPropertyName.WorldBackground, Variant.From(value));
 	}
 
-	public new Terrain3DMaterial.TextureFilteringEnum TextureFiltering
+	public new T3DMaterial.TextureFilteringEnum TextureFiltering
 	{
-		get => Get(GDExtensionPropertyName.TextureFiltering).As<Terrain3DMaterial.TextureFilteringEnum>();
+		get => Get(GDExtensionPropertyName.TextureFiltering).As<T3DMaterial.TextureFilteringEnum>();
 		set => Set(GDExtensionPropertyName.TextureFiltering, Variant.From(value));
 	}
 
-	public new Terrain3DMaterial.ShaderVariantModeEnum ShaderVariantMode
+	public new T3DMaterial.ShaderVariantModeEnum ShaderVariantMode
 	{
-		get => Get(GDExtensionPropertyName.ShaderVariantMode).As<Terrain3DMaterial.ShaderVariantModeEnum>();
+		get => Get(GDExtensionPropertyName.ShaderVariantMode).As<T3DMaterial.ShaderVariantModeEnum>();
 		set => Set(GDExtensionPropertyName.ShaderVariantMode, Variant.From(value));
 	}
 
@@ -453,69 +453,69 @@ public partial class Terrain3DMaterial : Resource
 		set => Set(GDExtensionPropertyName.ShaderVariantSourceBudgetMb, value);
 	}
 
-	public new Terrain3DMaterial.ShaderPerformancePresetEnum ShaderPerformancePreset
+	public new T3DMaterial.ShaderPerformancePresetEnum ShaderPerformancePreset
 	{
-		get => Get(GDExtensionPropertyName.ShaderPerformancePreset).As<Terrain3DMaterial.ShaderPerformancePresetEnum>();
+		get => Get(GDExtensionPropertyName.ShaderPerformancePreset).As<T3DMaterial.ShaderPerformancePresetEnum>();
 		set => Set(GDExtensionPropertyName.ShaderPerformancePreset, Variant.From(value));
 	}
 
-	public new Terrain3DMaterial.TerrainSamplingModeEnum TerrainSamplingMode
+	public new T3DMaterial.TerrainSamplingModeEnum TerrainSamplingMode
 	{
-		get => Get(GDExtensionPropertyName.TerrainSamplingMode).As<Terrain3DMaterial.TerrainSamplingModeEnum>();
+		get => Get(GDExtensionPropertyName.TerrainSamplingMode).As<T3DMaterial.TerrainSamplingModeEnum>();
 		set => Set(GDExtensionPropertyName.TerrainSamplingMode, Variant.From(value));
 	}
 
-	public new Terrain3DMaterial.TextureFilteringEnum MiddleTextureFiltering
+	public new T3DMaterial.TextureFilteringEnum MiddleTextureFiltering
 	{
-		get => Get(GDExtensionPropertyName.MiddleTextureFiltering).As<Terrain3DMaterial.TextureFilteringEnum>();
+		get => Get(GDExtensionPropertyName.MiddleTextureFiltering).As<T3DMaterial.TextureFilteringEnum>();
 		set => Set(GDExtensionPropertyName.MiddleTextureFiltering, Variant.From(value));
 	}
 
-	public new Terrain3DMaterial.TerrainSamplingModeEnum MiddleTerrainSamplingMode
+	public new T3DMaterial.TerrainSamplingModeEnum MiddleTerrainSamplingMode
 	{
-		get => Get(GDExtensionPropertyName.MiddleTerrainSamplingMode).As<Terrain3DMaterial.TerrainSamplingModeEnum>();
+		get => Get(GDExtensionPropertyName.MiddleTerrainSamplingMode).As<T3DMaterial.TerrainSamplingModeEnum>();
 		set => Set(GDExtensionPropertyName.MiddleTerrainSamplingMode, Variant.From(value));
 	}
 
-	public new Terrain3DMaterial.MiddleSurfaceSourceEnum MiddleSurfaceSource
+	public new T3DMaterial.MiddleSurfaceSourceEnum MiddleSurfaceSource
 	{
-		get => Get(GDExtensionPropertyName.MiddleSurfaceSource).As<Terrain3DMaterial.MiddleSurfaceSourceEnum>();
+		get => Get(GDExtensionPropertyName.MiddleSurfaceSource).As<T3DMaterial.MiddleSurfaceSourceEnum>();
 		set => Set(GDExtensionPropertyName.MiddleSurfaceSource, Variant.From(value));
 	}
 
-	public new Terrain3DMaterial.TerrainNormalModeEnum MiddleTerrainNormalMode
+	public new T3DMaterial.TerrainNormalModeEnum MiddleTerrainNormalMode
 	{
-		get => Get(GDExtensionPropertyName.MiddleTerrainNormalMode).As<Terrain3DMaterial.TerrainNormalModeEnum>();
+		get => Get(GDExtensionPropertyName.MiddleTerrainNormalMode).As<T3DMaterial.TerrainNormalModeEnum>();
 		set => Set(GDExtensionPropertyName.MiddleTerrainNormalMode, Variant.From(value));
 	}
 
-	public new Terrain3DMaterial.ColorSamplingModeEnum MiddleColorSamplingMode
+	public new T3DMaterial.ColorSamplingModeEnum MiddleColorSamplingMode
 	{
-		get => Get(GDExtensionPropertyName.MiddleColorSamplingMode).As<Terrain3DMaterial.ColorSamplingModeEnum>();
+		get => Get(GDExtensionPropertyName.MiddleColorSamplingMode).As<T3DMaterial.ColorSamplingModeEnum>();
 		set => Set(GDExtensionPropertyName.MiddleColorSamplingMode, Variant.From(value));
 	}
 
-	public new Terrain3DMaterial.SurfaceDataModeEnum MiddleSurfaceDataMode
+	public new T3DMaterial.SurfaceDataModeEnum MiddleSurfaceDataMode
 	{
-		get => Get(GDExtensionPropertyName.MiddleSurfaceDataMode).As<Terrain3DMaterial.SurfaceDataModeEnum>();
+		get => Get(GDExtensionPropertyName.MiddleSurfaceDataMode).As<T3DMaterial.SurfaceDataModeEnum>();
 		set => Set(GDExtensionPropertyName.MiddleSurfaceDataMode, Variant.From(value));
 	}
 
-	public new Terrain3DMaterial.TextureSurfaceModeEnum MiddleTextureSurfaceMode
+	public new T3DMaterial.TextureSurfaceModeEnum MiddleTextureSurfaceMode
 	{
-		get => Get(GDExtensionPropertyName.MiddleTextureSurfaceMode).As<Terrain3DMaterial.TextureSurfaceModeEnum>();
+		get => Get(GDExtensionPropertyName.MiddleTextureSurfaceMode).As<T3DMaterial.TextureSurfaceModeEnum>();
 		set => Set(GDExtensionPropertyName.MiddleTextureSurfaceMode, Variant.From(value));
 	}
 
-	public new Terrain3DMaterial.TerrainShadingModeEnum MiddleTerrainShadingMode
+	public new T3DMaterial.TerrainShadingModeEnum MiddleTerrainShadingMode
 	{
-		get => Get(GDExtensionPropertyName.MiddleTerrainShadingMode).As<Terrain3DMaterial.TerrainShadingModeEnum>();
+		get => Get(GDExtensionPropertyName.MiddleTerrainShadingMode).As<T3DMaterial.TerrainShadingModeEnum>();
 		set => Set(GDExtensionPropertyName.MiddleTerrainShadingMode, Variant.From(value));
 	}
 
-	public new Terrain3DMaterial.DetilingModeEnum MiddleDetilingMode
+	public new T3DMaterial.DetilingModeEnum MiddleDetilingMode
 	{
-		get => Get(GDExtensionPropertyName.MiddleDetilingMode).As<Terrain3DMaterial.DetilingModeEnum>();
+		get => Get(GDExtensionPropertyName.MiddleDetilingMode).As<T3DMaterial.DetilingModeEnum>();
 		set => Set(GDExtensionPropertyName.MiddleDetilingMode, Variant.From(value));
 	}
 
@@ -543,21 +543,21 @@ public partial class Terrain3DMaterial : Resource
 		set => Set(GDExtensionPropertyName.MiddleMaterialLodBias, value);
 	}
 
-	public new Terrain3DMaterial.TextureFilteringEnum FarTextureFiltering
+	public new T3DMaterial.TextureFilteringEnum FarTextureFiltering
 	{
-		get => Get(GDExtensionPropertyName.FarTextureFiltering).As<Terrain3DMaterial.TextureFilteringEnum>();
+		get => Get(GDExtensionPropertyName.FarTextureFiltering).As<T3DMaterial.TextureFilteringEnum>();
 		set => Set(GDExtensionPropertyName.FarTextureFiltering, Variant.From(value));
 	}
 
-	public new Terrain3DMaterial.TextureSurfaceModeEnum FarTextureSurfaceMode
+	public new T3DMaterial.TextureSurfaceModeEnum FarTextureSurfaceMode
 	{
-		get => Get(GDExtensionPropertyName.FarTextureSurfaceMode).As<Terrain3DMaterial.TextureSurfaceModeEnum>();
+		get => Get(GDExtensionPropertyName.FarTextureSurfaceMode).As<T3DMaterial.TextureSurfaceModeEnum>();
 		set => Set(GDExtensionPropertyName.FarTextureSurfaceMode, Variant.From(value));
 	}
 
-	public new Terrain3DMaterial.TerrainShadingModeEnum FarTerrainShadingMode
+	public new T3DMaterial.TerrainShadingModeEnum FarTerrainShadingMode
 	{
-		get => Get(GDExtensionPropertyName.FarTerrainShadingMode).As<Terrain3DMaterial.TerrainShadingModeEnum>();
+		get => Get(GDExtensionPropertyName.FarTerrainShadingMode).As<T3DMaterial.TerrainShadingModeEnum>();
 		set => Set(GDExtensionPropertyName.FarTerrainShadingMode, Variant.From(value));
 	}
 
@@ -579,57 +579,57 @@ public partial class Terrain3DMaterial : Resource
 		set => Set(GDExtensionPropertyName.FarWetnessEnabled, value);
 	}
 
-	public new Terrain3DMaterial.TerrainNormalModeEnum TerrainNormalMode
+	public new T3DMaterial.TerrainNormalModeEnum TerrainNormalMode
 	{
-		get => Get(GDExtensionPropertyName.TerrainNormalMode).As<Terrain3DMaterial.TerrainNormalModeEnum>();
+		get => Get(GDExtensionPropertyName.TerrainNormalMode).As<T3DMaterial.TerrainNormalModeEnum>();
 		set => Set(GDExtensionPropertyName.TerrainNormalMode, Variant.From(value));
 	}
 
-	public new Terrain3DMaterial.ColorSamplingModeEnum ColorSamplingMode
+	public new T3DMaterial.ColorSamplingModeEnum ColorSamplingMode
 	{
-		get => Get(GDExtensionPropertyName.ColorSamplingMode).As<Terrain3DMaterial.ColorSamplingModeEnum>();
+		get => Get(GDExtensionPropertyName.ColorSamplingMode).As<T3DMaterial.ColorSamplingModeEnum>();
 		set => Set(GDExtensionPropertyName.ColorSamplingMode, Variant.From(value));
 	}
 
-	public new Terrain3DMaterial.ProjectionModeEnum ProjectionMode
+	public new T3DMaterial.ProjectionModeEnum ProjectionMode
 	{
-		get => Get(GDExtensionPropertyName.ProjectionMode).As<Terrain3DMaterial.ProjectionModeEnum>();
+		get => Get(GDExtensionPropertyName.ProjectionMode).As<T3DMaterial.ProjectionModeEnum>();
 		set => Set(GDExtensionPropertyName.ProjectionMode, Variant.From(value));
 	}
 
-	public new Terrain3DMaterial.TessellationMaterialModeEnum TessellationMaterialMode
+	public new T3DMaterial.TessellationMaterialModeEnum TessellationMaterialMode
 	{
-		get => Get(GDExtensionPropertyName.TessellationMaterialMode).As<Terrain3DMaterial.TessellationMaterialModeEnum>();
+		get => Get(GDExtensionPropertyName.TessellationMaterialMode).As<T3DMaterial.TessellationMaterialModeEnum>();
 		set => Set(GDExtensionPropertyName.TessellationMaterialMode, Variant.From(value));
 	}
 
-	public new Terrain3DMaterial.SurfaceDataModeEnum SurfaceDataMode
+	public new T3DMaterial.SurfaceDataModeEnum SurfaceDataMode
 	{
-		get => Get(GDExtensionPropertyName.SurfaceDataMode).As<Terrain3DMaterial.SurfaceDataModeEnum>();
+		get => Get(GDExtensionPropertyName.SurfaceDataMode).As<T3DMaterial.SurfaceDataModeEnum>();
 		set => Set(GDExtensionPropertyName.SurfaceDataMode, Variant.From(value));
 	}
 
-	public new Terrain3DMaterial.TerrainShadingModeEnum TerrainShadingMode
+	public new T3DMaterial.TerrainShadingModeEnum TerrainShadingMode
 	{
-		get => Get(GDExtensionPropertyName.TerrainShadingMode).As<Terrain3DMaterial.TerrainShadingModeEnum>();
+		get => Get(GDExtensionPropertyName.TerrainShadingMode).As<T3DMaterial.TerrainShadingModeEnum>();
 		set => Set(GDExtensionPropertyName.TerrainShadingMode, Variant.From(value));
 	}
 
-	public new Terrain3DMaterial.TextureSurfaceModeEnum TextureSurfaceMode
+	public new T3DMaterial.TextureSurfaceModeEnum TextureSurfaceMode
 	{
-		get => Get(GDExtensionPropertyName.TextureSurfaceMode).As<Terrain3DMaterial.TextureSurfaceModeEnum>();
+		get => Get(GDExtensionPropertyName.TextureSurfaceMode).As<T3DMaterial.TextureSurfaceModeEnum>();
 		set => Set(GDExtensionPropertyName.TextureSurfaceMode, Variant.From(value));
 	}
 
-	public new Terrain3DMaterial.DetilingModeEnum DetilingMode
+	public new T3DMaterial.DetilingModeEnum DetilingMode
 	{
-		get => Get(GDExtensionPropertyName.DetilingMode).As<Terrain3DMaterial.DetilingModeEnum>();
+		get => Get(GDExtensionPropertyName.DetilingMode).As<T3DMaterial.DetilingModeEnum>();
 		set => Set(GDExtensionPropertyName.DetilingMode, Variant.From(value));
 	}
 
-	public new Terrain3DMaterial.WorldNoiseShaderModeEnum WorldNoiseShaderMode
+	public new T3DMaterial.WorldNoiseShaderModeEnum WorldNoiseShaderMode
 	{
-		get => Get(GDExtensionPropertyName.WorldNoiseShaderMode).As<Terrain3DMaterial.WorldNoiseShaderModeEnum>();
+		get => Get(GDExtensionPropertyName.WorldNoiseShaderMode).As<T3DMaterial.WorldNoiseShaderModeEnum>();
 		set => Set(GDExtensionPropertyName.WorldNoiseShaderMode, Variant.From(value));
 	}
 
@@ -998,90 +998,90 @@ public partial class Terrain3DMaterial : Resource
 
 file static class WorldBackgroundEnumExtensions
 {
-public static int SafeAsInt32(this Terrain3DMaterial.WorldBackgroundEnum enumValue) =>
+public static int SafeAsInt32(this T3DMaterial.WorldBackgroundEnum enumValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this Terrain3DMaterial.WorldBackgroundEnum enumValue, int defaultValue) =>
+public static int SafeAsInt32(this T3DMaterial.WorldBackgroundEnum enumValue, int defaultValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this Terrain3DMaterial.WorldBackgroundEnum? enumValue, int defaultValue = 0) =>
+public static int SafeAsInt32(this T3DMaterial.WorldBackgroundEnum? enumValue, int defaultValue = 0) =>
 enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
 }
 
 file static class TextureFilteringEnumExtensions
 {
-public static int SafeAsInt32(this Terrain3DMaterial.TextureFilteringEnum enumValue) =>
+public static int SafeAsInt32(this T3DMaterial.TextureFilteringEnum enumValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this Terrain3DMaterial.TextureFilteringEnum enumValue, int defaultValue) =>
+public static int SafeAsInt32(this T3DMaterial.TextureFilteringEnum enumValue, int defaultValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this Terrain3DMaterial.TextureFilteringEnum? enumValue, int defaultValue = 0) =>
+public static int SafeAsInt32(this T3DMaterial.TextureFilteringEnum? enumValue, int defaultValue = 0) =>
 enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
 }
 
 file static class ShaderPerformancePresetEnumExtensions
 {
-public static int SafeAsInt32(this Terrain3DMaterial.ShaderPerformancePresetEnum enumValue) => Convert.ToInt32(enumValue);
-public static int SafeAsInt32(this Terrain3DMaterial.ShaderPerformancePresetEnum enumValue, int defaultValue) => Convert.ToInt32(enumValue);
-public static int SafeAsInt32(this Terrain3DMaterial.ShaderPerformancePresetEnum? enumValue, int defaultValue = 0) => enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
+public static int SafeAsInt32(this T3DMaterial.ShaderPerformancePresetEnum enumValue) => Convert.ToInt32(enumValue);
+public static int SafeAsInt32(this T3DMaterial.ShaderPerformancePresetEnum enumValue, int defaultValue) => Convert.ToInt32(enumValue);
+public static int SafeAsInt32(this T3DMaterial.ShaderPerformancePresetEnum? enumValue, int defaultValue = 0) => enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
 }
 
 file static class TerrainSamplingModeEnumExtensions
 {
-public static int SafeAsInt32(this Terrain3DMaterial.TerrainSamplingModeEnum enumValue) => Convert.ToInt32(enumValue);
-public static int SafeAsInt32(this Terrain3DMaterial.TerrainSamplingModeEnum enumValue, int defaultValue) => Convert.ToInt32(enumValue);
-public static int SafeAsInt32(this Terrain3DMaterial.TerrainSamplingModeEnum? enumValue, int defaultValue = 0) => enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
+public static int SafeAsInt32(this T3DMaterial.TerrainSamplingModeEnum enumValue) => Convert.ToInt32(enumValue);
+public static int SafeAsInt32(this T3DMaterial.TerrainSamplingModeEnum enumValue, int defaultValue) => Convert.ToInt32(enumValue);
+public static int SafeAsInt32(this T3DMaterial.TerrainSamplingModeEnum? enumValue, int defaultValue = 0) => enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
 }
 
 file static class TerrainNormalModeEnumExtensions
 {
-public static int SafeAsInt32(this Terrain3DMaterial.TerrainNormalModeEnum enumValue) => Convert.ToInt32(enumValue);
-public static int SafeAsInt32(this Terrain3DMaterial.TerrainNormalModeEnum enumValue, int defaultValue) => Convert.ToInt32(enumValue);
-public static int SafeAsInt32(this Terrain3DMaterial.TerrainNormalModeEnum? enumValue, int defaultValue = 0) => enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
+public static int SafeAsInt32(this T3DMaterial.TerrainNormalModeEnum enumValue) => Convert.ToInt32(enumValue);
+public static int SafeAsInt32(this T3DMaterial.TerrainNormalModeEnum enumValue, int defaultValue) => Convert.ToInt32(enumValue);
+public static int SafeAsInt32(this T3DMaterial.TerrainNormalModeEnum? enumValue, int defaultValue = 0) => enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
 }
 
 file static class TextureSurfaceModeEnumExtensions
 {
-public static int SafeAsInt32(this Terrain3DMaterial.TextureSurfaceModeEnum enumValue) => Convert.ToInt32(enumValue);
-public static int SafeAsInt32(this Terrain3DMaterial.TextureSurfaceModeEnum enumValue, int defaultValue) => Convert.ToInt32(enumValue);
-public static int SafeAsInt32(this Terrain3DMaterial.TextureSurfaceModeEnum? enumValue, int defaultValue = 0) => enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
+public static int SafeAsInt32(this T3DMaterial.TextureSurfaceModeEnum enumValue) => Convert.ToInt32(enumValue);
+public static int SafeAsInt32(this T3DMaterial.TextureSurfaceModeEnum enumValue, int defaultValue) => Convert.ToInt32(enumValue);
+public static int SafeAsInt32(this T3DMaterial.TextureSurfaceModeEnum? enumValue, int defaultValue = 0) => enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
 }
 
 file static class DetilingModeEnumExtensions
 {
-public static int SafeAsInt32(this Terrain3DMaterial.DetilingModeEnum enumValue) => Convert.ToInt32(enumValue);
-public static int SafeAsInt32(this Terrain3DMaterial.DetilingModeEnum enumValue, int defaultValue) => Convert.ToInt32(enumValue);
-public static int SafeAsInt32(this Terrain3DMaterial.DetilingModeEnum? enumValue, int defaultValue = 0) => enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
+public static int SafeAsInt32(this T3DMaterial.DetilingModeEnum enumValue) => Convert.ToInt32(enumValue);
+public static int SafeAsInt32(this T3DMaterial.DetilingModeEnum enumValue, int defaultValue) => Convert.ToInt32(enumValue);
+public static int SafeAsInt32(this T3DMaterial.DetilingModeEnum? enumValue, int defaultValue = 0) => enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
 }
 
 file static class WorldNoiseShaderModeEnumExtensions
 {
-public static int SafeAsInt32(this Terrain3DMaterial.WorldNoiseShaderModeEnum enumValue) => Convert.ToInt32(enumValue);
-public static int SafeAsInt32(this Terrain3DMaterial.WorldNoiseShaderModeEnum enumValue, int defaultValue) => Convert.ToInt32(enumValue);
-public static int SafeAsInt32(this Terrain3DMaterial.WorldNoiseShaderModeEnum? enumValue, int defaultValue = 0) => enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
+public static int SafeAsInt32(this T3DMaterial.WorldNoiseShaderModeEnum enumValue) => Convert.ToInt32(enumValue);
+public static int SafeAsInt32(this T3DMaterial.WorldNoiseShaderModeEnum enumValue, int defaultValue) => Convert.ToInt32(enumValue);
+public static int SafeAsInt32(this T3DMaterial.WorldNoiseShaderModeEnum? enumValue, int defaultValue = 0) => enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
 }
 
 file static class ShaderVariantModeEnumExtensions
 {
-public static int SafeAsInt32(this Terrain3DMaterial.ShaderVariantModeEnum enumValue) =>
+public static int SafeAsInt32(this T3DMaterial.ShaderVariantModeEnum enumValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this Terrain3DMaterial.ShaderVariantModeEnum enumValue, int defaultValue) =>
+public static int SafeAsInt32(this T3DMaterial.ShaderVariantModeEnum enumValue, int defaultValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this Terrain3DMaterial.ShaderVariantModeEnum? enumValue, int defaultValue = 0) =>
+public static int SafeAsInt32(this T3DMaterial.ShaderVariantModeEnum? enumValue, int defaultValue = 0) =>
 enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
 }
 
 file static class UpdateFlagsExtensions
 {
-public static int SafeAsInt32(this Terrain3DMaterial.UpdateFlags enumValue) =>
+public static int SafeAsInt32(this T3DMaterial.UpdateFlags enumValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this Terrain3DMaterial.UpdateFlags enumValue, int defaultValue) =>
+public static int SafeAsInt32(this T3DMaterial.UpdateFlags enumValue, int defaultValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this Terrain3DMaterial.UpdateFlags? enumValue, int defaultValue = 0) =>
+public static int SafeAsInt32(this T3DMaterial.UpdateFlags? enumValue, int defaultValue = 0) =>
 enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
 }

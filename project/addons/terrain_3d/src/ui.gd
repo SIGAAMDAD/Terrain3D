@@ -46,23 +46,23 @@ const OP_NEGATIVE_ONLY: int = 0x02
 		region_texture = value
 
 
-var plugin: Terrain3DEditorPluginBase
-var asset_dock: Terrain3DAssetDock
+var plugin: T3DEditorPluginBase
+var asset_dock: T3DAssetDock
 var toolbar: TerrainToolbar
 var tool_settings: TerrainToolSettings
 var terrain_menu: TerrainMenu
-var execution_mode_menu: Terrain3DExecutionModeMenuBase
+var execution_mode_menu: T3DExecutionModeMenuBase
 var setting_has_changed: bool = false
 var visible: bool = false
-var picking: int = Terrain3DEditor.TOOL_MAX
+var picking: int = T3DEditor.TOOL_MAX
 var picking_callback: Callable
 var brush_data: Dictionary[StringName, Variant] = {}
 var operation_builder: OperationBuilder
 var landform_controller: LandformController
-var active_tool: int = int(Terrain3DEditor.TOOL_MAX)
-var _selected_tool: int = int(Terrain3DEditor.TOOL_MAX)
-var active_operation: int = int(Terrain3DEditor.OP_MAX)
-var _selected_operation: int = int(Terrain3DEditor.OP_MAX)
+var active_tool: int = int(T3DEditor.TOOL_MAX)
+var _selected_tool: int = int(T3DEditor.TOOL_MAX)
+var active_operation: int = int(T3DEditor.OP_MAX)
+var _selected_operation: int = int(T3DEditor.OP_MAX)
 var _touchscreen_invert_active: bool = false
 
 # 3 Editor decals: 0 = cursor, 1 = slope point1, 2 = slope point2
@@ -115,7 +115,7 @@ func _enter_tree() -> void:
 	plugin.add_control_to_container(EditorPlugin.CONTAINER_SPATIAL_EDITOR_BOTTOM, tool_settings)
 	plugin.add_control_to_container(EditorPlugin.CONTAINER_SPATIAL_EDITOR_MENU, terrain_menu)
 
-	_on_tool_changed(Terrain3DEditor.REGION, Terrain3DEditor.ADD)
+	_on_tool_changed(T3DEditor.REGION, T3DEditor.ADD)
 
 	editor_decal_timer = Timer.new()
 	editor_decal_timer.wait_time = .5
@@ -125,7 +125,7 @@ func _enter_tree() -> void:
 	add_child(editor_decal_timer)
 
 
-func set_asset_dock(p_asset_dock: Terrain3DAssetDock) -> void:
+func set_asset_dock(p_asset_dock: T3DAssetDock) -> void:
 	asset_dock = p_asset_dock
 	if is_instance_valid(tool_settings):
 		tool_settings.asset_dock = p_asset_dock
@@ -153,14 +153,14 @@ func _exit_tree() -> void:
 	editor_decal_timer.queue_free()
 
 
-func _ensure_execution_mode_menu() -> Terrain3DExecutionModeMenuBase:
+func _ensure_execution_mode_menu() -> T3DExecutionModeMenuBase:
 	if is_instance_valid(execution_mode_menu):
 		return execution_mode_menu
 	var menu_script: GDScript = load(EXECUTION_MODE_MENU_PATH) as GDScript
 	if menu_script == null:
 		push_error("Unable to load Terrain3D execution-mode menu")
 		return null
-	execution_mode_menu = menu_script.new() as Terrain3DExecutionModeMenuBase
+	execution_mode_menu = menu_script.new() as T3DExecutionModeMenuBase
 	if not is_instance_valid(execution_mode_menu):
 		push_error("Unable to instantiate Terrain3D execution-mode menu")
 		return null
@@ -176,7 +176,7 @@ func set_visible(p_visible: bool, p_menu_only: bool = false) -> void:
 
 	terrain_menu.set_visible(p_visible)
 	if p_visible and not p_menu_only:
-		var mode_menu: Terrain3DExecutionModeMenuBase = _ensure_execution_mode_menu()
+		var mode_menu: T3DExecutionModeMenuBase = _ensure_execution_mode_menu()
 		if is_instance_valid(mode_menu):
 			mode_menu.set_visible(true)
 			mode_menu.set_terrain(plugin.terrain)
@@ -193,7 +193,7 @@ func set_visible(p_visible: bool, p_menu_only: bool = false) -> void:
 		tool_settings.set_visible(p_visible)
 
 	if is_instance_valid(plugin.editor) and is_instance_valid(plugin.terrain) and p_visible:
-		var terrain_at_request: Terrain3D = plugin.terrain
+		var terrain_at_request: T3DTerrain = plugin.terrain
 		await get_tree().process_frame # Editor selection may change while this is suspended.
 		if not is_instance_valid(plugin) or not is_instance_valid(plugin.editor):
 			return
@@ -202,12 +202,12 @@ func set_visible(p_visible: bool, p_menu_only: bool = false) -> void:
 		if plugin.debug:
 			print("Terrain3DUI: set_visible: calling _on_tool_changed()")
 		_on_tool_changed(_selected_tool, _selected_operation)
-		if _selected_tool in [ Terrain3DEditor.REGION, Terrain3DEditor.NAVIGATION ] and \
+		if _selected_tool in [ T3DEditor.REGION, T3DEditor.NAVIGATION ] and \
 				is_instance_valid(terrain_at_request.material) and \
 				is_instance_valid(terrain_at_request.data) and \
 				terrain_at_request.is_initialized() and terrain_at_request.data.is_runtime_ready():
 			if not terrain_at_request.material.has_method("update_editor_overlay"):
-				push_error("Terrain3D native/script revision mismatch: Terrain3DMaterial.update_editor_overlay() is missing. Rebuild the GDExtension from the same source revision as the addon scripts.")
+				push_error("Terrain3D native/script revision mismatch: T3DMaterial.update_editor_overlay() is missing. Rebuild the GDExtension from the same source revision as the addon scripts.")
 				return
 			terrain_at_request.material.update_editor_overlay()
 
@@ -232,7 +232,7 @@ func _on_tool_changed(p_tool: int, p_operation: int) -> void:
 	if plugin.editor and plugin.editor.is_operating() and \
 			(_selected_tool != p_tool or _selected_operation != p_operation):
 		plugin.editor.stop_operation()
-	if landform_controller and _selected_tool == Terrain3DEditor.LANDFORM and p_tool != Terrain3DEditor.LANDFORM:
+	if landform_controller and _selected_tool == T3DEditor.LANDFORM and p_tool != T3DEditor.LANDFORM:
 		landform_controller.cancel_stroke()
 	_selected_tool = p_tool
 	_selected_operation = p_operation
@@ -254,22 +254,22 @@ func _on_tool_changed(p_tool: int, p_operation: int) -> void:
 	var to_show: PackedStringArray = []
 
 	match _selected_tool:
-		Terrain3DEditor.REGION:
+		T3DEditor.REGION:
 			to_show.push_back("instructions")
 			to_show.push_back("invert")
 			set_menu_visibility(tool_settings.advanced_list, false)
 
-		Terrain3DEditor.SCULPT:
+		T3DEditor.SCULPT:
 			to_show.push_back("brush")
 			to_show.push_back("size")
 			to_show.push_back("strength")
-			if _selected_operation in [Terrain3DEditor.ADD, Terrain3DEditor.SUBTRACT]:
+			if _selected_operation in [T3DEditor.ADD, T3DEditor.SUBTRACT]:
 				to_show.push_back("invert")
-			elif _selected_operation == Terrain3DEditor.GRADIENT:
+			elif _selected_operation == T3DEditor.GRADIENT:
 				to_show.push_back("gradient_points")
 				to_show.push_back("drawable")
 
-		Terrain3DEditor.HEIGHT:
+		T3DEditor.HEIGHT:
 			to_show.push_back("brush")
 			to_show.push_back("size")
 			to_show.push_back("strength")
@@ -277,12 +277,12 @@ func _on_tool_changed(p_tool: int, p_operation: int) -> void:
 			to_show.push_back("height_picker")
 			to_show.push_back("invert")
 
-		Terrain3DEditor.TEXTURE:
+		T3DEditor.TEXTURE:
 			to_show.push_back("brush")
 			to_show.push_back("size")
 			to_show.push_back("enable_texture")
 			to_show.push_back("texture_picker")
-			if _selected_operation == Terrain3DEditor.ADD:
+			if _selected_operation == T3DEditor.ADD:
 				to_show.push_back("strength")
 				to_show.push_back("invert")
 			to_show.push_back("slope")
@@ -294,7 +294,7 @@ func _on_tool_changed(p_tool: int, p_operation: int) -> void:
 			to_show.push_back("scale")
 			to_show.push_back("scale_picker")
 
-		Terrain3DEditor.COLOR:
+		T3DEditor.COLOR:
 			to_show.push_back("brush")
 			to_show.push_back("size")
 			to_show.push_back("strength")
@@ -305,7 +305,7 @@ func _on_tool_changed(p_tool: int, p_operation: int) -> void:
 			to_show.push_back("margin")
 			to_show.push_back("invert")
 
-		Terrain3DEditor.ROUGHNESS:
+		T3DEditor.ROUGHNESS:
 			to_show.push_back("brush")
 			to_show.push_back("size")
 			to_show.push_back("strength")
@@ -316,7 +316,7 @@ func _on_tool_changed(p_tool: int, p_operation: int) -> void:
 			to_show.push_back("margin")
 			to_show.push_back("invert")
 
-		Terrain3DEditor.AUTOSHADER:
+		T3DEditor.AUTOSHADER:
 			to_show.push_back("brush")
 			to_show.push_back("size")
 			to_show.push_back("invert")
@@ -326,12 +326,12 @@ func _on_tool_changed(p_tool: int, p_operation: int) -> void:
 				plugin.open_autoshader_baker,
 			)
 
-		Terrain3DEditor.HOLES, Terrain3DEditor.NAVIGATION:
+		T3DEditor.HOLES, T3DEditor.NAVIGATION:
 			to_show.push_back("brush")
 			to_show.push_back("size")
 			to_show.push_back("invert")
 
-		Terrain3DEditor.LANDFORM:
+		T3DEditor.LANDFORM:
 			tool_settings.set_context_action(
 				"Rebuild Selected Geometry",
 				"Regenerate a selected landform from its stored stroke using the current cliff-geometry settings.",
@@ -365,7 +365,7 @@ func _on_tool_changed(p_tool: int, p_operation: int) -> void:
 					to_show.push_back("%s%d" % [prefix, index])
 			set_menu_visibility(tool_settings.advanced_list, true)
 
-		Terrain3DEditor.INSTANCER:
+		T3DEditor.INSTANCER:
 			to_show.push_back("size")
 			to_show.push_back("strength")
 			to_show.push_back("slope")
@@ -396,7 +396,7 @@ func _on_tool_changed(p_tool: int, p_operation: int) -> void:
 
 	# Advanced menu settings
 	to_show.push_back("auto_regions")
-	if _selected_tool != Terrain3DEditor.LANDFORM:
+	if _selected_tool != T3DEditor.LANDFORM:
 		to_show.push_back("align_to_view")
 		to_show.push_back("show_brush_texture")
 		to_show.push_back("gamma")
@@ -418,9 +418,9 @@ func _on_setting_changed() -> void:
 	brush_data = tool_settings.get_settings()
 	_refresh_landform_mode_visibility()
 	match _selected_tool:
-		Terrain3DEditor.TEXTURE, Terrain3DEditor.COLOR, Terrain3DEditor.ROUGHNESS:
+		T3DEditor.TEXTURE, T3DEditor.COLOR, T3DEditor.ROUGHNESS:
 			brush_data["asset_id"] = asset_dock.texture_list.get_selected_asset_id()
-		Terrain3DEditor.INSTANCER:
+		T3DEditor.INSTANCER:
 			brush_data["asset_id"] = asset_dock.mesh_list.get_selected_asset_id()
 		_:
 			brush_data["asset_id"] = -1
@@ -455,30 +455,30 @@ func set_active_operation() -> void:
 	# For all other tools it must leave the selected tool/operation unchanged.
 	if plugin.modifier_shift and not inverted:
 		match _selected_tool:
-			Terrain3DEditor.SCULPT, Terrain3DEditor.HEIGHT:
-				active_tool = Terrain3DEditor.SCULPT
-				active_operation = Terrain3DEditor.AVERAGE
-			Terrain3DEditor.TEXTURE:
-				active_tool = Terrain3DEditor.TEXTURE
-				active_operation = Terrain3DEditor.AVERAGE
-			Terrain3DEditor.COLOR:
-				active_tool = Terrain3DEditor.COLOR
-				active_operation = Terrain3DEditor.AVERAGE
-			Terrain3DEditor.ROUGHNESS:
-				active_tool = Terrain3DEditor.ROUGHNESS
-				active_operation = Terrain3DEditor.AVERAGE
+			T3DEditor.SCULPT, T3DEditor.HEIGHT:
+				active_tool = T3DEditor.SCULPT
+				active_operation = T3DEditor.AVERAGE
+			T3DEditor.TEXTURE:
+				active_tool = T3DEditor.TEXTURE
+				active_operation = T3DEditor.AVERAGE
+			T3DEditor.COLOR:
+				active_tool = T3DEditor.COLOR
+				active_operation = T3DEditor.AVERAGE
+			T3DEditor.ROUGHNESS:
+				active_tool = T3DEditor.ROUGHNESS
+				active_operation = T3DEditor.AVERAGE
 			_:
 				pass
 
 	# Else if Ctrl/Invert checked, opposite
-	elif _selected_operation == Terrain3DEditor.ADD and inverted:
-		active_operation = Terrain3DEditor.SUBTRACT
-	elif _selected_operation == Terrain3DEditor.SUBTRACT and not inverted:
-		active_operation = Terrain3DEditor.ADD
+	elif _selected_operation == T3DEditor.ADD and inverted:
+		active_operation = T3DEditor.SUBTRACT
+	elif _selected_operation == T3DEditor.SUBTRACT and not inverted:
+		active_operation = T3DEditor.ADD
 
 	# Preserve a partially picked multipoint operation across unrelated setting or
 	# modifier refreshes. Rebuild it only when entering/leaving the operation.
-	if active_operation == Terrain3DEditor.GRADIENT:
+	if active_operation == T3DEditor.GRADIENT:
 		if not (operation_builder is GradientOperationBuilder):
 			operation_builder = GradientOperationBuilder.new()
 			operation_builder.tool_settings = tool_settings
@@ -491,7 +491,7 @@ func set_active_operation() -> void:
 
 
 func _refresh_landform_mode_visibility() -> void:
-	if _selected_tool != Terrain3DEditor.LANDFORM or not is_instance_valid(tool_settings):
+	if _selected_tool != T3DEditor.LANDFORM or not is_instance_valid(tool_settings):
 		return
 
 	var mode: int = int(tool_settings.get_setting("landform_mode"))
@@ -499,23 +499,23 @@ func _refresh_landform_mode_visibility() -> void:
 	var paint_material: bool = bool(tool_settings.get_setting("landform_paint_material"))
 	var generate_mesh: bool = bool(tool_settings.get_setting("landform_generate_mesh"))
 	var geometry_mode: int = int(tool_settings.get_setting("landform_geometry_mode"))
-	var procedural_geometry: bool = geometry_mode == Terrain3DLandformBaker.GEOMETRY_PROCEDURAL_UNIQUE
-	var modular_geometry: bool = geometry_mode == Terrain3DLandformBaker.GEOMETRY_MODULAR_INSTANCED
-	var geometry_has_mesh: bool = geometry_mode != Terrain3DLandformBaker.GEOMETRY_TERRAIN_ONLY
-	var supports_cliff_mesh: bool = mode in [Terrain3DLandformBaker.SCARP, Terrain3DLandformBaker.OCCLUSION]
+	var procedural_geometry: bool = geometry_mode == T3DLandformBaker.GEOMETRY_PROCEDURAL_UNIQUE
+	var modular_geometry: bool = geometry_mode == T3DLandformBaker.GEOMETRY_MODULAR_INSTANCED
+	var geometry_has_mesh: bool = geometry_mode != T3DLandformBaker.GEOMETRY_TERRAIN_ONLY
+	var supports_cliff_mesh: bool = mode in [T3DLandformBaker.SCARP, T3DLandformBaker.OCCLUSION]
 	var uses_noise: bool = mode in [
-		Terrain3DLandformBaker.RIDGE, Terrain3DLandformBaker.VALLEY, Terrain3DLandformBaker.SCARP,
-		Terrain3DLandformBaker.TALUS, Terrain3DLandformBaker.HYDRAULIC_CHANNEL,
-		Terrain3DLandformBaker.DUNE, Terrain3DLandformBaker.OCCLUSION,
+		T3DLandformBaker.RIDGE, T3DLandformBaker.VALLEY, T3DLandformBaker.SCARP,
+		T3DLandformBaker.TALUS, T3DLandformBaker.HYDRAULIC_CHANNEL,
+		T3DLandformBaker.DUNE, T3DLandformBaker.OCCLUSION,
 	]
 	var uses_amplitude: bool = mode in [
-		Terrain3DLandformBaker.RIDGE, Terrain3DLandformBaker.VALLEY, Terrain3DLandformBaker.SCARP,
-		Terrain3DLandformBaker.BASIN, Terrain3DLandformBaker.PLATEAU, Terrain3DLandformBaker.PASS,
-		Terrain3DLandformBaker.TALUS, Terrain3DLandformBaker.HYDRAULIC_CHANNEL,
-		Terrain3DLandformBaker.DUNE, Terrain3DLandformBaker.OCCLUSION,
+		T3DLandformBaker.RIDGE, T3DLandformBaker.VALLEY, T3DLandformBaker.SCARP,
+		T3DLandformBaker.BASIN, T3DLandformBaker.PLATEAU, T3DLandformBaker.PASS,
+		T3DLandformBaker.TALUS, T3DLandformBaker.HYDRAULIC_CHANNEL,
+		T3DLandformBaker.DUNE, T3DLandformBaker.OCCLUSION,
 	]
-	var uses_profile_falloff: bool = mode != Terrain3DLandformBaker.PLATEAU
-	var uses_crest: bool = mode != Terrain3DLandformBaker.BASIN
+	var uses_profile_falloff: bool = mode != T3DLandformBaker.PLATEAU
+	var uses_crest: bool = mode != T3DLandformBaker.BASIN
 
 	var amplitude_label: String = "Height / Depth"
 	var falloff_label: String = "Edge Falloff"
@@ -523,65 +523,65 @@ func _refresh_landform_mode_visibility() -> void:
 	var title: String = "Landform"
 	var help: String = "Drag a stroke over the terrain, then release to commit."
 	match mode:
-		Terrain3DLandformBaker.RIDGE:
+		T3DLandformBaker.RIDGE:
 			title = "Landform · Ridge"
 			amplitude_label = "Ridge Height"
 			help = "Raises terrain only. Existing terrain is never lowered."
-		Terrain3DLandformBaker.VALLEY:
+		T3DLandformBaker.VALLEY:
 			title = "Landform · Valley"
 			amplitude_label = "Valley Depth"
 			help = "Lowers terrain only. Existing terrain is never raised."
-		Terrain3DLandformBaker.SCARP:
+		T3DLandformBaker.SCARP:
 			title = "Landform · Scarp / Cliff"
 			amplitude_label = "Cliff Height"
 			help = "Raises the selected side only. Preview ticks point toward the raised side; the generated mesh follows the finished terrain and fills the cap, face, and toe."
-		Terrain3DLandformBaker.BASIN:
+		T3DLandformBaker.BASIN:
 			title = "Landform · Basin"
 			amplitude_label = "Basin Depth"
 			falloff_label = "Rim Softness"
 			help = "The stroke defines the basin spine and Width defines its full cross-section. The floor follows one fitted longitudinal grade, cuts downward only, and preserves terrain already below the target."
-		Terrain3DLandformBaker.PLATEAU:
+		T3DLandformBaker.PLATEAU:
 			title = "Landform · Plateau / Mesa"
 			amplitude_label = "Plateau Height"
 			help = "Raises terrain toward the plateau target without cutting existing high ground."
-		Terrain3DLandformBaker.TERRACE:
+		T3DLandformBaker.TERRACE:
 			title = "Landform · Terrace"
 			help = "Quantizes the existing slope into benches. This mode intentionally cuts and fills."
-		Terrain3DLandformBaker.ROAD:
+		T3DLandformBaker.ROAD:
 			title = "Landform · Road / Trail"
 			help = "Grades the stroke to its drawn elevation with cut-and-fill and an optional crown."
-		Terrain3DLandformBaker.PASS:
+		T3DLandformBaker.PASS:
 			title = "Landform · Mountain Pass"
 			amplitude_label = "Pass Cut Depth"
 			help = "Cuts a navigable pass downward. It does not raise surrounding terrain."
-		Terrain3DLandformBaker.TALUS:
+		T3DLandformBaker.TALUS:
 			title = "Landform · Talus / Debris"
 			amplitude_label = "Deposit Height"
 			help = "Deposits material only. Profile Bias chooses the preferred side of the stroke."
-		Terrain3DLandformBaker.HYDRAULIC_CHANNEL:
+		T3DLandformBaker.HYDRAULIC_CHANNEL:
 			title = "Landform · Hydraulic Channel"
 			amplitude_label = "Channel Depth"
 			help = "Cuts the channel and raises small banks. This mode intentionally changes height in both directions."
-		Terrain3DLandformBaker.THERMAL_RELAXATION:
+		T3DLandformBaker.THERMAL_RELAXATION:
 			title = "Landform · Thermal Relaxation"
 			help = "Moves material toward the selected angle of repose. This mode intentionally lowers and fills."
-		Terrain3DLandformBaker.DUNE:
+		T3DLandformBaker.DUNE:
 			title = "Landform · Dune"
 			amplitude_label = "Dune Height"
 			help = "Raises directional dune forms only. Existing terrain is never lowered."
-		Terrain3DLandformBaker.SHORELINE:
+		T3DLandformBaker.SHORELINE:
 			title = "Landform · Shoreline"
 			help = "Grades terrain toward the water level. This mode intentionally cuts and fills."
-		Terrain3DLandformBaker.MORPHOLOGY:
+		T3DLandformBaker.MORPHOLOGY:
 			title = "Landform · Morphology"
 			match morphology:
-				Terrain3DLandformBaker.MORPH_EXPAND_PEAKS, Terrain3DLandformBaker.MORPH_FILL_PITS, Terrain3DLandformBaker.MORPH_RIDGE_SHARPEN:
+				T3DLandformBaker.MORPH_EXPAND_PEAKS, T3DLandformBaker.MORPH_FILL_PITS, T3DLandformBaker.MORPH_RIDGE_SHARPEN:
 					help = "This morphology raises terrain only."
-				Terrain3DLandformBaker.MORPH_VALLEY_SHARPEN:
+				T3DLandformBaker.MORPH_VALLEY_SHARPEN:
 					help = "This morphology lowers terrain only."
 				_:
 					help = "Plateau cleanup may raise or lower small deviations around a local plane."
-		Terrain3DLandformBaker.OCCLUSION:
+		T3DLandformBaker.OCCLUSION:
 			title = "Landform · Occlusion"
 			amplitude_label = "Occluder Height"
 			help = "Raises an occluding formation only. Its optional cliff mesh fills the terrain-to-mesh transition."
@@ -593,12 +593,12 @@ func _refresh_landform_mode_visibility() -> void:
 	tool_settings.set_setting_tooltip(&"landform_amplitude", help)
 	tool_settings.set_setting_label(
 		&"landform_cliff_side",
-		"Raised Side" if mode == Terrain3DLandformBaker.SCARP else "Cliff Face Side"
+		"Raised Side" if mode == T3DLandformBaker.SCARP else "Cliff Face Side"
 	)
 	tool_settings.set_setting_tooltip(
 		&"landform_cliff_side",
 		"Chooses which side is raised; preview ticks point toward it."
-		if mode == Terrain3DLandformBaker.SCARP
+		if mode == T3DLandformBaker.SCARP
 		else "Chooses which side of the occlusion stroke receives the generated cliff face."
 	)
 
@@ -606,18 +606,18 @@ func _refresh_landform_mode_visibility() -> void:
 		"landform_amplitude": uses_amplitude,
 		"landform_falloff": uses_profile_falloff,
 		"landform_crest": uses_crest,
-		"landform_asymmetry": mode in [Terrain3DLandformBaker.SCARP, Terrain3DLandformBaker.TALUS],
-		"landform_cliff_side": mode in [Terrain3DLandformBaker.SCARP, Terrain3DLandformBaker.OCCLUSION],
-		"landform_terrace_step": mode == Terrain3DLandformBaker.TERRACE,
-		"landform_road_crown": mode == Terrain3DLandformBaker.ROAD,
-		"landform_water_level": mode == Terrain3DLandformBaker.SHORELINE,
-		"landform_shore_slope": mode == Terrain3DLandformBaker.SHORELINE,
-		"landform_dune_spacing": mode == Terrain3DLandformBaker.DUNE,
-		"landform_repose": mode == Terrain3DLandformBaker.THERMAL_RELAXATION,
-		"landform_iterations": mode == Terrain3DLandformBaker.THERMAL_RELAXATION,
-		"landform_morphology": mode == Terrain3DLandformBaker.MORPHOLOGY,
-		"landform_basin_floor_width": mode == Terrain3DLandformBaker.BASIN,
-		"landform_basin_create_regions": mode == Terrain3DLandformBaker.BASIN,
+		"landform_asymmetry": mode in [T3DLandformBaker.SCARP, T3DLandformBaker.TALUS],
+		"landform_cliff_side": mode in [T3DLandformBaker.SCARP, T3DLandformBaker.OCCLUSION],
+		"landform_terrace_step": mode == T3DLandformBaker.TERRACE,
+		"landform_road_crown": mode == T3DLandformBaker.ROAD,
+		"landform_water_level": mode == T3DLandformBaker.SHORELINE,
+		"landform_shore_slope": mode == T3DLandformBaker.SHORELINE,
+		"landform_dune_spacing": mode == T3DLandformBaker.DUNE,
+		"landform_repose": mode == T3DLandformBaker.THERMAL_RELAXATION,
+		"landform_iterations": mode == T3DLandformBaker.THERMAL_RELAXATION,
+		"landform_morphology": mode == T3DLandformBaker.MORPHOLOGY,
+		"landform_basin_floor_width": mode == T3DLandformBaker.BASIN,
+		"landform_basin_create_regions": mode == T3DLandformBaker.BASIN,
 		"landform_noise": uses_noise,
 		"landform_noise_scale": uses_noise,
 		"landform_seed": uses_noise,
@@ -714,7 +714,7 @@ func update_decal() -> void:
 
 	## Region Operations
 	var r_map: PackedInt32Array = plugin.terrain.data.get_region_map()
-	if plugin.editor.get_tool() == Terrain3DEditor.REGION:
+	if plugin.editor.get_tool() == T3DEditor.REGION:
 		var r_size: float = float(plugin.terrain.get_region_size()) * plugin.terrain.get_vertex_spacing()
 		var map_size: int = plugin.terrain.data.get_region_map_size()
 		var half_r_size: float = r_size * 0.5
@@ -730,21 +730,21 @@ func update_decal() -> void:
 		loc += Vector2i(map_size / 2, map_size / 2)
 		if !(loc.x < 0 or loc.x > map_size - 1 or loc.y < 0 or loc.y > map_size - 1):
 			var index: int = clampi(loc.y * map_size + loc.x, 0, map_size * map_size - 1)
-			if plugin.terrain.material.get_world_background() == Terrain3DMaterial.NONE:
-				if r_map[index] == 0 and active_operation == Terrain3DEditor.ADD:
+			if plugin.terrain.material.get_world_background() == T3DMaterial.NONE:
+				if r_map[index] == 0 and active_operation == T3DEditor.ADD:
 					r_map[index] = -index - 1
 				else:
 					r_map[index] = r_map[index]
 
 			match active_operation:
-				Terrain3DEditor.ADD:
+				T3DEditor.ADD:
 					if r_map[index] <= 0:
 						editor_decal_color[0] = Color.WHITE
 						editor_decal_color[0].a = 0.25
 					else:
 						hide_decal()
 
-				Terrain3DEditor.SUBTRACT:
+				T3DEditor.SUBTRACT:
 					if r_map[index] > 0:
 						editor_decal_color[0] = Color.WHITE * .15
 						editor_decal_color[0].a = 0.75
@@ -754,7 +754,7 @@ func update_decal() -> void:
 			hide_decal()
 
 	## Picking
-	elif picking != Terrain3DEditor.TOOL_MAX:
+	elif picking != T3DEditor.TOOL_MAX:
 		editor_decal_part[0] = false # Hide brush
 		editor_decal_size[0] = plugin.terrain.get_vertex_spacing()
 		editor_decal_color[0] = COLOR_PICK
@@ -764,7 +764,7 @@ func update_decal() -> void:
 	else:
 		editor_brush_texture_rid = brush_data["brush"][1].get_rid()
 		var decal_size: float = float(brush_data["size"])
-		if plugin.editor.get_tool() == Terrain3DEditor.LANDFORM:
+		if plugin.editor.get_tool() == T3DEditor.LANDFORM:
 			decal_size = float(brush_data.get("landform_width", decal_size))
 		editor_decal_size[0] = maxf(decal_size, 0.5)
 		if brush_data["align_to_view"]:
@@ -774,32 +774,32 @@ func update_decal() -> void:
 			else:
 				editor_decal_rotation[0] = 0.
 		match plugin.editor.get_tool():
-			Terrain3DEditor.SCULPT:
+			T3DEditor.SCULPT:
 				match active_operation:
-					Terrain3DEditor.ADD:
+					T3DEditor.ADD:
 						if plugin.modifier_alt:
 							editor_decal_color[0] = COLOR_LIFT
 							editor_decal_color[0].a = clampf(float(brush_data["strength"]), .2, .5)
 						else:
 							editor_decal_color[0] = COLOR_RAISE
 							editor_decal_color[0].a = clampf(float(brush_data["strength"]), .25, .5)
-					Terrain3DEditor.SUBTRACT:
+					T3DEditor.SUBTRACT:
 						if plugin.modifier_alt:
 							editor_decal_color[0] = COLOR_FLATTEN
 							editor_decal_color[0].a = clampf(float(brush_data["strength"]), .25, .5) + .1
 						else:
 							editor_decal_color[0] = COLOR_LOWER
 							editor_decal_color[0].a = clampf(float(brush_data["strength"]), .2, .5) + .25
-					Terrain3DEditor.AVERAGE:
+					T3DEditor.AVERAGE:
 						editor_decal_color[0] = COLOR_SMOOTH
 						editor_decal_color[0].a = clampf(float(brush_data["strength"]), .2, .5) + .25
-					Terrain3DEditor.GRADIENT:
+					T3DEditor.GRADIENT:
 						editor_decal_color[0] = COLOR_SLOPE
 						editor_decal_color[0].a = clampf(float(brush_data["strength"]), .2, .4)
-			Terrain3DEditor.HEIGHT:
+			T3DEditor.HEIGHT:
 				editor_decal_color[0] = COLOR_HEIGHT
 				editor_decal_color[0].a = clampf(float(brush_data["strength"]), .2, .5) + .25
-			Terrain3DEditor.TEXTURE:
+			T3DEditor.TEXTURE:
 				if plugin._input_mode == 1:
 					editor_decal_part[0] = false # Hide brush
 				if plugin.modifier_shift:
@@ -807,62 +807,62 @@ func update_decal() -> void:
 					editor_decal_color[0].a = clampf(float(brush_data["strength"]), .2, .5) + .25
 				else:
 					match active_operation:
-						Terrain3DEditor.REPLACE:
+						T3DEditor.REPLACE:
 							editor_decal_color[0] = COLOR_PAINT
 							editor_decal_color[0].a = .6
-						Terrain3DEditor.SUBTRACT:
+						T3DEditor.SUBTRACT:
 							editor_decal_color[0] = COLOR_UNSPRAY
 							editor_decal_color[0].a = clampf(float(brush_data["strength"]), .2, .5) + .1
-						Terrain3DEditor.ADD:
+						T3DEditor.ADD:
 							editor_decal_color[0] = COLOR_SPRAY
 							editor_decal_color[0].a = clampf(float(brush_data["strength"]), .15, .4)
-			Terrain3DEditor.COLOR:
-				if active_operation == Terrain3DEditor.AVERAGE:
+			T3DEditor.COLOR:
+				if active_operation == T3DEditor.AVERAGE:
 					editor_decal_color[0] = COLOR_AVERAGE
 					editor_decal_color[0].a = clampf(float(brush_data["strength"]), .2, .5) + .25
-				elif active_operation == Terrain3DEditor.SUBTRACT:
+				elif active_operation == T3DEditor.SUBTRACT:
 					editor_decal_color[0] = Color.WHITE
 					editor_decal_color[0].a = clampf(float(brush_data["strength"]), .2, .5)
 				else:
 					editor_decal_color[0] = brush_data["color"].srgb_to_linear()
 					editor_decal_color[0].a *= clampf(float(brush_data["strength"]), .3, .5)
-			Terrain3DEditor.ROUGHNESS:
+			T3DEditor.ROUGHNESS:
 				if plugin._input_mode == 1:
 					editor_decal_part[0] = false # Hide brush
-				if active_operation == Terrain3DEditor.AVERAGE:
+				if active_operation == T3DEditor.AVERAGE:
 					editor_decal_color[0] = COLOR_AVERAGE
 					editor_decal_color[0].a = clampf(float(brush_data["strength"]), .2, .5) + .25
-				elif active_operation == Terrain3DEditor.SUBTRACT:
+				elif active_operation == T3DEditor.SUBTRACT:
 					editor_decal_color[0] = COLOR_DRY
 					editor_decal_color[0].a = clampf(float(brush_data["strength"]), .2, .5) + .1
 				else:
 					editor_decal_color[0] = COLOR_WET
 					editor_decal_color[0].a = clampf(float(brush_data["strength"]), .2, .5) + .1
-			Terrain3DEditor.AUTOSHADER:
+			T3DEditor.AUTOSHADER:
 				editor_decal_color[0] = COLOR_AUTOSHADER
 				editor_decal_color[0].a = .6
-			Terrain3DEditor.HOLES:
+			T3DEditor.HOLES:
 				editor_decal_color[0] = COLOR_HOLES
 				editor_decal_color[0].a = .75
-			Terrain3DEditor.NAVIGATION:
+			T3DEditor.NAVIGATION:
 				editor_decal_color[0] = COLOR_NAVIGATION
 				editor_decal_color[0].a = .80
-			Terrain3DEditor.LANDFORM:
+			T3DEditor.LANDFORM:
 				editor_decal_color[0] = COLOR_LANDFORM
 				editor_decal_color[0].a = 0.48
-			Terrain3DEditor.INSTANCER:
+			T3DEditor.INSTANCER:
 				editor_decal_part[0] = false # Hide brush
-				if active_operation == Terrain3DEditor.SUBTRACT:
+				if active_operation == T3DEditor.SUBTRACT:
 					editor_decal_color[0] = COLOR_UNINSTANCE
 					editor_decal_color[0].a = .75
 				else:
 					editor_decal_color[0] = COLOR_INSTANCE
 					editor_decal_color[0].a = .75
 
-	if plugin.editor.get_tool() != Terrain3DEditor.REGION and not brush_data["show_brush_texture"]:
+	if plugin.editor.get_tool() != T3DEditor.REGION and not brush_data["show_brush_texture"]:
 		editor_decal_part[0] = false # Hide brush
 
-	if active_operation == Terrain3DEditor.GRADIENT:
+	if active_operation == T3DEditor.GRADIENT:
 		var point1: Vector3 = brush_data["gradient_points"][0]
 		if point1 != Vector3.ZERO:
 			editor_decal_color[1] = COLOR_SLOPE
@@ -935,7 +935,7 @@ func set_decal_rotation(p_rot: float) -> void:
 func _on_picking(p_type: int, p_callback: Callable) -> void:
 	picking = p_type
 	picking_callback = p_callback
-	if picking == Terrain3DEditor.INSTANCER:
+	if picking == T3DEditor.INSTANCER:
 		if not get_tree().process_frame.is_connected(_update_picker_highlight):
 			get_tree().process_frame.connect(_update_picker_highlight)
 	else:
@@ -951,13 +951,13 @@ func _update_picker_highlight() -> void:
 	if plugin.terrain.data.has_regionp(plugin.mouse_global_position):
 		mesh_asset_id = plugin.terrain.instancer.get_closest_mesh_id(plugin.mouse_global_position)
 	for i: int in plugin.terrain.assets.get_mesh_count():
-		var ma: Terrain3DMeshAsset = plugin.terrain.assets.get_mesh_asset(i)
+		var ma: T3DMeshAsset = plugin.terrain.assets.get_mesh_asset(i)
 		if ma:
 			ma.set_highlighted(i == mesh_asset_id)
 
 
 func clear_picking() -> void:
-	picking = Terrain3DEditor.TOOL_MAX
+	picking = T3DEditor.TOOL_MAX
 	picking_callback = Callable()
 	if is_inside_tree():
 		var tree: SceneTree = get_tree()
@@ -966,14 +966,14 @@ func clear_picking() -> void:
 	if not is_instance_valid(plugin) or not is_instance_valid(plugin.terrain) or not plugin.terrain.assets:
 		return
 	for i: int in range(0, plugin.terrain.assets.get_mesh_count()):
-		var ma: Terrain3DMeshAsset = plugin.terrain.assets.get_mesh_asset(i)
+		var ma: T3DMeshAsset = plugin.terrain.assets.get_mesh_asset(i)
 		if ma:
 			ma.set_highlighted(false)
 	asset_dock.update_dock()
 
 
 func is_picking() -> bool:
-	if picking != Terrain3DEditor.TOOL_MAX:
+	if picking != T3DEditor.TOOL_MAX:
 		return true
 
 	if operation_builder and operation_builder.is_picking():
@@ -983,23 +983,23 @@ func is_picking() -> bool:
 
 
 func pick(p_global_position: Vector3) -> void:
-	if picking != Terrain3DEditor.TOOL_MAX:
+	if picking != T3DEditor.TOOL_MAX:
 		var color: Color
 		match picking:
-			Terrain3DEditor.HEIGHT, Terrain3DEditor.SCULPT:
+			T3DEditor.HEIGHT, T3DEditor.SCULPT:
 				color = Color(plugin.terrain.data.get_height(p_global_position), 0., 0., 1.)
-			Terrain3DEditor.ROUGHNESS:
-				color = plugin.terrain.data.get_pixel(int(Terrain3DRegion.TYPE_COLOR), p_global_position)
-			Terrain3DEditor.COLOR:
+			T3DEditor.ROUGHNESS:
+				color = plugin.terrain.data.get_pixel(int(T3DRegion.TYPE_COLOR), p_global_position)
+			T3DEditor.COLOR:
 				color = plugin.terrain.data.get_color(p_global_position)
-			Terrain3DEditor.ANGLE:
+			T3DEditor.ANGLE:
 				color = Color(plugin.terrain.data.get_control_angle(p_global_position), 0., 0., 1.)
-			Terrain3DEditor.SCALE:
+			T3DEditor.SCALE:
 				color = Color(plugin.terrain.data.get_control_scale(p_global_position), 0., 0., 1.)
-			Terrain3DEditor.INSTANCER:
+			T3DEditor.INSTANCER:
 				var mesh_asset_id: int = plugin.terrain.instancer.get_closest_mesh_id(p_global_position)
 				color = Color(mesh_asset_id, 0., 0., 1.)
-			Terrain3DEditor.TEXTURE:
+			T3DEditor.TEXTURE:
 				var texture_blend_data: Vector3 = plugin.terrain.data.get_texture_id(p_global_position)
 				if not texture_blend_data.is_finite():
 					return
@@ -1022,11 +1022,11 @@ func pick(p_global_position: Vector3) -> void:
 func _get_autoshader_context() -> PackedStringArray:
 	if not is_instance_valid(plugin) or not is_instance_valid(plugin.terrain):
 		return PackedStringArray(["Material Rule Mask", "Paint where automatic material rules are allowed to write."])
-	var profile := plugin.terrain.auto_shader_profile as Terrain3DAutoShaderProfile
+	var profile := plugin.terrain.auto_shader_profile as T3DAutoShaderProfile
 	if not is_instance_valid(profile):
 		return PackedStringArray(["Material Rule Mask", "No rule profile is assigned. Open Material Rules to create one, then paint the automatic-material mask here."])
 	var enabled_rules: int = 0
-	for rule: Terrain3DAutoShaderRule in profile.rules:
+	for rule: T3DAutoShaderRule in profile.rules:
 		if is_instance_valid(rule) and rule.enabled:
 			enabled_rules += 1
 	return PackedStringArray([
@@ -1040,35 +1040,35 @@ func _get_tool_context(
 	p_operation: int
 ) -> PackedStringArray:
 	match p_tool:
-		Terrain3DEditor.REGION:
+		T3DEditor.REGION:
 			return PackedStringArray(["Regions", "Click terrain to add a 128 m region. Use the inverse operation to remove one."])
-		Terrain3DEditor.SCULPT:
+		T3DEditor.SCULPT:
 			match p_operation:
-				Terrain3DEditor.AVERAGE:
+				T3DEditor.AVERAGE:
 					return PackedStringArray(["Smooth", "Blend local height differences without changing the selected material."])
-				Terrain3DEditor.GRADIENT:
+				T3DEditor.GRADIENT:
 					return PackedStringArray(["Slope", "Pick slope points, then draw or apply the fitted gradient."])
-				Terrain3DEditor.SUBTRACT:
+				T3DEditor.SUBTRACT:
 					return PackedStringArray(["Lower", "Lower terrain using the selected brush, size, and strength."])
 				_:
 					return PackedStringArray(["Raise", "Raise terrain using the selected brush, size, and strength."])
-		Terrain3DEditor.HEIGHT:
+		T3DEditor.HEIGHT:
 			return PackedStringArray(["Set Height", "Paint an explicit world height; use the picker to sample terrain."])
-		Terrain3DEditor.TEXTURE:
+		T3DEditor.TEXTURE:
 			return PackedStringArray(["Texture", "Paint the selected texture asset. Angle, scale, and slope filters are optional."])
-		Terrain3DEditor.COLOR:
+		T3DEditor.COLOR:
 			return PackedStringArray(["Color", "Tint terrain color data without changing the material assignment."])
-		Terrain3DEditor.ROUGHNESS:
+		T3DEditor.ROUGHNESS:
 			return PackedStringArray(["Wetness", "Paint the terrain wetness/roughness control channel."])
-		Terrain3DEditor.AUTOSHADER:
+		T3DEditor.AUTOSHADER:
 			return _get_autoshader_context()
-		Terrain3DEditor.HOLES:
+		T3DEditor.HOLES:
 			return PackedStringArray(["Holes", "Mark terrain fragments as holes or restore them."])
-		Terrain3DEditor.NAVIGATION:
+		T3DEditor.NAVIGATION:
 			return PackedStringArray(["Navigation", "Paint the Terrain3D navigation mask used by navigation baking."])
-		Terrain3DEditor.LANDFORM:
+		T3DEditor.LANDFORM:
 			return PackedStringArray(["Landform Stroke", "Drag across the terrain to author a ridge, valley, cliff, road, basin, dune, shoreline, or cleanup operation. Scarp and occlusion modes can generate the missing vertical cliff mesh automatically."])
-		Terrain3DEditor.INSTANCER:
+		T3DEditor.INSTANCER:
 			return PackedStringArray(["Mesh Instances", "Place or remove the selected mesh asset with controlled variation."])
 	return PackedStringArray(["Terrain Tool", "Select a Terrain3D editing tool."])
 

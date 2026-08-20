@@ -19,10 +19,10 @@
 #include <cstddef>
 #include <cstdint>
 
-class Terrain3DAssets;
+class T3DAssets;
 class T3DCpuRegionCache;
-class Terrain3DMaterial;
-class Terrain3DRegion;
+class T3DMaterial;
+class T3DRegion;
 class T3DRegionRepository;
 class T3DSamplingStorage;
 
@@ -35,8 +35,8 @@ struct T3DFarSurfaceAtlasConfig {
 	Ref<Image> pDefaultHeightMap;
 	Ref<Image> pDefaultControlMap;
 	Ref<Image> pDefaultColorMap;
-	Ref<Terrain3DMaterial> pMaterial;
-	Ref<Terrain3DAssets> pAssets;
+	Ref<T3DMaterial> pMaterial;
+	Ref<T3DAssets> pAssets;
 };
 
 struct T3DFarSurfaceAtlasStats {
@@ -141,7 +141,7 @@ private:
 	bool patchColorRegion( const Vector2i &vLocation, PackedByteArray &rAtlasBytes );
 	bool rebuildHeightAtlas( void );
 	bool rebuildColorAtlas( void );
-	Ref<Image> getRegionMapOrDefault( const Terrain3DRegion *pRegion, t3dmapType_t eMapType ) const;
+	Ref<Image> getRegionMapOrDefault( const T3DRegion *pRegion, t3dmapType_t eMapType ) const;
 };
 
 #endif // TERRAIN3D_FAR_SURFACE_ATLAS_CACHE_H

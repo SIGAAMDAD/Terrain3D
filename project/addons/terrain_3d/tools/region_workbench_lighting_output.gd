@@ -1,5 +1,5 @@
 @tool
-class_name Terrain3DRegionWorkbenchLightingOutput
+class_name T3DRegionWorkbenchLightingOutput
 extends RefCounted
 
 var cluster_min: Vector2i = Vector2i.ZERO
@@ -15,13 +15,13 @@ var bake_signature: int = 0
 var finalized_unix: int = 0
 
 
-static func from_value(value: Variant) -> Terrain3DRegionWorkbenchLightingOutput:
+static func from_value(value: Variant) -> T3DRegionWorkbenchLightingOutput:
 	if not value is Dictionary:
 		return null
-	var map := Terrain3DRuntimeValueMap.from_value(value)
+	var map := T3DRuntimeValueMap.from_value(value)
 	if map == null:
 		return null
-	var output := Terrain3DRegionWorkbenchLightingOutput.new()
+	var output := T3DRegionWorkbenchLightingOutput.new()
 	output.cluster_min = _vector2i_from_value(map.raw_value("cluster_min"))
 	output.cluster_max = _vector2i_from_value(map.raw_value("cluster_max"))
 	var raw_locations: Variant = map.raw_value("region_locations")

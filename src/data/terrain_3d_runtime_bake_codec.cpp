@@ -60,11 +60,11 @@ static void setBit( PackedByteArray &rBytes, const int64_t nBase, const uint32_t
 	rBytes.ptrw()[nBase + nIndex / 8u] |= ( uint8_t ) ( 1u << ( nIndex & 7u ) );
 }
 
-static String descriptorScenePath( const Terrain3DRegion::t3dstreamedNodeRuntimeDescriptor_t &rDescriptor ) {
+static String descriptorScenePath( const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t &rDescriptor ) {
 	if ( !rDescriptor.scenePath.is_empty() ) return rDescriptor.scenePath;
 	return rDescriptor.pScene.is_valid() ? rDescriptor.pScene->get_path() : String();
 }
-static String descriptorShadowPath( const Terrain3DRegion::t3dstreamedNodeRuntimeDescriptor_t &rDescriptor ) {
+static String descriptorShadowPath( const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t &rDescriptor ) {
 	if ( !rDescriptor.shadowProxyScenePath.is_empty() ) return rDescriptor.shadowProxyScenePath;
 	return rDescriptor.pShadowProxyScene.is_valid() ? rDescriptor.pShadowProxyScene->get_path() : String();
 }
@@ -140,7 +140,7 @@ PackedByteArray T3DRuntimeBakeCodec::encodeMinMaxHierarchy( const Ref<Image> &rH
 	appendU32( bytes, ( uint32_t ) levels );
 	eastl::vector<float> mins( ( size_t ) nRegionSize * nRegionSize );
 	eastl::vector<float> maxs( mins.size() );
-	for ( int i = 0; i < nRegionSize * nRegionSize; ++i ) mins[( size_t ) i] = maxs[( size_t ) i] = Terrain3DRegionCodec::readHeightBytes( source.ptr(), i, Image::FORMAT_R16 );
+	for ( int i = 0; i < nRegionSize * nRegionSize; ++i ) mins[( size_t ) i] = maxs[( size_t ) i] = T3DRegionCodec::readHeightBytes( source.ptr(), i, Image::FORMAT_R16 );
 	int side = nRegionSize;
 	while ( true ) {
 		appendU32( bytes, ( uint32_t ) side ); appendU32( bytes, ( uint32_t ) ( side * side ) );
@@ -233,7 +233,7 @@ bool T3DRuntimeBakeCodec::decodeCollisionBounds( const PackedByteArray &rBlob, f
 	nWidth = readU16( p + 6 ); fMinHeight = readF32( p + 8 ); fMaxHeight = readF32( p + 12 ); return nWidth > 0;
 }
 
-PackedByteArray T3DRuntimeBakeCodec::encodeNodeDescriptors( const Terrain3DRegion &rRegion, const T3DRuntimeWorldManifest &rManifest ) {
+PackedByteArray T3DRuntimeBakeCodec::encodeNodeDescriptors( const T3DRegion &rRegion, const T3DRuntimeWorldManifest &rManifest ) {
 	PackedByteArray bytes; const auto &nodes = rRegion.getStreamedNodesRuntimeInternal();
 	appendU32( bytes, NODE_MAGIC ); appendU16( bytes, BLOB_VERSION ); appendU16( bytes, ( uint16_t ) MIN( nodes.size(), ( size_t ) UINT16_MAX ) );
 	for ( const auto &node : nodes ) {
@@ -252,12 +252,12 @@ PackedByteArray T3DRuntimeBakeCodec::encodeNodeDescriptors( const Terrain3DRegio
 	return bytes;
 }
 
-bool T3DRuntimeBakeCodec::decodeNodeDescriptors( const PackedByteArray &rBlob, const T3DRuntimeWorldManifest &rManifest, Terrain3DRegion &rRegion ) {
+bool T3DRuntimeBakeCodec::decodeNodeDescriptors( const PackedByteArray &rBlob, const T3DRuntimeWorldManifest &rManifest, T3DRegion &rRegion ) {
 	if ( rBlob.size() < 8 ) return false; const uint8_t *p = rBlob.ptr(); if ( readU32( p ) != NODE_MAGIC || readU16( p + 4 ) != BLOB_VERSION ) return false; const uint16_t count = readU16( p + 6 ); size_t offset = 8u;
-	eastl::vector<Terrain3DRegion::t3dstreamedNodeRuntimeDescriptor_t> nodes; nodes.reserve( count );
+	eastl::vector<T3DRegion::t3dstreamedNodeRuntimeDescriptor_t> nodes; nodes.reserve( count );
 	for ( uint16_t i = 0u; i < count; ++i ) {
 		static constexpr size_t fixed = 8u + 2u + 2u + 4u + 2u + 2u + 16u + 2u + 2u + 4u + 48u + 4u;
-		if ( offset + fixed > ( size_t ) rBlob.size() ) return false; Terrain3DRegion::t3dstreamedNodeRuntimeDescriptor_t node;
+		if ( offset + fixed > ( size_t ) rBlob.size() ) return false; T3DRegion::t3dstreamedNodeRuntimeDescriptor_t node;
 		node.id = ( int64_t ) readU64( p + offset ); offset += 8; const uint16_t scene_id = readU16( p + offset ); offset += 2; const uint16_t shadow_id = readU16( p + offset ); offset += 2;
 		node.scenePath = rManifest.getSceneDependency( scene_id ); if ( node.scenePath.is_empty() ) return false; if ( shadow_id != UINT16_MAX ) node.shadowProxyScenePath = rManifest.getSceneDependency( shadow_id );
 		node.flags = readI32( p + offset ); offset += 4; node.hlodMinLevel = readU16( p + offset ); offset += 2; node.boundaryPolicy = readU16( p + offset ); offset += 2;
@@ -273,7 +273,7 @@ bool T3DRuntimeBakeCodec::decodeNodeDescriptors( const PackedByteArray &rBlob, c
 	if ( offset != ( size_t ) rBlob.size() ) return false; rRegion.adoptCookedStreamedNodeRuntimeInternal( eastl::move( nodes ) ); return true;
 }
 
-PackedByteArray T3DRuntimeBakeCodec::encodeInstanceMetadata( const Terrain3DRegion &rRegion ) {
+PackedByteArray T3DRuntimeBakeCodec::encodeInstanceMetadata( const T3DRegion &rRegion ) {
 	PackedByteArray bytes; if ( !rRegion.ensureInstanceStoreResident() ) return bytes; const T3DInstanceStore &store = rRegion.getInstanceStore();
 	uint32_t cell_count = 0u; for ( const auto &mesh : store.meshes() ) cell_count += ( uint32_t ) mesh.cells.size();
 	appendU32( bytes, INSTANCE_META_MAGIC ); appendU16( bytes, BLOB_VERSION ); appendU16( bytes, ( uint16_t ) store.meshCount() ); appendU32( bytes, cell_count ); appendU32( bytes, rRegion.getInstanceCount() );
@@ -315,9 +315,9 @@ bool T3DRuntimeBakeCodec::decodeInstanceMetadata(
 	return true;
 }
 
-PackedByteArray T3DRuntimeBakeCodec::encodeLightingReceivers( const Terrain3DRegion &rRegion ) {
+PackedByteArray T3DRuntimeBakeCodec::encodeLightingReceivers( const T3DRegion &rRegion ) {
 	PackedByteArray bytes;
-	const Ref<Terrain3DRegionLighting> lighting = rRegion.getLighting();
+	const Ref<T3DRegionLighting> lighting = rRegion.getLighting();
 	if ( lighting.is_null() ) return bytes;
 	const Array &users = lighting->getBakedUserDataInternal();
 	if ( users.is_empty() || ( users.size() % 4 ) != 0 ) return bytes;
@@ -371,7 +371,7 @@ bool T3DRuntimeBakeCodec::decodeLightingReceivers(
 	return offset == ( size_t ) rBlob.size();
 }
 
-PackedByteArray T3DRuntimeBakeCodec::encodeMultimeshFastStart( const Terrain3DRegion &rRegion, const int nMinimumCellInstances ) {
+PackedByteArray T3DRuntimeBakeCodec::encodeMultimeshFastStart( const T3DRegion &rRegion, const int nMinimumCellInstances ) {
 	PackedByteArray bytes; if ( !rRegion.ensureInstanceStoreResident() ) return bytes; const T3DInstanceStore &store = rRegion.getInstanceStore();
 	uint32_t eligible = 0u; for ( const auto &mesh : store.meshes() ) for ( const auto &cell : mesh.cells ) if ( ( int ) cell.transforms.size() >= nMinimumCellInstances ) ++eligible;
 	if ( eligible == 0u ) return bytes; appendU32( bytes, MULTIMESH_MAGIC ); appendU16( bytes, BLOB_VERSION ); appendU16( bytes, 16u ); appendU32( bytes, eligible );

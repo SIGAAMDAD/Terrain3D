@@ -1,11 +1,11 @@
 # Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 @tool
-class_name Terrain3DHLODPanel
+class_name T3DHLODPanel
 extends Window
 
-var plugin: Terrain3DEditorPluginBase
-var baker: Terrain3DHLODBaker
-var terrain: Terrain3D
+var plugin: T3DEditorPluginBase
+var baker: T3DHLODBaker
+var terrain: T3DTerrain
 
 var _summary: Label
 var _runtime_status: Label
@@ -33,7 +33,7 @@ func _ready() -> void:
 	add_child(_poll_timer)
 
 
-func open(p_terrain: Terrain3D) -> void:
+func open(p_terrain: T3DTerrain) -> void:
 	terrain = p_terrain
 	_sync_controls_from_terrain()
 	_analyze()

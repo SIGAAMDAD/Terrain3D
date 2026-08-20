@@ -22,9 +22,9 @@ bool terrain3dIsPackedSurfaceFormat( const Image::Format format ) {
 } // namespace
 
 // Note a null texture is considered a valid format
-bool Terrain3DTextureAsset::isValidFormat( const Ref<Texture2D> &rTexture ) const {
+bool T3DTextureAsset::isValidFormat( const Ref<Texture2D> &rTexture ) const {
 	if ( rTexture.is_null() ) {
-		LOG( Terrain3D::DEBUG, "Provided texture is null." );
+		LOG( T3DTerrain::DEBUG, "Provided texture is null." );
 		return true;
 	}
 	const Ref<Image> pImg = rTexture->get_image();
@@ -33,33 +33,33 @@ bool Terrain3DTextureAsset::isValidFormat( const Ref<Texture2D> &rTexture ) cons
 		format = pImg->get_format();
 	}
 	if ( format < 0 || format >= Image::FORMAT_MAX ) {
-		LOG( Terrain3D::ERROR, "Invalid texture format. See documentation for format specification." );
+		LOG( T3DTerrain::ERROR, "Invalid texture format. See documentation for format specification." );
 		return false;
 	}
 	return true;
 }
 
-void Terrain3DTextureAsset::disconnectPackedPbrResource( void ) {
+void T3DTextureAsset::disconnectPackedPbrResource( void ) {
 	if ( m_pPackedPbrResource.is_null() ) {
 		return;
 	}
-	const Callable callback = callable_mp( this, &Terrain3DTextureAsset::packedPbrResourceChanged );
+	const Callable callback = callable_mp( this, &T3DTextureAsset::packedPbrResourceChanged );
 	if ( m_pPackedPbrResource->is_connected( "changed", callback ) ) {
 		m_pPackedPbrResource->disconnect( "changed", callback );
 	}
 }
 
-void Terrain3DTextureAsset::connectPackedPbrResource( void ) {
+void T3DTextureAsset::connectPackedPbrResource( void ) {
 	if ( m_pPackedPbrResource.is_null() ) {
 		return;
 	}
-	const Callable callback = callable_mp( this, &Terrain3DTextureAsset::packedPbrResourceChanged );
+	const Callable callback = callable_mp( this, &T3DTextureAsset::packedPbrResourceChanged );
 	if ( !m_pPackedPbrResource->is_connected( "changed", callback ) ) {
 		m_pPackedPbrResource->connect( "changed", callback );
 	}
 }
 
-void Terrain3DTextureAsset::packedPbrResourceChanged( void ) {
+void T3DTextureAsset::packedPbrResourceChanged( void ) {
 	if ( m_bPackedPbrChangeQueued ) {
 		return;
 	}
@@ -67,12 +67,12 @@ void Terrain3DTextureAsset::packedPbrResourceChanged( void ) {
 	call_deferred( "_emit_packed_pbr_file_changed" );
 }
 
-void Terrain3DTextureAsset::emitPackedPbrFileChanged( void ) {
+void T3DTextureAsset::emitPackedPbrFileChanged( void ) {
 	m_bPackedPbrChangeQueued = false;
 	emit_signal( "file_changed" );
 }
 
-void Terrain3DTextureAsset::setPackedPbrMode( const bool bEnabled ) {
+void T3DTextureAsset::setPackedPbrMode( const bool bEnabled ) {
 	if ( m_bPackedPbrMode == bEnabled ) {
 		return;
 	}
@@ -84,13 +84,13 @@ void Terrain3DTextureAsset::setPackedPbrMode( const bool bEnabled ) {
 // Public Functions
 ///////////////////////////
 
-void Terrain3DTextureAsset::initialize( void ) {
+void T3DTextureAsset::initialize( void ) {
 	connectPackedPbrResource();
-	LOG( Terrain3D::INFO, m_nId, ": ", m_name, ": initializing asset" );
+	LOG( T3DTerrain::INFO, m_nId, ": ", m_name, ": initializing asset" );
 }
 
-void Terrain3DTextureAsset::clear( void ) {
-	LOG( Terrain3D::INFO, "Clearing TextureAsset" );
+void T3DTextureAsset::clear( void ) {
+	LOG( T3DTerrain::INFO, "Clearing TextureAsset" );
 	m_name = "New Texture";
 	m_nId = 0;
 	m_bHighlighted = false;
@@ -139,59 +139,59 @@ void Terrain3DTextureAsset::clear( void ) {
 	m_nErosionVarnishedTextureId = -1;
 }
 
-void Terrain3DTextureAsset::setName( const String &rName ) {
+void T3DTextureAsset::setName( const String &rName ) {
 	if ( rName.length() > 96 ) {
-		LOG( Terrain3D::WARN, "Name too long, truncating to 96 characters" );
+		LOG( T3DTerrain::WARN, "Name too long, truncating to 96 characters" );
 	}
 	SET_IF_DIFF( m_name, rName.left( 96 ) );
-	LOG( Terrain3D::INFO, "t3dsetting_t name: ", m_name );
-	LOG( Terrain3D::DEBUG, "Emitting setting_changed" );
+	LOG( T3DTerrain::INFO, "t3dsetting_t name: ", m_name );
+	LOG( T3DTerrain::DEBUG, "Emitting setting_changed" );
 	emit_signal( "setting_changed" );
 }
 
-void Terrain3DTextureAsset::setId( const int nNewId ) {
+void T3DTextureAsset::setId( const int nNewId ) {
 	const int old_id = m_nId;
 	SET_IF_DIFF( m_nId, CLAMP( nNewId, 0, TERRAIN3D_MAX_TEXTURE_ASSETS - 1 ) );
-	LOG( Terrain3D::INFO, "t3dsetting_t texture id: ", m_nId );
-	LOG( Terrain3D::DEBUG, "Emitting id_changed, TYPE_TEXTURE, ", old_id, ", ", m_nId );
-	emit_signal( "id_changed", Terrain3DAssets::TYPE_TEXTURE, old_id, m_nId );
+	LOG( T3DTerrain::INFO, "t3dsetting_t texture id: ", m_nId );
+	LOG( T3DTerrain::DEBUG, "Emitting id_changed, TYPE_TEXTURE, ", old_id, ", ", m_nId );
+	emit_signal( "id_changed", T3DAssets::TYPE_TEXTURE, old_id, m_nId );
 }
 
-void Terrain3DTextureAsset::setHighlighted( const bool bHighlighted ) {
+void T3DTextureAsset::setHighlighted( const bool bHighlighted ) {
 	SET_IF_DIFF( m_bHighlighted, bHighlighted );
-	LOG( Terrain3D::INFO, "Set mesh ID ", m_nId, " highlight: ", bHighlighted );
+	LOG( T3DTerrain::INFO, "Set mesh ID ", m_nId, " highlight: ", bHighlighted );
 	const real_t fRandomFloat = ( real_t ) ( rand() ) / ( real_t ) ( RAND_MAX );
 	m_highlightColor.set_hsv( fRandomFloat, 1.f, 1.f, 1.f );
-	LOG( Terrain3D::DEBUG, "Emitting preview_changed" );
+	LOG( T3DTerrain::DEBUG, "Emitting preview_changed" );
 	emit_signal( "preview_changed" );
 }
 
-void Terrain3DTextureAsset::setAlbedoColor( const Color &rColor ) {
+void T3DTextureAsset::setAlbedoColor( const Color &rColor ) {
 	SET_IF_DIFF( m_albedoColor, rColor );
-	LOG( Terrain3D::INFO, "t3dsetting_t color: ", rColor );
-	LOG( Terrain3D::DEBUG, "Emitting setting_changed" );
+	LOG( T3DTerrain::INFO, "t3dsetting_t color: ", rColor );
+	LOG( T3DTerrain::DEBUG, "Emitting setting_changed" );
 	emit_signal( "setting_changed" );
 }
 
-void Terrain3DTextureAsset::setAlbedoTexture( const Ref<Texture2D> &rTexture ) {
+void T3DTextureAsset::setAlbedoTexture( const Ref<Texture2D> &rTexture ) {
 	if ( isValidFormat( rTexture ) ) {
 		SET_IF_DIFF( m_pAlbedoTexture, rTexture );
-		LOG( Terrain3D::INFO, "t3dsetting_t albedo texture: ", rTexture );
+		LOG( T3DTerrain::INFO, "t3dsetting_t albedo texture: ", rTexture );
 		if ( rTexture.is_valid() ) {
 			const String filename = rTexture->get_path().get_file().get_basename();
 			if ( m_name == "New Texture" && !rTexture->get_path().contains( "::" ) && !filename.is_empty() ) {
 				m_name = filename;
-				LOG( Terrain3D::INFO, "t3dsetting_t name based on filename: ", m_name );
+				LOG( T3DTerrain::INFO, "t3dsetting_t name based on filename: ", m_name );
 			}
 			Ref<Image> pImg = rTexture->get_image();
 			if ( !pImg->has_mipmaps() ) {
-				LOG( Terrain3D::WARN, "Albedo texture '", filename, "' has no mipmaps. Change on the Import panel if desired." );
+				LOG( T3DTerrain::WARN, "Albedo texture '", filename, "' has no mipmaps. Change on the Import panel if desired." );
 			}
 			if ( pImg->get_width() != pImg->get_height() ) {
-				LOG( Terrain3D::WARN, "Albedo texture '", filename, "' is not square. Mipmaps might have artifacts." );
+				LOG( T3DTerrain::WARN, "Albedo texture '", filename, "' is not square. Mipmaps might have artifacts." );
 			}
 			if ( !is_power_of_2( pImg->get_width() ) || !is_power_of_2( pImg->get_height() ) ) {
-				LOG( Terrain3D::WARN, "Albedo texture '", filename, "' size is not power of 2. This is sub-optimal." );
+				LOG( T3DTerrain::WARN, "Albedo texture '", filename, "' size is not power of 2. This is sub-optimal." );
 			}
 			if ( IS_EDITOR ) {
 				pImg = pImg->duplicate();
@@ -203,59 +203,59 @@ void Terrain3DTextureAsset::setAlbedoTexture( const Ref<Texture2D> &rTexture ) {
 		} else {
 			m_pThumbnail.unref();
 		}
-		LOG( Terrain3D::DEBUG, "Emitting file_changed" );
+		LOG( T3DTerrain::DEBUG, "Emitting file_changed" );
 		emit_signal( "file_changed" );
 	}
 }
 
-void Terrain3DTextureAsset::setNormalTexture( const Ref<Texture2D> &rTexture ) {
+void T3DTextureAsset::setNormalTexture( const Ref<Texture2D> &rTexture ) {
 	if ( isValidFormat( rTexture ) ) {
 		SET_IF_DIFF( m_pNormalTexture, rTexture );
-		LOG( Terrain3D::INFO, "t3dsetting_t normal texture: ", rTexture );
+		LOG( T3DTerrain::INFO, "t3dsetting_t normal texture: ", rTexture );
 		if ( rTexture.is_valid() ) {
 			const String filename = rTexture->get_path().get_file().get_basename();
 			const Ref<Image> pImg = rTexture->get_image();
 			if ( !pImg->has_mipmaps() ) {
-				LOG( Terrain3D::WARN, "Normal texture '", filename, "' has no mipmaps. Change on the Import panel if desired." );
+				LOG( T3DTerrain::WARN, "Normal texture '", filename, "' has no mipmaps. Change on the Import panel if desired." );
 			}
 			if ( pImg->get_width() != pImg->get_height() ) {
-				LOG( Terrain3D::WARN, "Normal texture '", filename,
+				LOG( T3DTerrain::WARN, "Normal texture '", filename,
 					"' is not square. Not recommended. Mipmaps might have artifacts." );
 			}
 			if ( !is_power_of_2( pImg->get_width() ) || !is_power_of_2( pImg->get_height() ) ) {
-				LOG( Terrain3D::WARN, "Normal texture '", filename, "' dimensions are not power of 2. This is sub-optimal." );
+				LOG( T3DTerrain::WARN, "Normal texture '", filename, "' dimensions are not power of 2. This is sub-optimal." );
 			}
 		}
-		LOG( Terrain3D::DEBUG, "Emitting file_changed" );
+		LOG( T3DTerrain::DEBUG, "Emitting file_changed" );
 		emit_signal( "file_changed" );
 	}
 }
 
-void Terrain3DTextureAsset::setSurfaceTexture( const Ref<Texture2D> &rTexture ) {
+void T3DTextureAsset::setSurfaceTexture( const Ref<Texture2D> &rTexture ) {
 	if ( !isValidFormat( rTexture ) ) {
 		return;
 	}
 	if ( rTexture.is_valid() ) {
 		const Ref<Image> pImg = rTexture->get_image();
 		if ( pImg.is_null() || !terrain3dIsPackedSurfaceFormat( pImg->get_format() ) ) {
-			LOG( Terrain3D::ERROR, "Packed PBR textures must use RGBA8, BC3/DXT5, or BC7/BPTC_RGBA "
+			LOG( T3DTerrain::ERROR, "Packed PBR textures must use RGBA8, BC3/DXT5, or BC7/BPTC_RGBA "
 				"(R=normal X, G=normal Y, B=roughness, A=AO)." );
 			return;
 		}
 		const String filename = rTexture->get_path().get_file().get_basename();
 		if ( !pImg->has_mipmaps() ) {
-			LOG( Terrain3D::WARN, "Packed PBR texture '", filename, "' has no mipmaps." );
+			LOG( T3DTerrain::WARN, "Packed PBR texture '", filename, "' has no mipmaps." );
 		}
 		if ( !is_power_of_2( pImg->get_width() ) || !is_power_of_2( pImg->get_height() ) ) {
-			LOG( Terrain3D::WARN, "Packed PBR texture '", filename, "' dimensions are not powers of two." );
+			LOG( T3DTerrain::WARN, "Packed PBR texture '", filename, "' dimensions are not powers of two." );
 		}
 	}
 	SET_IF_DIFF( m_pSurfaceTexture, rTexture );
-	LOG( Terrain3D::INFO, "t3dsetting_t packed PBR texture: ", rTexture );
+	LOG( T3DTerrain::INFO, "t3dsetting_t packed PBR texture: ", rTexture );
 	emit_signal( "file_changed" );
 }
 
-void Terrain3DTextureAsset::setDisplacementTexture( const Ref<Texture2D> &rTexture ) {
+void T3DTextureAsset::setDisplacementTexture( const Ref<Texture2D> &rTexture ) {
 	if ( !isValidFormat( rTexture ) ) {
 		return;
 	}
@@ -263,38 +263,38 @@ void Terrain3DTextureAsset::setDisplacementTexture( const Ref<Texture2D> &rTextu
 	if ( pTexture.is_valid() ) {
 		Ref<Image> pImage = pTexture->get_image();
 		if ( pImage.is_null() || pImage->is_empty() ) {
-			LOG( Terrain3D::ERROR, "Displacement texture image is missing or empty." );
+			LOG( T3DTerrain::ERROR, "Displacement texture image is missing or empty." );
 			return;
 		}
 		if ( pImage->get_format() == Image::FORMAT_R16 ) {
-			const Ref<Image> pMigrated = Terrain3DUtil::packDisplacementR8( pImage, 0, pImage->has_mipmaps() );
+			const Ref<Image> pMigrated = T3DUtil::packDisplacementR8( pImage, 0, pImage->has_mipmaps() );
 			if ( pMigrated.is_null() || pMigrated->is_empty() ) {
-				LOG( Terrain3D::ERROR, "Could not migrate legacy R16 displacement texture to R8." );
+				LOG( T3DTerrain::ERROR, "Could not migrate legacy R16 displacement texture to R8." );
 				return;
 			}
 			pTexture = ImageTexture::create_from_image( pMigrated );
 			pImage = pMigrated;
-			LOG( Terrain3D::WARN, "Migrated legacy R16 displacement texture to R8. Save the texture asset to persist the migration." );
+			LOG( T3DTerrain::WARN, "Migrated legacy R16 displacement texture to R8. Save the texture asset to persist the migration." );
 		}
 		if ( pImage->get_format() != Image::FORMAT_R8 ) {
-			LOG( Terrain3D::ERROR, "Displacement textures must use Image::FORMAT_R8 (R8_UNORM)." );
+			LOG( T3DTerrain::ERROR, "Displacement textures must use Image::FORMAT_R8 (R8_UNORM)." );
 			return;
 		}
 		const String filename = pTexture->get_path().get_file().get_basename();
 		if ( !pImage->has_mipmaps() ) {
-			LOG( Terrain3D::WARN, "Displacement texture '", filename,
+			LOG( T3DTerrain::WARN, "Displacement texture '", filename,
 				"' has no mipmaps. Tessellation LOD sampling remains valid but may alias at distance." );
 		}
 		if ( !is_power_of_2( pImage->get_width() ) || !is_power_of_2( pImage->get_height() ) ) {
-			LOG( Terrain3D::WARN, "Displacement texture '", filename, "' dimensions are not powers of two." );
+			LOG( T3DTerrain::WARN, "Displacement texture '", filename, "' dimensions are not powers of two." );
 		}
 	}
 	SET_IF_DIFF( m_pDisplacementTexture, pTexture );
-	LOG( Terrain3D::INFO, "t3dsetting_t R8 displacement texture: ", pTexture );
+	LOG( T3DTerrain::INFO, "t3dsetting_t R8 displacement texture: ", pTexture );
 	emit_signal( "file_changed" );
 }
 
-void Terrain3DTextureAsset::setPbrTexture( const Ref<Texture2D> &rTexture ) {
+void T3DTextureAsset::setPbrTexture( const Ref<Texture2D> &rTexture ) {
 	// Compatibility migration for resources saved by the former RGBA16UI path.
 	m_pPbrTexture = rTexture;
 	if ( rTexture.is_null() ) {
@@ -303,32 +303,32 @@ void Terrain3DTextureAsset::setPbrTexture( const Ref<Texture2D> &rTexture ) {
 	}
 	const Ref<Image> pImage = rTexture->get_image();
 	if ( pImage.is_null() || pImage->is_empty() ) {
-		LOG( Terrain3D::ERROR, "Compatibility PBR texture image is invalid or empty." );
+		LOG( T3DTerrain::ERROR, "Compatibility PBR texture image is invalid or empty." );
 		return;
 	}
 	if ( terrain3dIsPackedSurfaceFormat( pImage->get_format() ) ) {
 		m_pSurfaceTexture = rTexture;
 		m_pPbrTexture.unref();
 	} else if ( pImage->get_format() == Image::FORMAT_RGBA16I ) {
-		const Ref<Image> pSurface = Terrain3DUtil::convertPackedPbrRgba16uiToSurface( pImage, true );
-		const Ref<Image> pDisplacement = Terrain3DUtil::convertPackedPbrRgba16uiToDisplacement( pImage, true );
+		const Ref<Image> pSurface = T3DUtil::convertPackedPbrRgba16uiToSurface( pImage, true );
+		const Ref<Image> pDisplacement = T3DUtil::convertPackedPbrRgba16uiToDisplacement( pImage, true );
 		if ( pSurface.is_null() || pDisplacement.is_null() ) {
-			LOG( Terrain3D::ERROR, "Could not migrate RGBA16UI packed PBR texture." );
+			LOG( T3DTerrain::ERROR, "Could not migrate RGBA16UI packed PBR texture." );
 			return;
 		}
 		m_pSurfaceTexture = ImageTexture::create_from_image( pSurface );
 		m_pDisplacementTexture = ImageTexture::create_from_image( pDisplacement );
 		m_pPbrTexture.unref();
-		LOG( Terrain3D::WARN, "Migrated legacy RGBA16UI PBR texture to RGBA8 packed PBR + R8 displacement. Save the texture asset to "
+		LOG( T3DTerrain::WARN, "Migrated legacy RGBA16UI PBR texture to RGBA8 packed PBR + R8 displacement. Save the texture asset to "
 				  "persist the migration." );
 	} else {
-		LOG( Terrain3D::ERROR, "Compatibility pbr_texture accepts old RGBA16UI data or an RGBA8/BC3/BC7 packed PBR texture." );
+		LOG( T3DTerrain::ERROR, "Compatibility pbr_texture accepts old RGBA16UI data or an RGBA8/BC3/BC7 packed PBR texture." );
 		return;
 	}
 	emit_signal( "file_changed" );
 }
 
-void Terrain3DTextureAsset::setPackedPbrResource( const Ref<Terrain3DPackedPBRTexture> &rResource ) {
+void T3DTextureAsset::setPackedPbrResource( const Ref<T3DPackedPBRTexture> &rResource ) {
 	if ( m_pPackedPbrResource == rResource ) {
 		return;
 	}
@@ -336,11 +336,11 @@ void Terrain3DTextureAsset::setPackedPbrResource( const Ref<Terrain3DPackedPBRTe
 	m_pPackedPbrResource = rResource;
 	connectPackedPbrResource();
 	notify_property_list_changed();
-	LOG( Terrain3D::INFO, "t3dsetting_t legacy packed-PBR compatibility resource: ", rResource );
+	LOG( T3DTerrain::INFO, "t3dsetting_t legacy packed-PBR compatibility resource: ", rResource );
 	emit_signal( "file_changed" );
 }
 
-Ref<Texture2D> Terrain3DTextureAsset::getEffectiveSurfaceTexture( void ) {
+Ref<Texture2D> T3DTextureAsset::getEffectiveSurfaceTexture( void ) {
 	// Direct externally authored maps are the active workflow. The hidden
 	// compatibility resource is consulted only when a direct map is absent.
 	if ( m_pSurfaceTexture.is_valid() ) {
@@ -349,84 +349,84 @@ Ref<Texture2D> Terrain3DTextureAsset::getEffectiveSurfaceTexture( void ) {
 	return m_pPackedPbrResource.is_valid() ? m_pPackedPbrResource->getSurfaceTexture() : Ref<Texture2D>();
 }
 
-Ref<Texture2D> Terrain3DTextureAsset::getEffectiveDisplacementTexture( void ) {
+Ref<Texture2D> T3DTextureAsset::getEffectiveDisplacementTexture( void ) {
 	if ( m_pDisplacementTexture.is_valid() ) {
 		return m_pDisplacementTexture;
 	}
 	return m_pPackedPbrResource.is_valid() ? m_pPackedPbrResource->getDisplacementTexture() : Ref<Texture2D>();
 }
 
-void Terrain3DTextureAsset::setMetallic( const real_t fMetallic ) {
+void T3DTextureAsset::setMetallic( const real_t fMetallic ) {
 	SET_IF_DIFF( m_fMetallic, CLAMP( fMetallic, 0.0f, 1.0f ) );
-	LOG( Terrain3D::INFO, "t3dsetting_t metallic: ", m_fMetallic );
+	LOG( T3DTerrain::INFO, "t3dsetting_t metallic: ", m_fMetallic );
 	emit_signal( "setting_changed" );
 }
 
-void Terrain3DTextureAsset::setNormalDepth( const real_t fNormalDepth ) {
+void T3DTextureAsset::setNormalDepth( const real_t fNormalDepth ) {
 	SET_IF_DIFF( m_fNormalDepth, CLAMP( fNormalDepth, 0.0f, 2.0f ) );
-	LOG( Terrain3D::INFO, "t3dsetting_t normal_depth: ", m_fNormalDepth );
-	LOG( Terrain3D::DEBUG, "Emitting setting_changed" );
+	LOG( T3DTerrain::INFO, "t3dsetting_t normal_depth: ", m_fNormalDepth );
+	LOG( T3DTerrain::DEBUG, "Emitting setting_changed" );
 	emit_signal( "setting_changed" );
 }
 
-void Terrain3DTextureAsset::setRoughness( const real_t fRoughness ) {
+void T3DTextureAsset::setRoughness( const real_t fRoughness ) {
 	SET_IF_DIFF( m_fRoughness, CLAMP( fRoughness, -1.0f, 1.0f ) );
-	LOG( Terrain3D::INFO, "t3dsetting_t roughness modifier: ", m_fRoughness );
-	LOG( Terrain3D::DEBUG, "Emitting setting_changed" );
+	LOG( T3DTerrain::INFO, "t3dsetting_t roughness modifier: ", m_fRoughness );
+	LOG( T3DTerrain::DEBUG, "Emitting setting_changed" );
 	emit_signal( "setting_changed" );
 }
 
-void Terrain3DTextureAsset::setAoStrength( const real_t fAoStrength ) {
+void T3DTextureAsset::setAoStrength( const real_t fAoStrength ) {
 	SET_IF_DIFF( m_fAoStrength, CLAMP( fAoStrength, 0.0f, 1.0f ) );
-	LOG( Terrain3D::INFO, "t3dsetting_t ao_strength: ", m_fAoStrength );
-	LOG( Terrain3D::DEBUG, "Emitting setting_changed" );
+	LOG( T3DTerrain::INFO, "t3dsetting_t ao_strength: ", m_fAoStrength );
+	LOG( T3DTerrain::DEBUG, "Emitting setting_changed" );
 	emit_signal( "setting_changed" );
 }
 
-void Terrain3DTextureAsset::setAoLightAffect( const real_t fAoLightAffect ) {
+void T3DTextureAsset::setAoLightAffect( const real_t fAoLightAffect ) {
 	SET_IF_DIFF( m_fAoLightAffect, CLAMP( fAoLightAffect, 0.0f, 1.0f ) );
-	LOG( Terrain3D::INFO, "t3dsetting_t ao_light_affect: ", m_fAoLightAffect );
-	LOG( Terrain3D::DEBUG, "Emitting setting_changed" );
+	LOG( T3DTerrain::INFO, "t3dsetting_t ao_light_affect: ", m_fAoLightAffect );
+	LOG( T3DTerrain::DEBUG, "Emitting setting_changed" );
 	emit_signal( "setting_changed" );
 }
 
-void Terrain3DTextureAsset::setDisplacementScale( const real_t fDisplacementScale ) {
+void T3DTextureAsset::setDisplacementScale( const real_t fDisplacementScale ) {
 	SET_IF_DIFF( m_fDisplacementScale, CLAMP( fDisplacementScale, 0.0f, 2.0f ) );
-	LOG( Terrain3D::INFO, "t3dsetting_t displacement_scale: ", m_fDisplacementScale );
-	LOG( Terrain3D::DEBUG, "Emitting setting_changed" );
+	LOG( T3DTerrain::INFO, "t3dsetting_t displacement_scale: ", m_fDisplacementScale );
+	LOG( T3DTerrain::DEBUG, "Emitting setting_changed" );
 	emit_signal( "setting_changed" );
 }
 
-void Terrain3DTextureAsset::setDisplacementOffset( const real_t fDisplacementOffset ) {
+void T3DTextureAsset::setDisplacementOffset( const real_t fDisplacementOffset ) {
 	SET_IF_DIFF( m_fDisplacementOffset, CLAMP( fDisplacementOffset, -1.0f, 1.0f ) );
-	LOG( Terrain3D::INFO, "t3dsetting_t displacement_offset: ", m_fDisplacementOffset );
-	LOG( Terrain3D::DEBUG, "Emitting setting_changed" );
+	LOG( T3DTerrain::INFO, "t3dsetting_t displacement_offset: ", m_fDisplacementOffset );
+	LOG( T3DTerrain::DEBUG, "Emitting setting_changed" );
 	emit_signal( "setting_changed" );
 }
 
-void Terrain3DTextureAsset::setUvScale( const real_t fScale ) {
+void T3DTextureAsset::setUvScale( const real_t fScale ) {
 	SET_IF_DIFF( m_fUvScale, CLAMP( fScale, 0.001f, 100.0f ) );
-	LOG( Terrain3D::INFO, "t3dsetting_t uv_scale: ", m_fUvScale );
-	LOG( Terrain3D::DEBUG, "Emitting setting_changed" );
+	LOG( T3DTerrain::INFO, "t3dsetting_t uv_scale: ", m_fUvScale );
+	LOG( T3DTerrain::DEBUG, "Emitting setting_changed" );
 	emit_signal( "setting_changed" );
 }
 
-void Terrain3DTextureAsset::setDetilingRotation( const real_t fDetilingRotation ) {
+void T3DTextureAsset::setDetilingRotation( const real_t fDetilingRotation ) {
 	SET_IF_DIFF( m_fDetilingRotation, CLAMP( fDetilingRotation, 0.0f, 1.0f ) );
-	LOG( Terrain3D::INFO, "t3dsetting_t detiling_rotation: ", m_fDetilingRotation );
-	LOG( Terrain3D::DEBUG, "Emitting setting_changed" );
+	LOG( T3DTerrain::INFO, "t3dsetting_t detiling_rotation: ", m_fDetilingRotation );
+	LOG( T3DTerrain::DEBUG, "Emitting setting_changed" );
 	emit_signal( "setting_changed" );
 }
 
-void Terrain3DTextureAsset::setDetilingShift( const real_t fDetilingShift ) {
+void T3DTextureAsset::setDetilingShift( const real_t fDetilingShift ) {
 	SET_IF_DIFF( m_fDetilingShift, CLAMP( fDetilingShift, 0.0f, 1.0f ) );
-	LOG( Terrain3D::INFO, "t3dsetting_t detiling_shift: ", m_fDetilingShift );
-	LOG( Terrain3D::DEBUG, "Emitting setting_changed" );
+	LOG( T3DTerrain::INFO, "t3dsetting_t detiling_shift: ", m_fDetilingShift );
+	LOG( T3DTerrain::DEBUG, "Emitting setting_changed" );
 	emit_signal( "setting_changed" );
 }
 
 #define SET_EROSION_VALUE( methodName, field_name, min_value, max_value )     \
-	void Terrain3DTextureAsset::methodName( real_t fValueArg ) {          \
+	void T3DTextureAsset::methodName( real_t fValueArg ) {          \
 		real_t fValue = CLAMP( fValueArg, ( real_t ) ( min_value ), ( real_t ) ( max_value ) ); \
 		if ( field_name == fValue ) {                                           \
 			return;                                                          \
@@ -436,7 +436,7 @@ void Terrain3DTextureAsset::setDetilingShift( const real_t fDetilingShift ) {
 	}
 
 #define SET_EROSION_TEXTURE_ID( methodName, field_name )                        \
-	void Terrain3DTextureAsset::methodName( int32_t valueArg ) {           \
+	void T3DTextureAsset::methodName( int32_t valueArg ) {           \
 		int32_t value = CLAMP( valueArg, -1, TERRAIN3D_MAX_TEXTURE_ASSETS - 1 ); \
 		if ( field_name == value ) {                                             \
 			return;                                                            \
@@ -445,7 +445,7 @@ void Terrain3DTextureAsset::setDetilingShift( const real_t fDetilingShift ) {
 		emit_signal( "setting_changed" );                                        \
 	}
 
-void Terrain3DTextureAsset::setErosionEnabled( const bool bValue ) {
+void T3DTextureAsset::setErosionEnabled( const bool bValue ) {
 	if ( m_bErosionEnabled == bValue ) {
 		return;
 	}
@@ -482,7 +482,7 @@ SET_EROSION_TEXTURE_ID( setErosionVarnishedTextureId, m_nErosionVarnishedTexture
 // Protected Functions
 ///////////////////////////
 
-void Terrain3DTextureAsset::_validate_property( PropertyInfo &rProperty ) const {
+void T3DTextureAsset::_validate_property( PropertyInfo &rProperty ) const {
 	if ( !m_bErosionEnabled && rProperty.name != StringName( "erosion_enabled" ) &&
 		rProperty.name.begins_with( "erosion_" ) ) {
 		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
@@ -497,75 +497,75 @@ void Terrain3DTextureAsset::_validate_property( PropertyInfo &rProperty ) const 
 	}
 }
 
-void Terrain3DTextureAsset::_bind_methods( void ) {
+void T3DTextureAsset::_bind_methods( void ) {
 	ADD_SIGNAL( MethodInfo( "id_changed" ) );
 	ADD_SIGNAL( MethodInfo( "file_changed" ) );
 	ADD_SIGNAL( MethodInfo( "setting_changed" ) );
 	ADD_SIGNAL( MethodInfo( "preview_changed" ) );
 
-	ClassDB::bind_method( D_METHOD( "clear" ), &Terrain3DTextureAsset::clear );
-	ClassDB::bind_method( D_METHOD( "set_name", "name" ), &Terrain3DTextureAsset::setName );
-	ClassDB::bind_method( D_METHOD( "get_name" ), &Terrain3DTextureAsset::getName );
-	ClassDB::bind_method( D_METHOD( "set_id", "id" ), &Terrain3DTextureAsset::setId );
-	ClassDB::bind_method( D_METHOD( "get_id" ), &Terrain3DTextureAsset::getId );
-	ClassDB::bind_method( D_METHOD( "set_highlighted", "enabled" ), &Terrain3DTextureAsset::setHighlighted );
-	ClassDB::bind_method( D_METHOD( "is_highlighted" ), &Terrain3DTextureAsset::isHighlighted );
-	ClassDB::bind_method( D_METHOD( "get_highlight_color" ), &Terrain3DTextureAsset::getHighlightColor );
-	ClassDB::bind_method( D_METHOD( "get_thumbnail" ), &Terrain3DTextureAsset::getThumbnail );
-	ClassDB::bind_method( D_METHOD( "set_albedo_color", "color" ), &Terrain3DTextureAsset::setAlbedoColor );
-	ClassDB::bind_method( D_METHOD( "get_albedo_color" ), &Terrain3DTextureAsset::getAlbedoColor );
-	ClassDB::bind_method( D_METHOD( "set_albedo_texture", "texture" ), &Terrain3DTextureAsset::setAlbedoTexture );
-	ClassDB::bind_method( D_METHOD( "get_albedo_texture" ), &Terrain3DTextureAsset::getAlbedoTexture );
-	ClassDB::bind_method( D_METHOD( "set_normal_texture", "texture" ), &Terrain3DTextureAsset::setNormalTexture );
-	ClassDB::bind_method( D_METHOD( "get_normal_texture" ), &Terrain3DTextureAsset::getNormalTexture );
-	ClassDB::bind_method( D_METHOD( "set_surface_texture", "texture" ), &Terrain3DTextureAsset::setSurfaceTexture );
-	ClassDB::bind_method( D_METHOD( "get_surface_texture" ), &Terrain3DTextureAsset::getSurfaceTexture );
+	ClassDB::bind_method( D_METHOD( "clear" ), &T3DTextureAsset::clear );
+	ClassDB::bind_method( D_METHOD( "set_name", "name" ), &T3DTextureAsset::setName );
+	ClassDB::bind_method( D_METHOD( "get_name" ), &T3DTextureAsset::getName );
+	ClassDB::bind_method( D_METHOD( "set_id", "id" ), &T3DTextureAsset::setId );
+	ClassDB::bind_method( D_METHOD( "get_id" ), &T3DTextureAsset::getId );
+	ClassDB::bind_method( D_METHOD( "set_highlighted", "enabled" ), &T3DTextureAsset::setHighlighted );
+	ClassDB::bind_method( D_METHOD( "is_highlighted" ), &T3DTextureAsset::isHighlighted );
+	ClassDB::bind_method( D_METHOD( "get_highlight_color" ), &T3DTextureAsset::getHighlightColor );
+	ClassDB::bind_method( D_METHOD( "get_thumbnail" ), &T3DTextureAsset::getThumbnail );
+	ClassDB::bind_method( D_METHOD( "set_albedo_color", "color" ), &T3DTextureAsset::setAlbedoColor );
+	ClassDB::bind_method( D_METHOD( "get_albedo_color" ), &T3DTextureAsset::getAlbedoColor );
+	ClassDB::bind_method( D_METHOD( "set_albedo_texture", "texture" ), &T3DTextureAsset::setAlbedoTexture );
+	ClassDB::bind_method( D_METHOD( "get_albedo_texture" ), &T3DTextureAsset::getAlbedoTexture );
+	ClassDB::bind_method( D_METHOD( "set_normal_texture", "texture" ), &T3DTextureAsset::setNormalTexture );
+	ClassDB::bind_method( D_METHOD( "get_normal_texture" ), &T3DTextureAsset::getNormalTexture );
+	ClassDB::bind_method( D_METHOD( "set_surface_texture", "texture" ), &T3DTextureAsset::setSurfaceTexture );
+	ClassDB::bind_method( D_METHOD( "get_surface_texture" ), &T3DTextureAsset::getSurfaceTexture );
 	ClassDB::bind_method( D_METHOD( "set_packed_pbr_texture", "texture" ),
-						 &Terrain3DTextureAsset::setPackedPbrTexture );
-	ClassDB::bind_method( D_METHOD( "get_packed_pbr_texture" ), &Terrain3DTextureAsset::getPackedPbrTexture );
+						 &T3DTextureAsset::setPackedPbrTexture );
+	ClassDB::bind_method( D_METHOD( "get_packed_pbr_texture" ), &T3DTextureAsset::getPackedPbrTexture );
 	ClassDB::bind_method( D_METHOD( "set_displacement_texture", "texture" ),
-						 &Terrain3DTextureAsset::setDisplacementTexture );
-	ClassDB::bind_method( D_METHOD( "get_displacement_texture" ), &Terrain3DTextureAsset::getDisplacementTexture );
-	ClassDB::bind_method( D_METHOD( "set_pbr_texture", "texture" ), &Terrain3DTextureAsset::setPbrTexture );
-	ClassDB::bind_method( D_METHOD( "get_pbr_texture" ), &Terrain3DTextureAsset::getPbrTexture );
+						 &T3DTextureAsset::setDisplacementTexture );
+	ClassDB::bind_method( D_METHOD( "get_displacement_texture" ), &T3DTextureAsset::getDisplacementTexture );
+	ClassDB::bind_method( D_METHOD( "set_pbr_texture", "texture" ), &T3DTextureAsset::setPbrTexture );
+	ClassDB::bind_method( D_METHOD( "get_pbr_texture" ), &T3DTextureAsset::getPbrTexture );
 	ClassDB::bind_method( D_METHOD( "set_packed_pbr_resource", "resource" ),
-						 &Terrain3DTextureAsset::setPackedPbrResource );
-	ClassDB::bind_method( D_METHOD( "get_packed_pbr_resource" ), &Terrain3DTextureAsset::getPackedPbrResource );
+						 &T3DTextureAsset::setPackedPbrResource );
+	ClassDB::bind_method( D_METHOD( "get_packed_pbr_resource" ), &T3DTextureAsset::getPackedPbrResource );
 	ClassDB::bind_method( D_METHOD( "get_effective_surface_texture" ),
-						 &Terrain3DTextureAsset::getEffectiveSurfaceTexture );
+						 &T3DTextureAsset::getEffectiveSurfaceTexture );
 	ClassDB::bind_method( D_METHOD( "get_effective_displacement_texture" ),
-						 &Terrain3DTextureAsset::getEffectiveDisplacementTexture );
-	ClassDB::bind_method( D_METHOD( "get_effective_pbr_texture" ), &Terrain3DTextureAsset::getEffectivePbrTexture );
-	ClassDB::bind_method( D_METHOD( "set_metallic", "metallic" ), &Terrain3DTextureAsset::setMetallic );
-	ClassDB::bind_method( D_METHOD( "get_metallic" ), &Terrain3DTextureAsset::getMetallic );
+						 &T3DTextureAsset::getEffectiveDisplacementTexture );
+	ClassDB::bind_method( D_METHOD( "get_effective_pbr_texture" ), &T3DTextureAsset::getEffectivePbrTexture );
+	ClassDB::bind_method( D_METHOD( "set_metallic", "metallic" ), &T3DTextureAsset::setMetallic );
+	ClassDB::bind_method( D_METHOD( "get_metallic" ), &T3DTextureAsset::getMetallic );
 	ClassDB::bind_method( D_METHOD( "_emit_packed_pbr_file_changed" ),
-						 &Terrain3DTextureAsset::emitPackedPbrFileChanged );
-	ClassDB::bind_method( D_METHOD( "set_normal_depth", "normal_depth" ), &Terrain3DTextureAsset::setNormalDepth );
-	ClassDB::bind_method( D_METHOD( "get_normal_depth" ), &Terrain3DTextureAsset::getNormalDepth );
-	ClassDB::bind_method( D_METHOD( "set_ao_strength", "ao_strength" ), &Terrain3DTextureAsset::setAoStrength );
-	ClassDB::bind_method( D_METHOD( "get_ao_strength" ), &Terrain3DTextureAsset::getAoStrength );
+						 &T3DTextureAsset::emitPackedPbrFileChanged );
+	ClassDB::bind_method( D_METHOD( "set_normal_depth", "normal_depth" ), &T3DTextureAsset::setNormalDepth );
+	ClassDB::bind_method( D_METHOD( "get_normal_depth" ), &T3DTextureAsset::getNormalDepth );
+	ClassDB::bind_method( D_METHOD( "set_ao_strength", "ao_strength" ), &T3DTextureAsset::setAoStrength );
+	ClassDB::bind_method( D_METHOD( "get_ao_strength" ), &T3DTextureAsset::getAoStrength );
 	ClassDB::bind_method( D_METHOD( "set_ao_light_affect", "ao_light_affect" ),
-						 &Terrain3DTextureAsset::setAoLightAffect );
-	ClassDB::bind_method( D_METHOD( "get_ao_light_affect" ), &Terrain3DTextureAsset::getAoLightAffect );
-	ClassDB::bind_method( D_METHOD( "set_roughness", "roughness" ), &Terrain3DTextureAsset::setRoughness );
-	ClassDB::bind_method( D_METHOD( "get_roughness" ), &Terrain3DTextureAsset::getRoughness );
+						 &T3DTextureAsset::setAoLightAffect );
+	ClassDB::bind_method( D_METHOD( "get_ao_light_affect" ), &T3DTextureAsset::getAoLightAffect );
+	ClassDB::bind_method( D_METHOD( "set_roughness", "roughness" ), &T3DTextureAsset::setRoughness );
+	ClassDB::bind_method( D_METHOD( "get_roughness" ), &T3DTextureAsset::getRoughness );
 	ClassDB::bind_method( D_METHOD( "set_displacement_scale", "displacement_scale" ),
-						 &Terrain3DTextureAsset::setDisplacementScale );
-	ClassDB::bind_method( D_METHOD( "get_displacement_scale" ), &Terrain3DTextureAsset::getDisplacementScale );
+						 &T3DTextureAsset::setDisplacementScale );
+	ClassDB::bind_method( D_METHOD( "get_displacement_scale" ), &T3DTextureAsset::getDisplacementScale );
 	ClassDB::bind_method( D_METHOD( "set_displacement_offset", "displacement_offset" ),
-						 &Terrain3DTextureAsset::setDisplacementOffset );
-	ClassDB::bind_method( D_METHOD( "get_displacement_offset" ), &Terrain3DTextureAsset::getDisplacementOffset );
-	ClassDB::bind_method( D_METHOD( "set_uv_scale", "scale" ), &Terrain3DTextureAsset::setUvScale );
-	ClassDB::bind_method( D_METHOD( "get_uv_scale" ), &Terrain3DTextureAsset::getUvScale );
+						 &T3DTextureAsset::setDisplacementOffset );
+	ClassDB::bind_method( D_METHOD( "get_displacement_offset" ), &T3DTextureAsset::getDisplacementOffset );
+	ClassDB::bind_method( D_METHOD( "set_uv_scale", "scale" ), &T3DTextureAsset::setUvScale );
+	ClassDB::bind_method( D_METHOD( "get_uv_scale" ), &T3DTextureAsset::getUvScale );
 	ClassDB::bind_method( D_METHOD( "set_detiling_rotation", "detiling_rotation" ),
-						 &Terrain3DTextureAsset::setDetilingRotation );
-	ClassDB::bind_method( D_METHOD( "get_detiling_rotation" ), &Terrain3DTextureAsset::getDetilingRotation );
-	ClassDB::bind_method( D_METHOD( "set_detiling_shift", "detiling_shift" ), &Terrain3DTextureAsset::setDetilingShift );
-	ClassDB::bind_method( D_METHOD( "get_detiling_shift" ), &Terrain3DTextureAsset::getDetilingShift );
+						 &T3DTextureAsset::setDetilingRotation );
+	ClassDB::bind_method( D_METHOD( "get_detiling_rotation" ), &T3DTextureAsset::getDetilingRotation );
+	ClassDB::bind_method( D_METHOD( "set_detiling_shift", "detiling_shift" ), &T3DTextureAsset::setDetilingShift );
+	ClassDB::bind_method( D_METHOD( "get_detiling_shift" ), &T3DTextureAsset::getDetilingShift );
 
 #define BIND_EROSION_PROPERTY( name, setter, getter )                                      \
-	ClassDB::bind_method( D_METHOD( "set_" #name, "value" ), &Terrain3DTextureAsset::setter ); \
-	ClassDB::bind_method( D_METHOD( "get_" #name ), &Terrain3DTextureAsset::getter )
+	ClassDB::bind_method( D_METHOD( "set_" #name, "value" ), &T3DTextureAsset::setter ); \
+	ClassDB::bind_method( D_METHOD( "get_" #name ), &T3DTextureAsset::getter )
 
 	BIND_EROSION_PROPERTY( erosion_enabled, setErosionEnabled, getErosionEnabled );
 	BIND_EROSION_PROPERTY( erosion_hardness, setErosionHardness, getErosionHardness );
@@ -682,7 +682,7 @@ void Terrain3DTextureAsset::_bind_methods( void ) {
 	ADD_GROUP( "Compatibility", "" );
 	ADD_PROPERTY(
 		PropertyInfo( Variant::OBJECT, "packed_pbr_resource", PROPERTY_HINT_RESOURCE_TYPE,
-					 "Terrain3DPackedPBRTexture", PROPERTY_USAGE_STORAGE ),
+					 "T3DPackedPBRTexture", PROPERTY_USAGE_STORAGE ),
 		"set_packed_pbr_resource", "get_packed_pbr_resource" );
 	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "surface_texture", PROPERTY_HINT_RESOURCE_TYPE,
 							  "ImageTexture,CompressedTexture2D", PROPERTY_USAGE_STORAGE ),

@@ -7,7 +7,7 @@ extends CanvasLayer
 @export var maximum_problem_lines: int = 4
 @export var show_pipeline_timings: bool = true
 
-var terrain: Terrain3D
+var terrain: T3DTerrain
 var _panel: PanelContainer
 var _label: RichTextLabel
 var _refresh_accumulator: float = 0.0
@@ -18,7 +18,7 @@ func _ready() -> void:
 	layer = 120
 	_build_ui()
 	if not terrain_path.is_empty():
-		set_terrain(get_node_or_null(terrain_path) as Terrain3D)
+		set_terrain(get_node_or_null(terrain_path) as T3DTerrain)
 	set_process(true)
 	_refresh()
 
@@ -36,7 +36,7 @@ func _process(p_delta: float) -> void:
 		_refresh()
 
 
-func set_terrain(p_terrain: Terrain3D) -> void:
+func set_terrain(p_terrain: T3DTerrain) -> void:
 	_restore_profiling_state()
 	terrain = p_terrain
 	if is_instance_valid(terrain) and not terrain.is_runtime_profiling_enabled():
@@ -70,14 +70,14 @@ func _refresh() -> void:
 	if not is_instance_valid(terrain):
 		_label.text = "[b]Terrain3D diagnostics[/b]\nNo terrain assigned"
 		return
-	var snapshot: Terrain3DRuntimeValueMap = Terrain3DRuntimeValueMap.from_value(terrain.get_runtime_diagnostics())
-	var frame: Terrain3DRuntimeValueMap = snapshot.map_value("frame")
-	var gpu: Terrain3DRuntimeValueMap = snapshot.map_value("gpu")
-	var cpu: Terrain3DRuntimeValueMap = snapshot.map_value("cpu")
-	var instances: Terrain3DRuntimeValueMap = snapshot.map_value("instance_cache")
-	var instancer: Terrain3DRuntimeValueMap = snapshot.map_value("instancer")
-	var nodes: Terrain3DRuntimeValueMap = snapshot.map_value("nodes")
-	var streaming: Terrain3DRuntimeValueMap = snapshot.map_value("region_streaming")
+	var snapshot: T3DRuntimeValueMap = T3DRuntimeValueMap.from_value(terrain.get_runtime_diagnostics())
+	var frame: T3DRuntimeValueMap = snapshot.map_value("frame")
+	var gpu: T3DRuntimeValueMap = snapshot.map_value("gpu")
+	var cpu: T3DRuntimeValueMap = snapshot.map_value("cpu")
+	var instances: T3DRuntimeValueMap = snapshot.map_value("instance_cache")
+	var instancer: T3DRuntimeValueMap = snapshot.map_value("instancer")
+	var nodes: T3DRuntimeValueMap = snapshot.map_value("nodes")
+	var streaming: T3DRuntimeValueMap = snapshot.map_value("region_streaming")
 	var lines: PackedStringArray = PackedStringArray()
 	lines.append("[b]Terrain3D frame %d[/b]  %.3f ms" % [frame.int_value("sequence"), frame.float_value("physics_total_usec") / 1000.0])
 	lines.append("Residency %.3f ms | Clipmap %.3f ms | Instances %.3f ms | Nodes %.3f ms | Collision %.3f ms" % [
@@ -124,9 +124,9 @@ func _refresh() -> void:
 			gpu.float_value("prepare_publication_usec_last") / 1000.0,
 			gpu.float_value("prepare_end_to_end_usec_last") / 1000.0,
 		])
-	var problems: Array[Terrain3DRuntimeValueMap] = snapshot.map_array("problems")
+	var problems: Array[T3DRuntimeValueMap] = snapshot.map_array("problems")
 	for index: int in range(mini(problems.size(), maxi(maximum_problem_lines, 0))):
-		var problem: Terrain3DRuntimeValueMap = problems[index]
+		var problem: T3DRuntimeValueMap = problems[index]
 		lines.append("[color=%s]%s: %s (%s)[/color]" % [
 			_problem_color(problem.string_value("severity", "info")),
 			problem.string_value("severity", "info").to_upper(),

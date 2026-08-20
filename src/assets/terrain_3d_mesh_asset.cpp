@@ -16,25 +16,25 @@
 // Private Functions
 ///////////////////////////
 
-void Terrain3DMeshAsset::clearLodRanges( void ) {
-	LOG( Terrain3D::INFO, "ID ", m_nId, ", ", m_name, ": Clearing LOD Ranges, setting last_lod to 128" );
+void T3DMeshAsset::clearLodRanges( void ) {
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": Clearing LOD Ranges, setting last_lod to 128" );
 	for ( int i = 0; i < TERRAIN3D_MESH_MAX_LOD_COUNT; i++ ) {
 		m_fLodRanges[i] = ( i + 1 ) * TERRAIN3D_INSTANCE_DEFAULT_CELL_SIZE;
 	}
 	m_fLodRanges[m_iLastLod] = MAX( m_fLodRanges[m_iLastLod], 128.f );
 }
 
-bool Terrain3DMeshAsset::sortLodNodes( const Node *pA, const Node *pB ) {
+bool T3DMeshAsset::sortLodNodes( const Node *pA, const Node *pB ) {
 	ASSERT( pA && pB, false );
 	return pA->get_name().right( 1 ) < pB->get_name().right( 1 );
 }
 
-Ref<ArrayMesh> Terrain3DMeshAsset::createGeneratedMesh( const t3dgenType_t type ) const {
+Ref<ArrayMesh> T3DMeshAsset::createGeneratedMesh( const t3dgenType_t type ) const {
 	if ( type != TYPE_TEXTURE_CARD ) {
-		LOG( Terrain3D::ERROR, "Only TYPE_TEXTURE_CARD is currently implemented" );
+		LOG( T3DTerrain::ERROR, "Only TYPE_TEXTURE_CARD is currently implemented" );
 		return Ref<ArrayMesh>();
 	}
-	LOG( Terrain3D::EXTREME, "Regenerating new mesh" );
+	LOG( T3DTerrain::EXTREME, "Regenerating new mesh" );
 	Ref<ArrayMesh> pArrayMesh;
 	pArrayMesh.instantiate();
 	const int vertex_count = m_nGeneratedFaces * 4;
@@ -96,8 +96,8 @@ Ref<ArrayMesh> Terrain3DMeshAsset::createGeneratedMesh( const t3dgenType_t type 
 	return pArrayMesh;
 }
 
-void Terrain3DMeshAsset::assignGeneratedMesh( void ) {
-	LOG( Terrain3D::DEBUG, "Assiging generated mesh & lod settings" );
+void T3DMeshAsset::assignGeneratedMesh( void ) {
+	LOG( T3DTerrain::DEBUG, "Assiging generated mesh & lod settings" );
 	m_pPackedScene.unref();
 	m_pendingMeshes.clear();
 	m_pendingMeshes.push_back( createGeneratedMesh() );
@@ -113,7 +113,7 @@ void Terrain3DMeshAsset::assignGeneratedMesh( void ) {
 	}
 }
 
-Ref<Material> Terrain3DMeshAsset::getMaterial( void ) {
+Ref<Material> T3DMeshAsset::getMaterial( void ) {
 	if ( m_pMaterialOverride.is_null() ) {
 		Ref<StandardMaterial3D> pMat;
 		pMat.instantiate();
@@ -138,19 +138,19 @@ Ref<Material> Terrain3DMeshAsset::getMaterial( void ) {
 // Public Functions
 ///////////////////////////
 
-// Called by Terrain3DAssets::_set_asset_list() and _set_asset()
-void Terrain3DMeshAsset::initialize( void ) {
-	LOG( Terrain3D::INFO, m_nId, ": ", m_name, ": initializing asset" );
+// Called by T3DAssets::_set_asset_list() and _set_asset()
+void T3DMeshAsset::initialize( void ) {
+	LOG( T3DTerrain::INFO, m_nId, ": ", m_name, ": initializing asset" );
 	if ( m_pPackedScene.is_null() && m_generatedType == TYPE_NONE ) {
-		LOG( Terrain3D::DEBUG, "Blank mesh, setting up default texture card" );
+		LOG( T3DTerrain::DEBUG, "Blank mesh, setting up default texture card" );
 		setGeneratedType( TYPE_TEXTURE_CARD );
 		m_fHeightOffset = 0.5f;
 		clearLodRanges();
 	}
 }
 
-void Terrain3DMeshAsset::clear( void ) {
-	LOG( Terrain3D::INFO, "Clearing MeshAsset" );
+void T3DMeshAsset::clear( void ) {
+	LOG( T3DTerrain::INFO, "Clearing MeshAsset" );
 	m_name = "New Mesh";
 	m_nId = 0;
 	m_bEnabled = true;
@@ -176,27 +176,27 @@ void Terrain3DMeshAsset::clear( void ) {
 	m_pThumbnail.unref();
 }
 
-void Terrain3DMeshAsset::setName( const String &rName ) {
+void T3DMeshAsset::setName( const String &rName ) {
 	if ( rName.length() > 96 ) {
-		LOG( Terrain3D::WARN, "Name too long, truncating to 96 characters" );
+		LOG( T3DTerrain::WARN, "Name too long, truncating to 96 characters" );
 	}
 	SET_IF_DIFF( m_name, rName.left( 96 ) );
-	LOG( Terrain3D::INFO, "ID ", m_nId, ": t3dsetting_t name: ", m_name );
-	LOG( Terrain3D::DEBUG, "Emitting setting_changed, ID: ", m_nId );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ": t3dsetting_t name: ", m_name );
+	LOG( T3DTerrain::DEBUG, "Emitting setting_changed, ID: ", m_nId );
 	emit_signal( "setting_changed", m_nId );
 }
 
-void Terrain3DMeshAsset::setId( const int nNewId ) {
+void T3DMeshAsset::setId( const int nNewId ) {
 	const int old_id = m_nId;
 	SET_IF_DIFF( m_nId, CLAMP( nNewId, 0, TERRAIN3D_MAX_MESH_ASSETS - 1 ) );
-	LOG( Terrain3D::INFO, m_name, ": t3dsetting_t mesh ID: ", m_nId );
-	LOG( Terrain3D::DEBUG, "Emitting id_changed, TYPE_MESH, ", old_id, ", ", nNewId );
-	emit_signal( "id_changed", Terrain3DAssets::TYPE_MESH, old_id, nNewId );
+	LOG( T3DTerrain::INFO, m_name, ": t3dsetting_t mesh ID: ", m_nId );
+	LOG( T3DTerrain::DEBUG, "Emitting id_changed, TYPE_MESH, ", old_id, ", ", nNewId );
+	emit_signal( "id_changed", T3DAssets::TYPE_MESH, old_id, nNewId );
 }
 
-void Terrain3DMeshAsset::setHighlighted( const bool bHighlighted ) {
+void T3DMeshAsset::setHighlighted( const bool bHighlighted ) {
 	SET_IF_DIFF( m_bHighlighted, bHighlighted );
-	LOG( Terrain3D::INFO, "ID ", m_nId, ", ", m_name, ": Set mesh ID highlight: ", bHighlighted );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": Set mesh ID highlight: ", bHighlighted );
 	if ( m_bHighlighted && m_pHighlightMat.is_null() ) {
 		Ref<StandardMaterial3D> pMat;
 		pMat.instantiate();
@@ -207,11 +207,11 @@ void Terrain3DMeshAsset::setHighlighted( const bool bHighlighted ) {
 		pMat->set_albedo( color );
 		m_pHighlightMat = pMat;
 	}
-	LOG( Terrain3D::DEBUG, "Emitting preview_changed, ID: ", m_nId );
+	LOG( T3DTerrain::DEBUG, "Emitting preview_changed, ID: ", m_nId );
 	emit_signal( "preview_changed", m_nId );
 }
 
-Color Terrain3DMeshAsset::getHighlightColor( void ) const {
+Color T3DMeshAsset::getHighlightColor( void ) const {
 	StandardMaterial3D *pMat = cast_to<StandardMaterial3D>( m_pHighlightMat.ptr() );
 	if ( m_bHighlighted && pMat ) {
 		return pMat->get_albedo();
@@ -219,42 +219,42 @@ Color Terrain3DMeshAsset::getHighlightColor( void ) const {
 	return COLOR_WHITE;
 }
 
-void Terrain3DMeshAsset::setEnabled( const bool bEnabled ) {
+void T3DMeshAsset::setEnabled( const bool bEnabled ) {
 	SET_IF_DIFF( m_bEnabled, bEnabled );
-	LOG( Terrain3D::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t enabled: ", m_bEnabled );
-	LOG( Terrain3D::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t enabled: ", m_bEnabled );
+	LOG( T3DTerrain::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
 
-void Terrain3DMeshAsset::updateInstanceCount( const int64_t nAmount ) {
+void T3DMeshAsset::updateInstanceCount( const int64_t nAmount ) {
 	if ( nAmount == 0 ) {
 		return;
 	}
 	const int64_t new_count = ( int64_t ) ( m_nInstanceCount ) + nAmount;
 	m_nInstanceCount = ( uint32_t ) ( CLAMP( new_count, ( int64_t ) ( 0 ), ( int64_t ) ( UINT32_MAX ) ) );
-	LOG( Terrain3D::EXTREME, "Emitting instance_count_changed, ID: ", m_nId, ", count: ", m_nInstanceCount );
+	LOG( T3DTerrain::EXTREME, "Emitting instance_count_changed, ID: ", m_nId, ", count: ", m_nInstanceCount );
 	emit_signal( "instance_count_changed" );
 }
 
-void Terrain3DMeshAsset::setInstanceCount( const uint32_t nAmount ) {
+void T3DMeshAsset::setInstanceCount( const uint32_t nAmount ) {
 	SET_IF_DIFF( m_nInstanceCount, nAmount );
-	LOG( Terrain3D::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t instance_count: ", m_nInstanceCount );
-	LOG( Terrain3D::DEBUG, "Emitting instance_count_changed" );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t instance_count: ", m_nInstanceCount );
+	LOG( T3DTerrain::DEBUG, "Emitting instance_count_changed" );
 	emit_signal( "instance_count_changed" );
 }
 
-void Terrain3DMeshAsset::setSceneFile( const Ref<PackedScene> &rSceneFile ) {
+void T3DMeshAsset::setSceneFile( const Ref<PackedScene> &rSceneFile ) {
 	SET_IF_DIFF( m_pPackedScene, rSceneFile );
 	invalidateThumbnail();
 	m_pendingMeshes.clear();
 	if ( m_pPackedScene.is_valid() ) {
 		Node *pNode = m_pPackedScene->instantiate();
 		if ( !pNode ) {
-			LOG( Terrain3D::ERROR, "Drag a non-empty glb, fbx, scn, or tscn file into the scene_file slot" );
+			LOG( T3DTerrain::ERROR, "Drag a non-empty glb, fbx, scn, or tscn file into the scene_file slot" );
 			m_pPackedScene.unref();
 			return;
 		}
-		LOG( Terrain3D::INFO, "ID ", m_nId, ", ", m_name, ": Instantiating scene root node: ", m_pPackedScene->get_path() );
+		LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": Instantiating scene root node: ", m_pPackedScene->get_path() );
 		m_fHeightOffset = 0.0f;
 		m_generatedType = TYPE_NONE;
 		if ( m_pMaterialOverride.is_valid() && m_pMaterialOverride->has_meta( "terrain3d_generated_material" ) ) {
@@ -262,22 +262,22 @@ void Terrain3DMeshAsset::setSceneFile( const Ref<PackedScene> &rSceneFile ) {
 		}
 
 		// Look for MeshInstance3D nodes
-		LOG( Terrain3D::DEBUG, "Loaded scene with parent node: ", pNode );
+		LOG( T3DTerrain::DEBUG, "Loaded scene with parent node: ", pNode );
 		TypedArray<Node> mesh_instances;
 
 		// First look for XXXXLOD# meshes, sorted by last digit
 		mesh_instances = pNode->find_children( "*LOD?", "MeshInstance3D" );
 		if ( mesh_instances.size() > 0 ) {
-			LOG( Terrain3D::INFO, "Found ", mesh_instances.size(), " meshes using LOD# naming convention, using the first ",
+			LOG( T3DTerrain::INFO, "Found ", mesh_instances.size(), " meshes using LOD# naming convention, using the first ",
 				TERRAIN3D_MESH_MAX_LOD_COUNT );
-			mesh_instances.sort_custom( callable_mp_static( &Terrain3DMeshAsset::sortLodNodes ) );
+			mesh_instances.sort_custom( callable_mp_static( &T3DMeshAsset::sortLodNodes ) );
 		}
 
 		// Fallback to using all the meshes in provided order
 		if ( mesh_instances.size() == 0 ) {
 			mesh_instances = pNode->find_children( "*", "MeshInstance3D" );
 			if ( mesh_instances.size() > 0 ) {
-				LOG( Terrain3D::INFO, "No meshes with LOD# suffixes found, using the first ", TERRAIN3D_MESH_MAX_LOD_COUNT,
+				LOG( T3DTerrain::INFO, "No meshes with LOD# suffixes found, using the first ", TERRAIN3D_MESH_MAX_LOD_COUNT,
 					" meshes as LOD0-LOD3" );
 			}
 		}
@@ -285,29 +285,29 @@ void Terrain3DMeshAsset::setSceneFile( const Ref<PackedScene> &rSceneFile ) {
 		// Fallback to the scene root mesh
 		if ( mesh_instances.size() == 0 ) {
 			if ( pNode->is_class( "MeshInstance3D" ) ) {
-				LOG( Terrain3D::INFO, "No LOD# meshes found, assuming the root mesh is LOD0" );
+				LOG( T3DTerrain::INFO, "No LOD# meshes found, assuming the root mesh is LOD0" );
 				mesh_instances.push_back( pNode );
 			}
 		}
 		if ( mesh_instances.size() == 0 ) {
-			LOG( Terrain3D::ERROR, "No MeshInstance3D found in scene file" );
+			LOG( T3DTerrain::ERROR, "No MeshInstance3D found in scene file" );
 		}
 
 		// Now process the meshes
 		for ( int i = 0, count = MIN( mesh_instances.size(), TERRAIN3D_MESH_MAX_LOD_COUNT ); i < count; i++ ) {
 			MeshInstance3D *const pMi = cast_to<MeshInstance3D>( mesh_instances[i] );
-			LOG( Terrain3D::DEBUG, "Found mesh: ", pMi->get_name() );
+			LOG( T3DTerrain::DEBUG, "Found mesh: ", pMi->get_name() );
 			const String filename = m_pPackedScene->get_path().get_file().get_basename();
 			if ( m_name == "New Mesh" && !m_pPackedScene->get_path().contains( "::" ) ) {
 				m_name = filename;
-				LOG( Terrain3D::INFO, "t3dsetting_t name based on filename: ", m_name );
+				LOG( T3DTerrain::INFO, "t3dsetting_t name based on filename: ", m_name );
 			}
 			Ref<Mesh> pMesh = pMi->get_mesh();
 			if ( pMesh.is_null() ) {
-				LOG( Terrain3D::WARN, "MeshInstance3D ", pMi->get_name(), " has no mesh, skipping" );
+				LOG( T3DTerrain::WARN, "MeshInstance3D ", pMi->get_name(), " has no mesh, skipping" );
 				continue;
 			}
-			// Duplicate the mesh to make each Terrain3DMeshAsset unique
+			// Duplicate the mesh to make each T3DMeshAsset unique
 			pMesh = pMesh->duplicate();
 			// Apply the active material from the scene to the mesh, including MI or Geom overrides
 			for ( int j = 0; j < pMi->get_surface_override_material_count(); j++ ) {
@@ -321,7 +321,7 @@ void Terrain3DMeshAsset::setSceneFile( const Ref<PackedScene> &rSceneFile ) {
 	if ( m_pendingMeshes.size() > 0 ) {
 		const Ref<Mesh> pMesh = m_pendingMeshes[0];
 		if ( pMesh.is_null() ) {
-			LOG( Terrain3D::ERROR, "First mesh is null after loading scene" );
+			LOG( T3DTerrain::ERROR, "First mesh is null after loading scene" );
 			return;
 		}
 		const AABB aabb = pMesh->get_aabb();
@@ -340,19 +340,19 @@ void Terrain3DMeshAsset::setSceneFile( const Ref<PackedScene> &rSceneFile ) {
 		commitMeshes();
 	}
 	notify_property_list_changed(); // Call _validate_property to update inspector
-	LOG( Terrain3D::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
+	LOG( T3DTerrain::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
 
-void Terrain3DMeshAsset::commitMeshes( void ) {
-	LOG( Terrain3D::INFO, m_name, ": Committing ", m_pendingMeshes.size(), " pending meshes" );
+void T3DMeshAsset::commitMeshes( void ) {
+	LOG( T3DTerrain::INFO, m_name, ": Committing ", m_pendingMeshes.size(), " pending meshes" );
 	invalidateThumbnail();
 	m_meshes.clear();
 	m_meshes = m_pendingMeshes;
 	m_pendingMeshes = TypedArray<Mesh>();
 }
 
-void Terrain3DMeshAsset::setGeneratedType( const t3dgenType_t type ) {
+void T3DMeshAsset::setGeneratedType( const t3dgenType_t type ) {
 	const bool bEnteringGeneratedMode = m_generatedType == TYPE_NONE;
 	SET_IF_DIFF( m_generatedType, CLAMP( type, ( t3dgenType_t ) ( TYPE_NONE + 1 ), ( t3dgenType_t ) ( TYPE_MAX - 1 ) ) );
 	if ( bEnteringGeneratedMode ) {
@@ -361,44 +361,44 @@ void Terrain3DMeshAsset::setGeneratedType( const t3dgenType_t type ) {
 		m_shadowImpostor = 0;
 	}
 	invalidateThumbnail();
-	LOG( Terrain3D::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t generated type: ", m_generatedType );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t generated type: ", m_generatedType );
 	assignGeneratedMesh();
 	m_fDensity = 10.f;
-	LOG( Terrain3D::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
+	LOG( T3DTerrain::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 	notify_property_list_changed();
 }
 
-Ref<Mesh> Terrain3DMeshAsset::getMesh( const int nLod ) const {
+Ref<Mesh> T3DMeshAsset::getMesh( const int nLod ) const {
 	if ( nLod >= 0 && nLod < getMeshes().size() ) {
 		return getMeshes()[nLod];
 	}
 	return Ref<Mesh>();
 }
 
-void Terrain3DMeshAsset::setHeightOffset( const real_t fOffset ) {
+void T3DMeshAsset::setHeightOffset( const real_t fOffset ) {
 	SET_IF_DIFF( m_fHeightOffset, CLAMP( fOffset, -50.f, 50.f ) );
-	LOG( Terrain3D::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t height offset: ", m_fHeightOffset );
-	LOG( Terrain3D::DEBUG, "Emitting setting_changed, ID: ", m_nId );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t height offset: ", m_fHeightOffset );
+	LOG( T3DTerrain::DEBUG, "Emitting setting_changed, ID: ", m_nId );
 	emit_signal( "setting_changed", m_nId );
 }
 
-void Terrain3DMeshAsset::setDensity( const real_t fDensity ) {
+void T3DMeshAsset::setDensity( const real_t fDensity ) {
 	SET_IF_DIFF( m_fDensity, CLAMP( fDensity, 0.01f, 10.f ) );
-	LOG( Terrain3D::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t mesh density: ", fDensity );
-	LOG( Terrain3D::DEBUG, "Emitting setting_changed, ID: ", m_nId );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t mesh density: ", fDensity );
+	LOG( T3DTerrain::DEBUG, "Emitting setting_changed, ID: ", m_nId );
 	emit_signal( "setting_changed", m_nId );
 }
 
-void Terrain3DMeshAsset::setCastShadows( const ShadowCasting castShadows ) {
+void T3DMeshAsset::setCastShadows( const ShadowCasting castShadows ) {
 	SET_IF_DIFF( m_castShadows, castShadows );
-	LOG( Terrain3D::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t shadow casting mode: ", m_castShadows );
-	LOG( Terrain3D::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t shadow casting mode: ", m_castShadows );
+	LOG( T3DTerrain::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
 
 // Returns the approproate cast_shadows setting for the given LOD ID
-ShadowCasting Terrain3DMeshAsset::getLodCastShadows( const int nLodId ) const {
+ShadowCasting T3DMeshAsset::getLodCastShadows( const int nLodId ) const {
 	// If cast shadows is off, disable all shadows
 	if ( m_castShadows == TERRAIN3D_SHADOW_CASTING_OFF ) {
 		return m_castShadows;
@@ -422,54 +422,54 @@ ShadowCasting Terrain3DMeshAsset::getLodCastShadows( const int nLodId ) const {
 	return m_castShadows;
 }
 
-inline void Terrain3DMeshAsset::setVisibilityLayers( const uint32_t nLayers ) {
+inline void T3DMeshAsset::setVisibilityLayers( const uint32_t nLayers ) {
 	SET_IF_DIFF( m_visibilityLayers, nLayers );
-	LOG( Terrain3D::INFO, m_name, ": t3dsetting_t visibility layers: ", nLayers );
-	LOG( Terrain3D::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
+	LOG( T3DTerrain::INFO, m_name, ": t3dsetting_t visibility layers: ", nLayers );
+	LOG( T3DTerrain::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
 
-void Terrain3DMeshAsset::setMaterialOverride( const Ref<Material> &rMaterial ) {
+void T3DMeshAsset::setMaterialOverride( const Ref<Material> &rMaterial ) {
 	SET_IF_DIFF( m_pMaterialOverride, rMaterial );
 	invalidateThumbnail();
-	LOG( Terrain3D::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t material override: ", rMaterial );
-	LOG( Terrain3D::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t material override: ", rMaterial );
+	LOG( T3DTerrain::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
 
-void Terrain3DMeshAsset::setMaterialOverlay( const Ref<Material> &rMaterial ) {
+void T3DMeshAsset::setMaterialOverlay( const Ref<Material> &rMaterial ) {
 	SET_IF_DIFF( m_pMaterialOverlay, rMaterial );
 	invalidateThumbnail();
-	LOG( Terrain3D::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t material overlay: ", rMaterial );
-	LOG( Terrain3D::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t material overlay: ", rMaterial );
+	LOG( T3DTerrain::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
 
-void Terrain3DMeshAsset::setGeneratedFaces( const int nCount ) {
+void T3DMeshAsset::setGeneratedFaces( const int nCount ) {
 	SET_IF_DIFF( m_nGeneratedFaces, CLAMP( nCount, 1, 3 ) );
 	invalidateThumbnail();
-	LOG( Terrain3D::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t generated face count: ", m_nGeneratedFaces );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t generated face count: ", m_nGeneratedFaces );
 	// If already a texture card, just recreate the mesh w/o other settings
 	if ( m_generatedType > TYPE_NONE && m_generatedType < TYPE_MAX && getMeshes().size() == 1 ) {
 		assignGeneratedMesh();
 	}
-	LOG( Terrain3D::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
+	LOG( T3DTerrain::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
 
-void Terrain3DMeshAsset::setGeneratedSize( const Vector2 &rSize ) {
+void T3DMeshAsset::setGeneratedSize( const Vector2 &rSize ) {
 	SET_IF_DIFF( m_generatedSize, rSize );
 	invalidateThumbnail();
-	LOG( Terrain3D::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t generated size: ", m_generatedSize );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t generated size: ", m_generatedSize );
 	// If already a texture card, just recreate the mesh w/o other settings
 	if ( m_generatedType > TYPE_NONE && m_generatedType < TYPE_MAX && getMeshes().size() == 1 ) {
 		assignGeneratedMesh();
 	}
-	LOG( Terrain3D::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
+	LOG( T3DTerrain::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
 
-void Terrain3DMeshAsset::setLastLod( const int nLod ) {
+void T3DMeshAsset::setLastLod( const int nLod ) {
 	const int max_lod = m_generatedType != TYPE_NONE ? 0 : CLAMP( getMeshes().size(), 1, TERRAIN3D_MESH_MAX_LOD_COUNT ) - 1;
 	SET_IF_DIFF( m_iLastLod, CLAMP( nLod, 0, max_lod ) );
 	if ( m_iLastShadowLod > m_iLastLod ) {
@@ -478,48 +478,48 @@ void Terrain3DMeshAsset::setLastLod( const int nLod ) {
 	if ( m_shadowImpostor > m_iLastLod ) {
 		m_shadowImpostor = m_iLastLod;
 	}
-	LOG( Terrain3D::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t last LOD: ", m_iLastLod );
-	LOG( Terrain3D::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t last LOD: ", m_iLastLod );
+	LOG( T3DTerrain::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 	notify_property_list_changed();
 }
 
-void Terrain3DMeshAsset::setLastShadowLod( const int nLod ) {
+void T3DMeshAsset::setLastShadowLod( const int nLod ) {
 	SET_IF_DIFF( m_iLastShadowLod, CLAMP( nLod, 0, m_iLastLod ) );
-	LOG( Terrain3D::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t last shadow LOD: ", m_iLastShadowLod );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t last shadow LOD: ", m_iLastShadowLod );
 	if ( m_shadowImpostor > m_iLastShadowLod ) {
 		m_shadowImpostor = m_iLastShadowLod;
 	}
-	LOG( Terrain3D::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
+	LOG( T3DTerrain::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
 
-void Terrain3DMeshAsset::setShadowImpostor( const int nLod ) {
+void T3DMeshAsset::setShadowImpostor( const int nLod ) {
 	SET_IF_DIFF( m_shadowImpostor, CLAMP( nLod, 0, MIN( m_iLastLod, m_iLastShadowLod ) ) );
-	LOG( Terrain3D::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t shadow imposter LOD: ", m_shadowImpostor );
-	LOG( Terrain3D::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t shadow imposter LOD: ", m_shadowImpostor );
+	LOG( T3DTerrain::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
 
-void Terrain3DMeshAsset::setLodRange( const int nLod, const real_t fDistance ) {
+void T3DMeshAsset::setLodRange( const int nLod, const real_t fDistance ) {
 	if ( nLod < 0 || nLod >= TERRAIN3D_MESH_MAX_LOD_COUNT ) {
-		LOG( Terrain3D::ERROR, "p_lod out of range. Valid range is 0 - ", TERRAIN3D_MESH_MAX_LOD_COUNT - 1 );
+		LOG( T3DTerrain::ERROR, "p_lod out of range. Valid range is 0 - ", TERRAIN3D_MESH_MAX_LOD_COUNT - 1 );
 		return;
 	}
 	SET_IF_DIFF( m_fLodRanges[nLod], CLAMP( ( float ) ( fDistance ), 0.f, 100000.f ) );
-	LOG( Terrain3D::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t LOD ", nLod, " visibility range: ", m_fLodRanges[nLod] );
-	LOG( Terrain3D::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t LOD ", nLod, " visibility range: ", m_fLodRanges[nLod] );
+	LOG( T3DTerrain::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
 
-real_t Terrain3DMeshAsset::getLodRange( const int nLod ) const {
+real_t T3DMeshAsset::getLodRange( const int nLod ) const {
 	if ( nLod < 0 || nLod >= TERRAIN3D_MESH_MAX_LOD_COUNT ) {
 		return -1.f;
 	}
 	return m_fLodRanges[nLod];
 }
 
-real_t Terrain3DMeshAsset::getLodRangeBegin( const int nLod ) const {
+real_t T3DMeshAsset::getLodRangeBegin( const int nLod ) const {
 	if ( nLod <= 0 ) {
 		return 0.f;
 	}
@@ -527,7 +527,7 @@ real_t Terrain3DMeshAsset::getLodRangeBegin( const int nLod ) const {
 	return m_fLodRanges[nLod - 1];
 }
 
-real_t Terrain3DMeshAsset::getLodRangeEnd( const int nLod ) const {
+real_t T3DMeshAsset::getLodRangeEnd( const int nLod ) const {
 	if ( nLod == TERRAIN3D_MESH_SHADOW_LOD_ID ) {
 		return m_fLodRanges[MAX( m_shadowImpostor - 1, 0 )];
 	}
@@ -535,11 +535,11 @@ real_t Terrain3DMeshAsset::getLodRangeEnd( const int nLod ) const {
 	return m_fLodRanges[nLod];
 }
 
-void Terrain3DMeshAsset::setFadeMargin( const real_t fFadeMargin ) {
+void T3DMeshAsset::setFadeMargin( const real_t fFadeMargin ) {
 	const int max_range = CLAMP( m_fLodRanges[1] - m_fLodRanges[0], 0.f, 64.f );
 	SET_IF_DIFF( m_fFadeMargin, CLAMP( fFadeMargin, 0.f, max_range ) );
-	LOG( Terrain3D::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t visibility margin: ", m_fFadeMargin );
-	LOG( Terrain3D::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t visibility margin: ", m_fFadeMargin );
+	LOG( T3DTerrain::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
 
@@ -547,7 +547,7 @@ void Terrain3DMeshAsset::setFadeMargin( const real_t fFadeMargin ) {
 // Protected Functions
 ///////////////////////////
 
-void Terrain3DMeshAsset::_validate_property( PropertyInfo &rProperty ) const {
+void T3DMeshAsset::_validate_property( PropertyInfo &rProperty ) const {
 	if ( rProperty.name != StringName( "generated_type" ) && rProperty.name.begins_with( "generated_" ) ) {
 		if ( m_generatedType == TYPE_NONE ) {
 			rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
@@ -565,13 +565,13 @@ void Terrain3DMeshAsset::_validate_property( PropertyInfo &rProperty ) const {
 	}
 }
 
-bool Terrain3DMeshAsset::_property_can_revert( const StringName &rName ) const {
+bool T3DMeshAsset::_property_can_revert( const StringName &rName ) const {
 	return ( rName.match( "last_lod" ) || rName.match( "last_shadow_lod" ) || rName.match( "density" ) ||
 			rName.match( "generated_type" ) ||
 			( m_generatedType > TYPE_NONE && ( rName.match( "height_offset" ) || rName.match( "lod0_range" ) ) ) );
 }
 
-bool Terrain3DMeshAsset::_property_get_revert( const StringName &rName, Variant &rProperty ) const {
+bool T3DMeshAsset::_property_get_revert( const StringName &rName, Variant &rProperty ) const {
 	if ( rName.match( "last_lod" ) ) {
 		rProperty = getLodCount() - 1;
 		return true;
@@ -596,7 +596,7 @@ bool Terrain3DMeshAsset::_property_get_revert( const StringName &rName, Variant 
 	return false;
 }
 
-void Terrain3DMeshAsset::setHlodContribution( const t3dhlodContribution_t mode ) {
+void T3DMeshAsset::setHlodContribution( const t3dhlodContribution_t mode ) {
 	const t3dhlodContribution_t value = ( t3dhlodContribution_t ) CLAMP( ( int ) mode, ( int ) HLOD_AUTO, ( int ) HLOD_EXCLUDE );
 	if ( m_hlodContribution == value ) { return; }
 	m_hlodContribution = value;
@@ -604,7 +604,7 @@ void Terrain3DMeshAsset::setHlodContribution( const t3dhlodContribution_t mode )
 	emit_changed();
 }
 
-void Terrain3DMeshAsset::setHlodMinLevel( const int nLevel ) {
+void T3DMeshAsset::setHlodMinLevel( const int nLevel ) {
 	const int value = CLAMP( nLevel, 1, 6 );
 	if ( m_nHlodMinLevel == value ) { return; }
 	m_nHlodMinLevel = value;
@@ -612,15 +612,15 @@ void Terrain3DMeshAsset::setHlodMinLevel( const int nLevel ) {
 	emit_changed();
 }
 
-void Terrain3DMeshAsset::_bind_methods( void ) {
+void T3DMeshAsset::_bind_methods( void ) {
 	BIND_ENUM_CONSTANT( HLOD_AUTO );
 	BIND_ENUM_CONSTANT( HLOD_INCLUDE );
 	BIND_ENUM_CONSTANT( HLOD_EXCLUDE );
-	ClassDB::bind_method( D_METHOD( "set_hlod_contribution", "mode" ), &Terrain3DMeshAsset::setHlodContribution );
-	ClassDB::bind_method( D_METHOD( "get_hlod_contribution" ), &Terrain3DMeshAsset::getHlodContribution );
-	ClassDB::bind_method( D_METHOD( "set_hlod_min_level", "level" ), &Terrain3DMeshAsset::setHlodMinLevel );
-	ClassDB::bind_method( D_METHOD( "get_hlod_min_level" ), &Terrain3DMeshAsset::getHlodMinLevel );
-	ClassDB::bind_method( D_METHOD( "is_hlod_eligible" ), &Terrain3DMeshAsset::isHlodEligible );
+	ClassDB::bind_method( D_METHOD( "set_hlod_contribution", "mode" ), &T3DMeshAsset::setHlodContribution );
+	ClassDB::bind_method( D_METHOD( "get_hlod_contribution" ), &T3DMeshAsset::getHlodContribution );
+	ClassDB::bind_method( D_METHOD( "set_hlod_min_level", "level" ), &T3DMeshAsset::setHlodMinLevel );
+	ClassDB::bind_method( D_METHOD( "get_hlod_min_level" ), &T3DMeshAsset::getHlodMinLevel );
+	ClassDB::bind_method( D_METHOD( "is_hlod_eligible" ), &T3DMeshAsset::isHlodEligible );
 	BIND_ENUM_CONSTANT( TYPE_NONE );
 	BIND_ENUM_CONSTANT( TYPE_TEXTURE_CARD );
 	BIND_ENUM_CONSTANT( TYPE_MAX );
@@ -631,76 +631,76 @@ void Terrain3DMeshAsset::_bind_methods( void ) {
 	ADD_SIGNAL( MethodInfo( "preview_changed" ) );
 	ADD_SIGNAL( MethodInfo( "instance_count_changed" ) );
 
-	ClassDB::bind_method( D_METHOD( "clear" ), &Terrain3DMeshAsset::clear );
-	ClassDB::bind_method( D_METHOD( "set_name", "name" ), &Terrain3DMeshAsset::setName );
-	ClassDB::bind_method( D_METHOD( "get_name" ), &Terrain3DMeshAsset::getName );
-	ClassDB::bind_method( D_METHOD( "set_id", "id" ), &Terrain3DMeshAsset::setId );
-	ClassDB::bind_method( D_METHOD( "get_id" ), &Terrain3DMeshAsset::getId );
-	ClassDB::bind_method( D_METHOD( "set_highlighted", "enabled" ), &Terrain3DMeshAsset::setHighlighted );
-	ClassDB::bind_method( D_METHOD( "is_highlighted" ), &Terrain3DMeshAsset::isHighlighted );
-	ClassDB::bind_method( D_METHOD( "get_highlight_color" ), &Terrain3DMeshAsset::getHighlightColor );
-	ClassDB::bind_method( D_METHOD( "get_thumbnail" ), &Terrain3DMeshAsset::getThumbnail );
+	ClassDB::bind_method( D_METHOD( "clear" ), &T3DMeshAsset::clear );
+	ClassDB::bind_method( D_METHOD( "set_name", "name" ), &T3DMeshAsset::setName );
+	ClassDB::bind_method( D_METHOD( "get_name" ), &T3DMeshAsset::getName );
+	ClassDB::bind_method( D_METHOD( "set_id", "id" ), &T3DMeshAsset::setId );
+	ClassDB::bind_method( D_METHOD( "get_id" ), &T3DMeshAsset::getId );
+	ClassDB::bind_method( D_METHOD( "set_highlighted", "enabled" ), &T3DMeshAsset::setHighlighted );
+	ClassDB::bind_method( D_METHOD( "is_highlighted" ), &T3DMeshAsset::isHighlighted );
+	ClassDB::bind_method( D_METHOD( "get_highlight_color" ), &T3DMeshAsset::getHighlightColor );
+	ClassDB::bind_method( D_METHOD( "get_thumbnail" ), &T3DMeshAsset::getThumbnail );
 
-	ClassDB::bind_method( D_METHOD( "set_enabled", "enabled" ), &Terrain3DMeshAsset::setEnabled );
-	ClassDB::bind_method( D_METHOD( "is_enabled" ), &Terrain3DMeshAsset::isEnabled );
+	ClassDB::bind_method( D_METHOD( "set_enabled", "enabled" ), &T3DMeshAsset::setEnabled );
+	ClassDB::bind_method( D_METHOD( "is_enabled" ), &T3DMeshAsset::isEnabled );
 
-	ClassDB::bind_method( D_METHOD( "set_scene_file", "scene_file" ), &Terrain3DMeshAsset::setSceneFile );
-	ClassDB::bind_method( D_METHOD( "get_scene_file" ), &Terrain3DMeshAsset::getSceneFile );
-	ClassDB::bind_method( D_METHOD( "set_generated_type", "type" ), &Terrain3DMeshAsset::setGeneratedType );
-	ClassDB::bind_method( D_METHOD( "get_generated_type" ), &Terrain3DMeshAsset::getGeneratedType );
-	ClassDB::bind_method( D_METHOD( "get_mesh", "lod" ), &Terrain3DMeshAsset::getMesh, DEFVAL( 0 ) );
-	ClassDB::bind_method( D_METHOD( "set_height_offset", "offset" ), &Terrain3DMeshAsset::setHeightOffset );
-	ClassDB::bind_method( D_METHOD( "get_height_offset" ), &Terrain3DMeshAsset::getHeightOffset );
-	ClassDB::bind_method( D_METHOD( "set_density", "density" ), &Terrain3DMeshAsset::setDensity );
-	ClassDB::bind_method( D_METHOD( "get_density" ), &Terrain3DMeshAsset::getDensity );
-	ClassDB::bind_method( D_METHOD( "set_cast_shadows", "mode" ), &Terrain3DMeshAsset::setCastShadows );
-	ClassDB::bind_method( D_METHOD( "get_cast_shadows" ), &Terrain3DMeshAsset::getCastShadows );
-	ClassDB::bind_method( D_METHOD( "set_visibility_layers", "layers" ), &Terrain3DMeshAsset::setVisibilityLayers );
-	ClassDB::bind_method( D_METHOD( "get_visibility_layers" ), &Terrain3DMeshAsset::getVisibilityLayers );
-	ClassDB::bind_method( D_METHOD( "set_material_override", "material" ), &Terrain3DMeshAsset::setMaterialOverride );
-	ClassDB::bind_method( D_METHOD( "get_material_override" ), &Terrain3DMeshAsset::getMaterialOverride );
-	ClassDB::bind_method( D_METHOD( "set_material_overlay", "material" ), &Terrain3DMeshAsset::setMaterialOverlay );
-	ClassDB::bind_method( D_METHOD( "get_material_overlay" ), &Terrain3DMeshAsset::getMaterialOverlay );
+	ClassDB::bind_method( D_METHOD( "set_scene_file", "scene_file" ), &T3DMeshAsset::setSceneFile );
+	ClassDB::bind_method( D_METHOD( "get_scene_file" ), &T3DMeshAsset::getSceneFile );
+	ClassDB::bind_method( D_METHOD( "set_generated_type", "type" ), &T3DMeshAsset::setGeneratedType );
+	ClassDB::bind_method( D_METHOD( "get_generated_type" ), &T3DMeshAsset::getGeneratedType );
+	ClassDB::bind_method( D_METHOD( "get_mesh", "lod" ), &T3DMeshAsset::getMesh, DEFVAL( 0 ) );
+	ClassDB::bind_method( D_METHOD( "set_height_offset", "offset" ), &T3DMeshAsset::setHeightOffset );
+	ClassDB::bind_method( D_METHOD( "get_height_offset" ), &T3DMeshAsset::getHeightOffset );
+	ClassDB::bind_method( D_METHOD( "set_density", "density" ), &T3DMeshAsset::setDensity );
+	ClassDB::bind_method( D_METHOD( "get_density" ), &T3DMeshAsset::getDensity );
+	ClassDB::bind_method( D_METHOD( "set_cast_shadows", "mode" ), &T3DMeshAsset::setCastShadows );
+	ClassDB::bind_method( D_METHOD( "get_cast_shadows" ), &T3DMeshAsset::getCastShadows );
+	ClassDB::bind_method( D_METHOD( "set_visibility_layers", "layers" ), &T3DMeshAsset::setVisibilityLayers );
+	ClassDB::bind_method( D_METHOD( "get_visibility_layers" ), &T3DMeshAsset::getVisibilityLayers );
+	ClassDB::bind_method( D_METHOD( "set_material_override", "material" ), &T3DMeshAsset::setMaterialOverride );
+	ClassDB::bind_method( D_METHOD( "get_material_override" ), &T3DMeshAsset::getMaterialOverride );
+	ClassDB::bind_method( D_METHOD( "set_material_overlay", "material" ), &T3DMeshAsset::setMaterialOverlay );
+	ClassDB::bind_method( D_METHOD( "get_material_overlay" ), &T3DMeshAsset::getMaterialOverlay );
 
-	ClassDB::bind_method( D_METHOD( "set_generated_faces", "count" ), &Terrain3DMeshAsset::setGeneratedFaces );
-	ClassDB::bind_method( D_METHOD( "get_generated_faces" ), &Terrain3DMeshAsset::getGeneratedFaces );
-	ClassDB::bind_method( D_METHOD( "set_generated_size", "size" ), &Terrain3DMeshAsset::setGeneratedSize );
-	ClassDB::bind_method( D_METHOD( "get_generated_size" ), &Terrain3DMeshAsset::getGeneratedSize );
+	ClassDB::bind_method( D_METHOD( "set_generated_faces", "count" ), &T3DMeshAsset::setGeneratedFaces );
+	ClassDB::bind_method( D_METHOD( "get_generated_faces" ), &T3DMeshAsset::getGeneratedFaces );
+	ClassDB::bind_method( D_METHOD( "set_generated_size", "size" ), &T3DMeshAsset::setGeneratedSize );
+	ClassDB::bind_method( D_METHOD( "get_generated_size" ), &T3DMeshAsset::getGeneratedSize );
 
-	ClassDB::bind_method( D_METHOD( "get_lod_count" ), &Terrain3DMeshAsset::getLodCount );
-	ClassDB::bind_method( D_METHOD( "set_last_lod", "lod" ), &Terrain3DMeshAsset::setLastLod );
-	ClassDB::bind_method( D_METHOD( "get_last_lod" ), &Terrain3DMeshAsset::getLastLod );
-	ClassDB::bind_method( D_METHOD( "set_last_shadow_lod", "lod" ), &Terrain3DMeshAsset::setLastShadowLod );
-	ClassDB::bind_method( D_METHOD( "get_last_shadow_lod" ), &Terrain3DMeshAsset::getLastShadowLod );
-	ClassDB::bind_method( D_METHOD( "set_shadow_impostor", "lod" ), &Terrain3DMeshAsset::setShadowImpostor );
-	ClassDB::bind_method( D_METHOD( "get_shadow_impostor" ), &Terrain3DMeshAsset::getShadowImpostor );
+	ClassDB::bind_method( D_METHOD( "get_lod_count" ), &T3DMeshAsset::getLodCount );
+	ClassDB::bind_method( D_METHOD( "set_last_lod", "lod" ), &T3DMeshAsset::setLastLod );
+	ClassDB::bind_method( D_METHOD( "get_last_lod" ), &T3DMeshAsset::getLastLod );
+	ClassDB::bind_method( D_METHOD( "set_last_shadow_lod", "lod" ), &T3DMeshAsset::setLastShadowLod );
+	ClassDB::bind_method( D_METHOD( "get_last_shadow_lod" ), &T3DMeshAsset::getLastShadowLod );
+	ClassDB::bind_method( D_METHOD( "set_shadow_impostor", "lod" ), &T3DMeshAsset::setShadowImpostor );
+	ClassDB::bind_method( D_METHOD( "get_shadow_impostor" ), &T3DMeshAsset::getShadowImpostor );
 
-	ClassDB::bind_method( D_METHOD( "set_lod_range", "lod", "distance" ), &Terrain3DMeshAsset::setLodRange );
-	ClassDB::bind_method( D_METHOD( "get_lod_range", "lod" ), &Terrain3DMeshAsset::getLodRange );
-	ClassDB::bind_method( D_METHOD( "set_lod0_range", "distance" ), &Terrain3DMeshAsset::setLod0Range );
-	ClassDB::bind_method( D_METHOD( "get_lod0_range" ), &Terrain3DMeshAsset::getLod0Range );
-	ClassDB::bind_method( D_METHOD( "set_lod1_range", "distance" ), &Terrain3DMeshAsset::setLod1Range );
-	ClassDB::bind_method( D_METHOD( "get_lod1_range" ), &Terrain3DMeshAsset::getLod1Range );
-	ClassDB::bind_method( D_METHOD( "set_lod2_range", "distance" ), &Terrain3DMeshAsset::setLod2Range );
-	ClassDB::bind_method( D_METHOD( "get_lod2_range" ), &Terrain3DMeshAsset::getLod2Range );
-	ClassDB::bind_method( D_METHOD( "set_lod3_range", "distance" ), &Terrain3DMeshAsset::setLod3Range );
-	ClassDB::bind_method( D_METHOD( "get_lod3_range" ), &Terrain3DMeshAsset::getLod3Range );
-	ClassDB::bind_method( D_METHOD( "set_lod4_range", "distance" ), &Terrain3DMeshAsset::setLod4Range );
-	ClassDB::bind_method( D_METHOD( "get_lod4_range" ), &Terrain3DMeshAsset::getLod4Range );
-	ClassDB::bind_method( D_METHOD( "set_lod5_range", "distance" ), &Terrain3DMeshAsset::setLod5Range );
-	ClassDB::bind_method( D_METHOD( "get_lod5_range" ), &Terrain3DMeshAsset::getLod5Range );
-	ClassDB::bind_method( D_METHOD( "set_lod6_range", "distance" ), &Terrain3DMeshAsset::setLod6Range );
-	ClassDB::bind_method( D_METHOD( "get_lod6_range" ), &Terrain3DMeshAsset::getLod6Range );
-	ClassDB::bind_method( D_METHOD( "set_lod7_range", "distance" ), &Terrain3DMeshAsset::setLod7Range );
-	ClassDB::bind_method( D_METHOD( "get_lod7_range" ), &Terrain3DMeshAsset::getLod7Range );
-	ClassDB::bind_method( D_METHOD( "set_lod8_range", "distance" ), &Terrain3DMeshAsset::setLod8Range );
-	ClassDB::bind_method( D_METHOD( "get_lod8_range" ), &Terrain3DMeshAsset::getLod8Range );
-	ClassDB::bind_method( D_METHOD( "set_lod9_range", "distance" ), &Terrain3DMeshAsset::setLod9Range );
-	ClassDB::bind_method( D_METHOD( "get_lod9_range" ), &Terrain3DMeshAsset::getLod9Range );
-	ClassDB::bind_method( D_METHOD( "set_fade_margin", "distance" ), &Terrain3DMeshAsset::setFadeMargin );
-	ClassDB::bind_method( D_METHOD( "get_fade_margin" ), &Terrain3DMeshAsset::getFadeMargin );
+	ClassDB::bind_method( D_METHOD( "set_lod_range", "lod", "distance" ), &T3DMeshAsset::setLodRange );
+	ClassDB::bind_method( D_METHOD( "get_lod_range", "lod" ), &T3DMeshAsset::getLodRange );
+	ClassDB::bind_method( D_METHOD( "set_lod0_range", "distance" ), &T3DMeshAsset::setLod0Range );
+	ClassDB::bind_method( D_METHOD( "get_lod0_range" ), &T3DMeshAsset::getLod0Range );
+	ClassDB::bind_method( D_METHOD( "set_lod1_range", "distance" ), &T3DMeshAsset::setLod1Range );
+	ClassDB::bind_method( D_METHOD( "get_lod1_range" ), &T3DMeshAsset::getLod1Range );
+	ClassDB::bind_method( D_METHOD( "set_lod2_range", "distance" ), &T3DMeshAsset::setLod2Range );
+	ClassDB::bind_method( D_METHOD( "get_lod2_range" ), &T3DMeshAsset::getLod2Range );
+	ClassDB::bind_method( D_METHOD( "set_lod3_range", "distance" ), &T3DMeshAsset::setLod3Range );
+	ClassDB::bind_method( D_METHOD( "get_lod3_range" ), &T3DMeshAsset::getLod3Range );
+	ClassDB::bind_method( D_METHOD( "set_lod4_range", "distance" ), &T3DMeshAsset::setLod4Range );
+	ClassDB::bind_method( D_METHOD( "get_lod4_range" ), &T3DMeshAsset::getLod4Range );
+	ClassDB::bind_method( D_METHOD( "set_lod5_range", "distance" ), &T3DMeshAsset::setLod5Range );
+	ClassDB::bind_method( D_METHOD( "get_lod5_range" ), &T3DMeshAsset::getLod5Range );
+	ClassDB::bind_method( D_METHOD( "set_lod6_range", "distance" ), &T3DMeshAsset::setLod6Range );
+	ClassDB::bind_method( D_METHOD( "get_lod6_range" ), &T3DMeshAsset::getLod6Range );
+	ClassDB::bind_method( D_METHOD( "set_lod7_range", "distance" ), &T3DMeshAsset::setLod7Range );
+	ClassDB::bind_method( D_METHOD( "get_lod7_range" ), &T3DMeshAsset::getLod7Range );
+	ClassDB::bind_method( D_METHOD( "set_lod8_range", "distance" ), &T3DMeshAsset::setLod8Range );
+	ClassDB::bind_method( D_METHOD( "get_lod8_range" ), &T3DMeshAsset::getLod8Range );
+	ClassDB::bind_method( D_METHOD( "set_lod9_range", "distance" ), &T3DMeshAsset::setLod9Range );
+	ClassDB::bind_method( D_METHOD( "get_lod9_range" ), &T3DMeshAsset::getLod9Range );
+	ClassDB::bind_method( D_METHOD( "set_fade_margin", "distance" ), &T3DMeshAsset::setFadeMargin );
+	ClassDB::bind_method( D_METHOD( "get_fade_margin" ), &T3DMeshAsset::getFadeMargin );
 
-	ClassDB::bind_method( D_METHOD( "get_instance_count" ), &Terrain3DMeshAsset::getInstanceCount );
+	ClassDB::bind_method( D_METHOD( "get_instance_count" ), &T3DMeshAsset::getInstanceCount );
 
 	ADD_GROUP( "HLOD", "hlod_" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "hlod_contribution", PROPERTY_HINT_ENUM, "Auto,Include,Exclude" ), "set_hlod_contribution", "get_hlod_contribution" );

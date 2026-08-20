@@ -1,7 +1,7 @@
 # Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 # Serializable configuration and bake-state record for the editor autoshader.
 @tool
-class_name Terrain3DAutoShaderProfile
+class_name T3DAutoShaderProfile
 extends Resource
 
 
@@ -76,7 +76,7 @@ enum MaskChannel {
 		_notify_changed()
 
 @export_category("Rules")
-@export var rules: Array[Terrain3DAutoShaderRule] = []:
+@export var rules: Array[T3DAutoShaderRule] = []:
 	set(value):
 		# Array edits from the Inspector can reuse the same container instance.
 		# Always refresh nested-resource ownership when the property setter runs.
@@ -243,7 +243,7 @@ enum MaskChannel {
 @export_storage var baked_region_signatures: Dictionary[String, int] = {}
 @export_storage var baked_version: int = BAKE_VERSION
 
-var _connected_rules: Array[Terrain3DAutoShaderRule] = []
+var _connected_rules: Array[T3DAutoShaderRule] = []
 var _connected_dependencies: Array[Resource] = []
 var _change_batch_depth: int = 0
 var _change_pending: bool = false
@@ -270,11 +270,11 @@ func _notify_changed() -> void:
 
 
 func sync_rule_connections() -> void:
-	for rule: Terrain3DAutoShaderRule in _connected_rules:
+	for rule: T3DAutoShaderRule in _connected_rules:
 		if is_instance_valid(rule) and rule.changed.is_connected(_on_rule_resource_changed):
 			rule.changed.disconnect(_on_rule_resource_changed)
 	_connected_rules.clear()
-	for rule: Terrain3DAutoShaderRule in rules:
+	for rule: T3DAutoShaderRule in rules:
 		if not is_instance_valid(rule):
 			continue
 		rule.sync_subresource_connections()
@@ -299,7 +299,7 @@ func sync_dependency_connections() -> void:
 		_connected_dependencies.append(dependency)
 
 
-func add_rule(rule: Terrain3DAutoShaderRule) -> void:
+func add_rule(rule: T3DAutoShaderRule) -> void:
 	if not is_instance_valid(rule):
 		return
 	rules.append(rule)
@@ -326,7 +326,7 @@ func _on_dependency_resource_changed() -> void:
 func ensure_default_rules() -> void:
 	if not rules.is_empty():
 		return
-	var steep := AutoShaderRule.new() as Terrain3DAutoShaderRule
+	var steep := AutoShaderRule.new() as T3DAutoShaderRule
 	steep.rule_name = "Steep exposed rock"
 	steep.priority = 300
 	steep.use_slope = true
@@ -337,7 +337,7 @@ func ensure_default_rules() -> void:
 	steep.blend = 1.0
 	steep.slope_falloff = 6.0
 
-	var channels := AutoShaderRule.new() as Terrain3DAutoShaderRule
+	var channels := AutoShaderRule.new() as T3DAutoShaderRule
 	channels.rule_name = "Depositional channels"
 	channels.priority = 200
 	channels.use_deposition = true
@@ -348,7 +348,7 @@ func ensure_default_rules() -> void:
 	channels.blend = 0.65
 	channels.deposition_falloff = 0.1
 
-	var ground := AutoShaderRule.new() as Terrain3DAutoShaderRule
+	var ground := AutoShaderRule.new() as T3DAutoShaderRule
 	ground.rule_name = "Ground fallback"
 	ground.priority = 0
 	ground.base_texture = default_base_texture
@@ -391,7 +391,7 @@ func get_profile_signature() -> int:
 		int(water_mask_channel),
 		water_mask_invert,
 	])
-	for rule: Terrain3DAutoShaderRule in rules:
+	for rule: T3DAutoShaderRule in rules:
 		if is_instance_valid(rule):
 			signature = hash([signature, hash(rule.to_bake_dictionary())])
 	return signature
@@ -399,7 +399,7 @@ func get_profile_signature() -> int:
 
 func to_bake_dictionary() -> Dictionary[String, Variant]:
 	var rule_data: Array[Variant] = []
-	for rule: Terrain3DAutoShaderRule in rules:
+	for rule: T3DAutoShaderRule in rules:
 		if is_instance_valid(rule):
 			rule_data.append(rule.to_bake_dictionary())
 	return {
@@ -460,7 +460,7 @@ func clear_bake_signatures(locations: Array[Vector2i] = []) -> void:
 		baked_region_signatures.clear()
 	else:
 		for location: Vector2i in locations:
-			baked_region_signatures.erase(Terrain3DUtil.location_to_filename(location).trim_prefix("terrain3d").trim_suffix(".res"))
+			baked_region_signatures.erase(T3DUtil.location_to_filename(location).trim_prefix("terrain3d").trim_suffix(".res"))
 	_notify_changed()
 
 

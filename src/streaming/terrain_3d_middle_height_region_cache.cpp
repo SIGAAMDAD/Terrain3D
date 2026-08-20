@@ -101,7 +101,7 @@ bool T3DMiddleHeightRegionCache::configure( const T3DMiddleHeightRegionCacheConf
 	const int height_side = MAX( 1, ( m_pRepository->getRegionSize() + divisor - 1 ) / divisor );
 	PackedByteArray default_height_bytes;
 	default_height_bytes.resize( ( int64_t ) ( height_side ) * ( int64_t ) ( height_side ) * 2 );
-	const uint16_t default_height = Terrain3DRegionCodec::encodeHeightU16( 0.0f );
+	const uint16_t default_height = T3DRegionCodec::encodeHeightU16( 0.0f );
 	for ( int index = 0; index < height_side * height_side; ++index ) {
 		std::memcpy( default_height_bytes.ptrw() + ( size_t ) ( index ) * 2u, &default_height, sizeof( default_height ) );
 	}
@@ -155,7 +155,7 @@ Ref<Image> T3DMiddleHeightRegionCache::makeHeightImage( const Vector2i &vLocatio
 	if ( lease.valid() && lease.view().nRegionSize == m_pRepository->getRegionSize() && lease.view().pHeight ) {
 		pActiveHeight = lease.view().pHeight;
 	} else {
-		const Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( vLocation );
+		const T3DRegion *const pRegion = m_pRepository->getRegionPtr( vLocation );
 		const Ref<Image> pHeight = pRegion && !pRegion->isDeleted() ? pRegion->getHeightMap() : Ref<Image>();
 		if ( pHeight.is_null() || pHeight->get_width() != m_pRepository->getRegionSize() ||
 			pHeight->get_height() != m_pRepository->getRegionSize() || pHeight->get_format() != Image::FORMAT_R16 ||

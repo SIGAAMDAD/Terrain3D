@@ -5,7 +5,7 @@ const WORKBENCH_META: StringName = &"terrain3d_region_workbench"
 
 
 func _can_handle(object: Object) -> bool:
-	return object is Terrain3D and _in_workbench()
+	return object is T3DTerrain and _in_workbench()
 
 
 func _parse_begin(_object: Object) -> void:

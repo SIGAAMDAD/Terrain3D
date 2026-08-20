@@ -2,12 +2,12 @@
 # Batch editor UI for baking independent lightmap packages for every Terrain3D
 # region authored in the configured data directory.
 @tool
-class_name Terrain3DRegionLightmapPanel
+class_name T3DRegionLightmapPanel
 extends Window
 
-var plugin: Terrain3DEditorPluginBase
-var baker: Terrain3DRegionLightmapBaker
-var terrain: Terrain3D
+var plugin: T3DEditorPluginBase
+var baker: T3DRegionLightmapBaker
+var terrain: T3DTerrain
 
 var _dataset_summary: Label
 var _settings_summary: Label
@@ -49,7 +49,7 @@ func _ready() -> void:
 	hide()
 
 
-func open(p_terrain: Terrain3D) -> void:
+func open(p_terrain: T3DTerrain) -> void:
 	terrain = p_terrain
 	_refresh_dataset_summary()
 	_refresh_settings_summary()
@@ -185,7 +185,7 @@ func _refresh_dataset_summary() -> void:
 	var locations: Array[Vector2i] = baker.get_data_directory_regions(terrain)
 	var baked_count: int = 0
 	for location: Vector2i in locations:
-		var region: Terrain3DRegion = terrain.data.get_region(location)
+		var region: T3DRegion = terrain.data.get_region(location)
 		if is_instance_valid(region) and is_instance_valid(region.get_lighting()):
 			baked_count += 1
 	var output_directory: String = String(terrain.get("region_lightmap_output_directory")).strip_edges()
@@ -373,7 +373,7 @@ func _on_close_requested() -> void:
 func _sync_active_terrain() -> void:
 	if is_instance_valid(plugin):
 		var active_terrain: Variant = plugin.get("terrain")
-		if active_terrain is Terrain3D and active_terrain != terrain:
+		if active_terrain is T3DTerrain and active_terrain != terrain:
 			terrain = active_terrain
 
 

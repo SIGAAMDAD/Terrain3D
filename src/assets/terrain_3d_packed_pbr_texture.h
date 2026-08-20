@@ -16,8 +16,8 @@
 //   Packed PBR RGBA8: R=normal X, G=normal Y, B=roughness, A=AO
 //   Displacement R8_UNORM: R=height
 // Legacy separate-channel fields remain storage-only so old .tres resources load.
-class Terrain3DPackedPBRTexture : public Resource {
-	GDCLASS( Terrain3DPackedPBRTexture, Resource );
+class T3DPackedPBRTexture : public Resource {
+	GDCLASS( T3DPackedPBRTexture, Resource );
 	CLASS_NAME();
 
 public:
@@ -39,7 +39,7 @@ private:
 	Ref<Texture2D> m_pDisplacementSource;
 	Ref<Texture2D> m_pAoSource;
 	// Retained only so older resources deserialize cleanly. Metallic is now a
-	// per-material scalar on Terrain3DTextureAsset and is not packed per pixel.
+	// per-material scalar on T3DTextureAsset and is not packed per pixel.
 	Ref<Texture2D> m_pMetallicSource;
 	Vector2i m_outputSize = V2I( 512 );
 	bool m_bInvertNormalGreen = false;
@@ -84,8 +84,8 @@ protected:
 	void _validate_property( PropertyInfo &rProperty ) const;
 
 public:
-	Terrain3DPackedPBRTexture( void ) = default;
-	~Terrain3DPackedPBRTexture( void ) = default;
+	T3DPackedPBRTexture( void ) = default;
+	~T3DPackedPBRTexture( void ) = default;
 
 
 	void setPackedTexture( const Ref<Texture2D> &rTexture );
@@ -185,5 +185,5 @@ public:
 	String getChannelLayout( void ) const;
 };
 
-VARIANT_ENUM_CAST( Terrain3DPackedPBRTexture::t3dsourceChannel_t );
+VARIANT_ENUM_CAST( T3DPackedPBRTexture::t3dsourceChannel_t );
 #endif // TERRAIN3D_PACKED_PBR_TEXTURE_H

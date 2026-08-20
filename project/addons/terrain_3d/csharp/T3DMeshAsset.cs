@@ -9,34 +9,34 @@ using Godot.Collections;
 namespace TokisanGames;
 
 [Tool]
-public partial class Terrain3DMeshAsset : Resource
+public partial class T3DMeshAsset : Resource
 {
 
-	private new static readonly StringName NativeName = new StringName("Terrain3DMeshAsset");
+	private new static readonly StringName NativeName = new StringName("T3DMeshAsset");
 
-	[Obsolete("Wrapper types cannot be constructed with constructors (it only instantiate the underlying Terrain3DMeshAsset object), please use the Instantiate() method instead.")]
-	protected Terrain3DMeshAsset() { }
+	[Obsolete("Wrapper types cannot be constructed with constructors (it only instantiate the underlying T3DMeshAsset object), please use the Instantiate() method instead.")]
+	protected T3DMeshAsset() { }
 
 	private static CSharpScript _wrapperScriptAsset;
 
 	/// <summary>
-	/// Try to cast the script on the supplied <paramref name="godotObject"/> to the <see cref="Terrain3DMeshAsset"/> wrapper type,
-	/// if no script has attached to the type, or the script attached to the type does not inherit the <see cref="Terrain3DMeshAsset"/> wrapper type,
-	/// a new instance of the <see cref="Terrain3DMeshAsset"/> wrapper script will get attaches to the <paramref name="godotObject"/>.
+	/// Try to cast the script on the supplied <paramref name="godotObject"/> to the <see cref="T3DMeshAsset"/> wrapper type,
+	/// if no script has attached to the type, or the script attached to the type does not inherit the <see cref="T3DMeshAsset"/> wrapper type,
+	/// a new instance of the <see cref="T3DMeshAsset"/> wrapper script will get attaches to the <paramref name="godotObject"/>.
 	/// </summary>
 	/// <remarks>The developer should only supply the <paramref name="godotObject"/> that represents the correct underlying GDExtension type.</remarks>
 	/// <param name="godotObject">The <paramref name="godotObject"/> that represents the correct underlying GDExtension type.</param>
-	/// <returns>The existing or a new instance of the <see cref="Terrain3DMeshAsset"/> wrapper script attached to the supplied <paramref name="godotObject"/>.</returns>
-	public new static Terrain3DMeshAsset Bind(GodotObject godotObject)
+	/// <returns>The existing or a new instance of the <see cref="T3DMeshAsset"/> wrapper script attached to the supplied <paramref name="godotObject"/>.</returns>
+	public new static T3DMeshAsset Bind(GodotObject godotObject)
 	{
 		if (!IsInstanceValid(godotObject))
 			return null;
 
-		if (godotObject is Terrain3DMeshAsset wrapperScriptInstance)
+		if (godotObject is T3DMeshAsset wrapperScriptInstance)
 			return wrapperScriptInstance;
 
 #if DEBUG
-		var expectedType = typeof(Terrain3DMeshAsset);
+		var expectedType = typeof(T3DMeshAsset);
 		var currentObjectClassName = godotObject.GetClass();
 		if (!ClassDB.IsParentClass(expectedType.Name, currentObjectClassName))
 			throw new InvalidOperationException($"The supplied GodotObject ({currentObjectClassName}) is not the {expectedType.Name} type.");
@@ -44,21 +44,21 @@ public partial class Terrain3DMeshAsset : Resource
 
 		if (_wrapperScriptAsset is null)
 		{
-			var scriptPathAttribute = typeof(Terrain3DMeshAsset).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
+			var scriptPathAttribute = typeof(T3DMeshAsset).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
 			if (scriptPathAttribute is null) throw new UnreachableException();
 			_wrapperScriptAsset = ResourceLoader.Load<CSharpScript>(scriptPathAttribute.Path);
 		}
 
 		var instanceId = godotObject.GetInstanceId();
 		godotObject.SetScript(_wrapperScriptAsset);
-		return (Terrain3DMeshAsset)InstanceFromId(instanceId);
+		return (T3DMeshAsset)InstanceFromId(instanceId);
 	}
 
 	/// <summary>
-	/// Creates an instance of the GDExtension <see cref="Terrain3DMeshAsset"/> type, and attaches a wrapper script instance to it.
+	/// Creates an instance of the GDExtension <see cref="T3DMeshAsset"/> type, and attaches a wrapper script instance to it.
 	/// </summary>
-	/// <returns>The wrapper instance linked to the underlying GDExtension "Terrain3DMeshAsset" type.</returns>
-	public new static Terrain3DMeshAsset Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
+	/// <returns>The wrapper instance linked to the underlying GDExtension "T3DMeshAsset" type.</returns>
+	public new static T3DMeshAsset Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
 
 	public enum GenType
 	{
@@ -103,7 +103,7 @@ public partial class Terrain3DMeshAsset : Resource
 		{
 			if (_idChangedSignal is null)
 			{
-				_idChangedSignalCallable = Callable.From(() => 
+				_idChangedSignalCallable = Callable.From(() =>
 					_idChangedSignal?.Invoke());
 				Connect(GDExtensionSignalName.IdChanged, _idChangedSignalCallable);
 			}
@@ -127,7 +127,7 @@ public partial class Terrain3DMeshAsset : Resource
 		{
 			if (_settingChangedSignal is null)
 			{
-				_settingChangedSignalCallable = Callable.From(() => 
+				_settingChangedSignalCallable = Callable.From(() =>
 					_settingChangedSignal?.Invoke());
 				Connect(GDExtensionSignalName.SettingChanged, _settingChangedSignalCallable);
 			}
@@ -151,7 +151,7 @@ public partial class Terrain3DMeshAsset : Resource
 		{
 			if (_instancerSettingChangedSignal is null)
 			{
-				_instancerSettingChangedSignalCallable = Callable.From(() => 
+				_instancerSettingChangedSignalCallable = Callable.From(() =>
 					_instancerSettingChangedSignal?.Invoke());
 				Connect(GDExtensionSignalName.InstancerSettingChanged, _instancerSettingChangedSignalCallable);
 			}
@@ -175,7 +175,7 @@ public partial class Terrain3DMeshAsset : Resource
 		{
 			if (_instanceCountChangedSignal is null)
 			{
-				_instanceCountChangedSignalCallable = Callable.From(() => 
+				_instanceCountChangedSignalCallable = Callable.From(() =>
 					_instanceCountChangedSignal?.Invoke());
 				Connect(GDExtensionSignalName.InstanceCountChanged, _instanceCountChangedSignalCallable);
 			}
@@ -334,9 +334,9 @@ public partial class Terrain3DMeshAsset : Resource
 		set => Set(GDExtensionPropertyName.SceneFile, value);
 	}
 
-	public new Terrain3DMeshAsset.GenType GeneratedType
+	public new T3DMeshAsset.GenType GeneratedType
 	{
-		get => Get(GDExtensionPropertyName.GeneratedType).As<Terrain3DMeshAsset.GenType>();
+		get => Get(GDExtensionPropertyName.GeneratedType).As<T3DMeshAsset.GenType>();
 		set => Set(GDExtensionPropertyName.GeneratedType, Variant.From(value));
 	}
 
@@ -529,43 +529,43 @@ public partial class Terrain3DMeshAsset : Resource
 		public new static readonly StringName GetInstanceCount = "get_instance_count";
 	}
 
-	public new void Clear() => 
+	public new void Clear() =>
 		Call(GDExtensionMethodName.Clear, []);
 
-	public new void SetHighlighted(bool enabled) => 
+	public new void SetHighlighted(bool enabled) =>
 		Call(GDExtensionMethodName.SetHighlighted, [enabled]);
 
-	public new bool IsHighlighted() => 
+	public new bool IsHighlighted() =>
 		Call(GDExtensionMethodName.IsHighlighted, []).As<bool>();
 
-	public new Color GetHighlightColor() => 
+	public new Color GetHighlightColor() =>
 		Call(GDExtensionMethodName.GetHighlightColor, []).As<Color>();
 
-	public new Texture2D GetThumbnail() => 
+	public new Texture2D GetThumbnail() =>
 		Call(GDExtensionMethodName.GetThumbnail, []).As<Texture2D>();
 
-	public new Mesh GetMesh(long lod = 0) => 
+	public new Mesh GetMesh(long lod = 0) =>
 		Call(GDExtensionMethodName.GetMesh, [lod]).As<Mesh>();
 
-	public new void SetLodRange(long lod, double distance) => 
+	public new void SetLodRange(long lod, double distance) =>
 		Call(GDExtensionMethodName.SetLodRange, [lod, distance]);
 
-	public new double GetLodRange(long lod) => 
+	public new double GetLodRange(long lod) =>
 		Call(GDExtensionMethodName.GetLodRange, [lod]).As<double>();
 
-	public new long GetInstanceCount() => 
+	public new long GetInstanceCount() =>
 		Call(GDExtensionMethodName.GetInstanceCount, []).As<long>();
 
 }
 
 file static class GenTypeExtensions
 {
-public static int SafeAsInt32(this Terrain3DMeshAsset.GenType enumValue) =>
+public static int SafeAsInt32(this T3DMeshAsset.GenType enumValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this Terrain3DMeshAsset.GenType enumValue, int defaultValue) =>
+public static int SafeAsInt32(this T3DMeshAsset.GenType enumValue, int defaultValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this Terrain3DMeshAsset.GenType? enumValue, int defaultValue = 0) =>
+public static int SafeAsInt32(this T3DMeshAsset.GenType? enumValue, int defaultValue = 0) =>
 enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
 }

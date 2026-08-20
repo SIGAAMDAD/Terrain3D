@@ -13,7 +13,7 @@ func is_picking() -> bool:
 	return false
 
 
-func pick(p_global_position: Vector3, p_terrain: Terrain3D) -> void:
+func pick(p_global_position: Vector3, p_terrain: T3DTerrain) -> void:
 	pass
 
 
@@ -21,5 +21,5 @@ func is_ready() -> bool:
 	return false
 
 
-func apply_operation(editor: Terrain3DEditor, p_global_position: Vector3, p_camera_direction: float) -> void:
+func apply_operation(editor: T3DEditor, p_global_position: Vector3, p_camera_direction: float) -> void:
 	pass

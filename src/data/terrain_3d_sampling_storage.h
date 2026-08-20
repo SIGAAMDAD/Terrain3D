@@ -15,7 +15,7 @@
 #include <cstddef>
 #include <cstdint>
 
-class Terrain3DRegion;
+class T3DRegion;
 class T3DRegionRepository;
 
 struct T3DSamplingSource {
@@ -51,12 +51,12 @@ public:
 		return isActiveOwner() ? terrain3dActiveStorageAcquire( this, rLocation ) : T3DActiveMapLease();
 	}
 	bool containsActive( const Vector2i &rLocation ) const;
-	bool syncActiveRegion( const Vector2i &rLocation, const Terrain3DRegion *pRegion );
+	bool syncActiveRegion( const Vector2i &rLocation, const T3DRegion *pRegion );
 	bool syncActiveHeightPage( const Vector2i &rLocation, const uint8_t *pHeightBytes, size_t nHeightBytes );
 	bool replaceActiveHeightPages( int nRegionSize, const uint8_t *const *ppHeightPages, const int *pSlots, size_t nPageCount );
-	bool syncActiveMap( const Vector2i &rLocation, const Terrain3DRegion *pRegion, t3dmapType_t eType,
+	bool syncActiveMap( const Vector2i &rLocation, const T3DRegion *pRegion, t3dmapType_t eType,
 		const Rect2i &rDirtyRect = Rect2i() );
-	bool syncActiveDerived( const Vector2i &rLocation, const Terrain3DRegion *pRegion,
+	bool syncActiveDerived( const Vector2i &rLocation, const T3DRegion *pRegion,
 		const Rect2i &rDirtyRect = Rect2i() );
 	void invalidateActive( const Vector2i &rLocation );
 
@@ -66,15 +66,15 @@ public:
 	uint64_t getActiveReaderMutexCount( void ) const;
 	uint64_t getActivePublicationCount( void ) const;
 
-	T3DResidentMapLease acquireResident( const Vector2i &rLocation, const Terrain3DRegion *pRegion ) const;
+	T3DResidentMapLease acquireResident( const Vector2i &rLocation, const T3DRegion *pRegion ) const;
 	bool configureResidentPool( int nRegionSize, int nRegionMapSize, bool bControlMapsImplicit,
 		int nRequestedCapacity, size_t nBudgetBytes );
 	void clearResidentPool( void );
 	void resetResidentPool( void );
 	void invalidateResident( const Vector2i &rLocation );
-	void syncResidentMap( const Vector2i &rLocation, const Terrain3DRegion *pRegion, t3dmapType_t eType,
+	void syncResidentMap( const Vector2i &rLocation, const T3DRegion *pRegion, t3dmapType_t eType,
 		const Rect2i &rDirtyRect = Rect2i() );
-	void syncResidentDerived( const Vector2i &rLocation, const Terrain3DRegion *pRegion,
+	void syncResidentDerived( const Vector2i &rLocation, const T3DRegion *pRegion,
 		const Rect2i &rDirtyRect = Rect2i() );
 	size_t getResidentReservedBytes( void ) const;
 

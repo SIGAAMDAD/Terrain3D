@@ -1,5 +1,5 @@
 @tool
-class_name Terrain3DLandformPlacements
+class_name T3DLandformPlacements
 extends RefCounted
 
 class PlacementGroup extends RefCounted:
@@ -9,8 +9,8 @@ class PlacementGroup extends RefCounted:
 var groups: Array[PlacementGroup] = []
 
 
-static func from_value(p_value: Variant) -> Terrain3DLandformPlacements:
-	var result := Terrain3DLandformPlacements.new()
+static func from_value(p_value: Variant) -> T3DLandformPlacements:
+	var result := T3DLandformPlacements.new()
 	if not p_value is Dictionary:
 		return result
 	var source: Dictionary[Variant, Variant] = {}

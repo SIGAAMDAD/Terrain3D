@@ -18,7 +18,7 @@
 #include <cstddef>
 #include <cstdint>
 
-class Terrain3DRegion;
+class T3DRegion;
 class T3DRegionPersistence;
 class T3DRegionRepository;
 
@@ -111,13 +111,13 @@ public:
 	void resetFrameStats( void );
 	void poll( bool bWait );
 
-	String getPagePath( const Terrain3DRegion *pRegion, const String &rDataDirectory ) const;
-	uint64_t computeSourceSignature( const Terrain3DRegion *pRegion, const T3DRuntimePageConfig &rConfig ) const;
+	String getPagePath( const T3DRegion *pRegion, const String &rDataDirectory ) const;
+	uint64_t computeSourceSignature( const T3DRegion *pRegion, const T3DRuntimePageConfig &rConfig ) const;
 	bool readSourceSignature( const String &rPagePath, uint64_t &nSignature ) const;
 	uint32_t readMaterialMask( const String &rPagePath ) const;
 	bool removePageForSource( const String &rSourcePath ) const;
 	bool removePage( const String &rPagePath ) const;
-	bool validatePageForRegion( const Terrain3DRegion *pRegion, const T3DRuntimePageConfig &rConfig ) const;
+	bool validatePageForRegion( const T3DRegion *pRegion, const T3DRuntimePageConfig &rConfig ) const;
 	bool loadCpuMapsNow( const Vector2i &rLocation, const T3DRuntimePageConfig &rConfig,
 		Ref<Image> &rHeight, Ref<Image> &rControl, Ref<Image> &rColor, Ref<Image> &rDerived ) const;
 	bool loadCollisionNow( const Vector2i &rLocation, const T3DRuntimePageConfig &rConfig,
@@ -128,7 +128,7 @@ public:
 	bool loadLightingReceiversNow( const Vector2i &rLocation, const T3DRuntimePageConfig &rConfig,
 		PackedByteArray &rReceivers ) const;
 	bool writePage(
-		Terrain3DRegion *pRegion, const T3DRuntimePageConfig &rConfig,
+		T3DRegion *pRegion, const T3DRuntimePageConfig &rConfig,
 		const T3DRuntimePageCookPayload &rPayload, String *pError = nullptr
 	) const;
 
@@ -244,7 +244,7 @@ private:
 	int m_nQueuedCount = 0;
 	uint64_t m_nStreamingGenerationLast = 0u;
 
-	bool loadSourceRegion( const Vector2i &rLocation, Ref<Terrain3DRegion> &rSource ) const;
+	bool loadSourceRegion( const Vector2i &rLocation, Ref<T3DRegion> &rSource ) const;
 	static bool loadSnapshot( PreparedPage &rPage );
 	static void prepareTask( void *pContext, uint32_t iIndex );
 	void consumePreparedIndex( int nIndex );

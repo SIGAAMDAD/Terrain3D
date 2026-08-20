@@ -10,7 +10,7 @@
 
 class T3DActiveHeightResidency;
 class T3DCpuRegionCache;
-class Terrain3DData;
+class T3DData;
 class T3DFarSurfaceAtlasCache;
 class T3DGpuRegionCache;
 class T3DInstanceRegionCache;
@@ -36,9 +36,9 @@ public:
 	);
 
 	void reset( void );
-	void update( Terrain3DData &rData, const T3DResidencyFrameState &rFrame, bool bForce );
-	void resetRuntimeCaches( Terrain3DData &rData );
-	void appendRuntimeProfileSample( const Terrain3DData &rData, t3druntimeProfileSample_t &rSample ) const;
+	void update( T3DData &rData, const T3DResidencyFrameState &rFrame, bool bForce );
+	void resetRuntimeCaches( T3DData &rData );
+	void appendRuntimeProfileSample( const T3DData &rData, t3druntimeProfileSample_t &rSample ) const;
 
 	void setBudgetOverrides( int nGpuUploadLayers, int nCpuLoadLayers, int nInstanceLoadPages );
 	void clearBudgetOverrides( void );

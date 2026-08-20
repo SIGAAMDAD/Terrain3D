@@ -157,11 +157,11 @@ public:
 	}
 };
 #define EASTLAllocatorType T3DEastlAllocator
-static inline T3DEastlAllocator *Terrain3DGetDefaultEastlAllocator( void ) {
+static inline T3DEastlAllocator *T3DGetDefaultEastlAllocator( void ) {
 	static T3DEastlAllocator s_allocator;
 	return &s_allocator;
 }
-#define EASTLAllocatorDefault Terrain3DGetDefaultEastlAllocator
+#define EASTLAllocatorDefault T3DGetDefaultEastlAllocator
 
 #if defined( _MSC_VER )
 #define EA_COMPILER_MSVC 1

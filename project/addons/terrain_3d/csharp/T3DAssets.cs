@@ -9,34 +9,34 @@ using Godot.Collections;
 namespace TokisanGames;
 
 [Tool]
-public partial class Terrain3DAssets : Resource
+public partial class T3DAssets : Resource
 {
 
-	private new static readonly StringName NativeName = new StringName("Terrain3DAssets");
+	private new static readonly StringName NativeName = new StringName("T3DAssets");
 
-	[Obsolete("Wrapper types cannot be constructed with constructors (it only instantiate the underlying Terrain3DAssets object), please use the Instantiate() method instead.")]
-	protected Terrain3DAssets() { }
+	[Obsolete("Wrapper types cannot be constructed with constructors (it only instantiate the underlying T3DAssets object), please use the Instantiate() method instead.")]
+	protected T3DAssets() { }
 
 	private static CSharpScript _wrapperScriptAsset;
 
 	/// <summary>
-	/// Try to cast the script on the supplied <paramref name="godotObject"/> to the <see cref="Terrain3DAssets"/> wrapper type,
-	/// if no script has attached to the type, or the script attached to the type does not inherit the <see cref="Terrain3DAssets"/> wrapper type,
-	/// a new instance of the <see cref="Terrain3DAssets"/> wrapper script will get attaches to the <paramref name="godotObject"/>.
+	/// Try to cast the script on the supplied <paramref name="godotObject"/> to the <see cref="T3DAssets"/> wrapper type,
+	/// if no script has attached to the type, or the script attached to the type does not inherit the <see cref="T3DAssets"/> wrapper type,
+	/// a new instance of the <see cref="T3DAssets"/> wrapper script will get attaches to the <paramref name="godotObject"/>.
 	/// </summary>
 	/// <remarks>The developer should only supply the <paramref name="godotObject"/> that represents the correct underlying GDExtension type.</remarks>
 	/// <param name="godotObject">The <paramref name="godotObject"/> that represents the correct underlying GDExtension type.</param>
-	/// <returns>The existing or a new instance of the <see cref="Terrain3DAssets"/> wrapper script attached to the supplied <paramref name="godotObject"/>.</returns>
-	public new static Terrain3DAssets Bind(GodotObject godotObject)
+	/// <returns>The existing or a new instance of the <see cref="T3DAssets"/> wrapper script attached to the supplied <paramref name="godotObject"/>.</returns>
+	public new static T3DAssets Bind(GodotObject godotObject)
 	{
 		if (!IsInstanceValid(godotObject))
 			return null;
 
-		if (godotObject is Terrain3DAssets wrapperScriptInstance)
+		if (godotObject is T3DAssets wrapperScriptInstance)
 			return wrapperScriptInstance;
 
 #if DEBUG
-		var expectedType = typeof(Terrain3DAssets);
+		var expectedType = typeof(T3DAssets);
 		var currentObjectClassName = godotObject.GetClass();
 		if (!ClassDB.IsParentClass(expectedType.Name, currentObjectClassName))
 			throw new InvalidOperationException($"The supplied GodotObject ({currentObjectClassName}) is not the {expectedType.Name} type.");
@@ -44,21 +44,21 @@ public partial class Terrain3DAssets : Resource
 
 		if (_wrapperScriptAsset is null)
 		{
-			var scriptPathAttribute = typeof(Terrain3DAssets).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
+			var scriptPathAttribute = typeof(T3DAssets).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
 			if (scriptPathAttribute is null) throw new UnreachableException();
 			_wrapperScriptAsset = ResourceLoader.Load<CSharpScript>(scriptPathAttribute.Path);
 		}
 
 		var instanceId = godotObject.GetInstanceId();
 		godotObject.SetScript(_wrapperScriptAsset);
-		return (Terrain3DAssets)InstanceFromId(instanceId);
+		return (T3DAssets)InstanceFromId(instanceId);
 	}
 
 	/// <summary>
-	/// Creates an instance of the GDExtension <see cref="Terrain3DAssets"/> type, and attaches a wrapper script instance to it.
+	/// Creates an instance of the GDExtension <see cref="T3DAssets"/> type, and attaches a wrapper script instance to it.
 	/// </summary>
-	/// <returns>The wrapper instance linked to the underlying GDExtension "Terrain3DAssets" type.</returns>
-	public new static Terrain3DAssets Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
+	/// <returns>The wrapper instance linked to the underlying GDExtension "T3DAssets" type.</returns>
+	public new static T3DAssets Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
 
 	public enum AssetType
 	{
@@ -97,7 +97,7 @@ public partial class Terrain3DAssets : Resource
 		{
 			if (_meshesChangedSignal is null)
 			{
-				_meshesChangedSignalCallable = Callable.From(() => 
+				_meshesChangedSignalCallable = Callable.From(() =>
 					_meshesChangedSignal?.Invoke());
 				Connect(GDExtensionSignalName.MeshesChanged, _meshesChangedSignalCallable);
 			}
@@ -121,7 +121,7 @@ public partial class Terrain3DAssets : Resource
 		{
 			if (_texturesChangedSignal is null)
 			{
-				_texturesChangedSignalCallable = Callable.From(() => 
+				_texturesChangedSignalCallable = Callable.From(() =>
 					_texturesChangedSignal?.Invoke());
 				Connect(GDExtensionSignalName.TexturesChanged, _texturesChangedSignalCallable);
 			}
@@ -277,19 +277,19 @@ public partial class Terrain3DAssets : Resource
 		public new static readonly StringName Save = "save";
 	}
 
-	public new void SetTextureAsset(long id, Terrain3DTextureAsset texture) => 
+	public new void SetTextureAsset(long id, T3DTextureAsset texture) =>
 		Call(GDExtensionMethodName.SetTextureAsset, [id, texture]);
 
-	public new Terrain3DTextureAsset GetTextureAsset(long id) => 
-		Terrain3DTextureAsset.Bind(Call(GDExtensionMethodName.GetTextureAsset, [id]).As<Resource>());
+	public new T3DTextureAsset GetTextureAsset(long id) =>
+		T3DTextureAsset.Bind(Call(GDExtensionMethodName.GetTextureAsset, [id]).As<Resource>());
 
-	public new long GetTextureCount() => 
+	public new long GetTextureCount() =>
 		Call(GDExtensionMethodName.GetTextureCount, []).As<long>();
 
-	public new Rid GetAlbedoArrayRid() => 
+	public new Rid GetAlbedoArrayRid() =>
 		Call(GDExtensionMethodName.GetAlbedoArrayRid, []).As<Rid>();
 
-	public new Rid GetNormalArrayRid() => 
+	public new Rid GetNormalArrayRid() =>
 		Call(GDExtensionMethodName.GetNormalArrayRid, []).As<Rid>();
 
 	public new Rid GetSurfaceArrayRid() =>
@@ -311,79 +311,79 @@ public partial class Terrain3DAssets : Resource
 	public new long GetPackedPbrMipmapCount() =>
 		Call(GDExtensionMethodName.GetPackedPbrMipmapCount, []).As<long>();
 
-	public new Color[] GetTextureColors() => 
+	public new Color[] GetTextureColors() =>
 		Call(GDExtensionMethodName.GetTextureColors, []).As<Color[]>();
 
-	public new float[] GetTextureNormalDepths() => 
+	public new float[] GetTextureNormalDepths() =>
 		Call(GDExtensionMethodName.GetTextureNormalDepths, []).As<float[]>();
 
-	public new float[] GetTextureAoStrengths() => 
+	public new float[] GetTextureAoStrengths() =>
 		Call(GDExtensionMethodName.GetTextureAoStrengths, []).As<float[]>();
 
-	public new float[] GetTextureAoLightAffects() => 
+	public new float[] GetTextureAoLightAffects() =>
 		Call(GDExtensionMethodName.GetTextureAoLightAffects, []).As<float[]>();
 
-	public new float[] GetTextureRoughnessMods() => 
+	public new float[] GetTextureRoughnessMods() =>
 		Call(GDExtensionMethodName.GetTextureRoughnessMods, []).As<float[]>();
 
 	public new float[] GetTextureMetallics() =>
 		Call(GDExtensionMethodName.GetTextureMetallics, []).As<float[]>();
 
-	public new float[] GetTextureUvScales() => 
+	public new float[] GetTextureUvScales() =>
 		Call(GDExtensionMethodName.GetTextureUvScales, []).As<float[]>();
 
-	public new Vector2[] GetTextureDetiles() => 
+	public new Vector2[] GetTextureDetiles() =>
 		Call(GDExtensionMethodName.GetTextureDetiles, []).As<Vector2[]>();
 
-	public new Vector2[] GetTextureDisplacements() => 
+	public new Vector2[] GetTextureDisplacements() =>
 		Call(GDExtensionMethodName.GetTextureDisplacements, []).As<Vector2[]>();
 
-	public new void ClearTextures(bool update = false) => 
+	public new void ClearTextures(bool update = false) =>
 		Call(GDExtensionMethodName.ClearTextures, [update]);
 
-	public new void UpdateTextureList() => 
+	public new void UpdateTextureList() =>
 		Call(GDExtensionMethodName.UpdateTextureList, []);
 
-	public new void SetMeshAsset(long id, Terrain3DMeshAsset mesh) => 
+	public new void SetMeshAsset(long id, T3DMeshAsset mesh) =>
 		Call(GDExtensionMethodName.SetMeshAsset, [id, mesh]);
 
-	public new Terrain3DMeshAsset GetMeshAsset(long id) => 
-		Terrain3DMeshAsset.Bind(Call(GDExtensionMethodName.GetMeshAsset, [id]).As<Resource>());
+	public new T3DMeshAsset GetMeshAsset(long id) =>
+		T3DMeshAsset.Bind(Call(GDExtensionMethodName.GetMeshAsset, [id]).As<Resource>());
 
-	public new long GetMeshCount() => 
+	public new long GetMeshCount() =>
 		Call(GDExtensionMethodName.GetMeshCount, []).As<long>();
 
-	public new void CreateMeshThumbnails(long id = -1, Vector2I size = default, bool force = false) => 
+	public new void CreateMeshThumbnails(long id = -1, Vector2I size = default, bool force = false) =>
 		Call(GDExtensionMethodName.CreateMeshThumbnails, [id, size, force]);
 
-	public new void UpdateMeshList() => 
+	public new void UpdateMeshList() =>
 		Call(GDExtensionMethodName.UpdateMeshList, []);
 
-	public new Error Save(string path = "") => 
+	public new Error Save(string path = "") =>
 		Call(GDExtensionMethodName.Save, [path]).As<Error>();
 
 }
 
 file static class AssetTypeExtensions
 {
-public static int SafeAsInt32(this Terrain3DAssets.AssetType enumValue) =>
+public static int SafeAsInt32(this T3DAssets.AssetType enumValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this Terrain3DAssets.AssetType enumValue, int defaultValue) =>
+public static int SafeAsInt32(this T3DAssets.AssetType enumValue, int defaultValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this Terrain3DAssets.AssetType? enumValue, int defaultValue = 0) =>
+public static int SafeAsInt32(this T3DAssets.AssetType? enumValue, int defaultValue = 0) =>
 enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
 }
 
 file static class TexturePackingModeExtensions
 {
-public static int SafeAsInt32(this Terrain3DAssets.TexturePackingMode enumValue) =>
+public static int SafeAsInt32(this T3DAssets.TexturePackingMode enumValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this Terrain3DAssets.TexturePackingMode enumValue, int defaultValue) =>
+public static int SafeAsInt32(this T3DAssets.TexturePackingMode enumValue, int defaultValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this Terrain3DAssets.TexturePackingMode? enumValue, int defaultValue = 0) =>
+public static int SafeAsInt32(this T3DAssets.TexturePackingMode? enumValue, int defaultValue = 0) =>
 enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
 }

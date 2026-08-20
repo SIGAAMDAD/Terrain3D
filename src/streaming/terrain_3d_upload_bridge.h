@@ -18,13 +18,13 @@ using namespace godot;
 // Optional bridge to the TerrainUploadBridge engine module shipped with the
 // persistent-upload Godot fork. Stock Godot builds simply fall back to the
 // existing RenderingServer/RenderingDevice upload paths.
-namespace Terrain3DUploadBridge {
+namespace T3DUploadBridge {
 
 bool isAvailable( void );
 bool uploadTextureLayer( RID texture, const Ref<Image> &rImage, int nLayer );
 RID createPersistentStorageBuffer( uint32_t nSizeBytes );
 Dictionary getStats( void );
 
-} // namespace Terrain3DUploadBridge
+} // namespace T3DUploadBridge
 
 #endif // TERRAIN3D_UPLOAD_BRIDGE_H

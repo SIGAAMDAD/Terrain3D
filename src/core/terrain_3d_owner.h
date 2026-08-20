@@ -5,7 +5,7 @@
 #ifndef TERRAIN3D_OWNER_H
 #define TERRAIN3D_OWNER_H
 
-namespace Terrain3DOwnership {
+namespace T3DOwnership {
 
 template <typename T>
 inline T *transfer( T *&pOwner, T *pNextOwner ) {
@@ -23,6 +23,6 @@ inline bool release( T *&pOwner, T *pReleasingOwner ) {
 	return true;
 }
 
-} // namespace Terrain3DOwnership
+} // namespace T3DOwnership
 
 #endif // TERRAIN3D_OWNER_H

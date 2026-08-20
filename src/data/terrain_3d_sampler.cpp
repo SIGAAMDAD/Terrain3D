@@ -130,7 +130,7 @@ void T3DSampler::resolveAxis( const int64_t nGrid, int64_t &nRegion, int &nLocal
 }
 
 float T3DSampler::readHeight( const uint8_t *pBytes, const int iIndex ) {
-	return Terrain3DRegionCodec::readHeightBytes( pBytes, iIndex, Image::FORMAT_R16 );
+	return T3DRegionCodec::readHeightBytes( pBytes, iIndex, Image::FORMAT_R16 );
 }
 
 uint32_t T3DSampler::readUint( const uint8_t *pBytes, const int iIndex ) {
@@ -196,7 +196,7 @@ T3DSampler::t3dregionView_t *T3DSampler::getRegionViewUnchecked( const Vector2i 
 		}
 	}
 
-	Terrain3DRegion *const pRegion = m_source.pRepository->getRegionPtr( rLocation );
+	T3DRegion *const pRegion = m_source.pRepository->getRegionPtr( rLocation );
 	if ( !pRegion || pRegion->isDeleted() ) {
 		return nullptr;
 	}
@@ -209,8 +209,8 @@ T3DSampler::t3dregionView_t *T3DSampler::getRegionViewUnchecked( const Vector2i 
 	pReplacement->bLoaded = true;
 	pReplacement->nRegionGeneration = m_source.pStorage->getRegionGeneration( rLocation );
 	pReplacement->nValidatedOperation = m_operation;
-	pReplacement->bControlResolved = !pRegion->hasChannel( Terrain3DRegion::TYPE_CONTROL ) ||
-		pRegion->getMapPtr( Terrain3DRegion::TYPE_CONTROL ) != nullptr;
+	pReplacement->bControlResolved = !pRegion->hasChannel( T3DRegion::TYPE_CONTROL ) ||
+		pRegion->getMapPtr( T3DRegion::TYPE_CONTROL ) != nullptr;
 
 	T3DActiveMapLease active = m_source.pStorage->acquireActive( rLocation );
 	if ( active.valid() ) {
@@ -226,8 +226,8 @@ T3DSampler::t3dregionView_t *T3DSampler::getRegionViewUnchecked( const Vector2i 
 			pReplacement->pDerivedBytes = ( const uint8_t * ) ( view.pDerived );
 			rCold.lease = std::move( pooled );
 		} else {
-		Image *const height = pRegion->getMapPtr( Terrain3DRegion::TYPE_HEIGHT );
-		Image *const control = pRegion->getMapPtr( Terrain3DRegion::TYPE_CONTROL );
+		Image *const height = pRegion->getMapPtr( T3DRegion::TYPE_HEIGHT );
+		Image *const control = pRegion->getMapPtr( T3DRegion::TYPE_CONTROL );
 		if ( !height || height->get_format() != Image::FORMAT_R16 ) {
 			return nullptr;
 		}
@@ -253,7 +253,7 @@ T3DSampler::t3dregionView_t *T3DSampler::getRegionViewUnchecked( const Vector2i 
 	}
 
 	if ( !pReplacement->pControlBytes ) {
-		Image *const control = pRegion->getMapPtr( Terrain3DRegion::TYPE_CONTROL );
+		Image *const control = pRegion->getMapPtr( T3DRegion::TYPE_CONTROL );
 		if ( control ) {
 			if ( control->get_format() != Image::FORMAT_RF ) {
 				return nullptr;
@@ -633,14 +633,14 @@ bool T3DSampler::copyHeightRect(
 			const uint16_t *pHeight = ( const uint16_t * ) ( pView->pHeightBytes ) + index;
 			if ( !bRespectHoles ) {
 				for ( int i = 0; i < run; ++i ) {
-					destination[copied + i] = Terrain3DRegionCodec::decodeHeightU16( pHeight[i] );
+					destination[copied + i] = T3DRegionCodec::decodeHeightU16( pHeight[i] );
 				}
 			} else {
 				for ( int i = 0; i < run; ++i ) {
 					const uint32_t control = readControl( pView, index + i );
 					destination[copied + i] = isHole( control )
 						? NAN
-						: Terrain3DRegionCodec::decodeHeightU16( pHeight[i] );
+						: T3DRegionCodec::decodeHeightU16( pHeight[i] );
 				}
 			}
 			copied += run;
@@ -685,7 +685,7 @@ bool T3DSampler::minimumHeightRect(
 				if ( bRespectHoles && isHole( readControl( pView, index + i ) ) ) {
 					return false;
 				}
-				fMinimum = MIN( fMinimum, Terrain3DRegionCodec::decodeHeightU16( pHeight[i] ) );
+				fMinimum = MIN( fMinimum, T3DRegionCodec::decodeHeightU16( pHeight[i] ) );
 			}
 			copied += run;
 		}

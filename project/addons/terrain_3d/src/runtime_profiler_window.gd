@@ -1,6 +1,6 @@
 # Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 @tool
-extends Terrain3DRuntimeProfilerWindowBase
+extends T3DRuntimeProfilerWindowBase
 
 const SettingMetadata = preload("res://addons/terrain_3d/src/setting_metadata.gd")
 const SettingControlFactory = preload("res://addons/terrain_3d/src/setting_control_factory.gd")
@@ -19,7 +19,7 @@ const RuntimeOverlay = preload("res://addons/terrain_3d/src/runtime_profiler_ove
 const HISTORY_SAMPLES: int = 600
 const DEFAULT_REFRESH_HZ: float = 4.0
 
-var terrain: Terrain3D
+var terrain: T3DTerrain
 var _status: Label
 var _pause: CheckButton
 var _refresh_rate: OptionButton
@@ -65,9 +65,9 @@ var _control_bindings: Dictionary[String, Control] = {}
 var _control_descriptors: Dictionary[String, Dictionary] = {}
 var _refresh_accumulator: float = 0.0
 var _refresh_interval_sec: float = 1.0 / DEFAULT_REFRESH_HZ
-var _last_snapshot: Terrain3DRuntimeValueMap = Terrain3DRuntimeValueMap.new()
-var _history: Array[Terrain3DRuntimeValueMap] = []
-var _grid_snapshot: Terrain3DRuntimeValueMap = Terrain3DRuntimeValueMap.new()
+var _last_snapshot: T3DRuntimeValueMap = T3DRuntimeValueMap.new()
+var _history: Array[T3DRuntimeValueMap] = []
+var _grid_snapshot: T3DRuntimeValueMap = T3DRuntimeValueMap.new()
 var _restore_profiling_on_close: bool = false
 var _updating_controls: bool = false
 var _last_history_sequence: int = -1
@@ -272,7 +272,7 @@ func _create_diagnostics_tree(p_parent: VBoxContainer, p_title: String, p_titles
 	return tree
 
 
-func _update_diagnostics_products(p_snapshot: Terrain3DRuntimeValueMap) -> void:
+func _update_diagnostics_products(p_snapshot: T3DRuntimeValueMap) -> void:
 	_update_memory_budget_product(p_snapshot.map_value("memory"))
 	_update_render_pipeline_product(p_snapshot.map_array("active_render_pipeline"))
 	_update_cache_inventory_product(p_snapshot.map_array("cache_inventory"))
@@ -280,7 +280,7 @@ func _update_diagnostics_products(p_snapshot: Terrain3DRuntimeValueMap) -> void:
 	_update_gpu_information_product(p_snapshot.map_value("gpu_information"))
 
 
-func _update_memory_budget_product(p_memory: Terrain3DRuntimeValueMap) -> void:
+func _update_memory_budget_product(p_memory: T3DRuntimeValueMap) -> void:
 	_diagnostics_memory_tree.clear()
 	var root: TreeItem = _diagnostics_memory_tree.create_item()
 	var rows: Array[Array] = [
@@ -300,10 +300,10 @@ func _update_memory_budget_product(p_memory: Terrain3DRuntimeValueMap) -> void:
 		item.set_text(2, str(row[2]))
 
 
-func _update_render_pipeline_product(p_tiers: Array[Terrain3DRuntimeValueMap]) -> void:
+func _update_render_pipeline_product(p_tiers: Array[T3DRuntimeValueMap]) -> void:
 	_diagnostics_pipeline_tree.clear()
 	var root: TreeItem = _diagnostics_pipeline_tree.create_item()
-	for tier: Terrain3DRuntimeValueMap in p_tiers:
+	for tier: T3DRuntimeValueMap in p_tiers:
 		var item: TreeItem = _diagnostics_pipeline_tree.create_item(root)
 		var range_text: String = "%.0f m+" % tier.float_value("range_start_m") if tier.bool_value("range_unbounded") else "%.0f–%.0f m" % [tier.float_value("range_start_m"), tier.float_value("range_end_m")]
 		item.set_text(0, tier.string_value("tier_name"))
@@ -321,10 +321,10 @@ func _update_render_pipeline_product(p_tiers: Array[Terrain3DRuntimeValueMap]) -
 		item.set_text(12, _format_bytes(tier.float_value("shader_source_bytes")))
 
 
-func _update_cache_inventory_product(p_caches: Array[Terrain3DRuntimeValueMap]) -> void:
+func _update_cache_inventory_product(p_caches: Array[T3DRuntimeValueMap]) -> void:
 	_diagnostics_cache_tree.clear()
 	var root: TreeItem = _diagnostics_cache_tree.create_item()
-	for cache: Terrain3DRuntimeValueMap in p_caches:
+	for cache: T3DRuntimeValueMap in p_caches:
 		var item: TreeItem = _diagnostics_cache_tree.create_item(root)
 		item.set_text(0, _humanize_name(cache.string_value("cache_name")))
 		item.set_text(1, "%d / %d" % [cache.int_value("resident"), cache.int_value("effective_capacity")])
@@ -340,7 +340,7 @@ func _update_cache_inventory_product(p_caches: Array[Terrain3DRuntimeValueMap]) 
 		item.set_text(11, cache.string_value("limiting_constraint", "none"))
 
 
-func _update_cpu_profile_product(p_cpu: Terrain3DRuntimeValueMap) -> void:
+func _update_cpu_profile_product(p_cpu: T3DRuntimeValueMap) -> void:
 	_diagnostics_cpu_tree.clear()
 	var root: TreeItem = _diagnostics_cpu_tree.create_item()
 	var rows: Array[Array] = [
@@ -366,11 +366,11 @@ func _update_cpu_profile_product(p_cpu: Terrain3DRuntimeValueMap) -> void:
 		item.set_text(2, str(row[2]))
 
 
-func _update_gpu_information_product(p_gpu: Terrain3DRuntimeValueMap) -> void:
+func _update_gpu_information_product(p_gpu: T3DRuntimeValueMap) -> void:
 	_diagnostics_gpu_tree.clear()
 	var root: TreeItem = _diagnostics_gpu_tree.create_item()
-	var measured: Terrain3DRuntimeValueMap = p_gpu.map_value("measured")
-	var modeled: Terrain3DRuntimeValueMap = p_gpu.map_value("modeled")
+	var measured: T3DRuntimeValueMap = p_gpu.map_value("measured")
+	var modeled: T3DRuntimeValueMap = p_gpu.map_value("modeled")
 	var engine: Dictionary[String, float] = _get_engine_monitors()
 	var measured_item: TreeItem = _diagnostics_gpu_tree.create_item(root)
 	measured_item.set_text(0, "Measured")
@@ -562,7 +562,7 @@ func _build_settings_tab() -> void:
 
 
 func _add_metadata_control_groups(p_root: VBoxContainer) -> void:
-	var descriptors: Array[Dictionary] = SettingMetadata.descriptors_for_class("Terrain3D", CONTROL_GROUP_PREFIXES)
+	var descriptors: Array[Dictionary] = SettingMetadata.descriptors_for_class("T3DTerrain", CONTROL_GROUP_PREFIXES)
 	for group: Dictionary in SettingMetadata.group_descriptors(descriptors):
 		var supported: Array[Dictionary] = []
 		for descriptor: Dictionary in group.get("settings", []):
@@ -656,7 +656,7 @@ func _build_subsystems_tab() -> void:
 	_tabs.add_child(_subsystem_tree)
 
 
-func set_terrain(p_terrain: Terrain3D) -> void:
+func set_terrain(p_terrain: T3DTerrain) -> void:
 	_remove_runtime_overlay()
 	_restore_previous_profiling_state()
 	terrain = p_terrain
@@ -666,7 +666,7 @@ func set_terrain(p_terrain: Terrain3D) -> void:
 		refresh_now()
 
 
-func open_for_terrain(p_terrain: Terrain3D) -> void:
+func open_for_terrain(p_terrain: T3DTerrain) -> void:
 	if not is_node_ready():
 		call_deferred("open_for_terrain", p_terrain)
 		return
@@ -733,8 +733,8 @@ func refresh_now() -> void:
 	if not is_instance_valid(terrain):
 		_status.text = "No Terrain3D selected"
 		return
-	var terrain_snapshot: Terrain3DRuntimeValueMap = Terrain3DRuntimeValueMap.from_value(terrain.get_runtime_diagnostics(_deep_introspection.button_pressed))
-	var current_frame: Terrain3DRuntimeValueMap = terrain_snapshot.map_value("frame")
+	var terrain_snapshot: T3DRuntimeValueMap = T3DRuntimeValueMap.from_value(terrain.get_runtime_diagnostics(_deep_introspection.button_pressed))
+	var current_frame: T3DRuntimeValueMap = terrain_snapshot.map_value("frame")
 	var current_sequence: int = current_frame.int_value("sequence")
 	if _history_fetch_sequence > current_sequence:
 		_history.clear()
@@ -744,17 +744,17 @@ func refresh_now() -> void:
 		_last_history_sequence = -1
 		_history_fetch_sequence = -1
 		_selected_history_index = -1
-	var new_samples: Array[Terrain3DRuntimeValueMap] = Terrain3DRuntimeValueMap.maps_from_value(terrain.get_runtime_profile_history_since(_history_fetch_sequence, HISTORY_SAMPLES))
-	for sample: Terrain3DRuntimeValueMap in new_samples:
+	var new_samples: Array[T3DRuntimeValueMap] = T3DRuntimeValueMap.maps_from_value(terrain.get_runtime_profile_history_since(_history_fetch_sequence, HISTORY_SAMPLES))
+	for sample: T3DRuntimeValueMap in new_samples:
 		_history.push_back(sample)
 		_history_fetch_sequence = sample.int_value("sequence", _history_fetch_sequence)
 	while _history.size() > HISTORY_SAMPLES:
 		_history.pop_front()
 	if is_instance_valid(terrain.data):
-		_grid_snapshot = Terrain3DRuntimeValueMap.from_value(terrain.data.get_runtime_residency_grid(6))
+		_grid_snapshot = T3DRuntimeValueMap.from_value(terrain.data.get_runtime_residency_grid(6))
 	else:
-		_grid_snapshot = Terrain3DRuntimeValueMap.new()
-	_last_snapshot = Terrain3DRuntimeValueMap.from_value({
+		_grid_snapshot = T3DRuntimeValueMap.new()
+	_last_snapshot = T3DRuntimeValueMap.from_value({
 		"engine": _get_engine_monitors(),
 		"terrain3d": terrain_snapshot.duplicate_values(),
 		"history_summary": {
@@ -775,15 +775,15 @@ func refresh_now() -> void:
 			"prefetch_count": _grid_snapshot.int_value("prefetch_count"),
 		},
 	})
-	var frame: Terrain3DRuntimeValueMap = terrain_snapshot.map_value("frame")
+	var frame: T3DRuntimeValueMap = terrain_snapshot.map_value("frame")
 	var sequence: int = frame.int_value("sequence")
 	_status.text = "Frame %d — Terrain3D %.3f ms — history %d/%d" % [sequence, frame.float_value("physics_total_usec") / 1000.0, _history.size(), HISTORY_SAMPLES]
-	var adaptive_status: Terrain3DRuntimeValueMap = terrain_snapshot.map_value("adaptive_budgets")
+	var adaptive_status: T3DRuntimeValueMap = terrain_snapshot.map_value("adaptive_budgets")
 	if adaptive_status.bool_value("enabled"):
 		_status.text += " — adaptive %s %.3f/%.3f ms" % [adaptive_status.string_value("reason", "steady"),
 			adaptive_status.float_value("last_measured_usec") / 1000.0,
 			adaptive_status.float_value("target_usec") / 1000.0]
-	var phasing_status: Terrain3DRuntimeValueMap = terrain_snapshot.map_value("boundary_phasing")
+	var phasing_status: T3DRuntimeValueMap = terrain_snapshot.map_value("boundary_phasing")
 	if phasing_status.bool_value("node_deferred_last_tick") or phasing_status.bool_value("instancer_deferred_last_tick"):
 		var deferred: PackedStringArray = PackedStringArray()
 		if phasing_status.bool_value("node_deferred_last_tick"):
@@ -841,8 +841,8 @@ func _initialize_metric_rows() -> void:
 		_metric_items[entry[0]] = item
 
 
-func _update_overview(p_snapshot: Terrain3DRuntimeValueMap) -> void:
-	var frame: Terrain3DRuntimeValueMap = p_snapshot.map_value("frame")
+func _update_overview(p_snapshot: T3DRuntimeValueMap) -> void:
+	var frame: T3DRuntimeValueMap = p_snapshot.map_value("frame")
 	for key: String in _metric_items:
 		var item: TreeItem = _metric_items[key]
 		var stats: Dictionary[String, float] = _history_stats(key)
@@ -861,7 +861,7 @@ func _history_stats(p_key: String) -> Dictionary[String, float]:
 	var values: Array[float] = []
 	var total: float = 0.0
 	var peak: float = 0.0
-	for sample: Terrain3DRuntimeValueMap in _history:
+	for sample: T3DRuntimeValueMap in _history:
 		var value: float = sample.float_value(p_key)
 		values.push_back(value)
 		total += value
@@ -871,12 +871,12 @@ func _history_stats(p_key: String) -> Dictionary[String, float]:
 	return {"average": total / float(values.size()), "p95": values[percentile_index], "peak": peak}
 
 
-func _update_problems(p_problems: Array[Terrain3DRuntimeValueMap]) -> void:
+func _update_problems(p_problems: Array[T3DRuntimeValueMap]) -> void:
 	var root: TreeItem = _problems_tree.get_root()
 	if root == null:
 		root = _problems_tree.create_item()
 	var seen: Dictionary[String, bool] = {}
-	for problem: Terrain3DRuntimeValueMap in p_problems:
+	for problem: T3DRuntimeValueMap in p_problems:
 		var code: String = problem.string_value("code", "unknown")
 		seen[code] = true
 		var item: TreeItem = _problem_items.get(code)
@@ -894,12 +894,12 @@ func _update_problems(p_problems: Array[Terrain3DRuntimeValueMap]) -> void:
 			_problem_items.erase(code)
 
 
-func _update_pressure(p_snapshot: Terrain3DRuntimeValueMap) -> void:
-	var gpu: Terrain3DRuntimeValueMap = p_snapshot.map_value("gpu")
-	var cpu: Terrain3DRuntimeValueMap = p_snapshot.map_value("cpu")
-	var instance_cache: Terrain3DRuntimeValueMap = p_snapshot.map_value("instance_cache")
-	var instancer: Terrain3DRuntimeValueMap = p_snapshot.map_value("instancer")
-	var nodes: Terrain3DRuntimeValueMap = p_snapshot.map_value("nodes")
+func _update_pressure(p_snapshot: T3DRuntimeValueMap) -> void:
+	var gpu: T3DRuntimeValueMap = p_snapshot.map_value("gpu")
+	var cpu: T3DRuntimeValueMap = p_snapshot.map_value("cpu")
+	var instance_cache: T3DRuntimeValueMap = p_snapshot.map_value("instance_cache")
+	var instancer: T3DRuntimeValueMap = p_snapshot.map_value("instancer")
+	var nodes: T3DRuntimeValueMap = p_snapshot.map_value("nodes")
 	_set_pressure("gpu_residency", "GPU mapped pages", gpu.float_value("resident"),
 		gpu.float_value("capacity"), "gpu_missing_required")
 	_set_pressure("gpu_upload_pages", "GPU upload pages / tick", gpu.float_value("uploads_last_tick"),
@@ -927,14 +927,14 @@ func _update_pressure(p_snapshot: Terrain3DRuntimeValueMap) -> void:
 		nodes.float_value("effective_unload_region_budget", nodes.float_value("unload_region_budget")), "node_unloads")
 
 
-func _update_efficiency(p_snapshot: Terrain3DRuntimeValueMap) -> void:
+func _update_efficiency(p_snapshot: T3DRuntimeValueMap) -> void:
 	var root: TreeItem = _efficiency_tree.get_root()
 	if root == null:
 		root = _efficiency_tree.create_item()
-	var gpu: Terrain3DRuntimeValueMap = p_snapshot.map_value("gpu")
-	var memory: Terrain3DRuntimeValueMap = p_snapshot.map_value("memory")
-	var aggregate_root: Terrain3DRuntimeValueMap = p_snapshot.map_value("aggregate")
-	var aggregate: Terrain3DRuntimeValueMap = aggregate_root.map_value("gpu")
+	var gpu: T3DRuntimeValueMap = p_snapshot.map_value("gpu")
+	var memory: T3DRuntimeValueMap = p_snapshot.map_value("memory")
+	var aggregate_root: T3DRuntimeValueMap = p_snapshot.map_value("aggregate")
+	var aggregate: T3DRuntimeValueMap = aggregate_root.map_value("gpu")
 	var required_ratio: float = gpu.float_value("required_residency_ratio", 1.0)
 	_add_efficiency_row(root, "Required residency", "%.1f%%" % (required_ratio * 100.0),
 		"%d / %d pages" % [gpu.int_value("required_resident_last_tick"), gpu.int_value("required_last_tick")])
@@ -956,8 +956,8 @@ func _update_efficiency(p_snapshot: Terrain3DRuntimeValueMap) -> void:
 		if distance_m > 0.0 else "No movement", "%.1f m sampled" % distance_m)
 	_add_efficiency_row(root, "Eviction rate", "%.2f / km" % aggregate.float_value("evictions_per_km")
 		if distance_m > 0.0 else "No movement", "%d total evictions" % aggregate.int_value("evictions"))
-	var fixed_memory: Terrain3DRuntimeValueMap = memory.map_value("fixed_unavoidable")
-	var managed_memory: Terrain3DRuntimeValueMap = memory.map_value("managed_resident")
+	var fixed_memory: T3DRuntimeValueMap = memory.map_value("fixed_unavoidable")
+	var managed_memory: T3DRuntimeValueMap = memory.map_value("managed_resident")
 	_add_efficiency_row(root, "Terrain3D tracked memory", _format_bytes(memory.float_value("tracked_current_residency_bytes")),
 		"Tracked current Terrain3D-owned memory; unavailable renderer/driver allocations remain explicit")
 	_add_efficiency_row(root, "Terrain map CPU memory",
@@ -1018,8 +1018,8 @@ func _history_trend(p_key: String) -> String:
 	var first_total: float = 0.0
 	var last_total: float = 0.0
 	for index: int in range(window):
-		var first_sample: Terrain3DRuntimeValueMap = _history[index]
-		var last_sample: Terrain3DRuntimeValueMap = _history[_history.size() - window + index]
+		var first_sample: T3DRuntimeValueMap = _history[index]
+		var last_sample: T3DRuntimeValueMap = _history[_history.size() - window + index]
 		first_total += first_sample.float_value(p_key)
 		last_total += last_sample.float_value(p_key)
 	var first_average: float = first_total / float(window)
@@ -1043,7 +1043,7 @@ func _update_timeline(p_sequence: int) -> void:
 		root = _history_tree.create_item()
 	var seen: Dictionary[int, bool] = {}
 	for index: int in range(_history.size()):
-		var sample: Terrain3DRuntimeValueMap = _history[index]
+		var sample: T3DRuntimeValueMap = _history[index]
 		var sequence: int = sample.int_value("sequence", index)
 		seen[sequence] = true
 		var item: TreeItem = _history_items.get(sequence)
@@ -1091,17 +1091,17 @@ func _render_history_detail(p_index: int) -> void:
 	var root: TreeItem = _history_detail.create_item()
 	if p_index < 0 or p_index >= _history.size():
 		return
-	var sample: Terrain3DRuntimeValueMap = _history[p_index]
+	var sample: T3DRuntimeValueMap = _history[p_index]
 	for key: String in sample.keys():
 		var item: TreeItem = _history_detail.create_item(root)
 		item.set_text(0, _humanize_name(key))
 		item.set_text(1, sample.formatted_value(key))
 
 
-func _update_spatial(p_snapshot: Terrain3DRuntimeValueMap) -> void:
+func _update_spatial(p_snapshot: T3DRuntimeValueMap) -> void:
 	_residency_grid.set_grid(_grid_snapshot)
-	var gpu: Terrain3DRuntimeValueMap = p_snapshot.map_value("gpu")
-	var requests: Array[Terrain3DRuntimeValueMap] = gpu.map_array("pending_requests")
+	var gpu: T3DRuntimeValueMap = p_snapshot.map_value("gpu")
+	var requests: Array[T3DRuntimeValueMap] = gpu.map_array("pending_requests")
 	_priority_summary.text = "Active %d  •  Hot %d  •  Cold %d  •  Unloaded %d  •  Predicted %d\nPending residency requests: %d total, %d shown" % [
 		_grid_snapshot.int_value("active_count"), _grid_snapshot.int_value("hot_count"),
 		_grid_snapshot.int_value("cold_count"), _grid_snapshot.int_value("unloaded_count"),
@@ -1120,7 +1120,7 @@ func _update_spatial(p_snapshot: Terrain3DRuntimeValueMap) -> void:
 			item = _priority_tree.create_item(root)
 			_priority_items[index] = item
 		item.set_visible(true)
-		var request: Terrain3DRuntimeValueMap = requests[index]
+		var request: T3DRuntimeValueMap = requests[index]
 		item.set_text(0, str(request.int_value("priority_rank", index)))
 		item.set_text(1, request.string_value("class", "unknown"))
 		item.set_text(2, str(request.vector2i_value("location")))
@@ -1138,7 +1138,7 @@ func _update_spatial(p_snapshot: Terrain3DRuntimeValueMap) -> void:
 		item.set_text(5, str(request.int_value("motion_alignment")))
 
 
-func _on_residency_cell_selected(p_cell: Terrain3DRuntimeValueMap) -> void:
+func _on_residency_cell_selected(p_cell: T3DRuntimeValueMap) -> void:
 	var lines: PackedStringArray = PackedStringArray()
 	lines.append("[b]Region %s[/b]" % str(p_cell.vector2i_value("location")))
 	for key: String in p_cell.keys():
@@ -1146,13 +1146,13 @@ func _on_residency_cell_selected(p_cell: Terrain3DRuntimeValueMap) -> void:
 	_residency_detail.text = "\n".join(lines)
 
 
-func _update_settings(p_snapshot: Terrain3DRuntimeValueMap) -> void:
+func _update_settings(p_snapshot: T3DRuntimeValueMap) -> void:
 	_updating_controls = true
 	for property_name: String in _control_bindings:
 		SettingControlFactory.sync_control(_control_bindings[property_name], _control_descriptors[property_name], terrain.get(property_name))
 	_updating_controls = false
-	var clipmap: Terrain3DRuntimeValueMap = p_snapshot.map_value("clipmap")
-	var configuration: Terrain3DRuntimeValueMap = p_snapshot.map_value("configuration")
+	var clipmap: T3DRuntimeValueMap = p_snapshot.map_value("clipmap")
+	var configuration: T3DRuntimeValueMap = p_snapshot.map_value("configuration")
 	_range_summary.text = "Near %.0f m (%d rings)  •  Detail %.0f m (%d rings, %d/%d pages)  •  Middle %.0f m (%d rings)" % [
 		clipmap.float_value("near_range_end_m"), clipmap.int_value("near_lods"),
 		float(terrain.gpu_region_detail_range_end_m), configuration.int_value("gpu_detail_lods"),
@@ -1165,8 +1165,8 @@ func _update_settings(p_snapshot: Terrain3DRuntimeValueMap) -> void:
 	_update_profile_diff()
 
 
-func _update_adaptive_settings(p_snapshot: Terrain3DRuntimeValueMap) -> void:
-	var adaptive: Terrain3DRuntimeValueMap = p_snapshot.map_value("adaptive_budgets")
+func _update_adaptive_settings(p_snapshot: T3DRuntimeValueMap) -> void:
+	var adaptive: T3DRuntimeValueMap = p_snapshot.map_value("adaptive_budgets")
 	var enabled: bool = adaptive.bool_value("enabled")
 	var measured_ms: float = adaptive.float_value("last_measured_usec") / 1000.0
 	var target_ms: float = adaptive.float_value("target_usec") / 1000.0
@@ -1179,10 +1179,10 @@ func _update_adaptive_settings(p_snapshot: Terrain3DRuntimeValueMap) -> void:
 	var root: TreeItem = _adaptive_tree.get_root()
 	if root == null:
 		root = _adaptive_tree.create_item()
-	var effective: Terrain3DRuntimeValueMap = adaptive.map_value("effective")
-	var minimum: Terrain3DRuntimeValueMap = adaptive.map_value("minimum")
-	var maximum: Terrain3DRuntimeValueMap = adaptive.map_value("configured_maximum")
-	var limited: Terrain3DRuntimeValueMap = adaptive.map_value("limited")
+	var effective: T3DRuntimeValueMap = adaptive.map_value("effective")
+	var minimum: T3DRuntimeValueMap = adaptive.map_value("minimum")
+	var maximum: T3DRuntimeValueMap = adaptive.map_value("configured_maximum")
+	var limited: T3DRuntimeValueMap = adaptive.map_value("limited")
 	var adaptive_rows: Array[PackedStringArray] = [
 		PackedStringArray(["gpu_pages", "GPU page publication", "gpu"]),
 		PackedStringArray(["cpu_pages", "CPU page loads", "cpu"]),
@@ -1217,8 +1217,8 @@ func _update_adaptive_settings(p_snapshot: Terrain3DRuntimeValueMap) -> void:
 			item.set_text(4, "adaptive")
 
 
-func _update_boundary_phasing(p_snapshot: Terrain3DRuntimeValueMap) -> void:
-	var phasing: Terrain3DRuntimeValueMap = p_snapshot.map_value("boundary_phasing")
+func _update_boundary_phasing(p_snapshot: T3DRuntimeValueMap) -> void:
+	var phasing: T3DRuntimeValueMap = p_snapshot.map_value("boundary_phasing")
 	var deferred: PackedStringArray = PackedStringArray()
 	if phasing.bool_value("node_deferred_last_tick"):
 		deferred.append("nodes")
@@ -1232,13 +1232,13 @@ func _update_boundary_phasing(p_snapshot: Terrain3DRuntimeValueMap) -> void:
 	]
 
 
-func _update_validation(p_snapshot: Terrain3DRuntimeValueMap) -> void:
-	var configuration: Terrain3DRuntimeValueMap = p_snapshot.map_value("configuration")
-	var gpu: Terrain3DRuntimeValueMap = p_snapshot.map_value("gpu")
-	var cpu: Terrain3DRuntimeValueMap = p_snapshot.map_value("cpu")
+func _update_validation(p_snapshot: T3DRuntimeValueMap) -> void:
+	var configuration: T3DRuntimeValueMap = p_snapshot.map_value("configuration")
+	var gpu: T3DRuntimeValueMap = p_snapshot.map_value("gpu")
+	var cpu: T3DRuntimeValueMap = p_snapshot.map_value("cpu")
 	var lines: PackedStringArray = PackedStringArray()
 	if terrain.get_performance_profile_status_name() != "Custom" and \
-			terrain.editor_execution_mode == Terrain3D.EDITOR_EXECUTION_AUTHORING:
+			terrain.editor_execution_mode == T3DTerrain.EDITOR_EXECUTION_AUTHORING:
 		lines.append("[color=yellow]The selected performance profile is in Authoring mode: editor-safe Near rendering and pinned object/source data are active. Switch Editor Execution Mode to Runtime Profile for the shipping Near/Middle/Far and streaming comparison.[/color]")
 	if not configuration.bool_value("gpu_detail_range_valid", true):
 		lines.append("[color=red]Detailed footprint exceeds mapped GPU capacity.[/color]")
@@ -1250,16 +1250,16 @@ func _update_validation(p_snapshot: Terrain3DRuntimeValueMap) -> void:
 		lines.append("[color=orange]Cooked pages missed this tick; runtime fallback was used.[/color]")
 	if gpu.int_value("far_height_dirty_regions") + gpu.int_value("far_color_dirty_regions") > 0:
 		lines.append("Far-atlas patches remain dirty.")
-	var adaptive: Terrain3DRuntimeValueMap = p_snapshot.map_value("adaptive_budgets")
+	var adaptive: T3DRuntimeValueMap = p_snapshot.map_value("adaptive_budgets")
 	if adaptive.bool_value("enabled"):
-		var requested_minimum: Terrain3DRuntimeValueMap = adaptive.map_value("requested_minimum")
-		var effective_minimum: Terrain3DRuntimeValueMap = adaptive.map_value("minimum")
+		var requested_minimum: T3DRuntimeValueMap = adaptive.map_value("requested_minimum")
+		var effective_minimum: T3DRuntimeValueMap = adaptive.map_value("minimum")
 		for key: String in requested_minimum.keys():
 			if requested_minimum.int_value(key) != effective_minimum.int_value(key):
 				lines.append("[color=orange]%s minimum is clamped to its configured maximum.[/color]" % _humanize_name(key))
 		if int(terrain.instancer_update_cell_budget) == 0:
 			lines.append("Instancer ceiling 0 means unlimited in fixed mode; adaptive mode uses 65536 as its finite ceiling.")
-		var effective: Terrain3DRuntimeValueMap = adaptive.map_value("effective")
+		var effective: T3DRuntimeValueMap = adaptive.map_value("effective")
 		var all_at_minimum: bool = true
 		for key: String in effective.keys():
 			if effective.int_value(key) > effective_minimum.int_value(key):
@@ -1307,7 +1307,7 @@ func _clamp_detail_range() -> void:
 	refresh_now()
 
 
-func _evaluate_auto_freeze(p_frame: Terrain3DRuntimeValueMap) -> void:
+func _evaluate_auto_freeze(p_frame: T3DRuntimeValueMap) -> void:
 	if not _auto_freeze.button_pressed or _pause.button_pressed:
 		return
 	var sequence: int = p_frame.int_value("sequence")
@@ -1330,7 +1330,7 @@ func _evaluate_auto_freeze(p_frame: Terrain3DRuntimeValueMap) -> void:
 		_freeze_target_sequence = -1
 
 
-func _update_raw_tree(p_snapshot: Terrain3DRuntimeValueMap) -> void:
+func _update_raw_tree(p_snapshot: T3DRuntimeValueMap) -> void:
 	var root: TreeItem = _raw_tree.get_root()
 	if root == null:
 		root = _raw_tree.create_item()
@@ -1342,7 +1342,7 @@ func _update_raw_tree(p_snapshot: Terrain3DRuntimeValueMap) -> void:
 			item.set_text(1, "stale")
 
 
-func _update_subsystems(p_snapshot: Terrain3DRuntimeValueMap) -> void:
+func _update_subsystems(p_snapshot: T3DRuntimeValueMap) -> void:
 	var root: TreeItem = _subsystem_tree.get_root()
 	if root == null:
 		root = _subsystem_tree.create_item()
@@ -1372,14 +1372,14 @@ func _update_subsystem_value(p_parent: TreeItem, p_path: String, p_name: String,
 	item.set_text(0, _humanize_name(p_name))
 	item.set_tooltip_text(0, p_path)
 	if p_value is Dictionary:
-		var map: Terrain3DRuntimeValueMap = Terrain3DRuntimeValueMap.from_value(p_value)
+		var map: T3DRuntimeValueMap = T3DRuntimeValueMap.from_value(p_value)
 		var keys: PackedStringArray = map.keys()
 		keys.sort()
 		item.set_text(1, "%d entries" % keys.size())
 		for key: String in keys:
 			_update_subsystem_value(item, "%s.%s" % [p_path, key], key, map.raw_value(key), p_seen)
 	else:
-		item.set_text(1, Terrain3DRuntimeValueMap.format_external_value(p_name, p_value))
+		item.set_text(1, T3DRuntimeValueMap.format_external_value(p_name, p_value))
 		item.set_text(2, str(p_value))
 
 
@@ -1392,7 +1392,7 @@ func _update_raw_value(p_parent: TreeItem, p_path: String, p_name: String, p_val
 	item.set_text(0, _humanize_name(p_name))
 	item.set_tooltip_text(0, p_path)
 	if p_value is Dictionary:
-		var map: Terrain3DRuntimeValueMap = Terrain3DRuntimeValueMap.from_value(p_value)
+		var map: T3DRuntimeValueMap = T3DRuntimeValueMap.from_value(p_value)
 		var keys: PackedStringArray = map.keys()
 		keys.sort()
 		item.set_text(1, "%d entries" % keys.size())
@@ -1403,7 +1403,7 @@ func _update_raw_value(p_parent: TreeItem, p_path: String, p_name: String, p_val
 		for index: int in range(p_value.size()):
 			_update_raw_value(item, "%s[%d]" % [p_path, index], "[%d]" % index, p_value[index], p_seen)
 	else:
-		item.set_text(1, Terrain3DRuntimeValueMap.format_external_value(p_name, p_value))
+		item.set_text(1, T3DRuntimeValueMap.format_external_value(p_name, p_value))
 		item.set_text(2, str(p_value))
 
 
@@ -1465,7 +1465,7 @@ func _write_snapshot(p_path: String) -> void:
 		return
 	file.store_string(JSON.stringify({
 		"snapshot": _last_snapshot.duplicate_values(),
-		"history": Terrain3DRuntimeValueMap.values_from_maps(_history),
+		"history": T3DRuntimeValueMap.values_from_maps(_history),
 		"residency_grid": _grid_snapshot.duplicate_values(),
 	}, "\t"))
 	file.close()

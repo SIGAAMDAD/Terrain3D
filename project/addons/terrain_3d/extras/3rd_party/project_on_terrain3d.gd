@@ -82,7 +82,7 @@
 		#return
 #
 	#if not _terrain.data:
-		#warning += """Terrain3DData is not initialized"""
+		#warning += """T3DData is not initialized"""
 		#return
 #
 	## Review transforms

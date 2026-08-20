@@ -11,7 +11,7 @@
 
 
 @tool
-extends Terrain3D
+extends T3DTerrain
 
 
 @export var offset: Vector2i
@@ -33,12 +33,12 @@ func start_rename() -> void:
 	var files: PackedStringArray = dir.get_files()
 	for file_name: String in files:
 		if file_name.match("terrain3d*.res") and not dir.current_is_dir():
-			var region_loc: Vector2i = Terrain3DUtil.filename_to_location(file_name)
+			var region_loc: Vector2i = T3DUtil.filename_to_location(file_name)
 			var new_loc: Vector2i = region_loc + offset
 			if new_loc.x < -16 or new_loc.x > 15 or new_loc.y < -16 or new_loc.y > 15:
 				push_error("New location %.0v out of bounds for region %.0v. Aborting" % [ new_loc, region_loc ])
 				return
-			var new_name: String = "tmp_" + Terrain3DUtil.location_to_filename(new_loc)
+			var new_name: String = "tmp_" + T3DUtil.location_to_filename(new_loc)
 			dir.rename(file_name, new_name)
 			affected_files.push_back(new_name)
 			print("File: %s renamed to: %s" % [ file_name, new_name ])

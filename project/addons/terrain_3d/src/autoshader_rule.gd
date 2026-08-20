@@ -1,7 +1,7 @@
 # Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 # One ordered editor-time Terrain3D material classification rule.
 @tool
-class_name Terrain3DAutoShaderRule
+class_name T3DAutoShaderRule
 extends Resource
 
 

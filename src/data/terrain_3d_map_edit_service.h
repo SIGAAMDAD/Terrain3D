@@ -31,7 +31,7 @@ struct T3DDerivedMapUpdate {
 // retained scratch so synchronous Godot signals can safely trigger nested edits.
 // recycleMutation() returns their capacity to the service after dispatch.
 struct T3DMapMutation {
-	t3dmapType_t mapType = Terrain3DRegion::TYPE_MAX;
+	t3dmapType_t mapType = T3DRegion::TYPE_MAX;
 	AABB editedArea;
 	Vector2 editedHeightRange = V2_ZERO;
 	eastl::vector<Vector2i> changedLocations;
@@ -39,7 +39,7 @@ struct T3DMapMutation {
 	eastl::vector<T3DDerivedMapUpdate> derivedUpdates;
 
 	bool valid( void ) const {
-		return mapType >= Terrain3DRegion::TYPE_HEIGHT && mapType < Terrain3DRegion::TYPE_MAX && !changedLocations.empty();
+		return mapType >= T3DRegion::TYPE_HEIGHT && mapType < T3DRegion::TYPE_MAX && !changedLocations.empty();
 	}
 };
 
@@ -49,7 +49,7 @@ struct T3DMapMutation {
 class T3DMapEditService {
 public:
 	using EnsureRegionResidentFn = bool ( * )( void *pContext, const Vector2i &rLocation );
-	using AcquireEditableRegionFn = Error ( * )( void *pContext, const Vector2i &rLocation, Ref<Terrain3DRegion> &rRegion );
+	using AcquireEditableRegionFn = Error ( * )( void *pContext, const Vector2i &rLocation, Ref<T3DRegion> &rRegion );
 
 	T3DMapEditService( T3DRegionRepository *pRepository, T3DSamplingStorage *pSamplingStorage );
 	T3DMapEditService( const T3DMapEditService & ) = delete;
@@ -93,8 +93,8 @@ public:
 	);
 
 	void copyRegionMaps(
-		const Terrain3DRegion *pSourceRegion, const Rect2i &rSourceRect,
-		const Rect2i &rDestinationRect, Terrain3DRegion *pDestinationRegion
+		const T3DRegion *pSourceRegion, const Rect2i &rSourceRect,
+		const Rect2i &rDestinationRect, T3DRegion *pDestinationRegion
 	) const;
 
 	Error importImages(

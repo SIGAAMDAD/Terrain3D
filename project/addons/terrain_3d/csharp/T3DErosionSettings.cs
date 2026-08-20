@@ -8,38 +8,38 @@ using Godot;
 namespace TokisanGames;
 
 [Tool]
-public partial class Terrain3DErosionSettings : Resource
+public partial class T3DErosionSettings : Resource
 {
-    private new static readonly StringName NativeName = new StringName("Terrain3DErosionSettings");
+    private new static readonly StringName NativeName = new StringName("T3DErosionSettings");
 
     [Obsolete("Wrapper types cannot be constructed with constructors; use Instantiate() instead.")]
-    protected Terrain3DErosionSettings() { }
+    protected T3DErosionSettings() { }
 
     private static CSharpScript _wrapperScriptAsset;
 
-    public new static Terrain3DErosionSettings Bind(GodotObject godotObject)
+    public new static T3DErosionSettings Bind(GodotObject godotObject)
     {
         if (!IsInstanceValid(godotObject))
             return null;
-        if (godotObject is Terrain3DErosionSettings wrapperScriptInstance)
+        if (godotObject is T3DErosionSettings wrapperScriptInstance)
             return wrapperScriptInstance;
 #if DEBUG
         var currentObjectClassName = godotObject.GetClass();
-        if (!ClassDB.IsParentClass(nameof(Terrain3DErosionSettings), currentObjectClassName))
-            throw new InvalidOperationException($"The supplied GodotObject ({currentObjectClassName}) is not Terrain3DErosionSettings.");
+        if (!ClassDB.IsParentClass(nameof(T3DErosionSettings), currentObjectClassName))
+            throw new InvalidOperationException($"The supplied GodotObject ({currentObjectClassName}) is not T3DErosionSettings.");
 #endif
         if (_wrapperScriptAsset is null)
         {
-            var scriptPathAttribute = typeof(Terrain3DErosionSettings).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
+            var scriptPathAttribute = typeof(T3DErosionSettings).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
             if (scriptPathAttribute is null) throw new UnreachableException();
             _wrapperScriptAsset = ResourceLoader.Load<CSharpScript>(scriptPathAttribute.Path);
         }
         var instanceId = godotObject.GetInstanceId();
         godotObject.SetScript(_wrapperScriptAsset);
-        return (Terrain3DErosionSettings)InstanceFromId(instanceId);
+        return (T3DErosionSettings)InstanceFromId(instanceId);
     }
 
-    public new static Terrain3DErosionSettings Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
+    public new static T3DErosionSettings Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
 
     public enum BoundaryMode
     {

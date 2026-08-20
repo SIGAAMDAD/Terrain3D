@@ -40,13 +40,13 @@
 #include "rendering/terrain_3d_mesher.h"
 #include "streaming/terrain_3d_streaming_policy.h"
 
-class Terrain3DEditor;
-class Terrain3DNodeStreamer;
-class Terrain3DLightmapStreamer;
-class Terrain3DHLODStreamer;
+class T3DEditor;
+class T3DNodeStreamer;
+class T3DLightmapStreamer;
+class T3DHLODStreamer;
 
-class Terrain3D : public Node3D {
-	GDCLASS( Terrain3D, Node3D );
+class T3DTerrain : public Node3D {
+	GDCLASS( T3DTerrain, Node3D );
 	CLASS_NAME();
 
 public: // Constants
@@ -137,15 +137,15 @@ private:
 	bool m_bRuntimeMemoryReady = false;
 
 	// Object references
-	Terrain3DData *m_pData = nullptr;
-	Ref<Terrain3DAssets> m_pAssets;
+	T3DData *m_pData = nullptr;
+	Ref<T3DAssets> m_pAssets;
 	Ref<Resource> m_pAutoShaderProfile;
-	Terrain3DCollision *m_pCollision = nullptr;
-	Terrain3DInstancer *m_pInstancer = nullptr;
-	Terrain3DNodeStreamer *m_pNodeStreamer = nullptr;
-	Terrain3DLightmapStreamer *m_pLightmapStreamer = nullptr;
-	Terrain3DHLODStreamer *m_pHlodStreamer = nullptr;
-	Terrain3DEditor *m_pEditor = nullptr;
+	T3DCollision *m_pCollision = nullptr;
+	T3DInstancer *m_pInstancer = nullptr;
+	T3DNodeStreamer *m_pNodeStreamer = nullptr;
+	T3DLightmapStreamer *m_pLightmapStreamer = nullptr;
+	T3DHLODStreamer *m_pHlodStreamer = nullptr;
+	T3DEditor *m_pEditor = nullptr;
 	Object *m_pEditorPlugin = nullptr;
 
 	// Regions
@@ -332,7 +332,7 @@ private:
 
 	// Terrain Mesh
 	T3DMesher *m_pTerrainMesher = nullptr;
-	Ref<Terrain3DMaterial> m_pMaterial;
+	Ref<T3DMaterial> m_pMaterial;
 	int m_nMeshLods = 7;
 	int m_tessellationLevel = 0;
 	int m_nMeshSize = 48;
@@ -448,8 +448,8 @@ private:
 	int getTotalClipmapLevels( void ) const;
 	int rangeToLodCount( real_t fRangeM ) const;
 	real_t lodCountToRange( int nLodCount ) const;
-	void connectResourceSignals( const Ref<Terrain3DAssets> &rAssets, const Ref<Terrain3DMaterial> &rMaterial );
-	void disconnectResourceSignals( const Ref<Terrain3DAssets> &rAssets, const Ref<Terrain3DMaterial> &rMaterial );
+	void connectResourceSignals( const Ref<T3DAssets> &rAssets, const Ref<T3DMaterial> &rMaterial );
+	void disconnectResourceSignals( const Ref<T3DAssets> &rAssets, const Ref<T3DMaterial> &rMaterial );
 	void connectAutoShaderProfileSignal( const Ref<Resource> &rProfile );
 	void disconnectAutoShaderProfileSignal( const Ref<Resource> &rProfile );
 	void applyAutoShaderProfileMode( void );
@@ -593,19 +593,19 @@ private:
 		void getSample( const int32_t iX, const int32_t iZ, uint32_t &nControl, real_t &fHeight ) const;
 		bool getMinimumRect( int32_t iX, int32_t iZ, int32_t nWidth, int32_t nHeight, real_t &fHeight ) const;
 		Vector3 getMeshVertex(
-			const int32_t nLod, const Terrain3DData::t3dheightFilter_t filter, const int32_t iX,
+			const int32_t nLod, const T3DData::t3dheightFilter_t filter, const int32_t iX,
 			const int32_t iZ, uint32_t &nControl
 		) const;
 	} t3dbakeSnapshot_t;
 
 	typedef struct t3dbakeTaskContext_s {
-		const Terrain3D *pTerrain = nullptr;
+		const T3DTerrain *pTerrain = nullptr;
 		const t3dbakeSnapshot_t *pSnapshot = nullptr;
 		const eastl::vector<t3dbakeRowTask_t> *pTasks = nullptr;
 		eastl::vector<t3dtriangleBuffer_t> *pBuffers = nullptr;
 		int32_t step = 1;
 		int32_t lod = 0;
-		Terrain3DData::t3dheightFilter_t filter = Terrain3DData::HEIGHT_FILTER_NEAREST;
+		T3DData::t3dheightFilter_t filter = T3DData::HEIGHT_FILTER_NEAREST;
 		bool bGenerateUvs = false;
 		bool bRequireNav = false;
 	} t3dbakeTaskContext_t;
@@ -613,19 +613,19 @@ private:
 	static bool bakeRegionSnapshotLess( const t3dbakeRegionSnapshot_t &rA, const t3dbakeRegionSnapshot_t &rB );
 	static void runBakeTaskRange( void *pContext, size_t nBegin, size_t nEnd );
 	Vector3 getTriangleVertex(
-		const t3dbakeSnapshot_t *pSnapshot, int32_t nLod, Terrain3DData::t3dheightFilter_t filter,
+		const t3dbakeSnapshot_t *pSnapshot, int32_t nLod, T3DData::t3dheightFilter_t filter,
 		int32_t iX, int32_t iZ, const Vector3 &rPosition, uint32_t &nControl
 	) const;
 
 	t3dbakeSnapshot_t createBakeSnapshot( void ) const;
 	void generateTriangles(
 		PackedVector3Array &arrVertices, PackedVector2Array *pUvs, const int32_t nLod,
-		const Terrain3DData::t3dheightFilter_t filter, const bool require_nav,
+		const T3DData::t3dheightFilter_t filter, const bool require_nav,
 		const AABB &rGlobalAabb
 	) const;
 	void generateTrianglePair(
 		t3dtriangleBuffer_t &rBuffer, const bool bGenerateUvs, const int32_t nLod,
-		const Terrain3DData::t3dheightFilter_t filter, const bool require_nav, const int32_t x,
+		const T3DData::t3dheightFilter_t filter, const bool require_nav, const int32_t x,
 		const int32_t z, const t3dbakeSnapshot_t *pSnapshot = nullptr
 	) const;
 
@@ -634,8 +634,8 @@ public:
 	static constexpr const char *NATIVE_BUILD_ID = "a2.8.6-memory-zone";
 	static t3ddebugLevel_t s_debugLevel; // Initialized in terrain_3d.cpp
 
-	Terrain3D( void );
-	~Terrain3D( void );
+	T3DTerrain( void );
+	~T3DTerrain( void );
 	bool isInsideWorld( void ) const {
 		return m_bIsInsideWorld;
 	}
@@ -664,32 +664,32 @@ public:
 	bool cookRuntimeClipmapGeometryPack( void ) const;
 
 	// Object references
-	Terrain3DData *getData( void ) const {
+	T3DData *getData( void ) const {
 		return m_pData;
 	}
-	void setAssets( const Ref<Terrain3DAssets> &rAssets );
-	Ref<Terrain3DAssets> getAssets( void ) const {
+	void setAssets( const Ref<T3DAssets> &rAssets );
+	Ref<T3DAssets> getAssets( void ) const {
 		return m_pAssets;
 	}
 	void setAutoShaderProfile( const Ref<Resource> &rProfile );
 	Ref<Resource> getAutoShaderProfile( void ) const {
 		return m_pAutoShaderProfile;
 	}
-	Terrain3DCollision *getCollision( void ) const {
+	T3DCollision *getCollision( void ) const {
 		return m_pCollision;
 	}
-	Terrain3DInstancer *getInstancer( void ) const {
+	T3DInstancer *getInstancer( void ) const {
 		return m_pInstancer;
 	}
-	Terrain3DNodeStreamer *getNodeStreamer( void ) const {
+	T3DNodeStreamer *getNodeStreamer( void ) const {
 		return m_pNodeStreamer;
 	}
-	Terrain3DLightmapStreamer *getLightmapStreamer( void ) const {
+	T3DLightmapStreamer *getLightmapStreamer( void ) const {
 		return m_pLightmapStreamer;
 	}
-	Terrain3DHLODStreamer *getHlodStreamer( void ) const { return m_pHlodStreamer; }
-	void setEditor( Terrain3DEditor *pEditor );
-	Terrain3DEditor *getEditor( void ) const {
+	T3DHLODStreamer *getHlodStreamer( void ) const { return m_pHlodStreamer; }
+	void setEditor( T3DEditor *pEditor );
+	T3DEditor *getEditor( void ) const {
 		return m_pEditor;
 	}
 	void setPlugin( Object *pPlugin );
@@ -706,10 +706,10 @@ public:
 		if ( m_pData && m_pData->isInitializedFor( this ) ) {
 			m_pData->changeRegionSize( size );
 		} else {
-			// Property deserialization can create Terrain3DData before the node enters
-			// the tree/world and before Terrain3DData::initialize() assigns its owner.
+			// Property deserialization can create T3DData before the node enters
+			// the tree/world and before T3DData::initialize() assigns its owner.
 			// At that stage there is no repository to migrate; retain the requested
-			// owner setting and let Terrain3DData::initialize() reconcile storage later.
+			// owner setting and let T3DData::initialize() reconcile storage later.
 			setRegionSize( size );
 		}
 	}
@@ -829,10 +829,10 @@ public:
 	void forceMemoryBudgetRebalance( void );
 	Dictionary getRuntimeDiagnostics( bool bDeep = false ) const;
 	Dictionary getRuntimeParitySnapshot( void ) const;
-	Ref<Terrain3DMemoryStats> getMemoryStatsSnapshot( void ) const;
-	TypedArray<Terrain3DShaderTierStats> getShaderTierStatsSnapshot( void ) const;
-	TypedArray<Terrain3DCacheStats> getCacheStatsSnapshot( bool bDeep = false ) const;
-	Ref<Terrain3DFrameStats> getFrameStatsSnapshot( void ) const;
+	Ref<T3DMemoryStats> getMemoryStatsSnapshot( void ) const;
+	TypedArray<T3DShaderTierStats> getShaderTierStatsSnapshot( void ) const;
+	TypedArray<T3DCacheStats> getCacheStatsSnapshot( bool bDeep = false ) const;
+	Ref<T3DFrameStats> getFrameStatsSnapshot( void ) const;
 	Array getRuntimeProfileHistory( int nMaxSamples = 600 ) const;
 	Array getRuntimeProfileHistorySince( int64_t nAfterSequence, int nMaxSamples = 600 ) const;
 	void resetRuntimeDiagnostics( void );
@@ -1158,8 +1158,8 @@ public:
 	T3DMesher *getMesher( void ) const {
 		return m_pTerrainMesher;
 	}
-	void setMaterial( const Ref<Terrain3DMaterial> &rMaterial );
-	Ref<Terrain3DMaterial> getMaterial( void ) const {
+	void setMaterial( const Ref<T3DMaterial> &rMaterial );
+	Ref<T3DMaterial> getMaterial( void ) const {
 		return m_pMaterial;
 	}
 	void setMeshLods( const int nCount );
@@ -1353,7 +1353,7 @@ public:
 	) const;
 	Ref<Mesh> bakeMesh(
 		const int nLod,
-		const Terrain3DData::t3dheightFilter_t filter = Terrain3DData::HEIGHT_FILTER_NEAREST
+		const T3DData::t3dheightFilter_t filter = T3DData::HEIGHT_FILTER_NEAREST
 	) const;
 	Ref<Mesh> bakeRegionLightmapMesh(
 		const Vector2i &rRegionLocation, int nLod = 2,
@@ -1532,18 +1532,18 @@ protected:
 	static void _bind_methods( void );
 };
 
-VARIANT_ENUM_CAST( Terrain3D::t3dperformanceTarget_t );
-VARIANT_ENUM_CAST( Terrain3D::t3dperformanceProfileStatus_t );
-VARIANT_ENUM_CAST( Terrain3D::t3deditorExecutionMode_t );
-VARIANT_ENUM_CAST( Terrain3D::t3dregionSize_t );
-VARIANT_ENUM_CAST( Terrain3D::t3ddebugLevel_t );
+VARIANT_ENUM_CAST( T3DTerrain::t3dperformanceTarget_t );
+VARIANT_ENUM_CAST( T3DTerrain::t3dperformanceProfileStatus_t );
+VARIANT_ENUM_CAST( T3DTerrain::t3deditorExecutionMode_t );
+VARIANT_ENUM_CAST( T3DTerrain::t3dregionSize_t );
+VARIANT_ENUM_CAST( T3DTerrain::t3ddebugLevel_t );
 
 
-VARIANT_ENUM_CAST( Terrain3D::t3doceanPerformancePreset_t );
-VARIANT_ENUM_CAST( Terrain3D::t3doceanRefractionMode_t );
-VARIANT_ENUM_CAST( Terrain3D::t3doceanFoamMode_t );
-VARIANT_ENUM_CAST( Terrain3D::t3doceanScatteringMode_t );
-VARIANT_ENUM_CAST( Terrain3D::t3doceanShadingMode_t );
+VARIANT_ENUM_CAST( T3DTerrain::t3doceanPerformancePreset_t );
+VARIANT_ENUM_CAST( T3DTerrain::t3doceanRefractionMode_t );
+VARIANT_ENUM_CAST( T3DTerrain::t3doceanFoamMode_t );
+VARIANT_ENUM_CAST( T3DTerrain::t3doceanScatteringMode_t );
+VARIANT_ENUM_CAST( T3DTerrain::t3doceanShadingMode_t );
 
-VARIANT_ENUM_CAST( Terrain3D::t3denvironmentShadowQuality_t );
+VARIANT_ENUM_CAST( T3DTerrain::t3denvironmentShadowQuality_t );
 #endif // TERRAIN3D_CLASS_H

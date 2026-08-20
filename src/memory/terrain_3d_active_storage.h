@@ -25,7 +25,7 @@ using namespace godot;
 // descriptors publish immutable physical pages atomically; leases pin a page while
 // readers use it. Writers stage into an unpinned page and never mutate published
 // bytes in place. Control, color, and derived maps remain authoritative in
-// Terrain3DRegion.
+// T3DRegion.
 typedef struct t3dactiveMapView_s {
 	const uint16_t *pHeight = nullptr;
 	uint32_t nOwnerGeneration = 0u;
@@ -82,7 +82,7 @@ bool terrain3dActiveStorageContains( const void *pOwner, const Vector2i &rLocati
 T3DActiveMapLease terrain3dActiveStorageAcquire( const void *pOwner, const Vector2i &rLocation );
 bool terrain3dActiveStorageSyncRegion(
 	const void *pOwner, const Vector2i &rLocation,
-	const Terrain3DRegion *pRegion
+	const T3DRegion *pRegion
 );
 bool terrain3dActiveStorageSyncHeightPage(
 	const void *pOwner, const Vector2i &rLocation,
@@ -94,11 +94,11 @@ bool terrain3dActiveStorageReplaceHeightPages(
 );
 bool terrain3dActiveStorageSyncMap(
 	const void *pOwner, const Vector2i &rLocation,
-	const Terrain3DRegion *pRegion, t3dmapType_t type, const Rect2i &rDirtyRect = Rect2i()
+	const T3DRegion *pRegion, t3dmapType_t type, const Rect2i &rDirtyRect = Rect2i()
 );
 bool terrain3dActiveStorageSyncDerived(
 	const void *pOwner, const Vector2i &rLocation,
-	const Terrain3DRegion *pRegion, const Rect2i &rDirtyRect = Rect2i()
+	const T3DRegion *pRegion, const Rect2i &rDirtyRect = Rect2i()
 );
 void terrain3dActiveStorageInvalidate( const void *pOwner, const Vector2i &rLocation );
 

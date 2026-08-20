@@ -378,14 +378,14 @@ bool T3DCompute::ensureDisplacementResources(
 		return false;
 	}
 	if ( !m_displacementRegionBuffer.is_valid() ) {
-		m_displacementRegionBuffer = Terrain3DUploadBridge::createPersistentStorageBuffer( 4096u * sizeof( int32_t ) );
+		m_displacementRegionBuffer = T3DUploadBridge::createPersistentStorageBuffer( 4096u * sizeof( int32_t ) );
 		if ( !m_displacementRegionBuffer.is_valid() ) {
 			m_displacementRegionBuffer = m_pRenderRd->storage_buffer_create( 4096u * sizeof( int32_t ) );
 		}
 		m_bDisplacementRegionUploaded = false;
 	}
 	if ( !m_displacementMaterialBuffer.is_valid() ) {
-		m_displacementMaterialBuffer = Terrain3DUploadBridge::createPersistentStorageBuffer( 32u * 4u * sizeof( float ) );
+		m_displacementMaterialBuffer = T3DUploadBridge::createPersistentStorageBuffer( 32u * 4u * sizeof( float ) );
 		if ( !m_displacementMaterialBuffer.is_valid() ) {
 			m_displacementMaterialBuffer = m_pRenderRd->storage_buffer_create( 32u * 4u * sizeof( float ) );
 		}
@@ -440,25 +440,25 @@ bool T3DCompute::ensureDisplacementResources(
 }
 
 bool T3DCompute::prepareDisplacementRequest(
-	Terrain3D *const pTerrain, const Vector3 &rTargetPosition,
+	T3DTerrain *const pTerrain, const Vector3 &rTargetPosition,
 	t3ddisplacementRequest_t &rRequest
 ) {
 	rRequest = t3ddisplacementRequest_t{};
 	if ( !pTerrain || pTerrain->getTessellationLevel() <= 0 ) {
 		return false;
 	}
-	const Ref<Terrain3DMaterial> pMaterial = pTerrain->getMaterial();
-	const Ref<Terrain3DAssets> pAssets = pTerrain->getAssets();
-	Terrain3DData *const data = pTerrain->getData();
+	const Ref<T3DMaterial> pMaterial = pTerrain->getMaterial();
+	const Ref<T3DAssets> pAssets = pTerrain->getAssets();
+	T3DData *const data = pTerrain->getData();
 	if ( pMaterial.is_null() || pAssets.is_null() || !data || !pAssets->usesPackedPbr() ) {
 		setError( "Compute displacement requires the packed-PBR/R8 texture path" );
 		return false;
 	}
-	const Terrain3DMaterial::t3dtextureFiltering_t filtering = pMaterial->getTextureFiltering();
-	if ( pMaterial->getProjectionEnabled() || pMaterial->getDetilingMode() != Terrain3DMaterial::DETILING_DISABLED ||
+	const T3DMaterial::t3dtextureFiltering_t filtering = pMaterial->getTextureFiltering();
+	if ( pMaterial->getProjectionEnabled() || pMaterial->getDetilingMode() != T3DMaterial::DETILING_DISABLED ||
 		pMaterial->getBufferShaderOverride().is_valid() ||
-		pMaterial->getWorldBackground() == Terrain3DMaterial::NOISE || filtering == Terrain3DMaterial::NEAREST ||
-		filtering == Terrain3DMaterial::NEAREST_ANISOTROPIC ) {
+		pMaterial->getWorldBackground() == T3DMaterial::NOISE || filtering == T3DMaterial::NEAREST ||
+		filtering == T3DMaterial::NEAREST_ANISOTROPIC ) {
 		setError( "Compute displacement falls back for projection, detiling, world-noise backgrounds, nearest "
 				   "filtering, or buffer shader overrides" );
 		return false;
@@ -552,9 +552,9 @@ bool T3DCompute::prepareDisplacementRequest(
 	params.autoOverlayTexture = ( uint32_t ) ( CLAMP( ( int ) ( pMaterial->getShaderParam( "auto_overlay_texture" ) ), 0, auto_layer_max ) );
 	params.auto_enabled = pMaterial->getAutoShaderEnabled() ? 1u : 0u;
 	params.sampling_mode = ( uint32_t ) ( pMaterial->getTerrainSamplingMode() );
-	const Terrain3DMaterial::t3dshaderPerformancePreset_t preset = pMaterial->getShaderPerformancePreset();
+	const T3DMaterial::t3dshaderPerformancePreset_t preset = pMaterial->getShaderPerformancePreset();
 	params.bFastBlendCurve =
-		preset == Terrain3DMaterial::SHADER_PRESET_XBOX_360 || preset == Terrain3DMaterial::SHADER_PRESET_FASTEST ? 1u
+		preset == T3DMaterial::SHADER_PRESET_XBOX_360 || preset == T3DMaterial::SHADER_PRESET_FASTEST ? 1u
 																												  : 0u;
 	params.background_mode = ( uint32_t ) ( pMaterial->getWorldBackground() );
 	params.ground_level = ( float ) ( ( real_t ) ( pMaterial->getShaderParam( "ground_level" ) ) );

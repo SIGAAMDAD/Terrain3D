@@ -9,34 +9,34 @@ using Godot.Collections;
 namespace TokisanGames;
 
 [Tool]
-public partial class Terrain3DTextureAsset : Resource
+public partial class T3DTextureAsset : Resource
 {
 
-	private new static readonly StringName NativeName = new StringName("Terrain3DTextureAsset");
+	private new static readonly StringName NativeName = new StringName("T3DTextureAsset");
 
-	[Obsolete("Wrapper types cannot be constructed with constructors (it only instantiate the underlying Terrain3DTextureAsset object), please use the Instantiate() method instead.")]
-	protected Terrain3DTextureAsset() { }
+	[Obsolete("Wrapper types cannot be constructed with constructors (it only instantiate the underlying T3DTextureAsset object), please use the Instantiate() method instead.")]
+	protected T3DTextureAsset() { }
 
 	private static CSharpScript _wrapperScriptAsset;
 
 	/// <summary>
-	/// Try to cast the script on the supplied <paramref name="godotObject"/> to the <see cref="Terrain3DTextureAsset"/> wrapper type,
-	/// if no script has attached to the type, or the script attached to the type does not inherit the <see cref="Terrain3DTextureAsset"/> wrapper type,
-	/// a new instance of the <see cref="Terrain3DTextureAsset"/> wrapper script will get attaches to the <paramref name="godotObject"/>.
+	/// Try to cast the script on the supplied <paramref name="godotObject"/> to the <see cref="T3DTextureAsset"/> wrapper type,
+	/// if no script has attached to the type, or the script attached to the type does not inherit the <see cref="T3DTextureAsset"/> wrapper type,
+	/// a new instance of the <see cref="T3DTextureAsset"/> wrapper script will get attaches to the <paramref name="godotObject"/>.
 	/// </summary>
 	/// <remarks>The developer should only supply the <paramref name="godotObject"/> that represents the correct underlying GDExtension type.</remarks>
 	/// <param name="godotObject">The <paramref name="godotObject"/> that represents the correct underlying GDExtension type.</param>
-	/// <returns>The existing or a new instance of the <see cref="Terrain3DTextureAsset"/> wrapper script attached to the supplied <paramref name="godotObject"/>.</returns>
-	public new static Terrain3DTextureAsset Bind(GodotObject godotObject)
+	/// <returns>The existing or a new instance of the <see cref="T3DTextureAsset"/> wrapper script attached to the supplied <paramref name="godotObject"/>.</returns>
+	public new static T3DTextureAsset Bind(GodotObject godotObject)
 	{
 		if (!IsInstanceValid(godotObject))
 			return null;
 
-		if (godotObject is Terrain3DTextureAsset wrapperScriptInstance)
+		if (godotObject is T3DTextureAsset wrapperScriptInstance)
 			return wrapperScriptInstance;
 
 #if DEBUG
-		var expectedType = typeof(Terrain3DTextureAsset);
+		var expectedType = typeof(T3DTextureAsset);
 		var currentObjectClassName = godotObject.GetClass();
 		if (!ClassDB.IsParentClass(expectedType.Name, currentObjectClassName))
 			throw new InvalidOperationException($"The supplied GodotObject ({currentObjectClassName}) is not the {expectedType.Name} type.");
@@ -44,21 +44,21 @@ public partial class Terrain3DTextureAsset : Resource
 
 		if (_wrapperScriptAsset is null)
 		{
-			var scriptPathAttribute = typeof(Terrain3DTextureAsset).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
+			var scriptPathAttribute = typeof(T3DTextureAsset).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
 			if (scriptPathAttribute is null) throw new UnreachableException();
 			_wrapperScriptAsset = ResourceLoader.Load<CSharpScript>(scriptPathAttribute.Path);
 		}
 
 		var instanceId = godotObject.GetInstanceId();
 		godotObject.SetScript(_wrapperScriptAsset);
-		return (Terrain3DTextureAsset)InstanceFromId(instanceId);
+		return (T3DTextureAsset)InstanceFromId(instanceId);
 	}
 
 	/// <summary>
-	/// Creates an instance of the GDExtension <see cref="Terrain3DTextureAsset"/> type, and attaches a wrapper script instance to it.
+	/// Creates an instance of the GDExtension <see cref="T3DTextureAsset"/> type, and attaches a wrapper script instance to it.
 	/// </summary>
-	/// <returns>The wrapper instance linked to the underlying GDExtension "Terrain3DTextureAsset" type.</returns>
-	public new static Terrain3DTextureAsset Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
+	/// <returns>The wrapper instance linked to the underlying GDExtension "T3DTextureAsset" type.</returns>
+	public new static T3DTextureAsset Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
 
 	public new class GDExtensionSignalName : Resource.SignalName
 	{
@@ -85,7 +85,7 @@ public partial class Terrain3DTextureAsset : Resource
 		{
 			if (_idChangedSignal is null)
 			{
-				_idChangedSignalCallable = Callable.From(() => 
+				_idChangedSignalCallable = Callable.From(() =>
 					_idChangedSignal?.Invoke());
 				Connect(GDExtensionSignalName.IdChanged, _idChangedSignalCallable);
 			}
@@ -109,7 +109,7 @@ public partial class Terrain3DTextureAsset : Resource
 		{
 			if (_fileChangedSignal is null)
 			{
-				_fileChangedSignalCallable = Callable.From(() => 
+				_fileChangedSignalCallable = Callable.From(() =>
 					_fileChangedSignal?.Invoke());
 				Connect(GDExtensionSignalName.FileChanged, _fileChangedSignalCallable);
 			}
@@ -133,7 +133,7 @@ public partial class Terrain3DTextureAsset : Resource
 		{
 			if (_settingChangedSignal is null)
 			{
-				_settingChangedSignalCallable = Callable.From(() => 
+				_settingChangedSignalCallable = Callable.From(() =>
 					_settingChangedSignal?.Invoke());
 				Connect(GDExtensionSignalName.SettingChanged, _settingChangedSignalCallable);
 			}
@@ -297,9 +297,9 @@ public partial class Terrain3DTextureAsset : Resource
 	}
 
 	[Obsolete("Use PackedPbrTexture and DisplacementTexture. This resource remains only for serialized compatibility.")]
-	public new Terrain3DPackedPBRTexture PackedPbrResource
+	public new T3DPackedPBRTexture PackedPbrResource
 	{
-		get => Terrain3DPackedPBRTexture.Bind(Get(GDExtensionPropertyName.PackedPbrResource).As<GodotObject>());
+		get => T3DPackedPBRTexture.Bind(Get(GDExtensionPropertyName.PackedPbrResource).As<GodotObject>());
 		set => Set(GDExtensionPropertyName.PackedPbrResource, value);
 	}
 
@@ -517,19 +517,19 @@ public partial class Terrain3DTextureAsset : Resource
 		public new static readonly StringName GetEffectivePbrTexture = "get_effective_pbr_texture";
 	}
 
-	public new void Clear() => 
+	public new void Clear() =>
 		Call(GDExtensionMethodName.Clear, []);
 
-	public new void SetHighlighted(bool enabled) => 
+	public new void SetHighlighted(bool enabled) =>
 		Call(GDExtensionMethodName.SetHighlighted, [enabled]);
 
-	public new bool IsHighlighted() => 
+	public new bool IsHighlighted() =>
 		Call(GDExtensionMethodName.IsHighlighted, []).As<bool>();
 
-	public new Color GetHighlightColor() => 
+	public new Color GetHighlightColor() =>
 		Call(GDExtensionMethodName.GetHighlightColor, []).As<Color>();
 
-	public new Texture2D GetThumbnail() => 
+	public new Texture2D GetThumbnail() =>
 		Call(GDExtensionMethodName.GetThumbnail, []).As<Texture2D>();
 
 	public new Texture2D GetEffectiveSurfaceTexture() =>

@@ -96,7 +96,7 @@ bool terrain3dPerformanceProfileValueMatches(
 }
 
 String terrain3dPerformanceProfileOwnerName( const terrain_3d_profile::t3downer_t owner ) {
-	return owner == terrain_3d_profile::OWNER_MATERIAL ? "Terrain3DMaterial" : "Terrain3D";
+	return owner == terrain_3d_profile::OWNER_MATERIAL ? "T3DMaterial" : "T3DTerrain";
 }
 
 #define TERRAIN3D_ALIGN_BAKE_TASK_OFFSET( value ) \
@@ -105,83 +105,83 @@ String terrain3dPerformanceProfileOwnerName( const terrain_3d_profile::t3downer_
 } // namespace
 
 // Initialize static member variable
-Terrain3D::t3ddebugLevel_t Terrain3D::s_debugLevel{Terrain3D::ERROR};
+T3DTerrain::t3ddebugLevel_t T3DTerrain::s_debugLevel{T3DTerrain::ERROR};
 
 ///////////////////////////
 // Private Functions
 ///////////////////////////
 
-void Terrain3D::connectResourceSignals(
-	const Ref<Terrain3DAssets> &rAssets,
-	const Ref<Terrain3DMaterial> &rMaterial
+void T3DTerrain::connectResourceSignals(
+	const Ref<T3DAssets> &rAssets,
+	const Ref<T3DMaterial> &rMaterial
 ) {
 	if ( rMaterial.is_null() ) {
 		return;
 	}
-	const Callable maps_callback = callable_mp( this, &Terrain3D::onDataMapsChanged );
+	const Callable maps_callback = callable_mp( this, &T3DTerrain::onDataMapsChanged );
 	if ( m_pData && !m_pData->is_connected( "maps_changed", maps_callback ) ) {
 		m_pData->connect( "maps_changed", maps_callback );
 	}
-	const Callable page_table_callback = callable_mp( this, &Terrain3D::onGpuRegionPageTableChanged );
+	const Callable page_table_callback = callable_mp( this, &T3DTerrain::onGpuRegionPageTableChanged );
 	if ( m_pData && !m_pData->is_connected( "gpu_region_page_table_changed", page_table_callback ) ) {
 		m_pData->connect( "gpu_region_page_table_changed", page_table_callback );
 	}
-	const Callable textures_callback = callable_mp( this, &Terrain3D::onAssetsTexturesChanged );
+	const Callable textures_callback = callable_mp( this, &T3DTerrain::onAssetsTexturesChanged );
 	if ( rAssets.is_valid() && !rAssets->is_connected( "textures_changed", textures_callback ) ) {
 		rAssets->connect( "textures_changed", textures_callback );
 	}
-	const Callable material_callback = callable_mp( this, &Terrain3D::onProfileOwnedResourceChanged );
+	const Callable material_callback = callable_mp( this, &T3DTerrain::onProfileOwnedResourceChanged );
 	if ( !rMaterial->is_connected( "changed", material_callback ) ) {
 		rMaterial->connect( "changed", material_callback );
 	}
 }
 
-void Terrain3D::disconnectResourceSignals(
-	const Ref<Terrain3DAssets> &rAssets,
-	const Ref<Terrain3DMaterial> &rMaterial
+void T3DTerrain::disconnectResourceSignals(
+	const Ref<T3DAssets> &rAssets,
+	const Ref<T3DMaterial> &rMaterial
 ) {
 	if ( rMaterial.is_null() ) {
 		return;
 	}
-	const Callable maps_callback = callable_mp( this, &Terrain3D::onDataMapsChanged );
+	const Callable maps_callback = callable_mp( this, &T3DTerrain::onDataMapsChanged );
 	if ( m_pData && m_pData->is_connected( "maps_changed", maps_callback ) ) {
 		m_pData->disconnect( "maps_changed", maps_callback );
 	}
-	const Callable page_table_callback = callable_mp( this, &Terrain3D::onGpuRegionPageTableChanged );
+	const Callable page_table_callback = callable_mp( this, &T3DTerrain::onGpuRegionPageTableChanged );
 	if ( m_pData && m_pData->is_connected( "gpu_region_page_table_changed", page_table_callback ) ) {
 		m_pData->disconnect( "gpu_region_page_table_changed", page_table_callback );
 	}
-	const Callable textures_callback = callable_mp( this, &Terrain3D::onAssetsTexturesChanged );
+	const Callable textures_callback = callable_mp( this, &T3DTerrain::onAssetsTexturesChanged );
 	if ( rAssets.is_valid() && rAssets->is_connected( "textures_changed", textures_callback ) ) {
 		rAssets->disconnect( "textures_changed", textures_callback );
 	}
-	const Callable material_callback = callable_mp( this, &Terrain3D::onProfileOwnedResourceChanged );
+	const Callable material_callback = callable_mp( this, &T3DTerrain::onProfileOwnedResourceChanged );
 	if ( rMaterial->is_connected( "changed", material_callback ) ) {
 		rMaterial->disconnect( "changed", material_callback );
 	}
 }
 
-void Terrain3D::connectAutoShaderProfileSignal( const Ref<Resource> &rProfile ) {
+void T3DTerrain::connectAutoShaderProfileSignal( const Ref<Resource> &rProfile ) {
 	if ( rProfile.is_null() ) {
 		return;
 	}
-	const Callable callback = callable_mp( this, &Terrain3D::onAutoShaderProfileChanged );
+	const Callable callback = callable_mp( this, &T3DTerrain::onAutoShaderProfileChanged );
 	if ( !rProfile->is_connected( "changed", callback ) ) {
 		rProfile->connect( "changed", callback );
 	}
 }
 
-void Terrain3D::disconnectAutoShaderProfileSignal( const Ref<Resource> &rProfile ) {
+void T3DTerrain::disconnectAutoShaderProfileSignal( const Ref<Resource> &rProfile ) {
 	if ( rProfile.is_null() ) {
 		return;
 	}
-	const Callable callback = callable_mp( this, &Terrain3D::onAutoShaderProfileChanged );
+	const Callable callback = callable_mp( this, &T3DTerrain::onAutoShaderProfileChanged );
 	if ( rProfile->is_connected( "changed", callback ) ) {
 		rProfile->disconnect( "changed", callback );
 	}
 }
 
-void Terrain3D::applyAutoShaderProfileMode( void ) {
+void T3DTerrain::applyAutoShaderProfileMode( void ) {
 	if ( m_pMaterial.is_null() ) return;
 	const bool strict_cooked = m_bGpuRegionCookedPagesEnabled && !isEditorAuthoringModeInternal();
 	if ( m_pAutoShaderProfile.is_null() ) {
@@ -203,41 +203,41 @@ void Terrain3D::applyAutoShaderProfileMode( void ) {
 	m_pMaterial->setAutoShaderEnabled( mode == TERRAIN3D_AUTOSHADER_MODE_LEGACY_RUNTIME );
 }
 
-void Terrain3D::onAutoShaderProfileChanged( void ) {
+void T3DTerrain::onAutoShaderProfileChanged( void ) {
 	applyAutoShaderProfileMode();
 }
 
-void Terrain3D::onDataMapsChanged( void ) {
+void T3DTerrain::onDataMapsChanged( void ) {
 	// Signals can arrive from an inactive editor scene whose resource objects
 	// have already transferred to the newly active Terrain3D. Only the current
 	// owner may rebind shared material state.
 	if ( m_pMaterial.is_valid() && m_pMaterial->isInitializedFor( this ) ) {
-		m_pMaterial->update( Terrain3DMaterial::REGION_ARRAYS );
+		m_pMaterial->update( T3DMaterial::REGION_ARRAYS );
 	}
 }
 
-void Terrain3D::onGpuRegionPageTableChanged( void ) {
+void T3DTerrain::onGpuRegionPageTableChanged( void ) {
 	if ( m_pMaterial.is_valid() && m_pMaterial->isInitializedFor( this ) ) {
 		m_pMaterial->updateRegionPageTable();
 	}
 }
 
-void Terrain3D::onAssetsTexturesChanged( void ) {
+void T3DTerrain::onAssetsTexturesChanged( void ) {
 	if ( m_pAssets.is_valid() && m_pAssets->isInitializedFor( this ) && m_pMaterial.is_valid() &&
 		m_pMaterial->isInitializedFor( this ) ) {
-		m_pMaterial->update( Terrain3DMaterial::TEXTURE_ARRAYS );
+		m_pMaterial->update( T3DMaterial::TEXTURE_ARRAYS );
 		if ( m_pData ) {
 			m_pData->invalidateGpuFarSurface();
 		}
 	}
 }
 
-bool Terrain3D::isEditorAuthoringModeInternal( void ) const {
+bool T3DTerrain::isEditorAuthoringModeInternal( void ) const {
 	return terrain3dIsEditorAuthoringMode( IS_EDITOR,
 		( int ) ( m_editorExecutionMode ) );
 }
 
-bool Terrain3D::isAuthoringResidencyReadbackSafe( void ) const {
+bool T3DTerrain::isAuthoringResidencyReadbackSafe( void ) const {
 	if ( !isEditorAuthoringModeInternal() ) {
 		return true;
 	}
@@ -253,55 +253,55 @@ bool Terrain3D::isAuthoringResidencyReadbackSafe( void ) const {
 	return true;
 }
 
-bool Terrain3D::effectiveGpuRegionCacheEnabled( void ) const {
+bool T3DTerrain::effectiveGpuRegionCacheEnabled( void ) const {
 	// GPU paging is authoring-safe and remains essential when inspecting large
 	// terrain datasets. Editor mode only pins mutable source and object data.
 	return terrain3dIsGpuPagingEffectivelyEnabled( m_bGpuRegionCacheEnabled );
 }
 
-bool Terrain3D::effectiveCpuRegionCacheEnabled( void ) const {
+bool T3DTerrain::effectiveCpuRegionCacheEnabled( void ) const {
 	return terrain3dIsStreamingEffectivelyEnabled( m_bCpuRegionCacheEnabled, IS_EDITOR,
 		( int ) ( m_editorExecutionMode ) );
 }
 
-bool Terrain3D::effectiveInstanceRegionCacheEnabled( void ) const {
+bool T3DTerrain::effectiveInstanceRegionCacheEnabled( void ) const {
 	return terrain3dIsStreamingEffectivelyEnabled( m_bInstanceRegionCacheEnabled, IS_EDITOR,
 		( int ) ( m_editorExecutionMode ) );
 }
 
-bool Terrain3D::effectiveInstancerCellStreamingEnabled( void ) const {
+bool T3DTerrain::effectiveInstancerCellStreamingEnabled( void ) const {
 	return terrain3dIsStreamingEffectivelyEnabled( m_bInstancerCellStreamingEnabled, IS_EDITOR,
 		( int ) ( m_editorExecutionMode ) );
 }
 
-bool Terrain3D::effectiveDynamicNodeStreamingEnabled( void ) const {
+bool T3DTerrain::effectiveDynamicNodeStreamingEnabled( void ) const {
 	// Authoring still uses the node streamer, but the unified state map marks every
 	// authored region ACTIVE so all authored nodes are loaded and pinned.
 	return m_bDynamicNodeStreamingEnabled;
 }
 
-void Terrain3D::invalidateRegionStreamingPolicy( void ) {
+void T3DTerrain::invalidateRegionStreamingPolicy( void ) {
 	m_bRegionStreamingDirty = true;
 }
 
-t3dregionStreamingState_t Terrain3D::getRegionStreamingStateInternal( const Vector2i &vLocation ) const {
+t3dregionStreamingState_t T3DTerrain::getRegionStreamingStateInternal( const Vector2i &vLocation ) const {
 	if ( !m_pData || !m_pData->isRegionLocationValidInternal( vLocation ) ) {
 		return TERRAIN3D_REGION_STREAMING_UNLOADED;
 	}
-	const int map_index = Terrain3DData::getRegionMapIndex( vLocation );
+	const int map_index = T3DData::getRegionMapIndex( vLocation );
 	return map_index >= 0 ? ( t3dregionStreamingState_t ) ( m_szRegionStreamingStates[map_index] ) :
 		TERRAIN3D_REGION_STREAMING_UNLOADED;
 }
 
-bool Terrain3D::isRegionStreamingPrefetchInternal( const Vector2i &vLocation ) const {
+bool T3DTerrain::isRegionStreamingPrefetchInternal( const Vector2i &vLocation ) const {
 	if ( !m_pData || !m_pData->isRegionLocationValidInternal( vLocation ) ) {
 		return false;
 	}
-	const int map_index = Terrain3DData::getRegionMapIndex( vLocation );
+	const int map_index = T3DData::getRegionMapIndex( vLocation );
 	return map_index >= 0 && m_szRegionStreamingPrefetch[map_index] != 0u;
 }
 
-void Terrain3D::updateRegionStreamingPolicy(
+void T3DTerrain::updateRegionStreamingPolicy(
 	const Vector3 &rWorldPosition,
 	const double fDelta,
 	const bool bForce
@@ -384,7 +384,7 @@ void Terrain3D::updateRegionStreamingPolicy(
 		if ( location == V2I_MAX || !m_pData->hasRegion( location ) ) {
 			continue;
 		}
-		const int map_index = Terrain3DData::getRegionMapIndex( location );
+		const int map_index = T3DData::getRegionMapIndex( location );
 		if ( map_index < 0 ) {
 			continue;
 		}
@@ -417,7 +417,7 @@ void Terrain3D::updateRegionStreamingPolicy(
 	m_bRegionStreamingDirty = false;
 }
 
-Dictionary Terrain3D::getRegionStreamingStats( void ) const {
+Dictionary T3DTerrain::getRegionStreamingStats( void ) const {
 	Dictionary stats;
 	stats["active"] = m_nRegionStreamingActiveCount;
 	stats["hot"] = m_nRegionStreamingHotCount;
@@ -433,7 +433,7 @@ Dictionary Terrain3D::getRegionStreamingStats( void ) const {
 	return stats;
 }
 
-Dictionary Terrain3D::getRegionStreamingConfigurationStatus( void ) const {
+Dictionary T3DTerrain::getRegionStreamingConfigurationStatus( void ) const {
 	Dictionary status;
 	const int near_lods = MAX( 0, m_nRuntimeNearShaderLods );
 	const int middle_lods = MAX( 0, m_nRuntimeNearShaderLods + m_nRuntimeMiddleShaderLods );
@@ -485,7 +485,7 @@ Dictionary Terrain3D::getRegionStreamingConfigurationStatus( void ) const {
 	return status;
 }
 
-Dictionary Terrain3D::getHeightSourceDiagnostics( const Vector3 &rWorldPosition ) const {
+Dictionary T3DTerrain::getHeightSourceDiagnostics( const Vector3 &rWorldPosition ) const {
 	Dictionary diagnostics;
 	const Vector2i region = m_pData ? m_pData->getRegionLocation( rWorldPosition ) : V2I_MAX;
 	const t3dregionStreamingState_t state = getRegionStreamingStateInternal( region );
@@ -533,7 +533,7 @@ Dictionary Terrain3D::getHeightSourceDiagnostics( const Vector3 &rWorldPosition 
 	return diagnostics;
 }
 
-void Terrain3D::validateRegionStreamingConfiguration( const bool bReport ) const {
+void T3DTerrain::validateRegionStreamingConfiguration( const bool bReport ) const {
 	if ( !bReport ) {
 		return;
 	}
@@ -551,7 +551,7 @@ void Terrain3D::validateRegionStreamingConfiguration( const bool bReport ) const
 	}
 }
 
-void Terrain3D::setStreamingActiveRadius( const int nRadius ) {
+void T3DTerrain::setStreamingActiveRadius( const int nRadius ) {
 	m_regionStreamingConfig.activeRadius = CLAMP( nRadius, 0, 31 );
 	m_regionStreamingConfig.hotRadius = MAX( m_regionStreamingConfig.hotRadius, m_regionStreamingConfig.activeRadius );
 	m_regionStreamingConfig.coldRadius = MAX( m_regionStreamingConfig.coldRadius, m_regionStreamingConfig.hotRadius );
@@ -559,39 +559,39 @@ void Terrain3D::setStreamingActiveRadius( const int nRadius ) {
 	validateRegionStreamingConfiguration();
 }
 
-void Terrain3D::setStreamingHotRadius( const int nRadius ) {
+void T3DTerrain::setStreamingHotRadius( const int nRadius ) {
 	m_regionStreamingConfig.hotRadius = CLAMP( nRadius, m_regionStreamingConfig.activeRadius, 31 );
 	m_regionStreamingConfig.coldRadius = MAX( m_regionStreamingConfig.coldRadius, m_regionStreamingConfig.hotRadius );
 	invalidateRegionStreamingPolicy();
 	validateRegionStreamingConfiguration();
 }
 
-void Terrain3D::setStreamingColdRadius( const int nRadius ) {
+void T3DTerrain::setStreamingColdRadius( const int nRadius ) {
 	m_regionStreamingConfig.coldRadius = CLAMP( nRadius, m_regionStreamingConfig.hotRadius, 31 );
 	invalidateRegionStreamingPolicy();
 }
 
-void Terrain3D::setStreamingUnloadGuard( const int nRegions ) {
+void T3DTerrain::setStreamingUnloadGuard( const int nRegions ) {
 	m_regionStreamingConfig.unloadGuard = CLAMP( nRegions, 0, 4 );
 	invalidateRegionStreamingPolicy();
 }
 
-void Terrain3D::setStreamingPredictionEnabled( const bool bEnabled ) {
+void T3DTerrain::setStreamingPredictionEnabled( const bool bEnabled ) {
 	m_regionStreamingConfig.bPredictionEnabled = bEnabled;
 	invalidateRegionStreamingPolicy();
 }
 
-void Terrain3D::setStreamingPredictionLookahead( const real_t fSeconds ) {
+void T3DTerrain::setStreamingPredictionLookahead( const real_t fSeconds ) {
 	m_regionStreamingConfig.fPredictionLookaheadSeconds = MAX( ( real_t ) ( 0.0 ), fSeconds );
 	invalidateRegionStreamingPolicy();
 }
 
-void Terrain3D::setStreamingPredictionMaximumRegions( const int nRegions ) {
+void T3DTerrain::setStreamingPredictionMaximumRegions( const int nRegions ) {
 	m_regionStreamingConfig.predictionMaximumRegions = MAX( 0, nRegions );
 	invalidateRegionStreamingPolicy();
 }
 
-t3dadaptiveBudgetLimits_t Terrain3D::getRuntimeAdaptiveBudgetLimits( void ) const {
+t3dadaptiveBudgetLimits_t T3DTerrain::getRuntimeAdaptiveBudgetLimits( void ) const {
 	t3dadaptiveBudgetLimits_t limits;
 	limits.minimum.nGpuPages = m_nRuntimeAdaptiveMinGpuPages;
 	limits.minimum.nCpuPages = m_nRuntimeAdaptiveMinCpuPages;
@@ -612,7 +612,7 @@ t3dadaptiveBudgetLimits_t Terrain3D::getRuntimeAdaptiveBudgetLimits( void ) cons
 	return limits;
 }
 
-t3dadaptiveBudgetPressure_t Terrain3D::getRuntimeAdaptiveBudgetPressure( void ) const {
+t3dadaptiveBudgetPressure_t T3DTerrain::getRuntimeAdaptiveBudgetPressure( void ) const {
 	t3dadaptiveBudgetPressure_t pressure;
 	if ( m_pData ) {
 		pressure.bGpuLimited = effectiveGpuRegionCacheEnabled() &&
@@ -634,7 +634,7 @@ t3dadaptiveBudgetPressure_t Terrain3D::getRuntimeAdaptiveBudgetPressure( void ) 
 	return pressure;
 }
 
-void Terrain3D::applyRuntimeAdaptiveWorkBudgets( void ) {
+void T3DTerrain::applyRuntimeAdaptiveWorkBudgets( void ) {
 	if ( !m_bRuntimeAdaptiveWorkBudgetsEnabled ) {
 		if ( m_pData ) {
 			m_pData->clearRuntimePageBudgetOverrides();
@@ -662,7 +662,7 @@ void Terrain3D::applyRuntimeAdaptiveWorkBudgets( void ) {
 	}
 }
 
-void Terrain3D::resetRuntimeAdaptiveWorkBudgets( const bool bClearOverrides ) {
+void T3DTerrain::resetRuntimeAdaptiveWorkBudgets( const bool bClearOverrides ) {
 	const t3dadaptiveBudgetLimits_t limits = getRuntimeAdaptiveBudgetLimits();
 	terrain3dAdaptiveReset( limits, m_nRuntimeAdaptiveBudgetState,
 		m_bRuntimeAdaptiveWorkBudgetsEnabled ? TERRAIN3D_ADAPTIVE_REASON_INITIALIZED :
@@ -684,7 +684,7 @@ void Terrain3D::resetRuntimeAdaptiveWorkBudgets( const bool bClearOverrides ) {
 	applyRuntimeAdaptiveWorkBudgets();
 }
 
-void Terrain3D::updateRuntimeAdaptiveWorkBudgets( void ) {
+void T3DTerrain::updateRuntimeAdaptiveWorkBudgets( void ) {
 	if ( !m_bRuntimeAdaptiveWorkBudgetsEnabled ) {
 		return;
 	}
@@ -695,7 +695,7 @@ void Terrain3D::updateRuntimeAdaptiveWorkBudgets( void ) {
 	applyRuntimeAdaptiveWorkBudgets();
 }
 
-String Terrain3D::getRuntimeAdaptiveReasonName( void ) const {
+String T3DTerrain::getRuntimeAdaptiveReasonName( void ) const {
 	switch ( m_nRuntimeAdaptiveBudgetState.reason ) {
 		case TERRAIN3D_ADAPTIVE_REASON_DISABLED:
 			return "disabled";
@@ -713,8 +713,8 @@ String Terrain3D::getRuntimeAdaptiveReasonName( void ) const {
 	}
 }
 
-void Terrain3D::applyStreamingPolicy( const bool bForceResidency ) {
-	LOG( Terrain3D::INFO, "[streaming-policy] Applying policy: force_residency=", bForceResidency,
+void T3DTerrain::applyStreamingPolicy( const bool bForceResidency ) {
+	LOG( T3DTerrain::INFO, "[streaming-policy] Applying policy: force_residency=", bForceResidency,
 		"; editor_mode=", ( int ) ( m_editorExecutionMode ),
 		"; gpu_cache=", effectiveGpuRegionCacheEnabled(),
 		"; cpu_cache=", effectiveCpuRegionCacheEnabled(),
@@ -745,7 +745,7 @@ void Terrain3D::applyStreamingPolicy( const bool bForceResidency ) {
 	}
 }
 
-void Terrain3D::refreshPerformanceProfileConformity( void ) {
+void T3DTerrain::refreshPerformanceProfileConformity( void ) {
 	if ( m_bApplyingPerformanceTarget ) {
 		return;
 	}
@@ -777,12 +777,12 @@ void Terrain3D::refreshPerformanceProfileConformity( void ) {
 	}
 }
 
-void Terrain3D::onProfileOwnedResourceChanged( void ) {
+void T3DTerrain::onProfileOwnedResourceChanged( void ) {
 	markMemoryBudgetDirty();
 	refreshPerformanceProfileConformity();
 }
 
-void Terrain3D::applyPerformanceProfileToTerrain( void ) {
+void T3DTerrain::applyPerformanceProfileToTerrain( void ) {
 	for ( const terrain_3d_profile::t3dsetting_t &setting : terrain_3d_profile::XBOX360_EXPERIMENTAL_SETTINGS ) {
 		if ( setting.owner != terrain_3d_profile::OWNER_TERRAIN ) {
 			continue;
@@ -791,11 +791,11 @@ void Terrain3D::applyPerformanceProfileToTerrain( void ) {
 	}
 }
 
-int Terrain3D::getTotalClipmapLevels( void ) const {
+int T3DTerrain::getTotalClipmapLevels( void ) const {
 	return CLAMP( m_nMeshLods + m_tessellationLevel, 1, TERRAIN3D_MAX_CLIPMAP_LEVELS );
 }
 
-real_t Terrain3D::lodCountToRange( const int nLodCount ) const {
+real_t T3DTerrain::lodCountToRange( const int nLodCount ) const {
 	if ( nLodCount <= 0 ) {
 		return 0.0f;
 	}
@@ -804,7 +804,7 @@ real_t Terrain3D::lodCountToRange( const int nLodCount ) const {
 	return fBaseExtent * ( real_t ) ( ( uint64_t ) ( 1 ) << ( uint64_t ) ( CLAMP( nLodCount - 1, 0, 15 ) ) );
 }
 
-int Terrain3D::rangeToLodCount( const real_t fRangeM ) const {
+int T3DTerrain::rangeToLodCount( const real_t fRangeM ) const {
 	if ( fRangeM <= 0.0f ) {
 		return 0;
 	}
@@ -817,7 +817,7 @@ int Terrain3D::rangeToLodCount( const real_t fRangeM ) const {
 	return total_levels;
 }
 
-void Terrain3D::normalizeRuntimeTierLayout( const bool bSyncDetailLods ) {
+void T3DTerrain::normalizeRuntimeTierLayout( const bool bSyncDetailLods ) {
 	const int total_levels = getTotalClipmapLevels();
 	m_nRuntimeNearShaderLods = CLAMP( m_nRuntimeNearShaderLods, 0, total_levels );
 	m_nRuntimeMiddleShaderLods = CLAMP( m_nRuntimeMiddleShaderLods, 0,
@@ -849,13 +849,13 @@ void Terrain3D::normalizeRuntimeTierLayout( const bool bSyncDetailLods ) {
 				m_nRuntimeMiddleShaderLods = CLAMP( m_nRuntimeMiddleShaderLods, 0,
 					total_levels - m_nRuntimeNearShaderLods );
 			}
-			LOG( Terrain3D::WARN, "Clamped detailed terrain range to ", supported_lods,
+			LOG( T3DTerrain::WARN, "Clamped detailed terrain range to ", supported_lods,
 				" clipmap levels because the configured GPU page capacity cannot cover the requested footprint" );
 		}
 	}
 }
 
-void Terrain3D::applyRuntimeTierLayout( const bool bForceFullSnap ) {
+void T3DTerrain::applyRuntimeTierLayout( const bool bForceFullSnap ) {
 	normalizeRuntimeTierLayout( true );
 	if ( m_pTerrainMesher ) {
 		m_pTerrainMesher->setTierLayout( m_nRuntimeNearShaderLods, m_nRuntimeMiddleShaderLods,
@@ -868,7 +868,7 @@ void Terrain3D::applyRuntimeTierLayout( const bool bForceFullSnap ) {
 	}
 }
 
-void Terrain3D::sampleRuntimeProfile( const t3druntimeProfileSample_t &rSample ) {
+void T3DTerrain::sampleRuntimeProfile( const t3druntimeProfileSample_t &rSample ) {
 	t3druntimeProfileSample_t sample = rSample;
 	sample.frameSequence = ++m_nRuntimeProfileSampleCount;
 	if ( m_pData ) {
@@ -968,7 +968,7 @@ void Terrain3D::sampleRuntimeProfile( const t3druntimeProfileSample_t &rSample )
 	m_pRuntimeProfileHistory->push( sample );
 }
 
-void Terrain3D::updateCacheThrashEvents( const t3druntimeProfileSample_t &rSample ) {
+void T3DTerrain::updateCacheThrashEvents( const t3druntimeProfileSample_t &rSample ) {
 	const bool bStates[3] = {
 		rSample.gpuMissingRequired > 0 || ( rSample.nGpuEvictions >= 2 && rSample.nGpuUploads >= 2 ),
 		rSample.nCpuEvictions >= 2 && rSample.cpuLoads >= 2,
@@ -987,23 +987,23 @@ void Terrain3D::updateCacheThrashEvents( const t3druntimeProfileSample_t &rSampl
 	}
 }
 
-void Terrain3D::initializeInternal( void ) {
-	LOG( Terrain3D::INFO, "[lifecycle] Initialize request: initialized=", m_bInitialized,
+void T3DTerrain::initializeInternal( void ) {
+	LOG( T3DTerrain::INFO, "[lifecycle] Initialize request: initialized=", m_bInitialized,
 		"; inside_tree=", is_inside_tree(), "; inside_world=", m_bIsInsideWorld,
 		"; data_directory=", m_dataDirectory );
 	// Make blank objects if needed
 	if ( !m_pData ) {
-		LOG( Terrain3D::DEBUG, "Creating blank data object" );
-		m_pData = memnew( Terrain3DData );
+		LOG( T3DTerrain::DEBUG, "Creating blank data object" );
+		m_pData = memnew( T3DData );
 	}
 	if ( !initializeRuntimeMemory() ) {
-		LOG( Terrain3D::ERROR, "[lifecycle] Unable to initialize the fixed runtime memory image" );
+		LOG( T3DTerrain::ERROR, "[lifecycle] Unable to initialize the fixed runtime memory image" );
 		set_physics_process( false );
 		return;
 	}
 	bool bCreatedDefaultMaterial = false;
 	if ( m_pMaterial.is_null() ) {
-		LOG( Terrain3D::DEBUG, "Creating blank material" );
+		LOG( T3DTerrain::DEBUG, "Creating blank material" );
 		m_pMaterial.instantiate();
 		bCreatedDefaultMaterial = true;
 	}
@@ -1013,63 +1013,63 @@ void Terrain3D::initializeInternal( void ) {
 	if ( m_performanceTarget == PERFORMANCE_TARGET_XBOX360_EXPERIMENTAL &&
 		( bCreatedDefaultMaterial || m_bPerformanceProfileMaterialPendingApply ) ) {
 		m_pMaterial->setShaderPerformancePreset(
-			Terrain3DMaterial::SHADER_PRESET_XBOX_360_AUTHENTIC );
+			T3DMaterial::SHADER_PRESET_XBOX_360_AUTHENTIC );
 		m_bPerformanceProfileMaterialPendingApply = false;
 	}
 	connectAutoShaderProfileSignal( m_pAutoShaderProfile );
 	applyAutoShaderProfileMode();
 	if ( m_pAssets.is_null() ) {
-		LOG( Terrain3D::DEBUG, "Creating blank texture list" );
+		LOG( T3DTerrain::DEBUG, "Creating blank texture list" );
 		m_pAssets.instantiate();
 	}
 	if ( !m_pCollision ) {
-		LOG( Terrain3D::DEBUG, "Creating collision manager" );
-		m_pCollision = memnew( Terrain3DCollision );
+		LOG( T3DTerrain::DEBUG, "Creating collision manager" );
+		m_pCollision = memnew( T3DCollision );
 	}
 	if ( !m_pInstancer ) {
-		LOG( Terrain3D::DEBUG, "Creating instancer" );
-		m_pInstancer = memnew( Terrain3DInstancer );
+		LOG( T3DTerrain::DEBUG, "Creating instancer" );
+		m_pInstancer = memnew( T3DInstancer );
 	}
 	if ( !m_pNodeStreamer ) {
-		LOG( Terrain3D::DEBUG, "Creating node streamer" );
-		m_pNodeStreamer = memnew( Terrain3DNodeStreamer );
+		LOG( T3DTerrain::DEBUG, "Creating node streamer" );
+		m_pNodeStreamer = memnew( T3DNodeStreamer );
 	}
 	if ( !m_pLightmapStreamer ) {
-		LOG( Terrain3D::DEBUG, "Creating lightmap streamer" );
-		m_pLightmapStreamer = memnew( Terrain3DLightmapStreamer );
+		LOG( T3DTerrain::DEBUG, "Creating lightmap streamer" );
+		m_pLightmapStreamer = memnew( T3DLightmapStreamer );
 	}
 	if ( !m_pHlodStreamer ) {
-		LOG( Terrain3D::DEBUG, "Creating HLOD streamer" );
-		m_pHlodStreamer = memnew( Terrain3DHLODStreamer );
+		LOG( T3DTerrain::DEBUG, "Creating HLOD streamer" );
+		m_pHlodStreamer = memnew( T3DHLODStreamer );
 	}
 	// Connect signals
 	// Any region was changed, update region labels
-	if ( !m_pData->is_connected( "region_map_changed", callable_mp( this, &Terrain3D::updateRegionLabels ) ) ) {
-		LOG( Terrain3D::DEBUG, "Connecting _data::region_map_changed signal to set_show_region_locations()" );
-		m_pData->connect( "region_map_changed", callable_mp( this, &Terrain3D::updateRegionLabels ) );
+	if ( !m_pData->is_connected( "region_map_changed", callable_mp( this, &T3DTerrain::updateRegionLabels ) ) ) {
+		LOG( T3DTerrain::DEBUG, "Connecting _data::region_map_changed signal to set_show_region_locations()" );
+		m_pData->connect( "region_map_changed", callable_mp( this, &T3DTerrain::updateRegionLabels ) );
 	}
 	// Region layout changes are coalesced and update the existing dynamic
 	// collision pool instead of rebuilding every shape per editor event.
 	if ( !m_pData->is_connected( "region_map_changed",
-							 callable_mp( m_pCollision, &Terrain3DCollision::onRegionMapChanged ) ) ) {
-		LOG( Terrain3D::DEBUG, "Connecting _data::region_map_changed signal to on_region_map_changed()" );
-		m_pData->connect( "region_map_changed", callable_mp( m_pCollision, &Terrain3DCollision::onRegionMapChanged ) );
+							 callable_mp( m_pCollision, &T3DCollision::onRegionMapChanged ) ) ) {
+		LOG( T3DTerrain::DEBUG, "Connecting _data::region_map_changed signal to on_region_map_changed()" );
+		m_pData->connect( "region_map_changed", callable_mp( m_pCollision, &T3DCollision::onRegionMapChanged ) );
 	}
 	connectResourceSignals( m_pAssets, m_pMaterial );
 	refreshPerformanceProfileConformity();
 	// Height map was regenerated, update aabbs
-	if ( !m_pData->is_connected( "height_maps_changed", callable_mp( this, &Terrain3D::updateMesherAabbs ) ) ) {
-		LOG( Terrain3D::DEBUG, "Connecting _data::height_maps_changed signal to update_aabbs()" );
-		m_pData->connect( "height_maps_changed", callable_mp( this, &Terrain3D::updateMesherAabbs ) );
+	if ( !m_pData->is_connected( "height_maps_changed", callable_mp( this, &T3DTerrain::updateMesherAabbs ) ) ) {
+		LOG( T3DTerrain::DEBUG, "Connecting _data::height_maps_changed signal to update_aabbs()" );
+		m_pData->connect( "height_maps_changed", callable_mp( this, &T3DTerrain::updateMesherAabbs ) );
 	}
 	// Initialize the system
 	if ( !m_bInitialized && m_bIsInsideWorld && is_inside_tree() ) {
-		LOG( Terrain3D::INFO, "[lifecycle] Initializing main subsystems: gpu_cache=",
+		LOG( T3DTerrain::INFO, "[lifecycle] Initializing main subsystems: gpu_cache=",
 			effectiveGpuRegionCacheEnabled(), "; cpu_cache=", effectiveCpuRegionCacheEnabled(),
 			"; instance_cache=", effectiveInstanceRegionCacheEnabled() );
 		const Error data_error = m_pData->initialize( this );
 		if ( data_error != OK ) {
-			LOG( Terrain3D::ERROR, "[lifecycle] Terrain data activation failed; dependent runtime systems will remain inactive. Error: ",
+			LOG( T3DTerrain::ERROR, "[lifecycle] Terrain data activation failed; dependent runtime systems will remain inactive. Error: ",
 				data_error, "; state=", m_pData->getRuntimeState() );
 			set_physics_process( false );
 			return;
@@ -1090,7 +1090,7 @@ void Terrain3D::initializeInternal( void ) {
 		m_pData->ensureFarAtlases();
 		m_pMaterial->initialize( this );
 		if ( !m_pMaterial->isRenderShaderReady() ) {
-			LOG( Terrain3D::ERROR, "[lifecycle] Terrain material failed to produce a valid render shader; "
+			LOG( T3DTerrain::ERROR, "[lifecycle] Terrain material failed to produce a valid render shader; "
 				"aborting terrain activation before render meshes are created." );
 			m_pMaterial->uninitialize( this );
 			m_pAssets->uninitialize( this );
@@ -1139,7 +1139,7 @@ void Terrain3D::initializeInternal( void ) {
 		m_bInitialized = true;
 		updateRegionLabels();
 		snap();
-		LOG( Terrain3D::INFO, "[lifecycle] Main subsystems ready: regions=", m_pData->getRegionCount(),
+		LOG( T3DTerrain::INFO, "[lifecycle] Main subsystems ready: regions=", m_pData->getRegionCount(),
 			"; region_size=", ( int ) ( m_nRegionSize ), "; mesh_lods=", m_nMeshLods,
 			"; tessellation=", m_tessellationLevel );
 	}
@@ -1147,7 +1147,7 @@ void Terrain3D::initializeInternal( void ) {
 	update_configuration_warnings();
 }
 
-void Terrain3D::deactivateRuntime( void ) {
+void T3DTerrain::deactivateRuntime( void ) {
 	set_physics_process( false );
 	destroyTerrainMesher();
 	destroyOceanMesher();
@@ -1173,7 +1173,7 @@ void Terrain3D::deactivateRuntime( void ) {
  * This is a proxy for _process(delta) called by _notification() due to
  * https://github.com/godotengine/godot-cpp/issues/1022
  */
-void Terrain3D::physicsProcess( const double fDelta ) {
+void T3DTerrain::physicsProcess( const double fDelta ) {
 	if ( !m_bInitialized ) {
 		return;
 	}
@@ -1182,7 +1182,7 @@ void Terrain3D::physicsProcess( const double fDelta ) {
 		m_lastBufferPosition = V2_MAX;
 	}
 	if ( !m_camera.isValid() ) {
-		LOG( Terrain3D::DEBUG, "Camera is null, getting the current one" );
+		LOG( T3DTerrain::DEBUG, "Camera is null, getting the current one" );
 		grabCamera();
 	}
 
@@ -1350,7 +1350,7 @@ void Terrain3D::physicsProcess( const double fDelta ) {
 	}
 }
 
-void Terrain3D::syncLightShaderParameters( void ) {
+void T3DTerrain::syncLightShaderParameters( void ) {
 	DirectionalLight3D *const pLight = m_lightTarget.isValid() ? cast_to<DirectionalLight3D>( m_lightTarget.ptr() ) : nullptr;
 	if ( !pLight ) {
 		m_bLightStateValid = false;
@@ -1392,23 +1392,23 @@ void Terrain3D::syncLightShaderParameters( void ) {
  * If running in the editor, grab the first editor viewport camera.
  * The edited_scene_root is excluded in case the user already has a Camera3D in their scene.
  */
-void Terrain3D::grabCamera( void ) {
+void T3DTerrain::grabCamera( void ) {
 	if ( IS_EDITOR ) {
 		m_camera.setTarget( EditorInterface::get_singleton()->get_editor_viewport_3d( 0 )->get_camera_3d() );
-		LOG( Terrain3D::DEBUG, "Grabbing the first editor viewport camera: ", m_camera.getTarget() );
+		LOG( T3DTerrain::DEBUG, "Grabbing the first editor viewport camera: ", m_camera.getTarget() );
 	} else {
 		m_camera.setTarget( get_viewport()->get_camera_3d() );
-		LOG( Terrain3D::DEBUG, "Grabbing the in-game viewport camera: ", m_camera.getTarget() );
+		LOG( T3DTerrain::DEBUG, "Grabbing the in-game viewport camera: ", m_camera.getTarget() );
 	}
 	if ( !m_camera.isValid() && !m_clipmapTarget.isValid() ) {
 		set_physics_process( false ); // No target to follow, disable snapping until one set
-		LOG( Terrain3D::ERROR, "Cannot find clipmap target or active camera. LODs won't be updated. Set manually with "
+		LOG( T3DTerrain::ERROR, "Cannot find clipmap target or active camera. LODs won't be updated. Set manually with "
 				   "set_clipmap_target() or setCamera()" );
 	}
 }
 
-void Terrain3D::destroyCollision( const bool bFinal ) {
-	LOG( Terrain3D::INFO, "Destroying Collision" );
+void T3DTerrain::destroyCollision( const bool bFinal ) {
+	LOG( T3DTerrain::INFO, "Destroying Collision" );
 	if ( m_pCollision ) {
 		m_pCollision->destroy();
 	}
@@ -1418,20 +1418,20 @@ void Terrain3D::destroyCollision( const bool bFinal ) {
 	}
 }
 
-void Terrain3D::setupTerrainMesher( void ) {
+void T3DTerrain::setupTerrainMesher( void ) {
 	if ( !m_pTerrainMesher ) {
-		LOG( Terrain3D::DEBUG, "Creating mesher" );
+		LOG( T3DTerrain::DEBUG, "Creating mesher" );
 		m_pTerrainMesher = memnew( T3DMesher );
 	}
 	const eastl::array<RID, 3> materials = {
-		m_pMaterial->getMaterialRidForTier( Terrain3DMaterial::SHADER_TIER_NEAR ),
-		m_pMaterial->getMaterialRidForTier( Terrain3DMaterial::SHADER_TIER_MIDDLE ),
-		m_pMaterial->getMaterialRidForTier( Terrain3DMaterial::SHADER_TIER_FAR ),
+		m_pMaterial->getMaterialRidForTier( T3DMaterial::SHADER_TIER_NEAR ),
+		m_pMaterial->getMaterialRidForTier( T3DMaterial::SHADER_TIER_MIDDLE ),
+		m_pMaterial->getMaterialRidForTier( T3DMaterial::SHADER_TIER_FAR ),
 	};
 	const eastl::array<RID, 3> shadow_materials = {
-		m_pMaterial->getShadowMaterialRidForTier( Terrain3DMaterial::SHADER_TIER_NEAR ),
-		m_pMaterial->getShadowMaterialRidForTier( Terrain3DMaterial::SHADER_TIER_MIDDLE ),
-		m_pMaterial->getShadowMaterialRidForTier( Terrain3DMaterial::SHADER_TIER_FAR ),
+		m_pMaterial->getShadowMaterialRidForTier( T3DMaterial::SHADER_TIER_NEAR ),
+		m_pMaterial->getShadowMaterialRidForTier( T3DMaterial::SHADER_TIER_MIDDLE ),
+		m_pMaterial->getShadowMaterialRidForTier( T3DMaterial::SHADER_TIER_FAR ),
 	};
 	const bool bTieringActive = isRuntimeShaderTieringActive();
 	const int clipmap_levels = CLAMP( m_nMeshLods + m_tessellationLevel, 1, TERRAIN3D_MAX_CLIPMAP_LEVELS );
@@ -1451,12 +1451,12 @@ void Terrain3D::setupTerrainMesher( void ) {
 		isGpuRegionCookedPagesEnabled() && !isEditorAuthoringModeInternal() );
 }
 
-bool Terrain3D::cookRuntimeClipmapGeometryPack( void ) const {
+bool T3DTerrain::cookRuntimeClipmapGeometryPack( void ) const {
 	return m_pTerrainMesher && m_pTerrainMesher->writeRuntimeGeometryPack( getDataDirectory() );
 }
 
-void Terrain3D::destroyTerrainMesher( const bool bFinal ) {
-	LOG( Terrain3D::INFO, "Destroying terrain mesher" );
+void T3DTerrain::destroyTerrainMesher( const bool bFinal ) {
+	LOG( T3DTerrain::INFO, "Destroying terrain mesher" );
 	if ( !m_pTerrainMesher ) {
 		return;
 	}
@@ -1468,14 +1468,14 @@ void Terrain3D::destroyTerrainMesher( const bool bFinal ) {
 	}
 }
 
-void Terrain3D::setupOceanMesher( void ) {
+void T3DTerrain::setupOceanMesher( void ) {
 	if ( m_bOceanEnabled ) {
 		m_bLightStateValid = false;
 		// t3dsettings_t can be deserialized before the default material is loaded. Build
 		// the requested compile-time variant before the mesher captures its RID.
 		updateOceanShaderVariant();
 		if ( !m_pOceanMesher ) {
-			LOG( Terrain3D::DEBUG, "Creating mesher" );
+			LOG( T3DTerrain::DEBUG, "Creating mesher" );
 			m_pOceanMesher = memnew( T3DMesher );
 		}
 		const RID ocean_rid = m_pOceanMaterial.is_valid() ? m_pOceanMaterial->get_rid() : RID();
@@ -1499,8 +1499,8 @@ void Terrain3D::setupOceanMesher( void ) {
 	}
 }
 
-void Terrain3D::destroyOceanMesher( const bool bFinal ) {
-	LOG( Terrain3D::INFO, "Destroying ocean mesher" );
+void T3DTerrain::destroyOceanMesher( const bool bFinal ) {
+	LOG( T3DTerrain::INFO, "Destroying ocean mesher" );
 	if ( !m_pOceanMesher ) {
 		return;
 	}
@@ -1512,13 +1512,13 @@ void Terrain3D::destroyOceanMesher( const bool bFinal ) {
 	}
 }
 
-void Terrain3D::setupDisplacementBuffer( void ) {
+void T3DTerrain::setupDisplacementBuffer( void ) {
 	if ( !is_inside_tree() ) {
-		LOG( Terrain3D::ERROR, "Not inside the tree, skipping displacement buffer setup" );
+		LOG( T3DTerrain::ERROR, "Not inside the tree, skipping displacement buffer setup" );
 		return;
 	}
 	destroyDisplacementBuffer();
-	LOG( Terrain3D::INFO, "t3dsetting_t up displacement buffer" );
+	LOG( T3DTerrain::INFO, "t3dsetting_t up displacement buffer" );
 	m_pDBufferVp = memnew( SubViewport );
 	m_pDBufferVp->set_name( "DBufferViewport" );
 	add_child( m_pDBufferVp, true );
@@ -1535,7 +1535,7 @@ void Terrain3D::setupDisplacementBuffer( void ) {
 	m_pDBufferRect->set_anchors_preset( Control::PRESET_FULL_RECT );
 }
 
-void Terrain3D::updateDisplacementBuffer( void ) {
+void T3DTerrain::updateDisplacementBuffer( void ) {
 	if ( !m_pDBufferVp ) {
 		return;
 	}
@@ -1546,7 +1546,7 @@ void Terrain3D::updateDisplacementBuffer( void ) {
 	} else {
 		m_pDBufferVp->set_size( Vector2i( m_nMeshSize * 4 * m_tessellationLevel, m_nMeshSize * 4 ) );
 		m_pDBufferRect->set_size( Vector2i( m_nMeshSize * 4 * m_tessellationLevel, m_nMeshSize * 4 ) );
-		LOG( Terrain3D::INFO, "Updating displacement buffer to Size: ", m_pDBufferVp->get_size() );
+		LOG( T3DTerrain::INFO, "Updating displacement buffer to Size: ", m_pDBufferVp->get_size() );
 		if ( m_pMaterial.is_valid() && m_pMaterial->getMaterialRid().is_valid() ) {
 			// Keep a valid raster fallback bound until the asynchronous render-thread
 			// compute dispatch publishes its renderer-owned storage texture.
@@ -1558,7 +1558,7 @@ void Terrain3D::updateDisplacementBuffer( void ) {
 	}
 }
 
-bool Terrain3D::tryUpdateComputeDisplacement( const Vector3 &rTargetPosition ) {
+bool T3DTerrain::tryUpdateComputeDisplacement( const Vector3 &rTargetPosition ) {
 	m_bComputeDisplacementActive.store( false, std::memory_order_release );
 	if ( !m_bComputeDisplacementEnabled.load( std::memory_order_acquire ) ||
 		m_bComputeDisplacementFailed.load( std::memory_order_acquire ) ||
@@ -1581,14 +1581,14 @@ bool Terrain3D::tryUpdateComputeDisplacement( const Vector3 &rTargetPosition ) {
 	return true;
 }
 
-void Terrain3D::invalidateComputeDisplacementRequest( void ) {
+void T3DTerrain::invalidateComputeDisplacementRequest( void ) {
 	m_bComputeDisplacementActive.store( false, std::memory_order_release );
 	std::lock_guard<std::mutex> lock( m_computeDisplacementMutex );
 	m_computeDisplacementRequest = T3DCompute::t3ddisplacementRequest_t{};
 	++m_computeDisplacementRequestVersion;
 }
 
-void Terrain3D::queueComputeDisplacementRender( void ) {
+void T3DTerrain::queueComputeDisplacementRender( void ) {
 	if ( m_bComputeDisplacementTearingDown.load( std::memory_order_acquire ) ) {
 		return;
 	}
@@ -1607,11 +1607,11 @@ void Terrain3D::queueComputeDisplacementRender( void ) {
 	if ( pServer->is_on_render_thread() ) {
 		renderUpdateComputeDisplacement();
 	} else {
-		pServer->call_on_render_thread( callable_mp( this, &Terrain3D::renderUpdateComputeDisplacement ) );
+		pServer->call_on_render_thread( callable_mp( this, &T3DTerrain::renderUpdateComputeDisplacement ) );
 	}
 }
 
-void Terrain3D::renderUpdateComputeDisplacement( void ) {
+void T3DTerrain::renderUpdateComputeDisplacement( void ) {
 	T3DCompute::t3ddisplacementRequest_t request;
 	uint64_t request_version = 0u;
 	{
@@ -1659,14 +1659,14 @@ void Terrain3D::renderUpdateComputeDisplacement( void ) {
 	}
 }
 
-void Terrain3D::renderShutdownComputeDisplacement( void ) {
+void T3DTerrain::renderShutdownComputeDisplacement( void ) {
 	T3DCompute *const pCompute = m_pData ? m_pData->getComputeBackendIfCreated() : nullptr;
 	if ( pCompute ) {
 		pCompute->shutdownDisplacementResources();
 	}
 }
 
-void Terrain3D::setComputeDisplacementEnabled( const bool bEnabled ) {
+void T3DTerrain::setComputeDisplacementEnabled( const bool bEnabled ) {
 	const bool bOldEnabled = m_bComputeDisplacementEnabled.exchange( bEnabled, std::memory_order_acq_rel );
 	if ( bOldEnabled == bEnabled ) {
 		return;
@@ -1680,12 +1680,12 @@ void Terrain3D::setComputeDisplacementEnabled( const bool bEnabled ) {
 	}
 }
 
-void Terrain3D::setDisplacementUpdateDistance( const real_t fDistance ) {
+void T3DTerrain::setDisplacementUpdateDistance( const real_t fDistance ) {
 	SET_IF_DIFF( m_fDisplacementUpdateDistance, CLAMP( fDistance, 0.0f, 16.0f ) );
 	m_lastBufferPosition = V2_MAX;
 }
 
-void Terrain3D::buildContainers( void ) {
+void T3DTerrain::buildContainers( void ) {
 	if ( m_pLabelParent ) {
 		return;
 	}
@@ -1694,19 +1694,19 @@ void Terrain3D::buildContainers( void ) {
 	add_child( m_pLabelParent, true );
 }
 
-void Terrain3D::destroyContainers( void ) {
+void T3DTerrain::destroyContainers( void ) {
 	if ( m_pLabelParent ) {
 		memdelete( m_pLabelParent );
 		m_pLabelParent = nullptr;
 	}
 }
 
-void Terrain3D::destroyLabels( void ) {
+void T3DTerrain::destroyLabels( void ) {
 	if ( !m_pLabelParent ) {
 		return;
 	}
 	const Array labels = m_pLabelParent->get_children();
-	LOG( Terrain3D::DEBUG, "Destroying ", labels.size(), " region labels" );
+	LOG( T3DTerrain::DEBUG, "Destroying ", labels.size(), " region labels" );
 	for ( const Variant &var : labels ) {
 		Node *const pLabel = cast_to<Node>( var );
 		if ( pLabel ) {
@@ -1715,15 +1715,15 @@ void Terrain3D::destroyLabels( void ) {
 	}
 }
 
-void Terrain3D::destroyDisplacementBuffer( void ) {
-	LOG( Terrain3D::INFO, "[compute] Draining displacement work and releasing buffer resources" );
+void T3DTerrain::destroyDisplacementBuffer( void ) {
+	LOG( T3DTerrain::INFO, "[compute] Draining displacement work and releasing buffer resources" );
 	m_bComputeDisplacementTearingDown.store( true, std::memory_order_release );
 	RenderingServer *const pServer = RenderingServer::get_singleton();
 	if ( pServer && m_pData && m_pData->getComputeBackendIfCreated() ) {
 		if ( pServer->is_on_render_thread() ) {
 			renderShutdownComputeDisplacement();
 		} else {
-			pServer->call_on_render_thread( callable_mp( this, &Terrain3D::renderShutdownComputeDisplacement ) );
+			pServer->call_on_render_thread( callable_mp( this, &T3DTerrain::renderShutdownComputeDisplacement ) );
 			// Lifecycle-only synchronization: all queued displacement work and its
 			// renderer-owned resources must be gone before the compute backend or node dies.
 			pServer->force_sync();
@@ -1739,24 +1739,24 @@ void Terrain3D::destroyDisplacementBuffer( void ) {
 		++m_computeDisplacementRequestVersion;
 	}
 	m_bComputeDisplacementTearingDown.store( false, std::memory_order_release );
-	LOG( Terrain3D::DEBUG, "Freeing d_buffer_rect" );
+	LOG( T3DTerrain::DEBUG, "Freeing d_buffer_rect" );
 	if ( m_pDBufferRect ) {
 		memdelete( m_pDBufferRect );
 		m_pDBufferRect = nullptr;
 	}
-	LOG( Terrain3D::DEBUG, "Freeing d_buffer_vp" );
+	LOG( T3DTerrain::DEBUG, "Freeing d_buffer_vp" );
 	if ( m_pDBufferVp ) {
 		memdelete( m_pDBufferVp );
 		m_pDBufferVp = nullptr;
 	}
 }
 
-void Terrain3D::setupMousePicking( void ) {
+void T3DTerrain::setupMousePicking( void ) {
 	if ( !is_inside_tree() ) {
-		LOG( Terrain3D::ERROR, "Not inside the tree, skipping mouse setup" );
+		LOG( T3DTerrain::ERROR, "Not inside the tree, skipping mouse setup" );
 		return;
 	}
-	LOG( Terrain3D::INFO, "t3dsetting_t up mouse picker and get_intersection viewport, camera & screen quad" );
+	LOG( T3DTerrain::INFO, "t3dsetting_t up mouse picker and get_intersection viewport, camera & screen quad" );
 	m_pMouseVp = memnew( SubViewport );
 	m_pMouseVp->set_name( "MouseViewport" );
 	add_child( m_pMouseVp, true );
@@ -1813,33 +1813,33 @@ void Terrain3D::setupMousePicking( void ) {
 	setMouseLayer( force_update_layer );
 }
 
-void Terrain3D::destroyMousePicking( void ) {
-	LOG( Terrain3D::DEBUG, "Freeing mouse_quad" );
+void T3DTerrain::destroyMousePicking( void ) {
+	LOG( T3DTerrain::DEBUG, "Freeing mouse_quad" );
 	if ( m_pMouseQuad ) {
 		memdelete( m_pMouseQuad );
 		m_pMouseQuad = nullptr;
 	}
-	LOG( Terrain3D::DEBUG, "Freeing mouse_cam" );
+	LOG( T3DTerrain::DEBUG, "Freeing mouse_cam" );
 	if ( m_pMouseCam ) {
 		memdelete( m_pMouseCam );
 		m_pMouseCam = nullptr;
 	}
-	LOG( Terrain3D::DEBUG, "Freeing mouse_vp" );
+	LOG( T3DTerrain::DEBUG, "Freeing mouse_vp" );
 	if ( m_pMouseVp ) {
 		memdelete( m_pMouseVp );
 		m_pMouseVp = nullptr;
 	}
 }
 
-void Terrain3D::destroyInstancer( void ) {
-	LOG( Terrain3D::INFO, "Destroying Instancer" );
+void T3DTerrain::destroyInstancer( void ) {
+	LOG( T3DTerrain::INFO, "Destroying Instancer" );
 	if ( m_pInstancer ) {
 		memdelete( m_pInstancer );
 		m_pInstancer = nullptr;
 	}
 }
 
-void Terrain3D::destroyNodeStreamer( const bool bCaptureState ) {
+void T3DTerrain::destroyNodeStreamer( const bool bCaptureState ) {
 	if ( m_pNodeStreamer ) {
 		m_pNodeStreamer->destroy( bCaptureState );
 		memdelete( m_pNodeStreamer );
@@ -1847,7 +1847,7 @@ void Terrain3D::destroyNodeStreamer( const bool bCaptureState ) {
 	}
 }
 
-void Terrain3D::destroyLightmapStreamer( void ) {
+void T3DTerrain::destroyLightmapStreamer( void ) {
 	if ( m_pLightmapStreamer ) {
 		m_pLightmapStreamer->destroy();
 		memdelete( m_pLightmapStreamer );
@@ -1855,7 +1855,7 @@ void Terrain3D::destroyLightmapStreamer( void ) {
 	}
 }
 
-void Terrain3D::destroyHlodStreamer( void ) {
+void T3DTerrain::destroyHlodStreamer( void ) {
 	if ( m_pHlodStreamer ) {
 		m_pHlodStreamer->destroy();
 		memdelete( m_pHlodStreamer );
@@ -1863,14 +1863,14 @@ void Terrain3D::destroyHlodStreamer( void ) {
 	}
 }
 
-bool Terrain3D::bakeRegionSnapshotLess( const t3dbakeRegionSnapshot_t &rA, const t3dbakeRegionSnapshot_t &rB ) {
+bool T3DTerrain::bakeRegionSnapshotLess( const t3dbakeRegionSnapshot_t &rA, const t3dbakeRegionSnapshot_t &rB ) {
 	if ( rA.location.y != rB.location.y ) {
 		return rA.location.y < rB.location.y;
 	}
 	return rA.location.x < rB.location.x;
 }
 
-const Terrain3D::t3dbakeRegionSnapshot_t *Terrain3D::t3dbakeSnapshot_t::getRegion( const int32_t iX, const int32_t iZ ) const {
+const T3DTerrain::t3dbakeRegionSnapshot_t *T3DTerrain::t3dbakeSnapshot_t::getRegion( const int32_t iX, const int32_t iZ ) const {
 	if ( nRegionSize <= 0 ) {
 		return nullptr;
 	}
@@ -1879,7 +1879,7 @@ const Terrain3D::t3dbakeRegionSnapshot_t *Terrain3D::t3dbakeSnapshot_t::getRegio
 		terrain3dDivideFloor( iX, nRegionSize ),
 		terrain3dDivideFloor( iZ, nRegionSize )
 	);
-	const int32_t map_index = Terrain3DData::getRegionMapIndex( regionLocation );
+	const int32_t map_index = T3DData::getRegionMapIndex( regionLocation );
 	if ( map_index < 0 ) {
 		return nullptr;
 	}
@@ -1890,7 +1890,7 @@ const Terrain3D::t3dbakeRegionSnapshot_t *Terrain3D::t3dbakeSnapshot_t::getRegio
 	return &regions[( size_t ) ( region_index )];
 }
 
-void Terrain3D::t3dbakeSnapshot_t::getSample(
+void T3DTerrain::t3dbakeSnapshot_t::getSample(
 	const int32_t iX, const int32_t iZ, uint32_t &nControl,
 	real_t &fHeight
 ) const {
@@ -1908,7 +1908,7 @@ void Terrain3D::t3dbakeSnapshot_t::getSample(
 		return;
 	}
 	const int32_t index = local_z * nRegionSize + local_x;
-	fHeight = ( real_t ) ( Terrain3DRegionCodec::readHeightBytes( pRegion->pHeightBytes, index, Image::FORMAT_R16 ) );
+	fHeight = ( real_t ) ( T3DRegionCodec::readHeightBytes( pRegion->pHeightBytes, index, Image::FORMAT_R16 ) );
 	if ( pRegion->pControlBytes ) {
 		uint32_t control = TERRAIN3D_REGION_DEFAULT_CONTROL;
 		std::memcpy( &control, pRegion->pControlBytes + ( size_t ) ( index ) * sizeof( uint32_t ), sizeof( uint32_t ) );
@@ -1919,7 +1919,7 @@ void Terrain3D::t3dbakeSnapshot_t::getSample(
 	return;
 }
 
-bool Terrain3D::t3dbakeSnapshot_t::getMinimumRect(
+bool T3DTerrain::t3dbakeSnapshot_t::getMinimumRect(
 	const int32_t iX, const int32_t iZ, const int32_t nWidth,
 	const int32_t nHeight, real_t &fHeight
 ) const {
@@ -1952,7 +1952,7 @@ bool Terrain3D::t3dbakeSnapshot_t::getMinimumRect(
 				if ( isHole( sample_control ) ) {
 					return false;
 				}
-				fMinimum = MIN( fMinimum, ( real_t ) ( Terrain3DRegionCodec::decodeHeightU16( pHeight[i] ) ) );
+				fMinimum = MIN( fMinimum, ( real_t ) ( T3DRegionCodec::decodeHeightU16( pHeight[i] ) ) );
 			}
 			copied += run;
 		}
@@ -1964,8 +1964,8 @@ bool Terrain3D::t3dbakeSnapshot_t::getMinimumRect(
 	return true;
 }
 
-Vector3 Terrain3D::t3dbakeSnapshot_t::getMeshVertex(
-	const int32_t nLod, const Terrain3DData::t3dheightFilter_t filter,
+Vector3 T3DTerrain::t3dbakeSnapshot_t::getMeshVertex(
+	const int32_t nLod, const T3DData::t3dheightFilter_t filter,
 	const int32_t iX, const int32_t iZ, uint32_t &nControl
 ) const {
 	const int32_t step = 1 << CLAMP( nLod, 0, 8 );
@@ -1975,7 +1975,7 @@ Vector3 Terrain3D::t3dbakeSnapshot_t::getMeshVertex(
 		fHeight = NAN;
 	}
 
-	if ( filter == Terrain3DData::HEIGHT_FILTER_MINIMUM &&
+	if ( filter == T3DData::HEIGHT_FILTER_MINIMUM &&
 		!getMinimumRect( iX - step / 2, iZ - step / 2, step, step, fHeight ) ) {
 		fHeight = NAN;
 	}
@@ -1983,7 +1983,7 @@ Vector3 Terrain3D::t3dbakeSnapshot_t::getMeshVertex(
 	return Vector3( ( real_t ) ( iX ) * fVertexSpacing, fHeight, ( real_t ) ( iZ ) * fVertexSpacing );
 }
 
-Terrain3D::t3dbakeSnapshot_t Terrain3D::createBakeSnapshot( void ) const {
+T3DTerrain::t3dbakeSnapshot_t T3DTerrain::createBakeSnapshot( void ) const {
 	t3dbakeSnapshot_t snapshot;
 	snapshot.nRegionSize = ( int32_t )m_nRegionSize;
 	snapshot.fVertexSpacing = m_fVertexSpacing;
@@ -1998,10 +1998,10 @@ Terrain3D::t3dbakeSnapshot_t Terrain3D::createBakeSnapshot( void ) const {
 
 	for ( const Vector2i regionLocation : region_locations ) {
 		if ( !m_pData->ensureCpuRegionResident( regionLocation ) ) {
-			LOG( Terrain3D::ERROR, "Skipping terrain region that could not be paged for bake snapshot: ", regionLocation );
+			LOG( T3DTerrain::ERROR, "Skipping terrain region that could not be paged for bake snapshot: ", regionLocation );
 			continue;
 		}
-		Terrain3DRegion *const pRegion = m_pData->getRegionPtr( regionLocation );
+		T3DRegion *const pRegion = m_pData->getRegionPtr( regionLocation );
 		if ( !pRegion || pRegion->isDeleted() ) {
 			continue;
 		}
@@ -2012,7 +2012,7 @@ Terrain3D::t3dbakeSnapshot_t Terrain3D::createBakeSnapshot( void ) const {
 			pHeightMap->get_width() != snapshot.nRegionSize || pHeightMap->get_height() != snapshot.nRegionSize ||
 			( pControlMap.is_valid() && ( pControlMap->get_format() != Image::FORMAT_RF ||
 				pControlMap->get_width() != snapshot.nRegionSize || pControlMap->get_height() != snapshot.nRegionSize ) ) ) {
-			LOG( Terrain3D::ERROR, "Skipping invalid terrain region during bake snapshot: ", regionLocation );
+			LOG( T3DTerrain::ERROR, "Skipping invalid terrain region during bake snapshot: ", regionLocation );
 			continue;
 		}
 
@@ -2024,11 +2024,11 @@ Terrain3D::t3dbakeSnapshot_t Terrain3D::createBakeSnapshot( void ) const {
 		}
 		if ( region_snapshot.heightData.size() < expected_height_bytes ||
 			( pControlMap.is_valid() && region_snapshot.controlData.size() < expected_control_bytes ) ) {
-			LOG( Terrain3D::ERROR, "Skipping terrain region with incomplete map data during bake snapshot: ", regionLocation );
+			LOG( T3DTerrain::ERROR, "Skipping terrain region with incomplete map data during bake snapshot: ", regionLocation );
 			continue;
 		}
 
-		const int32_t map_index = Terrain3DData::getRegionMapIndex( regionLocation );
+		const int32_t map_index = T3DData::getRegionMapIndex( regionLocation );
 		if ( map_index < 0 ) {
 			continue;
 		}
@@ -2041,7 +2041,7 @@ Terrain3D::t3dbakeSnapshot_t Terrain3D::createBakeSnapshot( void ) const {
 	// when the resource's active-region order reflects edit history.
 	std::sort( snapshot.regions.begin(), snapshot.regions.end(), bakeRegionSnapshotLess );
 	for ( size_t region_index = 0; region_index < snapshot.regions.size(); ++region_index ) {
-		const int32_t map_index = Terrain3DData::getRegionMapIndex( snapshot.regions[region_index].location );
+		const int32_t map_index = T3DData::getRegionMapIndex( snapshot.regions[region_index].location );
 		if ( map_index >= 0 ) {
 			snapshot.szRegionLookup[map_index] = ( int32_t ) ( region_index );
 		}
@@ -2050,7 +2050,7 @@ Terrain3D::t3dbakeSnapshot_t Terrain3D::createBakeSnapshot( void ) const {
 	return snapshot;
 }
 
-void Terrain3D::runBakeTaskRange( void *const pContext, const size_t nBegin, const size_t nEnd ) {
+void T3DTerrain::runBakeTaskRange( void *const pContext, const size_t nBegin, const size_t nEnd ) {
 	t3dbakeTaskContext_t *context = ( t3dbakeTaskContext_t * ) ( pContext );
 	for ( size_t task_index = nBegin; task_index < nEnd; ++task_index ) {
 		const t3dbakeRowTask_t &task = ( *context->pTasks )[task_index];
@@ -2064,9 +2064,9 @@ void Terrain3D::runBakeTaskRange( void *const pContext, const size_t nBegin, con
 	}
 }
 
-Vector3 Terrain3D::getTriangleVertex(
+Vector3 T3DTerrain::getTriangleVertex(
 	const t3dbakeSnapshot_t *pSnapshot, const int32_t nLod,
-	const Terrain3DData::t3dheightFilter_t filter, const int32_t iX, const int32_t iZ,
+	const T3DData::t3dheightFilter_t filter, const int32_t iX, const int32_t iZ,
 	const Vector3 &rPosition, uint32_t &nControl
 ) const {
 	if ( pSnapshot ) {
@@ -2077,9 +2077,9 @@ Vector3 Terrain3D::getTriangleVertex(
 	return vertex;
 }
 
-void Terrain3D::generateTriangles(
+void T3DTerrain::generateTriangles(
 	PackedVector3Array &rVertices, PackedVector2Array *const pUvs, const int32_t nLod,
-	const Terrain3DData::t3dheightFilter_t filter, const bool bRequireNav,
+	const T3DData::t3dheightFilter_t filter, const bool bRequireNav,
 	const AABB &rGlobalAabb
 ) const {
 	ERR_FAIL_COND( m_pData == nullptr );
@@ -2087,8 +2087,8 @@ void Terrain3D::generateTriangles(
 	const bool generate_uvs = pUvs != nullptr;
 	eastl::vector<t3dtriangleBuffer_t> buffers;
 	T3DLinearArena bake_arena;
-	Terrain3DArenaBuffer<Vector3> bake_vertex_slab;
-	Terrain3DArenaBuffer<Vector2> bake_uv_slab;
+	T3DArenaBuffer<Vector3> bake_vertex_slab;
+	T3DArenaBuffer<Vector2> bake_uv_slab;
 
 	// Whole-terrain bakes are split into row chunks. This parallelizes even a single large region,
 	// while keeping each worker's output isolated and preserving deterministic merge order.
@@ -2172,7 +2172,7 @@ void Terrain3D::generateTriangles(
 			task_context.bGenerateUvs = generate_uvs;
 			task_context.bRequireNav = bRequireNav;
 
-			LOG( Terrain3D::INFO, "Generating terrain bake geometry with up to ", worker_count, " persistent worker tasks across ",
+			LOG( T3DTerrain::INFO, "Generating terrain bake geometry with up to ", worker_count, " persistent worker tasks across ",
 				tasks.size(), " chunks" );
 			executor.run( tasks.size(), 1u, runBakeTaskRange, &task_context );
 		}
@@ -2247,9 +2247,9 @@ void Terrain3D::generateTriangles(
 //		  | \|
 //		3  --  4
 // p_require_nav is false for the runtime baker, which ignores navigation.
-void Terrain3D::generateTrianglePair(
+void T3DTerrain::generateTrianglePair(
 	t3dtriangleBuffer_t &rBuffer, const bool bGenerateUvs, const int32_t nLod,
-	const Terrain3DData::t3dheightFilter_t filter, const bool bRequireNav,
+	const T3DData::t3dheightFilter_t filter, const bool bRequireNav,
 	const int32_t x, const int32_t z, const t3dbakeSnapshot_t *pSnapshot
 ) const {
 	const int32_t step = 1 << CLAMP( nLod, 0, 8 );
@@ -2308,8 +2308,8 @@ void Terrain3D::generateTrianglePair(
 // Public Functions
 ///////////////////////////
 
-Terrain3D::Terrain3D( void ) {
-	LOG( Terrain3D::INFO, "Terrain3D v", m_version, " - https://github.com/TokisanGames/Terrain3D" );
+T3DTerrain::T3DTerrain( void ) {
+	LOG( T3DTerrain::INFO, "Terrain3D v", m_version, " - https://github.com/TokisanGames/Terrain3D" );
 	// Process the command line
 	PackedStringArray args = OS::get_singleton()->get_cmdline_args();
 	for ( int i = args.size() - 1; i >= 0; i-- ) {
@@ -2317,19 +2317,19 @@ Terrain3D::Terrain3D( void ) {
 		if ( arg.begins_with( "--terrain3d-debug=" ) ) {
 			String value = arg.rsplit( "=" )[1];
 			if ( value == "ERROR" ) {
-				setDebugLevel( Terrain3D::ERROR );
+				setDebugLevel( T3DTerrain::ERROR );
 			} else if ( value == "INFO" ) {
-				setDebugLevel( Terrain3D::INFO );
+				setDebugLevel( T3DTerrain::INFO );
 			} else if ( value == "DEBUG" ) {
-				setDebugLevel( Terrain3D::DEBUG );
+				setDebugLevel( T3DTerrain::DEBUG );
 			} else if ( value == "EXTREME" ) {
-				setDebugLevel( Terrain3D::EXTREME );
+				setDebugLevel( T3DTerrain::EXTREME );
 			}
 		}
 	}
 }
 
-Terrain3D::~Terrain3D( void ) {
+T3DTerrain::~T3DTerrain( void ) {
 	if ( m_pRuntimeProfileHistory ) {
 		memdelete( m_pRuntimeProfileHistory );
 		m_pRuntimeProfileHistory = nullptr;
@@ -2342,7 +2342,7 @@ Terrain3D::~Terrain3D( void ) {
 	}
 }
 
-bool Terrain3D::initializeRuntimeMemory( void ) {
+bool T3DTerrain::initializeRuntimeMemory( void ) {
 	if ( m_bRuntimeMemoryReady ) {
 		if ( m_pData && m_pData->isActiveStorageOwnerInternal() ) return true;
 		const t3dmemoryArenaSpan_t active_span = m_runtimeMemoryArena.resolve( m_runtimeActiveHeightSlice );
@@ -2375,16 +2375,16 @@ bool Terrain3D::initializeRuntimeMemory( void ) {
 	return true;
 }
 
-void Terrain3D::setRuntimeProfilingEnabled( const bool bEnabled ) {
+void T3DTerrain::setRuntimeProfilingEnabled( const bool bEnabled ) {
 	if ( bEnabled && !m_pRuntimeProfileHistory ) {
 		m_pRuntimeProfileHistory = memnew( t3druntimeProfileHistory_t );
 	}
 	m_bRuntimeProfilingEnabled = bEnabled;
 }
 
-void Terrain3D::setDebugLevel( const t3ddebugLevel_t level ) {
-	SET_IF_DIFF( s_debugLevel, CLAMP( level, Terrain3D::ERROR, Terrain3D::EXTREME ) );
-	LOG( Terrain3D::INFO, "t3dsetting_t debug level: ", s_debugLevel );
+void T3DTerrain::setDebugLevel( const t3ddebugLevel_t level ) {
+	SET_IF_DIFF( s_debugLevel, CLAMP( level, T3DTerrain::ERROR, T3DTerrain::EXTREME ) );
+	LOG( T3DTerrain::INFO, "t3dsetting_t debug level: ", s_debugLevel );
 }
 
 static String terrain3dDefaultRegionLightmapOutputDirectory( const String &rDataDirectory ) {
@@ -2392,7 +2392,7 @@ static String terrain3dDefaultRegionLightmapOutputDirectory( const String &rData
 	return directory.is_empty() ? String() : directory.path_join( "lighting" );
 }
 
-void Terrain3D::setDataDirectory( const String dir ) {
+void T3DTerrain::setDataDirectory( const String dir ) {
 	if ( m_dataDirectory == dir ) {
 		if ( m_regionLightmapOutputDirectory.is_empty() && !dir.is_empty() ) {
 			m_regionLightmapOutputDirectory = terrain3dDefaultRegionLightmapOutputDirectory( dir );
@@ -2403,7 +2403,7 @@ void Terrain3D::setDataDirectory( const String dir ) {
 	const String old_lightmap_default = terrain3dDefaultRegionLightmapOutputDirectory( old_dir );
 	const bool bFollowLightmapDefault = m_regionLightmapOutputDirectory.is_empty() ||
 		m_regionLightmapOutputDirectory == old_lightmap_default;
-	LOG( Terrain3D::INFO, "[data-transition] Requested data directory change: ", old_dir, " -> ", dir,
+	LOG( T3DTerrain::INFO, "[data-transition] Requested data directory change: ", old_dir, " -> ", dir,
 		"; initialized=", m_bInitialized, "; inside_tree=", is_inside_tree(),
 		"; inside_world=", m_bIsInsideWorld );
 
@@ -2417,7 +2417,7 @@ void Terrain3D::setDataDirectory( const String dir ) {
 		return;
 	}
 
-	const bool bHasRegionFiles = !dir.is_empty() && !Util::getFiles( dir, "terrain3d*.res" ).is_empty();
+	const bool bHasRegionFiles = !dir.is_empty() && !T3DUtil::getFiles( dir, "terrain3d*.res" ).is_empty();
 	const bool bClearsRepository = !old_dir.is_empty() && dir.is_empty();
 	const bool bReplacesRepository = bHasRegionFiles;
 	if ( !bClearsRepository && !bReplacesRepository ) {
@@ -2427,7 +2427,7 @@ void Terrain3D::setDataDirectory( const String dir ) {
 		if ( bFollowLightmapDefault ) {
 			m_regionLightmapOutputDirectory = terrain3dDefaultRegionLightmapOutputDirectory( dir );
 		}
-		LOG( Terrain3D::INFO, "[data-transition] Updated save target without replacing terrain data" );
+		LOG( T3DTerrain::INFO, "[data-transition] Updated save target without replacing terrain data" );
 		update_configuration_warnings();
 		return;
 	}
@@ -2440,7 +2440,7 @@ void Terrain3D::setDataDirectory( const String dir ) {
 		// their live consumers may observe the repository half way through that
 		// transition. In particular, the displacement compute path can have a queued
 		// render-thread request that contains the old terrain texture RIDs.
-		LOG( Terrain3D::INFO, "[data-transition] Quiescing renderer, physics, streaming, and resource callbacks" );
+		LOG( T3DTerrain::INFO, "[data-transition] Quiescing renderer, physics, streaming, and resource callbacks" );
 		set_physics_process( false );
 		m_bInitialized = false;
 		destroyTerrainMesher();
@@ -2468,12 +2468,12 @@ void Terrain3D::setDataDirectory( const String dir ) {
 		if ( pServer && !pServer->is_on_render_thread() ) {
 			pServer->force_sync();
 		}
-		LOG( Terrain3D::INFO, "[data-transition] Runtime consumers quiesced; repository mutation may begin" );
+		LOG( T3DTerrain::INFO, "[data-transition] Runtime consumers quiesced; repository mutation may begin" );
 	}
 
 	Error transition_error = OK;
 	if ( bClearsRepository ) {
-		LOG( Terrain3D::INFO, "[data-transition] Clearing active terrain repository" );
+		LOG( T3DTerrain::INFO, "[data-transition] Clearing active terrain repository" );
 		m_pData->clear();
 	} else {
 		transition_error = m_pData->loadDirectory( dir );
@@ -2484,20 +2484,20 @@ void Terrain3D::setDataDirectory( const String dir ) {
 		if ( bFollowLightmapDefault ) {
 			m_regionLightmapOutputDirectory = terrain3dDefaultRegionLightmapOutputDirectory( dir );
 		}
-		LOG( Terrain3D::INFO, "[data-transition] Repository mutation committed for ", dir );
+		LOG( T3DTerrain::INFO, "[data-transition] Repository mutation committed for ", dir );
 	} else {
-		LOG( Terrain3D::ERROR, "[data-transition] Data directory change rejected; restoring previous terrain. Error: ",
+		LOG( T3DTerrain::ERROR, "[data-transition] Data directory change rejected; restoring previous terrain. Error: ",
 			transition_error );
 	}
 
 	if ( bWasInitialized ) {
-		LOG( Terrain3D::INFO, "[data-transition] Recreating editor/runtime consumers from the committed repository" );
+		LOG( T3DTerrain::INFO, "[data-transition] Recreating editor/runtime consumers from the committed repository" );
 		initializeInternal();
 		setupMousePicking();
 		setupDisplacementBuffer();
 		updateDisplacementBuffer();
 		set_physics_process( bWasPhysicsProcessing );
-		LOG( Terrain3D::INFO, "[data-transition] Consumer restore complete; initialized=", m_bInitialized,
+		LOG( T3DTerrain::INFO, "[data-transition] Consumer restore complete; initialized=", m_bInitialized,
 			"; physics_process=", is_physics_processing() );
 	} else if ( transition_error == OK ) {
 		// Preserve the old setter behavior for pre-tree/property-deserialization
@@ -2508,7 +2508,7 @@ void Terrain3D::setDataDirectory( const String dir ) {
 	update_configuration_warnings();
 }
 
-void Terrain3D::setAutoShaderProfile( const Ref<Resource> &rProfile ) {
+void T3DTerrain::setAutoShaderProfile( const Ref<Resource> &rProfile ) {
 	if ( m_pAutoShaderProfile == rProfile ) {
 		connectAutoShaderProfileSignal( m_pAutoShaderProfile );
 		applyAutoShaderProfileMode();
@@ -2521,13 +2521,13 @@ void Terrain3D::setAutoShaderProfile( const Ref<Resource> &rProfile ) {
 	applyAutoShaderProfileMode();
 }
 
-void Terrain3D::setAssets( const Ref<Terrain3DAssets> &rAssets ) {
+void T3DTerrain::setAssets( const Ref<T3DAssets> &rAssets ) {
 	if ( !differs( m_pAssets, rAssets ) ) {
 		return;
 	}
-	LOG( Terrain3D::INFO, "Replacing asset registry" );
+	LOG( T3DTerrain::INFO, "Replacing asset registry" );
 	const bool bWasInitialized = m_bInitialized;
-	const Ref<Terrain3DAssets> pOldAssets = m_pAssets;
+	const Ref<T3DAssets> pOldAssets = m_pAssets;
 	disconnectResourceSignals( pOldAssets, m_pMaterial );
 	if ( bWasInitialized && m_pInstancer ) {
 		// Clear render records while the old registry still owns their counts.
@@ -2547,7 +2547,7 @@ void Terrain3D::setAssets( const Ref<Terrain3DAssets> &rAssets ) {
 			m_pInstancer->initialize( this );
 		}
 		if ( m_pMaterial.is_valid() ) {
-			m_pMaterial->update( Terrain3DMaterial::FULL_REBUILD );
+			m_pMaterial->update( T3DMaterial::FULL_REBUILD );
 		}
 	} else {
 		initializeInternal();
@@ -2555,38 +2555,38 @@ void Terrain3D::setAssets( const Ref<Terrain3DAssets> &rAssets ) {
 	emit_signal( "assets_changed" );
 }
 
-void Terrain3D::setEditor( Terrain3DEditor *const pEditor ) {
+void T3DTerrain::setEditor( T3DEditor *const pEditor ) {
 	if ( pEditor && pEditor->is_queued_for_deletion() ) {
-		LOG( Terrain3D::ERROR, "Attempted to set a node queued for deletion" );
+		LOG( T3DTerrain::ERROR, "Attempted to set a node queued for deletion" );
 		return;
 	}
 	SET_IF_DIFF( m_pEditor, pEditor );
-	LOG( Terrain3D::INFO, "t3dsetting_t Terrain3DEditor: ", m_pEditor );
+	LOG( T3DTerrain::INFO, "t3dsetting_t T3DEditor: ", m_pEditor );
 	if ( m_pMaterial.is_valid() ) {
-		m_pMaterial->update( Terrain3DMaterial::FULL_REBUILD );
+		m_pMaterial->update( T3DMaterial::FULL_REBUILD );
 	}
 }
 
-void Terrain3D::setPlugin( Object *const pPlugin ) {
+void T3DTerrain::setPlugin( Object *const pPlugin ) {
 	if ( pPlugin && pPlugin->is_queued_for_deletion() ) {
-		LOG( Terrain3D::ERROR, "Attempted to set a node queued for deletion" );
+		LOG( T3DTerrain::ERROR, "Attempted to set a node queued for deletion" );
 		return;
 	}
 	SET_IF_DIFF( m_pEditorPlugin, pPlugin );
-	LOG( Terrain3D::INFO, "t3dsetting_t Editor Plugin: ", m_pEditorPlugin );
+	LOG( T3DTerrain::INFO, "t3dsetting_t Editor Plugin: ", m_pEditorPlugin );
 }
 
-void Terrain3D::setRegionSize( const t3dregionSize_t size ) {
+void T3DTerrain::setRegionSize( const t3dregionSize_t size ) {
 	if ( size != SIZE_128 ) {
-		LOG( Terrain3D::ERROR, "This Terrain3D fork is specialized for 128-sample regions and rejects all other sizes" );
+		LOG( T3DTerrain::ERROR, "This Terrain3D fork is specialized for 128-sample regions and rejects all other sizes" );
 		return;
 	}
 	if ( !isValidRegionSize( size ) ) {
-		LOG( Terrain3D::ERROR, "Invalid region size: ", size, ". Must be power of 2, 64-2048" );
+		LOG( T3DTerrain::ERROR, "Invalid region size: ", size, ". Must be power of 2, 64-2048" );
 		return;
 	}
 	if ( ( int ) ( size ) % m_nInstancerCellSize != 0 ) {
-		LOG( Terrain3D::ERROR, "Region size ", ( int ) ( size ), " is incompatible with instancer cell size ",
+		LOG( T3DTerrain::ERROR, "Region size ", ( int ) ( size ), " is incompatible with instancer cell size ",
 			m_nInstancerCellSize, ". Change instancer_cell_size first." );
 		return;
 	}
@@ -2604,7 +2604,7 @@ void Terrain3D::setRegionSize( const t3dregionSize_t size ) {
 	if ( bDataOwnerReady && !m_pData->matchesRegionLayoutInternal( ( int ) ( m_nRegionSize ) ) ) {
 		if ( !m_pData->setRegionSizeInternal( ( int ) ( m_nRegionSize ) ) ) {
 			m_nRegionSize = previous_size;
-			LOG( Terrain3D::ERROR, "Region size change rejected because active terrain storage could not be reconfigured" );
+			LOG( T3DTerrain::ERROR, "Region size change rejected because active terrain storage could not be reconfigured" );
 			return;
 		}
 		m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(), m_nEffectiveGpuRegionCacheBudgetMb,
@@ -2618,20 +2618,20 @@ void Terrain3D::setRegionSize( const t3dregionSize_t size ) {
 		m_pData->configureResidentPool( 64 );
 		bDataChanged = true;
 	} else if ( m_pData && !bDataOwnerReady && bOwnerChanged ) {
-		LOG( Terrain3D::DEBUG, "Deferring Terrain3DData region-size reconciliation until data initialization: ",
+		LOG( T3DTerrain::DEBUG, "Deferring T3DData region-size reconciliation until data initialization: ",
 			( int ) ( m_nRegionSize ) );
 	}
 	// Equality of the owner property does not prove dependent state is already
-	// synchronized. Return only after Terrain3DData has been reconciled.
+	// synchronized. Return only after T3DData has been reconciled.
 	if ( !bOwnerChanged && !bDataChanged ) {
 		return;
 	}
-	LOG( Terrain3D::INFO, "t3dsetting_t region size: ", m_nRegionSize );
+	LOG( T3DTerrain::INFO, "t3dsetting_t region size: ", m_nRegionSize );
 	// Runtime migration updates dependent instance layouts only after the data
 	// object has been attached to this terrain. Pre-tree property deserialization
-	// is intentionally reconciled by Terrain3DData::initialize().
+	// is intentionally reconciled by T3DData::initialize().
 	if ( m_bInitialized && m_pInstancer && !m_pInstancer->refreshResidentRegionLayouts() ) {
-		LOG( Terrain3D::ERROR, "Region size changed, but resident instance pages could not be repartitioned" );
+		LOG( T3DTerrain::ERROR, "Region size changed, but resident instance pages could not be repartitioned" );
 	}
 	if ( m_pMaterial.is_valid() && m_pMaterial->isInitialized() ) {
 		m_pMaterial->update();
@@ -2641,22 +2641,22 @@ void Terrain3D::setRegionSize( const t3dregionSize_t size ) {
 	}
 }
 
-void Terrain3D::setSave16Bit( const bool bEnabled ) {
+void T3DTerrain::setSave16Bit( const bool bEnabled ) {
 	SET_IF_DIFF( m_bSave16Bit, bEnabled );
 	// Region persistence is now unconditionally compact R16. Retain the property
 	// for scene compatibility, but do not dirty every region: bounded CPU residency
 	// deliberately permits clean region resources to exist without map payloads.
-	LOG( Terrain3D::INFO, "Save heightmaps as 16-bit: ", m_bSave16Bit );
+	LOG( T3DTerrain::INFO, "Save heightmaps as 16-bit: ", m_bSave16Bit );
 }
 
-void Terrain3D::setEditorRuntimeStreamingPreview( const bool bEnabled ) {
+void T3DTerrain::setEditorRuntimeStreamingPreview( const bool bEnabled ) {
 	if ( bEnabled ) {
 		setEditorNodeStreamingPreview( false );
 	}
 	setEditorExecutionMode( bEnabled ? EDITOR_EXECUTION_RUNTIME_PROFILE : EDITOR_EXECUTION_AUTHORING );
 }
 
-void Terrain3D::setEditorNodeStreamingPreview( const bool bEnabled ) {
+void T3DTerrain::setEditorNodeStreamingPreview( const bool bEnabled ) {
 	if ( m_bEditorNodeStreamingPreview == bEnabled ) {
 		return;
 	}
@@ -2667,7 +2667,7 @@ void Terrain3D::setEditorNodeStreamingPreview( const bool bEnabled ) {
 	emit_signal( "editor_execution_mode_changed", ( int ) ( m_editorExecutionMode ) );
 }
 
-void Terrain3D::setEditorHlodPreview( const bool bEnabled ) {
+void T3DTerrain::setEditorHlodPreview( const bool bEnabled ) {
 	if ( m_bEditorHlodPreview == bEnabled ) { return; }
 	m_bEditorHlodPreview = bEnabled;
 	if ( m_pHlodStreamer ) {
@@ -2678,7 +2678,7 @@ void Terrain3D::setEditorHlodPreview( const bool bEnabled ) {
 	emit_signal( "editor_execution_mode_changed", ( int ) m_editorExecutionMode );
 }
 
-void Terrain3D::setEditorExecutionMode( const t3deditorExecutionMode_t mode ) {
+void T3DTerrain::setEditorExecutionMode( const t3deditorExecutionMode_t mode ) {
 	if ( !terrain3dEditorExecutionModeIsValid( ( int ) ( mode ) ) ) {
 		return;
 	}
@@ -2701,7 +2701,7 @@ void Terrain3D::setEditorExecutionMode( const t3deditorExecutionMode_t mode ) {
 		m_pCollision->build();
 	}
 	if ( m_pMaterial.is_valid() && m_pMaterial->isInitialized() ) {
-		m_pMaterial->update( Terrain3DMaterial::FULL_REBUILD );
+		m_pMaterial->update( T3DMaterial::FULL_REBUILD );
 	}
 	if ( m_bInitialized ) {
 		const Vector3 target = getClipmapTargetPosition();
@@ -2720,7 +2720,7 @@ void Terrain3D::setEditorExecutionMode( const t3deditorExecutionMode_t mode ) {
 	emit_signal( "editor_execution_mode_changed", ( int ) ( m_editorExecutionMode ) );
 }
 
-Dictionary Terrain3D::runtimeProfileSampleToDictionary( const t3druntimeProfileSample_t &rSample ) const {
+Dictionary T3DTerrain::runtimeProfileSampleToDictionary( const t3druntimeProfileSample_t &rSample ) const {
 	Dictionary sample;
 	sample["sequence"] = ( int64_t ) ( rSample.frameSequence );
 	sample["physics_total_usec"] = ( int64_t ) ( rSample.nPhysicsTotalUsec );
@@ -2807,7 +2807,7 @@ Dictionary Terrain3D::runtimeProfileSampleToDictionary( const t3druntimeProfileS
 	return sample;
 }
 
-Array Terrain3D::getRuntimeProfileEventNames( const uint32_t nFlags ) const {
+Array T3DTerrain::getRuntimeProfileEventNames( const uint32_t nFlags ) const {
 	Array names;
 	if ( ( nFlags & TERRAIN3D_PROFILE_EVENT_CAMERA_MOVED ) != 0u ) { names.push_back( "camera_moved" ); }
 	if ( ( nFlags & TERRAIN3D_PROFILE_EVENT_GPU_UPLOAD ) != 0u ) { names.push_back( "gpu_upload" ); }
@@ -2825,7 +2825,7 @@ Array Terrain3D::getRuntimeProfileEventNames( const uint32_t nFlags ) const {
 	return names;
 }
 
-Array Terrain3D::getRuntimeProfileStallNames( const uint32_t nFlags ) const {
+Array T3DTerrain::getRuntimeProfileStallNames( const uint32_t nFlags ) const {
 	Array names;
 	if ( ( nFlags & TERRAIN3D_PROFILE_STALL_GPU_UPLOAD_LAYER_BUDGET ) != 0u ) { names.push_back( "gpu_upload_layer_budget" ); }
 	if ( ( nFlags & TERRAIN3D_PROFILE_STALL_GPU_PREPARE_PENDING ) != 0u ) { names.push_back( "gpu_prepare_pending" ); }
@@ -2845,7 +2845,7 @@ Array Terrain3D::getRuntimeProfileStallNames( const uint32_t nFlags ) const {
 	return names;
 }
 
-Array Terrain3D::getRuntimeProfileProblems( void ) const {
+Array T3DTerrain::getRuntimeProfileProblems( void ) const {
 	Array problems;
 	const t3druntimeProfileSample_t &sample = m_runtimeProfileLastSample;
 	if ( sample.gpuMissingRequired > 0 ) {
@@ -2945,7 +2945,7 @@ Array Terrain3D::getRuntimeProfileProblems( void ) const {
 	return problems;
 }
 
-Array Terrain3D::getRuntimeProfileHistory( const int nMaxSamples ) const {
+Array T3DTerrain::getRuntimeProfileHistory( const int nMaxSamples ) const {
 	Array history;
 	if ( !m_pRuntimeProfileHistory ) {
 		return history;
@@ -2960,7 +2960,7 @@ Array Terrain3D::getRuntimeProfileHistory( const int nMaxSamples ) const {
 	return history;
 }
 
-Array Terrain3D::getRuntimeProfileHistorySince( const int64_t nAfterSequence, const int nMaxSamples ) const {
+Array T3DTerrain::getRuntimeProfileHistorySince( const int64_t nAfterSequence, const int nMaxSamples ) const {
 	Array history;
 	if ( !m_pRuntimeProfileHistory ) {
 		return history;
@@ -2990,7 +2990,7 @@ Array Terrain3D::getRuntimeProfileHistorySince( const int64_t nAfterSequence, co
 }
 
 
-Dictionary Terrain3D::getRuntimeProfileAggregate( void ) const {
+Dictionary T3DTerrain::getRuntimeProfileAggregate( void ) const {
 	Dictionary aggregate;
 	const t3druntimeProfileAccumulator_t &stats = m_runtimeProfileAccumulator;
 	aggregate["sampled_ticks"] = ( int64_t ) ( stats.nSampledTicks );
@@ -3117,11 +3117,11 @@ Dictionary Terrain3D::getRuntimeProfileAggregate( void ) const {
 	return aggregate;
 }
 
-void Terrain3D::markMemoryBudgetDirty( void ) {
+void T3DTerrain::markMemoryBudgetDirty( void ) {
 	m_bMemoryBudgetPolicyDirty = true;
 }
 
-const char *Terrain3D::memoryLimitReasonName( const t3dmemoryLimitReason_t reason ) {
+const char *T3DTerrain::memoryLimitReasonName( const t3dmemoryLimitReason_t reason ) {
 	switch ( reason ) {
 		case TERRAIN3D_MEMORY_LIMIT_TOTAL_BUDGET:
 			return "total_budget";
@@ -3137,7 +3137,7 @@ const char *Terrain3D::memoryLimitReasonName( const t3dmemoryLimitReason_t reaso
 	}
 }
 
-uint64_t Terrain3D::calculateFixedMemoryBytes( void ) const {
+uint64_t T3DTerrain::calculateFixedMemoryBytes( void ) const {
 	uint64_t bytes = sizeof( *this );
 	if ( m_pData ) {
 		bytes += ( uint64_t ) ( m_pData->getMemoryFixedRepositoryBytes() );
@@ -3151,19 +3151,19 @@ uint64_t Terrain3D::calculateFixedMemoryBytes( void ) const {
 		bytes += ( uint64_t ) ( m_pTerrainMesher->getShadowGeometryPayloadBytes() );
 	}
 	if ( m_pInstancer ) {
-		bytes += ( uint64_t ) ( sizeof( Terrain3DInstancer ) );
+		bytes += ( uint64_t ) ( sizeof( T3DInstancer ) );
 		bytes += ( uint64_t ) ( m_pInstancer->getActiveMultimeshBytes() );
 		bytes += ( uint64_t ) ( m_pInstancer->getRetainedContainerBytes() );
 	}
 	if ( m_pCollision ) {
-		bytes += ( uint64_t ) ( sizeof( Terrain3DCollision ) );
+		bytes += ( uint64_t ) ( sizeof( T3DCollision ) );
 	}
 	if ( m_pNodeStreamer ) {
-		bytes += ( uint64_t ) ( sizeof( Terrain3DNodeStreamer ) );
+		bytes += ( uint64_t ) ( sizeof( T3DNodeStreamer ) );
 		bytes += ( uint64_t ) ( m_pNodeStreamer->getRetainedCapacityBytes() );
 	}
 	if ( m_pLightmapStreamer ) {
-		bytes += ( uint64_t ) ( sizeof( Terrain3DLightmapStreamer ) );
+		bytes += ( uint64_t ) ( sizeof( T3DLightmapStreamer ) );
 	}
 	if ( m_pRuntimeProfileHistory ) {
 		bytes += ( uint64_t ) ( sizeof( t3druntimeProfileHistory_t ) );
@@ -3171,7 +3171,7 @@ uint64_t Terrain3D::calculateFixedMemoryBytes( void ) const {
 	return bytes;
 }
 
-uint64_t Terrain3D::calculateTransientMemoryBytes( void ) const {
+uint64_t T3DTerrain::calculateTransientMemoryBytes( void ) const {
 	uint64_t bytes = 0u;
 	if ( m_pData ) {
 		bytes += ( uint64_t ) ( m_pData->getMemoryTransientStagingBytes() );
@@ -3185,7 +3185,7 @@ uint64_t Terrain3D::calculateTransientMemoryBytes( void ) const {
 	return bytes;
 }
 
-t3dmemoryBudgetInput_t Terrain3D::buildMemoryBudgetInput( void ) const {
+t3dmemoryBudgetInput_t T3DTerrain::buildMemoryBudgetInput( void ) const {
 	t3dmemoryBudgetInput_t input;
 	input.nTotalBudgetBytes = ( uint64_t ) ( m_nTotalMemoryBudgetMb ) * TERRAIN3D_MEMORY_MIB;
 	input.nFixedBytes = calculateFixedMemoryBytes();
@@ -3241,7 +3241,7 @@ t3dmemoryBudgetInput_t Terrain3D::buildMemoryBudgetInput( void ) const {
 	return input;
 }
 
-void Terrain3D::applyMemoryBudgetResult( const t3dmemoryBudgetResult_t &rResult, const bool bForce ) {
+void T3DTerrain::applyMemoryBudgetResult( const t3dmemoryBudgetResult_t &rResult, const bool bForce ) {
 	const int previous_effective_mb[TERRAIN3D_MEMORY_SUBSYSTEM_COUNT] = {
 		m_nEffectiveGpuRegionCacheBudgetMb,
 		m_nEffectiveCpuRegionCacheBudgetMb,
@@ -3324,7 +3324,7 @@ void Terrain3D::applyMemoryBudgetResult( const t3dmemoryBudgetResult_t &rResult,
 	}
 }
 
-void Terrain3D::serviceMemoryBudgetPolicy( const bool bForce ) {
+void T3DTerrain::serviceMemoryBudgetPolicy( const bool bForce ) {
 	if ( !bForce ) {
 		++m_nMemoryBudgetPolicyFrame;
 		if ( ( m_nMemoryBudgetPolicyFrame % ( uint64_t ) ( TERRAIN3D_MEMORY_POLICY_INTERVAL_FRAMES ) ) != 0u ) {
@@ -3345,12 +3345,12 @@ void Terrain3D::serviceMemoryBudgetPolicy( const bool bForce ) {
 	++m_nMemoryBudgetPolicyGeneration;
 }
 
-void Terrain3D::forceMemoryBudgetRebalance( void ) {
+void T3DTerrain::forceMemoryBudgetRebalance( void ) {
 	serviceMemoryBudgetPolicy( true );
 	notify_property_list_changed();
 }
 
-void Terrain3D::setTotalMemoryBudgetMb( const int nBudgetMb ) {
+void T3DTerrain::setTotalMemoryBudgetMb( const int nBudgetMb ) {
 	const int budget_mb = CLAMP( nBudgetMb, 32, 4096 );
 	if ( m_nTotalMemoryBudgetMb == budget_mb ) {
 		return;
@@ -3360,7 +3360,7 @@ void Terrain3D::setTotalMemoryBudgetMb( const int nBudgetMb ) {
 	refreshPerformanceProfileConformity();
 }
 
-void Terrain3D::setMemoryTransientReserveMb( const int nReserveMb ) {
+void T3DTerrain::setMemoryTransientReserveMb( const int nReserveMb ) {
 	const int reserve_mb = CLAMP( nReserveMb, 4, 1024 );
 	if ( m_nMemoryTransientReserveMb == reserve_mb ) {
 		return;
@@ -3369,7 +3369,7 @@ void Terrain3D::setMemoryTransientReserveMb( const int nReserveMb ) {
 	markMemoryBudgetDirty();
 }
 
-void Terrain3D::setGpuRegionCacheBudgetAuto( const bool bEnabled ) {
+void T3DTerrain::setGpuRegionCacheBudgetAuto( const bool bEnabled ) {
 	if ( m_bGpuRegionCacheBudgetAuto == bEnabled ) {
 		return;
 	}
@@ -3382,7 +3382,7 @@ void Terrain3D::setGpuRegionCacheBudgetAuto( const bool bEnabled ) {
 	}
 }
 
-void Terrain3D::setCpuRegionCacheBudgetAuto( const bool bEnabled ) {
+void T3DTerrain::setCpuRegionCacheBudgetAuto( const bool bEnabled ) {
 	if ( m_bCpuRegionCacheBudgetAuto == bEnabled ) {
 		return;
 	}
@@ -3395,7 +3395,7 @@ void Terrain3D::setCpuRegionCacheBudgetAuto( const bool bEnabled ) {
 	}
 }
 
-void Terrain3D::setInstanceRegionCacheBudgetAuto( const bool bEnabled ) {
+void T3DTerrain::setInstanceRegionCacheBudgetAuto( const bool bEnabled ) {
 	if ( m_bInstanceRegionCacheBudgetAuto == bEnabled ) {
 		return;
 	}
@@ -3408,7 +3408,7 @@ void Terrain3D::setInstanceRegionCacheBudgetAuto( const bool bEnabled ) {
 	}
 }
 
-void Terrain3D::setLightmapResidencyBudgetAuto( const bool bEnabled ) {
+void T3DTerrain::setLightmapResidencyBudgetAuto( const bool bEnabled ) {
 	if ( m_bLightmapResidencyBudgetAuto == bEnabled ) {
 		return;
 	}
@@ -3421,7 +3421,7 @@ void Terrain3D::setLightmapResidencyBudgetAuto( const bool bEnabled ) {
 	}
 }
 
-void Terrain3D::setLightmapResidencyBudgetMb( const int nBudgetMb ) {
+void T3DTerrain::setLightmapResidencyBudgetMb( const int nBudgetMb ) {
 	const int budget_mb = CLAMP( nBudgetMb, 1, 1024 );
 	if ( m_nLightmapResidencyBudgetMb == budget_mb ) {
 		return;
@@ -3433,7 +3433,7 @@ void Terrain3D::setLightmapResidencyBudgetMb( const int nBudgetMb ) {
 	}
 }
 
-void Terrain3D::setHlodMemoryBudgetAuto( const bool bEnabled ) {
+void T3DTerrain::setHlodMemoryBudgetAuto( const bool bEnabled ) {
 	if ( m_bHlodMemoryBudgetAuto == bEnabled ) { return; }
 	m_bHlodMemoryBudgetAuto = bEnabled;
 	notify_property_list_changed();
@@ -3442,7 +3442,7 @@ void Terrain3D::setHlodMemoryBudgetAuto( const bool bEnabled ) {
 	if ( m_bInitialized ) { serviceMemoryBudgetPolicy( true ); }
 }
 
-void Terrain3D::setShaderCacheBudgetAuto( const bool bEnabled ) {
+void T3DTerrain::setShaderCacheBudgetAuto( const bool bEnabled ) {
 	if ( m_bShaderCacheBudgetAuto == bEnabled ) {
 		return;
 	}
@@ -3455,7 +3455,7 @@ void Terrain3D::setShaderCacheBudgetAuto( const bool bEnabled ) {
 	}
 }
 
-Dictionary Terrain3D::getMemoryBudgetStats( void ) const {
+Dictionary T3DTerrain::getMemoryBudgetStats( void ) const {
 	Dictionary stats;
 	stats["total_budget_mb"] = m_nTotalMemoryBudgetMb;
 	stats["total_budget_bytes"] = ( int64_t ) ( ( uint64_t ) ( m_nTotalMemoryBudgetMb ) * TERRAIN3D_MEMORY_MIB );
@@ -3503,7 +3503,7 @@ Dictionary Terrain3D::getMemoryBudgetStats( void ) const {
 	return stats;
 }
 
-Dictionary Terrain3D::getTrackedCurrentResidency( void ) const {
+Dictionary T3DTerrain::getTrackedCurrentResidency( void ) const {
 	Dictionary memory;
 	const uint64_t gpu_page_bytes = m_pData ? ( uint64_t ) ( m_pData->getGpuRegionCacheReservedBytes() ) : 0u;
 	const uint64_t middle_height_bytes = m_pData ? ( uint64_t ) ( m_pData->getMiddleHeightCacheReservedBytes() ) : 0u;
@@ -3594,11 +3594,11 @@ Dictionary Terrain3D::getTrackedCurrentResidency( void ) const {
 	return memory;
 }
 
-Dictionary Terrain3D::getMemoryEstimate( void ) const {
+Dictionary T3DTerrain::getMemoryEstimate( void ) const {
 	return getTrackedCurrentResidency();
 }
 
-Dictionary Terrain3D::getRuntimeMemoryStatsFast( void ) const {
+Dictionary T3DTerrain::getRuntimeMemoryStatsFast( void ) const {
 	Dictionary memory;
 	const uint64_t gpu_page_bytes = m_pData ? ( uint64_t ) ( m_pData->getGpuRegionCacheReservedBytes() ) : 0u;
 	const uint64_t middle_height_bytes = m_pData ? ( uint64_t ) ( m_pData->getMiddleHeightCacheReservedBytes() ) : 0u;
@@ -3654,7 +3654,7 @@ Dictionary Terrain3D::getRuntimeMemoryStatsFast( void ) const {
 	return memory;
 }
 
-Array Terrain3D::getShaderTierStatsDictionaries( void ) const {
+Array T3DTerrain::getShaderTierStatsDictionaries( void ) const {
 	Array tiers;
 	if ( m_pMaterial.is_null() ) {
 		return tiers;
@@ -3662,33 +3662,33 @@ Array Terrain3D::getShaderTierStatsDictionaries( void ) const {
 	const Dictionary shader_global = m_pMaterial->getShaderVariantDiagnostics();
 	const real_t fNearEnd = getRuntimeNearRangeEndM();
 	const real_t fMiddleEnd = getRuntimeMiddleRangeEndM();
-	for ( int tier = Terrain3DMaterial::SHADER_TIER_NEAR; tier < Terrain3DMaterial::SHADER_TIER_COUNT; ++tier ) {
+	for ( int tier = T3DMaterial::SHADER_TIER_NEAR; tier < T3DMaterial::SHADER_TIER_COUNT; ++tier ) {
 		Dictionary row = m_pMaterial->getShaderTierDiagnostics( tier );
-		const real_t fRangeStart = tier == Terrain3DMaterial::SHADER_TIER_NEAR ? 0.0f :
-			( tier == Terrain3DMaterial::SHADER_TIER_MIDDLE ? fNearEnd : fMiddleEnd );
-		const real_t fRangeEnd = tier == Terrain3DMaterial::SHADER_TIER_NEAR ? fNearEnd :
-			( tier == Terrain3DMaterial::SHADER_TIER_MIDDLE ? fMiddleEnd : -1.0f );
+		const real_t fRangeStart = tier == T3DMaterial::SHADER_TIER_NEAR ? 0.0f :
+			( tier == T3DMaterial::SHADER_TIER_MIDDLE ? fNearEnd : fMiddleEnd );
+		const real_t fRangeEnd = tier == T3DMaterial::SHADER_TIER_NEAR ? fNearEnd :
+			( tier == T3DMaterial::SHADER_TIER_MIDDLE ? fMiddleEnd : -1.0f );
 		row["diagnostics_version"] = TERRAIN3D_DIAGNOSTICS_VERSION;
-		row["tier_name"] = tier == Terrain3DMaterial::SHADER_TIER_NEAR ? "Near" :
-			( tier == Terrain3DMaterial::SHADER_TIER_MIDDLE ? "Middle" : "Far" );
+		row["tier_name"] = tier == T3DMaterial::SHADER_TIER_NEAR ? "Near" :
+			( tier == T3DMaterial::SHADER_TIER_MIDDLE ? "Middle" : "Far" );
 		row["range_start_m"] = fRangeStart;
 		row["range_end_m"] = fRangeEnd;
-		row["range_unbounded"] = tier == Terrain3DMaterial::SHADER_TIER_FAR;
+		row["range_unbounded"] = tier == T3DMaterial::SHADER_TIER_FAR;
 		row["shader_rid"] = row.get( "active_shader_rid", ( int64_t ) ( 0 ) );
 		row["profile_target"] = ( int ) ( m_performanceTarget );
 		row["profile_name"] = m_performanceTarget == PERFORMANCE_TARGET_XBOX360_EXPERIMENTAL ? "Xbox 360 Experimental" : "Custom";
 		row["profile_status"] = ( int ) ( m_performanceProfileStatus );
 		row["profile_status_name"] = getPerformanceProfileStatusName();
 		const int filtering = ( int ) ( row.get( "texture_filtering", 0 ) );
-		row["texture_filtering_name"] = filtering == ( int ) ( Terrain3DMaterial::LINEAR_ANISOTROPIC ) ? "Linear Anisotropic" :
-			( filtering == ( int ) ( Terrain3DMaterial::LINEAR ) ? "Linear" :
-				( filtering == ( int ) ( Terrain3DMaterial::NEAREST_ANISOTROPIC ) ? "Nearest Anisotropic" : "Nearest" ) );
+		row["texture_filtering_name"] = filtering == ( int ) ( T3DMaterial::LINEAR_ANISOTROPIC ) ? "Linear Anisotropic" :
+			( filtering == ( int ) ( T3DMaterial::LINEAR ) ? "Linear" :
+				( filtering == ( int ) ( T3DMaterial::NEAREST_ANISOTROPIC ) ? "Nearest Anisotropic" : "Nearest" ) );
 		const int lighting = ( int ) ( row.get( "lighting_model", 0 ) );
-		row["lighting_model_name"] = lighting == ( int ) ( Terrain3DMaterial::TIER_LIGHTING_UNSHADED ) ? "Unshaded" :
-			( lighting == ( int ) ( Terrain3DMaterial::TIER_LIGHTING_LAMBERT ) ? "Lambert" :
-				( lighting == ( int ) ( Terrain3DMaterial::TIER_LIGHTING_BLINN_PHONG ) ? "Blinn-Phong" : "PBR/GGX" ) );
-		const bool bShadowEnabled = tier == Terrain3DMaterial::SHADER_TIER_NEAR ? m_bNearShadowEnabled :
-			( tier == Terrain3DMaterial::SHADER_TIER_MIDDLE ? m_bMiddleShadowEnabled : m_bFarShadowEnabled );
+		row["lighting_model_name"] = lighting == ( int ) ( T3DMaterial::TIER_LIGHTING_UNSHADED ) ? "Unshaded" :
+			( lighting == ( int ) ( T3DMaterial::TIER_LIGHTING_LAMBERT ) ? "Lambert" :
+				( lighting == ( int ) ( T3DMaterial::TIER_LIGHTING_BLINN_PHONG ) ? "Blinn-Phong" : "PBR/GGX" ) );
+		const bool bShadowEnabled = tier == T3DMaterial::SHADER_TIER_NEAR ? m_bNearShadowEnabled :
+			( tier == T3DMaterial::SHADER_TIER_MIDDLE ? m_bMiddleShadowEnabled : m_bFarShadowEnabled );
 		row["shadow_participates"] = bShadowEnabled && m_nShadowLodCount > 0;
 		row["render_batch_count"] = m_pTerrainMesher ? m_pTerrainMesher->getRenderBatchCountForTier( tier ) : 0;
 		row["shadow_batch_count"] = m_pTerrainMesher ? m_pTerrainMesher->getShadowBatchCountForTier( tier ) : 0;
@@ -3700,20 +3700,20 @@ Array Terrain3D::getShaderTierStatsDictionaries( void ) const {
 		row["shader_update_usec_last"] = shader_global.get( "shader_update_usec_last", ( int64_t ) ( 0 ) );
 		Dictionary features;
 		features["compact_tier_active"] = row.get( "compact_tier_active", false );
-		features["textured_surface"] = ( int ) ( row.get( "texture_surface_mode", 0 ) ) != ( int ) ( Terrain3DMaterial::TEXTURE_SURFACE_SILHOUETTE );
+		features["textured_surface"] = ( int ) ( row.get( "texture_surface_mode", 0 ) ) != ( int ) ( T3DMaterial::TEXTURE_SURFACE_SILHOUETTE );
 		features["authored_color"] = ( double ) ( row.get( "authored_color_contribution", 0.0 ) ) > 0.0;
 		features["wetness"] = ( double ) ( row.get( "wetness_contribution", 0.0 ) ) > 0.0;
-		features["detiling"] = ( int ) ( row.get( "detiling_quality", 0 ) ) != ( int ) ( Terrain3DMaterial::TIER_DETILING_DISABLED );
-		features["derived_normals"] = ( int ) ( row.get( "terrain_normal_quality", 0 ) ) != ( int ) ( Terrain3DMaterial::TERRAIN_NORMAL_QUALITY_GEOMETRY );
+		features["detiling"] = ( int ) ( row.get( "detiling_quality", 0 ) ) != ( int ) ( T3DMaterial::TIER_DETILING_DISABLED );
+		features["derived_normals"] = ( int ) ( row.get( "terrain_normal_quality", 0 ) ) != ( int ) ( T3DMaterial::TERRAIN_NORMAL_QUALITY_GEOMETRY );
 		row["feature_flags"] = features;
-		int modeled_fetches = tier == Terrain3DMaterial::SHADER_TIER_FAR ? 2 : 3;
-		if ( ( int ) ( row.get( "material_sampling_quality", 0 ) ) != ( int ) ( Terrain3DMaterial::MATERIAL_SAMPLING_FAST ) ) {
+		int modeled_fetches = tier == T3DMaterial::SHADER_TIER_FAR ? 2 : 3;
+		if ( ( int ) ( row.get( "material_sampling_quality", 0 ) ) != ( int ) ( T3DMaterial::MATERIAL_SAMPLING_FAST ) ) {
 			++modeled_fetches;
 		}
 		if ( ( bool ) ( features["derived_normals"] ) ) {
 			++modeled_fetches;
 		}
-		if ( ( int ) ( row.get( "surface_response_quality", 0 ) ) != ( int ) ( Terrain3DMaterial::SURFACE_RESPONSE_SIMPLE ) ) {
+		if ( ( int ) ( row.get( "surface_response_quality", 0 ) ) != ( int ) ( T3DMaterial::SURFACE_RESPONSE_SIMPLE ) ) {
 			++modeled_fetches;
 		}
 		if ( ( bool ) ( features["authored_color"] ) ) {
@@ -3729,7 +3729,7 @@ Array Terrain3D::getShaderTierStatsDictionaries( void ) const {
 	return tiers;
 }
 
-Array Terrain3D::getCacheInventory( const bool bDeep ) const {
+Array T3DTerrain::getCacheInventory( const bool bDeep ) const {
 	Array caches;
 	const Dictionary gpu = m_pData ? ( bDeep ? m_pData->getGpuRegionCacheStats() : m_pData->getGpuRegionCacheStatsFast() ) : Dictionary();
 	const Dictionary cpu = m_pData ? ( bDeep ? m_pData->getCpuRegionCacheStats() : m_pData->getCpuRegionCacheStatsFast() ) : Dictionary();
@@ -3834,7 +3834,7 @@ Array Terrain3D::getCacheInventory( const bool bDeep ) const {
 	return caches;
 }
 
-Dictionary Terrain3D::getCpuProfileStats( void ) const {
+Dictionary T3DTerrain::getCpuProfileStats( void ) const {
 	Dictionary cpu;
 	cpu["gpu_page_cache_service_cpu_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.nGpuCacheServiceUsec );
 	cpu["gpu_page_preparation_worker_cpu_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.nGpuPrepareWorkerUsec );
@@ -3864,7 +3864,7 @@ Dictionary Terrain3D::getCpuProfileStats( void ) const {
 	return cpu;
 }
 
-Dictionary Terrain3D::getGpuInformationStats( void ) const {
+Dictionary T3DTerrain::getGpuInformationStats( void ) const {
 	Dictionary info;
 	Dictionary measured;
 	measured["classification"] = "Measured";
@@ -3887,7 +3887,7 @@ Dictionary Terrain3D::getGpuInformationStats( void ) const {
 	return info;
 }
 
-Dictionary Terrain3D::getRuntimeParitySnapshot( void ) const {
+Dictionary T3DTerrain::getRuntimeParitySnapshot( void ) const {
 	Dictionary snapshot;
 	snapshot["native_api_revision"] = NATIVE_API_REVISION;
 	snapshot["native_build_id"] = String( NATIVE_BUILD_ID );
@@ -3926,18 +3926,18 @@ Dictionary Terrain3D::getRuntimeParitySnapshot( void ) const {
 	return snapshot;
 }
 
-Ref<Terrain3DMemoryStats> Terrain3D::getMemoryStatsSnapshot( void ) const {
-	Ref<Terrain3DMemoryStats> pStats;
+Ref<T3DMemoryStats> T3DTerrain::getMemoryStatsSnapshot( void ) const {
+	Ref<T3DMemoryStats> pStats;
 	pStats.instantiate();
 	pStats->setValues( getRuntimeMemoryStatsFast() );
 	return pStats;
 }
 
-TypedArray<Terrain3DShaderTierStats> Terrain3D::getShaderTierStatsSnapshot( void ) const {
-	TypedArray<Terrain3DShaderTierStats> output;
+TypedArray<T3DShaderTierStats> T3DTerrain::getShaderTierStatsSnapshot( void ) const {
+	TypedArray<T3DShaderTierStats> output;
 	const Array values = getShaderTierStatsDictionaries();
 	for ( int index = 0; index < values.size(); ++index ) {
-		Ref<Terrain3DShaderTierStats> pStats;
+		Ref<T3DShaderTierStats> pStats;
 		pStats.instantiate();
 		pStats->setValues( values[index] );
 		output.push_back( pStats );
@@ -3945,11 +3945,11 @@ TypedArray<Terrain3DShaderTierStats> Terrain3D::getShaderTierStatsSnapshot( void
 	return output;
 }
 
-TypedArray<Terrain3DCacheStats> Terrain3D::getCacheStatsSnapshot( const bool bDeep ) const {
-	TypedArray<Terrain3DCacheStats> output;
+TypedArray<T3DCacheStats> T3DTerrain::getCacheStatsSnapshot( const bool bDeep ) const {
+	TypedArray<T3DCacheStats> output;
 	const Array values = getCacheInventory( bDeep );
 	for ( int index = 0; index < values.size(); ++index ) {
-		Ref<Terrain3DCacheStats> pStats;
+		Ref<T3DCacheStats> pStats;
 		pStats.instantiate();
 		pStats->setValues( values[index] );
 		output.push_back( pStats );
@@ -3957,8 +3957,8 @@ TypedArray<Terrain3DCacheStats> Terrain3D::getCacheStatsSnapshot( const bool bDe
 	return output;
 }
 
-Ref<Terrain3DFrameStats> Terrain3D::getFrameStatsSnapshot( void ) const {
-	Ref<Terrain3DFrameStats> pStats;
+Ref<T3DFrameStats> T3DTerrain::getFrameStatsSnapshot( void ) const {
+	Ref<T3DFrameStats> pStats;
 	pStats.instantiate();
 	Dictionary values = runtimeProfileSampleToDictionary( m_runtimeProfileLastSample );
 	values["diagnostics_version"] = TERRAIN3D_DIAGNOSTICS_VERSION;
@@ -3967,7 +3967,7 @@ Ref<Terrain3DFrameStats> Terrain3D::getFrameStatsSnapshot( void ) const {
 	return pStats;
 }
 
-Dictionary Terrain3D::getRuntimeDiagnostics( const bool bDeep ) const {
+Dictionary T3DTerrain::getRuntimeDiagnostics( const bool bDeep ) const {
 	const uint64_t collection_started_usec = Time::get_singleton()->get_ticks_usec();
 	Dictionary diagnostics;
 	diagnostics["diagnostics_version"] = TERRAIN3D_DIAGNOSTICS_VERSION;
@@ -4122,7 +4122,7 @@ Dictionary Terrain3D::getRuntimeDiagnostics( const bool bDeep ) const {
 		diagnostics["instance_cache"] = bDeep ? m_pData->getInstanceRegionCacheStats() : m_pData->getInstanceRegionCacheStatsFast();
 		diagnostics["startup_load"] = m_pData->getStartupLoadStats();
 	}
-	diagnostics["persistent_upload"] = Terrain3DUploadBridge::getStats();
+	diagnostics["persistent_upload"] = T3DUploadBridge::getStats();
 	diagnostics["aggregate"] = getRuntimeProfileAggregate();
 	diagnostics["active_render_pipeline"] = getShaderTierStatsDictionaries();
 	diagnostics["cache_inventory"] = getCacheInventory( bDeep );
@@ -4148,7 +4148,7 @@ Dictionary Terrain3D::getRuntimeDiagnostics( const bool bDeep ) const {
 	return diagnostics;
 }
 
-void Terrain3D::resetRuntimeDiagnostics( void ) {
+void T3DTerrain::resetRuntimeDiagnostics( void ) {
 	m_runtimeProfileLastSample = t3druntimeProfileSample_t{};
 	m_nRuntimeProfileSampleCount = 0u;
 	m_runtimeProfileAccumulator.reset();
@@ -4174,7 +4174,7 @@ void Terrain3D::resetRuntimeDiagnostics( void ) {
 	m_runtimeBoundaryInstancerDeferralStreak = 0;
 }
 
-void Terrain3D::setRuntimeAdaptiveWorkBudgetsEnabled( const bool bEnabled ) {
+void T3DTerrain::setRuntimeAdaptiveWorkBudgetsEnabled( const bool bEnabled ) {
 	if ( m_bRuntimeAdaptiveWorkBudgetsEnabled == bEnabled ) {
 		return;
 	}
@@ -4184,7 +4184,7 @@ void Terrain3D::setRuntimeAdaptiveWorkBudgetsEnabled( const bool bEnabled ) {
 	notify_property_list_changed();
 }
 
-void Terrain3D::setRuntimeAdaptiveTargetMs( const real_t fTargetMs ) {
+void T3DTerrain::setRuntimeAdaptiveTargetMs( const real_t fTargetMs ) {
 	const uint64_t target_usec = ( uint64_t ) ( CLAMP( fTargetMs, ( real_t ) ( 0.05f ), ( real_t ) ( 50.0f ) ) * 1000.0f );
 	if ( m_nRuntimeAdaptiveTargetUsec == target_usec ) {
 		return;
@@ -4196,7 +4196,7 @@ void Terrain3D::setRuntimeAdaptiveTargetMs( const real_t fTargetMs ) {
 	m_nRuntimeAdaptiveBudgetState.underBudgetStreak = 0;
 }
 
-void Terrain3D::setRuntimeAdaptiveHardMaxMs( const real_t fHardMaxMs ) {
+void T3DTerrain::setRuntimeAdaptiveHardMaxMs( const real_t fHardMaxMs ) {
 	const uint64_t hard_max_usec = ( uint64_t ) ( CLAMP( fHardMaxMs, ( real_t ) ( 0.05f ), ( real_t ) ( 100.0f ) ) * 1000.0f );
 	const uint64_t normalized = MAX( hard_max_usec, m_nRuntimeAdaptiveTargetUsec );
 	if ( m_nRuntimeAdaptiveHardMaxUsec == normalized ) {
@@ -4208,7 +4208,7 @@ void Terrain3D::setRuntimeAdaptiveHardMaxMs( const real_t fHardMaxMs ) {
 	m_nRuntimeAdaptiveBudgetState.underBudgetStreak = 0;
 }
 
-void Terrain3D::setRuntimeAdaptiveAdjustmentWindowFrames( const int nFrames ) {
+void T3DTerrain::setRuntimeAdaptiveAdjustmentWindowFrames( const int nFrames ) {
 	const int frames = CLAMP( nFrames, 1, 120 );
 	if ( m_nRuntimeAdaptiveAdjustmentWindowFrames == frames ) {
 		return;
@@ -4219,7 +4219,7 @@ void Terrain3D::setRuntimeAdaptiveAdjustmentWindowFrames( const int nFrames ) {
 	m_nRuntimeAdaptiveBudgetState.underBudgetStreak = 0;
 }
 
-void Terrain3D::setRuntimeAdaptiveMinGpuPages( const int nPages ) {
+void T3DTerrain::setRuntimeAdaptiveMinGpuPages( const int nPages ) {
 	const int pages = CLAMP( nPages, 0, 64 );
 	if ( m_nRuntimeAdaptiveMinGpuPages == pages ) {
 		return;
@@ -4228,7 +4228,7 @@ void Terrain3D::setRuntimeAdaptiveMinGpuPages( const int nPages ) {
 	m_nRuntimeAdaptiveMinGpuPages = pages;
 }
 
-void Terrain3D::setRuntimeAdaptiveMinCpuPages( const int nPages ) {
+void T3DTerrain::setRuntimeAdaptiveMinCpuPages( const int nPages ) {
 	const int pages = CLAMP( nPages, 0, 64 );
 	if ( m_nRuntimeAdaptiveMinCpuPages == pages ) {
 		return;
@@ -4237,7 +4237,7 @@ void Terrain3D::setRuntimeAdaptiveMinCpuPages( const int nPages ) {
 	m_nRuntimeAdaptiveMinCpuPages = pages;
 }
 
-void Terrain3D::setRuntimeAdaptiveMinInstancePages( const int nPages ) {
+void T3DTerrain::setRuntimeAdaptiveMinInstancePages( const int nPages ) {
 	const int pages = CLAMP( nPages, 0, 64 );
 	if ( m_nRuntimeAdaptiveMinInstancePages == pages ) {
 		return;
@@ -4246,7 +4246,7 @@ void Terrain3D::setRuntimeAdaptiveMinInstancePages( const int nPages ) {
 	m_nRuntimeAdaptiveMinInstancePages = pages;
 }
 
-void Terrain3D::setRuntimeAdaptiveMinInstancerCells( const int nCells ) {
+void T3DTerrain::setRuntimeAdaptiveMinInstancerCells( const int nCells ) {
 	const int cells = CLAMP( nCells, 0, 65536 );
 	if ( m_nRuntimeAdaptiveMinInstancerCells == cells ) {
 		return;
@@ -4255,7 +4255,7 @@ void Terrain3D::setRuntimeAdaptiveMinInstancerCells( const int nCells ) {
 	m_nRuntimeAdaptiveMinInstancerCells = cells;
 }
 
-void Terrain3D::setRuntimeAdaptiveMinNodeLoadRegions( const int nRegions ) {
+void T3DTerrain::setRuntimeAdaptiveMinNodeLoadRegions( const int nRegions ) {
 	const int regions = CLAMP( nRegions, 0, 64 );
 	if ( m_nRuntimeAdaptiveMinNodeLoadRegions == regions ) {
 		return;
@@ -4264,7 +4264,7 @@ void Terrain3D::setRuntimeAdaptiveMinNodeLoadRegions( const int nRegions ) {
 	m_nRuntimeAdaptiveMinNodeLoadRegions = regions;
 }
 
-void Terrain3D::setRuntimeAdaptiveMinNodeUnloadRegions( const int nRegions ) {
+void T3DTerrain::setRuntimeAdaptiveMinNodeUnloadRegions( const int nRegions ) {
 	const int regions = CLAMP( nRegions, 0, 64 );
 	if ( m_nRuntimeAdaptiveMinNodeUnloadRegions == regions ) {
 		return;
@@ -4274,7 +4274,7 @@ void Terrain3D::setRuntimeAdaptiveMinNodeUnloadRegions( const int nRegions ) {
 }
 
 
-void Terrain3D::setRuntimeBoundaryWorkPhasingEnabled( const bool bEnabled ) {
+void T3DTerrain::setRuntimeBoundaryWorkPhasingEnabled( const bool bEnabled ) {
 	if ( m_bRuntimeBoundaryWorkPhasingEnabled == bEnabled ) {
 		return;
 	}
@@ -4286,7 +4286,7 @@ void Terrain3D::setRuntimeBoundaryWorkPhasingEnabled( const bool bEnabled ) {
 	m_runtimeBoundaryInstancerDeferralStreak = 0;
 }
 
-void Terrain3D::setRuntimeBoundaryNodeDelayFrames( const int nFrames ) {
+void T3DTerrain::setRuntimeBoundaryNodeDelayFrames( const int nFrames ) {
 	const int frames = CLAMP( nFrames, 0, 8 );
 	if ( m_nRuntimeBoundaryNodeDelayFrames == frames ) {
 		return;
@@ -4295,7 +4295,7 @@ void Terrain3D::setRuntimeBoundaryNodeDelayFrames( const int nFrames ) {
 	m_nRuntimeBoundaryNodeDelayFrames = frames;
 }
 
-void Terrain3D::setRuntimeBoundaryInstancerDelayFrames( const int nFrames ) {
+void T3DTerrain::setRuntimeBoundaryInstancerDelayFrames( const int nFrames ) {
 	const int frames = CLAMP( nFrames, 0, 8 );
 	if ( m_nRuntimeBoundaryInstancerDelayFrames == frames ) {
 		return;
@@ -4304,7 +4304,7 @@ void Terrain3D::setRuntimeBoundaryInstancerDelayFrames( const int nFrames ) {
 	m_nRuntimeBoundaryInstancerDelayFrames = frames;
 }
 
-Dictionary Terrain3D::getRuntimeBoundaryPhasingStats( void ) const {
+Dictionary T3DTerrain::getRuntimeBoundaryPhasingStats( void ) const {
 	Dictionary stats;
 	stats["enabled"] = m_bRuntimeBoundaryWorkPhasingEnabled;
 	stats["target_region"] = m_runtimeBoundaryTargetRegion;
@@ -4320,7 +4320,7 @@ Dictionary Terrain3D::getRuntimeBoundaryPhasingStats( void ) const {
 	return stats;
 }
 
-Dictionary Terrain3D::getRuntimeAdaptiveBudgetStats( void ) const {
+Dictionary T3DTerrain::getRuntimeAdaptiveBudgetStats( void ) const {
 	const t3dadaptiveBudgetLimits_t limits = getRuntimeAdaptiveBudgetLimits();
 	const t3dadaptiveBudgetPressure_t pressure = getRuntimeAdaptiveBudgetPressure();
 	Dictionary stats;
@@ -4388,7 +4388,7 @@ Dictionary Terrain3D::getRuntimeAdaptiveBudgetStats( void ) const {
 	return stats;
 }
 
-void Terrain3D::setPerformanceTarget( const t3dperformanceTarget_t target ) {
+void T3DTerrain::setPerformanceTarget( const t3dperformanceTarget_t target ) {
 	if ( target < PERFORMANCE_TARGET_CUSTOM || target > PERFORMANCE_TARGET_XBOX360_EXPERIMENTAL ) {
 		return;
 	}
@@ -4410,7 +4410,7 @@ void Terrain3D::setPerformanceTarget( const t3dperformanceTarget_t target ) {
 	resetRuntimeAdaptiveWorkBudgets( true );
 	normalizeRuntimeTierLayout( true );
 	if ( m_pMaterial.is_valid() ) {
-		m_pMaterial->setShaderPerformancePreset( Terrain3DMaterial::SHADER_PRESET_XBOX_360_AUTHENTIC );
+		m_pMaterial->setShaderPerformancePreset( T3DMaterial::SHADER_PRESET_XBOX_360_AUTHENTIC );
 	} else {
 		m_bPerformanceProfileMaterialPendingApply = true;
 	}
@@ -4425,13 +4425,13 @@ void Terrain3D::setPerformanceTarget( const t3dperformanceTarget_t target ) {
 	if ( m_nRegionSize != SIZE_128 || !Math::is_equal_approx( m_fVertexSpacing, ( real_t ) ( 1.0f ) ) ) {
 		m_performanceTarget = PERFORMANCE_TARGET_CUSTOM;
 		m_bPerformanceProfileMaterialPendingApply = false;
-		LOG( Terrain3D::ERROR, "Xbox 360 performance target requires 128-sample regions at 1 metre vertex spacing" );
+		LOG( T3DTerrain::ERROR, "Xbox 360 performance target requires 128-sample regions at 1 metre vertex spacing" );
 	}
 	refreshPerformanceProfileConformity();
 	notify_property_list_changed();
 }
 
-String Terrain3D::getPerformanceProfileStatusName( void ) const {
+String T3DTerrain::getPerformanceProfileStatusName( void ) const {
 	switch ( m_performanceProfileStatus ) {
 		case PERFORMANCE_PROFILE_EXACT:
 			return "Exact";
@@ -4443,15 +4443,15 @@ String Terrain3D::getPerformanceProfileStatusName( void ) const {
 	}
 }
 
-int Terrain3D::getPerformanceProfileVersion( void ) const {
+int T3DTerrain::getPerformanceProfileVersion( void ) const {
 	return ( int ) ( TERRAIN3D_PROFILE_VERSION );
 }
 
-String Terrain3D::getPerformanceProfileSignature( void ) const {
+String T3DTerrain::getPerformanceProfileSignature( void ) const {
 	return String::num_uint64( terrain_3d_profile::signature(), 16, true );
 }
 
-Dictionary Terrain3D::getPerformanceProfileManifest( void ) const {
+Dictionary T3DTerrain::getPerformanceProfileManifest( void ) const {
 	Dictionary manifest;
 	manifest["key"] = TERRAIN3D_PROFILE_KEY;
 	manifest["display_name"] = TERRAIN3D_PROFILE_DISPLAY_NAME;
@@ -4473,7 +4473,7 @@ Dictionary Terrain3D::getPerformanceProfileManifest( void ) const {
 	return manifest;
 }
 
-Array Terrain3D::getPerformanceProfileDiff( void ) const {
+Array T3DTerrain::getPerformanceProfileDiff( void ) const {
 	Array differences;
 	if ( m_performanceTarget != PERFORMANCE_TARGET_XBOX360_EXPERIMENTAL ) {
 		return differences;
@@ -4483,9 +4483,9 @@ Array Terrain3D::getPerformanceProfileDiff( void ) const {
 		if ( setting.owner == terrain_3d_profile::OWNER_MATERIAL ) {
 			if ( m_pMaterial.is_null() ) {
 				Dictionary row;
-				row["owner"] = "Terrain3DMaterial";
+				row["owner"] = "T3DMaterial";
 				row["property"] = setting.pszProperty;
-				row["key"] = String( "Terrain3DMaterial." ) + setting.pszProperty;
+				row["key"] = String( "T3DMaterial." ) + setting.pszProperty;
 				row["current"] = Variant();
 				row["expected"] = terrain3dPerformanceProfileValue( setting );
 				differences.push_back( row );
@@ -4508,13 +4508,13 @@ Array Terrain3D::getPerformanceProfileDiff( void ) const {
 	return differences;
 }
 
-void Terrain3D::resetPerformanceProfile( void ) {
+void T3DTerrain::resetPerformanceProfile( void ) {
 	if ( m_performanceTarget != PERFORMANCE_TARGET_CUSTOM ) {
 		setPerformanceTarget( m_performanceTarget );
 	}
 }
 
-void Terrain3D::setGpuRegionCacheEnabled( const bool bEnabled ) {
+void T3DTerrain::setGpuRegionCacheEnabled( const bool bEnabled ) {
 	if ( m_bGpuRegionCacheEnabled == bEnabled ) {
 		return;
 	}
@@ -4534,7 +4534,7 @@ void Terrain3D::setGpuRegionCacheEnabled( const bool bEnabled ) {
 	}
 }
 
-void Terrain3D::setGpuRegionCacheBudgetMb( const int nBudgetMb ) {
+void T3DTerrain::setGpuRegionCacheBudgetMb( const int nBudgetMb ) {
 	const int budget_mb = CLAMP( nBudgetMb, 1, 128 );
 	if ( m_nGpuRegionCacheBudgetMb == budget_mb ) {
 		return;
@@ -4547,7 +4547,7 @@ void Terrain3D::setGpuRegionCacheBudgetMb( const int nBudgetMb ) {
 	}
 }
 
-void Terrain3D::setGpuRegionUploadBudgetLayers( const int nLayers ) {
+void T3DTerrain::setGpuRegionUploadBudgetLayers( const int nLayers ) {
 	const int layers = CLAMP( nLayers, 1, TERRAIN3D_GPU_CACHE_RUNTIME_MAX_LAYERS );
 	if ( m_nGpuRegionUploadBudgetLayers == layers ) {
 		return;
@@ -4561,7 +4561,7 @@ void Terrain3D::setGpuRegionUploadBudgetLayers( const int nLayers ) {
 	}
 }
 
-void Terrain3D::setGpuRegionUploadBudgetMb( const int nBudgetMb ) {
+void T3DTerrain::setGpuRegionUploadBudgetMb( const int nBudgetMb ) {
 	const int budget_mb = CLAMP( nBudgetMb, 1, 64 );
 	if ( m_nGpuRegionUploadBudgetMb == budget_mb ) {
 		return;
@@ -4575,7 +4575,7 @@ void Terrain3D::setGpuRegionUploadBudgetMb( const int nBudgetMb ) {
 	}
 }
 
-void Terrain3D::setGpuRegionSparePages( const int nPages ) {
+void T3DTerrain::setGpuRegionSparePages( const int nPages ) {
 	const int pages = CLAMP( nPages, TERRAIN3D_GPU_CACHE_MIN_SPARE_LAYERS,
 		TERRAIN3D_GPU_CACHE_RUNTIME_MAX_LAYERS - 1 );
 	if ( m_nGpuRegionSparePages == pages ) {
@@ -4590,7 +4590,7 @@ void Terrain3D::setGpuRegionSparePages( const int nPages ) {
 	}
 }
 
-void Terrain3D::setGpuRegionRetireFrames( const int nFrames ) {
+void T3DTerrain::setGpuRegionRetireFrames( const int nFrames ) {
 	const int frames = CLAMP( nFrames, 1, 16 );
 	if ( m_nGpuRegionRetireFrames == frames ) {
 		return;
@@ -4604,7 +4604,7 @@ void Terrain3D::setGpuRegionRetireFrames( const int nFrames ) {
 	}
 }
 
-void Terrain3D::setGpuRegionDetailLods( const int nLods ) {
+void T3DTerrain::setGpuRegionDetailLods( const int nLods ) {
 	const int lods = CLAMP( nLods, 0, getTotalClipmapLevels() );
 	if ( m_nGpuRegionDetailLods == lods ) {
 		return;
@@ -4622,16 +4622,16 @@ void Terrain3D::setGpuRegionDetailLods( const int nLods ) {
 	notify_property_list_changed();
 }
 
-void Terrain3D::setGpuRegionDetailRangeEndM( const real_t fRangeM ) {
+void T3DTerrain::setGpuRegionDetailRangeEndM( const real_t fRangeM ) {
 	setGpuRegionDetailLods( rangeToLodCount( MAX( fRangeM, ( real_t ) ( 0.0f ) ) ) );
 }
 
-real_t Terrain3D::getGpuRegionDetailRangeEndM( void ) const {
+real_t T3DTerrain::getGpuRegionDetailRangeEndM( void ) const {
 	const int detail_lods = m_nGpuRegionDetailLods <= 0 ? getTotalClipmapLevels() : m_nGpuRegionDetailLods;
 	return lodCountToRange( detail_lods );
 }
 
-int Terrain3D::getGpuRegionMaxSupportedDetailLods( void ) const {
+int T3DTerrain::getGpuRegionMaxSupportedDetailLods( void ) const {
 	if ( !m_pData ) {
 		return getTotalClipmapLevels();
 	}
@@ -4646,38 +4646,38 @@ int Terrain3D::getGpuRegionMaxSupportedDetailLods( void ) const {
 	return supported;
 }
 
-real_t Terrain3D::getGpuRegionMaxSupportedDetailRangeM( void ) const {
+real_t T3DTerrain::getGpuRegionMaxSupportedDetailRangeM( void ) const {
 	return lodCountToRange( getGpuRegionMaxSupportedDetailLods() );
 }
 
-int Terrain3D::getGpuRegionRequiredCorePages( void ) const {
+int T3DTerrain::getGpuRegionRequiredCorePages( void ) const {
 	return m_pData ? m_pData->getGpuRegionRequiredCorePages() : 0;
 }
 
-int Terrain3D::getGpuRegionMappedCapacity( void ) const {
+int T3DTerrain::getGpuRegionMappedCapacity( void ) const {
 	return m_pData ? m_pData->getGpuRegionCacheCapacity() : 0;
 }
 
-bool Terrain3D::isGpuRegionDetailRangeValid( void ) const {
+bool T3DTerrain::isGpuRegionDetailRangeValid( void ) const {
 	if ( !m_pData || !m_bGpuRegionCacheEnabled ) {
 		return true;
 	}
 	return getGpuRegionRequiredCorePages() <= getGpuRegionMappedCapacity();
 }
 
-void Terrain3D::setGpuRegionGuardRegions( const int nRegions ) {
+void T3DTerrain::setGpuRegionGuardRegions( const int nRegions ) {
 	// Serialized compatibility only. Spatial guard behavior is owned by
 	// streaming_unload_guard in the unified region policy.
 	m_nGpuRegionGuardRegions = CLAMP( nRegions, 0, 4 );
 }
 
-void Terrain3D::setGpuRegionPrefetchRows( const int nRows ) {
+void T3DTerrain::setGpuRegionPrefetchRows( const int nRows ) {
 	// Serialized compatibility only. Prediction is owned by the unified streaming
 	// policy and supports diagonal, speed-sensitive lookahead.
 	m_nGpuRegionPrefetchRows = CLAMP( nRows, 0, 4 );
 }
 
-void Terrain3D::setGpuRegionHysteresisTicks( const int nTicks ) {
+void T3DTerrain::setGpuRegionHysteresisTicks( const int nTicks ) {
 	const int ticks = CLAMP( nTicks, 0, 240 );
 	if ( m_nGpuRegionHysteresisTicks == ticks ) {
 		return;
@@ -4689,7 +4689,7 @@ void Terrain3D::setGpuRegionHysteresisTicks( const int nTicks ) {
 	}
 }
 
-void Terrain3D::setGpuRegionColorResolutionDivisor( const int nDivisor ) {
+void T3DTerrain::setGpuRegionColorResolutionDivisor( const int nDivisor ) {
 	const int divisor = nDivisor <= 1 ? 1 : ( nDivisor <= 2 ? 2 : 4 );
 	if ( m_nGpuRegionColorResolutionDivisor == divisor ) {
 		return;
@@ -4703,7 +4703,7 @@ void Terrain3D::setGpuRegionColorResolutionDivisor( const int nDivisor ) {
 	}
 }
 
-void Terrain3D::setGpuRegionDerivedResolutionDivisor( const int nDivisor ) {
+void T3DTerrain::setGpuRegionDerivedResolutionDivisor( const int nDivisor ) {
 	const int divisor = nDivisor <= 1 ? 1 : ( nDivisor <= 2 ? 2 : 4 );
 	if ( m_nGpuRegionDerivedResolutionDivisor == divisor ) {
 		return;
@@ -4717,7 +4717,7 @@ void Terrain3D::setGpuRegionDerivedResolutionDivisor( const int nDivisor ) {
 	}
 }
 
-void Terrain3D::setGpuMiddleHeightResolutionDivisor( const int nDivisor ) {
+void T3DTerrain::setGpuMiddleHeightResolutionDivisor( const int nDivisor ) {
 	const int divisor = nDivisor <= 1 ? 1 : ( nDivisor <= 2 ? 2 : 4 );
 	if ( m_nGpuMiddleHeightResolutionDivisor == divisor ) {
 		return;
@@ -4730,7 +4730,7 @@ void Terrain3D::setGpuMiddleHeightResolutionDivisor( const int nDivisor ) {
 	}
 }
 
-void Terrain3D::setEditorGpuRegionCachePages( const int nPages ) {
+void T3DTerrain::setEditorGpuRegionCachePages( const int nPages ) {
 	const int pages = CLAMP( nPages, 16, TERRAIN3D_GPU_CACHE_EDITOR_MAX_LAYERS );
 	if ( m_nEditorGpuRegionCachePages == pages ) {
 		return;
@@ -4745,7 +4745,7 @@ void Terrain3D::setEditorGpuRegionCachePages( const int nPages ) {
 	}
 }
 
-void Terrain3D::setRuntimeMaterialStreamingEnabled( const bool bEnabled ) {
+void T3DTerrain::setRuntimeMaterialStreamingEnabled( const bool bEnabled ) {
 	if ( m_bRuntimeMaterialStreamingEnabled == bEnabled ) {
 		return;
 	}
@@ -4757,7 +4757,7 @@ void Terrain3D::setRuntimeMaterialStreamingEnabled( const bool bEnabled ) {
 	}
 }
 
-void Terrain3D::setRuntimeMaterialCacheLayers( const int nLayers ) {
+void T3DTerrain::setRuntimeMaterialCacheLayers( const int nLayers ) {
 	const int layers = CLAMP( nLayers, 4, TERRAIN3D_MAX_TEXTURE_ASSETS );
 	if ( m_nRuntimeMaterialCacheLayers == layers ) {
 		return;
@@ -4770,7 +4770,7 @@ void Terrain3D::setRuntimeMaterialCacheLayers( const int nLayers ) {
 	}
 }
 
-void Terrain3D::setRuntimeMaterialUploadBudgetLayers( const int nLayers ) {
+void T3DTerrain::setRuntimeMaterialUploadBudgetLayers( const int nLayers ) {
 	const int layers = CLAMP( nLayers, 1, TERRAIN3D_MAX_TEXTURE_ASSETS );
 	if ( m_nRuntimeMaterialUploadBudgetLayers == layers ) {
 		return;
@@ -4779,7 +4779,7 @@ void Terrain3D::setRuntimeMaterialUploadBudgetLayers( const int nLayers ) {
 	refreshPerformanceProfileConformity();
 }
 
-void Terrain3D::setRuntimeReleaseSourceMaterialTextures( const bool bEnabled ) {
+void T3DTerrain::setRuntimeReleaseSourceMaterialTextures( const bool bEnabled ) {
 	if ( m_bRuntimeReleaseSourceMaterialTextures == bEnabled ) {
 		return;
 	}
@@ -4790,7 +4790,7 @@ void Terrain3D::setRuntimeReleaseSourceMaterialTextures( const bool bEnabled ) {
 	}
 }
 
-void Terrain3D::setGpuFarQualityDivisor( const int nDivisor ) {
+void T3DTerrain::setGpuFarQualityDivisor( const int nDivisor ) {
 	const int nDivisorValue = nDivisor <= 1 ? 1 : ( nDivisor <= 2 ? 2 : ( nDivisor <= 4 ? 4 : 8 ) );
 	if ( m_nGpuFarQualityDivisor == nDivisorValue ) {
 		return;
@@ -4807,11 +4807,11 @@ void Terrain3D::setGpuFarQualityDivisor( const int nDivisor ) {
 			m_nGpuRegionSparePages, m_nGpuRegionRetireFrames );
 	}
 	if ( m_pMaterial.is_valid() && m_pMaterial->isInitializedFor( this ) ) {
-		m_pMaterial->update( Terrain3DMaterial::UNIFORMS_ONLY );
+		m_pMaterial->update( T3DMaterial::UNIFORMS_ONLY );
 	}
 }
 
-void Terrain3D::setFarMaterialResolution( const int nResolution ) {
+void T3DTerrain::setFarMaterialResolution( const int nResolution ) {
 	const int resolution = nResolution <= 64 ? 64 : ( nResolution <= 128 ? 128 : 256 );
 	if ( m_nFarMaterialResolution == resolution ) {
 		return;
@@ -4823,7 +4823,7 @@ void Terrain3D::setFarMaterialResolution( const int nResolution ) {
 	refreshPerformanceProfileConformity();
 }
 
-void Terrain3D::setFarControlResolution( const int nResolution ) {
+void T3DTerrain::setFarControlResolution( const int nResolution ) {
 	const int resolution = nResolution <= 64 ? 64 : ( nResolution <= 128 ? 128 : 256 );
 	if ( m_nFarControlResolution == resolution ) {
 		return;
@@ -4836,7 +4836,7 @@ void Terrain3D::setFarControlResolution( const int nResolution ) {
 	refreshPerformanceProfileConformity();
 }
 
-int Terrain3D::getGpuFarHeightAtlasSide( void ) const {
+int T3DTerrain::getGpuFarHeightAtlasSide( void ) const {
 	// Geometry quality follows the first Far mesh lattice. Surface-quality settings
 	// are intentionally excluded so they can never erase representable terrain shape.
 	const int first_far_lod = CLAMP( m_nRuntimeNearShaderLods + m_nRuntimeMiddleShaderLods, 0, 30 );
@@ -4845,17 +4845,17 @@ int Terrain3D::getGpuFarHeightAtlasSide( void ) const {
 	return CLAMP( required_side, TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE, TERRAIN3D_GPU_CACHE_FAR_HEIGHT_SIDE );
 }
 
-int Terrain3D::getGpuFarSurfaceAtlasSide( void ) const {
+int T3DTerrain::getGpuFarSurfaceAtlasSide( void ) const {
 	return m_nFarControlResolution * TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE;
 }
 
-uint64_t Terrain3D::getGpuFarAtlasBytes( void ) const {
+uint64_t T3DTerrain::getGpuFarAtlasBytes( void ) const {
 	const uint64_t height_side = ( uint64_t ) ( getGpuFarHeightAtlasSide() );
 	const uint64_t surface_side = ( uint64_t ) ( getGpuFarSurfaceAtlasSide() );
 	return height_side * height_side * 2u + surface_side * surface_side * 4u;
 }
 
-void Terrain3D::setGpuRegionCookedPagesEnabled( const bool bEnabled ) {
+void T3DTerrain::setGpuRegionCookedPagesEnabled( const bool bEnabled ) {
 	if ( m_bGpuRegionCookedPagesEnabled == bEnabled ) {
 		return;
 	}
@@ -4863,7 +4863,7 @@ void Terrain3D::setGpuRegionCookedPagesEnabled( const bool bEnabled ) {
 	refreshPerformanceProfileConformity();
 }
 
-void Terrain3D::setGpuRegionCookOnSave( const bool bEnabled ) {
+void T3DTerrain::setGpuRegionCookOnSave( const bool bEnabled ) {
 	if ( m_bGpuRegionCookOnSave == bEnabled ) {
 		return;
 	}
@@ -4871,7 +4871,7 @@ void Terrain3D::setGpuRegionCookOnSave( const bool bEnabled ) {
 	refreshPerformanceProfileConformity();
 }
 
-void Terrain3D::setCpuRegionCacheEnabled( const bool bEnabled ) {
+void T3DTerrain::setCpuRegionCacheEnabled( const bool bEnabled ) {
 	if ( m_bCpuRegionCacheEnabled == bEnabled ) {
 		return;
 	}
@@ -4887,7 +4887,7 @@ void Terrain3D::setCpuRegionCacheEnabled( const bool bEnabled ) {
 	}
 }
 
-void Terrain3D::setCpuRegionCacheBudgetMb( const int nBudgetMb ) {
+void T3DTerrain::setCpuRegionCacheBudgetMb( const int nBudgetMb ) {
 	const int budget_mb = CLAMP( nBudgetMb, 1, 128 );
 	if ( m_nCpuRegionCacheBudgetMb == budget_mb ) {
 		return;
@@ -4900,7 +4900,7 @@ void Terrain3D::setCpuRegionCacheBudgetMb( const int nBudgetMb ) {
 	}
 }
 
-void Terrain3D::setCpuRegionLoadBudgetLayers( const int nLayers ) {
+void T3DTerrain::setCpuRegionLoadBudgetLayers( const int nLayers ) {
 	const int layers = CLAMP( nLayers, 1, TERRAIN3D_CPU_CACHE_MAX_LAYERS );
 	if ( m_nCpuRegionLoadBudgetLayers == layers ) {
 		return;
@@ -4913,7 +4913,7 @@ void Terrain3D::setCpuRegionLoadBudgetLayers( const int nLayers ) {
 	}
 }
 
-void Terrain3D::setCpuRegionLoadBudgetMb( const int nBudgetMb ) {
+void T3DTerrain::setCpuRegionLoadBudgetMb( const int nBudgetMb ) {
 	const int budget_mb = CLAMP( nBudgetMb, 1, 64 );
 	if ( m_nCpuRegionLoadBudgetMb == budget_mb ) {
 		return;
@@ -4926,7 +4926,7 @@ void Terrain3D::setCpuRegionLoadBudgetMb( const int nBudgetMb ) {
 	}
 }
 
-void Terrain3D::setInstanceRegionCacheEnabled( const bool bEnabled ) {
+void T3DTerrain::setInstanceRegionCacheEnabled( const bool bEnabled ) {
 	if ( m_bInstanceRegionCacheEnabled == bEnabled ) {
 		return;
 	}
@@ -4940,7 +4940,7 @@ void Terrain3D::setInstanceRegionCacheEnabled( const bool bEnabled ) {
 	}
 }
 
-void Terrain3D::setInstanceRegionCacheBudgetMb( const int nBudgetMb ) {
+void T3DTerrain::setInstanceRegionCacheBudgetMb( const int nBudgetMb ) {
 	const int budget = CLAMP( nBudgetMb, 1, 128 );
 	if ( m_nInstanceRegionCacheBudgetMb == budget ) {
 		return;
@@ -4953,7 +4953,7 @@ void Terrain3D::setInstanceRegionCacheBudgetMb( const int nBudgetMb ) {
 	}
 }
 
-void Terrain3D::setInstanceRegionLoadBudgetPages( const int nPages ) {
+void T3DTerrain::setInstanceRegionLoadBudgetPages( const int nPages ) {
 	const int pages = CLAMP( nPages, 1, TERRAIN3D_INSTANCE_CACHE_MAX_PAGES );
 	if ( m_nInstanceRegionLoadBudgetPages == pages ) {
 		return;
@@ -4967,7 +4967,7 @@ void Terrain3D::setInstanceRegionLoadBudgetPages( const int nPages ) {
 	}
 }
 
-void Terrain3D::setInstanceRegionLoadBudgetMb( const int nBudgetMb ) {
+void T3DTerrain::setInstanceRegionLoadBudgetMb( const int nBudgetMb ) {
 	const int budget = CLAMP( nBudgetMb, 1, 64 );
 	if ( m_nInstanceRegionLoadBudgetMb == budget ) {
 		return;
@@ -4981,10 +4981,10 @@ void Terrain3D::setInstanceRegionLoadBudgetMb( const int nBudgetMb ) {
 	}
 }
 
-void Terrain3D::setInstancerCellSize( const int nCellSize ) {
+void T3DTerrain::setInstancerCellSize( const int nCellSize ) {
 	if ( nCellSize < TERRAIN3D_INSTANCE_MIN_CELL_SIZE || nCellSize > TERRAIN3D_INSTANCE_MAX_CELL_SIZE ||
 		( nCellSize & ( nCellSize - 1 ) ) != 0 || ( int ) ( m_nRegionSize ) % nCellSize != 0 ) {
-		LOG( Terrain3D::ERROR, "Instancer cell size must be a power of two from ", TERRAIN3D_INSTANCE_MIN_CELL_SIZE,
+		LOG( T3DTerrain::ERROR, "Instancer cell size must be a power of two from ", TERRAIN3D_INSTANCE_MIN_CELL_SIZE,
 			" through ", TERRAIN3D_INSTANCE_MAX_CELL_SIZE, " and divide region size ", ( int ) ( m_nRegionSize ) );
 		return;
 	}
@@ -5004,7 +5004,7 @@ void Terrain3D::setInstancerCellSize( const int nCellSize ) {
 	}
 }
 
-void Terrain3D::setInstancerCellStreamingEnabled( const bool bEnabled ) {
+void T3DTerrain::setInstancerCellStreamingEnabled( const bool bEnabled ) {
 	if ( m_bInstancerCellStreamingEnabled == bEnabled ) {
 		return;
 	}
@@ -5015,7 +5015,7 @@ void Terrain3D::setInstancerCellStreamingEnabled( const bool bEnabled ) {
 	}
 }
 
-void Terrain3D::setInstancerSingleLodBuffers( const bool bEnabled ) {
+void T3DTerrain::setInstancerSingleLodBuffers( const bool bEnabled ) {
 	if ( m_bInstancerSingleLodBuffers == bEnabled ) {
 		return;
 	}
@@ -5026,7 +5026,7 @@ void Terrain3D::setInstancerSingleLodBuffers( const bool bEnabled ) {
 	}
 }
 
-void Terrain3D::setInstancerCellStreamingMargin( const real_t fMargin ) {
+void T3DTerrain::setInstancerCellStreamingMargin( const real_t fMargin ) {
 	const real_t margin = CLAMP( fMargin, 0.0f, 1024.0f );
 	if ( Math::is_equal_approx( m_fInstancerCellStreamingMargin, margin ) ) {
 		return;
@@ -5038,7 +5038,7 @@ void Terrain3D::setInstancerCellStreamingMargin( const real_t fMargin ) {
 	}
 }
 
-void Terrain3D::setInstancerCellStreamingUpdateDistance( const real_t fDistance ) {
+void T3DTerrain::setInstancerCellStreamingUpdateDistance( const real_t fDistance ) {
 	const real_t distance = CLAMP( fDistance, 1.0f, 256.0f );
 	if ( Math::is_equal_approx( m_fInstancerCellStreamingUpdateDistance, distance ) ) {
 		return;
@@ -5050,7 +5050,7 @@ void Terrain3D::setInstancerCellStreamingUpdateDistance( const real_t fDistance 
 	}
 }
 
-void Terrain3D::setInstancerUpdateCellBudget( const int nBudget ) {
+void T3DTerrain::setInstancerUpdateCellBudget( const int nBudget ) {
 	const int budget = CLAMP( nBudget, 0, 65536 );
 	if ( m_nInstancerUpdateCellBudget == budget ) {
 		return;
@@ -5062,7 +5062,7 @@ void Terrain3D::setInstancerUpdateCellBudget( const int nBudget ) {
 	}
 }
 
-void Terrain3D::setDynamicNodeStreamingEnabled( const bool bEnabled ) {
+void T3DTerrain::setDynamicNodeStreamingEnabled( const bool bEnabled ) {
 	if ( m_bDynamicNodeStreamingEnabled == bEnabled ) {
 		return;
 	}
@@ -5073,7 +5073,7 @@ void Terrain3D::setDynamicNodeStreamingEnabled( const bool bEnabled ) {
 	}
 }
 
-void Terrain3D::setDynamicNodeStreamRadius( const int nRadius ) {
+void T3DTerrain::setDynamicNodeStreamRadius( const int nRadius ) {
 	const int radius = CLAMP( nRadius, 0, 16 );
 	if ( m_nDynamicNodeStreamRadius == radius ) {
 		return;
@@ -5085,7 +5085,7 @@ void Terrain3D::setDynamicNodeStreamRadius( const int nRadius ) {
 	}
 }
 
-void Terrain3D::setDynamicNodeLoadRegionBudget( const int nBudget ) {
+void T3DTerrain::setDynamicNodeLoadRegionBudget( const int nBudget ) {
 	const int budget = CLAMP( nBudget, 0, 64 );
 	if ( m_nDynamicNodeLoadRegionBudget == budget ) {
 		return;
@@ -5097,7 +5097,7 @@ void Terrain3D::setDynamicNodeLoadRegionBudget( const int nBudget ) {
 	}
 }
 
-void Terrain3D::setDynamicNodeLoadNodeBudget( const int nBudget ) {
+void T3DTerrain::setDynamicNodeLoadNodeBudget( const int nBudget ) {
 	const int budget = CLAMP( nBudget, 0, 4096 );
 	if ( m_nDynamicNodeLoadNodeBudget == budget ) {
 		return;
@@ -5109,7 +5109,7 @@ void Terrain3D::setDynamicNodeLoadNodeBudget( const int nBudget ) {
 	}
 }
 
-void Terrain3D::setDynamicNodeUnloadRegionBudget( const int nBudget ) {
+void T3DTerrain::setDynamicNodeUnloadRegionBudget( const int nBudget ) {
 	const int budget = CLAMP( nBudget, 0, 64 );
 	if ( m_nDynamicNodeUnloadRegionBudget == budget ) {
 		return;
@@ -5121,7 +5121,7 @@ void Terrain3D::setDynamicNodeUnloadRegionBudget( const int nBudget ) {
 	}
 }
 
-void Terrain3D::setLightmapStreamingEnabled( const bool bEnabled ) {
+void T3DTerrain::setLightmapStreamingEnabled( const bool bEnabled ) {
 	if ( m_bLightmapStreamingEnabled == bEnabled ) {
 		return;
 	}
@@ -5132,7 +5132,7 @@ void Terrain3D::setLightmapStreamingEnabled( const bool bEnabled ) {
 	}
 }
 
-void Terrain3D::setLightmapStreamRadius( const int nRadius ) {
+void T3DTerrain::setLightmapStreamRadius( const int nRadius ) {
 	const int radius = CLAMP( nRadius, 0, 16 );
 	if ( m_nLightmapStreamRadius == radius ) {
 		return;
@@ -5143,7 +5143,7 @@ void Terrain3D::setLightmapStreamRadius( const int nRadius ) {
 	}
 }
 
-void Terrain3D::setLightmapLoadBudget( const int nBudget ) {
+void T3DTerrain::setLightmapLoadBudget( const int nBudget ) {
 	const int budget = CLAMP( nBudget, 0, 64 );
 	if ( m_nLightmapLoadBudget == budget ) {
 		return;
@@ -5154,7 +5154,7 @@ void Terrain3D::setLightmapLoadBudget( const int nBudget ) {
 	}
 }
 
-void Terrain3D::setLightmapUnloadBudget( const int nBudget ) {
+void T3DTerrain::setLightmapUnloadBudget( const int nBudget ) {
 	const int budget = CLAMP( nBudget, 0, 64 );
 	if ( m_nLightmapUnloadBudget == budget ) {
 		return;
@@ -5165,11 +5165,11 @@ void Terrain3D::setLightmapUnloadBudget( const int nBudget ) {
 	}
 }
 
-Dictionary Terrain3D::getLightmapStreamingStats( void ) const {
+Dictionary T3DTerrain::getLightmapStreamingStats( void ) const {
 	return m_pLightmapStreamer ? m_pLightmapStreamer->getStats() : Dictionary();
 }
 
-void Terrain3D::setRegionLightmapOutputDirectory( const String &rDirectory ) {
+void T3DTerrain::setRegionLightmapOutputDirectory( const String &rDirectory ) {
 	String directory = rDirectory.strip_edges().trim_suffix( "/" );
 	if ( directory.is_empty() ) {
 		directory = terrain3dDefaultRegionLightmapOutputDirectory( m_dataDirectory );
@@ -5177,59 +5177,59 @@ void Terrain3D::setRegionLightmapOutputDirectory( const String &rDirectory ) {
 	m_regionLightmapOutputDirectory = directory;
 }
 
-void Terrain3D::setRegionLightmapProxyLod( const int nLod ) {
+void T3DTerrain::setRegionLightmapProxyLod( const int nLod ) {
 	m_nRegionLightmapProxyLod = CLAMP( nLod, 0, 8 );
 }
 
-void Terrain3D::setRegionLightmapContextRadius( const int nRadius ) {
+void T3DTerrain::setRegionLightmapContextRadius( const int nRadius ) {
 	m_nRegionLightmapContextRadius = CLAMP( nRadius, 0, 4 );
 }
 
-void Terrain3D::setRegionLightmapTexelSize( const real_t fTexelSize ) {
+void T3DTerrain::setRegionLightmapTexelSize( const real_t fTexelSize ) {
 	m_fRegionLightmapTexelSize = CLAMP( fTexelSize, 0.05f, 16.0f );
 }
 
-void Terrain3D::setRegionLightmapBakeQuality( const int nQuality ) {
+void T3DTerrain::setRegionLightmapBakeQuality( const int nQuality ) {
 	m_nRegionLightmapBakeQuality = CLAMP( nQuality, 0, 3 );
 }
 
-void Terrain3D::setRegionLightmapShadowmaskMode( const int nMode ) {
+void T3DTerrain::setRegionLightmapShadowmaskMode( const int nMode ) {
 	m_nRegionLightmapShadowmaskMode = CLAMP( nMode, 0, 2 );
 }
 
-void Terrain3D::setHlodEnabled( const bool bEnabled ) {
+void T3DTerrain::setHlodEnabled( const bool bEnabled ) {
 	if ( m_bHlodEnabled == bEnabled ) { return; }
 	m_bHlodEnabled = bEnabled; markMemoryBudgetDirty();
 	if ( m_pHlodStreamer ) { m_pHlodStreamer->setEnabled( bEnabled ); }
 }
-void Terrain3D::setHlodManifestPath( const String &rPath ) {
+void T3DTerrain::setHlodManifestPath( const String &rPath ) {
 	const String value = rPath.strip_edges(); if ( m_hlodManifestPath == value ) { return; }
 	m_hlodManifestPath = value; if ( m_pHlodStreamer ) { m_pHlodStreamer->setManifestPath( value ); }
 }
-void Terrain3D::setHlodTargetErrorPixels( const real_t fPixels ) { m_fHlodTargetErrorPixels = CLAMP( fPixels, 0.25f, 64.0f ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setTargetErrorPixels( m_fHlodTargetErrorPixels ); } }
-void Terrain3D::setHlodHysteresis( const real_t fRatio ) { m_fHlodHysteresis = CLAMP( fRatio, 0.0f, 0.75f ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setHysteresis( m_fHlodHysteresis ); } }
-void Terrain3D::setHlodMaxLevel( const int nLevel ) { m_nHlodMaxLevel = CLAMP( nLevel, 1, 6 ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setMaxLevel( m_nHlodMaxLevel ); } }
-void Terrain3D::setHlodLoadBudget( const int nBudget ) { m_nHlodLoadBudget = CLAMP( nBudget, 0, 64 ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setLoadBudget( m_nHlodLoadBudget ); } }
-void Terrain3D::setHlodUnloadBudget( const int nBudget ) { m_nHlodUnloadBudget = CLAMP( nBudget, 0, 64 ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setUnloadBudget( m_nHlodUnloadBudget ); } }
-void Terrain3D::setHlodMemoryBudgetMb( const int nBudgetMb ) {
+void T3DTerrain::setHlodTargetErrorPixels( const real_t fPixels ) { m_fHlodTargetErrorPixels = CLAMP( fPixels, 0.25f, 64.0f ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setTargetErrorPixels( m_fHlodTargetErrorPixels ); } }
+void T3DTerrain::setHlodHysteresis( const real_t fRatio ) { m_fHlodHysteresis = CLAMP( fRatio, 0.0f, 0.75f ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setHysteresis( m_fHlodHysteresis ); } }
+void T3DTerrain::setHlodMaxLevel( const int nLevel ) { m_nHlodMaxLevel = CLAMP( nLevel, 1, 6 ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setMaxLevel( m_nHlodMaxLevel ); } }
+void T3DTerrain::setHlodLoadBudget( const int nBudget ) { m_nHlodLoadBudget = CLAMP( nBudget, 0, 64 ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setLoadBudget( m_nHlodLoadBudget ); } }
+void T3DTerrain::setHlodUnloadBudget( const int nBudget ) { m_nHlodUnloadBudget = CLAMP( nBudget, 0, 64 ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setUnloadBudget( m_nHlodUnloadBudget ); } }
+void T3DTerrain::setHlodMemoryBudgetMb( const int nBudgetMb ) {
 	m_nHlodMemoryBudgetMb = CLAMP( nBudgetMb, 1, 4096 ); markMemoryBudgetDirty();
 	if ( !m_bHlodMemoryBudgetAuto && m_bInitialized ) { serviceMemoryBudgetPolicy( true ); }
 }
-void Terrain3D::setHlodMaxShadowLevel( const int nLevel ) { m_nHlodMaxShadowLevel = CLAMP( nLevel, 0, 6 ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setMaxShadowLevel( m_nHlodMaxShadowLevel ); } }
-void Terrain3D::setHlodForcedDebugLevel( const int nLevel ) { m_nHlodForcedDebugLevel = CLAMP( nLevel, -1, 6 ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setForcedDebugLevel( m_nHlodForcedDebugLevel ); } }
-bool Terrain3D::reloadHlodManifest( void ) { return m_pHlodStreamer && m_pHlodStreamer->reloadManifest(); }
-Dictionary Terrain3D::getHlodStreamingStats( void ) const { return m_pHlodStreamer ? m_pHlodStreamer->getStats() : Dictionary(); }
-Array Terrain3D::getHlodDebugEntries( void ) const { return m_pHlodStreamer ? m_pHlodStreamer->getDebugEntries() : Array(); }
-bool Terrain3D::isHlodRegionSuppressed( const Vector2i &rRegion, const int nMinimumLevel ) const { return m_pHlodStreamer && m_pHlodStreamer->isRegionSuppressed( rRegion, nMinimumLevel ); }
-bool Terrain3D::isHlodRegionDetailRequired( const Vector2i &rRegion ) const { return !m_pHlodStreamer || m_pHlodStreamer->isRegionDetailRequired( rRegion ); }
-bool Terrain3D::isHlodRegionManaged( const Vector2i &rRegion ) const { return m_pHlodStreamer && m_pHlodStreamer->isRegionManaged( rRegion ); }
-uint8_t Terrain3D::getHlodInstancerMinimumLevel( const Vector2i &rRegion, const int nMeshId ) const { return m_pHlodStreamer ? m_pHlodStreamer->getInstancerMinimumLevel( rRegion, nMeshId ) : 0; }
-uint8_t Terrain3D::getHlodNodeMinimumLevel( const Vector2i &rRegion, const int64_t nSpawnId ) const { return m_pHlodStreamer ? m_pHlodStreamer->getNodeMinimumLevel( rRegion, nSpawnId ) : 0; }
-void Terrain3D::onHlodRegionRepresentationChanged( const Vector2i &rRegion ) {
+void T3DTerrain::setHlodMaxShadowLevel( const int nLevel ) { m_nHlodMaxShadowLevel = CLAMP( nLevel, 0, 6 ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setMaxShadowLevel( m_nHlodMaxShadowLevel ); } }
+void T3DTerrain::setHlodForcedDebugLevel( const int nLevel ) { m_nHlodForcedDebugLevel = CLAMP( nLevel, -1, 6 ); if ( m_pHlodStreamer ) { m_pHlodStreamer->setForcedDebugLevel( m_nHlodForcedDebugLevel ); } }
+bool T3DTerrain::reloadHlodManifest( void ) { return m_pHlodStreamer && m_pHlodStreamer->reloadManifest(); }
+Dictionary T3DTerrain::getHlodStreamingStats( void ) const { return m_pHlodStreamer ? m_pHlodStreamer->getStats() : Dictionary(); }
+Array T3DTerrain::getHlodDebugEntries( void ) const { return m_pHlodStreamer ? m_pHlodStreamer->getDebugEntries() : Array(); }
+bool T3DTerrain::isHlodRegionSuppressed( const Vector2i &rRegion, const int nMinimumLevel ) const { return m_pHlodStreamer && m_pHlodStreamer->isRegionSuppressed( rRegion, nMinimumLevel ); }
+bool T3DTerrain::isHlodRegionDetailRequired( const Vector2i &rRegion ) const { return !m_pHlodStreamer || m_pHlodStreamer->isRegionDetailRequired( rRegion ); }
+bool T3DTerrain::isHlodRegionManaged( const Vector2i &rRegion ) const { return m_pHlodStreamer && m_pHlodStreamer->isRegionManaged( rRegion ); }
+uint8_t T3DTerrain::getHlodInstancerMinimumLevel( const Vector2i &rRegion, const int nMeshId ) const { return m_pHlodStreamer ? m_pHlodStreamer->getInstancerMinimumLevel( rRegion, nMeshId ) : 0; }
+uint8_t T3DTerrain::getHlodNodeMinimumLevel( const Vector2i &rRegion, const int64_t nSpawnId ) const { return m_pHlodStreamer ? m_pHlodStreamer->getNodeMinimumLevel( rRegion, nSpawnId ) : 0; }
+void T3DTerrain::onHlodRegionRepresentationChanged( const Vector2i &rRegion ) {
 	if ( m_pInstancer ) { m_pInstancer->updateMmis( -1, rRegion, false ); }
 	if ( m_pNodeStreamer ) { m_pNodeStreamer->onHlodRepresentationChanged( rRegion ); }
 }
-bool Terrain3D::isHlodDetailReady( const Vector2i &rRegionMin, const Vector2i &rRegionMax ) const {
+bool T3DTerrain::isHlodDetailReady( const Vector2i &rRegionMin, const Vector2i &rRegionMax ) const {
 	if ( m_pHlodStreamer ) {
 		for ( int z = rRegionMin.y; z <= rRegionMax.y; ++z ) {
 			for ( int x = rRegionMin.x; x <= rRegionMax.x; ++x ) {
@@ -5246,23 +5246,23 @@ bool Terrain3D::isHlodDetailReady( const Vector2i &rRegionMin, const Vector2i &r
 	return instances_ready && nodes_ready;
 }
 
-int64_t Terrain3D::addStreamedScene(
+int64_t T3DTerrain::addStreamedScene(
 	const Ref<PackedScene> &rScene, const Transform3D &rGlobalTransform,
 	const Dictionary &rState, const int nFlags, const int nHlodMinLevel
 ) {
 	return m_pNodeStreamer ? m_pNodeStreamer->addStreamedScene( rScene, rGlobalTransform, rState, nFlags, nHlodMinLevel ) : 0;
 }
-int64_t Terrain3D::addStreamedScenePath(
+int64_t T3DTerrain::addStreamedScenePath(
 	const String &rScenePath, const Transform3D &rGlobalTransform,
 	const Dictionary &rState, const int nFlags, const int nHlodMinLevel
 ) {
 	return m_pNodeStreamer ? m_pNodeStreamer->addStreamedScenePath( rScenePath, rGlobalTransform, rState, nFlags, nHlodMinLevel ) : 0;
 }
-bool Terrain3D::removeStreamedScene( const int64_t nSpawnId ) {
+bool T3DTerrain::removeStreamedScene( const int64_t nSpawnId ) {
 	return m_pNodeStreamer && m_pNodeStreamer->removeStreamedScene( nSpawnId );
 }
 
-int Terrain3D::allocateStreamOwnerId( void ) {
+int T3DTerrain::allocateStreamOwnerId( void ) {
 	const int minimum_owner_id = 0x40000000;
 	const int maximum_owner_id = INT32_MAX - 1;
 	if ( m_nNextStreamOwnerId < minimum_owner_id || m_nNextStreamOwnerId > maximum_owner_id ) {
@@ -5273,31 +5273,31 @@ int Terrain3D::allocateStreamOwnerId( void ) {
 	return owner_id;
 }
 
-void Terrain3D::setNextStreamOwnerId( const int nOwnerId ) {
+void T3DTerrain::setNextStreamOwnerId( const int nOwnerId ) {
 	m_nNextStreamOwnerId = CLAMP( nOwnerId, 0x40000000, INT32_MAX - 1 );
 }
 
-Dictionary Terrain3D::getNodeStreamingStats( void ) const {
+Dictionary T3DTerrain::getNodeStreamingStats( void ) const {
 	return m_pNodeStreamer ? m_pNodeStreamer->getStats() : Dictionary();
 }
 
-void Terrain3D::setLabelDistance( const real_t fDistance ) {
+void T3DTerrain::setLabelDistance( const real_t fDistance ) {
 	SET_IF_DIFF( m_fLabelDistance, CLAMP( fDistance, 0.f, 100000.f ) );
-	LOG( Terrain3D::INFO, "t3dsetting_t region label distance: ", m_fLabelDistance );
+	LOG( T3DTerrain::INFO, "t3dsetting_t region label distance: ", m_fLabelDistance );
 	updateRegionLabels();
 }
 
-void Terrain3D::setLabelSize( const int nSize ) {
+void T3DTerrain::setLabelSize( const int nSize ) {
 	SET_IF_DIFF( m_nLabelSize, CLAMP( nSize, 24, 128 ) );
-	LOG( Terrain3D::INFO, "t3dsetting_t region label size: ", m_nLabelSize );
+	LOG( T3DTerrain::INFO, "t3dsetting_t region label size: ", m_nLabelSize );
 	updateRegionLabels();
 }
 
-void Terrain3D::updateRegionLabels( void ) {
+void T3DTerrain::updateRegionLabels( void ) {
 	destroyLabels();
 	if ( m_pLabelParent && m_fLabelDistance > 0.f && m_pData ) {
 		const TypedArray<Vector2i> region_locations = m_pData->getRegionLocations();
-		LOG( Terrain3D::DEBUG, "Creating ", region_locations.size(), " region labels" );
+		LOG( T3DTerrain::DEBUG, "Creating ", region_locations.size(), " region labels" );
 		for ( const Vector2i region_loc : region_locations ) {
 			Label3D *const pLabel = memnew( Label3D );
 			const String text = region_loc;
@@ -5327,9 +5327,9 @@ void Terrain3D::updateRegionLabels( void ) {
 	}
 }
 
-void Terrain3D::setCamera( Camera3D *const pCamera ) {
+void T3DTerrain::setCamera( Camera3D *const pCamera ) {
 	if ( m_camera.ptr() != pCamera ) {
-		LOG( Terrain3D::EXTREME, "t3dsetting_t camera: ", pCamera );
+		LOG( T3DTerrain::EXTREME, "t3dsetting_t camera: ", pCamera );
 		m_camera.setTarget( pCamera );
 		if ( m_clipmapTarget.isValid() ) {
 			set_physics_process( true );
@@ -5337,9 +5337,9 @@ void Terrain3D::setCamera( Camera3D *const pCamera ) {
 	}
 }
 
-void Terrain3D::setClipmapTarget( Node3D *const pNode ) {
+void T3DTerrain::setClipmapTarget( Node3D *const pNode ) {
 	if ( m_clipmapTarget.ptr() != pNode ) {
-		LOG( Terrain3D::INFO, "t3dsetting_t clipmap target: ", pNode );
+		LOG( T3DTerrain::INFO, "t3dsetting_t clipmap target: ", pNode );
 		m_clipmapTarget.setTarget( pNode );
 		if ( m_clipmapTarget.isValid() ) {
 			set_physics_process( true );
@@ -5347,7 +5347,7 @@ void Terrain3D::setClipmapTarget( Node3D *const pNode ) {
 	}
 }
 
-Vector3 Terrain3D::getClipmapTargetPosition( void ) const {
+Vector3 T3DTerrain::getClipmapTargetPosition( void ) const {
 	// In Editor, or no clipmap target, use camera
 	if ( IS_EDITOR || !m_clipmapTarget.getTarget() ) {
 		if ( Node3D *cam = m_camera.getTarget() ) {
@@ -5360,9 +5360,9 @@ Vector3 Terrain3D::getClipmapTargetPosition( void ) const {
 	return V3_ZERO;
 }
 
-void Terrain3D::setCollisionTarget( Node3D *const pNode ) {
+void T3DTerrain::setCollisionTarget( Node3D *const pNode ) {
 	if ( m_collisionTarget.ptr() != pNode ) {
-		LOG( Terrain3D::INFO, "t3dsetting_t collision target: ", pNode );
+		LOG( T3DTerrain::INFO, "t3dsetting_t collision target: ", pNode );
 		m_collisionTarget.setTarget( pNode );
 		if ( m_collisionTarget.isValid() ) {
 			set_physics_process( true );
@@ -5370,7 +5370,7 @@ void Terrain3D::setCollisionTarget( Node3D *const pNode ) {
 	}
 }
 
-Vector3 Terrain3D::getCollisionTargetPosition( void ) const {
+Vector3 T3DTerrain::getCollisionTargetPosition( void ) const {
 	// In Editor, always prefer camera
 	if ( IS_EDITOR ) {
 		if ( Node3D *cam = m_camera.getTarget() ) {
@@ -5389,7 +5389,7 @@ Vector3 Terrain3D::getCollisionTargetPosition( void ) const {
 	return V3_ZERO;
 }
 
-void Terrain3D::updateEnvironmentShadowCasterMask( void ) {
+void T3DTerrain::updateEnvironmentShadowCasterMask( void ) {
 	DirectionalLight3D *const pLight = Object::cast_to<DirectionalLight3D>( m_lightTarget.ptr() );
 	if ( !pLight ) {
 		return;
@@ -5416,7 +5416,7 @@ void Terrain3D::updateEnvironmentShadowCasterMask( void ) {
 	pLight->set_shadow_caster_mask( mask );
 }
 
-void Terrain3D::setSemanticShadowPolicyEnabled( const bool bEnabled ) {
+void T3DTerrain::setSemanticShadowPolicyEnabled( const bool bEnabled ) {
 	if ( m_bSemanticShadowPolicyEnabled == bEnabled ) {
 		return;
 	}
@@ -5424,7 +5424,7 @@ void Terrain3D::setSemanticShadowPolicyEnabled( const bool bEnabled ) {
 	updateEnvironmentShadowCasterMask();
 }
 
-void Terrain3D::setEnvironmentShadowQuality( const t3denvironmentShadowQuality_t eQuality ) {
+void T3DTerrain::setEnvironmentShadowQuality( const t3denvironmentShadowQuality_t eQuality ) {
 	const t3denvironmentShadowQuality_t quality = ( t3denvironmentShadowQuality_t ) ( CLAMP( ( int ) ( eQuality ), ( int ) ( ENVIRONMENT_SHADOW_LOW ), ( int ) ( ENVIRONMENT_SHADOW_ULTRA ) ) );
 	if ( m_environmentShadowQuality == quality ) {
 		return;
@@ -5433,7 +5433,7 @@ void Terrain3D::setEnvironmentShadowQuality( const t3denvironmentShadowQuality_t
 	updateEnvironmentShadowCasterMask();
 }
 
-void Terrain3D::setEnvironmentShadowExternalMask( const uint32_t nMask ) {
+void T3DTerrain::setEnvironmentShadowExternalMask( const uint32_t nMask ) {
 	const uint32_t mask = nMask & 0xFFFFFu;
 	if ( m_nEnvironmentShadowExternalMask == mask ) {
 		return;
@@ -5442,7 +5442,7 @@ void Terrain3D::setEnvironmentShadowExternalMask( const uint32_t nMask ) {
 	updateEnvironmentShadowCasterMask();
 }
 
-void Terrain3D::updateEnvironmentDirectionalReceiverMask( void ) {
+void T3DTerrain::updateEnvironmentDirectionalReceiverMask( void ) {
 	DirectionalLight3D *const pLight = Object::cast_to<DirectionalLight3D>( m_lightTarget.ptr() );
 	if ( !pLight ) {
 		return;
@@ -5462,7 +5462,7 @@ void Terrain3D::updateEnvironmentDirectionalReceiverMask( void ) {
 	pLight->set_cull_mask( mask & 0xFFFFFu );
 }
 
-void Terrain3D::setSemanticDirectionalReceptionEnabled( const bool bEnabled ) {
+void T3DTerrain::setSemanticDirectionalReceptionEnabled( const bool bEnabled ) {
 	if ( m_bSemanticDirectionalReceptionEnabled == bEnabled ) {
 		return;
 	}
@@ -5470,7 +5470,7 @@ void Terrain3D::setSemanticDirectionalReceptionEnabled( const bool bEnabled ) {
 	updateEnvironmentDirectionalReceiverMask();
 }
 
-void Terrain3D::setEnvironmentDirectionalExternalMask( const uint32_t nMask ) {
+void T3DTerrain::setEnvironmentDirectionalExternalMask( const uint32_t nMask ) {
 	const uint32_t mask = nMask & 0xFFFFFu;
 	if ( m_nEnvironmentDirectionalExternalMask == mask ) {
 		return;
@@ -5479,7 +5479,7 @@ void Terrain3D::setEnvironmentDirectionalExternalMask( const uint32_t nMask ) {
 	updateEnvironmentDirectionalReceiverMask();
 }
 
-void Terrain3D::setLightTarget( Node3D *const pNode ) {
+void T3DTerrain::setLightTarget( Node3D *const pNode ) {
 	if ( m_lightTarget.ptr() != pNode ) {
 		DirectionalLight3D *const pOldLight = Object::cast_to<DirectionalLight3D>( m_lightTarget.ptr() );
 		if ( m_bSemanticShadowPolicyEnabled && m_bLightShadowMaskCaptured && pOldLight ) {
@@ -5490,7 +5490,7 @@ void Terrain3D::setLightTarget( Node3D *const pNode ) {
 		}
 		m_bLightShadowMaskCaptured = false;
 		m_bLightCullMaskCaptured = false;
-		LOG( Terrain3D::INFO, "t3dsetting_t directional light target: ", pNode );
+		LOG( T3DTerrain::INFO, "t3dsetting_t directional light target: ", pNode );
 		m_lightTarget.setTarget( pNode );
 		m_bLightStateValid = false;
 		updateEnvironmentShadowCasterMask();
@@ -5501,7 +5501,7 @@ void Terrain3D::setLightTarget( Node3D *const pNode ) {
 	}
 }
 
-void Terrain3D::snap( void ) {
+void T3DTerrain::snap( void ) {
 	if ( m_pTerrainMesher ) {
 		m_pTerrainMesher->resetTargetPosition();
 	}
@@ -5516,14 +5516,14 @@ void Terrain3D::snap( void ) {
 	}
 }
 
-void Terrain3D::setMaterial( const Ref<Terrain3DMaterial> &rMaterial ) {
+void T3DTerrain::setMaterial( const Ref<T3DMaterial> &rMaterial ) {
 	if ( !differs( m_pMaterial, rMaterial ) ) {
 		return;
 	}
-	LOG( Terrain3D::INFO, "Replacing terrain material" );
+	LOG( T3DTerrain::INFO, "Replacing terrain material" );
 	const bool bWasInitialized = m_bInitialized;
 	const bool bSuppliedMaterial = rMaterial.is_valid();
-	const Ref<Terrain3DMaterial> pOldMaterial = m_pMaterial;
+	const Ref<T3DMaterial> pOldMaterial = m_pMaterial;
 	disconnectResourceSignals( m_pAssets, pOldMaterial );
 	if ( pOldMaterial.is_valid() ) {
 		pOldMaterial->uninitialize( this );
@@ -5533,7 +5533,7 @@ void Terrain3D::setMaterial( const Ref<Terrain3DMaterial> &rMaterial ) {
 		m_pMaterial.instantiate();
 	}
 	if ( m_performanceTarget == PERFORMANCE_TARGET_XBOX360_EXPERIMENTAL && !bSuppliedMaterial ) {
-		m_pMaterial->setShaderPerformancePreset( Terrain3DMaterial::SHADER_PRESET_XBOX_360_AUTHENTIC );
+		m_pMaterial->setShaderPerformancePreset( T3DMaterial::SHADER_PRESET_XBOX_360_AUTHENTIC );
 	}
 	m_bPerformanceProfileMaterialPendingApply = false;
 	m_bLightStateValid = false;
@@ -5552,22 +5552,22 @@ void Terrain3D::setMaterial( const Ref<Terrain3DMaterial> &rMaterial ) {
 	emit_signal( "material_changed" );
 }
 
-void Terrain3D::setRuntimeShaderTieringEnabled( const bool bEnabled ) {
+void T3DTerrain::setRuntimeShaderTieringEnabled( const bool bEnabled ) {
 	SET_IF_DIFF( m_bRuntimeShaderTieringEnabled, bEnabled );
 	refreshPerformanceProfileConformity();
-	LOG( Terrain3D::INFO, "t3dsetting_t runtime shader tiering: ", bEnabled );
+	LOG( T3DTerrain::INFO, "t3dsetting_t runtime shader tiering: ", bEnabled );
 	if ( bEnabled && m_pData && m_bInitialized && !m_pData->ensureFarAtlases() ) {
-		LOG( Terrain3D::WARN, "Runtime far shader tier could not prepare coarse terrain atlases; far-tier rendering may use fallback textures until terrain data is ready." );
+		LOG( T3DTerrain::WARN, "Runtime far shader tier could not prepare coarse terrain atlases; far-tier rendering may use fallback textures until terrain data is ready." );
 	}
 	if ( m_pMaterial.is_valid() && m_pMaterial->isInitialized() ) {
-		m_pMaterial->update( Terrain3DMaterial::FULL_REBUILD );
+		m_pMaterial->update( T3DMaterial::FULL_REBUILD );
 	}
 	if ( m_bInitialized ) {
 		setupTerrainMesher();
 	}
 }
 
-void Terrain3D::setRuntimeNearShaderLods( const int nCount ) {
+void T3DTerrain::setRuntimeNearShaderLods( const int nCount ) {
 	const int count = CLAMP( nCount, 0, getTotalClipmapLevels() );
 	if ( m_nRuntimeNearShaderLods == count ) {
 		return;
@@ -5578,7 +5578,7 @@ void Terrain3D::setRuntimeNearShaderLods( const int nCount ) {
 	notify_property_list_changed();
 }
 
-void Terrain3D::setRuntimeMiddleShaderLods( const int nCount ) {
+void T3DTerrain::setRuntimeMiddleShaderLods( const int nCount ) {
 	const int count = CLAMP( nCount, 0, getTotalClipmapLevels() - m_nRuntimeNearShaderLods );
 	if ( m_nRuntimeMiddleShaderLods == count ) {
 		return;
@@ -5589,25 +5589,25 @@ void Terrain3D::setRuntimeMiddleShaderLods( const int nCount ) {
 	notify_property_list_changed();
 }
 
-void Terrain3D::setRuntimeNearRangeEndM( const real_t fRangeM ) {
+void T3DTerrain::setRuntimeNearRangeEndM( const real_t fRangeM ) {
 	setRuntimeNearShaderLods( rangeToLodCount( MAX( fRangeM, ( real_t ) ( 0.0f ) ) ) );
 }
 
-real_t Terrain3D::getRuntimeNearRangeEndM( void ) const {
+real_t T3DTerrain::getRuntimeNearRangeEndM( void ) const {
 	return lodCountToRange( m_nRuntimeNearShaderLods );
 }
 
-void Terrain3D::setRuntimeMiddleRangeEndM( const real_t fRangeM ) {
+void T3DTerrain::setRuntimeMiddleRangeEndM( const real_t fRangeM ) {
 	const int total_non_far = MAX( m_nRuntimeNearShaderLods,
 		rangeToLodCount( MAX( fRangeM, ( real_t ) ( 0.0f ) ) ) );
 	setRuntimeMiddleShaderLods( total_non_far - m_nRuntimeNearShaderLods );
 }
 
-real_t Terrain3D::getRuntimeMiddleRangeEndM( void ) const {
+real_t T3DTerrain::getRuntimeMiddleRangeEndM( void ) const {
 	return lodCountToRange( m_nRuntimeNearShaderLods + m_nRuntimeMiddleShaderLods );
 }
 
-void Terrain3D::setRuntimeSyncDetailLods( const bool bEnabled ) {
+void T3DTerrain::setRuntimeSyncDetailLods( const bool bEnabled ) {
 	if ( m_bRuntimeSyncDetailLods == bEnabled ) {
 		return;
 	}
@@ -5616,7 +5616,7 @@ void Terrain3D::setRuntimeSyncDetailLods( const bool bEnabled ) {
 	applyRuntimeTierLayout( true );
 }
 
-void Terrain3D::setRuntimeClipmapUpdateBudget( const int nCount ) {
+void T3DTerrain::setRuntimeClipmapUpdateBudget( const int nCount ) {
 	const int count = CLAMP( nCount, 1, TERRAIN3D_MAX_CLIPMAP_LEVELS );
 	if ( m_nRuntimeClipmapUpdateBudget == count ) {
 		return;
@@ -5626,7 +5626,7 @@ void Terrain3D::setRuntimeClipmapUpdateBudget( const int nCount ) {
 	applyRuntimeTierLayout( false );
 }
 
-void Terrain3D::setRuntimePagePrepareThreads( const int nCount ) {
+void T3DTerrain::setRuntimePagePrepareThreads( const int nCount ) {
 	const int count = CLAMP( nCount, 1, 32 );
 	if ( m_nRuntimePagePrepareThreads == count ) {
 		return;
@@ -5635,11 +5635,11 @@ void Terrain3D::setRuntimePagePrepareThreads( const int nCount ) {
 	refreshPerformanceProfileConformity();
 }
 
-void Terrain3D::setMeshLods( const int nCount ) {
+void T3DTerrain::setMeshLods( const int nCount ) {
 	SET_IF_DIFF( m_nMeshLods, CLAMP( nCount, 1, 10 ) );
 	refreshPerformanceProfileConformity();
 	normalizeRuntimeTierLayout( true );
-	LOG( Terrain3D::INFO, "t3dsetting_t mesh levels: ", m_nMeshLods );
+	LOG( T3DTerrain::INFO, "t3dsetting_t mesh levels: ", m_nMeshLods );
 	if ( m_pTerrainMesher && m_pMaterial.is_valid() ) {
 		m_pMaterial->update();
 		setupTerrainMesher();
@@ -5651,12 +5651,12 @@ void Terrain3D::setMeshLods( const int nCount ) {
 	}
 }
 
-void Terrain3D::setTessellationLevel( const int nLevel ) {
+void T3DTerrain::setTessellationLevel( const int nLevel ) {
 	const int old_level = m_tessellationLevel;
 	SET_IF_DIFF( m_tessellationLevel, CLAMP( nLevel, 0, 6 ) );
 	refreshPerformanceProfileConformity();
 	normalizeRuntimeTierLayout( true );
-	LOG( Terrain3D::INFO, "t3dsetting_t tessellation level: ", nLevel );
+	LOG( T3DTerrain::INFO, "t3dsetting_t tessellation level: ", nLevel );
 	// The optimized R8 displacement array exists only while tessellation is
 	// active. Crossing zero creates or frees it before rebuilding shaders.
 	if ( ( old_level == 0 ) != ( m_tessellationLevel == 0 ) && m_pAssets.is_valid() && m_pAssets->isInitialized() &&
@@ -5664,7 +5664,7 @@ void Terrain3D::setTessellationLevel( const int nLevel ) {
 		m_pAssets->updateTextureList();
 	}
 	if ( m_pTerrainMesher && m_pMaterial.is_valid() ) {
-		m_pMaterial->update( Terrain3DMaterial::FULL_REBUILD );
+		m_pMaterial->update( T3DMaterial::FULL_REBUILD );
 		setupTerrainMesher();
 		updateDisplacementBuffer();
 	}
@@ -5676,11 +5676,11 @@ void Terrain3D::setTessellationLevel( const int nLevel ) {
 	notify_property_list_changed();
 }
 
-void Terrain3D::setMeshSize( const int nSize ) {
+void T3DTerrain::setMeshSize( const int nSize ) {
 	SET_IF_DIFF( m_nMeshSize, CLAMP( nSize & ~1, 8, 256 ) ); // Ensure even
 	refreshPerformanceProfileConformity();
 	normalizeRuntimeTierLayout( true );
-	LOG( Terrain3D::INFO, "t3dsetting_t mesh size: ", m_nMeshSize );
+	LOG( T3DTerrain::INFO, "t3dsetting_t mesh size: ", m_nMeshSize );
 	if ( m_pTerrainMesher && m_pMaterial.is_valid() ) {
 		m_pMaterial->update();
 		setupTerrainMesher();
@@ -5693,16 +5693,16 @@ void Terrain3D::setMeshSize( const int nSize ) {
 	}
 }
 
-void Terrain3D::setVertexSpacing( const real_t fSpacing ) {
+void T3DTerrain::setVertexSpacing( const real_t fSpacing ) {
 	if ( !Math::is_equal_approx( fSpacing, ( real_t ) ( 1.0f ) ) ) {
-		LOG( Terrain3D::ERROR, "This Terrain3D fork requires 1 metre vertex spacing so every 128-sample region is exactly 128 metres wide" );
+		LOG( T3DTerrain::ERROR, "This Terrain3D fork requires 1 metre vertex spacing so every 128-sample region is exactly 128 metres wide" );
 		return;
 	}
 	if ( Math::is_equal_approx( m_fVertexSpacing, ( real_t ) ( 1.0f ) ) ) {
 		return;
 	}
 	m_fVertexSpacing = 1.0f;
-	LOG( Terrain3D::INFO, "t3dsetting_t fixed vertex spacing: 1 metre" );
+	LOG( T3DTerrain::INFO, "t3dsetting_t fixed vertex spacing: 1 metre" );
 	if ( m_pCollision && m_pData && m_pInstancer && m_pMaterial.is_valid() ) {
 		m_pInstancer->updateVertexSpacing( m_fVertexSpacing );
 		m_pData->setVertexSpacingInternal( m_fVertexSpacing );
@@ -5720,22 +5720,22 @@ void Terrain3D::setVertexSpacing( const real_t fSpacing ) {
 	}
 }
 
-void Terrain3D::setCullMargin( const real_t fMargin ) {
+void T3DTerrain::setCullMargin( const real_t fMargin ) {
 	SET_IF_DIFF( m_fCullMargin, CLAMP( fMargin, 0.f, 100000.f ) );
-	LOG( Terrain3D::INFO, "t3dsetting_t extra cull margin: ", m_fCullMargin );
+	LOG( T3DTerrain::INFO, "t3dsetting_t extra cull margin: ", m_fCullMargin );
 	if ( m_pTerrainMesher ) {
 		m_pTerrainMesher->updateAabbs();
 	}
 }
 
-void Terrain3D::setCastShadows( const RenderingServer::ShadowCastingSetting castShadows ) {
+void T3DTerrain::setCastShadows( const RenderingServer::ShadowCastingSetting castShadows ) {
 	SET_IF_DIFF( m_castShadows, castShadows );
 	if ( m_pTerrainMesher ) {
 		m_pTerrainMesher->setCastShadows( m_castShadows );
 	}
 }
 
-void Terrain3D::setShadowLodCount( const int nCount ) {
+void T3DTerrain::setShadowLodCount( const int nCount ) {
 	SET_IF_DIFF( m_nShadowLodCount, CLAMP( nCount, 0, TERRAIN3D_MAX_CLIPMAP_LEVELS ) );
 	refreshPerformanceProfileConformity();
 	if ( m_pTerrainMesher ) {
@@ -5743,7 +5743,7 @@ void Terrain3D::setShadowLodCount( const int nCount ) {
 	}
 }
 
-void Terrain3D::setNearShadowEnabled( const bool bEnabled ) {
+void T3DTerrain::setNearShadowEnabled( const bool bEnabled ) {
 	SET_IF_DIFF( m_bNearShadowEnabled, bEnabled );
 	refreshPerformanceProfileConformity();
 	if ( m_pTerrainMesher ) {
@@ -5751,7 +5751,7 @@ void Terrain3D::setNearShadowEnabled( const bool bEnabled ) {
 	}
 }
 
-void Terrain3D::setMiddleShadowEnabled( const bool bEnabled ) {
+void T3DTerrain::setMiddleShadowEnabled( const bool bEnabled ) {
 	SET_IF_DIFF( m_bMiddleShadowEnabled, bEnabled );
 	refreshPerformanceProfileConformity();
 	if ( m_pTerrainMesher ) {
@@ -5759,7 +5759,7 @@ void Terrain3D::setMiddleShadowEnabled( const bool bEnabled ) {
 	}
 }
 
-void Terrain3D::setFarShadowEnabled( const bool bEnabled ) {
+void T3DTerrain::setFarShadowEnabled( const bool bEnabled ) {
 	SET_IF_DIFF( m_bFarShadowEnabled, bEnabled );
 	refreshPerformanceProfileConformity();
 	if ( m_pTerrainMesher ) {
@@ -5767,7 +5767,7 @@ void Terrain3D::setFarShadowEnabled( const bool bEnabled ) {
 	}
 }
 
-void Terrain3D::setNearShadowLodCount( const int nCount ) {
+void T3DTerrain::setNearShadowLodCount( const int nCount ) {
 	SET_IF_DIFF( m_nNearShadowLodCount, CLAMP( nCount, -1, TERRAIN3D_MAX_CLIPMAP_LEVELS ) );
 	if ( m_pTerrainMesher ) {
 		m_pTerrainMesher->setTierShadowLodCounts(
@@ -5775,7 +5775,7 @@ void Terrain3D::setNearShadowLodCount( const int nCount ) {
 	}
 }
 
-void Terrain3D::setMiddleShadowLodCount( const int nCount ) {
+void T3DTerrain::setMiddleShadowLodCount( const int nCount ) {
 	SET_IF_DIFF( m_nMiddleShadowLodCount, CLAMP( nCount, -1, TERRAIN3D_MAX_CLIPMAP_LEVELS ) );
 	if ( m_pTerrainMesher ) {
 		m_pTerrainMesher->setTierShadowLodCounts(
@@ -5783,7 +5783,7 @@ void Terrain3D::setMiddleShadowLodCount( const int nCount ) {
 	}
 }
 
-void Terrain3D::setFarShadowLodCount( const int nCount ) {
+void T3DTerrain::setFarShadowLodCount( const int nCount ) {
 	SET_IF_DIFF( m_nFarShadowLodCount, CLAMP( nCount, -1, TERRAIN3D_MAX_CLIPMAP_LEVELS ) );
 	if ( m_pTerrainMesher ) {
 		m_pTerrainMesher->setTierShadowLodCounts(
@@ -5791,7 +5791,7 @@ void Terrain3D::setFarShadowLodCount( const int nCount ) {
 	}
 }
 
-void Terrain3D::setGiMode( const GeometryInstance3D::GIMode giMode ) {
+void T3DTerrain::setGiMode( const GeometryInstance3D::GIMode giMode ) {
 	SET_IF_DIFF( m_giMode, giMode );
 	refreshPerformanceProfileConformity();
 	if ( m_pTerrainMesher ) {
@@ -5799,15 +5799,15 @@ void Terrain3D::setGiMode( const GeometryInstance3D::GIMode giMode ) {
 	}
 }
 
-void Terrain3D::setRenderLayers( const uint32_t nLayers ) {
+void T3DTerrain::setRenderLayers( const uint32_t nLayers ) {
 	SET_IF_DIFF( m_renderLayers, nLayers );
-	LOG( Terrain3D::INFO, "t3dsetting_t terrain render layers to: ", nLayers );
+	LOG( T3DTerrain::INFO, "t3dsetting_t terrain render layers to: ", nLayers );
 	if ( m_pTerrainMesher ) {
 		m_pTerrainMesher->setRenderLayers( m_renderLayers );
 	}
 }
 
-void Terrain3D::updateOceanShaderVariant( void ) {
+void T3DTerrain::updateOceanShaderVariant( void ) {
 	ShaderMaterial *const pMaterial = Object::cast_to<ShaderMaterial>( m_pOceanMaterial.ptr() );
 	if ( !pMaterial || pMaterial->get_shader().is_null() ) {
 		return;
@@ -5865,7 +5865,7 @@ void Terrain3D::updateOceanShaderVariant( void ) {
 	pMaterial->set_shader( m_pOceanVariantShader );
 }
 
-void Terrain3D::setOceanPerformancePreset( const t3doceanPerformancePreset_t preset ) {
+void T3DTerrain::setOceanPerformancePreset( const t3doceanPerformancePreset_t preset ) {
 	m_oceanPerformancePreset = preset;
 	switch ( preset ) {
 		case OCEAN_PRESET_BORDER_MINIMUM:
@@ -5908,7 +5908,7 @@ void Terrain3D::setOceanPerformancePreset( const t3doceanPerformancePreset_t pre
 }
 
 #define T3D_OCEAN_MODE_SETTER( NAME, TYPE, FIELD )         \
-	void Terrain3D::NAME( const TYPE valueArg ) {           \
+	void T3DTerrain::NAME( const TYPE valueArg ) {           \
 		if ( FIELD == valueArg ) {                          \
 			return;                                      \
 		}                                                \
@@ -5917,7 +5917,7 @@ void Terrain3D::setOceanPerformancePreset( const t3doceanPerformancePreset_t pre
 		updateOceanShaderVariant();                  \
 	}
 
-void Terrain3D::setOceanVertexWaveIterations( const int nIterations ) {
+void T3DTerrain::setOceanVertexWaveIterations( const int nIterations ) {
 	const int value = CLAMP( nIterations, 0, 3 );
 	if ( m_nOceanVertexWaveIterations == value ) {
 		return;
@@ -5926,7 +5926,7 @@ void Terrain3D::setOceanVertexWaveIterations( const int nIterations ) {
 	m_oceanPerformancePreset = OCEAN_PRESET_CUSTOM;
 	updateOceanShaderVariant();
 }
-void Terrain3D::setOceanFragmentWaveIterations( const int nIterations ) {
+void T3DTerrain::setOceanFragmentWaveIterations( const int nIterations ) {
 	const int value = CLAMP( nIterations, 0, 4 );
 	if ( m_nOceanFragmentWaveIterations == value ) {
 		return;
@@ -5941,9 +5941,9 @@ T3D_OCEAN_MODE_SETTER( setOceanScatteringMode, t3doceanScatteringMode_t, m_ocean
 T3D_OCEAN_MODE_SETTER( setOceanShadingMode, t3doceanShadingMode_t, m_oceanShadingMode )
 #undef T3D_OCEAN_MODE_SETTER
 
-void Terrain3D::setOceanEnabled( const bool bEnabled ) {
+void T3DTerrain::setOceanEnabled( const bool bEnabled ) {
 	SET_IF_DIFF( m_bOceanEnabled, bEnabled );
-	LOG( Terrain3D::INFO, "t3dsetting_t ocean enabled: ", m_bOceanEnabled );
+	LOG( T3DTerrain::INFO, "t3dsetting_t ocean enabled: ", m_bOceanEnabled );
 	if ( m_bOceanEnabled ) {
 		if ( m_pOceanMaterial.is_null() ) {
 			const String ocean_mat_path = ProjectSettings::get_singleton()->globalize_path( OCEAN_MATERIAL_PATH );
@@ -5963,83 +5963,83 @@ void Terrain3D::setOceanEnabled( const bool bEnabled ) {
 	notify_property_list_changed();
 }
 
-void Terrain3D::setOceanMeshLods( const int nCount ) {
+void T3DTerrain::setOceanMeshLods( const int nCount ) {
 	SET_IF_DIFF( m_nOceanMeshLods, CLAMP( nCount, 1, 10 ) );
-	LOG( Terrain3D::INFO, "t3dsetting_t ocean mesh levels: ", m_nOceanMeshLods );
+	LOG( T3DTerrain::INFO, "t3dsetting_t ocean mesh levels: ", m_nOceanMeshLods );
 	if ( m_bOceanEnabled ) {
 		setupOceanMesher();
 	}
 }
 
-void Terrain3D::setOceanTessellationLevel( const int nLevel ) {
+void T3DTerrain::setOceanTessellationLevel( const int nLevel ) {
 	SET_IF_DIFF( m_oceanTessellationLevel, CLAMP( nLevel, 0, 6 ) );
-	LOG( Terrain3D::INFO, "t3dsetting_t ocean tessellation level: ", nLevel );
+	LOG( T3DTerrain::INFO, "t3dsetting_t ocean tessellation level: ", nLevel );
 	if ( m_bOceanEnabled ) {
 		setupOceanMesher();
 	}
 }
 
-void Terrain3D::setOceanMeshSize( const int nSize ) {
+void T3DTerrain::setOceanMeshSize( const int nSize ) {
 	SET_IF_DIFF( m_nOceanMeshSize, CLAMP( nSize & ~1, 8, 256 ) ); // Ensure even
-	LOG( Terrain3D::INFO, "t3dsetting_t ocean mesh size: ", m_nOceanMeshSize );
+	LOG( T3DTerrain::INFO, "t3dsetting_t ocean mesh size: ", m_nOceanMeshSize );
 	if ( m_bOceanEnabled ) {
 		setupOceanMesher();
 	}
 }
 
-void Terrain3D::setOceanVertexSpacing( const real_t fSpacing ) {
+void T3DTerrain::setOceanVertexSpacing( const real_t fSpacing ) {
 	SET_IF_DIFF( m_fOceanVertexSpacing, CLAMP( fSpacing, 0.25f, 100.0f ) );
-	LOG( Terrain3D::INFO, "t3dsetting_t ocean vertex spacing: ", m_fOceanVertexSpacing );
+	LOG( T3DTerrain::INFO, "t3dsetting_t ocean vertex spacing: ", m_fOceanVertexSpacing );
 	if ( m_bOceanEnabled ) {
 		setupOceanMesher();
 	}
 }
 
-void Terrain3D::setOceanCullMargin( const real_t fMargin ) {
+void T3DTerrain::setOceanCullMargin( const real_t fMargin ) {
 	SET_IF_DIFF( m_fOceanCullMargin, CLAMP( fMargin, 0.f, 100000.f ) );
-	LOG( Terrain3D::INFO, "t3dsetting_t extra cull margin: ", m_fOceanCullMargin );
+	LOG( T3DTerrain::INFO, "t3dsetting_t extra cull margin: ", m_fOceanCullMargin );
 	if ( m_pOceanMesher ) {
 		m_pOceanMesher->updateAabbs( m_fOceanCullMargin, V2_ZERO );
 	}
 }
 
-void Terrain3D::setOceanCastShadows( const RenderingServer::ShadowCastingSetting castShadows ) {
+void T3DTerrain::setOceanCastShadows( const RenderingServer::ShadowCastingSetting castShadows ) {
 	SET_IF_DIFF( m_oceanCastShadows, castShadows );
 	if ( m_pOceanMesher ) {
 		m_pOceanMesher->setCastShadows( m_oceanCastShadows );
 	}
 }
 
-void Terrain3D::setOceanGiMode( const GeometryInstance3D::GIMode giMode ) {
+void T3DTerrain::setOceanGiMode( const GeometryInstance3D::GIMode giMode ) {
 	SET_IF_DIFF( m_oceanGiMode, giMode );
 	if ( m_pOceanMesher ) {
 		m_pOceanMesher->setGiMode( m_oceanGiMode );
 	}
 }
 
-void Terrain3D::setOceanRenderLayers( const uint32_t nLayers ) {
+void T3DTerrain::setOceanRenderLayers( const uint32_t nLayers ) {
 	SET_IF_DIFF( m_oceanRenderLayers, nLayers );
-	LOG( Terrain3D::INFO, "t3dsetting_t ocean render layers to: ", nLayers );
+	LOG( T3DTerrain::INFO, "t3dsetting_t ocean render layers to: ", nLayers );
 	if ( m_pOceanMesher ) {
 		m_pOceanMesher->setRenderLayers( m_oceanRenderLayers );
 	}
 }
 
-void Terrain3D::setOceanMaterial( const Ref<Material> &rMaterial ) {
+void T3DTerrain::setOceanMaterial( const Ref<Material> &rMaterial ) {
 	SET_IF_DIFF( m_pOceanMaterial, rMaterial );
 	m_oceanVariantSource = String();
 	m_pOceanVariantShader.unref();
 	m_bLightStateValid = false;
-	LOG( Terrain3D::INFO, "t3dsetting_t ocean material" );
+	LOG( T3DTerrain::INFO, "t3dsetting_t ocean material" );
 	if ( m_bOceanEnabled ) {
 		setupOceanMesher();
 	}
 }
 
-void Terrain3D::setMouseLayer( const uint32_t nLayer ) {
+void T3DTerrain::setMouseLayer( const uint32_t nLayer ) {
 	SET_IF_DIFF( m_mouseLayer, CLAMP( nLayer, 21u, 32u ) );
 	const uint32_t mouse_mask = 1 << ( m_mouseLayer - 1 );
-	LOG( Terrain3D::INFO, "t3dsetting_t mouse layer: ", m_mouseLayer, " (", mouse_mask,
+	LOG( T3DTerrain::INFO, "t3dsetting_t mouse layer: ", m_mouseLayer, " (", mouse_mask,
 		") on terrain mesh, material, mouse camera, mouse quad" );
 
 	// Set terrain meshes to mouse layer
@@ -6065,13 +6065,13 @@ void Terrain3D::setMouseLayer( const uint32_t nLayer ) {
  *  p_gpu_mode - false: use raymarching, true: use GPU mode
  * Returns Vec3(NAN) on error or vec3(3.402823466e+38F) on no intersection. Test w/ if (var.x < 3.4e38)
  */
-Vector3 Terrain3D::getIntersection( const Vector3 &rSrcPos, const Vector3 &rDirection, const bool bGpuMode ) {
+Vector3 T3DTerrain::getIntersection( const Vector3 &rSrcPos, const Vector3 &rDirection, const bool bGpuMode ) {
 	if ( rDirection.is_zero_approx() || !rDirection.is_finite() ) {
-		LOG( Terrain3D::ERROR, "Invalid direction vector: ", rDirection );
+		LOG( T3DTerrain::ERROR, "Invalid direction vector: ", rDirection );
 		return V3_NAN;
 	}
 	if ( !rSrcPos.is_finite() ) {
-		LOG( Terrain3D::ERROR, "Invalid source vector: ", rSrcPos );
+		LOG( T3DTerrain::ERROR, "Invalid source vector: ", rSrcPos );
 		return V3_NAN;
 	}
 
@@ -6105,7 +6105,7 @@ Vector3 Terrain3D::getIntersection( const Vector3 &rSrcPos, const Vector3 &rDire
 	} else {
 		// Get depth from perspective camera snapshot
 		if ( !m_pMouseCam ) {
-			LOG( Terrain3D::ERROR, "Invalid mouse camera" );
+			LOG( T3DTerrain::ERROR, "Invalid mouse camera" );
 			return V3_NAN;
 		}
 		// Position mouse cam one unit behind the requested position
@@ -6162,7 +6162,7 @@ Vector3 Terrain3D::getIntersection( const Vector3 &rSrcPos, const Vector3 &rDire
  *	p_src_pos (ray start position)
  *	p_direction (ray direction * magnitude), relative to src_pos
  */
-Dictionary Terrain3D::getRaycastResult(
+Dictionary T3DTerrain::getRaycastResult(
 	const Vector3 &rSrcPos, const Vector3 &rDirection,
 	const uint32_t nColMask, const bool bExcludeSelf
 ) const {
@@ -6171,7 +6171,7 @@ Dictionary Terrain3D::getRaycastResult(
 	}
 	PhysicsDirectSpaceState3D *pSpaceState = get_world_3d()->get_direct_space_state();
 	if ( !pSpaceState ) {
-		LOG( Terrain3D::ERROR, "Invalid PhysicsDirectSpaceState3D" );
+		LOG( T3DTerrain::ERROR, "Invalid PhysicsDirectSpaceState3D" );
 		return Dictionary();
 	}
 	Ref<PhysicsRayQueryParameters3D> pQuery =
@@ -6191,8 +6191,8 @@ Dictionary Terrain3D::getRaycastResult(
  *   This takes longer than ..._NEAREST, but can be used to create occluders, since it can guarantee the
  *   generated mesh will not extend above or outside the clipmap at any LOD.
  */
-Ref<Mesh> Terrain3D::bakeMesh( const int nLod, const Terrain3DData::t3dheightFilter_t filter ) const {
-	LOG( Terrain3D::INFO, "Baking mesh at lod: ", nLod, " with filter: ", filter );
+Ref<Mesh> T3DTerrain::bakeMesh( const int nLod, const T3DData::t3dheightFilter_t filter ) const {
+	LOG( T3DTerrain::INFO, "Baking mesh at lod: ", nLod, " with filter: ", filter );
 	Ref<Mesh> pResult;
 	ERR_FAIL_COND_V( m_pData == nullptr, pResult );
 
@@ -6222,7 +6222,7 @@ Ref<Mesh> Terrain3D::bakeMesh( const int nLod, const Terrain3DData::t3dheightFil
  * Generates an ArrayOccluder3D directly. Unlike bake_mesh(), this path does not calculate normals,
  * tangents, or create an intermediate ArrayMesh that the editor immediately throws away.
  */
-Ref<Mesh> Terrain3D::bakeRegionLightmapMesh(
+Ref<Mesh> T3DTerrain::bakeRegionLightmapMesh(
 	const Vector2i &rRegionLocation, const int nLod,
 	const int nContextRadiusRegions, const real_t fTexelSize
 ) const {
@@ -6230,7 +6230,7 @@ Ref<Mesh> Terrain3D::bakeRegionLightmapMesh(
 		nContextRadiusRegions, fTexelSize );
 }
 
-Ref<Mesh> Terrain3D::bakeLightmapClusterMesh(
+Ref<Mesh> T3DTerrain::bakeLightmapClusterMesh(
 	const Vector2i &rRegionMin, const Vector2i &rRegionMax,
 	const int nLod, const int nContextRadiusRegions, const real_t fTexelSize
 ) const {
@@ -6254,7 +6254,7 @@ Ref<Mesh> Terrain3D::bakeLightmapClusterMesh(
 
 	PackedVector3Array vertices;
 	PackedVector2Array terrain_uvs;
-	generateTriangles( vertices, &terrain_uvs, lod, Terrain3DData::HEIGHT_FILTER_NEAREST, false, bounds );
+	generateTriangles( vertices, &terrain_uvs, lod, T3DData::HEIGHT_FILTER_NEAREST, false, bounds );
 	ERR_FAIL_COND_V( vertices.is_empty() || vertices.size() != terrain_uvs.size(), pResult );
 
 	Ref<SurfaceTool> pSt;
@@ -6279,13 +6279,13 @@ Ref<Mesh> Terrain3D::bakeLightmapClusterMesh(
 	return pResult;
 }
 
-Ref<ArrayOccluder3D> Terrain3D::bakeOccluder( const int nLod ) const {
-	LOG( Terrain3D::INFO, "Baking occluder at lod: ", nLod );
+Ref<ArrayOccluder3D> T3DTerrain::bakeOccluder( const int nLod ) const {
+	LOG( T3DTerrain::INFO, "Baking occluder at lod: ", nLod );
 	Ref<ArrayOccluder3D> pResult;
 	ERR_FAIL_COND_V( m_pData == nullptr, pResult );
 
 	PackedVector3Array vertices;
-	generateTriangles( vertices, nullptr, nLod, Terrain3DData::HEIGHT_FILTER_MINIMUM, false, AABB() );
+	generateTriangles( vertices, nullptr, nLod, T3DData::HEIGHT_FILTER_MINIMUM, false, AABB() );
 	ERR_FAIL_COND_V( vertices.is_empty(), pResult );
 
 	Ref<SurfaceTool> pSt;
@@ -6317,15 +6317,15 @@ Ref<ArrayOccluder3D> Terrain3D::bakeOccluder( const int nLod ) const {
  *  Otherwise, geometry is generated for the entire terrain within the AABB (which can be useful for
  *  dynamic and/or runtime nav mesh baking).
  */
-PackedVector3Array Terrain3D::generateNavMeshSourceGeometry(
+PackedVector3Array T3DTerrain::generateNavMeshSourceGeometry(
 	const AABB &rGlobalAabb,
 	const bool bRequireNav
 ) const {
-	LOG( Terrain3D::INFO, "Generating NavMesh source geometry from terrain" );
+	LOG( T3DTerrain::INFO, "Generating NavMesh source geometry from terrain" );
 	PackedVector3Array faces;
 	const bool strict_cooked = m_pData && isGpuRegionCookedPagesEnabled() && !isEditorAuthoringModeInternal();
 	if ( !strict_cooked ) {
-		generateTriangles( faces, nullptr, 0, Terrain3DData::HEIGHT_FILTER_NEAREST, bRequireNav, rGlobalAabb );
+		generateTriangles( faces, nullptr, 0, T3DData::HEIGHT_FILTER_NEAREST, bRequireNav, rGlobalAabb );
 		return faces;
 	}
 
@@ -6351,7 +6351,7 @@ PackedVector3Array Terrain3D::generateNavMeshSourceGeometry(
 		PackedByteArray minmax_blob;
 		PackedByteArray *const pMinMaxBlob = rGlobalAabb.has_volume() ? &minmax_blob : nullptr;
 		if ( !m_pData->loadCookedNavigationTileNow( location, navigation_blob, &collision_blob, pMinMaxBlob ) ) {
-			LOG( Terrain3D::ERROR, "Missing/invalid baked navigation tile for region ", location );
+			LOG( T3DTerrain::ERROR, "Missing/invalid baked navigation tile for region ", location );
 			continue;
 		}
 		PackedByteArray valid_bits;
@@ -6368,7 +6368,7 @@ PackedVector3Array Terrain3D::generateNavMeshSourceGeometry(
 		if ( !T3DRuntimeBakeCodec::decodeNavigationMask( navigation_blob, nav_width, valid_bits, nav_bits ) ||
 			!T3DRuntimeBakeCodec::decodeCollisionHeight( collision_blob, collision_heights, collision_width ) ||
 			nav_width != expected_width || collision_width != expected_width || ( pMinMaxBlob && !use_minmax ) ) {
-			LOG( Terrain3D::ERROR, "Baked navigation/collision acceleration data does not match region ", location );
+			LOG( T3DTerrain::ERROR, "Baked navigation/collision acceleration data does not match region ", location );
 			continue;
 		}
 		auto height_at = [&]( const int x, const int z ) -> real_t {
@@ -6427,7 +6427,7 @@ PackedVector3Array Terrain3D::generateNavMeshSourceGeometry(
 	return faces;
 }
 
-void Terrain3D::setWarning( const uint8_t nWarning, const bool bEnabled ) {
+void T3DTerrain::setWarning( const uint8_t nWarning, const bool bEnabled ) {
 	if ( bEnabled ) {
 		m_nWarnings |= nWarning;
 	} else {
@@ -6436,7 +6436,7 @@ void Terrain3D::setWarning( const uint8_t nWarning, const bool bEnabled ) {
 	update_configuration_warnings();
 }
 
-PackedStringArray Terrain3D::_get_configuration_warnings( void ) const {
+PackedStringArray T3DTerrain::_get_configuration_warnings( void ) const {
 	PackedStringArray psa;
 	if ( m_dataDirectory.is_empty() ) {
 		psa.push_back( "No data directory specified. Select a directory then save the scene to write data." );
@@ -6461,13 +6461,13 @@ PackedStringArray Terrain3D::_get_configuration_warnings( void ) const {
 
 // Notifications are defined in individual classes: Object, Node, Node3D
 // Listed below in order of operation
-void Terrain3D::_notification( const int nWhat ) {
+void T3DTerrain::_notification( const int nWhat ) {
 	switch ( nWhat ) {
 			/// Startup notifications
 
 		case NOTIFICATION_POSTINITIALIZE: {
 			// Object initialized, before script is attached
-			LOG( Terrain3D::INFO, "NOTIFICATION_POSTINITIALIZE" );
+			LOG( T3DTerrain::INFO, "NOTIFICATION_POSTINITIALIZE" );
 			buildContainers();
 			break;
 		}
@@ -6475,7 +6475,7 @@ void Terrain3D::_notification( const int nWhat ) {
 		case NOTIFICATION_ENTER_WORLD: {
 			// Node3D registered to new World3D resource
 			// Sent on scene changes
-			LOG( Terrain3D::INFO, "NOTIFICATION_ENTER_WORLD" );
+			LOG( T3DTerrain::INFO, "NOTIFICATION_ENTER_WORLD" );
 			m_bIsInsideWorld = true;
 			// ENTER_WORLD and ENTER_TREE can be delivered in different relative
 			// orders during editor scene-tab transitions. Initialization is
@@ -6490,7 +6490,7 @@ void Terrain3D::_notification( const int nWhat ) {
 		case NOTIFICATION_ENTER_TREE: {
 			// Node entered a SceneTree
 			// Sent on scene changes
-			LOG( Terrain3D::INFO, "NOTIFICATION_ENTER_TREE" );
+			LOG( T3DTerrain::INFO, "NOTIFICATION_ENTER_TREE" );
 			set_as_top_level( true ); // Don't inherit transforms from parent. Global only.
 			set_notify_transform( true );
 			set_meta( "_edit_lock_", true );
@@ -6498,8 +6498,8 @@ void Terrain3D::_notification( const int nWhat ) {
 			setupDisplacementBuffer();
 			// Reload editor textures - Also see READY
 			if ( m_bFreeEditorTextures && !IS_EDITOR && m_pAssets.is_valid() &&
-				!m_pAssets->get_path().is_empty() && !m_pAssets->get_path().contains( "Terrain3DAssets" ) ) {
-				LOG( Terrain3D::INFO, "free_editor_textures enabled, reloading Assets path: ", m_pAssets->get_path() );
+				!m_pAssets->get_path().is_empty() && !m_pAssets->get_path().contains( "T3DAssets" ) ) {
+				LOG( T3DTerrain::INFO, "free_editor_textures enabled, reloading Assets path: ", m_pAssets->get_path() );
 				m_pAssets =
 					ResourceLoader::get_singleton()->load( m_pAssets->get_path(), "", ResourceLoader::CACHE_MODE_IGNORE );
 			}
@@ -6510,18 +6510,18 @@ void Terrain3D::_notification( const int nWhat ) {
 
 		case NOTIFICATION_READY: {
 			// Node is ready
-			LOG( Terrain3D::INFO, "NOTIFICATION_READY" );
+			LOG( T3DTerrain::INFO, "NOTIFICATION_READY" );
 			// Optional: Run the testing suite
 			// #include "core/unit_testing.h"
 			// test_differs();
 
 			// Clear editor textures - also see ENTER_TREE
 			if ( m_bFreeEditorTextures && !IS_EDITOR && m_pAssets.is_valid() ) {
-				if ( m_pAssets->get_path().contains( "Terrain3DAssets" ) ) {
-					LOG( Terrain3D::WARN, "free_editor_textures requires `Assets` be saved to a file. Do so, or disable the former "
+				if ( m_pAssets->get_path().contains( "T3DAssets" ) ) {
+					LOG( T3DTerrain::WARN, "free_editor_textures requires `Assets` be saved to a file. Do so, or disable the former "
 							  "to turn off this warning" );
 				} else {
-					LOG( Terrain3D::INFO, "free_editor_textures enabled, clearing texture assets" );
+					LOG( T3DTerrain::INFO, "free_editor_textures enabled, clearing texture assets" );
 					m_pAssets->clearTextures();
 				}
 			}
@@ -6546,7 +6546,7 @@ void Terrain3D::_notification( const int nWhat ) {
 
 		case NOTIFICATION_VISIBILITY_CHANGED: {
 			// Node3D visibility changed
-			LOG( Terrain3D::INFO, "NOTIFICATION_VISIBILITY_CHANGED" );
+			LOG( T3DTerrain::INFO, "NOTIFICATION_VISIBILITY_CHANGED" );
 			if ( m_pTerrainMesher ) {
 				m_pTerrainMesher->update();
 			}
@@ -6565,27 +6565,27 @@ void Terrain3D::_notification( const int nWhat ) {
 
 		case NOTIFICATION_EXTENSION_RELOADED: {
 			// Object finished hot reloading
-			LOG( Terrain3D::INFO, "NOTIFICATION_EXTENSION_RELOADED" );
+			LOG( T3DTerrain::INFO, "NOTIFICATION_EXTENSION_RELOADED" );
 			break;
 		}
 
 		case NOTIFICATION_EDITOR_PRE_SAVE: {
 			// Editor Node is about to save the current scene
-			LOG( Terrain3D::INFO, "NOTIFICATION_EDITOR_PRE_SAVE" );
+			LOG( T3DTerrain::INFO, "NOTIFICATION_EDITOR_PRE_SAVE" );
 			if ( m_dataDirectory.is_empty() ) {
-				LOG( Terrain3D::ERROR, "Data directory is empty. Set it to save regions to disk." );
+				LOG( T3DTerrain::ERROR, "Data directory is empty. Set it to save regions to disk." );
 			} else if ( !m_pData ) {
-				LOG( Terrain3D::DEBUG, "Save requested, but no valid data object. Skipping" );
+				LOG( T3DTerrain::DEBUG, "Save requested, but no valid data object. Skipping" );
 			} else {
 				m_pData->saveDirectory( m_dataDirectory );
 			}
 			if ( !m_pMaterial.is_valid() ) {
-				LOG( Terrain3D::DEBUG, "Save requested, but no valid material. Skipping" );
+				LOG( T3DTerrain::DEBUG, "Save requested, but no valid material. Skipping" );
 			} else {
 				m_pMaterial->save();
 			}
 			if ( !m_pAssets.is_valid() ) {
-				LOG( Terrain3D::DEBUG, "Save requested, but no valid texture list. Skipping" );
+				LOG( T3DTerrain::DEBUG, "Save requested, but no valid texture list. Skipping" );
 			} else {
 				m_pAssets->save();
 			}
@@ -6600,7 +6600,7 @@ void Terrain3D::_notification( const int nWhat ) {
 		case NOTIFICATION_CRASH: {
 			// Godot's crash handler reports engine is about to crash
 			// Only works on desktop if the crash handler is enabled
-			LOG( Terrain3D::INFO, "NOTIFICATION_CRASH" );
+			LOG( T3DTerrain::INFO, "NOTIFICATION_CRASH" );
 			break;
 		}
 
@@ -6609,7 +6609,7 @@ void Terrain3D::_notification( const int nWhat ) {
 		case NOTIFICATION_EXIT_TREE: {
 			// Node is about to exit a SceneTree
 			// Sent on scene changes
-			LOG( Terrain3D::INFO, "NOTIFICATION_EXIT_TREE" );
+			LOG( T3DTerrain::INFO, "NOTIFICATION_EXIT_TREE" );
 			deactivateRuntime();
 			destroyMousePicking();
 			destroyDisplacementBuffer();
@@ -6619,7 +6619,7 @@ void Terrain3D::_notification( const int nWhat ) {
 		case NOTIFICATION_EXIT_WORLD: {
 			// Node3D unregistered from current World3D
 			// Sent on scene changes
-			LOG( Terrain3D::INFO, "NOTIFICATION_EXIT_WORLD" );
+			LOG( T3DTerrain::INFO, "NOTIFICATION_EXIT_WORLD" );
 			// Rendering/physics RIDs and process-static terrain storage belong to the
 			// active World3D. Preserve the loaded repository, but release every runtime
 			// owner so another scene can activate before this node is destroyed.
@@ -6630,7 +6630,7 @@ void Terrain3D::_notification( const int nWhat ) {
 
 		case NOTIFICATION_PREDELETE: {
 			// Object is about to be deleted
-			LOG( Terrain3D::INFO, "NOTIFICATION_PREDELETE" );
+			LOG( T3DTerrain::INFO, "NOTIFICATION_PREDELETE" );
 			disconnectAutoShaderProfileSignal( m_pAutoShaderProfile );
 			deactivateRuntime();
 			destroyTerrainMesher( true );
@@ -6656,7 +6656,7 @@ void Terrain3D::_notification( const int nWhat ) {
 	}
 }
 
-void Terrain3D::_validate_property( PropertyInfo &rProperty ) const {
+void T3DTerrain::_validate_property( PropertyInfo &rProperty ) const {
 	if ( m_tessellationLevel == 0 ) {
 		// Hide all displacement properties
 		if ( rProperty.name == StringName( "displacement_scale" ) ||
@@ -6679,7 +6679,7 @@ void Terrain3D::_validate_property( PropertyInfo &rProperty ) const {
 	}
 }
 
-void Terrain3D::_bind_methods( void ) {
+void T3DTerrain::_bind_methods( void ) {
 	BIND_ENUM_CONSTANT( ENVIRONMENT_SHADOW_LOW );
 	BIND_ENUM_CONSTANT( ENVIRONMENT_SHADOW_NORMAL );
 	BIND_ENUM_CONSTANT( ENVIRONMENT_SHADOW_HIGH );
@@ -6722,609 +6722,609 @@ void Terrain3D::_bind_methods( void ) {
 	BIND_ENUM_CONSTANT( OCEAN_SHADING_UNSHADED );
 	BIND_ENUM_CONSTANT( OCEAN_SHADING_LAMBERT_VERTEX );
 
-	ClassDB::bind_method( D_METHOD( "get_version" ), &Terrain3D::getVersion );
-	ClassDB::bind_method( D_METHOD( "get_native_api_revision" ), &Terrain3D::getNativeApiRevision );
-	ClassDB::bind_method( D_METHOD( "get_native_build_id" ), &Terrain3D::getNativeBuildId );
-	ClassDB::bind_method( D_METHOD( "is_initialized" ), &Terrain3D::isInitialized );
-	ClassDB::bind_method( D_METHOD( "set_debug_level", "level" ), &Terrain3D::setDebugLevel );
-	ClassDB::bind_method( D_METHOD( "get_debug_level" ), &Terrain3D::getDebugLevel );
-	ClassDB::bind_method( D_METHOD( "set_data_directory", "directory" ), &Terrain3D::setDataDirectory );
-	ClassDB::bind_method( D_METHOD( "get_data_directory" ), &Terrain3D::getDataDirectory );
+	ClassDB::bind_method( D_METHOD( "get_version" ), &T3DTerrain::getVersion );
+	ClassDB::bind_method( D_METHOD( "get_native_api_revision" ), &T3DTerrain::getNativeApiRevision );
+	ClassDB::bind_method( D_METHOD( "get_native_build_id" ), &T3DTerrain::getNativeBuildId );
+	ClassDB::bind_method( D_METHOD( "is_initialized" ), &T3DTerrain::isInitialized );
+	ClassDB::bind_method( D_METHOD( "set_debug_level", "level" ), &T3DTerrain::setDebugLevel );
+	ClassDB::bind_method( D_METHOD( "get_debug_level" ), &T3DTerrain::getDebugLevel );
+	ClassDB::bind_method( D_METHOD( "set_data_directory", "directory" ), &T3DTerrain::setDataDirectory );
+	ClassDB::bind_method( D_METHOD( "get_data_directory" ), &T3DTerrain::getDataDirectory );
 	ClassDB::bind_method( D_METHOD( "set_editor_runtime_streaming_preview", "enabled" ),
-		&Terrain3D::setEditorRuntimeStreamingPreview );
+		&T3DTerrain::setEditorRuntimeStreamingPreview );
 	ClassDB::bind_method( D_METHOD( "is_editor_runtime_streaming_preview" ),
-		&Terrain3D::isEditorRuntimeStreamingPreview );
+		&T3DTerrain::isEditorRuntimeStreamingPreview );
 	ClassDB::bind_method( D_METHOD( "set_editor_node_streaming_preview", "enabled" ),
-		&Terrain3D::setEditorNodeStreamingPreview );
+		&T3DTerrain::setEditorNodeStreamingPreview );
 	ClassDB::bind_method( D_METHOD( "is_editor_node_streaming_preview_enabled" ),
-		&Terrain3D::isEditorNodeStreamingPreviewEnabled );
+		&T3DTerrain::isEditorNodeStreamingPreviewEnabled );
 	ClassDB::bind_method( D_METHOD( "is_editor_node_streaming_preview_active" ),
-		&Terrain3D::isEditorNodeStreamingPreviewActive );
-	ClassDB::bind_method( D_METHOD( "set_editor_hlod_preview", "enabled" ), &Terrain3D::setEditorHlodPreview );
-	ClassDB::bind_method( D_METHOD( "is_editor_hlod_preview_enabled" ), &Terrain3D::isEditorHlodPreviewEnabled );
-	ClassDB::bind_method( D_METHOD( "is_editor_hlod_preview_active" ), &Terrain3D::isEditorHlodPreviewActive );
-	ClassDB::bind_method( D_METHOD( "set_editor_execution_mode", "mode" ), &Terrain3D::setEditorExecutionMode );
-	ClassDB::bind_method( D_METHOD( "get_editor_execution_mode" ), &Terrain3D::getEditorExecutionMode );
-	ClassDB::bind_method( D_METHOD( "get_memory_estimate" ), &Terrain3D::getMemoryEstimate );
-	ClassDB::bind_method( D_METHOD( "get_tracked_current_residency" ), &Terrain3D::getTrackedCurrentResidency );
-	ClassDB::bind_method( D_METHOD( "get_memory_budget_stats" ), &Terrain3D::getMemoryBudgetStats );
-	ClassDB::bind_method( D_METHOD( "set_total_memory_budget_mb", "budget_mb" ), &Terrain3D::setTotalMemoryBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_total_memory_budget_mb" ), &Terrain3D::getTotalMemoryBudgetMb );
-	ClassDB::bind_method( D_METHOD( "set_memory_transient_reserve_mb", "reserve_mb" ), &Terrain3D::setMemoryTransientReserveMb );
-	ClassDB::bind_method( D_METHOD( "get_memory_transient_reserve_mb" ), &Terrain3D::getMemoryTransientReserveMb );
-	ClassDB::bind_method( D_METHOD( "set_gpu_region_cache_budget_auto", "enabled" ), &Terrain3D::setGpuRegionCacheBudgetAuto );
-	ClassDB::bind_method( D_METHOD( "is_gpu_region_cache_budget_auto" ), &Terrain3D::isGpuRegionCacheBudgetAuto );
-	ClassDB::bind_method( D_METHOD( "set_cpu_region_cache_budget_auto", "enabled" ), &Terrain3D::setCpuRegionCacheBudgetAuto );
-	ClassDB::bind_method( D_METHOD( "is_cpu_region_cache_budget_auto" ), &Terrain3D::isCpuRegionCacheBudgetAuto );
-	ClassDB::bind_method( D_METHOD( "set_instance_region_cache_budget_auto", "enabled" ), &Terrain3D::setInstanceRegionCacheBudgetAuto );
-	ClassDB::bind_method( D_METHOD( "is_instance_region_cache_budget_auto" ), &Terrain3D::isInstanceRegionCacheBudgetAuto );
-	ClassDB::bind_method( D_METHOD( "set_lightmap_residency_budget_auto", "enabled" ), &Terrain3D::setLightmapResidencyBudgetAuto );
-	ClassDB::bind_method( D_METHOD( "is_lightmap_residency_budget_auto" ), &Terrain3D::isLightmapResidencyBudgetAuto );
-	ClassDB::bind_method( D_METHOD( "set_hlod_memory_budget_auto", "enabled" ), &Terrain3D::setHlodMemoryBudgetAuto );
-	ClassDB::bind_method( D_METHOD( "is_hlod_memory_budget_auto" ), &Terrain3D::isHlodMemoryBudgetAuto );
-	ClassDB::bind_method( D_METHOD( "set_lightmap_residency_budget_mb", "budget_mb" ), &Terrain3D::setLightmapResidencyBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_lightmap_residency_budget_mb" ), &Terrain3D::getLightmapResidencyBudgetMb );
-	ClassDB::bind_method( D_METHOD( "set_shader_cache_budget_auto", "enabled" ), &Terrain3D::setShaderCacheBudgetAuto );
-	ClassDB::bind_method( D_METHOD( "is_shader_cache_budget_auto" ), &Terrain3D::isShaderCacheBudgetAuto );
-	ClassDB::bind_method( D_METHOD( "get_effective_gpu_region_cache_budget_mb" ), &Terrain3D::getEffectiveGpuRegionCacheBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_effective_cpu_region_cache_budget_mb" ), &Terrain3D::getEffectiveCpuRegionCacheBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_effective_instance_region_cache_budget_mb" ), &Terrain3D::getEffectiveInstanceRegionCacheBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_effective_lightmap_residency_budget_mb" ), &Terrain3D::getEffectiveLightmapResidencyBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_effective_hlod_memory_budget_mb" ), &Terrain3D::getEffectiveHlodMemoryBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_effective_shader_cache_budget_mb" ), &Terrain3D::getEffectiveShaderCacheBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_memory_budget_policy_generation" ), &Terrain3D::getMemoryBudgetPolicyGeneration );
-	ClassDB::bind_method( D_METHOD( "is_memory_budget_overcommitted" ), &Terrain3D::isMemoryBudgetOvercommitted );
-	ClassDB::bind_method( D_METHOD( "get_memory_budget_headroom_bytes" ), &Terrain3D::getMemoryBudgetHeadroomBytes );
-	ClassDB::bind_method( D_METHOD( "force_memory_budget_rebalance" ), &Terrain3D::forceMemoryBudgetRebalance );
-	ClassDB::bind_method( D_METHOD( "get_runtime_diagnostics", "deep_introspection" ), &Terrain3D::getRuntimeDiagnostics, DEFVAL( false ) );
-	ClassDB::bind_method( D_METHOD( "get_runtime_parity_snapshot" ), &Terrain3D::getRuntimeParitySnapshot );
-	ClassDB::bind_method( D_METHOD( "get_memory_stats_snapshot" ), &Terrain3D::getMemoryStatsSnapshot );
-	ClassDB::bind_method( D_METHOD( "get_shader_tier_stats_snapshot" ), &Terrain3D::getShaderTierStatsSnapshot );
-	ClassDB::bind_method( D_METHOD( "get_cache_stats_snapshot", "deep_introspection" ), &Terrain3D::getCacheStatsSnapshot, DEFVAL( false ) );
-	ClassDB::bind_method( D_METHOD( "get_frame_stats_snapshot" ), &Terrain3D::getFrameStatsSnapshot );
+		&T3DTerrain::isEditorNodeStreamingPreviewActive );
+	ClassDB::bind_method( D_METHOD( "set_editor_hlod_preview", "enabled" ), &T3DTerrain::setEditorHlodPreview );
+	ClassDB::bind_method( D_METHOD( "is_editor_hlod_preview_enabled" ), &T3DTerrain::isEditorHlodPreviewEnabled );
+	ClassDB::bind_method( D_METHOD( "is_editor_hlod_preview_active" ), &T3DTerrain::isEditorHlodPreviewActive );
+	ClassDB::bind_method( D_METHOD( "set_editor_execution_mode", "mode" ), &T3DTerrain::setEditorExecutionMode );
+	ClassDB::bind_method( D_METHOD( "get_editor_execution_mode" ), &T3DTerrain::getEditorExecutionMode );
+	ClassDB::bind_method( D_METHOD( "get_memory_estimate" ), &T3DTerrain::getMemoryEstimate );
+	ClassDB::bind_method( D_METHOD( "get_tracked_current_residency" ), &T3DTerrain::getTrackedCurrentResidency );
+	ClassDB::bind_method( D_METHOD( "get_memory_budget_stats" ), &T3DTerrain::getMemoryBudgetStats );
+	ClassDB::bind_method( D_METHOD( "set_total_memory_budget_mb", "budget_mb" ), &T3DTerrain::setTotalMemoryBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_total_memory_budget_mb" ), &T3DTerrain::getTotalMemoryBudgetMb );
+	ClassDB::bind_method( D_METHOD( "set_memory_transient_reserve_mb", "reserve_mb" ), &T3DTerrain::setMemoryTransientReserveMb );
+	ClassDB::bind_method( D_METHOD( "get_memory_transient_reserve_mb" ), &T3DTerrain::getMemoryTransientReserveMb );
+	ClassDB::bind_method( D_METHOD( "set_gpu_region_cache_budget_auto", "enabled" ), &T3DTerrain::setGpuRegionCacheBudgetAuto );
+	ClassDB::bind_method( D_METHOD( "is_gpu_region_cache_budget_auto" ), &T3DTerrain::isGpuRegionCacheBudgetAuto );
+	ClassDB::bind_method( D_METHOD( "set_cpu_region_cache_budget_auto", "enabled" ), &T3DTerrain::setCpuRegionCacheBudgetAuto );
+	ClassDB::bind_method( D_METHOD( "is_cpu_region_cache_budget_auto" ), &T3DTerrain::isCpuRegionCacheBudgetAuto );
+	ClassDB::bind_method( D_METHOD( "set_instance_region_cache_budget_auto", "enabled" ), &T3DTerrain::setInstanceRegionCacheBudgetAuto );
+	ClassDB::bind_method( D_METHOD( "is_instance_region_cache_budget_auto" ), &T3DTerrain::isInstanceRegionCacheBudgetAuto );
+	ClassDB::bind_method( D_METHOD( "set_lightmap_residency_budget_auto", "enabled" ), &T3DTerrain::setLightmapResidencyBudgetAuto );
+	ClassDB::bind_method( D_METHOD( "is_lightmap_residency_budget_auto" ), &T3DTerrain::isLightmapResidencyBudgetAuto );
+	ClassDB::bind_method( D_METHOD( "set_hlod_memory_budget_auto", "enabled" ), &T3DTerrain::setHlodMemoryBudgetAuto );
+	ClassDB::bind_method( D_METHOD( "is_hlod_memory_budget_auto" ), &T3DTerrain::isHlodMemoryBudgetAuto );
+	ClassDB::bind_method( D_METHOD( "set_lightmap_residency_budget_mb", "budget_mb" ), &T3DTerrain::setLightmapResidencyBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_lightmap_residency_budget_mb" ), &T3DTerrain::getLightmapResidencyBudgetMb );
+	ClassDB::bind_method( D_METHOD( "set_shader_cache_budget_auto", "enabled" ), &T3DTerrain::setShaderCacheBudgetAuto );
+	ClassDB::bind_method( D_METHOD( "is_shader_cache_budget_auto" ), &T3DTerrain::isShaderCacheBudgetAuto );
+	ClassDB::bind_method( D_METHOD( "get_effective_gpu_region_cache_budget_mb" ), &T3DTerrain::getEffectiveGpuRegionCacheBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_effective_cpu_region_cache_budget_mb" ), &T3DTerrain::getEffectiveCpuRegionCacheBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_effective_instance_region_cache_budget_mb" ), &T3DTerrain::getEffectiveInstanceRegionCacheBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_effective_lightmap_residency_budget_mb" ), &T3DTerrain::getEffectiveLightmapResidencyBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_effective_hlod_memory_budget_mb" ), &T3DTerrain::getEffectiveHlodMemoryBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_effective_shader_cache_budget_mb" ), &T3DTerrain::getEffectiveShaderCacheBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_memory_budget_policy_generation" ), &T3DTerrain::getMemoryBudgetPolicyGeneration );
+	ClassDB::bind_method( D_METHOD( "is_memory_budget_overcommitted" ), &T3DTerrain::isMemoryBudgetOvercommitted );
+	ClassDB::bind_method( D_METHOD( "get_memory_budget_headroom_bytes" ), &T3DTerrain::getMemoryBudgetHeadroomBytes );
+	ClassDB::bind_method( D_METHOD( "force_memory_budget_rebalance" ), &T3DTerrain::forceMemoryBudgetRebalance );
+	ClassDB::bind_method( D_METHOD( "get_runtime_diagnostics", "deep_introspection" ), &T3DTerrain::getRuntimeDiagnostics, DEFVAL( false ) );
+	ClassDB::bind_method( D_METHOD( "get_runtime_parity_snapshot" ), &T3DTerrain::getRuntimeParitySnapshot );
+	ClassDB::bind_method( D_METHOD( "get_memory_stats_snapshot" ), &T3DTerrain::getMemoryStatsSnapshot );
+	ClassDB::bind_method( D_METHOD( "get_shader_tier_stats_snapshot" ), &T3DTerrain::getShaderTierStatsSnapshot );
+	ClassDB::bind_method( D_METHOD( "get_cache_stats_snapshot", "deep_introspection" ), &T3DTerrain::getCacheStatsSnapshot, DEFVAL( false ) );
+	ClassDB::bind_method( D_METHOD( "get_frame_stats_snapshot" ), &T3DTerrain::getFrameStatsSnapshot );
 	ClassDB::bind_method( D_METHOD( "get_runtime_profile_history", "max_samples" ),
-		&Terrain3D::getRuntimeProfileHistory, DEFVAL( 600 ) );
+		&T3DTerrain::getRuntimeProfileHistory, DEFVAL( 600 ) );
 	ClassDB::bind_method( D_METHOD( "get_runtime_profile_history_since", "after_sequence", "max_samples" ),
-		&Terrain3D::getRuntimeProfileHistorySince, DEFVAL( 600 ) );
-	ClassDB::bind_method( D_METHOD( "reset_runtime_diagnostics" ), &Terrain3D::resetRuntimeDiagnostics );
+		&T3DTerrain::getRuntimeProfileHistorySince, DEFVAL( 600 ) );
+	ClassDB::bind_method( D_METHOD( "reset_runtime_diagnostics" ), &T3DTerrain::resetRuntimeDiagnostics );
 	ClassDB::bind_method( D_METHOD( "set_runtime_profiling_enabled", "enabled" ),
-		&Terrain3D::setRuntimeProfilingEnabled );
+		&T3DTerrain::setRuntimeProfilingEnabled );
 	ClassDB::bind_method( D_METHOD( "is_runtime_profiling_enabled" ),
-		&Terrain3D::isRuntimeProfilingEnabled );
+		&T3DTerrain::isRuntimeProfilingEnabled );
 	ClassDB::bind_method( D_METHOD( "set_runtime_adaptive_work_budgets_enabled", "enabled" ),
-		&Terrain3D::setRuntimeAdaptiveWorkBudgetsEnabled );
+		&T3DTerrain::setRuntimeAdaptiveWorkBudgetsEnabled );
 	ClassDB::bind_method( D_METHOD( "is_runtime_adaptive_work_budgets_enabled" ),
-		&Terrain3D::isRuntimeAdaptiveWorkBudgetsEnabled );
+		&T3DTerrain::isRuntimeAdaptiveWorkBudgetsEnabled );
 	ClassDB::bind_method( D_METHOD( "set_runtime_adaptive_target_ms", "target_ms" ),
-		&Terrain3D::setRuntimeAdaptiveTargetMs );
+		&T3DTerrain::setRuntimeAdaptiveTargetMs );
 	ClassDB::bind_method( D_METHOD( "get_runtime_adaptive_target_ms" ),
-		&Terrain3D::getRuntimeAdaptiveTargetMs );
+		&T3DTerrain::getRuntimeAdaptiveTargetMs );
 	ClassDB::bind_method( D_METHOD( "set_runtime_adaptive_hard_max_ms", "hard_max_ms" ),
-		&Terrain3D::setRuntimeAdaptiveHardMaxMs );
+		&T3DTerrain::setRuntimeAdaptiveHardMaxMs );
 	ClassDB::bind_method( D_METHOD( "get_runtime_adaptive_hard_max_ms" ),
-		&Terrain3D::getRuntimeAdaptiveHardMaxMs );
+		&T3DTerrain::getRuntimeAdaptiveHardMaxMs );
 	ClassDB::bind_method( D_METHOD( "set_runtime_adaptive_adjustment_window_frames", "frames" ),
-		&Terrain3D::setRuntimeAdaptiveAdjustmentWindowFrames );
+		&T3DTerrain::setRuntimeAdaptiveAdjustmentWindowFrames );
 	ClassDB::bind_method( D_METHOD( "get_runtime_adaptive_adjustment_window_frames" ),
-		&Terrain3D::getRuntimeAdaptiveAdjustmentWindowFrames );
+		&T3DTerrain::getRuntimeAdaptiveAdjustmentWindowFrames );
 	ClassDB::bind_method( D_METHOD( "set_runtime_adaptive_min_gpu_pages", "pages" ),
-		&Terrain3D::setRuntimeAdaptiveMinGpuPages );
+		&T3DTerrain::setRuntimeAdaptiveMinGpuPages );
 	ClassDB::bind_method( D_METHOD( "get_runtime_adaptive_min_gpu_pages" ),
-		&Terrain3D::getRuntimeAdaptiveMinGpuPages );
+		&T3DTerrain::getRuntimeAdaptiveMinGpuPages );
 	ClassDB::bind_method( D_METHOD( "set_runtime_adaptive_min_cpu_pages", "pages" ),
-		&Terrain3D::setRuntimeAdaptiveMinCpuPages );
+		&T3DTerrain::setRuntimeAdaptiveMinCpuPages );
 	ClassDB::bind_method( D_METHOD( "get_runtime_adaptive_min_cpu_pages" ),
-		&Terrain3D::getRuntimeAdaptiveMinCpuPages );
+		&T3DTerrain::getRuntimeAdaptiveMinCpuPages );
 	ClassDB::bind_method( D_METHOD( "set_runtime_adaptive_min_instance_pages", "pages" ),
-		&Terrain3D::setRuntimeAdaptiveMinInstancePages );
+		&T3DTerrain::setRuntimeAdaptiveMinInstancePages );
 	ClassDB::bind_method( D_METHOD( "get_runtime_adaptive_min_instance_pages" ),
-		&Terrain3D::getRuntimeAdaptiveMinInstancePages );
+		&T3DTerrain::getRuntimeAdaptiveMinInstancePages );
 	ClassDB::bind_method( D_METHOD( "set_runtime_adaptive_min_instancer_cells", "cells" ),
-		&Terrain3D::setRuntimeAdaptiveMinInstancerCells );
+		&T3DTerrain::setRuntimeAdaptiveMinInstancerCells );
 	ClassDB::bind_method( D_METHOD( "get_runtime_adaptive_min_instancer_cells" ),
-		&Terrain3D::getRuntimeAdaptiveMinInstancerCells );
+		&T3DTerrain::getRuntimeAdaptiveMinInstancerCells );
 	ClassDB::bind_method( D_METHOD( "set_runtime_adaptive_min_node_load_regions", "regions" ),
-		&Terrain3D::setRuntimeAdaptiveMinNodeLoadRegions );
+		&T3DTerrain::setRuntimeAdaptiveMinNodeLoadRegions );
 	ClassDB::bind_method( D_METHOD( "get_runtime_adaptive_min_node_load_regions" ),
-		&Terrain3D::getRuntimeAdaptiveMinNodeLoadRegions );
+		&T3DTerrain::getRuntimeAdaptiveMinNodeLoadRegions );
 	ClassDB::bind_method( D_METHOD( "set_runtime_adaptive_min_node_unload_regions", "regions" ),
-		&Terrain3D::setRuntimeAdaptiveMinNodeUnloadRegions );
+		&T3DTerrain::setRuntimeAdaptiveMinNodeUnloadRegions );
 	ClassDB::bind_method( D_METHOD( "get_runtime_adaptive_min_node_unload_regions" ),
-		&Terrain3D::getRuntimeAdaptiveMinNodeUnloadRegions );
+		&T3DTerrain::getRuntimeAdaptiveMinNodeUnloadRegions );
 	ClassDB::bind_method( D_METHOD( "get_runtime_adaptive_budget_stats" ),
-		&Terrain3D::getRuntimeAdaptiveBudgetStats );
+		&T3DTerrain::getRuntimeAdaptiveBudgetStats );
 	ClassDB::bind_method( D_METHOD( "set_runtime_boundary_work_phasing_enabled", "enabled" ),
-		&Terrain3D::setRuntimeBoundaryWorkPhasingEnabled );
+		&T3DTerrain::setRuntimeBoundaryWorkPhasingEnabled );
 	ClassDB::bind_method( D_METHOD( "is_runtime_boundary_work_phasing_enabled" ),
-		&Terrain3D::isRuntimeBoundaryWorkPhasingEnabled );
+		&T3DTerrain::isRuntimeBoundaryWorkPhasingEnabled );
 	ClassDB::bind_method( D_METHOD( "set_runtime_boundary_node_delay_frames", "frames" ),
-		&Terrain3D::setRuntimeBoundaryNodeDelayFrames );
+		&T3DTerrain::setRuntimeBoundaryNodeDelayFrames );
 	ClassDB::bind_method( D_METHOD( "get_runtime_boundary_node_delay_frames" ),
-		&Terrain3D::getRuntimeBoundaryNodeDelayFrames );
+		&T3DTerrain::getRuntimeBoundaryNodeDelayFrames );
 	ClassDB::bind_method( D_METHOD( "set_runtime_boundary_instancer_delay_frames", "frames" ),
-		&Terrain3D::setRuntimeBoundaryInstancerDelayFrames );
+		&T3DTerrain::setRuntimeBoundaryInstancerDelayFrames );
 	ClassDB::bind_method( D_METHOD( "get_runtime_boundary_instancer_delay_frames" ),
-		&Terrain3D::getRuntimeBoundaryInstancerDelayFrames );
+		&T3DTerrain::getRuntimeBoundaryInstancerDelayFrames );
 	ClassDB::bind_method( D_METHOD( "get_runtime_boundary_phasing_stats" ),
-		&Terrain3D::getRuntimeBoundaryPhasingStats );
-	ClassDB::bind_method( D_METHOD( "is_editor_authoring_mode" ), &Terrain3D::isEditorAuthoringMode );
+		&T3DTerrain::getRuntimeBoundaryPhasingStats );
+	ClassDB::bind_method( D_METHOD( "is_editor_authoring_mode" ), &T3DTerrain::isEditorAuthoringMode );
 	ClassDB::bind_method( D_METHOD( "is_authoring_residency_readback_safe" ),
-		&Terrain3D::isAuthoringResidencyReadbackSafe );
-	ClassDB::bind_method( D_METHOD( "is_gpu_region_cache_effective" ), &Terrain3D::isGpuRegionCacheEffective );
-	ClassDB::bind_method( D_METHOD( "is_cpu_region_cache_effective" ), &Terrain3D::isCpuRegionCacheEffective );
+		&T3DTerrain::isAuthoringResidencyReadbackSafe );
+	ClassDB::bind_method( D_METHOD( "is_gpu_region_cache_effective" ), &T3DTerrain::isGpuRegionCacheEffective );
+	ClassDB::bind_method( D_METHOD( "is_cpu_region_cache_effective" ), &T3DTerrain::isCpuRegionCacheEffective );
 	ClassDB::bind_method( D_METHOD( "is_instance_region_cache_effective" ),
-		&Terrain3D::isInstanceRegionCacheEffective );
+		&T3DTerrain::isInstanceRegionCacheEffective );
 	ClassDB::bind_method( D_METHOD( "is_instancer_cell_streaming_effective" ),
-		&Terrain3D::isInstancerCellStreamingEffective );
+		&T3DTerrain::isInstancerCellStreamingEffective );
 	ClassDB::bind_method( D_METHOD( "is_dynamic_node_streaming_effective" ),
-		&Terrain3D::isDynamicNodeStreamingEffective );
-	ClassDB::bind_method( D_METHOD( "set_performance_target", "target" ), &Terrain3D::setPerformanceTarget );
-	ClassDB::bind_method( D_METHOD( "get_performance_target" ), &Terrain3D::getPerformanceTarget );
-	ClassDB::bind_method( D_METHOD( "get_performance_profile_status" ), &Terrain3D::getPerformanceProfileStatus );
-	ClassDB::bind_method( D_METHOD( "get_performance_profile_status_name" ), &Terrain3D::getPerformanceProfileStatusName );
-	ClassDB::bind_method( D_METHOD( "get_performance_profile_version" ), &Terrain3D::getPerformanceProfileVersion );
-	ClassDB::bind_method( D_METHOD( "get_performance_profile_signature" ), &Terrain3D::getPerformanceProfileSignature );
-	ClassDB::bind_method( D_METHOD( "get_performance_profile_manifest" ), &Terrain3D::getPerformanceProfileManifest );
-	ClassDB::bind_method( D_METHOD( "get_performance_profile_diff" ), &Terrain3D::getPerformanceProfileDiff );
-	ClassDB::bind_method( D_METHOD( "reset_performance_profile" ), &Terrain3D::resetPerformanceProfile );
-	ClassDB::bind_method( D_METHOD( "set_streaming_active_radius", "radius" ), &Terrain3D::setStreamingActiveRadius );
-	ClassDB::bind_method( D_METHOD( "get_streaming_active_radius" ), &Terrain3D::getStreamingActiveRadius );
-	ClassDB::bind_method( D_METHOD( "set_streaming_hot_radius", "radius" ), &Terrain3D::setStreamingHotRadius );
-	ClassDB::bind_method( D_METHOD( "get_streaming_hot_radius" ), &Terrain3D::getStreamingHotRadius );
-	ClassDB::bind_method( D_METHOD( "set_streaming_cold_radius", "radius" ), &Terrain3D::setStreamingColdRadius );
-	ClassDB::bind_method( D_METHOD( "get_streaming_cold_radius" ), &Terrain3D::getStreamingColdRadius );
-	ClassDB::bind_method( D_METHOD( "set_streaming_unload_guard", "regions" ), &Terrain3D::setStreamingUnloadGuard );
-	ClassDB::bind_method( D_METHOD( "get_streaming_unload_guard" ), &Terrain3D::getStreamingUnloadGuard );
-	ClassDB::bind_method( D_METHOD( "set_streaming_prediction_enabled", "enabled" ), &Terrain3D::setStreamingPredictionEnabled );
-	ClassDB::bind_method( D_METHOD( "is_streaming_prediction_enabled" ), &Terrain3D::isStreamingPredictionEnabled );
-	ClassDB::bind_method( D_METHOD( "set_streaming_prediction_lookahead", "seconds" ), &Terrain3D::setStreamingPredictionLookahead );
-	ClassDB::bind_method( D_METHOD( "get_streaming_prediction_lookahead" ), &Terrain3D::getStreamingPredictionLookahead );
-	ClassDB::bind_method( D_METHOD( "set_streaming_prediction_maximum_regions", "regions" ), &Terrain3D::setStreamingPredictionMaximumRegions );
-	ClassDB::bind_method( D_METHOD( "get_streaming_prediction_maximum_regions" ), &Terrain3D::getStreamingPredictionMaximumRegions );
-	ClassDB::bind_method( D_METHOD( "get_region_streaming_state", "region" ), &Terrain3D::getRegionStreamingState );
-	ClassDB::bind_method( D_METHOD( "is_region_streaming_prefetch", "region" ), &Terrain3D::isRegionStreamingPrefetch );
-	ClassDB::bind_method( D_METHOD( "get_region_streaming_stats" ), &Terrain3D::getRegionStreamingStats );
-	ClassDB::bind_method( D_METHOD( "get_region_streaming_configuration_status" ), &Terrain3D::getRegionStreamingConfigurationStatus );
-	ClassDB::bind_method( D_METHOD( "get_height_source_diagnostics", "world_position" ), &Terrain3D::getHeightSourceDiagnostics );
+		&T3DTerrain::isDynamicNodeStreamingEffective );
+	ClassDB::bind_method( D_METHOD( "set_performance_target", "target" ), &T3DTerrain::setPerformanceTarget );
+	ClassDB::bind_method( D_METHOD( "get_performance_target" ), &T3DTerrain::getPerformanceTarget );
+	ClassDB::bind_method( D_METHOD( "get_performance_profile_status" ), &T3DTerrain::getPerformanceProfileStatus );
+	ClassDB::bind_method( D_METHOD( "get_performance_profile_status_name" ), &T3DTerrain::getPerformanceProfileStatusName );
+	ClassDB::bind_method( D_METHOD( "get_performance_profile_version" ), &T3DTerrain::getPerformanceProfileVersion );
+	ClassDB::bind_method( D_METHOD( "get_performance_profile_signature" ), &T3DTerrain::getPerformanceProfileSignature );
+	ClassDB::bind_method( D_METHOD( "get_performance_profile_manifest" ), &T3DTerrain::getPerformanceProfileManifest );
+	ClassDB::bind_method( D_METHOD( "get_performance_profile_diff" ), &T3DTerrain::getPerformanceProfileDiff );
+	ClassDB::bind_method( D_METHOD( "reset_performance_profile" ), &T3DTerrain::resetPerformanceProfile );
+	ClassDB::bind_method( D_METHOD( "set_streaming_active_radius", "radius" ), &T3DTerrain::setStreamingActiveRadius );
+	ClassDB::bind_method( D_METHOD( "get_streaming_active_radius" ), &T3DTerrain::getStreamingActiveRadius );
+	ClassDB::bind_method( D_METHOD( "set_streaming_hot_radius", "radius" ), &T3DTerrain::setStreamingHotRadius );
+	ClassDB::bind_method( D_METHOD( "get_streaming_hot_radius" ), &T3DTerrain::getStreamingHotRadius );
+	ClassDB::bind_method( D_METHOD( "set_streaming_cold_radius", "radius" ), &T3DTerrain::setStreamingColdRadius );
+	ClassDB::bind_method( D_METHOD( "get_streaming_cold_radius" ), &T3DTerrain::getStreamingColdRadius );
+	ClassDB::bind_method( D_METHOD( "set_streaming_unload_guard", "regions" ), &T3DTerrain::setStreamingUnloadGuard );
+	ClassDB::bind_method( D_METHOD( "get_streaming_unload_guard" ), &T3DTerrain::getStreamingUnloadGuard );
+	ClassDB::bind_method( D_METHOD( "set_streaming_prediction_enabled", "enabled" ), &T3DTerrain::setStreamingPredictionEnabled );
+	ClassDB::bind_method( D_METHOD( "is_streaming_prediction_enabled" ), &T3DTerrain::isStreamingPredictionEnabled );
+	ClassDB::bind_method( D_METHOD( "set_streaming_prediction_lookahead", "seconds" ), &T3DTerrain::setStreamingPredictionLookahead );
+	ClassDB::bind_method( D_METHOD( "get_streaming_prediction_lookahead" ), &T3DTerrain::getStreamingPredictionLookahead );
+	ClassDB::bind_method( D_METHOD( "set_streaming_prediction_maximum_regions", "regions" ), &T3DTerrain::setStreamingPredictionMaximumRegions );
+	ClassDB::bind_method( D_METHOD( "get_streaming_prediction_maximum_regions" ), &T3DTerrain::getStreamingPredictionMaximumRegions );
+	ClassDB::bind_method( D_METHOD( "get_region_streaming_state", "region" ), &T3DTerrain::getRegionStreamingState );
+	ClassDB::bind_method( D_METHOD( "is_region_streaming_prefetch", "region" ), &T3DTerrain::isRegionStreamingPrefetch );
+	ClassDB::bind_method( D_METHOD( "get_region_streaming_stats" ), &T3DTerrain::getRegionStreamingStats );
+	ClassDB::bind_method( D_METHOD( "get_region_streaming_configuration_status" ), &T3DTerrain::getRegionStreamingConfigurationStatus );
+	ClassDB::bind_method( D_METHOD( "get_height_source_diagnostics", "world_position" ), &T3DTerrain::getHeightSourceDiagnostics );
 	ClassDB::bind_method( D_METHOD( "set_gpu_region_cache_enabled", "enabled" ),
-		&Terrain3D::setGpuRegionCacheEnabled );
-	ClassDB::bind_method( D_METHOD( "is_gpu_region_cache_enabled" ), &Terrain3D::isGpuRegionCacheEnabled );
+		&T3DTerrain::setGpuRegionCacheEnabled );
+	ClassDB::bind_method( D_METHOD( "is_gpu_region_cache_enabled" ), &T3DTerrain::isGpuRegionCacheEnabled );
 	ClassDB::bind_method( D_METHOD( "set_gpu_region_cache_budget_mb", "budget_mb" ),
-		&Terrain3D::setGpuRegionCacheBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_gpu_region_cache_budget_mb" ), &Terrain3D::getGpuRegionCacheBudgetMb );
+		&T3DTerrain::setGpuRegionCacheBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_gpu_region_cache_budget_mb" ), &T3DTerrain::getGpuRegionCacheBudgetMb );
 	ClassDB::bind_method( D_METHOD( "set_gpu_region_upload_budget_layers", "layers" ),
-		&Terrain3D::setGpuRegionUploadBudgetLayers );
+		&T3DTerrain::setGpuRegionUploadBudgetLayers );
 	ClassDB::bind_method( D_METHOD( "get_gpu_region_upload_budget_layers" ),
-		&Terrain3D::getGpuRegionUploadBudgetLayers );
+		&T3DTerrain::getGpuRegionUploadBudgetLayers );
 	ClassDB::bind_method( D_METHOD( "set_gpu_region_upload_budget_mb", "budget_mb" ),
-		&Terrain3D::setGpuRegionUploadBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_gpu_region_upload_budget_mb" ), &Terrain3D::getGpuRegionUploadBudgetMb );
-	ClassDB::bind_method( D_METHOD( "set_gpu_region_spare_pages", "pages" ), &Terrain3D::setGpuRegionSparePages );
-	ClassDB::bind_method( D_METHOD( "get_gpu_region_spare_pages" ), &Terrain3D::getGpuRegionSparePages );
-	ClassDB::bind_method( D_METHOD( "set_gpu_region_retire_frames", "frames" ), &Terrain3D::setGpuRegionRetireFrames );
-	ClassDB::bind_method( D_METHOD( "get_gpu_region_retire_frames" ), &Terrain3D::getGpuRegionRetireFrames );
-	ClassDB::bind_method( D_METHOD( "set_gpu_region_detail_lods", "lods" ), &Terrain3D::setGpuRegionDetailLods );
-	ClassDB::bind_method( D_METHOD( "get_gpu_region_detail_lods" ), &Terrain3D::getGpuRegionDetailLods );
+		&T3DTerrain::setGpuRegionUploadBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_gpu_region_upload_budget_mb" ), &T3DTerrain::getGpuRegionUploadBudgetMb );
+	ClassDB::bind_method( D_METHOD( "set_gpu_region_spare_pages", "pages" ), &T3DTerrain::setGpuRegionSparePages );
+	ClassDB::bind_method( D_METHOD( "get_gpu_region_spare_pages" ), &T3DTerrain::getGpuRegionSparePages );
+	ClassDB::bind_method( D_METHOD( "set_gpu_region_retire_frames", "frames" ), &T3DTerrain::setGpuRegionRetireFrames );
+	ClassDB::bind_method( D_METHOD( "get_gpu_region_retire_frames" ), &T3DTerrain::getGpuRegionRetireFrames );
+	ClassDB::bind_method( D_METHOD( "set_gpu_region_detail_lods", "lods" ), &T3DTerrain::setGpuRegionDetailLods );
+	ClassDB::bind_method( D_METHOD( "get_gpu_region_detail_lods" ), &T3DTerrain::getGpuRegionDetailLods );
 	ClassDB::bind_method( D_METHOD( "set_gpu_region_detail_range_end_m", "range_m" ),
-		&Terrain3D::setGpuRegionDetailRangeEndM );
+		&T3DTerrain::setGpuRegionDetailRangeEndM );
 	ClassDB::bind_method( D_METHOD( "get_gpu_region_detail_range_end_m" ),
-		&Terrain3D::getGpuRegionDetailRangeEndM );
+		&T3DTerrain::getGpuRegionDetailRangeEndM );
 	ClassDB::bind_method( D_METHOD( "get_gpu_region_max_supported_detail_lods" ),
-		&Terrain3D::getGpuRegionMaxSupportedDetailLods );
+		&T3DTerrain::getGpuRegionMaxSupportedDetailLods );
 	ClassDB::bind_method( D_METHOD( "get_gpu_region_max_supported_detail_range_m" ),
-		&Terrain3D::getGpuRegionMaxSupportedDetailRangeM );
+		&T3DTerrain::getGpuRegionMaxSupportedDetailRangeM );
 	ClassDB::bind_method( D_METHOD( "get_gpu_region_required_core_pages" ),
-		&Terrain3D::getGpuRegionRequiredCorePages );
+		&T3DTerrain::getGpuRegionRequiredCorePages );
 	ClassDB::bind_method( D_METHOD( "get_gpu_region_mapped_capacity" ),
-		&Terrain3D::getGpuRegionMappedCapacity );
+		&T3DTerrain::getGpuRegionMappedCapacity );
 	ClassDB::bind_method( D_METHOD( "is_gpu_region_detail_range_valid" ),
-		&Terrain3D::isGpuRegionDetailRangeValid );
-	ClassDB::bind_method( D_METHOD( "set_gpu_region_guard_regions", "regions" ), &Terrain3D::setGpuRegionGuardRegions );
-	ClassDB::bind_method( D_METHOD( "get_gpu_region_guard_regions" ), &Terrain3D::getGpuRegionGuardRegions );
-	ClassDB::bind_method( D_METHOD( "set_gpu_region_prefetch_rows", "rows" ), &Terrain3D::setGpuRegionPrefetchRows );
-	ClassDB::bind_method( D_METHOD( "get_gpu_region_prefetch_rows" ), &Terrain3D::getGpuRegionPrefetchRows );
-	ClassDB::bind_method( D_METHOD( "set_gpu_region_hysteresis_ticks", "ticks" ), &Terrain3D::setGpuRegionHysteresisTicks );
-	ClassDB::bind_method( D_METHOD( "get_gpu_region_hysteresis_ticks" ), &Terrain3D::getGpuRegionHysteresisTicks );
+		&T3DTerrain::isGpuRegionDetailRangeValid );
+	ClassDB::bind_method( D_METHOD( "set_gpu_region_guard_regions", "regions" ), &T3DTerrain::setGpuRegionGuardRegions );
+	ClassDB::bind_method( D_METHOD( "get_gpu_region_guard_regions" ), &T3DTerrain::getGpuRegionGuardRegions );
+	ClassDB::bind_method( D_METHOD( "set_gpu_region_prefetch_rows", "rows" ), &T3DTerrain::setGpuRegionPrefetchRows );
+	ClassDB::bind_method( D_METHOD( "get_gpu_region_prefetch_rows" ), &T3DTerrain::getGpuRegionPrefetchRows );
+	ClassDB::bind_method( D_METHOD( "set_gpu_region_hysteresis_ticks", "ticks" ), &T3DTerrain::setGpuRegionHysteresisTicks );
+	ClassDB::bind_method( D_METHOD( "get_gpu_region_hysteresis_ticks" ), &T3DTerrain::getGpuRegionHysteresisTicks );
 	ClassDB::bind_method( D_METHOD( "set_gpu_region_color_resolution_divisor", "divisor" ),
-		&Terrain3D::setGpuRegionColorResolutionDivisor );
+		&T3DTerrain::setGpuRegionColorResolutionDivisor );
 	ClassDB::bind_method( D_METHOD( "get_gpu_region_color_resolution_divisor" ),
-		&Terrain3D::getGpuRegionColorResolutionDivisor );
+		&T3DTerrain::getGpuRegionColorResolutionDivisor );
 	ClassDB::bind_method( D_METHOD( "set_gpu_region_derived_resolution_divisor", "divisor" ),
-		&Terrain3D::setGpuRegionDerivedResolutionDivisor );
+		&T3DTerrain::setGpuRegionDerivedResolutionDivisor );
 	ClassDB::bind_method( D_METHOD( "get_gpu_region_derived_resolution_divisor" ),
-		&Terrain3D::getGpuRegionDerivedResolutionDivisor );
+		&T3DTerrain::getGpuRegionDerivedResolutionDivisor );
 	ClassDB::bind_method( D_METHOD( "set_gpu_middle_height_resolution_divisor", "divisor" ),
-		&Terrain3D::setGpuMiddleHeightResolutionDivisor );
+		&T3DTerrain::setGpuMiddleHeightResolutionDivisor );
 	ClassDB::bind_method( D_METHOD( "get_gpu_middle_height_resolution_divisor" ),
-		&Terrain3D::getGpuMiddleHeightResolutionDivisor );
+		&T3DTerrain::getGpuMiddleHeightResolutionDivisor );
 	ClassDB::bind_method( D_METHOD( "set_editor_gpu_region_cache_pages", "pages" ),
-		&Terrain3D::setEditorGpuRegionCachePages );
+		&T3DTerrain::setEditorGpuRegionCachePages );
 	ClassDB::bind_method( D_METHOD( "get_editor_gpu_region_cache_pages" ),
-		&Terrain3D::getEditorGpuRegionCachePages );
+		&T3DTerrain::getEditorGpuRegionCachePages );
 	ClassDB::bind_method( D_METHOD( "set_runtime_material_streaming_enabled", "enabled" ),
-		&Terrain3D::setRuntimeMaterialStreamingEnabled );
+		&T3DTerrain::setRuntimeMaterialStreamingEnabled );
 	ClassDB::bind_method( D_METHOD( "is_runtime_material_streaming_enabled" ),
-		&Terrain3D::isRuntimeMaterialStreamingEnabled );
+		&T3DTerrain::isRuntimeMaterialStreamingEnabled );
 	ClassDB::bind_method( D_METHOD( "set_runtime_material_cache_layers", "layers" ),
-		&Terrain3D::setRuntimeMaterialCacheLayers );
+		&T3DTerrain::setRuntimeMaterialCacheLayers );
 	ClassDB::bind_method( D_METHOD( "get_runtime_material_cache_layers" ),
-		&Terrain3D::getRuntimeMaterialCacheLayers );
+		&T3DTerrain::getRuntimeMaterialCacheLayers );
 	ClassDB::bind_method( D_METHOD( "set_runtime_material_upload_budget_layers", "layers" ),
-		&Terrain3D::setRuntimeMaterialUploadBudgetLayers );
+		&T3DTerrain::setRuntimeMaterialUploadBudgetLayers );
 	ClassDB::bind_method( D_METHOD( "get_runtime_material_upload_budget_layers" ),
-		&Terrain3D::getRuntimeMaterialUploadBudgetLayers );
+		&T3DTerrain::getRuntimeMaterialUploadBudgetLayers );
 	ClassDB::bind_method( D_METHOD( "set_runtime_release_source_material_textures", "enabled" ),
-		&Terrain3D::setRuntimeReleaseSourceMaterialTextures );
+		&T3DTerrain::setRuntimeReleaseSourceMaterialTextures );
 	ClassDB::bind_method( D_METHOD( "is_runtime_release_source_material_textures" ),
-		&Terrain3D::isRuntimeReleaseSourceMaterialTextures );
+		&T3DTerrain::isRuntimeReleaseSourceMaterialTextures );
 	ClassDB::bind_method( D_METHOD( "set_gpu_far_quality_divisor", "divisor" ),
-		&Terrain3D::setGpuFarQualityDivisor );
+		&T3DTerrain::setGpuFarQualityDivisor );
 	ClassDB::bind_method( D_METHOD( "get_gpu_far_quality_divisor" ),
-		&Terrain3D::getGpuFarQualityDivisor );
+		&T3DTerrain::getGpuFarQualityDivisor );
 	ClassDB::bind_method( D_METHOD( "set_far_material_resolution", "resolution" ),
-		&Terrain3D::setFarMaterialResolution );
+		&T3DTerrain::setFarMaterialResolution );
 	ClassDB::bind_method( D_METHOD( "get_far_material_resolution" ),
-		&Terrain3D::getFarMaterialResolution );
+		&T3DTerrain::getFarMaterialResolution );
 	ClassDB::bind_method( D_METHOD( "set_far_control_resolution", "resolution" ),
-		&Terrain3D::setFarControlResolution );
+		&T3DTerrain::setFarControlResolution );
 	ClassDB::bind_method( D_METHOD( "get_far_control_resolution" ),
-		&Terrain3D::getFarControlResolution );
-	ClassDB::bind_method( D_METHOD( "get_gpu_far_atlas_side" ), &Terrain3D::getGpuFarAtlasSide );
-	ClassDB::bind_method( D_METHOD( "get_gpu_far_height_atlas_side" ), &Terrain3D::getGpuFarHeightAtlasSide );
-	ClassDB::bind_method( D_METHOD( "get_gpu_far_surface_atlas_side" ), &Terrain3D::getGpuFarSurfaceAtlasSide );
+		&T3DTerrain::getFarControlResolution );
+	ClassDB::bind_method( D_METHOD( "get_gpu_far_atlas_side" ), &T3DTerrain::getGpuFarAtlasSide );
+	ClassDB::bind_method( D_METHOD( "get_gpu_far_height_atlas_side" ), &T3DTerrain::getGpuFarHeightAtlasSide );
+	ClassDB::bind_method( D_METHOD( "get_gpu_far_surface_atlas_side" ), &T3DTerrain::getGpuFarSurfaceAtlasSide );
 	ClassDB::bind_method( D_METHOD( "set_gpu_region_cooked_pages_enabled", "enabled" ),
-		&Terrain3D::setGpuRegionCookedPagesEnabled );
+		&T3DTerrain::setGpuRegionCookedPagesEnabled );
 	ClassDB::bind_method( D_METHOD( "is_gpu_region_cooked_pages_enabled" ),
-		&Terrain3D::isGpuRegionCookedPagesEnabled );
+		&T3DTerrain::isGpuRegionCookedPagesEnabled );
 	ClassDB::bind_method( D_METHOD( "set_gpu_region_cook_on_save", "enabled" ),
-		&Terrain3D::setGpuRegionCookOnSave );
-	ClassDB::bind_method( D_METHOD( "is_gpu_region_cook_on_save" ), &Terrain3D::isGpuRegionCookOnSave );
-	ClassDB::bind_method( D_METHOD( "get_gpu_region_cache_stats" ), &Terrain3D::getGpuRegionCacheStats );
+		&T3DTerrain::setGpuRegionCookOnSave );
+	ClassDB::bind_method( D_METHOD( "is_gpu_region_cook_on_save" ), &T3DTerrain::isGpuRegionCookOnSave );
+	ClassDB::bind_method( D_METHOD( "get_gpu_region_cache_stats" ), &T3DTerrain::getGpuRegionCacheStats );
 	ClassDB::bind_method( D_METHOD( "set_cpu_region_cache_enabled", "enabled" ),
-		&Terrain3D::setCpuRegionCacheEnabled );
-	ClassDB::bind_method( D_METHOD( "is_cpu_region_cache_enabled" ), &Terrain3D::isCpuRegionCacheEnabled );
+		&T3DTerrain::setCpuRegionCacheEnabled );
+	ClassDB::bind_method( D_METHOD( "is_cpu_region_cache_enabled" ), &T3DTerrain::isCpuRegionCacheEnabled );
 	ClassDB::bind_method( D_METHOD( "set_cpu_region_cache_budget_mb", "budget_mb" ),
-		&Terrain3D::setCpuRegionCacheBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_cpu_region_cache_budget_mb" ), &Terrain3D::getCpuRegionCacheBudgetMb );
+		&T3DTerrain::setCpuRegionCacheBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_cpu_region_cache_budget_mb" ), &T3DTerrain::getCpuRegionCacheBudgetMb );
 	ClassDB::bind_method( D_METHOD( "set_cpu_region_load_budget_layers", "layers" ),
-		&Terrain3D::setCpuRegionLoadBudgetLayers );
+		&T3DTerrain::setCpuRegionLoadBudgetLayers );
 	ClassDB::bind_method( D_METHOD( "get_cpu_region_load_budget_layers" ),
-		&Terrain3D::getCpuRegionLoadBudgetLayers );
+		&T3DTerrain::getCpuRegionLoadBudgetLayers );
 	ClassDB::bind_method( D_METHOD( "set_cpu_region_load_budget_mb", "budget_mb" ),
-		&Terrain3D::setCpuRegionLoadBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_cpu_region_load_budget_mb" ), &Terrain3D::getCpuRegionLoadBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_cpu_region_cache_stats" ), &Terrain3D::getCpuRegionCacheStats );
-	ClassDB::bind_method( D_METHOD( "set_instance_region_cache_enabled", "enabled" ), &Terrain3D::setInstanceRegionCacheEnabled );
-	ClassDB::bind_method( D_METHOD( "is_instance_region_cache_enabled" ), &Terrain3D::isInstanceRegionCacheEnabled );
-	ClassDB::bind_method( D_METHOD( "set_instance_region_cache_budget_mb", "budget_mb" ), &Terrain3D::setInstanceRegionCacheBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_instance_region_cache_budget_mb" ), &Terrain3D::getInstanceRegionCacheBudgetMb );
-	ClassDB::bind_method( D_METHOD( "set_instance_region_load_budget_pages", "pages" ), &Terrain3D::setInstanceRegionLoadBudgetPages );
-	ClassDB::bind_method( D_METHOD( "get_instance_region_load_budget_pages" ), &Terrain3D::getInstanceRegionLoadBudgetPages );
-	ClassDB::bind_method( D_METHOD( "set_instance_region_load_budget_mb", "budget_mb" ), &Terrain3D::setInstanceRegionLoadBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_instance_region_load_budget_mb" ), &Terrain3D::getInstanceRegionLoadBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_instance_region_cache_stats" ), &Terrain3D::getInstanceRegionCacheStats );
-	ClassDB::bind_method( D_METHOD( "set_instancer_cell_size", "cell_size" ), &Terrain3D::setInstancerCellSize );
-	ClassDB::bind_method( D_METHOD( "get_instancer_cell_size" ), &Terrain3D::getInstancerCellSize );
-	ClassDB::bind_method( D_METHOD( "set_instancer_cell_streaming_enabled", "enabled" ), &Terrain3D::setInstancerCellStreamingEnabled );
-	ClassDB::bind_method( D_METHOD( "is_instancer_cell_streaming_enabled" ), &Terrain3D::isInstancerCellStreamingEnabled );
-	ClassDB::bind_method( D_METHOD( "set_instancer_single_lod_buffers", "enabled" ), &Terrain3D::setInstancerSingleLodBuffers );
-	ClassDB::bind_method( D_METHOD( "is_instancer_single_lod_buffers" ), &Terrain3D::isInstancerSingleLodBuffers );
-	ClassDB::bind_method( D_METHOD( "set_instancer_cell_streaming_margin", "margin" ), &Terrain3D::setInstancerCellStreamingMargin );
-	ClassDB::bind_method( D_METHOD( "get_instancer_cell_streaming_margin" ), &Terrain3D::getInstancerCellStreamingMargin );
-	ClassDB::bind_method( D_METHOD( "set_instancer_cell_streaming_update_distance", "distance" ), &Terrain3D::setInstancerCellStreamingUpdateDistance );
-	ClassDB::bind_method( D_METHOD( "get_instancer_cell_streaming_update_distance" ), &Terrain3D::getInstancerCellStreamingUpdateDistance );
-	ClassDB::bind_method( D_METHOD( "set_instancer_update_cell_budget", "budget" ), &Terrain3D::setInstancerUpdateCellBudget );
-	ClassDB::bind_method( D_METHOD( "get_instancer_update_cell_budget" ), &Terrain3D::getInstancerUpdateCellBudget );
-	ClassDB::bind_method( D_METHOD( "set_dynamic_node_streaming_enabled", "enabled" ), &Terrain3D::setDynamicNodeStreamingEnabled );
-	ClassDB::bind_method( D_METHOD( "is_dynamic_node_streaming_enabled" ), &Terrain3D::isDynamicNodeStreamingEnabled );
-	ClassDB::bind_method( D_METHOD( "set_lightmap_streaming_enabled", "enabled" ), &Terrain3D::setLightmapStreamingEnabled );
-	ClassDB::bind_method( D_METHOD( "is_lightmap_streaming_enabled" ), &Terrain3D::isLightmapStreamingEnabled );
-	ClassDB::bind_method( D_METHOD( "set_lightmap_stream_radius", "radius" ), &Terrain3D::setLightmapStreamRadius );
-	ClassDB::bind_method( D_METHOD( "get_lightmap_stream_radius" ), &Terrain3D::getLightmapStreamRadius );
-	ClassDB::bind_method( D_METHOD( "set_lightmap_load_budget", "budget" ), &Terrain3D::setLightmapLoadBudget );
-	ClassDB::bind_method( D_METHOD( "get_lightmap_load_budget" ), &Terrain3D::getLightmapLoadBudget );
-	ClassDB::bind_method( D_METHOD( "set_lightmap_unload_budget", "budget" ), &Terrain3D::setLightmapUnloadBudget );
-	ClassDB::bind_method( D_METHOD( "get_lightmap_unload_budget" ), &Terrain3D::getLightmapUnloadBudget );
-	ClassDB::bind_method( D_METHOD( "get_lightmap_streaming_stats" ), &Terrain3D::getLightmapStreamingStats );
-	ClassDB::bind_method( D_METHOD( "set_region_lightmap_output_directory", "directory" ), &Terrain3D::setRegionLightmapOutputDirectory );
-	ClassDB::bind_method( D_METHOD( "get_region_lightmap_output_directory" ), &Terrain3D::getRegionLightmapOutputDirectory );
-	ClassDB::bind_method( D_METHOD( "set_region_lightmap_proxy_lod", "lod" ), &Terrain3D::setRegionLightmapProxyLod );
-	ClassDB::bind_method( D_METHOD( "get_region_lightmap_proxy_lod" ), &Terrain3D::getRegionLightmapProxyLod );
-	ClassDB::bind_method( D_METHOD( "set_region_lightmap_context_radius", "radius" ), &Terrain3D::setRegionLightmapContextRadius );
-	ClassDB::bind_method( D_METHOD( "get_region_lightmap_context_radius" ), &Terrain3D::getRegionLightmapContextRadius );
-	ClassDB::bind_method( D_METHOD( "set_region_lightmap_texel_size", "texel_size" ), &Terrain3D::setRegionLightmapTexelSize );
-	ClassDB::bind_method( D_METHOD( "get_region_lightmap_texel_size" ), &Terrain3D::getRegionLightmapTexelSize );
-	ClassDB::bind_method( D_METHOD( "set_region_lightmap_bake_quality", "quality" ), &Terrain3D::setRegionLightmapBakeQuality );
-	ClassDB::bind_method( D_METHOD( "get_region_lightmap_bake_quality" ), &Terrain3D::getRegionLightmapBakeQuality );
-	ClassDB::bind_method( D_METHOD( "set_region_lightmap_shadowmask_mode", "mode" ), &Terrain3D::setRegionLightmapShadowmaskMode );
-	ClassDB::bind_method( D_METHOD( "get_region_lightmap_shadowmask_mode" ), &Terrain3D::getRegionLightmapShadowmaskMode );
-	ClassDB::bind_method( D_METHOD( "set_hlod_enabled", "enabled" ), &Terrain3D::setHlodEnabled );
-	ClassDB::bind_method( D_METHOD( "is_hlod_enabled" ), &Terrain3D::isHlodEnabled );
-	ClassDB::bind_method( D_METHOD( "set_hlod_manifest_path", "path" ), &Terrain3D::setHlodManifestPath );
-	ClassDB::bind_method( D_METHOD( "get_hlod_manifest_path" ), &Terrain3D::getHlodManifestPath );
-	ClassDB::bind_method( D_METHOD( "set_hlod_target_error_pixels", "pixels" ), &Terrain3D::setHlodTargetErrorPixels );
-	ClassDB::bind_method( D_METHOD( "get_hlod_target_error_pixels" ), &Terrain3D::getHlodTargetErrorPixels );
-	ClassDB::bind_method( D_METHOD( "set_hlod_hysteresis", "ratio" ), &Terrain3D::setHlodHysteresis );
-	ClassDB::bind_method( D_METHOD( "get_hlod_hysteresis" ), &Terrain3D::getHlodHysteresis );
-	ClassDB::bind_method( D_METHOD( "set_hlod_max_level", "level" ), &Terrain3D::setHlodMaxLevel );
-	ClassDB::bind_method( D_METHOD( "get_hlod_max_level" ), &Terrain3D::getHlodMaxLevel );
-	ClassDB::bind_method( D_METHOD( "set_hlod_load_budget", "budget" ), &Terrain3D::setHlodLoadBudget );
-	ClassDB::bind_method( D_METHOD( "get_hlod_load_budget" ), &Terrain3D::getHlodLoadBudget );
-	ClassDB::bind_method( D_METHOD( "set_hlod_unload_budget", "budget" ), &Terrain3D::setHlodUnloadBudget );
-	ClassDB::bind_method( D_METHOD( "get_hlod_unload_budget" ), &Terrain3D::getHlodUnloadBudget );
-	ClassDB::bind_method( D_METHOD( "set_hlod_memory_budget_mb", "budget_mb" ), &Terrain3D::setHlodMemoryBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_hlod_memory_budget_mb" ), &Terrain3D::getHlodMemoryBudgetMb );
-	ClassDB::bind_method( D_METHOD( "set_hlod_max_shadow_level", "level" ), &Terrain3D::setHlodMaxShadowLevel );
-	ClassDB::bind_method( D_METHOD( "get_hlod_max_shadow_level" ), &Terrain3D::getHlodMaxShadowLevel );
-	ClassDB::bind_method( D_METHOD( "set_hlod_forced_debug_level", "level" ), &Terrain3D::setHlodForcedDebugLevel );
-	ClassDB::bind_method( D_METHOD( "get_hlod_forced_debug_level" ), &Terrain3D::getHlodForcedDebugLevel );
-	ClassDB::bind_method( D_METHOD( "reload_hlod_manifest" ), &Terrain3D::reloadHlodManifest );
-	ClassDB::bind_method( D_METHOD( "get_hlod_streaming_stats" ), &Terrain3D::getHlodStreamingStats );
-	ClassDB::bind_method( D_METHOD( "get_hlod_debug_entries" ), &Terrain3D::getHlodDebugEntries );
-	ClassDB::bind_method( D_METHOD( "set_dynamic_node_stream_radius", "radius" ), &Terrain3D::setDynamicNodeStreamRadius );
-	ClassDB::bind_method( D_METHOD( "get_dynamic_node_stream_radius" ), &Terrain3D::getDynamicNodeStreamRadius );
-	ClassDB::bind_method( D_METHOD( "set_dynamic_node_load_region_budget", "budget" ), &Terrain3D::setDynamicNodeLoadRegionBudget );
-	ClassDB::bind_method( D_METHOD( "get_dynamic_node_load_region_budget" ), &Terrain3D::getDynamicNodeLoadRegionBudget );
-	ClassDB::bind_method( D_METHOD( "set_dynamic_node_load_node_budget", "budget" ), &Terrain3D::setDynamicNodeLoadNodeBudget );
-	ClassDB::bind_method( D_METHOD( "get_dynamic_node_load_node_budget" ), &Terrain3D::getDynamicNodeLoadNodeBudget );
-	ClassDB::bind_method( D_METHOD( "set_dynamic_node_unload_region_budget", "budget" ), &Terrain3D::setDynamicNodeUnloadRegionBudget );
-	ClassDB::bind_method( D_METHOD( "get_dynamic_node_unload_region_budget" ), &Terrain3D::getDynamicNodeUnloadRegionBudget );
-	ClassDB::bind_method( D_METHOD( "add_streamed_scene", "scene", "global_transform", "state", "flags", "hlod_min_level" ), &Terrain3D::addStreamedScene, DEFVAL( Dictionary() ), DEFVAL( 0 ), DEFVAL( 1 ) );
-	ClassDB::bind_method( D_METHOD( "add_streamed_scene_path", "scene_path", "global_transform", "state", "flags", "hlod_min_level" ), &Terrain3D::addStreamedScenePath, DEFVAL( Dictionary() ), DEFVAL( 0 ), DEFVAL( 1 ) );
-	ClassDB::bind_method( D_METHOD( "remove_streamed_scene", "spawn_id" ), &Terrain3D::removeStreamedScene );
-	ClassDB::bind_method( D_METHOD( "allocate_stream_owner_id" ), &Terrain3D::allocateStreamOwnerId );
-	ClassDB::bind_method( D_METHOD( "set_next_stream_owner_id", "owner_id" ), &Terrain3D::setNextStreamOwnerId );
-	ClassDB::bind_method( D_METHOD( "get_next_stream_owner_id" ), &Terrain3D::getNextStreamOwnerId );
-	ClassDB::bind_method( D_METHOD( "get_node_streaming_stats" ), &Terrain3D::getNodeStreamingStats );
+		&T3DTerrain::setCpuRegionLoadBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_cpu_region_load_budget_mb" ), &T3DTerrain::getCpuRegionLoadBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_cpu_region_cache_stats" ), &T3DTerrain::getCpuRegionCacheStats );
+	ClassDB::bind_method( D_METHOD( "set_instance_region_cache_enabled", "enabled" ), &T3DTerrain::setInstanceRegionCacheEnabled );
+	ClassDB::bind_method( D_METHOD( "is_instance_region_cache_enabled" ), &T3DTerrain::isInstanceRegionCacheEnabled );
+	ClassDB::bind_method( D_METHOD( "set_instance_region_cache_budget_mb", "budget_mb" ), &T3DTerrain::setInstanceRegionCacheBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_instance_region_cache_budget_mb" ), &T3DTerrain::getInstanceRegionCacheBudgetMb );
+	ClassDB::bind_method( D_METHOD( "set_instance_region_load_budget_pages", "pages" ), &T3DTerrain::setInstanceRegionLoadBudgetPages );
+	ClassDB::bind_method( D_METHOD( "get_instance_region_load_budget_pages" ), &T3DTerrain::getInstanceRegionLoadBudgetPages );
+	ClassDB::bind_method( D_METHOD( "set_instance_region_load_budget_mb", "budget_mb" ), &T3DTerrain::setInstanceRegionLoadBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_instance_region_load_budget_mb" ), &T3DTerrain::getInstanceRegionLoadBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_instance_region_cache_stats" ), &T3DTerrain::getInstanceRegionCacheStats );
+	ClassDB::bind_method( D_METHOD( "set_instancer_cell_size", "cell_size" ), &T3DTerrain::setInstancerCellSize );
+	ClassDB::bind_method( D_METHOD( "get_instancer_cell_size" ), &T3DTerrain::getInstancerCellSize );
+	ClassDB::bind_method( D_METHOD( "set_instancer_cell_streaming_enabled", "enabled" ), &T3DTerrain::setInstancerCellStreamingEnabled );
+	ClassDB::bind_method( D_METHOD( "is_instancer_cell_streaming_enabled" ), &T3DTerrain::isInstancerCellStreamingEnabled );
+	ClassDB::bind_method( D_METHOD( "set_instancer_single_lod_buffers", "enabled" ), &T3DTerrain::setInstancerSingleLodBuffers );
+	ClassDB::bind_method( D_METHOD( "is_instancer_single_lod_buffers" ), &T3DTerrain::isInstancerSingleLodBuffers );
+	ClassDB::bind_method( D_METHOD( "set_instancer_cell_streaming_margin", "margin" ), &T3DTerrain::setInstancerCellStreamingMargin );
+	ClassDB::bind_method( D_METHOD( "get_instancer_cell_streaming_margin" ), &T3DTerrain::getInstancerCellStreamingMargin );
+	ClassDB::bind_method( D_METHOD( "set_instancer_cell_streaming_update_distance", "distance" ), &T3DTerrain::setInstancerCellStreamingUpdateDistance );
+	ClassDB::bind_method( D_METHOD( "get_instancer_cell_streaming_update_distance" ), &T3DTerrain::getInstancerCellStreamingUpdateDistance );
+	ClassDB::bind_method( D_METHOD( "set_instancer_update_cell_budget", "budget" ), &T3DTerrain::setInstancerUpdateCellBudget );
+	ClassDB::bind_method( D_METHOD( "get_instancer_update_cell_budget" ), &T3DTerrain::getInstancerUpdateCellBudget );
+	ClassDB::bind_method( D_METHOD( "set_dynamic_node_streaming_enabled", "enabled" ), &T3DTerrain::setDynamicNodeStreamingEnabled );
+	ClassDB::bind_method( D_METHOD( "is_dynamic_node_streaming_enabled" ), &T3DTerrain::isDynamicNodeStreamingEnabled );
+	ClassDB::bind_method( D_METHOD( "set_lightmap_streaming_enabled", "enabled" ), &T3DTerrain::setLightmapStreamingEnabled );
+	ClassDB::bind_method( D_METHOD( "is_lightmap_streaming_enabled" ), &T3DTerrain::isLightmapStreamingEnabled );
+	ClassDB::bind_method( D_METHOD( "set_lightmap_stream_radius", "radius" ), &T3DTerrain::setLightmapStreamRadius );
+	ClassDB::bind_method( D_METHOD( "get_lightmap_stream_radius" ), &T3DTerrain::getLightmapStreamRadius );
+	ClassDB::bind_method( D_METHOD( "set_lightmap_load_budget", "budget" ), &T3DTerrain::setLightmapLoadBudget );
+	ClassDB::bind_method( D_METHOD( "get_lightmap_load_budget" ), &T3DTerrain::getLightmapLoadBudget );
+	ClassDB::bind_method( D_METHOD( "set_lightmap_unload_budget", "budget" ), &T3DTerrain::setLightmapUnloadBudget );
+	ClassDB::bind_method( D_METHOD( "get_lightmap_unload_budget" ), &T3DTerrain::getLightmapUnloadBudget );
+	ClassDB::bind_method( D_METHOD( "get_lightmap_streaming_stats" ), &T3DTerrain::getLightmapStreamingStats );
+	ClassDB::bind_method( D_METHOD( "set_region_lightmap_output_directory", "directory" ), &T3DTerrain::setRegionLightmapOutputDirectory );
+	ClassDB::bind_method( D_METHOD( "get_region_lightmap_output_directory" ), &T3DTerrain::getRegionLightmapOutputDirectory );
+	ClassDB::bind_method( D_METHOD( "set_region_lightmap_proxy_lod", "lod" ), &T3DTerrain::setRegionLightmapProxyLod );
+	ClassDB::bind_method( D_METHOD( "get_region_lightmap_proxy_lod" ), &T3DTerrain::getRegionLightmapProxyLod );
+	ClassDB::bind_method( D_METHOD( "set_region_lightmap_context_radius", "radius" ), &T3DTerrain::setRegionLightmapContextRadius );
+	ClassDB::bind_method( D_METHOD( "get_region_lightmap_context_radius" ), &T3DTerrain::getRegionLightmapContextRadius );
+	ClassDB::bind_method( D_METHOD( "set_region_lightmap_texel_size", "texel_size" ), &T3DTerrain::setRegionLightmapTexelSize );
+	ClassDB::bind_method( D_METHOD( "get_region_lightmap_texel_size" ), &T3DTerrain::getRegionLightmapTexelSize );
+	ClassDB::bind_method( D_METHOD( "set_region_lightmap_bake_quality", "quality" ), &T3DTerrain::setRegionLightmapBakeQuality );
+	ClassDB::bind_method( D_METHOD( "get_region_lightmap_bake_quality" ), &T3DTerrain::getRegionLightmapBakeQuality );
+	ClassDB::bind_method( D_METHOD( "set_region_lightmap_shadowmask_mode", "mode" ), &T3DTerrain::setRegionLightmapShadowmaskMode );
+	ClassDB::bind_method( D_METHOD( "get_region_lightmap_shadowmask_mode" ), &T3DTerrain::getRegionLightmapShadowmaskMode );
+	ClassDB::bind_method( D_METHOD( "set_hlod_enabled", "enabled" ), &T3DTerrain::setHlodEnabled );
+	ClassDB::bind_method( D_METHOD( "is_hlod_enabled" ), &T3DTerrain::isHlodEnabled );
+	ClassDB::bind_method( D_METHOD( "set_hlod_manifest_path", "path" ), &T3DTerrain::setHlodManifestPath );
+	ClassDB::bind_method( D_METHOD( "get_hlod_manifest_path" ), &T3DTerrain::getHlodManifestPath );
+	ClassDB::bind_method( D_METHOD( "set_hlod_target_error_pixels", "pixels" ), &T3DTerrain::setHlodTargetErrorPixels );
+	ClassDB::bind_method( D_METHOD( "get_hlod_target_error_pixels" ), &T3DTerrain::getHlodTargetErrorPixels );
+	ClassDB::bind_method( D_METHOD( "set_hlod_hysteresis", "ratio" ), &T3DTerrain::setHlodHysteresis );
+	ClassDB::bind_method( D_METHOD( "get_hlod_hysteresis" ), &T3DTerrain::getHlodHysteresis );
+	ClassDB::bind_method( D_METHOD( "set_hlod_max_level", "level" ), &T3DTerrain::setHlodMaxLevel );
+	ClassDB::bind_method( D_METHOD( "get_hlod_max_level" ), &T3DTerrain::getHlodMaxLevel );
+	ClassDB::bind_method( D_METHOD( "set_hlod_load_budget", "budget" ), &T3DTerrain::setHlodLoadBudget );
+	ClassDB::bind_method( D_METHOD( "get_hlod_load_budget" ), &T3DTerrain::getHlodLoadBudget );
+	ClassDB::bind_method( D_METHOD( "set_hlod_unload_budget", "budget" ), &T3DTerrain::setHlodUnloadBudget );
+	ClassDB::bind_method( D_METHOD( "get_hlod_unload_budget" ), &T3DTerrain::getHlodUnloadBudget );
+	ClassDB::bind_method( D_METHOD( "set_hlod_memory_budget_mb", "budget_mb" ), &T3DTerrain::setHlodMemoryBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_hlod_memory_budget_mb" ), &T3DTerrain::getHlodMemoryBudgetMb );
+	ClassDB::bind_method( D_METHOD( "set_hlod_max_shadow_level", "level" ), &T3DTerrain::setHlodMaxShadowLevel );
+	ClassDB::bind_method( D_METHOD( "get_hlod_max_shadow_level" ), &T3DTerrain::getHlodMaxShadowLevel );
+	ClassDB::bind_method( D_METHOD( "set_hlod_forced_debug_level", "level" ), &T3DTerrain::setHlodForcedDebugLevel );
+	ClassDB::bind_method( D_METHOD( "get_hlod_forced_debug_level" ), &T3DTerrain::getHlodForcedDebugLevel );
+	ClassDB::bind_method( D_METHOD( "reload_hlod_manifest" ), &T3DTerrain::reloadHlodManifest );
+	ClassDB::bind_method( D_METHOD( "get_hlod_streaming_stats" ), &T3DTerrain::getHlodStreamingStats );
+	ClassDB::bind_method( D_METHOD( "get_hlod_debug_entries" ), &T3DTerrain::getHlodDebugEntries );
+	ClassDB::bind_method( D_METHOD( "set_dynamic_node_stream_radius", "radius" ), &T3DTerrain::setDynamicNodeStreamRadius );
+	ClassDB::bind_method( D_METHOD( "get_dynamic_node_stream_radius" ), &T3DTerrain::getDynamicNodeStreamRadius );
+	ClassDB::bind_method( D_METHOD( "set_dynamic_node_load_region_budget", "budget" ), &T3DTerrain::setDynamicNodeLoadRegionBudget );
+	ClassDB::bind_method( D_METHOD( "get_dynamic_node_load_region_budget" ), &T3DTerrain::getDynamicNodeLoadRegionBudget );
+	ClassDB::bind_method( D_METHOD( "set_dynamic_node_load_node_budget", "budget" ), &T3DTerrain::setDynamicNodeLoadNodeBudget );
+	ClassDB::bind_method( D_METHOD( "get_dynamic_node_load_node_budget" ), &T3DTerrain::getDynamicNodeLoadNodeBudget );
+	ClassDB::bind_method( D_METHOD( "set_dynamic_node_unload_region_budget", "budget" ), &T3DTerrain::setDynamicNodeUnloadRegionBudget );
+	ClassDB::bind_method( D_METHOD( "get_dynamic_node_unload_region_budget" ), &T3DTerrain::getDynamicNodeUnloadRegionBudget );
+	ClassDB::bind_method( D_METHOD( "add_streamed_scene", "scene", "global_transform", "state", "flags", "hlod_min_level" ), &T3DTerrain::addStreamedScene, DEFVAL( Dictionary() ), DEFVAL( 0 ), DEFVAL( 1 ) );
+	ClassDB::bind_method( D_METHOD( "add_streamed_scene_path", "scene_path", "global_transform", "state", "flags", "hlod_min_level" ), &T3DTerrain::addStreamedScenePath, DEFVAL( Dictionary() ), DEFVAL( 0 ), DEFVAL( 1 ) );
+	ClassDB::bind_method( D_METHOD( "remove_streamed_scene", "spawn_id" ), &T3DTerrain::removeStreamedScene );
+	ClassDB::bind_method( D_METHOD( "allocate_stream_owner_id" ), &T3DTerrain::allocateStreamOwnerId );
+	ClassDB::bind_method( D_METHOD( "set_next_stream_owner_id", "owner_id" ), &T3DTerrain::setNextStreamOwnerId );
+	ClassDB::bind_method( D_METHOD( "get_next_stream_owner_id" ), &T3DTerrain::getNextStreamOwnerId );
+	ClassDB::bind_method( D_METHOD( "get_node_streaming_stats" ), &T3DTerrain::getNodeStreamingStats );
 
 	// Object references
-	ClassDB::bind_method( D_METHOD( "get_data" ), &Terrain3D::getData );
-	ClassDB::bind_method( D_METHOD( "set_material", "material" ), &Terrain3D::setMaterial );
-	ClassDB::bind_method( D_METHOD( "get_material" ), &Terrain3D::getMaterial );
-	ClassDB::bind_method( D_METHOD( "set_assets", "assets" ), &Terrain3D::setAssets );
-	ClassDB::bind_method( D_METHOD( "set_auto_shader_profile", "profile" ), &Terrain3D::setAutoShaderProfile );
-	ClassDB::bind_method( D_METHOD( "get_auto_shader_profile" ), &Terrain3D::getAutoShaderProfile );
-	ClassDB::bind_method( D_METHOD( "get_assets" ), &Terrain3D::getAssets );
-	ClassDB::bind_method( D_METHOD( "get_collision" ), &Terrain3D::getCollision );
-	ClassDB::bind_method( D_METHOD( "get_instancer" ), &Terrain3D::getInstancer );
-	ClassDB::bind_method( D_METHOD( "get_node_streamer" ), &Terrain3D::getNodeStreamer );
-	ClassDB::bind_method( D_METHOD( "set_editor", "editor" ), &Terrain3D::setEditor );
-	ClassDB::bind_method( D_METHOD( "get_editor" ), &Terrain3D::getEditor );
-	ClassDB::bind_method( D_METHOD( "set_plugin", "plugin" ), &Terrain3D::setPlugin );
-	ClassDB::bind_method( D_METHOD( "get_plugin" ), &Terrain3D::getPlugin );
+	ClassDB::bind_method( D_METHOD( "get_data" ), &T3DTerrain::getData );
+	ClassDB::bind_method( D_METHOD( "set_material", "material" ), &T3DTerrain::setMaterial );
+	ClassDB::bind_method( D_METHOD( "get_material" ), &T3DTerrain::getMaterial );
+	ClassDB::bind_method( D_METHOD( "set_assets", "assets" ), &T3DTerrain::setAssets );
+	ClassDB::bind_method( D_METHOD( "set_auto_shader_profile", "profile" ), &T3DTerrain::setAutoShaderProfile );
+	ClassDB::bind_method( D_METHOD( "get_auto_shader_profile" ), &T3DTerrain::getAutoShaderProfile );
+	ClassDB::bind_method( D_METHOD( "get_assets" ), &T3DTerrain::getAssets );
+	ClassDB::bind_method( D_METHOD( "get_collision" ), &T3DTerrain::getCollision );
+	ClassDB::bind_method( D_METHOD( "get_instancer" ), &T3DTerrain::getInstancer );
+	ClassDB::bind_method( D_METHOD( "get_node_streamer" ), &T3DTerrain::getNodeStreamer );
+	ClassDB::bind_method( D_METHOD( "set_editor", "editor" ), &T3DTerrain::setEditor );
+	ClassDB::bind_method( D_METHOD( "get_editor" ), &T3DTerrain::getEditor );
+	ClassDB::bind_method( D_METHOD( "set_plugin", "plugin" ), &T3DTerrain::setPlugin );
+	ClassDB::bind_method( D_METHOD( "get_plugin" ), &T3DTerrain::getPlugin );
 
 	// Regions
-	ClassDB::bind_method( D_METHOD( "change_region_size", "size" ), &Terrain3D::changeRegionSize );
-	ClassDB::bind_method( D_METHOD( "get_region_size" ), &Terrain3D::getRegionSize );
-	ClassDB::bind_method( D_METHOD( "set_save_16_bit", "enabled" ), &Terrain3D::setSave16Bit );
-	ClassDB::bind_method( D_METHOD( "get_save_16_bit" ), &Terrain3D::getSave16Bit );
-	ClassDB::bind_method( D_METHOD( "set_label_distance", "distance" ), &Terrain3D::setLabelDistance );
-	ClassDB::bind_method( D_METHOD( "get_label_distance" ), &Terrain3D::getLabelDistance );
-	ClassDB::bind_method( D_METHOD( "set_label_size", "size" ), &Terrain3D::setLabelSize );
-	ClassDB::bind_method( D_METHOD( "get_label_size" ), &Terrain3D::getLabelSize );
+	ClassDB::bind_method( D_METHOD( "change_region_size", "size" ), &T3DTerrain::changeRegionSize );
+	ClassDB::bind_method( D_METHOD( "get_region_size" ), &T3DTerrain::getRegionSize );
+	ClassDB::bind_method( D_METHOD( "set_save_16_bit", "enabled" ), &T3DTerrain::setSave16Bit );
+	ClassDB::bind_method( D_METHOD( "get_save_16_bit" ), &T3DTerrain::getSave16Bit );
+	ClassDB::bind_method( D_METHOD( "set_label_distance", "distance" ), &T3DTerrain::setLabelDistance );
+	ClassDB::bind_method( D_METHOD( "get_label_distance" ), &T3DTerrain::getLabelDistance );
+	ClassDB::bind_method( D_METHOD( "set_label_size", "size" ), &T3DTerrain::setLabelSize );
+	ClassDB::bind_method( D_METHOD( "get_label_size" ), &T3DTerrain::getLabelSize );
 
 	// Target Tracking
-	ClassDB::bind_method( D_METHOD( "set_camera", "camera" ), &Terrain3D::setCamera );
-	ClassDB::bind_method( D_METHOD( "get_camera" ), &Terrain3D::getCamera );
-	ClassDB::bind_method( D_METHOD( "set_clipmap_target", "node" ), &Terrain3D::setClipmapTarget );
-	ClassDB::bind_method( D_METHOD( "get_clipmap_target" ), &Terrain3D::getClipmapTarget );
-	ClassDB::bind_method( D_METHOD( "get_clipmap_target_position" ), &Terrain3D::getClipmapTargetPosition );
-	ClassDB::bind_method( D_METHOD( "set_collision_target", "node" ), &Terrain3D::setCollisionTarget );
-	ClassDB::bind_method( D_METHOD( "get_collision_target" ), &Terrain3D::getCollisionTarget );
-	ClassDB::bind_method( D_METHOD( "get_collision_target_position" ), &Terrain3D::getCollisionTargetPosition );
-	ClassDB::bind_method( D_METHOD( "set_light_target", "node" ), &Terrain3D::setLightTarget );
-	ClassDB::bind_method( D_METHOD( "set_semantic_shadow_policy_enabled", "enabled" ), &Terrain3D::setSemanticShadowPolicyEnabled );
-	ClassDB::bind_method( D_METHOD( "is_semantic_shadow_policy_enabled" ), &Terrain3D::isSemanticShadowPolicyEnabled );
-	ClassDB::bind_method( D_METHOD( "set_environment_shadow_quality", "quality" ), &Terrain3D::setEnvironmentShadowQuality );
-	ClassDB::bind_method( D_METHOD( "get_environment_shadow_quality" ), &Terrain3D::getEnvironmentShadowQuality );
-	ClassDB::bind_method( D_METHOD( "set_environment_shadow_external_mask", "mask" ), &Terrain3D::setEnvironmentShadowExternalMask );
-	ClassDB::bind_method( D_METHOD( "get_environment_shadow_external_mask" ), &Terrain3D::getEnvironmentShadowExternalMask );
-	ClassDB::bind_method( D_METHOD( "set_semantic_directional_reception_enabled", "enabled" ), &Terrain3D::setSemanticDirectionalReceptionEnabled );
-	ClassDB::bind_method( D_METHOD( "is_semantic_directional_reception_enabled" ), &Terrain3D::isSemanticDirectionalReceptionEnabled );
-	ClassDB::bind_method( D_METHOD( "set_environment_directional_external_mask", "mask" ), &Terrain3D::setEnvironmentDirectionalExternalMask );
-	ClassDB::bind_method( D_METHOD( "get_environment_directional_external_mask" ), &Terrain3D::getEnvironmentDirectionalExternalMask );
-	ClassDB::bind_method( D_METHOD( "get_light_target" ), &Terrain3D::getLightTarget );
-	ClassDB::bind_method( D_METHOD( "snap" ), &Terrain3D::snap );
+	ClassDB::bind_method( D_METHOD( "set_camera", "camera" ), &T3DTerrain::setCamera );
+	ClassDB::bind_method( D_METHOD( "get_camera" ), &T3DTerrain::getCamera );
+	ClassDB::bind_method( D_METHOD( "set_clipmap_target", "node" ), &T3DTerrain::setClipmapTarget );
+	ClassDB::bind_method( D_METHOD( "get_clipmap_target" ), &T3DTerrain::getClipmapTarget );
+	ClassDB::bind_method( D_METHOD( "get_clipmap_target_position" ), &T3DTerrain::getClipmapTargetPosition );
+	ClassDB::bind_method( D_METHOD( "set_collision_target", "node" ), &T3DTerrain::setCollisionTarget );
+	ClassDB::bind_method( D_METHOD( "get_collision_target" ), &T3DTerrain::getCollisionTarget );
+	ClassDB::bind_method( D_METHOD( "get_collision_target_position" ), &T3DTerrain::getCollisionTargetPosition );
+	ClassDB::bind_method( D_METHOD( "set_light_target", "node" ), &T3DTerrain::setLightTarget );
+	ClassDB::bind_method( D_METHOD( "set_semantic_shadow_policy_enabled", "enabled" ), &T3DTerrain::setSemanticShadowPolicyEnabled );
+	ClassDB::bind_method( D_METHOD( "is_semantic_shadow_policy_enabled" ), &T3DTerrain::isSemanticShadowPolicyEnabled );
+	ClassDB::bind_method( D_METHOD( "set_environment_shadow_quality", "quality" ), &T3DTerrain::setEnvironmentShadowQuality );
+	ClassDB::bind_method( D_METHOD( "get_environment_shadow_quality" ), &T3DTerrain::getEnvironmentShadowQuality );
+	ClassDB::bind_method( D_METHOD( "set_environment_shadow_external_mask", "mask" ), &T3DTerrain::setEnvironmentShadowExternalMask );
+	ClassDB::bind_method( D_METHOD( "get_environment_shadow_external_mask" ), &T3DTerrain::getEnvironmentShadowExternalMask );
+	ClassDB::bind_method( D_METHOD( "set_semantic_directional_reception_enabled", "enabled" ), &T3DTerrain::setSemanticDirectionalReceptionEnabled );
+	ClassDB::bind_method( D_METHOD( "is_semantic_directional_reception_enabled" ), &T3DTerrain::isSemanticDirectionalReceptionEnabled );
+	ClassDB::bind_method( D_METHOD( "set_environment_directional_external_mask", "mask" ), &T3DTerrain::setEnvironmentDirectionalExternalMask );
+	ClassDB::bind_method( D_METHOD( "get_environment_directional_external_mask" ), &T3DTerrain::getEnvironmentDirectionalExternalMask );
+	ClassDB::bind_method( D_METHOD( "get_light_target" ), &T3DTerrain::getLightTarget );
+	ClassDB::bind_method( D_METHOD( "snap" ), &T3DTerrain::snap );
 
 	// Collision
-	ClassDB::bind_method( D_METHOD( "set_collision_mode", "mode" ), &Terrain3D::setCollisionMode );
-	ClassDB::bind_method( D_METHOD( "get_collision_mode" ), &Terrain3D::getCollisionMode );
-	ClassDB::bind_method( D_METHOD( "set_collision_shape_size", "size" ), &Terrain3D::setCollisionShapeSize );
-	ClassDB::bind_method( D_METHOD( "get_collision_shape_size" ), &Terrain3D::getCollisionShapeSize );
-	ClassDB::bind_method( D_METHOD( "set_collision_radius", "radius" ), &Terrain3D::setCollisionRadius );
-	ClassDB::bind_method( D_METHOD( "get_collision_radius" ), &Terrain3D::getCollisionRadius );
-	ClassDB::bind_method( D_METHOD( "set_collision_layer", "layers" ), &Terrain3D::setCollisionLayer );
-	ClassDB::bind_method( D_METHOD( "get_collision_layer" ), &Terrain3D::getCollisionLayer );
-	ClassDB::bind_method( D_METHOD( "set_collision_mask", "mask" ), &Terrain3D::setCollisionMask );
-	ClassDB::bind_method( D_METHOD( "get_collision_mask" ), &Terrain3D::getCollisionMask );
-	ClassDB::bind_method( D_METHOD( "set_collision_priority", "priority" ), &Terrain3D::setCollisionPriority );
-	ClassDB::bind_method( D_METHOD( "get_collision_priority" ), &Terrain3D::getCollisionPriority );
-	ClassDB::bind_method( D_METHOD( "set_physics_material", "material" ), &Terrain3D::setPhysicsMaterial );
-	ClassDB::bind_method( D_METHOD( "get_physics_material" ), &Terrain3D::getPhysicsMaterial );
+	ClassDB::bind_method( D_METHOD( "set_collision_mode", "mode" ), &T3DTerrain::setCollisionMode );
+	ClassDB::bind_method( D_METHOD( "get_collision_mode" ), &T3DTerrain::getCollisionMode );
+	ClassDB::bind_method( D_METHOD( "set_collision_shape_size", "size" ), &T3DTerrain::setCollisionShapeSize );
+	ClassDB::bind_method( D_METHOD( "get_collision_shape_size" ), &T3DTerrain::getCollisionShapeSize );
+	ClassDB::bind_method( D_METHOD( "set_collision_radius", "radius" ), &T3DTerrain::setCollisionRadius );
+	ClassDB::bind_method( D_METHOD( "get_collision_radius" ), &T3DTerrain::getCollisionRadius );
+	ClassDB::bind_method( D_METHOD( "set_collision_layer", "layers" ), &T3DTerrain::setCollisionLayer );
+	ClassDB::bind_method( D_METHOD( "get_collision_layer" ), &T3DTerrain::getCollisionLayer );
+	ClassDB::bind_method( D_METHOD( "set_collision_mask", "mask" ), &T3DTerrain::setCollisionMask );
+	ClassDB::bind_method( D_METHOD( "get_collision_mask" ), &T3DTerrain::getCollisionMask );
+	ClassDB::bind_method( D_METHOD( "set_collision_priority", "priority" ), &T3DTerrain::setCollisionPriority );
+	ClassDB::bind_method( D_METHOD( "get_collision_priority" ), &T3DTerrain::getCollisionPriority );
+	ClassDB::bind_method( D_METHOD( "set_physics_material", "material" ), &T3DTerrain::setPhysicsMaterial );
+	ClassDB::bind_method( D_METHOD( "get_physics_material" ), &T3DTerrain::getPhysicsMaterial );
 
 	// Terrain Mesh
-	ClassDB::bind_method( D_METHOD( "set_mesh_lods", "count" ), &Terrain3D::setMeshLods );
-	ClassDB::bind_method( D_METHOD( "get_mesh_lods" ), &Terrain3D::getMeshLods );
-	ClassDB::bind_method( D_METHOD( "set_runtime_shader_tiering_enabled", "enabled" ), &Terrain3D::setRuntimeShaderTieringEnabled );
-	ClassDB::bind_method( D_METHOD( "is_runtime_shader_tiering_enabled" ), &Terrain3D::isRuntimeShaderTieringEnabled );
-	ClassDB::bind_method( D_METHOD( "set_runtime_near_shader_lods", "count" ), &Terrain3D::setRuntimeNearShaderLods );
-	ClassDB::bind_method( D_METHOD( "get_runtime_near_shader_lods" ), &Terrain3D::getRuntimeNearShaderLods );
-	ClassDB::bind_method( D_METHOD( "set_runtime_middle_shader_lods", "count" ), &Terrain3D::setRuntimeMiddleShaderLods );
-	ClassDB::bind_method( D_METHOD( "get_runtime_middle_shader_lods" ), &Terrain3D::getRuntimeMiddleShaderLods );
+	ClassDB::bind_method( D_METHOD( "set_mesh_lods", "count" ), &T3DTerrain::setMeshLods );
+	ClassDB::bind_method( D_METHOD( "get_mesh_lods" ), &T3DTerrain::getMeshLods );
+	ClassDB::bind_method( D_METHOD( "set_runtime_shader_tiering_enabled", "enabled" ), &T3DTerrain::setRuntimeShaderTieringEnabled );
+	ClassDB::bind_method( D_METHOD( "is_runtime_shader_tiering_enabled" ), &T3DTerrain::isRuntimeShaderTieringEnabled );
+	ClassDB::bind_method( D_METHOD( "set_runtime_near_shader_lods", "count" ), &T3DTerrain::setRuntimeNearShaderLods );
+	ClassDB::bind_method( D_METHOD( "get_runtime_near_shader_lods" ), &T3DTerrain::getRuntimeNearShaderLods );
+	ClassDB::bind_method( D_METHOD( "set_runtime_middle_shader_lods", "count" ), &T3DTerrain::setRuntimeMiddleShaderLods );
+	ClassDB::bind_method( D_METHOD( "get_runtime_middle_shader_lods" ), &T3DTerrain::getRuntimeMiddleShaderLods );
 	ClassDB::bind_method( D_METHOD( "set_runtime_near_range_end_m", "range_m" ),
-		&Terrain3D::setRuntimeNearRangeEndM );
+		&T3DTerrain::setRuntimeNearRangeEndM );
 	ClassDB::bind_method( D_METHOD( "get_runtime_near_range_end_m" ),
-		&Terrain3D::getRuntimeNearRangeEndM );
+		&T3DTerrain::getRuntimeNearRangeEndM );
 	ClassDB::bind_method( D_METHOD( "set_runtime_middle_range_end_m", "range_m" ),
-		&Terrain3D::setRuntimeMiddleRangeEndM );
+		&T3DTerrain::setRuntimeMiddleRangeEndM );
 	ClassDB::bind_method( D_METHOD( "get_runtime_middle_range_end_m" ),
-		&Terrain3D::getRuntimeMiddleRangeEndM );
+		&T3DTerrain::getRuntimeMiddleRangeEndM );
 	ClassDB::bind_method( D_METHOD( "set_runtime_sync_detail_lods", "enabled" ),
-		&Terrain3D::setRuntimeSyncDetailLods );
+		&T3DTerrain::setRuntimeSyncDetailLods );
 	ClassDB::bind_method( D_METHOD( "is_runtime_sync_detail_lods" ),
-		&Terrain3D::isRuntimeSyncDetailLods );
-	ClassDB::bind_method( D_METHOD( "set_runtime_clipmap_update_budget", "count" ), &Terrain3D::setRuntimeClipmapUpdateBudget );
-	ClassDB::bind_method( D_METHOD( "get_runtime_clipmap_update_budget" ), &Terrain3D::getRuntimeClipmapUpdateBudget );
-	ClassDB::bind_method( D_METHOD( "set_runtime_page_prepare_threads", "count" ), &Terrain3D::setRuntimePagePrepareThreads );
-	ClassDB::bind_method( D_METHOD( "get_runtime_page_prepare_threads" ), &Terrain3D::getRuntimePagePrepareThreads );
-	ClassDB::bind_method( D_METHOD( "set_mesh_size", "size" ), &Terrain3D::setMeshSize );
-	ClassDB::bind_method( D_METHOD( "get_mesh_size" ), &Terrain3D::getMeshSize );
-	ClassDB::bind_method( D_METHOD( "set_tessellation_level", "size" ), &Terrain3D::setTessellationLevel );
-	ClassDB::bind_method( D_METHOD( "get_tessellation_level" ), &Terrain3D::getTessellationLevel );
-	ClassDB::bind_method( D_METHOD( "set_vertex_spacing", "scale" ), &Terrain3D::setVertexSpacing );
-	ClassDB::bind_method( D_METHOD( "get_vertex_spacing" ), &Terrain3D::getVertexSpacing );
-	ClassDB::bind_method( D_METHOD( "set_cull_margin", "margin" ), &Terrain3D::setCullMargin );
-	ClassDB::bind_method( D_METHOD( "get_cull_margin" ), &Terrain3D::getCullMargin );
-	ClassDB::bind_method( D_METHOD( "set_cast_shadows", "shadow_casting_setting" ), &Terrain3D::setCastShadows );
-	ClassDB::bind_method( D_METHOD( "get_cast_shadows" ), &Terrain3D::getCastShadows );
-	ClassDB::bind_method( D_METHOD( "set_shadow_lod_count", "lod_count" ), &Terrain3D::setShadowLodCount );
-	ClassDB::bind_method( D_METHOD( "get_shadow_lod_count" ), &Terrain3D::getShadowLodCount );
-	ClassDB::bind_method( D_METHOD( "set_near_shadow_enabled", "enabled" ), &Terrain3D::setNearShadowEnabled );
-	ClassDB::bind_method( D_METHOD( "get_near_shadow_enabled" ), &Terrain3D::getNearShadowEnabled );
-	ClassDB::bind_method( D_METHOD( "set_middle_shadow_enabled", "enabled" ), &Terrain3D::setMiddleShadowEnabled );
-	ClassDB::bind_method( D_METHOD( "get_middle_shadow_enabled" ), &Terrain3D::getMiddleShadowEnabled );
-	ClassDB::bind_method( D_METHOD( "set_far_shadow_enabled", "enabled" ), &Terrain3D::setFarShadowEnabled );
-	ClassDB::bind_method( D_METHOD( "get_far_shadow_enabled" ), &Terrain3D::getFarShadowEnabled );
-	ClassDB::bind_method( D_METHOD( "set_near_shadow_lod_count", "lod_count" ), &Terrain3D::setNearShadowLodCount );
-	ClassDB::bind_method( D_METHOD( "get_near_shadow_lod_count" ), &Terrain3D::getNearShadowLodCount );
-	ClassDB::bind_method( D_METHOD( "set_middle_shadow_lod_count", "lod_count" ), &Terrain3D::setMiddleShadowLodCount );
-	ClassDB::bind_method( D_METHOD( "get_middle_shadow_lod_count" ), &Terrain3D::getMiddleShadowLodCount );
-	ClassDB::bind_method( D_METHOD( "set_far_shadow_lod_count", "lod_count" ), &Terrain3D::setFarShadowLodCount );
-	ClassDB::bind_method( D_METHOD( "get_far_shadow_lod_count" ), &Terrain3D::getFarShadowLodCount );
-	ClassDB::bind_method( D_METHOD( "set_gi_mode", "gi_mode" ), &Terrain3D::setGiMode );
-	ClassDB::bind_method( D_METHOD( "get_gi_mode" ), &Terrain3D::getGiMode );
-	ClassDB::bind_method( D_METHOD( "set_render_layers", "layers" ), &Terrain3D::setRenderLayers );
-	ClassDB::bind_method( D_METHOD( "get_render_layers" ), &Terrain3D::getRenderLayers );
+		&T3DTerrain::isRuntimeSyncDetailLods );
+	ClassDB::bind_method( D_METHOD( "set_runtime_clipmap_update_budget", "count" ), &T3DTerrain::setRuntimeClipmapUpdateBudget );
+	ClassDB::bind_method( D_METHOD( "get_runtime_clipmap_update_budget" ), &T3DTerrain::getRuntimeClipmapUpdateBudget );
+	ClassDB::bind_method( D_METHOD( "set_runtime_page_prepare_threads", "count" ), &T3DTerrain::setRuntimePagePrepareThreads );
+	ClassDB::bind_method( D_METHOD( "get_runtime_page_prepare_threads" ), &T3DTerrain::getRuntimePagePrepareThreads );
+	ClassDB::bind_method( D_METHOD( "set_mesh_size", "size" ), &T3DTerrain::setMeshSize );
+	ClassDB::bind_method( D_METHOD( "get_mesh_size" ), &T3DTerrain::getMeshSize );
+	ClassDB::bind_method( D_METHOD( "set_tessellation_level", "size" ), &T3DTerrain::setTessellationLevel );
+	ClassDB::bind_method( D_METHOD( "get_tessellation_level" ), &T3DTerrain::getTessellationLevel );
+	ClassDB::bind_method( D_METHOD( "set_vertex_spacing", "scale" ), &T3DTerrain::setVertexSpacing );
+	ClassDB::bind_method( D_METHOD( "get_vertex_spacing" ), &T3DTerrain::getVertexSpacing );
+	ClassDB::bind_method( D_METHOD( "set_cull_margin", "margin" ), &T3DTerrain::setCullMargin );
+	ClassDB::bind_method( D_METHOD( "get_cull_margin" ), &T3DTerrain::getCullMargin );
+	ClassDB::bind_method( D_METHOD( "set_cast_shadows", "shadow_casting_setting" ), &T3DTerrain::setCastShadows );
+	ClassDB::bind_method( D_METHOD( "get_cast_shadows" ), &T3DTerrain::getCastShadows );
+	ClassDB::bind_method( D_METHOD( "set_shadow_lod_count", "lod_count" ), &T3DTerrain::setShadowLodCount );
+	ClassDB::bind_method( D_METHOD( "get_shadow_lod_count" ), &T3DTerrain::getShadowLodCount );
+	ClassDB::bind_method( D_METHOD( "set_near_shadow_enabled", "enabled" ), &T3DTerrain::setNearShadowEnabled );
+	ClassDB::bind_method( D_METHOD( "get_near_shadow_enabled" ), &T3DTerrain::getNearShadowEnabled );
+	ClassDB::bind_method( D_METHOD( "set_middle_shadow_enabled", "enabled" ), &T3DTerrain::setMiddleShadowEnabled );
+	ClassDB::bind_method( D_METHOD( "get_middle_shadow_enabled" ), &T3DTerrain::getMiddleShadowEnabled );
+	ClassDB::bind_method( D_METHOD( "set_far_shadow_enabled", "enabled" ), &T3DTerrain::setFarShadowEnabled );
+	ClassDB::bind_method( D_METHOD( "get_far_shadow_enabled" ), &T3DTerrain::getFarShadowEnabled );
+	ClassDB::bind_method( D_METHOD( "set_near_shadow_lod_count", "lod_count" ), &T3DTerrain::setNearShadowLodCount );
+	ClassDB::bind_method( D_METHOD( "get_near_shadow_lod_count" ), &T3DTerrain::getNearShadowLodCount );
+	ClassDB::bind_method( D_METHOD( "set_middle_shadow_lod_count", "lod_count" ), &T3DTerrain::setMiddleShadowLodCount );
+	ClassDB::bind_method( D_METHOD( "get_middle_shadow_lod_count" ), &T3DTerrain::getMiddleShadowLodCount );
+	ClassDB::bind_method( D_METHOD( "set_far_shadow_lod_count", "lod_count" ), &T3DTerrain::setFarShadowLodCount );
+	ClassDB::bind_method( D_METHOD( "get_far_shadow_lod_count" ), &T3DTerrain::getFarShadowLodCount );
+	ClassDB::bind_method( D_METHOD( "set_gi_mode", "gi_mode" ), &T3DTerrain::setGiMode );
+	ClassDB::bind_method( D_METHOD( "get_gi_mode" ), &T3DTerrain::getGiMode );
+	ClassDB::bind_method( D_METHOD( "set_render_layers", "layers" ), &T3DTerrain::setRenderLayers );
+	ClassDB::bind_method( D_METHOD( "get_render_layers" ), &T3DTerrain::getRenderLayers );
 
 	// Terrain Displacement
-	ClassDB::bind_method( D_METHOD( "set_displacement_scale", "scale" ), &Terrain3D::setDisplacementScale );
-	ClassDB::bind_method( D_METHOD( "get_displacement_scale" ), &Terrain3D::getDisplacementScale );
-	ClassDB::bind_method( D_METHOD( "set_displacement_sharpness", "sharpness" ), &Terrain3D::setDisplacementSharpness );
-	ClassDB::bind_method( D_METHOD( "get_displacement_sharpness" ), &Terrain3D::getDisplacementSharpness );
+	ClassDB::bind_method( D_METHOD( "set_displacement_scale", "scale" ), &T3DTerrain::setDisplacementScale );
+	ClassDB::bind_method( D_METHOD( "get_displacement_scale" ), &T3DTerrain::getDisplacementScale );
+	ClassDB::bind_method( D_METHOD( "set_displacement_sharpness", "sharpness" ), &T3DTerrain::setDisplacementSharpness );
+	ClassDB::bind_method( D_METHOD( "get_displacement_sharpness" ), &T3DTerrain::getDisplacementSharpness );
 	ClassDB::bind_method( D_METHOD( "set_buffer_shader_override_enabled", "enabled" ),
-						 &Terrain3D::setBufferShaderOverrideEnabled );
-	ClassDB::bind_method( D_METHOD( "is_buffer_shader_override_enabled" ), &Terrain3D::isBufferShaderOverrideEnabled );
-	ClassDB::bind_method( D_METHOD( "set_buffer_shader_override", "shader" ), &Terrain3D::setBufferShaderOverride );
-	ClassDB::bind_method( D_METHOD( "get_buffer_shader_override" ), &Terrain3D::getBufferShaderOverride );
+						 &T3DTerrain::setBufferShaderOverrideEnabled );
+	ClassDB::bind_method( D_METHOD( "is_buffer_shader_override_enabled" ), &T3DTerrain::isBufferShaderOverrideEnabled );
+	ClassDB::bind_method( D_METHOD( "set_buffer_shader_override", "shader" ), &T3DTerrain::setBufferShaderOverride );
+	ClassDB::bind_method( D_METHOD( "get_buffer_shader_override" ), &T3DTerrain::getBufferShaderOverride );
 
 	// Ocean Mesh
-	ClassDB::bind_method( D_METHOD( "set_ocean_enabled", "enabled" ), &Terrain3D::setOceanEnabled );
-	ClassDB::bind_method( D_METHOD( "is_ocean_enabled" ), &Terrain3D::isOceanEnabled );
-	ClassDB::bind_method( D_METHOD( "set_ocean_performance_preset", "preset" ), &Terrain3D::setOceanPerformancePreset );
-	ClassDB::bind_method( D_METHOD( "get_ocean_performance_preset" ), &Terrain3D::getOceanPerformancePreset );
+	ClassDB::bind_method( D_METHOD( "set_ocean_enabled", "enabled" ), &T3DTerrain::setOceanEnabled );
+	ClassDB::bind_method( D_METHOD( "is_ocean_enabled" ), &T3DTerrain::isOceanEnabled );
+	ClassDB::bind_method( D_METHOD( "set_ocean_performance_preset", "preset" ), &T3DTerrain::setOceanPerformancePreset );
+	ClassDB::bind_method( D_METHOD( "get_ocean_performance_preset" ), &T3DTerrain::getOceanPerformancePreset );
 	ClassDB::bind_method( D_METHOD( "set_ocean_vertex_wave_iterations", "iterations" ),
-						 &Terrain3D::setOceanVertexWaveIterations );
-	ClassDB::bind_method( D_METHOD( "get_ocean_vertex_wave_iterations" ), &Terrain3D::getOceanVertexWaveIterations );
+						 &T3DTerrain::setOceanVertexWaveIterations );
+	ClassDB::bind_method( D_METHOD( "get_ocean_vertex_wave_iterations" ), &T3DTerrain::getOceanVertexWaveIterations );
 	ClassDB::bind_method( D_METHOD( "set_ocean_fragment_wave_iterations", "iterations" ),
-						 &Terrain3D::setOceanFragmentWaveIterations );
+						 &T3DTerrain::setOceanFragmentWaveIterations );
 	ClassDB::bind_method( D_METHOD( "get_ocean_fragment_wave_iterations" ),
-						 &Terrain3D::getOceanFragmentWaveIterations );
-	ClassDB::bind_method( D_METHOD( "set_ocean_refraction_mode", "mode" ), &Terrain3D::setOceanRefractionMode );
-	ClassDB::bind_method( D_METHOD( "get_ocean_refraction_mode" ), &Terrain3D::getOceanRefractionMode );
-	ClassDB::bind_method( D_METHOD( "set_ocean_foam_mode", "mode" ), &Terrain3D::setOceanFoamMode );
-	ClassDB::bind_method( D_METHOD( "get_ocean_foam_mode" ), &Terrain3D::getOceanFoamMode );
-	ClassDB::bind_method( D_METHOD( "set_ocean_scattering_mode", "mode" ), &Terrain3D::setOceanScatteringMode );
-	ClassDB::bind_method( D_METHOD( "get_ocean_scattering_mode" ), &Terrain3D::getOceanScatteringMode );
-	ClassDB::bind_method( D_METHOD( "set_ocean_shading_mode", "mode" ), &Terrain3D::setOceanShadingMode );
-	ClassDB::bind_method( D_METHOD( "get_ocean_shading_mode" ), &Terrain3D::getOceanShadingMode );
-	ClassDB::bind_method( D_METHOD( "set_ocean_mesh_lods", "count" ), &Terrain3D::setOceanMeshLods );
-	ClassDB::bind_method( D_METHOD( "get_ocean_mesh_lods" ), &Terrain3D::getOceanMeshLods );
-	ClassDB::bind_method( D_METHOD( "set_ocean_tessellation_level", "size" ), &Terrain3D::setOceanTessellationLevel );
-	ClassDB::bind_method( D_METHOD( "get_ocean_tessellation_level" ), &Terrain3D::getOceanTessellationLevel );
-	ClassDB::bind_method( D_METHOD( "set_ocean_mesh_size", "size" ), &Terrain3D::setOceanMeshSize );
-	ClassDB::bind_method( D_METHOD( "get_ocean_mesh_size" ), &Terrain3D::getOceanMeshSize );
-	ClassDB::bind_method( D_METHOD( "set_ocean_vertex_spacing", "scale" ), &Terrain3D::setOceanVertexSpacing );
-	ClassDB::bind_method( D_METHOD( "get_ocean_vertex_spacing" ), &Terrain3D::getOceanVertexSpacing );
-	ClassDB::bind_method( D_METHOD( "set_ocean_cull_margin", "margin" ), &Terrain3D::setOceanCullMargin );
-	ClassDB::bind_method( D_METHOD( "get_ocean_cull_margin" ), &Terrain3D::getOceanCullMargin );
+						 &T3DTerrain::getOceanFragmentWaveIterations );
+	ClassDB::bind_method( D_METHOD( "set_ocean_refraction_mode", "mode" ), &T3DTerrain::setOceanRefractionMode );
+	ClassDB::bind_method( D_METHOD( "get_ocean_refraction_mode" ), &T3DTerrain::getOceanRefractionMode );
+	ClassDB::bind_method( D_METHOD( "set_ocean_foam_mode", "mode" ), &T3DTerrain::setOceanFoamMode );
+	ClassDB::bind_method( D_METHOD( "get_ocean_foam_mode" ), &T3DTerrain::getOceanFoamMode );
+	ClassDB::bind_method( D_METHOD( "set_ocean_scattering_mode", "mode" ), &T3DTerrain::setOceanScatteringMode );
+	ClassDB::bind_method( D_METHOD( "get_ocean_scattering_mode" ), &T3DTerrain::getOceanScatteringMode );
+	ClassDB::bind_method( D_METHOD( "set_ocean_shading_mode", "mode" ), &T3DTerrain::setOceanShadingMode );
+	ClassDB::bind_method( D_METHOD( "get_ocean_shading_mode" ), &T3DTerrain::getOceanShadingMode );
+	ClassDB::bind_method( D_METHOD( "set_ocean_mesh_lods", "count" ), &T3DTerrain::setOceanMeshLods );
+	ClassDB::bind_method( D_METHOD( "get_ocean_mesh_lods" ), &T3DTerrain::getOceanMeshLods );
+	ClassDB::bind_method( D_METHOD( "set_ocean_tessellation_level", "size" ), &T3DTerrain::setOceanTessellationLevel );
+	ClassDB::bind_method( D_METHOD( "get_ocean_tessellation_level" ), &T3DTerrain::getOceanTessellationLevel );
+	ClassDB::bind_method( D_METHOD( "set_ocean_mesh_size", "size" ), &T3DTerrain::setOceanMeshSize );
+	ClassDB::bind_method( D_METHOD( "get_ocean_mesh_size" ), &T3DTerrain::getOceanMeshSize );
+	ClassDB::bind_method( D_METHOD( "set_ocean_vertex_spacing", "scale" ), &T3DTerrain::setOceanVertexSpacing );
+	ClassDB::bind_method( D_METHOD( "get_ocean_vertex_spacing" ), &T3DTerrain::getOceanVertexSpacing );
+	ClassDB::bind_method( D_METHOD( "set_ocean_cull_margin", "margin" ), &T3DTerrain::setOceanCullMargin );
+	ClassDB::bind_method( D_METHOD( "get_ocean_cull_margin" ), &T3DTerrain::getOceanCullMargin );
 	ClassDB::bind_method( D_METHOD( "set_ocean_cast_shadows", "shadow_casting_setting" ),
-						 &Terrain3D::setOceanCastShadows );
-	ClassDB::bind_method( D_METHOD( "get_ocean_cast_shadows" ), &Terrain3D::getOceanCastShadows );
-	ClassDB::bind_method( D_METHOD( "set_ocean_gi_mode", "gi_mode" ), &Terrain3D::setOceanGiMode );
-	ClassDB::bind_method( D_METHOD( "get_ocean_gi_mode" ), &Terrain3D::getOceanGiMode );
-	ClassDB::bind_method( D_METHOD( "set_ocean_render_layers", "layers" ), &Terrain3D::setOceanRenderLayers );
-	ClassDB::bind_method( D_METHOD( "get_ocean_render_layers" ), &Terrain3D::getOceanRenderLayers );
-	ClassDB::bind_method( D_METHOD( "set_ocean_material", "material" ), &Terrain3D::setOceanMaterial );
-	ClassDB::bind_method( D_METHOD( "get_ocean_material" ), &Terrain3D::getOceanMaterial );
+						 &T3DTerrain::setOceanCastShadows );
+	ClassDB::bind_method( D_METHOD( "get_ocean_cast_shadows" ), &T3DTerrain::getOceanCastShadows );
+	ClassDB::bind_method( D_METHOD( "set_ocean_gi_mode", "gi_mode" ), &T3DTerrain::setOceanGiMode );
+	ClassDB::bind_method( D_METHOD( "get_ocean_gi_mode" ), &T3DTerrain::getOceanGiMode );
+	ClassDB::bind_method( D_METHOD( "set_ocean_render_layers", "layers" ), &T3DTerrain::setOceanRenderLayers );
+	ClassDB::bind_method( D_METHOD( "get_ocean_render_layers" ), &T3DTerrain::getOceanRenderLayers );
+	ClassDB::bind_method( D_METHOD( "set_ocean_material", "material" ), &T3DTerrain::setOceanMaterial );
+	ClassDB::bind_method( D_METHOD( "get_ocean_material" ), &T3DTerrain::getOceanMaterial );
 
 	// Rendering
-	ClassDB::bind_method( D_METHOD( "set_mouse_layer", "layer" ), &Terrain3D::setMouseLayer );
-	ClassDB::bind_method( D_METHOD( "get_mouse_layer" ), &Terrain3D::getMouseLayer );
-	ClassDB::bind_method( D_METHOD( "set_free_editor_textures" ), &Terrain3D::setFreeEditorTextures );
-	ClassDB::bind_method( D_METHOD( "get_free_editor_textures" ), &Terrain3D::getFreeEditorTextures );
-	ClassDB::bind_method( D_METHOD( "set_instancer_mode", "mode" ), &Terrain3D::setInstancerMode );
-	ClassDB::bind_method( D_METHOD( "get_instancer_mode" ), &Terrain3D::getInstancerMode );
+	ClassDB::bind_method( D_METHOD( "set_mouse_layer", "layer" ), &T3DTerrain::setMouseLayer );
+	ClassDB::bind_method( D_METHOD( "get_mouse_layer" ), &T3DTerrain::getMouseLayer );
+	ClassDB::bind_method( D_METHOD( "set_free_editor_textures" ), &T3DTerrain::setFreeEditorTextures );
+	ClassDB::bind_method( D_METHOD( "get_free_editor_textures" ), &T3DTerrain::getFreeEditorTextures );
+	ClassDB::bind_method( D_METHOD( "set_instancer_mode", "mode" ), &T3DTerrain::setInstancerMode );
+	ClassDB::bind_method( D_METHOD( "get_instancer_mode" ), &T3DTerrain::getInstancerMode );
 
 	// Overlays
-	ClassDB::bind_method( D_METHOD( "set_show_region_grid", "enabled" ), &Terrain3D::setShowRegionGrid );
-	ClassDB::bind_method( D_METHOD( "get_show_region_grid" ), &Terrain3D::getShowRegionGrid );
-	ClassDB::bind_method( D_METHOD( "set_show_instancer_grid", "enabled" ), &Terrain3D::setShowInstancerGrid );
-	ClassDB::bind_method( D_METHOD( "get_show_instancer_grid" ), &Terrain3D::getShowInstancerGrid );
-	ClassDB::bind_method( D_METHOD( "set_show_vertex_grid", "enabled" ), &Terrain3D::setShowVertexGrid );
-	ClassDB::bind_method( D_METHOD( "get_show_vertex_grid" ), &Terrain3D::getShowVertexGrid );
-	ClassDB::bind_method( D_METHOD( "set_show_contours", "enabled" ), &Terrain3D::setShowContours );
-	ClassDB::bind_method( D_METHOD( "get_show_contours" ), &Terrain3D::getShowContours );
-	ClassDB::bind_method( D_METHOD( "set_show_navigation", "enabled" ), &Terrain3D::setShowNavigation );
-	ClassDB::bind_method( D_METHOD( "get_show_navigation" ), &Terrain3D::getShowNavigation );
+	ClassDB::bind_method( D_METHOD( "set_show_region_grid", "enabled" ), &T3DTerrain::setShowRegionGrid );
+	ClassDB::bind_method( D_METHOD( "get_show_region_grid" ), &T3DTerrain::getShowRegionGrid );
+	ClassDB::bind_method( D_METHOD( "set_show_instancer_grid", "enabled" ), &T3DTerrain::setShowInstancerGrid );
+	ClassDB::bind_method( D_METHOD( "get_show_instancer_grid" ), &T3DTerrain::getShowInstancerGrid );
+	ClassDB::bind_method( D_METHOD( "set_show_vertex_grid", "enabled" ), &T3DTerrain::setShowVertexGrid );
+	ClassDB::bind_method( D_METHOD( "get_show_vertex_grid" ), &T3DTerrain::getShowVertexGrid );
+	ClassDB::bind_method( D_METHOD( "set_show_contours", "enabled" ), &T3DTerrain::setShowContours );
+	ClassDB::bind_method( D_METHOD( "get_show_contours" ), &T3DTerrain::getShowContours );
+	ClassDB::bind_method( D_METHOD( "set_show_navigation", "enabled" ), &T3DTerrain::setShowNavigation );
+	ClassDB::bind_method( D_METHOD( "get_show_navigation" ), &T3DTerrain::getShowNavigation );
 
 	// Debug Views
-	ClassDB::bind_method( D_METHOD( "set_show_checkered", "enabled" ), &Terrain3D::setShowCheckered );
-	ClassDB::bind_method( D_METHOD( "get_show_checkered" ), &Terrain3D::getShowCheckered );
-	ClassDB::bind_method( D_METHOD( "set_show_grey", "enabled" ), &Terrain3D::setShowGrey );
-	ClassDB::bind_method( D_METHOD( "get_show_grey" ), &Terrain3D::getShowGrey );
-	ClassDB::bind_method( D_METHOD( "set_show_heightmap", "enabled" ), &Terrain3D::setShowHeightmap );
-	ClassDB::bind_method( D_METHOD( "get_show_heightmap" ), &Terrain3D::getShowHeightmap );
-	ClassDB::bind_method( D_METHOD( "set_show_jaggedness", "enabled" ), &Terrain3D::setShowJaggedness );
-	ClassDB::bind_method( D_METHOD( "get_show_jaggedness" ), &Terrain3D::getShowJaggedness );
-	ClassDB::bind_method( D_METHOD( "set_show_autoshader", "enabled" ), &Terrain3D::setShowAutoshader );
-	ClassDB::bind_method( D_METHOD( "get_show_autoshader" ), &Terrain3D::getShowAutoshader );
-	ClassDB::bind_method( D_METHOD( "set_show_control_texture", "enabled" ), &Terrain3D::setShowControlTexture );
-	ClassDB::bind_method( D_METHOD( "get_show_control_texture" ), &Terrain3D::getShowControlTexture );
-	ClassDB::bind_method( D_METHOD( "set_show_control_blend", "enabled" ), &Terrain3D::setShowControlBlend );
-	ClassDB::bind_method( D_METHOD( "get_show_control_blend" ), &Terrain3D::getShowControlBlend );
-	ClassDB::bind_method( D_METHOD( "set_show_control_angle", "enabled" ), &Terrain3D::setShowControlAngle );
-	ClassDB::bind_method( D_METHOD( "get_show_control_angle" ), &Terrain3D::getShowControlAngle );
-	ClassDB::bind_method( D_METHOD( "set_show_control_scale", "enabled" ), &Terrain3D::setShowControlScale );
-	ClassDB::bind_method( D_METHOD( "get_show_control_scale" ), &Terrain3D::getShowControlScale );
-	ClassDB::bind_method( D_METHOD( "set_show_colormap", "enabled" ), &Terrain3D::setShowColormap );
-	ClassDB::bind_method( D_METHOD( "get_show_colormap" ), &Terrain3D::getShowColormap );
-	ClassDB::bind_method( D_METHOD( "set_show_roughmap", "enabled" ), &Terrain3D::setShowRoughmap );
-	ClassDB::bind_method( D_METHOD( "get_show_roughmap" ), &Terrain3D::getShowRoughmap );
+	ClassDB::bind_method( D_METHOD( "set_show_checkered", "enabled" ), &T3DTerrain::setShowCheckered );
+	ClassDB::bind_method( D_METHOD( "get_show_checkered" ), &T3DTerrain::getShowCheckered );
+	ClassDB::bind_method( D_METHOD( "set_show_grey", "enabled" ), &T3DTerrain::setShowGrey );
+	ClassDB::bind_method( D_METHOD( "get_show_grey" ), &T3DTerrain::getShowGrey );
+	ClassDB::bind_method( D_METHOD( "set_show_heightmap", "enabled" ), &T3DTerrain::setShowHeightmap );
+	ClassDB::bind_method( D_METHOD( "get_show_heightmap" ), &T3DTerrain::getShowHeightmap );
+	ClassDB::bind_method( D_METHOD( "set_show_jaggedness", "enabled" ), &T3DTerrain::setShowJaggedness );
+	ClassDB::bind_method( D_METHOD( "get_show_jaggedness" ), &T3DTerrain::getShowJaggedness );
+	ClassDB::bind_method( D_METHOD( "set_show_autoshader", "enabled" ), &T3DTerrain::setShowAutoshader );
+	ClassDB::bind_method( D_METHOD( "get_show_autoshader" ), &T3DTerrain::getShowAutoshader );
+	ClassDB::bind_method( D_METHOD( "set_show_control_texture", "enabled" ), &T3DTerrain::setShowControlTexture );
+	ClassDB::bind_method( D_METHOD( "get_show_control_texture" ), &T3DTerrain::getShowControlTexture );
+	ClassDB::bind_method( D_METHOD( "set_show_control_blend", "enabled" ), &T3DTerrain::setShowControlBlend );
+	ClassDB::bind_method( D_METHOD( "get_show_control_blend" ), &T3DTerrain::getShowControlBlend );
+	ClassDB::bind_method( D_METHOD( "set_show_control_angle", "enabled" ), &T3DTerrain::setShowControlAngle );
+	ClassDB::bind_method( D_METHOD( "get_show_control_angle" ), &T3DTerrain::getShowControlAngle );
+	ClassDB::bind_method( D_METHOD( "set_show_control_scale", "enabled" ), &T3DTerrain::setShowControlScale );
+	ClassDB::bind_method( D_METHOD( "get_show_control_scale" ), &T3DTerrain::getShowControlScale );
+	ClassDB::bind_method( D_METHOD( "set_show_colormap", "enabled" ), &T3DTerrain::setShowColormap );
+	ClassDB::bind_method( D_METHOD( "get_show_colormap" ), &T3DTerrain::getShowColormap );
+	ClassDB::bind_method( D_METHOD( "set_show_roughmap", "enabled" ), &T3DTerrain::setShowRoughmap );
+	ClassDB::bind_method( D_METHOD( "get_show_roughmap" ), &T3DTerrain::getShowRoughmap );
 	ClassDB::bind_method( D_METHOD( "set_compute_displacement_enabled", "enabled" ),
-						 &Terrain3D::setComputeDisplacementEnabled );
-	ClassDB::bind_method( D_METHOD( "get_compute_displacement_enabled" ), &Terrain3D::getComputeDisplacementEnabled );
+						 &T3DTerrain::setComputeDisplacementEnabled );
+	ClassDB::bind_method( D_METHOD( "get_compute_displacement_enabled" ), &T3DTerrain::getComputeDisplacementEnabled );
 	ClassDB::bind_method( D_METHOD( "set_displacement_update_distance", "distance" ),
-						 &Terrain3D::setDisplacementUpdateDistance );
+						 &T3DTerrain::setDisplacementUpdateDistance );
 	ClassDB::bind_method( D_METHOD( "get_displacement_update_distance" ),
-						 &Terrain3D::getDisplacementUpdateDistance );
-	ClassDB::bind_method( D_METHOD( "is_compute_displacement_active" ), &Terrain3D::isComputeDisplacementActive );
-	ClassDB::bind_method( D_METHOD( "set_show_displacement_buffer", "enabled" ), &Terrain3D::setShowDisplacementBuffer );
-	ClassDB::bind_method( D_METHOD( "get_show_displacement_buffer" ), &Terrain3D::getShowDisplacementBuffer );
+						 &T3DTerrain::getDisplacementUpdateDistance );
+	ClassDB::bind_method( D_METHOD( "is_compute_displacement_active" ), &T3DTerrain::isComputeDisplacementActive );
+	ClassDB::bind_method( D_METHOD( "set_show_displacement_buffer", "enabled" ), &T3DTerrain::setShowDisplacementBuffer );
+	ClassDB::bind_method( D_METHOD( "get_show_displacement_buffer" ), &T3DTerrain::getShowDisplacementBuffer );
 
 	// PBR Views
-	ClassDB::bind_method( D_METHOD( "set_show_texture_albedo", "enabled" ), &Terrain3D::setShowTextureAlbedo );
-	ClassDB::bind_method( D_METHOD( "get_show_texture_albedo" ), &Terrain3D::getShowTextureAlbedo );
-	ClassDB::bind_method( D_METHOD( "set_show_texture_height", "enabled" ), &Terrain3D::setShowTextureHeight );
-	ClassDB::bind_method( D_METHOD( "get_show_texture_height" ), &Terrain3D::getShowTextureHeight );
-	ClassDB::bind_method( D_METHOD( "set_show_texture_normal", "enabled" ), &Terrain3D::setShowTextureNormal );
-	ClassDB::bind_method( D_METHOD( "get_show_texture_normal" ), &Terrain3D::getShowTextureNormal );
-	ClassDB::bind_method( D_METHOD( "set_show_texture_rough", "enabled" ), &Terrain3D::setShowTextureRough );
-	ClassDB::bind_method( D_METHOD( "get_show_texture_rough" ), &Terrain3D::getShowTextureRough );
-	ClassDB::bind_method( D_METHOD( "set_show_texture_ao", "enabled" ), &Terrain3D::setShowTextureAo );
-	ClassDB::bind_method( D_METHOD( "get_show_texture_ao" ), &Terrain3D::getShowTextureAo );
+	ClassDB::bind_method( D_METHOD( "set_show_texture_albedo", "enabled" ), &T3DTerrain::setShowTextureAlbedo );
+	ClassDB::bind_method( D_METHOD( "get_show_texture_albedo" ), &T3DTerrain::getShowTextureAlbedo );
+	ClassDB::bind_method( D_METHOD( "set_show_texture_height", "enabled" ), &T3DTerrain::setShowTextureHeight );
+	ClassDB::bind_method( D_METHOD( "get_show_texture_height" ), &T3DTerrain::getShowTextureHeight );
+	ClassDB::bind_method( D_METHOD( "set_show_texture_normal", "enabled" ), &T3DTerrain::setShowTextureNormal );
+	ClassDB::bind_method( D_METHOD( "get_show_texture_normal" ), &T3DTerrain::getShowTextureNormal );
+	ClassDB::bind_method( D_METHOD( "set_show_texture_rough", "enabled" ), &T3DTerrain::setShowTextureRough );
+	ClassDB::bind_method( D_METHOD( "get_show_texture_rough" ), &T3DTerrain::getShowTextureRough );
+	ClassDB::bind_method( D_METHOD( "set_show_texture_ao", "enabled" ), &T3DTerrain::setShowTextureAo );
+	ClassDB::bind_method( D_METHOD( "get_show_texture_ao" ), &T3DTerrain::getShowTextureAo );
 
 	// Utility
-	ClassDB::bind_method( D_METHOD( "get_intersection", "src_pos", "direction", "gpu_mode" ), &Terrain3D::getIntersection,
+	ClassDB::bind_method( D_METHOD( "get_intersection", "src_pos", "direction", "gpu_mode" ), &T3DTerrain::getIntersection,
 						 DEFVAL( false ) );
 	ClassDB::bind_method( D_METHOD( "get_raycast_result", "src_pos", "direction", "collision_mask", "exclude_terrain" ),
-						 &Terrain3D::getRaycastResult, DEFVAL( 0xFFFFFFFF ), DEFVAL( false ) );
-	ClassDB::bind_method( D_METHOD( "bake_mesh", "lod", "filter" ), &Terrain3D::bakeMesh,
-						 DEFVAL( Terrain3DData::HEIGHT_FILTER_NEAREST ) );
+						 &T3DTerrain::getRaycastResult, DEFVAL( 0xFFFFFFFF ), DEFVAL( false ) );
+	ClassDB::bind_method( D_METHOD( "bake_mesh", "lod", "filter" ), &T3DTerrain::bakeMesh,
+						 DEFVAL( T3DData::HEIGHT_FILTER_NEAREST ) );
 	ClassDB::bind_method( D_METHOD( "bake_region_lightmap_mesh", "region_location", "lod", "context_radius_regions", "texel_size" ),
-		&Terrain3D::bakeRegionLightmapMesh, DEFVAL( 2 ), DEFVAL( 1 ), DEFVAL( 1.0f ) );
-	ClassDB::bind_method( D_METHOD( "bake_occluder", "lod" ), &Terrain3D::bakeOccluder );
+		&T3DTerrain::bakeRegionLightmapMesh, DEFVAL( 2 ), DEFVAL( 1 ), DEFVAL( 1.0f ) );
+	ClassDB::bind_method( D_METHOD( "bake_occluder", "lod" ), &T3DTerrain::bakeOccluder );
 	ClassDB::bind_method( D_METHOD( "generate_nav_mesh_source_geometry", "global_aabb", "require_nav" ),
-						 &Terrain3D::generateNavMeshSourceGeometry, DEFVAL( true ) );
+						 &T3DTerrain::generateNavMeshSourceGeometry, DEFVAL( true ) );
 
 	ADD_GROUP( "General / Data & Authoring", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::STRING, "version", PROPERTY_HINT_NONE, "",
@@ -7365,25 +7365,25 @@ void Terrain3D::_bind_methods( void ) {
 		"None,Replace,Overlay" ), "set_region_lightmap_shadowmask_mode", "get_region_lightmap_shadowmask_mode" );
 
 	ADD_GROUP( "Resources", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "material", PROPERTY_HINT_RESOURCE_TYPE, "Terrain3DMaterial" ),
+	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "material", PROPERTY_HINT_RESOURCE_TYPE, "T3DMaterial" ),
 				 "set_material", "get_material" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "assets", PROPERTY_HINT_RESOURCE_TYPE, "Terrain3DAssets" ), "set_assets",
+	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "assets", PROPERTY_HINT_RESOURCE_TYPE, "T3DAssets" ), "set_assets",
 				 "get_assets" );
 	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "auto_shader_profile", PROPERTY_HINT_RESOURCE_TYPE,
-								  "Terrain3DAutoShaderProfile" ),
+								  "T3DAutoShaderProfile" ),
 				 "set_auto_shader_profile", "get_auto_shader_profile" );
 	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "light_target", PROPERTY_HINT_NODE_TYPE, "DirectionalLight3D",
 							  PROPERTY_USAGE_DEFAULT, "Node3D" ),
 				 "set_light_target", "get_light_target" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE, "Terrain3DData" ),
+	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE, "T3DData" ),
 				 "", "get_data" );
 	ADD_PROPERTY(
-		PropertyInfo( Variant::OBJECT, "collision", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE, "Terrain3DCollision" ),
+		PropertyInfo( Variant::OBJECT, "collision", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE, "T3DCollision" ),
 		"", "get_collision" );
 	ADD_PROPERTY(
-		PropertyInfo( Variant::OBJECT, "instancer", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE, "Terrain3DInstancer" ),
+		PropertyInfo( Variant::OBJECT, "instancer", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE, "T3DInstancer" ),
 		"", "get_instancer" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "node_streamer", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE, "Terrain3DNodeStreamer" ), "", "get_node_streamer" );
+	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "node_streamer", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE, "T3DNodeStreamer" ), "", "get_node_streamer" );
 
 	ADD_GROUP( "Performance Profile", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "performance_target", PROPERTY_HINT_ENUM,

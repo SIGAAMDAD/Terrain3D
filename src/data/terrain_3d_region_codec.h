@@ -24,7 +24,7 @@ using namespace godot;
 // Height is stored as R16_UNORM rather than IEEE-754 half float. Half float has
 // only a 10-bit mantissa and steps of roughly 0.25-0.5 m at the game's expected
 // absolute heights. R16_UNORM over this fixed range retains ~1.76 cm precision.
-namespace Terrain3DRegionCodec {
+namespace T3DRegionCodec {
 
 inline float encodeHeightNormalized( const float fHeight ) {
 	return CLAMP( ( fHeight - TERRAIN3D_REGION_HEIGHT_MIN ) * TERRAIN3D_REGION_HEIGHT_INV_RANGE, 0.0f, 1.0f );
@@ -190,6 +190,6 @@ inline Color defaultHeightColor( void ) {
 	return Color( encodeHeightNormalized( 0.0f ), 0.0f, 0.0f, 1.0f );
 }
 
-} // namespace Terrain3DRegionCodec
+} // namespace T3DRegionCodec
 
 #endif // TERRAIN3D_REGION_CODEC_H

@@ -345,7 +345,7 @@ static real_t measureVertexDeviation( const Array &source_arrays, const Array &p
 } // namespace
 
 
-PackedInt32Array Terrain3DHLODBuilder::getInstancerMeshIds( Terrain3DRegion *const pRegion ) const {
+PackedInt32Array T3DHLODBuilder::getInstancerMeshIds( T3DRegion *const pRegion ) const {
 	PackedInt32Array result;
 	if ( !pRegion ) { return result; }
 	const T3DInstanceStore &store = pRegion->getInstanceStore();
@@ -362,8 +362,8 @@ PackedInt32Array Terrain3DHLODBuilder::getInstancerMeshIds( Terrain3DRegion *con
 	return result;
 }
 
-Dictionary Terrain3DHLODBuilder::buildInstancerSource(
-	Terrain3D *const pTerrain, Terrain3DRegion *const pRegion, const int nMeshId
+Dictionary T3DHLODBuilder::buildInstancerSource(
+	T3DTerrain *const pTerrain, T3DRegion *const pRegion, const int nMeshId
 ) const {
 	Dictionary result;
 	result["ok"] = false;
@@ -371,7 +371,7 @@ Dictionary Terrain3DHLODBuilder::buildInstancerSource(
 		result["error"] = "invalid Terrain3D instancer source";
 		return result;
 	}
-	const Ref<Terrain3DMeshAsset> asset = pTerrain->getAssets()->getMeshAsset( nMeshId );
+	const Ref<T3DMeshAsset> asset = pTerrain->getAssets()->getMeshAsset( nMeshId );
 	if ( asset.is_null() || !asset->isEnabled() || !asset->isHlodEligible() ) {
 		result["error"] = "mesh asset is not HLOD eligible";
 		return result;
@@ -447,7 +447,7 @@ Dictionary Terrain3DHLODBuilder::buildInstancerSource(
 	return result;
 }
 
-Dictionary Terrain3DHLODBuilder::simplifyMesh( const Ref<ArrayMesh> &rMesh, const real_t fRatio ) const {
+Dictionary T3DHLODBuilder::simplifyMesh( const Ref<ArrayMesh> &rMesh, const real_t fRatio ) const {
 	Dictionary result;
 	result["ok"] = false;
 	if ( rMesh.is_null() || rMesh->get_surface_count() <= 0 ) {
@@ -505,8 +505,8 @@ Dictionary Terrain3DHLODBuilder::simplifyMesh( const Ref<ArrayMesh> &rMesh, cons
 	return result;
 }
 
-void Terrain3DHLODBuilder::_bind_methods( void ) {
-	ClassDB::bind_method( D_METHOD( "get_instancer_mesh_ids", "region" ), &Terrain3DHLODBuilder::getInstancerMeshIds );
-	ClassDB::bind_method( D_METHOD( "build_instancer_source", "terrain", "region", "mesh_id" ), &Terrain3DHLODBuilder::buildInstancerSource );
-	ClassDB::bind_method( D_METHOD( "simplify_mesh", "mesh", "ratio" ), &Terrain3DHLODBuilder::simplifyMesh );
+void T3DHLODBuilder::_bind_methods( void ) {
+	ClassDB::bind_method( D_METHOD( "get_instancer_mesh_ids", "region" ), &T3DHLODBuilder::getInstancerMeshIds );
+	ClassDB::bind_method( D_METHOD( "build_instancer_source", "terrain", "region", "mesh_id" ), &T3DHLODBuilder::buildInstancerSource );
+	ClassDB::bind_method( D_METHOD( "simplify_mesh", "mesh", "ratio" ), &T3DHLODBuilder::simplifyMesh );
 }

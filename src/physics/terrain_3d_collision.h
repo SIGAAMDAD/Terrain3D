@@ -17,11 +17,11 @@
 #include "core/terrain_3d_util.h"
 #include "physics/terrain_3d_collision_surface_builder.h"
 
-class Terrain3D;
+class T3DTerrain;
 
 
-class Terrain3DCollision : public Object {
-	GDCLASS( Terrain3DCollision, Object );
+class T3DCollision : public Object {
+	GDCLASS( T3DCollision, Object );
 	CLASS_NAME();
 
 public: // Constants
@@ -34,7 +34,7 @@ public: // Constants
 	} t3dcollisionMode_t;
 
 private:
-	Terrain3D *m_pTerrain = nullptr;
+	T3DTerrain *m_pTerrain = nullptr;
 
 	// Public settings
 	t3dcollisionMode_t m_mode = DYNAMIC_GAME;
@@ -137,11 +137,11 @@ private:
 	bool shapeAllowsCollision( const Vector2i &rPosition, const int nSize ) const;
 
 public:
-	Terrain3DCollision( void ) {}
-	~Terrain3DCollision( void ) {
+	T3DCollision( void ) {}
+	~T3DCollision( void ) {
 		destroy();
 	}
-	void initialize( Terrain3D *pTerrain );
+	void initialize( T3DTerrain *pTerrain );
 
 	void build( void );
 	void onRegionMapChanged( void );
@@ -197,14 +197,14 @@ protected:
 	static void _bind_methods( void );
 };
 
-using t3dcollisionMode_t = Terrain3DCollision::t3dcollisionMode_t;
-VARIANT_ENUM_CAST( Terrain3DCollision::t3dcollisionMode_t );
+using t3dcollisionMode_t = T3DCollision::t3dcollisionMode_t;
+VARIANT_ENUM_CAST( T3DCollision::t3dcollisionMode_t );
 
-inline Vector2i Terrain3DCollision::snapToGrid( const Vector2i &rPos ) const {
+inline Vector2i T3DCollision::snapToGrid( const Vector2i &rPos ) const {
 	return Vector2i( intRoundMult( rPos.x, ( int32_t ) ( m_nShapeSize ) ), intRoundMult( rPos.y, ( int32_t ) ( m_nShapeSize ) ) );
 }
 
-inline Vector2i Terrain3DCollision::snapToGrid( const Vector3 &rPos ) const {
+inline Vector2i T3DCollision::snapToGrid( const Vector3 &rPos ) const {
 	return Vector2i( Math::floor( rPos.x / ( real_t ) ( m_nShapeSize ) + 0.5f ),
 					Math::floor( rPos.z / ( real_t ) ( m_nShapeSize ) + 0.5f ) ) *
 		   m_nShapeSize;

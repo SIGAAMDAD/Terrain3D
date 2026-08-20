@@ -27,10 +27,10 @@
 using namespace godot;
 #endif
 
-class Terrain3D;
+class T3DTerrain;
 
-class Terrain3DNodeStreamer : public Object {
-	GDCLASS( Terrain3DNodeStreamer, Object );
+class T3DNodeStreamer : public Object {
+	GDCLASS( T3DNodeStreamer, Object );
 	CLASS_NAME();
 
 public:
@@ -73,7 +73,7 @@ private:
 		ObjectID objectId;
 	} t3dmovableNodeRef_t;
 
-	Terrain3D *m_pTerrain = nullptr;
+	T3DTerrain *m_pTerrain = nullptr;
 	Node3D *m_pHost = nullptr;
 	t3dregionRuntime_t m_szRegions[TERRAIN3D_MAX_REGION_SLOTS];
 	eastl::bitset<TERRAIN3D_MAX_REGION_SLOTS> m_desiredRegions;
@@ -126,20 +126,20 @@ private:
 	void untrackMovableNode( int64_t nSpawnId );
 	void removeMovableNodeAt( int iIndex );
 	void eraseActiveNode( t3dregionRuntime_t &rRuntime, int iNodeIndex );
-	Node3D *ensureRegionRoot( int iIndex, Terrain3DRegion *pRegion );
+	Node3D *ensureRegionRoot( int iIndex, T3DRegion *pRegion );
 	bool migrateActiveNodes( void );
 	void ensureHost( void );
 	void destroyHost( void );
-	void captureNodeState( Terrain3DRegion *pRegion, Node3D *pRegionRoot, const t3dactiveNode_t &rActive );
+	void captureNodeState( T3DRegion *pRegion, Node3D *pRegionRoot, const t3dactiveNode_t &rActive );
 	void deactivateRegion( int iIndex, bool bCaptureState );
 	bool activateRegion( int iIndex, int &nNodeBudget );
 	t3dspawnActivationResult_t activateSpawn(
-		Terrain3DRegion *pRegion, t3dregionRuntime_t &rRuntime,
-		const Terrain3DRegion::t3dstreamedNodeRuntimeDescriptor_t &rSpawn
+		T3DRegion *pRegion, t3dregionRuntime_t &rRuntime,
+		const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t &rSpawn
 	);
-	void requestRegionScenes( const Vector2i &rOwnerLocation, const eastl::vector<Terrain3DRegion::t3dstreamedNodeRuntimeDescriptor_t> &rSpawns );
-	bool isHlodVisualSuppressed( const Vector2i &rOwnerLocation, const Terrain3DRegion::t3dstreamedNodeRuntimeDescriptor_t &rSpawn ) const;
-	bool streamedSpawnCoverageIntersects( const Vector2i &rOwnerLocation, const Terrain3DRegion::t3dstreamedNodeRuntimeDescriptor_t &rSpawn, const Vector2i &rTargetMin, const Vector2i &rTargetMax ) const;
+	void requestRegionScenes( const Vector2i &rOwnerLocation, const eastl::vector<T3DRegion::t3dstreamedNodeRuntimeDescriptor_t> &rSpawns );
+	bool isHlodVisualSuppressed( const Vector2i &rOwnerLocation, const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t &rSpawn ) const;
+	bool streamedSpawnCoverageIntersects( const Vector2i &rOwnerLocation, const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t &rSpawn, const Vector2i &rTargetMin, const Vector2i &rTargetMax ) const;
 	int64_t addStreamedSceneInternal(
 		const Ref<PackedScene> &rScene, const String &rScenePath,
 		const Transform3D &rGlobalTransform, const Dictionary &rState, int nFlags, int nHlodMinLevel
@@ -152,10 +152,10 @@ private:
 	void refreshSpawnId( void );
 
 public:
-	Terrain3DNodeStreamer( void ) {}
-	~Terrain3DNodeStreamer( void );
+	T3DNodeStreamer( void ) {}
+	~T3DNodeStreamer( void );
 
-	void initialize( Terrain3D *pTerrain );
+	void initialize( T3DTerrain *pTerrain );
 	void destroy( bool bCaptureState = true );
 	void updateResidency( const Vector3 &rTargetPosition, bool bForce = false );
 	void deferUpdateForFrame( void );
@@ -262,5 +262,5 @@ protected:
 	static void _bind_methods( void );
 };
 
-VARIANT_ENUM_CAST( Terrain3DNodeStreamer::t3dstreamedNodeFlags_t );
+VARIANT_ENUM_CAST( T3DNodeStreamer::t3dstreamedNodeFlags_t );
 #endif // TERRAIN3D_NODE_STREAMER_H

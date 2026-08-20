@@ -23,7 +23,7 @@ Object *getUploadBridge( void ) {
 
 } // namespace
 
-namespace Terrain3DUploadBridge {
+namespace T3DUploadBridge {
 
 bool isAvailable( void ) {
 	Object *pBridge = getUploadBridge();
@@ -77,4 +77,4 @@ Dictionary getStats( void ) {
 	return Dictionary( result );
 }
 
-} // namespace Terrain3DUploadBridge
+} // namespace T3DUploadBridge

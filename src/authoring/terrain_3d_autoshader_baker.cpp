@@ -32,7 +32,7 @@
 #include "core/terrain_3d_util.h"
 
 namespace {
-static bool terrain3dTextureSlotIsPopulated( const Ref<Terrain3DAssets> &rAssets, const uint8_t nTextureId ) {
+static bool terrain3dTextureSlotIsPopulated( const Ref<T3DAssets> &rAssets, const uint8_t nTextureId ) {
 	return rAssets.is_valid() && rAssets->getTextureAsset( ( int ) ( nTextureId ) ).is_valid();
 }
 
@@ -155,19 +155,19 @@ static t3dmetricBuildConfig_t parseMetricBuildConfig( const Dictionary &rProfile
 }
 
 typedef struct t3dregionMetrics_s {
-	Terrain3DArenaBuffer<float> height;
-	Terrain3DArenaBuffer<float> height_halo;
-	Terrain3DArenaBuffer<float> slope;
-	Terrain3DArenaBuffer<float> curvature;
-	Terrain3DArenaBuffer<float> concavity;
-	Terrain3DArenaBuffer<float> aspect;
-	Terrain3DArenaBuffer<float> flow;
-	Terrain3DArenaBuffer<float> deposition;
-	Terrain3DArenaBuffer<float> water_distance;
-	Terrain3DArenaBuffer<float> noise;
-	Terrain3DArenaBuffer<float> biome;
-	Terrain3DArenaBuffer<int32_t> flow_order;
-	Terrain3DArenaBuffer<uint32_t> output_control;
+	T3DArenaBuffer<float> height;
+	T3DArenaBuffer<float> height_halo;
+	T3DArenaBuffer<float> slope;
+	T3DArenaBuffer<float> curvature;
+	T3DArenaBuffer<float> concavity;
+	T3DArenaBuffer<float> aspect;
+	T3DArenaBuffer<float> flow;
+	T3DArenaBuffer<float> deposition;
+	T3DArenaBuffer<float> water_distance;
+	T3DArenaBuffer<float> noise;
+	T3DArenaBuffer<float> biome;
+	T3DArenaBuffer<int32_t> flow_order;
+	T3DArenaBuffer<uint32_t> output_control;
 } t3dregionMetrics_t;
 
 
@@ -348,7 +348,7 @@ static bool addMetricLayout( T3DLinearArenaLayout &rLayout, const bool bEnabled,
 }
 
 static bool allocateMetric(
-	Terrain3DArenaBuffer<float> &fBuffer, T3DLinearArena &rArena, const bool bEnabled,
+	T3DArenaBuffer<float> &fBuffer, T3DLinearArena &rArena, const bool bEnabled,
 	const size_t nCount
 ) {
 	return !bEnabled || fBuffer.allocateUninitialized( rArena, nCount );
@@ -396,7 +396,7 @@ static void computeChamferDistance( float *pValues, const int nSize, const float
 }
 
 static bool buildMetrics(
-	Terrain3DData *pData, const Vector2i &rLocation, const t3dmetricNeeds_t &rNeeds,
+	T3DData *pData, const Vector2i &rLocation, const t3dmetricNeeds_t &rNeeds,
 	const t3dmetricBuildConfig_t &rConfig, const t3dmaskSource_t &rBiomeMask, const t3dmaskSource_t &rFlowMask,
 	const t3dmaskSource_t &rDepositionMask, const t3dmaskSource_t &rWaterMask, T3DLinearArena &rArena,
 	t3dregionMetrics_t &rMetrics
@@ -671,7 +671,7 @@ static uint64_t fnv1aBytes( const uint8_t *pBytes, const size_t nSize, uint64_t 
 	return nHash;
 }
 
-static uint64_t regionSignature( Terrain3DRegion *pRegion, const uint64_t nProfileSignature ) {
+static uint64_t regionSignature( T3DRegion *pRegion, const uint64_t nProfileSignature ) {
 	uint64_t result = nProfileSignature;
 	if ( !pRegion ) {
 		return result;
@@ -706,7 +706,7 @@ static uint64_t regionSignature( Terrain3DRegion *pRegion, const uint64_t nProfi
 	return result;
 }
 
-static TypedArray<Vector2i> normalizeLocations( Terrain3DData *pData, const TypedArray<Vector2i> &rLocations ) {
+static TypedArray<Vector2i> normalizeLocations( T3DData *pData, const TypedArray<Vector2i> &rLocations ) {
 	TypedArray<Vector2i> result;
 	if ( !pData ) {
 		return result;
@@ -724,7 +724,7 @@ static TypedArray<Vector2i> normalizeLocations( Terrain3DData *pData, const Type
 }
 
 typedef struct t3dautoShaderRegionContext_s {
-	Terrain3DData *data = nullptr;
+	T3DData *data = nullptr;
 	eastl::vector<t3dregionWork_t> *pWork = nullptr;
 	const eastl::vector<t3druleConfig_t> *pRules = nullptr;
 	const t3dmetricNeeds_t *pNeeds = nullptr;
@@ -810,8 +810,8 @@ static void terrain3dBakeAutoshaderRegions( void *pContext, const size_t nBegin,
 
 } // namespace
 
-Dictionary Terrain3DAutoShaderBaker::bakeRegions(
-	Terrain3D *const pTerrain, const Dictionary &rProfile,
+Dictionary T3DAutoShaderBaker::bakeRegions(
+	T3DTerrain *const pTerrain, const Dictionary &rProfile,
 	const TypedArray<Vector2i> &rRegionLocations
 ) {
 	Dictionary result;
@@ -827,7 +827,7 @@ Dictionary Terrain3DAutoShaderBaker::bakeRegions(
 		return result;
 	}
 
-	Terrain3DData *const data = pTerrain->getData();
+	T3DData *const data = pTerrain->getData();
 	const TypedArray<Vector2i> locations = normalizeLocations( data, rRegionLocations );
 	if ( locations.is_empty() ) {
 		result["error"] = "No valid terrain regions were supplied.";
@@ -854,7 +854,7 @@ Dictionary Terrain3DAutoShaderBaker::bakeRegions(
 	const uint8_t default_overlay = ( uint8_t ) ( CLAMP( ( int ) ( rProfile.get( "default_overlay_texture", 0 ) ), 0, 31 ) );
 	const uint8_t default_blend = ( uint8_t ) ( CLAMP( ( int ) ( Math::round( ( float ) ( rProfile.get( "default_blend", 0.0f ) ) * TERRAIN3D_BYTE_MAX_FLOAT ) ),
 											 0, 255 ) );
-	const Ref<Terrain3DAssets> pAssets = pTerrain->getAssets();
+	const Ref<T3DAssets> pAssets = pTerrain->getAssets();
 	if ( pAssets.is_null() ) {
 		result["error"] = "Terrain3D has no texture asset registry.";
 		return result;
@@ -898,7 +898,7 @@ Dictionary Terrain3DAutoShaderBaker::bakeRegions(
 		if ( !data->ensureCpuRegionResident( item.location ) ) {
 			continue;
 		}
-		Terrain3DRegion *const pRegion = data->getRegionPtr( item.location );
+		T3DRegion *const pRegion = data->getRegionPtr( item.location );
 		if ( !pRegion || pRegion->isDeleted() ) {
 			continue;
 		}
@@ -941,7 +941,7 @@ Dictionary Terrain3DAutoShaderBaker::bakeRegions(
 			errors.push_back( "Could not page CPU terrain maps for region " + String( item.location ) + "." );
 			continue;
 		}
-		Terrain3DRegion *const pRegion = data->getRegionPtr( item.location );
+		T3DRegion *const pRegion = data->getRegionPtr( item.location );
 		if ( !item.available || !pRegion || pRegion->isDeleted() ) {
 			errors.push_back( "Region " + String( item.location ) + " is unavailable." );
 			continue;
@@ -962,7 +962,7 @@ Dictionary Terrain3DAutoShaderBaker::bakeRegions(
 	}
 
 	for ( t3dregionWork_t &item : work ) {
-		Terrain3DRegion *const pRegion = data->getRegionPtr( item.location );
+		T3DRegion *const pRegion = data->getRegionPtr( item.location );
 		if ( !pRegion || pRegion->isDeleted() ) {
 			continue;
 		}
@@ -974,14 +974,14 @@ Dictionary Terrain3DAutoShaderBaker::bakeRegions(
 			pRegion->setControlMap( pOutput );
 			changed_locations.push_back( item.location );
 		}
-		signatures[Terrain3DUtil::locationToString( item.location )] =
+		signatures[T3DUtil::locationToString( item.location )] =
 			( int64_t ) ( regionSignature( pRegion, profile_signature ) );
 	}
 
 	if ( !changed_locations.empty() ) {
-		data->commitMapEdits( Terrain3DRegion::TYPE_CONTROL, changed_locations, AABB(), Terrain3DData::MAP_EDIT_SNAP |
-																		  Terrain3DData::MAP_EDIT_UPDATE_INSTANCES |
-																		  Terrain3DData::MAP_EDIT_UPDATE_COLLISION );
+		data->commitMapEdits( T3DRegion::TYPE_CONTROL, changed_locations, AABB(), T3DData::MAP_EDIT_SNAP |
+																		  T3DData::MAP_EDIT_UPDATE_INSTANCES |
+																		  T3DData::MAP_EDIT_UPDATE_COLLISION );
 	}
 	result["ok"] = true;
 	result["processed_regions"] = processed_region_count;
@@ -993,14 +993,14 @@ Dictionary Terrain3DAutoShaderBaker::bakeRegions(
 	return result;
 }
 
-Dictionary Terrain3DAutoShaderBaker::computeRegionSignatures(
-	Terrain3D *const pTerrain, const Dictionary &rProfile, const TypedArray<Vector2i> &rRegionLocations
+Dictionary T3DAutoShaderBaker::computeRegionSignatures(
+	T3DTerrain *const pTerrain, const Dictionary &rProfile, const TypedArray<Vector2i> &rRegionLocations
 ) {
 	Dictionary signatures;
 	if ( !pTerrain || !pTerrain->getData() ) {
 		return signatures;
 	}
-	Terrain3DData *const pData = pTerrain->getData();
+	T3DData *const pData = pTerrain->getData();
 	const TypedArray<Vector2i> locations = normalizeLocations( pData, rRegionLocations );
 	const uint64_t profile_signature = ( uint64_t ) ( ( int64_t ) ( rProfile.get( "profile_signature", 0 ) ) );
 	for ( int index = 0; index < locations.size(); ++index ) {
@@ -1008,18 +1008,18 @@ Dictionary Terrain3DAutoShaderBaker::computeRegionSignatures(
 		if ( !pData->ensureCpuRegionResident( location ) ) {
 			continue;
 		}
-		Terrain3DRegion *const pRegion = pData->getRegionPtr( location );
+		T3DRegion *const pRegion = pData->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() ) {
 			continue;
 		}
-		signatures[Terrain3DUtil::locationToString( location )] =
+		signatures[T3DUtil::locationToString( location )] =
 			( int64_t ) ( regionSignature( pRegion, profile_signature ) );
 	}
 	return signatures;
 }
 
-Dictionary Terrain3DAutoShaderBaker::clearBakedRegions(
-	Terrain3D *const pTerrain,
+Dictionary T3DAutoShaderBaker::clearBakedRegions(
+	T3DTerrain *const pTerrain,
 	const TypedArray<Vector2i> &rRegionLocations,
 	const bool bPreserveAutoMask
 ) {
@@ -1036,7 +1036,7 @@ Dictionary Terrain3DAutoShaderBaker::clearBakedRegions(
 		result["error"] = "Selective clear requires the automatic-material mask to be preserved during baking.";
 		return result;
 	}
-	Terrain3DData *const pData = pTerrain->getData();
+	T3DData *const pData = pTerrain->getData();
 	const TypedArray<Vector2i> locations = normalizeLocations( pData, rRegionLocations );
 	eastl::vector<t3dclearRegionWork_t> work;
 	work.reserve( ( size_t ) ( locations.size() ) );
@@ -1047,7 +1047,7 @@ Dictionary Terrain3DAutoShaderBaker::clearBakedRegions(
 			errors.push_back( "Could not page CPU terrain maps for region " + String( location ) + "." );
 			continue;
 		}
-		Terrain3DRegion *const pRegion = pData->getRegionPtr( location );
+		T3DRegion *const pRegion = pData->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() ) {
 			errors.push_back( "Region " + String( location ) + " is unavailable." );
 			continue;
@@ -1094,7 +1094,7 @@ Dictionary Terrain3DAutoShaderBaker::clearBakedRegions(
 	changed_locations.reserve( work.size() );
 	int64_t changed_pixels = 0;
 	for ( t3dclearRegionWork_t &item : work ) {
-		Terrain3DRegion *const pRegion = pData->getRegionPtr( item.location );
+		T3DRegion *const pRegion = pData->getRegionPtr( item.location );
 		if ( !pRegion || pRegion->isDeleted() ) {
 			continue;
 		}
@@ -1104,9 +1104,9 @@ Dictionary Terrain3DAutoShaderBaker::clearBakedRegions(
 		changed_pixels += item.changed_pixels;
 	}
 	if ( !changed_locations.empty() ) {
-		pData->commitMapEdits( Terrain3DRegion::TYPE_CONTROL, changed_locations, AABB(), Terrain3DData::MAP_EDIT_SNAP |
-																		  Terrain3DData::MAP_EDIT_UPDATE_INSTANCES |
-																		  Terrain3DData::MAP_EDIT_UPDATE_COLLISION );
+		pData->commitMapEdits( T3DRegion::TYPE_CONTROL, changed_locations, AABB(), T3DData::MAP_EDIT_SNAP |
+																		  T3DData::MAP_EDIT_UPDATE_INSTANCES |
+																		  T3DData::MAP_EDIT_UPDATE_COLLISION );
 	}
 	result["ok"] = true;
 	result["changed_regions"] = ( int ) ( changed_locations.size() );
@@ -1114,11 +1114,11 @@ Dictionary Terrain3DAutoShaderBaker::clearBakedRegions(
 	return result;
 }
 
-void Terrain3DAutoShaderBaker::_bind_methods( void ) {
+void T3DAutoShaderBaker::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "bake_regions", "terrain", "profile", "region_locations" ),
-						 &Terrain3DAutoShaderBaker::bakeRegions );
+						 &T3DAutoShaderBaker::bakeRegions );
 	ClassDB::bind_method( D_METHOD( "compute_region_signatures", "terrain", "profile", "region_locations" ),
-						 &Terrain3DAutoShaderBaker::computeRegionSignatures );
+						 &T3DAutoShaderBaker::computeRegionSignatures );
 	ClassDB::bind_method( D_METHOD( "clear_baked_regions", "terrain", "region_locations", "preserve_auto_mask" ),
-						 &Terrain3DAutoShaderBaker::clearBakedRegions, DEFVAL( true ) );
+						 &T3DAutoShaderBaker::clearBakedRegions, DEFVAL( true ) );
 }

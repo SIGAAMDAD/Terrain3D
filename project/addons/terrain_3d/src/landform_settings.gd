@@ -1,5 +1,5 @@
 @tool
-class_name Terrain3DLandformSettings
+class_name T3DLandformSettings
 extends RefCounted
 
 var mode: int = 0
@@ -47,11 +47,11 @@ var collision_spacing: float = 8.0
 var generate_collision: bool = true
 
 
-static func from_value(p_value: Variant) -> Terrain3DLandformSettings:
+static func from_value(p_value: Variant) -> T3DLandformSettings:
 	if not p_value is Dictionary:
-		return Terrain3DLandformSettings.new()
-	var values := Terrain3DRuntimeValueMap.from_value(p_value)
-	var settings := Terrain3DLandformSettings.new()
+		return T3DLandformSettings.new()
+	var values := T3DRuntimeValueMap.from_value(p_value)
+	var settings := T3DLandformSettings.new()
 	settings.mode = values.int_value("mode", settings.mode)
 	settings.morphology_mode = values.int_value("morphology_mode", settings.morphology_mode)
 	settings.width = values.float_value("width", settings.width)
@@ -97,8 +97,8 @@ static func from_value(p_value: Variant) -> Terrain3DLandformSettings:
 	return settings
 
 
-func duplicate_settings() -> Terrain3DLandformSettings:
-	return Terrain3DLandformSettings.from_value(to_dictionary())
+func duplicate_settings() -> T3DLandformSettings:
+	return T3DLandformSettings.from_value(to_dictionary())
 
 
 func to_dictionary() -> Dictionary[String, Variant]:

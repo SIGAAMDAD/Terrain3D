@@ -24,7 +24,7 @@ inline int32_t sanitizeResolutionScale( int32_t nValue ) {
 
 } // namespace
 
-Ref<Curve> Terrain3DErosionSettings::makeFlatCurve( const float fValue, const float fMin, const float fMax ) {
+Ref<Curve> T3DErosionSettings::makeFlatCurve( const float fValue, const float fMin, const float fMax ) {
 	Ref<Curve> pCurve;
 	pCurve.instantiate();
 	pCurve->set_min_value( fMin );
@@ -34,7 +34,7 @@ Ref<Curve> Terrain3DErosionSettings::makeFlatCurve( const float fValue, const fl
 	return pCurve;
 }
 
-void Terrain3DErosionSettings::setCurve( Ref<Curve> &rTargetCurve, const Ref<Curve> &rSourceCurve ) {
+void T3DErosionSettings::setCurve( Ref<Curve> &rTargetCurve, const Ref<Curve> &rSourceCurve ) {
 	if ( rTargetCurve == rSourceCurve ) {
 		return;
 	}
@@ -42,7 +42,7 @@ void Terrain3DErosionSettings::setCurve( Ref<Curve> &rTargetCurve, const Ref<Cur
 	emit_changed();
 }
 
-Terrain3DErosionSettings::Terrain3DErosionSettings( void ) {
+T3DErosionSettings::T3DErosionSettings( void ) {
 	m_pMasterIntensityCurve = makeFlatCurve( 1.0f );
 	m_pRainfallCurve = makeFlatCurve( 1.0f );
 	m_pWeatheringCurve = makeFlatCurve( 1.0f );
@@ -58,7 +58,7 @@ Terrain3DErosionSettings::Terrain3DErosionSettings( void ) {
 }
 
 #define SET_CLAMPED( methodName, methodSymbol, field_name, value_type, min_value, max_value )           \
-	void Terrain3DErosionSettings::methodSymbol( value_type valueArg ) {               \
+	void T3DErosionSettings::methodSymbol( value_type valueArg ) {               \
 		value_type value = CLAMP( valueArg, value_type( min_value ), value_type( max_value ) ); \
 		if ( field_name == value ) {                                                       \
 			return;                                                                      \
@@ -68,7 +68,7 @@ Terrain3DErosionSettings::Terrain3DErosionSettings( void ) {
 	}
 
 #define SET_VALUE( methodName, methodSymbol, field_name, value_type )                     \
-	void Terrain3DErosionSettings::methodSymbol( value_type valueArg ) { \
+	void T3DErosionSettings::methodSymbol( value_type valueArg ) { \
 		if ( field_name == valueArg ) {                                       \
 			return;                                                        \
 		}                                                                  \
@@ -77,7 +77,7 @@ Terrain3DErosionSettings::Terrain3DErosionSettings( void ) {
 	}
 
 #define SET_REF_VALUE( methodName, methodSymbol, field_name, value_type )                        \
-	void Terrain3DErosionSettings::methodSymbol( const value_type &valueArg ) { \
+	void T3DErosionSettings::methodSymbol( const value_type &valueArg ) { \
 		if ( field_name == valueArg ) {                                              \
 			return;                                                               \
 		}                                                                         \
@@ -86,7 +86,7 @@ Terrain3DErosionSettings::Terrain3DErosionSettings( void ) {
 	}
 
 #define SET_INSPECTOR_TOGGLE( methodName, methodSymbol, field_name )                \
-	void Terrain3DErosionSettings::methodSymbol( bool bValueArg ) { \
+	void T3DErosionSettings::methodSymbol( bool bValueArg ) { \
 		if ( field_name == bValueArg ) {                                 \
 			return;                                                  \
 		}                                                            \
@@ -97,7 +97,7 @@ Terrain3DErosionSettings::Terrain3DErosionSettings( void ) {
 
 SET_CLAMPED( simulation_years, setSimulationYears, m_fSimulationYears, double, 0.000001, 1000000000.0 )
 SET_CLAMPED( simulation_steps, setSimulationSteps, m_nSimulationSteps, int32_t, 1, 4096 )
-void Terrain3DErosionSettings::setResolutionScale( const int32_t nValue ) {
+void T3DErosionSettings::setResolutionScale( const int32_t nValue ) {
 	const int32_t value = sanitizeResolutionScale( nValue );
 	if ( m_resolutionScale != value ) {
 		m_resolutionScale = value;
@@ -111,7 +111,7 @@ SET_CLAMPED( live_preview_interval_steps, setLivePreviewIntervalSteps, m_nLivePr
 SET_VALUE( live_preview_start_paused, setLivePreviewStartPaused, m_bLivePreviewStartPaused, bool )
 SET_CLAMPED( thread_count, setThreadCount, m_nThreadCount, int32_t, 0, 64 )
 SET_VALUE( seed, setSeed, m_seed, int64_t )
-void Terrain3DErosionSettings::setBoundaryMode( const t3dboundaryMode_t eValue ) {
+void T3DErosionSettings::setBoundaryMode( const t3dboundaryMode_t eValue ) {
 	const t3dboundaryMode_t value = ( t3dboundaryMode_t ) ( CLAMP( ( int32_t ) ( eValue ), ( int32_t ) ( BOUNDARY_CLOSED ), ( int32_t ) ( BOUNDARY_OPEN ) ) );
 	if ( m_boundaryMode != value ) {
 		m_boundaryMode = value;
@@ -203,7 +203,7 @@ SET_CLAMPED( snow_melt_fraction_per_step, setSnowMeltFractionPerStep, m_fSnowMel
 SET_CLAMPED( snow_sublimation_fraction, setSnowSublimationFraction, m_fSnowSublimationFraction, float, 0.0f, 1.0f )
 
 SET_INSPECTOR_TOGGLE( wind_enabled, setWindEnabled, m_bWindEnabled )
-void Terrain3DErosionSettings::setWindDirection( const Vector2 &vValue ) {
+void T3DErosionSettings::setWindDirection( const Vector2 &vValue ) {
 	const Vector2 value = vValue.length_squared() > CMP_EPSILON ? vValue.normalized() : Vector2( 1.0f, 0.0f );
 	if ( !m_windDirection.is_equal_approx( value ) ) {
 		m_windDirection = value;
@@ -233,7 +233,7 @@ SET_CLAMPED( pavement_infiltration_reduction, setPavementInfiltrationReduction, 
 SET_INSPECTOR_TOGGLE( wave_enabled, setWaveEnabled, m_bWaveEnabled )
 SET_CLAMPED( sea_level, setSeaLevel, m_fSeaLevel, float, -1000000.0f, 1000000.0f )
 SET_CLAMPED( tidal_range, setTidalRange, m_fTidalRange, float, 0.0f, 100000.0f )
-void Terrain3DErosionSettings::setWaveDirection( const Vector2 &vValue ) {
+void T3DErosionSettings::setWaveDirection( const Vector2 &vValue ) {
 	const Vector2 value = vValue.length_squared() > CMP_EPSILON ? vValue.normalized() : Vector2( 1.0f, 0.0f );
 	if ( !m_waveDirection.is_equal_approx( value ) ) {
 		m_waveDirection = value;
@@ -277,40 +277,40 @@ SET_INSPECTOR_TOGGLE( oxidation_color_enabled, setOxidationColorEnabled, m_bOxid
 SET_REF_VALUE( oxidation_tint, setOxidationTint, m_oxidationTint, Color )
 SET_CLAMPED( oxidation_tint_strength, setOxidationTintStrength, m_fOxidationTintStrength, float, 0.0f, 1.0f )
 
-void Terrain3DErosionSettings::setMasterIntensityCurve( const Ref<Curve> &rValue ) {
+void T3DErosionSettings::setMasterIntensityCurve( const Ref<Curve> &rValue ) {
 	setCurve( m_pMasterIntensityCurve, rValue );
 }
-void Terrain3DErosionSettings::setRainfallCurve( const Ref<Curve> &rValue ) {
+void T3DErosionSettings::setRainfallCurve( const Ref<Curve> &rValue ) {
 	setCurve( m_pRainfallCurve, rValue );
 }
-void Terrain3DErosionSettings::setWeatheringCurve( const Ref<Curve> &rValue ) {
+void T3DErosionSettings::setWeatheringCurve( const Ref<Curve> &rValue ) {
 	setCurve( m_pWeatheringCurve, rValue );
 }
-void Terrain3DErosionSettings::setOxidationCurve( const Ref<Curve> &rValue ) {
+void T3DErosionSettings::setOxidationCurve( const Ref<Curve> &rValue ) {
 	setCurve( m_pOxidationCurve, rValue );
 }
-void Terrain3DErosionSettings::setWindCurve( const Ref<Curve> &rValue ) {
+void T3DErosionSettings::setWindCurve( const Ref<Curve> &rValue ) {
 	setCurve( m_pWindCurve, rValue );
 }
-void Terrain3DErosionSettings::setWaveCurve( const Ref<Curve> &rValue ) {
+void T3DErosionSettings::setWaveCurve( const Ref<Curve> &rValue ) {
 	setCurve( m_pWaveCurve, rValue );
 }
-void Terrain3DErosionSettings::setTrafficCurve( const Ref<Curve> &rValue ) {
+void T3DErosionSettings::setTrafficCurve( const Ref<Curve> &rValue ) {
 	setCurve( m_pTrafficCurve, rValue );
 }
-void Terrain3DErosionSettings::setTemperatureCurve( const Ref<Curve> &rValue ) {
+void T3DErosionSettings::setTemperatureCurve( const Ref<Curve> &rValue ) {
 	setCurve( m_pTemperatureCurve, rValue );
 }
-void Terrain3DErosionSettings::setSeaLevelCurve( const Ref<Curve> &rValue ) {
+void T3DErosionSettings::setSeaLevelCurve( const Ref<Curve> &rValue ) {
 	setCurve( m_pSeaLevelCurve, rValue );
 }
-void Terrain3DErosionSettings::setSnowmeltCurve( const Ref<Curve> &rValue ) {
+void T3DErosionSettings::setSnowmeltCurve( const Ref<Curve> &rValue ) {
 	setCurve( m_pSnowmeltCurve, rValue );
 }
-void Terrain3DErosionSettings::setSaltWeatheringCurve( const Ref<Curve> &rValue ) {
+void T3DErosionSettings::setSaltWeatheringCurve( const Ref<Curve> &rValue ) {
 	setCurve( m_pSaltWeatheringCurve, rValue );
 }
-void Terrain3DErosionSettings::setDebrisFlowCurve( const Ref<Curve> &rValue ) {
+void T3DErosionSettings::setDebrisFlowCurve( const Ref<Curve> &rValue ) {
 	setCurve( m_pDebrisFlowCurve, rValue );
 }
 
@@ -319,7 +319,7 @@ void Terrain3DErosionSettings::setDebrisFlowCurve( const Ref<Curve> &rValue ) {
 #undef SET_VALUE
 #undef SET_CLAMPED
 
-void Terrain3DErosionSettings::_validate_property( PropertyInfo &rProperty ) const {
+void T3DErosionSettings::_validate_property( PropertyInfo &rProperty ) const {
 	const StringName name = rProperty.name;
 	if ( !m_bApplyHeight && name == StringName( "height_output_strength" ) ) {
 		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
@@ -435,18 +435,18 @@ void Terrain3DErosionSettings::_validate_property( PropertyInfo &rProperty ) con
 	}
 }
 
-void Terrain3DErosionSettings::_bind_methods( void ) {
+void T3DErosionSettings::_bind_methods( void ) {
 	BIND_ENUM_CONSTANT( BOUNDARY_CLOSED );
 	BIND_ENUM_CONSTANT( BOUNDARY_OPEN );
 
 #define BIND_PROP( type, name, setter, getter )                                                     \
-	ClassDB::bind_method( D_METHOD( "set_" #name, "value" ), &Terrain3DErosionSettings::setter );     \
-	ClassDB::bind_method( D_METHOD( "get_" #name ), &Terrain3DErosionSettings::getter );              \
+	ClassDB::bind_method( D_METHOD( "set_" #name, "value" ), &T3DErosionSettings::setter );     \
+	ClassDB::bind_method( D_METHOD( "get_" #name ), &T3DErosionSettings::getter );              \
 	ADD_PROPERTY( PropertyInfo( type, #name ), "set_" #name, "get_" #name )
 
 #define BIND_PROP_HINT( type, name, setter, getter, hint, hint_string )                             \
-	ClassDB::bind_method( D_METHOD( "set_" #name, "value" ), &Terrain3DErosionSettings::setter );     \
-	ClassDB::bind_method( D_METHOD( "get_" #name ), &Terrain3DErosionSettings::getter );              \
+	ClassDB::bind_method( D_METHOD( "set_" #name, "value" ), &T3DErosionSettings::setter );     \
+	ClassDB::bind_method( D_METHOD( "get_" #name ), &T3DErosionSettings::getter );              \
 	ADD_PROPERTY( PropertyInfo( type, #name, hint, hint_string ), "set_" #name, "get_" #name )
 
 	ADD_GROUP( "General", "" );
@@ -469,8 +469,8 @@ void Terrain3DErosionSettings::_bind_methods( void ) {
 	BIND_PROP_HINT( Variant::FLOAT, global_intensity, setGlobalIntensity, getGlobalIntensity, PROPERTY_HINT_RANGE, "0,10,0.01" );
 
 	ADD_GROUP( "Spatial Limits", "" );
-	ClassDB::bind_method( D_METHOD( "set_simulation_mask", "value" ), &Terrain3DErosionSettings::setSimulationMask );
-	ClassDB::bind_method( D_METHOD( "get_simulation_mask" ), &Terrain3DErosionSettings::getSimulationMask );
+	ClassDB::bind_method( D_METHOD( "set_simulation_mask", "value" ), &T3DErosionSettings::setSimulationMask );
+	ClassDB::bind_method( D_METHOD( "get_simulation_mask" ), &T3DErosionSettings::getSimulationMask );
 	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "simulation_mask", PROPERTY_HINT_RESOURCE_TYPE, "Image" ),
 				 "set_simulation_mask", "get_simulation_mask" );
 	BIND_PROP( Variant::RECT2, simulation_mask_world_rect, setSimulationMaskWorldRect, getSimulationMaskWorldRect );
@@ -543,8 +543,8 @@ void Terrain3DErosionSettings::_bind_methods( void ) {
 	BIND_PROP_HINT( Variant::FLOAT, dry_threshold, setDryThreshold, getDryThreshold, PROPERTY_HINT_RANGE, "0,1,0.001" );
 	ADD_SUBGROUP( "Salt Weathering", "" );
 	BIND_PROP( Variant::BOOL, salt_weathering_enabled, setSaltWeatheringEnabled, getSaltWeatheringEnabled );
-	ClassDB::bind_method( D_METHOD( "set_salinity_mask", "value" ), &Terrain3DErosionSettings::setSalinityMask );
-	ClassDB::bind_method( D_METHOD( "get_salinity_mask" ), &Terrain3DErosionSettings::getSalinityMask );
+	ClassDB::bind_method( D_METHOD( "set_salinity_mask", "value" ), &T3DErosionSettings::setSalinityMask );
+	ClassDB::bind_method( D_METHOD( "get_salinity_mask" ), &T3DErosionSettings::getSalinityMask );
 	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "salinity_mask", PROPERTY_HINT_RESOURCE_TYPE, "Image" ),
 				 "set_salinity_mask", "get_salinity_mask" );
 	BIND_PROP( Variant::RECT2, salinity_world_rect, setSalinityWorldRect, getSalinityWorldRect );
@@ -607,8 +607,8 @@ void Terrain3DErosionSettings::_bind_methods( void ) {
 
 	ADD_GROUP( "Foot Traffic", "" );
 	BIND_PROP( Variant::BOOL, traffic_enabled, setTrafficEnabled, getTrafficEnabled );
-	ClassDB::bind_method( D_METHOD( "set_traffic_mask", "value" ), &Terrain3DErosionSettings::setTrafficMask );
-	ClassDB::bind_method( D_METHOD( "get_traffic_mask" ), &Terrain3DErosionSettings::getTrafficMask );
+	ClassDB::bind_method( D_METHOD( "set_traffic_mask", "value" ), &T3DErosionSettings::setTrafficMask );
+	ClassDB::bind_method( D_METHOD( "get_traffic_mask" ), &T3DErosionSettings::getTrafficMask );
 	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "traffic_mask", PROPERTY_HINT_RESOURCE_TYPE, "Image" ),
 				 "set_traffic_mask", "get_traffic_mask" );
 	BIND_PROP( Variant::RECT2, traffic_world_rect, setTrafficWorldRect, getTrafficWorldRect );
@@ -623,16 +623,16 @@ void Terrain3DErosionSettings::_bind_methods( void ) {
 	BIND_PROP( Variant::BOOL, stratigraphy_enabled, setStratigraphyEnabled, getStratigraphyEnabled );
 	BIND_PROP_HINT( Variant::FLOAT, surface_layer_depth_m, setSurfaceLayerDepthM, getSurfaceLayerDepthM, PROPERTY_HINT_RANGE, "0,100000,0.01,suffix: m" );
 	ClassDB::bind_method( D_METHOD( "set_surface_layer_depth_map", "value" ),
-						 &Terrain3DErosionSettings::setSurfaceLayerDepthMap );
+						 &T3DErosionSettings::setSurfaceLayerDepthMap );
 	ClassDB::bind_method( D_METHOD( "get_surface_layer_depth_map" ),
-						 &Terrain3DErosionSettings::getSurfaceLayerDepthMap );
+						 &T3DErosionSettings::getSurfaceLayerDepthMap );
 	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "surface_layer_depth_map", PROPERTY_HINT_RESOURCE_TYPE, "Image" ),
 				 "set_surface_layer_depth_map", "get_surface_layer_depth_map" );
 	BIND_PROP( Variant::RECT2, surface_layer_depth_world_rect, setSurfaceLayerDepthWorldRect, getSurfaceLayerDepthWorldRect );
 	BIND_PROP_HINT( Variant::FLOAT, bedrock_hardness, setBedrockHardness, getBedrockHardness, PROPERTY_HINT_RANGE, "0,1,0.01" );
 	ClassDB::bind_method( D_METHOD( "set_bedrock_hardness_map", "value" ),
-						 &Terrain3DErosionSettings::setBedrockHardnessMap );
-	ClassDB::bind_method( D_METHOD( "get_bedrock_hardness_map" ), &Terrain3DErosionSettings::getBedrockHardnessMap );
+						 &T3DErosionSettings::setBedrockHardnessMap );
+	ClassDB::bind_method( D_METHOD( "get_bedrock_hardness_map" ), &T3DErosionSettings::getBedrockHardnessMap );
 	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "bedrock_hardness_map", PROPERTY_HINT_RESOURCE_TYPE, "Image" ),
 				 "set_bedrock_hardness_map", "get_bedrock_hardness_map" );
 	BIND_PROP( Variant::RECT2, bedrock_hardness_world_rect, setBedrockHardnessWorldRect, getBedrockHardnessWorldRect );
@@ -652,8 +652,8 @@ void Terrain3DErosionSettings::_bind_methods( void ) {
 
 	ADD_GROUP( "Time Curves", "" );
 #define BIND_CURVE( name, setter, getter )                                                          \
-	ClassDB::bind_method( D_METHOD( "set_" #name, "value" ), &Terrain3DErosionSettings::setter );     \
-	ClassDB::bind_method( D_METHOD( "get_" #name ), &Terrain3DErosionSettings::getter );              \
+	ClassDB::bind_method( D_METHOD( "set_" #name, "value" ), &T3DErosionSettings::setter );     \
+	ClassDB::bind_method( D_METHOD( "get_" #name ), &T3DErosionSettings::getter );              \
 	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, #name, PROPERTY_HINT_RESOURCE_TYPE, "Curve" ), "set_" #name, "get_" #name )
 	BIND_CURVE( master_intensity_curve, setMasterIntensityCurve, getMasterIntensityCurve );
 	BIND_CURVE( rainfall_curve, setRainfallCurve, getRainfallCurve );

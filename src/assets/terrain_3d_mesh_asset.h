@@ -30,17 +30,17 @@ using ShadowCasting = RenderingServer::ShadowCastingSetting;
  * The specific defaults of concern are height_offset, density, lod0_range.
  *
  * The current solution to make the distinction is,
- * Loaded Assets go through Terrain3DAssets::set_mesh_list(), _set_asset_list()
- * New Assets go through Terrain3DAssets::set_mesh_asset(), _set_asset()
+ * Loaded Assets go through T3DAssets::set_mesh_list(), _set_asset_list()
+ * New Assets go through T3DAssets::set_mesh_asset(), _set_asset()
  * Both call initialize() with a new/loaded flag.
  *
- * New assets might be loaded from the API, AssetDock, or Terrain3DAssets::update_mesh_list()
+ * New assets might be loaded from the API, AssetDock, or T3DAssets::update_mesh_list()
  * when the mesh list is empty.
  */
 
 
-class Terrain3DMeshAsset : public T3DAssetResource {
-	GDCLASS( Terrain3DMeshAsset, T3DAssetResource );
+class T3DMeshAsset : public T3DAssetResource {
+	GDCLASS( T3DMeshAsset, T3DAssetResource );
 	CLASS_NAME();
 
 public:
@@ -92,10 +92,10 @@ private:
 	TypedArray<Mesh> getMeshes( void ) const;
 
 public:
-	Terrain3DMeshAsset( void ) {
+	T3DMeshAsset( void ) {
 		clear();
 	}
-	~Terrain3DMeshAsset( void ) {}
+	~T3DMeshAsset( void ) {}
 	void initialize( void ) override;
 	void clear( void ) override;
 
@@ -282,10 +282,10 @@ protected:
 	static void _bind_methods( void );
 };
 
-VARIANT_ENUM_CAST( Terrain3DMeshAsset::t3dgenType_t );
-VARIANT_ENUM_CAST( Terrain3DMeshAsset::t3dhlodContribution_t );
+VARIANT_ENUM_CAST( T3DMeshAsset::t3dgenType_t );
+VARIANT_ENUM_CAST( T3DMeshAsset::t3dhlodContribution_t );
 
-inline TypedArray<Mesh> Terrain3DMeshAsset::getMeshes( void ) const {
+inline TypedArray<Mesh> T3DMeshAsset::getMeshes( void ) const {
 	if ( !m_pendingMeshes.is_empty() ) {
 		return m_pendingMeshes;
 	}

@@ -89,14 +89,14 @@ public:
 		void *pMetadata, size_t nMetadataBytes, void *pBacking, size_t nBackingBytes );
 	void clear( void );
 	void resetResidency( void );
-	T3DResidentMapLease acquire( const Vector2i &rLocation, const Terrain3DRegion *pRegion );
-	bool ensureResident( const Vector2i &rLocation, const Terrain3DRegion *pRegion );
+	T3DResidentMapLease acquire( const Vector2i &rLocation, const T3DRegion *pRegion );
+	bool ensureResident( const Vector2i &rLocation, const T3DRegion *pRegion );
 	void syncMap(
-		const Vector2i &rLocation, const Terrain3DRegion *pRegion, t3dmapType_t type,
+		const Vector2i &rLocation, const T3DRegion *pRegion, t3dmapType_t type,
 		const Rect2i &rDirtyRect = Rect2i()
 	);
 	void syncDerived(
-		const Vector2i &rLocation, const Terrain3DRegion *pRegion,
+		const Vector2i &rLocation, const T3DRegion *pRegion,
 		const Rect2i &rDirtyRect = Rect2i()
 	);
 	void invalidate( const Vector2i &rLocation );
@@ -186,10 +186,10 @@ typedef struct t3dalignedAllocation_s {
 	void publishSlot( int iSlot );
 	void retireSlotUnlocked( int iSlot );
 	void releaseLease( int iSlot, uint32_t nGeneration );
-	bool copyMap( int iSlot, const Terrain3DRegion *pRegion, t3dmapType_t type );
-	bool copyMapRect( int iSlot, const Terrain3DRegion *pRegion, t3dmapType_t type, const Rect2i &rDirtyRect );
-	bool copyDerived( int iSlot, const Terrain3DRegion *pRegion );
-	bool copyDerivedRect( int iSlot, const Terrain3DRegion *pRegion, const Rect2i &rDirtyRect );
+	bool copyMap( int iSlot, const T3DRegion *pRegion, t3dmapType_t type );
+	bool copyMapRect( int iSlot, const T3DRegion *pRegion, t3dmapType_t type, const Rect2i &rDirtyRect );
+	bool copyDerived( int iSlot, const T3DRegion *pRegion );
+	bool copyDerivedRect( int iSlot, const T3DRegion *pRegion, const Rect2i &rDirtyRect );
 	t3dresidentMapView_t getView( int iSlot ) const;
 };
 

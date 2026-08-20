@@ -11,8 +11,8 @@
 #include "Terrain3DConstants.h"
 
 
-class Terrain3DMemoryStats : public RefCounted {
-	GDCLASS( Terrain3DMemoryStats, RefCounted );
+class T3DMemoryStats : public RefCounted {
+	GDCLASS( T3DMemoryStats, RefCounted );
 	CLASS_NAME();
 
 	Dictionary m_values;
@@ -36,8 +36,8 @@ protected:
 	static void _bind_methods( void );
 };
 
-class Terrain3DShaderTierStats : public RefCounted {
-	GDCLASS( Terrain3DShaderTierStats, RefCounted );
+class T3DShaderTierStats : public RefCounted {
+	GDCLASS( T3DShaderTierStats, RefCounted );
 	CLASS_NAME();
 
 	Dictionary m_values;
@@ -62,8 +62,8 @@ protected:
 	static void _bind_methods( void );
 };
 
-class Terrain3DCacheStats : public RefCounted {
-	GDCLASS( Terrain3DCacheStats, RefCounted );
+class T3DCacheStats : public RefCounted {
+	GDCLASS( T3DCacheStats, RefCounted );
 	CLASS_NAME();
 
 	Dictionary m_values;
@@ -87,8 +87,8 @@ protected:
 	static void _bind_methods( void );
 };
 
-class Terrain3DFrameStats : public RefCounted {
-	GDCLASS( Terrain3DFrameStats, RefCounted );
+class T3DFrameStats : public RefCounted {
+	GDCLASS( T3DFrameStats, RefCounted );
 	CLASS_NAME();
 
 	Dictionary m_values;

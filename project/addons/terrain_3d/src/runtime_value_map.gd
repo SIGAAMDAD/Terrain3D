@@ -1,21 +1,21 @@
 # Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 # Typed access facade for heterogeneous native/JSON dictionaries.
 @tool
-class_name Terrain3DRuntimeValueMap
+class_name T3DRuntimeValueMap
 extends RefCounted
 
 var _values: Dictionary[String, Variant] = {}
 
 
-static func from_value(p_value: Variant) -> Terrain3DRuntimeValueMap:
-	var result: Terrain3DRuntimeValueMap = Terrain3DRuntimeValueMap.new()
+static func from_value(p_value: Variant) -> T3DRuntimeValueMap:
+	var result: T3DRuntimeValueMap = T3DRuntimeValueMap.new()
 	if p_value is Dictionary:
 		result._values.assign(p_value)
 	return result
 
 
-static func maps_from_value(p_value: Variant) -> Array[Terrain3DRuntimeValueMap]:
-	var result: Array[Terrain3DRuntimeValueMap] = []
+static func maps_from_value(p_value: Variant) -> Array[T3DRuntimeValueMap]:
+	var result: Array[T3DRuntimeValueMap] = []
 	if not p_value is Array:
 		return result
 	var source: Array[Variant] = []
@@ -26,9 +26,9 @@ static func maps_from_value(p_value: Variant) -> Array[Terrain3DRuntimeValueMap]
 	return result
 
 
-static func values_from_maps(p_maps: Array[Terrain3DRuntimeValueMap]) -> Array[Variant]:
+static func values_from_maps(p_maps: Array[T3DRuntimeValueMap]) -> Array[Variant]:
 	var result: Array[Variant] = []
-	for entry: Terrain3DRuntimeValueMap in p_maps:
+	for entry: T3DRuntimeValueMap in p_maps:
 		result.push_back(entry.duplicate_values())
 	return result
 
@@ -119,11 +119,11 @@ func aabb_value(p_key: String, p_default: AABB = AABB()) -> AABB:
 	return value if value is AABB else p_default
 
 
-func map_value(p_key: String) -> Terrain3DRuntimeValueMap:
+func map_value(p_key: String) -> T3DRuntimeValueMap:
 	return from_value(_values.get(p_key, {}))
 
 
-func map_array(p_key: String) -> Array[Terrain3DRuntimeValueMap]:
+func map_array(p_key: String) -> Array[T3DRuntimeValueMap]:
 	return maps_from_value(_values.get(p_key, []))
 
 

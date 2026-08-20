@@ -2,9 +2,9 @@
 @tool
 extends Control
 
-signal cell_selected(cell: Terrain3DRuntimeValueMap)
+signal cell_selected(cell: T3DRuntimeValueMap)
 
-var grid: Terrain3DRuntimeValueMap = Terrain3DRuntimeValueMap.new()
+var grid: T3DRuntimeValueMap = T3DRuntimeValueMap.new()
 var selected_location: Vector2i = Vector2i(2147483647, 2147483647)
 
 
@@ -13,7 +13,7 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
 
-func set_grid(p_grid: Terrain3DRuntimeValueMap) -> void:
+func set_grid(p_grid: T3DRuntimeValueMap) -> void:
 	grid = p_grid
 	queue_redraw()
 
@@ -24,7 +24,7 @@ func _gui_input(p_event: InputEvent) -> void:
 	var mouse_event: InputEventMouseButton = p_event
 	if mouse_event.button_index != MOUSE_BUTTON_LEFT or not mouse_event.pressed:
 		return
-	var cells: Array[Terrain3DRuntimeValueMap] = grid.map_array("cells")
+	var cells: Array[T3DRuntimeValueMap] = grid.map_array("cells")
 	var radius: int = grid.int_value("radius")
 	var diameter: int = radius * 2 + 1
 	if cells.is_empty() or diameter <= 0:
@@ -39,7 +39,7 @@ func _gui_input(p_event: InputEvent) -> void:
 	var index: int = y * diameter + x
 	if index < 0 or index >= cells.size():
 		return
-	var cell: Terrain3DRuntimeValueMap = cells[index]
+	var cell: T3DRuntimeValueMap = cells[index]
 	selected_location = cell.vector2i_value("location")
 	cell_selected.emit(cell)
 	queue_redraw()
@@ -48,7 +48,7 @@ func _gui_input(p_event: InputEvent) -> void:
 func _draw() -> void:
 	var background: Color = get_theme_color("dark_color_2", "Editor")
 	draw_rect(Rect2(Vector2.ZERO, size), background)
-	var cells: Array[Terrain3DRuntimeValueMap] = grid.map_array("cells")
+	var cells: Array[T3DRuntimeValueMap] = grid.map_array("cells")
 	var radius: int = grid.int_value("radius")
 	var diameter: int = radius * 2 + 1
 	if cells.is_empty() or diameter <= 0:
@@ -56,7 +56,7 @@ func _draw() -> void:
 	var cell_size: float = minf(size.x, size.y) / float(diameter)
 	var origin: Vector2 = (size - Vector2(cell_size * diameter, cell_size * diameter)) * 0.5
 	for index: int in range(cells.size()):
-		var cell: Terrain3DRuntimeValueMap = cells[index]
+		var cell: T3DRuntimeValueMap = cells[index]
 		var x: int = index % diameter
 		var y: int = index / diameter
 		var rect: Rect2 = Rect2(origin + Vector2(x, y) * cell_size, Vector2.ONE * cell_size)
@@ -71,7 +71,7 @@ func _draw() -> void:
 		draw_line(center, end, Color(1.0, 0.9, 0.2), 3.0)
 
 
-func _draw_cell(p_rect: Rect2, p_cell: Terrain3DRuntimeValueMap) -> void:
+func _draw_cell(p_rect: Rect2, p_cell: T3DRuntimeValueMap) -> void:
 	var authored: bool = p_cell.bool_value("active")
 	var streaming_state: int = p_cell.int_value("streaming_state")
 	var predicted: bool = p_cell.bool_value("predicted")

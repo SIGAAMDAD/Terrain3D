@@ -11,10 +11,10 @@
 #include "assets/terrain_3d_asset_resource.h"
 #include "assets/terrain_3d_packed_pbr_texture.h"
 
-class Terrain3DTextureAsset : public T3DAssetResource {
-	GDCLASS( Terrain3DTextureAsset, T3DAssetResource );
+class T3DTextureAsset : public T3DAssetResource {
+	GDCLASS( T3DTextureAsset, T3DAssetResource );
 	CLASS_NAME();
-	friend class Terrain3DAssets;
+	friend class T3DAssets;
 
 	// Saved Data
 	Color m_albedoColor = Color( 1.f, 1.f, 1.f, 1.f );
@@ -24,7 +24,7 @@ class Terrain3DTextureAsset : public T3DAssetResource {
 	// GIMP) and loaded directly; Terrain3D does not expose separate PBR channels.
 	Ref<Texture2D> m_pSurfaceTexture;
 	Ref<Texture2D> m_pDisplacementTexture;
-	Ref<Terrain3DPackedPBRTexture> m_pPackedPbrResource;
+	Ref<T3DPackedPBRTexture> m_pPackedPbrResource;
 	// Serialized compatibility input for the former RGBA16UI implementation.
 	Ref<Texture2D> m_pPbrTexture;
 	real_t m_fMetallic = 0.0f;
@@ -74,10 +74,10 @@ class Terrain3DTextureAsset : public T3DAssetResource {
 	void setPackedPbrMode( bool bEnabled );
 
 public:
-	Terrain3DTextureAsset( void ) {
+	T3DTextureAsset( void ) {
 		clear();
 	}
-	~Terrain3DTextureAsset( void ) {}
+	~T3DTextureAsset( void ) {}
 	void initialize( void ) override;
 	void clear( void ) override;
 
@@ -140,8 +140,8 @@ public:
 		return m_pPbrTexture;
 	}
 
-	void setPackedPbrResource( const Ref<Terrain3DPackedPBRTexture> &rResource );
-	Ref<Terrain3DPackedPBRTexture> getPackedPbrResource( void ) const {
+	void setPackedPbrResource( const Ref<T3DPackedPBRTexture> &rResource );
+	Ref<T3DPackedPBRTexture> getPackedPbrResource( void ) const {
 		return m_pPackedPbrResource;
 	}
 	Ref<Texture2D> getEffectiveSurfaceTexture( void );

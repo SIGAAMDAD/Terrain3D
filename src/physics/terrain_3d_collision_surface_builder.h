@@ -12,15 +12,15 @@
 #include <EASTL/vector.h>
 #include <godot_cpp/variant/packed_float32_array.hpp>
 
-class Terrain3DData;
-class Terrain3DMaterial;
+class T3DData;
+class T3DMaterial;
 
 // Canonical final collision-surface generator shared by live collision and
 // runtime-page cooking. Output is already rotated into HeightMapShape3D layout.
 class T3DCollisionSurfaceBuilder {
 public:
 	bool build(
-		const Terrain3DData *pData, const Ref<Terrain3DMaterial> &rMaterial,
+		const T3DData *pData, const Ref<T3DMaterial> &rMaterial,
 		const Vector2i &rPosition, int nSize,
 		PackedFloat32Array &rHeights, float &rMinHeight, float &rMaxHeight
 	);

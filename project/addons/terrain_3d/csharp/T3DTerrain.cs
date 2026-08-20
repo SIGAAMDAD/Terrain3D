@@ -9,34 +9,34 @@ using Godot.Collections;
 namespace TokisanGames;
 
 [Tool]
-public partial class Terrain3D : Node3D
+public partial class T3DTerrain : Node3D
 {
 
-	private new static readonly StringName NativeName = new StringName("Terrain3D");
+	private new static readonly StringName NativeName = new StringName("T3DTerrain");
 
-	[Obsolete("Wrapper types cannot be constructed with constructors (it only instantiate the underlying Terrain3D object), please use the Instantiate() method instead.")]
-	protected Terrain3D() { }
+	[Obsolete("Wrapper types cannot be constructed with constructors (it only instantiate the underlying T3DTerrain object), please use the Instantiate() method instead.")]
+	protected T3DTerrain() { }
 
 	private static CSharpScript _wrapperScriptAsset;
 
 	/// <summary>
-	/// Try to cast the script on the supplied <paramref name="godotObject"/> to the <see cref="Terrain3D"/> wrapper type,
-	/// if no script has attached to the type, or the script attached to the type does not inherit the <see cref="Terrain3D"/> wrapper type,
-	/// a new instance of the <see cref="Terrain3D"/> wrapper script will get attaches to the <paramref name="godotObject"/>.
+	/// Try to cast the script on the supplied <paramref name="godotObject"/> to the <see cref="T3DTerrain"/> wrapper type,
+	/// if no script has attached to the type, or the script attached to the type does not inherit the <see cref="T3DTerrain"/> wrapper type,
+	/// a new instance of the <see cref="T3DTerrain"/> wrapper script will get attaches to the <paramref name="godotObject"/>.
 	/// </summary>
 	/// <remarks>The developer should only supply the <paramref name="godotObject"/> that represents the correct underlying GDExtension type.</remarks>
 	/// <param name="godotObject">The <paramref name="godotObject"/> that represents the correct underlying GDExtension type.</param>
-	/// <returns>The existing or a new instance of the <see cref="Terrain3D"/> wrapper script attached to the supplied <paramref name="godotObject"/>.</returns>
-	public new static Terrain3D Bind(GodotObject godotObject)
+	/// <returns>The existing or a new instance of the <see cref="T3DTerrain"/> wrapper script attached to the supplied <paramref name="godotObject"/>.</returns>
+	public new static T3DTerrain Bind(GodotObject godotObject)
 	{
 		if (!IsInstanceValid(godotObject))
 			return null;
 
-		if (godotObject is Terrain3D wrapperScriptInstance)
+		if (godotObject is T3DTerrain wrapperScriptInstance)
 			return wrapperScriptInstance;
 
 #if DEBUG
-		var expectedType = typeof(Terrain3D);
+		var expectedType = typeof(T3DTerrain);
 		var currentObjectClassName = godotObject.GetClass();
 		if (!ClassDB.IsParentClass(expectedType.Name, currentObjectClassName))
 			throw new InvalidOperationException($"The supplied GodotObject ({currentObjectClassName}) is not the {expectedType.Name} type.");
@@ -44,21 +44,21 @@ public partial class Terrain3D : Node3D
 
 		if (_wrapperScriptAsset is null)
 		{
-			var scriptPathAttribute = typeof(Terrain3D).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
+			var scriptPathAttribute = typeof(T3DTerrain).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
 			if (scriptPathAttribute is null) throw new UnreachableException();
 			_wrapperScriptAsset = ResourceLoader.Load<CSharpScript>(scriptPathAttribute.Path);
 		}
 
 		var instanceId = godotObject.GetInstanceId();
 		godotObject.SetScript(_wrapperScriptAsset);
-		return (Terrain3D)InstanceFromId(instanceId);
+		return (T3DTerrain)InstanceFromId(instanceId);
 	}
 
 	/// <summary>
-	/// Creates an instance of the GDExtension <see cref="Terrain3D"/> type, and attaches a wrapper script instance to it.
+	/// Creates an instance of the GDExtension <see cref="T3DTerrain"/> type, and attaches a wrapper script instance to it.
 	/// </summary>
-	/// <returns>The wrapper instance linked to the underlying GDExtension "Terrain3D" type.</returns>
-	public new static Terrain3D Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
+	/// <returns>The wrapper instance linked to the underlying GDExtension "T3DTerrain" type.</returns>
+	public new static T3DTerrain Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
 
 	public enum DebugLevelEnum
 	{
@@ -115,7 +115,7 @@ public partial class Terrain3D : Node3D
 		{
 			if (_materialChangedSignal is null)
 			{
-				_materialChangedSignalCallable = Callable.From(() => 
+				_materialChangedSignalCallable = Callable.From(() =>
 					_materialChangedSignal?.Invoke());
 				Connect(GDExtensionSignalName.MaterialChanged, _materialChangedSignalCallable);
 			}
@@ -139,7 +139,7 @@ public partial class Terrain3D : Node3D
 		{
 			if (_assetsChangedSignal is null)
 			{
-				_assetsChangedSignalCallable = Callable.From(() => 
+				_assetsChangedSignalCallable = Callable.From(() =>
 					_assetsChangedSignal?.Invoke());
 				Connect(GDExtensionSignalName.AssetsChanged, _assetsChangedSignalCallable);
 			}
@@ -338,7 +338,7 @@ public partial class Terrain3D : Node3D
 		public new static readonly StringName SemanticShadowPolicyEnabled = "semantic_shadow_policy_enabled";
 		/// <summary>Cached name for semantic environment shadow quality.</summary>
 		public new static readonly StringName EnvironmentShadowQuality = "environment_shadow_quality";
-		/// <summary>Cached name for non-Terrain3D render layers retained in the directional shadow caster mask.</summary>
+		/// <summary>Cached name for non-T3DTerrain render layers retained in the directional shadow caster mask.</summary>
 		public new static readonly StringName EnvironmentShadowExternalMask = "environment_shadow_external_mask";
 		/// <summary>Cached name for explicit semantic sun/moon reception policy.</summary>
 		public new static readonly StringName SemanticDirectionalReceptionEnabled = "semantic_directional_reception_enabled";
@@ -639,9 +639,9 @@ public partial class Terrain3D : Node3D
 		get => Get(GDExtensionPropertyName.Version).As<string>();
 	}
 
-	public new Terrain3D.DebugLevelEnum DebugLevel
+	public new T3DTerrain.DebugLevelEnum DebugLevel
 	{
-		get => Get(GDExtensionPropertyName.DebugLevel).As<Terrain3D.DebugLevelEnum>();
+		get => Get(GDExtensionPropertyName.DebugLevel).As<T3DTerrain.DebugLevelEnum>();
 		set => Set(GDExtensionPropertyName.DebugLevel, Variant.From(value));
 	}
 
@@ -658,21 +658,21 @@ public partial class Terrain3D : Node3D
 		set => Set(GDExtensionPropertyName.RuntimeProfilingEnabled, value);
 	}
 
-	/// <summary>Allows Terrain3D to adjust bounded work while preserving configured values as hard ceilings.</summary>
+	/// <summary>Allows T3DTerrain to adjust bounded work while preserving configured values as hard ceilings.</summary>
 	public new bool RuntimeAdaptiveWorkBudgetsEnabled
 	{
 		get => Get(GDExtensionPropertyName.RuntimeAdaptiveWorkBudgetsEnabled).As<bool>();
 		set => Set(GDExtensionPropertyName.RuntimeAdaptiveWorkBudgetsEnabled, value);
 	}
 
-	/// <summary>Target Terrain3D CPU time used by the adaptive controller.</summary>
+	/// <summary>Target T3DTerrain CPU time used by the adaptive controller.</summary>
 	public new double RuntimeAdaptiveTargetMs
 	{
 		get => Get(GDExtensionPropertyName.RuntimeAdaptiveTargetMs).As<double>();
 		set => Set(GDExtensionPropertyName.RuntimeAdaptiveTargetMs, value);
 	}
 
-	/// <summary>Hard Terrain3D CPU-time limit used to reduce adaptive work.</summary>
+	/// <summary>Hard T3DTerrain CPU-time limit used to reduce adaptive work.</summary>
 	public new double RuntimeAdaptiveHardMaxMs
 	{
 		get => Get(GDExtensionPropertyName.RuntimeAdaptiveHardMaxMs).As<double>();
@@ -1182,7 +1182,7 @@ public partial class Terrain3D : Node3D
 		set => Set(GDExtensionPropertyName.SemanticDirectionalReceptionEnabled, value);
 	}
 
-	/// <summary>Non-Terrain3D render layers that remain in the managed DirectionalLight3D cull mask while semantic directional reception is enabled.</summary>
+	/// <summary>Non-T3DTerrain render layers that remain in the managed DirectionalLight3D cull mask while semantic directional reception is enabled.</summary>
 	public new long EnvironmentDirectionalExternalMask
 	{
 		get => Get(GDExtensionPropertyName.EnvironmentDirectionalExternalMask).As<long>();
@@ -1231,31 +1231,31 @@ public partial class Terrain3D : Node3D
 		set => Set(GDExtensionPropertyName.InstancerUpdateCellBudget, value);
 	}
 
-	public new Terrain3DMaterial Material
+	public new T3DMaterial Material
 	{
-		get => Terrain3DMaterial.Bind(Get(GDExtensionPropertyName.Material).As<Resource>());
+		get => T3DMaterial.Bind(Get(GDExtensionPropertyName.Material).As<Resource>());
 		set => Set(GDExtensionPropertyName.Material, value);
 	}
 
-	public new Terrain3DAssets Assets
+	public new T3DAssets Assets
 	{
-		get => Terrain3DAssets.Bind(Get(GDExtensionPropertyName.Assets).As<Resource>());
+		get => T3DAssets.Bind(Get(GDExtensionPropertyName.Assets).As<Resource>());
 		set => Set(GDExtensionPropertyName.Assets, value);
 	}
 
-	public new Terrain3DData Data
+	public new T3DData Data
 	{
-		get => Terrain3DData.Bind(Get(GDExtensionPropertyName.Data).As<GodotObject>());
+		get => T3DData.Bind(Get(GDExtensionPropertyName.Data).As<GodotObject>());
 	}
 
-	public new Terrain3DCollision Collision
+	public new T3DCollision Collision
 	{
-		get => Terrain3DCollision.Bind(Get(GDExtensionPropertyName.Collision).As<GodotObject>());
+		get => T3DCollision.Bind(Get(GDExtensionPropertyName.Collision).As<GodotObject>());
 	}
 
-	public new Terrain3DInstancer Instancer
+	public new T3DInstancer Instancer
 	{
-		get => Terrain3DInstancer.Bind(Get(GDExtensionPropertyName.Instancer).As<GodotObject>());
+		get => T3DInstancer.Bind(Get(GDExtensionPropertyName.Instancer).As<GodotObject>());
 	}
 
 	public new Node3D LightTarget
@@ -1264,9 +1264,9 @@ public partial class Terrain3D : Node3D
 		set => Set(GDExtensionPropertyName.LightTarget, value);
 	}
 
-	public new Terrain3D.RegionSizeEnum RegionSize
+	public new T3DTerrain.RegionSizeEnum RegionSize
 	{
-		get => Get(GDExtensionPropertyName.RegionSize).As<Terrain3D.RegionSizeEnum>();
+		get => Get(GDExtensionPropertyName.RegionSize).As<T3DTerrain.RegionSizeEnum>();
 		set => Set(GDExtensionPropertyName.RegionSize, Variant.From(value));
 	}
 
@@ -1294,9 +1294,9 @@ public partial class Terrain3D : Node3D
 		set => Set(GDExtensionPropertyName.ShowGrid, value);
 	}
 
-	public new Terrain3DCollision.CollisionMode CollisionMode
+	public new T3DCollision.CollisionMode CollisionMode
 	{
-		get => Get(GDExtensionPropertyName.CollisionMode).As<Terrain3DCollision.CollisionMode>();
+		get => Get(GDExtensionPropertyName.CollisionMode).As<T3DCollision.CollisionMode>();
 		set => Set(GDExtensionPropertyName.CollisionMode, Variant.From(value));
 	}
 
@@ -1540,9 +1540,9 @@ public partial class Terrain3D : Node3D
 		set => Set(GDExtensionPropertyName.FreeEditorTextures, value);
 	}
 
-	public new Terrain3DInstancer.InstancerMode InstancerMode
+	public new T3DInstancer.InstancerMode InstancerMode
 	{
-		get => Get(GDExtensionPropertyName.InstancerMode).As<Terrain3DInstancer.InstancerMode>();
+		get => Get(GDExtensionPropertyName.InstancerMode).As<T3DInstancer.InstancerMode>();
 		set => Set(GDExtensionPropertyName.InstancerMode, Variant.From(value));
 	}
 
@@ -1694,7 +1694,7 @@ public partial class Terrain3D : Node3D
 		public new static readonly StringName GetRuntimeDiagnostics = "get_runtime_diagnostics";
 		/// <summary>Cached name for retrieving the shipping/runtime-profile parity state.</summary>
 		public new static readonly StringName GetRuntimeParitySnapshot = "get_runtime_parity_snapshot";
-		/// <summary>Cached name for retrieving the current Terrain3D-owned memory estimate.</summary>
+		/// <summary>Cached name for retrieving the current T3DTerrain-owned memory estimate.</summary>
 		public new static readonly StringName GetMemoryEstimate = "get_memory_estimate";
 		/// <summary>Cached name for toggling editor HLOD preview.</summary>
 		public new static readonly StringName SetEditorHlodPreview = "set_editor_hlod_preview";
@@ -1705,7 +1705,7 @@ public partial class Terrain3D : Node3D
 		public new static readonly StringName GetHlodDebugEntries = "get_hlod_debug_entries";
 		/// <summary>Cached name for regional baked-lighting residency diagnostics.</summary>
 		public new static readonly StringName GetLightmapStreamingStats = "get_lightmap_streaming_stats";
-		/// <summary>Cached name for generating temporary regional Terrain3D bake geometry with UV2.</summary>
+		/// <summary>Cached name for generating temporary regional T3DTerrain bake geometry with UV2.</summary>
 		public new static readonly StringName BakeRegionLightmapMesh = "bake_region_lightmap_mesh";
 		/// <summary>Cached name for retrieving adaptive work-budget state.</summary>
 		public new static readonly StringName GetRuntimeAdaptiveBudgetStats = "get_runtime_adaptive_budget_stats";
@@ -1867,82 +1867,82 @@ public partial class Terrain3D : Node3D
 	public new bool IsDynamicNodeStreamingEffective() =>
 		Call(GDExtensionMethodName.IsDynamicNodeStreamingEffective, []).As<bool>();
 
-	public new void SetEditor(Terrain3DEditor editor) => 
+	public new void SetEditor(T3DEditor editor) =>
 		Call(GDExtensionMethodName.SetEditor, [editor]);
 
-	public new Terrain3DEditor GetEditor() => 
-		Terrain3DEditor.Bind(Call(GDExtensionMethodName.GetEditor, []).As<GodotObject>());
+	public new T3DEditor GetEditor() =>
+		T3DEditor.Bind(Call(GDExtensionMethodName.GetEditor, []).As<GodotObject>());
 
-	public new void SetPlugin(GodotObject plugin) => 
+	public new void SetPlugin(GodotObject plugin) =>
 		Call(GDExtensionMethodName.SetPlugin, [plugin]);
 
-	public new GodotObject GetPlugin() => 
+	public new GodotObject GetPlugin() =>
 		Call(GDExtensionMethodName.GetPlugin, []).As<GodotObject>();
 
-	public new void SetCamera(Camera3D camera) => 
+	public new void SetCamera(Camera3D camera) =>
 		Call(GDExtensionMethodName.SetCamera, [camera]);
 
-	public new Camera3D GetCamera() => 
+	public new Camera3D GetCamera() =>
 		Call(GDExtensionMethodName.GetCamera, []).As<Camera3D>();
 
-	public new Vector3 GetClipmapTargetPosition() => 
+	public new Vector3 GetClipmapTargetPosition() =>
 		Call(GDExtensionMethodName.GetClipmapTargetPosition, []).As<Vector3>();
 
-	public new Vector3 GetCollisionTargetPosition() => 
+	public new Vector3 GetCollisionTargetPosition() =>
 		Call(GDExtensionMethodName.GetCollisionTargetPosition, []).As<Vector3>();
 
-	public new void Snap() => 
+	public new void Snap() =>
 		Call(GDExtensionMethodName.Snap, []);
 
-	public new Vector3 GetIntersection(Vector3 srcPos, Vector3 direction, bool gpuMode = false) => 
+	public new Vector3 GetIntersection(Vector3 srcPos, Vector3 direction, bool gpuMode = false) =>
 		Call(GDExtensionMethodName.GetIntersection, [srcPos, direction, gpuMode]).As<Vector3>();
 
-	public new Godot.Collections.Dictionary GetRaycastResult(Vector3 srcPos, Vector3 direction, long collisionMask = 4294967295, bool excludeTerrain = false) => 
+	public new Godot.Collections.Dictionary GetRaycastResult(Vector3 srcPos, Vector3 direction, long collisionMask = 4294967295, bool excludeTerrain = false) =>
 		Call(GDExtensionMethodName.GetRaycastResult, [srcPos, direction, collisionMask, excludeTerrain]).As<Godot.Collections.Dictionary>();
 
-	public new Mesh BakeMesh(long lod, Terrain3DData.HeightFilter filter = Terrain3DData.HeightFilter.Nearest) => 
+	public new Mesh BakeMesh(long lod, T3DData.HeightFilter filter = T3DData.HeightFilter.Nearest) =>
 		Call(GDExtensionMethodName.BakeMesh, [lod, Variant.From(filter)]).As<Mesh>();
 
 	public new ArrayOccluder3D BakeOccluder(long lod) =>
 		Call(GDExtensionMethodName.BakeOccluder, [lod]).As<ArrayOccluder3D>();
 
-	public new Vector3[] GenerateNavMeshSourceGeometry(Aabb globalAabb, bool requireNav = true) => 
+	public new Vector3[] GenerateNavMeshSourceGeometry(Aabb globalAabb, bool requireNav = true) =>
 		Call(GDExtensionMethodName.GenerateNavMeshSourceGeometry, [globalAabb, requireNav]).As<Vector3[]>();
 
 }
 
 file static class DebugLevelEnumExtensions
 {
-public static int SafeAsInt32(this Terrain3D.DebugLevelEnum enumValue) =>
+public static int SafeAsInt32(this T3DTerrain.DebugLevelEnum enumValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this Terrain3D.DebugLevelEnum enumValue, int defaultValue) =>
+public static int SafeAsInt32(this T3DTerrain.DebugLevelEnum enumValue, int defaultValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this Terrain3D.DebugLevelEnum? enumValue, int defaultValue = 0) =>
+public static int SafeAsInt32(this T3DTerrain.DebugLevelEnum? enumValue, int defaultValue = 0) =>
 enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
 }
 
 file static class RegionSizeEnumExtensions
 {
-public static int SafeAsInt32(this Terrain3D.RegionSizeEnum enumValue) =>
+public static int SafeAsInt32(this T3DTerrain.RegionSizeEnum enumValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this Terrain3D.RegionSizeEnum enumValue, int defaultValue) =>
+public static int SafeAsInt32(this T3DTerrain.RegionSizeEnum enumValue, int defaultValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this Terrain3D.RegionSizeEnum? enumValue, int defaultValue = 0) =>
+public static int SafeAsInt32(this T3DTerrain.RegionSizeEnum? enumValue, int defaultValue = 0) =>
 enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
 }
 
 file static class EditorExecutionModeEnumExtensions
 {
-public static int SafeAsInt32(this Terrain3D.EditorExecutionModeEnum enumValue) =>
+public static int SafeAsInt32(this T3DTerrain.EditorExecutionModeEnum enumValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this Terrain3D.EditorExecutionModeEnum enumValue, int defaultValue) =>
+public static int SafeAsInt32(this T3DTerrain.EditorExecutionModeEnum enumValue, int defaultValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this Terrain3D.EditorExecutionModeEnum? enumValue, int defaultValue = 0) =>
+public static int SafeAsInt32(this T3DTerrain.EditorExecutionModeEnum? enumValue, int defaultValue = 0) =>
 enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
 }

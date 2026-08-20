@@ -5,7 +5,7 @@ extends Node
 const DIRECTORY_SETUP: String = "res://addons/terrain_3d/menu/directory_setup.tscn"
 const EditorUI = preload("res://addons/terrain_3d/src/editor_ui_util.gd")
 
-var plugin: Terrain3DEditorPluginBase
+var plugin: T3DEditorPluginBase
 var dialog: ConfirmationDialog
 var select_dir_btn: Button
 var selected_dir_le: LineEdit

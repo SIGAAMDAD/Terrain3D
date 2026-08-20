@@ -16,10 +16,10 @@
 using namespace godot;
 #endif
 
-class Terrain3D;
+class T3DTerrain;
 
-class Terrain3DAutoShaderBaker : public RefCounted {
-	GDCLASS( Terrain3DAutoShaderBaker, RefCounted );
+class T3DAutoShaderBaker : public RefCounted {
+	GDCLASS( T3DAutoShaderBaker, RefCounted );
 	CLASS_NAME();
 
 protected:
@@ -27,15 +27,15 @@ protected:
 
 public:
 	Dictionary bakeRegions(
-		Terrain3D *pTerrain, const Dictionary &rProfile,
+		T3DTerrain *pTerrain, const Dictionary &rProfile,
 		const TypedArray<Vector2i> &rRegionLocations
 	);
 	Dictionary computeRegionSignatures(
-		Terrain3D *pTerrain, const Dictionary &rProfile,
+		T3DTerrain *pTerrain, const Dictionary &rProfile,
 		const TypedArray<Vector2i> &rRegionLocations
 	);
 	Dictionary clearBakedRegions(
-		Terrain3D *pTerrain, const TypedArray<Vector2i> &rRegionLocations,
+		T3DTerrain *pTerrain, const TypedArray<Vector2i> &rRegionLocations,
 		bool bPreserveAutoMask = true
 	);
 };

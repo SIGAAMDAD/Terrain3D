@@ -15,8 +15,8 @@
 using namespace godot;
 #endif
 
-class Terrain3DHLODManifest : public Resource {
-	GDCLASS( Terrain3DHLODManifest, Resource );
+class T3DHLODManifest : public Resource {
+	GDCLASS( T3DHLODManifest, Resource );
 	CLASS_NAME();
 
 	int m_nFormat = 1;

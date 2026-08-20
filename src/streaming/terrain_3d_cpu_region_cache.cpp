@@ -181,17 +181,17 @@ void T3DCpuRegionCache::invalidate( const Vector2i &vLocation ) {
 	m_bSelectionDirty = true;
 }
 
-bool T3DCpuRegionCache::loadSource( const Vector2i &vLocation, Ref<Terrain3DRegion> &rSource ) const {
+bool T3DCpuRegionCache::loadSource( const Vector2i &vLocation, Ref<T3DRegion> &rSource ) const {
 	rSource.unref();
 	if ( !m_pRepository || !m_pPersistence ) {
 		return false;
 	}
-	Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( vLocation );
+	T3DRegion *const pRegion = m_pRepository->getRegionPtr( vLocation );
 	if ( !pRegion || pRegion->isDeleted() ) {
 		return false;
 	}
 	if ( pRegion->hasRuntimeMapPayloadInternal() ) {
-		rSource = Ref<Terrain3DRegion>( pRegion );
+		rSource = Ref<T3DRegion>( pRegion );
 		return true;
 	}
 	return m_pPersistence->loadRuntimeRegionSource(
@@ -202,7 +202,7 @@ bool T3DCpuRegionCache::requestSourceAsync( const Vector2i &vLocation ) {
 	if ( !m_pRepository ) {
 		return false;
 	}
-	Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( vLocation );
+	T3DRegion *const pRegion = m_pRepository->getRegionPtr( vLocation );
 	const int mapIndex = T3DRegionRepository::getRegionMapIndex( vLocation );
 	if ( mapIndex < 0 || !pRegion || pRegion->isDeleted() || pRegion->hasRuntimeMapPayloadInternal() ||
 		m_szAsyncState[mapIndex] != 0u ) {
@@ -225,7 +225,7 @@ bool T3DCpuRegionCache::requestSourceAsync( const Vector2i &vLocation ) {
 		return false;
 	}
 	const Error error = pLoader->load_threaded_request(
-		path, "Terrain3DRegion", true, ResourceLoader::CACHE_MODE_IGNORE );
+		path, "T3DRegion", true, ResourceLoader::CACHE_MODE_IGNORE );
 	if ( error != OK && error != ERR_BUSY ) {
 		m_szAsyncState[mapIndex] = 2u;
 		return false;
@@ -236,18 +236,18 @@ bool T3DCpuRegionCache::requestSourceAsync( const Vector2i &vLocation ) {
 	return true;
 }
 
-bool T3DCpuRegionCache::takeSourceAsync( const Vector2i &vLocation, Ref<Terrain3DRegion> &rSource ) {
+bool T3DCpuRegionCache::takeSourceAsync( const Vector2i &vLocation, Ref<T3DRegion> &rSource ) {
 	rSource.unref();
 	if ( !m_pRepository || !m_pPersistence ) {
 		return false;
 	}
-	Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( vLocation );
+	T3DRegion *const pRegion = m_pRepository->getRegionPtr( vLocation );
 	const int mapIndex = T3DRegionRepository::getRegionMapIndex( vLocation );
 	if ( mapIndex < 0 || !pRegion || pRegion->isDeleted() ) {
 		return false;
 	}
 	if ( pRegion->hasRuntimeMapPayloadInternal() ) {
-		rSource = Ref<Terrain3DRegion>( pRegion );
+		rSource = Ref<T3DRegion>( pRegion );
 		return true;
 	}
 	if ( m_szAsyncState[mapIndex] != 1u ) {
@@ -270,7 +270,7 @@ bool T3DCpuRegionCache::takeSourceAsync( const Vector2i &vLocation, Ref<Terrain3
 		return false;
 	}
 	const Ref<Resource> pResource = pLoader->load_threaded_get( path );
-	const Ref<Terrain3DRegion> pLoaded = pResource;
+	const Ref<T3DRegion> pLoaded = pResource;
 	m_szAsyncState[mapIndex] = 0u;
 	m_nAsyncOutstanding = MAX( 0, m_nAsyncOutstanding - 1 );
 	if ( !m_pPersistence->prepareRuntimeRegionSource(
@@ -294,7 +294,7 @@ void T3DCpuRegionCache::prewarmSources( const T3DResidencyFrameState &rFrame ) {
 				findSlot( location ) >= 0 ) {
 				continue;
 			}
-			Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
+			T3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
 			if ( pRegion && !pRegion->isDeleted() && !pRegion->hasRuntimeMapPayloadInternal() ) {
 				requestSourceAsync( location );
 			}
@@ -341,7 +341,7 @@ void T3DCpuRegionCache::reapSourceAsync( const T3DResidencyFrameState &rFrame ) 
 		if ( activeNow || predictedActive ) {
 			continue;
 		}
-		Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
+		T3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() || pRegion->get_path().is_empty() ) {
 			m_szAsyncState[mapIndex] = 0u;
 			m_nAsyncOutstanding = MAX( 0, m_nAsyncOutstanding - 1 );
@@ -362,12 +362,12 @@ void T3DCpuRegionCache::reapSourceAsync( const T3DResidencyFrameState &rFrame ) 
 }
 
 bool T3DCpuRegionCache::publishSlot(
-	const int iSlot, const Vector2i &vLocation, const Ref<Terrain3DRegion> &rSource
+	const int iSlot, const Vector2i &vLocation, const Ref<T3DRegion> &rSource
 ) {
 	if ( iSlot < 0 || iSlot >= m_nCapacity || rSource.is_null() || !m_pRepository ) {
 		return false;
 	}
-	Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( vLocation );
+	T3DRegion *const pRegion = m_pRepository->getRegionPtr( vLocation );
 	if ( !pRegion || pRegion->isDeleted() ) {
 		return false;
 	}
@@ -395,7 +395,7 @@ bool T3DCpuRegionCache::publishCookedSlot(
 	if ( iSlot < 0 || iSlot >= m_nCapacity || !m_pRepository || rHeight.is_null() || rDerived.is_null() ) {
 		return false;
 	}
-	Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( vLocation );
+	T3DRegion *const pRegion = m_pRepository->getRegionPtr( vLocation );
 	if ( !pRegion || pRegion->isDeleted() ) return false;
 	pRegion->adoptCookedRuntimeMapsInternal( rHeight, rControl, rColor, rDerived );
 	if ( !pRegion->hasRuntimeMapPayloadInternal() ) return false;
@@ -418,7 +418,7 @@ bool T3DCpuRegionCache::evictSlot( const int iSlot ) {
 	if ( location == V2I_MAX ) {
 		return true;
 	}
-	Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
+	T3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
 	if ( pRegion && pRegion->hasRuntimeMapPayloadInternal() && !pRegion->runtimeMapsEvictableInternal() ) {
 		return false;
 	}
@@ -450,12 +450,12 @@ bool T3DCpuRegionCache::ensureResident( const Vector2i &vLocation, const bool bD
 	if ( findSlot( vLocation ) >= 0 ) {
 		return true;
 	}
-	Terrain3DRegion *const pExistingRegion = m_pRepository->getRegionPtr( vLocation );
+	T3DRegion *const pExistingRegion = m_pRepository->getRegionPtr( vLocation );
 	if ( pExistingRegion && pExistingRegion->hasRuntimeMapPayloadInternal() &&
 		!pExistingRegion->runtimeMapsEvictableInternal() ) {
 		return true;
 	}
-	Ref<Terrain3DRegion> pSource;
+	Ref<T3DRegion> pSource;
 	Ref<Image> pHeight, pControl, pColor, pDerived;
 	const bool bCooked = cookedRuntimeEnabled();
 	if ( bCooked ) {
@@ -476,7 +476,7 @@ bool T3DCpuRegionCache::ensureResident( const Vector2i &vLocation, const bool bD
 		const t3dcpuCacheCoord_t center = {evictionCenter.x, evictionCenter.y};
 		for ( int slot = 0; slot < m_nCapacity; ++slot ) {
 			const Vector2i oldLocation = m_szLocations[slot];
-			Terrain3DRegion *const pOldRegion = m_pRepository->getRegionPtr( oldLocation );
+			T3DRegion *const pOldRegion = m_pRepository->getRegionPtr( oldLocation );
 			if ( !pOldRegion || !pOldRegion->runtimeMapsEvictableInternal() ) {
 				continue;
 			}
@@ -516,7 +516,7 @@ void T3DCpuRegionCache::releaseUntrackedMaps( void ) {
 		if ( location == V2I_MAX || findSlot( location ) >= 0 ) {
 			continue;
 		}
-		Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
+		T3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
 		if ( !pRegion || !pRegion->hasRuntimeMapPayloadInternal() || !pRegion->runtimeMapsEvictableInternal() ) {
 			continue;
 		}
@@ -537,7 +537,7 @@ bool T3DCpuRegionCache::restoreAllMaps( void ) {
 	bool bSuccess = true;
 	for ( int slot = 0; slot < m_pRepository->getSlotCount(); ++slot ) {
 		const Vector2i location = m_pRepository->getSlotsData()[slot];
-		Terrain3DRegion *const pRegion = location == V2I_MAX ? nullptr : m_pRepository->getRegionPtr( location );
+		T3DRegion *const pRegion = location == V2I_MAX ? nullptr : m_pRepository->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() || pRegion->hasRuntimeMapPayloadInternal() ) {
 			continue;
 		}
@@ -549,7 +549,7 @@ bool T3DCpuRegionCache::restoreAllMaps( void ) {
 			}
 			pRegion->adoptCookedRuntimeMapsInternal( pHeight, pControl, pColor, pDerived );
 		} else {
-			Ref<Terrain3DRegion> pSource;
+			Ref<T3DRegion> pSource;
 			if ( !loadSource( location, pSource ) ) {
 				bSuccess = false;
 				continue;
@@ -690,7 +690,7 @@ void T3DCpuRegionCache::update(
 		if ( findSlot( location ) >= 0 ) {
 			continue;
 		}
-		Terrain3DRegion *const pAvailableRegion = m_pRepository->getRegionPtr( location );
+		T3DRegion *const pAvailableRegion = m_pRepository->getRegionPtr( location );
 		if ( pAvailableRegion && pAvailableRegion->hasRuntimeMapPayloadInternal() &&
 			!pAvailableRegion->runtimeMapsEvictableInternal() ) {
 			continue;
@@ -704,7 +704,7 @@ void T3DCpuRegionCache::update(
 			m_nStallFlagsLastTick |= TERRAIN3D_PROFILE_STALL_CPU_LOAD_BYTE_BUDGET;
 			break;
 		}
-		Ref<Terrain3DRegion> pSource;
+		Ref<T3DRegion> pSource;
 		Ref<Image> pHeight, pControl, pColor, pDerived;
 		const bool bCooked = cookedRuntimeEnabled();
 		bool bSourceReady = false;
@@ -744,7 +744,7 @@ void T3DCpuRegionCache::update(
 				if ( oldMapIndex >= 0 && desiredMap[oldMapIndex] != 0u ) {
 					continue;
 				}
-				Terrain3DRegion *const pOldRegion = m_pRepository->getRegionPtr( oldLocation );
+				T3DRegion *const pOldRegion = m_pRepository->getRegionPtr( oldLocation );
 				if ( !pOldRegion || !pOldRegion->runtimeMapsEvictableInternal() ) {
 					++m_nPinnedLastTick;
 					continue;
@@ -778,7 +778,7 @@ void T3DCpuRegionCache::update(
 		bAllDesiredResident = true;
 		for ( int index = 0; index < desiredCount; ++index ) {
 			const Vector2i location = desired[index];
-			Terrain3DRegion *const pAvailableRegion = m_pRepository->getRegionPtr( location );
+			T3DRegion *const pAvailableRegion = m_pRepository->getRegionPtr( location );
 			const bool bPinnedAvailable = pAvailableRegion && pAvailableRegion->hasRuntimeMapPayloadInternal() &&
 				!pAvailableRegion->runtimeMapsEvictableInternal();
 			if ( findSlot( location ) < 0 && !bPinnedAvailable ) {
@@ -854,7 +854,7 @@ Dictionary T3DCpuRegionCache::getStatsDictionary( const bool bDetailed, const in
 	int totalPayloadCount = 0;
 	for ( int slot = 0; slot < m_pRepository->getSlotCount(); ++slot ) {
 		const Vector2i location = m_pRepository->getSlotsData()[slot];
-		const Terrain3DRegion *const pRegion = location == V2I_MAX ? nullptr : m_pRepository->getRegionPtr( location );
+		const T3DRegion *const pRegion = location == V2I_MAX ? nullptr : m_pRepository->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() || !pRegion->hasRuntimeMapPayloadInternal() ) {
 			continue;
 		}

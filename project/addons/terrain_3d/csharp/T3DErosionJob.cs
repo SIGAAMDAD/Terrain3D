@@ -9,38 +9,38 @@ using Godot.Collections;
 namespace TokisanGames;
 
 [Tool]
-public partial class Terrain3DErosionJob : RefCounted
+public partial class T3DErosionJob : RefCounted
 {
-    private new static readonly StringName NativeName = new StringName("Terrain3DErosionJob");
+    private new static readonly StringName NativeName = new StringName("T3DErosionJob");
 
     [Obsolete("Wrapper types cannot be constructed with constructors; use Instantiate() instead.")]
-    protected Terrain3DErosionJob() { }
+    protected T3DErosionJob() { }
 
     private static CSharpScript _wrapperScriptAsset;
 
-    public new static Terrain3DErosionJob Bind(GodotObject godotObject)
+    public new static T3DErosionJob Bind(GodotObject godotObject)
     {
         if (!IsInstanceValid(godotObject))
             return null;
-        if (godotObject is Terrain3DErosionJob wrapperScriptInstance)
+        if (godotObject is T3DErosionJob wrapperScriptInstance)
             return wrapperScriptInstance;
 #if DEBUG
         var currentObjectClassName = godotObject.GetClass();
-        if (!ClassDB.IsParentClass(nameof(Terrain3DErosionJob), currentObjectClassName))
-            throw new InvalidOperationException($"The supplied GodotObject ({currentObjectClassName}) is not Terrain3DErosionJob.");
+        if (!ClassDB.IsParentClass(nameof(T3DErosionJob), currentObjectClassName))
+            throw new InvalidOperationException($"The supplied GodotObject ({currentObjectClassName}) is not T3DErosionJob.");
 #endif
         if (_wrapperScriptAsset is null)
         {
-            var scriptPathAttribute = typeof(Terrain3DErosionJob).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
+            var scriptPathAttribute = typeof(T3DErosionJob).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
             if (scriptPathAttribute is null) throw new UnreachableException();
             _wrapperScriptAsset = ResourceLoader.Load<CSharpScript>(scriptPathAttribute.Path);
         }
         var instanceId = godotObject.GetInstanceId();
         godotObject.SetScript(_wrapperScriptAsset);
-        return (Terrain3DErosionJob)InstanceFromId(instanceId);
+        return (T3DErosionJob)InstanceFromId(instanceId);
     }
 
-    public new static Terrain3DErosionJob Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
+    public new static T3DErosionJob Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
 
     public enum JobState
     {
@@ -102,13 +102,13 @@ public partial class Terrain3DErosionJob : RefCounted
 
     public new void Run() => Call(GDExtensionMethodName.Run, []);
     public new void Cancel() => Call(GDExtensionMethodName.Cancel, []);
-    public new Error Apply(Terrain3DData data, bool force = false) => Call(GDExtensionMethodName.Apply, [data, force]).As<Error>();
+    public new Error Apply(T3DData data, bool force = false) => Call(GDExtensionMethodName.Apply, [data, force]).As<Error>();
     public new JobState GetState() => (JobState)Call(GDExtensionMethodName.GetState, []).As<long>();
     public new double GetProgress() => Call(GDExtensionMethodName.GetProgress, []).As<double>();
     public new string GetStageName() => Call(GDExtensionMethodName.GetStageName, []).As<string>();
     public new string GetErrorMessage() => Call(GDExtensionMethodName.GetErrorMessage, []).As<string>();
     public new bool IsComplete() => Call(GDExtensionMethodName.IsComplete, []).As<bool>();
-    public new bool IsSourceUnchanged(Terrain3DData data) => Call(GDExtensionMethodName.IsSourceUnchanged, [data]).As<bool>();
+    public new bool IsSourceUnchanged(T3DData data) => Call(GDExtensionMethodName.IsSourceUnchanged, [data]).As<bool>();
     public new bool WasCancelled() => Call(GDExtensionMethodName.WasCancelled, []).As<bool>();
     public new long GetEffectiveResolutionScale() => Call(GDExtensionMethodName.GetEffectiveResolutionScale, []).As<long>();
     public new long GetCompletedSteps() => Call(GDExtensionMethodName.GetCompletedSteps, []).As<long>();

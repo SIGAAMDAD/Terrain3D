@@ -9,34 +9,34 @@ using Godot.Collections;
 namespace TokisanGames;
 
 [Tool]
-public partial class Terrain3DInstancer : GodotObject
+public partial class T3DInstancer : GodotObject
 {
 
-	private new static readonly StringName NativeName = new StringName("Terrain3DInstancer");
+	private new static readonly StringName NativeName = new StringName("T3DInstancer");
 
-	[Obsolete("Wrapper types cannot be constructed with constructors (it only instantiate the underlying Terrain3DInstancer object), please use the Instantiate() method instead.")]
-	protected Terrain3DInstancer() { }
+	[Obsolete("Wrapper types cannot be constructed with constructors (it only instantiate the underlying T3DInstancer object), please use the Instantiate() method instead.")]
+	protected T3DInstancer() { }
 
 	private static CSharpScript _wrapperScriptAsset;
 
 	/// <summary>
-	/// Try to cast the script on the supplied <paramref name="godotObject"/> to the <see cref="Terrain3DInstancer"/> wrapper type,
-	/// if no script has attached to the type, or the script attached to the type does not inherit the <see cref="Terrain3DInstancer"/> wrapper type,
-	/// a new instance of the <see cref="Terrain3DInstancer"/> wrapper script will get attaches to the <paramref name="godotObject"/>.
+	/// Try to cast the script on the supplied <paramref name="godotObject"/> to the <see cref="T3DInstancer"/> wrapper type,
+	/// if no script has attached to the type, or the script attached to the type does not inherit the <see cref="T3DInstancer"/> wrapper type,
+	/// a new instance of the <see cref="T3DInstancer"/> wrapper script will get attaches to the <paramref name="godotObject"/>.
 	/// </summary>
 	/// <remarks>The developer should only supply the <paramref name="godotObject"/> that represents the correct underlying GDExtension type.</remarks>
 	/// <param name="godotObject">The <paramref name="godotObject"/> that represents the correct underlying GDExtension type.</param>
-	/// <returns>The existing or a new instance of the <see cref="Terrain3DInstancer"/> wrapper script attached to the supplied <paramref name="godotObject"/>.</returns>
-	public new static Terrain3DInstancer Bind(GodotObject godotObject)
+	/// <returns>The existing or a new instance of the <see cref="T3DInstancer"/> wrapper script attached to the supplied <paramref name="godotObject"/>.</returns>
+	public new static T3DInstancer Bind(GodotObject godotObject)
 	{
 		if (!IsInstanceValid(godotObject))
 			return null;
 
-		if (godotObject is Terrain3DInstancer wrapperScriptInstance)
+		if (godotObject is T3DInstancer wrapperScriptInstance)
 			return wrapperScriptInstance;
 
 #if DEBUG
-		var expectedType = typeof(Terrain3DInstancer);
+		var expectedType = typeof(T3DInstancer);
 		var currentObjectClassName = godotObject.GetClass();
 		if (!ClassDB.IsParentClass(expectedType.Name, currentObjectClassName))
 			throw new InvalidOperationException($"The supplied GodotObject ({currentObjectClassName}) is not the {expectedType.Name} type.");
@@ -44,21 +44,21 @@ public partial class Terrain3DInstancer : GodotObject
 
 		if (_wrapperScriptAsset is null)
 		{
-			var scriptPathAttribute = typeof(Terrain3DInstancer).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
+			var scriptPathAttribute = typeof(T3DInstancer).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
 			if (scriptPathAttribute is null) throw new UnreachableException();
 			_wrapperScriptAsset = ResourceLoader.Load<CSharpScript>(scriptPathAttribute.Path);
 		}
 
 		var instanceId = godotObject.GetInstanceId();
 		godotObject.SetScript(_wrapperScriptAsset);
-		return (Terrain3DInstancer)InstanceFromId(instanceId);
+		return (T3DInstancer)InstanceFromId(instanceId);
 	}
 
 	/// <summary>
-	/// Creates an instance of the GDExtension <see cref="Terrain3DInstancer"/> type, and attaches a wrapper script instance to it.
+	/// Creates an instance of the GDExtension <see cref="T3DInstancer"/> type, and attaches a wrapper script instance to it.
 	/// </summary>
-	/// <returns>The wrapper instance linked to the underlying GDExtension "Terrain3DInstancer" type.</returns>
-	public new static Terrain3DInstancer Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
+	/// <returns>The wrapper instance linked to the underlying GDExtension "T3DInstancer" type.</returns>
+	public new static T3DInstancer Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
 
 	public enum InstancerMode
 	{
@@ -90,9 +90,9 @@ public partial class Terrain3DInstancer : GodotObject
 		public new static readonly StringName UpdateCellBudget = "update_cell_budget";
 	}
 
-	public new Terrain3DInstancer.InstancerMode Mode
+	public new T3DInstancer.InstancerMode Mode
 	{
-		get => Get(GDExtensionPropertyName.Mode).As<Terrain3DInstancer.InstancerMode>();
+		get => Get(GDExtensionPropertyName.Mode).As<T3DInstancer.InstancerMode>();
 		set => Set(GDExtensionPropertyName.Mode, Variant.From(value));
 	}
 
@@ -200,46 +200,46 @@ public partial class Terrain3DInstancer : GodotObject
 		public new static readonly StringName GetStats = "get_stats";
 	}
 
-	public new void ClearByMesh(long meshId) => 
+	public new void ClearByMesh(long meshId) =>
 		Call(GDExtensionMethodName.ClearByMesh, [meshId]);
 
-	public new void ClearByLocation(Vector2I regionLocation, long meshId) => 
+	public new void ClearByLocation(Vector2I regionLocation, long meshId) =>
 		Call(GDExtensionMethodName.ClearByLocation, [regionLocation, meshId]);
 
-	public new void ClearByRegion(Terrain3DRegion region, long meshId) => 
+	public new void ClearByRegion(T3DRegion region, long meshId) =>
 		Call(GDExtensionMethodName.ClearByRegion, [region, meshId]);
 
-	public new bool IsEnabled() => 
+	public new bool IsEnabled() =>
 		Call(GDExtensionMethodName.IsEnabled, []).As<bool>();
 
-	public new void AddInstances(Vector3 globalPosition, Godot.Collections.Dictionary @params) => 
+	public new void AddInstances(Vector3 globalPosition, Godot.Collections.Dictionary @params) =>
 		Call(GDExtensionMethodName.AddInstances, [globalPosition, @params]);
 
-	public new void RemoveInstances(Vector3 globalPosition, Godot.Collections.Dictionary @params) => 
+	public new void RemoveInstances(Vector3 globalPosition, Godot.Collections.Dictionary @params) =>
 		Call(GDExtensionMethodName.RemoveInstances, [globalPosition, @params]);
 
-	public new void AddMultimesh(long meshId, MultiMesh multimesh, Transform3D transform = default, bool update = true) => 
+	public new void AddMultimesh(long meshId, MultiMesh multimesh, Transform3D transform = default, bool update = true) =>
 		Call(GDExtensionMethodName.AddMultimesh, [meshId, multimesh, transform, update]);
 
-	public new void AddTransforms(long meshId, Godot.Collections.Array transforms, Color[] colors = default, bool update = true) => 
+	public new void AddTransforms(long meshId, Godot.Collections.Array transforms, Color[] colors = default, bool update = true) =>
 		Call(GDExtensionMethodName.AddTransforms, [meshId, transforms, colors, update]);
 
-	public new void AppendLocation(Vector2I regionLocation, long meshId, Godot.Collections.Array transforms, Color[] colors, bool update = true) => 
+	public new void AppendLocation(Vector2I regionLocation, long meshId, Godot.Collections.Array transforms, Color[] colors, bool update = true) =>
 		Call(GDExtensionMethodName.AppendLocation, [regionLocation, meshId, transforms, colors, update]);
 
-	public new void AppendRegion(Terrain3DRegion region, long meshId, Godot.Collections.Array transforms, Color[] colors, bool update = true) => 
+	public new void AppendRegion(T3DRegion region, long meshId, Godot.Collections.Array transforms, Color[] colors, bool update = true) =>
 		Call(GDExtensionMethodName.AppendRegion, [region, meshId, transforms, colors, update]);
 
-	public new void UpdateTransforms(Aabb aabb) => 
+	public new void UpdateTransforms(Aabb aabb) =>
 		Call(GDExtensionMethodName.UpdateTransforms, [aabb]);
 
-	public new long GetClosestMeshId(Vector3 globalPosition) => 
+	public new long GetClosestMeshId(Vector3 globalPosition) =>
 		Call(GDExtensionMethodName.GetClosestMeshId, [globalPosition]).As<long>();
 
-	public new void UpdateMmis(long meshId = -1, Vector2I regionLocation = default, bool rebuildAll = false) => 
+	public new void UpdateMmis(long meshId = -1, Vector2I regionLocation = default, bool rebuildAll = false) =>
 		Call(GDExtensionMethodName.UpdateMmis, [meshId, regionLocation, rebuildAll]);
 
-	public new void SwapIds(long srcId, long destId) => 
+	public new void SwapIds(long srcId, long destId) =>
 		Call(GDExtensionMethodName.SwapIds, [srcId, destId]);
 
 	public new Godot.Collections.Dictionary GetStats() =>
@@ -249,12 +249,12 @@ public partial class Terrain3DInstancer : GodotObject
 
 file static class InstancerModeExtensions
 {
-public static int SafeAsInt32(this Terrain3DInstancer.InstancerMode enumValue) =>
+public static int SafeAsInt32(this T3DInstancer.InstancerMode enumValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this Terrain3DInstancer.InstancerMode enumValue, int defaultValue) =>
+public static int SafeAsInt32(this T3DInstancer.InstancerMode enumValue, int defaultValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this Terrain3DInstancer.InstancerMode? enumValue, int defaultValue = 0) =>
+public static int SafeAsInt32(this T3DInstancer.InstancerMode? enumValue, int defaultValue = 0) =>
 enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
 }

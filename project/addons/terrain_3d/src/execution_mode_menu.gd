@@ -1,7 +1,7 @@
 # Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 # Compact editor execution-policy and live profiler control.
 @tool
-extends Terrain3DExecutionModeMenuBase
+extends T3DExecutionModeMenuBase
 
 const RUNTIME_PROFILER_WINDOW_PATH: String = "res://addons/terrain_3d/src/runtime_profiler_window.gd"
 
@@ -12,8 +12,8 @@ const MENU_OPEN_PROFILER: int = 10
 const MENU_RESET_PROFILER: int = 11
 const MENU_EXPORT_SNAPSHOT: int = 12
 
-var terrain: Terrain3D
-var _profiler_window: Terrain3DRuntimeProfilerWindowBase
+var terrain: T3DTerrain
+var _profiler_window: T3DRuntimeProfilerWindowBase
 var _export_dialog: FileDialog
 var _menu_initialized: bool = false
 
@@ -49,14 +49,14 @@ func _exit_tree() -> void:
 	_menu_initialized = false
 
 
-func _get_or_create_profiler_window() -> Terrain3DRuntimeProfilerWindowBase:
+func _get_or_create_profiler_window() -> T3DRuntimeProfilerWindowBase:
 	if is_instance_valid(_profiler_window):
 		return _profiler_window
 	var profiler_script: GDScript = load(RUNTIME_PROFILER_WINDOW_PATH) as GDScript
 	if profiler_script == null:
 		push_error("Unable to load Terrain3D runtime profiler window")
 		return null
-	_profiler_window = profiler_script.new() as Terrain3DRuntimeProfilerWindowBase
+	_profiler_window = profiler_script.new() as T3DRuntimeProfilerWindowBase
 	if not is_instance_valid(_profiler_window):
 		push_error("Unable to instantiate Terrain3D runtime profiler window")
 		return null
@@ -79,7 +79,7 @@ func _get_or_create_export_dialog() -> FileDialog:
 	return _export_dialog
 
 
-func set_terrain(p_terrain: Terrain3D) -> void:
+func set_terrain(p_terrain: T3DTerrain) -> void:
 	if is_instance_valid(terrain) and terrain.editor_execution_mode_changed.is_connected(_on_execution_mode_changed):
 		terrain.editor_execution_mode_changed.disconnect(_on_execution_mode_changed)
 	terrain = p_terrain
@@ -99,7 +99,7 @@ func _sync_state() -> void:
 
 	var mode: int = terrain.get_editor_execution_mode()
 	var node_preview: bool = terrain.is_editor_node_streaming_preview_active()
-	if mode == Terrain3D.EDITOR_EXECUTION_RUNTIME_PROFILE:
+	if mode == T3DTerrain.EDITOR_EXECUTION_RUNTIME_PROFILE:
 		text = "Runtime Profile"
 		tooltip_text = "Exact shipping ACTIVE/HOT/COLD/UNLOADED residency policy with runtime budgets and prediction"
 	elif node_preview:
@@ -112,9 +112,9 @@ func _sync_state() -> void:
 		return
 
 	var popup: PopupMenu = get_popup()
-	popup.set_item_checked(popup.get_item_index(MENU_AUTHORING), mode == Terrain3D.EDITOR_EXECUTION_AUTHORING and not node_preview)
-	popup.set_item_checked(popup.get_item_index(MENU_NODE_STREAM_PREVIEW), mode == Terrain3D.EDITOR_EXECUTION_AUTHORING and node_preview)
-	popup.set_item_checked(popup.get_item_index(MENU_RUNTIME_PROFILE), mode == Terrain3D.EDITOR_EXECUTION_RUNTIME_PROFILE)
+	popup.set_item_checked(popup.get_item_index(MENU_AUTHORING), mode == T3DTerrain.EDITOR_EXECUTION_AUTHORING and not node_preview)
+	popup.set_item_checked(popup.get_item_index(MENU_NODE_STREAM_PREVIEW), mode == T3DTerrain.EDITOR_EXECUTION_AUTHORING and node_preview)
+	popup.set_item_checked(popup.get_item_index(MENU_RUNTIME_PROFILE), mode == T3DTerrain.EDITOR_EXECUTION_RUNTIME_PROFILE)
 
 
 func _on_menu_pressed(p_id: int) -> void:
@@ -123,15 +123,15 @@ func _on_menu_pressed(p_id: int) -> void:
 	match p_id:
 		MENU_AUTHORING:
 			terrain.set_editor_node_streaming_preview(false)
-			terrain.set_editor_execution_mode(int(Terrain3D.EDITOR_EXECUTION_AUTHORING))
+			terrain.set_editor_execution_mode(int(T3DTerrain.EDITOR_EXECUTION_AUTHORING))
 		MENU_NODE_STREAM_PREVIEW:
-			terrain.set_editor_execution_mode(int(Terrain3D.EDITOR_EXECUTION_AUTHORING))
+			terrain.set_editor_execution_mode(int(T3DTerrain.EDITOR_EXECUTION_AUTHORING))
 			terrain.set_editor_node_streaming_preview(true)
 		MENU_RUNTIME_PROFILE:
 			terrain.set_editor_node_streaming_preview(false)
-			terrain.set_editor_execution_mode(int(Terrain3D.EDITOR_EXECUTION_RUNTIME_PROFILE))
+			terrain.set_editor_execution_mode(int(T3DTerrain.EDITOR_EXECUTION_RUNTIME_PROFILE))
 		MENU_OPEN_PROFILER:
-			var profiler_window: Terrain3DRuntimeProfilerWindowBase = _get_or_create_profiler_window()
+			var profiler_window: T3DRuntimeProfilerWindowBase = _get_or_create_profiler_window()
 			if is_instance_valid(profiler_window):
 				profiler_window.open_for_terrain(terrain)
 		MENU_RESET_PROFILER:

@@ -200,7 +200,7 @@ private:
 	bool m_bOwnsBacking = false;
 };
 
-template <typename T> class Terrain3DArenaBuffer {
+template <typename T> class T3DArenaBuffer {
 	static_assert( std::is_trivially_copyable_v<T>, "Arena buffers support trivially copyable values only." );
 	static_assert( std::is_trivially_destructible_v<T>, "Arena buffers support trivially destructible values only." );
 
@@ -209,9 +209,9 @@ public:
 	using iterator = T *;
 	using const_iterator = const T *;
 
-	Terrain3DArenaBuffer() = default;
-	Terrain3DArenaBuffer( const Terrain3DArenaBuffer & ) = delete;
-	Terrain3DArenaBuffer &operator=( const Terrain3DArenaBuffer & ) = delete;
+	T3DArenaBuffer() = default;
+	T3DArenaBuffer( const T3DArenaBuffer & ) = delete;
+	T3DArenaBuffer &operator=( const T3DArenaBuffer & ) = delete;
 
 	bool allocateUninitialized( T3DLinearArena &rArena, const size_t nCount ) {
 		clear();
@@ -242,12 +242,12 @@ public:
 		m_nSize = 0u;
 	}
 
-	void swap( Terrain3DArenaBuffer &rOther ) noexcept {
+	void swap( T3DArenaBuffer &rOther ) noexcept {
 		std::swap( m_pData, rOther.m_pData );
 		std::swap( m_nSize, rOther.m_nSize );
 	}
 
-	bool copyFrom( const Terrain3DArenaBuffer &rOther ) {
+	bool copyFrom( const T3DArenaBuffer &rOther ) {
 		if ( m_nSize != rOther.m_nSize ) {
 			return false;
 		}

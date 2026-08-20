@@ -26,7 +26,7 @@ typedef struct t3dgpuCacheSelectionStats_s {
 	int written = 0;
 } t3dgpuCacheSelectionStats_t;
 
-typedef bool ( *Terrain3DGpuCacheActiveFn )( int iX, int iY, const void *pContext );
+typedef bool ( *T3DGpuCacheActiveFn )( int iX, int iY, const void *pContext );
 
 inline bool terrain3dGpuCacheOptionalChannelNeedsUpdate(
 	const uint8_t nSourceFlags,
@@ -316,7 +316,7 @@ inline bool terrain3dGpuCacheCoordValid( const t3dgpuCacheCoord_t coord, const i
 inline bool terrain3dGpuCacheAppend(
 	const t3dgpuCacheCoord_t coord, const int nMapSize,
 	t3dgpuCacheCoord_t *pLocations, const int nCapacity, int &nWritten,
-	Terrain3DGpuCacheActiveFn active, const void *pContext
+	T3DGpuCacheActiveFn active, const void *pContext
 ) {
 	if ( !terrain3dGpuCacheCoordValid( coord, nMapSize ) || !active( coord.x, coord.y, pContext ) ) {
 		return false;
@@ -331,7 +331,7 @@ inline bool terrain3dGpuCacheAppend(
 inline void terrain3dGpuCacheCollectRing(
 	const t3dgpuCacheCoord_t center, const int nMapSize,
 	const int nRadius, t3dgpuCacheCoord_t *pLocations, const int nCapacity, int &nWritten,
-	int &nCount, Terrain3DGpuCacheActiveFn active, const void *pContext
+	int &nCount, T3DGpuCacheActiveFn active, const void *pContext
 ) {
 	if ( nRadius == 0 ) {
 		if ( terrain3dGpuCacheAppend( center, nMapSize, pLocations, nCapacity, nWritten, active, pContext ) ) {
@@ -367,7 +367,7 @@ inline void terrain3dGpuCacheCollectRing(
 
 inline int terrain3dGpuCacheCollectFootprint(
 	const t3dgpuCacheCoord_t center, const int nMapSize,
-	t3dgpuCacheCoord_t *pLocations, const int nCapacity, Terrain3DGpuCacheActiveFn active,
+	t3dgpuCacheCoord_t *pLocations, const int nCapacity, T3DGpuCacheActiveFn active,
 	const void *pContext, const int nRequiredRadius, const int nGuardRegions,
 	const t3dgpuCacheCoord_t motionDirection, const int nPrefetchRows,
 	t3dgpuCacheSelectionStats_t *pStats
@@ -427,7 +427,7 @@ inline int terrain3dGpuCacheCollectFootprint(
 // terrain3d_gpu_cache_collect_footprint().
 inline int terrain3dGpuCacheCollectDesired(
 	const t3dgpuCacheCoord_t center, const int nMapSize,
-	t3dgpuCacheCoord_t *pLocations, const int nCapacity, Terrain3DGpuCacheActiveFn active,
+	t3dgpuCacheCoord_t *pLocations, const int nCapacity, T3DGpuCacheActiveFn active,
 	const void *pContext
 ) {
 	if ( !pLocations || nCapacity <= 0 ) {

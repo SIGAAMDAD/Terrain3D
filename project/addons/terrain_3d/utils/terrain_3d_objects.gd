@@ -3,7 +3,7 @@
 # Children nodes get transform updates on sculpting
 @tool
 extends Node3D
-class_name Terrain3DObjects
+class_name T3DObjects
 
 const TransformChangedNotifier = preload("res://addons/terrain_3d/utils/transform_changed_notifier.gd")
 
@@ -12,7 +12,7 @@ const CHILD_HELPER_PATH: NodePath = ^"TransformChangedSignaller"
 
 var _undo_redo: EditorUndoRedoManager
 var _terrain_id: int
-var _connected_terrain_data: Terrain3DData
+var _connected_terrain_data: T3DData
 var _offsets: Dictionary[int, Vector3] = {} # Object ID -> Vector3(X, Y offset relative to terrain height, Z)
 var _ignore_transform_change: bool = false
 
@@ -41,18 +41,18 @@ func _exit_tree() -> void:
 	_terrain_id = 0
 
 
-func editor_setup(p_plugin: Terrain3DEditorPluginBase) -> void:
+func editor_setup(p_plugin: T3DEditorPluginBase) -> void:
 	_undo_redo = p_plugin.get_undo_redo()
 
 
-func get_terrain() -> Terrain3D:
-	var terrain := instance_from_id(_terrain_id) as Terrain3D
+func get_terrain() -> T3DTerrain:
+	var terrain := instance_from_id(_terrain_id) as T3DTerrain
 	var scene_root := EditorInterface.get_edited_scene_root()
 	var belongs_to_active_scene := is_instance_valid(terrain) and is_instance_valid(scene_root) and \
 		(terrain == scene_root or scene_root.is_ancestor_of(terrain))
 	if not belongs_to_active_scene or terrain.is_queued_for_deletion() or not terrain.is_inside_tree():
 		terrain = null
-		var terrains: Array[Node] = scene_root.find_children("", "Terrain3D") if scene_root else []
+		var terrains: Array[Node] = scene_root.find_children("", "T3DTerrain") if scene_root else []
 		if terrains.size() > 0:
 			terrain = terrains[0]
 		_terrain_id = terrain.get_instance_id() if terrain else 0
@@ -62,7 +62,7 @@ func get_terrain() -> Terrain3D:
 	return terrain
 
 
-func _set_connected_terrain_data(p_data: Terrain3DData) -> void:
+func _set_connected_terrain_data(p_data: T3DData) -> void:
 	if _connected_terrain_data == p_data:
 		return
 	if is_instance_valid(_connected_terrain_data) and \
@@ -75,7 +75,7 @@ func _set_connected_terrain_data(p_data: Terrain3DData) -> void:
 
 
 func _get_terrain_height(p_global_position: Vector3) -> float:
-	var terrain: Terrain3D = get_terrain()
+	var terrain: T3DTerrain = get_terrain()
 	if not terrain or not terrain.data:
 		return 0.0
 	var height: float = terrain.data.get_height(p_global_position)

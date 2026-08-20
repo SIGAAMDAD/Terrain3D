@@ -38,7 +38,7 @@ void T3DRegionPersistence::resetLoadStats( void ) {
 	m_nFinalizeStartedUsec = 0u;
 }
 
-bool T3DRegionPersistence::validateHeightPayload( const Ref<Terrain3DRegion> &rRegion, const String &rPath ) {
+bool T3DRegionPersistence::validateHeightPayload( const Ref<T3DRegion> &rRegion, const String &rPath ) {
 	if ( rRegion.is_null() ) {
 		return false;
 	}
@@ -50,16 +50,16 @@ bool T3DRegionPersistence::validateHeightPayload( const Ref<Terrain3DRegion> &rR
 	if ( format != Image::FORMAT_R16 && format != Image::FORMAT_RF ) {
 		return true;
 	}
-	if ( Terrain3DRegionCodec::hasValidHeightPayload( pHeight, rRegion->getRegionSize() ) ) {
+	if ( T3DRegionCodec::hasValidHeightPayload( pHeight, rRegion->getRegionSize() ) ) {
 		return true;
 	}
-	LOG( Terrain3D::ERROR, "Malformed height payload in file: ", rPath, ". Format: ", format,
+	LOG( T3DTerrain::ERROR, "Malformed height payload in file: ", rPath, ". Format: ", format,
 		", bytes: ", pHeight->get_data().size() );
 	return false;
 }
 
 void T3DRegionPersistence::normalizeLoadedRegion(
-	const Vector2i &rLocation, const Ref<Terrain3DRegion> &rRegion,
+	const Vector2i &rLocation, const Ref<T3DRegion> &rRegion,
 	const bool bApplyRepositorySpacing, bool &rStorageUpgrade
 ) const {
 	const Ref<Image> pLoadedHeight = rRegion->getHeightMap();
@@ -90,34 +90,34 @@ Error T3DRegionPersistence::stageDirectory(
 	rStaged.reset();
 	resetLoadStats();
 	if ( rDirectory.is_empty() ) {
-		LOG( Terrain3D::ERROR, "Specified directory name is blank" );
+		LOG( T3DTerrain::ERROR, "Specified directory name is blank" );
 		return ERR_INVALID_PARAMETER;
 	}
 	if ( !m_pRepository ) {
 		return ERR_UNCONFIGURED;
 	}
 
-	LOG( Terrain3D::INFO, "Loading region files from ", rDirectory );
-	PackedStringArray files = Util::getFiles( rDirectory, "terrain3d*.res" );
+	LOG( T3DTerrain::INFO, "Loading region files from ", rDirectory );
+	PackedStringArray files = T3DUtil::getFiles( rDirectory, "terrain3d*.res" );
 	files.sort();
 	m_startupLoadStats.nEnumerationUsecLast = Time::get_singleton()->get_ticks_usec() - m_nLoadStartedUsec;
 	m_startupLoadStats.nRegionFilesLast = files.size();
 	if ( files.is_empty() ) {
-		LOG( Terrain3D::INFO, "No Terrain3D region files found in: ", rDirectory );
+		LOG( T3DTerrain::INFO, "No Terrain3D region files found in: ", rDirectory );
 		return ERR_FILE_NOT_FOUND;
 	}
 
 	rStaged.bBoundedCpuLoad = bBoundedCpuLoad;
 	rStaged.regions.reserve( ( size_t ) ( files.size() ) );
 	if ( files.size() > TERRAIN3D_MAX_REGION_SLOTS ) {
-		LOG( Terrain3D::ERROR, "Directory contains ", files.size(),
+		LOG( T3DTerrain::ERROR, "Directory contains ", files.size(),
 			" regions, exceeding the fixed region-slot capacity of ", TERRAIN3D_MAX_REGION_SLOTS );
 		return ERR_OUT_OF_MEMORY;
 	}
 
 	for ( const String &fname : files ) {
 		T3DStagedRegion entry;
-		entry.location = Util::filenameToLocation( fname );
+		entry.location = T3DUtil::filenameToLocation( fname );
 		entry.path = rDirectory.path_join( fname );
 		rStaged.regions.push_back( entry );
 	}
@@ -127,7 +127,7 @@ Error T3DRegionPersistence::stageDirectory(
 		return ERR_UNAVAILABLE;
 	}
 
-	LOG( Terrain3D::DEBUG, "[terrain-data] Phase 1/4: synchronous region deserialization and validation" );
+	LOG( T3DTerrain::DEBUG, "[terrain-data] Phase 1/4: synchronous region deserialization and validation" );
 	const uint64_t deserializeStartedUsec = Time::get_singleton()->get_ticks_usec();
 	eastl::bitset<TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE * TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE> occupied;
 
@@ -136,24 +136,24 @@ Error T3DRegionPersistence::stageDirectory(
 		T3DStagedRegion &entry = rStaged.regions[( size_t ) ( fileIndex )];
 		const int mapIndex = T3DRegionRepository::getRegionMapIndex( entry.location );
 		if ( mapIndex < 0 ) {
-			LOG( Terrain3D::ERROR, "Invalid or out-of-bounds region file name: ", fname );
+			LOG( T3DTerrain::ERROR, "Invalid or out-of-bounds region file name: ", fname );
 			return ERR_FILE_CORRUPT;
 		}
 		if ( occupied.test( ( size_t ) ( mapIndex ) ) ) {
-			LOG( Terrain3D::ERROR, "Duplicate region location in directory: ", entry.location );
+			LOG( T3DTerrain::ERROR, "Duplicate region location in directory: ", entry.location );
 			return ERR_ALREADY_EXISTS;
 		}
 		occupied.set( ( size_t ) ( mapIndex ) );
 
-		Ref<Terrain3DRegion> region = pLoader->load(
-			entry.path, "Terrain3DRegion", ResourceLoader::CACHE_MODE_IGNORE );
+		Ref<T3DRegion> region = pLoader->load(
+			entry.path, "T3DRegion", ResourceLoader::CACHE_MODE_IGNORE );
 		if ( region.is_null() ) {
-			LOG( Terrain3D::ERROR, "Cannot load region at ", entry.path );
+			LOG( T3DTerrain::ERROR, "Cannot load region at ", entry.path );
 			return ERR_FILE_CORRUPT;
 		}
 		const int regionSize = region->getRegionSize();
 		if ( !isValidRegionSize( regionSize ) ) {
-			LOG( Terrain3D::ERROR, "Invalid region size ", regionSize, " in file: ", entry.path );
+			LOG( T3DTerrain::ERROR, "Invalid region size ", regionSize, " in file: ", entry.path );
 			return ERR_FILE_CORRUPT;
 		}
 		if ( !validateHeightPayload( region, entry.path ) ) {
@@ -162,14 +162,14 @@ Error T3DRegionPersistence::stageDirectory(
 		if ( rStaged.nTargetRegionSize == 0 ) {
 			rStaged.nTargetRegionSize = regionSize;
 		} else if ( rStaged.nTargetRegionSize != regionSize ) {
-			LOG( Terrain3D::ERROR, "Region size mismatch. First loaded: ", rStaged.nTargetRegionSize,
+			LOG( T3DTerrain::ERROR, "Region size mismatch. First loaded: ", rStaged.nTargetRegionSize,
 				" next: ", regionSize, " in file: ", entry.path );
 			return ERR_FILE_CORRUPT;
 		}
 
 		const int targetMapSize = TERRAIN3D_ACTIVE_WORLD_TEXELS / rStaged.nTargetRegionSize;
 		if ( !terrain3dRegionLocationValid( entry.location, targetMapSize ) ) {
-			LOG( Terrain3D::ERROR, "Region ", entry.location, " is outside the fixed ",
+			LOG( T3DTerrain::ERROR, "Region ", entry.location, " is outside the fixed ",
 				TERRAIN3D_ACTIVE_WORLD_TEXELS, "-texel world for region size ", rStaged.nTargetRegionSize );
 			return ERR_FILE_CORRUPT;
 		}
@@ -179,7 +179,7 @@ Error T3DRegionPersistence::stageDirectory(
 		if ( bBoundedCpuLoad ) {
 			const Ref<Image> pStagedHeight = region->getHeightMap();
 			if ( pStagedHeight.is_null() || pStagedHeight->get_format() != Image::FORMAT_R16 ) {
-				LOG( Terrain3D::ERROR, "Unable to stage R16 height payload from: ", entry.path );
+				LOG( T3DTerrain::ERROR, "Unable to stage R16 height payload from: ", entry.path );
 				return ERR_FILE_CORRUPT;
 			}
 			entry.stagedHeight = pStagedHeight->get_data();
@@ -187,7 +187,7 @@ Error T3DRegionPersistence::stageDirectory(
 				( size_t ) ( rStaged.nTargetRegionSize );
 			const size_t expectedHeightBytes = regionTexelCount * sizeof( uint16_t );
 			if ( ( size_t ) ( entry.stagedHeight.size() ) < expectedHeightBytes ) {
-				LOG( Terrain3D::ERROR, "Truncated staged height payload in: ", entry.path );
+				LOG( T3DTerrain::ERROR, "Truncated staged height payload in: ", entry.path );
 				return ERR_FILE_CORRUPT;
 			}
 			const int halfMap = targetMapSize / 2;
@@ -202,9 +202,9 @@ Error T3DRegionPersistence::stageDirectory(
 	}
 
 	m_startupLoadStats.nDeserializeUsecLast = Time::get_singleton()->get_ticks_usec() - deserializeStartedUsec;
-	LOG( Terrain3D::DEBUG, "[terrain-data] Phase 1/4 complete: validated ", rStaged.regions.size(),
+	LOG( T3DTerrain::DEBUG, "[terrain-data] Phase 1/4 complete: validated ", rStaged.regions.size(),
 		" regions at size ", rStaged.nTargetRegionSize );
-	LOG( Terrain3D::DEBUG, "[terrain-data] Phase 2/4: staging replacement repository tables" );
+	LOG( T3DTerrain::DEBUG, "[terrain-data] Phase 2/4: staging replacement repository tables" );
 	const uint64_t stagingStartedUsec = Time::get_singleton()->get_ticks_usec();
 
 	for ( int slot = 0; slot < ( int ) ( rStaged.regions.size() ); ++slot ) {
@@ -220,7 +220,7 @@ Error T3DRegionPersistence::stageDirectory(
 	}
 
 	m_startupLoadStats.nStagingUsecLast = Time::get_singleton()->get_ticks_usec() - stagingStartedUsec;
-	LOG( Terrain3D::DEBUG, "[terrain-data] Phase 2/4 complete: repository tables staged" );
+	LOG( T3DTerrain::DEBUG, "[terrain-data] Phase 2/4 complete: repository tables staged" );
 	return OK;
 }
 
@@ -267,10 +267,10 @@ T3DRegionLoadResult T3DRegionPersistence::loadRegion(
 		return result;
 	}
 
-	result.path = rDirectory.path_join( Util::locationToFilename( rLocation ) );
-	LOG( Terrain3D::INFO, "Loading region from location ", rLocation );
+	result.path = rDirectory.path_join( T3DUtil::locationToFilename( rLocation ) );
+	LOG( T3DTerrain::INFO, "Loading region from location ", rLocation );
 	if ( !FileAccess::file_exists( result.path ) ) {
-		LOG( Terrain3D::ERROR, "File ", result.path, " doesn't exist" );
+		LOG( T3DTerrain::ERROR, "File ", result.path, " doesn't exist" );
 		result.error = ERR_FILE_NOT_FOUND;
 		return result;
 	}
@@ -280,9 +280,9 @@ T3DRegionLoadResult T3DRegionPersistence::loadRegion(
 		result.error = ERR_UNAVAILABLE;
 		return result;
 	}
-	result.pRegion = pLoader->load( result.path, "Terrain3DRegion", ResourceLoader::CACHE_MODE_IGNORE );
+	result.pRegion = pLoader->load( result.path, "T3DRegion", ResourceLoader::CACHE_MODE_IGNORE );
 	if ( result.pRegion.is_null() ) {
-		LOG( Terrain3D::ERROR, "Cannot load region at ", result.path );
+		LOG( T3DTerrain::ERROR, "Cannot load region at ", result.path );
 		result.error = ERR_FILE_CORRUPT;
 		return result;
 	}
@@ -294,13 +294,13 @@ T3DRegionLoadResult T3DRegionPersistence::loadRegion(
 
 	const int regionSize = result.pRegion->getRegionSize();
 	if ( !isValidRegionSize( regionSize ) ) {
-		LOG( Terrain3D::ERROR, "Invalid region size ", regionSize, " in file: ", result.path );
+		LOG( T3DTerrain::ERROR, "Invalid region size ", regionSize, " in file: ", result.path );
 		result.pRegion.unref();
 		result.error = ERR_FILE_CORRUPT;
 		return result;
 	}
 	if ( !m_pRepository->isEmpty() && m_pRepository->getRegionSize() != regionSize ) {
-		LOG( Terrain3D::ERROR, "Region size mismatch. First loaded: ", m_pRepository->getRegionSize(),
+		LOG( T3DTerrain::ERROR, "Region size mismatch. First loaded: ", m_pRepository->getRegionSize(),
 			" next: ", regionSize, " in file: ", result.path );
 		result.pRegion.unref();
 		result.error = ERR_INVALID_DATA;
@@ -313,8 +313,8 @@ T3DRegionLoadResult T3DRegionPersistence::loadRegion(
 }
 
 bool T3DRegionPersistence::prepareRuntimeRegionSource(
-	const Ref<Terrain3DRegion> &rCandidate, const int nExpectedRegionSize,
-	Ref<Terrain3DRegion> &rSource
+	const Ref<T3DRegion> &rCandidate, const int nExpectedRegionSize,
+	Ref<T3DRegion> &rSource
 ) const {
 	rSource.unref();
 	if ( rCandidate.is_null() || rCandidate->getRegionSize() != nExpectedRegionSize ) {
@@ -322,7 +322,7 @@ bool T3DRegionPersistence::prepareRuntimeRegionSource(
 	}
 	const Ref<Image> pHeight = rCandidate->getHeightMap();
 	if ( pHeight.is_null() || pHeight->get_format() != Image::FORMAT_R16 ||
-		!Terrain3DRegionCodec::hasValidHeightPayload( pHeight, nExpectedRegionSize ) ) {
+		!T3DRegionCodec::hasValidHeightPayload( pHeight, nExpectedRegionSize ) ) {
 		return false;
 	}
 	rCandidate->setModified( false );
@@ -334,7 +334,7 @@ bool T3DRegionPersistence::prepareRuntimeRegionSource(
 
 bool T3DRegionPersistence::loadRuntimeRegionSource(
 	const String &rPath, const int nExpectedRegionSize,
-	Ref<Terrain3DRegion> &rSource
+	Ref<T3DRegion> &rSource
 ) const {
 	rSource.unref();
 	if ( rPath.is_empty() || !FileAccess::file_exists( rPath ) ) {
@@ -345,8 +345,8 @@ bool T3DRegionPersistence::loadRuntimeRegionSource(
 		return false;
 	}
 	const Ref<Resource> pResource = pLoader->load(
-		rPath, "Terrain3DRegion", ResourceLoader::CACHE_MODE_IGNORE );
-	const Ref<Terrain3DRegion> pLoaded = pResource;
+		rPath, "T3DRegion", ResourceLoader::CACHE_MODE_IGNORE );
+	const Ref<T3DRegion> pLoaded = pResource;
 	return prepareRuntimeRegionSource( pLoaded, nExpectedRegionSize, rSource );
 }
 
@@ -380,38 +380,38 @@ T3DRegionSaveResult T3DRegionPersistence::saveRegion(
 		result.error = ERR_UNCONFIGURED;
 		return result;
 	}
-	const Ref<Terrain3DRegion> pRegion = m_pRepository->getRegion( rLocation );
+	const Ref<T3DRegion> pRegion = m_pRepository->getRegion( rLocation );
 	if ( pRegion.is_null() ) {
-		LOG( Terrain3D::ERROR, "No region found at: ", rLocation );
+		LOG( T3DTerrain::ERROR, "No region found at: ", rLocation );
 		result.error = ERR_DOES_NOT_EXIST;
 		return result;
 	}
 	result.bFound = true;
-	const String fname = Util::locationToFilename( rLocation );
+	const String fname = T3DUtil::locationToFilename( rLocation );
 	result.path = rDirectory.path_join( fname );
 
 	if ( pRegion->isDeleted() ) {
 		result.bDeleted = true;
-		LOG( Terrain3D::DEBUG, "Removing ", rLocation, " from _regions" );
+		LOG( T3DTerrain::DEBUG, "Removing ", rLocation, " from _regions" );
 		m_pRepository->eraseRegionResource( rLocation );
-		LOG( Terrain3D::DEBUG, "File to be deleted: ", result.path );
+		LOG( T3DTerrain::DEBUG, "File to be deleted: ", result.path );
 		if ( FileAccess::file_exists( result.path ) ) {
 			Ref<DirAccess> pDirectory = DirAccess::open( rDirectory );
 			if ( pDirectory.is_null() ) {
-				LOG( Terrain3D::ERROR, "Cannot open directory for writing: ", rDirectory,
+				LOG( T3DTerrain::ERROR, "Cannot open directory for writing: ", rDirectory,
 					" error: ", DirAccess::get_open_error() );
 				result.error = DirAccess::get_open_error();
 				return result;
 			}
 			const Error removeError = pDirectory->remove( fname );
 			if ( removeError != OK ) {
-				LOG( Terrain3D::ERROR, "Could not remove file: ", fname, ", error code: ", removeError );
+				LOG( T3DTerrain::ERROR, "Could not remove file: ", fname, ", error code: ", removeError );
 				result.error = removeError;
 				return result;
 			}
-			LOG( Terrain3D::INFO, "File ", result.path, " deleted" );
+			LOG( T3DTerrain::INFO, "File ", result.path, " deleted" );
 		} else {
-			LOG( Terrain3D::INFO, "File to delete ", result.path,
+			LOG( T3DTerrain::INFO, "File to delete ", result.path,
 				" doesn't exist. (Maybe from add, undo, save)" );
 		}
 
@@ -427,14 +427,14 @@ T3DRegionSaveResult T3DRegionPersistence::saveRegion(
 		return result;
 	}
 	if ( pEnsureResident && !pEnsureResident( pResidentContext, rLocation ) ) {
-		LOG( Terrain3D::ERROR, "Unable to page CPU terrain maps before saving region: ", rLocation );
+		LOG( T3DTerrain::ERROR, "Unable to page CPU terrain maps before saving region: ", rLocation );
 		result.error = ERR_UNAVAILABLE;
 		return result;
 	}
 
 	result.error = pRegion->save( result.path, b16Bit );
 	if ( !( result.error == OK || result.error == ERR_SKIP ) ) {
-		LOG( Terrain3D::ERROR, "Could not save file: ", result.path, ", error: ",
+		LOG( T3DTerrain::ERROR, "Could not save file: ", result.path, ", error: ",
 			UtilityFunctions::error_string( result.error ), " (", result.error, ")" );
 		return result;
 	}

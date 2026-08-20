@@ -34,7 +34,7 @@ extends Node3D
 #region settings
 @export_category("Settings")
 ## Auto set if attached as a child of a Terrain3D node
-@export var terrain: Terrain3D:
+@export var terrain: T3DTerrain:
 	set(value):
 		terrain = value
 		_create_grid()
@@ -120,7 +120,7 @@ var particle_nodes: Array[GPUParticles3D]
 func _ready() -> void:
 	if not terrain:
 		var parent: Node = get_parent()
-		if parent is Terrain3D:
+		if parent is T3DTerrain:
 			terrain = parent
 	_create_grid()
 

@@ -145,12 +145,12 @@ const TERRAIN_RESOURCE_PROPERTIES: PackedStringArray = [
 	"ocean_material",
 ]
 
-var plugin: Terrain3DEditorPluginBase
+var plugin: T3DEditorPluginBase
 var _dialog: ConfirmationDialog
 var _x_spin: SpinBox
 var _z_spin: SpinBox
 var _region_list: ItemList
-var _region_map: Terrain3DRegionWorkbenchMap
+var _region_map: T3DRegionWorkbenchMap
 var _radius_spin: SpinBox
 var _status_label: Label
 var _dialog_selection: Dictionary[Vector2i, bool] = {}
@@ -169,7 +169,7 @@ var _operations_status: Label
 var _operations_refresh_accum: float = 0.0
 var _operations_manifest_path: String = ""
 var _operations_manifest_modified_time: int = 0
-var _operations_manifest: Terrain3DRegionWorkbenchManifest
+var _operations_manifest: T3DRegionWorkbenchManifest
 var _operations_region_list_dirty: bool = true
 
 
@@ -193,7 +193,7 @@ func _process(delta: float) -> void:
 
 
 func open_dialog() -> void:
-	var source_terrain: Terrain3D = _get_active_terrain()
+	var source_terrain: T3DTerrain = _get_active_terrain()
 	if not is_instance_valid(source_terrain):
 		push_error("Select a Terrain3D node before opening a region workbench")
 		return
@@ -212,12 +212,12 @@ func open_dialog() -> void:
 	_dialog.popup_centered(Vector2i(1000, 720))
 
 
-func open_region(location: Vector2i) -> Terrain3DRegionWorkbenchResult:
+func open_region(location: Vector2i) -> T3DRegionWorkbenchResult:
 	return await open_regions([location])
 
 
-func open_regions(locations: Array[Vector2i]) -> Terrain3DRegionWorkbenchResult:
-	var source_terrain: Terrain3D = _get_active_terrain()
+func open_regions(locations: Array[Vector2i]) -> T3DRegionWorkbenchResult:
+	var source_terrain: T3DTerrain = _get_active_terrain()
 	if Engine.is_editor_hint():
 		var save_error: Error = EditorInterface.save_scene()
 		if save_error != OK:
@@ -226,7 +226,7 @@ func open_regions(locations: Array[Vector2i]) -> Terrain3DRegionWorkbenchResult:
 		if not is_instance_valid(edited_root) or edited_root.scene_file_path.is_empty():
 			return _failure("Save the source scene to disk before opening a region workbench")
 
-	var result: Terrain3DRegionWorkbenchResult = await create_workbench_regions(source_terrain, locations)
+	var result: T3DRegionWorkbenchResult = await create_workbench_regions(source_terrain, locations)
 	if not result.ok:
 		push_error(result.error if not result.error.is_empty() else "Unable to create Terrain3D region workbench")
 		return result
@@ -239,12 +239,12 @@ func open_regions(locations: Array[Vector2i]) -> Terrain3DRegionWorkbenchResult:
 	return result
 
 
-func create_workbench(source_terrain: Terrain3D, location: Vector2i) -> Terrain3DRegionWorkbenchResult:
+func create_workbench(source_terrain: T3DTerrain, location: Vector2i) -> T3DRegionWorkbenchResult:
 	return await create_workbench_regions(source_terrain, [location])
 
 
-func create_workbench_regions(source_terrain: Terrain3D,
-		locations: Array[Vector2i]) -> Terrain3DRegionWorkbenchResult:
+func create_workbench_regions(source_terrain: T3DTerrain,
+		locations: Array[Vector2i]) -> T3DRegionWorkbenchResult:
 	if not is_instance_valid(source_terrain):
 		return _failure("No valid Terrain3D source node was provided")
 	if source_terrain.data_directory.is_empty():
@@ -287,12 +287,12 @@ func create_workbench_regions(source_terrain: Terrain3D,
 			_remove_directory_recursive(workbench_directory)
 			return _failure("Unable to create workbench context directory: %s" % error_string(mkdir_error))
 
-	var terrain_configuration: Terrain3DRegionWorkbenchConfiguration = _capture_terrain_configuration(
+	var terrain_configuration: T3DRegionWorkbenchConfiguration = _capture_terrain_configuration(
 		source_terrain, workbench_directory)
 	if not terrain_configuration.ok:
 		return _failure(terrain_configuration.error)
 
-	var manifest := Terrain3DRegionWorkbenchManifest.new()
+	var manifest := T3DRegionWorkbenchManifest.new()
 	manifest.source_scene = source_scene_path
 	manifest.source_data_directory = source_directory
 	var source_far_atlas_path: String = source_directory.path_join("terrain3d_far_atlas.t3dfar")
@@ -319,7 +319,7 @@ func create_workbench_regions(source_terrain: Terrain3D,
 	_begin_checkout_progress(copy_locations.size())
 	for copy_index: int in range(copy_locations.size()):
 		var location: Vector2i = copy_locations[copy_index]
-		var source_region: Terrain3DRegion = source_terrain.data.get_region(location)
+		var source_region: T3DRegion = source_terrain.data.get_region(location)
 		if not is_instance_valid(source_region):
 			_end_checkout_progress()
 			_remove_directory_recursive(workbench_directory)
@@ -345,7 +345,7 @@ func create_workbench_regions(source_terrain: Terrain3D,
 				_remove_directory_recursive(workbench_directory)
 				return _failure("Region Workbench checkout was cancelled")
 		var source_page_path: String = source_region_path.get_basename() + ".t3dpage"
-		var entry := Terrain3DRegionWorkbenchRegion.new()
+		var entry := T3DRegionWorkbenchRegion.new()
 		entry.location = location
 		entry.source_region_path = source_region_path
 		entry.source_region_md5 = FileAccess.get_md5(source_region_path)
@@ -369,24 +369,24 @@ func create_workbench_regions(source_terrain: Terrain3D,
 		_remove_directory_recursive(workbench_directory)
 		return _failure("Unable to create workbench scene: %s" % error_string(scene_error))
 
-	var result := Terrain3DRegionWorkbenchResult.success()
+	var result := T3DRegionWorkbenchResult.success()
 	result.scene_path = scene_path
 	result.manifest_path = manifest_path
 	result.region_count = checkout_locations.size()
 	result.context_region_count = context_locations.size()
 	result.region_locations = checkout_locations.duplicate()
-	for entry: Terrain3DRegionWorkbenchRegion in manifest.regions:
+	for entry: T3DRegionWorkbenchRegion in manifest.regions:
 		result.workbench_region_paths.push_back(entry.workbench_region_path)
 	result.workbench_region_path = manifest.workbench_region_path
 	result.region_location = manifest.region_location
 	return result
 
 
-func archive_active_region() -> Terrain3DRegionWorkbenchResult:
+func archive_active_region() -> T3DRegionWorkbenchResult:
 	var workbench_root: Node = EditorInterface.get_edited_scene_root() if Engine.is_editor_hint() else null
 	var active_manifest_path: String = String(workbench_root.get_meta(MANIFEST_META, "")) if is_instance_valid(workbench_root) else ""
 	var session_directory: String = active_manifest_path.get_base_dir() if not active_manifest_path.is_empty() else ""
-	var workbench_terrain: Terrain3D = _get_active_terrain()
+	var workbench_terrain: T3DTerrain = _get_active_terrain()
 	if not is_instance_valid(workbench_terrain):
 		push_error("The workbench Terrain3D node could not be found. Reopen the workbench scene before committing.")
 		return _failure("Workbench Terrain3D node is unavailable")
@@ -394,7 +394,7 @@ func archive_active_region() -> Terrain3DRegionWorkbenchResult:
 		var save_error: Error = EditorInterface.save_scene()
 		if save_error != OK:
 			return _failure("Save the workbench scene before committing: %s" % error_string(save_error))
-	var result: Terrain3DRegionWorkbenchResult = await archive_region(workbench_terrain)
+	var result: T3DRegionWorkbenchResult = await archive_region(workbench_terrain)
 	if not result.ok:
 		push_error(result.error if not result.error.is_empty() else "Unable to commit Terrain3D regions")
 	else:
@@ -408,7 +408,7 @@ func archive_active_region() -> Terrain3DRegionWorkbenchResult:
 	return result
 
 
-func archive_region(workbench_terrain: Terrain3D) -> Terrain3DRegionWorkbenchResult:
+func archive_region(workbench_terrain: T3DTerrain) -> T3DRegionWorkbenchResult:
 	if not is_instance_valid(workbench_terrain):
 		return _failure("No valid workbench Terrain3D node was provided")
 	var scene_root: Node = null
@@ -424,7 +424,7 @@ func archive_region(workbench_terrain: Terrain3D) -> Terrain3DRegionWorkbenchRes
 	var manifest_path: String = String(scene_root.get_meta(MANIFEST_META, ""))
 	if manifest_path.is_empty() or not FileAccess.file_exists(manifest_path):
 		return _failure("Workbench manifest is missing: %s" % manifest_path)
-	var manifest: Terrain3DRegionWorkbenchManifest = _read_manifest(manifest_path)
+	var manifest: T3DRegionWorkbenchManifest = _read_manifest(manifest_path)
 	if manifest == null or manifest.regions.is_empty():
 		return _failure("Workbench manifest is invalid or contains no regions")
 	if manifest.format < 6:
@@ -446,7 +446,7 @@ func archive_region(workbench_terrain: Terrain3D) -> Terrain3DRegionWorkbenchRes
 	# Lightmaps are part of the same source transaction as regions/pages. A staged
 	# Workbench bake may only replace the exact source lighting state captured at
 	# checkout.
-	for output: Terrain3DRegionWorkbenchLightingOutput in manifest.lighting_outputs:
+	for output: T3DRegionWorkbenchLightingOutput in manifest.lighting_outputs:
 		var current_light_md5: String = FileAccess.get_md5(output.source_light_data_path) if FileAccess.file_exists(output.source_light_data_path) else ""
 		var current_package_md5: String = FileAccess.get_md5(output.source_package_path) if FileAccess.file_exists(output.source_package_path) else ""
 		if current_light_md5 != output.source_light_data_md5 or current_package_md5 != output.source_package_md5:
@@ -456,9 +456,9 @@ func archive_region(workbench_terrain: Terrain3D) -> Terrain3DRegionWorkbenchRes
 	# multi-region commit all-or-nothing with respect to concurrent source edits.
 	# The read-only two-ring context is also hashed because freshly cooked pages
 	# for the editable set depend on those neighboring height/control samples.
-	var validation_entries: Array[Terrain3DRegionWorkbenchRegion] = manifest.get_all_region_entries()
+	var validation_entries: Array[T3DRegionWorkbenchRegion] = manifest.get_all_region_entries()
 	for validation_index: int in range(validation_entries.size()):
-		var entry: Terrain3DRegionWorkbenchRegion = validation_entries[validation_index]
+		var entry: T3DRegionWorkbenchRegion = validation_entries[validation_index]
 		if (validation_index % CHECKOUT_PROGRESS_BATCH) == 0:
 			_update_commit_progress(validation_index, validation_entries.size(), "Validating source region %s" % entry.location)
 			await get_tree().process_frame
@@ -482,19 +482,19 @@ func archive_region(workbench_terrain: Terrain3D) -> Terrain3DRegionWorkbenchRes
 
 	var world_region_size: float = float(workbench_terrain.region_size) * workbench_terrain.vertex_spacing
 	var generated_paths: PackedStringArray = PackedStringArray()
-	var node_results: Dictionary[Vector2i, Terrain3DRegionNodeBuildResult] = {}
+	var node_results: Dictionary[Vector2i, T3DRegionNodeBuildResult] = {}
 	var warnings: PackedStringArray = PackedStringArray()
 	var total_nodes: int = 0
 
 	for node_index: int in range(manifest.regions.size()):
-		var entry: Terrain3DRegionWorkbenchRegion = manifest.regions[node_index]
+		var entry: T3DRegionWorkbenchRegion = manifest.regions[node_index]
 		if (node_index % CHECKOUT_PROGRESS_BATCH) == 0:
 			_update_commit_progress(node_index, manifest.regions.size(), "Preparing streamed-node data for %s" % entry.location)
 			await get_tree().process_frame
 			if _checkout_cancelled:
 				_cleanup_generated_files(generated_paths)
 				return _commit_preflight_failure("Region Workbench commit was cancelled before source mutation")
-		var node_result: Terrain3DRegionNodeBuildResult = _build_region_node_descriptors(
+		var node_result: T3DRegionNodeBuildResult = _build_region_node_descriptors(
 			scene_root, source_directory, entry.location, world_region_size)
 		if not node_result.ok:
 			_cleanup_generated_files(generated_paths)
@@ -505,8 +505,8 @@ func archive_region(workbench_terrain: Terrain3D) -> Terrain3DRegionWorkbenchRes
 			warnings.push_back("%s: %s" % [entry.location, warning])
 		node_results[entry.location] = node_result
 		total_nodes += node_result.descriptors.size()
-		var region: Terrain3DRegion = workbench_terrain.data.get_region(entry.location)
-		region.set_streamed_nodes(Terrain3DRegionNodeDescriptor.values_from_list(node_result.descriptors))
+		var region: T3DRegion = workbench_terrain.data.get_region(entry.location)
+		region.set_streamed_nodes(T3DRegionNodeDescriptor.values_from_list(node_result.descriptors))
 		workbench_terrain.data.save_region(entry.location, manifest.workbench_data_directory,
 			workbench_terrain.save_16_bit)
 		region = workbench_terrain.data.get_region(entry.location)
@@ -524,8 +524,8 @@ func archive_region(workbench_terrain: Terrain3D) -> Terrain3DRegionWorkbenchRes
 		_cleanup_generated_files(generated_paths)
 		return _commit_preflight_failure("Workbench runtime-page cook failed before commit: %s" % [
 			String(cook_result.get("errors", cook_result.get("error", "unknown error")))])
-	var publish_page_entries: Array[Terrain3DRegionWorkbenchRegion] = _runtime_page_publish_entries(manifest)
-	for entry: Terrain3DRegionWorkbenchRegion in publish_page_entries:
+	var publish_page_entries: Array[T3DRegionWorkbenchRegion] = _runtime_page_publish_entries(manifest)
+	for entry: T3DRegionWorkbenchRegion in publish_page_entries:
 		var workbench_page_path: String = entry.workbench_region_path.get_basename() + ".t3dpage"
 		if not FileAccess.file_exists(workbench_page_path):
 			_cleanup_generated_files(generated_paths)
@@ -540,7 +540,7 @@ func archive_region(workbench_terrain: Terrain3D) -> Terrain3DRegionWorkbenchRes
 	# Snapshot editable source regions before staging replacements. This phase is
 	# still cancellable because no source path has been mutated yet.
 	for archive_index: int in range(manifest.regions.size()):
-		var entry: Terrain3DRegionWorkbenchRegion = manifest.regions[archive_index]
+		var entry: T3DRegionWorkbenchRegion = manifest.regions[archive_index]
 		if (archive_index % CHECKOUT_PROGRESS_BATCH) == 0:
 			_update_commit_progress(archive_index, manifest.regions.size(), "Archiving source region %s" % entry.location)
 			await get_tree().process_frame
@@ -557,7 +557,7 @@ func archive_region(workbench_terrain: Terrain3D) -> Terrain3DRegionWorkbenchRes
 	# Pages for the immediate dependency ring are also replaced because their
 	# compiled border/control data can depend on an edited neighbor.
 	for page_archive_index: int in range(publish_page_entries.size()):
-		var entry: Terrain3DRegionWorkbenchRegion = publish_page_entries[page_archive_index]
+		var entry: T3DRegionWorkbenchRegion = publish_page_entries[page_archive_index]
 		if (page_archive_index % CHECKOUT_PROGRESS_BATCH) == 0:
 			_update_commit_progress(page_archive_index, publish_page_entries.size(), "Archiving cooked page %s" % entry.location)
 			await get_tree().process_frame
@@ -572,7 +572,7 @@ func archive_region(workbench_terrain: Terrain3D) -> Terrain3DRegionWorkbenchRes
 				_cleanup_generated_files(generated_paths)
 				_remove_directory_recursive(archive_directory)
 				return _failure("Unable to archive cooked page for %s: %s" % [entry.location, error_string(copy_error)])
-	for output: Terrain3DRegionWorkbenchLightingOutput in manifest.lighting_outputs:
+	for output: T3DRegionWorkbenchLightingOutput in manifest.lighting_outputs:
 		if not output.is_staged():
 			continue
 		for source_path: String in [output.source_light_data_path, output.source_package_path]:
@@ -597,7 +597,7 @@ func archive_region(workbench_terrain: Terrain3D) -> Terrain3DRegionWorkbenchRes
 	var staged_light_data_paths: Dictionary[String, String] = {}
 	var staged_light_package_paths: Dictionary[String, String] = {}
 	for page_stage_index: int in range(publish_page_entries.size()):
-		var entry: Terrain3DRegionWorkbenchRegion = publish_page_entries[page_stage_index]
+		var entry: T3DRegionWorkbenchRegion = publish_page_entries[page_stage_index]
 		if (page_stage_index % CHECKOUT_PROGRESS_BATCH) == 0:
 			_update_commit_progress(page_stage_index, publish_page_entries.size(), "Staging cooked page %s" % entry.location)
 			await get_tree().process_frame
@@ -617,7 +617,7 @@ func archive_region(workbench_terrain: Terrain3D) -> Terrain3DRegionWorkbenchRes
 			return _failure("Unable to stage cooked page for %s: %s" % [entry.location, error_string(copy_error)])
 		staged_page_paths[entry.location] = stage_page_path
 
-	for output: Terrain3DRegionWorkbenchLightingOutput in manifest.lighting_outputs:
+	for output: T3DRegionWorkbenchLightingOutput in manifest.lighting_outputs:
 		if not output.is_staged():
 			continue
 		var stage_light_path: String = output.source_light_data_path + ".workbench_incoming"
@@ -628,13 +628,13 @@ func archive_region(workbench_terrain: Terrain3D) -> Terrain3DRegionWorkbenchRes
 			_cleanup_generated_files(generated_paths)
 			return _failure("Unable to stage Workbench lightmap %s: %s" % [output.cluster_min, error_string(light_copy_error)])
 		staged_light_data_paths[output.source_light_data_path] = stage_light_path
-		var workbench_package := ResourceLoader.load(output.workbench_package_path, "Terrain3DRegionLighting", ResourceLoader.CACHE_MODE_IGNORE_DEEP) as Terrain3DRegionLighting
+		var workbench_package := ResourceLoader.load(output.workbench_package_path, "T3DRegionLighting", ResourceLoader.CACHE_MODE_IGNORE_DEEP) as T3DRegionLighting
 		if not is_instance_valid(workbench_package):
 			_cleanup_staged_paths(staged_region_paths, staged_page_paths)
 			_cleanup_staged_lighting_paths(staged_light_data_paths, staged_light_package_paths)
 			_cleanup_generated_files(generated_paths)
 			return _failure("Unable to load staged lighting package for cluster %s" % output.cluster_min)
-		var source_package := workbench_package.duplicate(true) as Terrain3DRegionLighting
+		var source_package := workbench_package.duplicate(true) as T3DRegionLighting
 		source_package.set("light_data_path", output.source_light_data_path)
 		var source_lighting_dir: String = output.source_package_path.get_base_dir()
 		var lighting_mkdir_error: Error = DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(source_lighting_dir))
@@ -677,7 +677,7 @@ func archive_region(workbench_terrain: Terrain3D) -> Terrain3DRegionWorkbenchRes
 
 	# Now stage edited regions with lighting references resolved against the source
 	# package namespace rather than Workbench-local paths.
-	for entry: Terrain3DRegionWorkbenchRegion in manifest.regions:
+	for entry: T3DRegionWorkbenchRegion in manifest.regions:
 		var stage_region_path: String = entry.source_region_path + ".workbench_incoming"
 		var stage_error: Error = _stage_workbench_region_for_source(workbench_terrain, manifest, entry, stage_region_path)
 		if stage_error != OK:
@@ -688,7 +688,7 @@ func archive_region(workbench_terrain: Terrain3D) -> Terrain3DRegionWorkbenchRes
 			return _failure("Unable to stage edited region %s; the checkout was restored: %s" % [entry.location, error_string(stage_error)])
 		staged_region_paths[entry.location] = stage_region_path
 
-	for entry: Terrain3DRegionWorkbenchRegion in manifest.regions:
+	for entry: T3DRegionWorkbenchRegion in manifest.regions:
 		var replace_error: Error = _replace_file(staged_region_paths[entry.location], entry.source_region_path)
 		if replace_error != OK:
 			_restore_checkout_from_archive(manifest, archive_directory)
@@ -697,7 +697,7 @@ func archive_region(workbench_terrain: Terrain3D) -> Terrain3DRegionWorkbenchRes
 			_cleanup_generated_files(generated_paths)
 			return _failure("Unable to replace source region %s; the checkout was restored: %s" % [entry.location, error_string(replace_error)])
 
-	for entry: Terrain3DRegionWorkbenchRegion in publish_page_entries:
+	for entry: T3DRegionWorkbenchRegion in publish_page_entries:
 		var source_page_path: String = entry.source_region_path.get_basename() + ".t3dpage"
 		var replace_error: Error = _replace_file(staged_page_paths[entry.location], source_page_path)
 		if replace_error != OK:
@@ -721,14 +721,14 @@ func archive_region(workbench_terrain: Terrain3D) -> Terrain3DRegionWorkbenchRes
 	warnings.push_back("Source far atlas invalidated after commit. Run Cook Runtime Dataset in the full source terrain before shipping.")
 
 	var committed_unix: int = int(Time.get_unix_time_from_system())
-	for entry: Terrain3DRegionWorkbenchRegion in manifest.regions:
-		var node_result: Terrain3DRegionNodeBuildResult = node_results[entry.location]
+	for entry: T3DRegionWorkbenchRegion in manifest.regions:
+		var node_result: T3DRegionNodeBuildResult = node_results[entry.location]
 		entry.source_region_md5 = FileAccess.get_md5(entry.source_region_path)
 		entry.last_archive_directory = archive_directory
 		entry.last_region_node_directory = node_result.node_directory
 		entry.streamed_node_count = node_result.descriptors.size()
 		entry.committed_unix = committed_unix
-	for entry: Terrain3DRegionWorkbenchRegion in publish_page_entries:
+	for entry: T3DRegionWorkbenchRegion in publish_page_entries:
 		var source_page_path: String = entry.source_region_path.get_basename() + ".t3dpage"
 		entry.source_page_md5 = FileAccess.get_md5(source_page_path) if FileAccess.file_exists(source_page_path) else ""
 	manifest.last_archive_directory = archive_directory
@@ -736,7 +736,7 @@ func archive_region(workbench_terrain: Terrain3D) -> Terrain3DRegionWorkbenchRes
 	manifest.streamed_node_count = total_nodes
 	manifest.committed_unix = committed_unix
 	manifest.source_far_atlas_md5 = ""
-	for output: Terrain3DRegionWorkbenchLightingOutput in manifest.lighting_outputs:
+	for output: T3DRegionWorkbenchLightingOutput in manifest.lighting_outputs:
 		if output.is_staged():
 			output.source_light_data_md5 = FileAccess.get_md5(output.source_light_data_path) if FileAccess.file_exists(output.source_light_data_path) else ""
 			output.source_package_md5 = FileAccess.get_md5(output.source_package_path) if FileAccess.file_exists(output.source_package_path) else ""
@@ -750,7 +750,7 @@ func archive_region(workbench_terrain: Terrain3D) -> Terrain3DRegionWorkbenchRes
 	_operations_manifest_modified_time = int(FileAccess.get_modified_time(manifest_path)) if FileAccess.file_exists(manifest_path) else 0
 	_operations_region_list_dirty = true
 
-	var result := Terrain3DRegionWorkbenchResult.success()
+	var result := T3DRegionWorkbenchResult.success()
 	result.source_region_path = manifest.source_region_path
 	result.archive_directory = archive_directory
 	result.region_node_directory = manifest.last_region_node_directory
@@ -768,24 +768,24 @@ func is_active_workbench() -> bool:
 	return is_instance_valid(root) and bool(root.get_meta(WORKBENCH_META, false))
 
 
-func _manifest_for_root(root: Node) -> Terrain3DRegionWorkbenchManifest:
+func _manifest_for_root(root: Node) -> T3DRegionWorkbenchManifest:
 	if not is_instance_valid(root):
 		return null
 	var path: String = String(root.get_meta(MANIFEST_META, ""))
 	return _read_manifest(path) if not path.is_empty() else null
 
 
-func _context_snapshot_paths(manifest: Terrain3DRegionWorkbenchManifest) -> PackedStringArray:
+func _context_snapshot_paths(manifest: T3DRegionWorkbenchManifest) -> PackedStringArray:
 	var paths: PackedStringArray = PackedStringArray()
 	if manifest == null:
 		return paths
-	for entry: Terrain3DRegionWorkbenchRegion in manifest.context_regions:
+	for entry: T3DRegionWorkbenchRegion in manifest.context_regions:
 		if not entry.workbench_region_path.is_empty():
 			paths.push_back(entry.workbench_region_path)
 	return paths
 
 
-func configure_editor_region_filter(editor: Terrain3DEditor) -> void:
+func configure_editor_region_filter(editor: T3DEditor) -> void:
 	if not is_instance_valid(editor):
 		return
 	if not is_active_workbench():
@@ -793,7 +793,7 @@ func configure_editor_region_filter(editor: Terrain3DEditor) -> void:
 		return
 	var root: Node = EditorInterface.get_edited_scene_root()
 	var manifest_path: String = String(root.get_meta(MANIFEST_META, "")) if is_instance_valid(root) else ""
-	var manifest: Terrain3DRegionWorkbenchManifest = _read_manifest(manifest_path) if not manifest_path.is_empty() else null
+	var manifest: T3DRegionWorkbenchManifest = _read_manifest(manifest_path) if not manifest_path.is_empty() else null
 	if manifest == null or manifest.regions.is_empty():
 		editor.clear_editable_region_locations()
 		return
@@ -878,12 +878,12 @@ func _refresh_operations_panel() -> void:
 		_operations_manifest_modified_time = manifest_modified_time
 		_operations_manifest = _read_manifest(manifest_path) if not manifest_path.is_empty() else null
 		_operations_region_list_dirty = true
-	var manifest: Terrain3DRegionWorkbenchManifest = _operations_manifest
+	var manifest: T3DRegionWorkbenchManifest = _operations_manifest
 	if manifest == null:
 		_operations_summary.text = "Workbench manifest unavailable"
 		return
 	var staged_lighting: int = 0
-	for output: Terrain3DRegionWorkbenchLightingOutput in manifest.lighting_outputs:
+	for output: T3DRegionWorkbenchLightingOutput in manifest.lighting_outputs:
 		if output.is_staged():
 			staged_lighting += 1
 	_operations_summary.text = "%d editable loaded · %d cook-only context snapshots · lightmaps %d/%d staged · source %s" % [
@@ -893,7 +893,7 @@ func _refresh_operations_panel() -> void:
 		_operations_regions.clear()
 		var display_count: int = mini(manifest.regions.size(), WORKBENCH_REGION_LIST_DISPLAY_LIMIT)
 		for index: int in range(display_count):
-			var entry: Terrain3DRegionWorkbenchRegion = manifest.regions[index]
+			var entry: T3DRegionWorkbenchRegion = manifest.regions[index]
 			var page_path: String = entry.workbench_region_path.get_basename() + ".t3dpage"
 			var page_state: String = "cooked" if FileAccess.file_exists(page_path) else "uncooked"
 			_operations_regions.add_item("%d, %d    %s" % [entry.location.x, entry.location.y, page_state])
@@ -902,7 +902,7 @@ func _refresh_operations_panel() -> void:
 				manifest.regions.size() - display_count])
 		_operations_region_list_dirty = false
 
-	var terrain: Terrain3D = _get_active_terrain()
+	var terrain: T3DTerrain = _get_active_terrain()
 	if not is_instance_valid(terrain):
 		_operations_memory.text = "Terrain3D node unavailable"
 		return
@@ -923,11 +923,11 @@ func cook_active_runtime_data() -> Dictionary:
 		var save_error: Error = EditorInterface.save_scene()
 		if save_error != OK:
 			return {"complete": false, "error": "Save the workbench before cooking: %s" % error_string(save_error)}
-	var terrain: Terrain3D = _get_active_terrain()
+	var terrain: T3DTerrain = _get_active_terrain()
 	if not is_instance_valid(terrain) or not is_instance_valid(terrain.data):
 		return {"complete": false, "error": "Workbench Terrain3D data is unavailable"}
 	var root: Node = EditorInterface.get_edited_scene_root() if Engine.is_editor_hint() else null
-	var manifest: Terrain3DRegionWorkbenchManifest = _manifest_for_root(root)
+	var manifest: T3DRegionWorkbenchManifest = _manifest_for_root(root)
 	if manifest == null:
 		return {"complete": false, "error": "Workbench manifest is unavailable"}
 	result = terrain.data.cook_gpu_region_pages_with_context(_context_snapshot_paths(manifest))
@@ -1052,7 +1052,7 @@ func _ensure_dialog() -> void:
 	var map_label := Label.new()
 	map_label.text = "Spatial selection"
 	map_column.add_child(map_label)
-	_region_map = Terrain3DRegionWorkbenchMap.new()
+	_region_map = T3DRegionWorkbenchMap.new()
 	_region_map.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_region_map.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_region_map.selection_changed.connect(_on_map_selection_changed)
@@ -1109,7 +1109,7 @@ func _on_dialog_confirmed() -> void:
 
 
 func _use_cursor_region() -> void:
-	var source_terrain: Terrain3D = _get_active_terrain()
+	var source_terrain: T3DTerrain = _get_active_terrain()
 	if not is_instance_valid(source_terrain) or source_terrain.data == null:
 		return
 	var location: Vector2i = _get_default_region_location(source_terrain)
@@ -1120,7 +1120,7 @@ func _use_cursor_region() -> void:
 func _on_location_changed(_value: float) -> void:
 	if _updating_location_controls:
 		return
-	var source_terrain: Terrain3D = _get_active_terrain()
+	var source_terrain: T3DTerrain = _get_active_terrain()
 	if not is_instance_valid(source_terrain):
 		return
 	_set_dialog_location(source_terrain, Vector2i(int(_x_spin.value), int(_z_spin.value)))
@@ -1183,7 +1183,7 @@ func _on_map_selection_changed(locations: Array) -> void:
 
 
 func _on_map_center_requested(location: Vector2i) -> void:
-	var source_terrain: Terrain3D = _get_active_terrain()
+	var source_terrain: T3DTerrain = _get_active_terrain()
 	if is_instance_valid(source_terrain):
 		_set_dialog_location(source_terrain, location)
 
@@ -1199,7 +1199,7 @@ func _apply_dialog_selection(update_map: bool = true) -> void:
 	_update_selection_status()
 
 
-func _populate_region_list(source_terrain: Terrain3D) -> void:
+func _populate_region_list(source_terrain: T3DTerrain) -> void:
 	_available_locations.clear()
 	if source_terrain.data != null:
 		_available_locations.assign(source_terrain.data.get_region_locations())
@@ -1217,7 +1217,7 @@ func _region_location_less(a: Vector2i, b: Vector2i) -> bool:
 	return a.y < b.y or (a.y == b.y and a.x < b.x)
 
 
-func _set_dialog_location(source_terrain: Terrain3D, location: Vector2i) -> void:
+func _set_dialog_location(source_terrain: T3DTerrain, location: Vector2i) -> void:
 	_updating_location_controls = true
 	_x_spin.value = location.x
 	_z_spin.value = location.y
@@ -1252,7 +1252,7 @@ func _update_selection_status() -> void:
 	_status_label.text = "%d editable regions selected, bounds %s → %s. Only these regions load into the Workbench Terrain3D node; neighboring dependency snapshots remain cook-only." % [selected.size(), minimum, maximum]
 
 
-func _describe_region(source_terrain: Terrain3D, location: Vector2i) -> String:
+func _describe_region(source_terrain: T3DTerrain, location: Vector2i) -> String:
 	if source_terrain.data != null and is_instance_valid(source_terrain.data.get_region(location)):
 		return "Center %s is authored. %d terrain regions exist in the source data set." % [location, _available_locations.size()]
 	return "Center %s has no authored region. Radius selection still includes any authored neighbors inside the requested footprint." % location
@@ -1269,7 +1269,7 @@ func _normalize_locations(locations: Array[Vector2i]) -> Array[Vector2i]:
 	return result
 
 
-func _collect_context_locations(source_terrain: Terrain3D, editable_locations: Array[Vector2i],
+func _collect_context_locations(source_terrain: T3DTerrain, editable_locations: Array[Vector2i],
 		radius: int) -> Array[Vector2i]:
 	if not is_instance_valid(source_terrain) or source_terrain.data == null or radius <= 0:
 		return []
@@ -1294,38 +1294,38 @@ func _collect_context_locations(source_terrain: Terrain3D, editable_locations: A
 	return result
 
 
-func _runtime_page_publish_entries(manifest: Terrain3DRegionWorkbenchManifest) -> Array[Terrain3DRegionWorkbenchRegion]:
-	var result: Array[Terrain3DRegionWorkbenchRegion] = []
+func _runtime_page_publish_entries(manifest: T3DRegionWorkbenchManifest) -> Array[T3DRegionWorkbenchRegion]:
+	var result: Array[T3DRegionWorkbenchRegion] = []
 	result.append_array(manifest.regions)
 	var affected: Dictionary[Vector2i, bool] = {}
 	for location: Vector2i in manifest.get_region_locations():
 		for z_offset: int in range(-PUBLISH_PAGE_DEPENDENCY_RADIUS, PUBLISH_PAGE_DEPENDENCY_RADIUS + 1):
 			for x_offset: int in range(-PUBLISH_PAGE_DEPENDENCY_RADIUS, PUBLISH_PAGE_DEPENDENCY_RADIUS + 1):
 				affected[location + Vector2i(x_offset, z_offset)] = true
-	for entry: Terrain3DRegionWorkbenchRegion in manifest.context_regions:
+	for entry: T3DRegionWorkbenchRegion in manifest.context_regions:
 		if affected.has(entry.location):
 			result.push_back(entry)
 	return result
 
 
-func _stage_workbench_region_for_source(workbench_terrain: Terrain3D,
-		manifest: Terrain3DRegionWorkbenchManifest, entry: Terrain3DRegionWorkbenchRegion,
+func _stage_workbench_region_for_source(workbench_terrain: T3DTerrain,
+		manifest: T3DRegionWorkbenchManifest, entry: T3DRegionWorkbenchRegion,
 		destination_path: String) -> Error:
-	var edited: Terrain3DRegion = workbench_terrain.data.get_region(entry.location) if is_instance_valid(workbench_terrain.data) else null
+	var edited: T3DRegion = workbench_terrain.data.get_region(entry.location) if is_instance_valid(workbench_terrain.data) else null
 	if not is_instance_valid(edited):
 		return ERR_DOES_NOT_EXIST
-	var snapshot := edited.duplicate(true) as Terrain3DRegion
+	var snapshot := edited.duplicate(true) as T3DRegion
 	if not is_instance_valid(snapshot):
 		return ERR_CANT_CREATE
 	# Lighting is source-owned outside the Workbench. If this cluster was rebaked,
 	# load the just-published source package; otherwise preserve the source region's
 	# existing lighting reference exactly.
-	var output: Terrain3DRegionWorkbenchLightingOutput = manifest.get_lighting_output_for_location(entry.location)
-	var lighting: Terrain3DRegionLighting = null
+	var output: T3DRegionWorkbenchLightingOutput = manifest.get_lighting_output_for_location(entry.location)
+	var lighting: T3DRegionLighting = null
 	if output != null and output.is_staged() and FileAccess.file_exists(output.source_package_path):
-		lighting = ResourceLoader.load(output.source_package_path, "Terrain3DRegionLighting", ResourceLoader.CACHE_MODE_IGNORE_DEEP) as Terrain3DRegionLighting
+		lighting = ResourceLoader.load(output.source_package_path, "T3DRegionLighting", ResourceLoader.CACHE_MODE_IGNORE_DEEP) as T3DRegionLighting
 	else:
-		var source_region := ResourceLoader.load(entry.source_region_path, "Terrain3DRegion", ResourceLoader.CACHE_MODE_IGNORE_DEEP) as Terrain3DRegion
+		var source_region := ResourceLoader.load(entry.source_region_path, "T3DRegion", ResourceLoader.CACHE_MODE_IGNORE_DEEP) as T3DRegion
 		if is_instance_valid(source_region):
 			lighting = source_region.get_lighting()
 	snapshot.set_lighting(lighting)
@@ -1348,20 +1348,20 @@ func _cleanup_staged_paths(region_paths: Dictionary[Vector2i, String],
 		_remove_file_if_present(path)
 
 
-func _restore_checkout_from_archive(manifest: Terrain3DRegionWorkbenchManifest,
+func _restore_checkout_from_archive(manifest: T3DRegionWorkbenchManifest,
 		archive_directory: String) -> void:
-	for entry: Terrain3DRegionWorkbenchRegion in manifest.regions:
+	for entry: T3DRegionWorkbenchRegion in manifest.regions:
 		var archived_region_path: String = archive_directory.path_join(entry.source_region_path.get_file())
 		if FileAccess.file_exists(archived_region_path):
 			_copy_file(archived_region_path, entry.source_region_path)
-	for entry: Terrain3DRegionWorkbenchRegion in _runtime_page_publish_entries(manifest):
+	for entry: T3DRegionWorkbenchRegion in _runtime_page_publish_entries(manifest):
 		var source_page_path: String = entry.source_region_path.get_basename() + ".t3dpage"
 		var archived_page_path: String = archive_directory.path_join(source_page_path.get_file())
 		if FileAccess.file_exists(archived_page_path):
 			_copy_file(archived_page_path, source_page_path)
 		else:
 			_remove_file_if_present(source_page_path)
-	for output: Terrain3DRegionWorkbenchLightingOutput in manifest.lighting_outputs:
+	for output: T3DRegionWorkbenchLightingOutput in manifest.lighting_outputs:
 		if not output.is_staged():
 			continue
 		for source_path: String in [output.source_light_data_path, output.source_package_path]:
@@ -1382,7 +1382,7 @@ func _restore_checkout_from_archive(manifest: Terrain3DRegionWorkbenchManifest,
 			_remove_file_if_present(source_far_atlas_path)
 
 
-func _get_default_region_location(source_terrain: Terrain3D) -> Vector2i:
+func _get_default_region_location(source_terrain: T3DTerrain) -> Vector2i:
 	if is_instance_valid(plugin):
 		var mouse_location: Vector2i = source_terrain.data.get_region_location(plugin.mouse_global_position)
 		if is_instance_valid(source_terrain.data.get_region(mouse_location)):
@@ -1391,7 +1391,7 @@ func _get_default_region_location(source_terrain: Terrain3D) -> Vector2i:
 	return Vector2i(locations[0]) if not locations.is_empty() else Vector2i.ZERO
 
 
-func _get_active_terrain() -> Terrain3D:
+func _get_active_terrain() -> T3DTerrain:
 	if is_instance_valid(plugin) and is_instance_valid(plugin.terrain):
 		return plugin.terrain
 	if Engine.is_editor_hint():
@@ -1401,17 +1401,17 @@ func _get_active_terrain() -> Terrain3D:
 	return null
 
 
-func _find_terrain(node: Node) -> Terrain3D:
-	if node is Terrain3D:
-		return node as Terrain3D
+func _find_terrain(node: Node) -> T3DTerrain:
+	if node is T3DTerrain:
+		return node as T3DTerrain
 	for child: Node in node.get_children():
-		var found: Terrain3D = _find_terrain(child)
+		var found: T3DTerrain = _find_terrain(child)
 		if is_instance_valid(found):
 			return found
 	return null
 
 
-func _write_workbench_scene(_source_terrain: Terrain3D, _locations: Array[Vector2i], _data_directory: String,
+func _write_workbench_scene(_source_terrain: T3DTerrain, _locations: Array[Vector2i], _data_directory: String,
 		manifest_path: String, scene_path: String) -> Error:
 	var root := Node3D.new()
 	root.name = "Terrain3DRegionWorkbench"
@@ -1430,8 +1430,8 @@ func _write_workbench_scene(_source_terrain: Terrain3D, _locations: Array[Vector
 	return save_error
 
 
-func _capture_terrain_configuration(source_terrain: Terrain3D,
-		workbench_directory: String) -> Terrain3DRegionWorkbenchConfiguration:
+func _capture_terrain_configuration(source_terrain: T3DTerrain,
+		workbench_directory: String) -> T3DRegionWorkbenchConfiguration:
 	var properties: Dictionary[String, Variant] = {}
 	var resources: Dictionary[String, String] = {}
 	var available_properties: Dictionary[String, bool] = _property_name_set(source_terrain)
@@ -1449,16 +1449,16 @@ func _capture_terrain_configuration(source_terrain: Terrain3D,
 			continue
 		var mkdir_error: Error = DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(resource_directory))
 		if mkdir_error != OK:
-			return Terrain3DRegionWorkbenchConfiguration.failure(
+			return T3DRegionWorkbenchConfiguration.failure(
 				"Unable to create workbench resource directory: %s" % error_string(mkdir_error))
 		var resource_path: String = resource_directory.path_join(
 			property_name.validate_filename() + ".tres")
 		var save_error: Error = ResourceSaver.save(resource.duplicate(true), resource_path)
 		if save_error != OK:
-			return Terrain3DRegionWorkbenchConfiguration.failure(
+			return T3DRegionWorkbenchConfiguration.failure(
 				"Unable to save workbench resource %s: %s" % [property_name, error_string(save_error)])
 		resources[property_name] = resource_path
-	return Terrain3DRegionWorkbenchConfiguration.success(properties, resources)
+	return T3DRegionWorkbenchConfiguration.success(properties, resources)
 
 
 func _region_container_name(location: Vector2i) -> String:
@@ -1488,22 +1488,22 @@ func _has_region_node_containers(region_nodes: Node3D) -> bool:
 
 
 func _build_region_node_descriptors(scene_root: Node, source_directory: String,
-		location: Vector2i, world_region_size: float) -> Terrain3DRegionNodeBuildResult:
+		location: Vector2i, world_region_size: float) -> T3DRegionNodeBuildResult:
 	var region_nodes := scene_root.get_node_or_null(NodePath(String(REGION_NODES_NAME))) as Node3D
 	if not is_instance_valid(region_nodes):
-		return Terrain3DRegionNodeBuildResult.failure("Workbench scene is missing the RegionNodes root")
+		return T3DRegionNodeBuildResult.failure("Workbench scene is missing the RegionNodes root")
 	var region_container: Node3D = _get_region_node_container(region_nodes, location)
 	if not is_instance_valid(region_container):
 		# Version-2 workbenches stored the single region's nodes directly under RegionNodes.
 		if _has_region_node_containers(region_nodes):
-			return Terrain3DRegionNodeBuildResult.failure(
+			return T3DRegionNodeBuildResult.failure(
 				"Workbench is missing the RegionNodes/%s container for checked-out region %s" % [
 					_region_container_name(location), location])
 		region_container = region_nodes
 	if world_region_size <= 0.0:
-		return Terrain3DRegionNodeBuildResult.failure("Workbench terrain has an invalid world region size")
+		return T3DRegionNodeBuildResult.failure("Workbench terrain has an invalid world region size")
 
-	var result := Terrain3DRegionNodeBuildResult.success()
+	var result := T3DRegionNodeBuildResult.success()
 	var children: Array[Node] = region_container.get_children()
 	if children.is_empty():
 		return result
@@ -1512,7 +1512,7 @@ func _build_region_node_descriptors(scene_root: Node, source_directory: String,
 	var mkdir_error: Error = DirAccess.make_dir_recursive_absolute(
 		ProjectSettings.globalize_path(result.node_directory))
 	if mkdir_error != OK:
-		return Terrain3DRegionNodeBuildResult.failure(
+		return T3DRegionNodeBuildResult.failure(
 			"Unable to create region-node directory: %s" % error_string(mkdir_error))
 
 	var used_ids: Dictionary[int, bool] = {}
@@ -1520,18 +1520,18 @@ func _build_region_node_descriptors(scene_root: Node, source_directory: String,
 	for child: Node in children:
 		if not child is Node3D:
 			_cleanup_generated_files(result.generated_paths)
-			return Terrain3DRegionNodeBuildResult.failure(
+			return T3DRegionNodeBuildResult.failure(
 				"Every direct child of RegionNodes must be a Node3D: %s" % child.name)
 		if bool(child.get_meta(NODE_META_LOAD_ERROR, false)):
 			_cleanup_generated_files(result.generated_paths)
-			return Terrain3DRegionNodeBuildResult.failure(
+			return T3DRegionNodeBuildResult.failure(
 				"Cannot archive missing region node %s. Restore its source scene first." % child.name)
 
 		var node_root := child as Node3D
 		var anchor_error: String = _validate_region_node_anchor(node_root, world_region_size)
 		if not anchor_error.is_empty():
 			_cleanup_generated_files(result.generated_paths)
-			return Terrain3DRegionNodeBuildResult.failure(anchor_error)
+			return T3DRegionNodeBuildResult.failure(anchor_error)
 
 		var requested_id: int = int(child.get_meta(NODE_META_ID, 0))
 		var spawn_id: int = requested_id
@@ -1549,7 +1549,7 @@ func _build_region_node_descriptors(scene_root: Node, source_directory: String,
 			boundary_policy = BOUNDARY_POLICY_BOUNDS
 		child.set_meta(NODE_META_BOUNDARY_POLICY, boundary_policy)
 
-		var coverage: Terrain3DRegionWorkbenchCoverage = _calculate_region_node_coverage(
+		var coverage: T3DRegionWorkbenchCoverage = _calculate_region_node_coverage(
 			node_root, region_container, world_region_size)
 		var coverage_min := Vector2i.ZERO
 		var coverage_max := Vector2i.ZERO
@@ -1576,11 +1576,11 @@ func _build_region_node_descriptors(scene_root: Node, source_directory: String,
 		var save_error: Error = _save_region_node_scene(node_root, node_scene_path)
 		if save_error != OK:
 			_cleanup_generated_files(result.generated_paths)
-			return Terrain3DRegionNodeBuildResult.failure(
+			return T3DRegionNodeBuildResult.failure(
 				"Unable to save region node %s: %s" % [child.name, error_string(save_error)])
 		result.generated_paths.push_back(node_scene_path)
 
-		var descriptor := Terrain3DRegionNodeDescriptor.new()
+		var descriptor := T3DRegionNodeDescriptor.new()
 		descriptor.id = spawn_id
 		descriptor.scene_path = node_scene_path
 		descriptor.transform = node_root.transform
@@ -1618,7 +1618,7 @@ func _validate_region_node_anchor(node_root: Node3D, world_region_size: float) -
 
 
 func _calculate_region_node_coverage(node_root: Node3D, region_nodes: Node3D,
-		world_region_size: float) -> Terrain3DRegionWorkbenchCoverage:
+		world_region_size: float) -> T3DRegionWorkbenchCoverage:
 	var points: Array[Vector3] = [node_root.position]
 	var stack: Array[Node] = [node_root]
 	var region_inverse: Transform3D = region_nodes.global_transform.affine_inverse()
@@ -1654,7 +1654,7 @@ func _calculate_region_node_coverage(node_root: Node3D, region_nodes: Node3D,
 	var epsilon: float = maxf(0.0001, world_region_size * 0.000001)
 	var maximum_x: float = bounds_max.x - epsilon if bounds_max.x - bounds_min.x > epsilon else bounds_max.x
 	var maximum_z: float = bounds_max.z - epsilon if bounds_max.z - bounds_min.z > epsilon else bounds_max.z
-	return Terrain3DRegionWorkbenchCoverage.create(
+	return T3DRegionWorkbenchCoverage.create(
 		Vector2i(
 			int(floorf(bounds_min.x / world_region_size)),
 			int(floorf(bounds_min.z / world_region_size))),
@@ -1733,7 +1733,7 @@ func _property_name_set(object: Object) -> Dictionary[String, bool]:
 
 
 func _open_scene_after_owner_release(scene_path: String) -> void:
-	# Terrain3DData uses one process-static active storage owner. Defer opening
+	# T3DData uses one process-static active storage owner. Defer opening
 	# until the closed scene has completed teardown, then load the isolated owner.
 	await get_tree().process_frame
 	EditorInterface.get_resource_filesystem().scan_sources()
@@ -1750,7 +1750,7 @@ func _open_source_after_commit(scene_path: String, session_directory: String) ->
 	EditorInterface.open_scene_from_path(scene_path)
 
 
-func _write_manifest(path: String, manifest: Terrain3DRegionWorkbenchManifest) -> Error:
+func _write_manifest(path: String, manifest: T3DRegionWorkbenchManifest) -> Error:
 	if path.is_empty():
 		return ERR_INVALID_PARAMETER
 	var staged_path: String = path + ".incoming"
@@ -1781,10 +1781,10 @@ func _write_manifest(path: String, manifest: Terrain3DRegionWorkbenchManifest) -
 	return OK
 
 
-func _read_manifest(path: String) -> Terrain3DRegionWorkbenchManifest:
+func _read_manifest(path: String) -> T3DRegionWorkbenchManifest:
 	if path.is_empty() or not FileAccess.file_exists(path):
 		return null
-	return Terrain3DRegionWorkbenchManifest.from_value(
+	return T3DRegionWorkbenchManifest.from_value(
 		JSON.parse_string(FileAccess.get_file_as_string(path)))
 
 
@@ -1850,14 +1850,14 @@ func _remove_file_if_present(path: String) -> Error:
 	return OK
 
 
-func _snapshot_region_to_workbench(source_region: Terrain3DRegion, destination_path: String) -> Error:
-	var snapshot := source_region.duplicate(true) as Terrain3DRegion
+func _snapshot_region_to_workbench(source_region: T3DRegion, destination_path: String) -> Error:
+	var snapshot := source_region.duplicate(true) as T3DRegion
 	if not is_instance_valid(snapshot):
 		return ERR_CANT_CREATE
 	return ResourceSaver.save(snapshot, destination_path)
 
 
-func _initialize_lighting_outputs(manifest: Terrain3DRegionWorkbenchManifest,
+func _initialize_lighting_outputs(manifest: T3DRegionWorkbenchManifest,
 		editable_locations: Array[Vector2i], workbench_directory: String) -> void:
 	manifest.lighting_outputs.clear()
 	var clusters: Dictionary[Vector2i, Array] = {}
@@ -1876,7 +1876,7 @@ func _initialize_lighting_outputs(manifest: Terrain3DRegionWorkbenchManifest,
 			if raw_location is Vector2i:
 				members.push_back(raw_location)
 		members.sort_custom(_region_location_less)
-		var output := Terrain3DRegionWorkbenchLightingOutput.new()
+		var output := T3DRegionWorkbenchLightingOutput.new()
 		output.cluster_min = cluster_min
 		output.cluster_max = cluster_min + Vector2i(LIGHTMAP_CLUSTER_SIZE - 1, LIGHTMAP_CLUSTER_SIZE - 1)
 		output.region_locations = members
@@ -1897,7 +1897,7 @@ func _initialize_lighting_outputs(manifest: Terrain3DRegionWorkbenchManifest,
 		output.source_light_data_md5 = FileAccess.get_md5(output.source_light_data_path) if FileAccess.file_exists(output.source_light_data_path) else ""
 		output.source_package_md5 = FileAccess.get_md5(output.source_package_path) if FileAccess.file_exists(output.source_package_path) else ""
 		manifest.lighting_outputs.push_back(output)
-	manifest.lighting_outputs.sort_custom(func(a: Terrain3DRegionWorkbenchLightingOutput, b: Terrain3DRegionWorkbenchLightingOutput) -> bool:
+	manifest.lighting_outputs.sort_custom(func(a: T3DRegionWorkbenchLightingOutput, b: T3DRegionWorkbenchLightingOutput) -> bool:
 		return a.cluster_min.y < b.cluster_min.y or (a.cluster_min.y == b.cluster_min.y and a.cluster_min.x < b.cluster_min.x))
 
 
@@ -1960,7 +1960,7 @@ func _end_checkout_progress() -> void:
 	_checkout_cancelled = false
 
 
-func _commit_preflight_failure(message: String) -> Terrain3DRegionWorkbenchResult:
+func _commit_preflight_failure(message: String) -> T3DRegionWorkbenchResult:
 	_end_checkout_progress()
 	return _failure(message)
 
@@ -2001,7 +2001,7 @@ func _confirm_abandon_workbench() -> void:
 	if not is_instance_valid(root):
 		return
 	var manifest_path: String = String(root.get_meta(MANIFEST_META, ""))
-	var manifest: Terrain3DRegionWorkbenchManifest = _read_manifest(manifest_path)
+	var manifest: T3DRegionWorkbenchManifest = _read_manifest(manifest_path)
 	if manifest == null:
 		return
 	var session_directory: String = manifest.workbench_scene.get_base_dir()
@@ -2042,5 +2042,5 @@ func _remove_directory_recursive(path: String) -> Error:
 	return DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 
-func _failure(message: String) -> Terrain3DRegionWorkbenchResult:
-	return Terrain3DRegionWorkbenchResult.failure(message)
+func _failure(message: String) -> T3DRegionWorkbenchResult:
+	return T3DRegionWorkbenchResult.failure(message)

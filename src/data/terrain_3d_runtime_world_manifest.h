@@ -15,7 +15,7 @@
 #include <godot_cpp/variant/vector2.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
 
-class Terrain3DRegion;
+class T3DRegion;
 class T3DRegionRepository;
 class T3DRuntimePageStore;
 struct T3DRuntimePageConfig;

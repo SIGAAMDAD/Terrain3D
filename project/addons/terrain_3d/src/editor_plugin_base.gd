@@ -1,18 +1,18 @@
 # Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 # Typed contract shared by Terrain3D editor-side helpers.
 @tool
-class_name Terrain3DEditorPluginBase
+class_name T3DEditorPluginBase
 extends EditorPlugin
 
 var debug: int = 0
-var editor: Terrain3DEditor
+var editor: T3DEditor
 var editor_settings: EditorSettings
 var godot_editor_window: Window
 var viewport: SubViewport
 var mouse_global_position: Vector3 = Vector3.ZERO
 var mouse_in_main: bool = false
 
-var terrain: Terrain3D
+var terrain: T3DTerrain
 var nav_region: NavigationRegion3D
 
 var modifier_ctrl: bool = false
@@ -26,11 +26,11 @@ func _read_input(_p_event: InputEvent = null) -> AfterGUIInput:
 	return AFTER_GUI_INPUT_PASS
 
 
-func get_erosion_settings(_p_terrain: Terrain3D) -> Terrain3DErosionSettings:
-	return Terrain3DErosionSettings.new()
+func get_erosion_settings(_p_terrain: T3DTerrain) -> T3DErosionSettings:
+	return T3DErosionSettings.new()
 
 
-func set_erosion_settings(_p_terrain: Terrain3D, _p_settings: Terrain3DErosionSettings) -> void:
+func set_erosion_settings(_p_terrain: T3DTerrain, _p_settings: T3DErosionSettings) -> void:
 	pass
 
 
@@ -55,11 +55,11 @@ func get_region_lightmap_baker() -> Node:
 	return null
 
 
-func get_terrain() -> Terrain3D:
+func get_terrain() -> T3DTerrain:
 	return terrain
 
 
-func is_terrain_valid(_p_terrain: Terrain3D = null) -> bool:
+func is_terrain_valid(_p_terrain: T3DTerrain = null) -> bool:
 	return false
 
 

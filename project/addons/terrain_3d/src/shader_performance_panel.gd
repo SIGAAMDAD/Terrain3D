@@ -12,7 +12,7 @@ const TERRAIN_GLOBAL_GROUPS = [
 ]
 const OCEAN_GROUPS = ["Ocean"]
 
-var plugin: Terrain3DEditorPluginBase
+var plugin: T3DEditorPluginBase
 var _syncing: bool = false
 var _controls: Array[Control] = []
 var _bindings: Dictionary[String, Control] = {}
@@ -125,13 +125,13 @@ func _build_ui() -> void:
 
 func _build_terrain_tab(p_tabs: TabContainer) -> void:
 	var body: VBoxContainer = _make_tab_body(p_tabs, "Terrain")
-	_add_descriptor_groups(body, "Terrain3DMaterial")
-	_add_descriptor_groups(body, "Terrain3D", TERRAIN_GLOBAL_GROUPS)
+	_add_descriptor_groups(body, "T3DMaterial")
+	_add_descriptor_groups(body, "T3DTerrain", TERRAIN_GLOBAL_GROUPS)
 
 
 func _build_ocean_tab(p_tabs: TabContainer) -> void:
 	var body: VBoxContainer = _make_tab_body(p_tabs, "Ocean")
-	_add_descriptor_groups(body, "Terrain3D", OCEAN_GROUPS)
+	_add_descriptor_groups(body, "T3DTerrain", OCEAN_GROUPS)
 
 
 func _build_reference_tab(p_tabs: TabContainer) -> void:
@@ -144,9 +144,9 @@ func _build_reference_tab(p_tabs: TabContainer) -> void:
 		"[b]Authoritative operational setting reference[/b]",
 		"The text below is generated from the same metadata used by the Inspector and Runtime Profiler.",
 	])
-	var descriptors: Array[Dictionary] = SettingMetadata.descriptors_for_class("Terrain3DMaterial")
-	descriptors.append_array(SettingMetadata.descriptors_for_class("Terrain3D", TERRAIN_GLOBAL_GROUPS))
-	descriptors.append_array(SettingMetadata.descriptors_for_class("Terrain3D", OCEAN_GROUPS))
+	var descriptors: Array[Dictionary] = SettingMetadata.descriptors_for_class("T3DMaterial")
+	descriptors.append_array(SettingMetadata.descriptors_for_class("T3DTerrain", TERRAIN_GLOBAL_GROUPS))
+	descriptors.append_array(SettingMetadata.descriptors_for_class("T3DTerrain", OCEAN_GROUPS))
 	for descriptor: Dictionary in descriptors:
 		if not SettingControlFactory.is_supported(descriptor):
 			continue
@@ -276,20 +276,20 @@ func _on_search_changed(p_query: String) -> void:
 			group.folded = false
 
 
-func _get_terrain() -> Terrain3D:
+func _get_terrain() -> T3DTerrain:
 	if not is_instance_valid(plugin):
 		return null
 	return plugin.terrain
 
 
-func _get_material() -> Terrain3DMaterial:
-	var terrain_node: Terrain3D = _get_terrain()
+func _get_material() -> T3DMaterial:
+	var terrain_node: T3DTerrain = _get_terrain()
 	return terrain_node.material if is_instance_valid(terrain_node) else null
 
 
 func sync_from_material() -> void:
-	var terrain_node: Terrain3D = _get_terrain()
-	var material: Terrain3DMaterial = _get_material()
+	var terrain_node: T3DTerrain = _get_terrain()
+	var material: T3DMaterial = _get_material()
 	_syncing = true
 	if not is_instance_valid(terrain_node) or not is_instance_valid(material):
 		_status.text = "Select a Terrain3D node to edit runtime shader quality."
@@ -299,7 +299,7 @@ func sync_from_material() -> void:
 	_set_controls_enabled(true)
 	for key: String in _bindings:
 		var descriptor: Dictionary = _binding_descriptors[key]
-		var target: Object = material if str(descriptor.get("class_name", "")) == "Terrain3DMaterial" else terrain_node
+		var target: Object = material if str(descriptor.get("class_name", "")) == "T3DMaterial" else terrain_node
 		SettingControlFactory.sync_control(_bindings[key], descriptor, target.get(str(descriptor.get("property_name", ""))))
 	_status.text = (
 		"Profile: %s — %s. Cache: %d terrain, %d editor, %d displacement; %d speculative.\n"
@@ -326,11 +326,11 @@ func _set_controls_enabled(p_enabled: bool) -> void:
 func _set_descriptor_value(p_descriptor: Dictionary, p_value: Variant) -> void:
 	if _syncing:
 		return
-	var terrain_node: Terrain3D = _get_terrain()
-	var material: Terrain3DMaterial = _get_material()
+	var terrain_node: T3DTerrain = _get_terrain()
+	var material: T3DMaterial = _get_material()
 	if not is_instance_valid(terrain_node) or not is_instance_valid(material):
 		return
-	var target: Object = material if str(p_descriptor.get("class_name", "")) == "Terrain3DMaterial" else terrain_node
+	var target: Object = material if str(p_descriptor.get("class_name", "")) == "T3DMaterial" else terrain_node
 	target.set(str(p_descriptor.get("property_name", "")), p_value)
 	if target == material:
 		material.emit_changed()
@@ -340,15 +340,15 @@ func _set_descriptor_value(p_descriptor: Dictionary, p_value: Variant) -> void:
 
 
 func _on_prewarm() -> void:
-	var material: Terrain3DMaterial = _get_material()
+	var material: T3DMaterial = _get_material()
 	if is_instance_valid(material):
 		material.prewarm_shader_variants()
 		sync_from_material()
 
 
 func _on_clear_cache() -> void:
-	var material: Terrain3DMaterial = _get_material()
+	var material: T3DMaterial = _get_material()
 	if is_instance_valid(material):
 		material.clear_shader_variant_cache()
-		material.update(Terrain3DMaterial.FULL_REBUILD)
+		material.update(T3DMaterial.FULL_REBUILD)
 		sync_from_material()

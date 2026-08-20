@@ -49,7 +49,7 @@ T3DActiveHeightResidencyResult T3DActiveHeightResidency::update(
 	for ( int slot = 0; slot < m_pRepository->getSlotCount(); ++slot ) {
 		++m_stats.nSlotsExaminedLastTick;
 		const Vector2i location = m_pRepository->getSlotsData()[slot];
-		Terrain3DRegion *const pRegion = location == V2I_MAX ? nullptr : m_pRepository->getRegionPtr( location );
+		T3DRegion *const pRegion = location == V2I_MAX ? nullptr : m_pRepository->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() ) {
 			continue;
 		}

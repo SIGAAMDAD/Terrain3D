@@ -130,12 +130,12 @@ Error T3DMapEditService::setPixel(
 ) {
 	rRegionLocation = V2I_MAX;
 	rDirtyRect = Rect2i();
-	if ( !m_pRepository || eMapType < Terrain3DRegion::TYPE_HEIGHT || eMapType >= Terrain3DRegion::TYPE_MAX ) {
+	if ( !m_pRepository || eMapType < T3DRegion::TYPE_HEIGHT || eMapType >= T3DRegion::TYPE_MAX ) {
 		return ERR_INVALID_PARAMETER;
 	}
 
 	rRegionLocation = m_pRepository->getRegionLocation( rGlobalPosition );
-	Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( rRegionLocation );
+	T3DRegion *const pRegion = m_pRepository->getRegionPtr( rRegionLocation );
 	if ( !pRegion || pRegion->isDeleted() || m_pRepository->getRegionId( rRegionLocation ) < 0 ) {
 		return ERR_DOES_NOT_EXIST;
 	}
@@ -152,8 +152,8 @@ Error T3DMapEditService::setPixel(
 	if ( !pMap ) {
 		return ERR_UNAVAILABLE;
 	}
-	if ( eMapType == Terrain3DRegion::TYPE_HEIGHT ) {
-		Terrain3DRegionCodec::writeHeightPixel( pMap, imagePosition, rPixel.r );
+	if ( eMapType == T3DRegion::TYPE_HEIGHT ) {
+		T3DRegionCodec::writeHeightPixel( pMap, imagePosition, rPixel.r );
 	} else {
 		pMap->set_pixelv( imagePosition, rPixel );
 	}
@@ -176,7 +176,7 @@ const eastl::vector<T3DDerivedMapUpdate> &T3DMapEditService::regenerateDerivedMa
 	for ( const Vector2i &location : rRegionLocations ) {
 		t3dderivedMapTask_t task;
 		task.location = location;
-		Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
+		T3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() ) {
 			tasks.push_back( std::move( task ) );
 			continue;
@@ -272,7 +272,7 @@ const eastl::vector<T3DDerivedMapUpdate> &T3DMapEditService::regenerateDerivedMa
 		if ( !task.bAvailable || task.dirtyRect.size.x <= 0 || task.dirtyRect.size.y <= 0 ) {
 			continue;
 		}
-		Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( task.location );
+		T3DRegion *const pRegion = m_pRepository->getRegionPtr( task.location );
 		T3DDerivedMapUpdate update;
 		update.location = task.location;
 		update.dirtyRect = task.dirtyRect;
@@ -328,8 +328,8 @@ T3DMapMutation T3DMapEditService::commitMapEdits(
 	m_activeLocationScratch.clear();
 	m_derivedLocationScratch.clear();
 	m_derivedUpdateScratch.clear();
-	if ( !m_pRepository || !m_pSamplingStorage || eMapType < Terrain3DRegion::TYPE_HEIGHT ||
-		eMapType >= Terrain3DRegion::TYPE_MAX || rRegionLocations.empty() ) {
+	if ( !m_pRepository || !m_pSamplingStorage || eMapType < T3DRegion::TYPE_HEIGHT ||
+		eMapType >= T3DRegion::TYPE_MAX || rRegionLocations.empty() ) {
 		return {};
 	}
 
@@ -342,12 +342,12 @@ T3DMapMutation T3DMapEditService::commitMapEdits(
 	real_t editedMaxHeight = -std::numeric_limits<real_t>::infinity();
 
 	for ( const Vector2i &location : rRegionLocations ) {
-		Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
+		T3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() || m_pRepository->getRegionId( location ) < 0 ) {
 			continue;
 		}
 		pRegion->markMapEdited( eMapType, true );
-		if ( eMapType == Terrain3DRegion::TYPE_CONTROL || eMapType == Terrain3DRegion::TYPE_COLOR ) {
+		if ( eMapType == T3DRegion::TYPE_CONTROL || eMapType == T3DRegion::TYPE_COLOR ) {
 			pRegion->compactMapIfDefault( eMapType );
 		}
 		const Rect2i dirtyRect = getRegionDirtyRect(
@@ -364,7 +364,7 @@ T3DMapMutation T3DMapEditService::commitMapEdits(
 		return {};
 	}
 
-	if ( eMapType == Terrain3DRegion::TYPE_HEIGHT ) {
+	if ( eMapType == T3DRegion::TYPE_HEIGHT ) {
 		m_derivedLocationScratch.reserve( MIN<size_t>(
 			m_activeLocationScratch.size() * 3u,
 			( size_t ) ( m_pRepository->getRegionMapSize() ) * ( size_t ) ( m_pRepository->getRegionMapSize() )
@@ -396,7 +396,7 @@ T3DMapMutation T3DMapEditService::commitMapEdits(
 				if ( candidateMapIndex < 0 || derivedLocationSeen.test( ( size_t ) ( candidateMapIndex ) ) ) {
 					continue;
 				}
-				Terrain3DRegion *const pCandidateRegion = m_pRepository->getRegionPtr( candidate );
+				T3DRegion *const pCandidateRegion = m_pRepository->getRegionPtr( candidate );
 				if ( !pCandidateRegion || pCandidateRegion->isDeleted() ) {
 					continue;
 				}
@@ -414,7 +414,7 @@ T3DMapMutation T3DMapEditService::commitMapEdits(
 		}
 
 		for ( const Vector2i &location : m_activeLocationScratch ) {
-			if ( const Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location ) ) {
+			if ( const T3DRegion *const pRegion = m_pRepository->getRegionPtr( location ) ) {
 				const Vector2 range = pRegion->getHeightRange();
 				editedMinHeight = MIN( editedMinHeight, range.x );
 				editedMaxHeight = MAX( editedMaxHeight, range.y );
@@ -425,7 +425,7 @@ T3DMapMutation T3DMapEditService::commitMapEdits(
 	if ( editedArea.size.x <= 0.0f || editedArea.size.z <= 0.0f ) {
 		bool bFirstRegion = true;
 		for ( const Vector2i &location : m_activeLocationScratch ) {
-			const Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
+			const T3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
 			if ( !pRegion ) {
 				continue;
 			}
@@ -445,7 +445,7 @@ T3DMapMutation T3DMapEditService::commitMapEdits(
 	}
 
 	Vector2 editedHeightRange = V2_ZERO;
-	if ( eMapType == Terrain3DRegion::TYPE_HEIGHT ) {
+	if ( eMapType == T3DRegion::TYPE_HEIGHT ) {
 		calculateHeightRange( false );
 		if ( std::isfinite( editedMinHeight ) && std::isfinite( editedMaxHeight ) ) {
 			editedHeightRange = Vector2( editedMinHeight, editedMaxHeight );
@@ -464,7 +464,7 @@ T3DMapMutation T3DMapEditService::commitMapEdits(
 void T3DMapEditService::finalizeMapEdits( const T3DMapMutation &rMutation, const bool bKeepEdited ) {
 	if ( !bKeepEdited && m_pRepository ) {
 		for ( const Vector2i &location : rMutation.changedLocations ) {
-			if ( Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location ) ) {
+			if ( T3DRegion *const pRegion = m_pRepository->getRegionPtr( location ) ) {
 				pRegion->setEdited( false );
 			}
 		}
@@ -496,7 +496,7 @@ bool T3DMapEditService::buildRegionEditArea(
 	if ( !m_pRepository ) {
 		return false;
 	}
-	const Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( rRegionLocation );
+	const T3DRegion *const pRegion = m_pRepository->getRegionPtr( rRegionLocation );
 	if ( !pRegion || pRegion->isDeleted() || m_pRepository->getRegionId( rRegionLocation ) < 0 ) {
 		return false;
 	}
@@ -561,7 +561,7 @@ void T3DMapEditService::calculateHeightRange(
 	}
 	for ( int slot = 0; slot < m_pRepository->getSlotCount(); ++slot ) {
 		const Vector2i regionLocation = m_pRepository->getSlotsData()[slot];
-		Terrain3DRegion *pRegion = m_pRepository->getRegionPtr( regionLocation );
+		T3DRegion *pRegion = m_pRepository->getRegionPtr( regionLocation );
 		if ( !pRegion ) {
 			continue;
 		}
@@ -580,13 +580,13 @@ void T3DMapEditService::calculateHeightRange(
 }
 
 void T3DMapEditService::copyRegionMaps(
-	const Terrain3DRegion *const pSourceRegion, const Rect2i &rSourceRect,
-	const Rect2i &rDestinationRect, Terrain3DRegion *const pDestinationRegion
+	const T3DRegion *const pSourceRegion, const Rect2i &rSourceRect,
+	const Rect2i &rDestinationRect, T3DRegion *const pDestinationRegion
 ) const {
 	if ( !pSourceRegion || !pDestinationRegion ) {
 		return;
 	}
-	for ( int mapIndex = 0; mapIndex < Terrain3DRegion::TYPE_MAX; ++mapIndex ) {
+	for ( int mapIndex = 0; mapIndex < T3DRegion::TYPE_MAX; ++mapIndex ) {
 		const t3dmapType_t mapType = ( t3dmapType_t ) ( mapIndex );
 		Image *const pSourceImage = pSourceRegion->getMapPtr( mapType );
 		Image *pDestinationImage = pDestinationRegion->getMapPtr( mapType );
@@ -595,7 +595,7 @@ void T3DMapEditService::copyRegionMaps(
 			if ( pDestinationImage ) {
 				pDestinationImage->blit_rect( pSourceImage, rSourceRect, rDestinationRect.position );
 			}
-		} else if ( pDestinationImage && mapType != Terrain3DRegion::TYPE_HEIGHT ) {
+		} else if ( pDestinationImage && mapType != T3DRegion::TYPE_HEIGHT ) {
 			pDestinationImage->fill_rect( rDestinationRect, TERRAIN3D_REGION_MAP_DEFAULT_COLORS[mapIndex] );
 		}
 	}
@@ -607,12 +607,12 @@ Error T3DMapEditService::importImages(
 	void *const pAcquireContext, bool &rGenerateMipmaps
 ) {
 	rGenerateMipmaps = false;
-	if ( !m_pRepository || !pAcquireRegion || rImages.size() != Terrain3DRegion::TYPE_MAX ) {
+	if ( !m_pRepository || !pAcquireRegion || rImages.size() != T3DRegion::TYPE_MAX ) {
 		return ERR_INVALID_PARAMETER;
 	}
 
 	Vector2i imageSize = V2I_ZERO;
-	for ( int mapIndex = 0; mapIndex < Terrain3DRegion::TYPE_MAX; ++mapIndex ) {
+	for ( int mapIndex = 0; mapIndex < T3DRegion::TYPE_MAX; ++mapIndex ) {
 		const Ref<Image> pImage = rImages[mapIndex];
 		if ( pImage.is_null() || pImage->is_empty() ) {
 			continue;
@@ -635,8 +635,8 @@ Error T3DMapEditService::importImages(
 	}
 
 	TypedArray<Image> sourceImages;
-	sourceImages.resize( Terrain3DRegion::TYPE_MAX );
-	for ( int mapIndex = 0; mapIndex < Terrain3DRegion::TYPE_MAX; ++mapIndex ) {
+	sourceImages.resize( T3DRegion::TYPE_MAX );
+	for ( int mapIndex = 0; mapIndex < T3DRegion::TYPE_MAX; ++mapIndex ) {
 		const Ref<Image> pImage = rImages[mapIndex];
 		if ( pImage.is_null() ) {
 			continue;
@@ -652,7 +652,7 @@ Error T3DMapEditService::importImages(
 		}
 		sourceImages[mapIndex] = pReadable;
 
-		if ( mapIndex != Terrain3DRegion::TYPE_HEIGHT ) {
+		if ( mapIndex != T3DRegion::TYPE_HEIGHT ) {
 			continue;
 		}
 		Ref<Image> pAdjusted = Image::create_empty(
@@ -706,7 +706,7 @@ Error T3DMapEditService::importImages(
 				continue;
 			}
 
-			Ref<Terrain3DRegion> pRegion;
+			Ref<T3DRegion> pRegion;
 			const Error acquireError = pAcquireRegion( pAcquireContext, regionLocation, pRegion );
 			if ( acquireError != OK || pRegion.is_null() ) {
 				return acquireError != OK ? acquireError : ERR_DOES_NOT_EXIST;
@@ -719,7 +719,7 @@ Error T3DMapEditService::importImages(
 			const int destinationX = overlapStartX - regionStartX;
 			const int destinationZ = overlapStartZ - regionStartZ;
 
-			for ( int mapIndex = 0; mapIndex < Terrain3DRegion::TYPE_MAX; ++mapIndex ) {
+			for ( int mapIndex = 0; mapIndex < T3DRegion::TYPE_MAX; ++mapIndex ) {
 				const Ref<Image> pImage = sourceImages[mapIndex];
 				if ( pImage.is_null() || pImage->is_empty() ) {
 					continue;
@@ -728,14 +728,14 @@ Error T3DMapEditService::importImages(
 				Ref<Image> pRegionMap;
 				const t3dmapType_t mapType = ( t3dmapType_t ) ( mapIndex );
 				const Ref<Image> pExistingMap = pRegion->getMap( mapType );
-				if ( mapType == Terrain3DRegion::TYPE_HEIGHT ) {
+				if ( mapType == T3DRegion::TYPE_HEIGHT ) {
 					pRegionMap = Image::create_empty(
 						m_pRepository->getRegionSize(), m_pRepository->getRegionSize(), false, Image::FORMAT_RF
 					);
 					if ( pExistingMap.is_valid() && !pExistingMap->is_empty() ) {
 						for ( int y = 0; y < m_pRepository->getRegionSize(); ++y ) {
 							for ( int x = 0; x < m_pRepository->getRegionSize(); ++x ) {
-								const float height = Terrain3DRegionCodec::readHeightPixel(
+								const float height = T3DRegionCodec::readHeightPixel(
 									*pExistingMap, Vector2i( x, y )
 								);
 								pRegionMap->set_pixel( x, y, Color( height, 0.0f, 0.0f, 1.0f ) );
@@ -751,7 +751,7 @@ Error T3DMapEditService::importImages(
 						pRegionMap->convert( pImage->get_format() );
 					}
 				} else {
-					pRegionMap = Util::getFilledImage(
+					pRegionMap = T3DUtil::getFilledImage(
 						m_pRepository->getRegionSizeVector(), TERRAIN3D_REGION_MAP_DEFAULT_COLORS[mapIndex], false,
 						pImage->get_format()
 					);
@@ -762,7 +762,7 @@ Error T3DMapEditService::importImages(
 					Vector2i( destinationX, destinationZ )
 				);
 				pRegion->setMap( mapType, pRegionMap );
-				if ( mapType == Terrain3DRegion::TYPE_COLOR ) {
+				if ( mapType == T3DRegion::TYPE_COLOR ) {
 					rGenerateMipmaps = true;
 				}
 			}
@@ -780,16 +780,16 @@ Ref<Image> T3DMapEditService::layeredToImage(
 	if ( !m_pRepository || m_pRepository->getRegionSize() <= 0 ) {
 		return Ref<Image>();
 	}
-	const t3dmapType_t mapType = eMapType >= Terrain3DRegion::TYPE_HEIGHT && eMapType < Terrain3DRegion::TYPE_MAX
+	const t3dmapType_t mapType = eMapType >= T3DRegion::TYPE_HEIGHT && eMapType < T3DRegion::TYPE_MAX
 		? eMapType
-		: Terrain3DRegion::TYPE_HEIGHT;
+		: T3DRegion::TYPE_HEIGHT;
 
 	bool bFoundRegion = false;
 	Vector2i topLeft = V2I_ZERO;
 	Vector2i bottomRight = V2I_ZERO;
 	for ( int slot = 0; slot < m_pRepository->getSlotCount(); ++slot ) {
 		const Vector2i location = m_pRepository->getSlotsData()[slot];
-		const Terrain3DRegion *const pRegion = location == V2I_MAX ? nullptr : m_pRepository->getRegionPtr( location );
+		const T3DRegion *const pRegion = location == V2I_MAX ? nullptr : m_pRepository->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() ) {
 			continue;
 		}
@@ -806,17 +806,17 @@ Ref<Image> T3DMapEditService::layeredToImage(
 	}
 
 	if ( !bFoundRegion ) {
-		return Util::getFilledImage(
+		return T3DUtil::getFilledImage(
 			m_pRepository->getRegionSizeVector(), TERRAIN3D_REGION_MAP_DEFAULT_COLORS[mapType], false,
-			mapType == Terrain3DRegion::TYPE_HEIGHT ? Image::FORMAT_RF : TERRAIN3D_REGION_MAP_FORMATS[mapType]
+			mapType == T3DRegion::TYPE_HEIGHT ? Image::FORMAT_RF : TERRAIN3D_REGION_MAP_FORMATS[mapType]
 		);
 	}
 
 	const Vector2i imageSize = Vector2i( 1 + bottomRight.x - topLeft.x, 1 + bottomRight.y - topLeft.y ) *
 		m_pRepository->getRegionSize();
-	Ref<Image> pImage = Util::getFilledImage(
+	Ref<Image> pImage = T3DUtil::getFilledImage(
 		imageSize, TERRAIN3D_REGION_MAP_DEFAULT_COLORS[mapType], false,
-		mapType == Terrain3DRegion::TYPE_HEIGHT ? Image::FORMAT_RF : TERRAIN3D_REGION_MAP_FORMATS[mapType]
+		mapType == T3DRegion::TYPE_HEIGHT ? Image::FORMAT_RF : TERRAIN3D_REGION_MAP_FORMATS[mapType]
 	);
 
 	for ( int slot = 0; slot < m_pRepository->getSlotCount(); ++slot ) {
@@ -824,7 +824,7 @@ Ref<Image> T3DMapEditService::layeredToImage(
 		if ( location == V2I_MAX ) {
 			continue;
 		}
-		const Terrain3DRegion *pRegion = m_pRepository->getRegionPtr( location );
+		const T3DRegion *pRegion = m_pRepository->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() ) {
 			continue;
 		}
@@ -838,11 +838,11 @@ Ref<Image> T3DMapEditService::layeredToImage(
 
 		const Vector2i imageLocation = ( location - topLeft ) * m_pRepository->getRegionSize();
 		const Ref<Image> pSource = pRegion->getMap( mapType );
-		if ( mapType == Terrain3DRegion::TYPE_HEIGHT && pSource.is_valid() ) {
+		if ( mapType == T3DRegion::TYPE_HEIGHT && pSource.is_valid() ) {
 			for ( int y = 0; y < m_pRepository->getRegionSize(); ++y ) {
 				for ( int x = 0; x < m_pRepository->getRegionSize(); ++x ) {
 					pImage->set_pixel( imageLocation.x + x, imageLocation.y + y,
-						Color( Terrain3DRegionCodec::readHeightPixel( *pSource, Vector2i( x, y ) ), 0.0f, 0.0f, 1.0f ) );
+						Color( T3DRegionCodec::readHeightPixel( *pSource, Vector2i( x, y ) ), 0.0f, 0.0f, 1.0f ) );
 				}
 			}
 		} else if ( pSource.is_valid() ) {

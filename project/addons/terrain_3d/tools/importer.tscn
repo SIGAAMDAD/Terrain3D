@@ -23,7 +23,7 @@ seamless = true
 color_ramp = SubResource("Gradient_88f3t")
 noise = SubResource("FastNoiseLite_muvel")
 
-[sub_resource type="Terrain3DMaterial" id="Terrain3DMaterial_p55u0"]
+[sub_resource type="T3DMaterial" id="Terrain3DMaterial_p55u0"]
 _shader_parameters = {
 "blend_sharpness": 0.87,
 "height_blending": true,
@@ -45,16 +45,16 @@ vertex_color_use_as_albedo = true
 backlight_enabled = true
 backlight = Color(0.5, 0.5, 0.5, 1)
 
-[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_7je72"]
+[sub_resource type="T3DMeshAsset" id="Terrain3DMeshAsset_7je72"]
 height_offset = 0.5
 density = 10.0
 material_override = SubResource("StandardMaterial3D_8rvqy")
 generated_type = 1
 
-[sub_resource type="Terrain3DAssets" id="Terrain3DAssets_op32e"]
-mesh_list = Array[Terrain3DMeshAsset]([SubResource("Terrain3DMeshAsset_7je72")])
+[sub_resource type="T3DAssets" id="Terrain3DAssets_op32e"]
+mesh_list = Array[T3DMeshAsset]([SubResource("Terrain3DMeshAsset_7je72")])
 
-[node name="Importer" type="Terrain3D"]
+[node name="Importer" type="T3DTerrain"]
 material = SubResource("Terrain3DMaterial_p55u0")
 assets = SubResource("Terrain3DAssets_op32e")
 mesh_lods = 8

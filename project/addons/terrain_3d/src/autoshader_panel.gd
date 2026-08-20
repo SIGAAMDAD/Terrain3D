@@ -15,12 +15,12 @@ enum BakeScope {
 	DIRTY_REGIONS,
 }
 
-var plugin: Terrain3DEditorPluginBase
-var _terrain: Terrain3D
-var _profile: Terrain3DAutoShaderProfile
-var _baker: Terrain3DAutoShaderBaker
-var _connected_data: Terrain3DData
-var _connected_assets: Terrain3DAssets
+var plugin: T3DEditorPluginBase
+var _terrain: T3DTerrain
+var _profile: T3DAutoShaderProfile
+var _baker: T3DAutoShaderBaker
+var _connected_data: T3DData
+var _connected_assets: T3DAssets
 var _dirty_regions: Dictionary[Vector2i, bool] = {}
 var _suppress_dirty_tracking: bool = false
 var _suppress_profile_change_tracking: bool = false
@@ -44,7 +44,7 @@ var _save_dialog: EditorFileDialog
 
 
 func _ready() -> void:
-	_baker = Terrain3DAutoShaderBaker.new()
+	_baker = T3DAutoShaderBaker.new()
 	_build_ui()
 	_auto_rebake_timer = Timer.new()
 	_auto_rebake_timer.one_shot = true
@@ -59,14 +59,14 @@ func open() -> void:
 	if is_instance_valid(_terrain) and not is_instance_valid(_profile):
 		_create_default_profile(false)
 	_sync_from_terrain()
-	if is_instance_valid(_profile) and _profile.mode == Terrain3DAutoShaderProfile.Mode.EDITOR_PREVIEW:
+	if is_instance_valid(_profile) and _profile.mode == T3DAutoShaderProfile.Mode.EDITOR_PREVIEW:
 		call_deferred("_refresh_editor_preview")
 	var preferred := Vector2i(int(EditorUI.scaled(980.0)), int(EditorUI.scaled(720.0)))
 	var minimum := Vector2i(int(EditorUI.scaled(720.0)), int(EditorUI.scaled(480.0)))
 	popup_centered(EditorUI.popup_size_for_screen(self, preferred, minimum))
 
 
-func set_terrain(p_terrain: Terrain3D) -> void:
+func set_terrain(p_terrain: T3DTerrain) -> void:
 	if _terrain == p_terrain:
 		return
 	_cancel_auto_rebake()
@@ -76,7 +76,7 @@ func set_terrain(p_terrain: Terrain3D) -> void:
 	_profile = null
 	_dirty_regions.clear()
 	if is_instance_valid(_terrain):
-		_set_profile(_terrain.auto_shader_profile as Terrain3DAutoShaderProfile, false, false)
+		_set_profile(_terrain.auto_shader_profile as T3DAutoShaderProfile, false, false)
 		_connected_data = _terrain.data
 		_connected_assets = _terrain.assets
 		if is_instance_valid(_connected_data) and not _connected_data.maps_edited.is_connected(_on_maps_edited):
@@ -140,8 +140,8 @@ func _build_ui() -> void:
 	profile_label.custom_minimum_size.x = EditorUI.scaled(80.0)
 	profile_row.add_child(profile_label)
 	_profile_picker = EditorResourcePicker.new()
-	_profile_picker.base_type = "Terrain3DAutoShaderProfile"
-	_profile_picker.tooltip_text = "Terrain3DAutoShaderProfile resource that owns the ordered material rules, masks, and automatic classification workflow for this terrain."
+	_profile_picker.base_type = "T3DAutoShaderProfile"
+	_profile_picker.tooltip_text = "T3DAutoShaderProfile resource that owns the ordered material rules, masks, and automatic classification workflow for this terrain."
 	_profile_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_profile_picker.resource_changed.connect(_on_profile_resource_changed)
 	profile_row.add_child(_profile_picker)
@@ -155,10 +155,10 @@ func _build_ui() -> void:
 	root.add_child(workflow_grid)
 	_add_form_label(workflow_grid, "Workflow", "Live Editor Preview evaluates these rules temporarily. Baked Production commits ordinary control maps. Legacy Runtime retains the old two-texture fragment classifier.")
 	_mode = OptionButton.new()
-	_mode.add_item("Live Editor Preview", Terrain3DAutoShaderProfile.Mode.EDITOR_PREVIEW)
-	_mode.add_item("Baked Production", Terrain3DAutoShaderProfile.Mode.BAKED)
-	_mode.add_item("Legacy Runtime (two-texture)", Terrain3DAutoShaderProfile.Mode.LEGACY_RUNTIME)
-	_mode.add_item("Manual / Disabled", Terrain3DAutoShaderProfile.Mode.DISABLED)
+	_mode.add_item("Live Editor Preview", T3DAutoShaderProfile.Mode.EDITOR_PREVIEW)
+	_mode.add_item("Baked Production", T3DAutoShaderProfile.Mode.BAKED)
+	_mode.add_item("Legacy Runtime (two-texture)", T3DAutoShaderProfile.Mode.LEGACY_RUNTIME)
+	_mode.add_item("Manual / Disabled", T3DAutoShaderProfile.Mode.DISABLED)
 	_mode.tooltip_text = "Chooses how automatic material rules are evaluated: temporary editor preview, baked production control maps, legacy runtime classification, or disabled/manual painting."
 	_mode.item_selected.connect(_on_mode_selected)
 	EditorUI.configure_field_control(_mode)
@@ -280,7 +280,7 @@ func _sync_from_terrain() -> void:
 	if is_instance_valid(plugin) and plugin.terrain != _terrain:
 		set_terrain(plugin.terrain)
 	if is_instance_valid(_terrain):
-		var terrain_profile := _terrain.auto_shader_profile as Terrain3DAutoShaderProfile
+		var terrain_profile := _terrain.auto_shader_profile as T3DAutoShaderProfile
 		if terrain_profile != _profile:
 			_set_profile(terrain_profile, false, false)
 		_mark_unbaked_regions_dirty()
@@ -329,7 +329,7 @@ func _refresh_ui() -> void:
 			button.disabled = not has_profile
 	if is_instance_valid(_preview_button):
 		_preview_button.text = "Refresh Live Preview" if has_profile and \
-			_profile.mode == Terrain3DAutoShaderProfile.Mode.EDITOR_PREVIEW else "Preview Selected Scope"
+			_profile.mode == T3DAutoShaderProfile.Mode.EDITOR_PREVIEW else "Preview Selected Scope"
 	if is_instance_valid(_revert_button):
 		_revert_button.disabled = _preview_snapshot.is_empty()
 	_update_stale_status()
@@ -340,7 +340,7 @@ func _refresh_ui() -> void:
 
 
 func _set_profile(
-		p_profile: Terrain3DAutoShaderProfile,
+		p_profile: T3DAutoShaderProfile,
 		p_assign_to_terrain: bool = true,
 		p_mark_dirty: bool = true,
 ) -> void:
@@ -368,7 +368,7 @@ func _create_default_profile(report: bool = true) -> void:
 		if report:
 			_set_status("Select a Terrain3D node first.")
 		return
-	var profile := AutoShaderProfile.new() as Terrain3DAutoShaderProfile
+	var profile := AutoShaderProfile.new() as T3DAutoShaderProfile
 	profile.ensure_default_rules()
 	_configure_default_rule_outputs(profile)
 	_set_profile(profile)
@@ -384,11 +384,11 @@ func _on_profile_resource_changed(resource: Resource) -> void:
 	if resource == null:
 		_set_profile(null)
 		return
-	if not resource is Terrain3DAutoShaderProfile:
-		_set_status("The selected resource is not a Terrain3DAutoShaderProfile.")
+	if not resource is T3DAutoShaderProfile:
+		_set_status("The selected resource is not a T3DAutoShaderProfile.")
 		_profile_picker.edited_resource = _profile
 		return
-	_set_profile(resource as Terrain3DAutoShaderProfile)
+	_set_profile(resource as T3DAutoShaderProfile)
 
 
 func _on_save_profile() -> void:
@@ -430,8 +430,8 @@ func _get_ordered_rule_indices() -> Array[int]:
 		if is_instance_valid(_profile.rules[index]):
 			indices.append(index)
 	indices.sort_custom(func(a: int, b: int) -> bool:
-		var rule_a: Terrain3DAutoShaderRule = _profile.rules[a]
-		var rule_b: Terrain3DAutoShaderRule = _profile.rules[b]
+		var rule_a: T3DAutoShaderRule = _profile.rules[a]
+		var rule_b: T3DAutoShaderRule = _profile.rules[b]
 		return rule_a.priority > rule_b.priority if rule_a.priority != rule_b.priority else a < b
 	)
 	return indices
@@ -474,14 +474,14 @@ func _toggle_rule_enabled() -> void:
 	var index := _selected_rule_index()
 	if not is_instance_valid(_profile) or index < 0 or index >= _profile.rules.size():
 		return
-	var rule: Terrain3DAutoShaderRule = _profile.rules[index]
+	var rule: T3DAutoShaderRule = _profile.rules[index]
 	rule.enabled = not rule.enabled
 	EditorInterface.mark_scene_as_unsaved()
 	_refresh_ui()
 
 
-func _create_rule_template(template_id: int) -> Terrain3DAutoShaderRule:
-	var rule := AutoShaderRule.new() as Terrain3DAutoShaderRule
+func _create_rule_template(template_id: int) -> T3DAutoShaderRule:
+	var rule := AutoShaderRule.new() as T3DAutoShaderRule
 	rule.rule_name = "Material rule %d" % (_profile.rules.size() + 1)
 	match template_id:
 		1:
@@ -522,7 +522,7 @@ func _duplicate_rule() -> void:
 	var index := _selected_rule_index()
 	if not is_instance_valid(_profile) or index < 0 or index >= _profile.rules.size():
 		return
-	var copy := _profile.rules[index].duplicate(true) as Terrain3DAutoShaderRule
+	var copy := _profile.rules[index].duplicate(true) as T3DAutoShaderRule
 	copy.rule_name += " copy"
 	copy.priority = _profile.rules[index].priority - 1
 	_profile.add_rule(copy)
@@ -577,7 +577,7 @@ func _update_rule_summary() -> void:
 	if not is_instance_valid(_profile) or index < 0 or index >= _profile.rules.size():
 		_rule_summary.text = "Select a rule to see its material output and active conditions."
 		return
-	var rule: Terrain3DAutoShaderRule = _profile.rules[index]
+	var rule: T3DAutoShaderRule = _profile.rules[index]
 	_rule_summary.text = (
 		"[b]%s[/b]\n\n"
 		+ "[b]Output[/b]  %s\n"
@@ -599,14 +599,14 @@ func _texture_label(texture_id: int) -> String:
 		return "Texture %d" % texture_id
 	if texture_id < 0 or texture_id >= _terrain.assets.get_texture_count():
 		return "Missing texture %d" % texture_id
-	var asset: Terrain3DTextureAsset = _terrain.assets.get_texture_asset(texture_id)
+	var asset: T3DTextureAsset = _terrain.assets.get_texture_asset(texture_id)
 	if not is_instance_valid(asset):
 		return "Missing texture %d" % texture_id
 	var asset_name := asset.name.strip_edges()
 	return "%s [%d]" % [asset_name if not asset_name.is_empty() else "Texture", texture_id]
 
 
-func _rule_output_summary(rule: Terrain3DAutoShaderRule) -> String:
+func _rule_output_summary(rule: T3DAutoShaderRule) -> String:
 	if not is_instance_valid(rule):
 		return "No output"
 	var base := _texture_label(rule.base_texture)
@@ -619,7 +619,7 @@ func _rule_output_summary(rule: Terrain3DAutoShaderRule) -> String:
 	]
 
 
-func _configure_default_rule_outputs(profile: Terrain3DAutoShaderProfile) -> void:
+func _configure_default_rule_outputs(profile: T3DAutoShaderProfile) -> void:
 	if not is_instance_valid(profile) or not is_instance_valid(_terrain) or not is_instance_valid(_terrain.assets):
 		return
 	var valid_texture_ids: Array[int] = []
@@ -632,7 +632,7 @@ func _configure_default_rule_outputs(profile: Terrain3DAutoShaderProfile) -> voi
 	var rock_id := valid_texture_ids[mini(1, valid_texture_ids.size() - 1)]
 	var deposit_id := valid_texture_ids[mini(2, valid_texture_ids.size() - 1)]
 	profile.begin_change_batch()
-	for rule: Terrain3DAutoShaderRule in profile.rules:
+	for rule: T3DAutoShaderRule in profile.rules:
 		if not is_instance_valid(rule):
 			continue
 		match rule.rule_name:
@@ -665,14 +665,14 @@ func _on_mode_selected(index: int) -> void:
 	_suppress_profile_change_tracking = false
 	EditorInterface.mark_scene_as_unsaved()
 	match _profile.mode:
-		Terrain3DAutoShaderProfile.Mode.EDITOR_PREVIEW:
+		T3DAutoShaderProfile.Mode.EDITOR_PREVIEW:
 			_set_status("Live editor preview evaluates the expanded rules temporarily; closing this panel restores the original control maps.")
 			call_deferred("_refresh_editor_preview")
-		Terrain3DAutoShaderProfile.Mode.BAKED:
+		T3DAutoShaderProfile.Mode.BAKED:
 			_set_status("Baked production mode uses explicit control maps and no runtime classifier.")
-		Terrain3DAutoShaderProfile.Mode.LEGACY_RUNTIME:
+		T3DAutoShaderProfile.Mode.LEGACY_RUNTIME:
 			_set_status("Legacy runtime mode uses the original two-texture slope/height classifier every frame.")
-		Terrain3DAutoShaderProfile.Mode.DISABLED:
+		T3DAutoShaderProfile.Mode.DISABLED:
 			_set_status("Automatic classification is disabled; existing painted or baked control values remain active.")
 	_refresh_ui()
 
@@ -703,7 +703,7 @@ func _scope_locations() -> Array[Vector2i]:
 func _capture_snapshot(locations: Array[Vector2i]) -> Dictionary[Vector2i, Image]:
 	var snapshot: Dictionary[Vector2i, Image] = {}
 	for location: Vector2i in locations:
-		var region: Terrain3DRegion = _terrain.data.get_region(location)
+		var region: T3DRegion = _terrain.data.get_region(location)
 		if not is_instance_valid(region):
 			continue
 		var image: Image = region.control_map
@@ -711,17 +711,17 @@ func _capture_snapshot(locations: Array[Vector2i]) -> Dictionary[Vector2i, Image
 	return snapshot
 
 
-func _apply_snapshot(p_terrain: Terrain3D, snapshot: Dictionary[Vector2i, Image]) -> void:
+func _apply_snapshot(p_terrain: T3DTerrain, snapshot: Dictionary[Vector2i, Image]) -> void:
 	if not is_instance_valid(p_terrain) or not is_instance_valid(p_terrain.data):
 		return
 	_suppress_dirty_tracking = true
 	for region_location: Vector2i in snapshot:
-		var region: Terrain3DRegion = p_terrain.data.get_region(region_location)
+		var region: T3DRegion = p_terrain.data.get_region(region_location)
 		if not is_instance_valid(region):
 			continue
 		var image: Image = snapshot[region_location]
 		region.set_control_map(image.duplicate() if is_instance_valid(image) else null)
-		p_terrain.data.commit_map_edit(int(Terrain3DRegion.TYPE_CONTROL), region_location)
+		p_terrain.data.commit_map_edit(int(T3DRegion.TYPE_CONTROL), region_location)
 	_suppress_dirty_tracking = false
 
 
@@ -750,14 +750,14 @@ func _merge_signatures(base: Dictionary[String, int], updates: Dictionary[String
 func _remove_signatures(base: Dictionary[String, int], locations: Array[Vector2i]) -> Dictionary[String, int]:
 	var remaining: Dictionary[String, int] = _copy_signatures(base)
 	for location: Vector2i in locations:
-		remaining.erase(Terrain3DUtil.location_to_filename(location).trim_prefix("terrain3d").trim_suffix(".res"))
+		remaining.erase(T3DUtil.location_to_filename(location).trim_prefix("terrain3d").trim_suffix(".res"))
 	return remaining
 
 
 func _apply_bake_transaction(
-		p_terrain: Terrain3D,
+		p_terrain: T3DTerrain,
 		snapshot: Dictionary[Vector2i, Image],
-		p_profile: Terrain3DAutoShaderProfile,
+		p_profile: T3DAutoShaderProfile,
 		mode: int,
 		auto_shader_enabled: bool,
 		signatures: Dictionary[String, int],
@@ -767,7 +767,7 @@ func _apply_bake_transaction(
 		_suppress_profile_change_tracking = true
 		p_profile.mode = mode
 		p_profile.baked_region_signatures = signatures.duplicate(true)
-		p_profile.baked_version = Terrain3DAutoShaderProfile.BAKE_VERSION
+		p_profile.baked_version = T3DAutoShaderProfile.BAKE_VERSION
 		p_profile.emit_changed()
 		_suppress_profile_change_tracking = false
 	if is_instance_valid(p_terrain) and is_instance_valid(p_terrain.material):
@@ -790,7 +790,7 @@ func _asset_signature() -> int:
 		return 0
 	var signature: int = 17
 	for index: int in _terrain.assets.get_texture_count():
-		var asset: Terrain3DTextureAsset = _terrain.assets.get_texture_asset(index)
+		var asset: T3DTextureAsset = _terrain.assets.get_texture_asset(index)
 		if not is_instance_valid(asset):
 			continue
 		signature = hash([
@@ -815,11 +815,11 @@ func _bake_dictionary() -> Dictionary[String, Variant]:
 	return bake_profile
 
 
-func _run_bake(locations: Array[Vector2i], record_signatures: bool = true) -> Terrain3DAutoShaderBakeResult:
+func _run_bake(locations: Array[Vector2i], record_signatures: bool = true) -> T3DAutoShaderBakeResult:
 	if locations.is_empty():
-		return Terrain3DAutoShaderBakeResult.failure("No regions match the selected scope.")
+		return T3DAutoShaderBakeResult.failure("No regions match the selected scope.")
 	_suppress_dirty_tracking = true
-	var result: Terrain3DAutoShaderBakeResult = Terrain3DAutoShaderBakeResult.from_value(
+	var result: T3DAutoShaderBakeResult = T3DAutoShaderBakeResult.from_value(
 		_baker.bake_regions(_terrain, _bake_dictionary(), locations))
 	_suppress_dirty_tracking = false
 	if result.ok and record_signatures:
@@ -854,7 +854,7 @@ func _preview_bake_locations(locations: Array[Vector2i], action: String) -> void
 
 func _refresh_editor_preview() -> void:
 	if not visible or not is_instance_valid(_profile) or \
-			_profile.mode != Terrain3DAutoShaderProfile.Mode.EDITOR_PREVIEW:
+			_profile.mode != T3DAutoShaderProfile.Mode.EDITOR_PREVIEW:
 		return
 	var locations: Array[Vector2i] = []
 	if is_instance_valid(_terrain) and is_instance_valid(_terrain.data):
@@ -901,7 +901,7 @@ func _commit_bake() -> void:
 		_terrain,
 		after,
 		_profile,
-		Terrain3DAutoShaderProfile.Mode.BAKED,
+		T3DAutoShaderProfile.Mode.BAKED,
 		false,
 		after_signatures,
 	)
@@ -913,7 +913,7 @@ func _commit_bake() -> void:
 		_terrain,
 		after,
 		_profile,
-		Terrain3DAutoShaderProfile.Mode.BAKED,
+		T3DAutoShaderProfile.Mode.BAKED,
 		false,
 		after_signatures,
 	)
@@ -946,7 +946,7 @@ func _clear_bake() -> void:
 	var auto_shader_enabled := bool(_terrain.material.auto_shader_enabled) if is_instance_valid(_terrain.material) else false
 	var before_signatures: Dictionary[String, int] = _copy_signatures(_profile.baked_region_signatures)
 	_suppress_dirty_tracking = true
-	var result: Terrain3DAutoShaderBakeResult = Terrain3DAutoShaderBakeResult.from_value(
+	var result: T3DAutoShaderBakeResult = T3DAutoShaderBakeResult.from_value(
 		_baker.clear_baked_regions(_terrain, locations, _profile.preserve_auto_mask))
 	_suppress_dirty_tracking = false
 	if not result.ok:
@@ -983,7 +983,7 @@ func _clear_bake() -> void:
 	_refresh_ui()
 
 
-func _format_result(action: String, result: Terrain3DAutoShaderBakeResult) -> String:
+func _format_result(action: String, result: T3DAutoShaderBakeResult) -> String:
 	if not result.ok:
 		var message: String = result.error
 		if message.is_empty() and not result.errors.is_empty():
@@ -1040,7 +1040,7 @@ func _mark_unbaked_regions_dirty() -> void:
 		return
 	var locations: Array[Vector2i] = []
 	locations.assign(_terrain.data.get_region_locations())
-	if _profile.baked_version != Terrain3DAutoShaderProfile.BAKE_VERSION:
+	if _profile.baked_version != T3DAutoShaderProfile.BAKE_VERSION:
 		for location: Vector2i in locations:
 			_dirty_regions[location] = true
 		return
@@ -1050,7 +1050,7 @@ func _mark_unbaked_regions_dirty() -> void:
 		locations,
 	))
 	for location: Vector2i in locations:
-		var key := Terrain3DUtil.location_to_filename(location).trim_prefix("terrain3d").trim_suffix(".res")
+		var key := T3DUtil.location_to_filename(location).trim_prefix("terrain3d").trim_suffix(".res")
 		if not _profile.baked_region_signatures.has(key) or _profile.baked_region_signatures[key] != current.get(key):
 			_dirty_regions[location] = true
 
@@ -1072,14 +1072,14 @@ func _update_stale_status() -> void:
 		return
 	var enabled_rules := 0
 	var invalid_outputs := 0
-	var assets: Terrain3DAssets = _terrain.assets if is_instance_valid(_terrain) else null
+	var assets: T3DAssets = _terrain.assets if is_instance_valid(_terrain) else null
 	var texture_count := assets.get_texture_count() if is_instance_valid(assets) else 0
 	var fallback_invalid := not is_instance_valid(assets) or \
 		_profile.default_base_texture < 0 or _profile.default_base_texture >= texture_count or \
 		_profile.default_overlay_texture < 0 or _profile.default_overlay_texture >= texture_count or \
 		not is_instance_valid(assets.get_texture_asset(_profile.default_base_texture)) or \
 		not is_instance_valid(assets.get_texture_asset(_profile.default_overlay_texture))
-	for rule: Terrain3DAutoShaderRule in _profile.rules:
+	for rule: T3DAutoShaderRule in _profile.rules:
 		if not is_instance_valid(rule):
 			continue
 		if rule.enabled:
@@ -1105,17 +1105,17 @@ func _update_stale_status() -> void:
 func _schedule_auto_rebake() -> void:
 	if not is_instance_valid(_profile):
 		return
-	if _profile.mode == Terrain3DAutoShaderProfile.Mode.EDITOR_PREVIEW:
+	if _profile.mode == T3DAutoShaderProfile.Mode.EDITOR_PREVIEW:
 		_auto_rebake_timer.start(_profile.auto_rebake_delay)
 		return
-	if _profile.mode == Terrain3DAutoShaderProfile.Mode.BAKED and _profile.auto_rebake_after_sculpt:
+	if _profile.mode == T3DAutoShaderProfile.Mode.BAKED and _profile.auto_rebake_after_sculpt:
 		_auto_rebake_timer.start(_profile.auto_rebake_delay)
 
 
 func _on_auto_rebake_timeout() -> void:
 	if not is_instance_valid(_profile) or not is_instance_valid(_terrain):
 		return
-	if _profile.mode == Terrain3DAutoShaderProfile.Mode.EDITOR_PREVIEW:
+	if _profile.mode == T3DAutoShaderProfile.Mode.EDITOR_PREVIEW:
 		_refresh_editor_preview()
 		return
 	if _dirty_regions.is_empty():

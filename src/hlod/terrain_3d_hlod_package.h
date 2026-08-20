@@ -14,8 +14,8 @@
 using namespace godot;
 #endif
 
-class Terrain3DHLODPackage : public Resource {
-	GDCLASS( Terrain3DHLODPackage, Resource );
+class T3DHLODPackage : public Resource {
+	GDCLASS( T3DHLODPackage, Resource );
 	CLASS_NAME();
 
 	int m_nLevel = 1;

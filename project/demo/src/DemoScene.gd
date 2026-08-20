@@ -1,7 +1,7 @@
 @tool
 extends Node
 
-@onready var terrain: Terrain3D = find_child("Terrain3D")
+@onready var terrain: T3DTerrain = find_child("Terrain3D")
 
 
 func _ready():

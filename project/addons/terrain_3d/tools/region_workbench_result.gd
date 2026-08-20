@@ -1,5 +1,5 @@
 @tool
-class_name Terrain3DRegionWorkbenchResult
+class_name T3DRegionWorkbenchResult
 extends RefCounted
 
 var ok: bool = false
@@ -20,13 +20,13 @@ var region_location: Vector2i = Vector2i.ZERO
 var source_scene: String = ""
 
 
-static func success() -> Terrain3DRegionWorkbenchResult:
-	var result := Terrain3DRegionWorkbenchResult.new()
+static func success() -> T3DRegionWorkbenchResult:
+	var result := T3DRegionWorkbenchResult.new()
 	result.ok = true
 	return result
 
 
-static func failure(p_error: String) -> Terrain3DRegionWorkbenchResult:
-	var result := Terrain3DRegionWorkbenchResult.new()
+static func failure(p_error: String) -> T3DRegionWorkbenchResult:
+	var result := T3DRegionWorkbenchResult.new()
 	result.error = p_error
 	return result

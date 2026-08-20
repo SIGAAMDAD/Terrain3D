@@ -9,34 +9,34 @@ using Godot.Collections;
 namespace TokisanGames;
 
 [Tool]
-public partial class Terrain3DData : GodotObject
+public partial class T3DData : GodotObject
 {
 
-	private new static readonly StringName NativeName = new StringName("Terrain3DData");
+	private new static readonly StringName NativeName = new StringName("T3DData");
 
-	[Obsolete("Wrapper types cannot be constructed with constructors (it only instantiate the underlying Terrain3DData object), please use the Instantiate() method instead.")]
-	protected Terrain3DData() { }
+	[Obsolete("Wrapper types cannot be constructed with constructors (it only instantiate the underlying T3DData object), please use the Instantiate() method instead.")]
+	protected T3DData() { }
 
 	private static CSharpScript _wrapperScriptAsset;
 
 	/// <summary>
-	/// Try to cast the script on the supplied <paramref name="godotObject"/> to the <see cref="Terrain3DData"/> wrapper type,
-	/// if no script has attached to the type, or the script attached to the type does not inherit the <see cref="Terrain3DData"/> wrapper type,
-	/// a new instance of the <see cref="Terrain3DData"/> wrapper script will get attaches to the <paramref name="godotObject"/>.
+	/// Try to cast the script on the supplied <paramref name="godotObject"/> to the <see cref="T3DData"/> wrapper type,
+	/// if no script has attached to the type, or the script attached to the type does not inherit the <see cref="T3DData"/> wrapper type,
+	/// a new instance of the <see cref="T3DData"/> wrapper script will get attaches to the <paramref name="godotObject"/>.
 	/// </summary>
 	/// <remarks>The developer should only supply the <paramref name="godotObject"/> that represents the correct underlying GDExtension type.</remarks>
 	/// <param name="godotObject">The <paramref name="godotObject"/> that represents the correct underlying GDExtension type.</param>
-	/// <returns>The existing or a new instance of the <see cref="Terrain3DData"/> wrapper script attached to the supplied <paramref name="godotObject"/>.</returns>
-	public new static Terrain3DData Bind(GodotObject godotObject)
+	/// <returns>The existing or a new instance of the <see cref="T3DData"/> wrapper script attached to the supplied <paramref name="godotObject"/>.</returns>
+	public new static T3DData Bind(GodotObject godotObject)
 	{
 		if (!IsInstanceValid(godotObject))
 			return null;
 
-		if (godotObject is Terrain3DData wrapperScriptInstance)
+		if (godotObject is T3DData wrapperScriptInstance)
 			return wrapperScriptInstance;
 
 #if DEBUG
-		var expectedType = typeof(Terrain3DData);
+		var expectedType = typeof(T3DData);
 		var currentObjectClassName = godotObject.GetClass();
 		if (!ClassDB.IsParentClass(expectedType.Name, currentObjectClassName))
 			throw new InvalidOperationException($"The supplied GodotObject ({currentObjectClassName}) is not the {expectedType.Name} type.");
@@ -44,21 +44,21 @@ public partial class Terrain3DData : GodotObject
 
 		if (_wrapperScriptAsset is null)
 		{
-			var scriptPathAttribute = typeof(Terrain3DData).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
+			var scriptPathAttribute = typeof(T3DData).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
 			if (scriptPathAttribute is null) throw new UnreachableException();
 			_wrapperScriptAsset = ResourceLoader.Load<CSharpScript>(scriptPathAttribute.Path);
 		}
 
 		var instanceId = godotObject.GetInstanceId();
 		godotObject.SetScript(_wrapperScriptAsset);
-		return (Terrain3DData)InstanceFromId(instanceId);
+		return (T3DData)InstanceFromId(instanceId);
 	}
 
 	/// <summary>
-	/// Creates an instance of the GDExtension <see cref="Terrain3DData"/> type, and attaches a wrapper script instance to it.
+	/// Creates an instance of the GDExtension <see cref="T3DData"/> type, and attaches a wrapper script instance to it.
 	/// </summary>
-	/// <returns>The wrapper instance linked to the underlying GDExtension "Terrain3DData" type.</returns>
-	public new static Terrain3DData Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
+	/// <returns>The wrapper instance linked to the underlying GDExtension "T3DData" type.</returns>
+	public new static T3DData Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
 
 	public enum HeightFilter
 	{
@@ -103,7 +103,7 @@ public partial class Terrain3DData : GodotObject
 		{
 			if (_mapsChangedSignal is null)
 			{
-				_mapsChangedSignalCallable = Callable.From(() => 
+				_mapsChangedSignalCallable = Callable.From(() =>
 					_mapsChangedSignal?.Invoke());
 				Connect(GDExtensionSignalName.MapsChanged, _mapsChangedSignalCallable);
 			}
@@ -127,7 +127,7 @@ public partial class Terrain3DData : GodotObject
 		{
 			if (_regionMapChangedSignal is null)
 			{
-				_regionMapChangedSignalCallable = Callable.From(() => 
+				_regionMapChangedSignalCallable = Callable.From(() =>
 					_regionMapChangedSignal?.Invoke());
 				Connect(GDExtensionSignalName.RegionMapChanged, _regionMapChangedSignalCallable);
 			}
@@ -151,7 +151,7 @@ public partial class Terrain3DData : GodotObject
 		{
 			if (_heightMapsChangedSignal is null)
 			{
-				_heightMapsChangedSignalCallable = Callable.From(() => 
+				_heightMapsChangedSignalCallable = Callable.From(() =>
 					_heightMapsChangedSignal?.Invoke());
 				Connect(GDExtensionSignalName.HeightMapsChanged, _heightMapsChangedSignalCallable);
 			}
@@ -175,7 +175,7 @@ public partial class Terrain3DData : GodotObject
 		{
 			if (_controlMapsChangedSignal is null)
 			{
-				_controlMapsChangedSignalCallable = Callable.From(() => 
+				_controlMapsChangedSignalCallable = Callable.From(() =>
 					_controlMapsChangedSignal?.Invoke());
 				Connect(GDExtensionSignalName.ControlMapsChanged, _controlMapsChangedSignalCallable);
 			}
@@ -199,7 +199,7 @@ public partial class Terrain3DData : GodotObject
 		{
 			if (_colorMapsChangedSignal is null)
 			{
-				_colorMapsChangedSignalCallable = Callable.From(() => 
+				_colorMapsChangedSignalCallable = Callable.From(() =>
 					_colorMapsChangedSignal?.Invoke());
 				Connect(GDExtensionSignalName.ColorMapsChanged, _colorMapsChangedSignalCallable);
 			}
@@ -223,7 +223,7 @@ public partial class Terrain3DData : GodotObject
 		{
 			if (_mapsEditedSignal is null)
 			{
-				_mapsEditedSignalCallable = Callable.From((Variant editedArea) => 
+				_mapsEditedSignalCallable = Callable.From((Variant editedArea) =>
 					_mapsEditedSignal?.Invoke(editedArea.As<Aabb>()));
 				Connect(GDExtensionSignalName.MapsEdited, _mapsEditedSignalCallable);
 			}
@@ -569,82 +569,82 @@ public partial class Terrain3DData : GodotObject
 		public new static readonly StringName Dump = "dump";
 	}
 
-	public new long GetRegionCount() => 
+	public new long GetRegionCount() =>
 		Call(GDExtensionMethodName.GetRegionCount, []).As<long>();
 
-	public new Godot.Collections.Array GetRegionsActive(bool copy = false, bool deep = false) => 
+	public new Godot.Collections.Array GetRegionsActive(bool copy = false, bool deep = false) =>
 		Call(GDExtensionMethodName.GetRegionsActive, [copy, deep]).As<Godot.Collections.Array>();
 
-	public new Godot.Collections.Dictionary GetRegionsAll() => 
+	public new Godot.Collections.Dictionary GetRegionsAll() =>
 		Call(GDExtensionMethodName.GetRegionsAll, []).As<Godot.Collections.Dictionary>();
 
-	public new int[] GetRegionMap() => 
+	public new int[] GetRegionMap() =>
 		Call(GDExtensionMethodName.GetRegionMap, []).As<int[]>();
 
-	public new static long GetRegionMapIndex(Vector2I regionLocation) => 
+	public new static long GetRegionMapIndex(Vector2I regionLocation) =>
 		ClassDB.ClassCallStatic(NativeName, GDExtensionMethodName.GetRegionMapIndex, [regionLocation]).As<long>();
 
-	public new void DoForRegions(Rect2I area, Callable callback) => 
+	public new void DoForRegions(Rect2I area, Callable callback) =>
 		Call(GDExtensionMethodName.DoForRegions, [area, callback]);
 
-	public new void ChangeRegionSize(long regionSize) => 
+	public new void ChangeRegionSize(long regionSize) =>
 		Call(GDExtensionMethodName.ChangeRegionSize, [regionSize]);
 
-	public new Vector2I GetRegionLocation(Vector3 globalPosition) => 
+	public new Vector2I GetRegionLocation(Vector3 globalPosition) =>
 		Call(GDExtensionMethodName.GetRegionLocation, [globalPosition]).As<Vector2I>();
 
-	public new long GetRegionId(Vector2I regionLocation) => 
+	public new long GetRegionId(Vector2I regionLocation) =>
 		Call(GDExtensionMethodName.GetRegionId, [regionLocation]).As<long>();
 
-	public new long GetRegionIdp(Vector3 globalPosition) => 
+	public new long GetRegionIdp(Vector3 globalPosition) =>
 		Call(GDExtensionMethodName.GetRegionIdp, [globalPosition]).As<long>();
 
-	public new bool HasRegion(Vector2I regionLocation) => 
+	public new bool HasRegion(Vector2I regionLocation) =>
 		Call(GDExtensionMethodName.HasRegion, [regionLocation]).As<bool>();
 
-	public new bool HasRegionp(Vector3 globalPosition) => 
+	public new bool HasRegionp(Vector3 globalPosition) =>
 		Call(GDExtensionMethodName.HasRegionp, [globalPosition]).As<bool>();
 
-	public new Terrain3DRegion GetRegion(Vector2I regionLocation) => 
-		Terrain3DRegion.Bind(Call(GDExtensionMethodName.GetRegion, [regionLocation]).As<Resource>());
+	public new T3DRegion GetRegion(Vector2I regionLocation) =>
+		T3DRegion.Bind(Call(GDExtensionMethodName.GetRegion, [regionLocation]).As<Resource>());
 
-	public new Terrain3DRegion GetRegionp(Vector3 globalPosition) => 
-		Terrain3DRegion.Bind(Call(GDExtensionMethodName.GetRegionp, [globalPosition]).As<Resource>());
+	public new T3DRegion GetRegionp(Vector3 globalPosition) =>
+		T3DRegion.Bind(Call(GDExtensionMethodName.GetRegionp, [globalPosition]).As<Resource>());
 
-	public new void SetRegionModified(Vector2I regionLocation, bool modified) => 
+	public new void SetRegionModified(Vector2I regionLocation, bool modified) =>
 		Call(GDExtensionMethodName.SetRegionModified, [regionLocation, modified]);
 
-	public new bool IsRegionModified(Vector2I regionLocation) => 
+	public new bool IsRegionModified(Vector2I regionLocation) =>
 		Call(GDExtensionMethodName.IsRegionModified, [regionLocation]).As<bool>();
 
-	public new void SetRegionDeleted(Vector2I regionLocation, bool deleted) => 
+	public new void SetRegionDeleted(Vector2I regionLocation, bool deleted) =>
 		Call(GDExtensionMethodName.SetRegionDeleted, [regionLocation, deleted]);
 
-	public new bool IsRegionDeleted(Vector2I regionLocation) => 
+	public new bool IsRegionDeleted(Vector2I regionLocation) =>
 		Call(GDExtensionMethodName.IsRegionDeleted, [regionLocation]).As<bool>();
 
-	public new Terrain3DRegion AddRegionBlankp(Vector3 globalPosition, bool update = true) => 
-		Terrain3DRegion.Bind(Call(GDExtensionMethodName.AddRegionBlankp, [globalPosition, update]).As<Resource>());
+	public new T3DRegion AddRegionBlankp(Vector3 globalPosition, bool update = true) =>
+		T3DRegion.Bind(Call(GDExtensionMethodName.AddRegionBlankp, [globalPosition, update]).As<Resource>());
 
-	public new Terrain3DRegion AddRegionBlank(Vector2I regionLocation, bool update = true) => 
-		Terrain3DRegion.Bind(Call(GDExtensionMethodName.AddRegionBlank, [regionLocation, update]).As<Resource>());
+	public new T3DRegion AddRegionBlank(Vector2I regionLocation, bool update = true) =>
+		T3DRegion.Bind(Call(GDExtensionMethodName.AddRegionBlank, [regionLocation, update]).As<Resource>());
 
-	public new Error AddRegion(Terrain3DRegion region, bool update = true) => 
+	public new Error AddRegion(T3DRegion region, bool update = true) =>
 		Call(GDExtensionMethodName.AddRegion, [region, update]).As<Error>();
 
-	public new void RemoveRegionp(Vector3 globalPosition, bool update = true) => 
+	public new void RemoveRegionp(Vector3 globalPosition, bool update = true) =>
 		Call(GDExtensionMethodName.RemoveRegionp, [globalPosition, update]);
 
-	public new void RemoveRegionl(Vector2I regionLocation, bool update = true) => 
+	public new void RemoveRegionl(Vector2I regionLocation, bool update = true) =>
 		Call(GDExtensionMethodName.RemoveRegionl, [regionLocation, update]);
 
-	public new void RemoveRegion(Terrain3DRegion region, bool update = true) => 
+	public new void RemoveRegion(T3DRegion region, bool update = true) =>
 		Call(GDExtensionMethodName.RemoveRegion, [region, update]);
 
-	public new void SaveDirectory(string directory) => 
+	public new void SaveDirectory(string directory) =>
 		Call(GDExtensionMethodName.SaveDirectory, [directory]);
 
-	public new void SaveRegion(Vector2I regionLocation, string directory, bool save16Bit = false) => 
+	public new void SaveRegion(Vector2I regionLocation, string directory, bool save16Bit = false) =>
 		Call(GDExtensionMethodName.SaveRegion, [regionLocation, directory, save16Bit]);
 
 	public new Godot.Collections.Dictionary InspectGpuRegionPages() =>
@@ -656,148 +656,148 @@ public partial class Terrain3DData : GodotObject
 	public new Godot.Collections.Dictionary GetRuntimeResidencyGrid(long radius = 6) =>
 		Call(GDExtensionMethodName.GetRuntimeResidencyGrid, [radius]).As<Godot.Collections.Dictionary>();
 
-	public new void LoadDirectory(string directory) => 
+	public new void LoadDirectory(string directory) =>
 		Call(GDExtensionMethodName.LoadDirectory, [directory]);
 
-	public new void LoadRegion(Vector2I regionLocation, string directory, bool update = true) => 
+	public new void LoadRegion(Vector2I regionLocation, string directory, bool update = true) =>
 		Call(GDExtensionMethodName.LoadRegion, [regionLocation, directory, update]);
 
-	public new Godot.Collections.Array GetMaps(Terrain3DRegion.MapType mapType) => 
+	public new Godot.Collections.Array GetMaps(T3DRegion.MapType mapType) =>
 		Call(GDExtensionMethodName.GetMaps, [Variant.From(mapType)]).As<Godot.Collections.Array>();
 
-	public new void UpdateMaps(Terrain3DRegion.MapType mapType = Terrain3DRegion.MapType.Max, bool allRegions = true, bool generateMipmaps = false) => 
+	public new void UpdateMaps(T3DRegion.MapType mapType = T3DRegion.MapType.Max, bool allRegions = true, bool generateMipmaps = false) =>
 		Call(GDExtensionMethodName.UpdateMaps, [Variant.From(mapType), allRegions, generateMipmaps]);
 
-	public new Terrain3DErosionJob CreateErosionJob(Terrain3DErosionSettings settings) =>
-		Terrain3DErosionJob.Bind(Call(GDExtensionMethodName.CreateErosionJob, [settings]).As<GodotObject>());
+	public new T3DErosionJob CreateErosionJob(T3DErosionSettings settings) =>
+		T3DErosionJob.Bind(Call(GDExtensionMethodName.CreateErosionJob, [settings]).As<GodotObject>());
 
-	public new Rid GetHeightMapsRid() => 
+	public new Rid GetHeightMapsRid() =>
 		Call(GDExtensionMethodName.GetHeightMapsRid, []).As<Rid>();
 
-	public new Rid GetControlMapsRid() => 
+	public new Rid GetControlMapsRid() =>
 		Call(GDExtensionMethodName.GetControlMapsRid, []).As<Rid>();
 
-	public new Rid GetColorMapsRid() => 
+	public new Rid GetColorMapsRid() =>
 		Call(GDExtensionMethodName.GetColorMapsRid, []).As<Rid>();
 
-	public new void SetPixel(Terrain3DRegion.MapType mapType, Vector3 globalPosition, Color pixel) => 
+	public new void SetPixel(T3DRegion.MapType mapType, Vector3 globalPosition, Color pixel) =>
 		Call(GDExtensionMethodName.SetPixel, [Variant.From(mapType), globalPosition, pixel]);
 
-	public new Color GetPixel(Terrain3DRegion.MapType mapType, Vector3 globalPosition) => 
+	public new Color GetPixel(T3DRegion.MapType mapType, Vector3 globalPosition) =>
 		Call(GDExtensionMethodName.GetPixel, [Variant.From(mapType), globalPosition]).As<Color>();
 
-	public new void SetHeight(Vector3 globalPosition, double height) => 
+	public new void SetHeight(Vector3 globalPosition, double height) =>
 		Call(GDExtensionMethodName.SetHeight, [globalPosition, height]);
 
-	public new double GetHeight(Vector3 globalPosition) => 
+	public new double GetHeight(Vector3 globalPosition) =>
 		Call(GDExtensionMethodName.GetHeight, [globalPosition]).As<double>();
 
-	public new void SetColor(Vector3 globalPosition, Color color) => 
+	public new void SetColor(Vector3 globalPosition, Color color) =>
 		Call(GDExtensionMethodName.SetColor, [globalPosition, color]);
 
-	public new Color GetColor(Vector3 globalPosition) => 
+	public new Color GetColor(Vector3 globalPosition) =>
 		Call(GDExtensionMethodName.GetColor, [globalPosition]).As<Color>();
 
-	public new void SetControl(Vector3 globalPosition, long control) => 
+	public new void SetControl(Vector3 globalPosition, long control) =>
 		Call(GDExtensionMethodName.SetControl, [globalPosition, control]);
 
-	public new long GetControl(Vector3 globalPosition) => 
+	public new long GetControl(Vector3 globalPosition) =>
 		Call(GDExtensionMethodName.GetControl, [globalPosition]).As<long>();
 
-	public new void SetRoughness(Vector3 globalPosition, double roughness) => 
+	public new void SetRoughness(Vector3 globalPosition, double roughness) =>
 		Call(GDExtensionMethodName.SetRoughness, [globalPosition, roughness]);
 
-	public new double GetRoughness(Vector3 globalPosition) => 
+	public new double GetRoughness(Vector3 globalPosition) =>
 		Call(GDExtensionMethodName.GetRoughness, [globalPosition]).As<double>();
 
-	public new void SetControlBaseId(Vector3 globalPosition, long textureId) => 
+	public new void SetControlBaseId(Vector3 globalPosition, long textureId) =>
 		Call(GDExtensionMethodName.SetControlBaseId, [globalPosition, textureId]);
 
-	public new long GetControlBaseId(Vector3 globalPosition) => 
+	public new long GetControlBaseId(Vector3 globalPosition) =>
 		Call(GDExtensionMethodName.GetControlBaseId, [globalPosition]).As<long>();
 
-	public new void SetControlOverlayId(Vector3 globalPosition, long textureId) => 
+	public new void SetControlOverlayId(Vector3 globalPosition, long textureId) =>
 		Call(GDExtensionMethodName.SetControlOverlayId, [globalPosition, textureId]);
 
-	public new long GetControlOverlayId(Vector3 globalPosition) => 
+	public new long GetControlOverlayId(Vector3 globalPosition) =>
 		Call(GDExtensionMethodName.GetControlOverlayId, [globalPosition]).As<long>();
 
-	public new void SetControlBlend(Vector3 globalPosition, double blendValue) => 
+	public new void SetControlBlend(Vector3 globalPosition, double blendValue) =>
 		Call(GDExtensionMethodName.SetControlBlend, [globalPosition, blendValue]);
 
-	public new double GetControlBlend(Vector3 globalPosition) => 
+	public new double GetControlBlend(Vector3 globalPosition) =>
 		Call(GDExtensionMethodName.GetControlBlend, [globalPosition]).As<double>();
 
-	public new void SetControlAngle(Vector3 globalPosition, double degrees) => 
+	public new void SetControlAngle(Vector3 globalPosition, double degrees) =>
 		Call(GDExtensionMethodName.SetControlAngle, [globalPosition, degrees]);
 
-	public new double GetControlAngle(Vector3 globalPosition) => 
+	public new double GetControlAngle(Vector3 globalPosition) =>
 		Call(GDExtensionMethodName.GetControlAngle, [globalPosition]).As<double>();
 
-	public new void SetControlScale(Vector3 globalPosition, double percentageModifier) => 
+	public new void SetControlScale(Vector3 globalPosition, double percentageModifier) =>
 		Call(GDExtensionMethodName.SetControlScale, [globalPosition, percentageModifier]);
 
-	public new double GetControlScale(Vector3 globalPosition) => 
+	public new double GetControlScale(Vector3 globalPosition) =>
 		Call(GDExtensionMethodName.GetControlScale, [globalPosition]).As<double>();
 
-	public new void SetControlHole(Vector3 globalPosition, bool enable) => 
+	public new void SetControlHole(Vector3 globalPosition, bool enable) =>
 		Call(GDExtensionMethodName.SetControlHole, [globalPosition, enable]);
 
-	public new bool GetControlHole(Vector3 globalPosition) => 
+	public new bool GetControlHole(Vector3 globalPosition) =>
 		Call(GDExtensionMethodName.GetControlHole, [globalPosition]).As<bool>();
 
-	public new void SetControlNavigation(Vector3 globalPosition, bool enable) => 
+	public new void SetControlNavigation(Vector3 globalPosition, bool enable) =>
 		Call(GDExtensionMethodName.SetControlNavigation, [globalPosition, enable]);
 
-	public new bool GetControlNavigation(Vector3 globalPosition) => 
+	public new bool GetControlNavigation(Vector3 globalPosition) =>
 		Call(GDExtensionMethodName.GetControlNavigation, [globalPosition]).As<bool>();
 
-	public new void SetControlAuto(Vector3 globalPosition, bool enable) => 
+	public new void SetControlAuto(Vector3 globalPosition, bool enable) =>
 		Call(GDExtensionMethodName.SetControlAuto, [globalPosition, enable]);
 
-	public new bool GetControlAuto(Vector3 globalPosition) => 
+	public new bool GetControlAuto(Vector3 globalPosition) =>
 		Call(GDExtensionMethodName.GetControlAuto, [globalPosition]).As<bool>();
 
-	public new Vector3 GetNormal(Vector3 globalPosition) => 
+	public new Vector3 GetNormal(Vector3 globalPosition) =>
 		Call(GDExtensionMethodName.GetNormal, [globalPosition]).As<Vector3>();
 
-	public new bool IsInSlope(Vector3 globalPosition, Vector2 slopeRange, Vector3 normal = default) => 
+	public new bool IsInSlope(Vector3 globalPosition, Vector2 slopeRange, Vector3 normal = default) =>
 		Call(GDExtensionMethodName.IsInSlope, [globalPosition, slopeRange, normal]).As<bool>();
 
-	public new Vector3 GetTextureId(Vector3 globalPosition) => 
+	public new Vector3 GetTextureId(Vector3 globalPosition) =>
 		Call(GDExtensionMethodName.GetTextureId, [globalPosition]).As<Vector3>();
 
-	public new Vector3 GetMeshVertex(long lod, Terrain3DData.HeightFilter filter, Vector3 globalPosition) => 
+	public new Vector3 GetMeshVertex(long lod, T3DData.HeightFilter filter, Vector3 globalPosition) =>
 		Call(GDExtensionMethodName.GetMeshVertex, [lod, Variant.From(filter), globalPosition]).As<Vector3>();
 
-	public new Vector2 GetHeightRange() => 
+	public new Vector2 GetHeightRange() =>
 		Call(GDExtensionMethodName.GetHeightRange, []).As<Vector2>();
 
-	public new void CalcHeightRange(bool recursive = false) => 
+	public new void CalcHeightRange(bool recursive = false) =>
 		Call(GDExtensionMethodName.CalcHeightRange, [recursive]);
 
-	public new void ImportImages(Godot.Collections.Array images, Vector3 globalPosition = default, double offset = 0, double scale = 1) => 
+	public new void ImportImages(Godot.Collections.Array images, Vector3 globalPosition = default, double offset = 0, double scale = 1) =>
 		Call(GDExtensionMethodName.ImportImages, [images, globalPosition, offset, scale]);
 
-	public new Error ExportImage(string fileName, Terrain3DRegion.MapType mapType) => 
+	public new Error ExportImage(string fileName, T3DRegion.MapType mapType) =>
 		Call(GDExtensionMethodName.ExportImage, [fileName, Variant.From(mapType)]).As<Error>();
 
-	public new Image LayeredToImage(Terrain3DRegion.MapType mapType) => 
+	public new Image LayeredToImage(T3DRegion.MapType mapType) =>
 		Call(GDExtensionMethodName.LayeredToImage, [Variant.From(mapType)]).As<Image>();
 
-	public new void Dump(bool verbose = false) => 
+	public new void Dump(bool verbose = false) =>
 		Call(GDExtensionMethodName.Dump, [verbose]);
 
 }
 
 file static class HeightFilterExtensions
 {
-public static int SafeAsInt32(this Terrain3DData.HeightFilter enumValue) =>
+public static int SafeAsInt32(this T3DData.HeightFilter enumValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this Terrain3DData.HeightFilter enumValue, int defaultValue) =>
+public static int SafeAsInt32(this T3DData.HeightFilter enumValue, int defaultValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this Terrain3DData.HeightFilter? enumValue, int defaultValue = 0) =>
+public static int SafeAsInt32(this T3DData.HeightFilter? enumValue, int defaultValue = 0) =>
 enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
 }

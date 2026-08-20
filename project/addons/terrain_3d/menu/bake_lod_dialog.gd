@@ -1,7 +1,7 @@
 # Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 # Bake LOD Dialog for Terrain3D
 @tool
-class_name Terrain3DBakeLodDialog
+class_name T3DBakeLodDialog
 extends ConfirmationDialog
 
 var lod: int = 4

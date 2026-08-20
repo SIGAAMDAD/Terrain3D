@@ -24,7 +24,7 @@ const ICON_LANDFORM: String = "res://addons/terrain_3d/icons/landform.svg"
 var add_tool_group: ButtonGroup = ButtonGroup.new()
 var sub_tool_group: ButtonGroup = ButtonGroup.new()
 var buttons: Dictionary[StringName, Button] = {}
-var plugin: Terrain3DEditorPluginBase
+var plugin: T3DEditorPluginBase
 
 
 func _init() -> void:
@@ -36,150 +36,150 @@ func _ready() -> void:
 	sub_tool_group.pressed.connect(_on_tool_selected)
 
 	add_tool_button(
-		Terrain3DEditor.REGION,
+		T3DEditor.REGION,
 		"Add Region (E)",
-		Terrain3DEditor.ADD,
+		T3DEditor.ADD,
 		ICON_REGION_ADD,
 		"Remove Region",
-		Terrain3DEditor.SUBTRACT,
+		T3DEditor.SUBTRACT,
 		ICON_REGION_REMOVE
 	)
 
 	add_child(HSeparator.new())
 
 	add_tool_button(
-		Terrain3DEditor.SCULPT,
+		T3DEditor.SCULPT,
 		"Raise (R)",
-		Terrain3DEditor.ADD,
+		T3DEditor.ADD,
 		ICON_HEIGHT_ADD,
 		"Lower (R)",
-		Terrain3DEditor.SUBTRACT,
+		T3DEditor.SUBTRACT,
 		ICON_HEIGHT_SUB
 	)
 
 	add_tool_button(
-		Terrain3DEditor.SCULPT,
+		T3DEditor.SCULPT,
 		"Smooth (Shift)",
-		Terrain3DEditor.AVERAGE,
+		T3DEditor.AVERAGE,
 		ICON_HEIGHT_SMOOTH,
 		"",
-		Terrain3DEditor.OP_MAX,
+		T3DEditor.OP_MAX,
 		""
 	)
 
 	add_tool_button(
-		Terrain3DEditor.HEIGHT,
+		T3DEditor.HEIGHT,
 		"Height (H)",
-		Terrain3DEditor.ADD,
+		T3DEditor.ADD,
 		ICON_HEIGHT_FLAT,
 		"Height (H)",
-		Terrain3DEditor.SUBTRACT,
+		T3DEditor.SUBTRACT,
 		ICON_HEIGHT_FLAT
 	)
 
 	add_tool_button(
-		Terrain3DEditor.SCULPT,
+		T3DEditor.SCULPT,
 		"Slope (S)",
-		Terrain3DEditor.GRADIENT,
+		T3DEditor.GRADIENT,
 		ICON_HEIGHT_SLOPE,
 		"",
-		Terrain3DEditor.OP_MAX,
+		T3DEditor.OP_MAX,
 		""
 	)
 
 	add_tool_button(
-		Terrain3DEditor.LANDFORM,
+		T3DEditor.LANDFORM,
 		"Landform Stroke (L)",
-		Terrain3DEditor.REPLACE,
+		T3DEditor.REPLACE,
 		ICON_LANDFORM,
 		"",
-		Terrain3DEditor.OP_MAX,
+		T3DEditor.OP_MAX,
 		""
 	)
 
 	add_child(HSeparator.new())
 
 	add_tool_button(
-		Terrain3DEditor.TEXTURE,
+		T3DEditor.TEXTURE,
 		"Paint Texture (B)",
-		Terrain3DEditor.REPLACE,
+		T3DEditor.REPLACE,
 		ICON_PAINT_TEXTURE,
 		"",
-		Terrain3DEditor.OP_MAX,
+		T3DEditor.OP_MAX,
 		""
 	)
 
 	add_tool_button(
-		Terrain3DEditor.TEXTURE,
+		T3DEditor.TEXTURE,
 		"Spray Texture (V)",
-		Terrain3DEditor.ADD,
+		T3DEditor.ADD,
 		ICON_SPRAY_TEXTURE,
 		"",
-		Terrain3DEditor.OP_MAX,
+		T3DEditor.OP_MAX,
 		""
 	)
 
 	add_tool_button(
-		Terrain3DEditor.AUTOSHADER,
+		T3DEditor.AUTOSHADER,
 		"Enable Material Rules (A)",
-		Terrain3DEditor.ADD,
+		T3DEditor.ADD,
 		ICON_AUTOSHADER,
 		"Protect from Material Rules (A)",
-		Terrain3DEditor.SUBTRACT,
+		T3DEditor.SUBTRACT,
 		""
 	)
 
 	add_child(HSeparator.new())
 
 	add_tool_button(
-		Terrain3DEditor.COLOR,
+		T3DEditor.COLOR,
 		"Paint Color (C)",
-		Terrain3DEditor.ADD,
+		T3DEditor.ADD,
 		ICON_COLOR,
 		"Remove Color (C)",
-		Terrain3DEditor.SUBTRACT,
+		T3DEditor.SUBTRACT,
 		""
 	)
 
 	add_tool_button(
-		Terrain3DEditor.ROUGHNESS,
+		T3DEditor.ROUGHNESS,
 		"Paint Wetness (W)",
-		Terrain3DEditor.ADD,
+		T3DEditor.ADD,
 		ICON_WETNESS,
 		"Remove Wetness (W)",
-		Terrain3DEditor.SUBTRACT,
+		T3DEditor.SUBTRACT,
 		""
 	)
 
 	add_child(HSeparator.new())
 
 	add_tool_button(
-		Terrain3DEditor.HOLES,
+		T3DEditor.HOLES,
 		"Add Holes (X)",
-		Terrain3DEditor.ADD,
+		T3DEditor.ADD,
 		ICON_HOLES,
 		"Remove Holes (X)",
-		Terrain3DEditor.SUBTRACT,
+		T3DEditor.SUBTRACT,
 		""
 	)
 
 	add_tool_button(
-		Terrain3DEditor.NAVIGATION,
+		T3DEditor.NAVIGATION,
 		"Paint Navigable Area (N)",
-		Terrain3DEditor.ADD,
+		T3DEditor.ADD,
 		ICON_NAVIGATION,
 		"Remove Navigable Area (N)",
-		Terrain3DEditor.SUBTRACT,
+		T3DEditor.SUBTRACT,
 		""
 	)
 
 	add_tool_button(
-		Terrain3DEditor.INSTANCER,
+		T3DEditor.INSTANCER,
 		"Instance Meshes (I)",
-		Terrain3DEditor.ADD,
+		T3DEditor.ADD,
 		ICON_INSTANCER,
 		"Remove Meshes (I)",
-		Terrain3DEditor.SUBTRACT,
+		T3DEditor.SUBTRACT,
 		""
 	)
 
@@ -191,35 +191,35 @@ func _ready() -> void:
 
 func _get_tool_help(p_tool: int, p_operation: int) -> String:
 	match p_tool:
-		Terrain3DEditor.REGION:
+		T3DEditor.REGION:
 			return "Create or remove one 128 m Terrain3D region at the cursor."
-		Terrain3DEditor.SCULPT:
+		T3DEditor.SCULPT:
 			match p_operation:
-				Terrain3DEditor.AVERAGE:
+				T3DEditor.AVERAGE:
 					return "Smooth height differences inside the brush mask. Transparent brush pixels do not modify terrain."
-				Terrain3DEditor.GRADIENT:
+				T3DEditor.GRADIENT:
 					return "Fit terrain to the slope defined by two picked reference points."
-				Terrain3DEditor.SUBTRACT:
+				T3DEditor.SUBTRACT:
 					return "Lower terrain using brush alpha, strength, and pen pressure."
 				_:
 					return "Raise terrain using brush alpha, strength, and pen pressure."
-		Terrain3DEditor.HEIGHT:
+		T3DEditor.HEIGHT:
 			return "Blend terrain toward an explicit world elevation sampled or entered in Tool Settings."
-		Terrain3DEditor.TEXTURE:
+		T3DEditor.TEXTURE:
 			return "Paint terrain material IDs and optional UV rotation/scale metadata. Spray blends the selected material into existing material pairs."
-		Terrain3DEditor.AUTOSHADER:
+		T3DEditor.AUTOSHADER:
 			return "Enable or protect texels from Terrain3D material-rule/AutoShader ownership."
-		Terrain3DEditor.COLOR:
+		T3DEditor.COLOR:
 			return "Paint authored terrain tint while preserving wetness stored in the color-map alpha channel."
-		Terrain3DEditor.ROUGHNESS:
+		T3DEditor.ROUGHNESS:
 			return "Paint the terrain wetness/roughness channel without changing authored RGB tint."
-		Terrain3DEditor.HOLES:
+		T3DEditor.HOLES:
 			return "Mark terrain control texels as holes or restore solid terrain."
-		Terrain3DEditor.NAVIGATION:
+		T3DEditor.NAVIGATION:
 			return "Paint or erase the Terrain3D navigation mask used by navigation baking."
-		Terrain3DEditor.INSTANCER:
+		T3DEditor.INSTANCER:
 			return "Paint or remove the selected Terrain3D mesh asset using the instance variation settings."
-		Terrain3DEditor.LANDFORM:
+		T3DEditor.LANDFORM:
 			return "Author semantic ridge, valley, cliff, basin, road, dune, shoreline, morphology, or occlusion strokes."
 	return "Terrain3D editor painter tool."
 
@@ -235,7 +235,7 @@ func add_tool_button(
 		p_add_op: int,
 		p_add_icon: String,
 		p_sub_text: String = "",
-		p_sub_op: int = int(Terrain3DEditor.OP_MAX),
+		p_sub_op: int = int(T3DEditor.OP_MAX),
 		p_sub_icon: String = "",
 ) -> void:
 	# Additive button
@@ -297,9 +297,9 @@ func _on_tool_selected(p_button: BaseButton) -> void:
 		button.set_pressed_no_signal(button.get_meta("ID", -1) == id)
 	if plugin.debug:
 		print("Terrain3DToolbar: _on_tool_selected: emitting tool_changed, ",
-			p_button.get_meta("Tool", Terrain3DEditor.TOOL_MAX), ", ",
-			p_button.get_meta("Operation", Terrain3DEditor.OP_MAX))
-	emit_signal("tool_changed", p_button.get_meta("Tool", Terrain3DEditor.TOOL_MAX), p_button.get_meta("Operation", Terrain3DEditor.OP_MAX))
+			p_button.get_meta("Tool", T3DEditor.TOOL_MAX), ", ",
+			p_button.get_meta("Operation", T3DEditor.OP_MAX))
+	emit_signal("tool_changed", p_button.get_meta("Tool", T3DEditor.TOOL_MAX), p_button.get_meta("Operation", T3DEditor.OP_MAX))
 
 
 func change_tool(p_name: String) -> void:
@@ -310,7 +310,7 @@ func change_tool(p_name: String) -> void:
 		return
 
 	# Programmatic state changes emit toggle state, not the user activation path
-	# this toolbar uses to update Terrain3DEditor. Drive the group and handler
+	# this toolbar uses to update T3DEditor. Drive the group and handler
 	# explicitly so hotkeys/asset clicks also resynchronize an already-selected tool.
 	var group: ButtonGroup = btn.get_button_group()
 	if is_instance_valid(group):

@@ -1,7 +1,7 @@
 # Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 # Channel Packer Dragdropper for Terrain3D
 @tool
-class_name Terrain3DChannelPackerDragDrop
+class_name T3DChannelPackerDragDrop
 extends Button
 
 signal dropped(path: String)

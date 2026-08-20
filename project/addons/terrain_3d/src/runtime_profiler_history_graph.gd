@@ -4,7 +4,7 @@ extends Control
 
 signal sample_selected(index: int)
 
-var samples: Array[Terrain3DRuntimeValueMap] = []
+var samples: Array[T3DRuntimeValueMap] = []
 var selected_index: int = -1
 var frame_threshold_usec: float = 2000.0
 
@@ -14,7 +14,7 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
 
-func set_samples(p_samples: Array[Terrain3DRuntimeValueMap]) -> void:
+func set_samples(p_samples: Array[T3DRuntimeValueMap]) -> void:
 	samples = p_samples
 	if selected_index >= samples.size():
 		selected_index = samples.size() - 1
@@ -48,7 +48,7 @@ func _draw() -> void:
 		return
 
 	var maximum_usec: float = maxf(frame_threshold_usec, 1.0)
-	for sample: Terrain3DRuntimeValueMap in samples:
+	for sample: T3DRuntimeValueMap in samples:
 		maximum_usec = maxf(maximum_usec, sample.float_value("physics_total_usec"))
 	maximum_usec *= 1.1
 
@@ -77,7 +77,7 @@ func _draw_series(p_key: String, p_maximum_usec: float, p_color: Color, p_width:
 	var points: PackedVector2Array = PackedVector2Array()
 	points.resize(samples.size())
 	for index: int in range(samples.size()):
-		var sample: Terrain3DRuntimeValueMap = samples[index]
+		var sample: T3DRuntimeValueMap = samples[index]
 		var value: float = sample.float_value(p_key)
 		points[index] = Vector2(_sample_x(index), size.y - value / p_maximum_usec * size.y)
 	draw_polyline(points, p_color, p_width, true)
@@ -85,7 +85,7 @@ func _draw_series(p_key: String, p_maximum_usec: float, p_color: Color, p_width:
 
 func _draw_event_markers(p_maximum_usec: float) -> void:
 	for index: int in range(samples.size()):
-		var sample: Terrain3DRuntimeValueMap = samples[index]
+		var sample: T3DRuntimeValueMap = samples[index]
 		var events: PackedStringArray = sample.string_array("events")
 		var stalls: PackedStringArray = sample.string_array("stall_reasons")
 		if events.is_empty() and stalls.is_empty():

@@ -1,7 +1,7 @@
 # Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 @tool
 extends RefCounted
-class_name Terrain3DHLODBaker
+class_name T3DHLODBaker
 
 const NODE_FLAG_HLOD_VISUAL: int = 1 << 2
 const MAX_LEVEL: int = 6
@@ -34,16 +34,16 @@ class BuiltCluster extends RefCounted:
 	var region_min: Vector2i = Vector2i.ZERO
 	var region_max: Vector2i = Vector2i.ZERO
 	var package_path: String = ""
-	var package: Terrain3DHLODPackage
+	var package: T3DHLODPackage
 	var source_signature: int = 0
 
 var reduction_ratio: float = DEFAULT_REDUCTION
-var _native_builder: Terrain3DHLODBuilder = Terrain3DHLODBuilder.new()
+var _native_builder: T3DHLODBuilder = T3DHLODBuilder.new()
 var _warnings: PackedStringArray = PackedStringArray()
 var _errors: PackedStringArray = PackedStringArray()
 
 
-func analyze(terrain: Terrain3D) -> Dictionary:
+func analyze(terrain: T3DTerrain) -> Dictionary:
 	_warnings.clear()
 	_errors.clear()
 	var max_level: int = clampi(terrain.hlod_max_level, 1, MAX_LEVEL)
@@ -71,7 +71,7 @@ func analyze(terrain: Terrain3D) -> Dictionary:
 	}
 
 
-func validate_generated(terrain: Terrain3D) -> Dictionary:
+func validate_generated(terrain: T3DTerrain) -> Dictionary:
 	if not is_instance_valid(terrain) or terrain.data_directory.is_empty():
 		return {"ok": false, "error": "Terrain3D data directory is unavailable", "valid": 0, "missing": 0, "invalid": 0}
 	var manifest_path: String = terrain.hlod_manifest_path.strip_edges()
@@ -79,7 +79,7 @@ func validate_generated(terrain: Terrain3D) -> Dictionary:
 		manifest_path = terrain.data_directory.trim_suffix("/").path_join(MANIFEST_NAME)
 	if not FileAccess.file_exists(manifest_path):
 		return {"ok": false, "error": "HLOD manifest is missing", "missing_manifest": true, "valid": 0, "missing": 0, "invalid": 0}
-	var manifest := ResourceLoader.load(manifest_path, "Terrain3DHLODManifest", ResourceLoader.CACHE_MODE_IGNORE) as Terrain3DHLODManifest
+	var manifest := ResourceLoader.load(manifest_path, "T3DHLODManifest", ResourceLoader.CACHE_MODE_IGNORE) as T3DHLODManifest
 	if not is_instance_valid(manifest):
 		return {"ok": false, "error": "HLOD manifest could not be loaded", "valid": 0, "missing": 0, "invalid": 1}
 	var manifest_invalid: bool = manifest.format != 1 or manifest.region_map_size != REGION_MAP_SIZE or \
@@ -99,7 +99,7 @@ func validate_generated(terrain: Terrain3D) -> Dictionary:
 		if path.is_empty() or not FileAccess.file_exists(path):
 			missing += 1
 			continue
-		var package := ResourceLoader.load(path, "Terrain3DHLODPackage", ResourceLoader.CACHE_MODE_IGNORE) as Terrain3DHLODPackage
+		var package := ResourceLoader.load(path, "T3DHLODPackage", ResourceLoader.CACHE_MODE_IGNORE) as T3DHLODPackage
 		if not is_instance_valid(package) or not is_instance_valid(package.mesh) or \
 				package.level != int(entry.get("level", 0)) or \
 				package.cluster_location != entry.get("cluster", Vector2i.ZERO) or \
@@ -121,7 +121,7 @@ func validate_generated(terrain: Terrain3D) -> Dictionary:
 	}
 
 
-func bake(terrain: Terrain3D, dirty_only: bool = true) -> Dictionary:
+func bake(terrain: T3DTerrain, dirty_only: bool = true) -> Dictionary:
 	_warnings.clear()
 	_errors.clear()
 	if not is_instance_valid(terrain) or not is_instance_valid(terrain.data) or not is_instance_valid(terrain.assets):
@@ -141,10 +141,10 @@ func bake(terrain: Terrain3D, dirty_only: bool = true) -> Dictionary:
 	if sources.is_empty():
 		return _failure("No HLOD-eligible Terrain3D static sources were found")
 
-	var existing: Terrain3DHLODManifest = null
+	var existing: T3DHLODManifest = null
 	var manifest_path: String = data_dir.path_join(MANIFEST_NAME)
 	if dirty_only and ResourceLoader.exists(manifest_path):
-		existing = ResourceLoader.load(manifest_path, "Terrain3DHLODManifest", ResourceLoader.CACHE_MODE_IGNORE) as Terrain3DHLODManifest
+		existing = ResourceLoader.load(manifest_path, "T3DHLODManifest", ResourceLoader.CACHE_MODE_IGNORE) as T3DHLODManifest
 	var existing_entries: Dictionary[String, Dictionary] = _index_existing_entries(existing)
 
 	var build_signature: int = _signature_int(
@@ -192,7 +192,7 @@ func bake(terrain: Terrain3D, dirty_only: bool = true) -> Dictionary:
 				package_updates.append(cluster.package_path)
 		level_clusters = next_clusters
 
-	var manifest := Terrain3DHLODManifest.new()
+	var manifest := T3DHLODManifest.new()
 	manifest.format = 1
 	manifest.region_map_size = REGION_MAP_SIZE
 	manifest.region_size = terrain.region_size
@@ -202,7 +202,7 @@ func bake(terrain: Terrain3D, dirty_only: bool = true) -> Dictionary:
 	manifest.built_unix = int(Time.get_unix_time_from_system())
 	var entries: Array = []
 	for cluster: BuiltCluster in all_clusters:
-		var package: Terrain3DHLODPackage = cluster.package
+		var package: T3DHLODPackage = cluster.package
 		entries.append({
 			"level": cluster.level,
 			"cluster": cluster.cluster,
@@ -247,7 +247,7 @@ func bake(terrain: Terrain3D, dirty_only: bool = true) -> Dictionary:
 	}
 
 
-func clear_generated(terrain: Terrain3D) -> Dictionary:
+func clear_generated(terrain: T3DTerrain) -> Dictionary:
 	if not is_instance_valid(terrain) or terrain.data_directory.is_empty():
 		return _failure("Terrain3D data directory is unavailable")
 	var data_dir: String = terrain.data_directory.trim_suffix("/")
@@ -261,12 +261,12 @@ func clear_generated(terrain: Terrain3D) -> Dictionary:
 	return {"ok": true}
 
 
-func _collect_sources(terrain: Terrain3D, max_level: int) -> Array[Source]:
+func _collect_sources(terrain: T3DTerrain, max_level: int) -> Array[Source]:
 	var sources: Array[Source] = []
 	var world_region_size: float = float(terrain.region_size) * terrain.vertex_spacing
 	for location_value: Variant in terrain.data.get_region_locations():
 		var location: Vector2i = location_value
-		var region: Terrain3DRegion = terrain.data.get_region(location)
+		var region: T3DRegion = terrain.data.get_region(location)
 		if not is_instance_valid(region):
 			continue
 		_collect_instancer_sources(terrain, region, location, world_region_size, max_level, sources)
@@ -274,13 +274,13 @@ func _collect_sources(terrain: Terrain3D, max_level: int) -> Array[Source]:
 	return sources
 
 
-func _collect_instancer_sources(terrain: Terrain3D, region: Terrain3DRegion,
+func _collect_instancer_sources(terrain: T3DTerrain, region: T3DRegion,
 		location: Vector2i, world_region_size: float, max_level: int, output: Array[Source]) -> void:
 	# Read the native instance store directly. Exporting the full instance dictionary here
 	# duplicates every transform into Variant containers and scales terribly on
 	# authored worlds with dense static placement.
 	for mesh_id: int in _native_builder.get_instancer_mesh_ids(region):
-		var asset := terrain.assets.get_mesh_asset(mesh_id) as Terrain3DMeshAsset
+		var asset := terrain.assets.get_mesh_asset(mesh_id) as T3DMeshAsset
 		if not is_instance_valid(asset) or not asset.is_enabled() or not asset.is_hlod_eligible():
 			continue
 		var built: Dictionary = _native_builder.build_instancer_source(terrain, region, mesh_id)
@@ -314,9 +314,9 @@ func _collect_instancer_sources(terrain: Terrain3D, region: Terrain3DRegion,
 			_warnings.append("Mesh asset %d in region %s spans beyond configured HLOD level %d and remains detailed" % [mesh_id, location, max_level])
 
 
-func _collect_node_sources(region: Terrain3DRegion, location: Vector2i,
+func _collect_node_sources(region: T3DRegion, location: Vector2i,
 		world_region_size: float, max_level: int, output: Array[Source]) -> void:
-	for descriptor: Terrain3DRegionNodeDescriptor in Terrain3DRegionNodeDescriptor.list_from_value(region.get_streamed_nodes()):
+	for descriptor: T3DRegionNodeDescriptor in T3DRegionNodeDescriptor.list_from_value(region.get_streamed_nodes()):
 		if (descriptor.flags & NODE_FLAG_HLOD_VISUAL) == 0:
 			continue
 		var packed: PackedScene = descriptor.scene
@@ -382,7 +382,7 @@ func _collect_node_geometry(node: Node3D, parent_transform: Transform3D,
 			_collect_node_geometry(child as Node3D, local, base_transform, source, true)
 
 
-func _build_cluster(terrain: Terrain3D, level: int, cluster_key: Vector2i, inputs: Array,
+func _build_cluster(terrain: T3DTerrain, level: int, cluster_key: Vector2i, inputs: Array,
 		output_dir: String, build_signature: int, existing_entries: Dictionary[String, Dictionary],
 		dirty_only: bool) -> Dictionary:
 	var span: int = 1 << level
@@ -411,7 +411,7 @@ func _build_cluster(terrain: Terrain3D, level: int, cluster_key: Vector2i, input
 		var old: Dictionary = existing_entries[entry_key]
 		var old_path: String = String(old.get("package_path", ""))
 		if int(old.get("source_signature", -1)) == source_signature and int(old.get("build_signature", -1)) == build_signature and FileAccess.file_exists(old_path):
-			var loaded := ResourceLoader.load(old_path, "Terrain3DHLODPackage", ResourceLoader.CACHE_MODE_IGNORE) as Terrain3DHLODPackage
+			var loaded := ResourceLoader.load(old_path, "T3DHLODPackage", ResourceLoader.CACHE_MODE_IGNORE) as T3DHLODPackage
 			if is_instance_valid(loaded) and is_instance_valid(loaded.mesh) and \
 					loaded.level == level and loaded.cluster_location == cluster_key and \
 					loaded.region_min == region_min and loaded.region_max == region_max and \
@@ -431,7 +431,7 @@ func _build_cluster(terrain: Terrain3D, level: int, cluster_key: Vector2i, input
 	var proxy_mesh: ArrayMesh = simplified.get("mesh") as ArrayMesh
 	if not is_instance_valid(proxy_mesh) or proxy_mesh.get_surface_count() == 0:
 		return _failure("HLOD cluster L%d %s simplifier produced no proxy mesh" % [level, cluster_key])
-	var package := Terrain3DHLODPackage.new()
+	var package := T3DHLODPackage.new()
 	package.level = level
 	package.cluster_location = cluster_key
 	package.region_min = region_min
@@ -510,9 +510,9 @@ func _append_part(tools: Dictionary[String, SurfaceTool], materials: Dictionary[
 
 
 
-func _populate_source_policy(manifest: Terrain3DHLODManifest, sources: Array[Source]) -> void:
+func _populate_source_policy(manifest: T3DHLODManifest, sources: Array[Source]) -> void:
 	var mesh_policy := PackedByteArray()
-	mesh_policy.resize(4096 * Terrain3DAssets.TERRAIN3D_MAX_MESH_ASSETS)
+	mesh_policy.resize(4096 * T3DAssets.TERRAIN3D_MAX_MESH_ASSETS)
 	var node_regions := PackedInt32Array()
 	var node_ids := PackedInt64Array()
 	var node_levels := PackedByteArray()
@@ -521,7 +521,7 @@ func _populate_source_policy(manifest: Terrain3DHLODManifest, sources: Array[Sou
 		if region_index < 0:
 			continue
 		if source.mesh_id >= 0:
-			var offset: int = region_index * Terrain3DAssets.TERRAIN3D_MAX_MESH_ASSETS + source.mesh_id
+			var offset: int = region_index * T3DAssets.TERRAIN3D_MAX_MESH_ASSETS + source.mesh_id
 			mesh_policy[offset] = maxi(mesh_policy[offset], source.min_level)
 		elif source.spawn_id > 0:
 			node_regions.append(region_index)
@@ -624,7 +624,7 @@ func _resource_content_signature(resource: Resource) -> String:
 	return resource.get_class() + ":" + str(resource.get_instance_id())
 
 
-func _mesh_asset_materials(asset: Terrain3DMeshAsset, mesh: Mesh) -> Array[Material]:
+func _mesh_asset_materials(asset: T3DMeshAsset, mesh: Mesh) -> Array[Material]:
 	var result: Array[Material] = []
 	for surface: int in range(mesh.get_surface_count()):
 		var material: Material = asset.material_override
@@ -694,7 +694,7 @@ func _inherited_geometric_error(inputs: Array) -> float:
 
 
 
-func _index_existing_entries(manifest: Terrain3DHLODManifest) -> Dictionary[String, Dictionary]:
+func _index_existing_entries(manifest: T3DHLODManifest) -> Dictionary[String, Dictionary]:
 	var result: Dictionary[String, Dictionary] = {}
 	if not is_instance_valid(manifest):
 		return result
@@ -743,7 +743,7 @@ func _region_map_index(location: Vector2i) -> int:
 	return z * REGION_MAP_SIZE + x
 
 
-func _publish_manifest_transactionally(manifest: Terrain3DHLODManifest, manifest_path: String) -> Error:
+func _publish_manifest_transactionally(manifest: T3DHLODManifest, manifest_path: String) -> Error:
 	var directory: String = manifest_path.get_base_dir()
 	var staging_path: String = directory.path_join("terrain3d_hlod_manifest.staging.tres")
 	var previous_path: String = directory.path_join("terrain3d_hlod_manifest.previous.tres")
@@ -753,7 +753,7 @@ func _publish_manifest_transactionally(manifest: Terrain3DHLODManifest, manifest
 	var save_error: Error = ResourceSaver.save(manifest, staging_path)
 	if save_error != OK:
 		return save_error
-	var validation := ResourceLoader.load(staging_path, "Terrain3DHLODManifest", ResourceLoader.CACHE_MODE_IGNORE) as Terrain3DHLODManifest
+	var validation := ResourceLoader.load(staging_path, "T3DHLODManifest", ResourceLoader.CACHE_MODE_IGNORE) as T3DHLODManifest
 	if not is_instance_valid(validation) or validation.entries.size() != manifest.entries.size():
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(staging_path))
 		return ERR_FILE_CORRUPT
