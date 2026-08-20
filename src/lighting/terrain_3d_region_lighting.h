@@ -22,6 +22,7 @@ private:
 	// eagerly retain its atlas and shadowmask textures whenever terrain regions
 	// are loaded, defeating the residency streamer.
 	String m_lightDataPath;
+	String m_terrainShadowMaskPath;
 	Array m_bakedUserData;
 	Vector2i m_clusterLocation = V2I_ZERO;
 	Vector2i m_regionMin = V2I_ZERO;
@@ -49,6 +50,9 @@ public:
 	void setLightDataPath( const String &rPath );
 	String getLightDataPath( void ) const { return m_lightDataPath; }
 	bool hasLightData( void ) const { return !m_lightDataPath.is_empty(); }
+	void setTerrainShadowMaskPath( const String &rPath );
+	String getTerrainShadowMaskPath( void ) const { return m_terrainShadowMaskPath; }
+	bool hasTerrainShadowMask( void ) const { return !m_terrainShadowMaskPath.is_empty(); }
 
 	void setBakedUserData( const Array &rData );
 	Array getBakedUserData( void ) const { return m_bakedUserData.duplicate( true ); }

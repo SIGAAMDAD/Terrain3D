@@ -22,6 +22,15 @@ void T3DRegionLighting::setLightDataPath( const String &rPath ) {
 	emit_changed();
 }
 
+void T3DRegionLighting::setTerrainShadowMaskPath( const String &rPath ) {
+	const String path = rPath.strip_edges();
+	if ( m_terrainShadowMaskPath == path ) {
+		return;
+	}
+	m_terrainShadowMaskPath = path;
+	emit_changed();
+}
+
 void T3DRegionLighting::setBakedUserData( const Array &rData ) {
 	if ( ( rData.size() % 4 ) != 0 ) {
 		ERR_PRINT( "Terrain3DRegionLighting baked_user_data must contain four values per LightmapGI user" );
@@ -177,6 +186,9 @@ void T3DRegionLighting::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "set_light_data_path", "path" ), &T3DRegionLighting::setLightDataPath );
 	ClassDB::bind_method( D_METHOD( "get_light_data_path" ), &T3DRegionLighting::getLightDataPath );
 	ClassDB::bind_method( D_METHOD( "has_light_data" ), &T3DRegionLighting::hasLightData );
+	ClassDB::bind_method( D_METHOD( "set_terrain_shadow_mask_path", "path" ), &T3DRegionLighting::setTerrainShadowMaskPath );
+	ClassDB::bind_method( D_METHOD( "get_terrain_shadow_mask_path" ), &T3DRegionLighting::getTerrainShadowMaskPath );
+	ClassDB::bind_method( D_METHOD( "has_terrain_shadow_mask" ), &T3DRegionLighting::hasTerrainShadowMask );
 	ClassDB::bind_method( D_METHOD( "set_baked_user_data", "data" ), &T3DRegionLighting::setBakedUserData );
 	ClassDB::bind_method( D_METHOD( "get_baked_user_data" ), &T3DRegionLighting::getBakedUserData );
 	ClassDB::bind_method( D_METHOD( "set_cluster_location", "location" ), &T3DRegionLighting::setClusterLocation );
@@ -226,6 +238,7 @@ void T3DRegionLighting::_bind_methods( void ) {
 
 	ADD_GROUP( "Package Reference", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::STRING, "light_data_path", PROPERTY_HINT_FILE, "*.lmbake" ), "set_light_data_path", "get_light_data_path" );
+	ADD_PROPERTY( PropertyInfo( Variant::STRING, "terrain_shadow_mask_path", PROPERTY_HINT_FILE, "*.res,*.tres" ), "set_terrain_shadow_mask_path", "get_terrain_shadow_mask_path" );
 	ADD_PROPERTY( PropertyInfo( Variant::ARRAY, "baked_user_data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_INTERNAL ), "set_baked_user_data", "get_baked_user_data" );
 
 	ADD_GROUP( "Generated Bake Metadata", "" );

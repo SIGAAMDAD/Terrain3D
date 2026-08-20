@@ -34,6 +34,7 @@ typedef enum t3druntimePageChannel_e : uint32_t {
 	TERRAIN3D_RUNTIME_PAGE_INSTANCE_METADATA = 18u,
 	TERRAIN3D_RUNTIME_PAGE_LIGHTING_RECEIVERS = 19u,
 	TERRAIN3D_RUNTIME_PAGE_MULTIMESH_FAST_START = 20u,
+	TERRAIN3D_RUNTIME_PAGE_TERRAIN_SHADOW_MASK = 21u,
 } t3druntimePageChannel_t;
 
 typedef enum t3druntimePageCompression_e : uint32_t {

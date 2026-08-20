@@ -22,7 +22,7 @@ class T3DRegion;
 class T3DRegionPersistence;
 class T3DRegionRepository;
 
-typedef enum t3druntimePageConsumer_e : uint8_t {
+typedef enum t3druntimePageConsumer_e : uint16_t {
 	RUNTIME_PAGE_CONSUMER_ACTIVE_HEIGHT = 1u << 0,
 	RUNTIME_PAGE_CONSUMER_MIDDLE_HEIGHT = 1u << 1,
 	RUNTIME_PAGE_CONSUMER_GPU_DETAIL = 1u << 2,
@@ -31,11 +31,13 @@ typedef enum t3druntimePageConsumer_e : uint8_t {
 	RUNTIME_PAGE_CONSUMER_NODE_DESCRIPTORS = 1u << 5,
 	RUNTIME_PAGE_CONSUMER_COLLISION = 1u << 6,
 	RUNTIME_PAGE_CONSUMER_NAVIGATION = 1u << 7,
+	RUNTIME_PAGE_CONSUMER_TERRAIN_SHADOW = 1u << 8,
 } t3druntimePageConsumer_t;
 
 struct T3DRuntimePageConfig {
 	String dataDirectory;
 	uint64_t materialSourceSignature = 0u;
+	uint64_t collisionSurfaceSignature = 0u;
 	int colorDivisor = 1;
 	int derivedDivisor = 1;
 	int middleHeightDivisor = 1;
@@ -51,6 +53,7 @@ struct T3DRuntimePageCookPayload {
 	Ref<Image> pDerived;
 	Ref<Image> pMiddleHeight;
 	Ref<Image> pMiddleComposite;
+	Ref<Image> pTerrainShadowMask;
 	PackedByteArray holeMask;
 	PackedByteArray collisionHeight;
 	PackedByteArray collisionBounds;
@@ -134,13 +137,13 @@ public:
 		eastl::vector<Vector2i> &rLocations, PackedStringArray &rErrors
 	) const;
 
-	void request( const Vector2i &rLocation, uint8_t nConsumers, uint8_t nPriority, bool bEnabled );
+	void request( const Vector2i &rLocation, uint16_t nConsumers, uint8_t nPriority, bool bEnabled );
 	void service( const T3DRuntimePageServiceState &rState );
 	bool isPending( const Vector2i &rLocation ) const;
 	bool isPrepared( const Vector2i &rLocation ) const;
 
 	bool takeHeight(
-		const Vector2i &rLocation, uint8_t nConsumer, Ref<Image> &rHeight, bool bMiddle,
+		const Vector2i &rLocation, uint16_t nConsumer, Ref<Image> &rHeight, bool bMiddle,
 		PackedByteArray *pNativeHeightBytes = nullptr
 	);
 	bool takeInstance( const Vector2i &rLocation, T3DInstanceStore &rStore,
@@ -149,6 +152,7 @@ public:
 	bool takeNodeDescriptors( const Vector2i &rLocation, PackedByteArray &rDescriptors );
 	bool takeCollision( const Vector2i &rLocation, PackedByteArray &rHeight, PackedByteArray &rBounds, PackedByteArray &rHoleMask );
 	bool takeNavigation( const Vector2i &rLocation, PackedByteArray &rNavigation );
+	bool takeTerrainShadowMask( const Vector2i &rLocation, Ref<Image> &rShadowMask );
 	bool takeGpuPage(
 		const Vector2i &rLocation, Ref<Image> &rHeight,
 		Ref<Image> &rControl, Ref<Image> &rColor, Ref<Image> &rDerived,
@@ -176,7 +180,7 @@ private:
 		int derivedDivisor = 1;
 		int middleHeightDivisor = 1;
 		uint32_t materialMask = 1u;
-		uint8_t consumerMask = 0u;
+		uint16_t consumerMask = 0u;
 		PackedByteArray heightBytes;
 		Ref<Image> height;
 		Ref<Image> pControl;
@@ -184,6 +188,7 @@ private:
 		Ref<Image> pDerived;
 		Ref<Image> pMiddleHeight;
 		Ref<Image> pMiddleComposite;
+		Ref<Image> pTerrainShadowMask;
 		PackedByteArray instancePage;
 		PackedByteArray holeMask;
 		PackedByteArray collisionHeight;
@@ -234,7 +239,7 @@ private:
 	uint64_t m_nPrepareWorkerUsecLast = 0u;
 	uint64_t m_nPrepareReadyWaitUsecLast = 0u;
 	int m_nPrepareJobWorkers = 0;
-	eastl::array<uint8_t, TERRAIN3D_MAX_REGION_SLOTS> m_queuedConsumers{};
+	eastl::array<uint16_t, TERRAIN3D_MAX_REGION_SLOTS> m_queuedConsumers{};
 	eastl::array<uint8_t, TERRAIN3D_MAX_REGION_SLOTS> m_queuedPriorities{};
 	int m_nQueuedCount = 0;
 	uint64_t m_nStreamingGenerationLast = 0u;

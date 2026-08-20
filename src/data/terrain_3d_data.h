@@ -138,11 +138,11 @@ private:
 		eastl::vector<Vector2i> &rLocations, PackedStringArray &rErrors
 	) const;
 	void pollGpuRuntimePagePrepare( bool bWait );
-	void requestGpuRuntimePage( const Vector2i &vLocation, uint8_t nConsumers, uint8_t nPriority );
+	void requestGpuRuntimePage( const Vector2i &vLocation, uint16_t nConsumers, uint8_t nPriority );
 	void serviceGpuRuntimePagePrepare( const T3DResidencyFrameState &rFrame );
 	bool isGpuRuntimePagePreparePending( const Vector2i &vLocation ) const;
 	bool takePreparedRuntimeHeight(
-		const Vector2i &vLocation, uint8_t nConsumer, Ref<Image> &rHeight, bool bMiddle,
+		const Vector2i &vLocation, uint16_t nConsumer, Ref<Image> &rHeight, bool bMiddle,
 		PackedByteArray *pNativeHeightBytes = nullptr
 	);
 	bool takePreparedRuntimeInstance( const Vector2i &vLocation, T3DInstanceStore &rStore );
@@ -378,6 +378,7 @@ public:
 	PackedStringArray getCookedSceneDependencies( const Vector2i &vLocation ) const;
 	bool takeCookedCollisionTile( const Vector2i &vLocation, PackedByteArray &rHeight, PackedByteArray &rBounds, PackedByteArray &rHoleMask );
 	bool takeCookedNavigationTile( const Vector2i &vLocation, PackedByteArray &rNavigation );
+	bool takeCookedTerrainShadowMask( const Vector2i &vLocation, Ref<Image> &rShadowMask );
 	bool loadCookedCollisionTileNow( const Vector2i &vLocation, PackedByteArray &rHeight,
 		PackedByteArray &rBounds, PackedByteArray &rHoleMask ) const;
 	bool loadCookedNavigationTileNow( const Vector2i &vLocation, PackedByteArray &rNavigation,
@@ -385,6 +386,7 @@ public:
 	bool loadCookedLightingReceiversNow( const Vector2i &vLocation, PackedByteArray &rReceivers ) const;
 	void requestCookedCollisionTile( const Vector2i &vLocation, uint8_t nPriority = 0u );
 	void requestCookedNavigationTile( const Vector2i &vLocation, uint8_t nPriority = 0u );
+	void requestCookedTerrainShadowMask( const Vector2i &vLocation, uint8_t nPriority = 0u );
 	void updateCpuRegionResidency( const Vector3 &rWorldPosition, bool bForce = false );
 	void updateInstanceRegionResidency( const Vector3 &rWorldPosition, bool bForce = false );
 	void updateGpuRegionResidency( const Vector3 &rWorldPosition, bool bForce = false );

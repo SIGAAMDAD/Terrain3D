@@ -297,6 +297,18 @@ func finalize_prepared_bake() -> bool:
 	if (raw_user_data.size() % 4) != 0:
 		push_error("LightmapGIData returned malformed baked-user metadata")
 		return false
+	var shadowmask_count: int = light_data.shadowmask_textures.size()
+	var shadowmask_expected: bool = bool(bake_world.get_meta(META_SHADOWMASK_EXPECTED, false))
+	if shadowmask_expected and int(lightmap.shadowmask_mode) != 0 and shadowmask_count == 0:
+		push_error("Regional bake expected a directional shadowmask, but LightmapGIData contains no shadowmask textures")
+		return false
+	var terrain_shadow_mask: Image = null
+	if shadowmask_count > 0 and int(lightmap.shadowmask_mode) != 0:
+		terrain_shadow_mask = _extract_terrain_shadow_mask(
+			light_data, raw_user_data, int(bake_world.get_meta(META_CONTEXT_RADIUS, DEFAULT_CONTEXT_RADIUS)))
+		if terrain_shadow_mask == null:
+			push_error("Unable to extract the Terrain3D proxy shadowmask from LightmapGIData")
+			return false
 	var filtered_result: Dictionary = _filter_baked_user_data(raw_user_data, PackedStringArray([
 		"Terrain3DBakeProxy", String(GEOMETRY_CONTEXT_NAME)]))
 	var baked_user_data: Array = filtered_result["users"]
@@ -315,11 +327,20 @@ func finalize_prepared_bake() -> bool:
 		push_error("Unable to publish regional LightmapGIData: %s" % error_string(light_data_save_error))
 		return false
 
+	var terrain_shadow_path: String = ""
+	if terrain_shadow_mask != null:
+		terrain_shadow_path = String(_region_output_paths(terrain, location)["terrain_shadow"])
+		var shadow_save_error: Error = _publish_image_transactionally(terrain_shadow_mask, terrain_shadow_path)
+		if shadow_save_error != OK:
+			push_error("Unable to publish Terrain3D terrain shadow mask: %s" % error_string(shadow_save_error))
+			return false
+
 	var package := ClassDB.instantiate("Terrain3DRegionLighting") as Terrain3DRegionLighting
 	if not is_instance_valid(package):
 		push_error("Terrain3DRegionLighting is not registered. Rebuild/reload the Terrain3D extension.")
 		return false
 	package.set("light_data_path", final_data_path)
+	package.set("terrain_shadow_mask_path", terrain_shadow_path)
 	package.set("baked_user_data", baked_user_data)
 	package.set("cluster_location", location)
 	package.set("region_min", location)
@@ -339,15 +360,11 @@ func finalize_prepared_bake() -> bool:
 	var probe_data: Dictionary = light_data.call("_get_probe_data")
 	var probe_points: PackedVector3Array = probe_data.get("points", PackedVector3Array())
 	package.set("has_probe_data", not probe_points.is_empty())
-	package.set("estimated_gpu_bytes", _estimate_baked_texture_bytes(light_data))
-	package.set("disk_bytes", _resource_file_bytes(final_data_path))
+	package.set("estimated_gpu_bytes", _estimate_baked_texture_bytes(light_data) +
+		(terrain_shadow_mask.get_data().size() if terrain_shadow_mask != null else 0))
+	package.set("disk_bytes", _resource_file_bytes(final_data_path) +
+		(_resource_file_bytes(terrain_shadow_path) if not terrain_shadow_path.is_empty() else 0))
 	package.set("source_scene", root.scene_file_path)
-
-	var shadowmask_count: int = light_data.shadowmask_textures.size()
-	var shadowmask_expected: bool = bool(bake_world.get_meta(META_SHADOWMASK_EXPECTED, false))
-	if shadowmask_expected and int(lightmap.shadowmask_mode) != 0 and shadowmask_count == 0:
-		push_error("Regional bake expected a directional shadowmask, but LightmapGIData contains no shadowmask textures")
-		return false
 
 	var package_path: String = String(bake_world.get_meta(META_PACKAGE_PATH, ""))
 	if package_path.is_empty():
@@ -473,6 +490,7 @@ func _region_output_paths(terrain: Terrain3D, location: Vector2i) -> Dictionary:
 		"output_dir": output_dir,
 		"working_data": output_dir.path_join(base_name + ".working.lmbake"),
 		"data": output_dir.path_join(base_name + ".lmbake"),
+		"terrain_shadow": output_dir.path_join(base_name + ".terrain_shadow.res"),
 		"package": output_dir.path_join(base_name + ".t3dlight.tres"),
 	}
 
@@ -723,6 +741,84 @@ func _estimate_baked_texture_bytes(light_data: LightmapGIData) -> int:
 	return total
 
 
+func _find_terrain_proxy_user(raw: Array) -> Dictionary:
+	for index: int in range(0, raw.size(), 4):
+		if String(raw[index]).contains("Terrain3DBakeProxy"):
+			return {
+				"found": true,
+				"uv_scale": Rect2(raw[index + 1]),
+				"slice_index": int(raw[index + 2]),
+			}
+	return {"found": false}
+
+
+func _shadowmask_slice_image(textures: Array, slice_index: int) -> Image:
+	var remaining: int = slice_index
+	for value: Variant in textures:
+		var texture := value as TextureLayered
+		if not is_instance_valid(texture):
+			continue
+		if remaining < texture.get_layers():
+			var image: Image = texture.get_layer_data(remaining)
+			return image.duplicate() if image != null else null
+		remaining -= texture.get_layers()
+	return null
+
+
+func _nearest_power_of_two(value: int) -> int:
+	var upper: int = 1
+	while upper < max(1, value):
+		upper <<= 1
+	var lower: int = max(1, upper >> 1)
+	return lower if value - lower < upper - value else upper
+
+
+func _extract_terrain_shadow_mask(light_data: LightmapGIData, raw_users: Array,
+		context_radius: int) -> Image:
+	var proxy_user: Dictionary = _find_terrain_proxy_user(raw_users)
+	if not bool(proxy_user.get("found", false)):
+		return null
+	var slice_index: int = int(proxy_user.get("slice_index", -1))
+	if slice_index < 0:
+		return null
+	var source: Image = _shadowmask_slice_image(light_data.shadowmask_textures, slice_index)
+	if source == null or source.is_empty():
+		return null
+
+	# The proxy UV2 is planar across the full context rectangle. LightmapGI's
+	# baked user Rect2 maps that UV domain into the flattened shadowmask slice.
+	var context_side: int = max(1, context_radius * 2 + 1)
+	var owner_uv := Rect2(
+		Vector2(float(context_radius), float(context_radius)) / float(context_side),
+		Vector2.ONE / float(context_side))
+	var uv_scale: Rect2 = proxy_user["uv_scale"]
+	var atlas_position: Vector2 = uv_scale.position + owner_uv.position * uv_scale.size
+	var atlas_size: Vector2 = owner_uv.size * uv_scale.size
+	var image_size := Vector2(float(source.get_width()), float(source.get_height()))
+	var x0: int = clampi(int(floor(atlas_position.x * image_size.x)), 0, source.get_width() - 1)
+	var y0: int = clampi(int(floor(atlas_position.y * image_size.y)), 0, source.get_height() - 1)
+	var x1: int = clampi(int(ceil((atlas_position.x + atlas_size.x) * image_size.x)), x0 + 1, source.get_width())
+	var y1: int = clampi(int(ceil((atlas_position.y + atlas_size.y) * image_size.y)), y0 + 1, source.get_height())
+	var cropped: Image = source.get_region(Rect2i(x0, y0, x1 - x0, y1 - y0))
+	if cropped == null or cropped.is_empty():
+		return null
+
+	# Godot stores the lightmapper shadowmask atlas as RGBA8. The directional
+	# visibility value is read from the red channel; copy it explicitly instead
+	# of relying on color-to-luminance conversion semantics.
+	var visibility := Image.create(cropped.get_width(), cropped.get_height(), false, Image.FORMAT_L8)
+	for y: int in range(cropped.get_height()):
+		for x: int in range(cropped.get_width()):
+			var factor: float = cropped.get_pixel(x, y).r
+			visibility.set_pixel(x, y, Color(factor, factor, factor, 1.0))
+	cropped = visibility
+	var target_size: int = clampi(_nearest_power_of_two(max(cropped.get_width(), cropped.get_height())), 64, 1024)
+	if cropped.get_width() != target_size or cropped.get_height() != target_size:
+		cropped.resize(target_size, target_size, Image.INTERPOLATE_LANCZOS)
+	cropped.generate_mipmaps()
+	return cropped
+
+
 func _filter_baked_user_data(raw: Array, fragments: PackedStringArray) -> Dictionary:
 	var kept: Array = []
 	var removed: int = 0
@@ -799,6 +895,42 @@ func _publish_light_data_transactionally(light_data: LightmapGIData, final_path:
 	return OK
 
 
+func _publish_image_transactionally(image: Image, final_path: String) -> Error:
+	if image == null or image.is_empty():
+		return ERR_INVALID_DATA
+	var directory: String = final_path.get_base_dir()
+	var base_name: String = final_path.get_file().get_basename()
+	var staging_path: String = directory.path_join(base_name + ".publishing.res")
+	var previous_path: String = directory.path_join(base_name + ".previous.res")
+	for cleanup_path: String in [staging_path, previous_path]:
+		_remove_file_if_present(cleanup_path)
+	var save_error: Error = ResourceSaver.save(image, staging_path)
+	if save_error != OK:
+		return save_error
+	var validation := ResourceLoader.load(staging_path, "Image", ResourceLoader.CACHE_MODE_IGNORE) as Image
+	if validation == null or validation.is_empty() or validation.get_format() != Image.FORMAT_L8 or not validation.has_mipmaps():
+		_remove_file_if_present(staging_path)
+		return ERR_FILE_CORRUPT
+	var absolute_final: String = ProjectSettings.globalize_path(final_path)
+	var absolute_staging: String = ProjectSettings.globalize_path(staging_path)
+	var absolute_previous: String = ProjectSettings.globalize_path(previous_path)
+	var had_previous: bool = FileAccess.file_exists(final_path)
+	if had_previous:
+		var backup_error: Error = DirAccess.rename_absolute(absolute_final, absolute_previous)
+		if backup_error != OK:
+			_remove_file_if_present(staging_path)
+			return backup_error
+	var publish_error: Error = DirAccess.rename_absolute(absolute_staging, absolute_final)
+	if publish_error != OK:
+		if had_previous:
+			DirAccess.rename_absolute(absolute_previous, absolute_final)
+		_remove_file_if_present(staging_path)
+		return publish_error
+	if had_previous:
+		_remove_file_if_present(previous_path)
+	return OK
+
+
 func _publish_package_transactionally(package: Resource, final_path: String) -> Error:
 	var directory: String = final_path.get_base_dir()
 	var base_name: String = final_path.get_file().trim_suffix(".t3dlight.tres")
@@ -848,7 +980,9 @@ func _cleanup_interrupted_publications(directory: String) -> void:
 		if not file_name.begins_with("Region_["):
 			continue
 		if (file_name.ends_with(".working.lmbake") or file_name.ends_with(".publishing.lmbake")
-				or file_name.ends_with(".publishing.t3dlight.tres")):
+				or file_name.ends_with(".publishing.t3dlight.tres")
+				or file_name.ends_with(".terrain_shadow.publishing.res")
+				or file_name.ends_with(".terrain_shadow.previous.res")):
 			_remove_file_if_present(directory.path_join(file_name))
 
 

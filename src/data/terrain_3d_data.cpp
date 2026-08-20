@@ -7,6 +7,7 @@
 #include <godot_cpp/classes/editor_interface.hpp>
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/file_access.hpp>
+#include <godot_cpp/classes/resource_loader.hpp>
 #include <godot_cpp/classes/resource_saver.hpp>
 #include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/core/memory.hpp>
@@ -30,6 +31,8 @@
 #include "data/terrain_3d_region_codec.h"
 #include "data/terrain_3d_runtime_page_format.h"
 #include "data/terrain_3d_runtime_bake_codec.h"
+#include "physics/terrain_3d_collision_surface_builder.h"
+#include "lighting/terrain_3d_region_lighting.h"
 
 namespace {
 
@@ -699,6 +702,14 @@ T3DRuntimePageConfig T3DData::getRuntimePageConfig( void ) const {
 	config.bEditorAuthoring = m_pTerrain->isEditorAuthoringMode();
 	const Ref<T3DAssets> pAssets = m_pTerrain->getAssets();
 	config.materialSourceSignature = pAssets.is_valid() ? pAssets->getRuntimeMaterialSourceSignature() : 0u;
+	const Ref<T3DMaterial> material = m_pTerrain->getMaterial();
+	if ( material.is_valid() ) {
+		uint64_t collision_signature = 1469598103934665603ull;
+		terrain3dFnv1a64AppendU32( collision_signature, ( uint32_t ) material->getWorldBackground() );
+		terrain3dFnv1a64AppendF32( collision_signature, ( float ) ( real_t ) material->get( "ground_level" ) );
+		terrain3dFnv1a64AppendF32( collision_signature, ( float ) ( real_t ) material->get( "region_blend" ) );
+		config.collisionSurfaceSignature = collision_signature;
+	}
 	return config;
 }
 
@@ -764,7 +775,7 @@ bool T3DData::isGpuRuntimePagePreparePending( const Vector2i &vLocation ) const 
 }
 
 void T3DData::requestGpuRuntimePage(
-	const Vector2i &vLocation, const uint8_t nConsumers, const uint8_t nPriority
+	const Vector2i &vLocation, const uint16_t nConsumers, const uint8_t nPriority
 ) {
 	m_runtimePageStore.request(
 		vLocation, nConsumers, nPriority,
@@ -783,7 +794,7 @@ void T3DData::serviceGpuRuntimePagePrepare( const T3DResidencyFrameState &rFrame
 }
 
 bool T3DData::takePreparedRuntimeHeight(
-	const Vector2i &vLocation, const uint8_t nConsumer, Ref<Image> &rHeight, const bool bMiddle,
+	const Vector2i &vLocation, const uint16_t nConsumer, Ref<Image> &rHeight, const bool bMiddle,
 	PackedByteArray *const pNativeHeightBytes
 ) {
 	return m_runtimePageStore.takeHeight(
@@ -844,6 +855,14 @@ void T3DData::requestCookedNavigationTile( const Vector2i &vLocation, const uint
 
 bool T3DData::takeCookedNavigationTile( const Vector2i &vLocation, PackedByteArray &rNavigation ) {
 	return m_runtimePageStore.takeNavigation( vLocation, rNavigation );
+}
+
+void T3DData::requestCookedTerrainShadowMask( const Vector2i &vLocation, const uint8_t nPriority ) {
+	requestGpuRuntimePage( vLocation, RUNTIME_PAGE_CONSUMER_TERRAIN_SHADOW, nPriority );
+}
+
+bool T3DData::takeCookedTerrainShadowMask( const Vector2i &vLocation, Ref<Image> &rShadowMask ) {
+	return m_runtimePageStore.takeTerrainShadowMask( vLocation, rShadowMask );
 }
 
 bool T3DData::loadCookedCollisionTileNow(
@@ -914,6 +933,19 @@ bool T3DData::writeGpuRuntimePage( T3DRegion *const pRegion, String *const pErro
 		payload.pControl.is_valid() ? payload.pControl : m_pDefaultControlMap,
 		payload.pColor.is_valid() ? payload.pColor : makeGpuColorImage( m_pDefaultColorMap )
 	);
+	const Ref<T3DRegionLighting> lighting = pRegion->getLighting();
+	if ( lighting.is_valid() && lighting->hasTerrainShadowMask() ) {
+		const Ref<Resource> shadow_resource = ResourceLoader::get_singleton()->load( lighting->getTerrainShadowMaskPath() );
+		const Ref<Image> shadow_mask = shadow_resource;
+		if ( shadow_mask.is_null() || shadow_mask->is_empty() || shadow_mask->get_format() != Image::FORMAT_L8 ||
+			!shadow_mask->has_mipmaps() || shadow_mask->get_width() != shadow_mask->get_height() ) {
+			if ( pError ) {
+				*pError = "regional terrain shadow mask is missing or invalid";
+			}
+			return false;
+		}
+		payload.pTerrainShadowMask = shadow_mask;
+	}
 	payload.materialMask = payload.pControl.is_valid() ? terrain3dMaterialMaskFromControlImage( payload.pControl ) : 1u;
 
 	// Bake compact logical masks from authored control data, not the render halo.
@@ -936,36 +968,20 @@ bool T3DData::writeGpuRuntimePage( T3DRegion *const pRegion, String *const pErro
 	}
 	payload.navigation = T3DRuntimeBakeCodec::encodeNavigationMask( navigation_controls, collision_width );
 
-	// Store collision in HeightMapShape3D's final rotated consumer layout so full
-	// collision can upload without sampling/transposition at runtime.
-	PackedFloat32Array row_major;
-	row_major.resize( collision_width * collision_width );
-	if ( !sampler.copyHeightRect(
-		grid_x, grid_z, collision_width, collision_width,
-		row_major.ptrw(), collision_width, true ) ) {
+	// Build the exact final physics surface through the same canonical path used
+	// by live collision. This keeps holes and FLAT/NOISE world-background blend
+	// semantics identical between cooked and sampler-backed tiles.
+	PackedFloat32Array collision_heights;
+	float collision_min = 0.0f;
+	float collision_max = 0.0f;
+	T3DCollisionSurfaceBuilder collision_builder;
+	if ( !collision_builder.build(
+		this, m_pTerrain->getMaterial(), Vector2i( grid_x, grid_z ), region_size,
+		collision_heights, collision_min, collision_max ) ) {
 		if ( pError ) {
-			*pError = "collision height snapshot could not be sampled";
+			*pError = "canonical collision surface generation failed";
 		}
 		return false;
-	}
-	PackedFloat32Array collision_heights;
-	collision_heights.resize( collision_width * collision_width );
-	float collision_min = FLT_MAX;
-	float collision_max = -FLT_MAX;
-	for ( int x = 0; x < collision_width; ++x ) {
-		const int destination_base = x * collision_width;
-		for ( int z = collision_width - 1, destination = 0; z >= 0; --z, ++destination ) {
-			const float height = row_major[z * collision_width + x];
-			collision_heights.set( destination_base + destination, height );
-			if ( !std::isnan( height ) ) {
-				collision_min = MIN( collision_min, height );
-				collision_max = MAX( collision_max, height );
-			}
-		}
-	}
-	if ( collision_min == FLT_MAX ) {
-		collision_min = 0.0f;
-		collision_max = 0.0f;
 	}
 	payload.collisionHeight = T3DRuntimeBakeCodec::encodeCollisionHeight( collision_heights, collision_width );
 	payload.collisionBounds = T3DRuntimeBakeCodec::encodeCollisionBounds( collision_min, collision_max, collision_width );

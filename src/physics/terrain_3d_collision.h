@@ -15,6 +15,7 @@
 
 #include "Terrain3DConstants.h"
 #include "core/terrain_3d_util.h"
+#include "physics/terrain_3d_collision_surface_builder.h"
 
 class T3DTerrain;
 
@@ -77,18 +78,23 @@ private:
 	eastl::vector<t3dcollisionShapeRecord_t> m_shapeRecords;
 	eastl::vector<int32_t> m_gridScratch;
 	eastl::vector<int32_t> m_inactiveShapeIds;
-	eastl::vector<float> m_fHeightRowScratch;
-	eastl::vector<uint8_t> m_regionPresenceScratch;
 	PackedRealArray m_fullHeightScratch;
-eastl::array<int32_t, TERRAIN3D_MAX_COLLISION_AXIS_SAMPLES> m_szBlendRegionX0{};
-	eastl::array<int32_t, TERRAIN3D_MAX_COLLISION_AXIS_SAMPLES> m_szBlendRegionX1{};
-	eastl::array<int32_t, TERRAIN3D_MAX_COLLISION_AXIS_SAMPLES> m_szBlendRegionZ0{};
-	eastl::array<int32_t, TERRAIN3D_MAX_COLLISION_AXIS_SAMPLES> m_szBlendRegionZ1{};
-	eastl::array<real_t, TERRAIN3D_MAX_COLLISION_AXIS_SAMPLES> m_fBlendWeightX{};
-	eastl::array<real_t, TERRAIN3D_MAX_COLLISION_AXIS_SAMPLES> m_fBlendWeightZ{};
-	eastl::array<real_t, TERRAIN3D_MAX_REGION_BLEND_SAMPLES> m_fRegionBlendCurve{};
-	int m_nRegionBlendCurveSize = 0;
-	real_t m_fRegionBlendCurveSetting = -1.0f;
+	PackedFloat32Array m_collisionSurfaceScratch;
+	T3DCollisionSurfaceBuilder m_collisionSurfaceBuilder;
+
+	typedef struct t3dcollisionRegionCacheEntry_s {
+		Vector2i location = V2I_MAX;
+		PackedFloat32Array heights;
+		int nWidth = 0;
+		uint64_t nLastUseTick = 0u;
+	} t3dcollisionRegionCacheEntry_t;
+	eastl::vector<t3dcollisionRegionCacheEntry_t> m_bakedRegionCache;
+	uint64_t m_nBakedRegionCacheTick = 0u;
+	uint64_t m_nPreparationUsecLast = 0u;
+	uint64_t m_nUploadUsecLast = 0u;
+	int m_nBakedCacheHitsLastUpdate = 0;
+	int m_nBakedCacheMissesLastUpdate = 0;
+
 
 	bool m_bInitialized = false;
 	bool m_bRegionMapUpdatePending = false;
@@ -107,9 +113,10 @@ eastl::array<int32_t, TERRAIN3D_MAX_COLLISION_AXIS_SAMPLES> m_szBlendRegionX0{};
 
 	Vector2i snapToGrid( const Vector2i &rPos ) const;
 	Vector2i snapToGrid( const Vector3 &rPos ) const;
-	void refreshRegionBlendCurve( int nRegionSize, real_t fRegionBlend );
-	real_t getRegionBlendWeight( int64_t nGridCoordinate ) const;
-	real_t getRegionBlend( int iX, int iZ, int iMinRegionX, int iMinRegionZ, int nPresenceWidth ) const;
+	int findBakedRegionCache( const Vector2i &rLocation ) const;
+	void refreshBakedRegionCache( const Vector2i &rCenter );
+	bool copyBakedTile( const Vector2i &rPosition, int nSize, t3dcollisionShapeRecord_t &rRecord, PackedRealArray &rHeights );
+	bool canUseBakedDynamicCollision( void ) const;
 	bool getShapeData(
 		const Vector2i &rPosition, const int nSize, t3dcollisionShapeRecord_t &rRecord,
 		PackedRealArray &rHeights
