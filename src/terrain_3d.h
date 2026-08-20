@@ -780,6 +780,8 @@ public:
 	int getStreamingPredictionMaximumRegions( void ) const { return m_regionStreamingConfig.predictionMaximumRegions; }
 	t3dregionStreamingState_t getRegionStreamingStateInternal( const Vector2i &vLocation ) const;
 	bool isRegionStreamingPrefetchInternal( const Vector2i &vLocation ) const;
+	const uint8_t *getRegionStreamingStatesInternal( void ) const { return m_szRegionStreamingStates; }
+	const uint8_t *getRegionStreamingPrefetchInternal( void ) const { return m_szRegionStreamingPrefetch; }
 	int getRegionStreamingState( const Vector2i &vLocation ) const { return ( int ) ( getRegionStreamingStateInternal( vLocation ) ); }
 	bool isRegionStreamingPrefetch( const Vector2i &vLocation ) const { return isRegionStreamingPrefetchInternal( vLocation ); }
 	Dictionary getRegionStreamingStats( void ) const;

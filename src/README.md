@@ -15,7 +15,7 @@ The `src` root is intentionally limited to the extension entry points and global
 | `physics/` | Terrain collision integration |
 | `rendering/` | Meshing, material, compute and shader specialization |
 | `simd/` | Portable SIMD dispatch, parallel kernels and ISA-specific backends |
-| `streaming/` | Streaming policies/profiles, node streaming and upload bridge |
+| `streaming/` | Runtime page preparation, residency coordination/policies, profiles, node streaming and upload bridge |
 
 ## Include convention
 

@@ -2404,7 +2404,7 @@ void T3DInstancer::addInstances( const Vector3 &rGlobalPosition, const Dictionar
 	const bool bOnCollision = ( bool ) ( rParams.get( "on_collision", false ) );
 	const real_t fRaycastHeight = rParams.get( "raycast_height", 10.f );
 	T3DData *const pData = m_pTerrain->getData();
-	T3DSampler sampler( pData );
+	T3DSampler sampler( pData->getSamplingSourceInternal() );
 
 	m_placementTransforms.clear();
 	m_placementColors.clear();
@@ -2494,7 +2494,7 @@ void T3DInstancer::removeInstances( const Vector3 &rGlobalPosition, const Dictio
 	const int region_size = m_pTerrain->getRegionSize();
 	const real_t fSpacing = m_pTerrain->getVertexSpacing();
 	T3DData *const pData = m_pTerrain->getData();
-	T3DSampler sampler( pData );
+	T3DSampler sampler( pData->getSamplingSourceInternal() );
 	const bool bWasMaterializing = m_bMaterializingUpdates;
 	m_bMaterializingUpdates = true;
 	T3DRegion *const *ppRegionPtrs = pData->getRegionPtrMapInternal();
@@ -2827,7 +2827,7 @@ void T3DInstancer::appendRegion(
 void T3DInstancer::updateTransforms( const AABB &rAabb ) {
 	IS_DATA_INIT( VOID );
 	T3DData *const pData = m_pTerrain->getData();
-	T3DSampler sampler( pData );
+	T3DSampler sampler( pData->getSamplingSourceInternal() );
 	const Dictionary params = m_pTerrain->getEditor() ? m_pTerrain->getEditor()->getBrushData() : Dictionary();
 	const bool bOnCollision = params.get( "on_collision", false );
 	const real_t fRaycastHeight = params.get( "raycast_height", 10.f );

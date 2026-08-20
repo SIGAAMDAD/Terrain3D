@@ -2329,10 +2329,10 @@ T3DTerrain::~T3DTerrain( void ) {
 
 bool T3DTerrain::initializeRuntimeMemory( void ) {
 	if ( m_bRuntimeMemoryReady ) {
-		if ( terrain3dActiveStorageIsOwner( m_pData ) ) return true;
+		if ( m_pData && m_pData->isActiveStorageOwnerInternal() ) return true;
 		const t3dmemoryArenaSpan_t active_span = m_runtimeMemoryArena.resolve( m_runtimeActiveHeightSlice );
-		return active_span.valid() && terrain3dActiveStorageBind(
-			m_pData, ( int ) ( m_nRegionSize ), active_span.data, active_span.size );
+		return m_pData && active_span.valid() && m_pData->bindActiveStorageInternal(
+			( int ) ( m_nRegionSize ), active_span.data, active_span.size );
 	}
 	// Arbitrary-lifetime worker/container storage is isolated in the M2 zone.
 	// Active/resident fixed page banks retain separate binding work until their
@@ -2349,7 +2349,7 @@ bool T3DTerrain::initializeRuntimeMemory( void ) {
 	}
 	const t3dmemoryArenaSpan_t active_span = m_runtimeMemoryArena.resolve( m_runtimeActiveHeightSlice );
 	const t3dmemoryArenaSpan_t zone_span = m_runtimeMemoryArena.resolve( m_runtimeZoneSlice );
-	if ( !active_span.valid() || !terrain3dActiveStorageBind( m_pData, ( int ) ( m_nRegionSize ), active_span.data, active_span.size ) ||
+	if ( !m_pData || !active_span.valid() || !m_pData->bindActiveStorageInternal( ( int ) ( m_nRegionSize ), active_span.data, active_span.size ) ||
 		!zone_span.valid() || !m_runtimeMemoryZone.initialize( zone_span.data, zone_span.size ) ||
 		!m_runtimeMemoryArena.seal() ) {
 		m_runtimeMemoryArena.release();
@@ -2586,8 +2586,7 @@ void T3DTerrain::setRegionSize( const t3dregionSize_t size ) {
 	m_nRegionSize = size;
 	bool bDataChanged = false;
 	const bool bDataOwnerReady = m_pData && m_pData->isInitializedFor( this );
-	if ( bDataOwnerReady &&
-		( m_pData->m_nRegionSize != ( int ) ( m_nRegionSize ) || m_pData->m_regionSizev != V2I( m_nRegionSize ) ) ) {
+	if ( bDataOwnerReady && !m_pData->matchesRegionLayoutInternal( ( int ) ( m_nRegionSize ) ) ) {
 		if ( !m_pData->setRegionSizeInternal( ( int ) ( m_nRegionSize ) ) ) {
 			m_nRegionSize = previous_size;
 			LOG( T3DTerrain::ERROR, "Region size change rejected because active terrain storage could not be reconfigured" );
@@ -5691,7 +5690,7 @@ void T3DTerrain::setVertexSpacing( const real_t fSpacing ) {
 	LOG( T3DTerrain::INFO, "t3dsetting_t fixed vertex spacing: 1 metre" );
 	if ( m_pCollision && m_pData && m_pInstancer && m_pMaterial.is_valid() ) {
 		m_pInstancer->updateVertexSpacing( m_fVertexSpacing );
-		m_pData->m_fVertexSpacing = m_fVertexSpacing;
+		m_pData->setVertexSpacingInternal( m_fVertexSpacing );
 		updateRegionLabels();
 		m_pMaterial->update();
 		setupTerrainMesher();

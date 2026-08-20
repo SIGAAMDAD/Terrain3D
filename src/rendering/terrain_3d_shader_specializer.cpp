@@ -70,8 +70,6 @@ class T3DStaticExpressionParser {
 			nValue = m_state.bOutputAo ? 1 : 0;
 		} else if ( rName == "T3D_SHADING_MODE" ) {
 			nValue = m_state.terrainShadingMode;
-		} else if ( rName == "T3D_XBOX_360_AUTHENTIC_LIGHTING" ) {
-			nValue = m_state.bXbox360AuthenticLighting ? 1 : 0;
 		} else if ( rName == "T3D_DETILING_MODE" ) {
 			nValue = m_state.detilingMode;
 		} else if ( rName == "T3D_WORLD_NOISE_SHADER_MODE" ) {

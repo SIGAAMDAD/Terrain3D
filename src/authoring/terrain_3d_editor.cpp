@@ -457,7 +457,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 	if ( bUseAlphaCache ) {
 		updateBrushAlphaCache( pBrushImage, img_size, fGamma );
 	}
-	T3DSampler brushSampler( pData );
+	T3DSampler brushSampler( pData->getSamplingSourceInternal() );
 	const Vector2 clamped_slope_range = CLAMP( slope_range, V2_ZERO, V2( 90.f ) );
 	const bool bUnrestrictedSlope = clamped_slope_range.y - clamped_slope_range.x > 89.99f;
 

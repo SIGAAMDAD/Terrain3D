@@ -434,7 +434,7 @@ static bool buildMetrics(
 		return false;
 	}
 
-	T3DSampler sampler( pData );
+	T3DSampler sampler( pData->getSamplingSourceInternal() );
 	const int64_t origin_x = ( int64_t ) ( rLocation.x ) * ( int64_t ) ( size );
 	const int64_t origin_z = ( int64_t ) ( rLocation.y ) * ( int64_t ) ( size );
 	const float fSpacing = ( float ) ( pData->getVertexSpacingInternal() );

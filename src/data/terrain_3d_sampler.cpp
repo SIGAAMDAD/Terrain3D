@@ -11,7 +11,8 @@
 #include <godot_cpp/classes/image.hpp>
 
 #include "Terrain3DConstants.h"
-#include "data/terrain_3d_data.h"
+#include "data/terrain_3d_region_repository.h"
+#include "data/terrain_3d_sampling_storage.h"
 #include "data/terrain_3d_region.h"
 #include "data/terrain_3d_region_codec.h"
 
@@ -43,16 +44,16 @@ void T3DSampler::t3dregionCold_t::reset( void ) {
 	derivedData.clear();
 }
 
-T3DSampler::T3DSampler( const T3DData *pData )
-	: m_pData( pData ) {
-	if ( m_pData ) {
-		m_nSamplingGeneration = m_pData->getSamplingGenerationInternal();
-		m_nRegionSize = m_pData->getRegionSizeInternal();
+T3DSampler::T3DSampler( const T3DSamplingSource &rSource )
+	: m_source( rSource ) {
+	if ( m_source.valid() ) {
+		m_nSamplingGeneration = m_source.pStorage->getSamplingGeneration();
+		m_nRegionSize = m_source.pRepository->getRegionSize();
 		m_nRegionShift = m_nRegionSize > 0 && ( m_nRegionSize & ( m_nRegionSize - 1 ) ) == 0
 			? ( int ) ( terrain3d::countrZeroU32( ( uint32_t ) ( m_nRegionSize ) ) )
 			: -1;
 		m_nRegionMask = m_nRegionShift >= 0 ? ( int64_t ) ( m_nRegionSize - 1 ) : 0;
-		m_fVertexSpacing = m_pData->getVertexSpacingInternal();
+		m_fVertexSpacing = m_source.pRepository->getVertexSpacing();
 		m_fInverseVertexSpacing = m_fVertexSpacing > 0.0f ? 1.0 / ( double ) ( m_fVertexSpacing ) : 0.0;
 	}
 }
@@ -66,12 +67,12 @@ void T3DSampler::resetCache( const uint64_t nGeneration ) {
 	m_stamp = 1u;
 	m_operation = 1u;
 	m_nSamplingGeneration = nGeneration;
-	m_nRegionSize = m_pData ? m_pData->getRegionSizeInternal() : 0;
+	m_nRegionSize = m_source.pRepository ? m_source.pRepository->getRegionSize() : 0;
 	m_nRegionShift = m_nRegionSize > 0 && ( m_nRegionSize & ( m_nRegionSize - 1 ) ) == 0
 		? ( int ) ( terrain3d::countrZeroU32( ( uint32_t ) ( m_nRegionSize ) ) )
 		: -1;
 	m_nRegionMask = m_nRegionShift >= 0 ? ( int64_t ) ( m_nRegionSize - 1 ) : 0;
-	m_fVertexSpacing = m_pData ? m_pData->getVertexSpacingInternal() : 0.0f;
+	m_fVertexSpacing = m_source.pRepository ? m_source.pRepository->getVertexSpacing() : 0.0f;
 	m_fInverseVertexSpacing = m_fVertexSpacing > 0.0f ? 1.0 / ( double ) ( m_fVertexSpacing ) : 0.0;
 }
 
@@ -88,10 +89,10 @@ void T3DSampler::resetView( t3dregionView_t *const pView ) {
 }
 
 bool T3DSampler::validateEpoch( void ) {
-	if ( !m_pData || m_nRegionSize <= 0 || m_fVertexSpacing <= 0.0f ) {
+	if ( !m_source.valid() || m_nRegionSize <= 0 || m_fVertexSpacing <= 0.0f ) {
 		return false;
 	}
-	const uint64_t current_generation = m_pData->getSamplingGenerationInternal();
+	const uint64_t current_generation = m_source.pStorage->getSamplingGeneration();
 	if ( current_generation != m_nSamplingGeneration ) {
 		resetCache( current_generation );
 	}
@@ -156,7 +157,7 @@ T3DSampler::t3dregionView_t *T3DSampler::validateCachedView(
 		return nullptr;
 	}
 	if ( pView->nValidatedOperation != m_operation ) {
-		const uint32_t generation = m_pData->getRegionSamplingGenerationInternal( rLocation );
+		const uint32_t generation = m_source.pStorage->getRegionGeneration( rLocation );
 		if ( generation == 0u || generation != pView->nRegionGeneration ) {
 			resetView( pView );
 			if ( m_pLastView == pView ) {
@@ -171,7 +172,7 @@ T3DSampler::t3dregionView_t *T3DSampler::validateCachedView(
 }
 
 T3DSampler::t3dregionView_t *T3DSampler::getRegionViewUnchecked( const Vector2i &rLocation ) {
-	if ( !m_pData ) {
+	if ( !m_source.valid() ) {
 		return nullptr;
 	}
 	if ( t3dregionView_t *hit = validateCachedView( m_pLastView, rLocation ) ) {
@@ -195,7 +196,7 @@ T3DSampler::t3dregionView_t *T3DSampler::getRegionViewUnchecked( const Vector2i 
 		}
 	}
 
-	T3DRegion *const pRegion = m_pData->getRegionPtr( rLocation );
+	T3DRegion *const pRegion = m_source.pRepository->getRegionPtr( rLocation );
 	if ( !pRegion || pRegion->isDeleted() ) {
 		return nullptr;
 	}
@@ -206,17 +207,18 @@ T3DSampler::t3dregionView_t *T3DSampler::getRegionViewUnchecked( const Vector2i 
 	pReplacement->location = rLocation;
 	pReplacement->nStamp = ++m_stamp;
 	pReplacement->bLoaded = true;
-	pReplacement->nRegionGeneration = m_pData->getRegionSamplingGenerationInternal( rLocation );
+	pReplacement->nRegionGeneration = m_source.pStorage->getRegionGeneration( rLocation );
 	pReplacement->nValidatedOperation = m_operation;
-	pReplacement->bControlResolved = m_pData->isCpuRegionPayloadAvailable( rLocation );
+	pReplacement->bControlResolved = !pRegion->hasChannel( T3DRegion::TYPE_CONTROL ) ||
+		pRegion->getMapPtr( T3DRegion::TYPE_CONTROL ) != nullptr;
 
-	T3DActiveMapLease active = m_pData->acquireActiveMap( rLocation );
+	T3DActiveMapLease active = m_source.pStorage->acquireActive( rLocation );
 	if ( active.valid() ) {
 		const t3dactiveMapView_t &view = active.view();
 		pReplacement->pHeightBytes = ( const uint8_t * ) ( view.pHeight );
 		rCold.activeLease = std::move( active );
 	} else {
-		T3DResidentMapLease pooled = m_pData->acquireResidentMap( rLocation, pRegion );
+		T3DResidentMapLease pooled = m_source.pStorage->acquireResident( rLocation, pRegion );
 		if ( pooled.valid() ) {
 			const t3dresidentMapView_t &view = pooled.getView();
 			pReplacement->pHeightBytes = ( const uint8_t * ) ( view.pHeight );

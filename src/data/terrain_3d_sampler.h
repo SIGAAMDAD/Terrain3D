@@ -16,14 +16,13 @@
 #include <godot_cpp/variant/vector2i.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 
-#include "memory/terrain_3d_active_storage.h"
-#include "memory/terrain_3d_resident_pool.h"
+#include "data/terrain_3d_sampling_storage.h"
 
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
 using namespace godot;
 #endif
 
-class T3DData;
+class T3DRegionRepository;
 
 // Low-overhead terrain query context. A sampler owns leases on a compact set of
 // resident region planes, so cached raw pointers remain valid while the global
@@ -32,7 +31,7 @@ class T3DData;
 
 class T3DSampler {
 public:
-	explicit T3DSampler( const T3DData *pData );
+	explicit T3DSampler( const T3DSamplingSource &rSource );
 
 	float sampleHeight( const Vector3 &rGlobalPosition );
 	float sampleHeightGrid( int64_t iGridX, int64_t iGridZ, bool bRespectHoles = false );
@@ -83,7 +82,7 @@ private:
 		void reset( void );
 	} t3dregionCold_t;
 
-	const T3DData *m_pData = nullptr;
+	T3DSamplingSource m_source;
 	eastl::array<t3dregionView_t, TERRAIN3D_SAMPLER_CACHE_SIZE> m_szCache{};
 	eastl::array<t3dregionCold_t, TERRAIN3D_SAMPLER_CACHE_SIZE> m_szCacheCold{};
 	t3dregionView_t *m_pLastView = nullptr;

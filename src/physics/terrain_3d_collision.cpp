@@ -215,7 +215,7 @@ bool T3DCollision::getShapeData(
 	real_t *pHeightWrite = rHeights.ptrw();
 	real_t min_height = FLT_MAX;
 	real_t max_height = -FLT_MAX;
-	T3DSampler sampler( data );
+	T3DSampler sampler( data->getSamplingSourceInternal() );
 	m_fHeightRowScratch.resize( ( size_t ) ( sample_count ) );
 	float *const pRowMajorHeight = m_fHeightRowScratch.data();
 	// Decode terrain rows in contiguous spans. The physics server needs a rotated

@@ -325,7 +325,6 @@ String T3DMaterial::prepareShaderSource(
 	static_state.bOutputSpecular = eState.bOutputSpecularEnabled;
 	static_state.bOutputNormalMap = eState.bOutputNormalMapEnabled;
 	static_state.bOutputAo = eState.bOutputAmbientOcclusionEnabled;
-	static_state.bXbox360AuthenticLighting = eState.terrainShadingMode == SHADING_XBOX_360_BLINN_PHONG;
 	static_state.bFastBlendCurve = eState.bFastBlendCurve;
 	static_state.bControlMapsImplicit = eState.bControlMapsImplicit;
 	static_state.bColorMapsImplicit = eState.bColorMapsImplicit;

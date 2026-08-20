@@ -4061,9 +4061,7 @@ Error T3DErosionJob::apply( T3DData *const pData, const bool bForce ) {
 	// Publish all authoritative image replacements through one mutation boundary.
 	// The bounded CPU mirror and sampler-local views are invalidated exactly once;
 	// derived data and dependent systems are refreshed only for outputs they use.
-	if ( pData->m_pResidentPool ) {
-		pData->m_pResidentPool->resetResidency();
-	}
+	pData->resetResidentSamplingPoolInternal();
 	pData->invalidateSamplingCache();
 	if ( bHeightChanged ) {
 		pData->calcHeightRange( false );

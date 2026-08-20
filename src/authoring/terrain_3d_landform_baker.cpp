@@ -1296,7 +1296,7 @@ Dictionary T3DLandformBaker::buildCliffModules(
 		return result;
 	}
 
-	T3DSampler sampler( pTerrain->getData() );
+	T3DSampler sampler( pTerrain->getData()->getSamplingSourceInternal() );
 	Dictionary placements;
 	const float fVertexSpacing = MAX( pTerrain->getVertexSpacing(), 0.01f );
 	int previous_mesh_id = -1;
@@ -1422,7 +1422,7 @@ Ref<ArrayMesh> T3DLandformBaker::buildCliffCollisionMesh(
 	} t3dcollisionSection_t;
 	eastl::vector<t3dcollisionSection_t> sections;
 	sections.reserve( ( size_t ) ( samples.size() ) );
-	T3DSampler sampler( pTerrain->getData() );
+	T3DSampler sampler( pTerrain->getData()->getSamplingSourceInternal() );
 	const float fVertexSpacing = MAX( pTerrain->getVertexSpacing(), 0.01f );
 
 	for ( int index = 0; index < samples.size(); ++index ) {
@@ -1476,7 +1476,7 @@ Ref<ArrayMesh> T3DLandformBaker::buildCliffMesh(
 	}
 
 	const float fVertexSpacing = MAX( pTerrain->getVertexSpacing(), 0.01f );
-	T3DSampler sampler( pTerrain->getData() );
+	T3DSampler sampler( pTerrain->getData()->getSamplingSourceInternal() );
 	Ref<SurfaceTool> pSurface;
 	pSurface.instantiate();
 	pSurface->begin( Mesh::PRIMITIVE_TRIANGLES );

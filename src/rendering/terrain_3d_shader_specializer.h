@@ -22,7 +22,6 @@ typedef struct t3dshaderStaticState_s {
 	bool bOutputSpecular = false;
 	bool bOutputNormalMap = false;
 	bool bOutputAo = false;
-	bool bXbox360AuthenticLighting = false;
 	bool bFastBlendCurve = false;
 	bool bControlMapsImplicit = false;
 	bool bColorMapsImplicit = false;

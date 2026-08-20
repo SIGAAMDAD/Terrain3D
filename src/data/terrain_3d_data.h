@@ -7,18 +7,22 @@
 
 #include "Terrain3DConstants.h"
 
-#include <godot_cpp/classes/worker_thread_pool.hpp>
 #include "assets/generated_texture.h"
-#include "memory/terrain_3d_active_storage.h"
+#include "data/terrain_3d_sampling_storage.h"
+#include "data/terrain_3d_map_edit_service.h"
+#include "data/terrain_3d_region_persistence.h"
 #include "streaming/terrain_3d_cpu_cache_policy.h"
 #include "streaming/terrain_3d_gpu_cache_policy.h"
 #include "instances/terrain_3d_instance_cache_policy.h"
 #include "data/terrain_3d_region.h"
+#include "data/terrain_3d_region_repository.h"
 #include "streaming/terrain_3d_runtime_profile.h"
+#include "streaming/terrain_3d_runtime_page_store.h"
+#include "streaming/terrain_3d_active_height_residency.h"
+#include "streaming/terrain_3d_region_residency.h"
 
 #include "eastl_config.h"
 #include <EASTL/array.h>
-#include <atomic>
 #include <EASTL/bitset.h>
 #include <cstdint>
 #include <EASTL/vector.h>
@@ -27,10 +31,7 @@ class T3DTerrain;
 class T3DErosionJob;
 class T3DErosionSettings;
 class T3DCompute;
-class T3DResidentRegionPool;
 typedef struct t3dfarSurfaceBakeData_s t3dfarSurfaceBakeData_t;
-typedef struct t3dresidentMapView_s t3dresidentMapView_t;
-class T3DResidentMapLease;
 
 class T3DData : public Object {
 	using Terrain3DData = T3DData;
@@ -38,6 +39,7 @@ class T3DData : public Object {
 	CLASS_NAME();
 	friend T3DTerrain;
 	friend class T3DErosionJob;
+	friend class T3DRegionResidency;
 
 public:														 // Constants
 	// Maximum logical grid. The active grid is TERRAIN3D_ACTIVE_WORLD_TEXELS / region_size.
@@ -54,62 +56,20 @@ public:														 // Constants
 		MAP_EDIT_KEEP_EDITED = 1u << 3,
 	} t3dmapEditCommitFlag_t;
 
-	typedef enum t3druntimePageConsumer_e : uint8_t {
-		RUNTIME_PAGE_CONSUMER_ACTIVE_HEIGHT = 1u << 0,
-		RUNTIME_PAGE_CONSUMER_MIDDLE_HEIGHT = 1u << 1,
-		RUNTIME_PAGE_CONSUMER_GPU_DETAIL = 1u << 2,
-		RUNTIME_PAGE_CONSUMER_INSTANCE_STORE = 1u << 3,
-	} t3druntimePageConsumer_t;
 
 private:
 	T3DTerrain *m_pTerrain = nullptr;
 
-	// Data t3dsettings_t & flags
-	int m_nRegionSize = 0; // Set by Terrain3D::set_region_size
-	int m_nRegionMapSize = 0; // TERRAIN3D_ACTIVE_WORLD_TEXELS / region_size
-	Vector2i m_regionSizev = V2I( m_nRegionSize );
-	bool m_bOwnsActiveStorage = false;
-	bool m_bRepositoryLoaded = false;
+	T3DRegionRepository m_regionRepository;
+	T3DSamplingStorage m_samplingStorage;
+	T3DMapEditService m_mapEditService;
+	T3DRegionPersistence m_regionPersistence;
+	T3DRuntimePageStore m_runtimePageStore;
+	T3DActiveHeightResidency m_activeHeightResidency;
+	T3DRegionResidency m_regionResidency;
 	bool m_bRuntimeActive = false;
-	uint32_t m_nActiveStorageGeneration = 0u;
-	real_t m_fVertexSpacing = 1.f; // Set by Terrain3D::set_vertex_spacing
 
-	AABB m_editedArea;
-	Vector2 m_masterHeightRange = V2_ZERO;
 
-	/////////
-	// Terrain3DRegions house the maps, instances, and other data for each region.
-	// Regions are dual indexed:
-	// 1) By `region_location:Vector2i` as the primary key. This is the only stable index
-	// so should be the main index for users.
-	// 2) By `region_id:int`. This index changes on every add/remove, depends on load order,
-	// and is not stable. It should not be relied on by users and is primarily for internal use.
-
-	// Private functions should be indexed by region_id or region_location
-	// Public functions by region_location or global_position
-
-	// `_regions` stores all loaded Terrain3DRegions, indexed by region_location. If marked for
-	// deletion they are removed from here upon saving, however they may stay in memory if tracked
-	// by the Undo system.
-	Dictionary m_regions; // Dict[region_location:Vector2i] -> Terrain3DRegion
-	// Fixed world-grid pointer index used by native hot paths. The Dictionary is
-	// retained as the public/resource boundary, while runtime sampling avoids
-	// Variant hashing, conversion and duplicate lookups.
-	T3DRegion *m_szRegionPtrMap[TERRAIN3D_MAX_REGION_SLOTS] = {};
-
-	// Region maps are maintained in GPU texture-array slots. Active locations occupy a slot;
-	// V2I_MAX marks a reusable spare slot. t3dslot_t order defines region_id and therefore must remain
-	// aligned with the generated texture arrays.
-
-	// GPU texture-array slots. Empty slots are V2I_MAX and are retained so adding or
-	// removing a region usually changes only one layer instead of recreating every
-	// texture array. The region map stores slot index + 1.
-	Vector2i m_szRegionLocations[TERRAIN3D_MAX_REGION_SLOTS] = {};
-	int m_nRegionLocationCount = 0;
-	// Fixed reusable-slot stack. t3dslot_t metadata covers the maximum logical world plane.
-	uint16_t m_szFreeRegionSlots[TERRAIN3D_MAX_REGION_SLOTS] = {};
-	int m_nFreeRegionSlotCount = 0;
-	int m_nActiveRegionCount = 0;
 	TypedArray<Image> m_heightMaps;
 	TypedArray<Image> m_controlMaps;
 	TypedArray<Image> m_colorMaps;
@@ -127,22 +87,10 @@ private:
 	// Editing occurs on the Image arrays above, which are converted to Texture arrays
 	// below for the shader.
 
-	// Fixed maximum grid with region_id at its location; no region = 0, region IDs >= 1.
-	uint16_t m_szRegionMap[TERRAIN3D_MAX_REGION_SLOTS] = {};
-	bool m_bRegionMapDirty = true;
 	// Initial directory loading builds the CPU/GPU data once, before listeners are
 	// initialized. Suppress redundant startup signals/snaps and defer spare layers.
 	bool m_bStartupBulkLoad = false;
 	bool m_bSkipSlotReserveOnce = false;
-	uint64_t m_nStartupLoadTotalUsecLast = 0u;
-	uint64_t m_nStartupLoadEnumerationUsecLast = 0u;
-	uint64_t m_nStartupLoadDeserializeUsecLast = 0u;
-	uint64_t m_nStartupLoadStagingUsecLast = 0u;
-	uint64_t m_nStartupLoadPublishUsecLast = 0u;
-	uint64_t m_nStartupLoadFinalizeUsecLast = 0u;
-	int m_nStartupLoadRegionFilesLast = 0;
-	int m_nStartupLoadRegionsPublishedLast = 0;
-	bool m_bStartupLoadSucceededLast = false;
 
 	// These contain the TextureArray RIDs from the RenderingServer. In bounded
 	// residency mode they hold physical cache layers rather than repository slots.
@@ -214,7 +162,6 @@ private:
 	bool m_bGpuRegionCacheSelectionDirty = true;
 	int m_nGpuRegionCacheBudgetMb = 16;
 	int m_nGpuRegionUploadBudgetLayers = 4;
-	int m_nRuntimeGpuRegionUploadBudgetLayers = -1;
 	int m_nGpuRegionUploadBudgetMb = 2;
 	int m_nGpuRegionSparePages = TERRAIN3D_GPU_CACHE_DEFAULT_SPARE_LAYERS;
 	int m_nGpuRegionRetireFrames = TERRAIN3D_GPU_CACHE_DEFAULT_RETIRE_FRAMES;
@@ -292,74 +239,12 @@ private:
 	TypedArray<Image> m_gpuDerivedMaps;
 	TypedArray<Image> m_gpuMiddleCompositeMaps;
 
-	typedef struct t3dpreparedGpuRuntimePage_s {
-		Vector2i location = V2I_MAX;
-		String pagePath;
-		String sourcePath;
-		uint32_t expectedChannelFlags = 0u;
-		int nRegionSize = 0;
-		int colorDivisor = 1;
-		int derivedDivisor = 1;
-		int middleHeightDivisor = 1;
-		uint32_t materialMask = 1u;
-		uint8_t consumerMask = 0u;
-		// Retain the validated native height payload alongside the Image wrapper so
-		// active-height publication never round-trips through Image::get_data().
-		PackedByteArray heightBytes;
-		Ref<Image> height;
-		Ref<Image> pControl;
-		Ref<Image> pColor;
-		Ref<Image> pDerived;
-		Ref<Image> pMiddleHeight;
-		Ref<Image> pMiddleComposite;
-		PackedByteArray instancePage;
-		T3DInstanceStore preparedInstanceStore;
-		uint64_t nRequestedUsec = 0u;
-		uint64_t nWorkerStartedUsec = 0u;
-		uint64_t nFileOpenUsec = 0u;
-		uint64_t nFileReadUsec = 0u;
-		uint64_t nValidationUsec = 0u;
-		uint64_t nMaterializeUsec = 0u;
-		uint64_t nWorkerFinishedUsec = 0u;
-		bool bAttempted = false;
-		bool bLoaded = false;
-		bool bInstanceAttempted = false;
-		bool bInstanceLoaded = false;
-	} t3dpreparedGpuRuntimePage_t;
-	typedef struct t3dgpuPrepareJobContext_s {
-		t3dpreparedGpuRuntimePage_t *pPages = nullptr;
-		int nPageCount = 0;
-	} t3dgpuPrepareJobContext_t;
-	eastl::array<t3dpreparedGpuRuntimePage_t, TERRAIN3D_GPU_CACHE_MAX_LAYERS> m_szGpuPreparedPages{};
-	eastl::array<t3dpreparedGpuRuntimePage_t, TERRAIN3D_GPU_CACHE_MAX_LAYERS> m_szGpuPrepareWorkPages{};
-	t3dgpuPrepareJobContext_t m_gpuPrepareContext;
-	int m_nGpuPreparedPageCount = 0;
-	int m_nGpuPrepareWorkPageCount = 0;
-	int64_t m_nGpuPrepareGroupId = godot::WorkerThreadPool::INVALID_TASK_ID;
-	bool m_bGpuPrepareJobActive = false;
-	uint64_t m_nGpuPrepareJobStartedUsec = 0u;
-	uint64_t m_nGpuPrepareLatencyUsecLast = 0u;
-	uint64_t m_nGpuPrepareQueueWaitUsecLast = 0u;
-	uint64_t m_nGpuPrepareFileOpenUsecLast = 0u;
-	uint64_t m_nGpuPrepareFileReadUsecLast = 0u;
-	uint64_t m_nGpuPrepareValidationUsecLast = 0u;
-	uint64_t m_nGpuPrepareMaterializeUsecLast = 0u;
-	uint64_t m_nGpuPrepareWorkerUsecLast = 0u;
-	uint64_t m_nGpuPrepareReadyWaitUsecLast = 0u;
+	// Runtime-page worker state and merged consumer queues are owned by
+	// T3DRuntimePageStore. Publication timing remains here because GPU upload
+	// itself is a renderer/cache concern outside the page store.
 	uint64_t m_nGpuPreparePublicationUsecLast = 0u;
 	uint64_t m_nGpuPrepareEndToEndUsecLast = 0u;
 	uint64_t m_nGpuRegionServiceUsecLast = 0u;
-	uint64_t m_nGpuPrepareConsumedRequestUsec = 0u;
-	int m_nGpuPrepareJobWorkers = 0;
-	uint8_t m_szRuntimePagePrepareConsumers[TERRAIN3D_MAX_REGION_SLOTS] = {};
-	uint8_t m_szRuntimePagePreparePriorities[TERRAIN3D_MAX_REGION_SLOTS] = {};
-	int m_nRuntimePagePrepareQueuedCount = 0;
-	uint64_t m_nRuntimePagePrepareStreamingGenerationLast = 0u;
-	bool m_bActiveHeightResidencyDirty = true;
-	uint64_t m_nActiveHeightStreamingGenerationLast = 0u;
-	Vector2i m_activeHeightCenter = V2I_MAX;
-	int m_nActiveHeightReconciliationsLastTick = 0;
-	int m_nActiveHeightSlotsExaminedLastTick = 0;
 
 	// Experimental bounded CPU map residency. Region resources retain metadata
 	// and instances, while clean map payloads outside this fixed window are
@@ -368,7 +253,6 @@ private:
 	bool m_bCpuRegionCacheSelectionDirty = true;
 	int m_nCpuRegionCacheBudgetMb = 16;
 	int m_nCpuRegionLoadBudgetLayers = 4;
-	int m_nRuntimeCpuRegionLoadBudgetLayers = -1;
 	int m_nCpuRegionLoadBudgetMb = 2;
 	int m_nCpuRegionCacheCapacity = 0;
 	int m_nCpuRegionResidentCount = 0;
@@ -398,7 +282,6 @@ private:
 	bool m_bInstanceRegionCacheSelectionDirty = true;
 	int m_nInstanceRegionCacheBudgetMb = 16;
 	int m_nInstanceRegionLoadBudgetPages = 4;
-	int m_nRuntimeInstanceRegionLoadBudgetPages = -1;
 	int m_nInstanceRegionLoadBudgetMb = 2;
 	int m_nInstanceRegionCacheCapacity = TERRAIN3D_INSTANCE_CACHE_MAX_PAGES;
 	int m_nInstanceRegionResidentCount = 0;
@@ -418,30 +301,17 @@ private:
 	// Optional compute backend. It is lazy so Compatibility/headless runtimes
 	// retain the existing CPU path without constructing RenderingDevice state.
 	T3DCompute *m_pCompute = nullptr;
-	// Experimental fixed-capacity, cache-line-aligned CPU residency window.
-	// Images remain authoritative in this patch; the pool is a bounded runtime mirror.
-	mutable T3DResidentRegionPool *m_pResidentPool = nullptr;
-	// Monotonic repository epoch for local samplers. Region replacement, removal,
-	// pool reconfiguration, and repository reset increment this value. A sampler
-	// can therefore serve repeated local-cache hits without locking the resident
-	// pool while still detecting topology/storage invalidation at batch boundaries.
-	// Topology/storage epoch. Ordinary map edits use per-region generations so
-	// unrelated sampler working sets remain hot.
-	std::atomic<uint64_t> m_nSamplingGeneration{1u};
-	eastl::array<std::atomic<uint32_t>, TERRAIN3D_MAX_REGION_SLOTS> m_szRegionSamplingGenerations;
-
-	// Retained operation scratch. These buffers are terrain-owned because their
-	// useful lifetime spans repeated edits, but they never become published state.
-	eastl::vector<float> m_fDerivedHaloScratch;
-	eastl::vector<Vector2i> m_activeLocationScratch;
-	eastl::vector<Vector2i> m_derivedLocationScratch;
-
 	// Functions
 	void clear( void );
-	void invalidateSamplingCache( void );
-	void publishRegionSamplingGeneration( const Vector2i &vLocation );
+	void invalidateSamplingCache( void ) { m_samplingStorage.invalidateAllSamplers(); }
+	void publishRegionSamplingGeneration( const Vector2i &vLocation ) { m_samplingStorage.publishRegionGeneration( vLocation ); }
 	void ensureDefaultMaps( void );
 	bool setRegionSizeInternal( int nRegionSize );
+	bool bindActiveStorageInternal( int nRegionSize, void *pBacking, size_t nBackingBytes ) {
+		return m_samplingStorage.bindActive( nRegionSize, pBacking, nBackingBytes );
+	}
+	bool isActiveStorageOwnerInternal( void ) const { return m_samplingStorage.isActiveOwner(); }
+	void resetResidentSamplingPoolInternal( void ) { m_samplingStorage.resetResidentPool(); }
 	Error rehydrateActiveStorage( void );
 	bool syncActiveRegion( const Vector2i &vLocation, const T3DRegion *pRegion );
 	Ref<Image> getRegionMapOrDefault( const T3DRegion *pRegion, t3dmapType_t mapType ) const;
@@ -450,6 +320,8 @@ private:
 	Ref<Image> makeGpuRenderControlImage( const Vector2i &vLocation ) const;
 	Ref<Image> makeMiddleCompositeImage( const Vector2i &rLocation,
 		const Ref<Image> &rControl, const Ref<Image> &rColor ) const;
+	T3DRuntimePageConfig getRuntimePageConfig( void ) const;
+	static bool isRuntimePageWanted( void *pContext, const Vector2i &rLocation );
 	uint64_t computeGpuRuntimePageSourceSignature( const T3DRegion *pRegion ) const;
 	bool readGpuRuntimePageSourceSignature( const String &rPagePath, uint64_t &nSignature ) const;
 	String getGpuRuntimePagePath( const T3DRegion *pRegion ) const;
@@ -457,15 +329,9 @@ private:
 		String &rDataDirectory, PackedStringArray &rSourceFiles,
 		eastl::vector<Vector2i> &rLocations, PackedStringArray &rErrors
 	) const;
-	bool loadGpuRuntimePage(
-		T3DRegion *pRegion, Ref<Image> &rHeight,
-		Ref<Image> &rControl, Ref<Image> &rColor, Ref<Image> &rDerived
-	);
-	static bool loadGpuRuntimePageSnapshot( t3dpreparedGpuRuntimePage_t &rPage );
-	static void prepareGpuRuntimePageTask( void *pContext, uint32_t iIndex );
 	void pollGpuRuntimePagePrepare( bool bWait );
 	void requestGpuRuntimePage( const Vector2i &vLocation, uint8_t nConsumers, uint8_t nPriority );
-	void serviceGpuRuntimePagePrepare( void );
+	void serviceGpuRuntimePagePrepare( const T3DResidencyFrameState &rFrame );
 	bool isGpuRuntimePagePreparePending( const Vector2i &vLocation ) const;
 	bool takePreparedRuntimeHeight(
 		const Vector2i &vLocation, uint8_t nConsumer, Ref<Image> &rHeight, bool bMiddle,
@@ -475,19 +341,13 @@ private:
 	bool takePreparedGpuRuntimePage(
 		const Vector2i &vLocation, Ref<Image> &rHeight,
 		Ref<Image> &rControl, Ref<Image> &rColor, Ref<Image> &rDerived, Ref<Image> &rMiddleComposite,
-		uint32_t &rMaterialMask, bool &bAttempted
+		uint32_t &rMaterialMask, bool &bAttempted, uint64_t *pRequestedUsec = nullptr
 	);
 	bool writeGpuRuntimePage( T3DRegion *pRegion, String *pError = nullptr );
 	bool hasMaterializedMap( t3dmapType_t mapType ) const;
 	bool refreshImplicitMapState( void );
 	int getRegionSlotReserve( void ) const;
-	int findRegionSlot( const Vector2i &rRegionLoc ) const;
-	int takeFreeRegionSlot( void );
-	void releaseRegionSlot( const int iSlot );
-	void rebuildFreeRegionSlots( void );
-	bool ensureRegionSlotReserve( void );
 	bool canUpdateRegionSlotsIncrementally( void ) const;
-	void rebuildRegionMapFromSlots( void );
 	int calculateAuthoringGpuRegionBudgetMb( void ) const;
 	int calculateGpuRegionCacheCapacity( void ) const;
 	int calculateGpuRegionRequiredRadius( void ) const;
@@ -531,14 +391,13 @@ private:
 	void queueGpuRegionRepublish( const Vector2i &vLocation );
 	int processPendingGpuRegionRepublishes( int nLimit );
 	int collectDesiredGpuRegions(
-		const Vector2i &rCenter, Vector2i *pLocations, int nCapacity,
+		const T3DResidencyFrameState &rFrame, const Vector2i &rCenter, Vector2i *pLocations, int nCapacity,
 		t3dgpuCacheSelectionStats_t &rStats
 	);
 	void resetMiddleHeightCache( void );
 	bool configureMiddleHeightCache( void );
-	void updateActiveHeightResidency( bool bForce );
-	void updateMiddleHeightResidency( const Vector2i &rCenter, bool bForce );
-	int collectDesiredMiddleHeightRegions( const Vector2i &rCenter, Vector2i *pLocations, int nCapacity, int &rRequiredCount ) const;
+	void updateMiddleHeightResidencyInternal( const T3DResidencyFrameState &rFrame, bool bForce );
+	int collectDesiredMiddleHeightRegions( const T3DResidencyFrameState &rFrame, const Vector2i &rCenter, Vector2i *pLocations, int nCapacity, int &rRequiredCount ) const;
 	int findMiddleHeightSlot( const Vector2i &vLocation ) const;
 	bool uploadMiddleHeightLayer( int nLayer, const Vector2i &vLocation, const Ref<Image> &rPreparedHeight = Ref<Image>() );
 	bool updateMiddleHeightPageTableTexture( void );
@@ -551,30 +410,36 @@ private:
 	bool loadCpuRegionSource( const Vector2i &vLocation, Ref<T3DRegion> &rSource ) const;
 	bool requestCpuRegionSourceAsync( const Vector2i &vLocation );
 	bool takeCpuRegionSourceAsync( const Vector2i &vLocation, Ref<T3DRegion> &rSource );
-	void prewarmCpuRegionSources( void );
-	void reapCpuRegionSourceAsync( void );
+	void prewarmCpuRegionSources( const T3DResidencyFrameState &rFrame );
+	void reapCpuRegionSourceAsync( const T3DResidencyFrameState &rFrame );
 	bool publishCpuRegionSlot( int iSlot, const Vector2i &vLocation, const Ref<T3DRegion> &rSource );
 	bool evictCpuRegionSlot( int iSlot );
 	bool ensureCpuRegionResidentInternal( const Vector2i &vLocation, bool bDemandLoad );
 	void releaseUntrackedCpuMaps( void );
 	bool restoreAllCpuMaps( void );
-	int collectDesiredCpuRegions( const Vector2i &rCenter, Vector2i *pLocations, int nCapacity ) const;
+	int collectDesiredCpuRegions( const T3DResidencyFrameState &rFrame, const Vector2i &rCenter, Vector2i *pLocations, int nCapacity ) const;
 	bool ensureCpuSampleArea( const Vector3 &rWorldPosition, int nRadiusTexels );
 	void resetInstanceRegionCache( bool bRestoreAll );
 	int findInstanceRegionSlot( const Vector2i &vLocation ) const;
 	void invalidateInstanceRegionLocation( const Vector2i &vLocation );
 	bool evictInstanceRegionSlot( int iSlot );
 	bool ensureInstanceRegionResidentInternal( const Vector2i &vLocation, bool bDemandLoad );
-	int collectDesiredInstanceRegions( const Vector2i &rCenter, Vector2i *pLocations, int nCapacity ) const;
+	int collectDesiredInstanceRegions( const T3DResidencyFrameState &rFrame, const Vector2i &rCenter, Vector2i *pLocations, int nCapacity ) const;
 	void updateMapsBounded( const t3dmapType_t mapType, const bool bAllRegions );
 	void emitGpuRegionMapChanged( void );
 	void emitRegionLayoutChanged( const bool bTextureLayersChanged );
 	TypedArray<Image> getActiveMaps( const t3dmapType_t mapType ) const;
 	void copyPasteDfr(
 		const T3DRegion *pSrcRegion, const Rect2i &rSrcRect, const Rect2i &rDstRect,
-		const T3DRegion *pDstRegion
+		T3DRegion *pDstRegion
 	);
 	Error addRegionInternal( const Ref<T3DRegion> &rRegion, const bool bUpdate, const bool bSanitize );
+	void processRegionSaveResult( const T3DRegionSaveResult &rResult );
+	static bool ensurePersistenceRegionResident( void *pContext, const Vector2i &rLocation );
+	T3DResidencyFrameState makeResidencyFrameState( const Vector3 &rWorldPosition ) const;
+	void updateCpuRegionResidencyInternal( const T3DResidencyFrameState &rFrame, bool bForce );
+	void updateInstanceRegionResidencyInternal( const T3DResidencyFrameState &rFrame, bool bForce );
+	void updateGpuRegionResidencyInternal( const T3DResidencyFrameState &rFrame, bool bForce );
 
 public:
 	T3DData( void );
@@ -585,21 +450,20 @@ public:
 		return m_bRuntimeActive && m_pTerrain == pTerrain;
 	}
 	bool isRuntimeReady( void ) const {
-		return m_bRuntimeActive && m_bOwnsActiveStorage && terrain3dActiveStorageIsOwner( this ) &&
-			m_nRegionMapSize > 0;
+		return m_bRuntimeActive && m_samplingStorage.isActiveOwner() && m_regionRepository.getRegionMapSize() > 0;
 	}
 	bool isRepositoryLoaded( void ) const {
-		return m_bRepositoryLoaded;
+		return m_regionRepository.isLoaded();
 	}
 	uint32_t getActiveStorageGeneration( void ) const {
-		return isRuntimeReady() ? m_nActiveStorageGeneration : 0u;
+		return isRuntimeReady() ? m_samplingStorage.getActiveGeneration() : 0u;
 	}
 	Dictionary getRuntimeState( void ) const;
 
 	// Regions
 
 	int getRegionCount( void ) const {
-		return m_nActiveRegionCount;
+		return m_regionRepository.getActiveRegionCount();
 	}
 	void setRegionLocations( const TypedArray<Vector2i> &vLocations );
 	TypedArray<Vector2i> getRegionLocations( void ) const;
@@ -608,55 +472,50 @@ public:
 	TypedArray<Vector2i> getRegionSlots( void ) const;
 	TypedArray<Vector2i> getRenderRegionSlots( void ) const;
 	const Vector2i *getRegionSlotsInternal( void ) const {
-		return m_szRegionLocations;
+		return m_regionRepository.getSlotsData();
 	}
 	int getRegionSlotCountInternal( void ) const {
-		return m_nRegionLocationCount;
+		return m_regionRepository.getSlotCount();
 	}
 	T3DRegion *const *getRegionPtrMapInternal( void ) const {
-		return m_szRegionPtrMap;
+		return m_regionRepository.getRegionPtrMapData();
 	}
 	int getRegionSizeInternal( void ) const {
-		return m_nRegionSize;
+		return m_regionRepository.getRegionSize();
 	}
 	int getRegionMapSizeInternal( void ) const {
-		return m_nRegionMapSize;
+		return m_regionRepository.getRegionMapSize();
+	}
+	bool matchesRegionLayoutInternal( const int nRegionSize ) const {
+		return m_regionRepository.getRegionSize() == nRegionSize &&
+			m_regionRepository.getRegionSizeVector() == V2I( nRegionSize );
+	}
+	T3DRegionRepositoryView getRegionRepositoryViewInternal( void ) const {
+		return m_regionRepository.getView();
+	}
+	uint64_t getRegionTopologyGenerationInternal( void ) const {
+		return m_regionRepository.getTopologyGeneration();
+	}
+	void setVertexSpacingInternal( const real_t fVertexSpacing ) {
+		m_regionRepository.setVertexSpacing( fVertexSpacing );
 	}
 	bool isRegionLocationValidInternal( const Vector2i &vLocation ) const {
-		if ( m_nRegionMapSize <= 0 ) {
-			return false;
-		}
-		const int half = m_nRegionMapSize / 2;
-		return vLocation.x >= -half && vLocation.x < half && vLocation.y >= -half && vLocation.y < half;
-	}
-	T3DActiveMapLease acquireActiveMap( const Vector2i &vLocation ) const {
-		return m_bOwnsActiveStorage ? terrain3dActiveStorageAcquire( this, vLocation ) : T3DActiveMapLease();
-	}
-	size_t getActiveStorageReservedBytes( void ) const {
-		return m_bOwnsActiveStorage ? terrain3dActiveStorageGetReservedBytes() : 0u;
+		return m_regionRepository.isLocationValid( vLocation );
 	}
 	real_t getVertexSpacingInternal( void ) const {
-		return m_fVertexSpacing;
+		return m_regionRepository.getVertexSpacing();
 	}
-	uint64_t getSamplingGenerationInternal( void ) const {
-		return m_nSamplingGeneration.load( std::memory_order_acquire );
-	}
-	uint32_t getRegionSamplingGenerationInternal( const Vector2i &vLocation ) const {
-		if ( !isRegionLocationValidInternal( vLocation ) ) {
-			return 0u;
-		}
-		const int index = getRegionMapIndex( vLocation );
-		const uint32_t generation = index >= 0 ? m_szRegionSamplingGenerations[( size_t ) ( index )].load( std::memory_order_acquire ) : 0u;
-		return generation;
+	T3DSamplingSource getSamplingSourceInternal( void ) const {
+		return T3DSamplingSource{ &m_regionRepository, &m_samplingStorage };
 	}
 	TypedArray<T3DRegion> getRegionsActive( const bool bCopy = false, const bool bDeep = false ) const;
 	Dictionary getRegionsAll( void ) const {
-		return m_regions;
+		return m_regionRepository.getRegions();
 	}
 	PackedInt32Array getRegionMap( void ) const;
 	PackedInt32Array getLogicalRegionMap( void ) const;
 	int getRegionMapSize( void ) const {
-		return m_nRegionMapSize;
+		return m_regionRepository.getRegionMapSize();
 	}
 	static int getRegionMapIndex( const Vector2i &rRegionLoc );
 
@@ -723,8 +582,6 @@ public:
 	T3DCompute *getComputeBackendIfCreated( void ) const {
 		return m_pCompute;
 	}
-	T3DResidentMapLease acquireResidentMap( const Vector2i &vLocation, const T3DRegion *pRegion ) const;
-	size_t getResidentPoolReservedBytes( void ) const;
 	void configureResidentPool( int nCapacity = 64 );
 	void configureGpuRegionCache(
 		bool bEnabled, int nBudgetMb = 16, int nUploadLayers = 4,
@@ -757,7 +614,6 @@ public:
 		return m_nInstanceRegionStallFlagsLastTick;
 	}
 	bool ensureCpuRegionResident( const Vector2i &vLocation );
-	bool isCpuRegionPayloadAvailable( const Vector2i &vLocation ) const;
 	void updateCpuRegionResidency( const Vector3 &rWorldPosition, bool bForce = false );
 	void updateInstanceRegionResidency( const Vector3 &rWorldPosition, bool bForce = false );
 	void updateGpuRegionResidency( const Vector3 &rWorldPosition, bool bForce = false );
@@ -781,7 +637,7 @@ public:
 	int getGpuRegionRequiredCorePages( void ) const {
 		const int radius = calculateGpuRegionRequiredRadius();
 		const int diameter = radius * 2 + 1;
-		return MIN( diameter * diameter, m_nRegionMapSize * m_nRegionMapSize );
+		return MIN( diameter * diameter, m_regionRepository.getRegionMapSize() * m_regionRepository.getRegionMapSize() );
 	}
 	int calculateGpuRegionRequiredCorePagesForLods( int nDetailLods ) const;
 	int calculateGpuRegionCapacityForLods( int nDetailLods ) const;
@@ -831,6 +687,7 @@ public:
 		return m_nCpuRegionCacheCapacity;
 	}
 	void regenerateDerivedMaps( const eastl::vector<Vector2i> &rRegionLocations, const AABB &rEditedArea = AABB() );
+	void publishDerivedMapUpdates( const eastl::vector<T3DDerivedMapUpdate> &rUpdates );
 	Ref<T3DErosionJob> createErosionJob( const Ref<T3DErosionSettings> &rSettings );
 	RID getHeightMapsRid( void ) const {
 		return m_generatedHeightMaps.getRid();
@@ -913,14 +770,14 @@ public:
 
 	void addEditedArea( const AABB &rArea );
 	void clearEditedArea( void ) {
-		m_editedArea = AABB();
+		m_mapEditService.clearEditedArea();
 	}
 	AABB getEditedArea( void ) const {
-		return m_editedArea;
+		return m_mapEditService.getEditedArea();
 	}
 
 	Vector2 getHeightRange( void ) const {
-		return m_masterHeightRange;
+		return m_mapEditService.getHeightRange();
 	}
 	void updateMasterHeight( const real_t fHeight );
 	void updateMasterHeights( const Vector2 &rLowHigh );
@@ -948,71 +805,32 @@ VARIANT_ENUM_CAST( T3DData::t3dheightFilter_t );
 // Repository operations additionally enforce the active map size, which is
 // derived from the fixed 4096x4096 world resolution and current region size.
 inline int T3DData::getRegionMapIndex( const Vector2i &rRegionLoc ) {
-	const Vector2i loc = rRegionLoc + ( TERRAIN3D_REGION_MAP_VSIZE / 2 );
-	if ( ( uint32_t ) ( loc.x ) >= ( uint32_t ) ( TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE ) || ( uint32_t ) ( loc.y ) >= ( uint32_t ) ( TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE ) ) {
-		return -1;
-	}
-	return loc.y * TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE + loc.x;
+	return T3DRegionRepository::getRegionMapIndex( rRegionLoc );
 }
 
 // Returns a region location given a global position. No bounds checking nor data access.
 inline Vector2i T3DData::getRegionLocation( const Vector3 &rGlobalPosition ) const {
-	Vector2 descaled_position = v3v2( rGlobalPosition ) / m_fVertexSpacing;
-	return Vector2i( ( descaled_position / ( real_t ) ( m_nRegionSize ) ).floor() );
+	return m_regionRepository.getRegionLocation( rGlobalPosition );
 }
 
-// Returns id of any active region. -1 if out of bounds or no region, or region id
 inline int T3DData::getRegionId( const Vector2i &rRegionLoc ) const {
-	if ( !isRegionLocationValidInternal( rRegionLoc ) ) {
-		return -1;
-	}
-	const int map_index = getRegionMapIndex( rRegionLoc );
-	if ( map_index >= 0 ) {
-		int region_id = m_szRegionMap[map_index] - 1; // 0 = no region
-		// The location check is an invariant guard. A stale region map must never
-		// be allowed to redirect an edit into an unrelated texture-array layer.
-		if ( region_id >= 0 && region_id < m_nRegionLocationCount &&
-			Vector2i( m_szRegionLocations[region_id] ) == rRegionLoc ) {
-			return region_id;
-		}
-	}
-	return -1;
+	return m_regionRepository.getRegionId( rRegionLoc );
 }
 
 inline int T3DData::getRegionIdp( const Vector3 &rGlobalPosition ) const {
-	return getRegionId( getRegionLocation( rGlobalPosition ) );
+	return m_regionRepository.getRegionId( m_regionRepository.getRegionLocation( rGlobalPosition ) );
 }
 
-// This function is slower than the version below, but safer when interacting with Godot, which requires
-// References. This includes backing up regions in the UndoRedoManager.
-// Ref<> has a pointer constructor, so a reference can be created with Ref<>(ptr). Godot detects the
-// pointer is already tracked and increments the reference counter.
-// Passing the pointer to a function with a Ref<> parameter works, and there's an implicit conversion to Ref.
-// However, let's require explicit conversions for clarity, so wrap a Ref around it:
-// eg. backup_region(Ref<Terrain3D>(raw_ptr));
-// Should be used for most functions in Editor and Instancer.
 inline Ref<T3DRegion> T3DData::getRegion( const Vector2i &rRegionLoc ) const {
-	return m_regions.get( rRegionLoc, Ref<T3DRegion>() );
+	return m_regionRepository.getRegion( rRegionLoc );
 }
 
-// Using the raw pointer is faster than creating a Ref<>. It can also safely be converted to a Ref as needed
-// with Ref<>(ptr). Use this function when retreiving regions frequently, eg looping over getPixel().
-// Should be used for most data processing in Data, but not region handling.
-// Re overloaded template
-// get_region_ptr(region_locs[i]) worked with an implicit conversion of Variant::Vector2i to Vector2i.
-// However it also worked for Variant::Object, which silently sent invalid data.
-// The overloaded template was added to catch this. Pulling out of a dictionary/array gives a Variant,
-// so now explicit conversion is required, eg. get_region_ptr(Vector2i(locs[i])).
 inline T3DRegion *T3DData::getRegionPtr( const Vector2i &rRegionLoc ) const {
-	if ( !isRegionLocationValidInternal( rRegionLoc ) ) {
-		return nullptr;
-	}
-	const int map_index = getRegionMapIndex( rRegionLoc );
-	return map_index >= 0 ? m_szRegionPtrMap[map_index] : nullptr;
+	return m_regionRepository.getRegionPtr( rRegionLoc );
 }
 
 inline Ref<T3DRegion> T3DData::getRegionp( const Vector3 &rGlobalPosition ) const {
-	return m_regions.get( getRegionLocation( rGlobalPosition ), Ref<T3DRegion>() );
+	return m_regionRepository.getRegion( m_regionRepository.getRegionLocation( rGlobalPosition ) );
 }
 
 // Inline Map Functions
@@ -1141,20 +959,11 @@ inline real_t T3DData::getRoughness( const Vector3 &rGlobalPosition ) const {
 }
 
 inline void T3DData::updateMasterHeight( const real_t fHeight ) {
-	if ( fHeight < m_masterHeightRange.x ) {
-		m_masterHeightRange.x = fHeight;
-	} else if ( fHeight > m_masterHeightRange.y ) {
-		m_masterHeightRange.y = fHeight;
-	}
+	m_mapEditService.updateMasterHeight( fHeight );
 }
 
 inline void T3DData::updateMasterHeights( const Vector2 &rLowHigh ) {
-	if ( rLowHigh.x < m_masterHeightRange.x ) {
-		m_masterHeightRange.x = rLowHigh.x;
-	}
-	if ( rLowHigh.y > m_masterHeightRange.y ) {
-		m_masterHeightRange.y = rLowHigh.y;
-	}
+	m_mapEditService.updateMasterHeights( rLowHigh );
 }
 
 using Terrain3DData = T3DData;
