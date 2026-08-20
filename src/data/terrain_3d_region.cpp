@@ -768,6 +768,12 @@ bool T3DRegion::ensureInstanceStoreResident( void ) const {
 	return true;
 }
 
+void T3DRegion::adoptPreparedInstanceStoreInternal( T3DInstanceStore &&rStore ) {
+	m_instanceStore = eastl::move( rStore );
+	m_bInstanceStoreResident = true;
+	m_bInstanceStoreModified = false;
+}
+
 bool T3DRegion::evictInstanceStore( void ) {
 	if ( !m_bInstanceStoreResident ) {
 		return true;

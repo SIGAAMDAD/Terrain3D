@@ -11,9 +11,11 @@
 #include "data/terrain_3d_sampling_storage.h"
 #include "data/terrain_3d_map_edit_service.h"
 #include "data/terrain_3d_region_persistence.h"
-#include "streaming/terrain_3d_cpu_cache_policy.h"
-#include "streaming/terrain_3d_gpu_cache_policy.h"
-#include "instances/terrain_3d_instance_cache_policy.h"
+#include "rendering/terrain_3d_far_surface_atlas_cache.h"
+#include "streaming/terrain_3d_cpu_region_cache.h"
+#include "streaming/terrain_3d_gpu_region_cache.h"
+#include "streaming/terrain_3d_instance_region_cache.h"
+#include "streaming/terrain_3d_middle_height_region_cache.h"
 #include "data/terrain_3d_region.h"
 #include "data/terrain_3d_region_repository.h"
 #include "streaming/terrain_3d_runtime_profile.h"
@@ -23,7 +25,6 @@
 
 #include "eastl_config.h"
 #include <EASTL/array.h>
-#include <EASTL/bitset.h>
 #include <cstdint>
 #include <EASTL/vector.h>
 
@@ -31,7 +32,6 @@ class T3DTerrain;
 class T3DErosionJob;
 class T3DErosionSettings;
 class T3DCompute;
-typedef struct t3dfarSurfaceBakeData_s t3dfarSurfaceBakeData_t;
 
 class T3DData : public Object {
 	using Terrain3DData = T3DData;
@@ -65,6 +65,11 @@ private:
 	T3DMapEditService m_mapEditService;
 	T3DRegionPersistence m_regionPersistence;
 	T3DRuntimePageStore m_runtimePageStore;
+	T3DCpuRegionCache m_cpuRegionCache;
+	T3DInstanceRegionCache m_instanceRegionCache;
+	T3DMiddleHeightRegionCache m_middleHeightRegionCache;
+	T3DGpuRegionCache m_gpuRegionCache;
+	T3DFarSurfaceAtlasCache m_farSurfaceAtlasCache;
 	T3DActiveHeightResidency m_activeHeightResidency;
 	T3DRegionResidency m_regionResidency;
 	bool m_bRuntimeActive = false;
@@ -99,205 +104,6 @@ private:
 	T3DGeneratedTexture m_generatedColorMaps;
 	T3DGeneratedTexture m_generatedDerivedMaps;
 	T3DGeneratedTexture m_generatedMiddleCompositeMaps;
-	// Height-only residency for Middle geometry. This cache is independent of
-	// full surface pages so control/color/derived eviction cannot move vertices.
-	T3DGeneratedTexture m_generatedMiddleHeightMaps;
-	T3DGeneratedTexture m_generatedMiddleHeightRegionMap;
-	uint16_t m_szMiddleHeightRegionMap[TERRAIN3D_MAX_REGION_SLOTS] = {};
-	Vector2i m_szMiddleHeightLocations[TERRAIN3D_GPU_HEIGHT_CACHE_MAX_LAYERS] = {};
-	uint64_t m_szMiddleHeightLastUseTick[TERRAIN3D_GPU_HEIGHT_CACHE_MAX_LAYERS] = {};
-	uint64_t m_szMiddleHeightRetireAfterFrame[TERRAIN3D_GPU_HEIGHT_CACHE_MAX_LAYERS] = {};
-	uint8_t m_szMiddleHeightSlotStates[TERRAIN3D_GPU_HEIGHT_CACHE_MAX_LAYERS] = {};
-	int m_nMiddleHeightPhysicalLayerCount = 0;
-	int m_nMiddleHeightMappedCapacity = 0;
-	int m_nMiddleHeightResidentCount = 0;
-	int m_nMiddleHeightDesiredLastTick = 0;
-	int m_nMiddleHeightMissingRequiredLastTick = 0;
-	int m_nMiddleHeightUploadsLastTick = 0;
-	int m_nMiddleHeightEvictionsLastTick = 0;
-	uint64_t m_nMiddleHeightTick = 0u;
-	Vector2i m_middleHeightCenter = V2I_MAX;
-	bool m_bMiddleHeightTexturesReady = false;
-	bool m_bMiddleHeightPageTableDirty = true;
-	bool m_bMiddleHeightSelectionDirty = true;
-	uint64_t m_nMiddleHeightStreamingGenerationLast = 0u;
-
-	T3DGeneratedTexture m_generatedFarHeightMap;
-	T3DGeneratedTexture m_generatedFarColorMap;
-	Ref<Image> m_pGpuFarHeightImage;
-	Ref<Image> m_pGpuFarColorImage;
-	eastl::bitset<TERRAIN3D_MAX_REGION_SLOTS> m_gpuFarHeightDirtyRegions;
-	eastl::bitset<TERRAIN3D_MAX_REGION_SLOTS> m_gpuFarColorDirtyRegions;
-	bool m_bGpuFarHeightDirty = true;
-	bool m_bGpuFarColorDirty = true;
-	bool m_bGpuFarHeightDirtyAll = true;
-	bool m_bGpuFarColorDirtyAll = true;
-	bool m_bGpuFarCookedLoaded = false;
-	bool m_bGpuFarCookedSaved = false;
-	int m_nGpuFarHeightUpdatesLastTick = 0;
-	int m_nGpuFarColorUpdatesLastTick = 0;
-	int m_nGpuFarHeightRegionsLastTick = 0;
-	int m_nGpuFarColorRegionsLastTick = 0;
-	uint64_t m_nGpuFarHeightProcessingUsecLast = 0u;
-	uint64_t m_nGpuFarColorProcessingUsecLast = 0u;
-	uint64_t m_nGpuFarHeightDirtyTexelsLast = 0u;
-	uint64_t m_nGpuFarColorDirtyTexelsLast = 0u;
-	uint64_t m_nGpuFarHeightRebuiltBytesLast = 0u;
-	uint64_t m_nGpuFarColorRebuiltBytesLast = 0u;
-	uint64_t m_nGpuFarHeightUploadedBytesLast = 0u;
-	uint64_t m_nGpuFarColorUploadedBytesLast = 0u;
-	uint64_t m_nGpuFarHeightPublicationUsecLast = 0u;
-	uint64_t m_nGpuFarColorPublicationUsecLast = 0u;
-	uint64_t m_nGpuFarHeightPublicationCount = 0u;
-	uint64_t m_nGpuFarColorPublicationCount = 0u;
-	uint64_t m_nGpuFarHeightUploadedBytesTotal = 0u;
-	uint64_t m_nGpuFarColorUploadedBytesTotal = 0u;
-	uint64_t m_nGpuFarCookIoUsecLast = 0u;
-
-	// Xbox 360-style physical GPU residency. Logical terrain ownership remains in
-	// the repository plus sparse direct-indexed active height pages; these fixed
-	// tables map a bounded set of nearby logical regions into physical texture layers.
-	bool m_bGpuRegionCacheEnabled = false;
-	bool m_bGpuRegionCacheTexturesReady = false;
-	bool m_bGpuRegionCacheSelectionDirty = true;
-	int m_nGpuRegionCacheBudgetMb = 16;
-	int m_nGpuRegionUploadBudgetLayers = 4;
-	int m_nGpuRegionUploadBudgetMb = 2;
-	int m_nGpuRegionSparePages = TERRAIN3D_GPU_CACHE_DEFAULT_SPARE_LAYERS;
-	int m_nGpuRegionRetireFrames = TERRAIN3D_GPU_CACHE_DEFAULT_RETIRE_FRAMES;
-	int m_nGpuRegionCacheCapacity = 0;
-	int m_nGpuRegionPhysicalLayerCount = 0;
-	int m_nGpuRegionSpareLayerCount = 0;
-	int m_nGpuRegionResidentCount = 0;
-	int m_nGpuRegionRetiredCount = 0;
-	uint8_t m_szGpuRegionRepublishPending[TERRAIN3D_MAX_REGION_SLOTS] = {};
-	int m_nGpuRegionRepublishPendingCount = 0;
-	int m_nGpuRegionRepublishCursor = 0;
-	int m_nGpuRegionDesiredLastTick = 0;
-	int m_nGpuRegionRequiredLastTick = 0;
-	int m_nGpuRegionGuardLastTick = 0;
-	int m_nGpuRegionPrefetchLastTick = 0;
-	int m_nGpuRegionHysteresisLastTick = 0;
-	int m_nGpuRegionMissingRequiredLastTick = 0;
-	uint32_t m_nGpuRegionStallFlagsLastTick = TERRAIN3D_PROFILE_STALL_NONE;
-	int m_nGpuRegionRequestedPages = 0;
-	int m_nGpuRegionRequiredRadius = 0;
-	int m_nGpuRegionColorDivisor = 1;
-	int m_nGpuRegionDerivedDivisor = 1;
-	bool m_bGpuRegionColorChannelAllocated = true;
-	bool m_bGpuRegionDerivedChannelAllocated = true;
-	int m_nGpuRegionUploadsLastTick = 0;
-	uint64_t m_nGpuRegionUploadsSinceReset = 0u;
-	int m_nGpuRegionEvictionsLastTick = 0;
-	int m_nGpuRegionCookedHitsLastTick = 0;
-	int m_nGpuRegionCookedMissesLastTick = 0;
-	int m_nGpuRegionRuntimePreparesLastTick = 0;
-	int m_nGpuRegionReusedLayersLastTick = 0;
-	int m_nGpuRegionPageTableUpdatesLastTick = 0;
-	int m_nGpuRegionHeightUpdatesLastTick = 0;
-	int m_nGpuRegionControlUpdatesLastTick = 0;
-	int m_nGpuRegionColorUpdatesLastTick = 0;
-	int m_nGpuRegionDerivedUpdatesLastTick = 0;
-	int m_nGpuRegionRuntimeColorMipsLastTick = 0;
-	int m_nGpuRegionRuntimeDerivedBuildsLastTick = 0;
-	int m_nGpuRegionPreparedPagesLastTick = 0;
-	int m_nGpuRegionPrepareWorkersLastTick = 0;
-	int m_nGpuRegionEffectiveUploadLimitLastTick = 0;
-	bool m_bGpuRegionCameraMovedLastTick = false;
-	size_t m_nGpuRegionUploadBytesLastTick = 0u;
-	size_t m_nGpuRegionHeightBytesLastTick = 0u;
-	size_t m_nGpuRegionControlBytesLastTick = 0u;
-	size_t m_nGpuRegionColorBytesLastTick = 0u;
-	size_t m_nGpuRegionDerivedBytesLastTick = 0u;
-	uint64_t m_nGpuRegionTick = 0u;
-	uint64_t m_nGpuRegionLastPublicationTick = 0u;
-	Vector2i m_gpuRegionCacheCenter = V2I_MAX;
-	Vector2i m_gpuRegionPredictionDirection = V2I_ZERO;
-	uint64_t m_nGpuRegionStreamingGenerationLast = 0u;
-	Vector2i m_szGpuRegionPriorityLocations[TERRAIN3D_GPU_CACHE_MAX_LAYERS] = {};
-	uint8_t m_szGpuRegionPriorityClasses[TERRAIN3D_GPU_CACHE_MAX_LAYERS] = {};
-	int m_nGpuRegionPriorityCount = 0;
-	Vector2i m_szGpuRegionLocations[TERRAIN3D_GPU_CACHE_MAX_LAYERS] = {};
-	uint64_t m_szGpuRegionLastUseTick[TERRAIN3D_GPU_CACHE_MAX_LAYERS] = {};
-	uint64_t m_szGpuRegionLoadedTick[TERRAIN3D_GPU_CACHE_MAX_LAYERS] = {};
-	uint64_t m_szGpuRegionRetireAfterFrame[TERRAIN3D_GPU_CACHE_MAX_LAYERS] = {};
-	uint8_t m_szGpuRegionSlotStates[TERRAIN3D_GPU_CACHE_MAX_LAYERS] = {};
-	uint8_t m_szGpuRegionPrefetchOrigin[TERRAIN3D_GPU_CACHE_MAX_LAYERS] = {};
-	// Tracks which optional payloads currently occupy each physical layer. A
-	// sparse region can reuse an already-default layer without issuing a redundant
-	// control or color texture update.
-	uint8_t m_szGpuRegionLayerChannelFlags[TERRAIN3D_GPU_CACHE_MAX_LAYERS] = {};
-	uint32_t m_szGpuRegionMaterialMasks[TERRAIN3D_GPU_CACHE_MAX_LAYERS] = {};
-	uint64_t m_nGpuRegionPrefetchUsedTotal = 0u;
-	uint64_t m_nGpuRegionPrefetchDiscardedTotal = 0u;
-	uint64_t m_nGpuRegionResidentTicksTotal = 0u;
-	uint64_t m_nGpuRegionDepartedPagesTotal = 0u;
-	uint16_t m_szGpuRegionMap[TERRAIN3D_MAX_REGION_SLOTS] = {};
-	TypedArray<Image> m_gpuHeightMaps;
-	TypedArray<Image> m_gpuControlMaps;
-	TypedArray<Image> m_gpuColorMaps;
-	TypedArray<Image> m_gpuDerivedMaps;
-	TypedArray<Image> m_gpuMiddleCompositeMaps;
-
-	// Runtime-page worker state and merged consumer queues are owned by
-	// T3DRuntimePageStore. Publication timing remains here because GPU upload
-	// itself is a renderer/cache concern outside the page store.
-	uint64_t m_nGpuPreparePublicationUsecLast = 0u;
-	uint64_t m_nGpuPrepareEndToEndUsecLast = 0u;
-	uint64_t m_nGpuRegionServiceUsecLast = 0u;
-
-	// Experimental bounded CPU map residency. Region resources retain metadata
-	// and instances, while clean map payloads outside this fixed window are
-	// released and reloaded from their external resource path on demand.
-	bool m_bCpuRegionCacheEnabled = false;
-	bool m_bCpuRegionCacheSelectionDirty = true;
-	int m_nCpuRegionCacheBudgetMb = 16;
-	int m_nCpuRegionLoadBudgetLayers = 4;
-	int m_nCpuRegionLoadBudgetMb = 2;
-	int m_nCpuRegionCacheCapacity = 0;
-	int m_nCpuRegionResidentCount = 0;
-	int m_nCpuRegionDesiredLastTick = 0;
-	int m_nCpuRegionLoadsLastTick = 0;
-	uint64_t m_nCpuRegionLoadsSinceReset = 0u;
-	uint32_t m_nCpuRegionStallFlagsLastTick = TERRAIN3D_PROFILE_STALL_NONE;
-	int m_nCpuRegionEvictionsLastTick = 0;
-	int m_nCpuRegionPinnedLastTick = 0;
-	int m_nCpuRegionDemandLoads = 0;
-	size_t m_nCpuRegionLoadBytesLastTick = 0u;
-	uint64_t m_nCpuRegionServiceUsecLast = 0u;
-	uint64_t m_nCpuRegionPrefetchStreamingGenerationLast = 0u;
-	int m_nCpuRegionAsyncRequestsLastTick = 0;
-	int m_nCpuRegionAsyncReadyLastTick = 0;
-	int m_nCpuRegionAsyncPendingLastTick = 0;
-	int m_nCpuRegionAsyncOutstanding = 0;
-	uint8_t m_szCpuRegionAsyncState[TERRAIN3D_MAX_REGION_SLOTS] = {};
-	Vector2i m_cpuRegionCacheCenter = V2I_MAX;
-	Vector2i m_szCpuRegionLocations[TERRAIN3D_CPU_CACHE_MAX_LAYERS] = {};
-	uint8_t m_szCpuRegionMap[TERRAIN3D_MAX_REGION_SLOTS] = {};
-
-	// Bounded expansion cache for serialized static-instance pages. Every region
-	// retains its compact page, while only nearby regions own decoded transform
-	// arrays. The render-cell streamer consumes this same physical residency.
-	bool m_bInstanceRegionCacheEnabled = false;
-	bool m_bInstanceRegionCacheSelectionDirty = true;
-	int m_nInstanceRegionCacheBudgetMb = 16;
-	int m_nInstanceRegionLoadBudgetPages = 4;
-	int m_nInstanceRegionLoadBudgetMb = 2;
-	int m_nInstanceRegionCacheCapacity = TERRAIN3D_INSTANCE_CACHE_MAX_PAGES;
-	int m_nInstanceRegionResidentCount = 0;
-	int m_nInstanceRegionDesiredLastTick = 0;
-	int m_nInstanceRegionLoadsLastTick = 0;
-	uint32_t m_nInstanceRegionStallFlagsLastTick = TERRAIN3D_PROFILE_STALL_NONE;
-	int m_nInstanceRegionEvictionsLastTick = 0;
-	int m_nInstanceRegionDemandLoads = 0;
-	size_t m_nInstanceRegionResidentBytes = 0u;
-	size_t m_nInstanceRegionLoadBytesLastTick = 0u;
-	uint64_t m_nInstanceRegionServiceUsecLast = 0u;
-	uint64_t m_nInstancePrefetchStreamingGenerationLast = 0u;
-	Vector2i m_instanceRegionCacheCenter = V2I_MAX;
-	Vector2i m_szInstanceRegionLocations[TERRAIN3D_INSTANCE_CACHE_MAX_PAGES] = {};
-	uint8_t m_szInstanceRegionMap[TERRAIN3D_MAX_REGION_SLOTS] = {};
-
 	// Optional compute backend. It is lazy so Compatibility/headless runtimes
 	// retain the existing CPU path without constructing RenderingDevice state.
 	T3DCompute *m_pCompute = nullptr;
@@ -348,83 +154,30 @@ private:
 	bool refreshImplicitMapState( void );
 	int getRegionSlotReserve( void ) const;
 	bool canUpdateRegionSlotsIncrementally( void ) const;
-	int calculateAuthoringGpuRegionBudgetMb( void ) const;
-	int calculateGpuRegionCacheCapacity( void ) const;
-	int calculateGpuRegionRequiredRadius( void ) const;
-	int calculateGpuRegionRequestedPages( void ) const;
-	int calculateGpuRegionPhysicalLayers( const int nMappedCapacity ) const;
-	size_t estimateGpuRegionLayerBytes( void ) const;
-	size_t estimateGpuRegionSharedBytes( void ) const;
-	int getGpuFarHeightAtlasSide( void ) const;
-	int getGpuFarSurfaceAtlasSide( void ) const;
-	size_t getGpuFarHeightBytes( void ) const;
-	size_t getGpuFarColorBytes( void ) const;
-	int estimateGpuRegionUploadCalls( const T3DRegion *pRegion, int nLayer ) const;
-	size_t estimateGpuRegionUploadBytes( const T3DRegion *pRegion, int nLayer ) const;
-	int getGpuRegionTextureUpdateCallsLastTick( void ) const;
-	void resetGpuRegionCache( const bool bClearTextures );
-	bool rebuildGpuRegionCacheTextures( void );
-	String getGpuFarAtlasPath( const String &rDirectory = String() ) const;
-	uint64_t computeGpuFarAtlasSourceSignature( void ) const;
+	void syncCacheDefaultMaps( void );
+	T3DFarSurfaceAtlasConfig getFarSurfaceAtlasConfig( void ) const;
+	T3DMiddleHeightRegionCacheConfig getMiddleHeightCacheConfig( void ) const;
+	void applyInstanceRegionCacheChanges( const T3DInstanceRegionCacheChanges &rChanges );
+	void resetGpuRegionCache( bool bClearTextures );
+	void armPendingGpuRegionRetirements( void );
+	void invalidateGpuRegionLocation( const Vector2i &vLocation );
+	bool republishGpuRegionLocation( const Vector2i &vLocation );
+	void queueGpuRegionRepublish( const Vector2i &vLocation );
 	bool isFarAtlasRequired( void ) const;
-	bool initializeGpuFarAtlasImages( void );
-	bool loadCookedGpuFarAtlases( void );
 	bool writeCookedGpuFarAtlases( const String &rDirectory = String() );
 	void markAllGpuFarRegionsDirty( t3dmapType_t mapType );
 	void markGpuFarRegionDirty( const Vector2i &vLocation, t3dmapType_t mapType );
-	bool patchGpuFarHeightRegion( const Vector2i &vLocation, PackedByteArray &nAtlasBytes );
-	bool patchGpuFarColorRegion(
-		const Vector2i &vLocation, PackedByteArray &nAtlasBytes,
-		const t3dfarSurfaceBakeData_t &rBakeData
-	);
-	bool rebuildGpuFarHeightAtlas( void );
-	bool rebuildGpuFarColorAtlas( void );
-	int findGpuRegionSlot( const Vector2i &vLocation ) const;
-	int findFreeGpuRegionSlot( void ) const;
-	void recordGpuRegionDeparture( int nLayer, bool bCountUnusedPrefetch );
-	void retireGpuRegionSlot( int nLayer );
-	void reclaimRetiredGpuRegionSlots( void );
-	void armPendingGpuRegionRetirements( void );
-	void invalidateGpuRegionLocation( const Vector2i &vLocation );
-	bool uploadGpuRegionLayer( const int nLayer, const Vector2i &vLocation, const t3dmapType_t mapType );
-	bool republishGpuRegionLocation( const Vector2i &vLocation );
-	void queueGpuRegionRepublish( const Vector2i &vLocation );
-	int processPendingGpuRegionRepublishes( int nLimit );
-	int collectDesiredGpuRegions(
-		const T3DResidencyFrameState &rFrame, const Vector2i &rCenter, Vector2i *pLocations, int nCapacity,
-		t3dgpuCacheSelectionStats_t &rStats
-	);
 	void resetMiddleHeightCache( void );
 	bool configureMiddleHeightCache( void );
 	void updateMiddleHeightResidencyInternal( const T3DResidencyFrameState &rFrame, bool bForce );
-	int collectDesiredMiddleHeightRegions( const T3DResidencyFrameState &rFrame, const Vector2i &rCenter, Vector2i *pLocations, int nCapacity, int &rRequiredCount ) const;
-	int findMiddleHeightSlot( const Vector2i &vLocation ) const;
-	bool uploadMiddleHeightLayer( int nLayer, const Vector2i &vLocation, const Ref<Image> &rPreparedHeight = Ref<Image>() );
-	bool updateMiddleHeightPageTableTexture( void );
-	Ref<Image> makeMiddleHeightImage( const Vector2i &vLocation, bool bRuntimeResolution = false ) const;
-	int calculateCpuRegionCacheCapacity( void ) const;
-	size_t estimateCpuRegionLayerBytes( void ) const;
 	void resetCpuRegionCache( bool bReleaseCleanMaps );
-	int findCpuRegionSlot( const Vector2i &vLocation ) const;
 	void invalidateCpuRegionLocation( const Vector2i &vLocation );
-	bool loadCpuRegionSource( const Vector2i &vLocation, Ref<T3DRegion> &rSource ) const;
 	bool requestCpuRegionSourceAsync( const Vector2i &vLocation );
-	bool takeCpuRegionSourceAsync( const Vector2i &vLocation, Ref<T3DRegion> &rSource );
-	void prewarmCpuRegionSources( const T3DResidencyFrameState &rFrame );
-	void reapCpuRegionSourceAsync( const T3DResidencyFrameState &rFrame );
-	bool publishCpuRegionSlot( int iSlot, const Vector2i &vLocation, const Ref<T3DRegion> &rSource );
-	bool evictCpuRegionSlot( int iSlot );
 	bool ensureCpuRegionResidentInternal( const Vector2i &vLocation, bool bDemandLoad );
-	void releaseUntrackedCpuMaps( void );
-	bool restoreAllCpuMaps( void );
-	int collectDesiredCpuRegions( const T3DResidencyFrameState &rFrame, const Vector2i &rCenter, Vector2i *pLocations, int nCapacity ) const;
 	bool ensureCpuSampleArea( const Vector3 &rWorldPosition, int nRadiusTexels );
 	void resetInstanceRegionCache( bool bRestoreAll );
-	int findInstanceRegionSlot( const Vector2i &vLocation ) const;
 	void invalidateInstanceRegionLocation( const Vector2i &vLocation );
-	bool evictInstanceRegionSlot( int iSlot );
 	bool ensureInstanceRegionResidentInternal( const Vector2i &vLocation, bool bDemandLoad );
-	int collectDesiredInstanceRegions( const T3DResidencyFrameState &rFrame, const Vector2i &rCenter, Vector2i *pLocations, int nCapacity ) const;
 	void updateMapsBounded( const t3dmapType_t mapType, const bool bAllRegions );
 	void emitGpuRegionMapChanged( void );
 	void emitRegionLayoutChanged( const bool bTextureLayersChanged );
@@ -605,13 +358,13 @@ public:
 	int getEffectiveCpuRegionLoadBudgetLayers( void ) const;
 	int getEffectiveInstanceRegionLoadBudgetPages( void ) const;
 	uint32_t getGpuRegionStallFlagsLastTick( void ) const {
-		return m_nGpuRegionStallFlagsLastTick;
+		return m_gpuRegionCache.getStallFlagsLastTick();
 	}
 	uint32_t getCpuRegionStallFlagsLastTick( void ) const {
-		return m_nCpuRegionStallFlagsLastTick;
+		return m_cpuRegionCache.getStallFlagsLastTick();
 	}
 	uint32_t getInstanceRegionStallFlagsLastTick( void ) const {
-		return m_nInstanceRegionStallFlagsLastTick;
+		return m_instanceRegionCache.getStallFlagsLastTick();
 	}
 	bool ensureCpuRegionResident( const Vector2i &vLocation );
 	void updateCpuRegionResidency( const Vector3 &rWorldPosition, bool bForce = false );
@@ -621,21 +374,21 @@ public:
 	void resetRuntimeStreamingCaches( void );
 	void appendRuntimeProfileSample( t3druntimeProfileSample_t &rSample ) const;
 	bool isGpuRegionCacheEnabled( void ) const {
-		return m_bGpuRegionCacheEnabled;
+		return m_gpuRegionCache.isEnabled();
 	}
 	int getGpuRegionCacheCapacity( void ) const {
-		return m_nGpuRegionCacheCapacity;
+		return m_gpuRegionCache.getCapacity();
 	}
 	int getAuthoringGpuRegionBudgetMb( void ) const {
-		return calculateAuthoringGpuRegionBudgetMb();
+		return m_gpuRegionCache.getAuthoringBudgetMb();
 	}
 	bool isAuthoringGpuFullResidencyPossible( void ) const;
 	bool isAuthoringGpuReadbackSafe( void ) const;
 	int getGpuRegionRequiredRadius( void ) const {
-		return calculateGpuRegionRequiredRadius();
+		return m_gpuRegionCache.getRequiredRadius();
 	}
 	int getGpuRegionRequiredCorePages( void ) const {
-		const int radius = calculateGpuRegionRequiredRadius();
+		const int radius = m_gpuRegionCache.getRequiredRadius();
 		const int diameter = radius * 2 + 1;
 		return MIN( diameter * diameter, m_regionRepository.getRegionMapSize() * m_regionRepository.getRegionMapSize() );
 	}
@@ -650,7 +403,7 @@ public:
 	size_t getCpuRegionCacheReservedBytes( void ) const;
 	size_t getCpuRegionCacheMinimumBytes( void ) const;
 	size_t getCpuRegionCacheHardCapBytes( void ) const;
-	size_t getInstanceRegionCacheReservedBytes( void ) const { return m_nInstanceRegionResidentBytes; }
+	size_t getInstanceRegionCacheReservedBytes( void ) const { return m_instanceRegionCache.getReservedBytes(); }
 	size_t getMemoryTransientStagingBytes( void ) const;
 	size_t getMemoryFixedRepositoryBytes( void ) const;
 	Dictionary getRuntimeResidencyGrid( int nRadius = 6 ) const;
@@ -664,58 +417,51 @@ public:
 	Dictionary getInstanceRegionCacheStats( void ) const;
 	Dictionary getInstanceRegionCacheStatsFast( void ) const;
 	bool isInstanceRegionCacheEnabled( void ) const {
-		return m_bInstanceRegionCacheEnabled;
+		return m_instanceRegionCache.isEnabled();
 	}
 	bool isInstanceRegionResident( const Vector2i &vLocation ) const {
-		return !m_bInstanceRegionCacheEnabled || findInstanceRegionSlot( vLocation ) >= 0;
+		return m_instanceRegionCache.isResident( vLocation );
 	}
 	bool ensureInstanceRegionResident( const Vector2i &vLocation ) {
 		return ensureInstanceRegionResidentInternal( vLocation, true );
 	}
-	bool evictInstanceRegion( const Vector2i &vLocation ) {
-		const int slot = findInstanceRegionSlot( vLocation );
-		if ( slot >= 0 ) {
-			return evictInstanceRegionSlot( slot );
-		}
-		T3DRegion *region = getRegionPtr( vLocation );
-		return !region || !region->isInstanceStoreResident() || region->evictInstanceStore();
-	}
+	bool evictInstanceRegion( const Vector2i &vLocation );
 	bool isCpuRegionCacheEnabled( void ) const {
-		return m_bCpuRegionCacheEnabled;
+		return m_cpuRegionCache.isEnabled();
 	}
 	int getCpuRegionCacheCapacity( void ) const {
-		return m_nCpuRegionCacheCapacity;
+		return m_cpuRegionCache.getCapacity();
 	}
 	void regenerateDerivedMaps( const eastl::vector<Vector2i> &rRegionLocations, const AABB &rEditedArea = AABB() );
 	void publishDerivedMapUpdates( const eastl::vector<T3DDerivedMapUpdate> &rUpdates );
 	Ref<T3DErosionJob> createErosionJob( const Ref<T3DErosionSettings> &rSettings );
 	RID getHeightMapsRid( void ) const {
-		return m_generatedHeightMaps.getRid();
+		return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getHeightMapsRid() : m_generatedHeightMaps.getRid();
 	}
 	RID getDerivedMapsRid( void ) const {
-		return m_generatedDerivedMaps.getRid();
+		return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getDerivedMapsRid() : m_generatedDerivedMaps.getRid();
 	}
 	RID getControlMapsRid( void ) const {
-		return m_generatedControlMaps.getRid();
+		return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getControlMapsRid() : m_generatedControlMaps.getRid();
 	}
 	RID getColorMapsRid( void ) const {
-		return m_generatedColorMaps.getRid();
+		return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getColorMapsRid() : m_generatedColorMaps.getRid();
 	}
-	RID getMiddleCompositeMapsRid( void ) const { return m_generatedMiddleCompositeMaps.getRid(); }
-	RID getMiddleHeightMapsRid( void ) const { return m_generatedMiddleHeightMaps.getRid(); }
-	RID getMiddleHeightRegionMapRid( void ) const { return m_generatedMiddleHeightRegionMap.getRid(); }
-	int getMiddleHeightResidentCount( void ) const { return m_nMiddleHeightResidentCount; }
-	int getMiddleHeightMissingRequiredLastTick( void ) const { return m_nMiddleHeightMissingRequiredLastTick; }
-	bool isMiddleHeightRegionResident( const Vector2i &vLocation ) const { return findMiddleHeightSlot( vLocation ) >= 0; }
-	bool isGpuSurfaceRegionResident( const Vector2i &vLocation ) const { return findGpuRegionSlot( vLocation ) >= 0; }
+	RID getMiddleCompositeMapsRid( void ) const { return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getMiddleCompositeMapsRid() : m_generatedMiddleCompositeMaps.getRid(); }
+	RID getMiddleHeightMapsRid( void ) const { return m_middleHeightRegionCache.getHeightMapsRid(); }
+	RID getMiddleHeightRegionMapRid( void ) const { return m_middleHeightRegionCache.getRegionMapRid(); }
+	int getMiddleHeightResidentCount( void ) const { return m_middleHeightRegionCache.getResidentCount(); }
+	int getMiddleHeightMissingRequiredLastTick( void ) const { return m_middleHeightRegionCache.getMissingRequiredLastTick(); }
+	bool isMiddleHeightRegionResident( const Vector2i &vLocation ) const { return m_middleHeightRegionCache.isResident( vLocation ); }
+	bool isGpuSurfaceRegionResident( const Vector2i &vLocation ) const { return m_gpuRegionCache.isResident( vLocation ); }
 	Dictionary getMiddleHeightCacheStats( void ) const;
 	size_t getMiddleHeightCacheReservedBytes( void ) const;
 	int fillGpuMaterialPriorityIds( uint8_t *pIds, int nCapacity ) const;
 	RID getFarHeightMapRid( void ) const {
-		return m_generatedFarHeightMap.getRid();
+		return m_farSurfaceAtlasCache.getHeightMapRid();
 	}
 	RID getFarColorMapRid( void ) const {
-		return m_generatedFarColorMap.getRid();
+		return m_farSurfaceAtlasCache.getColorMapRid();
 	}
 	bool areControlMapsImplicit( void ) const {
 		return m_bControlMapsImplicit;

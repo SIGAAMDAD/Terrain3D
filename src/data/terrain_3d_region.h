@@ -242,6 +242,12 @@ public:
 	PackedByteArray getInstancePage( void ) const;
 	bool ensureInstanceStoreResident( void ) const;
 	bool evictInstanceStore( void );
+	void adoptPreparedInstanceStoreInternal( T3DInstanceStore &&rStore );
+	void importRuntimeMapsUnmodifiedInternal( const T3DRegion *pSource ) { importRuntimeMapsUnmodified( pSource ); }
+	void releaseRuntimeMapsUnmodifiedInternal( void ) { releaseRuntimeMapsUnmodified(); }
+	bool hasRuntimeMapPayloadInternal( void ) const { return hasRuntimeMapPayload(); }
+	bool runtimeMapsEvictableInternal( void ) const { return runtimeMapsEvictable(); }
+	void markRuntimeMapsCleanInternal( void ) { markRuntimeMapsClean(); }
 	bool isInstanceStoreResident( void ) const {
 		return m_bInstanceStoreResident;
 	}

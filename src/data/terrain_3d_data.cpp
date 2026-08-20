@@ -13,7 +13,6 @@
 
 #include <algorithm>
 #include "eastl_config.h"
-#include <EASTL/bitset.h>
 #include <cstring>
 
 #include "core/logger.h"
@@ -30,38 +29,7 @@
 #include "data/terrain_3d_region_codec.h"
 #include "data/terrain_3d_runtime_page_format.h"
 
-typedef struct t3dfarSurfaceBakeData_s {
-	eastl::array<uint8_t, TERRAIN3D_MAX_TEXTURE_ASSETS> populated = {};
-	int nCount = 0;
-	int fallback_texture = 0;
-} t3dfarSurfaceBakeData_t;
-
 namespace {
-
-template <typename Callback>
-static bool terrain3dForEachSquareRing( const Vector2i &rCenter, const int nMaxRadius, Callback &&rCallback ) {
-	for ( int radius = 0; radius < nMaxRadius; ++radius ) {
-		if ( radius == 0 ) {
-			if ( !rCallback( rCenter ) ) {
-				return false;
-			}
-			continue;
-		}
-		for ( int x = -radius; x <= radius; ++x ) {
-			if ( !rCallback( rCenter + Vector2i( x, -radius ) ) ||
-				!rCallback( rCenter + Vector2i( x, radius ) ) ) {
-				return false;
-			}
-		}
-		for ( int y = -radius + 1; y <= radius - 1; ++y ) {
-			if ( !rCallback( rCenter + Vector2i( -radius, y ) ) ||
-				!rCallback( rCenter + Vector2i( radius, y ) ) ) {
-				return false;
-			}
-		}
-	}
-	return true;
-}
 
 typedef struct t3dcontrolCookSource_s {
 	PackedByteArray nBytes;
@@ -209,117 +177,8 @@ static uint32_t terrain3dReadU32Unaligned( const uint8_t *pBytes, const size_t n
 	return value;
 }
 
-static uint16_t terrain3dReadU16Unaligned( const uint8_t *pBytes, const size_t nOffset ) {
-	uint16_t value = 0u;
-	if ( pBytes ) {
-		std::memcpy( &value, pBytes + nOffset, sizeof( value ) );
-	}
-	return value;
-}
-
 static uint8_t terrain3dColorToByte( const float fValue ) {
 	return ( uint8_t ) ( CLAMP( Math::round( fValue * TERRAIN3D_BYTE_MAX_FLOAT ), 0.0f, TERRAIN3D_BYTE_MAX_FLOAT ) );
-}
-
-static void terrain3dFillFarSurfaceEmpty( PackedByteArray &nBytes ) {
-	uint8_t *pWrite = nBytes.ptrw();
-	if ( !pWrite ) {
-		return;
-	}
-	const size_t pixel_count = ( size_t ) ( nBytes.size() ) / 4u;
-	for ( size_t index = 0u; index < pixel_count; ++index ) {
-		const size_t offset = index * 4u;
-		pWrite[offset] = 255u;
-		pWrite[offset + 1u] = 255u;
-		pWrite[offset + 2u] = 255u;
-		pWrite[offset + 3u] = 0u;
-	}
-}
-
-static uint8_t terrain3dFarSurfaceAlpha(
-	const float fSolidCoverage, const float fColorAlpha,
-	const int nMaterialId
-) {
-	if ( fSolidCoverage < 0.5f ) {
-		return 0u;
-	}
-	// Bit 7 marks solid terrain. Bits 2-6 carry the dominant terrain texture
-	// layer. Bits 0-1 retain coarse color-map alpha for wetness. This lets
-	// the far shader recover one real terrain material sample without another
-	// control/material atlas lookup.
-	const uint32_t material = ( uint32_t ) ( CLAMP( nMaterialId, 0, 31 ) );
-	const uint32_t surface_alpha = ( uint32_t ) ( CLAMP(
-		Math::round( CLAMP( fColorAlpha, 0.0f, 1.0f ) * 3.0f ), 0.0f, 3.0f ) );
-	return ( uint8_t ) ( 0x80u | ( material << 2u ) | surface_alpha );
-}
-
-static float terrain3dMaterialFloatParam(
-	T3DMaterial *pMaterial, const char *pszName,
-	const float fDefault
-) {
-	if ( !pMaterial ) {
-		return fDefault;
-	}
-	const Variant value = pMaterial->getShaderParam( StringName( pszName ) );
-	return value.get_type() == Variant::NIL ? fDefault : ( float ) ( value );
-}
-
-static int terrain3dMaterialIntParam(
-	T3DMaterial *pMaterial, const char *pszName,
-	const int nDefault
-) {
-	if ( !pMaterial ) {
-		return nDefault;
-	}
-	const Variant value = pMaterial->getShaderParam( StringName( pszName ) );
-	return value.get_type() == Variant::NIL ? nDefault : ( int ) ( value );
-}
-
-static int terrain3dFarResolveMaterialId(
-	const t3dfarSurfaceBakeData_t &rBakeData,
-	const int nTextureId
-) {
-	if ( nTextureId >= 0 && nTextureId < rBakeData.nCount &&
-		rBakeData.populated[( size_t ) ( nTextureId )] != 0u ) {
-		return nTextureId;
-	}
-	return rBakeData.fallback_texture;
-}
-
-static void terrain3dBuildFarSurfaceBakeData(
-	T3DTerrain *pTerrain,
-	t3dfarSurfaceBakeData_t &rBakeData
-) {
-	rBakeData = t3dfarSurfaceBakeData_s();
-	if ( !pTerrain ) {
-		return;
-	}
-	const Ref<T3DAssets> pAssets = pTerrain->getAssets();
-	if ( pAssets.is_null() ) {
-		return;
-	}
-	rBakeData.nCount = MIN( pAssets->getTextureCount(), TERRAIN3D_MAX_TEXTURE_ASSETS );
-	bool bFoundFallback = false;
-	for ( int index = 0; index < rBakeData.nCount; ++index ) {
-		const bool bPopulated = pAssets->getTextureAsset( index ).is_valid();
-		rBakeData.populated[( size_t ) ( index )] = bPopulated ? 1u : 0u;
-		if ( bPopulated && !bFoundFallback ) {
-			rBakeData.fallback_texture = index;
-			bFoundFallback = true;
-		}
-	}
-}
-
-typedef enum t3dgpuRegionSlotState_e : uint8_t {
-	TERRAIN3D_GPU_SLOT_FREE = 0u,
-	TERRAIN3D_GPU_SLOT_STAGING = 1u,
-	TERRAIN3D_GPU_SLOT_READY = 2u,
-	TERRAIN3D_GPU_SLOT_MAPPED = 3u,
-	TERRAIN3D_GPU_SLOT_RETIRED = 4u,
-} t3dgpuRegionSlotState_t;
-
-static size_t terrain3dGpuImageBytes( const Ref<Image> &rImage ) {
-	return rImage.is_valid() ? ( size_t ) ( rImage->get_data().size() ) : 0u;
 }
 
 bool terrain3dRegionLocationValid( const Vector2i &vLocation, const int nMapSize ) {
@@ -362,19 +221,22 @@ bool T3DData::setRegionSizeInternal( const int nRegionSize ) {
 		return false;
 	}
 	const bool bRegionSizeChanged = m_regionRepository.getRegionSize() != nRegionSize;
-	const bool bStorageOk = m_samplingStorage.claimOrReconfigureActive( nRegionSize );
-	if ( !bStorageOk ) {
+	if ( !m_samplingStorage.claimOrReconfigureActive( nRegionSize ) ) {
 		LOG( T3DTerrain::ERROR, "Unable to claim process-static active terrain storage. Only one Terrain3DData owner is legal." );
 		return false;
 	}
 	m_regionRepository.configureGeometry( nRegionSize, m_regionRepository.getVertexSpacing() );
 	m_activeHeightResidency.markDirty();
-	if ( bRegionSizeChanged && m_bGpuRegionCacheEnabled ) {
-		resetGpuRegionCache( true );
-	}
-	if ( bRegionSizeChanged && m_bCpuRegionCacheEnabled ) {
-		resetCpuRegionCache( false );
-		m_nCpuRegionCacheCapacity = calculateCpuRegionCacheCapacity();
+	if ( bRegionSizeChanged ) {
+		resetMiddleHeightCache();
+		if ( m_gpuRegionCache.isEnabled() ) {
+			resetGpuRegionCache( true );
+		}
+		if ( m_cpuRegionCache.isEnabled() ) {
+			resetCpuRegionCache( false );
+			m_cpuRegionCache.refreshCapacity();
+		}
+		m_farSurfaceAtlasCache.invalidateLayout();
 	}
 	return true;
 }
@@ -403,10 +265,14 @@ bool T3DData::syncActiveRegion( const Vector2i &vLocation, const T3DRegion *pReg
 
 void T3DData::clear( void ) {
 	m_regionResidency.reset();
+	m_runtimePageStore.reset();
 	m_samplingStorage.resetActive();
 	m_samplingStorage.resetResidentPool();
 	resetCpuRegionCache( false );
 	resetInstanceRegionCache( false );
+	resetMiddleHeightCache();
+	resetGpuRegionCache( true );
+	m_farSurfaceAtlasCache.reset();
 	LOG( T3DTerrain::INFO, "Clearing data" );
 	m_regionRepository.clear();
 	m_mapEditService.reset();
@@ -425,31 +291,6 @@ void T3DData::clear( void ) {
 	m_generatedColorMaps.clear();
 	m_generatedDerivedMaps.clear();
 	m_generatedMiddleCompositeMaps.clear();
-	resetGpuRegionCache( false );
-	m_generatedFarHeightMap.clear();
-	m_generatedFarColorMap.clear();
-	m_pGpuFarHeightImage.unref();
-	m_pGpuFarColorImage.unref();
-	m_gpuFarHeightDirtyRegions.reset();
-	m_gpuFarColorDirtyRegions.reset();
-	m_bGpuFarHeightDirty = true;
-	m_bGpuFarColorDirty = true;
-	m_bGpuFarHeightDirtyAll = true;
-	m_bGpuFarColorDirtyAll = true;
-	m_bGpuFarCookedLoaded = false;
-	m_bGpuFarCookedSaved = false;
-	m_nGpuFarHeightDirtyTexelsLast = 0u;
-	m_nGpuFarColorDirtyTexelsLast = 0u;
-	m_nGpuFarHeightRebuiltBytesLast = 0u;
-	m_nGpuFarColorRebuiltBytesLast = 0u;
-	m_nGpuFarHeightUploadedBytesLast = 0u;
-	m_nGpuFarColorUploadedBytesLast = 0u;
-	m_nGpuFarHeightPublicationUsecLast = 0u;
-	m_nGpuFarColorPublicationUsecLast = 0u;
-	m_nGpuFarHeightPublicationCount = 0u;
-	m_nGpuFarColorPublicationCount = 0u;
-	m_nGpuFarHeightUploadedBytesTotal = 0u;
-	m_nGpuFarColorUploadedBytesTotal = 0u;
 	invalidateSamplingCache();
 }
 
@@ -471,6 +312,7 @@ void T3DData::ensureDefaultMaps( void ) {
 		m_pDefaultDerivedMap = Util::getFilledImage( m_regionRepository.getRegionSizeVector(), Color( 0.5f, 0.5f, 0.0f, 1.0f ), false,
 									  Image::FORMAT_RG8 );
 	}
+	syncCacheDefaultMaps();
 }
 
 Ref<Image> T3DData::getRegionMapOrDefault( const T3DRegion *pRegion, const t3dmapType_t eMapType ) const {
@@ -521,7 +363,54 @@ bool T3DData::refreshImplicitMapState( void ) {
 		m_bColorMapsImplicit = bColorImplicit;
 		m_generatedColorMaps.clear();
 	}
+	if ( bChanged ) {
+		syncCacheDefaultMaps();
+	}
 	return bChanged;
+}
+
+void T3DData::syncCacheDefaultMaps( void ) {
+	m_gpuRegionCache.setTerrain( m_pTerrain );
+	m_gpuRegionCache.setDefaultMaps(
+		m_pDefaultHeightMap, m_pDefaultControlMap, m_pDefaultColorMap, m_pDefaultDerivedMap,
+		m_bControlMapsImplicit, m_bColorMapsImplicit );
+	m_farSurfaceAtlasCache.setConfig( getFarSurfaceAtlasConfig() );
+}
+
+T3DFarSurfaceAtlasConfig T3DData::getFarSurfaceAtlasConfig( void ) const {
+	T3DFarSurfaceAtlasConfig config;
+	config.bRequired = isFarAtlasRequired();
+	config.nHeightAtlasSide = m_pTerrain ? m_pTerrain->getGpuFarHeightAtlasSide() : TERRAIN3D_GPU_CACHE_FAR_HEIGHT_SIDE;
+	config.nSurfaceAtlasSide = m_pTerrain ? m_pTerrain->getGpuFarSurfaceAtlasSide() : TERRAIN3D_GPU_CACHE_FAR_HEIGHT_SIDE;
+	config.dataDirectory = m_pTerrain ? m_pTerrain->getDataDirectory() : String();
+	config.pDefaultHeightMap = m_pDefaultHeightMap;
+	config.pDefaultControlMap = m_pDefaultControlMap;
+	config.pDefaultColorMap = m_pDefaultColorMap;
+	config.pMaterial = m_pTerrain ? m_pTerrain->getMaterial() : Ref<T3DMaterial>();
+	config.pAssets = m_pTerrain ? m_pTerrain->getAssets() : Ref<T3DAssets>();
+	return config;
+}
+
+T3DMiddleHeightRegionCacheConfig T3DData::getMiddleHeightCacheConfig( void ) const {
+	T3DMiddleHeightRegionCacheConfig config;
+	config.bAuthoring = m_pTerrain && m_pTerrain->isEditorAuthoringMode();
+	config.nHotRadius = m_pTerrain ? m_pTerrain->getStreamingHotRadius() : 0;
+	config.nResolutionDivisor = config.bAuthoring ? 1 :
+		MAX( 1, m_pTerrain ? m_pTerrain->getGpuMiddleHeightResolutionDivisor() : 1 );
+	config.nRetireFrames = m_pTerrain ? m_pTerrain->getGpuRegionRetireFrames() : TERRAIN3D_GPU_CACHE_DEFAULT_RETIRE_FRAMES;
+	return config;
+}
+
+void T3DData::applyInstanceRegionCacheChanges( const T3DInstanceRegionCacheChanges &rChanges ) {
+	if ( !m_pTerrain || !m_pTerrain->getInstancer() ) {
+		return;
+	}
+	for ( int index = 0; index < rChanges.nEvicted; ++index ) {
+		m_pTerrain->getInstancer()->destroyRegionMmis( rChanges.evicted[index] );
+	}
+	for ( int index = 0; index < rChanges.nLoaded; ++index ) {
+		m_pTerrain->getInstancer()->updateMmis( -1, rChanges.loaded[index], false );
+	}
 }
 
 Ref<Image> T3DData::makeGpuColorImage( const Ref<Image> &rImage ) const {
@@ -798,8 +687,8 @@ T3DRuntimePageConfig T3DData::getRuntimePageConfig( void ) const {
 		return config;
 	}
 	config.dataDirectory = m_pTerrain->getDataDirectory();
-	config.colorDivisor = MAX( 1, m_nGpuRegionColorDivisor );
-	config.derivedDivisor = MAX( 1, m_nGpuRegionDerivedDivisor );
+	config.colorDivisor = MAX( 1, m_pTerrain->getGpuRegionColorResolutionDivisor() );
+	config.derivedDivisor = MAX( 1, m_pTerrain->getGpuRegionDerivedResolutionDivisor() );
 	config.middleHeightDivisor = MAX( 1, m_pTerrain->getGpuMiddleHeightResolutionDivisor() );
 	config.prepareThreads = MAX( 1, m_pTerrain->getRuntimePagePrepareThreads() );
 	config.bCookedPagesEnabled = m_pTerrain->isGpuRegionCookedPagesEnabled();
@@ -821,7 +710,7 @@ T3DResidencyFrameState T3DData::makeResidencyFrameState( const Vector3 &rWorldPo
 			{rawCenter.x, rawCenter.y}, frame.nRegionMapSize );
 		frame.residencyCenter = Vector2i( clampedCenter.x, clampedCenter.y );
 	}
-	frame.bCpuRegionCacheEnabled = m_bCpuRegionCacheEnabled;
+	frame.bCpuRegionCacheEnabled = m_cpuRegionCache.isEnabled();
 	if ( !m_pTerrain ) {
 		return frame;
 	}
@@ -864,9 +753,6 @@ String T3DData::getGpuRuntimePagePath( const T3DRegion *const pRegion ) const {
 
 void T3DData::pollGpuRuntimePagePrepare( const bool bWait ) {
 	m_runtimePageStore.poll( bWait );
-	const T3DRuntimePageStats stats = m_runtimePageStore.getStats();
-	m_nGpuRegionPreparedPagesLastTick = stats.nPreparedPages;
-	m_nGpuRegionPrepareWorkersLastTick = stats.nPrepareWorkers;
 }
 
 bool T3DData::isGpuRuntimePagePreparePending( const Vector2i &vLocation ) const {
@@ -890,9 +776,6 @@ void T3DData::serviceGpuRuntimePagePrepare( const T3DResidencyFrameState &rFrame
 	state.pIsWanted = &T3DData::isRuntimePageWanted;
 	state.pWantedContext = const_cast<T3DResidencyFrameState *>( &rFrame );
 	m_runtimePageStore.service( state );
-	const T3DRuntimePageStats stats = m_runtimePageStore.getStats();
-	m_nGpuRegionPreparedPagesLastTick = stats.nPreparedPages;
-	m_nGpuRegionPrepareWorkersLastTick = stats.nPrepareWorkers;
 }
 
 bool T3DData::takePreparedRuntimeHeight(
@@ -933,7 +816,7 @@ bool T3DData::writeGpuRuntimePage( T3DRegion *const pRegion, String *const pErro
 	if ( pRegion->hasChannel( T3DRegion::TYPE_COLOR ) ) {
 		payload.pColor = makeGpuColorImage( pRegion->getColorMap() );
 	}
-	payload.pMiddleHeight = makeMiddleHeightImage( pRegion->getLocation(), true );
+	payload.pMiddleHeight = m_middleHeightRegionCache.makeHeightImage( pRegion->getLocation(), true );
 	payload.pDerived = pRegion->getDerivedNormalSlopeMap();
 	if ( payload.pDerived.is_null() ) {
 		regenerateDerivedMaps( {pRegion->getLocation()} );
@@ -967,7 +850,7 @@ int T3DData::getRegionSlotReserve( void ) const {
 }
 
 bool T3DData::canUpdateRegionSlotsIncrementally( void ) const {
-	if ( m_bGpuRegionCacheEnabled ) {
+	if ( m_gpuRegionCache.isEnabled() ) {
 		return false;
 	}
 	const int slotCount = m_regionRepository.getSlotCount();
@@ -980,2422 +863,272 @@ bool T3DData::canUpdateRegionSlotsIncrementally( void ) const {
 }
 
 int T3DData::calculateGpuRegionRequiredCorePagesForLods( const int nDetailLods ) const {
-	if ( !m_pTerrain || m_regionRepository.getRegionSize() <= 0 || m_regionRepository.getRegionMapSize() <= 0 ) {
-		return 0;
-	}
-	const int total_lods = MAX( 1, m_pTerrain->getMeshLods() + m_pTerrain->getTessellationLevel() );
-	const int detail_lods = nDetailLods <= 0 ? total_lods : CLAMP( nDetailLods, 1, total_lods );
-	const int radius = terrain3dGpuCacheCalculateFootprintRadiusRegions( m_pTerrain->getMeshSize(),
-		detail_lods, ( double ) ( m_regionRepository.getVertexSpacing() ), m_regionRepository.getRegionSize() );
-	const int diameter = radius * 2 + 1;
-	return MIN( diameter * diameter, m_regionRepository.getRegionMapSize() * m_regionRepository.getRegionMapSize() );
+	return m_gpuRegionCache.calculateRequiredCorePagesForLods( nDetailLods );
 }
 
-int T3DData::calculateAuthoringGpuRegionBudgetMb( void ) const {
-	// m_nGpuRegionCacheBudgetMb is already the effective allocation produced by
-	// Terrain3D's aggregate memory-budget coordinator. Authoring may use more
-	// physical layers than runtime, but it must fit those layers inside that same
-	// coordinated GPU allocation instead of manufacturing extra editor memory.
-	return CLAMP( MAX( 1, m_nGpuRegionCacheBudgetMb ),
-		TERRAIN3D_GPU_REGION_CACHE_MIN_BUDGET_MB,
-		TERRAIN3D_GPU_REGION_CACHE_MAX_BUDGET_MB );
-}
+
+
+
 
 int T3DData::calculateGpuRegionCapacityForLods( const int nDetailLods ) const {
-	if ( !m_pTerrain || m_regionRepository.getRegionSize() <= 0 || m_regionRepository.getRegionMapSize() <= 0 ) {
-		return 0;
-	}
-	const int total_lods = MAX( 1, m_pTerrain->getMeshLods() + m_pTerrain->getTessellationLevel() );
-	const int detail_lods = nDetailLods <= 0 ? total_lods : CLAMP( nDetailLods, 1, total_lods );
-	const int required_core = calculateGpuRegionRequiredCorePagesForLods( detail_lods );
-	// Allocation is budget-driven. The unified region policy determines which pages
-	// are desirable; legacy GPU guard/prefetch controls must not define a second
-	// spatial footprint or reduce the usable physical cache.
-	const int requested = MIN( m_regionRepository.getActiveRegionCount(), TERRAIN3D_GPU_CACHE_RUNTIME_MAX_LAYERS );
-	const int capacity = terrain3dGpuCacheCalculateCapacity( m_regionRepository.getRegionSize(), m_regionRepository.getRegionMapSize(),
-		m_nGpuRegionCacheBudgetMb, TERRAIN3D_GPU_CACHE_RUNTIME_MAX_LAYERS, requested, m_bControlMapsImplicit,
-		!isGpuRegionColorChannelEnabled(), isGpuRegionDerivedChannelEnabled(), m_pTerrain->getGpuRegionColorResolutionDivisor(),
-		m_pTerrain->getGpuRegionDerivedResolutionDivisor(), m_pTerrain->getGpuFarQualityDivisor(),
-		m_nGpuRegionSparePages, m_pTerrain->getGpuFarHeightAtlasSide() );
-	return MAX( required_core > 0 ? 1 : 0, capacity );
+	return m_gpuRegionCache.calculateCapacityForLods( nDetailLods );
 }
 
-int T3DData::calculateGpuRegionCacheCapacity( void ) const {
-	if ( m_pTerrain && m_pTerrain->isEditorAuthoringMode() ) {
-		const int page_limit = CLAMP( m_pTerrain->getEditorGpuRegionCachePages(), 16,
-			TERRAIN3D_GPU_CACHE_EDITOR_MAX_LAYERS );
-		return terrain3dGpuCacheCalculateCapacity( m_regionRepository.getRegionSize(), m_regionRepository.getRegionMapSize(),
-			calculateAuthoringGpuRegionBudgetMb(), page_limit,
-			MIN( m_regionRepository.getActiveRegionCount(), page_limit ), m_bControlMapsImplicit, !isGpuRegionColorChannelEnabled(),
-			isGpuRegionDerivedChannelEnabled(),
-			m_pTerrain->getGpuRegionColorResolutionDivisor(),
-			m_pTerrain->getGpuRegionDerivedResolutionDivisor(),
-			m_pTerrain->getGpuFarQualityDivisor(), m_nGpuRegionSparePages,
-			m_pTerrain->getGpuFarHeightAtlasSide() );
-	}
-	const int allocation_request = MIN( m_regionRepository.getActiveRegionCount(), TERRAIN3D_GPU_CACHE_RUNTIME_MAX_LAYERS );
-	return terrain3dGpuCacheCalculateCapacity( m_regionRepository.getRegionSize(), m_regionRepository.getRegionMapSize(),
-		m_nGpuRegionCacheBudgetMb, TERRAIN3D_GPU_CACHE_RUNTIME_MAX_LAYERS,
-		allocation_request, m_bControlMapsImplicit, !isGpuRegionColorChannelEnabled(),
-		isGpuRegionDerivedChannelEnabled(), m_pTerrain ? m_pTerrain->getGpuRegionColorResolutionDivisor() : 1,
-		m_pTerrain ? m_pTerrain->getGpuRegionDerivedResolutionDivisor() : 1,
-		m_pTerrain ? m_pTerrain->getGpuFarQualityDivisor() : 1, m_nGpuRegionSparePages,
-		m_pTerrain ? m_pTerrain->getGpuFarHeightAtlasSide() : TERRAIN3D_GPU_CACHE_FAR_HEIGHT_SIDE );
-}
 
-int T3DData::calculateGpuRegionPhysicalLayers( const int nMappedCapacity ) const {
-	if ( m_pTerrain && m_pTerrain->isEditorAuthoringMode() ) {
-		return terrain3dGpuCacheCalculatePhysicalLayers( nMappedCapacity, m_nGpuRegionSparePages,
-			CLAMP( m_pTerrain->getEditorGpuRegionCachePages(), 16, TERRAIN3D_GPU_CACHE_EDITOR_MAX_LAYERS ) );
-	}
-	return terrain3dGpuCacheCalculatePhysicalLayers( nMappedCapacity,
-		m_nGpuRegionSparePages, TERRAIN3D_GPU_CACHE_RUNTIME_MAX_LAYERS );
-}
 
-int T3DData::calculateGpuRegionRequiredRadius( void ) const {
-	if ( !m_pTerrain ) {
-		return 0;
-	}
-	const int total_lods = MAX( 1, m_pTerrain->getMeshLods() + m_pTerrain->getTessellationLevel() );
-	int detail_lods = m_pTerrain->getGpuRegionDetailLods();
-	if ( detail_lods <= 0 || detail_lods > total_lods ) {
-		detail_lods = total_lods;
-	}
-	return terrain3dGpuCacheCalculateFootprintRadiusRegions( m_pTerrain->getMeshSize(),
-		detail_lods, ( double ) ( m_regionRepository.getVertexSpacing() ), m_regionRepository.getRegionSize() );
-}
 
-int T3DData::calculateGpuRegionRequestedPages( void ) const {
-	if ( !m_pTerrain || m_regionRepository.getActiveRegionCount() <= 0 ) {
-		return 0;
-	}
-	if ( m_pTerrain->isEditorAuthoringMode() ) {
-		return MIN( m_regionRepository.getActiveRegionCount(), m_pTerrain->getEditorGpuRegionCachePages() );
-	}
-	const Dictionary streaming = m_pTerrain->getRegionStreamingStats();
-	const int active = ( int ) ( streaming["active"] );
-	const int hot = ( int ) ( streaming["hot"] );
-	const int predicted = ( int ) ( streaming["predicted_promotions"] );
-	return MIN( m_regionRepository.getActiveRegionCount(), active + hot + predicted );
-}
 
-size_t T3DData::estimateGpuRegionLayerBytes( void ) const {
-	return terrain3dGpuCacheEstimateLayerBytes( m_regionRepository.getRegionSize(), m_bControlMapsImplicit,
-		!isGpuRegionColorChannelEnabled(), isGpuRegionDerivedChannelEnabled(),
-		m_pTerrain ? m_pTerrain->getGpuRegionColorResolutionDivisor() : 1,
-		m_pTerrain ? m_pTerrain->getGpuRegionDerivedResolutionDivisor() : 1 );
-}
+
+
+
+
+
+
+
+
+
+
+
 
 bool T3DData::isGpuRegionColorChannelEnabled( void ) const {
-	if ( m_bColorMapsImplicit ) {
-		return false;
-	}
-	if ( !m_pTerrain || m_pTerrain->isEditorAuthoringMode() ) {
-		return true;
-	}
-	const Ref<T3DMaterial> pMaterial = m_pTerrain->getMaterial();
-	if ( pMaterial.is_null() ) {
-		return true;
-	}
-	const bool near_needed = m_pTerrain->getRuntimeNearShaderLods() > 0 &&
-		( pMaterial->getNearAuthoredColorContribution() > 0.0f || pMaterial->getNearWetnessContribution() > 0.0f );
-	const bool middle_needed = m_pTerrain->getRuntimeMiddleShaderLods() > 0 &&
-		( pMaterial->getMiddleAuthoredColorContribution() > 0.0f || pMaterial->getMiddleWetnessContribution() > 0.0f );
-	return near_needed || middle_needed;
+	return m_gpuRegionCache.isColorChannelEnabled();
 }
+
 
 bool T3DData::isGpuRegionDerivedChannelEnabled( void ) const {
-	if ( !m_pTerrain || m_pTerrain->isEditorAuthoringMode() ) {
-		return true;
-	}
-	const Ref<T3DMaterial> pMaterial = m_pTerrain->getMaterial();
-	if ( pMaterial.is_null() ) {
-		return true;
-	}
-	return ( m_pTerrain->getRuntimeNearShaderLods() > 0 &&
-		pMaterial->getNearTerrainNormalQuality() == T3DMaterial::TERRAIN_NORMAL_QUALITY_DETAILED ) ||
-		( m_pTerrain->getRuntimeMiddleShaderLods() > 0 &&
-		pMaterial->getMiddleTerrainNormalQuality() == T3DMaterial::TERRAIN_NORMAL_QUALITY_DETAILED );
+	return m_gpuRegionCache.isDerivedChannelEnabled();
 }
 
-size_t T3DData::estimateGpuRegionSharedBytes( void ) const {
-	return terrain3dGpuCacheEstimateSharedBytes( m_regionRepository.getRegionSize(), m_bControlMapsImplicit,
-		!isGpuRegionColorChannelEnabled(), m_pTerrain ? m_pTerrain->getGpuRegionColorResolutionDivisor() : 1,
-		m_pTerrain ? m_pTerrain->getGpuFarQualityDivisor() : 1,
-		m_pTerrain ? m_pTerrain->getGpuFarHeightAtlasSide() : TERRAIN3D_GPU_CACHE_FAR_HEIGHT_SIDE );
-}
 
-int T3DData::getGpuFarHeightAtlasSide( void ) const {
-	return m_pTerrain ? m_pTerrain->getGpuFarHeightAtlasSide() : TERRAIN3D_GPU_CACHE_FAR_HEIGHT_SIDE;
-}
 
-int T3DData::getGpuFarSurfaceAtlasSide( void ) const {
-	return m_pTerrain ? m_pTerrain->getGpuFarSurfaceAtlasSide() : TERRAIN3D_GPU_CACHE_FAR_HEIGHT_SIDE;
-}
 
-size_t T3DData::getGpuFarHeightBytes( void ) const {
-	const size_t nSide = ( size_t ) ( getGpuFarHeightAtlasSide() );
-	return nSide * nSide * 2u;
-}
 
-size_t T3DData::getGpuFarColorBytes( void ) const {
-	const size_t nSide = ( size_t ) ( getGpuFarSurfaceAtlasSide() );
-	return nSide * nSide * 4u;
-}
 
-int T3DData::estimateGpuRegionUploadCalls( const T3DRegion *pRegion, const int nLayer ) const {
-	if ( !pRegion || nLayer < 0 || nLayer >= m_nGpuRegionPhysicalLayerCount ) {
-		return 0;
-	}
-	const uint8_t source_flags = ( uint8_t ) ( pRegion->getChannelFlags() );
-	const uint8_t layer_flags = m_szGpuRegionLayerChannelFlags[nLayer];
-	int calls = 1; // Height is always published.
-	if ( isGpuRegionDerivedChannelEnabled() ) {
-		++calls;
-	}
-	if ( !m_bControlMapsImplicit && terrain3dGpuCacheOptionalChannelNeedsUpdate(
-		source_flags, layer_flags, ( uint8_t ) ( T3DRegion::CHANNEL_CONTROL ) ) ) {
-		++calls;
-	}
-	if ( isGpuRegionColorChannelEnabled() && terrain3dGpuCacheOptionalChannelNeedsUpdate(
-		source_flags, layer_flags, ( uint8_t ) ( T3DRegion::CHANNEL_COLOR ) ) ) {
-		++calls;
-	}
-	return calls;
-}
 
-size_t T3DData::estimateGpuRegionUploadBytes( const T3DRegion *pRegion, const int nLayer ) const {
-	if ( !pRegion || nLayer < 0 || nLayer >= m_nGpuRegionPhysicalLayerCount ) {
-		return 0u;
-	}
-	const size_t full_texels = terrain3dGpuCacheTexelCount( m_regionRepository.getRegionSize(), 1 );
-	const size_t derived_texels = terrain3dGpuCacheTexelCount( m_regionRepository.getRegionSize(),
-		m_pTerrain ? m_pTerrain->getGpuRegionDerivedResolutionDivisor() : 1 );
-	if ( full_texels == 0u || derived_texels == 0u ) {
-		return 0u;
-	}
-	size_t bytes = full_texels * 2u;
-	if ( isGpuRegionDerivedChannelEnabled() ) {
-		bytes += derived_texels * 2u;
-	}
-	const uint8_t source_flags = ( uint8_t ) ( pRegion->getChannelFlags() );
-	const uint8_t layer_flags = m_szGpuRegionLayerChannelFlags[nLayer];
-	if ( !m_bControlMapsImplicit && terrain3dGpuCacheOptionalChannelNeedsUpdate(
-		source_flags, layer_flags, ( uint8_t ) ( T3DRegion::CHANNEL_CONTROL ) ) ) {
-		bytes += full_texels * 4u;
-	}
-	if ( isGpuRegionColorChannelEnabled() && terrain3dGpuCacheOptionalChannelNeedsUpdate(
-		source_flags, layer_flags, ( uint8_t ) ( T3DRegion::CHANNEL_COLOR ) ) ) {
-		bytes += terrain3dGpuCacheColorBytes( m_regionRepository.getRegionSize(),
-			m_pTerrain ? m_pTerrain->getGpuRegionColorResolutionDivisor() : 1 );
-	}
-	return bytes;
-}
 
-int T3DData::getGpuRegionTextureUpdateCallsLastTick( void ) const {
-	return m_nGpuRegionHeightUpdatesLastTick + m_nGpuRegionControlUpdatesLastTick +
-		m_nGpuRegionColorUpdatesLastTick + m_nGpuRegionDerivedUpdatesLastTick +
-		m_nGpuRegionPageTableUpdatesLastTick + m_nGpuFarHeightUpdatesLastTick +
-		m_nGpuFarColorUpdatesLastTick;
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 void T3DData::resetGpuRegionCache( const bool bClearTextures ) {
-	pollGpuRuntimePagePrepare( true );
-	m_runtimePageStore.reset();
-	std::fill_n( m_szGpuRegionMap, TERRAIN3D_MAX_REGION_SLOTS, ( uint16_t ) ( 0 ) );
-	std::fill_n( m_szGpuRegionLocations, TERRAIN3D_GPU_CACHE_MAX_LAYERS, V2I_MAX );
-	std::fill_n( m_szGpuRegionLastUseTick, TERRAIN3D_GPU_CACHE_MAX_LAYERS, ( uint64_t ) ( 0 ) );
-	std::fill_n( m_szGpuRegionLoadedTick, TERRAIN3D_GPU_CACHE_MAX_LAYERS, ( uint64_t ) ( 0 ) );
-	std::fill_n( m_szGpuRegionRetireAfterFrame, TERRAIN3D_GPU_CACHE_MAX_LAYERS, ( uint64_t ) ( 0 ) );
-	std::fill_n( m_szGpuRegionSlotStates, TERRAIN3D_GPU_CACHE_MAX_LAYERS, ( uint8_t ) ( TERRAIN3D_GPU_SLOT_FREE ) );
-	std::fill_n( m_szGpuRegionPrefetchOrigin, TERRAIN3D_GPU_CACHE_MAX_LAYERS, ( uint8_t ) ( 0 ) );
-	std::fill_n( m_szGpuRegionLayerChannelFlags, TERRAIN3D_GPU_CACHE_MAX_LAYERS, ( uint8_t ) ( 0 ) );
-	std::fill_n( m_szGpuRegionMaterialMasks, TERRAIN3D_GPU_CACHE_MAX_LAYERS, ( uint32_t ) ( 0 ) );
-	std::fill_n( m_szGpuRegionPriorityLocations, TERRAIN3D_GPU_CACHE_MAX_LAYERS, V2I_MAX );
-	std::fill_n( m_szGpuRegionPriorityClasses, TERRAIN3D_GPU_CACHE_MAX_LAYERS, ( uint8_t ) ( 0 ) );
-	m_gpuHeightMaps.clear();
-	m_gpuControlMaps.clear();
-	m_gpuColorMaps.clear();
-	m_gpuDerivedMaps.clear();
-	m_nGpuRegionCacheCapacity = 0;
-	m_nGpuRegionPhysicalLayerCount = 0;
-	m_nGpuRegionSpareLayerCount = 0;
-	m_nGpuRegionResidentCount = 0;
-	m_nGpuRegionRetiredCount = 0;
-	m_nGpuRegionDesiredLastTick = 0;
-	m_nGpuRegionRequiredLastTick = 0;
-	m_nGpuRegionGuardLastTick = 0;
-	m_nGpuRegionPrefetchLastTick = 0;
-	m_nGpuRegionHysteresisLastTick = 0;
-	m_nGpuRegionMissingRequiredLastTick = 0;
-	m_nGpuRegionRequestedPages = 0;
-	m_nGpuRegionRequiredRadius = 0;
-	m_nGpuRegionUploadsLastTick = 0;
-	m_nGpuRegionUploadsSinceReset = 0u;
-	m_nGpuRegionEvictionsLastTick = 0;
-	m_nGpuRegionCookedHitsLastTick = 0;
-	m_nGpuRegionCookedMissesLastTick = 0;
-	m_nGpuRegionRuntimePreparesLastTick = 0;
-	m_nGpuRegionReusedLayersLastTick = 0;
-	m_nGpuRegionPageTableUpdatesLastTick = 0;
-	m_nGpuRegionHeightUpdatesLastTick = 0;
-	m_nGpuRegionControlUpdatesLastTick = 0;
-	m_nGpuRegionColorUpdatesLastTick = 0;
-	m_nGpuRegionDerivedUpdatesLastTick = 0;
-	m_nGpuRegionRuntimeColorMipsLastTick = 0;
-	m_nGpuRegionRuntimeDerivedBuildsLastTick = 0;
-	m_nGpuRegionPreparedPagesLastTick = 0;
-	m_nGpuRegionPrepareWorkersLastTick = 0;
-	m_nGpuRegionEffectiveUploadLimitLastTick = m_nGpuRegionUploadBudgetLayers;
-	m_bGpuRegionCameraMovedLastTick = false;
-	m_nGpuFarHeightUpdatesLastTick = 0;
-	m_nGpuFarColorUpdatesLastTick = 0;
-	m_nGpuRegionUploadBytesLastTick = 0u;
-	m_nGpuRegionHeightBytesLastTick = 0u;
-	m_nGpuRegionControlBytesLastTick = 0u;
-	m_nGpuRegionColorBytesLastTick = 0u;
-	m_nGpuRegionDerivedBytesLastTick = 0u;
-	m_nGpuRegionPrefetchUsedTotal = 0u;
-	m_nGpuRegionPrefetchDiscardedTotal = 0u;
-	m_nGpuRegionResidentTicksTotal = 0u;
-	m_nGpuRegionDepartedPagesTotal = 0u;
-	m_nGpuRegionTick = 0u;
-	m_nGpuRegionLastPublicationTick = 0u;
-	m_gpuRegionCacheCenter = V2I_MAX;
-	m_gpuRegionPredictionDirection = V2I_ZERO;
-	m_nGpuRegionStreamingGenerationLast = 0u;
-	m_nGpuRegionPriorityCount = 0;
-	std::memset( m_szGpuRegionRepublishPending, 0, sizeof( m_szGpuRegionRepublishPending ) );
-	m_nGpuRegionRepublishPendingCount = 0;
-	m_nGpuRegionRepublishCursor = 0;
-	m_bGpuFarHeightDirty = m_bGpuFarHeightDirty || m_pGpuFarHeightImage.is_null();
-	m_bGpuFarColorDirty = m_bGpuFarColorDirty || m_pGpuFarColorImage.is_null();
-	m_nGpuFarHeightUpdatesLastTick = 0;
-	m_nGpuFarColorUpdatesLastTick = 0;
-	m_nGpuFarHeightRegionsLastTick = 0;
-	m_nGpuFarColorRegionsLastTick = 0;
-	m_bGpuRegionCacheTexturesReady = false;
-	m_bGpuRegionCacheSelectionDirty = true;
-	if ( bClearTextures ) {
-		m_generatedHeightMaps.clear();
-		m_generatedControlMaps.clear();
-		m_generatedColorMaps.clear();
-		m_generatedDerivedMaps.clear();
-		m_generatedMiddleCompositeMaps.clear();
-		if ( !isFarAtlasRequired() ) {
-			m_generatedFarHeightMap.clear();
-			m_generatedFarColorMap.clear();
-		}
-	}
+	m_gpuRegionCache.reset( bClearTextures );
 }
 
-bool T3DData::rebuildGpuRegionCacheTextures( void ) {
-	ensureDefaultMaps();
-	const int capacity = calculateGpuRegionCacheCapacity();
-	LOG( T3DTerrain::INFO, "[gpu-cache] Rebuild requested: mapped_capacity=", capacity,
-		"; region_size=", m_regionRepository.getRegionSize(), "; implicit_control=", m_bControlMapsImplicit,
-		"; implicit_color=", m_bColorMapsImplicit );
-	if ( capacity <= 0 || m_pDefaultHeightMap.is_null() || m_pDefaultControlMap.is_null() ||
-		m_pDefaultColorMap.is_null() || m_pDefaultDerivedMap.is_null() ) {
-		return false;
-	}
 
-	const Vector2i previous_center = m_gpuRegionCacheCenter;
-	resetGpuRegionCache( true );
-	m_nGpuRegionCacheCapacity = capacity;
-	m_nGpuRegionPhysicalLayerCount = calculateGpuRegionPhysicalLayers( capacity );
-	m_nGpuRegionSpareLayerCount = MAX( 0, m_nGpuRegionPhysicalLayerCount - capacity );
-	m_gpuRegionCacheCenter = previous_center;
-	m_nGpuRegionColorDivisor = m_pTerrain ? m_pTerrain->getGpuRegionColorResolutionDivisor() : 1;
-	m_nGpuRegionDerivedDivisor = m_pTerrain ? m_pTerrain->getGpuRegionDerivedResolutionDivisor() : 1;
-	const bool bColorChannelEnabled = isGpuRegionColorChannelEnabled();
-	const bool bDerivedChannelEnabled = isGpuRegionDerivedChannelEnabled();
-	m_bGpuRegionColorChannelAllocated = bColorChannelEnabled;
-	m_bGpuRegionDerivedChannelAllocated = bDerivedChannelEnabled;
 
-	m_gpuHeightMaps.resize( m_nGpuRegionPhysicalLayerCount );
-	m_gpuDerivedMaps.resize( bDerivedChannelEnabled ? m_nGpuRegionPhysicalLayerCount : 1 );
-	const int control_layers = m_bControlMapsImplicit ? 1 : m_nGpuRegionPhysicalLayerCount;
-	const int color_layers = bColorChannelEnabled ? m_nGpuRegionPhysicalLayerCount : 1;
-	m_gpuControlMaps.resize( control_layers );
-	m_gpuColorMaps.resize( color_layers );
-	m_gpuMiddleCompositeMaps.resize( m_nGpuRegionPhysicalLayerCount );
-	const Ref<Image> pDefaultGpuColor = makeGpuColorImage( m_pDefaultColorMap );
-	const Ref<Image> pDefaultGpuDerived = makeGpuDerivedImage( m_pDefaultDerivedMap );
-	if ( pDefaultGpuColor.is_null() || pDefaultGpuDerived.is_null() ) {
-		return false;
-	}
-	for ( int layer = 0; layer < m_nGpuRegionPhysicalLayerCount; ++layer ) {
-		m_gpuHeightMaps[layer] = m_pDefaultHeightMap;
-	}
-	for ( int layer = 0; layer < m_gpuDerivedMaps.size(); ++layer ) {
-		m_gpuDerivedMaps[layer] = pDefaultGpuDerived;
-	}
-	for ( int layer = 0; layer < control_layers; ++layer ) {
-		m_gpuControlMaps[layer] = m_pDefaultControlMap;
-	}
-	for ( int layer = 0; layer < color_layers; ++layer ) {
-		m_gpuColorMaps[layer] = pDefaultGpuColor;
-	}
-	const Ref<Image> pDefaultMiddleComposite = makeMiddleCompositeImage( V2I_ZERO, m_pDefaultControlMap, pDefaultGpuColor );
-	if ( pDefaultMiddleComposite.is_null() ) {
-		return false;
-	}
-	for ( int layer = 0; layer < m_nGpuRegionPhysicalLayerCount; ++layer ) {
-		m_gpuMiddleCompositeMaps[layer] = pDefaultMiddleComposite;
-	}
 
-	const bool bHeightOk = m_generatedHeightMaps.create( m_gpuHeightMaps ).is_valid();
-	const bool bControlOk = m_generatedControlMaps.create( m_gpuControlMaps ).is_valid();
-	const bool bColorOk = m_generatedColorMaps.create( m_gpuColorMaps ).is_valid();
-	const bool bDerivedOk = m_generatedDerivedMaps.create( m_gpuDerivedMaps ).is_valid();
-	const bool bMiddleCompositeOk = m_generatedMiddleCompositeMaps.create( m_gpuMiddleCompositeMaps ).is_valid();
-	// RenderingServer owns the uploaded layers. Retaining these Image arrays would
-	// duplicate the physical GPU cache on the CPU side and defeat bounded residency.
-	m_gpuHeightMaps.clear();
-	m_gpuControlMaps.clear();
-	m_gpuColorMaps.clear();
-	m_gpuDerivedMaps.clear();
-	m_gpuMiddleCompositeMaps.clear();
-	m_bGpuRegionCacheTexturesReady = bHeightOk && bControlOk && bColorOk && bDerivedOk && bMiddleCompositeOk;
-	if ( m_bGpuRegionCacheTexturesReady ) {
-		m_nGpuRegionLastPublicationTick = m_nGpuRegionTick;
-	}
-	LOG( T3DTerrain::DEBUG, "[gpu-cache] Physical arrays uploaded: height=", bHeightOk, "; control=", bControlOk,
-		"; color=", bColorOk, "; derived=", bDerivedOk, "; middle_composite=", bMiddleCompositeOk,
-		"; physical_layers=", m_nGpuRegionPhysicalLayerCount );
-	if ( !m_bGpuRegionCacheTexturesReady ) {
-		LOG( T3DTerrain::ERROR, "Failed to create bounded GPU region cache with ", capacity, " physical layers" );
-		return false;
-	}
-	if ( ( m_pGpuFarHeightImage.is_null() || m_pGpuFarColorImage.is_null() ) &&
-		!loadCookedGpuFarAtlases() ) {
-		markAllGpuFarRegionsDirty( T3DRegion::TYPE_MAX );
-	}
-	if ( !m_bGpuFarHeightDirty && m_pGpuFarHeightImage.is_valid() ) {
-		if ( !m_generatedFarHeightMap.create( m_pGpuFarHeightImage ).is_valid() ) {
-			return false;
-		}
-	} else if ( !rebuildGpuFarHeightAtlas() ) {
-		LOG( T3DTerrain::ERROR, "Failed to create the coarse whole-world terrain height atlas" );
-		return false;
-	}
-	if ( !m_bGpuFarColorDirty && m_pGpuFarColorImage.is_valid() ) {
-		if ( !m_generatedFarColorMap.create( m_pGpuFarColorImage ).is_valid() ) {
-			return false;
-		}
-	} else if ( !rebuildGpuFarColorAtlas() ) {
-		LOG( T3DTerrain::ERROR, "Failed to create the coarse whole-world terrain color atlas" );
-		return false;
-	}
-	const size_t budget_bytes = ( size_t ) ( m_nGpuRegionCacheBudgetMb ) * TERRAIN3D_GPU_CACHE_MIB;
-	const size_t layer_bytes = estimateGpuRegionLayerBytes();
-	const size_t shared_bytes = estimateGpuRegionSharedBytes();
-	const size_t estimated_bytes = shared_bytes + layer_bytes * ( size_t ) ( m_nGpuRegionPhysicalLayerCount );
-	if ( m_pTerrain ) {
-		const Ref<T3DMaterial> pMaterial = m_pTerrain->getMaterial();
-		if ( pMaterial.is_valid() && pMaterial->isInitializedFor( m_pTerrain ) ) {
-			pMaterial->updateFarAtlasTextures();
-		}
-	}
-	if ( estimated_bytes > budget_bytes ) {
-		LOG( T3DTerrain::WARN, "One terrain region requires approximately ", layer_bytes,
-			" GPU bytes and shared channels require ", shared_bytes,
-			" bytes. The selected cache exceeds the configured budget of ", budget_bytes,
-			" bytes because one physical layer is the minimum legal configuration." );
-	}
-	m_nGpuRegionRequestedPages = calculateGpuRegionRequestedPages();
-	m_nGpuRegionRequiredRadius = calculateGpuRegionRequiredRadius();
-	LOG( T3DTerrain::INFO, "[gpu-cache] Created footprint-driven GPU region cache: ", capacity, " mapped pages, ",
-		m_nGpuRegionSpareLayerCount, " spare/retirement pages, ",
-		m_nGpuRegionPhysicalLayerCount, " physical layers, requested ", m_nGpuRegionRequestedPages, ", required radius ", m_nGpuRegionRequiredRadius,
-		", estimated bytes ", estimated_bytes, ", budget ", budget_bytes );
-	return true;
-}
 
-String T3DData::getGpuFarAtlasPath( const String &rDirectory ) const {
-	const String directory = !rDirectory.is_empty() ? rDirectory :
-		( m_pTerrain ? m_pTerrain->getDataDirectory() : String() );
-	if ( directory.is_empty() ) {
-		return String();
-	}
-	return directory.path_join( "terrain3d_far_atlas.t3dfar" );
-}
 
-uint64_t T3DData::computeGpuFarAtlasSourceSignature( void ) const {
-	uint64_t hash = 1469598103934665603ull;
-	terrain3dFnv1a64AppendU32( hash, TERRAIN3D_GPU_FAR_ATLAS_VERSION );
-	terrain3dFnv1a64AppendU32( hash, ( uint32_t ) ( m_regionRepository.getRegionSize() ) );
-	terrain3dFnv1a64AppendU32( hash, ( uint32_t ) ( m_regionRepository.getRegionMapSize() ) );
-	terrain3dFnv1a64AppendU32( hash, ( uint32_t ) ( getGpuFarHeightAtlasSide() ) );
-	terrain3dFnv1a64AppendU32( hash, ( uint32_t ) ( getGpuFarSurfaceAtlasSide() ) );
-	terrain3dFnv1a64AppendF32( hash, ( float ) ( m_regionRepository.getVertexSpacing() ) );
 
-	// Iterate the fixed spatial table rather than region slot order so the same
-	// persisted world produces the same signature regardless of load/allocation order.
-	terrain3dFnv1a64AppendU32( hash, ( uint32_t ) ( m_regionRepository.getActiveRegionCount() ) );
-	for ( int map_index = 0; map_index < TERRAIN3D_MAX_REGION_SLOTS; ++map_index ) {
-		const Vector2i location(
-			map_index % TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE - TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE / 2,
-			map_index / TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE - TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE / 2
-		);
-		T3DRegion *const pRegion = getRegionPtr( location );
-		if ( !pRegion || pRegion->isDeleted() ) {
-			continue;
-		}
-		terrain3dFnv1a64AppendU32( hash, ( uint32_t ) ( map_index ) );
-		const String path = pRegion->get_path();
-		const uint64_t modified = !path.is_empty() && FileAccess::file_exists( path ) ?
-			FileAccess::get_modified_time( path ) : 0u;
-		terrain3dFnv1a64AppendU64( hash, modified );
-	}
 
-	t3dfarSurfaceBakeData_t bake_data;
-	terrain3dBuildFarSurfaceBakeData( m_pTerrain, bake_data );
-	terrain3dFnv1a64AppendU32( hash, ( uint32_t ) ( bake_data.nCount ) );
-	terrain3dFnv1a64AppendU32( hash, ( uint32_t ) ( bake_data.fallback_texture ) );
-	for ( int index = 0; index < bake_data.nCount; ++index ) {
-		terrain3dFnv1a64AppendU32( hash, ( uint32_t ) ( index ) );
-		terrain3dFnv1a64AppendU32( hash, ( uint32_t ) ( bake_data.populated[( size_t ) ( index )] ) );
-	}
 
-	const Ref<T3DMaterial> pMaterialRef = m_pTerrain ? m_pTerrain->getMaterial() : Ref<T3DMaterial>();
-	T3DMaterial *const pMaterial = pMaterialRef.ptr();
-	terrain3dFnv1a64AppendU32( hash, pMaterial ? 1u : 0u );
-	if ( pMaterial ) {
-		terrain3dFnv1a64AppendU32( hash, pMaterial->getAutoShaderEnabled() ? 1u : 0u );
-		terrain3dFnv1a64AppendF32( hash, terrain3dMaterialFloatParam( pMaterial, "auto_slope", 1.0f ) );
-		terrain3dFnv1a64AppendF32( hash,
-			terrain3dMaterialFloatParam( pMaterial, "auto_height_reduction", 0.1f ) );
-		terrain3dFnv1a64AppendU32( hash,
-			( uint32_t ) ( terrain3dMaterialIntParam( pMaterial, "auto_base_texture", 0 ) ) );
-		terrain3dFnv1a64AppendU32( hash,
-			( uint32_t ) ( terrain3dMaterialIntParam( pMaterial, "auto_overlay_texture", 1 ) ) );
-	}
-	return hash;
-}
+
 
 bool T3DData::isFarAtlasRequired( void ) const {
-	return m_bGpuRegionCacheEnabled || ( m_pTerrain && m_pTerrain->isRuntimeShaderTieringActive() );
+	return m_gpuRegionCache.isEnabled() || ( m_pTerrain && m_pTerrain->isRuntimeShaderTieringActive() );
 }
 
-bool T3DData::initializeGpuFarAtlasImages( void ) {
-	const int nHeightAtlasSize = getGpuFarHeightAtlasSide();
-	const int nSurfaceAtlasSize = getGpuFarSurfaceAtlasSide();
-	const int nHeightTexelCount = nHeightAtlasSize * nHeightAtlasSize;
-	const int nSurfaceTexelCount = nSurfaceAtlasSize * nSurfaceAtlasSize;
-	if ( m_pGpuFarHeightImage.is_null() || m_pGpuFarHeightImage->get_width() != nHeightAtlasSize ||
-		m_pGpuFarHeightImage->get_height() != nHeightAtlasSize ||
-		m_pGpuFarHeightImage->get_format() != Image::FORMAT_R16 ) {
-		const uint16_t default_height = Terrain3DRegionCodec::encodeHeightU16( 0.0f );
-		PackedByteArray height_bytes;
-		height_bytes.resize( ( int64_t ) ( nHeightTexelCount ) * 2 );
-		uint8_t *const pWrite = height_bytes.ptrw();
-		for ( int index = 0; index < nHeightTexelCount; ++index ) {
-			std::memcpy( pWrite + ( size_t ) ( index ) * 2u, &default_height, sizeof( default_height ) );
-		}
-		m_pGpuFarHeightImage = Image::create_from_data( nHeightAtlasSize, nHeightAtlasSize, false,
-			Image::FORMAT_R16, height_bytes );
-	}
-	if ( m_pGpuFarColorImage.is_null() || m_pGpuFarColorImage->get_width() != nSurfaceAtlasSize ||
-		m_pGpuFarColorImage->get_height() != nSurfaceAtlasSize ||
-		m_pGpuFarColorImage->get_format() != Image::FORMAT_RGBA8 ) {
-		PackedByteArray color_bytes;
-		color_bytes.resize( ( int64_t ) ( nSurfaceTexelCount ) * 4 );
-		terrain3dFillFarSurfaceEmpty( color_bytes );
-		m_pGpuFarColorImage = Image::create_from_data( nSurfaceAtlasSize, nSurfaceAtlasSize, false,
-			Image::FORMAT_RGBA8, color_bytes );
-	}
-	return m_pGpuFarHeightImage.is_valid() && !m_pGpuFarHeightImage->is_empty() &&
-		m_pGpuFarColorImage.is_valid() && !m_pGpuFarColorImage->is_empty();
-}
 
-bool T3DData::loadCookedGpuFarAtlases( void ) {
-	const String path = getGpuFarAtlasPath();
-	if ( path.is_empty() || !FileAccess::file_exists( path ) ) {
-		return false;
-	}
-	const uint64_t started_usec = Time::get_singleton()->get_ticks_usec();
-	const Ref<FileAccess> pFile = FileAccess::open( path, FileAccess::READ );
-	if ( pFile.is_null() || pFile->get_length() < TERRAIN3D_GPU_FAR_ATLAS_HEADER_BYTES ) {
-		return false;
-	}
-	const uint64_t magic = pFile->get_64();
-	const uint32_t version = pFile->get_32();
-	const uint32_t region_size = pFile->get_32();
-	const uint32_t region_map_size = pFile->get_32();
-	const uint32_t height_atlas_size = pFile->get_32();
-	const uint32_t surface_atlas_size = pFile->get_32();
-	const uint32_t height_size = pFile->get_32();
-	const uint32_t color_size = pFile->get_32();
-	const uint32_t height_checksum = pFile->get_32();
-	const uint32_t color_checksum = pFile->get_32();
-	const uint64_t source_signature = pFile->get_64();
-	const int nExpectedHeightAtlasSize = getGpuFarHeightAtlasSide();
-	const int nExpectedSurfaceAtlasSize = getGpuFarSurfaceAtlasSide();
-	const uint32_t expected_height_size = ( uint32_t ) ( nExpectedHeightAtlasSize * nExpectedHeightAtlasSize * 2 );
-	const uint32_t expected_color_size = ( uint32_t ) ( nExpectedSurfaceAtlasSize * nExpectedSurfaceAtlasSize * 4 );
-	if ( magic != TERRAIN3D_GPU_FAR_ATLAS_MAGIC || version != TERRAIN3D_GPU_FAR_ATLAS_VERSION ||
-		region_size != ( uint32_t ) ( m_regionRepository.getRegionSize() ) || region_map_size != ( uint32_t ) ( m_regionRepository.getRegionMapSize() ) ||
-		height_atlas_size != ( uint32_t ) ( nExpectedHeightAtlasSize ) ||
-		surface_atlas_size != ( uint32_t ) ( nExpectedSurfaceAtlasSize ) ||
-		height_size != expected_height_size || color_size != expected_color_size ||
-		pFile->get_length() != TERRAIN3D_GPU_FAR_ATLAS_HEADER_BYTES + ( uint64_t ) ( height_size ) +
-			( uint64_t ) ( color_size ) ) {
-		return false;
-	}
-	const uint64_t expected_source_signature = computeGpuFarAtlasSourceSignature();
-	if ( source_signature == 0u || source_signature != expected_source_signature ) {
-		LOG( T3DTerrain::INFO, "[far-cache] Rejecting cooked atlas with stale source signature: cached=",
-			source_signature, ", current=", expected_source_signature );
-		return false;
-	}
-	const PackedByteArray height_bytes = pFile->get_buffer( height_size );
-	const PackedByteArray color_bytes = pFile->get_buffer( color_size );
-	if ( height_bytes.size() != height_size || color_bytes.size() != color_size ||
-		terrain3dRuntimePageChecksum( height_bytes.ptr(), ( size_t ) ( height_bytes.size() ) ) != height_checksum ||
-		terrain3dRuntimePageChecksum( color_bytes.ptr(), ( size_t ) ( color_bytes.size() ) ) != color_checksum ) {
-		return false;
-	}
-	m_pGpuFarHeightImage = Image::create_from_data( nExpectedHeightAtlasSize,
-		nExpectedHeightAtlasSize, false, Image::FORMAT_R16, height_bytes );
-	m_pGpuFarColorImage = Image::create_from_data( nExpectedSurfaceAtlasSize,
-		nExpectedSurfaceAtlasSize, false, Image::FORMAT_RGBA8, color_bytes );
-	if ( m_pGpuFarHeightImage.is_null() || m_pGpuFarColorImage.is_null() ) {
-		return false;
-	}
-	m_bGpuFarHeightDirty = false;
-	m_bGpuFarColorDirty = false;
-	m_bGpuFarHeightDirtyAll = false;
-	m_bGpuFarColorDirtyAll = false;
-	m_gpuFarHeightDirtyRegions.reset();
-	m_gpuFarColorDirtyRegions.reset();
-	m_bGpuFarCookedLoaded = true;
-	m_bGpuFarCookedSaved = false;
-	m_nGpuFarCookIoUsecLast = Time::get_singleton()->get_ticks_usec() - started_usec;
-	return true;
-}
+
+
+
+
+
 
 bool T3DData::writeCookedGpuFarAtlases( const String &rDirectory ) {
-	const String path = getGpuFarAtlasPath( rDirectory );
-	if ( path.is_empty() ) {
-		return false;
-	}
-	// A loaded/saved clean atlas is already authoritative. Do not rewrite a large
-	// generated file merely because the scene itself was saved.
-	if ( !m_bGpuFarHeightDirty && !m_bGpuFarColorDirty &&
-		( m_bGpuFarCookedLoaded || m_bGpuFarCookedSaved ) && FileAccess::file_exists( path ) ) {
-		return true;
-	}
-	if ( !initializeGpuFarAtlasImages() ) {
-		return false;
-	}
-	if ( m_bGpuFarHeightDirty && !rebuildGpuFarHeightAtlas() ) {
-		return false;
-	}
-	if ( m_bGpuFarColorDirty && !rebuildGpuFarColorAtlas() ) {
-		return false;
-	}
-	const uint64_t started_usec = Time::get_singleton()->get_ticks_usec();
-	const PackedByteArray height_bytes = m_pGpuFarHeightImage->get_data();
-	const PackedByteArray color_bytes = m_pGpuFarColorImage->get_data();
-	const uint64_t source_signature = computeGpuFarAtlasSourceSignature();
-	const String temporary_path = path + String( ".tmp" );
-	const String backup_path = path + String( ".bak" );
-	if ( FileAccess::file_exists( temporary_path ) ) {
-		DirAccess::remove_absolute( temporary_path );
-	}
-	Ref<FileAccess> pFile = FileAccess::open( temporary_path, FileAccess::WRITE );
-	if ( pFile.is_null() ) {
-		return false;
-	}
-	pFile->store_64( TERRAIN3D_GPU_FAR_ATLAS_MAGIC );
-	pFile->store_32( TERRAIN3D_GPU_FAR_ATLAS_VERSION );
-	pFile->store_32( ( uint32_t ) ( m_regionRepository.getRegionSize() ) );
-	pFile->store_32( ( uint32_t ) ( m_regionRepository.getRegionMapSize() ) );
-	pFile->store_32( ( uint32_t ) ( getGpuFarHeightAtlasSide() ) );
-	pFile->store_32( ( uint32_t ) ( getGpuFarSurfaceAtlasSide() ) );
-	pFile->store_32( ( uint32_t ) ( height_bytes.size() ) );
-	pFile->store_32( ( uint32_t ) ( color_bytes.size() ) );
-	pFile->store_32( terrain3dRuntimePageChecksum( height_bytes.ptr(), ( size_t ) ( height_bytes.size() ) ) );
-	pFile->store_32( terrain3dRuntimePageChecksum( color_bytes.ptr(), ( size_t ) ( color_bytes.size() ) ) );
-	pFile->store_64( source_signature );
-	pFile->store_buffer( height_bytes );
-	pFile->store_buffer( color_bytes );
-	const Error write_error = pFile->get_error();
-	pFile->close();
-	if ( write_error != OK ) {
-		DirAccess::remove_absolute( temporary_path );
-		return false;
-	}
-	const bool bHadPrevious = FileAccess::file_exists( path );
-	if ( FileAccess::file_exists( backup_path ) ) {
-		DirAccess::remove_absolute( backup_path );
-	}
-	if ( bHadPrevious && DirAccess::rename_absolute( path, backup_path ) != OK ) {
-		DirAccess::remove_absolute( temporary_path );
-		return false;
-	}
-	if ( DirAccess::rename_absolute( temporary_path, path ) != OK ) {
-		if ( bHadPrevious ) {
-			DirAccess::rename_absolute( backup_path, path );
-		}
-		return false;
-	}
-	if ( FileAccess::file_exists( backup_path ) ) {
-		DirAccess::remove_absolute( backup_path );
-	}
-	m_bGpuFarCookedSaved = true;
-	m_bGpuFarCookedLoaded = false;
-	if ( IS_EDITOR && path.begins_with( "res://" ) ) {
-		EditorFileSystem *const pFilesystem = EditorInterface::get_singleton()->get_resource_filesystem();
-		if ( pFilesystem && !pFilesystem->is_scanning() ) {
-			pFilesystem->update_file( path );
-		}
-	}
-	m_nGpuFarCookIoUsecLast = Time::get_singleton()->get_ticks_usec() - started_usec;
-	return true;
+	m_farSurfaceAtlasCache.setConfig( getFarSurfaceAtlasConfig() );
+	return m_farSurfaceAtlasCache.writeCooked( rDirectory );
 }
+
 
 void T3DData::markAllGpuFarRegionsDirty( const t3dmapType_t eMapType ) {
-	if ( eMapType == T3DRegion::TYPE_HEIGHT || eMapType == T3DRegion::TYPE_MAX ) {
-		m_bGpuFarHeightDirty = true;
-		m_bGpuFarHeightDirtyAll = true;
-		m_gpuFarHeightDirtyRegions.reset();
-	}
-	if ( eMapType == T3DRegion::TYPE_CONTROL || eMapType == T3DRegion::TYPE_COLOR || eMapType == T3DRegion::TYPE_MAX ) {
-		m_bGpuFarColorDirty = true;
-		m_bGpuFarColorDirtyAll = true;
-		m_gpuFarColorDirtyRegions.reset();
-	}
-	m_bGpuFarCookedLoaded = false;
-	m_bGpuFarCookedSaved = false;
+	m_farSurfaceAtlasCache.markAllDirty( eMapType );
 }
+
 
 void T3DData::markGpuFarRegionDirty( const Vector2i &vLocation, const t3dmapType_t eMapType ) {
-	const int map_index = getRegionMapIndex( vLocation );
-	if ( map_index < 0 ) {
-		return;
-	}
-	if ( eMapType == T3DRegion::TYPE_HEIGHT || eMapType == T3DRegion::TYPE_MAX ) {
-		m_bGpuFarHeightDirty = true;
-		if ( !m_bGpuFarHeightDirtyAll ) {
-			m_gpuFarHeightDirtyRegions.set( ( size_t ) ( map_index ) );
-		}
-	}
-	if ( eMapType == T3DRegion::TYPE_CONTROL || eMapType == T3DRegion::TYPE_COLOR || eMapType == T3DRegion::TYPE_MAX ) {
-		m_bGpuFarColorDirty = true;
-		if ( !m_bGpuFarColorDirtyAll ) {
-			m_gpuFarColorDirtyRegions.set( ( size_t ) ( map_index ) );
-		}
-	}
-	m_bGpuFarCookedLoaded = false;
-	m_bGpuFarCookedSaved = false;
+	m_farSurfaceAtlasCache.markRegionDirty( vLocation, eMapType );
 }
 
-bool T3DData::patchGpuFarHeightRegion(
-	const Vector2i &vLocation,
-	PackedByteArray &nAtlasBytes
-) {
-	const int nAtlasSize = getGpuFarHeightAtlasSide();
-	if ( m_regionRepository.getRegionSize() <= 0 || m_regionRepository.getRegionMapSize() <= 0 ||
-		nAtlasSize % m_regionRepository.getRegionMapSize() != 0 ) {
-		return false;
-	}
-	const int samples_per_region = nAtlasSize / m_regionRepository.getRegionMapSize();
-	if ( samples_per_region <= 0 || m_regionRepository.getRegionSize() % samples_per_region != 0 ) {
-		return false;
-	}
-	const int atlas_half = m_regionRepository.getRegionMapSize() / 2;
-	const int atlas_origin_x = ( vLocation.x + atlas_half ) * samples_per_region;
-	const int atlas_origin_y = ( vLocation.y + atlas_half ) * samples_per_region;
-	if ( atlas_origin_x < 0 || atlas_origin_y < 0 ||
-		atlas_origin_x + samples_per_region > nAtlasSize ||
-		atlas_origin_y + samples_per_region > nAtlasSize ) {
-		return false;
-	}
-	const uint16_t default_height = Terrain3DRegionCodec::encodeHeightU16( 0.0f );
-	const uint16_t *height = nullptr;
-	PackedByteArray region_height_bytes;
-	T3DRegion *const pRegion = getRegionPtr( vLocation );
-	T3DActiveMapLease lease;
-	if ( pRegion && !pRegion->isDeleted() ) {
-		if ( m_bCpuRegionCacheEnabled && !ensureCpuRegionResidentInternal( vLocation, true ) ) {
-			return false;
-		}
-		lease = m_samplingStorage.acquireActive( vLocation );
-		if ( lease.valid() ) {
-			height = lease.view().pHeight;
-		} else {
-			const Ref<Image> pHeight = getRegionMapOrDefault( pRegion, T3DRegion::TYPE_HEIGHT );
-			if ( pHeight.is_valid() && pHeight->get_format() == Image::FORMAT_R16 ) {
-				region_height_bytes = pHeight->get_data();
-				if ( region_height_bytes.size() >= ( int64_t ) ( m_regionRepository.getRegionSize() ) * m_regionRepository.getRegionSize() * 2 ) {
-					height = ( const uint16_t * ) ( region_height_bytes.ptr() );
-				}
-			}
-		}
-	}
-	const int source_step = m_regionRepository.getRegionSize() / samples_per_region;
-	uint8_t *const pWrite = nAtlasBytes.ptrw();
-	if ( !pWrite ) {
-		return false;
-	}
-	for ( int y = 0; y < samples_per_region; ++y ) {
-		const int source_y = MIN( m_regionRepository.getRegionSize() - 1, y * source_step );
-		for ( int x = 0; x < samples_per_region; ++x ) {
-			const int source_x = MIN( m_regionRepository.getRegionSize() - 1, x * source_step );
-			const uint16_t encoded = height ? height[source_y * m_regionRepository.getRegionSize() + source_x] : default_height;
-			const int atlas_index = ( atlas_origin_y + y ) * nAtlasSize + atlas_origin_x + x;
-			std::memcpy( pWrite + ( size_t ) ( atlas_index ) * 2u, &encoded, sizeof( encoded ) );
-		}
-	}
-	return true;
-}
 
-bool T3DData::patchGpuFarColorRegion(
-	const Vector2i &vLocation,
-	PackedByteArray &nAtlasBytes, const t3dfarSurfaceBakeData_t &rBakeData
-) {
-	const int nAtlasSize = getGpuFarSurfaceAtlasSide();
-	if ( m_regionRepository.getRegionSize() <= 0 || m_regionRepository.getRegionMapSize() <= 0 ||
-		nAtlasSize % m_regionRepository.getRegionMapSize() != 0 ) {
-		return false;
-	}
-	const int samples_per_region = nAtlasSize / m_regionRepository.getRegionMapSize();
-	const int atlas_half = m_regionRepository.getRegionMapSize() / 2;
-	const int atlas_origin_x = ( vLocation.x + atlas_half ) * samples_per_region;
-	const int atlas_origin_y = ( vLocation.y + atlas_half ) * samples_per_region;
-	if ( samples_per_region <= 0 || atlas_origin_x < 0 || atlas_origin_y < 0 ||
-		atlas_origin_x + samples_per_region > nAtlasSize ||
-		atlas_origin_y + samples_per_region > nAtlasSize ) {
-		return false;
-	}
-	uint8_t *pAtlasWrite = nAtlasBytes.ptrw();
-	if ( !pAtlasWrite ) {
-		return false;
-	}
-	T3DRegion *const pRegion = getRegionPtr( vLocation );
-	if ( !pRegion || pRegion->isDeleted() ) {
-		for ( int y = 0; y < samples_per_region; ++y ) {
-			for ( int x = 0; x < samples_per_region; ++x ) {
-				const int atlas_index = ( atlas_origin_y + y ) * nAtlasSize + atlas_origin_x + x;
-				uint8_t *pixel = pAtlasWrite + ( size_t ) ( atlas_index ) * 4u;
-				pixel[0] = 255u;
-				pixel[1] = 255u;
-				pixel[2] = 255u;
-				pixel[3] = 0u;
-			}
-		}
-		return true;
-	}
-	if ( m_bCpuRegionCacheEnabled && !ensureCpuRegionResidentInternal( vLocation, true ) ) {
-		return false;
-	}
-	const Ref<Image> pSourceColor = getRegionMapOrDefault( pRegion, T3DRegion::TYPE_COLOR );
-	const Ref<Image> pSourceControl = getRegionMapOrDefault( pRegion, T3DRegion::TYPE_CONTROL );
-	const Ref<Image> pSourceHeight = getRegionMapOrDefault( pRegion, T3DRegion::TYPE_HEIGHT );
-	const Ref<Image> pSourceDerived = pRegion->getDerivedNormalSlopeMap();
-	if ( pSourceColor.is_null() || pSourceControl.is_null() ||
-		pSourceColor->get_format() != Image::FORMAT_RGBA8 ||
-		pSourceControl->get_format() != Image::FORMAT_RF ) {
-		return false;
-	}
-	const PackedByteArray color_bytes = pSourceColor->get_data();
-	const PackedByteArray control_bytes = pSourceControl->get_data();
-	const PackedByteArray height_bytes = pSourceHeight.is_valid() ? pSourceHeight->get_data() : PackedByteArray();
-	const PackedByteArray derived_bytes = pSourceDerived.is_valid() ? pSourceDerived->get_data() : PackedByteArray();
-	const uint8_t *pColorRead = color_bytes.ptr();
-	const uint8_t *pControlRead = control_bytes.ptr();
-	const uint8_t *pHeightRead = height_bytes.ptr();
-	const uint8_t *pDerivedRead = derived_bytes.ptr();
-	const int color_width = pSourceColor->get_width();
-	const int color_height = pSourceColor->get_height();
-	const bool bHeightValid = pSourceHeight.is_valid() && pSourceHeight->get_format() == Image::FORMAT_R16 &&
-		height_bytes.size() >= ( int64_t ) ( m_regionRepository.getRegionSize() ) * m_regionRepository.getRegionSize() * 2;
-	const int derived_width = pSourceDerived.is_valid() ? pSourceDerived->get_width() : 0;
-	const int derived_height = pSourceDerived.is_valid() ? pSourceDerived->get_height() : 0;
-	const bool bDerivedValid = pSourceDerived.is_valid() && pSourceDerived->get_format() == Image::FORMAT_RG8 &&
-		derived_width > 0 && derived_height > 0 &&
-		derived_bytes.size() >= ( int64_t ) ( derived_width ) * derived_height * 2;
-	if ( !pColorRead || !pControlRead || color_width <= 0 || color_height <= 0 ||
-		control_bytes.size() < ( int64_t ) ( m_regionRepository.getRegionSize() ) * m_regionRepository.getRegionSize() * 4 ) {
-		return false;
-	}
 
-	const Ref<T3DMaterial> pMaterialRef = m_pTerrain ? m_pTerrain->getMaterial() : Ref<T3DMaterial>();
-	T3DMaterial *const pMaterial = pMaterialRef.ptr();
-	const bool bAutoShaderEnabled = pMaterial && pMaterial->getAutoShaderEnabled();
-	const float fAutoSlope = terrain3dMaterialFloatParam( pMaterial, "auto_slope", 1.0f );
-	const float fAutoHeightReduction = terrain3dMaterialFloatParam( pMaterial, "auto_height_reduction", 0.1f );
-	const int auto_layer_max = MAX( rBakeData.nCount - 1, 0 );
-	const int auto_base_texture = CLAMP( terrain3dMaterialIntParam( pMaterial, "auto_base_texture", 0 ), 0, auto_layer_max );
-	const int auto_overlay_texture = CLAMP( terrain3dMaterialIntParam( pMaterial, "auto_overlay_texture", 1 ), 0, auto_layer_max );
-	const int source_step = MAX( 1, m_regionRepository.getRegionSize() / samples_per_region );
 
-	for ( int y = 0; y < samples_per_region; ++y ) {
-		const int region_y0 = y * m_regionRepository.getRegionSize() / samples_per_region;
-		const int region_y1 = MAX( region_y0 + 1, ( y + 1 ) * m_regionRepository.getRegionSize() / samples_per_region );
-		const int color_y0 = y * color_height / samples_per_region;
-		const int color_y1 = MAX( color_y0 + 1, ( y + 1 ) * color_height / samples_per_region );
-		for ( int x = 0; x < samples_per_region; ++x ) {
-			const int region_x0 = x * m_regionRepository.getRegionSize() / samples_per_region;
-			const int region_x1 = MAX( region_x0 + 1, ( x + 1 ) * m_regionRepository.getRegionSize() / samples_per_region );
-			const int color_x0 = x * color_width / samples_per_region;
-			const int color_x1 = MAX( color_x0 + 1, ( x + 1 ) * color_width / samples_per_region );
-			uint64_t sum_r = 0u;
-			uint64_t sum_g = 0u;
-			uint64_t sum_b = 0u;
-			uint64_t sum_a = 0u;
-			int color_samples = 0;
-			for ( int color_y = color_y0; color_y < MIN( color_y1, color_height ); ++color_y ) {
-				for ( int color_x = color_x0; color_x < MIN( color_x1, color_width ); ++color_x ) {
-					const size_t color_offset = ( size_t ) ( color_y * color_width + color_x ) * 4u;
-					sum_r += pColorRead[color_offset];
-					sum_g += pColorRead[color_offset + 1u];
-					sum_b += pColorRead[color_offset + 2u];
-					sum_a += pColorRead[color_offset + 3u];
-					++color_samples;
-				}
-			}
-			const int center_x = MIN( m_regionRepository.getRegionSize() - 1, region_x0 + ( region_x1 - region_x0 ) / 2 );
-			const int center_y = MIN( m_regionRepository.getRegionSize() - 1, region_y0 + ( region_y1 - region_y0 ) / 2 );
-			const int center_index = center_y * m_regionRepository.getRegionSize() + center_x;
-			const uint32_t control = terrain3dReadU32Unaligned( pControlRead, ( size_t ) ( center_index ) * 4u );
-			float fSolidCoverage = 0.0f;
-			for ( int probe_y = 0; probe_y < 2; ++probe_y ) {
-				for ( int probe_x = 0; probe_x < 2; ++probe_x ) {
-					const int px = MIN( m_regionRepository.getRegionSize() - 1, region_x0 + ( ( probe_x * 2 + 1 ) * source_step ) / 4 );
-					const int py = MIN( m_regionRepository.getRegionSize() - 1, region_y0 + ( ( probe_y * 2 + 1 ) * source_step ) / 4 );
-					const uint32_t probe_control = terrain3dReadU32Unaligned( pControlRead,
-						( size_t ) ( py * m_regionRepository.getRegionSize() + px ) * 4u );
-					fSolidCoverage += isHole( probe_control ) ? 0.0f : 0.25f;
-				}
-			}
 
-			int base_id = ( int ) ( getBase( control ) );
-			int overlay_id = ( int ) ( getOverlay( control ) );
-			float fBlend = ( float ) ( getBlend( control ) ) / TERRAIN3D_BYTE_MAX_FLOAT;
-			if ( bAutoShaderEnabled && isAuto( control ) ) {
-				float fNormalY = 1.0f;
-				float fHeight = 0.0f;
-				if ( bHeightValid ) {
-					fHeight = Terrain3DRegionCodec::decodeHeightU16( terrain3dReadU16Unaligned(
-						pHeightRead, ( size_t ) ( center_index ) * 2u ) );
-				}
-				if ( bDerivedValid ) {
-					const int derived_x = MIN( derived_width - 1, center_x * derived_width / m_regionRepository.getRegionSize() );
-					const int derived_y = MIN( derived_height - 1, center_y * derived_height / m_regionRepository.getRegionSize() );
-					const size_t derived_offset = ( size_t ) ( derived_y * derived_width + derived_x ) * 2u;
-					const float fNormalX = ( float ) ( pDerivedRead[derived_offset] ) / TERRAIN3D_BYTE_MAX_FLOAT * 2.0f - 1.0f;
-					const float fNormalZ = ( float ) ( pDerivedRead[derived_offset + 1u] ) / TERRAIN3D_BYTE_MAX_FLOAT * 2.0f - 1.0f;
-					fNormalY = Math::sqrt( MAX( 1.0f - fNormalX * fNormalX - fNormalZ * fNormalZ, 0.0f ) );
-				} else if ( bHeightValid ) {
-					const int sample_x = center_y * m_regionRepository.getRegionSize() + MIN( m_regionRepository.getRegionSize() - 1, center_x + 1 );
-					const int sample_z = MIN( m_regionRepository.getRegionSize() - 1, center_y + 1 ) * m_regionRepository.getRegionSize() + center_x;
-					const float fHeightX = Terrain3DRegionCodec::decodeHeightU16( terrain3dReadU16Unaligned(
-						pHeightRead, ( size_t ) ( sample_x ) * 2u ) );
-					const float fHeightZ = Terrain3DRegionCodec::decodeHeightU16( terrain3dReadU16Unaligned(
-						pHeightRead, ( size_t ) ( sample_z ) * 2u ) );
-					const float fSpacing = MAX( ( float ) ( m_regionRepository.getVertexSpacing() ), 0.0001f );
-					const float fDx = fHeightX - fHeight;
-					const float fDz = fHeightZ - fHeight;
-					fNormalY = fSpacing / Math::sqrt( fDx * fDx + fSpacing * fSpacing + fDz * fDz );
-				}
-				base_id = auto_base_texture;
-				overlay_id = auto_overlay_texture;
-				fBlend = CLAMP( fAutoSlope * 2.0f * ( fNormalY - 1.0f ) + 1.0f -
-					fAutoHeightReduction * 0.01f * fHeight, 0.0f, 1.0f );
-			}
-			base_id = terrain3dFarResolveMaterialId( rBakeData, base_id );
-			overlay_id = terrain3dFarResolveMaterialId( rBakeData, overlay_id );
-			const int dominant_material = fBlend >= 0.5f ? overlay_id : base_id;
-			const float fInvSampleCount = color_samples > 0 ? 1.0f / ( float ) ( color_samples ) : 0.0f;
-			const float fSurfaceR = ( float ) ( sum_r ) * fInvSampleCount / TERRAIN3D_BYTE_MAX_FLOAT;
-			const float fSurfaceG = ( float ) ( sum_g ) * fInvSampleCount / TERRAIN3D_BYTE_MAX_FLOAT;
-			const float fSurfaceB = ( float ) ( sum_b ) * fInvSampleCount / TERRAIN3D_BYTE_MAX_FLOAT;
-			const float fSurfaceAlpha = color_samples > 0 ? ( float ) ( sum_a ) * fInvSampleCount / TERRAIN3D_BYTE_MAX_FLOAT : 0.5f;
-			const int atlas_index = ( atlas_origin_y + y ) * nAtlasSize + atlas_origin_x + x;
-			const size_t atlas_offset = ( size_t ) ( atlas_index ) * 4u;
-			pAtlasWrite[atlas_offset] = terrain3dColorToByte( fSurfaceR );
-			pAtlasWrite[atlas_offset + 1u] = terrain3dColorToByte( fSurfaceG );
-			pAtlasWrite[atlas_offset + 2u] = terrain3dColorToByte( fSurfaceB );
-			pAtlasWrite[atlas_offset + 3u] = terrain3dFarSurfaceAlpha(
-				fSolidCoverage, fSurfaceAlpha, dominant_material );
-		}
-	}
-	return true;
-}
 
-bool T3DData::rebuildGpuFarHeightAtlas( void ) {
-	if ( !isFarAtlasRequired() || !m_samplingStorage.isActiveOwner() || !initializeGpuFarAtlasImages() ) {
-		return false;
-	}
-	const int nAtlasSize = getGpuFarHeightAtlasSide();
-	const uint64_t started_usec = Time::get_singleton()->get_ticks_usec();
-	PackedByteArray atlas_bytes = m_pGpuFarHeightImage->get_data();
-	m_nGpuFarHeightRegionsLastTick = 0;
-	m_nGpuFarHeightDirtyTexelsLast = 0u;
-	m_nGpuFarHeightRebuiltBytesLast = 0u;
-	m_nGpuFarHeightUploadedBytesLast = 0u;
-	m_nGpuFarHeightPublicationUsecLast = 0u;
-	const uint64_t atlas_texels = ( uint64_t ) ( nAtlasSize ) * ( uint64_t ) ( nAtlasSize );
-	const int samples_per_region = m_regionRepository.getRegionMapSize() > 0 ? nAtlasSize / m_regionRepository.getRegionMapSize() : 0;
-	const uint64_t region_texels = samples_per_region > 0 ? ( uint64_t ) ( samples_per_region ) * ( uint64_t ) ( samples_per_region ) : 0u;
-	if ( m_bGpuFarHeightDirtyAll ) {
-		m_nGpuFarHeightDirtyTexelsLast = atlas_texels;
-		const uint16_t default_height = Terrain3DRegionCodec::encodeHeightU16( 0.0f );
-		uint8_t *const pWrite = atlas_bytes.ptrw();
-		for ( int index = 0; index < nAtlasSize * nAtlasSize; ++index ) {
-			std::memcpy( pWrite + ( size_t ) ( index ) * 2u, &default_height, sizeof( default_height ) );
-		}
-		for ( int slot = 0; slot < m_regionRepository.getSlotCount(); ++slot ) {
-			const Vector2i location = m_regionRepository.getSlotsData()[slot];
-			if ( location != V2I_MAX && patchGpuFarHeightRegion( location, atlas_bytes ) ) {
-				++m_nGpuFarHeightRegionsLastTick;
-			}
-		}
-	} else {
-		m_nGpuFarHeightDirtyTexelsLast = ( uint64_t ) ( m_gpuFarHeightDirtyRegions.count() ) * region_texels;
-		for ( size_t index = 0; index < TERRAIN3D_MAX_REGION_SLOTS; ++index ) {
-			if ( !m_gpuFarHeightDirtyRegions.test( index ) ) {
-				continue;
-			}
-			const Vector2i location(
-				( int ) ( index % TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE ) - TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE / 2,
-				( int ) ( index / TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE ) - TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE / 2
-			);
-			if ( patchGpuFarHeightRegion( location, atlas_bytes ) ) {
-				++m_nGpuFarHeightRegionsLastTick;
-			}
-		}
-	}
-	m_nGpuFarHeightRebuiltBytesLast = m_bGpuFarHeightDirtyAll ? ( uint64_t ) ( atlas_bytes.size() ) :
-		( uint64_t ) ( m_nGpuFarHeightRegionsLastTick ) * region_texels * 2u;
-	m_pGpuFarHeightImage->set_data( nAtlasSize, nAtlasSize,
-		false, Image::FORMAT_R16, atlas_bytes );
-	m_nGpuFarHeightProcessingUsecLast = Time::get_singleton()->get_ticks_usec() - started_usec;
-	const uint64_t publication_started_usec = Time::get_singleton()->get_ticks_usec();
-	const bool bUploaded = m_generatedFarHeightMap.getRid().is_valid() ?
-		m_generatedFarHeightMap.update2d( m_pGpuFarHeightImage ) :
-		m_generatedFarHeightMap.create( m_pGpuFarHeightImage ).is_valid();
-	m_nGpuFarHeightPublicationUsecLast = Time::get_singleton()->get_ticks_usec() - publication_started_usec;
-	if ( !bUploaded ) {
-		return false;
-	}
-	m_nGpuFarHeightUploadedBytesLast = ( uint64_t ) ( atlas_bytes.size() );
-	m_nGpuFarHeightUploadedBytesTotal += m_nGpuFarHeightUploadedBytesLast;
-	++m_nGpuFarHeightPublicationCount;
-	m_bGpuFarHeightDirty = false;
-	m_bGpuFarHeightDirtyAll = false;
-	m_gpuFarHeightDirtyRegions.reset();
-	++m_nGpuFarHeightUpdatesLastTick;
-	return true;
-}
 
-bool T3DData::rebuildGpuFarColorAtlas( void ) {
-	if ( !isFarAtlasRequired() || !initializeGpuFarAtlasImages() ) {
-		return false;
-	}
-	const int nAtlasSize = getGpuFarSurfaceAtlasSide();
-	const uint64_t started_usec = Time::get_singleton()->get_ticks_usec();
-	PackedByteArray atlas_bytes = m_pGpuFarColorImage->get_data();
-	t3dfarSurfaceBakeData_t bake_data;
-	terrain3dBuildFarSurfaceBakeData( m_pTerrain, bake_data );
-	m_nGpuFarColorRegionsLastTick = 0;
-	m_nGpuFarColorDirtyTexelsLast = 0u;
-	m_nGpuFarColorRebuiltBytesLast = 0u;
-	m_nGpuFarColorUploadedBytesLast = 0u;
-	m_nGpuFarColorPublicationUsecLast = 0u;
-	const uint64_t atlas_texels = ( uint64_t ) ( nAtlasSize ) * ( uint64_t ) ( nAtlasSize );
-	const int samples_per_region = m_regionRepository.getRegionMapSize() > 0 ? nAtlasSize / m_regionRepository.getRegionMapSize() : 0;
-	const uint64_t region_texels = samples_per_region > 0 ? ( uint64_t ) ( samples_per_region ) * ( uint64_t ) ( samples_per_region ) : 0u;
-	if ( m_bGpuFarColorDirtyAll ) {
-		m_nGpuFarColorDirtyTexelsLast = atlas_texels;
-		terrain3dFillFarSurfaceEmpty( atlas_bytes );
-		for ( int slot = 0; slot < m_regionRepository.getSlotCount(); ++slot ) {
-			const Vector2i location = m_regionRepository.getSlotsData()[slot];
-			if ( location != V2I_MAX && patchGpuFarColorRegion( location, atlas_bytes, bake_data ) ) {
-				++m_nGpuFarColorRegionsLastTick;
-			}
-		}
-	} else {
-		m_nGpuFarColorDirtyTexelsLast = ( uint64_t ) ( m_gpuFarColorDirtyRegions.count() ) * region_texels;
-		for ( size_t index = 0; index < TERRAIN3D_MAX_REGION_SLOTS; ++index ) {
-			if ( !m_gpuFarColorDirtyRegions.test( index ) ) {
-				continue;
-			}
-			const Vector2i location(
-				( int ) ( index % TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE ) - TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE / 2,
-				( int ) ( index / TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE ) - TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE / 2
-			);
-			if ( patchGpuFarColorRegion( location, atlas_bytes, bake_data ) ) {
-				++m_nGpuFarColorRegionsLastTick;
-			}
-		}
-	}
-	m_nGpuFarColorRebuiltBytesLast = m_bGpuFarColorDirtyAll ? ( uint64_t ) ( atlas_bytes.size() ) :
-		( uint64_t ) ( m_nGpuFarColorRegionsLastTick ) * region_texels * 4u;
-	m_pGpuFarColorImage->set_data( nAtlasSize, nAtlasSize,
-		false, Image::FORMAT_RGBA8, atlas_bytes );
-	m_nGpuFarColorProcessingUsecLast = Time::get_singleton()->get_ticks_usec() - started_usec;
-	const uint64_t publication_started_usec = Time::get_singleton()->get_ticks_usec();
-	const bool bUploaded = m_generatedFarColorMap.getRid().is_valid() ?
-		m_generatedFarColorMap.update2d( m_pGpuFarColorImage ) :
-		m_generatedFarColorMap.create( m_pGpuFarColorImage ).is_valid();
-	m_nGpuFarColorPublicationUsecLast = Time::get_singleton()->get_ticks_usec() - publication_started_usec;
-	if ( !bUploaded ) {
-		return false;
-	}
-	m_nGpuFarColorUploadedBytesLast = ( uint64_t ) ( atlas_bytes.size() );
-	m_nGpuFarColorUploadedBytesTotal += m_nGpuFarColorUploadedBytesLast;
-	++m_nGpuFarColorPublicationCount;
-	m_bGpuFarColorDirty = false;
-	m_bGpuFarColorDirtyAll = false;
-	m_gpuFarColorDirtyRegions.reset();
-	++m_nGpuFarColorUpdatesLastTick;
-	return true;
-}
 
-int T3DData::findGpuRegionSlot( const Vector2i &vLocation ) const {
-	const int map_index = getRegionMapIndex( vLocation );
-	if ( map_index < 0 ) {
-		return -1;
-	}
-	const int layer = ( int ) ( m_szGpuRegionMap[map_index] ) - 1;
-	if ( layer < 0 || layer >= m_nGpuRegionPhysicalLayerCount ||
-		m_szGpuRegionSlotStates[layer] != TERRAIN3D_GPU_SLOT_MAPPED ||
-		m_szGpuRegionLocations[layer] != vLocation ) {
-		return -1;
-	}
-	return layer;
-}
 
-int T3DData::findFreeGpuRegionSlot( void ) const {
-	for ( int layer = 0; layer < m_nGpuRegionPhysicalLayerCount; ++layer ) {
-		if ( m_szGpuRegionLocations[layer] == V2I_MAX &&
-			m_szGpuRegionSlotStates[layer] == TERRAIN3D_GPU_SLOT_FREE ) {
-			return layer;
-		}
-	}
-	return -1;
-}
 
-void T3DData::recordGpuRegionDeparture( const int nLayer, const bool bCountUnusedPrefetch ) {
-	if ( nLayer < 0 || nLayer >= m_nGpuRegionPhysicalLayerCount ) {
-		return;
-	}
-	if ( m_szGpuRegionLoadedTick[nLayer] > 0u && m_nGpuRegionTick >= m_szGpuRegionLoadedTick[nLayer] ) {
-		m_nGpuRegionResidentTicksTotal += m_nGpuRegionTick - m_szGpuRegionLoadedTick[nLayer];
-		++m_nGpuRegionDepartedPagesTotal;
-	}
-	if ( bCountUnusedPrefetch && m_szGpuRegionPrefetchOrigin[nLayer] != 0u ) {
-		++m_nGpuRegionPrefetchDiscardedTotal;
-	}
-	m_szGpuRegionLoadedTick[nLayer] = 0u;
-	m_szGpuRegionPrefetchOrigin[nLayer] = 0u;
-}
 
-void T3DData::retireGpuRegionSlot( const int nLayer ) {
-	if ( nLayer < 0 || nLayer >= m_nGpuRegionPhysicalLayerCount ||
-		m_szGpuRegionSlotStates[nLayer] != TERRAIN3D_GPU_SLOT_MAPPED ) {
-		return;
-	}
-	m_szGpuRegionSlotStates[nLayer] = TERRAIN3D_GPU_SLOT_RETIRED;
-	m_szGpuRegionRetireAfterFrame[nLayer] = std::numeric_limits<uint64_t>::max();
-	++m_nGpuRegionRetiredCount;
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 void T3DData::armPendingGpuRegionRetirements( void ) {
-	Engine *const pEngine = Engine::get_singleton();
-	const uint64_t current_frame = pEngine ? ( uint64_t ) ( pEngine->get_frames_drawn() ) : m_nGpuRegionTick;
-	const uint64_t release_frame = current_frame + ( uint64_t ) ( MAX( 1, m_nGpuRegionRetireFrames ) );
-	for ( int layer = 0; layer < m_nGpuRegionPhysicalLayerCount; ++layer ) {
-		if ( m_szGpuRegionSlotStates[layer] == TERRAIN3D_GPU_SLOT_RETIRED &&
-			m_szGpuRegionRetireAfterFrame[layer] == std::numeric_limits<uint64_t>::max() ) {
-			m_szGpuRegionRetireAfterFrame[layer] = release_frame;
-		}
-	}
+	m_gpuRegionCache.armPendingRetirements();
 }
 
-void T3DData::reclaimRetiredGpuRegionSlots( void ) {
-	Engine *const pEngine = Engine::get_singleton();
-	const uint64_t current_frame = pEngine ? ( uint64_t ) ( pEngine->get_frames_drawn() ) : m_nGpuRegionTick;
-	for ( int layer = 0; layer < m_nGpuRegionPhysicalLayerCount; ++layer ) {
-		if ( m_szGpuRegionSlotStates[layer] != TERRAIN3D_GPU_SLOT_RETIRED ||
-			m_szGpuRegionRetireAfterFrame[layer] == std::numeric_limits<uint64_t>::max() ||
-			current_frame < m_szGpuRegionRetireAfterFrame[layer] ) {
-			continue;
-		}
-		m_szGpuRegionLocations[layer] = V2I_MAX;
-		m_szGpuRegionLastUseTick[layer] = 0u;
-		m_szGpuRegionLoadedTick[layer] = 0u;
-		m_szGpuRegionPrefetchOrigin[layer] = 0u;
-		m_szGpuRegionMaterialMasks[layer] = 0u;
-		m_szGpuRegionRetireAfterFrame[layer] = 0u;
-		m_szGpuRegionSlotStates[layer] = TERRAIN3D_GPU_SLOT_FREE;
-		m_nGpuRegionRetiredCount = MAX( 0, m_nGpuRegionRetiredCount - 1 );
-		++m_nGpuRegionReusedLayersLastTick;
-	}
-}
+
+
+
 
 void T3DData::invalidateGpuRegionLocation( const Vector2i &vLocation ) {
-	if ( !m_bGpuRegionCacheEnabled ) {
-		return;
-	}
-	const int layer = findGpuRegionSlot( vLocation );
-	if ( layer < 0 ) {
-		return;
-	}
-	const int map_index = getRegionMapIndex( vLocation );
-	if ( map_index >= 0 ) {
-		m_szGpuRegionMap[map_index] = 0u;
-	}
-	recordGpuRegionDeparture( layer, true );
-	retireGpuRegionSlot( layer );
-	m_nGpuRegionResidentCount = MAX( 0, m_nGpuRegionResidentCount - 1 );
-	m_bGpuRegionCacheSelectionDirty = true;
+	m_gpuRegionCache.invalidate( vLocation );
 }
 
-bool T3DData::uploadGpuRegionLayer(
-	const int nLayer, const Vector2i &vLocation,
-	const t3dmapType_t eMapType
-) {
-	uint64_t prepared_request_usec = 0u;
-	const T3DProfileScopeTimer publicationTimer(
-		m_nGpuPreparePublicationUsecLast,
-		prepared_request_usec, m_nGpuPrepareEndToEndUsecLast
-	);
-	if ( !m_bGpuRegionCacheEnabled || !m_bGpuRegionCacheTexturesReady || nLayer < 0 ||
-		nLayer >= m_nGpuRegionPhysicalLayerCount ) {
-		return false;
-	}
-	T3DRegion *const pRegion = getRegionPtr( vLocation );
-	if ( !pRegion || pRegion->isDeleted() ) {
-		return false;
-	}
-	ensureDefaultMaps();
 
-	const uint8_t source_channel_flags = ( uint8_t ) ( pRegion->getChannelFlags() );
-	const uint8_t previous_channel_flags = m_szGpuRegionLayerChannelFlags[nLayer];
-	const bool bUploadHeight = eMapType == T3DRegion::TYPE_HEIGHT || eMapType == T3DRegion::TYPE_MAX;
-	// Optional channels are updated only when either the incoming page or the
-	// previous physical contents are explicit. Reusing default-on-default layers
-	// requires no texture update, while explicit-to-default transitions still clear
-	// stale physical contents before publication.
-	const bool bUploadControl = ( eMapType == T3DRegion::TYPE_CONTROL || eMapType == T3DRegion::TYPE_MAX ) &&
-		!m_bControlMapsImplicit && terrain3dGpuCacheOptionalChannelNeedsUpdate(
-			source_channel_flags, previous_channel_flags, ( uint8_t ) ( T3DRegion::CHANNEL_CONTROL ) );
-	const bool bUploadColor = ( eMapType == T3DRegion::TYPE_COLOR || eMapType == T3DRegion::TYPE_MAX ) &&
-		isGpuRegionColorChannelEnabled() && terrain3dGpuCacheOptionalChannelNeedsUpdate(
-			source_channel_flags, previous_channel_flags, ( uint8_t ) ( T3DRegion::CHANNEL_COLOR ) );
-	Ref<Image> pHeight;
-	Ref<Image> pDerived;
-	Ref<Image> pControl;
-	Ref<Image> pColor;
-	Ref<Image> pMiddleComposite;
-	const uint8_t previous_state = m_szGpuRegionSlotStates[nLayer];
-	m_szGpuRegionSlotStates[nLayer] = TERRAIN3D_GPU_SLOT_STAGING;
 
-	bool bCookedPage = false;
-	uint32_t cooked_material_mask = 1u;
-	if ( eMapType == T3DRegion::TYPE_MAX && pRegion->runtimeMapsEvictable() && m_pTerrain &&
-		m_pTerrain->isGpuRegionCookedPagesEnabled() ) {
-		bool bPreparedAttempted = false;
-		bCookedPage = takePreparedGpuRuntimePage( vLocation, pHeight, pControl, pColor, pDerived, pMiddleComposite,
-			cooked_material_mask, bPreparedAttempted, &prepared_request_usec );
-		if ( !bPreparedAttempted && isGpuRuntimePagePreparePending( vLocation ) ) {
-			m_nGpuRegionStallFlagsLastTick |= TERRAIN3D_PROFILE_STALL_GPU_PREPARE_PENDING;
-			m_szGpuRegionSlotStates[nLayer] = previous_state;
-			return false;
-		}
-		if ( !bPreparedAttempted ) {
-			// Normal residency updates schedule cooked-page work before publication.
-			// An unscheduled evictable page is deferred rather than synchronously reading
-			// storage on the physics thread.
-			m_nGpuRegionStallFlagsLastTick |= TERRAIN3D_PROFILE_STALL_GPU_NO_READY_PAGE;
-			m_szGpuRegionSlotStates[nLayer] = previous_state;
-			return false;
-		}
-		if ( bCookedPage ) {
-			++m_nGpuRegionCookedHitsLastTick;
-		} else {
-			++m_nGpuRegionCookedMissesLastTick;
-		}
-	}
-	if ( !bCookedPage ) {
-		if ( m_bCpuRegionCacheEnabled && !ensureCpuRegionResidentInternal( vLocation, true ) ) {
-			m_szGpuRegionSlotStates[nLayer] = previous_state;
-			return false;
-		}
-		++m_nGpuRegionRuntimePreparesLastTick;
-	}
 
-	// Resolve the complete publication set before overwriting a physical layer.
-	// The page table continues to reference the previous logical region until all
-	// source images are known to be valid.
-	const bool bDerivedChannelEnabled = isGpuRegionDerivedChannelEnabled();
-	if ( bUploadHeight && !bCookedPage ) {
-		pHeight = getRegionMapOrDefault( pRegion, T3DRegion::TYPE_HEIGHT );
-		if ( pHeight.is_null() ) {
-			m_szGpuRegionSlotStates[nLayer] = previous_state;
-			return false;
-		}
-		if ( bDerivedChannelEnabled ) {
-			pDerived = pRegion->getDerivedNormalSlopeMap();
-			if ( pDerived.is_null() ) {
-				++m_nGpuRegionRuntimeDerivedBuildsLastTick;
-				regenerateDerivedMaps( {vLocation} );
-				pDerived = pRegion->getDerivedNormalSlopeMap();
-			}
-			if ( pDerived.is_null() ) {
-				pDerived = m_pDefaultDerivedMap;
-			}
-			if ( pDerived.is_null() ) {
-				m_szGpuRegionSlotStates[nLayer] = previous_state;
-				return false;
-			}
-			pDerived = makeGpuDerivedImage( pDerived );
-			if ( pDerived.is_null() ) {
-				m_szGpuRegionSlotStates[nLayer] = previous_state;
-				return false;
-			}
-		}
-	}
-	if ( bUploadControl ) {
-		if ( pControl.is_null() ) {
-			pControl = makeGpuRenderControlImage( vLocation );
-		}
-		if ( pControl.is_null() ) {
-			m_szGpuRegionSlotStates[nLayer] = previous_state;
-			return false;
-		}
-	}
-	if ( bUploadColor ) {
-		if ( pColor.is_null() ) {
-			const Ref<Image> pSourceColor = getRegionMapOrDefault( pRegion, T3DRegion::TYPE_COLOR );
-			if ( pSourceColor.is_valid() && ( !pSourceColor->has_mipmaps() ||
-				( m_pTerrain && m_pTerrain->getGpuRegionColorResolutionDivisor() > 1 ) ) ) {
-				++m_nGpuRegionRuntimeColorMipsLastTick;
-			}
-			pColor = makeGpuColorImage( pSourceColor );
-		}
-		if ( pColor.is_null() ) {
-			m_szGpuRegionSlotStates[nLayer] = previous_state;
-			return false;
-		}
-	}
-	if ( eMapType == T3DRegion::TYPE_MAX && pMiddleComposite.is_null() ) {
-		Ref<Image> pCompositeControl = pControl;
-		if ( pCompositeControl.is_null() ) {
-			pCompositeControl = makeGpuRenderControlImage( vLocation );
-		}
-		Ref<Image> pCompositeColor = pColor;
-		if ( pCompositeColor.is_null() ) {
-			pCompositeColor = makeGpuColorImage( getRegionMapOrDefault( pRegion, T3DRegion::TYPE_COLOR ) );
-		}
-		pMiddleComposite = makeMiddleCompositeImage( vLocation, pCompositeControl, pCompositeColor );
-		if ( pMiddleComposite.is_null() ) {
-			m_szGpuRegionSlotStates[nLayer] = previous_state;
-			return false;
-		}
-	}
-
-	bool bUploadOk = true;
-	if ( bUploadHeight ) {
-		bUploadOk = m_generatedHeightMaps.update( pHeight, nLayer );
-		if ( bUploadOk ) {
-			++m_nGpuRegionHeightUpdatesLastTick;
-			const size_t bytes = terrain3dGpuImageBytes( pHeight );
-			m_nGpuRegionHeightBytesLastTick += bytes;
-			m_nGpuRegionUploadBytesLastTick += bytes;
-		}
-		if ( bUploadOk && bDerivedChannelEnabled ) {
-			bUploadOk = m_generatedDerivedMaps.update( pDerived, nLayer );
-		}
-		if ( bUploadOk && bDerivedChannelEnabled ) {
-			++m_nGpuRegionDerivedUpdatesLastTick;
-			const size_t bytes = terrain3dGpuImageBytes( pDerived );
-			m_nGpuRegionDerivedBytesLastTick += bytes;
-			m_nGpuRegionUploadBytesLastTick += bytes;
-		}
-		if ( bDerivedChannelEnabled && !bCookedPage && !IS_EDITOR && pDerived != m_pDefaultDerivedMap ) {
-			pRegion->setDerivedNormalSlopeMapInternal( Ref<Image>() );
-		}
-	}
-	if ( bUploadOk && bUploadControl ) {
-		bUploadOk = m_generatedControlMaps.update( pControl, nLayer );
-		if ( bUploadOk ) {
-			++m_nGpuRegionControlUpdatesLastTick;
-			const size_t bytes = terrain3dGpuImageBytes( pControl );
-			m_nGpuRegionControlBytesLastTick += bytes;
-			m_nGpuRegionUploadBytesLastTick += bytes;
-		}
-	}
-	if ( bUploadOk && bUploadColor ) {
-		bUploadOk = m_generatedColorMaps.update( pColor, nLayer );
-		if ( bUploadOk ) {
-			++m_nGpuRegionColorUpdatesLastTick;
-			const size_t bytes = terrain3dGpuImageBytes( pColor );
-			m_nGpuRegionColorBytesLastTick += bytes;
-			m_nGpuRegionUploadBytesLastTick += bytes;
-		}
-	}
-	if ( bUploadOk && eMapType == T3DRegion::TYPE_MAX ) {
-		bUploadOk = m_generatedMiddleCompositeMaps.update( pMiddleComposite, nLayer );
-		if ( bUploadOk ) {
-			m_nGpuRegionUploadBytesLastTick += terrain3dGpuImageBytes( pMiddleComposite );
-		}
-	}
-	if ( !bUploadOk ) {
-		m_szGpuRegionSlotStates[nLayer] = previous_state;
-		return false;
-	}
-	uint8_t published_flags = previous_channel_flags;
-	if ( eMapType == T3DRegion::TYPE_CONTROL || eMapType == T3DRegion::TYPE_MAX ) {
-		published_flags &= ( uint8_t ) ( ~T3DRegion::CHANNEL_CONTROL );
-		published_flags |= source_channel_flags & ( uint8_t ) ( T3DRegion::CHANNEL_CONTROL );
-	}
-	if ( eMapType == T3DRegion::TYPE_COLOR || eMapType == T3DRegion::TYPE_MAX ) {
-		published_flags &= ( uint8_t ) ( ~T3DRegion::CHANNEL_COLOR );
-		published_flags |= source_channel_flags & ( uint8_t ) ( T3DRegion::CHANNEL_COLOR );
-	}
-	m_szGpuRegionLayerChannelFlags[nLayer] = published_flags;
-	uint32_t material_mask = bCookedPage ? cooked_material_mask :
-		( pControl.is_valid() ? terrain3dMaterialMaskFromControlImage( pControl ) : 1u );
-	if ( m_pTerrain ) {
-		const Ref<T3DMaterial> pMaterial = m_pTerrain->getMaterial();
-		if ( pMaterial.is_valid() && pMaterial->getAutoShaderEnabled() ) {
-			const int auto_base = CLAMP( terrain3dMaterialIntParam( pMaterial.ptr(), "auto_base_texture", 0 ), 0, 31 );
-			const int auto_overlay = CLAMP( terrain3dMaterialIntParam( pMaterial.ptr(), "auto_overlay_texture", 1 ), 0, 31 );
-			material_mask |= 1u << ( uint32_t ) ( auto_base );
-			material_mask |= 1u << ( uint32_t ) ( auto_overlay );
-		}
-	}
-	m_szGpuRegionMaterialMasks[nLayer] = material_mask;
-	m_szGpuRegionSlotStates[nLayer] = m_szGpuRegionLocations[nLayer] == vLocation ?
-		TERRAIN3D_GPU_SLOT_MAPPED : TERRAIN3D_GPU_SLOT_READY;
-	return true;
-}
 
 void T3DData::queueGpuRegionRepublish( const Vector2i &vLocation ) {
-	const int map_index = getRegionMapIndex( vLocation );
-	if ( map_index < 0 || map_index >= TERRAIN3D_MAX_REGION_SLOTS ) {
-		return;
-	}
-	if ( m_szGpuRegionRepublishPending[map_index] == 0u ) {
-		m_szGpuRegionRepublishPending[map_index] = 1u;
-		++m_nGpuRegionRepublishPendingCount;
-	}
-	// Force the ordinary per-frame residency tick to revisit deferred authoring
-	// publications even when the camera and streaming generation are stationary.
-	m_bGpuRegionCacheSelectionDirty = true;
+	m_gpuRegionCache.queueRepublish( vLocation );
 }
+
 
 bool T3DData::republishGpuRegionLocation( const Vector2i &vLocation ) {
-	const int old_layer = findGpuRegionSlot( vLocation );
-	if ( old_layer < 0 ) {
-		return false;
+	const bool bChanged = m_gpuRegionCache.republish( vLocation, getComputeBackendIfCreated() );
+	if ( bChanged ) {
+		emitGpuRegionMapChanged();
 	}
-	reclaimRetiredGpuRegionSlots();
-	const int staging_layer = findFreeGpuRegionSlot();
-	if ( staging_layer < 0 ) {
-		// Authoring can commit several brush stamps before the renderer has advanced
-		// enough frames to recycle retired layers. Coalesce the location and publish
-		// the newest page later instead of dropping the edit or synchronizing the GPU.
-		queueGpuRegionRepublish( vLocation );
-		return false;
-	}
-	// A staging slot starts from default channel contents, so publish the entire
-	// page even when only one source channel changed. The old mapped page remains
-	// valid until the replacement contains a coherent cross-channel snapshot.
-	if ( !uploadGpuRegionLayer( staging_layer, vLocation, T3DRegion::TYPE_MAX ) ) {
-		return false;
-	}
-	const int map_index = getRegionMapIndex( vLocation );
-	if ( map_index < 0 ) {
-		m_szGpuRegionSlotStates[staging_layer] = TERRAIN3D_GPU_SLOT_FREE;
-		return false;
-	}
-	m_szGpuRegionLocations[staging_layer] = vLocation;
-	m_szGpuRegionLastUseTick[staging_layer] = m_nGpuRegionTick;
-	m_szGpuRegionLoadedTick[staging_layer] = m_szGpuRegionLoadedTick[old_layer];
-	m_szGpuRegionPrefetchOrigin[staging_layer] = m_szGpuRegionPrefetchOrigin[old_layer];
-	m_szGpuRegionSlotStates[staging_layer] = TERRAIN3D_GPU_SLOT_MAPPED;
-	m_szGpuRegionMap[map_index] = ( uint16_t ) ( staging_layer + 1 );
-	if ( m_szGpuRegionRepublishPending[map_index] != 0u ) {
-		m_szGpuRegionRepublishPending[map_index] = 0u;
-		m_nGpuRegionRepublishPendingCount = MAX( 0, m_nGpuRegionRepublishPendingCount - 1 );
-	}
-	m_szGpuRegionLoadedTick[old_layer] = 0u;
-	m_szGpuRegionPrefetchOrigin[old_layer] = 0u;
-	retireGpuRegionSlot( old_layer );
-	return true;
+	return bChanged;
 }
 
-int T3DData::processPendingGpuRegionRepublishes( const int nLimit ) {
-	if ( m_nGpuRegionRepublishPendingCount <= 0 || nLimit <= 0 || m_nGpuRegionPhysicalLayerCount <= 0 ) {
-		return 0;
-	}
-	int published = 0;
-	int visited = 0;
-	int cursor = m_nGpuRegionRepublishCursor;
-	while ( visited < TERRAIN3D_MAX_REGION_SLOTS && m_nGpuRegionRepublishPendingCount > 0 && published < nLimit ) {
-		const int map_index = cursor;
-		cursor = ( cursor + 1 ) % TERRAIN3D_MAX_REGION_SLOTS;
-		++visited;
-		if ( m_szGpuRegionRepublishPending[map_index] == 0u ) {
-			continue;
-		}
-		const int map_x = map_index % TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE;
-		const int map_y = map_index / TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE;
-		const Vector2i location( map_x - TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE / 2,
-			map_y - TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE / 2 );
-		if ( findGpuRegionSlot( location ) < 0 ) {
-			// An evicted page will be uploaded from current source data if it becomes
-			// desirable again, so no separate republish remains necessary.
-			m_szGpuRegionRepublishPending[map_index] = 0u;
-			m_nGpuRegionRepublishPendingCount = MAX( 0, m_nGpuRegionRepublishPendingCount - 1 );
-			continue;
-		}
-		if ( findFreeGpuRegionSlot() < 0 ) {
-			break;
-		}
-		if ( republishGpuRegionLocation( location ) ) {
-			++published;
-		}
-	}
-	m_nGpuRegionRepublishCursor = cursor;
-	return published;
-}
 
-int T3DData::collectDesiredGpuRegions(
-	const T3DResidencyFrameState &rFrame, const Vector2i &rCenter, Vector2i *pLocations,
-	const int nCapacity, t3dgpuCacheSelectionStats_t &rStats
-) {
-	rStats = t3dgpuCacheSelectionStats_s();
-	if ( !pLocations || nCapacity <= 0 ) {
-		return 0;
-	}
-	const int capacity = MIN( nCapacity, TERRAIN3D_GPU_CACHE_MAX_LAYERS );
-	int output_count = 0;
-	uint8_t selected_map[TERRAIN3D_MAX_REGION_SLOTS] = {};
-	auto append_location = [&]( const Vector2i &location, const t3dregionStreamingState_t wanted ) {
-		if ( output_count >= capacity ) {
-			return false;
-		}
-		if ( !isRegionLocationValidInternal( location ) || !hasRegion( location ) ||
-			rFrame.streamingState( location ) != wanted ) {
-			return true;
-		}
-		const int map_index = getRegionMapIndex( location );
-		if ( map_index < 0 || selected_map[map_index] != 0u ) {
-			return true;
-		}
-		pLocations[output_count++] = location;
-		selected_map[map_index] = 1u;
-		return output_count < capacity;
-	};
-	auto append_state = [&]( const t3dregionStreamingState_t wanted ) {
-		terrain3dForEachSquareRing( rCenter, m_regionRepository.getRegionMapSize(),
-			[&]( const Vector2i &location ) { return append_location( location, wanted ); } );
-	};
 
-	// Full surface pages are mandatory only for ACTIVE. HOT geometry is served by
-	// the independent height cache below, so surface pressure can never move vertices.
-	append_state( TERRAIN3D_REGION_STREAMING_ACTIVE );
-	rStats.required = output_count;
-	append_state( TERRAIN3D_REGION_STREAMING_HOT );
-	rStats.guard = output_count - rStats.required;
-	const int prefetch_begin = output_count;
-	for ( int slot = 0; slot < m_regionRepository.getSlotCount() && output_count < capacity; ++slot ) {
-		const Vector2i location = m_regionRepository.getSlotsData()[slot];
-		const int map_index = location == V2I_MAX ? -1 : getRegionMapIndex( location );
-		if ( map_index < 0 || selected_map[map_index] != 0u || !hasRegion( location ) ||
-			!rFrame.isPrefetch( location ) ) {
-			continue;
-		}
-		pLocations[output_count++] = location;
-		selected_map[map_index] = 1u;
-	}
-	rStats.prefetch = output_count - prefetch_begin;
-	rStats.written = output_count;
-	return output_count;
-}
+
+
+
+
 
 void T3DData::resetMiddleHeightCache( void ) {
-	m_generatedMiddleHeightMaps.clear();
-	m_generatedMiddleHeightRegionMap.clear();
-	std::fill_n( m_szMiddleHeightRegionMap, TERRAIN3D_MAX_REGION_SLOTS, ( uint16_t ) ( 0 ) );
-	std::fill_n( m_szMiddleHeightLocations, TERRAIN3D_GPU_HEIGHT_CACHE_MAX_LAYERS, V2I_MAX );
-	std::fill_n( m_szMiddleHeightLastUseTick, TERRAIN3D_GPU_HEIGHT_CACHE_MAX_LAYERS, ( uint64_t ) ( 0 ) );
-	std::fill_n( m_szMiddleHeightRetireAfterFrame, TERRAIN3D_GPU_HEIGHT_CACHE_MAX_LAYERS, ( uint64_t ) ( 0 ) );
-	std::fill_n( m_szMiddleHeightSlotStates, TERRAIN3D_GPU_HEIGHT_CACHE_MAX_LAYERS,
-		( uint8_t ) ( TERRAIN3D_GPU_SLOT_FREE ) );
-	m_nMiddleHeightPhysicalLayerCount = 0;
-	m_nMiddleHeightMappedCapacity = 0;
-	m_nMiddleHeightResidentCount = 0;
-	m_nMiddleHeightDesiredLastTick = 0;
-	m_nMiddleHeightMissingRequiredLastTick = 0;
-	m_nMiddleHeightUploadsLastTick = 0;
-	m_nMiddleHeightEvictionsLastTick = 0;
-	m_nMiddleHeightTick = 0u;
-	m_middleHeightCenter = V2I_MAX;
-	m_bMiddleHeightTexturesReady = false;
-	m_bMiddleHeightPageTableDirty = true;
-	m_bMiddleHeightSelectionDirty = true;
-	m_nMiddleHeightStreamingGenerationLast = 0u;
+	m_middleHeightRegionCache.reset();
 }
+
 
 bool T3DData::configureMiddleHeightCache( void ) {
-	if ( !m_pTerrain || m_regionRepository.getRegionSize() <= 0 || m_regionRepository.getRegionMapSize() <= 0 || m_regionRepository.getActiveRegionCount() <= 0 ) {
-		return false;
-	}
-	ensureDefaultMaps();
-	const bool authoring = m_pTerrain->isEditorAuthoringMode();
-	const int hot_radius = authoring ? m_regionRepository.getRegionMapSize() : m_pTerrain->getStreamingHotRadius();
-	const int diameter = hot_radius * 2 + 1;
-	const int required_ceiling = authoring ? m_regionRepository.getActiveRegionCount() :
-		MIN( m_regionRepository.getActiveRegionCount(), diameter * diameter );
-	const int boundary_spares = authoring ? 0 : MAX( TERRAIN3D_GPU_HEIGHT_CACHE_MIN_SPARE_LAYERS,
-		4 * hot_radius + 4 );
-	m_nMiddleHeightMappedCapacity = MIN( required_ceiling, TERRAIN3D_GPU_HEIGHT_CACHE_MAX_LAYERS );
-	m_nMiddleHeightPhysicalLayerCount = MIN( m_regionRepository.getActiveRegionCount(),
-		MIN( TERRAIN3D_GPU_HEIGHT_CACHE_MAX_LAYERS, m_nMiddleHeightMappedCapacity + boundary_spares ) );
-	if ( m_nMiddleHeightPhysicalLayerCount <= 0 || m_nMiddleHeightMappedCapacity < required_ceiling ) {
-		UtilityFunctions::push_error( "Terrain3D: Middle height cache cannot satisfy the configured Active + Hot footprint." );
-		return false;
-	}
-
-	const int divisor = authoring ? 1 : MAX( 1, m_pTerrain->getGpuMiddleHeightResolutionDivisor() );
-	const int height_side = MAX( 1, ( m_regionRepository.getRegionSize() + divisor - 1 ) / divisor );
-	PackedByteArray default_height_bytes;
-	default_height_bytes.resize( ( int64_t ) ( height_side ) * ( int64_t ) ( height_side ) * 2 );
-	const uint16_t default_height = Terrain3DRegionCodec::encodeHeightU16( 0.0f );
-	for ( int index = 0; index < height_side * height_side; ++index ) {
-		std::memcpy( default_height_bytes.ptrw() + ( size_t ) ( index ) * 2u,
-			&default_height, sizeof( default_height ) );
-	}
-	const Ref<Image> pMiddleDefault = Image::create_from_data( height_side, height_side, false,
-		Image::FORMAT_R16, default_height_bytes );
-	if ( pMiddleDefault.is_null() ) {
-		return false;
-	}
-	TypedArray<Image> layers;
-	layers.resize( m_nMiddleHeightPhysicalLayerCount );
-	for ( int layer = 0; layer < m_nMiddleHeightPhysicalLayerCount; ++layer ) {
-		layers[layer] = pMiddleDefault;
-	}
-	if ( !m_generatedMiddleHeightMaps.create( layers ).is_valid() ) {
-		UtilityFunctions::push_error( "Terrain3D: Failed to allocate the Middle height-only texture array." );
-		resetMiddleHeightCache();
-		return false;
-	}
-	std::fill_n( m_szMiddleHeightRegionMap, TERRAIN3D_MAX_REGION_SLOTS, ( uint16_t ) ( 0 ) );
-	std::fill_n( m_szMiddleHeightLocations, TERRAIN3D_GPU_HEIGHT_CACHE_MAX_LAYERS, V2I_MAX );
-	std::fill_n( m_szMiddleHeightSlotStates, TERRAIN3D_GPU_HEIGHT_CACHE_MAX_LAYERS,
-		( uint8_t ) ( TERRAIN3D_GPU_SLOT_FREE ) );
-	m_bMiddleHeightTexturesReady = true;
-	m_bMiddleHeightPageTableDirty = true;
-	return updateMiddleHeightPageTableTexture();
-}
-
-int T3DData::findMiddleHeightSlot( const Vector2i &vLocation ) const {
-	const int map_index = getRegionMapIndex( vLocation );
-	if ( map_index < 0 ) {
-		return -1;
-	}
-	const int layer = ( int ) ( m_szMiddleHeightRegionMap[map_index] ) - 1;
-	if ( layer < 0 || layer >= m_nMiddleHeightPhysicalLayerCount ||
-		m_szMiddleHeightSlotStates[layer] != TERRAIN3D_GPU_SLOT_MAPPED ||
-		m_szMiddleHeightLocations[layer] != vLocation ) {
-		return -1;
-	}
-	return layer;
-}
-
-Ref<Image> T3DData::makeMiddleHeightImage( const Vector2i &vLocation, const bool bRuntimeResolution ) const {
-	T3DActiveMapLease lease = m_samplingStorage.acquireActive( vLocation );
-	const uint16_t *pActiveHeight = nullptr;
-	PackedByteArray source_bytes;
-	const uint8_t *pSourceBytes = nullptr;
-	if ( lease.valid() && lease.view().nRegionSize == m_regionRepository.getRegionSize() && lease.view().pHeight ) {
-		pActiveHeight = lease.view().pHeight;
-	} else {
-		const T3DRegion *const pRegion = getRegionPtr( vLocation );
-		const Ref<Image> pHeight = pRegion && !pRegion->isDeleted() ? pRegion->getHeightMap() : Ref<Image>();
-		if ( pHeight.is_null() || pHeight->get_width() != m_regionRepository.getRegionSize() || pHeight->get_height() != m_regionRepository.getRegionSize() ||
-			pHeight->get_format() != Image::FORMAT_R16 || pHeight->has_mipmaps() ) {
-			return Ref<Image>();
-		}
-		source_bytes = pHeight->get_data();
-		const size_t expected_source_bytes = ( size_t ) ( m_regionRepository.getRegionSize() ) * ( size_t ) ( m_regionRepository.getRegionSize() ) * sizeof( uint16_t );
-		if ( ( size_t ) ( source_bytes.size() ) != expected_source_bytes ) {
-			return Ref<Image>();
-		}
-		pSourceBytes = source_bytes.ptr();
-	}
-	const bool use_runtime_resolution = bRuntimeResolution || ( m_pTerrain && !m_pTerrain->isEditorAuthoringMode() );
-	const int divisor = m_pTerrain && use_runtime_resolution ?
-		MAX( 1, m_pTerrain->getGpuMiddleHeightResolutionDivisor() ) : 1;
-	const int side = MAX( 1, ( m_regionRepository.getRegionSize() + divisor - 1 ) / divisor );
-	const size_t byte_count = ( size_t ) ( side ) * ( size_t ) ( side ) * sizeof( uint16_t );
-	PackedByteArray bytes;
-	bytes.resize( ( int64_t ) ( byte_count ) );
-	uint8_t *const pWrite = bytes.ptrw();
-	if ( !pWrite ) {
-		return Ref<Image>();
-	}
-	if ( divisor == 1 ) {
-		if ( pActiveHeight ) {
-			std::memcpy( pWrite, pActiveHeight, byte_count );
-		} else {
-			std::memcpy( pWrite, pSourceBytes, byte_count );
-		}
-	} else {
-		for ( int y = 0; y < side; ++y ) {
-			const int source_y = MIN( y * divisor, m_regionRepository.getRegionSize() - 1 );
-			for ( int x = 0; x < side; ++x ) {
-				const int source_x = MIN( x * divisor, m_regionRepository.getRegionSize() - 1 );
-				const size_t source_offset = ( size_t ) ( source_y * m_regionRepository.getRegionSize() + source_x ) * sizeof( uint16_t );
-				uint16_t value = 0u;
-				if ( pActiveHeight ) {
-					value = pActiveHeight[source_y * m_regionRepository.getRegionSize() + source_x];
-				} else {
-					std::memcpy( &value, pSourceBytes + source_offset, sizeof( value ) );
-				}
-				std::memcpy( pWrite + ( size_t ) ( y * side + x ) * sizeof( uint16_t ),
-					&value, sizeof( value ) );
-			}
-		}
-	}
-	return Image::create_from_data( side, side, false, Image::FORMAT_R16, bytes );
-}
-
-bool T3DData::uploadMiddleHeightLayer(
-	const int nLayer, const Vector2i &vLocation, const Ref<Image> &rPreparedHeight
-) {
-	if ( !m_bMiddleHeightTexturesReady || nLayer < 0 || nLayer >= m_nMiddleHeightPhysicalLayerCount ) {
-		return false;
-	}
-	Ref<Image> pHeight = rPreparedHeight;
-	if ( pHeight.is_null() ) {
-		pHeight = makeMiddleHeightImage( vLocation );
-	}
-	if ( pHeight.is_null() || pHeight->is_empty() || !m_generatedMiddleHeightMaps.update( pHeight, nLayer ) ) {
-		return false;
-	}
-	++m_nMiddleHeightUploadsLastTick;
-	return true;
+	return m_middleHeightRegionCache.configure( getMiddleHeightCacheConfig() );
 }
 
 
-int T3DData::collectDesiredMiddleHeightRegions(
-	const T3DResidencyFrameState &rFrame, const Vector2i &rCenter, Vector2i *pLocations,
-	const int nCapacity, int &rRequiredCount
-) const {
-	rRequiredCount = 0;
-	if ( !pLocations || nCapacity <= 0 ) {
-		return 0;
-	}
-	const int capacity = MIN( nCapacity, TERRAIN3D_GPU_HEIGHT_CACHE_MAX_LAYERS );
-	int output_count = 0;
-	uint8_t selected_map[TERRAIN3D_MAX_REGION_SLOTS] = {};
-	for ( int state_value = ( int ) ( TERRAIN3D_REGION_STREAMING_ACTIVE );
-		state_value >= ( int ) ( TERRAIN3D_REGION_STREAMING_HOT ) && output_count < capacity; --state_value ) {
-		const t3dregionStreamingState_t wanted = ( t3dregionStreamingState_t ) ( state_value );
-		terrain3dForEachSquareRing( rCenter, m_regionRepository.getRegionMapSize(), [&]( const Vector2i &location ) {
-			if ( output_count >= capacity ) {
-				return false;
-			}
-			if ( !isRegionLocationValidInternal( location ) || !hasRegion( location ) ||
-				rFrame.streamingState( location ) != wanted ) {
-				return true;
-			}
-			const int map_index = getRegionMapIndex( location );
-			if ( map_index < 0 || selected_map[map_index] != 0u ) {
-				return true;
-			}
-			pLocations[output_count++] = location;
-			selected_map[map_index] = 1u;
-			return output_count < capacity;
-		} );
-	}
-	rRequiredCount = output_count;
-	for ( int slot = 0; slot < m_regionRepository.getSlotCount() && output_count < capacity; ++slot ) {
-		const Vector2i location = m_regionRepository.getSlotsData()[slot];
-		const int map_index = location == V2I_MAX ? -1 : getRegionMapIndex( location );
-		if ( map_index < 0 || selected_map[map_index] != 0u || !hasRegion( location ) ||
-			!rFrame.isPrefetch( location ) ) {
-			continue;
-		}
-		pLocations[output_count++] = location;
-		selected_map[map_index] = 1u;
-	}
-	return output_count;
-}
 
-bool T3DData::updateMiddleHeightPageTableTexture( void ) {
-	if ( m_regionRepository.getRegionMapSize() <= 0 ) {
-		return false;
-	}
-	PackedByteArray bytes;
-	bytes.resize( m_regionRepository.getRegionMapSize() * m_regionRepository.getRegionMapSize() * ( int ) ( sizeof( uint16_t ) ) );
-	uint8_t *const pWrite = bytes.ptrw();
-	if ( !pWrite ) {
-		return false;
-	}
-	std::memset( pWrite, 0, ( size_t ) ( bytes.size() ) );
-	const int half = m_regionRepository.getRegionMapSize() / 2;
-	for ( int layer = 0; layer < m_nMiddleHeightPhysicalLayerCount; ++layer ) {
-		if ( m_szMiddleHeightSlotStates[layer] != TERRAIN3D_GPU_SLOT_MAPPED ) {
-			continue;
-		}
-		const Vector2i location = m_szMiddleHeightLocations[layer];
-		const int x = location.x + half;
-		const int y = location.y + half;
-		if ( ( uint32_t ) ( x ) >= ( uint32_t ) ( m_regionRepository.getRegionMapSize() ) ||
-			( uint32_t ) ( y ) >= ( uint32_t ) ( m_regionRepository.getRegionMapSize() ) ) {
-			continue;
-		}
-		const uint16_t value = ( uint16_t ) ( layer + 1 );
-		std::memcpy( pWrite + ( size_t ) ( y * m_regionRepository.getRegionMapSize() + x ) * sizeof( uint16_t ),
-			&value, sizeof( uint16_t ) );
-	}
-	const Ref<Image> pImage = Image::create_from_data( m_regionRepository.getRegionMapSize(), m_regionRepository.getRegionMapSize(), false,
-		Image::FORMAT_R16, bytes );
-	if ( pImage.is_null() || pImage->is_empty() ) {
-		return false;
-	}
-	const bool bExisting = m_generatedMiddleHeightRegionMap.getRid().is_valid();
-	bool ok = bExisting ? m_generatedMiddleHeightRegionMap.update2d( pImage ) :
-		m_generatedMiddleHeightRegionMap.create( pImage ).is_valid();
-	if ( !ok && bExisting ) {
-		m_generatedMiddleHeightRegionMap.clear();
-		ok = m_generatedMiddleHeightRegionMap.create( pImage ).is_valid();
-	}
-	m_bMiddleHeightPageTableDirty = !ok;
-	return ok;
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 void T3DData::updateMiddleHeightResidencyInternal( const T3DResidencyFrameState &rFrame, const bool bForce ) {
-	const Vector2i &rCenter = rFrame.residencyCenter;
-	m_nMiddleHeightUploadsLastTick = 0;
-	m_nMiddleHeightEvictionsLastTick = 0;
-	m_nMiddleHeightMissingRequiredLastTick = 0;
-	if ( !rFrame.bRuntimeTiering || m_regionRepository.getActiveRegionCount() <= 0 ) {
-		return;
-	}
-	++m_nMiddleHeightTick;
-	const uint64_t streaming_generation = rFrame.streamingGeneration;
-	bool bRetirementPending = false;
-	for ( int layer = 0; layer < m_nMiddleHeightPhysicalLayerCount; ++layer ) {
-		if ( m_szMiddleHeightSlotStates[layer] == TERRAIN3D_GPU_SLOT_RETIRED ) {
-			bRetirementPending = true;
-			break;
-		}
-	}
-	if ( !bForce && m_bMiddleHeightTexturesReady && rCenter == m_middleHeightCenter &&
-		streaming_generation == m_nMiddleHeightStreamingGenerationLast &&
-		!m_bMiddleHeightSelectionDirty && !m_bMiddleHeightPageTableDirty && !bRetirementPending ) {
-		return;
-	}
-	const bool large_jump = m_middleHeightCenter != V2I_MAX &&
-		MAX( Math::abs( rCenter.x - m_middleHeightCenter.x ), Math::abs( rCenter.y - m_middleHeightCenter.y ) ) > 1;
-	if ( !m_bMiddleHeightTexturesReady ) {
-		if ( !configureMiddleHeightCache() ) {
-			return;
-		}
-	} else if ( large_jump ) {
-		std::fill_n( m_szMiddleHeightRegionMap, TERRAIN3D_MAX_REGION_SLOTS, ( uint16_t ) ( 0 ) );
-		std::fill_n( m_szMiddleHeightLocations, TERRAIN3D_GPU_HEIGHT_CACHE_MAX_LAYERS, V2I_MAX );
-		std::fill_n( m_szMiddleHeightSlotStates, TERRAIN3D_GPU_HEIGHT_CACHE_MAX_LAYERS,
-			( uint8_t ) ( TERRAIN3D_GPU_SLOT_FREE ) );
-		std::fill_n( m_szMiddleHeightRetireAfterFrame, TERRAIN3D_GPU_HEIGHT_CACHE_MAX_LAYERS, 0u );
-		m_nMiddleHeightResidentCount = 0;
-		m_bMiddleHeightPageTableDirty = true;
-	}
-	m_middleHeightCenter = rCenter;
-	m_nMiddleHeightStreamingGenerationLast = streaming_generation;
-
-	Engine *const pEngine = Engine::get_singleton();
-	const uint64_t frame = pEngine ? ( uint64_t ) ( pEngine->get_frames_drawn() ) : m_nMiddleHeightTick;
-	bRetirementPending = false;
-	for ( int layer = 0; layer < m_nMiddleHeightPhysicalLayerCount; ++layer ) {
-		if ( m_szMiddleHeightSlotStates[layer] == TERRAIN3D_GPU_SLOT_RETIRED ) {
-			if ( frame >= m_szMiddleHeightRetireAfterFrame[layer] ) {
-				m_szMiddleHeightSlotStates[layer] = TERRAIN3D_GPU_SLOT_FREE;
-				m_szMiddleHeightLocations[layer] = V2I_MAX;
-				m_szMiddleHeightRetireAfterFrame[layer] = 0u;
-			} else {
-				bRetirementPending = true;
-			}
-		}
-	}
-
-	Vector2i desired[TERRAIN3D_GPU_HEIGHT_CACHE_MAX_LAYERS];
-	int required_count = 0;
-	const int desired_count = collectDesiredMiddleHeightRegions( rFrame, rCenter, desired,
-		m_nMiddleHeightMappedCapacity, required_count );
-	m_nMiddleHeightDesiredLastTick = desired_count;
-	uint8_t desired_map[TERRAIN3D_MAX_REGION_SLOTS] = {};
-	for ( int index = 0; index < desired_count; ++index ) {
-		const int map_index = getRegionMapIndex( desired[index] );
-		if ( map_index >= 0 ) {
-			desired_map[map_index] = 1u;
-		}
-	}
-
-	for ( int layer = 0; layer < m_nMiddleHeightPhysicalLayerCount; ++layer ) {
-		if ( m_szMiddleHeightSlotStates[layer] != TERRAIN3D_GPU_SLOT_MAPPED ) {
-			continue;
-		}
-		const Vector2i location = m_szMiddleHeightLocations[layer];
-		const int map_index = getRegionMapIndex( location );
-		if ( map_index >= 0 && desired_map[map_index] != 0u ) {
-			m_szMiddleHeightLastUseTick[layer] = m_nMiddleHeightTick;
-			continue;
-		}
-		if ( map_index >= 0 ) {
-			m_szMiddleHeightRegionMap[map_index] = 0u;
-		}
-		m_szMiddleHeightSlotStates[layer] = TERRAIN3D_GPU_SLOT_RETIRED;
-		m_szMiddleHeightRetireAfterFrame[layer] = frame + ( uint64_t ) ( MAX( 1, m_nGpuRegionRetireFrames ) );
-		m_nMiddleHeightResidentCount = MAX( 0, m_nMiddleHeightResidentCount - 1 );
-		++m_nMiddleHeightEvictionsLastTick;
-		m_bMiddleHeightPageTableDirty = true;
-		bRetirementPending = true;
-	}
-
-	const int upload_budget = bForce ? TERRAIN3D_GPU_HEIGHT_CACHE_MAX_LAYERS :
-		MAX( 1, getEffectiveGpuRegionUploadBudgetLayers() );
-	const bool cooked_runtime = rFrame.bCookedPagesEnabled;
-	bool bAllDesiredResident = true;
-	for ( int index = 0; index < desired_count; ++index ) {
-		const Vector2i location = desired[index];
-		if ( findMiddleHeightSlot( location ) >= 0 ) {
-			continue;
-		}
-		bAllDesiredResident = false;
-		const bool required = index < required_count;
-		if ( cooked_runtime ) {
-			requestGpuRuntimePage( location, RUNTIME_PAGE_CONSUMER_MIDDLE_HEIGHT, required ? 2u : 3u );
-		}
-		if ( !bForce && m_nMiddleHeightUploadsLastTick >= upload_budget ) {
-			if ( required ) {
-				++m_nMiddleHeightMissingRequiredLastTick;
-			}
-			continue;
-		}
-		int free_layer = -1;
-		for ( int layer = 0; layer < m_nMiddleHeightPhysicalLayerCount; ++layer ) {
-			if ( m_szMiddleHeightSlotStates[layer] == TERRAIN3D_GPU_SLOT_FREE ) {
-				free_layer = layer;
-				break;
-			}
-		}
-		if ( free_layer < 0 ) {
-			if ( required ) {
-				++m_nMiddleHeightMissingRequiredLastTick;
-			}
-			continue;
-		}
-
-		Ref<Image> pPreparedHeight;
-		if ( cooked_runtime && !takePreparedRuntimeHeight( location,
-			RUNTIME_PAGE_CONSUMER_MIDDLE_HEIGHT, pPreparedHeight, true ) ) {
-			if ( required ) {
-				++m_nMiddleHeightMissingRequiredLastTick;
-			}
-			continue;
-		}
-		if ( !uploadMiddleHeightLayer( free_layer, location, pPreparedHeight ) ) {
-			if ( required ) {
-				++m_nMiddleHeightMissingRequiredLastTick;
-			}
-			continue;
-		}
-		m_szMiddleHeightLocations[free_layer] = location;
-		m_szMiddleHeightLastUseTick[free_layer] = m_nMiddleHeightTick;
-		m_szMiddleHeightSlotStates[free_layer] = TERRAIN3D_GPU_SLOT_MAPPED;
-		const int map_index = getRegionMapIndex( location );
-		if ( map_index >= 0 ) {
-			m_szMiddleHeightRegionMap[map_index] = ( uint16_t ) ( free_layer + 1 );
-		}
-		++m_nMiddleHeightResidentCount;
-		m_bMiddleHeightPageTableDirty = true;
-	}
-	if ( !bAllDesiredResident ) {
-		bAllDesiredResident = true;
-		for ( int index = 0; index < desired_count; ++index ) {
-			if ( findMiddleHeightSlot( desired[index] ) < 0 ) {
-				bAllDesiredResident = false;
-				break;
-			}
-		}
-	}
-	if ( m_bMiddleHeightPageTableDirty || bForce ) {
-		updateMiddleHeightPageTableTexture();
-	}
-	m_bMiddleHeightSelectionDirty = !bAllDesiredResident || bRetirementPending || m_bMiddleHeightPageTableDirty;
+	m_middleHeightRegionCache.update(
+		rFrame, bForce, getEffectiveGpuRegionUploadBudgetLayers(), getMiddleHeightCacheConfig() );
 }
+
 
 
 Dictionary T3DData::getMiddleHeightCacheStats( void ) const {
-	Dictionary stats;
-	stats["resident"] = m_nMiddleHeightResidentCount;
-	stats["mapped_capacity"] = m_nMiddleHeightMappedCapacity;
-	stats["physical_layers"] = m_nMiddleHeightPhysicalLayerCount;
-	stats["desired_last_tick"] = m_nMiddleHeightDesiredLastTick;
-	stats["missing_required_last_tick"] = m_nMiddleHeightMissingRequiredLastTick;
-	stats["uploads_last_tick"] = m_nMiddleHeightUploadsLastTick;
-	stats["evictions_last_tick"] = m_nMiddleHeightEvictionsLastTick;
-	stats["page_table_valid"] = m_generatedMiddleHeightRegionMap.getRid().is_valid();
-	stats["height_array_valid"] = m_generatedMiddleHeightMaps.getRid().is_valid();
-	stats["resolution_divisor"] = m_pTerrain && !m_pTerrain->isEditorAuthoringMode() ?
-		m_pTerrain->getGpuMiddleHeightResolutionDivisor() : 1;
-	stats["reserved_bytes"] = ( int64_t ) ( getMiddleHeightCacheReservedBytes() );
-	return stats;
+	return m_middleHeightRegionCache.getStatsDictionary();
 }
+
 
 int T3DData::fillGpuMaterialPriorityIds( uint8_t *const pIds, const int nCapacity ) const {
-	if ( !pIds || nCapacity <= 0 ) {
-		return 0;
-	}
-	uint32_t emitted_mask = 0u;
-	int count = 0;
-	auto append_mask = [&]( uint32_t mask ) {
-		while ( mask != 0u && count < nCapacity ) {
-			int id = 0;
-			while ( id < TERRAIN3D_MAX_TEXTURE_ASSETS && ( mask & ( 1u << ( uint32_t ) ( id ) ) ) == 0u ) {
-				++id;
-			}
-			if ( id >= TERRAIN3D_MAX_TEXTURE_ASSETS ) {
-				break;
-			}
-			const uint32_t bit = 1u << ( uint32_t ) ( id );
-			mask &= ~bit;
-			if ( ( emitted_mask & bit ) != 0u ) {
-				continue;
-			}
-			pIds[count++] = ( uint8_t ) ( id );
-			emitted_mask |= bit;
-		}
-	};
-
-	// Logical material zero is the stable fallback physical page.
-	append_mask( 1u );
-	for ( int priority = 0; priority < m_nGpuRegionPriorityCount && count < nCapacity; ++priority ) {
-		const int layer = findGpuRegionSlot( m_szGpuRegionPriorityLocations[priority] );
-		if ( layer >= 0 ) {
-			append_mask( m_szGpuRegionMaterialMasks[layer] );
-		}
-	}
-	for ( int layer = 0; layer < m_nGpuRegionPhysicalLayerCount && count < nCapacity; ++layer ) {
-		if ( m_szGpuRegionSlotStates[layer] == TERRAIN3D_GPU_SLOT_MAPPED ) {
-			append_mask( m_szGpuRegionMaterialMasks[layer] );
-		}
-	}
-	return count;
+	return m_gpuRegionCache.fillMaterialPriorityIds( pIds, nCapacity );
 }
+
 
 size_t T3DData::getMiddleHeightCacheReservedBytes( void ) const {
-	if ( m_nMiddleHeightPhysicalLayerCount <= 0 || m_regionRepository.getRegionSize() <= 0 ) {
-		return 0u;
-	}
-	const int divisor = m_pTerrain && !m_pTerrain->isEditorAuthoringMode() ?
-		MAX( 1, m_pTerrain->getGpuMiddleHeightResolutionDivisor() ) : 1;
-	const size_t side = ( size_t ) ( MAX( 1, ( m_regionRepository.getRegionSize() + divisor - 1 ) / divisor ) );
-	const size_t page_table = ( size_t ) ( MAX( 0, m_regionRepository.getRegionMapSize() ) ) *
-		( size_t ) ( MAX( 0, m_regionRepository.getRegionMapSize() ) ) * sizeof( uint16_t );
-	return side * side * sizeof( uint16_t ) * ( size_t ) ( m_nMiddleHeightPhysicalLayerCount ) + page_table;
+	return m_middleHeightRegionCache.getReservedBytes();
 }
 
-int T3DData::calculateCpuRegionCacheCapacity( void ) const {
-	return terrain3dCpuCacheCalculateCapacity( m_regionRepository.getRegionSize(), m_nCpuRegionCacheBudgetMb,
-		TERRAIN3D_CPU_CACHE_MAX_LAYERS );
-}
 
-size_t T3DData::estimateCpuRegionLayerBytes( void ) const {
-	return terrain3dCpuCacheEstimateLayerBytes( m_regionRepository.getRegionSize() );
-}
+
+
+
+
+
 
 void T3DData::resetCpuRegionCache( const bool bReleaseCleanMaps ) {
-	if ( bReleaseCleanMaps ) {
-		for ( int slot = 0; slot < m_nCpuRegionCacheCapacity; ++slot ) {
-			evictCpuRegionSlot( slot );
-		}
-	}
-	std::fill_n( m_szCpuRegionMap, TERRAIN3D_MAX_REGION_SLOTS, ( uint8_t ) ( 0 ) );
-	std::fill_n( m_szCpuRegionLocations, TERRAIN3D_CPU_CACHE_MAX_LAYERS, V2I_MAX );
-	m_nCpuRegionCacheCapacity = 0;
-	m_nCpuRegionResidentCount = 0;
-	m_nCpuRegionDesiredLastTick = 0;
-	m_nCpuRegionLoadsLastTick = 0;
-	m_nCpuRegionLoadsSinceReset = 0u;
-	m_nCpuRegionEvictionsLastTick = 0;
-	m_nCpuRegionPinnedLastTick = 0;
-	m_nCpuRegionLoadBytesLastTick = 0u;
-	m_nCpuRegionAsyncRequestsLastTick = 0;
-	m_nCpuRegionAsyncReadyLastTick = 0;
-	m_nCpuRegionAsyncPendingLastTick = 0;
-	m_nCpuRegionAsyncOutstanding = 0;
-	m_nCpuRegionPrefetchStreamingGenerationLast = 0u;
-	std::fill_n( m_szCpuRegionAsyncState, TERRAIN3D_MAX_REGION_SLOTS, ( uint8_t ) ( 0 ) );
-	m_cpuRegionCacheCenter = V2I_MAX;
-	m_bCpuRegionCacheSelectionDirty = true;
+	m_cpuRegionCache.reset( bReleaseCleanMaps );
 }
 
-int T3DData::findCpuRegionSlot( const Vector2i &vLocation ) const {
-	const int map_index = getRegionMapIndex( vLocation );
-	if ( map_index < 0 ) {
-		return -1;
-	}
-	const int slot = ( int ) ( m_szCpuRegionMap[map_index] ) - 1;
-	if ( slot < 0 || slot >= m_nCpuRegionCacheCapacity || m_szCpuRegionLocations[slot] != vLocation ) {
-		return -1;
-	}
-	return slot;
-}
+
+
+
 
 void T3DData::invalidateCpuRegionLocation( const Vector2i &vLocation ) {
-	const int slot = findCpuRegionSlot( vLocation );
-	if ( slot < 0 ) {
-		return;
-	}
-	const int map_index = getRegionMapIndex( vLocation );
-	if ( map_index >= 0 ) {
-		m_szCpuRegionMap[map_index] = 0u;
-	}
-	m_szCpuRegionLocations[slot] = V2I_MAX;
-	m_nCpuRegionResidentCount = MAX( 0, m_nCpuRegionResidentCount - 1 );
-	m_bCpuRegionCacheSelectionDirty = true;
+	m_cpuRegionCache.invalidate( vLocation );
 }
 
-bool T3DData::loadCpuRegionSource( const Vector2i &vLocation, Ref<T3DRegion> &rSource ) const {
-	rSource.unref();
-	T3DRegion *const pRegion = getRegionPtr( vLocation );
-	if ( !pRegion || pRegion->isDeleted() ) {
-		return false;
-	}
-	if ( pRegion->hasRuntimeMapPayload() ) {
-		rSource = Ref<T3DRegion>( pRegion );
-		return true;
-	}
-	return m_regionPersistence.loadRuntimeRegionSource(
-		pRegion->get_path(), m_regionRepository.getRegionSize(), rSource );
-}
+
+
+
 
 bool T3DData::requestCpuRegionSourceAsync( const Vector2i &vLocation ) {
-	T3DRegion *const pRegion = getRegionPtr( vLocation );
-	const int map_index = getRegionMapIndex( vLocation );
-	if ( map_index < 0 || !pRegion || pRegion->isDeleted() || pRegion->hasRuntimeMapPayload() ||
-		m_szCpuRegionAsyncState[map_index] != 0u ) {
-		return pRegion && !pRegion->isDeleted();
-	}
-	const String path = pRegion->get_path();
-	if ( path.is_empty() || !FileAccess::file_exists( path ) ) {
-		m_szCpuRegionAsyncState[map_index] = 2u;
-		return false;
-	}
-	ResourceLoader *const loader = ResourceLoader::get_singleton();
-	if ( !loader ) {
-		return false;
-	}
-	const Error error = loader->load_threaded_request( path, "Terrain3DRegion", true,
-		ResourceLoader::CACHE_MODE_IGNORE );
-	if ( error != OK && error != ERR_BUSY ) {
-		m_szCpuRegionAsyncState[map_index] = 2u;
-		return false;
-	}
-	m_szCpuRegionAsyncState[map_index] = 1u;
-	++m_nCpuRegionAsyncOutstanding;
-	++m_nCpuRegionAsyncRequestsLastTick;
-	return true;
-}
-
-bool T3DData::takeCpuRegionSourceAsync( const Vector2i &vLocation, Ref<T3DRegion> &rSource ) {
-	rSource.unref();
-	T3DRegion *const pRegion = getRegionPtr( vLocation );
-	const int map_index = getRegionMapIndex( vLocation );
-	if ( map_index < 0 || !pRegion || pRegion->isDeleted() ) {
-		return false;
-	}
-	if ( pRegion->hasRuntimeMapPayload() ) {
-		rSource = Ref<T3DRegion>( pRegion );
-		return true;
-	}
-	if ( m_szCpuRegionAsyncState[map_index] != 1u ) {
-		requestCpuRegionSourceAsync( vLocation );
-		return false;
-	}
-	ResourceLoader *const loader = ResourceLoader::get_singleton();
-	if ( !loader ) {
-		return false;
-	}
-	const String path = pRegion->get_path();
-	const ResourceLoader::ThreadLoadStatus status = loader->load_threaded_get_status( path );
-	if ( status == ResourceLoader::THREAD_LOAD_IN_PROGRESS ) {
-		++m_nCpuRegionAsyncPendingLastTick;
-		return false;
-	}
-	if ( status != ResourceLoader::THREAD_LOAD_LOADED ) {
-		m_szCpuRegionAsyncState[map_index] = 2u;
-		m_nCpuRegionAsyncOutstanding = MAX( 0, m_nCpuRegionAsyncOutstanding - 1 );
-		return false;
-	}
-	const Ref<Resource> pResource = loader->load_threaded_get( path );
-	const Ref<T3DRegion> pLoaded = pResource;
-	m_szCpuRegionAsyncState[map_index] = 0u;
-	m_nCpuRegionAsyncOutstanding = MAX( 0, m_nCpuRegionAsyncOutstanding - 1 );
-	if ( !m_regionPersistence.prepareRuntimeRegionSource(
-		pLoaded, m_regionRepository.getRegionSize(), rSource ) ) {
-		return false;
-	}
-	++m_nCpuRegionAsyncReadyLastTick;
-	return true;
-}
-
-void T3DData::prewarmCpuRegionSources( const T3DResidencyFrameState &rFrame ) {
-	if ( !m_bCpuRegionCacheEnabled || rFrame.bAuthoring ) {
-		return;
-	}
-	const Vector2i center = rFrame.predictedCenter;
-	const int radius = rFrame.nStreamingActiveRadius;
-	for ( int y = -radius; y <= radius; ++y ) {
-		for ( int x = -radius; x <= radius; ++x ) {
-			const Vector2i location = center + Vector2i( x, y );
-			if ( !isRegionLocationValidInternal( location ) || !hasRegion( location ) ||
-				findCpuRegionSlot( location ) >= 0 ) {
-				continue;
-			}
-			T3DRegion *const pRegion = getRegionPtr( location );
-			if ( pRegion && !pRegion->isDeleted() && !pRegion->hasRuntimeMapPayload() ) {
-				requestCpuRegionSourceAsync( location );
-			}
-		}
-	}
-}
-
-void T3DData::reapCpuRegionSourceAsync( const T3DResidencyFrameState &rFrame ) {
-	if ( m_nCpuRegionAsyncOutstanding <= 0 || rFrame.bAuthoring ) {
-		return;
-	}
-	ResourceLoader *const loader = ResourceLoader::get_singleton();
-	if ( !loader ) {
-		return;
-	}
-	const Vector2i predicted_center = rFrame.predictedCenter;
-	const int active_radius = rFrame.nStreamingActiveRadius;
-	for ( int slot = 0; slot < m_regionRepository.getSlotCount() && m_nCpuRegionAsyncOutstanding > 0; ++slot ) {
-		const Vector2i location = m_regionRepository.getSlotsData()[slot];
-		const int map_index = location == V2I_MAX ? -1 : getRegionMapIndex( location );
-		if ( map_index < 0 || m_szCpuRegionAsyncState[map_index] == 0u ) {
-			continue;
-		}
-		const bool active_now = rFrame.streamingState( location ) == TERRAIN3D_REGION_STREAMING_ACTIVE;
-		const bool predicted_active = MAX( Math::abs( location.x - predicted_center.x ),
-			Math::abs( location.y - predicted_center.y ) ) <= active_radius;
-		if ( active_now || predicted_active ) {
-			continue;
-		}
-		T3DRegion *const pRegion = getRegionPtr( location );
-		if ( !pRegion || pRegion->isDeleted() || pRegion->get_path().is_empty() ) {
-			m_szCpuRegionAsyncState[map_index] = 0u;
-			m_nCpuRegionAsyncOutstanding = MAX( 0, m_nCpuRegionAsyncOutstanding - 1 );
-			continue;
-		}
-		const String path = pRegion->get_path();
-		const ResourceLoader::ThreadLoadStatus status = loader->load_threaded_get_status( path );
-		if ( status == ResourceLoader::THREAD_LOAD_IN_PROGRESS ) {
-			continue;
-		}
-		if ( status == ResourceLoader::THREAD_LOAD_LOADED ) {
-			// Collect and immediately release stale completed requests.
-			const Ref<Resource> discard = loader->load_threaded_get( path );
-			( void ) discard;
-		}
-		m_szCpuRegionAsyncState[map_index] = 0u;
-		m_nCpuRegionAsyncOutstanding = MAX( 0, m_nCpuRegionAsyncOutstanding - 1 );
-	}
+	return m_cpuRegionCache.requestSourceAsync( vLocation );
 }
 
 
-bool T3DData::publishCpuRegionSlot(
-	const int iSlot, const Vector2i &vLocation,
-	const Ref<T3DRegion> &rSource
-) {
-	if ( iSlot < 0 || iSlot >= m_nCpuRegionCacheCapacity || rSource.is_null() ) {
-		return false;
-	}
-	T3DRegion *const pRegion = getRegionPtr( vLocation );
-	if ( !pRegion || pRegion->isDeleted() ) {
-		return false;
-	}
-	pRegion->importRuntimeMapsUnmodified( rSource.ptr() );
-	if ( !pRegion->hasRuntimeMapPayload() ) {
-		return false;
-	}
-	const int map_index = getRegionMapIndex( vLocation );
-	if ( map_index < 0 ) {
-		return false;
-	}
-	m_szCpuRegionLocations[iSlot] = vLocation;
-	m_szCpuRegionMap[map_index] = ( uint8_t ) ( iSlot + 1 );
-	++m_nCpuRegionResidentCount;
-	publishRegionSamplingGeneration( vLocation );
-	return true;
-}
 
-bool T3DData::evictCpuRegionSlot( const int iSlot ) {
-	if ( iSlot < 0 || iSlot >= m_nCpuRegionCacheCapacity ) {
-		return false;
-	}
-	const Vector2i location = m_szCpuRegionLocations[iSlot];
-	if ( location == V2I_MAX ) {
-		return true;
-	}
-	T3DRegion *const pRegion = getRegionPtr( location );
-	if ( pRegion && pRegion->hasRuntimeMapPayload() && !pRegion->runtimeMapsEvictable() ) {
-		return false;
-	}
-	m_samplingStorage.invalidateResident( location );
-	if ( pRegion ) {
-		pRegion->releaseRuntimeMapsUnmodified();
-	}
-	const int map_index = getRegionMapIndex( location );
-	if ( map_index >= 0 ) {
-		m_szCpuRegionMap[map_index] = 0u;
-	}
-	m_szCpuRegionLocations[iSlot] = V2I_MAX;
-	m_nCpuRegionResidentCount = MAX( 0, m_nCpuRegionResidentCount - 1 );
-	publishRegionSamplingGeneration( location );
-	return true;
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 bool T3DData::ensureCpuRegionResidentInternal( const Vector2i &vLocation, const bool bDemandLoad ) {
-	if ( !m_bCpuRegionCacheEnabled ) {
-		return true;
-	}
-	const int existing = findCpuRegionSlot( vLocation );
-	if ( existing >= 0 ) {
-		return true;
-	}
-	T3DRegion *const pExistingRegion = getRegionPtr( vLocation );
-	if ( pExistingRegion && pExistingRegion->hasRuntimeMapPayload() &&
-		!pExistingRegion->runtimeMapsEvictable() ) {
-		// Dirty, undo-owned, deleted, and pathless resources are deliberately
-		// outside the bounded clean cache. Their payload is already available and
-		// remains pinned until persistence/lifecycle state makes it evictable.
-		return true;
-	}
-	Ref<T3DRegion> pSource;
-	if ( !loadCpuRegionSource( vLocation, pSource ) ) {
-		return false;
-	}
-	int target_slot = -1;
-	for ( int slot = 0; slot < m_nCpuRegionCacheCapacity; ++slot ) {
-		if ( m_szCpuRegionLocations[slot] == V2I_MAX ) {
-			target_slot = slot;
-			break;
-		}
-	}
-	if ( target_slot < 0 ) {
-		int farthest_distance = -1;
-		const Vector2i eviction_center = m_cpuRegionCacheCenter == V2I_MAX ? vLocation : m_cpuRegionCacheCenter;
-		const t3dcpuCacheCoord_t center = {eviction_center.x, eviction_center.y};
-		for ( int slot = 0; slot < m_nCpuRegionCacheCapacity; ++slot ) {
-			const Vector2i old_location = m_szCpuRegionLocations[slot];
-			T3DRegion *const pOldRegion = getRegionPtr( old_location );
-			if ( !pOldRegion || !pOldRegion->runtimeMapsEvictable() ) {
-				continue;
-			}
-			const int distance = terrain3dCpuCacheDistance(
-				{old_location.x, old_location.y}, center );
-			if ( distance > farthest_distance ) {
-				farthest_distance = distance;
-				target_slot = slot;
-			}
-		}
-	}
-	if ( target_slot < 0 ) {
-		return false;
-	}
-	if ( m_szCpuRegionLocations[target_slot] != V2I_MAX ) {
-		if ( !evictCpuRegionSlot( target_slot ) ) {
-			return false;
-		}
-		++m_nCpuRegionEvictionsLastTick;
-	}
-	if ( !publishCpuRegionSlot( target_slot, vLocation, pSource ) ) {
-		return false;
-	}
-	if ( bDemandLoad ) {
-		++m_nCpuRegionDemandLoads;
-	}
-	return true;
+	return m_cpuRegionCache.ensureResident( vLocation, bDemandLoad );
 }
 
-void T3DData::releaseUntrackedCpuMaps( void ) {
-	if ( !m_bCpuRegionCacheEnabled ) {
-		return;
-	}
-	for ( int slot = 0; slot < m_regionRepository.getSlotCount(); ++slot ) {
-		const Vector2i location = m_regionRepository.getSlotsData()[slot];
-		if ( location == V2I_MAX || findCpuRegionSlot( location ) >= 0 ) {
-			continue;
-		}
-		T3DRegion *const pRegion = getRegionPtr( location );
-		if ( !pRegion || !pRegion->hasRuntimeMapPayload() || !pRegion->runtimeMapsEvictable() ) {
-			continue;
-		}
-		m_samplingStorage.invalidateResident( location );
-		pRegion->releaseRuntimeMapsUnmodified();
-		publishRegionSamplingGeneration( location );
-	}
-}
 
-bool T3DData::restoreAllCpuMaps( void ) {
-	bool bSuccess = true;
-	for ( int slot = 0; slot < m_regionRepository.getSlotCount(); ++slot ) {
-		const Vector2i location = m_regionRepository.getSlotsData()[slot];
-		T3DRegion *const pRegion = location == V2I_MAX ? nullptr : getRegionPtr( location );
-		if ( !pRegion || pRegion->isDeleted() || pRegion->hasRuntimeMapPayload() ) {
-			continue;
-		}
-		Ref<T3DRegion> pSource;
-		if ( !loadCpuRegionSource( location, pSource ) ) {
-			bSuccess = false;
-			continue;
-		}
-		pRegion->importRuntimeMapsUnmodified( pSource.ptr() );
-		publishRegionSamplingGeneration( location );
-	}
-	return bSuccess;
-}
 
-int T3DData::collectDesiredCpuRegions(
-	const T3DResidencyFrameState &rFrame, const Vector2i &rCenter, Vector2i *pLocations,
-	const int nCapacity
-) const {
-	if ( !pLocations || nCapacity <= 0 ) {
-		return 0;
-	}
-	const int capacity = MIN( nCapacity, TERRAIN3D_CPU_CACHE_MAX_LAYERS );
-	int output_count = 0;
-	terrain3dForEachSquareRing( rCenter, m_regionRepository.getRegionMapSize(), [&]( const Vector2i &location ) {
-		if ( output_count >= capacity ) {
-			return false;
-		}
-		if ( !isRegionLocationValidInternal( location ) || !hasRegion( location ) ||
-			rFrame.streamingState( location ) != TERRAIN3D_REGION_STREAMING_ACTIVE ) {
-			return true;
-		}
-		pLocations[output_count++] = location;
-		return output_count < capacity;
-	} );
-	return output_count;
-}
+
+
+
+
+
+
+
 
 void T3DData::setRuntimePageBudgetOverrides(
 	const int nGpuUploadLayers,
@@ -3409,15 +1142,15 @@ void T3DData::clearRuntimePageBudgetOverrides( void ) {
 }
 
 int T3DData::getEffectiveGpuRegionUploadBudgetLayers( void ) const {
-	return m_regionResidency.effectiveGpuUploadLayers( m_nGpuRegionUploadBudgetLayers );
+	return m_regionResidency.effectiveGpuUploadLayers( m_gpuRegionCache.getUploadBudgetLayers() );
 }
 
 int T3DData::getEffectiveCpuRegionLoadBudgetLayers( void ) const {
-	return m_regionResidency.effectiveCpuLoadLayers( m_nCpuRegionLoadBudgetLayers );
+	return m_regionResidency.effectiveCpuLoadLayers( m_cpuRegionCache.getLoadBudgetLayers() );
 }
 
 int T3DData::getEffectiveInstanceRegionLoadBudgetPages( void ) const {
-	return m_regionResidency.effectiveInstanceLoadPages( m_nInstanceRegionLoadBudgetPages );
+	return m_regionResidency.effectiveInstanceLoadPages( m_instanceRegionCache.getLoadBudgetPages() );
 }
 
 
@@ -3425,662 +1158,102 @@ void T3DData::configureCpuRegionCache(
 	const bool bEnabled, const int nBudgetMb,
 	const int nLoadLayers, const int nLoadBudgetMb
 ) {
-	const bool bOldEnabled = m_bCpuRegionCacheEnabled;
-	const int old_budget = m_nCpuRegionCacheBudgetMb;
-	m_bCpuRegionCacheEnabled = bEnabled;
-	m_nCpuRegionCacheBudgetMb = CLAMP( nBudgetMb, TERRAIN3D_CPU_REGION_CACHE_MIN_BUDGET_MB,
-		TERRAIN3D_CPU_REGION_CACHE_MAX_BUDGET_MB );
-	m_nCpuRegionLoadBudgetLayers = CLAMP( nLoadLayers, 1, TERRAIN3D_CPU_REGION_LOAD_MAX_LAYERS );
-	m_nCpuRegionLoadBudgetMb = CLAMP( nLoadBudgetMb, 1, TERRAIN3D_CPU_REGION_LOAD_MAX_BUDGET_MB );
-	if ( !bOldEnabled && !m_bCpuRegionCacheEnabled ) {
-		return;
-	}
-	if ( bOldEnabled && !m_bCpuRegionCacheEnabled ) {
-		if ( !restoreAllCpuMaps() ) {
-			m_bCpuRegionCacheEnabled = true;
-			m_bCpuRegionCacheSelectionDirty = true;
-			LOG( T3DTerrain::ERROR, "CPU region cache remains enabled because one or more region payloads could not be restored" );
-			return;
-		}
-		resetCpuRegionCache( false );
-		return;
-	}
-	const int capacity = calculateCpuRegionCacheCapacity();
-	if ( !bOldEnabled || old_budget != m_nCpuRegionCacheBudgetMb || capacity != m_nCpuRegionCacheCapacity ) {
-		resetCpuRegionCache( false );
-		m_nCpuRegionCacheCapacity = capacity;
-		m_bCpuRegionCacheSelectionDirty = true;
-	}
+	m_cpuRegionCache.configure( bEnabled, nBudgetMb, nLoadLayers, nLoadBudgetMb );
 }
 
+
 bool T3DData::ensureCpuRegionResident( const Vector2i &vLocation ) {
-	if ( !m_bCpuRegionCacheEnabled ) {
-		return hasRegion( vLocation );
-	}
-	if ( !hasRegion( vLocation ) ) {
-		return false;
-	}
-	return ensureCpuRegionResidentInternal( vLocation, true );
+	return m_cpuRegionCache.ensureResident( vLocation, true );
 }
+
 
 
 bool T3DData::ensureCpuSampleArea( const Vector3 &rWorldPosition, const int nRadiusTexels ) {
-	if ( !m_bCpuRegionCacheEnabled || m_regionRepository.getRegionSize() <= 0 || m_regionRepository.getVertexSpacing() <= 0.0f ) {
-		return true;
-	}
-	const int radius = MAX( 0, nRadiusTexels ) + 1;
-	const Vector2i center(
-		( int ) ( Math::floor( rWorldPosition.x / m_regionRepository.getVertexSpacing() ) ),
-		( int ) ( Math::floor( rWorldPosition.z / m_regionRepository.getVertexSpacing() ) )
-	);
-	const Vector2i extent( radius * 2 + 1, radius * 2 + 1 );
-	const Rect2i bounds = getRegionBoundsForArea( Rect2i( center - Vector2i( radius, radius ), extent ), m_regionRepository.getRegionSize() );
-	bool bSuccess = true;
-	for ( int y = bounds.position.y; y < bounds.get_end().y; ++y ) {
-		for ( int x = bounds.position.x; x < bounds.get_end().x; ++x ) {
-			const Vector2i location( x, y );
-			if ( hasRegion( location ) && !ensureCpuRegionResident( location ) ) {
-				bSuccess = false;
-			}
-		}
-	}
-	return bSuccess;
+	return m_cpuRegionCache.ensureSampleArea( rWorldPosition, nRadiusTexels );
 }
+
 
 void T3DData::updateCpuRegionResidencyInternal( const T3DResidencyFrameState &rFrame, const bool bForce ) {
-	const T3DLastScopeTimer serviceTimer( m_nCpuRegionServiceUsecLast, rFrame.bProfilingEnabled );
-	m_nCpuRegionLoadsLastTick = 0;
-	m_nCpuRegionStallFlagsLastTick = TERRAIN3D_PROFILE_STALL_NONE;
-	m_nCpuRegionEvictionsLastTick = 0;
-	m_nCpuRegionPinnedLastTick = 0;
-	m_nCpuRegionLoadBytesLastTick = 0u;
-	m_nCpuRegionAsyncRequestsLastTick = 0;
-	m_nCpuRegionAsyncReadyLastTick = 0;
-	m_nCpuRegionAsyncPendingLastTick = 0;
-	if ( !m_bCpuRegionCacheEnabled || m_nCpuRegionCacheCapacity <= 0 || m_regionRepository.getRegionSize() <= 0 ||
-		m_regionRepository.getVertexSpacing() <= 0.0f ) {
-		return;
-	}
-
-	// Predictive CPU requests only need to be reconsidered when the shared streaming
-	// policy changes. Crossing a boundary should normally promote an already-loaded
-	// Terrain3DRegion resource instead of invoking ResourceLoader::load() in physics.
-	const uint64_t streaming_generation = rFrame.streamingGeneration;
-	if ( bForce || streaming_generation != m_nCpuRegionPrefetchStreamingGenerationLast ) {
-		prewarmCpuRegionSources( rFrame );
-		m_nCpuRegionPrefetchStreamingGenerationLast = streaming_generation;
-	}
-	reapCpuRegionSourceAsync( rFrame );
-
-	const Vector2i center = rFrame.residencyCenter;
-	if ( !bForce && center == m_cpuRegionCacheCenter && !m_bCpuRegionCacheSelectionDirty ) {
-		return;
-	}
-	Vector2i desired[TERRAIN3D_CPU_CACHE_MAX_LAYERS];
-	const int desired_count = collectDesiredCpuRegions( rFrame, center, desired, m_nCpuRegionCacheCapacity );
-	m_nCpuRegionDesiredLastTick = desired_count;
-	uint8_t desired_map[TERRAIN3D_MAX_REGION_SLOTS] = {};
-	for ( int index = 0; index < desired_count; ++index ) {
-		const int map_index = getRegionMapIndex( desired[index] );
-		if ( map_index >= 0 ) {
-			desired_map[map_index] = 1u;
-		}
-	}
-	const size_t layer_bytes = estimateCpuRegionLayerBytes();
-	const size_t byte_budget = ( size_t ) ( m_nCpuRegionLoadBudgetMb ) * TERRAIN3D_CPU_CACHE_MIB;
-	const int load_layer_budget = getEffectiveCpuRegionLoadBudgetLayers();
-	bool bAllDesiredResident = true;
-	for ( int desired_index = 0; desired_index < desired_count; ++desired_index ) {
-		const Vector2i location = desired[desired_index];
-		if ( findCpuRegionSlot( location ) >= 0 ) {
-			continue;
-		}
-		T3DRegion *const pAvailableRegion = getRegionPtr( location );
-		if ( pAvailableRegion && pAvailableRegion->hasRuntimeMapPayload() &&
-			!pAvailableRegion->runtimeMapsEvictable() ) {
-			continue;
-		}
-		bAllDesiredResident = false;
-		if ( !bForce && m_nCpuRegionLoadsLastTick >= load_layer_budget ) {
-			m_nCpuRegionStallFlagsLastTick |= TERRAIN3D_PROFILE_STALL_CPU_LOAD_BUDGET;
-			break;
-		}
-		if ( !bForce && m_nCpuRegionLoadsLastTick > 0 &&
-			m_nCpuRegionLoadBytesLastTick + layer_bytes > byte_budget ) {
-			m_nCpuRegionStallFlagsLastTick |= TERRAIN3D_PROFILE_STALL_CPU_LOAD_BYTE_BUDGET;
-			break;
-		}
-		Ref<T3DRegion> pSource;
-		const bool bSourceReady = bForce ? loadCpuRegionSource( location, pSource ) :
-			takeCpuRegionSourceAsync( location, pSource );
-		if ( !bSourceReady ) {
-			if ( !bForce ) {
-				requestCpuRegionSourceAsync( location );
-			}
-			continue;
-		}
-		int target_slot = -1;
-		for ( int slot = 0; slot < m_nCpuRegionCacheCapacity; ++slot ) {
-			if ( m_szCpuRegionLocations[slot] == V2I_MAX ) {
-				target_slot = slot;
-				break;
-			}
-		}
-		if ( target_slot < 0 ) {
-			int farthest_distance = -1;
-			for ( int slot = 0; slot < m_nCpuRegionCacheCapacity; ++slot ) {
-				const Vector2i old_location = m_szCpuRegionLocations[slot];
-				const int old_map_index = getRegionMapIndex( old_location );
-				if ( old_map_index >= 0 && desired_map[old_map_index] != 0u ) {
-					continue;
-				}
-				T3DRegion *const pOldRegion = getRegionPtr( old_location );
-				if ( !pOldRegion || !pOldRegion->runtimeMapsEvictable() ) {
-					++m_nCpuRegionPinnedLastTick;
-					continue;
-				}
-				const int distance = MAX( std::abs( old_location.x - center.x ),
-					std::abs( old_location.y - center.y ) );
-				if ( distance > farthest_distance ) {
-					farthest_distance = distance;
-					target_slot = slot;
-				}
-			}
-		}
-		if ( target_slot < 0 ) {
-			m_nCpuRegionStallFlagsLastTick |= TERRAIN3D_PROFILE_STALL_CPU_PINNED_CAPACITY;
-			continue;
-		}
-		if ( m_szCpuRegionLocations[target_slot] != V2I_MAX ) {
-			if ( !evictCpuRegionSlot( target_slot ) ) {
-				continue;
-			}
-			++m_nCpuRegionEvictionsLastTick;
-		}
-		if ( !publishCpuRegionSlot( target_slot, location, pSource ) ) {
-			continue;
-		}
-		++m_nCpuRegionLoadsLastTick;
-		++m_nCpuRegionLoadsSinceReset;
-		m_nCpuRegionLoadBytesLastTick += layer_bytes;
-	}
-	if ( !bAllDesiredResident ) {
-		bAllDesiredResident = true;
-		for ( int index = 0; index < desired_count; ++index ) {
-			const Vector2i location = desired[index];
-			T3DRegion *const pAvailableRegion = getRegionPtr( location );
-			const bool bPinnedAvailable = pAvailableRegion && pAvailableRegion->hasRuntimeMapPayload() &&
-				!pAvailableRegion->runtimeMapsEvictable();
-			if ( findCpuRegionSlot( location ) < 0 && !bPinnedAvailable ) {
-				bAllDesiredResident = false;
-				break;
-			}
-		}
-	}
-	m_cpuRegionCacheCenter = center;
-	m_bCpuRegionCacheSelectionDirty = !bAllDesiredResident;
-	releaseUntrackedCpuMaps();
+	m_cpuRegionCache.update( rFrame, bForce, getEffectiveCpuRegionLoadBudgetLayers() );
 }
+
 
 
 Dictionary T3DData::getCpuRegionCacheStatsFast( void ) const {
-	Dictionary stats;
-	stats["enabled"] = m_bCpuRegionCacheEnabled;
-	stats["budget_mb"] = m_nCpuRegionCacheBudgetMb;
-	stats["capacity"] = m_nCpuRegionCacheCapacity;
-	stats["resident"] = m_nCpuRegionResidentCount;
-	stats["desired_last_tick"] = m_nCpuRegionDesiredLastTick;
-	stats["loads_last_tick"] = m_nCpuRegionLoadsLastTick;
-	stats["loads_since_reset"] = ( int64_t ) ( m_nCpuRegionLoadsSinceReset );
-	stats["evictions_last_tick"] = m_nCpuRegionEvictionsLastTick;
-	stats["pinned_last_tick"] = m_nCpuRegionPinnedLastTick;
-	stats["demand_loads"] = m_nCpuRegionDemandLoads;
-	stats["load_bytes_last_tick"] = ( int64_t ) ( m_nCpuRegionLoadBytesLastTick );
-	stats["async_requests_last_tick"] = m_nCpuRegionAsyncRequestsLastTick;
-	stats["async_ready_last_tick"] = m_nCpuRegionAsyncReadyLastTick;
-	stats["async_pending_last_tick"] = m_nCpuRegionAsyncPendingLastTick;
-	stats["service_cpu_usec_last"] = ( int64_t ) ( m_nCpuRegionServiceUsecLast );
-	stats["selection_pending"] = m_bCpuRegionCacheSelectionDirty;
-	stats["reserved_bytes"] = ( int64_t ) ( getCpuRegionCacheReservedBytes() );
-	stats["active_height_bytes"] = ( int64_t ) ( m_samplingStorage.getActiveReservedBytes() );
-	stats["active_height_physical_capacity"] = m_samplingStorage.getActivePhysicalCapacity();
-	const T3DActiveHeightResidencyStats &activeHeightStats = m_activeHeightResidency.getStats();
-	stats["active_height_reconciliations_last_tick"] = activeHeightStats.nReconciliationsLastTick;
-	stats["active_height_slots_examined_last_tick"] = activeHeightStats.nSlotsExaminedLastTick;
-	stats["active_height_required_last_tick"] = activeHeightStats.nRequiredLastTick;
-	stats["active_height_missing_required_last_tick"] = activeHeightStats.nMissingRequiredLastTick;
-	stats["active_height_published_last_tick"] = activeHeightStats.nPublishedLastTick;
-	stats["active_height_evicted_last_tick"] = activeHeightStats.nEvictedLastTick;
-	stats["active_height_predicted_requests_last_tick"] = activeHeightStats.nPredictedRequestsLastTick;
-	stats["active_height_reader_retries"] = ( int64_t ) ( m_samplingStorage.getActiveReaderRetryCount() );
-	stats["active_height_reader_mutexes"] = ( int64_t ) ( m_samplingStorage.getActiveReaderMutexCount() );
-	stats["active_height_publications"] = ( int64_t ) ( m_samplingStorage.getActivePublicationCount() );
-	return stats;
+	return m_cpuRegionCache.getStatsDictionary( false, getEffectiveCpuRegionLoadBudgetLayers() );
 }
 
+
 Dictionary T3DData::getCpuRegionCacheStats( void ) const {
-	Dictionary stats;
-	int pinned_payload_count = 0;
-	int total_payload_count = 0;
-	for ( int slot = 0; slot < m_regionRepository.getSlotCount(); ++slot ) {
-		const Vector2i location = m_regionRepository.getSlotsData()[slot];
-		const T3DRegion *pRegion = location == V2I_MAX ? nullptr : getRegionPtr( location );
-		if ( !pRegion || pRegion->isDeleted() || !pRegion->hasRuntimeMapPayload() ) {
-			continue;
-		}
-		++total_payload_count;
-		if ( findCpuRegionSlot( location ) < 0 ) {
-			++pinned_payload_count;
-		}
-	}
-	stats["enabled"] = m_bCpuRegionCacheEnabled;
-	stats["budget_mb"] = m_nCpuRegionCacheBudgetMb;
-	stats["capacity"] = m_nCpuRegionCacheCapacity;
-	stats["resident"] = m_nCpuRegionResidentCount;
-	stats["desired_last_tick"] = m_nCpuRegionDesiredLastTick;
-	stats["load_layer_budget"] = m_nCpuRegionLoadBudgetLayers;
-	stats["effective_load_layer_budget"] = getEffectiveCpuRegionLoadBudgetLayers();
-	stats["load_budget_mb"] = m_nCpuRegionLoadBudgetMb;
-	stats["loads_last_tick"] = m_nCpuRegionLoadsLastTick;
-	stats["loads_since_reset"] = ( int64_t ) ( m_nCpuRegionLoadsSinceReset );
-	stats["stall_flags_last_tick"] = ( int64_t ) ( m_nCpuRegionStallFlagsLastTick );
-	stats["evictions_last_tick"] = m_nCpuRegionEvictionsLastTick;
-	stats["pinned_last_tick"] = m_nCpuRegionPinnedLastTick;
-	stats["pinned_payloads"] = pinned_payload_count;
-	stats["total_payloads"] = total_payload_count;
-	stats["demand_loads"] = m_nCpuRegionDemandLoads;
-	stats["load_bytes_last_tick"] = ( int64_t ) ( m_nCpuRegionLoadBytesLastTick );
-	stats["async_requests_last_tick"] = m_nCpuRegionAsyncRequestsLastTick;
-	stats["async_ready_last_tick"] = m_nCpuRegionAsyncReadyLastTick;
-	stats["async_pending_last_tick"] = m_nCpuRegionAsyncPendingLastTick;
-	const size_t layer_bytes = estimateCpuRegionLayerBytes();
-	const size_t worst_case_bytes = layer_bytes * ( size_t ) ( MAX( 0, m_nCpuRegionCacheCapacity ) );
-	const size_t budget_bytes = ( size_t ) ( m_nCpuRegionCacheBudgetMb ) * TERRAIN3D_CPU_CACHE_MIB;
-	const size_t active_height_bytes = m_samplingStorage.getActiveReservedBytes();
-	const size_t default_map_bytes = m_regionRepository.getRegionSize() > 0 ? layer_bytes : 0u;
-	const size_t payload_bytes = layer_bytes * ( size_t ) ( MAX( 0, total_payload_count ) );
-	const size_t pinned_bytes = layer_bytes * ( size_t ) ( MAX( 0, pinned_payload_count ) );
-	const size_t total_map_bytes = active_height_bytes + default_map_bytes + payload_bytes;
-	stats["estimated_layer_bytes"] = ( int64_t ) ( layer_bytes );
-	stats["estimated_worst_case_bytes"] = ( int64_t ) ( worst_case_bytes );
-	stats["estimated_payload_bytes"] = ( int64_t ) ( payload_bytes );
-	stats["estimated_pinned_bytes"] = ( int64_t ) ( pinned_bytes );
-	stats["active_height_bytes"] = ( int64_t ) ( active_height_bytes );
-	stats["active_height_physical_capacity"] = m_samplingStorage.getActivePhysicalCapacity();
-	const T3DActiveHeightResidencyStats &activeHeightStats = m_activeHeightResidency.getStats();
-	stats["active_height_reconciliations_last_tick"] = activeHeightStats.nReconciliationsLastTick;
-	stats["active_height_slots_examined_last_tick"] = activeHeightStats.nSlotsExaminedLastTick;
-	stats["active_height_required_last_tick"] = activeHeightStats.nRequiredLastTick;
-	stats["active_height_missing_required_last_tick"] = activeHeightStats.nMissingRequiredLastTick;
-	stats["active_height_published_last_tick"] = activeHeightStats.nPublishedLastTick;
-	stats["active_height_evicted_last_tick"] = activeHeightStats.nEvictedLastTick;
-	stats["active_height_predicted_requests_last_tick"] = activeHeightStats.nPredictedRequestsLastTick;
-	stats["active_height_reader_retries"] = ( int64_t ) ( m_samplingStorage.getActiveReaderRetryCount() );
-	stats["active_height_reader_mutexes"] = ( int64_t ) ( m_samplingStorage.getActiveReaderMutexCount() );
-	stats["active_height_publications"] = ( int64_t ) ( m_samplingStorage.getActivePublicationCount() );
-	stats["default_map_bytes"] = ( int64_t ) ( default_map_bytes );
-	stats["estimated_total_map_bytes"] = ( int64_t ) ( total_map_bytes );
-	stats["target_map_ceiling_bytes"] = ( int64_t ) ( TERRAIN3D_XBOX360_CPU_MAP_CEILING_BYTES );
-	stats["budget_overcommitted"] = worst_case_bytes > budget_bytes;
-	stats["runtime_overcommitted"] = total_payload_count > m_nCpuRegionCacheCapacity;
-	stats["target_map_ceiling_exceeded"] = total_map_bytes > TERRAIN3D_XBOX360_CPU_MAP_CEILING_BYTES;
-	stats["center"] = m_cpuRegionCacheCenter;
-	stats["selection_pending"] = m_bCpuRegionCacheSelectionDirty;
-	return stats;
+	return m_cpuRegionCache.getStatsDictionary( true, getEffectiveCpuRegionLoadBudgetLayers() );
 }
+
 
 void T3DData::emitGpuRegionMapChanged( void ) {
 	if ( m_bStartupBulkLoad ) {
 		return;
 	}
-	++m_nGpuRegionPageTableUpdatesLastTick;
+	m_gpuRegionCache.recordPageTableUpdate();
 	emit_signal( "gpu_region_page_table_changed" );
 	armPendingGpuRegionRetirements();
 }
 
 
 void T3DData::resetInstanceRegionCache( const bool bRestoreAll ) {
-	if ( bRestoreAll ) {
-		for ( int slot = 0; slot < m_regionRepository.getSlotCount(); ++slot ) {
-			const Vector2i location = m_regionRepository.getSlotsData()[slot];
-			T3DRegion *const pRegion = location == V2I_MAX ? nullptr : getRegionPtr( location );
-			if ( pRegion && !pRegion->isDeleted() && pRegion->hasInstances() ) {
-				pRegion->ensureInstanceStoreResident();
-			}
-		}
-	} else {
-		for ( int slot = 0; slot < m_nInstanceRegionCacheCapacity; ++slot ) {
-			evictInstanceRegionSlot( slot );
-		}
-	}
-	std::fill_n( m_szInstanceRegionMap, TERRAIN3D_MAX_REGION_SLOTS, ( uint8_t ) ( 0 ) );
-	std::fill_n( m_szInstanceRegionLocations, TERRAIN3D_INSTANCE_CACHE_MAX_PAGES, V2I_MAX );
-	m_nInstanceRegionCacheCapacity = TERRAIN3D_INSTANCE_CACHE_MAX_PAGES;
-	m_nInstanceRegionResidentCount = 0;
-	m_nInstanceRegionDesiredLastTick = 0;
-	m_nInstanceRegionLoadsLastTick = 0;
-	m_nInstanceRegionEvictionsLastTick = 0;
-	m_nInstanceRegionLoadBytesLastTick = 0u;
-	m_nInstanceRegionResidentBytes = 0u;
-	m_instanceRegionCacheCenter = V2I_MAX;
-	m_nInstancePrefetchStreamingGenerationLast = 0u;
-	m_bInstanceRegionCacheSelectionDirty = true;
+	T3DInstanceRegionCacheChanges changes;
+	m_instanceRegionCache.reset( bRestoreAll, &changes );
+	applyInstanceRegionCacheChanges( changes );
 }
 
-int T3DData::findInstanceRegionSlot( const Vector2i &vLocation ) const {
-	const int map_index = getRegionMapIndex( vLocation );
-	if ( map_index < 0 ) {
-		return -1;
-	}
-	const int slot = ( int ) ( m_szInstanceRegionMap[map_index] ) - 1;
-	if ( slot < 0 || slot >= m_nInstanceRegionCacheCapacity || m_szInstanceRegionLocations[slot] != vLocation ) {
-		return -1;
-	}
-	return slot;
-}
+
+
+
 
 void T3DData::invalidateInstanceRegionLocation( const Vector2i &vLocation ) {
-	const int slot = findInstanceRegionSlot( vLocation );
-	if ( slot < 0 ) {
-		return;
-	}
-	evictInstanceRegionSlot( slot );
-	m_bInstanceRegionCacheSelectionDirty = true;
+	T3DInstanceRegionCacheChanges changes;
+	m_instanceRegionCache.invalidate( vLocation, &changes );
+	applyInstanceRegionCacheChanges( changes );
 }
 
-bool T3DData::evictInstanceRegionSlot( const int iSlot ) {
-	if ( !terrain3dInstanceCacheIndexValid( iSlot, m_nInstanceRegionCacheCapacity ) ) {
-		return false;
-	}
-	const Vector2i location = m_szInstanceRegionLocations[iSlot];
-	if ( location == V2I_MAX ) {
-		return true;
-	}
-	T3DRegion *const pRegion = getRegionPtr( location );
-	size_t resident_bytes = 0u;
-	if ( pRegion && pRegion->isInstanceStoreResident() ) {
-		resident_bytes = pRegion->getInstanceResidentBytes();
-		const PackedByteArray page = pRegion->getInstancePage();
-		if ( page.is_empty() && pRegion->hasInstances() ) {
-			return false;
-		}
-	}
-	if ( m_pTerrain && m_pTerrain->getInstancer() ) {
-		m_pTerrain->getInstancer()->destroyRegionMmis( location );
-	}
-	if ( pRegion && pRegion->isInstanceStoreResident() ) {
-		if ( !pRegion->evictInstanceStore() ) {
-			return false;
-		}
-		m_nInstanceRegionResidentBytes = resident_bytes <= m_nInstanceRegionResidentBytes ?
-			m_nInstanceRegionResidentBytes - resident_bytes : 0u;
-	}
-	const int map_index = getRegionMapIndex( location );
-	if ( map_index >= 0 ) {
-		m_szInstanceRegionMap[map_index] = 0u;
-	}
-	m_szInstanceRegionLocations[iSlot] = V2I_MAX;
-	m_nInstanceRegionResidentCount = MAX( 0, m_nInstanceRegionResidentCount - 1 );
-	return true;
-}
+
+
+
 
 bool T3DData::ensureInstanceRegionResidentInternal( const Vector2i &vLocation, const bool bDemandLoad ) {
-	T3DRegion *pRegion = getRegionPtr( vLocation );
-	if ( !pRegion || pRegion->isDeleted() ) {
-		return false;
-	}
-	if ( !m_bInstanceRegionCacheEnabled ) {
-		return pRegion->ensureInstanceStoreResident();
-	}
-	if ( findInstanceRegionSlot( vLocation ) >= 0 ) {
-		return true;
-	}
-	if ( !pRegion->hasInstances() ) {
-		return true;
-	}
-	int target_slot = -1;
-	for ( int slot = 0; slot < m_nInstanceRegionCacheCapacity; ++slot ) {
-		if ( m_szInstanceRegionLocations[slot] == V2I_MAX ) {
-			target_slot = slot;
-			break;
-		}
-	}
-	if ( target_slot < 0 ) {
-		int farthest_distance = -1;
-		const Vector2i center = m_instanceRegionCacheCenter == V2I_MAX ? vLocation : m_instanceRegionCacheCenter;
-		for ( int slot = 0; slot < m_nInstanceRegionCacheCapacity; ++slot ) {
-			const Vector2i old_location = m_szInstanceRegionLocations[slot];
-			const int distance = terrain3dInstanceCacheDistance(
-				{old_location.x, old_location.y}, {center.x, center.y} );
-			if ( distance > farthest_distance ) {
-				farthest_distance = distance;
-				target_slot = slot;
-			}
-		}
-	}
-	if ( target_slot < 0 ) {
-		return false;
-	}
-	if ( m_szInstanceRegionLocations[target_slot] != V2I_MAX && !evictInstanceRegionSlot( target_slot ) ) {
-		return false;
-	}
-	if ( !pRegion->ensureInstanceStoreResident() ) {
-		return false;
-	}
-	const size_t bytes = pRegion->getInstanceResidentBytes();
-	const size_t budget = ( size_t ) ( m_nInstanceRegionCacheBudgetMb ) * TERRAIN3D_INSTANCE_CACHE_MIB;
-	while ( bDemandLoad && m_nInstanceRegionResidentCount > 0 &&
-		m_nInstanceRegionResidentBytes + bytes > budget ) {
-		int farthest_slot = -1;
-		int farthest_distance = -1;
-		const Vector2i center = m_instanceRegionCacheCenter == V2I_MAX ? vLocation : m_instanceRegionCacheCenter;
-		for ( int slot = 0; slot < m_nInstanceRegionCacheCapacity; ++slot ) {
-			const Vector2i old_location = m_szInstanceRegionLocations[slot];
-			if ( old_location == V2I_MAX || old_location == vLocation ) {
-				continue;
-			}
-			const int distance = terrain3dInstanceCacheDistance(
-				{old_location.x, old_location.y}, {center.x, center.y} );
-			if ( distance > farthest_distance ) {
-				farthest_distance = distance;
-				farthest_slot = slot;
-			}
-		}
-		if ( farthest_slot < 0 || !evictInstanceRegionSlot( farthest_slot ) ) {
-			break;
-		}
-		++m_nInstanceRegionEvictionsLastTick;
-	}
-	if ( !bDemandLoad && !terrain3dInstanceCacheCanStream( m_nInstanceRegionResidentBytes, bytes, budget,
-		m_nInstanceRegionResidentCount ) ) {
-		pRegion->evictInstanceStore();
-		return false;
-	}
-	m_szInstanceRegionLocations[target_slot] = vLocation;
-	const int map_index = getRegionMapIndex( vLocation );
-	if ( map_index >= 0 ) {
-		m_szInstanceRegionMap[map_index] = ( uint8_t ) ( target_slot + 1 );
-	}
-	++m_nInstanceRegionResidentCount;
-	m_nInstanceRegionResidentBytes += bytes;
-	if ( bDemandLoad ) {
-		++m_nInstanceRegionDemandLoads;
-	}
-	if ( m_pTerrain && m_pTerrain->getInstancer() ) {
-		m_pTerrain->getInstancer()->updateMmis( -1, vLocation, false );
-	}
-	return true;
+	T3DInstanceRegionCacheChanges changes;
+	const bool bReady = m_instanceRegionCache.ensureResident( vLocation, bDemandLoad, &changes );
+	applyInstanceRegionCacheChanges( changes );
+	return bReady;
 }
 
-int T3DData::collectDesiredInstanceRegions(
-	const T3DResidencyFrameState &rFrame, const Vector2i &rCenter, Vector2i *pLocations,
-	const int nCapacity
-) const {
-	if ( !pLocations || nCapacity <= 0 ) {
-		return 0;
-	}
-	const int capacity = MIN( nCapacity, TERRAIN3D_INSTANCE_CACHE_MAX_PAGES );
-	int output_count = 0;
-	for ( int state_value = ( int ) ( TERRAIN3D_REGION_STREAMING_ACTIVE );
-		state_value >= ( int ) ( TERRAIN3D_REGION_STREAMING_HOT ) && output_count < capacity; --state_value ) {
-		const t3dregionStreamingState_t wanted = ( t3dregionStreamingState_t ) ( state_value );
-		terrain3dForEachSquareRing( rCenter, m_regionRepository.getRegionMapSize(), [&]( const Vector2i &location ) {
-			if ( output_count >= capacity ) {
-				return false;
-			}
-			if ( !isRegionLocationValidInternal( location ) || !hasRegion( location ) ||
-				rFrame.streamingState( location ) != wanted ) {
-				return true;
-			}
-			const T3DRegion *pRegion = getRegionPtr( location );
-			if ( pRegion && pRegion->hasInstances() ) {
-				pLocations[output_count++] = location;
-			}
-			return output_count < capacity;
-		} );
-	}
-	return output_count;
+
+
+
+
+bool T3DData::evictInstanceRegion( const Vector2i &vLocation ) {
+	T3DInstanceRegionCacheChanges changes;
+	const bool bEvicted = m_instanceRegionCache.evict( vLocation, &changes );
+	applyInstanceRegionCacheChanges( changes );
+	return bEvicted;
 }
+
 
 void T3DData::configureInstanceRegionCache(
 	const bool bEnabled, const int nBudgetMb,
 	const int nLoadPages, const int nLoadBudgetMb
 ) {
-	const bool bWasEnabled = m_bInstanceRegionCacheEnabled;
-	m_bInstanceRegionCacheEnabled = bEnabled;
-	m_nInstanceRegionCacheBudgetMb = CLAMP( nBudgetMb, TERRAIN3D_INSTANCE_REGION_CACHE_MIN_BUDGET_MB,
-		TERRAIN3D_INSTANCE_REGION_CACHE_MAX_BUDGET_MB );
-	m_nInstanceRegionLoadBudgetPages = CLAMP( nLoadPages, 1, TERRAIN3D_INSTANCE_REGION_LOAD_MAX_PAGES );
-	m_nInstanceRegionLoadBudgetMb = CLAMP( nLoadBudgetMb, 1, TERRAIN3D_INSTANCE_REGION_LOAD_MAX_BUDGET_MB );
-	if ( bWasEnabled && !bEnabled ) {
-		resetInstanceRegionCache( true );
-		return;
-	}
-	if ( !bWasEnabled && bEnabled ) {
-		resetInstanceRegionCache( false );
-	}
-	m_bInstanceRegionCacheSelectionDirty = true;
+	T3DInstanceRegionCacheChanges changes;
+	m_instanceRegionCache.configure( bEnabled, nBudgetMb, nLoadPages, nLoadBudgetMb, &changes );
+	applyInstanceRegionCacheChanges( changes );
 }
 
+
 void T3DData::updateInstanceRegionResidencyInternal( const T3DResidencyFrameState &rFrame, const bool bForce ) {
-	const T3DLastScopeTimer serviceTimer( m_nInstanceRegionServiceUsecLast, rFrame.bProfilingEnabled );
-	m_nInstanceRegionLoadsLastTick = 0;
-	m_nInstanceRegionStallFlagsLastTick = TERRAIN3D_PROFILE_STALL_NONE;
-	m_nInstanceRegionEvictionsLastTick = 0;
-	m_nInstanceRegionLoadBytesLastTick = 0u;
-	if ( !m_bInstanceRegionCacheEnabled || m_regionRepository.getRegionSize() <= 0 || m_regionRepository.getVertexSpacing() <= 0.0f ) {
-		return;
-	}
-	const bool async_runtime = !rFrame.bAuthoring && rFrame.bCookedPagesEnabled;
-	const uint64_t streaming_generation = rFrame.streamingGeneration;
-	if ( async_runtime && ( bForce || streaming_generation != m_nInstancePrefetchStreamingGenerationLast ) ) {
-		// Predictive instance demand changes only when the streaming generation changes.
-		// Avoid walking the authored region table on stationary frames.
-		for ( int slot = 0; slot < m_regionRepository.getSlotCount(); ++slot ) {
-			const Vector2i location = m_regionRepository.getSlotsData()[slot];
-			T3DRegion *const pRegion = location == V2I_MAX ? nullptr : getRegionPtr( location );
-			if ( !pRegion || pRegion->isDeleted() || !pRegion->hasInstances() ||
-				pRegion->isInstanceStoreResident() || findInstanceRegionSlot( location ) >= 0 ||
-				!rFrame.isPrefetch( location ) ) {
-				continue;
-			}
-			requestGpuRuntimePage( location, RUNTIME_PAGE_CONSUMER_INSTANCE_STORE, 3u );
-		}
-		m_nInstancePrefetchStreamingGenerationLast = streaming_generation;
-	}
-	const Vector2i center = rFrame.residencyCenter;
-	if ( !bForce && center == m_instanceRegionCacheCenter && !m_bInstanceRegionCacheSelectionDirty ) {
-		return;
-	}
-	Vector2i desired[TERRAIN3D_INSTANCE_CACHE_MAX_PAGES];
-	const int desired_count = collectDesiredInstanceRegions( rFrame, center, desired, m_nInstanceRegionCacheCapacity );
-	m_nInstanceRegionDesiredLastTick = desired_count;
-	uint8_t desired_map[TERRAIN3D_MAX_REGION_SLOTS] = {};
-	for ( int index = 0; index < desired_count; ++index ) {
-		const int map_index = getRegionMapIndex( desired[index] );
-		if ( map_index >= 0 ) {
-			desired_map[map_index] = 1u;
-		}
-	}
-	const size_t resident_budget = ( size_t ) ( m_nInstanceRegionCacheBudgetMb ) * TERRAIN3D_INSTANCE_CACHE_MIB;
-	while ( m_nInstanceRegionResidentCount > 1 && m_nInstanceRegionResidentBytes > resident_budget ) {
-		int farthest_slot = -1;
-		int farthest_distance = -1;
-		for ( int slot = 0; slot < m_nInstanceRegionCacheCapacity; ++slot ) {
-			const Vector2i location = m_szInstanceRegionLocations[slot];
-			if ( location == V2I_MAX ) {
-				continue;
-			}
-			const int distance = terrain3dInstanceCacheDistance(
-				{location.x, location.y}, {center.x, center.y} );
-			if ( distance > farthest_distance ) {
-				farthest_distance = distance;
-				farthest_slot = slot;
-			}
-		}
-		if ( farthest_slot < 0 || !evictInstanceRegionSlot( farthest_slot ) ) {
-			break;
-		}
-		++m_nInstanceRegionEvictionsLastTick;
-	}
-	for ( int slot = 0; slot < m_nInstanceRegionCacheCapacity; ++slot ) {
-		const Vector2i location = m_szInstanceRegionLocations[slot];
-		const int map_index = getRegionMapIndex( location );
-		if ( location != V2I_MAX && ( map_index < 0 || desired_map[map_index] == 0u ) ) {
-			if ( evictInstanceRegionSlot( slot ) ) {
-				++m_nInstanceRegionEvictionsLastTick;
-			}
-		}
-	}
-	const size_t load_budget = ( size_t ) ( m_nInstanceRegionLoadBudgetMb ) * TERRAIN3D_INSTANCE_CACHE_MIB;
-	const int load_page_budget = getEffectiveInstanceRegionLoadBudgetPages();
-	bool bComplete = true;
-	for ( int index = 0; index < desired_count; ++index ) {
-		const Vector2i location = desired[index];
-		if ( findInstanceRegionSlot( location ) >= 0 ) {
-			continue;
-		}
-		bComplete = false;
-		if ( !bForce && m_nInstanceRegionLoadsLastTick >= load_page_budget ) {
-			m_nInstanceRegionStallFlagsLastTick |= TERRAIN3D_PROFILE_STALL_INSTANCE_LOAD_BUDGET;
-			break;
-		}
-		T3DRegion *const pRegion = getRegionPtr( location );
-		const size_t estimated = pRegion ? MAX<size_t>( pRegion->getInstancePageBytes(), 1u ) : 0u;
-		if ( !bForce && m_nInstanceRegionLoadsLastTick > 0 &&
-			m_nInstanceRegionLoadBytesLastTick + estimated > load_budget ) {
-			m_nInstanceRegionStallFlagsLastTick |= TERRAIN3D_PROFILE_STALL_INSTANCE_LOAD_BYTE_BUDGET;
-			break;
-		}
-		if ( async_runtime && pRegion && !pRegion->isInstanceStoreResident() ) {
-			const uint8_t priority = rFrame.streamingState( location ) ==
-				TERRAIN3D_REGION_STREAMING_ACTIVE ? 1u : 2u;
-			requestGpuRuntimePage( location, RUNTIME_PAGE_CONSUMER_INSTANCE_STORE, priority );
-			T3DInstanceStore prepared_store;
-			if ( !takePreparedRuntimeInstance( location, prepared_store ) ) {
-				continue;
-			}
-			pRegion->m_instanceStore = eastl::move( prepared_store );
-			pRegion->m_bInstanceStoreResident = true;
-			pRegion->m_bInstanceStoreModified = false;
-		}
-		if ( ensureInstanceRegionResidentInternal( location, false ) ) {
-			++m_nInstanceRegionLoadsLastTick;
-			m_nInstanceRegionLoadBytesLastTick += estimated;
-		}
-	}
-	if ( !bComplete ) {
-		bComplete = true;
-		for ( int index = 0; index < desired_count; ++index ) {
-			if ( findInstanceRegionSlot( desired[index] ) < 0 ) {
-				bComplete = false;
-				break;
-			}
-		}
-	}
-	m_instanceRegionCacheCenter = center;
-	m_bInstanceRegionCacheSelectionDirty = !bComplete;
+	T3DInstanceRegionCacheChanges changes;
+	m_instanceRegionCache.update( rFrame, bForce, getEffectiveInstanceRegionLoadBudgetPages(), changes );
+	applyInstanceRegionCacheChanges( changes );
 }
+
 
 void T3DData::updateCpuRegionResidency( const Vector3 &rWorldPosition, const bool bForce ) {
 	updateCpuRegionResidencyInternal( makeResidencyFrameState( rWorldPosition ), bForce );
@@ -4107,44 +1280,14 @@ void T3DData::appendRuntimeProfileSample( t3druntimeProfileSample_t &rSample ) c
 }
 
 Dictionary T3DData::getInstanceRegionCacheStatsFast( void ) const {
-	Dictionary stats;
-	stats["enabled"] = m_bInstanceRegionCacheEnabled;
-	stats["budget_mb"] = m_nInstanceRegionCacheBudgetMb;
-	stats["capacity"] = m_nInstanceRegionCacheCapacity;
-	stats["resident"] = m_nInstanceRegionResidentCount;
-	stats["resident_bytes"] = ( int64_t ) ( m_nInstanceRegionResidentBytes );
-	stats["desired_last_tick"] = m_nInstanceRegionDesiredLastTick;
-	stats["loads_last_tick"] = m_nInstanceRegionLoadsLastTick;
-	stats["evictions_last_tick"] = m_nInstanceRegionEvictionsLastTick;
-	stats["load_bytes_last_tick"] = ( int64_t ) ( m_nInstanceRegionLoadBytesLastTick );
-	stats["service_cpu_usec_last"] = ( int64_t ) ( m_nInstanceRegionServiceUsecLast );
-	stats["demand_loads"] = m_nInstanceRegionDemandLoads;
-	stats["selection_pending"] = m_bInstanceRegionCacheSelectionDirty;
-	return stats;
+	return m_instanceRegionCache.getStatsDictionary( false, getEffectiveInstanceRegionLoadBudgetPages() );
 }
 
+
 Dictionary T3DData::getInstanceRegionCacheStats( void ) const {
-	Dictionary stats;
-	stats["enabled"] = m_bInstanceRegionCacheEnabled;
-	stats["budget_mb"] = m_nInstanceRegionCacheBudgetMb;
-	stats["capacity"] = m_nInstanceRegionCacheCapacity;
-	stats["resident"] = m_nInstanceRegionResidentCount;
-	stats["resident_bytes"] = ( int64_t ) ( m_nInstanceRegionResidentBytes );
-	stats["desired_last_tick"] = m_nInstanceRegionDesiredLastTick;
-	stats["load_page_budget"] = m_nInstanceRegionLoadBudgetPages;
-	stats["effective_load_page_budget"] = getEffectiveInstanceRegionLoadBudgetPages();
-	stats["load_budget_mb"] = m_nInstanceRegionLoadBudgetMb;
-	stats["loads_last_tick"] = m_nInstanceRegionLoadsLastTick;
-	stats["stall_flags_last_tick"] = ( int64_t ) ( m_nInstanceRegionStallFlagsLastTick );
-	stats["evictions_last_tick"] = m_nInstanceRegionEvictionsLastTick;
-	stats["load_bytes_last_tick"] = ( int64_t ) ( m_nInstanceRegionLoadBytesLastTick );
-	stats["demand_loads"] = m_nInstanceRegionDemandLoads;
-	stats["center"] = m_instanceRegionCacheCenter;
-	stats["selection_pending"] = m_bInstanceRegionCacheSelectionDirty;
-	stats["budget_overcommitted"] = m_nInstanceRegionResidentBytes >
-		( size_t ) ( m_nInstanceRegionCacheBudgetMb ) * TERRAIN3D_INSTANCE_CACHE_MIB;
-	return stats;
+	return m_instanceRegionCache.getStatsDictionary( true, getEffectiveInstanceRegionLoadBudgetPages() );
 }
+
 
 void T3DData::updateMapsBounded( const t3dmapType_t eMapType, const bool bAllRegions ) {
 	const bool bImplicitStateChanged = refreshImplicitMapState();
@@ -4152,73 +1295,45 @@ void T3DData::updateMapsBounded( const t3dmapType_t eMapType, const bool bAllReg
 	if ( m_regionRepository.isRegionMapDirty() ) {
 		m_regionRepository.rebuildRegionMapFromSlots();
 		bTopologyChanged = true;
-		m_bGpuRegionCacheSelectionDirty = true;
+		m_gpuRegionCache.markSelectionDirty();
 		if ( !m_bStartupBulkLoad ) {
 			emit_signal( "region_map_changed" );
 		}
 	}
 
-	const int required_capacity = calculateGpuRegionCacheCapacity();
-	const bool bRebuild = !m_bGpuRegionCacheTexturesReady || bImplicitStateChanged ||
-		required_capacity != m_nGpuRegionCacheCapacity || m_generatedHeightMaps.isDirty() ||
-		m_generatedControlMaps.isDirty() || m_generatedColorMaps.isDirty() ||
-		m_generatedDerivedMaps.isDirty();
-	if ( bRebuild && !rebuildGpuRegionCacheTextures() ) {
-		return;
-	}
-
-	bool bHeightChanged = false;
-	bool bControlChanged = false;
-	bool bColorChanged = false;
+	ensureDefaultMaps();
 	bool bPhysicalMappingChanged = false;
-	if ( bAllRegions && !bRebuild ) {
-		Vector2i resident_locations[TERRAIN3D_GPU_CACHE_MAX_LAYERS];
-		int resident_location_count = 0;
-		for ( int layer = 0; layer < m_nGpuRegionPhysicalLayerCount; ++layer ) {
-			if ( m_szGpuRegionLocations[layer] != V2I_MAX &&
-				m_szGpuRegionSlotStates[layer] == TERRAIN3D_GPU_SLOT_MAPPED ) {
-				resident_locations[resident_location_count++] = m_szGpuRegionLocations[layer];
-			}
-		}
-		for ( int index = 0; index < resident_location_count; ++index ) {
-			bHeightChanged = bHeightChanged || eMapType == T3DRegion::TYPE_HEIGHT || eMapType == T3DRegion::TYPE_MAX;
-			bControlChanged = bControlChanged || eMapType == T3DRegion::TYPE_CONTROL || eMapType == T3DRegion::TYPE_MAX;
-			bColorChanged = bColorChanged || eMapType == T3DRegion::TYPE_COLOR || eMapType == T3DRegion::TYPE_MAX;
-			if ( republishGpuRegionLocation( resident_locations[index] ) ) {
-				bPhysicalMappingChanged = true;
-			}
-		}
+	if ( bAllRegions && m_gpuRegionCache.isTexturesReady() ) {
+		bPhysicalMappingChanged = m_gpuRegionCache.republishAllResidents( getComputeBackendIfCreated() );
 	}
 
 	if ( eMapType == T3DRegion::TYPE_HEIGHT || eMapType == T3DRegion::TYPE_MAX ) {
 		calcHeightRange();
 	}
-	if ( bRebuild || bTopologyChanged ) {
-		const Vector2i center = m_gpuRegionCacheCenter == V2I_MAX ? V2I_ZERO : m_gpuRegionCacheCenter;
-		const real_t fWorldRegionSize = ( real_t ) ( m_regionRepository.getRegionSize() ) * m_regionRepository.getVertexSpacing();
-		const Vector3 centerPosition(
-			( ( real_t ) ( center.x ) + 0.5f ) * fWorldRegionSize, 0.0f,
-			( ( real_t ) ( center.y ) + 0.5f ) * fWorldRegionSize
-		);
-		// Initial population obeys the same upload ceiling as ordinary traversal.
-		// Rebuilding the physical arrays must not synchronously refill the cache.
-		updateGpuRegionResidency( centerPosition, false );
-	}
 
+	if ( bImplicitStateChanged || bTopologyChanged || !m_gpuRegionCache.isTexturesReady() ) {
+		m_gpuRegionCache.markSelectionDirty();
+		const Vector3 center = m_pTerrain ? m_pTerrain->getClipmapTargetPosition() : Vector3();
+		updateGpuRegionResidency( center, false );
+	}
 	if ( bPhysicalMappingChanged ) {
 		emitGpuRegionMapChanged();
 	}
+
 	if ( !m_bStartupBulkLoad ) {
-		if ( bHeightChanged || bRebuild ) {
+		const bool bHeightChanged = bAllRegions && ( eMapType == T3DRegion::TYPE_HEIGHT || eMapType == T3DRegion::TYPE_MAX );
+		const bool bControlChanged = bAllRegions && ( eMapType == T3DRegion::TYPE_CONTROL || eMapType == T3DRegion::TYPE_MAX );
+		const bool bColorChanged = bAllRegions && ( eMapType == T3DRegion::TYPE_COLOR || eMapType == T3DRegion::TYPE_MAX );
+		if ( bHeightChanged ) {
 			emit_signal( "height_maps_changed" );
 		}
-		if ( bControlChanged || bRebuild || bImplicitStateChanged ) {
+		if ( bControlChanged || bImplicitStateChanged ) {
 			emit_signal( "control_maps_changed" );
 		}
-		if ( bColorChanged || bRebuild || bImplicitStateChanged ) {
+		if ( bColorChanged || bImplicitStateChanged ) {
 			emit_signal( "color_maps_changed" );
 		}
-		if ( bRebuild || bImplicitStateChanged ) {
+		if ( bHeightChanged || bControlChanged || bColorChanged || bImplicitStateChanged || bTopologyChanged ) {
 			emit_signal( "maps_changed" );
 		}
 	}
@@ -4249,7 +1364,7 @@ TypedArray<Vector2i> T3DData::getRegionLocations( void ) const {
 
 TypedArray<Image> T3DData::getActiveMaps( const t3dmapType_t eMapType ) const {
 	TypedArray<Image> maps;
-	if ( m_bCpuRegionCacheEnabled ) {
+	if ( m_cpuRegionCache.isEnabled() ) {
 		LOG( T3DTerrain::ERROR, "Whole-world map arrays are unavailable while bounded CPU residency is enabled. "
 			"Page one region with ensure_cpu_region_resident() and read that Terrain3DRegion, or disable the CPU cache." );
 		return maps;
@@ -4304,17 +1419,18 @@ T3DData::T3DData( void ) :
 		m_mapEditService( &m_regionRepository, &m_samplingStorage ),
 		m_regionPersistence( &m_regionRepository ),
 		m_runtimePageStore( &m_regionRepository, &m_regionPersistence ),
+		m_cpuRegionCache( &m_regionRepository, &m_regionPersistence, &m_samplingStorage ),
+		m_instanceRegionCache( &m_regionRepository, &m_runtimePageStore ),
+		m_middleHeightRegionCache( &m_regionRepository, &m_samplingStorage, &m_runtimePageStore ),
+		m_gpuRegionCache( m_regionRepository, m_samplingStorage, m_mapEditService, m_runtimePageStore, m_cpuRegionCache ),
+		m_farSurfaceAtlasCache( &m_regionRepository, &m_samplingStorage, &m_cpuRegionCache ),
 		m_activeHeightResidency( &m_regionRepository, &m_samplingStorage, &m_runtimePageStore ),
-		m_regionResidency( &m_regionRepository, &m_samplingStorage, &m_runtimePageStore, &m_activeHeightResidency ) {
-	std::fill_n( m_szGpuRegionLocations, TERRAIN3D_GPU_CACHE_MAX_LAYERS, V2I_MAX );
+		m_regionResidency( &m_regionRepository, &m_samplingStorage, &m_runtimePageStore, &m_activeHeightResidency,
+			&m_cpuRegionCache, &m_instanceRegionCache, &m_middleHeightRegionCache, &m_gpuRegionCache, &m_farSurfaceAtlasCache ) {
 }
 
 T3DData::~T3DData( void ) {
 	clear();
-	// The far-field atlas is intentionally retained across normal data reloads,
-	// but destruction must release its RenderingServer RIDs and retained Images.
-	m_generatedFarHeightMap.clear();
-	m_generatedFarColorMap.clear();
 	if ( m_pCompute ) {
 		memdelete( m_pCompute );
 		m_pCompute = nullptr;
@@ -4341,401 +1457,57 @@ void T3DData::configureGpuRegionCache(
 	const int nUploadLayers, const int nUploadBudgetMb, const int nSparePages,
 	const int nRetireFrames
 ) {
-	const bool bOldEnabled = m_bGpuRegionCacheEnabled;
-	const int old_budget = m_nGpuRegionCacheBudgetMb;
-	const int old_upload_layers = m_nGpuRegionUploadBudgetLayers;
-	const int old_upload_budget = m_nGpuRegionUploadBudgetMb;
-	const int old_spare_pages = m_nGpuRegionSparePages;
-	const int old_retire_frames = m_nGpuRegionRetireFrames;
-	m_bGpuRegionCacheEnabled = bEnabled;
-	m_nGpuRegionCacheBudgetMb = CLAMP( nBudgetMb, TERRAIN3D_GPU_REGION_CACHE_MIN_BUDGET_MB,
-		TERRAIN3D_GPU_REGION_CACHE_MAX_BUDGET_MB );
-	m_nGpuRegionUploadBudgetLayers = CLAMP( nUploadLayers, 1, TERRAIN3D_GPU_REGION_UPLOAD_MAX_LAYERS );
-	m_nGpuRegionUploadBudgetMb = CLAMP( nUploadBudgetMb, 1, TERRAIN3D_GPU_REGION_UPLOAD_MAX_BUDGET_MB );
-	m_nGpuRegionSparePages = CLAMP( nSparePages, TERRAIN3D_GPU_CACHE_MIN_SPARE_LAYERS,
-		TERRAIN3D_GPU_CACHE_RUNTIME_MAX_LAYERS - 1 );
-	m_nGpuRegionRetireFrames = CLAMP( nRetireFrames, 1, 16 );
-
-	const int requested_pages = calculateGpuRegionRequestedPages();
-	const int required_radius = calculateGpuRegionRequiredRadius();
-	const int color_divisor = m_pTerrain ? m_pTerrain->getGpuRegionColorResolutionDivisor() : 1;
-	const int derived_divisor = m_pTerrain ? m_pTerrain->getGpuRegionDerivedResolutionDivisor() : 1;
-	const int required_capacity = m_bGpuRegionCacheEnabled ? calculateGpuRegionCacheCapacity() : 0;
-	const int required_physical_layers = m_bGpuRegionCacheEnabled ?
-		calculateGpuRegionPhysicalLayers( required_capacity ) : 0;
-	const bool color_channel_enabled = isGpuRegionColorChannelEnabled();
-	const bool derived_channel_enabled = isGpuRegionDerivedChannelEnabled();
-	const bool bLayoutChanged = m_bGpuRegionCacheEnabled && m_bGpuRegionCacheTexturesReady &&
-		( required_capacity != m_nGpuRegionCacheCapacity || color_divisor != m_nGpuRegionColorDivisor ||
-			derived_divisor != m_nGpuRegionDerivedDivisor ||
-			color_channel_enabled != m_bGpuRegionColorChannelAllocated ||
-			derived_channel_enabled != m_bGpuRegionDerivedChannelAllocated ||
-			required_physical_layers != m_nGpuRegionPhysicalLayerCount );
-	const bool bSelectionChanged = requested_pages != m_nGpuRegionRequestedPages ||
-		required_radius != m_nGpuRegionRequiredRadius;
-	const bool bStorageChanged = bOldEnabled != m_bGpuRegionCacheEnabled ||
-		( m_bGpuRegionCacheEnabled && old_budget != m_nGpuRegionCacheBudgetMb ) || bLayoutChanged;
-	if ( !bStorageChanged && !bSelectionChanged && old_upload_layers == m_nGpuRegionUploadBudgetLayers &&
-		old_upload_budget == m_nGpuRegionUploadBudgetMb && old_spare_pages == m_nGpuRegionSparePages &&
-		old_retire_frames == m_nGpuRegionRetireFrames ) {
-		return;
-	}
-	m_nGpuRegionRequestedPages = requested_pages;
-	m_nGpuRegionRequiredRadius = required_radius;
-	m_bGpuRegionCacheSelectionDirty = m_bGpuRegionCacheSelectionDirty || bSelectionChanged;
-	if ( !bOldEnabled && !m_bGpuRegionCacheEnabled ) {
-		return;
-	}
-	if ( bStorageChanged ) {
-		resetGpuRegionCache( true );
-		if ( m_pTerrain && m_regionRepository.getRegionSize() > 0 ) {
-			updateMaps( T3DRegion::TYPE_MAX, true, false );
-		}
+	ensureDefaultMaps();
+	m_gpuRegionCache.setTerrain( m_pTerrain );
+	syncCacheDefaultMaps();
+	const bool bStorageChanged = m_gpuRegionCache.configure(
+		bEnabled, nBudgetMb, nUploadLayers, nUploadBudgetMb, nSparePages, nRetireFrames );
+	m_farSurfaceAtlasCache.setConfig( getFarSurfaceAtlasConfig() );
+	if ( bStorageChanged && m_pTerrain && m_regionRepository.getRegionSize() > 0 ) {
+		updateMaps( T3DRegion::TYPE_MAX, true, false );
 	}
 }
 
+
 void T3DData::updateGpuRegionResidencyInternal( const T3DResidencyFrameState &rFrame, const bool bForce ) {
-	const T3DLastScopeTimer serviceTimer( m_nGpuRegionServiceUsecLast, rFrame.bProfilingEnabled );
-	m_nGpuRegionStallFlagsLastTick = TERRAIN3D_PROFILE_STALL_NONE;
-	m_runtimePageStore.resetFrameStats();
-	m_nGpuPreparePublicationUsecLast = 0u;
-	m_nGpuPrepareEndToEndUsecLast = 0u;
-	pollGpuRuntimePagePrepare( false );
-	m_nGpuRegionUploadsLastTick = 0;
-	m_nGpuRegionEvictionsLastTick = 0;
-	m_nGpuRegionCookedHitsLastTick = 0;
-	m_nGpuRegionCookedMissesLastTick = 0;
-	m_nGpuRegionRuntimePreparesLastTick = 0;
-	m_nGpuRegionReusedLayersLastTick = 0;
-	m_nGpuRegionPageTableUpdatesLastTick = 0;
-	m_nGpuRegionHeightUpdatesLastTick = 0;
-	m_nGpuRegionControlUpdatesLastTick = 0;
-	m_nGpuRegionColorUpdatesLastTick = 0;
-	m_nGpuRegionDerivedUpdatesLastTick = 0;
-	m_nGpuRegionRuntimeColorMipsLastTick = 0;
-	m_nGpuRegionRuntimeDerivedBuildsLastTick = 0;
-	const T3DRuntimePageStats runtime_page_stats = m_runtimePageStore.getStats();
-	m_nGpuRegionPreparedPagesLastTick = runtime_page_stats.nPreparedPages;
-	m_nGpuRegionPrepareWorkersLastTick = runtime_page_stats.nPrepareWorkers;
-	m_nGpuRegionEffectiveUploadLimitLastTick = m_nGpuRegionUploadBudgetLayers;
-	m_bGpuRegionCameraMovedLastTick = false;
-	m_nGpuFarHeightUpdatesLastTick = 0;
-	m_nGpuFarColorUpdatesLastTick = 0;
-	m_nGpuRegionUploadBytesLastTick = 0u;
-	m_nGpuRegionHeightBytesLastTick = 0u;
-	m_nGpuRegionControlBytesLastTick = 0u;
-	m_nGpuRegionColorBytesLastTick = 0u;
-	m_nGpuRegionDerivedBytesLastTick = 0u;
-	m_nGpuRegionHysteresisLastTick = 0;
-	m_nGpuRegionMissingRequiredLastTick = 0;
-	if ( !m_bGpuRegionCacheEnabled || m_regionRepository.getRegionSize() <= 0 || m_regionRepository.getVertexSpacing() <= 0.0f ) {
-		return;
+	m_farSurfaceAtlasCache.resetFrameStats();
+	if ( isFarAtlasRequired() ) {
+		ensureFarAtlases();
 	}
-	++m_nGpuRegionTick;
-	reclaimRetiredGpuRegionSlots();
-	const uint64_t streaming_generation = rFrame.streamingGeneration;
-	const Vector2i prediction_delta = rFrame.predictedCenter - rFrame.streamingCenter;
-	m_gpuRegionPredictionDirection = Vector2i( SIGN( prediction_delta.x ), SIGN( prediction_delta.y ) );
-	if ( !m_bGpuRegionCacheTexturesReady && !rebuildGpuRegionCacheTextures() ) {
-		return;
-	}
-	const T3DEditor *pTerrainEditor = m_pTerrain ? m_pTerrain->getEditor() : nullptr;
-	const bool bDeferFarAtlasPublish = rFrame.bAuthoring &&
-		pTerrainEditor && pTerrainEditor->isOperating();
-	// Brush motion can commit several stamps per frame. Keep the resident page
-	// updates immediate, but publish the full far atlases once after the stroke.
-	if ( !bDeferFarAtlasPublish ) {
-		if ( m_bGpuFarHeightDirty && !rebuildGpuFarHeightAtlas() ) {
-			return;
-		}
-		if ( m_bGpuFarColorDirty && !rebuildGpuFarColorAtlas() ) {
-			return;
-		}
-	}
-
-	const Vector2i center = rFrame.residencyCenter;
-	m_bGpuRegionCameraMovedLastTick = m_gpuRegionCacheCenter != V2I_MAX &&
-		center != m_gpuRegionCacheCenter;
-	const int runtime_upload_budget = getEffectiveGpuRegionUploadBudgetLayers();
-	const int effective_upload_limit = MAX( 1, runtime_upload_budget );
-	m_nGpuRegionEffectiveUploadLimitLastTick = effective_upload_limit;
-	const int deferred_republish_count = processPendingGpuRegionRepublishes( effective_upload_limit );
-	if ( deferred_republish_count > 0 ) {
-		m_nGpuRegionUploadsLastTick += deferred_republish_count;
-		m_nGpuRegionUploadsSinceReset += ( uint64_t ) ( deferred_republish_count );
-		m_nGpuRegionLastPublicationTick = m_nGpuRegionTick;
-	}
-	if ( !bForce && center == m_gpuRegionCacheCenter && !m_bGpuRegionCacheSelectionDirty &&
-		streaming_generation == m_nGpuRegionStreamingGenerationLast ) {
-		if ( deferred_republish_count > 0 ) {
-			emitGpuRegionMapChanged();
-		}
-		return;
-	}
-
-	Vector2i desired[TERRAIN3D_GPU_CACHE_MAX_LAYERS];
-	t3dgpuCacheSelectionStats_t selection_stats;
-	int desired_count = collectDesiredGpuRegions( rFrame, center, desired, m_nGpuRegionCacheCapacity, selection_stats );
-	const int footprint_count = desired_count;
-	m_nGpuRegionRequiredLastTick = selection_stats.required;
-	m_nGpuRegionGuardLastTick = selection_stats.guard;
-	m_nGpuRegionPrefetchLastTick = selection_stats.prefetch;
-	uint8_t desired_map[TERRAIN3D_MAX_REGION_SLOTS] = {};
-	for ( int index = 0; index < desired_count; ++index ) {
-		const int map_index = getRegionMapIndex( desired[index] );
-		if ( map_index >= 0 ) {
-			desired_map[map_index] = 1u;
-		}
-		const int layer = findGpuRegionSlot( desired[index] );
-		if ( layer >= 0 ) {
-			m_szGpuRegionLastUseTick[layer] = m_nGpuRegionTick;
-			if ( index < selection_stats.required && m_szGpuRegionPrefetchOrigin[layer] != 0u ) {
-				++m_nGpuRegionPrefetchUsedTotal;
-				m_szGpuRegionPrefetchOrigin[layer] = 0u;
-			}
-		}
-	}
-
-	const uint64_t hysteresis_ticks = ( uint64_t ) ( MAX( 0, rFrame.nGpuHysteresisTicks ) );
-	for ( int layer = 0; layer < m_nGpuRegionPhysicalLayerCount && desired_count < m_nGpuRegionCacheCapacity; ++layer ) {
-		const Vector2i location = m_szGpuRegionLocations[layer];
-		if ( location == V2I_MAX || m_szGpuRegionLastUseTick[layer] == 0u ||
-			m_nGpuRegionTick - m_szGpuRegionLastUseTick[layer] > hysteresis_ticks ) {
-			continue;
-		}
-		const int map_index = getRegionMapIndex( location );
-		if ( map_index < 0 || desired_map[map_index] != 0u ) {
-			continue;
-		}
-		desired[desired_count++] = location;
-		desired_map[map_index] = 1u;
-		++m_nGpuRegionHysteresisLastTick;
-	}
-	m_nGpuRegionDesiredLastTick = desired_count;
-	m_nGpuRegionPriorityCount = MIN( desired_count, TERRAIN3D_GPU_CACHE_MAX_LAYERS );
-	const int guard_end = selection_stats.required + selection_stats.guard;
-	const int priority_prefetch_end = guard_end + selection_stats.prefetch;
-	for ( int index = 0; index < m_nGpuRegionPriorityCount; ++index ) {
-		m_szGpuRegionPriorityLocations[index] = desired[index];
-		if ( index < selection_stats.required ) {
-			m_szGpuRegionPriorityClasses[index] = 1u;
-		} else if ( index < guard_end ) {
-			m_szGpuRegionPriorityClasses[index] = 2u;
-		} else if ( index < priority_prefetch_end ) {
-			m_szGpuRegionPriorityClasses[index] = 3u;
-		} else {
-			m_szGpuRegionPriorityClasses[index] = 4u;
-		}
-	}
-	for ( int index = m_nGpuRegionPriorityCount; index < TERRAIN3D_GPU_CACHE_MAX_LAYERS; ++index ) {
-		m_szGpuRegionPriorityLocations[index] = V2I_MAX;
-		m_szGpuRegionPriorityClasses[index] = 0u;
-	}
-
-	if ( rFrame.bCookedPagesEnabled ) {
-		for ( int index = 0; index < desired_count; ++index ) {
-			if ( findGpuRegionSlot( desired[index] ) >= 0 ) {
-				continue;
-			}
-			T3DRegion *const pRegion = getRegionPtr( desired[index] );
-			if ( pRegion && !pRegion->isDeleted() && pRegion->runtimeMapsEvictable() ) {
-				const uint8_t priority = index < m_nGpuRegionPriorityCount ?
-					m_szGpuRegionPriorityClasses[index] : 4u;
-				requestGpuRuntimePage( desired[index], RUNTIME_PAGE_CONSUMER_GPU_DETAIL, priority );
-			}
-		}
-		serviceGpuRuntimePagePrepare( rFrame );
-	}
-
-	bool bMapChanged = false;
-	bool bAllDesiredResident = true;
-	const size_t byte_budget = ( size_t ) ( m_nGpuRegionUploadBudgetMb ) * TERRAIN3D_GPU_CACHE_MIB;
-	const int update_call_budget = MAX( 5, effective_upload_limit * 3 + 1 );
-	for ( int desired_index = 0; desired_index < desired_count; ++desired_index ) {
-		const Vector2i location = desired[desired_index];
-		const int existing_layer = findGpuRegionSlot( location );
-		if ( existing_layer >= 0 ) {
-			m_szGpuRegionLastUseTick[existing_layer] = m_nGpuRegionTick;
-			continue;
-		}
-		bAllDesiredResident = false;
-		if ( m_nGpuRegionUploadsLastTick >= effective_upload_limit ) {
-			m_nGpuRegionStallFlagsLastTick |= TERRAIN3D_PROFILE_STALL_GPU_UPLOAD_LAYER_BUDGET;
-			break;
-		}
-
-		const int target_layer = findFreeGpuRegionSlot();
-		if ( target_layer < 0 ) {
-			// Spare pages can be temporarily exhausted while old mappings remain
-			// retired for in-flight rendering. Continue on a later frame rather than
-			// synchronizing or overwriting a page still visible to the renderer.
-			m_nGpuRegionStallFlagsLastTick |= TERRAIN3D_PROFILE_STALL_GPU_RETIREMENT_CAPACITY;
-			break;
-		}
-		T3DRegion *const pUploadRegion = getRegionPtr( location );
-		if ( !pUploadRegion || pUploadRegion->isDeleted() ) {
-			continue;
-		}
-		const size_t expected_bytes = estimateGpuRegionUploadBytes( pUploadRegion, target_layer );
-		const int expected_calls = estimateGpuRegionUploadCalls( pUploadRegion, target_layer );
-		const int page_table_reserve = bMapChanged ? 0 : 1;
-		if ( m_nGpuRegionUploadsLastTick > 0 &&
-			m_nGpuRegionUploadBytesLastTick + expected_bytes > byte_budget ) {
-			m_nGpuRegionStallFlagsLastTick |= TERRAIN3D_PROFILE_STALL_GPU_UPLOAD_BYTE_BUDGET;
-			break;
-		}
-		if ( m_nGpuRegionUploadsLastTick > 0 &&
-			getGpuRegionTextureUpdateCallsLastTick() + expected_calls + page_table_reserve >
-				update_call_budget ) {
-			m_nGpuRegionStallFlagsLastTick |= TERRAIN3D_PROFILE_STALL_GPU_UPDATE_CALL_BUDGET;
-			break;
-		}
-
-		int victim_layer = -1;
-		if ( m_nGpuRegionResidentCount >= m_nGpuRegionCacheCapacity ) {
-			uint64_t oldest_tick = std::numeric_limits<uint64_t>::max();
-			int farthest_distance = -1;
-			for ( int layer = 0; layer < m_nGpuRegionPhysicalLayerCount; ++layer ) {
-				const Vector2i old_location = m_szGpuRegionLocations[layer];
-				if ( old_location == V2I_MAX || m_szGpuRegionSlotStates[layer] != TERRAIN3D_GPU_SLOT_MAPPED ) {
-					continue;
-				}
-				const int old_map_index = getRegionMapIndex( old_location );
-				if ( old_map_index >= 0 && desired_map[old_map_index] != 0u ) {
-					continue;
-				}
-				const int distance = MAX( std::abs( old_location.x - center.x ), std::abs( old_location.y - center.y ) );
-				const uint64_t last_use = m_szGpuRegionLastUseTick[layer];
-				if ( last_use < oldest_tick || ( last_use == oldest_tick && distance > farthest_distance ) ) {
-					oldest_tick = last_use;
-					farthest_distance = distance;
-					victim_layer = layer;
-				}
-			}
-			if ( victim_layer < 0 ) {
-				m_nGpuRegionStallFlagsLastTick |= TERRAIN3D_PROFILE_STALL_GPU_PAGE_CAPACITY;
-				continue;
-			}
-		}
-
-		// The staging layer is not referenced by the page table. All channel
-		// updates therefore complete before any shader can sample the new page.
-		if ( !uploadGpuRegionLayer( target_layer, location, T3DRegion::TYPE_MAX ) ) {
-			continue;
-		}
-
-		if ( victim_layer >= 0 ) {
-			const Vector2i old_location = m_szGpuRegionLocations[victim_layer];
-			const int old_map_index = getRegionMapIndex( old_location );
-			if ( old_map_index >= 0 ) {
-				m_szGpuRegionMap[old_map_index] = 0u;
-			}
-			recordGpuRegionDeparture( victim_layer, true );
-			retireGpuRegionSlot( victim_layer );
-			++m_nGpuRegionEvictionsLastTick;
-		} else {
-			++m_nGpuRegionResidentCount;
-		}
-		m_szGpuRegionLocations[target_layer] = location;
-		m_szGpuRegionLastUseTick[target_layer] = m_nGpuRegionTick;
-		m_szGpuRegionLoadedTick[target_layer] = m_nGpuRegionTick;
-		const int prefetch_begin = selection_stats.required + selection_stats.guard;
-		const int prefetch_end = prefetch_begin + selection_stats.prefetch;
-		m_szGpuRegionPrefetchOrigin[target_layer] = desired_index >= prefetch_begin &&
-			desired_index < prefetch_end ? 1u : 0u;
-		m_szGpuRegionSlotStates[target_layer] = TERRAIN3D_GPU_SLOT_MAPPED;
-		const int new_map_index = getRegionMapIndex( location );
-		if ( new_map_index >= 0 ) {
-			m_szGpuRegionMap[new_map_index] = ( uint16_t ) ( target_layer + 1 );
-		}
-		++m_nGpuRegionUploadsLastTick;
-		++m_nGpuRegionUploadsSinceReset;
-		m_nGpuRegionLastPublicationTick = m_nGpuRegionTick;
-		bMapChanged = true;
-	}
-
-	int resident_required = 0;
-	const int written_required = MIN( selection_stats.required, footprint_count );
-	for ( int index = 0; index < written_required; ++index ) {
-		if ( findGpuRegionSlot( desired[index] ) >= 0 ) {
-			++resident_required;
-		}
-	}
-	m_nGpuRegionMissingRequiredLastTick = selection_stats.required - resident_required;
-	if ( !bAllDesiredResident ) {
-		bAllDesiredResident = true;
-		for ( int index = 0; index < desired_count; ++index ) {
-			if ( findGpuRegionSlot( desired[index] ) < 0 ) {
-				bAllDesiredResident = false;
-				break;
-			}
-		}
-	}
-	m_gpuRegionCacheCenter = center;
-	m_nGpuRegionStreamingGenerationLast = streaming_generation;
-	m_bGpuRegionCacheSelectionDirty = !bAllDesiredResident || m_nGpuRegionMissingRequiredLastTick > 0 ||
-		m_nGpuRegionRepublishPendingCount > 0;
-	if ( bMapChanged || deferred_republish_count > 0 ) {
+	const T3DGpuRegionCacheUpdateResult result = m_gpuRegionCache.update(
+		rFrame, bForce, getEffectiveGpuRegionUploadBudgetLayers(), getComputeBackendIfCreated() );
+	if ( result.bPageTableChanged ) {
 		emitGpuRegionMapChanged();
 	}
 }
 
+
 void T3DData::invalidateGpuFarSurface( void ) {
-	if ( !isFarAtlasRequired() ) {
-		return;
-	}
-	// Surface quality may change the atlas dimensions. Recreate only the surface
-	// representation; the Far height lattice is geometry-owned and stays intact.
-	m_generatedFarColorMap.clear();
-	m_pGpuFarColorImage.unref();
-	m_gpuFarColorDirtyRegions.reset();
-	m_bGpuFarColorDirty = true;
-	m_bGpuFarColorDirtyAll = true;
-	m_bGpuFarCookedLoaded = false;
-	m_bGpuFarCookedSaved = false;
-	if ( !m_bGpuRegionCacheEnabled ) {
+	m_farSurfaceAtlasCache.setConfig( getFarSurfaceAtlasConfig() );
+	m_farSurfaceAtlasCache.invalidateSurface();
+	if ( isFarAtlasRequired() && !m_gpuRegionCache.isEnabled() ) {
 		ensureFarAtlases();
 	}
 }
+
 
 void T3DData::invalidateGpuFarAtlasLayout( void ) {
-	m_generatedFarHeightMap.clear();
-	m_generatedFarColorMap.clear();
-	m_pGpuFarHeightImage.unref();
-	m_pGpuFarColorImage.unref();
-	m_gpuFarHeightDirtyRegions.reset();
-	m_gpuFarColorDirtyRegions.reset();
-	m_bGpuFarHeightDirty = true;
-	m_bGpuFarColorDirty = true;
-	m_bGpuFarHeightDirtyAll = true;
-	m_bGpuFarColorDirtyAll = true;
-	m_bGpuFarCookedLoaded = false;
-	m_bGpuFarCookedSaved = false;
-	if ( isFarAtlasRequired() && m_samplingStorage.isActiveOwner() && m_regionRepository.getRegionSize() > 0 && m_regionRepository.getRegionMapSize() > 0 ) {
+	m_farSurfaceAtlasCache.setConfig( getFarSurfaceAtlasConfig() );
+	m_farSurfaceAtlasCache.invalidateLayout();
+	if ( isFarAtlasRequired() && m_samplingStorage.isActiveOwner() &&
+		m_regionRepository.getRegionSize() > 0 && m_regionRepository.getRegionMapSize() > 0 ) {
 		ensureFarAtlases();
 	}
 }
 
+
 bool T3DData::ensureFarAtlases( void ) {
-	if ( !isFarAtlasRequired() || !m_samplingStorage.isActiveOwner() || m_regionRepository.getRegionSize() <= 0 || m_regionRepository.getRegionMapSize() <= 0 ) {
+	if ( !isFarAtlasRequired() || !m_samplingStorage.isActiveOwner() ||
+		m_regionRepository.getRegionSize() <= 0 || m_regionRepository.getRegionMapSize() <= 0 ) {
 		return false;
 	}
-	if ( ( m_pGpuFarHeightImage.is_null() || m_pGpuFarColorImage.is_null() ) &&
-		!loadCookedGpuFarAtlases() ) {
-		markAllGpuFarRegionsDirty( T3DRegion::TYPE_MAX );
-	}
-	if ( m_bGpuFarHeightDirty || !m_generatedFarHeightMap.getRid().is_valid() ) {
-		if ( !rebuildGpuFarHeightAtlas() ) {
-			return false;
-		}
-	}
-	if ( m_bGpuFarColorDirty || !m_generatedFarColorMap.getRid().is_valid() ) {
-		if ( !rebuildGpuFarColorAtlas() ) {
-			return false;
-		}
-	}
-	const bool bReady = m_generatedFarHeightMap.getRid().is_valid() &&
-		m_generatedFarColorMap.getRid().is_valid();
+	m_farSurfaceAtlasCache.setConfig( getFarSurfaceAtlasConfig() );
+	const bool bReady = m_farSurfaceAtlasCache.ensure();
 	if ( bReady && m_pTerrain ) {
 		const Ref<T3DMaterial> pMaterial = m_pTerrain->getMaterial();
 		if ( pMaterial.is_valid() && pMaterial->isInitializedFor( m_pTerrain ) ) {
@@ -4744,6 +1516,7 @@ bool T3DData::ensureFarAtlases( void ) {
 	}
 	return bReady;
 }
+
 
 Dictionary T3DData::getRuntimeResidencyGrid( const int nRadius ) const {
 	Dictionary grid;
@@ -4771,7 +1544,6 @@ Dictionary T3DData::getRuntimeResidencyGrid( const int nRadius ) const {
 			Dictionary cell;
 			cell["location"] = location;
 			cell["offset"] = location - center;
-			const int map_index = getRegionMapIndex( location );
 			const bool bValid = isRegionLocationValidInternal( location );
 			const bool bAuthored = bValid && hasRegion( location );
 			const t3dregionStreamingState_t state = m_pTerrain && bValid ?
@@ -4782,31 +1554,19 @@ Dictionary T3DData::getRuntimeResidencyGrid( const int nRadius ) const {
 			cell["streaming_state"] = ( int ) ( state );
 			cell["streaming_state_name"] = String( terrain3dStreamingStateName( state ) );
 			cell["predicted"] = predicted;
-			// Compatibility field for older profiler consumers: 1/2/3 remain the
-			// high-to-low surface-page priority classes.
 			cell["desired_class"] = state == TERRAIN3D_REGION_STREAMING_ACTIVE ? 1 :
 				( state == TERRAIN3D_REGION_STREAMING_HOT ? 2 : ( predicted ? 3 : 0 ) );
-			const int gpu_slot = findGpuRegionSlot( location );
+			const int gpu_slot = m_gpuRegionCache.getLayerForLocation( location );
 			cell["gpu_resident"] = gpu_slot >= 0;
 			cell["gpu_layer"] = gpu_slot;
-			cell["middle_height_resident"] = findMiddleHeightSlot( location ) >= 0;
-			cell["cpu_resident"] = findCpuRegionSlot( location ) >= 0;
-			cell["instance_resident"] = findInstanceRegionSlot( location ) >= 0;
-			const bool bPrepared = m_runtimePageStore.isPrepared( location );
-			cell["prepared"] = bPrepared;
+			cell["middle_height_resident"] = m_middleHeightRegionCache.isResident( location );
+			cell["cpu_resident"] = m_cpuRegionCache.isResident( location );
+			cell["instance_resident"] = m_instanceRegionCache.isResident( location );
+			cell["prepared"] = m_runtimePageStore.isPrepared( location );
 			cell["prepare_pending"] = isGpuRuntimePagePreparePending( location );
-			int slot_state = TERRAIN3D_GPU_SLOT_FREE;
-			for ( int layer = 0; layer < m_nGpuRegionPhysicalLayerCount; ++layer ) {
-				if ( m_szGpuRegionLocations[layer] == location ) {
-					slot_state = ( int ) ( m_szGpuRegionSlotStates[layer] );
-					break;
-				}
-			}
-			cell["gpu_slot_state"] = slot_state;
-			cell["far_height_dirty"] = map_index >= 0 &&
-				( m_bGpuFarHeightDirtyAll || m_gpuFarHeightDirtyRegions.test( ( size_t ) ( map_index ) ) );
-			cell["far_color_dirty"] = map_index >= 0 &&
-				( m_bGpuFarColorDirtyAll || m_gpuFarColorDirtyRegions.test( ( size_t ) ( map_index ) ) );
+			cell["gpu_slot_state"] = m_gpuRegionCache.getSlotStateForLocation( location );
+			cell["far_height_dirty"] = m_farSurfaceAtlasCache.isRegionHeightDirty( location );
+			cell["far_color_dirty"] = m_farSurfaceAtlasCache.isRegionColorDirty( location );
 			cells[write_index++] = cell;
 		}
 	}
@@ -4823,302 +1583,83 @@ Dictionary T3DData::getRuntimeResidencyGrid( const int nRadius ) const {
 }
 
 Dictionary T3DData::getGpuRegionCacheStatsFast( void ) const {
-	Dictionary stats;
-	const T3DRuntimePageStats runtime_page_stats = m_runtimePageStore.getStats();
-	stats["enabled"] = m_bGpuRegionCacheEnabled;
-	stats["budget_mb"] = m_nGpuRegionCacheBudgetMb;
-	stats["allocation_budget_mb"] = m_pTerrain && m_pTerrain->isEditorAuthoringMode() ?
-		calculateAuthoringGpuRegionBudgetMb() : m_nGpuRegionCacheBudgetMb;
-	stats["capacity"] = m_nGpuRegionCacheCapacity;
-	stats["physical_layers"] = m_nGpuRegionPhysicalLayerCount;
-	stats["resident"] = m_nGpuRegionResidentCount;
-	stats["republish_pending"] = m_nGpuRegionRepublishPendingCount;
-	stats["requested_pages"] = m_nGpuRegionRequestedPages;
-	stats["required_last_tick"] = m_nGpuRegionRequiredLastTick;
-	stats["missing_required_last_tick"] = m_nGpuRegionMissingRequiredLastTick;
-	stats["uploads_last_tick"] = m_nGpuRegionUploadsLastTick;
-	stats["uploads_since_reset"] = ( int64_t ) ( m_nGpuRegionUploadsSinceReset );
-	stats["evictions_last_tick"] = m_nGpuRegionEvictionsLastTick;
-	stats["cooked_hits_last_tick"] = m_nGpuRegionCookedHitsLastTick;
-	stats["cooked_misses_last_tick"] = m_nGpuRegionCookedMissesLastTick;
-	const int cooked_attempts = m_nGpuRegionCookedHitsLastTick + m_nGpuRegionCookedMissesLastTick;
-	stats["cooked_hit_ratio_last_tick"] = cooked_attempts > 0 ?
-		( double ) ( m_nGpuRegionCookedHitsLastTick ) / ( double ) ( cooked_attempts ) : -1.0;
-	stats["runtime_prepares_last_tick"] = m_nGpuRegionRuntimePreparesLastTick;
-	stats["prepare_job_active"] = runtime_page_stats.bPrepareJobActive;
-	stats["prepare_job_pending_pages"] = runtime_page_stats.nPendingPages;
-	stats["prepare_ready_pages"] = runtime_page_stats.nPreparedPages;
-	stats["prepare_publication_usec_last"] = ( int64_t ) ( m_nGpuPreparePublicationUsecLast );
-	stats["prepare_end_to_end_usec_last"] = ( int64_t ) ( m_nGpuPrepareEndToEndUsecLast );
-	stats["service_cpu_usec_last"] = ( int64_t ) ( m_nGpuRegionServiceUsecLast );
-	stats["far_height_dirty_regions"] = m_bGpuFarHeightDirtyAll ? m_regionRepository.getActiveRegionCount() : ( int ) ( m_gpuFarHeightDirtyRegions.count() );
-	stats["far_color_dirty_regions"] = m_bGpuFarColorDirtyAll ? m_regionRepository.getActiveRegionCount() : ( int ) ( m_gpuFarColorDirtyRegions.count() );
-	stats["far_height_processing_usec_last"] = ( int64_t ) ( m_nGpuFarHeightProcessingUsecLast );
-	stats["far_color_processing_usec_last"] = ( int64_t ) ( m_nGpuFarColorProcessingUsecLast );
-	stats["far_height_dirty_texels_last"] = ( int64_t ) ( m_nGpuFarHeightDirtyTexelsLast );
-	stats["far_color_dirty_texels_last"] = ( int64_t ) ( m_nGpuFarColorDirtyTexelsLast );
-	stats["far_height_rebuilt_bytes_last"] = ( int64_t ) ( m_nGpuFarHeightRebuiltBytesLast );
-	stats["far_color_rebuilt_bytes_last"] = ( int64_t ) ( m_nGpuFarColorRebuiltBytesLast );
-	stats["far_height_uploaded_bytes_last"] = ( int64_t ) ( m_nGpuFarHeightUploadedBytesLast );
-	stats["far_color_uploaded_bytes_last"] = ( int64_t ) ( m_nGpuFarColorUploadedBytesLast );
-	stats["far_height_publication_usec_last"] = ( int64_t ) ( m_nGpuFarHeightPublicationUsecLast );
-	stats["far_color_publication_usec_last"] = ( int64_t ) ( m_nGpuFarColorPublicationUsecLast );
-	stats["far_height_publication_count"] = ( int64_t ) ( m_nGpuFarHeightPublicationCount );
-	stats["far_color_publication_count"] = ( int64_t ) ( m_nGpuFarColorPublicationCount );
-	stats["far_height_uploaded_bytes_total"] = ( int64_t ) ( m_nGpuFarHeightUploadedBytesTotal );
-	stats["far_color_uploaded_bytes_total"] = ( int64_t ) ( m_nGpuFarColorUploadedBytesTotal );
-	stats["far_partial_publication_available"] = false;
-	stats["far_publication_path"] = "RenderingServer full Texture2D update";
-	stats["upload_bytes_last_tick"] = ( int64_t ) ( m_nGpuRegionUploadBytesLastTick );
-	stats["reserved_bytes"] = ( int64_t ) ( getGpuRegionCacheReservedBytes() );
-	stats["authoring_bounded_pool_covers_all_regions"] = isAuthoringGpuFullResidencyPossible();
-	stats["authoring_readback_safe"] = isAuthoringGpuReadbackSafe();
+	Dictionary stats = m_gpuRegionCache.getStatsDictionary( false );
+	const Dictionary farStats = m_farSurfaceAtlasCache.getStatsDictionary();
+	const Array keys = farStats.keys();
+	for ( int index = 0; index < keys.size(); ++index ) {
+		stats[keys[index]] = farStats[keys[index]];
+	}
 	return stats;
 }
 
+
 bool T3DData::isAuthoringGpuFullResidencyPossible( void ) const {
-	return !m_pTerrain || !m_pTerrain->isEditorAuthoringMode() ||
-		calculateGpuRegionCacheCapacity() >= m_regionRepository.getActiveRegionCount();
+	return m_gpuRegionCache.isAuthoringFullResidencyPossible();
 }
 
+
 bool T3DData::isAuthoringGpuReadbackSafe( void ) const {
-	if ( !m_pTerrain || !m_pTerrain->isEditorAuthoringMode() ) {
-		return true;
-	}
-	if ( !m_bGpuRegionCacheEnabled ) {
-		return true;
-	}
-	if ( !m_bGpuRegionCacheTexturesReady || m_runtimePageStore.isPrepareJobActive() ||
-		m_bGpuRegionCacheSelectionDirty || m_nGpuRegionUploadsLastTick > 0 ) {
-		return false;
-	}
-	return m_nGpuRegionTick >= m_nGpuRegionLastPublicationTick + 2u;
+	return m_gpuRegionCache.isAuthoringReadbackSafe();
 }
+
 
 Dictionary T3DData::getStartupLoadStats( void ) const {
 	return m_regionPersistence.getStartupLoadStatsDictionary();
 }
 
 Dictionary T3DData::getGpuRegionCacheStats( void ) const {
-	Dictionary stats;
-	const T3DRuntimePageStats runtime_page_stats = m_runtimePageStore.getStats();
-	stats["enabled"] = m_bGpuRegionCacheEnabled;
-	stats["budget_mb"] = m_nGpuRegionCacheBudgetMb;
-	stats["capacity"] = m_nGpuRegionCacheCapacity;
-	stats["physical_layers"] = m_nGpuRegionPhysicalLayerCount;
-	stats["spare_layers"] = m_nGpuRegionSpareLayerCount;
-	stats["retired_layers"] = m_nGpuRegionRetiredCount;
-	stats["retire_frames"] = m_nGpuRegionRetireFrames;
-	stats["resident"] = m_nGpuRegionResidentCount;
-	stats["republish_pending"] = m_nGpuRegionRepublishPendingCount;
-	stats["requested_pages"] = m_nGpuRegionRequestedPages;
-	stats["required_radius_regions"] = m_nGpuRegionRequiredRadius;
-	stats["desired_last_tick"] = m_nGpuRegionDesiredLastTick;
-	stats["required_last_tick"] = m_nGpuRegionRequiredLastTick;
-	stats["guard_last_tick"] = m_nGpuRegionGuardLastTick;
-	stats["prefetch_last_tick"] = m_nGpuRegionPrefetchLastTick;
-	stats["hysteresis_last_tick"] = m_nGpuRegionHysteresisLastTick;
-	stats["missing_required_last_tick"] = m_nGpuRegionMissingRequiredLastTick;
-	const int required_resident = MAX( 0, m_nGpuRegionRequiredLastTick - m_nGpuRegionMissingRequiredLastTick );
-	stats["required_resident_last_tick"] = required_resident;
-	stats["required_residency_ratio"] = m_nGpuRegionRequiredLastTick > 0 ?
-		( double ) ( required_resident ) / ( double ) ( m_nGpuRegionRequiredLastTick ) : 1.0;
-	stats["stall_flags_last_tick"] = ( int64_t ) ( m_nGpuRegionStallFlagsLastTick );
-	stats["prediction_direction"] = m_gpuRegionPredictionDirection;
-	stats["streaming_generation_last"] = ( int64_t ) ( m_nGpuRegionStreamingGenerationLast );
-	stats["upload_layer_budget"] = m_nGpuRegionUploadBudgetLayers;
-	stats["runtime_upload_layer_budget"] = getEffectiveGpuRegionUploadBudgetLayers();
-	stats["upload_budget_mb"] = m_nGpuRegionUploadBudgetMb;
-	stats["upload_update_budget"] = MAX( 5, getEffectiveGpuRegionUploadBudgetLayers() * 3 + 1 );
-	stats["uploads_last_tick"] = m_nGpuRegionUploadsLastTick;
-	stats["uploads_since_reset"] = ( int64_t ) ( m_nGpuRegionUploadsSinceReset );
-	stats["evictions_last_tick"] = m_nGpuRegionEvictionsLastTick;
-	stats["cooked_hits_last_tick"] = m_nGpuRegionCookedHitsLastTick;
-	stats["cooked_misses_last_tick"] = m_nGpuRegionCookedMissesLastTick;
-	const int cooked_attempts = m_nGpuRegionCookedHitsLastTick + m_nGpuRegionCookedMissesLastTick;
-	stats["cooked_hit_ratio_last_tick"] = cooked_attempts > 0 ?
-		( double ) ( m_nGpuRegionCookedHitsLastTick ) / ( double ) ( cooked_attempts ) : -1.0;
-	stats["prefetch_used_total"] = ( int64_t ) ( m_nGpuRegionPrefetchUsedTotal );
-	stats["prefetch_discarded_total"] = ( int64_t ) ( m_nGpuRegionPrefetchDiscardedTotal );
-	const uint64_t completed_prefetches = m_nGpuRegionPrefetchUsedTotal + m_nGpuRegionPrefetchDiscardedTotal;
-	stats["prefetch_accuracy"] = completed_prefetches > 0u ?
-		( double ) ( m_nGpuRegionPrefetchUsedTotal ) / ( double ) ( completed_prefetches ) : -1.0;
-	int pending_prefetches = 0;
-	for ( int layer = 0; layer < m_nGpuRegionPhysicalLayerCount; ++layer ) {
-		pending_prefetches += m_szGpuRegionPrefetchOrigin[layer] != 0u ? 1 : 0;
+	Dictionary stats = m_gpuRegionCache.getStatsDictionary( true );
+	const Dictionary farStats = m_farSurfaceAtlasCache.getStatsDictionary();
+	const Array keys = farStats.keys();
+	for ( int index = 0; index < keys.size(); ++index ) {
+		stats[keys[index]] = farStats[keys[index]];
 	}
-	stats["prefetch_pending"] = pending_prefetches;
-	Array pending_requests;
-	const int pending_request_limit = 16;
-	int pending_request_count = 0;
-	for ( int index = 0; index < m_nGpuRegionPriorityCount; ++index ) {
-		const Vector2i location = m_szGpuRegionPriorityLocations[index];
-		if ( location == V2I_MAX || findGpuRegionSlot( location ) >= 0 ) {
-			continue;
-		}
-		++pending_request_count;
-		if ( pending_requests.size() >= pending_request_limit ) {
-			continue;
-		}
-		Dictionary request;
-		request["priority_rank"] = index;
-		request["location"] = location;
-		request["offset"] = location - m_gpuRegionCacheCenter;
-		request["distance_regions"] = MAX( std::abs( location.x - m_gpuRegionCacheCenter.x ),
-			std::abs( location.y - m_gpuRegionCacheCenter.y ) );
-		request["prediction_alignment"] = ( location.x - m_gpuRegionCacheCenter.x ) * m_gpuRegionPredictionDirection.x +
-			( location.y - m_gpuRegionCacheCenter.y ) * m_gpuRegionPredictionDirection.y;
-		const uint8_t request_class = m_szGpuRegionPriorityClasses[index];
-		request["class_id"] = ( int ) ( request_class );
-		request["class"] = request_class == 1u ? "required" :
-			request_class == 2u ? "guard" : request_class == 3u ? "prefetch" : "hysteresis";
-		const bool bPrepared = m_runtimePageStore.isPrepared( location );
-		request["prepared"] = bPrepared;
-		request["prepare_pending"] = isGpuRuntimePagePreparePending( location );
-		const T3DRegion *pRegion = getRegionPtr( location );
-		request["active"] = pRegion && !pRegion->isDeleted();
-		request["runtime_maps_evictable"] = pRegion && pRegion->runtimeMapsEvictable();
-		pending_requests.push_back( request );
+	if ( m_pTerrain ) {
+		stats["far_height_atlas_side"] = m_pTerrain->getGpuFarHeightAtlasSide();
+		stats["far_surface_atlas_side"] = m_pTerrain->getGpuFarSurfaceAtlasSide();
+		stats["far_quality_divisor"] = m_pTerrain->getGpuFarQualityDivisor();
+		stats["cooked_pages_enabled"] = m_pTerrain->isGpuRegionCookedPagesEnabled();
+		stats["cook_on_save"] = m_pTerrain->isGpuRegionCookOnSave();
 	}
-	stats["pending_requests"] = pending_requests;
-	stats["pending_requests_reported"] = pending_requests.size();
-	stats["pending_requests_total"] = pending_request_count;
-	stats["departed_pages_total"] = ( int64_t ) ( m_nGpuRegionDepartedPagesTotal );
-	stats["average_resident_ticks"] = m_nGpuRegionDepartedPagesTotal > 0u ?
-		( double ) ( m_nGpuRegionResidentTicksTotal ) / ( double ) ( m_nGpuRegionDepartedPagesTotal ) : 0.0;
-	stats["runtime_prepares_last_tick"] = m_nGpuRegionRuntimePreparesLastTick;
-	stats["reused_layers_last_tick"] = m_nGpuRegionReusedLayersLastTick;
-	stats["page_table_updates_last_tick"] = m_nGpuRegionPageTableUpdatesLastTick;
-	stats["height_updates_last_tick"] = m_nGpuRegionHeightUpdatesLastTick;
-	stats["control_updates_last_tick"] = m_nGpuRegionControlUpdatesLastTick;
-	stats["color_updates_last_tick"] = m_nGpuRegionColorUpdatesLastTick;
-	stats["derived_updates_last_tick"] = m_nGpuRegionDerivedUpdatesLastTick;
-	stats["runtime_color_mips_last_tick"] = m_nGpuRegionRuntimeColorMipsLastTick;
-	stats["runtime_derived_builds_last_tick"] = m_nGpuRegionRuntimeDerivedBuildsLastTick;
-	stats["prepared_pages_last_tick"] = m_nGpuRegionPreparedPagesLastTick;
-	stats["prepare_workers_last_tick"] = m_nGpuRegionPrepareWorkersLastTick;
-	stats["prepare_job_active"] = runtime_page_stats.bPrepareJobActive;
-	stats["prepare_job_pending_pages"] = runtime_page_stats.nPendingPages;
-	stats["prepare_ready_pages"] = runtime_page_stats.nPreparedPages;
-	stats["prepare_latency_usec_last"] = ( int64_t ) ( runtime_page_stats.nPrepareLatencyUsecLast );
-	stats["prepare_queue_wait_usec_last"] = ( int64_t ) ( runtime_page_stats.nPrepareQueueWaitUsecLast );
-	stats["prepare_file_open_usec_last"] = ( int64_t ) ( runtime_page_stats.nPrepareFileOpenUsecLast );
-	stats["prepare_file_read_usec_last"] = ( int64_t ) ( runtime_page_stats.nPrepareFileReadUsecLast );
-	stats["prepare_validation_usec_last"] = ( int64_t ) ( runtime_page_stats.nPrepareValidationUsecLast );
-	stats["prepare_materialize_usec_last"] = ( int64_t ) ( runtime_page_stats.nPrepareMaterializeUsecLast );
-	stats["prepare_worker_usec_last"] = ( int64_t ) ( runtime_page_stats.nPrepareWorkerUsecLast );
-	stats["prepare_ready_wait_usec_last"] = ( int64_t ) ( runtime_page_stats.nPrepareReadyWaitUsecLast );
-	stats["prepare_publication_usec_last"] = ( int64_t ) ( m_nGpuPreparePublicationUsecLast );
-	stats["prepare_end_to_end_usec_last"] = ( int64_t ) ( m_nGpuPrepareEndToEndUsecLast );
-	stats["service_cpu_usec_last"] = ( int64_t ) ( m_nGpuRegionServiceUsecLast );
-	stats["effective_upload_limit_last_tick"] = m_nGpuRegionEffectiveUploadLimitLastTick;
-	stats["camera_moved_last_tick"] = m_bGpuRegionCameraMovedLastTick;
-	stats["far_height_updates_last_tick"] = m_nGpuFarHeightUpdatesLastTick;
-	stats["far_color_updates_last_tick"] = m_nGpuFarColorUpdatesLastTick;
-	stats["far_height_regions_processed_last_tick"] = m_nGpuFarHeightRegionsLastTick;
-	stats["far_color_regions_processed_last_tick"] = m_nGpuFarColorRegionsLastTick;
-	stats["far_height_dirty_regions"] = m_bGpuFarHeightDirtyAll ? m_regionRepository.getActiveRegionCount() :
-		( int ) ( m_gpuFarHeightDirtyRegions.count() );
-	stats["far_color_dirty_regions"] = m_bGpuFarColorDirtyAll ? m_regionRepository.getActiveRegionCount() :
-		( int ) ( m_gpuFarColorDirtyRegions.count() );
-	stats["far_height_processing_usec_last"] = ( int64_t ) ( m_nGpuFarHeightProcessingUsecLast );
-	stats["far_color_processing_usec_last"] = ( int64_t ) ( m_nGpuFarColorProcessingUsecLast );
-	stats["far_height_dirty_texels_last"] = ( int64_t ) ( m_nGpuFarHeightDirtyTexelsLast );
-	stats["far_color_dirty_texels_last"] = ( int64_t ) ( m_nGpuFarColorDirtyTexelsLast );
-	stats["far_height_rebuilt_bytes_last"] = ( int64_t ) ( m_nGpuFarHeightRebuiltBytesLast );
-	stats["far_color_rebuilt_bytes_last"] = ( int64_t ) ( m_nGpuFarColorRebuiltBytesLast );
-	stats["far_height_uploaded_bytes_last"] = ( int64_t ) ( m_nGpuFarHeightUploadedBytesLast );
-	stats["far_color_uploaded_bytes_last"] = ( int64_t ) ( m_nGpuFarColorUploadedBytesLast );
-	stats["far_height_publication_usec_last"] = ( int64_t ) ( m_nGpuFarHeightPublicationUsecLast );
-	stats["far_color_publication_usec_last"] = ( int64_t ) ( m_nGpuFarColorPublicationUsecLast );
-	stats["far_height_publication_count"] = ( int64_t ) ( m_nGpuFarHeightPublicationCount );
-	stats["far_color_publication_count"] = ( int64_t ) ( m_nGpuFarColorPublicationCount );
-	stats["far_height_uploaded_bytes_total"] = ( int64_t ) ( m_nGpuFarHeightUploadedBytesTotal );
-	stats["far_color_uploaded_bytes_total"] = ( int64_t ) ( m_nGpuFarColorUploadedBytesTotal );
-	stats["far_partial_publication_available"] = false;
-	stats["far_publication_path"] = "RenderingServer full Texture2D update";
-	stats["far_cook_io_usec_last"] = ( int64_t ) ( m_nGpuFarCookIoUsecLast );
-	stats["far_cooked_loaded"] = m_bGpuFarCookedLoaded;
-	stats["far_cooked_saved"] = m_bGpuFarCookedSaved;
-	stats["far_height_bytes"] = ( int64_t ) ( getGpuFarHeightBytes() );
-	stats["far_color_bytes"] = ( int64_t ) ( getGpuFarColorBytes() );
-	stats["far_quality_divisor"] = m_pTerrain ? m_pTerrain->getGpuFarQualityDivisor() : 1;
-	stats["far_height_atlas_side"] = getGpuFarHeightAtlasSide();
-	stats["far_surface_atlas_side"] = getGpuFarSurfaceAtlasSide();
-	stats["texture_update_calls_last_tick"] = getGpuRegionTextureUpdateCallsLastTick();
-	stats["upload_bytes_last_tick"] = ( int64_t ) ( m_nGpuRegionUploadBytesLastTick );
-	stats["height_bytes_last_tick"] = ( int64_t ) ( m_nGpuRegionHeightBytesLastTick );
-	stats["control_bytes_last_tick"] = ( int64_t ) ( m_nGpuRegionControlBytesLastTick );
-	stats["color_bytes_last_tick"] = ( int64_t ) ( m_nGpuRegionColorBytesLastTick );
-	stats["derived_bytes_last_tick"] = ( int64_t ) ( m_nGpuRegionDerivedBytesLastTick );
-	const size_t layer_bytes = estimateGpuRegionLayerBytes();
-	const size_t shared_bytes = estimateGpuRegionSharedBytes();
-	const size_t worst_case_bytes = shared_bytes + layer_bytes * ( size_t ) ( MAX( 0, m_nGpuRegionPhysicalLayerCount ) );
-	const int allocation_budget_mb = m_pTerrain && m_pTerrain->isEditorAuthoringMode() ?
-		calculateAuthoringGpuRegionBudgetMb() : m_nGpuRegionCacheBudgetMb;
-	const size_t budget_bytes = ( size_t ) ( allocation_budget_mb ) * TERRAIN3D_GPU_CACHE_MIB;
-	stats["estimated_layer_bytes"] = ( int64_t ) ( layer_bytes );
-	stats["estimated_shared_bytes"] = ( int64_t ) ( shared_bytes );
-	stats["estimated_worst_case_bytes"] = ( int64_t ) ( worst_case_bytes );
-	stats["allocation_budget_mb"] = allocation_budget_mb;
-	stats["budget_overcommitted"] = worst_case_bytes > budget_bytes;
-	stats["authoring_bounded_pool_covers_all_regions"] = isAuthoringGpuFullResidencyPossible();
-	stats["authoring_readback_safe"] = isAuthoringGpuReadbackSafe();
-	stats["control_implicit"] = m_bControlMapsImplicit;
-	stats["color_implicit"] = m_bColorMapsImplicit;
-	stats["color_resolution_divisor"] = m_nGpuRegionColorDivisor;
-	stats["derived_resolution_divisor"] = m_nGpuRegionDerivedDivisor;
-	stats["cooked_pages_enabled"] = m_pTerrain && m_pTerrain->isGpuRegionCookedPagesEnabled();
-	stats["cook_on_save"] = m_pTerrain && m_pTerrain->isGpuRegionCookOnSave();
-	stats["center"] = m_gpuRegionCacheCenter;
-	stats["selection_pending"] = m_bGpuRegionCacheSelectionDirty;
 	return stats;
 }
 
+
 size_t T3DData::getGpuRegionCacheReservedBytes( void ) const {
-	const size_t fixed_far_bytes = getGpuFarHeightBytes() + getGpuFarColorBytes();
-	const size_t shared_bytes = estimateGpuRegionSharedBytes();
-	return ( shared_bytes > fixed_far_bytes ? shared_bytes - fixed_far_bytes : 0u ) +
-		estimateGpuRegionLayerBytes() * ( size_t ) ( MAX( 0, m_nGpuRegionPhysicalLayerCount ) );
+	return m_gpuRegionCache.getReservedBytes();
 }
+
 
 size_t T3DData::getGpuRegionCacheMinimumBytes( void ) const {
-	const size_t fixed_far_bytes = getGpuFarHeightBytes() + getGpuFarColorBytes();
-	const size_t shared_bytes = estimateGpuRegionSharedBytes();
-	const size_t managed_shared = shared_bytes > fixed_far_bytes ? shared_bytes - fixed_far_bytes : 0u;
-	return managed_shared + estimateGpuRegionLayerBytes() *
-		( size_t ) ( TERRAIN3D_GPU_CACHE_MIN_SPARE_LAYERS + 1 );
+	return m_gpuRegionCache.getMinimumBytes();
 }
+
 
 size_t T3DData::getGpuRegionCacheHardCapBytes( void ) const {
-	const size_t fixed_far_bytes = getGpuFarHeightBytes() + getGpuFarColorBytes();
-	const size_t shared_bytes = estimateGpuRegionSharedBytes();
-	const size_t managed_shared = shared_bytes > fixed_far_bytes ? shared_bytes - fixed_far_bytes : 0u;
-	return managed_shared + estimateGpuRegionLayerBytes() * ( size_t ) ( TERRAIN3D_GPU_CACHE_MAX_LAYERS );
+	return m_gpuRegionCache.getHardCapBytes();
 }
+
 
 size_t T3DData::getCpuRegionCacheReservedBytes( void ) const {
-	return estimateCpuRegionLayerBytes() * ( size_t ) ( MAX( 0, m_nCpuRegionCacheCapacity ) );
+	return m_cpuRegionCache.getReservedBytes();
 }
+
 
 size_t T3DData::getCpuRegionCacheMinimumBytes( void ) const {
-	return estimateCpuRegionLayerBytes() * ( size_t ) ( TERRAIN3D_CPU_CACHE_MIN_SAMPLE_LAYERS );
+	return m_cpuRegionCache.getMinimumBytes();
 }
+
 
 size_t T3DData::getCpuRegionCacheHardCapBytes( void ) const {
-	return estimateCpuRegionLayerBytes() * ( size_t ) ( TERRAIN3D_CPU_CACHE_MAX_LAYERS );
+	return m_cpuRegionCache.getHardCapBytes();
 }
 
+
 size_t T3DData::getMemoryTransientStagingBytes( void ) const {
-	const size_t prepared_page_bytes = estimateCpuRegionLayerBytes();
-	size_t bytes = prepared_page_bytes * ( size_t ) ( MAX( 0, m_runtimePageStore.getTransientPageCount() ) );
+	const size_t preparedPageBytes = m_cpuRegionCache.estimateLayerBytes();
+	size_t bytes = preparedPageBytes * ( size_t ) ( MAX( 0, m_runtimePageStore.getTransientPageCount() ) );
 	bytes += m_mapEditService.getTransientScratchBytes();
-	if ( m_pGpuFarHeightImage.is_valid() ) {
-		bytes += getGpuFarHeightBytes();
-	}
-	if ( m_pGpuFarColorImage.is_valid() ) {
-		bytes += getGpuFarColorBytes();
-	}
+	bytes += m_farSurfaceAtlasCache.getImageBytes();
 	return bytes;
 }
 
@@ -5237,9 +1778,9 @@ Dictionary T3DData::getRuntimeState( void ) const {
 	state["active_storage_generation"] = ( int64_t ) ( getActiveStorageGeneration() );
 	state["region_map_size"] = m_regionRepository.getRegionMapSize();
 	state["logical_region_count"] = m_regionRepository.getActiveRegionCount();
-	state["gpu_resident_page_count"] = m_nGpuRegionResidentCount;
-	state["middle_height_resident_page_count"] = m_nMiddleHeightResidentCount;
-	state["middle_height_page_table_valid"] = m_generatedMiddleHeightRegionMap.getRid().is_valid();
+	state["gpu_resident_page_count"] = m_gpuRegionCache.getResidentCount();
+	state["middle_height_resident_page_count"] = m_middleHeightRegionCache.getResidentCount();
+	state["middle_height_page_table_valid"] = m_middleHeightRegionCache.getRegionMapRid().is_valid();
 	return state;
 }
 
@@ -5350,15 +1891,7 @@ TypedArray<Vector2i> T3DData::getRegionSlots( void ) const {
 }
 
 TypedArray<Vector2i> T3DData::getRenderRegionSlots( void ) const {
-	if ( !m_bGpuRegionCacheEnabled ) {
-		return getRegionSlots();
-	}
-	TypedArray<Vector2i> slots;
-	slots.resize( m_nGpuRegionPhysicalLayerCount );
-	for ( int layer = 0; layer < m_nGpuRegionPhysicalLayerCount; ++layer ) {
-		slots[layer] = m_szGpuRegionLocations[layer];
-	}
-	return slots;
+	return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getRenderRegionSlots() : getRegionSlots();
 }
 
 PackedInt32Array T3DData::getRegionMap( void ) const {
@@ -5369,7 +1902,7 @@ PackedInt32Array T3DData::getRegionMap( void ) const {
 	region_map.resize( m_regionRepository.getRegionMapSize() * m_regionRepository.getRegionMapSize() );
 	int32_t *pWrite = region_map.ptrw();
 	const int half = m_regionRepository.getRegionMapSize() / 2;
-	const uint16_t *pSourceMap = m_bGpuRegionCacheEnabled ? m_szGpuRegionMap : m_regionRepository.getLogicalRegionMapData();
+	const uint16_t *pSourceMap = m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getRegionMapData() : m_regionRepository.getLogicalRegionMapData();
 	for ( int y = 0; y < m_regionRepository.getRegionMapSize(); ++y ) {
 		for ( int x = 0; x < m_regionRepository.getRegionMapSize(); ++x ) {
 			const Vector2i location( x - half, y - half );
@@ -5386,7 +1919,7 @@ PackedInt32Array T3DData::getLogicalRegionMap( void ) const {
 
 TypedArray<T3DRegion> T3DData::getRegionsActive( const bool bCopy, const bool bDeep ) const {
 	TypedArray<T3DRegion> region_arr;
-	if ( bCopy && m_bCpuRegionCacheEnabled ) {
+	if ( bCopy && m_cpuRegionCache.isEnabled() ) {
 		LOG( T3DTerrain::ERROR, "Whole-repository region copies are unavailable while bounded CPU residency is enabled. "
 			"Disable the CPU cache before requesting copied Terrain3DRegion resources." );
 		return region_arr;
@@ -5417,7 +1950,7 @@ void T3DData::doForRegions( const Rect2i &rArea, const Callable &rCallback ) {
 			current_region_loc.x = x;
 			const T3DRegion *pRegion = getRegionPtr( current_region_loc );
 			if ( pRegion && !pRegion->isDeleted() ) {
-				if ( m_bCpuRegionCacheEnabled && !ensureCpuRegionResident( current_region_loc ) ) {
+				if ( m_cpuRegionCache.isEnabled() && !ensureCpuRegionResident( current_region_loc ) ) {
 					LOG( T3DTerrain::ERROR, "Unable to page CPU terrain maps for region callback: ", current_region_loc );
 					continue;
 				}
@@ -5888,7 +2421,7 @@ void T3DData::processRegionSaveResult( const T3DRegionSaveResult &rResult ) {
 			if ( !pCookRegion || pCookRegion->isDeleted() ) {
 				continue;
 			}
-			if ( m_bCpuRegionCacheEnabled && !ensureCpuRegionResidentInternal( cookLocation, true ) ) {
+			if ( m_cpuRegionCache.isEnabled() && !ensureCpuRegionResidentInternal( cookLocation, true ) ) {
 				LOG( T3DTerrain::ERROR, rResult.bDeleted ?
 					"Region deleted, but neighboring runtime page source could not be loaded: " :
 					"Region saved, but neighboring runtime page source could not be loaded: ", cookLocation );
@@ -5977,7 +2510,7 @@ Dictionary T3DData::inspectGpuRegionPages( void ) {
 		T3DRegion *const pRegion = getRegionPtr( location );
 		const String source_path = data_dir.path_join( Util::locationToFilename( location ) );
 		const String page_path = getGpuRuntimePagePath( pRegion );
-		if ( m_bCpuRegionCacheEnabled && !ensureCpuRegionResidentInternal( location, true ) ) {
+		if ( m_cpuRegionCache.isEnabled() && !ensureCpuRegionResidentInternal( location, true ) ) {
 			++source_unavailable;
 			needs_cook_regions.push_back( String( location ) );
 			errors.push_back( "Region " + String( location ) + ": unable to materialize source maps" );
@@ -6081,7 +2614,7 @@ Dictionary T3DData::cookGpuRegionPages( void ) {
 	int orphan_failed = 0;
 	for ( const Vector2i location : locations ) {
 		T3DRegion *const pRegion = getRegionPtr( location );
-		if ( m_bCpuRegionCacheEnabled && !ensureCpuRegionResidentInternal( location, true ) ) {
+		if ( m_cpuRegionCache.isEnabled() && !ensureCpuRegionResidentInternal( location, true ) ) {
 			++failed;
 			errors.push_back( "Region " + String( location ) + ": unable to materialize source maps" );
 			continue;
@@ -6173,10 +2706,10 @@ Dictionary T3DData::cookGpuRegionPages( void ) {
 
 Error T3DData::loadDirectory( const String &rDir ) {
 	T3DStagedRepository staged;
-	const bool bBoundedCpuLoad = m_bCpuRegionCacheEnabled;
+	const bool bBoundedCpuLoad = m_cpuRegionCache.isEnabled();
 	LOG( T3DTerrain::INFO, "[terrain-data] Candidate repository load; CPU cache ",
 		bBoundedCpuLoad ? "bounded" : "authoring/unbounded", "; GPU cache ",
-		m_bGpuRegionCacheEnabled ? "enabled" : "disabled" );
+		m_gpuRegionCache.isEnabled() ? "enabled" : "disabled" );
 	const Error stageError = m_regionPersistence.stageDirectory( rDir, bBoundedCpuLoad, staged );
 	if ( stageError != OK ) {
 		return stageError;
@@ -6287,7 +2820,7 @@ Error T3DData::loadDirectory( const String &rDir ) {
 	configureInstanceRegionCache(
 		m_pTerrain->isInstanceRegionCacheEffective(), m_pTerrain->getEffectiveInstanceRegionCacheBudgetMb(),
 		m_pTerrain->getInstanceRegionLoadBudgetPages(), m_pTerrain->getInstanceRegionLoadBudgetMb() );
-	if ( m_bCpuRegionCacheEnabled ) {
+	if ( m_cpuRegionCache.isEnabled() ) {
 		updateCpuRegionResidency( Vector3(), true );
 	}
 	updateMaps( T3DRegion::TYPE_MAX, true, false );
@@ -6325,7 +2858,7 @@ void T3DData::loadRegion( const Vector2i &rRegionLoc, const String &rDir, const 
 		m_regionPersistence.publishLoadedRegionPath( result );
 		pRegion->setModified( result.bStorageUpgrade || pRegion->isModified() );
 		pRegion->setEdited( false );
-		m_bCpuRegionCacheSelectionDirty = true;
+		m_cpuRegionCache.markSelectionDirty();
 	}
 }
 
@@ -6355,7 +2888,7 @@ void T3DData::updateMaps( const t3dmapType_t eMapType, const bool bAllRegions, c
 	if ( isFarAtlasRequired() ) {
 		markAllGpuFarRegionsDirty( eMapType );
 	}
-	if ( m_bGpuRegionCacheEnabled ) {
+	if ( m_gpuRegionCache.isEnabled() ) {
 		updateMapsBounded( eMapType, bAllRegions );
 		return;
 	}
@@ -6573,7 +3106,7 @@ void T3DData::updateMaps( const t3dmapType_t eMapType, const bool bAllRegions, c
 		}
 	}
 
-	if ( !m_bGpuRegionCacheEnabled && isFarAtlasRequired() ) {
+	if ( !m_gpuRegionCache.isEnabled() && isFarAtlasRequired() ) {
 		ensureFarAtlases();
 	}
 
@@ -6641,18 +3174,15 @@ void T3DData::updateMapRegions( const t3dmapType_t eMapType, const eastl::vector
 		if ( repository_slot < 0 ) {
 			continue;
 		}
-		if ( m_bGpuRegionCacheEnabled ) {
-			const int render_layer = findGpuRegionSlot( region_loc );
-			if ( render_layer < 0 ) {
-				m_bGpuRegionCacheSelectionDirty = true;
+		if ( m_gpuRegionCache.isEnabled() ) {
+			if ( !m_gpuRegionCache.isResident( region_loc ) ) {
+				m_gpuRegionCache.markSelectionDirty();
 				continue;
 			}
 			bHeightChanged = bHeightChanged || eMapType == T3DRegion::TYPE_HEIGHT || eMapType == T3DRegion::TYPE_MAX;
 			bControlChanged = bControlChanged || eMapType == T3DRegion::TYPE_CONTROL || eMapType == T3DRegion::TYPE_MAX;
 			bColorChanged = bColorChanged || eMapType == T3DRegion::TYPE_COLOR || eMapType == T3DRegion::TYPE_MAX;
-			if ( republishGpuRegionLocation( region_loc ) ) {
-				bPhysicalMappingChanged = true;
-			}
+			bPhysicalMappingChanged = m_gpuRegionCache.republish( region_loc, getComputeBackendIfCreated() ) || bPhysicalMappingChanged;
 			continue;
 		}
 
@@ -6710,7 +3240,7 @@ void T3DData::updateMapRegions( const t3dmapType_t eMapType, const eastl::vector
 	if ( bColorChanged ) {
 		emit_signal( "color_maps_changed" );
 	}
-	if ( !m_bGpuRegionCacheEnabled && isFarAtlasRequired() ) {
+	if ( !m_gpuRegionCache.isEnabled() && isFarAtlasRequired() ) {
 		ensureFarAtlases();
 	}
 }
@@ -6724,14 +3254,22 @@ void T3DData::publishDerivedMapUpdates( const eastl::vector<T3DDerivedMapUpdate>
 		if ( !pRegion || pRegion->isDeleted() ) {
 			continue;
 		}
+		if ( m_gpuRegionCache.isEnabled() ) {
+			if ( m_gpuRegionCache.isResident( update.location ) ) {
+				m_gpuRegionCache.updateResidentLocation(
+					update.location, T3DRegion::TYPE_HEIGHT, getComputeBackendIfCreated() );
+			} else {
+				m_gpuRegionCache.markSelectionDirty();
+			}
+			continue;
+		}
+
 		const int repositorySlot = getRegionId( update.location );
-		const int renderLayer = m_bGpuRegionCacheEnabled ? findGpuRegionSlot( update.location ) : repositorySlot;
 		const Ref<Image> pDerivedMap = pRegion->getDerivedNormalSlopeMap();
-		TypedArray<Image> &derivedLayers = m_bGpuRegionCacheEnabled ? m_gpuDerivedMaps : m_derivedMaps;
-		if ( renderLayer >= 0 && pDerivedMap.is_valid() && !m_generatedDerivedMaps.isDirty() &&
-			renderLayer < derivedLayers.size() && renderLayer < m_generatedDerivedMaps.size() ) {
-			derivedLayers[renderLayer] = pDerivedMap;
-			m_generatedDerivedMaps.update( pDerivedMap, renderLayer );
+		if ( repositorySlot >= 0 && pDerivedMap.is_valid() && !m_generatedDerivedMaps.isDirty() &&
+			repositorySlot < m_derivedMaps.size() && repositorySlot < m_generatedDerivedMaps.size() ) {
+			m_derivedMaps[repositorySlot] = pDerivedMap;
+			m_generatedDerivedMaps.update( pDerivedMap, repositorySlot );
 		}
 	}
 }
@@ -6769,7 +3307,7 @@ void T3DData::commitMapEdits(
 	const eastl::vector<Vector2i> &derivedLocations = mutation.derivedLocations;
 	publishDerivedMapUpdates( mutation.derivedUpdates );
 
-	if ( m_bGpuRegionCacheEnabled ) {
+	if ( m_gpuRegionCache.isEnabled() ) {
 		for ( const Vector2i &location : activeLocations ) {
 			markGpuFarRegionDirty( location, eMapType );
 		}
@@ -6872,7 +3410,7 @@ Color T3DData::getPixel( const t3dmapType_t eMapType, const Vector3 &rGlobalPosi
 		return COLOR_NAN;
 	}
 	const Vector2i region_loc = getRegionLocation( rGlobalPosition );
-	if ( eMapType != T3DRegion::TYPE_HEIGHT && m_bCpuRegionCacheEnabled &&
+	if ( eMapType != T3DRegion::TYPE_HEIGHT && m_cpuRegionCache.isEnabled() &&
 		!const_cast<T3DData *>( this )->ensureCpuRegionResident( region_loc ) ) {
 		return COLOR_NAN;
 	}
@@ -6938,7 +3476,7 @@ PackedFloat32Array T3DData::getHeights( const PackedVector3Array &rGlobalPositio
 	}
 
 	T3DSampler sampler( getSamplingSourceInternal() );
-	if ( !m_bCpuRegionCacheEnabled ) {
+	if ( !m_cpuRegionCache.isEnabled() ) {
 		sampler.sampleHeights( rGlobalPositions.ptr(), result.ptrw(), rGlobalPositions.size() );
 		return result;
 	}
@@ -6960,7 +3498,7 @@ PackedInt32Array T3DData::getControls( const PackedVector3Array &rGlobalPosition
 	}
 
 	T3DSampler sampler( getSamplingSourceInternal() );
-	if ( !m_bCpuRegionCacheEnabled ) {
+	if ( !m_cpuRegionCache.isEnabled() ) {
 		sampler.sampleControls( rGlobalPositions.ptr(), result.ptrw(), rGlobalPositions.size() );
 		return result;
 	}
@@ -6982,7 +3520,7 @@ PackedVector3Array T3DData::getNormals( const PackedVector3Array &rGlobalPositio
 	}
 
 	T3DSampler sampler( getSamplingSourceInternal() );
-	if ( !m_bCpuRegionCacheEnabled ) {
+	if ( !m_cpuRegionCache.isEnabled() ) {
 		sampler.sampleNormals( rGlobalPositions.ptr(), result.ptrw(), rGlobalPositions.size() );
 		return result;
 	}
