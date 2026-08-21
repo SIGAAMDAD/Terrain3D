@@ -5,21 +5,19 @@
 #ifndef TERRAIN3D_CPU_REGION_CACHE_H
 #define TERRAIN3D_CPU_REGION_CACHE_H
 
-#include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
+#include "core/terrain_3d_compiler.h"
 #include "streaming/terrain_3d_residency_state.h"
 #include "streaming/terrain_3d_runtime_page_store.h"
 
-#include <godot_cpp/variant/dictionary.hpp>
-
 #include <cstddef>
 #include <cstdint>
+#include <godot_cpp/variant/dictionary.hpp>
 
 class T3DRegion;
 class T3DRegionPersistence;
 class T3DRegionRepository;
 class T3DSamplingStorage;
-
 
 typedef struct t3dCpuRegionCacheStats_s {
 	bool m_bEnabled = false;
@@ -37,12 +35,10 @@ typedef struct t3dCpuRegionCacheStats_s {
 
 class T3DCpuRegionCache {
 public:
-	T3DCpuRegionCache(
-		T3DRegionRepository *pRepository,
-		T3DRegionPersistence *pPersistence,
-		T3DSamplingStorage *pSamplingStorage,
-		T3DRuntimePageStore *pRuntimePageStore
-	);
+	T3DCpuRegionCache( T3DRegionRepository *pRepository,
+			T3DRegionPersistence *pPersistence,
+			T3DSamplingStorage *pSamplingStorage,
+			T3DRuntimePageStore *pRuntimePageStore );
 
 	bool configure( bool bEnabled, int nBudgetMb, int nLoadLayers, int nLoadBudgetMb );
 	void setRuntimePageConfig( const t3dRuntimePageConfig_t &rConfig );
@@ -56,13 +52,27 @@ public:
 	bool ensureSampleArea( const Vector3 &rWorldPosition, int nRadiusTexels );
 	void update( const t3dResidencyFrameState_t &rFrame, bool bForce, int nEffectiveLoadLayers );
 
-	EA_FORCE_INLINE bool isEnabled( void ) const { return m_bEnabled; }
-	EA_FORCE_INLINE int getCapacity( void ) const { return m_nCapacity; }
-	EA_FORCE_INLINE int getLoadBudgetLayers( void ) const { return m_nLoadBudgetLayers; }
-	EA_FORCE_INLINE uint32_t getStallFlagsLastTick( void ) const { return m_nStallFlagsLastTick; }
-	EA_FORCE_INLINE bool isResident( const Vector2i &vLocation ) const { return findSlot( vLocation ) >= 0; }
-	EA_FORCE_INLINE bool isSelectionDirty( void ) const { return m_bSelectionDirty; }
-	EA_FORCE_INLINE void markSelectionDirty( void ) { m_bSelectionDirty = true; }
+	EA_FORCE_INLINE bool isEnabled( void ) const {
+		return m_bEnabled;
+	}
+	EA_FORCE_INLINE int getCapacity( void ) const {
+		return m_nCapacity;
+	}
+	EA_FORCE_INLINE int getLoadBudgetLayers( void ) const {
+		return m_nLoadBudgetLayers;
+	}
+	EA_FORCE_INLINE uint32_t getStallFlagsLastTick( void ) const {
+		return m_nStallFlagsLastTick;
+	}
+	EA_FORCE_INLINE bool isResident( const Vector2i &vLocation ) const {
+		return findSlot( vLocation ) >= 0;
+	}
+	EA_FORCE_INLINE bool isSelectionDirty( void ) const {
+		return m_bSelectionDirty;
+	}
+	EA_FORCE_INLINE void markSelectionDirty( void ) {
+		m_bSelectionDirty = true;
+	}
 
 	size_t estimateLayerBytes( void ) const;
 	size_t getReservedBytes( void ) const;
@@ -100,7 +110,7 @@ private:
 	int m_nAsyncPendingLastTick = 0;
 	int m_nAsyncOutstanding = 0;
 	uint8_t m_szAsyncState[s_nMaxRegionSlots] = {};
-	Vector2i m_center = V2I_MAX;
+	Vector2i m_center = s_v2iMax;
 	Vector2i m_szLocations[s_nCpuCacheMaxLayers] = {};
 	uint8_t m_szRegionMap[s_nMaxRegionSlots] = {};
 
@@ -110,17 +120,25 @@ private:
 	void prewarmSources( const t3dResidencyFrameState_t &rFrame );
 	void reapSourceAsync( const t3dResidencyFrameState_t &rFrame );
 	bool publishSlot( int iSlot, const Vector2i &vLocation, const Ref<T3DRegion> &rSource );
-	bool publishCookedSlot( int iSlot, const Vector2i &vLocation, const Ref<Image> &rHeight,
-		const Ref<Image> &rControl, const Ref<Image> &rColor, const Ref<Image> &rDerived );
+	bool publishCookedSlot( int iSlot,
+			const Vector2i &vLocation,
+			const Ref<Image> &rHeight,
+			const Ref<Image> &rControl,
+			const Ref<Image> &rColor,
+			const Ref<Image> &rDerived );
 	bool cookedRuntimeEnabled( void ) const;
-	bool loadCookedMapsNow( const Vector2i &vLocation, Ref<Image> &rHeight, Ref<Image> &rControl, Ref<Image> &rColor, Ref<Image> &rDerived ) const;
+	bool loadCookedMapsNow( const Vector2i &vLocation,
+			Ref<Image> &rHeight,
+			Ref<Image> &rControl,
+			Ref<Image> &rColor,
+			Ref<Image> &rDerived ) const;
 	bool evictSlot( int iSlot );
 	void releaseUntrackedMaps( void );
 	bool restoreAllMaps( void );
-	int collectDesired(
-		const t3dResidencyFrameState_t &rFrame, const Vector2i &rCenter,
-		Vector2i *pLocations, int nCapacity
-	) const;
+	int collectDesired( const t3dResidencyFrameState_t &rFrame,
+			const Vector2i &rCenter,
+			Vector2i *pLocations,
+			int nCapacity ) const;
 };
 
 #endif // TERRAIN3D_CPU_REGION_CACHE_H

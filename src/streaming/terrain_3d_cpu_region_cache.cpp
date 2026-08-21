@@ -9,15 +9,14 @@
 #include "streaming/terrain_3d_cpu_cache_policy.h"
 #include "streaming/terrain_3d_runtime_profile.h"
 
+#include <algorithm>
+#include <cmath>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
 #include <godot_cpp/classes/time.hpp>
 
-#include <algorithm>
-#include <cmath>
-
 class T3DCpuRegionCacheScopeTimer {
-	uint64_t m_startedUsec = 0u;
+	uint64_t m_nStartedUsec = 0u;
 	uint64_t *m_pElapsedUsec = nullptr;
 
 public:
@@ -28,7 +27,7 @@ public:
 		}
 		m_pElapsedUsec = &nElapsedUsec;
 		Time *const pTime = Time::get_singleton();
-		m_startedUsec = pTime ? pTime->get_ticks_usec() : 0u;
+		m_nStartedUsec = pTime ? pTime->get_ticks_usec() : 0u;
 	}
 
 	~T3DCpuRegionCacheScopeTimer( void ) {
@@ -36,8 +35,8 @@ public:
 			return;
 		}
 		Time *const pTime = Time::get_singleton();
-		const uint64_t finishedUsec = pTime ? pTime->get_ticks_usec() : m_startedUsec;
-		*m_pElapsedUsec = finishedUsec >= m_startedUsec ? finishedUsec - m_startedUsec : 0u;
+		const uint64_t finishedUsec = pTime ? pTime->get_ticks_usec() : m_nStartedUsec;
+		*m_pElapsedUsec = finishedUsec >= m_nStartedUsec ? finishedUsec - m_nStartedUsec : 0u;
 	}
 };
 
@@ -51,14 +50,12 @@ static bool t3dCpuRegionCacheForEachSquareRing( const Vector2i &rCenter, const i
 			continue;
 		}
 		for ( int x = -radius; x <= radius; ++x ) {
-			if ( !rCallback( rCenter + Vector2i( x, -radius ) ) ||
-				!rCallback( rCenter + Vector2i( x, radius ) ) ) {
+			if ( !rCallback( rCenter + Vector2i( x, -radius ) ) || !rCallback( rCenter + Vector2i( x, radius ) ) ) {
 				return false;
 			}
 		}
 		for ( int y = -radius + 1; y <= radius - 1; ++y ) {
-			if ( !rCallback( rCenter + Vector2i( -radius, y ) ) ||
-				!rCallback( rCenter + Vector2i( radius, y ) ) ) {
+			if ( !rCallback( rCenter + Vector2i( -radius, y ) ) || !rCallback( rCenter + Vector2i( radius, y ) ) ) {
 				return false;
 			}
 		}
@@ -75,17 +72,15 @@ static Rect2i t3dCpuRegionCacheGetRegionBoundsForArea( const Rect2i &rArea, cons
 	return Rect2i( begin, end - begin );
 }
 
-T3DCpuRegionCache::T3DCpuRegionCache(
-	T3DRegionRepository *const pRepository,
-	T3DRegionPersistence *const pPersistence,
-	T3DSamplingStorage *const pSamplingStorage,
-	T3DRuntimePageStore *const pRuntimePageStore
-) :
+T3DCpuRegionCache::T3DCpuRegionCache( T3DRegionRepository *const pRepository,
+		T3DRegionPersistence *const pPersistence,
+		T3DSamplingStorage *const pSamplingStorage,
+		T3DRuntimePageStore *const pRuntimePageStore ) :
 		m_pRepository( pRepository ),
 		m_pPersistence( pPersistence ),
 		m_pSamplingStorage( pSamplingStorage ),
 		m_pRuntimePageStore( pRuntimePageStore ) {
-	std::fill_n( m_szLocations, s_nCpuCacheMaxLayers, V2I_MAX );
+	std::fill_n( m_szLocations, s_nCpuCacheMaxLayers, s_v2iMax );
 }
 
 void T3DCpuRegionCache::setRuntimePageConfig( const t3dRuntimePageConfig_t &rConfig ) {
@@ -96,16 +91,19 @@ bool T3DCpuRegionCache::cookedRuntimeEnabled( void ) const {
 	return m_pRuntimePageStore && m_runtimePageConfig.m_bCookedPagesEnabled && !m_runtimePageConfig.m_bEditorAuthoring;
 }
 
-bool T3DCpuRegionCache::loadCookedMapsNow(
-	const Vector2i &vLocation, Ref<Image> &rHeight, Ref<Image> &rControl, Ref<Image> &rColor, Ref<Image> &rDerived
-) const {
-	return cookedRuntimeEnabled() && m_pRuntimePageStore->loadCpuMapsNow(
-		vLocation, m_runtimePageConfig, rHeight, rControl, rColor, rDerived );
+bool T3DCpuRegionCache::loadCookedMapsNow( const Vector2i &vLocation,
+		Ref<Image> &rHeight,
+		Ref<Image> &rControl,
+		Ref<Image> &rColor,
+		Ref<Image> &rDerived ) const {
+	return cookedRuntimeEnabled() &&
+			m_pRuntimePageStore->loadCpuMapsNow( vLocation, m_runtimePageConfig, rHeight, rControl, rColor, rDerived );
 }
 
 int T3DCpuRegionCache::calculateCapacity( void ) const {
-	return m_pRepository ? t3dCpuCacheCalculateCapacity(
-		m_pRepository->getRegionSize(), m_nBudgetMb, s_nCpuCacheMaxLayers ) : 0;
+	return m_pRepository
+			? t3dCpuCacheCalculateCapacity( m_pRepository->getRegionSize(), m_nBudgetMb, s_nCpuCacheMaxLayers )
+			: 0;
 }
 
 size_t T3DCpuRegionCache::estimateLayerBytes( void ) const {
@@ -118,8 +116,8 @@ void T3DCpuRegionCache::reset( const bool bReleaseCleanMaps ) {
 			evictSlot( slot );
 		}
 	}
-	std::fill_n( m_szRegionMap, s_nMaxRegionSlots, ( uint8_t ) ( 0 ) );
-	std::fill_n( m_szLocations, s_nCpuCacheMaxLayers, V2I_MAX );
+	std::fill_n( m_szRegionMap, s_nMaxRegionSlots, ( uint8_t )( 0 ) );
+	std::fill_n( m_szLocations, s_nCpuCacheMaxLayers, s_v2iMax );
 	m_nCapacity = 0;
 	m_nResidentCount = 0;
 	m_nDesiredLastTick = 0;
@@ -133,8 +131,8 @@ void T3DCpuRegionCache::reset( const bool bReleaseCleanMaps ) {
 	m_nAsyncPendingLastTick = 0;
 	m_nAsyncOutstanding = 0;
 	m_nPrefetchStreamingGenerationLast = 0u;
-	std::fill_n( m_szAsyncState, s_nMaxRegionSlots, ( uint8_t ) ( 0 ) );
-	m_center = V2I_MAX;
+	std::fill_n( m_szAsyncState, s_nMaxRegionSlots, ( uint8_t )( 0 ) );
+	m_center = s_v2iMax;
 	m_bSelectionDirty = true;
 }
 
@@ -156,7 +154,7 @@ int T3DCpuRegionCache::findSlot( const Vector2i &vLocation ) const {
 	if ( mapIndex < 0 ) {
 		return -1;
 	}
-	const int slot = ( int ) ( m_szRegionMap[mapIndex] ) - 1;
+	const int slot = ( int )( m_szRegionMap[mapIndex] ) - 1;
 	if ( slot < 0 || slot >= m_nCapacity || m_szLocations[slot] != vLocation ) {
 		return -1;
 	}
@@ -172,7 +170,7 @@ void T3DCpuRegionCache::invalidate( const Vector2i &vLocation ) {
 	if ( mapIndex >= 0 ) {
 		m_szRegionMap[mapIndex] = 0u;
 	}
-	m_szLocations[slot] = V2I_MAX;
+	m_szLocations[slot] = s_v2iMax;
 	m_nResidentCount = MAX( 0, m_nResidentCount - 1 );
 	m_bSelectionDirty = true;
 }
@@ -190,8 +188,7 @@ bool T3DCpuRegionCache::loadSource( const Vector2i &vLocation, Ref<T3DRegion> &r
 		rSource = Ref<T3DRegion>( pRegion );
 		return true;
 	}
-	return m_pPersistence->loadRuntimeRegionSource(
-		pRegion->get_path(), m_pRepository->getRegionSize(), rSource );
+	return m_pPersistence->loadRuntimeRegionSource( pRegion->get_path(), m_pRepository->getRegionSize(), rSource );
 }
 
 bool T3DCpuRegionCache::requestSourceAsync( const Vector2i &vLocation ) {
@@ -201,7 +198,7 @@ bool T3DCpuRegionCache::requestSourceAsync( const Vector2i &vLocation ) {
 	T3DRegion *const pRegion = m_pRepository->getRegionPtr( vLocation );
 	const int mapIndex = T3DRegionRepository::getRegionMapIndex( vLocation );
 	if ( mapIndex < 0 || !pRegion || pRegion->isDeleted() || pRegion->hasRuntimeMapPayloadInternal() ||
-		m_szAsyncState[mapIndex] != 0u ) {
+			m_szAsyncState[mapIndex] != 0u ) {
 		return pRegion && !pRegion->isDeleted();
 	}
 	if ( cookedRuntimeEnabled() ) {
@@ -220,8 +217,7 @@ bool T3DCpuRegionCache::requestSourceAsync( const Vector2i &vLocation ) {
 	if ( !pLoader ) {
 		return false;
 	}
-	const Error error = pLoader->load_threaded_request(
-		path, "T3DRegion", true, ResourceLoader::CACHE_MODE_IGNORE );
+	const Error error = pLoader->load_threaded_request( path, "T3DRegion", true, ResourceLoader::CACHE_MODE_IGNORE );
 	if ( error != OK && error != ERR_BUSY ) {
 		m_szAsyncState[mapIndex] = 2u;
 		return false;
@@ -269,8 +265,7 @@ bool T3DCpuRegionCache::takeSourceAsync( const Vector2i &vLocation, Ref<T3DRegio
 	const Ref<T3DRegion> pLoaded = pResource;
 	m_szAsyncState[mapIndex] = 0u;
 	m_nAsyncOutstanding = MAX( 0, m_nAsyncOutstanding - 1 );
-	if ( !m_pPersistence->prepareRuntimeRegionSource(
-		pLoaded, m_pRepository->getRegionSize(), rSource ) ) {
+	if ( !m_pPersistence->prepareRuntimeRegionSource( pLoaded, m_pRepository->getRegionSize(), rSource ) ) {
 		return false;
 	}
 	++m_nAsyncReadyLastTick;
@@ -287,7 +282,7 @@ void T3DCpuRegionCache::prewarmSources( const t3dResidencyFrameState_t &rFrame )
 		for ( int x = -radius; x <= radius; ++x ) {
 			const Vector2i location = center + Vector2i( x, y );
 			if ( !m_pRepository->isLocationValid( location ) || !m_pRepository->getRegionPtr( location ) ||
-				findSlot( location ) >= 0 ) {
+					findSlot( location ) >= 0 ) {
 				continue;
 			}
 			T3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
@@ -307,12 +302,16 @@ void T3DCpuRegionCache::reapSourceAsync( const t3dResidencyFrameState_t &rFrame 
 		const int activeRadius = rFrame.m_nStreamingActiveRadius;
 		for ( int slot = 0; slot < m_pRepository->getSlotCount() && m_nAsyncOutstanding > 0; ++slot ) {
 			const Vector2i location = m_pRepository->getSlotsData()[slot];
-			const int mapIndex = location == V2I_MAX ? -1 : T3DRegionRepository::getRegionMapIndex( location );
-			if ( mapIndex < 0 || m_szAsyncState[mapIndex] == 0u ) continue;
+			const int mapIndex = location == s_v2iMax ? -1 : T3DRegionRepository::getRegionMapIndex( location );
+			if ( mapIndex < 0 || m_szAsyncState[mapIndex] == 0u ) {
+				continue;
+			}
 			const bool activeNow = rFrame.streamingState( location ) == TERRAIN3D_REGION_STREAMING_ACTIVE;
 			const bool predictedActive = MAX( Math::abs( location.m_nX - predictedCenter.x ),
-				Math::abs( location.m_nY - predictedCenter.y ) ) <= activeRadius;
-			if ( activeNow || predictedActive ) continue;
+												 Math::abs( location.m_nY - predictedCenter.y ) ) <= activeRadius;
+			if ( activeNow || predictedActive ) {
+				continue;
+			}
 			m_pRuntimePageStore->request( location, RUNTIME_PAGE_CONSUMER_CPU_MAPS, 0u, false );
 			m_szAsyncState[mapIndex] = 0u;
 			m_nAsyncOutstanding = MAX( 0, m_nAsyncOutstanding - 1 );
@@ -327,13 +326,13 @@ void T3DCpuRegionCache::reapSourceAsync( const t3dResidencyFrameState_t &rFrame 
 	const int activeRadius = rFrame.m_nStreamingActiveRadius;
 	for ( int slot = 0; slot < m_pRepository->getSlotCount() && m_nAsyncOutstanding > 0; ++slot ) {
 		const Vector2i location = m_pRepository->getSlotsData()[slot];
-		const int mapIndex = location == V2I_MAX ? -1 : T3DRegionRepository::getRegionMapIndex( location );
+		const int mapIndex = location == s_v2iMax ? -1 : T3DRegionRepository::getRegionMapIndex( location );
 		if ( mapIndex < 0 || m_szAsyncState[mapIndex] == 0u ) {
 			continue;
 		}
 		const bool activeNow = rFrame.streamingState( location ) == TERRAIN3D_REGION_STREAMING_ACTIVE;
 		const bool predictedActive = MAX( Math::abs( location.m_nX - predictedCenter.x ),
-			Math::abs( location.m_nY - predictedCenter.y ) ) <= activeRadius;
+											 Math::abs( location.m_nY - predictedCenter.y ) ) <= activeRadius;
 		if ( activeNow || predictedActive ) {
 			continue;
 		}
@@ -350,16 +349,14 @@ void T3DCpuRegionCache::reapSourceAsync( const t3dResidencyFrameState_t &rFrame 
 		}
 		if ( status == ResourceLoader::THREAD_LOAD_LOADED ) {
 			const Ref<Resource> discard = pLoader->load_threaded_get( path );
-			( void ) discard;
+			( void )discard;
 		}
 		m_szAsyncState[mapIndex] = 0u;
 		m_nAsyncOutstanding = MAX( 0, m_nAsyncOutstanding - 1 );
 	}
 }
 
-bool T3DCpuRegionCache::publishSlot(
-	const int iSlot, const Vector2i &vLocation, const Ref<T3DRegion> &rSource
-) {
+bool T3DCpuRegionCache::publishSlot( const int iSlot, const Vector2i &vLocation, const Ref<T3DRegion> &rSource ) {
 	if ( iSlot < 0 || iSlot >= m_nCapacity || rSource.is_null() || !m_pRepository ) {
 		return false;
 	}
@@ -376,7 +373,7 @@ bool T3DCpuRegionCache::publishSlot(
 		return false;
 	}
 	m_szLocations[iSlot] = vLocation;
-	m_szRegionMap[mapIndex] = ( uint8_t ) ( iSlot + 1 );
+	m_szRegionMap[mapIndex] = ( uint8_t )( iSlot + 1 );
 	++m_nResidentCount;
 	if ( m_pSamplingStorage ) {
 		m_pSamplingStorage->publishRegionGeneration( vLocation );
@@ -384,21 +381,29 @@ bool T3DCpuRegionCache::publishSlot(
 	return true;
 }
 
-bool T3DCpuRegionCache::publishCookedSlot(
-	const int iSlot, const Vector2i &vLocation, const Ref<Image> &rHeight,
-	const Ref<Image> &rControl, const Ref<Image> &rColor, const Ref<Image> &rDerived
-) {
+bool T3DCpuRegionCache::publishCookedSlot( const int iSlot,
+		const Vector2i &vLocation,
+		const Ref<Image> &rHeight,
+		const Ref<Image> &rControl,
+		const Ref<Image> &rColor,
+		const Ref<Image> &rDerived ) {
 	if ( iSlot < 0 || iSlot >= m_nCapacity || !m_pRepository || rHeight.is_null() || rDerived.is_null() ) {
 		return false;
 	}
 	T3DRegion *const pRegion = m_pRepository->getRegionPtr( vLocation );
-	if ( !pRegion || pRegion->isDeleted() ) return false;
+	if ( !pRegion || pRegion->isDeleted() ) {
+		return false;
+	}
 	pRegion->adoptCookedRuntimeMapsInternal( rHeight, rControl, rColor, rDerived );
-	if ( !pRegion->hasRuntimeMapPayloadInternal() ) return false;
+	if ( !pRegion->hasRuntimeMapPayloadInternal() ) {
+		return false;
+	}
 	const int mapIndex = T3DRegionRepository::getRegionMapIndex( vLocation );
-	if ( mapIndex < 0 ) return false;
+	if ( mapIndex < 0 ) {
+		return false;
+	}
 	m_szLocations[iSlot] = vLocation;
-	m_szRegionMap[mapIndex] = ( uint8_t ) ( iSlot + 1 );
+	m_szRegionMap[mapIndex] = ( uint8_t )( iSlot + 1 );
 	++m_nResidentCount;
 	if ( m_pSamplingStorage ) {
 		m_pSamplingStorage->publishRegionGeneration( vLocation );
@@ -411,7 +416,7 @@ bool T3DCpuRegionCache::evictSlot( const int iSlot ) {
 		return false;
 	}
 	const Vector2i location = m_szLocations[iSlot];
-	if ( location == V2I_MAX ) {
+	if ( location == s_v2iMax ) {
 		return true;
 	}
 	T3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
@@ -428,7 +433,7 @@ bool T3DCpuRegionCache::evictSlot( const int iSlot ) {
 	if ( mapIndex >= 0 ) {
 		m_szRegionMap[mapIndex] = 0u;
 	}
-	m_szLocations[iSlot] = V2I_MAX;
+	m_szLocations[iSlot] = s_v2iMax;
 	m_nResidentCount = MAX( 0, m_nResidentCount - 1 );
 	if ( m_pSamplingStorage ) {
 		m_pSamplingStorage->publishRegionGeneration( location );
@@ -448,36 +453,37 @@ bool T3DCpuRegionCache::ensureResident( const Vector2i &vLocation, const bool bD
 	}
 	T3DRegion *const pExistingRegion = m_pRepository->getRegionPtr( vLocation );
 	if ( pExistingRegion && pExistingRegion->hasRuntimeMapPayloadInternal() &&
-		!pExistingRegion->runtimeMapsEvictableInternal() ) {
+			!pExistingRegion->runtimeMapsEvictableInternal() ) {
 		return true;
 	}
 	Ref<T3DRegion> pSource;
 	Ref<Image> pHeight, pControl, pColor, pDerived;
 	const bool bCooked = cookedRuntimeEnabled();
 	if ( bCooked ) {
-		if ( !loadCookedMapsNow( vLocation, pHeight, pControl, pColor, pDerived ) ) return false;
+		if ( !loadCookedMapsNow( vLocation, pHeight, pControl, pColor, pDerived ) ) {
+			return false;
+		}
 	} else if ( !loadSource( vLocation, pSource ) ) {
 		return false;
 	}
 	int targetSlot = -1;
 	for ( int slot = 0; slot < m_nCapacity; ++slot ) {
-		if ( m_szLocations[slot] == V2I_MAX ) {
+		if ( m_szLocations[slot] == s_v2iMax ) {
 			targetSlot = slot;
 			break;
 		}
 	}
 	if ( targetSlot < 0 ) {
 		int farthestDistance = -1;
-		const Vector2i evictionCenter = m_center == V2I_MAX ? vLocation : m_center;
-		const t3dCpuCacheCoord_t center = {evictionCenter.x, evictionCenter.y};
+		const Vector2i evictionCenter = m_center == s_v2iMax ? vLocation : m_center;
+		const t3dCpuCacheCoord_t center = { evictionCenter.x, evictionCenter.y };
 		for ( int slot = 0; slot < m_nCapacity; ++slot ) {
 			const Vector2i oldLocation = m_szLocations[slot];
 			T3DRegion *const pOldRegion = m_pRepository->getRegionPtr( oldLocation );
 			if ( !pOldRegion || !pOldRegion->runtimeMapsEvictableInternal() ) {
 				continue;
 			}
-			const int distance = t3dCpuCacheDistance(
-				{oldLocation.x, oldLocation.y}, center );
+			const int distance = t3dCpuCacheDistance( { oldLocation.x, oldLocation.y }, center );
 			if ( distance > farthestDistance ) {
 				farthestDistance = distance;
 				targetSlot = slot;
@@ -487,14 +493,14 @@ bool T3DCpuRegionCache::ensureResident( const Vector2i &vLocation, const bool bD
 	if ( targetSlot < 0 ) {
 		return false;
 	}
-	if ( m_szLocations[targetSlot] != V2I_MAX ) {
+	if ( m_szLocations[targetSlot] != s_v2iMax ) {
 		if ( !evictSlot( targetSlot ) ) {
 			return false;
 		}
 		++m_nEvictionsLastTick;
 	}
-	if ( bCooked ? !publishCookedSlot( targetSlot, vLocation, pHeight, pControl, pColor, pDerived ) :
-		!publishSlot( targetSlot, vLocation, pSource ) ) {
+	if ( bCooked ? !publishCookedSlot( targetSlot, vLocation, pHeight, pControl, pColor, pDerived )
+				 : !publishSlot( targetSlot, vLocation, pSource ) ) {
 		return false;
 	}
 	if ( bDemandLoad ) {
@@ -509,7 +515,7 @@ void T3DCpuRegionCache::releaseUntrackedMaps( void ) {
 	}
 	for ( int slot = 0; slot < m_pRepository->getSlotCount(); ++slot ) {
 		const Vector2i location = m_pRepository->getSlotsData()[slot];
-		if ( location == V2I_MAX || findSlot( location ) >= 0 ) {
+		if ( location == s_v2iMax || findSlot( location ) >= 0 ) {
 			continue;
 		}
 		T3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
@@ -533,7 +539,7 @@ bool T3DCpuRegionCache::restoreAllMaps( void ) {
 	bool bSuccess = true;
 	for ( int slot = 0; slot < m_pRepository->getSlotCount(); ++slot ) {
 		const Vector2i location = m_pRepository->getSlotsData()[slot];
-		T3DRegion *const pRegion = location == V2I_MAX ? nullptr : m_pRepository->getRegionPtr( location );
+		T3DRegion *const pRegion = location == s_v2iMax ? nullptr : m_pRepository->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() || pRegion->hasRuntimeMapPayloadInternal() ) {
 			continue;
 		}
@@ -559,10 +565,10 @@ bool T3DCpuRegionCache::restoreAllMaps( void ) {
 	return bSuccess;
 }
 
-int T3DCpuRegionCache::collectDesired(
-	const t3dResidencyFrameState_t &rFrame, const Vector2i &rCenter,
-	Vector2i *const pLocations, const int nCapacity
-) const {
+int T3DCpuRegionCache::collectDesired( const t3dResidencyFrameState_t &rFrame,
+		const Vector2i &rCenter,
+		Vector2i *const pLocations,
+		const int nCapacity ) const {
 	if ( !pLocations || nCapacity <= 0 || !m_pRepository ) {
 		return 0;
 	}
@@ -573,7 +579,7 @@ int T3DCpuRegionCache::collectDesired(
 			return false;
 		}
 		if ( !m_pRepository->isLocationValid( location ) || !m_pRepository->getRegionPtr( location ) ||
-			rFrame.streamingState( location ) != TERRAIN3D_REGION_STREAMING_ACTIVE ) {
+				rFrame.streamingState( location ) != TERRAIN3D_REGION_STREAMING_ACTIVE ) {
 			return true;
 		}
 		pLocations[outputCount++] = location;
@@ -582,15 +588,14 @@ int T3DCpuRegionCache::collectDesired(
 	return outputCount;
 }
 
-bool T3DCpuRegionCache::configure(
-	const bool bEnabled, const int nBudgetMb,
-	const int nLoadLayers, const int nLoadBudgetMb
-) {
+bool T3DCpuRegionCache::configure( const bool bEnabled,
+		const int nBudgetMb,
+		const int nLoadLayers,
+		const int nLoadBudgetMb ) {
 	const bool bOldEnabled = m_bEnabled;
 	const int oldBudget = m_nBudgetMb;
 	m_bEnabled = bEnabled;
-	m_nBudgetMb = CLAMP( nBudgetMb, s_nCpuRegionCacheMinBudgetMb,
-		s_nCpuRegionCacheMaxBudgetMb );
+	m_nBudgetMb = CLAMP( nBudgetMb, s_nCpuRegionCacheMinBudgetMb, s_nCpuRegionCacheMaxBudgetMb );
 	m_nLoadBudgetLayers = CLAMP( nLoadLayers, 1, s_nCpuRegionLoadMaxLayers );
 	m_nLoadBudgetMb = CLAMP( nLoadBudgetMb, 1, s_nCpuRegionLoadMaxBudgetMb );
 	if ( !bOldEnabled && !m_bEnabled ) {
@@ -616,16 +621,15 @@ bool T3DCpuRegionCache::configure(
 
 bool T3DCpuRegionCache::ensureSampleArea( const Vector3 &rWorldPosition, const int nRadiusTexels ) {
 	if ( !m_bEnabled || !m_pRepository || m_pRepository->getRegionSize() <= 0 ||
-		m_pRepository->getVertexSpacing() <= 0.0f ) {
+			m_pRepository->getVertexSpacing() <= 0.0f ) {
 		return true;
 	}
 	const int radius = MAX( 0, nRadiusTexels ) + 1;
-	const Vector2i center(
-		( int ) ( Math::floor( rWorldPosition.x / m_pRepository->getVertexSpacing() ) ),
-		( int ) ( Math::floor( rWorldPosition.z / m_pRepository->getVertexSpacing() ) ) );
+	const Vector2i center( ( int )( Math::floor( rWorldPosition.x / m_pRepository->getVertexSpacing() ) ),
+			( int )( Math::floor( rWorldPosition.z / m_pRepository->getVertexSpacing() ) ) );
 	const Vector2i extent( radius * 2 + 1, radius * 2 + 1 );
 	const Rect2i bounds = t3dCpuRegionCacheGetRegionBoundsForArea(
-		Rect2i( center - Vector2i( radius, radius ), extent ), m_pRepository->getRegionSize() );
+			Rect2i( center - Vector2i( radius, radius ), extent ), m_pRepository->getRegionSize() );
 	bool bSuccess = true;
 	for ( int y = bounds.position.y; y < bounds.get_end().y; ++y ) {
 		for ( int x = bounds.position.x; x < bounds.get_end().x; ++x ) {
@@ -638,9 +642,9 @@ bool T3DCpuRegionCache::ensureSampleArea( const Vector3 &rWorldPosition, const i
 	return bSuccess;
 }
 
-void T3DCpuRegionCache::update(
-	const t3dResidencyFrameState_t &rFrame, const bool bForce, const int nEffectiveLoadLayers
-) {
+void T3DCpuRegionCache::update( const t3dResidencyFrameState_t &rFrame,
+		const bool bForce,
+		const int nEffectiveLoadLayers ) {
 	const T3DCpuRegionCacheScopeTimer serviceTimer( m_nServiceUsecLast, rFrame.m_bProfilingEnabled );
 	setRuntimePageConfig( rFrame.m_runtimePageConfig );
 	m_nLoadsLastTick = 0;
@@ -652,7 +656,7 @@ void T3DCpuRegionCache::update(
 	m_nAsyncReadyLastTick = 0;
 	m_nAsyncPendingLastTick = 0;
 	if ( !m_bEnabled || m_nCapacity <= 0 || !m_pRepository || m_pRepository->getRegionSize() <= 0 ||
-		m_pRepository->getVertexSpacing() <= 0.0f ) {
+			m_pRepository->getVertexSpacing() <= 0.0f ) {
 		return;
 	}
 
@@ -678,7 +682,7 @@ void T3DCpuRegionCache::update(
 		}
 	}
 	const size_t layerBytes = estimateLayerBytes();
-	const size_t byteBudget = ( size_t ) ( m_nLoadBudgetMb ) * s_nCpuCacheMib;
+	const size_t byteBudget = ( size_t )( m_nLoadBudgetMb )*s_nCpuCacheMib;
 	const int loadLayerBudget = CLAMP( nEffectiveLoadLayers, 0, m_nLoadBudgetLayers );
 	bool bAllDesiredResident = true;
 	for ( int desiredIndex = 0; desiredIndex < desiredCount; ++desiredIndex ) {
@@ -688,7 +692,7 @@ void T3DCpuRegionCache::update(
 		}
 		T3DRegion *const pAvailableRegion = m_pRepository->getRegionPtr( location );
 		if ( pAvailableRegion && pAvailableRegion->hasRuntimeMapPayloadInternal() &&
-			!pAvailableRegion->runtimeMapsEvictableInternal() ) {
+				!pAvailableRegion->runtimeMapsEvictableInternal() ) {
 			continue;
 		}
 		bAllDesiredResident = false;
@@ -722,12 +726,14 @@ void T3DCpuRegionCache::update(
 			bSourceReady = bForce ? loadSource( location, pSource ) : takeSourceAsync( location, pSource );
 		}
 		if ( !bSourceReady ) {
-			if ( !bForce ) requestSourceAsync( location );
+			if ( !bForce ) {
+				requestSourceAsync( location );
+			}
 			continue;
 		}
 		int targetSlot = -1;
 		for ( int slot = 0; slot < m_nCapacity; ++slot ) {
-			if ( m_szLocations[slot] == V2I_MAX ) {
+			if ( m_szLocations[slot] == s_v2iMax ) {
 				targetSlot = slot;
 				break;
 			}
@@ -745,7 +751,8 @@ void T3DCpuRegionCache::update(
 					++m_nPinnedLastTick;
 					continue;
 				}
-				const int distance = MAX( std::abs( oldLocation.x - center.m_nX ), std::abs( oldLocation.y - center.m_nY ) );
+				const int distance =
+						MAX( std::abs( oldLocation.x - center.m_nX ), std::abs( oldLocation.y - center.m_nY ) );
 				if ( distance > farthestDistance ) {
 					farthestDistance = distance;
 					targetSlot = slot;
@@ -756,14 +763,14 @@ void T3DCpuRegionCache::update(
 			m_nStallFlagsLastTick |= TERRAIN3D_PROFILE_STALL_CPU_PINNED_CAPACITY;
 			continue;
 		}
-		if ( m_szLocations[targetSlot] != V2I_MAX ) {
+		if ( m_szLocations[targetSlot] != s_v2iMax ) {
 			if ( !evictSlot( targetSlot ) ) {
 				continue;
 			}
 			++m_nEvictionsLastTick;
 		}
-		if ( bCooked ? !publishCookedSlot( targetSlot, location, pHeight, pControl, pColor, pDerived ) :
-			!publishSlot( targetSlot, location, pSource ) ) {
+		if ( bCooked ? !publishCookedSlot( targetSlot, location, pHeight, pControl, pColor, pDerived )
+					 : !publishSlot( targetSlot, location, pSource ) ) {
 			continue;
 		}
 		++m_nLoadsLastTick;
@@ -776,7 +783,7 @@ void T3DCpuRegionCache::update(
 			const Vector2i location = desired[index];
 			T3DRegion *const pAvailableRegion = m_pRepository->getRegionPtr( location );
 			const bool bPinnedAvailable = pAvailableRegion && pAvailableRegion->hasRuntimeMapPayloadInternal() &&
-				!pAvailableRegion->runtimeMapsEvictableInternal();
+					!pAvailableRegion->runtimeMapsEvictableInternal();
 			if ( findSlot( location ) < 0 && !bPinnedAvailable ) {
 				bAllDesiredResident = false;
 				break;
@@ -789,15 +796,15 @@ void T3DCpuRegionCache::update(
 }
 
 size_t T3DCpuRegionCache::getReservedBytes( void ) const {
-	return estimateLayerBytes() * ( size_t ) ( MAX( 0, m_nCapacity ) );
+	return estimateLayerBytes() * ( size_t )( MAX( 0, m_nCapacity ) );
 }
 
 size_t T3DCpuRegionCache::getMinimumBytes( void ) const {
-	return estimateLayerBytes() * ( size_t ) ( s_nCpuCacheMinSampleLayers );
+	return estimateLayerBytes() * ( size_t )( s_nCpuCacheMinSampleLayers );
 }
 
 size_t T3DCpuRegionCache::getHardCapBytes( void ) const {
-	return estimateLayerBytes() * ( size_t ) ( s_nCpuCacheMaxLayers );
+	return estimateLayerBytes() * ( size_t )( s_nCpuCacheMaxLayers );
 }
 
 t3dCpuRegionCacheStats_t T3DCpuRegionCache::getStats( void ) const {
@@ -824,23 +831,23 @@ Dictionary T3DCpuRegionCache::getStatsDictionary( const bool bDetailed, const in
 	stats["resident"] = m_nResidentCount;
 	stats["desired_last_tick"] = m_nDesiredLastTick;
 	stats["loads_last_tick"] = m_nLoadsLastTick;
-	stats["loads_since_reset"] = ( int64_t ) ( m_nLoadsSinceReset );
+	stats["loads_since_reset"] = ( int64_t )( m_nLoadsSinceReset );
 	stats["evictions_last_tick"] = m_nEvictionsLastTick;
 	stats["pinned_last_tick"] = m_nPinnedLastTick;
 	stats["demand_loads"] = m_nDemandLoads;
-	stats["load_bytes_last_tick"] = ( int64_t ) ( m_nLoadBytesLastTick );
+	stats["load_bytes_last_tick"] = ( int64_t )( m_nLoadBytesLastTick );
 	stats["async_requests_last_tick"] = m_nAsyncRequestsLastTick;
 	stats["async_ready_last_tick"] = m_nAsyncReadyLastTick;
 	stats["async_pending_last_tick"] = m_nAsyncPendingLastTick;
-	stats["service_cpu_usec_last"] = ( int64_t ) ( m_nServiceUsecLast );
+	stats["service_cpu_usec_last"] = ( int64_t )( m_nServiceUsecLast );
 	stats["selection_pending"] = m_bSelectionDirty;
-	stats["reserved_bytes"] = ( int64_t ) ( getReservedBytes() );
+	stats["reserved_bytes"] = ( int64_t )( getReservedBytes() );
 	if ( m_pSamplingStorage ) {
-		stats["active_height_bytes"] = ( int64_t ) ( m_pSamplingStorage->getActiveReservedBytes() );
+		stats["active_height_bytes"] = ( int64_t )( m_pSamplingStorage->getActiveReservedBytes() );
 		stats["active_height_physical_capacity"] = m_pSamplingStorage->getActivePhysicalCapacity();
-		stats["active_height_reader_retries"] = ( int64_t ) ( m_pSamplingStorage->getActiveReaderRetryCount() );
-		stats["active_height_reader_mutexes"] = ( int64_t ) ( m_pSamplingStorage->getActiveReaderMutexCount() );
-		stats["active_height_publications"] = ( int64_t ) ( m_pSamplingStorage->getActivePublicationCount() );
+		stats["active_height_reader_retries"] = ( int64_t )( m_pSamplingStorage->getActiveReaderRetryCount() );
+		stats["active_height_reader_mutexes"] = ( int64_t )( m_pSamplingStorage->getActiveReaderMutexCount() );
+		stats["active_height_publications"] = ( int64_t )( m_pSamplingStorage->getActivePublicationCount() );
 	}
 	if ( !bDetailed || !m_pRepository ) {
 		return stats;
@@ -850,7 +857,7 @@ Dictionary T3DCpuRegionCache::getStatsDictionary( const bool bDetailed, const in
 	int totalPayloadCount = 0;
 	for ( int slot = 0; slot < m_pRepository->getSlotCount(); ++slot ) {
 		const Vector2i location = m_pRepository->getSlotsData()[slot];
-		const T3DRegion *const pRegion = location == V2I_MAX ? nullptr : m_pRepository->getRegionPtr( location );
+		const T3DRegion *const pRegion = location == s_v2iMax ? nullptr : m_pRepository->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() || !pRegion->hasRuntimeMapPayloadInternal() ) {
 			continue;
 		}
@@ -862,24 +869,24 @@ Dictionary T3DCpuRegionCache::getStatsDictionary( const bool bDetailed, const in
 	stats["load_layer_budget"] = m_nLoadBudgetLayers;
 	stats["effective_load_layer_budget"] = nEffectiveLoadLayers;
 	stats["load_budget_mb"] = m_nLoadBudgetMb;
-	stats["stall_flags_last_tick"] = ( int64_t ) ( m_nStallFlagsLastTick );
+	stats["stall_flags_last_tick"] = ( int64_t )( m_nStallFlagsLastTick );
 	stats["pinned_payloads"] = pinnedPayloadCount;
 	stats["total_payloads"] = totalPayloadCount;
 	const size_t layerBytes = estimateLayerBytes();
-	const size_t worstCaseBytes = layerBytes * ( size_t ) ( MAX( 0, m_nCapacity ) );
-	const size_t budgetBytes = ( size_t ) ( m_nBudgetMb ) * s_nCpuCacheMib;
+	const size_t worstCaseBytes = layerBytes * ( size_t )( MAX( 0, m_nCapacity ) );
+	const size_t budgetBytes = ( size_t )( m_nBudgetMb )*s_nCpuCacheMib;
 	const size_t activeHeightBytes = m_pSamplingStorage ? m_pSamplingStorage->getActiveReservedBytes() : 0u;
 	const size_t defaultMapBytes = m_pRepository->getRegionSize() > 0 ? layerBytes : 0u;
-	const size_t payloadBytes = layerBytes * ( size_t ) ( MAX( 0, totalPayloadCount ) );
-	const size_t pinnedBytes = layerBytes * ( size_t ) ( MAX( 0, pinnedPayloadCount ) );
+	const size_t payloadBytes = layerBytes * ( size_t )( MAX( 0, totalPayloadCount ) );
+	const size_t pinnedBytes = layerBytes * ( size_t )( MAX( 0, pinnedPayloadCount ) );
 	const size_t totalMapBytes = activeHeightBytes + defaultMapBytes + payloadBytes;
-	stats["estimated_layer_bytes"] = ( int64_t ) ( layerBytes );
-	stats["estimated_worst_case_bytes"] = ( int64_t ) ( worstCaseBytes );
-	stats["estimated_payload_bytes"] = ( int64_t ) ( payloadBytes );
-	stats["estimated_pinned_bytes"] = ( int64_t ) ( pinnedBytes );
-	stats["default_map_bytes"] = ( int64_t ) ( defaultMapBytes );
-	stats["estimated_total_map_bytes"] = ( int64_t ) ( totalMapBytes );
-	stats["target_map_ceiling_bytes"] = ( int64_t ) ( s_nXbox360CpuMapCeilingBytes );
+	stats["estimated_layer_bytes"] = ( int64_t )( layerBytes );
+	stats["estimated_worst_case_bytes"] = ( int64_t )( worstCaseBytes );
+	stats["estimated_payload_bytes"] = ( int64_t )( payloadBytes );
+	stats["estimated_pinned_bytes"] = ( int64_t )( pinnedBytes );
+	stats["default_map_bytes"] = ( int64_t )( defaultMapBytes );
+	stats["estimated_total_map_bytes"] = ( int64_t )( totalMapBytes );
+	stats["target_map_ceiling_bytes"] = ( int64_t )( s_nXbox360CpuMapCeilingBytes );
 	stats["budget_overcommitted"] = worstCaseBytes > budgetBytes;
 	stats["runtime_overcommitted"] = totalPayloadCount > m_nCapacity;
 	stats["target_map_ceiling_exceeded"] = totalMapBytes > s_nXbox360CpuMapCeilingBytes;

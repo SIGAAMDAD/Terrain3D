@@ -5,11 +5,11 @@
 #ifndef TERRAIN3D_ACTIVE_HEIGHT_RESIDENCY_H
 #define TERRAIN3D_ACTIVE_HEIGHT_RESIDENCY_H
 
-#include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
+#include "core/terrain_3d_compiler.h"
+#include "eastl_config.h"
 #include "streaming/terrain_3d_residency_state.h"
 
-#include "eastl_config.h"
 #include <EASTL/array.h>
 #include <cstddef>
 #include <cstdint>
@@ -35,28 +35,32 @@ typedef struct t3dActiveHeightResidencyResult_s {
 
 	void requestCpuSource( const Vector2i &rLocation ) {
 		if ( m_nCpuSourceRequestCount < s_nCpuRequestCapacity ) {
-			m_szCpuSourceRequests[( size_t ) ( m_nCpuSourceRequestCount++ )] = rLocation;
+			m_szCpuSourceRequests[( size_t )( m_nCpuSourceRequestCount++ )] = rLocation;
 		}
 	}
 } t3dActiveHeightResidencyResult_t;
 
-// Owns only the spatial policy for the s_nFixed active-height sampling bank.
+// Owns only the spatial policy for the fixed active-height sampling bank.
 // T3DSamplingStorage owns publication/leases; T3DRuntimePageStore owns cooked
 // page preparation. Missing authoritative CPU sources are returned to the
 // region-residency coordinator instead of introducing a cache/facade back-edge.
 class T3DActiveHeightResidency {
 public:
-	T3DActiveHeightResidency(
-		T3DRegionRepository *pRepository,
-		T3DSamplingStorage *pSamplingStorage,
-		T3DRuntimePageStore *pRuntimePageStore
-	);
+	T3DActiveHeightResidency( T3DRegionRepository *pRepository,
+			T3DSamplingStorage *pSamplingStorage,
+			T3DRuntimePageStore *pRuntimePageStore );
 
 	void reset( void );
-	EA_FORCE_INLINE void markDirty( void ) { m_bDirty = true; }
-	EA_FORCE_INLINE bool isDirty( void ) const { return m_bDirty; }
+	EA_FORCE_INLINE void markDirty( void ) {
+		m_bDirty = true;
+	}
+	EA_FORCE_INLINE bool isDirty( void ) const {
+		return m_bDirty;
+	}
 	t3dActiveHeightResidencyResult_t update( const t3dResidencyFrameState_t &rFrame, bool bForce );
-	EA_FORCE_INLINE const t3dActiveHeightResidencyStats_t &getStats( void ) const { return m_stats; }
+	EA_FORCE_INLINE const t3dActiveHeightResidencyStats_t &getStats( void ) const {
+		return m_stats;
+	}
 
 private:
 	static constexpr int s_nActiveRadius = 2;
@@ -67,7 +71,7 @@ private:
 	bool m_bDirty = true;
 	uint64_t m_nStreamingGenerationLast = 0u;
 	uint64_t m_nTopologyGenerationLast = 0u;
-	Vector2i m_center = V2I_MAX;
+	Vector2i m_center = s_v2iMax;
 	t3dActiveHeightResidencyStats_t m_stats;
 };
 

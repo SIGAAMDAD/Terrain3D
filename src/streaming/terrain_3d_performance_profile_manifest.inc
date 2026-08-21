@@ -114,7 +114,7 @@ T3D_PROFILE_MATERIAL_BOOL( "output_specular", false )
 T3D_PROFILE_MATERIAL_BOOL( "output_normal_map", true )
 T3D_PROFILE_MATERIAL_BOOL( "output_ambient_occlusion", true )
 
-// Near quality: canonical PATCH-02 11-row schema.
+// Near quality uses the shared 11-row quality schema.
 T3D_PROFILE_MATERIAL_INT( "near_texture_filtering", 1 )
 T3D_PROFILE_MATERIAL_INT( "near_material_sampling_quality", 1 )
 T3D_PROFILE_MATERIAL_INT( "near_terrain_normal_quality", 1 )
@@ -127,7 +127,7 @@ T3D_PROFILE_MATERIAL_FLOAT( "near_authored_color_contribution", 1.0 )
 T3D_PROFILE_MATERIAL_FLOAT( "near_wetness_contribution", 1.0 )
 T3D_PROFILE_MATERIAL_FLOAT( "near_material_lod_bias", 0.0 )
 
-// Middle quality: canonical PATCH-02 11-row schema. Fast sampling below selects
+// Middle quality uses the shared 11-row quality schema. Fast sampling selects
 // the baked-composite source through the compatibility alias.
 T3D_PROFILE_MATERIAL_INT( "middle_texture_filtering", 1 )
 T3D_PROFILE_MATERIAL_INT( "middle_material_sampling_quality", 0 )
@@ -141,7 +141,7 @@ T3D_PROFILE_MATERIAL_FLOAT( "middle_authored_color_contribution", 1.0 )
 T3D_PROFILE_MATERIAL_FLOAT( "middle_wetness_contribution", 1.0 )
 T3D_PROFILE_MATERIAL_FLOAT( "middle_material_lod_bias", 0.25 )
 
-// Far quality: canonical PATCH-02 11-row schema. Far remains atlas-authoritative.
+// Far quality uses the shared 11-row quality schema and remains atlas-authoritative.
 T3D_PROFILE_MATERIAL_INT( "far_texture_filtering", 1 )
 T3D_PROFILE_MATERIAL_INT( "far_material_sampling_quality", 0 )
 T3D_PROFILE_MATERIAL_INT( "far_terrain_normal_quality", 0 )

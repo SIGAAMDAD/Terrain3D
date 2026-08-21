@@ -1,5 +1,9 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "assets/terrain_3d_mesh_asset.h"
+
+#include "core/logger.h"
+
 #include <godot_cpp/classes/editor_interface.hpp>
 #include <godot_cpp/classes/editor_paths.hpp>
 #include <godot_cpp/classes/file_access.hpp>
@@ -9,12 +13,8 @@
 #include <godot_cpp/classes/quad_mesh.hpp>
 #include <godot_cpp/classes/standard_material3d.hpp>
 
-#include "core/logger.h"
-#include "assets/terrain_3d_mesh_asset.h"
-
-///////////////////////////
-// Private Functions
-///////////////////////////
+// -----------------------------------------------------------------------------
+// Private functions
 
 void T3DMeshAsset::clearLodRanges( void ) {
 	LOG( INFO, "ID ", m_nId, ", ", m_name, ": Clearing LOD Ranges, setting last_lod to 128" );
@@ -26,7 +26,7 @@ void T3DMeshAsset::clearLodRanges( void ) {
 
 bool T3DMeshAsset::sortLodNodes( const Node *pA, const Node *pB ) {
 	ASSERT( pA && pB, false );
-	return pA->get_name().m_nRight( 1 ) < pB->get_name().m_nRight( 1 );
+	return pA->get_name().right( 1 ) < pB->get_name().right( 1 );
 }
 
 Ref<ArrayMesh> T3DMeshAsset::createGeneratedMesh( const t3dGenType_t type ) const {
@@ -59,21 +59,21 @@ Ref<ArrayMesh> T3DMeshAsset::createGeneratedMesh( const t3dGenType_t type ) cons
 	const Vector3 normal( 0.f, 0.f, 1.f );
 
 	for ( int face = 0; face < m_nGeneratedFaces; ++face ) {
-		const real_t fAngle = face == 0 ? 0.f : ( real_t ) ( face ) * Math_PI / ( real_t ) ( m_nGeneratedFaces );
+		const real_t fAngle = face == 0 ? 0.f : ( real_t )( face )*Math_PI / ( real_t )( m_nGeneratedFaces );
 		const int vertex_base = face * 4;
 		for ( int j = 0; j < 2; ++j ) {
 			for ( int i = 0; i < 2; ++i ) {
 				const int vertex_index = vertex_base + j * 2 + i;
-				const float fX = start_pos.x + ( float ) ( i ) * m_generatedSize.x;
-				const float fZ = start_pos.y + ( float ) ( j ) * m_generatedSize.y;
-				pVertexWrite[vertex_index] = Vector3( -fX, fZ, 0.f ).rotated( V3_UP, fAngle );
+				const float fX = start_pos.x + ( float )( i )*m_generatedSize.x;
+				const float fZ = start_pos.y + ( float )( j )*m_generatedSize.y;
+				pVertexWrite[vertex_index] = Vector3( -fX, fZ, 0.f ).rotated( s_v3Up, fAngle );
 				pNormalWrite[vertex_index] = normal;
 				const int tangent_index = vertex_index * 4;
 				pTangentWrite[tangent_index] = 1.f;
 				pTangentWrite[tangent_index + 1] = 0.f;
 				pTangentWrite[tangent_index + 2] = 0.f;
 				pTangentWrite[tangent_index + 3] = 1.f;
-				pUvWrite[vertex_index] = Vector2( 1.f - ( float ) ( i ), 1.f - ( float ) ( j ) );
+				pUvWrite[vertex_index] = Vector2( 1.f - ( float )( i ), 1.f - ( float )( j ) );
 			}
 		}
 
@@ -134,9 +134,8 @@ Ref<Material> T3DMeshAsset::getMaterial( void ) {
 	}
 }
 
-///////////////////////////
-// Public Functions
-///////////////////////////
+// -----------------------------------------------------------------------------
+// Public functions
 
 // Called by T3DAssets::_set_asset_list() and _set_asset()
 void T3DMeshAsset::initialize( void ) {
@@ -180,8 +179,8 @@ void T3DMeshAsset::setName( const String &rName ) {
 	if ( rName.length() > 96 ) {
 		LOG( WARN, "Name too long, truncating to 96 characters" );
 	}
-	SET_IF_DIFF( m_name, rName.m_nLeft( 96 ) );
-	LOG( INFO, "ID ", m_nId, ": t3dSetting_t name: ", m_name );
+	SET_IF_DIFF( m_name, rName.left( 96 ) );
+	LOG( INFO, "ID ", m_nId, ": Setting name: ", m_name );
 	LOG( DEBUG, "Emitting setting_changed, ID: ", m_nId );
 	emit_signal( "setting_changed", m_nId );
 }
@@ -189,7 +188,7 @@ void T3DMeshAsset::setName( const String &rName ) {
 void T3DMeshAsset::setId( const int nNewId ) {
 	const int old_id = m_nId;
 	SET_IF_DIFF( m_nId, CLAMP( nNewId, 0, s_nMaxMeshAssets - 1 ) );
-	LOG( INFO, m_name, ": t3dSetting_t mesh ID: ", m_nId );
+	LOG( INFO, m_name, ": Setting mesh ID: ", m_nId );
 	LOG( DEBUG, "Emitting id_changed, TYPE_MESH, ", old_id, ", ", nNewId );
 	emit_signal( "id_changed", TYPE_MESH, old_id, nNewId );
 }
@@ -202,7 +201,7 @@ void T3DMeshAsset::setHighlighted( const bool bHighlighted ) {
 		pMat.instantiate();
 		pMat->set_cull_mode( BaseMaterial3D::CULL_DISABLED );
 		Color color;
-		const real_t fRandomFloat = ( real_t ) ( rand() ) / ( real_t ) ( RAND_MAX );
+		const real_t fRandomFloat = ( real_t )( rand() ) / ( real_t )( RAND_MAX );
 		color.set_hsv( fRandomFloat, 1.f, 1.f, 1.f );
 		pMat->set_albedo( color );
 		m_highlightMat = pMat;
@@ -216,12 +215,12 @@ Color T3DMeshAsset::getHighlightColor( void ) const {
 	if ( m_bHighlighted && pMat ) {
 		return pMat->get_albedo();
 	}
-	return COLOR_WHITE;
+	return s_colorWhite;
 }
 
 void T3DMeshAsset::setEnabled( const bool bEnabled ) {
 	SET_IF_DIFF( m_bEnabled, bEnabled );
-	LOG( INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t enabled: ", m_bEnabled );
+	LOG( INFO, "ID ", m_nId, ", ", m_name, ": Setting enabled: ", m_bEnabled );
 	LOG( DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
@@ -230,15 +229,15 @@ void T3DMeshAsset::updateInstanceCount( const int64_t nAmount ) {
 	if ( nAmount == 0 ) {
 		return;
 	}
-	const int64_t new_count = ( int64_t ) ( m_nInstanceCount ) + nAmount;
-	m_nInstanceCount = ( uint32_t ) ( CLAMP( new_count, ( int64_t ) ( 0 ), ( int64_t ) ( UINT32_MAX ) ) );
+	const int64_t new_count = ( int64_t )( m_nInstanceCount ) + nAmount;
+	m_nInstanceCount = ( uint32_t )( CLAMP( new_count, ( int64_t )( 0 ), ( int64_t )( UINT32_MAX ) ) );
 	LOG( EXTREME, "Emitting instance_count_changed, ID: ", m_nId, ", count: ", m_nInstanceCount );
 	emit_signal( "instance_count_changed" );
 }
 
 void T3DMeshAsset::setInstanceCount( const uint32_t nAmount ) {
 	SET_IF_DIFF( m_nInstanceCount, nAmount );
-	LOG( INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t instance_count: ", m_nInstanceCount );
+	LOG( INFO, "ID ", m_nId, ", ", m_name, ": Setting instance_count: ", m_nInstanceCount );
 	LOG( DEBUG, "Emitting instance_count_changed" );
 	emit_signal( "instance_count_changed" );
 }
@@ -268,8 +267,11 @@ void T3DMeshAsset::setSceneFile( const Ref<PackedScene> &rSceneFile ) {
 		// First look for XXXXLOD# meshes, sorted by last digit
 		mesh_instances = pNode->find_children( "*LOD?", "MeshInstance3D" );
 		if ( mesh_instances.size() > 0 ) {
-			LOG( INFO, "Found ", mesh_instances.size(), " meshes using LOD# naming convention, using the first ",
-				s_nMeshMaxLodCount );
+			LOG( INFO,
+					"Found ",
+					mesh_instances.size(),
+					" meshes using LOD# naming convention, using the first ",
+					s_nMeshMaxLodCount );
 			mesh_instances.sort_custom( callable_mp_static( &T3DMeshAsset::sortLodNodes ) );
 		}
 
@@ -277,8 +279,10 @@ void T3DMeshAsset::setSceneFile( const Ref<PackedScene> &rSceneFile ) {
 		if ( mesh_instances.size() == 0 ) {
 			mesh_instances = pNode->find_children( "*", "MeshInstance3D" );
 			if ( mesh_instances.size() > 0 ) {
-				LOG( INFO, "No meshes with LOD# suffixes found, using the first ", s_nMeshMaxLodCount,
-					" meshes as LOD0-LOD3" );
+				LOG( INFO,
+						"No meshes with LOD# suffixes found, using the first ",
+						s_nMeshMaxLodCount,
+						" meshes as LOD0-LOD3" );
 			}
 		}
 
@@ -300,7 +304,7 @@ void T3DMeshAsset::setSceneFile( const Ref<PackedScene> &rSceneFile ) {
 			const String filename = m_packedScene->get_path().get_file().get_basename();
 			if ( m_name == "New Mesh" && !m_packedScene->get_path().contains( "::" ) ) {
 				m_name = filename;
-				LOG( INFO, "t3dSetting_t name based on filename: ", m_name );
+				LOG( INFO, "Setting name based on filename: ", m_name );
 			}
 			Ref<Mesh> pMesh = pMi->get_mesh();
 			if ( pMesh.is_null() ) {
@@ -354,14 +358,15 @@ void T3DMeshAsset::commitMeshes( void ) {
 
 void T3DMeshAsset::setGeneratedType( const t3dGenType_t type ) {
 	const bool bEnteringGeneratedMode = m_generatedType == TYPE_NONE;
-	SET_IF_DIFF( m_generatedType, CLAMP( type, ( t3dGenType_t ) ( TYPE_NONE + 1 ), ( t3dGenType_t ) ( MESH_TYPE_MAX - 1 ) ) );
+	SET_IF_DIFF(
+			m_generatedType, CLAMP( type, ( t3dGenType_t )( TYPE_NONE + 1 ), ( t3dGenType_t )( MESH_TYPE_MAX - 1 ) ) );
 	if ( bEnteringGeneratedMode ) {
 		m_castShadows = s_shadowCastingOff;
 		m_iLastShadowLod = 0;
 		m_nShadowImpostor = 0;
 	}
 	invalidateThumbnail();
-	LOG( INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t generated type: ", m_generatedType );
+	LOG( INFO, "ID ", m_nId, ", ", m_name, ": Setting generated type: ", m_generatedType );
 	assignGeneratedMesh();
 	m_fDensity = 10.f;
 	LOG( DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
@@ -378,21 +383,21 @@ Ref<Mesh> T3DMeshAsset::getMesh( const int nLod ) const {
 
 void T3DMeshAsset::setHeightOffset( const real_t fOffset ) {
 	SET_IF_DIFF( m_fHeightOffset, CLAMP( fOffset, -50.f, 50.f ) );
-	LOG( INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t height offset: ", m_fHeightOffset );
+	LOG( INFO, "ID ", m_nId, ", ", m_name, ": Setting height offset: ", m_fHeightOffset );
 	LOG( DEBUG, "Emitting setting_changed, ID: ", m_nId );
 	emit_signal( "setting_changed", m_nId );
 }
 
 void T3DMeshAsset::setDensity( const real_t fDensity ) {
 	SET_IF_DIFF( m_fDensity, CLAMP( fDensity, 0.01f, 10.f ) );
-	LOG( INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t mesh density: ", fDensity );
+	LOG( INFO, "ID ", m_nId, ", ", m_name, ": Setting mesh density: ", fDensity );
 	LOG( DEBUG, "Emitting setting_changed, ID: ", m_nId );
 	emit_signal( "setting_changed", m_nId );
 }
 
 void T3DMeshAsset::setCastShadows( const ShadowCasting castShadows ) {
 	SET_IF_DIFF( m_castShadows, castShadows );
-	LOG( INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t shadow casting mode: ", m_castShadows );
+	LOG( INFO, "ID ", m_nId, ", ", m_name, ": Setting shadow casting mode: ", m_castShadows );
 	LOG( DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
@@ -424,7 +429,7 @@ ShadowCasting T3DMeshAsset::getLodCastShadows( const int nLodId ) const {
 
 inline void T3DMeshAsset::setVisibilityLayers( const uint32_t nLayers ) {
 	SET_IF_DIFF( m_nVisibilityLayers, nLayers );
-	LOG( INFO, m_name, ": t3dSetting_t visibility layers: ", nLayers );
+	LOG( INFO, m_name, ": Setting visibility layers: ", nLayers );
 	LOG( DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
@@ -432,7 +437,7 @@ inline void T3DMeshAsset::setVisibilityLayers( const uint32_t nLayers ) {
 void T3DMeshAsset::setMaterialOverride( const Ref<Material> &rMaterial ) {
 	SET_IF_DIFF( m_materialOverride, rMaterial );
 	invalidateThumbnail();
-	LOG( INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t material override: ", rMaterial );
+	LOG( INFO, "ID ", m_nId, ", ", m_name, ": Setting material override: ", rMaterial );
 	LOG( DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
@@ -440,7 +445,7 @@ void T3DMeshAsset::setMaterialOverride( const Ref<Material> &rMaterial ) {
 void T3DMeshAsset::setMaterialOverlay( const Ref<Material> &rMaterial ) {
 	SET_IF_DIFF( m_materialOverlay, rMaterial );
 	invalidateThumbnail();
-	LOG( INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t material overlay: ", rMaterial );
+	LOG( INFO, "ID ", m_nId, ", ", m_name, ": Setting material overlay: ", rMaterial );
 	LOG( DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
@@ -448,7 +453,7 @@ void T3DMeshAsset::setMaterialOverlay( const Ref<Material> &rMaterial ) {
 void T3DMeshAsset::setGeneratedFaces( const int nCount ) {
 	SET_IF_DIFF( m_nGeneratedFaces, CLAMP( nCount, 1, 3 ) );
 	invalidateThumbnail();
-	LOG( INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t generated face count: ", m_nGeneratedFaces );
+	LOG( INFO, "ID ", m_nId, ", ", m_name, ": Setting generated face count: ", m_nGeneratedFaces );
 	// If already a texture card, just recreate the mesh w/o other settings
 	if ( m_generatedType > TYPE_NONE && m_generatedType < MESH_TYPE_MAX && getMeshes().size() == 1 ) {
 		assignGeneratedMesh();
@@ -460,7 +465,7 @@ void T3DMeshAsset::setGeneratedFaces( const int nCount ) {
 void T3DMeshAsset::setGeneratedSize( const Vector2 &rSize ) {
 	SET_IF_DIFF( m_generatedSize, rSize );
 	invalidateThumbnail();
-	LOG( INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t generated size: ", m_generatedSize );
+	LOG( INFO, "ID ", m_nId, ", ", m_name, ": Setting generated size: ", m_generatedSize );
 	// If already a texture card, just recreate the mesh w/o other settings
 	if ( m_generatedType > TYPE_NONE && m_generatedType < MESH_TYPE_MAX && getMeshes().size() == 1 ) {
 		assignGeneratedMesh();
@@ -478,7 +483,7 @@ void T3DMeshAsset::setLastLod( const int nLod ) {
 	if ( m_nShadowImpostor > m_iLastLod ) {
 		m_nShadowImpostor = m_iLastLod;
 	}
-	LOG( INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t last LOD: ", m_iLastLod );
+	LOG( INFO, "ID ", m_nId, ", ", m_name, ": Setting last LOD: ", m_iLastLod );
 	LOG( DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 	notify_property_list_changed();
@@ -486,7 +491,7 @@ void T3DMeshAsset::setLastLod( const int nLod ) {
 
 void T3DMeshAsset::setLastShadowLod( const int nLod ) {
 	SET_IF_DIFF( m_iLastShadowLod, CLAMP( nLod, 0, m_iLastLod ) );
-	LOG( INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t last shadow LOD: ", m_iLastShadowLod );
+	LOG( INFO, "ID ", m_nId, ", ", m_name, ": Setting last shadow LOD: ", m_iLastShadowLod );
 	if ( m_nShadowImpostor > m_iLastShadowLod ) {
 		m_nShadowImpostor = m_iLastShadowLod;
 	}
@@ -496,7 +501,7 @@ void T3DMeshAsset::setLastShadowLod( const int nLod ) {
 
 void T3DMeshAsset::setShadowImpostor( const int nLod ) {
 	SET_IF_DIFF( m_nShadowImpostor, CLAMP( nLod, 0, MIN( m_iLastLod, m_iLastShadowLod ) ) );
-	LOG( INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t shadow imposter LOD: ", m_nShadowImpostor );
+	LOG( INFO, "ID ", m_nId, ", ", m_name, ": Setting shadow imposter LOD: ", m_nShadowImpostor );
 	LOG( DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
@@ -506,8 +511,8 @@ void T3DMeshAsset::setLodRange( const int nLod, const real_t fDistance ) {
 		LOG( ERROR, "p_lod out of range. Valid range is 0 - ", s_nMeshMaxLodCount - 1 );
 		return;
 	}
-	SET_IF_DIFF( m_fLodRanges[nLod], CLAMP( ( float ) ( fDistance ), 0.f, 100000.f ) );
-	LOG( INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t LOD ", nLod, " visibility range: ", m_fLodRanges[nLod] );
+	SET_IF_DIFF( m_fLodRanges[nLod], CLAMP( ( float )( fDistance ), 0.f, 100000.f ) );
+	LOG( INFO, "ID ", m_nId, ", ", m_name, ": Setting LOD ", nLod, " visibility range: ", m_fLodRanges[nLod] );
 	LOG( DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
@@ -538,14 +543,13 @@ real_t T3DMeshAsset::getLodRangeEnd( const int nLod ) const {
 void T3DMeshAsset::setFadeMargin( const real_t fFadeMargin ) {
 	const int max_range = CLAMP( m_fLodRanges[1] - m_fLodRanges[0], 0.f, 64.f );
 	SET_IF_DIFF( m_fFadeMargin, CLAMP( fFadeMargin, 0.f, max_range ) );
-	LOG( INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t visibility margin: ", m_fFadeMargin );
+	LOG( INFO, "ID ", m_nId, ", ", m_name, ": Setting visibility margin: ", m_fFadeMargin );
 	LOG( DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
 
-///////////////////////////
-// Protected Functions
-///////////////////////////
+// -----------------------------------------------------------------------------
+// Protected functions
 
 void T3DMeshAsset::_validate_property( PropertyInfo &rProperty ) const {
 	if ( rProperty.name != StringName( "generated_type" ) && rProperty.name.begins_with( "generated_" ) ) {
@@ -597,8 +601,11 @@ bool T3DMeshAsset::_property_get_revert( const StringName &rName, Variant &rProp
 }
 
 void T3DMeshAsset::setHlodContribution( const t3dHlodContribution_t mode ) {
-	const t3dHlodContribution_t value = ( t3dHlodContribution_t ) CLAMP( ( int ) mode, ( int ) HLOD_AUTO, ( int ) HLOD_EXCLUDE );
-	if ( m_hlodContribution == value ) { return; }
+	const t3dHlodContribution_t value =
+			( t3dHlodContribution_t )CLAMP( ( int )mode, ( int )HLOD_AUTO, ( int )HLOD_EXCLUDE );
+	if ( m_hlodContribution == value ) {
+		return;
+	}
 	m_hlodContribution = value;
 	emit_signal( "setting_changed" );
 	emit_changed();
@@ -606,7 +613,9 @@ void T3DMeshAsset::setHlodContribution( const t3dHlodContribution_t mode ) {
 
 void T3DMeshAsset::setHlodMinLevel( const int nLevel ) {
 	const int value = CLAMP( nLevel, 1, 6 );
-	if ( m_nHlodMinLevel == value ) { return; }
+	if ( m_nHlodMinLevel == value ) {
+		return;
+	}
 	m_nHlodMinLevel = value;
 	emit_signal( "setting_changed" );
 	emit_changed();
@@ -703,8 +712,12 @@ void T3DMeshAsset::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_instance_count" ), &T3DMeshAsset::getInstanceCount );
 
 	ADD_GROUP( "HLOD", "hlod_" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "hlod_contribution", PROPERTY_HINT_ENUM, "Auto,Include,Exclude" ), "set_hlod_contribution", "get_hlod_contribution" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "hlod_min_level", PROPERTY_HINT_RANGE, "1,6,1" ), "set_hlod_min_level", "get_hlod_min_level" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "hlod_contribution", PROPERTY_HINT_ENUM, "Auto,Include,Exclude" ),
+			"set_hlod_contribution",
+			"get_hlod_contribution" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "hlod_min_level", PROPERTY_HINT_RANGE, "1,6,1" ),
+			"set_hlod_min_level",
+			"get_hlod_min_level" );
 
 	ADD_GROUP( "General", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::STRING, "name", PROPERTY_HINT_NONE ), "set_name", "get_name" );
@@ -713,63 +726,101 @@ void T3DMeshAsset::_bind_methods( void ) {
 
 	ADD_GROUP( "Source / Placement", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "scene_file", PROPERTY_HINT_RESOURCE_TYPE, "PackedScene" ),
-				 "set_scene_file", "get_scene_file" );
+			"set_scene_file",
+			"get_scene_file" );
 	ADD_PROPERTY(
-		PropertyInfo( Variant::INT, "generated_type", PROPERTY_HINT_ENUM, "None,Texture Card", PROPERTY_USAGE_STORAGE ),
-		"set_generated_type", "get_generated_type" );
+			PropertyInfo(
+					Variant::INT, "generated_type", PROPERTY_HINT_ENUM, "None,Texture Card", PROPERTY_USAGE_STORAGE ),
+			"set_generated_type",
+			"get_generated_type" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "height_offset", PROPERTY_HINT_RANGE, "-20.0,20.0,.005" ),
-				 "set_height_offset", "get_height_offset" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "density", PROPERTY_HINT_RANGE, ".01,10.0,.005" ), "set_density",
-				 "get_density" );
+			"set_height_offset",
+			"get_height_offset" );
+	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "density", PROPERTY_HINT_RANGE, ".01,10.0,.005" ),
+			"set_density",
+			"get_density" );
 
 	ADD_GROUP( "Rendering", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "cast_shadows", PROPERTY_HINT_ENUM, "Off,On,Double-Sided,Shadows Only" ),
-				 "set_cast_shadows", "get_cast_shadows" );
+			"set_cast_shadows",
+			"get_cast_shadows" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "visibility_layers", PROPERTY_HINT_LAYERS_3D_RENDER ),
-				 "set_visibility_layers", "get_visibility_layers" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "material_override", PROPERTY_HINT_RESOURCE_TYPE,
-							  "BaseMaterial3D,ShaderMaterial" ),
-				 "set_material_override", "get_material_override" );
+			"set_visibility_layers",
+			"get_visibility_layers" );
+	ADD_PROPERTY( PropertyInfo( Variant::OBJECT,
+						  "material_override",
+						  PROPERTY_HINT_RESOURCE_TYPE,
+						  "BaseMaterial3D,ShaderMaterial" ),
+			"set_material_override",
+			"get_material_override" );
 	ADD_PROPERTY(
-		PropertyInfo( Variant::OBJECT, "material_overlay", PROPERTY_HINT_RESOURCE_TYPE, "BaseMaterial3D,ShaderMaterial" ),
-		"set_material_overlay", "get_material_overlay" );
+			PropertyInfo(
+					Variant::OBJECT, "material_overlay", PROPERTY_HINT_RESOURCE_TYPE, "BaseMaterial3D,ShaderMaterial" ),
+			"set_material_overlay",
+			"get_material_overlay" );
 
 	ADD_GROUP( "Generated Mesh", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "generated_faces", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_READ_ONLY ), "set_generated_faces",
-				 "get_generated_faces" );
-	ADD_PROPERTY( PropertyInfo( Variant::VECTOR2, "generated_size", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_READ_ONLY ), "set_generated_size",
-				 "get_generated_size" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT,
+						  "generated_faces",
+						  PROPERTY_HINT_NONE,
+						  "",
+						  PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_READ_ONLY ),
+			"set_generated_faces",
+			"get_generated_faces" );
+	ADD_PROPERTY( PropertyInfo( Variant::VECTOR2,
+						  "generated_size",
+						  PROPERTY_HINT_NONE,
+						  "",
+						  PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_READ_ONLY ),
+			"set_generated_size",
+			"get_generated_size" );
 
 	ADD_GROUP( "LODs", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "lod_count", PROPERTY_HINT_NONE, "",
-							  PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-				 "", "get_lod_count" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT,
+						  "lod_count",
+						  PROPERTY_HINT_NONE,
+						  "",
+						  PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+			"",
+			"get_lod_count" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "last_lod", PROPERTY_HINT_NONE ), "set_last_lod", "get_last_lod" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "last_shadow_lod", PROPERTY_HINT_NONE ), "set_last_shadow_lod",
-				 "get_last_shadow_lod" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "shadow_impostor", PROPERTY_HINT_NONE ), "set_shadow_impostor",
-				 "get_shadow_impostor" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "last_shadow_lod", PROPERTY_HINT_NONE ),
+			"set_last_shadow_lod",
+			"get_last_shadow_lod" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "shadow_impostor", PROPERTY_HINT_NONE ),
+			"set_shadow_impostor",
+			"get_shadow_impostor" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod0_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-				 "set_lod0_range", "get_lod0_range" );
+			"set_lod0_range",
+			"get_lod0_range" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod1_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-				 "set_lod1_range", "get_lod1_range" );
+			"set_lod1_range",
+			"get_lod1_range" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod2_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-				 "set_lod2_range", "get_lod2_range" );
+			"set_lod2_range",
+			"get_lod2_range" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod3_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-				 "set_lod3_range", "get_lod3_range" );
+			"set_lod3_range",
+			"get_lod3_range" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod4_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-				 "set_lod4_range", "get_lod4_range" );
+			"set_lod4_range",
+			"get_lod4_range" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod5_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-				 "set_lod5_range", "get_lod5_range" );
+			"set_lod5_range",
+			"get_lod5_range" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod6_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-				 "set_lod6_range", "get_lod6_range" );
+			"set_lod6_range",
+			"get_lod6_range" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod7_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-				 "set_lod7_range", "get_lod7_range" );
+			"set_lod7_range",
+			"get_lod7_range" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod8_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-				 "set_lod8_range", "get_lod8_range" );
+			"set_lod8_range",
+			"get_lod8_range" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod9_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-				 "set_lod9_range", "get_lod9_range" );
+			"set_lod9_range",
+			"get_lod9_range" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "fade_margin", PROPERTY_HINT_RANGE, "0.,64.0,.05,or_greater" ),
-				 "set_fade_margin", "get_fade_margin" );
-
+			"set_fade_margin",
+			"get_fade_margin" );
 }

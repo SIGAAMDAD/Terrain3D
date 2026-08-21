@@ -6,10 +6,9 @@
 // allocator/platform configuration as every EASTL container in the extension.
 #include "eastl_config.h"
 
+#include <EASTL/internal/config.h>
 #include <cstdio>
 #include <cstdlib>
-
-#include <EASTL/internal/config.h>
 
 namespace eastl {
 static void t3dEastlRuntimeEastlAssertDefault( void *pInstructionPointer, const char *pszExpression, void *pContext );
@@ -18,7 +17,8 @@ EASTL_AssertionFailureFunctionEx s_pfnAssertionFailure = t3dEastlRuntimeEastlAss
 void *s_pAssertionFailureContext = nullptr;
 EASTL_AssertionFailureFunction s_pfnLegacyAssertionFailure = nullptr;
 
-static void t3dEastlRuntimeEastlAssertLegacyAdapter( void *pInstructionPointer, const char *pszExpression, void *pContext ) {
+static void
+t3dEastlRuntimeEastlAssertLegacyAdapter( void *pInstructionPointer, const char *pszExpression, void *pContext ) {
 	EA_UNUSED( pInstructionPointer );
 	EA_UNUSED( pContext );
 	if ( s_pfnLegacyAssertionFailure ) {
@@ -26,7 +26,12 @@ static void t3dEastlRuntimeEastlAssertLegacyAdapter( void *pInstructionPointer, 
 	}
 }
 
-EA_FORCE_INLINE static void t3dEastlRuntimeEastlAssertDefault( void *pInstructionPointer, const char *pszExpression, void *pContext ) { EA_UNUSED( pInstructionPointer ); EA_UNUSED( pContext ); AssertionFailureFunctionDefault( pszExpression, nullptr ); }
+EA_FORCE_INLINE static void
+t3dEastlRuntimeEastlAssertDefault( void *pInstructionPointer, const char *pszExpression, void *pContext ) {
+	EA_UNUSED( pInstructionPointer );
+	EA_UNUSED( pContext );
+	AssertionFailureFunctionDefault( pszExpression, nullptr );
+}
 
 void SetAssertionFailureFunction( EASTL_AssertionFailureFunction function, void *pContext ) {
 	s_pfnLegacyAssertionFailure = function;

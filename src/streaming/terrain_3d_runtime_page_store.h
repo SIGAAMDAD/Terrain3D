@@ -6,17 +6,16 @@
 #define TERRAIN3D_RUNTIME_PAGE_STORE_H
 
 #include "Terrain3DConstants.h"
+#include "eastl_config.h"
 #include "instances/terrain_3d_instance_store.h"
 
-#include <godot_cpp/classes/worker_thread_pool.hpp>
-#include <godot_cpp/variant/packed_string_array.hpp>
-#include <godot_cpp/variant/string.hpp>
-
-#include "eastl_config.h"
 #include <EASTL/array.h>
 #include <EASTL/vector.h>
 #include <cstddef>
 #include <cstdint>
+#include <godot_cpp/classes/worker_thread_pool.hpp>
+#include <godot_cpp/variant/packed_string_array.hpp>
+#include <godot_cpp/variant/string.hpp>
 
 class T3DRegion;
 class T3DRegionPersistence;
@@ -87,7 +86,7 @@ typedef struct t3dRuntimePageServiceState_s {
 	using IsWantedFn = bool ( * )( void *pContext, const Vector2i &rLocation );
 
 	t3dRuntimePageConfig_t m_config;
-	Vector2i m_predictedCenter = V2I_MAX;
+	Vector2i m_predictedCenter = s_v2iMax;
 	uint64_t m_nStreamingGeneration = 0u;
 	IsWantedFn m_isWanted = nullptr;
 	void *m_pWantedContext = nullptr;
@@ -98,7 +97,7 @@ typedef struct t3dRuntimePageServiceState_s {
 // decide which locations they want; this store performs one physical page read
 // that can satisfy all consumers of that location.
 typedef struct t3dRuntimePreparedPage_s {
-	Vector2i m_location = V2I_MAX;
+	Vector2i m_location = s_v2iMax;
 	String m_pagePath;
 	String m_sourcePath;
 	uint32_t m_nExpectedChannelFlags = 0u;
@@ -150,10 +149,7 @@ typedef struct t3dRuntimePrepareJobContext_s {
 
 class T3DRuntimePageStore {
 public:
-	explicit T3DRuntimePageStore(
-		T3DRegionRepository *pRepository,
-		const T3DRegionPersistence *pPersistence
-	);
+	explicit T3DRuntimePageStore( T3DRegionRepository *pRepository, const T3DRegionPersistence *pPersistence );
 	~T3DRuntimePageStore( void );
 	T3DRuntimePageStore( const T3DRuntimePageStore & ) = delete;
 	T3DRuntimePageStore &operator=( const T3DRuntimePageStore & ) = delete;
@@ -169,61 +165,92 @@ public:
 	bool removePageForSource( const String &rSourcePath ) const;
 	bool removePage( const String &rPagePath ) const;
 	bool validatePageForRegion( const T3DRegion *pRegion, const t3dRuntimePageConfig_t &rConfig ) const;
-	bool loadCpuMapsNow( const Vector2i &rLocation, const t3dRuntimePageConfig_t &rConfig,
-		Ref<Image> &rHeight, Ref<Image> &rControl, Ref<Image> &rColor, Ref<Image> &rDerived ) const;
-	bool loadCollisionNow( const Vector2i &rLocation, const t3dRuntimePageConfig_t &rConfig,
-		PackedByteArray &rHeight, PackedByteArray &rBounds, PackedByteArray &rHoleMask ) const;
-	bool loadNavigationNow( const Vector2i &rLocation, const t3dRuntimePageConfig_t &rConfig,
-		PackedByteArray &rNavigation, PackedByteArray *pCollisionHeight = nullptr,
-		PackedByteArray *pMinMaxHeight = nullptr ) const;
-	bool loadLightingReceiversNow( const Vector2i &rLocation, const t3dRuntimePageConfig_t &rConfig,
-		PackedByteArray &rReceivers ) const;
-	bool writePage(
-		T3DRegion *pRegion, const t3dRuntimePageConfig_t &rConfig,
-		const t3dRuntimePageCookPayload_t &rPayload, String *pError = nullptr
-	) const;
+	bool loadCpuMapsNow( const Vector2i &rLocation,
+			const t3dRuntimePageConfig_t &rConfig,
+			Ref<Image> &rHeight,
+			Ref<Image> &rControl,
+			Ref<Image> &rColor,
+			Ref<Image> &rDerived ) const;
+	bool loadCollisionNow( const Vector2i &rLocation,
+			const t3dRuntimePageConfig_t &rConfig,
+			PackedByteArray &rHeight,
+			PackedByteArray &rBounds,
+			PackedByteArray &rHoleMask ) const;
+	bool loadNavigationNow( const Vector2i &rLocation,
+			const t3dRuntimePageConfig_t &rConfig,
+			PackedByteArray &rNavigation,
+			PackedByteArray *pCollisionHeight = nullptr,
+			PackedByteArray *pMinMaxHeight = nullptr ) const;
+	bool loadLightingReceiversNow( const Vector2i &rLocation,
+			const t3dRuntimePageConfig_t &rConfig,
+			PackedByteArray &rReceivers ) const;
+	bool writePage( T3DRegion *pRegion,
+			const t3dRuntimePageConfig_t &rConfig,
+			const t3dRuntimePageCookPayload_t &rPayload,
+			String *pError = nullptr ) const;
 
-	bool collectPageSources(
-		const String &rDataDirectory, PackedStringArray &rSourceFiles,
-		eastl::vector<Vector2i> &rLocations, PackedStringArray &rErrors
-	) const;
+	bool collectPageSources( const String &rDataDirectory,
+			PackedStringArray &rSourceFiles,
+			eastl::vector<Vector2i> &rLocations,
+			PackedStringArray &rErrors ) const;
 
 	void request( const Vector2i &rLocation, uint16_t nConsumers, uint8_t nPriority, bool bEnabled );
 	void service( const t3dRuntimePageServiceState_t &rState );
 	bool isPending( const Vector2i &rLocation ) const;
 	bool isPrepared( const Vector2i &rLocation ) const;
 
-	bool takeHeight(
-		const Vector2i &rLocation, uint16_t nConsumer, Ref<Image> &rHeight, bool bMiddle,
-		PackedByteArray *pNativeHeightBytes = nullptr
-	);
-	bool takeInstance( const Vector2i &rLocation, T3DInstanceStore &rStore,
-		PackedByteArray *pInstanceMetadata = nullptr, PackedByteArray *pMultimeshFastStart = nullptr );
-	bool takeCpuMaps( const Vector2i &rLocation, Ref<Image> &rHeight, Ref<Image> &rControl, Ref<Image> &rColor, Ref<Image> &rDerived );
+	bool takeHeight( const Vector2i &rLocation,
+			uint16_t nConsumer,
+			Ref<Image> &rHeight,
+			bool bMiddle,
+			PackedByteArray *pNativeHeightBytes = nullptr );
+	bool takeInstance( const Vector2i &rLocation,
+			T3DInstanceStore &rStore,
+			PackedByteArray *pInstanceMetadata = nullptr,
+			PackedByteArray *pMultimeshFastStart = nullptr );
+	bool takeCpuMaps( const Vector2i &rLocation,
+			Ref<Image> &rHeight,
+			Ref<Image> &rControl,
+			Ref<Image> &rColor,
+			Ref<Image> &rDerived );
 	bool takeNodeDescriptors( const Vector2i &rLocation, PackedByteArray &rDescriptors );
-	bool takeCollision( const Vector2i &rLocation, PackedByteArray &rHeight, PackedByteArray &rBounds, PackedByteArray &rHoleMask );
+	bool takeCollision( const Vector2i &rLocation,
+			PackedByteArray &rHeight,
+			PackedByteArray &rBounds,
+			PackedByteArray &rHoleMask );
 	bool takeNavigation( const Vector2i &rLocation, PackedByteArray &rNavigation );
 	bool takeTerrainShadowMask( const Vector2i &rLocation, Ref<Image> &rShadowMask );
-	bool takeGpuPage(
-		const Vector2i &rLocation, Ref<Image> &rHeight,
-		Ref<Image> &rControl, Ref<Image> &rColor, Ref<Image> &rDerived,
-		Ref<Image> &rMiddleComposite, uint32_t &rMaterialMask, bool &bAttempted,
-		uint64_t *pRequestedUsec = nullptr
-	);
+	bool takeGpuPage( const Vector2i &rLocation,
+			Ref<Image> &rHeight,
+			Ref<Image> &rControl,
+			Ref<Image> &rColor,
+			Ref<Image> &rDerived,
+			Ref<Image> &rMiddleComposite,
+			uint32_t &rMaterialMask,
+			bool &bAttempted,
+			uint64_t *pRequestedUsec = nullptr );
 
 	t3dRuntimePageStats_t getStats( void ) const;
-	EA_FORCE_INLINE int getPreparedPageCount( void ) const { return m_nPreparedPageCount; }
-	EA_FORCE_INLINE int getPendingPageCount( void ) const { return m_bPrepareJobActive ? m_nPrepareWorkPageCount : 0; }
-	EA_FORCE_INLINE int getQueuedPageCount( void ) const { return m_nQueuedCount; }
-	EA_FORCE_INLINE int getPrepareWorkerCount( void ) const { return m_bPrepareJobActive ? m_nPrepareJobWorkers : 0; }
-	EA_FORCE_INLINE bool isPrepareJobActive( void ) const { return m_bPrepareJobActive; }
-	EA_FORCE_INLINE int getTransientPageCount( void ) const { return m_nPreparedPageCount + m_nPrepareWorkPageCount; }
+	EA_FORCE_INLINE int getPreparedPageCount( void ) const {
+		return m_nPreparedPageCount;
+	}
+	EA_FORCE_INLINE int getPendingPageCount( void ) const {
+		return m_bPrepareJobActive ? m_nPrepareWorkPageCount : 0;
+	}
+	EA_FORCE_INLINE int getQueuedPageCount( void ) const {
+		return m_nQueuedCount;
+	}
+	EA_FORCE_INLINE int getPrepareWorkerCount( void ) const {
+		return m_bPrepareJobActive ? m_nPrepareJobWorkers : 0;
+	}
+	EA_FORCE_INLINE bool isPrepareJobActive( void ) const {
+		return m_bPrepareJobActive;
+	}
+	EA_FORCE_INLINE int getTransientPageCount( void ) const {
+		return m_nPreparedPageCount + m_nPrepareWorkPageCount;
+	}
 
 private:
-
-
-
-
 	T3DRegionRepository *m_pRepository = nullptr;
 	const T3DRegionPersistence *m_pPersistence = nullptr;
 	eastl::array<t3dRuntimePreparedPage_t, s_nGpuCacheMaxLayers> m_preparedPages{};

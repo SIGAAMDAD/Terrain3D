@@ -6,15 +6,13 @@
 #define TERRAIN3D_RUNTIME_PROFILE_H
 
 #include "Terrain3DConstants.h"
-
-#include <algorithm>
 #include "eastl_config.h"
+
 #include <EASTL/array.h>
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-
-
 
 typedef enum t3dRuntimeProfileEvent_e : uint32_t {
 	TERRAIN3D_PROFILE_EVENT_NONE = 0u,
@@ -145,11 +143,21 @@ typedef struct t3dRuntimeProfileHistory_s {
 	size_t m_iWriteIndex = 0u;
 	size_t m_nCount = 0u;
 
-	EA_FORCE_INLINE void reset( void ) noexcept { m_iWriteIndex = 0u; m_nCount = 0u; }
+	EA_FORCE_INLINE void reset( void ) noexcept {
+		m_iWriteIndex = 0u;
+		m_nCount = 0u;
+	}
 
-	EA_FORCE_INLINE void push( const t3dRuntimeProfileSample_t &rSample ) noexcept { m_szSamples[m_iWriteIndex] = rSample; m_iWriteIndex = ( m_iWriteIndex + 1u ) % m_szSamples.size(); m_nCount = std::min( m_nCount + 1u, m_szSamples.size() ); }
+	EA_FORCE_INLINE void push( const t3dRuntimeProfileSample_t &rSample ) noexcept {
+		m_szSamples[m_iWriteIndex] = rSample;
+		m_iWriteIndex = ( m_iWriteIndex + 1u ) % m_szSamples.size();
+		m_nCount = std::min( m_nCount + 1u, m_szSamples.size() );
+	}
 
-	EA_FORCE_INLINE const t3dRuntimeProfileSample_t &getOldest( const size_t iIndex ) const noexcept { const size_t oldest = ( m_iWriteIndex + m_szSamples.size() - m_nCount ) % m_szSamples.size(); return m_szSamples[( oldest + iIndex ) % m_szSamples.size()]; }
+	EA_FORCE_INLINE const t3dRuntimeProfileSample_t &getOldest( const size_t iIndex ) const noexcept {
+		const size_t oldest = ( m_iWriteIndex + m_szSamples.size() - m_nCount ) % m_szSamples.size();
+		return m_szSamples[( oldest + iIndex ) % m_szSamples.size()];
+	}
 } t3dRuntimeProfileHistory_t;
 
 typedef struct t3dRuntimeProfileAccumulator_s {
@@ -236,42 +244,42 @@ typedef struct t3dRuntimeProfileAccumulator_s {
 		m_nCollisionPeakUsec = std::max( m_nCollisionPeakUsec, rSample.m_nCollisionUsec );
 		m_nStreamingTotalUsec += rSample.m_nStreamingUsec;
 		m_nStreamingPeakUsec = std::max( m_nStreamingPeakUsec, rSample.m_nStreamingUsec );
-		m_nGpuUploadsTotal += ( uint64_t ) ( std::max( rSample.m_nGpuUploads, 0 ) );
-		m_nGpuEvictionsTotal += ( uint64_t ) ( std::max( rSample.m_nGpuEvictions, 0 ) );
+		m_nGpuUploadsTotal += ( uint64_t )( std::max( rSample.m_nGpuUploads, 0 ) );
+		m_nGpuEvictionsTotal += ( uint64_t )( std::max( rSample.m_nGpuEvictions, 0 ) );
 		m_nGpuUploadBytesTotal += rSample.m_nGpuUploadBytes;
-		m_nGpuMissingRequiredTotal += ( uint64_t ) ( std::max( rSample.m_nGpuMissingRequired, 0 ) );
+		m_nGpuMissingRequiredTotal += ( uint64_t )( std::max( rSample.m_nGpuMissingRequired, 0 ) );
 		m_nGpuResidentPeak = std::max( m_nGpuResidentPeak, rSample.m_nGpuResident );
-		m_nGpuPreparedPagesTotal += ( uint64_t ) ( std::max( rSample.m_nGpuPreparedPages, 0 ) );
+		m_nGpuPreparedPagesTotal += ( uint64_t )( std::max( rSample.m_nGpuPreparedPages, 0 ) );
 		m_nGpuPrepareWorkersPeak = std::max( m_nGpuPrepareWorkersPeak, rSample.m_nGpuPrepareWorkers );
 		m_nGpuEffectiveUploadLimitPeak = std::max( m_nGpuEffectiveUploadLimitPeak, rSample.m_nGpuEffectiveUploadLimit );
 		m_nGpuCameraMoveTicks += rSample.m_nGpuCameraMoved != 0 ? 1u : 0u;
-		m_fDistanceTravelledM += std::sqrt( ( double ) ( rSample.m_fMovementX ) * ( double ) ( rSample.m_fMovementX ) +
-			( double ) ( rSample.m_fMovementZ ) * ( double ) ( rSample.m_fMovementZ ) );
-		m_nGpuCookedHitsTotal += ( uint64_t ) ( std::max( rSample.m_nGpuCookedHits, 0 ) );
-		m_nGpuCookedMissesTotal += ( uint64_t ) ( std::max( rSample.m_nGpuCookedMisses, 0 ) );
-		m_nGpuRuntimePreparesTotal += ( uint64_t ) ( std::max( rSample.m_nGpuRuntimePrepares, 0 ) );
-		m_nClipmapNearUpdatesTotal += ( uint64_t ) ( std::max( rSample.m_nClipmapNearUpdates, 0 ) );
-		m_nClipmapMiddleUpdatesTotal += ( uint64_t ) ( std::max( rSample.m_nClipmapMiddleUpdates, 0 ) );
-		m_nClipmapFarUpdatesTotal += ( uint64_t ) ( std::max( rSample.m_nClipmapFarUpdates, 0 ) );
-		m_nClipmapTeleportsTotal += ( uint64_t ) ( std::max( rSample.m_nClipmapTeleports, 0 ) );
+		m_fDistanceTravelledM += std::sqrt( ( double )( rSample.m_fMovementX ) * ( double )( rSample.m_fMovementX ) +
+				( double )( rSample.m_fMovementZ ) * ( double )( rSample.m_fMovementZ ) );
+		m_nGpuCookedHitsTotal += ( uint64_t )( std::max( rSample.m_nGpuCookedHits, 0 ) );
+		m_nGpuCookedMissesTotal += ( uint64_t )( std::max( rSample.m_nGpuCookedMisses, 0 ) );
+		m_nGpuRuntimePreparesTotal += ( uint64_t )( std::max( rSample.m_nGpuRuntimePrepares, 0 ) );
+		m_nClipmapNearUpdatesTotal += ( uint64_t )( std::max( rSample.m_nClipmapNearUpdates, 0 ) );
+		m_nClipmapMiddleUpdatesTotal += ( uint64_t )( std::max( rSample.m_nClipmapMiddleUpdates, 0 ) );
+		m_nClipmapFarUpdatesTotal += ( uint64_t )( std::max( rSample.m_nClipmapFarUpdates, 0 ) );
+		m_nClipmapTeleportsTotal += ( uint64_t )( std::max( rSample.m_nClipmapTeleports, 0 ) );
 		m_nClipmapTeleportsPeak = std::max( m_nClipmapTeleportsPeak, rSample.m_nClipmapTeleports );
-		m_nClipmapBufferUploadsTotal += ( uint64_t ) ( std::max( rSample.m_nClipmapBufferUploads, 0 ) );
+		m_nClipmapBufferUploadsTotal += ( uint64_t )( std::max( rSample.m_nClipmapBufferUploads, 0 ) );
 		m_nClipmapBufferUploadsPeak = std::max( m_nClipmapBufferUploadsPeak, rSample.m_nClipmapBufferUploads );
-		m_nCpuLoadsTotal += ( uint64_t ) ( std::max( rSample.m_nCpuLoads, 0 ) );
-		m_nCpuEvictionsTotal += ( uint64_t ) ( std::max( rSample.m_nCpuEvictions, 0 ) );
+		m_nCpuLoadsTotal += ( uint64_t )( std::max( rSample.m_nCpuLoads, 0 ) );
+		m_nCpuEvictionsTotal += ( uint64_t )( std::max( rSample.m_nCpuEvictions, 0 ) );
 		m_nCpuLoadBytesTotal += rSample.m_nCpuLoadBytes;
 		m_nCpuResidentPeak = std::max( m_nCpuResidentPeak, rSample.m_nCpuResident );
-		m_nInstanceLoadsTotal += ( uint64_t ) ( std::max( rSample.m_nInstanceLoads, 0 ) );
-		m_nInstanceEvictionsTotal += ( uint64_t ) ( std::max( rSample.m_nInstanceEvictions, 0 ) );
+		m_nInstanceLoadsTotal += ( uint64_t )( std::max( rSample.m_nInstanceLoads, 0 ) );
+		m_nInstanceEvictionsTotal += ( uint64_t )( std::max( rSample.m_nInstanceEvictions, 0 ) );
 		m_nInstanceLoadBytesTotal += rSample.m_nInstanceLoadBytes;
 		m_nInstanceResidentPeak = std::max( m_nInstanceResidentPeak, rSample.m_nInstanceResident );
 		m_nRenderCellsPeak = std::max( m_nRenderCellsPeak, rSample.m_nRenderCells );
 		m_nPendingCellUpdatesPeak = std::max( m_nPendingCellUpdatesPeak, rSample.m_nPendingCellUpdates );
 		m_nNodeActiveRegionsPeak = std::max( m_nNodeActiveRegionsPeak, rSample.m_nNodeActiveRegions );
 		m_nNodeActiveNodesPeak = std::max( m_nNodeActiveNodesPeak, rSample.m_nNodeActiveNodes );
-		m_nNodeLoadsTotal += ( uint64_t ) ( std::max( rSample.m_nNodeLoads, 0 ) );
-		m_nNodeUnloadsTotal += ( uint64_t ) ( std::max( rSample.m_nNodeUnloads, 0 ) );
-		m_nNodeLoadFailuresTotal += ( uint64_t ) ( std::max( rSample.m_nNodeLoadFailures, 0 ) );
+		m_nNodeLoadsTotal += ( uint64_t )( std::max( rSample.m_nNodeLoads, 0 ) );
+		m_nNodeUnloadsTotal += ( uint64_t )( std::max( rSample.m_nNodeUnloads, 0 ) );
+		m_nNodeLoadFailuresTotal += ( uint64_t )( std::max( rSample.m_nNodeLoadFailures, 0 ) );
 	}
 } t3dRuntimeProfileAccumulator_t;
 #endif // TERRAIN3D_RUNTIME_PROFILE_H

@@ -19,11 +19,13 @@ class T3DMaterial;
 // runtime-page cooking. Output is already rotated into HeightMapShape3D layout.
 class T3DCollisionSurfaceBuilder {
 public:
-	bool build(
-		const T3DData *pData, const Ref<T3DMaterial> &rMaterial,
-		const Vector2i &rPosition, int nSize,
-		PackedFloat32Array &rHeights, float &rMinHeight, float &rMaxHeight
-	);
+	bool build( const T3DData *pData,
+			const Ref<T3DMaterial> &rMaterial,
+			const Vector2i &rPosition,
+			int nSize,
+			PackedFloat32Array &rHeights,
+			float &rMinHeight,
+			float &rMaxHeight );
 	size_t getRetainedBufferBytes( void ) const;
 
 private:

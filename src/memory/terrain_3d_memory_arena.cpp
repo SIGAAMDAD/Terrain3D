@@ -41,17 +41,14 @@ bool T3DMemoryArenaLayout::configure( const size_t nCapacityBytes ) {
 	return true;
 }
 
-bool T3DMemoryArenaLayout::reserveLow(
-	const size_t nBytes, const size_t nAlignment,
-	t3dMemoryArenaSlice_t &rSlice
-) {
+bool T3DMemoryArenaLayout::reserveLow( const size_t nBytes, const size_t nAlignment, t3dMemoryArenaSlice_t &rSlice ) {
 	return reserve( false, nBytes, nAlignment, rSlice );
 }
 
-bool T3DMemoryArenaLayout::reserve(
-	const bool bHigh, const size_t nBytes, const size_t nAlignment,
-	t3dMemoryArenaSlice_t &rSlice
-) {
+bool T3DMemoryArenaLayout::reserve( const bool bHigh,
+		const size_t nBytes,
+		const size_t nAlignment,
+		t3dMemoryArenaSlice_t &rSlice ) {
 	if ( m_bSealed || !m_bValid ) {
 		return false;
 	}
@@ -64,11 +61,11 @@ bool T3DMemoryArenaLayout::reserve(
 	if ( !bHigh ) {
 		size_t aligned = 0u;
 		if ( !alignUp( m_nLowCursor, nAlignment, aligned ) || aligned > m_nHighCursor ||
-			nBytes > m_nHighCursor - aligned ) {
+				nBytes > m_nHighCursor - aligned ) {
 			m_bValid = false;
 			return false;
 		}
-		const t3dMemoryArenaSlice_t slice = {aligned, nBytes, nAlignment, false, true};
+		const t3dMemoryArenaSlice_t slice = { aligned, nBytes, nAlignment, false, true };
 		rSlice = slice;
 		m_nLowCursor = aligned + nBytes;
 		return true;
@@ -83,7 +80,7 @@ bool T3DMemoryArenaLayout::reserve(
 		m_bValid = false;
 		return false;
 	}
-	const t3dMemoryArenaSlice_t slice = {candidate, nBytes, nAlignment, true, true};
+	const t3dMemoryArenaSlice_t slice = { candidate, nBytes, nAlignment, true, true };
 	rSlice = slice;
 	m_nHighCursor = candidate;
 	return true;
@@ -121,9 +118,9 @@ bool T3DMemoryArena::initialize( const T3DMemoryArenaLayout &rLayout ) {
 		release();
 		return false;
 	}
-	const uintptr_t raw_address = ( uintptr_t ) ( m_pRaw );
-	const uintptr_t mask = ( uintptr_t ) ( m_nBaseAlignment - 1u );
-	m_pBase = ( uint8_t * ) ( ( raw_address + mask ) & ~mask );
+	const uintptr_t raw_address = ( uintptr_t )( m_pRaw );
+	const uintptr_t mask = ( uintptr_t )( m_nBaseAlignment - 1u );
+	m_pBase = ( uint8_t * )( ( raw_address + mask ) & ~mask );
 	m_bInitialized = true;
 	return true;
 }
@@ -160,8 +157,8 @@ void T3DMemoryArena::release( void ) {
 
 bool T3DMemoryArena::sliceInBounds( const t3dMemoryArenaSlice_t &rSlice ) const {
 	if ( !rSlice.m_bReserved || rSlice.m_iOffset > m_nCapacity || rSlice.m_nAlignment == 0u ||
-		( rSlice.m_nAlignment & ( rSlice.m_nAlignment - 1u ) ) != 0u ||
-		rSlice.m_iOffset % rSlice.m_nAlignment != 0u ) {
+			( rSlice.m_nAlignment & ( rSlice.m_nAlignment - 1u ) ) != 0u ||
+			rSlice.m_iOffset % rSlice.m_nAlignment != 0u ) {
 		return false;
 	}
 	return rSlice.m_nSize <= m_nCapacity - rSlice.m_iOffset;
@@ -171,12 +168,12 @@ t3dMemoryArenaSpan_t T3DMemoryArena::resolve( const t3dMemoryArenaSlice_t &rSlic
 	if ( !initialized() || !sliceInBounds( rSlice ) ) {
 		return {};
 	}
-	return {m_pBase ? m_pBase + rSlice.m_iOffset : nullptr, rSlice.m_nSize};
+	return { m_pBase ? m_pBase + rSlice.m_iOffset : nullptr, rSlice.m_nSize };
 }
 
 t3dMemoryArenaSpan_t T3DMemoryArena::resolve( const t3dMemoryArenaSlice_t &rSlice ) const {
 	if ( !initialized() || !sliceInBounds( rSlice ) ) {
 		return {};
 	}
-	return {m_pBase ? m_pBase + rSlice.m_iOffset : nullptr, rSlice.m_nSize};
+	return { m_pBase ? m_pBase + rSlice.m_iOffset : nullptr, rSlice.m_nSize };
 }

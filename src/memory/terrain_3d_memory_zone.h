@@ -4,10 +4,11 @@
 #ifndef TERRAIN3D_MEMORY_ZONE_H
 #define TERRAIN3D_MEMORY_ZONE_H
 
+#include "core/terrain_3d_compiler.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
-#include "core/terrain_3d_compiler.h"
 
 typedef struct t3dMemoryZoneStats_s {
 	size_t m_nReservedBytes = 0u;
@@ -66,21 +67,22 @@ typedef struct t3dMemoryZoneAllocationHeader_s {
 } t3dMemoryZoneAllocationHeader_t;
 
 static_assert( sizeof( t3dMemoryZoneAllocationHeader_t ) % 16u == 0u,
-	"Zone payload headers must preserve 16-byte small-block alignment" );
+		"Zone payload headers must preserve 16-byte small-block alignment" );
 
 class T3DMemoryZone {
 public:
 	static constexpr uint32_t s_nSmallClassCount = 9u;
-	static constexpr uint32_t s_szSmallClasses[s_nSmallClassCount] = {
-		16u, 32u, 64u, 128u, 256u, 512u, 1024u, 2048u, 4096u
-	};
+	static constexpr uint32_t
+			s_szSmallClasses[s_nSmallClassCount] = { 16u, 32u, 64u, 128u, 256u, 512u, 1024u, 2048u, 4096u };
 	static constexpr uint32_t s_nSmallPageBytes = 64u * 1024u;
 	static constexpr uint32_t s_nMaxExtents = 8192u;
 	static constexpr uint32_t s_nMaxSmallPages = 1024u;
 	static constexpr uint64_t s_nAllocationMagic = 0x5A4F4E453344544FULL;
 
 	T3DMemoryZone() = default;
-	EA_FORCE_INLINE ~T3DMemoryZone() { release(); }
+	EA_FORCE_INLINE ~T3DMemoryZone() {
+		release();
+	}
 	T3DMemoryZone( const T3DMemoryZone & ) = delete;
 	T3DMemoryZone &operator=( const T3DMemoryZone & ) = delete;
 
@@ -101,7 +103,9 @@ public:
 		std::lock_guard<std::mutex> lock( m_mutex );
 		return m_state;
 	}
-	EA_FORCE_INLINE size_t capacity() const { return m_nCapacity; }
+	EA_FORCE_INLINE size_t capacity() const {
+		return m_nCapacity;
+	}
 	EA_FORCE_INLINE size_t liveAllocations() const {
 		std::lock_guard<std::mutex> lock( m_mutex );
 		return m_nLiveAllocations;
@@ -111,11 +115,13 @@ public:
 		return m_nLiveBytes;
 	}
 	size_t freeExtentBytes( void ) const;
-	EA_FORCE_INLINE size_t freeBytes( void ) const { return freeExtentBytes(); }
+	EA_FORCE_INLINE size_t freeBytes( void ) const {
+		return freeExtentBytes();
+	}
 	t3dMemoryZoneStats_t getStats( void ) const;
 	EA_FORCE_INLINE bool owns( const void *pMemory ) const {
 		return pMemory && m_pBase && static_cast<const uint8_t *>( pMemory ) > m_pBase &&
-			static_cast<const uint8_t *>( pMemory ) < m_pBase + m_nCapacity;
+				static_cast<const uint8_t *>( pMemory ) < m_pBase + m_nCapacity;
 	}
 
 private:
@@ -143,8 +149,11 @@ private:
 	static bool alignUp( size_t nValue, size_t nAlignment, size_t &rValue );
 	int classIndexFor( size_t nBytes, size_t nAlignment ) const;
 	bool insertFreeExtentUnlocked( size_t nOffset, size_t nBytes );
-	bool takeExtentUnlocked( size_t nBytes, size_t nAlignment, size_t nPrefixBytes,
-		size_t &rExtentOffset, size_t &rUserOffset );
+	bool takeExtentUnlocked( size_t nBytes,
+			size_t nAlignment,
+			size_t nPrefixBytes,
+			size_t &rExtentOffset,
+			size_t &rUserOffset );
 	void *allocateUnlocked( size_t nBytes, size_t nAlignment );
 	void *allocateSmallUnlocked( int iClass, size_t nBytes );
 	void *allocateLargeUnlocked( size_t nBytes, size_t nAlignment );

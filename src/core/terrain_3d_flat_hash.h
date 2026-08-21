@@ -21,8 +21,7 @@ typedef enum t3dFlatHashBucketState_e : uint8_t {
 
 // Compact open-addressing storage for bounded Terrain3D runtime tables. The map
 // retains capacity after clear() and performs no node allocations.
-template <typename Key, typename Value, typename Hash, typename Equal = eastl::equal_to<Key>>
-class T3DFlatHashMap {
+template <typename Key, typename Value, typename Hash, typename Equal = eastl::equal_to<Key>> class T3DFlatHashMap {
 private:
 	eastl::vector<Key> m_keys;
 	eastl::vector<Value> m_values;
@@ -155,7 +154,9 @@ public:
 		return iBucket == SIZE_MAX ? nullptr : &m_values[iBucket];
 	}
 
-	EA_FORCE_INLINE bool contains( const Key &rKey ) const { return findBucketIndex( rKey ) != SIZE_MAX; }
+	EA_FORCE_INLINE bool contains( const Key &rKey ) const {
+		return findBucketIndex( rKey ) != SIZE_MAX;
+	}
 
 	EA_FORCE_INLINE Value *insertOrAssign( const Key &rKey, const Value &rValue ) {
 		ensureInsertCapacity();
@@ -206,13 +207,19 @@ public:
 		m_nSize = 0u;
 	}
 
-	EA_FORCE_INLINE size_t size( void ) const { return m_nSize; }
-	EA_FORCE_INLINE size_t bucketCount( void ) const { return m_states.size(); }
+	EA_FORCE_INLINE size_t size( void ) const {
+		return m_nSize;
+	}
+	EA_FORCE_INLINE size_t bucketCount( void ) const {
+		return m_states.size();
+	}
 	EA_FORCE_INLINE size_t reservedBytes( void ) const {
 		return m_keys.capacity() * sizeof( Key ) + m_values.capacity() * sizeof( Value ) +
-			m_states.capacity() * sizeof( uint8_t );
+				m_states.capacity() * sizeof( uint8_t );
 	}
-	EA_FORCE_INLINE bool empty( void ) const { return m_nSize == 0u; }
+	EA_FORCE_INLINE bool empty( void ) const {
+		return m_nSize == 0u;
+	}
 
 	EA_FORCE_INLINE void swap( T3DFlatHashMap &rOther ) {
 		m_keys.swap( rOther.m_keys );
@@ -223,8 +230,7 @@ public:
 		std::swap( m_equal, rOther.m_equal );
 	}
 
-	template <typename Fn>
-	EA_FORCE_INLINE void forEach( Fn &&rFn ) {
+	template <typename Fn> EA_FORCE_INLINE void forEach( Fn &&rFn ) {
 		for ( size_t iBucket = 0u; iBucket < m_states.size(); ++iBucket ) {
 			if ( m_states[iBucket] == T3D_FLAT_HASH_BUCKET_OCCUPIED ) {
 				rFn( m_keys[iBucket], m_values[iBucket] );
@@ -232,8 +238,7 @@ public:
 		}
 	}
 
-	template <typename Fn>
-	EA_FORCE_INLINE void forEach( Fn &&rFn ) const {
+	template <typename Fn> EA_FORCE_INLINE void forEach( Fn &&rFn ) const {
 		for ( size_t iBucket = 0u; iBucket < m_states.size(); ++iBucket ) {
 			if ( m_states[iBucket] == T3D_FLAT_HASH_BUCKET_OCCUPIED ) {
 				rFn( m_keys[iBucket], m_values[iBucket] );
@@ -242,13 +247,14 @@ public:
 	}
 };
 
-template <typename Key, typename Hash, typename Equal = eastl::equal_to<Key>>
-class T3DFlatHashSet {
+template <typename Key, typename Hash, typename Equal = eastl::equal_to<Key>> class T3DFlatHashSet {
 private:
 	T3DFlatHashMap<Key, uint8_t, Hash, Equal> m_map;
 
 public:
-	EA_FORCE_INLINE void reserve( const size_t nEntries ) { m_map.reserve( nEntries ); }
+	EA_FORCE_INLINE void reserve( const size_t nEntries ) {
+		m_map.reserve( nEntries );
+	}
 	EA_FORCE_INLINE bool insert( const Key &rKey ) {
 		if ( m_map.contains( rKey ) ) {
 			return false;
@@ -256,23 +262,41 @@ public:
 		m_map.insertOrAssign( rKey, 1u );
 		return true;
 	}
-	EA_FORCE_INLINE bool erase( const Key &rKey ) { return m_map.erase( rKey ); }
-	EA_FORCE_INLINE bool contains( const Key &rKey ) const { return m_map.contains( rKey ); }
-	EA_FORCE_INLINE void clear( void ) { m_map.clear(); }
-	EA_FORCE_INLINE size_t size( void ) const { return m_map.size(); }
-	EA_FORCE_INLINE size_t bucketCount( void ) const { return m_map.bucketCount(); }
-	EA_FORCE_INLINE size_t reservedBytes( void ) const { return m_map.reservedBytes(); }
-	EA_FORCE_INLINE bool empty( void ) const { return m_map.empty(); }
-	EA_FORCE_INLINE void swap( T3DFlatHashSet &rOther ) { m_map.swap( rOther.m_map ); }
-
-	template <typename Fn>
-	EA_FORCE_INLINE void forEach( Fn &&rFn ) {
-		m_map.forEach( [&]( const Key &rKey, uint8_t & ) { rFn( rKey ); } );
+	EA_FORCE_INLINE bool erase( const Key &rKey ) {
+		return m_map.erase( rKey );
+	}
+	EA_FORCE_INLINE bool contains( const Key &rKey ) const {
+		return m_map.contains( rKey );
+	}
+	EA_FORCE_INLINE void clear( void ) {
+		m_map.clear();
+	}
+	EA_FORCE_INLINE size_t size( void ) const {
+		return m_map.size();
+	}
+	EA_FORCE_INLINE size_t bucketCount( void ) const {
+		return m_map.bucketCount();
+	}
+	EA_FORCE_INLINE size_t reservedBytes( void ) const {
+		return m_map.reservedBytes();
+	}
+	EA_FORCE_INLINE bool empty( void ) const {
+		return m_map.empty();
+	}
+	EA_FORCE_INLINE void swap( T3DFlatHashSet &rOther ) {
+		m_map.swap( rOther.m_map );
 	}
 
-	template <typename Fn>
-	EA_FORCE_INLINE void forEach( Fn &&rFn ) const {
-		m_map.forEach( [&]( const Key &rKey, const uint8_t & ) { rFn( rKey ); } );
+	template <typename Fn> EA_FORCE_INLINE void forEach( Fn &&rFn ) {
+		m_map.forEach( [&]( const Key &rKey, uint8_t & ) {
+			rFn( rKey );
+		} );
+	}
+
+	template <typename Fn> EA_FORCE_INLINE void forEach( Fn &&rFn ) const {
+		m_map.forEach( [&]( const Key &rKey, const uint8_t & ) {
+			rFn( rKey );
+		} );
 	}
 };
 

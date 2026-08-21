@@ -1,29 +1,28 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "assets/terrain_3d_assets.h"
+
+#include "core/logger.h"
+#include "core/terrain_3d_owner.h"
+#include "core/terrain_3d_util.h"
+#include "eastl_config.h"
+
+#include <EASTL/bitset.h>
 #include <algorithm>
-#include <limits>
+#include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/editor_file_system.hpp>
 #include <godot_cpp/classes/editor_interface.hpp>
 #include <godot_cpp/classes/engine.hpp>
-#include <godot_cpp/classes/file_access.hpp>
-#include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/environment.hpp>
+#include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/image_texture.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/resource_saver.hpp>
-
-#include "eastl_config.h"
-#include <EASTL/bitset.h>
+#include <limits>
 #include <vector>
 
-#include "core/logger.h"
-#include "assets/terrain_3d_assets.h"
-#include "core/terrain_3d_owner.h"
-#include "core/terrain_3d_util.h"
-
-///////////////////////////
-// Private Functions
-///////////////////////////
+// -----------------------------------------------------------------------------
+// Private functions
 
 static constexpr uint64_t s_nRuntimeMaterialMagic = 0x5433444D41543031ull; // T3DMAT01
 static constexpr uint32_t s_nRuntimeMaterialVersion = 4u;
@@ -33,17 +32,17 @@ static constexpr uint64_t s_nRuntimeMaterialImageDescriptorBytes = 32u;
 static constexpr uint64_t s_nRuntimeMaterialCookedChannels = 5u;
 static constexpr uint64_t s_nRuntimeMaterialFixedSettingsBytes = 60u;
 static constexpr uint64_t s_nRuntimeMaterialLayerDescriptorBytes =
-	s_nRuntimeMaterialCookedChannels * s_nRuntimeMaterialImageDescriptorBytes +
-	16u + s_nRuntimeMaterialFixedSettingsBytes;
+		s_nRuntimeMaterialCookedChannels * s_nRuntimeMaterialImageDescriptorBytes + 16u +
+		s_nRuntimeMaterialFixedSettingsBytes;
 static constexpr uint64_t s_nRuntimeMaterialDescriptorTableBytes =
-	s_nMaxTextureAssets * s_nRuntimeMaterialLayerDescriptorBytes;
+		s_nMaxTextureAssets * s_nRuntimeMaterialLayerDescriptorBytes;
 static constexpr uint64_t s_nRuntimeMaterialDataOffset =
-	s_nRuntimeMaterialHeaderBytes + s_nRuntimeMaterialDescriptorTableBytes;
+		s_nRuntimeMaterialHeaderBytes + s_nRuntimeMaterialDescriptorTableBytes;
 
 static uint32_t t3dAssetsMaterialChecksum( const uint8_t *const pData, const size_t nSize ) {
 	uint32_t hash = 2166136261u;
 	for ( size_t index = 0; index < nSize; ++index ) {
-		hash ^= ( uint32_t ) ( pData[index] );
+		hash ^= ( uint32_t )( pData[index] );
 		hash *= 16777619u;
 	}
 	return hash;
@@ -58,11 +57,11 @@ static void t3dAssetsMaterialHashU64( uint64_t &rHash, const uint64_t nValue ) {
 
 static Color t3dAssetsMaterialAverageAlbedo( const Ref<Image> &rImage ) {
 	if ( rImage.is_null() || rImage->is_empty() ) {
-		return COLOR_WHITE;
+		return s_colorWhite;
 	}
 	Ref<Image> pImage = rImage->duplicate();
 	if ( pImage->is_compressed() && pImage->decompress() != OK ) {
-		return COLOR_WHITE;
+		return s_colorWhite;
 	}
 	if ( pImage->has_mipmaps() ) {
 		pImage->clear_mipmaps();
@@ -74,11 +73,13 @@ static Color t3dAssetsMaterialAverageAlbedo( const Ref<Image> &rImage ) {
 static bool t3dAssetsIsNativePackedSurfaceFormat( const Image::Format format ) {
 	// Terrain3D's optimized surface uses all four channels (normal XY, roughness, AO).
 	// BC3 and BC7 preserve those channels and are directly usable by the sampler.
-	return format == Image::FORMAT_RGBA8 || format == Image::FORMAT_DXT5 ||
-		format == Image::FORMAT_BPTC_RGBA;
+	return format == Image::FORMAT_RGBA8 || format == Image::FORMAT_DXT5 || format == Image::FORMAT_BPTC_RGBA;
 }
 
-EA_FORCE_INLINE static bool t3dAssetsIsSupportedNativeArrayFormat( const Image::Format format ) { return format == Image::FORMAT_DXT1 || format == Image::FORMAT_DXT5 || format == Image::FORMAT_BPTC_RGBA || format == Image::FORMAT_RGTC_R || format == Image::FORMAT_RGTC_RG; }
+EA_FORCE_INLINE static bool t3dAssetsIsSupportedNativeArrayFormat( const Image::Format format ) {
+	return format == Image::FORMAT_DXT1 || format == Image::FORMAT_DXT5 || format == Image::FORMAT_BPTC_RGBA ||
+			format == Image::FORMAT_RGTC_R || format == Image::FORMAT_RGTC_RG;
+}
 
 static Error t3dAssetsCompressArrayImageToFormat( const Ref<Image> &rImage, const Image::Format format ) {
 	if ( rImage.is_null() ) {
@@ -105,10 +106,10 @@ static Error t3dAssetsCompressArrayImageToFormat( const Ref<Image> &rImage, cons
 	}
 }
 
-static Ref<Image> t3dAssetsMakeArrayDefault(
-	const Vector2i &rSize, const Image::Format format,
-	const bool bMipmaps, const Color &rDefaultColor
-) {
+static Ref<Image> t3dAssetsMakeArrayDefault( const Vector2i &rSize,
+		const Image::Format format,
+		const bool bMipmaps,
+		const Color &rDefaultColor ) {
 	if ( !t3dAssetsIsSupportedNativeArrayFormat( format ) ) {
 		return T3DUtil::getFilledImage( rSize, rDefaultColor, bMipmaps, format );
 	}
@@ -122,16 +123,17 @@ static Ref<Image> t3dAssetsMakeArrayDefault(
 	}
 	Ref<Image> pImage = T3DUtil::getFilledImage( rSize, rDefaultColor, bMipmaps, working_format );
 	if ( pImage.is_null() || t3dAssetsCompressArrayImageToFormat( pImage, format ) != OK ||
-		pImage->get_format() != format ) {
+			pImage->get_format() != format ) {
 		return Ref<Image>();
 	}
 	return pImage;
 }
 
-static Ref<Image> t3dAssetsPrepareArrayImage(
-	const Ref<Texture2D> &rTexture, const Vector2i &rSize,
-	const Image::Format format, const bool bMipmaps, const Color &rDefaultColor
-) {
+static Ref<Image> t3dAssetsPrepareArrayImage( const Ref<Texture2D> &rTexture,
+		const Vector2i &rSize,
+		const Image::Format format,
+		const bool bMipmaps,
+		const Color &rDefaultColor ) {
 	if ( rTexture.is_null() ) {
 		return t3dAssetsMakeArrayDefault( rSize, format, bMipmaps, rDefaultColor );
 	}
@@ -169,11 +171,20 @@ static Ref<Image> t3dAssetsPrepareArrayImage(
 			return Ref<Image>();
 		}
 	}
-	return pImage->get_size() == rSize && pImage->get_format() == format && pImage->has_mipmaps() == bMipmaps ?
-		pImage : Ref<Image>();
+	return pImage->get_size() == rSize && pImage->get_format() == format && pImage->has_mipmaps() == bMipmaps
+			? pImage
+			: Ref<Image>();
 }
 
-EA_FORCE_INLINE static void t3dAssetsReleaseGeneratedReplacements( T3DGeneratedTexture &rAlbedo, T3DGeneratedTexture &rNormal, T3DGeneratedTexture &rSurface, T3DGeneratedTexture &rDisplacement ) { rAlbedo.clear(); rNormal.clear(); rSurface.clear(); rDisplacement.clear(); }
+EA_FORCE_INLINE static void t3dAssetsReleaseGeneratedReplacements( T3DGeneratedTexture &rAlbedo,
+		T3DGeneratedTexture &rNormal,
+		T3DGeneratedTexture &rSurface,
+		T3DGeneratedTexture &rDisplacement ) {
+	rAlbedo.clear();
+	rNormal.clear();
+	rSurface.clear();
+	rDisplacement.clear();
+}
 
 String T3DAssets::getRuntimeMaterialCachePath( void ) const {
 	if ( !m_pTerrain || m_pTerrain->getDataDirectory().is_empty() ) {
@@ -184,12 +195,12 @@ String T3DAssets::getRuntimeMaterialCachePath( void ) const {
 
 uint64_t T3DAssets::computeRuntimeMaterialSourceSignature( void ) const {
 	uint64_t hash = 1469598103934665603ull;
-	t3dAssetsMaterialHashU64( hash, ( uint64_t ) ( m_texturePackingMode ) );
-	t3dAssetsMaterialHashU64( hash, ( uint64_t ) ( m_textureList.size() ) );
-	t3dAssetsMaterialHashU64( hash, m_pTerrain ? ( uint64_t ) ( m_pTerrain->getFarMaterialResolution() ) : 128u );
+	t3dAssetsMaterialHashU64( hash, ( uint64_t )( m_texturePackingMode ) );
+	t3dAssetsMaterialHashU64( hash, ( uint64_t )( m_textureList.size() ) );
+	t3dAssetsMaterialHashU64( hash, m_pTerrain ? ( uint64_t )( m_pTerrain->getFarMaterialResolution() ) : 128u );
 	for ( int index = 0; index < m_textureList.size(); ++index ) {
 		const Ref<T3DTextureAsset> pAsset = m_textureList[index];
-		t3dAssetsMaterialHashU64( hash, ( uint64_t ) ( index ) );
+		t3dAssetsMaterialHashU64( hash, ( uint64_t )( index ) );
 		if ( pAsset.is_null() ) {
 			continue;
 		}
@@ -199,9 +210,9 @@ uint64_t T3DAssets::computeRuntimeMaterialSourceSignature( void ) const {
 				return;
 			}
 			const String path = rResource->get_path();
-			t3dAssetsMaterialHashU64( hash, ( uint64_t ) ( path.hash() ) );
-			t3dAssetsMaterialHashU64( hash, !path.is_empty() && FileAccess::file_exists( path ) ?
-				FileAccess::get_modified_time( path ) : 0u );
+			t3dAssetsMaterialHashU64( hash, ( uint64_t )( path.hash() ) );
+			t3dAssetsMaterialHashU64( hash,
+					!path.is_empty() && FileAccess::file_exists( path ) ? FileAccess::get_modified_time( path ) : 0u );
 		};
 		append_resource( pAsset->m_albedoTexture );
 		append_resource( pAsset->m_normalTexture );
@@ -224,11 +235,11 @@ void T3DAssets::resetRuntimeMaterialCacheState( const bool bClearGeneratedArrays
 	m_nRuntimeMaterialEvictionsLastTick = 0;
 	m_bRuntimeMaterialSourceTexturesReleased = false;
 	for ( int index = 0; index < s_nMaxTextureAssets; ++index ) {
-		m_runtimeMaterialLogicalToPhysical[( size_t ) ( index )] = -1;
-		m_runtimeMaterialPhysicalToLogical[( size_t ) ( index )] = -1;
-		m_runtimeMaterialLastUseTick[( size_t ) ( index )] = 0u;
-		m_runtimeMaterialRetireAfterTick[( size_t ) ( index )] = 0u;
-		m_runtimeMaterialCookedLayers[( size_t ) ( index )] = t3dRuntimeMaterialLayerInfo_t{};
+		m_runtimeMaterialLogicalToPhysical[( size_t )( index )] = -1;
+		m_runtimeMaterialPhysicalToLogical[( size_t )( index )] = -1;
+		m_runtimeMaterialLastUseTick[( size_t )( index )] = 0u;
+		m_runtimeMaterialRetireAfterTick[( size_t )( index )] = 0u;
+		m_runtimeMaterialCookedLayers[( size_t )( index )] = t3dRuntimeMaterialLayerInfo_t{};
 	}
 	if ( bClearGeneratedArrays ) {
 		m_generatedAlbedoTextures.clear();
@@ -276,12 +287,13 @@ bool T3DAssets::loadRuntimeMaterialCookedIndex( void ) {
 	const uint32_t packing_mode = pFile->get_32();
 	const uint32_t flags = pFile->get_32();
 	const uint64_t signature = pFile->get_64();
-	( void ) ( flags );
+	( void )( flags );
 	bool source_resources_available = false;
 	for ( const Ref<T3DTextureAsset> pAsset : m_textureList ) {
-		if ( pAsset.is_valid() && ( pAsset->m_albedoTexture.is_valid() || pAsset->m_normalTexture.is_valid() ||
-			pAsset->m_surfaceTexture.is_valid() || pAsset->m_displacementTexture.is_valid() ||
-			pAsset->m_packedPbrResource.is_valid() ) ) {
+		if ( pAsset.is_valid() &&
+				( pAsset->m_albedoTexture.is_valid() || pAsset->m_normalTexture.is_valid() ||
+						pAsset->m_surfaceTexture.is_valid() || pAsset->m_displacementTexture.is_valid() ||
+						pAsset->m_packedPbrResource.is_valid() ) ) {
 			source_resources_available = true;
 			break;
 		}
@@ -290,54 +302,62 @@ bool T3DAssets::loadRuntimeMaterialCookedIndex( void ) {
 	if ( m_pTerrain && m_pTerrain->getData() ) {
 		expected_world_material_signature = m_pTerrain->getData()->getCookedWorldMaterialSignatureInternal();
 	}
-	const bool signature_valid = expected_world_material_signature != 0u ?
-		signature == expected_world_material_signature :
-		( !source_resources_available && !IS_EDITOR ? true : signature == computeRuntimeMaterialSourceSignature() );
+	const bool signature_valid = expected_world_material_signature != 0u
+			? signature == expected_world_material_signature
+			: ( !source_resources_available && !IS_EDITOR ? true
+														  : signature == computeRuntimeMaterialSourceSignature() );
 	if ( magic != s_nRuntimeMaterialMagic || version != s_nRuntimeMaterialVersion ||
-		texture_count != ( uint32_t ) ( m_textureList.size() ) || texture_count == 0u ||
-		texture_count > s_nMaxTextureAssets || packing_mode != ( uint32_t ) ( m_texturePackingMode ) ||
-		signature == 0u || !signature_valid ) {
+			texture_count != ( uint32_t )( m_textureList.size() ) || texture_count == 0u ||
+			texture_count > s_nMaxTextureAssets || packing_mode != ( uint32_t )( m_texturePackingMode ) ||
+			signature == 0u || !signature_valid ) {
 		return false;
 	}
 	const uint64_t file_length = pFile->get_length();
 	eastl::array<t3dRuntimeMaterialLayerInfo_t, s_nMaxTextureAssets> loaded_layers{};
 	for ( int logical = 0; logical < s_nMaxTextureAssets; ++logical ) {
 		for ( int channel = 0; channel < RUNTIME_MATERIAL_CHANNEL_COUNT; ++channel ) {
-			t3dRuntimeMaterialImageInfo_t &info = loaded_layers[( size_t ) ( logical )].m_szChannels[( size_t ) ( channel )];
+			t3dRuntimeMaterialImageInfo_t &info =
+					loaded_layers[( size_t )( logical )].m_szChannels[( size_t )( channel )];
 			info.m_iOffset = pFile->get_64();
 			info.m_nSize = pFile->get_32();
 			info.m_nChecksum = pFile->get_32();
-			info.m_nWidth = ( int32_t ) ( pFile->get_32() );
-			info.m_nHeight = ( int32_t ) ( pFile->get_32() );
-			info.m_nFormat = ( int32_t ) ( pFile->get_32() );
+			info.m_nWidth = ( int32_t )( pFile->get_32() );
+			info.m_nHeight = ( int32_t )( pFile->get_32() );
+			info.m_nFormat = ( int32_t )( pFile->get_32() );
 			info.m_nMipmaps = pFile->get_32();
-			if ( info.m_nSize > 0u && ( logical >= ( int ) ( texture_count ) ||
-				info.m_iOffset < s_nRuntimeMaterialDataOffset || info.m_iOffset > file_length ||
-				( uint64_t ) ( info.m_nSize ) > file_length - info.m_iOffset ||
-				info.m_nWidth <= 0 || info.m_nHeight <= 0 || info.m_nFormat < 0 ||
-				info.m_nFormat >= ( int32_t ) ( Image::FORMAT_MAX ) || info.m_nMipmaps > 1u ) ) {
+			if ( info.m_nSize > 0u &&
+					( logical >= ( int )( texture_count ) || info.m_iOffset < s_nRuntimeMaterialDataOffset ||
+							info.m_iOffset > file_length ||
+							( uint64_t )( info.m_nSize ) > file_length - info.m_iOffset || info.m_nWidth <= 0 ||
+							info.m_nHeight <= 0 || info.m_nFormat < 0 ||
+							info.m_nFormat >= ( int32_t )( Image::FORMAT_MAX ) || info.m_nMipmaps > 1u ) ) {
 				return false;
 			}
 		}
-		t3dRuntimeMaterialLayerInfo_t &layer = loaded_layers[( size_t ) ( logical )];
+		t3dRuntimeMaterialLayerInfo_t &layer = loaded_layers[( size_t )( logical )];
 		layer.m_averageAlbedo = Color( pFile->get_float(), pFile->get_float(), pFile->get_float(), pFile->get_float() );
 		layer.m_albedoColor = Color( pFile->get_float(), pFile->get_float(), pFile->get_float(), pFile->get_float() );
-		layer.m_fNormalDepth = pFile->get_float(); layer.m_fAoStrength = pFile->get_float();
-		layer.m_fAoLightAffect = pFile->get_float(); layer.m_fRoughness = pFile->get_float();
-		layer.m_fMetallic = pFile->get_float(); layer.m_fUvScale = pFile->get_float();
+		layer.m_fNormalDepth = pFile->get_float();
+		layer.m_fAoStrength = pFile->get_float();
+		layer.m_fAoLightAffect = pFile->get_float();
+		layer.m_fRoughness = pFile->get_float();
+		layer.m_fMetallic = pFile->get_float();
+		layer.m_fUvScale = pFile->get_float();
 		layer.m_detile = Vector2( pFile->get_float(), pFile->get_float() );
 		layer.m_displacement = Vector2( pFile->get_float(), pFile->get_float() );
 		layer.m_iBundleIndex = pFile->get_32();
-		if ( logical < ( int ) texture_count && layer.m_iBundleIndex != ( uint32_t ) logical ) return false;
+		if ( logical < ( int )texture_count && layer.m_iBundleIndex != ( uint32_t )logical ) {
+			return false;
+		}
 	}
 	for ( uint32_t logical = 0u; logical < texture_count; ++logical ) {
-		const t3dRuntimeMaterialLayerInfo_t &layer = loaded_layers[( size_t ) ( logical )];
-		if ( layer.m_szChannels[RUNTIME_MATERIAL_CHANNEL_ALBEDO].nSize == 0u ||
-			layer.m_szChannels[RUNTIME_MATERIAL_CHANNEL_FAR_ALBEDO].nSize == 0u ||
-			( m_texturePackingMode == TEXTURE_PACKING_LEGACY &&
-				layer.m_szChannels[RUNTIME_MATERIAL_CHANNEL_NORMAL].nSize == 0u ) ||
-			( m_texturePackingMode != TEXTURE_PACKING_LEGACY &&
-				layer.m_szChannels[RUNTIME_MATERIAL_CHANNEL_SURFACE].nSize == 0u ) ) {
+		const t3dRuntimeMaterialLayerInfo_t &layer = loaded_layers[( size_t )( logical )];
+		if ( layer.m_szChannels[RUNTIME_MATERIAL_CHANNEL_ALBEDO].m_nSize == 0u ||
+				layer.m_szChannels[RUNTIME_MATERIAL_CHANNEL_FAR_ALBEDO].m_nSize == 0u ||
+				( m_texturePackingMode == TEXTURE_PACKING_LEGACY &&
+						layer.m_szChannels[RUNTIME_MATERIAL_CHANNEL_NORMAL].m_nSize == 0u ) ||
+				( m_texturePackingMode != TEXTURE_PACKING_LEGACY &&
+						layer.m_szChannels[RUNTIME_MATERIAL_CHANNEL_SURFACE].m_nSize == 0u ) ) {
 			return false;
 		}
 	}
@@ -347,7 +367,7 @@ bool T3DAssets::loadRuntimeMaterialCookedIndex( void ) {
 	m_runtimeMaterialCachePath = path;
 	m_nRuntimeMaterialCookedSignature = signature;
 	m_bRuntimeMaterialCookedValid = true;
-	// In runtime the cooked bundle is the s_nFixed-settings authority.
+	// In runtime the cooked bundle is the fixed-settings authority.
 	if ( m_pTerrain && !m_pTerrain->isEditorAuthoringMode() ) {
 		publishRuntimeMaterialCookedSettings();
 	}
@@ -360,16 +380,16 @@ void T3DAssets::publishRuntimeMaterialCookedSettings( void ) {
 	}
 	m_textureSettings.m_nCount = MIN( m_textureList.size(), s_nMaxTextureAssets );
 	for ( int logical = 0; logical < m_textureSettings.m_nCount; ++logical ) {
-		const t3dRuntimeMaterialLayerInfo_t &layer = m_runtimeMaterialCookedLayers[( size_t ) logical];
-		m_textureSettings.m_szColors[( size_t ) logical] = layer.m_albedoColor;
-		m_textureSettings.m_szNormalDepths[( size_t ) logical] = layer.m_fNormalDepth;
-		m_textureSettings.m_szAoStrengths[( size_t ) logical] = layer.m_fAoStrength;
-		m_textureSettings.m_szAoLightAffects[( size_t ) logical] = layer.m_fAoLightAffect;
-		m_textureSettings.m_szRoughnessMods[( size_t ) logical] = layer.m_fRoughness;
-		m_textureSettings.m_szMetallics[( size_t ) logical] = layer.m_fMetallic;
-		m_textureSettings.m_szUvScales[( size_t ) logical] = layer.m_fUvScale;
-		m_textureSettings.m_szDetiles[( size_t ) logical] = layer.m_detile;
-		m_textureSettings.m_szDisplacements[( size_t ) logical] = layer.m_displacement;
+		const t3dRuntimeMaterialLayerInfo_t &layer = m_runtimeMaterialCookedLayers[( size_t )logical];
+		m_textureSettings.m_szColors[( size_t )logical] = layer.m_albedoColor;
+		m_textureSettings.m_szNormalDepths[( size_t )logical] = layer.m_fNormalDepth;
+		m_textureSettings.m_szAoStrengths[( size_t )logical] = layer.m_fAoStrength;
+		m_textureSettings.m_szAoLightAffects[( size_t )logical] = layer.m_fAoLightAffect;
+		m_textureSettings.m_szRoughnessMods[( size_t )logical] = layer.m_fRoughness;
+		m_textureSettings.m_szMetallics[( size_t )logical] = layer.m_fMetallic;
+		m_textureSettings.m_szUvScales[( size_t )logical] = layer.m_fUvScale;
+		m_textureSettings.m_szDetiles[( size_t )logical] = layer.m_detile;
+		m_textureSettings.m_szDisplacements[( size_t )logical] = layer.m_displacement;
 	}
 	const int count = m_textureSettings.m_nCount;
 	m_textureColors.resize( count );
@@ -396,12 +416,12 @@ void T3DAssets::publishRuntimeMaterialCookedSettings( void ) {
 }
 
 Ref<Image> T3DAssets::loadRuntimeMaterialCookedImage( const int nLogicalId, const int nChannel ) const {
-	if ( !m_bRuntimeMaterialCookedValid || nLogicalId < 0 || nLogicalId >= m_textureList.size() ||
-		nChannel < 0 || nChannel >= RUNTIME_MATERIAL_CHANNEL_COUNT ) {
+	if ( !m_bRuntimeMaterialCookedValid || nLogicalId < 0 || nLogicalId >= m_textureList.size() || nChannel < 0 ||
+			nChannel >= RUNTIME_MATERIAL_CHANNEL_COUNT ) {
 		return Ref<Image>();
 	}
 	const t3dRuntimeMaterialImageInfo_t &info =
-		m_runtimeMaterialCookedLayers[( size_t ) ( nLogicalId )].m_szChannels[( size_t ) ( nChannel )];
+			m_runtimeMaterialCookedLayers[( size_t )( nLogicalId )].m_szChannels[( size_t )( nChannel )];
 	if ( info.m_nSize == 0u ) {
 		return Ref<Image>();
 	}
@@ -411,20 +431,21 @@ Ref<Image> T3DAssets::loadRuntimeMaterialCookedImage( const int nLogicalId, cons
 	}
 	pFile->seek( info.m_iOffset );
 	const PackedByteArray bytes = pFile->get_buffer( info.m_nSize );
-	if ( bytes.size() != ( int64_t ) ( info.m_nSize ) ||
-		t3dAssetsMaterialChecksum( bytes.ptr(), ( size_t ) ( bytes.size() ) ) != info.m_nChecksum ) {
+	if ( bytes.size() != ( int64_t )( info.m_nSize ) ||
+			t3dAssetsMaterialChecksum( bytes.ptr(), ( size_t )( bytes.size() ) ) != info.m_nChecksum ) {
 		return Ref<Image>();
 	}
-	return Image::create_from_data( info.m_nWidth, info.m_nHeight, info.m_nMipmaps != 0u,
-		( Image::Format ) ( info.m_nFormat ), bytes );
+	return Image::create_from_data(
+			info.m_nWidth, info.m_nHeight, info.m_nMipmaps != 0u, ( Image::Format )( info.m_nFormat ), bytes );
 }
 
 bool T3DAssets::initializeRuntimeMaterialPhysicalArrays( const int nLayerLimit ) {
 	if ( !m_bRuntimeMaterialCookedValid || !m_pTerrain || m_textureList.is_empty() ) {
 		return false;
 	}
-	const int cache_limit = nLayerLimit > 0 ? CLAMP( nLayerLimit, 1, s_nMaxTextureAssets ) :
-		CLAMP( m_pTerrain->getRuntimeMaterialCacheLayers(), 4, s_nMaxTextureAssets );
+	const int cache_limit = nLayerLimit > 0
+			? CLAMP( nLayerLimit, 1, s_nMaxTextureAssets )
+			: CLAMP( m_pTerrain->getRuntimeMaterialCacheLayers(), 4, s_nMaxTextureAssets );
 	const int physical_layers = MIN( m_textureList.size(), cache_limit );
 	const bool fully_resident = m_textureList.size() <= cache_limit;
 	if ( physical_layers <= 0 || !initializeFarMaterialArray() ) {
@@ -454,32 +475,32 @@ bool T3DAssets::initializeRuntimeMaterialPhysicalArrays( const int nLayerLimit )
 		return rGenerated.create( layers ).is_valid();
 	};
 	if ( !create_channel_array( replacement_albedo, RUNTIME_MATERIAL_CHANNEL_ALBEDO ) ||
-		!create_channel_array( replacement_normal, RUNTIME_MATERIAL_CHANNEL_NORMAL ) ||
-		!create_channel_array( replacement_surface, RUNTIME_MATERIAL_CHANNEL_SURFACE ) ||
-		!create_channel_array( replacement_displacement, RUNTIME_MATERIAL_CHANNEL_DISPLACEMENT ) ) {
-		t3dAssetsReleaseGeneratedReplacements( replacement_albedo, replacement_normal,
-			replacement_surface, replacement_displacement );
+			!create_channel_array( replacement_normal, RUNTIME_MATERIAL_CHANNEL_NORMAL ) ||
+			!create_channel_array( replacement_surface, RUNTIME_MATERIAL_CHANNEL_SURFACE ) ||
+			!create_channel_array( replacement_displacement, RUNTIME_MATERIAL_CHANNEL_DISPLACEMENT ) ) {
+		t3dAssetsReleaseGeneratedReplacements(
+				replacement_albedo, replacement_normal, replacement_surface, replacement_displacement );
 		return false;
 	}
 	m_generatedAlbedoTextures.swap( replacement_albedo );
 	m_generatedNormalTextures.swap( replacement_normal );
 	m_generatedSurfaceTextures.swap( replacement_surface );
 	m_generatedDisplacementTextures.swap( replacement_displacement );
-	t3dAssetsReleaseGeneratedReplacements( replacement_albedo, replacement_normal,
-		replacement_surface, replacement_displacement );
+	t3dAssetsReleaseGeneratedReplacements(
+			replacement_albedo, replacement_normal, replacement_surface, replacement_displacement );
 
 	m_nRuntimeMaterialPhysicalLayers = physical_layers;
 	for ( int index = 0; index < s_nMaxTextureAssets; ++index ) {
-		m_runtimeMaterialLogicalToPhysical[( size_t ) ( index )] = -1;
-		m_runtimeMaterialPhysicalToLogical[( size_t ) ( index )] = -1;
-		m_runtimeMaterialLastUseTick[( size_t ) ( index )] = 0u;
-		m_runtimeMaterialRetireAfterTick[( size_t ) ( index )] = 0u;
+		m_runtimeMaterialLogicalToPhysical[( size_t )( index )] = -1;
+		m_runtimeMaterialPhysicalToLogical[( size_t )( index )] = -1;
+		m_runtimeMaterialLastUseTick[( size_t )( index )] = 0u;
+		m_runtimeMaterialRetireAfterTick[( size_t )( index )] = 0u;
 	}
 	m_nRuntimeMaterialResidentCount = fully_resident ? m_textureList.size() : 1;
 	for ( int physical = 0; physical < m_nRuntimeMaterialResidentCount; ++physical ) {
-		m_runtimeMaterialPhysicalToLogical[( size_t ) ( physical )] = physical;
-		m_runtimeMaterialLogicalToPhysical[( size_t ) ( physical )] = physical;
-		m_runtimeMaterialLastUseTick[( size_t ) ( physical )] = ++m_nRuntimeMaterialTick;
+		m_runtimeMaterialPhysicalToLogical[( size_t )( physical )] = physical;
+		m_runtimeMaterialLogicalToPhysical[( size_t )( physical )] = physical;
+		m_runtimeMaterialLastUseTick[( size_t )( physical )] = ++m_nRuntimeMaterialTick;
 	}
 	m_bRuntimeMaterialCacheActive = true;
 	return true;
@@ -487,7 +508,7 @@ bool T3DAssets::initializeRuntimeMaterialPhysicalArrays( const int nLayerLimit )
 
 bool T3DAssets::publishRuntimeMaterialLayer( const int nLogicalId, const int nPhysicalLayer ) {
 	if ( !m_bRuntimeMaterialCacheActive || nLogicalId < 0 || nLogicalId >= m_textureList.size() ||
-		nPhysicalLayer <= 0 || nPhysicalLayer >= m_nRuntimeMaterialPhysicalLayers ) {
+			nPhysicalLayer <= 0 || nPhysicalLayer >= m_nRuntimeMaterialPhysicalLayers ) {
 		return false;
 	}
 	const Ref<Image> pAlbedo = loadRuntimeMaterialCookedImage( nLogicalId, 0 );
@@ -498,15 +519,15 @@ bool T3DAssets::publishRuntimeMaterialLayer( const int nLogicalId, const int nPh
 		return false;
 	}
 	if ( m_generatedNormalTextures.getRid().is_valid() &&
-		( pNormal.is_null() || !m_generatedNormalTextures.update( pNormal, nPhysicalLayer ) ) ) {
+			( pNormal.is_null() || !m_generatedNormalTextures.update( pNormal, nPhysicalLayer ) ) ) {
 		return false;
 	}
 	if ( m_generatedSurfaceTextures.getRid().is_valid() &&
-		( pSurface.is_null() || !m_generatedSurfaceTextures.update( pSurface, nPhysicalLayer ) ) ) {
+			( pSurface.is_null() || !m_generatedSurfaceTextures.update( pSurface, nPhysicalLayer ) ) ) {
 		return false;
 	}
 	if ( m_generatedDisplacementTextures.getRid().is_valid() &&
-		( pDisplacement.is_null() || !m_generatedDisplacementTextures.update( pDisplacement, nPhysicalLayer ) ) ) {
+			( pDisplacement.is_null() || !m_generatedDisplacementTextures.update( pDisplacement, nPhysicalLayer ) ) ) {
 		return false;
 	}
 	return true;
@@ -543,8 +564,8 @@ bool T3DAssets::configureRuntimeMaterialCache( void ) {
 		}
 	};
 
-	const bool runtime_cache_requested = m_pTerrain->isRuntimeMaterialStreamingEnabled() &&
-		!m_pTerrain->isEditorAuthoringMode();
+	const bool runtime_cache_requested =
+			m_pTerrain->isRuntimeMaterialStreamingEnabled() && !m_pTerrain->isEditorAuthoringMode();
 	if ( !runtime_cache_requested ) {
 		// Editor Runtime Profile can transition back to Authoring without
 		// reinitializing the Terrain3D resource graph. Restore the full authoring
@@ -565,12 +586,14 @@ bool T3DAssets::configureRuntimeMaterialCache( void ) {
 		}
 		if ( !m_bRuntimeMaterialCookedValid && !loadRuntimeMaterialCookedIndex() ) {
 			LOG( WARN,
-				"Cannot disable runtime material streaming because the cooked material bundle is unavailable; keeping the bounded cache active." );
+					"Cannot disable runtime material streaming because the cooked material bundle is unavailable; "
+					"keeping the bounded cache active." );
 			return true;
 		}
 		if ( !initializeRuntimeMaterialPhysicalArrays( s_nMaxTextureAssets ) ) {
 			LOG( WARN,
-				"Cannot rebuild full terrain material arrays from the cooked bundle; keeping the bounded runtime material cache active." );
+					"Cannot rebuild full terrain material arrays from the cooked bundle; keeping the bounded runtime "
+					"material cache active." );
 			return true;
 		}
 		m_bRuntimeMaterialCacheActive = false;
@@ -578,8 +601,8 @@ bool T3DAssets::configureRuntimeMaterialCache( void ) {
 		return false;
 	}
 
-	const bool strict_baked_runtime = m_pTerrain->isGpuRegionCookedPagesEnabled() &&
-		!m_pTerrain->isEditorAuthoringMode();
+	const bool strict_baked_runtime =
+			m_pTerrain->isGpuRegionCookedPagesEnabled() && !m_pTerrain->isEditorAuthoringMode();
 	if ( !m_bRuntimeMaterialCookedValid && !loadRuntimeMaterialCookedIndex() ) {
 		if ( strict_baked_runtime ) {
 			LOG( ERROR, "Strict baked runtime requires a valid terrain3d_materials.t3dmatcache artifact." );
@@ -605,8 +628,8 @@ bool T3DAssets::configureRuntimeMaterialCache( void ) {
 	// pass; subsequent motion returns to the configured per-frame upload budget.
 	if ( m_pTerrain->getData() ) {
 		uint8_t priority_ids[s_nMaxTextureAssets] = {};
-		const int priority_count = m_pTerrain->getData()->fillGpuMaterialPriorityIds(
-			priority_ids, s_nMaxTextureAssets );
+		const int priority_count =
+				m_pTerrain->getData()->fillGpuMaterialPriorityIds( priority_ids, s_nMaxTextureAssets );
 		const int mapped_capacity = MAX( 1, m_nRuntimeMaterialPhysicalLayers - s_nRuntimeMaterialSpareLayers );
 		updateRuntimeMaterialResidencyInternal( priority_ids, priority_count, mapped_capacity );
 	}
@@ -617,10 +640,9 @@ bool T3DAssets::configureRuntimeMaterialCache( void ) {
 	return true;
 }
 
-void T3DAssets::updateRuntimeMaterialResidencyInternal(
-	const uint8_t *const pPriorityIds, const int nPriorityCount,
-	const int nUploadBudget
-) {
+void T3DAssets::updateRuntimeMaterialResidencyInternal( const uint8_t *const pPriorityIds,
+		const int nPriorityCount,
+		const int nUploadBudget ) {
 	m_nRuntimeMaterialUploadsLastTick = 0;
 	m_nRuntimeMaterialEvictionsLastTick = 0;
 	if ( !m_bRuntimeMaterialCacheActive || !m_pTerrain || !pPriorityIds || nPriorityCount <= 0 ) {
@@ -628,51 +650,53 @@ void T3DAssets::updateRuntimeMaterialResidencyInternal(
 	}
 	++m_nRuntimeMaterialTick;
 	for ( int physical = 1; physical < m_nRuntimeMaterialPhysicalLayers; ++physical ) {
-		if ( m_runtimeMaterialPhysicalToLogical[( size_t ) ( physical )] == -2 &&
-			m_nRuntimeMaterialTick >= m_runtimeMaterialRetireAfterTick[( size_t ) ( physical )] ) {
-			m_runtimeMaterialPhysicalToLogical[( size_t ) ( physical )] = -1;
-			m_runtimeMaterialRetireAfterTick[( size_t ) ( physical )] = 0u;
+		if ( m_runtimeMaterialPhysicalToLogical[( size_t )( physical )] == -2 &&
+				m_nRuntimeMaterialTick >= m_runtimeMaterialRetireAfterTick[( size_t )( physical )] ) {
+			m_runtimeMaterialPhysicalToLogical[( size_t )( physical )] = -1;
+			m_runtimeMaterialRetireAfterTick[( size_t )( physical )] = 0u;
 		}
 	}
 	uint32_t desired_mask = 1u;
 	for ( int index = 0; index < nPriorityCount; ++index ) {
-		const int id = ( int ) ( pPriorityIds[index] );
+		const int id = ( int )( pPriorityIds[index] );
 		if ( id >= 0 && id < m_textureList.size() ) {
-			desired_mask |= 1u << ( uint32_t ) ( id );
+			desired_mask |= 1u << ( uint32_t )( id );
 		}
 	}
 	const int mapped_capacity = MAX( 1, m_nRuntimeMaterialPhysicalLayers - s_nRuntimeMaterialSpareLayers );
 	const int upload_budget = MAX( 1, nUploadBudget );
 	bool mapping_changed = false;
-	for ( int priority = 0; priority < nPriorityCount && m_nRuntimeMaterialUploadsLastTick < upload_budget; ++priority ) {
-		const int logical = ( int ) ( pPriorityIds[priority] );
+	for ( int priority = 0; priority < nPriorityCount && m_nRuntimeMaterialUploadsLastTick < upload_budget;
+			++priority ) {
+		const int logical = ( int )( pPriorityIds[priority] );
 		if ( logical < 0 || logical >= m_textureList.size() ) {
 			continue;
 		}
-		const int existing = m_runtimeMaterialLogicalToPhysical[( size_t ) ( logical )];
-		if ( logical == 0 || ( existing > 0 && existing < m_nRuntimeMaterialPhysicalLayers &&
-			m_runtimeMaterialPhysicalToLogical[( size_t ) ( existing )] == logical ) ) {
-			m_runtimeMaterialLastUseTick[( size_t ) ( existing )] = m_nRuntimeMaterialTick;
+		const int existing = m_runtimeMaterialLogicalToPhysical[( size_t )( logical )];
+		if ( logical == 0 ||
+				( existing > 0 && existing < m_nRuntimeMaterialPhysicalLayers &&
+						m_runtimeMaterialPhysicalToLogical[( size_t )( existing )] == logical ) ) {
+			m_runtimeMaterialLastUseTick[( size_t )( existing )] = m_nRuntimeMaterialTick;
 			continue;
 		}
 		if ( m_nRuntimeMaterialResidentCount >= mapped_capacity ) {
 			int victim_physical = -1;
 			uint64_t oldest = std::numeric_limits<uint64_t>::max();
 			for ( int physical = 1; physical < m_nRuntimeMaterialPhysicalLayers; ++physical ) {
-				const int victim_logical = m_runtimeMaterialPhysicalToLogical[( size_t ) ( physical )];
-				if ( victim_logical <= 0 || ( desired_mask & ( 1u << ( uint32_t ) ( victim_logical ) ) ) != 0u ) {
+				const int victim_logical = m_runtimeMaterialPhysicalToLogical[( size_t )( physical )];
+				if ( victim_logical <= 0 || ( desired_mask & ( 1u << ( uint32_t )( victim_logical ) ) ) != 0u ) {
 					continue;
 				}
-				if ( m_runtimeMaterialLastUseTick[( size_t ) ( physical )] < oldest ) {
-					oldest = m_runtimeMaterialLastUseTick[( size_t ) ( physical )];
+				if ( m_runtimeMaterialLastUseTick[( size_t )( physical )] < oldest ) {
+					oldest = m_runtimeMaterialLastUseTick[( size_t )( physical )];
 					victim_physical = physical;
 				}
 			}
 			if ( victim_physical >= 0 ) {
-				const int victim_logical = m_runtimeMaterialPhysicalToLogical[( size_t ) ( victim_physical )];
-				m_runtimeMaterialLogicalToPhysical[( size_t ) ( victim_logical )] = -1;
-				m_runtimeMaterialPhysicalToLogical[( size_t ) ( victim_physical )] = -2;
-				m_runtimeMaterialRetireAfterTick[( size_t ) ( victim_physical )] = m_nRuntimeMaterialTick + 4u;
+				const int victim_logical = m_runtimeMaterialPhysicalToLogical[( size_t )( victim_physical )];
+				m_runtimeMaterialLogicalToPhysical[( size_t )( victim_logical )] = -1;
+				m_runtimeMaterialPhysicalToLogical[( size_t )( victim_physical )] = -2;
+				m_runtimeMaterialRetireAfterTick[( size_t )( victim_physical )] = m_nRuntimeMaterialTick + 4u;
 				--m_nRuntimeMaterialResidentCount;
 				++m_nRuntimeMaterialEvictionsLastTick;
 				mapping_changed = true;
@@ -685,7 +709,7 @@ void T3DAssets::updateRuntimeMaterialResidencyInternal(
 		}
 		int free_physical = -1;
 		for ( int physical = 1; physical < m_nRuntimeMaterialPhysicalLayers; ++physical ) {
-			if ( m_runtimeMaterialPhysicalToLogical[( size_t ) ( physical )] == -1 ) {
+			if ( m_runtimeMaterialPhysicalToLogical[( size_t )( physical )] == -1 ) {
 				free_physical = physical;
 				break;
 			}
@@ -693,9 +717,9 @@ void T3DAssets::updateRuntimeMaterialResidencyInternal(
 		if ( free_physical < 0 || !publishRuntimeMaterialLayer( logical, free_physical ) ) {
 			continue;
 		}
-		m_runtimeMaterialPhysicalToLogical[( size_t ) ( free_physical )] = logical;
-		m_runtimeMaterialLogicalToPhysical[( size_t ) ( logical )] = free_physical;
-		m_runtimeMaterialLastUseTick[( size_t ) ( free_physical )] = m_nRuntimeMaterialTick;
+		m_runtimeMaterialPhysicalToLogical[( size_t )( free_physical )] = logical;
+		m_runtimeMaterialLogicalToPhysical[( size_t )( logical )] = free_physical;
+		m_runtimeMaterialLastUseTick[( size_t )( free_physical )] = m_nRuntimeMaterialTick;
 		++m_nRuntimeMaterialResidentCount;
 		++m_nRuntimeMaterialUploadsLastTick;
 		mapping_changed = true;
@@ -718,8 +742,7 @@ PackedInt32Array T3DAssets::getTextureLayerMap( void ) const {
 	map.resize( s_nMaxTextureAssets );
 	int32_t *const pWrite = map.ptrw();
 	for ( int index = 0; index < s_nMaxTextureAssets; ++index ) {
-		pWrite[index] = m_bRuntimeMaterialCacheActive ?
-			m_runtimeMaterialLogicalToPhysical[( size_t ) ( index )] : index;
+		pWrite[index] = m_bRuntimeMaterialCacheActive ? m_runtimeMaterialLogicalToPhysical[( size_t )( index )] : index;
 	}
 	return map;
 }
@@ -729,8 +752,9 @@ PackedColorArray T3DAssets::getRuntimeMaterialAverageAlbedo( void ) const {
 	averages.resize( s_nMaxTextureAssets );
 	Color *const pWrite = averages.ptrw();
 	for ( int index = 0; index < s_nMaxTextureAssets; ++index ) {
-		pWrite[index] = m_bRuntimeMaterialCookedValid ?
-			m_runtimeMaterialCookedLayers[( size_t ) ( index )].m_averageAlbedo : COLOR_WHITE;
+		pWrite[index] = m_bRuntimeMaterialCookedValid
+				? m_runtimeMaterialCookedLayers[( size_t )( index )].m_averageAlbedo
+				: s_colorWhite;
 	}
 	return averages;
 }
@@ -745,13 +769,13 @@ Dictionary T3DAssets::getRuntimeMaterialCacheStats( void ) const {
 	stats["resident"] = m_nRuntimeMaterialResidentCount;
 	stats["uploads_last_tick"] = m_nRuntimeMaterialUploadsLastTick;
 	stats["evictions_last_tick"] = m_nRuntimeMaterialEvictionsLastTick;
-	stats["generated_payload_bytes"] = ( int64_t ) ( getGeneratedTexturePayloadBytes() );
+	stats["generated_payload_bytes"] = ( int64_t )( getGeneratedTexturePayloadBytes() );
 	stats["far_albedo_layers"] = m_generatedFarAlbedoTextures.size();
 	stats["far_albedo_max_lod"] = m_generatedFarAlbedoTextures.maxMipmapLevel();
 	stats["source_textures_released"] = m_bRuntimeMaterialSourceTexturesReleased;
 	uint64_t mapping_hash = 1469598103934665603ull;
 	for ( int logical = 0; logical < s_nMaxTextureAssets; ++logical ) {
-		mapping_hash ^= ( uint64_t ) ( ( uint32_t ) ( m_runtimeMaterialLogicalToPhysical[( size_t ) ( logical )] + 2 ) );
+		mapping_hash ^= ( uint64_t )( ( uint32_t )( m_runtimeMaterialLogicalToPhysical[( size_t )( logical )] + 2 ) );
 		mapping_hash *= 1099511628211ull;
 	}
 	stats["logical_to_physical_hash"] = String::num_uint64( mapping_hash, 16 );
@@ -761,12 +785,12 @@ Dictionary T3DAssets::getRuntimeMaterialCacheStats( void ) const {
 	int required_pending = 0;
 	if ( m_pTerrain && m_pTerrain->getData() && m_bRuntimeMaterialCacheActive ) {
 		uint8_t required_ids[s_nMaxTextureAssets] = {};
-		required_count = m_pTerrain->getData()->fillGpuMaterialPriorityIds(
-			required_ids, s_nMaxTextureAssets );
+		required_count = m_pTerrain->getData()->fillGpuMaterialPriorityIds( required_ids, s_nMaxTextureAssets );
 		for ( int index = 0; index < required_count; ++index ) {
-			const int logical = ( int ) ( required_ids[index] );
-			const int physical = logical >= 0 && logical < s_nMaxTextureAssets ?
-				m_runtimeMaterialLogicalToPhysical[( size_t ) ( logical )] : -1;
+			const int logical = ( int )( required_ids[index] );
+			const int physical = logical >= 0 && logical < s_nMaxTextureAssets
+					? m_runtimeMaterialLogicalToPhysical[( size_t )( logical )]
+					: -1;
 			if ( logical == 0 || physical >= 0 ) {
 				++required_resident;
 			} else {
@@ -785,8 +809,8 @@ Dictionary T3DAssets::cookRuntimeMaterialCache( void ) {
 	Dictionary result;
 	result["complete"] = false;
 	result["materials"] = m_textureList.size();
-	const bool restore_runtime_cache = m_pTerrain && m_pTerrain->isRuntimeMaterialStreamingEnabled() &&
-		!m_pTerrain->isEditorAuthoringMode();
+	const bool restore_runtime_cache =
+			m_pTerrain && m_pTerrain->isRuntimeMaterialStreamingEnabled() && !m_pTerrain->isEditorAuthoringMode();
 	const String path = getRuntimeMaterialCachePath();
 	if ( path.is_empty() || m_textureList.is_empty() ) {
 		result["error"] = "No terrain material set or data directory.";
@@ -812,8 +836,8 @@ Dictionary T3DAssets::cookRuntimeMaterialCache( void ) {
 	const uint64_t signature = computeRuntimeMaterialSourceSignature();
 	pFile->store_64( s_nRuntimeMaterialMagic );
 	pFile->store_32( s_nRuntimeMaterialVersion );
-	pFile->store_32( ( uint32_t ) ( m_textureList.size() ) );
-	pFile->store_32( ( uint32_t ) ( m_texturePackingMode ) );
+	pFile->store_32( ( uint32_t )( m_textureList.size() ) );
+	pFile->store_32( ( uint32_t )( m_texturePackingMode ) );
 	pFile->store_32( m_generatedDisplacementTextures.getRid().is_valid() ? 1u : 0u );
 	pFile->store_64( signature );
 	const uint64_t descriptor_offset = pFile->get_position();
@@ -824,34 +848,47 @@ Dictionary T3DAssets::cookRuntimeMaterialCache( void ) {
 				pFile->store_32( 0u );
 			}
 		}
-		for ( int component = 0; component < 4; ++component ) pFile->store_float( 1.0f );
-		for ( int component = 0; component < 4; ++component ) pFile->store_float( 1.0f );
-		for ( int setting = 0; setting < 10; ++setting ) pFile->store_float( 0.0f );
-		pFile->store_32( ( uint32_t ) logical );
+		for ( int component = 0; component < 4; ++component ) {
+			pFile->store_float( 1.0f );
+		}
+		for ( int component = 0; component < 4; ++component ) {
+			pFile->store_float( 1.0f );
+		}
+		for ( int setting = 0; setting < 10; ++setting ) {
+			pFile->store_float( 0.0f );
+		}
+		pFile->store_32( ( uint32_t )logical );
 	}
 	eastl::array<t3dRuntimeMaterialLayerInfo_t, s_nMaxTextureAssets> descriptors{};
-	const RID channel_rids[RUNTIME_MATERIAL_CHANNEL_COUNT] = {
-		m_generatedAlbedoTextures.getRid(), m_generatedNormalTextures.getRid(),
-		m_generatedSurfaceTextures.getRid(), m_generatedDisplacementTextures.getRid(), RID()
-	};
+	const RID channel_rids[RUNTIME_MATERIAL_CHANNEL_COUNT] = { m_generatedAlbedoTextures.getRid(),
+		m_generatedNormalTextures.getRid(),
+		m_generatedSurfaceTextures.getRid(),
+		m_generatedDisplacementTextures.getRid(),
+		RID() };
 	bool ok = true;
 	for ( int logical = 0; logical < m_textureList.size() && ok; ++logical ) {
-		t3dRuntimeMaterialLayerInfo_t &layer = descriptors[( size_t ) logical];
+		t3dRuntimeMaterialLayerInfo_t &layer = descriptors[( size_t )logical];
 		const Ref<T3DTextureAsset> pAsset = m_textureList[logical];
 		if ( pAsset.is_valid() ) {
-			layer.m_albedoColor = pAsset->getAlbedoColor(); layer.m_fNormalDepth = pAsset->getNormalDepth();
-			layer.m_fAoStrength = pAsset->getAoStrength(); layer.m_fAoLightAffect = pAsset->getAoLightAffect();
-			layer.m_fRoughness = pAsset->getRoughness(); layer.m_fMetallic = pAsset->getMetallic(); layer.m_fUvScale = pAsset->getUvScale();
+			layer.m_albedoColor = pAsset->getAlbedoColor();
+			layer.m_fNormalDepth = pAsset->getNormalDepth();
+			layer.m_fAoStrength = pAsset->getAoStrength();
+			layer.m_fAoLightAffect = pAsset->getAoLightAffect();
+			layer.m_fRoughness = pAsset->getRoughness();
+			layer.m_fMetallic = pAsset->getMetallic();
+			layer.m_fUvScale = pAsset->getUvScale();
 			layer.m_detile = Vector2( pAsset->getDetilingRotation(), pAsset->getDetilingShift() );
 			layer.m_displacement = Vector2( pAsset->getDisplacementOffset(), pAsset->getDisplacementScale() );
 		}
-		layer.m_iBundleIndex = ( uint32_t ) logical;
+		layer.m_iBundleIndex = ( uint32_t )logical;
 		for ( int channel = 0; channel < RUNTIME_MATERIAL_CHANNEL_COUNT; ++channel ) {
 			if ( channel != RUNTIME_MATERIAL_CHANNEL_FAR_ALBEDO && !channel_rids[channel].is_valid() ) {
 				continue;
 			}
-			Ref<Image> pImage = RS->texture_2d_layer_get(
-				channel == RUNTIME_MATERIAL_CHANNEL_FAR_ALBEDO ? channel_rids[RUNTIME_MATERIAL_CHANNEL_ALBEDO] : channel_rids[channel], logical );
+			Ref<Image> pImage = RS->texture_2d_layer_get( channel == RUNTIME_MATERIAL_CHANNEL_FAR_ALBEDO
+							? channel_rids[RUNTIME_MATERIAL_CHANNEL_ALBEDO]
+							: channel_rids[channel],
+					logical );
 			if ( channel == RUNTIME_MATERIAL_CHANNEL_FAR_ALBEDO && pImage.is_valid() ) {
 				pImage = pImage->duplicate();
 				if ( pImage->is_compressed() && pImage->decompress() != OK ) {
@@ -873,16 +910,17 @@ Dictionary T3DAssets::cookRuntimeMaterialCache( void ) {
 				break;
 			}
 			if ( channel == RUNTIME_MATERIAL_CHANNEL_ALBEDO ) {
-				descriptors[( size_t ) ( logical )].m_averageAlbedo = t3dAssetsMaterialAverageAlbedo( pImage );
+				descriptors[( size_t )( logical )].m_averageAlbedo = t3dAssetsMaterialAverageAlbedo( pImage );
 			}
 			const PackedByteArray bytes = pImage->get_data();
-			t3dRuntimeMaterialImageInfo_t &info = descriptors[( size_t ) ( logical )].m_szChannels[( size_t ) ( channel )];
+			t3dRuntimeMaterialImageInfo_t &info =
+					descriptors[( size_t )( logical )].m_szChannels[( size_t )( channel )];
 			info.m_iOffset = pFile->get_position();
-			info.m_nSize = ( uint32_t ) ( bytes.size() );
-			info.m_nChecksum = t3dAssetsMaterialChecksum( bytes.ptr(), ( size_t ) ( bytes.size() ) );
+			info.m_nSize = ( uint32_t )( bytes.size() );
+			info.m_nChecksum = t3dAssetsMaterialChecksum( bytes.ptr(), ( size_t )( bytes.size() ) );
 			info.m_nWidth = pImage->get_width();
 			info.m_nHeight = pImage->get_height();
-			info.m_nFormat = ( int32_t ) ( pImage->get_format() );
+			info.m_nFormat = ( int32_t )( pImage->get_format() );
 			info.m_nMipmaps = pImage->has_mipmaps() ? 1u : 0u;
 			pFile->store_buffer( bytes );
 		}
@@ -891,24 +929,36 @@ Dictionary T3DAssets::cookRuntimeMaterialCache( void ) {
 		pFile->seek( descriptor_offset );
 		for ( int logical = 0; logical < s_nMaxTextureAssets; ++logical ) {
 			for ( int channel = 0; channel < RUNTIME_MATERIAL_CHANNEL_COUNT; ++channel ) {
-				const t3dRuntimeMaterialImageInfo_t &info = descriptors[( size_t ) ( logical )].m_szChannels[( size_t ) ( channel )];
+				const t3dRuntimeMaterialImageInfo_t &info =
+						descriptors[( size_t )( logical )].m_szChannels[( size_t )( channel )];
 				pFile->store_64( info.m_iOffset );
 				pFile->store_32( info.m_nSize );
 				pFile->store_32( info.m_nChecksum );
-				pFile->store_32( ( uint32_t ) ( info.m_nWidth ) );
-				pFile->store_32( ( uint32_t ) ( info.m_nHeight ) );
-				pFile->store_32( ( uint32_t ) ( info.m_nFormat ) );
+				pFile->store_32( ( uint32_t )( info.m_nWidth ) );
+				pFile->store_32( ( uint32_t )( info.m_nHeight ) );
+				pFile->store_32( ( uint32_t )( info.m_nFormat ) );
 				pFile->store_32( info.m_nMipmaps );
 			}
-			const t3dRuntimeMaterialLayerInfo_t &layer = descriptors[( size_t ) logical];
+			const t3dRuntimeMaterialLayerInfo_t &layer = descriptors[( size_t )logical];
 			const Color average = layer.m_averageAlbedo;
-			pFile->store_float( average.r ); pFile->store_float( average.g ); pFile->store_float( average.b ); pFile->store_float( average.a );
-			pFile->store_float( layer.m_albedoColor.r ); pFile->store_float( layer.m_albedoColor.g );
-			pFile->store_float( layer.m_albedoColor.b ); pFile->store_float( layer.m_albedoColor.a );
-			pFile->store_float( layer.m_fNormalDepth ); pFile->store_float( layer.m_fAoStrength ); pFile->store_float( layer.m_fAoLightAffect );
-			pFile->store_float( layer.m_fRoughness ); pFile->store_float( layer.m_fMetallic ); pFile->store_float( layer.m_fUvScale );
-			pFile->store_float( layer.m_detile.x ); pFile->store_float( layer.m_detile.y );
-			pFile->store_float( layer.m_displacement.x ); pFile->store_float( layer.m_displacement.y );
+			pFile->store_float( average.r );
+			pFile->store_float( average.g );
+			pFile->store_float( average.b );
+			pFile->store_float( average.a );
+			pFile->store_float( layer.m_albedoColor.r );
+			pFile->store_float( layer.m_albedoColor.g );
+			pFile->store_float( layer.m_albedoColor.b );
+			pFile->store_float( layer.m_albedoColor.a );
+			pFile->store_float( layer.m_fNormalDepth );
+			pFile->store_float( layer.m_fAoStrength );
+			pFile->store_float( layer.m_fAoLightAffect );
+			pFile->store_float( layer.m_fRoughness );
+			pFile->store_float( layer.m_fMetallic );
+			pFile->store_float( layer.m_fUvScale );
+			pFile->store_float( layer.m_detile.x );
+			pFile->store_float( layer.m_detile.y );
+			pFile->store_float( layer.m_displacement.x );
+			pFile->store_float( layer.m_displacement.y );
 			pFile->store_32( layer.m_iBundleIndex );
 		}
 	}
@@ -945,7 +995,7 @@ Dictionary T3DAssets::cookRuntimeMaterialCache( void ) {
 		for ( int logical = 0; logical < m_textureList.size() && published_valid; ++logical ) {
 			for ( int channel = 0; channel < RUNTIME_MATERIAL_CHANNEL_COUNT; ++channel ) {
 				const t3dRuntimeMaterialImageInfo_t &info =
-					m_runtimeMaterialCookedLayers[( size_t ) ( logical )].m_szChannels[( size_t ) ( channel )];
+						m_runtimeMaterialCookedLayers[( size_t )( logical )].m_szChannels[( size_t )( channel )];
 				if ( info.m_nSize > 0u && loadRuntimeMaterialCookedImage( logical, channel ).is_null() ) {
 					published_valid = false;
 					break;
@@ -991,7 +1041,7 @@ Dictionary T3DAssets::cookRuntimeMaterialCache( void ) {
 		}
 	}
 	result["path"] = path;
-	result["signature"] = ( int64_t ) ( signature );
+	result["signature"] = ( int64_t )( signature );
 	result["complete"] = true;
 	return result;
 }
@@ -1162,7 +1212,7 @@ void T3DAssets::setAssetList( const t3dAssetType_t type, const TypedArray<T3DAss
 		return;
 	}
 
-	// Build a fresh s_nFixed-slot registry. Reusing the old Array makes replacement
+	// Build a fresh fixed-slot registry. Reusing the old Array makes replacement
 	// depend on its previous occupants and can silently mix old and new assets.
 	const int array_size = CLAMP( rList.size(), 0, max_size );
 	Array replacement;
@@ -1175,27 +1225,32 @@ void T3DAssets::setAssetList( const t3dAssetType_t type, const TypedArray<T3DAss
 			continue;
 		}
 		int target_id = pAsset->getId();
-		if ( target_id < 0 || target_id >= array_size || occupied.test( ( size_t ) ( target_id ) ) ) {
-			while ( next_free < array_size && occupied.test( ( size_t ) ( next_free ) ) ) {
+		if ( target_id < 0 || target_id >= array_size || occupied.test( ( size_t )( target_id ) ) ) {
+			while ( next_free < array_size && occupied.test( ( size_t )( next_free ) ) ) {
 				++next_free;
 			}
 			if ( next_free >= array_size ) {
 				LOG( ERROR, "No free slot for asset: ", pAsset->get_name() );
 				continue;
 			}
-			LOG( WARN, pAsset->get_class(), " ID ", target_id, " is invalid or duplicated. Assigning slot ", next_free );
+			LOG( WARN,
+					pAsset->get_class(),
+					" ID ",
+					target_id,
+					" is invalid or duplicated. Assigning slot ",
+					next_free );
 			target_id = next_free;
 		}
 		pAsset->m_nId = target_id;
 		pAsset->m_bPlaceholder = false;
 		replacement[target_id] = pAsset;
-		occupied.set( ( size_t ) ( target_id ) );
+		occupied.set( ( size_t )( target_id ) );
 	}
 
 	// Holes are explicit placeholder resources. Texture/control IDs and mesh IDs
 	// are stable slot identifiers and therefore cannot be compacted.
 	for ( int slot = 0; slot < array_size; ++slot ) {
-		if ( !occupied.test( ( size_t ) ( slot ) ) ) {
+		if ( !occupied.test( ( size_t )( slot ) ) ) {
 			replacement[slot] = makePlaceholderAsset( type, slot );
 		}
 	}
@@ -1210,7 +1265,7 @@ void T3DAssets::setAssetList( const t3dAssetType_t type, const TypedArray<T3DAss
 			Ref<T3DTextureAsset> pAsset = replacement[i];
 			m_textureList[i] = pAsset;
 			connectAssetSignals( TYPE_TEXTURE, pAsset );
-			if ( occupied.test( ( size_t ) ( i ) ) ) {
+			if ( occupied.test( ( size_t )( i ) ) ) {
 				pAsset->initialize();
 			}
 		}
@@ -1224,7 +1279,7 @@ void T3DAssets::setAssetList( const t3dAssetType_t type, const TypedArray<T3DAss
 			Ref<T3DMeshAsset> pAsset = replacement[i];
 			m_meshList[i] = pAsset;
 			connectAssetSignals( TYPE_MESH, pAsset );
-			if ( occupied.test( ( size_t ) ( i ) ) ) {
+			if ( occupied.test( ( size_t )( i ) ) ) {
 				pAsset->initialize();
 			}
 		}
@@ -1233,7 +1288,7 @@ void T3DAssets::setAssetList( const t3dAssetType_t type, const TypedArray<T3DAss
 
 void T3DAssets::setAsset( const t3dAssetType_t type, const int nId, const Ref<T3DAssetResource> &rAsset ) {
 	m_bPersistenceDirty = true;
-	LOG( INFO, "t3dSetting_t asset type: ", type, ", ID: ", nId, ", asset: ", rAsset );
+	LOG( INFO, "Setting asset type: ", type, ", ID: ", nId, ", asset: ", rAsset );
 	const int max_size = type == TYPE_TEXTURE ? s_nMaxTextureAssets : type == TYPE_MESH ? s_nMaxMeshAssets : 0;
 	if ( max_size == 0 || nId < 0 || nId >= max_size ) {
 		LOG( ERROR, "Invalid asset id: ", nId, " range is 0-", max_size - 1 );
@@ -1286,12 +1341,12 @@ void T3DAssets::setAsset( const t3dAssetType_t type, const int nId, const Ref<T3
 	}
 }
 
-void T3DAssets::validateArrayMember(
-	const Ref<Texture2D> &rTexture,
-	const Ref<T3DTextureAsset> &rAsset, const String &rLabel, t3dTextureArrayLayout_t &rLayout,
-	const Image::Format eRequiredFormat,
-	const bool bAllowCompressedSurface
-) {
+void T3DAssets::validateArrayMember( const Ref<Texture2D> &rTexture,
+		const Ref<T3DTextureAsset> &rAsset,
+		const String &rLabel,
+		t3dTextureArrayLayout_t &rLayout,
+		const Image::Format eRequiredFormat,
+		const bool bAllowCompressedSurface ) {
 	if ( rTexture.is_null() ) {
 		return;
 	}
@@ -1304,12 +1359,20 @@ void T3DAssets::validateArrayMember(
 	const Vector2i vTextureSize = pImage->get_size();
 	const Image::Format eFormat = pImage->get_format();
 	const bool bMipmaps = pImage->has_mipmaps();
-	const bool bAcceptedSurfaceCompression = bAllowCompressedSurface &&
-		eRequiredFormat == Image::FORMAT_RGBA8 && t3dAssetsIsNativePackedSurfaceFormat( eFormat );
+	const bool bAcceptedSurfaceCompression = bAllowCompressedSurface && eRequiredFormat == Image::FORMAT_RGBA8 &&
+			t3dAssetsIsNativePackedSurfaceFormat( eFormat );
 	if ( eRequiredFormat != Image::FORMAT_MAX && eFormat != eRequiredFormat && !bAcceptedSurfaceCompression ) {
 		m_pTerrain->setWarning( WARN_MISMATCHED_FORMAT, true );
-		LOG( ERROR, "Texture ID ", rAsset->getId(), " ", rLabel, " must use format ", ( int ) ( eRequiredFormat ),
-			" or a supported native compressed equivalent, received ", ( int ) ( eFormat ), "." );
+		LOG( ERROR,
+				"Texture ID ",
+				rAsset->getId(),
+				" ",
+				rLabel,
+				" must use format ",
+				( int )( eRequiredFormat ),
+				" or a supported native compressed equivalent, received ",
+				( int )( eFormat ),
+				"." );
 		return;
 	}
 	if ( rLayout.m_eFormat == Image::FORMAT_MAX ) {
@@ -1322,19 +1385,37 @@ void T3DAssets::validateArrayMember(
 		rLayout.m_bNeedsNormalization = true;
 		rLayout.m_vSize.x = MAX( rLayout.m_vSize.x, vTextureSize.x );
 		rLayout.m_vSize.y = MAX( rLayout.m_vSize.y, vTextureSize.y );
-		LOG( WARN, "Texture ID ", rAsset->getId(), " ", rLabel, " size ", vTextureSize,
-			" differs from another layer in the same array and will be normalized to ", rLayout.m_vSize, "." );
+		LOG( WARN,
+				"Texture ID ",
+				rAsset->getId(),
+				" ",
+				rLabel,
+				" size ",
+				vTextureSize,
+				" differs from another layer in the same array and will be normalized to ",
+				rLayout.m_vSize,
+				"." );
 	}
 	if ( eFormat != rLayout.m_eFormat ) {
 		rLayout.m_bNeedsNormalization = true;
-		LOG( WARN, "Texture ID ", rAsset->getId(), " ", rLabel, " format ", ( int ) ( eFormat ),
-			" differs from another layer in the same array; the array will be normalized instead of rejected." );
+		LOG( WARN,
+				"Texture ID ",
+				rAsset->getId(),
+				" ",
+				rLabel,
+				" format ",
+				( int )( eFormat ),
+				" differs from another layer in the same array; the array will be normalized instead of rejected." );
 	}
 	if ( bMipmaps != rLayout.m_bMipmaps ) {
 		rLayout.m_bNeedsNormalization = true;
 		rLayout.m_bMipmaps = rLayout.m_bMipmaps || bMipmaps;
-		LOG( WARN, "Texture ID ", rAsset->getId(), " ", rLabel,
-			" mipmap layout differs from another layer in the same array and will be normalized." );
+		LOG( WARN,
+				"Texture ID ",
+				rAsset->getId(),
+				" ",
+				rLabel,
+				" mipmap layout differs from another layer in the same array and will be normalized." );
 	}
 }
 
@@ -1370,8 +1451,11 @@ void T3DAssets::updateTextureFiles( void ) {
 			const Ref<Texture2D> pSurface = pAsset->getEffectiveSurfaceTexture();
 			if ( pAsset->m_packedPbrResource.is_valid() && pSurface.is_null() ) {
 				m_pTerrain->setWarning( WARN_MISMATCHED_FORMAT, true );
-				LOG( ERROR, "Texture ID ", pAsset->getId(),
-					" packed-PBR/displacement compatibility resource failed to build: ", pAsset->m_packedPbrResource->getLastError() );
+				LOG( ERROR,
+						"Texture ID ",
+						pAsset->getId(),
+						" packed-PBR/displacement compatibility resource failed to build: ",
+						pAsset->m_packedPbrResource->getLastError() );
 			}
 			validateArrayMember( pSurface, pAsset, "surface", secondaryLayout, Image::FORMAT_RGBA8, true );
 			if ( bUseDisplacement ) {
@@ -1387,13 +1471,14 @@ void T3DAssets::updateTextureFiles( void ) {
 	}
 
 	if ( bPackedPbr ) {
-		if ( albedoLayout.m_vSize == V2I_ZERO && secondaryLayout.m_vSize == V2I_ZERO ) {
+		if ( albedoLayout.m_vSize == s_v2iZero && secondaryLayout.m_vSize == s_v2iZero ) {
 			albedoLayout.m_vSize = V2I( 1024 );
 			secondaryLayout.m_vSize = V2I( 512 );
-		} else if ( albedoLayout.m_vSize == V2I_ZERO ) {
+		} else if ( albedoLayout.m_vSize == s_v2iZero ) {
 			albedoLayout.m_vSize = secondaryLayout.m_vSize * 2;
-		} else if ( secondaryLayout.m_vSize == V2I_ZERO ) {
-			secondaryLayout.m_vSize = Vector2i( MAX( albedoLayout.m_vSize.x / 2, 1 ), MAX( albedoLayout.m_vSize.y / 2, 1 ) );
+		} else if ( secondaryLayout.m_vSize == s_v2iZero ) {
+			secondaryLayout.m_vSize =
+					Vector2i( MAX( albedoLayout.m_vSize.x / 2, 1 ), MAX( albedoLayout.m_vSize.y / 2, 1 ) );
 		}
 		if ( albedoLayout.m_eFormat == Image::FORMAT_MAX ) {
 			albedoLayout.m_eFormat = Image::FORMAT_RGB8;
@@ -1401,17 +1486,17 @@ void T3DAssets::updateTextureFiles( void ) {
 		if ( secondaryLayout.m_eFormat == Image::FORMAT_MAX ) {
 			secondaryLayout.m_eFormat = Image::FORMAT_RGBA8;
 		}
-		if ( displacementLayout.m_vSize == V2I_ZERO ) {
+		if ( displacementLayout.m_vSize == s_v2iZero ) {
 			displacementLayout.m_vSize = secondaryLayout.m_vSize;
 		}
 		displacementLayout.m_eFormat = Image::FORMAT_R8;
 	} else {
-		if ( secondaryLayout.m_vSize == V2I_ZERO ) {
+		if ( secondaryLayout.m_vSize == s_v2iZero ) {
 			secondaryLayout.m_vSize = albedoLayout.m_vSize;
-		} else if ( albedoLayout.m_vSize == V2I_ZERO ) {
+		} else if ( albedoLayout.m_vSize == s_v2iZero ) {
 			albedoLayout.m_vSize = secondaryLayout.m_vSize;
 		}
-		if ( albedoLayout.m_vSize == V2I_ZERO ) {
+		if ( albedoLayout.m_vSize == s_v2iZero ) {
 			albedoLayout.m_vSize = V2I( 1024 );
 			secondaryLayout.m_vSize = albedoLayout.m_vSize;
 		}
@@ -1438,12 +1523,12 @@ void T3DAssets::updateTextureFiles( void ) {
 	T3DGeneratedTexture replacement_displacement;
 	bool bReplacementOk = true;
 
-	if ( albedoLayout.m_vSize != V2I_ZERO ) {
+	if ( albedoLayout.m_vSize != s_v2iZero ) {
 		TypedArray<Image> layers;
 		for ( const Ref<T3DTextureAsset> pAsset : m_textureList ) {
 			const Ref<Texture2D> pTexture = pAsset.is_valid() ? pAsset->m_albedoTexture : Ref<Texture2D>();
-			const Ref<Image> pImage = t3dAssetsPrepareArrayImage( pTexture, albedoLayout.m_vSize, albedoLayout.m_eFormat,
-				albedoLayout.m_bMipmaps, COLOR_CHECKED );
+			const Ref<Image> pImage = t3dAssetsPrepareArrayImage(
+					pTexture, albedoLayout.m_vSize, albedoLayout.m_eFormat, albedoLayout.m_bMipmaps, COLOR_CHECKED );
 			if ( pImage.is_null() ) {
 				bReplacementOk = false;
 				LOG( ERROR, "Failed to normalize albedo texture layer ", layers.size(), "." );
@@ -1456,12 +1541,15 @@ void T3DAssets::updateTextureFiles( void ) {
 		}
 	}
 
-	if ( bReplacementOk && bPackedPbr && secondaryLayout.m_vSize != V2I_ZERO ) {
+	if ( bReplacementOk && bPackedPbr && secondaryLayout.m_vSize != s_v2iZero ) {
 		TypedArray<Image> surface_layers;
 		for ( const Ref<T3DTextureAsset> pAsset : m_textureList ) {
 			const Ref<Texture2D> pTexture = pAsset.is_valid() ? pAsset->getEffectiveSurfaceTexture() : Ref<Texture2D>();
-			const Ref<Image> pImage = t3dAssetsPrepareArrayImage( pTexture, secondaryLayout.m_vSize, secondaryLayout.m_eFormat,
-				secondaryLayout.m_bMipmaps, Color( 0.5f, 0.5f, 1.0f, 1.0f ) );
+			const Ref<Image> pImage = t3dAssetsPrepareArrayImage( pTexture,
+					secondaryLayout.m_vSize,
+					secondaryLayout.m_eFormat,
+					secondaryLayout.m_bMipmaps,
+					Color( 0.5f, 0.5f, 1.0f, 1.0f ) );
 			if ( pImage.is_null() ) {
 				bReplacementOk = false;
 				LOG( ERROR, "Failed to normalize packed surface texture layer ", surface_layers.size(), "." );
@@ -1476,9 +1564,13 @@ void T3DAssets::updateTextureFiles( void ) {
 		if ( bReplacementOk && bUseDisplacement ) {
 			TypedArray<Image> displacement_layers;
 			for ( const Ref<T3DTextureAsset> pAsset : m_textureList ) {
-				const Ref<Texture2D> pTexture = pAsset.is_valid() ? pAsset->getEffectiveDisplacementTexture() : Ref<Texture2D>();
-				const Ref<Image> pImage = t3dAssetsPrepareArrayImage( pTexture, displacementLayout.m_vSize,
-					displacementLayout.m_eFormat, displacementLayout.m_bMipmaps, Color( 0.5f, 0.0f, 0.0f, 1.0f ) );
+				const Ref<Texture2D> pTexture =
+						pAsset.is_valid() ? pAsset->getEffectiveDisplacementTexture() : Ref<Texture2D>();
+				const Ref<Image> pImage = t3dAssetsPrepareArrayImage( pTexture,
+						displacementLayout.m_vSize,
+						displacementLayout.m_eFormat,
+						displacementLayout.m_bMipmaps,
+						Color( 0.5f, 0.0f, 0.0f, 1.0f ) );
 				if ( pImage.is_null() ) {
 					bReplacementOk = false;
 					LOG( ERROR, "Failed to normalize displacement texture layer ", displacement_layers.size(), "." );
@@ -1490,12 +1582,15 @@ void T3DAssets::updateTextureFiles( void ) {
 				bReplacementOk = replacement_displacement.create( displacement_layers ).is_valid();
 			}
 		}
-	} else if ( bReplacementOk && !bPackedPbr && secondaryLayout.m_vSize != V2I_ZERO ) {
+	} else if ( bReplacementOk && !bPackedPbr && secondaryLayout.m_vSize != s_v2iZero ) {
 		TypedArray<Image> layers;
 		for ( const Ref<T3DTextureAsset> pAsset : m_textureList ) {
 			const Ref<Texture2D> pTexture = pAsset.is_valid() ? pAsset->m_normalTexture : Ref<Texture2D>();
-			const Ref<Image> pImage = t3dAssetsPrepareArrayImage( pTexture, secondaryLayout.m_vSize, secondaryLayout.m_eFormat,
-				secondaryLayout.m_bMipmaps, COLOR_NORMAL );
+			const Ref<Image> pImage = t3dAssetsPrepareArrayImage( pTexture,
+					secondaryLayout.m_vSize,
+					secondaryLayout.m_eFormat,
+					secondaryLayout.m_bMipmaps,
+					COLOR_NORMAL );
 			if ( pImage.is_null() ) {
 				bReplacementOk = false;
 				LOG( ERROR, "Failed to normalize normal texture layer ", layers.size(), "." );
@@ -1509,8 +1604,8 @@ void T3DAssets::updateTextureFiles( void ) {
 	}
 
 	if ( !bReplacementOk ) {
-		t3dAssetsReleaseGeneratedReplacements( replacement_albedo, replacement_normal,
-			replacement_surface, replacement_displacement );
+		t3dAssetsReleaseGeneratedReplacements(
+				replacement_albedo, replacement_normal, replacement_surface, replacement_displacement );
 		LOG( ERROR, "Terrain texture-array rebuild failed. Keeping the last complete generated texture set." );
 		return;
 	}
@@ -1538,38 +1633,43 @@ void T3DAssets::updateTextureFiles( void ) {
 			continue;
 		}
 		if ( pAsset->m_albedoTexture.is_null() ) {
-			const Ref<Image> pImage = t3dAssetsMakeArrayDefault( albedoLayout.m_vSize, albedoLayout.m_eFormat,
-				albedoLayout.m_bMipmaps, COLOR_CHECKED );
+			const Ref<Image> pImage = t3dAssetsMakeArrayDefault(
+					albedoLayout.m_vSize, albedoLayout.m_eFormat, albedoLayout.m_bMipmaps, COLOR_CHECKED );
 			if ( pImage.is_valid() ) {
 				pAsset->m_albedoTexture = ImageTexture::create_from_image( pImage );
 			}
 		}
 		if ( bPackedPbr ) {
 			if ( pAsset->m_packedPbrResource.is_null() && pAsset->m_surfaceTexture.is_null() ) {
-				const Ref<Image> pImage = t3dAssetsMakeArrayDefault( secondaryLayout.m_vSize, secondaryLayout.m_eFormat,
-					secondaryLayout.m_bMipmaps, Color( 0.5f, 0.5f, 1.0f, 1.0f ) );
+				const Ref<Image> pImage = t3dAssetsMakeArrayDefault( secondaryLayout.m_vSize,
+						secondaryLayout.m_eFormat,
+						secondaryLayout.m_bMipmaps,
+						Color( 0.5f, 0.5f, 1.0f, 1.0f ) );
 				if ( pImage.is_valid() ) {
 					pAsset->m_surfaceTexture = ImageTexture::create_from_image( pImage );
 				}
 			}
-			if ( bUseDisplacement && pAsset->m_packedPbrResource.is_null() && pAsset->m_displacementTexture.is_null() ) {
-				const Ref<Image> pImage = t3dAssetsMakeArrayDefault( displacementLayout.m_vSize, displacementLayout.m_eFormat,
-					displacementLayout.m_bMipmaps, Color( 0.5f, 0.0f, 0.0f, 1.0f ) );
+			if ( bUseDisplacement && pAsset->m_packedPbrResource.is_null() &&
+					pAsset->m_displacementTexture.is_null() ) {
+				const Ref<Image> pImage = t3dAssetsMakeArrayDefault( displacementLayout.m_vSize,
+						displacementLayout.m_eFormat,
+						displacementLayout.m_bMipmaps,
+						Color( 0.5f, 0.0f, 0.0f, 1.0f ) );
 				if ( pImage.is_valid() ) {
 					pAsset->m_displacementTexture = ImageTexture::create_from_image( pImage );
 				}
 			}
 		} else if ( pAsset->m_normalTexture.is_null() ) {
-			const Ref<Image> pImage = t3dAssetsMakeArrayDefault( secondaryLayout.m_vSize, secondaryLayout.m_eFormat,
-				secondaryLayout.m_bMipmaps, COLOR_NORMAL );
+			const Ref<Image> pImage = t3dAssetsMakeArrayDefault(
+					secondaryLayout.m_vSize, secondaryLayout.m_eFormat, secondaryLayout.m_bMipmaps, COLOR_NORMAL );
 			if ( pImage.is_valid() ) {
 				pAsset->m_normalTexture = ImageTexture::create_from_image( pImage );
 			}
 		}
 	}
 
-	t3dAssetsReleaseGeneratedReplacements( replacement_albedo, replacement_normal,
-		replacement_surface, replacement_displacement );
+	t3dAssetsReleaseGeneratedReplacements(
+			replacement_albedo, replacement_normal, replacement_surface, replacement_displacement );
 	resetRuntimeMaterialCacheState( false );
 
 	if ( !m_bSuppressTextureChanged ) {
@@ -1593,30 +1693,30 @@ void T3DAssets::updateTextureSettingsInternal( const bool bPersistentChange ) {
 	for ( int index = 0; index < m_textureSettings.m_nCount; ++index ) {
 		const Ref<T3DTextureAsset> pTa = m_textureList[index];
 		if ( pTa.is_null() ) {
-			m_textureSettings.m_szColors[( size_t ) ( index )] = COLOR_WHITE;
-			m_textureSettings.m_szNormalDepths[( size_t ) ( index )] = 1.0f;
-			m_textureSettings.m_szAoStrengths[( size_t ) ( index )] = 0.5f;
-			m_textureSettings.m_szAoLightAffects[( size_t ) ( index )] = 0.0f;
-			m_textureSettings.m_szRoughnessMods[( size_t ) ( index )] = 0.0f;
-			m_textureSettings.m_szMetallics[( size_t ) ( index )] = 0.0f;
-			m_textureSettings.m_szUvScales[( size_t ) ( index )] = 0.1f;
-			m_textureSettings.m_szDetiles[( size_t ) ( index )] = Vector2();
-			m_textureSettings.m_szDisplacements[( size_t ) ( index )] = Vector2();
+			m_textureSettings.m_szColors[( size_t )( index )] = s_colorWhite;
+			m_textureSettings.m_szNormalDepths[( size_t )( index )] = 1.0f;
+			m_textureSettings.m_szAoStrengths[( size_t )( index )] = 0.5f;
+			m_textureSettings.m_szAoLightAffects[( size_t )( index )] = 0.0f;
+			m_textureSettings.m_szRoughnessMods[( size_t )( index )] = 0.0f;
+			m_textureSettings.m_szMetallics[( size_t )( index )] = 0.0f;
+			m_textureSettings.m_szUvScales[( size_t )( index )] = 0.1f;
+			m_textureSettings.m_szDetiles[( size_t )( index )] = Vector2();
+			m_textureSettings.m_szDisplacements[( size_t )( index )] = Vector2();
 			continue;
 		}
 
-		m_textureSettings.m_szColors[( size_t ) ( index )] =
-			pTa->isHighlighted() ? pTa->getHighlightColor() : pTa->getAlbedoColor();
-		m_textureSettings.m_szNormalDepths[( size_t ) ( index )] = pTa->getNormalDepth();
-		m_textureSettings.m_szAoStrengths[( size_t ) ( index )] = pTa->getAoStrength();
-		m_textureSettings.m_szAoLightAffects[( size_t ) ( index )] = pTa->getAoLightAffect();
-		m_textureSettings.m_szRoughnessMods[( size_t ) ( index )] = pTa->getRoughness();
-		m_textureSettings.m_szMetallics[( size_t ) ( index )] = pTa->getMetallic();
-		m_textureSettings.m_szUvScales[( size_t ) ( index )] = pTa->getUvScale();
-		m_textureSettings.m_szDetiles[( size_t ) ( index )] =
-			Vector2( pTa->getDetilingRotation(), pTa->getDetilingShift() );
-		m_textureSettings.m_szDisplacements[( size_t ) ( index )] =
-			Vector2( pTa->getDisplacementOffset(), pTa->getDisplacementScale() );
+		m_textureSettings.m_szColors[( size_t )( index )] =
+				pTa->isHighlighted() ? pTa->getHighlightColor() : pTa->getAlbedoColor();
+		m_textureSettings.m_szNormalDepths[( size_t )( index )] = pTa->getNormalDepth();
+		m_textureSettings.m_szAoStrengths[( size_t )( index )] = pTa->getAoStrength();
+		m_textureSettings.m_szAoLightAffects[( size_t )( index )] = pTa->getAoLightAffect();
+		m_textureSettings.m_szRoughnessMods[( size_t )( index )] = pTa->getRoughness();
+		m_textureSettings.m_szMetallics[( size_t )( index )] = pTa->getMetallic();
+		m_textureSettings.m_szUvScales[( size_t )( index )] = pTa->getUvScale();
+		m_textureSettings.m_szDetiles[( size_t )( index )] =
+				Vector2( pTa->getDetilingRotation(), pTa->getDetilingShift() );
+		m_textureSettings.m_szDisplacements[( size_t )( index )] =
+				Vector2( pTa->getDisplacementOffset(), pTa->getDisplacementScale() );
 	}
 
 	const int count = m_textureSettings.m_nCount;
@@ -1665,7 +1765,7 @@ void T3DAssets::updateMeshInternal( const int nId, const bool bPersistentChange 
 	}
 	IS_INSTANCER_INIT( VOID );
 	T3DInstancer *const pInstancer = m_pTerrain->getInstancer();
-	pInstancer->updateMmis( nId, V2I_MAX, false );
+	pInstancer->updateMmis( nId, s_v2iMax, false );
 }
 
 void T3DAssets::updateMesh( const int nId ) {
@@ -1681,7 +1781,7 @@ void T3DAssets::setupThumbnailCreation( void ) {
 	if ( m_hScenario.is_valid() ) {
 		return;
 	}
-	LOG( INFO, "t3dSetting_t up mesh thumbnail creation viewports" );
+	LOG( INFO, "Setting up mesh thumbnail creation viewports" );
 	// Setup Mesh preview environment
 	m_hScenario = RS->scenario_create();
 
@@ -1700,20 +1800,19 @@ void T3DAssets::setupThumbnailCreation( void ) {
 
 	m_hKeyLight = RS->directional_light_create();
 	m_hKeyLightInstance = RS->instance_create2( m_hKeyLight, m_hScenario );
-	RS->instance_set_transform( m_hKeyLightInstance, Transform3D().looking_at( V3( -1 ), V3_UP ) );
+	RS->instance_set_transform( m_hKeyLightInstance, Transform3D().looking_at( V3( -1 ), s_v3Up ) );
 
 	m_hFillLight = RS->directional_light_create();
 	RS->light_set_color( m_hFillLight, Color( 0.3, 0.3, 0.3 ) );
 	m_hFillLightInstance = RS->instance_create2( m_hFillLight, m_hScenario );
-	RS->instance_set_transform( m_hFillLightInstance, Transform3D().looking_at( V3_UP, Vector3( 0, 0, 1 ) ) );
+	RS->instance_set_transform( m_hFillLightInstance, Transform3D().looking_at( s_v3Up, Vector3( 0, 0, 1 ) ) );
 
 	m_hMeshInstance = RS->instance_create();
 	RS->instance_set_scenario( m_hMeshInstance, m_hScenario );
 }
 
-///////////////////////////
-// Public Functions
-///////////////////////////
+// -----------------------------------------------------------------------------
+// Public functions
 
 void T3DAssets::destroyThumbnailCreation( void ) {
 	if ( !m_hScenario.is_valid() ) {
@@ -1739,8 +1838,8 @@ void T3DAssets::destroyThumbnailCreation( void ) {
 }
 
 void T3DAssets::setTexturePackingMode( const t3dTexturePackingMode_t eMode ) {
-	const t3dTexturePackingMode_t mode =
-		( t3dTexturePackingMode_t ) ( CLAMP( ( int ) ( eMode ), ( int ) ( TEXTURE_PACKING_LEGACY ), ( int ) ( TEXTURE_PACKING_PACKED_PBR_R8 ) ) );
+	const t3dTexturePackingMode_t mode = ( t3dTexturePackingMode_t )( CLAMP(
+			( int )( eMode ), ( int )( TEXTURE_PACKING_LEGACY ), ( int )( TEXTURE_PACKING_PACKED_PBR_R8 ) ) );
 	if ( m_texturePackingMode == mode ) {
 		return;
 	}
@@ -1755,7 +1854,7 @@ void T3DAssets::setTexturePackingMode( const t3dTexturePackingMode_t eMode ) {
 	m_generatedNormalTextures.clear();
 	m_generatedSurfaceTextures.clear();
 	m_generatedDisplacementTextures.clear();
-	LOG( INFO, "t3dSetting_t texture packing mode: ", ( int ) ( m_texturePackingMode ) );
+	LOG( INFO, "Setting texture packing mode: ", ( int )( m_texturePackingMode ) );
 	if ( m_pTerrain ) {
 		updateTextureList();
 		Ref<T3DMaterial> pMaterial = m_pTerrain->getMaterial();
@@ -1782,8 +1881,8 @@ void T3DAssets::initialize( T3DTerrain *pTerrain ) {
 	// directly. Building the full logical arrays first would create a large
 	// transient duplicate and defeat the purpose of runtime material streaming.
 	bool runtime_materials_ready = false;
-	const bool strict_baked_runtime = m_pTerrain->isGpuRegionCookedPagesEnabled() &&
-		!m_pTerrain->isEditorAuthoringMode();
+	const bool strict_baked_runtime =
+			m_pTerrain->isGpuRegionCookedPagesEnabled() && !m_pTerrain->isEditorAuthoringMode();
 	if ( m_pTerrain->isRuntimeMaterialStreamingEnabled() && !m_pTerrain->isEditorAuthoringMode() ) {
 		for ( const Ref<T3DTextureAsset> pAsset : m_textureList ) {
 			if ( pAsset.is_valid() ) {
@@ -1853,7 +1952,7 @@ void T3DAssets::setTextureAsset( const int nId, const Ref<T3DTextureAsset> &rTex
 	if ( nId < m_textureList.size() && m_textureList[nId] == rTexture ) {
 		return;
 	}
-	LOG( INFO, "t3dSetting_t texture id: ", nId );
+	LOG( INFO, "Setting texture id: ", nId );
 	setAsset( TYPE_TEXTURE, nId, rTexture );
 	updateTextureList();
 }
@@ -1872,8 +1971,8 @@ TypedArray<T3DTextureAsset> T3DAssets::getTextureList( void ) const {
 }
 
 void T3DAssets::setTextureList( const TypedArray<T3DTextureAsset> &rTextureList ) {
-	LOG( INFO, "t3dSetting_t texture list with ", rTextureList.size(), " entries" );
-	if ( !differs( getTextureList(), rTextureList ) ) {
+	LOG( INFO, "Setting texture list with ", rTextureList.size(), " entries" );
+	if ( !t3dDiffers( getTextureList(), rTextureList ) ) {
 		return;
 	}
 	setAssetList( TYPE_TEXTURE, rTextureList );
@@ -1916,7 +2015,7 @@ void T3DAssets::setMeshAsset( const int nId, const Ref<T3DMeshAsset> &rMeshAsset
 	if ( nId < m_meshList.size() && m_meshList[nId] == rMeshAsset ) {
 		return;
 	}
-	LOG( INFO, "t3dSetting_t mesh id: ", nId, ", ", rMeshAsset );
+	LOG( INFO, "Setting mesh id: ", nId, ", ", rMeshAsset );
 	if ( rMeshAsset.is_null() ) {
 		IS_INSTANCER_INIT( VOID );
 		m_pTerrain->getInstancer()->clearByMesh( nId );
@@ -1924,7 +2023,7 @@ void T3DAssets::setMeshAsset( const int nId, const Ref<T3DMeshAsset> &rMeshAsset
 	setAsset( TYPE_MESH, nId, rMeshAsset );
 	updateMeshList();
 	if ( m_pTerrain && m_pTerrain->getInstancer() ) {
-		m_pTerrain->getInstancer()->updateMmis( nId, V2I_MAX, false );
+		m_pTerrain->getInstancer()->updateMmis( nId, s_v2iMax, false );
 	}
 }
 
@@ -1942,14 +2041,14 @@ TypedArray<T3DMeshAsset> T3DAssets::getMeshList( void ) const {
 }
 
 void T3DAssets::setMeshList( const TypedArray<T3DMeshAsset> &rMeshList ) {
-	LOG( INFO, "t3dSetting_t mesh list with ", rMeshList.size(), " entries" );
-	if ( !differs( getMeshList(), rMeshList ) ) {
+	LOG( INFO, "Setting mesh list with ", rMeshList.size(), " entries" );
+	if ( !t3dDiffers( getMeshList(), rMeshList ) ) {
 		return;
 	}
 	setAssetList( TYPE_MESH, rMeshList );
 	updateMeshList();
 	if ( m_pTerrain && m_pTerrain->getInstancer() ) {
-		m_pTerrain->getInstancer()->updateMmis( -1, V2I_MAX, true );
+		m_pTerrain->getInstancer()->updateMmis( -1, s_v2iMax, true );
 	}
 }
 
@@ -1981,7 +2080,7 @@ void T3DAssets::createMeshThumbnails( const int nId, const Vector2i &rSize, cons
 	LOG( DEBUG, "Creating thumbnails for ids: ", start, " through ", end - 1 );
 	for ( int i = start; i < end; i++ ) {
 		Ref<T3DMeshAsset> pMa = getMeshAsset( i );
-		LOG( EXTREME, i, ": Getting T3DMeshAsset: ", ptrToStr( *pMa ) );
+		LOG( EXTREME, i, ": Getting T3DMeshAsset: ", t3dPtrToStr( *pMa ) );
 		if ( pMa.is_null() ) {
 			LOG( ERROR, i, ": T3DMeshAsset is null, skipping" );
 			continue;
@@ -2019,7 +2118,7 @@ void T3DAssets::createMeshThumbnails( const int nId, const Vector2i &rSize, cons
 		const Vector3 ofs = aabb.get_center();
 		aabb.position -= ofs;
 		Transform3D xform;
-		xform.basis = Basis().rotated( V3_UP, -Math_PI * 0.125f );
+		xform.basis = Basis().rotated( s_v3Up, -Math_PI * 0.125f );
 		xform.basis = Basis().rotated( Vector3( 1.f, 0.f, 0.f ), Math_PI * 0.125f ) * xform.basis;
 		const AABB rot_aabb = xform.xform( aabb );
 		real_t fM = MAX( rot_aabb.size.x, rot_aabb.size.y ) * 0.5f;
@@ -2040,7 +2139,14 @@ void T3DAssets::createMeshThumbnails( const int nId, const Vector2i &rSize, cons
 		const Ref<Image> pImg = RS->texture_2d_get( m_hViewportTexture );
 		RS->instance_set_base( m_hMeshInstance, RID() ); // Clear mesh
 		if ( pImg.is_valid() ) {
-			LOG( EXTREME, i, ": Retrieving image: ", pImg, " size: ", pImg->get_size(), " format: ", pImg->get_format() );
+			LOG( EXTREME,
+					i,
+					": Retrieving image: ",
+					pImg,
+					" size: ",
+					pImg->get_size(),
+					" format: ",
+					pImg->get_format() );
 			pMa->setThumbnail( ImageTexture::create_from_image( pImg ) );
 		} else {
 			LOG( ERROR, "_viewport_texture is null. Couldn't create thumbnail picture" );
@@ -2081,7 +2187,7 @@ Error T3DAssets::save( const String &rPath ) {
 		return ERR_FILE_NOT_FOUND;
 	}
 	if ( !rPath.is_empty() ) {
-		LOG( DEBUG, "t3dSetting_t file path to ", rPath );
+		LOG( DEBUG, "Setting file path to ", rPath );
 		take_over_path( rPath );
 	}
 	// Avoid rewriting clean asset resources during scene pre-save. The nested
@@ -2106,16 +2212,19 @@ Error T3DAssets::save( const String &rPath ) {
 				}
 			}
 		} else {
-			LOG( ERROR, "Cannot save file: ", path, ". Error code: ", ERROR,
-				". Look up @GlobalScope Error enum in the Godot docs" );
+			LOG( ERROR,
+					"Cannot save file: ",
+					path,
+					". Error code: ",
+					ERROR,
+					". Look up @GlobalScope Error enum in the Godot docs" );
 		}
 	}
 	return err;
 }
 
-///////////////////////////
-// Protected Functions
-///////////////////////////
+// -----------------------------------------------------------------------------
+// Protected functions
 
 void T3DAssets::_bind_methods( void ) {
 	BIND_ENUM_CONSTANT( TYPE_TEXTURE );
@@ -2158,25 +2267,32 @@ void T3DAssets::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_mesh_list" ), &T3DAssets::getMeshList );
 	ClassDB::bind_method( D_METHOD( "get_mesh_count" ), &T3DAssets::getMeshCount );
 	ClassDB::bind_method( D_METHOD( "create_mesh_thumbnails", "id", "size", "force" ),
-						 &T3DAssets::createMeshThumbnails, DEFVAL( -1 ), DEFVAL( V2I( 256 ) ), DEFVAL( false ) );
+			&T3DAssets::createMeshThumbnails,
+			DEFVAL( -1 ),
+			DEFVAL( V2I( 256 ) ),
+			DEFVAL( false ) );
 	ClassDB::bind_method( D_METHOD( "update_mesh_list" ), &T3DAssets::updateMeshList );
 
 	ClassDB::bind_method( D_METHOD( "save", "path" ), &T3DAssets::save, DEFVAL( "" ) );
 
 	const int ro_flags = PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY;
 	ADD_GROUP( "Packing / Runtime Format", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "texture_packing_mode", PROPERTY_HINT_ENUM,
-							  "Legacy AlbedoHeight + NormalRoughness,Packed PBR RGBA8 + Displacement R8" ),
-				 "set_texture_packing_mode", "get_texture_packing_mode" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT,
+						  "texture_packing_mode",
+						  PROPERTY_HINT_ENUM,
+						  "Legacy AlbedoHeight + NormalRoughness,Packed PBR RGBA8 + Displacement R8" ),
+			"set_texture_packing_mode",
+			"get_texture_packing_mode" );
 
 	ADD_GROUP( "Texture Asset Registry", "" );
-	ADD_PROPERTY(
-		PropertyInfo( Variant::ARRAY, "texture_list", PROPERTY_HINT_ARRAY_TYPE, "T3DTextureAsset", ro_flags ),
-		"set_texture_list", "get_texture_list" );
+	ADD_PROPERTY( PropertyInfo( Variant::ARRAY, "texture_list", PROPERTY_HINT_ARRAY_TYPE, "T3DTextureAsset", ro_flags ),
+			"set_texture_list",
+			"get_texture_list" );
 
 	ADD_GROUP( "Mesh Asset Registry", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::ARRAY, "mesh_list", PROPERTY_HINT_ARRAY_TYPE, "T3DMeshAsset", ro_flags ),
-				 "set_mesh_list", "get_mesh_list" );
+			"set_mesh_list",
+			"get_mesh_list" );
 
 	ADD_SIGNAL( MethodInfo( "meshes_changed" ) );
 	ADD_SIGNAL( MethodInfo( "textures_changed" ) );

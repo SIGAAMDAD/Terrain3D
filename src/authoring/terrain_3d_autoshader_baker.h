@@ -5,12 +5,12 @@
 #ifndef TERRAIN3D_AUTOSHADER_BAKER_H
 #define TERRAIN3D_AUTOSHADER_BAKER_H
 
+#include "Terrain3DConstants.h"
+
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
-
-#include "Terrain3DConstants.h"
 
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
 using namespace godot;
@@ -26,17 +26,13 @@ protected:
 	static void _bind_methods( void );
 
 public:
-	Dictionary bakeRegions(
-		T3DTerrain *pTerrain, const Dictionary &rProfile,
-		const TypedArray<Vector2i> &rRegionLocations
-	);
-	Dictionary computeRegionSignatures(
-		T3DTerrain *pTerrain, const Dictionary &rProfile,
-		const TypedArray<Vector2i> &rRegionLocations
-	);
-	Dictionary clearBakedRegions(
-		T3DTerrain *pTerrain, const TypedArray<Vector2i> &rRegionLocations,
-		bool bPreserveAutoMask = true
-	);
+	Dictionary
+	bakeRegions( T3DTerrain *pTerrain, const Dictionary &rProfile, const TypedArray<Vector2i> &rRegionLocations );
+	Dictionary computeRegionSignatures( T3DTerrain *pTerrain,
+			const Dictionary &rProfile,
+			const TypedArray<Vector2i> &rRegionLocations );
+	Dictionary clearBakedRegions( T3DTerrain *pTerrain,
+			const TypedArray<Vector2i> &rRegionLocations,
+			bool bPreserveAutoMask = true );
 };
 #endif // TERRAIN3D_AUTOSHADER_BAKER_H

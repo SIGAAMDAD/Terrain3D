@@ -31,27 +31,20 @@ typedef struct t3dShaderStaticState_s {
 // Reads a root Terrain3D shader template and recursively expands every shader
 // include into one deterministic source unit. Repeated include occurrences are
 // preserved because a few modules are intentionally used as inline snippets.
-bool t3dExpandShaderIncludes(
-	const godot::String &rRootPath,
-	godot::String &rOutputSource,
-	godot::String &rFailureSummary
-);
+bool t3dExpandShaderIncludes( const godot::String &rRootPath,
+		godot::String &rOutputSource,
+		godot::String &rFailureSummary );
 
 // Resolves every Terrain3D-owned compile-time branch in an already-expanded
 // source unit. Renderer/platform directives and locally-derived shader macros
 // remain for Godot, but no T3D_* preprocessing state may survive this pass.
-bool t3dAssembleShaderSource(
-	const godot::String &rExpandedSource,
-	const t3dShaderStaticState_t &rState,
-	const godot::PackedStringArray &rEnabledFeatures,
-	godot::String &rOutputSource,
-	godot::String &rFailureSummary
-);
+bool t3dAssembleShaderSource( const godot::String &rExpandedSource,
+		const t3dShaderStaticState_t &rState,
+		const godot::PackedStringArray &rEnabledFeatures,
+		godot::String &rOutputSource,
+		godot::String &rFailureSummary );
 
 // Enforces the final built-in shader contract before Shader::set_code().
-bool t3dValidateAssembledShaderSource(
-	const godot::String &rSource,
-	godot::String &rFailureSummary
-);
+bool t3dValidateAssembledShaderSource( const godot::String &rSource, godot::String &rFailureSummary );
 
 #endif // TERRAIN3D_SHADER_SPECIALIZER_H

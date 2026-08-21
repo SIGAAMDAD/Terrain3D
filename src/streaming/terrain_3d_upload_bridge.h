@@ -6,7 +6,6 @@
 #define TERRAIN3D_UPLOAD_BRIDGE_H
 
 #include <cstdint>
-
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/rid.hpp>

@@ -6,7 +6,9 @@
 #include "core/terrain_3d_util.h"
 #include "data/terrain_3d_region_codec.h"
 #include "data/terrain_3d_region_repository.h"
+#include "eastl_config.h"
 
+#include <EASTL/bitset.h>
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/editor_file_system.hpp>
 #include <godot_cpp/classes/editor_interface.hpp>
@@ -15,22 +17,17 @@
 #include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
-#include "eastl_config.h"
-#include <EASTL/bitset.h>
-
 void t3dStagedRepository_t::reset( void ) {
 	regions.clear();
 	resources.clear();
 	regionPtrs.fill( nullptr );
-	regionLocations.fill( V2I_MAX );
+	regionLocations.fill( s_v2iMax );
 	logicalRegionMap.fill( 0u );
 	nTargetRegionSize = 0;
 	bBoundedCpuLoad = false;
 }
 
-T3DRegionPersistence::T3DRegionPersistence( T3DRegionRepository *const pRepository ) :
-		m_pRepository( pRepository ) {
-}
+T3DRegionPersistence::T3DRegionPersistence( T3DRegionRepository *const pRepository ) : m_pRepository( pRepository ) {}
 
 void T3DRegionPersistence::resetLoadStats( void ) {
 	m_startupLoadStats = t3dStartupLoadStats_t{};
@@ -54,19 +51,24 @@ bool T3DRegionPersistence::validateHeightPayload( const Ref<T3DRegion> &rRegion,
 	if ( t3dRegionCodecHasValidHeightPayload( pHeight, rRegion->getRegionSize() ) ) {
 		return true;
 	}
-	LOG( ERROR, "Malformed height payload in file: ", rPath, ". Format: ", format,
-		", bytes: ", pHeight->get_data().size() );
+	LOG( ERROR,
+			"Malformed height payload in file: ",
+			rPath,
+			". Format: ",
+			format,
+			", bytes: ",
+			pHeight->get_data().size() );
 	return false;
 }
 
-void T3DRegionPersistence::normalizeLoadedRegion(
-	const Vector2i &rLocation, const Ref<T3DRegion> &rRegion,
-	const bool bApplyRepositorySpacing, bool &rStorageUpgrade
-) const {
+void T3DRegionPersistence::normalizeLoadedRegion( const Vector2i &rLocation,
+		const Ref<T3DRegion> &rRegion,
+		const bool bApplyRepositorySpacing,
+		bool &rStorageUpgrade ) const {
 	const Ref<Image> pLoadedHeight = rRegion->getHeightMap();
 	rStorageUpgrade = rRegion->getVersion() < s_fDataCurrentVersion || pLoadedHeight.is_null() ||
-		pLoadedHeight->get_format() != Image::FORMAT_R16 ||
-		( rRegion->getColorMap().is_valid() && rRegion->getColorMap()->has_mipmaps() );
+			pLoadedHeight->get_format() != Image::FORMAT_R16 ||
+			( rRegion->getColorMap().is_valid() && rRegion->getColorMap()->has_mipmaps() );
 
 	// Resource property setters are mutation-oriented and may dirty freshly
 	// deserialized resources. Establish the serialized state as the clean baseline
@@ -84,10 +86,9 @@ void T3DRegionPersistence::normalizeLoadedRegion(
 	rRegion->setModified( rStorageUpgrade || rRegion->isModified() );
 }
 
-Error T3DRegionPersistence::stageDirectory(
-	const String &rDirectory, const bool bBoundedCpuLoad,
-	t3dStagedRepository_t &rStaged
-) {
+Error T3DRegionPersistence::stageDirectory( const String &rDirectory,
+		const bool bBoundedCpuLoad,
+		t3dStagedRepository_t &rStaged ) {
 	rStaged.reset();
 	resetLoadStats();
 	if ( rDirectory.is_empty() ) {
@@ -109,10 +110,13 @@ Error T3DRegionPersistence::stageDirectory(
 	}
 
 	rStaged.m_bBoundedCpuLoad = bBoundedCpuLoad;
-	rStaged.m_regions.reserve( ( size_t ) ( files.size() ) );
+	rStaged.m_regions.reserve( ( size_t )( files.size() ) );
 	if ( files.size() > s_nMaxRegionSlots ) {
-		LOG( ERROR, "Directory contains ", files.size(),
-			" regions, exceeding the s_nFixed region-slot capacity of ", s_nMaxRegionSlots );
+		LOG( ERROR,
+				"Directory contains ",
+				files.size(),
+				" regions, exceeding the fixed region-slot capacity of ",
+				s_nMaxRegionSlots );
 		return ERR_OUT_OF_MEMORY;
 	}
 
@@ -134,26 +138,25 @@ Error T3DRegionPersistence::stageDirectory(
 
 	for ( int fileIndex = 0; fileIndex < files.size(); ++fileIndex ) {
 		const String &fname = files[fileIndex];
-		t3dStagedRegion_t &entry = rStaged.m_regions[( size_t ) ( fileIndex )];
+		t3dStagedRegion_t &entry = rStaged.m_regions[( size_t )( fileIndex )];
 		const int mapIndex = T3DRegionRepository::getRegionMapIndex( entry.m_location );
 		if ( mapIndex < 0 ) {
 			LOG( ERROR, "Invalid or out-of-bounds region file name: ", fname );
 			return ERR_FILE_CORRUPT;
 		}
-		if ( occupied.test( ( size_t ) ( mapIndex ) ) ) {
+		if ( occupied.test( ( size_t )( mapIndex ) ) ) {
 			LOG( ERROR, "Duplicate region location in directory: ", entry.m_location );
 			return ERR_ALREADY_EXISTS;
 		}
-		occupied.set( ( size_t ) ( mapIndex ) );
+		occupied.set( ( size_t )( mapIndex ) );
 
-		Ref<T3DRegion> region = pLoader->load(
-			entry.m_path, "T3DRegion", ResourceLoader::CACHE_MODE_IGNORE );
+		Ref<T3DRegion> region = pLoader->load( entry.m_path, "T3DRegion", ResourceLoader::CACHE_MODE_IGNORE );
 		if ( region.is_null() ) {
 			LOG( ERROR, "Cannot load region at ", entry.m_path );
 			return ERR_FILE_CORRUPT;
 		}
 		const int regionSize = region->getRegionSize();
-		if ( !isValidRegionSize( regionSize ) ) {
+		if ( !t3dIsValidRegionSize( regionSize ) ) {
 			LOG( ERROR, "Invalid region size ", regionSize, " in file: ", entry.m_path );
 			return ERR_FILE_CORRUPT;
 		}
@@ -163,15 +166,25 @@ Error T3DRegionPersistence::stageDirectory(
 		if ( rStaged.m_nTargetRegionSize == 0 ) {
 			rStaged.m_nTargetRegionSize = regionSize;
 		} else if ( rStaged.m_nTargetRegionSize != regionSize ) {
-			LOG( ERROR, "Region size mismatch. First loaded: ", rStaged.m_nTargetRegionSize,
-				" next: ", regionSize, " in file: ", entry.m_path );
+			LOG( ERROR,
+					"Region size mismatch. First loaded: ",
+					rStaged.m_nTargetRegionSize,
+					" next: ",
+					regionSize,
+					" in file: ",
+					entry.m_path );
 			return ERR_FILE_CORRUPT;
 		}
 
 		const int targetMapSize = s_nActiveWorldTexels / rStaged.m_nTargetRegionSize;
 		if ( !t3dRegionLocationValid( entry.m_location, targetMapSize ) ) {
-			LOG( ERROR, "Region ", entry.m_location, " is outside the s_nFixed ",
-				s_nActiveWorldTexels, "-texel world for region size ", rStaged.m_nTargetRegionSize );
+			LOG( ERROR,
+					"Region ",
+					entry.m_location,
+					" is outside the fixed ",
+					s_nActiveWorldTexels,
+					"-texel world for region size ",
+					rStaged.m_nTargetRegionSize );
 			return ERR_FILE_CORRUPT;
 		}
 
@@ -184,10 +197,10 @@ Error T3DRegionPersistence::stageDirectory(
 				return ERR_FILE_CORRUPT;
 			}
 			entry.m_stagedHeight = pStagedHeight->get_data();
-			const size_t regionTexelCount = ( size_t ) ( rStaged.m_nTargetRegionSize ) *
-				( size_t ) ( rStaged.m_nTargetRegionSize );
+			const size_t regionTexelCount =
+					( size_t )( rStaged.m_nTargetRegionSize ) * ( size_t )( rStaged.m_nTargetRegionSize );
 			const size_t expectedHeightBytes = regionTexelCount * sizeof( uint16_t );
-			if ( ( size_t ) ( entry.m_stagedHeight.size() ) < expectedHeightBytes ) {
+			if ( ( size_t )( entry.m_stagedHeight.size() ) < expectedHeightBytes ) {
 				LOG( ERROR, "Truncated staged height payload in: ", entry.m_path );
 				return ERR_FILE_CORRUPT;
 			}
@@ -203,21 +216,24 @@ Error T3DRegionPersistence::stageDirectory(
 	}
 
 	m_startupLoadStats.m_nDeserializeUsecLast = Time::get_singleton()->get_ticks_usec() - deserializeStartedUsec;
-	LOG( DEBUG, "[terrain-data] Phase 1/4 complete: validated ", rStaged.m_regions.size(),
-		" regions at size ", rStaged.m_nTargetRegionSize );
+	LOG( DEBUG,
+			"[terrain-data] Phase 1/4 complete: validated ",
+			rStaged.m_regions.size(),
+			" regions at size ",
+			rStaged.m_nTargetRegionSize );
 	LOG( DEBUG, "[terrain-data] Phase 2/4: staging replacement repository tables" );
 	const uint64_t stagingStartedUsec = Time::get_singleton()->get_ticks_usec();
 
-	for ( int slot = 0; slot < ( int ) ( rStaged.m_regions.size() ); ++slot ) {
-		t3dStagedRegion_t &entry = rStaged.m_regions[( size_t ) ( slot )];
+	for ( int slot = 0; slot < ( int )( rStaged.m_regions.size() ); ++slot ) {
+		t3dStagedRegion_t &entry = rStaged.m_regions[( size_t )( slot )];
 		const int mapIndex = T3DRegionRepository::getRegionMapIndex( entry.m_location );
 		if ( mapIndex < 0 ) {
 			return ERR_FILE_CORRUPT;
 		}
 		rStaged.m_resources[entry.m_location] = entry.m_region;
-		rStaged.m_pRegionPtrs[( size_t ) ( mapIndex )] = entry.m_region.ptr();
-		rStaged.m_regionLocations[( size_t ) ( slot )] = entry.m_location;
-		rStaged.m_logicalRegionMap[( size_t ) ( mapIndex )] = ( uint16_t ) ( slot + 1 );
+		rStaged.m_pRegionPtrs[( size_t )( mapIndex )] = entry.m_region.ptr();
+		rStaged.m_regionLocations[( size_t )( slot )] = entry.m_location;
+		rStaged.m_logicalRegionMap[( size_t )( mapIndex )] = ( uint16_t )( slot + 1 );
 	}
 
 	m_startupLoadStats.m_nStagingUsecLast = Time::get_singleton()->get_ticks_usec() - stagingStartedUsec;
@@ -258,9 +274,7 @@ void T3DRegionPersistence::publishStagedPaths( t3dStagedRepository_t &rStaged ) 
 	}
 }
 
-t3dRegionLoadResult_t T3DRegionPersistence::loadRegion(
-	const Vector2i &rLocation, const String &rDirectory
-) const {
+t3dRegionLoadResult_t T3DRegionPersistence::loadRegion( const Vector2i &rLocation, const String &rDirectory ) const {
 	t3dRegionLoadResult_t result;
 	result.m_location = rLocation;
 	if ( !m_pRepository || rDirectory.is_empty() ) {
@@ -294,15 +308,20 @@ t3dRegionLoadResult_t T3DRegionPersistence::loadRegion(
 	}
 
 	const int regionSize = result.m_region->getRegionSize();
-	if ( !isValidRegionSize( regionSize ) ) {
+	if ( !t3dIsValidRegionSize( regionSize ) ) {
 		LOG( ERROR, "Invalid region size ", regionSize, " in file: ", result.m_path );
 		result.m_region.unref();
 		result.m_error = ERR_FILE_CORRUPT;
 		return result;
 	}
 	if ( !m_pRepository->isEmpty() && m_pRepository->getRegionSize() != regionSize ) {
-		LOG( ERROR, "Region size mismatch. First loaded: ", m_pRepository->getRegionSize(),
-			" next: ", regionSize, " in file: ", result.m_path );
+		LOG( ERROR,
+				"Region size mismatch. First loaded: ",
+				m_pRepository->getRegionSize(),
+				" next: ",
+				regionSize,
+				" in file: ",
+				result.m_path );
 		result.m_region.unref();
 		result.m_error = ERR_INVALID_DATA;
 		return result;
@@ -313,17 +332,16 @@ t3dRegionLoadResult_t T3DRegionPersistence::loadRegion(
 	return result;
 }
 
-bool T3DRegionPersistence::prepareRuntimeRegionSource(
-	const Ref<T3DRegion> &rCandidate, const int nExpectedRegionSize,
-	Ref<T3DRegion> &rSource
-) const {
+bool T3DRegionPersistence::prepareRuntimeRegionSource( const Ref<T3DRegion> &rCandidate,
+		const int nExpectedRegionSize,
+		Ref<T3DRegion> &rSource ) const {
 	rSource.unref();
 	if ( rCandidate.is_null() || rCandidate->getRegionSize() != nExpectedRegionSize ) {
 		return false;
 	}
 	const Ref<Image> pHeight = rCandidate->getHeightMap();
 	if ( pHeight.is_null() || pHeight->get_format() != Image::FORMAT_R16 ||
-		!t3dRegionCodecHasValidHeightPayload( pHeight, nExpectedRegionSize ) ) {
+			!t3dRegionCodecHasValidHeightPayload( pHeight, nExpectedRegionSize ) ) {
 		return false;
 	}
 	rCandidate->setModified( false );
@@ -333,10 +351,9 @@ bool T3DRegionPersistence::prepareRuntimeRegionSource(
 	return true;
 }
 
-bool T3DRegionPersistence::loadRuntimeRegionSource(
-	const String &rPath, const int nExpectedRegionSize,
-	Ref<T3DRegion> &rSource
-) const {
+bool T3DRegionPersistence::loadRuntimeRegionSource( const String &rPath,
+		const int nExpectedRegionSize,
+		Ref<T3DRegion> &rSource ) const {
 	rSource.unref();
 	if ( rPath.is_empty() || !FileAccess::file_exists( rPath ) ) {
 		return false;
@@ -345,8 +362,7 @@ bool T3DRegionPersistence::loadRuntimeRegionSource(
 	if ( !pLoader ) {
 		return false;
 	}
-	const Ref<Resource> pResource = pLoader->load(
-		rPath, "T3DRegion", ResourceLoader::CACHE_MODE_IGNORE );
+	const Ref<Resource> pResource = pLoader->load( rPath, "T3DRegion", ResourceLoader::CACHE_MODE_IGNORE );
 	const Ref<T3DRegion> pLoaded = pResource;
 	return prepareRuntimeRegionSource( pLoaded, nExpectedRegionSize, rSource );
 }
@@ -371,10 +387,11 @@ void T3DRegionPersistence::updateEditorFile( const String &rPath ) {
 	}
 }
 
-t3dRegionSaveResult_t T3DRegionPersistence::saveRegion(
-	const Vector2i &rLocation, const String &rDirectory, const bool b16Bit,
-	EnsureRegionResidentFn pEnsureResident, void *pResidentContext
-) {
+t3dRegionSaveResult_t T3DRegionPersistence::saveRegion( const Vector2i &rLocation,
+		const String &rDirectory,
+		const bool b16Bit,
+		EnsureRegionResidentFn pEnsureResident,
+		void *pResidentContext ) {
 	t3dRegionSaveResult_t result;
 	result.m_location = rLocation;
 	if ( !m_pRepository ) {
@@ -399,8 +416,11 @@ t3dRegionSaveResult_t T3DRegionPersistence::saveRegion(
 		if ( FileAccess::file_exists( result.m_path ) ) {
 			Ref<DirAccess> pDirectory = DirAccess::open( rDirectory );
 			if ( pDirectory.is_null() ) {
-				LOG( ERROR, "Cannot open directory for writing: ", rDirectory,
-					" error: ", DirAccess::get_open_error() );
+				LOG( ERROR,
+						"Cannot open directory for writing: ",
+						rDirectory,
+						" error: ",
+						DirAccess::get_open_error() );
 				result.m_error = DirAccess::get_open_error();
 				return result;
 			}
@@ -412,8 +432,7 @@ t3dRegionSaveResult_t T3DRegionPersistence::saveRegion(
 			}
 			LOG( INFO, "File ", result.m_path, " deleted" );
 		} else {
-			LOG( INFO, "File to delete ", result.m_path,
-				" doesn't exist. (Maybe from add, undo, save)" );
+			LOG( INFO, "File to delete ", result.m_path, " doesn't exist. (Maybe from add, undo, save)" );
 		}
 
 		updateEditorFile( result.m_path );
@@ -435,8 +454,14 @@ t3dRegionSaveResult_t T3DRegionPersistence::saveRegion(
 
 	result.m_error = pRegion->save( result.m_path, b16Bit );
 	if ( !( result.m_error == OK || result.m_error == ERR_SKIP ) ) {
-		LOG( ERROR, "Could not save file: ", result.m_path, ", error: ",
-			UtilityFunctions::error_string( result.m_error ), " (", result.m_error, ")" );
+		LOG( ERROR,
+				"Could not save file: ",
+				result.m_path,
+				", error: ",
+				UtilityFunctions::error_string( result.m_error ),
+				" (",
+				result.m_error,
+				")" );
 		return result;
 	}
 	if ( result.m_error == ERR_SKIP ) {
@@ -450,19 +475,19 @@ t3dRegionSaveResult_t T3DRegionPersistence::saveRegion(
 	return result;
 }
 
-t3dDirectorySaveResult_t T3DRegionPersistence::saveDirectory(
-	const String &rDirectory, const bool b16Bit,
-	EnsureRegionResidentFn pEnsureResident, void *pResidentContext
-) {
+t3dDirectorySaveResult_t T3DRegionPersistence::saveDirectory( const String &rDirectory,
+		const bool b16Bit,
+		EnsureRegionResidentFn pEnsureResident,
+		void *pResidentContext ) {
 	t3dDirectorySaveResult_t result;
 	if ( !m_pRepository ) {
 		return result;
 	}
 	const Array locations = m_pRepository->getRegionKeys();
-	result.m_regions.reserve( ( size_t ) ( locations.size() ) );
+	result.m_regions.reserve( ( size_t )( locations.size() ) );
 	for ( const Vector2i location : locations ) {
-		t3dRegionSaveResult_t saveResult = saveRegion(
-			location, rDirectory, b16Bit, pEnsureResident, pResidentContext );
+		t3dRegionSaveResult_t saveResult =
+				saveRegion( location, rDirectory, b16Bit, pEnsureResident, pResidentContext );
 		if ( saveResult.m_bDeleted && saveResult.succeeded() ) {
 			++result.m_nDeleted;
 		} else if ( saveResult.m_bSaved ) {
@@ -479,12 +504,12 @@ t3dDirectorySaveResult_t T3DRegionPersistence::saveDirectory(
 
 Dictionary T3DRegionPersistence::getStartupLoadStatsDictionary( void ) const {
 	Dictionary stats;
-	stats["total_usec_last"] = ( int64_t ) ( m_startupLoadStats.m_nTotalUsecLast );
-	stats["enumeration_usec_last"] = ( int64_t ) ( m_startupLoadStats.m_nEnumerationUsecLast );
-	stats["deserialize_usec_last"] = ( int64_t ) ( m_startupLoadStats.m_nDeserializeUsecLast );
-	stats["staging_usec_last"] = ( int64_t ) ( m_startupLoadStats.m_nStagingUsecLast );
-	stats["publish_usec_last"] = ( int64_t ) ( m_startupLoadStats.m_nPublishUsecLast );
-	stats["finalize_usec_last"] = ( int64_t ) ( m_startupLoadStats.m_nFinalizeUsecLast );
+	stats["total_usec_last"] = ( int64_t )( m_startupLoadStats.m_nTotalUsecLast );
+	stats["enumeration_usec_last"] = ( int64_t )( m_startupLoadStats.m_nEnumerationUsecLast );
+	stats["deserialize_usec_last"] = ( int64_t )( m_startupLoadStats.m_nDeserializeUsecLast );
+	stats["staging_usec_last"] = ( int64_t )( m_startupLoadStats.m_nStagingUsecLast );
+	stats["publish_usec_last"] = ( int64_t )( m_startupLoadStats.m_nPublishUsecLast );
+	stats["finalize_usec_last"] = ( int64_t )( m_startupLoadStats.m_nFinalizeUsecLast );
 	stats["region_files_last"] = m_startupLoadStats.m_nRegionFilesLast;
 	stats["regions_published_last"] = m_startupLoadStats.m_nRegionsPublishedLast;
 	stats["succeeded_last"] = m_startupLoadStats.m_bSucceededLast;

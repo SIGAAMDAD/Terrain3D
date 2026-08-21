@@ -5,26 +5,24 @@
 #ifndef TERRAIN3D_EROSION_JOB_CLASS_H
 #define TERRAIN3D_EROSION_JOB_CLASS_H
 
-#include <godot_cpp/classes/image.hpp>
-#include <godot_cpp/classes/ref_counted.hpp>
-
-#include "eastl_config.h"
-#include <EASTL/array.h>
-#include <atomic>
-#include <cstddef>
-#include <cstdint>
-#include <condition_variable>
-#include <mutex>
-#include <EASTL/vector.h>
-
 #include "Terrain3DConstants.h"
 #include "authoring/terrain_3d_erosion_settings.h"
 #include "data/terrain_3d_half_buffer.h"
+#include "eastl_config.h"
 #include "memory/terrain_3d_linear_arena.h"
+
+#include <EASTL/array.h>
+#include <EASTL/vector.h>
+#include <atomic>
+#include <condition_variable>
+#include <cstddef>
+#include <cstdint>
+#include <godot_cpp/classes/image.hpp>
+#include <godot_cpp/classes/ref_counted.hpp>
+#include <mutex>
 
 class T3DData;
 typedef struct t3dErosionKernels_s t3dErosionKernels_t;
-
 
 typedef enum t3dJobState_e {
 	STATE_NEW,
@@ -103,8 +101,14 @@ typedef struct t3dImageSnapshot_s {
 	Vector2i m_size;
 	PackedByteArray m_rfData;
 
-	EA_FORCE_INLINE bool isValid( void ) const { return m_size.x > 0 && m_size.y > 0 && m_rfData.size() >= ( int64_t ) ( m_size.x ) * ( int64_t ) ( m_size.y ) * ( int64_t ) ( sizeof( float ) ); }
-	EA_FORCE_INLINE void clear( void ) { m_size = Vector2i(); m_rfData.clear(); }
+	EA_FORCE_INLINE bool isValid( void ) const {
+		return m_size.x > 0 && m_size.y > 0 &&
+				m_rfData.size() >= ( int64_t )( m_size.x ) * ( int64_t )( m_size.y ) * ( int64_t )( sizeof( float ) );
+	}
+	EA_FORCE_INLINE void clear( void ) {
+		m_size = Vector2i();
+		m_rfData.clear();
+	}
 } t3dImageSnapshot_t;
 
 typedef struct t3dTextureErosionProfile_s {
@@ -319,29 +323,11 @@ class T3DErosionJob : public RefCounted {
 	friend struct t3dErosionKernels_s;
 
 public:
-
-
-
-
 private:
-
-
-
-
-
-
-
-
 	using FloatBuffer = T3DArenaBuffer<float>;
 	using HalfBuffer = T3DHalfBuffer;
 	using ByteBuffer = T3DArenaBuffer<uint8_t>;
 	using IndexBuffer = T3DArenaBuffer<int64_t>;
-
-
-
-
-
-
 
 	t3dConfig_t m_config;
 	eastl::vector<t3dRegionSnapshot_t> m_regions;
@@ -447,18 +433,18 @@ private:
 
 	mutable std::mutex m_previewMutex;
 	std::condition_variable m_previewCondition;
-	std::atomic<int32_t> m_previewRevision{0};
-	std::atomic<int32_t> m_previewStep{0};
-	std::atomic<bool> m_bPreviewPaused{false};
-	std::atomic<bool> m_bPreviewWaiting{false};
-	std::atomic<int32_t> m_previewStepRequests{0};
+	std::atomic<int32_t> m_previewRevision{ 0 };
+	std::atomic<int32_t> m_previewStep{ 0 };
+	std::atomic<bool> m_bPreviewPaused{ false };
+	std::atomic<bool> m_bPreviewWaiting{ false };
+	std::atomic<int32_t> m_previewStepRequests{ 0 };
 
 	uint64_t m_nAssetProfileHash = 0;
 
-	std::atomic<int32_t> m_state{STATE_NEW};
-	std::atomic<int32_t> m_stage{STAGE_IDLE};
-	std::atomic<float> m_fProgress{0.0f};
-	std::atomic<bool> m_bCancelRequested{false};
+	std::atomic<int32_t> m_state{ STATE_NEW };
+	std::atomic<int32_t> m_stage{ STAGE_IDLE };
+	std::atomic<float> m_fProgress{ 0.0f };
+	std::atomic<bool> m_bCancelRequested{ false };
 	mutable std::mutex m_statusMutex;
 	std::mutex m_applyMutex;
 	String m_errorMessage;
@@ -466,7 +452,7 @@ private:
 	double m_fTotalDeposited = 0.0;
 	float m_fMaximumLowering = 0.0f;
 	float m_fMaximumRaising = 0.0f;
-	std::atomic<int32_t> m_nCompletedSteps{0};
+	std::atomic<int32_t> m_nCompletedSteps{ 0 };
 
 	Error setup( T3DData *pData, const Ref<T3DErosionSettings> &rSettings );
 	void copyConfig( const Ref<T3DErosionSettings> &rSettings );
@@ -478,10 +464,8 @@ private:
 	bool compactCompletedResults( void );
 	bool captureSourceRegions( T3DData *pData );
 	static bool regionSnapshotLess( const t3dRegionSnapshot_t &rA, const t3dRegionSnapshot_t &rB );
-	static float sampleImageSnapshot(
-		const t3dImageSnapshot_t &rImage, const Rect2 &rWorldRect,
-		const Vector2 &rWorldPosition
-	);
+	static float
+	sampleImageSnapshot( const t3dImageSnapshot_t &rImage, const Rect2 &rWorldRect, const Vector2 &rWorldPosition );
 	bool captureImageSnapshot( const Ref<Image> &rImage, t3dImageSnapshot_t &rSnapshot, const char *pszLabel );
 	bool buildSimulationSnapshot( void );
 	void releaseSourceSnapshots( void );
@@ -490,10 +474,12 @@ private:
 	int64_t neighborIndex( size_t iIndex, int32_t nDx, int32_t nDy ) const;
 	uint64_t stochasticIndex( size_t iIndex ) const;
 	float getSlope( size_t iIndex ) const;
-	float sampleOutputCell(
-		const FloatBuffer &rMap, int32_t nRegionId, int32_t iBaseX, int32_t iBaseY,
-		int32_t iX, int32_t iY
-	) const;
+	float sampleOutputCell( const FloatBuffer &rMap,
+			int32_t nRegionId,
+			int32_t iBaseX,
+			int32_t iBaseY,
+			int32_t iX,
+			int32_t iY ) const;
 	float sampleOutput( const FloatBuffer &rMap, int32_t nRegionId, float fSourceX, float fSourceY ) const;
 	bool snapshotTextureProfiles( T3DData *pData );
 	uint64_t hashTextureProfiles( T3DData *pData ) const;
@@ -521,31 +507,55 @@ public:
 	void setPreviewPaused( bool bPaused );
 	void requestPreviewStep( void );
 	Error apply( T3DData *pData, bool bForce = false );
-	EA_FORCE_INLINE t3dJobState_t getState( void ) const { return ( t3dJobState_t ) ( m_state.load() ); }
-	EA_FORCE_INLINE float getProgress( void ) const { return m_fProgress.load(); }
+	EA_FORCE_INLINE t3dJobState_t getState( void ) const {
+		return ( t3dJobState_t )( m_state.load() );
+	}
+	EA_FORCE_INLINE float getProgress( void ) const {
+		return m_fProgress.load();
+	}
 	String getStageName( void ) const;
 	String getErrorMessage( void ) const;
 	bool isComplete( void ) const;
 	bool isSourceUnchanged( T3DData *pData ) const;
-	EA_FORCE_INLINE bool wasCancelled( void ) const { return m_state.load() == STATE_CANCELLED; }
-	EA_FORCE_INLINE int32_t getEffectiveResolutionScale( void ) const { return m_nResolutionScale; }
-	EA_FORCE_INLINE int32_t getCompletedSteps( void ) const { return m_nCompletedSteps.load(); }
-	EA_FORCE_INLINE bool isLivePreviewEnabled( void ) const { return m_config.m_bLivePreviewEnabled; }
-	EA_FORCE_INLINE bool isPreviewPaused( void ) const { return m_bPreviewPaused.load(); }
-	EA_FORCE_INLINE bool isPreviewWaiting( void ) const { return m_bPreviewWaiting.load(); }
-	EA_FORCE_INLINE int32_t getPreviewRevision( void ) const { return m_previewRevision.load(); }
-	EA_FORCE_INLINE int32_t getPreviewStep( void ) const { return m_previewStep.load(); }
-	EA_FORCE_INLINE int32_t getSimulationSteps( void ) const { return m_config.m_nSimulationSteps; }
-	EA_FORCE_INLINE int32_t getSimulationRegionSize( void ) const { return m_nSimulationRegionSize; }
-	EA_FORCE_INLINE float getPreviewCellSize( void ) const { return m_fCellSize; }
+	EA_FORCE_INLINE bool wasCancelled( void ) const {
+		return m_state.load() == STATE_CANCELLED;
+	}
+	EA_FORCE_INLINE int32_t getEffectiveResolutionScale( void ) const {
+		return m_nResolutionScale;
+	}
+	EA_FORCE_INLINE int32_t getCompletedSteps( void ) const {
+		return m_nCompletedSteps.load();
+	}
+	EA_FORCE_INLINE bool isLivePreviewEnabled( void ) const {
+		return m_config.m_bLivePreviewEnabled;
+	}
+	EA_FORCE_INLINE bool isPreviewPaused( void ) const {
+		return m_bPreviewPaused.load();
+	}
+	EA_FORCE_INLINE bool isPreviewWaiting( void ) const {
+		return m_bPreviewWaiting.load();
+	}
+	EA_FORCE_INLINE int32_t getPreviewRevision( void ) const {
+		return m_previewRevision.load();
+	}
+	EA_FORCE_INLINE int32_t getPreviewStep( void ) const {
+		return m_previewStep.load();
+	}
+	EA_FORCE_INLINE int32_t getSimulationSteps( void ) const {
+		return m_config.m_nSimulationSteps;
+	}
+	EA_FORCE_INLINE int32_t getSimulationRegionSize( void ) const {
+		return m_nSimulationRegionSize;
+	}
+	EA_FORCE_INLINE float getPreviewCellSize( void ) const {
+		return m_fCellSize;
+	}
 	Dictionary getStatistics( void ) const;
 	TypedArray<Vector2i> getRegionLocations( void ) const;
 	Ref<Image> getInitialRegionHeightMap( const Vector2i &rRegionLocation, bool bFullResolution = false ) const;
 	Ref<Image> getPreviewRegionHeightMap( const Vector2i &rRegionLocation, bool bFullResolution = false ) const;
-	Ref<Image> getRegionOutputMap(
-		const Vector2i &rRegionLocation, t3dOutputMap_t output,
-		bool bFullResolution = false
-	) const;
+	Ref<Image>
+	getRegionOutputMap( const Vector2i &rRegionLocation, t3dOutputMap_t output, bool bFullResolution = false ) const;
 
 protected:
 	static void _bind_methods( void );

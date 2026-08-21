@@ -5,6 +5,8 @@
 #ifndef TERRAIN3D_LANDFORM_BAKER_H
 #define TERRAIN3D_LANDFORM_BAKER_H
 
+#include "Terrain3DConstants.h"
+
 #include <godot_cpp/classes/array_mesh.hpp>
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/variant/aabb.hpp>
@@ -12,8 +14,6 @@
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/packed_int32_array.hpp>
 #include <godot_cpp/variant/packed_vector3_array.hpp>
-
-#include "Terrain3DConstants.h"
 
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
 using namespace godot;
@@ -63,26 +63,14 @@ class T3DLandformBaker : public RefCounted {
 	mutable Dictionary m_materialCache;
 
 public:
-
-
-
-
-
-
 	Dictionary apply( T3DTerrain *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings );
 	void restore( T3DTerrain *pTerrain, const Array &rSnapshots, const AABB &rEditedArea );
-	Ref<ArrayMesh> buildCliffMesh(
-		T3DTerrain *pTerrain, const PackedVector3Array &rPath,
-		const Dictionary &rSettings
-	) const;
-	Dictionary buildCliffModules(
-		T3DTerrain *pTerrain, const PackedVector3Array &rPath,
-		const Dictionary &rSettings
-	) const;
-	Ref<ArrayMesh> buildCliffCollisionMesh(
-		T3DTerrain *pTerrain, const PackedVector3Array &rPath,
-		const Dictionary &rSettings
-	) const;
+	Ref<ArrayMesh>
+	buildCliffMesh( T3DTerrain *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings ) const;
+	Dictionary
+	buildCliffModules( T3DTerrain *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings ) const;
+	Ref<ArrayMesh>
+	buildCliffCollisionMesh( T3DTerrain *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings ) const;
 
 protected:
 	static void _bind_methods( void );

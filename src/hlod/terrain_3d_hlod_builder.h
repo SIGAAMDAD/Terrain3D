@@ -4,6 +4,7 @@
 #define TERRAIN3D_HLOD_BUILDER_H
 
 #include "Terrain3DConstants.h"
+
 #include <godot_cpp/classes/array_mesh.hpp>
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/variant/dictionary.hpp>

@@ -20,8 +20,12 @@ static inline int32_t t3dDivideFloor( const int32_t nValue, const int32_t nDivis
 	return nQuotient;
 }
 
-static inline void t3dAppendRuntimeProblem( Array &rProblems, const String &rSeverity, const String &rCode,
-		const String &rSubsystem, const String &rMessage, const int64_t nValue ) {
+static inline void t3dAppendRuntimeProblem( Array &rProblems,
+		const String &rSeverity,
+		const String &rCode,
+		const String &rSubsystem,
+		const String &rMessage,
+		const int64_t nValue ) {
 	Dictionary problem;
 	problem["severity"] = rSeverity;
 	problem["code"] = rCode;
@@ -34,7 +38,7 @@ static inline void t3dAppendRuntimeProblem( Array &rProblems, const String &rSev
 static inline Variant t3dPerformanceProfileValue( const t3dPerformanceProfileSetting_t &rSetting ) {
 	switch ( rSetting.m_kind ) {
 		case T3D_PROFILE_VALUE_INT:
-			return ( int64_t ) ( rSetting.m_nIntValue );
+			return ( int64_t )( rSetting.m_nIntValue );
 		case T3D_PROFILE_VALUE_FLOAT:
 			return rSetting.m_fFloatValue;
 		case T3D_PROFILE_VALUE_BOOL:
@@ -47,11 +51,11 @@ static inline bool t3dPerformanceProfileValueMatches( const Variant &rCurrent,
 		const t3dPerformanceProfileSetting_t &rSetting ) {
 	switch ( rSetting.m_kind ) {
 		case T3D_PROFILE_VALUE_INT:
-			return ( int64_t ) ( rCurrent ) == rSetting.m_nIntValue;
+			return ( int64_t )( rCurrent ) == rSetting.m_nIntValue;
 		case T3D_PROFILE_VALUE_FLOAT:
-			return Math::is_equal_approx( ( double ) ( rCurrent ), rSetting.m_fFloatValue );
+			return Math::is_equal_approx( ( double )( rCurrent ), rSetting.m_fFloatValue );
 		case T3D_PROFILE_VALUE_BOOL:
-			return ( bool ) ( rCurrent ) == rSetting.m_bBoolValue;
+			return ( bool )( rCurrent ) == rSetting.m_bBoolValue;
 	}
 	return false;
 }

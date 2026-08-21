@@ -6,17 +6,15 @@
 #define TERRAIN3D_SAMPLER_H
 
 #include "Terrain3DConstants.h"
-
+#include "data/terrain_3d_sampling_storage.h"
 #include "eastl_config.h"
+
 #include <EASTL/array.h>
 #include <cstdint>
-
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/vector2.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
 #include <godot_cpp/variant/vector3.hpp>
-
-#include "data/terrain_3d_sampling_storage.h"
 
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
 using namespace godot;
@@ -70,21 +68,23 @@ public:
 
 	// Copies a grid-aligned rectangle in row-major order. Region metadata is
 	// resolved once per contiguous row span rather than once per texel.
-	bool copyHeightRect(
-		int64_t iGridX, int64_t iGridZ, int nWidth, int nHeight, float *pDestination,
-		int nDestinationStride, bool bRespectHoles = false
-	);
-	bool minimumHeightRect(
-		int64_t iGridX, int64_t iGridZ, int nWidth, int nHeight, float &fHeight,
-		bool bRespectHoles = true
-	);
+	bool copyHeightRect( int64_t iGridX,
+			int64_t iGridZ,
+			int nWidth,
+			int nHeight,
+			float *pDestination,
+			int nDestinationStride,
+			bool bRespectHoles = false );
+	bool minimumHeightRect( int64_t iGridX,
+			int64_t iGridZ,
+			int nWidth,
+			int nHeight,
+			float &fHeight,
+			bool bRespectHoles = true );
 
 private:
 	// Cache probes and successful samples touch only this cacheline-aligned hot
 	// descriptor. Ownership and fallback containers live in the parallel cold bank.
-
-
-
 
 	t3dSamplingSource_t m_source;
 	eastl::array<t3dRegionView_t, s_nSamplerCacheSize> m_szCache{};

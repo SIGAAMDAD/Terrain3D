@@ -7,20 +7,19 @@
 
 #include "Terrain3DConstants.h"
 #include "data/terrain_3d_region.h"
+#include "eastl_config.h"
 
+#include <EASTL/array.h>
+#include <EASTL/vector.h>
+#include <cstdint>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/string.hpp>
 
-#include "eastl_config.h"
-#include <EASTL/array.h>
-#include <EASTL/vector.h>
-#include <cstdint>
-
 class T3DRegionRepository;
 
 typedef struct t3dStagedRegion_s {
-	Vector2i m_location = V2I_MAX;
+	Vector2i m_location = s_v2iMax;
 	String m_path;
 	Ref<T3DRegion> m_region;
 	PackedByteArray m_stagedHeight;
@@ -39,22 +38,26 @@ typedef struct t3dStagedRepository_s {
 	bool m_bBoundedCpuLoad = false;
 
 	void reset( void );
-	EA_FORCE_INLINE int getRegionCount( void ) const { return ( int ) ( m_regions.size() ); }
+	EA_FORCE_INLINE int getRegionCount( void ) const {
+		return ( int )( m_regions.size() );
+	}
 } t3dStagedRepository_t;
 
 typedef struct t3dRegionLoadResult_s {
 	Error m_error = FAILED;
-	Vector2i m_location = V2I_MAX;
+	Vector2i m_location = s_v2iMax;
 	String m_path;
 	Ref<T3DRegion> m_region;
 	bool m_bStorageUpgrade = false;
 
-	EA_FORCE_INLINE bool succeeded( void ) const { return m_error == OK && m_region.is_valid(); }
+	EA_FORCE_INLINE bool succeeded( void ) const {
+		return m_error == OK && m_region.is_valid();
+	}
 } t3dRegionLoadResult_t;
 
 typedef struct t3dRegionSaveResult_s {
 	Error m_error = FAILED;
-	Vector2i m_location = V2I_MAX;
+	Vector2i m_location = s_v2iMax;
 	String m_path;
 	bool m_bFound = false;
 	bool m_bDeleted = false;
@@ -62,7 +65,9 @@ typedef struct t3dRegionSaveResult_s {
 	bool m_bSaved = false;
 	bool m_bSkipped = false;
 
-	EA_FORCE_INLINE bool succeeded( void ) const { return m_error == OK || m_error == ERR_SKIP; }
+	EA_FORCE_INLINE bool succeeded( void ) const {
+		return m_error == OK || m_error == ERR_SKIP;
+	}
 } t3dRegionSaveResult_t;
 
 typedef struct t3dDirectorySaveResult_s {
@@ -105,23 +110,24 @@ public:
 
 	t3dRegionLoadResult_t loadRegion( const Vector2i &rLocation, const String &rDirectory ) const;
 	void publishLoadedRegionPath( const t3dRegionLoadResult_t &rResult ) const;
-	bool loadRuntimeRegionSource(
-		const String &rPath, int nExpectedRegionSize, Ref<T3DRegion> &rSource
-	) const;
-	bool prepareRuntimeRegionSource(
-		const Ref<T3DRegion> &rCandidate, int nExpectedRegionSize, Ref<T3DRegion> &rSource
-	) const;
+	bool loadRuntimeRegionSource( const String &rPath, int nExpectedRegionSize, Ref<T3DRegion> &rSource ) const;
+	bool prepareRuntimeRegionSource( const Ref<T3DRegion> &rCandidate,
+			int nExpectedRegionSize,
+			Ref<T3DRegion> &rSource ) const;
 
-	t3dRegionSaveResult_t saveRegion(
-		const Vector2i &rLocation, const String &rDirectory, bool b16Bit,
-		EnsureRegionResidentFn pEnsureResident = nullptr, void *pResidentContext = nullptr
-	);
-	t3dDirectorySaveResult_t saveDirectory(
-		const String &rDirectory, bool b16Bit,
-		EnsureRegionResidentFn pEnsureResident = nullptr, void *pResidentContext = nullptr
-	);
+	t3dRegionSaveResult_t saveRegion( const Vector2i &rLocation,
+			const String &rDirectory,
+			bool b16Bit,
+			EnsureRegionResidentFn pEnsureResident = nullptr,
+			void *pResidentContext = nullptr );
+	t3dDirectorySaveResult_t saveDirectory( const String &rDirectory,
+			bool b16Bit,
+			EnsureRegionResidentFn pEnsureResident = nullptr,
+			void *pResidentContext = nullptr );
 
-	EA_FORCE_INLINE const t3dStartupLoadStats_t &getStartupLoadStats( void ) const { return m_startupLoadStats; }
+	EA_FORCE_INLINE const t3dStartupLoadStats_t &getStartupLoadStats( void ) const {
+		return m_startupLoadStats;
+	}
 	Dictionary getStartupLoadStatsDictionary( void ) const;
 
 private:
@@ -134,10 +140,10 @@ private:
 	void resetLoadStats( void );
 	static void updateEditorFile( const String &rPath );
 	static bool validateHeightPayload( const Ref<T3DRegion> &rRegion, const String &rPath );
-	void normalizeLoadedRegion(
-		const Vector2i &rLocation, const Ref<T3DRegion> &rRegion,
-		bool bApplyRepositorySpacing, bool &rStorageUpgrade
-	) const;
+	void normalizeLoadedRegion( const Vector2i &rLocation,
+			const Ref<T3DRegion> &rRegion,
+			bool bApplyRepositorySpacing,
+			bool &rStorageUpgrade ) const;
 };
 
 #endif // TERRAIN3D_REGION_PERSISTENCE_H

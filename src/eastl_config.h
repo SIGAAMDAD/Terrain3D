@@ -4,16 +4,16 @@
 #define TERRAIN3D_EASTL_CONFIG_H
 #define TERRAIN3D_EASTL_CONFIGURED 1
 
+#include "core/terrain_3d_compiler.h"
+#include "memory/terrain_3d_memory.h"
+#include "memory/terrain_3d_zone_allocator.h"
+
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <limits>
 #include <new>
-
-#include "core/terrain_3d_compiler.h"
-#include "memory/terrain_3d_memory.h"
-#include "memory/terrain_3d_zone_allocator.h"
 
 // EASTL is used only in Terrain3D internals. Public Godot APIs remain Godot types.
 #define EASTL_EABASE_DISABLED 1
@@ -58,13 +58,13 @@ static constexpr size_t s_nEastlAllocationHeaderSize = sizeof( t3dEastlAllocatio
 class T3DEastlAllocator {
 	using AllocationHeader = t3dEastlAllocationHeader_t;
 
-	inline static std::atomic<size_t> s_nLiveBytes{0u};
-	inline static std::atomic<size_t> s_nPeakBytes{0u};
-	inline static std::atomic<size_t> s_nLiveAllocations{0u};
-	inline static std::atomic<size_t> s_nTotalAllocations{0u};
-	inline static std::atomic<size_t> s_nFailedAllocations{0u};
-	inline static std::atomic<size_t> s_nOverflowAllocations{0u};
-	inline static std::atomic<size_t> s_nOverflowLiveBytes{0u};
+	inline static std::atomic<size_t> s_nLiveBytes{ 0u };
+	inline static std::atomic<size_t> s_nPeakBytes{ 0u };
+	inline static std::atomic<size_t> s_nLiveAllocations{ 0u };
+	inline static std::atomic<size_t> s_nTotalAllocations{ 0u };
+	inline static std::atomic<size_t> s_nFailedAllocations{ 0u };
+	inline static std::atomic<size_t> s_nOverflowAllocations{ 0u };
+	inline static std::atomic<size_t> s_nOverflowLiveBytes{ 0u };
 
 	static void recordAllocation( const size_t nSize, const uint8_t nOrigin ) {
 		const size_t live = s_nLiveBytes.fetch_add( nSize, std::memory_order_relaxed ) + nSize;
@@ -75,27 +75,46 @@ class T3DEastlAllocator {
 			s_nOverflowLiveBytes.fetch_add( nSize, std::memory_order_relaxed );
 		}
 		size_t peak = s_nPeakBytes.load( std::memory_order_relaxed );
-		while ( live > peak && !s_nPeakBytes.compare_exchange_weak( peak, live, std::memory_order_relaxed, std::memory_order_relaxed ) ) {}
+		while ( live > peak &&
+				!s_nPeakBytes.compare_exchange_weak(
+						peak, live, std::memory_order_relaxed, std::memory_order_relaxed ) ) {
+		}
 	}
 
-	EA_FORCE_INLINE static void recordFailure( void ) { s_nFailedAllocations.fetch_add( 1u, std::memory_order_relaxed ); }
+	EA_FORCE_INLINE static void recordFailure( void ) {
+		s_nFailedAllocations.fetch_add( 1u, std::memory_order_relaxed );
+	}
 
 public:
 	EA_FORCE_INLINE T3DEastlAllocator( const char * = EASTL_ALLOCATOR_DEFAULT_NAME ) {}
 	T3DEastlAllocator( const T3DEastlAllocator & ) = default;
 	EA_FORCE_INLINE T3DEastlAllocator( const T3DEastlAllocator &, const char * ) {}
 	T3DEastlAllocator &operator=( const T3DEastlAllocator & ) = default;
-	EA_FORCE_INLINE const char *getName( void ) const { return EASTL_ALLOCATOR_DEFAULT_NAME; }
+	EA_FORCE_INLINE const char *getName( void ) const {
+		return EASTL_ALLOCATOR_DEFAULT_NAME;
+	}
 	EA_FORCE_INLINE void setName( const char * ) {}
 
-	EA_FORCE_INLINE void *allocate( const size_t n, int = 0 ) { return allocate( n, alignof( std::max_align_t ), 0, 0 ); }
+	EA_FORCE_INLINE void *allocate( const size_t n, int = 0 ) {
+		return allocate( n, alignof( std::max_align_t ), 0, 0 );
+	}
 	void *allocate( const size_t n, size_t alignment, const size_t alignment_offset, int = 0 ) {
-		if ( alignment < alignof( void * ) ) alignment = alignof( void * );
-		if ( n == 0u ) return nullptr;
-		if ( ( alignment & ( alignment - 1u ) ) != 0u ) { recordFailure(); return nullptr; }
+		if ( alignment < alignof( void * ) ) {
+			alignment = alignof( void * );
+		}
+		if ( n == 0u ) {
+			return nullptr;
+		}
+		if ( ( alignment & ( alignment - 1u ) ) != 0u ) {
+			recordFailure();
+			return nullptr;
+		}
 		const size_t header_size = s_nEastlAllocationHeaderSize;
 		const size_t alignment_slack = alignment - 1u;
-		if ( n > std::numeric_limits<size_t>::max() - header_size - alignment_slack ) { recordFailure(); return nullptr; }
+		if ( n > std::numeric_limits<size_t>::max() - header_size - alignment_slack ) {
+			recordFailure();
+			return nullptr;
+		}
 		const size_t total = n + header_size + alignment_slack;
 		T3DMemoryZone *const pZone = T3DZoneAllocatorRouter::zone();
 		void *pRaw = pZone ? pZone->allocate( total, alignment ) : t3dMemoryAllocate( total );
@@ -104,30 +123,40 @@ public:
 			pRaw = t3dMemoryAllocate( total );
 			origin = TERRAIN3D_ALLOCATION_OVERFLOW;
 		}
-		if ( !pRaw ) { recordFailure(); return nullptr; }
-		const uintptr_t begin = ( uintptr_t ) pRaw + header_size;
-		const uintptr_t effective_offset = ( uintptr_t ) ( alignment_offset & alignment_slack );
-		uintptr_t aligned = ( begin + effective_offset + alignment_slack ) & ~( uintptr_t ) alignment_slack;
+		if ( !pRaw ) {
+			recordFailure();
+			return nullptr;
+		}
+		const uintptr_t begin = ( uintptr_t )pRaw + header_size;
+		const uintptr_t effective_offset = ( uintptr_t )( alignment_offset & alignment_slack );
+		uintptr_t aligned = ( begin + effective_offset + alignment_slack ) & ~( uintptr_t )alignment_slack;
 		aligned -= effective_offset;
 		AllocationHeader header;
 		header.m_pRaw = pRaw;
 		header.m_pZone = pZone;
-		header.nSize = n;
+		header.m_nSize = n;
 		header.m_nOrigin = origin;
-		std::memcpy( ( void * ) ( aligned - header_size ), &header, header_size );
+		std::memcpy( ( void * )( aligned - header_size ), &header, header_size );
 		recordAllocation( n, origin );
-		return ( void * ) aligned;
+		return ( void * )aligned;
 	}
 
 	void deallocate( void *const p, size_t = 0 ) {
-		if ( !p ) return;
+		if ( !p ) {
+			return;
+		}
 		AllocationHeader header;
-		std::memcpy( &header, ( unsigned char * ) p - sizeof( AllocationHeader ), sizeof( AllocationHeader ) );
-		s_nLiveBytes.fetch_sub( header.nSize, std::memory_order_relaxed );
+		std::memcpy( &header, ( unsigned char * )p - sizeof( AllocationHeader ), sizeof( AllocationHeader ) );
+		s_nLiveBytes.fetch_sub( header.m_nSize, std::memory_order_relaxed );
 		s_nLiveAllocations.fetch_sub( 1u, std::memory_order_relaxed );
-		if ( header.m_nOrigin == TERRAIN3D_ALLOCATION_OVERFLOW ) s_nOverflowLiveBytes.fetch_sub( header.nSize, std::memory_order_relaxed );
-		if ( header.m_nOrigin == TERRAIN3D_ALLOCATION_ZONE && header.m_pZone ) header.m_pZone->deallocate( header.m_pRaw );
-		else t3dMemoryRelease( header.m_pRaw );
+		if ( header.m_nOrigin == TERRAIN3D_ALLOCATION_OVERFLOW ) {
+			s_nOverflowLiveBytes.fetch_sub( header.m_nSize, std::memory_order_relaxed );
+		}
+		if ( header.m_nOrigin == TERRAIN3D_ALLOCATION_ZONE && header.m_pZone ) {
+			header.m_pZone->deallocate( header.m_pRaw );
+		} else {
+			t3dMemoryRelease( header.m_pRaw );
+		}
 	}
 
 	static t3dEastlAllocationStats_t getAllocationStats( void ) {
@@ -150,7 +179,10 @@ public:
 	}
 };
 #define EASTLAllocatorType T3DEastlAllocator
-EA_FORCE_INLINE static T3DEastlAllocator *T3DGetDefaultEastlAllocator( void ) { static T3DEastlAllocator s_allocator; return &s_allocator; }
+EA_FORCE_INLINE static T3DEastlAllocator *T3DGetDefaultEastlAllocator( void ) {
+	static T3DEastlAllocator s_allocator;
+	return &s_allocator;
+}
 #define EASTLAllocatorDefault T3DGetDefaultEastlAllocator
 
 #if defined( _MSC_VER )
@@ -237,14 +269,14 @@ EA_FORCE_INLINE static T3DEastlAllocator *T3DGetDefaultEastlAllocator( void ) { 
 #else
 #define EA_LIKELY( x ) __builtin_expect( !!( x ), 1 )
 #define EA_UNLIKELY( x ) __builtin_expect( !!( x ), 0 )
-#define EA_ASSUME( x )                 \
-	do {                             \
-		if ( !( x ) ) {                  \
+#define EA_ASSUME( x ) \
+	do { \
+		if ( !( x ) ) { \
 			__builtin_unreachable(); \
-		}                            \
+		} \
 	} while ( 0 )
 #endif
-#define EA_UNUSED( x ) ( void ) ( x )
+#define EA_UNUSED( x ) ( void )( x )
 #define EA_ANALYSIS_ASSUME( x ) EA_ASSUME( x )
 #define EA_DISABLE_VC_WARNING( x )
 #define EA_RESTORE_VC_WARNING()
@@ -260,7 +292,7 @@ EA_FORCE_INLINE static T3DEastlAllocator *T3DGetDefaultEastlAllocator( void ) { 
 #define EA_REMOVE_AT_2025_OCT_MSG( msg )
 #define EA_REMOVE_AT_2026_APRIL
 #define EA_DEPRECATED_MESSAGE( msg )
-#define EA_NON_COPYABLE( ClassName )         \
+#define EA_NON_COPYABLE( ClassName ) \
 	ClassName( const ClassName & ) = delete; \
 	ClassName &operator=( const ClassName & ) = delete
 #ifndef EA_NODISCARD

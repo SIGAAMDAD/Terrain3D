@@ -1,21 +1,19 @@
-// Fixed-residency pool backed by one contiguous map slab and s_nFixed slot metadata.
+// Fixed-residency pool backed by one contiguous map slab and fixed slot metadata.
 #pragma once
 
 #ifndef TERRAIN3D_RESIDENT_POOL_H
 #define TERRAIN3D_RESIDENT_POOL_H
 
-#include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
-
-#include <cstddef>
-#include <cstdint>
-#include <atomic>
-#include <mutex>
-
-#include <godot_cpp/variant/vector2i.hpp>
-
+#include "core/terrain_3d_compiler.h"
 #include "core/terrain_3d_limits.h"
 #include "data/terrain_3d_region.h"
+
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <godot_cpp/variant/vector2i.hpp>
+#include <mutex>
 
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
 using namespace godot;
@@ -27,7 +25,9 @@ typedef struct t3dResidentMapView_s {
 	const uint32_t *m_pColor = nullptr;
 	const uint8_t *m_pDerived = nullptr;
 	uint32_t m_nGeneration = 0;
-	EA_FORCE_INLINE bool valid( void ) const { return m_pHeight != nullptr; }
+	EA_FORCE_INLINE bool valid( void ) const {
+		return m_pHeight != nullptr;
+	}
 } t3dResidentMapView_t;
 
 class T3DResidentRegionPool;
@@ -41,8 +41,12 @@ public:
 	T3DResidentMapLease( T3DResidentMapLease &&rOther ) noexcept;
 	T3DResidentMapLease &operator=( T3DResidentMapLease &&rOther ) noexcept;
 
-	EA_FORCE_INLINE bool valid( void ) const { return m_view.valid(); }
-	EA_FORCE_INLINE const t3dResidentMapView_t &getView( void ) const { return m_view; }
+	EA_FORCE_INLINE bool valid( void ) const {
+		return m_view.valid();
+	}
+	EA_FORCE_INLINE const t3dResidentMapView_t &getView( void ) const {
+		return m_view;
+	}
 	void reset( void );
 
 private:
@@ -52,12 +56,11 @@ private:
 	uint32_t m_nGeneration = 0u;
 	t3dResidentMapView_t m_view;
 
-	T3DResidentMapLease(
-		T3DResidentRegionPool *pPool, int iSlot, uint32_t nGeneration,
-		const t3dResidentMapView_t &rView
-	);
+	T3DResidentMapLease( T3DResidentRegionPool *pPool,
+			int iSlot,
+			uint32_t nGeneration,
+			const t3dResidentMapView_t &rView );
 };
-
 
 typedef enum t3dChannel_e : uint32_t {
 	RESIDENT_CHANNEL_HEIGHT = 1u << 0u,
@@ -85,11 +88,11 @@ typedef struct t3dSlotLayout_s {
 
 typedef struct alignas( s_nResidentCacheAlignment ) t3dSlot_s {
 	Vector2i m_location = Vector2i( INT32_MAX, INT32_MAX );
-	std::atomic<uint32_t> nGeneration{1u};
-	std::atomic<uint32_t> nPinCount{0u};
-	std::atomic<uint8_t> nState{0u};
-	std::atomic<uint8_t> nValidChannels{0u};
-	std::atomic_bool bReferenced{false};
+	std::atomic<uint32_t> m_nGeneration{ 1u };
+	std::atomic<uint32_t> m_nPinCount{ 0u };
+	std::atomic<uint8_t> m_nState{ 0u };
+	std::atomic<uint8_t> m_nValidChannels{ 0u };
+	std::atomic_bool m_bReferenced{ false };
 	uint16_t *m_pHeight = nullptr;
 	uint32_t *m_pControl = nullptr;
 	uint32_t *m_pColor = nullptr;
@@ -100,9 +103,6 @@ class T3DResidentRegionPool {
 	friend class T3DResidentMapLease;
 
 public:
-
-
-
 	T3DResidentRegionPool( void ) = default;
 	~T3DResidentRegionPool( void );
 	T3DResidentRegionPool( const T3DResidentRegionPool & ) = delete;
@@ -114,31 +114,35 @@ public:
 	void resetResidency( void );
 	T3DResidentMapLease acquire( const Vector2i &rLocation, const T3DRegion *pRegion );
 	bool ensureResident( const Vector2i &rLocation, const T3DRegion *pRegion );
-	void syncMap(
-		const Vector2i &rLocation, const T3DRegion *pRegion, t3dMapType_t type,
-		const Rect2i &rDirtyRect = Rect2i()
-	);
-	void syncDerived(
-		const Vector2i &rLocation, const T3DRegion *pRegion,
-		const Rect2i &rDirtyRect = Rect2i()
-	);
+	void syncMap( const Vector2i &rLocation,
+			const T3DRegion *pRegion,
+			t3dMapType_t type,
+			const Rect2i &rDirtyRect = Rect2i() );
+	void syncDerived( const Vector2i &rLocation, const T3DRegion *pRegion, const Rect2i &rDirtyRect = Rect2i() );
 	void invalidate( const Vector2i &rLocation );
-	EA_FORCE_INLINE int getCapacity( void ) const { return m_nCapacity; }
-	EA_FORCE_INLINE int getRegionSize( void ) const { return m_nRegionSize; }
-	EA_FORCE_INLINE uint32_t getChannels( void ) const { return m_nChannels; }
-	EA_FORCE_INLINE size_t getReservedBytes( void ) const { return m_nBackingBytes + m_nMetadataBytes; }
-	EA_FORCE_INLINE size_t getBackingBytes( void ) const { return m_nBackingBytes; }
-	EA_FORCE_INLINE size_t getMetadataBytes( void ) const { return m_nMetadataBytes; }
+	EA_FORCE_INLINE int getCapacity( void ) const {
+		return m_nCapacity;
+	}
+	EA_FORCE_INLINE int getRegionSize( void ) const {
+		return m_nRegionSize;
+	}
+	EA_FORCE_INLINE uint32_t getChannels( void ) const {
+		return m_nChannels;
+	}
+	EA_FORCE_INLINE size_t getReservedBytes( void ) const {
+		return m_nBackingBytes + m_nMetadataBytes;
+	}
+	EA_FORCE_INLINE size_t getBackingBytes( void ) const {
+		return m_nBackingBytes;
+	}
+	EA_FORCE_INLINE size_t getMetadataBytes( void ) const {
+		return m_nMetadataBytes;
+	}
 
 private:
-
-
-
-
 	// Replacement and lookup touch only the prefix below. Keep it in the first
 	// cacheline and prevent adjacent slot metadata from sharing that line; sparse
 	// allocation ownership and plane pointers are cold outside acquire/sync.
-
 
 	int m_nRegionSize = 0;
 	int m_nCapacity = 0;
@@ -155,14 +159,12 @@ private:
 	int m_iClockHand = 0;
 
 	static bool alignUp( size_t nValue, size_t nAlignment, size_t &nAligned );
-	static bool buildSlotLayout(
-		int nRegionSize, uint32_t nChannels, t3dSlotLayout_t &rLayout,
-		size_t &nTexelCount
-	);
-	static bool addEstimatedOptionalBytes(
-		uint32_t nChannels, uint32_t nChannel, size_t nTexelCount,
-		size_t nBytesPerTexel, size_t &nTotal
-	);
+	static bool buildSlotLayout( int nRegionSize, uint32_t nChannels, t3dSlotLayout_t &rLayout, size_t &nTexelCount );
+	static bool addEstimatedOptionalBytes( uint32_t nChannels,
+			uint32_t nChannel,
+			size_t nTexelCount,
+			size_t nBytesPerTexel,
+			size_t &nTotal );
 	static int locationIndex( const Vector2i &rLocation );
 	bool allocateSlotsUnlocked( int nCapacity );
 	bool assignMapBankPointersUnlocked( void );

@@ -5,20 +5,19 @@
 #ifndef TERRAIN3D_COLLISION_CLASS_H
 #define TERRAIN3D_COLLISION_CLASS_H
 
+#include "Terrain3DConstants.h"
+#include "core/terrain_3d_util.h"
+#include "eastl_config.h"
+#include "physics/terrain_3d_collision_surface_builder.h"
+
+#include <EASTL/array.h>
+#include <EASTL/vector.h>
 #include <godot_cpp/classes/collision_shape3d.hpp>
 #include <godot_cpp/classes/physics_material.hpp>
 #include <godot_cpp/classes/static_body3d.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
-#include "eastl_config.h"
-#include <EASTL/array.h>
-#include <EASTL/vector.h>
-
-#include "Terrain3DConstants.h"
-#include "core/terrain_3d_util.h"
-#include "physics/terrain_3d_collision_surface_builder.h"
 
 class T3DTerrain;
-
 
 typedef enum t3dCollisionMode_e {
 	COLLISION_DISABLED,
@@ -31,7 +30,7 @@ typedef enum t3dCollisionMode_e {
 typedef struct t3dCollisionShapeData_s {
 	int m_nWidth = 0;
 	int m_nDepth = 0;
-	Transform3D m_transform = Transform3D( Basis(), V3_MAX );
+	Transform3D m_transform = Transform3D( Basis(), s_v3Max );
 	real_t m_fMinHeight = 0.0f;
 	real_t m_fMaxHeight = 0.0f;
 	bool m_bValid = false;
@@ -40,8 +39,8 @@ typedef struct t3dCollisionShapeData_s {
 typedef struct t3dCollisionShapeRecord_s {
 	CollisionShape3D *m_pNode = nullptr;
 	RID m_hRid;
-	Transform3D m_transform = Transform3D( Basis(), V3_MAX );
-	Vector2i m_gridPosition = V2I_MAX;
+	Transform3D m_transform = Transform3D( Basis(), s_v3Max );
+	Vector2i m_gridPosition = s_v2iMax;
 	t3dCollisionShapeData_t m_data;
 	// Dynamic collision alternates retained pBuffers to avoid copy-on-write
 	// allocation while shapes are updated every grid step. Full collision uses
@@ -53,7 +52,7 @@ typedef struct t3dCollisionShapeRecord_s {
 } t3dCollisionShapeRecord_t;
 
 typedef struct t3dCollisionRegionCacheEntry_s {
-	Vector2i m_location = V2I_MAX;
+	Vector2i m_location = s_v2iMax;
 	PackedFloat32Array m_heights;
 	int m_nWidth = 0;
 	uint64_t m_nLastUseTick = 0u;
@@ -64,8 +63,6 @@ class T3DCollision : public Object {
 	CLASS_NAME();
 
 public: // Constants
-
-
 private:
 	T3DTerrain *m_pTerrain = nullptr;
 
@@ -78,14 +75,10 @@ private:
 	real_t m_fPriority = 1.f;
 	Ref<PhysicsMaterial> m_physicsMaterial;
 
-
-
-
-
 	// Work data. Shape records own all state so updates never read it back from
 	// PhysicsServer. Height arrays retain caller-side capacity across grid moves;
 	// submitting a changed heightmap remains linear in the sample count.
-	RID m_hStaticBodyRid;				  // Physics Server Static Body
+	RID m_hStaticBodyRid; // Physics Server Static Body
 	StaticBody3D *m_pStaticBody = nullptr; // Editor mode StaticBody3D
 	eastl::vector<t3dCollisionShapeRecord_t> m_shapeRecords;
 	eastl::array<int32_t, s_nMaxRegionSlots> m_gridScratch{};
@@ -95,11 +88,8 @@ private:
 	PackedFloat32Array m_collisionSurfaceScratch;
 	T3DCollisionSurfaceBuilder m_collisionSurfaceBuilder;
 
-
-	static constexpr int s_nCollisionBakedCacheAxis =
-		( 2 * ( 256 + 64 + s_nMinRegionSize ) / s_nMinRegionSize ) + 1;
-	static constexpr int s_nBakedCacheCapacity =
-		s_nCollisionBakedCacheAxis * s_nCollisionBakedCacheAxis;
+	static constexpr int s_nCollisionBakedCacheAxis = ( 2 * ( 256 + 64 + s_nMinRegionSize ) / s_nMinRegionSize ) + 1;
+	static constexpr int s_nBakedCacheCapacity = s_nCollisionBakedCacheAxis * s_nCollisionBakedCacheAxis;
 	eastl::array<t3dCollisionRegionCacheEntry_t, s_nBakedCacheCapacity> m_bakedRegionCache{};
 	eastl::array<int16_t, s_nMaxRegionSlots> m_bakedRegionByMap{};
 	int m_nBakedRegionCacheCount = 0;
@@ -109,10 +99,9 @@ private:
 	int m_nBakedCacheHitsLastUpdate = 0;
 	int m_nBakedCacheMissesLastUpdate = 0;
 
-
 	bool m_bInitialized = false;
 	bool m_bRegionMapUpdatePending = false;
-	Vector2i m_lastSnappedPos = V2I_MAX;
+	Vector2i m_lastSnappedPos = s_v2iMax;
 	TypedArray<Vector2i> m_fullRegionSlots;
 	uint64_t m_nStreamingGenerationLast = 0u;
 	eastl::array<uint8_t, s_nMaxRegionSlots> m_szFullStreamingResident{};
@@ -131,12 +120,15 @@ private:
 	void clearBakedRegionCache( bool bReleasePayloads );
 	void eraseBakedRegionCacheAt( int nIndex );
 	void refreshBakedRegionCache( const Vector2i &rCenter );
-	bool copyBakedTile( const Vector2i &rPosition, int nSize, t3dCollisionShapeRecord_t &rRecord, PackedRealArray &rHeights );
+	bool copyBakedTile( const Vector2i &rPosition,
+			int nSize,
+			t3dCollisionShapeRecord_t &rRecord,
+			PackedRealArray &rHeights );
 	bool canUseBakedDynamicCollision( void ) const;
-	bool getShapeData(
-		const Vector2i &rPosition, const int nSize, t3dCollisionShapeRecord_t &rRecord,
-		PackedRealArray &rHeights
-	);
+	bool getShapeData( const Vector2i &rPosition,
+			const int nSize,
+			t3dCollisionShapeRecord_t &rRecord,
+			PackedRealArray &rHeights );
 
 	void shapeSetDisabled( const int nShapeId, const bool bDisabled );
 	void shapeSetTransform( const int nShapeId, const Transform3D &rXform );
@@ -154,34 +146,60 @@ private:
 	bool shapeAllowsCollision( const Vector2i &rPosition, const int nSize ) const;
 
 public:
-	EA_FORCE_INLINE T3DCollision( void ) { m_bakedRegionByMap.fill( ( int16_t ) -1 ); }
-	EA_FORCE_INLINE ~T3DCollision( void ) { destroy(); }
+	EA_FORCE_INLINE T3DCollision( void ) {
+		m_bakedRegionByMap.fill( ( int16_t )-1 );
+	}
+	EA_FORCE_INLINE ~T3DCollision( void ) {
+		destroy();
+	}
 	void initialize( T3DTerrain *pTerrain );
 
 	void build( void );
 	void onRegionMapChanged( void );
-	EA_FORCE_INLINE void resetTargetPosition( void ) { m_lastSnappedPos = V2I_MAX; }
-	void update( const Vector2i &rRegionLoc = V2I_MAX, const bool bRebuild = false );
+	EA_FORCE_INLINE void resetTargetPosition( void ) {
+		m_lastSnappedPos = s_v2iMax;
+	}
+	void update( const Vector2i &rRegionLoc = s_v2iMax, const bool bRebuild = false );
 	void destroy( void );
 
 	void setMode( const t3dCollisionMode_t mode );
-	EA_FORCE_INLINE t3dCollisionMode_t getMode( void ) const { return m_mode; }
-	EA_FORCE_INLINE bool isEnabled( void ) const { return m_mode > COLLISION_DISABLED; }
-	EA_FORCE_INLINE bool isEditorMode( void ) const { return m_mode == DYNAMIC_EDITOR || m_mode == FULL_EDITOR; }
-	EA_FORCE_INLINE bool isDynamicMode( void ) const { return m_mode == DYNAMIC_GAME || m_mode == DYNAMIC_EDITOR; }
+	EA_FORCE_INLINE t3dCollisionMode_t getMode( void ) const {
+		return m_mode;
+	}
+	EA_FORCE_INLINE bool isEnabled( void ) const {
+		return m_mode > COLLISION_DISABLED;
+	}
+	EA_FORCE_INLINE bool isEditorMode( void ) const {
+		return m_mode == DYNAMIC_EDITOR || m_mode == FULL_EDITOR;
+	}
+	EA_FORCE_INLINE bool isDynamicMode( void ) const {
+		return m_mode == DYNAMIC_GAME || m_mode == DYNAMIC_EDITOR;
+	}
 
 	void setShapeSize( const uint16_t nSize );
-	EA_FORCE_INLINE uint16_t getShapeSize( void ) const { return m_nShapeSize; }
+	EA_FORCE_INLINE uint16_t getShapeSize( void ) const {
+		return m_nShapeSize;
+	}
 	void setRadius( const uint16_t nRadius );
-	EA_FORCE_INLINE uint16_t getRadius( void ) const { return m_nRadius; }
+	EA_FORCE_INLINE uint16_t getRadius( void ) const {
+		return m_nRadius;
+	}
 	void setLayer( const uint32_t nLayers );
-	EA_FORCE_INLINE uint32_t getLayer( void ) const { return m_nLayer; }
+	EA_FORCE_INLINE uint32_t getLayer( void ) const {
+		return m_nLayer;
+	}
 	void setMask( const uint32_t nMask );
-	EA_FORCE_INLINE uint32_t getMask( void ) const { return m_nMask; }
+	EA_FORCE_INLINE uint32_t getMask( void ) const {
+		return m_nMask;
+	}
 	void setPriority( const real_t fPriority );
-	EA_FORCE_INLINE real_t getPriority( void ) const { return m_fPriority; }
+	EA_FORCE_INLINE real_t getPriority( void ) const {
+		return m_fPriority;
+	}
 	void setPhysicsMaterial( const Ref<PhysicsMaterial> &rMat );
-	EA_FORCE_INLINE Ref<PhysicsMaterial> getPhysicsMaterial( void ) const { return m_physicsMaterial; }
+	EA_FORCE_INLINE Ref<PhysicsMaterial> getPhysicsMaterial( void ) const {
+		return m_physicsMaterial;
+	}
 	Dictionary getStats( void ) const;
 	size_t getRetainedBufferBytes( void ) const;
 	RID getRid( void ) const;
@@ -189,11 +207,16 @@ public:
 protected:
 	static void _bind_methods( void );
 };
-
-using t3dCollisionMode_t = t3dCollisionMode_t;
 VARIANT_ENUM_CAST( t3dCollisionMode_t );
 
-EA_FORCE_INLINE Vector2i T3DCollision::snapToGrid( const Vector2i &rPos ) const { return Vector2i( intRoundMult( rPos.x, ( int32_t ) ( m_nShapeSize ) ), intRoundMult( rPos.y, ( int32_t ) ( m_nShapeSize ) ) ); }
+EA_FORCE_INLINE Vector2i T3DCollision::snapToGrid( const Vector2i &rPos ) const {
+	return Vector2i( t3dIntRoundMult( rPos.x, ( int32_t )( m_nShapeSize ) ),
+			t3dIntRoundMult( rPos.y, ( int32_t )( m_nShapeSize ) ) );
+}
 
-EA_FORCE_INLINE Vector2i T3DCollision::snapToGrid( const Vector3 &rPos ) const { return Vector2i( Math::floor( rPos.x / ( real_t ) ( m_nShapeSize ) + 0.5f ), Math::floor( rPos.z / ( real_t ) ( m_nShapeSize ) + 0.5f ) ) * m_nShapeSize; }
+EA_FORCE_INLINE Vector2i T3DCollision::snapToGrid( const Vector3 &rPos ) const {
+	return Vector2i( Math::floor( rPos.x / ( real_t )( m_nShapeSize ) + 0.5f ),
+				   Math::floor( rPos.z / ( real_t )( m_nShapeSize ) + 0.5f ) ) *
+			m_nShapeSize;
+}
 #endif // TERRAIN3D_COLLISION_CLASS_H

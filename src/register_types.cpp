@@ -4,24 +4,24 @@
 #include <gdextension_interface.h>
 #endif
 
-#include <godot_cpp/core/class_db.hpp>
-
-#include "register_types.h"
-#include "terrain_3d.h"
-#include "core/terrain_3d_diagnostics.h"
+#include "assets/terrain_3d_packed_pbr_texture.h"
 #include "authoring/terrain_3d_autoshader_baker.h"
 #include "authoring/terrain_3d_editor.h"
 #include "authoring/terrain_3d_erosion_job.h"
 #include "authoring/terrain_3d_erosion_settings.h"
 #include "authoring/terrain_3d_landform_baker.h"
-#include "lighting/terrain_3d_lightmap_streamer.h"
+#include "core/terrain_3d_diagnostics.h"
 #include "hlod/terrain_3d_hlod_builder.h"
 #include "hlod/terrain_3d_hlod_manifest.h"
 #include "hlod/terrain_3d_hlod_package.h"
 #include "hlod/terrain_3d_hlod_streamer.h"
-#include "streaming/terrain_3d_node_streamer.h"
+#include "lighting/terrain_3d_lightmap_streamer.h"
 #include "lighting/terrain_3d_region_lighting.h"
-#include "assets/terrain_3d_packed_pbr_texture.h"
+#include "register_types.h"
+#include "streaming/terrain_3d_node_streamer.h"
+#include "terrain_3d.h"
+
+#include <godot_cpp/core/class_db.hpp>
 
 void t3dInitializeTerrain3DModule( ModuleInitializationLevel level ) {
 	if ( level != MODULE_INITIALIZATION_LEVEL_SCENE ) {
@@ -65,11 +65,9 @@ void t3dUninitializeTerrain3DModule( ModuleInitializationLevel level ) {
 #ifdef GDEXTENSION
 extern "C" {
 // Initialization.
-GDExtensionBool GDE_EXPORT t3dInit(
-	GDExtensionInterfaceGetProcAddress getProcAddress,
-	GDExtensionClassLibraryPtr library,
-	GDExtensionInitialization *pInitialization
-) {
+GDExtensionBool GDE_EXPORT t3dInit( GDExtensionInterfaceGetProcAddress getProcAddress,
+		GDExtensionClassLibraryPtr library,
+		GDExtensionInitialization *pInitialization ) {
 	GDExtensionBinding::InitObject initObj( getProcAddress, library, pInitialization );
 
 	initObj.register_initializer( t3dInitializeTerrain3DModule );

@@ -1,10 +1,17 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#include "core/terrain_3d_compiler.h"
 #include "core/unit_testing.h"
+
+#include "core/terrain_3d_compiler.h"
 #include "core/terrain_3d_util.h"
 
-static template <typename TLeft, typename TRight> EA_FORCE_INLINE void t3dUnitTestingLogDiffers( const TLeft &rA, const TRight &rB, const String &rDescription, const bool bExpected ) { const bool bDiffersResult = differs( rA, rB ); const String result = bDiffersResult == bExpected ? "PASSED" : "FAILED"; UtilityFunctions::print( rDescription, ": differs(", rA, ", ", rB, ") = ", bDiffersResult, " - ", result ); }
+template <typename TLeft, typename TRight>
+static EA_FORCE_INLINE void
+t3dUnitTestingLogDiffers( const TLeft &rA, const TRight &rB, const String &rDescription, const bool bExpected ) {
+	const bool bDiffersResult = t3dDiffers( rA, rB );
+	const String result = bDiffersResult == bExpected ? "PASSED" : "FAILED";
+	UtilityFunctions::print( rDescription, ": differs(", rA, ", ", rB, ") = ", bDiffersResult, " - ", result );
+}
 
 void t3dTestDiffers( void ) {
 	UtilityFunctions::print( "=== Testing differs function ===" );
@@ -18,7 +25,7 @@ void t3dTestDiffers( void ) {
 		t3dUnitTestingLogDiffers( i1, i3, "int diff", true );
 
 		double fF1 = 3.14;
-		double fF2 = 3.14;	 // Same
+		double fF2 = 3.14; // Same
 		double fF3 = 3.14159; // Diff
 		t3dUnitTestingLogDiffers( fF1, fF2, "float same", false );
 		t3dUnitTestingLogDiffers( fF1, fF3, "float diff", true );
@@ -54,20 +61,20 @@ void t3dTestDiffers( void ) {
 	// 3. String: Share (COW), same value diff ptr, diff value
 	{
 		String s1 = "test";
-		String s2 = s1;	   // Shared (COW)
+		String s2 = s1; // Shared (COW)
 		String s3( "test" ); // Separate alloc, same value
 		String s4 = "diff";
 		t3dUnitTestingLogDiffers( String(), String(), "String() vs String()", false );
 		t3dUnitTestingLogDiffers( String(), String( "a" ), "String() vs String('a')", true );
 		t3dUnitTestingLogDiffers( s1, s2, "String shared", false );
 		t3dUnitTestingLogDiffers( s1, s3, "String same value diff ptr", false ); // Length match + == true
-		t3dUnitTestingLogDiffers( s1, s4, "String diff value", true );			  // Length may match, but == false
+		t3dUnitTestingLogDiffers( s1, s4, "String diff value", true ); // Length may match, but == false
 	}
 
 	// 4. StringName: Similar to String (uses ==, but test sharing if applicable)
 	{
 		StringName sn1 = "test";
-		StringName sn2 = sn1;	// Shared
+		StringName sn2 = sn1; // Shared
 		StringName sn3( "test" ); // Separate, same value
 		StringName sn4 = "diff";
 		t3dUnitTestingLogDiffers( sn1, sn2, "StringName shared", false );
@@ -79,26 +86,27 @@ void t3dTestDiffers( void ) {
 	{
 		Array arr1;
 		arr1.push_back( 42 );
-		Array arr2 = arr1;								// Shared
-		Array arr3;										// Empty diff
-		arr3.push_back( 42 );								// Same content, but separate (differs=true, conservative)
-		Array empty_arr;								// Explicit empty for size diff
+		Array arr2 = arr1; // Shared
+		Array arr3; // Empty diff
+		arr3.push_back( 42 ); // Same content, but separate (differs=true, conservative)
+		Array empty_arr; // Explicit empty for size diff
 		t3dUnitTestingLogDiffers( arr1, arr2, "Array shared", false ); // Same self ptr
-		t3dUnitTestingLogDiffers( arr1, arr3, "Array same content diff ptr", true ); // Diff self ptr (no fallback for Array)
-		t3dUnitTestingLogDiffers( arr1, empty_arr, "Array size diff", true );		  // Size mismatch
+		t3dUnitTestingLogDiffers(
+				arr1, arr3, "Array same content diff ptr", true ); // Diff self ptr (no fallback for Array)
+		t3dUnitTestingLogDiffers( arr1, empty_arr, "Array size diff", true ); // Size mismatch
 	}
 
 	// 6. TypedArray: e.g., TypedArray<int>
 	{
 		TypedArray<int> ta1;
 		ta1.push_back( 42 );
-		TypedArray<int> ta2 = ta1;										 // Shared
-		TypedArray<int> ta3;											 // Empty
-		ta3.push_back( 42 );												 // Separate
-		TypedArray<int> empty_ta;										 // Explicit empty
-		t3dUnitTestingLogDiffers( ta1, ta2, "TypedArray shared", false );				 // Via Array base
+		TypedArray<int> ta2 = ta1; // Shared
+		TypedArray<int> ta3; // Empty
+		ta3.push_back( 42 ); // Separate
+		TypedArray<int> empty_ta; // Explicit empty
+		t3dUnitTestingLogDiffers( ta1, ta2, "TypedArray shared", false ); // Via Array base
 		t3dUnitTestingLogDiffers( ta1, ta3, "TypedArray same content diff ptr", true ); // Diff self
-		t3dUnitTestingLogDiffers( ta1, empty_ta, "TypedArray size diff", true );		 // Size mismatch
+		t3dUnitTestingLogDiffers( ta1, empty_ta, "TypedArray size diff", true ); // Size mismatch
 	}
 
 	// 7. Dictionary: Share vs mutate
@@ -106,12 +114,12 @@ void t3dTestDiffers( void ) {
 		Dictionary dict1;
 		dict1["key"] = 42;
 		Dictionary dict2 = dict1; // Shared
-		Dictionary dict3;		  // Empty
-		dict3["key"] = 42;		  // Separate
-		Dictionary empty_dict;	  // Explicit empty
+		Dictionary dict3; // Empty
+		dict3["key"] = 42; // Separate
+		Dictionary empty_dict; // Explicit empty
 		t3dUnitTestingLogDiffers( dict1, dict2, "Dictionary shared", false );
 		t3dUnitTestingLogDiffers( dict1, dict3, "Dictionary same content diff ptr", true ); // Diff self
-		t3dUnitTestingLogDiffers( dict1, empty_dict, "Dictionary size diff", true );		 // Size mismatch
+		t3dUnitTestingLogDiffers( dict1, empty_dict, "Dictionary size diff", true ); // Size mismatch
 	}
 
 	// 8. Variant types: Wrap above (falls to ==)
@@ -136,7 +144,7 @@ void t3dTestDiffers( void ) {
 
 		// Variant Object (use RefCounted for ref support)
 		Ref<RefCounted> pRc1 = memnew( RefCounted );
-		Ref<RefCounted> pRc2 = pRc1;				  // Same ref
+		Ref<RefCounted> pRc2 = pRc1; // Same ref
 		Ref<RefCounted> pRc3 = memnew( RefCounted ); // Diff
 		Variant v_rc1 = pRc1;
 		Variant v_rc2 = pRc2;

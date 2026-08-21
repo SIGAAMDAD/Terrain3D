@@ -25,7 +25,7 @@ bool t3dUploadBridgeIsAvailable( void ) {
 		return false;
 	}
 	const Variant result = pBridge->call( "is_available" );
-	return result.get_type() == Variant::BOOL && ( bool ) ( result );
+	return result.get_type() == Variant::BOOL && ( bool )( result );
 }
 
 bool t3dUploadBridgeUploadTextureLayer( const RID hTexture, const Ref<Image> &rImage, const int iLayer ) {
@@ -41,7 +41,7 @@ bool t3dUploadBridgeUploadTextureLayer( const RID hTexture, const Ref<Image> &rI
 		return false;
 	}
 	const Variant result = pBridge->call( "upload_texture_layer", hTexture, iLayer, bytes );
-	return result.get_type() == Variant::BOOL && ( bool ) ( result );
+	return result.get_type() == Variant::BOOL && ( bool )( result );
 }
 
 RID t3dUploadBridgeCreatePersistentStorageBuffer( const uint32_t nSizeBytes ) {
@@ -52,7 +52,7 @@ RID t3dUploadBridgeCreatePersistentStorageBuffer( const uint32_t nSizeBytes ) {
 	if ( !pBridge ) {
 		return RID();
 	}
-	const Variant result = pBridge->call( "create_persistent_storage_buffer", ( int64_t ) ( nSizeBytes ) );
+	const Variant result = pBridge->call( "create_persistent_storage_buffer", ( int64_t )( nSizeBytes ) );
 	if ( result.get_type() != Variant::RID ) {
 		return RID();
 	}

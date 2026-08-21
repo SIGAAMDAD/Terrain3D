@@ -5,39 +5,39 @@
 #ifndef TERRAIN3D_HALF_BUFFER_H
 #define TERRAIN3D_HALF_BUFFER_H
 
+#include "core/terrain_3d_compiler.h"
+#include "memory/terrain_3d_linear_arena.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 
-#include "core/terrain_3d_compiler.h"
-#include "memory/terrain_3d_linear_arena.h"
-
 inline uint16_t t3dHalfEncode( const float fValue ) {
 	uint32_t bits = 0u;
 	std::memcpy( &bits, &fValue, sizeof( bits ) );
-	const uint16_t sign = ( uint16_t ) ( ( bits >> 16u ) & 0x8000u );
+	const uint16_t sign = ( uint16_t )( ( bits >> 16u ) & 0x8000u );
 	uint32_t mantissa = bits & 0x007fffffu;
 	const uint32_t source_exponent = ( bits >> 23u ) & 0xffu;
 
 	if ( source_exponent == 0xffu ) {
 		if ( mantissa == 0u ) {
-			return ( uint16_t ) ( sign | 0x7c00u );
+			return ( uint16_t )( sign | 0x7c00u );
 		}
-		return ( uint16_t ) ( sign | 0x7e00u | ( uint16_t ) ( mantissa >> 13u ) );
+		return ( uint16_t )( sign | 0x7e00u | ( uint16_t )( mantissa >> 13u ) );
 	}
 
-	int32_t exponent = ( int32_t ) ( source_exponent ) - 127 + 15;
+	int32_t exponent = ( int32_t )( source_exponent )-127 + 15;
 	if ( exponent >= 31 ) {
-		return ( uint16_t ) ( sign | 0x7c00u );
+		return ( uint16_t )( sign | 0x7c00u );
 	}
 	if ( exponent <= 0 ) {
 		if ( exponent < -10 ) {
 			return sign;
 		}
 		mantissa |= 0x00800000u;
-		const uint32_t shift = ( uint32_t ) ( 14 - exponent );
-		const uint32_t rounding = ( ( uint32_t ) ( 1 ) << ( shift - 1u ) ) - 1u + ( ( mantissa >> shift ) & 1u );
-		return ( uint16_t ) ( sign | ( uint16_t ) ( ( mantissa + rounding ) >> shift ) );
+		const uint32_t shift = ( uint32_t )( 14 - exponent );
+		const uint32_t rounding = ( ( uint32_t )( 1 ) << ( shift - 1u ) ) - 1u + ( ( mantissa >> shift ) & 1u );
+		return ( uint16_t )( sign | ( uint16_t )( ( mantissa + rounding ) >> shift ) );
 	}
 
 	mantissa += 0x00000fffu + ( ( mantissa >> 13u ) & 1u );
@@ -45,14 +45,14 @@ inline uint16_t t3dHalfEncode( const float fValue ) {
 		mantissa = 0u;
 		++exponent;
 		if ( exponent >= 31 ) {
-			return ( uint16_t ) ( sign | 0x7c00u );
+			return ( uint16_t )( sign | 0x7c00u );
 		}
 	}
-	return ( uint16_t ) ( sign | ( uint16_t ) ( ( uint32_t ) ( exponent ) << 10u ) | ( uint16_t ) ( mantissa >> 13u ) );
+	return ( uint16_t )( sign | ( uint16_t )( ( uint32_t )( exponent ) << 10u ) | ( uint16_t )( mantissa >> 13u ) );
 }
 
 inline float t3dHalfDecode( const uint16_t nValue ) {
-	const uint32_t sign = ( uint32_t ) ( nValue & 0x8000u ) << 16u;
+	const uint32_t sign = ( uint32_t )( nValue & 0x8000u ) << 16u;
 	uint32_t exponent = ( nValue >> 10u ) & 0x1fu;
 	uint32_t mantissa = nValue & 0x03ffu;
 	uint32_t bits = 0u;
@@ -67,13 +67,13 @@ inline float t3dHalfDecode( const uint16_t nValue ) {
 				--exponent;
 			}
 			mantissa &= 0x03ffu;
-			const uint32_t float_exponent = exponent + ( uint32_t ) ( 127 - 15 );
+			const uint32_t float_exponent = exponent + ( uint32_t )( 127 - 15 );
 			bits = sign | ( float_exponent << 23u ) | ( mantissa << 13u );
 		}
 	} else if ( exponent == 0x1fu ) {
 		bits = sign | 0x7f800000u | ( mantissa << 13u );
 	} else {
-		const uint32_t float_exponent = exponent + ( uint32_t ) ( 127 - 15 );
+		const uint32_t float_exponent = exponent + ( uint32_t )( 127 - 15 );
 		bits = sign | ( float_exponent << 23u ) | ( mantissa << 13u );
 	}
 
@@ -81,7 +81,6 @@ inline float t3dHalfDecode( const uint16_t nValue ) {
 	std::memcpy( &fResult, &bits, sizeof( fResult ) );
 	return fResult;
 }
-
 
 class T3DHalfBuffer {
 public:
@@ -97,10 +96,12 @@ public:
 		}
 
 		T3DReference &operator=( const T3DReference &rOther ) {
-			return operator=( ( float ) ( rOther ) );
+			return operator=( ( float )( rOther ) );
 		}
 
-		EA_FORCE_INLINE operator float( void ) const { return t3dHalfDecode( *m_pStorage ); }
+		EA_FORCE_INLINE operator float( void ) const {
+			return t3dHalfDecode( *m_pStorage );
+		}
 
 	private:
 		uint16_t *m_pStorage = nullptr;
@@ -121,7 +122,10 @@ public:
 		return true;
 	}
 
-	EA_FORCE_INLINE void clear( void ) { m_pData = nullptr; m_nSize = 0u; }
+	EA_FORCE_INLINE void clear( void ) {
+		m_pData = nullptr;
+		m_nSize = 0u;
+	}
 
 	T3DReference operator[]( const size_t iIndex ) {
 		return T3DReference( m_pData + iIndex );
@@ -131,13 +135,21 @@ public:
 		return t3dHalfDecode( m_pData[iIndex] );
 	}
 
-	EA_FORCE_INLINE size_t size( void ) const { return m_nSize; }
+	EA_FORCE_INLINE size_t size( void ) const {
+		return m_nSize;
+	}
 
-	EA_FORCE_INLINE bool empty( void ) const { return m_nSize == 0u; }
+	EA_FORCE_INLINE bool empty( void ) const {
+		return m_nSize == 0u;
+	}
 
-	EA_FORCE_INLINE uint16_t *data( void ) { return m_pData; }
+	EA_FORCE_INLINE uint16_t *data( void ) {
+		return m_pData;
+	}
 
-	EA_FORCE_INLINE const uint16_t *data( void ) const { return m_pData; }
+	EA_FORCE_INLINE const uint16_t *data( void ) const {
+		return m_pData;
+	}
 
 private:
 	uint16_t *m_pData = nullptr;

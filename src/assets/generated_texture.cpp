@@ -1,27 +1,25 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#include <godot_cpp/classes/rendering_server.hpp>
+#include "assets/generated_texture.h"
 
+#include "core/logger.h"
+#include "streaming/terrain_3d_upload_bridge.h"
+#include "terrain_3d.h"
+
+#include <godot_cpp/classes/rendering_server.hpp>
 #include <utility>
 
-#include "assets/generated_texture.h"
-#include "core/logger.h"
-#include "terrain_3d.h"
-#include "streaming/terrain_3d_upload_bridge.h"
-
-///////////////////////////
-// Private Functions
-///////////////////////////
+// -----------------------------------------------------------------------------
+// Private functions
 
 bool T3DGeneratedTexture::matchesLayout( const Ref<Image> &rImage ) const {
 	return rImage.is_valid() && !rImage->is_empty() && rImage->get_width() == m_nWidth &&
-		rImage->get_height() == m_nHeight && ( int ) ( rImage->get_format() ) == m_nFormat &&
-		rImage->has_mipmaps() == m_bMipmaps;
+			rImage->get_height() == m_nHeight && ( int )( rImage->get_format() ) == m_nFormat &&
+			rImage->has_mipmaps() == m_bMipmaps;
 }
 
-///////////////////////////
-// Public Functions
-///////////////////////////
+// -----------------------------------------------------------------------------
+// Public functions
 
 void T3DGeneratedTexture::clear( void ) {
 	if ( m_hRid.is_valid() ) {
@@ -69,18 +67,17 @@ RID T3DGeneratedTexture::create( const TypedArray<Image> &rLayers ) {
 	}
 	const int width = pFirst->get_width();
 	const int height = pFirst->get_height();
-	const int format = ( int ) ( pFirst->get_format() );
+	const int format = ( int )( pFirst->get_format() );
 	const bool bMipmaps = pFirst->has_mipmaps();
-	size_t payload_bytes = ( size_t ) ( pFirst->get_data().size() );
+	size_t payload_bytes = ( size_t )( pFirst->get_data().size() );
 	for ( int layer = 1; layer < rLayers.size(); ++layer ) {
 		const Ref<Image> pImage = rLayers[layer];
-		if ( pImage.is_null() || pImage->is_empty() || pImage->get_width() != width ||
-			pImage->get_height() != height || ( int ) ( pImage->get_format() ) != format ||
-			pImage->has_mipmaps() != bMipmaps ) {
+		if ( pImage.is_null() || pImage->is_empty() || pImage->get_width() != width || pImage->get_height() != height ||
+				( int )( pImage->get_format() ) != format || pImage->has_mipmaps() != bMipmaps ) {
 			LOG( ERROR, "Rejected incompatible Terrain3D texture-array layer ", layer );
 			return RID();
 		}
-		payload_bytes += ( size_t ) ( pImage->get_data().size() );
+		payload_bytes += ( size_t )( pImage->get_data().size() );
 	}
 	if ( T3DTerrain::s_debugLevel >= DEBUG ) {
 		LOG( EXTREME, "RenderingServer creating Texture2DArray, layers size: ", rLayers.size() );
@@ -90,19 +87,40 @@ RID T3DGeneratedTexture::create( const TypedArray<Image> &rLayers ) {
 				LOG( EXTREME, i, ": null image" );
 				continue;
 			}
-			LOG( EXTREME, i, ": ", pImg, ", empty: ", pImg->is_empty(), ", size: ", pImg->get_size(),
-				", format: ", pImg->get_format() );
+			LOG( EXTREME,
+					i,
+					": ",
+					pImg,
+					", empty: ",
+					pImg->is_empty(),
+					", size: ",
+					pImg->get_size(),
+					", format: ",
+					pImg->get_format() );
 		}
 	}
-	LOG( DEBUG, "[render-resource] Creating Texture2DArray replacement: layers=", rLayers.size(),
-		"; size=", width, "x", height, "; format=", format, "; mipmaps=", bMipmaps,
-		"; replacing_old_rid=", m_hRid.is_valid() );
+	LOG( DEBUG,
+			"[render-resource] Creating Texture2DArray replacement: layers=",
+			rLayers.size(),
+			"; size=",
+			width,
+			"x",
+			height,
+			"; format=",
+			format,
+			"; mipmaps=",
+			bMipmaps,
+			"; replacing_old_rid=",
+			m_hRid.is_valid() );
 	const RID new_rid = RS->texture_2d_layered_create( rLayers, RenderingServer::TEXTURE_LAYERED_2D_ARRAY );
 	if ( !new_rid.is_valid() ) {
 		m_bDirty = true;
 		m_nSize = 0;
-		LOG( ERROR, "RenderingServer rejected Terrain3D texture array with ", rLayers.size(),
-			" layers. The active world exceeds the renderer's texture-array capacity or contains incompatible layers." );
+		LOG( ERROR,
+				"RenderingServer rejected Terrain3D texture array with ",
+				rLayers.size(),
+				" layers. The active world exceeds the renderer's texture-array capacity or contains incompatible "
+				"layers." );
 		return RID();
 	}
 	if ( m_hRid.is_valid() ) {
@@ -123,10 +141,20 @@ RID T3DGeneratedTexture::create( const TypedArray<Image> &rLayers ) {
 
 bool T3DGeneratedTexture::update( const Ref<Image> &rImage, const int nLayer ) {
 	if ( !m_hRid.is_valid() || m_bDirty || !m_bLayered || nLayer < 0 || nLayer >= m_nSize ||
-		!matchesLayout( rImage ) ) {
-		LOG( ERROR, "Rejected Texture2DArray update. RID valid: ", m_hRid.is_valid(), ", dirty: ", m_bDirty,
-			", layered: ", m_bLayered, ", layer: ", nLayer, ", layer count: ", m_nSize,
-			", compatible image: ", matchesLayout( rImage ) );
+			!matchesLayout( rImage ) ) {
+		LOG( ERROR,
+				"Rejected Texture2DArray update. RID valid: ",
+				m_hRid.is_valid(),
+				", dirty: ",
+				m_bDirty,
+				", layered: ",
+				m_bLayered,
+				", layer: ",
+				nLayer,
+				", layer count: ",
+				m_nSize,
+				", compatible image: ",
+				matchesLayout( rImage ) );
 		return false;
 	}
 	LOG( EXTREME, "RenderingServer updating Texture2DArray at index: ", nLayer );
@@ -143,9 +171,15 @@ RID T3DGeneratedTexture::create( const Ref<Image> &rImage ) {
 		return RID();
 	}
 	LOG( EXTREME, "RenderingServer creating Texture2D" );
-	LOG( DEBUG, "[render-resource] Creating Texture2D replacement: size=", rImage->get_width(), "x",
-		rImage->get_height(), "; format=", ( int ) ( rImage->get_format() ),
-		"; replacing_old_rid=", m_hRid.is_valid() );
+	LOG( DEBUG,
+			"[render-resource] Creating Texture2D replacement: size=",
+			rImage->get_width(),
+			"x",
+			rImage->get_height(),
+			"; format=",
+			( int )( rImage->get_format() ),
+			"; replacing_old_rid=",
+			m_hRid.is_valid() );
 	const RID new_rid = RS->texture_2d_create( rImage );
 	if ( !new_rid.is_valid() ) {
 		m_bDirty = true;
@@ -161,18 +195,26 @@ RID T3DGeneratedTexture::create( const Ref<Image> &rImage ) {
 	m_nSize = 1;
 	m_nWidth = rImage->get_width();
 	m_nHeight = rImage->get_height();
-	m_nFormat = ( int ) ( rImage->get_format() );
+	m_nFormat = ( int )( rImage->get_format() );
 	m_bMipmaps = rImage->has_mipmaps();
 	m_bLayered = false;
-	m_nPayloadBytes = ( size_t ) ( rImage->get_data().size() );
+	m_nPayloadBytes = ( size_t )( rImage->get_data().size() );
 	return m_hRid;
 }
 
 bool T3DGeneratedTexture::update2d( const Ref<Image> &rImage ) {
 	if ( !m_hRid.is_valid() || m_bDirty || m_bLayered || m_nSize != 1 || !matchesLayout( rImage ) ) {
-		LOG( ERROR, "Rejected Texture2D update. RID valid: ", m_hRid.is_valid(), ", dirty: ", m_bDirty,
-			", layered: ", m_bLayered, ", compatible image: ", matchesLayout( rImage ),
-			", size: ", m_nSize );
+		LOG( ERROR,
+				"Rejected Texture2D update. RID valid: ",
+				m_hRid.is_valid(),
+				", dirty: ",
+				m_bDirty,
+				", layered: ",
+				m_bLayered,
+				", compatible image: ",
+				matchesLayout( rImage ),
+				", size: ",
+				m_nSize );
 		return false;
 	}
 	LOG( EXTREME, "RenderingServer updating Texture2D" );

@@ -1,22 +1,22 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#include <godot_cpp/classes/engine.hpp>
-#include <godot_cpp/classes/time.hpp>
-#include <godot_cpp/variant/callable.hpp>
-
-#include <algorithm>
-#include "eastl_config.h"
-#include <EASTL/array.h>
+#include "authoring/terrain_3d_editor.h"
 
 #include "Terrain3DConstants.h"
 #include "core/logger.h"
-#include "terrain_3d.h"
+#include "core/terrain_3d_util.h"
 #include "data/terrain_3d_data.h"
-#include "rendering/terrain_3d_compute.h"
-#include "authoring/terrain_3d_editor.h"
 #include "data/terrain_3d_region_codec.h"
 #include "data/terrain_3d_sampler.h"
-#include "core/terrain_3d_util.h"
+#include "eastl_config.h"
+#include "rendering/terrain_3d_compute.h"
+#include "terrain_3d.h"
+
+#include <EASTL/array.h>
+#include <algorithm>
+#include <godot_cpp/classes/engine.hpp>
+#include <godot_cpp/classes/time.hpp>
+#include <godot_cpp/variant/callable.hpp>
 
 typedef enum t3dEditSnapshotKind_e {
 	EDIT_SNAPSHOT_MAP = 0,
@@ -24,38 +24,37 @@ typedef enum t3dEditSnapshotKind_e {
 } t3dEditSnapshotKind_t;
 
 #define TERRAIN3DEDITORQUANTIZERGBA8( value ) \
-	( uint32_t ) ( CLAMP( Math::round( ( value ) * s_fByteMaxFloat ), 0.0f, s_fByteMaxFloat ) )
+	( uint32_t )( CLAMP( Math::round( ( value ) * s_fByteMaxFloat ), 0.0f, s_fByteMaxFloat ) )
 
-///////////////////////////
-// Private Functions
-///////////////////////////
+// -----------------------------------------------------------------------------
+// Private functions
 
-bool T3DEditor::isBrushSlopeAllowed(
-	T3DSampler &rSampler, const bool bUnrestricted,
-	const Vector2 &vSlopeRange, const Vector3 &rPosition
-) {
+bool T3DEditor::isBrushSlopeAllowed( T3DSampler &rSampler,
+		const bool bUnrestricted,
+		const Vector2 &vSlopeRange,
+		const Vector3 &rPosition ) {
 	if ( bUnrestricted ) {
 		return true;
 	}
 	uint32_t control = UINT32_MAX;
-	Vector3 normal = V3_NAN;
+	Vector3 normal = s_v3Nan;
 	if ( !rSampler.sampleControlAndSlopeNormal( rPosition, control, normal ) ) {
 		return false;
 	}
-	const real_t fDegrees = Math::rad_to_deg( Math::acos( CLAMP( normal.dot( V3_UP ), -1.0f, 1.0f ) ) );
+	const real_t fDegrees = Math::rad_to_deg( Math::acos( CLAMP( normal.dot( s_v3Up ), -1.0f, 1.0f ) ) );
 	return vSlopeRange.x <= fDegrees && fDegrees <= vSlopeRange.y;
 }
 
 uint32_t T3DEditor::packColorRgba8( const Color &rColor ) {
-	return TERRAIN3DEDITORQUANTIZERGBA8( rColor.r ) |
-		( TERRAIN3DEDITORQUANTIZERGBA8( rColor.g ) << 8u ) |
-		( TERRAIN3DEDITORQUANTIZERGBA8( rColor.b ) << 16u ) |
-		( TERRAIN3DEDITORQUANTIZERGBA8( rColor.a ) << 24u );
+	return TERRAIN3DEDITORQUANTIZERGBA8( rColor.r ) | ( TERRAIN3DEDITORQUANTIZERGBA8( rColor.g ) << 8u ) |
+			( TERRAIN3DEDITORQUANTIZERGBA8( rColor.b ) << 16u ) | ( TERRAIN3DEDITORQUANTIZERGBA8( rColor.a ) << 24u );
 }
 
 Color T3DEditor::unpackColorRgba8( const uint32_t nValue ) {
-	return Color( ( real_t ) ( nValue & 0xffu ) / s_fByteMaxFloat, ( real_t ) ( ( nValue >> 8u ) & 0xffu ) / s_fByteMaxFloat,
-		( real_t ) ( ( nValue >> 16u ) & 0xffu ) / s_fByteMaxFloat, ( real_t ) ( ( nValue >> 24u ) & 0xffu ) / s_fByteMaxFloat );
+	return Color( ( real_t )( nValue & 0xffu ) / s_fByteMaxFloat,
+			( real_t )( ( nValue >> 8u ) & 0xffu ) / s_fByteMaxFloat,
+			( real_t )( ( nValue >> 16u ) & 0xffu ) / s_fByteMaxFloat,
+			( real_t )( ( nValue >> 24u ) & 0xffu ) / s_fByteMaxFloat );
 }
 
 uint32_t T3DEditor::readU32( const uint8_t *pBytes, const size_t iIndex ) {
@@ -66,15 +65,15 @@ uint32_t T3DEditor::readU32( const uint8_t *pBytes, const size_t iIndex ) {
 	return value;
 }
 
-Color T3DEditor::readMapPixel(
-	const t3dRegionMapCache_t &rEntry, const size_t iIndex,
-	const Vector2i &rPixel, const t3dMapType_t mapType
-) {
+Color T3DEditor::readMapPixel( const t3dRegionMapCache_t &rEntry,
+		const size_t iIndex,
+		const Vector2i &rPixel,
+		const t3dMapType_t mapType ) {
 	if ( !rEntry.m_bDirectAccess || !rEntry.m_pMapBytes ) {
 		const Color raw = rEntry.m_pMap->get_pixelv( rPixel );
 		return mapType == TYPE_HEIGHT
-			? Color( t3dRegionCodecReadHeightPixel( rEntry.m_pMap, rPixel ), 0.0f, 0.0f, 1.0f )
-			: raw;
+				? Color( t3dRegionCodecReadHeightPixel( rEntry.m_pMap, rPixel ), 0.0f, 0.0f, 1.0f )
+				: raw;
 	}
 	if ( mapType == TYPE_HEIGHT ) {
 		uint16_t encoded = 0u;
@@ -82,28 +81,27 @@ Color T3DEditor::readMapPixel(
 		return Color( t3dRegionCodecDecodeHeightU16( encoded ), 0.0f, 0.0f, 1.0f );
 	}
 	if ( mapType == TYPE_CONTROL ) {
-		return Color( asFloat( readU32( rEntry.m_pMapBytes, iIndex ) ), 0.0f, 0.0f, 1.0f );
+		return Color( t3dAsFloat( readU32( rEntry.m_pMapBytes, iIndex ) ), 0.0f, 0.0f, 1.0f );
 	}
 	const uint8_t *pRgba = rEntry.m_pMapBytes + iIndex * 4u;
-	return Color( ( real_t ) ( pRgba[0] ) / s_fByteMaxFloat, ( real_t ) ( pRgba[1] ) / s_fByteMaxFloat, ( real_t ) ( pRgba[2] ) / s_fByteMaxFloat,
-		( real_t ) ( pRgba[3] ) / s_fByteMaxFloat );
+	return Color( ( real_t )( pRgba[0] ) / s_fByteMaxFloat,
+			( real_t )( pRgba[1] ) / s_fByteMaxFloat,
+			( real_t )( pRgba[2] ) / s_fByteMaxFloat,
+			( real_t )( pRgba[3] ) / s_fByteMaxFloat );
 }
 
-uint32_t T3DEditor::readControlBits(
-	const t3dRegionMapCache_t &rEntry, const size_t iIndex,
-	const Vector2i &rPixel
-) {
+uint32_t T3DEditor::readControlBits( const t3dRegionMapCache_t &rEntry, const size_t iIndex, const Vector2i &rPixel ) {
 	if ( rEntry.m_pControlBytes ) {
 		return readU32( rEntry.m_pControlBytes, iIndex );
 	}
-	return rEntry.m_controlMap ? asUint( rEntry.m_controlMap->get_pixelv( rPixel ).r )
-		: s_nRegionDefaultControl;
+	return rEntry.m_pControlMap ? t3dAsUint( rEntry.m_pControlMap->get_pixelv( rPixel ).r ) : s_nRegionDefaultControl;
 }
 
-void T3DEditor::writeMapPixel(
-	t3dRegionMapCache_t &rEntry, const size_t iIndex, const Vector2i &rPixel,
-	const Color &clrValue, const t3dMapType_t mapType
-) {
+void T3DEditor::writeMapPixel( t3dRegionMapCache_t &rEntry,
+		const size_t iIndex,
+		const Vector2i &rPixel,
+		const Color &clrValue,
+		const t3dMapType_t mapType ) {
 	if ( !rEntry.m_bDirectAccess || !rEntry.m_pMapBytes ) {
 		if ( mapType == TYPE_HEIGHT ) {
 			t3dRegionCodecWriteHeightPixel( rEntry.m_pMap, rPixel, clrValue.r );
@@ -118,57 +116,52 @@ void T3DEditor::writeMapPixel(
 		return;
 	}
 	if ( mapType == TYPE_CONTROL ) {
-		const uint32_t bits = asUint( clrValue.r );
+		const uint32_t bits = t3dAsUint( clrValue.r );
 		std::memcpy( rEntry.m_pMapBytes + iIndex * sizeof( uint32_t ), &bits, sizeof( uint32_t ) );
 		return;
 	}
 	uint8_t *pRgba = rEntry.m_pMapBytes + iIndex * 4u;
-	pRgba[0] = ( uint8_t ) ( TERRAIN3DEDITORQUANTIZERGBA8( clrValue.r ) );
-	pRgba[1] = ( uint8_t ) ( TERRAIN3DEDITORQUANTIZERGBA8( clrValue.g ) );
-	pRgba[2] = ( uint8_t ) ( TERRAIN3DEDITORQUANTIZERGBA8( clrValue.b ) );
-	pRgba[3] = ( uint8_t ) ( TERRAIN3DEDITORQUANTIZERGBA8( clrValue.a ) );
+	pRgba[0] = ( uint8_t )( TERRAIN3DEDITORQUANTIZERGBA8( clrValue.r ) );
+	pRgba[1] = ( uint8_t )( TERRAIN3DEDITORQUANTIZERGBA8( clrValue.g ) );
+	pRgba[2] = ( uint8_t )( TERRAIN3DEDITORQUANTIZERGBA8( clrValue.b ) );
+	pRgba[3] = ( uint8_t )( TERRAIN3DEDITORQUANTIZERGBA8( clrValue.a ) );
 }
 
 bool T3DEditor::locationLess( const Vector2i &vA, const Vector2i &rB ) {
 	return vA.x == rB.x ? vA.y < rB.y : vA.x < rB.x;
 }
 
-void T3DEditor::updateBrushAlphaCache(
-	Image *const pBrushImage, const Vector2i &vImageSize,
-	const real_t fGamma
-) {
+void T3DEditor::updateBrushAlphaCache( Image *const pBrushImage, const Vector2i &vImageSize, const real_t fGamma ) {
 	if ( m_pCachedBrushImage == pBrushImage && m_cachedBrushImageSize == vImageSize &&
-		Math::is_equal_approx( m_fCachedBrushGamma, fGamma ) &&
-		m_fBrushAlphaCache.size() == ( size_t ) ( vImageSize.x * vImageSize.y ) ) {
+			Math::is_equal_approx( m_fCachedBrushGamma, fGamma ) &&
+			m_fBrushAlphaCache.size() == ( size_t )( vImageSize.x * vImageSize.y ) ) {
 		return;
 	}
 
 	m_pCachedBrushImage = pBrushImage;
 	m_cachedBrushImageSize = vImageSize;
 	m_fCachedBrushGamma = fGamma;
-	m_fBrushAlphaCache.resize( ( size_t ) ( vImageSize.x * vImageSize.y ) );
+	m_fBrushAlphaCache.resize( ( size_t )( vImageSize.x * vImageSize.y ) );
 
 	for ( int32_t y = 0; y < vImageSize.y; ++y ) {
 		for ( int32_t x = 0; x < vImageSize.x; ++x ) {
 			real_t fAlpha = pBrushImage->get_pixel( x, y ).r;
-			fAlpha = ( real_t ) ( Math::pow( ( double ) ( fAlpha ), ( double ) ( fGamma ) ) );
-			m_fBrushAlphaCache[( size_t ) ( y * vImageSize.x + x )] = std::isnan( fAlpha ) ? 0.f : ( float ) ( fAlpha );
+			fAlpha = ( real_t )( Math::pow( ( double )( fAlpha ), ( double )( fGamma ) ) );
+			m_fBrushAlphaCache[( size_t )( y * vImageSize.x + x )] = std::isnan( fAlpha ) ? 0.f : ( float )( fAlpha );
 		}
 	}
 }
 
-Dictionary T3DEditor::captureEditSnapshot(
-	const Ref<T3DRegion> &rRegion,
-	const Dictionary &rTemplate,
-	const bool bMapWasImplicit
-) const {
+Dictionary T3DEditor::captureEditSnapshot( const Ref<T3DRegion> &rRegion,
+		const Dictionary &rTemplate,
+		const bool bMapWasImplicit ) const {
 	Dictionary snapshot;
 	if ( rRegion.is_null() ) {
 		return snapshot;
 	}
 
-	const int kind = rTemplate.has( "kind" ) ? ( int ) ( rTemplate["kind"] )
-											: ( m_tool == INSTANCER ? EDIT_SNAPSHOT_INSTANCES : EDIT_SNAPSHOT_MAP );
+	const int kind = rTemplate.has( "kind" ) ? ( int )( rTemplate["kind"] )
+											 : ( m_tool == INSTANCER ? EDIT_SNAPSHOT_INSTANCES : EDIT_SNAPSHOT_MAP );
 	snapshot["kind"] = kind;
 	snapshot["location"] = rRegion->getLocation();
 
@@ -177,11 +170,12 @@ Dictionary T3DEditor::captureEditSnapshot(
 		return snapshot;
 	}
 
-	const t3dMapType_t map_type = rTemplate.has( "map_type" ) ? ( t3dMapType_t ) ( ( int ) ( rTemplate["map_type"] ) ) : getMapType();
+	const t3dMapType_t map_type =
+			rTemplate.has( "map_type" ) ? ( t3dMapType_t )( ( int )( rTemplate["map_type"] ) ) : getMapType();
 	if ( map_type < TYPE_HEIGHT || map_type >= REGION_TYPE_MAX ) {
 		return Dictionary();
 	}
-	snapshot["map_type"] = ( int ) ( map_type );
+	snapshot["map_type"] = ( int )( map_type );
 	if ( bMapWasImplicit && ( map_type == TYPE_CONTROL || map_type == TYPE_COLOR ) ) {
 		snapshot["map_absent"] = true;
 		return snapshot;
@@ -198,11 +192,9 @@ Dictionary T3DEditor::captureEditSnapshot(
 	return snapshot;
 }
 
-void T3DEditor::applyEditSnapshot(
-	const Dictionary &rSnapshot,
-	eastl::array<eastl::vector<Vector2i>, REGION_TYPE_MAX> &rMapUpdates,
-	bool &bInstancesChanged
-) {
+void T3DEditor::applyEditSnapshot( const Dictionary &rSnapshot,
+		eastl::array<eastl::vector<Vector2i>, REGION_TYPE_MAX> &rMapUpdates,
+		bool &bInstancesChanged ) {
 	if ( !rSnapshot.has( "kind" ) || !rSnapshot.has( "location" ) ) {
 		return;
 	}
@@ -228,15 +220,15 @@ void T3DEditor::applyEditSnapshot(
 	if ( !rSnapshot.has( "map_type" ) ) {
 		return;
 	}
-	const t3dMapType_t map_type = ( t3dMapType_t ) ( ( int ) ( rSnapshot["map_type"] ) );
+	const t3dMapType_t map_type = ( t3dMapType_t )( ( int )( rSnapshot["map_type"] ) );
 	if ( map_type < TYPE_HEIGHT || map_type >= REGION_TYPE_MAX ) {
 		return;
 	}
-	if ( ( bool ) ( rSnapshot.get( "map_absent", false ) ) ) {
+	if ( ( bool )( rSnapshot.get( "map_absent", false ) ) ) {
 		if ( map_type == TYPE_CONTROL || map_type == TYPE_COLOR ) {
 			pRegion->setMap( map_type, Ref<Image>() );
 			pRegion->setModified( true );
-			rMapUpdates[( size_t ) ( map_type )].push_back( location );
+			rMapUpdates[( size_t )( map_type )].push_back( location );
 		}
 		return;
 	}
@@ -254,7 +246,7 @@ void T3DEditor::applyEditSnapshot(
 		pRegion->setHeightRange( rSnapshot["height_range"] );
 	}
 	pRegion->setModified( true );
-	rMapUpdates[( size_t ) ( map_type )].push_back( location );
+	rMapUpdates[( size_t )( map_type )].push_back( location );
 }
 
 // Sends the whole region aabb to edited_area
@@ -282,8 +274,13 @@ Ref<T3DRegion> T3DEditor::operateRegion( const Vector2i &rRegionLoc ) {
 	}
 	if ( !pData->isRegionLocationValidInternal( rRegionLoc ) ) {
 		if ( bCanPrint ) {
-			LOG( INFO, "Location ", rRegionLoc, " out of bounds. Max: ", -pData->getRegionMapSizeInternal() / 2,
-				" to ", pData->getRegionMapSizeInternal() / 2 - 1 );
+			LOG( INFO,
+					"Location ",
+					rRegionLoc,
+					" out of bounds. Max: ",
+					-pData->getRegionMapSizeInternal() / 2,
+					" to ",
+					pData->getRegionMapSizeInternal() / 2 - 1 );
 		}
 		return Ref<T3DRegion>();
 	}
@@ -295,19 +292,26 @@ Ref<T3DRegion> T3DEditor::operateRegion( const Vector2i &rRegionLoc ) {
 		return Ref<T3DRegion>();
 	}
 	if ( bCanPrint ) {
-		LOG( DEBUG, "t3dTool_t: ", m_tool, " Op: ", m_nOperation, " processing region ", rRegionLoc, ": ",
-			ptrToStr( *pRegion ) );
+		LOG( DEBUG,
+				"Tool: ",
+				m_tool,
+				" Op: ",
+				m_nOperation,
+				" processing region ",
+				rRegionLoc,
+				": ",
+				t3dPtrToStr( *pRegion ) );
 	}
 
 	// Create new region if location is null or deleted
 	if ( pRegion.is_null() || ( pRegion.is_valid() && pRegion->isDeleted() ) ) {
 		// And tool is Add Region, or Height + auto_regions
 		if ( ( m_tool == REGION && m_nOperation == ADD ) ||
-			( ( m_tool == SCULPT || m_tool == HEIGHT ) && m_brushData["auto_regions"] ) ) {
+				( ( m_tool == SCULPT || m_tool == HEIGHT ) && m_brushData["auto_regions"] ) ) {
 			if ( !m_undoData.has( "region_locations" ) ) {
 				m_undoData["region_locations"] = pData->getRegionLocations().duplicate();
 			}
-			LOG( DEBUG, "Adding blank region at: ", rRegionLoc, ", ptr: ", ptrToStr( *pRegion ) );
+			LOG( DEBUG, "Adding blank region at: ", rRegionLoc, ", ptr: ", t3dPtrToStr( *pRegion ) );
 			pRegion = pData->addRegionBlank( rRegionLoc );
 			if ( pRegion.is_null() ) {
 				LOG( ERROR, "A new region cannot be created" );
@@ -323,7 +327,7 @@ Ref<T3DRegion> T3DEditor::operateRegion( const Vector2i &rRegionLoc ) {
 		if ( !m_undoData.has( "region_locations" ) ) {
 			m_undoData["region_locations"] = pData->getRegionLocations().duplicate();
 		}
-		LOG( DEBUG, "Removing region at: ", rRegionLoc, ", ptr: ", ptrToStr( *pRegion ) );
+		LOG( DEBUG, "Removing region at: ", rRegionLoc, ", ptr: ", t3dPtrToStr( *pRegion ) );
 		m_originalRegions.push_back( pRegion );
 		height_range = pRegion->getHeightRange();
 		m_pTerrain->getData()->removeRegion( pRegion );
@@ -353,7 +357,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 	// If no region and can't add one, skip whole function. Checked again later
 	T3DData *const pData = m_pTerrain->getData();
 	if ( !pData->hasRegionp( rGlobalPosition ) &&
-		( !m_brushData["auto_regions"] || ( m_tool != SCULPT && m_tool != HEIGHT ) ) ) {
+			( !m_brushData["auto_regions"] || ( m_tool != SCULPT && m_tool != HEIGHT ) ) ) {
 		return;
 	}
 
@@ -366,7 +370,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 		return;
 	}
 	const Vector2i img_size = m_brushData["brush_image_size"];
-	const real_t fBrushSize = CLAMP( ( real_t ) ( m_brushData.get( "size", 10.f ) ), 0.1f, 4096.f ); // Meters
+	const real_t fBrushSize = CLAMP( ( real_t )( m_brushData.get( "size", 10.f ) ), 0.1f, 4096.f ); // Meters
 	// Typicall we multiply mouse pressure & strength setting, but
 	// * Mouse movement w/ button down has a pressure of 1
 	// * Mouse clicks always have pressure of 0
@@ -374,7 +378,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 	// If we're operating with a pressure of 0.001-.999 it's a pen
 	// So if there's a 0 pressure operation >100ms after a pen operation, we assume it's
 	// a mouse click. This occasionally catches a pen click, but avoids most pen lifts.
-	real_t fMousePressure = CLAMP( ( real_t ) ( m_brushData.get( "mouse_pressure", 0.f ) ), 0.f, 1.f );
+	real_t fMousePressure = CLAMP( ( real_t )( m_brushData.get( "mouse_pressure", 0.f ) ), 0.f, 1.f );
 	if ( fMousePressure > CMP_EPSILON && fMousePressure < 1.f ) {
 		m_nLastPenTick = Time::get_singleton()->get_ticks_msec();
 	}
@@ -397,13 +401,13 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 		return;
 	}
 	if ( ( m_tool == COLOR || m_tool == ROUGHNESS ) && bTextureFilter &&
-		( pAssets.is_null() || pAssets->getTextureAsset( asset_id ).is_null() ) ) {
+			( pAssets.is_null() || pAssets->getTextureAsset( asset_id ).is_null() ) ) {
 		return;
 	}
 	if ( m_tool == INSTANCER && ( pAssets.is_null() || pAssets->getMeshAsset( asset_id ).is_null() ) ) {
 		return;
 	}
-	const uint32_t asset_id_bits = ( uint32_t ) ( asset_id );
+	const uint32_t asset_id_bits = ( uint32_t )( asset_id );
 
 	const Vector2 slope_range = m_brushData["slope"];
 	const bool bEnableAngle = m_brushData["enable_angle"];
@@ -417,7 +421,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 	PackedVector3Array gradient_points = m_brushData["gradient_points"];
 
 	const real_t randf = UtilityFunctions::randf();
-	real_t fRot = randf * Math_PI * ( real_t ) ( m_brushData["brush_spin_speed"] );
+	real_t fRot = randf * Math_PI * ( real_t )( m_brushData["brush_spin_speed"] );
 	if ( m_brushData["align_to_view"] ) {
 		fRot += fCameraDirection;
 	}
@@ -446,55 +450,61 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 	const real_t fHalfBrushSize = fBrushSize * .5f;
 	const real_t fSampleCenterOffset = fVertexSpacing * .5f;
 	const int32_t sample_count = MAX( 1, ( int32_t )Math::ceil( fBrushSize / fVertexSpacing ) );
-	const int64_t total_samples = ( int64_t ) ( sample_count ) * ( int64_t ) ( sample_count );
-	const int64_t brush_pixel_count = ( int64_t ) ( img_size.x ) * ( int64_t ) ( img_size.y );
+	const int64_t total_samples = ( int64_t )( sample_count ) * ( int64_t )( sample_count );
+	const int64_t brush_pixel_count = ( int64_t )( img_size.x ) * ( int64_t )( img_size.y );
 	const bool bUseAlphaCache = total_samples >= std::max<int64_t>( 4096, brush_pixel_count / 4 );
 	if ( bUseAlphaCache ) {
 		updateBrushAlphaCache( pBrushImage, img_size, fGamma );
 	}
 	T3DSampler brushSampler( pData->getSamplingSourceInternal() );
-	const Vector2 clamped_slope_range = CLAMP( slope_range, V2_ZERO, V2( 90.f ) );
+	const Vector2 clamped_slope_range = CLAMP( slope_range, s_v2Zero, V2( 90.f ) );
 	const bool bUnrestrictedSlope = clamped_slope_range.y - clamped_slope_range.x > 89.99f;
 
-	const bool bComputeSupported =
-		m_nOperation != AVERAGE &&
-		( ( map_type == TYPE_HEIGHT && ( m_nOperation == ADD || m_nOperation == SUBTRACT || m_nOperation == GRADIENT ) ) ||
-		 ( map_type == TYPE_CONTROL &&
-		  ( m_tool == TEXTURE || m_tool == AUTOSHADER || m_tool == HOLES || m_tool == NAVIGATION ) &&
-		  ( m_nOperation == ADD || m_nOperation == SUBTRACT || m_nOperation == REPLACE ) ) ||
-		 ( map_type == TYPE_COLOR && ( m_tool == COLOR || m_tool == ROUGHNESS ) &&
-		  ( m_nOperation == ADD || m_nOperation == SUBTRACT ) ) );
+	const bool bComputeSupported = m_nOperation != AVERAGE &&
+			( ( map_type == TYPE_HEIGHT &&
+					  ( m_nOperation == ADD || m_nOperation == SUBTRACT || m_nOperation == GRADIENT ) ) ||
+					( map_type == TYPE_CONTROL &&
+							( m_tool == TEXTURE || m_tool == AUTOSHADER || m_tool == HOLES || m_tool == NAVIGATION ) &&
+							( m_nOperation == ADD || m_nOperation == SUBTRACT || m_nOperation == REPLACE ) ) ||
+					( map_type == TYPE_COLOR && ( m_tool == COLOR || m_tool == ROUGHNESS ) &&
+							( m_nOperation == ADD || m_nOperation == SUBTRACT ) ) );
 	T3DCompute *const pComputeBackend = pData->getComputeBackend();
 	const bool bUseCompute =
-		bComputeSupported && total_samples >= 4096 && pComputeBackend && pComputeBackend->isAvailable();
+			bComputeSupported && total_samples >= 4096 && pComputeBackend && pComputeBackend->isAvailable();
 	// Average operations intentionally observe earlier writes in the same stamp.
 	// Other tools can edit detached byte planes and publish each region once,
 	// eliminating thousands of Image::get_pixelv/set_pixelv calls.
 	const bool bUseDirectMapAccess = m_nOperation != AVERAGE && ( bUseCompute || total_samples >= 1024 );
 
-	m_xAxisScratch.resize( ( size_t ) ( sample_count ) );
-	m_zAxisScratch.resize( ( size_t ) ( sample_count ) );
+	m_xAxisScratch.resize( ( size_t )( sample_count ) );
+	m_zAxisScratch.resize( ( size_t )( sample_count ) );
 	eastl::vector<t3dAxisSample_t> &x_samples = m_xAxisScratch;
 	eastl::vector<t3dAxisSample_t> &z_samples = m_zAxisScratch;
 	for ( int32_t i = 0; i < sample_count; ++i ) {
-		const real_t fDistance = ( real_t ) ( i ) * fVertexSpacing;
+		const real_t fDistance = ( real_t )( i )*fVertexSpacing;
 		const bool bSingleSample = sample_count == 1;
 		const real_t offset = bSingleSample ? 0.0f : fDistance - fHalfBrushSize + fSampleCenterOffset;
 		const real_t fGlobalX = rGlobalPosition.x + offset;
 		const real_t fGlobalZ = rGlobalPosition.z + offset;
 		const real_t fDescaledX = fGlobalX / fVertexSpacing;
 		const real_t fDescaledZ = fGlobalZ / fVertexSpacing;
-		const int32_t region_x = ( int32_t )Math::floor( fDescaledX / ( real_t ) ( region_size ) );
-		const int32_t region_z = ( int32_t )Math::floor( fDescaledZ / ( real_t ) ( region_size ) );
-		x_samples[i] = {offset, fGlobalX, region_x, ( int32_t )( fDescaledX - ( real_t ) ( region_x * region_size ) ),
-						offset / fBrushSize};
-		z_samples[i] = {offset, fGlobalZ, region_z, ( int32_t )( fDescaledZ - ( real_t ) ( region_z * region_size ) ),
-						offset / fBrushSize};
+		const int32_t region_x = ( int32_t )Math::floor( fDescaledX / ( real_t )( region_size ) );
+		const int32_t region_z = ( int32_t )Math::floor( fDescaledZ / ( real_t )( region_size ) );
+		x_samples[i] = { offset,
+			fGlobalX,
+			region_x,
+			( int32_t )( fDescaledX - ( real_t )( region_x * region_size ) ),
+			offset / fBrushSize };
+		z_samples[i] = { offset,
+			fGlobalZ,
+			region_z,
+			( int32_t )( fDescaledZ - ( real_t )( region_z * region_size ) ),
+			offset / fBrushSize };
 	}
 
 	const real_t fRotCos = Math::cos( fRot );
 	const real_t fRotSin = Math::sin( fRot );
-	const eastl::array<uint32_t, 8> scale_align = {5, 6, 7, 0, 1, 2, 3, 4};
+	const eastl::array<uint32_t, 8> scale_align = { 5, 6, 7, 0, 1, 2, 3, 4 };
 
 	// Resolve each covered region and map once. At maximum brush size, repeatedly resolving regions
 	// per column still costs tens of thousands of dictionary lookups despite touching very few regions.
@@ -505,35 +515,37 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 	const int32_t region_cache_width = max_region_x - min_region_x + 1;
 	const int32_t region_cache_height = max_region_z - min_region_z + 1;
 	m_regionCacheScratch.clear();
-	m_regionCacheScratch.resize( ( size_t ) ( region_cache_width ) * ( size_t ) ( region_cache_height ) );
+	m_regionCacheScratch.resize( ( size_t )( region_cache_width ) * ( size_t )( region_cache_height ) );
 	eastl::vector<t3dRegionMapCache_t> &region_cache = m_regionCacheScratch;
 	// Store regions in the same Z-major/X-minor order used by Image pixels and by
 	// the brush traversal below. Crossing an X region boundary therefore advances
 	// to an adjacent cache entry instead of jumping by region_cache_height.
 	for ( int32_t region_z = min_region_z; region_z <= max_region_z; ++region_z ) {
 		for ( int32_t region_x = min_region_x; region_x <= max_region_x; ++region_x ) {
-			t3dRegionMapCache_t &entry = region_cache[( size_t ) ( region_z - min_region_z ) * ( size_t ) ( region_cache_width ) +
-											 ( size_t ) ( region_x - min_region_x )];
+			t3dRegionMapCache_t &entry =
+					region_cache[( size_t )( region_z - min_region_z ) * ( size_t )( region_cache_width ) +
+							( size_t )( region_x - min_region_x )];
 			entry.m_location = Vector2i( region_x, region_z );
 			entry.m_region = operateRegion( entry.m_location );
 			entry.m_bMapWasImplicit = entry.m_region.is_valid() && entry.m_region->getMapPtr( map_type ) == nullptr;
 			entry.m_pMap = entry.m_region.is_valid() ? entry.m_region->getMapPtrForWrite( map_type ) : nullptr;
-			entry.m_controlMap = entry.m_region.is_valid() ? entry.m_region->getMapPtr( TYPE_CONTROL ) : nullptr;
+			entry.m_pControlMap = entry.m_region.is_valid() ? entry.m_region->getMapPtr( TYPE_CONTROL ) : nullptr;
 			if ( !entry.m_pMap || !bUseDirectMapAccess ) {
 				continue;
 			}
 			entry.m_mapFormat = entry.m_pMap->get_format();
 			entry.m_bMapHasMipmaps = entry.m_pMap->has_mipmaps();
 			const Image::Format expected_format = map_type == TYPE_HEIGHT ? Image::FORMAT_R16
-				: map_type == TYPE_CONTROL ? Image::FORMAT_RF : Image::FORMAT_RGBA8;
+					: map_type == TYPE_CONTROL							  ? Image::FORMAT_RF
+																		  : Image::FORMAT_RGBA8;
 			const size_t bytes_per_texel = map_type == TYPE_HEIGHT ? sizeof( uint16_t ) : sizeof( uint32_t );
-			const size_t expected_bytes = ( size_t ) ( region_size ) * ( size_t ) ( region_size ) * bytes_per_texel;
+			const size_t expected_bytes = ( size_t )( region_size ) * ( size_t )( region_size )*bytes_per_texel;
 			if ( entry.m_mapFormat != expected_format || entry.m_pMap->get_width() != region_size ||
-				entry.m_pMap->get_height() != region_size ) {
+					entry.m_pMap->get_height() != region_size ) {
 				continue;
 			}
 			entry.m_mapData = entry.m_pMap->get_data();
-			if ( ( size_t ) ( entry.m_mapData.size() ) < expected_bytes ) {
+			if ( ( size_t )( entry.m_mapData.size() ) < expected_bytes ) {
 				entry.m_mapData.clear();
 				continue;
 			}
@@ -544,11 +556,12 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 			}
 			if ( map_type == TYPE_CONTROL ) {
 				entry.m_pControlBytes = entry.m_pMapBytes;
-			} else if ( entry.m_controlMap && entry.m_controlMap->get_format() == Image::FORMAT_RF &&
-				entry.m_controlMap->get_width() == region_size && entry.m_controlMap->get_height() == region_size ) {
-				entry.m_controlData = entry.m_controlMap->get_data();
-				if ( ( size_t ) ( entry.m_controlData.size() ) >=
-					( size_t ) ( region_size ) * ( size_t ) ( region_size ) * sizeof( uint32_t ) ) {
+			} else if ( entry.m_pControlMap && entry.m_pControlMap->get_format() == Image::FORMAT_RF &&
+					entry.m_pControlMap->get_width() == region_size &&
+					entry.m_pControlMap->get_height() == region_size ) {
+				entry.m_controlData = entry.m_pControlMap->get_data();
+				if ( ( size_t )( entry.m_controlData.size() ) >=
+						( size_t )( region_size ) * ( size_t )( region_size ) * sizeof( uint32_t ) ) {
 					entry.m_pControlBytes = entry.m_controlData.ptr();
 				}
 			}
@@ -560,18 +573,18 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 	eastl::vector<t3dBrushElement_t> &compute_elements = m_computeElementScratch;
 	eastl::vector<t3dComputeWrite_t> &compute_writes = m_computeWriteScratch;
 	if ( bUseCompute ) {
-		compute_elements.reserve( ( size_t ) ( total_samples ) );
-		compute_writes.reserve( ( size_t ) ( total_samples ) );
+		compute_elements.reserve( ( size_t )( total_samples ) );
+		compute_writes.reserve( ( size_t )( total_samples ) );
 	}
-
 
 	real_t fComputeAngle = angle;
 	if ( bDynamicAngle ) {
 		fComputeAngle = Vector2( -m_operationMovement.x, m_operationMovement.z ).angle();
-		fComputeAngle = ( real_t ) ( Math::fmod( Math::rad_to_deg( fComputeAngle ) + 450.f, ( real_t ) ( 360.f ) ) );
+		fComputeAngle = ( real_t )( Math::fmod( Math::rad_to_deg( fComputeAngle ) + 450.f, ( real_t )( 360.f ) ) );
 	}
-	const uint32_t compute_uv_rotation = ( uint32_t ) ( CLAMP( Math::round( fComputeAngle / 22.5f ), 0.f, 15.f ) );
-	const uint32_t compute_uv_scale = scale_align[( uint8_t ) ( CLAMP( Math::round( ( fScale + 60.f ) / 20.f ), 0.f, 7.f ) )];
+	const uint32_t compute_uv_rotation = ( uint32_t )( CLAMP( Math::round( fComputeAngle / 22.5f ), 0.f, 15.f ) );
+	const uint32_t compute_uv_scale =
+			scale_align[( uint8_t )( CLAMP( Math::round( ( fScale + 60.f ) / 20.f ), 0.f, 7.f ) )];
 
 	// Terrain image rows are X-contiguous. Keep X in the inner loop so ordinary
 	// stamps stream through map cachelines rather than revisiting one cacheline per
@@ -594,10 +607,11 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 
 			real_t fBrushAlpha;
 			if ( bUseAlphaCache ) {
-				fBrushAlpha = m_fBrushAlphaCache[( size_t ) ( brush_pixel_position.y * img_size.x + brush_pixel_position.x )];
+				fBrushAlpha =
+						m_fBrushAlphaCache[( size_t )( brush_pixel_position.y * img_size.x + brush_pixel_position.x )];
 			} else {
 				fBrushAlpha = pBrushImage->get_pixelv( brush_pixel_position ).r;
-				fBrushAlpha = ( real_t ) ( Math::pow( ( double ) ( fBrushAlpha ), ( double ) ( fGamma ) ) );
+				fBrushAlpha = ( real_t )( Math::pow( ( double )( fBrushAlpha ), ( double )( fGamma ) ) );
 				fBrushAlpha = std::isnan( fBrushAlpha ) ? 0.f : fBrushAlpha;
 			}
 			if ( fBrushAlpha <= CMP_EPSILON ) {
@@ -605,8 +619,8 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 			}
 
 			const size_t region_cache_index =
-				( size_t ) ( z_sample.m_nRegionLocation - min_region_z ) * ( size_t ) ( region_cache_width ) +
-				( size_t ) ( x_sample.m_nRegionLocation - min_region_x );
+					( size_t )( z_sample.m_nRegionLocation - min_region_z ) * ( size_t )( region_cache_width ) +
+					( size_t )( x_sample.m_nRegionLocation - min_region_x );
 			t3dRegionMapCache_t &region_entry = region_cache[region_cache_index];
 			if ( !region_entry.m_pMap ) {
 				continue;
@@ -620,9 +634,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 
 			const Vector2 brushOffset( x_sample.m_fOffset, z_sample.m_fOffset );
 			const Vector3 brushGlobalPosition(
-				x_sample.m_fGlobalPosition, rGlobalPosition.y,
-				z_sample.m_fGlobalPosition
-			);
+					x_sample.m_fGlobalPosition, rGlobalPosition.y, z_sample.m_fGlobalPosition );
 			Vector3 edited_position = brushGlobalPosition;
 			if ( map_type != TYPE_HEIGHT ) {
 				edited_position.y = brushSampler.sampleHeight( edited_position );
@@ -630,7 +642,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 			}
 
 			const size_t map_index =
-				( size_t ) ( mapPixelPosition.y ) * ( size_t ) ( region_size ) + ( size_t ) ( mapPixelPosition.x );
+					( size_t )( mapPixelPosition.y ) * ( size_t )( region_size ) + ( size_t )( mapPixelPosition.x );
 			const Color src = readMapPixel( region_entry, map_index, mapPixelPosition, map_type );
 			Color dest = src;
 			if ( bUseCompute ) {
@@ -639,7 +651,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 				uint32_t target_value = 0u;
 				if ( map_type == TYPE_HEIGHT ) {
 					const float fSourceHeight = std::isfinite( src.r ) ? src.r : 0.0f;
-					source_value = asUint( fSourceHeight );
+					source_value = t3dAsUint( fSourceHeight );
 					edited_position.y = fSourceHeight;
 					edited_area = edited_area.expand( edited_position );
 					if ( m_nOperation == GRADIENT ) {
@@ -656,41 +668,46 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 								Vector2 brushXz( brushGlobalPosition.x, brushGlobalPosition.z );
 								if ( m_operationMovement.length_squared() > 0.f ) {
 									const Vector2 movement_xz =
-										Vector2( m_operationMovement.x, m_operationMovement.z ).normalized();
+											Vector2( m_operationMovement.x, m_operationMovement.z ).normalized();
 									const Vector2 offset = movement_xz * brushOffset.dot( movement_xz );
 									brushXz = Vector2( rGlobalPosition.x + offset.x, rGlobalPosition.z + offset.y );
 								}
-								const real_t fWeight = CLAMP(
-									direction.normalized().dot( brushXz - point1Xz ) / direction.length(), 0.0f, 1.0f );
-								target_value = asUint( ( float ) ( Math::lerp( point_1.y, point_2.y, fWeight ) ) );
+								const real_t fWeight =
+										CLAMP( direction.normalized().dot( brushXz - point1Xz ) / direction.length(),
+												0.0f,
+												1.0f );
+								target_value = t3dAsUint( ( float )( Math::lerp( point_1.y, point_2.y, fWeight ) ) );
 							}
 						}
 					}
 				} else if ( map_type == TYPE_CONTROL ) {
-					source_value = asUint( src.r );
+					source_value = t3dAsUint( src.r );
 					if ( m_tool == TEXTURE ) {
-						bEligible = isBrushSlopeAllowed( brushSampler, bUnrestrictedSlope, clamped_slope_range, brushGlobalPosition );
+						bEligible = isBrushSlopeAllowed(
+								brushSampler, bUnrestrictedSlope, clamped_slope_range, brushGlobalPosition );
 					}
 				} else {
 					source_value = packColorRgba8( src );
 					if ( bTextureFilter ) {
-						const float fControl = asFloat( readControlBits( region_entry, map_index, mapPixelPosition ) );
-						const int texture_id =
-							( getBlend( fControl ) > 110 - margin ) ? getOverlay( fControl ) : getBase( fControl );
+						const float fControl =
+								t3dAsFloat( readControlBits( region_entry, map_index, mapPixelPosition ) );
+						const int texture_id = ( t3dGetBlend( fControl ) > 110 - margin ) ? t3dGetOverlay( fControl )
+																						  : t3dGetBase( fControl );
 						bEligible = texture_id == asset_id;
 					}
 					if ( bEligible ) {
-						bEligible = isBrushSlopeAllowed( brushSampler, bUnrestrictedSlope, clamped_slope_range, brushGlobalPosition );
+						bEligible = isBrushSlopeAllowed(
+								brushSampler, bUnrestrictedSlope, clamped_slope_range, brushGlobalPosition );
 					}
 				}
 				if ( bEligible ) {
 					t3dBrushElement_t element;
 					element.m_nValue = source_value;
-					element.m_nAlpha = asUint( ( float ) ( fBrushAlpha ) );
+					element.m_nAlpha = t3dAsUint( ( float )( fBrushAlpha ) );
 					element.m_nTarget = target_value;
 					element.m_nFlags = 1u;
 					compute_elements.push_back( element );
-					compute_writes.push_back( {region_cache_index, mapPixelPosition, source_value, edited_position} );
+					compute_writes.push_back( { region_cache_index, mapPixelPosition, source_value, edited_position } );
 				}
 				continue;
 			}
@@ -753,7 +770,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 								// Ramp up/down only in the direction of movement, to avoid giving winding
 								// paths one edge higher than the other.
 								const Vector2 movement_xz =
-									Vector2( m_operationMovement.x, m_operationMovement.z ).normalized();
+										Vector2( m_operationMovement.x, m_operationMovement.z ).normalized();
 								const Vector2 offset = movement_xz * Vector2( brushOffset ).dot( movement_xz );
 								brushXz = Vector2( rGlobalPosition.x + offset.x, rGlobalPosition.z + offset.y );
 							}
@@ -776,17 +793,18 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 
 			} else if ( map_type == TYPE_CONTROL ) {
 				// Get current bit field from pixel
-				uint32_t base_id = getBase( src.r );
-				uint32_t overlay_id = getOverlay( src.r );
-				real_t fBlend = ( real_t ) ( getBlend( src.r ) ) / 255.f;
-				uint32_t uvrotation = getUvRotation( src.r );
-				uint32_t uvscale = getUvScale( src.r );
-				bool bHole = isHole( src.r );
-				bool bNavigation = isNav( src.r );
-				bool bAutoshader = isAuto( src.r );
+				uint32_t base_id = t3dGetBase( src.r );
+				uint32_t overlay_id = t3dGetOverlay( src.r );
+				real_t fBlend = ( real_t )( t3dGetBlend( src.r ) ) / 255.f;
+				uint32_t uvrotation = t3dGetUvRotation( src.r );
+				uint32_t uvscale = t3dGetUvScale( src.r );
+				bool bHole = t3dIsHole( src.r );
+				bool bNavigation = t3dIsNav( src.r );
+				bool bAutoshader = t3dIsAuto( src.r );
 				switch ( m_tool ) {
 					case TEXTURE: {
-						if ( !isBrushSlopeAllowed( brushSampler, bUnrestrictedSlope, clamped_slope_range, brushGlobalPosition ) ) {
+						if ( !isBrushSlopeAllowed(
+									 brushSampler, bUnrestrictedSlope, clamped_slope_range, brushGlobalPosition ) ) {
 							continue;
 						}
 						switch ( m_nOperation ) {
@@ -807,16 +825,17 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 											// Angle from mouse movement.
 											angle = Vector2( -m_operationMovement.x, m_operationMovement.z ).angle();
 											// Avoid negative, align texture "up" with mouse direction.
-											angle = ( real_t ) ( Math::fmod( Math::rad_to_deg( angle ) + 450.f, ( real_t ) ( 360.f ) ) );
+											angle = ( real_t )( Math::fmod(
+													Math::rad_to_deg( angle ) + 450.f, ( real_t )( 360.f ) ) );
 										}
 										// Convert from degrees to 0 - 15 value range
-										uvrotation = ( uint32_t ) ( CLAMP( Math::round( angle / 22.5f ), 0.f, 15.f ) );
+										uvrotation = ( uint32_t )( CLAMP( Math::round( angle / 22.5f ), 0.f, 15.f ) );
 									}
 									if ( base_id == asset_id_bits && bEnableScale && !bAutoshader ) {
 										// Offset negative and convert from percentage to 0 - 7 bit value range
 										// Maintain 0 = 0, remap negatives to end.
-										uvscale =
-											scale_align[( uint8_t ) ( CLAMP( Math::round( ( fScale + 60.f ) / 20.f ), 0.f, 7.f ) )];
+										uvscale = scale_align[( uint8_t )( CLAMP(
+												Math::round( ( fScale + 60.f ) / 20.f ), 0.f, 7.f ) )];
 									}
 								}
 								break;
@@ -869,23 +888,24 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 								}
 
 								if ( ( base_id == asset_id_bits && fBlend < 0.5f ) ||
-									( overlay_id == asset_id_bits && fBlend >= 0.5f ) ) {
+										( overlay_id == asset_id_bits && fBlend >= 0.5f ) ) {
 									// Set angle & scale
 									if ( bEnableAngle && !bAutoshader && fBrushAlpha > 0.5f ) {
 										if ( bDynamicAngle ) {
 											// Angle from mouse movement.
 											angle = Vector2( -m_operationMovement.x, m_operationMovement.z ).angle();
 											// Avoid negative, align texture "up" with mouse direction.
-											angle = ( real_t ) ( Math::fmod( Math::rad_to_deg( angle ) + 450.f, ( real_t ) ( 360.f ) ) );
+											angle = ( real_t )( Math::fmod(
+													Math::rad_to_deg( angle ) + 450.f, ( real_t )( 360.f ) ) );
 										}
 										// Convert from degrees to 0 - 15 value range
-										uvrotation = ( uint32_t ) ( CLAMP( Math::round( angle / 22.5f ), 0.f, 15.f ) );
+										uvrotation = ( uint32_t )( CLAMP( Math::round( angle / 22.5f ), 0.f, 15.f ) );
 									}
 									if ( bEnableScale && !bAutoshader && fBrushAlpha > 0.5f ) {
 										// Offset negative and convert from percentage to 0 - 7 bit value range
 										// Maintain 0 = 0, remap negatives to end.
-										uvscale =
-											scale_align[( uint8_t ) ( CLAMP( Math::round( ( fScale + 60.f ) / 20.f ), 0.f, 7.f ) )];
+										uvscale = scale_align[( uint8_t )( CLAMP(
+												Math::round( ( fScale + 60.f ) / 20.f ), 0.f, 7.f ) )];
 									}
 								}
 								break;
@@ -906,7 +926,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 
 							case AVERAGE: {
 								const real_t fAvg =
-									average( AVG_BLEND, brushGlobalPosition, src.r, 0.f, bModifierAlt ) / 255.f;
+										average( AVG_BLEND, brushGlobalPosition, src.r, 0.f, bModifierAlt ) / 255.f;
 								fBlend = Math::lerp( fBlend, fAvg, CLAMP( fBrushAlpha * strength * 2.f, 0.f, 1.f ) );
 								break;
 							}
@@ -943,24 +963,26 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 				}
 
 				// Convert back to bitfield
-				const uint32_t blend_int = ( uint32_t ) ( CLAMP( Math::round( fBlend * 255.f ), 0.f, 255.f ) );
-				const uint32_t bits = encBase( base_id ) | encOverlay( overlay_id ) | encBlend( blend_int ) |
-								encUvRotation( uvrotation ) | encUvScale( uvscale ) | encHole( bHole ) |
-								encNav( bNavigation ) | encAuto( bAutoshader );
+				const uint32_t blend_int = ( uint32_t )( CLAMP( Math::round( fBlend * 255.f ), 0.f, 255.f ) );
+				const uint32_t bits = t3dEncBase( base_id ) | t3dEncOverlay( overlay_id ) | t3dEncBlend( blend_int ) |
+						t3dEncUvRotation( uvrotation ) | t3dEncUvScale( uvscale ) | t3dEncHole( bHole ) |
+						t3dEncNav( bNavigation ) | t3dEncAuto( bAutoshader );
 
 				// Write back to pixel in FORMAT_RF. Must be a 32-bit float
-				dest = Color( asFloat( bits ), 0.f, 0.f, 1.f );
+				dest = Color( t3dAsFloat( bits ), 0.f, 0.f, 1.f );
 
 			} else if ( map_type == TYPE_COLOR ) {
 				// Filter by visible texture
 				if ( bTextureFilter ) {
-					const float fSrcCtrl = asFloat( readControlBits( region_entry, map_index, mapPixelPosition ) );
-					const int tex_id = ( getBlend( fSrcCtrl ) > 110 - margin ) ? getOverlay( fSrcCtrl ) : getBase( fSrcCtrl );
+					const float fSrcCtrl = t3dAsFloat( readControlBits( region_entry, map_index, mapPixelPosition ) );
+					const int tex_id = ( t3dGetBlend( fSrcCtrl ) > 110 - margin ) ? t3dGetOverlay( fSrcCtrl )
+																				  : t3dGetBase( fSrcCtrl );
 					if ( tex_id != asset_id ) {
 						continue;
 					}
 				}
-				if ( !isBrushSlopeAllowed( brushSampler, bUnrestrictedSlope, clamped_slope_range, brushGlobalPosition ) ) {
+				if ( !isBrushSlopeAllowed(
+							 brushSampler, bUnrestrictedSlope, clamped_slope_range, brushGlobalPosition ) ) {
 					continue;
 				}
 				switch ( m_tool ) {
@@ -972,7 +994,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 								break;
 							}
 							case SUBTRACT: {
-								dest = src.lerp( COLOR_WHITE, CLAMP( fBrushAlpha * strength, 0.f, 1.f ) );
+								dest = src.lerp( s_colorWhite, CLAMP( fBrushAlpha * strength, 0.f, 1.f ) );
 								dest.a = src.a;
 								break;
 							}
@@ -996,21 +1018,24 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 						switch ( m_nOperation ) {
 							case ADD: {
 								const real_t fTarget = .5f + .5f * roughness;
-								dest.a = Math::lerp( ( real_t ) ( src.a ), fTarget, CLAMP( fBrushAlpha * strength, 0.f, 1.f ) );
-								dest.a = ( float ) ( ( int ) ( dest.a * 255.f ) ) /
-										 255.f; // Quantize explicitly so picked values match painted values
+								dest.a = Math::lerp(
+										( real_t )( src.a ), fTarget, CLAMP( fBrushAlpha * strength, 0.f, 1.f ) );
+								dest.a = ( float )( ( int )( dest.a * 255.f ) ) /
+										255.f; // Quantize explicitly so picked values match painted values
 								break;
 							}
 							case SUBTRACT: {
-								dest.a =
-									Math::lerp( ( real_t ) ( src.a ), ( real_t ) ( .5f ), CLAMP( fBrushAlpha * strength, 0.f, 1.f ) );
-								dest.a = ( float ) ( ( int ) ( dest.a * 255.f ) ) / 255.f;
+								dest.a = Math::lerp( ( real_t )( src.a ),
+										( real_t )( .5f ),
+										CLAMP( fBrushAlpha * strength, 0.f, 1.f ) );
+								dest.a = ( float )( ( int )( dest.a * 255.f ) ) / 255.f;
 								break;
 							}
 							case AVERAGE: {
 								const real_t fAvg = average( AVG_ROUGHNESS, brushGlobalPosition, src.a, 0.5f );
-								dest.a = Math::lerp( ( real_t ) ( dest.a ), fAvg, CLAMP( fBrushAlpha * strength * 2.f, .0f, 1.f ) );
-								dest.a = ( float ) ( ( int ) ( dest.a * 255.f ) ) / 255.f;
+								dest.a = Math::lerp(
+										( real_t )( dest.a ), fAvg, CLAMP( fBrushAlpha * strength * 2.f, .0f, 1.f ) );
+								dest.a = ( float )( ( int )( dest.a * 255.f ) ) / 255.f;
 								break;
 							}
 							default:
@@ -1032,22 +1057,23 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 
 	if ( bUseCompute && !compute_elements.empty() ) {
 		t3dBrushParams_t params;
-		params.m_nMapType = ( uint32_t ) ( map_type );
-		params.m_nTool = ( uint32_t ) ( m_tool );
-		params.m_nOperation = ( uint32_t ) ( m_nOperation );
-		params.m_fStrength = ( float ) ( strength );
-		params.m_fSelectedHeight = ( float ) ( fHeight );
-		params.m_fBrushCenterHeight = ( float ) ( rGlobalPosition.y );
-		params.m_fRoughness = ( float ) ( roughness );
+		params.m_nMapType = ( uint32_t )( map_type );
+		params.m_nTool = ( uint32_t )( m_tool );
+		params.m_nOperation = ( uint32_t )( m_nOperation );
+		params.m_fStrength = ( float )( strength );
+		params.m_fSelectedHeight = ( float )( fHeight );
+		params.m_fBrushCenterHeight = ( float )( rGlobalPosition.y );
+		params.m_fRoughness = ( float )( roughness );
 		params.m_nColorRgba8 = packColorRgba8( color );
 		params.m_nAssetId = asset_id_bits;
 		params.m_nUvRotation = compute_uv_rotation;
 		params.m_nUvScale = compute_uv_scale;
 		params.m_nFeatureFlags = ( bModifierAlt ? 1u : 0u ) | ( std::isfinite( rGlobalPosition.y ) ? 2u : 0u ) |
-							   ( bEnableTexture ? 4u : 0u ) | ( bEnableAngle ? 8u : 0u ) | ( bEnableScale ? 16u : 0u );
+				( bEnableTexture ? 4u : 0u ) | ( bEnableAngle ? 8u : 0u ) | ( bEnableScale ? 16u : 0u );
 		if ( !pComputeBackend->processBrush( compute_elements, params ) ) {
 			LOG( WARN,
-				"Compute brush failed; using buffer-equivalent CPU fallback: ", pComputeBackend->getLastError() );
+					"Compute brush failed; using buffer-equivalent CPU fallback: ",
+					pComputeBackend->getLastError() );
 			T3DCompute::processBrushCpu( compute_elements, params );
 		}
 		for ( size_t i = 0; i < compute_elements.size(); ++i ) {
@@ -1062,9 +1088,9 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 			}
 			backupRegion( entry.m_region, entry.m_bMapWasImplicit );
 			const size_t map_index =
-				( size_t ) ( write.m_mapPixel.y ) * ( size_t ) ( region_size ) + ( size_t ) ( write.m_mapPixel.x );
+					( size_t )( write.m_mapPixel.y ) * ( size_t )( region_size ) + ( size_t )( write.m_mapPixel.x );
 			if ( map_type == TYPE_HEIGHT ) {
-				const float fResult = asFloat( element.m_nValue );
+				const float fResult = t3dAsFloat( element.m_nValue );
 				writeMapPixel( entry, map_index, write.m_mapPixel, Color( fResult, 0.f, 0.f, 1.f ), map_type );
 				entry.m_region->updateHeight( fResult );
 				pData->updateMasterHeight( fResult );
@@ -1072,7 +1098,11 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 				result_position.y = fResult;
 				edited_area = edited_area.expand( result_position );
 			} else if ( map_type == TYPE_CONTROL ) {
-				writeMapPixel( entry, map_index, write.m_mapPixel, Color( asFloat( element.m_nValue ), 0.f, 0.f, 1.f ), map_type );
+				writeMapPixel( entry,
+						map_index,
+						write.m_mapPixel,
+						Color( t3dAsFloat( element.m_nValue ), 0.f, 0.f, 1.f ),
+						map_type );
 			} else {
 				writeMapPixel( entry, map_index, write.m_mapPixel, unpackColorRgba8( element.m_nValue ), map_type );
 			}
@@ -1085,14 +1115,15 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 	// identity for the renderer, undo snapshots and external references.
 	for ( t3dRegionMapCache_t &entry : region_cache ) {
 		if ( entry.m_bModified && entry.m_bDirectAccess && entry.m_pMap && !entry.m_mapData.is_empty() ) {
-			entry.m_pMap->set_data( region_size, region_size, entry.m_bMapHasMipmaps, entry.m_mapFormat, entry.m_mapData );
+			entry.m_pMap->set_data(
+					region_size, region_size, entry.m_bMapHasMipmaps, entry.m_mapFormat, entry.m_mapData );
 		}
-			if ( entry.m_bMapWasImplicit && !entry.m_bModified && entry.m_region.is_valid() &&
+		if ( entry.m_bMapWasImplicit && !entry.m_bModified && entry.m_region.is_valid() &&
 				( map_type == TYPE_CONTROL || map_type == TYPE_COLOR ) ) {
-				// Region coverage is resolved before slope/texture filters are evaluated.
-				// Drop transient default maps for covered regions that received no write.
-				entry.m_region->compactMapIfDefault( map_type, false );
-			}
+			// Region coverage is resolved before slope/texture filters are evaluated.
+			// Drop transient default maps for covered regions that received no write.
+			entry.m_region->compactMapIfDefault( map_type, false );
+		}
 	}
 
 	m_modifiedRegionScratch.clear();
@@ -1109,8 +1140,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 	if ( m_tool == HOLES || m_tool == HEIGHT || m_tool == SCULPT ) {
 		commit_flags |= MAP_EDIT_UPDATE_INSTANCES;
 	}
-	if ( m_pTerrain->getCollisionMode() == DYNAMIC_EDITOR &&
-		( map_type == TYPE_HEIGHT || map_type == TYPE_CONTROL ) ) {
+	if ( m_pTerrain->getCollisionMode() == DYNAMIC_EDITOR && ( map_type == TYPE_HEIGHT || map_type == TYPE_CONTROL ) ) {
 		commit_flags |= MAP_EDIT_UPDATE_COLLISION;
 	}
 	if ( m_tool == HEIGHT || m_tool == SCULPT || m_tool == TEXTURE || m_tool == AUTOSHADER ) {
@@ -1163,8 +1193,11 @@ void T3DEditor::storeUndo( void ) {
 				pRegion->dump();
 			}
 		}
-		LOG( DEBUG, "Targeted edit snapshots: undo=", m_originalEditSnapshots.size(),
-			", redo=", m_editedEditSnapshots.size() );
+		LOG( DEBUG,
+				"Targeted edit snapshots: undo=",
+				m_originalEditSnapshots.size(),
+				", redo=",
+				m_editedEditSnapshots.size() );
 	}
 
 	// Store regions that were removed or added
@@ -1191,14 +1224,16 @@ void T3DEditor::storeUndo( void ) {
 		LOG( INFO, "Storing undo snapshot" );
 		String action_name = "Terrain3D Edit";
 		if ( bHasValidTool && m_nOperation >= 0 && m_nOperation < OP_MAX ) {
-			action_name = String( "Terrain3D " ) + TERRAIN3D_EDITOR_OPERATION_NAMES[m_nOperation] + String( " " ) + TERRAIN3D_EDITOR_TOOL_NAMES[m_tool];
+			action_name = String( "Terrain3D " ) + s_pszEditorOperationNames[m_nOperation] + String( " " ) +
+					s_pszEditorToolNames[m_tool];
 		}
 		LOG( DEBUG, "Creating undo action: '", action_name, "'" );
 		m_pTerrain->getPlugin()->call( "create_undo_action", action_name );
 
 		LOG( DEBUG, "Storing undo snapshot: " );
 		T3DUtil::printDict( "_undo_data snapshot", m_undoData, DEBUG );
-		m_pTerrain->getPlugin()->call( "add_undo_method", Callable( this, "apply_undo" ).bind( m_undoData.duplicate() ) );
+		m_pTerrain->getPlugin()->call(
+				"add_undo_method", Callable( this, "apply_undo" ).bind( m_undoData.duplicate() ) );
 
 		LOG( DEBUG, "Storing redo snapshot: " );
 		T3DUtil::printDict( "redo_data snapshot", redo_data, DEBUG );
@@ -1243,8 +1278,8 @@ void T3DEditor::applyUndo( const Dictionary &rData ) {
 				LOG( ERROR, "Unable to restore undo region at ", pRegion->getLocation(), ": ", replace_error );
 				continue;
 			}
-			pRegion->setModified( true ); // Tell update_maps() this region has layers that can be individually updated
-			pRegion->setEdited( true );	// Flag so update_maps() will include it
+			pRegion->setModified( true ); // Marks the region for per-layer map updates.
+			pRegion->setEdited( true ); // Includes the region in the next map update.
 			pRegion->setDeleted( false ); // Ensure region not marked for deletion
 			restored_region_locations.push_back( pRegion->getLocation() );
 			if ( T3DTerrain::s_debugLevel >= DEBUG ) {
@@ -1265,7 +1300,7 @@ void T3DEditor::applyUndo( const Dictionary &rData ) {
 		for ( const Vector2i region_loc : region_locs ) {
 			Ref<T3DRegion> pRegion = pData->getRegion( region_loc );
 			if ( pRegion.is_valid() ) {
-				LOG( DEBUG, "Marking region: ", region_loc, " +deleted, +modified, ", ptrToStr( *pRegion ) );
+				LOG( DEBUG, "Marking region: ", region_loc, " +deleted, +modified, ", t3dPtrToStr( *pRegion ) );
 				pRegion->setDeleted( true );
 				pRegion->setModified( true );
 			}
@@ -1277,7 +1312,7 @@ void T3DEditor::applyUndo( const Dictionary &rData ) {
 		for ( const Vector2i region_loc : region_locs ) {
 			Ref<T3DRegion> pRegion = pData->getRegion( region_loc );
 			if ( pRegion.is_valid() ) {
-				LOG( DEBUG, "Marking region: ", region_loc, " -deleted, +modified, ", ptrToStr( *pRegion ) );
+				LOG( DEBUG, "Marking region: ", region_loc, " -deleted, +modified, ", t3dPtrToStr( *pRegion ) );
 				pRegion->setDeleted( false );
 				pRegion->setModified( true );
 				sendRegionAabb( region_loc, pRegion->getHeightRange() );
@@ -1303,20 +1338,20 @@ void T3DEditor::applyUndo( const Dictionary &rData ) {
 	}
 	const AABB restored_area = rData.has( "edited_area" ) ? AABB( rData["edited_area"] ) : AABB();
 	for ( int map_type = TYPE_HEIGHT; map_type < REGION_TYPE_MAX; ++map_type ) {
-		eastl::vector<Vector2i> commit_locations = restored_map_locations[( size_t ) ( map_type )];
-		commit_locations.insert( commit_locations.end(), restored_region_locations.begin(),
-								restored_region_locations.end() );
+		eastl::vector<Vector2i> commit_locations = restored_map_locations[( size_t )( map_type )];
+		commit_locations.insert(
+				commit_locations.end(), restored_region_locations.begin(), restored_region_locations.end() );
 		std::sort( commit_locations.begin(), commit_locations.end(), locationLess );
-		commit_locations.erase( std::unique( commit_locations.begin(), commit_locations.end() ), commit_locations.end() );
+		commit_locations.erase(
+				std::unique( commit_locations.begin(), commit_locations.end() ), commit_locations.end() );
 		if ( commit_locations.empty() ) {
 			continue;
 		}
 		uint32_t commit_flags = 0u;
 		if ( map_type == TYPE_HEIGHT || map_type == TYPE_CONTROL ) {
-			commit_flags |= MAP_EDIT_UPDATE_INSTANCES | MAP_EDIT_UPDATE_COLLISION |
-							MAP_EDIT_SNAP;
+			commit_flags |= MAP_EDIT_UPDATE_INSTANCES | MAP_EDIT_UPDATE_COLLISION | MAP_EDIT_SNAP;
 		}
-		pData->commitMapEdits( ( t3dMapType_t ) ( map_type ), commit_locations, restored_area, commit_flags );
+		pData->commitMapEdits( ( t3dMapType_t )( map_type ), commit_locations, restored_area, commit_flags );
 	}
 	// After TextureArray updates clear edited regions flag.
 	if ( rData.has( "edited_regions" ) ) {
@@ -1328,16 +1363,17 @@ void T3DEditor::applyUndo( const Dictionary &rData ) {
 		}
 	}
 	if ( bInstancesChanged || rData.has( "edited_regions" ) || rData.has( "added_regions" ) ||
-		rData.has( "removed_regions" ) ) {
-		m_pTerrain->getInstancer()->updateMmis( -1, V2I_MAX, true );
+			rData.has( "removed_regions" ) ) {
+		m_pTerrain->getInstancer()->updateMmis( -1, s_v2iMax, true );
 	}
 }
 
 // Returns average of height, blend (as real_t(0-255)), or roughness. Overloaded version handles average color
-float T3DEditor::average(
-	const t3dAverageMode_t mode, const Vector3 &rGlobalPosition, const float fBase,
-	const float fNanVal, const bool bAlt
-) const {
+float T3DEditor::average( const t3dAverageMode_t mode,
+		const Vector3 &rGlobalPosition,
+		const float fBase,
+		const float fNanVal,
+		const bool bAlt ) const {
 	IS_DATA_INIT( NAN );
 	T3DData *const pData = m_pTerrain->getData();
 	const real_t fVertexSpacing = m_pTerrain->getVertexSpacing();
@@ -1378,9 +1414,11 @@ float T3DEditor::average(
 
 	if ( mode == AVG_BLEND ) {
 		if ( bAlt ) {
-			return ( getBlend( fBase ) + getBlend( fLeft ) + getBlend( right ) + getBlend( up ) + getBlend( down ) ) * 0.2f;
+			return ( t3dGetBlend( fBase ) + t3dGetBlend( fLeft ) + t3dGetBlend( right ) + t3dGetBlend( up ) +
+						   t3dGetBlend( down ) ) *
+					0.2f;
 		} else {
-			return Math::lerp( ( float ) ( getBlend( fBase ) ), 128.f, .1f );
+			return Math::lerp( ( float )( t3dGetBlend( fBase ) ), 128.f, .1f );
 		}
 	} else {
 		return ( fBase + fLeft + right + up + down ) * 0.2f;
@@ -1388,7 +1426,7 @@ float T3DEditor::average(
 }
 
 Color T3DEditor::average( const Vector3 &rGlobalPosition, const Color &clrBase ) const {
-	IS_DATA_INIT( COLOR_NAN );
+	IS_DATA_INIT( s_colorNan );
 	T3DData *const pData = m_pTerrain->getData();
 	const real_t fVertexSpacing = m_pTerrain->getVertexSpacing();
 	const Vector3 left_position = rGlobalPosition - Vector3( fVertexSpacing, 0.f, 0.f );
@@ -1398,36 +1436,37 @@ Color T3DEditor::average( const Vector3 &rGlobalPosition, const Color &clrBase )
 
 	Color left = pData->getPixel( TYPE_COLOR, left_position ).srgb_to_linear();
 	if ( std::isnan( left.r ) ) {
-		left = COLOR_WHITE;
+		left = s_colorWhite;
 	}
 	Color right = pData->getPixel( TYPE_COLOR, right_position ).srgb_to_linear();
 	if ( std::isnan( right.r ) ) {
-		right = COLOR_WHITE;
+		right = s_colorWhite;
 	}
 	Color up = pData->getPixel( TYPE_COLOR, up_position ).srgb_to_linear();
 	if ( std::isnan( up.r ) ) {
-		up = COLOR_WHITE;
+		up = s_colorWhite;
 	}
 	Color down = pData->getPixel( TYPE_COLOR, down_position ).srgb_to_linear();
 	if ( std::isnan( down.r ) ) {
-		down = COLOR_WHITE;
+		down = s_colorWhite;
 	}
 	Color base = clrBase.srgb_to_linear();
-	return Color( ( base.r + left.r + right.r + up.r + down.r ) * 0.2f, ( base.g + left.g + right.g + up.g + down.g ) * 0.2f,
-				 ( base.b + left.b + right.b + up.b + down.b ) * 0.2f, 1.f )
-		.linear_to_srgb();
+	return Color( ( base.r + left.r + right.r + up.r + down.r ) * 0.2f,
+			( base.g + left.g + right.g + up.g + down.g ) * 0.2f,
+			( base.b + left.b + right.b + up.b + down.b ) * 0.2f,
+			1.f )
+			.linear_to_srgb();
 }
 
-///////////////////////////
-// Public Functions
-///////////////////////////
+// -----------------------------------------------------------------------------
+// Public functions
 
-// Santize and set incoming brush data w/ defaults and clamps
-// Only santizes data needed for the editor, other parameters (eg instancer) untouched here
+// Sanitizes incoming brush data and applies editor defaults and clamps.
+// Only editor-owned fields are sanitized here; instancer-specific fields remain untouched.
 void T3DEditor::setBrushData( const Dictionary &rData ) {
 	m_brushData = rData; // Same instance. Anything could be inserted after this, eg mouse_pressure
 	m_pCachedBrushImage = nullptr;
-	m_cachedBrushImageSize = V2I_ZERO;
+	m_cachedBrushImageSize = s_v2iZero;
 	m_fCachedBrushGamma = -1.f;
 	m_fBrushAlphaCache.clear();
 
@@ -1451,69 +1490,70 @@ void T3DEditor::setBrushData( const Dictionary &rData ) {
 		LOG( ERROR, "Brush data doesn't contain an image and texture" );
 	}
 
-	// Santize settings
-	// size is redundantly clamped differently in _operate_map and instancer::add_transforms
-	m_brushData["size"] = CLAMP( ( real_t ) ( rData.get( "size", 10.f ) ), 0.1f, 4096.f ); // Diameter in meters
-	m_brushData["strength"] =
-		CLAMP( ( real_t ) ( rData.get( "strength", .1f ) ) * .01f, .01f, 1000.f ); // 1-100k% (max of 1000m per click)
-	// mouse_pressure injected in editor.gd and sanitized in _operate_map()
+	// Sanitize scalar brush settings.
+	// Size is also constrained by operateMap() and T3DInstancer::addTransforms().
+	m_brushData["size"] = CLAMP( ( real_t )( rData.get( "size", 10.f ) ), 0.1f, 4096.f ); // Diameter in meters
+	m_brushData["strength"] = CLAMP(
+			( real_t )( rData.get( "strength", .1f ) ) * .01f, .01f, 1000.f ); // 1-100k% (max of 1000m per click)
+	// mouse_pressure is injected by editor.gd and sanitized by operateMap().
 	Vector2 slope = rData.get( "slope", Vector2( 0.f, 90.f ) );
 	slope.x = CLAMP( slope.x, 0.f, 90.f );
 	slope.y = CLAMP( slope.y, 0.f, 90.f );
-	m_brushData["slope"] = slope;														 // 0-90 (degrees)
-	m_brushData["height"] = CLAMP( ( real_t ) ( rData.get( "height", 0.f ) ), -65536.f, 65536.f ); // Meters
+	m_brushData["slope"] = slope; // 0-90 (degrees)
+	m_brushData["height"] = CLAMP( ( real_t )( rData.get( "height", 0.f ) ), -65536.f, 65536.f ); // Meters
 	Color col = rData.get( "color", COLOR_ROUGHNESS );
 	col.r = CLAMP( col.r, 0.f, 5.f );
 	col.g = CLAMP( col.g, 0.f, 5.f );
 	col.b = CLAMP( col.b, 0.f, 5.f );
 	col.a = CLAMP( col.a, 0.f, 1.f );
 	m_brushData["color"] = col;
-	m_brushData["roughness"] = CLAMP( ( real_t ) ( rData.get( "roughness", 0.f ) ), -100.f, 100.f ) * .01f; // Percentage
+	m_brushData["roughness"] = CLAMP( ( real_t )( rData.get( "roughness", 0.f ) ), -100.f, 100.f ) * .01f; // Percentage
 
 	m_brushData["enable_texture"] = rData.get( "enable_texture", true );
 	m_brushData["texture_filter"] = rData.get( "texture_filter", false );
-	const int requested_asset_id = ( int ) ( rData.get( "asset_id", -1 ) );
+	const int requested_asset_id = ( int )( rData.get( "asset_id", -1 ) );
 	const int maximum_asset_id = MAX( s_nMaxMeshAssets, s_nMaxTextureAssets ) - 1;
 	m_brushData["asset_id"] = requested_asset_id < 0 ? -1 : CLAMP( requested_asset_id, 0, maximum_asset_id );
-	m_brushData["margin"] = CLAMP( ( int ) ( rData.get( "margin", 0 ) ), -100, 100 );
+	m_brushData["margin"] = CLAMP( ( int )( rData.get( "margin", 0 ) ), -100, 100 );
 
 	m_brushData["enable_angle"] = rData.get( "enable_angle", true );
 	m_brushData["dynamic_angle"] = rData.get( "dynamic_angle", false );
-	m_brushData["angle"] = CLAMP( ( real_t ) ( rData.get( "angle", 0.f ) ), 0.f, 337.5f );
+	m_brushData["angle"] = CLAMP( ( real_t )( rData.get( "angle", 0.f ) ), 0.f, 337.5f );
 
 	m_brushData["enable_scale"] = rData.get( "enable_scale", true );
-	m_brushData["scale"] = CLAMP( ( real_t ) ( rData.get( "scale", 0.f ) ), -60.f, 80.f );
+	m_brushData["scale"] = CLAMP( ( real_t )( rData.get( "scale", 0.f ) ), -60.f, 80.f );
 
-	m_brushData["auto_regions"] = ( bool ) ( rData.get( "auto_regions", true ) );
-	m_brushData["align_to_view"] = ( bool ) ( rData.get( "align_to_view", true ) );
-	m_brushData["gamma"] = CLAMP( ( real_t ) ( rData.get( "gamma", 1.f ) ), 0.1f, 2.f );
-	m_brushData["brush_spin_speed"] = CLAMP( ( real_t ) ( rData.get( "brush_spin_speed", 0.f ) ), 0.f, 1.f );
+	m_brushData["auto_regions"] = ( bool )( rData.get( "auto_regions", true ) );
+	m_brushData["align_to_view"] = ( bool )( rData.get( "align_to_view", true ) );
+	m_brushData["gamma"] = CLAMP( ( real_t )( rData.get( "gamma", 1.f ) ), 0.1f, 2.f );
+	m_brushData["brush_spin_speed"] = CLAMP( ( real_t )( rData.get( "brush_spin_speed", 0.f ) ), 0.f, 1.f );
 	m_brushData["gradient_points"] = rData.get( "gradient_points", PackedVector3Array() );
 
-	T3DUtil::printDict( "set_brush_data() Santized brush data:", m_brushData, EXTREME );
+	T3DUtil::printDict( "setBrushData() sanitized brush data:", m_brushData, EXTREME );
 }
 
 void T3DEditor::setTool( const t3dTool_t tool ) {
-	const t3dTool_t new_tool = CLAMP( tool, ( t3dTool_t ) ( 0 ), TOOL_MAX );
+	const t3dTool_t new_tool = CLAMP( tool, ( t3dTool_t )( 0 ), TOOL_MAX );
 	if ( new_tool == m_tool ) {
 		return;
 	}
 	const t3dTool_t old_tool = m_tool;
 	m_tool = new_tool;
-	if ( m_pTerrain && ( m_tool == t3dTool_t::NAVIGATION || old_tool == t3dTool_t::NAVIGATION || m_tool == t3dTool_t::REGION ||
-					 old_tool == t3dTool_t::REGION ) ) {
+	if ( m_pTerrain &&
+			( m_tool == t3dTool_t::NAVIGATION || old_tool == t3dTool_t::NAVIGATION || m_tool == t3dTool_t::REGION ||
+					old_tool == t3dTool_t::REGION ) ) {
 		m_pTerrain->getMaterial()->update( FULL_REBUILD );
 	}
 }
 
 void T3DEditor::setOperation( const t3dOperation_t operation ) {
-	SET_IF_DIFF( m_nOperation, CLAMP( operation, ( t3dOperation_t ) ( 0 ), OP_MAX ) );
+	SET_IF_DIFF( m_nOperation, CLAMP( operation, ( t3dOperation_t )( 0 ), OP_MAX ) );
 }
 
 // Called on mouse click
 void T3DEditor::startOperation( const Vector3 &rGlobalPosition ) {
 	IS_DATA_INIT_MESG( "Terrain isn't initialized", VOID );
-	LOG( INFO, "t3dSetting_t up undo snapshot" );
+	LOG( INFO, "Setting up undo snapshot" );
 	m_undoData.clear();
 	m_bIsOperating = true;
 	m_originalRegions = TypedArray<T3DRegion>(); // New pointers instead of clear
@@ -1525,7 +1565,7 @@ void T3DEditor::startOperation( const Vector3 &rGlobalPosition ) {
 	m_pTerrain->getInstancer()->resetDensityCounter();
 	m_pTerrain->getData()->clearEditedArea();
 	m_operationPosition = rGlobalPosition;
-	m_operationMovement = V3_ZERO;
+	m_operationMovement = s_v3Zero;
 }
 
 // Called on mouse movement with left mouse button down
@@ -1610,9 +1650,8 @@ void T3DEditor::trimBrushScratch( void ) {
 	m_computeWriteScratch.clear();
 	m_modifiedRegionScratch.clear();
 
-	const size_t compute_bytes =
-		m_computeElementScratch.capacity() * sizeof( t3dBrushElement_t ) +
-		m_computeWriteScratch.capacity() * sizeof( t3dComputeWrite_t );
+	const size_t compute_bytes = m_computeElementScratch.capacity() * sizeof( t3dBrushElement_t ) +
+			m_computeWriteScratch.capacity() * sizeof( t3dComputeWrite_t );
 	if ( compute_bytes > s_nComputeScratchRetainLimit ) {
 		eastl::vector<t3dBrushElement_t>().swap( m_computeElementScratch );
 		eastl::vector<t3dComputeWrite_t>().swap( m_computeWriteScratch );
@@ -1623,7 +1662,7 @@ void T3DEditor::trimBrushScratch( void ) {
 	if ( m_pTerrain && m_pTerrain->getData() ) {
 		region_map_size = m_pTerrain->getData()->getRegionMapSizeInternal();
 	}
-	const size_t region_cache_limit = ( size_t ) ( region_map_size ) * ( size_t ) ( region_map_size );
+	const size_t region_cache_limit = ( size_t )( region_map_size ) * ( size_t )( region_map_size );
 	if ( m_regionCacheScratch.capacity() > region_cache_limit ) {
 		eastl::vector<t3dRegionMapCache_t>().swap( m_regionCacheScratch );
 	}
@@ -1633,11 +1672,18 @@ void T3DEditor::trimBrushScratch( void ) {
 void T3DEditor::stopOperation( void ) {
 	IS_DATA_INIT_MESG( "Terrain isn't initialized", VOID );
 	// If undo was created and terrain actually modified, store it
-	LOG( DEBUG, "Backed up regions: ", m_originalRegions.size(), ", Edited regions: ", m_editedRegions.size(),
-		", Targeted snapshots: ", m_originalEditSnapshots.size(),
-		", Added/Removed regions: ", m_addedRemovedLocations.size() );
+	LOG( DEBUG,
+			"Backed up regions: ",
+			m_originalRegions.size(),
+			", Edited regions: ",
+			m_editedRegions.size(),
+			", Targeted snapshots: ",
+			m_originalEditSnapshots.size(),
+			", Added/Removed regions: ",
+			m_addedRemovedLocations.size() );
 	if ( m_bIsOperating &&
-		( !m_addedRemovedLocations.is_empty() || !m_editedRegions.is_empty() || !m_originalEditSnapshots.is_empty() ) ) {
+			( !m_addedRemovedLocations.is_empty() || !m_editedRegions.is_empty() ||
+					!m_originalEditSnapshots.is_empty() ) ) {
 		for ( int i = 0; i < m_editedRegions.size(); i++ ) {
 			Ref<T3DRegion> pRegion = m_editedRegions[i];
 			pRegion->setEdited( false );
@@ -1679,10 +1725,8 @@ void T3DEditor::stopOperation( void ) {
 	trimBrushScratch();
 }
 
-
-///////////////////////////
-// Protected Functions
-///////////////////////////
+// -----------------------------------------------------------------------------
+// Protected functions
 
 void T3DEditor::_bind_methods( void ) {
 	BIND_ENUM_CONSTANT( ADD );
@@ -1718,7 +1762,8 @@ void T3DEditor::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "start_operation", "position" ), &T3DEditor::startOperation );
 	ClassDB::bind_method( D_METHOD( "is_operating" ), &T3DEditor::isOperating );
 	ClassDB::bind_method( D_METHOD( "operate", "position", "camera_direction" ), &T3DEditor::operate );
-	ClassDB::bind_method( D_METHOD( "backup_region", "region", "map_was_implicit" ), &T3DEditor::backupRegion, DEFVAL( false ) );
+	ClassDB::bind_method(
+			D_METHOD( "backup_region", "region", "map_was_implicit" ), &T3DEditor::backupRegion, DEFVAL( false ) );
 	ClassDB::bind_method( D_METHOD( "backup_region_full", "region" ), &T3DEditor::backupRegionFull );
 	ClassDB::bind_method( D_METHOD( "stop_operation" ), &T3DEditor::stopOperation );
 

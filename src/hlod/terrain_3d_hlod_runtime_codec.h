@@ -5,6 +5,7 @@
 
 #include "Terrain3DConstants.h"
 #include "eastl_config.h"
+
 #include <EASTL/array.h>
 #include <EASTL/vector.h>
 #include <godot_cpp/variant/aabb.hpp>
@@ -21,9 +22,9 @@ using namespace godot;
 
 typedef struct t3dHlodRuntimeEntryRecord_s {
 	int m_nLevel = 1;
-	Vector2i m_cluster = V2I_ZERO;
-	Vector2i m_regionMin = V2I_ZERO;
-	Vector2i m_regionMax = V2I_ZERO;
+	Vector2i m_cluster = s_v2iZero;
+	Vector2i m_regionMin = s_v2iZero;
+	Vector2i m_regionMax = s_v2iZero;
 	AABB m_localBounds;
 	String m_packagePath;
 	real_t m_fGeometricError = 1.0f;
@@ -31,7 +32,7 @@ typedef struct t3dHlodRuntimeEntryRecord_s {
 	int64_t m_nBuildSignature = 0;
 	int64_t m_nEstimatedGpuBytes = 0;
 	int m_nParent = -1;
-	int m_szChildren[4] = {-1, -1, -1, -1};
+	int m_szChildren[4] = { -1, -1, -1, -1 };
 } t3dHlodRuntimeEntryRecord_t;
 
 typedef struct t3dHlodRuntimeNodePolicyRecord_s {
@@ -49,13 +50,11 @@ typedef struct t3dHlodRuntimeData_s {
 
 class T3DHLODRuntimeCodec {
 public:
-	static PackedByteArray encode(
-		const Array &rEntries,
-		const PackedByteArray &rInstancerMinLevels,
-		const PackedInt32Array &rNodeRegionIndices,
-		const PackedInt64Array &rNodeSpawnIds,
-		const PackedByteArray &rNodeMinLevels
-	);
+	static PackedByteArray encode( const Array &rEntries,
+			const PackedByteArray &rInstancerMinLevels,
+			const PackedInt32Array &rNodeRegionIndices,
+			const PackedInt64Array &rNodeSpawnIds,
+			const PackedByteArray &rNodeMinLevels );
 	static bool decode( const PackedByteArray &rBlob, t3dHlodRuntimeData_t &rData );
 };
 

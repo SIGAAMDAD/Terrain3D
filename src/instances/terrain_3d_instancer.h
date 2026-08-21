@@ -5,24 +5,23 @@
 #ifndef TERRAIN3D_INSTANCER_CLASS_H
 #define TERRAIN3D_INSTANCER_CLASS_H
 
-#include <godot_cpp/classes/multi_mesh.hpp>
-#include <godot_cpp/classes/multi_mesh_instance3d.hpp>
-#include <array>
-#include "eastl_config.h"
-#include <EASTL/bitset.h>
-#include <cstdint>
-#include "core/terrain_3d_flat_hash.h"
-#include <EASTL/vector.h>
-
 #include "Terrain3DConstants.h"
-#include "instances/terrain_3d_instance_layout.h"
+#include "core/terrain_3d_flat_hash.h"
 #include "core/terrain_3d_limits.h"
 #include "data/terrain_3d_region.h"
+#include "eastl_config.h"
+#include "instances/terrain_3d_instance_layout.h"
+
+#include <EASTL/bitset.h>
+#include <EASTL/vector.h>
+#include <array>
+#include <cstdint>
+#include <godot_cpp/classes/multi_mesh.hpp>
+#include <godot_cpp/classes/multi_mesh_instance3d.hpp>
 
 class T3DTerrain;
 class T3DAssets;
 class T3DSampler;
-
 
 typedef enum t3dInstancerMode_e {
 	INSTANCER_DISABLED,
@@ -32,14 +31,14 @@ typedef enum t3dInstancerMode_e {
 
 typedef struct t3dVector2iHash_s {
 	size_t operator()( const Vector2i &rValue ) const {
-		const uint64_t x = ( uint32_t ) ( rValue.x );
-		const uint64_t y = ( uint32_t ) ( rValue.y );
+		const uint64_t x = ( uint32_t )( rValue.x );
+		const uint64_t y = ( uint32_t )( rValue.y );
 		uint64_t h = ( x << 32 ) | y;
 		h ^= h >> 33;
 		h *= 0xff51afd7ed558ccdu;
 		h ^= h >> 33;
 		h *= 0xc4ceb9fe1a85ec53u;
-		return ( size_t ) ( h ^ ( h >> 33 ) );
+		return ( size_t )( h ^ ( h >> 33 ) );
 	}
 } t3dVector2iHash_t;
 
@@ -49,16 +48,17 @@ typedef struct t3dRenderCellKey_s {
 	int m_nMeshId = -1;
 	int m_nLod = 0;
 	bool operator==( const t3dRenderCellKey_s &rOther ) const {
-		return m_region == rOther.m_region && m_cell == rOther.m_cell && m_nMeshId == rOther.m_nMeshId && m_nLod == rOther.m_nLod;
+		return m_region == rOther.m_region && m_cell == rOther.m_cell && m_nMeshId == rOther.m_nMeshId &&
+				m_nLod == rOther.m_nLod;
 	}
 } t3dRenderCellKey_t;
 
 typedef struct t3dRenderCellKeyHash_s {
 	size_t operator()( const t3dRenderCellKey_t &rKey ) const {
 		size_t h = t3dVector2iHash_t{}( rKey.m_region );
-		h ^= t3dVector2iHash_t{}( rKey.m_cell ) + ( size_t ) ( s_nHashGoldenRatio32 ) + ( h << 6 ) + ( h >> 2 );
-		h ^= ( size_t ) ( ( uint32_t ) ( rKey.m_nMeshId ) ) * ( size_t ) ( s_nHashMix32 );
-		h ^= ( size_t ) ( ( uint32_t ) ( rKey.m_nLod ) ) * ( size_t ) ( s_nHashMix32Secondary );
+		h ^= t3dVector2iHash_t{}( rKey.m_cell ) + ( size_t )( s_nHashGoldenRatio32 ) + ( h << 6 ) + ( h >> 2 );
+		h ^= ( size_t )( ( uint32_t )( rKey.m_nMeshId ) ) * ( size_t )( s_nHashMix32 );
+		h ^= ( size_t )( ( uint32_t )( rKey.m_nLod ) ) * ( size_t )( s_nHashMix32Secondary );
 		return h;
 	}
 } t3dRenderCellKeyHash_t;
@@ -74,7 +74,7 @@ typedef struct t3dCellUpdateKey_s {
 
 typedef struct t3dCellUpdateKeyHash_s {
 	size_t operator()( const t3dCellUpdateKey_t &rKey ) const {
-		t3dRenderCellKey_t key{rKey.m_region, rKey.m_cell, rKey.m_nMeshId, 0};
+		t3dRenderCellKey_t key{ rKey.m_region, rKey.m_cell, rKey.m_nMeshId, 0 };
 		return t3dRenderCellKeyHash_t{}( key );
 	}
 } t3dCellUpdateKeyHash_t;
@@ -105,13 +105,15 @@ typedef struct t3dUsableHeight_s {
 	bool m_bValid = false;
 	real_t m_fHeight = 0.f;
 	bool m_bRaycastHit = false;
-	Vector3 m_normal = V3_UP;
+	Vector3 m_normal = s_v3Up;
 } t3dUsableHeight_t;
 
 typedef struct t3dCellInterval_s {
 	int m_nFirst = 1;
 	int m_nLast = 0;
-	EA_FORCE_INLINE bool valid( void ) const { return m_nFirst <= m_nLast; }
+	EA_FORCE_INLINE bool valid( void ) const {
+		return m_nFirst <= m_nLast;
+	}
 } t3dCellInterval_t;
 
 typedef struct t3dTransitionBucketKey_s {
@@ -125,7 +127,7 @@ typedef struct t3dTransitionBucketKey_s {
 typedef struct t3dTransitionBucketKeyHash_s {
 	size_t operator()( const t3dTransitionBucketKey_t &rKey ) const {
 		size_t h = t3dVector2iHash_t{}( rKey.m_bucket );
-		h ^= ( size_t ) ( ( uint32_t ) ( rKey.m_nMeshId ) ) * ( size_t ) ( s_nHashMix32 );
+		h ^= ( size_t )( ( uint32_t )( rKey.m_nMeshId ) ) * ( size_t )( s_nHashMix32 );
 		return h;
 	}
 } t3dTransitionBucketKeyHash_t;
@@ -134,7 +136,7 @@ typedef struct t3dPendingPlacement_s {
 	T3DRegion *m_pRegion = nullptr;
 	Vector2i m_cell;
 	Transform3D m_transform;
-	Color m_color = COLOR_WHITE;
+	Color m_color = s_colorWhite;
 	uint32_t m_nOwner = 0;
 } t3dPendingPlacement_t;
 
@@ -183,37 +185,16 @@ class T3DInstancer : public Object {
 	friend T3DTerrain;
 
 public: // Constants
-
-
 private:
 	T3DTerrain *m_pTerrain = nullptr;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 	// Runtime indices use contiguous open-addressing tables. reserve() establishes a
 	// high-water bucket array; ordinary streaming inserts/erases never allocate nodes.
 	using RenderCellIndex = T3DFlatHashMap<t3dRenderCellKey_t, size_t, t3dRenderCellKeyHash_t>;
 	using LogicalCellMap = T3DFlatHashMap<t3dCellUpdateKey_t, t3dLogicalCellState_t, t3dCellUpdateKeyHash_t>;
 
-
-
-
-
-	using TransitionBucketMap = T3DFlatHashMap<t3dTransitionBucketKey_t, t3dTransitionBucketState_t, t3dTransitionBucketKeyHash_t>;
+	using TransitionBucketMap =
+			T3DFlatHashMap<t3dTransitionBucketKey_t, t3dTransitionBucketState_t, t3dTransitionBucketKeyHash_t>;
 	using StreamingUpdateSet = T3DFlatHashSet<t3dCellUpdateKey_t, t3dCellUpdateKeyHash_t>;
 
 	eastl::vector<t3dRenderCell_t> m_renderCells;
@@ -236,12 +217,12 @@ private:
 	uint64_t m_szLogicalMeshInstanceTotals[s_nMaxMeshAssets] = {};
 	eastl::bitset<s_nMaxMeshAssets> m_dirtyLogicalMeshCounts;
 	bool m_bPublishingLogicalMeshCounts = false;
-t3dRegionUpdateState_t m_szRegionUpdates[s_nInstanceRegionUpdateCapacity] = {};
+	t3dRegionUpdateState_t m_szRegionUpdates[s_nInstanceRegionUpdateCapacity] = {};
 	eastl::bitset<s_nInstanceRegionUpdateCapacity> m_regionUpdateMask;
 	uint16_t m_szRegionUpdateIndices[s_nInstanceRegionUpdateCapacity] = {};
 	int m_nRegionUpdateCount = 0;
 	StreamingUpdateSet m_streamingUpdates;
-	// Dirty region topology is s_nFixed by the maximum terrain domain. Only active
+	// Dirty region topology is fixed by the maximum terrain domain. Only active
 	// indices are copied into the callback-safe snapshot between batches.
 	t3dRegionUpdateState_t m_szActiveRegionUpdates[s_nInstanceRegionUpdateCapacity] = {};
 	eastl::bitset<s_nInstanceRegionUpdateCapacity> m_activeRegionUpdateMask;
@@ -290,7 +271,7 @@ t3dRegionUpdateState_t m_szRegionUpdates[s_nInstanceRegionUpdateCapacity] = {};
 	eastl::vector<Transform3D> m_placementTransforms;
 	eastl::vector<Color> m_placementColors;
 	eastl::vector<t3dPendingPlacement_t> m_placementPending;
-	T3DRegion *m_pTouchedRegions[s_nMaxRegionSlots] = {};
+	T3DRegion *m_pszTouchedRegions[s_nMaxRegionSlots] = {};
 	uint16_t m_nTouchedRegionCount = 0u;
 
 	static t3dRenderCellKey_t makeRenderKey( const t3dRenderCell_t &rCell );
@@ -343,36 +324,39 @@ t3dRegionUpdateState_t m_szRegionUpdates[s_nInstanceRegionUpdateCapacity] = {};
 #endif
 	void refreshStreamingCache( void );
 	bool cellShouldBeResident( const Vector2i &region, const Vector2i &cell, int nMeshId ) const;
-	bool cellShouldBeResidentAt(
-		const Vector2i &region, const Vector2i &cell, int nMeshId,
-		const Vector3 &rTargetPosition
-	) const;
-	int selectCellLod(
-		const Vector2i &vRegion, const Vector2i &vCell,
-		const Ref<T3DMeshAsset> &rAsset, const Vector3 &rTargetPosition
-	) const;
+	bool cellShouldBeResidentAt( const Vector2i &region,
+			const Vector2i &cell,
+			int nMeshId,
+			const Vector3 &rTargetPosition ) const;
+	int selectCellLod( const Vector2i &vRegion,
+			const Vector2i &vCell,
+			const Ref<T3DMeshAsset> &rAsset,
+			const Vector3 &rTargetPosition ) const;
 	Vector2i getGlobalCell( const Vector2i &vRegion, const Vector2i &vCell ) const;
 	t3dTransitionBucketKey_t getTransitionBucketKey( const t3dCellUpdateKey_t &rKey ) const;
 	void trackSingleLodCell( const t3dCellUpdateKey_t &rKey );
 	void untrackSingleLodCell( const t3dCellUpdateKey_t &rKey );
 	void clearSingleLodTransitionBuckets( void );
-	bool transitionBucketMayCrossBoundary(
-		const t3dTransitionBucketKey_t &rBucket,
-		const Ref<T3DMeshAsset> &rAsset, const Vector3 &rPreviousPosition,
-		const Vector3 &rTargetPosition
-	) const;
+	bool transitionBucketMayCrossBoundary( const t3dTransitionBucketKey_t &rBucket,
+			const Ref<T3DMeshAsset> &rAsset,
+			const Vector3 &rPreviousPosition,
+			const Vector3 &rTargetPosition ) const;
 	const t3dRenderCell_t *findSingleLodRenderCell( const t3dCellUpdateKey_t &rKey ) const;
 	void queueSingleLodTransitions( const Vector3 &rPreviousPosition, const Vector3 &rTargetPosition );
-	void appendGlobalNative(
-		int nMeshId, const eastl::vector<Transform3D> &xforms,
-		const eastl::vector<Color> &colors, bool bUpdate, uint32_t owner = 0,
-		bool bBackup = true
-	);
-	void appendRegionNative(
-		T3DRegion *pRegion, int nMeshId, const eastl::vector<Transform3D> &rXforms,
-		const eastl::vector<Color> &rColors, bool bGlobalSpace, bool bUpdate,
-		bool bBackup = true, uint32_t nOwner = 0
-	);
+	void appendGlobalNative( int nMeshId,
+			const eastl::vector<Transform3D> &xforms,
+			const eastl::vector<Color> &colors,
+			bool bUpdate,
+			uint32_t owner = 0,
+			bool bBackup = true );
+	void appendRegionNative( T3DRegion *pRegion,
+			int nMeshId,
+			const eastl::vector<Transform3D> &rXforms,
+			const eastl::vector<Color> &rColors,
+			bool bGlobalSpace,
+			bool bUpdate,
+			bool bBackup = true,
+			uint32_t nOwner = 0 );
 
 	t3dInstancerMode_t m_mode = NORMAL;
 	uint32_t m_nDensityCounter = 0;
@@ -386,31 +370,26 @@ t3dRegionUpdateState_t m_szRegionUpdates[s_nInstanceRegionUpdateCapacity] = {};
 	real_t m_fCellStreamingStep = 16.f;
 	uint32_t m_nUpdateCellBudget = 32;
 	int m_nRuntimeUpdateCellBudgetOverride = -1;
-	Vector3 m_lastStreamPosition = V3_ZERO;
+	Vector3 m_lastStreamPosition = s_v3Zero;
 	bool m_bStreamPositionValid = false;
 
-	Vector2i getCellForLocalPosition(
-		const Vector3 &rLocalPosition, int nRegionSize,
-		int nCellSize
-	) const;
-	bool buildRepartitionedStore(
-		const T3DRegion *pRegion, const t3dInstanceLayout_t &rLayout,
-		T3DInstanceStore &rStore
-	) const;
+	Vector2i getCellForLocalPosition( const Vector3 &rLocalPosition, int nRegionSize, int nCellSize ) const;
+	bool buildRepartitionedStore( const T3DRegion *pRegion,
+			const t3dInstanceLayout_t &rLayout,
+			T3DInstanceStore &rStore ) const;
 	bool repartitionRegionStore( T3DRegion *pRegion, const t3dInstanceLayout_t &rLayout );
 	bool repartitionResidentRegions( const t3dInstanceLayout_t &rLayout );
 	uint32_t getDensityCount( const real_t fDensity );
 	int getMasterLod( const Ref<T3DMeshAsset> &rMa ) const;
 	void processUpdates( void );
 	void updateMmiByRegion( T3DRegion *pRegion, const int nMeshId );
-	void updateMmiCell(
-		T3DRegion *pRegion, const int nMeshId, t3dInstanceCell_t &rCell,
-		const Ref<T3DMeshAsset> &rAsset
-	);
-	void ensureUploadBuffer(
-		t3dInstanceCell_t &rCell, const Ref<Mesh> &rMasterMesh,
-		const AABB &aabbSourceMeshAabb, bool bRebuildAabb, bool &bReady
-	);
+	void
+	updateMmiCell( T3DRegion *pRegion, const int nMeshId, t3dInstanceCell_t &rCell, const Ref<T3DMeshAsset> &rAsset );
+	void ensureUploadBuffer( t3dInstanceCell_t &rCell,
+			const Ref<Mesh> &rMasterMesh,
+			const AABB &aabbSourceMeshAabb,
+			bool bRebuildAabb,
+			bool &bReady );
 	void setMmiLodRanges( RID mmi, const Ref<T3DMeshAsset> &rMa, const int nLod );
 	void updateVertexSpacing( const real_t fVertexSpacing );
 	// Renderer teardown never mutates persistent content accounting. Callers that
@@ -422,43 +401,46 @@ t3dRegionUpdateState_t m_szRegionUpdates[s_nInstanceRegionUpdateCapacity] = {};
 	static bool pendingPlacementRegionCellLess( const t3dPendingPlacement_t &rA, const t3dPendingPlacement_t &rB );
 	static bool pendingPlacementCellLess( const t3dPendingPlacement_t &rA, const t3dPendingPlacement_t &rB );
 	static int floorDivCell( int nValue, int nDivisor );
-	t3dCellInterval_t streamingRowInterval(
-		const Vector3 &rPosition, real_t fRadius, int iGlobalZ,
-		real_t fCellWorldSize, int nMinGlobalCell, int nMaxGlobalCell
-	) const;
-	void queueStreamingCell(
-		T3DData *pData, int nMeshId, int iGlobalX, int iGlobalZ,
-		int nCellsPerRegion
-	);
-	void queueStreamingInterval(
-		T3DData *pData, int nMeshId, int iGlobalZ, int nFirst, int nLast,
-		int nCellsPerRegion
-	);
-	void queueStreamingDifference(
-		T3DData *pData, int nMeshId, int iGlobalZ,
-		const t3dCellInterval_t &rSource, const t3dCellInterval_t &rOther, int nCellsPerRegion
-	);
+	t3dCellInterval_t streamingRowInterval( const Vector3 &rPosition,
+			real_t fRadius,
+			int iGlobalZ,
+			real_t fCellWorldSize,
+			int nMinGlobalCell,
+			int nMaxGlobalCell ) const;
+	void queueStreamingCell( T3DData *pData, int nMeshId, int iGlobalX, int iGlobalZ, int nCellsPerRegion );
+	void
+	queueStreamingInterval( T3DData *pData, int nMeshId, int iGlobalZ, int nFirst, int nLast, int nCellsPerRegion );
+	void queueStreamingDifference( T3DData *pData,
+			int nMeshId,
+			int iGlobalZ,
+			const t3dCellInterval_t &rSource,
+			const t3dCellInterval_t &rOther,
+			int nCellsPerRegion );
 	void backupRegion( const Ref<T3DRegion> &rRegion );
-	t3dMultiMeshUpdateResult_t updateMultimesh(
-		const int nMeshId, const int nLod, const t3dInstanceCell_t &rCell,
-		t3dRenderCell_t &rRender, bool bUseColors,
-		const PackedFloat32Array &rUploadBuffer
-	);
-	void fillMultimeshBuffer(
-		const t3dInstanceCell_t &rCell, PackedFloat32Array &rBuffer,
-		const AABB *pSourceMeshAabb = nullptr, AABB *pCellAabb = nullptr
-	) const;
+	t3dMultiMeshUpdateResult_t updateMultimesh( const int nMeshId,
+			const int nLod,
+			const t3dInstanceCell_t &rCell,
+			t3dRenderCell_t &rRender,
+			bool bUseColors,
+			const PackedFloat32Array &rUploadBuffer );
+	void fillMultimeshBuffer( const t3dInstanceCell_t &rCell,
+			PackedFloat32Array &rBuffer,
+			const AABB *pSourceMeshAabb = nullptr,
+			AABB *pCellAabb = nullptr ) const;
 	const PackedFloat32Array &buildUploadBuffer( const t3dInstanceCell_t &rCell ) const;
 	Vector2i getCell( const Vector3 &rGlobalPosition, const int nRegionSize ) const;
-	t3dUsableHeight_t getUsableHeight(
-		T3DSampler &rSampler, const Vector3 &rGlobalPosition,
-		const Vector2 &rSlopeRange, bool bOnCollision, real_t fRaycastStart,
-		bool bSampleNormal = false
-	) const;
+	t3dUsableHeight_t getUsableHeight( T3DSampler &rSampler,
+			const Vector3 &rGlobalPosition,
+			const Vector2 &rSlopeRange,
+			bool bOnCollision,
+			real_t fRaycastStart,
+			bool bSampleNormal = false ) const;
 
 public:
 	EA_FORCE_INLINE T3DInstancer( void ) {}
-	EA_FORCE_INLINE ~T3DInstancer( void ) { destroy(); }
+	EA_FORCE_INLINE ~T3DInstancer( void ) {
+		destroy();
+	}
 
 	void initialize( T3DTerrain *pTerrain );
 	void destroy( void );
@@ -472,113 +454,147 @@ public:
 	void destroyRegionMmis( const Vector2i &rRegionLoc );
 
 	void setMode( const t3dInstancerMode_t mode );
-	EA_FORCE_INLINE t3dInstancerMode_t getMode( void ) const { return m_mode; }
-	EA_FORCE_INLINE bool isEnabled( void ) const { return m_mode != INSTANCER_DISABLED; }
+	EA_FORCE_INLINE t3dInstancerMode_t getMode( void ) const {
+		return m_mode;
+	}
+	EA_FORCE_INLINE bool isEnabled( void ) const {
+		return m_mode != INSTANCER_DISABLED;
+	}
 
 	void addInstances( const Vector3 &rGlobalPosition, const Dictionary &rParams );
 	void removeInstances( const Vector3 &rGlobalPosition, const Dictionary &rParams );
-	void addMultimesh(
-		const int nMeshId, const Ref<MultiMesh> &rMultimesh,
-		const Transform3D &rXform = Transform3D(), const bool bUpdate = true
-	);
-	void addTransforms(
-		const int nMeshId, const TypedArray<Transform3D> &rXforms,
-		const PackedColorArray &rColors = PackedColorArray(), const bool bUpdate = true
-	);
-	void addOwnedTransforms(
-		const int nMeshId, const TypedArray<Transform3D> &rXforms, const int64_t nOwnerId,
-		const PackedColorArray &rColors = PackedColorArray(), const bool bUpdate = true,
-		const bool bBackup = true
-	);
+	void addMultimesh( const int nMeshId,
+			const Ref<MultiMesh> &rMultimesh,
+			const Transform3D &rXform = Transform3D(),
+			const bool bUpdate = true );
+	void addTransforms( const int nMeshId,
+			const TypedArray<Transform3D> &rXforms,
+			const PackedColorArray &rColors = PackedColorArray(),
+			const bool bUpdate = true );
+	void addOwnedTransforms( const int nMeshId,
+			const TypedArray<Transform3D> &rXforms,
+			const int64_t nOwnerId,
+			const PackedColorArray &rColors = PackedColorArray(),
+			const bool bUpdate = true,
+			const bool bBackup = true );
 	int removeOwnedInstances( const int64_t nOwnerId, const bool bUpdate = true, const bool bBackup = true );
-	void appendLocation(
-		const Vector2i &rRegionLoc, const int nMeshId, const TypedArray<Transform3D> &rXforms,
-		const PackedColorArray &rColors, const bool bUpdate = true
-	);
-	void appendRegion(
-		const Ref<T3DRegion> &rRegion, const int nMeshId,
-		const TypedArray<Transform3D> &rXforms, const PackedColorArray &rColors,
-		const bool bUpdate = true
-	);
+	void appendLocation( const Vector2i &rRegionLoc,
+			const int nMeshId,
+			const TypedArray<Transform3D> &rXforms,
+			const PackedColorArray &rColors,
+			const bool bUpdate = true );
+	void appendRegion( const Ref<T3DRegion> &rRegion,
+			const int nMeshId,
+			const TypedArray<Transform3D> &rXforms,
+			const PackedColorArray &rColors,
+			const bool bUpdate = true );
 	void updateTransforms( const AABB &rAabb );
 	void updateStreaming( const Vector3 &rTargetPosition );
-	EA_FORCE_INLINE void deferStreamingSelectionForFrame( void ) { m_bStreamingSelectionDeferredLastFrame = true; }
-	EA_FORCE_INLINE void resetStreamingResidency( void ) { suspendRendering(); }
-	EA_FORCE_INLINE int getRenderCellCount( void ) const { return ( int ) ( m_renderCells.size() ); }
-	EA_FORCE_INLINE int getPendingStreamingUpdateCount( void ) const { const size_t pending_count = m_pendingCellUpdates.size() > m_iPendingCellUpdateCursor ? m_pendingCellUpdates.size() - m_iPendingCellUpdateCursor : 0u; return ( int ) ( m_streamingUpdates.size() + m_activeStreamingUpdates.size() + pending_count ); }
+	EA_FORCE_INLINE void deferStreamingSelectionForFrame( void ) {
+		m_bStreamingSelectionDeferredLastFrame = true;
+	}
+	EA_FORCE_INLINE void resetStreamingResidency( void ) {
+		suspendRendering();
+	}
+	EA_FORCE_INLINE int getRenderCellCount( void ) const {
+		return ( int )( m_renderCells.size() );
+	}
+	EA_FORCE_INLINE int getPendingStreamingUpdateCount( void ) const {
+		const size_t pending_count = m_pendingCellUpdates.size() > m_iPendingCellUpdateCursor
+				? m_pendingCellUpdates.size() - m_iPendingCellUpdateCursor
+				: 0u;
+		return ( int )( m_streamingUpdates.size() + m_activeStreamingUpdates.size() + pending_count );
+	}
 	bool areHlodDetailRegionsReady( const Vector2i &rRegionMin, const Vector2i &rRegionMax ) const {
 		for ( int z = rRegionMin.y; z <= rRegionMax.y; ++z ) {
 			for ( int x = rRegionMin.x; x <= rRegionMax.x; ++x ) {
-				if ( hasPendingUpdatesForRegion( Vector2i( x, z ) ) ) { return false; }
+				if ( hasPendingUpdatesForRegion( Vector2i( x, z ) ) ) {
+					return false;
+				}
 			}
 		}
 		return true;
 	}
 	Dictionary getStats( void ) const;
-	Dictionary debugValidateSingleLodTransitionCandidates(
-		const Vector3 &rPreviousPosition,
-		const Vector3 &rTargetPosition
-	) const;
+	Dictionary debugValidateSingleLodTransitionCandidates( const Vector3 &rPreviousPosition,
+			const Vector3 &rTargetPosition ) const;
 	Dictionary debugValidateSingleLodState( const Vector3 &rTargetPosition ) const;
 	size_t getRetainedContainerBytes( void ) const;
 	size_t getActiveMultimeshBytes( void ) const;
 	void setCellSize( int nCellSize );
-	EA_FORCE_INLINE int getCellSize( void ) const { return m_nCellSize; }
+	EA_FORCE_INLINE int getCellSize( void ) const {
+		return m_nCellSize;
+	}
 	int getCellsPerRegionAxis( void ) const;
 	bool ensureRegionLayout( T3DRegion *pRegion );
 	bool refreshResidentRegionLayouts( void );
 	void setCellStreamingEnabled( bool bEnabled );
-	EA_FORCE_INLINE bool isCellStreamingEnabled( void ) const { return m_bCellStreamingEnabled; }
+	EA_FORCE_INLINE bool isCellStreamingEnabled( void ) const {
+		return m_bCellStreamingEnabled;
+	}
 	void setSingleLodInstanceBuffers( bool bEnabled );
-	EA_FORCE_INLINE bool isSingleLodInstanceBuffers( void ) const { return m_bSingleLodInstanceBuffers; }
+	EA_FORCE_INLINE bool isSingleLodInstanceBuffers( void ) const {
+		return m_bSingleLodInstanceBuffers;
+	}
 	void setCellStreamingMargin( real_t fMargin );
-	EA_FORCE_INLINE real_t getCellStreamingMargin( void ) const { return m_fCellStreamingMargin; }
-	EA_FORCE_INLINE void setCellStreamingStep( const real_t fStep ) { m_fCellStreamingStep = CLAMP( fStep, 1.f, 256.f ); }
-	EA_FORCE_INLINE real_t getCellStreamingStep( void ) const { return m_fCellStreamingStep; }
-	EA_FORCE_INLINE void setUpdateCellBudget( const int nBudget ) { m_nUpdateCellBudget = ( uint32_t ) ( CLAMP( nBudget, 0, 65536 ) ); }
-	EA_FORCE_INLINE uint32_t getUpdateCellBudget( void ) const { return m_nUpdateCellBudget; }
-	EA_FORCE_INLINE void setRuntimeUpdateCellBudgetOverride( const int nBudget ) { m_nRuntimeUpdateCellBudgetOverride = nBudget < 0 ? -1 : CLAMP( nBudget, 0, 65536 ); }
+	EA_FORCE_INLINE real_t getCellStreamingMargin( void ) const {
+		return m_fCellStreamingMargin;
+	}
+	EA_FORCE_INLINE void setCellStreamingStep( const real_t fStep ) {
+		m_fCellStreamingStep = CLAMP( fStep, 1.f, 256.f );
+	}
+	EA_FORCE_INLINE real_t getCellStreamingStep( void ) const {
+		return m_fCellStreamingStep;
+	}
+	EA_FORCE_INLINE void setUpdateCellBudget( const int nBudget ) {
+		m_nUpdateCellBudget = ( uint32_t )( CLAMP( nBudget, 0, 65536 ) );
+	}
+	EA_FORCE_INLINE uint32_t getUpdateCellBudget( void ) const {
+		return m_nUpdateCellBudget;
+	}
+	EA_FORCE_INLINE void setRuntimeUpdateCellBudgetOverride( const int nBudget ) {
+		m_nRuntimeUpdateCellBudgetOverride = nBudget < 0 ? -1 : CLAMP( nBudget, 0, 65536 );
+	}
 	int getEffectiveUpdateCellBudget( void ) const {
 		if ( m_nRuntimeUpdateCellBudgetOverride < 0 ) {
-			return ( int ) ( m_nUpdateCellBudget );
+			return ( int )( m_nUpdateCellBudget );
 		}
-		return m_nUpdateCellBudget == 0u ? m_nRuntimeUpdateCellBudgetOverride :
-			MIN( ( int ) ( m_nUpdateCellBudget ), m_nRuntimeUpdateCellBudgetOverride );
+		return m_nUpdateCellBudget == 0u ? m_nRuntimeUpdateCellBudgetOverride
+										 : MIN( ( int )( m_nUpdateCellBudget ), m_nRuntimeUpdateCellBudgetOverride );
 	}
-	EA_FORCE_INLINE bool isUpdateBudgetLimitedLastFrame( void ) const { const int effective_budget = getEffectiveUpdateCellBudget(); return effective_budget > 0 && m_nProcessedCellUpdatesLastFrame >= ( uint32_t ) ( effective_budget ) && m_nQueueAfterLastFrame > 0u; }
+	EA_FORCE_INLINE bool isUpdateBudgetLimitedLastFrame( void ) const {
+		const int effective_budget = getEffectiveUpdateCellBudget();
+		return effective_budget > 0 && m_nProcessedCellUpdatesLastFrame >= ( uint32_t )( effective_budget ) &&
+				m_nQueueAfterLastFrame > 0u;
+	}
 	int getClosestMeshId( const Vector3 &rGlobalPosition ) const;
-	void copyPasteDfr(
-		const T3DRegion *pSrcRegion, const Rect2i &rSrcRect,
-		const T3DRegion *pDstRegion
-	);
+	void copyPasteDfr( const T3DRegion *pSrcRegion, const Rect2i &rSrcRect, const T3DRegion *pDstRegion );
 
 	void swapIds( const int nSrcId, const int nDstId );
-	void updateMmis( const int nMeshId = -1, const Vector2i &rRegionLoc = V2I_MAX, const bool bRebuild = false );
+	void updateMmis( const int nMeshId = -1, const Vector2i &rRegionLoc = s_v2iMax, const bool bRebuild = false );
 
 	// Builds the exact packed RenderingServer buffer used by Terrain3D's
 	// MultiMeshes: 12 transform floats, plus RGBA only when a cell uses non-white colors.
-	PackedFloat32Array buildMultimeshBuffer(
-		const TypedArray<Transform3D> &rXforms,
-		const PackedColorArray &rColors = PackedColorArray()
-	) const;
+	PackedFloat32Array buildMultimeshBuffer( const TypedArray<Transform3D> &rXforms,
+			const PackedColorArray &rColors = PackedColorArray() ) const;
 
-	EA_FORCE_INLINE void resetDensityCounter( void ) { m_nDensityCounter = 0; }
+	EA_FORCE_INLINE void resetDensityCounter( void ) {
+		m_nDensityCounter = 0;
+	}
 
 protected:
 	static void _bind_methods( void );
 };
-
-using t3dInstancerMode_t = t3dInstancerMode_t;
 VARIANT_ENUM_CAST( t3dInstancerMode_t );
 
 // Allows us to instance every X function calls for sparse placement
 // Modifies _density_counter, not const!
 inline uint32_t T3DInstancer::getDensityCount( const real_t fDensity ) {
 	uint32_t count = 0;
-	if ( fDensity < 1.f && m_nDensityCounter++ % ( uint32_t ) ( 1.f / fDensity ) == 0 ) {
+	if ( fDensity < 1.f && m_nDensityCounter++ % ( uint32_t )( 1.f / fDensity ) == 0 ) {
 		count = 1;
 	} else if ( fDensity >= 1.f ) {
-		count = ( uint32_t ) ( fDensity );
+		count = ( uint32_t )( fDensity );
 	}
 	return count;
 }

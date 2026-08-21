@@ -13,11 +13,11 @@
 #include <cstdint>
 
 typedef struct t3dResidencyFrameState_s {
-	Vector3 m_worldPosition = V3_ZERO;
-	Vector2i m_streamingCenter = V2I_MAX;
-	Vector2i m_residencyCenter = V2I_MAX;
-	Vector2i m_predictedCenter = V2I_MAX;
-	Vector2i m_activeHeightCenter = V2I_MAX;
+	Vector3 m_worldPosition = s_v3Zero;
+	Vector2i m_streamingCenter = s_v2iMax;
+	Vector2i m_residencyCenter = s_v2iMax;
+	Vector2i m_predictedCenter = s_v2iMax;
+	Vector2i m_activeHeightCenter = s_v2iMax;
 	const uint8_t *m_pStreamingStates = nullptr;
 	const uint8_t *m_pStreamingPrefetch = nullptr;
 	uint64_t m_nStreamingGeneration = 0u;
@@ -37,8 +37,7 @@ typedef struct t3dResidencyFrameState_s {
 			return false;
 		}
 		const int half = m_nRegionMapSize / 2;
-		return rLocation.x >= -half && rLocation.x < half &&
-			rLocation.y >= -half && rLocation.y < half;
+		return rLocation.x >= -half && rLocation.x < half && rLocation.y >= -half && rLocation.y < half;
 	}
 
 	t3dRegionStreamingState_t streamingState( const Vector2i &rLocation ) const {
@@ -46,9 +45,8 @@ typedef struct t3dResidencyFrameState_s {
 			return TERRAIN3D_REGION_STREAMING_UNLOADED;
 		}
 		const int mapIndex = T3DRegionRepository::getRegionMapIndex( rLocation );
-		return mapIndex >= 0 ?
-			( t3dRegionStreamingState_t ) ( m_pStreamingStates[mapIndex] ) :
-			TERRAIN3D_REGION_STREAMING_UNLOADED;
+		return mapIndex >= 0 ? ( t3dRegionStreamingState_t )( m_pStreamingStates[mapIndex] )
+							 : TERRAIN3D_REGION_STREAMING_UNLOADED;
 	}
 
 	bool isPrefetch( const Vector2i &rLocation ) const {

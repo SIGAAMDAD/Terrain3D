@@ -5,24 +5,21 @@
 #ifndef TERRAIN3D_ACTIVE_STORAGE_H
 #define TERRAIN3D_ACTIVE_STORAGE_H
 
-#include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
+#include "core/terrain_3d_compiler.h"
+#include "core/terrain_3d_limits.h"
+#include "data/terrain_3d_region.h"
 
 #include <cstddef>
 #include <cstdint>
-
 #include <godot_cpp/variant/rect2i.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
-
-#include "core/terrain_3d_limits.h"
-#include "data/terrain_3d_region.h"
 
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
 using namespace godot;
 #endif
 
-
-// Height hot storage is a s_nFixed 32-page, cache-aligned R16 bank. Logical region
+// Height hot storage is a fixed 32-page, cache-aligned R16 bank. Logical region
 // descriptors publish immutable physical pages atomically; leases pin a page while
 // readers use it. Writers stage into an unpinned page and never mutate published
 // bytes in place. Control, color, and derived maps remain authoritative in
@@ -34,7 +31,9 @@ typedef struct t3dActiveMapView_s {
 	int m_nRegionSize = 0;
 	int m_iSlot = -1;
 
-	EA_FORCE_INLINE bool valid( void ) const { return m_pHeight != nullptr && m_iSlot >= 0; }
+	EA_FORCE_INLINE bool valid( void ) const {
+		return m_pHeight != nullptr && m_iSlot >= 0;
+	}
 } t3dActiveMapView_t;
 
 class T3DActiveMapLease {
@@ -46,8 +45,12 @@ public:
 	T3DActiveMapLease( T3DActiveMapLease &&rOther ) noexcept;
 	T3DActiveMapLease &operator=( T3DActiveMapLease &&rOther ) noexcept;
 
-	EA_FORCE_INLINE bool valid( void ) const { return m_view.valid(); }
-	EA_FORCE_INLINE const t3dActiveMapView_t &view( void ) const { return m_view; }
+	EA_FORCE_INLINE bool valid( void ) const {
+		return m_view.valid();
+	}
+	EA_FORCE_INLINE const t3dActiveMapView_t &view( void ) const {
+		return m_view;
+	}
 	void reset( void );
 
 private:
@@ -75,26 +78,25 @@ uint64_t t3dActiveStorageGetPublicationCount( void );
 bool t3dActiveStorageContains( const void *pOwner, const Vector2i &rLocation );
 
 T3DActiveMapLease t3dActiveStorageAcquire( const void *pOwner, const Vector2i &rLocation );
-bool t3dActiveStorageSyncRegion(
-	const void *pOwner, const Vector2i &rLocation,
-	const T3DRegion *pRegion
-);
-bool t3dActiveStorageSyncHeightPage(
-	const void *pOwner, const Vector2i &rLocation,
-	const uint8_t *pHeightBytes, size_t nHeightBytes
-);
-bool t3dActiveStorageReplaceHeightPages(
-	const void *pOwner, int nRegionSize,
-	const uint8_t *const *pHeightPages, const int *pSlots, size_t nPageCount
-);
-bool t3dActiveStorageSyncMap(
-	const void *pOwner, const Vector2i &rLocation,
-	const T3DRegion *pRegion, t3dMapType_t type, const Rect2i &rDirtyRect = Rect2i()
-);
-bool t3dActiveStorageSyncDerived(
-	const void *pOwner, const Vector2i &rLocation,
-	const T3DRegion *pRegion, const Rect2i &rDirtyRect = Rect2i()
-);
+bool t3dActiveStorageSyncRegion( const void *pOwner, const Vector2i &rLocation, const T3DRegion *pRegion );
+bool t3dActiveStorageSyncHeightPage( const void *pOwner,
+		const Vector2i &rLocation,
+		const uint8_t *pHeightBytes,
+		size_t nHeightBytes );
+bool t3dActiveStorageReplaceHeightPages( const void *pOwner,
+		int nRegionSize,
+		const uint8_t *const *pHeightPages,
+		const int *pSlots,
+		size_t nPageCount );
+bool t3dActiveStorageSyncMap( const void *pOwner,
+		const Vector2i &rLocation,
+		const T3DRegion *pRegion,
+		t3dMapType_t type,
+		const Rect2i &rDirtyRect = Rect2i() );
+bool t3dActiveStorageSyncDerived( const void *pOwner,
+		const Vector2i &rLocation,
+		const T3DRegion *pRegion,
+		const Rect2i &rDirtyRect = Rect2i() );
 void t3dActiveStorageInvalidate( const void *pOwner, const Vector2i &rLocation );
 
 #endif // TERRAIN3D_ACTIVE_STORAGE_H

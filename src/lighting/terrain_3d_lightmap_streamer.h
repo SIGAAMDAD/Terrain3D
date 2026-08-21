@@ -5,14 +5,14 @@
 #define TERRAIN3D_LIGHTMAP_STREAMER_H
 
 #include "Terrain3DConstants.h"
+#include "data/terrain_3d_runtime_bake_codec.h"
+#include "lighting/terrain_3d_region_lighting.h"
+
 #include <godot_cpp/classes/lightmap_gi.hpp>
 #include <godot_cpp/classes/object.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
 #include <godot_cpp/variant/vector3.hpp>
-
-#include "lighting/terrain_3d_region_lighting.h"
-#include "data/terrain_3d_runtime_bake_codec.h"
 
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
 using namespace godot;
@@ -43,10 +43,6 @@ class T3DLightmapStreamer : public Object {
 	GDCLASS( T3DLightmapStreamer, Object );
 	CLASS_NAME();
 
-
-
-
-
 	T3DTerrain *m_pTerrain = nullptr;
 	t3dActivePackage_t m_szActive[s_nLightmapActiveInstanceLimit];
 	uint8_t m_nActiveCount = 0u;
@@ -55,7 +51,7 @@ class T3DLightmapStreamer : public Object {
 	int m_nLoadBudget = 2;
 	int m_nUnloadBudget = 4;
 	int m_nResidencyBudgetMb = 16;
-	Vector2i m_center = V2I_MAX;
+	Vector2i m_center = s_v2iMax;
 	int m_nLoadsLastTick = 0;
 	int m_nUnloadsLastTick = 0;
 	int m_nRefreshesLastTick = 0;
@@ -76,26 +72,23 @@ class T3DLightmapStreamer : public Object {
 
 	t3dActivePackage_t *findActive( const Ref<T3DRegionLighting> &rPackage );
 	const t3dActivePackage_t *findActive( const Ref<T3DRegionLighting> &rPackage ) const;
-	t3dSourceLoadResult_t requestSourceData(
-		const Ref<T3DRegionLighting> &rPackage,
-		Ref<LightmapGIData> &rData
-	);
-	bool collectReceiverState(
-		const Ref<T3DRegionLighting> &rPackage, uint64_t &nSignature, int &nReceiverCount
-	) const;
-	bool buildRuntimeData(
-		const Ref<T3DRegionLighting> &rPackage,
-		const Ref<LightmapGIData> &rSource, Ref<LightmapGIData> &rData,
-		uint64_t &nSignature, int &nReceiverCount
-	) const;
-	bool activate(
-		const Ref<T3DRegionLighting> &rPackage, const Ref<LightmapGIData> &rSourceData,
-		const Ref<LightmapGIData> &rRuntimeData, uint64_t nSignature, int nReceiverCount
-	);
-	bool refreshActive(
-		t3dActivePackage_t &rActive, const Ref<LightmapGIData> &rRuntimeData,
-		uint64_t nSignature, int nReceiverCount
-	);
+	t3dSourceLoadResult_t requestSourceData( const Ref<T3DRegionLighting> &rPackage, Ref<LightmapGIData> &rData );
+	bool
+	collectReceiverState( const Ref<T3DRegionLighting> &rPackage, uint64_t &nSignature, int &nReceiverCount ) const;
+	bool buildRuntimeData( const Ref<T3DRegionLighting> &rPackage,
+			const Ref<LightmapGIData> &rSource,
+			Ref<LightmapGIData> &rData,
+			uint64_t &nSignature,
+			int &nReceiverCount ) const;
+	bool activate( const Ref<T3DRegionLighting> &rPackage,
+			const Ref<LightmapGIData> &rSourceData,
+			const Ref<LightmapGIData> &rRuntimeData,
+			uint64_t nSignature,
+			int nReceiverCount );
+	bool refreshActive( t3dActivePackage_t &rActive,
+			const Ref<LightmapGIData> &rRuntimeData,
+			uint64_t nSignature,
+			int nReceiverCount );
 	bool isPackageCompatibleWithActive( const Ref<T3DRegionLighting> &rPackage ) const;
 	void deactivate( size_t iIndex );
 	void markDesired( const Vector2i &rCenter );
@@ -111,21 +104,43 @@ public:
 	void suspend( void );
 
 	void setEnabled( bool bEnabled );
-	EA_FORCE_INLINE bool isEnabled( void ) const { return m_bEnabled; }
+	EA_FORCE_INLINE bool isEnabled( void ) const {
+		return m_bEnabled;
+	}
 	void setRadiusRegions( int nRadius );
-	EA_FORCE_INLINE int getRadiusRegions( void ) const { return m_nRadiusRegions; }
-	EA_FORCE_INLINE void setLoadBudget( const int nBudget ) { m_nLoadBudget = CLAMP( nBudget, 0, 64 ); }
-	EA_FORCE_INLINE int getLoadBudget( void ) const { return m_nLoadBudget; }
-	EA_FORCE_INLINE void setUnloadBudget( const int nBudget ) { m_nUnloadBudget = CLAMP( nBudget, 0, 64 ); }
-	EA_FORCE_INLINE int getUnloadBudget( void ) const { return m_nUnloadBudget; }
+	EA_FORCE_INLINE int getRadiusRegions( void ) const {
+		return m_nRadiusRegions;
+	}
+	EA_FORCE_INLINE void setLoadBudget( const int nBudget ) {
+		m_nLoadBudget = CLAMP( nBudget, 0, 64 );
+	}
+	EA_FORCE_INLINE int getLoadBudget( void ) const {
+		return m_nLoadBudget;
+	}
+	EA_FORCE_INLINE void setUnloadBudget( const int nBudget ) {
+		m_nUnloadBudget = CLAMP( nBudget, 0, 64 );
+	}
+	EA_FORCE_INLINE int getUnloadBudget( void ) const {
+		return m_nUnloadBudget;
+	}
 	void setResidencyBudgetMb( int nBudgetMb );
-	EA_FORCE_INLINE int getResidencyBudgetMb( void ) const { return m_nResidencyBudgetMb; }
-	EA_FORCE_INLINE int getEffectiveResidencyBudgetMbForDiagnostics( void ) const { return getEffectiveResidencyBudgetMb(); }
-	EA_FORCE_INLINE size_t getResidentEstimatedBytes( void ) const { return m_nResidentEstimatedBytes; }
-	EA_FORCE_INLINE bool isResidencyIdle( void ) const { return m_nLoadsLastTick == 0 && m_nRefreshesLastTick == 0; }
+	EA_FORCE_INLINE int getResidencyBudgetMb( void ) const {
+		return m_nResidencyBudgetMb;
+	}
+	EA_FORCE_INLINE int getEffectiveResidencyBudgetMbForDiagnostics( void ) const {
+		return getEffectiveResidencyBudgetMb();
+	}
+	EA_FORCE_INLINE size_t getResidentEstimatedBytes( void ) const {
+		return m_nResidentEstimatedBytes;
+	}
+	EA_FORCE_INLINE bool isResidencyIdle( void ) const {
+		return m_nLoadsLastTick == 0 && m_nRefreshesLastTick == 0;
+	}
 	Dictionary getStatsFast( void ) const;
 
-	EA_FORCE_INLINE int getActivePackageCount( void ) const { return ( int ) m_nActiveCount; }
+	EA_FORCE_INLINE int getActivePackageCount( void ) const {
+		return ( int )m_nActiveCount;
+	}
 	Dictionary getStats( void ) const;
 
 protected:

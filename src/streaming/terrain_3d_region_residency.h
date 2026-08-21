@@ -23,17 +23,15 @@ class T3DSamplingStorage;
 // own their storage, replacement policy, statistics, and reset/configuration state.
 class T3DRegionResidency {
 public:
-	T3DRegionResidency(
-		T3DRegionRepository *pRepository,
-		T3DSamplingStorage *pSamplingStorage,
-		T3DRuntimePageStore *pRuntimePageStore,
-		T3DActiveHeightResidency *pActiveHeightResidency,
-		T3DCpuRegionCache *pCpuRegionCache,
-		T3DInstanceRegionCache *pInstanceRegionCache,
-		T3DMiddleHeightRegionCache *pMiddleHeightRegionCache,
-		T3DGpuRegionCache *pGpuRegionCache,
-		T3DFarSurfaceAtlasCache *pFarSurfaceAtlasCache
-	);
+	T3DRegionResidency( T3DRegionRepository *pRepository,
+			T3DSamplingStorage *pSamplingStorage,
+			T3DRuntimePageStore *pRuntimePageStore,
+			T3DActiveHeightResidency *pActiveHeightResidency,
+			T3DCpuRegionCache *pCpuRegionCache,
+			T3DInstanceRegionCache *pInstanceRegionCache,
+			T3DMiddleHeightRegionCache *pMiddleHeightRegionCache,
+			T3DGpuRegionCache *pGpuRegionCache,
+			T3DFarSurfaceAtlasCache *pFarSurfaceAtlasCache );
 
 	void reset( void );
 	void update( T3DData &rData, const t3dResidencyFrameState_t &rFrame, bool bForce );

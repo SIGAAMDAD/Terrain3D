@@ -12,7 +12,6 @@
 #include <cstdint>
 #include <limits>
 
-
 typedef struct t3dMemoryArenaSlice_s {
 	size_t m_iOffset = 0u;
 	size_t m_nSize = 0u;
@@ -20,14 +19,18 @@ typedef struct t3dMemoryArenaSlice_s {
 	bool m_bHigh = false;
 	bool m_bReserved = false;
 
-	EA_FORCE_INLINE bool valid( void ) const { return m_bReserved; }
+	EA_FORCE_INLINE bool valid( void ) const {
+		return m_bReserved;
+	}
 } t3dMemoryArenaSlice_t;
 
 typedef struct t3dMemoryArenaSpan_s {
 	uint8_t *m_pData = nullptr;
 	size_t m_nSize = 0u;
 
-	EA_FORCE_INLINE bool valid( void ) const { return m_pData != nullptr || m_nSize == 0u; }
+	EA_FORCE_INLINE bool valid( void ) const {
+		return m_pData != nullptr || m_nSize == 0u;
+	}
 } t3dMemoryArenaSpan_t;
 
 class T3DMemoryArenaLayout {
@@ -39,13 +42,27 @@ public:
 	bool reserveLow( size_t nBytes, size_t nAlignment, t3dMemoryArenaSlice_t &rSlice );
 	bool seal( void );
 
-	EA_FORCE_INLINE size_t capacity( void ) const { return m_nCapacity; }
-	EA_FORCE_INLINE size_t lowUsed( void ) const { return m_nLowCursor; }
-	EA_FORCE_INLINE size_t highUsed( void ) const { return m_nCapacity - m_nHighCursor; }
-	EA_FORCE_INLINE size_t remaining( void ) const { return m_nHighCursor >= m_nLowCursor ? m_nHighCursor - m_nLowCursor : 0u; }
-	EA_FORCE_INLINE size_t maxAlignment( void ) const { return m_nMaxAlignment; }
-	EA_FORCE_INLINE bool valid( void ) const { return m_bValid; }
-	EA_FORCE_INLINE bool sealed( void ) const { return m_bSealed; }
+	EA_FORCE_INLINE size_t capacity( void ) const {
+		return m_nCapacity;
+	}
+	EA_FORCE_INLINE size_t lowUsed( void ) const {
+		return m_nLowCursor;
+	}
+	EA_FORCE_INLINE size_t highUsed( void ) const {
+		return m_nCapacity - m_nHighCursor;
+	}
+	EA_FORCE_INLINE size_t remaining( void ) const {
+		return m_nHighCursor >= m_nLowCursor ? m_nHighCursor - m_nLowCursor : 0u;
+	}
+	EA_FORCE_INLINE size_t maxAlignment( void ) const {
+		return m_nMaxAlignment;
+	}
+	EA_FORCE_INLINE bool valid( void ) const {
+		return m_bValid;
+	}
+	EA_FORCE_INLINE bool sealed( void ) const {
+		return m_bSealed;
+	}
 
 private:
 	size_t m_nCapacity = 0u;
@@ -76,11 +93,21 @@ public:
 	t3dMemoryArenaSpan_t resolve( const t3dMemoryArenaSlice_t &rSlice );
 	t3dMemoryArenaSpan_t resolve( const t3dMemoryArenaSlice_t &rSlice ) const;
 
-	EA_FORCE_INLINE size_t capacity( void ) const { return m_nCapacity; }
-	EA_FORCE_INLINE size_t baseAlignment( void ) const { return m_nBaseAlignment; }
-	EA_FORCE_INLINE bool initialized( void ) const { return m_bInitialized; }
-	EA_FORCE_INLINE bool committed( void ) const { return m_bCommitted; }
-	EA_FORCE_INLINE bool sealed( void ) const { return m_bSealed; }
+	EA_FORCE_INLINE size_t capacity( void ) const {
+		return m_nCapacity;
+	}
+	EA_FORCE_INLINE size_t baseAlignment( void ) const {
+		return m_nBaseAlignment;
+	}
+	EA_FORCE_INLINE bool initialized( void ) const {
+		return m_bInitialized;
+	}
+	EA_FORCE_INLINE bool committed( void ) const {
+		return m_bCommitted;
+	}
+	EA_FORCE_INLINE bool sealed( void ) const {
+		return m_bSealed;
+	}
 
 private:
 	void *m_pRaw = nullptr;

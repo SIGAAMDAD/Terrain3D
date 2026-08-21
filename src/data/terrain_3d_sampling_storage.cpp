@@ -2,10 +2,10 @@
 
 #include "data/terrain_3d_sampling_storage.h"
 
-#include <algorithm>
-
 #include "data/terrain_3d_region.h"
 #include "data/terrain_3d_region_repository.h"
+
+#include <algorithm>
 
 T3DSamplingStorage::T3DSamplingStorage( void ) {
 	for ( std::atomic<uint32_t> &generation : m_szRegionSamplingGenerations ) {
@@ -23,9 +23,8 @@ int T3DSamplingStorage::locationIndex( const Vector2i &rLocation ) {
 
 bool T3DSamplingStorage::claimOrReconfigureActive( const int nRegionSize ) {
 	const uint32_t previousGeneration = m_nActiveStorageGeneration;
-	const bool configured = isActiveOwner()
-		? t3dActiveStorageReconfigure( this, nRegionSize )
-		: t3dActiveStorageClaim( this, nRegionSize );
+	const bool configured = isActiveOwner() ? t3dActiveStorageReconfigure( this, nRegionSize )
+											: t3dActiveStorageClaim( this, nRegionSize );
 	if ( !configured ) {
 		return false;
 	}
@@ -86,16 +85,18 @@ bool T3DSamplingStorage::syncActiveRegion( const Vector2i &rLocation, const T3DR
 	return isActiveOwner() && t3dActiveStorageSyncRegion( this, rLocation, pRegion );
 }
 
-bool T3DSamplingStorage::syncActiveHeightPage(
-	const Vector2i &rLocation, const uint8_t *const pHeightBytes, const size_t nHeightBytes
-) {
+bool T3DSamplingStorage::syncActiveHeightPage( const Vector2i &rLocation,
+		const uint8_t *const pHeightBytes,
+		const size_t nHeightBytes ) {
 	return isActiveOwner() && t3dActiveStorageSyncHeightPage( this, rLocation, pHeightBytes, nHeightBytes );
 }
 
-bool T3DSamplingStorage::replaceActiveHeightPages(
-	const int nRegionSize, const uint8_t *const *const ppHeightPages, const int *const pSlots, const size_t nPageCount
-) {
-	if ( !isActiveOwner() || !t3dActiveStorageReplaceHeightPages( this, nRegionSize, ppHeightPages, pSlots, nPageCount ) ) {
+bool T3DSamplingStorage::replaceActiveHeightPages( const int nRegionSize,
+		const uint8_t *const *const ppHeightPages,
+		const int *const pSlots,
+		const size_t nPageCount ) {
+	if ( !isActiveOwner() ||
+			!t3dActiveStorageReplaceHeightPages( this, nRegionSize, ppHeightPages, pSlots, nPageCount ) ) {
 		return false;
 	}
 	refreshActiveGeneration();
@@ -103,15 +104,16 @@ bool T3DSamplingStorage::replaceActiveHeightPages(
 	return true;
 }
 
-bool T3DSamplingStorage::syncActiveMap(
-	const Vector2i &rLocation, const T3DRegion *const pRegion, const t3dMapType_t eType, const Rect2i &rDirtyRect
-) {
+bool T3DSamplingStorage::syncActiveMap( const Vector2i &rLocation,
+		const T3DRegion *const pRegion,
+		const t3dMapType_t eType,
+		const Rect2i &rDirtyRect ) {
 	return isActiveOwner() && t3dActiveStorageSyncMap( this, rLocation, pRegion, eType, rDirtyRect );
 }
 
-bool T3DSamplingStorage::syncActiveDerived(
-	const Vector2i &rLocation, const T3DRegion *const pRegion, const Rect2i &rDirtyRect
-) {
+bool T3DSamplingStorage::syncActiveDerived( const Vector2i &rLocation,
+		const T3DRegion *const pRegion,
+		const Rect2i &rDirtyRect ) {
 	return isActiveOwner() && t3dActiveStorageSyncDerived( this, rLocation, pRegion, rDirtyRect );
 }
 
@@ -141,19 +143,19 @@ uint64_t T3DSamplingStorage::getActivePublicationCount( void ) const {
 	return t3dActiveStorageGetPublicationCount();
 }
 
-T3DResidentMapLease T3DSamplingStorage::acquireResident(
-	const Vector2i &rLocation, const T3DRegion *const pRegion
-) const {
+T3DResidentMapLease T3DSamplingStorage::acquireResident( const Vector2i &rLocation,
+		const T3DRegion *const pRegion ) const {
 	if ( isActiveOwner() || m_residentPool.getCapacity() <= 0 || !pRegion || pRegion->isDeleted() ) {
 		return {};
 	}
 	return m_residentPool.acquire( rLocation, pRegion );
 }
 
-bool T3DSamplingStorage::configureResidentPool(
-	const int nRegionSize, const int nRegionMapSize, const bool bControlMapsImplicit,
-	const int nRequestedCapacity, const size_t nBudgetBytes
-) {
+bool T3DSamplingStorage::configureResidentPool( const int nRegionSize,
+		const int nRegionMapSize,
+		const bool bControlMapsImplicit,
+		const int nRequestedCapacity,
+		const size_t nBudgetBytes ) {
 	if ( isActiveOwner() ) {
 		clearResidentPool();
 		return true;
@@ -167,9 +169,7 @@ bool T3DSamplingStorage::configureResidentPool(
 		channels |= T3DResidentRegionPool::CHANNEL_CONTROL;
 	}
 	const size_t bytesPerRegion = T3DResidentRegionPool::estimateSlotBytes( nRegionSize, channels );
-	const int budgetCapacity = bytesPerRegion > 0u
-		? ( int ) ( MAX<size_t>( 1u, nBudgetBytes / bytesPerRegion ) )
-		: 1;
+	const int budgetCapacity = bytesPerRegion > 0u ? ( int )( MAX<size_t>( 1u, nBudgetBytes / bytesPerRegion ) ) : 1;
 	const int capacity = CLAMP( MIN( nRequestedCapacity, budgetCapacity ), 1, nRegionMapSize * nRegionMapSize );
 	const int oldRegionSize = m_residentPool.getRegionSize();
 	const int oldCapacity = m_residentPool.getCapacity();
@@ -201,17 +201,18 @@ void T3DSamplingStorage::invalidateResident( const Vector2i &rLocation ) {
 	}
 }
 
-void T3DSamplingStorage::syncResidentMap(
-	const Vector2i &rLocation, const T3DRegion *const pRegion, const t3dMapType_t eType, const Rect2i &rDirtyRect
-) {
+void T3DSamplingStorage::syncResidentMap( const Vector2i &rLocation,
+		const T3DRegion *const pRegion,
+		const t3dMapType_t eType,
+		const Rect2i &rDirtyRect ) {
 	if ( m_residentPool.getCapacity() > 0 ) {
 		m_residentPool.syncMap( rLocation, pRegion, eType, rDirtyRect );
 	}
 }
 
-void T3DSamplingStorage::syncResidentDerived(
-	const Vector2i &rLocation, const T3DRegion *const pRegion, const Rect2i &rDirtyRect
-) {
+void T3DSamplingStorage::syncResidentDerived( const Vector2i &rLocation,
+		const T3DRegion *const pRegion,
+		const Rect2i &rDirtyRect ) {
 	if ( m_residentPool.getCapacity() > 0 ) {
 		m_residentPool.syncDerived( rLocation, pRegion, rDirtyRect );
 	}
@@ -233,7 +234,7 @@ void T3DSamplingStorage::publishRegionGeneration( const Vector2i &rLocation ) {
 	if ( index < 0 ) {
 		return;
 	}
-	std::atomic<uint32_t> &generation = m_szRegionSamplingGenerations[( size_t ) ( index )];
+	std::atomic<uint32_t> &generation = m_szRegionSamplingGenerations[( size_t )( index )];
 	const uint32_t next = generation.fetch_add( 1u, std::memory_order_acq_rel ) + 1u;
 	if ( next == 0u ) {
 		generation.store( 1u, std::memory_order_release );

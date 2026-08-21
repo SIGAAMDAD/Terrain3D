@@ -5,13 +5,12 @@
 #ifndef TERRAIN3D_ACTIVE_ACCESS_H
 #define TERRAIN3D_ACTIVE_ACCESS_H
 
-#include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
+#include "core/terrain_3d_compiler.h"
 
 #include <atomic>
 #include <cstdint>
 #include <thread>
-
 
 // Per-region reader/writer gate for the process-static terrain bank.
 // Writers announce themselves before waiting so later readers cannot starve them.
@@ -27,8 +26,8 @@ typedef struct t3dActiveAccessGate_s {
 			if ( ( state & s_nActiveAccessReaderMask ) == s_nActiveAccessReaderMask ) {
 				return false;
 			}
-			if ( m_state.compare_exchange_weak( state, state + 1u, std::memory_order_acq_rel,
-				std::memory_order_acquire ) ) {
+			if ( m_state.compare_exchange_weak(
+						 state, state + 1u, std::memory_order_acq_rel, std::memory_order_acquire ) ) {
 				return true;
 			}
 		}
@@ -40,8 +39,8 @@ typedef struct t3dActiveAccessGate_s {
 			if ( ( state & s_nActiveAccessReaderMask ) == 0u ) {
 				return false;
 			}
-			if ( m_state.compare_exchange_weak( state, state - 1u, std::memory_order_acq_rel,
-				std::memory_order_acquire ) ) {
+			if ( m_state.compare_exchange_weak(
+						 state, state - 1u, std::memory_order_acq_rel, std::memory_order_acquire ) ) {
 				return true;
 			}
 		}
@@ -55,8 +54,10 @@ typedef struct t3dActiveAccessGate_s {
 				state = m_state.load( std::memory_order_acquire );
 				continue;
 			}
-			if ( m_state.compare_exchange_weak( state, state | s_nActiveAccessWriterBit, std::memory_order_acq_rel,
-				std::memory_order_acquire ) ) {
+			if ( m_state.compare_exchange_weak( state,
+						 state | s_nActiveAccessWriterBit,
+						 std::memory_order_acq_rel,
+						 std::memory_order_acquire ) ) {
 				break;
 			}
 		}
@@ -65,7 +66,9 @@ typedef struct t3dActiveAccessGate_s {
 		}
 	}
 
-	EA_FORCE_INLINE void releaseWrite( void ) { m_state.store( 0u, std::memory_order_release ); }
+	EA_FORCE_INLINE void releaseWrite( void ) {
+		m_state.store( 0u, std::memory_order_release );
+	}
 
 	void waitIdle( void ) const {
 		while ( m_state.load( std::memory_order_acquire ) != 0u ) {
@@ -73,12 +76,16 @@ typedef struct t3dActiveAccessGate_s {
 		}
 	}
 
-	EA_FORCE_INLINE void resetUnsafe( void ) { m_state.store( 0u, std::memory_order_relaxed ); }
+	EA_FORCE_INLINE void resetUnsafe( void ) {
+		m_state.store( 0u, std::memory_order_relaxed );
+	}
 
-	EA_FORCE_INLINE uint32_t load( void ) const { return m_state.load( std::memory_order_acquire ); }
+	EA_FORCE_INLINE uint32_t load( void ) const {
+		return m_state.load( std::memory_order_acquire );
+	}
 
 private:
-	std::atomic<uint32_t> m_state{0u};
+	std::atomic<uint32_t> m_state{ 0u };
 } t3dActiveAccessGate_t;
 
 #endif // TERRAIN3D_ACTIVE_ACCESS_H

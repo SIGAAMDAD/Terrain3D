@@ -4,13 +4,13 @@
 
 #include <godot_cpp/core/class_db.hpp>
 
-#define T3D_SET_VALUE( methodName, methodSymbol, field_name, value_type )                     \
-	void T3DRegionLighting::methodSymbol( value_type value ) {       \
-		if ( field_name == value ) {                                             \
-			return;                                                               \
-		}                                                                        \
-		field_name = value;                                                    \
-		emit_changed();                                                          \
+#define T3D_SET_VALUE( methodName, methodSymbol, field_name, value_type ) \
+	void T3DRegionLighting::methodSymbol( value_type value ) { \
+		if ( field_name == value ) { \
+			return; \
+		} \
+		field_name = value; \
+		emit_changed(); \
 	}
 
 void T3DRegionLighting::setLightDataPath( const String &rPath ) {
@@ -72,7 +72,9 @@ void T3DRegionLighting::setContextRadiusRegions( const int nRadius ) {
 }
 
 void T3DRegionLighting::setShadowmaskMode( const int nMode ) {
-	const int value = CLAMP( nMode, ( int ) ( LightmapGIData::SHADOWMASK_MODE_NONE ), ( int ) ( LightmapGIData::SHADOWMASK_MODE_OVERLAY ) );
+	const int value = CLAMP( nMode,
+			( int )( LightmapGIData::SHADOWMASK_MODE_NONE ),
+			( int )( LightmapGIData::SHADOWMASK_MODE_OVERLAY ) );
 	if ( m_nShadowmaskMode == value ) {
 		return;
 	}
@@ -137,7 +139,7 @@ void T3DRegionLighting::setHasProbeData( const bool bHasProbes ) {
 }
 
 void T3DRegionLighting::setDiskBytes( const int64_t nBytes ) {
-	const int64_t value = MAX( nBytes, ( int64_t ) ( 0 ) );
+	const int64_t value = MAX( nBytes, ( int64_t )( 0 ) );
 	if ( m_nDiskBytes == value ) {
 		return;
 	}
@@ -146,7 +148,7 @@ void T3DRegionLighting::setDiskBytes( const int64_t nBytes ) {
 }
 
 void T3DRegionLighting::setEstimatedGpuBytes( const int64_t nBytes ) {
-	const int64_t value = MAX( nBytes, ( int64_t ) ( 0 ) );
+	const int64_t value = MAX( nBytes, ( int64_t )( 0 ) );
 	if ( m_nEstimatedGpuBytes == value ) {
 		return;
 	}
@@ -186,7 +188,8 @@ void T3DRegionLighting::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "set_light_data_path", "path" ), &T3DRegionLighting::setLightDataPath );
 	ClassDB::bind_method( D_METHOD( "get_light_data_path" ), &T3DRegionLighting::getLightDataPath );
 	ClassDB::bind_method( D_METHOD( "has_light_data" ), &T3DRegionLighting::hasLightData );
-	ClassDB::bind_method( D_METHOD( "set_terrain_shadow_mask_path", "path" ), &T3DRegionLighting::setTerrainShadowMaskPath );
+	ClassDB::bind_method(
+			D_METHOD( "set_terrain_shadow_mask_path", "path" ), &T3DRegionLighting::setTerrainShadowMaskPath );
 	ClassDB::bind_method( D_METHOD( "get_terrain_shadow_mask_path" ), &T3DRegionLighting::getTerrainShadowMaskPath );
 	ClassDB::bind_method( D_METHOD( "has_terrain_shadow_mask" ), &T3DRegionLighting::hasTerrainShadowMask );
 	ClassDB::bind_method( D_METHOD( "set_baked_user_data", "data" ), &T3DRegionLighting::setBakedUserData );
@@ -201,23 +204,28 @@ void T3DRegionLighting::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_cluster_size_regions" ), &T3DRegionLighting::getClusterSizeRegions );
 	ClassDB::bind_method( D_METHOD( "set_terrain_proxy_lod", "lod" ), &T3DRegionLighting::setTerrainProxyLod );
 	ClassDB::bind_method( D_METHOD( "get_terrain_proxy_lod" ), &T3DRegionLighting::getTerrainProxyLod );
-	ClassDB::bind_method( D_METHOD( "set_context_radius_regions", "radius" ), &T3DRegionLighting::setContextRadiusRegions );
+	ClassDB::bind_method(
+			D_METHOD( "set_context_radius_regions", "radius" ), &T3DRegionLighting::setContextRadiusRegions );
 	ClassDB::bind_method( D_METHOD( "get_context_radius_regions" ), &T3DRegionLighting::getContextRadiusRegions );
 	ClassDB::bind_method( D_METHOD( "set_shadowmask_mode", "mode" ), &T3DRegionLighting::setShadowmaskMode );
 	ClassDB::bind_method( D_METHOD( "get_shadowmask_mode" ), &T3DRegionLighting::getShadowmaskMode );
 	ClassDB::bind_method( D_METHOD( "set_bake_signature", "signature" ), &T3DRegionLighting::setBakeSignature );
 	ClassDB::bind_method( D_METHOD( "get_bake_signature" ), &T3DRegionLighting::getBakeSignature );
-	ClassDB::bind_method( D_METHOD( "set_directional_light_signature", "signature" ), &T3DRegionLighting::setDirectionalLightSignature );
-	ClassDB::bind_method( D_METHOD( "get_directional_light_signature" ), &T3DRegionLighting::getDirectionalLightSignature );
+	ClassDB::bind_method( D_METHOD( "set_directional_light_signature", "signature" ),
+			&T3DRegionLighting::setDirectionalLightSignature );
+	ClassDB::bind_method(
+			D_METHOD( "get_directional_light_signature" ), &T3DRegionLighting::getDirectionalLightSignature );
 	ClassDB::bind_method( D_METHOD( "set_baked_unix", "unix_time" ), &T3DRegionLighting::setBakedUnix );
 	ClassDB::bind_method( D_METHOD( "get_baked_unix" ), &T3DRegionLighting::getBakedUnix );
 	ClassDB::bind_method( D_METHOD( "set_receiver_count", "count" ), &T3DRegionLighting::setReceiverCount );
 	ClassDB::bind_method( D_METHOD( "get_receiver_count" ), &T3DRegionLighting::getReceiverCount );
 	ClassDB::bind_method( D_METHOD( "set_contributor_count", "count" ), &T3DRegionLighting::setContributorCount );
 	ClassDB::bind_method( D_METHOD( "get_contributor_count" ), &T3DRegionLighting::getContributorCount );
-	ClassDB::bind_method( D_METHOD( "set_lightmap_texture_count", "count" ), &T3DRegionLighting::setLightmapTextureCount );
+	ClassDB::bind_method(
+			D_METHOD( "set_lightmap_texture_count", "count" ), &T3DRegionLighting::setLightmapTextureCount );
 	ClassDB::bind_method( D_METHOD( "get_lightmap_texture_count" ), &T3DRegionLighting::getLightmapTextureCount );
-	ClassDB::bind_method( D_METHOD( "set_shadowmask_texture_count", "count" ), &T3DRegionLighting::setShadowmaskTextureCount );
+	ClassDB::bind_method(
+			D_METHOD( "set_shadowmask_texture_count", "count" ), &T3DRegionLighting::setShadowmaskTextureCount );
 	ClassDB::bind_method( D_METHOD( "get_shadowmask_texture_count" ), &T3DRegionLighting::getShadowmaskTextureCount );
 	ClassDB::bind_method( D_METHOD( "set_has_probe_data", "has_probes" ), &T3DRegionLighting::setHasProbeData );
 	ClassDB::bind_method( D_METHOD( "has_probe_data" ), &T3DRegionLighting::hasProbeData );
@@ -228,33 +236,135 @@ void T3DRegionLighting::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "set_source_scene", "path" ), &T3DRegionLighting::setSourceScene );
 	ClassDB::bind_method( D_METHOD( "get_source_scene" ), &T3DRegionLighting::getSourceScene );
 	ClassDB::bind_method( D_METHOD( "has_shadowmask" ), &T3DRegionLighting::hasShadowmask );
-	ClassDB::bind_method( D_METHOD( "strip_baked_users_with_path_fragment", "path_fragment" ), &T3DRegionLighting::stripBakedUsersWithPathFragment );
+	ClassDB::bind_method( D_METHOD( "strip_baked_users_with_path_fragment", "path_fragment" ),
+			&T3DRegionLighting::stripBakedUsersWithPathFragment );
 
 	ADD_GROUP( "Bake Configuration", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "cluster_size_regions", PROPERTY_HINT_RANGE, "1,8,1" ), "set_cluster_size_regions", "get_cluster_size_regions" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "terrain_proxy_lod", PROPERTY_HINT_RANGE, "0,8,1" ), "set_terrain_proxy_lod", "get_terrain_proxy_lod" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "context_radius_regions", PROPERTY_HINT_RANGE, "0,4,1" ), "set_context_radius_regions", "get_context_radius_regions" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "shadowmask_mode", PROPERTY_HINT_ENUM, "None,Replace,Overlay" ), "set_shadowmask_mode", "get_shadowmask_mode" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "cluster_size_regions", PROPERTY_HINT_RANGE, "1,8,1" ),
+			"set_cluster_size_regions",
+			"get_cluster_size_regions" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "terrain_proxy_lod", PROPERTY_HINT_RANGE, "0,8,1" ),
+			"set_terrain_proxy_lod",
+			"get_terrain_proxy_lod" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "context_radius_regions", PROPERTY_HINT_RANGE, "0,4,1" ),
+			"set_context_radius_regions",
+			"get_context_radius_regions" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "shadowmask_mode", PROPERTY_HINT_ENUM, "None,Replace,Overlay" ),
+			"set_shadowmask_mode",
+			"get_shadowmask_mode" );
 
 	ADD_GROUP( "Package Reference", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::STRING, "light_data_path", PROPERTY_HINT_FILE, "*.lmbake" ), "set_light_data_path", "get_light_data_path" );
-	ADD_PROPERTY( PropertyInfo( Variant::STRING, "terrain_shadow_mask_path", PROPERTY_HINT_FILE, "*.res,*.tres" ), "set_terrain_shadow_mask_path", "get_terrain_shadow_mask_path" );
-	ADD_PROPERTY( PropertyInfo( Variant::ARRAY, "baked_user_data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_INTERNAL ), "set_baked_user_data", "get_baked_user_data" );
+	ADD_PROPERTY( PropertyInfo( Variant::STRING, "light_data_path", PROPERTY_HINT_FILE, "*.lmbake" ),
+			"set_light_data_path",
+			"get_light_data_path" );
+	ADD_PROPERTY( PropertyInfo( Variant::STRING, "terrain_shadow_mask_path", PROPERTY_HINT_FILE, "*.res,*.tres" ),
+			"set_terrain_shadow_mask_path",
+			"get_terrain_shadow_mask_path" );
+	ADD_PROPERTY( PropertyInfo( Variant::ARRAY,
+						  "baked_user_data",
+						  PROPERTY_HINT_NONE,
+						  "",
+						  PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_INTERNAL ),
+			"set_baked_user_data",
+			"get_baked_user_data" );
 
 	ADD_GROUP( "Generated Bake Metadata", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::VECTOR2I, "cluster_location", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_cluster_location", "get_cluster_location" );
-	ADD_PROPERTY( PropertyInfo( Variant::VECTOR2I, "region_min", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_region_min", "get_region_min" );
-	ADD_PROPERTY( PropertyInfo( Variant::VECTOR2I, "region_max", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_region_max", "get_region_max" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "bake_signature", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_bake_signature", "get_bake_signature" );
-	ADD_PROPERTY( PropertyInfo( Variant::STRING, "directional_light_signature", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_directional_light_signature", "get_directional_light_signature" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "baked_unix", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_baked_unix", "get_baked_unix" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "receiver_count", PROPERTY_HINT_RANGE, "0,1000000,1", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_receiver_count", "get_receiver_count" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "contributor_count", PROPERTY_HINT_RANGE, "0,1000000,1", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_contributor_count", "get_contributor_count" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "lightmap_texture_count", PROPERTY_HINT_RANGE, "0,1024,1", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_lightmap_texture_count", "get_lightmap_texture_count" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "shadowmask_texture_count", PROPERTY_HINT_RANGE, "0,1024,1", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_shadowmask_texture_count", "get_shadowmask_texture_count" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "has_probe_data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_has_probe_data", "has_probe_data" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "disk_bytes", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_disk_bytes", "get_disk_bytes" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "estimated_gpu_bytes", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_estimated_gpu_bytes", "get_estimated_gpu_bytes" );
-	ADD_PROPERTY( PropertyInfo( Variant::STRING, "source_scene", PROPERTY_HINT_FILE, "*.tscn,*.scn", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_source_scene", "get_source_scene" );
-
+	ADD_PROPERTY( PropertyInfo( Variant::VECTOR2I,
+						  "cluster_location",
+						  PROPERTY_HINT_NONE,
+						  "",
+						  PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+			"set_cluster_location",
+			"get_cluster_location" );
+	ADD_PROPERTY( PropertyInfo( Variant::VECTOR2I,
+						  "region_min",
+						  PROPERTY_HINT_NONE,
+						  "",
+						  PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+			"set_region_min",
+			"get_region_min" );
+	ADD_PROPERTY( PropertyInfo( Variant::VECTOR2I,
+						  "region_max",
+						  PROPERTY_HINT_NONE,
+						  "",
+						  PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+			"set_region_max",
+			"get_region_max" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT,
+						  "bake_signature",
+						  PROPERTY_HINT_NONE,
+						  "",
+						  PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+			"set_bake_signature",
+			"get_bake_signature" );
+	ADD_PROPERTY( PropertyInfo( Variant::STRING,
+						  "directional_light_signature",
+						  PROPERTY_HINT_NONE,
+						  "",
+						  PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+			"set_directional_light_signature",
+			"get_directional_light_signature" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT,
+						  "baked_unix",
+						  PROPERTY_HINT_NONE,
+						  "",
+						  PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+			"set_baked_unix",
+			"get_baked_unix" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT,
+						  "receiver_count",
+						  PROPERTY_HINT_RANGE,
+						  "0,1000000,1",
+						  PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+			"set_receiver_count",
+			"get_receiver_count" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT,
+						  "contributor_count",
+						  PROPERTY_HINT_RANGE,
+						  "0,1000000,1",
+						  PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+			"set_contributor_count",
+			"get_contributor_count" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT,
+						  "lightmap_texture_count",
+						  PROPERTY_HINT_RANGE,
+						  "0,1024,1",
+						  PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+			"set_lightmap_texture_count",
+			"get_lightmap_texture_count" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT,
+						  "shadowmask_texture_count",
+						  PROPERTY_HINT_RANGE,
+						  "0,1024,1",
+						  PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+			"set_shadowmask_texture_count",
+			"get_shadowmask_texture_count" );
+	ADD_PROPERTY( PropertyInfo( Variant::BOOL,
+						  "has_probe_data",
+						  PROPERTY_HINT_NONE,
+						  "",
+						  PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+			"set_has_probe_data",
+			"has_probe_data" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT,
+						  "disk_bytes",
+						  PROPERTY_HINT_NONE,
+						  "",
+						  PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+			"set_disk_bytes",
+			"get_disk_bytes" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT,
+						  "estimated_gpu_bytes",
+						  PROPERTY_HINT_NONE,
+						  "",
+						  PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+			"set_estimated_gpu_bytes",
+			"get_estimated_gpu_bytes" );
+	ADD_PROPERTY( PropertyInfo( Variant::STRING,
+						  "source_scene",
+						  PROPERTY_HINT_FILE,
+						  "*.tscn,*.scn",
+						  PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+			"set_source_scene",
+			"get_source_scene" );
 }

@@ -5,31 +5,29 @@
 #ifndef TERRAIN3D_CONSTANTS_H
 #define TERRAIN3D_CONSTANTS_H
 
-#include <cstddef>
-#include <cstdint>
-#include <numeric>
-#include <limits>
-
-#include "eastl_config.h"
 #include "core/terrain_3d_numeric_constants.h"
 #include "data/terrain_3d_runtime_page_constants.h"
+#include "eastl_config.h"
 #include "instances/terrain_3d_instance_cache_constants.h"
-#include "streaming/terrain_3d_gpu_cache_constants.h"
 #include "memory/terrain_3d_memory_constants.h"
+#include "streaming/terrain_3d_gpu_cache_constants.h"
 
 #include <EASTL/functional.h>
 #include <EASTL/utility.h>
-
+#include <cstddef>
+#include <cstdint>
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/physics_server3d.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
-#include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/color.hpp>
+#include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 #include <godot_cpp/variant/vector2.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
 #include <godot_cpp/variant/vector3.hpp>
+#include <limits>
+#include <numeric>
 
 // GDExtension uses the godot namespace, custom modules do not.
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
@@ -48,8 +46,8 @@ using namespace godot;
 
 // Centralized native compile-time constants. Keep tunable limits and format constants here.
 static constexpr uint32_t s_nProfileVersion = 5u;
-static constexpr const char *TERRAIN3D_PROFILE_KEY = "xbox360_experimental";
-static constexpr const char *TERRAIN3D_PROFILE_DISPLAY_NAME = "Xbox 360 Experimental";
+static constexpr const char *s_pszProfileKey = "xbox360_experimental";
+static constexpr const char *s_pszProfileDisplayName = "Xbox 360 Experimental";
 static constexpr uint64_t s_nProfileFnvOffset = 1469598103934665603ull;
 static constexpr uint64_t s_nProfileFnvPrime = 1099511628211ull;
 static constexpr uint32_t s_nHashGoldenRatio32 = 0x9e3779b9u;
@@ -70,22 +68,46 @@ static constexpr size_t s_nTestDispatchIterations = 64u;
 static constexpr size_t s_nTestEastlAlignment = 64u;
 static constexpr size_t s_nTestEastlOffset = 13u;
 static constexpr uint8_t s_nTestControlFlag = 1u << 0u;
-static constexpr const char *TERRAIN3D_CACHE_THRASH_SUBSYSTEM_NAMES[] = {
-	"gpu_terrain_pages", "cpu_terrain_pages", "instance_pages",
+static constexpr const char *s_pszCacheThrashSubsystemNames[] = {
+	"gpu_terrain_pages",
+	"cpu_terrain_pages",
+	"instance_pages",
 };
-static constexpr const char *TERRAIN3D_MEMORY_SUBSYSTEM_NAMES[] = {
-	"gpu_terrain_pages", "cpu_terrain_pages", "instance_pages", "baked_lighting", "hlod_proxies", "shader_cache",
+static constexpr const char *s_pszMemorySubsystemNames[] = {
+	"gpu_terrain_pages",
+	"cpu_terrain_pages",
+	"instance_pages",
+	"baked_lighting",
+	"hlod_proxies",
+	"shader_cache",
 };
 static constexpr size_t s_nMemorySubsystemNameCount =
-	sizeof( TERRAIN3D_MEMORY_SUBSYSTEM_NAMES ) / sizeof( TERRAIN3D_MEMORY_SUBSYSTEM_NAMES[0] );
-static constexpr const char *TERRAIN3D_EDITOR_TOOL_NAMES[] = {
-	"Region", "Sculpt", "Height", "Texture", "Color", "Roughness", "Auto Shader",
-	"Holes", "Navigation", "Instancer", "Angle", "Scale", "Landform", "TOOL_MAX",
+		sizeof( s_pszMemorySubsystemNames ) / sizeof( s_pszMemorySubsystemNames[0] );
+static constexpr const char *s_pszEditorToolNames[] = {
+	"Region",
+	"Sculpt",
+	"Height",
+	"Texture",
+	"Color",
+	"Roughness",
+	"Auto Shader",
+	"Holes",
+	"Navigation",
+	"Instancer",
+	"Angle",
+	"Scale",
+	"Landform",
+	"TOOL_MAX",
 };
-static constexpr const char *TERRAIN3D_EDITOR_OPERATION_NAMES[] = {
-	"Add", "Subtract", "Replace", "Average", "Gradient", "OP_MAX",
+static constexpr const char *s_pszEditorOperationNames[] = {
+	"Add",
+	"Subtract",
+	"Replace",
+	"Average",
+	"Gradient",
+	"OP_MAX",
 };
-static constexpr const char *TERRAIN3D_SHADER_STATIC_MACRO_NAMES[] = {
+static constexpr const char *s_pszShaderStaticMacroNames[] = {
 	"T3D_TERRAIN_SAMPLING_MODE",
 	"T3D_TERRAIN_NORMAL_MODE",
 	"T3D_COLOR_SAMPLING_MODE",
@@ -104,12 +126,10 @@ static constexpr const char *TERRAIN3D_SHADER_STATIC_MACRO_NAMES[] = {
 	"T3D_COLOR_MAPS_IMPLICIT",
 	"T3D_AUTO_SHADER_ENABLED",
 };
-static constexpr RenderingServer::ShadowCastingSetting s_shadowCastingOn =
-	RenderingServer::SHADOW_CASTING_SETTING_ON;
-static constexpr RenderingServer::ShadowCastingSetting s_shadowCastingOff =
-	RenderingServer::SHADOW_CASTING_SETTING_OFF;
+static constexpr RenderingServer::ShadowCastingSetting s_shadowCastingOn = RenderingServer::SHADOW_CASTING_SETTING_ON;
+static constexpr RenderingServer::ShadowCastingSetting s_shadowCastingOff = RenderingServer::SHADOW_CASTING_SETTING_OFF;
 static constexpr RenderingServer::ShadowCastingSetting s_shadowCastingOnly =
-	RenderingServer::SHADOW_CASTING_SETTING_SHADOWS_ONLY;
+		RenderingServer::SHADOW_CASTING_SETTING_SHADOWS_ONLY;
 static constexpr int s_nMaxTextureAssets = 32;
 static constexpr int s_nMaxMeshAssets = 256;
 static constexpr real_t s_fDataCurrentVersion = 0.94f;
@@ -126,9 +146,9 @@ static constexpr float s_fLargeDistance = 1.0e20f;
 static constexpr uint32_t s_nLandformMaterialMask = s_nAutoshaderMaterialMask | 0x1u;
 static constexpr float s_fLandformEpsilon = 0.0001f;
 static constexpr int32_t s_nErosionDirectionCount = 4;
-static constexpr int32_t s_szErosionDirectionX[s_nErosionDirectionCount] = {-1, 1, 0, 0};
-static constexpr int32_t s_szErosionDirectionY[s_nErosionDirectionCount] = {0, 0, -1, 1};
-static constexpr int32_t s_szErosionOppositeDirection[s_nErosionDirectionCount] = {1, 0, 3, 2};
+static constexpr int32_t s_szErosionDirectionX[s_nErosionDirectionCount] = { -1, 1, 0, 0 };
+static constexpr int32_t s_szErosionDirectionY[s_nErosionDirectionCount] = { 0, 0, -1, 1 };
+static constexpr int32_t s_szErosionOppositeDirection[s_nErosionDirectionCount] = { 1, 0, 3, 2 };
 static constexpr float s_fErosionEpsilon = 1.0e-6f;
 static constexpr uint64_t s_nErosionFnvOffset = 1469598103934665603ULL;
 static constexpr uint64_t s_nErosionFnvPrime = 1099511628211ULL;
@@ -230,11 +250,10 @@ static constexpr uint32_t s_nOpReplaceValue = 2u;
 static constexpr uint32_t s_nOpSubtractValue = 1u;
 static constexpr int s_nPairInstances = 2;
 static constexpr int s_nRenderControlBlendRadius = 2;
-static constexpr int s_szRenderControlKernel[5] = {1, 2, 3, 2, 1};
-static constexpr uint32_t s_nRenderControlMaterialMask =
-	( 0x1Fu << 27u ) | ( 0x1Fu << 22u ) | ( 0xFFu << 14u );
+static constexpr int s_szRenderControlKernel[5] = { 1, 2, 3, 2, 1 };
+static constexpr uint32_t s_nRenderControlMaterialMask = ( 0x1Fu << 27u ) | ( 0x1Fu << 22u ) | ( 0xFFu << 14u );
 static constexpr size_t s_nResidentCacheAlignment = 64u;
-static constexpr size_t s_nResidentInvalidOffset = ( size_t ) ( -1 );
+static constexpr size_t s_nResidentInvalidOffset = ( size_t )( -1 );
 static constexpr int s_nRingTileInstances = 12;
 static constexpr size_t s_nRuntimeProfileHistoryCapacity = 600u;
 static constexpr int s_nSamplerCacheSize = 8;
@@ -254,34 +273,30 @@ static constexpr size_t s_nXbox360CpuMapCeilingBytes = 64u * 1024u * 1024u;
 static constexpr int s_nActiveMinRegionSize = s_nMinRegionSize;
 static constexpr int s_nActiveWorldTexels = s_nWorldTexels;
 static constexpr size_t s_nBakeUvCachelineElements =
-	s_nBakeCachelineBytes / std::gcd( s_nBakeCachelineBytes, sizeof( Vector2 ) );
+		s_nBakeCachelineBytes / std::gcd( s_nBakeCachelineBytes, sizeof( Vector2 ) );
 static constexpr size_t s_nBakeVertexCachelineElements =
-	s_nBakeCachelineBytes / std::gcd( s_nBakeCachelineBytes, sizeof( Vector3 ) );
+		s_nBakeCachelineBytes / std::gcd( s_nBakeCachelineBytes, sizeof( Vector3 ) );
 static constexpr size_t s_nGpuCacheFarColorBytes =
-	( size_t ) ( s_nGpuCacheFarHeightSide ) * ( size_t ) ( s_nGpuCacheFarHeightSide ) * 4u;
+		( size_t )( s_nGpuCacheFarHeightSide ) * ( size_t )( s_nGpuCacheFarHeightSide ) * 4u;
 static constexpr size_t s_nGpuCacheFarHeightBytes =
-	( size_t ) ( s_nGpuCacheFarHeightSide ) * ( size_t ) ( s_nGpuCacheFarHeightSide ) * 2u;
+		( size_t )( s_nGpuCacheFarHeightSide ) * ( size_t )( s_nGpuCacheFarHeightSide ) * 2u;
 static constexpr int s_nGpuFarHeightSize = s_nGpuCacheFarHeightSide;
 static constexpr uint32_t s_nLightingClassLayerMask =
-	s_nLightingLayerFoliage | s_nLightingLayerMedium |
-	s_nLightingLayerLarge | s_nLightingLayerRegional;
+		s_nLightingLayerFoliage | s_nLightingLayerMedium | s_nLightingLayerLarge | s_nLightingLayerRegional;
 static constexpr int s_nMaxBatchInstances = s_nMaxClipmapLevels;
 static constexpr int s_nMaxBufferShaderVariantCacheLimit = s_nMaxShaderVariantCacheLimit / 2;
 static constexpr int s_nMaxEditorShaderVariantCacheLimit = s_nMaxShaderVariantCacheLimit / 4;
-static constexpr int s_nMaxRegionMapSize =
-	s_nWorldTexels / s_nMinRegionSize;
+static constexpr int s_nMaxRegionMapSize = s_nWorldTexels / s_nMinRegionSize;
 static constexpr uint64_t s_nMemoryPolicyHysteresisBytes = 2ULL * s_nMemoryMib;
 static constexpr int s_nActiveMaxRegionMapSize = s_nMaxRegionMapSize;
-static const Vector2i TERRAIN3D_REGION_MAP_VSIZE{s_nActiveMaxRegionMapSize, s_nActiveMaxRegionMapSize};
+static const Vector2i s_regionMapVSize{ s_nActiveMaxRegionMapSize, s_nActiveMaxRegionMapSize };
 static constexpr size_t s_nBakeTaskAlignmentElements =
-	std::lcm( s_nBakeVertexCachelineElements, s_nBakeUvCachelineElements );
-static constexpr uint32_t s_nLightingManagedLayerMask =
-	s_nLightingClassLayerMask | s_nDirectionalReceiverLayer;
-static constexpr int s_nMaxRegionSlots =
-	s_nMaxRegionMapSize * s_nMaxRegionMapSize;
+		std::lcm( s_nBakeVertexCachelineElements, s_nBakeUvCachelineElements );
+static constexpr uint32_t s_nLightingManagedLayerMask = s_nLightingClassLayerMask | s_nDirectionalReceiverLayer;
+static constexpr int s_nMaxRegionSlots = s_nMaxRegionMapSize * s_nMaxRegionMapSize;
 static constexpr int s_nResidentWorldSize = s_nMaxRegionMapSize;
 static constexpr int s_nActiveMaxRegionSlots = s_nMaxRegionSlots;
-static constexpr size_t s_nInstanceRegionTableCapacity = ( size_t ) ( s_nMaxRegionSlots );
+static constexpr size_t s_nInstanceRegionTableCapacity = ( size_t )( s_nMaxRegionSlots );
 static constexpr int s_nResidentWorldHalf = s_nResidentWorldSize / 2;
 static constexpr int s_nResidentWorldSlotCount = s_nMaxRegionSlots;
 static constexpr size_t s_nInstanceRegionUpdateCapacity = s_nInstanceRegionTableCapacity;
@@ -305,18 +320,24 @@ typedef struct t3dPerformanceProfileSetting_s {
 	bool m_bBoolValue;
 } t3dPerformanceProfileSetting_t;
 
-#define T3D_PROFILE_TERRAIN_INT( name, value ) { T3D_PROFILE_OWNER_TERRAIN, T3D_PROFILE_VALUE_INT, name, ( int64_t ) ( value ), 0.0, false },
-#define T3D_PROFILE_TERRAIN_FLOAT( name, value ) { T3D_PROFILE_OWNER_TERRAIN, T3D_PROFILE_VALUE_FLOAT, name, 0, ( double ) ( value ), false },
-#define T3D_PROFILE_TERRAIN_BOOL( name, value ) { T3D_PROFILE_OWNER_TERRAIN, T3D_PROFILE_VALUE_BOOL, name, 0, 0.0, ( bool ) ( value ) },
-#define T3D_PROFILE_MATERIAL_INT( name, value ) { T3D_PROFILE_OWNER_MATERIAL, T3D_PROFILE_VALUE_INT, name, ( int64_t ) ( value ), 0.0, false },
-#define T3D_PROFILE_MATERIAL_FLOAT( name, value ) { T3D_PROFILE_OWNER_MATERIAL, T3D_PROFILE_VALUE_FLOAT, name, 0, ( double ) ( value ), false },
-#define T3D_PROFILE_MATERIAL_BOOL( name, value ) { T3D_PROFILE_OWNER_MATERIAL, T3D_PROFILE_VALUE_BOOL, name, 0, 0.0, ( bool ) ( value ) },
+#define T3D_PROFILE_TERRAIN_INT( name, value ) \
+	{ T3D_PROFILE_OWNER_TERRAIN, T3D_PROFILE_VALUE_INT, name, ( int64_t )( value ), 0.0, false },
+#define T3D_PROFILE_TERRAIN_FLOAT( name, value ) \
+	{ T3D_PROFILE_OWNER_TERRAIN, T3D_PROFILE_VALUE_FLOAT, name, 0, ( double )( value ), false },
+#define T3D_PROFILE_TERRAIN_BOOL( name, value ) \
+	{ T3D_PROFILE_OWNER_TERRAIN, T3D_PROFILE_VALUE_BOOL, name, 0, 0.0, ( bool )( value ) },
+#define T3D_PROFILE_MATERIAL_INT( name, value ) \
+	{ T3D_PROFILE_OWNER_MATERIAL, T3D_PROFILE_VALUE_INT, name, ( int64_t )( value ), 0.0, false },
+#define T3D_PROFILE_MATERIAL_FLOAT( name, value ) \
+	{ T3D_PROFILE_OWNER_MATERIAL, T3D_PROFILE_VALUE_FLOAT, name, 0, ( double )( value ), false },
+#define T3D_PROFILE_MATERIAL_BOOL( name, value ) \
+	{ T3D_PROFILE_OWNER_MATERIAL, T3D_PROFILE_VALUE_BOOL, name, 0, 0.0, ( bool )( value ) },
 
 inline constexpr t3dPerformanceProfileSetting_t g_szXbox360ExperimentalSettings[] = {
 #include "streaming/terrain_3d_performance_profile_manifest.inc"
 };
 inline constexpr size_t g_nXbox360ExperimentalSettingCount =
-	sizeof( g_szXbox360ExperimentalSettings ) / sizeof( g_szXbox360ExperimentalSettings[0] );
+		sizeof( g_szXbox360ExperimentalSettings ) / sizeof( g_szXbox360ExperimentalSettings[0] );
 
 #undef T3D_PROFILE_TERRAIN_INT
 #undef T3D_PROFILE_TERRAIN_FLOAT
@@ -325,18 +346,17 @@ inline constexpr size_t g_nXbox360ExperimentalSettingCount =
 #undef T3D_PROFILE_MATERIAL_FLOAT
 #undef T3D_PROFILE_MATERIAL_BOOL
 
-
 // End centralized native compile-time constants.
 
-static const Color COLOR_NAN{NAN, NAN, NAN, NAN};
-static const Color COLOR_WHITE{1.0f, 1.0f, 1.0f, 1.0f};
-static const Image::Format TERRAIN3D_REGION_MAP_FORMATS[s_nTypeMaxValue + 1u] = {
+static const Color s_colorNan{ NAN, NAN, NAN, NAN };
+static const Color s_colorWhite{ 1.0f, 1.0f, 1.0f, 1.0f };
+static const Image::Format s_szRegionMapFormats[s_nTypeMaxValue + 1u] = {
 	Image::FORMAT_R16,
 	Image::FORMAT_RF,
 	Image::FORMAT_RGBA8,
 	Image::Format( s_nTypeMaxValue ),
 };
-static constexpr const char *TERRAIN3D_REGION_MAP_TYPE_NAMES[s_nTypeMaxValue + 1u] = {
+static constexpr const char *s_pszRegionMapTypeNames[s_nTypeMaxValue + 1u] = {
 	"TYPE_HEIGHT",
 	"TYPE_CONTROL",
 	"TYPE_COLOR",
@@ -348,11 +368,11 @@ static constexpr const char *TERRAIN3D_REGION_MAP_TYPE_NAMES[s_nTypeMaxValue + 1
 #define COLOR_NORMAL Color( 0.5f, 0.5f, 1.0f, 1.0f )
 static constexpr float s_fControlAutoFloat = std::numeric_limits<float>::denorm_min();
 #define COLOR_CONTROL Color( s_fControlAutoFloat, 0.f, 0.f, 1.0f )
-static const Color TERRAIN3D_REGION_MAP_DEFAULT_COLORS[s_nTypeMaxValue + 1u] = {
+static const Color s_szRegionMapDefaultColors[s_nTypeMaxValue + 1u] = {
 	COLOR_BLACK,
 	COLOR_CONTROL,
 	COLOR_ROUGHNESS,
-	COLOR_NAN,
+	s_colorNan,
 };
 
 // For consistency between MSVC, gcc, clang
@@ -360,7 +380,7 @@ static const Color TERRAIN3D_REGION_MAP_DEFAULT_COLORS[s_nTypeMaxValue + 1u] = {
 #define FLT_MAX __FLT_MAX__
 #endif
 
-// Terrain3D::_warnings is uint8_t
+// Warning flags are stored in an 8-bit mask.
 #define WARN_MISMATCHED_SIZE 0x01
 #define WARN_MISMATCHED_FORMAT 0x02
 #define WARN_MISMATCHED_MIPMAPS 0x04
@@ -371,14 +391,14 @@ static const Color TERRAIN3D_REGION_MAP_DEFAULT_COLORS[s_nTypeMaxValue + 1u] = {
 #define V2( x ) Vector2( x, x )
 #define V2I( x ) Vector2i( x, x )
 #define V3( x ) Vector3( x, x, x )
-static const Vector2 V2_ZERO{0.f, 0.f};
-static const Vector2 V2_MAX{FLT_MAX, FLT_MAX};
-static const Vector2i V2I_ZERO{0, 0};
-static const Vector2i V2I_MAX{INT32_MAX, INT32_MAX};
-static const Vector3 V3_ZERO{0.f, 0.f, 0.f};
-static const Vector3 V3_MAX{FLT_MAX, FLT_MAX, FLT_MAX};
-static const Vector3 V3_NAN{NAN, NAN, NAN};
-static const Vector3 V3_UP{0.f, 1.f, 0.f};
+static const Vector2 s_v2Zero{ 0.f, 0.f };
+static const Vector2 s_v2Max{ FLT_MAX, FLT_MAX };
+static const Vector2i s_v2iZero{ 0, 0 };
+static const Vector2i s_v2iMax{ INT32_MAX, INT32_MAX };
+static const Vector3 s_v3Zero{ 0.f, 0.f, 0.f };
+static const Vector3 s_v3Max{ FLT_MAX, FLT_MAX, FLT_MAX };
+static const Vector3 s_v3Nan{ NAN, NAN, NAN };
+static const Vector3 s_v3Up{ 0.f, 1.f, 0.f };
 // static const Vector3 V3_DOWN{ 0.f, -1.f, 0.f };
 
 typedef struct t3dVector2iHash_s {
@@ -391,7 +411,7 @@ typedef struct t3dVector2iHash_s {
 
 typedef struct t3dPairVector2iIntHash_s {
 	std::size_t operator()( const eastl::pair<Vector2i, int> &p ) const {
-		std::size_t h1 = t3dVector2iHash_t{}( p.m_nFirst );
+		std::size_t h1 = t3dVector2iHash_t{}( p.first );
 		std::size_t h2 = eastl::hash<int>{}( p.second );
 		return h1 ^ ( h2 << 1 );
 	}
@@ -409,62 +429,62 @@ typedef struct t3dVector3Hash_s {
 // Set class name for logger.h
 
 #define CLASS_NAME() \
-	const String __class__ = get_class_static() + String( "#" ) + String::num_uint64( get_instance_id() ).m_nRight( 4 );
+	const String __class__ = get_class_static() + String( "#" ) + String::num_uint64( get_instance_id() ).right( 4 );
 
 #define CLASS_NAME_STATIC( pszName ) static inline const char *__class__ = pszName;
 
 // Validation macros
 
-#define ASSERT( cond, ret )                                                                            \
-	if ( !( cond ) ) {                                                                                   \
+#define ASSERT( cond, ret ) \
+	if ( !( cond ) ) { \
 		UtilityFunctions::push_error( "Assertion '", #cond, "' failed at ", __FILE__, ":", __LINE__ ); \
-		return ret;                                                                                  \
+		return ret; \
 	}
 
 #define VOID // a return value for void, to avoid compiler warnings
 
 #define IS_INIT( ret ) \
 	if ( !m_pTerrain ) { \
-		return ret;  \
+		return ret; \
 	}
 
 #define IS_INIT_MESG( mesg, ret ) \
-	if ( !m_pTerrain ) {            \
-		LOG( ERROR, mesg );       \
-		return ret;             \
+	if ( !m_pTerrain ) { \
+		LOG( ERROR, mesg ); \
+		return ret; \
 	}
 
 #define IS_INIT_COND( cond, ret ) \
-	if ( !m_pTerrain || cond ) {    \
-		return ret;             \
+	if ( !m_pTerrain || cond ) { \
+		return ret; \
 	}
 
 #define IS_INIT_COND_MESG( cond, mesg, ret ) \
-	if ( !m_pTerrain || cond ) {               \
-		LOG( ERROR, mesg );                  \
-		return ret;                        \
+	if ( !m_pTerrain || cond ) { \
+		LOG( ERROR, mesg ); \
+		return ret; \
 	}
 
-#define IS_INSTANCER_INIT( ret )                     \
+#define IS_INSTANCER_INIT( ret ) \
 	if ( !m_pTerrain || !m_pTerrain->getInstancer() ) { \
-		return ret;                                \
+		return ret; \
 	}
 
-#define IS_INSTANCER_INIT_MESG( mesg, ret )          \
+#define IS_INSTANCER_INIT_MESG( mesg, ret ) \
 	if ( !m_pTerrain || !m_pTerrain->getInstancer() ) { \
-		LOG( ERROR, mesg );                          \
-		return ret;                                \
+		LOG( ERROR, mesg ); \
+		return ret; \
 	}
 
-#define IS_DATA_INIT( ret )                     \
+#define IS_DATA_INIT( ret ) \
 	if ( !m_pTerrain || !m_pTerrain->getData() ) { \
-		return ret;                           \
+		return ret; \
 	}
 
-#define IS_DATA_INIT_MESG( mesg, ret )          \
+#define IS_DATA_INIT_MESG( mesg, ret ) \
 	if ( !m_pTerrain || !m_pTerrain->getData() ) { \
-		LOG( ERROR, mesg );                     \
-		return ret;                           \
+		LOG( ERROR, mesg ); \
+		return ret; \
 	}
 
 #endif // TERRAIN3D_CONSTANTS_H

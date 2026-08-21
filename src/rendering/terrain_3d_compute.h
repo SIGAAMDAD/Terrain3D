@@ -5,17 +5,17 @@
 #ifndef TERRAIN3D_COMPUTE_H
 #define TERRAIN3D_COMPUTE_H
 
-#include <cstdint>
-#include <mutex>
 #include "eastl_config.h"
-#include <EASTL/vector.h>
 
+#include <EASTL/vector.h>
+#include <cstdint>
 #include <godot_cpp/classes/rd_shader_spirv.hpp>
 #include <godot_cpp/classes/rendering_device.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/packed_int32_array.hpp>
 #include <godot_cpp/variant/rid.hpp>
 #include <godot_cpp/variant/vector3.hpp>
+#include <mutex>
 
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
 using namespace godot;
@@ -29,10 +29,10 @@ using namespace godot;
 class T3DTerrain;
 
 typedef struct t3dBrushElement_s {
-	uint32_t m_nValue = 0u;  // Height float bits, packed pControl, or RGBA8.
-	uint32_t m_nAlpha = 0u;  // Float bits.
+	uint32_t m_nValue = 0u; // Height float bits, packed pControl, or RGBA8.
+	uint32_t m_nAlpha = 0u; // Float bits.
 	uint32_t m_nTarget = 0u; // Gradient/height m_nTarget float bits.
-	uint32_t m_nFlags = 0u;  // Bit 0: eligible.
+	uint32_t m_nFlags = 0u; // Bit 0: eligible.
 } t3dBrushElement_t;
 
 typedef struct t3dDisplacementRequest_s {
@@ -54,10 +54,10 @@ typedef struct t3dDisplacementRequest_s {
 
 	bool valid( void ) const {
 		return m_shaderSpirv.is_valid() && m_hHeightTexture.is_valid() && m_hControlTexture.is_valid() &&
-			   m_hDisplacementTexture.is_valid() && m_hMaterialRid.is_valid() &&
-			   m_nWidth > 0u && m_nHeight > 0u && m_nRegionMapSize > 0u && m_nRegionMapSize <= 64u &&
-			   m_regionMap.size() == ( int64_t ) ( m_nRegionMapSize ) * ( int64_t ) ( m_nRegionMapSize ) && !m_materialData.is_empty() &&
-			   !m_pushConstants.is_empty();
+				m_hDisplacementTexture.is_valid() && m_hMaterialRid.is_valid() && m_nWidth > 0u && m_nHeight > 0u &&
+				m_nRegionMapSize > 0u && m_nRegionMapSize <= 64u &&
+				m_regionMap.size() == ( int64_t )( m_nRegionMapSize ) * ( int64_t )( m_nRegionMapSize ) &&
+				!m_materialData.is_empty() && !m_pushConstants.is_empty();
 	}
 } t3dDisplacementRequest_t;
 
@@ -85,12 +85,6 @@ typedef struct t3dPipeline_s {
 
 class T3DCompute {
 public:
-
-
-
-
-
-
 	T3DCompute( void ) = default;
 	~T3DCompute( void );
 
@@ -98,30 +92,31 @@ public:
 	T3DCompute &operator=( const T3DCompute & ) = delete;
 
 	bool isAvailable( void );
-	EA_FORCE_INLINE String getLastError( void ) const { std::lock_guard<std::mutex> lock( m_errorMutex ); return m_lastError; }
+	EA_FORCE_INLINE String getLastError( void ) const {
+		std::lock_guard<std::mutex> lock( m_errorMutex );
+		return m_lastError;
+	}
 
 	bool processBrush( eastl::vector<t3dBrushElement_t> &rElements, const t3dBrushParams_t &rParams );
 	static void processBrushCpu( eastl::vector<t3dBrushElement_t> &rElements, const t3dBrushParams_t &rParams );
-	bool generateDerivedMap(
-		const eastl::vector<float> &fHeightHalo, int nWidth, int nHeight,
-		float fVertexSpacing, PackedByteArray &rRgba8
-	);
+	bool generateDerivedMap( const eastl::vector<float> &fHeightHalo,
+			int nWidth,
+			int nHeight,
+			float fVertexSpacing,
+			PackedByteArray &rRgba8 );
 	// Builds a render-thread-safe snapshot without touching the global RenderingDevice.
 	// The raw GLSL path is intentionally restricted to non-projected, non-detiled
 	// packed-PBR/R8 materials; all other variants retain the raster fallback.
-	bool prepareDisplacementRequest(
-		T3DTerrain *pTerrain, const Vector3 &rTargetPosition,
-		t3dDisplacementRequest_t &rRequest
-	);
+	bool prepareDisplacementRequest( T3DTerrain *pTerrain,
+			const Vector3 &rTargetPosition,
+			t3dDisplacementRequest_t &rRequest );
 	// Must execute through RenderingServer.call_on_render_thread().
 	bool dispatchDisplacementRequest( const t3dDisplacementRequest_t &rRequest, RID &rTexture );
 	// Must execute on the render thread before T3DCompute is destroyed.
 	void shutdownDisplacementResources( void );
 
 private:
-
-
-	RenderingDevice *m_pRd = nullptr;		   // Owned local device for readback workloads.
+	RenderingDevice *m_pRd = nullptr; // Owned local device for readback workloads.
 	RenderingDevice *m_pRenderRd = nullptr; // Non-owning global renderer device.
 	t3dPipeline_t m_brushPipeline;
 	t3dPipeline_t m_derivedPipeline;
@@ -171,7 +166,10 @@ private:
 	void freeRenderPipeline( t3dPipeline_t &rPipeline );
 	void freeDisplacementTexture( void );
 	void shutdown( void );
-	EA_FORCE_INLINE void setError( const String &rError ) { std::lock_guard<std::mutex> lock( m_errorMutex ); m_lastError = rError; }
+	EA_FORCE_INLINE void setError( const String &rError ) {
+		std::lock_guard<std::mutex> lock( m_errorMutex );
+		m_lastError = rError;
+	}
 	static uint32_t growthCapacity( uint32_t nRequired );
 	static PackedByteArray copyToBytes( const void *pData, size_t nSize );
 };

@@ -11,17 +11,15 @@
 #include "streaming/terrain_3d_middle_height_region_cache.h"
 #include "streaming/terrain_3d_runtime_page_store.h"
 
-T3DRegionResidency::T3DRegionResidency(
-	T3DRegionRepository *const pRepository,
-	T3DSamplingStorage *const pSamplingStorage,
-	T3DRuntimePageStore *const pRuntimePageStore,
-	T3DActiveHeightResidency *const pActiveHeightResidency,
-	T3DCpuRegionCache *const pCpuRegionCache,
-	T3DInstanceRegionCache *const pInstanceRegionCache,
-	T3DMiddleHeightRegionCache *const pMiddleHeightRegionCache,
-	T3DGpuRegionCache *const pGpuRegionCache,
-	T3DFarSurfaceAtlasCache *const pFarSurfaceAtlasCache
-) :
+T3DRegionResidency::T3DRegionResidency( T3DRegionRepository *const pRepository,
+		T3DSamplingStorage *const pSamplingStorage,
+		T3DRuntimePageStore *const pRuntimePageStore,
+		T3DActiveHeightResidency *const pActiveHeightResidency,
+		T3DCpuRegionCache *const pCpuRegionCache,
+		T3DInstanceRegionCache *const pInstanceRegionCache,
+		T3DMiddleHeightRegionCache *const pMiddleHeightRegionCache,
+		T3DGpuRegionCache *const pGpuRegionCache,
+		T3DFarSurfaceAtlasCache *const pFarSurfaceAtlasCache ) :
 		m_pRepository( pRepository ),
 		m_pSamplingStorage( pSamplingStorage ),
 		m_pRuntimePageStore( pRuntimePageStore ),
@@ -30,8 +28,7 @@ T3DRegionResidency::T3DRegionResidency(
 		m_pInstanceRegionCache( pInstanceRegionCache ),
 		m_pMiddleHeightRegionCache( pMiddleHeightRegionCache ),
 		m_pGpuRegionCache( pGpuRegionCache ),
-		m_pFarSurfaceAtlasCache( pFarSurfaceAtlasCache ) {
-}
+		m_pFarSurfaceAtlasCache( pFarSurfaceAtlasCache ) {}
 
 void T3DRegionResidency::reset( void ) {
 	if ( m_pActiveHeightResidency ) {
@@ -39,13 +36,9 @@ void T3DRegionResidency::reset( void ) {
 	}
 }
 
-void T3DRegionResidency::update(
-	T3DData &rData,
-	const t3dResidencyFrameState_t &rFrame,
-	const bool bForce
-) {
+void T3DRegionResidency::update( T3DData &rData, const t3dResidencyFrameState_t &rFrame, const bool bForce ) {
 	if ( !m_pRepository || !m_pSamplingStorage || !m_pRuntimePageStore || !m_pActiveHeightResidency ||
-		!m_pCpuRegionCache || !m_pInstanceRegionCache || !m_pMiddleHeightRegionCache || !m_pGpuRegionCache ) {
+			!m_pCpuRegionCache || !m_pInstanceRegionCache || !m_pMiddleHeightRegionCache || !m_pGpuRegionCache ) {
 		return;
 	}
 
@@ -55,7 +48,7 @@ void T3DRegionResidency::update(
 
 	const t3dActiveHeightResidencyResult_t activeResult = m_pActiveHeightResidency->update( rFrame, bForce );
 	for ( int index = 0; index < activeResult.m_nCpuSourceRequestCount; ++index ) {
-		rData.requestCpuRegionSourceAsync( activeResult.cpuSourceRequests[( size_t ) ( index )] );
+		rData.requestCpuRegionSourceAsync( activeResult.cpuSourceRequests[( size_t )( index )] );
 	}
 
 	rData.updateInstanceRegionResidencyInternal( rFrame, bForce );
@@ -88,18 +81,15 @@ void T3DRegionResidency::resetRuntimeCaches( T3DData &rData ) {
 	}
 }
 
-void T3DRegionResidency::appendRuntimeProfileSample(
-	const T3DData &,
-	t3dRuntimeProfileSample_t &rSample
-) const {
-	const t3dRuntimePageStats_t runtimePageStats = m_pRuntimePageStore ?
-		m_pRuntimePageStore->getStats() : t3dRuntimePageStats_t{};
+void T3DRegionResidency::appendRuntimeProfileSample( const T3DData &, t3dRuntimeProfileSample_t &rSample ) const {
+	const t3dRuntimePageStats_t runtimePageStats =
+			m_pRuntimePageStore ? m_pRuntimePageStore->getStats() : t3dRuntimePageStats_t{};
 	const t3dGpuRegionCacheStats_t gpu = m_pGpuRegionCache ? m_pGpuRegionCache->getStats() : t3dGpuRegionCacheStats_t{};
 	const t3dCpuRegionCacheStats_t cpu = m_pCpuRegionCache ? m_pCpuRegionCache->getStats() : t3dCpuRegionCacheStats_t{};
-	const t3dInstanceRegionCacheStats_t instance = m_pInstanceRegionCache ?
-		m_pInstanceRegionCache->getStats() : t3dInstanceRegionCacheStats_t{};
-	const t3dFarSurfaceAtlasStats_t far = m_pFarSurfaceAtlasCache ?
-		m_pFarSurfaceAtlasCache->getStats() : t3dFarSurfaceAtlasStats_t{};
+	const t3dInstanceRegionCacheStats_t instance =
+			m_pInstanceRegionCache ? m_pInstanceRegionCache->getStats() : t3dInstanceRegionCacheStats_t{};
+	const t3dFarSurfaceAtlasStats_t far =
+			m_pFarSurfaceAtlasCache ? m_pFarSurfaceAtlasCache->getStats() : t3dFarSurfaceAtlasStats_t{};
 
 	rSample.m_nStallFlags |= gpu.m_nStallFlagsLastTick | cpu.m_nStallFlagsLastTick | instance.m_nStallFlagsLastTick;
 	rSample.m_nGpuResident = gpu.m_nResident;
@@ -153,11 +143,9 @@ void T3DRegionResidency::appendRuntimeProfileSample(
 	rSample.m_nInstanceSelectionPending = instance.m_bSelectionPending ? 1 : 0;
 }
 
-void T3DRegionResidency::setBudgetOverrides(
-	const int nGpuUploadLayers,
-	const int nCpuLoadLayers,
-	const int nInstanceLoadPages
-) {
+void T3DRegionResidency::setBudgetOverrides( const int nGpuUploadLayers,
+		const int nCpuLoadLayers,
+		const int nInstanceLoadPages ) {
 	m_nGpuUploadBudgetOverride = nGpuUploadLayers < 0 ? -1 : CLAMP( nGpuUploadLayers, 0, 64 );
 	m_nCpuLoadBudgetOverride = nCpuLoadLayers < 0 ? -1 : CLAMP( nCpuLoadLayers, 0, 64 );
 	m_nInstanceLoadBudgetOverride = nInstanceLoadPages < 0 ? -1 : CLAMP( nInstanceLoadPages, 0, 64 );

@@ -5,11 +5,11 @@
 #ifndef TERRAIN3D_ASSET_RESOURCE_CLASS_H
 #define TERRAIN3D_ASSET_RESOURCE_CLASS_H
 
+#include "Terrain3DConstants.h"
+#include "core/terrain_3d_compiler.h"
+
 #include <godot_cpp/classes/resource.hpp>
 #include <godot_cpp/classes/texture2d.hpp>
-
-#include "core/terrain_3d_compiler.h"
-#include "Terrain3DConstants.h"
 
 class T3DAssets;
 

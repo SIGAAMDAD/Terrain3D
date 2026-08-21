@@ -1,6 +1,29 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "terrain_3d.h"
+
 #include "Terrain3DConstants.h"
+#include "authoring/terrain_3d_editor.h"
+#include "core/logger.h"
+#include "core/terrain_3d_integration_helpers.h"
+#include "core/terrain_3d_util.h"
+#include "data/terrain_3d_region_codec.h"
+#include "data/terrain_3d_runtime_bake_codec.h"
+#include "eastl_config.h"
+#include "hlod/terrain_3d_hlod_streamer.h"
+#include "lighting/terrain_3d_lighting_policy.h"
+#include "lighting/terrain_3d_lightmap_streamer.h"
+#include "memory/terrain_3d_linear_arena.h"
+#include "memory/terrain_3d_zone_allocator.h"
+#include "rendering/terrain_3d_compute.h"
+#include "simd/terrain_3d_parallel.h"
+#include "streaming/terrain_3d_node_streamer.h"
+#include "streaming/terrain_3d_performance_profile.h"
+#include "streaming/terrain_3d_streaming_policy.h"
+#include "streaming/terrain_3d_upload_bridge.h"
+
+#include <algorithm>
+#include <cstring>
 #include <godot_cpp/classes/compositor.hpp>
 #include <godot_cpp/classes/directional_light3d.hpp>
 #include <godot_cpp/classes/editor_interface.hpp>
@@ -18,51 +41,33 @@
 #include <godot_cpp/classes/viewport_texture.hpp>
 #include <godot_cpp/classes/world3d.hpp>
 #include <godot_cpp/core/memory.hpp>
-
-#include <algorithm>
-#include <cstring>
 #include <limits>
 #include <numeric>
 #include <utility>
 
-#include "eastl_config.h"
-#include "core/logger.h"
-#include "terrain_3d.h"
-#include "core/terrain_3d_integration_helpers.h"
-#include "rendering/terrain_3d_compute.h"
-#include "authoring/terrain_3d_editor.h"
-#include "memory/terrain_3d_linear_arena.h"
-#include "memory/terrain_3d_zone_allocator.h"
-#include "lighting/terrain_3d_lightmap_streamer.h"
-#include "hlod/terrain_3d_hlod_streamer.h"
-#include "lighting/terrain_3d_lighting_policy.h"
-#include "streaming/terrain_3d_node_streamer.h"
-#include "simd/terrain_3d_parallel.h"
-#include "streaming/terrain_3d_performance_profile.h"
-#include "data/terrain_3d_region_codec.h"
-#include "data/terrain_3d_runtime_bake_codec.h"
-#include "streaming/terrain_3d_streaming_policy.h"
-#include "streaming/terrain_3d_upload_bridge.h"
-#include "core/terrain_3d_util.h"
-
 // Initialize static member variable
-t3dDebugLevel_t T3DTerrain::s_debugLevel{ERROR};
+t3dDebugLevel_t T3DTerrain::s_debugLevel{ ERROR };
 
-///////////////////////////
-// Private Functions
-///////////////////////////
+// -----------------------------------------------------------------------------
+// Private functions
 
 void T3DTerrain::initializeInternal( void ) {
-	LOG( INFO, "[lifecycle] Initialize request: initialized=", m_bInitialized,
-		"; inside_tree=", is_inside_tree(), "; inside_world=", m_bIsInsideWorld,
-		"; data_directory=", m_dataDirectory );
+	LOG( INFO,
+			"[lifecycle] Initialize request: initialized=",
+			m_bInitialized,
+			"; inside_tree=",
+			is_inside_tree(),
+			"; inside_world=",
+			m_bIsInsideWorld,
+			"; data_directory=",
+			m_dataDirectory );
 	// Make blank objects if needed
 	if ( !m_pData ) {
 		LOG( DEBUG, "Creating blank data object" );
 		m_pData = memnew( T3DData );
 	}
 	if ( !initializeRuntimeMemory() ) {
-		LOG( ERROR, "[lifecycle] Unable to initialize the s_nFixed runtime memory image" );
+		LOG( ERROR, "[lifecycle] Unable to initialize the fixed runtime memory image" );
 		set_physics_process( false );
 		return;
 	}
@@ -76,9 +81,8 @@ void T3DTerrain::initializeInternal( void ) {
 	// material once. Existing/deserialized material resources are never overwritten
 	// here; their actual values determine Exact versus Modified conformity.
 	if ( m_performanceTarget == PERFORMANCE_TARGET_XBOX360_EXPERIMENTAL &&
-		( bCreatedDefaultMaterial || m_bPerformanceProfileMaterialPendingApply ) ) {
-		m_material->setShaderPerformancePreset(
-			SHADER_PRESET_XBOX_360_AUTHENTIC );
+			( bCreatedDefaultMaterial || m_bPerformanceProfileMaterialPendingApply ) ) {
+		m_material->setShaderPerformancePreset( SHADER_PRESET_XBOX_360_AUTHENTIC );
 		m_bPerformanceProfileMaterialPendingApply = false;
 	}
 	connectAutoShaderProfileSignal( m_autoShaderProfile );
@@ -115,8 +119,8 @@ void T3DTerrain::initializeInternal( void ) {
 	}
 	// Region layout changes are coalesced and update the existing dynamic
 	// collision pool instead of rebuilding every shape per editor event.
-	if ( !m_pData->is_connected( "region_map_changed",
-							 callable_mp( m_pCollision, &T3DCollision::onRegionMapChanged ) ) ) {
+	if ( !m_pData->is_connected(
+				 "region_map_changed", callable_mp( m_pCollision, &T3DCollision::onRegionMapChanged ) ) ) {
 		LOG( DEBUG, "Connecting _data::region_map_changed signal to on_region_map_changed()" );
 		m_pData->connect( "region_map_changed", callable_mp( m_pCollision, &T3DCollision::onRegionMapChanged ) );
 	}
@@ -129,13 +133,21 @@ void T3DTerrain::initializeInternal( void ) {
 	}
 	// Initialize the system
 	if ( !m_bInitialized && m_bIsInsideWorld && is_inside_tree() ) {
-		LOG( INFO, "[lifecycle] Initializing main subsystems: gpu_cache=",
-			effectiveGpuRegionCacheEnabled(), "; cpu_cache=", effectiveCpuRegionCacheEnabled(),
-			"; instance_cache=", effectiveInstanceRegionCacheEnabled() );
+		LOG( INFO,
+				"[lifecycle] Initializing main subsystems: gpu_cache=",
+				effectiveGpuRegionCacheEnabled(),
+				"; cpu_cache=",
+				effectiveCpuRegionCacheEnabled(),
+				"; instance_cache=",
+				effectiveInstanceRegionCacheEnabled() );
 		const Error data_error = m_pData->initialize( this );
 		if ( data_error != OK ) {
-			LOG( ERROR, "[lifecycle] Terrain data activation failed; dependent runtime systems will remain inactive. Error: ",
-				data_error, "; state=", m_pData->getRuntimeState() );
+			LOG( ERROR,
+					"[lifecycle] Terrain data activation failed; dependent runtime systems will remain inactive. "
+					"Error: ",
+					data_error,
+					"; state=",
+					m_pData->getRuntimeState() );
 			set_physics_process( false );
 			return;
 		}
@@ -155,8 +167,9 @@ void T3DTerrain::initializeInternal( void ) {
 		m_pData->ensureFarAtlases();
 		m_material->initialize( this );
 		if ( !m_material->isRenderShaderReady() ) {
-			LOG( ERROR, "[lifecycle] Terrain material failed to produce a valid render shader; "
-				"aborting terrain activation before render meshes are created." );
+			LOG( ERROR,
+					"[lifecycle] Terrain material failed to produce a valid render shader; "
+					"aborting terrain activation before render meshes are created." );
 			m_material->uninitialize( this );
 			m_assets->uninitialize( this );
 			m_pData->deactivateRuntimeStorage( this );
@@ -169,7 +182,7 @@ void T3DTerrain::initializeInternal( void ) {
 		m_pInstancer->m_bSingleLodInstanceBuffers = m_bInstancerSingleLodBuffers;
 		m_pInstancer->m_fCellStreamingMargin = m_fInstancerCellStreamingMargin;
 		m_pInstancer->m_fCellStreamingStep = m_fInstancerCellStreamingUpdateDistance;
-		m_pInstancer->m_nUpdateCellBudget = ( uint32_t ) ( MAX( m_nInstancerUpdateCellBudget, 0 ) );
+		m_pInstancer->m_nUpdateCellBudget = ( uint32_t )( MAX( m_nInstancerUpdateCellBudget, 0 ) );
 		m_pInstancer->initialize( this );
 		m_pNodeStreamer->initialize( this );
 		m_pNodeStreamer->setEnabled( effectiveDynamicNodeStreamingEnabled() );
@@ -204,9 +217,15 @@ void T3DTerrain::initializeInternal( void ) {
 		m_bInitialized = true;
 		updateRegionLabels();
 		snap();
-		LOG( INFO, "[lifecycle] Main subsystems ready: regions=", m_pData->getRegionCount(),
-			"; region_size=", ( int ) ( m_nRegionSize ), "; mesh_lods=", m_nMeshLods,
-			"; tessellation=", m_nTessellationLevel );
+		LOG( INFO,
+				"[lifecycle] Main subsystems ready: regions=",
+				m_pData->getRegionCount(),
+				"; region_size=",
+				( int )( m_nRegionSize ),
+				"; mesh_lods=",
+				m_nMeshLods,
+				"; tessellation=",
+				m_nTessellationLevel );
 	}
 	serviceMemoryBudgetPolicy( true );
 	update_configuration_warnings();
@@ -244,7 +263,7 @@ void T3DTerrain::physicsProcess( const double fDelta ) {
 	}
 	serviceMemoryBudgetPolicy( false );
 	if ( m_bComputeDisplacementFallbackRequested.exchange( false, std::memory_order_acq_rel ) ) {
-		m_lastBufferPosition = V2_MAX;
+		m_lastBufferPosition = s_v2Max;
 	}
 	if ( !m_hCamera.isValid() ) {
 		LOG( DEBUG, "Camera is null, getting the current one" );
@@ -271,26 +290,29 @@ void T3DTerrain::physicsProcess( const double fDelta ) {
 	// snapping must observe one coherent position for this physics tick.
 	const Vector3 clipmap_target_position = getClipmapTargetPosition();
 	++m_iRuntimePhysicsFrameIndex;
-	const Vector2i target_region = m_pData ? m_pData->getRegionLocation( clipmap_target_position ) : V2I_MAX;
+	const Vector2i target_region = m_pData ? m_pData->getRegionLocation( clipmap_target_position ) : s_v2iMax;
 	if ( target_region != m_runtimeBoundaryTargetRegion ) {
 		m_runtimeBoundaryTargetRegion = target_region;
 		m_nRuntimeBoundaryTransitionFrame = m_iRuntimePhysicsFrameIndex;
 	}
 	const uint64_t boundary_age_frames = m_iRuntimePhysicsFrameIndex - m_nRuntimeBoundaryTransitionFrame;
-	m_bRuntimeBoundaryNodeDeferredLastTick = t3dBoundaryShouldDefer(
-		m_bRuntimeBoundaryWorkPhasingEnabled, effectiveDynamicNodeStreamingEnabled(),
-		boundary_age_frames, m_nRuntimeBoundaryNodeDelayFrames, m_nRuntimeBoundaryNodeDeferralStreak );
-	m_bRuntimeBoundaryInstancerDeferredLastTick = t3dBoundaryShouldDefer(
-		m_bRuntimeBoundaryWorkPhasingEnabled, effectiveInstancerCellStreamingEnabled(),
-		boundary_age_frames, m_nRuntimeBoundaryInstancerDelayFrames,
-		m_nRuntimeBoundaryInstancerDeferralStreak );
-	m_nRuntimeBoundaryNodeDeferralStreak = m_bRuntimeBoundaryNodeDeferredLastTick ?
-		m_nRuntimeBoundaryNodeDeferralStreak + 1 : 0;
-	m_nRuntimeBoundaryInstancerDeferralStreak = m_bRuntimeBoundaryInstancerDeferredLastTick ?
-		m_nRuntimeBoundaryInstancerDeferralStreak + 1 : 0;
+	m_bRuntimeBoundaryNodeDeferredLastTick = t3dBoundaryShouldDefer( m_bRuntimeBoundaryWorkPhasingEnabled,
+			effectiveDynamicNodeStreamingEnabled(),
+			boundary_age_frames,
+			m_nRuntimeBoundaryNodeDelayFrames,
+			m_nRuntimeBoundaryNodeDeferralStreak );
+	m_bRuntimeBoundaryInstancerDeferredLastTick = t3dBoundaryShouldDefer( m_bRuntimeBoundaryWorkPhasingEnabled,
+			effectiveInstancerCellStreamingEnabled(),
+			boundary_age_frames,
+			m_nRuntimeBoundaryInstancerDelayFrames,
+			m_nRuntimeBoundaryInstancerDeferralStreak );
+	m_nRuntimeBoundaryNodeDeferralStreak =
+			m_bRuntimeBoundaryNodeDeferredLastTick ? m_nRuntimeBoundaryNodeDeferralStreak + 1 : 0;
+	m_nRuntimeBoundaryInstancerDeferralStreak =
+			m_bRuntimeBoundaryInstancerDeferredLastTick ? m_nRuntimeBoundaryInstancerDeferralStreak + 1 : 0;
 	if ( bProfileFrame ) {
-		profile_sample.m_fTargetX = ( float ) ( clipmap_target_position.x );
-		profile_sample.m_fTargetZ = ( float ) ( clipmap_target_position.z );
+		profile_sample.m_fTargetX = ( float )( clipmap_target_position.x );
+		profile_sample.m_fTargetZ = ( float )( clipmap_target_position.z );
 		if ( m_nRuntimeProfileSampleCount > 0u ) {
 			profile_sample.m_fMovementX = profile_sample.m_fTargetX - m_runtimeProfileLastSample.m_fTargetX;
 			profile_sample.m_fMovementZ = profile_sample.m_fTargetZ - m_runtimeProfileLastSample.m_fTargetZ;
@@ -303,8 +325,7 @@ void T3DTerrain::physicsProcess( const double fDelta ) {
 		m_pData->updateRegionResidency( clipmap_target_position, false );
 		if ( m_assets.is_valid() && m_assets->isRuntimeMaterialCacheActive() ) {
 			uint8_t material_ids[s_nMaxTextureAssets] = {};
-			const int material_count = m_pData->fillGpuMaterialPriorityIds(
-				material_ids, s_nMaxTextureAssets );
+			const int material_count = m_pData->fillGpuMaterialPriorityIds( material_ids, s_nMaxTextureAssets );
 			m_assets->updateRuntimeMaterialResidency( material_ids, material_count );
 		}
 	}
@@ -313,10 +334,14 @@ void T3DTerrain::physicsProcess( const double fDelta ) {
 		profile_sample.m_nDataResidencyUsec = now - phase_started_usec;
 		phase_started_usec = now;
 	}
-	const bool hlod_active = m_bHlodEnabled && ( !Engine::get_singleton()->is_editor_hint() || !isEditorAuthoringModeInternal() || m_bEditorHlodPreview );
+	const bool hlod_active = m_bHlodEnabled &&
+			( !Engine::get_singleton()->is_editor_hint() || !isEditorAuthoringModeInternal() || m_bEditorHlodPreview );
 	if ( m_pHlodStreamer ) {
-		if ( hlod_active ) { m_pHlodStreamer->updateResidency( clipmap_target_position, false ); }
-		else { m_pHlodStreamer->suspend(); }
+		if ( hlod_active ) {
+			m_pHlodStreamer->updateResidency( clipmap_target_position, false );
+		} else {
+			m_pHlodStreamer->suspend();
+		}
 	}
 	if ( bProfileFrame ) {
 		const uint64_t now = Time::get_singleton()->get_ticks_usec();
@@ -346,16 +371,16 @@ void T3DTerrain::physicsProcess( const double fDelta ) {
 	}
 	if ( m_nTessellationLevel > 0 ) {
 		if ( m_pTerrainMesher && m_pDBufferVp && m_material.is_valid() ) {
-			const Vector2 target_position_2d = v3v2( clipmap_target_position );
-			const real_t fTessellationDensity = 1.0f / ( real_t ) ( 1u << ( uint32_t ) m_nTessellationLevel );
+			const Vector2 target_position_2d = t3dVector3ToVector2( clipmap_target_position );
+			const real_t fTessellationDensity = 1.0f / ( real_t )( 1u << ( uint32_t )m_nTessellationLevel );
 			const real_t fBufferVertexSpacing = m_fVertexSpacing * fTessellationDensity;
 			const real_t fUpdateDistance = MAX( fBufferVertexSpacing, m_fDisplacementUpdateDistance );
 			if ( MAX( std::abs( m_lastBufferPosition.x - target_position_2d.x ),
-						std::abs( m_lastBufferPosition.y - target_position_2d.y ) ) >= fUpdateDistance ) {
+						 std::abs( m_lastBufferPosition.y - target_position_2d.y ) ) >= fUpdateDistance ) {
 				m_lastBufferPosition = target_position_2d;
 				if ( !tryUpdateComputeDisplacement( clipmap_target_position ) ) {
-					RS->material_set_param( m_material->getBufferMaterialRid(), "_target_pos",
-										   clipmap_target_position );
+					RS->material_set_param(
+							m_material->getBufferMaterialRid(), "_target_pos", clipmap_target_position );
 					m_pDBufferVp->set_update_mode( SubViewport::UPDATE_ONCE );
 				}
 				m_pTerrainMesher->snap( clipmap_target_position );
@@ -408,8 +433,9 @@ void T3DTerrain::physicsProcess( const double fDelta ) {
 		if ( bProfileFrame ) {
 			profile_sample.m_nCollisionUsec = now - phase_started_usec;
 			profile_sample.m_nPhysicsTotalUsec = measured_usec;
-			profile_sample.m_nStreamingUsec = profile_sample.m_nDataResidencyUsec + profile_sample.m_nHlodStreamingUsec +
-				profile_sample.m_nNodeStreamingUsec + profile_sample.m_nLightmapStreamingUsec + profile_sample.m_nInstancerUsec;
+			profile_sample.m_nStreamingUsec = profile_sample.m_nDataResidencyUsec +
+					profile_sample.m_nHlodStreamingUsec + profile_sample.m_nNodeStreamingUsec +
+					profile_sample.m_nLightmapStreamingUsec + profile_sample.m_nInstancerUsec;
 			sampleRuntimeProfile( profile_sample );
 		}
 	}
@@ -429,8 +455,9 @@ void T3DTerrain::grabCamera( void ) {
 	}
 	if ( !m_hCamera.isValid() && !m_clipmapTarget.isValid() ) {
 		set_physics_process( false ); // No target to follow, disable snapping until one set
-		LOG( ERROR, "Cannot find clipmap target or active camera. LODs won't be updated. Set manually with "
-				   "set_clipmap_target() or setCamera()" );
+		LOG( ERROR,
+				"Cannot find clipmap target or active camera. LODs won't be updated. Set manually with "
+				"set_clipmap_target() or setCamera()" );
 	}
 }
 
@@ -455,10 +482,7 @@ const t3dBakeRegionSnapshot_t *t3dBakeSnapshot_t::getRegion( const int32_t iX, c
 		return nullptr;
 	}
 
-	const Vector2i regionLocation(
-		t3dDivideFloor( iX, nRegionSize ),
-		t3dDivideFloor( iZ, nRegionSize )
-	);
+	const Vector2i regionLocation( t3dDivideFloor( iX, nRegionSize ), t3dDivideFloor( iZ, nRegionSize ) );
 	const int32_t map_index = T3DData::getRegionMapIndex( regionLocation );
 	if ( map_index < 0 ) {
 		return nullptr;
@@ -467,13 +491,10 @@ const t3dBakeRegionSnapshot_t *t3dBakeSnapshot_t::getRegion( const int32_t iX, c
 	if ( region_index < 0 || region_index >= ( int32_t )regions.size() ) {
 		return nullptr;
 	}
-	return &regions[( size_t ) ( region_index )];
+	return &regions[( size_t )( region_index )];
 }
 
-void t3dBakeSnapshot_t::getSample(
-	const int32_t iX, const int32_t iZ, uint32_t &nControl,
-	real_t &fHeight
-) const {
+void t3dBakeSnapshot_t::getSample( const int32_t iX, const int32_t iZ, uint32_t &nControl, real_t &fHeight ) const {
 	const t3dBakeRegionSnapshot_t *pRegion = getRegion( iX, iZ );
 	if ( !pRegion || !pRegion->m_pHeightBytes ) {
 		nControl = UINT32_MAX;
@@ -488,10 +509,11 @@ void t3dBakeSnapshot_t::getSample(
 		return;
 	}
 	const int32_t index = local_z * nRegionSize + local_x;
-	fHeight = ( real_t ) ( t3dRegionCodecReadHeightBytes( pRegion->m_pHeightBytes, index, Image::FORMAT_R16 ) );
+	fHeight = ( real_t )( t3dRegionCodecReadHeightBytes( pRegion->m_pHeightBytes, index, Image::FORMAT_R16 ) );
 	if ( pRegion->m_pControlBytes ) {
 		uint32_t control = s_nRegionDefaultControl;
-		std::memcpy( &control, pRegion->m_pControlBytes + ( size_t ) ( index ) * sizeof( uint32_t ), sizeof( uint32_t ) );
+		std::memcpy(
+				&control, pRegion->m_pControlBytes + ( size_t )( index ) * sizeof( uint32_t ), sizeof( uint32_t ) );
 		nControl = control;
 	} else {
 		nControl = s_nRegionDefaultControl;
@@ -499,10 +521,11 @@ void t3dBakeSnapshot_t::getSample(
 	return;
 }
 
-bool t3dBakeSnapshot_t::getMinimumRect(
-	const int32_t iX, const int32_t iZ, const int32_t nWidth,
-	const int32_t nHeight, real_t &fHeight
-) const {
+bool t3dBakeSnapshot_t::getMinimumRect( const int32_t iX,
+		const int32_t iZ,
+		const int32_t nWidth,
+		const int32_t nHeight,
+		real_t &fHeight ) const {
 	if ( nRegionSize <= 0 || nWidth <= 0 || nHeight <= 0 ) {
 		return false;
 	}
@@ -523,16 +546,15 @@ bool t3dBakeSnapshot_t::getMinimumRect(
 			}
 			const int32_t run = MIN( nWidth - copied, nRegionSize - local_x );
 			const int32_t index = local_z * nRegionSize + local_x;
-			const uint16_t *pHeight = ( const uint16_t * ) ( pRegion->m_pHeightBytes ) + index;
-			const uint32_t *pControl = pRegion->m_pControlBytes
-				? ( const uint32_t * ) ( pRegion->m_pControlBytes ) + index
-				: nullptr;
+			const uint16_t *pHeight = ( const uint16_t * )( pRegion->m_pHeightBytes ) + index;
+			const uint32_t *pControl =
+					pRegion->m_pControlBytes ? ( const uint32_t * )( pRegion->m_pControlBytes ) + index : nullptr;
 			for ( int32_t i = 0; i < run; ++i ) {
 				const uint32_t sample_control = pControl ? pControl[i] : s_nRegionDefaultControl;
-				if ( isHole( sample_control ) ) {
+				if ( t3dIsHole( sample_control ) ) {
 					return false;
 				}
-				fMinimum = MIN( fMinimum, ( real_t ) ( t3dRegionCodecDecodeHeightU16( pHeight[i] ) ) );
+				fMinimum = MIN( fMinimum, ( real_t )( t3dRegionCodecDecodeHeightU16( pHeight[i] ) ) );
 			}
 			copied += run;
 		}
@@ -544,23 +566,23 @@ bool t3dBakeSnapshot_t::getMinimumRect(
 	return true;
 }
 
-Vector3 t3dBakeSnapshot_t::getMeshVertex(
-	const int32_t nLod, const t3dHeightFilter_t filter,
-	const int32_t iX, const int32_t iZ, uint32_t &nControl
-) const {
+Vector3 t3dBakeSnapshot_t::getMeshVertex( const int32_t nLod,
+		const t3dHeightFilter_t filter,
+		const int32_t iX,
+		const int32_t iZ,
+		uint32_t &nControl ) const {
 	const int32_t step = 1 << CLAMP( nLod, 0, 8 );
 	real_t fHeight = NAN;
 	getSample( iX, iZ, nControl, fHeight );
-	if ( isHole( nControl ) ) {
+	if ( t3dIsHole( nControl ) ) {
 		fHeight = NAN;
 	}
 
-	if ( filter == HEIGHT_FILTER_MINIMUM &&
-		!getMinimumRect( iX - step / 2, iZ - step / 2, step, step, fHeight ) ) {
+	if ( filter == HEIGHT_FILTER_MINIMUM && !getMinimumRect( iX - step / 2, iZ - step / 2, step, step, fHeight ) ) {
 		fHeight = NAN;
 	}
 
-	return Vector3( ( real_t ) ( iX ) * fVertexSpacing, fHeight, ( real_t ) ( iZ ) * fVertexSpacing );
+	return Vector3( ( real_t )( iX )*fVertexSpacing, fHeight, ( real_t )( iZ )*fVertexSpacing );
 }
 
 // Generates two triangles: Top 124, Bottom 143
@@ -569,9 +591,8 @@ Vector3 t3dBakeSnapshot_t::getMeshVertex(
 //		  | \|
 //		3  --  4
 // p_require_nav is false for the runtime baker, which ignores navigation.
-///////////////////////////
-// Public Functions
-///////////////////////////
+// -----------------------------------------------------------------------------
+// Public functions
 
 T3DTerrain::T3DTerrain( void ) {
 	LOG( INFO, "Terrain3D v", m_version, " - https://github.com/TokisanGames/Terrain3D" );
@@ -602,28 +623,29 @@ T3DTerrain::~T3DTerrain( void ) {
 	if ( T3DZoneAllocatorRouter::zone() == &m_runtimeMemoryZone ) {
 		T3DZoneAllocatorRouter::install( nullptr );
 	}
-	if ( m_runtimeMemoryZone.state() == T3DMemoryZone::ACTIVE ) {
+	if ( m_runtimeMemoryZone.state() == T3D_MEMORY_ZONE_ACTIVE ) {
 		m_runtimeMemoryZone.beginDraining();
 	}
 }
 
 void T3DTerrain::setDebugLevel( const t3dDebugLevel_t level ) {
 	SET_IF_DIFF( s_debugLevel, CLAMP( level, ERROR, EXTREME ) );
-	LOG( INFO, "t3dSetting_t debug level: ", s_debugLevel );
+	LOG( INFO, "Setting debug level: ", s_debugLevel );
 }
 
-EA_FORCE_INLINE static String t3dDefaultRegionLightmapOutputDirectory( const String &rDataDirectory ) { const String directory = rDataDirectory.strip_edges().trim_suffix( "/" ); return directory.is_empty() ? String() : directory.path_join( "lighting" ); }
+EA_FORCE_INLINE static String t3dDefaultRegionLightmapOutputDirectory( const String &rDataDirectory ) {
+	const String directory = rDataDirectory.strip_edges().trim_suffix( "/" );
+	return directory.is_empty() ? String() : directory.path_join( "lighting" );
+}
 
-
-
-#define T3D_OCEAN_MODE_SETTER( NAME, TYPE, FIELD )         \
-	void T3DTerrain::NAME( const TYPE valueArg ) {           \
-		if ( FIELD == valueArg ) {                          \
-			return;                                      \
-		}                                                \
-		FIELD = valueArg;                                 \
+#define T3D_OCEAN_MODE_SETTER( NAME, TYPE, FIELD ) \
+	void T3DTerrain::NAME( const TYPE valueArg ) { \
+		if ( FIELD == valueArg ) { \
+			return; \
+		} \
+		FIELD = valueArg; \
 		m_oceanPerformancePreset = OCEAN_PRESET_CUSTOM; \
-		updateOceanShaderVariant();                  \
+		updateOceanShaderVariant(); \
 	}
 
 T3D_OCEAN_MODE_SETTER( setOceanRefractionMode, t3dOceanRefractionMode_t, m_oceanRefractionMode )
@@ -664,9 +686,8 @@ T3D_OCEAN_MODE_SETTER( setOceanShadingMode, t3dOceanShadingMode_t, m_oceanShadin
  *  Otherwise, geometry is generated for the entire terrain within the AABB (which can be useful for
  *  dynamic and/or runtime nav mesh baking).
  */
-///////////////////////////
-// Protected Functions
-///////////////////////////
+// -----------------------------------------------------------------------------
+// Protected functions
 
 // Notifications are defined in individual classes: Object, Node, Node3D
 // Listed below in order of operation
@@ -706,11 +727,11 @@ void T3DTerrain::_notification( const int nWhat ) {
 			setupMousePicking();
 			setupDisplacementBuffer();
 			// Reload editor textures - Also see READY
-			if ( m_bFreeEditorTextures && !IS_EDITOR && m_assets.is_valid() &&
-				!m_assets->get_path().is_empty() && !m_assets->get_path().contains( "T3DAssets" ) ) {
+			if ( m_bFreeEditorTextures && !IS_EDITOR && m_assets.is_valid() && !m_assets->get_path().is_empty() &&
+					!m_assets->get_path().contains( "T3DAssets" ) ) {
 				LOG( INFO, "free_editor_textures enabled, reloading Assets path: ", m_assets->get_path() );
-				m_assets =
-					ResourceLoader::get_singleton()->load( m_assets->get_path(), "", ResourceLoader::CACHE_MODE_IGNORE );
+				m_assets = ResourceLoader::get_singleton()->load(
+						m_assets->get_path(), "", ResourceLoader::CACHE_MODE_IGNORE );
 			}
 			initializeInternal(); // Rebuild anything freed: meshes, collision, instancer
 			set_physics_process( true );
@@ -720,15 +741,12 @@ void T3DTerrain::_notification( const int nWhat ) {
 		case NOTIFICATION_READY: {
 			// Node is ready
 			LOG( INFO, "NOTIFICATION_READY" );
-			// Optional: Run the testing suite
-			// #include "core/unit_testing.h"
-			// test_differs();
-
 			// Clear editor textures - also see ENTER_TREE
 			if ( m_bFreeEditorTextures && !IS_EDITOR && m_assets.is_valid() ) {
 				if ( m_assets->get_path().contains( "T3DAssets" ) ) {
-					LOG( WARN, "free_editor_textures requires `Assets` be saved to a file. Do so, or disable the former "
-							  "to turn off this warning" );
+					LOG( WARN,
+							"free_editor_textures requires `Assets` be saved to a file. Do so, or disable the former "
+							"to turn off this warning" );
 				} else {
 					LOG( INFO, "free_editor_textures enabled, clearing texture assets" );
 					m_assets->clearTextures();
@@ -766,7 +784,7 @@ void T3DTerrain::_notification( const int nWhat ) {
 				if ( !is_visible_in_tree() ) {
 					m_pInstancer->suspendRendering();
 				} else {
-					m_pInstancer->updateMmis( -1, V2I_MAX, true );
+					m_pInstancer->updateMmis( -1, s_v2iMax, true );
 				}
 			}
 			break;
@@ -845,8 +863,8 @@ void T3DTerrain::_notification( const int nWhat ) {
 			destroyTerrainMesher( true );
 			destroyOceanMesher( true );
 			destroyHlodStreamer();
-		destroyLightmapStreamer();
-		destroyNodeStreamer( false );
+			destroyLightmapStreamer();
+			destroyNodeStreamer( false );
 			destroyInstancer();
 			destroyCollision( true );
 			m_assets.unref();

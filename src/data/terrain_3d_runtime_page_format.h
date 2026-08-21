@@ -11,7 +11,7 @@
 #include <cstdint>
 #include <limits>
 
- // T3PG, little endian.
+// T3PG, little endian.
 
 typedef enum t3dRuntimePageChannel_e : uint32_t {
 	TERRAIN3D_RUNTIME_PAGE_HEIGHT = 1u,
@@ -82,11 +82,10 @@ typedef struct t3dRuntimePageHeader_s {
 	uint32_t m_nBoundsMaxYBits = 0u;
 } t3dRuntimePageHeader_t;
 
-inline const t3dRuntimePageChannelInfo_t *t3dRuntimePageFindChannel(
-	const t3dRuntimePageHeader_t &rHeader, const t3dRuntimePageChannel_t channel
-) {
+inline const t3dRuntimePageChannelInfo_t *t3dRuntimePageFindChannel( const t3dRuntimePageHeader_t &rHeader,
+		const t3dRuntimePageChannel_t channel ) {
 	for ( uint32_t index = 0u; index < rHeader.m_nChannelCount; ++index ) {
-		if ( rHeader.m_szChannels[index].type == ( uint32_t ) ( channel ) ) {
+		if ( rHeader.m_szChannels[index].type == ( uint32_t )( channel ) ) {
 			return &rHeader.m_szChannels[index];
 		}
 	}
@@ -107,45 +106,39 @@ inline uint32_t t3dRuntimePageChecksum( const uint8_t *pData, const size_t nSize
 		return 0u;
 	}
 	for ( size_t index = 0u; index < nSize; ++index ) {
-		hash ^= ( uint32_t ) ( pData[index] );
+		hash ^= ( uint32_t )( pData[index] );
 		hash *= 16777619u;
 	}
 	return hash;
 }
 
-inline bool t3dRuntimePageValidateHeader(
-	const t3dRuntimePageHeader_t &rHeader,
-	const uint64_t nFileBytes
-) {
-	if ( rHeader.m_nMagic != s_nRuntimePageMagic ||
-		rHeader.m_nVersion != s_nRuntimePageVersion ||
-		rHeader.m_nHeaderBytes != s_nRuntimePageHeaderBytes ||
-		rHeader.m_nRegionSize == 0u || rHeader.m_nColorDivisor == 0u ||
-		rHeader.m_nDerivedDivisor == 0u || rHeader.m_nTotalBytes < rHeader.m_nHeaderBytes ||
-		rHeader.m_nChannelCount == 0u || rHeader.m_nChannelCount > s_nRuntimePageChannelCount ||
-		rHeader.m_iChannelTableOffset != 40u ||
-		rHeader.m_nTotalBytes > s_nRuntimePageMaxBytes ||
-		( uint64_t ) ( rHeader.m_nTotalBytes ) != nFileBytes ||
-		( rHeader.m_nColorDivisor != 1u && rHeader.m_nColorDivisor != 2u && rHeader.m_nColorDivisor != 4u ) ||
-		( rHeader.m_nDerivedDivisor != 1u && rHeader.m_nDerivedDivisor != 2u &&
-			rHeader.m_nDerivedDivisor != 4u ) ||
-		( rHeader.m_nChannelFlags & ~7u ) != 0u ) {
+inline bool t3dRuntimePageValidateHeader( const t3dRuntimePageHeader_t &rHeader, const uint64_t nFileBytes ) {
+	if ( rHeader.m_nMagic != s_nRuntimePageMagic || rHeader.m_nVersion != s_nRuntimePageVersion ||
+			rHeader.m_nHeaderBytes != s_nRuntimePageHeaderBytes || rHeader.m_nRegionSize == 0u ||
+			rHeader.m_nColorDivisor == 0u || rHeader.m_nDerivedDivisor == 0u ||
+			rHeader.m_nTotalBytes < rHeader.m_nHeaderBytes || rHeader.m_nChannelCount == 0u ||
+			rHeader.m_nChannelCount > s_nRuntimePageChannelCount || rHeader.m_iChannelTableOffset != 40u ||
+			rHeader.m_nTotalBytes > s_nRuntimePageMaxBytes || ( uint64_t )( rHeader.m_nTotalBytes ) != nFileBytes ||
+			( rHeader.m_nColorDivisor != 1u && rHeader.m_nColorDivisor != 2u && rHeader.m_nColorDivisor != 4u ) ||
+			( rHeader.m_nDerivedDivisor != 1u && rHeader.m_nDerivedDivisor != 2u && rHeader.m_nDerivedDivisor != 4u ) ||
+			( rHeader.m_nChannelFlags & ~7u ) != 0u ) {
 		return false;
 	}
 	if ( rHeader.m_nBlendRecipeVersion == 0u || rHeader.m_nMaterialMask == 0u ||
-		( rHeader.m_nWorldSignatureLo == 0u && rHeader.m_nWorldSignatureHi == 0u ) ||
-		( rHeader.m_nMiddleHeightDivisor != 1u && rHeader.m_nMiddleHeightDivisor != 2u &&
-			rHeader.m_nMiddleHeightDivisor != 4u ) ) {
+			( rHeader.m_nWorldSignatureLo == 0u && rHeader.m_nWorldSignatureHi == 0u ) ||
+			( rHeader.m_nMiddleHeightDivisor != 1u && rHeader.m_nMiddleHeightDivisor != 2u &&
+					rHeader.m_nMiddleHeightDivisor != 4u ) ) {
 		return false;
 	}
 	uint32_t previous_end = rHeader.m_nHeaderBytes;
 	for ( uint32_t channel = 0u; channel < rHeader.m_nChannelCount; ++channel ) {
 		const t3dRuntimePageChannelInfo_t &info = rHeader.m_szChannels[channel];
 		if ( info.m_nType == 0u || info.m_nCompressedBytes == 0u || info.m_nUncompressedBytes == 0u ||
-			( info.m_nCompression != TERRAIN3D_RUNTIME_PAGE_COMPRESSION_NONE &&
-				info.m_nCompression != TERRAIN3D_RUNTIME_PAGE_COMPRESSION_RLE ) ||
-			( info.m_nCompression == TERRAIN3D_RUNTIME_PAGE_COMPRESSION_NONE &&
-				info.m_nCompressedBytes != info.m_nUncompressedBytes ) || info.m_nAlignment != s_nRuntimePageAlignment ) {
+				( info.m_nCompression != TERRAIN3D_RUNTIME_PAGE_COMPRESSION_NONE &&
+						info.m_nCompression != TERRAIN3D_RUNTIME_PAGE_COMPRESSION_RLE ) ||
+				( info.m_nCompression == TERRAIN3D_RUNTIME_PAGE_COMPRESSION_NONE &&
+						info.m_nCompressedBytes != info.m_nUncompressedBytes ) ||
+				info.m_nAlignment != s_nRuntimePageAlignment ) {
 			return false;
 		}
 		for ( uint32_t previous = 0u; previous < channel; ++previous ) {
@@ -153,10 +146,9 @@ inline bool t3dRuntimePageValidateHeader(
 				return false;
 			}
 		}
-		if ( info.m_iOffset < rHeader.m_nHeaderBytes ||
-			( info.m_iOffset & ( info.m_nAlignment - 1u ) ) != 0u ||
-			info.m_iOffset < previous_end || info.m_nWidth == 0u || info.m_nHeight == 0u || info.m_nMipCount == 0u ||
-			info.m_nCompressedBytes > rHeader.m_nTotalBytes - info.m_iOffset ) {
+		if ( info.m_iOffset < rHeader.m_nHeaderBytes || ( info.m_iOffset & ( info.m_nAlignment - 1u ) ) != 0u ||
+				info.m_iOffset < previous_end || info.m_nWidth == 0u || info.m_nHeight == 0u ||
+				info.m_nMipCount == 0u || info.m_nCompressedBytes > rHeader.m_nTotalBytes - info.m_iOffset ) {
 			return false;
 		}
 		previous_end = info.m_iOffset + info.m_nCompressedBytes;

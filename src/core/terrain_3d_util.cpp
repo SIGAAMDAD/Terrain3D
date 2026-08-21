@@ -1,19 +1,19 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#include <godot_cpp/classes/os.hpp>
+#include "core/terrain_3d_util.h"
+
+#include "core/logger.h"
+#include "eastl_config.h"
+#include "simd/terrain_3d_parallel.h"
+
+#include <EASTL/vector.h>
+#include <algorithm>
+#include <cstring>
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/file_access.hpp>
+#include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/classes/time.hpp>
-
-#include <algorithm>
-#include <cstring>
-#include "eastl_config.h"
-#include <EASTL/vector.h>
-
-#include "core/logger.h"
-#include "core/terrain_3d_util.h"
-#include "simd/terrain_3d_parallel.h"
 
 typedef struct t3dPackedPBRPixel_s {
 	Vector3 m_normal = Vector3( 0.0f, 0.0f, 1.0f );
@@ -45,24 +45,37 @@ static Ref<Image> t3dUtilPrepareRgbaFloatSource( const Ref<Image> &rImage ) {
 	return pImage;
 }
 
-EA_FORCE_INLINE static float t3dUtilRgbaFloatChannel( const uint8_t *pBytes, const size_t nPixel, const int nChannel ) { float fValue = 0.0f; std::memcpy( &fValue, pBytes + ( nPixel * 4u + ( size_t ) ( nChannel ) ) * sizeof( float ), sizeof( float ) ); return fValue; }
-
-static T3DParallelExecutor t3dUtilAuthoringExecutor( const size_t nItemCount ) {
-	const uint32_t hardware_threads = MAX( 1u, ( uint32_t ) ( MAX( 1, OS::get_singleton()->get_processor_count() ) ) );
-	const size_t useful_tasks = MAX<size_t>( 1u, nItemCount / 16384u );
-	return T3DParallelExecutor( ( int32_t ) ( MIN<size_t>( ( size_t ) ( hardware_threads ), useful_tasks ) ) );
+EA_FORCE_INLINE static float t3dUtilRgbaFloatChannel( const uint8_t *pBytes, const size_t nPixel, const int nChannel ) {
+	float fValue = 0.0f;
+	std::memcpy( &fValue, pBytes + ( nPixel * 4u + ( size_t )( nChannel ) ) * sizeof( float ), sizeof( float ) );
+	return fValue;
 }
 
-EA_FORCE_INLINE static uint16_t t3dUtilQuantizeU16( const real_t fValue ) { return ( uint16_t ) ( CLAMP( Math::round( CLAMP( fValue, ( real_t ) ( 0.0 ), ( real_t ) ( 1.0 ) ) * 65535.0 ), 0.0, 65535.0 ) ); }
+static T3DParallelExecutor t3dUtilAuthoringExecutor( const size_t nItemCount ) {
+	const uint32_t hardware_threads = MAX( 1u, ( uint32_t )( MAX( 1, OS::get_singleton()->get_processor_count() ) ) );
+	const size_t useful_tasks = MAX<size_t>( 1u, nItemCount / 16384u );
+	return T3DParallelExecutor( ( int32_t )( MIN<size_t>( ( size_t )( hardware_threads ), useful_tasks ) ) );
+}
 
-EA_FORCE_INLINE static uint8_t t3dUtilQuantizeU8( const real_t fValue ) { return ( uint8_t ) ( CLAMP( Math::round( CLAMP( fValue, ( real_t ) ( 0.0 ), ( real_t ) ( 1.0 ) ) * 255.0 ), 0.0, 255.0 ) ); }
+EA_FORCE_INLINE static uint16_t t3dUtilQuantizeU16( const real_t fValue ) {
+	return ( uint16_t )( CLAMP(
+			Math::round( CLAMP( fValue, ( real_t )( 0.0 ), ( real_t )( 1.0 ) ) * 65535.0 ), 0.0, 65535.0 ) );
+}
 
-EA_FORCE_INLINE static int t3dUtilClampSourceCoord( const int nValue, const int nLimit ) { return CLAMP( nValue, 0, MAX( nLimit - 1, 0 ) ); }
+EA_FORCE_INLINE static uint8_t t3dUtilQuantizeU8( const real_t fValue ) {
+	return ( uint8_t )( CLAMP(
+			Math::round( CLAMP( fValue, ( real_t )( 0.0 ), ( real_t )( 1.0 ) ) * 255.0 ), 0.0, 255.0 ) );
+}
 
-static t3dPackedPBRPixel_t t3dUtilAveragePackedPbrPixels(
-	const eastl::vector<t3dPackedPBRPixel_t> &rSrc, const int nWidth,
-	const int nHeight, const int iX, const int iY
-) {
+EA_FORCE_INLINE static int t3dUtilClampSourceCoord( const int nValue, const int nLimit ) {
+	return CLAMP( nValue, 0, MAX( nLimit - 1, 0 ) );
+}
+
+static t3dPackedPBRPixel_t t3dUtilAveragePackedPbrPixels( const eastl::vector<t3dPackedPBRPixel_t> &rSrc,
+		const int nWidth,
+		const int nHeight,
+		const int iX,
+		const int iY ) {
 	t3dPackedPBRPixel_t result;
 	result.m_normal = Vector3();
 	result.m_fAo = 0.0f;
@@ -74,7 +87,7 @@ static t3dPackedPBRPixel_t t3dUtilAveragePackedPbrPixels(
 		for ( int ox = 0; ox < 2; ox++ ) {
 			const int sx = t3dUtilClampSourceCoord( iX * 2 + ox, nWidth );
 			const int sy = t3dUtilClampSourceCoord( iY * 2 + oy, nHeight );
-			const t3dPackedPBRPixel_t &sample = rSrc[( size_t ) ( sy ) * ( size_t ) ( nWidth ) + ( size_t ) ( sx )];
+			const t3dPackedPBRPixel_t &sample = rSrc[( size_t )( sy ) * ( size_t )( nWidth ) + ( size_t )( sx )];
 			result.m_normal += sample.m_normal;
 			result.m_fAo += sample.m_fAo;
 			result.m_fMetallic += sample.m_fMetallic;
@@ -83,7 +96,7 @@ static t3dPackedPBRPixel_t t3dUtilAveragePackedPbrPixels(
 			sample_count++;
 		}
 	}
-	const real_t fInvCount = 1.0f / ( real_t ) ( MAX( sample_count, 1 ) );
+	const real_t fInvCount = 1.0f / ( real_t )( MAX( sample_count, 1 ) );
 	result.m_normal *= fInvCount;
 	if ( result.m_normal.length_squared() > 1e-12f ) {
 		result.m_normal.normalize();
@@ -97,14 +110,16 @@ static t3dPackedPBRPixel_t t3dUtilAveragePackedPbrPixels(
 	return result;
 }
 
-static void t3dUtilAppendPackedPbrLevel( PackedByteArray &rData, int64_t &nOffset, const eastl::vector<t3dPackedPBRPixel_t> &rPixels ) {
+static void t3dUtilAppendPackedPbrLevel( PackedByteArray &rData,
+		int64_t &nOffset,
+		const eastl::vector<t3dPackedPBRPixel_t> &rPixels ) {
 	for ( const t3dPackedPBRPixel_t &pixel : rPixels ) {
 		const uint8_t normal_x = t3dUtilQuantizeU8( pixel.m_normal.x * 0.5f + 0.5f );
 		const uint8_t normal_y = t3dUtilQuantizeU8( pixel.m_normal.y * 0.5f + 0.5f );
 		const uint8_t ao = t3dUtilQuantizeU8( pixel.m_fAo );
 		const uint8_t metallic = t3dUtilQuantizeU8( pixel.m_fMetallic );
-		const uint16_t packed_normal_ao = ( ( uint16_t ) ( normal_x ) << 8u ) | ( uint16_t ) ( ao );
-		const uint16_t packed_normal_metallic = ( ( uint16_t ) ( normal_y ) << 8u ) | ( uint16_t ) ( metallic );
+		const uint16_t packed_normal_ao = ( ( uint16_t )( normal_x ) << 8u ) | ( uint16_t )( ao );
+		const uint16_t packed_normal_metallic = ( ( uint16_t )( normal_y ) << 8u ) | ( uint16_t )( metallic );
 		rData.encode_u16( nOffset, packed_normal_ao );
 		rData.encode_u16( nOffset + 2, packed_normal_metallic );
 		rData.encode_u16( nOffset + 4, t3dUtilQuantizeU16( pixel.m_fRoughness ) );
@@ -113,7 +128,9 @@ static void t3dUtilAppendPackedPbrLevel( PackedByteArray &rData, int64_t &nOffse
 	}
 }
 
-static void t3dUtilAppendSurfaceLevel( PackedByteArray &rData, int64_t &nOffset, const eastl::vector<t3dPackedPBRPixel_t> &rPixels ) {
+static void t3dUtilAppendSurfaceLevel( PackedByteArray &rData,
+		int64_t &nOffset,
+		const eastl::vector<t3dPackedPBRPixel_t> &rPixels ) {
 	for ( const t3dPackedPBRPixel_t &pixel : rPixels ) {
 		rData.set( nOffset++, t3dUtilQuantizeU8( pixel.m_normal.x * 0.5f + 0.5f ) );
 		rData.set( nOffset++, t3dUtilQuantizeU8( pixel.m_normal.y * 0.5f + 0.5f ) );
@@ -122,10 +139,7 @@ static void t3dUtilAppendSurfaceLevel( PackedByteArray &rData, int64_t &nOffset,
 	}
 }
 
-static bool t3dUtilValidateOptionalImage(
-	const Ref<Image> &rImage, const Vector2i &rSize,
-	const char *pszName
-) {
+static bool t3dUtilValidateOptionalImage( const Ref<Image> &rImage, const Vector2i &rSize, const char *pszName ) {
 	if ( rImage.is_null() ) {
 		return true;
 	}
@@ -151,7 +165,7 @@ typedef struct t3dPackedPBRBuildContext_s {
 } t3dPackedPBRBuildContext_t;
 
 static void t3dUtilBuildPackedPbrRange( void *pContext, const size_t nBegin, const size_t nEnd, int32_t ) {
-	t3dPackedPBRBuildContext_t *context = ( t3dPackedPBRBuildContext_t * ) ( pContext );
+	t3dPackedPBRBuildContext_t *context = ( t3dPackedPBRBuildContext_t * )( pContext );
 	for ( size_t index = nBegin; index < nEnd; ++index ) {
 		real_t fNx = t3dUtilRgbaFloatChannel( context->m_pNormal, index, 0 ) * 2.0f - 1.0f;
 		const real_t fGreen = t3dUtilRgbaFloatChannel( context->m_pNormal, index, 1 );
@@ -165,12 +179,20 @@ static void t3dUtilBuildPackedPbrRange( void *pContext, const size_t nBegin, con
 		const real_t fNz = Math::sqrt( MAX( 1.0f - fNx * fNx - fNy * fNy, 0.0f ) );
 		t3dPackedPBRPixel_t &pixel = ( *context->m_pOutput )[index];
 		pixel.m_normal = Vector3( fNx, fNy, fNz ).normalized();
-		pixel.m_fRoughness = CLAMP( t3dUtilRgbaFloatChannel( context->m_pRoughness, index, context->m_nRoughnessChannel ), 0.0f, 1.0f );
-		pixel.m_fDisplacement = CLAMP( t3dUtilRgbaFloatChannel( context->m_pDisplacement, index, context->m_nDisplacementChannel ), 0.0f, 1.0f );
-		pixel.m_fAo = context->m_pAo ? CLAMP( t3dUtilRgbaFloatChannel( context->m_pAo, index, context->m_nAoChannel ), 0.0f, 1.0f ) : 1.0f;
+		pixel.m_fRoughness = CLAMP(
+				t3dUtilRgbaFloatChannel( context->m_pRoughness, index, context->m_nRoughnessChannel ), 0.0f, 1.0f );
+		pixel.m_fDisplacement =
+				CLAMP( t3dUtilRgbaFloatChannel( context->m_pDisplacement, index, context->m_nDisplacementChannel ),
+						0.0f,
+						1.0f );
+		pixel.m_fAo = context->m_pAo
+				? CLAMP( t3dUtilRgbaFloatChannel( context->m_pAo, index, context->m_nAoChannel ), 0.0f, 1.0f )
+				: 1.0f;
 		pixel.m_fMetallic = context->m_pMetallic
-			? CLAMP( t3dUtilRgbaFloatChannel( context->m_pMetallic, index, context->m_nMetallicChannel ), 0.0f, 1.0f )
-			: 0.0f;
+				? CLAMP( t3dUtilRgbaFloatChannel( context->m_pMetallic, index, context->m_nMetallicChannel ),
+						  0.0f,
+						  1.0f )
+				: 0.0f;
 	}
 }
 
@@ -185,7 +207,7 @@ typedef struct t3dSurfaceBuildContext_s {
 } t3dSurfaceBuildContext_t;
 
 static void t3dUtilBuildSurfaceRange( void *pContext, const size_t nBegin, const size_t nEnd, int32_t ) {
-	t3dSurfaceBuildContext_t *context = ( t3dSurfaceBuildContext_t * ) ( pContext );
+	t3dSurfaceBuildContext_t *context = ( t3dSurfaceBuildContext_t * )( pContext );
 	for ( size_t index = nBegin; index < nEnd; ++index ) {
 		real_t fNx = t3dUtilRgbaFloatChannel( context->m_pNormal, index, 0 ) * 2.0f - 1.0f;
 		const real_t fGreen = t3dUtilRgbaFloatChannel( context->m_pNormal, index, 1 );
@@ -199,8 +221,11 @@ static void t3dUtilBuildSurfaceRange( void *pContext, const size_t nBegin, const
 		const real_t fNz = Math::sqrt( MAX( 1.0f - fNx * fNx - fNy * fNy, 0.0f ) );
 		t3dPackedPBRPixel_t &pixel = ( *context->m_pOutput )[index];
 		pixel.m_normal = Vector3( fNx, fNy, fNz ).normalized();
-		pixel.m_fRoughness = CLAMP( t3dUtilRgbaFloatChannel( context->m_pRoughness, index, context->m_nRoughnessChannel ), 0.0f, 1.0f );
-		pixel.m_fAo = context->m_pAo ? CLAMP( t3dUtilRgbaFloatChannel( context->m_pAo, index, context->m_nAoChannel ), 0.0f, 1.0f ) : 1.0f;
+		pixel.m_fRoughness = CLAMP(
+				t3dUtilRgbaFloatChannel( context->m_pRoughness, index, context->m_nRoughnessChannel ), 0.0f, 1.0f );
+		pixel.m_fAo = context->m_pAo
+				? CLAMP( t3dUtilRgbaFloatChannel( context->m_pAo, index, context->m_nAoChannel ), 0.0f, 1.0f )
+				: 1.0f;
 	}
 }
 
@@ -213,11 +238,12 @@ typedef struct t3dPackedMipContext_s {
 } t3dPackedMipContext_t;
 
 static void t3dUtilBuildPackedMipRows( void *pContext, const size_t nBegin, const size_t nEnd, int32_t ) {
-	t3dPackedMipContext_t *context = ( t3dPackedMipContext_t * ) ( pContext );
+	t3dPackedMipContext_t *context = ( t3dPackedMipContext_t * )( pContext );
 	for ( size_t y = nBegin; y < nEnd; ++y ) {
 		for ( int x = 0; x < context->m_nDestinationWidth; ++x ) {
-			( *context->m_pDestination )[y * ( size_t ) ( context->m_nDestinationWidth ) + ( size_t ) ( x )] =
-				t3dUtilAveragePackedPbrPixels( *context->m_pSource, context->m_nSourceWidth, context->m_nSourceHeight, x, ( int ) ( y ) );
+			( *context->m_pDestination )[y * ( size_t )( context->m_nDestinationWidth ) + ( size_t )( x )] =
+					t3dUtilAveragePackedPbrPixels(
+							*context->m_pSource, context->m_nSourceWidth, context->m_nSourceHeight, x, ( int )( y ) );
 		}
 	}
 }
@@ -229,16 +255,16 @@ typedef struct t3dDisplacementBuildContext_s {
 } t3dDisplacementBuildContext_t;
 
 static void t3dUtilBuildDisplacementRange( void *pContext, const size_t nBegin, const size_t nEnd, int32_t ) {
-	t3dDisplacementBuildContext_t *context = ( t3dDisplacementBuildContext_t * ) ( pContext );
+	t3dDisplacementBuildContext_t *context = ( t3dDisplacementBuildContext_t * )( pContext );
 	for ( size_t index = nBegin; index < nEnd; ++index ) {
-		const float fValue = CLAMP( t3dUtilRgbaFloatChannel( context->m_pSource, index, context->m_nChannel ), 0.0f, 1.0f );
+		const float fValue =
+				CLAMP( t3dUtilRgbaFloatChannel( context->m_pSource, index, context->m_nChannel ), 0.0f, 1.0f );
 		context->m_pDestination[index] = t3dUtilQuantizeU8( fValue );
 	}
 }
 
-///////////////////////////
-// Public Functions
-///////////////////////////
+// -----------------------------------------------------------------------------
+// Public functions
 
 void T3DUtil::printArr( const String &strName, const Array &rArr, const int nLevel ) {
 	LOG( nLevel, "Array[", rArr.size(), "]: ", strName );
@@ -255,7 +281,8 @@ void T3DUtil::printArr( const String &strName, const Array &rArr, const int nLev
 			}
 			case Variant::OBJECT: {
 				Object *const pObj = cast_to<Object>( var );
-				const String str = "Object#" + String::num_uint64( pObj->get_instance_id() ) + ", " + ptrToStr( pObj );
+				const String str =
+						"Object#" + String::num_uint64( pObj->get_instance_id() ) + ", " + t3dPtrToStr( pObj );
 				LOG( nLevel, i, ": ", str );
 				break;
 			}
@@ -283,7 +310,8 @@ void T3DUtil::printDict( const String &strName, const Dictionary &rDict, const i
 			}
 			case Variant::OBJECT: {
 				Object *const pObj = cast_to<Object>( var );
-				const String str = "Object#" + String::num_uint64( pObj->get_instance_id() ) + ", " + ptrToStr( pObj );
+				const String str =
+						"Object#" + String::num_uint64( pObj->get_instance_id() ) + ", " + t3dPtrToStr( pObj );
 				LOG( nLevel, "\"", key, "\": ", str );
 				break;
 			}
@@ -296,14 +324,21 @@ void T3DUtil::printDict( const String &strName, const Dictionary &rDict, const i
 }
 
 void T3DUtil::dumpGentex( const T3DGeneratedTexture &rGen, const String &strName ) {
-	LOG( MESG, "Generated ", strName, " RID: ", rGen.getRid(), ", dirty: ", rGen.isDirty(),
-		", image: ", ptrToStr( *rGen.getImage() ) );
+	LOG( MESG,
+			"Generated ",
+			strName,
+			" RID: ",
+			rGen.getRid(),
+			", dirty: ",
+			rGen.isDirty(),
+			", image: ",
+			t3dPtrToStr( *rGen.getImage() ) );
 }
 
 void T3DUtil::dumpMaps( const TypedArray<Image> &rMaps, const String &strName ) {
 	LOG( MESG, "Dumping ", strName, " array. Size: ", rMaps.size() );
 	for ( const Ref<Image> pImg : rMaps ) {
-		LOG( MESG, "Map size: ", pImg->get_size(), ", eFormat: ", pImg->get_format(), ", ", ptrToStr( *pImg ) );
+		LOG( MESG, "Map size: ", pImg->get_size(), ", eFormat: ", pImg->get_format(), ", ", t3dPtrToStr( *pImg ) );
 	}
 }
 
@@ -315,11 +350,11 @@ Vector2i T3DUtil::filenameToLocation( const String &rFilename ) {
 
 // Expects a string formatted as: "±##±##" which returns (##,##)
 Vector2i T3DUtil::stringToLocation( const String &rString ) {
-	String x_str = rString.m_nLeft( 3 ).replace( "_", "" );
-	String y_str = rString.m_nRight( 3 ).replace( "_", "" );
+	String x_str = rString.left( 3 ).replace( "_", "" );
+	String y_str = rString.right( 3 ).replace( "_", "" );
 	if ( !x_str.is_valid_int() || !y_str.is_valid_int() ) {
 		LOG( ERROR, "Malformed string '", rString, "'. Result: ", x_str, ", ", y_str );
-		return V2I_MAX;
+		return s_v2iMax;
 	}
 	return Vector2i( x_str.to_int(), y_str.to_int() );
 }
@@ -470,10 +505,10 @@ Ref<Image> T3DUtil::getThumbnail( const Ref<Image> &rImage, const Vector2i &rSiz
  * unreliable, offering little control over the output eFormat, choosing automatically and
  * often wrong. We have selected a few compressed formats it gets right.
  */
-Ref<Image> T3DUtil::getFilledImage(
-	const Vector2i &rSize, const Color &rColor, const bool bCreateMipmaps,
-	const Image::Format eRequestedFormat
-) {
+Ref<Image> T3DUtil::getFilledImage( const Vector2i &rSize,
+		const Color &rColor,
+		const bool bCreateMipmaps,
+		const Image::Format eRequestedFormat ) {
 	Image::Format eFormat = eRequestedFormat;
 	if ( eFormat < 0 || eFormat >= Image::FORMAT_MAX ) {
 		eFormat = Image::FORMAT_DXT5;
@@ -519,7 +554,7 @@ Ref<Image> T3DUtil::getFilledImage(
 			color.a = 1.0f;
 			const Color col_a = Color( 0.8f, 0.8f, 0.8f, 1.0 ) * color;
 			const Color col_b = Color( 0.5f, 0.5f, 0.5f, 1.0 ) * color;
-			pImg->fill_rect( Rect2i( V2I_ZERO, rSize / 2 ), col_a );
+			pImg->fill_rect( Rect2i( s_v2iZero, rSize / 2 ), col_a );
 			pImg->fill_rect( Rect2i( rSize / 2, rSize / 2 ), col_a );
 			pImg->fill_rect( Rect2i( Vector2( rSize.x, 0 ) / 2, rSize / 2 ), col_b );
 			pImg->fill_rect( Rect2i( Vector2( 0, rSize.y ) / 2, rSize / 2 ), col_b );
@@ -544,10 +579,10 @@ Ref<Image> T3DUtil::getFilledImage(
  *	p_height_range - R16 eFormat: x=Min & y=Max value ranges. Required for R16 import
  *	p_size - R16 eFormat: Image dimensions. Default (0,0) auto detects f/ square images. Required f/ non-square R16
  */
-Ref<Image> T3DUtil::loadImage(
-	const String &rFileName, const int nCacheMode,
-	const Vector2 &rR16HeightRange, const Vector2i &rR16Size
-) {
+Ref<Image> T3DUtil::loadImage( const String &rFileName,
+		const int nCacheMode,
+		const Vector2 &rR16HeightRange,
+		const Vector2i &rR16Size ) {
 	if ( rFileName.is_empty() ) {
 		LOG( ERROR, "No file specified. Nothing imported" );
 		return Ref<Image>();
@@ -562,7 +597,7 @@ Ref<Image> T3DUtil::loadImage(
 	LOG( INFO, "Attempting to load: ", rFileName );
 	String ext = rFileName.get_extension().to_lower();
 	const PackedStringArray imgloader_extensions =
-		PackedStringArray( Array::make( "bmp", "dds", "exr", "hdr", "jpg", "jpeg", "png", "tga", "svg", "webp" ) );
+			PackedStringArray( Array::make( "bmp", "dds", "exr", "hdr", "jpg", "jpeg", "png", "tga", "svg", "webp" ) );
 
 	// If R16 integer eFormat (read/writeable by Krita)
 	if ( ext == "r16" || ext == "raw" ) {
@@ -570,7 +605,7 @@ Ref<Image> T3DUtil::loadImage(
 		Ref<FileAccess> pFile = FileAccess::open( rFileName, FileAccess::READ );
 		// If p_size is zero, assume square and try to auto detect size
 		Vector2i r16_size = rR16Size;
-		if ( r16_size <= V2I_ZERO ) {
+		if ( r16_size <= s_v2iZero ) {
 			pFile->seek_end();
 			const int fsize = pFile->get_position();
 			const int fwidth = sqrt( fsize / 2 );
@@ -581,7 +616,7 @@ Ref<Image> T3DUtil::loadImage(
 		pImg = Image::create_empty( r16_size.x, r16_size.y, false, Image::FORMAT_RF );
 		for ( int y = 0; y < r16_size.y; y++ ) {
 			for ( int x = 0; x < r16_size.x; x++ ) {
-				real_t fH = ( real_t ) ( pFile->get_16() ) / 65535.0f;
+				real_t fH = ( real_t )( pFile->get_16() ) / 65535.0f;
 				fH = fH * ( rR16HeightRange.y - rR16HeightRange.x ) + rR16HeightRange.x;
 				pImg->set_pixel( x, y, Color( fH, 0.f, 0.f ) );
 			}
@@ -595,8 +630,7 @@ Ref<Image> T3DUtil::loadImage(
 		// Else, see if Godot's resource loader will read it as an image: RES, TRES, etc
 	} else {
 		LOG( DEBUG, "Loading file as a resource" );
-		pImg = ResourceLoader::get_singleton()->load( rFileName, "",
-													( ResourceLoader::CacheMode ) ( nCacheMode ) );
+		pImg = ResourceLoader::get_singleton()->load( rFileName, "", ( ResourceLoader::CacheMode )( nCacheMode ) );
 	}
 
 	if ( !pImg.is_valid() ) {
@@ -615,11 +649,14 @@ Ref<Image> T3DUtil::loadImage(
  * If p_invert_green is true, the destination green channel will be 1.0 - input green channel.
  * If p_invert_alpha is true, the destination alpha channel will be 1.0 - input source channel.
  */
-Ref<Image> T3DUtil::packImage(
-	const Ref<Image> &rSrcRgb, const Ref<Image> &rSrcA, const Ref<Image> &rSrcAo,
-	const bool bInvertGreen, const bool bInvertAlpha, const bool bNormalizeAlpha,
-	const int nAlphaChannel, const int nAoChannel
-) {
+Ref<Image> T3DUtil::packImage( const Ref<Image> &rSrcRgb,
+		const Ref<Image> &rSrcA,
+		const Ref<Image> &rSrcAo,
+		const bool bInvertGreen,
+		const bool bInvertAlpha,
+		const bool bNormalizeAlpha,
+		const int nAlphaChannel,
+		const int nAoChannel ) {
 	if ( !rSrcRgb.is_valid() || !rSrcA.is_valid() ) {
 		LOG( ERROR, "Provided images are not valid. Cannot pack" );
 		return Ref<Image>();
@@ -640,7 +677,7 @@ Ref<Image> T3DUtil::packImage(
 		return Ref<Image>();
 	}
 	if ( nAlphaChannel < 0 || nAlphaChannel > 3 ) {
-		LOG( ERROR, "Source t3dChannel_t of Height/Roughness invalid. Cannot Pack" );
+		LOG( ERROR, "Source channel of Height/Roughness invalid. Cannot Pack" );
 		return Ref<Image>();
 	}
 
@@ -697,19 +734,22 @@ Ref<Image> T3DUtil::packImage(
 	return pDst;
 }
 
-Ref<Image> T3DUtil::packPbrRgba16ui(
-	const Ref<Image> &rNormal, const Ref<Image> &rRoughness,
-	const Ref<Image> &rDisplacement, const Ref<Image> &rAo,
-	const Ref<Image> &rMetallic, const bool bInvertNormalGreen,
-	const int nRoughnessChannel, const int nDisplacementChannel,
-	const int nAoChannel, const int nMetallicChannel,
-	const bool bGenerateMipmaps
-) {
+Ref<Image> T3DUtil::packPbrRgba16ui( const Ref<Image> &rNormal,
+		const Ref<Image> &rRoughness,
+		const Ref<Image> &rDisplacement,
+		const Ref<Image> &rAo,
+		const Ref<Image> &rMetallic,
+		const bool bInvertNormalGreen,
+		const int nRoughnessChannel,
+		const int nDisplacementChannel,
+		const int nAoChannel,
+		const int nMetallicChannel,
+		const bool bGenerateMipmaps ) {
 	if ( rNormal.is_null() || rRoughness.is_null() || rDisplacement.is_null() ) {
 		LOG( ERROR, "Normal, roughness, and displacement images are required for packed PBR generation." );
 		return Ref<Image>();
 	}
-	const int channels[] = {nRoughnessChannel, nDisplacementChannel, nAoChannel, nMetallicChannel};
+	const int channels[] = { nRoughnessChannel, nDisplacementChannel, nAoChannel, nMetallicChannel };
 	for ( const int channel : channels ) {
 		if ( channel < 0 || channel > 3 ) {
 			LOG( ERROR, "Packed PBR source channel must be between 0 and 3." );
@@ -732,20 +772,23 @@ Ref<Image> T3DUtil::packPbrRgba16ui(
 	}
 
 	const Vector2i size = pNormal->get_size();
-	if ( pRoughness->get_size() != size || pDisplacement->get_size() != size || !t3dUtilValidateOptionalImage( pAo, size, "AO" ) ||
-		!t3dUtilValidateOptionalImage( pMetallic, size, "Metallic" ) ) {
+	if ( pRoughness->get_size() != size || pDisplacement->get_size() != size ||
+			!t3dUtilValidateOptionalImage( pAo, size, "AO" ) ||
+			!t3dUtilValidateOptionalImage( pMetallic, size, "Metallic" ) ) {
 		LOG( ERROR, "All packed PBR source images must have identical dimensions." );
 		return Ref<Image>();
 	}
 	if ( !is_power_of_2( size.x ) || !is_power_of_2( size.y ) ) {
-		LOG( WARN, "Packed PBR image dimensions are not powers of two: ", size,
-			". Mipmaps remain valid but may be less efficient." );
+		LOG( WARN,
+				"Packed PBR image dimensions are not powers of two: ",
+				size,
+				". Mipmaps remain valid but may be less efficient." );
 	}
 
-	const size_t pixel_count = ( size_t ) ( size.x ) * ( size_t ) ( size.y );
+	const size_t pixel_count = ( size_t )( size.x ) * ( size_t )( size.y );
 	eastl::vector<t3dPackedPBRPixel_t> levelPixels( pixel_count );
 	eastl::vector<t3dPackedPBRPixel_t> mip_scratch;
-	mip_scratch.reserve( ( size_t ) ( MAX( size.x / 2, 1 ) ) * ( size_t ) ( MAX( size.y / 2, 1 ) ) );
+	mip_scratch.reserve( ( size_t )( MAX( size.x / 2, 1 ) ) * ( size_t )( MAX( size.y / 2, 1 ) ) );
 	const PackedByteArray normal_data = pNormal->get_data();
 	const PackedByteArray roughness_data = pRoughness->get_data();
 	const PackedByteArray displacement_data = pDisplacement->get_data();
@@ -774,12 +817,12 @@ Ref<Image> T3DUtil::packPbrRgba16ui(
 	int mip_count = 1;
 	int mip_width = size.x;
 	int mip_height = size.y;
-	int64_t total_bytes = ( int64_t ) ( mip_width ) * ( int64_t ) ( mip_height ) * 8;
+	int64_t total_bytes = ( int64_t )( mip_width ) * ( int64_t )( mip_height ) * 8;
 	if ( bGenerateMipmaps ) {
 		while ( mip_width > 1 || mip_height > 1 ) {
 			mip_width = MAX( mip_width / 2, 1 );
 			mip_height = MAX( mip_height / 2, 1 );
-			total_bytes += ( int64_t ) ( mip_width ) * ( int64_t ) ( mip_height ) * 8;
+			total_bytes += ( int64_t )( mip_width ) * ( int64_t )( mip_height ) * 8;
 			mip_count++;
 		}
 	}
@@ -794,14 +837,14 @@ Ref<Image> T3DUtil::packPbrRgba16ui(
 	for ( int mip = 1; mip < mip_count; mip++ ) {
 		const int next_width = MAX( current_width / 2, 1 );
 		const int next_height = MAX( current_height / 2, 1 );
-		mip_scratch.resize( ( size_t ) ( next_width ) * ( size_t ) ( next_height ) );
+		mip_scratch.resize( ( size_t )( next_width ) * ( size_t )( next_height ) );
 		t3dPackedMipContext_t mip_context;
 		mip_context.m_pSource = &levelPixels;
 		mip_context.m_pDestination = &mip_scratch;
 		mip_context.m_nSourceWidth = current_width;
 		mip_context.m_nSourceHeight = current_height;
 		mip_context.m_nDestinationWidth = next_width;
-		executor.runStatic( ( size_t ) ( next_height ), 1u, t3dUtilBuildPackedMipRows, &mip_context );
+		executor.runStatic( ( size_t )( next_height ), 1u, t3dUtilBuildPackedMipRows, &mip_context );
 		t3dUtilAppendPackedPbrLevel( data, byte_offset, mip_scratch );
 		levelPixels.swap( mip_scratch );
 		current_width = next_width;
@@ -825,16 +868,17 @@ Ref<Image> T3DUtil::getDefaultPackedPbrImage( const Vector2i &rSize, const bool 
 	pNormal->fill( Color( 0.5f, 0.5f, 1.0f, 1.0f ) );
 	pRoughness->fill( Color( 1.0f, 1.0f, 1.0f, 1.0f ) );
 	pDisplacement->fill( Color( 0.5f, 0.5f, 0.5f, 1.0f ) );
-	return packPbrRgba16ui( pNormal, pRoughness, pDisplacement, Ref<Image>(), Ref<Image>(), false, 0, 0, 0, 0,
-							 bCreateMipmaps );
+	return packPbrRgba16ui(
+			pNormal, pRoughness, pDisplacement, Ref<Image>(), Ref<Image>(), false, 0, 0, 0, 0, bCreateMipmaps );
 }
 
-Ref<Image> T3DUtil::packSurfaceRgba8(
-	const Ref<Image> &rNormal, const Ref<Image> &rRoughness,
-	const Ref<Image> &rAo, const bool bInvertNormalGreen,
-	const int nRoughnessChannel, const int nAoChannel,
-	const bool bGenerateMipmaps
-) {
+Ref<Image> T3DUtil::packSurfaceRgba8( const Ref<Image> &rNormal,
+		const Ref<Image> &rRoughness,
+		const Ref<Image> &rAo,
+		const bool bInvertNormalGreen,
+		const int nRoughnessChannel,
+		const int nAoChannel,
+		const bool bGenerateMipmaps ) {
 	if ( rNormal.is_null() || rRoughness.is_null() ) {
 		LOG( ERROR, "Normal and roughness images are required for surface texture generation." );
 		return Ref<Image>();
@@ -856,10 +900,10 @@ Ref<Image> T3DUtil::packSurfaceRgba8(
 		return Ref<Image>();
 	}
 
-	const size_t pixel_count = ( size_t ) ( size.x ) * ( size_t ) ( size.y );
+	const size_t pixel_count = ( size_t )( size.x ) * ( size_t )( size.y );
 	eastl::vector<t3dPackedPBRPixel_t> levelPixels( pixel_count );
 	eastl::vector<t3dPackedPBRPixel_t> mip_scratch;
-	mip_scratch.reserve( ( size_t ) ( MAX( size.x / 2, 1 ) ) * ( size_t ) ( MAX( size.y / 2, 1 ) ) );
+	mip_scratch.reserve( ( size_t )( MAX( size.x / 2, 1 ) ) * ( size_t )( MAX( size.y / 2, 1 ) ) );
 	const PackedByteArray normal_data = pNormal->get_data();
 	const PackedByteArray roughness_data = pRoughness->get_data();
 	const PackedByteArray ao_data = pAo.is_valid() ? pAo->get_data() : PackedByteArray();
@@ -880,12 +924,12 @@ Ref<Image> T3DUtil::packSurfaceRgba8(
 	int mip_count = 1;
 	int mip_width = size.x;
 	int mip_height = size.y;
-	int64_t total_bytes = ( int64_t ) ( mip_width ) * ( int64_t ) ( mip_height ) * 4;
+	int64_t total_bytes = ( int64_t )( mip_width ) * ( int64_t )( mip_height ) * 4;
 	if ( bGenerateMipmaps ) {
 		while ( mip_width > 1 || mip_height > 1 ) {
 			mip_width = MAX( mip_width / 2, 1 );
 			mip_height = MAX( mip_height / 2, 1 );
-			total_bytes += ( int64_t ) ( mip_width ) * ( int64_t ) ( mip_height ) * 4;
+			total_bytes += ( int64_t )( mip_width ) * ( int64_t )( mip_height ) * 4;
 			mip_count++;
 		}
 	}
@@ -898,14 +942,14 @@ Ref<Image> T3DUtil::packSurfaceRgba8(
 	for ( int mip = 1; mip < mip_count; mip++ ) {
 		const int next_width = MAX( current_width / 2, 1 );
 		const int next_height = MAX( current_height / 2, 1 );
-		mip_scratch.resize( ( size_t ) ( next_width ) * ( size_t ) ( next_height ) );
+		mip_scratch.resize( ( size_t )( next_width ) * ( size_t )( next_height ) );
 		t3dPackedMipContext_t mip_context;
 		mip_context.m_pSource = &levelPixels;
 		mip_context.m_pDestination = &mip_scratch;
 		mip_context.m_nSourceWidth = current_width;
 		mip_context.m_nSourceHeight = current_height;
 		mip_context.m_nDestinationWidth = next_width;
-		executor.runStatic( ( size_t ) ( next_height ), 1u, t3dUtilBuildPackedMipRows, &mip_context );
+		executor.runStatic( ( size_t )( next_height ), 1u, t3dUtilBuildPackedMipRows, &mip_context );
 		t3dUtilAppendSurfaceLevel( data, byte_offset, mip_scratch );
 		levelPixels.swap( mip_scratch );
 		current_width = next_width;
@@ -914,10 +958,9 @@ Ref<Image> T3DUtil::packSurfaceRgba8(
 	return Image::create_from_data( size.x, size.y, mip_count > 1, Image::FORMAT_RGBA8, data );
 }
 
-Ref<Image> T3DUtil::packDisplacementR8(
-	const Ref<Image> &rDisplacement, const int nDisplacementChannel,
-	const bool bGenerateMipmaps
-) {
+Ref<Image> T3DUtil::packDisplacementR8( const Ref<Image> &rDisplacement,
+		const int nDisplacementChannel,
+		const bool bGenerateMipmaps ) {
 	if ( rDisplacement.is_null() || nDisplacementChannel < 0 || nDisplacementChannel > 3 ) {
 		LOG( ERROR, "A displacement image and source channel 0-3 are required." );
 		return Ref<Image>();
@@ -926,11 +969,11 @@ Ref<Image> T3DUtil::packDisplacementR8(
 	if ( pSource.is_null() || pSource->is_empty() ) {
 		return Ref<Image>();
 	}
-	const size_t pixel_count = ( size_t ) ( pSource->get_width() ) * ( size_t ) ( pSource->get_height() );
+	const size_t pixel_count = ( size_t )( pSource->get_width() ) * ( size_t )( pSource->get_height() );
 	const PackedByteArray source_data = pSource->get_data();
 	const uint8_t *pSourceBytes = source_data.ptr();
 	PackedByteArray output;
-	output.resize( ( int64_t ) ( pixel_count ) );
+	output.resize( ( int64_t )( pixel_count ) );
 	uint8_t *const pDestination = output.ptrw();
 	const T3DParallelExecutor executor = t3dUtilAuthoringExecutor( pixel_count );
 	t3dDisplacementBuildContext_t displacement_context;
@@ -938,8 +981,8 @@ Ref<Image> T3DUtil::packDisplacementR8(
 	displacement_context.m_pDestination = pDestination;
 	displacement_context.m_nChannel = nDisplacementChannel;
 	executor.runStatic( pixel_count, 512u, t3dUtilBuildDisplacementRange, &displacement_context );
-	Ref<Image> pResult = Image::create_from_data(
-		pSource->get_width(), pSource->get_height(), false, Image::FORMAT_R8, output );
+	Ref<Image> pResult =
+			Image::create_from_data( pSource->get_width(), pSource->get_height(), false, Image::FORMAT_R8, output );
 	if ( bGenerateMipmaps ) {
 		pResult->generate_mipmaps();
 	}
@@ -970,31 +1013,28 @@ Ref<Image> T3DUtil::getDefaultDisplacementImage( const Vector2i &rSize, const bo
 	return pResult;
 }
 
-Ref<Image> T3DUtil::convertPackedPbrRgba16uiToSurface(
-	const Ref<Image> &rPacked,
-	const bool bGenerateMipmaps
-) {
+Ref<Image> T3DUtil::convertPackedPbrRgba16uiToSurface( const Ref<Image> &rPacked, const bool bGenerateMipmaps ) {
 	if ( rPacked.is_null() || rPacked->is_empty() || rPacked->get_format() != Image::FORMAT_RGBA16I ) {
 		return Ref<Image>();
 	}
 	const int width = rPacked->get_width();
 	const int height = rPacked->get_height();
 	const PackedByteArray data = rPacked->get_data();
-	if ( data.size() < ( int64_t ) ( width ) * ( int64_t ) ( height ) * 8 ) {
+	if ( data.size() < ( int64_t )( width ) * ( int64_t )( height ) * 8 ) {
 		return Ref<Image>();
 	}
 	PackedByteArray out;
-	out.resize( ( int64_t ) ( width ) * ( int64_t ) ( height ) * 4 );
+	out.resize( ( int64_t )( width ) * ( int64_t )( height ) * 4 );
 	int64_t in_offset = 0;
 	int64_t out_offset = 0;
 	for ( int i = 0; i < width * height; i++ ) {
 		const uint16_t r = data.decode_u16( in_offset );
 		const uint16_t g = data.decode_u16( in_offset + 2 );
 		const uint16_t rough = data.decode_u16( in_offset + 4 );
-		out.set( out_offset++, ( uint8_t ) ( r >> 8u ) );
-		out.set( out_offset++, ( uint8_t ) ( g >> 8u ) );
-		out.set( out_offset++, ( uint8_t ) ( rough >> 8u ) );
-		out.set( out_offset++, ( uint8_t ) ( r & 0xffu ) );
+		out.set( out_offset++, ( uint8_t )( r >> 8u ) );
+		out.set( out_offset++, ( uint8_t )( g >> 8u ) );
+		out.set( out_offset++, ( uint8_t )( rough >> 8u ) );
+		out.set( out_offset++, ( uint8_t )( r & 0xffu ) );
 		in_offset += 8;
 	}
 	Ref<Image> pResult = Image::create_from_data( width, height, false, Image::FORMAT_RGBA8, out );
@@ -1016,24 +1056,21 @@ Ref<Image> T3DUtil::convertPackedPbrRgba16uiToSurface(
 	return pResult;
 }
 
-Ref<Image> T3DUtil::convertPackedPbrRgba16uiToDisplacement(
-	const Ref<Image> &rPacked,
-	const bool bGenerateMipmaps
-) {
+Ref<Image> T3DUtil::convertPackedPbrRgba16uiToDisplacement( const Ref<Image> &rPacked, const bool bGenerateMipmaps ) {
 	if ( rPacked.is_null() || rPacked->is_empty() || rPacked->get_format() != Image::FORMAT_RGBA16I ) {
 		return Ref<Image>();
 	}
 	const int width = rPacked->get_width();
 	const int height = rPacked->get_height();
 	const PackedByteArray data = rPacked->get_data();
-	if ( data.size() < ( int64_t ) ( width ) * ( int64_t ) ( height ) * 8 ) {
+	if ( data.size() < ( int64_t )( width ) * ( int64_t )( height ) * 8 ) {
 		return Ref<Image>();
 	}
 	PackedByteArray out;
-	out.resize( ( int64_t ) ( width ) * ( int64_t ) ( height ) );
+	out.resize( ( int64_t )( width ) * ( int64_t )( height ) );
 	int64_t in_offset = 6;
 	for ( int i = 0; i < width * height; i++ ) {
-		out.set( i, ( uint8_t ) ( data.decode_u16( in_offset ) >> 8u ) );
+		out.set( i, ( uint8_t )( data.decode_u16( in_offset ) >> 8u ) );
 		in_offset += 8;
 	}
 	Ref<Image> pResult = Image::create_from_data( width, height, false, Image::FORMAT_R8, out );
@@ -1131,77 +1168,120 @@ void T3DUtil::benchmark( T3DTerrain *const pTerrain ) {
 	}
 }
 
-///////////////////////////
-// Protected Functions
-///////////////////////////
+// -----------------------------------------------------------------------------
+// Protected functions
 
 void T3DUtil::_bind_methods( void ) {
 	// Control map converters
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "as_float", "value" ), &asFloat );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "as_uint", "value" ), &asUint );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "get_base", "pixel" ), &gdGetBase );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "enc_base", "base" ), &gdEncBase );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "get_overlay", "pixel" ), &gdGetOverlay );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "enc_overlay", "overlay" ), &gdEncOverlay );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "get_blend", "pixel" ), &gdGetBlend );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "enc_blend", "blend" ), &gdEncBlend );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "get_uv_rotation", "pixel" ), &gdGetUvRotation );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "enc_uv_rotation", "rotation" ), &gdEncUvRotation );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "get_uv_scale", "pixel" ), &gdGetUvScale );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "enc_uv_scale", "scale" ), &gdEncUvScale );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "is_hole", "pixel" ), &gdIsHole );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "enc_hole", "pixel" ), &encHole );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "is_nav", "pixel" ), &gdIsNav );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "enc_nav", "pixel" ), &encNav );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "is_auto", "pixel" ), &gdIsAuto );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "enc_auto", "pixel" ), &encAuto );
+	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "as_float", "value" ), &t3dAsFloat );
+	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "as_uint", "value" ), &t3dAsUint );
+	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "get_base", "pixel" ), &t3dGdGetBase );
+	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "enc_base", "base" ), &t3dGdEncBase );
+	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "get_overlay", "pixel" ), &t3dGdGetOverlay );
+	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "enc_overlay", "overlay" ), &t3dGdEncOverlay );
+	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "get_blend", "pixel" ), &t3dGdGetBlend );
+	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "enc_blend", "blend" ), &t3dGdEncBlend );
+	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "get_uv_rotation", "pixel" ), &t3dGdGetUvRotation );
+	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "enc_uv_rotation", "rotation" ), &t3dGdEncUvRotation );
+	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "get_uv_scale", "pixel" ), &t3dGdGetUvScale );
+	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "enc_uv_scale", "scale" ), &t3dGdEncUvScale );
+	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "is_hole", "pixel" ), &t3dGdIsHole );
+	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "enc_hole", "pixel" ), &t3dEncHole );
+	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "is_nav", "pixel" ), &t3dGdIsNav );
+	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "enc_nav", "pixel" ), &t3dEncNav );
+	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "is_auto", "pixel" ), &t3dGdIsAuto );
+	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "enc_auto", "pixel" ), &t3dEncAuto );
 
 	// String functions
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "filename_to_location", "filename" ),
-								&T3DUtil::filenameToLocation );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "location_to_filename", "region_location" ),
-								&T3DUtil::locationToFilename );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "location_to_string", "region_location" ),
-								&T3DUtil::locationToString );
+	ClassDB::bind_static_method(
+			"T3DUtil", D_METHOD( "filename_to_location", "filename" ), &T3DUtil::filenameToLocation );
+	ClassDB::bind_static_method(
+			"T3DUtil", D_METHOD( "location_to_filename", "region_location" ), &T3DUtil::locationToFilename );
+	ClassDB::bind_static_method(
+			"T3DUtil", D_METHOD( "location_to_string", "region_location" ), &T3DUtil::locationToString );
 
 	// Image handling
 	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "black_to_alpha", "image" ), &T3DUtil::blackToAlpha );
 	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "get_min_max", "image" ), &T3DUtil::getMinMax );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "get_thumbnail", "image", "size" ),
-								&T3DUtil::getThumbnail, DEFVAL( V2I( 256 ) ) );
+	ClassDB::bind_static_method(
+			"T3DUtil", D_METHOD( "get_thumbnail", "image", "size" ), &T3DUtil::getThumbnail, DEFVAL( V2I( 256 ) ) );
 	ClassDB::bind_static_method( "T3DUtil",
-								D_METHOD( "get_filled_image", "size", "color", "create_mipmaps", "eFormat" ),
-								&T3DUtil::getFilledImage );
+			D_METHOD( "get_filled_image", "size", "color", "create_mipmaps", "eFormat" ),
+			&T3DUtil::getFilledImage );
 	ClassDB::bind_static_method( "T3DUtil",
-								D_METHOD( "load_image", "file_name", "cache_mode", "r16_height_range", "r16_size" ),
-								&T3DUtil::loadImage, DEFVAL( ResourceLoader::CACHE_MODE_IGNORE ),
-								DEFVAL( Vector2( 0.f, 255.f ) ), DEFVAL( V2I_ZERO ) );
+			D_METHOD( "load_image", "file_name", "cache_mode", "r16_height_range", "r16_size" ),
+			&T3DUtil::loadImage,
+			DEFVAL( ResourceLoader::CACHE_MODE_IGNORE ),
+			DEFVAL( Vector2( 0.f, 255.f ) ),
+			DEFVAL( s_v2iZero ) );
 	ClassDB::bind_static_method( "T3DUtil",
-								D_METHOD( "pack_image", "src_rgb", "src_a", "src_ao", "invert_green", "invert_alpha",
-										 "normalize_alpha", "alpha_channel", "ao_channel" ),
-								&T3DUtil::packImage, DEFVAL( false ), DEFVAL( false ), DEFVAL( false ), DEFVAL( 0 ),
-								DEFVAL( 0 ) );
+			D_METHOD( "pack_image",
+					"src_rgb",
+					"src_a",
+					"src_ao",
+					"invert_green",
+					"invert_alpha",
+					"normalize_alpha",
+					"alpha_channel",
+					"ao_channel" ),
+			&T3DUtil::packImage,
+			DEFVAL( false ),
+			DEFVAL( false ),
+			DEFVAL( false ),
+			DEFVAL( 0 ),
+			DEFVAL( 0 ) );
 	ClassDB::bind_static_method( "T3DUtil",
-								D_METHOD( "pack_pbr_rgba16ui", "normal", "roughness", "displacement", "ao", "metallic",
-										 "invert_normal_green", "roughness_channel", "displacement_channel",
-										 "ao_channel", "metallic_channel", "generate_mipmaps" ),
-								&T3DUtil::packPbrRgba16ui, DEFVAL( Ref<Image>() ), DEFVAL( Ref<Image>() ),
-								DEFVAL( false ), DEFVAL( 0 ), DEFVAL( 0 ), DEFVAL( 0 ), DEFVAL( 0 ), DEFVAL( true ) );
+			D_METHOD( "pack_pbr_rgba16ui",
+					"normal",
+					"roughness",
+					"displacement",
+					"ao",
+					"metallic",
+					"invert_normal_green",
+					"roughness_channel",
+					"displacement_channel",
+					"ao_channel",
+					"metallic_channel",
+					"generate_mipmaps" ),
+			&T3DUtil::packPbrRgba16ui,
+			DEFVAL( Ref<Image>() ),
+			DEFVAL( Ref<Image>() ),
+			DEFVAL( false ),
+			DEFVAL( 0 ),
+			DEFVAL( 0 ),
+			DEFVAL( 0 ),
+			DEFVAL( 0 ),
+			DEFVAL( true ) );
 	ClassDB::bind_static_method( "T3DUtil",
-								D_METHOD( "pack_surface_rgba8", "normal", "roughness", "ao", "invert_normal_green",
-										 "roughness_channel", "ao_channel", "generate_mipmaps" ),
-								&T3DUtil::packSurfaceRgba8, DEFVAL( Ref<Image>() ), DEFVAL( false ), DEFVAL( 0 ),
-								DEFVAL( 0 ), DEFVAL( true ) );
+			D_METHOD( "pack_surface_rgba8",
+					"normal",
+					"roughness",
+					"ao",
+					"invert_normal_green",
+					"roughness_channel",
+					"ao_channel",
+					"generate_mipmaps" ),
+			&T3DUtil::packSurfaceRgba8,
+			DEFVAL( Ref<Image>() ),
+			DEFVAL( false ),
+			DEFVAL( 0 ),
+			DEFVAL( 0 ),
+			DEFVAL( true ) );
 	ClassDB::bind_static_method( "T3DUtil",
-								D_METHOD( "pack_displacement_r8", "displacement", "channel", "generate_mipmaps" ),
-								&T3DUtil::packDisplacementR8, DEFVAL( 0 ), DEFVAL( true ) );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "save_displacement_r8_dds", "displacement", "path" ),
-								&T3DUtil::saveDisplacementR8Dds );
+			D_METHOD( "pack_displacement_r8", "displacement", "channel", "generate_mipmaps" ),
+			&T3DUtil::packDisplacementR8,
+			DEFVAL( 0 ),
+			DEFVAL( true ) );
 	ClassDB::bind_static_method( "T3DUtil",
-								D_METHOD( "pack_displacement_r16", "displacement", "channel", "generate_mipmaps" ),
-								&T3DUtil::packDisplacementR16, DEFVAL( 0 ), DEFVAL( true ) );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "save_displacement_r16_dds", "displacement", "path" ),
-								&T3DUtil::saveDisplacementR16Dds );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "luminance_to_height", "src_rgb" ),
-								&T3DUtil::luminanceToHeight );
+			D_METHOD( "save_displacement_r8_dds", "displacement", "path" ),
+			&T3DUtil::saveDisplacementR8Dds );
+	ClassDB::bind_static_method( "T3DUtil",
+			D_METHOD( "pack_displacement_r16", "displacement", "channel", "generate_mipmaps" ),
+			&T3DUtil::packDisplacementR16,
+			DEFVAL( 0 ),
+			DEFVAL( true ) );
+	ClassDB::bind_static_method( "T3DUtil",
+			D_METHOD( "save_displacement_r16_dds", "displacement", "path" ),
+			&T3DUtil::saveDisplacementR16Dds );
+	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "luminance_to_height", "src_rgb" ), &T3DUtil::luminanceToHeight );
 }

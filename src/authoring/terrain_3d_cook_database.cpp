@@ -1,6 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "authoring/terrain_3d_cook_database.h"
+
 #include "data/terrain_3d_region_repository.h"
 #include "data/terrain_3d_runtime_page_constants.h"
 
@@ -20,22 +21,17 @@ String T3DCookDatabase::getPath( const String &rDataDirectory ) const {
 	return rDataDirectory.path_join( "terrain3d_cook.t3ddb" );
 }
 
-bool T3DCookDatabase::load(
-	const String &rDataDirectory, const int nRegionSize, const uint64_t nMaterialSignature
-) {
+bool T3DCookDatabase::load( const String &rDataDirectory, const int nRegionSize, const uint64_t nMaterialSignature ) {
 	reset();
 	const String path = getPath( rDataDirectory );
 	Ref<FileAccess> file = FileAccess::open( path, FileAccess::READ );
 	if ( file.is_null() ) {
 		return false;
 	}
-	const uint64_t expected_bytes = s_nCookDatabaseHeaderBytes +
-		( uint64_t ) s_nMaxRegionSlots * sizeof( uint64_t );
-	if ( ( uint64_t ) file->get_length() != expected_bytes ||
-		file->get_64() != s_nCookDatabaseMagic ||
-		file->get_32() != s_nCookDatabaseVersion ||
-		file->get_32() != s_nRuntimePageVersion ||
-		( int ) file->get_32() != nRegionSize ) {
+	const uint64_t expected_bytes = s_nCookDatabaseHeaderBytes + ( uint64_t )s_nMaxRegionSlots * sizeof( uint64_t );
+	if ( ( uint64_t )file->get_length() != expected_bytes || file->get_64() != s_nCookDatabaseMagic ||
+			file->get_32() != s_nCookDatabaseVersion || file->get_32() != s_nRuntimePageVersion ||
+			( int )file->get_32() != nRegionSize ) {
 		return false;
 	}
 	file->get_32(); // reserved
@@ -54,9 +50,9 @@ bool T3DCookDatabase::load(
 	return true;
 }
 
-bool T3DCookDatabase::write(
-	const String &rDataDirectory, const int nRegionSize, const uint64_t nMaterialSignature
-) const {
+bool T3DCookDatabase::write( const String &rDataDirectory,
+		const int nRegionSize,
+		const uint64_t nMaterialSignature ) const {
 	if ( rDataDirectory.is_empty() || nRegionSize <= 0 ) {
 		return false;
 	}
@@ -69,7 +65,7 @@ bool T3DCookDatabase::write(
 	file->store_64( s_nCookDatabaseMagic );
 	file->store_32( s_nCookDatabaseVersion );
 	file->store_32( s_nRuntimePageVersion );
-	file->store_32( ( uint32_t ) nRegionSize );
+	file->store_32( ( uint32_t )nRegionSize );
 	file->store_32( 0u );
 	file->store_64( nMaterialSignature );
 	file->store_64( 0u );
@@ -98,22 +94,18 @@ bool T3DCookDatabase::write(
 	return true;
 }
 
-bool T3DCookDatabase::hasCurrentRegion(
-	const Vector2i &rLocation, const uint64_t nSourceSignature
-) const {
+bool T3DCookDatabase::hasCurrentRegion( const Vector2i &rLocation, const uint64_t nSourceSignature ) const {
 	if ( !m_bLoaded || nSourceSignature == 0u ) {
 		return false;
 	}
 	const int index = T3DRegionRepository::getRegionMapIndex( rLocation );
-	return index >= 0 && m_regionSignatures[( size_t ) index] == nSourceSignature;
+	return index >= 0 && m_regionSignatures[( size_t )index] == nSourceSignature;
 }
 
-void T3DCookDatabase::setRegion(
-	const Vector2i &rLocation, const uint64_t nSourceSignature
-) {
+void T3DCookDatabase::setRegion( const Vector2i &rLocation, const uint64_t nSourceSignature ) {
 	const int index = T3DRegionRepository::getRegionMapIndex( rLocation );
 	if ( index >= 0 ) {
-		m_regionSignatures[( size_t ) index] = nSourceSignature;
+		m_regionSignatures[( size_t )index] = nSourceSignature;
 	}
 }
 

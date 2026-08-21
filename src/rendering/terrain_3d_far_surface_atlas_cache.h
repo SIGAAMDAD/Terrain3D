@@ -7,17 +7,15 @@
 
 #include "Terrain3DConstants.h"
 #include "assets/generated_texture.h"
+#include "eastl_config.h"
 #include "streaming/terrain_3d_gpu_cache_constants.h"
 
-#include "eastl_config.h"
 #include <EASTL/bitset.h>
-
+#include <cstddef>
+#include <cstdint>
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/string.hpp>
-
-#include <cstddef>
-#include <cstdint>
 
 class T3DAssets;
 class T3DCpuRegionCache;
@@ -69,11 +67,9 @@ typedef struct t3dFarSurfaceAtlasStats_s {
 
 class T3DFarSurfaceAtlasCache {
 public:
-	T3DFarSurfaceAtlasCache(
-		T3DRegionRepository *pRepository,
-		T3DSamplingStorage *pSamplingStorage,
-		T3DCpuRegionCache *pCpuRegionCache
-	);
+	T3DFarSurfaceAtlasCache( T3DRegionRepository *pRepository,
+			T3DSamplingStorage *pSamplingStorage,
+			T3DCpuRegionCache *pCpuRegionCache );
 
 	void setConfig( const t3dFarSurfaceAtlasConfig_t &rConfig );
 	void reset( void );
@@ -85,9 +81,15 @@ public:
 	bool ensure( void );
 	bool writeCooked( const String &rDirectory = String() );
 
-	EA_FORCE_INLINE RID getHeightMapRid( void ) const { return m_generatedHeightMap.getRid(); }
-	EA_FORCE_INLINE RID getColorMapRid( void ) const { return m_generatedColorMap.getRid(); }
-	EA_FORCE_INLINE bool isReady( void ) const { return m_generatedHeightMap.getRid().is_valid() && m_generatedColorMap.getRid().is_valid(); }
+	EA_FORCE_INLINE RID getHeightMapRid( void ) const {
+		return m_generatedHeightMap.getRid();
+	}
+	EA_FORCE_INLINE RID getColorMapRid( void ) const {
+		return m_generatedColorMap.getRid();
+	}
+	EA_FORCE_INLINE bool isReady( void ) const {
+		return m_generatedHeightMap.getRid().is_valid() && m_generatedColorMap.getRid().is_valid();
+	}
 	bool isRegionHeightDirty( const Vector2i &vLocation ) const;
 	bool isRegionColorDirty( const Vector2i &vLocation ) const;
 	int getDirtyRegionCount( void ) const;

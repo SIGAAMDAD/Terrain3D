@@ -1,11 +1,23 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#include <godot_cpp/classes/engine.hpp>
+#include "rendering/terrain_3d_material.h"
+
+#include "authoring/terrain_3d_editor.h"
+#include "core/logger.h"
+#include "core/terrain_3d_compiler.h"
+#include "core/terrain_3d_owner.h"
+#include "core/terrain_3d_util.h"
+#include "data/terrain_3d_region_codec.h"
+#include "rendering/terrain_3d_shader_specializer.h"
+#include "streaming/terrain_3d_performance_profile.h"
+
+#include <cstring>
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/editor_file_system.hpp>
 #include <godot_cpp/classes/editor_interface.hpp>
-#include <godot_cpp/classes/file_access.hpp>
+#include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/fast_noise_lite.hpp>
+#include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/gradient.hpp>
 #include <godot_cpp/classes/image_texture.hpp>
 #include <godot_cpp/classes/noise_texture2d.hpp>
@@ -14,38 +26,42 @@
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/resource_saver.hpp>
 #include <godot_cpp/classes/time.hpp>
-
-#include <cstring>
 #include <utility>
 
-#include "core/terrain_3d_compiler.h"
-#include "core/logger.h"
-#include "authoring/terrain_3d_editor.h"
-#include "rendering/terrain_3d_material.h"
-#include "streaming/terrain_3d_performance_profile.h"
-#include "core/terrain_3d_owner.h"
-#include "data/terrain_3d_region_codec.h"
-#include "rendering/terrain_3d_shader_specializer.h"
-#include "core/terrain_3d_util.h"
-
-EA_FORCE_INLINE static void t3dMaterialMixShaderSignature( uint64_t &nSignature, const uint64_t nValue ) { nSignature ^= nValue; nSignature *= 1099511628211ULL; }
+EA_FORCE_INLINE static void t3dMaterialMixShaderSignature( uint64_t &nSignature, const uint64_t nValue ) {
+	nSignature ^= nValue;
+	nSignature *= 1099511628211ULL;
+}
 
 static constexpr uint64_t s_nShaderPackMagic = 0x314b504853443354ull; // T3DSHPK1
 static constexpr uint32_t s_nShaderPackVersion = 1u;
 
-EA_FORCE_INLINE static void t3dMaterialStoreShaderPackString( const Ref<FileAccess> &rFile, const String &rValue ) { const CharString utf8 = rValue.utf8(); const uint32_t bytes = ( uint32_t ) MAX( 0, utf8.length() ); rFile->store_32( bytes ); if ( bytes > 0u ) rFile->store_buffer( reinterpret_cast<const uint8_t *>( utf8.get_data() ), bytes ); }
+EA_FORCE_INLINE static void t3dMaterialStoreShaderPackString( const Ref<FileAccess> &rFile, const String &rValue ) {
+	const CharString utf8 = rValue.utf8();
+	const uint32_t bytes = ( uint32_t )MAX( 0, utf8.length() );
+	rFile->store_32( bytes );
+	if ( bytes > 0u ) {
+		rFile->store_buffer( reinterpret_cast<const uint8_t *>( utf8.get_data() ), bytes );
+	}
+}
 
 static bool t3dMaterialReadShaderPackString( const Ref<FileAccess> &rFile, String &rValue ) {
-	if ( rFile.is_null() || rFile->get_position() + 4u > rFile->get_length() ) return false;
+	if ( rFile.is_null() || rFile->get_position() + 4u > rFile->get_length() ) {
+		return false;
+	}
 	const uint32_t bytes = rFile->get_32();
-	if ( bytes > 16u * 1024u * 1024u || rFile->get_position() + bytes > rFile->get_length() ) return false;
+	if ( bytes > 16u * 1024u * 1024u || rFile->get_position() + bytes > rFile->get_length() ) {
+		return false;
+	}
 	const PackedByteArray data = rFile->get_buffer( bytes );
-	if ( data.size() != bytes ) return false;
-	rValue = bytes > 0u ? String::utf8( reinterpret_cast<const char *>( data.ptr() ), ( int ) bytes ) : String();
+	if ( data.size() != bytes ) {
+		return false;
+	}
+	rValue = bytes > 0u ? String::utf8( reinterpret_cast<const char *>( data.ptr() ), ( int )bytes ) : String();
 	return true;
 }
 
-static constexpr const char *TERRAIN3D_SHADER_FEATURES[] = {
+static constexpr const char *s_pszShaderFeatures[] = {
 	"AUTO_SHADER",
 	"AUTO_SHADER_UNIFORMS",
 	"BLEND_WEIGHT_FUNCTIONS",
@@ -99,7 +115,6 @@ static constexpr const char *TERRAIN3D_SHADER_FEATURES[] = {
 	"WORLD_NOISE_VERTEX",
 };
 
-
 static String t3dMaterialInjectShaderDefines( const String &rShader, const PackedStringArray &rDefineLines ) {
 	if ( rDefineLines.is_empty() ) {
 		return rShader;
@@ -123,14 +138,12 @@ static String t3dMaterialInjectShaderDefines( const String &rShader, const Packe
 	return rShader.insert( declaration_end + 1, "\n" + defines );
 }
 
-
-
 static PackedColorArray t3dMaterialMakeTextureColorUniforms( const PackedColorArray &rSource ) {
 	PackedColorArray colors;
 	colors.resize( s_nMaxTextureAssets );
 	Color *pWrite = colors.ptrw();
 	for ( int index = 0; index < s_nMaxTextureAssets; ++index ) {
-		pWrite[index] = COLOR_WHITE;
+		pWrite[index] = s_colorWhite;
 	}
 	const int count = MIN( rSource.size(), s_nMaxTextureAssets );
 	for ( int index = 0; index < count; ++index ) {
@@ -139,14 +152,20 @@ static PackedColorArray t3dMaterialMakeTextureColorUniforms( const PackedColorAr
 	return colors;
 }
 
-EA_FORCE_INLINE static void t3dMaterialAppendDefine( PackedStringArray &rLines, const String &strName, const String &strValue ) { rLines.push_back( "#define " + strName + " " + strValue ); }
+EA_FORCE_INLINE static void
+t3dMaterialAppendDefine( PackedStringArray &rLines, const String &strName, const String &strValue ) {
+	rLines.push_back( "#define " + strName + " " + strValue );
+}
 
-EA_FORCE_INLINE static char32_t t3dMaterialCommentPeek( const String &rCode, const int iIndex ) { return iIndex < rCode.length() ? rCode[iIndex] : 0; }
+EA_FORCE_INLINE static char32_t t3dMaterialCommentPeek( const String &rCode, const int iIndex ) {
+	return iIndex < rCode.length() ? rCode[iIndex] : 0;
+}
 
-static bool t3dMaterialCommentAdvance(
-	const String &rCode, int &iIndex, int &nLine,
-	Vector<char32_t> &rStripped, const char32_t target
-) {
+static bool t3dMaterialCommentAdvance( const String &rCode,
+		int &iIndex,
+		int &nLine,
+		Vector<char32_t> &rStripped,
+		const char32_t target ) {
 	while ( iIndex < rCode.length() ) {
 		const char32_t character = rCode[iIndex++];
 		if ( character == '\n' ) {
@@ -160,7 +179,6 @@ static bool t3dMaterialCommentAdvance(
 	return false;
 }
 
-
 static bool t3dMaterialShaderParameterListHas( const Array &rParameterList, const StringName &strName ) {
 	for ( int index = 0; index < rParameterList.size(); ++index ) {
 		const Dictionary parameter = rParameterList[index];
@@ -172,10 +190,8 @@ static bool t3dMaterialShaderParameterListHas( const Array &rParameterList, cons
 	return false;
 }
 
-static bool t3dMaterialRequireShaderParameter(
-	const Array &rParameterList, const char *pszName,
-	String &rFailureSummary
-) {
+static bool
+t3dMaterialRequireShaderParameter( const Array &rParameterList, const char *pszName, String &rFailureSummary ) {
 	const StringName name( pszName );
 	if ( t3dMaterialShaderParameterListHas( rParameterList, name ) ) {
 		return true;
@@ -184,10 +200,8 @@ static bool t3dMaterialRequireShaderParameter(
 	return false;
 }
 
-static String t3dMaterialCharVectorToString(
-	const Vector<char32_t> &rCharacters, const int nStart = 0,
-	const int nEnd = -1
-) {
+static String
+t3dMaterialCharVectorToString( const Vector<char32_t> &rCharacters, const int nStart = 0, const int nEnd = -1 ) {
 	const int stop = nEnd == -1 ? rCharacters.size() : nEnd;
 	const int count = stop - nStart;
 	String result;
@@ -199,34 +213,34 @@ static String t3dMaterialCharVectorToString(
 	return result;
 }
 
-///////////////////////////
-// Private Functions
-///////////////////////////
+typedef struct t3dShaderTemplate_s {
+	const char *m_pszName;
+	const char *m_pszPath;
+} t3dShaderTemplate_t;
+
+static const t3dShaderTemplate_t s_szShaderTemplates[] = {
+	{ "main", "res://addons/terrain_3d/shaders/main.gdshaderinc" },
+	{ "main_middle", "res://addons/terrain_3d/shaders/main_middle.gdshaderinc" },
+	{ "main_far", "res://addons/terrain_3d/shaders/main_far.gdshaderinc" },
+	{ "main_shadow", "res://addons/terrain_3d/shaders/main_shadow.gdshaderinc" },
+	{ "displacement_buffer", "res://addons/terrain_3d/shaders/displacement_buffer.gdshaderinc" },
+};
 
 void T3DMaterial::preloadShaders( void ) {
 	m_shaderTemplates.clear();
-	static const struct {
-		const char *pszName;
-		const char *pszPath;
-	} templates[] = {
-		{ "main", "res://addons/terrain_3d/shaders/main.gdshaderinc" },
-		{ "main_middle", "res://addons/terrain_3d/shaders/main_middle.gdshaderinc" },
-		{ "main_far", "res://addons/terrain_3d/shaders/main_far.gdshaderinc" },
-		{ "main_shadow", "res://addons/terrain_3d/shaders/main_shadow.gdshaderinc" },
-		{ "displacement_buffer", "res://addons/terrain_3d/shaders/displacement_buffer.gdshaderinc" },
-	};
 
-	for ( const auto &shader_template : templates ) {
+	for ( const t3dShaderTemplate_t &shaderTemplate : s_szShaderTemplates ) {
 		String source;
 		String failure_summary;
-		if ( !t3dExpandShaderIncludes( shader_template.pszPath, source, failure_summary ) ) {
-			UtilityFunctions::push_error(
-				"T3DMaterial: Failed to assemble shader include graph for ",
-				shader_template.pszPath, ": ", failure_summary );
+		if ( !t3dExpandShaderIncludes( shaderTemplate.m_pszPath, source, failure_summary ) ) {
+			UtilityFunctions::push_error( "T3DMaterial: Failed to assemble shader include graph for ",
+					shaderTemplate.m_pszPath,
+					": ",
+					failure_summary );
 			continue;
 		}
-		m_shaderTemplates[shader_template.pszName] = source;
-		LOG( DEBUG, "Expanded shader template: ", shader_template.pszPath );
+		m_shaderTemplates[shaderTemplate.m_pszName] = source;
+		LOG( DEBUG, "Expanded shader template: ", shaderTemplate.m_pszPath );
 	}
 }
 
@@ -300,32 +314,32 @@ PackedStringArray T3DMaterial::getEditorShaderFeatures( void ) const {
 		features.push_back( "OVERLAY_VERTEX_GRID" );
 	}
 	if ( m_bShowNavigation ||
-		( m_pTerrain && m_pTerrain->getEditor() && m_pTerrain->getEditor()->getTool() == NAVIGATION ) ) {
+			( m_pTerrain && m_pTerrain->getEditor() && m_pTerrain->getEditor()->getTool() == NAVIGATION ) ) {
 		features.push_back( "EDITOR_NAVIGATION" );
 	}
 	if ( m_bShowRegionGrid ||
-		( m_pTerrain && m_pTerrain->getEditor() && m_pTerrain->getEditor()->getTool() == REGION ) ) {
+			( m_pTerrain && m_pTerrain->getEditor() && m_pTerrain->getEditor()->getTool() == REGION ) ) {
 		features.push_back( "EDITOR_REGION_GRID" );
 	}
 	return features;
 }
 
-String T3DMaterial::prepareShaderSource(
-	const String &rShader, const t3dShaderVariantState_t &eState,
-	const Array &rExcludes, const t3dShaderTier_t tier,
-	const bool bIncludeEditorFeatures
-) const {
+String T3DMaterial::prepareShaderSource( const String &rShader,
+		const t3dShaderVariantState_t &eState,
+		const Array &rExcludes,
+		const t3dShaderTier_t tier,
+		const bool bIncludeEditorFeatures ) const {
 	const bool sample_surface_data = samplesSurfaceData( eState );
 
 	t3dShaderStaticState_t static_state;
-	static_state.m_nTerrainSamplingMode = ( int ) ( eState.m_terrainSamplingMode );
-	static_state.m_nTerrainNormalMode = ( int ) ( eState.m_terrainNormalMode );
-	static_state.m_nColorSamplingMode = ( int ) ( eState.m_colorSamplingMode );
-	static_state.m_nProjectionMode = ( int ) ( eState.m_projectionMode );
-	static_state.m_nTextureSurfaceMode = ( int ) ( eState.m_textureSurfaceMode );
-	static_state.m_nTerrainShadingMode = ( int ) ( eState.m_terrainShadingMode );
-	static_state.m_nDetilingMode = ( int ) ( eState.m_detilingMode );
-	static_state.m_nWorldNoiseShaderMode = ( int ) ( eState.m_worldNoiseShaderMode );
+	static_state.m_nTerrainSamplingMode = ( int )( eState.m_terrainSamplingMode );
+	static_state.m_nTerrainNormalMode = ( int )( eState.m_terrainNormalMode );
+	static_state.m_nColorSamplingMode = ( int )( eState.m_colorSamplingMode );
+	static_state.m_nProjectionMode = ( int )( eState.m_projectionMode );
+	static_state.m_nTextureSurfaceMode = ( int )( eState.m_textureSurfaceMode );
+	static_state.m_nTerrainShadingMode = ( int )( eState.m_terrainShadingMode );
+	static_state.m_nDetilingMode = ( int )( eState.m_detilingMode );
+	static_state.m_nWorldNoiseShaderMode = ( int )( eState.m_worldNoiseShaderMode );
 	static_state.m_bSampleSurfaceData = sample_surface_data;
 	static_state.m_bOutputRoughness = eState.m_bOutputRoughnessEnabled;
 	static_state.m_bOutputSpecular = eState.m_bOutputSpecularEnabled;
@@ -337,7 +351,7 @@ String T3DMaterial::prepareShaderSource(
 	static_state.m_bAutoShaderEnabled = eState.m_bAutoShaderEnabled;
 
 	PackedStringArray enabled_features;
-	for ( const char *pszFeature : TERRAIN3D_SHADER_FEATURES ) {
+	for ( const char *pszFeature : s_pszShaderFeatures ) {
 		const StringName feature( pszFeature );
 		if ( !rExcludes.has( feature ) ) {
 			enabled_features.push_back( String( feature ) );
@@ -352,11 +366,9 @@ String T3DMaterial::prepareShaderSource(
 
 	String assembled_shader;
 	String failure_summary;
-	if ( !t3dAssembleShaderSource(
-			rShader, static_state, enabled_features, assembled_shader, failure_summary ) ) {
+	if ( !t3dAssembleShaderSource( rShader, static_state, enabled_features, assembled_shader, failure_summary ) ) {
 		UtilityFunctions::push_error(
-			"T3DMaterial: Built-in shader assembly failed for tier ",
-			( int ) ( tier ), ": ", failure_summary );
+				"T3DMaterial: Built-in shader assembly failed for tier ", ( int )( tier ), ": ", failure_summary );
 		return String();
 	}
 	return assembled_shader;
@@ -372,8 +384,8 @@ bool T3DMaterial::samplesSurfaceData( const t3dShaderVariantState_t &eState ) co
 	if ( eState.m_surfaceDataMode != SURFACE_DATA_AUTO ) {
 		return false;
 	}
-	return eState.m_bOutputNormalMapEnabled || eState.m_bOutputRoughnessEnabled ||
-			eState.m_bOutputSpecularEnabled || eState.m_bOutputAmbientOcclusionEnabled;
+	return eState.m_bOutputNormalMapEnabled || eState.m_bOutputRoughnessEnabled || eState.m_bOutputSpecularEnabled ||
+			eState.m_bOutputAmbientOcclusionEnabled;
 }
 
 t3dShaderVariantState_t T3DMaterial::captureVariantState( void ) const {
@@ -391,9 +403,8 @@ t3dShaderVariantState_t T3DMaterial::captureVariantState( void ) const {
 	state.m_bOutputNormalMapEnabled = m_bOutputNormalMapEnabled;
 	state.m_bOutputAmbientOcclusionEnabled = m_bOutputAmbientOcclusionEnabled;
 	state.m_bFastBlendCurve = m_shaderPerformancePreset == SHADER_PRESET_RUNTIME_360 ||
-							 m_shaderPerformancePreset == SHADER_PRESET_XBOX_360_AUTHENTIC ||
-							 m_shaderPerformancePreset == SHADER_PRESET_LOW ||
-							 m_shaderPerformancePreset == SHADER_PRESET_MINIMUM;
+			m_shaderPerformancePreset == SHADER_PRESET_XBOX_360_AUTHENTIC ||
+			m_shaderPerformancePreset == SHADER_PRESET_LOW || m_shaderPerformancePreset == SHADER_PRESET_MINIMUM;
 	state.m_bTessellationEnabled = m_pTerrain && m_pTerrain->getTessellationLevel() > 0;
 	const Ref<T3DAssets> pAssets = m_pTerrain ? m_pTerrain->getAssets() : Ref<T3DAssets>();
 	state.m_bSurfacePacked = pAssets.is_valid() && pAssets->usesPackedPbr();
@@ -411,11 +422,11 @@ void T3DMaterial::applyXboxProfileManifestToState( t3dShaderVariantState_t &rSta
 		}
 		const char *property = setting.m_pszProperty;
 		if ( std::strcmp( property, "projection_mode" ) == 0 ) {
-			rState.m_projectionMode = ( t3dProjectionMode_t ) ( setting.m_nIntValue );
+			rState.m_projectionMode = ( t3dProjectionMode_t )( setting.m_nIntValue );
 		} else if ( std::strcmp( property, "tessellation_material_mode" ) == 0 ) {
-			rState.m_tessellationMaterialMode = ( t3dTessellationMaterialMode_t ) ( setting.m_nIntValue );
+			rState.m_tessellationMaterialMode = ( t3dTessellationMaterialMode_t )( setting.m_nIntValue );
 		} else if ( std::strcmp( property, "world_noise_shader_mode" ) == 0 ) {
-			rState.m_worldNoiseShaderMode = ( t3dWorldNoiseShaderMode_t ) ( setting.m_nIntValue );
+			rState.m_worldNoiseShaderMode = ( t3dWorldNoiseShaderMode_t )( setting.m_nIntValue );
 		} else if ( std::strcmp( property, "auto_shader_enabled" ) == 0 ) {
 			rState.m_bAutoShaderEnabled = setting.m_bBoolValue;
 		} else if ( std::strcmp( property, "dual_scaling_enabled" ) == 0 ) {
@@ -457,35 +468,33 @@ void T3DMaterial::applyXboxProfileManifestToTiers( void ) {
 		}
 
 		if ( std::strcmp( suffix, "texture_filtering" ) == 0 ) {
-			pQuality->m_textureFiltering = ( t3dTextureFiltering_t ) ( setting.m_nIntValue );
+			pQuality->m_textureFiltering = ( t3dTextureFiltering_t )( setting.m_nIntValue );
 		} else if ( std::strcmp( suffix, "material_sampling_quality" ) == 0 ) {
-			pQuality->m_materialSamplingQuality = ( t3dMaterialSamplingQuality_t ) ( setting.m_nIntValue );
+			pQuality->m_materialSamplingQuality = ( t3dMaterialSamplingQuality_t )( setting.m_nIntValue );
 		} else if ( std::strcmp( suffix, "terrain_normal_quality" ) == 0 ) {
-			pQuality->m_terrainNormalQuality = ( t3dTerrainNormalQuality_t ) ( setting.m_nIntValue );
+			pQuality->m_terrainNormalQuality = ( t3dTerrainNormalQuality_t )( setting.m_nIntValue );
 		} else if ( std::strcmp( suffix, "terrain_color_quality" ) == 0 ) {
-			pQuality->m_terrainColorQuality = ( t3dTerrainColorQuality_t ) ( setting.m_nIntValue );
+			pQuality->m_terrainColorQuality = ( t3dTerrainColorQuality_t )( setting.m_nIntValue );
 		} else if ( std::strcmp( suffix, "surface_response_quality" ) == 0 ) {
-			pQuality->m_surfaceResponseQuality = ( t3dSurfaceResponseQuality_t ) ( setting.m_nIntValue );
+			pQuality->m_surfaceResponseQuality = ( t3dSurfaceResponseQuality_t )( setting.m_nIntValue );
 		} else if ( std::strcmp( suffix, "texture_surface_mode" ) == 0 ) {
-			pQuality->m_textureSurfaceMode = ( t3dTextureSurfaceMode_t ) ( setting.m_nIntValue );
+			pQuality->m_textureSurfaceMode = ( t3dTextureSurfaceMode_t )( setting.m_nIntValue );
 		} else if ( std::strcmp( suffix, "lighting_model" ) == 0 ) {
-			pQuality->m_lightingModel = ( t3dTierLightingModel_t ) ( setting.m_nIntValue );
+			pQuality->m_lightingModel = ( t3dTierLightingModel_t )( setting.m_nIntValue );
 		} else if ( std::strcmp( suffix, "detiling_quality" ) == 0 ) {
-			pQuality->m_detilingQuality = ( t3dTierDetilingQuality_t ) ( setting.m_nIntValue );
+			pQuality->m_detilingQuality = ( t3dTierDetilingQuality_t )( setting.m_nIntValue );
 		} else if ( std::strcmp( suffix, "authored_color_contribution" ) == 0 ) {
-			pQuality->m_fAuthoredColorContribution = ( real_t ) ( setting.m_fFloatValue );
+			pQuality->m_fAuthoredColorContribution = ( real_t )( setting.m_fFloatValue );
 		} else if ( std::strcmp( suffix, "wetness_contribution" ) == 0 ) {
-			pQuality->m_fWetnessContribution = ( real_t ) ( setting.m_fFloatValue );
+			pQuality->m_fWetnessContribution = ( real_t )( setting.m_fFloatValue );
 		} else if ( std::strcmp( suffix, "material_lod_bias" ) == 0 ) {
-			pQuality->m_fMaterialLodBias = ( real_t ) ( setting.m_fFloatValue );
+			pQuality->m_fMaterialLodBias = ( real_t )( setting.m_fFloatValue );
 		}
 	}
 }
 
-void T3DMaterial::applyPerformancePresetToState(
-	t3dShaderVariantState_t &rState,
-	const t3dShaderPerformancePreset_t ePreset
-) const {
+void T3DMaterial::applyPerformancePresetToState( t3dShaderVariantState_t &rState,
+		const t3dShaderPerformancePreset_t ePreset ) const {
 	switch ( ePreset ) {
 		case SHADER_PRESET_CINEMATIC:
 			rState.m_textureFiltering = LINEAR_ANISOTROPIC;
@@ -725,42 +734,47 @@ void T3DMaterial::applyVariantState( const t3dShaderVariantState_t &eState ) {
 	m_bOutputNormalMapEnabled = eState.m_bOutputNormalMapEnabled;
 	m_bOutputAmbientOcclusionEnabled = eState.m_bOutputAmbientOcclusionEnabled;
 	m_nearQuality.m_textureFiltering = eState.m_textureFiltering;
-	m_nearQuality.m_materialSamplingQuality = eState.m_terrainSamplingMode == TERRAIN_SAMPLING_SINGLE_SAMPLE ?
-		MATERIAL_SAMPLING_FAST : MATERIAL_SAMPLING_FULL;
-	m_nearQuality.m_terrainNormalQuality = eState.m_terrainNormalMode == TERRAIN_NORMAL_GEOMETRY_DERIVATIVE ?
-		TERRAIN_NORMAL_QUALITY_GEOMETRY : TERRAIN_NORMAL_QUALITY_DETAILED;
-	m_nearQuality.m_terrainColorQuality = eState.m_colorSamplingMode == COLOR_SAMPLING_EXACT_4_TAP ?
-		TERRAIN_COLOR_QUALITY_EXACT : TERRAIN_COLOR_QUALITY_FAST;
-	m_nearQuality.m_surfaceResponseQuality = eState.m_surfaceDataMode == SURFACE_DATA_ALBEDO_ONLY ?
-		SURFACE_RESPONSE_SIMPLE : SURFACE_RESPONSE_DETAILED;
+	m_nearQuality.m_materialSamplingQuality = eState.m_terrainSamplingMode == TERRAIN_SAMPLING_SINGLE_SAMPLE
+			? MATERIAL_SAMPLING_FAST
+			: MATERIAL_SAMPLING_FULL;
+	m_nearQuality.m_terrainNormalQuality = eState.m_terrainNormalMode == TERRAIN_NORMAL_GEOMETRY_DERIVATIVE
+			? TERRAIN_NORMAL_QUALITY_GEOMETRY
+			: TERRAIN_NORMAL_QUALITY_DETAILED;
+	m_nearQuality.m_terrainColorQuality = eState.m_colorSamplingMode == COLOR_SAMPLING_EXACT_4_TAP
+			? TERRAIN_COLOR_QUALITY_EXACT
+			: TERRAIN_COLOR_QUALITY_FAST;
+	m_nearQuality.m_surfaceResponseQuality =
+			eState.m_surfaceDataMode == SURFACE_DATA_ALBEDO_ONLY ? SURFACE_RESPONSE_SIMPLE : SURFACE_RESPONSE_DETAILED;
 	m_nearQuality.m_textureSurfaceMode = eState.m_textureSurfaceMode;
-	m_nearQuality.m_lightingModel = eState.m_terrainShadingMode == SHADING_UNSHADED ? TIER_LIGHTING_UNSHADED :
-		( eState.m_terrainShadingMode == SHADING_XBOX_360_BLINN_PHONG ? TIER_LIGHTING_BLINN_PHONG :
-			( eState.m_terrainShadingMode == SHADING_BURLEY_GGX || eState.m_terrainShadingMode == SHADING_LAMBERT_GGX ?
-				TIER_LIGHTING_PBR : TIER_LIGHTING_LAMBERT ) );
-	m_nearQuality.m_detilingQuality = eState.m_detilingMode == DETILING_DISABLED ?
-		TIER_DETILING_DISABLED : TIER_DETILING_ROTATION;
+	m_nearQuality.m_lightingModel = eState.m_terrainShadingMode == SHADING_UNSHADED
+			? TIER_LIGHTING_UNSHADED
+			: ( eState.m_terrainShadingMode == SHADING_XBOX_360_BLINN_PHONG
+							  ? TIER_LIGHTING_BLINN_PHONG
+							  : ( eState.m_terrainShadingMode == SHADING_BURLEY_GGX ||
+														eState.m_terrainShadingMode == SHADING_LAMBERT_GGX
+												? TIER_LIGHTING_PBR
+												: TIER_LIGHTING_LAMBERT ) );
+	m_nearQuality.m_detilingQuality =
+			eState.m_detilingMode == DETILING_DISABLED ? TIER_DETILING_DISABLED : TIER_DETILING_ROTATION;
 }
 
 t3dShaderVariantKey_t T3DMaterial::makeVariantCacheKey( const String &rCode ) const {
 	t3dShaderVariantKey_t key;
-	key.m_nPrimaryHash = ( uint64_t ) ( rCode.hash() );
-	key.m_nSourceLength = ( uint32_t ) ( rCode.length() );
+	key.m_nPrimaryHash = ( uint64_t )( rCode.hash() );
+	key.m_nSourceLength = ( uint32_t )( rCode.length() );
 
 	// A second full-source fingerprint avoids retaining duplicate shader source
 	// strings solely to guard the compiled variant cache against hash collisions.
 	uint64_t fingerprint = 1469598103934665603ULL;
 	for ( int32_t i = 0; i < rCode.length(); ++i ) {
-		fingerprint ^= ( uint64_t ) ( rCode.unicode_at( i ) );
+		fingerprint ^= ( uint64_t )( rCode.unicode_at( i ) );
 		fingerprint *= 1099511628211ULL;
 	}
 	key.m_nFingerprint = fingerprint;
 	return key;
 }
 
-t3dShaderVariantEntry_t *T3DMaterial::getShaderVariantEntries(
-	const t3dShaderVariantDomain_t domain
-) {
+t3dShaderVariantEntry_t *T3DMaterial::getShaderVariantEntries( const t3dShaderVariantDomain_t domain ) {
 	switch ( domain ) {
 		case SHADER_DOMAIN_EDITOR:
 			return m_szEditorShaderVariantEntries;
@@ -772,9 +786,7 @@ t3dShaderVariantEntry_t *T3DMaterial::getShaderVariantEntries(
 	}
 }
 
-const t3dShaderVariantEntry_t *T3DMaterial::getShaderVariantEntries(
-	const t3dShaderVariantDomain_t domain
-) const {
+const t3dShaderVariantEntry_t *T3DMaterial::getShaderVariantEntries( const t3dShaderVariantDomain_t domain ) const {
 	switch ( domain ) {
 		case SHADER_DOMAIN_EDITOR:
 			return m_szEditorShaderVariantEntries;
@@ -859,8 +871,7 @@ int T3DMaterial::getVariantCacheLimit( const t3dShaderVariantDomain_t domain ) c
 }
 
 uint64_t T3DMaterial::getShaderVariantSourceBytesRaw( void ) const {
-	return m_nRuntimeShaderVariantSourceBytes + m_nEditorShaderVariantSourceBytes +
-		m_nBufferShaderVariantSourceBytes;
+	return m_nRuntimeShaderVariantSourceBytes + m_nEditorShaderVariantSourceBytes + m_nBufferShaderVariantSourceBytes;
 }
 
 bool T3DMaterial::isActiveShader( const Ref<Shader> &rShader ) const {
@@ -902,20 +913,22 @@ void T3DMaterial::eraseShaderVariant( const t3dShaderVariantDomain_t domain, con
 	}
 	--count;
 	pEntries[count] = t3dShaderVariantEntry_t{};
-	if ( ( uint64_t ) ( source_bytes ) > retained_source_bytes ) {
-		LOG( ERROR, "Shader variant source-byte accounting underflow in domain ", ( int ) ( domain ), ": entry ",
-			source_bytes, ", retained ", retained_source_bytes );
+	if ( ( uint64_t )( source_bytes ) > retained_source_bytes ) {
+		LOG( ERROR,
+				"Shader variant source-byte accounting underflow in domain ",
+				( int )( domain ),
+				": entry ",
+				source_bytes,
+				", retained ",
+				retained_source_bytes );
 		retained_source_bytes = 0u;
 	} else {
-		retained_source_bytes -= ( uint64_t ) ( source_bytes );
+		retained_source_bytes -= ( uint64_t )( source_bytes );
 	}
 	++m_nVariantRemovalsTotal;
 }
 
-void T3DMaterial::touchShaderVariant(
-	const t3dShaderVariantDomain_t domain, const int iIndex,
-	const bool bActualUse
-) {
+void T3DMaterial::touchShaderVariant( const t3dShaderVariantDomain_t domain, const int iIndex, const bool bActualUse ) {
 	t3dShaderVariantEntry_t *pEntries = getShaderVariantEntries( domain );
 	const int count = getShaderVariantCountForDomain( domain );
 	if ( iIndex < 0 || iIndex >= count ) {
@@ -934,10 +947,7 @@ void T3DMaterial::touchShaderVariant(
 	pEntries[0] = std::move( touched );
 }
 
-bool T3DMaterial::evictLruShaderVariant(
-	const t3dShaderVariantDomain_t domain,
-	const bool bSpeculativeOnly
-) {
+bool T3DMaterial::evictLruShaderVariant( const t3dShaderVariantDomain_t domain, const bool bSpeculativeOnly ) {
 	const t3dShaderVariantEntry_t *pEntries = getShaderVariantEntries( domain );
 	const int count = getShaderVariantCountForDomain( domain );
 	for ( int index = count - 1; index >= 0; --index ) {
@@ -954,26 +964,22 @@ bool T3DMaterial::evictLruShaderVariant(
 	return false;
 }
 
-bool T3DMaterial::evictBudgetLruShaderVariant(
-	const t3dShaderVariantDomain_t requestDomain,
-	const bool bSpeculativeOnly
-) {
+bool T3DMaterial::evictBudgetLruShaderVariant( const t3dShaderVariantDomain_t requestDomain,
+		const bool bSpeculativeOnly ) {
 	if ( evictLruShaderVariant( SHADER_DOMAIN_EDITOR, bSpeculativeOnly ) ) {
 		return true;
 	}
-	if ( requestDomain != SHADER_DOMAIN_EDITOR &&
-		evictLruShaderVariant( SHADER_DOMAIN_BUFFER, bSpeculativeOnly ) ) {
+	if ( requestDomain != SHADER_DOMAIN_EDITOR && evictLruShaderVariant( SHADER_DOMAIN_BUFFER, bSpeculativeOnly ) ) {
 		return true;
 	}
-	if ( requestDomain == SHADER_DOMAIN_RUNTIME &&
-		evictLruShaderVariant( SHADER_DOMAIN_RUNTIME, bSpeculativeOnly ) ) {
+	if ( requestDomain == SHADER_DOMAIN_RUNTIME && evictLruShaderVariant( SHADER_DOMAIN_RUNTIME, bSpeculativeOnly ) ) {
 		return true;
 	}
 	return false;
 }
 
 void T3DMaterial::trimShaderVariantCaches( void ) {
-	const t3dShaderVariantDomain_t domains[] = {SHADER_DOMAIN_RUNTIME, SHADER_DOMAIN_EDITOR, SHADER_DOMAIN_BUFFER};
+	const t3dShaderVariantDomain_t domains[] = { SHADER_DOMAIN_RUNTIME, SHADER_DOMAIN_EDITOR, SHADER_DOMAIN_BUFFER };
 	for ( const t3dShaderVariantDomain_t domain : domains ) {
 		const int limit = getVariantCacheLimit( domain );
 		while ( getShaderVariantCountForDomain( domain ) > limit ) {
@@ -983,10 +989,10 @@ void T3DMaterial::trimShaderVariantCaches( void ) {
 		}
 	}
 
-	const uint64_t budget_bytes = ( uint64_t ) ( m_nShaderVariantEffectiveSourceBudgetMb ) * 1024ULL * 1024ULL;
+	const uint64_t budget_bytes = ( uint64_t )( m_nShaderVariantEffectiveSourceBudgetMb ) * 1024ULL * 1024ULL;
 	while ( getShaderVariantSourceBytesRaw() > budget_bytes ) {
 		if ( !evictBudgetLruShaderVariant( SHADER_DOMAIN_RUNTIME, true ) &&
-			!evictBudgetLruShaderVariant( SHADER_DOMAIN_RUNTIME, false ) ) {
+				!evictBudgetLruShaderVariant( SHADER_DOMAIN_RUNTIME, false ) ) {
 			break;
 		}
 	}
@@ -1006,9 +1012,8 @@ void T3DMaterial::submitShaderSource( const Ref<Shader> &rShader, const String &
 	m_nVariantSourceSubmissionUsecPeak = MAX( m_nVariantSourceSubmissionUsecPeak, elapsed_usec );
 }
 
-t3dShaderValidationResult_t T3DMaterial::validateShaderVariant(
-	const Ref<Shader> &rShader, const t3dShaderTier_t tier
-) {
+t3dShaderValidationResult_t T3DMaterial::validateShaderVariant( const Ref<Shader> &rShader,
+		const t3dShaderTier_t tier ) {
 	t3dShaderValidationResult_t result;
 	if ( rShader.is_null() ) {
 		result.m_failureSummary = "Shader resource is null";
@@ -1030,41 +1035,47 @@ t3dShaderValidationResult_t T3DMaterial::validateShaderVariant(
 	}
 
 	if ( !t3dMaterialRequireShaderParameter( parameter_list, "_target_pos", result.m_failureSummary ) ||
-		!t3dMaterialRequireShaderParameter( parameter_list, "_far_height_map", result.m_failureSummary ) ||
-		!t3dMaterialRequireShaderParameter( parameter_list, "_far_color_map", result.m_failureSummary ) ||
-		!t3dMaterialRequireShaderParameter( parameter_list, "_clipmap_lod_states", result.m_failureSummary ) ) {
+			!t3dMaterialRequireShaderParameter( parameter_list, "_far_height_map", result.m_failureSummary ) ||
+			!t3dMaterialRequireShaderParameter( parameter_list, "_far_color_map", result.m_failureSummary ) ||
+			!t3dMaterialRequireShaderParameter( parameter_list, "_clipmap_lod_states", result.m_failureSummary ) ) {
 		return result;
 	}
 	if ( tier == SHADER_TIER_NEAR || tier == SHADER_TIER_MIDDLE ) {
 		if ( !t3dMaterialRequireShaderParameter( parameter_list, "_region_map_texture", result.m_failureSummary ) ||
-			!t3dMaterialRequireShaderParameter( parameter_list, "_logical_region_map_texture", result.m_failureSummary ) ) {
+				!t3dMaterialRequireShaderParameter(
+						parameter_list, "_logical_region_map_texture", result.m_failureSummary ) ) {
 			return result;
 		}
 	}
 	if ( tier == SHADER_TIER_NEAR &&
-		!t3dMaterialRequireShaderParameter( parameter_list, "_height_maps", result.m_failureSummary ) ) {
+			!t3dMaterialRequireShaderParameter( parameter_list, "_height_maps", result.m_failureSummary ) ) {
 		return result;
 	}
 	if ( tier == SHADER_TIER_MIDDLE &&
-		( !t3dMaterialRequireShaderParameter( parameter_list, "_derived_maps", result.m_failureSummary ) ||
-			!t3dMaterialRequireShaderParameter( parameter_list, "_middle_height_region_map_texture", result.m_failureSummary ) ||
-			!t3dMaterialRequireShaderParameter( parameter_list, "_middle_height_maps", result.m_failureSummary ) ||
-			( m_middleQuality.m_materialSamplingQuality == MATERIAL_SAMPLING_FAST &&
-				!t3dMaterialRequireShaderParameter( parameter_list, "_middle_composite_maps", result.m_failureSummary ) ) ) ) {
+			( !t3dMaterialRequireShaderParameter( parameter_list, "_derived_maps", result.m_failureSummary ) ||
+					!t3dMaterialRequireShaderParameter(
+							parameter_list, "_middle_height_region_map_texture", result.m_failureSummary ) ||
+					!t3dMaterialRequireShaderParameter(
+							parameter_list, "_middle_height_maps", result.m_failureSummary ) ||
+					( m_middleQuality.m_materialSamplingQuality == MATERIAL_SAMPLING_FAST &&
+							!t3dMaterialRequireShaderParameter(
+									parameter_list, "_middle_composite_maps", result.m_failureSummary ) ) ) ) {
 		return result;
 	}
-	const bool bBakedMiddle = tier == SHADER_TIER_MIDDLE &&
-		m_middleQuality.m_materialSamplingQuality == MATERIAL_SAMPLING_FAST;
+	const bool bBakedMiddle =
+			tier == SHADER_TIER_MIDDLE && m_middleQuality.m_materialSamplingQuality == MATERIAL_SAMPLING_FAST;
 	const char *const albedo_parameter = tier == SHADER_TIER_FAR ? "_far_albedo_array" : "_texture_array_albedo";
-	if ( !bBakedMiddle && !t3dMaterialRequireShaderParameter( parameter_list, albedo_parameter, result.m_failureSummary ) ) {
+	if ( !bBakedMiddle &&
+			!t3dMaterialRequireShaderParameter( parameter_list, albedo_parameter, result.m_failureSummary ) ) {
 		return result;
 	}
 	if ( tier == SHADER_TIER_FAR ) {
-		const StringName forbidden[] = {
-			StringName( "_logical_region_map_texture" ), StringName( "_region_map_texture" ),
-			StringName( "_height_maps" ), StringName( "_control_maps" ), StringName( "_color_maps" ),
-			StringName( "_derived_maps" )
-		};
+		const StringName forbidden[] = { StringName( "_logical_region_map_texture" ),
+			StringName( "_region_map_texture" ),
+			StringName( "_height_maps" ),
+			StringName( "_control_maps" ),
+			StringName( "_color_maps" ),
+			StringName( "_derived_maps" ) };
 		for ( const StringName &name : forbidden ) {
 			if ( t3dMaterialShaderParameterListHas( parameter_list, name ) ) {
 				result.m_failureSummary = "Far shader reflected forbidden streamed dependency: " + String( name );
@@ -1076,22 +1087,24 @@ t3dShaderValidationResult_t T3DMaterial::validateShaderVariant(
 	return result;
 }
 
-void T3DMaterial::recordShaderTierValidation(
-	const t3dShaderTier_t tier, const String &rCode,
-	const t3dShaderValidationResult_t &rValidation, const uint64_t nActiveShaderRidId,
-	const bool bFallbackToNear, const bool bCompactTierActive
-) {
+void T3DMaterial::recordShaderTierValidation( const t3dShaderTier_t tier,
+		const String &rCode,
+		const t3dShaderValidationResult_t &rValidation,
+		const uint64_t nActiveShaderRidId,
+		const bool bFallbackToNear,
+		const bool bCompactTierActive ) {
 	if ( tier < SHADER_TIER_NEAR || tier >= SHADER_TIER_COUNT ) {
 		return;
 	}
 	t3dShaderTierValidationState_t &state = m_szShaderTierValidation[tier];
 	const t3dShaderVariantKey_t next_key = makeVariantCacheKey( rCode );
 	const bool bStateChanged = state.m_key.m_nPrimaryHash != next_key.m_nPrimaryHash ||
-		state.m_key.m_nFingerprint != next_key.m_nFingerprint || state.m_key.m_nSourceLength != next_key.m_nSourceLength ||
-		state.m_nActiveShaderRidId != nActiveShaderRidId || state.m_bCompileValid != rValidation.m_bValid ||
-		state.m_nReflectedParameterCount != rValidation.m_nReflectedParameterCount ||
-		state.m_failureSummary != rValidation.m_failureSummary || state.m_bFallbackToNear != bFallbackToNear ||
-		state.m_bCompactTierActive != bCompactTierActive;
+			state.m_key.m_nFingerprint != next_key.m_nFingerprint ||
+			state.m_key.m_nSourceLength != next_key.m_nSourceLength ||
+			state.m_nActiveShaderRidId != nActiveShaderRidId || state.m_bCompileValid != rValidation.m_bValid ||
+			state.m_nReflectedParameterCount != rValidation.m_nReflectedParameterCount ||
+			state.m_failureSummary != rValidation.m_failureSummary || state.m_bFallbackToNear != bFallbackToNear ||
+			state.m_bCompactTierActive != bCompactTierActive;
 	state.m_key = next_key;
 	state.m_nRequestedShaderRidId = rValidation.m_nShaderRidId;
 	state.m_nActiveShaderRidId = nActiveShaderRidId;
@@ -1101,17 +1114,21 @@ void T3DMaterial::recordShaderTierValidation(
 	state.m_bFallbackToNear = bFallbackToNear;
 	state.m_bCompactTierActive = bCompactTierActive;
 	if ( bStateChanged ) {
-		emit_signal( "shader_tier_state_changed", ( int ) ( tier ),
-			String::num_uint64( state.m_key.m_nPrimaryHash, 16, true ), state.m_bCompileValid, state.m_bFallbackToNear );
+		emit_signal( "shader_tier_state_changed",
+				( int )( tier ),
+				String::num_uint64( state.m_key.m_nPrimaryHash, 16, true ),
+				state.m_bCompileValid,
+				state.m_bFallbackToNear );
 	}
 }
 
-Ref<Shader> T3DMaterial::getOrCreateShaderVariant(
-	const String &rCode, const t3dShaderVariantDomain_t domain,
-	const bool bPrewarm, const t3dShaderTier_t tier, t3dShaderValidationResult_t *pValidation
-) {
-	const uint32_t source_bytes = ( uint32_t ) ( rCode.to_utf8_buffer().size() );
-	m_nLastVariantRequestDomain = ( int ) ( domain );
+Ref<Shader> T3DMaterial::getOrCreateShaderVariant( const String &rCode,
+		const t3dShaderVariantDomain_t domain,
+		const bool bPrewarm,
+		const t3dShaderTier_t tier,
+		t3dShaderValidationResult_t *pValidation ) {
+	const uint32_t source_bytes = ( uint32_t )( rCode.to_utf8_buffer().size() );
+	m_nLastVariantRequestDomain = ( int )( domain );
 	m_bLastVariantRequestHit = false;
 	m_bLastVariantRequestPrewarm = bPrewarm;
 	m_nLastVariantRequestSourceBytes = source_bytes;
@@ -1178,7 +1195,7 @@ Ref<Shader> T3DMaterial::getOrCreateShaderVariant(
 		}
 	}
 
-	const uint64_t budget_bytes = ( uint64_t ) ( m_nShaderVariantEffectiveSourceBudgetMb ) * 1024ULL * 1024ULL;
+	const uint64_t budget_bytes = ( uint64_t )( m_nShaderVariantEffectiveSourceBudgetMb ) * 1024ULL * 1024ULL;
 	while ( getShaderVariantSourceBytesRaw() + source_bytes > budget_bytes ) {
 		bool bEvicted = evictBudgetLruShaderVariant( domain, true );
 		if ( !bEvicted && !bPrewarm ) {
@@ -1189,15 +1206,16 @@ Ref<Shader> T3DMaterial::getOrCreateShaderVariant(
 				++m_nVariantAllocationFailuresTotal;
 				return Ref<Shader>();
 			}
-			LOG( WARN, "Shader variant source budget is smaller than the active working set; retaining the selected "
-					  "shader and exceeding the soft budget." );
+			LOG( WARN,
+					"Shader variant source budget is smaller than the active working set; retaining the selected "
+					"shader and exceeding the soft budget." );
 			break;
 		}
 	}
 
 	const int physical_capacity = getVariantPhysicalCapacity( domain );
 	if ( count >= physical_capacity ) {
-		LOG( ERROR, "Shader variant cache exceeded its s_nFixed physical capacity of ", physical_capacity );
+		LOG( ERROR, "Shader variant cache exceeded its fixed physical capacity of ", physical_capacity );
 		++m_nVariantAllocationFailuresTotal;
 		return Ref<Shader>();
 	}
@@ -1241,10 +1259,8 @@ Ref<Shader> T3DMaterial::getOrCreateShaderVariant(
 	return pVariant;
 }
 
-uint64_t T3DMaterial::getChangedVariantDimensions(
-	const t3dShaderVariantState_t &rPrevious,
-	const t3dShaderVariantState_t &rCurrent
-) const {
+uint64_t T3DMaterial::getChangedVariantDimensions( const t3dShaderVariantState_t &rPrevious,
+		const t3dShaderVariantState_t &rCurrent ) const {
 	uint64_t changed = 0u;
 	if ( rPrevious.m_worldBackground != rCurrent.m_worldBackground ) {
 		changed |= 1ULL << VARIANT_DIM_WORLD_BACKGROUND;
@@ -1339,7 +1355,7 @@ void T3DMaterial::recordVariantTransition( const t3dShaderVariantState_t &eState
 	}
 
 	for ( int dimension = 0; dimension < VARIANT_DIM_COUNT; ++dimension ) {
-		const uint64_t bit = 1ULL << ( uint64_t ) ( dimension );
+		const uint64_t bit = 1ULL << ( uint64_t )( dimension );
 		if ( ( changed & bit ) == 0 ) {
 			continue;
 		}
@@ -1350,10 +1366,9 @@ void T3DMaterial::recordVariantTransition( const t3dShaderVariantState_t &eState
 	m_bHasLastBoundVariantState = true;
 }
 
-bool T3DMaterial::appendVariantState(
-	t3dShaderVariantState_t *pStates, int &nCount,
-	const t3dShaderVariantState_t &eState
-) const {
+bool T3DMaterial::appendVariantState( t3dShaderVariantState_t *pStates,
+		int &nCount,
+		const t3dShaderVariantState_t &eState ) const {
 	const int capacity = MIN( m_nShaderVariantPrewarmLimit, s_nMaxShaderVariantPrewarmLimit );
 	if ( nCount >= capacity ) {
 		return false;
@@ -1362,18 +1377,17 @@ bool T3DMaterial::appendVariantState(
 	return true;
 }
 
-void T3DMaterial::appendDimensionStates(
-	t3dShaderVariantState_t *const pStates, int &nCount,
-	const t3dShaderVariantState_t &rBase,
-	const t3dShaderVariantDimension_t dimension
-) const {
+void T3DMaterial::appendDimensionStates( t3dShaderVariantState_t *const pStates,
+		int &nCount,
+		const t3dShaderVariantState_t &rBase,
+		const t3dShaderVariantDimension_t dimension ) const {
 	t3dShaderVariantState_t state;
 	switch ( dimension ) {
 		case VARIANT_DIM_WORLD_BACKGROUND:
 			for ( int value = NONE; value <= NOISE; ++value ) {
 				if ( value != rBase.m_worldBackground ) {
 					state = rBase;
-					state.m_worldBackground = ( t3dWorldBackground_t ) ( value );
+					state.m_worldBackground = ( t3dWorldBackground_t )( value );
 					if ( !appendVariantState( pStates, nCount, state ) ) {
 						return;
 					}
@@ -1384,7 +1398,7 @@ void T3DMaterial::appendDimensionStates(
 			for ( int value = LINEAR_ANISOTROPIC; value <= NEAREST; ++value ) {
 				if ( value != rBase.m_textureFiltering ) {
 					state = rBase;
-					state.m_textureFiltering = ( t3dTextureFiltering_t ) ( value );
+					state.m_textureFiltering = ( t3dTextureFiltering_t )( value );
 					if ( !appendVariantState( pStates, nCount, state ) ) {
 						return;
 					}
@@ -1395,7 +1409,7 @@ void T3DMaterial::appendDimensionStates(
 			for ( int value = TERRAIN_SAMPLING_ADAPTIVE; value <= TERRAIN_SAMPLING_ADAPTIVE_2_CORNER; ++value ) {
 				if ( value != rBase.m_terrainSamplingMode ) {
 					state = rBase;
-					state.m_terrainSamplingMode = ( t3dTerrainSamplingMode_t ) ( value );
+					state.m_terrainSamplingMode = ( t3dTerrainSamplingMode_t )( value );
 					if ( !appendVariantState( pStates, nCount, state ) ) {
 						return;
 					}
@@ -1406,7 +1420,7 @@ void T3DMaterial::appendDimensionStates(
 			for ( int value = TERRAIN_NORMAL_ADAPTIVE; value <= TERRAIN_NORMAL_HEIGHT_3_TAP; ++value ) {
 				if ( value != rBase.m_terrainNormalMode ) {
 					state = rBase;
-					state.m_terrainNormalMode = ( t3dTerrainNormalMode_t ) ( value );
+					state.m_terrainNormalMode = ( t3dTerrainNormalMode_t )( value );
 					if ( !appendVariantState( pStates, nCount, state ) ) {
 						return;
 					}
@@ -1417,7 +1431,7 @@ void T3DMaterial::appendDimensionStates(
 			for ( int value = COLOR_SAMPLING_AUTO; value <= COLOR_SAMPLING_EXACT_4_TAP; ++value ) {
 				if ( value != rBase.m_colorSamplingMode ) {
 					state = rBase;
-					state.m_colorSamplingMode = ( t3dColorSamplingMode_t ) ( value );
+					state.m_colorSamplingMode = ( t3dColorSamplingMode_t )( value );
 					if ( !appendVariantState( pStates, nCount, state ) ) {
 						return;
 					}
@@ -1428,7 +1442,7 @@ void T3DMaterial::appendDimensionStates(
 			for ( int value = PROJECTION_DISABLED; value <= PROJECTION_EXACT_PER_CORNER; ++value ) {
 				if ( value != rBase.m_projectionMode ) {
 					state = rBase;
-					state.m_projectionMode = ( t3dProjectionMode_t ) ( value );
+					state.m_projectionMode = ( t3dProjectionMode_t )( value );
 					if ( !appendVariantState( pStates, nCount, state ) ) {
 						return;
 					}
@@ -1439,8 +1453,8 @@ void T3DMaterial::appendDimensionStates(
 			if ( rBase.m_bTessellationEnabled ) {
 				state = rBase;
 				state.m_tessellationMaterialMode = rBase.m_tessellationMaterialMode == TESSELLATION_GEOMETRY_ONLY
-					? TESSELLATION_GEOMETRY_AND_MATERIAL_HEIGHT
-					: TESSELLATION_GEOMETRY_ONLY;
+						? TESSELLATION_GEOMETRY_AND_MATERIAL_HEIGHT
+						: TESSELLATION_GEOMETRY_ONLY;
 				appendVariantState( pStates, nCount, state );
 			}
 			break;
@@ -1448,7 +1462,7 @@ void T3DMaterial::appendDimensionStates(
 			for ( int value = SURFACE_DATA_AUTO; value <= SURFACE_DATA_ALBEDO_ONLY; ++value ) {
 				if ( value != rBase.m_surfaceDataMode ) {
 					state = rBase;
-					state.m_surfaceDataMode = ( t3dSurfaceDataMode_t ) ( value );
+					state.m_surfaceDataMode = ( t3dSurfaceDataMode_t )( value );
 					if ( !appendVariantState( pStates, nCount, state ) ) {
 						return;
 					}
@@ -1459,7 +1473,7 @@ void T3DMaterial::appendDimensionStates(
 			for ( int value = SHADING_BURLEY_GGX; value <= SHADING_XBOX_360_BLINN_PHONG; ++value ) {
 				if ( value != rBase.m_terrainShadingMode ) {
 					state = rBase;
-					state.m_terrainShadingMode = ( t3dTerrainShadingMode_t ) ( value );
+					state.m_terrainShadingMode = ( t3dTerrainShadingMode_t )( value );
 					if ( !appendVariantState( pStates, nCount, state ) ) {
 						return;
 					}
@@ -1470,7 +1484,7 @@ void T3DMaterial::appendDimensionStates(
 			for ( int value = DETILING_CONTINUOUS; value <= DETILING_DISCRETE_16; ++value ) {
 				if ( value != rBase.m_detilingMode ) {
 					state = rBase;
-					state.m_detilingMode = ( t3dDetilingMode_t ) ( value );
+					state.m_detilingMode = ( t3dDetilingMode_t )( value );
 					if ( !appendVariantState( pStates, nCount, state ) ) {
 						return;
 					}
@@ -1480,8 +1494,8 @@ void T3DMaterial::appendDimensionStates(
 		case VARIANT_DIM_TEXTURE_SURFACE:
 			state = rBase;
 			state.m_textureSurfaceMode = rBase.m_textureSurfaceMode == TEXTURE_SURFACE_TEXTURED
-				? TEXTURE_SURFACE_SILHOUETTE
-				: TEXTURE_SURFACE_TEXTURED;
+					? TEXTURE_SURFACE_SILHOUETTE
+					: TEXTURE_SURFACE_TEXTURED;
 			appendVariantState( pStates, nCount, state );
 			break;
 		case VARIANT_DIM_WORLD_NOISE:
@@ -1489,7 +1503,7 @@ void T3DMaterial::appendDimensionStates(
 				for ( int value = WORLD_NOISE_DYNAMIC; value <= WORLD_NOISE_PROCEDURAL_FRAGMENT_NORMALS; ++value ) {
 					if ( value != rBase.m_worldNoiseShaderMode ) {
 						state = rBase;
-						state.m_worldNoiseShaderMode = ( t3dWorldNoiseShaderMode_t ) ( value );
+						state.m_worldNoiseShaderMode = ( t3dWorldNoiseShaderMode_t )( value );
 						if ( !appendVariantState( pStates, nCount, state ) ) {
 							return;
 						}
@@ -1543,22 +1557,21 @@ void T3DMaterial::appendDimensionStates(
 	}
 }
 
-void T3DMaterial::appendPotentialBranchStates(
-	t3dShaderVariantState_t *const pStates, int &nCount,
-	const t3dShaderVariantState_t &rBase
-) const {
+void T3DMaterial::appendPotentialBranchStates( t3dShaderVariantState_t *const pStates,
+		int &nCount,
+		const t3dShaderVariantState_t &rBase ) const {
 	appendVariantState( pStates, nCount, rBase );
 
 	// Quality presets are the most likely menu transitions. Only neighboring tiers
 	// are speculative; selecting a distant tier may stall once and then joins the LRU.
 	if ( m_shaderPerformancePreset > SHADER_PRESET_CUSTOM && m_shaderPerformancePreset <= SHADER_PRESET_MINIMUM ) {
 		for ( int offset = -1; offset <= 1; offset += 2 ) {
-			const int preset = ( int ) ( m_shaderPerformancePreset ) + offset;
+			const int preset = ( int )( m_shaderPerformancePreset ) + offset;
 			if ( preset < SHADER_PRESET_CINEMATIC || preset > SHADER_PRESET_MINIMUM ) {
 				continue;
 			}
 			t3dShaderVariantState_t state = rBase;
-			applyPerformancePresetToState( state, ( t3dShaderPerformancePreset_t ) ( preset ) );
+			applyPerformancePresetToState( state, ( t3dShaderPerformancePreset_t )( preset ) );
 			appendVariantState( pStates, nCount, state );
 		}
 	} else if ( m_shaderPerformancePreset == SHADER_PRESET_XBOX_360_AUTHENTIC ) {
@@ -1579,7 +1592,7 @@ void T3DMaterial::appendPotentialBranchStates(
 
 	uint64_t dimensions = getInferredPotentialDimensions( rBase );
 	if ( m_shaderVariantMode == SHADER_VARIANTS_PREWARM_ACTIVE_AND_RECENT ||
-		m_shaderVariantMode == SHADER_VARIANTS_PREWARM_FEATURE_MATRIX ) {
+			m_shaderVariantMode == SHADER_VARIANTS_PREWARM_FEATURE_MATRIX ) {
 		dimensions |= m_nObservedVariantDimensions;
 	}
 
@@ -1589,7 +1602,7 @@ void T3DMaterial::appendPotentialBranchStates(
 		int selected = -1;
 		uint64_t selected_clock = 0;
 		for ( int dimension = 0; dimension < VARIANT_DIM_COUNT; ++dimension ) {
-			const uint64_t bit = 1ULL << ( uint64_t ) ( dimension );
+			const uint64_t bit = 1ULL << ( uint64_t )( dimension );
 			if ( ( dimensions & bit ) == 0 ) {
 				continue;
 			}
@@ -1601,81 +1614,81 @@ void T3DMaterial::appendPotentialBranchStates(
 		if ( selected < 0 ) {
 			break;
 		}
-		dimensions &= ~( 1ULL << ( uint64_t ) ( selected ) );
-		appendDimensionStates( pStates, nCount, rBase, ( t3dShaderVariantDimension_t ) ( selected ) );
+		dimensions &= ~( 1ULL << ( uint64_t )( selected ) );
+		appendDimensionStates( pStates, nCount, rBase, ( t3dShaderVariantDimension_t )( selected ) );
 	}
 }
 
 uint64_t T3DMaterial::getVariantStateSignature( const t3dShaderVariantState_t &state ) const {
 	uint64_t signature = 1469598103934665603ULL;
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.m_worldBackground );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.m_textureFiltering );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.m_terrainSamplingMode );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.m_terrainNormalMode );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.m_colorSamplingMode );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.m_projectionMode );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.m_tessellationMaterialMode );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.m_surfaceDataMode );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.m_terrainShadingMode );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.m_detilingMode );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.m_textureSurfaceMode );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.m_worldNoiseShaderMode );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.m_bAutoShaderEnabled );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.m_bDualScalingEnabled );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.m_bMacroVariationEnabled );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.m_bOutputAlbedoEnabled );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.m_bOutputRoughnessEnabled );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.m_bOutputSpecularEnabled );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.m_bOutputNormalMapEnabled );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.m_bOutputAmbientOcclusionEnabled );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.m_bFastBlendCurve );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.m_bTessellationEnabled );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.m_bSurfacePacked );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.m_bControlMapsImplicit );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.m_bColorMapsImplicit );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )state.m_worldBackground );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )state.m_textureFiltering );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )state.m_terrainSamplingMode );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )state.m_terrainNormalMode );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )state.m_colorSamplingMode );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )state.m_projectionMode );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )state.m_tessellationMaterialMode );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )state.m_surfaceDataMode );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )state.m_terrainShadingMode );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )state.m_detilingMode );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )state.m_textureSurfaceMode );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )state.m_worldNoiseShaderMode );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )state.m_bAutoShaderEnabled );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )state.m_bDualScalingEnabled );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )state.m_bMacroVariationEnabled );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )state.m_bOutputAlbedoEnabled );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )state.m_bOutputRoughnessEnabled );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )state.m_bOutputSpecularEnabled );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )state.m_bOutputNormalMapEnabled );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )state.m_bOutputAmbientOcclusionEnabled );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )state.m_bFastBlendCurve );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )state.m_bTessellationEnabled );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )state.m_bSurfacePacked );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )state.m_bControlMapsImplicit );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )state.m_bColorMapsImplicit );
 	return signature;
 }
 
 uint64_t T3DMaterial::getPrewarmSignature( void ) const {
 	const t3dShaderVariantState_t state = captureVariantState();
 	uint64_t signature = 1469598103934665603ULL;
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( m_shaderVariantMode ) );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( m_nShaderVariantCacheLimit ) );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( m_nShaderVariantPrewarmLimit ) );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( m_nShaderVariantSourceBudgetMb ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )( m_shaderVariantMode ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )( m_nShaderVariantCacheLimit ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )( m_nShaderVariantPrewarmLimit ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )( m_nShaderVariantSourceBudgetMb ) );
 	t3dMaterialMixShaderSignature( signature, m_nObservedVariantDimensions );
 	for ( int dimension = 0; dimension < VARIANT_DIM_COUNT; ++dimension ) {
 		t3dMaterialMixShaderSignature( signature, m_szVariantDimensionLastUsed[dimension] );
 	}
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.m_worldBackground ) );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.m_textureFiltering ) );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.m_terrainSamplingMode ) );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.m_terrainNormalMode ) );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.m_colorSamplingMode ) );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.m_projectionMode ) );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.m_tessellationMaterialMode ) );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.m_surfaceDataMode ) );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.m_terrainShadingMode ) );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.m_detilingMode ) );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.m_textureSurfaceMode ) );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.m_worldNoiseShaderMode ) );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.m_bAutoShaderEnabled ) );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.m_bDualScalingEnabled ) );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.m_bMacroVariationEnabled ) );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.m_bOutputAlbedoEnabled ) );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.m_bOutputRoughnessEnabled ) );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.m_bOutputSpecularEnabled ) );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.m_bOutputNormalMapEnabled ) );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.m_bOutputAmbientOcclusionEnabled ) );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.m_bFastBlendCurve ) );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.m_bTessellationEnabled ) );
-	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.m_bSurfacePacked ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )( state.m_worldBackground ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )( state.m_textureFiltering ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )( state.m_terrainSamplingMode ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )( state.m_terrainNormalMode ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )( state.m_colorSamplingMode ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )( state.m_projectionMode ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )( state.m_tessellationMaterialMode ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )( state.m_surfaceDataMode ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )( state.m_terrainShadingMode ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )( state.m_detilingMode ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )( state.m_textureSurfaceMode ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )( state.m_worldNoiseShaderMode ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )( state.m_bAutoShaderEnabled ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )( state.m_bDualScalingEnabled ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )( state.m_bMacroVariationEnabled ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )( state.m_bOutputAlbedoEnabled ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )( state.m_bOutputRoughnessEnabled ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )( state.m_bOutputSpecularEnabled ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )( state.m_bOutputNormalMapEnabled ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )( state.m_bOutputAmbientOcclusionEnabled ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )( state.m_bFastBlendCurve ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )( state.m_bTessellationEnabled ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t )( state.m_bSurfacePacked ) );
 	return signature;
 }
 
 void T3DMaterial::prewarmShaderVariantsInternal( const bool bForce ) {
 	if ( m_shaderVariantMode != SHADER_VARIANTS_PREWARM_ACTIVE_BRANCHES &&
-		m_shaderVariantMode != SHADER_VARIANTS_PREWARM_ACTIVE_AND_RECENT ) {
+			m_shaderVariantMode != SHADER_VARIANTS_PREWARM_ACTIVE_AND_RECENT ) {
 		return;
 	}
 	if ( m_bShaderOverrideEnabled || !m_pTerrain || ( IS_EDITOR && !bForce ) ) {
@@ -1712,7 +1725,7 @@ void T3DMaterial::prewarmShaderVariantsInternal( const bool bForce ) {
 		}
 		if ( !bMainSeen ) {
 			if ( seen_main_count >= s_nMaxShaderVariantPrewarmLimit ) {
-				LOG( ERROR, "Main shader prewarm key set exceeded s_nFixed capacity" );
+				LOG( ERROR, "Main shader prewarm key set exceeded fixed capacity" );
 				break;
 			}
 			seen_main[seen_main_count++] = main_key;
@@ -1735,7 +1748,7 @@ void T3DMaterial::prewarmShaderVariantsInternal( const bool bForce ) {
 			}
 			if ( !bBufferSeen ) {
 				if ( seen_buffer_count >= s_nMaxShaderVariantPrewarmLimit ) {
-					LOG( ERROR, "Buffer shader prewarm key set exceeded s_nFixed capacity" );
+					LOG( ERROR, "Buffer shader prewarm key set exceeded fixed capacity" );
 					break;
 				}
 				seen_buffer[seen_buffer_count++] = buffer_key;
@@ -1778,11 +1791,19 @@ void T3DMaterial::prewarmShaderVariantsInternal( const bool bForce ) {
 	}
 
 	if ( m_nLastPrewarmSkippedCount > 0 ) {
-		LOG( WARN, "Shader prewarm retained ", m_nLastPrewarmVariantCount, " variants and skipped ",
-			m_nLastPrewarmSkippedCount, " due to the cache count/source-memory budget." );
+		LOG( WARN,
+				"Shader prewarm retained ",
+				m_nLastPrewarmVariantCount,
+				" variants and skipped ",
+				m_nLastPrewarmSkippedCount,
+				" due to the cache count/source-memory budget." );
 	} else {
-		LOG( INFO, "Shader prewarm retained ", m_nLastPrewarmVariantCount, " unique runtime/buffer variants using ",
-			getShaderVariantSourceBytesRaw(), " source bytes." );
+		LOG( INFO,
+				"Shader prewarm retained ",
+				m_nLastPrewarmVariantCount,
+				" unique runtime/buffer variants using ",
+				getShaderVariantSourceBytesRaw(),
+				" source bytes." );
 	}
 }
 String T3DMaterial::generateShaderCode( void ) const {
@@ -1793,27 +1814,33 @@ String T3DMaterial::generateShaderCode( const t3dShaderVariantState_t &eState ) 
 	return generateShaderCode( eState, SHADER_TIER_NEAR );
 }
 
-void T3DMaterial::applyTierQualityToState(
-	t3dShaderVariantState_t &rState,
-	const t3dTierQualityConfig_t &rQuality, const t3dShaderTier_t tier
-) const {
+void T3DMaterial::applyTierQualityToState( t3dShaderVariantState_t &rState,
+		const t3dTierQualityConfig_t &rQuality,
+		const t3dShaderTier_t tier ) const {
 	rState.m_textureFiltering = rQuality.m_textureFiltering;
-	rState.m_terrainSamplingMode = rQuality.m_materialSamplingQuality == MATERIAL_SAMPLING_FAST ?
-		TERRAIN_SAMPLING_SINGLE_SAMPLE : TERRAIN_SAMPLING_ADAPTIVE_WEIGHTED;
-	rState.m_terrainNormalMode = rQuality.m_terrainNormalQuality == TERRAIN_NORMAL_QUALITY_GEOMETRY ?
-		TERRAIN_NORMAL_GEOMETRY_DERIVATIVE : TERRAIN_NORMAL_DERIVED_TEXTURE;
-	rState.m_colorSamplingMode = rQuality.m_terrainColorQuality == TERRAIN_COLOR_QUALITY_EXACT ?
-		COLOR_SAMPLING_EXACT_4_TAP : COLOR_SAMPLING_HARDWARE_FILTERED;
-	rState.m_surfaceDataMode = rQuality.m_surfaceResponseQuality == SURFACE_RESPONSE_DETAILED ?
-		SURFACE_DATA_FULL : SURFACE_DATA_ALBEDO_ONLY;
+	rState.m_terrainSamplingMode = rQuality.m_materialSamplingQuality == MATERIAL_SAMPLING_FAST
+			? TERRAIN_SAMPLING_SINGLE_SAMPLE
+			: TERRAIN_SAMPLING_ADAPTIVE_WEIGHTED;
+	rState.m_terrainNormalMode = rQuality.m_terrainNormalQuality == TERRAIN_NORMAL_QUALITY_GEOMETRY
+			? TERRAIN_NORMAL_GEOMETRY_DERIVATIVE
+			: TERRAIN_NORMAL_DERIVED_TEXTURE;
+	rState.m_colorSamplingMode = rQuality.m_terrainColorQuality == TERRAIN_COLOR_QUALITY_EXACT
+			? COLOR_SAMPLING_EXACT_4_TAP
+			: COLOR_SAMPLING_HARDWARE_FILTERED;
+	rState.m_surfaceDataMode = rQuality.m_surfaceResponseQuality == SURFACE_RESPONSE_DETAILED
+			? SURFACE_DATA_FULL
+			: SURFACE_DATA_ALBEDO_ONLY;
 	rState.m_textureSurfaceMode = rQuality.m_textureSurfaceMode;
-	rState.m_terrainShadingMode = rQuality.m_lightingModel == TIER_LIGHTING_UNSHADED ? SHADING_UNSHADED :
-		( rQuality.m_lightingModel == TIER_LIGHTING_BLINN_PHONG ? SHADING_XBOX_360_BLINN_PHONG :
-			( rQuality.m_lightingModel == TIER_LIGHTING_PBR ? SHADING_BURLEY_GGX : SHADING_LAMBERT_DIFFUSE_ONLY ) );
-	rState.m_detilingMode = rQuality.m_detilingQuality == TIER_DETILING_DISABLED ?
-		DETILING_DISABLED : DETILING_DISCRETE_8;
-	// Auto material classification is a global policy in PATCH-02. Far does not
-	// consume the detailed control-map autoshader path.
+	rState.m_terrainShadingMode = rQuality.m_lightingModel == TIER_LIGHTING_UNSHADED
+			? SHADING_UNSHADED
+			: ( rQuality.m_lightingModel == TIER_LIGHTING_BLINN_PHONG
+							  ? SHADING_XBOX_360_BLINN_PHONG
+							  : ( rQuality.m_lightingModel == TIER_LIGHTING_PBR ? SHADING_BURLEY_GGX
+																				: SHADING_LAMBERT_DIFFUSE_ONLY ) );
+	rState.m_detilingMode =
+			rQuality.m_detilingQuality == TIER_DETILING_DISABLED ? DETILING_DISABLED : DETILING_DISCRETE_8;
+	// Auto-material classification is shared across quality tiers. Far rendering does
+	// not consume the detailed control-map autoshader path.
 	if ( tier == SHADER_TIER_FAR ) {
 		rState.m_bAutoShaderEnabled = false;
 	}
@@ -1828,9 +1855,8 @@ void T3DMaterial::applyTierQualityToState(
 	}
 }
 
-t3dShaderVariantState_t T3DMaterial::makeTierState(
-	const t3dShaderVariantState_t &eState, const t3dShaderTier_t tier
-) const {
+t3dShaderVariantState_t T3DMaterial::makeTierState( const t3dShaderVariantState_t &eState,
+		const t3dShaderTier_t tier ) const {
 	t3dShaderVariantState_t state = eState;
 	if ( tier == SHADER_TIER_NEAR ) {
 		applyTierQualityToState( state, m_nearQuality, tier );
@@ -1842,25 +1868,25 @@ t3dShaderVariantState_t T3DMaterial::makeTierState(
 	return state;
 }
 
-String T3DMaterial::generateShaderCode(
-	const t3dShaderVariantState_t &eState, const t3dShaderTier_t tier,
-	const bool bIncludeEditorFeatures
-) const {
+String T3DMaterial::generateShaderCode( const t3dShaderVariantState_t &eState,
+		const t3dShaderTier_t tier,
+		const bool bIncludeEditorFeatures ) const {
 	if ( !bIncludeEditorFeatures ) {
 		const bool strict_cooked_builtin = m_pTerrain && m_pTerrain->isGpuRegionCookedPagesEnabled() &&
-			!m_pTerrain->isEditorAuthoringMode() && !m_bShaderOverrideEnabled;
-		if ( m_bRuntimeShaderPackLoaded &&
-			getVariantStateSignature( eState ) == m_nRuntimeShaderPackStateSignature &&
-			tier >= SHADER_TIER_NEAR && tier < SHADER_TIER_COUNT && !m_szRuntimeShaderPackTierSource[tier].is_empty() ) {
+				!m_pTerrain->isEditorAuthoringMode() && !m_bShaderOverrideEnabled;
+		if ( m_bRuntimeShaderPackLoaded && getVariantStateSignature( eState ) == m_nRuntimeShaderPackStateSignature &&
+				tier >= SHADER_TIER_NEAR && tier < SHADER_TIER_COUNT &&
+				!m_szRuntimeShaderPackTierSource[tier].is_empty() ) {
 			return m_szRuntimeShaderPackTierSource[tier];
 		}
 		if ( strict_cooked_builtin ) {
-			ERR_PRINT_ONCE( "Terrain3D strict cooked runtime refused to regenerate built-in terrain shader source; recook terrain3d_shaders.t3dshaderpack." );
+			ERR_PRINT_ONCE( "Terrain3D strict cooked runtime refused to regenerate built-in terrain shader source; "
+							"recook terrain3d_shaders.t3dshaderpack." );
 			return String();
 		}
 	}
 	const t3dShaderVariantState_t tier_state = makeTierState( eState, tier );
-	LOG( INFO, "Generating terrain shader tier ", ( int ) ( tier ) );
+	LOG( INFO, "Generating terrain shader tier ", ( int )( tier ) );
 	Array excludes;
 	if ( tier_state.m_worldBackground != NONE ) {
 		excludes.push_back( "NONE_FUNCTIONS" );
@@ -1887,7 +1913,8 @@ String T3DMaterial::generateShaderCode(
 		excludes.push_back( "LEGACY_PBR_MATERIAL_FUNCTIONS" );
 		excludes.push_back( "LEGACY_PBR_DISPLACEMENT_FUNCTIONS" );
 		excludes.push_back( "SURFACE_PBR_DISPLACEMENT_FUNCTIONS" );
-		if ( !tier_state.m_bTessellationEnabled || tier_state.m_tessellationMaterialMode == TESSELLATION_GEOMETRY_ONLY ) {
+		if ( !tier_state.m_bTessellationEnabled ||
+				tier_state.m_tessellationMaterialMode == TESSELLATION_GEOMETRY_ONLY ) {
 			excludes.push_back( "SURFACE_DISPLACEMENT_UNIFORM" );
 		}
 	} else {
@@ -1980,7 +2007,7 @@ String T3DMaterial::generateShaderCode(
 		shader_template = "main_far";
 	}
 	String shader = prepareShaderSource(
-		m_shaderTemplates[shader_template], tier_state, excludes, tier, bIncludeEditorFeatures );
+			m_shaderTemplates[shader_template], tier_state, excludes, tier, bIncludeEditorFeatures );
 	if ( shader.is_empty() ) {
 		return String();
 	}
@@ -2013,8 +2040,8 @@ String T3DMaterial::generateShaderCode(
 			break;
 	}
 	shader = shader.replace( "render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_burley, "
-							"specular_schlick_ggx, skip_vertex_transform;",
-							render_mode );
+							 "specular_schlick_ggx, skip_vertex_transform;",
+			render_mode );
 	return shader;
 }
 
@@ -2075,13 +2102,14 @@ String T3DMaterial::generateBufferShaderCode( void ) const {
 
 String T3DMaterial::generateBufferShaderCode( const t3dShaderVariantState_t &eState ) const {
 	if ( m_bRuntimeShaderPackLoaded && getVariantStateSignature( eState ) == m_nRuntimeShaderPackStateSignature &&
-		!m_runtimeShaderPackBufferSource.is_empty() ) {
+			!m_runtimeShaderPackBufferSource.is_empty() ) {
 		return m_runtimeShaderPackBufferSource;
 	}
 	const bool strict_cooked_builtin = m_pTerrain && m_pTerrain->isGpuRegionCookedPagesEnabled() &&
-		!m_pTerrain->isEditorAuthoringMode() && !m_bBufferShaderOverrideEnabled;
+			!m_pTerrain->isEditorAuthoringMode() && !m_bBufferShaderOverrideEnabled;
 	if ( strict_cooked_builtin ) {
-		ERR_PRINT_ONCE( "Terrain3D strict cooked runtime refused to regenerate displacement shader source; recook terrain3d_shaders.t3dshaderpack." );
+		ERR_PRINT_ONCE( "Terrain3D strict cooked runtime refused to regenerate displacement shader source; recook "
+						"terrain3d_shaders.t3dshaderpack." );
 		return String();
 	}
 	LOG( INFO, "Generating default displacement buffer shader code" );
@@ -2271,7 +2299,7 @@ void T3DMaterial::disconnectShaderOverrideSignals( void ) {
 		m_connectedShaderOverride->disconnect( "changed", callback );
 	}
 	if ( m_connectedBufferShaderOverride.is_valid() &&
-		m_connectedBufferShaderOverride->is_connected( "changed", callback ) ) {
+			m_connectedBufferShaderOverride->is_connected( "changed", callback ) ) {
 		m_connectedBufferShaderOverride->disconnect( "changed", callback );
 	}
 	m_connectedShaderOverride.unref();
@@ -2287,7 +2315,7 @@ void T3DMaterial::connectShaderOverrideSignals( void ) {
 		m_connectedShaderOverride = m_shaderOverride;
 	}
 	if ( m_bBufferShaderOverrideEnabled && m_bufferShaderOverride.is_valid() && m_pTerrain &&
-		m_pTerrain->getTessellationLevel() > 0 ) {
+			m_pTerrain->getTessellationLevel() > 0 ) {
 		if ( !m_bufferShaderOverride->is_connected( "changed", callback ) ) {
 			m_bufferShaderOverride->connect( "changed", callback );
 		}
@@ -2323,8 +2351,8 @@ void T3DMaterial::updateShader( void ) {
 	String code;
 	t3dShaderValidationResult_t near_validation;
 	const Ref<Shader> previous_near_shader = m_shader;
-	const bool previous_near_ready = m_bNearShaderReady && previous_near_shader.is_valid() &&
-		previous_near_shader->get_rid().is_valid();
+	const bool previous_near_ready =
+			m_bNearShaderReady && previous_near_shader.is_valid() && previous_near_shader->get_rid().is_valid();
 	Ref<Shader> candidate_near_shader;
 
 	// Build and validate a candidate before replacing the shader currently bound
@@ -2339,8 +2367,9 @@ void T3DMaterial::updateShader( void ) {
 		code = m_shaderOverride->get_code();
 		candidate_near_shader.instantiate();
 		++m_nVariantUncachedSubmissionsTotal;
-		const String candidate_code = seeded_from_builtin ?
-			generateShaderCode( variant_state, SHADER_TIER_NEAR, IS_EDITOR ) : injectEditorCode( code );
+		const String candidate_code = seeded_from_builtin
+				? generateShaderCode( variant_state, SHADER_TIER_NEAR, IS_EDITOR )
+				: injectEditorCode( code );
 		submitShaderSource( candidate_near_shader, candidate_code );
 		near_validation = validateShaderVariant( candidate_near_shader, SHADER_TIER_NEAR );
 	} else {
@@ -2351,8 +2380,7 @@ void T3DMaterial::updateShader( void ) {
 		}
 #endif
 		const t3dShaderVariantDomain_t domain = IS_EDITOR ? SHADER_DOMAIN_EDITOR : SHADER_DOMAIN_RUNTIME;
-		candidate_near_shader = getOrCreateShaderVariant(
-			code, domain, false, SHADER_TIER_NEAR, &near_validation );
+		candidate_near_shader = getOrCreateShaderVariant( code, domain, false, SHADER_TIER_NEAR, &near_validation );
 	}
 
 	if ( candidate_near_shader.is_valid() && near_validation.m_bValid ) {
@@ -2361,13 +2389,15 @@ void T3DMaterial::updateShader( void ) {
 	} else if ( previous_near_ready ) {
 		m_shader = previous_near_shader;
 		m_bNearShaderReady = true;
-		LOG( ERROR, "Terrain Near shader candidate failed validation; retaining the last valid shader. ",
-			near_validation.m_failureSummary );
+		LOG( ERROR,
+				"Terrain Near shader candidate failed validation; retaining the last valid shader. ",
+				near_validation.m_failureSummary );
 	} else {
 		m_shader.unref();
 		m_bNearShaderReady = false;
-		LOG( ERROR, "Terrain Near shader candidate failed validation and no previously valid shader exists. ",
-			near_validation.m_failureSummary );
+		LOG( ERROR,
+				"Terrain Near shader candidate failed validation and no previously valid shader exists. ",
+				near_validation.m_failureSummary );
 	}
 
 	m_szTierShaders[SHADER_TIER_NEAR] = m_shader;
@@ -2375,8 +2405,12 @@ void T3DMaterial::updateShader( void ) {
 	if ( m_bNearShaderReady ) {
 		RS->material_set_shader( m_hMaterial, getShaderRid() );
 	}
-	recordShaderTierValidation( SHADER_TIER_NEAR, code, near_validation,
-		m_bNearShaderReady ? getShaderRid().get_id() : 0u, previous_near_ready && !near_validation.m_bValid, false );
+	recordShaderTierValidation( SHADER_TIER_NEAR,
+			code,
+			near_validation,
+			m_bNearShaderReady ? getShaderRid().get_id() : 0u,
+			previous_near_ready && !near_validation.m_bValid,
+			false );
 	LOG( DEBUG, "Material rid: ", m_hMaterial, ", shader rid: ", getShaderRid() );
 
 	if ( !m_bNearShaderReady ) {
@@ -2394,7 +2428,7 @@ void T3DMaterial::updateShader( void ) {
 
 	const bool bTieringActive = !m_bShaderOverrideEnabled && m_pTerrain->isRuntimeShaderTieringActive();
 	for ( int tier_value = SHADER_TIER_MIDDLE; tier_value < SHADER_TIER_COUNT; ++tier_value ) {
-		const t3dShaderTier_t tier = ( t3dShaderTier_t ) ( tier_value );
+		const t3dShaderTier_t tier = ( t3dShaderTier_t )( tier_value );
 		if ( !m_hszTierMaterials[tier].is_valid() ) {
 			m_hszTierMaterials[tier] = RS->material_create();
 		}
@@ -2405,7 +2439,8 @@ void T3DMaterial::updateShader( void ) {
 			String tier_code = finalizeRuntimeShaderCode( generateShaderCode( variant_state, tier ) );
 #ifdef DEBUG_ENABLED
 			if ( m_nShaderRegressionInvalidTier == tier_value ) {
-				tier_code += "\nvoid patch01_forced_invalid_compact_shader() { float x = PATCH01_UNDEFINED_IDENTIFIER; }\n";
+				tier_code +=
+						"\nvoid patch01_forced_invalid_compact_shader() { float x = PATCH01_UNDEFINED_IDENTIFIER; }\n";
 			}
 #endif
 			t3dShaderValidationResult_t validation;
@@ -2428,22 +2463,26 @@ void T3DMaterial::updateShader( void ) {
 
 			if ( pCompactShader.is_valid() && validation.m_bValid ) {
 				m_szTierShaders[tier] = pCompactShader;
-				recordShaderTierValidation( tier, tier_code, validation, pCompactShader->get_rid().get_id(), false, true );
+				recordShaderTierValidation(
+						tier, tier_code, validation, pCompactShader->get_rid().get_id(), false, true );
 			} else {
 				if ( validation.m_failureSummary.is_empty() ) {
 					validation.m_failureSummary = "Compact shader variant was unavailable before validation";
 				}
 				m_szTierShaders[tier] = m_shader;
 				recordShaderTierValidation( tier, tier_code, validation, getShaderRid().get_id(), true, true );
-				LOG( ERROR, "Compact terrain shader tier ", tier_value, " failed validation; using Near fallback. ",
-					validation.m_failureSummary );
+				LOG( ERROR,
+						"Compact terrain shader tier ",
+						tier_value,
+						" failed validation; using Near fallback. ",
+						validation.m_failureSummary );
 			}
 		} else {
 			m_szTierShaders[tier] = m_shader;
 			recordShaderTierValidation( tier, code, near_validation, getShaderRid().get_id(), false, false );
 		}
-		RS->material_set_shader( m_hszTierMaterials[tier], m_szTierShaders[tier].is_valid() ?
-			m_szTierShaders[tier]->get_rid() : RID() );
+		RS->material_set_shader(
+				m_hszTierMaterials[tier], m_szTierShaders[tier].is_valid() ? m_szTierShaders[tier]->get_rid() : RID() );
 	}
 
 	// Displacement Buffer
@@ -2496,25 +2535,25 @@ void T3DMaterial::updateShader( void ) {
 		}
 	}
 
-	// Control-map rotation is encoded to 16 s_nFixed angles. Upload the exact
+	// Control-map rotation is encoded to 16 fixed angles. Upload the exact
 	// sine/cosine pairs once per shader rebuild instead of evaluating two
 	// transcendental functions for every blended material corner.
 	PackedVector2Array control_rotations;
 	control_rotations.resize( 16 );
 	for ( int i = 0; i < 16; i++ ) {
-		const real_t fAngle = ( real_t ) ( i ) * -0.392699081698724;
+		const real_t fAngle = ( real_t )( i ) * -0.392699081698724;
 		control_rotations.set( i, Vector2( Math::cos( fAngle ), Math::sin( fAngle ) ) );
 	}
 	setRuntimeMaterialParam( "_control_rotation_cs", control_rotations );
 	RS->material_set_param( m_hBufferMaterial, "_control_rotation_cs", control_rotations );
 
-	// Sixteen s_nFixed detiling rotations back the 4/8/16-way modes. Keep this as a
+	// Sixteen fixed detiling rotations back the 4/8/16-way modes. Keep this as a
 	// uniform table rather than a local shader array: older/compatibility Godot
 	// shader parsers are inconsistent about local constant-array constructors.
 	PackedVector2Array detile_rotations;
 	detile_rotations.resize( 16 );
 	for ( int i = 0; i < 16; i++ ) {
-		const real_t fAngle = ( real_t ) ( i ) * Math_TAU / 16.0;
+		const real_t fAngle = ( real_t )( i )*Math_TAU / 16.0;
 		detile_rotations.set( i, Vector2( Math::cos( fAngle ), Math::sin( fAngle ) ) );
 	}
 	setRuntimeMaterialParam( "_detile_rotation_cs", detile_rotations );
@@ -2524,7 +2563,7 @@ void T3DMaterial::updateShader( void ) {
 	// for every terrain fragment while preserving the public angle parameter.
 	if ( m_activeParams.has( "noise1_angle" ) ) {
 		const Variant angle_value = m_shaderParams.get( StringName( "noise1_angle" ),
-			m_shaderParamDefaults.get( StringName( "noise1_angle" ), ( real_t ) ( 0.0f ) ) );
+				m_shaderParamDefaults.get( StringName( "noise1_angle" ), ( real_t )( 0.0f ) ) );
 		const real_t fAngle = angle_value;
 		const Vector2 rotation( Math::cos( fAngle ), Math::sin( fAngle ) );
 		setRuntimeMaterialParam( "_noise1_rotation", rotation );
@@ -2534,15 +2573,16 @@ void T3DMaterial::updateShader( void ) {
 	// Set specific shader parameters
 	setRuntimeMaterialParam( "_background_mode", m_worldBackground );
 	RS->material_set_param( m_hBufferMaterial, "_background_mode", m_worldBackground );
-	if ( m_worldBackground == NOISE && ( m_worldNoiseShaderMode == WORLD_NOISE_DYNAMIC ||
-									   m_worldNoiseShaderMode == WORLD_NOISE_CACHED_VERTEX_NORMALS ||
-									   m_worldNoiseShaderMode == WORLD_NOISE_CACHED_FRAGMENT_NORMALS ) ) {
+	if ( m_worldBackground == NOISE &&
+			( m_worldNoiseShaderMode == WORLD_NOISE_DYNAMIC ||
+					m_worldNoiseShaderMode == WORLD_NOISE_CACHED_VERTEX_NORMALS ||
+					m_worldNoiseShaderMode == WORLD_NOISE_CACHED_FRAGMENT_NORMALS ) ) {
 		ensureWorldNoiseCache();
 	}
 
 	// If no noise texture, generate one
 	if ( m_activeParams.has( "noise_texture" ) &&
-		m_shaderParams.get( StringName( "noise_texture" ), Variant() ).get_type() == Variant::NIL ) {
+			m_shaderParams.get( StringName( "noise_texture" ), Variant() ).get_type() == Variant::NIL ) {
 		LOG( INFO, "Generating default noise_texture for shader" );
 		Ref<FastNoiseLite> pFnoise;
 		pFnoise.instantiate();
@@ -2596,43 +2636,39 @@ void T3DMaterial::invalidateRegionPageTables( void ) {
 	m_nRegionPageTableOwnerGeneration = 0u;
 }
 
-bool T3DMaterial::updateRegionMapTexture(
-	const PackedInt32Array &rRegionMap,
-	const int nRegionMapSize
-) {
+bool T3DMaterial::updateRegionMapTexture( const PackedInt32Array &rRegionMap, const int nRegionMapSize ) {
 	if ( nRegionMapSize <= 0 || nRegionMapSize > s_nActiveMaxRegionMapSize ||
-		rRegionMap.size() != nRegionMapSize * nRegionMapSize ) {
+			rRegionMap.size() != nRegionMapSize * nRegionMapSize ) {
 		return false;
 	}
 	uint64_t hash = 1469598103934665603ULL;
-	t3dMaterialMixShaderSignature( hash, ( uint64_t ) ( nRegionMapSize ) );
+	t3dMaterialMixShaderSignature( hash, ( uint64_t )( nRegionMapSize ) );
 	for ( int index = 0; index < rRegionMap.size(); ++index ) {
-		t3dMaterialMixShaderSignature( hash, ( uint64_t ) ( ( uint32_t ) ( rRegionMap[index] ) ) );
+		t3dMaterialMixShaderSignature( hash, ( uint64_t )( ( uint32_t )( rRegionMap[index] ) ) );
 	}
 	if ( m_generatedRegionMap.getRid().is_valid() && m_nRegionMapTextureHash == hash &&
-		m_nRegionMapTextureSize == nRegionMapSize ) {
+			m_nRegionMapTextureSize == nRegionMapSize ) {
 		return true;
 	}
 
 	PackedByteArray bytes;
-	bytes.resize( rRegionMap.size() * ( int ) ( sizeof( uint16_t ) ) );
+	bytes.resize( rRegionMap.size() * ( int )( sizeof( uint16_t ) ) );
 	uint8_t *const pWrite = bytes.ptrw();
 	if ( !pWrite ) {
 		return false;
 	}
 	for ( int index = 0; index < rRegionMap.size(); ++index ) {
-		const uint16_t value = ( uint16_t ) ( CLAMP( rRegionMap[index], 0, ( int ) ( UINT16_MAX ) ) );
-		std::memcpy( pWrite + ( size_t ) ( index ) * sizeof( uint16_t ), &value, sizeof( uint16_t ) );
+		const uint16_t value = ( uint16_t )( CLAMP( rRegionMap[index], 0, ( int )( UINT16_MAX ) ) );
+		std::memcpy( pWrite + ( size_t )( index ) * sizeof( uint16_t ), &value, sizeof( uint16_t ) );
 	}
-	const Ref<Image> pImage = Image::create_from_data( nRegionMapSize, nRegionMapSize, false,
-		Image::FORMAT_R16, bytes );
+	const Ref<Image> pImage =
+			Image::create_from_data( nRegionMapSize, nRegionMapSize, false, Image::FORMAT_R16, bytes );
 	if ( pImage.is_null() || pImage->is_empty() ) {
 		return false;
 	}
-	const bool bSameSizeTexture = m_generatedRegionMap.getRid().is_valid() &&
-		m_nRegionMapTextureSize == nRegionMapSize;
-	bool bUploaded = bSameSizeTexture ? m_generatedRegionMap.update2d( pImage ) :
-		m_generatedRegionMap.create( pImage ).is_valid();
+	const bool bSameSizeTexture = m_generatedRegionMap.getRid().is_valid() && m_nRegionMapTextureSize == nRegionMapSize;
+	bool bUploaded = bSameSizeTexture ? m_generatedRegionMap.update2d( pImage )
+									  : m_generatedRegionMap.create( pImage ).is_valid();
 	if ( !bUploaded && bSameSizeTexture ) {
 		// A World3D/owner transition can leave a renderer-side RID unusable even
 		// though the cached wrapper still describes the same dimensions. Discard
@@ -2651,22 +2687,18 @@ bool T3DMaterial::updateRegionMapTexture(
 	return true;
 }
 
-bool T3DMaterial::updateLogicalRegionMapTexture(
-	const PackedInt32Array &rRegionMap,
-	const int nRegionMapSize
-) {
+bool T3DMaterial::updateLogicalRegionMapTexture( const PackedInt32Array &rRegionMap, const int nRegionMapSize ) {
 	if ( nRegionMapSize <= 0 || nRegionMapSize > s_nActiveMaxRegionMapSize ||
-		rRegionMap.size() != nRegionMapSize * nRegionMapSize ) {
+			rRegionMap.size() != nRegionMapSize * nRegionMapSize ) {
 		return false;
 	}
 	uint64_t hash = 1469598103934665603ULL;
-	t3dMaterialMixShaderSignature( hash, ( uint64_t ) ( nRegionMapSize ) );
+	t3dMaterialMixShaderSignature( hash, ( uint64_t )( nRegionMapSize ) );
 	for ( int index = 0; index < rRegionMap.size(); ++index ) {
-		t3dMaterialMixShaderSignature( hash, ( uint64_t ) ( ( uint32_t ) ( rRegionMap[index] ) ) );
+		t3dMaterialMixShaderSignature( hash, ( uint64_t )( ( uint32_t )( rRegionMap[index] ) ) );
 	}
-	if ( m_generatedLogicalRegionMap.getRid().is_valid() &&
-		m_nLogicalRegionMapTextureHash == hash &&
-		m_nLogicalRegionMapTextureSize == nRegionMapSize ) {
+	if ( m_generatedLogicalRegionMap.getRid().is_valid() && m_nLogicalRegionMapTextureHash == hash &&
+			m_nLogicalRegionMapTextureSize == nRegionMapSize ) {
 		return true;
 	}
 	PackedByteArray bytes;
@@ -2678,15 +2710,14 @@ bool T3DMaterial::updateLogicalRegionMapTexture(
 	for ( int index = 0; index < rRegionMap.size(); ++index ) {
 		pWrite[index] = rRegionMap[index] != 0 ? 255u : 0u;
 	}
-	const Ref<Image> pImage = Image::create_from_data( nRegionMapSize, nRegionMapSize, false,
-		Image::FORMAT_R8, bytes );
+	const Ref<Image> pImage = Image::create_from_data( nRegionMapSize, nRegionMapSize, false, Image::FORMAT_R8, bytes );
 	if ( pImage.is_null() || pImage->is_empty() ) {
 		return false;
 	}
-	const bool bSameSizeTexture = m_generatedLogicalRegionMap.getRid().is_valid() &&
-		m_nLogicalRegionMapTextureSize == nRegionMapSize;
-	bool bUploaded = bSameSizeTexture ? m_generatedLogicalRegionMap.update2d( pImage ) :
-		m_generatedLogicalRegionMap.create( pImage ).is_valid();
+	const bool bSameSizeTexture =
+			m_generatedLogicalRegionMap.getRid().is_valid() && m_nLogicalRegionMapTextureSize == nRegionMapSize;
+	bool bUploaded = bSameSizeTexture ? m_generatedLogicalRegionMap.update2d( pImage )
+									  : m_generatedLogicalRegionMap.create( pImage ).is_valid();
 	if ( !bUploaded && bSameSizeTexture ) {
 		m_generatedLogicalRegionMap.clear();
 		bUploaded = m_generatedLogicalRegionMap.create( pImage ).is_valid();
@@ -2721,8 +2752,8 @@ t3dPageTableBuildResult_t T3DMaterial::prepareRegionPageTables( void ) {
 	const int region_map_size = pData->getRegionMapSizeInternal();
 	const PackedInt32Array logical_region_map = pData->getLogicalRegionMap();
 	if ( region_map_size <= 0 || region_map_size > s_nActiveMaxRegionMapSize ||
-		region_map.size() != region_map_size * region_map_size ||
-		logical_region_map.size() != region_map_size * region_map_size ) {
+			region_map.size() != region_map_size * region_map_size ||
+			logical_region_map.size() != region_map_size * region_map_size ) {
 		return PAGE_TABLE_INVALID_DIMENSIONS;
 	}
 	if ( !updateRegionMapTexture( region_map, region_map_size ) ) {
@@ -2736,8 +2767,7 @@ t3dPageTableBuildResult_t T3DMaterial::prepareRegionPageTables( void ) {
 }
 
 void T3DMaterial::bindRegionPageTableUniforms( const RID &rMaterial ) {
-	if ( !rMaterial.is_valid() || !m_pTerrain || !m_pTerrain->getData() ||
-		!isRegionPageTableValid() ) {
+	if ( !rMaterial.is_valid() || !m_pTerrain || !m_pTerrain->getData() || !isRegionPageTableValid() ) {
 		return;
 	}
 	T3DData *const pData = m_pTerrain->getData();
@@ -2745,7 +2775,7 @@ void T3DMaterial::bindRegionPageTableUniforms( const RID &rMaterial ) {
 	RS->material_set_param( rMaterial, "_region_map_size", m_nRegionMapTextureSize );
 	RS->material_set_param( rMaterial, "_logical_region_map_texture", m_generatedLogicalRegionMap.getRid() );
 	const bool bNeedsRegionLocations = ( rMaterial == m_hMaterial && m_bShaderOverrideEnabled ) ||
-		( rMaterial == m_hBufferMaterial && m_bBufferShaderOverrideEnabled );
+			( rMaterial == m_hBufferMaterial && m_bBufferShaderOverrideEnabled );
 	if ( bNeedsRegionLocations ) {
 		RS->material_set_param( rMaterial, "_region_locations", pData->getRenderRegionSlots() );
 	}
@@ -2758,10 +2788,11 @@ void T3DMaterial::updateFarAtlasUniforms( const RID &rMaterial ) {
 	T3DData *const pData = m_pTerrain->getData();
 	const RID far_height_rid = pData->getFarHeightMapRid();
 	const RID far_color_rid = pData->getFarColorMapRid();
-	RS->material_set_param( rMaterial, "_far_height_map",
-		far_height_rid.is_valid() ? far_height_rid : m_generatedFarHeightDummy.getRid() );
-	RS->material_set_param( rMaterial, "_far_color_map",
-		far_color_rid.is_valid() ? far_color_rid : m_generatedFarColorDummy.getRid() );
+	RS->material_set_param( rMaterial,
+			"_far_height_map",
+			far_height_rid.is_valid() ? far_height_rid : m_generatedFarHeightDummy.getRid() );
+	RS->material_set_param(
+			rMaterial, "_far_color_map", far_color_rid.is_valid() ? far_color_rid : m_generatedFarColorDummy.getRid() );
 }
 
 void T3DMaterial::ensureShadowMaterials( void ) {
@@ -2770,8 +2801,8 @@ void T3DMaterial::ensureShadowMaterials( void ) {
 			return;
 		}
 		const t3dShaderVariantState_t state = captureVariantState();
-		const String code = prepareShaderSource(
-			m_shaderTemplates["main_shadow"], state, Array(), SHADER_TIER_FAR, false );
+		const String code =
+				prepareShaderSource( m_shaderTemplates["main_shadow"], state, Array(), SHADER_TIER_FAR, false );
 		if ( code.is_empty() ) {
 			return;
 		}
@@ -2801,25 +2832,26 @@ void T3DMaterial::updateShadowUniforms( void ) {
 		if ( !material.is_valid() ) {
 			continue;
 		}
-		RS->material_set_param( material, "_region_map_texture", isRegionPageTableValid() ?
-			m_generatedRegionMap.getRid() : m_generatedDummy.getRid() );
-		RS->material_set_param( material, "_middle_height_region_map_texture", middle_map.is_valid() ?
-			middle_map : m_generatedDummy.getRid() );
-		RS->material_set_param( material, "_height_maps", detail_height.is_valid() ?
-			detail_height : m_generatedDummy.getRid() );
-		RS->material_set_param( material, "_middle_height_maps", middle_height.is_valid() ?
-			middle_height : m_generatedDummy.getRid() );
-		RS->material_set_param( material, "_far_height_map", far_height.is_valid() ?
-			far_height : m_generatedFarHeightDummy.getRid() );
+		RS->material_set_param( material,
+				"_region_map_texture",
+				isRegionPageTableValid() ? m_generatedRegionMap.getRid() : m_generatedDummy.getRid() );
+		RS->material_set_param( material,
+				"_middle_height_region_map_texture",
+				middle_map.is_valid() ? middle_map : m_generatedDummy.getRid() );
+		RS->material_set_param(
+				material, "_height_maps", detail_height.is_valid() ? detail_height : m_generatedDummy.getRid() );
+		RS->material_set_param(
+				material, "_middle_height_maps", middle_height.is_valid() ? middle_height : m_generatedDummy.getRid() );
+		RS->material_set_param(
+				material, "_far_height_map", far_height.is_valid() ? far_height : m_generatedFarHeightDummy.getRid() );
 		RS->material_set_param( material, "_region_map_size", MAX( 1, m_nRegionMapTextureSize ) );
-		RS->material_set_param( material, "_region_size", ( real_t ) ( m_pTerrain->getRegionSize() ) );
-		RS->material_set_param( material, "_region_texel_size", 1.0f / ( real_t ) ( m_pTerrain->getRegionSize() ) );
-		RS->material_set_param( material, "_height_decode",
-			Vector2( s_fRegionHeightMin, s_fRegionHeightRange ) );
+		RS->material_set_param( material, "_region_size", ( real_t )( m_pTerrain->getRegionSize() ) );
+		RS->material_set_param( material, "_region_texel_size", 1.0f / ( real_t )( m_pTerrain->getRegionSize() ) );
+		RS->material_set_param( material, "_height_decode", Vector2( s_fRegionHeightMin, s_fRegionHeightRange ) );
 		RS->material_set_param( material, "_vertex_spacing", m_pTerrain->getVertexSpacing() );
 		RS->material_set_param( material, "_vertex_density", 1.0f / m_pTerrain->getVertexSpacing() );
-		RS->material_set_param( material, "_mesh_size", ( real_t ) ( m_pTerrain->getMeshSize() ) );
-		RS->material_set_param( material, "_subdiv", ( real_t ) ( 1 << m_pTerrain->getTessellationLevel() ) );
+		RS->material_set_param( material, "_mesh_size", ( real_t )( m_pTerrain->getMeshSize() ) );
+		RS->material_set_param( material, "_subdiv", ( real_t )( 1 << m_pTerrain->getTessellationLevel() ) );
 	}
 }
 
@@ -2852,15 +2884,15 @@ void T3DMaterial::updateUniforms( const RID &rMaterial, const uint32_t nFlags ) 
 		// optimized default shaders derive world texel positions directly.
 	}
 
-	const real_t fRegionSize = ( real_t ) ( m_pTerrain->getRegionSize() );
-	LOG( EXTREME, "t3dSetting_t region size in material: ", fRegionSize );
+	const real_t fRegionSize = ( real_t )( m_pTerrain->getRegionSize() );
+	LOG( EXTREME, "Setting region size in material: ", fRegionSize );
 	RS->material_set_param( rMaterial, "_region_size", fRegionSize );
 	RS->material_set_param( rMaterial, "_region_texel_size", 1.0f / fRegionSize );
 	const T3DInstancer *pInstancer = m_pTerrain->getInstancer();
-	RS->material_set_param( rMaterial, "_instancer_cell_size",
-		pInstancer ? ( real_t ) ( pInstancer->getCellSize() ) : ( real_t ) ( s_nInstanceDefaultCellSize ) );
-	RS->material_set_param( rMaterial, "_height_decode",
-		Vector2( s_fRegionHeightMin, s_fRegionHeightRange ) );
+	RS->material_set_param( rMaterial,
+			"_instancer_cell_size",
+			pInstancer ? ( real_t )( pInstancer->getCellSize() ) : ( real_t )( s_nInstanceDefaultCellSize ) );
+	RS->material_set_param( rMaterial, "_height_decode", Vector2( s_fRegionHeightMin, s_fRegionHeightRange ) );
 
 	if ( nFlags & REGION_ARRAYS ) {
 		if ( pData->getRegionCount() > 0 ) {
@@ -2886,14 +2918,14 @@ void T3DMaterial::updateUniforms( const RID &rMaterial, const uint32_t nFlags ) 
 	}
 
 	const real_t fSpacing = m_pTerrain->getVertexSpacing();
-	LOG( EXTREME, "t3dSetting_t vertex spacing in material: ", fSpacing );
+	LOG( EXTREME, "Setting vertex spacing in material: ", fSpacing );
 	RS->material_set_param( rMaterial, "_vertex_spacing", fSpacing );
 	RS->material_set_param( rMaterial, "_vertex_density", 1.0f / fSpacing );
 
-	const real_t fMeshSize = ( real_t ) ( m_pTerrain->getMeshSize() );
+	const real_t fMeshSize = ( real_t )( m_pTerrain->getMeshSize() );
 	RS->material_set_param( rMaterial, "_mesh_size", fMeshSize );
 
-	const real_t fTessellationLevel = ( real_t ) ( m_pTerrain->getTessellationLevel() );
+	const real_t fTessellationLevel = ( real_t )( m_pTerrain->getTessellationLevel() );
 	const real_t fSubdiv = pow( 2.f, fTessellationLevel );
 	RS->material_set_param( rMaterial, "_subdiv", fSubdiv );
 	RS->material_set_param( rMaterial, "_tessellation_level", fTessellationLevel );
@@ -2909,45 +2941,53 @@ void T3DMaterial::updateUniforms( const RID &rMaterial, const uint32_t nFlags ) 
 	}
 	if ( pTierQuality ) {
 		RS->material_set_param( rMaterial, "_tier_material_lod_bias", pTierQuality->m_fMaterialLodBias );
-		RS->material_set_param( rMaterial, "_tier_authored_color_contribution", pTierQuality->m_fAuthoredColorContribution );
+		RS->material_set_param(
+				rMaterial, "_tier_authored_color_contribution", pTierQuality->m_fAuthoredColorContribution );
 		RS->material_set_param( rMaterial, "_tier_wetness_contribution", pTierQuality->m_fWetnessContribution );
 	}
 
 	Ref<T3DAssets> pAssetList = m_pTerrain->getAssets();
 	LOG( INFO, "Updating texture arrays in shader" );
-	const bool bCompactTier = rMaterial == m_hszTierMaterials[SHADER_TIER_MIDDLE] ||
-		rMaterial == m_hszTierMaterials[SHADER_TIER_FAR];
+	const bool bCompactTier =
+			rMaterial == m_hszTierMaterials[SHADER_TIER_MIDDLE] || rMaterial == m_hszTierMaterials[SHADER_TIER_FAR];
 	const bool bAssetsReady = pAssetList.is_valid() && pAssetList->isInitialized();
 	if ( rMaterial == m_hMaterial ) {
-		int color_side = MAX( 1, m_pTerrain->getRegionSize() / MAX( 1, m_pTerrain->getGpuRegionColorResolutionDivisor() ) );
+		int color_side =
+				MAX( 1, m_pTerrain->getRegionSize() / MAX( 1, m_pTerrain->getGpuRegionColorResolutionDivisor() ) );
 		int color_max_lod = 0;
 		while ( color_side > 1 ) {
 			color_side >>= 1;
 			++color_max_lod;
 		}
-		RS->material_set_param( rMaterial, "_region_color_max_lod", ( real_t ) ( color_max_lod ) );
+		RS->material_set_param( rMaterial, "_region_color_max_lod", ( real_t )( color_max_lod ) );
 	}
 	if ( rMaterial == m_hMaterial || rMaterial == m_hszTierMaterials[SHADER_TIER_MIDDLE] ) {
-		RS->material_set_param( rMaterial, "_material_max_lod",
-			bAssetsReady ? ( real_t ) ( pAssetList->getAlbedoArrayMaxLod() ) : ( real_t ) ( 0.0 ) );
+		RS->material_set_param( rMaterial,
+				"_material_max_lod",
+				bAssetsReady ? ( real_t )( pAssetList->getAlbedoArrayMaxLod() ) : ( real_t )( 0.0 ) );
 	}
 	if ( bCompactTier ) {
-		const int texture_color_count = bAssetsReady ?
-			MIN( pAssetList->getTextureColors().size(), s_nMaxTextureAssets ) : 0;
+		const int texture_color_count =
+				bAssetsReady ? MIN( pAssetList->getTextureColors().size(), s_nMaxTextureAssets ) : 0;
 		RS->material_set_param( rMaterial, "_texture_color_count", texture_color_count );
-		RS->material_set_param( rMaterial, "_texture_color_array",
-			t3dMaterialMakeTextureColorUniforms( bAssetsReady ? pAssetList->getTextureColors() : PackedColorArray() ) );
+		RS->material_set_param( rMaterial,
+				"_texture_color_array",
+				t3dMaterialMakeTextureColorUniforms(
+						bAssetsReady ? pAssetList->getTextureColors() : PackedColorArray() ) );
 		if ( rMaterial == m_hszTierMaterials[SHADER_TIER_FAR] ) {
-			RS->material_set_param( rMaterial, "_far_material_max_lod",
-				bAssetsReady ? ( real_t ) ( pAssetList->getFarAlbedoArrayMaxLod() ) : ( real_t ) ( 0.0 ) );
-			RS->material_set_param( rMaterial, "_far_albedo_layer_count",
-				bAssetsReady ? MAX( pAssetList->getFarAlbedoArraySize(), 1 ) : 1 );
-			RS->material_set_param( rMaterial, "_far_albedo_array",
-				bAssetsReady && pAssetList->getFarAlbedoArrayRid().is_valid() ?
-					pAssetList->getFarAlbedoArrayRid() : m_generatedDummy.getRid() );
+			RS->material_set_param( rMaterial,
+					"_far_material_max_lod",
+					bAssetsReady ? ( real_t )( pAssetList->getFarAlbedoArrayMaxLod() ) : ( real_t )( 0.0 ) );
+			RS->material_set_param( rMaterial,
+					"_far_albedo_layer_count",
+					bAssetsReady ? MAX( pAssetList->getFarAlbedoArraySize(), 1 ) : 1 );
+			RS->material_set_param( rMaterial,
+					"_far_albedo_array",
+					bAssetsReady && pAssetList->getFarAlbedoArrayRid().is_valid() ? pAssetList->getFarAlbedoArrayRid()
+																				  : m_generatedDummy.getRid() );
 			const int nFarDivisor = m_pTerrain->getGpuFarQualityDivisor();
-			const real_t fFarQualityLodOffset = nFarDivisor >= 8 ? 3.0f :
-				( nFarDivisor >= 4 ? 2.0f : ( nFarDivisor >= 2 ? 1.0f : 0.0f ) );
+			const real_t fFarQualityLodOffset =
+					nFarDivisor >= 8 ? 3.0f : ( nFarDivisor >= 4 ? 2.0f : ( nFarDivisor >= 2 ? 1.0f : 0.0f ) );
 			RS->material_set_param( rMaterial, "_far_quality_lod_offset", fFarQualityLodOffset );
 		}
 	}
@@ -2967,13 +3007,14 @@ void T3DMaterial::updateUniforms( const RID &rMaterial, const uint32_t nFlags ) 
 				PackedColorArray fallback_averages;
 				fallback_averages.resize( s_nMaxTextureAssets );
 				for ( int index = 0; index < s_nMaxTextureAssets; ++index ) {
-					fallback_averages.set( index, COLOR_WHITE );
+					fallback_averages.set( index, s_colorWhite );
 				}
 				RS->material_set_param( rMaterial, "_runtime_material_average_albedo", fallback_averages );
 				RS->material_set_param( rMaterial, "_texture_array_albedo", m_generatedDummy.getRid() );
 				RS->material_set_param( rMaterial, "_texture_array_surface", m_generatedSurfaceDummy.getRid() );
 				RS->material_set_param( rMaterial, "_texture_array_normal", m_generatedDummy.getRid() );
-				RS->material_set_param( rMaterial, "_texture_array_displacement", m_generatedDisplacementDummy.getRid() );
+				RS->material_set_param(
+						rMaterial, "_texture_array_displacement", m_generatedDisplacementDummy.getRid() );
 			}
 			if ( !m_bDebugViewCheckered ) {
 				setShowCheckered( true );
@@ -2986,27 +3027,29 @@ void T3DMaterial::updateUniforms( const RID &rMaterial, const uint32_t nFlags ) 
 		const bool bSurfacePacked = pAssetList->usesPackedPbr();
 		const bool bFarTier = rMaterial == m_hszTierMaterials[SHADER_TIER_FAR];
 		if ( !bFarTier ) {
-			RS->material_set_param( rMaterial, "_texture_array_layer_count",
-				MAX( pAssetList->getTextureCount(), 1 ) );
+			RS->material_set_param( rMaterial, "_texture_array_layer_count", MAX( pAssetList->getTextureCount(), 1 ) );
 			RS->material_set_param( rMaterial, "_texture_layer_map", pAssetList->getTextureLayerMap() );
-			RS->material_set_param( rMaterial, "_runtime_material_streaming_active", pAssetList->isRuntimeMaterialCacheActive() );
-			RS->material_set_param( rMaterial, "_runtime_material_average_albedo", pAssetList->getRuntimeMaterialAverageAlbedo() );
+			RS->material_set_param(
+					rMaterial, "_runtime_material_streaming_active", pAssetList->isRuntimeMaterialCacheActive() );
+			RS->material_set_param(
+					rMaterial, "_runtime_material_average_albedo", pAssetList->getRuntimeMaterialAverageAlbedo() );
 		}
 		if ( pAssetList->getGeneratedArraySize() > 0 ) {
 			if ( rMaterial == m_hszTierMaterials[SHADER_TIER_FAR] ) {
-				RS->material_set_param( rMaterial, "_far_albedo_layer_count",
-					MAX( pAssetList->getFarAlbedoArraySize(), 1 ) );
-				RS->material_set_param( rMaterial, "_far_albedo_array",
-					pAssetList->getFarAlbedoArrayRid().is_valid() ?
-						pAssetList->getFarAlbedoArrayRid() : m_generatedDummy.getRid() );
+				RS->material_set_param(
+						rMaterial, "_far_albedo_layer_count", MAX( pAssetList->getFarAlbedoArraySize(), 1 ) );
+				RS->material_set_param( rMaterial,
+						"_far_albedo_array",
+						pAssetList->getFarAlbedoArrayRid().is_valid() ? pAssetList->getFarAlbedoArrayRid()
+																	  : m_generatedDummy.getRid() );
 			} else {
 				RS->material_set_param( rMaterial, "_texture_array_albedo", pAssetList->getAlbedoArrayRid() );
 			}
 			if ( rMaterial != m_hszTierMaterials[SHADER_TIER_FAR] && bSurfacePacked ) {
 				RS->material_set_param( rMaterial, "_texture_array_surface", pAssetList->getSurfaceArrayRid() );
 				if ( m_pTerrain->getTessellationLevel() > 0 ) {
-					RS->material_set_param( rMaterial, "_texture_array_displacement",
-										   pAssetList->getDisplacementArrayRid() );
+					RS->material_set_param(
+							rMaterial, "_texture_array_displacement", pAssetList->getDisplacementArrayRid() );
 				}
 			} else if ( rMaterial != m_hszTierMaterials[SHADER_TIER_FAR] ) {
 				RS->material_set_param( rMaterial, "_texture_array_normal", pAssetList->getNormalArrayRid() );
@@ -3024,8 +3067,8 @@ void T3DMaterial::updateUniforms( const RID &rMaterial, const uint32_t nFlags ) 
 			if ( rMaterial != m_hszTierMaterials[SHADER_TIER_FAR] && bSurfacePacked ) {
 				RS->material_set_param( rMaterial, "_texture_array_surface", m_generatedSurfaceDummy.getRid() );
 				if ( m_pTerrain->getTessellationLevel() > 0 ) {
-					RS->material_set_param( rMaterial, "_texture_array_displacement",
-										   m_generatedDisplacementDummy.getRid() );
+					RS->material_set_param(
+							rMaterial, "_texture_array_displacement", m_generatedDisplacementDummy.getRid() );
 				}
 			} else if ( rMaterial != m_hszTierMaterials[SHADER_TIER_FAR] ) {
 				RS->material_set_param( rMaterial, "_texture_array_normal", m_generatedDummy.getRid() );
@@ -3037,11 +3080,13 @@ void T3DMaterial::updateUniforms( const RID &rMaterial, const uint32_t nFlags ) 
 			}
 		}
 
-		RS->material_set_param( rMaterial, "_texture_color_array",
-			t3dMaterialMakeTextureColorUniforms( pAssetList->getTextureColors() ) );
+		RS->material_set_param( rMaterial,
+				"_texture_color_array",
+				t3dMaterialMakeTextureColorUniforms( pAssetList->getTextureColors() ) );
 		if ( bCompactTier ) {
-			RS->material_set_param( rMaterial, "_texture_color_count",
-				MIN( pAssetList->getTextureColors().size(), s_nMaxTextureAssets ) );
+			RS->material_set_param( rMaterial,
+					"_texture_color_count",
+					MIN( pAssetList->getTextureColors().size(), s_nMaxTextureAssets ) );
 		}
 		RS->material_set_param( rMaterial, "_texture_uv_scale_array", pAssetList->getTextureUvScales() );
 		if ( rMaterial != m_hszTierMaterials[SHADER_TIER_FAR] ) {
@@ -3059,12 +3104,11 @@ void T3DMaterial::updateUniforms( const RID &rMaterial, const uint32_t nFlags ) 
 void T3DMaterial::setShaderParameters( const Dictionary &rDict ) {
 	SET_IF_DIFF( m_shaderParams, rDict );
 	m_bPersistenceDirty = true;
-	LOG( INFO, "t3dSetting_t shader params dictionary: ", rDict.size() );
+	LOG( INFO, "Setting shader params dictionary: ", rDict.size() );
 }
 
-///////////////////////////
-// Public Functions
-///////////////////////////
+// -----------------------------------------------------------------------------
+// Public functions
 
 // This function serves as the constructor which is initialized by the class Terrain3D.
 // Godot likes to create resource objects at startup, so this prevents it from creating
@@ -3084,7 +3128,7 @@ void T3DMaterial::initialize( T3DTerrain *pTerrain ) {
 	}
 	LOG( INFO, "Initializing material" );
 	const bool strict_cooked_builtin = m_pTerrain->isGpuRegionCookedPagesEnabled() &&
-		!m_pTerrain->isEditorAuthoringMode() && !m_bShaderOverrideEnabled;
+			!m_pTerrain->isEditorAuthoringMode() && !m_bShaderOverrideEnabled;
 	if ( strict_cooked_builtin ) {
 		if ( !loadRuntimeShaderPack() ) {
 			ERR_PRINT( "Terrain3D strict cooked runtime requires a valid terrain3d_shaders.t3dshaderpack." );
@@ -3117,29 +3161,29 @@ void T3DMaterial::initialize( T3DTerrain *pTerrain ) {
 	}
 	{ // Create dummy texture arrays to avoid empty sampler2DArrays
 		const Ref<Image> pImg = Image::create( 1, 1, false, Image::FORMAT_RF );
-		const TypedArray<Image> ia = {pImg};
+		const TypedArray<Image> ia = { pImg };
 		m_generatedDummy.create( ia );
 
 		// Far atlases are sampler2D, not sampler2DArray. Binding the layered
 		// dummy to them causes GL_INVALID_OPERATION on the compatibility renderer
 		// and repeated driver validation work during material updates.
-			const uint16_t encoded_zero_height = t3dRegionCodecEncodeHeightU16( 0.0f );
-			PackedByteArray far_height_bytes;
-			far_height_bytes.resize( 2 );
-			std::memcpy( far_height_bytes.ptrw(), &encoded_zero_height, sizeof( encoded_zero_height ) );
-			const Ref<Image> pFarHeightImg = Image::create_from_data( 1, 1, false, Image::FORMAT_R16, far_height_bytes );
-			m_generatedFarHeightDummy.create( pFarHeightImg );
+		const uint16_t encoded_zero_height = t3dRegionCodecEncodeHeightU16( 0.0f );
+		PackedByteArray far_height_bytes;
+		far_height_bytes.resize( 2 );
+		std::memcpy( far_height_bytes.ptrw(), &encoded_zero_height, sizeof( encoded_zero_height ) );
+		const Ref<Image> pFarHeightImg = Image::create_from_data( 1, 1, false, Image::FORMAT_R16, far_height_bytes );
+		m_generatedFarHeightDummy.create( pFarHeightImg );
 		Ref<Image> pFarColorImg = Image::create( 1, 1, false, Image::FORMAT_RGBA8 );
-			// Alpha is packed far-surface metadata. A fallback texture must describe
-			// empty terrain; 0.5 rounds to bit 7 and therefore means solid terrain.
-			pFarColorImg->fill( Color( 1.0, 1.0, 1.0, 0.0 ) );
+		// Alpha is packed far-surface metadata. A fallback texture must describe
+		// empty terrain; 0.5 rounds to bit 7 and therefore means solid terrain.
+		pFarColorImg->fill( Color( 1.0, 1.0, 1.0, 0.0 ) );
 		m_generatedFarColorDummy.create( pFarColorImg );
 
 		const Ref<Image> pSurfaceImg = T3DUtil::getDefaultSurfaceImage( V2I( 1 ), false );
-		const TypedArray<Image> surface_array = {pSurfaceImg};
+		const TypedArray<Image> surface_array = { pSurfaceImg };
 		m_generatedSurfaceDummy.create( surface_array );
 		const Ref<Image> pDisplacementImg = T3DUtil::getDefaultDisplacementImage( V2I( 1 ), false );
-		const TypedArray<Image> displacement_array = {pDisplacementImg};
+		const TypedArray<Image> displacement_array = { pDisplacementImg };
 		m_generatedDisplacementDummy.create( displacement_array );
 	}
 
@@ -3236,7 +3280,7 @@ void T3DMaterial::update( const uint32_t nFlags ) {
 	if ( !bRebuildShader && ( nFlags & REGION_ARRAYS ) != 0u && m_bHasLastBoundVariantState ) {
 		const t3dShaderVariantState_t current_state = captureVariantState();
 		bRebuildShader = current_state.m_bControlMapsImplicit != m_lastBoundVariantState.m_bControlMapsImplicit ||
-			current_state.m_bColorMapsImplicit != m_lastBoundVariantState.m_bColorMapsImplicit;
+				current_state.m_bColorMapsImplicit != m_lastBoundVariantState.m_bColorMapsImplicit;
 	}
 	if ( bRebuildShader ) {
 		updateShader();
@@ -3247,8 +3291,9 @@ void T3DMaterial::update( const uint32_t nFlags ) {
 			switch ( page_table_result ) {
 				case PAGE_TABLE_INVALID_TERRAIN_STATE: {
 					if ( m_pTerrain && m_pTerrain->getData() ) {
-						LOG( ERROR, "Cannot build terrain page tables while data runtime storage is inactive: ",
-							m_pTerrain->getData()->getRuntimeState() );
+						LOG( ERROR,
+								"Cannot build terrain page tables while data runtime storage is inactive: ",
+								m_pTerrain->getData()->getRuntimeState() );
 					}
 					break;
 				}
@@ -3315,14 +3360,22 @@ void T3DMaterial::updateRegionPageTable( void ) {
 }
 
 void T3DMaterial::updateRuntimeMaterialLayerMap( void ) {
-	if ( !m_pTerrain ) { return; }
+	if ( !m_pTerrain ) {
+		return;
+	}
 	const Ref<T3DAssets> pAssets = m_pTerrain->getAssets();
-	if ( pAssets.is_null() ) { return; }
+	if ( pAssets.is_null() ) {
+		return;
+	}
 	static const StringName s_layerMap( "_texture_layer_map" );
 	const PackedInt32Array layerMap = pAssets->getTextureLayerMap();
-	if ( m_hMaterial.is_valid() ) { RS->material_set_param( m_hMaterial, s_layerMap, layerMap ); }
+	if ( m_hMaterial.is_valid() ) {
+		RS->material_set_param( m_hMaterial, s_layerMap, layerMap );
+	}
 	for ( int tier = SHADER_TIER_MIDDLE; tier < SHADER_TIER_COUNT; ++tier ) {
-		if ( m_hszTierMaterials[tier].is_valid() ) { RS->material_set_param( m_hszTierMaterials[tier], s_layerMap, layerMap ); }
+		if ( m_hszTierMaterials[tier].is_valid() ) {
+			RS->material_set_param( m_hszTierMaterials[tier], s_layerMap, layerMap );
+		}
 	}
 	if ( m_pTerrain->getTessellationLevel() > 0 && m_hBufferMaterial.is_valid() ) {
 		RS->material_set_param( m_hBufferMaterial, s_layerMap, layerMap );
@@ -3348,14 +3401,14 @@ void T3DMaterial::updateFarAtlasTextures( void ) {
 void T3DMaterial::setDisplacementScale( const real_t fDisplacementScale ) {
 	SET_IF_DIFF( m_fDisplacementScale, CLAMP( fDisplacementScale, 0.f, 2.f ) );
 	m_bPersistenceDirty = true;
-	LOG( INFO, "t3dSetting_t displacement scale: ", fDisplacementScale );
+	LOG( INFO, "Setting displacement scale: ", fDisplacementScale );
 	update();
 }
 
 void T3DMaterial::setDisplacementSharpness( const real_t fDisplacementSharpness ) {
 	SET_IF_DIFF( m_fDisplacementSharpness, CLAMP( fDisplacementSharpness, 0.f, 1.f ) );
 	m_bPersistenceDirty = true;
-	LOG( INFO, "t3dSetting_t displacement sharpness: ", fDisplacementSharpness );
+	LOG( INFO, "Setting displacement sharpness: ", fDisplacementSharpness );
 	update();
 	if ( m_pTerrain ) {
 		m_pTerrain->snap();
@@ -3372,7 +3425,7 @@ void T3DMaterial::setWorldBackground( const t3dWorldBackground_t background ) {
 void T3DMaterial::setShaderVariantMode( const t3dShaderVariantMode_t mode ) {
 	SET_IF_DIFF( m_shaderVariantMode, mode );
 	m_bPersistenceDirty = true;
-	LOG( INFO, "t3dSetting_t shader variant mode: ", mode );
+	LOG( INFO, "Setting shader variant mode: ", mode );
 	clearShaderVariantCache();
 	update( FULL_REBUILD );
 }
@@ -3381,7 +3434,7 @@ void T3DMaterial::setShaderVariantCacheLimit( const int nLimit ) {
 	const int limit = CLAMP( nLimit, s_nMinShaderVariantCacheLimit, s_nMaxShaderVariantCacheLimit );
 	SET_IF_DIFF( m_nShaderVariantCacheLimit, limit );
 	m_bPersistenceDirty = true;
-	LOG( INFO, "t3dSetting_t shader variant cache limit: ", limit );
+	LOG( INFO, "Setting shader variant cache limit: ", limit );
 	trimShaderVariantCaches();
 	m_nPrewarmSignature = UINT64_MAX;
 	prewarmShaderVariants();
@@ -3392,7 +3445,7 @@ void T3DMaterial::setShaderVariantPrewarmLimit( const int nLimit ) {
 	const int limit = CLAMP( nLimit, s_nMinShaderVariantPrewarmLimit, s_nMaxShaderVariantPrewarmLimit );
 	SET_IF_DIFF( m_nShaderVariantPrewarmLimit, limit );
 	m_bPersistenceDirty = true;
-	LOG( INFO, "t3dSetting_t shader variant prewarm limit: ", limit );
+	LOG( INFO, "Setting shader variant prewarm limit: ", limit );
 	m_nPrewarmSignature = UINT64_MAX;
 	prewarmShaderVariants();
 	emit_changed();
@@ -3402,7 +3455,7 @@ void T3DMaterial::setShaderVariantSourceBudgetMb( const int nBudgetMb ) {
 	const int budget_mb = CLAMP( nBudgetMb, s_nMinShaderVariantSourceBudgetMb, s_nMaxShaderVariantSourceBudgetMb );
 	SET_IF_DIFF( m_nShaderVariantSourceBudgetMb, budget_mb );
 	m_bPersistenceDirty = true;
-	LOG( INFO, "t3dSetting_t shader variant source budget: ", budget_mb, " MiB" );
+	LOG( INFO, "Setting shader variant source budget: ", budget_mb, " MiB" );
 	if ( m_pTerrain == nullptr ) {
 		setEffectiveShaderVariantSourceBudgetMb( budget_mb );
 	}
@@ -3432,7 +3485,7 @@ void T3DMaterial::setShaderPerformancePreset( const t3dShaderPerformancePreset_t
 	applyVariantState( state );
 	applyPerformancePresetToTiers( ePreset );
 	m_shaderPerformancePreset = ePreset;
-	LOG( INFO, "t3dSetting_t shader performance preset: ", ePreset );
+	LOG( INFO, "Setting shader performance preset: ", ePreset );
 	// Changing the preset can replace the Middle/Far shader RIDs. Rebind every
 	// sampler and compact-tier uniform in the same transaction so the new shader
 	// never renders with default white sampler state or zeroed metadata arrays.
@@ -3480,9 +3533,12 @@ void T3DMaterial::refreshGpuRegionChannelPolicy( void ) {
 		return;
 	}
 	const int effective_budget_mb = m_pTerrain->getEffectiveGpuRegionCacheBudgetMb();
-	pData->configureGpuRegionCache( effective_budget_mb > 0, effective_budget_mb,
-		m_pTerrain->getGpuRegionUploadBudgetLayers(), m_pTerrain->getGpuRegionUploadBudgetMb(),
-		m_pTerrain->getGpuRegionSparePages(), m_pTerrain->getGpuRegionRetireFrames() );
+	pData->configureGpuRegionCache( effective_budget_mb > 0,
+			effective_budget_mb,
+			m_pTerrain->getGpuRegionUploadBudgetLayers(),
+			m_pTerrain->getGpuRegionUploadBudgetMb(),
+			m_pTerrain->getGpuRegionSparePages(),
+			m_pTerrain->getGpuRegionRetireFrames() );
 }
 
 void T3DMaterial::setNearTextureFiltering( const t3dTextureFiltering_t filtering ) {
@@ -3695,27 +3751,34 @@ void T3DMaterial::setTextureFiltering( const t3dTextureFiltering_t filtering ) {
 }
 
 void T3DMaterial::setMiddleTerrainSamplingMode( const t3dTerrainSamplingMode_t mode ) {
-	setMiddleMaterialSamplingQuality( mode == TERRAIN_SAMPLING_SINGLE_SAMPLE ? MATERIAL_SAMPLING_FAST : MATERIAL_SAMPLING_FULL );
+	setMiddleMaterialSamplingQuality(
+			mode == TERRAIN_SAMPLING_SINGLE_SAMPLE ? MATERIAL_SAMPLING_FAST : MATERIAL_SAMPLING_FULL );
 }
 
 t3dTerrainSamplingMode_t T3DMaterial::getMiddleTerrainSamplingMode( void ) const {
-	return m_middleQuality.m_materialSamplingQuality == MATERIAL_SAMPLING_FAST ? TERRAIN_SAMPLING_SINGLE_SAMPLE : TERRAIN_SAMPLING_ADAPTIVE_WEIGHTED;
+	return m_middleQuality.m_materialSamplingQuality == MATERIAL_SAMPLING_FAST ? TERRAIN_SAMPLING_SINGLE_SAMPLE
+																			   : TERRAIN_SAMPLING_ADAPTIVE_WEIGHTED;
 }
 
 void T3DMaterial::setMiddleTerrainNormalMode( const t3dTerrainNormalMode_t mode ) {
-	setMiddleTerrainNormalQuality( mode == TERRAIN_NORMAL_GEOMETRY_DERIVATIVE ? TERRAIN_NORMAL_QUALITY_GEOMETRY : TERRAIN_NORMAL_QUALITY_DETAILED );
+	setMiddleTerrainNormalQuality( mode == TERRAIN_NORMAL_GEOMETRY_DERIVATIVE ? TERRAIN_NORMAL_QUALITY_GEOMETRY
+																			  : TERRAIN_NORMAL_QUALITY_DETAILED );
 }
 
 t3dTerrainNormalMode_t T3DMaterial::getMiddleTerrainNormalMode( void ) const {
-	return m_middleQuality.m_terrainNormalQuality == TERRAIN_NORMAL_QUALITY_GEOMETRY ? TERRAIN_NORMAL_GEOMETRY_DERIVATIVE : TERRAIN_NORMAL_DERIVED_TEXTURE;
+	return m_middleQuality.m_terrainNormalQuality == TERRAIN_NORMAL_QUALITY_GEOMETRY
+			? TERRAIN_NORMAL_GEOMETRY_DERIVATIVE
+			: TERRAIN_NORMAL_DERIVED_TEXTURE;
 }
 
 void T3DMaterial::setMiddleColorSamplingMode( const t3dColorSamplingMode_t mode ) {
-	setMiddleTerrainColorQuality( mode == COLOR_SAMPLING_EXACT_4_TAP ? TERRAIN_COLOR_QUALITY_EXACT : TERRAIN_COLOR_QUALITY_FAST );
+	setMiddleTerrainColorQuality(
+			mode == COLOR_SAMPLING_EXACT_4_TAP ? TERRAIN_COLOR_QUALITY_EXACT : TERRAIN_COLOR_QUALITY_FAST );
 }
 
 t3dColorSamplingMode_t T3DMaterial::getMiddleColorSamplingMode( void ) const {
-	return m_middleQuality.m_terrainColorQuality == TERRAIN_COLOR_QUALITY_EXACT ? COLOR_SAMPLING_EXACT_4_TAP : COLOR_SAMPLING_HARDWARE_FILTERED;
+	return m_middleQuality.m_terrainColorQuality == TERRAIN_COLOR_QUALITY_EXACT ? COLOR_SAMPLING_EXACT_4_TAP
+																				: COLOR_SAMPLING_HARDWARE_FILTERED;
 }
 
 void T3DMaterial::setMiddleSurfaceDataMode( const t3dSurfaceDataMode_t mode ) {
@@ -3723,7 +3786,8 @@ void T3DMaterial::setMiddleSurfaceDataMode( const t3dSurfaceDataMode_t mode ) {
 }
 
 t3dSurfaceDataMode_t T3DMaterial::getMiddleSurfaceDataMode( void ) const {
-	return m_middleQuality.m_surfaceResponseQuality == SURFACE_RESPONSE_DETAILED ? SURFACE_DATA_FULL : SURFACE_DATA_ALBEDO_ONLY;
+	return m_middleQuality.m_surfaceResponseQuality == SURFACE_RESPONSE_DETAILED ? SURFACE_DATA_FULL
+																				 : SURFACE_DATA_ALBEDO_ONLY;
 }
 
 void T3DMaterial::setMiddleTerrainShadingMode( const t3dTerrainShadingMode_t mode ) {
@@ -3740,10 +3804,14 @@ void T3DMaterial::setMiddleTerrainShadingMode( const t3dTerrainShadingMode_t mod
 
 t3dTerrainShadingMode_t T3DMaterial::getMiddleTerrainShadingMode( void ) const {
 	switch ( m_middleQuality.m_lightingModel ) {
-		case TIER_LIGHTING_UNSHADED: return SHADING_UNSHADED;
-		case TIER_LIGHTING_BLINN_PHONG: return SHADING_XBOX_360_BLINN_PHONG;
-		case TIER_LIGHTING_PBR: return SHADING_BURLEY_GGX;
-		default: return SHADING_LAMBERT_DIFFUSE_ONLY;
+		case TIER_LIGHTING_UNSHADED:
+			return SHADING_UNSHADED;
+		case TIER_LIGHTING_BLINN_PHONG:
+			return SHADING_XBOX_360_BLINN_PHONG;
+		case TIER_LIGHTING_PBR:
+			return SHADING_BURLEY_GGX;
+		default:
+			return SHADING_LAMBERT_DIFFUSE_ONLY;
 	}
 }
 
@@ -3781,10 +3849,14 @@ void T3DMaterial::setFarTerrainShadingMode( const t3dTerrainShadingMode_t mode )
 
 t3dTerrainShadingMode_t T3DMaterial::getFarTerrainShadingMode( void ) const {
 	switch ( m_farQuality.m_lightingModel ) {
-		case TIER_LIGHTING_UNSHADED: return SHADING_UNSHADED;
-		case TIER_LIGHTING_BLINN_PHONG: return SHADING_XBOX_360_BLINN_PHONG;
-		case TIER_LIGHTING_PBR: return SHADING_BURLEY_GGX;
-		default: return SHADING_LAMBERT_DIFFUSE_ONLY;
+		case TIER_LIGHTING_UNSHADED:
+			return SHADING_UNSHADED;
+		case TIER_LIGHTING_BLINN_PHONG:
+			return SHADING_XBOX_360_BLINN_PHONG;
+		case TIER_LIGHTING_PBR:
+			return SHADING_BURLEY_GGX;
+		default:
+			return SHADING_LAMBERT_DIFFUSE_ONLY;
 	}
 }
 
@@ -3801,15 +3873,18 @@ void T3DMaterial::setFarWetnessEnabled( const bool bEnabled ) {
 }
 
 void T3DMaterial::setTerrainSamplingMode( const t3dTerrainSamplingMode_t mode ) {
-	setNearMaterialSamplingQuality( mode == TERRAIN_SAMPLING_SINGLE_SAMPLE ? MATERIAL_SAMPLING_FAST : MATERIAL_SAMPLING_FULL );
+	setNearMaterialSamplingQuality(
+			mode == TERRAIN_SAMPLING_SINGLE_SAMPLE ? MATERIAL_SAMPLING_FAST : MATERIAL_SAMPLING_FULL );
 }
 
 void T3DMaterial::setTerrainNormalMode( const t3dTerrainNormalMode_t mode ) {
-	setNearTerrainNormalQuality( mode == TERRAIN_NORMAL_GEOMETRY_DERIVATIVE ? TERRAIN_NORMAL_QUALITY_GEOMETRY : TERRAIN_NORMAL_QUALITY_DETAILED );
+	setNearTerrainNormalQuality( mode == TERRAIN_NORMAL_GEOMETRY_DERIVATIVE ? TERRAIN_NORMAL_QUALITY_GEOMETRY
+																			: TERRAIN_NORMAL_QUALITY_DETAILED );
 }
 
 void T3DMaterial::setColorSamplingMode( const t3dColorSamplingMode_t mode ) {
-	setNearTerrainColorQuality( mode == COLOR_SAMPLING_EXACT_4_TAP ? TERRAIN_COLOR_QUALITY_EXACT : TERRAIN_COLOR_QUALITY_FAST );
+	setNearTerrainColorQuality(
+			mode == COLOR_SAMPLING_EXACT_4_TAP ? TERRAIN_COLOR_QUALITY_EXACT : TERRAIN_COLOR_QUALITY_FAST );
 }
 
 void T3DMaterial::setProjectionMode( const t3dProjectionMode_t mode ) {
@@ -3856,7 +3931,7 @@ void T3DMaterial::setWorldNoiseShaderMode( const t3dWorldNoiseShaderMode_t mode 
 	SET_IF_DIFF( m_worldNoiseShaderMode, mode );
 	m_bPersistenceDirty = true;
 	m_shaderPerformancePreset = SHADER_PRESET_CUSTOM;
-	LOG( INFO, "t3dSetting_t world-noise shader mode: ", mode );
+	LOG( INFO, "Setting world-noise shader mode: ", mode );
 	update( FULL_REBUILD );
 	emit_changed();
 }
@@ -3872,68 +3947,180 @@ Dictionary T3DMaterial::cookRuntimeShaderPack( void ) {
 	m_bRuntimeShaderPackLoaded = false;
 	const t3dShaderVariantState_t base = captureVariantState();
 	const uint64_t state_signature = getVariantStateSignature( base );
-	typedef struct t3dShaderPackSourceEntry_s { uint8_t m_nDomain; uint8_t m_nTier; String m_source; } t3dShaderPackSourceEntry_t;
+	typedef struct t3dShaderPackSourceEntry_s {
+		uint8_t m_nDomain;
+		uint8_t m_nTier;
+		String m_source;
+	} t3dShaderPackSourceEntry_t;
 	eastl::vector<t3dShaderPackSourceEntry_t> entries;
 	for ( int tier = SHADER_TIER_NEAR; tier < SHADER_TIER_COUNT; ++tier ) {
-		entries.push_back( {0u, ( uint8_t ) tier, finalizeRuntimeShaderCode( generateShaderCode( base, ( t3dShaderTier_t ) tier, false ) )} );
+		entries.push_back( { 0u,
+				( uint8_t )tier,
+				finalizeRuntimeShaderCode( generateShaderCode( base, ( t3dShaderTier_t )tier, false ) ) } );
 	}
-	if ( base.m_bTessellationEnabled ) entries.push_back( {1u, 0u, generateBufferShaderCode( base )} );
+	if ( base.m_bTessellationEnabled ) {
+		entries.push_back( { 1u, 0u, generateBufferShaderCode( base ) } );
+	}
 	t3dShaderVariantState_t states[s_nMaxShaderVariantPrewarmLimit] = {};
-	int state_count = 0; appendPotentialBranchStates( states, state_count, base );
+	int state_count = 0;
+	appendPotentialBranchStates( states, state_count, base );
 	t3dShaderVariantKey_t seen[s_nMaxShaderVariantPrewarmLimit * 2] = {};
 	int seen_count = 0;
-	for ( int i = 0; i < state_count && ( int ) entries.size() < m_nShaderVariantPrewarmLimit + 4; ++i ) {
+	for ( int i = 0; i < state_count && ( int )entries.size() < m_nShaderVariantPrewarmLimit + 4; ++i ) {
 		const String source = finalizeRuntimeShaderCode( generateShaderCode( states[i], SHADER_TIER_NEAR, false ) );
-		const t3dShaderVariantKey_t key = makeVariantCacheKey( source ); bool duplicate = false;
-		for ( int k = 0; k < seen_count; ++k ) if ( seen[k] == key ) { duplicate = true; break; }
-		if ( !duplicate ) { seen[seen_count++] = key; entries.push_back( {0u, ( uint8_t ) SHADER_TIER_NEAR, source} ); }
-		if ( states[i].m_bTessellationEnabled && ( int ) entries.size() < m_nShaderVariantPrewarmLimit + 4 ) {
-			const String buffer = generateBufferShaderCode( states[i] ); const t3dShaderVariantKey_t buffer_key = makeVariantCacheKey( buffer ); duplicate = false;
-			for ( int k = 0; k < seen_count; ++k ) if ( seen[k] == buffer_key ) { duplicate = true; break; }
-			if ( !duplicate && seen_count < s_nMaxShaderVariantPrewarmLimit * 2 ) { seen[seen_count++] = buffer_key; entries.push_back( {1u, 0u, buffer} ); }
+		const t3dShaderVariantKey_t key = makeVariantCacheKey( source );
+		bool duplicate = false;
+		for ( int k = 0; k < seen_count; ++k ) {
+			if ( seen[k] == key ) {
+				duplicate = true;
+				break;
+			}
+		}
+		if ( !duplicate ) {
+			seen[seen_count++] = key;
+			entries.push_back( { 0u, ( uint8_t )SHADER_TIER_NEAR, source } );
+		}
+		if ( states[i].m_bTessellationEnabled && ( int )entries.size() < m_nShaderVariantPrewarmLimit + 4 ) {
+			const String buffer = generateBufferShaderCode( states[i] );
+			const t3dShaderVariantKey_t buffer_key = makeVariantCacheKey( buffer );
+			duplicate = false;
+			for ( int k = 0; k < seen_count; ++k ) {
+				if ( seen[k] == buffer_key ) {
+					duplicate = true;
+					break;
+				}
+			}
+			if ( !duplicate && seen_count < s_nMaxShaderVariantPrewarmLimit * 2 ) {
+				seen[seen_count++] = buffer_key;
+				entries.push_back( { 1u, 0u, buffer } );
+			}
 		}
 	}
 	m_bRuntimeShaderPackLoaded = old_loaded;
 	const String path = m_pTerrain->getDataDirectory().path_join( "terrain3d_shaders.t3dshaderpack" );
 	const String temporary = path + ".tmp";
 	Ref<FileAccess> file = FileAccess::open( temporary, FileAccess::WRITE );
-	if ( file.is_null() ) { result["error"] = "Unable to open runtime shader pack."; return result; }
-	file->store_64( s_nShaderPackMagic ); file->store_32( s_nShaderPackVersion ); file->store_32( ( uint32_t ) entries.size() ); file->store_64( state_signature );
-	for ( const t3dShaderPackSourceEntry_t &entry : entries ) { file->store_8( entry.m_nDomain ); file->store_8( entry.m_nTier ); file->store_16( 0u ); t3dMaterialStoreShaderPackString( file, entry.m_source ); }
-	const Error write_error = file->get_error(); file->close();
-	if ( write_error != OK ) { DirAccess::remove_absolute( temporary ); result["error"] = "Runtime shader pack write failed."; return result; }
+	if ( file.is_null() ) {
+		result["error"] = "Unable to open runtime shader pack.";
+		return result;
+	}
+	file->store_64( s_nShaderPackMagic );
+	file->store_32( s_nShaderPackVersion );
+	file->store_32( ( uint32_t )entries.size() );
+	file->store_64( state_signature );
+	for ( const t3dShaderPackSourceEntry_t &entry : entries ) {
+		file->store_8( entry.m_nDomain );
+		file->store_8( entry.m_nTier );
+		file->store_16( 0u );
+		t3dMaterialStoreShaderPackString( file, entry.m_source );
+	}
+	const Error write_error = file->get_error();
+	file->close();
+	if ( write_error != OK ) {
+		DirAccess::remove_absolute( temporary );
+		result["error"] = "Runtime shader pack write failed.";
+		return result;
+	}
 	const String backup = path + ".bak";
-	if ( FileAccess::file_exists( backup ) ) { DirAccess::remove_absolute( backup ); }
+	if ( FileAccess::file_exists( backup ) ) {
+		DirAccess::remove_absolute( backup );
+	}
 	const bool had_previous = FileAccess::file_exists( path );
 	if ( had_previous && DirAccess::rename_absolute( path, backup ) != OK ) {
-		DirAccess::remove_absolute( temporary ); result["error"] = "Runtime shader pack backup failed."; return result;
+		DirAccess::remove_absolute( temporary );
+		result["error"] = "Runtime shader pack backup failed.";
+		return result;
 	}
 	if ( DirAccess::rename_absolute( temporary, path ) != OK ) {
-		if ( had_previous ) { DirAccess::rename_absolute( backup, path ); }
-		result["error"] = "Runtime shader pack publish failed."; return result;
+		if ( had_previous ) {
+			DirAccess::rename_absolute( backup, path );
+		}
+		result["error"] = "Runtime shader pack publish failed.";
+		return result;
 	}
-	if ( FileAccess::file_exists( backup ) ) { DirAccess::remove_absolute( backup ); }
-	result["complete"] = true; result["path"] = path; result["entry_count"] = ( int ) entries.size(); result["state_signature"] = String::num_uint64( state_signature, 16, true );
+	if ( FileAccess::file_exists( backup ) ) {
+		DirAccess::remove_absolute( backup );
+	}
+	result["complete"] = true;
+	result["path"] = path;
+	result["entry_count"] = ( int )entries.size();
+	result["state_signature"] = String::num_uint64( state_signature, 16, true );
 	return result;
 }
 
 bool T3DMaterial::loadRuntimeShaderPack( void ) {
-	m_bRuntimeShaderPackLoaded = false; m_nRuntimeShaderPackStateSignature = 0u; m_runtimeShaderPackBufferSource = String();
-	for ( String &source : m_szRuntimeShaderPackTierSource ) source = String();
-	if ( !m_pTerrain || m_pTerrain->getDataDirectory().is_empty() ) return false;
+	m_bRuntimeShaderPackLoaded = false;
+	m_nRuntimeShaderPackStateSignature = 0u;
+	m_runtimeShaderPackBufferSource = String();
+	for ( String &source : m_szRuntimeShaderPackTierSource ) {
+		source = String();
+	}
+	if ( !m_pTerrain || m_pTerrain->getDataDirectory().is_empty() ) {
+		return false;
+	}
 	const String path = m_pTerrain->getDataDirectory().path_join( "terrain3d_shaders.t3dshaderpack" );
-	Ref<FileAccess> file = FileAccess::open( path, FileAccess::READ ); if ( file.is_null() || file->get_length() < 24u ) return false;
-	if ( file->get_64() != s_nShaderPackMagic || file->get_32() != s_nShaderPackVersion ) return false;
-	const uint32_t count = file->get_32(); const uint64_t signature = file->get_64();
-	if ( count < SHADER_TIER_COUNT || count > 128u || signature != getVariantStateSignature( captureVariantState() ) ) return false;
-	typedef struct t3dShaderPackVerifyEntry_s { uint8_t m_nDomain; uint8_t m_nTier; String m_source; } t3dShaderPackVerifyEntry_t; eastl::vector<t3dShaderPackVerifyEntry_t> entries; entries.reserve( count );
-	for ( uint32_t i = 0; i < count; ++i ) { if ( file->get_position() + 4u > file->get_length() ) return false; t3dShaderPackVerifyEntry_t entry; entry.m_nDomain=file->get_8(); entry.m_nTier=file->get_8(); file->get_16(); if(!t3dMaterialReadShaderPackString(file,entry.m_source)||entry.m_source.is_empty()) return false; entries.push_back(entry); }
-	if ( file->get_position() != file->get_length() ) return false;
-	for ( size_t i = 0; i < entries.size(); ++i ) { const t3dShaderPackVerifyEntry_t &entry=entries[i]; if ( entry.m_nDomain==0u && entry.m_nTier<SHADER_TIER_COUNT && m_szRuntimeShaderPackTierSource[entry.m_nTier].is_empty() ) m_szRuntimeShaderPackTierSource[entry.m_nTier]=entry.m_source; else if(entry.m_nDomain==1u && m_runtimeShaderPackBufferSource.is_empty()) m_runtimeShaderPackBufferSource=entry.m_source; }
-	for ( int tier=SHADER_TIER_NEAR; tier<SHADER_TIER_COUNT; ++tier ) if(m_szRuntimeShaderPackTierSource[tier].is_empty()) return false;
-	m_nRuntimeShaderPackStateSignature=signature; m_bRuntimeShaderPackLoaded=true;
+	Ref<FileAccess> file = FileAccess::open( path, FileAccess::READ );
+	if ( file.is_null() || file->get_length() < 24u ) {
+		return false;
+	}
+	if ( file->get_64() != s_nShaderPackMagic || file->get_32() != s_nShaderPackVersion ) {
+		return false;
+	}
+	const uint32_t count = file->get_32();
+	const uint64_t signature = file->get_64();
+	if ( count < SHADER_TIER_COUNT || count > 128u || signature != getVariantStateSignature( captureVariantState() ) ) {
+		return false;
+	}
+	typedef struct t3dShaderPackVerifyEntry_s {
+		uint8_t m_nDomain;
+		uint8_t m_nTier;
+		String m_source;
+	} t3dShaderPackVerifyEntry_t;
+	eastl::vector<t3dShaderPackVerifyEntry_t> entries;
+	entries.reserve( count );
+	for ( uint32_t i = 0; i < count; ++i ) {
+		if ( file->get_position() + 4u > file->get_length() ) {
+			return false;
+		}
+		t3dShaderPackVerifyEntry_t entry;
+		entry.m_nDomain = file->get_8();
+		entry.m_nTier = file->get_8();
+		file->get_16();
+		if ( !t3dMaterialReadShaderPackString( file, entry.m_source ) || entry.m_source.is_empty() ) {
+			return false;
+		}
+		entries.push_back( entry );
+	}
+	if ( file->get_position() != file->get_length() ) {
+		return false;
+	}
+	for ( size_t i = 0; i < entries.size(); ++i ) {
+		const t3dShaderPackVerifyEntry_t &entry = entries[i];
+		if ( entry.m_nDomain == 0u && entry.m_nTier < SHADER_TIER_COUNT &&
+				m_szRuntimeShaderPackTierSource[entry.m_nTier].is_empty() ) {
+			m_szRuntimeShaderPackTierSource[entry.m_nTier] = entry.m_source;
+		} else if ( entry.m_nDomain == 1u && m_runtimeShaderPackBufferSource.is_empty() ) {
+			m_runtimeShaderPackBufferSource = entry.m_source;
+		}
+	}
+	for ( int tier = SHADER_TIER_NEAR; tier < SHADER_TIER_COUNT; ++tier ) {
+		if ( m_szRuntimeShaderPackTierSource[tier].is_empty() ) {
+			return false;
+		}
+	}
+	m_nRuntimeShaderPackStateSignature = signature;
+	m_bRuntimeShaderPackLoaded = true;
 	// Create engine shader objects in deterministic pack order; driver pipeline creation remains runtime-owned.
-	for ( const t3dShaderPackVerifyEntry_t &entry : entries ) { if(entry.m_nDomain==0u) getOrCreateShaderVariant(entry.m_source,SHADER_DOMAIN_RUNTIME,true,(t3dShaderTier_t)CLAMP((int)entry.m_nTier,0,(int)SHADER_TIER_FAR)); else getOrCreateShaderVariant(entry.m_source,SHADER_DOMAIN_BUFFER,true); }
+	for ( const t3dShaderPackVerifyEntry_t &entry : entries ) {
+		if ( entry.m_nDomain == 0u ) {
+			getOrCreateShaderVariant( entry.m_source,
+					SHADER_DOMAIN_RUNTIME,
+					true,
+					( t3dShaderTier_t )CLAMP( ( int )entry.m_nTier, 0, ( int )SHADER_TIER_FAR ) );
+		} else {
+			getOrCreateShaderVariant( entry.m_source, SHADER_DOMAIN_BUFFER, true );
+		}
+	}
 	return true;
 }
 
@@ -3943,17 +4130,17 @@ void T3DMaterial::prewarmShaderVariants( void ) {
 
 void T3DMaterial::clearShaderVariantCache( void ) {
 	for ( int index = 0; index < m_nRuntimeShaderVariantCount; ++index ) {
-		m_szRuntimeShaderVariantEntries[index] = t3dShaderVariantt3dShaderPackVerifyEntry_t_t{};
+		m_szRuntimeShaderVariantEntries[index] = t3dShaderVariantEntry_t{};
 	}
 	m_nRuntimeShaderVariantCount = 0;
 	m_nRuntimeShaderVariantSourceBytes = 0;
 	for ( int index = 0; index < m_nEditorShaderVariantCount; ++index ) {
-		m_szEditorShaderVariantEntries[index] = t3dShaderVariantt3dShaderPackVerifyEntry_t_t{};
+		m_szEditorShaderVariantEntries[index] = t3dShaderVariantEntry_t{};
 	}
 	m_nEditorShaderVariantCount = 0;
 	m_nEditorShaderVariantSourceBytes = 0;
 	for ( int index = 0; index < m_nBufferShaderVariantCount; ++index ) {
-		m_szBufferShaderVariantEntries[index] = t3dShaderVariantt3dShaderPackVerifyEntry_t_t{};
+		m_szBufferShaderVariantEntries[index] = t3dShaderVariantEntry_t{};
 	}
 	m_nBufferShaderVariantCount = 0;
 	m_nBufferShaderVariantSourceBytes = 0;
@@ -3970,9 +4157,9 @@ void T3DMaterial::clearShaderVariantCache( void ) {
 
 int T3DMaterial::getSpeculativeShaderVariantCount( void ) const {
 	int speculative_count = 0;
-	const t3dShaderVariantDomain_t domains[] = {SHADER_DOMAIN_RUNTIME, SHADER_DOMAIN_EDITOR, SHADER_DOMAIN_BUFFER};
+	const t3dShaderVariantDomain_t domains[] = { SHADER_DOMAIN_RUNTIME, SHADER_DOMAIN_EDITOR, SHADER_DOMAIN_BUFFER };
 	for ( const t3dShaderVariantDomain_t domain : domains ) {
-		const t3dShaderVariantt3dShaderPackVerifyEntry_t_t *pEntries = getShaderVariantEntries( domain );
+		const t3dShaderVariantEntry_t *pEntries = getShaderVariantEntries( domain );
 		const int entry_count = getShaderVariantCountForDomain( domain );
 		for ( int index = 0; index < entry_count; ++index ) {
 			if ( pEntries[index].m_bSpeculative ) {
@@ -3983,20 +4170,21 @@ int T3DMaterial::getSpeculativeShaderVariantCount( void ) const {
 	return speculative_count;
 }
 
-String T3DMaterial::getShaderRegressionSource(
-	const int nTier, const int nAssemblyPath,
-	const bool bControlMapsImplicit, const bool bColorMapsImplicit
-) {
+String T3DMaterial::getShaderRegressionSource( const int nTier,
+		const int nAssemblyPath,
+		const bool bControlMapsImplicit,
+		const bool bColorMapsImplicit ) {
 	if ( m_shaderTemplates.is_empty() ) {
 		preloadShaders();
 	}
 
-	const t3dShaderTier_t requested_tier = ( t3dShaderTier_t ) ( CLAMP( nTier, ( int ) ( SHADER_TIER_NEAR ), ( int ) ( SHADER_TIER_FAR ) ) );
+	const t3dShaderTier_t requested_tier =
+			( t3dShaderTier_t )( CLAMP( nTier, ( int )( SHADER_TIER_NEAR ), ( int )( SHADER_TIER_FAR ) ) );
 	t3dShaderVariantState_t state = captureVariantState();
 	state.m_bControlMapsImplicit = bControlMapsImplicit;
 	state.m_bColorMapsImplicit = bColorMapsImplicit;
 
-	// PATCH-00 regression assembly paths mirror the real material update contract.
+	// Regression assembly paths mirror the production material update contract.
 	// Authoring binds the complete Near shader to every clipmap tier. Runtime
 	// Profile activates compact Middle/Far source while Near keeps the editor path.
 	if ( nAssemblyPath == 0 || requested_tier == SHADER_TIER_NEAR ) {
@@ -4008,16 +4196,15 @@ String T3DMaterial::getShaderRegressionSource(
 Dictionary T3DMaterial::getShaderVariantDiagnostics( void ) const {
 	Dictionary diagnostics;
 	const uint64_t cached_requests = m_nVariantCacheHitsTotal + m_nVariantCacheMissesTotal;
-	const double fHitRatio = cached_requests > 0u ? ( double ) ( m_nVariantCacheHitsTotal ) / ( double ) ( cached_requests ) : -1.0;
+	const double fHitRatio =
+			cached_requests > 0u ? ( double )( m_nVariantCacheHitsTotal ) / ( double )( cached_requests ) : -1.0;
 	const uint64_t submitted_sources = m_nVariantCreationsTotal + m_nVariantUncachedSubmissionsTotal;
-	const uint64_t source_submission_average = submitted_sources > 0u
-			? m_nVariantSourceSubmissionUsecTotal / submitted_sources
-			: 0u;
-	const uint64_t shader_update_average = m_nShaderUpdateCount > 0u
-			? m_nShaderUpdateUsecTotal / m_nShaderUpdateCount
-			: 0u;
+	const uint64_t source_submission_average =
+			submitted_sources > 0u ? m_nVariantSourceSubmissionUsecTotal / submitted_sources : 0u;
+	const uint64_t shader_update_average =
+			m_nShaderUpdateCount > 0u ? m_nShaderUpdateUsecTotal / m_nShaderUpdateCount : 0u;
 
-	diagnostics["variant_mode"] = ( int ) ( m_shaderVariantMode );
+	diagnostics["variant_mode"] = ( int )( m_shaderVariantMode );
 	diagnostics["cache_limit"] = m_nShaderVariantCacheLimit;
 	diagnostics["prewarm_limit"] = m_nShaderVariantPrewarmLimit;
 	diagnostics["source_budget_mb"] = m_nShaderVariantSourceBudgetMb;
@@ -4027,36 +4214,36 @@ Dictionary T3DMaterial::getShaderVariantDiagnostics( void ) const {
 	diagnostics["variants_editor"] = m_nEditorShaderVariantCount;
 	diagnostics["variants_buffer"] = m_nBufferShaderVariantCount;
 	diagnostics["variants_speculative"] = getSpeculativeShaderVariantCount();
-	diagnostics["variant_source_bytes"] = ( int64_t ) ( getShaderVariantSourceBytesRaw() );
-	diagnostics["cache_hits_total"] = ( int64_t ) ( m_nVariantCacheHitsTotal );
-	diagnostics["cache_misses_total"] = ( int64_t ) ( m_nVariantCacheMissesTotal );
+	diagnostics["variant_source_bytes"] = ( int64_t )( getShaderVariantSourceBytesRaw() );
+	diagnostics["cache_hits_total"] = ( int64_t )( m_nVariantCacheHitsTotal );
+	diagnostics["cache_misses_total"] = ( int64_t )( m_nVariantCacheMissesTotal );
 	diagnostics["cache_hit_ratio"] = fHitRatio;
-	diagnostics["creations_total"] = ( int64_t ) ( m_nVariantCreationsTotal );
-	diagnostics["prewarm_creations_total"] = ( int64_t ) ( m_nVariantPrewarmCreationsTotal );
-	diagnostics["uncached_submissions_total"] = ( int64_t ) ( m_nVariantUncachedSubmissionsTotal );
-	diagnostics["allocation_failures_total"] = ( int64_t ) ( m_nVariantAllocationFailuresTotal );
-	diagnostics["removals_total"] = ( int64_t ) ( m_nVariantRemovalsTotal );
-	diagnostics["source_submission_usec_last"] = ( int64_t ) ( m_nVariantSourceSubmissionUsecLast );
-	diagnostics["source_submission_usec_average"] = ( int64_t ) ( source_submission_average );
-	diagnostics["source_submission_usec_peak"] = ( int64_t ) ( m_nVariantSourceSubmissionUsecPeak );
-	diagnostics["shader_update_usec_last"] = ( int64_t ) ( m_nShaderUpdateUsecLast );
-	diagnostics["shader_update_usec_average"] = ( int64_t ) ( shader_update_average );
-	diagnostics["shader_update_usec_peak"] = ( int64_t ) ( m_nShaderUpdateUsecPeak );
-	diagnostics["shader_update_count"] = ( int64_t ) ( m_nShaderUpdateCount );
-	diagnostics["shader_parameter_list_queries"] = ( int64_t ) ( m_nShaderParameterListQueryCount );
-	diagnostics["shader_parameter_default_queries"] = ( int64_t ) ( m_nShaderParameterDefaultQueryCount );
-	diagnostics["shader_inspector_local_reads"] = ( int64_t ) ( m_nShaderInspectorRuntimeReadCount );
+	diagnostics["creations_total"] = ( int64_t )( m_nVariantCreationsTotal );
+	diagnostics["prewarm_creations_total"] = ( int64_t )( m_nVariantPrewarmCreationsTotal );
+	diagnostics["uncached_submissions_total"] = ( int64_t )( m_nVariantUncachedSubmissionsTotal );
+	diagnostics["allocation_failures_total"] = ( int64_t )( m_nVariantAllocationFailuresTotal );
+	diagnostics["removals_total"] = ( int64_t )( m_nVariantRemovalsTotal );
+	diagnostics["source_submission_usec_last"] = ( int64_t )( m_nVariantSourceSubmissionUsecLast );
+	diagnostics["source_submission_usec_average"] = ( int64_t )( source_submission_average );
+	diagnostics["source_submission_usec_peak"] = ( int64_t )( m_nVariantSourceSubmissionUsecPeak );
+	diagnostics["shader_update_usec_last"] = ( int64_t )( m_nShaderUpdateUsecLast );
+	diagnostics["shader_update_usec_average"] = ( int64_t )( shader_update_average );
+	diagnostics["shader_update_usec_peak"] = ( int64_t )( m_nShaderUpdateUsecPeak );
+	diagnostics["shader_update_count"] = ( int64_t )( m_nShaderUpdateCount );
+	diagnostics["shader_parameter_list_queries"] = ( int64_t )( m_nShaderParameterListQueryCount );
+	diagnostics["shader_parameter_default_queries"] = ( int64_t )( m_nShaderParameterDefaultQueryCount );
+	diagnostics["shader_inspector_local_reads"] = ( int64_t )( m_nShaderInspectorRuntimeReadCount );
 	diagnostics["last_request_domain"] = m_nLastVariantRequestDomain;
 	diagnostics["last_request_hit"] = m_bLastVariantRequestHit;
 	diagnostics["last_request_prewarm"] = m_bLastVariantRequestPrewarm;
-	diagnostics["last_request_source_bytes"] = ( int64_t ) ( m_nLastVariantRequestSourceBytes );
+	diagnostics["last_request_source_bytes"] = ( int64_t )( m_nLastVariantRequestSourceBytes );
 	diagnostics["last_prewarm_variants"] = m_nLastPrewarmVariantCount;
 	diagnostics["last_prewarm_skipped"] = m_nLastPrewarmSkippedCount;
 	diagnostics["theoretical_variants"] = getTheoreticalShaderVariantCount();
-	diagnostics["near_shader_rid"] = ( int64_t ) ( getShaderRidForTier( SHADER_TIER_NEAR ).get_id() );
-	diagnostics["middle_shader_rid"] = ( int64_t ) ( getShaderRidForTier( SHADER_TIER_MIDDLE ).get_id() );
-	diagnostics["far_shader_rid"] = ( int64_t ) ( getShaderRidForTier( SHADER_TIER_FAR ).get_id() );
-	diagnostics["buffer_shader_rid"] = ( int64_t ) ( getBufferShaderRid().get_id() );
+	diagnostics["near_shader_rid"] = ( int64_t )( getShaderRidForTier( SHADER_TIER_NEAR ).get_id() );
+	diagnostics["middle_shader_rid"] = ( int64_t )( getShaderRidForTier( SHADER_TIER_MIDDLE ).get_id() );
+	diagnostics["far_shader_rid"] = ( int64_t )( getShaderRidForTier( SHADER_TIER_FAR ).get_id() );
+	diagnostics["buffer_shader_rid"] = ( int64_t )( getBufferShaderRid().get_id() );
 	Ref<T3DAssets> pAssets = m_pTerrain ? m_pTerrain->getAssets() : Ref<T3DAssets>();
 	T3DData *const pData = m_pTerrain ? m_pTerrain->getData() : nullptr;
 	const bool bFarAssetsReady = pAssets.is_valid() && pAssets->isInitialized();
@@ -4065,28 +4252,31 @@ Dictionary T3DMaterial::getShaderVariantDiagnostics( void ) const {
 	const RID far_albedo_rid = bFarAssetsReady ? pAssets->getFarAlbedoArrayRid() : RID();
 	const RID far_height_rid = pData ? pData->getFarHeightMapRid() : RID();
 	const RID far_color_rid = pData ? pData->getFarColorMapRid() : RID();
-	diagnostics["page_table_rid"] = ( int64_t ) ( m_generatedRegionMap.getRid().get_id() );
-	diagnostics["logical_page_table_rid"] = ( int64_t ) ( m_generatedLogicalRegionMap.getRid().get_id() );
+	diagnostics["page_table_rid"] = ( int64_t )( m_generatedRegionMap.getRid().get_id() );
+	diagnostics["logical_page_table_rid"] = ( int64_t )( m_generatedLogicalRegionMap.getRid().get_id() );
 	diagnostics["page_table_valid"] = isRegionPageTableValid();
 	diagnostics["page_table_region_map_size"] = m_nRegionMapTextureSize;
-	diagnostics["page_table_owner_generation"] = ( int64_t ) ( m_nRegionPageTableOwnerGeneration );
-	diagnostics["far_albedo_array_rid"] = ( int64_t ) ( far_albedo_rid.get_id() );
+	diagnostics["page_table_owner_generation"] = ( int64_t )( m_nRegionPageTableOwnerGeneration );
+	diagnostics["far_albedo_array_rid"] = ( int64_t )( far_albedo_rid.get_id() );
 	diagnostics["far_albedo_layers"] = far_albedo_layers;
 	diagnostics["far_albedo_max_lod"] = far_albedo_max_lod;
 	diagnostics["far_requested_material_lod"] = m_farQuality.m_fMaterialLodBias;
 	diagnostics["far_material_resolution"] = m_pTerrain ? m_pTerrain->getFarMaterialResolution() : 128;
 	diagnostics["far_material_lod_bias"] = m_farQuality.m_fMaterialLodBias;
 	diagnostics["far_quality_divisor"] = m_pTerrain ? m_pTerrain->getGpuFarQualityDivisor() : 1;
-	diagnostics["far_height_atlas_side"] = m_pTerrain ? m_pTerrain->getGpuFarHeightAtlasSide() : s_nGpuCacheFarHeightSide;
-	diagnostics["far_surface_atlas_side"] = m_pTerrain ? m_pTerrain->getGpuFarSurfaceAtlasSide() : s_nGpuCacheFarHeightSide;
+	diagnostics["far_height_atlas_side"] =
+			m_pTerrain ? m_pTerrain->getGpuFarHeightAtlasSide() : s_nGpuCacheFarHeightSide;
+	diagnostics["far_surface_atlas_side"] =
+			m_pTerrain ? m_pTerrain->getGpuFarSurfaceAtlasSide() : s_nGpuCacheFarHeightSide;
 	diagnostics["far_atlas_side"] = diagnostics["far_height_atlas_side"];
-	diagnostics["far_texture_color_count"] = bFarAssetsReady ? MIN( pAssets->getTextureColors().size(), s_nMaxTextureAssets ) : 0;
-	diagnostics["far_height_atlas_rid"] = ( int64_t ) ( far_height_rid.get_id() );
-	diagnostics["far_color_atlas_rid"] = ( int64_t ) ( far_color_rid.get_id() );
-	diagnostics["far_resources_ready"] = far_albedo_rid.is_valid() && far_albedo_layers > 0 &&
-		far_height_rid.is_valid() && far_color_rid.is_valid();
-	diagnostics["validation_reflection_queries_total"] = ( int64_t ) ( m_nVariantValidationReflectionQueriesTotal );
-	diagnostics["validation_failures_total"] = ( int64_t ) ( m_nVariantValidationFailuresTotal );
+	diagnostics["far_texture_color_count"] =
+			bFarAssetsReady ? MIN( pAssets->getTextureColors().size(), s_nMaxTextureAssets ) : 0;
+	diagnostics["far_height_atlas_rid"] = ( int64_t )( far_height_rid.get_id() );
+	diagnostics["far_color_atlas_rid"] = ( int64_t )( far_color_rid.get_id() );
+	diagnostics["far_resources_ready"] =
+			far_albedo_rid.is_valid() && far_albedo_layers > 0 && far_height_rid.is_valid() && far_color_rid.is_valid();
+	diagnostics["validation_reflection_queries_total"] = ( int64_t )( m_nVariantValidationReflectionQueriesTotal );
+	diagnostics["validation_failures_total"] = ( int64_t )( m_nVariantValidationFailuresTotal );
 	Array tier_diagnostics;
 	for ( int tier = SHADER_TIER_NEAR; tier < SHADER_TIER_COUNT; ++tier ) {
 		tier_diagnostics.push_back( getShaderTierDiagnostics( tier ) );
@@ -4097,34 +4287,34 @@ Dictionary T3DMaterial::getShaderVariantDiagnostics( void ) const {
 
 Dictionary T3DMaterial::getShaderTierDiagnostics( const int nTier ) const {
 	Dictionary diagnostics;
-	const int tier = CLAMP( nTier, ( int ) ( SHADER_TIER_NEAR ), ( int ) ( SHADER_TIER_FAR ) );
+	const int tier = CLAMP( nTier, ( int )( SHADER_TIER_NEAR ), ( int )( SHADER_TIER_FAR ) );
 	const t3dShaderTierValidationState_t &state = m_szShaderTierValidation[tier];
-	const t3dTierQualityConfig_t &quality = tier == SHADER_TIER_NEAR ? m_nearQuality :
-		( tier == SHADER_TIER_MIDDLE ? m_middleQuality : m_farQuality );
+	const t3dTierQualityConfig_t &quality =
+			tier == SHADER_TIER_NEAR ? m_nearQuality : ( tier == SHADER_TIER_MIDDLE ? m_middleQuality : m_farQuality );
 	diagnostics["tier"] = tier;
 	diagnostics["variant_signature"] = String::num_uint64( state.m_key.m_nPrimaryHash, 16, true );
 	diagnostics["variant_fingerprint"] = String::num_uint64( state.m_key.m_nFingerprint, 16, true );
-	diagnostics["variant_source_length"] = ( int64_t ) ( state.m_key.m_nSourceLength );
-	diagnostics["requested_shader_rid"] = ( int64_t ) ( state.m_nRequestedShaderRidId );
-	diagnostics["active_shader_rid"] = ( int64_t ) ( state.m_nActiveShaderRidId );
+	diagnostics["variant_source_length"] = ( int64_t )( state.m_key.m_nSourceLength );
+	diagnostics["requested_shader_rid"] = ( int64_t )( state.m_nRequestedShaderRidId );
+	diagnostics["active_shader_rid"] = ( int64_t )( state.m_nActiveShaderRidId );
 	diagnostics["compile_valid"] = state.m_bCompileValid;
 	diagnostics["reflected_parameter_count"] = state.m_nReflectedParameterCount;
 	diagnostics["last_failure_summary"] = state.m_failureSummary;
 	diagnostics["fallback_to_near"] = state.m_bFallbackToNear;
 	diagnostics["compact_tier_active"] = state.m_bCompactTierActive;
-	diagnostics["texture_filtering"] = ( int ) ( quality.m_textureFiltering );
-	diagnostics["material_sampling_quality"] = ( int ) ( quality.m_materialSamplingQuality );
-	diagnostics["terrain_normal_quality"] = ( int ) ( quality.m_terrainNormalQuality );
-	diagnostics["terrain_color_quality"] = ( int ) ( quality.m_terrainColorQuality );
-	diagnostics["surface_response_quality"] = ( int ) ( quality.m_surfaceResponseQuality );
-	diagnostics["texture_surface_mode"] = ( int ) ( quality.m_textureSurfaceMode );
-	diagnostics["lighting_model"] = ( int ) ( quality.m_lightingModel );
-	diagnostics["detiling_quality"] = ( int ) ( quality.m_detilingQuality );
+	diagnostics["texture_filtering"] = ( int )( quality.m_textureFiltering );
+	diagnostics["material_sampling_quality"] = ( int )( quality.m_materialSamplingQuality );
+	diagnostics["terrain_normal_quality"] = ( int )( quality.m_terrainNormalQuality );
+	diagnostics["terrain_color_quality"] = ( int )( quality.m_terrainColorQuality );
+	diagnostics["surface_response_quality"] = ( int )( quality.m_surfaceResponseQuality );
+	diagnostics["texture_surface_mode"] = ( int )( quality.m_textureSurfaceMode );
+	diagnostics["lighting_model"] = ( int )( quality.m_lightingModel );
+	diagnostics["detiling_quality"] = ( int )( quality.m_detilingQuality );
 	diagnostics["authored_color_contribution"] = quality.m_fAuthoredColorContribution;
 	diagnostics["wetness_contribution"] = quality.m_fWetnessContribution;
 	diagnostics["material_lod_bias"] = quality.m_fMaterialLodBias;
-	diagnostics["range_context"] = getTierRangeContext( ( t3dShaderTier_t ) ( tier ) );
-	diagnostics["shadow_context"] = getTierShadowContext( ( t3dShaderTier_t ) ( tier ) );
+	diagnostics["range_context"] = getTierRangeContext( ( t3dShaderTier_t )( tier ) );
+	diagnostics["shadow_context"] = getTierShadowContext( ( t3dShaderTier_t )( tier ) );
 	return diagnostics;
 }
 
@@ -4149,10 +4339,17 @@ String T3DMaterial::getTierShadowContext( const t3dShaderTier_t tier ) const {
 	}
 	bool bEnabled = false;
 	switch ( tier ) {
-		case SHADER_TIER_NEAR: bEnabled = m_pTerrain->getNearShadowEnabled(); break;
-		case SHADER_TIER_MIDDLE: bEnabled = m_pTerrain->getMiddleShadowEnabled(); break;
-		case SHADER_TIER_FAR: bEnabled = m_pTerrain->getFarShadowEnabled(); break;
-		default: break;
+		case SHADER_TIER_NEAR:
+			bEnabled = m_pTerrain->getNearShadowEnabled();
+			break;
+		case SHADER_TIER_MIDDLE:
+			bEnabled = m_pTerrain->getMiddleShadowEnabled();
+			break;
+		case SHADER_TIER_FAR:
+			bEnabled = m_pTerrain->getFarShadowEnabled();
+			break;
+		default:
+			break;
 	}
 	if ( !bEnabled || m_pTerrain->getShadowLodCount() <= 0 ) {
 		return "Disabled";
@@ -4161,15 +4358,18 @@ String T3DMaterial::getTierShadowContext( const t3dShaderTier_t tier ) const {
 }
 
 String T3DMaterial::getTierShaderStatus( const t3dShaderTier_t argTier ) const {
-	const int tier = CLAMP( ( int ) ( argTier ), ( int ) ( SHADER_TIER_NEAR ), ( int ) ( SHADER_TIER_FAR ) );
+	const int tier = CLAMP( ( int )( argTier ), ( int )( SHADER_TIER_NEAR ), ( int )( SHADER_TIER_FAR ) );
 	const t3dShaderTierValidationState_t &state = m_szShaderTierValidation[tier];
 	if ( state.m_bFallbackToNear ) {
-		return vformat( "Fallback to Near; RID %d; %s", ( int64_t ) ( state.m_nActiveShaderRidId ), state.m_failureSummary );
+		return vformat(
+				"Fallback to Near; RID %d; %s", ( int64_t )( state.m_nActiveShaderRidId ), state.m_failureSummary );
 	}
 	if ( !state.m_bCompileValid ) {
 		return state.m_failureSummary.is_empty() ? "Not compiled" : "Invalid: " + state.m_failureSummary;
 	}
-	return vformat( "Valid; RID %d; %d reflected parameters", ( int64_t ) ( state.m_nActiveShaderRidId ), state.m_nReflectedParameterCount );
+	return vformat( "Valid; RID %d; %d reflected parameters",
+			( int64_t )( state.m_nActiveShaderRidId ),
+			state.m_nReflectedParameterCount );
 }
 
 void T3DMaterial::resetShaderVariantDiagnostics( void ) {
@@ -4211,12 +4411,12 @@ void T3DMaterial::setShaderRegressionInvalidTier( const int nTier ) {
 }
 
 Variant T3DMaterial::getTierRegressionMaterialParam( const int nTier, const StringName &strName ) const {
-	const int tier = CLAMP( nTier, ( int ) ( SHADER_TIER_NEAR ), ( int ) ( SHADER_TIER_FAR ) );
+	const int tier = CLAMP( nTier, ( int )( SHADER_TIER_NEAR ), ( int )( SHADER_TIER_FAR ) );
 	if ( m_szTierUniformPublicationCount[tier] == 0u ) {
 		return Variant();
 	}
-	const t3dTierQualityConfig_t &quality = tier == SHADER_TIER_NEAR ? m_nearQuality :
-		( tier == SHADER_TIER_MIDDLE ? m_middleQuality : m_farQuality );
+	const t3dTierQualityConfig_t &quality =
+			tier == SHADER_TIER_NEAR ? m_nearQuality : ( tier == SHADER_TIER_MIDDLE ? m_middleQuality : m_farQuality );
 	if ( strName == StringName( "_tier_authored_color_contribution" ) ) {
 		return quality.m_fAuthoredColorContribution;
 	}
@@ -4235,8 +4435,9 @@ void T3DMaterial::setPackedPbrSingleFetch( const bool bEnabled ) {
 	// branch. The current layout stores albedo and surface data in separate arrays,
 	// so a true single-fetch path cannot be generated without changing the format.
 	if ( bEnabled ) {
-		LOG( WARN, "packed_pbr_single_fetch is deprecated and has no valid path with the current texture layout; "
-				  "ignoring it." );
+		LOG( WARN,
+				"packed_pbr_single_fetch is deprecated and has no valid path with the current texture layout; "
+				"ignoring it." );
 	}
 }
 
@@ -4298,13 +4499,13 @@ void T3DMaterial::setShaderOverrideEnabled( const bool bEnabled ) {
 }
 
 void T3DMaterial::setShaderOverride( const Ref<Shader> &rShader ) {
-	if ( !differs( m_shaderOverride, rShader ) ) {
+	if ( !t3dDiffers( m_shaderOverride, rShader ) ) {
 		return;
 	}
 	disconnectShaderOverrideSignals();
 	m_shaderOverride = rShader;
 	m_bPersistenceDirty = true;
-	LOG( INFO, "t3dSetting_t override shader" );
+	LOG( INFO, "Setting override shader" );
 	update( FULL_REBUILD );
 }
 
@@ -4323,26 +4524,27 @@ void T3DMaterial::setBufferShaderOverrideEnabled( const bool bEnabled ) {
 }
 
 void T3DMaterial::setBufferShaderOverride( const Ref<Shader> &rShader ) {
-	if ( !differs( m_bufferShaderOverride, rShader ) ) {
+	if ( !t3dDiffers( m_bufferShaderOverride, rShader ) ) {
 		return;
 	}
 	disconnectShaderOverrideSignals();
 	m_bufferShaderOverride = rShader;
 	m_bPersistenceDirty = true;
-	LOG( INFO, "t3dSetting_t override shader" );
+	LOG( INFO, "Setting override shader" );
 	updateShader();
 }
 
 void T3DMaterial::setShaderParam( const StringName &strName, const Variant &rValue ) {
-	LOG( DEBUG, "t3dSetting_t shader parameter: ", strName );
+	LOG( DEBUG, "Setting shader parameter: ", strName );
 	if ( strName.begins_with( "_" ) && m_hMaterial.is_valid() ) {
 		setRuntimeMaterialParam( strName, rValue );
 	} else {
 		_set( strName, rValue );
 	}
 	if ( m_pTerrain && m_pTerrain->getData() &&
-		( strName == StringName( "auto_slope" ) || strName == StringName( "auto_height_reduction" ) ||
-		 strName == StringName( "auto_base_texture" ) || strName == StringName( "auto_overlay_texture" ) ) ) {
+			( strName == StringName( "auto_slope" ) || strName == StringName( "auto_height_reduction" ) ||
+					strName == StringName( "auto_base_texture" ) ||
+					strName == StringName( "auto_overlay_texture" ) ) ) {
 		m_pTerrain->getData()->invalidateGpuFarSurface();
 	}
 }
@@ -4556,7 +4758,7 @@ Error T3DMaterial::save( const String &rPath ) {
 		return ERR_FILE_NOT_FOUND;
 	}
 	if ( !rPath.is_empty() ) {
-		LOG( DEBUG, "t3dSetting_t file path to ", rPath );
+		LOG( DEBUG, "Setting file path to ", rPath );
 		take_over_path( rPath );
 	}
 
@@ -4594,16 +4796,19 @@ Error T3DMaterial::save( const String &rPath ) {
 				}
 			}
 		} else {
-			LOG( ERROR, "Cannot save file: ", path, ". Error code: ", ERROR,
-				". Look up @GlobalScope Error enum in the Godot docs" );
+			LOG( ERROR,
+					"Cannot save file: ",
+					path,
+					". Error code: ",
+					ERROR,
+					". Look up @GlobalScope Error enum in the Godot docs" );
 		}
 	}
 	return err;
 }
 
-///////////////////////////
-// Protected Functions
-///////////////////////////
+// -----------------------------------------------------------------------------
+// Protected functions
 
 void T3DMaterial::refreshShaderPropertyCache( void ) {
 	m_shaderPropertyCache.clear();
@@ -4661,7 +4866,7 @@ void T3DMaterial::refreshShaderPropertyCache( void ) {
 			}
 			// Filter out extraneous parameters from the inspector if they are not present in the terrain shader.
 			if ( i >= buffer_param && ( !new_active_params.has( name ) && use != PROPERTY_USAGE_GROUP ) &&
-				!current_group.contains( "Displacement" ) ) {
+					!current_group.contains( "Displacement" ) ) {
 				LOG( INFO, "Displacement buffer has active parameter: ", name, " not present in terrain shader." );
 				continue;
 			}
@@ -4704,7 +4909,7 @@ void T3DMaterial::refreshShaderPropertyCache( void ) {
 			PropertyInfo pi;
 			pi.class_name = dict["class_name"];
 			pi.name = dict["name"];
-			pi.type = Variant::Type( ( int ) ( dict["type"] ) );
+			pi.type = Variant::Type( ( int )( dict["type"] ) );
 			pi.hint = dict["hint"];
 			pi.hint_string = dict["hint_string"];
 			pi.usage = dict["usage"];
@@ -4872,12 +5077,12 @@ void T3DMaterial::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "_set_shader_parameters", "dict" ), &T3DMaterial::setShaderParameters );
 	ClassDB::bind_method( D_METHOD( "_get_shader_parameters" ), &T3DMaterial::getShaderParameters );
 	ADD_PROPERTY(
-		PropertyInfo( Variant::DICTIONARY, "_shader_parameters", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-		"_set_shader_parameters", "_get_shader_parameters" );
+			PropertyInfo( Variant::DICTIONARY, "_shader_parameters", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
+			"_set_shader_parameters",
+			"_get_shader_parameters" );
 
 	// Public
-	ClassDB::bind_method( D_METHOD( "update", "flags" ), &T3DMaterial::update,
-						 DEFVAL( UNIFORMS_ONLY ) );
+	ClassDB::bind_method( D_METHOD( "update", "flags" ), &T3DMaterial::update, DEFVAL( UNIFORMS_ONLY ) );
 	ClassDB::bind_method( D_METHOD( "update_editor_overlay" ), &T3DMaterial::updateEditorOverlay );
 	ClassDB::bind_method( D_METHOD( "is_render_shader_ready" ), &T3DMaterial::isRenderShaderReady );
 	ClassDB::bind_method( D_METHOD( "is_region_page_table_valid" ), &T3DMaterial::isRegionPageTableValid );
@@ -4892,78 +5097,106 @@ void T3DMaterial::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_texture_filtering" ), &T3DMaterial::getTextureFiltering );
 	ClassDB::bind_method( D_METHOD( "set_shader_variant_mode", "mode" ), &T3DMaterial::setShaderVariantMode );
 	ClassDB::bind_method( D_METHOD( "get_shader_variant_mode" ), &T3DMaterial::getShaderVariantMode );
-	ClassDB::bind_method( D_METHOD( "set_shader_variant_cache_limit", "limit" ),
-						 &T3DMaterial::setShaderVariantCacheLimit );
-	ClassDB::bind_method( D_METHOD( "get_shader_variant_cache_limit" ),
-						 &T3DMaterial::getShaderVariantCacheLimit );
-	ClassDB::bind_method( D_METHOD( "set_shader_variant_prewarm_limit", "limit" ),
-						 &T3DMaterial::setShaderVariantPrewarmLimit );
-	ClassDB::bind_method( D_METHOD( "get_shader_variant_prewarm_limit" ),
-						 &T3DMaterial::getShaderVariantPrewarmLimit );
+	ClassDB::bind_method(
+			D_METHOD( "set_shader_variant_cache_limit", "limit" ), &T3DMaterial::setShaderVariantCacheLimit );
+	ClassDB::bind_method( D_METHOD( "get_shader_variant_cache_limit" ), &T3DMaterial::getShaderVariantCacheLimit );
+	ClassDB::bind_method(
+			D_METHOD( "set_shader_variant_prewarm_limit", "limit" ), &T3DMaterial::setShaderVariantPrewarmLimit );
+	ClassDB::bind_method( D_METHOD( "get_shader_variant_prewarm_limit" ), &T3DMaterial::getShaderVariantPrewarmLimit );
 	ClassDB::bind_method( D_METHOD( "set_shader_variant_source_budget_mb", "budget_mb" ),
-						 &T3DMaterial::setShaderVariantSourceBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_shader_variant_source_budget_mb" ),
-						 &T3DMaterial::getShaderVariantSourceBudgetMb );
-	ClassDB::bind_method( D_METHOD( "set_shader_performance_preset", "preset" ),
-						 &T3DMaterial::setShaderPerformancePreset );
+			&T3DMaterial::setShaderVariantSourceBudgetMb );
+	ClassDB::bind_method(
+			D_METHOD( "get_shader_variant_source_budget_mb" ), &T3DMaterial::getShaderVariantSourceBudgetMb );
+	ClassDB::bind_method(
+			D_METHOD( "set_shader_performance_preset", "preset" ), &T3DMaterial::setShaderPerformancePreset );
 	ClassDB::bind_method( D_METHOD( "get_shader_performance_preset" ), &T3DMaterial::getShaderPerformancePreset );
-	ClassDB::bind_method( D_METHOD( "set_near_texture_filtering", "filtering" ), &T3DMaterial::setNearTextureFiltering );
+	ClassDB::bind_method(
+			D_METHOD( "set_near_texture_filtering", "filtering" ), &T3DMaterial::setNearTextureFiltering );
 	ClassDB::bind_method( D_METHOD( "get_near_texture_filtering" ), &T3DMaterial::getNearTextureFiltering );
-	ClassDB::bind_method( D_METHOD( "set_near_material_sampling_quality", "quality" ), &T3DMaterial::setNearMaterialSamplingQuality );
-	ClassDB::bind_method( D_METHOD( "get_near_material_sampling_quality" ), &T3DMaterial::getNearMaterialSamplingQuality );
-	ClassDB::bind_method( D_METHOD( "set_near_terrain_normal_quality", "quality" ), &T3DMaterial::setNearTerrainNormalQuality );
+	ClassDB::bind_method(
+			D_METHOD( "set_near_material_sampling_quality", "quality" ), &T3DMaterial::setNearMaterialSamplingQuality );
+	ClassDB::bind_method(
+			D_METHOD( "get_near_material_sampling_quality" ), &T3DMaterial::getNearMaterialSamplingQuality );
+	ClassDB::bind_method(
+			D_METHOD( "set_near_terrain_normal_quality", "quality" ), &T3DMaterial::setNearTerrainNormalQuality );
 	ClassDB::bind_method( D_METHOD( "get_near_terrain_normal_quality" ), &T3DMaterial::getNearTerrainNormalQuality );
-	ClassDB::bind_method( D_METHOD( "set_near_terrain_color_quality", "quality" ), &T3DMaterial::setNearTerrainColorQuality );
+	ClassDB::bind_method(
+			D_METHOD( "set_near_terrain_color_quality", "quality" ), &T3DMaterial::setNearTerrainColorQuality );
 	ClassDB::bind_method( D_METHOD( "get_near_terrain_color_quality" ), &T3DMaterial::getNearTerrainColorQuality );
-	ClassDB::bind_method( D_METHOD( "set_near_surface_response_quality", "quality" ), &T3DMaterial::setNearSurfaceResponseQuality );
-	ClassDB::bind_method( D_METHOD( "get_near_surface_response_quality" ), &T3DMaterial::getNearSurfaceResponseQuality );
-	ClassDB::bind_method( D_METHOD( "set_near_texture_surface_mode", "mode" ), &T3DMaterial::setNearTextureSurfaceMode );
+	ClassDB::bind_method(
+			D_METHOD( "set_near_surface_response_quality", "quality" ), &T3DMaterial::setNearSurfaceResponseQuality );
+	ClassDB::bind_method(
+			D_METHOD( "get_near_surface_response_quality" ), &T3DMaterial::getNearSurfaceResponseQuality );
+	ClassDB::bind_method(
+			D_METHOD( "set_near_texture_surface_mode", "mode" ), &T3DMaterial::setNearTextureSurfaceMode );
 	ClassDB::bind_method( D_METHOD( "get_near_texture_surface_mode" ), &T3DMaterial::getNearTextureSurfaceMode );
 	ClassDB::bind_method( D_METHOD( "set_near_lighting_model", "model" ), &T3DMaterial::setNearLightingModel );
 	ClassDB::bind_method( D_METHOD( "get_near_lighting_model" ), &T3DMaterial::getNearLightingModel );
 	ClassDB::bind_method( D_METHOD( "set_near_detiling_quality", "quality" ), &T3DMaterial::setNearDetilingQuality );
 	ClassDB::bind_method( D_METHOD( "get_near_detiling_quality" ), &T3DMaterial::getNearDetilingQuality );
-	ClassDB::bind_method( D_METHOD( "set_near_authored_color_contribution", "contribution" ), &T3DMaterial::setNearAuthoredColorContribution );
-	ClassDB::bind_method( D_METHOD( "get_near_authored_color_contribution" ), &T3DMaterial::getNearAuthoredColorContribution );
-	ClassDB::bind_method( D_METHOD( "set_near_wetness_contribution", "contribution" ), &T3DMaterial::setNearWetnessContribution );
+	ClassDB::bind_method( D_METHOD( "set_near_authored_color_contribution", "contribution" ),
+			&T3DMaterial::setNearAuthoredColorContribution );
+	ClassDB::bind_method(
+			D_METHOD( "get_near_authored_color_contribution" ), &T3DMaterial::getNearAuthoredColorContribution );
+	ClassDB::bind_method(
+			D_METHOD( "set_near_wetness_contribution", "contribution" ), &T3DMaterial::setNearWetnessContribution );
 	ClassDB::bind_method( D_METHOD( "get_near_wetness_contribution" ), &T3DMaterial::getNearWetnessContribution );
 	ClassDB::bind_method( D_METHOD( "set_near_material_lod_bias", "bias" ), &T3DMaterial::setNearMaterialLodBias );
 	ClassDB::bind_method( D_METHOD( "get_near_material_lod_bias" ), &T3DMaterial::getNearMaterialLodBias );
 
-	ClassDB::bind_method( D_METHOD( "set_middle_material_sampling_quality", "quality" ), &T3DMaterial::setMiddleMaterialSamplingQuality );
-	ClassDB::bind_method( D_METHOD( "get_middle_material_sampling_quality" ), &T3DMaterial::getMiddleMaterialSamplingQuality );
+	ClassDB::bind_method( D_METHOD( "set_middle_material_sampling_quality", "quality" ),
+			&T3DMaterial::setMiddleMaterialSamplingQuality );
+	ClassDB::bind_method(
+			D_METHOD( "get_middle_material_sampling_quality" ), &T3DMaterial::getMiddleMaterialSamplingQuality );
 	ClassDB::bind_method( D_METHOD( "set_middle_surface_source", "source" ), &T3DMaterial::setMiddleSurfaceSource );
 	ClassDB::bind_method( D_METHOD( "get_middle_surface_source" ), &T3DMaterial::getMiddleSurfaceSource );
-	ClassDB::bind_method( D_METHOD( "set_middle_terrain_normal_quality", "quality" ), &T3DMaterial::setMiddleTerrainNormalQuality );
-	ClassDB::bind_method( D_METHOD( "get_middle_terrain_normal_quality" ), &T3DMaterial::getMiddleTerrainNormalQuality );
-	ClassDB::bind_method( D_METHOD( "set_middle_terrain_color_quality", "quality" ), &T3DMaterial::setMiddleTerrainColorQuality );
+	ClassDB::bind_method(
+			D_METHOD( "set_middle_terrain_normal_quality", "quality" ), &T3DMaterial::setMiddleTerrainNormalQuality );
+	ClassDB::bind_method(
+			D_METHOD( "get_middle_terrain_normal_quality" ), &T3DMaterial::getMiddleTerrainNormalQuality );
+	ClassDB::bind_method(
+			D_METHOD( "set_middle_terrain_color_quality", "quality" ), &T3DMaterial::setMiddleTerrainColorQuality );
 	ClassDB::bind_method( D_METHOD( "get_middle_terrain_color_quality" ), &T3DMaterial::getMiddleTerrainColorQuality );
-	ClassDB::bind_method( D_METHOD( "set_middle_surface_response_quality", "quality" ), &T3DMaterial::setMiddleSurfaceResponseQuality );
-	ClassDB::bind_method( D_METHOD( "get_middle_surface_response_quality" ), &T3DMaterial::getMiddleSurfaceResponseQuality );
+	ClassDB::bind_method( D_METHOD( "set_middle_surface_response_quality", "quality" ),
+			&T3DMaterial::setMiddleSurfaceResponseQuality );
+	ClassDB::bind_method(
+			D_METHOD( "get_middle_surface_response_quality" ), &T3DMaterial::getMiddleSurfaceResponseQuality );
 	ClassDB::bind_method( D_METHOD( "set_middle_lighting_model", "model" ), &T3DMaterial::setMiddleLightingModel );
 	ClassDB::bind_method( D_METHOD( "get_middle_lighting_model" ), &T3DMaterial::getMiddleLightingModel );
-	ClassDB::bind_method( D_METHOD( "set_middle_detiling_quality", "quality" ), &T3DMaterial::setMiddleDetilingQuality );
+	ClassDB::bind_method(
+			D_METHOD( "set_middle_detiling_quality", "quality" ), &T3DMaterial::setMiddleDetilingQuality );
 	ClassDB::bind_method( D_METHOD( "get_middle_detiling_quality" ), &T3DMaterial::getMiddleDetilingQuality );
-	ClassDB::bind_method( D_METHOD( "set_middle_authored_color_contribution", "contribution" ), &T3DMaterial::setMiddleAuthoredColorContribution );
-	ClassDB::bind_method( D_METHOD( "get_middle_authored_color_contribution" ), &T3DMaterial::getMiddleAuthoredColorContribution );
-	ClassDB::bind_method( D_METHOD( "set_middle_wetness_contribution", "contribution" ), &T3DMaterial::setMiddleWetnessContribution );
+	ClassDB::bind_method( D_METHOD( "set_middle_authored_color_contribution", "contribution" ),
+			&T3DMaterial::setMiddleAuthoredColorContribution );
+	ClassDB::bind_method(
+			D_METHOD( "get_middle_authored_color_contribution" ), &T3DMaterial::getMiddleAuthoredColorContribution );
+	ClassDB::bind_method(
+			D_METHOD( "set_middle_wetness_contribution", "contribution" ), &T3DMaterial::setMiddleWetnessContribution );
 	ClassDB::bind_method( D_METHOD( "get_middle_wetness_contribution" ), &T3DMaterial::getMiddleWetnessContribution );
 
-	ClassDB::bind_method( D_METHOD( "set_far_material_sampling_quality", "quality" ), &T3DMaterial::setFarMaterialSamplingQuality );
-	ClassDB::bind_method( D_METHOD( "get_far_material_sampling_quality" ), &T3DMaterial::getFarMaterialSamplingQuality );
-	ClassDB::bind_method( D_METHOD( "set_far_terrain_normal_quality", "quality" ), &T3DMaterial::setFarTerrainNormalQuality );
+	ClassDB::bind_method(
+			D_METHOD( "set_far_material_sampling_quality", "quality" ), &T3DMaterial::setFarMaterialSamplingQuality );
+	ClassDB::bind_method(
+			D_METHOD( "get_far_material_sampling_quality" ), &T3DMaterial::getFarMaterialSamplingQuality );
+	ClassDB::bind_method(
+			D_METHOD( "set_far_terrain_normal_quality", "quality" ), &T3DMaterial::setFarTerrainNormalQuality );
 	ClassDB::bind_method( D_METHOD( "get_far_terrain_normal_quality" ), &T3DMaterial::getFarTerrainNormalQuality );
-	ClassDB::bind_method( D_METHOD( "set_far_terrain_color_quality", "quality" ), &T3DMaterial::setFarTerrainColorQuality );
+	ClassDB::bind_method(
+			D_METHOD( "set_far_terrain_color_quality", "quality" ), &T3DMaterial::setFarTerrainColorQuality );
 	ClassDB::bind_method( D_METHOD( "get_far_terrain_color_quality" ), &T3DMaterial::getFarTerrainColorQuality );
-	ClassDB::bind_method( D_METHOD( "set_far_surface_response_quality", "quality" ), &T3DMaterial::setFarSurfaceResponseQuality );
+	ClassDB::bind_method(
+			D_METHOD( "set_far_surface_response_quality", "quality" ), &T3DMaterial::setFarSurfaceResponseQuality );
 	ClassDB::bind_method( D_METHOD( "get_far_surface_response_quality" ), &T3DMaterial::getFarSurfaceResponseQuality );
 	ClassDB::bind_method( D_METHOD( "set_far_lighting_model", "model" ), &T3DMaterial::setFarLightingModel );
 	ClassDB::bind_method( D_METHOD( "get_far_lighting_model" ), &T3DMaterial::getFarLightingModel );
 	ClassDB::bind_method( D_METHOD( "set_far_detiling_quality", "quality" ), &T3DMaterial::setFarDetilingQuality );
 	ClassDB::bind_method( D_METHOD( "get_far_detiling_quality" ), &T3DMaterial::getFarDetilingQuality );
-	ClassDB::bind_method( D_METHOD( "set_far_authored_color_contribution", "contribution" ), &T3DMaterial::setFarAuthoredColorContribution );
-	ClassDB::bind_method( D_METHOD( "get_far_authored_color_contribution" ), &T3DMaterial::getFarAuthoredColorContribution );
-	ClassDB::bind_method( D_METHOD( "set_far_wetness_contribution", "contribution" ), &T3DMaterial::setFarWetnessContribution );
+	ClassDB::bind_method( D_METHOD( "set_far_authored_color_contribution", "contribution" ),
+			&T3DMaterial::setFarAuthoredColorContribution );
+	ClassDB::bind_method(
+			D_METHOD( "get_far_authored_color_contribution" ), &T3DMaterial::getFarAuthoredColorContribution );
+	ClassDB::bind_method(
+			D_METHOD( "set_far_wetness_contribution", "contribution" ), &T3DMaterial::setFarWetnessContribution );
 	ClassDB::bind_method( D_METHOD( "get_far_wetness_contribution" ), &T3DMaterial::getFarWetnessContribution );
 	ClassDB::bind_method( D_METHOD( "set_far_material_lod_bias", "bias" ), &T3DMaterial::setFarMaterialLodBias );
 	ClassDB::bind_method( D_METHOD( "get_far_material_lod_bias" ), &T3DMaterial::getFarMaterialLodBias );
@@ -4977,26 +5210,35 @@ void T3DMaterial::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_near_shader_status" ), &T3DMaterial::getNearShaderStatus );
 	ClassDB::bind_method( D_METHOD( "get_middle_shader_status" ), &T3DMaterial::getMiddleShaderStatus );
 	ClassDB::bind_method( D_METHOD( "get_far_shader_status" ), &T3DMaterial::getFarShaderStatus );
-	ClassDB::bind_method( D_METHOD( "set_middle_texture_filtering", "filtering" ), &T3DMaterial::setMiddleTextureFiltering );
+	ClassDB::bind_method(
+			D_METHOD( "set_middle_texture_filtering", "filtering" ), &T3DMaterial::setMiddleTextureFiltering );
 	ClassDB::bind_method( D_METHOD( "get_middle_texture_filtering" ), &T3DMaterial::getMiddleTextureFiltering );
-	ClassDB::bind_method( D_METHOD( "set_middle_terrain_sampling_mode", "mode" ), &T3DMaterial::setMiddleTerrainSamplingMode );
+	ClassDB::bind_method(
+			D_METHOD( "set_middle_terrain_sampling_mode", "mode" ), &T3DMaterial::setMiddleTerrainSamplingMode );
 	ClassDB::bind_method( D_METHOD( "get_middle_terrain_sampling_mode" ), &T3DMaterial::getMiddleTerrainSamplingMode );
-	ClassDB::bind_method( D_METHOD( "set_middle_terrain_normal_mode", "mode" ), &T3DMaterial::setMiddleTerrainNormalMode );
+	ClassDB::bind_method(
+			D_METHOD( "set_middle_terrain_normal_mode", "mode" ), &T3DMaterial::setMiddleTerrainNormalMode );
 	ClassDB::bind_method( D_METHOD( "get_middle_terrain_normal_mode" ), &T3DMaterial::getMiddleTerrainNormalMode );
-	ClassDB::bind_method( D_METHOD( "set_middle_color_sampling_mode", "mode" ), &T3DMaterial::setMiddleColorSamplingMode );
+	ClassDB::bind_method(
+			D_METHOD( "set_middle_color_sampling_mode", "mode" ), &T3DMaterial::setMiddleColorSamplingMode );
 	ClassDB::bind_method( D_METHOD( "get_middle_color_sampling_mode" ), &T3DMaterial::getMiddleColorSamplingMode );
 	ClassDB::bind_method( D_METHOD( "set_middle_surface_data_mode", "mode" ), &T3DMaterial::setMiddleSurfaceDataMode );
 	ClassDB::bind_method( D_METHOD( "get_middle_surface_data_mode" ), &T3DMaterial::getMiddleSurfaceDataMode );
-	ClassDB::bind_method( D_METHOD( "set_middle_texture_surface_mode", "mode" ), &T3DMaterial::setMiddleTextureSurfaceMode );
+	ClassDB::bind_method(
+			D_METHOD( "set_middle_texture_surface_mode", "mode" ), &T3DMaterial::setMiddleTextureSurfaceMode );
 	ClassDB::bind_method( D_METHOD( "get_middle_texture_surface_mode" ), &T3DMaterial::getMiddleTextureSurfaceMode );
-	ClassDB::bind_method( D_METHOD( "set_middle_terrain_shading_mode", "mode" ), &T3DMaterial::setMiddleTerrainShadingMode );
+	ClassDB::bind_method(
+			D_METHOD( "set_middle_terrain_shading_mode", "mode" ), &T3DMaterial::setMiddleTerrainShadingMode );
 	ClassDB::bind_method( D_METHOD( "get_middle_terrain_shading_mode" ), &T3DMaterial::getMiddleTerrainShadingMode );
 	ClassDB::bind_method( D_METHOD( "set_middle_detiling_mode", "mode" ), &T3DMaterial::setMiddleDetilingMode );
 	ClassDB::bind_method( D_METHOD( "get_middle_detiling_mode" ), &T3DMaterial::getMiddleDetilingMode );
-	ClassDB::bind_method( D_METHOD( "set_middle_auto_shader_enabled", "enabled" ), &T3DMaterial::setMiddleAutoShaderEnabled );
+	ClassDB::bind_method(
+			D_METHOD( "set_middle_auto_shader_enabled", "enabled" ), &T3DMaterial::setMiddleAutoShaderEnabled );
 	ClassDB::bind_method( D_METHOD( "get_middle_auto_shader_enabled" ), &T3DMaterial::getMiddleAutoShaderEnabled );
-	ClassDB::bind_method( D_METHOD( "set_middle_authored_color_enabled", "enabled" ), &T3DMaterial::setMiddleAuthoredColorEnabled );
-	ClassDB::bind_method( D_METHOD( "get_middle_authored_color_enabled" ), &T3DMaterial::getMiddleAuthoredColorEnabled );
+	ClassDB::bind_method(
+			D_METHOD( "set_middle_authored_color_enabled", "enabled" ), &T3DMaterial::setMiddleAuthoredColorEnabled );
+	ClassDB::bind_method(
+			D_METHOD( "get_middle_authored_color_enabled" ), &T3DMaterial::getMiddleAuthoredColorEnabled );
 	ClassDB::bind_method( D_METHOD( "set_middle_wetness_enabled", "enabled" ), &T3DMaterial::setMiddleWetnessEnabled );
 	ClassDB::bind_method( D_METHOD( "get_middle_wetness_enabled" ), &T3DMaterial::getMiddleWetnessEnabled );
 	ClassDB::bind_method( D_METHOD( "set_middle_material_lod_bias", "bias" ), &T3DMaterial::setMiddleMaterialLodBias );
@@ -5009,7 +5251,8 @@ void T3DMaterial::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_far_terrain_shading_mode" ), &T3DMaterial::getFarTerrainShadingMode );
 	ClassDB::bind_method( D_METHOD( "set_far_material_lod", "lod" ), &T3DMaterial::setFarMaterialLod );
 	ClassDB::bind_method( D_METHOD( "get_far_material_lod" ), &T3DMaterial::getFarMaterialLod );
-	ClassDB::bind_method( D_METHOD( "set_far_authored_color_enabled", "enabled" ), &T3DMaterial::setFarAuthoredColorEnabled );
+	ClassDB::bind_method(
+			D_METHOD( "set_far_authored_color_enabled", "enabled" ), &T3DMaterial::setFarAuthoredColorEnabled );
 	ClassDB::bind_method( D_METHOD( "get_far_authored_color_enabled" ), &T3DMaterial::getFarAuthoredColorEnabled );
 	ClassDB::bind_method( D_METHOD( "set_far_wetness_enabled", "enabled" ), &T3DMaterial::setFarWetnessEnabled );
 	ClassDB::bind_method( D_METHOD( "get_far_wetness_enabled" ), &T3DMaterial::getFarWetnessEnabled );
@@ -5021,10 +5264,9 @@ void T3DMaterial::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_color_sampling_mode" ), &T3DMaterial::getColorSamplingMode );
 	ClassDB::bind_method( D_METHOD( "set_projection_mode", "mode" ), &T3DMaterial::setProjectionMode );
 	ClassDB::bind_method( D_METHOD( "get_projection_mode" ), &T3DMaterial::getProjectionMode );
-	ClassDB::bind_method( D_METHOD( "set_tessellation_material_mode", "mode" ),
-						 &T3DMaterial::setTessellationMaterialMode );
-	ClassDB::bind_method( D_METHOD( "get_tessellation_material_mode" ),
-						 &T3DMaterial::getTessellationMaterialMode );
+	ClassDB::bind_method(
+			D_METHOD( "set_tessellation_material_mode", "mode" ), &T3DMaterial::setTessellationMaterialMode );
+	ClassDB::bind_method( D_METHOD( "get_tessellation_material_mode" ), &T3DMaterial::getTessellationMaterialMode );
 	ClassDB::bind_method( D_METHOD( "set_surface_data_mode", "mode" ), &T3DMaterial::setSurfaceDataMode );
 	ClassDB::bind_method( D_METHOD( "get_surface_data_mode" ), &T3DMaterial::getSurfaceDataMode );
 	ClassDB::bind_method( D_METHOD( "set_texture_surface_mode", "mode" ), &T3DMaterial::setTextureSurfaceMode );
@@ -5033,99 +5275,87 @@ void T3DMaterial::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_terrain_shading_mode" ), &T3DMaterial::getTerrainShadingMode );
 	ClassDB::bind_method( D_METHOD( "set_detiling_mode", "mode" ), &T3DMaterial::setDetilingMode );
 	ClassDB::bind_method( D_METHOD( "get_detiling_mode" ), &T3DMaterial::getDetilingMode );
-	ClassDB::bind_method( D_METHOD( "set_world_noise_shader_mode", "mode" ),
-						 &T3DMaterial::setWorldNoiseShaderMode );
+	ClassDB::bind_method( D_METHOD( "set_world_noise_shader_mode", "mode" ), &T3DMaterial::setWorldNoiseShaderMode );
 	ClassDB::bind_method( D_METHOD( "get_world_noise_shader_mode" ), &T3DMaterial::getWorldNoiseShaderMode );
 	ClassDB::bind_method( D_METHOD( "prewarm_shader_variants" ), &T3DMaterial::prewarmShaderVariants );
 	ClassDB::bind_method( D_METHOD( "clear_shader_variant_cache" ), &T3DMaterial::clearShaderVariantCache );
 	ClassDB::bind_method( D_METHOD( "get_shader_variant_count" ), &T3DMaterial::getShaderVariantCount );
-	ClassDB::bind_method( D_METHOD( "get_runtime_shader_variant_count" ),
-						 &T3DMaterial::getRuntimeShaderVariantCount );
-	ClassDB::bind_method( D_METHOD( "get_editor_shader_variant_count" ),
-						 &T3DMaterial::getEditorShaderVariantCount );
-	ClassDB::bind_method( D_METHOD( "get_buffer_shader_variant_count" ),
-						 &T3DMaterial::getBufferShaderVariantCount );
-	ClassDB::bind_method( D_METHOD( "get_speculative_shader_variant_count" ),
-						 &T3DMaterial::getSpeculativeShaderVariantCount );
-	ClassDB::bind_method( D_METHOD( "get_shader_variant_source_bytes" ),
-						 &T3DMaterial::getShaderVariantSourceBytes );
-	ClassDB::bind_method( D_METHOD( "get_last_prewarm_variant_count" ),
-						 &T3DMaterial::getLastPrewarmVariantCount );
-	ClassDB::bind_method( D_METHOD( "get_last_prewarm_skipped_count" ),
-						 &T3DMaterial::getLastPrewarmSkippedCount );
-	ClassDB::bind_method( D_METHOD( "get_theoretical_shader_variant_count" ),
-						 &T3DMaterial::getTheoreticalShaderVariantCount );
-	ClassDB::bind_method( D_METHOD( "get_shader_variant_diagnostics" ),
-						 &T3DMaterial::getShaderVariantDiagnostics );
-	ClassDB::bind_method( D_METHOD( "get_shader_tier_diagnostics", "tier" ),
-						 &T3DMaterial::getShaderTierDiagnostics );
-	ClassDB::bind_method( D_METHOD( "reset_shader_variant_diagnostics" ),
-						 &T3DMaterial::resetShaderVariantDiagnostics );
-	ClassDB::bind_method( D_METHOD(
-		"get_shader_regression_source", "tier", "assembly_path",
-		"control_maps_implicit", "color_maps_implicit"
-	),
-						 &T3DMaterial::getShaderRegressionSource );
+	ClassDB::bind_method( D_METHOD( "get_runtime_shader_variant_count" ), &T3DMaterial::getRuntimeShaderVariantCount );
+	ClassDB::bind_method( D_METHOD( "get_editor_shader_variant_count" ), &T3DMaterial::getEditorShaderVariantCount );
+	ClassDB::bind_method( D_METHOD( "get_buffer_shader_variant_count" ), &T3DMaterial::getBufferShaderVariantCount );
+	ClassDB::bind_method(
+			D_METHOD( "get_speculative_shader_variant_count" ), &T3DMaterial::getSpeculativeShaderVariantCount );
+	ClassDB::bind_method( D_METHOD( "get_shader_variant_source_bytes" ), &T3DMaterial::getShaderVariantSourceBytes );
+	ClassDB::bind_method( D_METHOD( "get_last_prewarm_variant_count" ), &T3DMaterial::getLastPrewarmVariantCount );
+	ClassDB::bind_method( D_METHOD( "get_last_prewarm_skipped_count" ), &T3DMaterial::getLastPrewarmSkippedCount );
+	ClassDB::bind_method(
+			D_METHOD( "get_theoretical_shader_variant_count" ), &T3DMaterial::getTheoreticalShaderVariantCount );
+	ClassDB::bind_method( D_METHOD( "get_shader_variant_diagnostics" ), &T3DMaterial::getShaderVariantDiagnostics );
+	ClassDB::bind_method( D_METHOD( "get_shader_tier_diagnostics", "tier" ), &T3DMaterial::getShaderTierDiagnostics );
+	ClassDB::bind_method( D_METHOD( "reset_shader_variant_diagnostics" ), &T3DMaterial::resetShaderVariantDiagnostics );
+	ClassDB::bind_method( D_METHOD( "get_shader_regression_source",
+								  "tier",
+								  "assembly_path",
+								  "control_maps_implicit",
+								  "color_maps_implicit" ),
+			&T3DMaterial::getShaderRegressionSource );
 #ifdef DEBUG_ENABLED
-	ClassDB::bind_method( D_METHOD( "set_shader_regression_invalid_tier", "tier" ),
-						 &T3DMaterial::setShaderRegressionInvalidTier );
+	ClassDB::bind_method(
+			D_METHOD( "set_shader_regression_invalid_tier", "tier" ), &T3DMaterial::setShaderRegressionInvalidTier );
 	ClassDB::bind_method( D_METHOD( "get_tier_regression_material_param", "tier", "name" ),
-						 &T3DMaterial::getTierRegressionMaterialParam );
+			&T3DMaterial::getTierRegressionMaterialParam );
 #endif
-	ClassDB::bind_method( D_METHOD( "set_packed_pbr_single_fetch", "enabled" ),
-						 &T3DMaterial::setPackedPbrSingleFetch );
+	ClassDB::bind_method( D_METHOD( "set_packed_pbr_single_fetch", "enabled" ), &T3DMaterial::setPackedPbrSingleFetch );
 	ClassDB::bind_method( D_METHOD( "get_packed_pbr_single_fetch" ), &T3DMaterial::getPackedPbrSingleFetch );
 	ClassDB::bind_method( D_METHOD( "set_auto_shader_enabled", "enabled" ), &T3DMaterial::setAutoShaderEnabled );
-	ClassDB::bind_method( D_METHOD( "set_auto_shader_enabled_transient", "enabled" ),
-						 &T3DMaterial::setAutoShaderEnabledTransient );
+	ClassDB::bind_method(
+			D_METHOD( "set_auto_shader_enabled_transient", "enabled" ), &T3DMaterial::setAutoShaderEnabledTransient );
 	ClassDB::bind_method( D_METHOD( "get_auto_shader_enabled" ), &T3DMaterial::getAutoShaderEnabled );
 	ClassDB::bind_method( D_METHOD( "set_dual_scaling_enabled", "enabled" ), &T3DMaterial::setDualScalingEnabled );
 	ClassDB::bind_method( D_METHOD( "get_dual_scaling_enabled" ), &T3DMaterial::getDualScalingEnabled );
-	ClassDB::bind_method( D_METHOD( "set_macro_variation_enabled", "enabled" ),
-						 &T3DMaterial::setMacroVariationEnabled );
+	ClassDB::bind_method(
+			D_METHOD( "set_macro_variation_enabled", "enabled" ), &T3DMaterial::setMacroVariationEnabled );
 	ClassDB::bind_method( D_METHOD( "get_macro_variation_enabled" ), &T3DMaterial::getMacroVariationEnabled );
 	ClassDB::bind_method( D_METHOD( "set_projection_enabled", "enabled" ), &T3DMaterial::setProjectionEnabled );
 	ClassDB::bind_method( D_METHOD( "get_projection_enabled" ), &T3DMaterial::getProjectionEnabled );
 
-	ClassDB::bind_method( D_METHOD( "set_shader_override_enabled", "enabled" ),
-						 &T3DMaterial::setShaderOverrideEnabled );
+	ClassDB::bind_method(
+			D_METHOD( "set_shader_override_enabled", "enabled" ), &T3DMaterial::setShaderOverrideEnabled );
 	ClassDB::bind_method( D_METHOD( "is_shader_override_enabled" ), &T3DMaterial::isShaderOverrideEnabled );
 	ClassDB::bind_method( D_METHOD( "set_shader_override", "shader" ), &T3DMaterial::setShaderOverride );
 	ClassDB::bind_method( D_METHOD( "get_shader_override" ), &T3DMaterial::getShaderOverride );
 
-	ClassDB::bind_method( D_METHOD( "set_buffer_shader_override_enabled", "enabled" ),
-						 &T3DMaterial::setBufferShaderOverrideEnabled );
-	ClassDB::bind_method( D_METHOD( "is_buffer_shader_override_enabled" ),
-						 &T3DMaterial::isBufferShaderOverrideEnabled );
-	ClassDB::bind_method( D_METHOD( "set_buffer_shader_override", "shader" ),
-						 &T3DMaterial::setBufferShaderOverride );
+	ClassDB::bind_method(
+			D_METHOD( "set_buffer_shader_override_enabled", "enabled" ), &T3DMaterial::setBufferShaderOverrideEnabled );
+	ClassDB::bind_method(
+			D_METHOD( "is_buffer_shader_override_enabled" ), &T3DMaterial::isBufferShaderOverrideEnabled );
+	ClassDB::bind_method( D_METHOD( "set_buffer_shader_override", "shader" ), &T3DMaterial::setBufferShaderOverride );
 	ClassDB::bind_method( D_METHOD( "get_buffer_shader_override" ), &T3DMaterial::getBufferShaderOverride );
 	ClassDB::bind_method( D_METHOD( "set_displacement_scale", "scale" ), &T3DMaterial::setDisplacementScale );
 	ClassDB::bind_method( D_METHOD( "get_displacement_scale" ), &T3DMaterial::getDisplacementScale );
-	ClassDB::bind_method( D_METHOD( "set_displacement_sharpness", "sharpness" ),
-						 &T3DMaterial::setDisplacementSharpness );
+	ClassDB::bind_method(
+			D_METHOD( "set_displacement_sharpness", "sharpness" ), &T3DMaterial::setDisplacementSharpness );
 	ClassDB::bind_method( D_METHOD( "get_displacement_sharpness" ), &T3DMaterial::getDisplacementSharpness );
 
 	ClassDB::bind_method( D_METHOD( "set_shader_param", "name", "value" ), &T3DMaterial::setShaderParam );
 	ClassDB::bind_method( D_METHOD( "get_shader_param", "name" ), &T3DMaterial::getShaderParam );
 
 	// PBR output
-	ClassDB::bind_method( D_METHOD( "set_output_albedo_enabled", "enabled" ),
-						 &T3DMaterial::setOutputAlbedoEnabled );
+	ClassDB::bind_method( D_METHOD( "set_output_albedo_enabled", "enabled" ), &T3DMaterial::setOutputAlbedoEnabled );
 	ClassDB::bind_method( D_METHOD( "get_output_albedo_enabled" ), &T3DMaterial::getOutputAlbedoEnabled );
-	ClassDB::bind_method( D_METHOD( "set_output_roughness_enabled", "enabled" ),
-						 &T3DMaterial::setOutputRoughnessEnabled );
+	ClassDB::bind_method(
+			D_METHOD( "set_output_roughness_enabled", "enabled" ), &T3DMaterial::setOutputRoughnessEnabled );
 	ClassDB::bind_method( D_METHOD( "get_output_roughness_enabled" ), &T3DMaterial::getOutputRoughnessEnabled );
-	ClassDB::bind_method( D_METHOD( "set_output_specular_enabled", "enabled" ),
-						 &T3DMaterial::setOutputSpecularEnabled );
+	ClassDB::bind_method(
+			D_METHOD( "set_output_specular_enabled", "enabled" ), &T3DMaterial::setOutputSpecularEnabled );
 	ClassDB::bind_method( D_METHOD( "get_output_specular_enabled" ), &T3DMaterial::getOutputSpecularEnabled );
-	ClassDB::bind_method( D_METHOD( "set_output_normal_map_enabled", "enabled" ),
-						 &T3DMaterial::setOutputNormalMapEnabled );
+	ClassDB::bind_method(
+			D_METHOD( "set_output_normal_map_enabled", "enabled" ), &T3DMaterial::setOutputNormalMapEnabled );
 	ClassDB::bind_method( D_METHOD( "get_output_normal_map_enabled" ), &T3DMaterial::getOutputNormalMapEnabled );
 	ClassDB::bind_method( D_METHOD( "set_output_ambient_occlusion_enabled", "enabled" ),
-						 &T3DMaterial::setOutputAmbientOcclusionEnabled );
-	ClassDB::bind_method( D_METHOD( "get_output_ambient_occlusion_enabled" ),
-						 &T3DMaterial::getOutputAmbientOcclusionEnabled );
+			&T3DMaterial::setOutputAmbientOcclusionEnabled );
+	ClassDB::bind_method(
+			D_METHOD( "get_output_ambient_occlusion_enabled" ), &T3DMaterial::getOutputAmbientOcclusionEnabled );
 
 	// Overlays
 	ClassDB::bind_method( D_METHOD( "set_show_region_grid", "enabled" ), &T3DMaterial::setShowRegionGrid );
@@ -5174,8 +5404,8 @@ void T3DMaterial::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_show_texture_ao" ), &T3DMaterial::getShowTextureAo );
 	ClassDB::bind_method( D_METHOD( "set_show_texture_rough", "enabled" ), &T3DMaterial::setShowTextureRough );
 	ClassDB::bind_method( D_METHOD( "get_show_texture_rough" ), &T3DMaterial::getShowTextureRough );
-	ClassDB::bind_method( D_METHOD( "set_show_displacement_buffer", "enabled" ),
-						 &T3DMaterial::setShowDisplacementBuffer );
+	ClassDB::bind_method(
+			D_METHOD( "set_show_displacement_buffer", "enabled" ), &T3DMaterial::setShowDisplacementBuffer );
 	ClassDB::bind_method( D_METHOD( "get_show_displacement_buffer" ), &T3DMaterial::getShowDisplacementBuffer );
 
 	ClassDB::bind_method( D_METHOD( "save", "path" ), &T3DMaterial::save, DEFVAL( "" ) );
@@ -5183,260 +5413,464 @@ void T3DMaterial::_bind_methods( void ) {
 	// Inspector groups are intentionally distinct from shader uniform-group names.
 
 	ADD_GROUP( "Profile & Shader Cache", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "shader_performance_preset", PROPERTY_HINT_ENUM,
-		"Custom,Cinematic,High,Xbox 360 Styled,Low,Minimum,Xbox 360 Authentic" ),
-		"set_shader_performance_preset", "get_shader_performance_preset" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "shader_variant_mode", PROPERTY_HINT_ENUM,
-		"Disabled,On Demand LRU,Prewarm Active Potential,Prewarm Active + Recent" ),
-		"set_shader_variant_mode", "get_shader_variant_mode" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT,
+						  "shader_performance_preset",
+						  PROPERTY_HINT_ENUM,
+						  "Custom,Cinematic,High,Xbox 360 Styled,Low,Minimum,Xbox 360 Authentic" ),
+			"set_shader_performance_preset",
+			"get_shader_performance_preset" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT,
+						  "shader_variant_mode",
+						  PROPERTY_HINT_ENUM,
+						  "Disabled,On Demand LRU,Prewarm Active Potential,Prewarm Active + Recent" ),
+			"set_shader_variant_mode",
+			"get_shader_variant_mode" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "shader_variant_cache_limit", PROPERTY_HINT_RANGE, "8,256,1" ),
-		"set_shader_variant_cache_limit", "get_shader_variant_cache_limit" );
+			"set_shader_variant_cache_limit",
+			"get_shader_variant_cache_limit" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "shader_variant_prewarm_limit", PROPERTY_HINT_RANGE, "1,64,1" ),
-		"set_shader_variant_prewarm_limit", "get_shader_variant_prewarm_limit" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "shader_variant_source_budget_mb", PROPERTY_HINT_RANGE,
-		"1,256,1,suffix: MiB" ), "set_shader_variant_source_budget_mb", "get_shader_variant_source_budget_mb" );
+			"set_shader_variant_prewarm_limit",
+			"get_shader_variant_prewarm_limit" );
+	ADD_PROPERTY(
+			PropertyInfo( Variant::INT, "shader_variant_source_budget_mb", PROPERTY_HINT_RANGE, "1,256,1,suffix: MiB" ),
+			"set_shader_variant_source_budget_mb",
+			"get_shader_variant_source_budget_mb" );
 
 	ADD_GROUP( "Common Material Policy", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "world_background", PROPERTY_HINT_ENUM, "None,Flat,Noise" ),
-		"set_world_background", "get_world_background" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "world_noise_shader_mode", PROPERTY_HINT_ENUM,
-		"Dynamic,Cached + Vertex Normals,Cached + Fragment Normals,Procedural + Vertex Normals,Procedural + Fragment Normals" ),
-		"set_world_noise_shader_mode", "get_world_noise_shader_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "auto_shader_enabled" ), "set_auto_shader_enabled", "get_auto_shader_enabled" );
+			"set_world_background",
+			"get_world_background" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT,
+						  "world_noise_shader_mode",
+						  PROPERTY_HINT_ENUM,
+						  "Dynamic,Cached + Vertex Normals,Cached + Fragment Normals,Procedural + Vertex "
+						  "Normals,Procedural + Fragment Normals" ),
+			"set_world_noise_shader_mode",
+			"get_world_noise_shader_mode" );
+	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "auto_shader_enabled" ),
+			"set_auto_shader_enabled",
+			"get_auto_shader_enabled" );
 
 	ADD_GROUP( "Near Quality", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "near_texture_filtering", PROPERTY_HINT_ENUM,
-		"Linear Anisotropic,Linear,Nearest Anisotropic,Nearest" ),
-		"set_near_texture_filtering", "get_near_texture_filtering" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT,
+						  "near_texture_filtering",
+						  PROPERTY_HINT_ENUM,
+						  "Linear Anisotropic,Linear,Nearest Anisotropic,Nearest" ),
+			"set_near_texture_filtering",
+			"get_near_texture_filtering" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "near_material_sampling_quality", PROPERTY_HINT_ENUM, "Fast,Full" ),
-		"set_near_material_sampling_quality", "get_near_material_sampling_quality" );
+			"set_near_material_sampling_quality",
+			"get_near_material_sampling_quality" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "near_terrain_normal_quality", PROPERTY_HINT_ENUM, "Geometry,Detailed" ),
-		"set_near_terrain_normal_quality", "get_near_terrain_normal_quality" );
+			"set_near_terrain_normal_quality",
+			"get_near_terrain_normal_quality" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "near_terrain_color_quality", PROPERTY_HINT_ENUM, "Fast,Exact" ),
-		"set_near_terrain_color_quality", "get_near_terrain_color_quality" );
+			"set_near_terrain_color_quality",
+			"get_near_terrain_color_quality" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "near_surface_response_quality", PROPERTY_HINT_ENUM, "Simple,Detailed" ),
-		"set_near_surface_response_quality", "get_near_surface_response_quality" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "near_texture_surface_mode", PROPERTY_HINT_ENUM,
-		"Textured,Silhouette / No Textures" ), "set_near_texture_surface_mode", "get_near_texture_surface_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "near_lighting_model", PROPERTY_HINT_ENUM, "Unshaded,Lambert,Blinn-Phong,PBR" ),
-		"set_near_lighting_model", "get_near_lighting_model" );
+			"set_near_surface_response_quality",
+			"get_near_surface_response_quality" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT,
+						  "near_texture_surface_mode",
+						  PROPERTY_HINT_ENUM,
+						  "Textured,Silhouette / No Textures" ),
+			"set_near_texture_surface_mode",
+			"get_near_texture_surface_mode" );
+	ADD_PROPERTY(
+			PropertyInfo( Variant::INT, "near_lighting_model", PROPERTY_HINT_ENUM, "Unshaded,Lambert,Blinn-Phong,PBR" ),
+			"set_near_lighting_model",
+			"get_near_lighting_model" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "near_detiling_quality", PROPERTY_HINT_ENUM, "Disabled,Rotation" ),
-		"set_near_detiling_quality", "get_near_detiling_quality" );
+			"set_near_detiling_quality",
+			"get_near_detiling_quality" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "near_authored_color_contribution", PROPERTY_HINT_RANGE, "0,1,0.01" ),
-		"set_near_authored_color_contribution", "get_near_authored_color_contribution" );
+			"set_near_authored_color_contribution",
+			"get_near_authored_color_contribution" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "near_wetness_contribution", PROPERTY_HINT_RANGE, "0,1,0.01" ),
-		"set_near_wetness_contribution", "get_near_wetness_contribution" );
+			"set_near_wetness_contribution",
+			"get_near_wetness_contribution" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "near_material_lod_bias", PROPERTY_HINT_RANGE, "-2,4,0.25" ),
-		"set_near_material_lod_bias", "get_near_material_lod_bias" );
+			"set_near_material_lod_bias",
+			"get_near_material_lod_bias" );
 
 	ADD_GROUP( "Middle Quality", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_texture_filtering", PROPERTY_HINT_ENUM,
-		"Linear Anisotropic,Linear,Nearest Anisotropic,Nearest" ),
-		"set_middle_texture_filtering", "get_middle_texture_filtering" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT,
+						  "middle_texture_filtering",
+						  PROPERTY_HINT_ENUM,
+						  "Linear Anisotropic,Linear,Nearest Anisotropic,Nearest" ),
+			"set_middle_texture_filtering",
+			"get_middle_texture_filtering" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_material_sampling_quality", PROPERTY_HINT_ENUM, "Fast,Full" ),
-		"set_middle_material_sampling_quality", "get_middle_material_sampling_quality" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_surface_source", PROPERTY_HINT_ENUM,
-		"Baked Composite,Runtime Material" ), "set_middle_surface_source", "get_middle_surface_source" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_terrain_normal_quality", PROPERTY_HINT_ENUM, "Geometry,Detailed" ),
-		"set_middle_terrain_normal_quality", "get_middle_terrain_normal_quality" );
+			"set_middle_material_sampling_quality",
+			"get_middle_material_sampling_quality" );
+	ADD_PROPERTY(
+			PropertyInfo(
+					Variant::INT, "middle_surface_source", PROPERTY_HINT_ENUM, "Baked Composite,Runtime Material" ),
+			"set_middle_surface_source",
+			"get_middle_surface_source" );
+	ADD_PROPERTY(
+			PropertyInfo( Variant::INT, "middle_terrain_normal_quality", PROPERTY_HINT_ENUM, "Geometry,Detailed" ),
+			"set_middle_terrain_normal_quality",
+			"get_middle_terrain_normal_quality" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_terrain_color_quality", PROPERTY_HINT_ENUM, "Fast,Exact" ),
-		"set_middle_terrain_color_quality", "get_middle_terrain_color_quality" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_surface_response_quality", PROPERTY_HINT_ENUM, "Simple,Detailed" ),
-		"set_middle_surface_response_quality", "get_middle_surface_response_quality" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_texture_surface_mode", PROPERTY_HINT_ENUM,
-		"Textured,Silhouette / No Textures" ), "set_middle_texture_surface_mode", "get_middle_texture_surface_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_lighting_model", PROPERTY_HINT_ENUM, "Unshaded,Lambert,Blinn-Phong,PBR" ),
-		"set_middle_lighting_model", "get_middle_lighting_model" );
+			"set_middle_terrain_color_quality",
+			"get_middle_terrain_color_quality" );
+	ADD_PROPERTY(
+			PropertyInfo( Variant::INT, "middle_surface_response_quality", PROPERTY_HINT_ENUM, "Simple,Detailed" ),
+			"set_middle_surface_response_quality",
+			"get_middle_surface_response_quality" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT,
+						  "middle_texture_surface_mode",
+						  PROPERTY_HINT_ENUM,
+						  "Textured,Silhouette / No Textures" ),
+			"set_middle_texture_surface_mode",
+			"get_middle_texture_surface_mode" );
+	ADD_PROPERTY(
+			PropertyInfo(
+					Variant::INT, "middle_lighting_model", PROPERTY_HINT_ENUM, "Unshaded,Lambert,Blinn-Phong,PBR" ),
+			"set_middle_lighting_model",
+			"get_middle_lighting_model" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_detiling_quality", PROPERTY_HINT_ENUM, "Disabled,Rotation" ),
-		"set_middle_detiling_quality", "get_middle_detiling_quality" );
+			"set_middle_detiling_quality",
+			"get_middle_detiling_quality" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "middle_authored_color_contribution", PROPERTY_HINT_RANGE, "0,1,0.01" ),
-		"set_middle_authored_color_contribution", "get_middle_authored_color_contribution" );
+			"set_middle_authored_color_contribution",
+			"get_middle_authored_color_contribution" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "middle_wetness_contribution", PROPERTY_HINT_RANGE, "0,1,0.01" ),
-		"set_middle_wetness_contribution", "get_middle_wetness_contribution" );
+			"set_middle_wetness_contribution",
+			"get_middle_wetness_contribution" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "middle_material_lod_bias", PROPERTY_HINT_RANGE, "-2,4,0.25" ),
-		"set_middle_material_lod_bias", "get_middle_material_lod_bias" );
+			"set_middle_material_lod_bias",
+			"get_middle_material_lod_bias" );
 
 	ADD_GROUP( "Far Quality", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "far_texture_filtering", PROPERTY_HINT_ENUM,
-		"Linear Anisotropic,Linear,Nearest Anisotropic,Nearest" ),
-		"set_far_texture_filtering", "get_far_texture_filtering" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT,
+						  "far_texture_filtering",
+						  PROPERTY_HINT_ENUM,
+						  "Linear Anisotropic,Linear,Nearest Anisotropic,Nearest" ),
+			"set_far_texture_filtering",
+			"get_far_texture_filtering" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "far_material_sampling_quality", PROPERTY_HINT_ENUM, "Fast,Full" ),
-		"set_far_material_sampling_quality", "get_far_material_sampling_quality" );
+			"set_far_material_sampling_quality",
+			"get_far_material_sampling_quality" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "far_terrain_normal_quality", PROPERTY_HINT_ENUM, "Geometry,Detailed" ),
-		"set_far_terrain_normal_quality", "get_far_terrain_normal_quality" );
+			"set_far_terrain_normal_quality",
+			"get_far_terrain_normal_quality" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "far_terrain_color_quality", PROPERTY_HINT_ENUM, "Fast,Exact" ),
-		"set_far_terrain_color_quality", "get_far_terrain_color_quality" );
+			"set_far_terrain_color_quality",
+			"get_far_terrain_color_quality" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "far_surface_response_quality", PROPERTY_HINT_ENUM, "Simple,Detailed" ),
-		"set_far_surface_response_quality", "get_far_surface_response_quality" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "far_texture_surface_mode", PROPERTY_HINT_ENUM,
-		"Textured,Silhouette / No Textures" ), "set_far_texture_surface_mode", "get_far_texture_surface_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "far_lighting_model", PROPERTY_HINT_ENUM, "Unshaded,Lambert,Blinn-Phong,PBR" ),
-		"set_far_lighting_model", "get_far_lighting_model" );
+			"set_far_surface_response_quality",
+			"get_far_surface_response_quality" );
+	ADD_PROPERTY(
+			PropertyInfo(
+					Variant::INT, "far_texture_surface_mode", PROPERTY_HINT_ENUM, "Textured,Silhouette / No Textures" ),
+			"set_far_texture_surface_mode",
+			"get_far_texture_surface_mode" );
+	ADD_PROPERTY(
+			PropertyInfo( Variant::INT, "far_lighting_model", PROPERTY_HINT_ENUM, "Unshaded,Lambert,Blinn-Phong,PBR" ),
+			"set_far_lighting_model",
+			"get_far_lighting_model" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "far_detiling_quality", PROPERTY_HINT_ENUM, "Disabled,Rotation" ),
-		"set_far_detiling_quality", "get_far_detiling_quality" );
+			"set_far_detiling_quality",
+			"get_far_detiling_quality" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "far_authored_color_contribution", PROPERTY_HINT_RANGE, "0,1,0.01" ),
-		"set_far_authored_color_contribution", "get_far_authored_color_contribution" );
+			"set_far_authored_color_contribution",
+			"get_far_authored_color_contribution" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "far_wetness_contribution", PROPERTY_HINT_RANGE, "0,1,0.01" ),
-		"set_far_wetness_contribution", "get_far_wetness_contribution" );
+			"set_far_wetness_contribution",
+			"get_far_wetness_contribution" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "far_material_lod_bias", PROPERTY_HINT_RANGE, "-2,4,0.25" ),
-		"set_far_material_lod_bias", "get_far_material_lod_bias" );
+			"set_far_material_lod_bias",
+			"get_far_material_lod_bias" );
 
 	ADD_GROUP( "Global Projection / Tessellation / Variation", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "projection_mode", PROPERTY_HINT_ENUM,
-		"Disabled,Shared Fragment Basis,Exact Per-Corner" ),
-		"set_projection_mode", "get_projection_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "tessellation_material_mode", PROPERTY_HINT_ENUM,
-		"Geometry Only,Geometry + Material Height" ),
-		"set_tessellation_material_mode", "get_tessellation_material_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "dual_scaling_enabled" ), "set_dual_scaling_enabled", "get_dual_scaling_enabled" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "macro_variation_enabled" ), "set_macro_variation_enabled", "get_macro_variation_enabled" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT,
+						  "projection_mode",
+						  PROPERTY_HINT_ENUM,
+						  "Disabled,Shared Fragment Basis,Exact Per-Corner" ),
+			"set_projection_mode",
+			"get_projection_mode" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT,
+						  "tessellation_material_mode",
+						  PROPERTY_HINT_ENUM,
+						  "Geometry Only,Geometry + Material Height" ),
+			"set_tessellation_material_mode",
+			"get_tessellation_material_mode" );
+	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "dual_scaling_enabled" ),
+			"set_dual_scaling_enabled",
+			"get_dual_scaling_enabled" );
+	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "macro_variation_enabled" ),
+			"set_macro_variation_enabled",
+			"get_macro_variation_enabled" );
 
 	ADD_GROUP( "PBR Output / Debug", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "output_albedo" ), "set_output_albedo_enabled",
-				 "get_output_albedo_enabled" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "output_roughness" ), "set_output_roughness_enabled",
-				 "get_output_roughness_enabled" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "output_specular" ), "set_output_specular_enabled",
-				 "get_output_specular_enabled" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "output_normal_map" ), "set_output_normal_map_enabled",
-				 "get_output_normal_map_enabled" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "output_ambient_occlusion" ), "set_output_ambient_occlusion_enabled",
-				 "get_output_ambient_occlusion_enabled" );
+	ADD_PROPERTY(
+			PropertyInfo( Variant::BOOL, "output_albedo" ), "set_output_albedo_enabled", "get_output_albedo_enabled" );
+	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "output_roughness" ),
+			"set_output_roughness_enabled",
+			"get_output_roughness_enabled" );
+	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "output_specular" ),
+			"set_output_specular_enabled",
+			"get_output_specular_enabled" );
+	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "output_normal_map" ),
+			"set_output_normal_map_enabled",
+			"get_output_normal_map_enabled" );
+	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "output_ambient_occlusion" ),
+			"set_output_ambient_occlusion_enabled",
+			"get_output_ambient_occlusion_enabled" );
 
 	ADD_GROUP( "Custom Shader", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "shader_override_enabled" ), "set_shader_override_enabled",
-				 "is_shader_override_enabled" );
+	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "shader_override_enabled" ),
+			"set_shader_override_enabled",
+			"is_shader_override_enabled" );
 	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "shader_override", PROPERTY_HINT_RESOURCE_TYPE, "Shader" ),
-				 "set_shader_override", "get_shader_override" );
+			"set_shader_override",
+			"get_shader_override" );
 
 	ADD_GROUP( "Runtime Shader Status", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::STRING, "near_range_context", PROPERTY_HINT_NONE, "",
-		PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "", "get_near_range_context" );
-	ADD_PROPERTY( PropertyInfo( Variant::STRING, "near_shadow_context", PROPERTY_HINT_NONE, "",
-		PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "", "get_near_shadow_context" );
-	ADD_PROPERTY( PropertyInfo( Variant::STRING, "near_shader_status", PROPERTY_HINT_NONE, "",
-		PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "", "get_near_shader_status" );
-	ADD_PROPERTY( PropertyInfo( Variant::STRING, "middle_range_context", PROPERTY_HINT_NONE, "",
-		PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "", "get_middle_range_context" );
-	ADD_PROPERTY( PropertyInfo( Variant::STRING, "middle_shadow_context", PROPERTY_HINT_NONE, "",
-		PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "", "get_middle_shadow_context" );
-	ADD_PROPERTY( PropertyInfo( Variant::STRING, "middle_shader_status", PROPERTY_HINT_NONE, "",
-		PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "", "get_middle_shader_status" );
-	ADD_PROPERTY( PropertyInfo( Variant::STRING, "far_range_context", PROPERTY_HINT_NONE, "",
-		PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "", "get_far_range_context" );
-	ADD_PROPERTY( PropertyInfo( Variant::STRING, "far_shadow_context", PROPERTY_HINT_NONE, "",
-		PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "", "get_far_shadow_context" );
-	ADD_PROPERTY( PropertyInfo( Variant::STRING, "far_shader_status", PROPERTY_HINT_NONE, "",
-		PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "", "get_far_shader_status" );
+	ADD_PROPERTY( PropertyInfo( Variant::STRING,
+						  "near_range_context",
+						  PROPERTY_HINT_NONE,
+						  "",
+						  PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+			"",
+			"get_near_range_context" );
+	ADD_PROPERTY( PropertyInfo( Variant::STRING,
+						  "near_shadow_context",
+						  PROPERTY_HINT_NONE,
+						  "",
+						  PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+			"",
+			"get_near_shadow_context" );
+	ADD_PROPERTY( PropertyInfo( Variant::STRING,
+						  "near_shader_status",
+						  PROPERTY_HINT_NONE,
+						  "",
+						  PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+			"",
+			"get_near_shader_status" );
+	ADD_PROPERTY( PropertyInfo( Variant::STRING,
+						  "middle_range_context",
+						  PROPERTY_HINT_NONE,
+						  "",
+						  PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+			"",
+			"get_middle_range_context" );
+	ADD_PROPERTY( PropertyInfo( Variant::STRING,
+						  "middle_shadow_context",
+						  PROPERTY_HINT_NONE,
+						  "",
+						  PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+			"",
+			"get_middle_shadow_context" );
+	ADD_PROPERTY( PropertyInfo( Variant::STRING,
+						  "middle_shader_status",
+						  PROPERTY_HINT_NONE,
+						  "",
+						  PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+			"",
+			"get_middle_shader_status" );
+	ADD_PROPERTY( PropertyInfo( Variant::STRING,
+						  "far_range_context",
+						  PROPERTY_HINT_NONE,
+						  "",
+						  PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+			"",
+			"get_far_range_context" );
+	ADD_PROPERTY( PropertyInfo( Variant::STRING,
+						  "far_shadow_context",
+						  PROPERTY_HINT_NONE,
+						  "",
+						  PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+			"",
+			"get_far_shadow_context" );
+	ADD_PROPERTY( PropertyInfo( Variant::STRING,
+						  "far_shader_status",
+						  PROPERTY_HINT_NONE,
+						  "",
+						  PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+			"",
+			"get_far_shader_status" );
 
 	ADD_GROUP( "Serialized Compatibility", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "texture_filtering", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-		"set_texture_filtering", "get_texture_filtering" );
+			"set_texture_filtering",
+			"get_texture_filtering" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "terrain_sampling_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-		"set_terrain_sampling_mode", "get_terrain_sampling_mode" );
+			"set_terrain_sampling_mode",
+			"get_terrain_sampling_mode" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "terrain_normal_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-		"set_terrain_normal_mode", "get_terrain_normal_mode" );
+			"set_terrain_normal_mode",
+			"get_terrain_normal_mode" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "color_sampling_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-		"set_color_sampling_mode", "get_color_sampling_mode" );
+			"set_color_sampling_mode",
+			"get_color_sampling_mode" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "surface_data_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-		"set_surface_data_mode", "get_surface_data_mode" );
+			"set_surface_data_mode",
+			"get_surface_data_mode" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "texture_surface_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-		"set_texture_surface_mode", "get_texture_surface_mode" );
+			"set_texture_surface_mode",
+			"get_texture_surface_mode" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "terrain_shading_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-		"set_terrain_shading_mode", "get_terrain_shading_mode" );
+			"set_terrain_shading_mode",
+			"get_terrain_shading_mode" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "detiling_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-		"set_detiling_mode", "get_detiling_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_terrain_sampling_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-		"set_middle_terrain_sampling_mode", "get_middle_terrain_sampling_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_terrain_normal_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-		"set_middle_terrain_normal_mode", "get_middle_terrain_normal_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_color_sampling_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-		"set_middle_color_sampling_mode", "get_middle_color_sampling_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_surface_data_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-		"set_middle_surface_data_mode", "get_middle_surface_data_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_terrain_shading_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-		"set_middle_terrain_shading_mode", "get_middle_terrain_shading_mode" );
+			"set_detiling_mode",
+			"get_detiling_mode" );
+	ADD_PROPERTY(
+			PropertyInfo(
+					Variant::INT, "middle_terrain_sampling_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
+			"set_middle_terrain_sampling_mode",
+			"get_middle_terrain_sampling_mode" );
+	ADD_PROPERTY(
+			PropertyInfo( Variant::INT, "middle_terrain_normal_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
+			"set_middle_terrain_normal_mode",
+			"get_middle_terrain_normal_mode" );
+	ADD_PROPERTY(
+			PropertyInfo( Variant::INT, "middle_color_sampling_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
+			"set_middle_color_sampling_mode",
+			"get_middle_color_sampling_mode" );
+	ADD_PROPERTY(
+			PropertyInfo( Variant::INT, "middle_surface_data_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
+			"set_middle_surface_data_mode",
+			"get_middle_surface_data_mode" );
+	ADD_PROPERTY(
+			PropertyInfo( Variant::INT, "middle_terrain_shading_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
+			"set_middle_terrain_shading_mode",
+			"get_middle_terrain_shading_mode" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_detiling_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-		"set_middle_detiling_mode", "get_middle_detiling_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "middle_auto_shader_enabled", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-		"set_middle_auto_shader_enabled", "get_middle_auto_shader_enabled" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "middle_authored_color_enabled", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-		"set_middle_authored_color_enabled", "get_middle_authored_color_enabled" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "middle_wetness_enabled", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-		"set_middle_wetness_enabled", "get_middle_wetness_enabled" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "far_terrain_shading_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-		"set_far_terrain_shading_mode", "get_far_terrain_shading_mode" );
+			"set_middle_detiling_mode",
+			"get_middle_detiling_mode" );
+	ADD_PROPERTY(
+			PropertyInfo( Variant::BOOL, "middle_auto_shader_enabled", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
+			"set_middle_auto_shader_enabled",
+			"get_middle_auto_shader_enabled" );
+	ADD_PROPERTY(
+			PropertyInfo(
+					Variant::BOOL, "middle_authored_color_enabled", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
+			"set_middle_authored_color_enabled",
+			"get_middle_authored_color_enabled" );
+	ADD_PROPERTY(
+			PropertyInfo( Variant::BOOL, "middle_wetness_enabled", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
+			"set_middle_wetness_enabled",
+			"get_middle_wetness_enabled" );
+	ADD_PROPERTY(
+			PropertyInfo( Variant::INT, "far_terrain_shading_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
+			"set_far_terrain_shading_mode",
+			"get_far_terrain_shading_mode" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "far_material_lod", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-		"set_far_material_lod", "get_far_material_lod" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "far_authored_color_enabled", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-		"set_far_authored_color_enabled", "get_far_authored_color_enabled" );
+			"set_far_material_lod",
+			"get_far_material_lod" );
+	ADD_PROPERTY(
+			PropertyInfo( Variant::BOOL, "far_authored_color_enabled", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
+			"set_far_authored_color_enabled",
+			"get_far_authored_color_enabled" );
 	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "far_wetness_enabled", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-		"set_far_wetness_enabled", "get_far_wetness_enabled" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "packed_pbr_single_fetch", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-		"set_packed_pbr_single_fetch", "get_packed_pbr_single_fetch" );
+			"set_far_wetness_enabled",
+			"get_far_wetness_enabled" );
+	ADD_PROPERTY(
+			PropertyInfo( Variant::BOOL, "packed_pbr_single_fetch", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
+			"set_packed_pbr_single_fetch",
+			"get_packed_pbr_single_fetch" );
 	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "projection_enabled", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-		"set_projection_enabled", "get_projection_enabled" );
+			"set_projection_enabled",
+			"get_projection_enabled" );
 
 	ADD_GROUP( "Hidden Terrain Aliases", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_region_grid", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-				 "set_show_region_grid", "get_show_region_grid" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_instancer_grid", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-				 "set_show_instancer_grid", "get_show_instancer_grid" );
+			"set_show_region_grid",
+			"get_show_region_grid" );
+	ADD_PROPERTY(
+			PropertyInfo( Variant::BOOL, "show_instancer_grid", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
+			"set_show_instancer_grid",
+			"get_show_instancer_grid" );
 	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_vertex_grid", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-				 "set_show_vertex_grid", "get_show_vertex_grid" );
+			"set_show_vertex_grid",
+			"get_show_vertex_grid" );
 	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_contours", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-				 "set_show_contours", "get_show_contours" );
+			"set_show_contours",
+			"get_show_contours" );
 	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_navigation", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-				 "set_show_navigation", "get_show_navigation" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "displacement_scale", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-				 "set_displacement_scale", "get_displacement_scale" );
+			"set_show_navigation",
+			"get_show_navigation" );
 	ADD_PROPERTY(
-		PropertyInfo( Variant::FLOAT, "displacement_sharpness", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-		"set_displacement_sharpness", "get_displacement_sharpness" );
+			PropertyInfo( Variant::FLOAT, "displacement_scale", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
+			"set_displacement_scale",
+			"get_displacement_scale" );
 	ADD_PROPERTY(
-		PropertyInfo( Variant::BOOL, "buffer_shader_override_enabled", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-		"set_buffer_shader_override_enabled", "is_buffer_shader_override_enabled" );
+			PropertyInfo( Variant::FLOAT, "displacement_sharpness", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
+			"set_displacement_sharpness",
+			"get_displacement_sharpness" );
 	ADD_PROPERTY(
-		PropertyInfo( Variant::OBJECT, "buffer_shader_override", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-		"set_buffer_shader_override", "get_buffer_shader_override" );
+			PropertyInfo(
+					Variant::BOOL, "buffer_shader_override_enabled", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
+			"set_buffer_shader_override_enabled",
+			"is_buffer_shader_override_enabled" );
+	ADD_PROPERTY(
+			PropertyInfo( Variant::OBJECT, "buffer_shader_override", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
+			"set_buffer_shader_override",
+			"get_buffer_shader_override" );
 	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_checkered", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-				 "set_show_checkered", "get_show_checkered" );
+			"set_show_checkered",
+			"get_show_checkered" );
 	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_grey", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-				 "set_show_grey", "get_show_grey" );
+			"set_show_grey",
+			"get_show_grey" );
 	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_heightmap", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-				 "set_show_heightmap", "get_show_heightmap" );
+			"set_show_heightmap",
+			"get_show_heightmap" );
 	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_jaggedness", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-				 "set_show_jaggedness", "get_show_jaggedness" );
+			"set_show_jaggedness",
+			"get_show_jaggedness" );
 	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_autoshader", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-				 "set_show_autoshader", "get_show_autoshader" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_control_texture", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-				 "set_show_control_texture", "get_show_control_texture" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_control_blend", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-				 "set_show_control_blend", "get_show_control_blend" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_control_angle", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-				 "set_show_control_angle", "get_show_control_angle" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_control_scale", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-				 "set_show_control_scale", "get_show_control_scale" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_colormap", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-				 "set_show_colormap", "get_show_colormap" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_roughmap", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-				 "set_show_roughmap", "get_show_roughmap" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_texture_albedo", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-				 "set_show_texture_albedo", "get_show_texture_albedo" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_texture_height", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-				 "set_show_texture_height", "get_show_texture_height" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_texture_normal", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-				 "set_show_texture_normal", "get_show_texture_normal" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_texture_ao", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-				 "set_show_texture_ao", "get_show_texture_ao" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_texture_rough", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-				 "set_show_texture_rough", "get_show_texture_rough" );
+			"set_show_autoshader",
+			"get_show_autoshader" );
 	ADD_PROPERTY(
-		PropertyInfo( Variant::BOOL, "show_displacement_buffer", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-		"set_show_displacement_buffer", "get_show_displacement_buffer" );
+			PropertyInfo( Variant::BOOL, "show_control_texture", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
+			"set_show_control_texture",
+			"get_show_control_texture" );
+	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_control_blend", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
+			"set_show_control_blend",
+			"get_show_control_blend" );
+	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_control_angle", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
+			"set_show_control_angle",
+			"get_show_control_angle" );
+	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_control_scale", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
+			"set_show_control_scale",
+			"get_show_control_scale" );
+	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_colormap", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
+			"set_show_colormap",
+			"get_show_colormap" );
+	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_roughmap", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
+			"set_show_roughmap",
+			"get_show_roughmap" );
+	ADD_PROPERTY(
+			PropertyInfo( Variant::BOOL, "show_texture_albedo", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
+			"set_show_texture_albedo",
+			"get_show_texture_albedo" );
+	ADD_PROPERTY(
+			PropertyInfo( Variant::BOOL, "show_texture_height", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
+			"set_show_texture_height",
+			"get_show_texture_height" );
+	ADD_PROPERTY(
+			PropertyInfo( Variant::BOOL, "show_texture_normal", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
+			"set_show_texture_normal",
+			"get_show_texture_normal" );
+	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_texture_ao", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
+			"set_show_texture_ao",
+			"get_show_texture_ao" );
+	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_texture_rough", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
+			"set_show_texture_rough",
+			"get_show_texture_rough" );
+	ADD_PROPERTY(
+			PropertyInfo( Variant::BOOL, "show_displacement_buffer", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
+			"set_show_displacement_buffer",
+			"get_show_displacement_buffer" );
 
-	ADD_SIGNAL( MethodInfo( "shader_tier_state_changed", PropertyInfo( Variant::INT, "tier" ),
-		PropertyInfo( Variant::STRING, "variant_signature" ), PropertyInfo( Variant::BOOL, "compile_valid" ),
-		PropertyInfo( Variant::BOOL, "fallback_to_near" ) ) );
-
+	ADD_SIGNAL( MethodInfo( "shader_tier_state_changed",
+			PropertyInfo( Variant::INT, "tier" ),
+			PropertyInfo( Variant::STRING, "variant_signature" ),
+			PropertyInfo( Variant::BOOL, "compile_valid" ),
+			PropertyInfo( Variant::BOOL, "fallback_to_near" ) ) );
 }

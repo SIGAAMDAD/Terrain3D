@@ -5,12 +5,12 @@
 #ifndef TERRAIN3D_PACKED_PBR_TEXTURE_H
 #define TERRAIN3D_PACKED_PBR_TEXTURE_H
 
+#include "Terrain3DConstants.h"
+#include "core/terrain_3d_compiler.h"
+
 #include <godot_cpp/classes/image_texture.hpp>
 #include <godot_cpp/classes/resource.hpp>
 #include <godot_cpp/classes/texture2d.hpp>
-
-#include "core/terrain_3d_compiler.h"
-#include "Terrain3DConstants.h"
 
 // Compatibility-preserving container for externally authored packed textures.
 // New resources take exactly two files:
@@ -29,8 +29,6 @@ class T3DPackedPBRTexture : public Resource {
 	CLASS_NAME();
 
 public:
-
-
 private:
 	// Primary externally authored runtime textures.
 	Ref<Texture2D> m_packedTexture;
@@ -70,15 +68,14 @@ private:
 	void invalidate( void );
 	void queueRebuild( void );
 	void deferredRebuild( void );
-	Ref<Image> prepareSource(
-		const Ref<Texture2D> &rSource, const Vector2i &rTargetSize,
-		const String &rLabel
-	) const;
+	Ref<Image> prepareSource( const Ref<Texture2D> &rSource, const Vector2i &rTargetSize, const String &rLabel ) const;
 	void setGeneratedSurfaceTexture( const Ref<ImageTexture> &rTexture );
 	void setGeneratedDisplacementTexture( const Ref<ImageTexture> &rTexture );
 	// Old serialized property alias. RGBA16UI data is migrated into the new pair.
 	void setGeneratedTexture( const Ref<ImageTexture> &rTexture );
-	EA_FORCE_INLINE Ref<ImageTexture> getLegacyGeneratedTexture( void ) const { return Ref<ImageTexture>(); }
+	EA_FORCE_INLINE Ref<ImageTexture> getLegacyGeneratedTexture( void ) const {
+		return Ref<ImageTexture>();
+	}
 
 protected:
 	static void _bind_methods( void );
@@ -88,56 +85,99 @@ public:
 	T3DPackedPBRTexture( void ) = default;
 	~T3DPackedPBRTexture( void ) = default;
 
-
 	void setPackedTexture( const Ref<Texture2D> &rTexture );
-	EA_FORCE_INLINE Ref<Texture2D> getPackedTexture( void ) const { return m_packedTexture; }
+	EA_FORCE_INLINE Ref<Texture2D> getPackedTexture( void ) const {
+		return m_packedTexture;
+	}
 	void setDisplacementTexture( const Ref<Texture2D> &rTexture );
-	EA_FORCE_INLINE Ref<Texture2D> getDirectDisplacementTexture( void ) const { return m_displacementTexture; }
+	EA_FORCE_INLINE Ref<Texture2D> getDirectDisplacementTexture( void ) const {
+		return m_displacementTexture;
+	}
 
 	void setNormalSource( const Ref<Texture2D> &rTexture );
-	EA_FORCE_INLINE Ref<Texture2D> getNormalSource( void ) const { return m_normalSource; }
+	EA_FORCE_INLINE Ref<Texture2D> getNormalSource( void ) const {
+		return m_normalSource;
+	}
 	void setRoughnessSource( const Ref<Texture2D> &rTexture );
-	EA_FORCE_INLINE Ref<Texture2D> getRoughnessSource( void ) const { return m_roughnessSource; }
+	EA_FORCE_INLINE Ref<Texture2D> getRoughnessSource( void ) const {
+		return m_roughnessSource;
+	}
 	void setDisplacementSource( const Ref<Texture2D> &rTexture );
-	EA_FORCE_INLINE Ref<Texture2D> getDisplacementSource( void ) const { return m_displacementSource; }
+	EA_FORCE_INLINE Ref<Texture2D> getDisplacementSource( void ) const {
+		return m_displacementSource;
+	}
 	void setAoSource( const Ref<Texture2D> &rTexture );
-	EA_FORCE_INLINE Ref<Texture2D> getAoSource( void ) const { return m_aoSource; }
+	EA_FORCE_INLINE Ref<Texture2D> getAoSource( void ) const {
+		return m_aoSource;
+	}
 	void setMetallicSource( const Ref<Texture2D> &rTexture );
-	EA_FORCE_INLINE Ref<Texture2D> getMetallicSource( void ) const { return m_metallicSource; }
+	EA_FORCE_INLINE Ref<Texture2D> getMetallicSource( void ) const {
+		return m_metallicSource;
+	}
 
 	void setOutputSize( const Vector2i &rSize );
-	EA_FORCE_INLINE Vector2i getOutputSize( void ) const { return m_outputSize; }
+	EA_FORCE_INLINE Vector2i getOutputSize( void ) const {
+		return m_outputSize;
+	}
 	void setInvertNormalGreen( bool bEnabled );
-	EA_FORCE_INLINE bool getInvertNormalGreen( void ) const { return m_bInvertNormalGreen; }
+	EA_FORCE_INLINE bool getInvertNormalGreen( void ) const {
+		return m_bInvertNormalGreen;
+	}
 	void setRoughnessChannel( int32_t nChannel );
-	EA_FORCE_INLINE int32_t getRoughnessChannel( void ) const { return m_nRoughnessChannel; }
+	EA_FORCE_INLINE int32_t getRoughnessChannel( void ) const {
+		return m_nRoughnessChannel;
+	}
 	void setDisplacementChannel( int32_t nChannel );
-	EA_FORCE_INLINE int32_t getDisplacementChannel( void ) const { return m_nDisplacementChannel; }
+	EA_FORCE_INLINE int32_t getDisplacementChannel( void ) const {
+		return m_nDisplacementChannel;
+	}
 	void setAoChannel( int32_t nChannel );
-	EA_FORCE_INLINE int32_t getAoChannel( void ) const { return m_nAoChannel; }
+	EA_FORCE_INLINE int32_t getAoChannel( void ) const {
+		return m_nAoChannel;
+	}
 	void setMetallicChannel( int32_t nChannel );
-	EA_FORCE_INLINE int32_t getMetallicChannel( void ) const { return m_nMetallicChannel; }
+	EA_FORCE_INLINE int32_t getMetallicChannel( void ) const {
+		return m_nMetallicChannel;
+	}
 	void setGenerateMipmaps( bool bEnabled );
-	EA_FORCE_INLINE bool getGenerateMipmaps( void ) const { return m_bGenerateMipmaps; }
+	EA_FORCE_INLINE bool getGenerateMipmaps( void ) const {
+		return m_bGenerateMipmaps;
+	}
 	void setAutoRebuild( bool bEnabled );
-	EA_FORCE_INLINE bool getAutoRebuild( void ) const { return m_bAutoRebuild; }
+	EA_FORCE_INLINE bool getAutoRebuild( void ) const {
+		return m_bAutoRebuild;
+	}
 
 	bool rebuild( void );
-	EA_FORCE_INLINE bool isDirty( void ) const { return m_bDirty; }
+	EA_FORCE_INLINE bool isDirty( void ) const {
+		return m_bDirty;
+	}
 	bool hasRequiredSources( void ) const;
 	bool isValidSurfaceTexture( void ) const;
 	bool isValidDisplacementTexture( void ) const;
 	// Compatibility alias for older callers.
-	EA_FORCE_INLINE bool isValidPackedTexture( void ) const { return isValidSurfaceTexture() && isValidDisplacementTexture(); }
-	EA_FORCE_INLINE String getLastError( void ) const { return m_lastError; }
+	EA_FORCE_INLINE bool isValidPackedTexture( void ) const {
+		return isValidSurfaceTexture() && isValidDisplacementTexture();
+	}
+	EA_FORCE_INLINE String getLastError( void ) const {
+		return m_lastError;
+	}
 	Ref<Texture2D> getSurfaceTexture( void );
 	Ref<Texture2D> getDisplacementTexture( void );
 	// Compatibility aliases: get_texture()/get_generated_texture() now return the
 	// RGBA8 surface texture, not an integer-packed image.
-	EA_FORCE_INLINE Ref<Texture2D> getTexture( void ) { return getSurfaceTexture(); }
-	EA_FORCE_INLINE Ref<Texture2D> getGeneratedTexture( void ) const { return m_generatedSurfaceTexture; }
-	EA_FORCE_INLINE Ref<Texture2D> getGeneratedSurfaceTexture( void ) const { return m_generatedSurfaceTexture; }
-	EA_FORCE_INLINE Ref<Texture2D> getGeneratedDisplacementTexture( void ) const { return m_generatedDisplacementTexture; }
+	EA_FORCE_INLINE Ref<Texture2D> getTexture( void ) {
+		return getSurfaceTexture();
+	}
+	EA_FORCE_INLINE Ref<Texture2D> getGeneratedTexture( void ) const {
+		return m_generatedSurfaceTexture;
+	}
+	EA_FORCE_INLINE Ref<Texture2D> getGeneratedSurfaceTexture( void ) const {
+		return m_generatedSurfaceTexture;
+	}
+	EA_FORCE_INLINE Ref<Texture2D> getGeneratedDisplacementTexture( void ) const {
+		return m_generatedDisplacementTexture;
+	}
 	Error saveDisplacementDds( const String &rPath );
 	String getChannelLayout( void ) const;
 };

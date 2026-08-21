@@ -5,15 +5,14 @@
 #ifndef TERRAIN3D_INSTANCE_REGION_CACHE_H
 #define TERRAIN3D_INSTANCE_REGION_CACHE_H
 
-#include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
+#include "core/terrain_3d_compiler.h"
 #include "instances/terrain_3d_instance_cache_constants.h"
 #include "streaming/terrain_3d_residency_state.h"
 
-#include <godot_cpp/variant/dictionary.hpp>
-
 #include <cstddef>
 #include <cstdint>
+#include <godot_cpp/variant/dictionary.hpp>
 
 class T3DRegionRepository;
 class T3DRuntimePageStore;
@@ -46,23 +45,42 @@ class T3DInstanceRegionCache {
 public:
 	T3DInstanceRegionCache( T3DRegionRepository *pRepository, T3DRuntimePageStore *pRuntimePageStore );
 
-	void configure( bool bEnabled, int nBudgetMb, int nLoadPages, int nLoadBudgetMb,
-		t3dInstanceRegionCacheChanges_t *pChanges = nullptr );
+	void configure( bool bEnabled,
+			int nBudgetMb,
+			int nLoadPages,
+			int nLoadBudgetMb,
+			t3dInstanceRegionCacheChanges_t *pChanges = nullptr );
 	void reset( bool bRestoreAll, t3dInstanceRegionCacheChanges_t *pChanges = nullptr );
 	void invalidate( const Vector2i &vLocation, t3dInstanceRegionCacheChanges_t *pChanges = nullptr );
 	bool evict( const Vector2i &vLocation, t3dInstanceRegionCacheChanges_t *pChanges = nullptr );
-	bool ensureResident( const Vector2i &vLocation, bool bDemandLoad,
-		t3dInstanceRegionCacheChanges_t *pChanges = nullptr );
-	void update( const t3dResidencyFrameState_t &rFrame, bool bForce, int nEffectiveLoadPages,
-		t3dInstanceRegionCacheChanges_t &rChanges );
+	bool
+	ensureResident( const Vector2i &vLocation, bool bDemandLoad, t3dInstanceRegionCacheChanges_t *pChanges = nullptr );
+	void update( const t3dResidencyFrameState_t &rFrame,
+			bool bForce,
+			int nEffectiveLoadPages,
+			t3dInstanceRegionCacheChanges_t &rChanges );
 
-	EA_FORCE_INLINE bool isEnabled( void ) const { return m_bEnabled; }
-	EA_FORCE_INLINE bool isResident( const Vector2i &vLocation ) const { return !m_bEnabled || findSlot( vLocation ) >= 0; }
-	EA_FORCE_INLINE int getLoadBudgetPages( void ) const { return m_nLoadBudgetPages; }
-	EA_FORCE_INLINE uint32_t getStallFlagsLastTick( void ) const { return m_nStallFlagsLastTick; }
-	EA_FORCE_INLINE bool isSelectionDirty( void ) const { return m_bSelectionDirty; }
-	EA_FORCE_INLINE void markSelectionDirty( void ) { m_bSelectionDirty = true; }
-	EA_FORCE_INLINE size_t getReservedBytes( void ) const { return m_nResidentBytes; }
+	EA_FORCE_INLINE bool isEnabled( void ) const {
+		return m_bEnabled;
+	}
+	EA_FORCE_INLINE bool isResident( const Vector2i &vLocation ) const {
+		return !m_bEnabled || findSlot( vLocation ) >= 0;
+	}
+	EA_FORCE_INLINE int getLoadBudgetPages( void ) const {
+		return m_nLoadBudgetPages;
+	}
+	EA_FORCE_INLINE uint32_t getStallFlagsLastTick( void ) const {
+		return m_nStallFlagsLastTick;
+	}
+	EA_FORCE_INLINE bool isSelectionDirty( void ) const {
+		return m_bSelectionDirty;
+	}
+	EA_FORCE_INLINE void markSelectionDirty( void ) {
+		m_bSelectionDirty = true;
+	}
+	EA_FORCE_INLINE size_t getReservedBytes( void ) const {
+		return m_nResidentBytes;
+	}
 	t3dInstanceRegionCacheStats_t getStats( void ) const;
 	Dictionary getStatsDictionary( bool bDetailed, int nEffectiveLoadPages ) const;
 
@@ -86,14 +104,16 @@ private:
 	size_t m_nLoadBytesLastTick = 0u;
 	uint64_t m_nServiceUsecLast = 0u;
 	uint64_t m_nPrefetchStreamingGenerationLast = 0u;
-	Vector2i m_center = V2I_MAX;
+	Vector2i m_center = s_v2iMax;
 	Vector2i m_szLocations[s_nInstanceCacheMaxPages] = {};
 	uint8_t m_szRegionMap[s_nMaxRegionSlots] = {};
 
 	int findSlot( const Vector2i &vLocation ) const;
 	bool evictSlot( int iSlot, t3dInstanceRegionCacheChanges_t *pChanges );
-	int collectDesired( const t3dResidencyFrameState_t &rFrame, const Vector2i &rCenter,
-		Vector2i *pLocations, int nCapacity ) const;
+	int collectDesired( const t3dResidencyFrameState_t &rFrame,
+			const Vector2i &rCenter,
+			Vector2i *pLocations,
+			int nCapacity ) const;
 };
 
 #endif // TERRAIN3D_INSTANCE_REGION_CACHE_H

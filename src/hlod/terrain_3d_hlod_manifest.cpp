@@ -1,28 +1,50 @@
 #include "hlod/terrain_3d_hlod_manifest.h"
+
 #include "hlod/terrain_3d_hlod_runtime_codec.h"
+
 #include <godot_cpp/core/class_db.hpp>
 
 bool T3DHLODManifest::compileRuntimeBlob( void ) {
-	PackedByteArray compiled = T3DHLODRuntimeCodec::encode( m_entries, m_instancerMinLevels, m_nodeRegionIndices, m_nodeSpawnIds, m_nodeMinLevels );
-	if ( compiled.is_empty() ) return false;
-	m_runtimeBlob = compiled; emit_changed(); return true;
+	PackedByteArray compiled = T3DHLODRuntimeCodec::encode(
+			m_entries, m_instancerMinLevels, m_nodeRegionIndices, m_nodeSpawnIds, m_nodeMinLevels );
+	if ( compiled.is_empty() ) {
+		return false;
+	}
+	m_runtimeBlob = compiled;
+	emit_changed();
+	return true;
 }
 
 void T3DHLODManifest::_bind_methods( void ) {
-#define BIND_RW(name, setter, getter) ClassDB::bind_method( D_METHOD( setter, "value" ), &T3DHLODManifest::name ); ClassDB::bind_method( D_METHOD( getter ), &T3DHLODManifest::get##name )
-	ClassDB::bind_method( D_METHOD( "set_format", "value" ), &T3DHLODManifest::setFormat ); ClassDB::bind_method( D_METHOD( "get_format" ), &T3DHLODManifest::getFormat );
-	ClassDB::bind_method( D_METHOD( "set_region_map_size", "value" ), &T3DHLODManifest::setRegionMapSize ); ClassDB::bind_method( D_METHOD( "get_region_map_size" ), &T3DHLODManifest::getRegionMapSize );
-	ClassDB::bind_method( D_METHOD( "set_region_size", "value" ), &T3DHLODManifest::setRegionSize ); ClassDB::bind_method( D_METHOD( "get_region_size" ), &T3DHLODManifest::getRegionSize );
-	ClassDB::bind_method( D_METHOD( "set_vertex_spacing", "value" ), &T3DHLODManifest::setVertexSpacing ); ClassDB::bind_method( D_METHOD( "get_vertex_spacing" ), &T3DHLODManifest::getVertexSpacing );
-	ClassDB::bind_method( D_METHOD( "set_max_level", "value" ), &T3DHLODManifest::setMaxLevel ); ClassDB::bind_method( D_METHOD( "get_max_level" ), &T3DHLODManifest::getMaxLevel );
-	ClassDB::bind_method( D_METHOD( "set_build_signature", "value" ), &T3DHLODManifest::setBuildSignature ); ClassDB::bind_method( D_METHOD( "get_build_signature" ), &T3DHLODManifest::getBuildSignature );
-	ClassDB::bind_method( D_METHOD( "set_built_unix", "value" ), &T3DHLODManifest::setBuiltUnix ); ClassDB::bind_method( D_METHOD( "get_built_unix" ), &T3DHLODManifest::getBuiltUnix );
-	ClassDB::bind_method( D_METHOD( "set_entries", "value" ), &T3DHLODManifest::setEntries ); ClassDB::bind_method( D_METHOD( "get_entries" ), &T3DHLODManifest::getEntries );
-	ClassDB::bind_method( D_METHOD( "set_instancer_min_levels", "value" ), &T3DHLODManifest::setInstancerMinLevels ); ClassDB::bind_method( D_METHOD( "get_instancer_min_levels" ), &T3DHLODManifest::getInstancerMinLevels );
-	ClassDB::bind_method( D_METHOD( "set_node_region_indices", "value" ), &T3DHLODManifest::setNodeRegionIndices ); ClassDB::bind_method( D_METHOD( "get_node_region_indices" ), &T3DHLODManifest::getNodeRegionIndices );
-	ClassDB::bind_method( D_METHOD( "set_node_spawn_ids", "value" ), &T3DHLODManifest::setNodeSpawnIds ); ClassDB::bind_method( D_METHOD( "get_node_spawn_ids" ), &T3DHLODManifest::getNodeSpawnIds );
-	ClassDB::bind_method( D_METHOD( "set_node_min_levels", "value" ), &T3DHLODManifest::setNodeMinLevels ); ClassDB::bind_method( D_METHOD( "get_node_min_levels" ), &T3DHLODManifest::getNodeMinLevels );
-	ClassDB::bind_method( D_METHOD( "set_runtime_blob", "value" ), &T3DHLODManifest::setRuntimeBlob ); ClassDB::bind_method( D_METHOD( "get_runtime_blob" ), &T3DHLODManifest::getRuntimeBlob );
+#define BIND_RW( name, setter, getter ) \
+	ClassDB::bind_method( D_METHOD( setter, "value" ), &T3DHLODManifest::name ); \
+	ClassDB::bind_method( D_METHOD( getter ), &T3DHLODManifest::get##name )
+	ClassDB::bind_method( D_METHOD( "set_format", "value" ), &T3DHLODManifest::setFormat );
+	ClassDB::bind_method( D_METHOD( "get_format" ), &T3DHLODManifest::getFormat );
+	ClassDB::bind_method( D_METHOD( "set_region_map_size", "value" ), &T3DHLODManifest::setRegionMapSize );
+	ClassDB::bind_method( D_METHOD( "get_region_map_size" ), &T3DHLODManifest::getRegionMapSize );
+	ClassDB::bind_method( D_METHOD( "set_region_size", "value" ), &T3DHLODManifest::setRegionSize );
+	ClassDB::bind_method( D_METHOD( "get_region_size" ), &T3DHLODManifest::getRegionSize );
+	ClassDB::bind_method( D_METHOD( "set_vertex_spacing", "value" ), &T3DHLODManifest::setVertexSpacing );
+	ClassDB::bind_method( D_METHOD( "get_vertex_spacing" ), &T3DHLODManifest::getVertexSpacing );
+	ClassDB::bind_method( D_METHOD( "set_max_level", "value" ), &T3DHLODManifest::setMaxLevel );
+	ClassDB::bind_method( D_METHOD( "get_max_level" ), &T3DHLODManifest::getMaxLevel );
+	ClassDB::bind_method( D_METHOD( "set_build_signature", "value" ), &T3DHLODManifest::setBuildSignature );
+	ClassDB::bind_method( D_METHOD( "get_build_signature" ), &T3DHLODManifest::getBuildSignature );
+	ClassDB::bind_method( D_METHOD( "set_built_unix", "value" ), &T3DHLODManifest::setBuiltUnix );
+	ClassDB::bind_method( D_METHOD( "get_built_unix" ), &T3DHLODManifest::getBuiltUnix );
+	ClassDB::bind_method( D_METHOD( "set_entries", "value" ), &T3DHLODManifest::setEntries );
+	ClassDB::bind_method( D_METHOD( "get_entries" ), &T3DHLODManifest::getEntries );
+	ClassDB::bind_method( D_METHOD( "set_instancer_min_levels", "value" ), &T3DHLODManifest::setInstancerMinLevels );
+	ClassDB::bind_method( D_METHOD( "get_instancer_min_levels" ), &T3DHLODManifest::getInstancerMinLevels );
+	ClassDB::bind_method( D_METHOD( "set_node_region_indices", "value" ), &T3DHLODManifest::setNodeRegionIndices );
+	ClassDB::bind_method( D_METHOD( "get_node_region_indices" ), &T3DHLODManifest::getNodeRegionIndices );
+	ClassDB::bind_method( D_METHOD( "set_node_spawn_ids", "value" ), &T3DHLODManifest::setNodeSpawnIds );
+	ClassDB::bind_method( D_METHOD( "get_node_spawn_ids" ), &T3DHLODManifest::getNodeSpawnIds );
+	ClassDB::bind_method( D_METHOD( "set_node_min_levels", "value" ), &T3DHLODManifest::setNodeMinLevels );
+	ClassDB::bind_method( D_METHOD( "get_node_min_levels" ), &T3DHLODManifest::getNodeMinLevels );
+	ClassDB::bind_method( D_METHOD( "set_runtime_blob", "value" ), &T3DHLODManifest::setRuntimeBlob );
+	ClassDB::bind_method( D_METHOD( "get_runtime_blob" ), &T3DHLODManifest::getRuntimeBlob );
 	ClassDB::bind_method( D_METHOD( "compile_runtime_blob" ), &T3DHLODManifest::compileRuntimeBlob );
 	ClassDB::bind_method( D_METHOD( "get_entry_count" ), &T3DHLODManifest::getEntryCount );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "format" ), "set_format", "get_format" );
@@ -33,9 +55,19 @@ void T3DHLODManifest::_bind_methods( void ) {
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "build_signature" ), "set_build_signature", "get_build_signature" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "built_unix" ), "set_built_unix", "get_built_unix" );
 	ADD_PROPERTY( PropertyInfo( Variant::ARRAY, "entries" ), "set_entries", "get_entries" );
-	ADD_PROPERTY( PropertyInfo( Variant::PACKED_BYTE_ARRAY, "instancer_min_levels" ), "set_instancer_min_levels", "get_instancer_min_levels" );
-	ADD_PROPERTY( PropertyInfo( Variant::PACKED_INT32_ARRAY, "node_region_indices" ), "set_node_region_indices", "get_node_region_indices" );
-	ADD_PROPERTY( PropertyInfo( Variant::PACKED_INT64_ARRAY, "node_spawn_ids" ), "set_node_spawn_ids", "get_node_spawn_ids" );
-	ADD_PROPERTY( PropertyInfo( Variant::PACKED_BYTE_ARRAY, "node_min_levels" ), "set_node_min_levels", "get_node_min_levels" );
-	ADD_PROPERTY( PropertyInfo( Variant::PACKED_BYTE_ARRAY, "runtime_blob", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_runtime_blob", "get_runtime_blob" );
+	ADD_PROPERTY( PropertyInfo( Variant::PACKED_BYTE_ARRAY, "instancer_min_levels" ),
+			"set_instancer_min_levels",
+			"get_instancer_min_levels" );
+	ADD_PROPERTY( PropertyInfo( Variant::PACKED_INT32_ARRAY, "node_region_indices" ),
+			"set_node_region_indices",
+			"get_node_region_indices" );
+	ADD_PROPERTY(
+			PropertyInfo( Variant::PACKED_INT64_ARRAY, "node_spawn_ids" ), "set_node_spawn_ids", "get_node_spawn_ids" );
+	ADD_PROPERTY( PropertyInfo( Variant::PACKED_BYTE_ARRAY, "node_min_levels" ),
+			"set_node_min_levels",
+			"get_node_min_levels" );
+	ADD_PROPERTY(
+			PropertyInfo( Variant::PACKED_BYTE_ARRAY, "runtime_blob", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
+			"set_runtime_blob",
+			"get_runtime_blob" );
 }

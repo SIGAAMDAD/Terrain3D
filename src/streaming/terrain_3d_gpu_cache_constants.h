@@ -15,7 +15,6 @@ typedef enum t3dGpuRegionSlotState_e : uint8_t {
 	TERRAIN3D_GPU_SLOT_RETIRED = 4u,
 } t3dGpuRegionSlotState_t;
 
-
 static constexpr int s_nGpuCacheDefaultGuardRegions = 1;
 static constexpr int s_nGpuCacheDefaultHysteresisReserve = 4;
 static constexpr int s_nGpuCacheDefaultHysteresisTicks = 30;

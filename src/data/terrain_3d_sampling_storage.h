@@ -6,10 +6,10 @@
 #define TERRAIN3D_SAMPLING_STORAGE_H
 
 #include "Terrain3DConstants.h"
+#include "eastl_config.h"
 #include "memory/terrain_3d_active_storage.h"
 #include "memory/terrain_3d_resident_pool.h"
 
-#include "eastl_config.h"
 #include <EASTL/array.h>
 #include <atomic>
 #include <cstddef>
@@ -22,7 +22,9 @@ typedef struct t3dSamplingSource_s {
 	const T3DRegionRepository *m_pRepository = nullptr;
 	const class T3DSamplingStorage *m_pStorage = nullptr;
 
-	EA_FORCE_INLINE bool valid( void ) const { return m_pRepository != nullptr && m_pStorage != nullptr; }
+	EA_FORCE_INLINE bool valid( void ) const {
+		return m_pRepository != nullptr && m_pStorage != nullptr;
+	}
 } t3dSamplingSource_t;
 
 // Owns the CPU publication mechanisms used by terrain sampling. Spatial policy
@@ -39,19 +41,29 @@ public:
 	bool bindActive( int nRegionSize, void *pBacking, size_t nBackingBytes );
 	void releaseActive( void );
 	void resetActive( void );
-	EA_FORCE_INLINE bool isActiveOwner( void ) const { return t3dActiveStorageIsOwner( this ); }
+	EA_FORCE_INLINE bool isActiveOwner( void ) const {
+		return t3dActiveStorageIsOwner( this );
+	}
 	uint32_t refreshActiveGeneration( void );
-	EA_FORCE_INLINE uint32_t getActiveGeneration( void ) const { return m_nActiveStorageGeneration; }
+	EA_FORCE_INLINE uint32_t getActiveGeneration( void ) const {
+		return m_nActiveStorageGeneration;
+	}
 
-	EA_FORCE_INLINE T3DActiveMapLease acquireActive( const Vector2i &rLocation ) const { return isActiveOwner() ? t3dActiveStorageAcquire( this, rLocation ) : T3DActiveMapLease(); }
+	EA_FORCE_INLINE T3DActiveMapLease acquireActive( const Vector2i &rLocation ) const {
+		return isActiveOwner() ? t3dActiveStorageAcquire( this, rLocation ) : T3DActiveMapLease();
+	}
 	bool containsActive( const Vector2i &rLocation ) const;
 	bool syncActiveRegion( const Vector2i &rLocation, const T3DRegion *pRegion );
 	bool syncActiveHeightPage( const Vector2i &rLocation, const uint8_t *pHeightBytes, size_t nHeightBytes );
-	bool replaceActiveHeightPages( int nRegionSize, const uint8_t *const *ppHeightPages, const int *pSlots, size_t nPageCount );
-	bool syncActiveMap( const Vector2i &rLocation, const T3DRegion *pRegion, t3dMapType_t eType,
-		const Rect2i &rDirtyRect = Rect2i() );
-	bool syncActiveDerived( const Vector2i &rLocation, const T3DRegion *pRegion,
-		const Rect2i &rDirtyRect = Rect2i() );
+	bool replaceActiveHeightPages( int nRegionSize,
+			const uint8_t *const *ppHeightPages,
+			const int *pSlots,
+			size_t nPageCount );
+	bool syncActiveMap( const Vector2i &rLocation,
+			const T3DRegion *pRegion,
+			t3dMapType_t eType,
+			const Rect2i &rDirtyRect = Rect2i() );
+	bool syncActiveDerived( const Vector2i &rLocation, const T3DRegion *pRegion, const Rect2i &rDirtyRect = Rect2i() );
 	void invalidateActive( const Vector2i &rLocation );
 
 	size_t getActiveReservedBytes( void ) const;
@@ -61,26 +73,36 @@ public:
 	uint64_t getActivePublicationCount( void ) const;
 
 	T3DResidentMapLease acquireResident( const Vector2i &rLocation, const T3DRegion *pRegion ) const;
-	bool configureResidentPool( int nRegionSize, int nRegionMapSize, bool bControlMapsImplicit,
-		int nRequestedCapacity, size_t nBudgetBytes );
+	bool configureResidentPool( int nRegionSize,
+			int nRegionMapSize,
+			bool bControlMapsImplicit,
+			int nRequestedCapacity,
+			size_t nBudgetBytes );
 	void clearResidentPool( void );
 	void resetResidentPool( void );
 	void invalidateResident( const Vector2i &rLocation );
-	void syncResidentMap( const Vector2i &rLocation, const T3DRegion *pRegion, t3dMapType_t eType,
-		const Rect2i &rDirtyRect = Rect2i() );
-	void syncResidentDerived( const Vector2i &rLocation, const T3DRegion *pRegion,
-		const Rect2i &rDirtyRect = Rect2i() );
+	void syncResidentMap( const Vector2i &rLocation,
+			const T3DRegion *pRegion,
+			t3dMapType_t eType,
+			const Rect2i &rDirtyRect = Rect2i() );
+	void
+	syncResidentDerived( const Vector2i &rLocation, const T3DRegion *pRegion, const Rect2i &rDirtyRect = Rect2i() );
 	size_t getResidentReservedBytes( void ) const;
 
 	void invalidateAllSamplers( void );
 	void publishRegionGeneration( const Vector2i &rLocation );
-	EA_FORCE_INLINE uint64_t getSamplingGeneration( void ) const { return m_nSamplingGeneration.load( std::memory_order_acquire ); }
-	EA_FORCE_INLINE uint32_t getRegionGeneration( const Vector2i &rLocation ) const { const int index = locationIndex( rLocation ); return index >= 0 ? m_szRegionSamplingGenerations[( size_t ) ( index )].load( std::memory_order_acquire ) : 0u; }
+	EA_FORCE_INLINE uint64_t getSamplingGeneration( void ) const {
+		return m_nSamplingGeneration.load( std::memory_order_acquire );
+	}
+	EA_FORCE_INLINE uint32_t getRegionGeneration( const Vector2i &rLocation ) const {
+		const int index = locationIndex( rLocation );
+		return index >= 0 ? m_szRegionSamplingGenerations[( size_t )( index )].load( std::memory_order_acquire ) : 0u;
+	}
 
 private:
 	uint32_t m_nActiveStorageGeneration = 0u;
 	mutable T3DResidentRegionPool m_residentPool;
-	std::atomic<uint64_t> m_nSamplingGeneration{1u};
+	std::atomic<uint64_t> m_nSamplingGeneration{ 1u };
 	eastl::array<std::atomic<uint32_t>, s_nMaxRegionSlots> m_szRegionSamplingGenerations;
 
 	static int locationIndex( const Vector2i &rLocation );
