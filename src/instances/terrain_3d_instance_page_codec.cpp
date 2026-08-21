@@ -123,11 +123,14 @@ bool terrain3dMeasurePage(
 
 bool terrain3dReadPageHeaders(
 	const PackedByteArray &arrPage, size_t &nOffset, uint32_t *pMeshCounts,
-	uint32_t &nInstanceCount, uint16_t &nMeshCount, bool bDecode, T3DInstanceStore *pStore
+	uint32_t &nInstanceCount, uint16_t &nMeshCount, bool bDecode, T3DInstanceStore *pStore,
+	size_t *const pColorCount = nullptr, size_t *const pOwnerCount = nullptr
 ) {
 	terrain3dClearMeshCounts( pMeshCounts );
 	nInstanceCount = 0u;
 	nMeshCount = 0u;
+	if ( pColorCount ) *pColorCount = 0u;
+	if ( pOwnerCount ) *pOwnerCount = 0u;
 	const size_t page_size = ( size_t ) ( arrPage.size() );
 	if ( !terrain3dPageHas( 0u, TERRAIN3D_INSTANCE_PAGE_HEADER_BYTES, page_size ) ) {
 		return arrPage.is_empty();
@@ -221,7 +224,7 @@ bool terrain3dReadPageHeaders(
 			}
 			t3dinstanceCell_t *pDecodedCell = nullptr;
 			if ( bDecode && pDecodedMesh && pStore ) {
-				pDecodedCell = &pStore->getOrCreateCell( mesh_id, Vector2i( cell_x, cell_y ), count,
+				pDecodedCell = &pStore->getOrCreateCellExact( mesh_id, Vector2i( cell_x, cell_y ), count,
 					( flags & TERRAIN3D_INSTANCE_PAGE_CELL_COLORS ) != 0u,
 					( flags & TERRAIN3D_INSTANCE_PAGE_CELL_OWNERS ) != 0u );
 				pDecodedCell->transforms.resize( count );
@@ -240,6 +243,7 @@ bool terrain3dReadPageHeaders(
 			}
 			nOffset += transform_bytes;
 			if ( ( flags & TERRAIN3D_INSTANCE_PAGE_CELL_COLORS ) != 0u ) {
+				if ( pColorCount ) { if ( ( size_t ) count > std::numeric_limits<size_t>::max() - *pColorCount ) return false; *pColorCount += ( size_t ) count; }
 				if ( !terrain3dSizeMul( ( size_t ) ( count ), sizeof( uint32_t ), sidecar_bytes ) ||
 					!terrain3dPageHas( nOffset, sidecar_bytes, page_size ) ) {
 					return false;
@@ -253,6 +257,7 @@ bool terrain3dReadPageHeaders(
 				nOffset += sidecar_bytes;
 			}
 			if ( ( flags & TERRAIN3D_INSTANCE_PAGE_CELL_OWNERS ) != 0u ) {
+				if ( pOwnerCount ) { if ( ( size_t ) count > std::numeric_limits<size_t>::max() - *pOwnerCount ) return false; *pOwnerCount += ( size_t ) count; }
 				if ( !terrain3dSizeMul( ( size_t ) ( count ), sizeof( uint32_t ), sidecar_bytes ) ||
 					!terrain3dPageHas( nOffset, sidecar_bytes, page_size ) ) {
 					return false;
@@ -369,8 +374,10 @@ bool T3DInstancePageCodec::decode(
 	uint32_t *const pMeshCounts, uint32_t &nInstanceCount, uint16_t &nMeshCount
 ) {
 	if ( arrPage.is_empty() ) { rStore.clearRetainCapacity(); terrain3dClearMeshCounts( pMeshCounts ); nInstanceCount = 0u; nMeshCount = 0u; return true; }
-	uint32_t inspected_instances = 0u; uint16_t inspected_meshes = 0u; size_t inspect_offset = 0u;
-	if ( !terrain3dReadPageHeaders( arrPage, inspect_offset, nullptr, inspected_instances, inspected_meshes, false, nullptr ) ) { terrain3dClearMeshCounts( pMeshCounts ); nInstanceCount = 0u; nMeshCount = 0u; return false; }
+	uint32_t inspected_instances = 0u; uint16_t inspected_meshes = 0u; size_t inspect_offset = 0u; size_t color_count = 0u; size_t owner_count = 0u;
+	if ( !terrain3dReadPageHeaders( arrPage, inspect_offset, nullptr, inspected_instances, inspected_meshes, false, nullptr, &color_count, &owner_count ) ) { terrain3dClearMeshCounts( pMeshCounts ); nInstanceCount = 0u; nMeshCount = 0u; return false; }
+	rStore.reserveMeshCapacity( ( size_t ) inspected_meshes );
+	rStore.reservePayloadCapacity( ( size_t ) inspected_instances, color_count, owner_count );
 	size_t decode_offset = 0u; if ( !terrain3dReadPageHeaders( arrPage, decode_offset, pMeshCounts, nInstanceCount, nMeshCount, true, &rStore ) ) { terrain3dClearMeshCounts( pMeshCounts ); nInstanceCount = 0u; nMeshCount = 0u; return false; }
 	return nInstanceCount == inspected_instances && nMeshCount == inspected_meshes;
 }

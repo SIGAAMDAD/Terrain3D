@@ -88,7 +88,13 @@ private:
 		int nWidth = 0;
 		uint64_t nLastUseTick = 0u;
 	} t3dcollisionRegionCacheEntry_t;
-	eastl::vector<t3dcollisionRegionCacheEntry_t> m_bakedRegionCache;
+	static constexpr int TERRAIN3D_COLLISION_BAKED_CACHE_AXIS =
+		( 2 * ( 256 + 64 + TERRAIN3D_MIN_REGION_SIZE ) / TERRAIN3D_MIN_REGION_SIZE ) + 1;
+	static constexpr int TERRAIN3D_COLLISION_BAKED_CACHE_CAPACITY =
+		TERRAIN3D_COLLISION_BAKED_CACHE_AXIS * TERRAIN3D_COLLISION_BAKED_CACHE_AXIS;
+	eastl::array<t3dcollisionRegionCacheEntry_t, TERRAIN3D_COLLISION_BAKED_CACHE_CAPACITY> m_bakedRegionCache{};
+	eastl::array<int16_t, TERRAIN3D_MAX_REGION_SLOTS> m_bakedRegionByMap{};
+	int m_nBakedRegionCacheCount = 0;
 	uint64_t m_nBakedRegionCacheTick = 0u;
 	uint64_t m_nPreparationUsecLast = 0u;
 	uint64_t m_nUploadUsecLast = 0u;
@@ -114,6 +120,8 @@ private:
 	Vector2i snapToGrid( const Vector2i &rPos ) const;
 	Vector2i snapToGrid( const Vector3 &rPos ) const;
 	int findBakedRegionCache( const Vector2i &rLocation ) const;
+	void clearBakedRegionCache( bool bReleasePayloads );
+	void eraseBakedRegionCacheAt( int nIndex );
 	void refreshBakedRegionCache( const Vector2i &rCenter );
 	bool copyBakedTile( const Vector2i &rPosition, int nSize, t3dcollisionShapeRecord_t &rRecord, PackedRealArray &rHeights );
 	bool canUseBakedDynamicCollision( void ) const;
@@ -138,7 +146,7 @@ private:
 	bool shapeAllowsCollision( const Vector2i &rPosition, const int nSize ) const;
 
 public:
-	EA_FORCE_INLINE T3DCollision( void ) {}
+	EA_FORCE_INLINE T3DCollision( void ) { m_bakedRegionByMap.fill( ( int16_t ) -1 ); }
 	EA_FORCE_INLINE ~T3DCollision( void ) { destroy(); }
 	void initialize( T3DTerrain *pTerrain );
 

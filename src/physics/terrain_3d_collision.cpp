@@ -81,23 +81,63 @@ bool T3DCollision::canUseBakedDynamicCollision( void ) const {
 }
 
 int T3DCollision::findBakedRegionCache( const Vector2i &rLocation ) const {
-	for ( int index = 0; index < ( int ) ( m_bakedRegionCache.size() ); ++index ) {
-		if ( m_bakedRegionCache[( size_t ) ( index )].location == rLocation ) {
-			return index;
+	const int map_index = T3DData::getRegionMapIndex( rLocation );
+	if ( map_index < 0 ) {
+		return -1;
+	}
+	const int index = m_bakedRegionByMap[( size_t ) ( map_index )];
+	return index >= 0 && index < m_nBakedRegionCacheCount && m_bakedRegionCache[( size_t ) ( index )].location == rLocation ? index : -1;
+}
+
+void T3DCollision::clearBakedRegionCache( const bool bReleasePayloads ) {
+	m_bakedRegionByMap.fill( ( int16_t ) -1 );
+	if ( bReleasePayloads ) {
+		for ( t3dcollisionRegionCacheEntry_t &entry : m_bakedRegionCache ) {
+			entry = t3dcollisionRegionCacheEntry_t{};
+		}
+	} else {
+		for ( int index = 0; index < m_nBakedRegionCacheCount; ++index ) {
+			m_bakedRegionCache[( size_t ) ( index )].location = V2I_MAX;
+			m_bakedRegionCache[( size_t ) ( index )].nWidth = 0;
+			m_bakedRegionCache[( size_t ) ( index )].nLastUseTick = 0u;
 		}
 	}
-	return -1;
+	m_nBakedRegionCacheCount = 0;
+}
+
+void T3DCollision::eraseBakedRegionCacheAt( const int nIndex ) {
+	if ( nIndex < 0 || nIndex >= m_nBakedRegionCacheCount ) {
+		return;
+	}
+	t3dcollisionRegionCacheEntry_t &dead = m_bakedRegionCache[( size_t ) ( nIndex )];
+	const int dead_map_index = T3DData::getRegionMapIndex( dead.location );
+	if ( dead_map_index >= 0 ) {
+		m_bakedRegionByMap[( size_t ) ( dead_map_index )] = -1;
+	}
+	const int last = m_nBakedRegionCacheCount - 1;
+	if ( nIndex != last ) {
+		std::swap( m_bakedRegionCache[( size_t ) ( nIndex )], m_bakedRegionCache[( size_t ) ( last )] );
+		const int moved_map_index = T3DData::getRegionMapIndex( m_bakedRegionCache[( size_t ) ( nIndex )].location );
+		if ( moved_map_index >= 0 ) {
+			m_bakedRegionByMap[( size_t ) ( moved_map_index )] = ( int16_t ) nIndex;
+		}
+	}
+	// The now-inactive tail retains its height allocation for the next cache fill.
+	m_bakedRegionCache[( size_t ) ( last )].location = V2I_MAX;
+	m_bakedRegionCache[( size_t ) ( last )].nWidth = 0;
+	m_bakedRegionCache[( size_t ) ( last )].nLastUseTick = 0u;
+	--m_nBakedRegionCacheCount;
 }
 
 void T3DCollision::refreshBakedRegionCache( const Vector2i &rCenter ) {
 	if ( !canUseBakedDynamicCollision() ) {
-		m_bakedRegionCache.clear();
+		clearBakedRegionCache( false );
 		return;
 	}
 	T3DData *const pData = m_pTerrain->getData();
 	const int region_size = m_pTerrain->getRegionSize();
 	if ( region_size <= 0 ) {
-		m_bakedRegionCache.clear();
+		clearBakedRegionCache( false );
 		return;
 	}
 	++m_nBakedRegionCacheTick;
@@ -105,13 +145,13 @@ void T3DCollision::refreshBakedRegionCache( const Vector2i &rCenter ) {
 	const Vector2i min_region = V2I_DIVIDE_FLOOR( rCenter - V2I( margin ), region_size );
 	const Vector2i max_region = V2I_DIVIDE_FLOOR( rCenter + V2I( margin ), region_size );
 
-	for ( int index = ( int ) ( m_bakedRegionCache.size() ) - 1; index >= 0; --index ) {
+	for ( int index = m_nBakedRegionCacheCount - 1; index >= 0; --index ) {
 		const Vector2i location = m_bakedRegionCache[( size_t ) ( index )].location;
 		const T3DRegion *const pRegion = pData->getRegionPtr( location );
 		const bool outside = location.x < min_region.x || location.x > max_region.x ||
 			location.y < min_region.y || location.y > max_region.y;
 		if ( outside || !pRegion || pRegion->isDeleted() || pRegion->isModified() ) {
-			m_bakedRegionCache.erase( m_bakedRegionCache.begin() + index );
+			eraseBakedRegionCacheAt( index );
 		}
 	}
 
@@ -127,6 +167,10 @@ void T3DCollision::refreshBakedRegionCache( const Vector2i &rCenter ) {
 				m_bakedRegionCache[( size_t ) ( cached_index )].nLastUseTick = m_nBakedRegionCacheTick;
 				continue;
 			}
+			if ( m_nBakedRegionCacheCount >= TERRAIN3D_COLLISION_BAKED_CACHE_CAPACITY ) {
+				LOG( T3DTerrain::ERROR, "Baked collision region cache exceeded fixed geometric capacity" );
+				return;
+			}
 			pData->requestCookedCollisionTile( location, 1u );
 			PackedByteArray height_blob;
 			PackedByteArray bounds_blob;
@@ -134,22 +178,24 @@ void T3DCollision::refreshBakedRegionCache( const Vector2i &rCenter ) {
 			if ( !pData->takeCookedCollisionTile( location, height_blob, bounds_blob, hole_blob ) ) {
 				continue;
 			}
-			PackedFloat32Array heights;
+			t3dcollisionRegionCacheEntry_t &entry = m_bakedRegionCache[( size_t ) ( m_nBakedRegionCacheCount )];
 			int width = 0;
 			float min_height = 0.0f;
 			float max_height = 0.0f;
 			int bounds_width = 0;
-			if ( !T3DRuntimeBakeCodec::decodeCollisionHeight( height_blob, heights, width ) ||
+			if ( !T3DRuntimeBakeCodec::decodeCollisionHeight( height_blob, entry.heights, width ) ||
 				!T3DRuntimeBakeCodec::decodeCollisionBounds( bounds_blob, min_height, max_height, bounds_width ) ||
 				width != region_size + 1 || bounds_width != width ) {
 				continue;
 			}
-			t3dcollisionRegionCacheEntry_t entry;
 			entry.location = location;
-			entry.heights = heights;
 			entry.nWidth = width;
 			entry.nLastUseTick = m_nBakedRegionCacheTick;
-			m_bakedRegionCache.push_back( entry );
+			const int map_index = T3DData::getRegionMapIndex( location );
+			if ( map_index >= 0 ) {
+				m_bakedRegionByMap[( size_t ) ( map_index )] = ( int16_t ) m_nBakedRegionCacheCount;
+			}
+			++m_nBakedRegionCacheCount;
 		}
 	}
 }
@@ -805,7 +851,7 @@ void T3DCollision::destroy( void ) {
 	m_nInactiveShapeCount = 0;
 	m_fullHeightScratch.clear();
 	m_collisionSurfaceScratch.clear();
-	m_bakedRegionCache.clear();
+	clearBakedRegionCache( true );
 	const Callable region_callback = callable_mp( this, &T3DCollision::processRegionMapUpdate );
 	if ( RS->is_connected( "frame_pre_draw", region_callback ) ) {
 		RS->disconnect( "frame_pre_draw", region_callback );
@@ -959,7 +1005,7 @@ size_t T3DCollision::getRetainedBufferBytes( void ) const {
 	bytes += ( size_t ) ( m_fullHeightScratch.size() ) * sizeof( real_t );
 	bytes += ( size_t ) ( m_collisionSurfaceScratch.size() ) * sizeof( float );
 	bytes += m_collisionSurfaceBuilder.getRetainedBufferBytes();
-	bytes += m_bakedRegionCache.capacity() * sizeof( t3dcollisionRegionCacheEntry_t );
+	bytes += sizeof( m_bakedRegionCache ) + sizeof( m_bakedRegionByMap );
 	for ( const t3dcollisionRegionCacheEntry_t &entry : m_bakedRegionCache ) {
 		bytes += ( size_t ) ( entry.heights.size() ) * sizeof( float );
 	}
@@ -1011,7 +1057,8 @@ Dictionary T3DCollision::getStats( void ) const {
 	stats["update_usec_last"] = ( int64_t ) ( m_nUpdateUsecLast );
 	stats["preparation_usec_last"] = ( int64_t ) ( m_nPreparationUsecLast );
 	stats["physics_upload_usec_last"] = ( int64_t ) ( m_nUploadUsecLast );
-	stats["baked_cache_regions"] = ( int ) ( m_bakedRegionCache.size() );
+	stats["baked_cache_regions"] = m_nBakedRegionCacheCount;
+	stats["baked_cache_capacity"] = TERRAIN3D_COLLISION_BAKED_CACHE_CAPACITY;
 	stats["baked_cache_hits_last_update"] = m_nBakedCacheHitsLastUpdate;
 	stats["baked_cache_misses_last_update"] = m_nBakedCacheMissesLastUpdate;
 	stats["shapes_rebuilt_last_update"] = m_nShapesRebuiltLastUpdate;

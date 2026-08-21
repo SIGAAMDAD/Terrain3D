@@ -83,61 +83,142 @@ int T3DInstancer::getRegionTableIndex( const Vector2i &vRegion ) {
 	return T3DData::getRegionMapIndex( vRegion );
 }
 
-eastl::vector<size_t> *T3DInstancer::getRegionRenderList( const Vector2i &vRegion ) {
-	const int index = getRegionTableIndex( vRegion );
-	if ( index < 0 || index >= ( int ) ( TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY ) ) {
-		return nullptr;
+uint32_t T3DInstancer::allocateRenderRegionNode( const size_t iRenderCell, const uint16_t nRegionIndex ) {
+	uint32_t node_index = UINT32_MAX;
+	if ( m_nRenderRegionFreeHead != UINT32_MAX ) {
+		node_index = m_nRenderRegionFreeHead;
+		m_nRenderRegionFreeHead = m_renderRegionNodes[( size_t ) ( node_index )].nNext;
+	} else {
+		node_index = ( uint32_t ) ( m_renderRegionNodes.size() );
+		m_renderRegionNodes.push_back( t3drenderRegionNode_t{} );
 	}
-	m_regionRenderMask.set( ( size_t ) ( index ) );
-	return &m_szRegionRenderIndices[( size_t ) ( index )];
+	t3dregionList_t &list = m_szRegionRenderLists[nRegionIndex];
+	t3drenderRegionNode_t &node = m_renderRegionNodes[( size_t ) ( node_index )];
+	node.iRenderCell = iRenderCell;
+	node.nPrev = UINT32_MAX;
+	node.nNext = list.nHead;
+	if ( list.nHead != UINT32_MAX ) {
+		m_renderRegionNodes[( size_t ) ( list.nHead )].nPrev = node_index;
+	}
+	list.nHead = node_index;
+	++list.nCount;
+	m_regionRenderMask.set( nRegionIndex );
+	return node_index;
 }
 
-const eastl::vector<size_t> *T3DInstancer::findRegionRenderList( const Vector2i &vRegion ) const {
-	const int index = getRegionTableIndex( vRegion );
-	if ( index < 0 || index >= ( int ) ( TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY ) || !m_regionRenderMask.test( ( size_t ) ( index ) ) ) {
-		return nullptr;
+void T3DInstancer::releaseRenderRegionNode( const uint32_t nNode, const uint16_t nRegionIndex ) {
+	if ( nNode == UINT32_MAX || nNode >= m_renderRegionNodes.size() || nRegionIndex >= TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY ) {
+		return;
 	}
-	return &m_szRegionRenderIndices[( size_t ) ( index )];
+	t3dregionList_t &list = m_szRegionRenderLists[nRegionIndex];
+	t3drenderRegionNode_t &node = m_renderRegionNodes[( size_t ) ( nNode )];
+	if ( node.nPrev != UINT32_MAX ) {
+		m_renderRegionNodes[( size_t ) ( node.nPrev )].nNext = node.nNext;
+	} else if ( list.nHead == nNode ) {
+		list.nHead = node.nNext;
+	}
+	if ( node.nNext != UINT32_MAX ) {
+		m_renderRegionNodes[( size_t ) ( node.nNext )].nPrev = node.nPrev;
+	}
+	if ( list.nCount > 0u ) {
+		--list.nCount;
+	}
+	if ( list.nCount == 0u ) {
+		list.nHead = UINT32_MAX;
+		m_regionRenderMask.reset( nRegionIndex );
+	}
+	node.nPrev = UINT32_MAX;
+	node.nNext = m_nRenderRegionFreeHead;
+	m_nRenderRegionFreeHead = nNode;
 }
 
-eastl::vector<T3DInstancer::t3dcellUpdateKey_t> *T3DInstancer::getRegionLogicalList(
-	const Vector2i &vRegion
-) {
-	const int index = getRegionTableIndex( vRegion );
-	if ( index < 0 || index >= ( int ) ( TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY ) ) {
-		return nullptr;
+uint32_t T3DInstancer::allocateLogicalRegionNode( const t3dcellUpdateKey_t &rKey, const uint16_t nRegionIndex ) {
+	uint32_t node_index = UINT32_MAX;
+	if ( m_nLogicalRegionFreeHead != UINT32_MAX ) {
+		node_index = m_nLogicalRegionFreeHead;
+		m_nLogicalRegionFreeHead = m_logicalRegionNodes[( size_t ) ( node_index )].nNext;
+	} else {
+		node_index = ( uint32_t ) ( m_logicalRegionNodes.size() );
+		m_logicalRegionNodes.push_back( t3dlogicalRegionNode_t{} );
 	}
-	m_regionLogicalMask.set( ( size_t ) ( index ) );
-	return &m_szRegionLogicalCells[( size_t ) ( index )];
+	t3dregionList_t &list = m_szRegionLogicalLists[nRegionIndex];
+	t3dlogicalRegionNode_t &node = m_logicalRegionNodes[( size_t ) ( node_index )];
+	node.key = rKey;
+	node.nPrev = UINT32_MAX;
+	node.nNext = list.nHead;
+	if ( list.nHead != UINT32_MAX ) {
+		m_logicalRegionNodes[( size_t ) ( list.nHead )].nPrev = node_index;
+	}
+	list.nHead = node_index;
+	++list.nCount;
+	m_regionLogicalMask.set( nRegionIndex );
+	return node_index;
 }
 
-const eastl::vector<T3DInstancer::t3dcellUpdateKey_t> *T3DInstancer::findRegionLogicalList(
-	const Vector2i &vRegion
-) const {
-	const int index = getRegionTableIndex( vRegion );
-	if ( index < 0 || index >= ( int ) ( TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY ) || !m_regionLogicalMask.test( ( size_t ) ( index ) ) ) {
-		return nullptr;
+void T3DInstancer::releaseLogicalRegionNode( const uint32_t nNode, const uint16_t nRegionIndex ) {
+	if ( nNode == UINT32_MAX || nNode >= m_logicalRegionNodes.size() || nRegionIndex >= TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY ) {
+		return;
 	}
-	return &m_szRegionLogicalCells[( size_t ) ( index )];
+	t3dregionList_t &list = m_szRegionLogicalLists[nRegionIndex];
+	t3dlogicalRegionNode_t &node = m_logicalRegionNodes[( size_t ) ( nNode )];
+	if ( node.nPrev != UINT32_MAX ) {
+		m_logicalRegionNodes[( size_t ) ( node.nPrev )].nNext = node.nNext;
+	} else if ( list.nHead == nNode ) {
+		list.nHead = node.nNext;
+	}
+	if ( node.nNext != UINT32_MAX ) {
+		m_logicalRegionNodes[( size_t ) ( node.nNext )].nPrev = node.nPrev;
+	}
+	if ( list.nCount > 0u ) {
+		--list.nCount;
+	}
+	if ( list.nCount == 0u ) {
+		list.nHead = UINT32_MAX;
+		m_regionLogicalMask.reset( nRegionIndex );
+	}
+	node.nPrev = UINT32_MAX;
+	node.nNext = m_nLogicalRegionFreeHead;
+	m_nLogicalRegionFreeHead = nNode;
+}
+
+uint32_t T3DInstancer::allocateTransitionCellNode( const t3dcellUpdateKey_t &rKey, const uint32_t nNext ) {
+	uint32_t node_index = UINT32_MAX;
+	if ( m_nTransitionCellFreeHead != UINT32_MAX ) {
+		node_index = m_nTransitionCellFreeHead;
+		m_nTransitionCellFreeHead = m_transitionCellNodes[( size_t ) ( node_index )].nNext;
+	} else {
+		node_index = ( uint32_t ) ( m_transitionCellNodes.size() );
+		m_transitionCellNodes.push_back( t3dtransitionCellNode_t{} );
+	}
+	t3dtransitionCellNode_t &node = m_transitionCellNodes[( size_t ) ( node_index )];
+	node.key = rKey;
+	node.nNext = nNext;
+	return node_index;
+}
+
+void T3DInstancer::releaseTransitionCellNode( const uint32_t nNode ) {
+	if ( nNode == UINT32_MAX || nNode >= m_transitionCellNodes.size() ) {
+		return;
+	}
+	m_transitionCellNodes[( size_t ) ( nNode )].nNext = m_nTransitionCellFreeHead;
+	m_nTransitionCellFreeHead = nNode;
 }
 
 void T3DInstancer::clearRegionRenderLists( void ) {
 	for ( size_t index = 0; index < TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY; ++index ) {
-		if ( !m_regionRenderMask.test( index ) ) {
-			continue;
-		}
-		m_szRegionRenderIndices[index].clear();
+		m_szRegionRenderLists[index] = t3dregionList_t{};
 	}
+	m_renderRegionNodes.clear();
+	m_nRenderRegionFreeHead = UINT32_MAX;
 	m_regionRenderMask.reset();
 }
 
 void T3DInstancer::clearRegionLogicalLists( void ) {
 	for ( size_t index = 0; index < TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY; ++index ) {
-		if ( !m_regionLogicalMask.test( index ) ) {
-			continue;
-		}
-		m_szRegionLogicalCells[index].clear();
+		m_szRegionLogicalLists[index] = t3dregionList_t{};
 	}
+	m_logicalRegionNodes.clear();
+	m_nLogicalRegionFreeHead = UINT32_MAX;
 	m_regionLogicalMask.reset();
 }
 
@@ -146,11 +227,11 @@ T3DInstancer::t3drenderCell_t *T3DInstancer::findRenderCell(
 	const Vector2i &cell
 ) {
 	const t3drenderCellKey_t key{region, cell, nMeshId, nLod};
-	RenderCellIndex::iterator it = m_iRenderCellIndex.find( key );
-	if ( it == m_iRenderCellIndex.end() || it->second >= m_renderCells.size() ) {
+	const size_t *const pIndex = m_iRenderCellIndex.find( key );
+	if ( !pIndex || *pIndex >= m_renderCells.size() ) {
 		return nullptr;
 	}
-	return &m_renderCells[it->second];
+	return &m_renderCells[*pIndex];
 }
 
 T3DInstancer::t3drenderCell_t *T3DInstancer::getOrCreateRenderCell(
@@ -158,12 +239,11 @@ T3DInstancer::t3drenderCell_t *T3DInstancer::getOrCreateRenderCell(
 	const int nLod, const Vector2i &cell
 ) {
 	const t3drenderCellKey_t key{region, cell, nMeshId, nLod};
-	RenderCellIndex::iterator it = m_iRenderCellIndex.find( key );
-	if ( it != m_iRenderCellIndex.end() ) {
-		return &m_renderCells[it->second];
+	if ( const size_t *const pIndex = m_iRenderCellIndex.find( key ) ) {
+		return *pIndex < m_renderCells.size() ? &m_renderCells[*pIndex] : nullptr;
 	}
-	eastl::vector<size_t> *const pRegionIndices = getRegionRenderList( region );
-	if ( !pRegionIndices ) {
+	const int region_index = getRegionTableIndex( region );
+	if ( region_index < 0 || region_index >= ( int ) ( TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY ) ) {
 		LOG( T3DTerrain::ERROR, "Instance cell region is outside the fixed terrain map: ", region );
 		return nullptr;
 	}
@@ -172,12 +252,16 @@ T3DInstancer::t3drenderCell_t *T3DInstancer::getOrCreateRenderCell(
 	value.cell = cell;
 	value.meshId = nMeshId;
 	value.lod = nLod;
-	value.iRegionListIndex = pRegionIndices->size();
 	const size_t index = m_renderCells.size();
 	m_renderCells.push_back( eastl::move( value ) );
-	m_iRenderCellIndex.emplace( key, index );
-	pRegionIndices->push_back( index );
-	return &m_renderCells.back();
+	t3drenderCell_t &render_cell = m_renderCells.back();
+	render_cell.nRegionListNode = allocateRenderRegionNode( index, ( uint16_t ) ( region_index ) );
+	if ( !m_iRenderCellIndex.insertOrAssign( key, index ) ) {
+		releaseRenderRegionNode( render_cell.nRegionListNode, ( uint16_t ) ( region_index ) );
+		m_renderCells.pop_back();
+		return nullptr;
+	}
+	return &render_cell;
 }
 
 void T3DInstancer::eraseRenderCellAt( const size_t iIndex ) {
@@ -187,21 +271,8 @@ void T3DInstancer::eraseRenderCellAt( const size_t iIndex ) {
 	t3drenderCell_t &dead = m_renderCells[iIndex];
 	m_iRenderCellIndex.erase( makeRenderKey( dead ) );
 	const int dead_region_index = getRegionTableIndex( dead.pRegion );
-	if ( dead_region_index >= 0 && dead_region_index < ( int ) ( TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY ) &&
-		m_regionRenderMask.test( ( size_t ) ( dead_region_index ) ) ) {
-		eastl::vector<size_t> &region_indices = m_szRegionRenderIndices[( size_t ) ( dead_region_index )];
-		if ( dead.iRegionListIndex < region_indices.size() ) {
-			const size_t replacement_index = region_indices.back();
-			region_indices[dead.iRegionListIndex] = replacement_index;
-			if ( replacement_index < m_renderCells.size() ) {
-				m_renderCells[replacement_index].iRegionListIndex = dead.iRegionListIndex;
-			}
-			region_indices.pop_back();
-		}
-		if ( region_indices.empty() ) {
-			region_indices.clear();
-			m_regionRenderMask.reset( ( size_t ) ( dead_region_index ) );
-		}
+	if ( dead_region_index >= 0 && dead_region_index < ( int ) ( TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY ) ) {
+		releaseRenderRegionNode( dead.nRegionListNode, ( uint16_t ) ( dead_region_index ) );
 	}
 	if ( dead.mmi.is_valid() ) {
 		RS->free_rid( dead.mmi );
@@ -210,13 +281,13 @@ void T3DInstancer::eraseRenderCellAt( const size_t iIndex ) {
 		RS->free_rid( dead.multimesh );
 	}
 
-	const size_t last = m_renderCells.size() - 1;
+	const size_t last = m_renderCells.size() - 1u;
 	if ( iIndex != last ) {
 		m_renderCells[iIndex] = eastl::move( m_renderCells[last] );
-		m_iRenderCellIndex[makeRenderKey( m_renderCells[iIndex] )] = iIndex;
-		eastl::vector<size_t> *pMovedRegionIndices = getRegionRenderList( m_renderCells[iIndex].pRegion );
-		if ( pMovedRegionIndices && m_renderCells[iIndex].iRegionListIndex < pMovedRegionIndices->size() ) {
-			( *pMovedRegionIndices )[m_renderCells[iIndex].iRegionListIndex] = iIndex;
+		m_iRenderCellIndex.insertOrAssign( makeRenderKey( m_renderCells[iIndex] ), iIndex );
+		const uint32_t moved_node = m_renderCells[iIndex].nRegionListNode;
+		if ( moved_node != UINT32_MAX && moved_node < m_renderRegionNodes.size() ) {
+			m_renderRegionNodes[( size_t ) ( moved_node )].iRenderCell = iIndex;
 		}
 	}
 	m_renderCells.pop_back();
@@ -224,9 +295,8 @@ void T3DInstancer::eraseRenderCellAt( const size_t iIndex ) {
 
 void T3DInstancer::eraseRenderCell( const Vector2i &region, const int nMeshId, const int nLod, const Vector2i &cell ) {
 	const t3drenderCellKey_t key{region, cell, nMeshId, nLod};
-	const RenderCellIndex::iterator it = m_iRenderCellIndex.find( key );
-	if ( it != m_iRenderCellIndex.end() ) {
-		eraseRenderCellAt( it->second );
+	if ( const size_t *const pIndex = m_iRenderCellIndex.find( key ) ) {
+		eraseRenderCellAt( *pIndex );
 	}
 }
 
@@ -291,43 +361,38 @@ void T3DInstancer::setLogicalCellCount(
 	if ( nMeshId < 0 || nMeshId >= TERRAIN3D_MAX_MESH_ASSETS ) {
 		return;
 	}
-	if ( nCount == 0 ) {
+	if ( nCount == 0u ) {
 		eraseLogicalCellCount( vRegion, nMeshId, vCell );
 		return;
 	}
-
+	const int region_index = getRegionTableIndex( vRegion );
+	if ( region_index < 0 || region_index >= ( int ) ( TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY ) ) {
+		LOG( T3DTerrain::ERROR, "Logical instance cell region is outside the fixed terrain map: ", vRegion );
+		return;
+	}
 	const uint32_t new_count = nCount > ( size_t ) ( UINT32_MAX ) ? UINT32_MAX : ( uint32_t ) ( nCount );
 	const t3dcellUpdateKey_t key{vRegion, vCell, nMeshId};
-	LogicalCellMap::iterator it = m_logicalCellCounts.find( key );
-	const uint32_t old_count = it == m_logicalCellCounts.end() ? 0u : it->second.nCount;
+	t3dlogicalCellState_t *pState = m_logicalCellCounts.find( key );
+	const uint32_t old_count = pState ? pState->nCount : 0u;
 	if ( old_count == new_count ) {
-		// A mesh resource can be replaced without changing the cell. Republish the
-		// authoritative total so the new asset cannot inherit a stale zero count.
 		publishLogicalMeshCount( nMeshId );
 		return;
 	}
-	if ( it == m_logicalCellCounts.end() ) {
-		eastl::vector<t3dcellUpdateKey_t> *const pRegionCells = getRegionLogicalList( vRegion );
-		if ( !pRegionCells ) {
-			LOG( T3DTerrain::ERROR, "Logical instance cell region is outside the fixed terrain map: ", vRegion );
-			return;
-		}
+	if ( !pState ) {
 		t3dlogicalCellState_t state;
 		state.nCount = new_count;
-		state.iRegionListIndex = pRegionCells->size();
-		m_logicalCellCounts.emplace( key, state );
-		pRegionCells->push_back( key );
+		state.nRegionListNode = allocateLogicalRegionNode( key, ( uint16_t ) ( region_index ) );
+		pState = m_logicalCellCounts.insertOrAssign( key, state );
+		if ( !pState ) {
+			releaseLogicalRegionNode( state.nRegionListNode, ( uint16_t ) ( region_index ) );
+			return;
+		}
 	} else {
-		it->second.nCount = new_count;
+		pState->nCount = new_count;
 	}
 	uint64_t &mesh_total = m_szLogicalMeshInstanceTotals[( size_t ) ( nMeshId )];
 	mesh_total = mesh_total >= ( uint64_t ) ( old_count ) ? mesh_total - ( uint64_t ) ( old_count ) : 0u;
-	if ( UINT64_MAX - mesh_total < ( uint64_t ) ( new_count ) ) {
-		mesh_total = UINT64_MAX;
-	} else {
-		mesh_total += ( uint64_t ) ( new_count );
-	}
-
+	mesh_total = UINT64_MAX - mesh_total < ( uint64_t ) ( new_count ) ? UINT64_MAX : mesh_total + ( uint64_t ) ( new_count );
 	publishLogicalMeshCount( nMeshId );
 }
 
@@ -337,75 +402,55 @@ void T3DInstancer::eraseLogicalCellCount(
 ) {
 	const t3dcellUpdateKey_t key{vRegion, vCell, nMeshId};
 	untrackSingleLodCell( key );
-	LogicalCellMap::iterator it = m_logicalCellCounts.find( key );
-
-	// Keep the secondary region index self-healing. Its stored dense index is the
-	// normal O(1) path; the linear fallback only runs if an earlier invariant was
-	// violated, and prevents a stale secondary key from causing an infinite erase
-	// loop during region teardown.
+	t3dlogicalCellState_t *const pState = m_logicalCellCounts.find( key );
 	const int region_index = getRegionTableIndex( vRegion );
-	if ( region_index >= 0 && region_index < ( int ) ( TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY ) &&
-		m_regionLogicalMask.test( ( size_t ) ( region_index ) ) ) {
-		eastl::vector<t3dcellUpdateKey_t> &region_cells = m_szRegionLogicalCells[( size_t ) ( region_index )];
-		size_t list_index = it == m_logicalCellCounts.end() ? region_cells.size() : it->second.iRegionListIndex;
-		if ( list_index >= region_cells.size() || !( region_cells[list_index] == key ) ) {
-			list_index = region_cells.size();
-			for ( size_t i = 0; i < region_cells.size(); ++i ) {
-				if ( region_cells[i] == key ) {
-					list_index = i;
-					break;
-				}
+	uint32_t node_index = pState ? pState->nRegionListNode : UINT32_MAX;
+	if ( node_index == UINT32_MAX && region_index >= 0 && region_index < ( int ) ( TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY ) ) {
+		for ( uint32_t node = m_szRegionLogicalLists[( size_t ) ( region_index )].nHead; node != UINT32_MAX; node = m_logicalRegionNodes[( size_t ) ( node )].nNext ) {
+			if ( m_logicalRegionNodes[( size_t ) ( node )].key == key ) {
+				node_index = node;
+				break;
 			}
-		}
-		if ( list_index < region_cells.size() ) {
-			const t3dcellUpdateKey_t replacement_key = region_cells.back();
-			region_cells[list_index] = replacement_key;
-			region_cells.pop_back();
-			if ( !( replacement_key == key ) ) {
-				LogicalCellMap::iterator replacement_it = m_logicalCellCounts.find( replacement_key );
-				if ( replacement_it != m_logicalCellCounts.end() ) {
-					replacement_it->second.iRegionListIndex = list_index;
-				}
-			}
-		}
-		if ( region_cells.empty() ) {
-			region_cells.clear();
-			m_regionLogicalMask.reset( ( size_t ) ( region_index ) );
 		}
 	}
-
-	if ( it == m_logicalCellCounts.end() ) {
+	if ( node_index != UINT32_MAX && region_index >= 0 ) {
+		releaseLogicalRegionNode( node_index, ( uint16_t ) ( region_index ) );
+	}
+	if ( !pState ) {
 		return;
 	}
-	const uint32_t old_count = it->second.nCount;
-	m_logicalCellCounts.erase( it );
+	const uint32_t old_count = pState->nCount;
+	m_logicalCellCounts.erase( key );
 	uint64_t &mesh_total = m_szLogicalMeshInstanceTotals[( size_t ) ( nMeshId )];
 	mesh_total = mesh_total >= ( uint64_t ) ( old_count ) ? mesh_total - ( uint64_t ) ( old_count ) : 0u;
 	publishLogicalMeshCount( nMeshId );
 }
 
 void T3DInstancer::eraseLogicalCellsByRegion( const Vector2i &vRegion ) {
-	while ( const eastl::vector<t3dcellUpdateKey_t> *region_cells = findRegionLogicalList( vRegion ) ) {
-		if ( region_cells->empty() ) {
-			break;
-		}
-		const t3dcellUpdateKey_t key = region_cells->back();
+	const int region_index = getRegionTableIndex( vRegion );
+	if ( region_index < 0 || region_index >= ( int ) ( TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY ) ) {
+		return;
+	}
+	while ( m_szRegionLogicalLists[( size_t ) ( region_index )].nHead != UINT32_MAX ) {
+		const uint32_t node = m_szRegionLogicalLists[( size_t ) ( region_index )].nHead;
+		const t3dcellUpdateKey_t key = m_logicalRegionNodes[( size_t ) ( node )].key;
 		eraseLogicalCellCount( key.pRegion, key.meshId, key.cell );
 	}
 }
 
 void T3DInstancer::eraseLogicalCellsByLocation( const Vector2i &vRegion, const int nMeshId ) {
-	size_t list_index = 0;
-	while ( const eastl::vector<t3dcellUpdateKey_t> *region_cells = findRegionLogicalList( vRegion ) ) {
-		if ( list_index >= region_cells->size() ) {
-			break;
+	const int region_index = getRegionTableIndex( vRegion );
+	if ( region_index < 0 || region_index >= ( int ) ( TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY ) ) {
+		return;
+	}
+	uint32_t node = m_szRegionLogicalLists[( size_t ) ( region_index )].nHead;
+	while ( node != UINT32_MAX ) {
+		const uint32_t next = m_logicalRegionNodes[( size_t ) ( node )].nNext;
+		const t3dcellUpdateKey_t key = m_logicalRegionNodes[( size_t ) ( node )].key;
+		if ( key.meshId == nMeshId ) {
+			eraseLogicalCellCount( key.pRegion, key.meshId, key.cell );
 		}
-		const t3dcellUpdateKey_t key = ( *region_cells )[list_index];
-		if ( key.meshId != nMeshId ) {
-			++list_index;
-			continue;
-		}
-		eraseLogicalCellCount( key.pRegion, key.meshId, key.cell );
+		node = next;
 	}
 }
 
@@ -515,26 +560,30 @@ void T3DInstancer::swapLogicalMeshIds( const int nSrcId, const int nDstId ) {
 		publishLogicalMeshCount( nDstId );
 		return;
 	}
-	LogicalCellMap swapped;
-	swapped.reserve( m_logicalCellCounts.size() );
-	for ( const LogicalCellMap::value_type &entry : m_logicalCellCounts ) {
-		t3dcellUpdateKey_t key = entry.first;
+	typedef struct t3dlogicalSwapEntry_s { t3dcellUpdateKey_t key; uint32_t nCount; } t3dlogicalSwapEntry_t;
+	eastl::vector<t3dlogicalSwapEntry_t> entries;
+	entries.reserve( m_logicalCellCounts.size() );
+	m_logicalCellCounts.forEach( [&]( const t3dcellUpdateKey_t &rKey, const t3dlogicalCellState_t &rState ) {
+		t3dcellUpdateKey_t key = rKey;
 		if ( key.meshId == nSrcId ) {
 			key.meshId = nDstId;
 		} else if ( key.meshId == nDstId ) {
 			key.meshId = nSrcId;
 		}
-		swapped.emplace( key, entry.second );
-	}
-	m_logicalCellCounts.swap( swapped );
+		entries.push_back( t3dlogicalSwapEntry_t{key, rState.nCount} );
+	} );
+	m_logicalCellCounts.clear();
 	clearRegionLogicalLists();
-	for ( LogicalCellMap::value_type &entry : m_logicalCellCounts ) {
-		eastl::vector<t3dcellUpdateKey_t> *const pRegionCells = getRegionLogicalList( entry.first.pRegion );
-		if ( !pRegionCells ) {
+	m_logicalCellCounts.reserve( entries.size() );
+	for ( const t3dlogicalSwapEntry_t &entry : entries ) {
+		const int region_index = getRegionTableIndex( entry.key.pRegion );
+		if ( region_index < 0 ) {
 			continue;
 		}
-		entry.second.iRegionListIndex = pRegionCells->size();
-		pRegionCells->push_back( entry.first );
+		t3dlogicalCellState_t state;
+		state.nCount = entry.nCount;
+		state.nRegionListNode = allocateLogicalRegionNode( entry.key, ( uint16_t ) ( region_index ) );
+		m_logicalCellCounts.insertOrAssign( entry.key, state );
 	}
 	std::swap( m_szLogicalMeshInstanceTotals[( size_t ) ( nSrcId )], m_szLogicalMeshInstanceTotals[( size_t ) ( nDstId )] );
 	publishLogicalMeshCount( nSrcId );
@@ -551,59 +600,40 @@ void T3DInstancer::reconcileRegionRenderCells( T3DRegion *const pRegion, const i
 		return;
 	}
 	const Vector2i regionLocation = pRegion->getLocation();
-	const T3DInstanceStore &store = pRegion->getInstanceStore();
-	// Reconcile persistent content independently of render LOD records. This is
-	// required even when a region currently has no render records.
-	size_t logical_list_index = 0;
-	while ( const eastl::vector<t3dcellUpdateKey_t> *logical_region = findRegionLogicalList( regionLocation ) ) {
-		if ( logical_list_index >= logical_region->size() ) {
-			break;
-		}
-		const t3dcellUpdateKey_t key = ( *logical_region )[logical_list_index];
-		if ( nMeshId >= 0 && key.meshId != nMeshId ) {
-			++logical_list_index;
-			continue;
-		}
-		const t3dinstanceCell_t *pCell = store.findCell( key.meshId, key.cell );
-		if ( pCell && !pCell->transforms.empty() ) {
-			++logical_list_index;
-			continue;
-		}
-		eraseLogicalCellCount( key.pRegion, key.meshId, key.cell );
+	const int region_index = getRegionTableIndex( regionLocation );
+	if ( region_index < 0 ) {
+		return;
 	}
-	size_t list_index = 0;
-	while ( eastl::vector<size_t> *region_indices = getRegionRenderList( regionLocation ) ) {
-		if ( list_index >= region_indices->size() ) {
-			if ( region_indices->empty() ) {
-				const int region_index = getRegionTableIndex( regionLocation );
-				region_indices->clear();
-				if ( region_index >= 0 ) {
-					m_regionRenderMask.reset( ( size_t ) ( region_index ) );
-				}
+	const T3DInstanceStore &store = pRegion->getInstanceStore();
+	uint32_t logical_node = m_szRegionLogicalLists[( size_t ) ( region_index )].nHead;
+	while ( logical_node != UINT32_MAX ) {
+		const uint32_t next = m_logicalRegionNodes[( size_t ) ( logical_node )].nNext;
+		const t3dcellUpdateKey_t key = m_logicalRegionNodes[( size_t ) ( logical_node )].key;
+		if ( nMeshId < 0 || key.meshId == nMeshId ) {
+			const t3dinstanceCell_t *pCell = store.findCell( key.meshId, key.cell );
+			if ( !pCell || pCell->transforms.empty() ) {
+				eraseLogicalCellCount( key.pRegion, key.meshId, key.cell );
 			}
-			break;
 		}
-		const size_t render_index = ( *region_indices )[list_index];
+		logical_node = next;
+	}
+	uint32_t render_node = m_szRegionRenderLists[( size_t ) ( region_index )].nHead;
+	while ( render_node != UINT32_MAX ) {
+		const uint32_t next = m_renderRegionNodes[( size_t ) ( render_node )].nNext;
+		const size_t render_index = m_renderRegionNodes[( size_t ) ( render_node )].iRenderCell;
 		if ( render_index >= m_renderCells.size() ) {
-			const size_t replacement_index = region_indices->back();
-			( *region_indices )[list_index] = replacement_index;
-			if ( replacement_index < m_renderCells.size() ) {
-				m_renderCells[replacement_index].iRegionListIndex = list_index;
-			}
-			region_indices->pop_back();
+			releaseRenderRegionNode( render_node, ( uint16_t ) ( region_index ) );
+			render_node = next;
 			continue;
 		}
 		const t3drenderCell_t &render = m_renderCells[render_index];
-		if ( nMeshId >= 0 && render.meshId != nMeshId ) {
-			++list_index;
-			continue;
+		if ( nMeshId < 0 || render.meshId == nMeshId ) {
+			const t3dinstanceCell_t *pCell = store.findCell( render.meshId, render.cell );
+			if ( !pCell || pCell->transforms.empty() ) {
+				eraseRenderCellAt( render_index );
+			}
 		}
-		const t3dinstanceCell_t *pCell = store.findCell( render.meshId, render.cell );
-		if ( pCell && !pCell->transforms.empty() ) {
-			++list_index;
-			continue;
-		}
-		eraseRenderCellAt( render_index );
+		render_node = next;
 	}
 }
 
@@ -683,12 +713,8 @@ void T3DInstancer::markPendingRegionWork( const Vector2i &rRegion ) {
 
 void T3DInstancer::rebuildPendingRegionWorkMask( void ) {
 	m_pendingRegionWorkMask.reset();
-	for ( const t3dcellUpdateKey_t &key : m_streamingUpdates ) {
-		markPendingRegionWork( key.pRegion );
-	}
-	for ( const t3dcellUpdateKey_t &key : m_activeStreamingUpdates ) {
-		markPendingRegionWork( key.pRegion );
-	}
+	m_streamingUpdates.forEach( [&]( const t3dcellUpdateKey_t &rKey ) { markPendingRegionWork( rKey.pRegion ); } );
+	m_activeStreamingUpdates.forEach( [&]( const t3dcellUpdateKey_t &rKey ) { markPendingRegionWork( rKey.pRegion ); } );
 	for ( size_t i = m_iPendingCellUpdateCursor; i < m_pendingCellUpdates.size(); ++i ) {
 		markPendingRegionWork( m_pendingCellUpdates[i].pRegion );
 	}
@@ -855,37 +881,53 @@ void T3DInstancer::trackSingleLodCell( const t3dcellUpdateKey_t &rKey ) {
 		return;
 	}
 	const t3dtransitionBucketKey_t bucket_key = getTransitionBucketKey( rKey );
-	eastl::vector<t3dcellUpdateKey_t> &cells = m_singleLodTransitionBuckets[bucket_key];
-	for ( const t3dcellUpdateKey_t &existing : cells ) {
-		if ( existing == rKey ) {
+	t3dtransitionBucketState_t *const pBucket = m_singleLodTransitionBuckets.getOrInsert( bucket_key );
+	if ( !pBucket ) {
+		return;
+	}
+	for ( uint32_t node = pBucket->nHead; node != UINT32_MAX; node = m_transitionCellNodes[( size_t ) ( node )].nNext ) {
+		if ( m_transitionCellNodes[( size_t ) ( node )].key == rKey ) {
 			return;
 		}
 	}
-	cells.push_back( rKey );
+	pBucket->nHead = allocateTransitionCellNode( rKey, pBucket->nHead );
+	++pBucket->nCount;
 }
 
 void T3DInstancer::untrackSingleLodCell( const t3dcellUpdateKey_t &rKey ) {
 	const t3dtransitionBucketKey_t bucket_key = getTransitionBucketKey( rKey );
-	TransitionBucketMap::iterator bucket_it = m_singleLodTransitionBuckets.find( bucket_key );
-	if ( bucket_it == m_singleLodTransitionBuckets.end() ) {
+	t3dtransitionBucketState_t *const pBucket = m_singleLodTransitionBuckets.find( bucket_key );
+	if ( !pBucket ) {
 		return;
 	}
-	eastl::vector<t3dcellUpdateKey_t> &cells = bucket_it->second;
-	for ( size_t index = 0; index < cells.size(); ++index ) {
-		if ( !( cells[index] == rKey ) ) {
-			continue;
+	uint32_t previous = UINT32_MAX;
+	uint32_t node = pBucket->nHead;
+	while ( node != UINT32_MAX ) {
+		const uint32_t next = m_transitionCellNodes[( size_t ) ( node )].nNext;
+		if ( m_transitionCellNodes[( size_t ) ( node )].key == rKey ) {
+			if ( previous == UINT32_MAX ) {
+				pBucket->nHead = next;
+			} else {
+				m_transitionCellNodes[( size_t ) ( previous )].nNext = next;
+			}
+			releaseTransitionCellNode( node );
+			if ( pBucket->nCount > 0u ) {
+				--pBucket->nCount;
+			}
+			if ( pBucket->nCount == 0u ) {
+				m_singleLodTransitionBuckets.erase( bucket_key );
+			}
+			return;
 		}
-		cells[index] = cells.back();
-		cells.pop_back();
-		break;
-	}
-	if ( cells.empty() ) {
-		m_singleLodTransitionBuckets.erase( bucket_it );
+		previous = node;
+		node = next;
 	}
 }
 
 void T3DInstancer::clearSingleLodTransitionBuckets( void ) {
 	m_singleLodTransitionBuckets.clear();
+	m_transitionCellNodes.clear();
+	m_nTransitionCellFreeHead = UINT32_MAX;
 }
 
 EA_FORCE_INLINE static real_t terrain3dPointRectMinDistanceSquared( const Vector2 &rPoint, const Vector2 &rMin, const Vector2 &rMax ) { const real_t fDx = rPoint.x < rMin.x ? rMin.x - rPoint.x : ( rPoint.x > rMax.x ? rPoint.x - rMax.x : 0.0f ); const real_t fDy = rPoint.y < rMin.y ? rMin.y - rPoint.y : ( rPoint.y > rMax.y ? rPoint.y - rMax.y : 0.0f ); return fDx * fDx + fDy * fDy; }
@@ -946,9 +988,9 @@ bool T3DInstancer::transitionBucketMayCrossBoundary(
 const T3DInstancer::t3drenderCell_t *T3DInstancer::findSingleLodRenderCell( const t3dcellUpdateKey_t &rKey ) const {
 	for ( int lod = 0; lod < TERRAIN3D_MESH_MAX_LOD_COUNT; ++lod ) {
 		const t3drenderCellKey_t render_key{rKey.pRegion, rKey.cell, rKey.meshId, lod};
-		RenderCellIndex::const_iterator it = m_iRenderCellIndex.find( render_key );
-		if ( it != m_iRenderCellIndex.end() && it->second < m_renderCells.size() ) {
-			return &m_renderCells[it->second];
+		const size_t *const pIndex = m_iRenderCellIndex.find( render_key );
+		if ( pIndex && *pIndex < m_renderCells.size() ) {
+			return &m_renderCells[*pIndex];
 		}
 	}
 	return nullptr;
@@ -968,18 +1010,18 @@ void T3DInstancer::queueSingleLodTransitions(
 		m_nTransitionScanUsecLastScan = Time::get_singleton()->get_ticks_usec() - scan_started_usec;
 		return;
 	}
-	for ( const TransitionBucketMap::value_type &bucket_entry : m_singleLodTransitionBuckets ) {
+	m_singleLodTransitionBuckets.forEach( [&]( const t3dtransitionBucketKey_t &bucket_key, const t3dtransitionBucketState_t &rBucketState ) {
 		++m_nTransitionBucketsExaminedLastScan;
-		const t3dtransitionBucketKey_t &bucket_key = bucket_entry.first;
 		if ( bucket_key.meshId < 0 || bucket_key.meshId >= TERRAIN3D_MAX_MESH_ASSETS ) {
-			continue;
+			return;
 		}
 		const Ref<T3DMeshAsset> pAsset = m_pTerrain->getAssets()->getMeshAsset( bucket_key.meshId );
 		if ( !transitionBucketMayCrossBoundary( bucket_key, pAsset, rPreviousPosition, rTargetPosition ) ) {
-			continue;
+			return;
 		}
 		++m_nTransitionCandidateBucketsLastScan;
-		for ( const t3dcellUpdateKey_t &cell_key : bucket_entry.second ) {
+		for ( uint32_t node = rBucketState.nHead; node != UINT32_MAX; node = m_transitionCellNodes[( size_t ) ( node )].nNext ) {
+			const t3dcellUpdateKey_t &cell_key = m_transitionCellNodes[( size_t ) ( node )].key;
 			++m_nTransitionCellsExaminedLastScan;
 			const t3drenderCell_t *pRender = findSingleLodRenderCell( cell_key );
 			if ( !pRender ) {
@@ -987,16 +1029,12 @@ void T3DInstancer::queueSingleLodTransitions(
 			}
 			++m_nTransitionLodEvaluationsLastScan;
 			const int selected_lod = selectCellLod( cell_key.pRegion, cell_key.cell, pAsset, rTargetPosition );
-			if ( selected_lod != pRender->lod ) {
-				const size_t before = m_streamingUpdates.size();
-				m_streamingUpdates.insert( cell_key );
-				if ( m_streamingUpdates.size() != before ) {
-					markPendingRegionWork( cell_key.pRegion );
-					++m_nTransitionsQueuedLastScan;
-				}
+			if ( selected_lod != pRender->lod && m_streamingUpdates.insert( cell_key ) ) {
+				markPendingRegionWork( cell_key.pRegion );
+				++m_nTransitionsQueuedLastScan;
 			}
 		}
-	}
+	} );
 	m_nTransitionScanUsecLastScan = Time::get_singleton()->get_ticks_usec() - scan_started_usec;
 }
 
@@ -1121,14 +1159,13 @@ bool T3DInstancer::validateInternalState( void ) const {
 	}
 	for ( size_t index = 0; index < m_renderCells.size(); ++index ) {
 		const t3drenderCell_t &render = m_renderCells[index];
-		RenderCellIndex::const_iterator key_it = m_iRenderCellIndex.find( makeRenderKey( render ) );
-		if ( key_it == m_iRenderCellIndex.end() || key_it->second != index ) {
+		const size_t *const pDenseIndex = m_iRenderCellIndex.find( makeRenderKey( render ) );
+		if ( !pDenseIndex || *pDenseIndex != index ) {
 			return reportInvariantFailure( vformat( "render key does not resolve to dense index %d", ( int64_t ) ( index ) ) );
 		}
-		const eastl::vector<size_t> *pRegionIndices = findRegionRenderList( render.pRegion );
-		if ( !pRegionIndices || render.iRegionListIndex >= pRegionIndices->size() ||
-			( *pRegionIndices )[render.iRegionListIndex] != index ) {
-			return reportInvariantFailure( vformat( "render region index is stale at dense index %d", ( int64_t ) ( index ) ) );
+		if ( render.nRegionListNode == UINT32_MAX || render.nRegionListNode >= m_renderRegionNodes.size() ||
+			m_renderRegionNodes[( size_t ) ( render.nRegionListNode )].iRenderCell != index ) {
+			return reportInvariantFailure( vformat( "render region node is stale at dense index %d", ( int64_t ) ( index ) ) );
 		}
 	}
 	for ( size_t region_index = 0; region_index < TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY; ++region_index ) {
@@ -1136,19 +1173,27 @@ bool T3DInstancer::validateInternalState( void ) const {
 			continue;
 		}
 		const Vector2i regionLocation = regionLocationFromUpdateIndex( ( uint16_t ) ( region_index ) );
-		const eastl::vector<size_t> &pRegionIndices = m_szRegionRenderIndices[region_index];
-		if ( pRegionIndices.empty() ) {
+		const t3dregionList_t &list = m_szRegionRenderLists[region_index];
+		if ( list.nCount == 0u || list.nHead == UINT32_MAX ) {
 			return reportInvariantFailure( "active region render slot is empty" );
 		}
-		for ( size_t list_index = 0; list_index < pRegionIndices.size(); ++list_index ) {
-			const size_t render_index = pRegionIndices[list_index];
+		uint32_t seen = 0u;
+		for ( uint32_t node = list.nHead; node != UINT32_MAX; node = m_renderRegionNodes[( size_t ) ( node )].nNext ) {
+			if ( node >= m_renderRegionNodes.size() ) {
+				return reportInvariantFailure( "region render node points outside pool" );
+			}
+			const size_t render_index = m_renderRegionNodes[( size_t ) ( node )].iRenderCell;
 			if ( render_index >= m_renderCells.size() ) {
-				return reportInvariantFailure( "region render index points outside dense storage" );
+				return reportInvariantFailure( "region render node points outside dense storage" );
 			}
 			const t3drenderCell_t &render = m_renderCells[render_index];
-			if ( render.pRegion != regionLocation || render.iRegionListIndex != list_index ) {
+			if ( render.pRegion != regionLocation || render.nRegionListNode != node ) {
 				return reportInvariantFailure( "region render reverse index is inconsistent" );
 			}
+			++seen;
+		}
+		if ( seen != list.nCount ) {
+			return reportInvariantFailure( "region render list count is inconsistent" );
 		}
 	}
 
@@ -1177,38 +1222,54 @@ bool T3DInstancer::validateInternalState( void ) const {
 	}
 
 	eastl::array<uint64_t, TERRAIN3D_MAX_MESH_ASSETS> calculated_totals{};
-	for ( const LogicalCellMap::value_type &count_entry : m_logicalCellCounts ) {
-		const t3dcellUpdateKey_t &key = count_entry.first;
-		const t3dlogicalCellState_t &state = count_entry.second;
-		if ( key.meshId < 0 || key.meshId >= TERRAIN3D_MAX_MESH_ASSETS ) {
-			return reportInvariantFailure( "logical cell contains an invalid mesh ID" );
+	bool logical_valid = true;
+	String logical_error;
+	m_logicalCellCounts.forEach( [&]( const t3dcellUpdateKey_t &key, const t3dlogicalCellState_t &state ) {
+		if ( !logical_valid ) {
+			return;
 		}
-		const eastl::vector<t3dcellUpdateKey_t> *pRegionCells = findRegionLogicalList( key.pRegion );
-		if ( !pRegionCells || state.iRegionListIndex >= pRegionCells->size() ||
-			!( ( *pRegionCells )[state.iRegionListIndex] == key ) ) {
-			return reportInvariantFailure( "logical cell region index is stale" );
+		if ( key.meshId < 0 || key.meshId >= TERRAIN3D_MAX_MESH_ASSETS ) {
+			logical_valid = false;
+			logical_error = "logical cell contains an invalid mesh ID";
+			return;
+		}
+		if ( state.nRegionListNode == UINT32_MAX || state.nRegionListNode >= m_logicalRegionNodes.size() ||
+			!( m_logicalRegionNodes[( size_t ) ( state.nRegionListNode )].key == key ) ) {
+			logical_valid = false;
+			logical_error = "logical cell region node is stale";
+			return;
 		}
 		uint64_t &calculated_total = calculated_totals[( size_t ) ( key.meshId )];
 		calculated_total = UINT64_MAX - calculated_total < ( uint64_t ) ( state.nCount )
 			? UINT64_MAX
 			: calculated_total + ( uint64_t ) ( state.nCount );
+	} );
+	if ( !logical_valid ) {
+		return reportInvariantFailure( logical_error );
 	}
 	for ( size_t region_index = 0; region_index < TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY; ++region_index ) {
 		if ( !m_regionLogicalMask.test( region_index ) ) {
 			continue;
 		}
 		const Vector2i regionLocation = regionLocationFromUpdateIndex( ( uint16_t ) ( region_index ) );
-		const eastl::vector<t3dcellUpdateKey_t> &pRegionCells = m_szRegionLogicalCells[region_index];
-		if ( pRegionCells.empty() ) {
+		const t3dregionList_t &list = m_szRegionLogicalLists[region_index];
+		if ( list.nCount == 0u || list.nHead == UINT32_MAX ) {
 			return reportInvariantFailure( "active logical region slot is empty" );
 		}
-		for ( size_t list_index = 0; list_index < pRegionCells.size(); ++list_index ) {
-			const t3dcellUpdateKey_t &key = pRegionCells[list_index];
-			LogicalCellMap::const_iterator count_it = m_logicalCellCounts.find( key );
-			if ( key.pRegion != regionLocation || count_it == m_logicalCellCounts.end() ||
-				count_it->second.iRegionListIndex != list_index ) {
+		uint32_t seen = 0u;
+		for ( uint32_t node = list.nHead; node != UINT32_MAX; node = m_logicalRegionNodes[( size_t ) ( node )].nNext ) {
+			if ( node >= m_logicalRegionNodes.size() ) {
+				return reportInvariantFailure( "logical region node points outside pool" );
+			}
+			const t3dcellUpdateKey_t &key = m_logicalRegionNodes[( size_t ) ( node )].key;
+			const t3dlogicalCellState_t *const pState = m_logicalCellCounts.find( key );
+			if ( key.pRegion != regionLocation || !pState || pState->nRegionListNode != node ) {
 				return reportInvariantFailure( "logical region reverse index is inconsistent" );
 			}
+			++seen;
+		}
+		if ( seen != list.nCount ) {
+			return reportInvariantFailure( "logical region list count is inconsistent" );
 		}
 	}
 	for ( int mesh_id = 0; mesh_id < TERRAIN3D_MAX_MESH_ASSETS; ++mesh_id ) {
@@ -1277,15 +1338,13 @@ void T3DInstancer::materializePendingUpdates( void ) {
 				destroyMmisByRegion( regionLocation );
 			}
 		}
-		for ( LogicalCellMap::iterator count_it = m_logicalCellCounts.begin(); count_it != m_logicalCellCounts.end(); ) {
-			const t3dcellUpdateKey_t key = count_it->first;
-			T3DRegion *const region = pData->getRegionPtr( key.pRegion );
-			if ( region && !region->isDeleted() && pData->getRegionId( key.pRegion ) >= 0 ) {
-				++count_it;
-				continue;
-			}
-			++count_it;
-			eraseLogicalCellCount( key.pRegion, key.meshId, key.cell );
+		// Erase through the fixed per-region lists rather than mutating the flat hash
+		// while iterating its probe buckets. erase() repairs probe clusters in place.
+		for ( size_t region_index = 0u; region_index < TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY; ++region_index ) {
+			if ( !m_regionLogicalMask.test( region_index ) ) continue;
+			const Vector2i region_location = regionLocationFromUpdateIndex( ( uint16_t ) region_index );
+			T3DRegion *const pRegion = pData->getRegionPtr( region_location );
+			if ( !pRegion || pRegion->isDeleted() || pData->getRegionId( region_location ) < 0 ) eraseLogicalCellsByRegion( region_location );
 		}
 	}
 
@@ -1344,17 +1403,17 @@ void T3DInstancer::materializePendingUpdates( void ) {
 		}
 	}
 
-	for ( const t3dcellUpdateKey_t &update : m_activeStreamingUpdates ) {
+	m_activeStreamingUpdates.forEach( [&]( const t3dcellUpdateKey_t &update ) {
 		if ( bUpdateAll || global_mesh_updates.test( update.meshId ) ) {
-			continue;
+			return;
 		}
 		const t3dregionUpdateState_t *pRegionUpdate = findActiveRegionUpdate( update.pRegion );
 		if ( pRegionUpdate && ( pRegionUpdate->bAllMeshes || pRegionUpdate->meshes.test( update.meshId ) ) ) {
-			continue;
+			return;
 		}
 		m_buildingCellUpdates.push_back( update );
 		markPendingRegionWork( update.pRegion );
-	}
+	} );
 
 	m_bMaterializingUpdates = false;
 	clearRegionUpdates( true );
@@ -1764,38 +1823,43 @@ void T3DInstancer::updateVertexSpacing( const real_t fVertexSpacing ) {
 }
 
 void T3DInstancer::destroyMmisByRegion( const Vector2i &rRegionLoc ) {
-	if ( const eastl::vector<t3dcellUpdateKey_t> *logical_cells = findRegionLogicalList( rRegionLoc ) ) {
-		for ( const t3dcellUpdateKey_t &key : *logical_cells ) {
-			untrackSingleLodCell( key );
-		}
+	const int region_index = getRegionTableIndex( rRegionLoc );
+	if ( region_index < 0 ) {
+		return;
 	}
-	while ( const eastl::vector<size_t> *region_indices = findRegionRenderList( rRegionLoc ) ) {
-		if ( region_indices->empty() ) {
-			break;
+	for ( uint32_t node = m_szRegionLogicalLists[( size_t ) ( region_index )].nHead; node != UINT32_MAX; node = m_logicalRegionNodes[( size_t ) ( node )].nNext ) {
+		untrackSingleLodCell( m_logicalRegionNodes[( size_t ) ( node )].key );
+	}
+	while ( m_szRegionRenderLists[( size_t ) ( region_index )].nHead != UINT32_MAX ) {
+		const uint32_t node = m_szRegionRenderLists[( size_t ) ( region_index )].nHead;
+		const size_t render_index = m_renderRegionNodes[( size_t ) ( node )].iRenderCell;
+		if ( render_index >= m_renderCells.size() ) {
+			releaseRenderRegionNode( node, ( uint16_t ) ( region_index ) );
+			continue;
 		}
-		eraseRenderCellAt( region_indices->back() );
+		eraseRenderCellAt( render_index );
 	}
 }
 
 void T3DInstancer::destroyMmiByLocation( const Vector2i &rRegionLoc, const int nMeshId ) {
-	if ( const eastl::vector<t3dcellUpdateKey_t> *logical_cells = findRegionLogicalList( rRegionLoc ) ) {
-		for ( const t3dcellUpdateKey_t &key : *logical_cells ) {
-			if ( key.meshId == nMeshId ) {
-				untrackSingleLodCell( key );
-			}
+	const int region_index = getRegionTableIndex( rRegionLoc );
+	if ( region_index < 0 ) {
+		return;
+	}
+	for ( uint32_t node = m_szRegionLogicalLists[( size_t ) ( region_index )].nHead; node != UINT32_MAX; node = m_logicalRegionNodes[( size_t ) ( node )].nNext ) {
+		const t3dcellUpdateKey_t &key = m_logicalRegionNodes[( size_t ) ( node )].key;
+		if ( key.meshId == nMeshId ) {
+			untrackSingleLodCell( key );
 		}
 	}
-	size_t list_index = 0;
-	while ( const eastl::vector<size_t> *region_indices = findRegionRenderList( rRegionLoc ) ) {
-		if ( list_index >= region_indices->size() ) {
-			break;
-		}
-		const size_t render_index = ( *region_indices )[list_index];
+	uint32_t node = m_szRegionRenderLists[( size_t ) ( region_index )].nHead;
+	while ( node != UINT32_MAX ) {
+		const uint32_t next = m_renderRegionNodes[( size_t ) ( node )].nNext;
+		const size_t render_index = m_renderRegionNodes[( size_t ) ( node )].iRenderCell;
 		if ( render_index < m_renderCells.size() && m_renderCells[render_index].meshId == nMeshId ) {
 			eraseRenderCellAt( render_index );
-		} else {
-			++list_index;
 		}
+		node = next;
 	}
 }
 
@@ -1879,11 +1943,9 @@ PackedFloat32Array T3DInstancer::buildMultimeshBuffer(
 	const TypedArray<Transform3D> &rXforms,
 	const PackedColorArray &rColors
 ) const {
-	t3dinstanceCell_t cell;
-	cell.transforms.reserve( rXforms.size() );
-	for ( int i = 0; i < rXforms.size(); ++i ) {
-		cell.transforms.pushBack( rXforms[i] );
-	}
+	T3DInstanceStore temporary_store;
+	t3dinstanceCell_t &cell = temporary_store.getOrCreateCell( 0, V2I_ZERO, ( size_t ) rXforms.size(), false, false );
+	for ( int i = 0; i < rXforms.size(); ++i ) cell.transforms.pushBack( rXforms[i] );
 	bool bNonwhite = false;
 	for ( int i = 0; i < rColors.size(); ++i ) {
 		if ( rColors[i] != COLOR_WHITE ) {
@@ -2255,10 +2317,15 @@ void T3DInstancer::initialize( T3DTerrain *const pTerrain ) {
 			estimated_render_cells += mesh.cells.size() * ( size_t ) ( render_lods );
 		}
 	}
-	m_renderCells.reserve( MAX<size_t>( 1024, estimated_render_cells ) );
-	m_iRenderCellIndex.reserve( MAX<size_t>( 1024, estimated_render_cells ) );
-	m_logicalCellCounts.reserve( MAX<size_t>( 256, estimated_render_cells / 2 ) );
-	m_singleLodTransitionBuckets.reserve( MAX<size_t>( 64, estimated_render_cells / 16 ) );
+	const size_t render_reserve = MAX<size_t>( 1024, estimated_render_cells );
+	const size_t logical_reserve = MAX<size_t>( 256, estimated_render_cells / 2 );
+	m_renderCells.reserve( render_reserve );
+	m_renderRegionNodes.reserve( render_reserve );
+	m_iRenderCellIndex.reserve( render_reserve );
+	m_logicalRegionNodes.reserve( logical_reserve );
+	m_transitionCellNodes.reserve( logical_reserve );
+	m_logicalCellCounts.reserve( logical_reserve );
+	m_singleLodTransitionBuckets.reserve( MAX<size_t>( 64, logical_reserve / TERRAIN3D_INSTANCE_TRANSITION_BUCKET_CELL_SPAN ) );
 	m_streamingUpdates.reserve( 512 );
 	m_activeStreamingUpdates.reserve( 512 );
 	m_pendingCellUpdates.reserve( 1024 );
@@ -3491,14 +3558,14 @@ size_t T3DInstancer::getRetainedContainerBytes( void ) const {
 	bytes += m_placementTransforms.capacity() * sizeof( Transform3D );
 	bytes += m_placementColors.capacity() * sizeof( Color );
 	bytes += m_placementPending.capacity() * sizeof( t3dpendingPlacement_t );
-	for ( size_t index = 0; index < TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY; ++index ) {
-		bytes += m_szRegionRenderIndices[index].capacity() * sizeof( size_t );
-		bytes += m_szRegionLogicalCells[index].capacity() * sizeof( t3dcellUpdateKey_t );
-	}
-	bytes += m_singleLodTransitionBuckets.size() * sizeof( TransitionBucketMap::value_type );
-	for ( const TransitionBucketMap::value_type &bucket_entry : m_singleLodTransitionBuckets ) {
-		bytes += bucket_entry.second.capacity() * sizeof( t3dcellUpdateKey_t );
-	}
+	bytes += m_iRenderCellIndex.reservedBytes();
+	bytes += m_logicalCellCounts.reservedBytes();
+	bytes += m_singleLodTransitionBuckets.reservedBytes();
+	bytes += m_streamingUpdates.reservedBytes();
+	bytes += m_activeStreamingUpdates.reservedBytes();
+	bytes += m_renderRegionNodes.capacity() * sizeof( t3drenderRegionNode_t );
+	bytes += m_logicalRegionNodes.capacity() * sizeof( t3dlogicalRegionNode_t );
+	bytes += m_transitionCellNodes.capacity() * sizeof( t3dtransitionCellNode_t );
 	return bytes;
 }
 
@@ -3526,13 +3593,12 @@ Dictionary T3DInstancer::debugValidateSingleLodTransitionCandidates(
 		result["candidate_cells"] = ( int64_t ) ( candidate_cells );
 		return result;
 	}
-	for ( const TransitionBucketMap::value_type &bucket_entry : m_singleLodTransitionBuckets ) {
-		const t3dtransitionBucketKey_t &bucket_key = bucket_entry.first;
+	m_singleLodTransitionBuckets.forEach( [&]( const t3dtransitionBucketKey_t &bucket_key, const t3dtransitionBucketState_t &rState ) {
 		const Ref<T3DMeshAsset> pAsset = m_pTerrain->getAssets()->getMeshAsset( bucket_key.meshId );
 		if ( transitionBucketMayCrossBoundary( bucket_key, pAsset, rPreviousPosition, rTargetPosition ) ) {
-			candidate_cells += bucket_entry.second.size();
+			candidate_cells += rState.nCount;
 		}
-	}
+	} );
 	for ( const t3drenderCell_t &render : m_renderCells ) {
 		if ( render.lod < 0 || render.meshId < 0 || render.meshId >= TERRAIN3D_MAX_MESH_ASSETS ) {
 			continue;
@@ -3547,9 +3613,8 @@ Dictionary T3DInstancer::debugValidateSingleLodTransitionCandidates(
 		++reference_transitions;
 		const t3dcellUpdateKey_t key{render.pRegion, render.cell, render.meshId};
 		const t3dtransitionBucketKey_t bucket_key = getTransitionBucketKey( key );
-		TransitionBucketMap::const_iterator bucket_it = m_singleLodTransitionBuckets.find( bucket_key );
-		if ( bucket_it == m_singleLodTransitionBuckets.end() ||
-			!transitionBucketMayCrossBoundary( bucket_key, pAsset, rPreviousPosition, rTargetPosition ) ) {
+		const t3dtransitionBucketState_t *const pBucket = m_singleLodTransitionBuckets.find( bucket_key );
+		if ( !pBucket || !transitionBucketMayCrossBoundary( bucket_key, pAsset, rPreviousPosition, rTargetPosition ) ) {
 			++missed_transitions;
 		}
 	}

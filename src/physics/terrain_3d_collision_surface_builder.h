@@ -27,8 +27,12 @@ public:
 	size_t getRetainedBufferBytes( void ) const;
 
 private:
-	eastl::vector<float> m_heightRowScratch;
-	eastl::vector<uint8_t> m_regionPresenceScratch;
+	static constexpr int DYNAMIC_SCRATCH_AXIS = 65;
+	static constexpr int DYNAMIC_SCRATCH_SAMPLES = DYNAMIC_SCRATCH_AXIS * DYNAMIC_SCRATCH_AXIS;
+	static constexpr int REGION_PRESENCE_SAMPLES = 25;
+	eastl::array<float, DYNAMIC_SCRATCH_SAMPLES> m_dynamicHeightScratch{};
+	eastl::vector<float> m_fullHeightRowScratch;
+	eastl::array<uint8_t, REGION_PRESENCE_SAMPLES> m_regionPresenceScratch{};
 	eastl::array<int32_t, TERRAIN3D_MAX_COLLISION_AXIS_SAMPLES> m_szBlendRegionX0{};
 	eastl::array<int32_t, TERRAIN3D_MAX_COLLISION_AXIS_SAMPLES> m_szBlendRegionX1{};
 	eastl::array<int32_t, TERRAIN3D_MAX_COLLISION_AXIS_SAMPLES> m_szBlendRegionZ0{};

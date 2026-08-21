@@ -114,8 +114,8 @@ private:
 	bool loadRuntimeGeometryPack( const String &rDataDirectory );
 	t3dclipmapGeometry_t generateCombinedGeometry( bool bLod0 );
 	void appendGrid(
-		PackedVector3Array &rVertices, PackedVector2Array &rMetadata,
-		PackedInt32Array &rIndices, const Vector2i &vSize, const Vector3 &rOrigin,
+		PackedVector3Array &rVertices, PackedVector2Array &rMetadata, PackedInt32Array &rIndices,
+		int &nVertexWrite, int &nIndexWrite, const Vector2i &vSize, const Vector3 &rOrigin,
 		float fPartId, bool bStandardGrid
 	);
 	RID instantiateMesh(

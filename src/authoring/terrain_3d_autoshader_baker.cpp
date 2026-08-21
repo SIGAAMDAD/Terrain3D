@@ -9,9 +9,8 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <memory>
 #include "eastl_config.h"
-#include <EASTL/vector.h>
-
 #include <EASTL/vector.h>
 
 #include <godot_cpp/classes/os.hpp>
@@ -100,8 +99,8 @@ typedef struct t3dregionWork_s {
 	bool changed = false;
 	int64_t changed_pixels = 0;
 	int64_t skipped_manual = 0;
-	eastl::vector<uint8_t> pControlBytes;
-	eastl::vector<uint32_t> output_control;
+	PackedByteArray controlBytes;
+	PackedByteArray outputBytes;
 } t3dregionWork_t;
 
 typedef struct t3dclearRegionWork_s {
@@ -398,7 +397,7 @@ static bool buildMetrics(
 		!addMetricLayout( layout, rNeeds.bDeposition, count ) ||
 		!addMetricLayout( layout, rNeeds.bWaterDistance, count ) || !addMetricLayout( layout, rNeeds.noise, count ) ||
 		!addMetricLayout( layout, rNeeds.bBiome, count ) || ( rNeeds.bFlow && !layout.addArray<int32_t>( count ) ) ||
-		!layout.addArray<uint32_t>( count ) || !layout.valid() || !rArena.configure( layout.size() ) ) {
+		!layout.addArray<uint32_t>( count ) || !layout.valid() || !rArena.ensureCapacity( layout.size() ) ) {
 		return false;
 	}
 	if ( !rMetrics.height.allocateUninitialized( rArena, count ) ||
@@ -721,16 +720,17 @@ typedef struct t3dautoShaderRegionContext_s {
 	uint8_t default_base = 0u;
 	uint8_t default_overlay = 0u;
 	uint8_t default_blend = 0u;
+	T3DLinearArena *pWorkerArenas = nullptr;
 } t3dautoShaderRegionContext_t;
 
-static void terrain3dBakeAutoshaderRegions( void *pContext, const size_t nBegin, const size_t nEnd, int32_t ) {
+static void terrain3dBakeAutoshaderRegions( void *pContext, const size_t nBegin, const size_t nEnd, const int32_t nWorker ) {
 	t3dautoShaderRegionContext_t *context = ( t3dautoShaderRegionContext_t * ) ( pContext );
 	for ( size_t work_index = nBegin; work_index < nEnd; ++work_index ) {
 		t3dregionWork_t &item = ( *context->pWork )[work_index];
 		if ( !item.available ) {
 			continue;
 		}
-		T3DLinearArena arena;
+		T3DLinearArena &arena = context->pWorkerArenas[MAX( nWorker, 0 )];
 		t3dregionMetrics_t metrics;
 		if ( !buildMetrics( context->data, item.location, *context->pNeeds, *context->pMetricConfig,
 				*context->pBiomeMask, *context->pFlowMask, *context->pDepositionMask, *context->pWaterMask,
@@ -738,7 +738,7 @@ static void terrain3dBakeAutoshaderRegions( void *pContext, const size_t nBegin,
 			continue;
 		}
 		item.success = true;
-		const uint8_t *pControlRead = item.pControlBytes.empty() ? nullptr : item.pControlBytes.data();
+		const uint8_t *pControlRead = item.controlBytes.is_empty() ? nullptr : item.controlBytes.ptr();
 		for ( size_t index = 0; index < context->pixel_count; ++index ) {
 			uint32_t control = TERRAIN3D_REGION_DEFAULT_CONTROL;
 			if ( pControlRead ) {
@@ -785,7 +785,8 @@ static void terrain3dBakeAutoshaderRegions( void *pContext, const size_t nBegin,
 			}
 		}
 		if ( item.changed ) {
-			item.output_control.assign( metrics.output_control.begin(), metrics.output_control.end() );
+			item.outputBytes.resize( ( int64_t ) ( context->pixel_count * sizeof( uint32_t ) ) );
+			std::memcpy( item.outputBytes.ptrw(), metrics.output_control.data(), context->pixel_count * sizeof( uint32_t ) );
 		}
 	}
 }
@@ -887,16 +888,15 @@ Dictionary T3DAutoShaderBaker::bakeRegions(
 		item.available = true;
 		const Ref<Image> pControlImage = pRegion->getControlMap();
 		if ( pControlImage.is_valid() ) {
-			const PackedByteArray bytes = pControlImage->get_data();
-			if ( ( size_t ) ( bytes.size() ) >= count * sizeof( uint32_t ) ) {
-				item.pControlBytes.resize( count * sizeof( uint32_t ) );
-				std::memcpy( item.pControlBytes.data(), bytes.ptr(), item.pControlBytes.size() );
-			}
+			item.controlBytes = pControlImage->get_data();
+			if ( ( size_t ) item.controlBytes.size() < count * sizeof( uint32_t ) ) item.controlBytes.clear();
 		}
 	}
 
 	const uint32_t hardware_threads = MAX( 1u, ( uint32_t ) ( MAX( 1, OS::get_singleton()->get_processor_count() ) ) );
-	const T3DParallelExecutor executor( ( int32_t ) ( MIN<size_t>( ( size_t ) ( hardware_threads ), work.size() ) ) );
+	const size_t worker_count = MAX<size_t>( 1u, MIN<size_t>( ( size_t ) hardware_threads, work.size() ) );
+	const T3DParallelExecutor executor( ( int32_t ) worker_count );
+	std::unique_ptr<T3DLinearArena[]> worker_arenas( new T3DLinearArena[worker_count] );
 	t3dautoShaderRegionContext_t bake_context;
 	bake_context.data = data;
 	bake_context.pWork = &work;
@@ -913,6 +913,7 @@ Dictionary T3DAutoShaderBaker::bakeRegions(
 	bake_context.default_base = default_base;
 	bake_context.default_overlay = default_overlay;
 	bake_context.default_blend = default_blend;
+	bake_context.pWorkerArenas = worker_arenas.get();
 	executor.runStatic( work.size(), 1u, terrain3dBakeAutoshaderRegions, &bake_context );
 
 	// Validate the complete batch before mutating region resources. Editor callers
@@ -949,10 +950,7 @@ Dictionary T3DAutoShaderBaker::bakeRegions(
 			continue;
 		}
 		if ( item.changed ) {
-			PackedByteArray output_bytes;
-			output_bytes.resize( ( int64_t ) ( count * sizeof( uint32_t ) ) );
-			std::memcpy( output_bytes.ptrw(), item.output_control.data(), count * sizeof( uint32_t ) );
-			const Ref<Image> pOutput = Image::create_from_data( size, size, false, Image::FORMAT_RF, output_bytes );
+			const Ref<Image> pOutput = Image::create_from_data( size, size, false, Image::FORMAT_RF, item.outputBytes );
 			pRegion->setControlMap( pOutput );
 			changed_locations.push_back( item.location );
 		}

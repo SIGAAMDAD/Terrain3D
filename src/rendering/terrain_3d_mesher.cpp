@@ -4,12 +4,12 @@
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 #include "eastl_config.h"
-#include <EASTL/unordered_map.h>
+#include <EASTL/vector.h>
 #include <godot_cpp/classes/world3d.hpp>
 #include <godot_cpp/core/version.hpp>
 
 #include <algorithm>
-#include <unordered_map>
+#include <climits>
 
 #include "core/logger.h"
 #include "terrain_3d.h"
@@ -20,35 +20,42 @@
 namespace {
 constexpr uint64_t TERRAIN3D_CLIPMAP_PACK_MAGIC = 0x314b504d504c4333ull; // 3CLMPPK1
 constexpr uint32_t TERRAIN3D_CLIPMAP_PACK_VERSION = 1u;
+constexpr uint32_t TERRAIN3D_CLIPMAP_WELD_PART_COUNT = 5u;
+EA_FORCE_INLINE int terrain3dGridVertexCount( const Vector2i &rSize ) { return ( rSize.x + 1 ) * ( rSize.y + 1 ); }
+EA_FORCE_INLINE int terrain3dGridIndexCount( const Vector2i &rSize ) { return rSize.x * rSize.y * 6; }
 }
-
-typedef struct t3dclipmapVertexKey_s {
-	int32_t x = 0;
-	int32_t z = 0;
-	uint8_t part = 0;
-
-	bool operator==( const t3dclipmapVertexKey_s &rOther ) const {
-		return x == rOther.x && z == rOther.z && part == rOther.part;
-	}
-} t3dclipmapVertexKey_t;
-
-typedef struct t3dclipmapVertexKeyHash_s {
-	size_t operator()( const t3dclipmapVertexKey_t &rKey ) const {
-		uint64_t hash = ( uint64_t ) ( ( uint32_t ) ( rKey.x ) ) * 0x9E3779B185EBCA87ull;
-		hash ^= ( uint64_t ) ( ( uint32_t ) ( rKey.z ) ) * 0xC2B2AE3D27D4EB4Full;
-		hash ^= ( uint64_t ) ( rKey.part ) * 0x165667B19E3779F9ull;
-		hash ^= hash >> 29u;
-		return ( size_t ) ( hash );
-	}
-} t3dclipmapVertexKeyHash_t;
 
 void weldClipmapGeometry(
 	PackedVector3Array &rVertices, PackedVector2Array &rMetadata,
 	PackedInt32Array &rIndices
 ) {
 	const int source_vertex_count = rVertices.size();
-	eastl::unordered_map<t3dclipmapVertexKey_t, int, t3dclipmapVertexKeyHash_t> unique_vertices;
-	unique_vertices.reserve( ( size_t ) ( source_vertex_count ) );
+	if ( source_vertex_count <= 0 ) {
+		return;
+	}
+	const Vector3 *const pSourceVertices = rVertices.ptr();
+	const Vector2 *const pSourceMetadata = rMetadata.ptr();
+	int32_t min_x = INT32_MAX;
+	int32_t min_z = INT32_MAX;
+	int32_t max_x = INT32_MIN;
+	int32_t max_z = INT32_MIN;
+	for ( int vertex_index = 0; vertex_index < source_vertex_count; ++vertex_index ) {
+		const int32_t x = ( int32_t ) ( Math::round( pSourceVertices[vertex_index].x ) );
+		const int32_t z = ( int32_t ) ( Math::round( pSourceVertices[vertex_index].z ) );
+		min_x = MIN( min_x, x );
+		min_z = MIN( min_z, z );
+		max_x = MAX( max_x, x );
+		max_z = MAX( max_z, z );
+	}
+	const uint64_t width = ( uint64_t ) ( ( int64_t ) ( max_x ) - ( int64_t ) ( min_x ) + 1ll );
+	const uint64_t height = ( uint64_t ) ( ( int64_t ) ( max_z ) - ( int64_t ) ( min_z ) + 1ll );
+	const uint64_t plane = width * height;
+	const uint64_t lookup_count = plane * TERRAIN3D_CLIPMAP_WELD_PART_COUNT;
+	if ( width == 0u || height == 0u || lookup_count > ( uint64_t ) ( INT32_MAX ) ) {
+		return;
+	}
+	eastl::vector<int32_t> lookup;
+	lookup.resize( ( size_t ) ( lookup_count ), -1 );
 	PackedVector3Array welded_vertices;
 	PackedVector2Array welded_metadata;
 	PackedInt32Array remap;
@@ -58,22 +65,24 @@ void weldClipmapGeometry(
 	Vector3 *const pWeldedVertices = welded_vertices.ptrw();
 	Vector2 *const pWeldedMetadata = welded_metadata.ptrw();
 	int32_t *const pRemap = remap.ptrw();
-	const Vector3 *const pSourceVertices = rVertices.ptr();
-	const Vector2 *const pSourceMetadata = rMetadata.ptr();
 	int welded_count = 0;
 	for ( int vertex_index = 0; vertex_index < source_vertex_count; ++vertex_index ) {
 		const Vector3 &vertex = pSourceVertices[vertex_index];
 		const Vector2 &metadata = pSourceMetadata[vertex_index];
-		const t3dclipmapVertexKey_t key{
-			( int32_t ) ( Math::round( vertex.x ) ), ( int32_t ) ( Math::round( vertex.z ) ), ( uint8_t ) ( Math::round( metadata.x ) )
-		};
-		const eastl::unordered_map<t3dclipmapVertexKey_t, int, t3dclipmapVertexKeyHash_t>::const_iterator found = unique_vertices.find( key );
-		if ( found != unique_vertices.end() ) {
-			pRemap[vertex_index] = found->second;
+		const int32_t x = ( int32_t ) ( Math::round( vertex.x ) );
+		const int32_t z = ( int32_t ) ( Math::round( vertex.z ) );
+		const int32_t rounded_part = ( int32_t ) ( Math::round( metadata.x ) );
+		if ( rounded_part < 0 || rounded_part >= ( int32_t ) TERRAIN3D_CLIPMAP_WELD_PART_COUNT ) return;
+		const uint32_t part = ( uint32_t ) rounded_part;
+		const uint64_t lookup_index = ( uint64_t ) part * plane +
+			( uint64_t ) ( ( int64_t ) ( z ) - ( int64_t ) ( min_z ) ) * width +
+			( uint64_t ) ( ( int64_t ) ( x ) - ( int64_t ) ( min_x ) );
+		int32_t &welded_index = lookup[( size_t ) ( lookup_index )];
+		if ( welded_index >= 0 ) {
+			pRemap[vertex_index] = welded_index;
 			continue;
 		}
-		const int welded_index = welded_count++;
-		unique_vertices.emplace( key, welded_index );
+		welded_index = welded_count++;
 		pWeldedVertices[welded_index] = vertex;
 		pWeldedMetadata[welded_index] = metadata;
 		pRemap[vertex_index] = welded_index;
@@ -93,21 +102,15 @@ void weldClipmapGeometry(
 ///////////////////////////
 
 void T3DMesher::appendGrid(
-	PackedVector3Array &rVertices, PackedVector2Array &rMetadata,
-	PackedInt32Array &rIndices, const Vector2i &rSize, const Vector3 &rOrigin,
+	PackedVector3Array &rVertices, PackedVector2Array &rMetadata, PackedInt32Array &rIndices,
+	int &nVertexWrite, int &nIndexWrite, const Vector2i &rSize, const Vector3 &rOrigin,
 	const float fPartId, const bool bStandardGrid
 ) {
-	const int vertex_base = rVertices.size();
-	const int index_base = rIndices.size();
-	const int vertex_count = ( rSize.x + 1 ) * ( rSize.y + 1 );
-	const int index_count = rSize.x * rSize.y * 6;
-	rVertices.resize( vertex_base + vertex_count );
-	rMetadata.resize( vertex_base + vertex_count );
-	rIndices.resize( index_base + index_count );
+	const int vertex_base = nVertexWrite;
 	Vector3 *const pVertices = rVertices.ptrw();
 	Vector2 *const pMetadata = rMetadata.ptrw();
 	int32_t *const pIndices = rIndices.ptrw();
-	int vertex_write = vertex_base;
+	int vertex_write = nVertexWrite;
 	for ( int y = 0; y <= rSize.y; ++y ) {
 		for ( int x = 0; x <= rSize.x; ++x ) {
 			pVertices[vertex_write] = rOrigin + Vector3( x, 0.0f, y );
@@ -115,7 +118,7 @@ void T3DMesher::appendGrid(
 		}
 	}
 
-	int index_write = index_base;
+	int index_write = nIndexWrite;
 	for ( int y = 0; y < rSize.y; ++y ) {
 		for ( int x = 0; x < rSize.x; ++x ) {
 			const int bottom_left = vertex_base + y * ( rSize.x + 1 ) + x;
@@ -140,6 +143,8 @@ void T3DMesher::appendGrid(
 			}
 		}
 	}
+	nVertexWrite = vertex_write;
+	nIndexWrite = index_write;
 }
 
 T3DMesher::t3dclipmapGeometry_t T3DMesher::generateCombinedGeometry( const bool bLod0 ) {
@@ -148,30 +153,33 @@ T3DMesher::t3dclipmapGeometry_t T3DMesher::generateCombinedGeometry( const bool 
 	PackedVector2Array &metadata = geometry.metadata;
 	PackedInt32Array &indices = geometry.indices;
 
+	int total_vertices = 0;
+	int total_indices = 0;
+	auto measure_grid = [&]( const Vector2i &rSize ) { total_vertices += terrain3dGridVertexCount( rSize ); total_indices += terrain3dGridIndexCount( rSize ); };
 	if ( bLod0 ) {
-		for ( const Vector3 &position : m_szTilePosLod0 ) {
-			appendGrid( vertices, metadata, indices, V2I( m_nMeshSize ), position, TERRAIN3D_CLIPMAP_PART_STATIC, true );
-		}
-		for ( const Vector3 &position : m_szTrimAPos ) {
-			appendGrid( vertices, metadata, indices, Vector2i( 2, m_nMeshSize * 4 + 2 ), position,
-				TERRAIN3D_CLIPMAP_PART_STATIC, true );
-		}
-		for ( const Vector3 &position : m_szTrimBPos ) {
-			appendGrid( vertices, metadata, indices, Vector2i( m_nMeshSize * 4 + 2, 2 ), position,
-				TERRAIN3D_CLIPMAP_PART_STATIC, true );
-		}
+		for ( const Vector3 &position : m_szTilePosLod0 ) { ( void ) position; measure_grid( V2I( m_nMeshSize ) ); }
+		for ( const Vector3 &position : m_szTrimAPos ) { ( void ) position; measure_grid( Vector2i( 2, m_nMeshSize * 4 + 2 ) ); }
+		for ( const Vector3 &position : m_szTrimBPos ) { ( void ) position; measure_grid( Vector2i( m_nMeshSize * 4 + 2, 2 ) ); }
 	} else {
-		for ( const Vector3 &position : m_szTilePos ) {
-			appendGrid( vertices, metadata, indices, V2I( m_nMeshSize ), position, TERRAIN3D_CLIPMAP_PART_STATIC, false );
-		}
-		for ( const Vector3 &position : m_szFillAPos ) {
-			appendGrid( vertices, metadata, indices, Vector2i( 4, m_nMeshSize ), position,
-				TERRAIN3D_CLIPMAP_PART_STATIC, false );
-		}
-		for ( const Vector3 &position : m_szFillBPos ) {
-			appendGrid( vertices, metadata, indices, Vector2i( m_nMeshSize, 4 ), position,
-				TERRAIN3D_CLIPMAP_PART_STATIC, false );
-		}
+		for ( const Vector3 &position : m_szTilePos ) { ( void ) position; measure_grid( V2I( m_nMeshSize ) ); }
+		for ( const Vector3 &position : m_szFillAPos ) { ( void ) position; measure_grid( Vector2i( 4, m_nMeshSize ) ); }
+		for ( const Vector3 &position : m_szFillBPos ) { ( void ) position; measure_grid( Vector2i( m_nMeshSize, 4 ) ); }
+	}
+	for ( int i = 0; i < TERRAIN3D_PAIR_INSTANCES; ++i ) { ( void ) i; measure_grid( Vector2i( 2, m_nMeshSize * 4 + 8 ) ); measure_grid( Vector2i( m_nMeshSize * 4 + 4, 2 ) ); }
+	vertices.resize( total_vertices );
+	metadata.resize( total_vertices );
+	indices.resize( total_indices );
+	int vertex_write = 0;
+	int index_write = 0;
+
+	if ( bLod0 ) {
+		for ( const Vector3 &position : m_szTilePosLod0 ) appendGrid( vertices, metadata, indices, vertex_write, index_write, V2I( m_nMeshSize ), position, TERRAIN3D_CLIPMAP_PART_STATIC, true );
+		for ( const Vector3 &position : m_szTrimAPos ) appendGrid( vertices, metadata, indices, vertex_write, index_write, Vector2i( 2, m_nMeshSize * 4 + 2 ), position, TERRAIN3D_CLIPMAP_PART_STATIC, true );
+		for ( const Vector3 &position : m_szTrimBPos ) appendGrid( vertices, metadata, indices, vertex_write, index_write, Vector2i( m_nMeshSize * 4 + 2, 2 ), position, TERRAIN3D_CLIPMAP_PART_STATIC, true );
+	} else {
+		for ( const Vector3 &position : m_szTilePos ) appendGrid( vertices, metadata, indices, vertex_write, index_write, V2I( m_nMeshSize ), position, TERRAIN3D_CLIPMAP_PART_STATIC, false );
+		for ( const Vector3 &position : m_szFillAPos ) appendGrid( vertices, metadata, indices, vertex_write, index_write, Vector2i( 4, m_nMeshSize ), position, TERRAIN3D_CLIPMAP_PART_STATIC, false );
+		for ( const Vector3 &position : m_szFillBPos ) appendGrid( vertices, metadata, indices, vertex_write, index_write, Vector2i( m_nMeshSize, 4 ), position, TERRAIN3D_CLIPMAP_PART_STATIC, false );
 	}
 
 	// Edge placement is baked for stitch state (1, 1). INSTANCE_CUSTOM.rg
@@ -181,16 +189,15 @@ T3DMesher::t3dclipmapGeometry_t T3DMesher::generateCombinedGeometry( const bool 
 	for ( int i = 0; i < TERRAIN3D_PAIR_INSTANCES; ++i ) {
 		Vector3 edge_a;
 		edge_a.z = -m_fOffsetA - 2.0f;
-		edge_a.x = m_szEdgePos[( size_t ) ( i )][1];
-		appendGrid( vertices, metadata, indices, Vector2i( 2, m_nMeshSize * 4 + 8 ), edge_a,
-			i == 0 ? TERRAIN3D_CLIPMAP_PART_EDGE_A0 : TERRAIN3D_CLIPMAP_PART_EDGE_A1, bLod0 );
+		edge_a.x = m_szEdgePos[( size_t ) i][1];
+		appendGrid( vertices, metadata, indices, vertex_write, index_write, Vector2i( 2, m_nMeshSize * 4 + 8 ), edge_a, i == 0 ? TERRAIN3D_CLIPMAP_PART_EDGE_A0 : TERRAIN3D_CLIPMAP_PART_EDGE_A1, bLod0 );
 
 		Vector3 edge_b;
-		edge_b.z = m_szEdgePos[( size_t ) ( i )][1];
+		edge_b.z = m_szEdgePos[( size_t ) i][1];
 		edge_b.x = -m_fOffsetA;
-		appendGrid( vertices, metadata, indices, Vector2i( m_nMeshSize * 4 + 4, 2 ), edge_b,
-			i == 0 ? TERRAIN3D_CLIPMAP_PART_EDGE_B0 : TERRAIN3D_CLIPMAP_PART_EDGE_B1, bLod0 );
+		appendGrid( vertices, metadata, indices, vertex_write, index_write, Vector2i( m_nMeshSize * 4 + 4, 2 ), edge_b, i == 0 ? TERRAIN3D_CLIPMAP_PART_EDGE_B0 : TERRAIN3D_CLIPMAP_PART_EDGE_B1, bLod0 );
 	}
+	if ( vertex_write != total_vertices || index_write != total_indices ) { LOG( T3DTerrain::ERROR, "Clipmap geometry preallocation count mismatch" ); return t3dclipmapGeometry_t{}; }
 
 	const int source_vertex_count = vertices.size();
 	weldClipmapGeometry( vertices, metadata, indices );

@@ -27,6 +27,15 @@ struct T3DDerivedMapUpdate {
 	bool bSuccess = false;
 };
 
+struct T3DDerivedMapTask {
+	Vector2i location = V2I_MAX;
+	Rect2i dirtyRect;
+	size_t nOutputOffset = 0u;
+	size_t nOutputBytes = 0u;
+	bool bAvailable = false;
+	bool bSuccess = false;
+};
+
 // Owns one synchronous edit dispatch. Vectors are moved out of the service's
 // retained scratch so synchronous Godot signals can safely trigger nested edits.
 // recycleMutation() returns their capacity to the service after dispatch.
@@ -120,7 +129,8 @@ private:
 	AABB m_editedArea;
 	Vector2 m_masterHeightRange = V2_ZERO;
 
-	// Reused on the synchronous edit path. Worker tasks use private local halos.
+	// Reused on the synchronous edit path. Worker tasks receive retained, disjoint halo spans.
+	eastl::vector<T3DDerivedMapTask> m_derivedTaskScratch;
 	eastl::vector<float> m_fDerivedHaloScratch;
 	eastl::vector<float> m_fDerivedWorkerHaloScratch;
 	eastl::vector<uint8_t> m_derivedOutputScratch;

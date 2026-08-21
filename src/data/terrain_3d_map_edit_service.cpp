@@ -24,18 +24,9 @@
 
 namespace {
 
-typedef struct t3dderivedMapTask_s {
-	Vector2i location;
-	Rect2i dirtyRect;
-	size_t nOutputOffset = 0u;
-	size_t nOutputBytes = 0u;
-	bool bAvailable = false;
-	bool bSuccess = false;
-} t3dderivedMapTask_t;
-
 typedef struct t3dderivedMapBuildContext_s {
 	T3DSamplingSource samplingSource;
-	eastl::vector<t3dderivedMapTask_t> *pTasks = nullptr;
+	eastl::vector<T3DDerivedMapTask> *pTasks = nullptr;
 	float *pWorkerHaloScratch = nullptr;
 	uint8_t *pOutputScratch = nullptr;
 	size_t nWorkerHaloElements = 0u;
@@ -47,7 +38,7 @@ void terrain3dBuildDerivedMapRange( void *pContext, const size_t nBegin, const s
 	t3dderivedMapBuildContext_t *const pBuildContext = ( t3dderivedMapBuildContext_t * ) ( pContext );
 	T3DSampler sampler( pBuildContext->samplingSource );
 	for ( size_t taskIndex = nBegin; taskIndex < nEnd; ++taskIndex ) {
-		t3dderivedMapTask_t &task = ( *pBuildContext->pTasks )[taskIndex];
+		T3DDerivedMapTask &task = ( *pBuildContext->pTasks )[taskIndex];
 		if ( task.bSuccess ) {
 			continue;
 		}
@@ -99,6 +90,7 @@ T3DMapEditService::T3DMapEditService(
 void T3DMapEditService::reset( void ) {
 	m_editedArea = AABB();
 	m_masterHeightRange = V2_ZERO;
+	m_derivedTaskScratch.clear();
 	m_fDerivedHaloScratch.clear();
 	m_fDerivedWorkerHaloScratch.clear();
 	m_derivedOutputScratch.clear();
@@ -179,10 +171,11 @@ const eastl::vector<T3DDerivedMapUpdate> &T3DMapEditService::regenerateDerivedMa
 		return m_derivedUpdateScratch;
 	}
 
-	eastl::vector<t3dderivedMapTask_t> tasks;
-	tasks.reserve( rRegionLocations.size() );
+	m_derivedTaskScratch.clear();
+	m_derivedTaskScratch.reserve( rRegionLocations.size() );
+	eastl::vector<T3DDerivedMapTask> &tasks = m_derivedTaskScratch;
 	for ( const Vector2i &location : rRegionLocations ) {
-		t3dderivedMapTask_t task;
+		T3DDerivedMapTask task;
 		task.location = location;
 		T3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() ) {
@@ -212,7 +205,7 @@ const eastl::vector<T3DDerivedMapUpdate> &T3DMapEditService::regenerateDerivedMa
 	size_t eligibleTaskCount = 0u;
 	size_t eligibleTaskIndex = 0u;
 	for ( size_t taskIndex = 0u; taskIndex < tasks.size(); ++taskIndex ) {
-		const t3dderivedMapTask_t &task = tasks[taskIndex];
+		const T3DDerivedMapTask &task = tasks[taskIndex];
 		if ( task.bAvailable && task.dirtyRect.size.x > 0 && task.dirtyRect.size.y > 0 ) {
 			eligibleTaskIndex = taskIndex;
 			++eligibleTaskCount;
@@ -223,7 +216,7 @@ const eastl::vector<T3DDerivedMapUpdate> &T3DMapEditService::regenerateDerivedMa
 	const int32_t workerCount = ( int32_t ) MIN<size_t>( ( size_t ) hardwareThreads, MAX<size_t>( 1u, tasks.size() ) );
 	size_t totalOutputBytes = 0u;
 	size_t maxHaloElements = 0u;
-	for ( t3dderivedMapTask_t &task : tasks ) {
+	for ( T3DDerivedMapTask &task : tasks ) {
 		if ( !task.bAvailable || task.dirtyRect.size.x <= 0 || task.dirtyRect.size.y <= 0 ) continue;
 		task.nOutputOffset = totalOutputBytes;
 		task.nOutputBytes = ( size_t ) task.dirtyRect.size.x * ( size_t ) task.dirtyRect.size.y * 2u;
@@ -235,7 +228,7 @@ const eastl::vector<T3DDerivedMapUpdate> &T3DMapEditService::regenerateDerivedMa
 
 	const T3DSamplingSource samplingSource{m_pRepository, m_pSamplingStorage};
 	if ( pCompute && eligibleTaskCount == 1u ) {
-		t3dderivedMapTask_t &task = tasks[eligibleTaskIndex];
+		T3DDerivedMapTask &task = tasks[eligibleTaskIndex];
 		const int width = task.dirtyRect.size.x;
 		const int height = task.dirtyRect.size.y;
 		const int haloStride = width + 2;
@@ -292,7 +285,7 @@ const eastl::vector<T3DDerivedMapUpdate> &T3DMapEditService::regenerateDerivedMa
 	executor.runStatic( tasks.size(), 1u, terrain3dBuildDerivedMapRange, &buildContext );
 
 	m_derivedUpdateScratch.reserve( tasks.size() );
-	for ( t3dderivedMapTask_t &task : tasks ) {
+	for ( T3DDerivedMapTask &task : tasks ) {
 		if ( !task.bAvailable || task.dirtyRect.size.x <= 0 || task.dirtyRect.size.y <= 0 ) {
 			continue;
 		}
@@ -877,7 +870,8 @@ Ref<Image> T3DMapEditService::layeredToImage(
 }
 
 size_t T3DMapEditService::getTransientScratchBytes( void ) const {
-	return m_fDerivedHaloScratch.capacity() * sizeof( float ) +
+	return m_derivedTaskScratch.capacity() * sizeof( T3DDerivedMapTask ) +
+		m_fDerivedHaloScratch.capacity() * sizeof( float ) +
 		m_fDerivedWorkerHaloScratch.capacity() * sizeof( float ) +
 		m_derivedOutputScratch.capacity() * sizeof( uint8_t ) +
 		m_activeLocationScratch.capacity() * sizeof( Vector2i ) +

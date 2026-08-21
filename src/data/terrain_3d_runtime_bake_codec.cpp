@@ -121,26 +121,47 @@ PackedByteArray T3DRuntimeBakeCodec::encodeMinMaxHierarchy( const Ref<Image> &rH
 	if ( !resizeBytes( bytes, output_bytes ) ) return PackedByteArray();
 	T3DByteWriter writer( bytes.ptrw(), output_bytes );
 	writer.writeU32( MINMAX_MAGIC ); writer.writeU16( BLOB_VERSION ); writer.writeU16( ( uint16_t ) nRegionSize ); writer.writeU32( ( uint32_t ) levels );
-	eastl::vector<Vector2> current( ( size_t ) nRegionSize * nRegionSize );
-	eastl::vector<Vector2> next; next.resize( ( size_t ) ( ( nRegionSize + 1 ) / 2 ) * ( ( nRegionSize + 1 ) / 2 ) );
 	const uint8_t *const pSource = source.ptr();
-	for ( int i = 0; i < nRegionSize * nRegionSize; ++i ) { const float h = T3DRegionCodec::readHeightBytes( pSource, i, Image::FORMAT_R16 ); current[( size_t ) i] = Vector2( h, h ); }
-	int side = nRegionSize;
+	const uint32_t source_count = ( uint32_t ) nRegionSize * ( uint32_t ) nRegionSize;
+	writer.writeU32( ( uint32_t ) nRegionSize ); writer.writeU32( source_count );
+	for ( uint32_t i = 0u; i < source_count; ++i ) { const float h = T3DRegionCodec::readHeightBytes( pSource, ( int ) i, Image::FORMAT_R16 ); writer.writeF32( h ); writer.writeF32( h ); }
+	if ( nRegionSize == 1 ) return writer.complete() ? bytes : PackedByteArray();
+
+	// Level 0 is emitted directly from the R16 source. Only the first reduced
+	// level is retained, then every later level is reduced in-place into the
+	// beginning of the same high-water buffer. For a 2048 region this reduces
+	// scratch from ~40 MiB (four full float planes) to ~8 MiB.
+	int side = ( nRegionSize + 1 ) / 2;
+	eastl::vector<Vector2> ranges;
+	ranges.resize( ( size_t ) side * side );
+	for ( int z = 0; z < side; ++z ) {
+		for ( int x = 0; x < side; ++x ) {
+			float minimum = INFINITY; float maximum = -INFINITY;
+			for ( int dz = 0; dz < 2; ++dz ) for ( int dx = 0; dx < 2; ++dx ) {
+				const int sx = x * 2 + dx; const int sz = z * 2 + dz; if ( sx >= nRegionSize || sz >= nRegionSize ) continue;
+				const float h = T3DRegionCodec::readHeightBytes( pSource, sz * nRegionSize + sx, Image::FORMAT_R16 ); minimum = MIN( minimum, h ); maximum = MAX( maximum, h );
+			}
+			ranges[( size_t ) z * side + x] = Vector2( minimum, maximum );
+		}
+	}
 	while ( true ) {
 		const uint32_t count = ( uint32_t ) side * ( uint32_t ) side; writer.writeU32( ( uint32_t ) side ); writer.writeU32( count );
-		for ( uint32_t i = 0u; i < count; ++i ) { writer.writeF32( current[i].x ); writer.writeF32( current[i].y ); }
+		for ( uint32_t i = 0u; i < count; ++i ) { writer.writeF32( ranges[i].x ); writer.writeF32( ranges[i].y ); }
 		if ( side == 1 ) break;
-		const int next_side = ( side + 1 ) / 2; const size_t next_count = ( size_t ) next_side * next_side;
-		if ( next.size() < next_count ) next.resize( next_count );
-		for ( size_t i = 0u; i < next_count; ++i ) next[i] = Vector2( INFINITY, -INFINITY );
-		for ( int z = 0; z < side; ++z ) for ( int x = 0; x < side; ++x ) {
-			const size_t dst = ( size_t ) ( z / 2 ) * next_side + x / 2; const Vector2 range = current[( size_t ) z * side + x];
-			next[dst].x = MIN( next[dst].x, range.x ); next[dst].y = MAX( next[dst].y, range.y );
+		const int next_side = ( side + 1 ) / 2;
+		for ( int z = 0; z < next_side; ++z ) {
+			for ( int x = 0; x < next_side; ++x ) {
+				float minimum = INFINITY; float maximum = -INFINITY;
+				for ( int dz = 0; dz < 2; ++dz ) for ( int dx = 0; dx < 2; ++dx ) {
+					const int sx = x * 2 + dx; const int sz = z * 2 + dz; if ( sx >= side || sz >= side ) continue;
+					const Vector2 range = ranges[( size_t ) sz * side + sx]; minimum = MIN( minimum, range.x ); maximum = MAX( maximum, range.y );
+				}
+				ranges[( size_t ) z * next_side + x] = Vector2( minimum, maximum );
+			}
 		}
-		current.swap( next ); side = next_side;
+		ranges.resize( ( size_t ) next_side * next_side ); side = next_side;
 	}
-	if ( !writer.complete() ) return PackedByteArray();
-	return bytes;
+	return writer.complete() ? bytes : PackedByteArray();
 }
 
 bool T3DRuntimeBakeCodec::getMinMaxLevelView( const PackedByteArray &rBlob, const int nMaximumSide, T3DMinMaxLevelView &rView ) {
@@ -191,9 +212,9 @@ PackedByteArray T3DRuntimeBakeCodec::encodeCollisionBounds( const float fMinHeig
 }
 
 bool T3DRuntimeBakeCodec::decodeCollisionHeight( const PackedByteArray &rBlob, PackedFloat32Array &rHeights, int &nWidth ) {
-	rHeights.clear(); nWidth = 0; if ( rBlob.size() < 12 ) return false; const uint8_t *p = rBlob.ptr(); if ( readU32( p ) != COLLISION_HEIGHT_MAGIC || readU16( p + 4 ) != BLOB_VERSION ) return false;
-	nWidth = readU16( p + 6 ); const uint32_t count = readU32( p + 8 ); if ( nWidth <= 0 || count != ( uint32_t ) nWidth * nWidth || rBlob.size() != 12 + ( int64_t ) count * 4 ) return false;
-	rHeights.resize( count ); std::memcpy( rHeights.ptrw(), p + 12, ( size_t ) count * 4u ); return true;
+	nWidth = 0; if ( rBlob.size() < 12 ) return false; const uint8_t *p = rBlob.ptr(); if ( readU32( p ) != COLLISION_HEIGHT_MAGIC || readU16( p + 4 ) != BLOB_VERSION ) return false;
+	nWidth = readU16( p + 6 ); const uint32_t count = readU32( p + 8 ); if ( nWidth <= 0 || count != ( uint32_t ) nWidth * nWidth || rBlob.size() != 12 + ( int64_t ) count * 4 ) { nWidth = 0; return false; }
+	if ( rHeights.size() != ( int64_t ) count ) rHeights.resize( count ); std::memcpy( rHeights.ptrw(), p + 12, ( size_t ) count * 4u ); return true;
 }
 bool T3DRuntimeBakeCodec::decodeCollisionBounds( const PackedByteArray &rBlob, float &fMinHeight, float &fMaxHeight, int &nWidth ) {
 	if ( rBlob.size() != 16 ) return false; const uint8_t *p = rBlob.ptr(); if ( readU32( p ) != COLLISION_BOUNDS_MAGIC || readU16( p + 4 ) != BLOB_VERSION ) return false;

@@ -249,7 +249,7 @@ private:
 	int getPreparedIndex( const Vector2i &rLocation ) const;
 	int getWorkIndex( const Vector2i &rLocation ) const;
 	bool loadSourceRegion( const Vector2i &rLocation, Ref<T3DRegion> &rSource ) const;
-	static bool loadSnapshot( PreparedPage &rPage );
+	static bool loadSnapshot( PreparedPage &rPage, bool bPreserveMaterialized = false );
 	static void prepareTask( void *pContext, uint32_t iIndex );
 	void consumePreparedIndex( int nIndex );
 };

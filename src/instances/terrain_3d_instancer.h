@@ -11,8 +11,7 @@
 #include "eastl_config.h"
 #include <EASTL/bitset.h>
 #include <cstdint>
-#include <EASTL/hash_map.h>
-#include <EASTL/hash_set.h>
+#include "core/terrain_3d_flat_hash.h"
 #include <EASTL/vector.h>
 
 #include "Terrain3DConstants.h"
@@ -97,7 +96,7 @@ private:
 		RID multimesh;
 		RID boundMultimesh;
 		RID boundMesh;
-		size_t iRegionListIndex = 0;
+		uint32_t nRegionListNode = UINT32_MAX;
 		int nUploadedCount = 0;
 		uint32_t nUploadedRevision = 0;
 		uint32_t nSettingsRevision = 0;
@@ -139,7 +138,7 @@ private:
 	} t3dpendingPlacement_t;
 	typedef struct t3dlogicalCellState_s {
 		uint32_t nCount = 0;
-		size_t iRegionListIndex = 0;
+		uint32_t nRegionListNode = UINT32_MAX;
 	} t3dlogicalCellState_t;
 	typedef enum t3dmultiMeshUpdateResult_e : uint8_t {
 		UPDATED,
@@ -148,26 +147,51 @@ private:
 		MISSING_MESH,
 	} t3dmultiMeshUpdateResult_t;
 
-	// Dense render records provide cache-friendly iteration while the index gives
-	// average O(1) lookup/removal. Erasure uses swap-and-pop, avoiding sorted-vector
-	// middle moves when streaming cells enter or leave residency.
-using RenderCellIndex = eastl::hash_map<t3drenderCellKey_t, size_t, t3drenderCellKeyHash_t>;
-	using LogicalCellMap = eastl::hash_map<t3dcellUpdateKey_t, t3dlogicalCellState_t, t3dcellUpdateKeyHash_t>;
-	using TransitionBucketMap = eastl::hash_map<t3dtransitionBucketKey_t, eastl::vector<t3dcellUpdateKey_t>, t3dtransitionBucketKeyHash_t>;
+	// Runtime indices use contiguous open-addressing tables. reserve() establishes a
+	// high-water bucket array; ordinary streaming inserts/erases never allocate nodes.
+	using RenderCellIndex = T3DFlatHashMap<t3drenderCellKey_t, size_t, t3drenderCellKeyHash_t>;
+	using LogicalCellMap = T3DFlatHashMap<t3dcellUpdateKey_t, t3dlogicalCellState_t, t3dcellUpdateKeyHash_t>;
+	typedef struct t3dregionList_s {
+		uint32_t nHead = UINT32_MAX;
+		uint32_t nCount = 0u;
+	} t3dregionList_t;
+	typedef struct t3drenderRegionNode_s {
+		size_t iRenderCell = 0u;
+		uint32_t nNext = UINT32_MAX;
+		uint32_t nPrev = UINT32_MAX;
+	} t3drenderRegionNode_t;
+	typedef struct t3dlogicalRegionNode_s {
+		t3dcellUpdateKey_t key{};
+		uint32_t nNext = UINT32_MAX;
+		uint32_t nPrev = UINT32_MAX;
+	} t3dlogicalRegionNode_t;
+	typedef struct t3dtransitionBucketState_s {
+		uint32_t nHead = UINT32_MAX;
+		uint32_t nCount = 0u;
+	} t3dtransitionBucketState_t;
+	typedef struct t3dtransitionCellNode_s {
+		t3dcellUpdateKey_t key{};
+		uint32_t nNext = UINT32_MAX;
+	} t3dtransitionCellNode_t;
+	using TransitionBucketMap = T3DFlatHashMap<t3dtransitionBucketKey_t, t3dtransitionBucketState_t, t3dtransitionBucketKeyHash_t>;
+	using StreamingUpdateSet = T3DFlatHashSet<t3dcellUpdateKey_t, t3dcellUpdateKeyHash_t>;
 
 	eastl::vector<t3drenderCell_t> m_renderCells;
 	RenderCellIndex m_iRenderCellIndex;
-	// Region coordinates are bounded to the terrain's fixed maximum map. Direct tables
-	// avoid one hash node and bucket entry per active region. Empty vectors retain
-	// no heap allocation; masks identify the populated slots.
-	eastl::vector<size_t> m_szRegionRenderIndices[TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY];
+	t3dregionList_t m_szRegionRenderLists[TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY] = {};
+	eastl::vector<t3drenderRegionNode_t> m_renderRegionNodes;
+	uint32_t m_nRenderRegionFreeHead = UINT32_MAX;
 	eastl::bitset<TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY> m_regionRenderMask;
 	// One entry per persistent logical instance cell, independent of renderer
 	// residency. Asset counts describe authored terrain contents; streaming only
 	// creates or removes t3drenderCell_t records and must never mutate these totals.
 	LogicalCellMap m_logicalCellCounts;
 	TransitionBucketMap m_singleLodTransitionBuckets;
-	eastl::vector<t3dcellUpdateKey_t> m_szRegionLogicalCells[TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY];
+	eastl::vector<t3dtransitionCellNode_t> m_transitionCellNodes;
+	uint32_t m_nTransitionCellFreeHead = UINT32_MAX;
+	t3dregionList_t m_szRegionLogicalLists[TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY] = {};
+	eastl::vector<t3dlogicalRegionNode_t> m_logicalRegionNodes;
+	uint32_t m_nLogicalRegionFreeHead = UINT32_MAX;
 	eastl::bitset<TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY> m_regionLogicalMask;
 	uint64_t m_szLogicalMeshInstanceTotals[TERRAIN3D_MAX_MESH_ASSETS] = {};
 	eastl::bitset<TERRAIN3D_MAX_MESH_ASSETS> m_dirtyLogicalMeshCounts;
@@ -176,14 +200,14 @@ t3dregionUpdateState_t m_szRegionUpdates[TERRAIN3D_INSTANCE_REGION_UPDATE_CAPACI
 	eastl::bitset<TERRAIN3D_INSTANCE_REGION_UPDATE_CAPACITY> m_regionUpdateMask;
 	uint16_t m_szRegionUpdateIndices[TERRAIN3D_INSTANCE_REGION_UPDATE_CAPACITY] = {};
 	int m_nRegionUpdateCount = 0;
-	eastl::hash_set<t3dcellUpdateKey_t, t3dcellUpdateKeyHash_t> m_streamingUpdates;
+	StreamingUpdateSet m_streamingUpdates;
 	// Dirty region topology is fixed by the maximum terrain domain. Only active
 	// indices are copied into the callback-safe snapshot between batches.
 	t3dregionUpdateState_t m_szActiveRegionUpdates[TERRAIN3D_INSTANCE_REGION_UPDATE_CAPACITY] = {};
 	eastl::bitset<TERRAIN3D_INSTANCE_REGION_UPDATE_CAPACITY> m_activeRegionUpdateMask;
 	uint16_t m_szActiveRegionUpdateIndices[TERRAIN3D_INSTANCE_REGION_UPDATE_CAPACITY] = {};
 	int m_nActiveRegionUpdateCount = 0;
-	eastl::hash_set<t3dcellUpdateKey_t, t3dcellUpdateKeyHash_t> m_activeStreamingUpdates;
+	StreamingUpdateSet m_activeStreamingUpdates;
 	// Dirty requests are converted into stable cell keys before touching the
 	// RenderingServer. Processing a bounded number of keys per pre-draw frame
 	// prevents global asset or region changes from becoming one unbounded hitch.
@@ -231,10 +255,12 @@ t3dregionUpdateState_t m_szRegionUpdates[TERRAIN3D_INSTANCE_REGION_UPDATE_CAPACI
 
 	static t3drenderCellKey_t makeRenderKey( const t3drenderCell_t &rCell );
 	static int getRegionTableIndex( const Vector2i &vRegion );
-	eastl::vector<size_t> *getRegionRenderList( const Vector2i &vRegion );
-	const eastl::vector<size_t> *findRegionRenderList( const Vector2i &vRegion ) const;
-	eastl::vector<t3dcellUpdateKey_t> *getRegionLogicalList( const Vector2i &vRegion );
-	const eastl::vector<t3dcellUpdateKey_t> *findRegionLogicalList( const Vector2i &vRegion ) const;
+	uint32_t allocateRenderRegionNode( size_t iRenderCell, uint16_t nRegionIndex );
+	void releaseRenderRegionNode( uint32_t nNode, uint16_t nRegionIndex );
+	uint32_t allocateLogicalRegionNode( const t3dcellUpdateKey_t &rKey, uint16_t nRegionIndex );
+	void releaseLogicalRegionNode( uint32_t nNode, uint16_t nRegionIndex );
+	uint32_t allocateTransitionCellNode( const t3dcellUpdateKey_t &rKey, uint32_t nNext );
+	void releaseTransitionCellNode( uint32_t nNode );
 	void clearRegionRenderLists( void );
 	void clearRegionLogicalLists( void );
 	t3drenderCell_t *findRenderCell( const Vector2i &region, int nMeshId, int nLod, const Vector2i &cell );

@@ -5,8 +5,8 @@
 #ifndef TERRAIN3D_PACKED_TRANSFORM_H
 #define TERRAIN3D_PACKED_TRANSFORM_H
 
+#include "core/terrain_3d_slab_array.h"
 #include "eastl_config.h"
-#include <EASTL/vector.h>
 #include <godot_cpp/variant/transform3d.hpp>
 
 #include <cstddef>
@@ -76,15 +76,23 @@ public:
 		t3dpackedTransform_t *m_pTransform = nullptr;
 	};
 
+	EA_FORCE_INLINE void bind( T3DHighWaterSlab<t3dpackedTransform_t> *const pSlab ) { m_storage.bind( pSlab ); }
+
+	EA_FORCE_INLINE void rebind( T3DHighWaterSlab<t3dpackedTransform_t> *const pSlab ) { m_storage.rebind( pSlab ); }
+
+	EA_FORCE_INLINE void relocateExact( T3DHighWaterSlab<t3dpackedTransform_t> *const pSlab ) { m_storage.relocateExact( pSlab ); }
+
 	EA_FORCE_INLINE void reserve( const size_t nCount ) { m_storage.reserve( nCount ); }
+
+	EA_FORCE_INLINE void reserveExact( const size_t nCount ) { m_storage.reserveExact( nCount ); }
 
 	EA_FORCE_INLINE void resize( const size_t nCount ) { m_storage.resize( nCount ); }
 
 	EA_FORCE_INLINE void clear( void ) { m_storage.clear(); }
 
-	EA_FORCE_INLINE void shrinkToFit( void ) { m_storage.shrink_to_fit(); }
+	EA_FORCE_INLINE void shrinkToFit( void ) {}
 
-	EA_FORCE_INLINE void pushBack( const Transform3D &rTransform ) { m_storage.emplace_back( rTransform ); }
+	EA_FORCE_INLINE void pushBack( const Transform3D &rTransform ) { m_storage.push_back( t3dpackedTransform_t( rTransform ) ); }
 
 	EA_FORCE_INLINE size_t size( void ) const { return m_storage.size(); }
 
@@ -113,7 +121,7 @@ public:
 	EA_FORCE_INLINE void rescaleOriginXz( const size_t iIndex, const real_t fOldSpacing, const real_t fNewSpacing ) { t3dpackedTransform_t &packed = m_storage[iIndex]; packed.origin[0] = ( float ) ( ( real_t ) ( packed.origin[0] ) / fOldSpacing * fNewSpacing ); packed.origin[2] = ( float ) ( ( real_t ) ( packed.origin[2] ) / fOldSpacing * fNewSpacing ); }
 
 private:
-	eastl::vector<t3dpackedTransform_t> m_storage;
+	T3DSlabArray<t3dpackedTransform_t> m_storage;
 };
 
 #endif // TERRAIN3D_PACKED_TRANSFORM_H

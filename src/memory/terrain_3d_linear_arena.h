@@ -100,6 +100,11 @@ public:
 		return true;
 	}
 
+	bool ensureCapacity( const size_t nBytes, const size_t nBaseAlignment = TERRAIN3D_ARENA_DEFAULT_BASE_ALIGNMENT ) {
+		if ( nBytes <= m_nCapacity && m_pBase ) { m_iOffset = 0u; return true; }
+		return configure( nBytes, nBaseAlignment );
+	}
+
 	void release( void ) {
 		if ( m_pRaw ) terrain3d_memory::release( m_pRaw );
 		m_pRaw = nullptr;
@@ -139,6 +144,7 @@ public:
 			nCount * sizeof( T ), std::max<size_t>( alignof( T ), TERRAIN3D_ARENA_CACHELINE_ALIGNMENT ) ) );
 	}
 
+	EA_FORCE_INLINE size_t usedBytes( void ) const { return m_iOffset; }
 	EA_FORCE_INLINE size_t mark( void ) const { return m_iOffset; }
 
 	bool rewind( const size_t nMark ) {

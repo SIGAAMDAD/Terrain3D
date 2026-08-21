@@ -14,8 +14,7 @@
 #include <cmath>
 
 size_t T3DCollisionSurfaceBuilder::getRetainedBufferBytes( void ) const {
-	return m_heightRowScratch.capacity() * sizeof( float ) +
-		m_regionPresenceScratch.capacity() * sizeof( uint8_t );
+	return m_fullHeightRowScratch.capacity() * sizeof( float );
 }
 
 void T3DCollisionSurfaceBuilder::refreshRegionBlendCurve( const int nRegionSize, const real_t fRegionBlend ) {
@@ -128,7 +127,7 @@ bool T3DCollisionSurfaceBuilder::build(
 		}
 		const int presence_width = max_blend_region_x - min_blend_region_x + 1;
 		const int presence_height = max_blend_region_z - min_blend_region_z + 1;
-		m_regionPresenceScratch.resize( ( size_t ) ( presence_width ) * ( size_t ) ( presence_height ) );
+		if ( presence_width <= 0 || presence_height <= 0 || presence_width * presence_height > REGION_PRESENCE_SAMPLES ) { return false; }
 		for ( int z = 0; z < presence_height; ++z ) {
 			for ( int x = 0; x < presence_width; ++x ) {
 				const T3DRegion *const pRegion = pData->getRegionPtr( Vector2i( min_blend_region_x + x, min_blend_region_z + z ) );
@@ -139,19 +138,25 @@ bool T3DCollisionSurfaceBuilder::build(
 	}
 
 	const int sample_count = width * width;
-	m_heightRowScratch.resize( ( size_t ) ( sample_count ) );
+	float *pHeightScratch = nullptr;
+	if ( width <= DYNAMIC_SCRATCH_AXIS ) {
+		pHeightScratch = m_dynamicHeightScratch.data();
+	} else {
+		if ( m_fullHeightRowScratch.size() < ( size_t ) sample_count ) m_fullHeightRowScratch.resize( ( size_t ) sample_count );
+		pHeightScratch = m_fullHeightRowScratch.data();
+	}
 	T3DSampler sampler( pData->getSamplingSourceInternal() );
-	if ( !sampler.copyHeightRect( rPosition.x, rPosition.y, width, width, m_heightRowScratch.data(), width, true ) ) {
+	if ( !sampler.copyHeightRect( rPosition.x, rPosition.y, width, width, pHeightScratch, width, true ) ) {
 		return false;
 	}
-	rHeights.resize( sample_count );
+	if ( rHeights.size() != sample_count ) rHeights.resize( sample_count );
 	float *const output = rHeights.ptrw();
 	rMinHeight = FLT_MAX;
 	rMaxHeight = -FLT_MAX;
 	for ( int x = 0; x < width; ++x ) {
 		const int destination_base = x * width;
 		for ( int z = width - 1, destination = 0; z >= 0; --z, ++destination ) {
-			float height = m_heightRowScratch[( size_t ) ( z ) * ( size_t ) ( width ) + ( size_t ) ( x )];
+			float height = pHeightScratch[( size_t ) ( z ) * ( size_t ) ( width ) + ( size_t ) ( x )];
 			if ( !std::isnan( height ) && blend_background ) {
 				height = ( float ) Math::lerp( ( real_t ) ( height ), ground_level,
 					smoothstep( 0.0f, 1.0f, getRegionBlend( x, z, min_blend_region_x, min_blend_region_z,

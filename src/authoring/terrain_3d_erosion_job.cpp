@@ -1958,7 +1958,7 @@ bool T3DErosionJob::allocateBuffers( void ) {
 	keepValid( planFloatBuffer( phase_layout, m_config.bExposureAgeEnabled, m_nCellCount, 1u ), bLayoutValid );
 
 	if ( !bLayoutValid || !persistent_layout.valid() || !phase_layout.valid() ||
-		!m_persistentMemory.configure( persistent_layout.size() ) || !m_phaseMemory.configure( phase_layout.size() ) ) {
+		!m_persistentMemory.ensureCapacity( persistent_layout.size() ) || !m_phaseMemory.ensureCapacity( phase_layout.size() ) ) {
 		m_persistentMemory.release();
 		m_phaseMemory.release();
 		setFailed( "Erosion buffer layout exceeds the configured address space or could not be allocated." );
@@ -2058,7 +2058,7 @@ bool T3DErosionJob::allocatePreviewBuffer( void ) {
 		return true;
 	}
 	T3DLinearArenaLayout layout;
-	if ( !layout.addArray<float>( m_nCellCount ) || !layout.valid() || !m_previewMemory.configure( layout.size() ) ||
+	if ( !layout.addArray<float>( m_nCellCount ) || !layout.valid() || !m_previewMemory.ensureCapacity( layout.size() ) ||
 		!m_previewHeight.allocateUninitialized( m_previewMemory, m_nCellCount ) ||
 		m_previewMemory.used() != layout.size() ) {
 		m_previewHeight.clear();
@@ -2216,7 +2216,7 @@ bool T3DErosionJob::compactCompletedResults( void ) {
 	}
 
 	m_resultMemory.release();
-	if ( !m_resultMemory.configure( layout.size() ) ) {
+	if ( !m_resultMemory.ensureCapacity( layout.size() ) ) {
 		return false;
 	}
 	keepValid( copyResultByte( m_resultMemory, m_active, result.bActive ), valid );

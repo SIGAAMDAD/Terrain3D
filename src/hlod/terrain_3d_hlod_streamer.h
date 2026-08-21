@@ -93,7 +93,7 @@ class T3DHLODStreamer : public Object {
 	static int regionIndex( const Vector2i &rRegion );
 	static Vector2i regionFromIndex( int index );
 	int findEntry( int level, const Vector2i &rCluster ) const;
-	void clearRuntime( bool bNotify );
+	void clearRuntime( bool bNotify, bool bReleaseStorage = false );
 	bool compileManifest( const Ref<T3DHLODManifest> &rManifest );
 	bool compilePackedManifest( const Ref<T3DHLODManifest> &rManifest );
 	void compileLegacyNodePolicies( const Ref<T3DHLODManifest> &rManifest );

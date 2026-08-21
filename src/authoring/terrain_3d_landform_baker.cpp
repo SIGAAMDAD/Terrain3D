@@ -393,27 +393,27 @@ static uint32_t updateMaterial( const uint32_t nSource, const t3dsettings_t &rSe
 }
 
 static float neighborValue(
-	const eastl::vector<float> &fValues, const int nSize, const int iX, const int iY,
+	const float *const pValues, const int nSize, const int iX, const int iY,
 	const float fFallback
 ) {
 	if ( iX < 0 || iY < 0 || iX >= nSize || iY >= nSize ) {
 		return fFallback;
 	}
-	return fValues[( size_t ) ( iY * nSize + iX )];
+	return pValues[( size_t ) ( iY * nSize + iX )];
 }
 
 static float morphologyTarget(
-	const eastl::vector<float> &fValues, const int nSize, const int iX, const int iY,
+	const float *const pValues, const int nSize, const int iX, const int iY,
 	const T3DLandformBaker::t3dmorphologyMode_t mode
 ) {
-	const float fSource = fValues[( size_t ) ( iY * nSize + iX )];
+	const float fSource = pValues[( size_t ) ( iY * nSize + iX )];
 	float fMinimum = fSource;
 	float fMaximum = fSource;
 	float fSum = 0.0f;
 	int count = 0;
 	for ( int offset_y = -1; offset_y <= 1; ++offset_y ) {
 		for ( int offset_x = -1; offset_x <= 1; ++offset_x ) {
-			const float fValue = neighborValue( fValues, nSize, iX + offset_x, iY + offset_y, fSource );
+			const float fValue = neighborValue( pValues, nSize, iX + offset_x, iY + offset_y, fSource );
 			fMinimum = MIN( fMinimum, fValue );
 			fMaximum = MAX( fMaximum, fValue );
 			fSum += fValue;
@@ -437,10 +437,10 @@ static float morphologyTarget(
 }
 
 static float thermalTarget(
-	const eastl::vector<float> &fValues, const int nSize, const int iX, const int iY,
+	const float *const pValues, const int nSize, const int iX, const int iY,
 	const float fSpacing, const float fAngleDegrees
 ) {
-	const float fSource = fValues[( size_t ) ( iY * nSize + iX )];
+	const float fSource = pValues[( size_t ) ( iY * nSize + iX )];
 	const float fMaximumDelta = Math::tan( Math::deg_to_rad( fAngleDegrees ) ) * fSpacing;
 	float fSum = 0.0f;
 	int count = 0;
@@ -449,7 +449,7 @@ static float thermalTarget(
 			if ( offset_x == 0 && offset_y == 0 ) {
 				continue;
 			}
-			const float fNeighbor = neighborValue( fValues, nSize, iX + offset_x, iY + offset_y, fSource );
+			const float fNeighbor = neighborValue( pValues, nSize, iX + offset_x, iY + offset_y, fSource );
 			const float fDelta = fNeighbor - fSource;
 			if ( Math::abs( fDelta ) > fMaximumDelta ) {
 				fSum += fNeighbor - Math::sign( fDelta ) * fMaximumDelta;
@@ -850,23 +850,27 @@ typedef struct t3dlandformCalculateContext_s {
 	float fSpacing = 1.0f;
 	int nRegionSize = 0;
 	std::atomic<bool> *pInvalidOutput = nullptr;
+	float *pWorkerScratch = nullptr;
+	size_t nWorkerScratchStride = 0u;
 } t3dlandformCalculateContext_t;
 
-static void calculateLandformRegions( void *pContext, const size_t nBegin, const size_t nEnd, int32_t ) {
+static void calculateLandformRegions( void *pContext, const size_t nBegin, const size_t nEnd, const int32_t nWorker ) {
 	t3dlandformCalculateContext_t *context = ( t3dlandformCalculateContext_t * ) ( pContext );
 	const t3dsettings_t &settings = *context->pSettings;
 	const PackedVector3Array &operation_path = *context->pOperationPath;
 	const AABB &edited_area = *context->pEditedArea;
 	const t3dbasinProfile_t &basin_profile = *context->pBasinProfile;
+	float *const pWorkerScratch = context->pWorkerScratch + ( size_t ) MAX( nWorker, 0 ) * context->nWorkerScratchStride;
 	for ( size_t edit_index = nBegin; edit_index < nEnd; ++edit_index ) {
 		t3dregionEdit_t &edit = ( *context->edits )[edit_index];
 		const eastl::vector<float> &source_values = edit.source_values;
-		eastl::vector<float> working_values = source_values;
-		eastl::vector<float> next_values = working_values;
+		edit.output_values.resize( source_values.size() );
+		memcpy( edit.output_values.data(), source_values.data(), source_values.size() * sizeof( float ) );
+		float *pWorking = edit.output_values.data();
+		float *pNext = pWorkerScratch;
 		const int relaxation_passes = settings.mode == T3DLandformBaker::THERMAL_RELAXATION ? settings.iterations : 1;
 		for ( int pass = 0; pass < relaxation_passes; ++pass ) {
-			const eastl::vector<float> &pass_source = working_values;
-			next_values = working_values;
+			memcpy( pNext, pWorking, source_values.size() * sizeof( float ) );
 			for ( int y = 0; y < context->nRegionSize; ++y ) {
 				for ( int x = 0; x < context->nRegionSize; ++x ) {
 					const float fWorldX = ( float ) ( edit.location.x * context->nRegionSize + x ) * context->fSpacing;
@@ -877,12 +881,12 @@ static void calculateLandformRegions( void *pContext, const size_t nBegin, const
 					}
 					const Vector2 world( fWorldX, fWorldZ );
 					const t3dpathProjection_t projection = projectToPath( operation_path, world );
-					const float fSource = pass_source[( size_t ) ( y * context->nRegionSize + x )];
+					const float fSource = pWorking[( size_t ) ( y * context->nRegionSize + x )];
 					float fNeighborTarget = fSource;
 					if ( settings.mode == T3DLandformBaker::THERMAL_RELAXATION ) {
-						fNeighborTarget = thermalTarget( pass_source, context->nRegionSize, x, y, context->fSpacing, settings.fAngleOfRepose );
+						fNeighborTarget = thermalTarget( pWorking, context->nRegionSize, x, y, context->fSpacing, settings.fAngleOfRepose );
 					} else if ( settings.mode == T3DLandformBaker::MORPHOLOGY ) {
-						fNeighborTarget = morphologyTarget( pass_source, context->nRegionSize, x, y, settings.morphology_mode );
+						fNeighborTarget = morphologyTarget( pWorking, context->nRegionSize, x, y, settings.morphology_mode );
 					}
 					const float fEvaluated = evaluateHeight( settings, projection, world, context->areaCenter,
 						context->fAreaRadius, fSource, fNeighborTarget, basin_profile );
@@ -891,14 +895,14 @@ static void calculateLandformRegions( void *pContext, const size_t nBegin, const
 						context->pInvalidOutput->store( true, std::memory_order_relaxed );
 						continue;
 					}
-					next_values[( size_t ) ( y * context->nRegionSize + x )] =
+					pNext[( size_t ) ( y * context->nRegionSize + x )] =
 						CLAMP( fEvaluated, TERRAIN3D_REGION_HEIGHT_MIN, TERRAIN3D_REGION_HEIGHT_MAX );
 				}
 			}
-			working_values.swap( next_values );
+			std::swap( pWorking, pNext );
 		}
+		if ( pWorking != edit.output_values.data() ) memcpy( edit.output_values.data(), pWorking, source_values.size() * sizeof( float ) );
 
-		edit.output_values = std::move( working_values );
 		for ( size_t index = 0; index < edit.output_values.size(); ++index ) {
 			if ( !Math::is_equal_approx( source_values[index], edit.output_values[index] ) ) {
 				edit.bHeightModified = true;
@@ -1038,6 +1042,9 @@ Dictionary T3DLandformBaker::apply(
 	eastl::vector<Vector2i> height_locations;
 	eastl::vector<Vector2i> control_locations;
 	std::atomic<bool> invalid_output{false};
+	const size_t calculate_worker_count = MIN<size_t>( ( size_t ) ( hardware_threads ), edits.size() );
+	eastl::vector<float> calculate_scratch;
+	calculate_scratch.resize( calculate_worker_count * pixel_count );
 	t3dlandformCalculateContext_t calculate_context;
 	calculate_context.edits = &edits;
 	calculate_context.pSettings = &settings;
@@ -1049,6 +1056,8 @@ Dictionary T3DLandformBaker::apply(
 	calculate_context.fSpacing = spacing;
 	calculate_context.nRegionSize = region_size;
 	calculate_context.pInvalidOutput = &invalid_output;
+	calculate_context.pWorkerScratch = calculate_scratch.data();
+	calculate_context.nWorkerScratchStride = pixel_count;
 	executor.runStatic( edits.size(), 1u, calculateLandformRegions, &calculate_context );
 	if ( invalid_output.load( std::memory_order_relaxed ) ) {
 		removeCreatedRegions( data, edits );

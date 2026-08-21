@@ -1,35 +1,82 @@
 #include "core/terrain_3d_compiler.h"
 #include "instances/terrain_3d_instance_store.h"
 
-T3DInstanceStore::T3DInstanceStore( void ) { rebuildMeshLookup(); }
-
-T3DInstanceStore::~T3DInstanceStore( void ) {
-}
-
-T3DInstanceStore::T3DInstanceStore( const T3DInstanceStore &rOther ) :
-		m_meshes( rOther.m_meshes ),
-		m_layout( rOther.m_layout ) { rebuildMeshLookup(); }
-
 T3DInstanceStore::T3DInstanceStore( T3DInstanceStore &&rOther ) :
 		m_meshes( eastl::move( rOther.m_meshes ) ),
-		m_layout( rOther.m_layout ) { rebuildMeshLookup(); rOther.invalidateMeshLookup(); }
+		m_transformSlab( eastl::move( rOther.m_transformSlab ) ),
+		m_colorSlab( eastl::move( rOther.m_colorSlab ) ),
+		m_ownerSlab( eastl::move( rOther.m_ownerSlab ) ),
+		m_layout( rOther.m_layout ) {
+	rebindPayloadPools();
+	rebuildMeshLookup();
+	rOther.m_meshes.clear();
+	rOther.m_transformSlab.reset();
+	rOther.m_colorSlab.reset();
+	rOther.m_ownerSlab.reset();
+	rOther.rebuildMeshLookup();
+}
 
 T3DInstanceStore &T3DInstanceStore::operator=( const T3DInstanceStore &rOther ) {
-	if ( this != &rOther ) {
-		m_meshes = rOther.m_meshes;
-		m_layout = rOther.m_layout;
-		rebuildMeshLookup();
-	}
+	if ( this != &rOther ) copyFrom( rOther );
 	return *this;
 }
 
 T3DInstanceStore &T3DInstanceStore::operator=( T3DInstanceStore &&rOther ) {
-	if ( this != &rOther ) {
-		m_meshes = eastl::move( rOther.m_meshes );
-		m_layout = rOther.m_layout;
-		rebuildMeshLookup(); rOther.invalidateMeshLookup();
-	}
+	if ( this == &rOther ) return *this;
+	m_meshes = eastl::move( rOther.m_meshes );
+	m_transformSlab = eastl::move( rOther.m_transformSlab );
+	m_colorSlab = eastl::move( rOther.m_colorSlab );
+	m_ownerSlab = eastl::move( rOther.m_ownerSlab );
+	m_layout = rOther.m_layout;
+	rebindPayloadPools();
+	rebuildMeshLookup();
+	rOther.m_meshes.clear();
+	rOther.m_transformSlab.reset();
+	rOther.m_colorSlab.reset();
+	rOther.m_ownerSlab.reset();
+	rOther.rebuildMeshLookup();
 	return *this;
+}
+
+void T3DInstanceStore::rebindPayloadPools( void ) {
+	for ( t3dinstanceMesh_t &mesh : m_meshes ) {
+		for ( t3dinstanceCell_t &cell : mesh.cells ) cell.rebindPayloadPools( &m_transformSlab, &m_colorSlab, &m_ownerSlab );
+	}
+}
+
+void T3DInstanceStore::copyFrom( const T3DInstanceStore &rOther ) {
+	clearRetainCapacity();
+	m_layout = rOther.m_layout;
+	size_t transform_count = 0u;
+	size_t color_count = 0u;
+	size_t owner_count = 0u;
+	for ( const t3dinstanceMesh_t &source_mesh : rOther.m_meshes ) {
+		for ( const t3dinstanceCell_t &source_cell : source_mesh.cells ) {
+			transform_count += source_cell.transforms.size();
+			color_count += source_cell.colors.size();
+			owner_count += source_cell.owners.size();
+		}
+	}
+	reserveMeshCapacity( rOther.m_meshes.size() );
+	reservePayloadCapacity( transform_count, color_count, owner_count );
+	for ( const t3dinstanceMesh_t &source_mesh : rOther.m_meshes ) {
+		t3dinstanceMesh_t &destination_mesh = getOrCreateMesh( source_mesh.id, source_mesh.cells.size() );
+		for ( const t3dinstanceCell_t &source_cell : source_mesh.cells ) {
+			t3dinstanceCell_t &destination_cell = getOrCreateCellExact( source_mesh.id, source_cell.location, source_cell.transforms.size(), source_cell.usesColors(), source_cell.usesOwners() );
+			destination_cell.transforms.resize( source_cell.transforms.size() );
+			if ( !source_cell.transforms.empty() ) eastl::copy_n( source_cell.transforms.data(), source_cell.transforms.size(), destination_cell.transforms.data() );
+			if ( source_cell.usesColors() ) { destination_cell.colors.resize( source_cell.colors.size() ); eastl::copy_n( source_cell.colors.data(), source_cell.colors.size(), destination_cell.colors.data() ); }
+			if ( source_cell.usesOwners() ) { destination_cell.owners.resize( source_cell.owners.size() ); eastl::copy_n( source_cell.owners.data(), source_cell.owners.size(), destination_cell.owners.data() ); }
+			destination_cell.nRevision = source_cell.nRevision;
+			destination_cell.bModified = source_cell.bModified;
+			destination_cell.cachedAabb = source_cell.cachedAabb;
+			destination_cell.cachedSourceMeshAabb = source_cell.cachedSourceMeshAabb;
+			destination_cell.nCachedAabbRevision = source_cell.nCachedAabbRevision;
+			destination_cell.nCachedAabbGeneration = source_cell.nCachedAabbGeneration;
+			destination_cell.bCachedAabbValid = source_cell.bCachedAabbValid;
+		}
+	}
+	rebuildMeshLookup();
 }
 
 bool T3DInstanceStore::cellLess( const t3dinstanceCell_t &a, const Vector2i &b ) {
@@ -66,19 +113,38 @@ void T3DInstanceStore::rebuildMeshLookup( void ) const {
 	m_bMeshLookupDirty = false;
 }
 
-void T3DInstanceStore::clear( void ) { clearRetainCapacity(); }
+void T3DInstanceStore::clearRetainCapacity( void ) {
+	m_meshes.clear();
+	m_transformSlab.reset();
+	m_colorSlab.reset();
+	m_ownerSlab.reset();
+	invalidateMeshLookup();
+}
 
-void T3DInstanceStore::clearRetainCapacity( void ) { m_meshes.clear(); invalidateMeshLookup(); }
-
-void T3DInstanceStore::releaseStorage( void ) { m_meshes.clear(); m_meshes.shrink_to_fit(); rebuildMeshLookup(); }
+void T3DInstanceStore::releaseStorage( void ) {
+	m_meshes.clear();
+	m_meshes.shrink_to_fit();
+	m_transformSlab.release();
+	m_colorSlab.release();
+	m_ownerSlab.release();
+	rebuildMeshLookup();
+}
 
 void T3DInstanceStore::compactStorage( void ) {
+	T3DHighWaterSlab<t3dpackedTransform_t> compact_transforms;
+	T3DHighWaterSlab<uint32_t> compact_colors;
+	T3DHighWaterSlab<uint32_t> compact_owners;
 	for ( t3dinstanceMesh_t &mesh : m_meshes ) {
-		for ( t3dinstanceCell_t &cell : mesh.cells ) {
-			cell.compactStorage();
-		}
+		for ( t3dinstanceCell_t &cell : mesh.cells ) cell.relocatePayloadsExact( &compact_transforms, &compact_colors, &compact_owners );
 		mesh.cells.shrink_to_fit();
 	}
+	compact_transforms.compactBacking();
+	compact_colors.compactBacking();
+	compact_owners.compactBacking();
+	m_transformSlab.swap( compact_transforms );
+	m_colorSlab.swap( compact_colors );
+	m_ownerSlab.swap( compact_owners );
+	rebindPayloadPools();
 	m_meshes.shrink_to_fit();
 }
 
@@ -157,10 +223,30 @@ t3dinstanceCell_t &T3DInstanceStore::getOrCreateCell(
 		cell_index = cellLowerBound( mesh.cells, cell );
 		t3dinstanceCell_t value;
 		value.location = cell;
+		bindCellPayloads( value );
 		value.reserve( reserve_instances, bColorData, bOwnerData );
 		mesh.cells.insert( mesh.cells.begin() + cell_index, eastl::move( value ) );
 	} else {
 		mesh.cells[cell_index].reserve( reserve_instances, bColorData, bOwnerData );
+	}
+	return mesh.cells[cell_index];
+}
+
+t3dinstanceCell_t &T3DInstanceStore::getOrCreateCellExact(
+	const int nMeshId, const Vector2i &cell, const size_t reserve_instances,
+	const bool bColorData, const bool bOwnerData
+) {
+	t3dinstanceMesh_t &mesh = getOrCreateMesh( nMeshId, 4 );
+	size_t cell_index = findCellIndex( mesh, cell );
+	if ( cell_index >= mesh.cells.size() ) {
+		cell_index = cellLowerBound( mesh.cells, cell );
+		t3dinstanceCell_t value;
+		value.location = cell;
+		bindCellPayloads( value );
+		value.reserveExact( reserve_instances, bColorData, bOwnerData );
+		mesh.cells.insert( mesh.cells.begin() + cell_index, eastl::move( value ) );
+	} else {
+		mesh.cells[cell_index].reserveExact( reserve_instances, bColorData, bOwnerData );
 	}
 	return mesh.cells[cell_index];
 }
@@ -364,13 +450,9 @@ size_t T3DInstanceStore::instanceCount( const int nMeshId ) const {
 }
 size_t T3DInstanceStore::residentBytes( void ) const {
 	size_t bytes = m_meshes.capacity() * sizeof( t3dinstanceMesh_t );
-	for ( const t3dinstanceMesh_t &mesh : m_meshes ) {
-		bytes += mesh.cells.capacity() * sizeof( t3dinstanceCell_t );
-		for ( const t3dinstanceCell_t &cell : mesh.cells ) {
-			bytes += cell.transforms.capacity() * sizeof( t3dpackedTransform_t );
-			bytes += cell.colors.capacity() * sizeof( uint32_t );
-			bytes += cell.owners.capacity() * sizeof( uint32_t );
-		}
-	}
+	for ( const t3dinstanceMesh_t &mesh : m_meshes ) bytes += mesh.cells.capacity() * sizeof( t3dinstanceCell_t );
+	bytes += m_transformSlab.residentBytes();
+	bytes += m_colorSlab.residentBytes();
+	bytes += m_ownerSlab.residentBytes();
 	return bytes;
 }

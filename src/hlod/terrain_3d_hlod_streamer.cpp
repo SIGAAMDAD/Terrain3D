@@ -35,7 +35,7 @@ void T3DHLODStreamer::initialize( T3DTerrain *const pTerrain ) {
 	reloadManifest();
 }
 void T3DHLODStreamer::destroy( void ) {
-	clearRuntime( true );
+	clearRuntime( true, true );
 	m_pTerrain = nullptr;
 	m_manifest.unref();
 }
@@ -52,14 +52,21 @@ void T3DHLODStreamer::suspend( void ) {
 	m_detailRequiredRegions = m_managedRegions;
 	if ( m_pTerrain ) { notifyRepresentationChanges( old ); }
 }
-void T3DHLODStreamer::clearRuntime( const bool bNotify ) {
+void T3DHLODStreamer::clearRuntime( const bool bNotify, const bool bReleaseStorage ) {
 	uint8_t old[TERRAIN3D_MAX_REGION_SLOTS];
 	std::memcpy( old, m_regionRepresentationLevel, sizeof( old ) );
 	for ( int i = 0; i < ( int ) ( m_entries.size() ); ++i ) { deactivate( i ); }
-	eastl::vector<t3dentry_t>().swap( m_entries );
-	eastl::vector<int>().swap( m_roots );
-	eastl::vector<uint8_t>().swap( m_instancerMinLevels );
-	eastl::vector<t3dnodePolicy_t>().swap( m_nodePolicies );
+	if ( bReleaseStorage ) {
+		eastl::vector<t3dentry_t>().swap( m_entries );
+		eastl::vector<int>().swap( m_roots );
+		eastl::vector<uint8_t>().swap( m_instancerMinLevels );
+		eastl::vector<t3dnodePolicy_t>().swap( m_nodePolicies );
+	} else {
+		m_entries.clear();
+		m_roots.clear();
+		m_instancerMinLevels.clear();
+		m_nodePolicies.clear();
+	}
 	m_nodePolicyOffsets.fill( 0u );
 	std::memset( m_regionRepresentationLevel, 0, sizeof( m_regionRepresentationLevel ) );
 	m_managedRegions.reset();

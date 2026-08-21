@@ -88,172 +88,128 @@ static bool fnv1a64AppendR16HeightCorner(
 	return true;
 }
 
-static void writeU32( PackedByteArray &rBytes, const uint32_t nOffset, const uint32_t nValue ) {
-	if ( nOffset > ( uint32_t ) ( rBytes.size() ) || ( uint32_t ) ( rBytes.size() ) - nOffset < 4u ) {
-		return;
-	}
-	uint8_t *const pWrite = rBytes.ptrw() + nOffset;
-	pWrite[0] = ( uint8_t ) ( nValue & 0xffu );
-	pWrite[1] = ( uint8_t ) ( ( nValue >> 8u ) & 0xffu );
-	pWrite[2] = ( uint8_t ) ( ( nValue >> 16u ) & 0xffu );
-	pWrite[3] = ( uint8_t ) ( ( nValue >> 24u ) & 0xffu );
-}
+EA_FORCE_INLINE static void writeU32Raw( uint8_t *&pWrite, const uint32_t nValue ) { pWrite[0] = ( uint8_t ) ( nValue & 0xffu ); pWrite[1] = ( uint8_t ) ( ( nValue >> 8u ) & 0xffu ); pWrite[2] = ( uint8_t ) ( ( nValue >> 16u ) & 0xffu ); pWrite[3] = ( uint8_t ) ( ( nValue >> 24u ) & 0xffu ); pWrite += 4u; }
 
-static uint32_t readU32( const PackedByteArray &rBytes, const uint32_t nOffset ) {
-	if ( nOffset > ( uint32_t ) ( rBytes.size() ) || ( uint32_t ) ( rBytes.size() ) - nOffset < 4u ) {
-		return 0u;
-	}
-	const uint8_t *const pRead = rBytes.ptr() + nOffset;
-	return ( uint32_t ) ( pRead[0] ) |
-		( ( uint32_t ) ( pRead[1] ) << 8u ) |
-		( ( uint32_t ) ( pRead[2] ) << 16u ) |
-		( ( uint32_t ) ( pRead[3] ) << 24u );
-}
+EA_FORCE_INLINE static uint32_t readU32Raw( const uint8_t *&pRead ) { const uint32_t value = ( uint32_t ) pRead[0] | ( ( uint32_t ) pRead[1] << 8u ) | ( ( uint32_t ) pRead[2] << 16u ) | ( ( uint32_t ) pRead[3] << 24u ); pRead += 4u; return value; }
 
-static void encodeHeader( PackedByteArray &rBytes, const t3druntimePageHeader_t &rHeader ) {
-	uint32_t offset = 0u;
-	writeU32( rBytes, offset, rHeader.magic ); offset += 4u;
-	writeU32( rBytes, offset, rHeader.version ); offset += 4u;
-	writeU32( rBytes, offset, rHeader.nHeaderBytes ); offset += 4u;
-	writeU32( rBytes, offset, rHeader.nRegionSize ); offset += 4u;
-	writeU32( rBytes, offset, rHeader.colorDivisor ); offset += 4u;
-	writeU32( rBytes, offset, rHeader.derivedDivisor ); offset += 4u;
-	writeU32( rBytes, offset, rHeader.channelFlags ); offset += 4u;
-	writeU32( rBytes, offset, rHeader.nTotalBytes ); offset += 4u;
-	writeU32( rBytes, offset, rHeader.channelCount ); offset += 4u;
-	writeU32( rBytes, offset, rHeader.channelTableOffset ); offset += 4u;
+static bool encodeHeader( PackedByteArray &rBytes, const t3druntimePageHeader_t &rHeader ) {
+	if ( rBytes.size() < TERRAIN3D_RUNTIME_PAGE_HEADER_BYTES ) return false;
+	uint8_t *const pBegin = rBytes.ptrw();
+	uint8_t *pWrite = pBegin;
+	writeU32Raw( pWrite, rHeader.magic );
+	writeU32Raw( pWrite, rHeader.version );
+	writeU32Raw( pWrite, rHeader.nHeaderBytes );
+	writeU32Raw( pWrite, rHeader.nRegionSize );
+	writeU32Raw( pWrite, rHeader.colorDivisor );
+	writeU32Raw( pWrite, rHeader.derivedDivisor );
+	writeU32Raw( pWrite, rHeader.channelFlags );
+	writeU32Raw( pWrite, rHeader.nTotalBytes );
+	writeU32Raw( pWrite, rHeader.channelCount );
+	writeU32Raw( pWrite, rHeader.channelTableOffset );
 	for ( uint32_t channel = 0u; channel < TERRAIN3D_RUNTIME_PAGE_CHANNEL_COUNT; ++channel ) {
 		const t3druntimePageChannelInfo_t &info = rHeader.szChannels[channel];
-		writeU32( rBytes, offset, info.type ); offset += 4u;
-		writeU32( rBytes, offset, info.format ); offset += 4u;
-		writeU32( rBytes, offset, info.compression ); offset += 4u;
-		writeU32( rBytes, offset, info.iOffset ); offset += 4u;
-		writeU32( rBytes, offset, info.compressedBytes ); offset += 4u;
-		writeU32( rBytes, offset, info.uncompressedBytes ); offset += 4u;
-		writeU32( rBytes, offset, info.nWidth ); offset += 4u;
-		writeU32( rBytes, offset, info.height ); offset += 4u;
-		writeU32( rBytes, offset, info.mipCount ); offset += 4u;
-		writeU32( rBytes, offset, info.alignment ); offset += 4u;
-		writeU32( rBytes, offset, info.checksum ); offset += 4u;
-		writeU32( rBytes, offset, info.signature ); offset += 4u;
+		writeU32Raw( pWrite, info.type );
+		writeU32Raw( pWrite, info.format );
+		writeU32Raw( pWrite, info.compression );
+		writeU32Raw( pWrite, info.iOffset );
+		writeU32Raw( pWrite, info.compressedBytes );
+		writeU32Raw( pWrite, info.uncompressedBytes );
+		writeU32Raw( pWrite, info.nWidth );
+		writeU32Raw( pWrite, info.height );
+		writeU32Raw( pWrite, info.mipCount );
+		writeU32Raw( pWrite, info.alignment );
+		writeU32Raw( pWrite, info.checksum );
+		writeU32Raw( pWrite, info.signature );
 	}
-	writeU32( rBytes, offset, rHeader.sourceSignatureLo ); offset += 4u;
-	writeU32( rBytes, offset, rHeader.sourceSignatureHi ); offset += 4u;
-	writeU32( rBytes, offset, rHeader.blendRecipeVersion ); offset += 4u;
-	writeU32( rBytes, offset, rHeader.materialMask ); offset += 4u;
-	writeU32( rBytes, offset, rHeader.middleHeightDivisor ); offset += 4u;
-	writeU32( rBytes, offset, rHeader.worldSignatureLo ); offset += 4u;
-	writeU32( rBytes, offset, rHeader.worldSignatureHi ); offset += 4u;
-	writeU32( rBytes, offset, ( uint32_t ) ( rHeader.regionX ) ); offset += 4u;
-	writeU32( rBytes, offset, ( uint32_t ) ( rHeader.regionZ ) ); offset += 4u;
-	writeU32( rBytes, offset, rHeader.boundsMinYBits ); offset += 4u;
-	writeU32( rBytes, offset, rHeader.boundsMaxYBits );
+	writeU32Raw( pWrite, rHeader.sourceSignatureLo );
+	writeU32Raw( pWrite, rHeader.sourceSignatureHi );
+	writeU32Raw( pWrite, rHeader.blendRecipeVersion );
+	writeU32Raw( pWrite, rHeader.materialMask );
+	writeU32Raw( pWrite, rHeader.middleHeightDivisor );
+	writeU32Raw( pWrite, rHeader.worldSignatureLo );
+	writeU32Raw( pWrite, rHeader.worldSignatureHi );
+	writeU32Raw( pWrite, ( uint32_t ) rHeader.regionX );
+	writeU32Raw( pWrite, ( uint32_t ) rHeader.regionZ );
+	writeU32Raw( pWrite, rHeader.boundsMinYBits );
+	writeU32Raw( pWrite, rHeader.boundsMaxYBits );
+	return ( size_t ) ( pWrite - pBegin ) == TERRAIN3D_RUNTIME_PAGE_HEADER_BYTES;
 }
 
 static t3druntimePageHeader_t decodeHeader( const PackedByteArray &rBytes ) {
 	t3druntimePageHeader_t header;
-	uint32_t offset = 0u;
-	header.magic = readU32( rBytes, offset ); offset += 4u;
-	header.version = readU32( rBytes, offset ); offset += 4u;
-	header.nHeaderBytes = readU32( rBytes, offset ); offset += 4u;
-	header.nRegionSize = readU32( rBytes, offset ); offset += 4u;
-	header.colorDivisor = readU32( rBytes, offset ); offset += 4u;
-	header.derivedDivisor = readU32( rBytes, offset ); offset += 4u;
-	header.channelFlags = readU32( rBytes, offset ); offset += 4u;
-	header.nTotalBytes = readU32( rBytes, offset ); offset += 4u;
-	header.channelCount = readU32( rBytes, offset ); offset += 4u;
-	header.channelTableOffset = readU32( rBytes, offset ); offset += 4u;
+	if ( rBytes.size() < TERRAIN3D_RUNTIME_PAGE_HEADER_BYTES ) return header;
+	const uint8_t *pRead = rBytes.ptr();
+	header.magic = readU32Raw( pRead );
+	header.version = readU32Raw( pRead );
+	header.nHeaderBytes = readU32Raw( pRead );
+	header.nRegionSize = readU32Raw( pRead );
+	header.colorDivisor = readU32Raw( pRead );
+	header.derivedDivisor = readU32Raw( pRead );
+	header.channelFlags = readU32Raw( pRead );
+	header.nTotalBytes = readU32Raw( pRead );
+	header.channelCount = readU32Raw( pRead );
+	header.channelTableOffset = readU32Raw( pRead );
 	for ( uint32_t channel = 0u; channel < TERRAIN3D_RUNTIME_PAGE_CHANNEL_COUNT; ++channel ) {
 		t3druntimePageChannelInfo_t &info = header.szChannels[channel];
-		info.type = readU32( rBytes, offset ); offset += 4u;
-		info.format = readU32( rBytes, offset ); offset += 4u;
-		info.compression = readU32( rBytes, offset ); offset += 4u;
-		info.iOffset = readU32( rBytes, offset ); offset += 4u;
-		info.compressedBytes = readU32( rBytes, offset ); offset += 4u;
-		info.uncompressedBytes = readU32( rBytes, offset ); offset += 4u;
-		info.nWidth = readU32( rBytes, offset ); offset += 4u;
-		info.height = readU32( rBytes, offset ); offset += 4u;
-		info.mipCount = readU32( rBytes, offset ); offset += 4u;
-		info.alignment = readU32( rBytes, offset ); offset += 4u;
-		info.checksum = readU32( rBytes, offset ); offset += 4u;
-		info.signature = readU32( rBytes, offset ); offset += 4u;
+		info.type = readU32Raw( pRead );
+		info.format = readU32Raw( pRead );
+		info.compression = readU32Raw( pRead );
+		info.iOffset = readU32Raw( pRead );
+		info.compressedBytes = readU32Raw( pRead );
+		info.uncompressedBytes = readU32Raw( pRead );
+		info.nWidth = readU32Raw( pRead );
+		info.height = readU32Raw( pRead );
+		info.mipCount = readU32Raw( pRead );
+		info.alignment = readU32Raw( pRead );
+		info.checksum = readU32Raw( pRead );
+		info.signature = readU32Raw( pRead );
 	}
-	header.sourceSignatureLo = readU32( rBytes, offset ); offset += 4u;
-	header.sourceSignatureHi = readU32( rBytes, offset ); offset += 4u;
-	header.blendRecipeVersion = readU32( rBytes, offset ); offset += 4u;
-	header.materialMask = readU32( rBytes, offset ); offset += 4u;
-	header.middleHeightDivisor = readU32( rBytes, offset ); offset += 4u;
-	header.worldSignatureLo = readU32( rBytes, offset ); offset += 4u;
-	header.worldSignatureHi = readU32( rBytes, offset ); offset += 4u;
-	header.regionX = ( int32_t ) ( readU32( rBytes, offset ) ); offset += 4u;
-	header.regionZ = ( int32_t ) ( readU32( rBytes, offset ) ); offset += 4u;
-	header.boundsMinYBits = readU32( rBytes, offset ); offset += 4u;
-	header.boundsMaxYBits = readU32( rBytes, offset );
+	header.sourceSignatureLo = readU32Raw( pRead );
+	header.sourceSignatureHi = readU32Raw( pRead );
+	header.blendRecipeVersion = readU32Raw( pRead );
+	header.materialMask = readU32Raw( pRead );
+	header.middleHeightDivisor = readU32Raw( pRead );
+	header.worldSignatureLo = readU32Raw( pRead );
+	header.worldSignatureHi = readU32Raw( pRead );
+	header.regionX = ( int32_t ) readU32Raw( pRead );
+	header.regionZ = ( int32_t ) readU32Raw( pRead );
+	header.boundsMinYBits = readU32Raw( pRead );
+	header.boundsMaxYBits = readU32Raw( pRead );
 	return header;
 }
 
-static bool addImageChannel(
-	PackedByteArray &rFileBytes, t3druntimePageHeader_t &rHeader,
-	const t3druntimePageChannel_t channel, const Ref<Image> &rImage
-) {
-	if ( rImage.is_null() || rImage->is_empty() || rHeader.channelCount >= TERRAIN3D_RUNTIME_PAGE_CHANNEL_COUNT ||
-		terrain3dRuntimePageFindChannel( rHeader, channel ) ) {
-		return false;
-	}
-	const PackedByteArray image_bytes = rImage->get_data();
-	if ( image_bytes.is_empty() || image_bytes.size() > INT32_MAX ) {
-		return false;
-	}
-	const uint32_t aligned_offset = terrain3dRuntimePageAlign( ( uint32_t ) ( rFileBytes.size() ) );
-	if ( aligned_offset == 0u || aligned_offset > TERRAIN3D_RUNTIME_PAGE_MAX_BYTES ||
-		( uint32_t ) ( image_bytes.size() ) > TERRAIN3D_RUNTIME_PAGE_MAX_BYTES - aligned_offset ) {
-		return false;
-	}
-	const uint32_t total_bytes = aligned_offset + ( uint32_t ) ( image_bytes.size() );
-	const uint32_t previous_bytes = ( uint32_t ) ( rFileBytes.size() );
-	rFileBytes.resize( total_bytes );
-	if ( aligned_offset > previous_bytes ) {
-		std::memset( rFileBytes.ptrw() + previous_bytes, 0, aligned_offset - previous_bytes );
-	}
-	std::memcpy( rFileBytes.ptrw() + aligned_offset, image_bytes.ptr(), ( size_t ) ( image_bytes.size() ) );
-	t3druntimePageChannelInfo_t &info = rHeader.szChannels[rHeader.channelCount++];
-	info.type = ( uint32_t ) ( channel );
-	info.format = ( uint32_t ) ( rImage->get_format() );
-	info.compression = TERRAIN3D_RUNTIME_PAGE_COMPRESSION_NONE;
-	info.iOffset = aligned_offset;
-	info.compressedBytes = ( uint32_t ) ( image_bytes.size() );
-	info.uncompressedBytes = ( uint32_t ) ( image_bytes.size() );
-	info.checksum = terrain3dRuntimePageChecksum( image_bytes.ptr(), ( size_t ) ( image_bytes.size() ) );
-	info.nWidth = ( uint32_t ) ( rImage->get_width() );
-	info.height = ( uint32_t ) ( rImage->get_height() );
-	info.mipCount = rImage->has_mipmaps() ? ( uint32_t ) ( rImage->get_mipmap_count() + 1 ) : 1u;
-	info.alignment = TERRAIN3D_RUNTIME_PAGE_ALIGNMENT;
-	info.signature = info.checksum;
-	rHeader.nTotalBytes = total_bytes;
-	return true;
-}
+typedef struct t3dstagedPageBuild_s {
+	PackedByteArray szPayloads[TERRAIN3D_RUNTIME_PAGE_CHANNEL_COUNT];
+	uint32_t nTotalBytes = TERRAIN3D_RUNTIME_PAGE_HEADER_BYTES;
+} t3dstagedPageBuild_t;
 
 static PackedByteArray encodeRle( const PackedByteArray &rSource ) {
 	PackedByteArray encoded;
-	if ( rSource.is_empty() ) {
-		return encoded;
-	}
-	encoded.resize( rSource.size() * 2 );
+	if ( rSource.is_empty() ) return encoded;
 	const uint8_t *const pRead = rSource.ptr();
-	uint8_t *const pWrite = encoded.ptrw();
 	int64_t read = 0;
+	int64_t encoded_bytes = 0;
+	while ( read < rSource.size() ) {
+		const uint8_t value = pRead[read];
+		uint32_t run = 1u;
+		while ( read + run < rSource.size() && run < 255u && pRead[read + run] == value ) ++run;
+		encoded_bytes += 2;
+		read += run;
+	}
+	if ( encoded_bytes + 16 >= rSource.size() ) return encoded;
+	encoded.resize( encoded_bytes );
+	if ( encoded.size() != encoded_bytes ) return PackedByteArray();
+	uint8_t *const pWrite = encoded.ptrw();
+	read = 0;
 	int64_t write = 0;
 	while ( read < rSource.size() ) {
 		const uint8_t value = pRead[read];
 		uint8_t run = 1u;
-		while ( read + run < rSource.size() && run < 255u && pRead[read + run] == value ) {
-			++run;
-		}
+		while ( read + run < rSource.size() && run < 255u && pRead[read + run] == value ) ++run;
 		pWrite[write++] = run;
 		pWrite[write++] = value;
 		read += run;
 	}
-	encoded.resize( write );
 	return encoded;
 }
 
@@ -263,6 +219,7 @@ static PackedByteArray decodeRle( const PackedByteArray &rSource, const uint32_t
 		return decoded;
 	}
 	decoded.resize( nExpectedBytes );
+	if ( decoded.size() != ( int64_t ) nExpectedBytes ) return PackedByteArray();
 	const uint8_t *const pRead = rSource.ptr();
 	uint8_t *const pWrite = decoded.ptrw();
 	int64_t read = 0;
@@ -277,56 +234,95 @@ static PackedByteArray decodeRle( const PackedByteArray &rSource, const uint32_t
 		std::memset( pWrite + write, value, run );
 		write += run;
 	}
-	if ( read != rSource.size() || write != nExpectedBytes ) {
-		decoded.clear();
-	}
+	if ( read != rSource.size() || write != nExpectedBytes ) decoded.clear();
 	return decoded;
 }
 
-static bool addBlobChannel(
-	PackedByteArray &rFileBytes, t3druntimePageHeader_t &rHeader,
+static bool stageImageChannel(
+	t3dstagedPageBuild_t &rBuild, t3druntimePageHeader_t &rHeader,
+	const t3druntimePageChannel_t channel, const Ref<Image> &rImage
+) {
+	if ( rImage.is_null() || rImage->is_empty() || rHeader.channelCount >= TERRAIN3D_RUNTIME_PAGE_CHANNEL_COUNT ||
+		terrain3dRuntimePageFindChannel( rHeader, channel ) ) return false;
+	const PackedByteArray image_bytes = rImage->get_data();
+	if ( image_bytes.is_empty() || image_bytes.size() > INT32_MAX ) return false;
+	const uint32_t aligned_offset = terrain3dRuntimePageAlign( rBuild.nTotalBytes );
+	if ( aligned_offset == 0u || aligned_offset > TERRAIN3D_RUNTIME_PAGE_MAX_BYTES ||
+		( uint32_t ) image_bytes.size() > TERRAIN3D_RUNTIME_PAGE_MAX_BYTES - aligned_offset ) return false;
+	const uint32_t channel_index = rHeader.channelCount++;
+	rBuild.szPayloads[channel_index] = image_bytes;
+	t3druntimePageChannelInfo_t &info = rHeader.szChannels[channel_index];
+	info.type = ( uint32_t ) channel;
+	info.format = ( uint32_t ) rImage->get_format();
+	info.compression = TERRAIN3D_RUNTIME_PAGE_COMPRESSION_NONE;
+	info.iOffset = aligned_offset;
+	info.compressedBytes = ( uint32_t ) image_bytes.size();
+	info.uncompressedBytes = ( uint32_t ) image_bytes.size();
+	info.checksum = terrain3dRuntimePageChecksum( image_bytes.ptr(), ( size_t ) image_bytes.size() );
+	info.nWidth = ( uint32_t ) rImage->get_width();
+	info.height = ( uint32_t ) rImage->get_height();
+	info.mipCount = rImage->has_mipmaps() ? ( uint32_t ) ( rImage->get_mipmap_count() + 1 ) : 1u;
+	info.alignment = TERRAIN3D_RUNTIME_PAGE_ALIGNMENT;
+	info.signature = info.checksum;
+	rBuild.nTotalBytes = aligned_offset + info.compressedBytes;
+	rHeader.nTotalBytes = rBuild.nTotalBytes;
+	return true;
+}
+
+static bool stageBlobChannel(
+	t3dstagedPageBuild_t &rBuild, t3druntimePageHeader_t &rHeader,
 	const t3druntimePageChannel_t channel, const PackedByteArray &rPayload,
 	const bool bAllowCompression = true
 ) {
 	if ( rPayload.is_empty() || rHeader.channelCount >= TERRAIN3D_RUNTIME_PAGE_CHANNEL_COUNT ||
-		terrain3dRuntimePageFindChannel( rHeader, channel ) ) {
-		return false;
-	}
+		terrain3dRuntimePageFindChannel( rHeader, channel ) ) return false;
 	PackedByteArray stored = rPayload;
 	uint32_t compression = TERRAIN3D_RUNTIME_PAGE_COMPRESSION_NONE;
 	if ( bAllowCompression && rPayload.size() >= 64 ) {
 		PackedByteArray compressed = encodeRle( rPayload );
-		if ( !compressed.is_empty() && compressed.size() + 16 < rPayload.size() ) {
+		if ( !compressed.is_empty() ) {
 			stored = compressed;
 			compression = TERRAIN3D_RUNTIME_PAGE_COMPRESSION_RLE;
 		}
 	}
-	const uint32_t aligned_offset = terrain3dRuntimePageAlign( ( uint32_t ) ( rFileBytes.size() ) );
-	if ( aligned_offset == 0u || ( uint64_t ) ( aligned_offset ) + ( uint64_t ) ( stored.size() ) >
-		TERRAIN3D_RUNTIME_PAGE_MAX_BYTES ) {
-		return false;
-	}
-	const uint32_t previous_bytes = ( uint32_t ) ( rFileBytes.size() );
-	const uint32_t payload_bytes = ( uint32_t ) ( stored.size() );
-	rFileBytes.resize( aligned_offset + payload_bytes );
-	if ( aligned_offset > previous_bytes ) {
-		std::memset( rFileBytes.ptrw() + previous_bytes, 0, aligned_offset - previous_bytes );
-	}
-	std::memcpy( rFileBytes.ptrw() + aligned_offset, stored.ptr(), payload_bytes );
-	t3druntimePageChannelInfo_t &info = rHeader.szChannels[rHeader.channelCount++];
-	info.type = ( uint32_t ) ( channel );
+	const uint32_t aligned_offset = terrain3dRuntimePageAlign( rBuild.nTotalBytes );
+	if ( aligned_offset == 0u || ( uint64_t ) aligned_offset + ( uint64_t ) stored.size() > TERRAIN3D_RUNTIME_PAGE_MAX_BYTES ) return false;
+	const uint32_t channel_index = rHeader.channelCount++;
+	rBuild.szPayloads[channel_index] = stored;
+	t3druntimePageChannelInfo_t &info = rHeader.szChannels[channel_index];
+	info.type = ( uint32_t ) channel;
 	info.format = UINT32_MAX;
 	info.compression = compression;
 	info.iOffset = aligned_offset;
-	info.compressedBytes = payload_bytes;
-	info.uncompressedBytes = ( uint32_t ) ( rPayload.size() );
-	info.nWidth = ( uint32_t ) ( rPayload.size() );
+	info.compressedBytes = ( uint32_t ) rBuild.szPayloads[channel_index].size();
+	info.uncompressedBytes = ( uint32_t ) rPayload.size();
+	info.nWidth = ( uint32_t ) rPayload.size();
 	info.height = 1u;
 	info.mipCount = 1u;
-	info.checksum = terrain3dRuntimePageChecksum( rPayload.ptr(), ( size_t ) ( rPayload.size() ) );
+	info.checksum = terrain3dRuntimePageChecksum( rPayload.ptr(), ( size_t ) rPayload.size() );
 	info.signature = info.checksum;
-	rHeader.nTotalBytes = aligned_offset + payload_bytes;
+	rBuild.nTotalBytes = aligned_offset + info.compressedBytes;
+	rHeader.nTotalBytes = rBuild.nTotalBytes;
 	return true;
+}
+
+static bool finalizePageBytes(
+	const t3dstagedPageBuild_t &rBuild, t3druntimePageHeader_t &rHeader, PackedByteArray &rFileBytes
+) {
+	if ( rBuild.nTotalBytes < TERRAIN3D_RUNTIME_PAGE_HEADER_BYTES || rBuild.nTotalBytes > TERRAIN3D_RUNTIME_PAGE_MAX_BYTES ) return false;
+	rFileBytes.resize( rBuild.nTotalBytes );
+	if ( rFileBytes.size() != ( int64_t ) rBuild.nTotalBytes ) return false;
+	uint8_t *const pWrite = rFileBytes.ptrw();
+	std::memset( pWrite, 0, rBuild.nTotalBytes );
+	for ( uint32_t channel_index = 0u; channel_index < rHeader.channelCount; ++channel_index ) {
+		const t3druntimePageChannelInfo_t &info = rHeader.szChannels[channel_index];
+		const PackedByteArray &payload = rBuild.szPayloads[channel_index];
+		if ( payload.size() != ( int64_t ) info.compressedBytes || info.iOffset > rBuild.nTotalBytes ||
+			info.compressedBytes > rBuild.nTotalBytes - info.iOffset ) return false;
+		if ( info.compressedBytes > 0u ) std::memcpy( pWrite + info.iOffset, payload.ptr(), info.compressedBytes );
+	}
+	rHeader.nTotalBytes = rBuild.nTotalBytes;
+	return encodeHeader( rFileBytes, rHeader );
 }
 
 static PackedByteArray readBlob(
@@ -682,26 +678,28 @@ bool T3DRuntimePageStore::removePage( const String &rPagePath ) const {
 	return removed;
 }
 
-bool T3DRuntimePageStore::loadSnapshot( PreparedPage &rPage ) {
-	rPage.height.unref();
-	rPage.heightBytes.clear();
-	rPage.pControl.unref();
-	rPage.pColor.unref();
-	rPage.pDerived.unref();
-	rPage.pMiddleHeight.unref();
-	rPage.pMiddleComposite.unref();
-	rPage.pTerrainShadowMask.unref();
-	rPage.instancePage.clear();
-	rPage.holeMask.clear();
-	rPage.collisionHeight.clear();
-	rPage.collisionBounds.clear();
-	rPage.navigation.clear();
-	rPage.minMaxHeight.clear();
-	rPage.nodeDescriptors.clear();
-	rPage.instanceMetadata.clear();
-	rPage.lightingReceivers.clear();
-	rPage.multimeshFastStart.clear();
-	rPage.preparedInstanceStore = T3DInstanceStore{};
+bool T3DRuntimePageStore::loadSnapshot( PreparedPage &rPage, const bool bPreserveMaterialized ) {
+	if ( !bPreserveMaterialized ) {
+		rPage.height.unref();
+		rPage.heightBytes.clear();
+		rPage.pControl.unref();
+		rPage.pColor.unref();
+		rPage.pDerived.unref();
+		rPage.pMiddleHeight.unref();
+		rPage.pMiddleComposite.unref();
+		rPage.pTerrainShadowMask.unref();
+		rPage.instancePage.clear();
+		rPage.holeMask.clear();
+		rPage.collisionHeight.clear();
+		rPage.collisionBounds.clear();
+		rPage.navigation.clear();
+		rPage.minMaxHeight.clear();
+		rPage.nodeDescriptors.clear();
+		rPage.instanceMetadata.clear();
+		rPage.lightingReceivers.clear();
+		rPage.multimeshFastStart.clear();
+		rPage.preparedInstanceStore.clearRetainCapacity();
+	}
 	rPage.materialMask = 1u;
 	rPage.nFileOpenUsec = 0u;
 	rPage.nFileReadUsec = 0u;
@@ -788,11 +786,17 @@ bool T3DRuntimePageStore::loadSnapshot( PreparedPage &rPage ) {
 	const bool bNeedHeight = bNeedGpu || bNeedCpu || bNeedActiveHeight;
 	const bool bMaterializeHeight = bNeedGpu || bNeedCpu;
 	if ( bNeedHeight ) {
-		rPage.height = readImage( pFile, *pHeightChannel, rPage.nFileReadUsec,
-			rPage.nValidationUsec, rPage.nMaterializeUsec, &rPage.heightBytes, bMaterializeHeight );
 		if ( rPage.heightBytes.is_empty() ) {
-			return false;
+			rPage.height = readImage( pFile, *pHeightChannel, rPage.nFileReadUsec,
+				rPage.nValidationUsec, rPage.nMaterializeUsec, &rPage.heightBytes, bMaterializeHeight );
+		} else if ( bMaterializeHeight && rPage.height.is_null() ) {
+			const uint64_t materialize_started = pTime ? pTime->get_ticks_usec() : 0u;
+			rPage.height = Image::create_from_data( ( int ) pHeightChannel->nWidth, ( int ) pHeightChannel->height,
+				pHeightChannel->mipCount > 1u, Image::Format( pHeightChannel->format ), rPage.heightBytes );
+			const uint64_t materialize_finished = pTime ? pTime->get_ticks_usec() : materialize_started;
+			rPage.nMaterializeUsec += materialize_finished - materialize_started;
 		}
+		if ( rPage.heightBytes.is_empty() ) return false;
 	}
 	rPage.materialMask = header.materialMask;
 
@@ -802,7 +806,7 @@ bool T3DRuntimePageStore::loadSnapshot( PreparedPage &rPage ) {
 		if ( !pDerivedChannel ) {
 			return false;
 		}
-		rPage.pDerived = readImage( pFile, *pDerivedChannel, rPage.nFileReadUsec,
+		if ( rPage.pDerived.is_null() ) rPage.pDerived = readImage( pFile, *pDerivedChannel, rPage.nFileReadUsec,
 			rPage.nValidationUsec, rPage.nMaterializeUsec );
 	}
 	if ( bNeedMiddle ) {
@@ -811,7 +815,7 @@ bool T3DRuntimePageStore::loadSnapshot( PreparedPage &rPage ) {
 		if ( !pMiddleHeightChannel ) {
 			return false;
 		}
-		rPage.pMiddleHeight = readImage( pFile, *pMiddleHeightChannel, rPage.nFileReadUsec,
+		if ( rPage.pMiddleHeight.is_null() ) rPage.pMiddleHeight = readImage( pFile, *pMiddleHeightChannel, rPage.nFileReadUsec,
 			rPage.nValidationUsec, rPage.nMaterializeUsec );
 	}
 	if ( bNeedGpu ) {
@@ -820,7 +824,7 @@ bool T3DRuntimePageStore::loadSnapshot( PreparedPage &rPage ) {
 		if ( !pMiddleCompositeChannel ) {
 			return false;
 		}
-		rPage.pMiddleComposite = readImage( pFile, *pMiddleCompositeChannel, rPage.nFileReadUsec,
+		if ( rPage.pMiddleComposite.is_null() ) rPage.pMiddleComposite = readImage( pFile, *pMiddleCompositeChannel, rPage.nFileReadUsec,
 			rPage.nValidationUsec, rPage.nMaterializeUsec );
 	}
 	if ( bNeedTerrainShadow ) {
@@ -829,7 +833,7 @@ bool T3DRuntimePageStore::loadSnapshot( PreparedPage &rPage ) {
 		if ( !pShadowChannel ) {
 			return false;
 		}
-		rPage.pTerrainShadowMask = readImage( pFile, *pShadowChannel, rPage.nFileReadUsec,
+		if ( rPage.pTerrainShadowMask.is_null() ) rPage.pTerrainShadowMask = readImage( pFile, *pShadowChannel, rPage.nFileReadUsec,
 			rPage.nValidationUsec, rPage.nMaterializeUsec );
 	}
 	if ( bNeedGpu || bNeedCpu ) {
@@ -839,7 +843,7 @@ bool T3DRuntimePageStore::loadSnapshot( PreparedPage &rPage ) {
 			if ( !pControlChannel ) {
 				return false;
 			}
-			rPage.pControl = readImage( pFile, *pControlChannel, rPage.nFileReadUsec,
+			if ( rPage.pControl.is_null() ) rPage.pControl = readImage( pFile, *pControlChannel, rPage.nFileReadUsec,
 				rPage.nValidationUsec, rPage.nMaterializeUsec );
 		}
 		if ( ( expected_flags & ( uint32_t ) ( T3DRegion::CHANNEL_COLOR ) ) != 0u ) {
@@ -848,7 +852,7 @@ bool T3DRuntimePageStore::loadSnapshot( PreparedPage &rPage ) {
 			if ( !pColorChannel ) {
 				return false;
 			}
-			rPage.pColor = readImage( pFile, *pColorChannel, rPage.nFileReadUsec,
+			if ( rPage.pColor.is_null() ) rPage.pColor = readImage( pFile, *pColorChannel, rPage.nFileReadUsec,
 				rPage.nValidationUsec, rPage.nMaterializeUsec );
 		}
 	}
@@ -858,7 +862,7 @@ bool T3DRuntimePageStore::loadSnapshot( PreparedPage &rPage ) {
 		if ( !pChannel ) {
 			return !bRequired;
 		}
-		rTarget = readBlob( pFile, *pChannel, rPage.nFileReadUsec, rPage.nValidationUsec );
+		if ( rTarget.is_empty() ) rTarget = readBlob( pFile, *pChannel, rPage.nFileReadUsec, rPage.nValidationUsec );
 		return !rTarget.is_empty();
 	};
 	const bool bNeedInstances = ( rPage.consumerMask & RUNTIME_PAGE_CONSUMER_INSTANCE_STORE ) != 0u;
@@ -1134,34 +1138,29 @@ bool T3DRuntimePageStore::writePage(
 	std::memcpy( &header.boundsMinYBits, &min_height, sizeof( uint32_t ) );
 	std::memcpy( &header.boundsMaxYBits, &max_height, sizeof( uint32_t ) );
 
+	t3dstagedPageBuild_t page_build;
 	PackedByteArray file_bytes;
-	file_bytes.resize( TERRAIN3D_RUNTIME_PAGE_HEADER_BYTES );
-	std::memset( file_bytes.ptrw(), 0, TERRAIN3D_RUNTIME_PAGE_HEADER_BYTES );
 	const PackedByteArray instance_page = pRegion->getInstancePage();
-	if ( !addImageChannel( file_bytes, header, TERRAIN3D_RUNTIME_PAGE_HEIGHT, rPayload.height ) ||
-		( rPayload.pControl.is_valid() && !addImageChannel(
-			file_bytes, header, TERRAIN3D_RUNTIME_PAGE_CONTROL, rPayload.pControl ) ) ||
-		( rPayload.pColor.is_valid() && !addImageChannel(
-			file_bytes, header, TERRAIN3D_RUNTIME_PAGE_COLOR, rPayload.pColor ) ) ||
-		!addImageChannel( file_bytes, header, TERRAIN3D_RUNTIME_PAGE_DERIVED, rPayload.pDerived ) ||
-		!addImageChannel( file_bytes, header, TERRAIN3D_RUNTIME_PAGE_MIDDLE_HEIGHT, rPayload.pMiddleHeight ) ||
-		!addImageChannel( file_bytes, header, TERRAIN3D_RUNTIME_PAGE_MIDDLE_COMPOSITE, rPayload.pMiddleComposite ) ||
-		( rPayload.pTerrainShadowMask.is_valid() && !addImageChannel(
-			file_bytes, header, TERRAIN3D_RUNTIME_PAGE_TERRAIN_SHADOW_MASK, rPayload.pTerrainShadowMask ) ) ||
-		( !instance_page.is_empty() && !addBlobChannel(
-			file_bytes, header, TERRAIN3D_RUNTIME_PAGE_STATIC_INSTANCES, instance_page ) ) ||
-		( !rPayload.holeMask.is_empty() && !addBlobChannel( file_bytes, header, TERRAIN3D_RUNTIME_PAGE_HOLE_MASK, rPayload.holeMask ) ) ||
-		( !rPayload.collisionHeight.is_empty() && !addBlobChannel( file_bytes, header, TERRAIN3D_RUNTIME_PAGE_COLLISION_HEIGHT, rPayload.collisionHeight ) ) ||
-		( !rPayload.collisionBounds.is_empty() && !addBlobChannel( file_bytes, header, TERRAIN3D_RUNTIME_PAGE_COLLISION_BOUNDS, rPayload.collisionBounds ) ) ||
-		( !rPayload.navigation.is_empty() && !addBlobChannel( file_bytes, header, TERRAIN3D_RUNTIME_PAGE_NAVIGATION, rPayload.navigation ) ) ||
-		( !rPayload.minMaxHeight.is_empty() && !addBlobChannel( file_bytes, header, TERRAIN3D_RUNTIME_PAGE_MIN_MAX_HEIGHT, rPayload.minMaxHeight ) ) ||
-		( !rPayload.nodeDescriptors.is_empty() && !addBlobChannel( file_bytes, header, TERRAIN3D_RUNTIME_PAGE_NODE_DESCRIPTORS, rPayload.nodeDescriptors ) ) ||
-		( !rPayload.instanceMetadata.is_empty() && !addBlobChannel( file_bytes, header, TERRAIN3D_RUNTIME_PAGE_INSTANCE_METADATA, rPayload.instanceMetadata ) ) ||
-		( !rPayload.lightingReceivers.is_empty() && !addBlobChannel( file_bytes, header, TERRAIN3D_RUNTIME_PAGE_LIGHTING_RECEIVERS, rPayload.lightingReceivers ) ) ||
-		( !rPayload.multimeshFastStart.is_empty() && !addBlobChannel( file_bytes, header, TERRAIN3D_RUNTIME_PAGE_MULTIMESH_FAST_START, rPayload.multimeshFastStart ) ) ) {
+	if ( !stageImageChannel( page_build, header, TERRAIN3D_RUNTIME_PAGE_HEIGHT, rPayload.height ) ||
+		( rPayload.pControl.is_valid() && !stageImageChannel( page_build, header, TERRAIN3D_RUNTIME_PAGE_CONTROL, rPayload.pControl ) ) ||
+		( rPayload.pColor.is_valid() && !stageImageChannel( page_build, header, TERRAIN3D_RUNTIME_PAGE_COLOR, rPayload.pColor ) ) ||
+		!stageImageChannel( page_build, header, TERRAIN3D_RUNTIME_PAGE_DERIVED, rPayload.pDerived ) ||
+		!stageImageChannel( page_build, header, TERRAIN3D_RUNTIME_PAGE_MIDDLE_HEIGHT, rPayload.pMiddleHeight ) ||
+		!stageImageChannel( page_build, header, TERRAIN3D_RUNTIME_PAGE_MIDDLE_COMPOSITE, rPayload.pMiddleComposite ) ||
+		( rPayload.pTerrainShadowMask.is_valid() && !stageImageChannel( page_build, header, TERRAIN3D_RUNTIME_PAGE_TERRAIN_SHADOW_MASK, rPayload.pTerrainShadowMask ) ) ||
+		( !instance_page.is_empty() && !stageBlobChannel( page_build, header, TERRAIN3D_RUNTIME_PAGE_STATIC_INSTANCES, instance_page ) ) ||
+		( !rPayload.holeMask.is_empty() && !stageBlobChannel( page_build, header, TERRAIN3D_RUNTIME_PAGE_HOLE_MASK, rPayload.holeMask ) ) ||
+		( !rPayload.collisionHeight.is_empty() && !stageBlobChannel( page_build, header, TERRAIN3D_RUNTIME_PAGE_COLLISION_HEIGHT, rPayload.collisionHeight ) ) ||
+		( !rPayload.collisionBounds.is_empty() && !stageBlobChannel( page_build, header, TERRAIN3D_RUNTIME_PAGE_COLLISION_BOUNDS, rPayload.collisionBounds ) ) ||
+		( !rPayload.navigation.is_empty() && !stageBlobChannel( page_build, header, TERRAIN3D_RUNTIME_PAGE_NAVIGATION, rPayload.navigation ) ) ||
+		( !rPayload.minMaxHeight.is_empty() && !stageBlobChannel( page_build, header, TERRAIN3D_RUNTIME_PAGE_MIN_MAX_HEIGHT, rPayload.minMaxHeight ) ) ||
+		( !rPayload.nodeDescriptors.is_empty() && !stageBlobChannel( page_build, header, TERRAIN3D_RUNTIME_PAGE_NODE_DESCRIPTORS, rPayload.nodeDescriptors ) ) ||
+		( !rPayload.instanceMetadata.is_empty() && !stageBlobChannel( page_build, header, TERRAIN3D_RUNTIME_PAGE_INSTANCE_METADATA, rPayload.instanceMetadata ) ) ||
+		( !rPayload.lightingReceivers.is_empty() && !stageBlobChannel( page_build, header, TERRAIN3D_RUNTIME_PAGE_LIGHTING_RECEIVERS, rPayload.lightingReceivers ) ) ||
+		( !rPayload.multimeshFastStart.is_empty() && !stageBlobChannel( page_build, header, TERRAIN3D_RUNTIME_PAGE_MULTIMESH_FAST_START, rPayload.multimeshFastStart ) ) ||
+		!finalizePageBytes( page_build, header, file_bytes ) ) {
 		return fail( "runtime page channel serialization failed" );
 	}
-	encodeHeader( file_bytes, header );
 	if ( !terrain3dRuntimePageValidateHeader( header, ( uint64_t ) ( file_bytes.size() ) ) ) {
 		return fail( "generated runtime page header failed validation" );
 	}
@@ -1352,7 +1351,7 @@ void T3DRuntimePageStore::poll( const bool bWait ) {
 		// otherwise a late CPU/GPU/metadata consumer could observe a valid page whose
 		// required payload was intentionally skipped by the original worker read.
 		if ( work_page.bLoaded && work_page.consumerMask != worker_consumer_mask ) {
-			work_page.bLoaded = loadSnapshot( work_page );
+			work_page.bLoaded = loadSnapshot( work_page, true );
 			work_page.bInstanceAttempted = false;
 			work_page.bInstanceLoaded = false;
 			if ( work_page.bLoaded &&
