@@ -111,36 +111,36 @@ static t3dSimdDispatch_t t3dSimdMakeDispatch( const t3dSimdBackend_t backend ) {
 	result.m_backend = backend;
 	switch ( backend ) {
 		case T3D_SIMD_AVX2_F16C:
-			result.m_pfnHalfToFloat = t3dSimdAvx2HalfToFloat;
-			result.m_pfnPackedTransformsToMultimesh = t3dSimdAvx2PackedTransforms;
-			result.m_pfnDerivedNormalsRg8 = t3dSimdAvx2DerivedNormals;
-			result.m_pfnUpdateCumulativeErosion = t3dSimdAvx2UpdateCumulativeErosion;
+			result.m_pPfnHalfToFloat = t3dSimdAvx2HalfToFloat;
+			result.m_pPfnPackedTransformsToMultimesh = t3dSimdAvx2PackedTransforms;
+			result.m_pPfnDerivedNormalsRg8 = t3dSimdAvx2DerivedNormals;
+			result.m_pPfnUpdateCumulativeErosion = t3dSimdAvx2UpdateCumulativeErosion;
 			break;
 		case T3D_SIMD_AVX_F16C:
-			result.m_pfnHalfToFloat = t3dSimdAvxHalfToFloat;
-			result.m_pfnPackedTransformsToMultimesh = t3dSimdAvxPackedTransforms;
-			result.m_pfnDerivedNormalsRg8 = t3dSimdAvxDerivedNormals;
-			result.m_pfnUpdateCumulativeErosion = t3dSimdAvxUpdateCumulativeErosion;
+			result.m_pPfnHalfToFloat = t3dSimdAvxHalfToFloat;
+			result.m_pPfnPackedTransformsToMultimesh = t3dSimdAvxPackedTransforms;
+			result.m_pPfnDerivedNormalsRg8 = t3dSimdAvxDerivedNormals;
+			result.m_pPfnUpdateCumulativeErosion = t3dSimdAvxUpdateCumulativeErosion;
 			break;
 		case T3D_SIMD_SSE2:
-			result.m_pfnHalfToFloat = t3dSimdSse2HalfToFloat;
-			result.m_pfnPackedTransformsToMultimesh = t3dSimdSse2PackedTransforms;
-			result.m_pfnDerivedNormalsRg8 = t3dSimdSse2DerivedNormals;
-			result.m_pfnUpdateCumulativeErosion = t3dSimdSse2UpdateCumulativeErosion;
+			result.m_pPfnHalfToFloat = t3dSimdSse2HalfToFloat;
+			result.m_pPfnPackedTransformsToMultimesh = t3dSimdSse2PackedTransforms;
+			result.m_pPfnDerivedNormalsRg8 = t3dSimdSse2DerivedNormals;
+			result.m_pPfnUpdateCumulativeErosion = t3dSimdSse2UpdateCumulativeErosion;
 			break;
 		case T3D_SIMD_NEON:
-			result.m_pfnHalfToFloat = t3dSimdNeonHalfToFloat;
-			result.m_pfnPackedTransformsToMultimesh = t3dSimdNeonPackedTransforms;
-			result.m_pfnDerivedNormalsRg8 = t3dSimdNeonDerivedNormals;
-			result.m_pfnUpdateCumulativeErosion = t3dSimdNeonUpdateCumulativeErosion;
+			result.m_pPfnHalfToFloat = t3dSimdNeonHalfToFloat;
+			result.m_pPfnPackedTransformsToMultimesh = t3dSimdNeonPackedTransforms;
+			result.m_pPfnDerivedNormalsRg8 = t3dSimdNeonDerivedNormals;
+			result.m_pPfnUpdateCumulativeErosion = t3dSimdNeonUpdateCumulativeErosion;
 			break;
 		case T3D_SIMD_SCALAR:
 		default:
 			result.m_backend = T3D_SIMD_SCALAR;
-			result.m_pfnHalfToFloat = t3dSimdScalarHalfToFloat;
-			result.m_pfnPackedTransformsToMultimesh = t3dSimdScalarPackedTransforms;
-			result.m_pfnDerivedNormalsRg8 = t3dSimdScalarDerivedNormals;
-			result.m_pfnUpdateCumulativeErosion = t3dSimdScalarUpdateCumulativeErosion;
+			result.m_pPfnHalfToFloat = t3dSimdScalarHalfToFloat;
+			result.m_pPfnPackedTransformsToMultimesh = t3dSimdScalarPackedTransforms;
+			result.m_pPfnDerivedNormalsRg8 = t3dSimdScalarDerivedNormals;
+			result.m_pPfnUpdateCumulativeErosion = t3dSimdScalarUpdateCumulativeErosion;
 			break;
 	}
 	return result;
@@ -224,7 +224,7 @@ static void t3dSimdInitialize( void ) {
 
 EA_FORCE_INLINE static void t3dSimdEnsureInitialized( void ) { std::call_once( s_simdInitializeOnce, t3dSimdInitialize ); }
 
-EA_FORCE_INLINE static uint8_t t3dSimdEncodeNormalComponent( const float fValue ) { const float fEncoded = std::max( 0.0f, std::min( TERRAIN3D_BYTE_MAX_FLOAT, ( fValue * 0.5f + 0.5f ) * TERRAIN3D_BYTE_MAX_FLOAT ) ); return ( uint8_t ) ( std::floor( fEncoded + 0.5f ) ); }
+EA_FORCE_INLINE static uint8_t t3dSimdEncodeNormalComponent( const float fValue ) { const float fEncoded = std::max( 0.0f, std::min( s_fByteMaxFloat, ( fValue * 0.5f + 0.5f ) * s_fByteMaxFloat ) ); return ( uint8_t ) ( std::floor( fEncoded + 0.5f ) ); }
 
 void t3dSimdScalarHalfToFloat( const uint16_t *pSource, float *pDestination, const size_t nCount ) {
 	for ( size_t i = 0; i < nCount; ++i ) {
@@ -239,24 +239,24 @@ void t3dSimdScalarPackedTransforms(
 	for ( size_t i = 0; i < nCount; ++i ) {
 		const t3dPackedTransform_t &t = pTransforms[i];
 		float *pOut = pDestination + i * ( size_t ) ( nStride );
-		pOut[0] = t3dHalfDecode( t.basis[0] );
-		pOut[1] = t3dHalfDecode( t.basis[1] );
-		pOut[2] = t3dHalfDecode( t.basis[2] );
-		pOut[3] = t.origin[0];
-		pOut[4] = t3dHalfDecode( t.basis[3] );
-		pOut[5] = t3dHalfDecode( t.basis[4] );
-		pOut[6] = t3dHalfDecode( t.basis[5] );
-		pOut[7] = t.origin[1];
-		pOut[8] = t3dHalfDecode( t.basis[6] );
-		pOut[9] = t3dHalfDecode( t.basis[7] );
-		pOut[10] = t3dHalfDecode( t.basis[8] );
-		pOut[11] = t.origin[2];
+		pOut[0] = t3dHalfDecode( t.m_szBasis[0] );
+		pOut[1] = t3dHalfDecode( t.m_szBasis[1] );
+		pOut[2] = t3dHalfDecode( t.m_szBasis[2] );
+		pOut[3] = t.m_szOrigin[0];
+		pOut[4] = t3dHalfDecode( t.m_szBasis[3] );
+		pOut[5] = t3dHalfDecode( t.m_szBasis[4] );
+		pOut[6] = t3dHalfDecode( t.m_szBasis[5] );
+		pOut[7] = t.m_szOrigin[1];
+		pOut[8] = t3dHalfDecode( t.m_szBasis[6] );
+		pOut[9] = t3dHalfDecode( t.m_szBasis[7] );
+		pOut[10] = t3dHalfDecode( t.m_szBasis[8] );
+		pOut[11] = t.m_szOrigin[2];
 		if ( nStride == 16 ) {
 			const uint32_t color = pColors ? pColors[i] : 0xffffffffu;
-			pOut[12] = ( float ) ( ( color >> 24u ) & 0xffu ) * ( TERRAIN3D_BYTE_INV_MAX_FLOAT );
-			pOut[13] = ( float ) ( ( color >> 16u ) & 0xffu ) * ( TERRAIN3D_BYTE_INV_MAX_FLOAT );
-			pOut[14] = ( float ) ( ( color >> 8u ) & 0xffu ) * ( TERRAIN3D_BYTE_INV_MAX_FLOAT );
-			pOut[15] = ( float ) ( color & 0xffu ) * ( TERRAIN3D_BYTE_INV_MAX_FLOAT );
+			pOut[12] = ( float ) ( ( color >> 24u ) & 0xffu ) * ( s_fByteInvMaxFloat );
+			pOut[13] = ( float ) ( ( color >> 16u ) & 0xffu ) * ( s_fByteInvMaxFloat );
+			pOut[14] = ( float ) ( ( color >> 8u ) & 0xffu ) * ( s_fByteInvMaxFloat );
+			pOut[15] = ( float ) ( color & 0xffu ) * ( s_fByteInvMaxFloat );
 		}
 	}
 }
@@ -325,7 +325,7 @@ void t3dSimdHalfToFloat( const uint16_t *pSource, float *pDestination, const siz
 	if ( !pSource || !pDestination || nCount == 0u ) {
 		return;
 	}
-	t3dSimdGetDispatch().m_pfnHalfToFloat( pSource, pDestination, nCount );
+	t3dSimdGetDispatch().m_pPfnHalfToFloat( pSource, pDestination, nCount );
 }
 
 void t3dSimdPackedTransformsToMultimesh(
@@ -338,7 +338,7 @@ void t3dSimdPackedTransformsToMultimesh(
 	if ( nCount > std::numeric_limits<size_t>::max() / ( size_t ) ( nStride ) ) {
 		return;
 	}
-	t3dSimdGetDispatch().m_pfnPackedTransformsToMultimesh( pTransforms, pColors, nCount, nStride, pDestination );
+	t3dSimdGetDispatch().m_pPfnPackedTransformsToMultimesh( pTransforms, pColors, nCount, nStride, pDestination );
 }
 
 void t3dSimdDerivedNormalsRg8(
@@ -357,7 +357,7 @@ void t3dSimdDerivedNormalsRg8(
 	if ( height + 2u > maximum / stride || height > maximum / width || width * height > maximum / 2u ) {
 		return;
 	}
-	t3dSimdGetDispatch().m_pfnDerivedNormalsRg8( pHalo, nWidth, nHeight, nHaloStride, fSpacing, pDestination );
+	t3dSimdGetDispatch().m_pPfnDerivedNormalsRg8( pHalo, nWidth, nHeight, nHaloStride, fSpacing, pDestination );
 }
 
 void t3dSimdUpdateCumulativeErosion(
@@ -367,7 +367,7 @@ void t3dSimdUpdateCumulativeErosion(
 	if ( !pActive || !pInitialHeight || !pHeight || !pCumulativeErosion || nCount == 0u ) {
 		return;
 	}
-	t3dSimdGetDispatch().m_pfnUpdateCumulativeErosion( pActive, pInitialHeight, pHeight, pCumulativeErosion, nCount );
+	t3dSimdGetDispatch().m_pPfnUpdateCumulativeErosion( pActive, pInitialHeight, pHeight, pCumulativeErosion, nCount );
 }
 
 bool t3dSimdSetBackendOverrideForTests( const t3dSimdBackend_t backend ) {

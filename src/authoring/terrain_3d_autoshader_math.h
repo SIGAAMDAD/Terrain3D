@@ -45,7 +45,7 @@ inline float t3dAutoshaderAngleDistanceDegrees( const float fA, const float fB )
 
 EA_FORCE_INLINE uint32_t t3dAutoshaderHashU32( uint32_t nValue ) { nValue ^= nValue >> 16u; nValue *= 0x7feb352du; nValue ^= nValue >> 15u; nValue *= 0x846ca68bu; nValue ^= nValue >> 16u; return nValue; }
 
-EA_FORCE_INLINE float t3dAutoshaderHash01( const int32_t iX, const int32_t iY, const uint32_t nSeed ) { const uint32_t x = ( uint32_t ) ( iX ); const uint32_t y = ( uint32_t ) ( iY ); return ( float ) ( t3dAutoshaderHashU32( x * TERRAIN3D_HASH_GOLDEN_RATIO_32 ^ y * TERRAIN3D_HASH_MIX_32 ^ nSeed ) ) / TERRAIN3D_UINT32_MAX_FLOAT; }
+EA_FORCE_INLINE float t3dAutoshaderHash01( const int32_t iX, const int32_t iY, const uint32_t nSeed ) { const uint32_t x = ( uint32_t ) ( iX ); const uint32_t y = ( uint32_t ) ( iY ); return ( float ) ( t3dAutoshaderHashU32( x * s_nHashGoldenRatio32 ^ y * s_nHashMix32 ^ nSeed ) ) / s_fUint32MaxFloat; }
 
 inline float t3dAutoshaderValueNoise( const float fX, const float fY, const uint32_t nSeed ) {
 	const int32_t x0 = ( int32_t ) ( std::floor( fX ) );

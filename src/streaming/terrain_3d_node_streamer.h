@@ -46,25 +46,25 @@ typedef enum t3dSpawnActivationResult_e {
 } t3dSpawnActivationResult_t;
 
 typedef struct t3dActiveNode_s {
-	int64_t spawnId = 0;
-	ObjectID objectId;
-	int flags = 0;
+	int64_t m_nSpawnId = 0;
+	ObjectID m_hObjectId;
+	int m_nFlags = 0;
 } t3dActiveNode_t;
 
 typedef struct t3dRegionRuntime_s {
-	Node3D *pRoot = nullptr;
-	eastl::vector<t3dActiveNode_t> nodes;
-	int nextSpawn = 0;
-	int iActiveListPosition = -1;
-	bool bRequestsStarted = false;
-	bool bLoading = false;
-	bool bActive = false;
+	Node3D *m_pRoot = nullptr;
+	eastl::vector<t3dActiveNode_t> m_nodes;
+	int m_nNextSpawn = 0;
+	int m_iActiveListPosition = -1;
+	bool m_bRequestsStarted = false;
+	bool m_bLoading = false;
+	bool m_bActive = false;
 } t3dRegionRuntime_t;
 
 typedef struct t3dMovableNodeRef_s {
-	int iRegionIndex = -1;
-	int64_t spawnId = 0;
-	ObjectID objectId;
+	int m_iRegionIndex = -1;
+	int64_t m_nSpawnId = 0;
+	ObjectID m_hObjectId;
 } t3dMovableNodeRef_t;
 
 class T3DNodeStreamer : public Object {
@@ -85,10 +85,10 @@ private:
 
 	T3DTerrain *m_pTerrain = nullptr;
 	Node3D *m_pHost = nullptr;
-	t3dRegionRuntime_t m_szRegions[TERRAIN3D_MAX_REGION_SLOTS];
-	eastl::bitset<TERRAIN3D_MAX_REGION_SLOTS> m_desiredRegions;
-	uint16_t m_szActiveRegionIndices[TERRAIN3D_MAX_REGION_SLOTS] = {};
-	uint16_t m_szDesiredRegionIndices[TERRAIN3D_MAX_REGION_SLOTS] = {};
+	t3dRegionRuntime_t m_szRegions[s_nMaxRegionSlots];
+	eastl::bitset<s_nMaxRegionSlots> m_desiredRegions;
+	uint16_t m_szActiveRegionIndices[s_nMaxRegionSlots] = {};
+	uint16_t m_szDesiredRegionIndices[s_nMaxRegionSlots] = {};
 	uint16_t m_nDesiredRegionCount = 0u;
 	eastl::vector<t3dMovableNodeRef_t> m_movableNodes;
 	bool m_bEnabled = true;

@@ -86,7 +86,7 @@ int T3DCollision::findBakedRegionCache( const Vector2i &rLocation ) const {
 		return -1;
 	}
 	const int index = m_bakedRegionByMap[( size_t ) ( map_index )];
-	return index >= 0 && index < m_nBakedRegionCacheCount && m_bakedRegionCache[( size_t ) ( index )].location == rLocation ? index : -1;
+	return index >= 0 && index < m_nBakedRegionCacheCount && m_bakedRegionCache[( size_t ) ( index )].m_location == rLocation ? index : -1;
 }
 
 void T3DCollision::clearBakedRegionCache( const bool bReleasePayloads ) {
@@ -97,9 +97,9 @@ void T3DCollision::clearBakedRegionCache( const bool bReleasePayloads ) {
 		}
 	} else {
 		for ( int index = 0; index < m_nBakedRegionCacheCount; ++index ) {
-			m_bakedRegionCache[( size_t ) ( index )].location = V2I_MAX;
-			m_bakedRegionCache[( size_t ) ( index )].nWidth = 0;
-			m_bakedRegionCache[( size_t ) ( index )].nLastUseTick = 0u;
+			m_bakedRegionCache[( size_t ) ( index )].m_location = V2I_MAX;
+			m_bakedRegionCache[( size_t ) ( index )].m_nWidth = 0;
+			m_bakedRegionCache[( size_t ) ( index )].m_nLastUseTick = 0u;
 		}
 	}
 	m_nBakedRegionCacheCount = 0;
@@ -110,22 +110,22 @@ void T3DCollision::eraseBakedRegionCacheAt( const int nIndex ) {
 		return;
 	}
 	t3dCollisionRegionCacheEntry_t &dead = m_bakedRegionCache[( size_t ) ( nIndex )];
-	const int dead_map_index = T3DData::getRegionMapIndex( dead.location );
+	const int dead_map_index = T3DData::getRegionMapIndex( dead.m_location );
 	if ( dead_map_index >= 0 ) {
 		m_bakedRegionByMap[( size_t ) ( dead_map_index )] = -1;
 	}
 	const int last = m_nBakedRegionCacheCount - 1;
 	if ( nIndex != last ) {
 		std::swap( m_bakedRegionCache[( size_t ) ( nIndex )], m_bakedRegionCache[( size_t ) ( last )] );
-		const int moved_map_index = T3DData::getRegionMapIndex( m_bakedRegionCache[( size_t ) ( nIndex )].location );
+		const int moved_map_index = T3DData::getRegionMapIndex( m_bakedRegionCache[( size_t ) ( nIndex )].m_location );
 		if ( moved_map_index >= 0 ) {
 			m_bakedRegionByMap[( size_t ) ( moved_map_index )] = ( int16_t ) nIndex;
 		}
 	}
 	// The now-inactive tail retains its height allocation for the next cache fill.
-	m_bakedRegionCache[( size_t ) ( last )].location = V2I_MAX;
-	m_bakedRegionCache[( size_t ) ( last )].nWidth = 0;
-	m_bakedRegionCache[( size_t ) ( last )].nLastUseTick = 0u;
+	m_bakedRegionCache[( size_t ) ( last )].m_location = V2I_MAX;
+	m_bakedRegionCache[( size_t ) ( last )].m_nWidth = 0;
+	m_bakedRegionCache[( size_t ) ( last )].m_nLastUseTick = 0u;
 	--m_nBakedRegionCacheCount;
 }
 
@@ -146,10 +146,10 @@ void T3DCollision::refreshBakedRegionCache( const Vector2i &rCenter ) {
 	const Vector2i max_region = V2I_DIVIDE_FLOOR( rCenter + V2I( margin ), region_size );
 
 	for ( int index = m_nBakedRegionCacheCount - 1; index >= 0; --index ) {
-		const Vector2i location = m_bakedRegionCache[( size_t ) ( index )].location;
+		const Vector2i location = m_bakedRegionCache[( size_t ) ( index )].m_location;
 		const T3DRegion *const pRegion = pData->getRegionPtr( location );
-		const bool outside = location.x < min_region.x || location.x > max_region.x ||
-			location.y < min_region.y || location.y > max_region.y;
+		const bool outside = location.m_nX < min_region.x || location.m_nX > max_region.x ||
+			location.m_nY < min_region.y || location.m_nY > max_region.y;
 		if ( outside || !pRegion || pRegion->isDeleted() || pRegion->isModified() ) {
 			eraseBakedRegionCacheAt( index );
 		}
@@ -164,11 +164,11 @@ void T3DCollision::refreshBakedRegionCache( const Vector2i &rCenter ) {
 			}
 			const int cached_index = findBakedRegionCache( location );
 			if ( cached_index >= 0 ) {
-				m_bakedRegionCache[( size_t ) ( cached_index )].nLastUseTick = m_nBakedRegionCacheTick;
+				m_bakedRegionCache[( size_t ) ( cached_index )].m_nLastUseTick = m_nBakedRegionCacheTick;
 				continue;
 			}
-			if ( m_nBakedRegionCacheCount >= TERRAIN3D_COLLISION_BAKED_CACHE_CAPACITY ) {
-				LOG( ERROR, "Baked collision region cache exceeded fixed geometric capacity" );
+			if ( m_nBakedRegionCacheCount >= s_nBakedCacheCapacity ) {
+				LOG( ERROR, "Baked collision region cache exceeded s_nFixed geometric capacity" );
 				return;
 			}
 			pData->requestCookedCollisionTile( location, 1u );
@@ -183,14 +183,14 @@ void T3DCollision::refreshBakedRegionCache( const Vector2i &rCenter ) {
 			float min_height = 0.0f;
 			float max_height = 0.0f;
 			int bounds_width = 0;
-			if ( !T3DRuntimeBakeCodec::decodeCollisionHeight( height_blob, entry.heights, width ) ||
+			if ( !T3DRuntimeBakeCodec::decodeCollisionHeight( height_blob, entry.m_heights, width ) ||
 				!T3DRuntimeBakeCodec::decodeCollisionBounds( bounds_blob, min_height, max_height, bounds_width ) ||
 				width != region_size + 1 || bounds_width != width ) {
 				continue;
 			}
-			entry.location = location;
-			entry.nWidth = width;
-			entry.nLastUseTick = m_nBakedRegionCacheTick;
+			entry.m_location = location;
+			entry.m_nWidth = width;
+			entry.m_nLastUseTick = m_nBakedRegionCacheTick;
 			const int map_index = T3DData::getRegionMapIndex( location );
 			if ( map_index >= 0 ) {
 				m_bakedRegionByMap[( size_t ) ( map_index )] = ( int16_t ) m_nBakedRegionCacheCount;
@@ -211,7 +211,7 @@ bool T3DCollision::copyBakedTile(
 	const int region_size = m_pTerrain->getRegionSize();
 	const int width = nSize + 1;
 	const int sample_count = width * width;
-	if ( width <= 0 || width > TERRAIN3D_MAX_COLLISION_AXIS_SAMPLES ) {
+	if ( width <= 0 || width > s_nMaxCollisionAxisSamples ) {
 		return false;
 	}
 	if ( rHeights.size() != sample_count ) {
@@ -238,14 +238,14 @@ bool T3DCollision::copyBakedTile(
 				return false;
 			}
 			t3dCollisionRegionCacheEntry_t &entry = m_bakedRegionCache[( size_t ) ( cache_index )];
-			entry.nLastUseTick = m_nBakedRegionCacheTick;
+			entry.m_nLastUseTick = m_nBakedRegionCacheTick;
 			const int local_x = world_x - region_location.x * region_size;
 			const int local_z = world_z - region_location.y * region_size;
-			if ( local_x < 0 || local_x >= entry.nWidth || local_z < 0 || local_z >= entry.nWidth ) {
+			if ( local_x < 0 || local_x >= entry.m_nWidth || local_z < 0 || local_z >= entry.m_nWidth ) {
 				++m_nBakedCacheMissesLastUpdate;
 				return false;
 			}
-			const float height = entry.heights[local_x * entry.nWidth + ( entry.nWidth - 1 - local_z )];
+			const float height = entry.m_heights[local_x * entry.m_nWidth + ( entry.m_nWidth - 1 - local_z )];
 			const int destination = x * width + ( width - 1 - z );
 			output[destination] = ( real_t ) ( height );
 			if ( !std::isnan( height ) ) {
@@ -258,13 +258,13 @@ bool T3DCollision::copyBakedTile(
 		return false;
 	}
 
-	t3dCollisionShapeData_t &data = rRecord.data;
-	data.nWidth = width;
-	data.depth = width;
-	data.transform = Transform3D( Basis( V3_UP, Math_PI * 0.5f ), v2iv3( rPosition + V2I( nSize / 2 ) ) );
-	data.fMinHeight = min_height;
-	data.fMaxHeight = max_height;
-	data.bValid = true;
+	t3dCollisionShapeData_t &data = rRecord.m_data;
+	data.m_nWidth = width;
+	data.m_nDepth = width;
+	data.m_transform = Transform3D( Basis( V3_UP, Math_PI * 0.5f ), v2iv3( rPosition + V2I( nSize / 2 ) ) );
+	data.m_fMinHeight = min_height;
+	data.m_fMaxHeight = max_height;
+	data.m_bValid = true;
 	++m_nBakedCacheHitsLastUpdate;
 	return true;
 }
@@ -282,7 +282,7 @@ bool T3DCollision::getShapeData(
 	if ( !m_collisionSurfaceBuilder.build(
 		m_pTerrain->getData(), material, rPosition, nSize,
 		m_collisionSurfaceScratch, min_height, max_height ) ) {
-		rRecord.data.bValid = false;
+		rRecord.m_data.m_bValid = false;
 		return false;
 	}
 	if ( rHeights.size() != m_collisionSurfaceScratch.size() ) {
@@ -296,16 +296,16 @@ bool T3DCollision::getShapeData(
 		has_solid_sample = has_solid_sample || !std::isnan( input[index] );
 	}
 	if ( !has_solid_sample ) {
-		rRecord.data.bValid = false;
+		rRecord.m_data.m_bValid = false;
 		return false;
 	}
 	const int width = nSize + 1;
-	rRecord.data.nWidth = width;
-	rRecord.data.depth = width;
-	rRecord.data.transform = Transform3D( Basis( V3_UP, Math_PI * 0.5f ), v2iv3( rPosition + V2I( nSize / 2 ) ) );
-	rRecord.data.fMinHeight = min_height;
-	rRecord.data.fMaxHeight = max_height;
-	rRecord.data.bValid = true;
+	rRecord.m_data.m_nWidth = width;
+	rRecord.m_data.m_nDepth = width;
+	rRecord.m_data.m_transform = Transform3D( Basis( V3_UP, Math_PI * 0.5f ), v2iv3( rPosition + V2I( nSize / 2 ) ) );
+	rRecord.m_data.m_fMinHeight = min_height;
+	rRecord.m_data.m_fMaxHeight = max_height;
+	rRecord.m_data.m_bValid = true;
 	return true;
 }
 
@@ -314,18 +314,18 @@ void T3DCollision::shapeSetDisabled( const int nShapeId, const bool bDisabled ) 
 		return;
 	}
 	t3dCollisionShapeRecord_t &record = m_shapeRecords[( size_t ) ( nShapeId )];
-	if ( record.bDisabled == bDisabled ) {
+	if ( record.m_bDisabled == bDisabled ) {
 		return;
 	}
-	record.bDisabled = bDisabled;
+	record.m_bDisabled = bDisabled;
 	if ( usesEditorBackend() ) {
-		if ( !record.pNode ) {
+		if ( !record.m_pNode ) {
 			return;
 		}
-		record.pNode->set_disabled( bDisabled );
-		record.pNode->set_visible( !bDisabled );
-	} else if ( m_staticBodyRid.is_valid() ) {
-		PS->body_set_shape_disabled( m_staticBodyRid, nShapeId, bDisabled );
+		record.m_pNode->set_disabled( bDisabled );
+		record.m_pNode->set_visible( !bDisabled );
+	} else if ( m_hStaticBodyRid.is_valid() ) {
+		PS->body_set_shape_disabled( m_hStaticBodyRid, nShapeId, bDisabled );
 	}
 }
 
@@ -334,16 +334,16 @@ void T3DCollision::shapeSetTransform( const int nShapeId, const Transform3D &rXf
 		return;
 	}
 	t3dCollisionShapeRecord_t &record = m_shapeRecords[( size_t ) ( nShapeId )];
-	if ( record.transform.is_equal_approx( rXform ) ) {
+	if ( record.m_transform.is_equal_approx( rXform ) ) {
 		return;
 	}
-	record.transform = rXform;
+	record.m_transform = rXform;
 	if ( usesEditorBackend() ) {
-		if ( record.pNode ) {
-			record.pNode->set_transform( rXform );
+		if ( record.m_pNode ) {
+			record.m_pNode->set_transform( rXform );
 		}
-	} else if ( m_staticBodyRid.is_valid() ) {
-		PS->body_set_shape_transform( m_staticBodyRid, nShapeId, rXform );
+	} else if ( m_hStaticBodyRid.is_valid() ) {
+		PS->body_set_shape_transform( m_hStaticBodyRid, nShapeId, rXform );
 	}
 }
 
@@ -351,7 +351,7 @@ Vector3 T3DCollision::shapeGetPosition( const int nShapeId ) const {
 	if ( nShapeId < 0 || nShapeId >= ( int ) ( m_shapeRecords.size() ) ) {
 		return V3_MAX;
 	}
-	return m_shapeRecords[( size_t ) ( nShapeId )].transform.origin;
+	return m_shapeRecords[( size_t ) ( nShapeId )].m_transform.origin;
 }
 
 void T3DCollision::shapeSetData( const int nShapeId, const PackedRealArray &rHeights ) {
@@ -359,25 +359,25 @@ void T3DCollision::shapeSetData( const int nShapeId, const PackedRealArray &rHei
 		return;
 	}
 	t3dCollisionShapeRecord_t &record = m_shapeRecords[( size_t ) ( nShapeId )];
-	if ( !record.data.bValid ) {
+	if ( !record.m_data.m_bValid ) {
 		return;
 	}
 	if ( usesEditorBackend() ) {
-		if ( !record.pNode ) {
+		if ( !record.m_pNode ) {
 			return;
 		}
-		Ref<HeightMapShape3D> pHeightShape = record.pNode->get_shape();
+		Ref<HeightMapShape3D> pHeightShape = record.m_pNode->get_shape();
 		if ( pHeightShape.is_valid() ) {
 			pHeightShape->set_map_data( rHeights );
 		}
-	} else if ( record.rid.is_valid() ) {
+	} else if ( record.m_hRid.is_valid() ) {
 		Dictionary upload_data;
-		upload_data["width"] = record.data.nWidth;
-		upload_data["depth"] = record.data.depth;
+		upload_data["width"] = record.m_data.m_nWidth;
+		upload_data["depth"] = record.m_data.m_nDepth;
 		upload_data["heights"] = rHeights;
-		upload_data["min_height"] = record.data.fMinHeight;
-		upload_data["max_height"] = record.data.fMaxHeight;
-		PS->shape_set_data( record.rid, upload_data );
+		upload_data["min_height"] = record.m_data.m_fMinHeight;
+		upload_data["max_height"] = record.m_data.m_fMaxHeight;
+		PS->shape_set_data( record.m_hRid, upload_data );
 	}
 }
 
@@ -386,8 +386,8 @@ void T3DCollision::deactivateShape( const int nShapeId ) {
 		return;
 	}
 	t3dCollisionShapeRecord_t &record = m_shapeRecords[( size_t ) ( nShapeId )];
-	record.gridPosition = V2I_MAX;
-	record.data.bValid = false;
+	record.m_gridPosition = V2I_MAX;
+	record.m_data.m_bValid = false;
 	shapeSetDisabled( nShapeId, true );
 	shapeSetTransform( nShapeId, Transform3D( Basis(), V3_MAX ) );
 }
@@ -395,26 +395,26 @@ void T3DCollision::deactivateShape( const int nShapeId ) {
 void T3DCollision::reloadPhysicsMaterial( void ) {
 	if ( usesEditorBackend() ) {
 		if ( m_pStaticBody ) {
-			m_pStaticBody->set_physics_material_override( m_pPhysicsMaterial );
+			m_pStaticBody->set_physics_material_override( m_physicsMaterial );
 		}
 	} else {
-		if ( m_staticBodyRid.is_valid() ) {
-			if ( m_pPhysicsMaterial.is_null() ) {
-				PS->body_set_param( m_staticBodyRid, PhysicsServer3D::BODY_PARAM_BOUNCE, 0.f );
-				PS->body_set_param( m_staticBodyRid, PhysicsServer3D::BODY_PARAM_FRICTION, 1.f );
+		if ( m_hStaticBodyRid.is_valid() ) {
+			if ( m_physicsMaterial.is_null() ) {
+				PS->body_set_param( m_hStaticBodyRid, PhysicsServer3D::BODY_PARAM_BOUNCE, 0.f );
+				PS->body_set_param( m_hStaticBodyRid, PhysicsServer3D::BODY_PARAM_FRICTION, 1.f );
 			} else {
 				const real_t fComputedBounce =
-					m_pPhysicsMaterial->get_bounce() * ( m_pPhysicsMaterial->is_absorbent() ? -1.f : 1.f );
+					m_physicsMaterial->get_bounce() * ( m_physicsMaterial->is_absorbent() ? -1.f : 1.f );
 				const real_t fComputedFriction =
-					m_pPhysicsMaterial->get_friction() * ( m_pPhysicsMaterial->is_rough() ? -1.f : 1.f );
-				PS->body_set_param( m_staticBodyRid, PhysicsServer3D::BODY_PARAM_BOUNCE, fComputedBounce );
-				PS->body_set_param( m_staticBodyRid, PhysicsServer3D::BODY_PARAM_FRICTION, fComputedFriction );
+					m_physicsMaterial->get_friction() * ( m_physicsMaterial->is_rough() ? -1.f : 1.f );
+				PS->body_set_param( m_hStaticBodyRid, PhysicsServer3D::BODY_PARAM_BOUNCE, fComputedBounce );
+				PS->body_set_param( m_hStaticBodyRid, PhysicsServer3D::BODY_PARAM_FRICTION, fComputedFriction );
 			}
 		}
 	}
-	if ( m_pPhysicsMaterial.is_valid() ) {
-		LOG( DEBUG, "t3dSetting_t PhysicsMaterial bounce: ", m_pPhysicsMaterial->get_bounce(),
-			", friction: ", m_pPhysicsMaterial->get_friction() );
+	if ( m_physicsMaterial.is_valid() ) {
+		LOG( DEBUG, "t3dSetting_t PhysicsMaterial bounce: ", m_physicsMaterial->get_bounce(),
+			", friction: ", m_physicsMaterial->get_friction() );
 	}
 }
 
@@ -464,13 +464,13 @@ void T3DCollision::updateFullShape( const int nShapeId, const Vector2i &rRegionL
 				has_solid_sample = has_solid_sample || !std::isnan( pRead[index] );
 			}
 			if ( has_solid_sample ) {
-				record.data.nWidth = baked_width;
-				record.data.depth = baked_width;
-				record.data.transform = Transform3D( Basis( V3_UP, Math_PI * 0.5f ),
+				record.m_data.m_nWidth = baked_width;
+				record.m_data.m_nDepth = baked_width;
+				record.m_data.m_transform = Transform3D( Basis( V3_UP, Math_PI * 0.5f ),
 					v2iv3( shape_position + V2I( region_size / 2 ) ) );
-				record.data.fMinHeight = min_height;
-				record.data.fMaxHeight = max_height;
-				record.data.bValid = true;
+				record.m_data.m_fMinHeight = min_height;
+				record.m_data.m_fMaxHeight = max_height;
+				record.m_data.m_bValid = true;
 				shape_ready = true;
 			}
 		}
@@ -487,9 +487,9 @@ void T3DCollision::updateFullShape( const int nShapeId, const Vector2i &rRegionL
 		return;
 	}
 
-	Transform3D transform = record.data.transform;
+	Transform3D transform = record.m_data.m_transform;
 	transform.scale( Vector3( m_pTerrain->getVertexSpacing(), 1.0f, m_pTerrain->getVertexSpacing() ) );
-	record.gridPosition = shape_position;
+	record.m_gridPosition = shape_position;
 	shapeSetTransform( nShapeId, transform );
 	const uint64_t upload_started = Time::get_singleton()->get_ticks_usec();
 	shapeSetData( nShapeId, m_fullHeightScratch );
@@ -539,7 +539,7 @@ void T3DCollision::processRegionMapUpdate( void ) {
 	}
 
 	if ( usesDynamicShapePool() ) {
-		// Dynamic collision owns a fixed-size local shape pool. A region layout
+		// Dynamic collision owns a s_nFixed-size local shape pool. A region layout
 		// change only requires repopulating that pool.
 		update( V2I_MAX, true );
 	} else {
@@ -608,13 +608,13 @@ void T3DCollision::build( void ) {
 		m_pStaticBody->set_collision_priority( m_fPriority );
 	} else {
 		LOG( INFO, "Building collision with Physics Server" );
-		m_staticBodyRid = PS->body_create();
-		PS->body_set_mode( m_staticBodyRid, PhysicsServer3D::BODY_MODE_STATIC );
-		PS->body_set_space( m_staticBodyRid, m_pTerrain->get_world_3d()->get_space() );
-		PS->body_attach_object_instance_id( m_staticBodyRid, m_pTerrain->get_instance_id() );
-		PS->body_set_collision_mask( m_staticBodyRid, m_nMask );
-		PS->body_set_collision_layer( m_staticBodyRid, m_layer );
-		PS->body_set_collision_priority( m_staticBodyRid, m_fPriority );
+		m_hStaticBodyRid = PS->body_create();
+		PS->body_set_mode( m_hStaticBodyRid, PhysicsServer3D::BODY_MODE_STATIC );
+		PS->body_set_space( m_hStaticBodyRid, m_pTerrain->get_world_3d()->get_space() );
+		PS->body_attach_object_instance_id( m_hStaticBodyRid, m_pTerrain->get_instance_id() );
+		PS->body_set_collision_mask( m_hStaticBodyRid, m_nMask );
+		PS->body_set_collision_layer( m_hStaticBodyRid, m_layer );
+		PS->body_set_collision_priority( m_hStaticBodyRid, m_fPriority );
 	}
 	reloadPhysicsMaterial();
 
@@ -633,43 +633,43 @@ void T3DCollision::build( void ) {
 		shape_count = m_pTerrain->getData()->getRegionSlots().size();
 		hshape_size = m_pTerrain->getRegionSize() + 1;
 	}
-	if ( shape_count < 0 || shape_count > TERRAIN3D_MAX_REGION_SLOTS ) { LOG( ERROR, "Collision shape count exceeds fixed scratch capacity: ", shape_count ); return; }
+	if ( shape_count < 0 || shape_count > s_nMaxRegionSlots ) { LOG( ERROR, "Collision shape count exceeds s_nFixed scratch capacity: ", shape_count ); return; }
 	m_shapeRecords.resize( ( size_t ) shape_count ); m_nInactiveShapeCount = 0; std::fill_n( m_gridScratch.begin(), shape_count, -1 );
 	LOG( DEBUG, "Shape count: ", shape_count );
 	LOG( DEBUG, "Shape size: ", m_nShapeSize, ", hshape_size: ", hshape_size );
 	const Transform3D inactiveTransform( Basis(), V3_MAX );
 	for ( int i = 0; i < shape_count; ++i ) {
 		t3dCollisionShapeRecord_t &record = m_shapeRecords[( size_t ) ( i )];
-		record.transform = inactiveTransform;
-		record.bDisabled = true;
-		record.gridPosition = V2I_MAX;
-		record.data.nWidth = hshape_size;
-		record.data.depth = hshape_size;
+		record.m_transform = inactiveTransform;
+		record.m_bDisabled = true;
+		record.m_gridPosition = V2I_MAX;
+		record.m_data.m_nWidth = hshape_size;
+		record.m_data.m_nDepth = hshape_size;
 		if ( usesDynamicShapePool() ) {
-			for ( PackedRealArray &height_buffer : record.szDynamicHeightBuffers ) {
+			for ( PackedRealArray &height_buffer : record.m_dynamicHeightBuffers ) {
 				height_buffer.resize( hshape_size * hshape_size );
 			}
-			record.uploadedHeightBuffer = 0;
-			record.pendingHeightBuffer = 1;
+			record.m_nUploadedHeightBuffer = 0;
+			record.m_nPendingHeightBuffer = 1;
 		}
 		if ( usesEditorBackend() ) {
-			record.pNode = memnew( CollisionShape3D );
-			record.pNode->set_name( "CollisionShape3D" );
-			record.pNode->set_disabled( true );
-			record.pNode->set_visible( false );
-			record.pNode->set_enable_debug_fill( false );
+			record.m_pNode = memnew( CollisionShape3D );
+			record.m_pNode->set_name( "CollisionShape3D" );
+			record.m_pNode->set_disabled( true );
+			record.m_pNode->set_visible( false );
+			record.m_pNode->set_enable_debug_fill( false );
 			Ref<HeightMapShape3D> pHeightShape;
 			pHeightShape.instantiate();
 			pHeightShape->set_map_width( hshape_size );
 			pHeightShape->set_map_depth( hshape_size );
-			record.pNode->set_shape( pHeightShape );
-			m_pStaticBody->add_child( record.pNode, true );
-			record.pNode->set_owner( m_pStaticBody );
-			record.pNode->set_transform( inactiveTransform );
+			record.m_pNode->set_shape( pHeightShape );
+			m_pStaticBody->add_child( record.m_pNode, true );
+			record.m_pNode->set_owner( m_pStaticBody );
+			record.m_pNode->set_transform( inactiveTransform );
 		} else {
-			record.rid = PS->heightmap_shape_create();
-			PS->body_add_shape( m_staticBodyRid, record.rid, inactiveTransform, true );
-			LOG( DEBUG, "Adding shape: ", i, ", rid: ", record.rid.get_id() );
+			record.m_hRid = PS->heightmap_shape_create();
+			PS->body_add_shape( m_hStaticBodyRid, record.m_hRid, inactiveTransform, true );
+			LOG( DEBUG, "Adding shape: ", i, ", rid: ", record.m_hRid.get_id() );
 		}
 	}
 
@@ -717,7 +717,7 @@ void T3DCollision::update( const Vector2i &rRegionLoc, const bool bRebuild ) {
 			build();
 			return;
 		}
-		if ( grid_count > TERRAIN3D_MAX_REGION_SLOTS ) { LOG( ERROR, "Collision grid exceeds fixed scratch capacity: ", grid_count ); return; }
+		if ( grid_count > s_nMaxRegionSlots ) { LOG( ERROR, "Collision grid exceeds s_nFixed scratch capacity: ", grid_count ); return; }
 		std::fill_n( m_gridScratch.begin(), grid_count, -1 ); m_nInactiveShapeCount = 0;
 
 		const Vector2i grid_offset = -V2I( grid_width / 2 );
@@ -729,17 +729,17 @@ void T3DCollision::update( const Vector2i &rRegionLoc, const bool bRebuild ) {
 		// be reassigned. No PhysicsServer state reads and no per-update arrays.
 		for ( int shape_id = 0; shape_id < ( int ) ( m_shapeRecords.size() ); ++shape_id ) {
 			t3dCollisionShapeRecord_t &record = m_shapeRecords[( size_t ) ( shape_id )];
-			if ( bRebuild || record.gridPosition == V2I_MAX ) {
+			if ( bRebuild || record.m_gridPosition == V2I_MAX ) {
 				deactivateShape( shape_id );
 				++m_nShapesDeactivatedLastUpdate;
 				m_inactiveShapeIds[m_nInactiveShapeCount++] = shape_id;
 				continue;
 			}
 
-			const Vector2i shape_center = record.gridPosition + shape_offset;
+			const Vector2i shape_center = record.m_gridPosition + shape_offset;
 			if ( shape_center.distance_squared_to( snapped_position ) <= radius_squared &&
-				shapeAllowsCollision( record.gridPosition, m_nShapeSize ) ) {
-				const Vector2i gridLocation = ( record.gridPosition - grid_corner ) / m_nShapeSize;
+				shapeAllowsCollision( record.m_gridPosition, m_nShapeSize ) ) {
+				const Vector2i gridLocation = ( record.m_gridPosition - grid_corner ) / m_nShapeSize;
 				const int grid_index = gridLocation.y * grid_width + gridLocation.x;
 				if ( grid_index >= 0 && grid_index < grid_count && m_gridScratch[( size_t ) ( grid_index )] < 0 ) {
 					m_gridScratch[( size_t ) ( grid_index )] = shape_id;
@@ -774,8 +774,8 @@ void T3DCollision::update( const Vector2i &rRegionLoc, const bool bRebuild ) {
 
 			const int shape_id = m_inactiveShapeIds[m_nInactiveShapeCount - 1];
 			t3dCollisionShapeRecord_t &record = m_shapeRecords[( size_t ) ( shape_id )];
-			record.pendingHeightBuffer = ( uint8_t ) ( record.uploadedHeightBuffer ^ 1u );
-			PackedRealArray &height_buffer = record.szDynamicHeightBuffers[record.pendingHeightBuffer];
+			record.m_nPendingHeightBuffer = ( uint8_t ) ( record.m_nUploadedHeightBuffer ^ 1u );
+			PackedRealArray &height_buffer = record.m_dynamicHeightBuffers[record.m_nPendingHeightBuffer];
 			const uint64_t preparation_started = Time::get_singleton()->get_ticks_usec();
 			bool shape_ready = copyBakedTile( shape_position, m_nShapeSize, record, height_buffer );
 			if ( !shape_ready ) {
@@ -787,14 +787,14 @@ void T3DCollision::update( const Vector2i &rRegionLoc, const bool bRebuild ) {
 			}
 			--m_nInactiveShapeCount;
 
-			Transform3D transform = record.data.transform;
+			Transform3D transform = record.m_data.m_transform;
 			transform.scale( Vector3( fSpacing, 1.0f, fSpacing ) );
-			record.gridPosition = shape_position;
+			record.m_gridPosition = shape_position;
 			shapeSetTransform( shape_id, transform );
 			const uint64_t upload_started = Time::get_singleton()->get_ticks_usec();
 			shapeSetData( shape_id, height_buffer );
 			m_nUploadUsecLast += Time::get_singleton()->get_ticks_usec() - upload_started;
-			record.uploadedHeightBuffer = record.pendingHeightBuffer;
+			record.m_nUploadedHeightBuffer = record.m_nPendingHeightBuffer;
 			shapeSetDisabled( shape_id, false );
 			m_gridScratch[( size_t ) ( grid_index )] = shape_id;
 			++m_nShapesRebuiltLastUpdate;
@@ -858,24 +858,24 @@ void T3DCollision::destroy( void ) {
 	}
 
 	for ( t3dCollisionShapeRecord_t &record : m_shapeRecords ) {
-		if ( record.pNode ) {
-			LOG( DEBUG, "Freeing CollisionShape3D ", record.pNode->get_name() );
-			removeFromTree( record.pNode );
-			memdelete( record.pNode );
-			record.pNode = nullptr;
+		if ( record.m_pNode ) {
+			LOG( DEBUG, "Freeing CollisionShape3D ", record.m_pNode->get_name() );
+			removeFromTree( record.m_pNode );
+			memdelete( record.m_pNode );
+			record.m_pNode = nullptr;
 		}
-		if ( record.rid.is_valid() ) {
-			LOG( DEBUG, "Freeing CollisionShape RID ", record.rid );
-			PS->free_rid( record.rid );
-			record.rid = RID();
+		if ( record.m_hRid.is_valid() ) {
+			LOG( DEBUG, "Freeing CollisionShape RID ", record.m_hRid );
+			PS->free_rid( record.m_hRid );
+			record.m_hRid = RID();
 		}
 	}
 	m_shapeRecords.clear();
 
-	if ( m_staticBodyRid.is_valid() ) {
+	if ( m_hStaticBodyRid.is_valid() ) {
 		LOG( DEBUG, "Freeing StaticBody RID" );
-		PS->free_rid( m_staticBodyRid );
-		m_staticBodyRid = RID();
+		PS->free_rid( m_hStaticBodyRid );
+		m_hStaticBodyRid = RID();
 	}
 	if ( m_pStaticBody ) {
 		LOG( DEBUG, "Freeing StaticBody3D" );
@@ -931,8 +931,8 @@ void T3DCollision::setLayer( const uint32_t nLayers ) {
 			m_pStaticBody->set_collision_layer( m_layer );
 		}
 	} else {
-		if ( m_staticBodyRid.is_valid() ) {
-			PS->body_set_collision_layer( m_staticBodyRid, m_layer );
+		if ( m_hStaticBodyRid.is_valid() ) {
+			PS->body_set_collision_layer( m_hStaticBodyRid, m_layer );
 		}
 	}
 }
@@ -945,8 +945,8 @@ void T3DCollision::setMask( const uint32_t nMask ) {
 			m_pStaticBody->set_collision_mask( m_nMask );
 		}
 	} else {
-		if ( m_staticBodyRid.is_valid() ) {
-			PS->body_set_collision_mask( m_staticBodyRid, m_nMask );
+		if ( m_hStaticBodyRid.is_valid() ) {
+			PS->body_set_collision_mask( m_hStaticBodyRid, m_nMask );
 		}
 	}
 }
@@ -959,35 +959,35 @@ void T3DCollision::setPriority( const real_t fPriority ) {
 			m_pStaticBody->set_collision_priority( m_fPriority );
 		}
 	} else {
-		if ( m_staticBodyRid.is_valid() ) {
-			PS->body_set_collision_priority( m_staticBodyRid, m_fPriority );
+		if ( m_hStaticBodyRid.is_valid() ) {
+			PS->body_set_collision_priority( m_hStaticBodyRid, m_fPriority );
 		}
 	}
 }
 
 void T3DCollision::setPhysicsMaterial( const Ref<PhysicsMaterial> &rMat ) {
-	if ( m_pPhysicsMaterial == rMat ) {
+	if ( m_physicsMaterial == rMat ) {
 		return;
 	}
-	if ( m_pPhysicsMaterial.is_valid() ) {
-		if ( m_pPhysicsMaterial->is_connected( "changed",
+	if ( m_physicsMaterial.is_valid() ) {
+		if ( m_physicsMaterial->is_connected( "changed",
 											callable_mp( this, &T3DCollision::reloadPhysicsMaterial ) ) ) {
-			LOG( DEBUG, "Disconnecting _physics_material::changed signal to _reload_physics_material()" );
-			m_pPhysicsMaterial->disconnect( "changed", callable_mp( this, &T3DCollision::reloadPhysicsMaterial ) );
+			LOG( DEBUG, "Disconnecting _physics_material::m_bChanged signal to _reload_physics_material()" );
+			m_physicsMaterial->disconnect( "changed", callable_mp( this, &T3DCollision::reloadPhysicsMaterial ) );
 		}
 	}
-	m_pPhysicsMaterial = rMat;
+	m_physicsMaterial = rMat;
 	LOG( INFO, "t3dSetting_t physics material: ", rMat );
-	if ( m_pPhysicsMaterial.is_valid() ) {
-		LOG( DEBUG, "Connecting _physics_material::changed signal to _reload_physics_material()" );
-		m_pPhysicsMaterial->connect( "changed", callable_mp( this, &T3DCollision::reloadPhysicsMaterial ) );
+	if ( m_physicsMaterial.is_valid() ) {
+		LOG( DEBUG, "Connecting _physics_material::m_bChanged signal to _reload_physics_material()" );
+		m_physicsMaterial->connect( "changed", callable_mp( this, &T3DCollision::reloadPhysicsMaterial ) );
 	}
 	reloadPhysicsMaterial();
 }
 
 RID T3DCollision::getRid( void ) const {
 	if ( !usesEditorBackend() ) {
-		return m_staticBodyRid;
+		return m_hStaticBodyRid;
 	} else {
 		if ( m_pStaticBody ) {
 			return m_pStaticBody->get_rid();
@@ -1007,11 +1007,11 @@ size_t T3DCollision::getRetainedBufferBytes( void ) const {
 	bytes += m_collisionSurfaceBuilder.getRetainedBufferBytes();
 	bytes += sizeof( m_bakedRegionCache ) + sizeof( m_bakedRegionByMap );
 	for ( const t3dCollisionRegionCacheEntry_t &entry : m_bakedRegionCache ) {
-		bytes += ( size_t ) ( entry.heights.size() ) * sizeof( float );
+		bytes += ( size_t ) ( entry.m_heights.size() ) * sizeof( float );
 	}
 	for ( const t3dCollisionShapeRecord_t &record : m_shapeRecords ) {
-		bytes += ( size_t ) ( record.szDynamicHeightBuffers[0].size() ) * sizeof( real_t );
-		bytes += ( size_t ) ( record.szDynamicHeightBuffers[1].size() ) * sizeof( real_t );
+		bytes += ( size_t ) ( record.m_dynamicHeightBuffers[0].size() ) * sizeof( real_t );
+		bytes += ( size_t ) ( record.m_dynamicHeightBuffers[1].size() ) * sizeof( real_t );
 	}
 	return bytes;
 }
@@ -1023,17 +1023,17 @@ Dictionary T3DCollision::getStats( void ) const {
 	int valid_shapes = 0;
 	int height_samples = 0;
 	for ( const t3dCollisionShapeRecord_t &record : m_shapeRecords ) {
-		if ( !record.bDisabled ) {
+		if ( !record.m_bDisabled ) {
 			++active_shapes;
-			if ( !isAuthoringFullResidencyMode() && record.gridPosition != V2I_MAX &&
-				!shapeAllowsCollision( record.gridPosition,
+			if ( !isAuthoringFullResidencyMode() && record.m_gridPosition != V2I_MAX &&
+				!shapeAllowsCollision( record.m_gridPosition,
 					usesDynamicShapePool() ? ( int ) ( m_nShapeSize ) : ( int ) ( m_pTerrain->getRegionSize() ) ) ) {
 				++active_shapes_outside_hot;
 			}
 		}
-		if ( record.data.bValid ) {
+		if ( record.m_data.m_bValid ) {
 			++valid_shapes;
-			height_samples += MAX( record.data.nWidth, 0 ) * MAX( record.data.depth, 0 );
+			height_samples += MAX( record.m_data.m_nWidth, 0 ) * MAX( record.m_data.m_nDepth, 0 );
 		}
 	}
 	stats["initialized"] = m_bInitialized;
@@ -1058,7 +1058,7 @@ Dictionary T3DCollision::getStats( void ) const {
 	stats["preparation_usec_last"] = ( int64_t ) ( m_nPreparationUsecLast );
 	stats["physics_upload_usec_last"] = ( int64_t ) ( m_nUploadUsecLast );
 	stats["baked_cache_regions"] = m_nBakedRegionCacheCount;
-	stats["baked_cache_capacity"] = TERRAIN3D_COLLISION_BAKED_CACHE_CAPACITY;
+	stats["baked_cache_capacity"] = s_nBakedCacheCapacity;
 	stats["baked_cache_hits_last_update"] = m_nBakedCacheHitsLastUpdate;
 	stats["baked_cache_misses_last_update"] = m_nBakedCacheMissesLastUpdate;
 	stats["shapes_rebuilt_last_update"] = m_nShapesRebuiltLastUpdate;

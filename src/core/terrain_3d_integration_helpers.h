@@ -32,26 +32,26 @@ static inline void t3dAppendRuntimeProblem( Array &rProblems, const String &rSev
 }
 
 static inline Variant t3dPerformanceProfileValue( const t3dPerformanceProfileSetting_t &rSetting ) {
-	switch ( rSetting.kind ) {
+	switch ( rSetting.m_kind ) {
 		case T3D_PROFILE_VALUE_INT:
-			return ( int64_t ) ( rSetting.intValue );
+			return ( int64_t ) ( rSetting.m_nIntValue );
 		case T3D_PROFILE_VALUE_FLOAT:
-			return rSetting.fFloatValue;
+			return rSetting.m_fFloatValue;
 		case T3D_PROFILE_VALUE_BOOL:
-			return rSetting.bBoolValue;
+			return rSetting.m_bBoolValue;
 	}
 	return Variant();
 }
 
 static inline bool t3dPerformanceProfileValueMatches( const Variant &rCurrent,
 		const t3dPerformanceProfileSetting_t &rSetting ) {
-	switch ( rSetting.kind ) {
+	switch ( rSetting.m_kind ) {
 		case T3D_PROFILE_VALUE_INT:
-			return ( int64_t ) ( rCurrent ) == rSetting.intValue;
+			return ( int64_t ) ( rCurrent ) == rSetting.m_nIntValue;
 		case T3D_PROFILE_VALUE_FLOAT:
-			return Math::is_equal_approx( ( double ) ( rCurrent ), rSetting.fFloatValue );
+			return Math::is_equal_approx( ( double ) ( rCurrent ), rSetting.m_fFloatValue );
 		case T3D_PROFILE_VALUE_BOOL:
-			return ( bool ) ( rCurrent ) == rSetting.bBoolValue;
+			return ( bool ) ( rCurrent ) == rSetting.m_bBoolValue;
 	}
 	return false;
 }
@@ -61,4 +61,4 @@ static inline String t3dPerformanceProfileOwnerName( const t3dPerformanceProfile
 }
 
 #define TERRAIN3D_ALIGN_BAKE_TASK_OFFSET( value ) \
-	( ( ( value ) + TERRAIN3D_BAKE_TASK_ALIGNMENT_ELEMENTS - 1u ) & ~( TERRAIN3D_BAKE_TASK_ALIGNMENT_ELEMENTS - 1u ) )
+	( ( ( value ) + s_nBakeTaskAlignmentElements - 1u ) & ~( s_nBakeTaskAlignmentElements - 1u ) )

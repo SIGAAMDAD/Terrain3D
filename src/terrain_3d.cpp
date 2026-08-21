@@ -62,14 +62,14 @@ void T3DTerrain::initializeInternal( void ) {
 		m_pData = memnew( T3DData );
 	}
 	if ( !initializeRuntimeMemory() ) {
-		LOG( ERROR, "[lifecycle] Unable to initialize the fixed runtime memory image" );
+		LOG( ERROR, "[lifecycle] Unable to initialize the s_nFixed runtime memory image" );
 		set_physics_process( false );
 		return;
 	}
 	bool bCreatedDefaultMaterial = false;
-	if ( m_pMaterial.is_null() ) {
+	if ( m_material.is_null() ) {
 		LOG( DEBUG, "Creating blank material" );
-		m_pMaterial.instantiate();
+		m_material.instantiate();
 		bCreatedDefaultMaterial = true;
 	}
 	// A base profile selected before a default material exists must seed that new
@@ -77,15 +77,15 @@ void T3DTerrain::initializeInternal( void ) {
 	// here; their actual values determine Exact versus Modified conformity.
 	if ( m_performanceTarget == PERFORMANCE_TARGET_XBOX360_EXPERIMENTAL &&
 		( bCreatedDefaultMaterial || m_bPerformanceProfileMaterialPendingApply ) ) {
-		m_pMaterial->setShaderPerformancePreset(
+		m_material->setShaderPerformancePreset(
 			SHADER_PRESET_XBOX_360_AUTHENTIC );
 		m_bPerformanceProfileMaterialPendingApply = false;
 	}
-	connectAutoShaderProfileSignal( m_pAutoShaderProfile );
+	connectAutoShaderProfileSignal( m_autoShaderProfile );
 	applyAutoShaderProfileMode();
-	if ( m_pAssets.is_null() ) {
+	if ( m_assets.is_null() ) {
 		LOG( DEBUG, "Creating blank texture list" );
-		m_pAssets.instantiate();
+		m_assets.instantiate();
 	}
 	if ( !m_pCollision ) {
 		LOG( DEBUG, "Creating collision manager" );
@@ -120,7 +120,7 @@ void T3DTerrain::initializeInternal( void ) {
 		LOG( DEBUG, "Connecting _data::region_map_changed signal to on_region_map_changed()" );
 		m_pData->connect( "region_map_changed", callable_mp( m_pCollision, &T3DCollision::onRegionMapChanged ) );
 	}
-	connectResourceSignals( m_pAssets, m_pMaterial );
+	connectResourceSignals( m_assets, m_material );
 	refreshPerformanceProfileConformity();
 	// Height map was regenerated, update aabbs
 	if ( !m_pData->is_connected( "height_maps_changed", callable_mp( this, &T3DTerrain::updateMesherAabbs ) ) ) {
@@ -151,14 +151,14 @@ void T3DTerrain::initializeInternal( void ) {
 		// materials take their initial sampler bindings. Initializing the material
 		// first leaves Middle/Far bound to their empty fallbacks until an unrelated
 		// material rebuild happens.
-		m_pAssets->initialize( this );
+		m_assets->initialize( this );
 		m_pData->ensureFarAtlases();
-		m_pMaterial->initialize( this );
-		if ( !m_pMaterial->isRenderShaderReady() ) {
+		m_material->initialize( this );
+		if ( !m_material->isRenderShaderReady() ) {
 			LOG( ERROR, "[lifecycle] Terrain material failed to produce a valid render shader; "
 				"aborting terrain activation before render meshes are created." );
-			m_pMaterial->uninitialize( this );
-			m_pAssets->uninitialize( this );
+			m_material->uninitialize( this );
+			m_assets->uninitialize( this );
 			m_pData->deactivateRuntimeStorage( this );
 			set_physics_process( false );
 			return;
@@ -221,12 +221,12 @@ void T3DTerrain::deactivateRuntime( void ) {
 	destroyNodeStreamer( true );
 	destroyInstancer();
 	destroyCollision();
-	disconnectResourceSignals( m_pAssets, m_pMaterial );
-	if ( m_pAssets.is_valid() ) {
-		m_pAssets->uninitialize( this );
+	disconnectResourceSignals( m_assets, m_material );
+	if ( m_assets.is_valid() ) {
+		m_assets->uninitialize( this );
 	}
-	if ( m_pMaterial.is_valid() ) {
-		m_pMaterial->uninitialize( this );
+	if ( m_material.is_valid() ) {
+		m_material->uninitialize( this );
 	}
 	if ( m_pData ) {
 		m_pData->deactivateRuntimeStorage( this );
@@ -246,7 +246,7 @@ void T3DTerrain::physicsProcess( const double fDelta ) {
 	if ( m_bComputeDisplacementFallbackRequested.exchange( false, std::memory_order_acq_rel ) ) {
 		m_lastBufferPosition = V2_MAX;
 	}
-	if ( !m_camera.isValid() ) {
+	if ( !m_hCamera.isValid() ) {
 		LOG( DEBUG, "Camera is null, getting the current one" );
 		grabCamera();
 	}
@@ -277,10 +277,10 @@ void T3DTerrain::physicsProcess( const double fDelta ) {
 		m_nRuntimeBoundaryTransitionFrame = m_iRuntimePhysicsFrameIndex;
 	}
 	const uint64_t boundary_age_frames = m_iRuntimePhysicsFrameIndex - m_nRuntimeBoundaryTransitionFrame;
-	m_bRuntimeBoundaryNodeDeferredLastTick = terrain3dBoundaryShouldDefer(
+	m_bRuntimeBoundaryNodeDeferredLastTick = t3dBoundaryShouldDefer(
 		m_bRuntimeBoundaryWorkPhasingEnabled, effectiveDynamicNodeStreamingEnabled(),
 		boundary_age_frames, m_nRuntimeBoundaryNodeDelayFrames, m_runtimeBoundaryNodeDeferralStreak );
-	m_bRuntimeBoundaryInstancerDeferredLastTick = terrain3dBoundaryShouldDefer(
+	m_bRuntimeBoundaryInstancerDeferredLastTick = t3dBoundaryShouldDefer(
 		m_bRuntimeBoundaryWorkPhasingEnabled, effectiveInstancerCellStreamingEnabled(),
 		boundary_age_frames, m_nRuntimeBoundaryInstancerDelayFrames,
 		m_runtimeBoundaryInstancerDeferralStreak );
@@ -289,28 +289,28 @@ void T3DTerrain::physicsProcess( const double fDelta ) {
 	m_runtimeBoundaryInstancerDeferralStreak = m_bRuntimeBoundaryInstancerDeferredLastTick ?
 		m_runtimeBoundaryInstancerDeferralStreak + 1 : 0;
 	if ( bProfileFrame ) {
-		profile_sample.fTargetX = ( float ) ( clipmap_target_position.x );
-		profile_sample.fTargetZ = ( float ) ( clipmap_target_position.z );
+		profile_sample.m_fTargetX = ( float ) ( clipmap_target_position.x );
+		profile_sample.m_fTargetZ = ( float ) ( clipmap_target_position.z );
 		if ( m_nRuntimeProfileSampleCount > 0u ) {
-			profile_sample.fMovementX = profile_sample.fTargetX - m_runtimeProfileLastSample.fTargetX;
-			profile_sample.fMovementZ = profile_sample.fTargetZ - m_runtimeProfileLastSample.fTargetZ;
+			profile_sample.m_fMovementX = profile_sample.m_fTargetX - m_runtimeProfileLastSample.m_fTargetX;
+			profile_sample.m_fMovementZ = profile_sample.m_fTargetZ - m_runtimeProfileLastSample.m_fTargetZ;
 		}
-		profile_sample.targetRegionX = target_region.x;
-		profile_sample.targetRegionZ = target_region.y;
+		profile_sample.m_nTargetRegionX = target_region.x;
+		profile_sample.m_nTargetRegionZ = target_region.y;
 	}
 	if ( m_pData ) {
 		updateRegionStreamingPolicy( clipmap_target_position, fDelta, false );
 		m_pData->updateRegionResidency( clipmap_target_position, false );
-		if ( m_pAssets.is_valid() && m_pAssets->isRuntimeMaterialCacheActive() ) {
-			uint8_t material_ids[TERRAIN3D_MAX_TEXTURE_ASSETS] = {};
+		if ( m_assets.is_valid() && m_assets->isRuntimeMaterialCacheActive() ) {
+			uint8_t material_ids[s_nMaxTextureAssets] = {};
 			const int material_count = m_pData->fillGpuMaterialPriorityIds(
-				material_ids, TERRAIN3D_MAX_TEXTURE_ASSETS );
-			m_pAssets->updateRuntimeMaterialResidency( material_ids, material_count );
+				material_ids, s_nMaxTextureAssets );
+			m_assets->updateRuntimeMaterialResidency( material_ids, material_count );
 		}
 	}
 	if ( bProfileFrame ) {
 		const uint64_t now = Time::get_singleton()->get_ticks_usec();
-		profile_sample.nDataResidencyUsec = now - phase_started_usec;
+		profile_sample.m_nDataResidencyUsec = now - phase_started_usec;
 		phase_started_usec = now;
 	}
 	const bool hlod_active = m_bHlodEnabled && ( !Engine::get_singleton()->is_editor_hint() || !isEditorAuthoringModeInternal() || m_bEditorHlodPreview );
@@ -320,7 +320,7 @@ void T3DTerrain::physicsProcess( const double fDelta ) {
 	}
 	if ( bProfileFrame ) {
 		const uint64_t now = Time::get_singleton()->get_ticks_usec();
-		profile_sample.nHlodStreamingUsec = now - phase_started_usec;
+		profile_sample.m_nHlodStreamingUsec = now - phase_started_usec;
 		phase_started_usec = now;
 	}
 	if ( m_pNodeStreamer && effectiveDynamicNodeStreamingEnabled() ) {
@@ -333,7 +333,7 @@ void T3DTerrain::physicsProcess( const double fDelta ) {
 	}
 	if ( bProfileFrame ) {
 		const uint64_t now = Time::get_singleton()->get_ticks_usec();
-		profile_sample.nNodeStreamingUsec = now - phase_started_usec;
+		profile_sample.m_nNodeStreamingUsec = now - phase_started_usec;
 		phase_started_usec = now;
 	}
 	if ( m_pLightmapStreamer && m_bLightmapStreamingEnabled ) {
@@ -341,11 +341,11 @@ void T3DTerrain::physicsProcess( const double fDelta ) {
 	}
 	if ( bProfileFrame ) {
 		const uint64_t now = Time::get_singleton()->get_ticks_usec();
-		profile_sample.nLightmapStreamingUsec = now - phase_started_usec;
+		profile_sample.m_nLightmapStreamingUsec = now - phase_started_usec;
 		phase_started_usec = now;
 	}
 	if ( m_tessellationLevel > 0 ) {
-		if ( m_pTerrainMesher && m_pDBufferVp && m_pMaterial.is_valid() ) {
+		if ( m_pTerrainMesher && m_pDBufferVp && m_material.is_valid() ) {
 			const Vector2 target_position_2d = v3v2( clipmap_target_position );
 			const real_t fTessellationDensity = 1.0f / ( real_t ) ( 1u << ( uint32_t ) m_tessellationLevel );
 			const real_t fBufferVertexSpacing = m_fVertexSpacing * fTessellationDensity;
@@ -354,7 +354,7 @@ void T3DTerrain::physicsProcess( const double fDelta ) {
 						std::abs( m_lastBufferPosition.y - target_position_2d.y ) ) >= fUpdateDistance ) {
 				m_lastBufferPosition = target_position_2d;
 				if ( !tryUpdateComputeDisplacement( clipmap_target_position ) ) {
-					RS->material_set_param( m_pMaterial->getBufferMaterialRid(), "_target_pos",
+					RS->material_set_param( m_material->getBufferMaterialRid(), "_target_pos",
 										   clipmap_target_position );
 					m_pDBufferVp->set_update_mode( SubViewport::UPDATE_ONCE );
 				}
@@ -366,7 +366,7 @@ void T3DTerrain::physicsProcess( const double fDelta ) {
 	}
 	if ( bProfileFrame ) {
 		const uint64_t now = Time::get_singleton()->get_ticks_usec();
-		profile_sample.nClipmapUsec = now - phase_started_usec;
+		profile_sample.m_nClipmapUsec = now - phase_started_usec;
 		phase_started_usec = now;
 	}
 	if ( m_bOceanEnabled && m_pOceanMesher ) {
@@ -374,7 +374,7 @@ void T3DTerrain::physicsProcess( const double fDelta ) {
 	}
 	if ( bProfileFrame ) {
 		const uint64_t now = Time::get_singleton()->get_ticks_usec();
-		profile_sample.nOceanUsec = now - phase_started_usec;
+		profile_sample.m_nOceanUsec = now - phase_started_usec;
 		phase_started_usec = now;
 	}
 	if ( m_pInstancer && effectiveInstancerCellStreamingEnabled() ) {
@@ -387,13 +387,13 @@ void T3DTerrain::physicsProcess( const double fDelta ) {
 	}
 	if ( bProfileFrame ) {
 		const uint64_t now = Time::get_singleton()->get_ticks_usec();
-		profile_sample.nInstancerUsec = now - phase_started_usec;
+		profile_sample.m_nInstancerUsec = now - phase_started_usec;
 		phase_started_usec = now;
 	}
 	syncLightShaderParameters();
 	if ( bProfileFrame ) {
 		const uint64_t now = Time::get_singleton()->get_ticks_usec();
-		profile_sample.nLightSyncUsec = now - phase_started_usec;
+		profile_sample.m_nLightSyncUsec = now - phase_started_usec;
 		phase_started_usec = now;
 	}
 	if ( m_pCollision && m_pCollision->isEnabled() ) {
@@ -406,10 +406,10 @@ void T3DTerrain::physicsProcess( const double fDelta ) {
 			m_nRuntimeAdaptiveLastMeasuredUsec = measured_usec;
 		}
 		if ( bProfileFrame ) {
-			profile_sample.nCollisionUsec = now - phase_started_usec;
-			profile_sample.nPhysicsTotalUsec = measured_usec;
-			profile_sample.nStreamingUsec = profile_sample.nDataResidencyUsec + profile_sample.nHlodStreamingUsec +
-				profile_sample.nNodeStreamingUsec + profile_sample.nLightmapStreamingUsec + profile_sample.nInstancerUsec;
+			profile_sample.m_nCollisionUsec = now - phase_started_usec;
+			profile_sample.m_nPhysicsTotalUsec = measured_usec;
+			profile_sample.m_nStreamingUsec = profile_sample.m_nDataResidencyUsec + profile_sample.m_nHlodStreamingUsec +
+				profile_sample.m_nNodeStreamingUsec + profile_sample.m_nLightmapStreamingUsec + profile_sample.m_nInstancerUsec;
 			sampleRuntimeProfile( profile_sample );
 		}
 	}
@@ -421,13 +421,13 @@ void T3DTerrain::physicsProcess( const double fDelta ) {
  */
 void T3DTerrain::grabCamera( void ) {
 	if ( IS_EDITOR ) {
-		m_camera.setTarget( EditorInterface::get_singleton()->get_editor_viewport_3d( 0 )->get_camera_3d() );
-		LOG( DEBUG, "Grabbing the first editor viewport camera: ", m_camera.getTarget() );
+		m_hCamera.setTarget( EditorInterface::get_singleton()->get_editor_viewport_3d( 0 )->get_camera_3d() );
+		LOG( DEBUG, "Grabbing the first editor viewport camera: ", m_hCamera.getTarget() );
 	} else {
-		m_camera.setTarget( get_viewport()->get_camera_3d() );
-		LOG( DEBUG, "Grabbing the in-game viewport camera: ", m_camera.getTarget() );
+		m_hCamera.setTarget( get_viewport()->get_camera_3d() );
+		LOG( DEBUG, "Grabbing the in-game viewport camera: ", m_hCamera.getTarget() );
 	}
-	if ( !m_camera.isValid() && !m_clipmapTarget.isValid() ) {
+	if ( !m_hCamera.isValid() && !m_clipmapTarget.isValid() ) {
 		set_physics_process( false ); // No target to follow, disable snapping until one set
 		LOG( ERROR, "Cannot find clipmap target or active camera. LODs won't be updated. Set manually with "
 				   "set_clipmap_target() or setCamera()" );
@@ -475,26 +475,26 @@ void t3dBakeSnapshot_t::getSample(
 	real_t &fHeight
 ) const {
 	const t3dBakeRegionSnapshot_t *pRegion = getRegion( iX, iZ );
-	if ( !pRegion || !pRegion->pHeightBytes ) {
+	if ( !pRegion || !pRegion->m_pHeightBytes ) {
 		nControl = UINT32_MAX;
 		fHeight = NAN;
 		return;
 	}
-	const int32_t local_x = iX - pRegion->location.x * nRegionSize;
-	const int32_t local_z = iZ - pRegion->location.y * nRegionSize;
+	const int32_t local_x = iX - pRegion->m_location.x * nRegionSize;
+	const int32_t local_z = iZ - pRegion->m_location.y * nRegionSize;
 	if ( local_x < 0 || local_z < 0 || local_x >= nRegionSize || local_z >= nRegionSize ) {
 		nControl = UINT32_MAX;
 		fHeight = NAN;
 		return;
 	}
 	const int32_t index = local_z * nRegionSize + local_x;
-	fHeight = ( real_t ) ( t3dRegionCodecReadHeightBytes( pRegion->pHeightBytes, index, Image::FORMAT_R16 ) );
-	if ( pRegion->pControlBytes ) {
-		uint32_t control = TERRAIN3D_REGION_DEFAULT_CONTROL;
-		std::memcpy( &control, pRegion->pControlBytes + ( size_t ) ( index ) * sizeof( uint32_t ), sizeof( uint32_t ) );
+	fHeight = ( real_t ) ( t3dRegionCodecReadHeightBytes( pRegion->m_pHeightBytes, index, Image::FORMAT_R16 ) );
+	if ( pRegion->m_pControlBytes ) {
+		uint32_t control = s_nRegionDefaultControl;
+		std::memcpy( &control, pRegion->m_pControlBytes + ( size_t ) ( index ) * sizeof( uint32_t ), sizeof( uint32_t ) );
 		nControl = control;
 	} else {
-		nControl = TERRAIN3D_REGION_DEFAULT_CONTROL;
+		nControl = s_nRegionDefaultControl;
 	}
 	return;
 }
@@ -513,22 +513,22 @@ bool t3dBakeSnapshot_t::getMinimumRect(
 		while ( copied < nWidth ) {
 			const int32_t global_x = iX + copied;
 			const t3dBakeRegionSnapshot_t *pRegion = getRegion( global_x, global_z );
-			if ( !pRegion || !pRegion->pHeightBytes ) {
+			if ( !pRegion || !pRegion->m_pHeightBytes ) {
 				return false;
 			}
-			const int32_t local_x = global_x - pRegion->location.x * nRegionSize;
-			const int32_t local_z = global_z - pRegion->location.y * nRegionSize;
+			const int32_t local_x = global_x - pRegion->m_location.x * nRegionSize;
+			const int32_t local_z = global_z - pRegion->m_location.y * nRegionSize;
 			if ( local_x < 0 || local_z < 0 || local_x >= nRegionSize || local_z >= nRegionSize ) {
 				return false;
 			}
 			const int32_t run = MIN( nWidth - copied, nRegionSize - local_x );
 			const int32_t index = local_z * nRegionSize + local_x;
-			const uint16_t *pHeight = ( const uint16_t * ) ( pRegion->pHeightBytes ) + index;
-			const uint32_t *pControl = pRegion->pControlBytes
-				? ( const uint32_t * ) ( pRegion->pControlBytes ) + index
+			const uint16_t *pHeight = ( const uint16_t * ) ( pRegion->m_pHeightBytes ) + index;
+			const uint32_t *pControl = pRegion->m_pControlBytes
+				? ( const uint32_t * ) ( pRegion->m_pControlBytes ) + index
 				: nullptr;
 			for ( int32_t i = 0; i < run; ++i ) {
-				const uint32_t sample_control = pControl ? pControl[i] : TERRAIN3D_REGION_DEFAULT_CONTROL;
+				const uint32_t sample_control = pControl ? pControl[i] : s_nRegionDefaultControl;
 				if ( isHole( sample_control ) ) {
 					return false;
 				}
@@ -612,7 +612,7 @@ void T3DTerrain::setDebugLevel( const t3dDebugLevel_t level ) {
 	LOG( INFO, "t3dSetting_t debug level: ", s_debugLevel );
 }
 
-EA_FORCE_INLINE static String terrain3dDefaultRegionLightmapOutputDirectory( const String &rDataDirectory ) { const String directory = rDataDirectory.strip_edges().trim_suffix( "/" ); return directory.is_empty() ? String() : directory.path_join( "lighting" ); }
+EA_FORCE_INLINE static String t3dDefaultRegionLightmapOutputDirectory( const String &rDataDirectory ) { const String directory = rDataDirectory.strip_edges().trim_suffix( "/" ); return directory.is_empty() ? String() : directory.path_join( "lighting" ); }
 
 
 
@@ -706,11 +706,11 @@ void T3DTerrain::_notification( const int nWhat ) {
 			setupMousePicking();
 			setupDisplacementBuffer();
 			// Reload editor textures - Also see READY
-			if ( m_bFreeEditorTextures && !IS_EDITOR && m_pAssets.is_valid() &&
-				!m_pAssets->get_path().is_empty() && !m_pAssets->get_path().contains( "T3DAssets" ) ) {
-				LOG( INFO, "free_editor_textures enabled, reloading Assets path: ", m_pAssets->get_path() );
-				m_pAssets =
-					ResourceLoader::get_singleton()->load( m_pAssets->get_path(), "", ResourceLoader::CACHE_MODE_IGNORE );
+			if ( m_bFreeEditorTextures && !IS_EDITOR && m_assets.is_valid() &&
+				!m_assets->get_path().is_empty() && !m_assets->get_path().contains( "T3DAssets" ) ) {
+				LOG( INFO, "free_editor_textures enabled, reloading Assets path: ", m_assets->get_path() );
+				m_assets =
+					ResourceLoader::get_singleton()->load( m_assets->get_path(), "", ResourceLoader::CACHE_MODE_IGNORE );
 			}
 			initializeInternal(); // Rebuild anything freed: meshes, collision, instancer
 			set_physics_process( true );
@@ -725,13 +725,13 @@ void T3DTerrain::_notification( const int nWhat ) {
 			// test_differs();
 
 			// Clear editor textures - also see ENTER_TREE
-			if ( m_bFreeEditorTextures && !IS_EDITOR && m_pAssets.is_valid() ) {
-				if ( m_pAssets->get_path().contains( "T3DAssets" ) ) {
+			if ( m_bFreeEditorTextures && !IS_EDITOR && m_assets.is_valid() ) {
+				if ( m_assets->get_path().contains( "T3DAssets" ) ) {
 					LOG( WARN, "free_editor_textures requires `Assets` be saved to a file. Do so, or disable the former "
 							  "to turn off this warning" );
 				} else {
 					LOG( INFO, "free_editor_textures enabled, clearing texture assets" );
-					m_pAssets->clearTextures();
+					m_assets->clearTextures();
 				}
 			}
 			break;
@@ -788,15 +788,15 @@ void T3DTerrain::_notification( const int nWhat ) {
 			} else {
 				m_pData->saveDirectory( m_dataDirectory );
 			}
-			if ( !m_pMaterial.is_valid() ) {
+			if ( !m_material.is_valid() ) {
 				LOG( DEBUG, "Save requested, but no valid material. Skipping" );
 			} else {
-				m_pMaterial->save();
+				m_material->save();
 			}
-			if ( !m_pAssets.is_valid() ) {
+			if ( !m_assets.is_valid() ) {
 				LOG( DEBUG, "Save requested, but no valid texture list. Skipping" );
 			} else {
-				m_pAssets->save();
+				m_assets->save();
 			}
 			break;
 		}
@@ -840,7 +840,7 @@ void T3DTerrain::_notification( const int nWhat ) {
 		case NOTIFICATION_PREDELETE: {
 			// Object is about to be deleted
 			LOG( INFO, "NOTIFICATION_PREDELETE" );
-			disconnectAutoShaderProfileSignal( m_pAutoShaderProfile );
+			disconnectAutoShaderProfileSignal( m_autoShaderProfile );
 			deactivateRuntime();
 			destroyTerrainMesher( true );
 			destroyOceanMesher( true );
@@ -849,8 +849,8 @@ void T3DTerrain::_notification( const int nWhat ) {
 		destroyNodeStreamer( false );
 			destroyInstancer();
 			destroyCollision( true );
-			m_pAssets.unref();
-			m_pMaterial.unref();
+			m_assets.unref();
+			m_material.unref();
 			if ( m_pData ) {
 				memdelete( m_pData );
 				m_pData = nullptr;

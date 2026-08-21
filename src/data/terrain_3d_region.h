@@ -57,23 +57,23 @@ typedef enum t3dBakedLightingMode_e : int {
 } t3dBakedLightingMode_t;
 
 typedef struct t3dStreamedNodeRuntimeDescriptor_s {
-	int64_t id = 0;
-	Ref<PackedScene> pScene;
-	String scenePath;
-	Transform3D transform;
-	Dictionary state;
-	int flags = 0;
-	int hlodMinLevel = 1;
-	int boundaryPolicy = STREAMED_NODE_BOUNDARY_ANCHOR;
-	Vector2i coverageMin = V2I_ZERO;
-	Vector2i coverageMax = V2I_ZERO;
-	int lightingClass = LIGHTING_CLASS_MEDIUM_OBSTACLE;
-	int bakedLightingMode = BAKED_LIGHTING_LIGHTMAP;
-	bool bContributeBakedGi = true;
-	bool bReceiveDynamicDirectional = true;
-	bool bDynamicShadowEligible = true;
-	Ref<PackedScene> pShadowProxyScene;
-	String shadowProxyScenePath;
+	int64_t m_nId = 0;
+	Ref<PackedScene> m_scene;
+	String m_scenePath;
+	Transform3D m_transform;
+	Dictionary m_state;
+	int m_nFlags = 0;
+	int m_nHlodMinLevel = 1;
+	int m_nBoundaryPolicy = STREAMED_NODE_BOUNDARY_ANCHOR;
+	Vector2i m_coverageMin = V2I_ZERO;
+	Vector2i m_coverageMax = V2I_ZERO;
+	int m_nLightingClass = LIGHTING_CLASS_MEDIUM_OBSTACLE;
+	int m_nBakedLightingMode = BAKED_LIGHTING_LIGHTMAP;
+	bool m_bContributeBakedGi = true;
+	bool m_bReceiveDynamicDirectional = true;
+	bool m_bDynamicShadowEligible = true;
+	Ref<PackedScene> m_shadowProxyScene;
+	String m_shadowProxyScenePath;
 } t3dStreamedNodeRuntimeDescriptor_t;
 
 class T3DRegion : public Resource {
@@ -121,13 +121,13 @@ private:
 	int m_nRegionSize = 0;
 	Vector2 m_heightRange = V2_ZERO;
 	// Maps
-	Ref<Image> m_pHeightMap;
-	Ref<Image> m_pControlMap;
-	Ref<Image> m_pColorMap;
+	Ref<Image> m_heightMap;
+	Ref<Image> m_controlMap;
+	Ref<Image> m_colorMap;
 	// Runtime-only normal cache regenerated from the height map. RG stores
 	// encoded normal X/Z; normal Y and slope are reconstructed by consumers. It
 	// is excluded from serialization because height remains authoritative.
-	Ref<Image> m_pDerivedNormalSlopeMap;
+	Ref<Image> m_derivedNormalSlopeMap;
 	bool m_bDerivedNormalSlopeValid = false;
 	// Persistent channel metadata survives bounded CPU eviction. Runtime code must
 	// never infer world-wide channel presence from currently resident Image refs.
@@ -141,7 +141,7 @@ private:
 	mutable bool m_bInstanceStoreModified = false;
 	mutable PackedByteArray m_cookedInstanceMetadata;
 	mutable PackedByteArray m_cookedMultimeshFastStart;
-	mutable uint32_t m_szInstanceMeshCounts[TERRAIN3D_MAX_MESH_ASSETS] = {};
+	mutable uint32_t m_szInstanceMeshCounts[s_nMaxMeshAssets] = {};
 	mutable uint32_t m_nInstanceCount = 0u;
 	mutable uint16_t m_nInstanceMeshCount = 0u;
 	uint64_t m_nCookedPageSourceSignature = 0u;
@@ -157,7 +157,7 @@ private:
 	Vector2i m_streamedNodeCoverageMin = V2I_ZERO;
 	Vector2i m_streamedNodeCoverageMax = V2I_ZERO;
 	bool m_bStreamedNodeHasExtendedCoverage = false;
-	Ref<T3DRegionLighting> m_pLighting;
+	Ref<T3DRegionLighting> m_lighting;
 	real_t m_fVertexSpacing = 1.f; // Spacing that instancer transforms are currently scaled by.
 
 	// Working data not saved to disk
@@ -183,11 +183,11 @@ public:
 	void setMaps( const TypedArray<Image> &rMaps );
 	TypedArray<Image> getMaps( void ) const;
 	void setHeightMap( const Ref<Image> &rMap );
-	EA_FORCE_INLINE Ref<Image> getHeightMap( void ) const { return m_pHeightMap; }
+	EA_FORCE_INLINE Ref<Image> getHeightMap( void ) const { return m_heightMap; }
 	void setControlMap( const Ref<Image> &rMap );
-	EA_FORCE_INLINE Ref<Image> getControlMap( void ) const { return m_pControlMap; }
+	EA_FORCE_INLINE Ref<Image> getControlMap( void ) const { return m_controlMap; }
 	void setColorMap( const Ref<Image> &rMap );
-	EA_FORCE_INLINE Ref<Image> getColorMap( void ) const { return m_pColorMap; }
+	EA_FORCE_INLINE Ref<Image> getColorMap( void ) const { return m_colorMap; }
 	Image *getMapPtrForWrite( const t3dMapType_t mapType );
 	Ref<Image> materializeMap( const t3dMapType_t mapType );
 	EA_FORCE_INLINE bool hasMap( const t3dMapType_t mapType ) const { return getMap( mapType ).is_valid(); }
@@ -206,8 +206,8 @@ public:
 		return false;
 	}
 	EA_FORCE_INLINE bool hasDerivedChannel( void ) const { return ( m_nChannelFlags & REGION_CHANNEL_DERIVED ) != 0u; }
-	EA_FORCE_INLINE Ref<Image> getDerivedNormalSlopeMap( void ) const { return m_pDerivedNormalSlopeMap; }
-	EA_FORCE_INLINE bool hasValidDerivedNormalSlopeMap( void ) const { return m_bDerivedNormalSlopeValid && m_pDerivedNormalSlopeMap.is_valid(); }
+	EA_FORCE_INLINE Ref<Image> getDerivedNormalSlopeMap( void ) const { return m_derivedNormalSlopeMap; }
+	EA_FORCE_INLINE bool hasValidDerivedNormalSlopeMap( void ) const { return m_bDerivedNormalSlopeValid && m_derivedNormalSlopeMap.is_valid(); }
 	void setDerivedNormalSlopeMapInternal( const Ref<Image> &rMap );
 	EA_FORCE_INLINE void invalidateDerivedNormalSlopeMap( void ) { m_bDerivedNormalSlopeValid = false; }
 	void sanitizeMaps( void );
@@ -255,10 +255,10 @@ public:
 	EA_FORCE_INLINE size_t getInstancePageBytes( void ) const { return ( size_t ) ( m_instancePage.size() ); }
 	uint32_t getInstanceCount( const int nMeshId = -1 ) const {
 		if ( m_bInstanceStoreResident ) {
-			const size_t count = m_instanceStore.instanceCount( nMeshId );
+			const size_t count = m_instanceStore.m_nInstanceCount( nMeshId );
 			return count > ( size_t ) ( UINT32_MAX ) ? UINT32_MAX : ( uint32_t ) ( count );
 		}
-		return nMeshId >= 0 && nMeshId < TERRAIN3D_MAX_MESH_ASSETS ?
+		return nMeshId >= 0 && nMeshId < s_nMaxMeshAssets ?
 			m_szInstanceMeshCounts[nMeshId] : m_nInstanceCount;
 	}
 	uint16_t getInstanceMeshCount( void ) const {
@@ -306,8 +306,8 @@ public:
 	EA_FORCE_INLINE bool hasExtendedStreamedNodeCoverage( void ) const { return m_bStreamedNodeHasExtendedCoverage || m_nCookedStreamedNodeCount > 0u && ( m_cookedStreamedNodeCoverageMin != V2I_ZERO || m_cookedStreamedNodeCoverageMax != V2I_ZERO ); }
 
 	void setLighting( const Ref<T3DRegionLighting> &rLighting );
-	EA_FORCE_INLINE Ref<T3DRegionLighting> getLighting( void ) const { return m_pLighting; }
-	EA_FORCE_INLINE bool hasLighting( void ) const { return m_pLighting.is_valid() && m_pLighting->hasLightData(); }
+	EA_FORCE_INLINE Ref<T3DRegionLighting> getLighting( void ) const { return m_lighting; }
+	EA_FORCE_INLINE bool hasLighting( void ) const { return m_lighting.is_valid() && m_lighting->hasLightData(); }
 	EA_FORCE_INLINE void setVertexSpacing( const real_t fVertexSpacing ) { m_fVertexSpacing = CLAMP( fVertexSpacing, 0.25f, 100.f ); }
 	EA_FORCE_INLINE real_t getVertexSpacing( void ) const { return m_fVertexSpacing; }
 

@@ -21,51 +21,51 @@ class T3DRegion;
 class T3DRuntimeWorldManifest;
 
 typedef struct t3dRuntimeInstanceCellMetadata_s {
-	uint16_t meshId = 0u;
-	Vector2i cell = V2I_ZERO;
-	uint32_t instanceCount = 0u;
-	uint32_t ordinal = 0u;
-	AABB originBounds;
+	uint16_t m_nMeshId = 0u;
+	Vector2i m_cell = V2I_ZERO;
+	uint32_t m_nInstanceCount = 0u;
+	uint32_t m_nOrdinal = 0u;
+	AABB m_originBounds;
 } t3dRuntimeInstanceCellMetadata_t;
 
 typedef struct t3dRuntimeLightingReceiverRecord_s {
-	NodePath path;
-	Rect2 uvScale;
-	int32_t sliceIndex = 0;
-	int32_t subInstance = 0;
+	NodePath m_path;
+	Rect2 m_uvScale;
+	int32_t m_iSliceIndex = 0;
+	int32_t m_nSubInstance = 0;
 } t3dRuntimeLightingReceiverRecord_t;
 
 typedef struct t3dNavigationMaskView_s {
-	const uint8_t *pValidBits = nullptr;
-	const uint8_t *pNavigationBits = nullptr;
-	uint32_t nPlaneBytes = 0u;
-	uint32_t nSamples = 0u;
-	uint16_t nWidth = 0u;
+	const uint8_t *m_pValidBits = nullptr;
+	const uint8_t *m_pNavigationBits = nullptr;
+	uint32_t m_nPlaneBytes = 0u;
+	uint32_t m_nSamples = 0u;
+	uint16_t m_nWidth = 0u;
 
-	EA_FORCE_INLINE bool isValidSample( const uint32_t nIndex ) const { return pValidBits && nIndex < nSamples && ( pValidBits[nIndex >> 3u] & ( uint8_t ) ( 1u << ( nIndex & 7u ) ) ) != 0u; }
-	EA_FORCE_INLINE bool isNavigationSample( const uint32_t nIndex ) const { return pNavigationBits && nIndex < nSamples && ( pNavigationBits[nIndex >> 3u] & ( uint8_t ) ( 1u << ( nIndex & 7u ) ) ) != 0u; }
+	EA_FORCE_INLINE bool isValidSample( const uint32_t nIndex ) const { return m_pValidBits && nIndex < m_nSamples && ( m_pValidBits[nIndex >> 3u] & ( uint8_t ) ( 1u << ( nIndex & 7u ) ) ) != 0u; }
+	EA_FORCE_INLINE bool isNavigationSample( const uint32_t nIndex ) const { return m_pNavigationBits && nIndex < m_nSamples && ( m_pNavigationBits[nIndex >> 3u] & ( uint8_t ) ( 1u << ( nIndex & 7u ) ) ) != 0u; }
 } t3dNavigationMaskView_t;
 
 typedef struct t3dMinMaxLevelView_s {
-	const uint8_t *pRanges = nullptr;
-	uint32_t nRangeCount = 0u;
-	uint16_t nSourceSide = 0u;
-	uint16_t nLevelSide = 0u;
+	const uint8_t *m_pRanges = nullptr;
+	uint32_t m_nRangeCount = 0u;
+	uint16_t m_nSourceSide = 0u;
+	uint16_t m_nLevelSide = 0u;
 } t3dMinMaxLevelView_t;
 
 typedef struct t3dInstanceMetadataView_s {
-	const uint8_t *pRecords = nullptr;
-	uint32_t nCellCount = 0u;
-	uint32_t nInstanceCount = 0u;
-	uint16_t nMeshCount = 0u;
+	const uint8_t *m_pRecords = nullptr;
+	uint32_t m_nCellCount = 0u;
+	uint32_t m_nInstanceCount = 0u;
+	uint16_t m_nMeshCount = 0u;
 } t3dInstanceMetadataView_t;
 
 typedef struct t3dLightingReceiverCursor_s {
-	const uint8_t *pData = nullptr;
-	size_t nSize = 0u;
-	size_t nOffset = 0u;
-	uint32_t nCount = 0u;
-	uint32_t nIndex = 0u;
+	const uint8_t *m_pData = nullptr;
+	size_t m_nSize = 0u;
+	size_t m_iOffset = 0u;
+	uint32_t m_nCount = 0u;
+	uint32_t m_iIndex = 0u;
 } t3dLightingReceiverCursor_t;
 
 class T3DRuntimeBakeCodec {

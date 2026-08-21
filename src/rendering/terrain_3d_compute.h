@@ -29,58 +29,58 @@ using namespace godot;
 class T3DTerrain;
 
 typedef struct t3dBrushElement_s {
-	uint32_t value = 0u;  // Height float bits, packed pControl, or RGBA8.
-	uint32_t alpha = 0u;  // Float bits.
-	uint32_t target = 0u; // Gradient/height target float bits.
-	uint32_t flags = 0u;  // Bit 0: eligible.
+	uint32_t m_nValue = 0u;  // Height float bits, packed pControl, or RGBA8.
+	uint32_t m_nAlpha = 0u;  // Float bits.
+	uint32_t m_nTarget = 0u; // Gradient/height m_nTarget float bits.
+	uint32_t m_nFlags = 0u;  // Bit 0: eligible.
 } t3dBrushElement_t;
 
 typedef struct t3dDisplacementRequest_s {
 	// RenderingServer texture RIDs. The render callback resolves their
 	// global RenderingDevice texture RIDs on the render thread.
-	RID heightTexture;
-	RID controlTexture;
-	RID displacementTexture;
-	RID materialRid;
-	Ref<RDShaderSPIRV> pShaderSpirv;
-	PackedInt32Array regionMap;
-	PackedByteArray materialData;
-	PackedByteArray pushConstants;
-	uint64_t regionMapHash = 0u;
-	uint64_t materialDataHash = 0u;
-	uint32_t nWidth = 0u;
-	uint32_t nHeight = 0u;
-	uint32_t nRegionMapSize = 0u;
+	RID m_hHeightTexture;
+	RID m_hControlTexture;
+	RID m_hDisplacementTexture;
+	RID m_hMaterialRid;
+	Ref<RDShaderSPIRV> m_shaderSpirv;
+	PackedInt32Array m_regionMap;
+	PackedByteArray m_materialData;
+	PackedByteArray m_pushConstants;
+	uint64_t m_nRegionMapHash = 0u;
+	uint64_t m_nMaterialDataHash = 0u;
+	uint32_t m_nWidth = 0u;
+	uint32_t m_nHeight = 0u;
+	uint32_t m_nRegionMapSize = 0u;
 
 	bool valid( void ) const {
-		return pShaderSpirv.is_valid() && heightTexture.is_valid() && controlTexture.is_valid() &&
-			   displacementTexture.is_valid() && materialRid.is_valid() &&
-			   nWidth > 0u && nHeight > 0u && nRegionMapSize > 0u && nRegionMapSize <= 64u &&
-			   regionMap.size() == ( int64_t ) ( nRegionMapSize ) * ( int64_t ) ( nRegionMapSize ) && !materialData.is_empty() &&
-			   !pushConstants.is_empty();
+		return m_shaderSpirv.is_valid() && m_hHeightTexture.is_valid() && m_hControlTexture.is_valid() &&
+			   m_hDisplacementTexture.is_valid() && m_hMaterialRid.is_valid() &&
+			   m_nWidth > 0u && m_nHeight > 0u && m_nRegionMapSize > 0u && m_nRegionMapSize <= 64u &&
+			   m_regionMap.size() == ( int64_t ) ( m_nRegionMapSize ) * ( int64_t ) ( m_nRegionMapSize ) && !m_materialData.is_empty() &&
+			   !m_pushConstants.is_empty();
 	}
 } t3dDisplacementRequest_t;
 
 typedef struct t3dBrushParams_s {
-	uint32_t mapType = 0u;
-	uint32_t tool = 0u;
-	uint32_t operation = 0u;
-	uint32_t nCount = 0u;
-	float fStrength = 0.0f;
-	float fSelectedHeight = 0.0f;
-	float fBrushCenterHeight = 0.0f;
-	float fRoughness = 0.0f;
-	uint32_t colorRgba8 = 0xffffffffu;
-	uint32_t assetId = 0u;
-	uint32_t uvRotation = 0u;
-	uint32_t uvScale = 0u;
-	uint32_t featureFlags = 0u;
+	uint32_t m_nMapType = 0u;
+	uint32_t m_nTool = 0u;
+	uint32_t m_nOperation = 0u;
+	uint32_t m_nCount = 0u;
+	float m_fStrength = 0.0f;
+	float m_fSelectedHeight = 0.0f;
+	float m_fBrushCenterHeight = 0.0f;
+	float m_fRoughness = 0.0f;
+	uint32_t m_nColorRgba8 = 0xffffffffu;
+	uint32_t m_nAssetId = 0u;
+	uint32_t m_nUvRotation = 0u;
+	uint32_t m_nUvScale = 0u;
+	uint32_t m_nFeatureFlags = 0u;
 } t3dBrushParams_t;
 
 typedef struct t3dPipeline_s {
-	RID pShader;
-	RID pipeline;
-	bool bAttempted = false;
+	RID m_hShader;
+	RID m_hPipeline;
+	bool m_bAttempted = false;
 } t3dPipeline_t;
 
 class T3DCompute {
@@ -126,22 +126,22 @@ private:
 	t3dPipeline_t m_brushPipeline;
 	t3dPipeline_t m_derivedPipeline;
 	t3dPipeline_t m_displacementPipeline;
-	Ref<RDShaderSPIRV> m_pDisplacementSpirv;
-	RID m_brushBuffer;
-	RID m_derivedInputBuffer;
-	RID m_derivedOutputBuffer;
-	RID m_brushUniformSet;
-	RID m_derivedUniformSet;
-	RID m_displacementUniformSet;
-	RID m_displacementRegionBuffer;
-	RID m_displacementMaterialBuffer;
-	RID m_displacementOutputTexture;
-	RID m_displacementRsTexture;
-	RID m_displacementBoundHeight;
-	RID m_displacementBoundControl;
-	RID m_displacementBoundDisplacement;
-	RID m_nearestSampler;
-	RID m_linearRepeatSampler;
+	Ref<RDShaderSPIRV> m_displacementSpirv;
+	RID m_hBrushBuffer;
+	RID m_hDerivedInputBuffer;
+	RID m_hDerivedOutputBuffer;
+	RID m_hBrushUniformSet;
+	RID m_hDerivedUniformSet;
+	RID m_hDisplacementUniformSet;
+	RID m_hDisplacementRegionBuffer;
+	RID m_hDisplacementMaterialBuffer;
+	RID m_hDisplacementOutputTexture;
+	RID m_hDisplacementRsTexture;
+	RID m_hDisplacementBoundHeight;
+	RID m_hDisplacementBoundControl;
+	RID m_hDisplacementBoundDisplacement;
+	RID m_hNearestSampler;
+	RID m_hLinearRepeatSampler;
 	uint64_t m_nDisplacementRegionHash = 0u;
 	uint64_t m_displacementMaterialHash = 0u;
 	bool m_bDisplacementRegionUploaded = false;

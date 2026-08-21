@@ -54,13 +54,13 @@ void T3DRegionResidency::update(
 	rData.updateCpuRegionResidencyInternal( rFrame, bForce );
 
 	const t3dActiveHeightResidencyResult_t activeResult = m_pActiveHeightResidency->update( rFrame, bForce );
-	for ( int index = 0; index < activeResult.nCpuSourceRequestCount; ++index ) {
+	for ( int index = 0; index < activeResult.m_nCpuSourceRequestCount; ++index ) {
 		rData.requestCpuRegionSourceAsync( activeResult.cpuSourceRequests[( size_t ) ( index )] );
 	}
 
 	rData.updateInstanceRegionResidencyInternal( rFrame, bForce );
 
-	if ( m_pRepository->getRegionMapSize() > 0 && !rFrame.bAuthoring && rFrame.nMiddleLods > 0 ) {
+	if ( m_pRepository->getRegionMapSize() > 0 && !rFrame.m_bAuthoring && rFrame.m_nMiddleLods > 0 ) {
 		rData.updateMiddleHeightResidencyInternal( rFrame, bForce );
 	} else if ( m_pMiddleHeightRegionCache->isReady() ) {
 		rData.resetMiddleHeightCache();
@@ -101,56 +101,56 @@ void T3DRegionResidency::appendRuntimeProfileSample(
 	const t3dFarSurfaceAtlasStats_t far = m_pFarSurfaceAtlasCache ?
 		m_pFarSurfaceAtlasCache->getStats() : t3dFarSurfaceAtlasStats_t{};
 
-	rSample.stallFlags |= gpu.nStallFlagsLastTick | cpu.nStallFlagsLastTick | instance.nStallFlagsLastTick;
-	rSample.gpuResident = gpu.nResident;
-	rSample.nGpuCapacity = gpu.nCapacity;
-	rSample.nGpuUploads = gpu.nUploadsLastTick;
-	rSample.nGpuEvictions = gpu.nEvictionsLastTick;
-	rSample.gpuMissingRequired = gpu.nMissingRequiredLastTick;
-	rSample.nGpuUploadBytes = gpu.nUploadBytesLastTick;
-	rSample.nGpuPreparedPages = gpu.nPreparedPagesLastTick;
-	rSample.nGpuPrepareWorkers = gpu.nPrepareWorkersLastTick;
-	rSample.gpuEffectiveUploadLimit = gpu.nEffectiveUploadLimitLastTick;
-	rSample.gpuCameraMoved = gpu.bCameraMovedLastTick ? 1 : 0;
-	rSample.nGpuRequestedPages = gpu.nRequestedPages;
-	rSample.nGpuRequiredPages = gpu.nRequiredLastTick;
-	rSample.nGpuGuardPages = gpu.nGuardLastTick;
-	rSample.nGpuPrefetchPages = gpu.nPrefetchLastTick;
-	rSample.nGpuHysteresisPages = gpu.nHysteresisLastTick;
-	rSample.gpuPreparedQueue = runtimePageStats.nPreparedPages;
-	rSample.nGpuPreparePendingPages = runtimePageStats.nPendingPages;
-	rSample.gpuPrepareJobActive = runtimePageStats.bPrepareJobActive ? 1 : 0;
-	rSample.nGpuCookedHits = gpu.nCookedHitsLastTick;
-	rSample.nGpuCookedMisses = gpu.nCookedMissesLastTick;
-	rSample.gpuRuntimePrepares = gpu.nRuntimePreparesLastTick;
-	rSample.nGpuFarDirtyRegions = m_pFarSurfaceAtlasCache ? m_pFarSurfaceAtlasCache->getDirtyRegionCount() : 0;
-	rSample.gpuFarRegionsProcessed = far.nHeightRegionsLastTick + far.nColorRegionsLastTick;
-	rSample.nGpuPrepareLatencyUsec = runtimePageStats.nPrepareLatencyUsecLast;
-	rSample.nGpuPrepareQueueWaitUsec = runtimePageStats.nPrepareQueueWaitUsecLast;
-	rSample.nGpuPrepareFileOpenUsec = runtimePageStats.nPrepareFileOpenUsecLast;
-	rSample.nGpuPrepareFileReadUsec = runtimePageStats.nPrepareFileReadUsecLast;
-	rSample.nGpuPrepareValidationUsec = runtimePageStats.nPrepareValidationUsecLast;
-	rSample.nGpuPrepareMaterializeUsec = runtimePageStats.nPrepareMaterializeUsecLast;
-	rSample.nGpuPrepareWorkerUsec = runtimePageStats.nPrepareWorkerUsecLast;
-	rSample.nGpuPrepareReadyWaitUsec = runtimePageStats.nPrepareReadyWaitUsecLast;
-	rSample.nGpuPreparePublicationUsec = gpu.nPreparePublicationUsecLast;
-	rSample.nGpuPrepareEndToEndUsec = gpu.nPrepareEndToEndUsecLast;
-	rSample.nGpuCacheServiceUsec = gpu.nServiceUsecLast;
-	rSample.cpuResident = cpu.nResident;
-	rSample.cpuLoads = cpu.nLoadsLastTick;
-	rSample.nCpuEvictions = cpu.nEvictionsLastTick;
-	rSample.nCpuLoadBytes = cpu.nLoadBytesLastTick;
-	rSample.nCpuCacheServiceUsec = cpu.nServiceUsecLast;
-	rSample.cpuDesired = cpu.nDesiredLastTick;
-	rSample.cpuSelectionPending = cpu.bSelectionPending ? 1 : 0;
-	rSample.cpuPinned = cpu.nPinnedLastTick;
-	rSample.instanceResident = instance.nResident;
-	rSample.instanceLoads = instance.nLoadsLastTick;
-	rSample.nInstanceEvictions = instance.nEvictionsLastTick;
-	rSample.nInstanceLoadBytes = instance.nLoadBytesLastTick;
-	rSample.nInstanceCacheServiceUsec = instance.nServiceUsecLast;
-	rSample.instanceDesired = instance.nDesiredLastTick;
-	rSample.instanceSelectionPending = instance.bSelectionPending ? 1 : 0;
+	rSample.m_nStallFlags |= gpu.m_nStallFlagsLastTick | cpu.m_nStallFlagsLastTick | instance.m_nStallFlagsLastTick;
+	rSample.m_nGpuResident = gpu.m_nResident;
+	rSample.m_nGpuCapacity = gpu.m_nCapacity;
+	rSample.m_nGpuUploads = gpu.m_nUploadsLastTick;
+	rSample.m_nGpuEvictions = gpu.m_nEvictionsLastTick;
+	rSample.m_nGpuMissingRequired = gpu.m_nMissingRequiredLastTick;
+	rSample.m_nGpuUploadBytes = gpu.m_nUploadBytesLastTick;
+	rSample.m_nGpuPreparedPages = gpu.m_nPreparedPagesLastTick;
+	rSample.m_nGpuPrepareWorkers = gpu.m_nPrepareWorkersLastTick;
+	rSample.m_nGpuEffectiveUploadLimit = gpu.m_nEffectiveUploadLimitLastTick;
+	rSample.m_nGpuCameraMoved = gpu.m_bCameraMovedLastTick ? 1 : 0;
+	rSample.m_nGpuRequestedPages = gpu.m_nRequestedPages;
+	rSample.m_nGpuRequiredPages = gpu.m_nRequiredLastTick;
+	rSample.m_nGpuGuardPages = gpu.m_nGuardLastTick;
+	rSample.m_nGpuPrefetchPages = gpu.m_nPrefetchLastTick;
+	rSample.m_nGpuHysteresisPages = gpu.m_nHysteresisLastTick;
+	rSample.m_nGpuPreparedQueue = runtimePageStats.m_nPreparedPages;
+	rSample.m_nGpuPreparePendingPages = runtimePageStats.m_nPendingPages;
+	rSample.m_nGpuPrepareJobActive = runtimePageStats.m_bPrepareJobActive ? 1 : 0;
+	rSample.m_nGpuCookedHits = gpu.m_nCookedHitsLastTick;
+	rSample.m_nGpuCookedMisses = gpu.m_nCookedMissesLastTick;
+	rSample.m_nGpuRuntimePrepares = gpu.m_nRuntimePreparesLastTick;
+	rSample.m_nGpuFarDirtyRegions = m_pFarSurfaceAtlasCache ? m_pFarSurfaceAtlasCache->getDirtyRegionCount() : 0;
+	rSample.m_nGpuFarRegionsProcessed = far.m_nHeightRegionsLastTick + far.m_nColorRegionsLastTick;
+	rSample.m_nGpuPrepareLatencyUsec = runtimePageStats.m_nPrepareLatencyUsecLast;
+	rSample.m_nGpuPrepareQueueWaitUsec = runtimePageStats.m_nPrepareQueueWaitUsecLast;
+	rSample.m_nGpuPrepareFileOpenUsec = runtimePageStats.m_nPrepareFileOpenUsecLast;
+	rSample.m_nGpuPrepareFileReadUsec = runtimePageStats.m_nPrepareFileReadUsecLast;
+	rSample.m_nGpuPrepareValidationUsec = runtimePageStats.m_nPrepareValidationUsecLast;
+	rSample.m_nGpuPrepareMaterializeUsec = runtimePageStats.m_nPrepareMaterializeUsecLast;
+	rSample.m_nGpuPrepareWorkerUsec = runtimePageStats.m_nPrepareWorkerUsecLast;
+	rSample.m_nGpuPrepareReadyWaitUsec = runtimePageStats.m_nPrepareReadyWaitUsecLast;
+	rSample.m_nGpuPreparePublicationUsec = gpu.m_nPreparePublicationUsecLast;
+	rSample.m_nGpuPrepareEndToEndUsec = gpu.m_nPrepareEndToEndUsecLast;
+	rSample.m_nGpuCacheServiceUsec = gpu.m_nServiceUsecLast;
+	rSample.m_nCpuResident = cpu.m_nResident;
+	rSample.m_nCpuLoads = cpu.m_nLoadsLastTick;
+	rSample.m_nCpuEvictions = cpu.m_nEvictionsLastTick;
+	rSample.m_nCpuLoadBytes = cpu.m_nLoadBytesLastTick;
+	rSample.m_nCpuCacheServiceUsec = cpu.m_nServiceUsecLast;
+	rSample.m_nCpuDesired = cpu.m_nDesiredLastTick;
+	rSample.m_nCpuSelectionPending = cpu.m_bSelectionPending ? 1 : 0;
+	rSample.m_nCpuPinned = cpu.m_nPinnedLastTick;
+	rSample.m_nInstanceResident = instance.m_nResident;
+	rSample.m_nInstanceLoads = instance.m_nLoadsLastTick;
+	rSample.m_nInstanceEvictions = instance.m_nEvictionsLastTick;
+	rSample.m_nInstanceLoadBytes = instance.m_nLoadBytesLastTick;
+	rSample.m_nInstanceCacheServiceUsec = instance.m_nServiceUsecLast;
+	rSample.m_nInstanceDesired = instance.m_nDesiredLastTick;
+	rSample.m_nInstanceSelectionPending = instance.m_bSelectionPending ? 1 : 0;
 }
 
 void T3DRegionResidency::setBudgetOverrides(

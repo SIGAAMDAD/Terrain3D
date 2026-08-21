@@ -24,7 +24,7 @@ class T3DHLODPackage : public Resource {
 	Vector2i m_regionMin = V2I_ZERO;
 	Vector2i m_regionMax = V2I_ZERO;
 	AABB m_localBounds;
-	Ref<ArrayMesh> m_pMesh;
+	Ref<ArrayMesh> m_mesh;
 	real_t m_fGeometricError = 1.0f;
 	int64_t m_nSourceSignature = 0;
 	int64_t m_nBuildSignature = 0;
@@ -45,7 +45,7 @@ public:
 	void setLocalBounds( const AABB &rBounds );
 	EA_FORCE_INLINE AABB getLocalBounds( void ) const { return m_localBounds; }
 	void setMesh( const Ref<ArrayMesh> &rMesh );
-	EA_FORCE_INLINE Ref<ArrayMesh> getMesh( void ) const { return m_pMesh; }
+	EA_FORCE_INLINE Ref<ArrayMesh> getMesh( void ) const { return m_mesh; }
 	void setGeometricError( real_t fError );
 	EA_FORCE_INLINE real_t getGeometricError( void ) const { return m_fGeometricError; }
 	void setSourceSignature( int64_t nSignature );

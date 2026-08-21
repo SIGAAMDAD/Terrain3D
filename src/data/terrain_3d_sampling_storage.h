@@ -19,10 +19,10 @@ class T3DRegion;
 class T3DRegionRepository;
 
 typedef struct t3dSamplingSource_s {
-	const T3DRegionRepository *pRepository = nullptr;
-	const class T3DSamplingStorage *pStorage = nullptr;
+	const T3DRegionRepository *m_pRepository = nullptr;
+	const class T3DSamplingStorage *m_pStorage = nullptr;
 
-	EA_FORCE_INLINE bool valid( void ) const { return pRepository != nullptr && pStorage != nullptr; }
+	EA_FORCE_INLINE bool valid( void ) const { return m_pRepository != nullptr && m_pStorage != nullptr; }
 } t3dSamplingSource_t;
 
 // Owns the CPU publication mechanisms used by terrain sampling. Spatial policy
@@ -39,11 +39,11 @@ public:
 	bool bindActive( int nRegionSize, void *pBacking, size_t nBackingBytes );
 	void releaseActive( void );
 	void resetActive( void );
-	EA_FORCE_INLINE bool isActiveOwner( void ) const { return terrain3dActiveStorageIsOwner( this ); }
+	EA_FORCE_INLINE bool isActiveOwner( void ) const { return t3dActiveStorageIsOwner( this ); }
 	uint32_t refreshActiveGeneration( void );
 	EA_FORCE_INLINE uint32_t getActiveGeneration( void ) const { return m_nActiveStorageGeneration; }
 
-	EA_FORCE_INLINE T3DActiveMapLease acquireActive( const Vector2i &rLocation ) const { return isActiveOwner() ? terrain3dActiveStorageAcquire( this, rLocation ) : T3DActiveMapLease(); }
+	EA_FORCE_INLINE T3DActiveMapLease acquireActive( const Vector2i &rLocation ) const { return isActiveOwner() ? t3dActiveStorageAcquire( this, rLocation ) : T3DActiveMapLease(); }
 	bool containsActive( const Vector2i &rLocation ) const;
 	bool syncActiveRegion( const Vector2i &rLocation, const T3DRegion *pRegion );
 	bool syncActiveHeightPage( const Vector2i &rLocation, const uint8_t *pHeightBytes, size_t nHeightBytes );
@@ -81,7 +81,7 @@ private:
 	uint32_t m_nActiveStorageGeneration = 0u;
 	mutable T3DResidentRegionPool m_residentPool;
 	std::atomic<uint64_t> m_nSamplingGeneration{1u};
-	eastl::array<std::atomic<uint32_t>, TERRAIN3D_MAX_REGION_SLOTS> m_szRegionSamplingGenerations;
+	eastl::array<std::atomic<uint32_t>, s_nMaxRegionSlots> m_szRegionSamplingGenerations;
 
 	static int locationIndex( const Vector2i &rLocation );
 };

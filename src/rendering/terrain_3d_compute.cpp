@@ -28,8 +28,8 @@
 
 #define TERRAIN3D_CLAMP01( value ) std::clamp( ( value ), 0.0f, 1.0f )
 #define TERRAIN3D_LERP( a, b, t ) ( ( a ) + ( ( b ) - ( a ) ) * ( t ) )
-#define TERRAIN3D_UNPACK_COLOR( value, shift ) ( ( float ) ( ( ( value ) >> ( shift ) ) & 0xffu ) / TERRAIN3D_BYTE_MAX_FLOAT )
-#define TERRAIN3DQUANTIZECOLOR( value ) ( uint32_t ) ( std::clamp( std::round( ( value ) * TERRAIN3D_BYTE_MAX_FLOAT ), 0.0f, TERRAIN3D_BYTE_MAX_FLOAT ) )
+#define TERRAIN3D_UNPACK_COLOR( value, shift ) ( ( float ) ( ( ( value ) >> ( shift ) ) & 0xffu ) / s_fByteMaxFloat )
+#define TERRAIN3DQUANTIZECOLOR( value ) ( uint32_t ) ( std::clamp( std::round( ( value ) * s_fByteMaxFloat ), 0.0f, s_fByteMaxFloat ) )
 
 EA_FORCE_INLINE static float t3dComputeBitsToFloat( const uint32_t nBits ) { float fValue = 0.0f; std::memcpy( &fValue, &nBits, sizeof( fValue ) ); return fValue; }
 
@@ -132,13 +132,13 @@ bool T3DCompute::ensureRenderDevice( void ) {
 }
 
 bool T3DCompute::ensurePipeline( t3dPipeline_t &rPipeline, const String &rPath, const String &rName ) {
-	if ( rPipeline.pipeline.is_valid() ) {
+	if ( rPipeline.m_hPipeline.is_valid() ) {
 		return true;
 	}
-	if ( rPipeline.bAttempted || !ensureDevice() ) {
+	if ( rPipeline.m_bAttempted || !ensureDevice() ) {
 		return false;
 	}
-	rPipeline.bAttempted = true;
+	rPipeline.m_bAttempted = true;
 	ResourceLoader *const pLoader = ResourceLoader::get_singleton();
 	if ( !pLoader ) {
 		setError( "ResourceLoader unavailable while loading " + rPath );
@@ -154,16 +154,16 @@ bool T3DCompute::ensurePipeline( t3dPipeline_t &rPipeline, const String &rPath, 
 		setError( "Compute shader has no compiled SPIR-V: " + rPath );
 		return false;
 	}
-	rPipeline.pShader = m_pRd->shader_create_from_spirv( pSpirv, rName );
-	if ( !rPipeline.pShader.is_valid() ) {
+	rPipeline.m_hShader = m_pRd->shader_create_from_spirv( pSpirv, rName );
+	if ( !rPipeline.m_hShader.is_valid() ) {
 		setError( "Failed to create compute shader: " + rPath );
 		return false;
 	}
-	rPipeline.pipeline = m_pRd->compute_pipeline_create( rPipeline.pShader );
-	if ( !rPipeline.pipeline.is_valid() ) {
+	rPipeline.m_hPipeline = m_pRd->compute_pipeline_create( rPipeline.m_hShader );
+	if ( !rPipeline.m_hPipeline.is_valid() ) {
 		setError( "Failed to create compute pipeline: " + rPath );
-		m_pRd->free_rid( rPipeline.pShader );
-		rPipeline.pShader = RID();
+		m_pRd->free_rid( rPipeline.m_hShader );
+		rPipeline.m_hShader = RID();
 		return false;
 	}
 	return true;
@@ -173,27 +173,27 @@ bool T3DCompute::ensureRenderPipeline(
 	t3dPipeline_t &rPipeline, const Ref<RDShaderSPIRV> &rSpirv,
 	const String &rName
 ) {
-	if ( rPipeline.pipeline.is_valid() ) {
+	if ( rPipeline.m_hPipeline.is_valid() ) {
 		return true;
 	}
-	if ( rPipeline.bAttempted || !ensureRenderDevice() ) {
+	if ( rPipeline.m_bAttempted || !ensureRenderDevice() ) {
 		return false;
 	}
-	rPipeline.bAttempted = true;
+	rPipeline.m_bAttempted = true;
 	if ( rSpirv.is_null() ) {
 		setError( "Displacement compute shader has no compiled SPIR-V" );
 		return false;
 	}
-	rPipeline.pShader = m_pRenderRd->shader_create_from_spirv( rSpirv, rName );
-	if ( !rPipeline.pShader.is_valid() ) {
+	rPipeline.m_hShader = m_pRenderRd->shader_create_from_spirv( rSpirv, rName );
+	if ( !rPipeline.m_hShader.is_valid() ) {
 		setError( "Failed to create displacement compute shader" );
 		return false;
 	}
-	rPipeline.pipeline = m_pRenderRd->compute_pipeline_create( rPipeline.pShader );
-	if ( !rPipeline.pipeline.is_valid() ) {
+	rPipeline.m_hPipeline = m_pRenderRd->compute_pipeline_create( rPipeline.m_hShader );
+	if ( !rPipeline.m_hPipeline.is_valid() ) {
 		setError( "Failed to create displacement compute pipeline" );
-		m_pRenderRd->free_rid( rPipeline.pShader );
-		rPipeline.pShader = RID();
+		m_pRenderRd->free_rid( rPipeline.m_hShader );
+		rPipeline.m_hShader = RID();
 		return false;
 	}
 	return true;
@@ -214,11 +214,11 @@ void T3DCompute::freeBuffer( RID &rBuffer ) {
 }
 
 void T3DCompute::freePipeline( t3dPipeline_t &rPipeline ) {
-	if ( m_pRd && rPipeline.pipeline.is_valid() ) {
-		m_pRd->free_rid( rPipeline.pipeline );
+	if ( m_pRd && rPipeline.m_hPipeline.is_valid() ) {
+		m_pRd->free_rid( rPipeline.m_hPipeline );
 	}
-	if ( m_pRd && rPipeline.pShader.is_valid() ) {
-		m_pRd->free_rid( rPipeline.pShader );
+	if ( m_pRd && rPipeline.m_hShader.is_valid() ) {
+		m_pRd->free_rid( rPipeline.m_hShader );
 	}
 	rPipeline = t3dPipeline_t{};
 }
@@ -238,32 +238,32 @@ void T3DCompute::freeRenderRid( RID &rRid ) {
 }
 
 void T3DCompute::freeRenderPipeline( t3dPipeline_t &rPipeline ) {
-	if ( m_pRenderRd && rPipeline.pipeline.is_valid() ) {
-		m_pRenderRd->free_rid( rPipeline.pipeline );
+	if ( m_pRenderRd && rPipeline.m_hPipeline.is_valid() ) {
+		m_pRenderRd->free_rid( rPipeline.m_hPipeline );
 	}
-	if ( m_pRenderRd && rPipeline.pShader.is_valid() ) {
-		m_pRenderRd->free_rid( rPipeline.pShader );
+	if ( m_pRenderRd && rPipeline.m_hShader.is_valid() ) {
+		m_pRenderRd->free_rid( rPipeline.m_hShader );
 	}
 	rPipeline = t3dPipeline_t{};
 }
 
 bool T3DCompute::ensureBrushCapacity( const uint32_t nBytes ) {
-	if ( nBytes <= m_nBrushCapacity && m_brushBuffer.is_valid() && m_brushUniformSet.is_valid() ) {
+	if ( nBytes <= m_nBrushCapacity && m_hBrushBuffer.is_valid() && m_hBrushUniformSet.is_valid() ) {
 		return true;
 	}
-	freeUniformSet( m_brushUniformSet );
-	freeBuffer( m_brushBuffer );
+	freeUniformSet( m_hBrushUniformSet );
+	freeBuffer( m_hBrushBuffer );
 	m_nBrushCapacity = growthCapacity( nBytes );
-	m_brushBuffer = m_pRd->storage_buffer_create( m_nBrushCapacity );
-	if ( !m_brushBuffer.is_valid() ) {
+	m_hBrushBuffer = m_pRd->storage_buffer_create( m_nBrushCapacity );
+	if ( !m_hBrushBuffer.is_valid() ) {
 		setError( "Failed to allocate brush compute buffer" );
 		m_nBrushCapacity = 0u;
 		return false;
 	}
 	TypedArray<Ref<RDUniform>> pUniforms;
-	pUniforms.push_back( t3dComputeMakeStorageUniform( 0, m_brushBuffer ) );
-	m_brushUniformSet = m_pRd->uniform_set_create( pUniforms, m_brushPipeline.pShader, 0u );
-	if ( !m_brushUniformSet.is_valid() ) {
+	pUniforms.push_back( t3dComputeMakeStorageUniform( 0, m_hBrushBuffer ) );
+	m_hBrushUniformSet = m_pRd->uniform_set_create( pUniforms, m_brushPipeline.m_hShader, 0u );
+	if ( !m_hBrushUniformSet.is_valid() ) {
 		setError( "Failed to create brush compute uniform set" );
 		return false;
 	}
@@ -272,25 +272,25 @@ bool T3DCompute::ensureBrushCapacity( const uint32_t nBytes ) {
 
 bool T3DCompute::ensureDerivedCapacity( const uint32_t nInputBytes, const uint32_t nOutputBytes ) {
 	if ( nInputBytes <= m_nDerivedInputCapacity && nOutputBytes <= m_nDerivedOutputCapacity &&
-		m_derivedInputBuffer.is_valid() && m_derivedOutputBuffer.is_valid() && m_derivedUniformSet.is_valid() ) {
+		m_hDerivedInputBuffer.is_valid() && m_hDerivedOutputBuffer.is_valid() && m_hDerivedUniformSet.is_valid() ) {
 		return true;
 	}
-	freeUniformSet( m_derivedUniformSet );
-	freeBuffer( m_derivedInputBuffer );
-	freeBuffer( m_derivedOutputBuffer );
+	freeUniformSet( m_hDerivedUniformSet );
+	freeBuffer( m_hDerivedInputBuffer );
+	freeBuffer( m_hDerivedOutputBuffer );
 	m_nDerivedInputCapacity = growthCapacity( nInputBytes );
 	m_nDerivedOutputCapacity = growthCapacity( nOutputBytes );
-	m_derivedInputBuffer = m_pRd->storage_buffer_create( m_nDerivedInputCapacity );
-	m_derivedOutputBuffer = m_pRd->storage_buffer_create( m_nDerivedOutputCapacity );
-	if ( !m_derivedInputBuffer.is_valid() || !m_derivedOutputBuffer.is_valid() ) {
+	m_hDerivedInputBuffer = m_pRd->storage_buffer_create( m_nDerivedInputCapacity );
+	m_hDerivedOutputBuffer = m_pRd->storage_buffer_create( m_nDerivedOutputCapacity );
+	if ( !m_hDerivedInputBuffer.is_valid() || !m_hDerivedOutputBuffer.is_valid() ) {
 		setError( "Failed to allocate derived-map compute buffers" );
 		return false;
 	}
 	TypedArray<Ref<RDUniform>> pUniforms;
-	pUniforms.push_back( t3dComputeMakeStorageUniform( 0, m_derivedInputBuffer ) );
-	pUniforms.push_back( t3dComputeMakeStorageUniform( 1, m_derivedOutputBuffer ) );
-	m_derivedUniformSet = m_pRd->uniform_set_create( pUniforms, m_derivedPipeline.pShader, 0u );
-	if ( !m_derivedUniformSet.is_valid() ) {
+	pUniforms.push_back( t3dComputeMakeStorageUniform( 0, m_hDerivedInputBuffer ) );
+	pUniforms.push_back( t3dComputeMakeStorageUniform( 1, m_hDerivedOutputBuffer ) );
+	m_hDerivedUniformSet = m_pRd->uniform_set_create( pUniforms, m_derivedPipeline.m_hShader, 0u );
+	if ( !m_hDerivedUniformSet.is_valid() ) {
 		setError( "Failed to create derived-map compute uniform set" );
 		return false;
 	}
@@ -298,18 +298,18 @@ bool T3DCompute::ensureDerivedCapacity( const uint32_t nInputBytes, const uint32
 }
 
 void T3DCompute::freeDisplacementTexture( void ) {
-	freeRenderUniformSet( m_displacementUniformSet );
+	freeRenderUniformSet( m_hDisplacementUniformSet );
 	RenderingServer *const pServer = RenderingServer::get_singleton();
-	if ( pServer && m_displacementRsTexture.is_valid() ) {
-		pServer->free_rid( m_displacementRsTexture );
+	if ( pServer && m_hDisplacementRsTexture.is_valid() ) {
+		pServer->free_rid( m_hDisplacementRsTexture );
 	}
-	m_displacementRsTexture = RID();
-	m_displacementBoundHeight = RID();
-	m_displacementBoundControl = RID();
-	m_displacementBoundDisplacement = RID();
-	freeRenderRid( m_displacementRegionBuffer );
-	freeRenderRid( m_displacementMaterialBuffer );
-	freeRenderRid( m_displacementOutputTexture );
+	m_hDisplacementRsTexture = RID();
+	m_hDisplacementBoundHeight = RID();
+	m_hDisplacementBoundControl = RID();
+	m_hDisplacementBoundDisplacement = RID();
+	freeRenderRid( m_hDisplacementRegionBuffer );
+	freeRenderRid( m_hDisplacementMaterialBuffer );
+	freeRenderRid( m_hDisplacementOutputTexture );
 	m_nDisplacementRegionHash = 0u;
 	m_displacementMaterialHash = 0u;
 	m_bDisplacementRegionUploaded = false;
@@ -325,7 +325,7 @@ bool T3DCompute::ensureDisplacementResources(
 	if ( !ensureRenderPipeline( m_displacementPipeline, rSpirv, "Terrain3D displacement compute" ) ) {
 		return false;
 	}
-	if ( !m_nearestSampler.is_valid() ) {
+	if ( !m_hNearestSampler.is_valid() ) {
 		Ref<RDSamplerState> pState;
 		pState.instantiate();
 		pState->set_mag_filter( RenderingDevice::SAMPLER_FILTER_NEAREST );
@@ -334,9 +334,9 @@ bool T3DCompute::ensureDisplacementResources(
 		pState->set_repeat_u( RenderingDevice::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE );
 		pState->set_repeat_v( RenderingDevice::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE );
 		pState->set_repeat_w( RenderingDevice::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE );
-		m_nearestSampler = m_pRenderRd->sampler_create( pState );
+		m_hNearestSampler = m_pRenderRd->sampler_create( pState );
 	}
-	if ( !m_linearRepeatSampler.is_valid() ) {
+	if ( !m_hLinearRepeatSampler.is_valid() ) {
 		Ref<RDSamplerState> pState;
 		pState.instantiate();
 		pState->set_mag_filter( RenderingDevice::SAMPLER_FILTER_LINEAR );
@@ -345,40 +345,40 @@ bool T3DCompute::ensureDisplacementResources(
 		pState->set_repeat_u( RenderingDevice::SAMPLER_REPEAT_MODE_REPEAT );
 		pState->set_repeat_v( RenderingDevice::SAMPLER_REPEAT_MODE_REPEAT );
 		pState->set_repeat_w( RenderingDevice::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE );
-		m_linearRepeatSampler = m_pRenderRd->sampler_create( pState );
+		m_hLinearRepeatSampler = m_pRenderRd->sampler_create( pState );
 	}
-	if ( !m_nearestSampler.is_valid() || !m_linearRepeatSampler.is_valid() ) {
+	if ( !m_hNearestSampler.is_valid() || !m_hLinearRepeatSampler.is_valid() ) {
 		setError( "Failed to create displacement samplers" );
 		return false;
 	}
-	if ( !m_displacementRegionBuffer.is_valid() ) {
-		m_displacementRegionBuffer = t3dUploadBridgeCreatePersistentStorageBuffer( 4096u * sizeof( int32_t ) );
-		if ( !m_displacementRegionBuffer.is_valid() ) {
-			m_displacementRegionBuffer = m_pRenderRd->storage_buffer_create( 4096u * sizeof( int32_t ) );
+	if ( !m_hDisplacementRegionBuffer.is_valid() ) {
+		m_hDisplacementRegionBuffer = t3dUploadBridgeCreatePersistentStorageBuffer( 4096u * sizeof( int32_t ) );
+		if ( !m_hDisplacementRegionBuffer.is_valid() ) {
+			m_hDisplacementRegionBuffer = m_pRenderRd->storage_buffer_create( 4096u * sizeof( int32_t ) );
 		}
 		m_bDisplacementRegionUploaded = false;
 	}
-	if ( !m_displacementMaterialBuffer.is_valid() ) {
-		m_displacementMaterialBuffer = t3dUploadBridgeCreatePersistentStorageBuffer( 32u * 4u * sizeof( float ) );
-		if ( !m_displacementMaterialBuffer.is_valid() ) {
-			m_displacementMaterialBuffer = m_pRenderRd->storage_buffer_create( 32u * 4u * sizeof( float ) );
+	if ( !m_hDisplacementMaterialBuffer.is_valid() ) {
+		m_hDisplacementMaterialBuffer = t3dUploadBridgeCreatePersistentStorageBuffer( 32u * 4u * sizeof( float ) );
+		if ( !m_hDisplacementMaterialBuffer.is_valid() ) {
+			m_hDisplacementMaterialBuffer = m_pRenderRd->storage_buffer_create( 32u * 4u * sizeof( float ) );
 		}
 		m_bDisplacementMaterialUploaded = false;
 	}
-	if ( !m_displacementRegionBuffer.is_valid() || !m_displacementMaterialBuffer.is_valid() ) {
+	if ( !m_hDisplacementRegionBuffer.is_valid() || !m_hDisplacementMaterialBuffer.is_valid() ) {
 		setError( "Failed to allocate displacement parameter buffers" );
 		return false;
 	}
-	if ( m_displacementOutputTexture.is_valid() && m_nDisplacementWidth == nWidth && m_nDisplacementHeight == nHeight ) {
+	if ( m_hDisplacementOutputTexture.is_valid() && m_nDisplacementWidth == nWidth && m_nDisplacementHeight == nHeight ) {
 		return true;
 	}
-	freeRenderUniformSet( m_displacementUniformSet );
+	freeRenderUniformSet( m_hDisplacementUniformSet );
 	RenderingServer *const pServer = RenderingServer::get_singleton();
-	if ( pServer && m_displacementRsTexture.is_valid() ) {
-		pServer->free_rid( m_displacementRsTexture );
+	if ( pServer && m_hDisplacementRsTexture.is_valid() ) {
+		pServer->free_rid( m_hDisplacementRsTexture );
 	}
-	m_displacementRsTexture = RID();
-	freeRenderRid( m_displacementOutputTexture );
+	m_hDisplacementRsTexture = RID();
+	freeRenderRid( m_hDisplacementOutputTexture );
 
 	Ref<RDTextureFormat> pFormat;
 	pFormat.instantiate();
@@ -394,8 +394,8 @@ bool T3DCompute::ensureDisplacementResources(
 						   RenderingDevice::TEXTURE_USAGE_CAN_COPY_TO_BIT );
 	Ref<RDTextureView> pView;
 	pView.instantiate();
-	m_displacementOutputTexture = m_pRenderRd->texture_create( pFormat, pView );
-	if ( !m_displacementOutputTexture.is_valid() ) {
+	m_hDisplacementOutputTexture = m_pRenderRd->texture_create( pFormat, pView );
+	if ( !m_hDisplacementOutputTexture.is_valid() ) {
 		setError( "Failed to allocate displacement storage texture" );
 		return false;
 	}
@@ -403,8 +403,8 @@ bool T3DCompute::ensureDisplacementResources(
 		setError( "RenderingServer unavailable while exposing displacement texture" );
 		return false;
 	}
-	m_displacementRsTexture = pServer->texture_rd_create( m_displacementOutputTexture );
-	if ( !m_displacementRsTexture.is_valid() ) {
+	m_hDisplacementRsTexture = pServer->texture_rd_create( m_hDisplacementOutputTexture );
+	if ( !m_hDisplacementRsTexture.is_valid() ) {
 		setError( "Failed to expose displacement texture to RenderingServer" );
 		return false;
 	}
@@ -442,132 +442,132 @@ bool T3DCompute::prepareDisplacementRequest(
 		setError( "Global RenderingDevice is unavailable" );
 		return false;
 	}
-	if ( m_pDisplacementSpirv.is_null() ) {
+	if ( m_displacementSpirv.is_null() ) {
 		ResourceLoader *const pLoader = ResourceLoader::get_singleton();
 		Ref<RDShaderFile> pShaderFile;
 		if ( pLoader ) {
 			pShaderFile = pLoader->load( "res://addons/terrain_3d/compute/terrain_displacement.glsl" );
 		}
-		m_pDisplacementSpirv = pShaderFile.is_valid() ? pShaderFile->get_spirv() : Ref<RDShaderSPIRV>();
+		m_displacementSpirv = pShaderFile.is_valid() ? pShaderFile->get_spirv() : Ref<RDShaderSPIRV>();
 	}
-	rRequest.pShaderSpirv = m_pDisplacementSpirv;
-	if ( rRequest.pShaderSpirv.is_null() ) {
+	rRequest.m_shaderSpirv = m_displacementSpirv;
+	if ( rRequest.m_shaderSpirv.is_null() ) {
 		setError( "Compute displacement shader is unavailable or failed to compile" );
 		return false;
 	}
 
-	rRequest.nWidth = ( uint32_t ) ( pTerrain->getMeshSize() * 4 * pTerrain->getTessellationLevel() );
-	rRequest.nHeight = ( uint32_t ) ( pTerrain->getMeshSize() * 4 );
-	rRequest.materialRid = pMaterial->getMaterialRid();
-	rRequest.heightTexture = data->getHeightMapsRid();
-	rRequest.controlTexture = data->getControlMapsRid();
-	rRequest.displacementTexture = pAssets->getDisplacementArrayRid();
-	rRequest.regionMap = data->getRegionMap();
-	rRequest.nRegionMapSize = ( uint32_t ) ( data->getRegionMapSizeInternal() );
-	if ( rRequest.nWidth == 0u || rRequest.nHeight == 0u || rRequest.nRegionMapSize == 0u ||
-		rRequest.regionMap.size() != ( int64_t ) ( rRequest.nRegionMapSize ) * ( int64_t ) ( rRequest.nRegionMapSize ) ||
-		!rRequest.materialRid.is_valid() || !rRequest.heightTexture.is_valid() ||
-		!rRequest.controlTexture.is_valid() || !rRequest.displacementTexture.is_valid() ) {
+	rRequest.m_nWidth = ( uint32_t ) ( pTerrain->getMeshSize() * 4 * pTerrain->getTessellationLevel() );
+	rRequest.m_nHeight = ( uint32_t ) ( pTerrain->getMeshSize() * 4 );
+	rRequest.m_hMaterialRid = pMaterial->getMaterialRid();
+	rRequest.m_hHeightTexture = data->getHeightMapsRid();
+	rRequest.m_hControlTexture = data->getControlMapsRid();
+	rRequest.m_hDisplacementTexture = pAssets->getDisplacementArrayRid();
+	rRequest.m_regionMap = data->getRegionMap();
+	rRequest.m_nRegionMapSize = ( uint32_t ) ( data->getRegionMapSizeInternal() );
+	if ( rRequest.m_nWidth == 0u || rRequest.m_nHeight == 0u || rRequest.m_nRegionMapSize == 0u ||
+		rRequest.m_regionMap.size() != ( int64_t ) ( rRequest.m_nRegionMapSize ) * ( int64_t ) ( rRequest.m_nRegionMapSize ) ||
+		!rRequest.m_hMaterialRid.is_valid() || !rRequest.m_hHeightTexture.is_valid() ||
+		!rRequest.m_hControlTexture.is_valid() || !rRequest.m_hDisplacementTexture.is_valid() ) {
 		setError( "Displacement compute inputs are incomplete" );
 		return false;
 	}
 
 	typedef struct alignas( 16 ) t3dMaterialData_s {
-		float fUvScale;
-		float fOffset;
-		float fScale;
-		float fPad;
+		float m_fUvScale;
+		float m_fOffset;
+		float m_fScale;
+		float m_fPad;
 	} t3dMaterialData_t;
 	eastl::array<t3dMaterialData_t, 32> material_data{};
 	const PackedFloat32Array uv_scales = pAssets->getTextureUvScales();
 	const PackedVector2Array displacements = pAssets->getTextureDisplacements();
 	for ( int i = 0; i < 32; ++i ) {
-		material_data[( size_t ) ( i )].fUvScale = i < uv_scales.size() ? uv_scales[i] : 1.0f;
+		material_data[( size_t ) ( i )].m_fUvScale = i < uv_scales.size() ? uv_scales[i] : 1.0f;
 		const Vector2 displacement = i < displacements.size() ? displacements[i] : Vector2( 0.0f, 1.0f );
-		material_data[( size_t ) ( i )].fOffset = displacement.x;
-		material_data[( size_t ) ( i )].fScale = displacement.y;
+		material_data[( size_t ) ( i )].m_fOffset = displacement.x;
+		material_data[( size_t ) ( i )].m_fScale = displacement.y;
 	}
-	rRequest.materialData = copyToBytes( material_data.data(), sizeof( material_data ) );
-	rRequest.regionMapHash = t3dComputeHashBytes( ( const uint8_t * ) ( rRequest.regionMap.ptr() ),
-										 ( size_t ) ( rRequest.regionMap.size() ) * sizeof( int32_t ) );
-	rRequest.materialDataHash =
-		t3dComputeHashBytes( rRequest.materialData.ptr(), ( size_t ) ( rRequest.materialData.size() ) );
+	rRequest.m_materialData = copyToBytes( material_data.data(), sizeof( material_data ) );
+	rRequest.m_nRegionMapHash = t3dComputeHashBytes( ( const uint8_t * ) ( rRequest.m_regionMap.ptr() ),
+										 ( size_t ) ( rRequest.m_regionMap.size() ) * sizeof( int32_t ) );
+	rRequest.m_nMaterialDataHash =
+		t3dComputeHashBytes( rRequest.m_materialData.ptr(), ( size_t ) ( rRequest.m_materialData.size() ) );
 
 	typedef struct t3dDisplacementParams_s {
-		uint32_t nWidth, nHeight, nRegionSize, nRegionMapSize;
-		float fVertexSpacing, vertex_density, mesh_size, fTessellationLevel;
-		float fTargetX, fTargetZ, blend_sharpness, fDisplacementSharpness;
-		float fAutoSlope, fAutoHeightReduction;
-		uint32_t autoBaseTexture, autoOverlayTexture, auto_enabled, sampling_mode;
-		uint32_t bFastBlendCurve, background_mode;
-		float ground_level, fRegionBlend;
-		float height_min, fHeightRange;
-		uint32_t bControlMapsImplicit, texture_layer_count, padding1, padding2;
+		uint32_t m_nWidth, m_nHeight, m_nRegionSize, m_nRegionMapSize;
+		float m_fVertexSpacing, m_fVertexDensity, m_fMeshSize, m_fTessellationLevel;
+		float m_fTargetX, m_fTargetZ, m_fBlendSharpness, m_fDisplacementSharpness;
+		float m_fAutoSlope, m_fAutoHeightReduction;
+		uint32_t m_nAutoBaseTexture, m_nAutoOverlayTexture, m_bAutoEnabled, m_nSamplingMode;
+		uint32_t m_bFastBlendCurve, m_nBackgroundMode;
+		float m_fGroundLevel, m_fRegionBlend;
+		float m_fHeightMin, m_fHeightRange;
+		uint32_t m_bControlMapsImplicit, m_nTextureLayerCount, m_nPadding1, m_nPadding2;
 	} t3dDisplacementParams_t;
 	t3dDisplacementParams_t params{};
 	static_assert( sizeof( t3dDisplacementParams_t ) == 112u, "Displacement push constants must match GLSL" );
-	params.nWidth = rRequest.nWidth;
-	params.nHeight = rRequest.nHeight;
-	params.nRegionSize = ( uint32_t ) ( pTerrain->getRegionSize() );
-	params.nRegionMapSize = rRequest.nRegionMapSize;
-	params.fVertexSpacing = ( float ) ( pTerrain->getVertexSpacing() );
-	params.vertex_density = 1.0f / params.fVertexSpacing;
-	params.mesh_size = ( float ) ( pTerrain->getMeshSize() );
-	params.fTessellationLevel = ( float ) ( pTerrain->getTessellationLevel() );
-	params.fTargetX = ( float ) ( rTargetPosition.x );
-	params.fTargetZ = ( float ) ( rTargetPosition.z );
-	params.blend_sharpness = ( float ) ( ( real_t ) ( pMaterial->getShaderParam( "blend_sharpness" ) ) );
-	params.fDisplacementSharpness = ( float ) ( pMaterial->getDisplacementSharpness() );
-	params.fAutoSlope = ( float ) ( ( real_t ) ( pMaterial->getShaderParam( "auto_slope" ) ) );
-	params.fAutoHeightReduction = ( float ) ( ( real_t ) ( pMaterial->getShaderParam( "auto_height_reduction" ) ) );
-	params.texture_layer_count = ( uint32_t ) ( MAX( pAssets->getGeneratedArraySize(), 1 ) );
-	const int auto_layer_max = ( int ) ( params.texture_layer_count ) - 1;
-	params.autoBaseTexture = ( uint32_t ) ( CLAMP( ( int ) ( pMaterial->getShaderParam( "auto_base_texture" ) ), 0, auto_layer_max ) );
-	params.autoOverlayTexture = ( uint32_t ) ( CLAMP( ( int ) ( pMaterial->getShaderParam( "auto_overlay_texture" ) ), 0, auto_layer_max ) );
-	params.auto_enabled = pMaterial->getAutoShaderEnabled() ? 1u : 0u;
-	params.sampling_mode = ( uint32_t ) ( pMaterial->getTerrainSamplingMode() );
+	params.m_nWidth = rRequest.m_nWidth;
+	params.m_nHeight = rRequest.m_nHeight;
+	params.m_nRegionSize = ( uint32_t ) ( pTerrain->getRegionSize() );
+	params.m_nRegionMapSize = rRequest.m_nRegionMapSize;
+	params.m_fVertexSpacing = ( float ) ( pTerrain->getVertexSpacing() );
+	params.m_fVertexDensity = 1.0f / params.m_fVertexSpacing;
+	params.m_fMeshSize = ( float ) ( pTerrain->getMeshSize() );
+	params.m_fTessellationLevel = ( float ) ( pTerrain->getTessellationLevel() );
+	params.m_fTargetX = ( float ) ( rTargetPosition.x );
+	params.m_fTargetZ = ( float ) ( rTargetPosition.z );
+	params.m_fBlendSharpness = ( float ) ( ( real_t ) ( pMaterial->getShaderParam( "blend_sharpness" ) ) );
+	params.m_fDisplacementSharpness = ( float ) ( pMaterial->getDisplacementSharpness() );
+	params.m_fAutoSlope = ( float ) ( ( real_t ) ( pMaterial->getShaderParam( "auto_slope" ) ) );
+	params.m_fAutoHeightReduction = ( float ) ( ( real_t ) ( pMaterial->getShaderParam( "auto_height_reduction" ) ) );
+	params.m_nTextureLayerCount = ( uint32_t ) ( MAX( pAssets->getGeneratedArraySize(), 1 ) );
+	const int auto_layer_max = ( int ) ( params.m_nTextureLayerCount ) - 1;
+	params.m_nAutoBaseTexture = ( uint32_t ) ( CLAMP( ( int ) ( pMaterial->getShaderParam( "auto_base_texture" ) ), 0, auto_layer_max ) );
+	params.m_nAutoOverlayTexture = ( uint32_t ) ( CLAMP( ( int ) ( pMaterial->getShaderParam( "auto_overlay_texture" ) ), 0, auto_layer_max ) );
+	params.m_bAutoEnabled = pMaterial->getAutoShaderEnabled() ? 1u : 0u;
+	params.m_nSamplingMode = ( uint32_t ) ( pMaterial->getTerrainSamplingMode() );
 	const t3dShaderPerformancePreset_t preset = pMaterial->getShaderPerformancePreset();
-	params.bFastBlendCurve =
+	params.m_bFastBlendCurve =
 		preset == SHADER_PRESET_XBOX_360 || preset == SHADER_PRESET_FASTEST ? 1u
 																												  : 0u;
-	params.background_mode = ( uint32_t ) ( pMaterial->getWorldBackground() );
-	params.ground_level = ( float ) ( ( real_t ) ( pMaterial->getShaderParam( "ground_level" ) ) );
-	params.fRegionBlend = ( float ) ( ( real_t ) ( pMaterial->getShaderParam( "region_blend" ) ) );
-	params.height_min = TERRAIN3D_REGION_HEIGHT_MIN;
-	params.fHeightRange = TERRAIN3D_REGION_HEIGHT_RANGE;
-	params.bControlMapsImplicit = data->areControlMapsImplicit() ? 1u : 0u;
-	rRequest.pushConstants = copyToBytes( &params, sizeof( params ) );
+	params.m_nBackgroundMode = ( uint32_t ) ( pMaterial->getWorldBackground() );
+	params.m_fGroundLevel = ( float ) ( ( real_t ) ( pMaterial->getShaderParam( "ground_level" ) ) );
+	params.m_fRegionBlend = ( float ) ( ( real_t ) ( pMaterial->getShaderParam( "region_blend" ) ) );
+	params.m_fHeightMin = s_fRegionHeightMin;
+	params.m_fHeightRange = s_fRegionHeightRange;
+	params.m_bControlMapsImplicit = data->areControlMapsImplicit() ? 1u : 0u;
+	rRequest.m_pushConstants = copyToBytes( &params, sizeof( params ) );
 	return rRequest.valid();
 }
 
 bool T3DCompute::dispatchDisplacementRequest( const t3dDisplacementRequest_t &rRequest, RID &rTexture ) {
 	rTexture = RID();
 	if ( !rRequest.valid() || !ensureRenderDevice() ||
-		!ensureDisplacementResources( rRequest.nWidth, rRequest.nHeight, rRequest.pShaderSpirv ) ) {
+		!ensureDisplacementResources( rRequest.m_nWidth, rRequest.m_nHeight, rRequest.m_shaderSpirv ) ) {
 		return false;
 	}
-	if ( !m_bDisplacementRegionUploaded || m_nDisplacementRegionHash != rRequest.regionMapHash ) {
+	if ( !m_bDisplacementRegionUploaded || m_nDisplacementRegionHash != rRequest.m_nRegionMapHash ) {
 		const PackedByteArray region_bytes =
-			copyToBytes( rRequest.regionMap.ptr(), ( size_t ) ( rRequest.regionMap.size() ) * sizeof( int32_t ) );
-		const int64_t expected_region_bytes = ( int64_t ) ( rRequest.regionMap.size() ) * ( int64_t ) ( sizeof( int32_t ) );
+			copyToBytes( rRequest.m_regionMap.ptr(), ( size_t ) ( rRequest.m_regionMap.size() ) * sizeof( int32_t ) );
+		const int64_t expected_region_bytes = ( int64_t ) ( rRequest.m_regionMap.size() ) * ( int64_t ) ( sizeof( int32_t ) );
 		if ( region_bytes.size() != expected_region_bytes || expected_region_bytes > 4096 * ( int64_t ) ( sizeof( int32_t ) ) ||
-			m_pRenderRd->buffer_update( m_displacementRegionBuffer, 0u, ( uint32_t ) ( region_bytes.size() ), region_bytes ) != OK ) {
+			m_pRenderRd->buffer_update( m_hDisplacementRegionBuffer, 0u, ( uint32_t ) ( region_bytes.size() ), region_bytes ) != OK ) {
 			setError( "Failed to upload displacement region topology" );
 			m_bDisplacementRegionUploaded = false;
 			return false;
 		}
-		m_nDisplacementRegionHash = rRequest.regionMapHash;
+		m_nDisplacementRegionHash = rRequest.m_nRegionMapHash;
 		m_bDisplacementRegionUploaded = true;
 	}
-	if ( !m_bDisplacementMaterialUploaded || m_displacementMaterialHash != rRequest.materialDataHash ) {
-		if ( rRequest.materialData.size() != 32 * 4 * ( int64_t ) ( sizeof( float ) ) ||
-			m_pRenderRd->buffer_update( m_displacementMaterialBuffer, 0u, ( uint32_t ) ( rRequest.materialData.size() ),
-									  rRequest.materialData ) != OK ) {
+	if ( !m_bDisplacementMaterialUploaded || m_displacementMaterialHash != rRequest.m_nMaterialDataHash ) {
+		if ( rRequest.m_materialData.size() != 32 * 4 * ( int64_t ) ( sizeof( float ) ) ||
+			m_pRenderRd->buffer_update( m_hDisplacementMaterialBuffer, 0u, ( uint32_t ) ( rRequest.m_materialData.size() ),
+									  rRequest.m_materialData ) != OK ) {
 			setError( "Failed to upload displacement material data" );
 			m_bDisplacementMaterialUploaded = false;
 			return false;
 		}
-		m_displacementMaterialHash = rRequest.materialDataHash;
+		m_displacementMaterialHash = rRequest.m_nMaterialDataHash;
 		m_bDisplacementMaterialUploaded = true;
 	}
 
@@ -576,53 +576,53 @@ bool T3DCompute::dispatchDisplacementRequest( const t3dDisplacementRequest_t &rR
 		setError( "RenderingServer unavailable during displacement dispatch" );
 		return false;
 	}
-	const RID height_texture = pServer->texture_get_rd_texture( rRequest.heightTexture );
-	const RID control_texture = pServer->texture_get_rd_texture( rRequest.controlTexture );
-	const RID displacement_texture = pServer->texture_get_rd_texture( rRequest.displacementTexture );
+	const RID height_texture = pServer->texture_get_rd_texture( rRequest.m_hHeightTexture );
+	const RID control_texture = pServer->texture_get_rd_texture( rRequest.m_hControlTexture );
+	const RID displacement_texture = pServer->texture_get_rd_texture( rRequest.m_hDisplacementTexture );
 	if ( !height_texture.is_valid() || !control_texture.is_valid() || !displacement_texture.is_valid() ) {
 		setError( "Displacement texture arrays are unavailable on the global RenderingDevice" );
 		return false;
 	}
 
 	const bool bBindingsChanged =
-		!m_displacementUniformSet.is_valid() || m_displacementBoundHeight != height_texture ||
-		m_displacementBoundControl != control_texture || m_displacementBoundDisplacement != displacement_texture;
+		!m_hDisplacementUniformSet.is_valid() || m_hDisplacementBoundHeight != height_texture ||
+		m_hDisplacementBoundControl != control_texture || m_hDisplacementBoundDisplacement != displacement_texture;
 	if ( bBindingsChanged ) {
-		freeRenderUniformSet( m_displacementUniformSet );
+		freeRenderUniformSet( m_hDisplacementUniformSet );
 		TypedArray<Ref<RDUniform>> pUniforms;
-		pUniforms.push_back( t3dComputeMakeSampledTextureUniform( 0, m_nearestSampler, height_texture ) );
-		pUniforms.push_back( t3dComputeMakeSampledTextureUniform( 1, m_nearestSampler, control_texture ) );
-		pUniforms.push_back( t3dComputeMakeSampledTextureUniform( 2, m_linearRepeatSampler, displacement_texture ) );
-		pUniforms.push_back( t3dComputeMakeImageUniform( 3, m_displacementOutputTexture ) );
-		pUniforms.push_back( t3dComputeMakeStorageUniform( 4, m_displacementRegionBuffer ) );
-		pUniforms.push_back( t3dComputeMakeStorageUniform( 5, m_displacementMaterialBuffer ) );
-		m_displacementUniformSet = m_pRenderRd->uniform_set_create( pUniforms, m_displacementPipeline.pShader, 0u );
-		if ( !m_displacementUniformSet.is_valid() ) {
+		pUniforms.push_back( t3dComputeMakeSampledTextureUniform( 0, m_hNearestSampler, height_texture ) );
+		pUniforms.push_back( t3dComputeMakeSampledTextureUniform( 1, m_hNearestSampler, control_texture ) );
+		pUniforms.push_back( t3dComputeMakeSampledTextureUniform( 2, m_hLinearRepeatSampler, displacement_texture ) );
+		pUniforms.push_back( t3dComputeMakeImageUniform( 3, m_hDisplacementOutputTexture ) );
+		pUniforms.push_back( t3dComputeMakeStorageUniform( 4, m_hDisplacementRegionBuffer ) );
+		pUniforms.push_back( t3dComputeMakeStorageUniform( 5, m_hDisplacementMaterialBuffer ) );
+		m_hDisplacementUniformSet = m_pRenderRd->uniform_set_create( pUniforms, m_displacementPipeline.m_hShader, 0u );
+		if ( !m_hDisplacementUniformSet.is_valid() ) {
 			setError( "Failed to bind displacement compute resources" );
 			return false;
 		}
-		m_displacementBoundHeight = height_texture;
-		m_displacementBoundControl = control_texture;
-		m_displacementBoundDisplacement = displacement_texture;
+		m_hDisplacementBoundHeight = height_texture;
+		m_hDisplacementBoundControl = control_texture;
+		m_hDisplacementBoundDisplacement = displacement_texture;
 	}
 
 	const int64_t list = m_pRenderRd->compute_list_begin();
-	m_pRenderRd->compute_list_bind_compute_pipeline( list, m_displacementPipeline.pipeline );
-	m_pRenderRd->compute_list_bind_uniform_set( list, m_displacementUniformSet, 0u );
-	m_pRenderRd->compute_list_set_push_constant( list, rRequest.pushConstants,
-											   ( uint32_t ) ( rRequest.pushConstants.size() ) );
-	m_pRenderRd->compute_list_dispatch( list, ( rRequest.nWidth + 7u ) / 8u, ( rRequest.nHeight + 7u ) / 8u, 1u );
+	m_pRenderRd->compute_list_bind_compute_pipeline( list, m_displacementPipeline.m_hPipeline );
+	m_pRenderRd->compute_list_bind_uniform_set( list, m_hDisplacementUniformSet, 0u );
+	m_pRenderRd->compute_list_set_push_constant( list, rRequest.m_pushConstants,
+											   ( uint32_t ) ( rRequest.m_pushConstants.size() ) );
+	m_pRenderRd->compute_list_dispatch( list, ( rRequest.m_nWidth + 7u ) / 8u, ( rRequest.m_nHeight + 7u ) / 8u, 1u );
 	m_pRenderRd->compute_list_end();
 	m_pRenderRd->barrier( RenderingDevice::BARRIER_MASK_COMPUTE, RenderingDevice::BARRIER_MASK_RASTER );
-	rTexture = m_displacementRsTexture;
+	rTexture = m_hDisplacementRsTexture;
 	return rTexture.is_valid();
 }
 
 void T3DCompute::shutdownDisplacementResources( void ) {
 	freeDisplacementTexture();
 	freeRenderPipeline( m_displacementPipeline );
-	freeRenderRid( m_nearestSampler );
-	freeRenderRid( m_linearRepeatSampler );
+	freeRenderRid( m_hNearestSampler );
+	freeRenderRid( m_hLinearRepeatSampler );
 	m_pRenderRd = nullptr;
 	m_bRenderDeviceAttempted = false;
 }
@@ -633,142 +633,142 @@ bool T3DCompute::isAvailable( void ) {
 
 void T3DCompute::processBrushCpu( eastl::vector<t3dBrushElement_t> &rElements, const t3dBrushParams_t &p ) {
 	for ( t3dBrushElement_t &e : rElements ) {
-		if ( ( e.flags & 1u ) == 0u ) {
+		if ( ( e.m_nFlags & 1u ) == 0u ) {
 			continue;
 		}
-		const float fAlpha = t3dComputeBitsToFloat( e.alpha );
-		if ( p.mapType == TERRAIN3D_TYPE_HEIGHT_VALUE ) {
-			float fSource = t3dComputeBitsToFloat( e.value );
+		const float fAlpha = t3dComputeBitsToFloat( e.m_nAlpha );
+		if ( p.m_nMapType == s_nTypeHeightValue ) {
+			float fSource = t3dComputeBitsToFloat( e.m_nValue );
 			if ( !std::isfinite( fSource ) ) {
 				fSource = 0.0f;
 			}
 			float fResult = fSource;
-			const float fAmount = fAlpha * p.fStrength;
-			if ( p.operation == TERRAIN3D_OP_ADD_VALUE ) {
-				if ( p.tool == TERRAIN3D_TOOL_HEIGHT_VALUE ) {
-					fResult = TERRAIN3D_LERP( fSource, p.fSelectedHeight, TERRAIN3D_CLAMP01( fAmount ) );
-				} else if ( ( p.featureFlags & TERRAIN3D_FEATURE_ALT_VALUE ) && ( p.featureFlags & TERRAIN3D_FEATURE_CENTER_VALID_VALUE ) ) {
-					fResult = std::clamp( p.fBrushCenterHeight + fAmount, fSource, fSource + fAmount );
+			const float fAmount = fAlpha * p.m_fStrength;
+			if ( p.m_nOperation == s_nOpAddValue ) {
+				if ( p.m_nTool == s_nToolHeightValue ) {
+					fResult = TERRAIN3D_LERP( fSource, p.m_fSelectedHeight, TERRAIN3D_CLAMP01( fAmount ) );
+				} else if ( ( p.m_nFeatureFlags & s_nFeatureAltValue ) && ( p.m_nFeatureFlags & s_nFeatureCenterValidValue ) ) {
+					fResult = std::clamp( p.m_fBrushCenterHeight + fAmount, fSource, fSource + fAmount );
 				} else {
 					fResult = fSource + fAmount;
 				}
-			} else if ( p.operation == TERRAIN3D_OP_SUBTRACT_VALUE ) {
-				if ( p.tool == TERRAIN3D_TOOL_HEIGHT_VALUE ) {
-					fResult = TERRAIN3D_LERP( fSource, p.fSelectedHeight, TERRAIN3D_CLAMP01( fAmount ) );
-				} else if ( ( p.featureFlags & TERRAIN3D_FEATURE_ALT_VALUE ) && ( p.featureFlags & TERRAIN3D_FEATURE_CENTER_VALID_VALUE ) ) {
-					fResult = std::clamp( p.fBrushCenterHeight - fAmount, fSource - fAmount, fSource );
+			} else if ( p.m_nOperation == s_nOpSubtractValue ) {
+				if ( p.m_nTool == s_nToolHeightValue ) {
+					fResult = TERRAIN3D_LERP( fSource, p.m_fSelectedHeight, TERRAIN3D_CLAMP01( fAmount ) );
+				} else if ( ( p.m_nFeatureFlags & s_nFeatureAltValue ) && ( p.m_nFeatureFlags & s_nFeatureCenterValidValue ) ) {
+					fResult = std::clamp( p.m_fBrushCenterHeight - fAmount, fSource - fAmount, fSource );
 				} else {
 					fResult = fSource - fAmount;
 				}
-			} else if ( p.operation == TERRAIN3D_OP_GRADIENT_VALUE ) {
-				fResult = TERRAIN3D_LERP( fSource, t3dComputeBitsToFloat( e.target ), TERRAIN3D_CLAMP01( fAmount ) );
+			} else if ( p.m_nOperation == s_nOpGradientValue ) {
+				fResult = TERRAIN3D_LERP( fSource, t3dComputeBitsToFloat( e.m_nTarget ), TERRAIN3D_CLAMP01( fAmount ) );
 			}
-			e.value = t3dComputeFloatToBits( fResult );
-		} else if ( p.mapType == TERRAIN3D_TYPE_CONTROL_VALUE ) {
-			uint32_t base = ( e.value >> 27u ) & 31u;
-			uint32_t overlay = ( e.value >> 22u ) & 31u;
-			float fBlend = ( float ) ( ( e.value >> 14u ) & 255u ) / TERRAIN3D_BYTE_MAX_FLOAT;
-			uint32_t rotation = ( e.value >> 10u ) & 15u;
-			uint32_t scale = ( e.value >> 7u ) & 7u;
-			bool bHole = ( ( e.value >> 2u ) & 1u ) != 0u;
-			bool bNav = ( ( e.value >> 1u ) & 1u ) != 0u;
-			bool bAutomatic = ( e.value & 1u ) != 0u;
-			if ( p.tool == TERRAIN3D_TOOL_TEXTURE_VALUE ) {
-				if ( p.operation == TERRAIN3D_OP_REPLACE_VALUE && fAlpha > 0.5f ) {
-					if ( p.featureFlags & TERRAIN3D_FEATURE_TEXTURE_VALUE ) {
-						base = p.assetId;
-						overlay = p.assetId;
+			e.m_nValue = t3dComputeFloatToBits( fResult );
+		} else if ( p.m_nMapType == s_nTypeControlValue ) {
+			uint32_t base = ( e.m_nValue >> 27u ) & 31u;
+			uint32_t overlay = ( e.m_nValue >> 22u ) & 31u;
+			float fBlend = ( float ) ( ( e.m_nValue >> 14u ) & 255u ) / s_fByteMaxFloat;
+			uint32_t rotation = ( e.m_nValue >> 10u ) & 15u;
+			uint32_t scale = ( e.m_nValue >> 7u ) & 7u;
+			bool bHole = ( ( e.m_nValue >> 2u ) & 1u ) != 0u;
+			bool bNav = ( ( e.m_nValue >> 1u ) & 1u ) != 0u;
+			bool bAutomatic = ( e.m_nValue & 1u ) != 0u;
+			if ( p.m_nTool == s_nToolTextureValue ) {
+				if ( p.m_nOperation == s_nOpReplaceValue && fAlpha > 0.5f ) {
+					if ( p.m_nFeatureFlags & s_nFeatureTextureValue ) {
+						base = p.m_nAssetId;
+						overlay = p.m_nAssetId;
 						fBlend = 0.0f;
 						bAutomatic = false;
 					}
-					if ( base == p.assetId && !bAutomatic ) {
-						if ( p.featureFlags & TERRAIN3D_FEATURE_ANGLE_VALUE ) {
-							rotation = p.uvRotation;
+					if ( base == p.m_nAssetId && !bAutomatic ) {
+						if ( p.m_nFeatureFlags & s_nFeatureAngleValue ) {
+							rotation = p.m_nUvRotation;
 						}
-						if ( p.featureFlags & TERRAIN3D_FEATURE_SCALE_VALUE ) {
-							scale = p.uvScale;
+						if ( p.m_nFeatureFlags & s_nFeatureScaleValue ) {
+							scale = p.m_nUvScale;
 						}
 					}
-				} else if ( p.operation == TERRAIN3D_OP_ADD_VALUE ) {
-					const float fSpray = std::clamp( p.fStrength * 0.05f, 0.004f, 0.25f );
+				} else if ( p.m_nOperation == s_nOpAddValue ) {
+					const float fSpray = std::clamp( p.m_fStrength * 0.05f, 0.004f, 0.25f );
 					const float fBrushValue = TERRAIN3D_CLAMP01( fAlpha * fSpray );
-					if ( ( p.featureFlags & TERRAIN3D_FEATURE_TEXTURE_VALUE ) && fAlpha * p.fStrength * 11.0f > 0.1f ) {
+					if ( ( p.m_nFeatureFlags & s_nFeatureTextureValue ) && fAlpha * p.m_fStrength * 11.0f > 0.1f ) {
 						bAutomatic = false;
-						if ( p.assetId != base && p.assetId != overlay ) {
-							if ( p.featureFlags & TERRAIN3D_FEATURE_ALT_VALUE ) {
+						if ( p.m_nAssetId != base && p.m_nAssetId != overlay ) {
+							if ( p.m_nFeatureFlags & s_nFeatureAltValue ) {
 								if ( fBlend < 0.5f ) {
-									overlay = p.assetId;
+									overlay = p.m_nAssetId;
 								} else {
-									base = p.assetId;
+									base = p.m_nAssetId;
 								}
 							} else {
 								fBlend = fBlend >= 0.5f ? TERRAIN3D_CLAMP01( fBlend + fBrushValue ) : TERRAIN3D_CLAMP01( fBlend - fBrushValue );
 								if ( fBlend <= 1.0f / 254.0f ) {
-									overlay = p.assetId;
+									overlay = p.m_nAssetId;
 								} else if ( fBlend >= 1.0f - 1.0f / 254.0f ) {
-									base = p.assetId;
+									base = p.m_nAssetId;
 								}
 							}
 						}
-						if ( base == p.assetId ) {
+						if ( base == p.m_nAssetId ) {
 							fBlend = TERRAIN3D_CLAMP01( fBlend - fBrushValue );
 							if ( fAlpha > 0.5f && fBlend < 0.5f ) {
 								bAutomatic = false;
 							}
 						}
-						if ( overlay == p.assetId ) {
+						if ( overlay == p.m_nAssetId ) {
 							fBlend = TERRAIN3D_CLAMP01( fBlend + fBrushValue );
 							if ( fAlpha > 0.5f && fBlend >= 0.5f ) {
 								bAutomatic = false;
 							}
 						}
 					}
-					if ( ( ( base == p.assetId && fBlend < 0.5f ) || ( overlay == p.assetId && fBlend >= 0.5f ) ) &&
+					if ( ( ( base == p.m_nAssetId && fBlend < 0.5f ) || ( overlay == p.m_nAssetId && fBlend >= 0.5f ) ) &&
 						!bAutomatic && fAlpha > 0.5f ) {
-						if ( p.featureFlags & TERRAIN3D_FEATURE_ANGLE_VALUE ) {
-							rotation = p.uvRotation;
+						if ( p.m_nFeatureFlags & s_nFeatureAngleValue ) {
+							rotation = p.m_nUvRotation;
 						}
-						if ( p.featureFlags & TERRAIN3D_FEATURE_SCALE_VALUE ) {
-							scale = p.uvScale;
+						if ( p.m_nFeatureFlags & s_nFeatureScaleValue ) {
+							scale = p.m_nUvScale;
 						}
 					}
-				} else if ( p.operation == TERRAIN3D_OP_SUBTRACT_VALUE ) {
-					const float fBrushValue = TERRAIN3D_CLAMP01( fAlpha * std::clamp( p.fStrength * 0.05f, 0.004f, 0.25f ) );
-					if ( base == p.assetId ) {
+				} else if ( p.m_nOperation == s_nOpSubtractValue ) {
+					const float fBrushValue = TERRAIN3D_CLAMP01( fAlpha * std::clamp( p.m_fStrength * 0.05f, 0.004f, 0.25f ) );
+					if ( base == p.m_nAssetId ) {
 						fBlend = TERRAIN3D_CLAMP01( fBlend + fBrushValue );
 					}
-					if ( overlay == p.assetId ) {
+					if ( overlay == p.m_nAssetId ) {
 						fBlend = TERRAIN3D_CLAMP01( fBlend - fBrushValue );
 					}
 				}
-			} else if ( p.tool == TERRAIN3D_TOOL_AUTOSHADER_VALUE && fAlpha > 0.5f ) {
-				bAutomatic = p.operation == TERRAIN3D_OP_ADD_VALUE;
+			} else if ( p.m_nTool == s_nToolAutoshaderValue && fAlpha > 0.5f ) {
+				bAutomatic = p.m_nOperation == s_nOpAddValue;
 				scale = 0u;
 				rotation = 0u;
-			} else if ( p.tool == TERRAIN3D_TOOL_HOLES_VALUE && fAlpha > 0.5f ) {
-				bHole = p.operation == TERRAIN3D_OP_ADD_VALUE;
-			} else if ( p.tool == TERRAIN3D_TOOL_NAVIGATION_VALUE && fAlpha > 0.5f ) {
-				bNav = p.operation == TERRAIN3D_OP_ADD_VALUE;
+			} else if ( p.m_nTool == s_nToolHolesValue && fAlpha > 0.5f ) {
+				bHole = p.m_nOperation == s_nOpAddValue;
+			} else if ( p.m_nTool == s_nToolNavigationValue && fAlpha > 0.5f ) {
+				bNav = p.m_nOperation == s_nOpAddValue;
 			}
-			const uint32_t blend_u8 = ( uint32_t ) ( std::clamp( std::round( fBlend * TERRAIN3D_BYTE_MAX_FLOAT ), 0.0f, TERRAIN3D_BYTE_MAX_FLOAT ) );
-			e.value = ( ( base & 31u ) << 27u ) | ( ( overlay & 31u ) << 22u ) | ( ( blend_u8 & 255u ) << 14u ) |
+			const uint32_t blend_u8 = ( uint32_t ) ( std::clamp( std::round( fBlend * s_fByteMaxFloat ), 0.0f, s_fByteMaxFloat ) );
+			e.m_nValue = ( ( base & 31u ) << 27u ) | ( ( overlay & 31u ) << 22u ) | ( ( blend_u8 & 255u ) << 14u ) |
 					  ( ( rotation & 15u ) << 10u ) | ( ( scale & 7u ) << 7u ) | ( bHole ? 4u : 0u ) | ( bNav ? 2u : 0u ) |
 					  ( bAutomatic ? 1u : 0u );
-		} else if ( p.mapType == TERRAIN3D_TYPE_COLOR_VALUE ) {
-			float fR = TERRAIN3D_UNPACK_COLOR( e.value, 0 ), g = TERRAIN3D_UNPACK_COLOR( e.value, 8 ), b = TERRAIN3D_UNPACK_COLOR( e.value, 16 ),
-				  a = TERRAIN3D_UNPACK_COLOR( e.value, 24 );
-			const float fWeight = TERRAIN3D_CLAMP01( fAlpha * p.fStrength );
-			if ( p.tool == TERRAIN3D_TOOL_COLOR_VALUE ) {
-				const uint32_t fTarget = p.operation == TERRAIN3D_OP_ADD_VALUE ? p.colorRgba8 : 0xffffffffu;
+		} else if ( p.m_nMapType == s_nTypeColorValue ) {
+			float fR = TERRAIN3D_UNPACK_COLOR( e.m_nValue, 0 ), g = TERRAIN3D_UNPACK_COLOR( e.m_nValue, 8 ), b = TERRAIN3D_UNPACK_COLOR( e.m_nValue, 16 ),
+				  a = TERRAIN3D_UNPACK_COLOR( e.m_nValue, 24 );
+			const float fWeight = TERRAIN3D_CLAMP01( fAlpha * p.m_fStrength );
+			if ( p.m_nTool == s_nToolColorValue ) {
+				const uint32_t fTarget = p.m_nOperation == s_nOpAddValue ? p.m_nColorRgba8 : 0xffffffffu;
 				fR = TERRAIN3D_LERP( fR, TERRAIN3D_UNPACK_COLOR( fTarget, 0 ), fWeight );
 				g = TERRAIN3D_LERP( g, TERRAIN3D_UNPACK_COLOR( fTarget, 8 ), fWeight );
 				b = TERRAIN3D_LERP( b, TERRAIN3D_UNPACK_COLOR( fTarget, 16 ), fWeight );
-			} else if ( p.tool == TERRAIN3D_TOOL_ROUGHNESS_VALUE ) {
-				const float fTarget = p.operation == TERRAIN3D_OP_ADD_VALUE ? 0.5f + 0.5f * p.fRoughness : 0.5f;
+			} else if ( p.m_nTool == s_nToolRoughnessValue ) {
+				const float fTarget = p.m_nOperation == s_nOpAddValue ? 0.5f + 0.5f * p.m_fRoughness : 0.5f;
 				a = TERRAIN3D_LERP( a, fTarget, fWeight );
-				a = ( float ) ( ( int ) ( a * TERRAIN3D_BYTE_MAX_FLOAT ) ) / TERRAIN3D_BYTE_MAX_FLOAT;
+				a = ( float ) ( ( int ) ( a * s_fByteMaxFloat ) ) / s_fByteMaxFloat;
 			}
-			e.value = t3dComputePackColor( fR, g, b, a );
+			e.m_nValue = t3dComputePackColor( fR, g, b, a );
 		}
 	}
 }
@@ -795,22 +795,22 @@ bool T3DCompute::processBrush( eastl::vector<t3dBrushElement_t> &rElements, cons
 		return false;
 	}
 	const PackedByteArray input = copyToBytes( rElements.data(), byte_count );
-	if ( m_pRd->buffer_update( m_brushBuffer, 0u, byte_count, input ) != OK ) {
+	if ( m_pRd->buffer_update( m_hBrushBuffer, 0u, byte_count, input ) != OK ) {
 		setError( "Failed to upload brush compute batch" );
 		return false;
 	}
 	t3dBrushParams_t params = rParams;
-	params.nCount = ( uint32_t ) ( rElements.size() );
+	params.m_nCount = ( uint32_t ) ( rElements.size() );
 	const PackedByteArray push = copyToBytes( &params, sizeof( params ) );
 	const int64_t list = m_pRd->compute_list_begin();
-	m_pRd->compute_list_bind_compute_pipeline( list, m_brushPipeline.pipeline );
-	m_pRd->compute_list_bind_uniform_set( list, m_brushUniformSet, 0u );
+	m_pRd->compute_list_bind_compute_pipeline( list, m_brushPipeline.m_hPipeline );
+	m_pRd->compute_list_bind_uniform_set( list, m_hBrushUniformSet, 0u );
 	m_pRd->compute_list_set_push_constant( list, push, ( uint32_t ) ( sizeof( params ) ) );
-	m_pRd->compute_list_dispatch( list, ( params.nCount + TERRAIN3D_COMPUTE_WORKGROUP_SIZE - 1u ) / TERRAIN3D_COMPUTE_WORKGROUP_SIZE, 1u, 1u );
+	m_pRd->compute_list_dispatch( list, ( params.m_nCount + s_nComputeWorkgroupSize - 1u ) / s_nComputeWorkgroupSize, 1u, 1u );
 	m_pRd->compute_list_end();
 	m_pRd->submit();
 	m_pRd->sync();
-	const PackedByteArray output = m_pRd->buffer_get_data( m_brushBuffer, 0u, byte_count );
+	const PackedByteArray output = m_pRd->buffer_get_data( m_hBrushBuffer, 0u, byte_count );
 	if ( output.size() != byte_count ) {
 		setError( "Brush compute readback returned an unexpected byte count" );
 		return false;
@@ -850,28 +850,28 @@ bool T3DCompute::generateDerivedMap(
 		return false;
 	}
 	const PackedByteArray input = copyToBytes( fHeightHalo.data(), input_bytes );
-	if ( m_pRd->buffer_update( m_derivedInputBuffer, 0u, input_bytes, input ) != OK ) {
+	if ( m_pRd->buffer_update( m_hDerivedInputBuffer, 0u, input_bytes, input ) != OK ) {
 		setError( "Failed to upload derived-map height halo" );
 		return false;
 	}
 	typedef struct t3dDerivedParams_s {
-		uint32_t nWidth;
-		uint32_t height;
-		uint32_t halo_stride;
-		float fVertexSpacing;
+		uint32_t m_nWidth;
+		uint32_t m_nHeight;
+		uint32_t m_nHaloStride;
+		float m_fVertexSpacing;
 	} t3dDerivedParams_t;
 	t3dDerivedParams_t params{( uint32_t ) ( nWidth ), ( uint32_t ) ( nHeight ), ( uint32_t ) ( nWidth + 2 ), fVertexSpacing};
 	const PackedByteArray push = copyToBytes( &params, sizeof( params ) );
 	const uint32_t count = ( uint32_t ) ( nWidth * nHeight );
 	const int64_t list = m_pRd->compute_list_begin();
-	m_pRd->compute_list_bind_compute_pipeline( list, m_derivedPipeline.pipeline );
-	m_pRd->compute_list_bind_uniform_set( list, m_derivedUniformSet, 0u );
+	m_pRd->compute_list_bind_compute_pipeline( list, m_derivedPipeline.m_hPipeline );
+	m_pRd->compute_list_bind_uniform_set( list, m_hDerivedUniformSet, 0u );
 	m_pRd->compute_list_set_push_constant( list, push, ( uint32_t ) ( sizeof( params ) ) );
-	m_pRd->compute_list_dispatch( list, ( count + TERRAIN3D_COMPUTE_WORKGROUP_SIZE - 1u ) / TERRAIN3D_COMPUTE_WORKGROUP_SIZE, 1u, 1u );
+	m_pRd->compute_list_dispatch( list, ( count + s_nComputeWorkgroupSize - 1u ) / s_nComputeWorkgroupSize, 1u, 1u );
 	m_pRd->compute_list_end();
 	m_pRd->submit();
 	m_pRd->sync();
-	rRgba8 = m_pRd->buffer_get_data( m_derivedOutputBuffer, 0u, output_bytes );
+	rRgba8 = m_pRd->buffer_get_data( m_hDerivedOutputBuffer, 0u, output_bytes );
 	if ( rRgba8.size() != output_bytes ) {
 		setError( "Derived-map compute readback returned an unexpected byte count" );
 		rRgba8.clear();
@@ -884,11 +884,11 @@ void T3DCompute::shutdown( void ) {
 	if ( !m_pRd ) {
 		return;
 	}
-	freeUniformSet( m_brushUniformSet );
-	freeUniformSet( m_derivedUniformSet );
-	freeBuffer( m_brushBuffer );
-	freeBuffer( m_derivedInputBuffer );
-	freeBuffer( m_derivedOutputBuffer );
+	freeUniformSet( m_hBrushUniformSet );
+	freeUniformSet( m_hDerivedUniformSet );
+	freeBuffer( m_hBrushBuffer );
+	freeBuffer( m_hDerivedInputBuffer );
+	freeBuffer( m_hDerivedOutputBuffer );
 	freePipeline( m_brushPipeline );
 	freePipeline( m_derivedPipeline );
 	memdelete( m_pRd );

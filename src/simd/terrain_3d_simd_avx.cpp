@@ -23,10 +23,10 @@
 EA_FORCE_INLINE static __m256 t3dSimdAvxDecode8( const uint16_t *pSource ) { return _mm256_cvtph_ps( _mm_loadu_si128( ( const __m128i * ) ( pSource ) ) ); }
 
 static inline void t3dSimdAvxEncodeNormal8( const __m256 argX, const __m256 argZ, uint8_t *pDestination ) {
-	const __m256 scale = _mm256_set1_ps( TERRAIN3D_BYTE_MIDPOINT_FLOAT );
+	const __m256 scale = _mm256_set1_ps( s_fByteMidpointFloat );
 	const __m256 half = _mm256_set1_ps( 0.5f );
 	const __m256 zero = _mm256_setzero_ps();
-	const __m256 max255 = _mm256_set1_ps( TERRAIN3D_BYTE_MAX_FLOAT );
+	const __m256 max255 = _mm256_set1_ps( s_fByteMaxFloat );
 	const __m256 one = _mm256_set1_ps( 1.0f );
 	const __m256 x = _mm256_min_ps( max255,
 		_mm256_max_ps( zero, _mm256_add_ps( _mm256_mul_ps( _mm256_add_ps( argX, one ), scale ), half ) ) );
@@ -50,8 +50,8 @@ static inline void t3dSimdAvxScalarNormalPixel(
 	const float fDz = pCenterRow[iX] - pDownRow[iX];
 	const float fLength = std::sqrt( fDx * fDx + fSpacing * fSpacing + fDz * fDz );
 	const float fInverse = fLength > 0.0f ? 1.0f / fLength : 0.0f;
-	const float fNx = std::max( 0.0f, std::min( TERRAIN3D_BYTE_MAX_FLOAT, ( fDx * fInverse * 0.5f + 0.5f ) * TERRAIN3D_BYTE_MAX_FLOAT ) );
-	const float fNz = std::max( 0.0f, std::min( TERRAIN3D_BYTE_MAX_FLOAT, ( fDz * fInverse * 0.5f + 0.5f ) * TERRAIN3D_BYTE_MAX_FLOAT ) );
+	const float fNx = std::max( 0.0f, std::min( s_fByteMaxFloat, ( fDx * fInverse * 0.5f + 0.5f ) * s_fByteMaxFloat ) );
+	const float fNz = std::max( 0.0f, std::min( s_fByteMaxFloat, ( fDz * fInverse * 0.5f + 0.5f ) * s_fByteMaxFloat ) );
 	pDestination[0] = ( uint8_t ) ( std::floor( fNx + 0.5f ) );
 	pDestination[1] = ( uint8_t ) ( std::floor( fNz + 0.5f ) );
 }
@@ -61,24 +61,24 @@ static inline void t3dSimdAvxWriteTransform(
 	float *pDestination
 ) {
 	alignas( 32 ) float fBasis[8];
-	_mm256_store_ps( fBasis, t3dSimdAvxDecode8( rTransform.basis ) );
+	_mm256_store_ps( fBasis, t3dSimdAvxDecode8( rTransform.m_szBasis ) );
 	pDestination[0] = fBasis[0];
 	pDestination[1] = fBasis[1];
 	pDestination[2] = fBasis[2];
-	pDestination[3] = rTransform.origin[0];
+	pDestination[3] = rTransform.m_szOrigin[0];
 	pDestination[4] = fBasis[3];
 	pDestination[5] = fBasis[4];
 	pDestination[6] = fBasis[5];
-	pDestination[7] = rTransform.origin[1];
+	pDestination[7] = rTransform.m_szOrigin[1];
 	pDestination[8] = fBasis[6];
 	pDestination[9] = fBasis[7];
-	pDestination[10] = t3dHalfDecode( rTransform.basis[8] );
-	pDestination[11] = rTransform.origin[2];
+	pDestination[10] = t3dHalfDecode( rTransform.m_szBasis[8] );
+	pDestination[11] = rTransform.m_szOrigin[2];
 	if ( nStride == 16 ) {
-		pDestination[12] = ( float ) ( ( nColor >> 24u ) & 0xffu ) * ( TERRAIN3D_BYTE_INV_MAX_FLOAT );
-		pDestination[13] = ( float ) ( ( nColor >> 16u ) & 0xffu ) * ( TERRAIN3D_BYTE_INV_MAX_FLOAT );
-		pDestination[14] = ( float ) ( ( nColor >> 8u ) & 0xffu ) * ( TERRAIN3D_BYTE_INV_MAX_FLOAT );
-		pDestination[15] = ( float ) ( nColor & 0xffu ) * ( TERRAIN3D_BYTE_INV_MAX_FLOAT );
+		pDestination[12] = ( float ) ( ( nColor >> 24u ) & 0xffu ) * ( s_fByteInvMaxFloat );
+		pDestination[13] = ( float ) ( ( nColor >> 16u ) & 0xffu ) * ( s_fByteInvMaxFloat );
+		pDestination[14] = ( float ) ( ( nColor >> 8u ) & 0xffu ) * ( s_fByteInvMaxFloat );
+		pDestination[15] = ( float ) ( nColor & 0xffu ) * ( s_fByteInvMaxFloat );
 	}
 }
 

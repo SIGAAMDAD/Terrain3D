@@ -61,7 +61,7 @@ public:
 private:
 	// Saved data
 	bool m_bEnabled = true;
-	Ref<PackedScene> m_pPackedScene;
+	Ref<PackedScene> m_packedScene;
 	t3dGenType_t m_generatedType = TYPE_NONE;
 	t3dHlodContribution_t m_hlodContribution = HLOD_AUTO;
 	int m_nHlodMinLevel = 1;
@@ -69,18 +69,18 @@ private:
 	Vector2 m_generatedSize = V2( 1.f );
 	real_t m_fHeightOffset = 0.f;
 	real_t m_fDensity = 0.f;
-	ShadowCasting m_castShadows = TERRAIN3D_SHADOW_CASTING_ON;
+	ShadowCasting m_castShadows = s_shadowCastingOn;
 	uint32_t m_visibilityLayers = 1;
-	Ref<Material> m_pMaterialOverride;
-	Ref<Material> m_pMaterialOverlay;
-	int m_iLastLod = TERRAIN3D_MESH_MAX_LOD_COUNT - 1;
-	int m_iLastShadowLod = TERRAIN3D_MESH_MAX_LOD_COUNT - 1;
+	Ref<Material> m_materialOverride;
+	Ref<Material> m_materialOverlay;
+	int m_iLastLod = s_nMeshMaxLodCount - 1;
+	int m_iLastShadowLod = s_nMeshMaxLodCount - 1;
 	int m_shadowImpostor = 0;
-	eastl::array<float, TERRAIN3D_MESH_MAX_LOD_COUNT> m_fLodRanges{};
+	eastl::array<float, s_nMeshMaxLodCount> m_fLodRanges{};
 	real_t m_fFadeMargin = 0.f;
 
 	// Working data
-	Ref<Material> m_pHighlightMat;
+	Ref<Material> m_highlightMat;
 	TypedArray<Mesh> m_meshes;
 	TypedArray<Mesh> m_pendingMeshes; // Queue to avoid warnings from RS on mesh swap
 	uint32_t m_nInstanceCount = 0;
@@ -89,7 +89,7 @@ private:
 	static bool sortLodNodes( const Node *pA, const Node *pB );
 	Ref<ArrayMesh> createGeneratedMesh( const t3dGenType_t type = TYPE_TEXTURE_CARD ) const;
 	void assignGeneratedMesh( void );
-	EA_FORCE_INLINE void invalidateThumbnail( void ) { m_pThumbnail.unref(); }
+	EA_FORCE_INLINE void invalidateThumbnail( void ) { m_thumbnail.unref(); }
 	Ref<Material> getMaterial( void );
 	TypedArray<Mesh> getMeshes( void ) const;
 
@@ -105,9 +105,9 @@ public:
 	EA_FORCE_INLINE int getId( void ) const override { return m_nId; }
 	void setHighlighted( const bool bHighlighted ) override;
 	EA_FORCE_INLINE bool isHighlighted( void ) const override { return m_bHighlighted; }
-	EA_FORCE_INLINE Ref<Material> getHighlightMaterial( void ) const { return m_bHighlighted ? m_pHighlightMat : Ref<Material>(); }
+	EA_FORCE_INLINE Ref<Material> getHighlightMaterial( void ) const { return m_bHighlighted ? m_highlightMat : Ref<Material>(); }
 	Color getHighlightColor( void ) const override;
-	EA_FORCE_INLINE Ref<Texture2D> getThumbnail( void ) const override { return m_pThumbnail; }
+	EA_FORCE_INLINE Ref<Texture2D> getThumbnail( void ) const override { return m_thumbnail; }
 
 	void setEnabled( const bool bEnabled );
 	EA_FORCE_INLINE bool isEnabled( void ) const { return m_bEnabled; }
@@ -117,7 +117,7 @@ public:
 	EA_FORCE_INLINE uint32_t getInstanceCount( void ) const { return m_nInstanceCount; }
 
 	void setSceneFile( const Ref<PackedScene> &rSceneFile );
-	EA_FORCE_INLINE Ref<PackedScene> getSceneFile( void ) const { return m_pPackedScene; }
+	EA_FORCE_INLINE Ref<PackedScene> getSceneFile( void ) const { return m_packedScene; }
 	EA_FORCE_INLINE bool isSceneFilePending( void ) const { return m_pendingMeshes.size() > 0; }
 	void commitMeshes( void );
 	void setHlodContribution( t3dHlodContribution_t mode );
@@ -132,7 +132,7 @@ public:
 	void setGeneratedType( const t3dGenType_t type );
 	EA_FORCE_INLINE t3dGenType_t getGeneratedType( void ) const { return m_generatedType; }
 	Ref<Mesh> getMesh( const int nLod = 0 ) const;
-	EA_FORCE_INLINE void setThumbnail( const Ref<Texture2D> tex ) { m_pThumbnail = tex; }
+	EA_FORCE_INLINE void setThumbnail( const Ref<Texture2D> tex ) { m_thumbnail = tex; }
 	void setHeightOffset( const real_t fOffset );
 	EA_FORCE_INLINE real_t getHeightOffset( void ) const { return m_fHeightOffset; }
 	void setDensity( const real_t fDensity );
@@ -143,9 +143,9 @@ public:
 	void setVisibilityLayers( const uint32_t nLayers );
 	EA_FORCE_INLINE uint32_t getVisibilityLayers( void ) const { return m_visibilityLayers; }
 	void setMaterialOverride( const Ref<Material> &rMaterial );
-	EA_FORCE_INLINE Ref<Material> getMaterialOverride( void ) const { return m_pMaterialOverride; }
+	EA_FORCE_INLINE Ref<Material> getMaterialOverride( void ) const { return m_materialOverride; }
 	void setMaterialOverlay( const Ref<Material> &rMaterial );
-	EA_FORCE_INLINE Ref<Material> getMaterialOverlay( void ) const { return m_pMaterialOverlay; }
+	EA_FORCE_INLINE Ref<Material> getMaterialOverlay( void ) const { return m_materialOverlay; }
 
 	void setGeneratedFaces( const int nCount );
 	EA_FORCE_INLINE int getGeneratedFaces( void ) const { return m_nGeneratedFaces; }

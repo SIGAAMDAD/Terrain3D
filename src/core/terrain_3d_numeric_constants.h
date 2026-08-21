@@ -4,8 +4,8 @@
 #ifndef TERRAIN3D_NUMERIC_CONSTANTS_H
 #define TERRAIN3D_NUMERIC_CONSTANTS_H
 
-static constexpr float TERRAIN3D_BYTE_MAX_FLOAT = 255.0f;
-static constexpr float TERRAIN3D_BYTE_MIDPOINT_FLOAT = 127.5f;
-static constexpr float TERRAIN3D_BYTE_INV_MAX_FLOAT = 1.0f / TERRAIN3D_BYTE_MAX_FLOAT;
+static constexpr float s_fByteMaxFloat = 255.0f;
+static constexpr float s_fByteMidpointFloat = 127.5f;
+static constexpr float s_fByteInvMaxFloat = 1.0f / s_fByteMaxFloat;
 
 #endif // TERRAIN3D_NUMERIC_CONSTANTS_H

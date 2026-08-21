@@ -24,7 +24,7 @@ typedef enum t3dEditSnapshotKind_e {
 } t3dEditSnapshotKind_t;
 
 #define TERRAIN3DEDITORQUANTIZERGBA8( value ) \
-	( uint32_t ) ( CLAMP( Math::round( ( value ) * TERRAIN3D_BYTE_MAX_FLOAT ), 0.0f, TERRAIN3D_BYTE_MAX_FLOAT ) )
+	( uint32_t ) ( CLAMP( Math::round( ( value ) * s_fByteMaxFloat ), 0.0f, s_fByteMaxFloat ) )
 
 ///////////////////////////
 // Private Functions
@@ -54,12 +54,12 @@ uint32_t T3DEditor::packColorRgba8( const Color &rColor ) {
 }
 
 Color T3DEditor::unpackColorRgba8( const uint32_t nValue ) {
-	return Color( ( real_t ) ( nValue & 0xffu ) / TERRAIN3D_BYTE_MAX_FLOAT, ( real_t ) ( ( nValue >> 8u ) & 0xffu ) / TERRAIN3D_BYTE_MAX_FLOAT,
-		( real_t ) ( ( nValue >> 16u ) & 0xffu ) / TERRAIN3D_BYTE_MAX_FLOAT, ( real_t ) ( ( nValue >> 24u ) & 0xffu ) / TERRAIN3D_BYTE_MAX_FLOAT );
+	return Color( ( real_t ) ( nValue & 0xffu ) / s_fByteMaxFloat, ( real_t ) ( ( nValue >> 8u ) & 0xffu ) / s_fByteMaxFloat,
+		( real_t ) ( ( nValue >> 16u ) & 0xffu ) / s_fByteMaxFloat, ( real_t ) ( ( nValue >> 24u ) & 0xffu ) / s_fByteMaxFloat );
 }
 
 uint32_t T3DEditor::readU32( const uint8_t *pBytes, const size_t iIndex ) {
-	uint32_t value = TERRAIN3D_REGION_DEFAULT_CONTROL;
+	uint32_t value = s_nRegionDefaultControl;
 	if ( pBytes ) {
 		std::memcpy( &value, pBytes + iIndex * sizeof( uint32_t ), sizeof( uint32_t ) );
 	}
@@ -70,59 +70,59 @@ Color T3DEditor::readMapPixel(
 	const t3dRegionMapCache_t &rEntry, const size_t iIndex,
 	const Vector2i &rPixel, const t3dMapType_t mapType
 ) {
-	if ( !rEntry.bDirectAccess || !rEntry.pMapBytes ) {
-		const Color raw = rEntry.pMap->get_pixelv( rPixel );
+	if ( !rEntry.m_bDirectAccess || !rEntry.m_pMapBytes ) {
+		const Color raw = rEntry.m_pMap->get_pixelv( rPixel );
 		return mapType == TYPE_HEIGHT
-			? Color( t3dRegionCodecReadHeightPixel( rEntry.pMap, rPixel ), 0.0f, 0.0f, 1.0f )
+			? Color( t3dRegionCodecReadHeightPixel( rEntry.m_pMap, rPixel ), 0.0f, 0.0f, 1.0f )
 			: raw;
 	}
 	if ( mapType == TYPE_HEIGHT ) {
 		uint16_t encoded = 0u;
-		std::memcpy( &encoded, rEntry.pMapBytes + iIndex * sizeof( uint16_t ), sizeof( uint16_t ) );
+		std::memcpy( &encoded, rEntry.m_pMapBytes + iIndex * sizeof( uint16_t ), sizeof( uint16_t ) );
 		return Color( t3dRegionCodecDecodeHeightU16( encoded ), 0.0f, 0.0f, 1.0f );
 	}
 	if ( mapType == TYPE_CONTROL ) {
-		return Color( asFloat( readU32( rEntry.pMapBytes, iIndex ) ), 0.0f, 0.0f, 1.0f );
+		return Color( asFloat( readU32( rEntry.m_pMapBytes, iIndex ) ), 0.0f, 0.0f, 1.0f );
 	}
-	const uint8_t *pRgba = rEntry.pMapBytes + iIndex * 4u;
-	return Color( ( real_t ) ( pRgba[0] ) / TERRAIN3D_BYTE_MAX_FLOAT, ( real_t ) ( pRgba[1] ) / TERRAIN3D_BYTE_MAX_FLOAT, ( real_t ) ( pRgba[2] ) / TERRAIN3D_BYTE_MAX_FLOAT,
-		( real_t ) ( pRgba[3] ) / TERRAIN3D_BYTE_MAX_FLOAT );
+	const uint8_t *pRgba = rEntry.m_pMapBytes + iIndex * 4u;
+	return Color( ( real_t ) ( pRgba[0] ) / s_fByteMaxFloat, ( real_t ) ( pRgba[1] ) / s_fByteMaxFloat, ( real_t ) ( pRgba[2] ) / s_fByteMaxFloat,
+		( real_t ) ( pRgba[3] ) / s_fByteMaxFloat );
 }
 
 uint32_t T3DEditor::readControlBits(
 	const t3dRegionMapCache_t &rEntry, const size_t iIndex,
 	const Vector2i &rPixel
 ) {
-	if ( rEntry.pControlBytes ) {
-		return readU32( rEntry.pControlBytes, iIndex );
+	if ( rEntry.m_pControlBytes ) {
+		return readU32( rEntry.m_pControlBytes, iIndex );
 	}
-	return rEntry.pControlMap ? asUint( rEntry.pControlMap->get_pixelv( rPixel ).r )
-		: TERRAIN3D_REGION_DEFAULT_CONTROL;
+	return rEntry.m_controlMap ? asUint( rEntry.m_controlMap->get_pixelv( rPixel ).r )
+		: s_nRegionDefaultControl;
 }
 
 void T3DEditor::writeMapPixel(
 	t3dRegionMapCache_t &rEntry, const size_t iIndex, const Vector2i &rPixel,
 	const Color &clrValue, const t3dMapType_t mapType
 ) {
-	if ( !rEntry.bDirectAccess || !rEntry.pMapBytes ) {
+	if ( !rEntry.m_bDirectAccess || !rEntry.m_pMapBytes ) {
 		if ( mapType == TYPE_HEIGHT ) {
-			t3dRegionCodecWriteHeightPixel( rEntry.pMap, rPixel, clrValue.r );
+			t3dRegionCodecWriteHeightPixel( rEntry.m_pMap, rPixel, clrValue.r );
 		} else {
-			rEntry.pMap->set_pixelv( rPixel, clrValue );
+			rEntry.m_pMap->set_pixelv( rPixel, clrValue );
 		}
 		return;
 	}
 	if ( mapType == TYPE_HEIGHT ) {
 		const uint16_t encoded = t3dRegionCodecEncodeHeightU16( clrValue.r );
-		std::memcpy( rEntry.pMapBytes + iIndex * sizeof( uint16_t ), &encoded, sizeof( uint16_t ) );
+		std::memcpy( rEntry.m_pMapBytes + iIndex * sizeof( uint16_t ), &encoded, sizeof( uint16_t ) );
 		return;
 	}
 	if ( mapType == TYPE_CONTROL ) {
 		const uint32_t bits = asUint( clrValue.r );
-		std::memcpy( rEntry.pMapBytes + iIndex * sizeof( uint32_t ), &bits, sizeof( uint32_t ) );
+		std::memcpy( rEntry.m_pMapBytes + iIndex * sizeof( uint32_t ), &bits, sizeof( uint32_t ) );
 		return;
 	}
-	uint8_t *pRgba = rEntry.pMapBytes + iIndex * 4u;
+	uint8_t *pRgba = rEntry.m_pMapBytes + iIndex * 4u;
 	pRgba[0] = ( uint8_t ) ( TERRAIN3DEDITORQUANTIZERGBA8( clrValue.r ) );
 	pRgba[1] = ( uint8_t ) ( TERRAIN3DEDITORQUANTIZERGBA8( clrValue.g ) );
 	pRgba[2] = ( uint8_t ) ( TERRAIN3DEDITORQUANTIZERGBA8( clrValue.b ) );
@@ -498,10 +498,10 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 
 	// Resolve each covered region and map once. At maximum brush size, repeatedly resolving regions
 	// per column still costs tens of thousands of dictionary lookups despite touching very few regions.
-	const int32_t min_region_x = x_samples.front().regionLocation;
-	const int32_t max_region_x = x_samples.back().regionLocation;
-	const int32_t min_region_z = z_samples.front().regionLocation;
-	const int32_t max_region_z = z_samples.back().regionLocation;
+	const int32_t min_region_x = x_samples.front().m_nRegionLocation;
+	const int32_t max_region_x = x_samples.back().m_nRegionLocation;
+	const int32_t min_region_z = z_samples.front().m_nRegionLocation;
+	const int32_t max_region_z = z_samples.back().m_nRegionLocation;
 	const int32_t region_cache_width = max_region_x - min_region_x + 1;
 	const int32_t region_cache_height = max_region_z - min_region_z + 1;
 	m_regionCacheScratch.clear();
@@ -514,42 +514,42 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 		for ( int32_t region_x = min_region_x; region_x <= max_region_x; ++region_x ) {
 			t3dRegionMapCache_t &entry = region_cache[( size_t ) ( region_z - min_region_z ) * ( size_t ) ( region_cache_width ) +
 											 ( size_t ) ( region_x - min_region_x )];
-			entry.location = Vector2i( region_x, region_z );
-			entry.pRegion = operateRegion( entry.location );
-			entry.bMapWasImplicit = entry.pRegion.is_valid() && entry.pRegion->getMapPtr( map_type ) == nullptr;
-			entry.pMap = entry.pRegion.is_valid() ? entry.pRegion->getMapPtrForWrite( map_type ) : nullptr;
-			entry.pControlMap = entry.pRegion.is_valid() ? entry.pRegion->getMapPtr( TYPE_CONTROL ) : nullptr;
-			if ( !entry.pMap || !bUseDirectMapAccess ) {
+			entry.m_location = Vector2i( region_x, region_z );
+			entry.m_region = operateRegion( entry.m_location );
+			entry.m_bMapWasImplicit = entry.m_region.is_valid() && entry.m_region->getMapPtr( map_type ) == nullptr;
+			entry.m_pMap = entry.m_region.is_valid() ? entry.m_region->getMapPtrForWrite( map_type ) : nullptr;
+			entry.m_controlMap = entry.m_region.is_valid() ? entry.m_region->getMapPtr( TYPE_CONTROL ) : nullptr;
+			if ( !entry.m_pMap || !bUseDirectMapAccess ) {
 				continue;
 			}
-			entry.mapFormat = entry.pMap->get_format();
-			entry.bMapHasMipmaps = entry.pMap->has_mipmaps();
+			entry.m_mapFormat = entry.m_pMap->get_format();
+			entry.m_bMapHasMipmaps = entry.m_pMap->has_mipmaps();
 			const Image::Format expected_format = map_type == TYPE_HEIGHT ? Image::FORMAT_R16
 				: map_type == TYPE_CONTROL ? Image::FORMAT_RF : Image::FORMAT_RGBA8;
 			const size_t bytes_per_texel = map_type == TYPE_HEIGHT ? sizeof( uint16_t ) : sizeof( uint32_t );
 			const size_t expected_bytes = ( size_t ) ( region_size ) * ( size_t ) ( region_size ) * bytes_per_texel;
-			if ( entry.mapFormat != expected_format || entry.pMap->get_width() != region_size ||
-				entry.pMap->get_height() != region_size ) {
+			if ( entry.m_mapFormat != expected_format || entry.m_pMap->get_width() != region_size ||
+				entry.m_pMap->get_height() != region_size ) {
 				continue;
 			}
-			entry.mapData = entry.pMap->get_data();
-			if ( ( size_t ) ( entry.mapData.size() ) < expected_bytes ) {
-				entry.mapData.clear();
+			entry.m_mapData = entry.m_pMap->get_data();
+			if ( ( size_t ) ( entry.m_mapData.size() ) < expected_bytes ) {
+				entry.m_mapData.clear();
 				continue;
 			}
-			entry.pMapBytes = entry.mapData.ptrw();
-			entry.bDirectAccess = entry.pMapBytes != nullptr;
-			if ( !entry.bDirectAccess ) {
+			entry.m_pMapBytes = entry.m_mapData.ptrw();
+			entry.m_bDirectAccess = entry.m_pMapBytes != nullptr;
+			if ( !entry.m_bDirectAccess ) {
 				continue;
 			}
 			if ( map_type == TYPE_CONTROL ) {
-				entry.pControlBytes = entry.pMapBytes;
-			} else if ( entry.pControlMap && entry.pControlMap->get_format() == Image::FORMAT_RF &&
-				entry.pControlMap->get_width() == region_size && entry.pControlMap->get_height() == region_size ) {
-				entry.controlData = entry.pControlMap->get_data();
-				if ( ( size_t ) ( entry.controlData.size() ) >=
+				entry.m_pControlBytes = entry.m_pMapBytes;
+			} else if ( entry.m_controlMap && entry.m_controlMap->get_format() == Image::FORMAT_RF &&
+				entry.m_controlMap->get_width() == region_size && entry.m_controlMap->get_height() == region_size ) {
+				entry.m_controlData = entry.m_controlMap->get_data();
+				if ( ( size_t ) ( entry.m_controlData.size() ) >=
 					( size_t ) ( region_size ) * ( size_t ) ( region_size ) * sizeof( uint32_t ) ) {
-					entry.pControlBytes = entry.controlData.ptr();
+					entry.m_pControlBytes = entry.m_controlData.ptr();
 				}
 			}
 		}
@@ -580,8 +580,8 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 	const real_t fRotatedUStep = fCenteredUvStep * fRotCos;
 	const real_t fRotatedVStep = fCenteredUvStep * fRotSin;
 	for ( const t3dAxisSample_t &z_sample : z_samples ) {
-		real_t fRowU = x_samples.front().fCenteredUv * fRotCos - z_sample.fCenteredUv * fRotSin + .5f;
-		real_t fRowV = x_samples.front().fCenteredUv * fRotSin + z_sample.fCenteredUv * fRotCos + .5f;
+		real_t fRowU = x_samples.front().m_fCenteredUv * fRotCos - z_sample.m_fCenteredUv * fRotSin + .5f;
+		real_t fRowV = x_samples.front().m_fCenteredUv * fRotSin + z_sample.m_fCenteredUv * fRotCos + .5f;
 		for ( const t3dAxisSample_t &x_sample : x_samples ) {
 			const real_t fRotatedU = CLAMP( fRowU, 0.f, 1.f );
 			const real_t fRotatedV = CLAMP( fRowV, 0.f, 1.f );
@@ -605,23 +605,23 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 			}
 
 			const size_t region_cache_index =
-				( size_t ) ( z_sample.regionLocation - min_region_z ) * ( size_t ) ( region_cache_width ) +
-				( size_t ) ( x_sample.regionLocation - min_region_x );
+				( size_t ) ( z_sample.m_nRegionLocation - min_region_z ) * ( size_t ) ( region_cache_width ) +
+				( size_t ) ( x_sample.m_nRegionLocation - min_region_x );
 			t3dRegionMapCache_t &region_entry = region_cache[region_cache_index];
-			if ( !region_entry.pMap ) {
+			if ( !region_entry.m_pMap ) {
 				continue;
 			}
-			Ref<T3DRegion> &region = region_entry.pRegion;
+			Ref<T3DRegion> &region = region_entry.m_region;
 
-			const Vector2i mapPixelPosition( x_sample.mapPixel, z_sample.mapPixel );
+			const Vector2i mapPixelPosition( x_sample.m_nMapPixel, z_sample.m_nMapPixel );
 			if ( !isInBounds( mapPixelPosition, region_vsize ) ) {
 				continue;
 			}
 
-			const Vector2 brushOffset( x_sample.fOffset, z_sample.fOffset );
+			const Vector2 brushOffset( x_sample.m_fOffset, z_sample.m_fOffset );
 			const Vector3 brushGlobalPosition(
-				x_sample.fGlobalPosition, rGlobalPosition.y,
-				z_sample.fGlobalPosition
+				x_sample.m_fGlobalPosition, rGlobalPosition.y,
+				z_sample.m_fGlobalPosition
 			);
 			Vector3 edited_position = brushGlobalPosition;
 			if ( map_type != TYPE_HEIGHT ) {
@@ -685,10 +685,10 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 				}
 				if ( bEligible ) {
 					t3dBrushElement_t element;
-					element.value = source_value;
-					element.alpha = asUint( ( float ) ( fBrushAlpha ) );
-					element.target = target_value;
-					element.flags = 1u;
+					element.m_nValue = source_value;
+					element.m_nAlpha = asUint( ( float ) ( fBrushAlpha ) );
+					element.m_nTarget = target_value;
+					element.m_nFlags = 1u;
 					compute_elements.push_back( element );
 					compute_writes.push_back( {region_cache_index, mapPixelPosition, source_value, edited_position} );
 				}
@@ -1024,26 +1024,26 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 			if ( dest == src ) {
 				continue;
 			}
-			backupRegion( region, region_entry.bMapWasImplicit );
+			backupRegion( region, region_entry.m_bMapWasImplicit );
 			writeMapPixel( region_entry, map_index, mapPixelPosition, dest, map_type );
-			region_entry.bModified = true;
+			region_entry.m_bModified = true;
 		}
 	}
 
 	if ( bUseCompute && !compute_elements.empty() ) {
 		t3dBrushParams_t params;
-		params.mapType = ( uint32_t ) ( map_type );
-		params.tool = ( uint32_t ) ( m_tool );
-		params.operation = ( uint32_t ) ( m_operation );
-		params.fStrength = ( float ) ( strength );
-		params.fSelectedHeight = ( float ) ( fHeight );
-		params.fBrushCenterHeight = ( float ) ( rGlobalPosition.y );
-		params.fRoughness = ( float ) ( roughness );
-		params.colorRgba8 = packColorRgba8( color );
-		params.assetId = asset_id_bits;
-		params.uvRotation = compute_uv_rotation;
-		params.uvScale = compute_uv_scale;
-		params.featureFlags = ( bModifierAlt ? 1u : 0u ) | ( std::isfinite( rGlobalPosition.y ) ? 2u : 0u ) |
+		params.m_nMapType = ( uint32_t ) ( map_type );
+		params.m_nTool = ( uint32_t ) ( m_tool );
+		params.m_nOperation = ( uint32_t ) ( m_operation );
+		params.m_fStrength = ( float ) ( strength );
+		params.m_fSelectedHeight = ( float ) ( fHeight );
+		params.m_fBrushCenterHeight = ( float ) ( rGlobalPosition.y );
+		params.m_fRoughness = ( float ) ( roughness );
+		params.m_nColorRgba8 = packColorRgba8( color );
+		params.m_nAssetId = asset_id_bits;
+		params.m_nUvRotation = compute_uv_rotation;
+		params.m_nUvScale = compute_uv_scale;
+		params.m_nFeatureFlags = ( bModifierAlt ? 1u : 0u ) | ( std::isfinite( rGlobalPosition.y ) ? 2u : 0u ) |
 							   ( bEnableTexture ? 4u : 0u ) | ( bEnableAngle ? 8u : 0u ) | ( bEnableScale ? 16u : 0u );
 		if ( !pComputeBackend->processBrush( compute_elements, params ) ) {
 			LOG( WARN,
@@ -1053,30 +1053,30 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 		for ( size_t i = 0; i < compute_elements.size(); ++i ) {
 			const t3dBrushElement_t &element = compute_elements[i];
 			const t3dComputeWrite_t &write = compute_writes[i];
-			if ( element.value == write.sourceValue || write.iRegionIndex >= region_cache.size() ) {
+			if ( element.m_nValue == write.m_nSourceValue || write.m_iRegionIndex >= region_cache.size() ) {
 				continue;
 			}
-			t3dRegionMapCache_t &entry = region_cache[write.iRegionIndex];
-			if ( !entry.pMap || entry.pRegion.is_null() ) {
+			t3dRegionMapCache_t &entry = region_cache[write.m_iRegionIndex];
+			if ( !entry.m_pMap || entry.m_region.is_null() ) {
 				continue;
 			}
-			backupRegion( entry.pRegion, entry.bMapWasImplicit );
+			backupRegion( entry.m_region, entry.m_bMapWasImplicit );
 			const size_t map_index =
-				( size_t ) ( write.mapPixel.y ) * ( size_t ) ( region_size ) + ( size_t ) ( write.mapPixel.x );
+				( size_t ) ( write.m_mapPixel.y ) * ( size_t ) ( region_size ) + ( size_t ) ( write.m_mapPixel.x );
 			if ( map_type == TYPE_HEIGHT ) {
-				const float fResult = asFloat( element.value );
-				writeMapPixel( entry, map_index, write.mapPixel, Color( fResult, 0.f, 0.f, 1.f ), map_type );
-				entry.pRegion->updateHeight( fResult );
+				const float fResult = asFloat( element.m_nValue );
+				writeMapPixel( entry, map_index, write.m_mapPixel, Color( fResult, 0.f, 0.f, 1.f ), map_type );
+				entry.m_region->updateHeight( fResult );
 				pData->updateMasterHeight( fResult );
-				Vector3 result_position = write.worldPosition;
+				Vector3 result_position = write.m_worldPosition;
 				result_position.y = fResult;
 				edited_area = edited_area.expand( result_position );
 			} else if ( map_type == TYPE_CONTROL ) {
-				writeMapPixel( entry, map_index, write.mapPixel, Color( asFloat( element.value ), 0.f, 0.f, 1.f ), map_type );
+				writeMapPixel( entry, map_index, write.m_mapPixel, Color( asFloat( element.m_nValue ), 0.f, 0.f, 1.f ), map_type );
 			} else {
-				writeMapPixel( entry, map_index, write.mapPixel, unpackColorRgba8( element.value ), map_type );
+				writeMapPixel( entry, map_index, write.m_mapPixel, unpackColorRgba8( element.m_nValue ), map_type );
 			}
-			entry.bModified = true;
+			entry.m_bModified = true;
 		}
 	}
 
@@ -1084,14 +1084,14 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 	// the hot brush loop on raw contiguous storage while preserving Image resource
 	// identity for the renderer, undo snapshots and external references.
 	for ( t3dRegionMapCache_t &entry : region_cache ) {
-		if ( entry.bModified && entry.bDirectAccess && entry.pMap && !entry.mapData.is_empty() ) {
-			entry.pMap->set_data( region_size, region_size, entry.bMapHasMipmaps, entry.mapFormat, entry.mapData );
+		if ( entry.m_bModified && entry.m_bDirectAccess && entry.m_pMap && !entry.m_mapData.is_empty() ) {
+			entry.m_pMap->set_data( region_size, region_size, entry.m_bMapHasMipmaps, entry.m_mapFormat, entry.m_mapData );
 		}
-			if ( entry.bMapWasImplicit && !entry.bModified && entry.pRegion.is_valid() &&
+			if ( entry.m_bMapWasImplicit && !entry.m_bModified && entry.m_region.is_valid() &&
 				( map_type == TYPE_CONTROL || map_type == TYPE_COLOR ) ) {
 				// Region coverage is resolved before slope/texture filters are evaluated.
 				// Drop transient default maps for covered regions that received no write.
-				entry.pRegion->compactMapIfDefault( map_type, false );
+				entry.m_region->compactMapIfDefault( map_type, false );
 			}
 	}
 
@@ -1099,10 +1099,10 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 	m_modifiedRegionScratch.reserve( region_cache.size() );
 	eastl::vector<Vector2i> &modified_region_locations = m_modifiedRegionScratch;
 	for ( t3dRegionMapCache_t &entry : region_cache ) {
-		if ( !entry.bModified || entry.pRegion.is_null() ) {
+		if ( !entry.m_bModified || entry.m_region.is_null() ) {
 			continue;
 		}
-		modified_region_locations.push_back( entry.location );
+		modified_region_locations.push_back( entry.m_location );
 	}
 
 	uint32_t commit_flags = MAP_EDIT_KEEP_EDITED;
@@ -1473,7 +1473,7 @@ void T3DEditor::setBrushData( const Dictionary &rData ) {
 	m_brushData["enable_texture"] = rData.get( "enable_texture", true );
 	m_brushData["texture_filter"] = rData.get( "texture_filter", false );
 	const int requested_asset_id = ( int ) ( rData.get( "asset_id", -1 ) );
-	const int maximum_asset_id = MAX( TERRAIN3D_MAX_MESH_ASSETS, TERRAIN3D_MAX_TEXTURE_ASSETS ) - 1;
+	const int maximum_asset_id = MAX( s_nMaxMeshAssets, s_nMaxTextureAssets ) - 1;
 	m_brushData["asset_id"] = requested_asset_id < 0 ? -1 : CLAMP( requested_asset_id, 0, maximum_asset_id );
 	m_brushData["margin"] = CLAMP( ( int ) ( rData.get( "margin", 0 ) ), -100, 100 );
 
@@ -1613,13 +1613,13 @@ void T3DEditor::trimBrushScratch( void ) {
 	const size_t compute_bytes =
 		m_computeElementScratch.capacity() * sizeof( t3dBrushElement_t ) +
 		m_computeWriteScratch.capacity() * sizeof( t3dComputeWrite_t );
-	if ( compute_bytes > TERRAIN3D_COMPUTE_SCRATCH_RETAIN_LIMIT ) {
+	if ( compute_bytes > s_nComputeScratchRetainLimit ) {
 		eastl::vector<t3dBrushElement_t>().swap( m_computeElementScratch );
 		eastl::vector<t3dComputeWrite_t>().swap( m_computeWriteScratch );
 	}
 
 	// Retain no more region-cache entries than the active logical terrain can use.
-	int region_map_size = TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE;
+	int region_map_size = s_nActiveMaxRegionMapSize;
 	if ( m_pTerrain && m_pTerrain->getData() ) {
 		region_map_size = m_pTerrain->getData()->getRegionMapSizeInternal();
 	}

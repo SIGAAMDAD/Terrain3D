@@ -22,9 +22,9 @@
 #include <cstring>
 
 typedef struct t3dFarSurfaceBakeData_s {
-	eastl::array<uint8_t, TERRAIN3D_MAX_TEXTURE_ASSETS> populated = {};
-	int nCount = 0;
-	int fallbackTexture = 0;
+	eastl::array<uint8_t, s_nMaxTextureAssets> m_populated = {};
+	int m_nCount = 0;
+	int m_nFallbackTexture = 0;
 } t3dFarSurfaceBakeData_t;
 
 static void t3dFarSurfaceAtlasCacheFnv1a64Append( uint64_t &nHash, const uint8_t *pData, const size_t nSize ) {
@@ -56,7 +56,7 @@ static uint16_t t3dFarSurfaceAtlasCacheReadU16Unaligned( const uint8_t *pBytes, 
 	return value;
 }
 
-EA_FORCE_INLINE static uint8_t t3dFarSurfaceAtlasCacheColorToByte( const float fValue ) { return ( uint8_t ) ( CLAMP( Math::round( fValue * TERRAIN3D_BYTE_MAX_FLOAT ), 0.0f, TERRAIN3D_BYTE_MAX_FLOAT ) ); }
+EA_FORCE_INLINE static uint8_t t3dFarSurfaceAtlasCacheColorToByte( const float fValue ) { return ( uint8_t ) ( CLAMP( Math::round( fValue * s_fByteMaxFloat ), 0.0f, s_fByteMaxFloat ) ); }
 
 static void t3dFarSurfaceAtlasCacheFillFarSurfaceEmpty( PackedByteArray &rBytes ) {
 	uint8_t *pWrite = rBytes.ptrw();
@@ -104,23 +104,23 @@ static void t3dFarSurfaceAtlasCacheBuildBakeData( const Ref<T3DAssets> &rAssets,
 	if ( rAssets.is_null() ) {
 		return;
 	}
-	rData.nCount = MIN( rAssets->getTextureCount(), TERRAIN3D_MAX_TEXTURE_ASSETS );
+	rData.m_nCount = MIN( rAssets->getTextureCount(), s_nMaxTextureAssets );
 	bool found_fallback = false;
-	for ( int index = 0; index < rData.nCount; ++index ) {
+	for ( int index = 0; index < rData.m_nCount; ++index ) {
 		const bool populated = rAssets->getTextureAsset( index ).is_valid();
-		rData.populated[( size_t ) ( index )] = populated ? 1u : 0u;
+		rData.m_populated[( size_t ) ( index )] = populated ? 1u : 0u;
 		if ( populated && !found_fallback ) {
-			rData.fallbackTexture = index;
+			rData.m_nFallbackTexture = index;
 			found_fallback = true;
 		}
 	}
 }
 
 static int t3dFarSurfaceAtlasCacheResolveMaterialId( const t3dFarSurfaceBakeData_t &rData, const int nTextureId ) {
-	if ( nTextureId >= 0 && nTextureId < rData.nCount && rData.populated[( size_t ) ( nTextureId )] != 0u ) {
+	if ( nTextureId >= 0 && nTextureId < rData.m_nCount && rData.m_populated[( size_t ) ( nTextureId )] != 0u ) {
 		return nTextureId;
 	}
-	return rData.fallbackTexture;
+	return rData.m_nFallbackTexture;
 }
 
 T3DFarSurfaceAtlasCache::T3DFarSurfaceAtlasCache(
@@ -135,8 +135,8 @@ T3DFarSurfaceAtlasCache::T3DFarSurfaceAtlasCache(
 }
 
 void T3DFarSurfaceAtlasCache::setConfig( const t3dFarSurfaceAtlasConfig_t &rConfig ) {
-	const bool layout_changed = rConfig.nHeightAtlasSide != m_config.nHeightAtlasSide ||
-		rConfig.nSurfaceAtlasSide != m_config.nSurfaceAtlasSide;
+	const bool layout_changed = rConfig.m_nHeightAtlasSide != m_config.m_nHeightAtlasSide ||
+		rConfig.m_nSurfaceAtlasSide != m_config.m_nSurfaceAtlasSide;
 	m_config = rConfig;
 	if ( layout_changed ) {
 		invalidateLayout();
@@ -146,8 +146,8 @@ void T3DFarSurfaceAtlasCache::setConfig( const t3dFarSurfaceAtlasConfig_t &rConf
 void T3DFarSurfaceAtlasCache::reset( void ) {
 	m_generatedHeightMap.clear();
 	m_generatedColorMap.clear();
-	m_pHeightImage.unref();
-	m_pColorImage.unref();
+	m_heightImage.unref();
+	m_colorImage.unref();
 	m_heightDirtyRegions.reset();
 	m_colorDirtyRegions.reset();
 	m_bHeightDirty = true;
@@ -186,7 +186,7 @@ void T3DFarSurfaceAtlasCache::resetFrameStats( void ) {
 
 void T3DFarSurfaceAtlasCache::invalidateSurface( void ) {
 	m_generatedColorMap.clear();
-	m_pColorImage.unref();
+	m_colorImage.unref();
 	m_colorDirtyRegions.reset();
 	m_bColorDirty = true;
 	m_bColorDirtyAll = true;
@@ -197,8 +197,8 @@ void T3DFarSurfaceAtlasCache::invalidateSurface( void ) {
 void T3DFarSurfaceAtlasCache::invalidateLayout( void ) {
 	m_generatedHeightMap.clear();
 	m_generatedColorMap.clear();
-	m_pHeightImage.unref();
-	m_pColorImage.unref();
+	m_heightImage.unref();
+	m_colorImage.unref();
 	m_heightDirtyRegions.reset();
 	m_colorDirtyRegions.reset();
 	m_bHeightDirty = true;
@@ -210,7 +210,7 @@ void T3DFarSurfaceAtlasCache::invalidateLayout( void ) {
 }
 
 String T3DFarSurfaceAtlasCache::getCookedPath( const String &rDirectory ) const {
-	const String directory = !rDirectory.is_empty() ? rDirectory : m_config.dataDirectory;
+	const String directory = !rDirectory.is_empty() ? rDirectory : m_config.m_dataDirectory;
 	return directory.is_empty() ? String() : directory.path_join( "terrain3d_far_atlas.t3dfar" );
 }
 
@@ -225,11 +225,11 @@ Ref<Image> T3DFarSurfaceAtlasCache::getRegionMapOrDefault(
 	}
 	switch ( eMapType ) {
 		case TYPE_HEIGHT:
-			return m_config.pDefaultHeightMap;
+			return m_config.m_defaultHeightMap;
 		case TYPE_CONTROL:
-			return m_config.pDefaultControlMap;
+			return m_config.m_defaultControlMap;
 		case TYPE_COLOR:
-			return m_config.pDefaultColorMap;
+			return m_config.m_defaultColorMap;
 		default:
 			return Ref<Image>();
 	}
@@ -240,17 +240,17 @@ uint64_t T3DFarSurfaceAtlasCache::computeSourceSignature( void ) const {
 		return 0u;
 	}
 	uint64_t hash = 1469598103934665603ull;
-	t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, TERRAIN3D_GPU_FAR_ATLAS_VERSION );
+	t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, s_nGpuFarAtlasVersion );
 	t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( m_pRepository->getRegionSize() ) );
 	t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( m_pRepository->getRegionMapSize() ) );
-	t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( m_config.nHeightAtlasSide ) );
-	t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( m_config.nSurfaceAtlasSide ) );
+	t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( m_config.m_nHeightAtlasSide ) );
+	t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( m_config.m_nSurfaceAtlasSide ) );
 	t3dFarSurfaceAtlasCacheFnv1a64AppendF32( hash, ( float ) ( m_pRepository->getVertexSpacing() ) );
 	t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( m_pRepository->getActiveRegionCount() ) );
-	for ( int map_index = 0; map_index < TERRAIN3D_MAX_REGION_SLOTS; ++map_index ) {
+	for ( int map_index = 0; map_index < s_nMaxRegionSlots; ++map_index ) {
 		const Vector2i location(
-			map_index % TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE - TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE / 2,
-			map_index / TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE - TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE / 2
+			map_index % s_nActiveMaxRegionMapSize - s_nActiveMaxRegionMapSize / 2,
+			map_index / s_nActiveMaxRegionMapSize - s_nActiveMaxRegionMapSize / 2
 		);
 		T3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() ) {
@@ -262,14 +262,14 @@ uint64_t T3DFarSurfaceAtlasCache::computeSourceSignature( void ) const {
 		t3dFarSurfaceAtlasCacheFnv1a64AppendU64( hash, modified );
 	}
 	t3dFarSurfaceBakeData_t bake_data;
-	t3dFarSurfaceAtlasCacheBuildBakeData( m_config.pAssets, bake_data );
-	t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( bake_data.nCount ) );
-	t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( bake_data.fallbackTexture ) );
-	for ( int index = 0; index < bake_data.nCount; ++index ) {
+	t3dFarSurfaceAtlasCacheBuildBakeData( m_config.m_assets, bake_data );
+	t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( bake_data.m_nCount ) );
+	t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( bake_data.m_nFallbackTexture ) );
+	for ( int index = 0; index < bake_data.m_nCount; ++index ) {
 		t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( index ) );
-		t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( bake_data.populated[( size_t ) ( index )] ) );
+		t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( bake_data.m_populated[( size_t ) ( index )] ) );
 	}
-	T3DMaterial *const pMaterial = m_config.pMaterial.ptr();
+	T3DMaterial *const pMaterial = m_config.m_material.ptr();
 	t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, pMaterial ? 1u : 0u );
 	if ( pMaterial ) {
 		t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, pMaterial->getAutoShaderEnabled() ? 1u : 0u );
@@ -282,10 +282,10 @@ uint64_t T3DFarSurfaceAtlasCache::computeSourceSignature( void ) const {
 }
 
 bool T3DFarSurfaceAtlasCache::initializeImages( void ) {
-	const int height_side = MAX( 1, m_config.nHeightAtlasSide );
-	const int surface_side = MAX( 1, m_config.nSurfaceAtlasSide );
-	if ( m_pHeightImage.is_null() || m_pHeightImage->get_width() != height_side ||
-		m_pHeightImage->get_height() != height_side || m_pHeightImage->get_format() != Image::FORMAT_R16 ) {
+	const int height_side = MAX( 1, m_config.m_nHeightAtlasSide );
+	const int surface_side = MAX( 1, m_config.m_nSurfaceAtlasSide );
+	if ( m_heightImage.is_null() || m_heightImage->get_width() != height_side ||
+		m_heightImage->get_height() != height_side || m_heightImage->get_format() != Image::FORMAT_R16 ) {
 		const uint16_t default_height = t3dRegionCodecEncodeHeightU16( 0.0f );
 		PackedByteArray bytes;
 		bytes.resize( ( int64_t ) ( height_side ) * height_side * 2 );
@@ -293,17 +293,17 @@ bool T3DFarSurfaceAtlasCache::initializeImages( void ) {
 		for ( int index = 0; index < height_side * height_side; ++index ) {
 			std::memcpy( pWrite + ( size_t ) ( index ) * 2u, &default_height, sizeof( default_height ) );
 		}
-		m_pHeightImage = Image::create_from_data( height_side, height_side, false, Image::FORMAT_R16, bytes );
+		m_heightImage = Image::create_from_data( height_side, height_side, false, Image::FORMAT_R16, bytes );
 	}
-	if ( m_pColorImage.is_null() || m_pColorImage->get_width() != surface_side ||
-		m_pColorImage->get_height() != surface_side || m_pColorImage->get_format() != Image::FORMAT_RGBA8 ) {
+	if ( m_colorImage.is_null() || m_colorImage->get_width() != surface_side ||
+		m_colorImage->get_height() != surface_side || m_colorImage->get_format() != Image::FORMAT_RGBA8 ) {
 		PackedByteArray bytes;
 		bytes.resize( ( int64_t ) ( surface_side ) * surface_side * 4 );
 		t3dFarSurfaceAtlasCacheFillFarSurfaceEmpty( bytes );
-		m_pColorImage = Image::create_from_data( surface_side, surface_side, false, Image::FORMAT_RGBA8, bytes );
+		m_colorImage = Image::create_from_data( surface_side, surface_side, false, Image::FORMAT_RGBA8, bytes );
 	}
-	return m_pHeightImage.is_valid() && !m_pHeightImage->is_empty() &&
-		m_pColorImage.is_valid() && !m_pColorImage->is_empty();
+	return m_heightImage.is_valid() && !m_heightImage->is_empty() &&
+		m_colorImage.is_valid() && !m_colorImage->is_empty();
 }
 
 bool T3DFarSurfaceAtlasCache::loadCooked( void ) {
@@ -317,7 +317,7 @@ bool T3DFarSurfaceAtlasCache::loadCooked( void ) {
 	Time *const pTime = Time::get_singleton();
 	const uint64_t started_usec = pTime ? pTime->get_ticks_usec() : 0u;
 	const Ref<FileAccess> pFile = FileAccess::open( path, FileAccess::READ );
-	if ( pFile.is_null() || pFile->get_length() < TERRAIN3D_GPU_FAR_ATLAS_HEADER_BYTES ) {
+	if ( pFile.is_null() || pFile->get_length() < s_nGpuFarAtlasHeaderBytes ) {
 		return false;
 	}
 	const uint64_t magic = pFile->get_64();
@@ -331,32 +331,32 @@ bool T3DFarSurfaceAtlasCache::loadCooked( void ) {
 	const uint32_t height_checksum = pFile->get_32();
 	const uint32_t color_checksum = pFile->get_32();
 	const uint64_t source_signature = pFile->get_64();
-	const uint32_t expected_height_size = ( uint32_t ) ( m_config.nHeightAtlasSide * m_config.nHeightAtlasSide * 2 );
-	const uint32_t expected_color_size = ( uint32_t ) ( m_config.nSurfaceAtlasSide * m_config.nSurfaceAtlasSide * 4 );
-	if ( magic != TERRAIN3D_GPU_FAR_ATLAS_MAGIC || version != TERRAIN3D_GPU_FAR_ATLAS_VERSION ||
+	const uint32_t expected_height_size = ( uint32_t ) ( m_config.m_nHeightAtlasSide * m_config.m_nHeightAtlasSide * 2 );
+	const uint32_t expected_color_size = ( uint32_t ) ( m_config.m_nSurfaceAtlasSide * m_config.m_nSurfaceAtlasSide * 4 );
+	if ( magic != s_nGpuFarAtlasMagic || version != s_nGpuFarAtlasVersion ||
 		region_size != ( uint32_t ) ( m_pRepository->getRegionSize() ) ||
 		region_map_size != ( uint32_t ) ( m_pRepository->getRegionMapSize() ) ||
-		height_atlas_size != ( uint32_t ) ( m_config.nHeightAtlasSide ) ||
-		surface_atlas_size != ( uint32_t ) ( m_config.nSurfaceAtlasSide ) ||
+		height_atlas_size != ( uint32_t ) ( m_config.m_nHeightAtlasSide ) ||
+		surface_atlas_size != ( uint32_t ) ( m_config.m_nSurfaceAtlasSide ) ||
 		height_size != expected_height_size || color_size != expected_color_size ||
-		pFile->get_length() != TERRAIN3D_GPU_FAR_ATLAS_HEADER_BYTES + ( uint64_t ) ( height_size ) + ( uint64_t ) ( color_size ) ) {
+		pFile->get_length() != s_nGpuFarAtlasHeaderBytes + ( uint64_t ) ( height_size ) + ( uint64_t ) ( color_size ) ) {
 		return false;
 	}
-	if ( source_signature == 0u || ( !m_config.bStrictCooked && source_signature != computeSourceSignature() ) ) {
+	if ( source_signature == 0u || ( !m_config.m_bStrictCooked && source_signature != computeSourceSignature() ) ) {
 		return false;
 	}
 	const PackedByteArray height_bytes = pFile->get_buffer( height_size );
 	const PackedByteArray color_bytes = pFile->get_buffer( color_size );
 	if ( height_bytes.size() != height_size || color_bytes.size() != color_size ||
-		terrain3dRuntimePageChecksum( height_bytes.ptr(), ( size_t ) ( height_bytes.size() ) ) != height_checksum ||
-		terrain3dRuntimePageChecksum( color_bytes.ptr(), ( size_t ) ( color_bytes.size() ) ) != color_checksum ) {
+		t3dRuntimePageChecksum( height_bytes.ptr(), ( size_t ) ( height_bytes.size() ) ) != height_checksum ||
+		t3dRuntimePageChecksum( color_bytes.ptr(), ( size_t ) ( color_bytes.size() ) ) != color_checksum ) {
 		return false;
 	}
-	m_pHeightImage = Image::create_from_data( m_config.nHeightAtlasSide, m_config.nHeightAtlasSide,
+	m_heightImage = Image::create_from_data( m_config.m_nHeightAtlasSide, m_config.m_nHeightAtlasSide,
 		false, Image::FORMAT_R16, height_bytes );
-	m_pColorImage = Image::create_from_data( m_config.nSurfaceAtlasSide, m_config.nSurfaceAtlasSide,
+	m_colorImage = Image::create_from_data( m_config.m_nSurfaceAtlasSide, m_config.m_nSurfaceAtlasSide,
 		false, Image::FORMAT_RGBA8, color_bytes );
-	if ( m_pHeightImage.is_null() || m_pColorImage.is_null() ) {
+	if ( m_heightImage.is_null() || m_colorImage.is_null() ) {
 		return false;
 	}
 	m_bHeightDirty = false;
@@ -387,8 +387,8 @@ bool T3DFarSurfaceAtlasCache::writeCooked( const String &rDirectory ) {
 	}
 	Time *const pTime = Time::get_singleton();
 	const uint64_t started_usec = pTime ? pTime->get_ticks_usec() : 0u;
-	const PackedByteArray height_bytes = m_pHeightImage->get_data();
-	const PackedByteArray color_bytes = m_pColorImage->get_data();
+	const PackedByteArray height_bytes = m_heightImage->get_data();
+	const PackedByteArray color_bytes = m_colorImage->get_data();
 	const String temporary_path = path + String( ".tmp" );
 	const String backup_path = path + String( ".bak" );
 	if ( FileAccess::file_exists( temporary_path ) ) {
@@ -398,16 +398,16 @@ bool T3DFarSurfaceAtlasCache::writeCooked( const String &rDirectory ) {
 	if ( pFile.is_null() ) {
 		return false;
 	}
-	pFile->store_64( TERRAIN3D_GPU_FAR_ATLAS_MAGIC );
-	pFile->store_32( TERRAIN3D_GPU_FAR_ATLAS_VERSION );
+	pFile->store_64( s_nGpuFarAtlasMagic );
+	pFile->store_32( s_nGpuFarAtlasVersion );
 	pFile->store_32( ( uint32_t ) ( m_pRepository->getRegionSize() ) );
 	pFile->store_32( ( uint32_t ) ( m_pRepository->getRegionMapSize() ) );
-	pFile->store_32( ( uint32_t ) ( m_config.nHeightAtlasSide ) );
-	pFile->store_32( ( uint32_t ) ( m_config.nSurfaceAtlasSide ) );
+	pFile->store_32( ( uint32_t ) ( m_config.m_nHeightAtlasSide ) );
+	pFile->store_32( ( uint32_t ) ( m_config.m_nSurfaceAtlasSide ) );
 	pFile->store_32( ( uint32_t ) ( height_bytes.size() ) );
 	pFile->store_32( ( uint32_t ) ( color_bytes.size() ) );
-	pFile->store_32( terrain3dRuntimePageChecksum( height_bytes.ptr(), ( size_t ) ( height_bytes.size() ) ) );
-	pFile->store_32( terrain3dRuntimePageChecksum( color_bytes.ptr(), ( size_t ) ( color_bytes.size() ) ) );
+	pFile->store_32( t3dRuntimePageChecksum( height_bytes.ptr(), ( size_t ) ( height_bytes.size() ) ) );
+	pFile->store_32( t3dRuntimePageChecksum( color_bytes.ptr(), ( size_t ) ( color_bytes.size() ) ) );
 	pFile->store_64( computeSourceSignature() );
 	pFile->store_buffer( height_bytes );
 	pFile->store_buffer( color_bytes );
@@ -489,7 +489,7 @@ bool T3DFarSurfaceAtlasCache::patchHeightRegion( const Vector2i &vLocation, Pack
 	if ( !m_pRepository ) {
 		return false;
 	}
-	const int atlas_size = m_config.nHeightAtlasSide;
+	const int atlas_size = m_config.m_nHeightAtlasSide;
 	if ( m_pRepository->getRegionSize() <= 0 || m_pRepository->getRegionMapSize() <= 0 ||
 		atlas_size % m_pRepository->getRegionMapSize() != 0 ) {
 		return false;
@@ -518,7 +518,7 @@ bool T3DFarSurfaceAtlasCache::patchHeightRegion( const Vector2i &vLocation, Pack
 			lease = m_pSamplingStorage->acquireActive( vLocation );
 		}
 		if ( lease.valid() ) {
-			height = lease.view().pHeight;
+			height = lease.view().m_pHeight;
 		} else {
 			const Ref<Image> pHeight = getRegionMapOrDefault( pRegion, TYPE_HEIGHT );
 			if ( pHeight.is_valid() && pHeight->get_format() == Image::FORMAT_R16 ) {
@@ -550,7 +550,7 @@ bool T3DFarSurfaceAtlasCache::patchColorRegion( const Vector2i &vLocation, Packe
 	if ( !m_pRepository ) {
 		return false;
 	}
-	const int atlas_size = m_config.nSurfaceAtlasSide;
+	const int atlas_size = m_config.m_nSurfaceAtlasSide;
 	if ( m_pRepository->getRegionSize() <= 0 || m_pRepository->getRegionMapSize() <= 0 ||
 		atlas_size % m_pRepository->getRegionMapSize() != 0 ) {
 		return false;
@@ -612,12 +612,12 @@ bool T3DFarSurfaceAtlasCache::patchColorRegion( const Vector2i &vLocation, Packe
 		return false;
 	}
 	t3dFarSurfaceBakeData_t bake_data;
-	t3dFarSurfaceAtlasCacheBuildBakeData( m_config.pAssets, bake_data );
-	T3DMaterial *const pMaterial = m_config.pMaterial.ptr();
+	t3dFarSurfaceAtlasCacheBuildBakeData( m_config.m_assets, bake_data );
+	T3DMaterial *const pMaterial = m_config.m_material.ptr();
 	const bool auto_shader_enabled = pMaterial && pMaterial->getAutoShaderEnabled();
 	const float auto_slope = t3dFarSurfaceAtlasCacheMaterialFloatParam( pMaterial, "auto_slope", 1.0f );
 	const float auto_height_reduction = t3dFarSurfaceAtlasCacheMaterialFloatParam( pMaterial, "auto_height_reduction", 0.1f );
-	const int auto_layer_max = MAX( bake_data.nCount - 1, 0 );
+	const int auto_layer_max = MAX( bake_data.m_nCount - 1, 0 );
 	const int auto_base_texture = CLAMP( t3dFarSurfaceAtlasCacheMaterialIntParam( pMaterial, "auto_base_texture", 0 ), 0, auto_layer_max );
 	const int auto_overlay_texture = CLAMP( t3dFarSurfaceAtlasCacheMaterialIntParam( pMaterial, "auto_overlay_texture", 1 ), 0, auto_layer_max );
 	const int source_step = MAX( 1, m_pRepository->getRegionSize() / samples_per_region );
@@ -663,7 +663,7 @@ bool T3DFarSurfaceAtlasCache::patchColorRegion( const Vector2i &vLocation, Packe
 			}
 			int base_id = ( int ) ( getBase( control ) );
 			int overlay_id = ( int ) ( getOverlay( control ) );
-			float blend = ( float ) ( getBlend( control ) ) / TERRAIN3D_BYTE_MAX_FLOAT;
+			float blend = ( float ) ( getBlend( control ) ) / s_fByteMaxFloat;
 			if ( auto_shader_enabled && isAuto( control ) ) {
 				float normal_y = 1.0f;
 				float height = 0.0f;
@@ -674,8 +674,8 @@ bool T3DFarSurfaceAtlasCache::patchColorRegion( const Vector2i &vLocation, Packe
 					const int derived_x = MIN( derived_width - 1, center_x * derived_width / m_pRepository->getRegionSize() );
 					const int derived_y = MIN( derived_height - 1, center_y * derived_height / m_pRepository->getRegionSize() );
 					const size_t derived_offset = ( size_t ) ( derived_y * derived_width + derived_x ) * 2u;
-					const float normal_x = ( float ) ( pDerivedRead[derived_offset] ) / TERRAIN3D_BYTE_MAX_FLOAT * 2.0f - 1.0f;
-					const float normal_z = ( float ) ( pDerivedRead[derived_offset + 1u] ) / TERRAIN3D_BYTE_MAX_FLOAT * 2.0f - 1.0f;
+					const float normal_x = ( float ) ( pDerivedRead[derived_offset] ) / s_fByteMaxFloat * 2.0f - 1.0f;
+					const float normal_z = ( float ) ( pDerivedRead[derived_offset + 1u] ) / s_fByteMaxFloat * 2.0f - 1.0f;
 					normal_y = Math::sqrt( MAX( 1.0f - normal_x * normal_x - normal_z * normal_z, 0.0f ) );
 				} else if ( height_valid ) {
 					const int sample_x = center_y * m_pRepository->getRegionSize() + MIN( m_pRepository->getRegionSize() - 1, center_x + 1 );
@@ -697,10 +697,10 @@ bool T3DFarSurfaceAtlasCache::patchColorRegion( const Vector2i &vLocation, Packe
 			const int dominant_material = blend >= 0.5f ? overlay_id : base_id;
 			const float inv_samples = color_samples > 0 ? 1.0f / ( float ) ( color_samples ) : 0.0f;
 			const size_t atlas_offset = ( size_t ) ( ( atlas_origin_y + y ) * atlas_size + atlas_origin_x + x ) * 4u;
-			pAtlasWrite[atlas_offset] = t3dFarSurfaceAtlasCacheColorToByte( ( float ) ( sum_r ) * inv_samples / TERRAIN3D_BYTE_MAX_FLOAT );
-			pAtlasWrite[atlas_offset + 1u] = t3dFarSurfaceAtlasCacheColorToByte( ( float ) ( sum_g ) * inv_samples / TERRAIN3D_BYTE_MAX_FLOAT );
-			pAtlasWrite[atlas_offset + 2u] = t3dFarSurfaceAtlasCacheColorToByte( ( float ) ( sum_b ) * inv_samples / TERRAIN3D_BYTE_MAX_FLOAT );
-			const float color_alpha = color_samples > 0 ? ( float ) ( sum_a ) * inv_samples / TERRAIN3D_BYTE_MAX_FLOAT : 0.5f;
+			pAtlasWrite[atlas_offset] = t3dFarSurfaceAtlasCacheColorToByte( ( float ) ( sum_r ) * inv_samples / s_fByteMaxFloat );
+			pAtlasWrite[atlas_offset + 1u] = t3dFarSurfaceAtlasCacheColorToByte( ( float ) ( sum_g ) * inv_samples / s_fByteMaxFloat );
+			pAtlasWrite[atlas_offset + 2u] = t3dFarSurfaceAtlasCacheColorToByte( ( float ) ( sum_b ) * inv_samples / s_fByteMaxFloat );
+			const float color_alpha = color_samples > 0 ? ( float ) ( sum_a ) * inv_samples / s_fByteMaxFloat : 0.5f;
 			pAtlasWrite[atlas_offset + 3u] = t3dFarSurfaceAtlasCacheFarSurfaceAlpha( solid_coverage, color_alpha, dominant_material );
 		}
 	}
@@ -708,25 +708,25 @@ bool T3DFarSurfaceAtlasCache::patchColorRegion( const Vector2i &vLocation, Packe
 }
 
 bool T3DFarSurfaceAtlasCache::rebuildHeightAtlas( void ) {
-	if ( !m_config.bRequired || !m_pRepository || !m_pSamplingStorage || !m_pSamplingStorage->isActiveOwner() || !initializeImages() ) {
+	if ( !m_config.m_bRequired || !m_pRepository || !m_pSamplingStorage || !m_pSamplingStorage->isActiveOwner() || !initializeImages() ) {
 		return false;
 	}
 	Time *const pTime = Time::get_singleton();
 	const uint64_t started_usec = pTime ? pTime->get_ticks_usec() : 0u;
-	PackedByteArray atlas_bytes = m_pHeightImage->get_data();
+	PackedByteArray atlas_bytes = m_heightImage->get_data();
 	m_nHeightRegionsLastTick = 0;
 	m_nHeightDirtyTexelsLast = 0u;
 	m_nHeightRebuiltBytesLast = 0u;
 	m_nHeightUploadedBytesLast = 0u;
 	m_nHeightPublicationUsecLast = 0u;
-	const uint64_t atlas_texels = ( uint64_t ) ( m_config.nHeightAtlasSide ) * m_config.nHeightAtlasSide;
-	const int samples_per_region = m_pRepository->getRegionMapSize() > 0 ? m_config.nHeightAtlasSide / m_pRepository->getRegionMapSize() : 0;
+	const uint64_t atlas_texels = ( uint64_t ) ( m_config.m_nHeightAtlasSide ) * m_config.m_nHeightAtlasSide;
+	const int samples_per_region = m_pRepository->getRegionMapSize() > 0 ? m_config.m_nHeightAtlasSide / m_pRepository->getRegionMapSize() : 0;
 	const uint64_t region_texels = samples_per_region > 0 ? ( uint64_t ) ( samples_per_region ) * samples_per_region : 0u;
 	if ( m_bHeightDirtyAll ) {
 		m_nHeightDirtyTexelsLast = atlas_texels;
 		const uint16_t default_height = t3dRegionCodecEncodeHeightU16( 0.0f );
 		uint8_t *const pWrite = atlas_bytes.ptrw();
-		for ( int index = 0; index < m_config.nHeightAtlasSide * m_config.nHeightAtlasSide; ++index ) {
+		for ( int index = 0; index < m_config.m_nHeightAtlasSide * m_config.m_nHeightAtlasSide; ++index ) {
 			std::memcpy( pWrite + ( size_t ) ( index ) * 2u, &default_height, sizeof( default_height ) );
 		}
 		for ( int slot = 0; slot < m_pRepository->getSlotCount(); ++slot ) {
@@ -737,13 +737,13 @@ bool T3DFarSurfaceAtlasCache::rebuildHeightAtlas( void ) {
 		}
 	} else {
 		m_nHeightDirtyTexelsLast = ( uint64_t ) ( m_heightDirtyRegions.count() ) * region_texels;
-		for ( size_t index = 0; index < TERRAIN3D_MAX_REGION_SLOTS; ++index ) {
+		for ( size_t index = 0; index < s_nMaxRegionSlots; ++index ) {
 			if ( !m_heightDirtyRegions.test( index ) ) {
 				continue;
 			}
 			const Vector2i location(
-				( int ) ( index % TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE ) - TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE / 2,
-				( int ) ( index / TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE ) - TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE / 2
+				( int ) ( index % s_nActiveMaxRegionMapSize ) - s_nActiveMaxRegionMapSize / 2,
+				( int ) ( index / s_nActiveMaxRegionMapSize ) - s_nActiveMaxRegionMapSize / 2
 			);
 			if ( patchHeightRegion( location, atlas_bytes ) ) {
 				++m_nHeightRegionsLastTick;
@@ -752,11 +752,11 @@ bool T3DFarSurfaceAtlasCache::rebuildHeightAtlas( void ) {
 	}
 	m_nHeightRebuiltBytesLast = m_bHeightDirtyAll ? ( uint64_t ) ( atlas_bytes.size() ) :
 		( uint64_t ) ( m_nHeightRegionsLastTick ) * region_texels * 2u;
-	m_pHeightImage->set_data( m_config.nHeightAtlasSide, m_config.nHeightAtlasSide, false, Image::FORMAT_R16, atlas_bytes );
+	m_heightImage->set_data( m_config.m_nHeightAtlasSide, m_config.m_nHeightAtlasSide, false, Image::FORMAT_R16, atlas_bytes );
 	m_nHeightProcessingUsecLast = pTime ? pTime->get_ticks_usec() - started_usec : 0u;
 	const uint64_t publication_started = pTime ? pTime->get_ticks_usec() : 0u;
-	const bool uploaded = m_generatedHeightMap.getRid().is_valid() ? m_generatedHeightMap.update2d( m_pHeightImage ) :
-		m_generatedHeightMap.create( m_pHeightImage ).is_valid();
+	const bool uploaded = m_generatedHeightMap.getRid().is_valid() ? m_generatedHeightMap.update2d( m_heightImage ) :
+		m_generatedHeightMap.create( m_heightImage ).is_valid();
 	m_nHeightPublicationUsecLast = pTime ? pTime->get_ticks_usec() - publication_started : 0u;
 	if ( !uploaded ) {
 		return false;
@@ -772,19 +772,19 @@ bool T3DFarSurfaceAtlasCache::rebuildHeightAtlas( void ) {
 }
 
 bool T3DFarSurfaceAtlasCache::rebuildColorAtlas( void ) {
-	if ( !m_config.bRequired || !m_pRepository || !initializeImages() ) {
+	if ( !m_config.m_bRequired || !m_pRepository || !initializeImages() ) {
 		return false;
 	}
 	Time *const pTime = Time::get_singleton();
 	const uint64_t started_usec = pTime ? pTime->get_ticks_usec() : 0u;
-	PackedByteArray atlas_bytes = m_pColorImage->get_data();
+	PackedByteArray atlas_bytes = m_colorImage->get_data();
 	m_nColorRegionsLastTick = 0;
 	m_nColorDirtyTexelsLast = 0u;
 	m_nColorRebuiltBytesLast = 0u;
 	m_nColorUploadedBytesLast = 0u;
 	m_nColorPublicationUsecLast = 0u;
-	const uint64_t atlas_texels = ( uint64_t ) ( m_config.nSurfaceAtlasSide ) * m_config.nSurfaceAtlasSide;
-	const int samples_per_region = m_pRepository->getRegionMapSize() > 0 ? m_config.nSurfaceAtlasSide / m_pRepository->getRegionMapSize() : 0;
+	const uint64_t atlas_texels = ( uint64_t ) ( m_config.m_nSurfaceAtlasSide ) * m_config.m_nSurfaceAtlasSide;
+	const int samples_per_region = m_pRepository->getRegionMapSize() > 0 ? m_config.m_nSurfaceAtlasSide / m_pRepository->getRegionMapSize() : 0;
 	const uint64_t region_texels = samples_per_region > 0 ? ( uint64_t ) ( samples_per_region ) * samples_per_region : 0u;
 	if ( m_bColorDirtyAll ) {
 		m_nColorDirtyTexelsLast = atlas_texels;
@@ -797,13 +797,13 @@ bool T3DFarSurfaceAtlasCache::rebuildColorAtlas( void ) {
 		}
 	} else {
 		m_nColorDirtyTexelsLast = ( uint64_t ) ( m_colorDirtyRegions.count() ) * region_texels;
-		for ( size_t index = 0; index < TERRAIN3D_MAX_REGION_SLOTS; ++index ) {
+		for ( size_t index = 0; index < s_nMaxRegionSlots; ++index ) {
 			if ( !m_colorDirtyRegions.test( index ) ) {
 				continue;
 			}
 			const Vector2i location(
-				( int ) ( index % TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE ) - TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE / 2,
-				( int ) ( index / TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE ) - TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE / 2
+				( int ) ( index % s_nActiveMaxRegionMapSize ) - s_nActiveMaxRegionMapSize / 2,
+				( int ) ( index / s_nActiveMaxRegionMapSize ) - s_nActiveMaxRegionMapSize / 2
 			);
 			if ( patchColorRegion( location, atlas_bytes ) ) {
 				++m_nColorRegionsLastTick;
@@ -812,11 +812,11 @@ bool T3DFarSurfaceAtlasCache::rebuildColorAtlas( void ) {
 	}
 	m_nColorRebuiltBytesLast = m_bColorDirtyAll ? ( uint64_t ) ( atlas_bytes.size() ) :
 		( uint64_t ) ( m_nColorRegionsLastTick ) * region_texels * 4u;
-	m_pColorImage->set_data( m_config.nSurfaceAtlasSide, m_config.nSurfaceAtlasSide, false, Image::FORMAT_RGBA8, atlas_bytes );
+	m_colorImage->set_data( m_config.m_nSurfaceAtlasSide, m_config.m_nSurfaceAtlasSide, false, Image::FORMAT_RGBA8, atlas_bytes );
 	m_nColorProcessingUsecLast = pTime ? pTime->get_ticks_usec() - started_usec : 0u;
 	const uint64_t publication_started = pTime ? pTime->get_ticks_usec() : 0u;
-	const bool uploaded = m_generatedColorMap.getRid().is_valid() ? m_generatedColorMap.update2d( m_pColorImage ) :
-		m_generatedColorMap.create( m_pColorImage ).is_valid();
+	const bool uploaded = m_generatedColorMap.getRid().is_valid() ? m_generatedColorMap.update2d( m_colorImage ) :
+		m_generatedColorMap.create( m_colorImage ).is_valid();
 	m_nColorPublicationUsecLast = pTime ? pTime->get_ticks_usec() - publication_started : 0u;
 	if ( !uploaded ) {
 		return false;
@@ -832,12 +832,12 @@ bool T3DFarSurfaceAtlasCache::rebuildColorAtlas( void ) {
 }
 
 bool T3DFarSurfaceAtlasCache::ensure( void ) {
-	if ( !m_config.bRequired || !m_pRepository || !m_pSamplingStorage || !m_pSamplingStorage->isActiveOwner() ||
+	if ( !m_config.m_bRequired || !m_pRepository || !m_pSamplingStorage || !m_pSamplingStorage->isActiveOwner() ||
 		m_pRepository->getRegionSize() <= 0 || m_pRepository->getRegionMapSize() <= 0 ) {
 		return false;
 	}
-	if ( ( m_pHeightImage.is_null() || m_pColorImage.is_null() ) && !loadCooked() ) {
-		if ( m_config.bStrictCooked ) {
+	if ( ( m_heightImage.is_null() || m_colorImage.is_null() ) && !loadCooked() ) {
+		if ( m_config.m_bStrictCooked ) {
 			return false;
 		}
 		markAllDirty( REGION_TYPE_MAX );
@@ -879,70 +879,70 @@ int T3DFarSurfaceAtlasCache::getDirtyRegionCount( void ) const {
 
 size_t T3DFarSurfaceAtlasCache::getImageBytes( void ) const {
 	size_t bytes = 0u;
-	if ( m_pHeightImage.is_valid() ) {
-		bytes += ( size_t ) ( m_pHeightImage->get_data().size() );
+	if ( m_heightImage.is_valid() ) {
+		bytes += ( size_t ) ( m_heightImage->get_data().size() );
 	}
-	if ( m_pColorImage.is_valid() ) {
-		bytes += ( size_t ) ( m_pColorImage->get_data().size() );
+	if ( m_colorImage.is_valid() ) {
+		bytes += ( size_t ) ( m_colorImage->get_data().size() );
 	}
 	return bytes;
 }
 
 t3dFarSurfaceAtlasStats_t T3DFarSurfaceAtlasCache::getStats( void ) const {
 	t3dFarSurfaceAtlasStats_t stats;
-	stats.nHeightUpdatesLastTick = m_nHeightUpdatesLastTick;
-	stats.nColorUpdatesLastTick = m_nColorUpdatesLastTick;
-	stats.nHeightRegionsLastTick = m_nHeightRegionsLastTick;
-	stats.nColorRegionsLastTick = m_nColorRegionsLastTick;
-	stats.nHeightDirtyRegions = m_bHeightDirtyAll && m_pRepository ? m_pRepository->getActiveRegionCount() : ( int ) ( m_heightDirtyRegions.count() );
-	stats.nColorDirtyRegions = m_bColorDirtyAll && m_pRepository ? m_pRepository->getActiveRegionCount() : ( int ) ( m_colorDirtyRegions.count() );
-	stats.nHeightProcessingUsecLast = m_nHeightProcessingUsecLast;
-	stats.nColorProcessingUsecLast = m_nColorProcessingUsecLast;
-	stats.nHeightDirtyTexelsLast = m_nHeightDirtyTexelsLast;
-	stats.nColorDirtyTexelsLast = m_nColorDirtyTexelsLast;
-	stats.nHeightRebuiltBytesLast = m_nHeightRebuiltBytesLast;
-	stats.nColorRebuiltBytesLast = m_nColorRebuiltBytesLast;
-	stats.nHeightUploadedBytesLast = m_nHeightUploadedBytesLast;
-	stats.nColorUploadedBytesLast = m_nColorUploadedBytesLast;
-	stats.nHeightPublicationUsecLast = m_nHeightPublicationUsecLast;
-	stats.nColorPublicationUsecLast = m_nColorPublicationUsecLast;
-	stats.nHeightPublicationCount = m_nHeightPublicationCount;
-	stats.nColorPublicationCount = m_nColorPublicationCount;
-	stats.nHeightUploadedBytesTotal = m_nHeightUploadedBytesTotal;
-	stats.nColorUploadedBytesTotal = m_nColorUploadedBytesTotal;
-	stats.nCookIoUsecLast = m_nCookIoUsecLast;
-	stats.bHeightDirtyAll = m_bHeightDirtyAll;
-	stats.bColorDirtyAll = m_bColorDirtyAll;
-	stats.bCookedLoaded = m_bCookedLoaded;
-	stats.bCookedSaved = m_bCookedSaved;
+	stats.m_nHeightUpdatesLastTick = m_nHeightUpdatesLastTick;
+	stats.m_nColorUpdatesLastTick = m_nColorUpdatesLastTick;
+	stats.m_nHeightRegionsLastTick = m_nHeightRegionsLastTick;
+	stats.m_nColorRegionsLastTick = m_nColorRegionsLastTick;
+	stats.m_nHeightDirtyRegions = m_bHeightDirtyAll && m_pRepository ? m_pRepository->getActiveRegionCount() : ( int ) ( m_heightDirtyRegions.count() );
+	stats.m_nColorDirtyRegions = m_bColorDirtyAll && m_pRepository ? m_pRepository->getActiveRegionCount() : ( int ) ( m_colorDirtyRegions.count() );
+	stats.m_nHeightProcessingUsecLast = m_nHeightProcessingUsecLast;
+	stats.m_nColorProcessingUsecLast = m_nColorProcessingUsecLast;
+	stats.m_nHeightDirtyTexelsLast = m_nHeightDirtyTexelsLast;
+	stats.m_nColorDirtyTexelsLast = m_nColorDirtyTexelsLast;
+	stats.m_nHeightRebuiltBytesLast = m_nHeightRebuiltBytesLast;
+	stats.m_nColorRebuiltBytesLast = m_nColorRebuiltBytesLast;
+	stats.m_nHeightUploadedBytesLast = m_nHeightUploadedBytesLast;
+	stats.m_nColorUploadedBytesLast = m_nColorUploadedBytesLast;
+	stats.m_nHeightPublicationUsecLast = m_nHeightPublicationUsecLast;
+	stats.m_nColorPublicationUsecLast = m_nColorPublicationUsecLast;
+	stats.m_nHeightPublicationCount = m_nHeightPublicationCount;
+	stats.m_nColorPublicationCount = m_nColorPublicationCount;
+	stats.m_nHeightUploadedBytesTotal = m_nHeightUploadedBytesTotal;
+	stats.m_nColorUploadedBytesTotal = m_nColorUploadedBytesTotal;
+	stats.m_nCookIoUsecLast = m_nCookIoUsecLast;
+	stats.m_bHeightDirtyAll = m_bHeightDirtyAll;
+	stats.m_bColorDirtyAll = m_bColorDirtyAll;
+	stats.m_bCookedLoaded = m_bCookedLoaded;
+	stats.m_bCookedSaved = m_bCookedSaved;
 	return stats;
 }
 
 Dictionary T3DFarSurfaceAtlasCache::getStatsDictionary( void ) const {
 	const t3dFarSurfaceAtlasStats_t values = getStats();
 	Dictionary stats;
-	stats["far_height_updates_last_tick"] = values.nHeightUpdatesLastTick;
-	stats["far_color_updates_last_tick"] = values.nColorUpdatesLastTick;
-	stats["far_height_regions_processed_last_tick"] = values.nHeightRegionsLastTick;
-	stats["far_color_regions_processed_last_tick"] = values.nColorRegionsLastTick;
-	stats["far_height_dirty_regions"] = values.nHeightDirtyRegions;
-	stats["far_color_dirty_regions"] = values.nColorDirtyRegions;
-	stats["far_height_processing_usec_last"] = ( int64_t ) ( values.nHeightProcessingUsecLast );
-	stats["far_color_processing_usec_last"] = ( int64_t ) ( values.nColorProcessingUsecLast );
-	stats["far_height_dirty_texels_last"] = ( int64_t ) ( values.nHeightDirtyTexelsLast );
-	stats["far_color_dirty_texels_last"] = ( int64_t ) ( values.nColorDirtyTexelsLast );
-	stats["far_height_rebuilt_bytes_last"] = ( int64_t ) ( values.nHeightRebuiltBytesLast );
-	stats["far_color_rebuilt_bytes_last"] = ( int64_t ) ( values.nColorRebuiltBytesLast );
-	stats["far_height_uploaded_bytes_last"] = ( int64_t ) ( values.nHeightUploadedBytesLast );
-	stats["far_color_uploaded_bytes_last"] = ( int64_t ) ( values.nColorUploadedBytesLast );
-	stats["far_height_publication_usec_last"] = ( int64_t ) ( values.nHeightPublicationUsecLast );
-	stats["far_color_publication_usec_last"] = ( int64_t ) ( values.nColorPublicationUsecLast );
-	stats["far_height_publication_count"] = ( int64_t ) ( values.nHeightPublicationCount );
-	stats["far_color_publication_count"] = ( int64_t ) ( values.nColorPublicationCount );
-	stats["far_height_uploaded_bytes_total"] = ( int64_t ) ( values.nHeightUploadedBytesTotal );
-	stats["far_color_uploaded_bytes_total"] = ( int64_t ) ( values.nColorUploadedBytesTotal );
-	stats["far_cook_io_usec_last"] = ( int64_t ) ( values.nCookIoUsecLast );
-	stats["far_cooked_loaded"] = values.bCookedLoaded;
-	stats["far_cooked_saved"] = values.bCookedSaved;
+	stats["far_height_updates_last_tick"] = values.m_nHeightUpdatesLastTick;
+	stats["far_color_updates_last_tick"] = values.m_nColorUpdatesLastTick;
+	stats["far_height_regions_processed_last_tick"] = values.m_nHeightRegionsLastTick;
+	stats["far_color_regions_processed_last_tick"] = values.m_nColorRegionsLastTick;
+	stats["far_height_dirty_regions"] = values.m_nHeightDirtyRegions;
+	stats["far_color_dirty_regions"] = values.m_nColorDirtyRegions;
+	stats["far_height_processing_usec_last"] = ( int64_t ) ( values.m_nHeightProcessingUsecLast );
+	stats["far_color_processing_usec_last"] = ( int64_t ) ( values.m_nColorProcessingUsecLast );
+	stats["far_height_dirty_texels_last"] = ( int64_t ) ( values.m_nHeightDirtyTexelsLast );
+	stats["far_color_dirty_texels_last"] = ( int64_t ) ( values.m_nColorDirtyTexelsLast );
+	stats["far_height_rebuilt_bytes_last"] = ( int64_t ) ( values.m_nHeightRebuiltBytesLast );
+	stats["far_color_rebuilt_bytes_last"] = ( int64_t ) ( values.m_nColorRebuiltBytesLast );
+	stats["far_height_uploaded_bytes_last"] = ( int64_t ) ( values.m_nHeightUploadedBytesLast );
+	stats["far_color_uploaded_bytes_last"] = ( int64_t ) ( values.m_nColorUploadedBytesLast );
+	stats["far_height_publication_usec_last"] = ( int64_t ) ( values.m_nHeightPublicationUsecLast );
+	stats["far_color_publication_usec_last"] = ( int64_t ) ( values.m_nColorPublicationUsecLast );
+	stats["far_height_publication_count"] = ( int64_t ) ( values.m_nHeightPublicationCount );
+	stats["far_color_publication_count"] = ( int64_t ) ( values.m_nColorPublicationCount );
+	stats["far_height_uploaded_bytes_total"] = ( int64_t ) ( values.m_nHeightUploadedBytesTotal );
+	stats["far_color_uploaded_bytes_total"] = ( int64_t ) ( values.m_nColorUploadedBytesTotal );
+	stats["far_cook_io_usec_last"] = ( int64_t ) ( values.m_nCookIoUsecLast );
+	stats["far_cooked_loaded"] = values.m_bCookedLoaded;
+	stats["far_cooked_saved"] = values.m_bCookedSaved;
 	return stats;
 }

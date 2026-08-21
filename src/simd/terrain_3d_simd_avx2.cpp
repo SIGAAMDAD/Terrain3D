@@ -21,10 +21,10 @@
 EA_FORCE_INLINE static __m256 t3dSimdAvx2Decode8( const uint16_t *pSource ) { return _mm256_cvtph_ps( _mm_loadu_si128( ( const __m128i * ) ( pSource ) ) ); }
 
 static inline void t3dSimdAvx2EncodeNormal8( const __m256 argX, const __m256 argZ, uint8_t *pDestination ) {
-	const __m256 scale = _mm256_set1_ps( TERRAIN3D_BYTE_MIDPOINT_FLOAT );
+	const __m256 scale = _mm256_set1_ps( s_fByteMidpointFloat );
 	const __m256 half = _mm256_set1_ps( 0.5f );
 	const __m256 zero = _mm256_setzero_ps();
-	const __m256 max255 = _mm256_set1_ps( TERRAIN3D_BYTE_MAX_FLOAT );
+	const __m256 max255 = _mm256_set1_ps( s_fByteMaxFloat );
 	const __m256 one = _mm256_set1_ps( 1.0f );
 	const __m256 x = _mm256_min_ps( max255,
 		_mm256_max_ps( zero, _mm256_add_ps( _mm256_mul_ps( _mm256_add_ps( argX, one ), scale ), half ) ) );
@@ -50,8 +50,8 @@ static inline void t3dSimdAvx2ScalarNormalPixel(
 	const float fDz = pCenterRow[iX] - pDownRow[iX];
 	const float fLength = std::sqrt( fDx * fDx + fSpacing * fSpacing + fDz * fDz );
 	const float fInverse = fLength > 0.0f ? 1.0f / fLength : 0.0f;
-	pDestination[0] = ( uint8_t ) ( std::floor( std::max( 0.0f, std::min( TERRAIN3D_BYTE_MAX_FLOAT, ( fDx * fInverse + 1.0f ) * TERRAIN3D_BYTE_MIDPOINT_FLOAT ) ) + 0.5f ) );
-	pDestination[1] = ( uint8_t ) ( std::floor( std::max( 0.0f, std::min( TERRAIN3D_BYTE_MAX_FLOAT, ( fDz * fInverse + 1.0f ) * TERRAIN3D_BYTE_MIDPOINT_FLOAT ) ) + 0.5f ) );
+	pDestination[0] = ( uint8_t ) ( std::floor( std::max( 0.0f, std::min( s_fByteMaxFloat, ( fDx * fInverse + 1.0f ) * s_fByteMidpointFloat ) ) + 0.5f ) );
+	pDestination[1] = ( uint8_t ) ( std::floor( std::max( 0.0f, std::min( s_fByteMaxFloat, ( fDz * fInverse + 1.0f ) * s_fByteMidpointFloat ) ) + 0.5f ) );
 }
 }
 #endif
@@ -84,25 +84,25 @@ void t3dSimdAvx2PackedTransforms(
 		const t3dPackedTransform_t &t = pTransforms[i];
 		float *pOut = pDestination + i * ( size_t ) ( nStride );
 		alignas( 32 ) float fBasis[8];
-		_mm256_store_ps( fBasis, t3dSimdAvx2Decode8( t.basis ) );
+		_mm256_store_ps( fBasis, t3dSimdAvx2Decode8( t.m_szBasis ) );
 		pOut[0] = fBasis[0];
 		pOut[1] = fBasis[1];
 		pOut[2] = fBasis[2];
-		pOut[3] = t.origin[0];
+		pOut[3] = t.m_szOrigin[0];
 		pOut[4] = fBasis[3];
 		pOut[5] = fBasis[4];
 		pOut[6] = fBasis[5];
-		pOut[7] = t.origin[1];
+		pOut[7] = t.m_szOrigin[1];
 		pOut[8] = fBasis[6];
 		pOut[9] = fBasis[7];
-		pOut[10] = t3dHalfDecode( t.basis[8] );
-		pOut[11] = t.origin[2];
+		pOut[10] = t3dHalfDecode( t.m_szBasis[8] );
+		pOut[11] = t.m_szOrigin[2];
 		if ( nStride == 16 ) {
 			const uint32_t color = pColors ? pColors[i] : 0xffffffffu;
 			const __m128i bytes = _mm_cvtsi32_si128( ( int ) ( color ) );
 			const __m128 floats = _mm_cvtepi32_ps( _mm_cvtepu8_epi32( bytes ) );
 			alignas( 16 ) float fRgbaLe[4];
-			_mm_store_ps( fRgbaLe, _mm_mul_ps( floats, _mm_set1_ps( TERRAIN3D_BYTE_INV_MAX_FLOAT ) ) );
+			_mm_store_ps( fRgbaLe, _mm_mul_ps( floats, _mm_set1_ps( s_fByteInvMaxFloat ) ) );
 			pOut[12] = fRgbaLe[3];
 			pOut[13] = fRgbaLe[2];
 			pOut[14] = fRgbaLe[1];

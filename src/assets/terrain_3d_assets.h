@@ -31,16 +31,16 @@ typedef enum t3dTexturePackingMode_e {
 } t3dTexturePackingMode_t;
 
 typedef struct t3dTextureSettingsBlock_s {
-	eastl::array<Color, TERRAIN3D_MAX_TEXTURE_ASSETS> colors{};
-	eastl::array<float, TERRAIN3D_MAX_TEXTURE_ASSETS> normal_depths{};
-	eastl::array<float, TERRAIN3D_MAX_TEXTURE_ASSETS> ao_strengths{};
-	eastl::array<float, TERRAIN3D_MAX_TEXTURE_ASSETS> ao_light_affects{};
-	eastl::array<float, TERRAIN3D_MAX_TEXTURE_ASSETS> roughness_mods{};
-	eastl::array<float, TERRAIN3D_MAX_TEXTURE_ASSETS> metallics{};
-	eastl::array<float, TERRAIN3D_MAX_TEXTURE_ASSETS> uv_scales{};
-	eastl::array<Vector2, TERRAIN3D_MAX_TEXTURE_ASSETS> detiles{};
-	eastl::array<Vector2, TERRAIN3D_MAX_TEXTURE_ASSETS> displacements{};
-	int nCount = 0;
+	eastl::array<Color, s_nMaxTextureAssets> m_szColors{};
+	eastl::array<float, s_nMaxTextureAssets> m_szNormalDepths{};
+	eastl::array<float, s_nMaxTextureAssets> m_szAoStrengths{};
+	eastl::array<float, s_nMaxTextureAssets> m_szAoLightAffects{};
+	eastl::array<float, s_nMaxTextureAssets> m_szRoughnessMods{};
+	eastl::array<float, s_nMaxTextureAssets> m_szMetallics{};
+	eastl::array<float, s_nMaxTextureAssets> m_szUvScales{};
+	eastl::array<Vector2, s_nMaxTextureAssets> m_szDetiles{};
+	eastl::array<Vector2, s_nMaxTextureAssets> m_szDisplacements{};
+	int m_nCount = 0;
 } t3dTextureSettingsBlock_t;
 
 typedef enum t3dRuntimeMaterialChannel_e {
@@ -53,35 +53,35 @@ typedef enum t3dRuntimeMaterialChannel_e {
 } t3dRuntimeMaterialChannel_t;
 
 typedef struct t3dRuntimeMaterialImageInfo_s {
-	uint64_t nOffset = 0u;
-	uint32_t nSize = 0u;
-	uint32_t nChecksum = 0u;
-	int32_t nWidth = 0;
-	int32_t nHeight = 0;
-	int32_t nFormat = ( int32_t ) ( Image::FORMAT_MAX );
-	uint32_t bMipmaps = 0u;
+	uint64_t m_iOffset = 0u;
+	uint32_t m_nSize = 0u;
+	uint32_t m_nChecksum = 0u;
+	int32_t m_nWidth = 0;
+	int32_t m_nHeight = 0;
+	int32_t m_nFormat = ( int32_t ) ( Image::FORMAT_MAX );
+	uint32_t m_nMipmaps = 0u;
 } t3dRuntimeMaterialImageInfo_t;
 
 typedef struct t3dRuntimeMaterialLayerInfo_s {
-	eastl::array<t3dRuntimeMaterialImageInfo_t, RUNTIME_MATERIAL_CHANNEL_COUNT> channels{};
-	Color averageAlbedo = COLOR_WHITE;
-	Color albedoColor = COLOR_WHITE;
-	float normalDepth = 1.0f;
-	float aoStrength = 0.5f;
-	float aoLightAffect = 0.0f;
-	float roughness = 0.0f;
-	float metallic = 0.0f;
-	float uvScale = 0.1f;
-	Vector2 detile = Vector2();
-	Vector2 displacement = Vector2();
-	uint32_t nBundleIndex = 0u;
+	eastl::array<t3dRuntimeMaterialImageInfo_t, RUNTIME_MATERIAL_CHANNEL_COUNT> m_szChannels{};
+	Color m_averageAlbedo = COLOR_WHITE;
+	Color m_albedoColor = COLOR_WHITE;
+	float m_fNormalDepth = 1.0f;
+	float m_fAoStrength = 0.5f;
+	float m_fAoLightAffect = 0.0f;
+	float m_fRoughness = 0.0f;
+	float m_fMetallic = 0.0f;
+	float m_fUvScale = 0.1f;
+	Vector2 m_detile = Vector2();
+	Vector2 m_displacement = Vector2();
+	uint32_t m_iBundleIndex = 0u;
 } t3dRuntimeMaterialLayerInfo_t;
 
 typedef struct t3dTextureArrayLayout_s {
-	Vector2i vSize = V2I_ZERO;
-	Image::Format eFormat = Image::FORMAT_MAX;
-	bool bMipmaps = true;
-	bool bNeedsNormalization = false;
+	Vector2i m_vSize = V2I_ZERO;
+	Image::Format m_eFormat = Image::FORMAT_MAX;
+	bool m_bMipmaps = true;
+	bool m_bNeedsNormalization = false;
 } t3dTextureArrayLayout_t;
 
 class T3DAssets : public Resource {
@@ -123,11 +123,11 @@ private:
 
 
 
-	eastl::array<t3dRuntimeMaterialLayerInfo_t, TERRAIN3D_MAX_TEXTURE_ASSETS> m_runtimeMaterialCookedLayers{};
-	eastl::array<int, TERRAIN3D_MAX_TEXTURE_ASSETS> m_runtimeMaterialLogicalToPhysical{};
-	eastl::array<int, TERRAIN3D_MAX_TEXTURE_ASSETS> m_runtimeMaterialPhysicalToLogical{};
-	eastl::array<uint64_t, TERRAIN3D_MAX_TEXTURE_ASSETS> m_runtimeMaterialLastUseTick{};
-	eastl::array<uint64_t, TERRAIN3D_MAX_TEXTURE_ASSETS> m_runtimeMaterialRetireAfterTick{};
+	eastl::array<t3dRuntimeMaterialLayerInfo_t, s_nMaxTextureAssets> m_runtimeMaterialCookedLayers{};
+	eastl::array<int, s_nMaxTextureAssets> m_runtimeMaterialLogicalToPhysical{};
+	eastl::array<int, s_nMaxTextureAssets> m_runtimeMaterialPhysicalToLogical{};
+	eastl::array<uint64_t, s_nMaxTextureAssets> m_runtimeMaterialLastUseTick{};
+	eastl::array<uint64_t, s_nMaxTextureAssets> m_runtimeMaterialRetireAfterTick{};
 	String m_runtimeMaterialCachePath;
 	uint64_t m_nRuntimeMaterialCookedSignature = 0u;
 	uint64_t m_nRuntimeMaterialTick = 0u;
@@ -142,15 +142,15 @@ private:
 
 
 	// Mesh Thumbnail Generation
-	RID m_scenario;
-	RID m_viewport;
-	RID m_viewportTexture;
-	RID m_camera;
-	RID m_keyLight;
-	RID m_keyLightInstance;
-	RID m_fillLight;
-	RID m_fillLightInstance;
-	RID m_meshInstance;
+	RID m_hScenario;
+	RID m_hViewport;
+	RID m_hViewportTexture;
+	RID m_hCamera;
+	RID m_hKeyLight;
+	RID m_hKeyLightInstance;
+	RID m_hFillLight;
+	RID m_hFillLightInstance;
+	RID m_hMeshInstance;
 
 	void swapIds( const t3dAssetType_t type, const int nSrcId, const int nDstId );
 	void connectAssetSignals( const t3dAssetType_t type, const Ref<T3DAssetResource> &rAsset );

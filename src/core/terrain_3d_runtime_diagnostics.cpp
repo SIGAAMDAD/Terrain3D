@@ -58,7 +58,7 @@ Dictionary T3DTerrain::getHeightSourceDiagnostics( const Vector3 &rWorldPosition
 	const real_t tessellation_scale = ( real_t ) ( ( uint64_t ) ( 1 ) << ( uint64_t ) ( CLAMP( m_tessellationLevel, 0, 6 ) ) );
 	const real_t mesh_spacing = m_fVertexSpacing * ( real_t ) ( ( uint64_t ) ( 1 ) << ( uint64_t ) ( CLAMP( mesh_lod, 0, 30 ) ) ) /
 		tessellation_scale;
-	const real_t far_source_spacing = m_fVertexSpacing * ( real_t ) ( TERRAIN3D_ACTIVE_WORLD_TEXELS ) /
+	const real_t far_source_spacing = m_fVertexSpacing * ( real_t ) ( s_nActiveWorldTexels ) /
 		( real_t ) ( MAX( 1, getGpuFarHeightAtlasSide() ) );
 
 	String height_source = "none";
@@ -77,7 +77,7 @@ Dictionary T3DTerrain::getHeightSourceDiagnostics( const Vector3 &rWorldPosition
 	diagnostics["world_position"] = rWorldPosition;
 	diagnostics["region"] = region;
 	diagnostics["streaming_state"] = ( int ) ( state );
-	diagnostics["streaming_state_name"] = String( terrain3dStreamingStateName( state ) );
+	diagnostics["streaming_state_name"] = String( t3dStreamingStateName( state ) );
 	diagnostics["render_mesh_lod"] = mesh_lod;
 	diagnostics["mesh_vertex_spacing"] = mesh_spacing;
 	diagnostics["first_far_mesh_lod"] = first_far_lod;
@@ -96,19 +96,19 @@ Dictionary T3DTerrain::getHeightSourceDiagnostics( const Vector3 &rWorldPosition
 
 Array T3DTerrain::getShaderTierStatsDictionaries( void ) const {
 	Array tiers;
-	if ( m_pMaterial.is_null() ) {
+	if ( m_material.is_null() ) {
 		return tiers;
 	}
-	const Dictionary shader_global = m_pMaterial->getShaderVariantDiagnostics();
+	const Dictionary shader_global = m_material->getShaderVariantDiagnostics();
 	const real_t fNearEnd = getRuntimeNearRangeEndM();
 	const real_t fMiddleEnd = getRuntimeMiddleRangeEndM();
 	for ( int tier = SHADER_TIER_NEAR; tier < SHADER_TIER_COUNT; ++tier ) {
-		Dictionary row = m_pMaterial->getShaderTierDiagnostics( tier );
+		Dictionary row = m_material->getShaderTierDiagnostics( tier );
 		const real_t fRangeStart = tier == SHADER_TIER_NEAR ? 0.0f :
 			( tier == SHADER_TIER_MIDDLE ? fNearEnd : fMiddleEnd );
 		const real_t fRangeEnd = tier == SHADER_TIER_NEAR ? fNearEnd :
 			( tier == SHADER_TIER_MIDDLE ? fMiddleEnd : -1.0f );
-		row["diagnostics_version"] = TERRAIN3D_DIAGNOSTICS_VERSION;
+		row["diagnostics_version"] = s_nDiagnosticsVersion;
 		row["tier_name"] = tier == SHADER_TIER_NEAR ? "Near" :
 			( tier == SHADER_TIER_MIDDLE ? "Middle" : "Far" );
 		row["range_start_m"] = fRangeStart;
@@ -175,24 +175,24 @@ Array T3DTerrain::getCacheInventory( const bool bDeep ) const {
 	const Dictionary cpu = m_pData ? ( bDeep ? m_pData->getCpuRegionCacheStats() : m_pData->getCpuRegionCacheStatsFast() ) : Dictionary();
 	const Dictionary instance = m_pData ? ( bDeep ? m_pData->getInstanceRegionCacheStats() : m_pData->getInstanceRegionCacheStatsFast() ) : Dictionary();
 	const Dictionary lightmap = m_pLightmapStreamer ? ( bDeep ? m_pLightmapStreamer->getStats() : m_pLightmapStreamer->getStatsFast() ) : Dictionary();
-	const Dictionary shader = m_pMaterial.is_valid() ? m_pMaterial->getShaderVariantDiagnostics() : Dictionary();
+	const Dictionary shader = m_material.is_valid() ? m_material->getShaderVariantDiagnostics() : Dictionary();
 	const uint64_t current_bytes[6] = {
 		m_pData ? ( uint64_t ) ( m_pData->getGpuRegionCacheReservedBytes() ) : 0u,
 		m_pData ? ( uint64_t ) ( m_pData->getCpuRegionCacheReservedBytes() ) : 0u,
 		m_pData ? ( uint64_t ) ( m_pData->getInstanceRegionCacheReservedBytes() ) : 0u,
 		m_pLightmapStreamer ? ( uint64_t ) ( m_pLightmapStreamer->getResidentEstimatedBytes() ) : 0u,
-		m_pMaterial.is_valid() ? ( uint64_t ) ( m_pMaterial->getShaderVariantSourceBytesNative() ) : 0u,
+		m_material.is_valid() ? ( uint64_t ) ( m_material->getShaderVariantSourceBytesNative() ) : 0u,
 		getGpuFarAtlasBytes(),
 	};
 	for ( int index = 0; index < 6; ++index ) {
 		m_szDiagnosticCachePeakBytes[( size_t ) ( index )] = MAX( m_szDiagnosticCachePeakBytes[( size_t ) ( index )], current_bytes[index] );
 	}
 	const uint64_t hard_caps[5] = {
-		m_pData ? ( uint64_t ) ( m_pData->getGpuRegionCacheHardCapBytes() ) : 128u * TERRAIN3D_MEMORY_MIB,
-		m_pData ? ( uint64_t ) ( m_pData->getCpuRegionCacheHardCapBytes() ) : 128u * TERRAIN3D_MEMORY_MIB,
-		128u * TERRAIN3D_MEMORY_MIB,
-		1024u * TERRAIN3D_MEMORY_MIB,
-		( uint64_t ) ( TERRAIN3D_MAX_SHADER_VARIANT_SOURCE_BUDGET_MB ) * TERRAIN3D_MEMORY_MIB,
+		m_pData ? ( uint64_t ) ( m_pData->getGpuRegionCacheHardCapBytes() ) : 128u * s_nMemoryMib,
+		m_pData ? ( uint64_t ) ( m_pData->getCpuRegionCacheHardCapBytes() ) : 128u * s_nMemoryMib,
+		128u * s_nMemoryMib,
+		1024u * s_nMemoryMib,
+		( uint64_t ) ( s_nMaxShaderVariantSourceBudgetMb ) * s_nMemoryMib,
 	};
 	const Dictionary raw[5] = { gpu, cpu, instance, lightmap, shader };
 	const int64_t resident[5] = {
@@ -201,32 +201,32 @@ Array T3DTerrain::getCacheInventory( const bool bDeep ) const {
 	};
 	const int64_t capacity[5] = {
 		( int64_t ) ( gpu.get( "capacity", 0 ) ), ( int64_t ) ( cpu.get( "capacity", 0 ) ), ( int64_t ) ( instance.get( "capacity", 0 ) ),
-		( int64_t ) ( lightmap.get( "max_active_packages", 0 ) ), ( int64_t ) ( m_pMaterial.is_valid() ? m_pMaterial->getShaderVariantCacheLimit() : 0 )
+		( int64_t ) ( lightmap.get( "max_active_packages", 0 ) ), ( int64_t ) ( m_material.is_valid() ? m_material->getShaderVariantCacheLimit() : 0 )
 	};
 	const int64_t evictions[5] = {
-		( int64_t ) ( m_runtimeProfileAccumulator.nGpuEvictionsTotal ), ( int64_t ) ( m_runtimeProfileAccumulator.nCpuEvictionsTotal ),
-		( int64_t ) ( m_runtimeProfileAccumulator.nInstanceEvictionsTotal ), ( int64_t ) ( lightmap.get( "unloads_total", ( int64_t ) ( 0 ) ) ),
+		( int64_t ) ( m_runtimeProfileAccumulator.m_nGpuEvictionsTotal ), ( int64_t ) ( m_runtimeProfileAccumulator.m_nCpuEvictionsTotal ),
+		( int64_t ) ( m_runtimeProfileAccumulator.m_nInstanceEvictionsTotal ), ( int64_t ) ( lightmap.get( "unloads_total", ( int64_t ) ( 0 ) ) ),
 		( int64_t ) ( shader.get( "removals_total", ( int64_t ) ( 0 ) ) )
 	};
 	const int64_t hits[5] = {
-		( int64_t ) ( m_runtimeProfileAccumulator.nGpuCookedHitsTotal ), -1, -1, -1,
+		( int64_t ) ( m_runtimeProfileAccumulator.m_nGpuCookedHitsTotal ), -1, -1, -1,
 		( int64_t ) ( shader.get( "cache_hits_total", ( int64_t ) ( 0 ) ) )
 	};
 	const int64_t misses[5] = {
-		( int64_t ) ( m_runtimeProfileAccumulator.nGpuCookedMissesTotal ), -1, -1, -1,
+		( int64_t ) ( m_runtimeProfileAccumulator.m_nGpuCookedMissesTotal ), -1, -1, -1,
 		( int64_t ) ( shader.get( "cache_misses_total", ( int64_t ) ( 0 ) ) )
 	};
 	for ( int index = 0; index < 5; ++index ) {
-		const t3dMemorySubsystemAllocation_t &allocation = m_nMemoryBudgetResult.subsystems[( size_t ) ( index )];
+		const t3dMemorySubsystemAllocation_t &allocation = m_nMemoryBudgetResult.m_szSubsystems[( size_t ) ( index )];
 		Dictionary row;
-		row["diagnostics_version"] = TERRAIN3D_DIAGNOSTICS_VERSION;
+		row["diagnostics_version"] = s_nDiagnosticsVersion;
 		row["cache_name"] = TERRAIN3D_MEMORY_SUBSYSTEM_NAMES[index];
 		row["resident"] = resident[index];
 		row["effective_capacity"] = capacity[index];
-		row["requested_budget_bytes"] = ( int64_t ) ( allocation.nRequestedBytes );
-		row["effective_budget_bytes"] = ( int64_t ) ( allocation.nEffectiveBytes );
+		row["requested_budget_bytes"] = ( int64_t ) ( allocation.m_nRequestedBytes );
+		row["effective_budget_bytes"] = ( int64_t ) ( allocation.m_nEffectiveBytes );
 		row["hard_maximum_bytes"] = ( int64_t ) ( hard_caps[index] );
-		row["limiting_constraint"] = memoryLimitReasonName( allocation.limitingReason );
+		row["limiting_constraint"] = memoryLimitReasonName( allocation.m_limitingReason );
 		row["current_bytes"] = ( int64_t ) ( current_bytes[index] );
 		row["peak_bytes"] = ( int64_t ) ( m_szDiagnosticCachePeakBytes[( size_t ) ( index )] );
 		row["hits"] = hits[index];
@@ -250,7 +250,7 @@ Array T3DTerrain::getCacheInventory( const bool bDeep ) const {
 		caches.push_back( row );
 	}
 	Dictionary far;
-	far["diagnostics_version"] = TERRAIN3D_DIAGNOSTICS_VERSION;
+	far["diagnostics_version"] = s_nDiagnosticsVersion;
 	far["cache_name"] = "far_atlas";
 	far["resident"] = m_pData ? 2 : 0;
 	far["effective_capacity"] = 2;
@@ -276,15 +276,15 @@ Array T3DTerrain::getCacheInventory( const bool bDeep ) const {
 
 Dictionary T3DTerrain::getCpuProfileStats( void ) const {
 	Dictionary cpu;
-	cpu["gpu_page_cache_service_cpu_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.nGpuCacheServiceUsec );
-	cpu["gpu_page_preparation_worker_cpu_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.nGpuPrepareWorkerUsec );
-	cpu["rendering_server_publication_cpu_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.nGpuPreparePublicationUsec );
-	cpu["cpu_cache_service_cpu_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.nCpuCacheServiceUsec );
-	cpu["instance_cache_service_cpu_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.nInstanceCacheServiceUsec );
-	cpu["instance_streaming_cpu_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.nInstancerUsec );
-	cpu["node_streaming_migration_cpu_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.nNodeStreamingUsec );
-	cpu["baked_lighting_streaming_cpu_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.nLightmapStreamingUsec );
-	cpu["collision_rebuild_cpu_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.nCollisionUsec );
+	cpu["gpu_page_cache_service_cpu_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.m_nGpuCacheServiceUsec );
+	cpu["gpu_page_preparation_worker_cpu_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.m_nGpuPrepareWorkerUsec );
+	cpu["rendering_server_publication_cpu_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.m_nGpuPreparePublicationUsec );
+	cpu["cpu_cache_service_cpu_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.m_nCpuCacheServiceUsec );
+	cpu["instance_cache_service_cpu_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.m_nInstanceCacheServiceUsec );
+	cpu["instance_streaming_cpu_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.m_nInstancerUsec );
+	cpu["node_streaming_migration_cpu_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.m_nNodeStreamingUsec );
+	cpu["baked_lighting_streaming_cpu_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.m_nLightmapStreamingUsec );
+	cpu["collision_rebuild_cpu_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.m_nCollisionUsec );
 	const Dictionary gpu = m_pData ? m_pData->getGpuRegionCacheStatsFast() : Dictionary();
 	cpu["far_height_rebuild_cpu_usec"] = gpu.get( "far_height_processing_usec_last", ( int64_t ) ( 0 ) );
 	cpu["far_color_rebuild_cpu_usec"] = gpu.get( "far_color_processing_usec_last", ( int64_t ) ( 0 ) );
@@ -317,7 +317,7 @@ Dictionary T3DTerrain::getGpuInformationStats( void ) const {
 	modeled["render_batches"] = m_pTerrainMesher ? m_pTerrainMesher->getRenderBatchCount() : 0;
 	modeled["shadow_batches"] = m_pTerrainMesher ? m_pTerrainMesher->getShadowBatchCount() : 0;
 	modeled["tier_shaders"] = getShaderTierStatsDictionaries();
-	modeled["upload_bytes_last_tick"] = ( int64_t ) ( m_runtimeProfileLastSample.nGpuUploadBytes );
+	modeled["upload_bytes_last_tick"] = ( int64_t ) ( m_runtimeProfileLastSample.m_nGpuUploadBytes );
 	modeled["note"] = "Terrain geometry, batches, feature/sample model, and upload traffic; these are not GPU milliseconds.";
 	info["modeled"] = modeled;
 	Dictionary scene_wide;
@@ -329,8 +329,8 @@ Dictionary T3DTerrain::getGpuInformationStats( void ) const {
 
 Dictionary T3DTerrain::getRuntimeParitySnapshot( void ) const {
 	Dictionary snapshot;
-	snapshot["native_api_revision"] = NATIVE_API_REVISION;
-	snapshot["native_build_id"] = String( NATIVE_BUILD_ID );
+	snapshot["native_api_revision"] = s_nNativeApiRevision;
+	snapshot["native_build_id"] = String( s_pszNativeBuildId );
 	snapshot["execution_mode"] = ( int ) ( m_editorExecutionMode );
 	snapshot["shipping_policy_active"] = !isEditorAuthoringModeInternal();
 	snapshot["runtime_shader_tiering_active"] = isRuntimeShaderTieringActive();
@@ -353,7 +353,7 @@ Dictionary T3DTerrain::getRuntimeParitySnapshot( void ) const {
 	snapshot["middle_shadow_enabled"] = m_bMiddleShadowEnabled;
 	snapshot["far_shadow_enabled"] = m_bFarShadowEnabled;
 
-	const Dictionary materials = m_pAssets.is_valid() ? m_pAssets->getRuntimeMaterialCacheStats() : Dictionary();
+	const Dictionary materials = m_assets.is_valid() ? m_assets->getRuntimeMaterialCacheStats() : Dictionary();
 	snapshot["runtime_material_cache_active"] = ( bool ) ( materials.get( "active", false ) );
 	snapshot["runtime_material_physical_layers"] = ( int ) ( materials.get( "physical_layers", 0 ) );
 	snapshot["runtime_material_logical_to_physical_hash"] = materials.get( "logical_to_physical_hash", String() );
@@ -401,7 +401,7 @@ Ref<T3DFrameStats> T3DTerrain::getFrameStatsSnapshot( void ) const {
 	Ref<T3DFrameStats> pStats;
 	pStats.instantiate();
 	Dictionary values = runtimeProfileSampleToDictionary( m_runtimeProfileLastSample );
-	values["diagnostics_version"] = TERRAIN3D_DIAGNOSTICS_VERSION;
+	values["diagnostics_version"] = s_nDiagnosticsVersion;
 	values["profiler_collection_usec"] = ( int64_t ) ( m_nDiagnosticsCollectionUsecLast );
 	pStats->setValues( values );
 	return pStats;
@@ -410,7 +410,7 @@ Ref<T3DFrameStats> T3DTerrain::getFrameStatsSnapshot( void ) const {
 Dictionary T3DTerrain::getRuntimeDiagnostics( const bool bDeep ) const {
 	const uint64_t collection_started_usec = Time::get_singleton()->get_ticks_usec();
 	Dictionary diagnostics;
-	diagnostics["diagnostics_version"] = TERRAIN3D_DIAGNOSTICS_VERSION;
+	diagnostics["diagnostics_version"] = s_nDiagnosticsVersion;
 	diagnostics["deep_introspection"] = bDeep;
 	diagnostics["profiling_enabled"] = m_bRuntimeProfilingEnabled;
 	diagnostics["sample_count"] = ( int64_t ) ( m_nRuntimeProfileSampleCount );
@@ -418,7 +418,7 @@ Dictionary T3DTerrain::getRuntimeDiagnostics( const bool bDeep ) const {
 	diagnostics["performance_target"] = ( int ) ( m_performanceTarget );
 	diagnostics["performance_profile_status"] = ( int ) ( m_performanceProfileStatus );
 	diagnostics["performance_profile_status_name"] = getPerformanceProfileStatusName();
-	diagnostics["performance_profile_version"] = ( int ) ( TERRAIN3D_PROFILE_VERSION );
+	diagnostics["performance_profile_version"] = ( int ) ( s_nProfileVersion );
 	diagnostics["performance_profile_signature"] = getPerformanceProfileSignature();
 	diagnostics["performance_profile_diff_count"] = getPerformanceProfileDiff().size();
 	diagnostics["adaptive_budgets"] = getRuntimeAdaptiveBudgetStats();
@@ -428,40 +428,40 @@ Dictionary T3DTerrain::getRuntimeDiagnostics( const bool bDeep ) const {
 	diagnostics["memory"] = bDeep ? getMemoryEstimate() : getRuntimeMemoryStatsFast();
 
 	Dictionary frame;
-	frame["sequence"] = ( int64_t ) ( m_runtimeProfileLastSample.frameSequence );
-	frame["physics_total_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.nPhysicsTotalUsec );
-	frame["data_residency_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.nDataResidencyUsec );
-	frame["node_streaming_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.nNodeStreamingUsec );
-	frame["lightmap_streaming_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.nLightmapStreamingUsec );
-	frame["clipmap_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.nClipmapUsec );
-	frame["ocean_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.nOceanUsec );
-	frame["instancer_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.nInstancerUsec );
-	frame["light_sync_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.nLightSyncUsec );
-	frame["collision_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.nCollisionUsec );
-	frame["streaming_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.nStreamingUsec );
-	frame["gpu_cache_service_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.nGpuCacheServiceUsec );
-	frame["cpu_cache_service_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.nCpuCacheServiceUsec );
-	frame["instance_cache_service_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.nInstanceCacheServiceUsec );
-	frame["target_position"] = Vector2( m_runtimeProfileLastSample.fTargetX, m_runtimeProfileLastSample.fTargetZ );
-	frame["movement"] = Vector2( m_runtimeProfileLastSample.fMovementX, m_runtimeProfileLastSample.fMovementZ );
-	frame["target_region"] = Vector2i( m_runtimeProfileLastSample.targetRegionX, m_runtimeProfileLastSample.targetRegionZ );
-	frame["shader_updates"] = m_runtimeProfileLastSample.shaderUpdates;
-	frame["shader_variant_creations"] = m_runtimeProfileLastSample.shaderVariantCreations;
-	frame["shader_source_submission_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.nShaderSourceSubmissionUsec );
-	frame["shader_update_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.nShaderUpdateUsec );
-	frame["events"] = getRuntimeProfileEventNames( m_runtimeProfileLastSample.eventFlags );
-	frame["stall_reasons"] = getRuntimeProfileStallNames( m_runtimeProfileLastSample.stallFlags );
+	frame["sequence"] = ( int64_t ) ( m_runtimeProfileLastSample.m_nFrameSequence );
+	frame["physics_total_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.m_nPhysicsTotalUsec );
+	frame["data_residency_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.m_nDataResidencyUsec );
+	frame["node_streaming_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.m_nNodeStreamingUsec );
+	frame["lightmap_streaming_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.m_nLightmapStreamingUsec );
+	frame["clipmap_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.m_nClipmapUsec );
+	frame["ocean_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.m_nOceanUsec );
+	frame["instancer_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.m_nInstancerUsec );
+	frame["light_sync_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.m_nLightSyncUsec );
+	frame["collision_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.m_nCollisionUsec );
+	frame["streaming_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.m_nStreamingUsec );
+	frame["gpu_cache_service_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.m_nGpuCacheServiceUsec );
+	frame["cpu_cache_service_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.m_nCpuCacheServiceUsec );
+	frame["instance_cache_service_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.m_nInstanceCacheServiceUsec );
+	frame["target_position"] = Vector2( m_runtimeProfileLastSample.m_fTargetX, m_runtimeProfileLastSample.m_fTargetZ );
+	frame["movement"] = Vector2( m_runtimeProfileLastSample.m_fMovementX, m_runtimeProfileLastSample.m_fMovementZ );
+	frame["target_region"] = Vector2i( m_runtimeProfileLastSample.m_nTargetRegionX, m_runtimeProfileLastSample.m_nTargetRegionZ );
+	frame["shader_updates"] = m_runtimeProfileLastSample.m_nShaderUpdates;
+	frame["shader_variant_creations"] = m_runtimeProfileLastSample.m_nShaderVariantCreations;
+	frame["shader_source_submission_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.m_nShaderSourceSubmissionUsec );
+	frame["shader_update_usec"] = ( int64_t ) ( m_runtimeProfileLastSample.m_nShaderUpdateUsec );
+	frame["events"] = getRuntimeProfileEventNames( m_runtimeProfileLastSample.m_nEventFlags );
+	frame["stall_reasons"] = getRuntimeProfileStallNames( m_runtimeProfileLastSample.m_nStallFlags );
 	diagnostics["frame"] = frame;
 	diagnostics["problems"] = getRuntimeProfileProblems();
-	diagnostics["history_capacity"] = ( int64_t ) ( TERRAIN3D_RUNTIME_PROFILE_HISTORY_CAPACITY );
-	diagnostics["history_count"] = ( int64_t ) ( m_pRuntimeProfileHistory ? m_pRuntimeProfileHistory->nCount : 0u );
+	diagnostics["history_capacity"] = ( int64_t ) ( s_nRuntimeProfileHistoryCapacity );
+	diagnostics["history_count"] = ( int64_t ) ( m_pRuntimeProfileHistory ? m_pRuntimeProfileHistory->m_nCount : 0u );
 
 	Dictionary clipmap;
-	clipmap["near_updates"] = m_runtimeProfileLastSample.clipmapNearUpdates;
-	clipmap["middle_updates"] = m_runtimeProfileLastSample.clipmapMiddleUpdates;
-	clipmap["far_updates"] = m_runtimeProfileLastSample.clipmapFarUpdates;
-	clipmap["teleports"] = m_runtimeProfileLastSample.clipmapTeleports;
-	clipmap["buffer_uploads"] = m_runtimeProfileLastSample.nClipmapBufferUploads;
+	clipmap["near_updates"] = m_runtimeProfileLastSample.m_nClipmapNearUpdates;
+	clipmap["middle_updates"] = m_runtimeProfileLastSample.m_nClipmapMiddleUpdates;
+	clipmap["far_updates"] = m_runtimeProfileLastSample.m_nClipmapFarUpdates;
+	clipmap["teleports"] = m_runtimeProfileLastSample.m_nClipmapTeleports;
+	clipmap["buffer_uploads"] = m_runtimeProfileLastSample.m_nClipmapBufferUploads;
 	clipmap["mesh_lods"] = m_nMeshLods;
 	clipmap["tessellation_level"] = m_tessellationLevel;
 	clipmap["total_levels"] = getTotalClipmapLevels();
@@ -478,11 +478,11 @@ Dictionary T3DTerrain::getRuntimeDiagnostics( const bool bDeep ) const {
 	diagnostics["clipmap"] = clipmap;
 
 	Dictionary nodes = m_pNodeStreamer && bDeep ? m_pNodeStreamer->getStats() : Dictionary();
-	nodes["active_regions"] = m_runtimeProfileLastSample.nNodeActiveRegions;
-	nodes["active_nodes"] = m_runtimeProfileLastSample.nodeActiveNodes;
-	nodes["loads_last_tick"] = m_runtimeProfileLastSample.nodeLoads;
-	nodes["unloads_last_tick"] = m_runtimeProfileLastSample.nodeUnloads;
-	nodes["load_failures_last_tick"] = m_runtimeProfileLastSample.nNodeLoadFailures;
+	nodes["active_regions"] = m_runtimeProfileLastSample.m_nNodeActiveRegions;
+	nodes["active_nodes"] = m_runtimeProfileLastSample.m_nNodeActiveNodes;
+	nodes["loads_last_tick"] = m_runtimeProfileLastSample.m_nNodeLoads;
+	nodes["unloads_last_tick"] = m_runtimeProfileLastSample.m_nNodeUnloads;
+	nodes["load_failures_last_tick"] = m_runtimeProfileLastSample.m_nNodeLoadFailures;
 	nodes["enabled"] = m_bDynamicNodeStreamingEnabled;
 	nodes["effective"] = effectiveDynamicNodeStreamingEnabled();
 	nodes["stream_radius"] = m_nDynamicNodeStreamRadius;
@@ -504,8 +504,8 @@ Dictionary T3DTerrain::getRuntimeDiagnostics( const bool bDeep ) const {
 	diagnostics["baked_lighting"] = baked_lighting;
 
 	Dictionary instancer = m_pInstancer && bDeep ? m_pInstancer->getStats() : Dictionary();
-	instancer["render_cells"] = m_runtimeProfileLastSample.renderCells;
-	instancer["pending_cell_updates"] = m_runtimeProfileLastSample.pendingCellUpdates;
+	instancer["render_cells"] = m_runtimeProfileLastSample.m_nRenderCells;
+	instancer["pending_cell_updates"] = m_runtimeProfileLastSample.m_nPendingCellUpdates;
 	instancer["cell_size"] = m_nInstancerCellSize;
 	instancer["streaming_enabled"] = m_bInstancerCellStreamingEnabled;
 	instancer["streaming_effective"] = effectiveInstancerCellStreamingEnabled();
@@ -518,11 +518,11 @@ Dictionary T3DTerrain::getRuntimeDiagnostics( const bool bDeep ) const {
 	if ( m_pCollision ) {
 		Dictionary collision = bDeep ? m_pCollision->getStats() : Dictionary();
 		collision["enabled"] = m_pCollision->isEnabled();
-		collision["update_usec_last"] = ( int64_t ) ( m_runtimeProfileLastSample.nCollisionUsec );
+		collision["update_usec_last"] = ( int64_t ) ( m_runtimeProfileLastSample.m_nCollisionUsec );
 		diagnostics["collision"] = collision;
 	}
-	if ( m_pMaterial.is_valid() ) {
-		diagnostics["shaders"] = m_pMaterial->getShaderVariantDiagnostics();
+	if ( m_material.is_valid() ) {
+		diagnostics["shaders"] = m_material->getShaderVariantDiagnostics();
 	}
 
 	Dictionary configuration;
@@ -600,14 +600,14 @@ void T3DTerrain::resetRuntimeDiagnostics( void ) {
 	if ( m_pRuntimeProfileHistory ) {
 		m_pRuntimeProfileHistory->reset();
 	}
-	if ( m_pMaterial.is_valid() ) {
-		m_pMaterial->resetShaderVariantDiagnostics();
+	if ( m_material.is_valid() ) {
+		m_material->resetShaderVariantDiagnostics();
 	}
 	m_nRuntimeProfileShaderUpdatesSeen = 0u;
 	m_runtimeProfileShaderCreationsSeen = 0u;
-	m_nRuntimeAdaptiveBudgetState.overBudgetStreak = 0;
-	m_nRuntimeAdaptiveBudgetState.underBudgetStreak = 0;
-	m_nRuntimeAdaptiveBudgetState.nAdjustmentCount = 0u;
+	m_nRuntimeAdaptiveBudgetState.m_nOverBudgetStreak = 0;
+	m_nRuntimeAdaptiveBudgetState.m_nUnderBudgetStreak = 0;
+	m_nRuntimeAdaptiveBudgetState.m_nAdjustmentCount = 0u;
 	m_nRuntimeBoundaryNodeDeferralsTotal = 0u;
 	m_nRuntimeBoundaryInstancerDeferralsTotal = 0u;
 	m_runtimeBoundaryNodeDeferralStreak = 0;

@@ -19,28 +19,28 @@ class T3DRuntimePageStore;
 class T3DSamplingStorage;
 
 typedef struct t3dActiveHeightResidencyStats_s {
-	int nReconciliationsLastTick = 0;
-	int nSlotsExaminedLastTick = 0;
-	int nRequiredLastTick = 0;
-	int nMissingRequiredLastTick = 0;
-	int nPublishedLastTick = 0;
-	int nEvictedLastTick = 0;
-	int nPredictedRequestsLastTick = 0;
+	int m_nReconciliationsLastTick = 0;
+	int m_nSlotsExaminedLastTick = 0;
+	int m_nRequiredLastTick = 0;
+	int m_nMissingRequiredLastTick = 0;
+	int m_nPublishedLastTick = 0;
+	int m_nEvictedLastTick = 0;
+	int m_nPredictedRequestsLastTick = 0;
 } t3dActiveHeightResidencyStats_t;
 
 typedef struct t3dActiveHeightResidencyResult_s {
-	static constexpr int CPU_REQUEST_CAPACITY = 25;
-	eastl::array<Vector2i, CPU_REQUEST_CAPACITY> cpuSourceRequests{};
-	int nCpuSourceRequestCount = 0;
+	static constexpr int s_nCpuRequestCapacity = 25;
+	eastl::array<Vector2i, s_nCpuRequestCapacity> m_szCpuSourceRequests{};
+	int m_nCpuSourceRequestCount = 0;
 
 	void requestCpuSource( const Vector2i &rLocation ) {
-		if ( nCpuSourceRequestCount < CPU_REQUEST_CAPACITY ) {
-			cpuSourceRequests[( size_t ) ( nCpuSourceRequestCount++ )] = rLocation;
+		if ( m_nCpuSourceRequestCount < s_nCpuRequestCapacity ) {
+			m_szCpuSourceRequests[( size_t ) ( m_nCpuSourceRequestCount++ )] = rLocation;
 		}
 	}
 } t3dActiveHeightResidencyResult_t;
 
-// Owns only the spatial policy for the fixed active-height sampling bank.
+// Owns only the spatial policy for the s_nFixed active-height sampling bank.
 // T3DSamplingStorage owns publication/leases; T3DRuntimePageStore owns cooked
 // page preparation. Missing authoritative CPU sources are returned to the
 // region-residency coordinator instead of introducing a cache/facade back-edge.
@@ -59,7 +59,7 @@ public:
 	EA_FORCE_INLINE const t3dActiveHeightResidencyStats_t &getStats( void ) const { return m_stats; }
 
 private:
-	static constexpr int ACTIVE_RADIUS = 2;
+	static constexpr int s_nActiveRadius = 2;
 
 	T3DRegionRepository *m_pRepository = nullptr;
 	T3DSamplingStorage *m_pSamplingStorage = nullptr;

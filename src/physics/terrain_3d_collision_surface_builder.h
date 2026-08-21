@@ -27,19 +27,19 @@ public:
 	size_t getRetainedBufferBytes( void ) const;
 
 private:
-	static constexpr int DYNAMIC_SCRATCH_AXIS = 65;
-	static constexpr int DYNAMIC_SCRATCH_SAMPLES = DYNAMIC_SCRATCH_AXIS * DYNAMIC_SCRATCH_AXIS;
-	static constexpr int REGION_PRESENCE_SAMPLES = 25;
-	eastl::array<float, DYNAMIC_SCRATCH_SAMPLES> m_dynamicHeightScratch{};
+	static constexpr int s_nDynamicScratchAxis = 65;
+	static constexpr int s_nDynamicScratchSamples = s_nDynamicScratchAxis * s_nDynamicScratchAxis;
+	static constexpr int s_nRegionPresenceSamples = 25;
+	eastl::array<float, s_nDynamicScratchSamples> m_dynamicHeightScratch{};
 	eastl::vector<float> m_fullHeightRowScratch;
-	eastl::array<uint8_t, REGION_PRESENCE_SAMPLES> m_regionPresenceScratch{};
-	eastl::array<int32_t, TERRAIN3D_MAX_COLLISION_AXIS_SAMPLES> m_szBlendRegionX0{};
-	eastl::array<int32_t, TERRAIN3D_MAX_COLLISION_AXIS_SAMPLES> m_szBlendRegionX1{};
-	eastl::array<int32_t, TERRAIN3D_MAX_COLLISION_AXIS_SAMPLES> m_szBlendRegionZ0{};
-	eastl::array<int32_t, TERRAIN3D_MAX_COLLISION_AXIS_SAMPLES> m_szBlendRegionZ1{};
-	eastl::array<real_t, TERRAIN3D_MAX_COLLISION_AXIS_SAMPLES> m_fBlendWeightX{};
-	eastl::array<real_t, TERRAIN3D_MAX_COLLISION_AXIS_SAMPLES> m_fBlendWeightZ{};
-	eastl::array<real_t, TERRAIN3D_MAX_REGION_BLEND_SAMPLES> m_fRegionBlendCurve{};
+	eastl::array<uint8_t, s_nRegionPresenceSamples> m_regionPresenceScratch{};
+	eastl::array<int32_t, s_nMaxCollisionAxisSamples> m_szBlendRegionX0{};
+	eastl::array<int32_t, s_nMaxCollisionAxisSamples> m_szBlendRegionX1{};
+	eastl::array<int32_t, s_nMaxCollisionAxisSamples> m_szBlendRegionZ0{};
+	eastl::array<int32_t, s_nMaxCollisionAxisSamples> m_szBlendRegionZ1{};
+	eastl::array<real_t, s_nMaxCollisionAxisSamples> m_fBlendWeightX{};
+	eastl::array<real_t, s_nMaxCollisionAxisSamples> m_fBlendWeightZ{};
+	eastl::array<real_t, s_nMaxRegionBlendSamples> m_fRegionBlendCurve{};
 	int m_nRegionBlendCurveSize = 0;
 	real_t m_fRegionBlendCurveSetting = -1.0f;
 

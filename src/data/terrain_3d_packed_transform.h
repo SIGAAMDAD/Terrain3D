@@ -21,34 +21,34 @@ using namespace godot;
 // Two transforms fit exactly in one 64-byte cacheline. The 32-byte alignment
 // prevents an individual transform from straddling cachelines in EASTL storage.
 typedef struct alignas( 32 ) t3dPackedTransform_s {
-	float origin[3] = {0.0f, 0.0f, 0.0f};
-	uint16_t basis[9] = {};
-	uint16_t reserved = 0u;
+	float m_szOrigin[3] = {0.0f, 0.0f, 0.0f};
+	uint16_t m_szBasis[9] = {};
+	uint16_t m_nReserved = 0u;
 
 	EA_FORCE_INLINE t3dPackedTransform_s( void ) { set( Transform3D() ); }
 
 	EA_FORCE_INLINE explicit t3dPackedTransform_s( const Transform3D &rTransform ) { set( rTransform ); }
 
 	void set( const Transform3D &rTransform ) {
-		origin[0] = ( float ) ( rTransform.origin.x );
-		origin[1] = ( float ) ( rTransform.origin.y );
-		origin[2] = ( float ) ( rTransform.origin.z );
+		m_szOrigin[0] = ( float ) ( rTransform.origin.x );
+		m_szOrigin[1] = ( float ) ( rTransform.origin.y );
+		m_szOrigin[2] = ( float ) ( rTransform.origin.z );
 		for ( int row = 0; row < 3; ++row ) {
-			basis[row * 3 + 0] = t3dHalfEncode( ( float ) ( rTransform.basis[row].x ) );
-			basis[row * 3 + 1] = t3dHalfEncode( ( float ) ( rTransform.basis[row].y ) );
-			basis[row * 3 + 2] = t3dHalfEncode( ( float ) ( rTransform.basis[row].z ) );
+			m_szBasis[row * 3 + 0] = t3dHalfEncode( ( float ) ( rTransform.basis[row].x ) );
+			m_szBasis[row * 3 + 1] = t3dHalfEncode( ( float ) ( rTransform.basis[row].y ) );
+			m_szBasis[row * 3 + 2] = t3dHalfEncode( ( float ) ( rTransform.basis[row].z ) );
 		}
-		reserved = 0u;
+		m_nReserved = 0u;
 	}
 
 	Transform3D get( void ) const {
 		Basis unpacked_basis;
 		for ( int row = 0; row < 3; ++row ) {
 			unpacked_basis[row] = Vector3(
-				t3dHalfDecode( basis[row * 3 + 0] ), t3dHalfDecode( basis[row * 3 + 1] ),
-				t3dHalfDecode( basis[row * 3 + 2] ) );
+				t3dHalfDecode( m_szBasis[row * 3 + 0] ), t3dHalfDecode( m_szBasis[row * 3 + 1] ),
+				t3dHalfDecode( m_szBasis[row * 3 + 2] ) );
 		}
-		return Transform3D( unpacked_basis, Vector3( origin[0], origin[1], origin[2] ) );
+		return Transform3D( unpacked_basis, Vector3( m_szOrigin[0], m_szOrigin[1], m_szOrigin[2] ) );
 	}
 } t3dPackedTransform_t;
 
@@ -112,13 +112,13 @@ public:
 
 	EA_FORCE_INLINE t3dPackedTransform_t *data( void ) { return m_storage.data(); }
 
-	EA_FORCE_INLINE Vector3 getOrigin( const size_t iIndex ) const { const t3dPackedTransform_t &packed = m_storage[iIndex]; return Vector3( packed.origin[0], packed.origin[1], packed.origin[2] ); }
+	EA_FORCE_INLINE Vector3 getOrigin( const size_t iIndex ) const { const t3dPackedTransform_t &packed = m_storage[iIndex]; return Vector3( packed.m_szOrigin[0], packed.m_szOrigin[1], packed.m_szOrigin[2] ); }
 
-	EA_FORCE_INLINE Vector3 getUpAxis( const size_t iIndex ) const { const t3dPackedTransform_t &packed = m_storage[iIndex]; return Vector3( t3dHalfDecode( packed.basis[1] ), t3dHalfDecode( packed.basis[4] ), t3dHalfDecode( packed.basis[7] ) ); }
+	EA_FORCE_INLINE Vector3 getUpAxis( const size_t iIndex ) const { const t3dPackedTransform_t &packed = m_storage[iIndex]; return Vector3( t3dHalfDecode( packed.m_szBasis[1] ), t3dHalfDecode( packed.m_szBasis[4] ), t3dHalfDecode( packed.m_szBasis[7] ) ); }
 
 	EA_FORCE_INLINE void setOriginY( const size_t iIndex, const real_t fY ) { m_storage[iIndex].origin[1] = ( float ) ( fY ); }
 
-	EA_FORCE_INLINE void rescaleOriginXz( const size_t iIndex, const real_t fOldSpacing, const real_t fNewSpacing ) { t3dPackedTransform_t &packed = m_storage[iIndex]; packed.origin[0] = ( float ) ( ( real_t ) ( packed.origin[0] ) / fOldSpacing * fNewSpacing ); packed.origin[2] = ( float ) ( ( real_t ) ( packed.origin[2] ) / fOldSpacing * fNewSpacing ); }
+	EA_FORCE_INLINE void rescaleOriginXz( const size_t iIndex, const real_t fOldSpacing, const real_t fNewSpacing ) { t3dPackedTransform_t &packed = m_storage[iIndex]; packed.m_szOrigin[0] = ( float ) ( ( real_t ) ( packed.m_szOrigin[0] ) / fOldSpacing * fNewSpacing ); packed.m_szOrigin[2] = ( float ) ( ( real_t ) ( packed.m_szOrigin[2] ) / fOldSpacing * fNewSpacing ); }
 
 private:
 	T3DSlabArray<t3dPackedTransform_t> m_storage;

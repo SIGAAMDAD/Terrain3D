@@ -23,6 +23,6 @@
 		}                                               \
 	} while ( 0 )
 
-void testDiffers( void );
+void t3dTestDiffers( void );
 
 #endif // UNIT_TESTING_H

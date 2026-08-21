@@ -19,15 +19,15 @@ class T3DTextureAsset : public T3DAssetResource {
 
 	// Saved Data
 	Color m_albedoColor = Color( 1.f, 1.f, 1.f, 1.f );
-	Ref<Texture2D> m_pAlbedoTexture;
-	Ref<Texture2D> m_pNormalTexture;
+	Ref<Texture2D> m_albedoTexture;
+	Ref<Texture2D> m_normalTexture;
 	// Optimized runtime inputs. Packed PBR is authored externally (for example in
 	// GIMP) and loaded directly; Terrain3D does not expose separate PBR channels.
-	Ref<Texture2D> m_pSurfaceTexture;
-	Ref<Texture2D> m_pDisplacementTexture;
-	Ref<T3DPackedPBRTexture> m_pPackedPbrResource;
+	Ref<Texture2D> m_surfaceTexture;
+	Ref<Texture2D> m_displacementTexture;
+	Ref<T3DPackedPBRTexture> m_packedPbrResource;
 	// Serialized compatibility input for the former RGBA16UI implementation.
-	Ref<Texture2D> m_pPbrTexture;
+	Ref<Texture2D> m_pbrTexture;
 	real_t m_fMetallic = 0.0f;
 	real_t m_fNormalDepth = 1.0f;
 	real_t m_fAoStrength = 0.5f;
@@ -90,31 +90,31 @@ public:
 	EA_FORCE_INLINE bool isHighlighted( void ) const override { return m_bHighlighted; }
 	EA_FORCE_INLINE Color getHighlightColor( void ) const override { return m_bHighlighted ? m_highlightColor : COLOR_WHITE; }
 
-	EA_FORCE_INLINE Ref<Texture2D> getThumbnail( void ) const override { return m_pThumbnail; }
+	EA_FORCE_INLINE Ref<Texture2D> getThumbnail( void ) const override { return m_thumbnail; }
 
 	void setAlbedoColor( const Color &rColor );
 	EA_FORCE_INLINE Color getAlbedoColor( void ) const { return m_albedoColor; }
 
 	void setAlbedoTexture( const Ref<Texture2D> &rTexture );
-	EA_FORCE_INLINE Ref<Texture2D> getAlbedoTexture( void ) const { return m_pAlbedoTexture; }
+	EA_FORCE_INLINE Ref<Texture2D> getAlbedoTexture( void ) const { return m_albedoTexture; }
 
 	void setNormalTexture( const Ref<Texture2D> &rTexture );
-	EA_FORCE_INLINE Ref<Texture2D> getNormalTexture( void ) const { return m_pNormalTexture; }
+	EA_FORCE_INLINE Ref<Texture2D> getNormalTexture( void ) const { return m_normalTexture; }
 
 	void setSurfaceTexture( const Ref<Texture2D> &rTexture );
-	EA_FORCE_INLINE Ref<Texture2D> getSurfaceTexture( void ) const { return m_pSurfaceTexture; }
+	EA_FORCE_INLINE Ref<Texture2D> getSurfaceTexture( void ) const { return m_surfaceTexture; }
 	EA_FORCE_INLINE void setPackedPbrTexture( const Ref<Texture2D> &rTexture ) { setSurfaceTexture( rTexture ); }
-	EA_FORCE_INLINE Ref<Texture2D> getPackedPbrTexture( void ) const { return m_pSurfaceTexture; }
+	EA_FORCE_INLINE Ref<Texture2D> getPackedPbrTexture( void ) const { return m_surfaceTexture; }
 	void setDisplacementTexture( const Ref<Texture2D> &rTexture );
-	EA_FORCE_INLINE Ref<Texture2D> getDisplacementTexture( void ) const { return m_pDisplacementTexture; }
+	EA_FORCE_INLINE Ref<Texture2D> getDisplacementTexture( void ) const { return m_displacementTexture; }
 
 	// Compatibility setter/getter for serialized RGBA16UI assets. New code should
 	// use packed_pbr_texture and displacement_texture.
 	void setPbrTexture( const Ref<Texture2D> &rTexture );
-	EA_FORCE_INLINE Ref<Texture2D> getPbrTexture( void ) const { return m_pPbrTexture; }
+	EA_FORCE_INLINE Ref<Texture2D> getPbrTexture( void ) const { return m_pbrTexture; }
 
 	void setPackedPbrResource( const Ref<T3DPackedPBRTexture> &rResource );
-	EA_FORCE_INLINE Ref<T3DPackedPBRTexture> getPackedPbrResource( void ) const { return m_pPackedPbrResource; }
+	EA_FORCE_INLINE Ref<T3DPackedPBRTexture> getPackedPbrResource( void ) const { return m_packedPbrResource; }
 	Ref<Texture2D> getEffectiveSurfaceTexture( void );
 	Ref<Texture2D> getEffectiveDisplacementTexture( void );
 	// Deprecated compatibility alias; returns the effective surface texture.

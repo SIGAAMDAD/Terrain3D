@@ -29,12 +29,12 @@ typedef struct t3dSimdCapabilities_s {
 
 typedef struct t3dSimdDispatch_s {
 	t3dSimdBackend_t m_backend = T3D_SIMD_SCALAR;
-	void ( *m_pfnHalfToFloat )( const uint16_t *, float *, size_t ) = nullptr;
-	void ( *m_pfnPackedTransformsToMultimesh )(
+	void ( *m_pPfnHalfToFloat )( const uint16_t *, float *, size_t ) = nullptr;
+	void ( *m_pPfnPackedTransformsToMultimesh )(
 		const t3dPackedTransform_t *, const uint32_t *, size_t, int, float *
 	) = nullptr;
-	void ( *m_pfnDerivedNormalsRg8 )( const float *, int, int, int, float, uint8_t * ) = nullptr;
-	void ( *m_pfnUpdateCumulativeErosion )( const uint8_t *, const float *, const float *, float *, size_t ) = nullptr;
+	void ( *m_pPfnDerivedNormalsRg8 )( const float *, int, int, int, float, uint8_t * ) = nullptr;
+	void ( *m_pPfnUpdateCumulativeErosion )( const uint8_t *, const float *, const float *, float *, size_t ) = nullptr;
 } t3dSimdDispatch_t;
 
 const t3dSimdCapabilities_t &t3dSimdGetCapabilities( void );

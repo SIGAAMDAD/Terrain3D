@@ -26,7 +26,7 @@ class T3DMemoryStats : public RefCounted {
 
 public:
 	EA_FORCE_INLINE void setValues( const Dictionary &rValues ) { m_values = rValues.duplicate( true ); }
-	EA_FORCE_INLINE int getDiagnosticsVersion( void ) const { return TERRAIN3D_DIAGNOSTICS_VERSION; }
+	EA_FORCE_INLINE int getDiagnosticsVersion( void ) const { return s_nDiagnosticsVersion; }
 	EA_FORCE_INLINE int64_t getConfiguredBudgetBytes( void ) const { return t3dDiagnosticsGetInt( m_values, "configured_budget_bytes" ); }
 	EA_FORCE_INLINE int64_t getCurrentKnownBytes( void ) const { return t3dDiagnosticsGetInt( m_values, "current_known_bytes" ); }
 	EA_FORCE_INLINE int64_t getPeakKnownBytes( void ) const { return t3dDiagnosticsGetInt( m_values, "peak_known_bytes" ); }
@@ -51,7 +51,7 @@ class T3DShaderTierStats : public RefCounted {
 
 public:
 	EA_FORCE_INLINE void setValues( const Dictionary &rValues ) { m_values = rValues.duplicate( true ); }
-	EA_FORCE_INLINE int getDiagnosticsVersion( void ) const { return TERRAIN3D_DIAGNOSTICS_VERSION; }
+	EA_FORCE_INLINE int getDiagnosticsVersion( void ) const { return s_nDiagnosticsVersion; }
 	EA_FORCE_INLINE int getTier( void ) const { return ( int ) ( t3dDiagnosticsGetInt( m_values, "tier" ) ); }
 	EA_FORCE_INLINE String getVariantSignature( void ) const { return t3dDiagnosticsGetString( m_values, "variant_signature" ); }
 	EA_FORCE_INLINE int64_t getShaderRid( void ) const { return t3dDiagnosticsGetInt( m_values, "shader_rid" ); }
@@ -77,7 +77,7 @@ class T3DCacheStats : public RefCounted {
 
 public:
 	EA_FORCE_INLINE void setValues( const Dictionary &rValues ) { m_values = rValues.duplicate( true ); }
-	EA_FORCE_INLINE int getDiagnosticsVersion( void ) const { return TERRAIN3D_DIAGNOSTICS_VERSION; }
+	EA_FORCE_INLINE int getDiagnosticsVersion( void ) const { return s_nDiagnosticsVersion; }
 	EA_FORCE_INLINE String getCacheName( void ) const { return t3dDiagnosticsGetString( m_values, "cache_name" ); }
 	EA_FORCE_INLINE int64_t getResident( void ) const { return t3dDiagnosticsGetInt( m_values, "resident" ); }
 	EA_FORCE_INLINE int64_t getEffectiveCapacity( void ) const { return t3dDiagnosticsGetInt( m_values, "effective_capacity" ); }
@@ -102,7 +102,7 @@ class T3DFrameStats : public RefCounted {
 
 public:
 	EA_FORCE_INLINE void setValues( const Dictionary &rValues ) { m_values = rValues.duplicate( true ); }
-	EA_FORCE_INLINE int getDiagnosticsVersion( void ) const { return TERRAIN3D_DIAGNOSTICS_VERSION; }
+	EA_FORCE_INLINE int getDiagnosticsVersion( void ) const { return s_nDiagnosticsVersion; }
 	EA_FORCE_INLINE int64_t getSequence( void ) const { return t3dDiagnosticsGetInt( m_values, "sequence" ); }
 	EA_FORCE_INLINE int64_t getPhysicsTotalUsec( void ) const { return t3dDiagnosticsGetInt( m_values, "physics_total_usec" ); }
 	EA_FORCE_INLINE int64_t getProfilerCollectionUsec( void ) const { return t3dDiagnosticsGetInt( m_values, "profiler_collection_usec" ); }

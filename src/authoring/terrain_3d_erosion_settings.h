@@ -42,7 +42,7 @@ private:
 	bool m_bApplyHeight = true;
 	float m_fHeightOutputStrength = 1.0f;
 	float m_fGlobalIntensity = 1.0f;
-	Ref<Image> m_pSimulationMask;
+	Ref<Image> m_simulationMask;
 	Rect2 m_simulationMaskWorldRect;
 	bool m_bInvertSimulationMask = false;
 	float m_fEdgeFadeDistanceM = 0.0f;
@@ -108,7 +108,7 @@ private:
 	float m_fWetThreshold = 0.05f;
 	float m_fDryThreshold = 0.01f;
 	bool m_bSaltWeatheringEnabled = false;
-	Ref<Image> m_pSalinityMask;
+	Ref<Image> m_salinityMask;
 	Rect2 m_salinityWorldRect;
 	float m_fBackgroundSalinity = 0.0f;
 	float m_fSaltWeatheringMPerYear = 0.00005f;
@@ -167,7 +167,7 @@ private:
 
 	// Foot traffic.
 	bool m_bTrafficEnabled = false;
-	Ref<Image> m_pTrafficMask;
+	Ref<Image> m_trafficMask;
 	Rect2 m_trafficWorldRect;
 	float m_fTrafficErosionMPerYear = 0.0002f;
 	float m_fTrafficCompaction = 0.75f;
@@ -179,10 +179,10 @@ private:
 	// Layered substrate / stratigraphy.
 	bool m_bStratigraphyEnabled = false;
 	float m_fSurfaceLayerDepthM = 2.0f;
-	Ref<Image> m_pSurfaceLayerDepthMap;
+	Ref<Image> m_surfaceLayerDepthMap;
 	Rect2 m_surfaceLayerDepthWorldRect;
 	float m_fBedrockHardness = 0.9f;
-	Ref<Image> m_pBedrockHardnessMap;
+	Ref<Image> m_bedrockHardnessMap;
 	Rect2 m_bedrockHardnessWorldRect;
 	float m_fStratigraphyTransitionWidthM = 0.5f;
 
@@ -198,18 +198,18 @@ private:
 	float m_fOxidationTintStrength = 0.45f;
 
 	// Curves are sampled on the main thread before simulation starts.
-	Ref<Curve> m_pMasterIntensityCurve;
-	Ref<Curve> m_pRainfallCurve;
-	Ref<Curve> m_pWeatheringCurve;
-	Ref<Curve> m_pOxidationCurve;
-	Ref<Curve> m_pWindCurve;
-	Ref<Curve> m_pWaveCurve;
-	Ref<Curve> m_pTrafficCurve;
-	Ref<Curve> m_pTemperatureCurve;
-	Ref<Curve> m_pSeaLevelCurve;
-	Ref<Curve> m_pSnowmeltCurve;
-	Ref<Curve> m_pSaltWeatheringCurve;
-	Ref<Curve> m_pDebrisFlowCurve;
+	Ref<Curve> m_masterIntensityCurve;
+	Ref<Curve> m_rainfallCurve;
+	Ref<Curve> m_weatheringCurve;
+	Ref<Curve> m_oxidationCurve;
+	Ref<Curve> m_windCurve;
+	Ref<Curve> m_waveCurve;
+	Ref<Curve> m_trafficCurve;
+	Ref<Curve> m_temperatureCurve;
+	Ref<Curve> m_seaLevelCurve;
+	Ref<Curve> m_snowmeltCurve;
+	Ref<Curve> m_saltWeatheringCurve;
+	Ref<Curve> m_debrisFlowCurve;
 
 	static Ref<Curve> makeFlatCurve( float fValue, float fMin = 0.0f, float fMax = 2.0f );
 	void setCurve( Ref<Curve> &rTargetCurve, const Ref<Curve> &rSourceCurve );
@@ -251,7 +251,7 @@ public:
 	void setGlobalIntensity( float fValue );
 	EA_FORCE_INLINE float getGlobalIntensity( void ) const { return m_fGlobalIntensity; }
 	void setSimulationMask( const Ref<Image> &rValue );
-	EA_FORCE_INLINE Ref<Image> getSimulationMask( void ) const { return m_pSimulationMask; }
+	EA_FORCE_INLINE Ref<Image> getSimulationMask( void ) const { return m_simulationMask; }
 	void setSimulationMaskWorldRect( const Rect2 &rValue );
 	EA_FORCE_INLINE Rect2 getSimulationMaskWorldRect( void ) const { return m_simulationMaskWorldRect; }
 	void setInvertSimulationMask( bool bValue );
@@ -369,7 +369,7 @@ public:
 	void setSaltWeatheringEnabled( bool bValue );
 	EA_FORCE_INLINE bool getSaltWeatheringEnabled( void ) const { return m_bSaltWeatheringEnabled; }
 	void setSalinityMask( const Ref<Image> &rValue );
-	EA_FORCE_INLINE Ref<Image> getSalinityMask( void ) const { return m_pSalinityMask; }
+	EA_FORCE_INLINE Ref<Image> getSalinityMask( void ) const { return m_salinityMask; }
 	void setSalinityWorldRect( const Rect2 &rValue );
 	EA_FORCE_INLINE Rect2 getSalinityWorldRect( void ) const { return m_salinityWorldRect; }
 	void setBackgroundSalinity( float fValue );
@@ -474,7 +474,7 @@ public:
 	void setTrafficEnabled( bool bValue );
 	EA_FORCE_INLINE bool getTrafficEnabled( void ) const { return m_bTrafficEnabled; }
 	void setTrafficMask( const Ref<Image> &rValue );
-	EA_FORCE_INLINE Ref<Image> getTrafficMask( void ) const { return m_pTrafficMask; }
+	EA_FORCE_INLINE Ref<Image> getTrafficMask( void ) const { return m_trafficMask; }
 	void setTrafficWorldRect( const Rect2 &rValue );
 	EA_FORCE_INLINE Rect2 getTrafficWorldRect( void ) const { return m_trafficWorldRect; }
 	void setTrafficErosionMPerYear( float fValue );
@@ -495,13 +495,13 @@ public:
 	void setSurfaceLayerDepthM( float fValue );
 	EA_FORCE_INLINE float getSurfaceLayerDepthM( void ) const { return m_fSurfaceLayerDepthM; }
 	void setSurfaceLayerDepthMap( const Ref<Image> &rValue );
-	EA_FORCE_INLINE Ref<Image> getSurfaceLayerDepthMap( void ) const { return m_pSurfaceLayerDepthMap; }
+	EA_FORCE_INLINE Ref<Image> getSurfaceLayerDepthMap( void ) const { return m_surfaceLayerDepthMap; }
 	void setSurfaceLayerDepthWorldRect( const Rect2 &rValue );
 	EA_FORCE_INLINE Rect2 getSurfaceLayerDepthWorldRect( void ) const { return m_surfaceLayerDepthWorldRect; }
 	void setBedrockHardness( float fValue );
 	EA_FORCE_INLINE float getBedrockHardness( void ) const { return m_fBedrockHardness; }
 	void setBedrockHardnessMap( const Ref<Image> &rValue );
-	EA_FORCE_INLINE Ref<Image> getBedrockHardnessMap( void ) const { return m_pBedrockHardnessMap; }
+	EA_FORCE_INLINE Ref<Image> getBedrockHardnessMap( void ) const { return m_bedrockHardnessMap; }
 	void setBedrockHardnessWorldRect( const Rect2 &rValue );
 	EA_FORCE_INLINE Rect2 getBedrockHardnessWorldRect( void ) const { return m_bedrockHardnessWorldRect; }
 	void setStratigraphyTransitionWidthM( float fValue );
@@ -527,29 +527,29 @@ public:
 	EA_FORCE_INLINE float getOxidationTintStrength( void ) const { return m_fOxidationTintStrength; }
 
 	void setMasterIntensityCurve( const Ref<Curve> &rValue );
-	EA_FORCE_INLINE Ref<Curve> getMasterIntensityCurve( void ) const { return m_pMasterIntensityCurve; }
+	EA_FORCE_INLINE Ref<Curve> getMasterIntensityCurve( void ) const { return m_masterIntensityCurve; }
 	void setRainfallCurve( const Ref<Curve> &rValue );
-	EA_FORCE_INLINE Ref<Curve> getRainfallCurve( void ) const { return m_pRainfallCurve; }
+	EA_FORCE_INLINE Ref<Curve> getRainfallCurve( void ) const { return m_rainfallCurve; }
 	void setWeatheringCurve( const Ref<Curve> &rValue );
-	EA_FORCE_INLINE Ref<Curve> getWeatheringCurve( void ) const { return m_pWeatheringCurve; }
+	EA_FORCE_INLINE Ref<Curve> getWeatheringCurve( void ) const { return m_weatheringCurve; }
 	void setOxidationCurve( const Ref<Curve> &rValue );
-	EA_FORCE_INLINE Ref<Curve> getOxidationCurve( void ) const { return m_pOxidationCurve; }
+	EA_FORCE_INLINE Ref<Curve> getOxidationCurve( void ) const { return m_oxidationCurve; }
 	void setWindCurve( const Ref<Curve> &rValue );
-	EA_FORCE_INLINE Ref<Curve> getWindCurve( void ) const { return m_pWindCurve; }
+	EA_FORCE_INLINE Ref<Curve> getWindCurve( void ) const { return m_windCurve; }
 	void setWaveCurve( const Ref<Curve> &rValue );
-	EA_FORCE_INLINE Ref<Curve> getWaveCurve( void ) const { return m_pWaveCurve; }
+	EA_FORCE_INLINE Ref<Curve> getWaveCurve( void ) const { return m_waveCurve; }
 	void setTrafficCurve( const Ref<Curve> &rValue );
-	EA_FORCE_INLINE Ref<Curve> getTrafficCurve( void ) const { return m_pTrafficCurve; }
+	EA_FORCE_INLINE Ref<Curve> getTrafficCurve( void ) const { return m_trafficCurve; }
 	void setTemperatureCurve( const Ref<Curve> &rValue );
-	EA_FORCE_INLINE Ref<Curve> getTemperatureCurve( void ) const { return m_pTemperatureCurve; }
+	EA_FORCE_INLINE Ref<Curve> getTemperatureCurve( void ) const { return m_temperatureCurve; }
 	void setSeaLevelCurve( const Ref<Curve> &rValue );
-	EA_FORCE_INLINE Ref<Curve> getSeaLevelCurve( void ) const { return m_pSeaLevelCurve; }
+	EA_FORCE_INLINE Ref<Curve> getSeaLevelCurve( void ) const { return m_seaLevelCurve; }
 	void setSnowmeltCurve( const Ref<Curve> &rValue );
-	EA_FORCE_INLINE Ref<Curve> getSnowmeltCurve( void ) const { return m_pSnowmeltCurve; }
+	EA_FORCE_INLINE Ref<Curve> getSnowmeltCurve( void ) const { return m_snowmeltCurve; }
 	void setSaltWeatheringCurve( const Ref<Curve> &rValue );
-	EA_FORCE_INLINE Ref<Curve> getSaltWeatheringCurve( void ) const { return m_pSaltWeatheringCurve; }
+	EA_FORCE_INLINE Ref<Curve> getSaltWeatheringCurve( void ) const { return m_saltWeatheringCurve; }
 	void setDebrisFlowCurve( const Ref<Curve> &rValue );
-	EA_FORCE_INLINE Ref<Curve> getDebrisFlowCurve( void ) const { return m_pDebrisFlowCurve; }
+	EA_FORCE_INLINE Ref<Curve> getDebrisFlowCurve( void ) const { return m_debrisFlowCurve; }
 
 protected:
 	void _validate_property( PropertyInfo &rProperty ) const;

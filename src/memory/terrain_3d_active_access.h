@@ -19,12 +19,12 @@ typedef struct t3dActiveAccessGate_s {
 	bool acquireRead( void ) {
 		uint32_t state = m_state.load( std::memory_order_acquire );
 		for ( ;; ) {
-			if ( ( state & TERRAIN3D_ACTIVE_ACCESS_WRITER_BIT ) != 0u ) {
+			if ( ( state & s_nActiveAccessWriterBit ) != 0u ) {
 				std::this_thread::yield();
 				state = m_state.load( std::memory_order_acquire );
 				continue;
 			}
-			if ( ( state & TERRAIN3D_ACTIVE_ACCESS_READER_MASK ) == TERRAIN3D_ACTIVE_ACCESS_READER_MASK ) {
+			if ( ( state & s_nActiveAccessReaderMask ) == s_nActiveAccessReaderMask ) {
 				return false;
 			}
 			if ( m_state.compare_exchange_weak( state, state + 1u, std::memory_order_acq_rel,
@@ -37,7 +37,7 @@ typedef struct t3dActiveAccessGate_s {
 	bool releaseRead( void ) {
 		uint32_t state = m_state.load( std::memory_order_acquire );
 		for ( ;; ) {
-			if ( ( state & TERRAIN3D_ACTIVE_ACCESS_READER_MASK ) == 0u ) {
+			if ( ( state & s_nActiveAccessReaderMask ) == 0u ) {
 				return false;
 			}
 			if ( m_state.compare_exchange_weak( state, state - 1u, std::memory_order_acq_rel,
@@ -50,17 +50,17 @@ typedef struct t3dActiveAccessGate_s {
 	void acquireWrite( void ) {
 		uint32_t state = m_state.load( std::memory_order_acquire );
 		for ( ;; ) {
-			if ( ( state & TERRAIN3D_ACTIVE_ACCESS_WRITER_BIT ) != 0u ) {
+			if ( ( state & s_nActiveAccessWriterBit ) != 0u ) {
 				std::this_thread::yield();
 				state = m_state.load( std::memory_order_acquire );
 				continue;
 			}
-			if ( m_state.compare_exchange_weak( state, state | TERRAIN3D_ACTIVE_ACCESS_WRITER_BIT, std::memory_order_acq_rel,
+			if ( m_state.compare_exchange_weak( state, state | s_nActiveAccessWriterBit, std::memory_order_acq_rel,
 				std::memory_order_acquire ) ) {
 				break;
 			}
 		}
-		while ( ( m_state.load( std::memory_order_acquire ) & TERRAIN3D_ACTIVE_ACCESS_READER_MASK ) != 0u ) {
+		while ( ( m_state.load( std::memory_order_acquire ) & s_nActiveAccessReaderMask ) != 0u ) {
 			std::this_thread::yield();
 		}
 	}

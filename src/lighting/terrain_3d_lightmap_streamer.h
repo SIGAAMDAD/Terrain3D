@@ -30,13 +30,13 @@ typedef enum t3dSourceLoadResult_e {
 } t3dSourceLoadResult_t;
 
 typedef struct t3dActivePackage_s {
-	Ref<T3DRegionLighting> pPackage;
-	Ref<LightmapGIData> pSourceData;
-	Ref<LightmapGIData> pRuntimeData;
-	LightmapGI *pNode = nullptr;
-	uint64_t receiverSignature = 0u;
-	int nReceiverCount = 0;
-	bool bDesired = false;
+	Ref<T3DRegionLighting> m_ackage;
+	Ref<LightmapGIData> m_sourceData;
+	Ref<LightmapGIData> m_runtimeData;
+	LightmapGI *m_pNode = nullptr;
+	uint64_t m_nReceiverSignature = 0u;
+	int m_nReceiverCount = 0;
+	bool m_bDesired = false;
 } t3dActivePackage_t;
 
 class T3DLightmapStreamer : public Object {
@@ -48,7 +48,7 @@ class T3DLightmapStreamer : public Object {
 
 
 	T3DTerrain *m_pTerrain = nullptr;
-	t3dActivePackage_t m_szActive[TERRAIN3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT];
+	t3dActivePackage_t m_szActive[s_nLightmapActiveInstanceLimit];
 	uint8_t m_nActiveCount = 0u;
 	bool m_bEnabled = true;
 	int m_nRadiusRegions = 1;

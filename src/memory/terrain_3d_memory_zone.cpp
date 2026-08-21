@@ -48,13 +48,13 @@ bool T3DMemoryZone::insertFreet3dMemoryZoneExtent_tUnlocked( const size_t nOffse
 	if ( nBytes == 0u ) return true;
 	if ( nOffset > m_nCapacity || nBytes > m_nCapacity - nOffset || m_nFreet3dMemoryZoneExtent_tCount >= s_nMaxExtents ) return false;
 	uint32_t index = 0u;
-	while ( index < m_nFreet3dMemoryZoneExtent_tCount && m_szFreet3dMemoryZoneExtent_ts[index].m_nOffset < nOffset ) ++index;
+	while ( index < m_nFreet3dMemoryZoneExtent_tCount && m_szFreet3dMemoryZoneExtent_ts[index].m_iOffset < nOffset ) ++index;
 	for ( uint32_t move = m_nFreet3dMemoryZoneExtent_tCount; move > index; --move ) m_szFreet3dMemoryZoneExtent_ts[move] = m_szFreet3dMemoryZoneExtent_ts[move - 1u];
 	m_szFreet3dMemoryZoneExtent_ts[index] = {nOffset, nBytes};
 	++m_nFreet3dMemoryZoneExtent_tCount;
 	if ( index > 0u ) {
 		t3dMemoryZoneExtent_t &previous = m_szFreet3dMemoryZoneExtent_ts[index - 1u];
-		if ( previous.m_nOffset + previous.m_nSize == nOffset ) {
+		if ( previous.m_iOffset + previous.m_nSize == nOffset ) {
 			previous.m_nSize += nBytes;
 			for ( uint32_t move = index; move + 1u < m_nFreet3dMemoryZoneExtent_tCount; ++move ) m_szFreet3dMemoryZoneExtent_ts[move] = m_szFreet3dMemoryZoneExtent_ts[move + 1u];
 			--m_nFreet3dMemoryZoneExtent_tCount;
@@ -63,7 +63,7 @@ bool T3DMemoryZone::insertFreet3dMemoryZoneExtent_tUnlocked( const size_t nOffse
 	}
 	if ( index + 1u < m_nFreet3dMemoryZoneExtent_tCount ) {
 		t3dMemoryZoneExtent_t &current = m_szFreet3dMemoryZoneExtent_ts[index];
-		if ( current.m_nOffset + current.m_nSize == m_szFreet3dMemoryZoneExtent_ts[index + 1u].m_nOffset ) {
+		if ( current.m_iOffset + current.m_nSize == m_szFreet3dMemoryZoneExtent_ts[index + 1u].m_iOffset ) {
 			current.m_nSize += m_szFreet3dMemoryZoneExtent_ts[index + 1u].m_nSize;
 			for ( uint32_t move = index + 1u; move + 1u < m_nFreet3dMemoryZoneExtent_tCount; ++move ) m_szFreet3dMemoryZoneExtent_ts[move] = m_szFreet3dMemoryZoneExtent_ts[move + 1u];
 			--m_nFreet3dMemoryZoneExtent_tCount;
@@ -78,22 +78,22 @@ bool T3DMemoryZone::taket3dMemoryZoneExtent_tUnlocked( const size_t nBytes, cons
 	for ( uint32_t index = 0u; index < m_nFreet3dMemoryZoneExtent_tCount; ++index ) {
 		const t3dMemoryZoneExtent_t source = m_szFreet3dMemoryZoneExtent_ts[index];
 		const uintptr_t base = reinterpret_cast<uintptr_t>( m_pBase );
-		if ( source.m_nOffset > std::numeric_limits<uintptr_t>::max() - base - nPrefixBytes ) continue;
+		if ( source.m_iOffset > std::numeric_limits<uintptr_t>::max() - base - nPrefixBytes ) continue;
 		size_t aligned_address = 0u;
-		if ( !alignUp( base + source.m_nOffset + nPrefixBytes, nAlignment, aligned_address ) || aligned_address < base ) continue;
+		if ( !alignUp( base + source.m_iOffset + nPrefixBytes, nAlignment, aligned_address ) || aligned_address < base ) continue;
 		const size_t user = aligned_address - base;
 		const size_t start = user - nPrefixBytes;
-		if ( start < source.m_nOffset || nBytes > source.m_nSize - ( start - source.m_nOffset ) ||
+		if ( start < source.m_iOffset || nBytes > source.m_nSize - ( start - source.m_iOffset ) ||
 			user > std::numeric_limits<size_t>::max() - nBytes ) continue;
 		const size_t end = user + nBytes;
-		if ( end > source.m_nOffset + source.m_nSize ) continue;
-		const uint32_t required_extent_slots = ( start > source.m_nOffset ? 1u : 0u ) +
-			( end < source.m_nOffset + source.m_nSize ? 1u : 0u );
+		if ( end > source.m_iOffset + source.m_nSize ) continue;
+		const uint32_t required_extent_slots = ( start > source.m_iOffset ? 1u : 0u ) +
+			( end < source.m_iOffset + source.m_nSize ? 1u : 0u );
 		if ( m_nFreet3dMemoryZoneExtent_tCount - 1u + required_extent_slots > s_nMaxExtents ) continue;
 		for ( uint32_t move = index; move + 1u < m_nFreet3dMemoryZoneExtent_tCount; ++move ) m_szFreet3dMemoryZoneExtent_ts[move] = m_szFreet3dMemoryZoneExtent_ts[move + 1u];
 		--m_nFreet3dMemoryZoneExtent_tCount;
-		if ( start > source.m_nOffset ) insertFreet3dMemoryZoneExtent_tUnlocked( source.m_nOffset, start - source.m_nOffset );
-		if ( end < source.m_nOffset + source.m_nSize ) insertFreet3dMemoryZoneExtent_tUnlocked( end, source.m_nOffset + source.m_nSize - end );
+		if ( start > source.m_iOffset ) insertFreet3dMemoryZoneExtent_tUnlocked( source.m_iOffset, start - source.m_iOffset );
+		if ( end < source.m_iOffset + source.m_nSize ) insertFreet3dMemoryZoneExtent_tUnlocked( end, source.m_iOffset + source.m_nSize - end );
 		rt3dMemoryZoneExtent_tOffset = start;
 		rUserOffset = user;
 		return true;
@@ -114,7 +114,7 @@ void *T3DMemoryZone::allocateSmallUnlocked( const int nClassIndex, const size_t 
 		t3dMemoryZoneSmallPage_t &page = m_szt3dMemoryZoneSmallPage_ts[page_index];
 		page = {};
 		page.m_bActive = true;
-		page.m_nOffset = page_offset;
+		page.m_iOffset = page_offset;
 		page.m_nBytes = s_nSmallPageBytes;
 		page.m_iClass = ( uint16_t ) nClassIndex;
 		size_t stride = 0u;
@@ -125,20 +125,20 @@ void *T3DMemoryZone::allocateSmallUnlocked( const int nClassIndex, const size_t 
 		++m_nActivet3dMemoryZoneSmallPage_ts;
 		m_nPeakActivet3dMemoryZoneSmallPage_ts = std::max( m_nPeakActivet3dMemoryZoneSmallPage_ts, m_nActivet3dMemoryZoneSmallPage_ts );
 		for ( uint32_t block = 0u; block < page.m_nTotalBlocks; ++block ) {
-			uint8_t *payload = m_pBase + page.m_nOffset + ( size_t ) block * stride + sizeof( t3dMemoryZoneAllocationHeader_t );
+			uint8_t *payload = m_pBase + page.m_iOffset + ( size_t ) block * stride + sizeof( t3dMemoryZoneAllocationHeader_t );
 			*reinterpret_cast<uint32_t *>( payload ) = block + 1u < page.m_nTotalBlocks ? block + 1u : UINT32_MAX;
 		}
 	}
 	t3dMemoryZoneSmallPage_t &page = m_szt3dMemoryZoneSmallPage_ts[page_index];
 	const uint32_t block = page.m_iFirstFree;
-	uint8_t *const block_start = m_pBase + page.m_nOffset + ( size_t ) block * page.m_nBlockStride;
+	uint8_t *const block_start = m_pBase + page.m_iOffset + ( size_t ) block * page.m_nBlockStride;
 	uint8_t *const payload = block_start + sizeof( t3dMemoryZoneAllocationHeader_t );
 	page.m_iFirstFree = *reinterpret_cast<uint32_t *>( payload );
 	++page.m_nLiveBlocks;
 	t3dMemoryZoneAllocationHeader_t *const header = reinterpret_cast<t3dMemoryZoneAllocationHeader_t *>( block_start );
 	*header = {};
 	header->m_nMagic = s_nAllocationMagic;
-	header->m_iExtentOffset = page.m_nOffset + ( size_t ) block * page.m_nBlockStride;
+	header->m_iExtentOffset = page.m_iOffset + ( size_t ) block * page.m_nBlockStride;
 	header->m_nExtentBytes = page.m_nBlockStride;
 	header->m_nRequestedBytes = nBytes;
 	header->m_nAlignment = 16u;
@@ -204,7 +204,7 @@ void T3DMemoryZone::freeUnlocked( void *const pMemory ) {
 	header->m_nMagic = 0u;
 	if ( page_index != UINT16_MAX ) {
 		t3dMemoryZoneSmallPage_t &page = m_szt3dMemoryZoneSmallPage_ts[page_index];
-		const uint32_t block = ( uint32_t ) ( ( header->m_iExtentOffset - page.m_nOffset ) / page.m_nBlockStride );
+		const uint32_t block = ( uint32_t ) ( ( header->m_iExtentOffset - page.m_iOffset ) / page.m_nBlockStride );
 		*reinterpret_cast<uint32_t *>( pMemory ) = page.m_iFirstFree;
 		page.m_iFirstFree = block;
 		if ( page.m_nLiveBlocks > 0u ) --page.m_nLiveBlocks;
@@ -212,7 +212,7 @@ void T3DMemoryZone::freeUnlocked( void *const pMemory ) {
 		m_nLiveSizeClassWasteBytes -= s_szSmallClasses[class_index] - requested;
 		m_nLiveAlignmentWasteBytes -= page.m_nBlockStride - sizeof( t3dMemoryZoneAllocationHeader_t ) - s_szSmallClasses[class_index];
 		if ( page.m_nLiveBlocks == 0u ) {
-			insertFreet3dMemoryZoneExtent_tUnlocked( page.m_nOffset, page.m_nBytes );
+			insertFreet3dMemoryZoneExtent_tUnlocked( page.m_iOffset, page.m_nBytes );
 			page = {};
 			if ( m_nActivet3dMemoryZoneSmallPage_ts > 0u ) --m_nActivet3dMemoryZoneSmallPage_ts;
 		}
@@ -249,7 +249,7 @@ size_t T3DMemoryZone::freet3dMemoryZoneExtent_tBytes( void ) const {
 t3dMemoryZoneStats_t T3DMemoryZone::getStats( void ) const {
 	std::lock_guard<std::mutex> lock( m_mutex );
 	t3dMemoryZoneStats_t stats;
-	stats.nReservedBytes = m_nCapacity;
+	stats.m_nReservedBytes = m_nCapacity;
 	stats.nLiveRequestedBytes = m_nLiveBytes;
 	stats.nLivePhysicalBytes = m_nLivePhysicalBytes;
 	stats.nLiveAllocationCount = m_nLiveAllocations;
@@ -257,7 +257,7 @@ t3dMemoryZoneStats_t T3DMemoryZone::getStats( void ) const {
 	stats.nAlignmentWasteBytes = m_nLiveAlignmentWasteBytes;
 	stats.nSizeClassWasteBytes = m_nLiveSizeClassWasteBytes;
 	stats.nInternalFragmentationBytes = m_nLivePhysicalBytes >= m_nLiveBytes ? m_nLivePhysicalBytes - m_nLiveBytes : 0u;
-	stats.nFailedAllocations = m_nFailedAllocations;
+	stats.m_nFailedAllocations = m_nFailedAllocations;
 	stats.nActivet3dMemoryZoneSmallPage_ts = m_nActivet3dMemoryZoneSmallPage_ts;
 	stats.nPeakActivet3dMemoryZoneSmallPage_ts = m_nPeakActivet3dMemoryZoneSmallPage_ts;
 	stats.nFreet3dMemoryZoneExtent_tCount = m_nFreet3dMemoryZoneExtent_tCount;

@@ -27,7 +27,7 @@ void T3DCollisionSurfaceBuilder::refreshRegionBlendCurve( const int nRegionSize,
 	if ( m_nRegionBlendCurveSize == nRegionSize && Math::is_equal_approx( m_fRegionBlendCurveSetting, fRegionBlend ) ) {
 		return;
 	}
-	if ( nRegionSize > TERRAIN3D_MAX_REGION_BLEND_SAMPLES ) {
+	if ( nRegionSize > s_nMaxRegionBlendSamples ) {
 		m_nRegionBlendCurveSize = 0;
 		return;
 	}
@@ -101,7 +101,7 @@ bool T3DCollisionSurfaceBuilder::build(
 	}
 
 	const int width = nSize + 1;
-	if ( width > TERRAIN3D_MAX_COLLISION_AXIS_SAMPLES ) {
+	if ( width > s_nMaxCollisionAxisSamples ) {
 		return false;
 	}
 	int32_t min_blend_region_x = INT32_MAX;
@@ -127,7 +127,7 @@ bool T3DCollisionSurfaceBuilder::build(
 		}
 		const int presence_width = max_blend_region_x - min_blend_region_x + 1;
 		const int presence_height = max_blend_region_z - min_blend_region_z + 1;
-		if ( presence_width <= 0 || presence_height <= 0 || presence_width * presence_height > REGION_PRESENCE_SAMPLES ) { return false; }
+		if ( presence_width <= 0 || presence_height <= 0 || presence_width * presence_height > s_nRegionPresenceSamples ) { return false; }
 		for ( int z = 0; z < presence_height; ++z ) {
 			for ( int x = 0; x < presence_width; ++x ) {
 				const T3DRegion *const pRegion = pData->getRegionPtr( Vector2i( min_blend_region_x + x, min_blend_region_z + z ) );
@@ -139,7 +139,7 @@ bool T3DCollisionSurfaceBuilder::build(
 
 	const int sample_count = width * width;
 	float *pHeightScratch = nullptr;
-	if ( width <= DYNAMIC_SCRATCH_AXIS ) {
+	if ( width <= s_nDynamicScratchAxis ) {
 		pHeightScratch = m_dynamicHeightScratch.data();
 	} else {
 		if ( m_fullHeightRowScratch.size() < ( size_t ) sample_count ) m_fullHeightRowScratch.resize( ( size_t ) sample_count );

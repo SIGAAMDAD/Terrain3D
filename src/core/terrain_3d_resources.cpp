@@ -117,25 +117,25 @@ void T3DTerrain::disconnectAutoShaderProfileSignal( const Ref<Resource> &rProfil
 }
 
 void T3DTerrain::applyAutoShaderProfileMode( void ) {
-	if ( m_pMaterial.is_null() ) return;
+	if ( m_material.is_null() ) return;
 	const bool strict_cooked = m_bGpuRegionCookedPagesEnabled && !isEditorAuthoringModeInternal();
-	if ( m_pAutoShaderProfile.is_null() ) {
-		if ( strict_cooked ) m_pMaterial->setAutoShaderEnabled( false );
+	if ( m_autoShaderProfile.is_null() ) {
+		if ( strict_cooked ) m_material->setAutoShaderEnabled( false );
 		return;
 	}
-	const Variant mode_value = m_pAutoShaderProfile->get( "mode" );
+	const Variant mode_value = m_autoShaderProfile->get( "mode" );
 	if ( mode_value.get_type() != Variant::INT ) return;
 	const int mode = ( int ) mode_value;
 	if ( strict_cooked ) {
 		// Production cooked pages already contain resolved material classification.
 		// Never reactivate fragment-time procedural classification in this profile.
-		if ( mode == TERRAIN3D_AUTOSHADER_MODE_LEGACY_RUNTIME || mode == TERRAIN3D_AUTOSHADER_MODE_EDITOR_PREVIEW ) {
+		if ( mode == s_nAutoshaderModeLegacyRuntime || mode == s_nAutoshaderModeEditorPreview ) {
 			ERR_PRINT_ONCE( "Terrain3D strict cooked runtime ignores live/legacy autoshader classification; bake the profile into control maps before export." );
 		}
-		m_pMaterial->setAutoShaderEnabled( false );
+		m_material->setAutoShaderEnabled( false );
 		return;
 	}
-	m_pMaterial->setAutoShaderEnabled( mode == TERRAIN3D_AUTOSHADER_MODE_LEGACY_RUNTIME );
+	m_material->setAutoShaderEnabled( mode == s_nAutoshaderModeLegacyRuntime );
 }
 
 void T3DTerrain::onAutoShaderProfileChanged( void ) {
@@ -146,21 +146,21 @@ void T3DTerrain::onDataMapsChanged( void ) {
 	// Signals can arrive from an inactive editor scene whose resource objects
 	// have already transferred to the newly active Terrain3D. Only the current
 	// owner may rebind shared material state.
-	if ( m_pMaterial.is_valid() && m_pMaterial->isInitializedFor( this ) ) {
-		m_pMaterial->update( REGION_ARRAYS );
+	if ( m_material.is_valid() && m_material->isInitializedFor( this ) ) {
+		m_material->update( REGION_ARRAYS );
 	}
 }
 
 void T3DTerrain::onGpuRegionPageTableChanged( void ) {
-	if ( m_pMaterial.is_valid() && m_pMaterial->isInitializedFor( this ) ) {
-		m_pMaterial->updateRegionPageTable();
+	if ( m_material.is_valid() && m_material->isInitializedFor( this ) ) {
+		m_material->updateRegionPageTable();
 	}
 }
 
 void T3DTerrain::onAssetsTexturesChanged( void ) {
-	if ( m_pAssets.is_valid() && m_pAssets->isInitializedFor( this ) && m_pMaterial.is_valid() &&
-		m_pMaterial->isInitializedFor( this ) ) {
-		m_pMaterial->update( TEXTURE_ARRAYS );
+	if ( m_assets.is_valid() && m_assets->isInitializedFor( this ) && m_material.is_valid() &&
+		m_material->isInitializedFor( this ) ) {
+		m_material->update( TEXTURE_ARRAYS );
 		if ( m_pData ) {
 			m_pData->invalidateGpuFarSurface();
 		}
@@ -177,14 +177,14 @@ void T3DTerrain::refreshPerformanceProfileConformity( void ) {
 		next_status = PERFORMANCE_PROFILE_EXACT;
 		for ( const t3dPerformanceProfileSetting_t &setting : g_szXbox360ExperimentalSettings ) {
 			Object *pOwner = this;
-			if ( setting.owner == T3D_PROFILE_OWNER_MATERIAL ) {
-				if ( m_pMaterial.is_null() ) {
+			if ( setting.m_owner == T3D_PROFILE_OWNER_MATERIAL ) {
+				if ( m_material.is_null() ) {
 					next_status = PERFORMANCE_PROFILE_MODIFIED;
 					break;
 				}
-				pOwner = m_pMaterial.ptr();
+				pOwner = m_material.ptr();
 			}
-			const Variant current = pOwner->get( StringName( setting.pszProperty ) );
+			const Variant current = pOwner->get( StringName( setting.m_pszProperty ) );
 			if ( !t3dPerformanceProfileValueMatches( current, setting ) ) {
 				next_status = PERFORMANCE_PROFILE_MODIFIED;
 				break;
@@ -206,22 +206,22 @@ void T3DTerrain::onProfileOwnedResourceChanged( void ) {
 
 void T3DTerrain::applyPerformanceProfileToTerrain( void ) {
 	for ( const t3dPerformanceProfileSetting_t &setting : g_szXbox360ExperimentalSettings ) {
-		if ( setting.owner != T3D_PROFILE_OWNER_TERRAIN ) {
+		if ( setting.m_owner != T3D_PROFILE_OWNER_TERRAIN ) {
 			continue;
 		}
-		set( StringName( setting.pszProperty ), t3dPerformanceProfileValue( setting ) );
+		set( StringName( setting.m_pszProperty ), t3dPerformanceProfileValue( setting ) );
 	}
 }
 
 void T3DTerrain::setDataDirectory( const String dir ) {
 	if ( m_dataDirectory == dir ) {
 		if ( m_regionLightmapOutputDirectory.is_empty() && !dir.is_empty() ) {
-			m_regionLightmapOutputDirectory = terrain3dDefaultRegionLightmapOutputDirectory( dir );
+			m_regionLightmapOutputDirectory = t3dDefaultRegionLightmapOutputDirectory( dir );
 		}
 		return;
 	}
 	const String old_dir = m_dataDirectory;
-	const String old_lightmap_default = terrain3dDefaultRegionLightmapOutputDirectory( old_dir );
+	const String old_lightmap_default = t3dDefaultRegionLightmapOutputDirectory( old_dir );
 	const bool bFollowLightmapDefault = m_regionLightmapOutputDirectory.is_empty() ||
 		m_regionLightmapOutputDirectory == old_lightmap_default;
 	LOG( INFO, "[data-transition] Requested data directory change: ", old_dir, " -> ", dir,
@@ -231,7 +231,7 @@ void T3DTerrain::setDataDirectory( const String dir ) {
 	if ( !m_pData ) {
 		m_dataDirectory = dir;
 		if ( bFollowLightmapDefault ) {
-			m_regionLightmapOutputDirectory = terrain3dDefaultRegionLightmapOutputDirectory( dir );
+			m_regionLightmapOutputDirectory = t3dDefaultRegionLightmapOutputDirectory( dir );
 		}
 		initializeInternal();
 		update_configuration_warnings();
@@ -246,7 +246,7 @@ void T3DTerrain::setDataDirectory( const String dir ) {
 		// current in-memory world instead of destroying it.
 		m_dataDirectory = dir;
 		if ( bFollowLightmapDefault ) {
-			m_regionLightmapOutputDirectory = terrain3dDefaultRegionLightmapOutputDirectory( dir );
+			m_regionLightmapOutputDirectory = t3dDefaultRegionLightmapOutputDirectory( dir );
 		}
 		LOG( INFO, "[data-transition] Updated save target without replacing terrain data" );
 		update_configuration_warnings();
@@ -274,12 +274,12 @@ void T3DTerrain::setDataDirectory( const String dir ) {
 		destroyLabels();
 		destroyMousePicking();
 		destroyDisplacementBuffer();
-		disconnectResourceSignals( m_pAssets, m_pMaterial );
-		if ( m_pAssets.is_valid() ) {
-			m_pAssets->uninitialize( this );
+		disconnectResourceSignals( m_assets, m_material );
+		if ( m_assets.is_valid() ) {
+			m_assets->uninitialize( this );
 		}
-		if ( m_pMaterial.is_valid() ) {
-			m_pMaterial->uninitialize( this );
+		if ( m_material.is_valid() ) {
+			m_material->uninitialize( this );
 		}
 
 		// T3DGeneratedTexture replacement frees old renderer RIDs. Flush teardown
@@ -303,7 +303,7 @@ void T3DTerrain::setDataDirectory( const String dir ) {
 	if ( transition_error == OK ) {
 		m_dataDirectory = dir;
 		if ( bFollowLightmapDefault ) {
-			m_regionLightmapOutputDirectory = terrain3dDefaultRegionLightmapOutputDirectory( dir );
+			m_regionLightmapOutputDirectory = t3dDefaultRegionLightmapOutputDirectory( dir );
 		}
 		LOG( INFO, "[data-transition] Repository mutation committed for ", dir );
 	} else {
@@ -330,26 +330,26 @@ void T3DTerrain::setDataDirectory( const String dir ) {
 }
 
 void T3DTerrain::setAutoShaderProfile( const Ref<Resource> &rProfile ) {
-	if ( m_pAutoShaderProfile == rProfile ) {
-		connectAutoShaderProfileSignal( m_pAutoShaderProfile );
+	if ( m_autoShaderProfile == rProfile ) {
+		connectAutoShaderProfileSignal( m_autoShaderProfile );
 		applyAutoShaderProfileMode();
 		return;
 	}
 
-	disconnectAutoShaderProfileSignal( m_pAutoShaderProfile );
-	m_pAutoShaderProfile = rProfile;
-	connectAutoShaderProfileSignal( m_pAutoShaderProfile );
+	disconnectAutoShaderProfileSignal( m_autoShaderProfile );
+	m_autoShaderProfile = rProfile;
+	connectAutoShaderProfileSignal( m_autoShaderProfile );
 	applyAutoShaderProfileMode();
 }
 
 void T3DTerrain::setAssets( const Ref<T3DAssets> &rAssets ) {
-	if ( !differs( m_pAssets, rAssets ) ) {
+	if ( !differs( m_assets, rAssets ) ) {
 		return;
 	}
 	LOG( INFO, "Replacing asset registry" );
 	const bool bWasInitialized = m_bInitialized;
-	const Ref<T3DAssets> pOldAssets = m_pAssets;
-	disconnectResourceSignals( pOldAssets, m_pMaterial );
+	const Ref<T3DAssets> pOldAssets = m_assets;
+	disconnectResourceSignals( pOldAssets, m_material );
 	if ( bWasInitialized && m_pInstancer ) {
 		// Clear render records while the old registry still owns their counts.
 		m_pInstancer->destroy();
@@ -357,18 +357,18 @@ void T3DTerrain::setAssets( const Ref<T3DAssets> &rAssets ) {
 	if ( pOldAssets.is_valid() ) {
 		pOldAssets->uninitialize( this );
 	}
-	m_pAssets = rAssets;
-	if ( m_pAssets.is_null() ) {
-		m_pAssets.instantiate();
+	m_assets = rAssets;
+	if ( m_assets.is_null() ) {
+		m_assets.instantiate();
 	}
-	connectResourceSignals( m_pAssets, m_pMaterial );
+	connectResourceSignals( m_assets, m_material );
 	if ( bWasInitialized ) {
-		m_pAssets->initialize( this );
+		m_assets->initialize( this );
 		if ( m_pInstancer ) {
 			m_pInstancer->initialize( this );
 		}
-		if ( m_pMaterial.is_valid() ) {
-			m_pMaterial->update( FULL_REBUILD );
+		if ( m_material.is_valid() ) {
+			m_material->update( FULL_REBUILD );
 		}
 	} else {
 		initializeInternal();
@@ -383,8 +383,8 @@ void T3DTerrain::setEditor( T3DEditor *const pEditor ) {
 	}
 	SET_IF_DIFF( m_pEditor, pEditor );
 	LOG( INFO, "t3dSetting_t T3DEditor: ", m_pEditor );
-	if ( m_pMaterial.is_valid() ) {
-		m_pMaterial->update( FULL_REBUILD );
+	if ( m_material.is_valid() ) {
+		m_material->update( FULL_REBUILD );
 	}
 }
 
@@ -454,8 +454,8 @@ void T3DTerrain::setRegionSize( const t3dRegionSize_t size ) {
 	if ( m_bInitialized && m_pInstancer && !m_pInstancer->refreshResidentRegionLayouts() ) {
 		LOG( ERROR, "Region size changed, but resident instance pages could not be repartitioned" );
 	}
-	if ( m_pMaterial.is_valid() && m_pMaterial->isInitialized() ) {
-		m_pMaterial->update();
+	if ( m_material.is_valid() && m_material->isInitialized() ) {
+		m_material->update();
 	}
 	if ( m_bInitialized ) {
 		updateDisplacementBuffer();

@@ -19,27 +19,27 @@ class T3DRegionRepository;
 class T3DRuntimePageStore;
 
 typedef struct t3dInstanceRegionCacheChanges_s {
-	Vector2i loaded[TERRAIN3D_INSTANCE_CACHE_MAX_PAGES] = {};
-	Vector2i evicted[TERRAIN3D_INSTANCE_CACHE_MAX_PAGES] = {};
-	int nLoaded = 0;
-	int nEvicted = 0;
+	Vector2i m_szLoaded[s_nInstanceCacheMaxPages] = {};
+	Vector2i m_szEvicted[s_nInstanceCacheMaxPages] = {};
+	int m_nLoaded = 0;
+	int m_nEvicted = 0;
 
 	void recordLoaded( const Vector2i &vLocation );
 	void recordEvicted( const Vector2i &vLocation );
 } t3dInstanceRegionCacheChanges_t;
 
 typedef struct t3dInstanceRegionCacheStats_s {
-	bool bEnabled = false;
-	bool bSelectionPending = true;
-	int nCapacity = 0;
-	int nResident = 0;
-	int nDesiredLastTick = 0;
-	int nLoadsLastTick = 0;
-	int nEvictionsLastTick = 0;
-	uint32_t nStallFlagsLastTick = 0u;
-	size_t nResidentBytes = 0u;
-	size_t nLoadBytesLastTick = 0u;
-	uint64_t nServiceUsecLast = 0u;
+	bool m_bEnabled = false;
+	bool m_bSelectionPending = true;
+	int m_nCapacity = 0;
+	int m_nResident = 0;
+	int m_nDesiredLastTick = 0;
+	int m_nLoadsLastTick = 0;
+	int m_nEvictionsLastTick = 0;
+	uint32_t m_nStallFlagsLastTick = 0u;
+	size_t m_nResidentBytes = 0u;
+	size_t m_nLoadBytesLastTick = 0u;
+	uint64_t m_nServiceUsecLast = 0u;
 } t3dInstanceRegionCacheStats_t;
 
 class T3DInstanceRegionCache {
@@ -75,7 +75,7 @@ private:
 	int m_nBudgetMb = 16;
 	int m_nLoadBudgetPages = 4;
 	int m_nLoadBudgetMb = 2;
-	int m_nCapacity = TERRAIN3D_INSTANCE_CACHE_MAX_PAGES;
+	int m_nCapacity = s_nInstanceCacheMaxPages;
 	int m_nResidentCount = 0;
 	int m_nDesiredLastTick = 0;
 	int m_nLoadsLastTick = 0;
@@ -87,8 +87,8 @@ private:
 	uint64_t m_nServiceUsecLast = 0u;
 	uint64_t m_nPrefetchStreamingGenerationLast = 0u;
 	Vector2i m_center = V2I_MAX;
-	Vector2i m_szLocations[TERRAIN3D_INSTANCE_CACHE_MAX_PAGES] = {};
-	uint8_t m_szRegionMap[TERRAIN3D_MAX_REGION_SLOTS] = {};
+	Vector2i m_szLocations[s_nInstanceCacheMaxPages] = {};
+	uint8_t m_szRegionMap[s_nMaxRegionSlots] = {};
 
 	int findSlot( const Vector2i &vLocation ) const;
 	bool evictSlot( int iSlot, t3dInstanceRegionCacheChanges_t *pChanges );

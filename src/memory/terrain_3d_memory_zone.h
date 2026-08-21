@@ -38,12 +38,12 @@ typedef enum t3dMemoryZoneState_e : uint8_t {
 } t3dMemoryZoneState_t;
 
 typedef struct t3dMemoryZoneExtent_s {
-	size_t m_nOffset = 0u;
+	size_t m_iOffset = 0u;
 	size_t m_nSize = 0u;
 } t3dMemoryZoneExtent_t;
 
 typedef struct t3dMemoryZoneSmallPage_s {
-	size_t m_nOffset = 0u;
+	size_t m_iOffset = 0u;
 	uint32_t m_nBytes = 0u;
 	uint32_t m_nBlockStride = 0u;
 	uint32_t m_iFirstFree = UINT32_MAX;

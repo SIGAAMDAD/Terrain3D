@@ -16,19 +16,19 @@
 // managed directional light. Terrain does not need a shadow layer because the
 // semantic policy intentionally excludes Terrain from dynamic casting.
 
-inline uint32_t terrain3dLightingLayerForClass( const int nClass ) {
+inline uint32_t t3dLightingLayerForClass( const int nClass ) {
 	switch ( nClass ) {
 		case LIGHTING_CLASS_TERRAIN:
 			return 0u;
 		case LIGHTING_CLASS_FOLIAGE_CLUTTER:
-			return TERRAIN3D_LIGHTING_LAYER_FOLIAGE;
+			return s_nLightingLayerFoliage;
 		case LIGHTING_CLASS_LARGE_OCCLUDER:
-			return TERRAIN3D_LIGHTING_LAYER_LARGE;
+			return s_nLightingLayerLarge;
 		case LIGHTING_CLASS_REGIONAL_OCCLUDER:
-			return TERRAIN3D_LIGHTING_LAYER_REGIONAL;
+			return s_nLightingLayerRegional;
 		case LIGHTING_CLASS_MEDIUM_OBSTACLE:
 		default:
-			return TERRAIN3D_LIGHTING_LAYER_MEDIUM;
+			return s_nLightingLayerMedium;
 	}
 }
 

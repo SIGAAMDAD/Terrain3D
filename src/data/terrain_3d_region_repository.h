@@ -22,22 +22,22 @@
 #include <cstdint>
 
 typedef struct t3dRegionLocationReconcileResult_s {
-	eastl::vector<Vector2i> removedLocations;
-	eastl::vector<int> addedSlots;
-	int nOldSlotCount = 0;
-	bool bSlotsChanged = false;
-	bool bCapacityExceeded = false;
+	eastl::vector<Vector2i> m_removedLocations;
+	eastl::vector<int> m_addedSlots;
+	int m_nOldSlotCount = 0;
+	bool m_bSlotsChanged = false;
+	bool m_bCapacityExceeded = false;
 } t3dRegionLocationReconcileResult_t;
 
 typedef struct t3dRegionRepositoryView_s {
-	const Vector2i *pSlots = nullptr;
-	T3DRegion *const *ppRegionMap = nullptr;
-	const uint16_t *pLogicalRegionMap = nullptr;
-	int nSlotCount = 0;
-	int nRegionSize = 0;
-	int nRegionMapSize = 0;
-	real_t fVertexSpacing = 1.0f;
-	uint64_t nTopologyGeneration = 0u;
+	const Vector2i *m_pSlots = nullptr;
+	T3DRegion *const *m_ppRegionMap = nullptr;
+	const uint16_t *m_pLogicalRegionMap = nullptr;
+	int m_nSlotCount = 0;
+	int m_nRegionSize = 0;
+	int m_nRegionMapSize = 0;
+	real_t m_fVertexSpacing = 1.0f;
+	uint64_t m_nTopologyGeneration = 0u;
 } t3dRegionRepositoryView_t;
 
 class T3DRegionRepository {
@@ -48,15 +48,15 @@ private:
 	real_t m_fVertexSpacing = 1.0f;
 	bool m_bLoaded = false;
 
-	Ref<T3DRegion> m_szRegionRefs[TERRAIN3D_MAX_REGION_SLOTS];
-	T3DRegion *m_szRegionPtrMap[TERRAIN3D_MAX_REGION_SLOTS] = {};
+	Ref<T3DRegion> m_szRegionRefs[s_nMaxRegionSlots];
+	T3DRegion *m_szRegionPtrMap[s_nMaxRegionSlots] = {};
 	int m_nRegionResourceCount = 0;
-	Vector2i m_szRegionLocations[TERRAIN3D_MAX_REGION_SLOTS] = {};
+	Vector2i m_szRegionLocations[s_nMaxRegionSlots] = {};
 	int m_nRegionLocationCount = 0;
-	uint16_t m_szFreeRegionSlots[TERRAIN3D_MAX_REGION_SLOTS] = {};
+	uint16_t m_szFreeRegionSlots[s_nMaxRegionSlots] = {};
 	int m_nFreeRegionSlotCount = 0;
 	int m_nActiveRegionCount = 0;
-	uint16_t m_szRegionMap[TERRAIN3D_MAX_REGION_SLOTS] = {};
+	uint16_t m_szRegionMap[s_nMaxRegionSlots] = {};
 	bool m_bRegionMapDirty = true;
 	uint64_t m_nTopologyGeneration = 1u;
 

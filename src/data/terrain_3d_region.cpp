@@ -25,7 +25,7 @@ static bool t3dRegionImageIsDefaultControl( const Ref<Image> &rMap, const int nR
 	for ( size_t index = 0; index < texel_count; ++index ) {
 		uint32_t value = 0u;
 		std::memcpy( &value, pBytes + index * sizeof( uint32_t ), sizeof( uint32_t ) );
-		if ( value != TERRAIN3D_REGION_DEFAULT_CONTROL ) {
+		if ( value != s_nRegionDefaultControl ) {
 			return false;
 		}
 	}
@@ -116,10 +116,10 @@ void T3DRegion::clear( void ) {
 	m_fVersion = 0.8f;
 	m_nRegionSize = 0;
 	m_heightRange = V2_ZERO;
-	m_pHeightMap.unref();
-	m_pControlMap.unref();
-	m_pColorMap.unref();
-	m_pDerivedNormalSlopeMap.unref();
+	m_heightMap.unref();
+	m_controlMap.unref();
+	m_colorMap.unref();
+	m_derivedNormalSlopeMap.unref();
 	m_bDerivedNormalSlopeValid = false;
 	m_nChannelFlags = 0u;
 	m_bRuntimeMapsModified = false;
@@ -135,7 +135,7 @@ void T3DRegion::clear( void ) {
 	m_streamedNodeCoverageMin = V2I_ZERO;
 	m_streamedNodeCoverageMax = V2I_ZERO;
 	m_bStreamedNodeHasExtendedCoverage = false;
-	m_pLighting.unref();
+	m_lighting.unref();
 	m_fVertexSpacing = 1.f;
 	m_bDeleted = false;
 	m_bEdited = false;
@@ -154,9 +154,9 @@ void T3DRegion::setVersion( const real_t fVersion ) {
 	}
 	m_fVersion = version;
 	LOG( DEBUG, vformat( "%.3f", m_fVersion ) );
-	if ( m_fVersion < TERRAIN3D_DATA_CURRENT_VERSION ) {
+	if ( m_fVersion < s_fDataCurrentVersion ) {
 		LOG( WARN, "Region Data ", get_path(), " version ", vformat( "%.3f", m_fVersion ), " will be updated to ",
-			vformat( "%.3f", TERRAIN3D_DATA_CURRENT_VERSION ), " upon save" );
+			vformat( "%.3f", s_fDataCurrentVersion ), " upon save" );
 	}
 }
 
@@ -171,8 +171,8 @@ void T3DRegion::setRegionSize( const int nRegionSize ) {
 	}
 	SET_IF_DIFF( m_nRegionSize, nRegionSize );
 	t3dInstanceLayout_t default_layout;
-	if ( m_instanceStore.empty() && terrain3dInstanceLayoutForRegion(
-			nRegionSize, TERRAIN3D_INSTANCE_DEFAULT_CELL_SIZE, default_layout ) ) {
+	if ( m_instanceStore.empty() && t3dInstanceLayoutForRegion(
+			nRegionSize, s_nInstanceDefaultCellSize, default_layout ) ) {
 		m_instanceStore.setLayout( default_layout );
 	}
 	LOG( DEBUG, "t3dSetting_t region ", m_location, " size: ", nRegionSize );
@@ -212,11 +212,11 @@ Ref<Image> T3DRegion::getMap( const t3dMapType_t mapType ) const {
 Image *T3DRegion::getMapPtr( const t3dMapType_t mapType ) const {
 	switch ( mapType ) {
 		case TYPE_HEIGHT:
-			return m_pHeightMap.is_valid() ? *m_pHeightMap : nullptr;
+			return m_heightMap.is_valid() ? *m_heightMap : nullptr;
 		case TYPE_CONTROL:
-			return m_pControlMap.is_valid() ? *m_pControlMap : nullptr;
+			return m_controlMap.is_valid() ? *m_controlMap : nullptr;
 		case TYPE_COLOR:
-			return m_pColorMap.is_valid() ? *m_pColorMap : nullptr;
+			return m_colorMap.is_valid() ? *m_colorMap : nullptr;
 		default:
 			LOG( ERROR, "Requested map type ", mapType, ", is invalid" );
 			return nullptr;
@@ -255,10 +255,10 @@ Ref<Image> T3DRegion::materializeMap( const t3dMapType_t mapType ) {
 		setHeightMap( pMap );
 		return getHeightMap();
 	} else if ( mapType == TYPE_CONTROL ) {
-		m_pControlMap = pMap;
+		m_controlMap = pMap;
 		m_nChannelFlags |= REGION_CHANNEL_CONTROL;
 	} else if ( mapType == TYPE_COLOR ) {
-		m_pColorMap = pMap;
+		m_colorMap = pMap;
 		m_nChannelFlags |= REGION_CHANNEL_COLOR;
 	}
 	return pMap;
@@ -283,9 +283,9 @@ void T3DRegion::setMaps( const TypedArray<Image> &rMaps ) {
 TypedArray<Image> T3DRegion::getMaps( void ) const {
 	LOG( DEBUG, "Retrieving maps from region: ", m_location );
 	TypedArray<Image> maps;
-	maps.push_back( m_pHeightMap );
-	maps.push_back( m_pControlMap );
-	maps.push_back( m_pColorMap );
+	maps.push_back( m_heightMap );
+	maps.push_back( m_controlMap );
+	maps.push_back( m_colorMap );
 	return maps;
 }
 
@@ -294,7 +294,7 @@ void T3DRegion::setHeightMap( const Ref<Image> &rMap ) {
 	if ( m_nRegionSize == 0 && rMap.is_valid() ) {
 		setRegionSize( rMap->get_width() );
 	}
-	const Ref<Image> pOldMap = m_pHeightMap;
+	const Ref<Image> pOldMap = m_heightMap;
 	const Ref<Image> pMap = sanitizeMap( TYPE_HEIGHT, rMap );
 	if ( rMap.is_valid() && pMap.is_null() ) {
 		LOG( ERROR, "Height map assignment was rejected; existing region storage remains unchanged" );
@@ -303,7 +303,7 @@ void T3DRegion::setHeightMap( const Ref<Image> &rMap ) {
 	if ( pOldMap == pMap ) {
 		return;
 	}
-	m_pHeightMap = pMap;
+	m_heightMap = pMap;
 	m_bDerivedNormalSlopeValid = false;
 	m_bRuntimeMapsModified = true;
 	m_bModified = true;
@@ -315,7 +315,7 @@ void T3DRegion::setControlMap( const Ref<Image> &rMap ) {
 	if ( m_nRegionSize == 0 && rMap.is_valid() ) {
 		setRegionSize( rMap->get_width() );
 	}
-	const Ref<Image> pOldMap = m_pControlMap;
+	const Ref<Image> pOldMap = m_controlMap;
 	Ref<Image> pMap = sanitizeMap( TYPE_CONTROL, rMap );
 	if ( t3dRegionImageIsDefaultControl( pMap, m_nRegionSize ) ) {
 		pMap.unref();
@@ -323,8 +323,8 @@ void T3DRegion::setControlMap( const Ref<Image> &rMap ) {
 	if ( pOldMap == pMap ) {
 		return;
 	}
-	m_pControlMap = pMap;
-	if ( m_pControlMap.is_valid() ) {
+	m_controlMap = pMap;
+	if ( m_controlMap.is_valid() ) {
 		m_nChannelFlags |= REGION_CHANNEL_CONTROL;
 	} else {
 		m_nChannelFlags &= ( uint8_t ) ( ~REGION_CHANNEL_CONTROL );
@@ -338,7 +338,7 @@ void T3DRegion::setColorMap( const Ref<Image> &rMap ) {
 	if ( m_nRegionSize == 0 && rMap.is_valid() ) {
 		setRegionSize( rMap->get_width() );
 	}
-	const Ref<Image> pOldMap = m_pColorMap;
+	const Ref<Image> pOldMap = m_colorMap;
 	Ref<Image> pMap = sanitizeMap( TYPE_COLOR, rMap );
 	if ( t3dRegionImageIsDefaultColor( pMap, m_nRegionSize ) ) {
 		pMap.unref();
@@ -346,8 +346,8 @@ void T3DRegion::setColorMap( const Ref<Image> &rMap ) {
 	if ( pOldMap == pMap ) {
 		return;
 	}
-	m_pColorMap = pMap;
-	if ( m_pColorMap.is_valid() ) {
+	m_colorMap = pMap;
+	if ( m_colorMap.is_valid() ) {
 		m_nChannelFlags |= REGION_CHANNEL_COLOR;
 	} else {
 		m_nChannelFlags &= ( uint8_t ) ( ~REGION_CHANNEL_COLOR );
@@ -360,13 +360,13 @@ void T3DRegion::setChannelFlags( const int nFlags ) {
 	uint8_t flags = ( uint8_t ) ( nFlags ) & REGION_CHANNEL_MASK;
 	// Image payloads are authoritative when present. This makes property load
 	// order irrelevant for old and new .res files.
-	if ( m_pControlMap.is_valid() ) {
+	if ( m_controlMap.is_valid() ) {
 		flags |= REGION_CHANNEL_CONTROL;
 	}
-	if ( m_pColorMap.is_valid() ) {
+	if ( m_colorMap.is_valid() ) {
 		flags |= REGION_CHANNEL_COLOR;
 	}
-	if ( m_pDerivedNormalSlopeMap.is_valid() ) {
+	if ( m_derivedNormalSlopeMap.is_valid() ) {
 		flags |= REGION_CHANNEL_DERIVED;
 	}
 	m_nChannelFlags = flags;
@@ -375,11 +375,11 @@ void T3DRegion::setChannelFlags( const int nFlags ) {
 void T3DRegion::setDerivedNormalSlopeMapInternal( const Ref<Image> &rMap ) {
 	if ( rMap.is_null() || rMap->get_width() != m_nRegionSize || rMap->get_height() != m_nRegionSize ||
 		rMap->get_format() != Image::FORMAT_RG8 ) {
-		m_pDerivedNormalSlopeMap.unref();
+		m_derivedNormalSlopeMap.unref();
 		m_bDerivedNormalSlopeValid = false;
 		return;
 	}
-	m_pDerivedNormalSlopeMap = rMap;
+	m_derivedNormalSlopeMap = rMap;
 	m_bDerivedNormalSlopeValid = true;
 	m_nChannelFlags |= REGION_CHANNEL_DERIVED;
 }
@@ -389,28 +389,28 @@ void T3DRegion::sanitizeMaps( void ) {
 		LOG( ERROR, "Set region_size first" );
 		return;
 	}
-	Ref<Image> pMap = sanitizeMap( TYPE_HEIGHT, m_pHeightMap );
-	if ( m_pHeightMap != pMap ) {
+	Ref<Image> pMap = sanitizeMap( TYPE_HEIGHT, m_heightMap );
+	if ( m_heightMap != pMap ) {
 		m_bRuntimeMapsModified = true;
 		m_bModified = true;
 	}
-	m_pHeightMap = pMap;
+	m_heightMap = pMap;
 	m_bDerivedNormalSlopeValid = false;
-	if ( m_pControlMap.is_valid() ) {
-		pMap = sanitizeMap( TYPE_CONTROL, m_pControlMap );
-		if ( m_pControlMap != pMap ) {
+	if ( m_controlMap.is_valid() ) {
+		pMap = sanitizeMap( TYPE_CONTROL, m_controlMap );
+		if ( m_controlMap != pMap ) {
 			m_bRuntimeMapsModified = true;
 			m_bModified = true;
 		}
-		m_pControlMap = pMap;
+		m_controlMap = pMap;
 	}
-	if ( m_pColorMap.is_valid() ) {
-		pMap = sanitizeMap( TYPE_COLOR, m_pColorMap );
-		if ( m_pColorMap != pMap ) {
+	if ( m_colorMap.is_valid() ) {
+		pMap = sanitizeMap( TYPE_COLOR, m_colorMap );
+		if ( m_colorMap != pMap ) {
 			m_bRuntimeMapsModified = true;
 			m_bModified = true;
 		}
-		m_pColorMap = pMap;
+		m_colorMap = pMap;
 	}
 	setChannelFlags( m_nChannelFlags );
 	compactDefaultMaps();
@@ -419,9 +419,9 @@ void T3DRegion::sanitizeMaps( void ) {
 bool T3DRegion::isMapDefault( const t3dMapType_t mapType ) const {
 	switch ( mapType ) {
 		case TYPE_CONTROL:
-			return m_pControlMap.is_null() || t3dRegionImageIsDefaultControl( m_pControlMap, m_nRegionSize );
+			return m_controlMap.is_null() || t3dRegionImageIsDefaultControl( m_controlMap, m_nRegionSize );
 		case TYPE_COLOR:
-			return m_pColorMap.is_null() || t3dRegionImageIsDefaultColor( m_pColorMap, m_nRegionSize );
+			return m_colorMap.is_null() || t3dRegionImageIsDefaultColor( m_colorMap, m_nRegionSize );
 		default:
 			return false;
 	}
@@ -431,10 +431,10 @@ bool T3DRegion::compactMapIfDefault( const t3dMapType_t mapType, const bool bMar
 	Ref<Image> *pMap = nullptr;
 	switch ( mapType ) {
 		case TYPE_CONTROL:
-			pMap = &m_pControlMap;
+			pMap = &m_controlMap;
 			break;
 		case TYPE_COLOR:
-			pMap = &m_pColorMap;
+			pMap = &m_colorMap;
 			break;
 		default:
 			return false;
@@ -602,7 +602,7 @@ void T3DRegion::updateHeights( const Vector2 &rLowHigh ) {
 }
 
 void T3DRegion::calcHeightRange( void ) {
-	const Vector2 range = t3dRegionCodecGetHeightMinMax( m_pHeightMap );
+	const Vector2 range = t3dRegionCodecGetHeightMinMax( m_heightMap );
 	if ( m_heightRange != range ) {
 		m_heightRange = range;
 		m_bModified = true;
@@ -617,10 +617,10 @@ void T3DRegion::adoptCookedRuntimeMapsInternal(
 	if ( rHeight.is_null() || rHeight->get_width() != m_nRegionSize || rHeight->get_height() != m_nRegionSize ) {
 		return;
 	}
-	m_pHeightMap = rHeight;
-	m_pControlMap = rControl;
-	m_pColorMap = rColor;
-	m_pDerivedNormalSlopeMap = rDerived;
+	m_heightMap = rHeight;
+	m_controlMap = rControl;
+	m_colorMap = rColor;
+	m_derivedNormalSlopeMap = rDerived;
 	m_bDerivedNormalSlopeValid = rDerived.is_valid();
 	m_nChannelFlags |= CHANNEL_HEIGHT;
 	if ( rControl.is_valid() ) m_nChannelFlags |= REGION_CHANNEL_CONTROL; else m_nChannelFlags &= ~REGION_CHANNEL_CONTROL;
@@ -633,10 +633,10 @@ void T3DRegion::importRuntimeMapsUnmodified( const T3DRegion *pSource ) {
 	if ( !pSource || pSource->m_nRegionSize != m_nRegionSize ) {
 		return;
 	}
-	m_pHeightMap = pSource->m_pHeightMap;
-	m_pControlMap = pSource->m_pControlMap;
-	m_pColorMap = pSource->m_pColorMap;
-	m_pDerivedNormalSlopeMap = pSource->m_pDerivedNormalSlopeMap;
+	m_heightMap = pSource->m_heightMap;
+	m_controlMap = pSource->m_controlMap;
+	m_colorMap = pSource->m_colorMap;
+	m_derivedNormalSlopeMap = pSource->m_derivedNormalSlopeMap;
 	m_bDerivedNormalSlopeValid = pSource->m_bDerivedNormalSlopeValid;
 	m_nChannelFlags = pSource->m_nChannelFlags;
 	m_bRuntimeMapsModified = pSource->m_bRuntimeMapsModified;
@@ -646,10 +646,10 @@ void T3DRegion::importRuntimeMapsUnmodified( const T3DRegion *pSource ) {
 }
 
 void T3DRegion::releaseRuntimeMapsUnmodified( void ) {
-	m_pHeightMap.unref();
-	m_pControlMap.unref();
-	m_pColorMap.unref();
-	m_pDerivedNormalSlopeMap.unref();
+	m_heightMap.unref();
+	m_controlMap.unref();
+	m_colorMap.unref();
+	m_derivedNormalSlopeMap.unref();
 	m_bDerivedNormalSlopeValid = false;
 }
 
@@ -658,7 +658,7 @@ void T3DRegion::markRuntimeMapsClean( void ) {
 }
 
 bool T3DRegion::hasRuntimeMapPayload( void ) const {
-	return m_pHeightMap.is_valid();
+	return m_heightMap.is_valid();
 }
 
 bool T3DRegion::runtimeMapsEvictable( void ) const {
@@ -681,7 +681,7 @@ bool T3DRegion::encodeInstancePage( void ) const {
 	PackedByteArray page;
 	uint32_t instance_count = 0u;
 	uint16_t mesh_count = 0u;
-	uint32_t mesh_counts[TERRAIN3D_MAX_MESH_ASSETS] = {};
+	uint32_t mesh_counts[s_nMaxMeshAssets] = {};
 	if ( !T3DInstancePageCodec::encode( m_instanceStore, page, mesh_counts, instance_count, mesh_count ) ) {
 		LOG( ERROR, "Failed encoding instance page for region ", m_location );
 		return false;
@@ -734,7 +734,7 @@ void T3DRegion::setInstancePage( const PackedByteArray &rPage ) {
 	if ( rPage == m_instancePage && !m_bInstanceStoreModified ) {
 		return;
 	}
-	uint32_t mesh_counts[TERRAIN3D_MAX_MESH_ASSETS] = {};
+	uint32_t mesh_counts[s_nMaxMeshAssets] = {};
 	uint32_t instance_count = 0u;
 	uint16_t mesh_count = 0u;
 	if ( !T3DInstancePageCodec::inspect( rPage, mesh_counts, instance_count, mesh_count ) ) {
@@ -762,7 +762,7 @@ bool T3DRegion::ensureInstanceStoreResident( void ) const {
 		return true;
 	}
 	T3DInstanceStore decoded;
-	uint32_t mesh_counts[TERRAIN3D_MAX_MESH_ASSETS] = {};
+	uint32_t mesh_counts[s_nMaxMeshAssets] = {};
 	uint32_t instance_count = 0u;
 	uint16_t mesh_count = 0u;
 	if ( !T3DInstancePageCodec::decode( m_instancePage, decoded, mesh_counts, instance_count, mesh_count ) ) {
@@ -901,28 +901,28 @@ void T3DRegion::rebuildStreamedNodeRuntime( void ) {
 			continue;
 		}
 		t3dStreamedNodeRuntimeDescriptor_t descriptor;
-		descriptor.id = ( int64_t ) ( entry["id"] );
-		descriptor.pScene = entry.has( "scene" ) ? Ref<PackedScene>( entry["scene"] ) : Ref<PackedScene>();
-		descriptor.scenePath = entry.has( "scene_path" ) ? String( entry["scene_path"] ) : String();
-		descriptor.transform = Transform3D( entry["transform"] );
-		descriptor.state = entry.has( "state" ) && Variant( entry["state"] ).get_type() == Variant::DICTIONARY ?
+		descriptor.m_nId = ( int64_t ) ( entry["id"] );
+		descriptor.m_scene = entry.has( "scene" ) ? Ref<PackedScene>( entry["scene"] ) : Ref<PackedScene>();
+		descriptor.m_scenePath = entry.has( "scene_path" ) ? String( entry["scene_path"] ) : String();
+		descriptor.m_transform = Transform3D( entry["transform"] );
+		descriptor.m_state = entry.has( "state" ) && Variant( entry["state"] ).get_type() == Variant::DICTIONARY ?
 			Dictionary( entry["state"] ) : Dictionary();
-		descriptor.flags = entry.has( "flags" ) ? ( int ) ( entry["flags"] ) : 0;
-		descriptor.hlodMinLevel = CLAMP( entry.has( "hlod_min_level" ) ? ( int ) entry["hlod_min_level"] : 1, 1, 6 );
-		descriptor.boundaryPolicy = entry.has( "boundary_policy" ) ?
+		descriptor.m_nFlags = entry.has( "flags" ) ? ( int ) ( entry["flags"] ) : 0;
+		descriptor.m_nHlodMinLevel = CLAMP( entry.has( "hlod_min_level" ) ? ( int ) entry["hlod_min_level"] : 1, 1, 6 );
+		descriptor.m_nBoundaryPolicy = entry.has( "boundary_policy" ) ?
 			t3dRegionNormalizeStreamedNodeBoundaryPolicy( ( int ) ( entry["boundary_policy"] ) ) :
 			STREAMED_NODE_BOUNDARY_ANCHOR;
-		descriptor.coverageMin = entry.has( "coverage_min" ) ? Vector2i( entry["coverage_min"] ) : V2I_ZERO;
-		descriptor.coverageMax = entry.has( "coverage_max" ) ? Vector2i( entry["coverage_max"] ) : V2I_ZERO;
-		t3dRegionNormalizeStreamedNodeCoverage( descriptor.boundaryPolicy, descriptor.coverageMin,
-			descriptor.coverageMax, descriptor.coverageMin, descriptor.coverageMax );
-		descriptor.lightingClass = t3dRegionNormalizeLightingClass( entry.has( "lighting_class" ) ? ( int ) ( entry["lighting_class"] ) : ( int ) ( LIGHTING_CLASS_MEDIUM_OBSTACLE ) );
-		descriptor.bakedLightingMode = t3dRegionNormalizeBakedLightingMode( entry.has( "baked_lighting_mode" ) ? ( int ) ( entry["baked_lighting_mode"] ) : ( int ) ( BAKED_LIGHTING_LIGHTMAP ) );
-		descriptor.bContributeBakedGi = entry.has( "contribute_baked_gi" ) ? ( bool ) ( entry["contribute_baked_gi"] ) : true;
-		descriptor.bReceiveDynamicDirectional = entry.has( "receive_dynamic_directional" ) ? ( bool ) ( entry["receive_dynamic_directional"] ) : true;
-		descriptor.bDynamicShadowEligible = entry.has( "dynamic_shadow_eligible" ) ? ( bool ) ( entry["dynamic_shadow_eligible"] ) : true;
-		descriptor.shadowProxyScenePath = entry.has( "shadow_proxy_scene_path" ) ? String( entry["shadow_proxy_scene_path"] ) : String();
-		descriptor.pShadowProxyScene = entry.has( "shadow_proxy_scene" ) ? Ref<PackedScene>( entry["shadow_proxy_scene"] ) : Ref<PackedScene>();
+		descriptor.m_coverageMin = entry.has( "coverage_min" ) ? Vector2i( entry["coverage_min"] ) : V2I_ZERO;
+		descriptor.m_coverageMax = entry.has( "coverage_max" ) ? Vector2i( entry["coverage_max"] ) : V2I_ZERO;
+		t3dRegionNormalizeStreamedNodeCoverage( descriptor.m_nBoundaryPolicy, descriptor.m_coverageMin,
+			descriptor.m_coverageMax, descriptor.m_coverageMin, descriptor.m_coverageMax );
+		descriptor.m_nLightingClass = t3dRegionNormalizeLightingClass( entry.has( "lighting_class" ) ? ( int ) ( entry["lighting_class"] ) : ( int ) ( LIGHTING_CLASS_MEDIUM_OBSTACLE ) );
+		descriptor.m_nBakedLightingMode = t3dRegionNormalizeBakedLightingMode( entry.has( "baked_lighting_mode" ) ? ( int ) ( entry["baked_lighting_mode"] ) : ( int ) ( BAKED_LIGHTING_LIGHTMAP ) );
+		descriptor.m_bContributeBakedGi = entry.has( "contribute_baked_gi" ) ? ( bool ) ( entry["contribute_baked_gi"] ) : true;
+		descriptor.m_bReceiveDynamicDirectional = entry.has( "receive_dynamic_directional" ) ? ( bool ) ( entry["receive_dynamic_directional"] ) : true;
+		descriptor.m_bDynamicShadowEligible = entry.has( "dynamic_shadow_eligible" ) ? ( bool ) ( entry["dynamic_shadow_eligible"] ) : true;
+		descriptor.m_shadowProxyScenePath = entry.has( "shadow_proxy_scene_path" ) ? String( entry["shadow_proxy_scene_path"] ) : String();
+		descriptor.m_shadowProxyScene = entry.has( "shadow_proxy_scene" ) ? Ref<PackedScene>( entry["shadow_proxy_scene"] ) : Ref<PackedScene>();
 		m_streamedNodeRuntime.push_back( eastl::move( descriptor ) );
 	}
 }
@@ -932,11 +932,11 @@ void T3DRegion::refreshStreamedNodeCoverage( void ) {
 	m_streamedNodeCoverageMax = V2I_ZERO;
 	m_bStreamedNodeHasExtendedCoverage = false;
 	for ( const t3dStreamedNodeRuntimeDescriptor_t &descriptor : m_streamedNodeRuntime ) {
-		if ( descriptor.boundaryPolicy != STREAMED_NODE_BOUNDARY_COVERAGE ) {
+		if ( descriptor.m_nBoundaryPolicy != STREAMED_NODE_BOUNDARY_COVERAGE ) {
 			continue;
 		}
-		const Vector2i coverage_min = descriptor.coverageMin;
-		const Vector2i coverage_max = descriptor.coverageMax;
+		const Vector2i coverage_min = descriptor.m_coverageMin;
+		const Vector2i coverage_max = descriptor.m_coverageMax;
 		m_streamedNodeCoverageMin.x = MIN( m_streamedNodeCoverageMin.x, coverage_min.x );
 		m_streamedNodeCoverageMin.y = MIN( m_streamedNodeCoverageMin.y, coverage_min.y );
 		m_streamedNodeCoverageMax.x = MAX( m_streamedNodeCoverageMax.x, coverage_max.x );
@@ -976,11 +976,11 @@ bool T3DRegion::streamedNodeCoverageIntersects(
 		return false;
 	}
 	for ( const t3dStreamedNodeRuntimeDescriptor_t &descriptor : m_streamedNodeRuntime ) {
-		if ( descriptor.boundaryPolicy != STREAMED_NODE_BOUNDARY_COVERAGE ) {
+		if ( descriptor.m_nBoundaryPolicy != STREAMED_NODE_BOUNDARY_COVERAGE ) {
 			continue;
 		}
-		const Vector2i coverage_min = rOwnerLocation + descriptor.coverageMin;
-		const Vector2i coverage_max = rOwnerLocation + descriptor.coverageMax;
+		const Vector2i coverage_min = rOwnerLocation + descriptor.m_coverageMin;
+		const Vector2i coverage_max = rOwnerLocation + descriptor.m_coverageMax;
 		if ( coverage_min.x <= vTargetMax.x && coverage_max.x >= rTargetMin.x &&
 			coverage_min.y <= vTargetMax.y && coverage_max.y >= rTargetMin.y ) {
 			return true;
@@ -993,7 +993,7 @@ const t3dStreamedNodeRuntimeDescriptor_t *T3DRegion::findStreamedNodeRuntimeInte
 	const int64_t nId
 ) const {
 	for ( const t3dStreamedNodeRuntimeDescriptor_t &descriptor : m_streamedNodeRuntime ) {
-		if ( descriptor.id == nId ) {
+		if ( descriptor.m_nId == nId ) {
 			return &descriptor;
 		}
 	}
@@ -1145,18 +1145,18 @@ bool T3DRegion::updateStreamedNodeState(
 }
 
 void T3DRegion::setLighting( const Ref<T3DRegionLighting> &rLighting ) {
-	if ( m_pLighting == rLighting ) {
+	if ( m_lighting == rLighting ) {
 		return;
 	}
-	m_pLighting = rLighting;
+	m_lighting = rLighting;
 	m_bModified = true;
 }
 
 void T3DRegion::setLocation( const Vector2i &rLocation ) {
-	// Locations are bounded by the fixed logical region map.
+	// Locations are bounded by the s_nFixed logical region map.
 	if ( T3DData::getRegionMapIndex( rLocation ) < 0 ) {
-		LOG( ERROR, "Location ", rLocation, " out of bounds. Max: ", -TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE / 2, " to ",
-			TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE / 2 - 1 );
+		LOG( ERROR, "Location ", rLocation, " out of bounds. Max: ", -s_nActiveMaxRegionMapSize / 2, " to ",
+			s_nActiveMaxRegionMapSize / 2 - 1 );
 		return;
 	}
 	// Marked modified if setting after initialized
@@ -1183,7 +1183,7 @@ Error T3DRegion::save( const String &rPath, const bool b16Bit ) {
 		LOG( DEBUG, "Region ", m_location, " not modified. Skipping ", rPath );
 		return ERR_SKIP;
 	}
-	if ( m_pHeightMap.is_null() ) {
+	if ( m_heightMap.is_null() ) {
 		LOG( ERROR, "Cannot save mapless region ", m_location,
 			". Page it through T3DData::ensure_cpu_region_resident() before direct region save." );
 		return ERR_UNAVAILABLE;
@@ -1199,7 +1199,7 @@ Error T3DRegion::save( const String &rPath, const bool b16Bit ) {
 		// incuding those in the undo queue
 	}
 	LOG( MESG, "Writing compact R16 region ", m_location, " to ", get_path() );
-	setVersion( TERRAIN3D_DATA_CURRENT_VERSION );
+	setVersion( s_fDataCurrentVersion );
 	( void ) b16Bit;
 	const Error err = ResourceSaver::get_singleton()->save( this, get_path(), ResourceSaver::FLAG_COMPRESS );
 	if ( err == OK ) {
@@ -1272,14 +1272,14 @@ Dictionary T3DRegion::getData( void ) const {
 	dict["region_size"] = m_nRegionSize;
 	dict["vertex_spacing"] = m_fVertexSpacing;
 	dict["height_range"] = m_heightRange;
-	dict["height_map"] = m_pHeightMap;
-	dict["control_map"] = m_pControlMap;
-	dict["color_map"] = m_pColorMap;
+	dict["height_map"] = m_heightMap;
+	dict["control_map"] = m_controlMap;
+	dict["color_map"] = m_colorMap;
 	dict["channel_flags"] = ( int ) ( m_nChannelFlags );
 	dict["instances"] = Dictionary();
 	dict["instance_page"] = getInstancePage();
 	dict["streamed_nodes"] = m_streamedNodes.duplicate( true );
-	dict["lighting"] = m_pLighting;
+	dict["lighting"] = m_lighting;
 	return dict;
 }
 
@@ -1307,16 +1307,16 @@ Ref<T3DRegion> T3DRegion::duplicate( const bool bDeep ) {
 	pRegion->m_streamedNodeCoverageMin = m_streamedNodeCoverageMin;
 	pRegion->m_streamedNodeCoverageMax = m_streamedNodeCoverageMax;
 	pRegion->m_bStreamedNodeHasExtendedCoverage = m_bStreamedNodeHasExtendedCoverage;
-	pRegion->m_pLighting = m_pLighting;
+	pRegion->m_lighting = m_lighting;
 	if ( bDeep ) {
-		pRegion->m_pHeightMap = m_pHeightMap.is_valid() ? Ref<Image>( m_pHeightMap->duplicate() ) : Ref<Image>();
-		pRegion->m_pControlMap = m_pControlMap.is_valid() ? Ref<Image>( m_pControlMap->duplicate() ) : Ref<Image>();
-		pRegion->m_pColorMap = m_pColorMap.is_valid() ? Ref<Image>( m_pColorMap->duplicate() ) : Ref<Image>();
+		pRegion->m_heightMap = m_heightMap.is_valid() ? Ref<Image>( m_heightMap->duplicate() ) : Ref<Image>();
+		pRegion->m_controlMap = m_controlMap.is_valid() ? Ref<Image>( m_controlMap->duplicate() ) : Ref<Image>();
+		pRegion->m_colorMap = m_colorMap.is_valid() ? Ref<Image>( m_colorMap->duplicate() ) : Ref<Image>();
 	} else {
 		pRegion->m_bEdited = m_bEdited;
-		pRegion->m_pHeightMap = m_pHeightMap;
-		pRegion->m_pControlMap = m_pControlMap;
-		pRegion->m_pColorMap = m_pColorMap;
+		pRegion->m_heightMap = m_heightMap;
+		pRegion->m_controlMap = m_controlMap;
+		pRegion->m_colorMap = m_colorMap;
 	}
 	return pRegion;
 }
@@ -1331,16 +1331,16 @@ void T3DRegion::dump( const bool bVerbose ) const {
 		LOG( MESG, "Streamed dynamic nodes: ", m_streamedNodes.size() );
 		return;
 	}
-	for ( const t3dInstanceMesh_t &mesh : m_instanceStore.meshes() ) {
+	for ( const t3dInstanceMesh_t &mesh : m_instanceStore.m_meshes() ) {
 		size_t count = 0;
-		for ( const t3dInstanceCell_t &cell : mesh.cells ) {
-			count += cell.transforms.size();
+		for ( const t3dInstanceCell_t &cell : mesh.m_cells ) {
+			count += cell.m_transforms.size();
 			if ( bVerbose ) {
-				LOG( MESG, "Mesh ID: ", mesh.id, " cell: ", cell.location, " xforms: ", ( int ) ( cell.transforms.size() ),
-					cell.usesColors() ? ", colored" : ", uncolored", cell.bModified ? ", modified" : "" );
+				LOG( MESG, "Mesh ID: ", mesh.m_nId, " cell: ", cell.m_location, " xforms: ", ( int ) ( cell.m_transforms.size() ),
+					cell.usesColors() ? ", colored" : ", uncolored", cell.m_bModified ? ", modified" : "" );
 			}
 		}
-		LOG( MESG, "Mesh ID: ", mesh.id, ", instance count: ", ( int ) ( count ) );
+		LOG( MESG, "Mesh ID: ", mesh.m_nId, ", instance count: ", ( int ) ( count ) );
 	}
 }
 

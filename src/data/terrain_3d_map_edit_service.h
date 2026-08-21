@@ -22,32 +22,32 @@ class T3DRegionRepository;
 class T3DSamplingStorage;
 
 typedef struct t3dDerivedMapUpdate_s {
-	Vector2i location = V2I_MAX;
-	Rect2i dirtyRect;
-	bool bSuccess = false;
+	Vector2i m_location = V2I_MAX;
+	Rect2i m_dirtyRect;
+	bool m_bSuccess = false;
 } t3dDerivedMapUpdate_t;
 
 typedef struct t3dDerivedMapTask_s {
-	Vector2i location = V2I_MAX;
-	Rect2i dirtyRect;
-	size_t nOutputOffset = 0u;
-	size_t nOutputBytes = 0u;
-	bool bAvailable = false;
-	bool bSuccess = false;
+	Vector2i m_location = V2I_MAX;
+	Rect2i m_dirtyRect;
+	size_t m_iOutputOffset = 0u;
+	size_t m_nOutputBytes = 0u;
+	bool m_bAvailable = false;
+	bool m_bSuccess = false;
 } t3dDerivedMapTask_t;
 
 // Owns one synchronous edit dispatch. Vectors are moved out of the service's
 // retained scratch so synchronous Godot signals can safely trigger nested edits.
 // recycleMutation() returns their capacity to the service after dispatch.
 typedef struct t3dMapMutation_s {
-	t3dMapType_t mapType = REGION_TYPE_MAX;
-	AABB editedArea;
-	Vector2 editedHeightRange = V2_ZERO;
-	eastl::vector<Vector2i> changedLocations;
-	eastl::vector<Vector2i> derivedLocations;
-	eastl::vector<t3dDerivedMapUpdate_t> derivedUpdates;
+	t3dMapType_t m_mapType = REGION_TYPE_MAX;
+	AABB m_editedArea;
+	Vector2 m_editedHeightRange = V2_ZERO;
+	eastl::vector<Vector2i> m_changedLocations;
+	eastl::vector<Vector2i> m_derivedLocations;
+	eastl::vector<t3dDerivedMapUpdate_t> m_derivedUpdates;
 
-	EA_FORCE_INLINE bool valid( void ) const { return mapType >= TYPE_HEIGHT && mapType < REGION_TYPE_MAX && !changedLocations.empty(); }
+	EA_FORCE_INLINE bool valid( void ) const { return m_mapType >= TYPE_HEIGHT && m_mapType < REGION_TYPE_MAX && !m_changedLocations.empty(); }
 } t3dMapMutation_t;
 
 // Owns authoritative terrain-map mutation mechanics and edit bookkeeping.

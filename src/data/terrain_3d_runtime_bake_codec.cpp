@@ -15,28 +15,28 @@
 #include <cmath>
 #include <cstring>
 
-static constexpr uint32_t HOLE_MAGIC = 0x314c4f48u; // HOL1
-static constexpr uint32_t NAV_MAGIC = 0x3156414eu; // NAV1
-static constexpr uint32_t MINMAX_MAGIC = 0x31584d4du; // MMX1
-static constexpr uint32_t COLLISION_HEIGHT_MAGIC = 0x31484c43u; // CLH1
-static constexpr uint32_t COLLISION_BOUNDS_MAGIC = 0x31424c43u; // CLB1
-static constexpr uint32_t NODE_MAGIC = 0x31444f4eu; // NOD1
-static constexpr uint32_t INSTANCE_META_MAGIC = 0x314d4e49u; // INM1
-static constexpr uint32_t LIGHTING_MAGIC = 0x3154474cu; // LGT1
-static constexpr uint32_t MULTIMESH_MAGIC = 0x31494d4du; // MMI1
-static constexpr uint16_t BLOB_VERSION = 1u;
+static constexpr uint32_t s_nHoleMagic = 0x314c4f48u; // HOL1
+static constexpr uint32_t s_nNavMagic = 0x3156414eu; // NAV1
+static constexpr uint32_t s_nMinmaxMagic = 0x31584d4du; // MMX1
+static constexpr uint32_t s_nCollisionHeightMagic = 0x31484c43u; // CLH1
+static constexpr uint32_t s_nCollisionBoundsMagic = 0x31424c43u; // CLB1
+static constexpr uint32_t s_nNodeMagic = 0x31444f4eu; // NOD1
+static constexpr uint32_t s_nInstanceMetaMagic = 0x314d4e49u; // INM1
+static constexpr uint32_t s_nLightingMagic = 0x3154474cu; // LGT1
+static constexpr uint32_t s_nMultimeshMagic = 0x31494d4du; // MMI1
+static constexpr uint16_t s_nBlobVersion = 1u;
 
 EA_FORCE_INLINE static uint16_t t3dRuntimeBakeCodecReadU16( const uint8_t *p ) { return ( uint16_t ) ( p[0] | ( ( uint16_t ) p[1] << 8u ) ); }
 EA_FORCE_INLINE static uint32_t t3dRuntimeBakeCodecReadU32( const uint8_t *p ) { return ( uint32_t ) p[0] | ( ( uint32_t ) p[1] << 8u ) | ( ( uint32_t ) p[2] << 16u ) | ( ( uint32_t ) p[3] << 24u ); }
 EA_FORCE_INLINE static int32_t t3dRuntimeBakeCodecReadI32( const uint8_t *p ) { return ( int32_t ) t3dRuntimeBakeCodecReadU32( p ); }
 EA_FORCE_INLINE static uint64_t t3dRuntimeBakeCodecReadU64( const uint8_t *p ) { return ( uint64_t ) t3dRuntimeBakeCodecReadU32( p ) | ( ( uint64_t ) t3dRuntimeBakeCodecReadU32( p + 4 ) << 32u ); }
 EA_FORCE_INLINE static float t3dRuntimeBakeCodecReadF32( const uint8_t *p ) { const uint32_t bits = t3dRuntimeBakeCodecReadU32( p ); float v = 0.f; std::memcpy( &v, &bits, 4 ); return v; }
-EA_FORCE_INLINE static uint32_t t3dRuntimeBakeCodecReadControlPixel( const uint8_t *pControl, const size_t nControlBytes, const uint32_t nIndex ) { if ( pControl == nullptr || ( size_t ) ( nIndex + 1u ) * 4u > nControlBytes ) return TERRAIN3D_REGION_DEFAULT_CONTROL; uint32_t value = 0u; std::memcpy( &value, pControl + ( size_t ) nIndex * 4u, 4u ); return value; }
+EA_FORCE_INLINE static uint32_t t3dRuntimeBakeCodecReadControlPixel( const uint8_t *pControl, const size_t nControlBytes, const uint32_t nIndex ) { if ( pControl == nullptr || ( size_t ) ( nIndex + 1u ) * 4u > nControlBytes ) return s_nRegionDefaultControl; uint32_t value = 0u; std::memcpy( &value, pControl + ( size_t ) nIndex * 4u, 4u ); return value; }
 EA_FORCE_INLINE static void t3dRuntimeBakeCodecSetBit( uint8_t *pBytes, const uint32_t nIndex ) { pBytes[nIndex >> 3u] |= ( uint8_t ) ( 1u << ( nIndex & 7u ) ); }
 EA_FORCE_INLINE static bool t3dRuntimeBakeCodecResizeBytes( PackedByteArray &rBytes, const size_t nBytes ) { if ( nBytes > ( size_t ) INT64_MAX ) return false; rBytes.resize( ( int64_t ) nBytes ); return ( size_t ) rBytes.size() == nBytes; }
 
-EA_FORCE_INLINE static String t3dRuntimeBakeCodecDescriptorScenePath( const t3dStreamedNodeRuntimeDescriptor_t &rDescriptor ) { if ( !rDescriptor.scenePath.is_empty() ) return rDescriptor.scenePath; return rDescriptor.pScene.is_valid() ? rDescriptor.pScene->get_path() : String(); }
-EA_FORCE_INLINE static String t3dRuntimeBakeCodecDescriptorShadowPath( const t3dStreamedNodeRuntimeDescriptor_t &rDescriptor ) { if ( !rDescriptor.shadowProxyScenePath.is_empty() ) return rDescriptor.shadowProxyScenePath; return rDescriptor.pShadowProxyScene.is_valid() ? rDescriptor.pShadowProxyScene->get_path() : String(); }
+EA_FORCE_INLINE static String t3dRuntimeBakeCodecDescriptorScenePath( const t3dStreamedNodeRuntimeDescriptor_t &rDescriptor ) { if ( !rDescriptor.m_scenePath.is_empty() ) return rDescriptor.m_scenePath; return rDescriptor.m_scene.is_valid() ? rDescriptor.m_scene->get_path() : String(); }
+EA_FORCE_INLINE static String t3dRuntimeBakeCodecDescriptorShadowPath( const t3dStreamedNodeRuntimeDescriptor_t &rDescriptor ) { if ( !rDescriptor.m_shadowProxyScenePath.is_empty() ) return rDescriptor.m_shadowProxyScenePath; return rDescriptor.m_shadowProxyScene.is_valid() ? rDescriptor.m_shadowProxyScene->get_path() : String(); }
 
 PackedByteArray T3DRuntimeBakeCodec::encodeHoleMask( const Ref<Image> &rControl, const int nRegionSize ) {
 	PackedByteArray bytes;
@@ -45,7 +45,7 @@ PackedByteArray T3DRuntimeBakeCodec::encodeHoleMask( const Ref<Image> &rControl,
 	const uint32_t plane = ( samples + 7u ) / 8u;
 	if ( !t3dRuntimeBakeCodecResizeBytes( bytes, 12u + plane ) ) return PackedByteArray();
 	t3dByteWriter_t writer( bytes.ptrw(), ( size_t ) bytes.size() );
-	writer.writeU32( HOLE_MAGIC ); writer.writeU16( BLOB_VERSION ); writer.writeU16( ( uint16_t ) nRegionSize ); writer.writeU32( samples );
+	writer.writeU32( s_nHoleMagic ); writer.writeU16( s_nBlobVersion ); writer.writeU16( ( uint16_t ) nRegionSize ); writer.writeU32( samples );
 	uint8_t *const pBits = bytes.ptrw() + writer.offset(); std::memset( pBits, 0, plane );
 	const PackedByteArray control_bytes = rControl.is_valid() ? rControl->get_data() : PackedByteArray();
 	const uint8_t *const pControl = control_bytes.is_empty() ? nullptr : control_bytes.ptr();
@@ -60,7 +60,7 @@ PackedByteArray T3DRuntimeBakeCodec::encodeNavigationMask( const Ref<Image> &rCo
 	const uint32_t plane = ( samples + 7u ) / 8u;
 	if ( !t3dRuntimeBakeCodecResizeBytes( bytes, 16u + ( size_t ) plane * 2u ) ) return PackedByteArray();
 	t3dByteWriter_t writer( bytes.ptrw(), ( size_t ) bytes.size() );
-	writer.writeU32( NAV_MAGIC ); writer.writeU16( BLOB_VERSION ); writer.writeU16( ( uint16_t ) nRegionSize ); writer.writeU32( samples ); writer.writeU32( plane );
+	writer.writeU32( s_nNavMagic ); writer.writeU16( s_nBlobVersion ); writer.writeU16( ( uint16_t ) nRegionSize ); writer.writeU32( samples ); writer.writeU32( plane );
 	uint8_t *const pValid = bytes.ptrw() + writer.offset(); uint8_t *const pNavigation = pValid + plane; std::memset( pValid, 0, ( size_t ) plane * 2u );
 	const PackedByteArray control_bytes = rControl.is_valid() ? rControl->get_data() : PackedByteArray();
 	const uint8_t *const pControl = control_bytes.is_empty() ? nullptr : control_bytes.ptr();
@@ -79,7 +79,7 @@ PackedByteArray T3DRuntimeBakeCodec::encodeNavigationMask( const PackedInt32Arra
 	const uint32_t plane = ( samples + 7u ) / 8u;
 	if ( !t3dRuntimeBakeCodecResizeBytes( bytes, 16u + ( size_t ) plane * 2u ) ) return PackedByteArray();
 	t3dByteWriter_t writer( bytes.ptrw(), ( size_t ) bytes.size() );
-	writer.writeU32( NAV_MAGIC ); writer.writeU16( BLOB_VERSION ); writer.writeU16( ( uint16_t ) nWidth ); writer.writeU32( samples ); writer.writeU32( plane );
+	writer.writeU32( s_nNavMagic ); writer.writeU16( s_nBlobVersion ); writer.writeU16( ( uint16_t ) nWidth ); writer.writeU32( samples ); writer.writeU32( plane );
 	uint8_t *const pValid = bytes.ptrw() + writer.offset(); uint8_t *const pNavigation = pValid + plane; std::memset( pValid, 0, ( size_t ) plane * 2u );
 	const int32_t *const pControls = rControls.ptr();
 	for ( uint32_t i = 0u; i < samples; ++i ) {
@@ -94,10 +94,10 @@ bool T3DRuntimeBakeCodec::getNavigationMaskView( const PackedByteArray &rBlob, t
 	rView = t3dNavigationMaskView_t();
 	if ( rBlob.size() < 16 ) return false;
 	const uint8_t *const p = rBlob.ptr();
-	if ( t3dRuntimeBakeCodecReadU32( p ) != NAV_MAGIC || t3dRuntimeBakeCodecReadU16( p + 4 ) != BLOB_VERSION ) return false;
+	if ( t3dRuntimeBakeCodecReadU32( p ) != s_nNavMagic || t3dRuntimeBakeCodecReadU16( p + 4 ) != s_nBlobVersion ) return false;
 	const uint16_t width = t3dRuntimeBakeCodecReadU16( p + 6 ); const uint32_t samples = t3dRuntimeBakeCodecReadU32( p + 8 ); const uint32_t plane = t3dRuntimeBakeCodecReadU32( p + 12 );
 	if ( width == 0u || samples != ( uint32_t ) width * width || plane != ( samples + 7u ) / 8u || rBlob.size() != 16 + ( int64_t ) plane * 2 ) return false;
-	rView.pValidBits = p + 16; rView.pNavigationBits = p + 16 + plane; rView.nPlaneBytes = plane; rView.nSamples = samples; rView.nWidth = width; return true;
+	rView.m_pValidBits = p + 16; rView.m_pNavigationBits = p + 16 + plane; rView.m_nPlaneBytes = plane; rView.m_nSamples = samples; rView.m_nWidth = width; return true;
 }
 
 bool T3DRuntimeBakeCodec::decodeNavigationMask(
@@ -105,8 +105,8 @@ bool T3DRuntimeBakeCodec::decodeNavigationMask(
 ) {
 	nWidth = 0; rValidBits.clear(); rNavigationBits.clear();
 	t3dNavigationMaskView_t view; if ( !getNavigationMaskView( rBlob, view ) ) return false;
-	nWidth = ( int ) view.nWidth; rValidBits.resize( view.nPlaneBytes ); rNavigationBits.resize( view.nPlaneBytes );
-	std::memcpy( rValidBits.ptrw(), view.pValidBits, view.nPlaneBytes ); std::memcpy( rNavigationBits.ptrw(), view.pNavigationBits, view.nPlaneBytes ); return true;
+	nWidth = ( int ) view.m_nWidth; rValidBits.resize( view.m_nPlaneBytes ); rNavigationBits.resize( view.m_nPlaneBytes );
+	std::memcpy( rValidBits.ptrw(), view.m_pValidBits, view.m_nPlaneBytes ); std::memcpy( rNavigationBits.ptrw(), view.m_pNavigationBits, view.m_nPlaneBytes ); return true;
 }
 
 PackedByteArray T3DRuntimeBakeCodec::encodeMinMaxHierarchy( const Ref<Image> &rHeight, const int nRegionSize ) {
@@ -118,7 +118,7 @@ PackedByteArray T3DRuntimeBakeCodec::encodeMinMaxHierarchy( const Ref<Image> &rH
 	for ( int side = nRegionSize; ; side = ( side + 1 ) / 2 ) { output_bytes += 8u + ( size_t ) side * side * 8u; if ( side == 1 ) break; ++levels; }
 	if ( !t3dRuntimeBakeCodecResizeBytes( bytes, output_bytes ) ) return PackedByteArray();
 	t3dByteWriter_t writer( bytes.ptrw(), output_bytes );
-	writer.writeU32( MINMAX_MAGIC ); writer.writeU16( BLOB_VERSION ); writer.writeU16( ( uint16_t ) nRegionSize ); writer.writeU32( ( uint32_t ) levels );
+	writer.writeU32( s_nMinmaxMagic ); writer.writeU16( s_nBlobVersion ); writer.writeU16( ( uint16_t ) nRegionSize ); writer.writeU32( ( uint32_t ) levels );
 	const uint8_t *const pSource = source.ptr();
 	const uint32_t source_count = ( uint32_t ) nRegionSize * ( uint32_t ) nRegionSize;
 	writer.writeU32( ( uint32_t ) nRegionSize ); writer.writeU32( source_count );
@@ -166,7 +166,7 @@ bool T3DRuntimeBakeCodec::getMinMaxLevelView( const PackedByteArray &rBlob, cons
 	rView = t3dMinMaxLevelView_t();
 	if ( rBlob.size() < 12 || nMaximumSide <= 0 ) return false;
 	const uint8_t *const p = rBlob.ptr();
-	if ( t3dRuntimeBakeCodecReadU32( p ) != MINMAX_MAGIC || t3dRuntimeBakeCodecReadU16( p + 4 ) != BLOB_VERSION ) return false;
+	if ( t3dRuntimeBakeCodecReadU32( p ) != s_nMinmaxMagic || t3dRuntimeBakeCodecReadU16( p + 4 ) != s_nBlobVersion ) return false;
 	const uint16_t source_side = t3dRuntimeBakeCodecReadU16( p + 6 ); const uint32_t level_count = t3dRuntimeBakeCodecReadU32( p + 8 );
 	if ( source_side == 0u || level_count == 0u || level_count > 32u ) return false;
 	size_t offset = 12u; const uint8_t *pSelected = nullptr; uint32_t selected_count = 0u; uint16_t selected_side = 0u;
@@ -178,12 +178,12 @@ bool T3DRuntimeBakeCodec::getMinMaxLevelView( const PackedByteArray &rBlob, cons
 		offset += ( size_t ) count * 8u;
 	}
 	if ( offset != ( size_t ) rBlob.size() || selected_side == 0u ) return false;
-	rView.pRanges = pSelected; rView.nRangeCount = selected_count; rView.nSourceSide = source_side; rView.nLevelSide = selected_side; return true;
+	rView.m_pRanges = pSelected; rView.m_nRangeCount = selected_count; rView.m_nSourceSide = source_side; rView.m_nLevelSide = selected_side; return true;
 }
 
 Vector2 T3DRuntimeBakeCodec::getMinMaxRange( const t3dMinMaxLevelView_t &rView, const uint32_t nIndex ) {
-	if ( rView.pRanges == nullptr || nIndex >= rView.nRangeCount ) return Vector2();
-	const uint8_t *const p = rView.pRanges + ( size_t ) nIndex * 8u; return Vector2( t3dRuntimeBakeCodecReadF32( p ), t3dRuntimeBakeCodecReadF32( p + 4u ) );
+	if ( rView.m_pRanges == nullptr || nIndex >= rView.m_nRangeCount ) return Vector2();
+	const uint8_t *const p = rView.m_pRanges + ( size_t ) nIndex * 8u; return Vector2( t3dRuntimeBakeCodecReadF32( p ), t3dRuntimeBakeCodecReadF32( p + 4u ) );
 }
 
 bool T3DRuntimeBakeCodec::decodeMinMaxLevel(
@@ -192,66 +192,66 @@ bool T3DRuntimeBakeCodec::decodeMinMaxLevel(
 ) {
 	nSourceSide = 0; nLevelSide = 0; rRanges.clear(); t3dMinMaxLevelView_t view;
 	if ( !getMinMaxLevelView( rBlob, nMaximumSide, view ) ) return false;
-	nSourceSide = view.nSourceSide; nLevelSide = view.nLevelSide; rRanges.resize( view.nRangeCount );
-	for ( uint32_t i = 0u; i < view.nRangeCount; ++i ) rRanges[i] = getMinMaxRange( view, i );
+	nSourceSide = view.m_nSourceSide; nLevelSide = view.m_nLevelSide; rRanges.resize( view.m_nRangeCount );
+	for ( uint32_t i = 0u; i < view.m_nRangeCount; ++i ) rRanges[i] = getMinMaxRange( view, i );
 	return true;
 }
 
 PackedByteArray T3DRuntimeBakeCodec::encodeCollisionHeight( const PackedFloat32Array &rHeights, const int nWidth ) {
 	PackedByteArray bytes; if ( nWidth <= 0 || nWidth > UINT16_MAX || rHeights.size() != nWidth * nWidth ) return bytes;
 	const size_t payload_bytes = ( size_t ) rHeights.size() * sizeof( float ); if ( !t3dRuntimeBakeCodecResizeBytes( bytes, 12u + payload_bytes ) ) return PackedByteArray();
-	t3dByteWriter_t writer( bytes.ptrw(), ( size_t ) bytes.size() ); writer.writeU32( COLLISION_HEIGHT_MAGIC ); writer.writeU16( BLOB_VERSION ); writer.writeU16( ( uint16_t ) nWidth ); writer.writeU32( ( uint32_t ) rHeights.size() ); writer.writeBytes( rHeights.ptr(), payload_bytes );
+	t3dByteWriter_t writer( bytes.ptrw(), ( size_t ) bytes.size() ); writer.writeU32( s_nCollisionHeightMagic ); writer.writeU16( s_nBlobVersion ); writer.writeU16( ( uint16_t ) nWidth ); writer.writeU32( ( uint32_t ) rHeights.size() ); writer.writeBytes( rHeights.ptr(), payload_bytes );
 	return writer.complete() ? bytes : PackedByteArray();
 }
 
 PackedByteArray T3DRuntimeBakeCodec::encodeCollisionBounds( const float fMinHeight, const float fMaxHeight, const int nWidth ) {
 	PackedByteArray bytes; if ( nWidth <= 0 || nWidth > UINT16_MAX || !t3dRuntimeBakeCodecResizeBytes( bytes, 16u ) ) return bytes;
-	t3dByteWriter_t writer( bytes.ptrw(), ( size_t ) bytes.size() ); writer.writeU32( COLLISION_BOUNDS_MAGIC ); writer.writeU16( BLOB_VERSION ); writer.writeU16( ( uint16_t ) nWidth ); writer.writeF32( fMinHeight ); writer.writeF32( fMaxHeight ); return writer.complete() ? bytes : PackedByteArray();
+	t3dByteWriter_t writer( bytes.ptrw(), ( size_t ) bytes.size() ); writer.writeU32( s_nCollisionBoundsMagic ); writer.writeU16( s_nBlobVersion ); writer.writeU16( ( uint16_t ) nWidth ); writer.writeF32( fMinHeight ); writer.writeF32( fMaxHeight ); return writer.complete() ? bytes : PackedByteArray();
 }
 
 bool T3DRuntimeBakeCodec::decodeCollisionHeight( const PackedByteArray &rBlob, PackedFloat32Array &rHeights, int &nWidth ) {
-	nWidth = 0; if ( rBlob.size() < 12 ) return false; const uint8_t *p = rBlob.ptr(); if ( t3dRuntimeBakeCodecReadU32( p ) != COLLISION_HEIGHT_MAGIC || t3dRuntimeBakeCodecReadU16( p + 4 ) != BLOB_VERSION ) return false;
+	nWidth = 0; if ( rBlob.size() < 12 ) return false; const uint8_t *p = rBlob.ptr(); if ( t3dRuntimeBakeCodecReadU32( p ) != s_nCollisionHeightMagic || t3dRuntimeBakeCodecReadU16( p + 4 ) != s_nBlobVersion ) return false;
 	nWidth = t3dRuntimeBakeCodecReadU16( p + 6 ); const uint32_t count = t3dRuntimeBakeCodecReadU32( p + 8 ); if ( nWidth <= 0 || count != ( uint32_t ) nWidth * nWidth || rBlob.size() != 12 + ( int64_t ) count * 4 ) { nWidth = 0; return false; }
 	if ( rHeights.size() != ( int64_t ) count ) rHeights.resize( count ); std::memcpy( rHeights.ptrw(), p + 12, ( size_t ) count * 4u ); return true;
 }
 bool T3DRuntimeBakeCodec::decodeCollisionBounds( const PackedByteArray &rBlob, float &fMinHeight, float &fMaxHeight, int &nWidth ) {
-	if ( rBlob.size() != 16 ) return false; const uint8_t *p = rBlob.ptr(); if ( t3dRuntimeBakeCodecReadU32( p ) != COLLISION_BOUNDS_MAGIC || t3dRuntimeBakeCodecReadU16( p + 4 ) != BLOB_VERSION ) return false;
+	if ( rBlob.size() != 16 ) return false; const uint8_t *p = rBlob.ptr(); if ( t3dRuntimeBakeCodecReadU32( p ) != s_nCollisionBoundsMagic || t3dRuntimeBakeCodecReadU16( p + 4 ) != s_nBlobVersion ) return false;
 	nWidth = t3dRuntimeBakeCodecReadU16( p + 6 ); fMinHeight = t3dRuntimeBakeCodecReadF32( p + 8 ); fMaxHeight = t3dRuntimeBakeCodecReadF32( p + 12 ); return nWidth > 0;
 }
 
 PackedByteArray T3DRuntimeBakeCodec::encodeNodeDescriptors( const T3DRegion &rRegion, const T3DRuntimeWorldManifest &rManifest ) {
 	PackedByteArray bytes; const auto &nodes = rRegion.getStreamedNodesRuntimeInternal(); const uint16_t count = ( uint16_t ) MIN( nodes.size(), ( size_t ) UINT16_MAX );
 	eastl::vector<PackedByteArray> states; states.resize( count ); size_t total_bytes = 8u + ( size_t ) count * 96u;
-	for ( uint16_t i = 0u; i < count; ++i ) { const auto &node = nodes[i]; states[i] = node.state.is_empty() ? PackedByteArray() : UtilityFunctions::var_to_bytes( node.state ); total_bytes += ( size_t ) states[i].size(); }
-	if ( !t3dRuntimeBakeCodecResizeBytes( bytes, total_bytes ) ) return PackedByteArray(); t3dByteWriter_t writer( bytes.ptrw(), total_bytes ); writer.writeU32( NODE_MAGIC ); writer.writeU16( BLOB_VERSION ); writer.writeU16( count );
+	for ( uint16_t i = 0u; i < count; ++i ) { const auto &node = nodes[i]; states[i] = node.m_state.is_empty() ? PackedByteArray() : UtilityFunctions::var_to_bytes( node.m_state ); total_bytes += ( size_t ) states[i].size(); }
+	if ( !t3dRuntimeBakeCodecResizeBytes( bytes, total_bytes ) ) return PackedByteArray(); t3dByteWriter_t writer( bytes.ptrw(), total_bytes ); writer.writeU32( s_nNodeMagic ); writer.writeU16( s_nBlobVersion ); writer.writeU16( count );
 	for ( uint16_t i = 0u; i < count; ++i ) {
 		const auto &node = nodes[i]; const int scene_id = rManifest.findSceneDependency( t3dRuntimeBakeCodecDescriptorScenePath( node ) ); const int shadow_id = rManifest.findSceneDependency( t3dRuntimeBakeCodecDescriptorShadowPath( node ) );
 		if ( scene_id < 0 || scene_id > UINT16_MAX ) return PackedByteArray();
-		writer.writeU64( ( uint64_t ) node.id ); writer.writeU16( ( uint16_t ) scene_id ); writer.writeU16( shadow_id >= 0 && shadow_id <= UINT16_MAX ? ( uint16_t ) shadow_id : UINT16_MAX );
-		writer.writeI32( node.flags ); writer.writeU16( ( uint16_t ) node.hlodMinLevel ); writer.writeU16( ( uint16_t ) node.boundaryPolicy ); writer.writeI32( node.coverageMin.x ); writer.writeI32( node.coverageMin.y ); writer.writeI32( node.coverageMax.x ); writer.writeI32( node.coverageMax.y );
-		writer.writeU16( ( uint16_t ) node.lightingClass ); writer.writeU16( ( uint16_t ) node.bakedLightingMode ); uint32_t bools = node.bContributeBakedGi ? 1u : 0u; if ( node.bReceiveDynamicDirectional ) bools |= 2u; if ( node.bDynamicShadowEligible ) bools |= 4u; writer.writeU32( bools );
-		for ( int row = 0; row < 3; ++row ) { writer.writeF32( node.transform.basis[row].x ); writer.writeF32( node.transform.basis[row].y ); writer.writeF32( node.transform.basis[row].z ); }
-		writer.writeF32( node.transform.origin.x ); writer.writeF32( node.transform.origin.y ); writer.writeF32( node.transform.origin.z ); const PackedByteArray &state = states[i]; writer.writeU32( ( uint32_t ) state.size() ); writer.writeBytes( state.ptr(), ( size_t ) state.size() );
+		writer.writeU64( ( uint64_t ) node.m_nId ); writer.writeU16( ( uint16_t ) scene_id ); writer.writeU16( shadow_id >= 0 && shadow_id <= UINT16_MAX ? ( uint16_t ) shadow_id : UINT16_MAX );
+		writer.writeI32( node.m_nFlags ); writer.writeU16( ( uint16_t ) node.m_nHlodMinLevel ); writer.writeU16( ( uint16_t ) node.m_nBoundaryPolicy ); writer.writeI32( node.m_coverageMin.x ); writer.writeI32( node.m_coverageMin.y ); writer.writeI32( node.m_coverageMax.x ); writer.writeI32( node.m_coverageMax.y );
+		writer.writeU16( ( uint16_t ) node.m_nLightingClass ); writer.writeU16( ( uint16_t ) node.m_nBakedLightingMode ); uint32_t bools = node.m_bContributeBakedGi ? 1u : 0u; if ( node.m_bReceiveDynamicDirectional ) bools |= 2u; if ( node.m_bDynamicShadowEligible ) bools |= 4u; writer.writeU32( bools );
+		for ( int row = 0; row < 3; ++row ) { writer.writeF32( node.m_transform.basis[row].x ); writer.writeF32( node.m_transform.basis[row].y ); writer.writeF32( node.m_transform.basis[row].z ); }
+		writer.writeF32( node.m_transform.origin.x ); writer.writeF32( node.m_transform.origin.y ); writer.writeF32( node.m_transform.origin.z ); const PackedByteArray &state = states[i]; writer.writeU32( ( uint32_t ) state.size() ); writer.writeBytes( state.ptr(), ( size_t ) state.size() );
 	}
 	return writer.complete() ? bytes : PackedByteArray();
 }
 
 bool T3DRuntimeBakeCodec::decodeNodeDescriptors( const PackedByteArray &rBlob, const T3DRuntimeWorldManifest &rManifest, T3DRegion &rRegion ) {
-	if ( rBlob.size() < 8 ) return false; const uint8_t *p = rBlob.ptr(); if ( t3dRuntimeBakeCodecReadU32( p ) != NODE_MAGIC || t3dRuntimeBakeCodecReadU16( p + 4 ) != BLOB_VERSION ) return false; const uint16_t count = t3dRuntimeBakeCodecReadU16( p + 6 ); size_t offset = 8u;
+	if ( rBlob.size() < 8 ) return false; const uint8_t *p = rBlob.ptr(); if ( t3dRuntimeBakeCodecReadU32( p ) != s_nNodeMagic || t3dRuntimeBakeCodecReadU16( p + 4 ) != s_nBlobVersion ) return false; const uint16_t count = t3dRuntimeBakeCodecReadU16( p + 6 ); size_t offset = 8u;
 	eastl::vector<t3dStreamedNodeRuntimeDescriptor_t> nodes; nodes.reserve( count );
 	for ( uint16_t i = 0u; i < count; ++i ) {
-		static constexpr size_t fixed = 8u + 2u + 2u + 4u + 2u + 2u + 16u + 2u + 2u + 4u + 48u + 4u;
-		if ( offset + fixed > ( size_t ) rBlob.size() ) return false; t3dStreamedNodeRuntimeDescriptor_t node;
-		node.id = ( int64_t ) t3dRuntimeBakeCodecReadU64( p + offset ); offset += 8; const uint16_t scene_id = t3dRuntimeBakeCodecReadU16( p + offset ); offset += 2; const uint16_t shadow_id = t3dRuntimeBakeCodecReadU16( p + offset ); offset += 2;
-		node.scenePath = rManifest.getSceneDependency( scene_id ); if ( node.scenePath.is_empty() ) return false; if ( shadow_id != UINT16_MAX ) node.shadowProxyScenePath = rManifest.getSceneDependency( shadow_id );
-		node.flags = t3dRuntimeBakeCodecReadI32( p + offset ); offset += 4; node.hlodMinLevel = t3dRuntimeBakeCodecReadU16( p + offset ); offset += 2; node.boundaryPolicy = t3dRuntimeBakeCodecReadU16( p + offset ); offset += 2;
-		node.coverageMin.x = t3dRuntimeBakeCodecReadI32( p + offset ); offset += 4; node.coverageMin.y = t3dRuntimeBakeCodecReadI32( p + offset ); offset += 4; node.coverageMax.x = t3dRuntimeBakeCodecReadI32( p + offset ); offset += 4; node.coverageMax.y = t3dRuntimeBakeCodecReadI32( p + offset ); offset += 4;
-		node.lightingClass = t3dRuntimeBakeCodecReadU16( p + offset ); offset += 2; node.bakedLightingMode = t3dRuntimeBakeCodecReadU16( p + offset ); offset += 2; const uint32_t bools = t3dRuntimeBakeCodecReadU32( p + offset ); offset += 4;
-		node.bContributeBakedGi = ( bools & 1u ) != 0u; node.bReceiveDynamicDirectional = ( bools & 2u ) != 0u; node.bDynamicShadowEligible = ( bools & 4u ) != 0u;
+		static constexpr size_t s_nFixed = 8u + 2u + 2u + 4u + 2u + 2u + 16u + 2u + 2u + 4u + 48u + 4u;
+		if ( offset + s_nFixed > ( size_t ) rBlob.size() ) return false; t3dStreamedNodeRuntimeDescriptor_t node;
+		node.m_nId = ( int64_t ) t3dRuntimeBakeCodecReadU64( p + offset ); offset += 8; const uint16_t scene_id = t3dRuntimeBakeCodecReadU16( p + offset ); offset += 2; const uint16_t shadow_id = t3dRuntimeBakeCodecReadU16( p + offset ); offset += 2;
+		node.m_scenePath = rManifest.getSceneDependency( scene_id ); if ( node.m_scenePath.is_empty() ) return false; if ( shadow_id != UINT16_MAX ) node.m_shadowProxyScenePath = rManifest.getSceneDependency( shadow_id );
+		node.m_nFlags = t3dRuntimeBakeCodecReadI32( p + offset ); offset += 4; node.m_nHlodMinLevel = t3dRuntimeBakeCodecReadU16( p + offset ); offset += 2; node.m_nBoundaryPolicy = t3dRuntimeBakeCodecReadU16( p + offset ); offset += 2;
+		node.m_coverageMin.x = t3dRuntimeBakeCodecReadI32( p + offset ); offset += 4; node.m_coverageMin.y = t3dRuntimeBakeCodecReadI32( p + offset ); offset += 4; node.m_coverageMax.x = t3dRuntimeBakeCodecReadI32( p + offset ); offset += 4; node.m_coverageMax.y = t3dRuntimeBakeCodecReadI32( p + offset ); offset += 4;
+		node.m_nLightingClass = t3dRuntimeBakeCodecReadU16( p + offset ); offset += 2; node.m_nBakedLightingMode = t3dRuntimeBakeCodecReadU16( p + offset ); offset += 2; const uint32_t bools = t3dRuntimeBakeCodecReadU32( p + offset ); offset += 4;
+		node.m_bContributeBakedGi = ( bools & 1u ) != 0u; node.m_bReceiveDynamicDirectional = ( bools & 2u ) != 0u; node.m_bDynamicShadowEligible = ( bools & 4u ) != 0u;
 		Basis basis; for ( int row = 0; row < 3; ++row ) basis[row] = Vector3( t3dRuntimeBakeCodecReadF32( p + offset + row * 12 ), t3dRuntimeBakeCodecReadF32( p + offset + row * 12 + 4 ), t3dRuntimeBakeCodecReadF32( p + offset + row * 12 + 8 ) ); offset += 36;
-		const Vector3 origin( t3dRuntimeBakeCodecReadF32( p + offset ), t3dRuntimeBakeCodecReadF32( p + offset + 4 ), t3dRuntimeBakeCodecReadF32( p + offset + 8 ) ); offset += 12; node.transform = Transform3D( basis, origin );
+		const Vector3 origin( t3dRuntimeBakeCodecReadF32( p + offset ), t3dRuntimeBakeCodecReadF32( p + offset + 4 ), t3dRuntimeBakeCodecReadF32( p + offset + 8 ) ); offset += 12; node.m_transform = Transform3D( basis, origin );
 		const uint32_t state_bytes = t3dRuntimeBakeCodecReadU32( p + offset ); offset += 4; if ( state_bytes > ( size_t ) rBlob.size() - offset ) return false;
-		if ( state_bytes > 0u ) { PackedByteArray state; state.resize( state_bytes ); std::memcpy( state.ptrw(), p + offset, state_bytes ); const Variant decoded = UtilityFunctions::bytes_to_var( state, false ); if ( decoded.get_type() == Variant::DICTIONARY ) node.state = decoded; } offset += state_bytes;
+		if ( state_bytes > 0u ) { PackedByteArray state; state.resize( state_bytes ); std::memcpy( state.ptrw(), p + offset, state_bytes ); const Variant decoded = UtilityFunctions::bytes_to_var( state, false ); if ( decoded.get_type() == Variant::DICTIONARY ) node.m_state = decoded; } offset += state_bytes;
 		nodes.push_back( node );
 	}
 	if ( offset != ( size_t ) rBlob.size() ) return false; rRegion.adoptCookedStreamedNodeRuntimeInternal( eastl::move( nodes ) ); return true;
@@ -259,36 +259,36 @@ bool T3DRuntimeBakeCodec::decodeNodeDescriptors( const PackedByteArray &rBlob, c
 
 PackedByteArray T3DRuntimeBakeCodec::encodeInstanceMetadata( const T3DRegion &rRegion ) {
 	PackedByteArray bytes; if ( !rRegion.ensureInstanceStoreResident() ) return bytes; const T3DInstanceStore &store = rRegion.getInstanceStore();
-	uint32_t cell_count = 0u; for ( const auto &mesh : store.meshes() ) cell_count += ( uint32_t ) mesh.cells.size();
+	uint32_t cell_count = 0u; for ( const auto &mesh : store.m_meshes() ) cell_count += ( uint32_t ) mesh.m_cells.size();
 	const size_t total_bytes = 16u + ( size_t ) cell_count * 44u; if ( !t3dRuntimeBakeCodecResizeBytes( bytes, total_bytes ) ) return PackedByteArray(); t3dByteWriter_t writer( bytes.ptrw(), total_bytes );
-	writer.writeU32( INSTANCE_META_MAGIC ); writer.writeU16( BLOB_VERSION ); writer.writeU16( ( uint16_t ) store.meshCount() ); writer.writeU32( cell_count ); writer.writeU32( rRegion.getInstanceCount() );
-	uint32_t ordinal = 0u; for ( const auto &mesh : store.meshes() ) for ( const auto &cell : mesh.cells ) {
-		writer.writeU16( ( uint16_t ) mesh.id ); writer.writeU16( 0u ); writer.writeI32( cell.location.x ); writer.writeI32( cell.location.y ); writer.writeU32( ( uint32_t ) cell.transforms.size() ); writer.writeU32( ordinal );
+	writer.writeU32( s_nInstanceMetaMagic ); writer.writeU16( s_nBlobVersion ); writer.writeU16( ( uint16_t ) store.meshCount() ); writer.writeU32( cell_count ); writer.writeU32( rRegion.getInstanceCount() );
+	uint32_t ordinal = 0u; for ( const auto &mesh : store.m_meshes() ) for ( const auto &cell : mesh.m_cells ) {
+		writer.writeU16( ( uint16_t ) mesh.m_nId ); writer.writeU16( 0u ); writer.writeI32( cell.m_location.x ); writer.writeI32( cell.m_location.y ); writer.writeU32( ( uint32_t ) cell.m_transforms.size() ); writer.writeU32( ordinal );
 		Vector3 minimum( INFINITY, INFINITY, INFINITY ), maximum( -INFINITY, -INFINITY, -INFINITY );
-		for ( size_t i = 0; i < cell.transforms.size(); ++i ) { const Vector3 o = cell.transforms.getOrigin( i ); minimum.x = MIN( minimum.x, o.x ); minimum.y = MIN( minimum.y, o.y ); minimum.z = MIN( minimum.z, o.z ); maximum.x = MAX( maximum.x, o.x ); maximum.y = MAX( maximum.y, o.y ); maximum.z = MAX( maximum.z, o.z ); }
-		if ( cell.transforms.empty() ) minimum = maximum = V3_ZERO;
-		writer.writeF32( minimum.x ); writer.writeF32( minimum.y ); writer.writeF32( minimum.z ); writer.writeF32( maximum.x ); writer.writeF32( maximum.y ); writer.writeF32( maximum.z ); ordinal += ( uint32_t ) cell.transforms.size();
+		for ( size_t i = 0; i < cell.m_transforms.size(); ++i ) { const Vector3 o = cell.m_transforms.getOrigin( i ); minimum.x = MIN( minimum.x, o.x ); minimum.y = MIN( minimum.y, o.y ); minimum.z = MIN( minimum.z, o.z ); maximum.x = MAX( maximum.x, o.x ); maximum.y = MAX( maximum.y, o.y ); maximum.z = MAX( maximum.z, o.z ); }
+		if ( cell.m_transforms.empty() ) minimum = maximum = V3_ZERO;
+		writer.writeF32( minimum.x ); writer.writeF32( minimum.y ); writer.writeF32( minimum.z ); writer.writeF32( maximum.x ); writer.writeF32( maximum.y ); writer.writeF32( maximum.z ); ordinal += ( uint32_t ) cell.m_transforms.size();
 	}
 	return writer.complete() ? bytes : PackedByteArray();
 }
 
 bool T3DRuntimeBakeCodec::getInstanceMetadataView( const PackedByteArray &rBlob, t3dInstanceMetadataView_t &rView ) {
 	rView = t3dInstanceMetadataView_t(); if ( rBlob.size() < 16 ) return false; const uint8_t *const p = rBlob.ptr();
-	if ( t3dRuntimeBakeCodecReadU32( p ) != INSTANCE_META_MAGIC || t3dRuntimeBakeCodecReadU16( p + 4 ) != BLOB_VERSION ) return false;
+	if ( t3dRuntimeBakeCodecReadU32( p ) != s_nInstanceMetaMagic || t3dRuntimeBakeCodecReadU16( p + 4 ) != s_nBlobVersion ) return false;
 	const uint16_t mesh_count = t3dRuntimeBakeCodecReadU16( p + 6 ); const uint32_t cell_count = t3dRuntimeBakeCodecReadU32( p + 8 ); const uint32_t instance_count = t3dRuntimeBakeCodecReadU32( p + 12 );
 	if ( cell_count > 1000000u || ( size_t ) rBlob.size() != 16u + ( size_t ) cell_count * 44u ) return false;
-	rView.pRecords = p + 16; rView.nCellCount = cell_count; rView.nInstanceCount = instance_count; rView.nMeshCount = mesh_count; return true;
+	rView.m_pRecords = p + 16; rView.m_nCellCount = cell_count; rView.m_nInstanceCount = instance_count; rView.m_nMeshCount = mesh_count; return true;
 }
 
 t3dRuntimeInstanceCellMetadata_t T3DRuntimeBakeCodec::getInstanceMetadataRecord( const t3dInstanceMetadataView_t &rView, const uint32_t nIndex ) {
-	t3dRuntimeInstanceCellMetadata_t record; if ( rView.pRecords == nullptr || nIndex >= rView.nCellCount ) return record;
-	const uint8_t *p = rView.pRecords + ( size_t ) nIndex * 44u; record.meshId = t3dRuntimeBakeCodecReadU16( p ); p += 4u; record.cell.x = t3dRuntimeBakeCodecReadI32( p ); p += 4u; record.cell.y = t3dRuntimeBakeCodecReadI32( p ); p += 4u; record.instanceCount = t3dRuntimeBakeCodecReadU32( p ); p += 4u; record.ordinal = t3dRuntimeBakeCodecReadU32( p ); p += 4u;
-	const Vector3 minimum( t3dRuntimeBakeCodecReadF32( p ), t3dRuntimeBakeCodecReadF32( p + 4u ), t3dRuntimeBakeCodecReadF32( p + 8u ) ); p += 12u; const Vector3 maximum( t3dRuntimeBakeCodecReadF32( p ), t3dRuntimeBakeCodecReadF32( p + 4u ), t3dRuntimeBakeCodecReadF32( p + 8u ) ); record.originBounds = AABB( minimum, maximum - minimum ); return record;
+	t3dRuntimeInstanceCellMetadata_t record; if ( rView.m_pRecords == nullptr || nIndex >= rView.m_nCellCount ) return record;
+	const uint8_t *p = rView.m_pRecords + ( size_t ) nIndex * 44u; record.m_nMeshId = t3dRuntimeBakeCodecReadU16( p ); p += 4u; record.m_cell.x = t3dRuntimeBakeCodecReadI32( p ); p += 4u; record.m_cell.y = t3dRuntimeBakeCodecReadI32( p ); p += 4u; record.m_nInstanceCount = t3dRuntimeBakeCodecReadU32( p ); p += 4u; record.m_nOrdinal = t3dRuntimeBakeCodecReadU32( p ); p += 4u;
+	const Vector3 minimum( t3dRuntimeBakeCodecReadF32( p ), t3dRuntimeBakeCodecReadF32( p + 4u ), t3dRuntimeBakeCodecReadF32( p + 8u ) ); p += 12u; const Vector3 maximum( t3dRuntimeBakeCodecReadF32( p ), t3dRuntimeBakeCodecReadF32( p + 4u ), t3dRuntimeBakeCodecReadF32( p + 8u ) ); record.m_originBounds = AABB( minimum, maximum - minimum ); return record;
 }
 
 bool T3DRuntimeBakeCodec::decodeInstanceMetadata( const PackedByteArray &rBlob, eastl::vector<t3dRuntimeInstanceCellMetadata_t> &rCells ) {
-	rCells.clear(); t3dInstanceMetadataView_t view; if ( !getInstanceMetadataView( rBlob, view ) ) return false; rCells.resize( view.nCellCount );
-	for ( uint32_t i = 0u; i < view.nCellCount; ++i ) rCells[i] = getInstanceMetadataRecord( view, i ); return true;
+	rCells.clear(); t3dInstanceMetadataView_t view; if ( !getInstanceMetadataView( rBlob, view ) ) return false; rCells.resize( view.m_nCellCount );
+	for ( uint32_t i = 0u; i < view.m_nCellCount; ++i ) rCells[i] = getInstanceMetadataRecord( view, i ); return true;
 }
 
 PackedByteArray T3DRuntimeBakeCodec::encodeLightingReceivers( const T3DRegion &rRegion ) {
@@ -296,7 +296,7 @@ PackedByteArray T3DRuntimeBakeCodec::encodeLightingReceivers( const T3DRegion &r
 	if ( users.is_empty() || ( users.size() % 4 ) != 0 ) return bytes; const uint32_t count = ( uint32_t ) ( users.size() / 4 );
 	eastl::vector<CharString> paths; paths.resize( count ); size_t total_bytes = 12u + ( size_t ) count * 28u;
 	for ( uint32_t record = 0u; record < count; ++record ) { paths[record] = String( ( NodePath ) users[( int ) record * 4] ).utf8(); total_bytes += ( size_t ) MAX( 0, paths[record].length() ); }
-	if ( !t3dRuntimeBakeCodecResizeBytes( bytes, total_bytes ) ) return PackedByteArray(); t3dByteWriter_t writer( bytes.ptrw(), total_bytes ); writer.writeU32( LIGHTING_MAGIC ); writer.writeU16( BLOB_VERSION ); writer.writeU16( 0u ); writer.writeU32( count );
+	if ( !t3dRuntimeBakeCodecResizeBytes( bytes, total_bytes ) ) return PackedByteArray(); t3dByteWriter_t writer( bytes.ptrw(), total_bytes ); writer.writeU32( s_nLightingMagic ); writer.writeU16( s_nBlobVersion ); writer.writeU16( 0u ); writer.writeU32( count );
 	for ( uint32_t record = 0u; record < count; ++record ) {
 		const int i = ( int ) record * 4; const Rect2 uv = users[i + 1]; const int32_t slice = ( int32_t ) ( ( int ) users[i + 2] ); const int32_t sub_instance = ( int32_t ) ( ( int ) users[i + 3] ); const CharString &utf8 = paths[record]; const uint32_t path_bytes = ( uint32_t ) MAX( 0, utf8.length() );
 		writer.writeU32( path_bytes ); writer.writeBytes( utf8.get_data(), path_bytes ); writer.writeF32( uv.position.x ); writer.writeF32( uv.position.y ); writer.writeF32( uv.size.x ); writer.writeF32( uv.size.y ); writer.writeI32( slice ); writer.writeI32( sub_instance );
@@ -306,29 +306,29 @@ PackedByteArray T3DRuntimeBakeCodec::encodeLightingReceivers( const T3DRegion &r
 
 bool T3DRuntimeBakeCodec::beginLightingReceivers( const PackedByteArray &rBlob, t3dLightingReceiverCursor_t &rCursor ) {
 	rCursor = t3dLightingReceiverCursor_t(); if ( rBlob.size() < 12 ) return false; const uint8_t *const p = rBlob.ptr();
-	if ( t3dRuntimeBakeCodecReadU32( p ) != LIGHTING_MAGIC || t3dRuntimeBakeCodecReadU16( p + 4 ) != BLOB_VERSION ) return false; const uint32_t count = t3dRuntimeBakeCodecReadU32( p + 8 ); if ( count > 1000000u ) return false;
+	if ( t3dRuntimeBakeCodecReadU32( p ) != s_nLightingMagic || t3dRuntimeBakeCodecReadU16( p + 4 ) != s_nBlobVersion ) return false; const uint32_t count = t3dRuntimeBakeCodecReadU32( p + 8 ); if ( count > 1000000u ) return false;
 	size_t offset = 12u; for ( uint32_t i = 0u; i < count; ++i ) { if ( offset + 4u > ( size_t ) rBlob.size() ) return false; const uint32_t path_bytes = t3dRuntimeBakeCodecReadU32( p + offset ); offset += 4u; if ( path_bytes > 1024u * 1024u || offset + path_bytes + 24u > ( size_t ) rBlob.size() ) return false; offset += path_bytes + 24u; }
-	if ( offset != ( size_t ) rBlob.size() ) return false; rCursor.pData = p; rCursor.nSize = ( size_t ) rBlob.size(); rCursor.nOffset = 12u; rCursor.nCount = count; return true;
+	if ( offset != ( size_t ) rBlob.size() ) return false; rCursor.m_pData = p; rCursor.m_nSize = ( size_t ) rBlob.size(); rCursor.m_iOffset = 12u; rCursor.m_nCount = count; return true;
 }
 
 bool T3DRuntimeBakeCodec::nextLightingReceiver( t3dLightingReceiverCursor_t &rCursor, t3dRuntimeLightingReceiverRecord_t &rReceiver ) {
-	if ( rCursor.pData == nullptr || rCursor.nIndex >= rCursor.nCount || rCursor.nOffset + 4u > rCursor.nSize ) return false; const uint8_t *const p = rCursor.pData; const uint32_t path_bytes = t3dRuntimeBakeCodecReadU32( p + rCursor.nOffset ); rCursor.nOffset += 4u;
-	if ( rCursor.nOffset + path_bytes + 24u > rCursor.nSize ) return false; rReceiver.path = NodePath( String::utf8( reinterpret_cast<const char *>( p + rCursor.nOffset ), ( int ) path_bytes ) ); rCursor.nOffset += path_bytes;
-	rReceiver.uvScale = Rect2( t3dRuntimeBakeCodecReadF32( p + rCursor.nOffset ), t3dRuntimeBakeCodecReadF32( p + rCursor.nOffset + 4u ), t3dRuntimeBakeCodecReadF32( p + rCursor.nOffset + 8u ), t3dRuntimeBakeCodecReadF32( p + rCursor.nOffset + 12u ) ); rCursor.nOffset += 16u; rReceiver.sliceIndex = t3dRuntimeBakeCodecReadI32( p + rCursor.nOffset ); rCursor.nOffset += 4u; rReceiver.subInstance = t3dRuntimeBakeCodecReadI32( p + rCursor.nOffset ); rCursor.nOffset += 4u; ++rCursor.nIndex; return !rReceiver.path.is_empty();
+	if ( rCursor.m_pData == nullptr || rCursor.m_iIndex >= rCursor.m_nCount || rCursor.m_iOffset + 4u > rCursor.m_nSize ) return false; const uint8_t *const p = rCursor.m_pData; const uint32_t path_bytes = t3dRuntimeBakeCodecReadU32( p + rCursor.m_iOffset ); rCursor.m_iOffset += 4u;
+	if ( rCursor.m_iOffset + path_bytes + 24u > rCursor.m_nSize ) return false; rReceiver.m_path = NodePath( String::utf8( reinterpret_cast<const char *>( p + rCursor.m_iOffset ), ( int ) path_bytes ) ); rCursor.m_iOffset += path_bytes;
+	rReceiver.m_uvScale = Rect2( t3dRuntimeBakeCodecReadF32( p + rCursor.m_iOffset ), t3dRuntimeBakeCodecReadF32( p + rCursor.m_iOffset + 4u ), t3dRuntimeBakeCodecReadF32( p + rCursor.m_iOffset + 8u ), t3dRuntimeBakeCodecReadF32( p + rCursor.m_iOffset + 12u ) ); rCursor.m_iOffset += 16u; rReceiver.m_iSliceIndex = t3dRuntimeBakeCodecReadI32( p + rCursor.m_iOffset ); rCursor.m_iOffset += 4u; rReceiver.m_nSubInstance = t3dRuntimeBakeCodecReadI32( p + rCursor.m_iOffset ); rCursor.m_iOffset += 4u; ++rCursor.m_iIndex; return !rReceiver.m_path.is_empty();
 }
 
 bool T3DRuntimeBakeCodec::decodeLightingReceivers( const PackedByteArray &rBlob, eastl::vector<t3dRuntimeLightingReceiverRecord_t> &rReceivers ) {
-	rReceivers.clear(); t3dLightingReceiverCursor_t cursor; if ( !beginLightingReceivers( rBlob, cursor ) ) return false; rReceivers.resize( cursor.nCount );
-	for ( uint32_t i = 0u; i < cursor.nCount; ++i ) if ( !nextLightingReceiver( cursor, rReceivers[i] ) ) { rReceivers.clear(); return false; } return true;
+	rReceivers.clear(); t3dLightingReceiverCursor_t cursor; if ( !beginLightingReceivers( rBlob, cursor ) ) return false; rReceivers.resize( cursor.m_nCount );
+	for ( uint32_t i = 0u; i < cursor.m_nCount; ++i ) if ( !nextLightingReceiver( cursor, rReceivers[i] ) ) { rReceivers.clear(); return false; } return true;
 }
 
 PackedByteArray T3DRuntimeBakeCodec::encodeMultimeshFastStart( const T3DRegion &rRegion, const int nMinimumCellInstances ) {
 	PackedByteArray bytes; if ( !rRegion.ensureInstanceStoreResident() ) return bytes; const T3DInstanceStore &store = rRegion.getInstanceStore(); uint32_t eligible = 0u; size_t total_bytes = 12u;
-	for ( const auto &mesh : store.meshes() ) for ( const auto &cell : mesh.cells ) if ( ( int ) cell.transforms.size() >= nMinimumCellInstances ) { ++eligible; total_bytes += 16u + cell.transforms.size() * 64u; }
-	if ( eligible == 0u || !t3dRuntimeBakeCodecResizeBytes( bytes, total_bytes ) ) return bytes; t3dByteWriter_t writer( bytes.ptrw(), total_bytes ); writer.writeU32( MULTIMESH_MAGIC ); writer.writeU16( BLOB_VERSION ); writer.writeU16( 16u ); writer.writeU32( eligible );
-	for ( const auto &mesh : store.meshes() ) for ( const auto &cell : mesh.cells ) {
-		if ( ( int ) cell.transforms.size() < nMinimumCellInstances ) continue; writer.writeU16( ( uint16_t ) mesh.id ); writer.writeU16( 0u ); writer.writeI32( cell.location.x ); writer.writeI32( cell.location.y ); writer.writeU32( ( uint32_t ) cell.transforms.size() );
-		for ( size_t i = 0; i < cell.transforms.size(); ++i ) { const Transform3D t = cell.transforms[i]; for ( int row = 0; row < 3; ++row ) { writer.writeF32( t.basis[row].x ); writer.writeF32( t.basis[row].y ); writer.writeF32( t.basis[row].z ); writer.writeF32( row == 0 ? t.origin.x : row == 1 ? t.origin.y : t.origin.z ); } const Color c = cell.getColor( i ); writer.writeF32( c.r ); writer.writeF32( c.g ); writer.writeF32( c.b ); writer.writeF32( c.a ); }
+	for ( const auto &mesh : store.m_meshes() ) for ( const auto &cell : mesh.m_cells ) if ( ( int ) cell.m_transforms.size() >= nMinimumCellInstances ) { ++eligible; total_bytes += 16u + cell.m_transforms.size() * 64u; }
+	if ( eligible == 0u || !t3dRuntimeBakeCodecResizeBytes( bytes, total_bytes ) ) return bytes; t3dByteWriter_t writer( bytes.ptrw(), total_bytes ); writer.writeU32( s_nMultimeshMagic ); writer.writeU16( s_nBlobVersion ); writer.writeU16( 16u ); writer.writeU32( eligible );
+	for ( const auto &mesh : store.m_meshes() ) for ( const auto &cell : mesh.m_cells ) {
+		if ( ( int ) cell.m_transforms.size() < nMinimumCellInstances ) continue; writer.writeU16( ( uint16_t ) mesh.m_nId ); writer.writeU16( 0u ); writer.writeI32( cell.m_location.x ); writer.writeI32( cell.m_location.y ); writer.writeU32( ( uint32_t ) cell.m_transforms.size() );
+		for ( size_t i = 0; i < cell.m_transforms.size(); ++i ) { const Transform3D t = cell.m_transforms[i]; for ( int row = 0; row < 3; ++row ) { writer.writeF32( t.basis[row].x ); writer.writeF32( t.basis[row].y ); writer.writeF32( t.basis[row].z ); writer.writeF32( row == 0 ? t.origin.x : row == 1 ? t.origin.y : t.origin.z ); } const Color c = cell.getColor( i ); writer.writeF32( c.r ); writer.writeF32( c.g ); writer.writeF32( c.b ); writer.writeF32( c.a ); }
 	}
 	return writer.complete() ? bytes : PackedByteArray();
 }
@@ -341,7 +341,7 @@ bool T3DRuntimeBakeCodec::findMultimeshFastStart(
 	nInstanceCount = 0u;
 	if ( rBlob.size() < 12 ) return false;
 	const uint8_t *const p = rBlob.ptr();
-	if ( t3dRuntimeBakeCodecReadU32( p ) != MULTIMESH_MAGIC || t3dRuntimeBakeCodecReadU16( p + 4 ) != BLOB_VERSION || t3dRuntimeBakeCodecReadU16( p + 6 ) != 16u ) return false;
+	if ( t3dRuntimeBakeCodecReadU32( p ) != s_nMultimeshMagic || t3dRuntimeBakeCodecReadU16( p + 4 ) != s_nBlobVersion || t3dRuntimeBakeCodecReadU16( p + 6 ) != 16u ) return false;
 	const uint32_t record_count = t3dRuntimeBakeCodecReadU32( p + 8 );
 	if ( record_count > 1000000u ) return false;
 	size_t offset = 12u;

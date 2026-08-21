@@ -51,34 +51,34 @@ typedef enum t3dAverageMode_e {
 } t3dAverageMode_t;
 
 typedef struct t3dAxisSample_s {
-	real_t fOffset = 0.f;
-	real_t fGlobalPosition = 0.f;
-	int32_t regionLocation = 0;
-	int32_t mapPixel = 0;
-	real_t fCenteredUv = 0.f;
+	real_t m_fOffset = 0.f;
+	real_t m_fGlobalPosition = 0.f;
+	int32_t m_nRegionLocation = 0;
+	int32_t m_nMapPixel = 0;
+	real_t m_fCenteredUv = 0.f;
 } t3dAxisSample_t;
 
 typedef struct t3dRegionMapCache_s {
-	Ref<T3DRegion> pRegion;
-	Image *pMap = nullptr;
-	Image *pControlMap = nullptr;
-	PackedByteArray mapData;
-	PackedByteArray controlData;
-	uint8_t *pMapBytes = nullptr;
-	const uint8_t *pControlBytes = nullptr;
-	Vector2i location = V2I_ZERO;
-	Image::Format mapFormat = Image::FORMAT_MAX;
-	bool bMapHasMipmaps = false;
-	bool bMapWasImplicit = false;
-	bool bDirectAccess = false;
-	bool bModified = false;
+	Ref<T3DRegion> m_region;
+	Image *m_pMap = nullptr;
+	Image *m_controlMap = nullptr;
+	PackedByteArray m_mapData;
+	PackedByteArray m_controlData;
+	uint8_t *m_pMapBytes = nullptr;
+	const uint8_t *m_pControlBytes = nullptr;
+	Vector2i m_location = V2I_ZERO;
+	Image::Format m_mapFormat = Image::FORMAT_MAX;
+	bool m_bMapHasMipmaps = false;
+	bool m_bMapWasImplicit = false;
+	bool m_bDirectAccess = false;
+	bool m_bModified = false;
 } t3dRegionMapCache_t;
 
 typedef struct t3dComputeWrite_s {
-	size_t iRegionIndex = 0u;
-	Vector2i mapPixel = V2I_ZERO;
-	uint32_t sourceValue = 0u;
-	Vector3 worldPosition = V3_ZERO;
+	size_t m_iRegionIndex = 0u;
+	Vector2i m_mapPixel = V2I_ZERO;
+	uint32_t m_nSourceValue = 0u;
+	Vector3 m_worldPosition = V3_ZERO;
 } t3dComputeWrite_t;
 
 class T3DEditor : public Object {

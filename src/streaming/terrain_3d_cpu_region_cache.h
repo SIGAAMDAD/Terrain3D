@@ -22,17 +22,17 @@ class T3DSamplingStorage;
 
 
 typedef struct t3dCpuRegionCacheStats_s {
-	bool bEnabled = false;
-	bool bSelectionPending = true;
-	int nCapacity = 0;
-	int nResident = 0;
-	int nDesiredLastTick = 0;
-	int nLoadsLastTick = 0;
-	int nEvictionsLastTick = 0;
-	int nPinnedLastTick = 0;
-	uint32_t nStallFlagsLastTick = 0u;
-	size_t nLoadBytesLastTick = 0u;
-	uint64_t nServiceUsecLast = 0u;
+	bool m_bEnabled = false;
+	bool m_bSelectionPending = true;
+	int m_nCapacity = 0;
+	int m_nResident = 0;
+	int m_nDesiredLastTick = 0;
+	int m_nLoadsLastTick = 0;
+	int m_nEvictionsLastTick = 0;
+	int m_nPinnedLastTick = 0;
+	uint32_t m_nStallFlagsLastTick = 0u;
+	size_t m_nLoadBytesLastTick = 0u;
+	uint64_t m_nServiceUsecLast = 0u;
 } t3dCpuRegionCacheStats_t;
 
 class T3DCpuRegionCache {
@@ -99,10 +99,10 @@ private:
 	int m_nAsyncReadyLastTick = 0;
 	int m_nAsyncPendingLastTick = 0;
 	int m_nAsyncOutstanding = 0;
-	uint8_t m_szAsyncState[TERRAIN3D_MAX_REGION_SLOTS] = {};
+	uint8_t m_szAsyncState[s_nMaxRegionSlots] = {};
 	Vector2i m_center = V2I_MAX;
-	Vector2i m_szLocations[TERRAIN3D_CPU_CACHE_MAX_LAYERS] = {};
-	uint8_t m_szRegionMap[TERRAIN3D_MAX_REGION_SLOTS] = {};
+	Vector2i m_szLocations[s_nCpuCacheMaxLayers] = {};
+	uint8_t m_szRegionMap[s_nMaxRegionSlots] = {};
 
 	int calculateCapacity( void ) const;
 	int findSlot( const Vector2i &vLocation ) const;

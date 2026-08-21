@@ -6,7 +6,7 @@
 
 static template <typename TLeft, typename TRight> EA_FORCE_INLINE void t3dUnitTestingLogDiffers( const TLeft &rA, const TRight &rB, const String &rDescription, const bool bExpected ) { const bool bDiffersResult = differs( rA, rB ); const String result = bDiffersResult == bExpected ? "PASSED" : "FAILED"; UtilityFunctions::print( rDescription, ": differs(", rA, ", ", rB, ") = ", bDiffersResult, " - ", result ); }
 
-void testDiffers( void ) {
+void t3dTestDiffers( void ) {
 	UtilityFunctions::print( "=== Testing differs function ===" );
 
 	// 1. Scalars: int, float (should use ==, differs if values differ)

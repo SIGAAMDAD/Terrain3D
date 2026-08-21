@@ -37,23 +37,23 @@
 #define EASTL_NAME_VAL( x ) x
 
 typedef struct t3dEastlAllocationStats_s {
-	size_t nLiveBytes = 0u;
-	size_t nPeakBytes = 0u;
-	size_t nLiveAllocations = 0u;
-	size_t nTotalAllocations = 0u;
-	size_t nFailedAllocations = 0u;
-	size_t nOverflowAllocations = 0u;
-	size_t nOverflowLiveBytes = 0u;
+	size_t m_nLiveBytes = 0u;
+	size_t m_nPeakBytes = 0u;
+	size_t m_nLiveAllocations = 0u;
+	size_t m_nTotalAllocations = 0u;
+	size_t m_nFailedAllocations = 0u;
+	size_t m_nOverflowAllocations = 0u;
+	size_t m_nOverflowLiveBytes = 0u;
 } t3dEastlAllocationStats_t;
 
 typedef struct t3dEastlAllocationHeader_s {
-	void *pRaw = nullptr;
-	T3DMemoryZone *pZone = nullptr;
-	size_t nSize = 0u;
-	uint8_t nOrigin = TERRAIN3D_ALLOCATION_BOOTSTRAP;
+	void *m_pRaw = nullptr;
+	T3DMemoryZone *m_pZone = nullptr;
+	size_t m_nSize = 0u;
+	uint8_t m_nOrigin = TERRAIN3D_ALLOCATION_BOOTSTRAP;
 } t3dEastlAllocationHeader_t;
 
-inline constexpr size_t TERRAIN3D_EASTL_ALLOCATION_HEADER_SIZE = sizeof( t3dEastlAllocationHeader_t );
+static constexpr size_t s_nEastlAllocationHeaderSize = sizeof( t3dEastlAllocationHeader_t );
 
 class T3DEastlAllocator {
 	using AllocationHeader = t3dEastlAllocationHeader_t;
@@ -93,7 +93,7 @@ public:
 		if ( alignment < alignof( void * ) ) alignment = alignof( void * );
 		if ( n == 0u ) return nullptr;
 		if ( ( alignment & ( alignment - 1u ) ) != 0u ) { recordFailure(); return nullptr; }
-		const size_t header_size = TERRAIN3D_EASTL_ALLOCATION_HEADER_SIZE;
+		const size_t header_size = s_nEastlAllocationHeaderSize;
 		const size_t alignment_slack = alignment - 1u;
 		if ( n > std::numeric_limits<size_t>::max() - header_size - alignment_slack ) { recordFailure(); return nullptr; }
 		const size_t total = n + header_size + alignment_slack;
@@ -110,10 +110,10 @@ public:
 		uintptr_t aligned = ( begin + effective_offset + alignment_slack ) & ~( uintptr_t ) alignment_slack;
 		aligned -= effective_offset;
 		AllocationHeader header;
-		header.pRaw = pRaw;
-		header.pZone = pZone;
+		header.m_pRaw = pRaw;
+		header.m_pZone = pZone;
 		header.nSize = n;
-		header.nOrigin = origin;
+		header.m_nOrigin = origin;
 		std::memcpy( ( void * ) ( aligned - header_size ), &header, header_size );
 		recordAllocation( n, origin );
 		return ( void * ) aligned;
@@ -125,20 +125,20 @@ public:
 		std::memcpy( &header, ( unsigned char * ) p - sizeof( AllocationHeader ), sizeof( AllocationHeader ) );
 		s_nLiveBytes.fetch_sub( header.nSize, std::memory_order_relaxed );
 		s_nLiveAllocations.fetch_sub( 1u, std::memory_order_relaxed );
-		if ( header.nOrigin == TERRAIN3D_ALLOCATION_OVERFLOW ) s_nOverflowLiveBytes.fetch_sub( header.nSize, std::memory_order_relaxed );
-		if ( header.nOrigin == TERRAIN3D_ALLOCATION_ZONE && header.pZone ) header.pZone->deallocate( header.pRaw );
-		else t3dMemoryRelease( header.pRaw );
+		if ( header.m_nOrigin == TERRAIN3D_ALLOCATION_OVERFLOW ) s_nOverflowLiveBytes.fetch_sub( header.nSize, std::memory_order_relaxed );
+		if ( header.m_nOrigin == TERRAIN3D_ALLOCATION_ZONE && header.m_pZone ) header.m_pZone->deallocate( header.m_pRaw );
+		else t3dMemoryRelease( header.m_pRaw );
 	}
 
 	static t3dEastlAllocationStats_t getAllocationStats( void ) {
 		t3dEastlAllocationStats_t stats;
-		stats.nLiveBytes = s_nLiveBytes.load( std::memory_order_relaxed );
-		stats.nPeakBytes = s_nPeakBytes.load( std::memory_order_relaxed );
-		stats.nLiveAllocations = s_nLiveAllocations.load( std::memory_order_relaxed );
-		stats.nTotalAllocations = s_nTotalAllocations.load( std::memory_order_relaxed );
-		stats.nFailedAllocations = s_nFailedAllocations.load( std::memory_order_relaxed );
-		stats.nOverflowAllocations = s_nOverflowAllocations.load( std::memory_order_relaxed );
-		stats.nOverflowLiveBytes = s_nOverflowLiveBytes.load( std::memory_order_relaxed );
+		stats.m_nLiveBytes = s_nLiveBytes.load( std::memory_order_relaxed );
+		stats.m_nPeakBytes = s_nPeakBytes.load( std::memory_order_relaxed );
+		stats.m_nLiveAllocations = s_nLiveAllocations.load( std::memory_order_relaxed );
+		stats.m_nTotalAllocations = s_nTotalAllocations.load( std::memory_order_relaxed );
+		stats.m_nFailedAllocations = s_nFailedAllocations.load( std::memory_order_relaxed );
+		stats.m_nOverflowAllocations = s_nOverflowAllocations.load( std::memory_order_relaxed );
+		stats.m_nOverflowLiveBytes = s_nOverflowLiveBytes.load( std::memory_order_relaxed );
 		return stats;
 	}
 

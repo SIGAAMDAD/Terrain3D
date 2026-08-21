@@ -14,20 +14,20 @@
 
 
 typedef struct t3dMemoryArenaSlice_s {
-	size_t offset = 0u;
-	size_t size = 0u;
-	size_t alignment = 1u;
-	bool high = false;
-	bool reserved = false;
+	size_t m_iOffset = 0u;
+	size_t m_nSize = 0u;
+	size_t m_nAlignment = 1u;
+	bool m_bHigh = false;
+	bool m_bReserved = false;
 
-	EA_FORCE_INLINE bool valid( void ) const { return reserved; }
+	EA_FORCE_INLINE bool valid( void ) const { return m_bReserved; }
 } t3dMemoryArenaSlice_t;
 
 typedef struct t3dMemoryArenaSpan_s {
-	uint8_t *data = nullptr;
-	size_t size = 0u;
+	uint8_t *m_pData = nullptr;
+	size_t m_nSize = 0u;
 
-	EA_FORCE_INLINE bool valid( void ) const { return data != nullptr || size == 0u; }
+	EA_FORCE_INLINE bool valid( void ) const { return m_pData != nullptr || m_nSize == 0u; }
 } t3dMemoryArenaSpan_t;
 
 class T3DMemoryArenaLayout {
@@ -51,7 +51,7 @@ private:
 	size_t m_nCapacity = 0u;
 	size_t m_nLowCursor = 0u;
 	size_t m_nHighCursor = 0u;
-	size_t m_nMaxAlignment = TERRAIN3D_ARENA_DEFAULT_BASE_ALIGNMENT;
+	size_t m_nMaxAlignment = s_nArenaDefaultBaseAlignment;
 	bool m_bValid = true;
 	bool m_bSealed = false;
 
@@ -86,7 +86,7 @@ private:
 	void *m_pRaw = nullptr;
 	uint8_t *m_pBase = nullptr;
 	size_t m_nCapacity = 0u;
-	size_t m_nBaseAlignment = TERRAIN3D_ARENA_DEFAULT_BASE_ALIGNMENT;
+	size_t m_nBaseAlignment = s_nArenaDefaultBaseAlignment;
 	bool m_bInitialized = false;
 	bool m_bCommitted = false;
 	bool m_bSealed = false;

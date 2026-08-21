@@ -50,10 +50,10 @@ static inline float32x4_t t3dSimdNeonReciprocalSqrt( const float32x4_t value ) {
 }
 
 static inline void t3dSimdNeonEncodeNormal4( const float32x4_t argX, const float32x4_t argZ, uint8_t *pDestination ) {
-	const float32x4_t scale = vdupq_n_f32( TERRAIN3D_BYTE_MIDPOINT_FLOAT );
+	const float32x4_t scale = vdupq_n_f32( s_fByteMidpointFloat );
 	const float32x4_t half = vdupq_n_f32( 0.5f );
 	const float32x4_t zero = vdupq_n_f32( 0.0f );
-	const float32x4_t max255 = vdupq_n_f32( TERRAIN3D_BYTE_MAX_FLOAT );
+	const float32x4_t max255 = vdupq_n_f32( s_fByteMaxFloat );
 	const float32x4_t x = vminq_f32( max255,
 		vmaxq_f32( zero, vaddq_f32( vmulq_f32( vaddq_f32( argX, vdupq_n_f32( 1.0f ) ), scale ), half ) ) );
 	const float32x4_t z = vminq_f32( max255,
@@ -76,8 +76,8 @@ static inline void t3dSimdNeonScalarNormalPixel(
 	const float fDz = pCenterRow[iX] - pDownRow[iX];
 	const float fLength = std::sqrt( fDx * fDx + fSpacing * fSpacing + fDz * fDz );
 	const float fInverse = fLength > 0.0f ? 1.0f / fLength : 0.0f;
-	pDestination[0] = ( uint8_t ) ( std::floor( std::max( 0.0f, std::min( TERRAIN3D_BYTE_MAX_FLOAT, ( fDx * fInverse + 1.0f ) * TERRAIN3D_BYTE_MIDPOINT_FLOAT ) ) + 0.5f ) );
-	pDestination[1] = ( uint8_t ) ( std::floor( std::max( 0.0f, std::min( TERRAIN3D_BYTE_MAX_FLOAT, ( fDz * fInverse + 1.0f ) * TERRAIN3D_BYTE_MIDPOINT_FLOAT ) ) + 0.5f ) );
+	pDestination[0] = ( uint8_t ) ( std::floor( std::max( 0.0f, std::min( s_fByteMaxFloat, ( fDx * fInverse + 1.0f ) * s_fByteMidpointFloat ) ) + 0.5f ) );
+	pDestination[1] = ( uint8_t ) ( std::floor( std::max( 0.0f, std::min( s_fByteMaxFloat, ( fDz * fInverse + 1.0f ) * s_fByteMidpointFloat ) ) + 0.5f ) );
 }
 
 #endif
@@ -109,26 +109,26 @@ void t3dSimdNeonPackedTransforms(
 		const t3dPackedTransform_t &t = pTransforms[i];
 		float *pOut = pDestination + i * ( size_t ) ( nStride );
 		alignas( 16 ) float fBasis[8];
-		vst1q_f32( fBasis, t3dSimdNeonDecode4Exact( t.basis ) );
-		vst1q_f32( fBasis + 4, t3dSimdNeonDecode4Exact( t.basis + 4 ) );
+		vst1q_f32( fBasis, t3dSimdNeonDecode4Exact( t.m_szBasis ) );
+		vst1q_f32( fBasis + 4, t3dSimdNeonDecode4Exact( t.m_szBasis + 4 ) );
 		pOut[0] = fBasis[0];
 		pOut[1] = fBasis[1];
 		pOut[2] = fBasis[2];
-		pOut[3] = t.origin[0];
+		pOut[3] = t.m_szOrigin[0];
 		pOut[4] = fBasis[3];
 		pOut[5] = fBasis[4];
 		pOut[6] = fBasis[5];
-		pOut[7] = t.origin[1];
+		pOut[7] = t.m_szOrigin[1];
 		pOut[8] = fBasis[6];
 		pOut[9] = fBasis[7];
-		pOut[10] = t3dHalfDecode( t.basis[8] );
-		pOut[11] = t.origin[2];
+		pOut[10] = t3dHalfDecode( t.m_szBasis[8] );
+		pOut[11] = t.m_szOrigin[2];
 		if ( nStride == 16 ) {
 			const uint32_t color = pColors ? pColors[i] : 0xffffffffu;
-			pOut[12] = ( float ) ( ( color >> 24u ) & 0xffu ) * ( TERRAIN3D_BYTE_INV_MAX_FLOAT );
-			pOut[13] = ( float ) ( ( color >> 16u ) & 0xffu ) * ( TERRAIN3D_BYTE_INV_MAX_FLOAT );
-			pOut[14] = ( float ) ( ( color >> 8u ) & 0xffu ) * ( TERRAIN3D_BYTE_INV_MAX_FLOAT );
-			pOut[15] = ( float ) ( color & 0xffu ) * ( TERRAIN3D_BYTE_INV_MAX_FLOAT );
+			pOut[12] = ( float ) ( ( color >> 24u ) & 0xffu ) * ( s_fByteInvMaxFloat );
+			pOut[13] = ( float ) ( ( color >> 16u ) & 0xffu ) * ( s_fByteInvMaxFloat );
+			pOut[14] = ( float ) ( ( color >> 8u ) & 0xffu ) * ( s_fByteInvMaxFloat );
+			pOut[15] = ( float ) ( color & 0xffu ) * ( s_fByteInvMaxFloat );
 		}
 	}
 #else

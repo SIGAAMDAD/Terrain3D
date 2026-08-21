@@ -16,8 +16,8 @@ class T3DGeneratedTexture {
 	CLASS_NAME_STATIC( "Terrain3DGenTex" );
 
 private:
-	RID m_rid = RID();
-	Ref<Image> m_pImage;
+	RID m_hRid = RID();
+	Ref<Image> m_image;
 	bool m_bDirty = false;
 	int m_nSize = 0;
 	int m_nWidth = 0;
@@ -37,8 +37,8 @@ public:
 	bool update( const Ref<Image> &rImage, const int nLayer );
 	RID create( const Ref<Image> &rImage );
 	bool update2d( const Ref<Image> &rImage );
-	EA_FORCE_INLINE Ref<Image> getImage( void ) const { return m_pImage; }
-	EA_FORCE_INLINE RID getRid( void ) const { return m_rid; }
+	EA_FORCE_INLINE Ref<Image> getImage( void ) const { return m_image; }
+	EA_FORCE_INLINE RID getRid( void ) const { return m_hRid; }
 	EA_FORCE_INLINE int size( void ) const { return m_nSize; }
 	int maxMipmapLevel( void ) const {
 		if ( !m_bMipmaps || m_nWidth <= 0 || m_nHeight <= 0 ) {

@@ -16,22 +16,22 @@
  // R16 physical page table plus R8 logical-presence table.
 
 typedef struct t3dGpuCacheCoord_s {
-	int x;
-	int y;
+	int m_nX;
+	int m_nY;
 } t3dGpuCacheCoord_t;
 
 typedef struct t3dGpuCacheSelectionStats_s {
-	int required = 0;
-	int guard = 0;
-	int prefetch = 0;
-	int written = 0;
+	int m_nRequired = 0;
+	int m_nGuard = 0;
+	int m_nPrefetch = 0;
+	int m_nWritten = 0;
 } t3dGpuCacheSelectionStats_t;
 
 typedef bool ( *T3DGpuCacheActiveFn )( int iX, int iY, const void *pContext );
 
-EA_FORCE_INLINE bool terrain3dGpuCacheOptionalChannelNeedsUpdate( const uint8_t nSourceFlags, const uint8_t nPhysicalFlags, const uint8_t nChannelMask ) { return ( ( nSourceFlags | nPhysicalFlags ) & nChannelMask ) != 0u; }
+EA_FORCE_INLINE bool t3dGpuCacheOptionalChannelNeedsUpdate( const uint8_t nSourceFlags, const uint8_t nPhysicalFlags, const uint8_t nChannelMask ) { return ( ( nSourceFlags | nPhysicalFlags ) & nChannelMask ) != 0u; }
 
-inline size_t terrain3dGpuCacheTexelCount( const int nRegionSize, const int nDivisor ) {
+inline size_t t3dGpuCacheTexelCount( const int nRegionSize, const int nDivisor ) {
 	if ( nRegionSize <= 0 || nDivisor <= 0 ) {
 		return 0u;
 	}
@@ -42,8 +42,8 @@ inline size_t terrain3dGpuCacheTexelCount( const int nRegionSize, const int nDiv
 	return side * side;
 }
 
-inline size_t terrain3dGpuCacheColorBytes( const int nRegionSize, const int nDivisor ) {
-	const size_t texels = terrain3dGpuCacheTexelCount( nRegionSize, nDivisor );
+inline size_t t3dGpuCacheColorBytes( const int nRegionSize, const int nDivisor ) {
+	const size_t texels = t3dGpuCacheTexelCount( nRegionSize, nDivisor );
 	if ( texels == 0u || texels > ( std::numeric_limits<size_t>::max() - 2u ) / 16u ) {
 		return 0u;
 	}
@@ -51,12 +51,12 @@ inline size_t terrain3dGpuCacheColorBytes( const int nRegionSize, const int nDiv
 	return ( texels * 16u + 2u ) / 3u;
 }
 
-inline size_t terrain3dGpuCacheEstimateLayerBytes(
+inline size_t t3dGpuCacheEstimateLayerBytes(
 	const int nRegionSize,
 	const bool bControlImplicit, const bool bColorImplicit, const bool bDerivedEnabled,
 	const int nColorDivisor, const int nDerivedDivisor
 ) {
-	const size_t full_texels = terrain3dGpuCacheTexelCount( nRegionSize, 1 );
+	const size_t full_texels = t3dGpuCacheTexelCount( nRegionSize, 1 );
 	if ( full_texels == 0u ) {
 		return 0u;
 	}
@@ -68,14 +68,14 @@ inline size_t terrain3dGpuCacheEstimateLayerBytes(
 		bytes += full_texels * 4u; // RF packed control.
 	}
 	if ( !bColorImplicit ) {
-		const size_t color_bytes = terrain3dGpuCacheColorBytes( nRegionSize, nColorDivisor );
+		const size_t color_bytes = t3dGpuCacheColorBytes( nRegionSize, nColorDivisor );
 		if ( color_bytes == 0u || bytes > std::numeric_limits<size_t>::max() - color_bytes ) {
 			return 0u;
 		}
 		bytes += color_bytes;
 	}
 	if ( bDerivedEnabled ) {
-		const size_t derived_texels = terrain3dGpuCacheTexelCount( nRegionSize, nDerivedDivisor );
+		const size_t derived_texels = t3dGpuCacheTexelCount( nRegionSize, nDerivedDivisor );
 		if ( derived_texels == 0u || derived_texels > ( std::numeric_limits<size_t>::max() - bytes ) / 2u ) {
 			return 0u;
 		}
@@ -84,19 +84,19 @@ inline size_t terrain3dGpuCacheEstimateLayerBytes(
 	return bytes;
 }
 
-inline size_t terrain3dGpuCacheEstimateSharedBytes(
+inline size_t t3dGpuCacheEstimateSharedBytes(
 	const int nRegionSize,
 	const bool bControlImplicit, const bool bColorImplicit,
 	const int nColorDivisor, const int nFarQualityDivisor,
-	const int nFarHeightSide = TERRAIN3D_GPU_CACHE_FAR_HEIGHT_SIDE
+	const int nFarHeightSide = s_nGpuCacheFarHeightSide
 ) {
-	const size_t full_texels = terrain3dGpuCacheTexelCount( nRegionSize, 1 );
+	const size_t full_texels = t3dGpuCacheTexelCount( nRegionSize, 1 );
 	if ( full_texels == 0u ) {
 		return 0u;
 	}
 	size_t bytes = bControlImplicit ? full_texels * 4u : 0u;
 	if ( bColorImplicit ) {
-		const size_t color_bytes = terrain3dGpuCacheColorBytes( nRegionSize, nColorDivisor );
+		const size_t color_bytes = t3dGpuCacheColorBytes( nRegionSize, nColorDivisor );
 		if ( color_bytes == 0u || bytes > std::numeric_limits<size_t>::max() - color_bytes ) {
 			return 0u;
 		}
@@ -104,7 +104,7 @@ inline size_t terrain3dGpuCacheEstimateSharedBytes(
 	}
 	const int far_divisor = nFarQualityDivisor <= 1 ? 1 :
 		( nFarQualityDivisor <= 2 ? 2 : ( nFarQualityDivisor <= 4 ? 4 : 8 ) );
-	const size_t far_surface_side = ( size_t ) ( TERRAIN3D_GPU_CACHE_FAR_HEIGHT_SIDE / far_divisor );
+	const size_t far_surface_side = ( size_t ) ( s_nGpuCacheFarHeightSide / far_divisor );
 	const size_t far_height_side = ( size_t ) ( nFarHeightSide > 0 ? nFarHeightSide : 1 );
 	if ( far_surface_side == 0u || far_surface_side > std::numeric_limits<size_t>::max() / far_surface_side ||
 		far_height_side > std::numeric_limits<size_t>::max() / far_height_side ) {
@@ -118,17 +118,17 @@ inline size_t terrain3dGpuCacheEstimateSharedBytes(
 	}
 	const size_t far_height_bytes = far_height_texels * 2u;
 	const size_t far_surface_bytes = far_surface_texels * 4u;
-	if ( far_height_bytes > std::numeric_limits<size_t>::max() - far_surface_bytes - TERRAIN3D_GPU_CACHE_MAX_PAGE_TABLE_BYTES ) {
+	if ( far_height_bytes > std::numeric_limits<size_t>::max() - far_surface_bytes - s_nGpuCacheMaxPageTableBytes ) {
 		return 0u;
 	}
-	const size_t fixed_bytes = far_height_bytes + far_surface_bytes + TERRAIN3D_GPU_CACHE_MAX_PAGE_TABLE_BYTES;
+	const size_t fixed_bytes = far_height_bytes + far_surface_bytes + s_nGpuCacheMaxPageTableBytes;
 	if ( bytes > std::numeric_limits<size_t>::max() - fixed_bytes ) {
 		return 0u;
 	}
 	return bytes + fixed_bytes;
 }
 
-inline int terrain3dGpuCacheCalculateFootprintRadiusRegions(
+inline int t3dGpuCacheCalculateFootprintRadiusRegions(
 	const int nMeshSize,
 	const int nDetailLods, const double fVertexSpacing, const int nRegionSize
 ) {
@@ -149,7 +149,7 @@ inline int terrain3dGpuCacheCalculateFootprintRadiusRegions(
 	return ( int ) ( fRegionRadius );
 }
 
-inline int terrain3dGpuCacheCalculateRequestedPages(
+inline int t3dGpuCacheCalculateRequestedPages(
 	const int nMapSize, const int nActiveRegions,
 	const int nRequiredRadius, const int nGuardRegions, const int nPrefetchRows,
 	const int nHysteresisReserve
@@ -183,37 +183,37 @@ inline int terrain3dGpuCacheCalculateRequestedPages(
 	return requested > ( size_t ) ( std::numeric_limits<int>::max() ) ? std::numeric_limits<int>::max() : ( int ) ( requested );
 }
 
-inline int terrain3dGpuCacheCalculateCapacity(
+inline int t3dGpuCacheCalculateCapacity(
 	const int nRegionSize, const int nMapSize,
 	const int nBudgetMb, const int nMaxLayers, const int nRequestedPages,
 	const bool bControlImplicit, const bool bColorImplicit, const bool bDerivedEnabled,
 	const int nColorDivisor, const int nDerivedDivisor, const int nFarQualityDivisor,
 	const int nRequestedSpareLayers,
-	const int nFarHeightSide = TERRAIN3D_GPU_CACHE_FAR_HEIGHT_SIDE
+	const int nFarHeightSide = s_nGpuCacheFarHeightSide
 ) {
 	if ( nMapSize <= 0 || nBudgetMb <= 0 || nMaxLayers <= 0 || nRequestedPages <= 0 ) {
 		return 0;
 	}
-	const size_t layer_bytes = terrain3dGpuCacheEstimateLayerBytes( nRegionSize,
+	const size_t layer_bytes = t3dGpuCacheEstimateLayerBytes( nRegionSize,
 		bControlImplicit, bColorImplicit, bDerivedEnabled, nColorDivisor, nDerivedDivisor );
-	const size_t shared_bytes = terrain3dGpuCacheEstimateSharedBytes( nRegionSize,
+	const size_t shared_bytes = t3dGpuCacheEstimateSharedBytes( nRegionSize,
 		bControlImplicit, bColorImplicit, nColorDivisor, nFarQualityDivisor, nFarHeightSide );
-	if ( layer_bytes == 0u || ( size_t ) ( nBudgetMb ) > std::numeric_limits<size_t>::max() / TERRAIN3D_GPU_CACHE_MIB ) {
+	if ( layer_bytes == 0u || ( size_t ) ( nBudgetMb ) > std::numeric_limits<size_t>::max() / s_nGpuCacheMib ) {
 		return 0;
 	}
-	const size_t budget_bytes = ( size_t ) ( nBudgetMb ) * TERRAIN3D_GPU_CACHE_MIB;
+	const size_t budget_bytes = ( size_t ) ( nBudgetMb ) * s_nGpuCacheMib;
 	const size_t available_bytes = budget_bytes > shared_bytes ? budget_bytes - shared_bytes : 0u;
 	const size_t budget_layers = available_bytes / layer_bytes;
 	const size_t maximum_physical_layers = ( size_t ) ( nMaxLayers );
-	const size_t requested_spares = ( size_t ) ( nRequestedSpareLayers < TERRAIN3D_GPU_CACHE_MIN_SPARE_LAYERS ?
-		TERRAIN3D_GPU_CACHE_MIN_SPARE_LAYERS : nRequestedSpareLayers );
+	const size_t requested_spares = ( size_t ) ( nRequestedSpareLayers < s_nGpuCacheMinSpareLayers ?
+		s_nGpuCacheMinSpareLayers : nRequestedSpareLayers );
 	const size_t physical_layers = budget_layers < maximum_physical_layers ? budget_layers : maximum_physical_layers;
 	// Mapped capacity is renderer demand constrained. Spare and retiring layers are
 	// physical publication resources and must never be counted as mapped demand.
 	// If one page already exceeds the configured byte ceiling, retain one mapped
 	// page and the minimum legal spare set so failure remains explicit and bounded.
 	const size_t effective_physical_layers = physical_layers > 0u ? physical_layers :
-		( size_t ) ( TERRAIN3D_GPU_CACHE_MIN_SPARE_LAYERS + 1 );
+		( size_t ) ( s_nGpuCacheMinSpareLayers + 1 );
 	const size_t spare_layers = requested_spares < effective_physical_layers ? requested_spares :
 		( effective_physical_layers > 1u ? effective_physical_layers - 1u : 0u );
 	const size_t maximum_mapped_layers = effective_physical_layers > spare_layers ?
@@ -229,25 +229,25 @@ inline int terrain3dGpuCacheCalculateCapacity(
 	return ( int ) ( capacity );
 }
 
-inline int terrain3dGpuCacheCalculatePinnedCapacity(
+inline int t3dGpuCacheCalculatePinnedCapacity(
 	const int nRegionSize, const int nMapSize,
 	const int nBudgetMb, const int nMaxLayers, const int nRequestedPages,
 	const bool bControlImplicit, const bool bColorImplicit, const bool bDerivedEnabled,
 	const int nColorDivisor, const int nDerivedDivisor, const int nFarQualityDivisor,
-	const int nFarHeightSide = TERRAIN3D_GPU_CACHE_FAR_HEIGHT_SIDE
+	const int nFarHeightSide = s_nGpuCacheFarHeightSide
 ) {
 	if ( nMapSize <= 0 || nBudgetMb <= 0 || nMaxLayers <= 0 || nRequestedPages <= 0 ) {
 		return 0;
 	}
-	const size_t layer_bytes = terrain3dGpuCacheEstimateLayerBytes( nRegionSize,
+	const size_t layer_bytes = t3dGpuCacheEstimateLayerBytes( nRegionSize,
 		bControlImplicit, bColorImplicit, bDerivedEnabled, nColorDivisor, nDerivedDivisor );
-	const size_t shared_bytes = terrain3dGpuCacheEstimateSharedBytes( nRegionSize,
+	const size_t shared_bytes = t3dGpuCacheEstimateSharedBytes( nRegionSize,
 		bControlImplicit, bColorImplicit, nColorDivisor, nFarQualityDivisor, nFarHeightSide );
 	if ( layer_bytes == 0u || ( size_t ) ( nBudgetMb ) >
-		std::numeric_limits<size_t>::max() / TERRAIN3D_GPU_CACHE_MIB ) {
+		std::numeric_limits<size_t>::max() / s_nGpuCacheMib ) {
 		return 0;
 	}
-	const size_t budget_bytes = ( size_t ) ( nBudgetMb ) * TERRAIN3D_GPU_CACHE_MIB;
+	const size_t budget_bytes = ( size_t ) ( nBudgetMb ) * s_nGpuCacheMib;
 	if ( budget_bytes <= shared_bytes ) {
 		return 0;
 	}
@@ -261,60 +261,60 @@ inline int terrain3dGpuCacheCalculatePinnedCapacity(
 		std::numeric_limits<int>::max() : ( int ) ( capacity );
 }
 
-inline int terrain3dGpuCacheCalculatePhysicalLayers(
+inline int t3dGpuCacheCalculatePhysicalLayers(
 	const int nMappedCapacity,
 	const int nRequestedSpareLayers, const int nMaxLayers
 ) {
 	if ( nMappedCapacity <= 0 || nMaxLayers <= 0 ) {
 		return 0;
 	}
-	const int requested_spares = nRequestedSpareLayers < TERRAIN3D_GPU_CACHE_MIN_SPARE_LAYERS ?
-		TERRAIN3D_GPU_CACHE_MIN_SPARE_LAYERS : nRequestedSpareLayers;
+	const int requested_spares = nRequestedSpareLayers < s_nGpuCacheMinSpareLayers ?
+		s_nGpuCacheMinSpareLayers : nRequestedSpareLayers;
 	const int physical = nMappedCapacity > nMaxLayers - requested_spares ? nMaxLayers :
 		nMappedCapacity + requested_spares;
 	return physical < 1 ? 1 : physical;
 }
 
-inline t3dGpuCacheCoord_t terrain3dGpuCacheClampCenter(
+inline t3dGpuCacheCoord_t t3dGpuCacheClampCenter(
 	const t3dGpuCacheCoord_t center,
 	const int nMapSize
 ) {
 	t3dGpuCacheCoord_t result = center;
 	if ( nMapSize <= 0 ) {
-		result.x = 0;
-		result.y = 0;
+		result.m_nX = 0;
+		result.m_nY = 0;
 		return result;
 	}
 	const int minimum = -( nMapSize / 2 );
 	const int maximum = minimum + nMapSize - 1;
-	if ( result.x < minimum ) {
-		result.x = minimum;
-	} else if ( result.x > maximum ) {
-		result.x = maximum;
+	if ( result.m_nX < minimum ) {
+		result.m_nX = minimum;
+	} else if ( result.m_nX > maximum ) {
+		result.m_nX = maximum;
 	}
-	if ( result.y < minimum ) {
-		result.y = minimum;
-	} else if ( result.y > maximum ) {
-		result.y = maximum;
+	if ( result.m_nY < minimum ) {
+		result.m_nY = minimum;
+	} else if ( result.m_nY > maximum ) {
+		result.m_nY = maximum;
 	}
 	return result;
 }
 
-inline bool terrain3dGpuCacheCoordValid( const t3dGpuCacheCoord_t coord, const int nMapSize ) {
+inline bool t3dGpuCacheCoordValid( const t3dGpuCacheCoord_t coord, const int nMapSize ) {
 	if ( nMapSize <= 0 ) {
 		return false;
 	}
 	const int minimum = -( nMapSize / 2 );
 	const int maximum = minimum + nMapSize;
-	return coord.x >= minimum && coord.x < maximum && coord.y >= minimum && coord.y < maximum;
+	return coord.m_nX >= minimum && coord.m_nX < maximum && coord.m_nY >= minimum && coord.m_nY < maximum;
 }
 
-inline bool terrain3dGpuCacheAppend(
+inline bool t3dGpuCacheAppend(
 	const t3dGpuCacheCoord_t coord, const int nMapSize,
 	t3dGpuCacheCoord_t *pLocations, const int nCapacity, int &nWritten,
 	T3DGpuCacheActiveFn active, const void *pContext
 ) {
-	if ( !terrain3dGpuCacheCoordValid( coord, nMapSize ) || !active( coord.x, coord.y, pContext ) ) {
+	if ( !t3dGpuCacheCoordValid( coord, nMapSize ) || !active( coord.m_nX, coord.m_nY, pContext ) ) {
 		return false;
 	}
 	if ( pLocations && nWritten < nCapacity ) {
@@ -324,44 +324,44 @@ inline bool terrain3dGpuCacheAppend(
 	return true;
 }
 
-inline void terrain3dGpuCacheCollectRing(
+inline void t3dGpuCacheCollectRing(
 	const t3dGpuCacheCoord_t center, const int nMapSize,
 	const int nRadius, t3dGpuCacheCoord_t *pLocations, const int nCapacity, int &nWritten,
 	int &nCount, T3DGpuCacheActiveFn active, const void *pContext
 ) {
 	if ( nRadius == 0 ) {
-		if ( terrain3dGpuCacheAppend( center, nMapSize, pLocations, nCapacity, nWritten, active, pContext ) ) {
+		if ( t3dGpuCacheAppend( center, nMapSize, pLocations, nCapacity, nWritten, active, pContext ) ) {
 			++nCount;
 		}
 		return;
 	}
 	for ( int x = -nRadius; x <= nRadius; ++x ) {
-		if ( terrain3dGpuCacheAppend( {center.x + x, center.y - nRadius}, nMapSize,
+		if ( t3dGpuCacheAppend( {center.m_nX + x, center.m_nY - nRadius}, nMapSize,
 			pLocations, nCapacity, nWritten, active, pContext ) ) {
 			++nCount;
 		}
 	}
 	for ( int y = -nRadius + 1; y <= nRadius - 1; ++y ) {
-		if ( terrain3dGpuCacheAppend( {center.x + nRadius, center.y + y}, nMapSize,
+		if ( t3dGpuCacheAppend( {center.m_nX + nRadius, center.m_nY + y}, nMapSize,
 			pLocations, nCapacity, nWritten, active, pContext ) ) {
 			++nCount;
 		}
 	}
 	for ( int x = nRadius; x >= -nRadius; --x ) {
-		if ( terrain3dGpuCacheAppend( {center.x + x, center.y + nRadius}, nMapSize,
+		if ( t3dGpuCacheAppend( {center.m_nX + x, center.m_nY + nRadius}, nMapSize,
 			pLocations, nCapacity, nWritten, active, pContext ) ) {
 			++nCount;
 		}
 	}
 	for ( int y = nRadius - 1; y >= -nRadius + 1; --y ) {
-		if ( terrain3dGpuCacheAppend( {center.x - nRadius, center.y + y}, nMapSize,
+		if ( t3dGpuCacheAppend( {center.m_nX - nRadius, center.m_nY + y}, nMapSize,
 			pLocations, nCapacity, nWritten, active, pContext ) ) {
 			++nCount;
 		}
 	}
 }
 
-inline int terrain3dGpuCacheCollectFootprint(
+inline int t3dGpuCacheCollectFootprint(
 	const t3dGpuCacheCoord_t center, const int nMapSize,
 	t3dGpuCacheCoord_t *pLocations, const int nCapacity, T3DGpuCacheActiveFn active,
 	const void *pContext, const int nRequiredRadius, const int nGuardRegions,
@@ -375,7 +375,7 @@ inline int terrain3dGpuCacheCollectFootprint(
 		}
 		return 0;
 	}
-	const t3dGpuCacheCoord_t clampedCenter = terrain3dGpuCacheClampCenter( center, nMapSize );
+	const t3dGpuCacheCoord_t clampedCenter = t3dGpuCacheClampCenter( center, nMapSize );
 	const int maximum_radius = nMapSize - 1;
 	const int required_radius = nRequiredRadius < 0 ? 0 :
 		( nRequiredRadius > maximum_radius ? maximum_radius : nRequiredRadius );
@@ -383,36 +383,36 @@ inline int terrain3dGpuCacheCollectFootprint(
 	const int outer_radius = required_radius + guard > maximum_radius ? maximum_radius : required_radius + guard;
 	int written = 0;
 	for ( int radius = 0; radius <= required_radius; ++radius ) {
-		terrain3dGpuCacheCollectRing( clampedCenter, nMapSize, radius, pLocations, nCapacity, written,
-			stats.required, active, pContext );
+		t3dGpuCacheCollectRing( clampedCenter, nMapSize, radius, pLocations, nCapacity, written,
+			stats.m_nRequired, active, pContext );
 	}
 	for ( int radius = required_radius + 1; radius <= outer_radius; ++radius ) {
-		terrain3dGpuCacheCollectRing( clampedCenter, nMapSize, radius, pLocations, nCapacity, written,
-			stats.guard, active, pContext );
+		t3dGpuCacheCollectRing( clampedCenter, nMapSize, radius, pLocations, nCapacity, written,
+			stats.m_nGuard, active, pContext );
 	}
 	const int rows = nPrefetchRows < 0 ? 0 : nPrefetchRows;
-	if ( rows > 0 && ( motionDirection.x != 0 || motionDirection.y != 0 ) ) {
+	if ( rows > 0 && ( motionDirection.m_nX != 0 || motionDirection.m_nY != 0 ) ) {
 		for ( int row = 1; row <= rows; ++row ) {
-			if ( motionDirection.x != 0 ) {
-				const int x = center.x + motionDirection.x * ( outer_radius + row );
+			if ( motionDirection.m_nX != 0 ) {
+				const int x = center.m_nX + motionDirection.m_nX * ( outer_radius + row );
 				for ( int y = -outer_radius; y <= outer_radius; ++y ) {
-					if ( terrain3dGpuCacheAppend( {x, center.y + y}, nMapSize, pLocations,
+					if ( t3dGpuCacheAppend( {x, center.m_nY + y}, nMapSize, pLocations,
 						nCapacity, written, active, pContext ) ) {
-						++stats.prefetch;
+						++stats.m_nPrefetch;
 					}
 				}
 			} else {
-				const int y = center.y + motionDirection.y * ( outer_radius + row );
+				const int y = center.m_nY + motionDirection.m_nY * ( outer_radius + row );
 				for ( int x = -outer_radius; x <= outer_radius; ++x ) {
-					if ( terrain3dGpuCacheAppend( {center.x + x, y}, nMapSize, pLocations,
+					if ( t3dGpuCacheAppend( {center.m_nX + x, y}, nMapSize, pLocations,
 						nCapacity, written, active, pContext ) ) {
-						++stats.prefetch;
+						++stats.m_nPrefetch;
 					}
 				}
 			}
 		}
 	}
-	stats.written = written;
+	stats.m_nWritten = written;
 	if ( pStats ) {
 		*pStats = stats;
 	}
@@ -421,7 +421,7 @@ inline int terrain3dGpuCacheCollectFootprint(
 
 // Compatibility collector retained for CPU/instance caches. GPU residency uses
 // terrain3d_gpu_cache_collect_footprint().
-inline int terrain3dGpuCacheCollectDesired(
+inline int t3dGpuCacheCollectDesired(
 	const t3dGpuCacheCoord_t center, const int nMapSize,
 	t3dGpuCacheCoord_t *pLocations, const int nCapacity, T3DGpuCacheActiveFn active,
 	const void *pContext
@@ -430,7 +430,7 @@ inline int terrain3dGpuCacheCollectDesired(
 		return 0;
 	}
 	t3dGpuCacheSelectionStats_t stats;
-	return terrain3dGpuCacheCollectFootprint( center, nMapSize, pLocations, nCapacity,
+	return t3dGpuCacheCollectFootprint( center, nMapSize, pLocations, nCapacity,
 		active, pContext, nMapSize - 1, 0, {0, 0}, 0, &stats );
 }
 

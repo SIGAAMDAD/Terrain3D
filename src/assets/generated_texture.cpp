@@ -24,15 +24,15 @@ bool T3DGeneratedTexture::matchesLayout( const Ref<Image> &rImage ) const {
 ///////////////////////////
 
 void T3DGeneratedTexture::clear( void ) {
-	if ( m_rid.is_valid() ) {
-		LOG( EXTREME, "T3DGeneratedTexture freeing ", m_rid );
-		RS->free_rid( m_rid );
+	if ( m_hRid.is_valid() ) {
+		LOG( EXTREME, "T3DGeneratedTexture freeing ", m_hRid );
+		RS->free_rid( m_hRid );
 	}
-	if ( m_pImage.is_valid() ) {
-		LOG( EXTREME, "T3DGeneratedTexture unref image", m_pImage );
-		m_pImage.unref();
+	if ( m_image.is_valid() ) {
+		LOG( EXTREME, "T3DGeneratedTexture unref image", m_image );
+		m_image.unref();
 	}
-	m_rid = RID();
+	m_hRid = RID();
 	m_bDirty = true;
 	m_nSize = 0;
 	m_nWidth = 0;
@@ -45,8 +45,8 @@ void T3DGeneratedTexture::clear( void ) {
 
 void T3DGeneratedTexture::swap( T3DGeneratedTexture &rOther ) {
 	using std::swap;
-	swap( m_rid, rOther.m_rid );
-	swap( m_pImage, rOther.m_pImage );
+	swap( m_hRid, rOther.m_hRid );
+	swap( m_image, rOther.m_image );
 	swap( m_bDirty, rOther.m_bDirty );
 	swap( m_nSize, rOther.m_nSize );
 	swap( m_nWidth, rOther.m_nWidth );
@@ -96,7 +96,7 @@ RID T3DGeneratedTexture::create( const TypedArray<Image> &rLayers ) {
 	}
 	LOG( DEBUG, "[render-resource] Creating Texture2DArray replacement: layers=", rLayers.size(),
 		"; size=", width, "x", height, "; format=", format, "; mipmaps=", bMipmaps,
-		"; replacing_old_rid=", m_rid.is_valid() );
+		"; replacing_old_rid=", m_hRid.is_valid() );
 	const RID new_rid = RS->texture_2d_layered_create( rLayers, RenderingServer::TEXTURE_LAYERED_2D_ARRAY );
 	if ( !new_rid.is_valid() ) {
 		m_bDirty = true;
@@ -105,11 +105,11 @@ RID T3DGeneratedTexture::create( const TypedArray<Image> &rLayers ) {
 			" layers. The active world exceeds the renderer's texture-array capacity or contains incompatible layers." );
 		return RID();
 	}
-	if ( m_rid.is_valid() ) {
-		RS->free_rid( m_rid );
+	if ( m_hRid.is_valid() ) {
+		RS->free_rid( m_hRid );
 	}
-	m_pImage.unref();
-	m_rid = new_rid;
+	m_image.unref();
+	m_hRid = new_rid;
 	m_bDirty = false;
 	m_nSize = rLayers.size();
 	m_nWidth = width;
@@ -118,20 +118,20 @@ RID T3DGeneratedTexture::create( const TypedArray<Image> &rLayers ) {
 	m_bMipmaps = bMipmaps;
 	m_bLayered = true;
 	m_nPayloadBytes = payload_bytes;
-	return m_rid;
+	return m_hRid;
 }
 
 bool T3DGeneratedTexture::update( const Ref<Image> &rImage, const int nLayer ) {
-	if ( !m_rid.is_valid() || m_bDirty || !m_bLayered || nLayer < 0 || nLayer >= m_nSize ||
+	if ( !m_hRid.is_valid() || m_bDirty || !m_bLayered || nLayer < 0 || nLayer >= m_nSize ||
 		!matchesLayout( rImage ) ) {
-		LOG( ERROR, "Rejected Texture2DArray update. RID valid: ", m_rid.is_valid(), ", dirty: ", m_bDirty,
+		LOG( ERROR, "Rejected Texture2DArray update. RID valid: ", m_hRid.is_valid(), ", dirty: ", m_bDirty,
 			", layered: ", m_bLayered, ", layer: ", nLayer, ", layer count: ", m_nSize,
 			", compatible image: ", matchesLayout( rImage ) );
 		return false;
 	}
 	LOG( EXTREME, "RenderingServer updating Texture2DArray at index: ", nLayer );
-	if ( !t3dUploadBridgeUploadTextureLayer( m_rid, rImage, nLayer ) ) {
-		RS->texture_2d_update( m_rid, rImage, nLayer );
+	if ( !t3dUploadBridgeUploadTextureLayer( m_hRid, rImage, nLayer ) ) {
+		RS->texture_2d_update( m_hRid, rImage, nLayer );
 	}
 	return true;
 }
@@ -145,18 +145,18 @@ RID T3DGeneratedTexture::create( const Ref<Image> &rImage ) {
 	LOG( EXTREME, "RenderingServer creating Texture2D" );
 	LOG( DEBUG, "[render-resource] Creating Texture2D replacement: size=", rImage->get_width(), "x",
 		rImage->get_height(), "; format=", ( int ) ( rImage->get_format() ),
-		"; replacing_old_rid=", m_rid.is_valid() );
+		"; replacing_old_rid=", m_hRid.is_valid() );
 	const RID new_rid = RS->texture_2d_create( rImage );
 	if ( !new_rid.is_valid() ) {
 		m_bDirty = true;
 		LOG( ERROR, "RenderingServer rejected generated Texture2D" );
 		return RID();
 	}
-	if ( m_rid.is_valid() ) {
-		RS->free_rid( m_rid );
+	if ( m_hRid.is_valid() ) {
+		RS->free_rid( m_hRid );
 	}
-	m_pImage = rImage;
-	m_rid = new_rid;
+	m_image = rImage;
+	m_hRid = new_rid;
 	m_bDirty = false;
 	m_nSize = 1;
 	m_nWidth = rImage->get_width();
@@ -165,20 +165,20 @@ RID T3DGeneratedTexture::create( const Ref<Image> &rImage ) {
 	m_bMipmaps = rImage->has_mipmaps();
 	m_bLayered = false;
 	m_nPayloadBytes = ( size_t ) ( rImage->get_data().size() );
-	return m_rid;
+	return m_hRid;
 }
 
 bool T3DGeneratedTexture::update2d( const Ref<Image> &rImage ) {
-	if ( !m_rid.is_valid() || m_bDirty || m_bLayered || m_nSize != 1 || !matchesLayout( rImage ) ) {
-		LOG( ERROR, "Rejected Texture2D update. RID valid: ", m_rid.is_valid(), ", dirty: ", m_bDirty,
+	if ( !m_hRid.is_valid() || m_bDirty || m_bLayered || m_nSize != 1 || !matchesLayout( rImage ) ) {
+		LOG( ERROR, "Rejected Texture2D update. RID valid: ", m_hRid.is_valid(), ", dirty: ", m_bDirty,
 			", layered: ", m_bLayered, ", compatible image: ", matchesLayout( rImage ),
 			", size: ", m_nSize );
 		return false;
 	}
 	LOG( EXTREME, "RenderingServer updating Texture2D" );
-	if ( !t3dUploadBridgeUploadTextureLayer( m_rid, rImage, 0 ) ) {
-		RS->texture_2d_update( m_rid, rImage, 0 );
+	if ( !t3dUploadBridgeUploadTextureLayer( m_hRid, rImage, 0 ) ) {
+		RS->texture_2d_update( m_hRid, rImage, 0 );
 	}
-	m_pImage = rImage;
+	m_image = rImage;
 	return true;
 }

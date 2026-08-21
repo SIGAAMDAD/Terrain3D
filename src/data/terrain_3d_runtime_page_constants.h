@@ -6,12 +6,12 @@
 
 #include <cstdint>
 
-static constexpr uint32_t TERRAIN3D_RUNTIME_PAGE_ALIGNMENT = 16u;
-static constexpr uint32_t TERRAIN3D_RUNTIME_PAGE_BLEND_RECIPE_VERSION = 4u;
-static constexpr uint32_t TERRAIN3D_RUNTIME_PAGE_CHANNEL_COUNT = 24u;
-static constexpr uint32_t TERRAIN3D_RUNTIME_PAGE_HEADER_BYTES = 1248u;
-static constexpr uint32_t TERRAIN3D_RUNTIME_PAGE_MAGIC = 0x47503354u;
-static constexpr uint32_t TERRAIN3D_RUNTIME_PAGE_MAX_BYTES = 256u * 1024u * 1024u;
-static constexpr uint32_t TERRAIN3D_RUNTIME_PAGE_VERSION = 6u;
+static constexpr uint32_t s_nRuntimePageAlignment = 16u;
+static constexpr uint32_t s_nRuntimePageBlendRecipeVersion = 4u;
+static constexpr uint32_t s_nRuntimePageChannelCount = 24u;
+static constexpr uint32_t s_nRuntimePageHeaderBytes = 1248u;
+static constexpr uint32_t s_nRuntimePageMagic = 0x47503354u;
+static constexpr uint32_t s_nRuntimePageMaxBytes = 256u * 1024u * 1024u;
+static constexpr uint32_t s_nRuntimePageVersion = 6u;
 
 #endif // TERRAIN3D_RUNTIME_PAGE_CONSTANTS_H

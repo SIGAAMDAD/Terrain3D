@@ -26,113 +26,113 @@ using namespace godot;
 #endif
 
 typedef struct t3dInstanceCell_s {
-	Vector2i location;
-	T3DTransformArray transforms;
-	T3DSlabArray<uint32_t> colors; // RGBA8. Empty means all white.
-	T3DSlabArray<uint32_t> owners; // Sparse semantic owner IDs. Empty means owner 0.
-	uint32_t nRevision = 1;
-	bool bModified = true;
-	AABB cachedAabb;
-	AABB cachedSourceMeshAabb;
-	uint32_t nCachedAabbRevision = 0;
-	uint32_t nCachedAabbGeneration = 0;
-	bool bCachedAabbValid = false;
+	Vector2i m_location;
+	T3DTransformArray m_transforms;
+	T3DSlabArray<uint32_t> m_colors; // RGBA8. Empty means all white.
+	T3DSlabArray<uint32_t> m_owners; // Sparse semantic owner IDs. Empty means owner 0.
+	uint32_t m_nRevision = 1;
+	bool m_bModified = true;
+	AABB m_cachedAabb;
+	AABB m_cachedSourceMeshAabb;
+	uint32_t m_nCachedAabbRevision = 0;
+	uint32_t m_nCachedAabbGeneration = 0;
+	bool m_bCachedAabbValid = false;
 
 	EA_FORCE_INLINE void bindPayloadPools(
 		T3DHighWaterSlab<t3dPackedTransform_t> *const pTransforms,
 		T3DHighWaterSlab<uint32_t> *const pColors, T3DHighWaterSlab<uint32_t> *const pOwners
-	) { transforms.bind( pTransforms ); colors.bind( pColors ); owners.bind( pOwners ); }
+	) { m_transforms.bind( pTransforms ); m_colors.bind( pColors ); m_owners.bind( pOwners ); }
 
 	EA_FORCE_INLINE void rebindPayloadPools(
 		T3DHighWaterSlab<t3dPackedTransform_t> *const pTransforms,
 		T3DHighWaterSlab<uint32_t> *const pColors, T3DHighWaterSlab<uint32_t> *const pOwners
-	) { transforms.rebind( pTransforms ); colors.rebind( pColors ); owners.rebind( pOwners ); }
+	) { m_transforms.rebind( pTransforms ); m_colors.rebind( pColors ); m_owners.rebind( pOwners ); }
 
 	EA_FORCE_INLINE void relocatePayloadsExact(
 		T3DHighWaterSlab<t3dPackedTransform_t> *const pTransforms,
 		T3DHighWaterSlab<uint32_t> *const pColors, T3DHighWaterSlab<uint32_t> *const pOwners
-	) { transforms.relocateExact( pTransforms ); colors.relocateExact( pColors ); owners.relocateExact( pOwners ); }
+	) { m_transforms.relocateExact( pTransforms ); m_colors.relocateExact( pColors ); m_owners.relocateExact( pOwners ); }
 
-	EA_FORCE_INLINE bool usesColors( void ) const { return !colors.empty(); }
+	EA_FORCE_INLINE bool usesColors( void ) const { return !m_colors.empty(); }
 
-	EA_FORCE_INLINE bool usesOwners( void ) const { return !owners.empty(); }
+	EA_FORCE_INLINE bool usesOwners( void ) const { return !m_owners.empty(); }
 
-	EA_FORCE_INLINE uint32_t getOwner( const size_t iIndex ) const { return owners.empty() || iIndex >= owners.size() ? 0u : owners[iIndex]; }
+	EA_FORCE_INLINE uint32_t getOwner( const size_t iIndex ) const { return m_owners.empty() || iIndex >= m_owners.size() ? 0u : m_owners[iIndex]; }
 
 	EA_FORCE_INLINE static uint32_t packColor( const Color &clrColor ) { return clrColor.to_rgba32(); }
 
 	EA_FORCE_INLINE static Color unpackColor( const uint32_t nColor ) { return Color::hex( nColor ); }
 
-	EA_FORCE_INLINE Color getColor( const size_t iIndex ) const { return colors.empty() || iIndex >= colors.size() ? Color( 1, 1, 1, 1 ) : unpackColor( colors[iIndex] ); }
+	EA_FORCE_INLINE Color getColor( const size_t iIndex ) const { return m_colors.empty() || iIndex >= m_colors.size() ? Color( 1, 1, 1, 1 ) : unpackColor( m_colors[iIndex] ); }
 
-	EA_FORCE_INLINE void setColor( const size_t iIndex, const Color &clrColor ) { colors[iIndex] = packColor( clrColor ); }
+	EA_FORCE_INLINE void setColor( const size_t iIndex, const Color &clrColor ) { m_colors[iIndex] = packColor( clrColor ); }
 
-	EA_FORCE_INLINE void pushColor( const Color &clrColor ) { colors.push_back( packColor( clrColor ) ); }
+	EA_FORCE_INLINE void pushColor( const Color &clrColor ) { m_colors.push_back( packColor( clrColor ) ); }
 
 	void reserve( size_t nCount, bool bColorData, bool bOwnerData = false ) {
-		transforms.reserve( nCount );
+		m_transforms.reserve( nCount );
 		if ( bColorData ) {
-			colors.reserve( nCount );
+			m_colors.reserve( nCount );
 		}
 		if ( bOwnerData ) {
-			owners.reserve( nCount );
+			m_owners.reserve( nCount );
 		}
 	}
 
-	EA_FORCE_INLINE void reserveExact( const size_t nCount, const bool bColorData, const bool bOwnerData = false ) { transforms.reserveExact( nCount ); if ( bColorData ) colors.reserveExact( nCount ); if ( bOwnerData ) owners.reserveExact( nCount ); }
+	EA_FORCE_INLINE void reserveExact( const size_t nCount, const bool bColorData, const bool bOwnerData = false ) { m_transforms.reserveExact( nCount ); if ( bColorData ) m_colors.reserveExact( nCount ); if ( bOwnerData ) m_owners.reserveExact( nCount ); }
 
 	void prepareAppend( size_t nAdditional, bool bColorData, bool bOwnerData = false ) {
-		const size_t needed = transforms.size() + nAdditional;
-		if ( needed > transforms.capacity() ) {
-			transforms.reserve(
-				eastl::max( needed, transforms.capacity() + eastl::max<size_t>( 32, transforms.capacity() / 2 ) ) );
+		const size_t needed = m_transforms.size() + nAdditional;
+		if ( needed > m_transforms.capacity() ) {
+			m_transforms.reserve(
+				eastl::max( needed, m_transforms.capacity() + eastl::max<size_t>( 32, m_transforms.capacity() / 2 ) ) );
 		}
-		if ( bColorData && colors.empty() ) {
-			colors.resize( transforms.size(), TERRAIN3D_INSTANCE_WHITE_RGBA8 );
+		if ( bColorData && m_colors.empty() ) {
+			m_colors.resize( m_transforms.size(), s_nInstanceWhiteRgba8 );
 		}
-		if ( !colors.empty() && needed > colors.capacity() ) {
-			colors.reserve( eastl::max( needed, colors.capacity() + eastl::max<size_t>( 32, colors.capacity() / 2 ) ) );
+		if ( !m_colors.empty() && needed > m_colors.capacity() ) {
+			m_colors.reserve( eastl::max( needed, m_colors.capacity() + eastl::max<size_t>( 32, m_colors.capacity() / 2 ) ) );
 		}
-		if ( bOwnerData && owners.empty() ) {
-			owners.resize( transforms.size(), 0u );
+		if ( bOwnerData && m_owners.empty() ) {
+			m_owners.resize( m_transforms.size(), 0u );
 		}
-		if ( !owners.empty() && needed > owners.capacity() ) {
-			owners.reserve( eastl::max( needed, owners.capacity() + eastl::max<size_t>( 32, owners.capacity() / 2 ) ) );
+		if ( !m_owners.empty() && needed > m_owners.capacity() ) {
+			m_owners.reserve( eastl::max( needed, m_owners.capacity() + eastl::max<size_t>( 32, m_owners.capacity() / 2 ) ) );
 		}
 	}
 
 	void compactOwnerSidecar( void ) {
-		for ( const uint32_t owner : owners ) {
+		for ( const uint32_t owner : m_owners ) {
 			if ( owner != 0u ) return;
 		}
-		owners.clear();
+		m_owners.clear();
 	}
 
 	EA_FORCE_INLINE void compactStorage( void ) {}
 
 	void touch( void ) {
-		bModified = true;
-		bCachedAabbValid = false;
-		++nRevision;
-		if ( nRevision == 0 ) {
-			nRevision = 1;
+		m_bModified = true;
+		m_bCachedAabbValid = false;
+		++m_nRevision;
+		if ( m_nRevision == 0 ) {
+			m_nRevision = 1;
 		}
 	}
 } t3dInstanceCell_t;
 
 typedef struct t3dInstanceMesh_s {
-	int id = -1;
-	eastl::vector<t3dInstanceCell_t> cells;
+	int m_nId = -1;
+	eastl::vector<t3dInstanceCell_t> m_cells;
 } t3dInstanceMesh_t;
 
 class T3DInstanceStore {
-	static constexpr uint16_t INVALID_MESH_SLOT = UINT16_MAX;
+	static constexpr uint16_t s_nInvalidMeshSlot = UINT16_MAX;
 	eastl::vector<t3dInstanceMesh_t> m_meshes;
 	T3DHighWaterSlab<t3dPackedTransform_t> m_transformSlab;
 	T3DHighWaterSlab<uint32_t> m_colorSlab;
 	T3DHighWaterSlab<uint32_t> m_ownerSlab;
 	t3dInstanceLayout_t m_layout;
-	mutable uint16_t m_szMeshSlots[TERRAIN3D_MAX_MESH_ASSETS];
+	mutable uint16_t m_szMeshSlots[s_nMaxMeshAssets];
 	mutable bool m_bMeshLookupDirty = true;
 
 	static bool cellLess( const t3dInstanceCell_t &a, const Vector2i &b );

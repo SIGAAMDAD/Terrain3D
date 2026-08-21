@@ -54,7 +54,7 @@ class T3DData : public Object {
 	friend class T3DRegionResidency;
 
 public:														 // Constants
-	// Maximum logical grid. The active grid is TERRAIN3D_ACTIVE_WORLD_TEXELS / region_size.
+	// Maximum logical grid. The active grid is s_nActiveWorldTexels / region_size.
 
 
 
@@ -87,10 +87,10 @@ private:
 
 	// Shared implicit map payloads. Regions retain null control/color references until
 	// a write materializes them, while GPU arrays still receive valid layers.
-	Ref<Image> m_pDefaultHeightMap;
-	Ref<Image> m_pDefaultControlMap;
-	Ref<Image> m_pDefaultColorMap;
-	Ref<Image> m_pDefaultDerivedMap;
+	Ref<Image> m_defaultHeightMap;
+	Ref<Image> m_defaultControlMap;
+	Ref<Image> m_defaultColorMap;
+	Ref<Image> m_defaultDerivedMap;
 	bool m_bControlMapsImplicit = true;
 	bool m_bColorMapsImplicit = true;
 
@@ -298,8 +298,8 @@ public:
 	void configureResidentPool( int nCapacity = 64 );
 	void configureGpuRegionCache(
 		bool bEnabled, int nBudgetMb = 16, int nUploadLayers = 4,
-		int nUploadBudgetMb = 2, int nSparePages = TERRAIN3D_GPU_CACHE_DEFAULT_SPARE_LAYERS,
-		int nRetireFrames = TERRAIN3D_GPU_CACHE_DEFAULT_RETIRE_FRAMES
+		int nUploadBudgetMb = 2, int nSparePages = s_nGpuCacheDefaultSpareLayers,
+		int nRetireFrames = s_nGpuCacheDefaultRetireFrames
 	);
 	void configureCpuRegionCache(
 		bool bEnabled, int nBudgetMb = 16, int nLoadLayers = 4,
@@ -475,7 +475,7 @@ VARIANT_ENUM_CAST( t3dHeightFilter_t );
 
 // Returns an index in the maximum 64x64 process-static region table.
 // Repository operations additionally enforce the active map size, which is
-// derived from the fixed 4096x4096 world resolution and current region size.
+// derived from the s_nFixed 4096x4096 world resolution and current region size.
 EA_FORCE_INLINE int T3DData::getRegionMapIndex( const Vector2i &rRegionLoc ) { return T3DRegionRepository::getRegionMapIndex( rRegionLoc ); }
 
 // Returns a region location given a global position. No bounds checking nor data access.

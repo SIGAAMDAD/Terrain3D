@@ -30,24 +30,24 @@ class T3DRegionRepository;
 // repository topology once, then all sub-samples use unchecked in-cache access.
 
 typedef struct alignas( 64 ) t3dRegionView_s {
-	Vector2i location = Vector2i( INT32_MAX, INT32_MAX );
-	uint32_t nStamp = 0;
-	uint32_t nRegionGeneration = 0u;
-	uint32_t nValidatedOperation = 0u;
-	bool bLoaded = false;
-	bool bValid = false;
-	bool bControlResolved = false;
-	const uint8_t *pHeightBytes = nullptr;
-	const uint8_t *pControlBytes = nullptr;
-	const uint8_t *pDerivedBytes = nullptr;
+	Vector2i m_location = Vector2i( INT32_MAX, INT32_MAX );
+	uint32_t m_nStamp = 0;
+	uint32_t m_nRegionGeneration = 0u;
+	uint32_t m_nValidatedOperation = 0u;
+	bool m_bLoaded = false;
+	bool m_bValid = false;
+	bool m_bControlResolved = false;
+	const uint8_t *m_pHeightBytes = nullptr;
+	const uint8_t *m_pControlBytes = nullptr;
+	const uint8_t *m_pDerivedBytes = nullptr;
 } t3dRegionView_t;
 
 typedef struct t3dRegionCold_s {
-	T3DActiveMapLease activeLease;
-	T3DResidentMapLease lease;
-	PackedByteArray heightData;
-	PackedByteArray controlData;
-	PackedByteArray derivedData;
+	T3DActiveMapLease m_activeLease;
+	T3DResidentMapLease m_lease;
+	PackedByteArray m_heightData;
+	PackedByteArray m_controlData;
+	PackedByteArray m_derivedData;
 
 	void reset( void );
 } t3dRegionCold_t;
@@ -87,8 +87,8 @@ private:
 
 
 	t3dSamplingSource_t m_source;
-	eastl::array<t3dRegionView_t, TERRAIN3D_SAMPLER_CACHE_SIZE> m_szCache{};
-	eastl::array<t3dRegionCold_t, TERRAIN3D_SAMPLER_CACHE_SIZE> m_szCacheCold{};
+	eastl::array<t3dRegionView_t, s_nSamplerCacheSize> m_szCache{};
+	eastl::array<t3dRegionCold_t, s_nSamplerCacheSize> m_szCacheCold{};
 	t3dRegionView_t *m_pLastView = nullptr;
 	uint32_t m_stamp = 1;
 	uint32_t m_operation = 1u;

@@ -39,7 +39,7 @@ protected:
 	bool m_bHighlighted = false;
 	// Internal stable-slot sentinel. Placeholder resources must never escape the asset registry as authored assets.
 	bool m_bPlaceholder = false;
-	Ref<Texture2D> m_pThumbnail;
+	Ref<Texture2D> m_thumbnail;
 };
 
 #endif // TERRAIN3D_ASSET_RESOURCE_CLASS_H

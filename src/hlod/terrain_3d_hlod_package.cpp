@@ -22,8 +22,8 @@ HLOD_SET_VALUE( setEstimatedGpuBytes, m_nEstimatedGpuBytes, int64_t, MAX<int64_t
 HLOD_SET_VALUE( setBuiltUnix, m_nBuiltUnix, int64_t, MAX<int64_t>( value, 0 ) )
 
 void T3DHLODPackage::setMesh( const Ref<ArrayMesh> &rMesh ) {
-	if ( m_pMesh == rMesh ) { return; }
-	m_pMesh = rMesh;
+	if ( m_mesh == rMesh ) { return; }
+	m_mesh = rMesh;
 	emit_changed();
 }
 

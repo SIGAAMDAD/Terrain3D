@@ -24,7 +24,7 @@ public:
 
 private:
 	bool m_bLoaded = false;
-	std::array<uint64_t, TERRAIN3D_MAX_REGION_SLOTS> m_regionSignatures{};
+	std::array<uint64_t, s_nMaxRegionSlots> m_regionSignatures{};
 };
 
 #endif // TERRAIN3D_COOK_DATABASE_H

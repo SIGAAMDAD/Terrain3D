@@ -23,7 +23,7 @@
 #include "lighting/terrain_3d_region_lighting.h"
 #include "assets/terrain_3d_packed_pbr_texture.h"
 
-void initializeTerrain3dModule( ModuleInitializationLevel level ) {
+void t3dInitializeTerrain3DModule( ModuleInitializationLevel level ) {
 	if ( level != MODULE_INITIALIZATION_LEVEL_SCENE ) {
 		return;
 	}
@@ -56,7 +56,7 @@ void initializeTerrain3dModule( ModuleInitializationLevel level ) {
 	ClassDB::register_class<T3DUtil>();
 }
 
-void uninitializeTerrain3dModule( ModuleInitializationLevel level ) {
+void t3dUninitializeTerrain3DModule( ModuleInitializationLevel level ) {
 	if ( level != MODULE_INITIALIZATION_LEVEL_SCENE ) {
 		return;
 	}
@@ -65,15 +65,15 @@ void uninitializeTerrain3dModule( ModuleInitializationLevel level ) {
 #ifdef GDEXTENSION
 extern "C" {
 // Initialization.
-GDExtensionBool GDE_EXPORT terrain3dInit(
+GDExtensionBool GDE_EXPORT t3dInit(
 	GDExtensionInterfaceGetProcAddress getProcAddress,
 	GDExtensionClassLibraryPtr library,
 	GDExtensionInitialization *pInitialization
 ) {
 	GDExtensionBinding::InitObject initObj( getProcAddress, library, pInitialization );
 
-	initObj.register_initializer( initializeTerrain3dModule );
-	initObj.register_terminator( uninitializeTerrain3dModule );
+	initObj.register_initializer( t3dInitializeTerrain3DModule );
+	initObj.register_terminator( t3dUninitializeTerrain3DModule );
 	initObj.set_minimum_library_initialization_level( MODULE_INITIALIZATION_LEVEL_SERVERS );
 
 	return initObj.init();

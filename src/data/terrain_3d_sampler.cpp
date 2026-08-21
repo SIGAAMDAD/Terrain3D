@@ -38,19 +38,19 @@ void t3dRegionCold_t::reset( void ) {
 T3DSampler::T3DSampler( const t3dSamplingSource_t &rSource )
 	: m_source( rSource ) {
 	if ( m_source.valid() ) {
-		m_nSamplingGeneration = m_source.pStorage->getSamplingGeneration();
-		m_nRegionSize = m_source.pRepository->getRegionSize();
+		m_nSamplingGeneration = m_source.m_pStorage->getSamplingGeneration();
+		m_nRegionSize = m_source.m_pRepository->getRegionSize();
 		m_nRegionShift = m_nRegionSize > 0 && ( m_nRegionSize & ( m_nRegionSize - 1 ) ) == 0
 			? ( int ) ( t3dCountrZeroU32( ( uint32_t ) ( m_nRegionSize ) ) )
 			: -1;
 		m_nRegionMask = m_nRegionShift >= 0 ? ( int64_t ) ( m_nRegionSize - 1 ) : 0;
-		m_fVertexSpacing = m_source.pRepository->getVertexSpacing();
+		m_fVertexSpacing = m_source.m_pRepository->getVertexSpacing();
 		m_fInverseVertexSpacing = m_fVertexSpacing > 0.0f ? 1.0 / ( double ) ( m_fVertexSpacing ) : 0.0;
 	}
 }
 
 void T3DSampler::resetCache( const uint64_t nGeneration ) {
-	for ( int index = 0; index < TERRAIN3D_SAMPLER_CACHE_SIZE; ++index ) {
+	for ( int index = 0; index < s_nSamplerCacheSize; ++index ) {
 		m_szCacheCold[( size_t ) ( index )].reset();
 		m_szCache[( size_t ) ( index )] = t3dRegionView_t{};
 	}
@@ -58,12 +58,12 @@ void T3DSampler::resetCache( const uint64_t nGeneration ) {
 	m_stamp = 1u;
 	m_operation = 1u;
 	m_nSamplingGeneration = nGeneration;
-	m_nRegionSize = m_source.pRepository ? m_source.pRepository->getRegionSize() : 0;
+	m_nRegionSize = m_source.m_pRepository ? m_source.m_pRepository->getRegionSize() : 0;
 	m_nRegionShift = m_nRegionSize > 0 && ( m_nRegionSize & ( m_nRegionSize - 1 ) ) == 0
 		? ( int ) ( t3dCountrZeroU32( ( uint32_t ) ( m_nRegionSize ) ) )
 		: -1;
 	m_nRegionMask = m_nRegionShift >= 0 ? ( int64_t ) ( m_nRegionSize - 1 ) : 0;
-	m_fVertexSpacing = m_source.pRepository ? m_source.pRepository->getVertexSpacing() : 0.0f;
+	m_fVertexSpacing = m_source.m_pRepository ? m_source.m_pRepository->getVertexSpacing() : 0.0f;
 	m_fInverseVertexSpacing = m_fVertexSpacing > 0.0f ? 1.0 / ( double ) ( m_fVertexSpacing ) : 0.0;
 }
 
@@ -72,7 +72,7 @@ void T3DSampler::resetView( t3dRegionView_t *const pView ) {
 		return;
 	}
 	const ptrdiff_t index = pView - m_szCache.data();
-	if ( index < 0 || index >= TERRAIN3D_SAMPLER_CACHE_SIZE ) {
+	if ( index < 0 || index >= s_nSamplerCacheSize ) {
 		return;
 	}
 	m_szCacheCold[( size_t ) ( index )].reset();
@@ -83,14 +83,14 @@ bool T3DSampler::validateEpoch( void ) {
 	if ( !m_source.valid() || m_nRegionSize <= 0 || m_fVertexSpacing <= 0.0f ) {
 		return false;
 	}
-	const uint64_t current_generation = m_source.pStorage->getSamplingGeneration();
+	const uint64_t current_generation = m_source.m_pStorage->getSamplingGeneration();
 	if ( current_generation != m_nSamplingGeneration ) {
 		resetCache( current_generation );
 	}
 	if ( ++m_operation == 0u ) {
 		m_operation = 1u;
 		for ( t3dRegionView_t &entry : m_szCache ) {
-			entry.nValidatedOperation = 0u;
+			entry.m_nValidatedOperation = 0u;
 		}
 	}
 	return m_nRegionSize > 0 && m_fVertexSpacing > 0.0f;
@@ -134,31 +134,31 @@ uint32_t T3DSampler::readUint( const uint8_t *pBytes, const int iIndex ) {
 }
 
 uint32_t T3DSampler::readControl( const t3dRegionView_t *pView, const int iIndex ) {
-	if ( !pView || iIndex < 0 || !pView->bControlResolved ) {
+	if ( !pView || iIndex < 0 || !pView->m_bControlResolved ) {
 		return UINT32_MAX;
 	}
-	return pView->pControlBytes ? readUint( pView->pControlBytes, iIndex ) : TERRAIN3D_REGION_DEFAULT_CONTROL;
+	return pView->m_pControlBytes ? readUint( pView->m_pControlBytes, iIndex ) : s_nRegionDefaultControl;
 }
 
 t3dRegionView_t *T3DSampler::validateCachedView(
 	t3dRegionView_t *pView,
 	const Vector2i &rLocation
 ) {
-	if ( !pView || !pView->bLoaded || !pView->bValid || pView->location != rLocation ) {
+	if ( !pView || !pView->m_bLoaded || !pView->m_bValid || pView->m_location != rLocation ) {
 		return nullptr;
 	}
-	if ( pView->nValidatedOperation != m_operation ) {
-		const uint32_t generation = m_source.pStorage->getRegionGeneration( rLocation );
-		if ( generation == 0u || generation != pView->nRegionGeneration ) {
+	if ( pView->m_nValidatedOperation != m_operation ) {
+		const uint32_t generation = m_source.m_pStorage->getRegionGeneration( rLocation );
+		if ( generation == 0u || generation != pView->m_nRegionGeneration ) {
 			resetView( pView );
 			if ( m_pLastView == pView ) {
 				m_pLastView = nullptr;
 			}
 			return nullptr;
 		}
-		pView->nValidatedOperation = m_operation;
+		pView->m_nValidatedOperation = m_operation;
 	}
-	pView->nStamp = ++m_stamp;
+	pView->m_nStamp = ++m_stamp;
 	return pView;
 }
 
@@ -172,22 +172,22 @@ t3dRegionView_t *T3DSampler::getRegionViewUnchecked( const Vector2i &rLocation )
 
 	t3dRegionView_t *pReplacement = &m_szCache[0];
 	for ( t3dRegionView_t &entry : m_szCache ) {
-		if ( entry.bLoaded && entry.location == rLocation ) {
+		if ( entry.m_bLoaded && entry.m_location == rLocation ) {
 			if ( t3dRegionView_t *hit = validateCachedView( &entry, rLocation ) ) {
 				m_pLastView = hit;
 				return hit;
 			}
 		}
-		if ( !entry.bLoaded ) {
+		if ( !entry.m_bLoaded ) {
 			pReplacement = &entry;
 			break;
 		}
-		if ( entry.nStamp < pReplacement->nStamp ) {
+		if ( entry.m_nStamp < pReplacement->m_nStamp ) {
 			pReplacement = &entry;
 		}
 	}
 
-	T3DRegion *const pRegion = m_source.pRepository->getRegionPtr( rLocation );
+	T3DRegion *const pRegion = m_source.m_pRepository->getRegionPtr( rLocation );
 	if ( !pRegion || pRegion->isDeleted() ) {
 		return nullptr;
 	}
@@ -195,81 +195,81 @@ t3dRegionView_t *T3DSampler::getRegionViewUnchecked( const Vector2i &rLocation )
 	resetView( pReplacement );
 	const size_t replacement_index = ( size_t ) ( pReplacement - m_szCache.data() );
 	t3dRegionCold_t &rCold = m_szCacheCold[replacement_index];
-	pReplacement->location = rLocation;
-	pReplacement->nStamp = ++m_stamp;
-	pReplacement->bLoaded = true;
-	pReplacement->nRegionGeneration = m_source.pStorage->getRegionGeneration( rLocation );
-	pReplacement->nValidatedOperation = m_operation;
-	pReplacement->bControlResolved = !pRegion->hasChannel( TYPE_CONTROL ) ||
+	pReplacement->m_location = rLocation;
+	pReplacement->m_nStamp = ++m_stamp;
+	pReplacement->m_bLoaded = true;
+	pReplacement->m_nRegionGeneration = m_source.m_pStorage->getRegionGeneration( rLocation );
+	pReplacement->m_nValidatedOperation = m_operation;
+	pReplacement->m_bControlResolved = !pRegion->hasChannel( TYPE_CONTROL ) ||
 		pRegion->getMapPtr( TYPE_CONTROL ) != nullptr;
 
-	T3DActiveMapLease active = m_source.pStorage->acquireActive( rLocation );
+	T3DActiveMapLease active = m_source.m_pStorage->acquireActive( rLocation );
 	if ( active.valid() ) {
 		const t3dActiveMapView_t &view = active.view();
-		pReplacement->pHeightBytes = ( const uint8_t * ) ( view.pHeight );
-		rCold.activeLease = std::move( active );
+		pReplacement->m_pHeightBytes = ( const uint8_t * ) ( view.m_pHeight );
+		rCold.m_activeLease = std::move( active );
 	} else {
-		T3DResidentMapLease pooled = m_source.pStorage->acquireResident( rLocation, pRegion );
+		T3DResidentMapLease pooled = m_source.m_pStorage->acquireResident( rLocation, pRegion );
 		if ( pooled.valid() ) {
 			const t3dResidentMapView_t &view = pooled.getView();
-			pReplacement->pHeightBytes = ( const uint8_t * ) ( view.pHeight );
-			pReplacement->pControlBytes = ( const uint8_t * ) ( view.pControl );
-			pReplacement->pDerivedBytes = ( const uint8_t * ) ( view.pDerived );
-			rCold.lease = std::move( pooled );
+			pReplacement->m_pHeightBytes = ( const uint8_t * ) ( view.m_pHeight );
+			pReplacement->m_pControlBytes = ( const uint8_t * ) ( view.m_pControl );
+			pReplacement->m_pDerivedBytes = ( const uint8_t * ) ( view.m_pDerived );
+			rCold.m_lease = std::move( pooled );
 		} else {
 		Image *const height = pRegion->getMapPtr( TYPE_HEIGHT );
 		Image *const control = pRegion->getMapPtr( TYPE_CONTROL );
 		if ( !height || height->get_format() != Image::FORMAT_R16 ) {
 			return nullptr;
 		}
-			rCold.heightData = height->get_data();
+			rCold.m_heightData = height->get_data();
 			const int texels = m_nRegionSize * m_nRegionSize;
-			if ( rCold.heightData.size() < texels * ( int ) ( sizeof( uint16_t ) ) ) {
-				rCold.heightData.clear();
+			if ( rCold.m_heightData.size() < texels * ( int ) ( sizeof( uint16_t ) ) ) {
+				rCold.m_heightData.clear();
 				return nullptr;
 			}
-			pReplacement->pHeightBytes = rCold.heightData.ptr();
+			pReplacement->m_pHeightBytes = rCold.m_heightData.ptr();
 			if ( control ) {
 				if ( control->get_format() != Image::FORMAT_RF ) {
 					return nullptr;
 				}
-				rCold.controlData = control->get_data();
-				if ( rCold.controlData.size() < texels * ( int ) ( sizeof( uint32_t ) ) ) {
-					rCold.controlData.clear();
+				rCold.m_controlData = control->get_data();
+				if ( rCold.m_controlData.size() < texels * ( int ) ( sizeof( uint32_t ) ) ) {
+					rCold.m_controlData.clear();
 					return nullptr;
 				}
-				pReplacement->pControlBytes = rCold.controlData.ptr();
+				pReplacement->m_pControlBytes = rCold.m_controlData.ptr();
 			}
 		}
 	}
 
-	if ( !pReplacement->pControlBytes ) {
+	if ( !pReplacement->m_pControlBytes ) {
 		Image *const control = pRegion->getMapPtr( TYPE_CONTROL );
 		if ( control ) {
 			if ( control->get_format() != Image::FORMAT_RF ) {
 				return nullptr;
 			}
-			rCold.controlData = control->get_data();
+			rCold.m_controlData = control->get_data();
 			const int texels = m_nRegionSize * m_nRegionSize;
-			if ( rCold.controlData.size() < texels * ( int ) ( sizeof( uint32_t ) ) ) {
-				rCold.controlData.clear();
+			if ( rCold.m_controlData.size() < texels * ( int ) ( sizeof( uint32_t ) ) ) {
+				rCold.m_controlData.clear();
 				return nullptr;
 			}
-			pReplacement->pControlBytes = rCold.controlData.ptr();
+			pReplacement->m_pControlBytes = rCold.m_controlData.ptr();
 		}
 	}
 
-	if ( !pReplacement->pDerivedBytes && pRegion->hasValidDerivedNormalSlopeMap() ) {
+	if ( !pReplacement->m_pDerivedBytes && pRegion->hasValidDerivedNormalSlopeMap() ) {
 		const Ref<Image> derived = pRegion->getDerivedNormalSlopeMap();
 		if ( derived.is_valid() && derived->get_format() == Image::FORMAT_RG8 ) {
-			rCold.derivedData = derived->get_data();
+			rCold.m_derivedData = derived->get_data();
 		}
 	}
 	const int expected_derived_bytes = m_nRegionSize * m_nRegionSize * 2;
-	if ( !pReplacement->pDerivedBytes && rCold.derivedData.size() >= expected_derived_bytes ) {
-		pReplacement->pDerivedBytes = rCold.derivedData.ptr();
+	if ( !pReplacement->m_pDerivedBytes && rCold.m_derivedData.size() >= expected_derived_bytes ) {
+		pReplacement->m_pDerivedBytes = rCold.m_derivedData.ptr();
 	}
-	pReplacement->bValid = true;
+	pReplacement->m_bValid = true;
 	m_pLastView = pReplacement;
 	return pReplacement;
 }
@@ -311,7 +311,7 @@ float T3DSampler::sampleHeightGridUnchecked(
 		isHole( readControl( pView, index ) ) ) {
 		return NAN;
 	}
-	return readHeight( pView->pHeightBytes, index );
+	return readHeight( pView->m_pHeightBytes, index );
 }
 
 uint32_t T3DSampler::sampleControlGridUnchecked( const int64_t iGridX, const int64_t iGridZ ) {
@@ -362,7 +362,7 @@ float T3DSampler::sampleHeightUnchecked( const Vector3 &rGlobalPosition ) {
 	const double fDx = ( fGridX - ( double ) ( rounded_x ) ) * ( double ) ( m_fVertexSpacing );
 	const double fDz = ( fGridZ - ( double ) ( rounded_z ) ) * ( double ) ( m_fVertexSpacing );
 	if ( fDx * fDx + fDz * fDz < 0.0001 ) {
-		return readHeight( pView->pHeightBytes, index );
+		return readHeight( pView->m_pHeightBytes, index );
 	}
 
 	const int local_x = m_nRegionShift >= 0 ? ( int ) ( index & ( int ) ( m_nRegionMask ) ) : index % m_nRegionSize;
@@ -375,10 +375,10 @@ float T3DSampler::sampleHeightUnchecked( const Vector3 &rGlobalPosition ) {
 		// The overwhelmingly common path resolves one region and consumes two
 		// adjacent R16 pairs. No cache scan, coordinate decomposition or metadata
 		// load occurs for the remaining three samples.
-		fH00 = readHeight( pView->pHeightBytes, index );
-		fH10 = readHeight( pView->pHeightBytes, index + 1 );
-		fH01 = readHeight( pView->pHeightBytes, index + m_nRegionSize );
-		fH11 = readHeight( pView->pHeightBytes, index + m_nRegionSize + 1 );
+		fH00 = readHeight( pView->m_pHeightBytes, index );
+		fH10 = readHeight( pView->m_pHeightBytes, index + 1 );
+		fH01 = readHeight( pView->m_pHeightBytes, index + m_nRegionSize );
+		fH11 = readHeight( pView->m_pHeightBytes, index + m_nRegionSize + 1 );
 	} else {
 		fH00 = sampleHeightGridUnchecked( x0, z0, false );
 		fH10 = sampleHeightGridUnchecked( x0 + 1, z0, false );
@@ -427,7 +427,7 @@ Vector3 T3DSampler::sampleNormalUnchecked( const Vector3 &rGlobalPosition, float
 		for ( int z = 0; z < needed; ++z ) {
 			const int row = index + z * m_nRegionSize;
 			for ( int x = 0; x < needed; ++x ) {
-				fHeights[z][x] = readHeight( pView->pHeightBytes, row + x );
+				fHeights[z][x] = readHeight( pView->m_pHeightBytes, row + x );
 			}
 		}
 	} else {
@@ -488,10 +488,10 @@ Vector3 T3DSampler::sampleSlopeNormalUnchecked( const Vector3 &rGlobalPosition )
 	if ( !resolveGridUnchecked( x, z, pView, index ) ) {
 		return V3_NAN;
 	}
-	if ( pView->pDerivedBytes ) {
+	if ( pView->m_pDerivedBytes ) {
 		const size_t offset = ( size_t ) ( index ) * 2u;
-		const float fNx = ( float ) ( pView->pDerivedBytes[offset + 0u] ) / TERRAIN3D_BYTE_MAX_FLOAT * 2.0f - 1.0f;
-		const float fNz = ( float ) ( pView->pDerivedBytes[offset + 1u] ) / TERRAIN3D_BYTE_MAX_FLOAT * 2.0f - 1.0f;
+		const float fNx = ( float ) ( pView->m_pDerivedBytes[offset + 0u] ) / s_fByteMaxFloat * 2.0f - 1.0f;
+		const float fNz = ( float ) ( pView->m_pDerivedBytes[offset + 1u] ) / s_fByteMaxFloat * 2.0f - 1.0f;
 		const float fNy = Math::sqrt( MAX( 1.0f - fNx * fNx - fNz * fNz, 0.0f ) );
 		Vector3 normal( fNx, fNy, fNz );
 		if ( normal.length_squared() > CMP_EPSILON ) {
@@ -504,9 +504,9 @@ Vector3 T3DSampler::sampleSlopeNormalUnchecked( const Vector3 &rGlobalPosition )
 	const int local_x = m_nRegionShift >= 0 ? ( int ) ( index & ( int ) ( m_nRegionMask ) ) : index % m_nRegionSize;
 	const int local_z = m_nRegionShift >= 0 ? index >> m_nRegionShift : index / m_nRegionSize;
 	if ( local_x + 1 < m_nRegionSize && local_z + 1 < m_nRegionSize ) {
-		fHeight = readHeight( pView->pHeightBytes, index );
-		fHeightX = readHeight( pView->pHeightBytes, index + 1 );
-		fHeightZ = readHeight( pView->pHeightBytes, index + m_nRegionSize );
+		fHeight = readHeight( pView->m_pHeightBytes, index );
+		fHeightX = readHeight( pView->m_pHeightBytes, index + 1 );
+		fHeightZ = readHeight( pView->m_pHeightBytes, index + m_nRegionSize );
 	} else {
 		fHeight = sampleHeightGridUnchecked( x, z, false );
 		fHeightX = sampleHeightGridUnchecked( x + 1, z, false );
@@ -621,7 +621,7 @@ bool T3DSampler::copyHeightRect(
 				continue;
 			}
 			const int index = local_z * m_nRegionSize + local_x;
-			const uint16_t *pHeight = ( const uint16_t * ) ( pView->pHeightBytes ) + index;
+			const uint16_t *pHeight = ( const uint16_t * ) ( pView->m_pHeightBytes ) + index;
 			if ( !bRespectHoles ) {
 				for ( int i = 0; i < run; ++i ) {
 					destination[copied + i] = t3dRegionCodecDecodeHeightU16( pHeight[i] );
@@ -671,7 +671,7 @@ bool T3DSampler::minimumHeightRect(
 				return false;
 			}
 			const int index = local_z * m_nRegionSize + local_x;
-			const uint16_t *pHeight = ( const uint16_t * ) ( pView->pHeightBytes ) + index;
+			const uint16_t *pHeight = ( const uint16_t * ) ( pView->m_pHeightBytes ) + index;
 			for ( int i = 0; i < run; ++i ) {
 				if ( bRespectHoles && isHole( readControl( pView, index + i ) ) ) {
 					return false;

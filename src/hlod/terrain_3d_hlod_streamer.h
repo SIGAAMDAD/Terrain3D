@@ -24,31 +24,31 @@ using namespace godot;
 class T3DTerrain;
 
 typedef struct t3dEntry_s {
-	int level = 1;
-	Vector2i cluster = V2I_ZERO;
-	Vector2i regionMin = V2I_ZERO;
-	Vector2i regionMax = V2I_ZERO;
-	AABB localBounds;
-	String packagePath;
-	real_t geometricError = 1.0f;
-	int64_t sourceSignature = 0;
-	int64_t buildSignature = 0;
-	int64_t estimatedGpuBytes = 0;
-	int parent = -1;
-	int children[4] = {-1, -1, -1, -1};
-	bool desired = false;
-	bool requestStarted = false;
-	bool loadFailed = false;
-	bool active = false;
-	bool retiring = false;
-	uint8_t retireReadyFrames = 0;
-	Ref<T3DHLODPackage> package;
-	RID instance;
+	int m_nLevel = 1;
+	Vector2i m_cluster = V2I_ZERO;
+	Vector2i m_regionMin = V2I_ZERO;
+	Vector2i m_regionMax = V2I_ZERO;
+	AABB m_localBounds;
+	String m_packagePath;
+	real_t m_fGeometricError = 1.0f;
+	int64_t m_nSourceSignature = 0;
+	int64_t m_nBuildSignature = 0;
+	int64_t m_nEstimatedGpuBytes = 0;
+	int m_nParent = -1;
+	int m_szChildren[4] = {-1, -1, -1, -1};
+	bool m_bDesired = false;
+	bool m_bRequestStarted = false;
+	bool m_bLoadFailed = false;
+	bool m_bActive = false;
+	bool m_bRetiring = false;
+	uint8_t m_nRetireReadyFrames = 0;
+	Ref<T3DHLODPackage> m_ackage;
+	RID m_hInstance;
 } t3dEntry_t;
 
 typedef struct t3dNodePolicy_s {
-	int64_t spawnId = 0;
-	uint8_t minLevel = 0;
+	int64_t m_nSpawnId = 0;
+	uint8_t m_nMinLevel = 0;
 } t3dNodePolicy_t;
 
 class T3DHLODStreamer : public Object {
@@ -65,10 +65,10 @@ class T3DHLODStreamer : public Object {
 	eastl::vector<int> m_roots;
 	eastl::vector<uint8_t> m_instancerMinLevels;
 	eastl::vector<t3dNodePolicy_t> m_nodePolicies;
-	eastl::array<uint32_t, TERRAIN3D_MAX_REGION_SLOTS + 1> m_nodePolicyOffsets{};
-	uint8_t m_regionRepresentationLevel[TERRAIN3D_MAX_REGION_SLOTS] = {};
-	eastl::bitset<TERRAIN3D_MAX_REGION_SLOTS> m_managedRegions;
-	eastl::bitset<TERRAIN3D_MAX_REGION_SLOTS> m_detailRequiredRegions;
+	eastl::array<uint32_t, s_nMaxRegionSlots + 1> m_nodePolicyOffsets{};
+	uint8_t m_regionRepresentationLevel[s_nMaxRegionSlots] = {};
+	eastl::bitset<s_nMaxRegionSlots> m_managedRegions;
+	eastl::bitset<s_nMaxRegionSlots> m_detailRequiredRegions;
 	bool m_bEnabled = true;
 	String m_manifestPath;
 	real_t m_fTargetErrorPixels = 3.0f;
@@ -146,7 +146,7 @@ public:
 	EA_FORCE_INLINE bool isRegionManaged( const Vector2i &rRegion ) const { const int index = regionIndex( rRegion ); return index >= 0 && m_managedRegions.test( ( size_t ) index ); }
 	EA_FORCE_INLINE bool isRegionDetailRequired( const Vector2i &rRegion ) const { const int index = regionIndex( rRegion ); return index < 0 || !m_managedRegions.test( ( size_t ) index ) || m_detailRequiredRegions.test( ( size_t ) index ); }
 	EA_FORCE_INLINE bool isRegionSuppressed( const Vector2i &rRegion, int nMinimumLevel = 1 ) const { return getRegionRepresentationLevel( rRegion ) >= CLAMP( nMinimumLevel, 1, 6 ); }
-	EA_FORCE_INLINE uint8_t getInstancerMinimumLevel( const Vector2i &rRegion, int nMeshId ) const { const int region = regionIndex( rRegion ); if ( region < 0 || nMeshId < 0 || nMeshId >= TERRAIN3D_MAX_MESH_ASSETS ) { return 0; } const size_t offset = ( size_t ) region * TERRAIN3D_MAX_MESH_ASSETS + ( size_t ) nMeshId; return offset < m_instancerMinLevels.size() ? m_instancerMinLevels[offset] : 0; }
+	EA_FORCE_INLINE uint8_t getInstancerMinimumLevel( const Vector2i &rRegion, int nMeshId ) const { const int region = regionIndex( rRegion ); if ( region < 0 || nMeshId < 0 || nMeshId >= s_nMaxMeshAssets ) { return 0; } const size_t offset = ( size_t ) region * s_nMaxMeshAssets + ( size_t ) nMeshId; return offset < m_instancerMinLevels.size() ? m_instancerMinLevels[offset] : 0; }
 	uint8_t getNodeMinimumLevel( const Vector2i &rRegion, int64_t nSpawnId ) const;
 	EA_FORCE_INLINE uint8_t getRegionRepresentationLevel( const Vector2i &rRegion ) const { const int index = regionIndex( rRegion ); return index >= 0 ? m_regionRepresentationLevel[index] : 0; }
 	EA_FORCE_INLINE int64_t getResidentEstimatedBytes( void ) const { return m_nResidentEstimatedBytes; }

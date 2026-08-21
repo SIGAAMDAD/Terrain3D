@@ -20,31 +20,31 @@ using namespace godot;
 #endif
 
 typedef struct t3dHlodRuntimeEntryRecord_s {
-	int level = 1;
-	Vector2i cluster = V2I_ZERO;
-	Vector2i regionMin = V2I_ZERO;
-	Vector2i regionMax = V2I_ZERO;
-	AABB localBounds;
-	String packagePath;
-	real_t geometricError = 1.0f;
-	int64_t sourceSignature = 0;
-	int64_t buildSignature = 0;
-	int64_t estimatedGpuBytes = 0;
-	int parent = -1;
-	int children[4] = {-1, -1, -1, -1};
+	int m_nLevel = 1;
+	Vector2i m_cluster = V2I_ZERO;
+	Vector2i m_regionMin = V2I_ZERO;
+	Vector2i m_regionMax = V2I_ZERO;
+	AABB m_localBounds;
+	String m_packagePath;
+	real_t m_fGeometricError = 1.0f;
+	int64_t m_nSourceSignature = 0;
+	int64_t m_nBuildSignature = 0;
+	int64_t m_nEstimatedGpuBytes = 0;
+	int m_nParent = -1;
+	int m_szChildren[4] = {-1, -1, -1, -1};
 } t3dHlodRuntimeEntryRecord_t;
 
 typedef struct t3dHlodRuntimeNodePolicyRecord_s {
-	int64_t spawnId = 0;
-	uint8_t minLevel = 0;
+	int64_t m_nSpawnId = 0;
+	uint8_t m_nMinLevel = 0;
 } t3dHlodRuntimeNodePolicyRecord_t;
 
 typedef struct t3dHlodRuntimeData_s {
-	eastl::vector<t3dHlodRuntimeEntryRecord_t> entries;
-	eastl::vector<int> roots;
-	eastl::vector<uint8_t> instancerMinLevels;
-	eastl::vector<t3dHlodRuntimeNodePolicyRecord_t> nodePolicies;
-	eastl::array<uint32_t, TERRAIN3D_MAX_REGION_SLOTS + 1> nodePolicyOffsets{};
+	eastl::vector<t3dHlodRuntimeEntryRecord_t> m_entries;
+	eastl::vector<int> m_roots;
+	eastl::vector<uint8_t> m_instancerMinLevels;
+	eastl::vector<t3dHlodRuntimeNodePolicyRecord_t> m_nodePolicies;
+	eastl::array<uint32_t, s_nMaxRegionSlots + 1> m_szNodePolicyOffsets{};
 } t3dHlodRuntimeData_t;
 
 class T3DHLODRuntimeCodec {

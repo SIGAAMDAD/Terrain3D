@@ -46,7 +46,7 @@ bool add( const size_t nBytes, const size_t nAlignment, size_t *pOffset = nullpt
 			m_bValid = false;
 			return false;
 		}
-		return add( nCount * sizeof( T ), std::max<size_t>( alignof( T ), TERRAIN3D_ARENA_CACHELINE_ALIGNMENT ) );
+		return add( nCount * sizeof( T ), std::max<size_t>( alignof( T ), s_nArenaCachelineAlignment ) );
 	}
 
 	EA_FORCE_INLINE size_t size( void ) const { return m_nSize; }
@@ -78,7 +78,7 @@ public:
 	T3DLinearArena &operator=( const T3DLinearArena & ) = delete;
 
 
-	bool configure( const size_t nBytes, const size_t nBaseAlignment = TERRAIN3D_ARENA_DEFAULT_BASE_ALIGNMENT ) {
+	bool configure( const size_t nBytes, const size_t nBaseAlignment = s_nArenaDefaultBaseAlignment ) {
 		release();
 		if ( nBytes == 0u ) {
 			return true;
@@ -100,7 +100,7 @@ public:
 		return true;
 	}
 
-	bool ensureCapacity( const size_t nBytes, const size_t nBaseAlignment = TERRAIN3D_ARENA_DEFAULT_BASE_ALIGNMENT ) {
+	bool ensureCapacity( const size_t nBytes, const size_t nBaseAlignment = s_nArenaDefaultBaseAlignment ) {
 		if ( nBytes <= m_nCapacity && m_pBase ) { m_iOffset = 0u; return true; }
 		return configure( nBytes, nBaseAlignment );
 	}
@@ -141,7 +141,7 @@ public:
 			return nullptr;
 		}
 		return ( T * ) ( allocate(
-			nCount * sizeof( T ), std::max<size_t>( alignof( T ), TERRAIN3D_ARENA_CACHELINE_ALIGNMENT ) ) );
+			nCount * sizeof( T ), std::max<size_t>( alignof( T ), s_nArenaCachelineAlignment ) ) );
 	}
 
 	EA_FORCE_INLINE size_t usedBytes( void ) const { return m_iOffset; }

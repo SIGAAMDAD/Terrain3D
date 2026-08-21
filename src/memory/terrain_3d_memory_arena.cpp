@@ -35,7 +35,7 @@ bool T3DMemoryArenaLayout::configure( const size_t nCapacityBytes ) {
 	m_nCapacity = nCapacityBytes;
 	m_nLowCursor = 0u;
 	m_nHighCursor = nCapacityBytes;
-	m_nMaxAlignment = TERRAIN3D_ARENA_DEFAULT_BASE_ALIGNMENT;
+	m_nMaxAlignment = s_nArenaDefaultBaseAlignment;
 	m_bValid = true;
 	m_bSealed = false;
 	return true;
@@ -107,7 +107,7 @@ bool T3DMemoryArena::initialize( const T3DMemoryArenaLayout &rLayout ) {
 		return false;
 	}
 	m_nCapacity = rLayout.capacity();
-	m_nBaseAlignment = std::max( rLayout.maxAlignment(), TERRAIN3D_ARENA_DEFAULT_BASE_ALIGNMENT );
+	m_nBaseAlignment = std::max( rLayout.maxAlignment(), s_nArenaDefaultBaseAlignment );
 	if ( m_nCapacity == 0u ) {
 		m_bInitialized = true;
 		return true;
@@ -152,31 +152,31 @@ void T3DMemoryArena::release( void ) {
 	m_pRaw = nullptr;
 	m_pBase = nullptr;
 	m_nCapacity = 0u;
-	m_nBaseAlignment = TERRAIN3D_ARENA_DEFAULT_BASE_ALIGNMENT;
+	m_nBaseAlignment = s_nArenaDefaultBaseAlignment;
 	m_bInitialized = false;
 	m_bCommitted = false;
 	m_bSealed = false;
 }
 
 bool T3DMemoryArena::sliceInBounds( const t3dMemoryArenaSlice_t &rSlice ) const {
-	if ( !rSlice.reserved || rSlice.offset > m_nCapacity || rSlice.alignment == 0u ||
-		( rSlice.alignment & ( rSlice.alignment - 1u ) ) != 0u ||
-		rSlice.offset % rSlice.alignment != 0u ) {
+	if ( !rSlice.m_bReserved || rSlice.m_iOffset > m_nCapacity || rSlice.m_nAlignment == 0u ||
+		( rSlice.m_nAlignment & ( rSlice.m_nAlignment - 1u ) ) != 0u ||
+		rSlice.m_iOffset % rSlice.m_nAlignment != 0u ) {
 		return false;
 	}
-	return rSlice.size <= m_nCapacity - rSlice.offset;
+	return rSlice.m_nSize <= m_nCapacity - rSlice.m_iOffset;
 }
 
 t3dMemoryArenaSpan_t T3DMemoryArena::resolve( const t3dMemoryArenaSlice_t &rSlice ) {
 	if ( !initialized() || !sliceInBounds( rSlice ) ) {
 		return {};
 	}
-	return {m_pBase ? m_pBase + rSlice.offset : nullptr, rSlice.size};
+	return {m_pBase ? m_pBase + rSlice.m_iOffset : nullptr, rSlice.m_nSize};
 }
 
 t3dMemoryArenaSpan_t T3DMemoryArena::resolve( const t3dMemoryArenaSlice_t &rSlice ) const {
 	if ( !initialized() || !sliceInBounds( rSlice ) ) {
 		return {};
 	}
-	return {m_pBase ? m_pBase + rSlice.offset : nullptr, rSlice.size};
+	return {m_pBase ? m_pBase + rSlice.m_iOffset : nullptr, rSlice.m_nSize};
 }

@@ -35,62 +35,62 @@ typedef enum t3dRuntimePageConsumer_e : uint16_t {
 } t3dRuntimePageConsumer_t;
 
 typedef struct t3dRuntimePageConfig_s {
-	String dataDirectory;
-	uint64_t materialSourceSignature = 0u;
-	uint64_t collisionSurfaceSignature = 0u;
-	int colorDivisor = 1;
-	int derivedDivisor = 1;
-	int middleHeightDivisor = 1;
-	int prepareThreads = 2;
-	bool bCookedPagesEnabled = false;
-	bool bEditorAuthoring = false;
+	String m_dataDirectory;
+	uint64_t m_nMaterialSourceSignature = 0u;
+	uint64_t m_nCollisionSurfaceSignature = 0u;
+	int m_nColorDivisor = 1;
+	int m_nDerivedDivisor = 1;
+	int m_nMiddleHeightDivisor = 1;
+	int m_nPrepareThreads = 2;
+	bool m_bCookedPagesEnabled = false;
+	bool m_bEditorAuthoring = false;
 } t3dRuntimePageConfig_t;
 
 typedef struct t3dRuntimePageCookPayload_s {
-	Ref<Image> height;
-	Ref<Image> pControl;
-	Ref<Image> pColor;
-	Ref<Image> pDerived;
-	Ref<Image> pMiddleHeight;
-	Ref<Image> pMiddleComposite;
-	Ref<Image> pTerrainShadowMask;
-	PackedByteArray holeMask;
-	PackedByteArray collisionHeight;
-	PackedByteArray collisionBounds;
-	PackedByteArray navigation;
-	PackedByteArray minMaxHeight;
-	PackedByteArray nodeDescriptors;
-	PackedByteArray instanceMetadata;
-	PackedByteArray lightingReceivers;
-	PackedByteArray multimeshFastStart;
-	uint32_t materialMask = 1u;
+	Ref<Image> m_height;
+	Ref<Image> m_control;
+	Ref<Image> m_color;
+	Ref<Image> m_derived;
+	Ref<Image> m_middleHeight;
+	Ref<Image> m_middleComposite;
+	Ref<Image> m_terrainShadowMask;
+	PackedByteArray m_holeMask;
+	PackedByteArray m_collisionHeight;
+	PackedByteArray m_collisionBounds;
+	PackedByteArray m_navigation;
+	PackedByteArray m_minMaxHeight;
+	PackedByteArray m_nodeDescriptors;
+	PackedByteArray m_instanceMetadata;
+	PackedByteArray m_lightingReceivers;
+	PackedByteArray m_multimeshFastStart;
+	uint32_t m_nMaterialMask = 1u;
 } t3dRuntimePageCookPayload_t;
 
 typedef struct t3dRuntimePageStats_s {
-	int nPreparedPages = 0;
-	int nPreparedLoadedPages = 0;
-	int nPendingPages = 0;
-	int nQueuedPages = 0;
-	int nPrepareWorkers = 0;
-	bool bPrepareJobActive = false;
-	uint64_t nPrepareLatencyUsecLast = 0u;
-	uint64_t nPrepareQueueWaitUsecLast = 0u;
-	uint64_t nPrepareFileOpenUsecLast = 0u;
-	uint64_t nPrepareFileReadUsecLast = 0u;
-	uint64_t nPrepareValidationUsecLast = 0u;
-	uint64_t nPrepareMaterializeUsecLast = 0u;
-	uint64_t nPrepareWorkerUsecLast = 0u;
-	uint64_t nPrepareReadyWaitUsecLast = 0u;
+	int m_nPreparedPages = 0;
+	int m_nPreparedLoadedPages = 0;
+	int m_nPendingPages = 0;
+	int m_nQueuedPages = 0;
+	int m_nPrepareWorkers = 0;
+	bool m_bPrepareJobActive = false;
+	uint64_t m_nPrepareLatencyUsecLast = 0u;
+	uint64_t m_nPrepareQueueWaitUsecLast = 0u;
+	uint64_t m_nPrepareFileOpenUsecLast = 0u;
+	uint64_t m_nPrepareFileReadUsecLast = 0u;
+	uint64_t m_nPrepareValidationUsecLast = 0u;
+	uint64_t m_nPrepareMaterializeUsecLast = 0u;
+	uint64_t m_nPrepareWorkerUsecLast = 0u;
+	uint64_t m_nPrepareReadyWaitUsecLast = 0u;
 } t3dRuntimePageStats_t;
 
 typedef struct t3dRuntimePageServiceState_s {
 	using IsWantedFn = bool ( * )( void *pContext, const Vector2i &rLocation );
 
-	t3dRuntimePageConfig_t config;
-	Vector2i predictedCenter = V2I_MAX;
-	uint64_t streamingGeneration = 0u;
-	IsWantedFn pIsWanted = nullptr;
-	void *pWantedContext = nullptr;
+	t3dRuntimePageConfig_t m_config;
+	Vector2i m_predictedCenter = V2I_MAX;
+	uint64_t m_nStreamingGeneration = 0u;
+	IsWantedFn m_isWanted = nullptr;
+	void *m_pWantedContext = nullptr;
 } t3dRuntimePageServiceState_t;
 
 // Owns cooked runtime-page I/O, validation/materialization, merged consumer
@@ -98,54 +98,54 @@ typedef struct t3dRuntimePageServiceState_s {
 // decide which locations they want; this store performs one physical page read
 // that can satisfy all consumers of that location.
 typedef struct t3dRuntimePreparedPage_s {
-	Vector2i location = V2I_MAX;
-	String pagePath;
-	String sourcePath;
-	uint32_t expectedChannelFlags = 0u;
-	uint64_t expectedSourceSignature = 0u;
-	int nRegionSize = 0;
-	int colorDivisor = 1;
-	int derivedDivisor = 1;
-	int middleHeightDivisor = 1;
-	uint32_t materialMask = 1u;
-	uint16_t consumerMask = 0u;
-	PackedByteArray heightBytes;
-	Ref<Image> height;
-	Ref<Image> pControl;
-	Ref<Image> pColor;
-	Ref<Image> pDerived;
-	Ref<Image> pMiddleHeight;
-	Ref<Image> pMiddleComposite;
-	Ref<Image> pTerrainShadowMask;
-	PackedByteArray instancePage;
-	PackedByteArray holeMask;
-	PackedByteArray collisionHeight;
-	PackedByteArray collisionBounds;
-	PackedByteArray navigation;
-	PackedByteArray minMaxHeight;
-	PackedByteArray nodeDescriptors;
-	PackedByteArray instanceMetadata;
-	PackedByteArray lightingReceivers;
-	PackedByteArray multimeshFastStart;
-	T3DInstanceStore preparedInstanceStore;
-	uint64_t nRequestedUsec = 0u;
-	uint64_t nWorkerStartedUsec = 0u;
-	uint64_t nFileOpenUsec = 0u;
-	uint64_t nFileReadUsec = 0u;
-	uint64_t nValidationUsec = 0u;
-	uint64_t nMaterializeUsec = 0u;
-	uint64_t nWorkerFinishedUsec = 0u;
-	bool bAttempted = false;
-	bool bLoaded = false;
-	bool bInstanceAttempted = false;
-	bool bInstanceLoaded = false;
-	bool bLoadMinMax = false;
-	bool bEditorAuthoring = false;
+	Vector2i m_location = V2I_MAX;
+	String m_pagePath;
+	String m_sourcePath;
+	uint32_t m_nExpectedChannelFlags = 0u;
+	uint64_t m_nExpectedSourceSignature = 0u;
+	int m_nRegionSize = 0;
+	int m_nColorDivisor = 1;
+	int m_nDerivedDivisor = 1;
+	int m_nMiddleHeightDivisor = 1;
+	uint32_t m_nMaterialMask = 1u;
+	uint16_t m_nConsumerMask = 0u;
+	PackedByteArray m_heightBytes;
+	Ref<Image> m_height;
+	Ref<Image> m_control;
+	Ref<Image> m_color;
+	Ref<Image> m_derived;
+	Ref<Image> m_middleHeight;
+	Ref<Image> m_middleComposite;
+	Ref<Image> m_terrainShadowMask;
+	PackedByteArray m_instancePage;
+	PackedByteArray m_holeMask;
+	PackedByteArray m_collisionHeight;
+	PackedByteArray m_collisionBounds;
+	PackedByteArray m_navigation;
+	PackedByteArray m_minMaxHeight;
+	PackedByteArray m_nodeDescriptors;
+	PackedByteArray m_instanceMetadata;
+	PackedByteArray m_lightingReceivers;
+	PackedByteArray m_multimeshFastStart;
+	T3DInstanceStore m_preparedInstanceStore;
+	uint64_t m_nRequestedUsec = 0u;
+	uint64_t m_nWorkerStartedUsec = 0u;
+	uint64_t m_nFileOpenUsec = 0u;
+	uint64_t m_nFileReadUsec = 0u;
+	uint64_t m_nValidationUsec = 0u;
+	uint64_t m_nMaterializeUsec = 0u;
+	uint64_t m_nWorkerFinishedUsec = 0u;
+	bool m_bAttempted = false;
+	bool m_bLoaded = false;
+	bool m_bInstanceAttempted = false;
+	bool m_bInstanceLoaded = false;
+	bool m_bLoadMinMax = false;
+	bool m_bEditorAuthoring = false;
 } t3dRuntimePreparedPage_t;
 
 typedef struct t3dRuntimePrepareJobContext_s {
-	t3dRuntimePreparedPage_t *pPages = nullptr;
-	int nPageCount = 0;
+	t3dRuntimePreparedPage_t *m_pPages = nullptr;
+	int m_nPageCount = 0;
 } t3dRuntimePrepareJobContext_t;
 
 class T3DRuntimePageStore {
@@ -226,10 +226,10 @@ private:
 
 	T3DRegionRepository *m_pRepository = nullptr;
 	const T3DRegionPersistence *m_pPersistence = nullptr;
-	eastl::array<t3dRuntimePreparedPage_t, TERRAIN3D_GPU_CACHE_MAX_LAYERS> m_preparedPages{};
-	eastl::array<t3dRuntimePreparedPage_t, TERRAIN3D_GPU_CACHE_MAX_LAYERS> m_workPages{};
-	eastl::array<int16_t, TERRAIN3D_MAX_REGION_SLOTS> m_preparedByRegion{};
-	eastl::array<int16_t, TERRAIN3D_MAX_REGION_SLOTS> m_workByRegion{};
+	eastl::array<t3dRuntimePreparedPage_t, s_nGpuCacheMaxLayers> m_preparedPages{};
+	eastl::array<t3dRuntimePreparedPage_t, s_nGpuCacheMaxLayers> m_workPages{};
+	eastl::array<int16_t, s_nMaxRegionSlots> m_preparedByRegion{};
+	eastl::array<int16_t, s_nMaxRegionSlots> m_workByRegion{};
 	t3dRuntimePrepareJobContext_t m_prepareContext;
 	int m_nPreparedPageCount = 0;
 	int m_nPrepareWorkPageCount = 0;
@@ -245,8 +245,8 @@ private:
 	uint64_t m_nPrepareWorkerUsecLast = 0u;
 	uint64_t m_nPrepareReadyWaitUsecLast = 0u;
 	int m_nPrepareJobWorkers = 0;
-	eastl::array<uint16_t, TERRAIN3D_MAX_REGION_SLOTS> m_queuedConsumers{};
-	eastl::array<uint8_t, TERRAIN3D_MAX_REGION_SLOTS> m_queuedPriorities{};
+	eastl::array<uint16_t, s_nMaxRegionSlots> m_queuedConsumers{};
+	eastl::array<uint8_t, s_nMaxRegionSlots> m_queuedPriorities{};
 	int m_nQueuedCount = 0;
 	uint64_t m_nStreamingGenerationLast = 0u;
 

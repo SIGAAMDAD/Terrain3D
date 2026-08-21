@@ -1,4 +1,4 @@
-// Fixed-residency pool backed by one contiguous map slab and fixed slot metadata.
+// Fixed-residency pool backed by one contiguous map slab and s_nFixed slot metadata.
 #pragma once
 
 #ifndef TERRAIN3D_RESIDENT_POOL_H
@@ -22,12 +22,12 @@ using namespace godot;
 #endif
 
 typedef struct t3dResidentMapView_s {
-	const uint16_t *pHeight = nullptr;
-	const uint32_t *pControl = nullptr;
-	const uint32_t *pColor = nullptr;
-	const uint8_t *pDerived = nullptr;
-	uint32_t nGeneration = 0;
-	EA_FORCE_INLINE bool valid( void ) const { return pHeight != nullptr; }
+	const uint16_t *m_pHeight = nullptr;
+	const uint32_t *m_pControl = nullptr;
+	const uint32_t *m_pColor = nullptr;
+	const uint8_t *m_pDerived = nullptr;
+	uint32_t m_nGeneration = 0;
+	EA_FORCE_INLINE bool valid( void ) const { return m_pHeight != nullptr; }
 } t3dResidentMapView_t;
 
 class T3DResidentRegionPool;
@@ -67,33 +67,33 @@ typedef enum t3dChannel_e : uint32_t {
 } t3dChannel_t;
 
 typedef struct t3dAlignedAllocation_s {
-	void *pRaw = nullptr;
-	uint8_t *pAligned = nullptr;
-	size_t nBytes = 0u;
-	bool bOwned = false;
+	void *m_pRaw = nullptr;
+	uint8_t *m_pAligned = nullptr;
+	size_t m_nBytes = 0u;
+	bool m_bOwned = false;
 	bool allocate( size_t nRequestedBytes, size_t nAlignment );
 	void release( void );
 } t3dAlignedAllocation_t;
 
 typedef struct t3dSlotLayout_s {
-	size_t nHeightSlotBytes = 0u;
-	size_t nControlSlotBytes = 0u;
-	size_t nColorSlotBytes = 0u;
-	size_t nDerivedSlotBytes = 0u;
-	size_t stride = 0u;
+	size_t m_nHeightSlotBytes = 0u;
+	size_t m_nControlSlotBytes = 0u;
+	size_t m_nColorSlotBytes = 0u;
+	size_t m_nDerivedSlotBytes = 0u;
+	size_t m_nStride = 0u;
 } t3dSlotLayout_t;
 
-typedef struct alignas( TERRAIN3D_RESIDENT_CACHE_ALIGNMENT ) t3dSlot_s {
-	Vector2i location = Vector2i( INT32_MAX, INT32_MAX );
+typedef struct alignas( s_nResidentCacheAlignment ) t3dSlot_s {
+	Vector2i m_location = Vector2i( INT32_MAX, INT32_MAX );
 	std::atomic<uint32_t> nGeneration{1u};
 	std::atomic<uint32_t> nPinCount{0u};
 	std::atomic<uint8_t> nState{0u};
 	std::atomic<uint8_t> nValidChannels{0u};
 	std::atomic_bool bReferenced{false};
-	uint16_t *pHeight = nullptr;
-	uint32_t *pControl = nullptr;
-	uint32_t *pColor = nullptr;
-	uint8_t *pDerived = nullptr;
+	uint16_t *m_pHeight = nullptr;
+	uint32_t *m_pControl = nullptr;
+	uint32_t *m_pColor = nullptr;
+	uint8_t *m_pDerived = nullptr;
 } t3dSlot_t;
 
 class T3DResidentRegionPool {
@@ -150,7 +150,7 @@ private:
 	t3dAlignedAllocation_t m_mapMemory;
 	t3dSlot_t *m_pSlots = nullptr;
 	bool m_bSlotsOwned = false;
-	std::atomic<int16_t> m_szLocationToSlot[TERRAIN3D_RESIDENT_WORLD_SLOT_COUNT] = {};
+	std::atomic<int16_t> m_szLocationToSlot[s_nResidentWorldSlotCount] = {};
 	mutable std::mutex m_mutex;
 	int m_iClockHand = 0;
 

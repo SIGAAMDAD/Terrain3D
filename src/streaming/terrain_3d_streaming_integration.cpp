@@ -47,7 +47,7 @@
 
 
 bool T3DTerrain::isEditorAuthoringModeInternal( void ) const {
-	return terrain3dIsEditorAuthoringMode( IS_EDITOR,
+	return t3dIsEditorAuthoringMode( IS_EDITOR,
 		( int ) ( m_editorExecutionMode ) );
 }
 
@@ -70,21 +70,21 @@ bool T3DTerrain::isAuthoringResidencyReadbackSafe( void ) const {
 bool T3DTerrain::effectiveGpuRegionCacheEnabled( void ) const {
 	// GPU paging is authoring-safe and remains essential when inspecting large
 	// terrain datasets. Editor mode only pins mutable source and object data.
-	return terrain3dIsGpuPagingEffectivelyEnabled( m_bGpuRegionCacheEnabled );
+	return t3dIsGpuPagingEffectivelyEnabled( m_bGpuRegionCacheEnabled );
 }
 
 bool T3DTerrain::effectiveCpuRegionCacheEnabled( void ) const {
-	return terrain3dIsStreamingEffectivelyEnabled( m_bCpuRegionCacheEnabled, IS_EDITOR,
+	return t3dIsStreamingEffectivelyEnabled( m_bCpuRegionCacheEnabled, IS_EDITOR,
 		( int ) ( m_editorExecutionMode ) );
 }
 
 bool T3DTerrain::effectiveInstanceRegionCacheEnabled( void ) const {
-	return terrain3dIsStreamingEffectivelyEnabled( m_bInstanceRegionCacheEnabled, IS_EDITOR,
+	return t3dIsStreamingEffectivelyEnabled( m_bInstanceRegionCacheEnabled, IS_EDITOR,
 		( int ) ( m_editorExecutionMode ) );
 }
 
 bool T3DTerrain::effectiveInstancerCellStreamingEnabled( void ) const {
-	return terrain3dIsStreamingEffectivelyEnabled( m_bInstancerCellStreamingEnabled, IS_EDITOR,
+	return t3dIsStreamingEffectivelyEnabled( m_bInstancerCellStreamingEnabled, IS_EDITOR,
 		( int ) ( m_editorExecutionMode ) );
 }
 
@@ -125,9 +125,9 @@ void T3DTerrain::updateRegionStreamingPolicy(
 	}
 	const int map_size = m_pData->getRegionMapSizeInternal();
 	const Vector2i raw_center = m_pData->getRegionLocation( rWorldPosition );
-	const t3dStreamingCoord_t policy_center = terrain3dStreamingClampCenter(
+	const t3dStreamingCoord_t policy_center = t3dStreamingClampCenter(
 		{ raw_center.x, raw_center.y }, map_size );
-	const Vector2i center( policy_center.x, policy_center.y );
+	const Vector2i center( policy_center.m_nX, policy_center.m_nY );
 	const bool authoring = isEditorAuthoringModeInternal();
 	if ( authoring && !bForce && !m_bRegionStreamingDirty && m_nRegionStreamingGeneration > 0u ) {
 		return;
@@ -148,13 +148,13 @@ void T3DTerrain::updateRegionStreamingPolicy(
 		instant_x = ( ( double ) ( rWorldPosition.x - m_regionStreamingPreviousWorldPosition.x ) / region_world_size ) / delta;
 		instant_z = ( ( double ) ( rWorldPosition.z - m_regionStreamingPreviousWorldPosition.z ) / region_world_size ) / delta;
 	}
-	const t3dRegionStreamingPrediction_t prediction = terrain3dStreamingPredict(
+	const t3dRegionStreamingPrediction_t prediction = t3dStreamingPredict(
 		{ center.x, center.y }, map_size, instant_x, instant_z,
 		m_fRegionStreamingVelocityX, m_fRegionStreamingVelocityZ, delta, m_regionStreamingConfig );
-	m_fRegionStreamingVelocityX = prediction.fVelocityXRegionsPerSecond;
-	m_fRegionStreamingVelocityZ = prediction.fVelocityYRegionsPerSecond;
+	m_fRegionStreamingVelocityX = prediction.m_fVelocityXRegionsPerSecond;
+	m_fRegionStreamingVelocityZ = prediction.m_fVelocityYRegionsPerSecond;
 	m_regionStreamingCenter = center;
-	Vector2i prefetch_center( prediction.predictedCenter.x, prediction.predictedCenter.y );
+	Vector2i prefetch_center( prediction.m_predictedCenter.x, prediction.m_predictedCenter.y );
 	// Whole-region velocity prediction rounds to zero at ordinary traversal speeds.
 	// Add a spatial lead near the current boundary so the entering Active/Hot edge
 	// begins asynchronous preparation before the discrete center changes.
@@ -175,16 +175,16 @@ void T3DTerrain::updateRegionStreamingPolicy(
 		} else if ( m_fRegionStreamingVelocityZ < -0.001 && local_z <= boundary_fraction ) {
 			prefetch_center.y = MIN( prefetch_center.y, center.y - 1 );
 		}
-		const t3dStreamingCoord_t clamped_prefetch = terrain3dStreamingClampCenter(
+		const t3dStreamingCoord_t clamped_prefetch = t3dStreamingClampCenter(
 			{ prefetch_center.x, prefetch_center.y }, map_size );
-		prefetch_center = Vector2i( clamped_prefetch.x, clamped_prefetch.y );
+		prefetch_center = Vector2i( clamped_prefetch.m_nX, clamped_prefetch.m_nY );
 	}
 	m_regionStreamingPredictedCenter = prefetch_center;
 	m_regionStreamingPreviousWorldPosition = rWorldPosition;
 
-	std::fill_n( m_szRegionStreamingStates, TERRAIN3D_MAX_REGION_SLOTS,
+	std::fill_n( m_szRegionStreamingStates, s_nMaxRegionSlots,
 		( uint8_t ) ( TERRAIN3D_REGION_STREAMING_UNLOADED ) );
-	std::fill_n( m_szRegionStreamingPrefetch, TERRAIN3D_MAX_REGION_SLOTS, ( uint8_t ) ( 0 ) );
+	std::fill_n( m_szRegionStreamingPrefetch, s_nMaxRegionSlots, ( uint8_t ) ( 0 ) );
 	m_nRegionStreamingActiveCount = 0;
 	m_nRegionStreamingHotCount = 0;
 	m_nRegionStreamingColdCount = 0;
@@ -204,7 +204,7 @@ void T3DTerrain::updateRegionStreamingPolicy(
 		}
 		t3dRegionStreamingState_t state = TERRAIN3D_REGION_STREAMING_ACTIVE;
 		if ( !authoring ) {
-			state = terrain3dStreamingClassify( { location.x, location.y },
+			state = t3dStreamingClassify( { location.m_nX, location.m_nY },
 				{ center.x, center.y }, m_regionStreamingConfig );
 		}
 		m_szRegionStreamingStates[map_index] = ( uint8_t ) ( state );
@@ -216,10 +216,10 @@ void T3DTerrain::updateRegionStreamingPolicy(
 			default: ++m_nRegionStreamingUnloadedCount; break;
 		}
 
-		if ( !authoring && m_regionStreamingConfig.bPredictionEnabled &&
+		if ( !authoring && m_regionStreamingConfig.m_bPredictionEnabled &&
 			m_regionStreamingPredictedCenter != center && state != TERRAIN3D_REGION_STREAMING_ACTIVE ) {
-			const t3dRegionStreamingState_t predicted_state = terrain3dStreamingClassify(
-				{ location.x, location.y }, { m_regionStreamingPredictedCenter.x, m_regionStreamingPredictedCenter.y },
+			const t3dRegionStreamingState_t predicted_state = t3dStreamingClassify(
+				{ location.m_nX, location.m_nY }, { m_regionStreamingPredictedCenter.x, m_regionStreamingPredictedCenter.y },
 				m_regionStreamingConfig );
 			if ( predicted_state > state ) {
 				m_szRegionStreamingPrefetch[map_index] = 1u;
@@ -251,19 +251,19 @@ Dictionary T3DTerrain::getRegionStreamingConfigurationStatus( void ) const {
 	Dictionary status;
 	const int near_lods = MAX( 0, m_nRuntimeNearShaderLods );
 	const int middle_lods = MAX( 0, m_nRuntimeNearShaderLods + m_nRuntimeMiddleShaderLods );
-	const int required_active_radius = terrain3dGpuCacheCalculateFootprintRadiusRegions(
+	const int required_active_radius = t3dGpuCacheCalculateFootprintRadiusRegions(
 		m_nMeshSize, near_lods, ( double ) ( m_fVertexSpacing ), ( int ) ( m_nRegionSize ) );
-	const int required_hot_radius = terrain3dGpuCacheCalculateFootprintRadiusRegions(
+	const int required_hot_radius = t3dGpuCacheCalculateFootprintRadiusRegions(
 		m_nMeshSize, middle_lods, ( double ) ( m_fVertexSpacing ), ( int ) ( m_nRegionSize ) );
-	const bool active_range_valid = m_regionStreamingConfig.activeRadius >= required_active_radius;
-	const bool hot_range_valid = m_regionStreamingConfig.hotRadius >= required_hot_radius;
-	const int active_side = m_regionStreamingConfig.activeRadius * 2 + 1;
-	const int hot_side = m_regionStreamingConfig.hotRadius * 2 + 1;
-	const int authored_regions = m_pData ? m_pData->getRegionCount() : TERRAIN3D_MAX_REGION_SLOTS;
+	const bool active_range_valid = m_regionStreamingConfig.m_nActiveRadius >= required_active_radius;
+	const bool hot_range_valid = m_regionStreamingConfig.m_nHotRadius >= required_hot_radius;
+	const int active_side = m_regionStreamingConfig.m_nActiveRadius * 2 + 1;
+	const int hot_side = m_regionStreamingConfig.m_nHotRadius * 2 + 1;
+	const int authored_regions = m_pData ? m_pData->getRegionCount() : s_nMaxRegionSlots;
 	const int required_active_surface_pages = MIN( authored_regions, active_side * active_side );
 	const int required_hot_height_pages = MIN( authored_regions, hot_side * hot_side );
-	int surface_capacity = isEditorAuthoringModeInternal() ? TERRAIN3D_GPU_CACHE_EDITOR_MAX_LAYERS : TERRAIN3D_GPU_CACHE_RUNTIME_MAX_LAYERS;
-	int height_capacity = TERRAIN3D_GPU_HEIGHT_CACHE_MAX_LAYERS;
+	int surface_capacity = isEditorAuthoringModeInternal() ? s_nGpuCacheEditorMaxLayers : s_nGpuCacheRuntimeMaxLayers;
+	int height_capacity = s_nGpuHeightCacheMaxLayers;
 	if ( m_pData ) {
 		if ( m_pData->getGpuRegionCacheCapacity() > 0 ) {
 			surface_capacity = m_pData->getGpuRegionCacheCapacity();
@@ -280,12 +280,12 @@ Dictionary T3DTerrain::getRegionStreamingConfigurationStatus( void ) const {
 	const bool active_surface_budget_valid = required_active_surface_pages <= surface_capacity;
 	const bool hot_height_budget_valid = isEditorAuthoringModeInternal() || required_hot_height_pages <= height_capacity;
 	status["valid"] = active_range_valid && hot_range_valid && active_surface_budget_valid && hot_height_budget_valid &&
-		terrain3dStreamingConfigIsValid( m_regionStreamingConfig );
-	status["active_radius"] = m_regionStreamingConfig.activeRadius;
-	status["hot_radius"] = m_regionStreamingConfig.hotRadius;
-	status["cold_radius"] = m_regionStreamingConfig.coldRadius;
-	status["unload_guard"] = m_regionStreamingConfig.unloadGuard;
-	status["effective_cold_radius_with_guard"] = m_regionStreamingConfig.coldRadius + m_regionStreamingConfig.unloadGuard;
+		t3dStreamingConfigIsValid( m_regionStreamingConfig );
+	status["active_radius"] = m_regionStreamingConfig.m_nActiveRadius;
+	status["hot_radius"] = m_regionStreamingConfig.m_nHotRadius;
+	status["cold_radius"] = m_regionStreamingConfig.m_nColdRadius;
+	status["unload_guard"] = m_regionStreamingConfig.m_nUnloadGuard;
+	status["effective_cold_radius_with_guard"] = m_regionStreamingConfig.m_nColdRadius + m_regionStreamingConfig.m_nUnloadGuard;
 	status["required_active_radius_for_near"] = required_active_radius;
 	status["required_hot_radius_for_middle"] = required_hot_radius;
 	status["near_coverage_valid"] = active_range_valid;
@@ -318,42 +318,42 @@ void T3DTerrain::validateRegionStreamingConfiguration( const bool bReport ) cons
 }
 
 void T3DTerrain::setStreamingActiveRadius( const int nRadius ) {
-	m_regionStreamingConfig.activeRadius = CLAMP( nRadius, 0, 31 );
-	m_regionStreamingConfig.hotRadius = MAX( m_regionStreamingConfig.hotRadius, m_regionStreamingConfig.activeRadius );
-	m_regionStreamingConfig.coldRadius = MAX( m_regionStreamingConfig.coldRadius, m_regionStreamingConfig.hotRadius );
+	m_regionStreamingConfig.m_nActiveRadius = CLAMP( nRadius, 0, 31 );
+	m_regionStreamingConfig.m_nHotRadius = MAX( m_regionStreamingConfig.m_nHotRadius, m_regionStreamingConfig.m_nActiveRadius );
+	m_regionStreamingConfig.m_nColdRadius = MAX( m_regionStreamingConfig.m_nColdRadius, m_regionStreamingConfig.m_nHotRadius );
 	invalidateRegionStreamingPolicy();
 	validateRegionStreamingConfiguration();
 }
 
 void T3DTerrain::setStreamingHotRadius( const int nRadius ) {
-	m_regionStreamingConfig.hotRadius = CLAMP( nRadius, m_regionStreamingConfig.activeRadius, 31 );
-	m_regionStreamingConfig.coldRadius = MAX( m_regionStreamingConfig.coldRadius, m_regionStreamingConfig.hotRadius );
+	m_regionStreamingConfig.m_nHotRadius = CLAMP( nRadius, m_regionStreamingConfig.m_nActiveRadius, 31 );
+	m_regionStreamingConfig.m_nColdRadius = MAX( m_regionStreamingConfig.m_nColdRadius, m_regionStreamingConfig.m_nHotRadius );
 	invalidateRegionStreamingPolicy();
 	validateRegionStreamingConfiguration();
 }
 
 void T3DTerrain::setStreamingColdRadius( const int nRadius ) {
-	m_regionStreamingConfig.coldRadius = CLAMP( nRadius, m_regionStreamingConfig.hotRadius, 31 );
+	m_regionStreamingConfig.m_nColdRadius = CLAMP( nRadius, m_regionStreamingConfig.m_nHotRadius, 31 );
 	invalidateRegionStreamingPolicy();
 }
 
 void T3DTerrain::setStreamingUnloadGuard( const int nRegions ) {
-	m_regionStreamingConfig.unloadGuard = CLAMP( nRegions, 0, 4 );
+	m_regionStreamingConfig.m_nUnloadGuard = CLAMP( nRegions, 0, 4 );
 	invalidateRegionStreamingPolicy();
 }
 
 void T3DTerrain::setStreamingPredictionEnabled( const bool bEnabled ) {
-	m_regionStreamingConfig.bPredictionEnabled = bEnabled;
+	m_regionStreamingConfig.m_bPredictionEnabled = bEnabled;
 	invalidateRegionStreamingPolicy();
 }
 
 void T3DTerrain::setStreamingPredictionLookahead( const real_t fSeconds ) {
-	m_regionStreamingConfig.fPredictionLookaheadSeconds = MAX( ( real_t ) ( 0.0 ), fSeconds );
+	m_regionStreamingConfig.m_fPredictionLookaheadSeconds = MAX( ( real_t ) ( 0.0 ), fSeconds );
 	invalidateRegionStreamingPolicy();
 }
 
 void T3DTerrain::setStreamingPredictionMaximumRegions( const int nRegions ) {
-	m_regionStreamingConfig.predictionMaximumRegions = MAX( 0, nRegions );
+	m_regionStreamingConfig.m_nPredictionMaximumRegions = MAX( 0, nRegions );
 	invalidateRegionStreamingPolicy();
 }
 
@@ -390,7 +390,7 @@ void T3DTerrain::applyStreamingPolicy( const bool bForceResidency ) {
 }
 
 int T3DTerrain::getTotalClipmapLevels( void ) const {
-	return CLAMP( m_nMeshLods + m_tessellationLevel, 1, TERRAIN3D_MAX_CLIPMAP_LEVELS );
+	return CLAMP( m_nMeshLods + m_tessellationLevel, 1, s_nMaxClipmapLevels );
 }
 
 real_t T3DTerrain::lodCountToRange( const int nLodCount ) const {
@@ -496,7 +496,7 @@ void T3DTerrain::setEditorHlodPreview( const bool bEnabled ) {
 }
 
 void T3DTerrain::setEditorExecutionMode( const t3dEditorExecutionMode_t mode ) {
-	if ( !terrain3dEditorExecutionModeIsValid( ( int ) ( mode ) ) ) {
+	if ( !t3dEditorExecutionModeIsValid( ( int ) ( mode ) ) ) {
 		return;
 	}
 	if ( mode == EDITOR_EXECUTION_RUNTIME_PROFILE ) {
@@ -508,17 +508,17 @@ void T3DTerrain::setEditorExecutionMode( const t3dEditorExecutionMode_t mode ) {
 	}
 	m_editorExecutionMode = mode;
 	applyStreamingPolicy( true );
-	if ( m_pAssets.is_valid() && m_pAssets->isInitializedFor( this ) ) {
+	if ( m_assets.is_valid() && m_assets->isInitializedFor( this ) ) {
 		// Runtime Profile is a real execution-mode transition, not just a shader
 		// preview. Rebuild the exact bounded/full material representation selected
 		// by the new mode after GPU residency has established its priority set.
-		m_pAssets->configureRuntimeMaterialCache();
+		m_assets->configureRuntimeMaterialCache();
 	}
 	if ( m_pCollision ) {
 		m_pCollision->build();
 	}
-	if ( m_pMaterial.is_valid() && m_pMaterial->isInitialized() ) {
-		m_pMaterial->update( FULL_REBUILD );
+	if ( m_material.is_valid() && m_material->isInitialized() ) {
+		m_material->update( FULL_REBUILD );
 	}
 	if ( m_bInitialized ) {
 		const Vector3 target = getClipmapTargetPosition();
@@ -571,7 +571,7 @@ void T3DTerrain::setGpuRegionCacheBudgetMb( const int nBudgetMb ) {
 }
 
 void T3DTerrain::setGpuRegionUploadBudgetLayers( const int nLayers ) {
-	const int layers = CLAMP( nLayers, 1, TERRAIN3D_GPU_CACHE_RUNTIME_MAX_LAYERS );
+	const int layers = CLAMP( nLayers, 1, s_nGpuCacheRuntimeMaxLayers );
 	if ( m_nGpuRegionUploadBudgetLayers == layers ) {
 		return;
 	}
@@ -599,8 +599,8 @@ void T3DTerrain::setGpuRegionUploadBudgetMb( const int nBudgetMb ) {
 }
 
 void T3DTerrain::setGpuRegionSparePages( const int nPages ) {
-	const int pages = CLAMP( nPages, TERRAIN3D_GPU_CACHE_MIN_SPARE_LAYERS,
-		TERRAIN3D_GPU_CACHE_RUNTIME_MAX_LAYERS - 1 );
+	const int pages = CLAMP( nPages, s_nGpuCacheMinSpareLayers,
+		s_nGpuCacheRuntimeMaxLayers - 1 );
 	if ( m_nGpuRegionSparePages == pages ) {
 		return;
 	}
@@ -754,7 +754,7 @@ void T3DTerrain::setGpuMiddleHeightResolutionDivisor( const int nDivisor ) {
 }
 
 void T3DTerrain::setEditorGpuRegionCachePages( const int nPages ) {
-	const int pages = CLAMP( nPages, 16, TERRAIN3D_GPU_CACHE_EDITOR_MAX_LAYERS );
+	const int pages = CLAMP( nPages, 16, s_nGpuCacheEditorMaxLayers );
 	if ( m_nEditorGpuRegionCachePages == pages ) {
 		return;
 	}
@@ -775,26 +775,26 @@ void T3DTerrain::setRuntimeMaterialStreamingEnabled( const bool bEnabled ) {
 	m_bRuntimeMaterialStreamingEnabled = bEnabled;
 	refreshPerformanceProfileConformity();
 	markMemoryBudgetDirty();
-	if ( m_pAssets.is_valid() && m_bInitialized ) {
-		m_pAssets->configureRuntimeMaterialCache();
+	if ( m_assets.is_valid() && m_bInitialized ) {
+		m_assets->configureRuntimeMaterialCache();
 	}
 }
 
 void T3DTerrain::setRuntimeMaterialCacheLayers( const int nLayers ) {
-	const int layers = CLAMP( nLayers, 4, TERRAIN3D_MAX_TEXTURE_ASSETS );
+	const int layers = CLAMP( nLayers, 4, s_nMaxTextureAssets );
 	if ( m_nRuntimeMaterialCacheLayers == layers ) {
 		return;
 	}
 	m_nRuntimeMaterialCacheLayers = layers;
 	refreshPerformanceProfileConformity();
 	markMemoryBudgetDirty();
-	if ( m_pAssets.is_valid() && m_bInitialized ) {
-		m_pAssets->configureRuntimeMaterialCache();
+	if ( m_assets.is_valid() && m_bInitialized ) {
+		m_assets->configureRuntimeMaterialCache();
 	}
 }
 
 void T3DTerrain::setRuntimeMaterialUploadBudgetLayers( const int nLayers ) {
-	const int layers = CLAMP( nLayers, 1, TERRAIN3D_MAX_TEXTURE_ASSETS );
+	const int layers = CLAMP( nLayers, 1, s_nMaxTextureAssets );
 	if ( m_nRuntimeMaterialUploadBudgetLayers == layers ) {
 		return;
 	}
@@ -808,8 +808,8 @@ void T3DTerrain::setRuntimeReleaseSourceMaterialTextures( const bool bEnabled ) 
 	}
 	m_bRuntimeReleaseSourceMaterialTextures = bEnabled;
 	refreshPerformanceProfileConformity();
-	if ( bEnabled && m_pAssets.is_valid() && m_bInitialized ) {
-		m_pAssets->configureRuntimeMaterialCache();
+	if ( bEnabled && m_assets.is_valid() && m_bInitialized ) {
+		m_assets->configureRuntimeMaterialCache();
 	}
 }
 
@@ -829,8 +829,8 @@ void T3DTerrain::setGpuFarQualityDivisor( const int nDivisor ) {
 			m_nGpuRegionUploadBudgetLayers, m_nGpuRegionUploadBudgetMb,
 			m_nGpuRegionSparePages, m_nGpuRegionRetireFrames );
 	}
-	if ( m_pMaterial.is_valid() && m_pMaterial->isInitializedFor( this ) ) {
-		m_pMaterial->update( UNIFORMS_ONLY );
+	if ( m_material.is_valid() && m_material->isInitializedFor( this ) ) {
+		m_material->update( UNIFORMS_ONLY );
 	}
 }
 
@@ -840,8 +840,8 @@ void T3DTerrain::setFarMaterialResolution( const int nResolution ) {
 		return;
 	}
 	m_nFarMaterialResolution = resolution;
-	if ( m_pAssets.is_valid() ) {
-		m_pAssets->invalidateRuntimeMaterialCache();
+	if ( m_assets.is_valid() ) {
+		m_assets->invalidateRuntimeMaterialCache();
 	}
 	refreshPerformanceProfileConformity();
 }
@@ -864,12 +864,12 @@ int T3DTerrain::getGpuFarHeightAtlasSide( void ) const {
 	// are intentionally excluded so they can never erase representable terrain shape.
 	const int first_far_lod = CLAMP( m_nRuntimeNearShaderLods + m_nRuntimeMiddleShaderLods, 0, 30 );
 	const int source_spacing = 1 << first_far_lod;
-	const int required_side = MAX( 1, TERRAIN3D_ACTIVE_WORLD_TEXELS / source_spacing );
-	return CLAMP( required_side, TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE, TERRAIN3D_GPU_CACHE_FAR_HEIGHT_SIDE );
+	const int required_side = MAX( 1, s_nActiveWorldTexels / source_spacing );
+	return CLAMP( required_side, s_nActiveMaxRegionMapSize, s_nGpuCacheFarHeightSide );
 }
 
 int T3DTerrain::getGpuFarSurfaceAtlasSide( void ) const {
-	return m_nFarControlResolution * TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE;
+	return m_nFarControlResolution * s_nActiveMaxRegionMapSize;
 }
 
 uint64_t T3DTerrain::getGpuFarAtlasBytes( void ) const {
@@ -924,7 +924,7 @@ void T3DTerrain::setCpuRegionCacheBudgetMb( const int nBudgetMb ) {
 }
 
 void T3DTerrain::setCpuRegionLoadBudgetLayers( const int nLayers ) {
-	const int layers = CLAMP( nLayers, 1, TERRAIN3D_CPU_CACHE_MAX_LAYERS );
+	const int layers = CLAMP( nLayers, 1, s_nCpuCacheMaxLayers );
 	if ( m_nCpuRegionLoadBudgetLayers == layers ) {
 		return;
 	}
@@ -977,7 +977,7 @@ void T3DTerrain::setInstanceRegionCacheBudgetMb( const int nBudgetMb ) {
 }
 
 void T3DTerrain::setInstanceRegionLoadBudgetPages( const int nPages ) {
-	const int pages = CLAMP( nPages, 1, TERRAIN3D_INSTANCE_CACHE_MAX_PAGES );
+	const int pages = CLAMP( nPages, 1, s_nInstanceCacheMaxPages );
 	if ( m_nInstanceRegionLoadBudgetPages == pages ) {
 		return;
 	}
@@ -1005,10 +1005,10 @@ void T3DTerrain::setInstanceRegionLoadBudgetMb( const int nBudgetMb ) {
 }
 
 void T3DTerrain::setInstancerCellSize( const int nCellSize ) {
-	if ( nCellSize < TERRAIN3D_INSTANCE_MIN_CELL_SIZE || nCellSize > TERRAIN3D_INSTANCE_MAX_CELL_SIZE ||
+	if ( nCellSize < s_nInstanceMinCellSize || nCellSize > s_nInstanceMaxCellSize ||
 		( nCellSize & ( nCellSize - 1 ) ) != 0 || ( int ) ( m_nRegionSize ) % nCellSize != 0 ) {
-		LOG( ERROR, "Instancer cell size must be a power of two from ", TERRAIN3D_INSTANCE_MIN_CELL_SIZE,
-			" through ", TERRAIN3D_INSTANCE_MAX_CELL_SIZE, " and divide region size ", ( int ) ( m_nRegionSize ) );
+		LOG( ERROR, "Instancer cell size must be a power of two from ", s_nInstanceMinCellSize,
+			" through ", s_nInstanceMaxCellSize, " and divide region size ", ( int ) ( m_nRegionSize ) );
 		return;
 	}
 	if ( m_nInstancerCellSize == nCellSize ) {
@@ -1022,8 +1022,8 @@ void T3DTerrain::setInstancerCellSize( const int nCellSize ) {
 	}
 	m_nInstancerCellSize = nCellSize;
 	refreshPerformanceProfileConformity();
-	if ( m_pMaterial.is_valid() && m_pMaterial->isInitialized() ) {
-		m_pMaterial->update();
+	if ( m_material.is_valid() && m_material->isInitialized() ) {
+		m_material->update();
 	}
 }
 
@@ -1195,7 +1195,7 @@ Dictionary T3DTerrain::getLightmapStreamingStats( void ) const {
 void T3DTerrain::setRegionLightmapOutputDirectory( const String &rDirectory ) {
 	String directory = rDirectory.strip_edges().trim_suffix( "/" );
 	if ( directory.is_empty() ) {
-		directory = terrain3dDefaultRegionLightmapOutputDirectory( m_dataDirectory );
+		directory = t3dDefaultRegionLightmapOutputDirectory( m_dataDirectory );
 	}
 	m_regionLightmapOutputDirectory = directory;
 }

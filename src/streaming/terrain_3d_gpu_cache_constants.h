@@ -16,19 +16,19 @@ typedef enum t3dGpuRegionSlotState_e : uint8_t {
 } t3dGpuRegionSlotState_t;
 
 
-static constexpr int TERRAIN3D_GPU_CACHE_DEFAULT_GUARD_REGIONS = 1;
-static constexpr int TERRAIN3D_GPU_CACHE_DEFAULT_HYSTERESIS_RESERVE = 4;
-static constexpr int TERRAIN3D_GPU_CACHE_DEFAULT_HYSTERESIS_TICKS = 30;
-static constexpr int TERRAIN3D_GPU_CACHE_DEFAULT_PREFETCH_ROWS = 1;
-static constexpr int TERRAIN3D_GPU_CACHE_DEFAULT_RETIRE_FRAMES = 4;
-static constexpr int TERRAIN3D_GPU_CACHE_DEFAULT_SPARE_LAYERS = 12;
-static constexpr int TERRAIN3D_GPU_CACHE_FAR_HEIGHT_SIDE = 512;
-static constexpr int TERRAIN3D_GPU_CACHE_RUNTIME_MAX_LAYERS = 64;
-static constexpr int TERRAIN3D_GPU_CACHE_EDITOR_MAX_LAYERS = 256;
+static constexpr int s_nGpuCacheDefaultGuardRegions = 1;
+static constexpr int s_nGpuCacheDefaultHysteresisReserve = 4;
+static constexpr int s_nGpuCacheDefaultHysteresisTicks = 30;
+static constexpr int s_nGpuCacheDefaultPrefetchRows = 1;
+static constexpr int s_nGpuCacheDefaultRetireFrames = 4;
+static constexpr int s_nGpuCacheDefaultSpareLayers = 12;
+static constexpr int s_nGpuCacheFarHeightSide = 512;
+static constexpr int s_nGpuCacheRuntimeMaxLayers = 64;
+static constexpr int s_nGpuCacheEditorMaxLayers = 256;
 // Storage ceiling. Runtime remains capped at 64; Authoring may pin larger supplied worlds.
-static constexpr int TERRAIN3D_GPU_CACHE_MAX_LAYERS = TERRAIN3D_GPU_CACHE_EDITOR_MAX_LAYERS;
-static constexpr size_t TERRAIN3D_GPU_CACHE_MAX_PAGE_TABLE_BYTES = 64u * 64u * 3u;
-static constexpr size_t TERRAIN3D_GPU_CACHE_MIB = 1024u * 1024u;
-static constexpr int TERRAIN3D_GPU_CACHE_MIN_SPARE_LAYERS = 2;
+static constexpr int s_nGpuCacheMaxLayers = s_nGpuCacheEditorMaxLayers;
+static constexpr size_t s_nGpuCacheMaxPageTableBytes = 64u * 64u * 3u;
+static constexpr size_t s_nGpuCacheMib = 1024u * 1024u;
+static constexpr int s_nGpuCacheMinSpareLayers = 2;
 
 #endif // TERRAIN3D_GPU_CACHE_CONSTANTS_H

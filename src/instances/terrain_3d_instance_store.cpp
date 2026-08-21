@@ -40,7 +40,7 @@ T3DInstanceStore &T3DInstanceStore::operator=( T3DInstanceStore &&rOther ) {
 
 void T3DInstanceStore::rebindPayloadPools( void ) {
 	for ( t3dInstanceMesh_t &mesh : m_meshes ) {
-		for ( t3dInstanceCell_t &cell : mesh.cells ) cell.rebindPayloadPools( &m_transformSlab, &m_colorSlab, &m_ownerSlab );
+		for ( t3dInstanceCell_t &cell : mesh.m_cells ) cell.rebindPayloadPools( &m_transformSlab, &m_colorSlab, &m_ownerSlab );
 	}
 }
 
@@ -51,40 +51,40 @@ void T3DInstanceStore::copyFrom( const T3DInstanceStore &rOther ) {
 	size_t color_count = 0u;
 	size_t owner_count = 0u;
 	for ( const t3dInstanceMesh_t &source_mesh : rOther.m_meshes ) {
-		for ( const t3dInstanceCell_t &source_cell : source_mesh.cells ) {
-			transform_count += source_cell.transforms.size();
-			color_count += source_cell.colors.size();
-			owner_count += source_cell.owners.size();
+		for ( const t3dInstanceCell_t &source_cell : source_mesh.m_cells ) {
+			transform_count += source_cell.m_transforms.size();
+			color_count += source_cell.m_colors.size();
+			owner_count += source_cell.m_owners.size();
 		}
 	}
 	reserveMeshCapacity( rOther.m_meshes.size() );
 	reservePayloadCapacity( transform_count, color_count, owner_count );
 	for ( const t3dInstanceMesh_t &source_mesh : rOther.m_meshes ) {
-		t3dInstanceMesh_t &destination_mesh = getOrCreateMesh( source_mesh.id, source_mesh.cells.size() );
-		for ( const t3dInstanceCell_t &source_cell : source_mesh.cells ) {
-			t3dInstanceCell_t &destination_cell = getOrCreateCellExact( source_mesh.id, source_cell.location, source_cell.transforms.size(), source_cell.usesColors(), source_cell.usesOwners() );
-			destination_cell.transforms.resize( source_cell.transforms.size() );
-			if ( !source_cell.transforms.empty() ) eastl::copy_n( source_cell.transforms.data(), source_cell.transforms.size(), destination_cell.transforms.data() );
-			if ( source_cell.usesColors() ) { destination_cell.colors.resize( source_cell.colors.size() ); eastl::copy_n( source_cell.colors.data(), source_cell.colors.size(), destination_cell.colors.data() ); }
-			if ( source_cell.usesOwners() ) { destination_cell.owners.resize( source_cell.owners.size() ); eastl::copy_n( source_cell.owners.data(), source_cell.owners.size(), destination_cell.owners.data() ); }
-			destination_cell.nRevision = source_cell.nRevision;
-			destination_cell.bModified = source_cell.bModified;
-			destination_cell.cachedAabb = source_cell.cachedAabb;
-			destination_cell.cachedSourceMeshAabb = source_cell.cachedSourceMeshAabb;
-			destination_cell.nCachedAabbRevision = source_cell.nCachedAabbRevision;
-			destination_cell.nCachedAabbGeneration = source_cell.nCachedAabbGeneration;
-			destination_cell.bCachedAabbValid = source_cell.bCachedAabbValid;
+		t3dInstanceMesh_t &destination_mesh = getOrCreateMesh( source_mesh.m_nId, source_mesh.m_cells.size() );
+		for ( const t3dInstanceCell_t &source_cell : source_mesh.m_cells ) {
+			t3dInstanceCell_t &destination_cell = getOrCreateCellExact( source_mesh.m_nId, source_cell.m_location, source_cell.m_transforms.size(), source_cell.usesColors(), source_cell.usesOwners() );
+			destination_cell.m_transforms.resize( source_cell.m_transforms.size() );
+			if ( !source_cell.m_transforms.empty() ) eastl::copy_n( source_cell.m_transforms.data(), source_cell.m_transforms.size(), destination_cell.m_transforms.data() );
+			if ( source_cell.usesColors() ) { destination_cell.m_colors.resize( source_cell.m_colors.size() ); eastl::copy_n( source_cell.m_colors.data(), source_cell.m_colors.size(), destination_cell.m_colors.data() ); }
+			if ( source_cell.usesOwners() ) { destination_cell.m_owners.resize( source_cell.m_owners.size() ); eastl::copy_n( source_cell.m_owners.data(), source_cell.m_owners.size(), destination_cell.m_owners.data() ); }
+			destination_cell.m_nRevision = source_cell.m_nRevision;
+			destination_cell.m_bModified = source_cell.m_bModified;
+			destination_cell.m_cachedAabb = source_cell.m_cachedAabb;
+			destination_cell.m_cachedSourceMeshAabb = source_cell.m_cachedSourceMeshAabb;
+			destination_cell.m_nCachedAabbRevision = source_cell.m_nCachedAabbRevision;
+			destination_cell.m_nCachedAabbGeneration = source_cell.m_nCachedAabbGeneration;
+			destination_cell.m_bCachedAabbValid = source_cell.m_bCachedAabbValid;
 		}
 	}
 	rebuildMeshLookup();
 }
 
 bool T3DInstanceStore::cellLess( const t3dInstanceCell_t &a, const Vector2i &b ) {
-	return a.location.x < b.x || ( a.location.x == b.x && a.location.y < b.y );
+	return a.m_location.x < b.x || ( a.m_location.x == b.x && a.m_location.y < b.y );
 }
 
 bool T3DInstanceStore::meshLess( const t3dInstanceMesh_t &a, const int b ) {
-	return a.id < b;
+	return a.m_nId < b;
 }
 
 size_t T3DInstanceStore::cellLowerBound(
@@ -94,11 +94,11 @@ size_t T3DInstanceStore::cellLowerBound(
 	return ( size_t ) ( eastl::lower_bound( cells.begin(), cells.end(), location, cellLess ) - cells.begin() );
 }
 
-EA_FORCE_INLINE static bool t3dInstanceStoreInstanceMeshIdLess( const t3dInstanceMesh_t &rA, const t3dInstanceMesh_t &rB ) { return rA.id < rB.id; }
+EA_FORCE_INLINE static bool t3dInstanceStoreInstanceMeshIdLess( const t3dInstanceMesh_t &rA, const t3dInstanceMesh_t &rB ) { return rA.m_nId < rB.m_nId; }
 
 size_t T3DInstanceStore::findCellIndex( const t3dInstanceMesh_t &mesh, const Vector2i &location ) {
-	const size_t cell_index = cellLowerBound( mesh.cells, location );
-	return cell_index < mesh.cells.size() && mesh.cells[cell_index].location == location ? cell_index : mesh.cells.size();
+	const size_t cell_index = cellLowerBound( mesh.m_cells, location );
+	return cell_index < mesh.m_cells.size() && mesh.m_cells[cell_index].m_location == location ? cell_index : mesh.m_cells.size();
 }
 
 size_t T3DInstanceStore::meshLowerBound( const int nMeshId ) const {
@@ -106,8 +106,8 @@ size_t T3DInstanceStore::meshLowerBound( const int nMeshId ) const {
 }
 
 void T3DInstanceStore::rebuildMeshLookup( void ) const {
-	for ( uint16_t &slot : m_szMeshSlots ) slot = INVALID_MESH_SLOT;
-	for ( size_t i = 0u; i < m_meshes.size(); ++i ) { const int id = m_meshes[i].id; if ( id >= 0 && id < TERRAIN3D_MAX_MESH_ASSETS && i < INVALID_MESH_SLOT ) m_szMeshSlots[id] = ( uint16_t ) i; }
+	for ( uint16_t &slot : m_szMeshSlots ) slot = s_nInvalidMeshSlot;
+	for ( size_t i = 0u; i < m_meshes.size(); ++i ) { const int id = m_meshes[i].m_nId; if ( id >= 0 && id < s_nMaxMeshAssets && i < s_nInvalidMeshSlot ) m_szMeshSlots[id] = ( uint16_t ) i; }
 	m_bMeshLookupDirty = false;
 }
 
@@ -133,8 +133,8 @@ void T3DInstanceStore::compactStorage( void ) {
 	T3DHighWaterSlab<uint32_t> compact_colors;
 	T3DHighWaterSlab<uint32_t> compact_owners;
 	for ( t3dInstanceMesh_t &mesh : m_meshes ) {
-		for ( t3dInstanceCell_t &cell : mesh.cells ) cell.relocatePayloadsExact( &compact_transforms, &compact_colors, &compact_owners );
-		mesh.cells.shrink_to_fit();
+		for ( t3dInstanceCell_t &cell : mesh.m_cells ) cell.relocatePayloadsExact( &compact_transforms, &compact_colors, &compact_owners );
+		mesh.m_cells.shrink_to_fit();
 	}
 	compact_transforms.compactBacking();
 	compact_colors.compactBacking();
@@ -148,33 +148,33 @@ void T3DInstanceStore::compactStorage( void ) {
 
 const t3dInstanceMesh_t *T3DInstanceStore::findMesh( const int nMeshId ) const {
 	if ( m_bMeshLookupDirty ) rebuildMeshLookup();
-	if ( nMeshId >= 0 && nMeshId < TERRAIN3D_MAX_MESH_ASSETS ) { const uint16_t slot = m_szMeshSlots[nMeshId]; return slot != INVALID_MESH_SLOT && slot < m_meshes.size() ? &m_meshes[slot] : nullptr; }
-	const size_t mesh_index = meshLowerBound( nMeshId ); return mesh_index < m_meshes.size() && m_meshes[mesh_index].id == nMeshId ? &m_meshes[mesh_index] : nullptr;
+	if ( nMeshId >= 0 && nMeshId < s_nMaxMeshAssets ) { const uint16_t slot = m_szMeshSlots[nMeshId]; return slot != s_nInvalidMeshSlot && slot < m_meshes.size() ? &m_meshes[slot] : nullptr; }
+	const size_t mesh_index = meshLowerBound( nMeshId ); return mesh_index < m_meshes.size() && m_meshes[mesh_index].m_nId == nMeshId ? &m_meshes[mesh_index] : nullptr;
 }
 
 t3dInstanceMesh_t *T3DInstanceStore::findMesh( const int nMeshId ) {
 	if ( m_bMeshLookupDirty ) rebuildMeshLookup();
-	if ( nMeshId >= 0 && nMeshId < TERRAIN3D_MAX_MESH_ASSETS ) { const uint16_t slot = m_szMeshSlots[nMeshId]; return slot != INVALID_MESH_SLOT && slot < m_meshes.size() ? &m_meshes[slot] : nullptr; }
-	const size_t mesh_index = meshLowerBound( nMeshId ); return mesh_index < m_meshes.size() && m_meshes[mesh_index].id == nMeshId ? &m_meshes[mesh_index] : nullptr;
+	if ( nMeshId >= 0 && nMeshId < s_nMaxMeshAssets ) { const uint16_t slot = m_szMeshSlots[nMeshId]; return slot != s_nInvalidMeshSlot && slot < m_meshes.size() ? &m_meshes[slot] : nullptr; }
+	const size_t mesh_index = meshLowerBound( nMeshId ); return mesh_index < m_meshes.size() && m_meshes[mesh_index].m_nId == nMeshId ? &m_meshes[mesh_index] : nullptr;
 }
 
 t3dInstanceMesh_t &T3DInstanceStore::getOrCreateMesh( const int nMeshId, const size_t nReserveCells ) {
 	const size_t mesh_index = meshLowerBound( nMeshId );
-	if ( mesh_index >= m_meshes.size() || m_meshes[mesh_index].id != nMeshId ) {
+	if ( mesh_index >= m_meshes.size() || m_meshes[mesh_index].m_nId != nMeshId ) {
 		t3dInstanceMesh_t mesh;
-		mesh.id = nMeshId;
-		mesh.cells.reserve( nReserveCells );
+		mesh.m_nId = nMeshId;
+		mesh.m_cells.reserve( nReserveCells );
 		m_meshes.insert( m_meshes.begin() + mesh_index, eastl::move( mesh ) );
 		rebuildMeshLookup();
-	} else if ( nReserveCells > m_meshes[mesh_index].cells.capacity() ) {
-		m_meshes[mesh_index].cells.reserve( nReserveCells );
+	} else if ( nReserveCells > m_meshes[mesh_index].m_cells.capacity() ) {
+		m_meshes[mesh_index].m_cells.reserve( nReserveCells );
 	}
 	return m_meshes[mesh_index];
 }
 
 bool T3DInstanceStore::eraseMesh( const int nMeshId ) {
 	const size_t mesh_index = meshLowerBound( nMeshId );
-	if ( mesh_index >= m_meshes.size() || m_meshes[mesh_index].id != nMeshId ) {
+	if ( mesh_index >= m_meshes.size() || m_meshes[mesh_index].m_nId != nMeshId ) {
 		return false;
 	}
 	m_meshes.erase( m_meshes.begin() + mesh_index ); rebuildMeshLookup();
@@ -185,10 +185,10 @@ void T3DInstanceStore::swapMeshIds( const int nSrcId, const int nDstId ) {
 	t3dInstanceMesh_t *pSrc = findMesh( nSrcId );
 	t3dInstanceMesh_t *pDst = findMesh( nDstId );
 	if ( pSrc != nullptr ) {
-		pSrc->id = nDstId;
+		pSrc->m_nId = nDstId;
 	}
 	if ( pDst != nullptr ) {
-		pDst->id = nSrcId;
+		pDst->m_nId = nSrcId;
 	}
 	eastl::sort( m_meshes.begin(), m_meshes.end(), t3dInstanceStoreInstanceMeshIdLess ); rebuildMeshLookup();
 }
@@ -199,7 +199,7 @@ const t3dInstanceCell_t *T3DInstanceStore::findCell( const int nMeshId, const Ve
 		return nullptr;
 	}
 	const size_t cell_index = findCellIndex( *pMesh, cell );
-	return cell_index < pMesh->cells.size() ? &pMesh->cells[cell_index] : nullptr;
+	return cell_index < pMesh->m_cells.size() ? &pMesh->m_cells[cell_index] : nullptr;
 }
 
 t3dInstanceCell_t *T3DInstanceStore::findCell( const int nMeshId, const Vector2i &cell ) {
@@ -208,7 +208,7 @@ t3dInstanceCell_t *T3DInstanceStore::findCell( const int nMeshId, const Vector2i
 		return nullptr;
 	}
 	const size_t cell_index = findCellIndex( *pMesh, cell );
-	return cell_index < pMesh->cells.size() ? &pMesh->cells[cell_index] : nullptr;
+	return cell_index < pMesh->m_cells.size() ? &pMesh->m_cells[cell_index] : nullptr;
 }
 
 t3dInstanceCell_t &T3DInstanceStore::getOrCreateCell(
@@ -217,17 +217,17 @@ t3dInstanceCell_t &T3DInstanceStore::getOrCreateCell(
 ) {
 	t3dInstanceMesh_t &mesh = getOrCreateMesh( nMeshId, 4 );
 	size_t cell_index = findCellIndex( mesh, cell );
-	if ( cell_index >= mesh.cells.size() ) {
-		cell_index = cellLowerBound( mesh.cells, cell );
+	if ( cell_index >= mesh.m_cells.size() ) {
+		cell_index = cellLowerBound( mesh.m_cells, cell );
 		t3dInstanceCell_t value;
-		value.location = cell;
+		value.m_location = cell;
 		bindCellPayloads( value );
 		value.reserve( reserve_instances, bColorData, bOwnerData );
-		mesh.cells.insert( mesh.cells.begin() + cell_index, eastl::move( value ) );
+		mesh.m_cells.insert( mesh.m_cells.begin() + cell_index, eastl::move( value ) );
 	} else {
-		mesh.cells[cell_index].reserve( reserve_instances, bColorData, bOwnerData );
+		mesh.m_cells[cell_index].reserve( reserve_instances, bColorData, bOwnerData );
 	}
-	return mesh.cells[cell_index];
+	return mesh.m_cells[cell_index];
 }
 
 t3dInstanceCell_t &T3DInstanceStore::getOrCreateCellExact(
@@ -236,17 +236,17 @@ t3dInstanceCell_t &T3DInstanceStore::getOrCreateCellExact(
 ) {
 	t3dInstanceMesh_t &mesh = getOrCreateMesh( nMeshId, 4 );
 	size_t cell_index = findCellIndex( mesh, cell );
-	if ( cell_index >= mesh.cells.size() ) {
-		cell_index = cellLowerBound( mesh.cells, cell );
+	if ( cell_index >= mesh.m_cells.size() ) {
+		cell_index = cellLowerBound( mesh.m_cells, cell );
 		t3dInstanceCell_t value;
-		value.location = cell;
+		value.m_location = cell;
 		bindCellPayloads( value );
 		value.reserveExact( reserve_instances, bColorData, bOwnerData );
-		mesh.cells.insert( mesh.cells.begin() + cell_index, eastl::move( value ) );
+		mesh.m_cells.insert( mesh.m_cells.begin() + cell_index, eastl::move( value ) );
 	} else {
-		mesh.cells[cell_index].reserveExact( reserve_instances, bColorData, bOwnerData );
+		mesh.m_cells[cell_index].reserveExact( reserve_instances, bColorData, bOwnerData );
 	}
-	return mesh.cells[cell_index];
+	return mesh.m_cells[cell_index];
 }
 
 bool T3DInstanceStore::eraseCell( const int nMeshId, const Vector2i &cell ) {
@@ -255,11 +255,11 @@ bool T3DInstanceStore::eraseCell( const int nMeshId, const Vector2i &cell ) {
 		return false;
 	}
 	const size_t cell_index = findCellIndex( *pMesh, cell );
-	if ( cell_index >= pMesh->cells.size() ) {
+	if ( cell_index >= pMesh->m_cells.size() ) {
 		return false;
 	}
-	pMesh->cells.erase( pMesh->cells.begin() + cell_index );
-	if ( pMesh->cells.empty() ) {
+	pMesh->m_cells.erase( pMesh->m_cells.begin() + cell_index );
+	if ( pMesh->m_cells.empty() ) {
 		eraseMesh( nMeshId );
 	}
 	return true;
@@ -307,25 +307,25 @@ void T3DInstanceStore::importDictionary( const Dictionary &instances ) {
 			}
 			t3dInstanceCell_t &cell =
 				getOrCreateCell( mesh_id, location, xforms.size(), bHasNonwhite, bHasOwnerData );
-			cell.transforms.resize( xforms.size() );
+			cell.m_transforms.resize( xforms.size() );
 			for ( int transform_index = 0; transform_index < xforms.size(); ++transform_index ) {
-				cell.transforms[( size_t ) ( transform_index )] = xforms[transform_index];
+				cell.m_transforms[( size_t ) ( transform_index )] = xforms[transform_index];
 			}
 			if ( bHasNonwhite ) {
-				cell.colors.resize( xforms.size(), TERRAIN3D_INSTANCE_WHITE_RGBA8 );
+				cell.m_colors.resize( xforms.size(), s_nInstanceWhiteRgba8 );
 				const int color_count = eastl::min( source_colors.size(), xforms.size() );
 				for ( int color_index = 0; color_index < color_count; ++color_index ) {
 					cell.setColor( ( size_t ) ( color_index ), source_colors[color_index] );
 				}
 			}
 			if ( bHasOwnerData ) {
-				cell.owners.resize( xforms.size(), 0u );
+				cell.m_owners.resize( xforms.size(), 0u );
 				const int owner_count = eastl::min( source_owners.size(), xforms.size() );
 				for ( int owner_index = 0; owner_index < owner_count; ++owner_index ) {
-					cell.owners[( size_t ) ( owner_index )] = ( uint32_t ) ( MAX( source_owners[owner_index], 0 ) );
+					cell.m_owners[( size_t ) ( owner_index )] = ( uint32_t ) ( MAX( source_owners[owner_index], 0 ) );
 				}
 			}
-			cell.bModified = true; // Import/undo replaces storage; force one GPU upload.
+			cell.m_bModified = true; // Import/undo replaces storage; force one GPU upload.
 		}
 	}
 	rebuildMeshLookup();
@@ -337,19 +337,19 @@ bool T3DInstanceStore::equalsDictionary( const Dictionary &instances ) const {
 	}
 	for ( size_t mesh_index = 0; mesh_index < m_meshes.size(); ++mesh_index ) {
 		const t3dInstanceMesh_t &mesh = m_meshes[mesh_index];
-		if ( !instances.has( mesh.id ) ) {
+		if ( !instances.has( mesh.m_nId ) ) {
 			return false;
 		}
-		const Dictionary cell_dict = instances[mesh.id];
-		if ( cell_dict.size() != ( int ) ( mesh.cells.size() ) ) {
+		const Dictionary cell_dict = instances[mesh.m_nId];
+		if ( cell_dict.size() != ( int ) ( mesh.m_cells.size() ) ) {
 			return false;
 		}
-		for ( size_t cell_index = 0; cell_index < mesh.cells.size(); ++cell_index ) {
-			const t3dInstanceCell_t &cell = mesh.cells[cell_index];
-			if ( !cell_dict.has( cell.location ) ) {
+		for ( size_t cell_index = 0; cell_index < mesh.m_cells.size(); ++cell_index ) {
+			const t3dInstanceCell_t &cell = mesh.m_cells[cell_index];
+			if ( !cell_dict.has( cell.m_location ) ) {
 				return false;
 			}
-			const Array triple = cell_dict[cell.location];
+			const Array triple = cell_dict[cell.m_location];
 			if ( triple.size() < 2 ) {
 				return false;
 			}
@@ -359,13 +359,13 @@ bool T3DInstanceStore::equalsDictionary( const Dictionary &instances ) const {
 			if ( triple.size() > 3 && Variant( triple[3] ).get_type() == Variant::PACKED_INT32_ARRAY ) {
 				owners = triple[3];
 			}
-			if ( transforms.size() != ( int ) ( cell.transforms.size() ) || colors.size() > transforms.size() ||
+			if ( transforms.size() != ( int ) ( cell.m_transforms.size() ) || colors.size() > transforms.size() ||
 				owners.size() > transforms.size() ) {
 				return false;
 			}
 			for ( int transform_index = 0; transform_index < transforms.size(); ++transform_index ) {
 				const size_t index = ( size_t ) ( transform_index );
-				if ( Transform3D( transforms[transform_index] ) != cell.transforms[index] ) {
+				if ( Transform3D( transforms[transform_index] ) != cell.m_transforms[index] ) {
 					return false;
 				}
 				const Color expected = cell.getColor( index );
@@ -390,17 +390,17 @@ Dictionary T3DInstanceStore::exportDictionary( void ) const {
 	for ( size_t mesh_index = 0; mesh_index < m_meshes.size(); ++mesh_index ) {
 		const t3dInstanceMesh_t &mesh = m_meshes[mesh_index];
 		Dictionary cells;
-		for ( size_t cell_index = 0; cell_index < mesh.cells.size(); ++cell_index ) {
-			const t3dInstanceCell_t &cell = mesh.cells[cell_index];
+		for ( size_t cell_index = 0; cell_index < mesh.m_cells.size(); ++cell_index ) {
+			const t3dInstanceCell_t &cell = mesh.m_cells[cell_index];
 			TypedArray<Transform3D> xforms;
-			xforms.resize( cell.transforms.size() );
-			for ( size_t transform_index = 0; transform_index < cell.transforms.size(); ++transform_index ) {
-				xforms[( int ) ( transform_index )] = cell.transforms[transform_index];
+			xforms.resize( cell.m_transforms.size() );
+			for ( size_t transform_index = 0; transform_index < cell.m_transforms.size(); ++transform_index ) {
+				xforms[( int ) ( transform_index )] = cell.m_transforms[transform_index];
 			}
 			PackedColorArray colors;
-			colors.resize( cell.transforms.size() );
+			colors.resize( cell.m_transforms.size() );
 			if ( cell.usesColors() ) {
-				for ( size_t color_index = 0; color_index < cell.colors.size(); ++color_index ) {
+				for ( size_t color_index = 0; color_index < cell.m_colors.size(); ++color_index ) {
 					colors.set( ( int ) ( color_index ), cell.getColor( color_index ) );
 				}
 			} else {
@@ -410,45 +410,45 @@ Dictionary T3DInstanceStore::exportDictionary( void ) const {
 			triple.resize( cell.usesOwners() ? 4 : 3 );
 			triple[0] = xforms;
 			triple[1] = colors;
-			triple[2] = cell.bModified;
+			triple[2] = cell.m_bModified;
 			if ( cell.usesOwners() ) {
 				PackedInt32Array owners;
-				owners.resize( cell.transforms.size() );
-				for ( size_t owner_index = 0; owner_index < cell.transforms.size(); ++owner_index ) {
+				owners.resize( cell.m_transforms.size() );
+				for ( size_t owner_index = 0; owner_index < cell.m_transforms.size(); ++owner_index ) {
 					owners.set( ( int ) ( owner_index ), ( int32_t ) ( cell.getOwner( owner_index ) ) );
 				}
 				triple[3] = owners;
 			}
-			cells[cell.location] = triple;
+			cells[cell.m_location] = triple;
 		}
-		result[mesh.id] = cells;
+		result[mesh.m_nId] = cells;
 	}
 	return result;
 }
 
-size_t T3DInstanceStore::instanceCount( const int nMeshId ) const {
+size_t T3DInstanceStore::m_nInstanceCount( const int nMeshId ) const {
 	size_t count = 0;
 	if ( nMeshId >= 0 ) {
 		const t3dInstanceMesh_t *pMesh = findMesh( nMeshId );
 		if ( pMesh == nullptr ) {
 			return 0;
 		}
-		for ( size_t cell_index = 0; cell_index < pMesh->cells.size(); ++cell_index ) {
-			count += pMesh->cells[cell_index].transforms.size();
+		for ( size_t cell_index = 0; cell_index < pMesh->m_cells.size(); ++cell_index ) {
+			count += pMesh->m_cells[cell_index].m_transforms.size();
 		}
 		return count;
 	}
 	for ( size_t mesh_index = 0; mesh_index < m_meshes.size(); ++mesh_index ) {
 		const t3dInstanceMesh_t &pMesh = m_meshes[mesh_index];
-		for ( size_t cell_index = 0; cell_index < pMesh.cells.size(); ++cell_index ) {
-			count += pMesh.cells[cell_index].transforms.size();
+		for ( size_t cell_index = 0; cell_index < pMesh.m_cells.size(); ++cell_index ) {
+			count += pMesh.m_cells[cell_index].m_transforms.size();
 		}
 	}
 	return count;
 }
 size_t T3DInstanceStore::residentBytes( void ) const {
 	size_t bytes = m_meshes.capacity() * sizeof( t3dInstanceMesh_t );
-	for ( const t3dInstanceMesh_t &mesh : m_meshes ) bytes += mesh.cells.capacity() * sizeof( t3dInstanceCell_t );
+	for ( const t3dInstanceMesh_t &mesh : m_meshes ) bytes += mesh.m_cells.capacity() * sizeof( t3dInstanceCell_t );
 	bytes += m_transformSlab.residentBytes();
 	bytes += m_colorSlab.residentBytes();
 	bytes += m_ownerSlab.residentBytes();

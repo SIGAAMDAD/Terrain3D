@@ -17,9 +17,9 @@
 #include <algorithm>
 #include <cstring>
 
-static constexpr uint32_t MANIFEST_HEADER_BYTES = 112u;
-static constexpr uint32_t MANIFEST_TOPOLOGY_BYTES = TERRAIN3D_MAX_REGION_SLOTS / 8u;
-static constexpr uint32_t MANIFEST_REGION_BASE_BYTES = 112u;
+static constexpr uint32_t s_nManifestHeaderBytes = 112u;
+static constexpr uint32_t s_nManifestTopologyBytes = s_nMaxRegionSlots / 8u;
+static constexpr uint32_t s_nManifestRegionBaseBytes = 112u;
 
 static void t3dRuntimeWorldManifestHashBytes( uint64_t &nHash, const void *pData, const size_t nBytes ) {
 	const uint8_t *const pRead = static_cast<const uint8_t *>( pData );
@@ -61,10 +61,10 @@ static bool t3dRuntimeWorldManifestReadString( const Ref<FileAccess> &rFile, Str
 }
 
 static String t3dRuntimeWorldManifestDescriptorScenePath( const t3dStreamedNodeRuntimeDescriptor_t &rDescriptor ) {
-	if ( !rDescriptor.scenePath.is_empty() ) {
-		return rDescriptor.scenePath;
+	if ( !rDescriptor.m_scenePath.is_empty() ) {
+		return rDescriptor.m_scenePath;
 	}
-	return rDescriptor.pScene.is_valid() ? rDescriptor.pScene->get_path() : String();
+	return rDescriptor.m_scene.is_valid() ? rDescriptor.m_scene->get_path() : String();
 }
 
 void T3DRuntimeWorldManifest::reset( void ) {
@@ -106,8 +106,8 @@ void T3DRuntimeWorldManifest::rebuildLookup( void ) {
 	m_regionLookup.fill( -1 );
 	m_topologyBits.fill( 0u );
 	for ( int index = 0; index < ( int ) ( m_regions.size() ); ++index ) {
-		const int map_index = T3DRegionRepository::getRegionMapIndex( m_regions[( size_t ) ( index )].location );
-		if ( map_index >= 0 && map_index < TERRAIN3D_MAX_REGION_SLOTS ) {
+		const int map_index = T3DRegionRepository::getRegionMapIndex( m_regions[( size_t ) ( index )].m_location );
+		if ( map_index >= 0 && map_index < s_nMaxRegionSlots ) {
 			m_regionLookup[( size_t ) ( map_index )] = ( int16_t ) ( index );
 			m_topologyBits[( size_t ) ( map_index >> 6 )] |= 1ull << ( map_index & 63 );
 		}
@@ -116,13 +116,13 @@ void T3DRuntimeWorldManifest::rebuildLookup( void ) {
 
 bool T3DRuntimeWorldManifest::hasRegion( const Vector2i &rLocation ) const {
 	const int map_index = T3DRegionRepository::getRegionMapIndex( rLocation );
-	return map_index >= 0 && map_index < TERRAIN3D_MAX_REGION_SLOTS &&
+	return map_index >= 0 && map_index < s_nMaxRegionSlots &&
 		( m_topologyBits[( size_t ) ( map_index >> 6 )] & ( 1ull << ( map_index & 63 ) ) ) != 0u;
 }
 
 const t3dRuntimeWorldRegionRecord_t *T3DRuntimeWorldManifest::findRegion( const Vector2i &rLocation ) const {
 	const int map_index = T3DRegionRepository::getRegionMapIndex( rLocation );
-	if ( map_index < 0 || map_index >= TERRAIN3D_MAX_REGION_SLOTS ) {
+	if ( map_index < 0 || map_index >= s_nMaxRegionSlots ) {
 		return nullptr;
 	}
 	const int index = m_regionLookup[( size_t ) ( map_index )];
@@ -146,41 +146,41 @@ bool T3DRuntimeWorldManifest::buildAuthoringIndex( const T3DRegionRepository &rR
 			continue;
 		}
 		t3dRuntimeWorldRegionRecord_t record;
-		record.location = location;
+		record.m_location = location;
 		if ( first_region ) {
 			m_worldRegionMin = location;
 			m_worldRegionMax = location;
 			first_region = false;
 		} else {
-			m_worldRegionMin.x = MIN( m_worldRegionMin.x, location.x );
-			m_worldRegionMin.y = MIN( m_worldRegionMin.y, location.y );
-			m_worldRegionMax.x = MAX( m_worldRegionMax.x, location.x );
-			m_worldRegionMax.y = MAX( m_worldRegionMax.y, location.y );
+			m_worldRegionMin.x = MIN( m_worldRegionMin.x, location.m_nX );
+			m_worldRegionMin.y = MIN( m_worldRegionMin.y, location.m_nY );
+			m_worldRegionMax.x = MAX( m_worldRegionMax.x, location.m_nX );
+			m_worldRegionMax.y = MAX( m_worldRegionMax.y, location.m_nY );
 		}
-		record.heightRange = pRegion->getHeightRange();
-		record.channelFlags = ( uint32_t ) ( pRegion->getChannelFlags() );
-		record.instanceCount = pRegion->getInstanceCount();
-		record.instanceMeshCount = pRegion->getInstanceMeshCount();
-		for ( int mesh = 0; mesh < TERRAIN3D_MAX_MESH_ASSETS; ++mesh ) {
-			record.instanceMeshCounts[( size_t ) ( mesh )] = pRegion->getInstanceCount( mesh );
+		record.m_heightRange = pRegion->getHeightRange();
+		record.m_nChannelFlags = ( uint32_t ) ( pRegion->getChannelFlags() );
+		record.m_nInstanceCount = pRegion->getInstanceCount();
+		record.m_nInstanceMeshCount = pRegion->getInstanceMeshCount();
+		for ( int mesh = 0; mesh < s_nMaxMeshAssets; ++mesh ) {
+			record.m_szInstanceMeshCounts[( size_t ) ( mesh )] = pRegion->getInstanceCount( mesh );
 		}
 		const eastl::vector<t3dStreamedNodeRuntimeDescriptor_t> &nodes = pRegion->getStreamedNodesRuntimeInternal();
-		record.streamedNodeCount = ( uint16_t ) ( MIN( nodes.size(), ( size_t ) ( UINT16_MAX ) ) );
-		record.nodeCoverageMin = V2I_ZERO;
-		record.nodeCoverageMax = V2I_ZERO;
+		record.m_nStreamedNodeCount = ( uint16_t ) ( MIN( nodes.size(), ( size_t ) ( UINT16_MAX ) ) );
+		record.m_nodeCoverageMin = V2I_ZERO;
+		record.m_nodeCoverageMax = V2I_ZERO;
 		bool first_coverage = true;
-		record.sceneDependencyFirst = ( uint32_t ) ( m_regionSceneDependencies.size() );
+		record.m_nSceneDependencyFirst = ( uint32_t ) ( m_regionSceneDependencies.size() );
 		for ( const t3dStreamedNodeRuntimeDescriptor_t &descriptor : nodes ) {
-			if ( descriptor.boundaryPolicy == STREAMED_NODE_BOUNDARY_COVERAGE ) {
+			if ( descriptor.m_nBoundaryPolicy == STREAMED_NODE_BOUNDARY_COVERAGE ) {
 				if ( first_coverage ) {
-					record.nodeCoverageMin = descriptor.coverageMin;
-					record.nodeCoverageMax = descriptor.coverageMax;
+					record.m_nodeCoverageMin = descriptor.m_coverageMin;
+					record.m_nodeCoverageMax = descriptor.m_coverageMax;
 					first_coverage = false;
 				} else {
-					record.nodeCoverageMin.x = MIN( record.nodeCoverageMin.x, descriptor.coverageMin.x );
-					record.nodeCoverageMin.y = MIN( record.nodeCoverageMin.y, descriptor.coverageMin.y );
-					record.nodeCoverageMax.x = MAX( record.nodeCoverageMax.x, descriptor.coverageMax.x );
-					record.nodeCoverageMax.y = MAX( record.nodeCoverageMax.y, descriptor.coverageMax.y );
+					record.m_nodeCoverageMin.x = MIN( record.m_nodeCoverageMin.x, descriptor.m_coverageMin.x );
+					record.m_nodeCoverageMin.y = MIN( record.m_nodeCoverageMin.y, descriptor.m_coverageMin.y );
+					record.m_nodeCoverageMax.x = MAX( record.m_nodeCoverageMax.x, descriptor.m_coverageMax.x );
+					record.m_nodeCoverageMax.y = MAX( record.m_nodeCoverageMax.y, descriptor.m_coverageMax.y );
 				}
 			}
 			const String scene_path = t3dRuntimeWorldManifestDescriptorScenePath( descriptor );
@@ -193,7 +193,7 @@ bool T3DRuntimeWorldManifest::buildAuthoringIndex( const T3DRegionRepository &rR
 				m_sceneDependencies.push_back( scene_path );
 			}
 			bool duplicate = false;
-			for ( uint32_t d = record.sceneDependencyFirst; d < m_regionSceneDependencies.size(); ++d ) {
+			for ( uint32_t d = record.m_nSceneDependencyFirst; d < m_regionSceneDependencies.size(); ++d ) {
 				if ( m_regionSceneDependencies[d] == ( uint16_t ) ( dependency ) ) {
 					duplicate = true;
 					break;
@@ -203,36 +203,36 @@ bool T3DRuntimeWorldManifest::buildAuthoringIndex( const T3DRegionRepository &rR
 				m_regionSceneDependencies.push_back( ( uint16_t ) ( dependency ) );
 			}
 		}
-		record.sceneDependencyCount = ( uint16_t ) ( m_regionSceneDependencies.size() - record.sceneDependencyFirst );
+		record.m_nSceneDependencyCount = ( uint16_t ) ( m_regionSceneDependencies.size() - record.m_nSceneDependencyFirst );
 		const Ref<T3DRegionLighting> pLighting = pRegion->getLighting();
 		if ( pLighting.is_valid() && !pLighting->getLightDataPath().is_empty() ) {
 			int dependency = findSceneDependency( pLighting->getLightDataPath() );
 			if ( dependency < 0 ) { dependency = ( int ) m_sceneDependencies.size(); m_sceneDependencies.push_back( pLighting->getLightDataPath() ); }
-			record.lightmapDependency = ( uint32_t ) dependency;
+			record.m_nLightmapDependency = ( uint32_t ) dependency;
 			const String directional_signature = pLighting->getDirectionalLightSignature();
 			if ( !directional_signature.is_empty() ) {
 				int directional = findSceneDependency( directional_signature );
 				if ( directional < 0 ) { directional = ( int ) m_sceneDependencies.size(); m_sceneDependencies.push_back( directional_signature ); }
-				record.lightmapDirectionalSignatureDependency = ( uint32_t ) directional;
+				record.m_nLightmapDirectionalSignatureDependency = ( uint32_t ) directional;
 			}
-			record.lightmapReceiverCount = ( uint32_t ) MAX( pLighting->getReceiverCount(), 0 );
-			record.lightmapContributorCount = ( uint32_t ) MAX( pLighting->getContributorCount(), 0 );
-			record.lightmapEstimatedGpuBytes = ( uint64_t ) MAX<int64_t>( pLighting->getEstimatedGpuBytes(), 0 );
-			record.lightmapBakeSignature = pLighting->getBakeSignature();
-			record.lightmapShadowmaskMode = ( uint16_t ) MAX( pLighting->getShadowmaskMode(), 0 );
-			record.lightmapFlags = pLighting->hasProbeData() ? 1u : 0u;
-			record.lightmapTextureCount = ( uint16_t ) MIN( MAX( pLighting->getLightmapTextureCount(), 0 ), ( int ) UINT16_MAX );
-			record.lightmapShadowmaskTextureCount = ( uint16_t ) MIN( MAX( pLighting->getShadowmaskTextureCount(), 0 ), ( int ) UINT16_MAX );
-			record.lightmapClusterSizeRegions = ( uint16_t ) pLighting->getClusterSizeRegions();
-			record.lightmapContextRadiusRegions = ( uint16_t ) pLighting->getContextRadiusRegions();
-			record.lightmapTerrainProxyLod = ( uint16_t ) pLighting->getTerrainProxyLod();
+			record.m_nLightmapReceiverCount = ( uint32_t ) MAX( pLighting->getReceiverCount(), 0 );
+			record.m_nLightmapContributorCount = ( uint32_t ) MAX( pLighting->getContributorCount(), 0 );
+			record.m_nLightmapEstimatedGpuBytes = ( uint64_t ) MAX<int64_t>( pLighting->getEstimatedGpuBytes(), 0 );
+			record.m_nLightmapBakeSignature = pLighting->getBakeSignature();
+			record.m_nLightmapShadowmaskMode = ( uint16_t ) MAX( pLighting->getShadowmaskMode(), 0 );
+			record.m_nLightmapFlags = pLighting->hasProbeData() ? 1u : 0u;
+			record.m_nLightmapTextureCount = ( uint16_t ) MIN( MAX( pLighting->getLightmapTextureCount(), 0 ), ( int ) UINT16_MAX );
+			record.m_nLightmapShadowmaskTextureCount = ( uint16_t ) MIN( MAX( pLighting->getShadowmaskTextureCount(), 0 ), ( int ) UINT16_MAX );
+			record.m_nLightmapClusterSizeRegions = ( uint16_t ) pLighting->getClusterSizeRegions();
+			record.m_nLightmapContextRadiusRegions = ( uint16_t ) pLighting->getContextRadiusRegions();
+			record.m_nLightmapTerrainProxyLod = ( uint16_t ) pLighting->getTerrainProxyLod();
 		}
 		if ( first_height ) {
-			m_worldHeightRange = record.heightRange;
+			m_worldHeightRange = record.m_heightRange;
 			first_height = false;
 		} else {
-			m_worldHeightRange.x = MIN( m_worldHeightRange.x, record.heightRange.x );
-			m_worldHeightRange.y = MAX( m_worldHeightRange.y, record.heightRange.y );
+			m_worldHeightRange.x = MIN( m_worldHeightRange.x, record.m_heightRange.x );
+			m_worldHeightRange.y = MAX( m_worldHeightRange.y, record.m_heightRange.y );
 		}
 		m_regions.push_back( record );
 	}
@@ -244,11 +244,11 @@ bool T3DRuntimeWorldManifest::buildAuthoringIndex( const T3DRegionRepository &rR
 	for ( t3dRuntimeWorldRegionRecord_t &record : m_regions ) {
 		uint16_t adjacency = 0u;
 		for ( uint16_t bit = 0u; bit < 8u; ++bit ) {
-			if ( hasRegion( record.location + neighbors[bit] ) ) {
+			if ( hasRegion( record.m_location + neighbors[bit] ) ) {
 				adjacency |= ( uint16_t ) ( 1u << bit );
 			}
 		}
-		record.flags = ( uint16_t ) ( ( record.flags & 0xff00u ) | adjacency );
+		record.m_nFlags = ( uint16_t ) ( ( record.m_nFlags & 0xff00u ) | adjacency );
 	}
 	return !m_regions.empty();
 }
@@ -262,26 +262,26 @@ bool T3DRuntimeWorldManifest::write(
 		if ( pErrors ) pErrors->push_back( "World manifest has no regions to cook." );
 		return false;
 	}
-	m_nMaterialSignature = rConfig.materialSourceSignature;
+	m_nMaterialSignature = rConfig.m_nMaterialSourceSignature;
 	uint64_t world_signature = 1469598103934665603ull;
 	t3dRuntimeWorldManifestHashU32( world_signature, ( uint32_t ) ( m_nRegionSize ) );
 	t3dRuntimeWorldManifestHashU32( world_signature, ( uint32_t ) ( m_regions.size() ) );
 	for ( t3dRuntimeWorldRegionRecord_t &record : m_regions ) {
-		const T3DRegion *const pRegion = rRepository.getRegionPtr( record.location );
+		const T3DRegion *const pRegion = rRepository.getRegionPtr( record.m_location );
 		uint64_t page_signature = 0u;
 		const String page_path = rPageStore.getPagePath( pRegion, rDataDirectory );
 		if ( !rPageStore.readSourceSignature( page_path, page_signature ) || page_signature == 0u ) {
-			if ( pErrors ) pErrors->push_back( "Missing/invalid runtime page for manifest region " + String( record.location ) );
+			if ( pErrors ) pErrors->push_back( "Missing/invalid runtime page for manifest region " + String( record.m_location ) );
 			return false;
 		}
-		record.pageSourceSignature = page_signature;
-		record.materialMask = rPageStore.readMaterialMask( page_path );
-		if ( record.materialMask == 0u ) record.materialMask = 1u;
-		t3dRuntimeWorldManifestHashBytes( world_signature, &record.location.x, sizeof( record.location.x ) );
-		t3dRuntimeWorldManifestHashBytes( world_signature, &record.location.y, sizeof( record.location.y ) );
-		t3dRuntimeWorldManifestHashBytes( world_signature, &record.pageSourceSignature, sizeof( record.pageSourceSignature ) );
-		t3dRuntimeWorldManifestHashBytes( world_signature, &record.materialMask, sizeof( record.materialMask ) );
-		t3dRuntimeWorldManifestHashBytes( world_signature, &record.flags, sizeof( record.flags ) );
+		record.m_nPageSourceSignature = page_signature;
+		record.m_nMaterialMask = rPageStore.readMaterialMask( page_path );
+		if ( record.m_nMaterialMask == 0u ) record.m_nMaterialMask = 1u;
+		t3dRuntimeWorldManifestHashBytes( world_signature, &record.m_location.x, sizeof( record.m_location.x ) );
+		t3dRuntimeWorldManifestHashBytes( world_signature, &record.m_location.y, sizeof( record.m_location.y ) );
+		t3dRuntimeWorldManifestHashBytes( world_signature, &record.m_nPageSourceSignature, sizeof( record.m_nPageSourceSignature ) );
+		t3dRuntimeWorldManifestHashBytes( world_signature, &record.m_nMaterialMask, sizeof( record.m_nMaterialMask ) );
+		t3dRuntimeWorldManifestHashBytes( world_signature, &record.m_nFlags, sizeof( record.m_nFlags ) );
 	}
 	m_nWorldSignature = world_signature;
 
@@ -295,15 +295,15 @@ bool T3DRuntimeWorldManifest::write(
 		if ( pErrors ) pErrors->push_back( "Cannot open world manifest temporary file." );
 		return false;
 	}
-	pFile->store_64( TERRAIN3D_RUNTIME_WORLD_MANIFEST_MAGIC );
-	pFile->store_32( TERRAIN3D_RUNTIME_WORLD_MANIFEST_VERSION );
-	pFile->store_32( MANIFEST_HEADER_BYTES );
+	pFile->store_64( s_nRuntimeWorldManifestMagic );
+	pFile->store_32( s_nRuntimeWorldManifestVersion );
+	pFile->store_32( s_nManifestHeaderBytes );
 	pFile->store_32( ( uint32_t ) ( m_nRegionSize ) );
 	pFile->store_32( ( uint32_t ) ( m_nRegionMapSize ) );
 	pFile->store_32( ( uint32_t ) ( m_regions.size() ) );
 	pFile->store_32( ( uint32_t ) ( m_sceneDependencies.size() ) );
 	pFile->store_32( ( uint32_t ) ( m_regionSceneDependencies.size() ) );
-	pFile->store_32( MANIFEST_REGION_BASE_BYTES + ( uint32_t ) ( TERRAIN3D_MAX_MESH_ASSETS * sizeof( uint32_t ) ) );
+	pFile->store_32( s_nManifestRegionBaseBytes + ( uint32_t ) ( s_nMaxMeshAssets * sizeof( uint32_t ) ) );
 	pFile->store_64( m_nWorldSignature );
 	pFile->store_64( m_nMaterialSignature );
 	pFile->store_float( ( float ) ( m_fVertexSpacing ) );
@@ -313,43 +313,43 @@ bool T3DRuntimeWorldManifest::write(
 	pFile->store_32( ( uint32_t ) ( m_worldRegionMin.y ) );
 	pFile->store_32( ( uint32_t ) ( m_worldRegionMax.x ) );
 	pFile->store_32( ( uint32_t ) ( m_worldRegionMax.y ) );
-	pFile->store_32( MANIFEST_TOPOLOGY_BYTES );
+	pFile->store_32( s_nManifestTopologyBytes );
 	pFile->store_32( 0u );
-	while ( pFile->get_position() < MANIFEST_HEADER_BYTES ) pFile->store_8( 0u );
+	while ( pFile->get_position() < s_nManifestHeaderBytes ) pFile->store_8( 0u );
 	for ( uint64_t bits : m_topologyBits ) pFile->store_64( bits );
 	for ( const t3dRuntimeWorldRegionRecord_t &record : m_regions ) {
-		pFile->store_32( ( uint32_t ) ( record.location.x ) );
-		pFile->store_32( ( uint32_t ) ( record.location.y ) );
-		pFile->store_float( ( float ) ( record.heightRange.x ) );
-		pFile->store_float( ( float ) ( record.heightRange.y ) );
-		pFile->store_32( record.channelFlags );
-		pFile->store_32( record.materialMask );
-		pFile->store_64( record.pageSourceSignature );
-		pFile->store_32( record.instanceCount );
-		pFile->store_16( record.instanceMeshCount );
-		pFile->store_16( record.streamedNodeCount );
-		pFile->store_32( ( uint32_t ) ( record.nodeCoverageMin.x ) );
-		pFile->store_32( ( uint32_t ) ( record.nodeCoverageMin.y ) );
-		pFile->store_32( ( uint32_t ) ( record.nodeCoverageMax.x ) );
-		pFile->store_32( ( uint32_t ) ( record.nodeCoverageMax.y ) );
-		pFile->store_32( record.sceneDependencyFirst );
-		pFile->store_16( record.sceneDependencyCount );
-		pFile->store_16( record.flags );
-		pFile->store_32( record.lightmapDependency );
-		pFile->store_32( record.lightmapDirectionalSignatureDependency );
-		pFile->store_32( record.lightmapReceiverCount );
-		pFile->store_32( record.lightmapContributorCount );
-		pFile->store_64( record.lightmapEstimatedGpuBytes );
-		pFile->store_64( ( uint64_t ) record.lightmapBakeSignature );
-		pFile->store_16( record.lightmapShadowmaskMode );
-		pFile->store_16( record.lightmapFlags );
-		pFile->store_16( record.lightmapTextureCount );
-		pFile->store_16( record.lightmapShadowmaskTextureCount );
-		pFile->store_16( record.lightmapClusterSizeRegions );
-		pFile->store_16( record.lightmapContextRadiusRegions );
-		pFile->store_16( record.lightmapTerrainProxyLod );
+		pFile->store_32( ( uint32_t ) ( record.m_location.x ) );
+		pFile->store_32( ( uint32_t ) ( record.m_location.y ) );
+		pFile->store_float( ( float ) ( record.m_heightRange.x ) );
+		pFile->store_float( ( float ) ( record.m_heightRange.y ) );
+		pFile->store_32( record.m_nChannelFlags );
+		pFile->store_32( record.m_nMaterialMask );
+		pFile->store_64( record.m_nPageSourceSignature );
+		pFile->store_32( record.m_nInstanceCount );
+		pFile->store_16( record.m_nInstanceMeshCount );
+		pFile->store_16( record.m_nStreamedNodeCount );
+		pFile->store_32( ( uint32_t ) ( record.m_nodeCoverageMin.x ) );
+		pFile->store_32( ( uint32_t ) ( record.m_nodeCoverageMin.y ) );
+		pFile->store_32( ( uint32_t ) ( record.m_nodeCoverageMax.x ) );
+		pFile->store_32( ( uint32_t ) ( record.m_nodeCoverageMax.y ) );
+		pFile->store_32( record.m_nSceneDependencyFirst );
+		pFile->store_16( record.m_nSceneDependencyCount );
+		pFile->store_16( record.m_nFlags );
+		pFile->store_32( record.m_nLightmapDependency );
+		pFile->store_32( record.m_nLightmapDirectionalSignatureDependency );
+		pFile->store_32( record.m_nLightmapReceiverCount );
+		pFile->store_32( record.m_nLightmapContributorCount );
+		pFile->store_64( record.m_nLightmapEstimatedGpuBytes );
+		pFile->store_64( ( uint64_t ) record.m_nLightmapBakeSignature );
+		pFile->store_16( record.m_nLightmapShadowmaskMode );
+		pFile->store_16( record.m_nLightmapFlags );
+		pFile->store_16( record.m_nLightmapTextureCount );
+		pFile->store_16( record.m_nLightmapShadowmaskTextureCount );
+		pFile->store_16( record.m_nLightmapClusterSizeRegions );
+		pFile->store_16( record.m_nLightmapContextRadiusRegions );
+		pFile->store_16( record.m_nLightmapTerrainProxyLod );
 		pFile->store_16( 0u );
-		for ( uint32_t count : record.instanceMeshCounts ) pFile->store_32( count );
+		for ( uint32_t count : record.m_szInstanceMeshCounts ) pFile->store_32( count );
 	}
 	for ( uint16_t dependency : m_regionSceneDependencies ) pFile->store_16( dependency );
 	for ( const String &dependency : m_sceneDependencies ) t3dRuntimeWorldManifestStoreString( pFile, dependency );
@@ -383,8 +383,8 @@ bool T3DRuntimeWorldManifest::load( const String &rDataDirectory, PackedStringAr
 		if ( pErrors ) pErrors->push_back( "Cooked world manifest is missing: " + path );
 		return false;
 	}
-	if ( pFile->get_length() < MANIFEST_HEADER_BYTES || pFile->get_64() != TERRAIN3D_RUNTIME_WORLD_MANIFEST_MAGIC ||
-		pFile->get_32() != TERRAIN3D_RUNTIME_WORLD_MANIFEST_VERSION || pFile->get_32() != MANIFEST_HEADER_BYTES ) {
+	if ( pFile->get_length() < s_nManifestHeaderBytes || pFile->get_64() != s_nRuntimeWorldManifestMagic ||
+		pFile->get_32() != s_nRuntimeWorldManifestVersion || pFile->get_32() != s_nManifestHeaderBytes ) {
 		if ( pErrors ) pErrors->push_back( "Cooked world manifest header is invalid." );
 		return false;
 	}
@@ -405,56 +405,56 @@ bool T3DRuntimeWorldManifest::load( const String &rDataDirectory, PackedStringAr
 	m_worldRegionMax.y = ( int32_t ) ( pFile->get_32() );
 	const uint32_t topology_bytes = pFile->get_32();
 	pFile->get_32();
-	if ( !isValidRegionSize( m_nRegionSize ) || m_nRegionMapSize != TERRAIN3D_ACTIVE_WORLD_TEXELS / m_nRegionSize ||
-		region_count == 0u || region_count > TERRAIN3D_MAX_REGION_SLOTS || dependency_count > UINT16_MAX ||
-		record_bytes != MANIFEST_REGION_BASE_BYTES + TERRAIN3D_MAX_MESH_ASSETS * sizeof( uint32_t ) ||
-		topology_bytes != MANIFEST_TOPOLOGY_BYTES || m_fVertexSpacing < 0.25f || m_fVertexSpacing > 100.0f ) {
+	if ( !isValidRegionSize( m_nRegionSize ) || m_nRegionMapSize != s_nActiveWorldTexels / m_nRegionSize ||
+		region_count == 0u || region_count > s_nMaxRegionSlots || dependency_count > UINT16_MAX ||
+		record_bytes != s_nManifestRegionBaseBytes + s_nMaxMeshAssets * sizeof( uint32_t ) ||
+		topology_bytes != s_nManifestTopologyBytes || m_fVertexSpacing < 0.25f || m_fVertexSpacing > 100.0f ) {
 		if ( pErrors ) pErrors->push_back( "Cooked world manifest dimensions are invalid." );
 		return false;
 	}
-	pFile->seek( MANIFEST_HEADER_BYTES );
+	pFile->seek( s_nManifestHeaderBytes );
 	for ( uint64_t &bits : m_topologyBits ) bits = pFile->get_64();
 	m_regions.resize( region_count );
 	for ( uint32_t index = 0u; index < region_count; ++index ) {
 		t3dRuntimeWorldRegionRecord_t &record = m_regions[index];
-		record.location.x = ( int32_t ) ( pFile->get_32() );
-		record.location.y = ( int32_t ) ( pFile->get_32() );
-		record.heightRange.x = pFile->get_float();
-		record.heightRange.y = pFile->get_float();
-		record.channelFlags = pFile->get_32();
-		record.materialMask = pFile->get_32();
-		record.pageSourceSignature = pFile->get_64();
-		record.instanceCount = pFile->get_32();
-		record.instanceMeshCount = pFile->get_16();
-		record.streamedNodeCount = pFile->get_16();
-		record.nodeCoverageMin.x = ( int32_t ) ( pFile->get_32() );
-		record.nodeCoverageMin.y = ( int32_t ) ( pFile->get_32() );
-		record.nodeCoverageMax.x = ( int32_t ) ( pFile->get_32() );
-		record.nodeCoverageMax.y = ( int32_t ) ( pFile->get_32() );
-		record.sceneDependencyFirst = pFile->get_32();
-		record.sceneDependencyCount = pFile->get_16();
-		record.flags = pFile->get_16();
-		record.lightmapDependency = pFile->get_32();
-		record.lightmapDirectionalSignatureDependency = pFile->get_32();
-		record.lightmapReceiverCount = pFile->get_32();
-		record.lightmapContributorCount = pFile->get_32();
-		record.lightmapEstimatedGpuBytes = pFile->get_64();
-		record.lightmapBakeSignature = ( int64_t ) pFile->get_64();
-		record.lightmapShadowmaskMode = pFile->get_16();
-		record.lightmapFlags = pFile->get_16();
-		record.lightmapTextureCount = pFile->get_16();
-		record.lightmapShadowmaskTextureCount = pFile->get_16();
-		record.lightmapClusterSizeRegions = pFile->get_16();
-		record.lightmapContextRadiusRegions = pFile->get_16();
-		record.lightmapTerrainProxyLod = pFile->get_16();
+		record.m_location.x = ( int32_t ) ( pFile->get_32() );
+		record.m_location.y = ( int32_t ) ( pFile->get_32() );
+		record.m_heightRange.x = pFile->get_float();
+		record.m_heightRange.y = pFile->get_float();
+		record.m_nChannelFlags = pFile->get_32();
+		record.m_nMaterialMask = pFile->get_32();
+		record.m_nPageSourceSignature = pFile->get_64();
+		record.m_nInstanceCount = pFile->get_32();
+		record.m_nInstanceMeshCount = pFile->get_16();
+		record.m_nStreamedNodeCount = pFile->get_16();
+		record.m_nodeCoverageMin.x = ( int32_t ) ( pFile->get_32() );
+		record.m_nodeCoverageMin.y = ( int32_t ) ( pFile->get_32() );
+		record.m_nodeCoverageMax.x = ( int32_t ) ( pFile->get_32() );
+		record.m_nodeCoverageMax.y = ( int32_t ) ( pFile->get_32() );
+		record.m_nSceneDependencyFirst = pFile->get_32();
+		record.m_nSceneDependencyCount = pFile->get_16();
+		record.m_nFlags = pFile->get_16();
+		record.m_nLightmapDependency = pFile->get_32();
+		record.m_nLightmapDirectionalSignatureDependency = pFile->get_32();
+		record.m_nLightmapReceiverCount = pFile->get_32();
+		record.m_nLightmapContributorCount = pFile->get_32();
+		record.m_nLightmapEstimatedGpuBytes = pFile->get_64();
+		record.m_nLightmapBakeSignature = ( int64_t ) pFile->get_64();
+		record.m_nLightmapShadowmaskMode = pFile->get_16();
+		record.m_nLightmapFlags = pFile->get_16();
+		record.m_nLightmapTextureCount = pFile->get_16();
+		record.m_nLightmapShadowmaskTextureCount = pFile->get_16();
+		record.m_nLightmapClusterSizeRegions = pFile->get_16();
+		record.m_nLightmapContextRadiusRegions = pFile->get_16();
+		record.m_nLightmapTerrainProxyLod = pFile->get_16();
 		pFile->get_16();
-		if ( !terrain3dRegionLocationValid( record.location, m_nRegionMapSize ) || record.materialMask == 0u ||
-			record.pageSourceSignature == 0u || record.sceneDependencyFirst + record.sceneDependencyCount > region_dependency_count ) {
+		if ( !t3dRegionLocationValid( record.m_location, m_nRegionMapSize ) || record.m_nMaterialMask == 0u ||
+			record.m_nPageSourceSignature == 0u || record.m_nSceneDependencyFirst + record.m_nSceneDependencyCount > region_dependency_count ) {
 			if ( pErrors ) pErrors->push_back( "Cooked world manifest contains an invalid region record." );
 			reset();
 			return false;
 		}
-		for ( uint32_t &count : record.instanceMeshCounts ) count = pFile->get_32();
+		for ( uint32_t &count : record.m_szInstanceMeshCounts ) count = pFile->get_32();
 	}
 	m_regionSceneDependencies.resize( region_dependency_count );
 	for ( uint32_t index = 0u; index < region_dependency_count; ++index ) m_regionSceneDependencies[index] = pFile->get_16();
@@ -474,15 +474,15 @@ bool T3DRuntimeWorldManifest::load( const String &rDataDirectory, PackedStringAr
 		}
 	}
 	for ( const t3dRuntimeWorldRegionRecord_t &record : m_regions ) {
-		if ( ( record.lightmapDependency != UINT32_MAX && record.lightmapDependency >= dependency_count ) ||
-			( record.lightmapDirectionalSignatureDependency != UINT32_MAX &&
-				record.lightmapDirectionalSignatureDependency >= dependency_count ) ) {
+		if ( ( record.m_nLightmapDependency != UINT32_MAX && record.m_nLightmapDependency >= dependency_count ) ||
+			( record.m_nLightmapDirectionalSignatureDependency != UINT32_MAX &&
+				record.m_nLightmapDirectionalSignatureDependency >= dependency_count ) ) {
 			if ( pErrors ) pErrors->push_back( "Cooked world manifest contains an invalid lightmap dependency index." );
 			reset();
 			return false;
 		}
 		const String source_path = rDataDirectory.trim_suffix( "/" ) + String( "/" ) +
-			T3DUtil::locationToFilename( record.location );
+			T3DUtil::locationToFilename( record.m_location );
 		const String page_path = source_path.get_basename() + String( ".t3dpage" );
 		if ( !FileAccess::file_exists( page_path ) ) {
 			if ( pErrors ) pErrors->push_back( "Cooked runtime page is missing: " + page_path );
@@ -504,50 +504,50 @@ bool T3DRuntimeWorldManifest::stageRepository(
 ) const {
 	if ( !m_bLoaded || m_nRegionSize <= 0 || m_regions.empty() ) return false;
 	rStaged.reset();
-	rStaged.bBoundedCpuLoad = true;
-	rStaged.nTargetRegionSize = m_nRegionSize;
-	rStaged.regions.reserve( m_regions.size() );
+	rStaged.m_bBoundedCpuLoad = true;
+	rStaged.m_nTargetRegionSize = m_nRegionSize;
+	rStaged.m_regions.reserve( m_regions.size() );
 	for ( int slot = 0; slot < ( int ) ( m_regions.size() ); ++slot ) {
 		const t3dRuntimeWorldRegionRecord_t &record = m_regions[( size_t ) ( slot )];
 		Ref<T3DRegion> pRegion;
 		pRegion.instantiate();
-		pRegion->setLocation( record.location );
+		pRegion->setLocation( record.m_location );
 		pRegion->setRegionSize( m_nRegionSize );
 		pRegion->setVertexSpacing( m_fVertexSpacing );
-		pRegion->setHeightRange( record.heightRange );
-		pRegion->setChannelFlags( ( int ) ( record.channelFlags ) );
-		pRegion->setCookedPageSourceSignatureInternal( record.pageSourceSignature );
-		pRegion->setCookedInstanceMetadataInternal( record.instanceMeshCounts.data(), record.instanceCount, record.instanceMeshCount );
+		pRegion->setHeightRange( record.m_heightRange );
+		pRegion->setChannelFlags( ( int ) ( record.m_nChannelFlags ) );
+		pRegion->setCookedPageSourceSignatureInternal( record.m_nPageSourceSignature );
+		pRegion->setCookedInstanceMetadataInternal( record.m_szInstanceMeshCounts.data(), record.m_nInstanceCount, record.m_nInstanceMeshCount );
 		pRegion->setCookedStreamedNodeMetadataInternal(
-			record.streamedNodeCount, record.nodeCoverageMin, record.nodeCoverageMax );
-		if ( record.lightmapDependency != UINT32_MAX && record.lightmapDependency < m_sceneDependencies.size() ) {
+			record.m_nStreamedNodeCount, record.m_nodeCoverageMin, record.m_nodeCoverageMax );
+		if ( record.m_nLightmapDependency != UINT32_MAX && record.m_nLightmapDependency < m_sceneDependencies.size() ) {
 			Ref<T3DRegionLighting> lighting; lighting.instantiate();
-			lighting->setLightDataPath( m_sceneDependencies[record.lightmapDependency] );
-			lighting->setClusterLocation( record.location ); lighting->setRegionMin( record.location ); lighting->setRegionMax( record.location );
-			lighting->setClusterSizeRegions( record.lightmapClusterSizeRegions ); lighting->setTerrainProxyLod( record.lightmapTerrainProxyLod );
-			lighting->setContextRadiusRegions( record.lightmapContextRadiusRegions ); lighting->setShadowmaskMode( record.lightmapShadowmaskMode );
-			lighting->setBakeSignature( record.lightmapBakeSignature );
-			if ( record.lightmapDirectionalSignatureDependency != UINT32_MAX && record.lightmapDirectionalSignatureDependency < m_sceneDependencies.size() )
-				lighting->setDirectionalLightSignature( m_sceneDependencies[record.lightmapDirectionalSignatureDependency] );
-			lighting->setReceiverCount( ( int ) record.lightmapReceiverCount ); lighting->setContributorCount( ( int ) record.lightmapContributorCount );
-			lighting->setLightmapTextureCount( record.lightmapTextureCount ); lighting->setShadowmaskTextureCount( record.lightmapShadowmaskTextureCount );
-			lighting->setHasProbeData( ( record.lightmapFlags & 1u ) != 0u ); lighting->setEstimatedGpuBytes( ( int64_t ) record.lightmapEstimatedGpuBytes );
+			lighting->setLightDataPath( m_sceneDependencies[record.m_nLightmapDependency] );
+			lighting->setClusterLocation( record.m_location ); lighting->setRegionMin( record.m_location ); lighting->setRegionMax( record.m_location );
+			lighting->setClusterSizeRegions( record.m_nLightmapClusterSizeRegions ); lighting->setTerrainProxyLod( record.m_nLightmapTerrainProxyLod );
+			lighting->setContextRadiusRegions( record.m_nLightmapContextRadiusRegions ); lighting->setShadowmaskMode( record.m_nLightmapShadowmaskMode );
+			lighting->setBakeSignature( record.m_nLightmapBakeSignature );
+			if ( record.m_nLightmapDirectionalSignatureDependency != UINT32_MAX && record.m_nLightmapDirectionalSignatureDependency < m_sceneDependencies.size() )
+				lighting->setDirectionalLightSignature( m_sceneDependencies[record.m_nLightmapDirectionalSignatureDependency] );
+			lighting->setReceiverCount( ( int ) record.m_nLightmapReceiverCount ); lighting->setContributorCount( ( int ) record.m_nLightmapContributorCount );
+			lighting->setLightmapTextureCount( record.m_nLightmapTextureCount ); lighting->setShadowmaskTextureCount( record.m_nLightmapShadowmaskTextureCount );
+			lighting->setHasProbeData( ( record.m_nLightmapFlags & 1u ) != 0u ); lighting->setEstimatedGpuBytes( ( int64_t ) record.m_nLightmapEstimatedGpuBytes );
 			pRegion->setLighting( lighting );
 		}
 		pRegion->setModified( false );
 		pRegion->markRuntimeMapsCleanInternal();
 		t3dStagedRegion_t entry;
-		entry.location = record.location;
-		entry.path = rDataDirectory.path_join( T3DUtil::locationToFilename( record.location ) );
-		entry.pRegion = pRegion;
+		entry.m_location = record.m_location;
+		entry.m_path = rDataDirectory.path_join( T3DUtil::locationToFilename( record.m_location ) );
+		entry.m_region = pRegion;
 		const int half_map = m_nRegionMapSize / 2;
-		entry.nActiveSlot = ( record.location.y + half_map ) * m_nRegionMapSize + record.location.x + half_map;
-		rStaged.regions.push_back( entry );
-		const int map_index = T3DRegionRepository::getRegionMapIndex( record.location );
-		rStaged.resources[record.location] = pRegion;
-		rStaged.regionPtrs[( size_t ) ( map_index )] = pRegion.ptr();
-		rStaged.regionLocations[( size_t ) ( slot )] = record.location;
-		rStaged.logicalRegionMap[( size_t ) ( map_index )] = ( uint16_t ) ( slot + 1 );
+		entry.m_nActiveSlot = ( record.m_location.y + half_map ) * m_nRegionMapSize + record.m_location.x + half_map;
+		rStaged.m_regions.push_back( entry );
+		const int map_index = T3DRegionRepository::getRegionMapIndex( record.m_location );
+		rStaged.m_resources[record.m_location] = pRegion;
+		rStaged.m_pRegionPtrs[( size_t ) ( map_index )] = pRegion.ptr();
+		rStaged.m_regionLocations[( size_t ) ( slot )] = record.m_location;
+		rStaged.m_logicalRegionMap[( size_t ) ( map_index )] = ( uint16_t ) ( slot + 1 );
 	}
 	return true;
 }

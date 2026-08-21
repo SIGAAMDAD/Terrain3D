@@ -27,71 +27,71 @@ typedef enum t3dRegionStreamingState_e : uint8_t {
 } t3dRegionStreamingState_t;
 
 typedef struct t3dStreamingCoord_s {
-	int x = 0;
-	int y = 0;
+	int m_nX = 0;
+	int m_nY = 0;
 } t3dStreamingCoord_t;
 
 typedef struct t3dRegionStreamingConfig_s {
-	int activeRadius = 1;
-	int hotRadius = 8;
-	int coldRadius = 12;
-	int unloadGuard = 2;
-	bool bPredictionEnabled = true;
-	double fPredictionLookaheadSeconds = 0.75;
-	int predictionMaximumRegions = 4;
+	int m_nActiveRadius = 1;
+	int m_nHotRadius = 8;
+	int m_nColdRadius = 12;
+	int m_nUnloadGuard = 2;
+	bool m_bPredictionEnabled = true;
+	double m_fPredictionLookaheadSeconds = 0.75;
+	int m_nPredictionMaximumRegions = 4;
 } t3dRegionStreamingConfig_t;
 
 typedef struct t3dRegionStreamingPrediction_s {
-	double fVelocityXRegionsPerSecond = 0.0;
-	double fVelocityYRegionsPerSecond = 0.0;
-	t3dStreamingCoord_t predictedCenter;
+	double m_fVelocityXRegionsPerSecond = 0.0;
+	double m_fVelocityYRegionsPerSecond = 0.0;
+	t3dStreamingCoord_t m_predictedCenter;
 } t3dRegionStreamingPrediction_t;
 
-EA_FORCE_INLINE constexpr bool terrain3dEditorExecutionModeIsValid( const int nMode ) noexcept { return nMode >= TERRAIN3D_EDITOR_EXECUTION_AUTHORING && nMode <= TERRAIN3D_EDITOR_EXECUTION_RUNTIME_PROFILE; }
+EA_FORCE_INLINE constexpr bool t3dEditorExecutionModeIsValid( const int nMode ) noexcept { return nMode >= TERRAIN3D_EDITOR_EXECUTION_AUTHORING && nMode <= TERRAIN3D_EDITOR_EXECUTION_RUNTIME_PROFILE; }
 
-EA_FORCE_INLINE constexpr bool terrain3dIsEditorAuthoringMode( const bool bEditorHint, const int nExecutionMode ) noexcept { return bEditorHint && nExecutionMode == TERRAIN3D_EDITOR_EXECUTION_AUTHORING; }
+EA_FORCE_INLINE constexpr bool t3dIsEditorAuthoringMode( const bool bEditorHint, const int nExecutionMode ) noexcept { return bEditorHint && nExecutionMode == TERRAIN3D_EDITOR_EXECUTION_AUTHORING; }
 
-EA_FORCE_INLINE constexpr bool terrain3dIsRuntimeProfileMode( const bool bEditorHint, const int nExecutionMode ) noexcept { return bEditorHint && nExecutionMode == TERRAIN3D_EDITOR_EXECUTION_RUNTIME_PROFILE; }
+EA_FORCE_INLINE constexpr bool t3dIsRuntimeProfileMode( const bool bEditorHint, const int nExecutionMode ) noexcept { return bEditorHint && nExecutionMode == TERRAIN3D_EDITOR_EXECUTION_RUNTIME_PROFILE; }
 
-EA_FORCE_INLINE constexpr bool terrain3dIsGpuPagingEffectivelyEnabled( const bool bConfiguredEnabled ) noexcept { return bConfiguredEnabled; }
+EA_FORCE_INLINE constexpr bool t3dIsGpuPagingEffectivelyEnabled( const bool bConfiguredEnabled ) noexcept { return bConfiguredEnabled; }
 
-EA_FORCE_INLINE constexpr bool terrain3dIsStreamingEffectivelyEnabled( const bool bConfiguredEnabled, const bool bEditorHint, const int nExecutionMode ) noexcept { return bConfiguredEnabled && !terrain3dIsEditorAuthoringMode( bEditorHint, nExecutionMode ); }
+EA_FORCE_INLINE constexpr bool t3dIsStreamingEffectivelyEnabled( const bool bConfiguredEnabled, const bool bEditorHint, const int nExecutionMode ) noexcept { return bConfiguredEnabled && !t3dIsEditorAuthoringMode( bEditorHint, nExecutionMode ); }
 
-EA_FORCE_INLINE constexpr int terrain3dStreamingChebyshevDistance( const t3dStreamingCoord_t a, const t3dStreamingCoord_t b ) noexcept { const int dx = a.x >= b.x ? a.x - b.x : b.x - a.x; const int dy = a.y >= b.y ? a.y - b.y : b.y - a.y; return dx > dy ? dx : dy; }
+EA_FORCE_INLINE constexpr int t3dStreamingChebyshevDistance( const t3dStreamingCoord_t a, const t3dStreamingCoord_t b ) noexcept { const int dx = a.m_nX >= b.m_nX ? a.m_nX - b.m_nX : b.m_nX - a.m_nX; const int dy = a.m_nY >= b.m_nY ? a.m_nY - b.m_nY : b.m_nY - a.m_nY; return dx > dy ? dx : dy; }
 
-constexpr t3dRegionStreamingConfig_t terrain3dStreamingSanitizeConfig(
+constexpr t3dRegionStreamingConfig_t t3dStreamingSanitizeConfig(
 	const t3dRegionStreamingConfig_t config
 ) noexcept {
 	t3dRegionStreamingConfig_t result = config;
-	result.activeRadius = result.activeRadius < 0 ? 0 : result.activeRadius;
-	result.hotRadius = result.hotRadius < result.activeRadius ? result.activeRadius : result.hotRadius;
-	result.coldRadius = result.coldRadius < result.hotRadius ? result.hotRadius : result.coldRadius;
-	result.unloadGuard = result.unloadGuard < 0 ? 0 : ( result.unloadGuard > 4 ? 4 : result.unloadGuard );
-	result.fPredictionLookaheadSeconds = result.fPredictionLookaheadSeconds < 0.0 ? 0.0 :
-		result.fPredictionLookaheadSeconds;
-	result.predictionMaximumRegions = result.predictionMaximumRegions < 0 ? 0 :
-		result.predictionMaximumRegions;
+	result.m_nActiveRadius = result.m_nActiveRadius < 0 ? 0 : result.m_nActiveRadius;
+	result.m_nHotRadius = result.m_nHotRadius < result.m_nActiveRadius ? result.m_nActiveRadius : result.m_nHotRadius;
+	result.m_nColdRadius = result.m_nColdRadius < result.m_nHotRadius ? result.m_nHotRadius : result.m_nColdRadius;
+	result.m_nUnloadGuard = result.m_nUnloadGuard < 0 ? 0 : ( result.m_nUnloadGuard > 4 ? 4 : result.m_nUnloadGuard );
+	result.m_fPredictionLookaheadSeconds = result.m_fPredictionLookaheadSeconds < 0.0 ? 0.0 :
+		result.m_fPredictionLookaheadSeconds;
+	result.m_nPredictionMaximumRegions = result.m_nPredictionMaximumRegions < 0 ? 0 :
+		result.m_nPredictionMaximumRegions;
 	return result;
 }
 
-EA_FORCE_INLINE constexpr bool terrain3dStreamingConfigIsValid( const t3dRegionStreamingConfig_t config ) noexcept { return config.activeRadius >= 0 && config.hotRadius >= config.activeRadius && config.coldRadius >= config.hotRadius && config.unloadGuard >= 0 && config.unloadGuard <= 4 && config.fPredictionLookaheadSeconds >= 0.0 && config.predictionMaximumRegions >= 0; }
+EA_FORCE_INLINE constexpr bool t3dStreamingConfigIsValid( const t3dRegionStreamingConfig_t config ) noexcept { return config.m_nActiveRadius >= 0 && config.m_nHotRadius >= config.m_nActiveRadius && config.m_nColdRadius >= config.m_nHotRadius && config.m_nUnloadGuard >= 0 && config.m_nUnloadGuard <= 4 && config.m_fPredictionLookaheadSeconds >= 0.0 && config.m_nPredictionMaximumRegions >= 0; }
 
-constexpr t3dRegionStreamingState_t terrain3dStreamingClassify(
+constexpr t3dRegionStreamingState_t t3dStreamingClassify(
 	const t3dStreamingCoord_t location,
 	const t3dStreamingCoord_t center,
 	const t3dRegionStreamingConfig_t rawConfig
 ) noexcept {
-	const t3dRegionStreamingConfig_t config = terrain3dStreamingSanitizeConfig( rawConfig );
-	const int distance = terrain3dStreamingChebyshevDistance( location, center );
-	return distance <= config.activeRadius ? TERRAIN3D_REGION_STREAMING_ACTIVE :
-		( distance <= config.hotRadius ? TERRAIN3D_REGION_STREAMING_HOT :
-			( distance <= config.coldRadius + config.unloadGuard ? TERRAIN3D_REGION_STREAMING_COLD :
+	const t3dRegionStreamingConfig_t config = t3dStreamingSanitizeConfig( rawConfig );
+	const int distance = t3dStreamingChebyshevDistance( location, center );
+	return distance <= config.m_nActiveRadius ? TERRAIN3D_REGION_STREAMING_ACTIVE :
+		( distance <= config.m_nHotRadius ? TERRAIN3D_REGION_STREAMING_HOT :
+			( distance <= config.m_nColdRadius + config.m_nUnloadGuard ? TERRAIN3D_REGION_STREAMING_COLD :
 				TERRAIN3D_REGION_STREAMING_UNLOADED ) );
 }
 
-EA_FORCE_INLINE constexpr bool terrain3dStreamingInsideUnloadGuard( const t3dStreamingCoord_t location, const t3dStreamingCoord_t center, const t3dRegionStreamingConfig_t rawConfig ) noexcept { const t3dRegionStreamingConfig_t config = terrain3dStreamingSanitizeConfig( rawConfig ); return terrain3dStreamingChebyshevDistance( location, center ) <= config.coldRadius + config.unloadGuard; }
+EA_FORCE_INLINE constexpr bool t3dStreamingInsideUnloadGuard( const t3dStreamingCoord_t location, const t3dStreamingCoord_t center, const t3dRegionStreamingConfig_t rawConfig ) noexcept { const t3dRegionStreamingConfig_t config = t3dStreamingSanitizeConfig( rawConfig ); return t3dStreamingChebyshevDistance( location, center ) <= config.m_nColdRadius + config.m_nUnloadGuard; }
 
-inline t3dStreamingCoord_t terrain3dStreamingClampCenter(
+inline t3dStreamingCoord_t t3dStreamingClampCenter(
 	const t3dStreamingCoord_t center,
 	const int nMapSize
 ) noexcept {
@@ -101,12 +101,12 @@ inline t3dStreamingCoord_t terrain3dStreamingClampCenter(
 	const int minimum = -( nMapSize / 2 );
 	const int maximum = minimum + nMapSize - 1;
 	return {
-		std::clamp( center.x, minimum, maximum ),
-		std::clamp( center.y, minimum, maximum ),
+		std::clamp( center.m_nX, minimum, maximum ),
+		std::clamp( center.m_nY, minimum, maximum ),
 	};
 }
 
-inline t3dRegionStreamingPrediction_t terrain3dStreamingPredict(
+inline t3dRegionStreamingPrediction_t t3dStreamingPredict(
 	const t3dStreamingCoord_t currentCenter,
 	const int nMapSize,
 	const double fInstantVelocityXRegionsPerSecond,
@@ -116,41 +116,41 @@ inline t3dRegionStreamingPrediction_t terrain3dStreamingPredict(
 	const double fDeltaSeconds,
 	const t3dRegionStreamingConfig_t rawConfig
 ) noexcept {
-	const t3dRegionStreamingConfig_t config = terrain3dStreamingSanitizeConfig( rawConfig );
+	const t3dRegionStreamingConfig_t config = t3dStreamingSanitizeConfig( rawConfig );
 	t3dRegionStreamingPrediction_t result;
 	const double delta = std::max( 0.0, fDeltaSeconds );
 	// Eight-per-second response is deliberate: prediction follows sustained motion
 	// quickly while decaying within a fraction of a second after the target stops.
 	const double blend = std::clamp( delta * 8.0, 0.0, 1.0 );
-	result.fVelocityXRegionsPerSecond = fPreviousVelocityXRegionsPerSecond +
+	result.m_fVelocityXRegionsPerSecond = fPreviousVelocityXRegionsPerSecond +
 		( fInstantVelocityXRegionsPerSecond - fPreviousVelocityXRegionsPerSecond ) * blend;
-	result.fVelocityYRegionsPerSecond = fPreviousVelocityYRegionsPerSecond +
+	result.m_fVelocityYRegionsPerSecond = fPreviousVelocityYRegionsPerSecond +
 		( fInstantVelocityYRegionsPerSecond - fPreviousVelocityYRegionsPerSecond ) * blend;
 	if ( std::abs( fInstantVelocityXRegionsPerSecond ) < 0.01 ) {
-		result.fVelocityXRegionsPerSecond *= std::max( 0.0, 1.0 - delta * 10.0 );
+		result.m_fVelocityXRegionsPerSecond *= std::max( 0.0, 1.0 - delta * 10.0 );
 	}
 	if ( std::abs( fInstantVelocityYRegionsPerSecond ) < 0.01 ) {
-		result.fVelocityYRegionsPerSecond *= std::max( 0.0, 1.0 - delta * 10.0 );
+		result.m_fVelocityYRegionsPerSecond *= std::max( 0.0, 1.0 - delta * 10.0 );
 	}
-	result.predictedCenter = terrain3dStreamingClampCenter( currentCenter, nMapSize );
-	if ( !config.bPredictionEnabled || config.predictionMaximumRegions <= 0 ||
-		config.fPredictionLookaheadSeconds <= 0.0 ) {
+	result.m_predictedCenter = t3dStreamingClampCenter( currentCenter, nMapSize );
+	if ( !config.m_bPredictionEnabled || config.m_nPredictionMaximumRegions <= 0 ||
+		config.m_fPredictionLookaheadSeconds <= 0.0 ) {
 		return result;
 	}
-	const double predictedX = result.fVelocityXRegionsPerSecond * config.fPredictionLookaheadSeconds;
-	const double predictedY = result.fVelocityYRegionsPerSecond * config.fPredictionLookaheadSeconds;
+	const double predictedX = result.m_fVelocityXRegionsPerSecond * config.m_fPredictionLookaheadSeconds;
+	const double predictedY = result.m_fVelocityYRegionsPerSecond * config.m_fPredictionLookaheadSeconds;
 	const double dominant = std::max( std::abs( predictedX ), std::abs( predictedY ) );
-	const double scale = dominant > ( double ) ( config.predictionMaximumRegions ) && dominant > 0.0 ?
-		( double ) ( config.predictionMaximumRegions ) / dominant : 1.0;
+	const double scale = dominant > ( double ) ( config.m_nPredictionMaximumRegions ) && dominant > 0.0 ?
+		( double ) ( config.m_nPredictionMaximumRegions ) / dominant : 1.0;
 	const t3dStreamingCoord_t predicted = {
-		currentCenter.x + ( int ) ( std::lround( predictedX * scale ) ),
-		currentCenter.y + ( int ) ( std::lround( predictedY * scale ) ),
+		currentCenter.m_nX + ( int ) ( std::lround( predictedX * scale ) ),
+		currentCenter.m_nY + ( int ) ( std::lround( predictedY * scale ) ),
 	};
-	result.predictedCenter = terrain3dStreamingClampCenter( predicted, nMapSize );
+	result.m_predictedCenter = t3dStreamingClampCenter( predicted, nMapSize );
 	return result;
 }
 
-inline const char *terrain3dStreamingStateName( const t3dRegionStreamingState_t state ) noexcept {
+inline const char *t3dStreamingStateName( const t3dRegionStreamingState_t state ) noexcept {
 	switch ( state ) {
 		case TERRAIN3D_REGION_STREAMING_ACTIVE:
 			return "Active";

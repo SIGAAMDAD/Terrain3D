@@ -21,46 +21,46 @@ class T3DRuntimePageStore;
 typedef struct t3dRuntimePageConfig_s t3dRuntimePageConfig_t;
 typedef struct t3dStagedRepository_s t3dStagedRepository_t;
 
-static constexpr uint64_t TERRAIN3D_RUNTIME_WORLD_MANIFEST_MAGIC = 0x31464e4d57334454ull; // T3DWMNF1
-static constexpr uint32_t TERRAIN3D_RUNTIME_WORLD_MANIFEST_VERSION = 3u;
-static constexpr uint16_t TERRAIN3D_RUNTIME_WORLD_ADJ_N = 1u << 0u;
-static constexpr uint16_t TERRAIN3D_RUNTIME_WORLD_ADJ_NE = 1u << 1u;
-static constexpr uint16_t TERRAIN3D_RUNTIME_WORLD_ADJ_E = 1u << 2u;
-static constexpr uint16_t TERRAIN3D_RUNTIME_WORLD_ADJ_SE = 1u << 3u;
-static constexpr uint16_t TERRAIN3D_RUNTIME_WORLD_ADJ_S = 1u << 4u;
-static constexpr uint16_t TERRAIN3D_RUNTIME_WORLD_ADJ_SW = 1u << 5u;
-static constexpr uint16_t TERRAIN3D_RUNTIME_WORLD_ADJ_W = 1u << 6u;
-static constexpr uint16_t TERRAIN3D_RUNTIME_WORLD_ADJ_NW = 1u << 7u;
+static constexpr uint64_t s_nRuntimeWorldManifestMagic = 0x31464e4d57334454ull; // T3DWMNF1
+static constexpr uint32_t s_nRuntimeWorldManifestVersion = 3u;
+static constexpr uint16_t s_nRuntimeWorldAdjN = 1u << 0u;
+static constexpr uint16_t s_nRuntimeWorldAdjNe = 1u << 1u;
+static constexpr uint16_t s_nRuntimeWorldAdjE = 1u << 2u;
+static constexpr uint16_t s_nRuntimeWorldAdjSe = 1u << 3u;
+static constexpr uint16_t s_nRuntimeWorldAdjS = 1u << 4u;
+static constexpr uint16_t s_nRuntimeWorldAdjSw = 1u << 5u;
+static constexpr uint16_t s_nRuntimeWorldAdjW = 1u << 6u;
+static constexpr uint16_t s_nRuntimeWorldAdjNw = 1u << 7u;
 
 typedef struct t3dRuntimeWorldRegionRecord_s {
-	Vector2i location = V2I_MAX;
-	Vector2 heightRange = V2_ZERO;
-	uint32_t channelFlags = 0u;
-	uint32_t materialMask = 1u;
-	uint64_t pageSourceSignature = 0u;
-	uint32_t instanceCount = 0u;
-	uint16_t instanceMeshCount = 0u;
-	uint16_t streamedNodeCount = 0u;
-	Vector2i nodeCoverageMin = V2I_ZERO;
-	Vector2i nodeCoverageMax = V2I_ZERO;
-	uint32_t sceneDependencyFirst = 0u;
-	uint16_t sceneDependencyCount = 0u;
-	uint16_t flags = 0u;
-	uint32_t lightmapDependency = UINT32_MAX;
-	uint32_t lightmapDirectionalSignatureDependency = UINT32_MAX;
-	uint32_t lightmapReceiverCount = 0u;
-	uint32_t lightmapContributorCount = 0u;
-	uint64_t lightmapEstimatedGpuBytes = 0u;
-	int64_t lightmapBakeSignature = 0;
-	uint16_t lightmapShadowmaskMode = 0u;
-	uint16_t lightmapFlags = 0u;
-	uint16_t lightmapTextureCount = 0u;
-	uint16_t lightmapShadowmaskTextureCount = 0u;
-	uint16_t lightmapClusterSizeRegions = 1u;
-	uint16_t lightmapContextRadiusRegions = 1u;
-	uint16_t lightmapTerrainProxyLod = 2u;
-	uint16_t reserved = 0u;
-	eastl::array<uint32_t, TERRAIN3D_MAX_MESH_ASSETS> instanceMeshCounts{};
+	Vector2i m_location = V2I_MAX;
+	Vector2 m_heightRange = V2_ZERO;
+	uint32_t m_nChannelFlags = 0u;
+	uint32_t m_nMaterialMask = 1u;
+	uint64_t m_nPageSourceSignature = 0u;
+	uint32_t m_nInstanceCount = 0u;
+	uint16_t m_nInstanceMeshCount = 0u;
+	uint16_t m_nStreamedNodeCount = 0u;
+	Vector2i m_nodeCoverageMin = V2I_ZERO;
+	Vector2i m_nodeCoverageMax = V2I_ZERO;
+	uint32_t m_nSceneDependencyFirst = 0u;
+	uint16_t m_nSceneDependencyCount = 0u;
+	uint16_t m_nFlags = 0u;
+	uint32_t m_nLightmapDependency = UINT32_MAX;
+	uint32_t m_nLightmapDirectionalSignatureDependency = UINT32_MAX;
+	uint32_t m_nLightmapReceiverCount = 0u;
+	uint32_t m_nLightmapContributorCount = 0u;
+	uint64_t m_nLightmapEstimatedGpuBytes = 0u;
+	int64_t m_nLightmapBakeSignature = 0;
+	uint16_t m_nLightmapShadowmaskMode = 0u;
+	uint16_t m_nLightmapFlags = 0u;
+	uint16_t m_nLightmapTextureCount = 0u;
+	uint16_t m_nLightmapShadowmaskTextureCount = 0u;
+	uint16_t m_nLightmapClusterSizeRegions = 1u;
+	uint16_t m_nLightmapContextRadiusRegions = 1u;
+	uint16_t m_nLightmapTerrainProxyLod = 2u;
+	uint16_t m_nReserved = 0u;
+	eastl::array<uint32_t, s_nMaxMeshAssets> m_szInstanceMeshCounts{};
 } t3dRuntimeWorldRegionRecord_t;
 
 // Immutable cooked-world topology/dependency index. Runtime residency keeps
@@ -89,7 +89,7 @@ public:
 	EA_FORCE_INLINE uint64_t getMaterialSignature( void ) const { return m_nMaterialSignature; }
 	EA_FORCE_INLINE Vector2 getWorldHeightRange( void ) const { return m_worldHeightRange; }
 	const t3dRuntimeWorldRegionRecord_t *findRegion( const Vector2i &rLocation ) const;
-	EA_FORCE_INLINE uint8_t getRegionAdjacencyMask( const Vector2i &rLocation ) const { const t3dRuntimeWorldRegionRecord_t *record = findRegion( rLocation ); return record ? ( uint8_t ) ( record->flags & 0xffu ) : 0u; }
+	EA_FORCE_INLINE uint8_t getRegionAdjacencyMask( const Vector2i &rLocation ) const { const t3dRuntimeWorldRegionRecord_t *record = findRegion( rLocation ); return record ? ( uint8_t ) ( record->m_nFlags & 0xffu ) : 0u; }
 	int findSceneDependency( const String &rPath ) const;
 	const String &getSceneDependency( uint32_t nIndex ) const;
 	EA_FORCE_INLINE const eastl::vector<uint16_t> &getRegionSceneDependencies( void ) const { return m_regionSceneDependencies; }
@@ -108,8 +108,8 @@ private:
 	eastl::vector<t3dRuntimeWorldRegionRecord_t> m_regions;
 	eastl::vector<String> m_sceneDependencies;
 	eastl::vector<uint16_t> m_regionSceneDependencies;
-	eastl::array<int16_t, TERRAIN3D_MAX_REGION_SLOTS> m_regionLookup{};
-	eastl::array<uint64_t, TERRAIN3D_MAX_REGION_SLOTS / 64> m_topologyBits{};
+	eastl::array<int16_t, s_nMaxRegionSlots> m_regionLookup{};
+	eastl::array<uint64_t, s_nMaxRegionSlots / 64> m_topologyBits{};
 
 	void rebuildLookup( void );
 };

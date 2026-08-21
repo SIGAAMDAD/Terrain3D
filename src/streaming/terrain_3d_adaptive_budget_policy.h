@@ -9,29 +9,29 @@
 #include "core/terrain_3d_compiler.h"
 
 typedef struct t3dAdaptiveBudgetValues_s {
-	int nGpuPages = 4;
-	int nCpuPages = 4;
-	int nInstancePages = 4;
-	int instancerCells = 32;
-	int nNodeLoadRegions = 2;
-	int nNodeUnloadRegions = 4;
+	int m_nGpuPages = 4;
+	int m_nCpuPages = 4;
+	int m_nInstancePages = 4;
+	int m_nInstancerCells = 32;
+	int m_nNodeLoadRegions = 2;
+	int m_nNodeUnloadRegions = 4;
 } t3dAdaptiveBudgetValues_t;
 
 typedef struct t3dAdaptiveBudgetLimits_s {
-	t3dAdaptiveBudgetValues_t minimum;
-	t3dAdaptiveBudgetValues_t maximum;
-	uint64_t nTargetUsec = 1000u;
-	uint64_t nHardMaxUsec = 2000u;
-	int nAdjustmentWindowFrames = 4;
+	t3dAdaptiveBudgetValues_t m_minimum;
+	t3dAdaptiveBudgetValues_t m_maximum;
+	uint64_t m_nTargetUsec = 1000u;
+	uint64_t m_nHardMaxUsec = 2000u;
+	int m_nAdjustmentWindowFrames = 4;
 } t3dAdaptiveBudgetLimits_t;
 
 typedef struct t3dAdaptiveBudgetPressure_s {
-	bool bGpuLimited = false;
-	bool bCpuLimited = false;
-	bool bInstanceLimited = false;
-	bool bInstancerLimited = false;
-	bool bNodeLoadLimited = false;
-	bool bNodeUnloadLimited = false;
+	bool m_bGpuLimited = false;
+	bool m_bCpuLimited = false;
+	bool m_bInstanceLimited = false;
+	bool m_bInstancerLimited = false;
+	bool m_bNodeLoadLimited = false;
+	bool m_bNodeUnloadLimited = false;
 } t3dAdaptiveBudgetPressure_t;
 
 typedef enum t3dAdaptiveBudgetReason_e {
@@ -44,43 +44,43 @@ typedef enum t3dAdaptiveBudgetReason_e {
 } t3dAdaptiveBudgetReason_t;
 
 typedef struct t3dAdaptiveBudgetState_s {
-	t3dAdaptiveBudgetValues_t effective;
-	int overBudgetStreak = 0;
-	int underBudgetStreak = 0;
-	uint64_t nAdjustmentCount = 0u;
-	t3dAdaptiveBudgetReason_t reason = TERRAIN3D_ADAPTIVE_REASON_DISABLED;
-	bool bInitialized = false;
+	t3dAdaptiveBudgetValues_t m_effective;
+	int m_nOverBudgetStreak = 0;
+	int m_nUnderBudgetStreak = 0;
+	uint64_t m_nAdjustmentCount = 0u;
+	t3dAdaptiveBudgetReason_t m_reason = TERRAIN3D_ADAPTIVE_REASON_DISABLED;
+	bool m_bInitialized = false;
 } t3dAdaptiveBudgetState_t;
 
-EA_FORCE_INLINE int terrain3dAdaptiveClampValue( const int nValue, const int nMinimum, const int nMaximum ) { const int maximum = std::max( nMinimum, nMaximum ); return std::max( nMinimum, std::min( nValue, maximum ) ); }
+EA_FORCE_INLINE int t3dAdaptiveClampValue( const int nValue, const int nMinimum, const int nMaximum ) { const int maximum = std::max( nMinimum, nMaximum ); return std::max( nMinimum, std::min( nValue, maximum ) ); }
 
-inline void terrain3dAdaptiveSanitizeLimits( t3dAdaptiveBudgetLimits_t &rLimits ) {
-	rLimits.maximum.nGpuPages = std::max( 0, rLimits.maximum.nGpuPages );
-	rLimits.maximum.nCpuPages = std::max( 0, rLimits.maximum.nCpuPages );
-	rLimits.maximum.nInstancePages = std::max( 0, rLimits.maximum.nInstancePages );
-	rLimits.maximum.instancerCells = std::max( 0, rLimits.maximum.instancerCells );
-	rLimits.maximum.nNodeLoadRegions = std::max( 0, rLimits.maximum.nNodeLoadRegions );
-	rLimits.maximum.nNodeUnloadRegions = std::max( 0, rLimits.maximum.nNodeUnloadRegions );
-	rLimits.minimum.nGpuPages = terrain3dAdaptiveClampValue( rLimits.minimum.nGpuPages, 0,
-		rLimits.maximum.nGpuPages );
-	rLimits.minimum.nCpuPages = terrain3dAdaptiveClampValue( rLimits.minimum.nCpuPages, 0,
-		rLimits.maximum.nCpuPages );
-	rLimits.minimum.nInstancePages = terrain3dAdaptiveClampValue( rLimits.minimum.nInstancePages, 0,
-		rLimits.maximum.nInstancePages );
-	rLimits.minimum.instancerCells = terrain3dAdaptiveClampValue( rLimits.minimum.instancerCells, 0,
-		rLimits.maximum.instancerCells );
-	rLimits.minimum.nNodeLoadRegions = terrain3dAdaptiveClampValue( rLimits.minimum.nNodeLoadRegions, 0,
-		rLimits.maximum.nNodeLoadRegions );
-	rLimits.minimum.nNodeUnloadRegions = terrain3dAdaptiveClampValue( rLimits.minimum.nNodeUnloadRegions, 0,
-		rLimits.maximum.nNodeUnloadRegions );
-	rLimits.nTargetUsec = std::max<uint64_t>( 1u, rLimits.nTargetUsec );
-	rLimits.nHardMaxUsec = std::max( rLimits.nTargetUsec, rLimits.nHardMaxUsec );
-	rLimits.nAdjustmentWindowFrames = std::max( 1, rLimits.nAdjustmentWindowFrames );
+inline void t3dAdaptiveSanitizeLimits( t3dAdaptiveBudgetLimits_t &rLimits ) {
+	rLimits.m_maximum.m_nGpuPages = std::max( 0, rLimits.m_maximum.m_nGpuPages );
+	rLimits.m_maximum.m_nCpuPages = std::max( 0, rLimits.m_maximum.m_nCpuPages );
+	rLimits.m_maximum.m_nInstancePages = std::max( 0, rLimits.m_maximum.m_nInstancePages );
+	rLimits.m_maximum.m_nInstancerCells = std::max( 0, rLimits.m_maximum.m_nInstancerCells );
+	rLimits.m_maximum.m_nNodeLoadRegions = std::max( 0, rLimits.m_maximum.m_nNodeLoadRegions );
+	rLimits.m_maximum.m_nNodeUnloadRegions = std::max( 0, rLimits.m_maximum.m_nNodeUnloadRegions );
+	rLimits.m_minimum.m_nGpuPages = t3dAdaptiveClampValue( rLimits.m_minimum.m_nGpuPages, 0,
+		rLimits.m_maximum.m_nGpuPages );
+	rLimits.m_minimum.m_nCpuPages = t3dAdaptiveClampValue( rLimits.m_minimum.m_nCpuPages, 0,
+		rLimits.m_maximum.m_nCpuPages );
+	rLimits.m_minimum.m_nInstancePages = t3dAdaptiveClampValue( rLimits.m_minimum.m_nInstancePages, 0,
+		rLimits.m_maximum.m_nInstancePages );
+	rLimits.m_minimum.m_nInstancerCells = t3dAdaptiveClampValue( rLimits.m_minimum.m_nInstancerCells, 0,
+		rLimits.m_maximum.m_nInstancerCells );
+	rLimits.m_minimum.m_nNodeLoadRegions = t3dAdaptiveClampValue( rLimits.m_minimum.m_nNodeLoadRegions, 0,
+		rLimits.m_maximum.m_nNodeLoadRegions );
+	rLimits.m_minimum.m_nNodeUnloadRegions = t3dAdaptiveClampValue( rLimits.m_minimum.m_nNodeUnloadRegions, 0,
+		rLimits.m_maximum.m_nNodeUnloadRegions );
+	rLimits.m_nTargetUsec = std::max<uint64_t>( 1u, rLimits.m_nTargetUsec );
+	rLimits.m_nHardMaxUsec = std::max( rLimits.m_nTargetUsec, rLimits.m_nHardMaxUsec );
+	rLimits.m_nAdjustmentWindowFrames = std::max( 1, rLimits.m_nAdjustmentWindowFrames );
 }
 
-EA_FORCE_INLINE void terrain3dAdaptiveReset( const t3dAdaptiveBudgetLimits_t &rLimits, t3dAdaptiveBudgetState_t &rState, const t3dAdaptiveBudgetReason_t reason ) { rState.effective = rLimits.maximum; rState.overBudgetStreak = 0; rState.underBudgetStreak = 0; rState.reason = reason; rState.bInitialized = true; }
+EA_FORCE_INLINE void t3dAdaptiveReset( const t3dAdaptiveBudgetLimits_t &rLimits, t3dAdaptiveBudgetState_t &rState, const t3dAdaptiveBudgetReason_t reason ) { rState.m_effective = rLimits.m_maximum; rState.m_nOverBudgetStreak = 0; rState.m_nUnderBudgetStreak = 0; rState.m_reason = reason; rState.m_bInitialized = true; }
 
-inline int terrain3dAdaptiveDecrease( const int nValue, const int nMinimum ) {
+inline int t3dAdaptiveDecrease( const int nValue, const int nMinimum ) {
 	if ( nValue <= nMinimum ) {
 		return nMinimum;
 	}
@@ -88,7 +88,7 @@ inline int terrain3dAdaptiveDecrease( const int nValue, const int nMinimum ) {
 	return std::max( nMinimum, nValue - step );
 }
 
-inline int terrain3dAdaptiveIncrease( const int nValue, const int nMaximum ) {
+inline int t3dAdaptiveIncrease( const int nValue, const int nMaximum ) {
 	if ( nValue >= nMaximum ) {
 		return nMaximum;
 	}
@@ -96,116 +96,116 @@ inline int terrain3dAdaptiveIncrease( const int nValue, const int nMaximum ) {
 	return std::min( nMaximum, nValue + step );
 }
 
-inline void terrain3dAdaptiveClampState(
+inline void t3dAdaptiveClampState(
 	const t3dAdaptiveBudgetLimits_t &rLimits,
 	t3dAdaptiveBudgetState_t &rState
 ) {
-	rState.effective.nGpuPages = terrain3dAdaptiveClampValue( rState.effective.nGpuPages,
-		rLimits.minimum.nGpuPages, rLimits.maximum.nGpuPages );
-	rState.effective.nCpuPages = terrain3dAdaptiveClampValue( rState.effective.nCpuPages,
-		rLimits.minimum.nCpuPages, rLimits.maximum.nCpuPages );
-	rState.effective.nInstancePages = terrain3dAdaptiveClampValue( rState.effective.nInstancePages,
-		rLimits.minimum.nInstancePages, rLimits.maximum.nInstancePages );
-	rState.effective.instancerCells = terrain3dAdaptiveClampValue( rState.effective.instancerCells,
-		rLimits.minimum.instancerCells, rLimits.maximum.instancerCells );
-	rState.effective.nNodeLoadRegions = terrain3dAdaptiveClampValue( rState.effective.nNodeLoadRegions,
-		rLimits.minimum.nNodeLoadRegions, rLimits.maximum.nNodeLoadRegions );
-	rState.effective.nNodeUnloadRegions = terrain3dAdaptiveClampValue( rState.effective.nNodeUnloadRegions,
-		rLimits.minimum.nNodeUnloadRegions, rLimits.maximum.nNodeUnloadRegions );
+	rState.m_effective.m_nGpuPages = t3dAdaptiveClampValue( rState.m_effective.m_nGpuPages,
+		rLimits.m_minimum.m_nGpuPages, rLimits.m_maximum.m_nGpuPages );
+	rState.m_effective.m_nCpuPages = t3dAdaptiveClampValue( rState.m_effective.m_nCpuPages,
+		rLimits.m_minimum.m_nCpuPages, rLimits.m_maximum.m_nCpuPages );
+	rState.m_effective.m_nInstancePages = t3dAdaptiveClampValue( rState.m_effective.m_nInstancePages,
+		rLimits.m_minimum.m_nInstancePages, rLimits.m_maximum.m_nInstancePages );
+	rState.m_effective.m_nInstancerCells = t3dAdaptiveClampValue( rState.m_effective.m_nInstancerCells,
+		rLimits.m_minimum.m_nInstancerCells, rLimits.m_maximum.m_nInstancerCells );
+	rState.m_effective.m_nNodeLoadRegions = t3dAdaptiveClampValue( rState.m_effective.m_nNodeLoadRegions,
+		rLimits.m_minimum.m_nNodeLoadRegions, rLimits.m_maximum.m_nNodeLoadRegions );
+	rState.m_effective.m_nNodeUnloadRegions = t3dAdaptiveClampValue( rState.m_effective.m_nNodeUnloadRegions,
+		rLimits.m_minimum.m_nNodeUnloadRegions, rLimits.m_maximum.m_nNodeUnloadRegions );
 }
 
-inline bool terrain3dAdaptiveStep(
+inline bool t3dAdaptiveStep(
 	const t3dAdaptiveBudgetLimits_t &rLimits,
 	const t3dAdaptiveBudgetPressure_t &rPressure, const uint64_t nMeasuredUsec,
 	t3dAdaptiveBudgetState_t &rState
 ) {
-	if ( !rState.bInitialized ) {
-		terrain3dAdaptiveReset( rLimits, rState, TERRAIN3D_ADAPTIVE_REASON_INITIALIZED );
+	if ( !rState.m_bInitialized ) {
+		t3dAdaptiveReset( rLimits, rState, TERRAIN3D_ADAPTIVE_REASON_INITIALIZED );
 		return true;
 	}
-	terrain3dAdaptiveClampState( rLimits, rState );
-	if ( nMeasuredUsec > rLimits.nHardMaxUsec ) {
-		++rState.overBudgetStreak;
-		rState.underBudgetStreak = 0;
-		if ( rState.overBudgetStreak < rLimits.nAdjustmentWindowFrames ) {
-			rState.reason = TERRAIN3D_ADAPTIVE_REASON_STABLE;
+	t3dAdaptiveClampState( rLimits, rState );
+	if ( nMeasuredUsec > rLimits.m_nHardMaxUsec ) {
+		++rState.m_nOverBudgetStreak;
+		rState.m_nUnderBudgetStreak = 0;
+		if ( rState.m_nOverBudgetStreak < rLimits.m_nAdjustmentWindowFrames ) {
+			rState.m_reason = TERRAIN3D_ADAPTIVE_REASON_STABLE;
 			return false;
 		}
-		const t3dAdaptiveBudgetValues_t previous = rState.effective;
-		rState.effective.nGpuPages = terrain3dAdaptiveDecrease( rState.effective.nGpuPages,
-			rLimits.minimum.nGpuPages );
-		rState.effective.nCpuPages = terrain3dAdaptiveDecrease( rState.effective.nCpuPages,
-			rLimits.minimum.nCpuPages );
-		rState.effective.nInstancePages = terrain3dAdaptiveDecrease( rState.effective.nInstancePages,
-			rLimits.minimum.nInstancePages );
-		rState.effective.instancerCells = terrain3dAdaptiveDecrease( rState.effective.instancerCells,
-			rLimits.minimum.instancerCells );
-		rState.effective.nNodeLoadRegions = terrain3dAdaptiveDecrease( rState.effective.nNodeLoadRegions,
-			rLimits.minimum.nNodeLoadRegions );
-		rState.effective.nNodeUnloadRegions = terrain3dAdaptiveDecrease( rState.effective.nNodeUnloadRegions,
-			rLimits.minimum.nNodeUnloadRegions );
-		rState.overBudgetStreak = 0;
-		rState.reason = TERRAIN3D_ADAPTIVE_REASON_HARD_LIMIT;
-		const bool bChanged = previous.nGpuPages != rState.effective.nGpuPages ||
-			previous.nCpuPages != rState.effective.nCpuPages ||
-			previous.nInstancePages != rState.effective.nInstancePages ||
-			previous.instancerCells != rState.effective.instancerCells ||
-			previous.nNodeLoadRegions != rState.effective.nNodeLoadRegions ||
-			previous.nNodeUnloadRegions != rState.effective.nNodeUnloadRegions;
+		const t3dAdaptiveBudgetValues_t previous = rState.m_effective;
+		rState.m_effective.m_nGpuPages = t3dAdaptiveDecrease( rState.m_effective.m_nGpuPages,
+			rLimits.m_minimum.m_nGpuPages );
+		rState.m_effective.m_nCpuPages = t3dAdaptiveDecrease( rState.m_effective.m_nCpuPages,
+			rLimits.m_minimum.m_nCpuPages );
+		rState.m_effective.m_nInstancePages = t3dAdaptiveDecrease( rState.m_effective.m_nInstancePages,
+			rLimits.m_minimum.m_nInstancePages );
+		rState.m_effective.m_nInstancerCells = t3dAdaptiveDecrease( rState.m_effective.m_nInstancerCells,
+			rLimits.m_minimum.m_nInstancerCells );
+		rState.m_effective.m_nNodeLoadRegions = t3dAdaptiveDecrease( rState.m_effective.m_nNodeLoadRegions,
+			rLimits.m_minimum.m_nNodeLoadRegions );
+		rState.m_effective.m_nNodeUnloadRegions = t3dAdaptiveDecrease( rState.m_effective.m_nNodeUnloadRegions,
+			rLimits.m_minimum.m_nNodeUnloadRegions );
+		rState.m_nOverBudgetStreak = 0;
+		rState.m_reason = TERRAIN3D_ADAPTIVE_REASON_HARD_LIMIT;
+		const bool bChanged = previous.m_nGpuPages != rState.m_effective.m_nGpuPages ||
+			previous.m_nCpuPages != rState.m_effective.m_nCpuPages ||
+			previous.m_nInstancePages != rState.m_effective.m_nInstancePages ||
+			previous.m_nInstancerCells != rState.m_effective.m_nInstancerCells ||
+			previous.m_nNodeLoadRegions != rState.m_effective.m_nNodeLoadRegions ||
+			previous.m_nNodeUnloadRegions != rState.m_effective.m_nNodeUnloadRegions;
 		if ( bChanged ) {
-			++rState.nAdjustmentCount;
+			++rState.m_nAdjustmentCount;
 		}
 		return bChanged;
 	}
-	if ( nMeasuredUsec < rLimits.nTargetUsec ) {
-		++rState.underBudgetStreak;
-		rState.overBudgetStreak = 0;
-		if ( rState.underBudgetStreak < rLimits.nAdjustmentWindowFrames ) {
-			rState.reason = TERRAIN3D_ADAPTIVE_REASON_STABLE;
+	if ( nMeasuredUsec < rLimits.m_nTargetUsec ) {
+		++rState.m_nUnderBudgetStreak;
+		rState.m_nOverBudgetStreak = 0;
+		if ( rState.m_nUnderBudgetStreak < rLimits.m_nAdjustmentWindowFrames ) {
+			rState.m_reason = TERRAIN3D_ADAPTIVE_REASON_STABLE;
 			return false;
 		}
-		const t3dAdaptiveBudgetValues_t previous = rState.effective;
-		if ( rPressure.bGpuLimited ) {
-			rState.effective.nGpuPages = terrain3dAdaptiveIncrease( rState.effective.nGpuPages,
-				rLimits.maximum.nGpuPages );
+		const t3dAdaptiveBudgetValues_t previous = rState.m_effective;
+		if ( rPressure.m_bGpuLimited ) {
+			rState.m_effective.m_nGpuPages = t3dAdaptiveIncrease( rState.m_effective.m_nGpuPages,
+				rLimits.m_maximum.m_nGpuPages );
 		}
-		if ( rPressure.bCpuLimited ) {
-			rState.effective.nCpuPages = terrain3dAdaptiveIncrease( rState.effective.nCpuPages,
-				rLimits.maximum.nCpuPages );
+		if ( rPressure.m_bCpuLimited ) {
+			rState.m_effective.m_nCpuPages = t3dAdaptiveIncrease( rState.m_effective.m_nCpuPages,
+				rLimits.m_maximum.m_nCpuPages );
 		}
-		if ( rPressure.bInstanceLimited ) {
-			rState.effective.nInstancePages = terrain3dAdaptiveIncrease( rState.effective.nInstancePages,
-				rLimits.maximum.nInstancePages );
+		if ( rPressure.m_bInstanceLimited ) {
+			rState.m_effective.m_nInstancePages = t3dAdaptiveIncrease( rState.m_effective.m_nInstancePages,
+				rLimits.m_maximum.m_nInstancePages );
 		}
-		if ( rPressure.bInstancerLimited ) {
-			rState.effective.instancerCells = terrain3dAdaptiveIncrease( rState.effective.instancerCells,
-				rLimits.maximum.instancerCells );
+		if ( rPressure.m_bInstancerLimited ) {
+			rState.m_effective.m_nInstancerCells = t3dAdaptiveIncrease( rState.m_effective.m_nInstancerCells,
+				rLimits.m_maximum.m_nInstancerCells );
 		}
-		if ( rPressure.bNodeLoadLimited ) {
-			rState.effective.nNodeLoadRegions = terrain3dAdaptiveIncrease( rState.effective.nNodeLoadRegions,
-				rLimits.maximum.nNodeLoadRegions );
+		if ( rPressure.m_bNodeLoadLimited ) {
+			rState.m_effective.m_nNodeLoadRegions = t3dAdaptiveIncrease( rState.m_effective.m_nNodeLoadRegions,
+				rLimits.m_maximum.m_nNodeLoadRegions );
 		}
-		if ( rPressure.bNodeUnloadLimited ) {
-			rState.effective.nNodeUnloadRegions = terrain3dAdaptiveIncrease( rState.effective.nNodeUnloadRegions,
-				rLimits.maximum.nNodeUnloadRegions );
+		if ( rPressure.m_bNodeUnloadLimited ) {
+			rState.m_effective.m_nNodeUnloadRegions = t3dAdaptiveIncrease( rState.m_effective.m_nNodeUnloadRegions,
+				rLimits.m_maximum.m_nNodeUnloadRegions );
 		}
-		rState.underBudgetStreak = 0;
-		const bool bChanged = previous.nGpuPages != rState.effective.nGpuPages ||
-			previous.nCpuPages != rState.effective.nCpuPages ||
-			previous.nInstancePages != rState.effective.nInstancePages ||
-			previous.instancerCells != rState.effective.instancerCells ||
-			previous.nNodeLoadRegions != rState.effective.nNodeLoadRegions ||
-			previous.nNodeUnloadRegions != rState.effective.nNodeUnloadRegions;
-		rState.reason = bChanged ? TERRAIN3D_ADAPTIVE_REASON_BACKLOG_RECOVERY :
+		rState.m_nUnderBudgetStreak = 0;
+		const bool bChanged = previous.m_nGpuPages != rState.m_effective.m_nGpuPages ||
+			previous.m_nCpuPages != rState.m_effective.m_nCpuPages ||
+			previous.m_nInstancePages != rState.m_effective.m_nInstancePages ||
+			previous.m_nInstancerCells != rState.m_effective.m_nInstancerCells ||
+			previous.m_nNodeLoadRegions != rState.m_effective.m_nNodeLoadRegions ||
+			previous.m_nNodeUnloadRegions != rState.m_effective.m_nNodeUnloadRegions;
+		rState.m_reason = bChanged ? TERRAIN3D_ADAPTIVE_REASON_BACKLOG_RECOVERY :
 			TERRAIN3D_ADAPTIVE_REASON_UNDER_TARGET_NO_BACKLOG;
 		if ( bChanged ) {
-			++rState.nAdjustmentCount;
+			++rState.m_nAdjustmentCount;
 		}
 		return bChanged;
 	}
-	rState.overBudgetStreak = 0;
-	rState.underBudgetStreak = 0;
-	rState.reason = TERRAIN3D_ADAPTIVE_REASON_STABLE;
+	rState.m_nOverBudgetStreak = 0;
+	rState.m_nUnderBudgetStreak = 0;
+	rState.m_reason = TERRAIN3D_ADAPTIVE_REASON_STABLE;
 	return false;
 }
 

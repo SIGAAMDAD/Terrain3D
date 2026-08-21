@@ -47,36 +47,36 @@ using namespace godot;
 // Constants
 
 // Centralized native compile-time constants. Keep tunable limits and format constants here.
-static constexpr uint32_t TERRAIN3D_PROFILE_VERSION = 5u;
+static constexpr uint32_t s_nProfileVersion = 5u;
 static constexpr const char *TERRAIN3D_PROFILE_KEY = "xbox360_experimental";
 static constexpr const char *TERRAIN3D_PROFILE_DISPLAY_NAME = "Xbox 360 Experimental";
-static constexpr uint64_t TERRAIN3D_PROFILE_FNV_OFFSET = 1469598103934665603ull;
-static constexpr uint64_t TERRAIN3D_PROFILE_FNV_PRIME = 1099511628211ull;
-static constexpr uint32_t TERRAIN3D_HASH_GOLDEN_RATIO_32 = 0x9e3779b9u;
-static constexpr uint32_t TERRAIN3D_HASH_MIX_32 = 0x85ebca6bu;
-static constexpr uint32_t TERRAIN3D_HASH_MIX_32_SECONDARY = 0xc2b2ae35u;
-static constexpr uint64_t TERRAIN3D_HASH_GOLDEN_RATIO_64 = 0x9e3779b97f4a7c15ULL;
-static constexpr float TERRAIN3D_UINT32_MAX_FLOAT = 4294967295.0f;
-static constexpr size_t TERRAIN3D_TEST_HALF_ENCODING_COUNT = 65536u;
-static constexpr size_t TERRAIN3D_TEST_TRANSFORM_COUNT = 37u;
-static constexpr int TERRAIN3D_TEST_NORMAL_WIDTH = 37;
-static constexpr int TERRAIN3D_TEST_NORMAL_HEIGHT = 19;
-static constexpr int TERRAIN3D_TEST_NORMAL_STRIDE = TERRAIN3D_TEST_NORMAL_WIDTH + 2;
-static constexpr size_t TERRAIN3D_TEST_EROSION_COUNT = 4099u;
-static constexpr size_t TERRAIN3D_TEST_NON_FINITE_EROSION_COUNT = 16u;
-static constexpr size_t TERRAIN3D_TEST_DISPATCH_COUNT = 1024u;
-static constexpr size_t TERRAIN3D_TEST_DISPATCH_ROUNDS = 32u;
-static constexpr size_t TERRAIN3D_TEST_DISPATCH_ITERATIONS = 64u;
-static constexpr size_t TERRAIN3D_TEST_EASTL_ALIGNMENT = 64u;
-static constexpr size_t TERRAIN3D_TEST_EASTL_OFFSET = 13u;
-static constexpr uint8_t TERRAIN3D_TEST_CONTROL_FLAG = 1u << 0u;
+static constexpr uint64_t s_nProfileFnvOffset = 1469598103934665603ull;
+static constexpr uint64_t s_nProfileFnvPrime = 1099511628211ull;
+static constexpr uint32_t s_nHashGoldenRatio32 = 0x9e3779b9u;
+static constexpr uint32_t s_nHashMix32 = 0x85ebca6bu;
+static constexpr uint32_t s_nHashMix32Secondary = 0xc2b2ae35u;
+static constexpr uint64_t s_nHashGoldenRatio64 = 0x9e3779b97f4a7c15ULL;
+static constexpr float s_fUint32MaxFloat = 4294967295.0f;
+static constexpr size_t s_nTestHalfEncodingCount = 65536u;
+static constexpr size_t s_nTestTransformCount = 37u;
+static constexpr int s_nTestNormalWidth = 37;
+static constexpr int s_nTestNormalHeight = 19;
+static constexpr int s_nTestNormalStride = s_nTestNormalWidth + 2;
+static constexpr size_t s_nTestErosionCount = 4099u;
+static constexpr size_t s_nTestNonFiniteErosionCount = 16u;
+static constexpr size_t s_nTestDispatchCount = 1024u;
+static constexpr size_t s_nTestDispatchRounds = 32u;
+static constexpr size_t s_nTestDispatchIterations = 64u;
+static constexpr size_t s_nTestEastlAlignment = 64u;
+static constexpr size_t s_nTestEastlOffset = 13u;
+static constexpr uint8_t s_nTestControlFlag = 1u << 0u;
 static constexpr const char *TERRAIN3D_CACHE_THRASH_SUBSYSTEM_NAMES[] = {
 	"gpu_terrain_pages", "cpu_terrain_pages", "instance_pages",
 };
 static constexpr const char *TERRAIN3D_MEMORY_SUBSYSTEM_NAMES[] = {
 	"gpu_terrain_pages", "cpu_terrain_pages", "instance_pages", "baked_lighting", "hlod_proxies", "shader_cache",
 };
-static constexpr size_t TERRAIN3D_MEMORY_SUBSYSTEM_NAME_COUNT =
+static constexpr size_t s_nMemorySubsystemNameCount =
 	sizeof( TERRAIN3D_MEMORY_SUBSYSTEM_NAMES ) / sizeof( TERRAIN3D_MEMORY_SUBSYSTEM_NAMES[0] );
 static constexpr const char *TERRAIN3D_EDITOR_TOOL_NAMES[] = {
 	"Region", "Sculpt", "Height", "Texture", "Color", "Roughness", "Auto Shader",
@@ -104,187 +104,187 @@ static constexpr const char *TERRAIN3D_SHADER_STATIC_MACRO_NAMES[] = {
 	"T3D_COLOR_MAPS_IMPLICIT",
 	"T3D_AUTO_SHADER_ENABLED",
 };
-static constexpr RenderingServer::ShadowCastingSetting TERRAIN3D_SHADOW_CASTING_ON =
+static constexpr RenderingServer::ShadowCastingSetting s_shadowCastingOn =
 	RenderingServer::SHADOW_CASTING_SETTING_ON;
-static constexpr RenderingServer::ShadowCastingSetting TERRAIN3D_SHADOW_CASTING_OFF =
+static constexpr RenderingServer::ShadowCastingSetting s_shadowCastingOff =
 	RenderingServer::SHADOW_CASTING_SETTING_OFF;
-static constexpr RenderingServer::ShadowCastingSetting TERRAIN3D_SHADOW_CASTING_ONLY =
+static constexpr RenderingServer::ShadowCastingSetting s_shadowCastingOnly =
 	RenderingServer::SHADOW_CASTING_SETTING_SHADOWS_ONLY;
-static constexpr int TERRAIN3D_MAX_TEXTURE_ASSETS = 32;
-static constexpr int TERRAIN3D_MAX_MESH_ASSETS = 256;
-static constexpr real_t TERRAIN3D_DATA_CURRENT_VERSION = 0.94f;
-static constexpr float TERRAIN3D_REGION_HEIGHT_MIN = -384.0f;
-static constexpr float TERRAIN3D_REGION_HEIGHT_MAX = 768.0f;
-static constexpr float TERRAIN3D_REGION_HEIGHT_RANGE = TERRAIN3D_REGION_HEIGHT_MAX - TERRAIN3D_REGION_HEIGHT_MIN;
-static constexpr float TERRAIN3D_REGION_HEIGHT_INV_RANGE = 1.0f / TERRAIN3D_REGION_HEIGHT_RANGE;
-static constexpr float TERRAIN3D_REGION_HEIGHT_U16_SCALE = 65535.0f;
-static constexpr uint32_t TERRAIN3D_REGION_DEFAULT_CONTROL = 1u;
-static constexpr uint32_t TERRAIN3D_AUTOSHADER_MATERIAL_MASK = ( 0x1Fu << 27u ) | ( 0x1Fu << 22u ) | ( 0xFFu << 14u );
-static constexpr float TERRAIN3D_DEGREES_PER_RADIAN = 57.29577951308232f;
-static constexpr float TERRAIN3D_SQRT_TWO = 1.4142135623730951f;
-static constexpr float TERRAIN3D_LARGE_DISTANCE = 1.0e20f;
-static constexpr uint32_t TERRAIN3D_LANDFORM_MATERIAL_MASK = TERRAIN3D_AUTOSHADER_MATERIAL_MASK | 0x1u;
-static constexpr float TERRAIN3D_LANDFORM_EPSILON = 0.0001f;
-static constexpr int32_t TERRAIN3D_EROSION_DIRECTION_COUNT = 4;
-static constexpr int32_t TERRAIN3D_EROSION_DIRECTION_X[TERRAIN3D_EROSION_DIRECTION_COUNT] = {-1, 1, 0, 0};
-static constexpr int32_t TERRAIN3D_EROSION_DIRECTION_Y[TERRAIN3D_EROSION_DIRECTION_COUNT] = {0, 0, -1, 1};
-static constexpr int32_t TERRAIN3D_EROSION_OPPOSITE_DIRECTION[TERRAIN3D_EROSION_DIRECTION_COUNT] = {1, 0, 3, 2};
-static constexpr float TERRAIN3D_EROSION_EPSILON = 1.0e-6f;
-static constexpr uint64_t TERRAIN3D_EROSION_FNV_OFFSET = 1469598103934665603ULL;
-static constexpr uint64_t TERRAIN3D_EROSION_FNV_PRIME = 1099511628211ULL;
-static constexpr size_t TERRAIN3D_EROSION_HALF_DECODE_BLOCK = 256u;
-static constexpr float TERRAIN3D_CLIPMAP_PART_STATIC = 0.0f;
-static constexpr float TERRAIN3D_CLIPMAP_PART_EDGE_A0 = 1.0f;
-static constexpr float TERRAIN3D_CLIPMAP_PART_EDGE_A1 = 2.0f;
-static constexpr float TERRAIN3D_CLIPMAP_PART_EDGE_B0 = 3.0f;
-static constexpr float TERRAIN3D_CLIPMAP_PART_EDGE_B1 = 4.0f;
-static constexpr int TERRAIN3D_MULTIMESH_STRIDE_FLOATS = 16;
-static constexpr uint32_t TERRAIN3D_COMPUTE_WORKGROUP_SIZE = 64u;
-static constexpr int TERRAIN3D_SHADER_MAX_CONDITIONAL_DEPTH = 32;
-static constexpr uint32_t TERRAIN3D_INSTANCE_PAGE_MAGIC = 0x49334454u;
-static constexpr uint16_t TERRAIN3D_INSTANCE_PAGE_VERSION = 2u;
-static constexpr uint16_t TERRAIN3D_INSTANCE_PAGE_LEGACY_VERSION = 1u;
-static constexpr size_t TERRAIN3D_INSTANCE_PAGE_HEADER_BYTES = 16u;
-static constexpr size_t TERRAIN3D_INSTANCE_PAGE_MESH_HEADER_BYTES = 12u;
-static constexpr size_t TERRAIN3D_INSTANCE_PAGE_LEGACY_MESH_HEADER_BYTES = 8u;
-static constexpr size_t TERRAIN3D_INSTANCE_PAGE_CELL_HEADER_BYTES = 12u;
-static constexpr uint16_t TERRAIN3D_INSTANCE_PAGE_CELL_COLORS = 1u << 0u;
-static constexpr uint16_t TERRAIN3D_INSTANCE_PAGE_CELL_OWNERS = 1u << 1u;
-static constexpr uint16_t TERRAIN3D_INSTANCE_PAGE_CELL_FLAGS = TERRAIN3D_INSTANCE_PAGE_CELL_COLORS | TERRAIN3D_INSTANCE_PAGE_CELL_OWNERS;
-static constexpr uint32_t TERRAIN3D_ACTIVE_ACCESS_READER_MASK = 0x7fffffffu;
-static constexpr uint32_t TERRAIN3D_ACTIVE_ACCESS_WRITER_BIT = 0x80000000u;
-static constexpr size_t TERRAIN3D_ACTIVE_STORAGE_ALIGNMENT = 64u;
-static constexpr int TERRAIN3D_AUTOSHADER_MODE_LEGACY_RUNTIME = 0;
-static constexpr int TERRAIN3D_AUTOSHADER_MODE_BAKED = 1;
-static constexpr int TERRAIN3D_AUTOSHADER_MODE_DISABLED = 2;
-static constexpr int TERRAIN3D_AUTOSHADER_MODE_EDITOR_PREVIEW = 3;
-static constexpr size_t TERRAIN3D_BAKE_CACHELINE_BYTES = 64u;
-static constexpr size_t TERRAIN3D_COMPUTE_SCRATCH_RETAIN_LIMIT = 32u * 1024u * 1024u;
-static constexpr size_t TERRAIN3D_CPU_CACHE_BYTES_PER_TEXEL = 12u;
-static constexpr int TERRAIN3D_CPU_CACHE_MAX_LAYERS = 64;
-static constexpr size_t TERRAIN3D_CPU_CACHE_MIB = 1024u * 1024u;
-static constexpr int TERRAIN3D_CPU_CACHE_MIN_SAMPLE_LAYERS = 4;
-static constexpr int TERRAIN3D_CPU_REGION_CACHE_MAX_BUDGET_MB = 128;
-static constexpr int TERRAIN3D_CPU_REGION_CACHE_MIN_BUDGET_MB = 1;
-static constexpr int TERRAIN3D_CPU_REGION_LOAD_MAX_BUDGET_MB = 64;
-static constexpr int TERRAIN3D_CPU_REGION_LOAD_MAX_LAYERS = 64;
-static constexpr size_t TERRAIN3D_DEFAULT_RESIDENT_POOL_BUDGET = 64u * 1024u * 1024u;
-static constexpr int TERRAIN3D_DIAGNOSTICS_VERSION = 1;
-static constexpr uint32_t TERRAIN3D_DIRECTIONAL_RECEIVER_LAYER = 1u << 19u;
-static constexpr int32_t TERRAIN3D_EROSION_REGION_LOOKUP_CAPACITY = 4096;
-static constexpr int32_t TERRAIN3D_EROSION_TEXTURE_PROFILE_COUNT = 32;
-static constexpr uint32_t TERRAIN3D_FEATURE_ALT_VALUE = 1u << 0u;
-static constexpr uint32_t TERRAIN3D_FEATURE_ANGLE_VALUE = 1u << 3u;
-static constexpr uint32_t TERRAIN3D_FEATURE_CENTER_VALID_VALUE = 1u << 1u;
-static constexpr uint32_t TERRAIN3D_FEATURE_SCALE_VALUE = 1u << 4u;
-static constexpr uint32_t TERRAIN3D_FEATURE_TEXTURE_VALUE = 1u << 2u;
-static constexpr int TERRAIN3D_GPU_HEIGHT_CACHE_MAX_LAYERS = 512;
-static constexpr int TERRAIN3D_GPU_HEIGHT_CACHE_MIN_SPARE_LAYERS = 8;
-static constexpr uint64_t TERRAIN3D_GPU_FAR_ATLAS_HEADER_BYTES = 52u;
-static constexpr uint64_t TERRAIN3D_GPU_FAR_ATLAS_MAGIC = 0x5444334641523031ull;
-static constexpr uint32_t TERRAIN3D_GPU_FAR_ATLAS_VERSION = 7u;
-static constexpr int TERRAIN3D_GPU_REGION_CACHE_MAX_BUDGET_MB = 128;
-static constexpr int TERRAIN3D_GPU_REGION_CACHE_MIN_BUDGET_MB = 1;
-static constexpr int TERRAIN3D_GPU_REGION_UPLOAD_MAX_BUDGET_MB = 64;
-static constexpr int TERRAIN3D_GPU_REGION_UPLOAD_MAX_LAYERS = 64;
-static constexpr int TERRAIN3D_INSTANCE_DEFAULT_CELL_SIZE = 32;
-static constexpr int TERRAIN3D_INSTANCE_MAX_CELLS_PER_AXIS = 256;
-static constexpr int TERRAIN3D_INSTANCE_MAX_CELL_SIZE = 128;
-static constexpr int TERRAIN3D_INSTANCE_MAX_REGION_SIZE = 2048;
-static constexpr int TERRAIN3D_INSTANCE_MIN_CELL_SIZE = 8;
-static constexpr int TERRAIN3D_INSTANCE_MIN_REGION_SIZE = 64;
-static constexpr int TERRAIN3D_INSTANCE_REGION_CACHE_MAX_BUDGET_MB = 128;
-static constexpr int TERRAIN3D_INSTANCE_REGION_CACHE_MIN_BUDGET_MB = 1;
-static constexpr int TERRAIN3D_INSTANCE_REGION_LOAD_MAX_BUDGET_MB = 64;
-static constexpr int TERRAIN3D_INSTANCE_REGION_LOAD_MAX_PAGES = 64;
-static constexpr int TERRAIN3D_INSTANCE_TRANSITION_BUCKET_CELL_SPAN = 4;
-static constexpr uint32_t TERRAIN3D_INSTANCE_WHITE_RGBA8 = 0xffffffffu;
-static constexpr uint32_t TERRAIN3D_LIGHTING_LAYER_FOLIAGE = 1u << 15u;
-static constexpr uint32_t TERRAIN3D_LIGHTING_LAYER_LARGE = 1u << 17u;
-static constexpr uint32_t TERRAIN3D_LIGHTING_LAYER_MEDIUM = 1u << 16u;
-static constexpr uint32_t TERRAIN3D_LIGHTING_LAYER_REGIONAL = 1u << 18u;
-static constexpr int TERRAIN3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT = 8;
-static constexpr uint64_t TERRAIN3D_LIGHTMAP_FNV_OFFSET = 1469598103934665603ull;
-static constexpr uint64_t TERRAIN3D_LIGHTMAP_FNV_PRIME = 1099511628211ull;
-static constexpr int TERRAIN3D_MAX_CLIPMAP_LEVELS = 16;
-static constexpr int TERRAIN3D_MAX_REGION_BLEND_SAMPLES = 2048;
+static constexpr int s_nMaxTextureAssets = 32;
+static constexpr int s_nMaxMeshAssets = 256;
+static constexpr real_t s_fDataCurrentVersion = 0.94f;
+static constexpr float s_fRegionHeightMin = -384.0f;
+static constexpr float s_fRegionHeightMax = 768.0f;
+static constexpr float s_fRegionHeightRange = s_fRegionHeightMax - s_fRegionHeightMin;
+static constexpr float s_fRegionHeightInvRange = 1.0f / s_fRegionHeightRange;
+static constexpr float s_fRegionHeightU16Scale = 65535.0f;
+static constexpr uint32_t s_nRegionDefaultControl = 1u;
+static constexpr uint32_t s_nAutoshaderMaterialMask = ( 0x1Fu << 27u ) | ( 0x1Fu << 22u ) | ( 0xFFu << 14u );
+static constexpr float s_fDegreesPerRadian = 57.29577951308232f;
+static constexpr float s_fSqrtTwo = 1.4142135623730951f;
+static constexpr float s_fLargeDistance = 1.0e20f;
+static constexpr uint32_t s_nLandformMaterialMask = s_nAutoshaderMaterialMask | 0x1u;
+static constexpr float s_fLandformEpsilon = 0.0001f;
+static constexpr int32_t s_nErosionDirectionCount = 4;
+static constexpr int32_t s_szErosionDirectionX[s_nErosionDirectionCount] = {-1, 1, 0, 0};
+static constexpr int32_t s_szErosionDirectionY[s_nErosionDirectionCount] = {0, 0, -1, 1};
+static constexpr int32_t s_szErosionOppositeDirection[s_nErosionDirectionCount] = {1, 0, 3, 2};
+static constexpr float s_fErosionEpsilon = 1.0e-6f;
+static constexpr uint64_t s_nErosionFnvOffset = 1469598103934665603ULL;
+static constexpr uint64_t s_nErosionFnvPrime = 1099511628211ULL;
+static constexpr size_t s_nErosionHalfDecodeBlock = 256u;
+static constexpr float s_fClipmapPartStatic = 0.0f;
+static constexpr float s_fClipmapPartEdgeA0 = 1.0f;
+static constexpr float s_fClipmapPartEdgeA1 = 2.0f;
+static constexpr float s_fClipmapPartEdgeB0 = 3.0f;
+static constexpr float s_fClipmapPartEdgeB1 = 4.0f;
+static constexpr int s_nMultimeshStrideFloats = 16;
+static constexpr uint32_t s_nComputeWorkgroupSize = 64u;
+static constexpr int s_nShaderMaxConditionalDepth = 32;
+static constexpr uint32_t s_nInstancePageMagic = 0x49334454u;
+static constexpr uint16_t s_nInstancePageVersion = 2u;
+static constexpr uint16_t s_nInstancePageLegacyVersion = 1u;
+static constexpr size_t s_nInstancePageHeaderBytes = 16u;
+static constexpr size_t s_nInstancePageMeshHeaderBytes = 12u;
+static constexpr size_t s_nInstancePageLegacyMeshHeaderBytes = 8u;
+static constexpr size_t s_nInstancePageCellHeaderBytes = 12u;
+static constexpr uint16_t s_nInstancePageCellColors = 1u << 0u;
+static constexpr uint16_t s_nInstancePageCellOwners = 1u << 1u;
+static constexpr uint16_t s_nInstancePageCellFlags = s_nInstancePageCellColors | s_nInstancePageCellOwners;
+static constexpr uint32_t s_nActiveAccessReaderMask = 0x7fffffffu;
+static constexpr uint32_t s_nActiveAccessWriterBit = 0x80000000u;
+static constexpr size_t s_nActiveStorageAlignment = 64u;
+static constexpr int s_nAutoshaderModeLegacyRuntime = 0;
+static constexpr int s_nAutoshaderModeBaked = 1;
+static constexpr int s_nAutoshaderModeDisabled = 2;
+static constexpr int s_nAutoshaderModeEditorPreview = 3;
+static constexpr size_t s_nBakeCachelineBytes = 64u;
+static constexpr size_t s_nComputeScratchRetainLimit = 32u * 1024u * 1024u;
+static constexpr size_t s_nCpuCacheBytesPerTexel = 12u;
+static constexpr int s_nCpuCacheMaxLayers = 64;
+static constexpr size_t s_nCpuCacheMib = 1024u * 1024u;
+static constexpr int s_nCpuCacheMinSampleLayers = 4;
+static constexpr int s_nCpuRegionCacheMaxBudgetMb = 128;
+static constexpr int s_nCpuRegionCacheMinBudgetMb = 1;
+static constexpr int s_nCpuRegionLoadMaxBudgetMb = 64;
+static constexpr int s_nCpuRegionLoadMaxLayers = 64;
+static constexpr size_t s_nDefaultResidentPoolBudget = 64u * 1024u * 1024u;
+static constexpr int s_nDiagnosticsVersion = 1;
+static constexpr uint32_t s_nDirectionalReceiverLayer = 1u << 19u;
+static constexpr int32_t s_nErosionRegionLookupCapacity = 4096;
+static constexpr int32_t s_nErosionTextureProfileCount = 32;
+static constexpr uint32_t s_nFeatureAltValue = 1u << 0u;
+static constexpr uint32_t s_nFeatureAngleValue = 1u << 3u;
+static constexpr uint32_t s_nFeatureCenterValidValue = 1u << 1u;
+static constexpr uint32_t s_nFeatureScaleValue = 1u << 4u;
+static constexpr uint32_t s_nFeatureTextureValue = 1u << 2u;
+static constexpr int s_nGpuHeightCacheMaxLayers = 512;
+static constexpr int s_nGpuHeightCacheMinSpareLayers = 8;
+static constexpr uint64_t s_nGpuFarAtlasHeaderBytes = 52u;
+static constexpr uint64_t s_nGpuFarAtlasMagic = 0x5444334641523031ull;
+static constexpr uint32_t s_nGpuFarAtlasVersion = 7u;
+static constexpr int s_nGpuRegionCacheMaxBudgetMb = 128;
+static constexpr int s_nGpuRegionCacheMinBudgetMb = 1;
+static constexpr int s_nGpuRegionUploadMaxBudgetMb = 64;
+static constexpr int s_nGpuRegionUploadMaxLayers = 64;
+static constexpr int s_nInstanceDefaultCellSize = 32;
+static constexpr int s_nInstanceMaxCellsPerAxis = 256;
+static constexpr int s_nInstanceMaxCellSize = 128;
+static constexpr int s_nInstanceMaxRegionSize = 2048;
+static constexpr int s_nInstanceMinCellSize = 8;
+static constexpr int s_nInstanceMinRegionSize = 64;
+static constexpr int s_nInstanceRegionCacheMaxBudgetMb = 128;
+static constexpr int s_nInstanceRegionCacheMinBudgetMb = 1;
+static constexpr int s_nInstanceRegionLoadMaxBudgetMb = 64;
+static constexpr int s_nInstanceRegionLoadMaxPages = 64;
+static constexpr int s_nInstanceTransitionBucketCellSpan = 4;
+static constexpr uint32_t s_nInstanceWhiteRgba8 = 0xffffffffu;
+static constexpr uint32_t s_nLightingLayerFoliage = 1u << 15u;
+static constexpr uint32_t s_nLightingLayerLarge = 1u << 17u;
+static constexpr uint32_t s_nLightingLayerMedium = 1u << 16u;
+static constexpr uint32_t s_nLightingLayerRegional = 1u << 18u;
+static constexpr int s_nLightmapActiveInstanceLimit = 8;
+static constexpr uint64_t s_nLightmapFnvOffset = 1469598103934665603ull;
+static constexpr uint64_t s_nLightmapFnvPrime = 1099511628211ull;
+static constexpr int s_nMaxClipmapLevels = 16;
+static constexpr int s_nMaxRegionBlendSamples = 2048;
 // Full-region heightmap collision samples region_size + 1 vertices. Keep the
 // axis scratch large enough for the maximum supported 2048-texel region.
-static constexpr int TERRAIN3D_MAX_COLLISION_AXIS_SAMPLES = TERRAIN3D_MAX_REGION_BLEND_SAMPLES + 1;
-static constexpr int TERRAIN3D_MAX_RENDER_BATCHES = 5;
-static constexpr int TERRAIN3D_MAX_SHADER_VARIANT_CACHE_LIMIT = 256;
-static constexpr int TERRAIN3D_MAX_SHADER_VARIANT_PREWARM_LIMIT = 64;
-static constexpr int TERRAIN3D_MAX_SHADER_VARIANT_SOURCE_BUDGET_MB = 256;
-static constexpr int TERRAIN3D_MAX_TILE_INSTANCES = 16;
-static constexpr uint64_t TERRAIN3D_MEMORY_MIB = 1024ULL * 1024ULL;
-static constexpr int TERRAIN3D_MEMORY_POLICY_INTERVAL_FRAMES = 30;
-static constexpr int TERRAIN3D_MESH_MAX_LOD_COUNT = 10;
-static constexpr int TERRAIN3D_MESH_SHADOW_LOD_ID = -1;
-static constexpr int TERRAIN3D_MIN_REGION_SIZE = 64;
-static constexpr int TERRAIN3D_MIN_SHADER_VARIANT_CACHE_LIMIT = 8;
-static constexpr int TERRAIN3D_MIN_SHADER_VARIANT_PREWARM_LIMIT = 1;
-static constexpr int TERRAIN3D_MIN_SHADER_VARIANT_SOURCE_BUDGET_MB = 1;
-static constexpr uint32_t TERRAIN3D_OP_ADD_VALUE = 0u;
-static constexpr uint32_t TERRAIN3D_OP_GRADIENT_VALUE = 4u;
-static constexpr uint32_t TERRAIN3D_OP_REPLACE_VALUE = 2u;
-static constexpr uint32_t TERRAIN3D_OP_SUBTRACT_VALUE = 1u;
-static constexpr int TERRAIN3D_PAIR_INSTANCES = 2;
-static constexpr int TERRAIN3D_RENDER_CONTROL_BLEND_RADIUS = 2;
-static constexpr int TERRAIN3D_RENDER_CONTROL_KERNEL[5] = {1, 2, 3, 2, 1};
-static constexpr uint32_t TERRAIN3D_RENDER_CONTROL_MATERIAL_MASK =
+static constexpr int s_nMaxCollisionAxisSamples = s_nMaxRegionBlendSamples + 1;
+static constexpr int s_nMaxRenderBatches = 5;
+static constexpr int s_nMaxShaderVariantCacheLimit = 256;
+static constexpr int s_nMaxShaderVariantPrewarmLimit = 64;
+static constexpr int s_nMaxShaderVariantSourceBudgetMb = 256;
+static constexpr int s_nMaxTileInstances = 16;
+static constexpr uint64_t s_nMemoryMib = 1024ULL * 1024ULL;
+static constexpr int s_nMemoryPolicyIntervalFrames = 30;
+static constexpr int s_nMeshMaxLodCount = 10;
+static constexpr int s_nMeshShadowLodId = -1;
+static constexpr int s_nMinRegionSize = 64;
+static constexpr int s_nMinShaderVariantCacheLimit = 8;
+static constexpr int s_nMinShaderVariantPrewarmLimit = 1;
+static constexpr int s_nMinShaderVariantSourceBudgetMb = 1;
+static constexpr uint32_t s_nOpAddValue = 0u;
+static constexpr uint32_t s_nOpGradientValue = 4u;
+static constexpr uint32_t s_nOpReplaceValue = 2u;
+static constexpr uint32_t s_nOpSubtractValue = 1u;
+static constexpr int s_nPairInstances = 2;
+static constexpr int s_nRenderControlBlendRadius = 2;
+static constexpr int s_szRenderControlKernel[5] = {1, 2, 3, 2, 1};
+static constexpr uint32_t s_nRenderControlMaterialMask =
 	( 0x1Fu << 27u ) | ( 0x1Fu << 22u ) | ( 0xFFu << 14u );
-static constexpr size_t TERRAIN3D_RESIDENT_CACHE_ALIGNMENT = 64u;
-static constexpr size_t TERRAIN3D_RESIDENT_INVALID_OFFSET = ( size_t ) ( -1 );
-static constexpr int TERRAIN3D_RING_TILE_INSTANCES = 12;
-static constexpr size_t TERRAIN3D_RUNTIME_PROFILE_HISTORY_CAPACITY = 600u;
-static constexpr int TERRAIN3D_SAMPLER_CACHE_SIZE = 8;
-static constexpr uint32_t TERRAIN3D_TOOL_AUTOSHADER_VALUE = 6u;
-static constexpr uint32_t TERRAIN3D_TOOL_COLOR_VALUE = 4u;
-static constexpr uint32_t TERRAIN3D_TOOL_HEIGHT_VALUE = 2u;
-static constexpr uint32_t TERRAIN3D_TOOL_HOLES_VALUE = 7u;
-static constexpr uint32_t TERRAIN3D_TOOL_NAVIGATION_VALUE = 8u;
-static constexpr uint32_t TERRAIN3D_TOOL_ROUGHNESS_VALUE = 5u;
-static constexpr uint32_t TERRAIN3D_TOOL_TEXTURE_VALUE = 3u;
-static constexpr uint32_t TERRAIN3D_TYPE_COLOR_VALUE = 2u;
-static constexpr uint32_t TERRAIN3D_TYPE_CONTROL_VALUE = 1u;
-static constexpr uint32_t TERRAIN3D_TYPE_HEIGHT_VALUE = 0u;
-static constexpr uint32_t TERRAIN3D_TYPE_MAX_VALUE = 3u;
-static constexpr int TERRAIN3D_WORLD_TEXELS = 4096;
-static constexpr size_t TERRAIN3D_XBOX360_CPU_MAP_CEILING_BYTES = 64u * 1024u * 1024u;
-static constexpr int TERRAIN3D_ACTIVE_MIN_REGION_SIZE = TERRAIN3D_MIN_REGION_SIZE;
-static constexpr int TERRAIN3D_ACTIVE_WORLD_TEXELS = TERRAIN3D_WORLD_TEXELS;
-static constexpr size_t TERRAIN3D_BAKE_UV_CACHELINE_ELEMENTS =
-	TERRAIN3D_BAKE_CACHELINE_BYTES / std::gcd( TERRAIN3D_BAKE_CACHELINE_BYTES, sizeof( Vector2 ) );
-static constexpr size_t TERRAIN3D_BAKE_VERTEX_CACHELINE_ELEMENTS =
-	TERRAIN3D_BAKE_CACHELINE_BYTES / std::gcd( TERRAIN3D_BAKE_CACHELINE_BYTES, sizeof( Vector3 ) );
-static constexpr size_t TERRAIN3D_GPU_CACHE_FAR_COLOR_BYTES =
-	( size_t ) ( TERRAIN3D_GPU_CACHE_FAR_HEIGHT_SIDE ) * ( size_t ) ( TERRAIN3D_GPU_CACHE_FAR_HEIGHT_SIDE ) * 4u;
-static constexpr size_t TERRAIN3D_GPU_CACHE_FAR_HEIGHT_BYTES =
-	( size_t ) ( TERRAIN3D_GPU_CACHE_FAR_HEIGHT_SIDE ) * ( size_t ) ( TERRAIN3D_GPU_CACHE_FAR_HEIGHT_SIDE ) * 2u;
-static constexpr int TERRAIN3D_GPU_FAR_HEIGHT_SIZE = TERRAIN3D_GPU_CACHE_FAR_HEIGHT_SIDE;
-static constexpr uint32_t TERRAIN3D_LIGHTING_CLASS_LAYER_MASK =
-	TERRAIN3D_LIGHTING_LAYER_FOLIAGE | TERRAIN3D_LIGHTING_LAYER_MEDIUM |
-	TERRAIN3D_LIGHTING_LAYER_LARGE | TERRAIN3D_LIGHTING_LAYER_REGIONAL;
-static constexpr int TERRAIN3D_MAX_BATCH_INSTANCES = TERRAIN3D_MAX_CLIPMAP_LEVELS;
-static constexpr int TERRAIN3D_MAX_BUFFER_SHADER_VARIANT_CACHE_LIMIT = TERRAIN3D_MAX_SHADER_VARIANT_CACHE_LIMIT / 2;
-static constexpr int TERRAIN3D_MAX_EDITOR_SHADER_VARIANT_CACHE_LIMIT = TERRAIN3D_MAX_SHADER_VARIANT_CACHE_LIMIT / 4;
-static constexpr int TERRAIN3D_MAX_REGION_MAP_SIZE =
-	TERRAIN3D_WORLD_TEXELS / TERRAIN3D_MIN_REGION_SIZE;
-static constexpr uint64_t TERRAIN3D_MEMORY_POLICY_HYSTERESIS_BYTES = 2ULL * TERRAIN3D_MEMORY_MIB;
-static constexpr int TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE = TERRAIN3D_MAX_REGION_MAP_SIZE;
-static const Vector2i TERRAIN3D_REGION_MAP_VSIZE{TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE, TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE};
-static constexpr size_t TERRAIN3D_BAKE_TASK_ALIGNMENT_ELEMENTS =
-	std::lcm( TERRAIN3D_BAKE_VERTEX_CACHELINE_ELEMENTS, TERRAIN3D_BAKE_UV_CACHELINE_ELEMENTS );
-static constexpr uint32_t TERRAIN3D_LIGHTING_MANAGED_LAYER_MASK =
-	TERRAIN3D_LIGHTING_CLASS_LAYER_MASK | TERRAIN3D_DIRECTIONAL_RECEIVER_LAYER;
-static constexpr int TERRAIN3D_MAX_REGION_SLOTS =
-	TERRAIN3D_MAX_REGION_MAP_SIZE * TERRAIN3D_MAX_REGION_MAP_SIZE;
-static constexpr int TERRAIN3D_RESIDENT_WORLD_SIZE = TERRAIN3D_MAX_REGION_MAP_SIZE;
-static constexpr int TERRAIN3D_ACTIVE_MAX_REGION_SLOTS = TERRAIN3D_MAX_REGION_SLOTS;
-static constexpr size_t TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY = ( size_t ) ( TERRAIN3D_MAX_REGION_SLOTS );
-static constexpr int TERRAIN3D_RESIDENT_WORLD_HALF = TERRAIN3D_RESIDENT_WORLD_SIZE / 2;
-static constexpr int TERRAIN3D_RESIDENT_WORLD_SLOT_COUNT = TERRAIN3D_MAX_REGION_SLOTS;
-static constexpr size_t TERRAIN3D_INSTANCE_REGION_UPDATE_CAPACITY = TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY;
+static constexpr size_t s_nResidentCacheAlignment = 64u;
+static constexpr size_t s_nResidentInvalidOffset = ( size_t ) ( -1 );
+static constexpr int s_nRingTileInstances = 12;
+static constexpr size_t s_nRuntimeProfileHistoryCapacity = 600u;
+static constexpr int s_nSamplerCacheSize = 8;
+static constexpr uint32_t s_nToolAutoshaderValue = 6u;
+static constexpr uint32_t s_nToolColorValue = 4u;
+static constexpr uint32_t s_nToolHeightValue = 2u;
+static constexpr uint32_t s_nToolHolesValue = 7u;
+static constexpr uint32_t s_nToolNavigationValue = 8u;
+static constexpr uint32_t s_nToolRoughnessValue = 5u;
+static constexpr uint32_t s_nToolTextureValue = 3u;
+static constexpr uint32_t s_nTypeColorValue = 2u;
+static constexpr uint32_t s_nTypeControlValue = 1u;
+static constexpr uint32_t s_nTypeHeightValue = 0u;
+static constexpr uint32_t s_nTypeMaxValue = 3u;
+static constexpr int s_nWorldTexels = 4096;
+static constexpr size_t s_nXbox360CpuMapCeilingBytes = 64u * 1024u * 1024u;
+static constexpr int s_nActiveMinRegionSize = s_nMinRegionSize;
+static constexpr int s_nActiveWorldTexels = s_nWorldTexels;
+static constexpr size_t s_nBakeUvCachelineElements =
+	s_nBakeCachelineBytes / std::gcd( s_nBakeCachelineBytes, sizeof( Vector2 ) );
+static constexpr size_t s_nBakeVertexCachelineElements =
+	s_nBakeCachelineBytes / std::gcd( s_nBakeCachelineBytes, sizeof( Vector3 ) );
+static constexpr size_t s_nGpuCacheFarColorBytes =
+	( size_t ) ( s_nGpuCacheFarHeightSide ) * ( size_t ) ( s_nGpuCacheFarHeightSide ) * 4u;
+static constexpr size_t s_nGpuCacheFarHeightBytes =
+	( size_t ) ( s_nGpuCacheFarHeightSide ) * ( size_t ) ( s_nGpuCacheFarHeightSide ) * 2u;
+static constexpr int s_nGpuFarHeightSize = s_nGpuCacheFarHeightSide;
+static constexpr uint32_t s_nLightingClassLayerMask =
+	s_nLightingLayerFoliage | s_nLightingLayerMedium |
+	s_nLightingLayerLarge | s_nLightingLayerRegional;
+static constexpr int s_nMaxBatchInstances = s_nMaxClipmapLevels;
+static constexpr int s_nMaxBufferShaderVariantCacheLimit = s_nMaxShaderVariantCacheLimit / 2;
+static constexpr int s_nMaxEditorShaderVariantCacheLimit = s_nMaxShaderVariantCacheLimit / 4;
+static constexpr int s_nMaxRegionMapSize =
+	s_nWorldTexels / s_nMinRegionSize;
+static constexpr uint64_t s_nMemoryPolicyHysteresisBytes = 2ULL * s_nMemoryMib;
+static constexpr int s_nActiveMaxRegionMapSize = s_nMaxRegionMapSize;
+static const Vector2i TERRAIN3D_REGION_MAP_VSIZE{s_nActiveMaxRegionMapSize, s_nActiveMaxRegionMapSize};
+static constexpr size_t s_nBakeTaskAlignmentElements =
+	std::lcm( s_nBakeVertexCachelineElements, s_nBakeUvCachelineElements );
+static constexpr uint32_t s_nLightingManagedLayerMask =
+	s_nLightingClassLayerMask | s_nDirectionalReceiverLayer;
+static constexpr int s_nMaxRegionSlots =
+	s_nMaxRegionMapSize * s_nMaxRegionMapSize;
+static constexpr int s_nResidentWorldSize = s_nMaxRegionMapSize;
+static constexpr int s_nActiveMaxRegionSlots = s_nMaxRegionSlots;
+static constexpr size_t s_nInstanceRegionTableCapacity = ( size_t ) ( s_nMaxRegionSlots );
+static constexpr int s_nResidentWorldHalf = s_nResidentWorldSize / 2;
+static constexpr int s_nResidentWorldSlotCount = s_nMaxRegionSlots;
+static constexpr size_t s_nInstanceRegionUpdateCapacity = s_nInstanceRegionTableCapacity;
 typedef enum t3dPerformanceProfileOwner_e : uint8_t {
 	T3D_PROFILE_OWNER_TERRAIN,
 	T3D_PROFILE_OWNER_MATERIAL,
@@ -297,12 +297,12 @@ typedef enum t3dPerformanceProfileValueKind_e : uint8_t {
 } t3dPerformanceProfileValueKind_t;
 
 typedef struct t3dPerformanceProfileSetting_s {
-	t3dPerformanceProfileOwner_t owner;
-	t3dPerformanceProfileValueKind_t kind;
-	const char *pszProperty;
-	int64_t intValue;
-	double fFloatValue;
-	bool bBoolValue;
+	t3dPerformanceProfileOwner_t m_owner;
+	t3dPerformanceProfileValueKind_t m_kind;
+	const char *m_pszProperty;
+	int64_t m_nIntValue;
+	double m_fFloatValue;
+	bool m_bBoolValue;
 } t3dPerformanceProfileSetting_t;
 
 #define T3D_PROFILE_TERRAIN_INT( name, value ) { T3D_PROFILE_OWNER_TERRAIN, T3D_PROFILE_VALUE_INT, name, ( int64_t ) ( value ), 0.0, false },
@@ -330,13 +330,13 @@ inline constexpr size_t g_nXbox360ExperimentalSettingCount =
 
 static const Color COLOR_NAN{NAN, NAN, NAN, NAN};
 static const Color COLOR_WHITE{1.0f, 1.0f, 1.0f, 1.0f};
-static const Image::Format TERRAIN3D_REGION_MAP_FORMATS[TERRAIN3D_TYPE_MAX_VALUE + 1u] = {
+static const Image::Format TERRAIN3D_REGION_MAP_FORMATS[s_nTypeMaxValue + 1u] = {
 	Image::FORMAT_R16,
 	Image::FORMAT_RF,
 	Image::FORMAT_RGBA8,
-	Image::Format( TERRAIN3D_TYPE_MAX_VALUE ),
+	Image::Format( s_nTypeMaxValue ),
 };
-static constexpr const char *TERRAIN3D_REGION_MAP_TYPE_NAMES[TERRAIN3D_TYPE_MAX_VALUE + 1u] = {
+static constexpr const char *TERRAIN3D_REGION_MAP_TYPE_NAMES[s_nTypeMaxValue + 1u] = {
 	"TYPE_HEIGHT",
 	"TYPE_CONTROL",
 	"TYPE_COLOR",
@@ -346,9 +346,9 @@ static constexpr const char *TERRAIN3D_REGION_MAP_TYPE_NAMES[TERRAIN3D_TYPE_MAX_
 #define COLOR_ROUGHNESS Color( 1.0f, 1.0f, 1.0f, 0.5f )
 #define COLOR_CHECKED Color( 1.f, 1.f, 1.0f, -1.0f )
 #define COLOR_NORMAL Color( 0.5f, 0.5f, 1.0f, 1.0f )
-static constexpr float TERRAIN3D_CONTROL_AUTO_FLOAT = std::numeric_limits<float>::denorm_min();
-#define COLOR_CONTROL Color( TERRAIN3D_CONTROL_AUTO_FLOAT, 0.f, 0.f, 1.0f )
-static const Color TERRAIN3D_REGION_MAP_DEFAULT_COLORS[TERRAIN3D_TYPE_MAX_VALUE + 1u] = {
+static constexpr float s_fControlAutoFloat = std::numeric_limits<float>::denorm_min();
+#define COLOR_CONTROL Color( s_fControlAutoFloat, 0.f, 0.f, 1.0f )
+static const Color TERRAIN3D_REGION_MAP_DEFAULT_COLORS[s_nTypeMaxValue + 1u] = {
 	COLOR_BLACK,
 	COLOR_CONTROL,
 	COLOR_ROUGHNESS,
@@ -391,7 +391,7 @@ typedef struct t3dVector2iHash_s {
 
 typedef struct t3dPairVector2iIntHash_s {
 	std::size_t operator()( const eastl::pair<Vector2i, int> &p ) const {
-		std::size_t h1 = t3dVector2iHash_t{}( p.first );
+		std::size_t h1 = t3dVector2iHash_t{}( p.m_nFirst );
 		std::size_t h2 = eastl::hash<int>{}( p.second );
 		return h1 ^ ( h2 << 1 );
 	}
@@ -409,7 +409,7 @@ typedef struct t3dVector3Hash_s {
 // Set class name for logger.h
 
 #define CLASS_NAME() \
-	const String __class__ = get_class_static() + String( "#" ) + String::num_uint64( get_instance_id() ).right( 4 );
+	const String __class__ = get_class_static() + String( "#" ) + String::num_uint64( get_instance_id() ).m_nRight( 4 );
 
 #define CLASS_NAME_STATIC( pszName ) static inline const char *__class__ = pszName;
 

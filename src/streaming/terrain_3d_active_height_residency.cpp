@@ -38,42 +38,42 @@ t3dActiveHeightResidencyResult_t T3DActiveHeightResidency::update(
 		return result;
 	}
 	const uint64_t topologyGeneration = m_pRepository->getTopologyGeneration();
-	if ( !bForce && !m_bDirty && rFrame.streamingGeneration == m_nStreamingGenerationLast &&
-		topologyGeneration == m_nTopologyGenerationLast && rFrame.activeHeightCenter == m_center ) {
+	if ( !bForce && !m_bDirty && rFrame.m_nStreamingGeneration == m_nStreamingGenerationLast &&
+		topologyGeneration == m_nTopologyGenerationLast && rFrame.m_activeHeightCenter == m_center ) {
 		return result;
 	}
 
-	m_stats.nReconciliationsLastTick = 1;
-	const bool cookedRuntime = !rFrame.bAuthoring && rFrame.bCookedPagesEnabled;
+	m_stats.m_nReconciliationsLastTick = 1;
+	const bool cookedRuntime = !rFrame.m_bAuthoring && rFrame.m_bCookedPagesEnabled;
 	bool allRequiredResident = true;
 	for ( int slot = 0; slot < m_pRepository->getSlotCount(); ++slot ) {
-		++m_stats.nSlotsExaminedLastTick;
+		++m_stats.m_nSlotsExaminedLastTick;
 		const Vector2i location = m_pRepository->getSlotsData()[slot];
 		T3DRegion *const pRegion = location == V2I_MAX ? nullptr : m_pRepository->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() ) {
 			continue;
 		}
 
-		const Vector2i delta = location - rFrame.activeHeightCenter;
-		const bool insideActiveBank = MAX( ABS( delta.x ), ABS( delta.y ) ) <= ACTIVE_RADIUS;
-		const bool required = insideActiveBank && ( rFrame.bAuthoring ||
+		const Vector2i delta = location - rFrame.m_activeHeightCenter;
+		const bool insideActiveBank = MAX( ABS( delta.x ), ABS( delta.y ) ) <= s_nActiveRadius;
+		const bool required = insideActiveBank && ( rFrame.m_bAuthoring ||
 			rFrame.streamingState( location ) >= TERRAIN3D_REGION_STREAMING_HOT );
-		const bool predicted = !rFrame.bAuthoring && rFrame.isPrefetch( location );
+		const bool predicted = !rFrame.m_bAuthoring && rFrame.isPrefetch( location );
 		const bool resident = m_pSamplingStorage->containsActive( location );
 
 		if ( !required ) {
 			if ( resident ) {
 				m_pSamplingStorage->invalidateActive( location );
-				++m_stats.nEvictedLastTick;
+				++m_stats.m_nEvictedLastTick;
 			} else if ( cookedRuntime && predicted ) {
 				m_pRuntimePageStore->request(
 					location, RUNTIME_PAGE_CONSUMER_ACTIVE_HEIGHT, 3u, true );
-				++m_stats.nPredictedRequestsLastTick;
+				++m_stats.m_nPredictedRequestsLastTick;
 			}
 			continue;
 		}
 
-		++m_stats.nRequiredLastTick;
+		++m_stats.m_nRequiredLastTick;
 		if ( resident ) {
 			continue;
 		}
@@ -97,25 +97,25 @@ t3dActiveHeightResidencyResult_t T3DActiveHeightResidency::update(
 			published = m_pSamplingStorage->syncActiveRegion( location, pRegion );
 		}
 		if ( published ) {
-			++m_stats.nPublishedLastTick;
+			++m_stats.m_nPublishedLastTick;
 			continue;
 		}
 
 		allRequiredResident = false;
-		++m_stats.nMissingRequiredLastTick;
-		if ( rFrame.bCpuRegionCacheEnabled && !rFrame.bAuthoring ) {
+		++m_stats.m_nMissingRequiredLastTick;
+		if ( rFrame.m_bCpuRegionCacheEnabled && !rFrame.m_bAuthoring ) {
 			result.requestCpuSource( location );
 			continue;
 		}
-		if ( rFrame.bAuthoring && !m_pSamplingStorage->syncActiveRegion( location, pRegion ) ) {
+		if ( rFrame.m_bAuthoring && !m_pSamplingStorage->syncActiveRegion( location, pRegion ) ) {
 			UtilityFunctions::push_error( vformat(
 				"Terrain3D: Failed to publish required authoring height payload for region %s.", location ) );
 		}
 	}
 
-	m_nStreamingGenerationLast = rFrame.streamingGeneration;
+	m_nStreamingGenerationLast = rFrame.m_nStreamingGeneration;
 	m_nTopologyGenerationLast = topologyGeneration;
-	m_center = rFrame.activeHeightCenter;
+	m_center = rFrame.m_activeHeightCenter;
 	m_bDirty = !allRequiredResident;
 	return result;
 }

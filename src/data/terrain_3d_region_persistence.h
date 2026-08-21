@@ -20,69 +20,69 @@
 class T3DRegionRepository;
 
 typedef struct t3dStagedRegion_s {
-	Vector2i location = V2I_MAX;
-	String path;
-	Ref<T3DRegion> pRegion;
-	PackedByteArray stagedHeight;
-	int nActiveSlot = -1;
+	Vector2i m_location = V2I_MAX;
+	String m_path;
+	Ref<T3DRegion> m_region;
+	PackedByteArray m_stagedHeight;
+	int m_nActiveSlot = -1;
 } t3dStagedRegion_t;
 
 // Complete replacement candidate. No live repository state is mutated while
 // this object is being built or validated.
 typedef struct t3dStagedRepository_s {
-	eastl::vector<t3dStagedRegion_t> regions;
-	Dictionary resources;
-	eastl::array<T3DRegion *, TERRAIN3D_MAX_REGION_SLOTS> regionPtrs = {};
-	eastl::array<Vector2i, TERRAIN3D_MAX_REGION_SLOTS> regionLocations = {};
-	eastl::array<uint16_t, TERRAIN3D_MAX_REGION_SLOTS> logicalRegionMap = {};
-	int nTargetRegionSize = 0;
-	bool bBoundedCpuLoad = false;
+	eastl::vector<t3dStagedRegion_t> m_regions;
+	Dictionary m_resources;
+	eastl::array<T3DRegion *, s_nMaxRegionSlots> m_pRegionPtrs = {};
+	eastl::array<Vector2i, s_nMaxRegionSlots> m_regionLocations = {};
+	eastl::array<uint16_t, s_nMaxRegionSlots> m_logicalRegionMap = {};
+	int m_nTargetRegionSize = 0;
+	bool m_bBoundedCpuLoad = false;
 
 	void reset( void );
-	EA_FORCE_INLINE int getRegionCount( void ) const { return ( int ) ( regions.size() ); }
+	EA_FORCE_INLINE int getRegionCount( void ) const { return ( int ) ( m_regions.size() ); }
 } t3dStagedRepository_t;
 
 typedef struct t3dRegionLoadResult_s {
-	Error error = FAILED;
-	Vector2i location = V2I_MAX;
-	String path;
-	Ref<T3DRegion> pRegion;
-	bool bStorageUpgrade = false;
+	Error m_error = FAILED;
+	Vector2i m_location = V2I_MAX;
+	String m_path;
+	Ref<T3DRegion> m_region;
+	bool m_bStorageUpgrade = false;
 
-	EA_FORCE_INLINE bool succeeded( void ) const { return error == OK && pRegion.is_valid(); }
+	EA_FORCE_INLINE bool succeeded( void ) const { return m_error == OK && m_region.is_valid(); }
 } t3dRegionLoadResult_t;
 
 typedef struct t3dRegionSaveResult_s {
-	Error error = FAILED;
-	Vector2i location = V2I_MAX;
-	String path;
-	bool bFound = false;
-	bool bDeleted = false;
-	bool bSourceChanged = false;
-	bool bSaved = false;
-	bool bSkipped = false;
+	Error m_error = FAILED;
+	Vector2i m_location = V2I_MAX;
+	String m_path;
+	bool m_bFound = false;
+	bool m_bDeleted = false;
+	bool m_bSourceChanged = false;
+	bool m_bSaved = false;
+	bool m_bSkipped = false;
 
-	EA_FORCE_INLINE bool succeeded( void ) const { return error == OK || error == ERR_SKIP; }
+	EA_FORCE_INLINE bool succeeded( void ) const { return m_error == OK || m_error == ERR_SKIP; }
 } t3dRegionSaveResult_t;
 
 typedef struct t3dDirectorySaveResult_s {
-	eastl::vector<t3dRegionSaveResult_t> regions;
-	int nSaved = 0;
-	int nDeleted = 0;
-	int nSkipped = 0;
-	int nFailed = 0;
+	eastl::vector<t3dRegionSaveResult_t> m_regions;
+	int m_nSaved = 0;
+	int m_nDeleted = 0;
+	int m_nSkipped = 0;
+	int m_nFailed = 0;
 } t3dDirectorySaveResult_t;
 
 typedef struct t3dStartupLoadStats_s {
-	uint64_t nTotalUsecLast = 0u;
-	uint64_t nEnumerationUsecLast = 0u;
-	uint64_t nDeserializeUsecLast = 0u;
-	uint64_t nStagingUsecLast = 0u;
-	uint64_t nPublishUsecLast = 0u;
-	uint64_t nFinalizeUsecLast = 0u;
-	int nRegionFilesLast = 0;
-	int nRegionsPublishedLast = 0;
-	bool bSucceededLast = false;
+	uint64_t m_nTotalUsecLast = 0u;
+	uint64_t m_nEnumerationUsecLast = 0u;
+	uint64_t m_nDeserializeUsecLast = 0u;
+	uint64_t m_nStagingUsecLast = 0u;
+	uint64_t m_nPublishUsecLast = 0u;
+	uint64_t m_nFinalizeUsecLast = 0u;
+	int m_nRegionFilesLast = 0;
+	int m_nRegionsPublishedLast = 0;
+	bool m_bSucceededLast = false;
 } t3dStartupLoadStats_t;
 
 // Owns T3DRegion resource serialization and staged repository loading.

@@ -64,7 +64,7 @@ public:
 template <typename T>
 class T3DSlabArray {
 	T3DHighWaterSlab<T> *m_pSlab = nullptr;
-	size_t m_nOffset = 0u;
+	size_t m_iOffset = 0u;
 	size_t m_nCount = 0u;
 	size_t m_nCapacity = 0u;
 
@@ -78,35 +78,35 @@ public:
 	T3DSlabArray( void ) = default;
 	T3DSlabArray( const T3DSlabArray & ) = delete;
 	T3DSlabArray &operator=( const T3DSlabArray & ) = delete;
-	EA_FORCE_INLINE T3DSlabArray( T3DSlabArray &&rOther ) noexcept : m_pSlab( rOther.m_pSlab ), m_nOffset( rOther.m_nOffset ), m_nCount( rOther.m_nCount ), m_nCapacity( rOther.m_nCapacity ) { rOther.m_pSlab = nullptr; rOther.m_nOffset = 0u; rOther.m_nCount = 0u; rOther.m_nCapacity = 0u; }
-	EA_FORCE_INLINE T3DSlabArray &operator=( T3DSlabArray &&rOther ) noexcept { if ( this != &rOther ) { m_pSlab = rOther.m_pSlab; m_nOffset = rOther.m_nOffset; m_nCount = rOther.m_nCount; m_nCapacity = rOther.m_nCapacity; rOther.m_pSlab = nullptr; rOther.m_nOffset = 0u; rOther.m_nCount = 0u; rOther.m_nCapacity = 0u; } return *this; }
+	EA_FORCE_INLINE T3DSlabArray( T3DSlabArray &&rOther ) noexcept : m_pSlab( rOther.m_pSlab ), m_iOffset( rOther.m_iOffset ), m_nCount( rOther.m_nCount ), m_nCapacity( rOther.m_nCapacity ) { rOther.m_pSlab = nullptr; rOther.m_iOffset = 0u; rOther.m_nCount = 0u; rOther.m_nCapacity = 0u; }
+	EA_FORCE_INLINE T3DSlabArray &operator=( T3DSlabArray &&rOther ) noexcept { if ( this != &rOther ) { m_pSlab = rOther.m_pSlab; m_iOffset = rOther.m_iOffset; m_nCount = rOther.m_nCount; m_nCapacity = rOther.m_nCapacity; rOther.m_pSlab = nullptr; rOther.m_iOffset = 0u; rOther.m_nCount = 0u; rOther.m_nCapacity = 0u; } return *this; }
 
-	EA_FORCE_INLINE void bind( T3DHighWaterSlab<T> *const pSlab ) { m_pSlab = pSlab; m_nOffset = 0u; m_nCount = 0u; m_nCapacity = 0u; }
+	EA_FORCE_INLINE void bind( T3DHighWaterSlab<T> *const pSlab ) { m_pSlab = pSlab; m_iOffset = 0u; m_nCount = 0u; m_nCapacity = 0u; }
 	EA_FORCE_INLINE void rebind( T3DHighWaterSlab<T> *const pSlab ) { m_pSlab = pSlab; }
 	EA_FORCE_INLINE bool isBound( void ) const { return m_pSlab != nullptr; }
 
 	void reserve( const size_t nCount ) {
 		if ( nCount <= m_nCapacity || !m_pSlab ) return;
 		const size_t new_capacity = growthCapacity( nCount );
-		const size_t old_offset = m_nOffset;
+		const size_t old_offset = m_iOffset;
 		const size_t old_count = m_nCount;
 		const size_t new_offset = m_pSlab->allocate( new_capacity );
 		if ( new_offset == SIZE_MAX ) return;
 		T *const pData = m_pSlab->data();
 		if ( old_count > 0u ) eastl::copy_n( pData + old_offset, old_count, pData + new_offset );
-		m_nOffset = new_offset;
+		m_iOffset = new_offset;
 		m_nCapacity = new_capacity;
 	}
 
 	void reserveExact( const size_t nCount ) {
 		if ( nCount <= m_nCapacity || !m_pSlab ) return;
-		const size_t old_offset = m_nOffset;
+		const size_t old_offset = m_iOffset;
 		const size_t old_count = m_nCount;
 		const size_t new_offset = m_pSlab->allocate( nCount );
 		if ( new_offset == SIZE_MAX ) return;
 		T *const pData = m_pSlab->data();
 		if ( old_count > 0u ) eastl::copy_n( pData + old_offset, old_count, pData + new_offset );
-		m_nOffset = new_offset;
+		m_iOffset = new_offset;
 		m_nCapacity = nCount;
 	}
 
@@ -132,15 +132,15 @@ public:
 	EA_FORCE_INLINE size_t size( void ) const { return m_nCount; }
 	EA_FORCE_INLINE size_t capacity( void ) const { return m_nCapacity; }
 	EA_FORCE_INLINE bool empty( void ) const { return m_nCount == 0u; }
-	EA_FORCE_INLINE T *data( void ) { return m_pSlab && m_nCapacity > 0u ? m_pSlab->data() + m_nOffset : nullptr; }
-	EA_FORCE_INLINE const T *data( void ) const { return m_pSlab && m_nCapacity > 0u ? m_pSlab->data() + m_nOffset : nullptr; }
+	EA_FORCE_INLINE T *data( void ) { return m_pSlab && m_nCapacity > 0u ? m_pSlab->data() + m_iOffset : nullptr; }
+	EA_FORCE_INLINE const T *data( void ) const { return m_pSlab && m_nCapacity > 0u ? m_pSlab->data() + m_iOffset : nullptr; }
 	EA_FORCE_INLINE T &operator[]( const size_t nIndex ) { return data()[nIndex]; }
 	EA_FORCE_INLINE const T &operator[]( const size_t nIndex ) const { return data()[nIndex]; }
 	EA_FORCE_INLINE T *begin( void ) { return data(); }
 	EA_FORCE_INLINE const T *begin( void ) const { return data(); }
 	EA_FORCE_INLINE T *end( void ) { return data() ? data() + m_nCount : nullptr; }
 	EA_FORCE_INLINE const T *end( void ) const { return data() ? data() + m_nCount : nullptr; }
-	EA_FORCE_INLINE size_t offset( void ) const { return m_nOffset; }
+	EA_FORCE_INLINE size_t offset( void ) const { return m_iOffset; }
 
 	void relocateExact( T3DHighWaterSlab<T> *const pDestination ) {
 		if ( !pDestination ) return;
@@ -152,7 +152,7 @@ public:
 		T *const pDestinationData = pDestination->data();
 		eastl::copy_n( pSource, count, pDestinationData + offset );
 		m_pSlab = pDestination;
-		m_nOffset = offset;
+		m_iOffset = offset;
 		m_nCount = count;
 		m_nCapacity = count;
 	}

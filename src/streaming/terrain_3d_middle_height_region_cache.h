@@ -21,24 +21,24 @@ class T3DRuntimePageStore;
 class T3DSamplingStorage;
 
 typedef struct t3dMiddleHeightRegionCacheConfig_s {
-	bool bAuthoring = false;
-	int nHotRadius = 0;
-	int nResolutionDivisor = 1;
-	int nRetireFrames = TERRAIN3D_GPU_CACHE_DEFAULT_RETIRE_FRAMES;
+	bool m_bAuthoring = false;
+	int m_nHotRadius = 0;
+	int m_nResolutionDivisor = 1;
+	int m_nRetireFrames = s_nGpuCacheDefaultRetireFrames;
 } t3dMiddleHeightRegionCacheConfig_t;
 
 typedef struct t3dMiddleHeightRegionCacheStats_s {
-	int nResident = 0;
-	int nMappedCapacity = 0;
-	int nPhysicalLayers = 0;
-	int nDesiredLastTick = 0;
-	int nMissingRequiredLastTick = 0;
-	int nUploadsLastTick = 0;
-	int nEvictionsLastTick = 0;
-	int nResolutionDivisor = 1;
-	size_t nReservedBytes = 0u;
-	bool bPageTableValid = false;
-	bool bHeightArrayValid = false;
+	int m_nResident = 0;
+	int m_nMappedCapacity = 0;
+	int m_nPhysicalLayers = 0;
+	int m_nDesiredLastTick = 0;
+	int m_nMissingRequiredLastTick = 0;
+	int m_nUploadsLastTick = 0;
+	int m_nEvictionsLastTick = 0;
+	int m_nResolutionDivisor = 1;
+	size_t m_nReservedBytes = 0u;
+	bool m_bPageTableValid = false;
+	bool m_bHeightArrayValid = false;
 } t3dMiddleHeightRegionCacheStats_t;
 
 class T3DMiddleHeightRegionCache {
@@ -76,11 +76,11 @@ private:
 
 	T3DGeneratedTexture m_generatedHeightMaps;
 	T3DGeneratedTexture m_generatedRegionMap;
-	uint16_t m_szRegionMap[TERRAIN3D_MAX_REGION_SLOTS] = {};
-	Vector2i m_szLocations[TERRAIN3D_GPU_HEIGHT_CACHE_MAX_LAYERS] = {};
-	uint64_t m_szLastUseTick[TERRAIN3D_GPU_HEIGHT_CACHE_MAX_LAYERS] = {};
-	uint64_t m_szRetireAfterFrame[TERRAIN3D_GPU_HEIGHT_CACHE_MAX_LAYERS] = {};
-	uint8_t m_szSlotStates[TERRAIN3D_GPU_HEIGHT_CACHE_MAX_LAYERS] = {};
+	uint16_t m_szRegionMap[s_nMaxRegionSlots] = {};
+	Vector2i m_szLocations[s_nGpuHeightCacheMaxLayers] = {};
+	uint64_t m_szLastUseTick[s_nGpuHeightCacheMaxLayers] = {};
+	uint64_t m_szRetireAfterFrame[s_nGpuHeightCacheMaxLayers] = {};
+	uint8_t m_szSlotStates[s_nGpuHeightCacheMaxLayers] = {};
 	int m_nPhysicalLayerCount = 0;
 	int m_nMappedCapacity = 0;
 	int m_nResidentCount = 0;

@@ -92,44 +92,44 @@ typedef enum t3dStage_e {
 } t3dStage_t;
 
 typedef struct t3dRegionSnapshot_s {
-	Vector2i location;
-	int32_t sourceOrder = 0;
-	uint64_t sourceHash = 0;
-	PackedByteArray heightData;
-	PackedByteArray controlData;
+	Vector2i m_location;
+	int32_t m_nSourceOrder = 0;
+	uint64_t m_nSourceHash = 0;
+	PackedByteArray m_heightData;
+	PackedByteArray m_controlData;
 } t3dRegionSnapshot_t;
 
 typedef struct t3dImageSnapshot_s {
-	Vector2i nSize;
-	PackedByteArray rfData;
+	Vector2i m_size;
+	PackedByteArray m_rfData;
 
-	EA_FORCE_INLINE bool isValid( void ) const { return nSize.x > 0 && nSize.y > 0 && rfData.size() >= ( int64_t ) ( nSize.x ) * ( int64_t ) ( nSize.y ) * ( int64_t ) ( sizeof( float ) ); }
-	EA_FORCE_INLINE void clear( void ) { nSize = Vector2i(); rfData.clear(); }
+	EA_FORCE_INLINE bool isValid( void ) const { return m_size.x > 0 && m_size.y > 0 && m_rfData.size() >= ( int64_t ) ( m_size.x ) * ( int64_t ) ( m_size.y ) * ( int64_t ) ( sizeof( float ) ); }
+	EA_FORCE_INLINE void clear( void ) { m_size = Vector2i(); m_rfData.clear(); }
 } t3dImageSnapshot_t;
 
 typedef struct t3dTextureErosionProfile_s {
-	bool bValid = false;
-	bool bEnabled = true;
-	float fHardness = -1.0f;
-	float fHydraulicErodibility = 1.0f;
-	float fWindErodibility = 1.0f;
-	float fWaveErodibility = 1.0f;
-	float fWeatheringSusceptibility = 1.0f;
-	float fOxidationSusceptibility = 1.0f;
-	float fSaltSusceptibility = 1.0f;
-	float fWetDrySusceptibility = 1.0f;
-	float fInfiltrationMultiplier = 1.0f;
-	float fTrafficErodibility = 1.0f;
-	float fCohesion = 0.0f;
-	float fGrainSize = 0.5f;
-	int32_t exposedTextureId = -1;
-	int32_t weatheredTextureId = -1;
-	int32_t oxidizedTextureId = -1;
-	int32_t coarseDepositTextureId = -1;
-	int32_t fineDepositTextureId = -1;
-	int32_t saltWeatheredTextureId = -1;
-	int32_t pavementTextureId = -1;
-	int32_t varnishedTextureId = -1;
+	bool m_bValid = false;
+	bool m_bEnabled = true;
+	float m_fHardness = -1.0f;
+	float m_fHydraulicErodibility = 1.0f;
+	float m_fWindErodibility = 1.0f;
+	float m_fWaveErodibility = 1.0f;
+	float m_fWeatheringSusceptibility = 1.0f;
+	float m_fOxidationSusceptibility = 1.0f;
+	float m_fSaltSusceptibility = 1.0f;
+	float m_fWetDrySusceptibility = 1.0f;
+	float m_fInfiltrationMultiplier = 1.0f;
+	float m_fTrafficErodibility = 1.0f;
+	float m_fCohesion = 0.0f;
+	float m_fGrainSize = 0.5f;
+	int32_t m_nExposedTextureId = -1;
+	int32_t m_nWeatheredTextureId = -1;
+	int32_t m_nOxidizedTextureId = -1;
+	int32_t m_nCoarseDepositTextureId = -1;
+	int32_t m_nFineDepositTextureId = -1;
+	int32_t m_nSaltWeatheredTextureId = -1;
+	int32_t m_nPavementTextureId = -1;
+	int32_t m_nVarnishedTextureId = -1;
 } t3dTextureErosionProfile_t;
 
 typedef enum t3dCurveId_e : uint8_t {
@@ -149,167 +149,167 @@ typedef enum t3dCurveId_e : uint8_t {
 } t3dCurveId_t;
 
 typedef struct t3dConfig_s {
-	double fSimulationYears = 1000.0;
-	int32_t simulationSteps = 128;
-	int32_t requestedResolutionScale = 8;
-	bool bAutoAdjustResolution = true;
-	int32_t memoryBudgetMb = 1024;
-	bool bLivePreviewEnabled = false;
-	int32_t livePreviewIntervalSteps = 4;
-	bool bLivePreviewStartPaused = false;
-	int32_t nThreadCount = 0;
-	uint64_t seed = 1;
-	t3dBoundaryMode_t boundaryMode = BOUNDARY_CLOSED;
-	float fMaxHeightChangePerStep = 0.5f;
-	bool bPreserveHoles = true;
-	bool bApplyHeight = true;
-	float fHeightOutputStrength = 1.0f;
-	float fGlobalIntensity = 1.0f;
-	Rect2 simulationMaskWorldRect;
-	bool bInvertSimulationMask = false;
-	float fEdgeFadeDistanceM = 0.0f;
-	bool bHeightRangeEnabled = false;
-	float fMinimumHeightM = -1000000.0f;
-	float fMaximumHeightM = 1000000.0f;
-	float fHeightRangeFalloffM = 0.0f;
+	double m_fSimulationYears = 1000.0;
+	int32_t m_nSimulationSteps = 128;
+	int32_t m_nRequestedResolutionScale = 8;
+	bool m_bAutoAdjustResolution = true;
+	int32_t m_nMemoryBudgetMb = 1024;
+	bool m_bLivePreviewEnabled = false;
+	int32_t m_nLivePreviewIntervalSteps = 4;
+	bool m_bLivePreviewStartPaused = false;
+	int32_t m_nThreadCount = 0;
+	uint64_t m_nSeed = 1;
+	t3dBoundaryMode_t m_boundaryMode = BOUNDARY_CLOSED;
+	float m_fMaxHeightChangePerStep = 0.5f;
+	bool m_bPreserveHoles = true;
+	bool m_bApplyHeight = true;
+	float m_fHeightOutputStrength = 1.0f;
+	float m_fGlobalIntensity = 1.0f;
+	Rect2 m_simulationMaskWorldRect;
+	bool m_bInvertSimulationMask = false;
+	float m_fEdgeFadeDistanceM = 0.0f;
+	bool m_bHeightRangeEnabled = false;
+	float m_fMinimumHeightM = -1000000.0f;
+	float m_fMaximumHeightM = 1000000.0f;
+	float m_fHeightRangeFalloffM = 0.0f;
 
-	bool bHydraulicEnabled = true;
-	float fRainfallMPerYear = 0.002f;
-	float fRainfallVariation = 0.25f;
-	float fEvaporationFraction = 0.18f;
-	float fInfiltrationFraction = 0.05f;
-	float fFlowRate = 0.65f;
-	float fSedimentCapacity = 1.25f;
-	float fHydraulicErosionMPerYear = 0.0002f;
-	float fHydraulicDepositionRate = 0.35f;
-	float fMinimumSlope = 0.001f;
-	float fStormFrequency = 1.0f;
-	float fStormIntensity = 1.0f;
-	float fChannelIncisionStrength = 0.0f;
-	float fStandingWaterDepositionRate = 0.0f;
-	bool bSedimentSortingEnabled = true;
-	float fCoarseTransportMultiplier = 0.35f;
-	float fSandTransportMultiplier = 1.0f;
-	float fFineTransportMultiplier = 1.5f;
-	float fCoarseSettlingRate = 0.75f;
-	float fSandSettlingRate = 0.35f;
-	float fFineSettlingRate = 0.08f;
-	bool bAlluvialFanEnabled = false;
-	float fAlluvialFanStrength = 0.75f;
-	float fAlluvialFanSlopeDrop = 0.02f;
-	float fAlluvialFanSpread = 0.35f;
-	bool bDebrisFlowEnabled = false;
-	float fDebrisFlowConcentrationThreshold = 0.35f;
-	float fDebrisFlowSlopeThreshold = 0.02f;
-	float fDebrisFlowRate = 0.35f;
-	float fDebrisFlowDepositionRate = 0.65f;
-	int32_t debrisFlowRunoutCells = 4;
+	bool m_bHydraulicEnabled = true;
+	float m_fRainfallMPerYear = 0.002f;
+	float m_fRainfallVariation = 0.25f;
+	float m_fEvaporationFraction = 0.18f;
+	float m_fInfiltrationFraction = 0.05f;
+	float m_fFlowRate = 0.65f;
+	float m_fSedimentCapacity = 1.25f;
+	float m_fHydraulicErosionMPerYear = 0.0002f;
+	float m_fHydraulicDepositionRate = 0.35f;
+	float m_fMinimumSlope = 0.001f;
+	float m_fStormFrequency = 1.0f;
+	float m_fStormIntensity = 1.0f;
+	float m_fChannelIncisionStrength = 0.0f;
+	float m_fStandingWaterDepositionRate = 0.0f;
+	bool m_bSedimentSortingEnabled = true;
+	float m_fCoarseTransportMultiplier = 0.35f;
+	float m_fSandTransportMultiplier = 1.0f;
+	float m_fFineTransportMultiplier = 1.5f;
+	float m_fCoarseSettlingRate = 0.75f;
+	float m_fSandSettlingRate = 0.35f;
+	float m_fFineSettlingRate = 0.08f;
+	bool m_bAlluvialFanEnabled = false;
+	float m_fAlluvialFanStrength = 0.75f;
+	float m_fAlluvialFanSlopeDrop = 0.02f;
+	float m_fAlluvialFanSpread = 0.35f;
+	bool m_bDebrisFlowEnabled = false;
+	float m_fDebrisFlowConcentrationThreshold = 0.35f;
+	float m_fDebrisFlowSlopeThreshold = 0.02f;
+	float m_fDebrisFlowRate = 0.35f;
+	float m_fDebrisFlowDepositionRate = 0.65f;
+	int32_t m_nDebrisFlowRunoutCells = 4;
 
-	bool bWeatheringEnabled = true;
-	float fPhysicalWeatheringMPerYear = 0.00005f;
-	float fChemicalWeatheringMPerYear = 0.00002f;
-	float fFreezeThawStrength = 0.25f;
-	float fTalusAngleDegrees = 35.0f;
-	float fThermalCreepRate = 0.2f;
-	float fBaseHardness = 0.72f;
-	float fHardnessVariation = 0.12f;
-	bool bOxidationEnabled = true;
-	float fOxidationRatePerYear = 0.0001f;
-	float fOxidationWeakening = 0.2f;
-	float fWeatheringSlopeBias = 1.0f;
-	float fChemicalMoistureExponent = 1.0f;
-	float fFreezePoint = 0.0f;
-	bool bWetDryEnabled = false;
-	float fWetDryWeatheringMPerCycle = 0.0005f;
-	float fWetThreshold = 0.05f;
-	float fDryThreshold = 0.01f;
-	bool bSaltWeatheringEnabled = false;
-	Rect2 salinityWorldRect;
-	float fBackgroundSalinity = 0.0f;
-	float fSaltWeatheringMPerYear = 0.00005f;
-	float fSaltCrystallizationStrength = 1.0f;
-	float fSaltEvaporationBias = 1.0f;
-	float fSaltCohesionLoss = 0.25f;
-	bool bExposureAgeEnabled = false;
-	float fVarnishMaturationYears = 5000.0f;
-	float fExposureResetDepthM = 0.02f;
-	float fVarnishStabilitySlope = 0.25f;
-	float fVarnishOxidationMultiplier = 1.0f;
-	bool bSnowmeltEnabled = false;
-	float fSnowfallFraction = 0.65f;
-	float fSnowAccumulationTemperature = 0.0f;
-	float fSnowMeltTemperature = 0.1f;
-	float fSnowMeltFractionPerStep = 0.25f;
-	float fSnowSublimationFraction = 0.02f;
+	bool m_bWeatheringEnabled = true;
+	float m_fPhysicalWeatheringMPerYear = 0.00005f;
+	float m_fChemicalWeatheringMPerYear = 0.00002f;
+	float m_fFreezeThawStrength = 0.25f;
+	float m_fTalusAngleDegrees = 35.0f;
+	float m_fThermalCreepRate = 0.2f;
+	float m_fBaseHardness = 0.72f;
+	float m_fHardnessVariation = 0.12f;
+	bool m_bOxidationEnabled = true;
+	float m_fOxidationRatePerYear = 0.0001f;
+	float m_fOxidationWeakening = 0.2f;
+	float m_fWeatheringSlopeBias = 1.0f;
+	float m_fChemicalMoistureExponent = 1.0f;
+	float m_fFreezePoint = 0.0f;
+	bool m_bWetDryEnabled = false;
+	float m_fWetDryWeatheringMPerCycle = 0.0005f;
+	float m_fWetThreshold = 0.05f;
+	float m_fDryThreshold = 0.01f;
+	bool m_bSaltWeatheringEnabled = false;
+	Rect2 m_salinityWorldRect;
+	float m_fBackgroundSalinity = 0.0f;
+	float m_fSaltWeatheringMPerYear = 0.00005f;
+	float m_fSaltCrystallizationStrength = 1.0f;
+	float m_fSaltEvaporationBias = 1.0f;
+	float m_fSaltCohesionLoss = 0.25f;
+	bool m_bExposureAgeEnabled = false;
+	float m_fVarnishMaturationYears = 5000.0f;
+	float m_fExposureResetDepthM = 0.02f;
+	float m_fVarnishStabilitySlope = 0.25f;
+	float m_fVarnishOxidationMultiplier = 1.0f;
+	bool m_bSnowmeltEnabled = false;
+	float m_fSnowfallFraction = 0.65f;
+	float m_fSnowAccumulationTemperature = 0.0f;
+	float m_fSnowMeltTemperature = 0.1f;
+	float m_fSnowMeltFractionPerStep = 0.25f;
+	float m_fSnowSublimationFraction = 0.02f;
 
-	bool bWindEnabled = false;
-	Vector2 windDirection = Vector2( 1.0f, 0.0f );
-	float fWindStrength = 1.0f;
-	float fWindVariation = 0.2f;
-	float fWindErosionMPerYear = 0.00005f;
-	float fWindTransportRate = 0.25f;
-	float fWindDepositionRate = 0.4f;
-	float fWindShelterStrength = 0.6f;
-	float fWindThreshold = 0.0f;
-	int32_t windTransportDistanceCells = 1;
-	float fWindDepositionSlopeBias = 0.0f;
-	bool bDuneEnabled = false;
-	float fSandReposeAngleDegrees = 33.0f;
-	float fDuneAvalancheRate = 0.35f;
-	int32_t duneRelaxationIterations = 2;
-	float fDuneMinSandDepthM = 0.02f;
-	bool bDesertPavementEnabled = false;
-	float fPavementFormationRate = 0.25f;
-	float fPavementFineRemovalThreshold = 0.4f;
-	float fPavementArmorStrength = 0.65f;
-	float fPavementInfiltrationReduction = 0.25f;
+	bool m_bWindEnabled = false;
+	Vector2 m_windDirection = Vector2( 1.0f, 0.0f );
+	float m_fWindStrength = 1.0f;
+	float m_fWindVariation = 0.2f;
+	float m_fWindErosionMPerYear = 0.00005f;
+	float m_fWindTransportRate = 0.25f;
+	float m_fWindDepositionRate = 0.4f;
+	float m_fWindShelterStrength = 0.6f;
+	float m_fWindThreshold = 0.0f;
+	int32_t m_nWindTransportDistanceCells = 1;
+	float m_fWindDepositionSlopeBias = 0.0f;
+	bool m_bDuneEnabled = false;
+	float m_fSandReposeAngleDegrees = 33.0f;
+	float m_fDuneAvalancheRate = 0.35f;
+	int32_t m_nDuneRelaxationIterations = 2;
+	float m_fDuneMinSandDepthM = 0.02f;
+	bool m_bDesertPavementEnabled = false;
+	float m_fPavementFormationRate = 0.25f;
+	float m_fPavementFineRemovalThreshold = 0.4f;
+	float m_fPavementArmorStrength = 0.65f;
+	float m_fPavementInfiltrationReduction = 0.25f;
 
-	bool bWaveEnabled = false;
-	float fSeaLevel = 0.0f;
-	float fTidalRange = 2.0f;
-	Vector2 waveDirection = Vector2( 1.0f, 0.0f );
-	float fWaveStrength = 1.0f;
-	float fWaveErosionMPerYear = 0.001f;
-	float fWaveDepositionRate = 0.65f;
-	float fCoastlineBandM = 12.0f;
-	float fWaveFetchDistanceM = 512.0f;
-	float fWaveUndercutBias = 1.5f;
-	float fBeachSmoothing = 0.0f;
+	bool m_bWaveEnabled = false;
+	float m_fSeaLevel = 0.0f;
+	float m_fTidalRange = 2.0f;
+	Vector2 m_waveDirection = Vector2( 1.0f, 0.0f );
+	float m_fWaveStrength = 1.0f;
+	float m_fWaveErosionMPerYear = 0.001f;
+	float m_fWaveDepositionRate = 0.65f;
+	float m_fCoastlineBandM = 12.0f;
+	float m_fWaveFetchDistanceM = 512.0f;
+	float m_fWaveUndercutBias = 1.5f;
+	float m_fBeachSmoothing = 0.0f;
 
-	bool bTrafficEnabled = false;
-	Rect2 trafficWorldRect;
-	float fTrafficErosionMPerYear = 0.0002f;
-	float fTrafficCompaction = 0.75f;
-	float fTrafficSmoothing = 0.2f;
-	float fTrafficRunoffMultiplier = 1.5f;
-	float fTrafficThreshold = 0.0f;
-	int32_t trafficWideningCells = 0;
+	bool m_bTrafficEnabled = false;
+	Rect2 m_trafficWorldRect;
+	float m_fTrafficErosionMPerYear = 0.0002f;
+	float m_fTrafficCompaction = 0.75f;
+	float m_fTrafficSmoothing = 0.2f;
+	float m_fTrafficRunoffMultiplier = 1.5f;
+	float m_fTrafficThreshold = 0.0f;
+	int32_t m_nTrafficWideningCells = 0;
 
-	bool bStratigraphyEnabled = false;
-	float fSurfaceLayerDepthM = 2.0f;
-	Rect2 surfaceLayerDepthWorldRect;
-	float fBedrockHardness = 0.9f;
-	Rect2 bedrockHardnessWorldRect;
-	float fStratigraphyTransitionWidthM = 0.5f;
+	bool m_bStratigraphyEnabled = false;
+	float m_fSurfaceLayerDepthM = 2.0f;
+	Rect2 m_surfaceLayerDepthWorldRect;
+	float m_fBedrockHardness = 0.9f;
+	Rect2 m_bedrockHardnessWorldRect;
+	float m_fStratigraphyTransitionWidthM = 0.5f;
 
-	bool bMaterialOutputEnabled = false;
-	bool bPreserveControlFlags = true;
-	bool bResolveAutoMaterials = true;
-	float fMaterialTransitionStrength = 1.0f;
-	float fMaterialTransitionThreshold = 0.05f;
-	float fMaterialTransitionDepthM = 0.25f;
-	bool bAutoShaderEnabled = false;
-	int32_t autoBaseTexture = 0;
-	int32_t autoOverlayTexture = 1;
-	float fAutoSlope = 1.0f;
-	float fAutoHeightReduction = 0.0f;
-	eastl::array<t3dTextureErosionProfile_t, TERRAIN3D_EROSION_TEXTURE_PROFILE_COUNT> szTextureProfiles;
-	bool bOxidationColorEnabled = false;
-	Color oxidationTint = Color( 0.45f, 0.19f, 0.07f, 1.0f );
-	float fOxidationTintStrength = 0.45f;
+	bool m_bMaterialOutputEnabled = false;
+	bool m_bPreserveControlFlags = true;
+	bool m_bResolveAutoMaterials = true;
+	float m_fMaterialTransitionStrength = 1.0f;
+	float m_fMaterialTransitionThreshold = 0.05f;
+	float m_fMaterialTransitionDepthM = 0.25f;
+	bool m_bAutoShaderEnabled = false;
+	int32_t m_nAutoBaseTexture = 0;
+	int32_t m_nAutoOverlayTexture = 1;
+	float m_fAutoSlope = 1.0f;
+	float m_fAutoHeightReduction = 0.0f;
+	eastl::array<t3dTextureErosionProfile_t, s_nErosionTextureProfileCount> m_textureProfiles;
+	bool m_bOxidationColorEnabled = false;
+	Color m_oxidationTint = Color( 0.45f, 0.19f, 0.07f, 1.0f );
+	float m_fOxidationTintStrength = 0.45f;
 
-	eastl::vector<float> fCurveSamples;
-	int32_t curveStride = 0;
+	eastl::vector<float> m_curveSamples;
+	int32_t m_nCurveStride = 0;
 } t3dConfig_t;
 
 class T3DErosionJob : public RefCounted {
@@ -346,7 +346,7 @@ private:
 	t3dConfig_t m_config;
 	eastl::vector<t3dRegionSnapshot_t> m_regions;
 	eastl::vector<eastl::array<int32_t, 4>> m_szRegionNeighbors;
-	int32_t m_szRegionLookup[TERRAIN3D_EROSION_REGION_LOOKUP_CAPACITY] = {};
+	int32_t m_szRegionLookup[s_nErosionRegionLookupCapacity] = {};
 	int32_t m_nSourceRegionSize = 0;
 	int32_t m_nSimulationRegionSize = 0;
 	int32_t m_nSimulationRegionShift = 0;
@@ -530,12 +530,12 @@ public:
 	EA_FORCE_INLINE bool wasCancelled( void ) const { return m_state.load() == STATE_CANCELLED; }
 	EA_FORCE_INLINE int32_t getEffectiveResolutionScale( void ) const { return m_resolutionScale; }
 	EA_FORCE_INLINE int32_t getCompletedSteps( void ) const { return m_nCompletedSteps.load(); }
-	EA_FORCE_INLINE bool isLivePreviewEnabled( void ) const { return m_config.bLivePreviewEnabled; }
+	EA_FORCE_INLINE bool isLivePreviewEnabled( void ) const { return m_config.m_bLivePreviewEnabled; }
 	EA_FORCE_INLINE bool isPreviewPaused( void ) const { return m_bPreviewPaused.load(); }
 	EA_FORCE_INLINE bool isPreviewWaiting( void ) const { return m_bPreviewWaiting.load(); }
 	EA_FORCE_INLINE int32_t getPreviewRevision( void ) const { return m_previewRevision.load(); }
 	EA_FORCE_INLINE int32_t getPreviewStep( void ) const { return m_previewStep.load(); }
-	EA_FORCE_INLINE int32_t getSimulationSteps( void ) const { return m_config.simulationSteps; }
+	EA_FORCE_INLINE int32_t getSimulationSteps( void ) const { return m_config.m_nSimulationSteps; }
 	EA_FORCE_INLINE int32_t getSimulationRegionSize( void ) const { return m_nSimulationRegionSize; }
 	EA_FORCE_INLINE float getPreviewCellSize( void ) const { return m_fCellSize; }
 	Dictionary getStatistics( void ) const;

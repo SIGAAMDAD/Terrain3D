@@ -16,9 +16,9 @@ typedef enum t3dConditionalOwnership_e {
 } t3dConditionalOwnership_t;
 
 typedef struct t3dConditionalFrame_s {
-	t3dConditionalOwnership_t ownership = T3D_CONDITIONAL_PRESERVED;
-	bool bParentEmit = true;
-	bool bBranchTaken = false;
+	t3dConditionalOwnership_t m_ownership = T3D_CONDITIONAL_PRESERVED;
+	bool m_bParentEmit = true;
+	bool m_bBranchTaken = false;
 } t3dConditionalFrame_t;
 
 class T3DStaticExpressionParser {
@@ -48,39 +48,39 @@ class T3DStaticExpressionParser {
 
 	bool getMacroValue( const String &rName, int64_t &nValue ) {
 		if ( rName == "T3D_TERRAIN_SAMPLING_MODE" ) {
-			nValue = m_state.terrainSamplingMode;
+			nValue = m_state.m_nTerrainSamplingMode;
 		} else if ( rName == "T3D_TERRAIN_NORMAL_MODE" ) {
-			nValue = m_state.terrainNormalMode;
+			nValue = m_state.m_nTerrainNormalMode;
 		} else if ( rName == "T3D_COLOR_SAMPLING_MODE" ) {
-			nValue = m_state.colorSamplingMode;
+			nValue = m_state.m_nColorSamplingMode;
 		} else if ( rName == "T3D_PROJECTION_MODE" ) {
-			nValue = m_state.projectionMode;
+			nValue = m_state.m_nProjectionMode;
 		} else if ( rName == "T3D_TEXTURE_SURFACE_MODE" ) {
-			nValue = m_state.textureSurfaceMode;
+			nValue = m_state.m_nTextureSurfaceMode;
 		} else if ( rName == "T3D_SAMPLE_SURFACE_DATA" ) {
-			nValue = m_state.bSampleSurfaceData ? 1 : 0;
+			nValue = m_state.m_bSampleSurfaceData ? 1 : 0;
 		} else if ( rName == "T3D_OUTPUT_ROUGHNESS" ) {
-			nValue = m_state.bOutputRoughness ? 1 : 0;
+			nValue = m_state.m_bOutputRoughness ? 1 : 0;
 		} else if ( rName == "T3D_OUTPUT_SPECULAR" ) {
-			nValue = m_state.bOutputSpecular ? 1 : 0;
+			nValue = m_state.m_bOutputSpecular ? 1 : 0;
 		} else if ( rName == "T3D_OUTPUT_NORMAL_MAP" ) {
-			nValue = m_state.bOutputNormalMap ? 1 : 0;
+			nValue = m_state.m_bOutputNormalMap ? 1 : 0;
 		} else if ( rName == "T3D_OUTPUT_AO" ) {
-			nValue = m_state.bOutputAo ? 1 : 0;
+			nValue = m_state.m_bOutputAo ? 1 : 0;
 		} else if ( rName == "T3D_SHADING_MODE" ) {
-			nValue = m_state.terrainShadingMode;
+			nValue = m_state.m_nTerrainShadingMode;
 		} else if ( rName == "T3D_DETILING_MODE" ) {
-			nValue = m_state.detilingMode;
+			nValue = m_state.m_nDetilingMode;
 		} else if ( rName == "T3D_WORLD_NOISE_SHADER_MODE" ) {
-			nValue = m_state.worldNoiseShaderMode;
+			nValue = m_state.m_nWorldNoiseShaderMode;
 		} else if ( rName == "T3D_FAST_BLEND_CURVE" ) {
-			nValue = m_state.bFastBlendCurve ? 1 : 0;
+			nValue = m_state.m_bFastBlendCurve ? 1 : 0;
 		} else if ( rName == "T3D_CONTROL_MAPS_IMPLICIT" ) {
-			nValue = m_state.bControlMapsImplicit ? 1 : 0;
+			nValue = m_state.m_bControlMapsImplicit ? 1 : 0;
 		} else if ( rName == "T3D_COLOR_MAPS_IMPLICIT" ) {
-			nValue = m_state.bColorMapsImplicit ? 1 : 0;
+			nValue = m_state.m_bColorMapsImplicit ? 1 : 0;
 		} else if ( rName == "T3D_AUTO_SHADER_ENABLED" ) {
-			nValue = m_state.bAutoShaderEnabled ? 1 : 0;
+			nValue = m_state.m_bAutoShaderEnabled ? 1 : 0;
 		} else {
 			m_error = "Unknown Terrain3D shader macro: " + rName;
 			return false;
@@ -263,7 +263,7 @@ static bool t3dShaderSpecializerExpandShaderSourceRecursive(
 	const String &rPath, Vector<String> &rStack,
 	String &rOutputSource, String &rFailureSummary
 ) {
-	if ( rStack.size() >= TERRAIN3D_SHADER_MAX_CONDITIONAL_DEPTH ) {
+	if ( rStack.size() >= s_nShaderMaxConditionalDepth ) {
 		rFailureSummary = "Terrain3D shader include depth exceeded while expanding: " + rPath;
 		return false;
 	}
@@ -321,7 +321,7 @@ static bool t3dShaderSpecializerExpandShaderSourceRecursive(
 	return true;
 }
 
-bool terrain3dExpandShaderIncludes(
+bool t3dExpandShaderIncludes(
 	const String &rRootPath, String &rOutputSource, String &rFailureSummary
 ) {
 	Vector<String> stack;
@@ -330,7 +330,7 @@ bool terrain3dExpandShaderIncludes(
 	return t3dShaderSpecializerExpandShaderSourceRecursive( rRootPath, stack, rOutputSource, rFailureSummary );
 }
 
-bool terrain3dValidateAssembledShaderSource(
+bool t3dValidateAssembledShaderSource(
 	const String &rSource, String &rFailureSummary
 ) {
 	const PackedStringArray lines = rSource.split( "\n", true );
@@ -352,14 +352,14 @@ bool terrain3dValidateAssembledShaderSource(
 	return true;
 }
 
-bool terrain3dAssembleShaderSource(
+bool t3dAssembleShaderSource(
 	const String &rExpandedSource, const t3dShaderStaticState_t &rState,
 	const PackedStringArray &rEnabledFeatures, String &rOutputSource,
 	String &rFailureSummary
 ) {
 	const PackedStringArray lines = rExpandedSource.split( "\n", true );
 	PackedStringArray output;
-	t3dConditionalFrame_t stack[TERRAIN3D_SHADER_MAX_CONDITIONAL_DEPTH] = {};
+	t3dConditionalFrame_t stack[s_nShaderMaxConditionalDepth] = {};
 	int depth = 0;
 	bool bEmit = true;
 	bool bSkipStandaloneDefaults = false;
@@ -390,7 +390,7 @@ bool terrain3dAssembleShaderSource(
 		const bool bIfdef = directive.begins_with( "#ifdef " );
 		const bool bIfndef = directive.begins_with( "#ifndef " );
 		if ( bIfdef || bIfndef ) {
-			if ( depth >= TERRAIN3D_SHADER_MAX_CONDITIONAL_DEPTH ) {
+			if ( depth >= s_nShaderMaxConditionalDepth ) {
 				rFailureSummary = "Terrain3D shader conditional depth exceeded at line " + String::num_int64( line_index + 1 );
 				return false;
 			}
@@ -410,9 +410,9 @@ bool terrain3dAssembleShaderSource(
 			}
 
 			t3dConditionalFrame_t &frame = stack[depth++];
-			frame.bParentEmit = bEmit;
-			frame.bBranchTaken = bOwned && bValue;
-			frame.ownership = bOwned ? T3D_CONDITIONAL_SPECIALIZED : T3D_CONDITIONAL_PRESERVED;
+			frame.m_bParentEmit = bEmit;
+			frame.m_bBranchTaken = bOwned && bValue;
+			frame.m_ownership = bOwned ? T3D_CONDITIONAL_SPECIALIZED : T3D_CONDITIONAL_PRESERVED;
 			if ( bOwned ) {
 				bEmit = bEmit && bValue;
 			} else if ( bEmit ) {
@@ -422,7 +422,7 @@ bool terrain3dAssembleShaderSource(
 		}
 
 		if ( directive.begins_with( "#if " ) ) {
-			if ( depth >= TERRAIN3D_SHADER_MAX_CONDITIONAL_DEPTH ) {
+			if ( depth >= s_nShaderMaxConditionalDepth ) {
 				rFailureSummary = "Terrain3D shader conditional depth exceeded at line " + String::num_int64( line_index + 1 );
 				return false;
 			}
@@ -438,9 +438,9 @@ bool terrain3dAssembleShaderSource(
 				}
 			}
 			t3dConditionalFrame_t &frame = stack[depth++];
-			frame.bParentEmit = bEmit;
-			frame.bBranchTaken = bOwned && bValue;
-			frame.ownership = bOwned ? T3D_CONDITIONAL_SPECIALIZED : T3D_CONDITIONAL_PRESERVED;
+			frame.m_bParentEmit = bEmit;
+			frame.m_bBranchTaken = bOwned && bValue;
+			frame.m_ownership = bOwned ? T3D_CONDITIONAL_SPECIALIZED : T3D_CONDITIONAL_PRESERVED;
 			if ( bOwned ) {
 				bEmit = bEmit && bValue;
 			} else if ( bEmit ) {
@@ -455,11 +455,11 @@ bool terrain3dAssembleShaderSource(
 				return false;
 			}
 			t3dConditionalFrame_t &frame = stack[depth - 1];
-			if ( frame.ownership == T3D_CONDITIONAL_PRESERVED ) {
-				if ( frame.bParentEmit ) {
+			if ( frame.m_ownership == T3D_CONDITIONAL_PRESERVED ) {
+				if ( frame.m_bParentEmit ) {
 					output.push_back( line );
 				}
-				bEmit = frame.bParentEmit;
+				bEmit = frame.m_bParentEmit;
 				continue;
 			}
 			const String expression = directive.substr( 6 ).strip_edges();
@@ -475,9 +475,9 @@ bool terrain3dAssembleShaderSource(
 					": " + rFailureSummary + " [" + expression + "]";
 				return false;
 			}
-			const bool bSelect = !frame.bBranchTaken && bValue;
-			frame.bBranchTaken = frame.bBranchTaken || bValue;
-			bEmit = frame.bParentEmit && bSelect;
+			const bool bSelect = !frame.m_bBranchTaken && bValue;
+			frame.m_bBranchTaken = frame.m_bBranchTaken || bValue;
+			bEmit = frame.m_bParentEmit && bSelect;
 			continue;
 		}
 
@@ -487,15 +487,15 @@ bool terrain3dAssembleShaderSource(
 				return false;
 			}
 			t3dConditionalFrame_t &frame = stack[depth - 1];
-			if ( frame.ownership == T3D_CONDITIONAL_PRESERVED ) {
-				if ( frame.bParentEmit ) {
+			if ( frame.m_ownership == T3D_CONDITIONAL_PRESERVED ) {
+				if ( frame.m_bParentEmit ) {
 					output.push_back( line );
 				}
-				bEmit = frame.bParentEmit;
+				bEmit = frame.m_bParentEmit;
 				continue;
 			}
-			bEmit = frame.bParentEmit && !frame.bBranchTaken;
-			frame.bBranchTaken = true;
+			bEmit = frame.m_bParentEmit && !frame.m_bBranchTaken;
+			frame.m_bBranchTaken = true;
 			continue;
 		}
 
@@ -505,10 +505,10 @@ bool terrain3dAssembleShaderSource(
 				return false;
 			}
 			const t3dConditionalFrame_t frame = stack[--depth];
-			if ( frame.ownership == T3D_CONDITIONAL_PRESERVED && frame.bParentEmit ) {
+			if ( frame.m_ownership == T3D_CONDITIONAL_PRESERVED && frame.m_bParentEmit ) {
 				output.push_back( line );
 			}
-			bEmit = frame.bParentEmit;
+			bEmit = frame.m_bParentEmit;
 			continue;
 		}
 
@@ -530,7 +530,7 @@ bool terrain3dAssembleShaderSource(
 	if ( rExpandedSource.ends_with( "\n" ) ) {
 		assembled += "\n";
 	}
-	if ( !terrain3dValidateAssembledShaderSource( assembled, rFailureSummary ) ) {
+	if ( !t3dValidateAssembledShaderSource( assembled, rFailureSummary ) ) {
 		return false;
 	}
 	rOutputSource = assembled;

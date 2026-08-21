@@ -29,34 +29,34 @@ typedef enum t3dCollisionMode_e {
 } t3dCollisionMode_t;
 
 typedef struct t3dCollisionShapeData_s {
-	int nWidth = 0;
-	int depth = 0;
-	Transform3D transform = Transform3D( Basis(), V3_MAX );
-	real_t fMinHeight = 0.0f;
-	real_t fMaxHeight = 0.0f;
-	bool bValid = false;
+	int m_nWidth = 0;
+	int m_nDepth = 0;
+	Transform3D m_transform = Transform3D( Basis(), V3_MAX );
+	real_t m_fMinHeight = 0.0f;
+	real_t m_fMaxHeight = 0.0f;
+	bool m_bValid = false;
 } t3dCollisionShapeData_t;
 
 typedef struct t3dCollisionShapeRecord_s {
-	CollisionShape3D *pNode = nullptr;
-	RID rid;
-	Transform3D transform = Transform3D( Basis(), V3_MAX );
-	Vector2i gridPosition = V2I_MAX;
-	t3dCollisionShapeData_t data;
+	CollisionShape3D *m_pNode = nullptr;
+	RID m_hRid;
+	Transform3D m_transform = Transform3D( Basis(), V3_MAX );
+	Vector2i m_gridPosition = V2I_MAX;
+	t3dCollisionShapeData_t m_data;
 	// Dynamic collision alternates retained pBuffers to avoid copy-on-write
 	// allocation while shapes are updated every grid step. Full collision uses
 	// one shared upload scratch buffer because pRegion shapes update rarely.
-	eastl::array<PackedRealArray, 2> szDynamicHeightBuffers;
-	uint8_t uploadedHeightBuffer = 0;
-	uint8_t pendingHeightBuffer = 1;
-	bool bDisabled = true;
+	eastl::array<PackedRealArray, 2> m_dynamicHeightBuffers;
+	uint8_t m_nUploadedHeightBuffer = 0;
+	uint8_t m_nPendingHeightBuffer = 1;
+	bool m_bDisabled = true;
 } t3dCollisionShapeRecord_t;
 
 typedef struct t3dCollisionRegionCacheEntry_s {
-	Vector2i location = V2I_MAX;
-	PackedFloat32Array heights;
-	int nWidth = 0;
-	uint64_t nLastUseTick = 0u;
+	Vector2i m_location = V2I_MAX;
+	PackedFloat32Array m_heights;
+	int m_nWidth = 0;
+	uint64_t m_nLastUseTick = 0u;
 } t3dCollisionRegionCacheEntry_t;
 
 class T3DCollision : public Object {
@@ -76,7 +76,7 @@ private:
 	uint32_t m_layer = 1;
 	uint32_t m_nMask = 1;
 	real_t m_fPriority = 1.f;
-	Ref<PhysicsMaterial> m_pPhysicsMaterial;
+	Ref<PhysicsMaterial> m_physicsMaterial;
 
 
 
@@ -85,23 +85,23 @@ private:
 	// Work data. Shape records own all state so updates never read it back from
 	// PhysicsServer. Height arrays retain caller-side capacity across grid moves;
 	// submitting a changed heightmap remains linear in the sample count.
-	RID m_staticBodyRid;				  // Physics Server Static Body
+	RID m_hStaticBodyRid;				  // Physics Server Static Body
 	StaticBody3D *m_pStaticBody = nullptr; // Editor mode StaticBody3D
 	eastl::vector<t3dCollisionShapeRecord_t> m_shapeRecords;
-	eastl::array<int32_t, TERRAIN3D_MAX_REGION_SLOTS> m_gridScratch{};
-	eastl::array<int32_t, TERRAIN3D_MAX_REGION_SLOTS> m_inactiveShapeIds{};
+	eastl::array<int32_t, s_nMaxRegionSlots> m_gridScratch{};
+	eastl::array<int32_t, s_nMaxRegionSlots> m_inactiveShapeIds{};
 	int m_nInactiveShapeCount = 0;
 	PackedRealArray m_fullHeightScratch;
 	PackedFloat32Array m_collisionSurfaceScratch;
 	T3DCollisionSurfaceBuilder m_collisionSurfaceBuilder;
 
 
-	static constexpr int TERRAIN3D_COLLISION_BAKED_CACHE_AXIS =
-		( 2 * ( 256 + 64 + TERRAIN3D_MIN_REGION_SIZE ) / TERRAIN3D_MIN_REGION_SIZE ) + 1;
-	static constexpr int TERRAIN3D_COLLISION_BAKED_CACHE_CAPACITY =
-		TERRAIN3D_COLLISION_BAKED_CACHE_AXIS * TERRAIN3D_COLLISION_BAKED_CACHE_AXIS;
-	eastl::array<t3dCollisionRegionCacheEntry_t, TERRAIN3D_COLLISION_BAKED_CACHE_CAPACITY> m_bakedRegionCache{};
-	eastl::array<int16_t, TERRAIN3D_MAX_REGION_SLOTS> m_bakedRegionByMap{};
+	static constexpr int s_nCollisionBakedCacheAxis =
+		( 2 * ( 256 + 64 + s_nMinRegionSize ) / s_nMinRegionSize ) + 1;
+	static constexpr int s_nBakedCacheCapacity =
+		s_nCollisionBakedCacheAxis * s_nCollisionBakedCacheAxis;
+	eastl::array<t3dCollisionRegionCacheEntry_t, s_nBakedCacheCapacity> m_bakedRegionCache{};
+	eastl::array<int16_t, s_nMaxRegionSlots> m_bakedRegionByMap{};
 	int m_nBakedRegionCacheCount = 0;
 	uint64_t m_nBakedRegionCacheTick = 0u;
 	uint64_t m_nPreparationUsecLast = 0u;
@@ -115,7 +115,7 @@ private:
 	Vector2i m_lastSnappedPos = V2I_MAX;
 	TypedArray<Vector2i> m_fullRegionSlots;
 	uint64_t m_nStreamingGenerationLast = 0u;
-	eastl::array<uint8_t, TERRAIN3D_MAX_REGION_SLOTS> m_szFullStreamingResident{};
+	eastl::array<uint8_t, s_nMaxRegionSlots> m_szFullStreamingResident{};
 	uint64_t m_nUpdateUsecLast = 0u;
 	int m_nShapesRebuiltLastUpdate = 0;
 	int m_nShapesReusedLastUpdate = 0;
@@ -181,7 +181,7 @@ public:
 	void setPriority( const real_t fPriority );
 	EA_FORCE_INLINE real_t getPriority( void ) const { return m_fPriority; }
 	void setPhysicsMaterial( const Ref<PhysicsMaterial> &rMat );
-	EA_FORCE_INLINE Ref<PhysicsMaterial> getPhysicsMaterial( void ) const { return m_pPhysicsMaterial; }
+	EA_FORCE_INLINE Ref<PhysicsMaterial> getPhysicsMaterial( void ) const { return m_physicsMaterial; }
 	Dictionary getStats( void ) const;
 	size_t getRetainedBufferBytes( void ) const;
 	RID getRid( void ) const;

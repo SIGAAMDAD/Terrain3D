@@ -27,7 +27,7 @@ typedef struct t3dParallelDispatch_s {
 	std::atomic<size_t> m_iNext{0u};
 	size_t m_nCount = 0u;
 	size_t m_nGrain = 1u;
-	t3dParallelRangeTask_t m_pTask = nullptr;
+	t3dParallelRangeTask_t m_task = nullptr;
 	void *m_pContext = nullptr;
 
 	void process( void ) {
@@ -45,7 +45,7 @@ typedef struct t3dParallelDispatch_s {
 					break;
 				}
 			}
-			m_pTask( m_pContext, iBegin, iEnd );
+			m_task( m_pContext, iBegin, iEnd );
 		}
 	}
 
@@ -58,7 +58,7 @@ typedef struct t3dParallelStaticDispatch_s {
 	size_t m_nCount = 0u;
 	size_t m_nAlignment = 1u;
 	int32_t m_nTaskCount = 1;
-	t3dParallelStaticRangeTask_t m_pTask = nullptr;
+	t3dParallelStaticRangeTask_t m_task = nullptr;
 	void *m_pContext = nullptr;
 
 	EA_FORCE_INLINE static size_t partitionPoint( const size_t nCount, const size_t nPart, const size_t nParts ) {
@@ -83,7 +83,7 @@ typedef struct t3dParallelStaticDispatch_s {
 		const size_t iBegin = alignedOffset( iFirstChunk, m_nAlignment, m_nCount );
 		const size_t iEnd = alignedOffset( iLastChunk, m_nAlignment, m_nCount );
 		if ( iBegin < iEnd ) {
-			m_pTask( m_pContext, iBegin, iEnd, iWorker );
+			m_task( m_pContext, iBegin, iEnd, iWorker );
 		}
 	}
 
@@ -98,7 +98,7 @@ typedef struct t3dParallelTileDispatchContext_s {
 	size_t m_nTileWidth = 1u;
 	size_t m_nTileHeight = 1u;
 	size_t m_nTilesX = 0u;
-	t3dParallelTileTask_t m_pTask = nullptr;
+	t3dParallelTileTask_t m_task = nullptr;
 	void *m_pContext = nullptr;
 } t3dParallelTileDispatchContext_t;
 
@@ -117,7 +117,7 @@ private:
 				pDispatch->m_nWidth : iX0 + pDispatch->m_nTileWidth;
 			const size_t iY1 = pDispatch->m_nTileHeight >= pDispatch->m_nHeight - iY0 ?
 				pDispatch->m_nHeight : iY0 + pDispatch->m_nTileHeight;
-			pDispatch->m_pTask( pDispatch->m_pContext, iX0, iY0, iX1, iY1, iWorker );
+			pDispatch->m_task( pDispatch->m_pContext, iX0, iY0, iX1, iY1, iWorker );
 		}
 	}
 
@@ -137,7 +137,7 @@ public:
 		dispatch.m_nCount = nCount;
 		dispatch.m_nGrain = std::max<size_t>( 1u, nGrain );
 		dispatch.m_pContext = pContext;
-		dispatch.m_pTask = pTask;
+		dispatch.m_task = pTask;
 
 #if defined( __EMSCRIPTEN__ ) && !defined( __EMSCRIPTEN_PTHREADS__ )
 		dispatch.process();
@@ -173,7 +173,7 @@ public:
 		dispatch.m_nCount = nCount;
 		dispatch.m_nAlignment = std::max<size_t>( 1u, nAlignment );
 		dispatch.m_pContext = pContext;
-		dispatch.m_pTask = pTask;
+		dispatch.m_task = pTask;
 
 #if defined( __EMSCRIPTEN__ ) && !defined( __EMSCRIPTEN_PTHREADS__ )
 		dispatch.m_nTaskCount = 1;
@@ -223,7 +223,7 @@ public:
 			nTilesY > std::numeric_limits<size_t>::max() / dispatch.m_nTilesX ) {
 			return;
 		}
-		dispatch.m_pTask = pTask;
+		dispatch.m_task = pTask;
 		dispatch.m_pContext = pContext;
 		runStatic( dispatch.m_nTilesX * nTilesY, 1u, &runTileRange, &dispatch );
 	}

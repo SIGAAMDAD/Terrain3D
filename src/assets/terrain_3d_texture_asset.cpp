@@ -34,22 +34,22 @@ bool T3DTextureAsset::isValidFormat( const Ref<Texture2D> &rTexture ) const {
 }
 
 void T3DTextureAsset::disconnectPackedPbrResource( void ) {
-	if ( m_pPackedPbrResource.is_null() ) {
+	if ( m_packedPbrResource.is_null() ) {
 		return;
 	}
 	const Callable callback = callable_mp( this, &T3DTextureAsset::packedPbrResourceChanged );
-	if ( m_pPackedPbrResource->is_connected( "changed", callback ) ) {
-		m_pPackedPbrResource->disconnect( "changed", callback );
+	if ( m_packedPbrResource->is_connected( "changed", callback ) ) {
+		m_packedPbrResource->disconnect( "changed", callback );
 	}
 }
 
 void T3DTextureAsset::connectPackedPbrResource( void ) {
-	if ( m_pPackedPbrResource.is_null() ) {
+	if ( m_packedPbrResource.is_null() ) {
 		return;
 	}
 	const Callable callback = callable_mp( this, &T3DTextureAsset::packedPbrResourceChanged );
-	if ( !m_pPackedPbrResource->is_connected( "changed", callback ) ) {
-		m_pPackedPbrResource->connect( "changed", callback );
+	if ( !m_packedPbrResource->is_connected( "changed", callback ) ) {
+		m_packedPbrResource->connect( "changed", callback );
 	}
 }
 
@@ -90,14 +90,14 @@ void T3DTextureAsset::clear( void ) {
 	m_bHighlighted = false;
 	m_highlightColor = Color();
 	m_albedoColor = Color( 1.0f, 1.0f, 1.0f, 1.0f );
-	m_pAlbedoTexture.unref();
-	m_pNormalTexture.unref();
+	m_albedoTexture.unref();
+	m_normalTexture.unref();
 	disconnectPackedPbrResource();
-	m_pSurfaceTexture.unref();
-	m_pDisplacementTexture.unref();
-	m_pPbrTexture.unref();
-	m_pPackedPbrResource.unref();
-	m_pThumbnail.unref();
+	m_surfaceTexture.unref();
+	m_displacementTexture.unref();
+	m_pbrTexture.unref();
+	m_packedPbrResource.unref();
+	m_thumbnail.unref();
 
 	m_fNormalDepth = 1.0f;
 	m_fAoStrength = 0.5f;
@@ -137,7 +137,7 @@ void T3DTextureAsset::setName( const String &rName ) {
 	if ( rName.length() > 96 ) {
 		LOG( WARN, "Name too long, truncating to 96 characters" );
 	}
-	SET_IF_DIFF( m_name, rName.left( 96 ) );
+	SET_IF_DIFF( m_name, rName.m_nLeft( 96 ) );
 	LOG( INFO, "t3dSetting_t name: ", m_name );
 	LOG( DEBUG, "Emitting setting_changed" );
 	emit_signal( "setting_changed" );
@@ -145,7 +145,7 @@ void T3DTextureAsset::setName( const String &rName ) {
 
 void T3DTextureAsset::setId( const int nNewId ) {
 	const int old_id = m_nId;
-	SET_IF_DIFF( m_nId, CLAMP( nNewId, 0, TERRAIN3D_MAX_TEXTURE_ASSETS - 1 ) );
+	SET_IF_DIFF( m_nId, CLAMP( nNewId, 0, s_nMaxTextureAssets - 1 ) );
 	LOG( INFO, "t3dSetting_t texture id: ", m_nId );
 	LOG( DEBUG, "Emitting id_changed, TYPE_TEXTURE, ", old_id, ", ", m_nId );
 	emit_signal( "id_changed", TYPE_TEXTURE, old_id, m_nId );
@@ -169,7 +169,7 @@ void T3DTextureAsset::setAlbedoColor( const Color &rColor ) {
 
 void T3DTextureAsset::setAlbedoTexture( const Ref<Texture2D> &rTexture ) {
 	if ( isValidFormat( rTexture ) ) {
-		SET_IF_DIFF( m_pAlbedoTexture, rTexture );
+		SET_IF_DIFF( m_albedoTexture, rTexture );
 		LOG( INFO, "t3dSetting_t albedo texture: ", rTexture );
 		if ( rTexture.is_valid() ) {
 			const String filename = rTexture->get_path().get_file().get_basename();
@@ -192,10 +192,10 @@ void T3DTextureAsset::setAlbedoTexture( const Ref<Texture2D> &rTexture ) {
 				pImg->decompress();
 				pImg->resize( 256, 256, Image::INTERPOLATE_LANCZOS );
 				pImg->convert( Image::FORMAT_RGB8 );
-				m_pThumbnail = ImageTexture::create_from_image( pImg );
+				m_thumbnail = ImageTexture::create_from_image( pImg );
 			}
 		} else {
-			m_pThumbnail.unref();
+			m_thumbnail.unref();
 		}
 		LOG( DEBUG, "Emitting file_changed" );
 		emit_signal( "file_changed" );
@@ -204,7 +204,7 @@ void T3DTextureAsset::setAlbedoTexture( const Ref<Texture2D> &rTexture ) {
 
 void T3DTextureAsset::setNormalTexture( const Ref<Texture2D> &rTexture ) {
 	if ( isValidFormat( rTexture ) ) {
-		SET_IF_DIFF( m_pNormalTexture, rTexture );
+		SET_IF_DIFF( m_normalTexture, rTexture );
 		LOG( INFO, "t3dSetting_t normal texture: ", rTexture );
 		if ( rTexture.is_valid() ) {
 			const String filename = rTexture->get_path().get_file().get_basename();
@@ -244,7 +244,7 @@ void T3DTextureAsset::setSurfaceTexture( const Ref<Texture2D> &rTexture ) {
 			LOG( WARN, "Packed PBR texture '", filename, "' dimensions are not powers of two." );
 		}
 	}
-	SET_IF_DIFF( m_pSurfaceTexture, rTexture );
+	SET_IF_DIFF( m_surfaceTexture, rTexture );
 	LOG( INFO, "t3dSetting_t packed PBR texture: ", rTexture );
 	emit_signal( "file_changed" );
 }
@@ -283,14 +283,14 @@ void T3DTextureAsset::setDisplacementTexture( const Ref<Texture2D> &rTexture ) {
 			LOG( WARN, "Displacement texture '", filename, "' dimensions are not powers of two." );
 		}
 	}
-	SET_IF_DIFF( m_pDisplacementTexture, pTexture );
+	SET_IF_DIFF( m_displacementTexture, pTexture );
 	LOG( INFO, "t3dSetting_t R8 displacement texture: ", pTexture );
 	emit_signal( "file_changed" );
 }
 
 void T3DTextureAsset::setPbrTexture( const Ref<Texture2D> &rTexture ) {
 	// Compatibility migration for resources saved by the former RGBA16UI path.
-	m_pPbrTexture = rTexture;
+	m_pbrTexture = rTexture;
 	if ( rTexture.is_null() ) {
 		emit_signal( "file_changed" );
 		return;
@@ -301,8 +301,8 @@ void T3DTextureAsset::setPbrTexture( const Ref<Texture2D> &rTexture ) {
 		return;
 	}
 	if ( t3dTextureAssetIsPackedSurfaceFormat( pImage->get_format() ) ) {
-		m_pSurfaceTexture = rTexture;
-		m_pPbrTexture.unref();
+		m_surfaceTexture = rTexture;
+		m_pbrTexture.unref();
 	} else if ( pImage->get_format() == Image::FORMAT_RGBA16I ) {
 		const Ref<Image> pSurface = T3DUtil::convertPackedPbrRgba16uiToSurface( pImage, true );
 		const Ref<Image> pDisplacement = T3DUtil::convertPackedPbrRgba16uiToDisplacement( pImage, true );
@@ -310,9 +310,9 @@ void T3DTextureAsset::setPbrTexture( const Ref<Texture2D> &rTexture ) {
 			LOG( ERROR, "Could not migrate RGBA16UI packed PBR texture." );
 			return;
 		}
-		m_pSurfaceTexture = ImageTexture::create_from_image( pSurface );
-		m_pDisplacementTexture = ImageTexture::create_from_image( pDisplacement );
-		m_pPbrTexture.unref();
+		m_surfaceTexture = ImageTexture::create_from_image( pSurface );
+		m_displacementTexture = ImageTexture::create_from_image( pDisplacement );
+		m_pbrTexture.unref();
 		LOG( WARN, "Migrated legacy RGBA16UI PBR texture to RGBA8 packed PBR + R8 displacement. Save the texture asset to "
 				  "persist the migration." );
 	} else {
@@ -323,11 +323,11 @@ void T3DTextureAsset::setPbrTexture( const Ref<Texture2D> &rTexture ) {
 }
 
 void T3DTextureAsset::setPackedPbrResource( const Ref<T3DPackedPBRTexture> &rResource ) {
-	if ( m_pPackedPbrResource == rResource ) {
+	if ( m_packedPbrResource == rResource ) {
 		return;
 	}
 	disconnectPackedPbrResource();
-	m_pPackedPbrResource = rResource;
+	m_packedPbrResource = rResource;
 	connectPackedPbrResource();
 	notify_property_list_changed();
 	LOG( INFO, "t3dSetting_t legacy packed-PBR compatibility resource: ", rResource );
@@ -337,17 +337,17 @@ void T3DTextureAsset::setPackedPbrResource( const Ref<T3DPackedPBRTexture> &rRes
 Ref<Texture2D> T3DTextureAsset::getEffectiveSurfaceTexture( void ) {
 	// Direct externally authored maps are the active workflow. The hidden
 	// compatibility resource is consulted only when a direct map is absent.
-	if ( m_pSurfaceTexture.is_valid() ) {
-		return m_pSurfaceTexture;
+	if ( m_surfaceTexture.is_valid() ) {
+		return m_surfaceTexture;
 	}
-	return m_pPackedPbrResource.is_valid() ? m_pPackedPbrResource->getSurfaceTexture() : Ref<Texture2D>();
+	return m_packedPbrResource.is_valid() ? m_packedPbrResource->getSurfaceTexture() : Ref<Texture2D>();
 }
 
 Ref<Texture2D> T3DTextureAsset::getEffectiveDisplacementTexture( void ) {
-	if ( m_pDisplacementTexture.is_valid() ) {
-		return m_pDisplacementTexture;
+	if ( m_displacementTexture.is_valid() ) {
+		return m_displacementTexture;
 	}
-	return m_pPackedPbrResource.is_valid() ? m_pPackedPbrResource->getDisplacementTexture() : Ref<Texture2D>();
+	return m_packedPbrResource.is_valid() ? m_packedPbrResource->getDisplacementTexture() : Ref<Texture2D>();
 }
 
 void T3DTextureAsset::setMetallic( const real_t fMetallic ) {
@@ -431,7 +431,7 @@ void T3DTextureAsset::setDetilingShift( const real_t fDetilingShift ) {
 
 #define SET_EROSION_TEXTURE_ID( methodName, field_name )                        \
 	void T3DTextureAsset::methodName( int32_t valueArg ) {           \
-		int32_t value = CLAMP( valueArg, -1, TERRAIN3D_MAX_TEXTURE_ASSETS - 1 ); \
+		int32_t value = CLAMP( valueArg, -1, s_nMaxTextureAssets - 1 ); \
 		if ( field_name == value ) {                                             \
 			return;                                                            \
 		}                                                                      \

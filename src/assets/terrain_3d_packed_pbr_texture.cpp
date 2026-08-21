@@ -95,18 +95,18 @@ Ref<Image> T3DPackedPBRTexture::prepareSource(
 }
 
 void T3DPackedPBRTexture::setGeneratedSurfaceTexture( const Ref<ImageTexture> &rTexture ) {
-	m_pGeneratedSurfaceTexture = rTexture;
+	m_generatedSurfaceTexture = rTexture;
 	m_bDirty = !( isValidSurfaceTexture() && isValidDisplacementTexture() );
 }
 
 void T3DPackedPBRTexture::setGeneratedDisplacementTexture( const Ref<ImageTexture> &rTexture ) {
-	m_pGeneratedDisplacementTexture = rTexture;
-	if ( m_pGeneratedDisplacementTexture.is_valid() ) {
-		const Ref<Image> pImage = m_pGeneratedDisplacementTexture->get_image();
+	m_generatedDisplacementTexture = rTexture;
+	if ( m_generatedDisplacementTexture.is_valid() ) {
+		const Ref<Image> pImage = m_generatedDisplacementTexture->get_image();
 		if ( pImage.is_valid() && pImage->get_format() == Image::FORMAT_R16 ) {
 			const Ref<Image> pMigrated = T3DUtil::packDisplacementR8( pImage, 0, pImage->has_mipmaps() );
 			if ( pMigrated.is_valid() && !pMigrated->is_empty() ) {
-				m_pGeneratedDisplacementTexture = ImageTexture::create_from_image( pMigrated );
+				m_generatedDisplacementTexture = ImageTexture::create_from_image( pMigrated );
 				LOG( WARN, "Migrated serialized R16 displacement data to R8." );
 			}
 		}
@@ -123,7 +123,7 @@ void T3DPackedPBRTexture::setGeneratedTexture( const Ref<ImageTexture> &rTexture
 		return;
 	}
 	if ( pImage->get_format() == Image::FORMAT_RGBA8 ) {
-		m_pGeneratedSurfaceTexture = rTexture;
+		m_generatedSurfaceTexture = rTexture;
 		m_bDirty = !( isValidSurfaceTexture() && isValidDisplacementTexture() );
 		return;
 	}
@@ -131,8 +131,8 @@ void T3DPackedPBRTexture::setGeneratedTexture( const Ref<ImageTexture> &rTexture
 		const Ref<Image> pSurface = T3DUtil::convertPackedPbrRgba16uiToSurface( pImage, m_bGenerateMipmaps );
 		const Ref<Image> pDisplacement = T3DUtil::convertPackedPbrRgba16uiToDisplacement( pImage, m_bGenerateMipmaps );
 		if ( pSurface.is_valid() && pDisplacement.is_valid() ) {
-			m_pGeneratedSurfaceTexture = ImageTexture::create_from_image( pSurface );
-			m_pGeneratedDisplacementTexture = ImageTexture::create_from_image( pDisplacement );
+			m_generatedSurfaceTexture = ImageTexture::create_from_image( pSurface );
+			m_generatedDisplacementTexture = ImageTexture::create_from_image( pDisplacement );
 			m_bDirty = false;
 			LOG( WARN, "Migrated serialized RGBA16UI packed PBR data to RGBA8 packed PBR + R8 displacement." );
 		}
@@ -149,10 +149,10 @@ void T3DPackedPBRTexture::setPackedTexture( const Ref<Texture2D> &rTexture ) {
 			return;
 		}
 	}
-	if ( m_pPackedTexture == rTexture ) {
+	if ( m_packedTexture == rTexture ) {
 		return;
 	}
-	m_pPackedTexture = rTexture;
+	m_packedTexture = rTexture;
 	m_bDirty = !( isValidSurfaceTexture() && isValidDisplacementTexture() );
 	m_lastError = String();
 	emit_changed();
@@ -184,35 +184,35 @@ void T3DPackedPBRTexture::setDisplacementTexture( const Ref<Texture2D> &rTexture
 			return;
 		}
 	}
-	if ( m_pDisplacementTexture == pTexture ) {
+	if ( m_displacementTexture == pTexture ) {
 		return;
 	}
-	m_pDisplacementTexture = pTexture;
+	m_displacementTexture = pTexture;
 	m_bDirty = !( isValidSurfaceTexture() && isValidDisplacementTexture() );
 	m_lastError = String();
 	emit_changed();
 }
 
 void T3DPackedPBRTexture::setNormalSource( const Ref<Texture2D> &rTexture ) {
-	setSource( m_pNormalSource, rTexture );
+	setSource( m_normalSource, rTexture );
 }
 
 void T3DPackedPBRTexture::setRoughnessSource( const Ref<Texture2D> &rTexture ) {
-	setSource( m_pRoughnessSource, rTexture );
+	setSource( m_roughnessSource, rTexture );
 }
 
 void T3DPackedPBRTexture::setDisplacementSource( const Ref<Texture2D> &rTexture ) {
-	setSource( m_pDisplacementSource, rTexture );
+	setSource( m_displacementSource, rTexture );
 }
 
 void T3DPackedPBRTexture::setAoSource( const Ref<Texture2D> &rTexture ) {
-	setSource( m_pAoSource, rTexture );
+	setSource( m_aoSource, rTexture );
 }
 
 void T3DPackedPBRTexture::setMetallicSource( const Ref<Texture2D> &rTexture ) {
 	// Kept only for old resource compatibility. Runtime metallic is now the
 	// T3DTextureAsset metallic scalar.
-	setSource( m_pMetallicSource, rTexture );
+	setSource( m_metallicSource, rTexture );
 }
 
 void T3DPackedPBRTexture::setOutputSize( const Vector2i &rSize ) {
@@ -291,12 +291,12 @@ void T3DPackedPBRTexture::setAutoRebuild( const bool bEnabled ) {
 }
 
 bool T3DPackedPBRTexture::hasRequiredSources( void ) const {
-	return ( m_pPackedTexture.is_valid() && m_pDisplacementTexture.is_valid() ) ||
-		   ( m_pNormalSource.is_valid() && m_pRoughnessSource.is_valid() );
+	return ( m_packedTexture.is_valid() && m_displacementTexture.is_valid() ) ||
+		   ( m_normalSource.is_valid() && m_roughnessSource.is_valid() );
 }
 
 bool T3DPackedPBRTexture::isValidSurfaceTexture( void ) const {
-	const Ref<Texture2D> pTexture = m_pPackedTexture.is_valid() ? m_pPackedTexture : Ref<Texture2D>( m_pGeneratedSurfaceTexture );
+	const Ref<Texture2D> pTexture = m_packedTexture.is_valid() ? m_packedTexture : Ref<Texture2D>( m_generatedSurfaceTexture );
 	if ( pTexture.is_null() ) {
 		return false;
 	}
@@ -306,7 +306,7 @@ bool T3DPackedPBRTexture::isValidSurfaceTexture( void ) const {
 
 bool T3DPackedPBRTexture::isValidDisplacementTexture( void ) const {
 	const Ref<Texture2D> pTexture =
-		m_pDisplacementTexture.is_valid() ? m_pDisplacementTexture : Ref<Texture2D>( m_pGeneratedDisplacementTexture );
+		m_displacementTexture.is_valid() ? m_displacementTexture : Ref<Texture2D>( m_generatedDisplacementTexture );
 	if ( pTexture.is_null() ) {
 		return false;
 	}
@@ -317,7 +317,7 @@ bool T3DPackedPBRTexture::isValidDisplacementTexture( void ) const {
 bool T3DPackedPBRTexture::rebuild( void ) {
 	m_bRebuildQueued = false;
 	m_lastError = String();
-	if ( m_pPackedTexture.is_valid() || m_pDisplacementTexture.is_valid() ) {
+	if ( m_packedTexture.is_valid() || m_displacementTexture.is_valid() ) {
 		m_bDirty = !( isValidSurfaceTexture() && isValidDisplacementTexture() );
 		if ( m_bDirty ) {
 			m_lastError = "Packed PBR resources require one RGBA8/BC3/BC7 packed texture and one R8 displacement texture.";
@@ -330,10 +330,10 @@ bool T3DPackedPBRTexture::rebuild( void ) {
 		return false;
 	}
 	const Vector2i size( MAX( m_outputSize.x, 1 ), MAX( m_outputSize.y, 1 ) );
-	const Ref<Image> pNormal = prepareSource( m_pNormalSource, size, "normal" );
-	const Ref<Image> pRoughness = prepareSource( m_pRoughnessSource, size, "roughness" );
-	const Ref<Image> pDisplacement = prepareSource( m_pDisplacementSource, size, "displacement" );
-	const Ref<Image> pAo = prepareSource( m_pAoSource, size, "AO" );
+	const Ref<Image> pNormal = prepareSource( m_normalSource, size, "normal" );
+	const Ref<Image> pRoughness = prepareSource( m_roughnessSource, size, "roughness" );
+	const Ref<Image> pDisplacement = prepareSource( m_displacementSource, size, "displacement" );
+	const Ref<Image> pAo = prepareSource( m_aoSource, size, "AO" );
 	if ( pNormal.is_null() || pRoughness.is_null() ) {
 		m_lastError = "A required source image could not be prepared.";
 		return false;
@@ -350,8 +350,8 @@ bool T3DPackedPBRTexture::rebuild( void ) {
 		return false;
 	}
 
-	m_pGeneratedSurfaceTexture = ImageTexture::create_from_image( pSurface );
-	m_pGeneratedDisplacementTexture = ImageTexture::create_from_image( pHeight );
+	m_generatedSurfaceTexture = ImageTexture::create_from_image( pSurface );
+	m_generatedDisplacementTexture = ImageTexture::create_from_image( pHeight );
 	m_bDirty = false;
 	emit_changed();
 	return true;
@@ -361,7 +361,7 @@ Ref<Texture2D> T3DPackedPBRTexture::getSurfaceTexture( void ) {
 	if ( m_bDirty && hasRequiredSources() && !rebuild() ) {
 		return Ref<Texture2D>();
 	}
-	Ref<Texture2D> pTexture = m_pPackedTexture.is_valid() ? m_pPackedTexture : Ref<Texture2D>( m_pGeneratedSurfaceTexture );
+	Ref<Texture2D> pTexture = m_packedTexture.is_valid() ? m_packedTexture : Ref<Texture2D>( m_generatedSurfaceTexture );
 	return isValidSurfaceTexture() ? pTexture : Ref<Texture2D>();
 }
 
@@ -370,7 +370,7 @@ Ref<Texture2D> T3DPackedPBRTexture::getDisplacementTexture( void ) {
 		return Ref<Texture2D>();
 	}
 	Ref<Texture2D> pTexture =
-		m_pDisplacementTexture.is_valid() ? m_pDisplacementTexture : Ref<Texture2D>( m_pGeneratedDisplacementTexture );
+		m_displacementTexture.is_valid() ? m_displacementTexture : Ref<Texture2D>( m_generatedDisplacementTexture );
 	return isValidDisplacementTexture() ? pTexture : Ref<Texture2D>();
 }
 

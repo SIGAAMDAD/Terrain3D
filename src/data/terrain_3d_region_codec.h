@@ -24,14 +24,14 @@ using namespace godot;
 //
 // Height is stored as R16_UNORM rather than IEEE-754 half float. Half float has
 // only a 10-bit mantissa and steps of roughly 0.25-0.5 m at the game's expected
-// absolute heights. R16_UNORM over this fixed range retains ~1.76 cm precision.
-EA_FORCE_INLINE float t3dRegionCodecEncodeHeightNormalized( const float fHeight ) { return CLAMP( ( fHeight - TERRAIN3D_REGION_HEIGHT_MIN ) * TERRAIN3D_REGION_HEIGHT_INV_RANGE, 0.0f, 1.0f ); }
+// absolute heights. R16_UNORM over this s_nFixed range retains ~1.76 cm precision.
+EA_FORCE_INLINE float t3dRegionCodecEncodeHeightNormalized( const float fHeight ) { return CLAMP( ( fHeight - s_fRegionHeightMin ) * s_fRegionHeightInvRange, 0.0f, 1.0f ); }
 
-EA_FORCE_INLINE float t3dRegionCodecDecodeHeightNormalized( const float fNormalized ) { return TERRAIN3D_REGION_HEIGHT_MIN + CLAMP( fNormalized, 0.0f, 1.0f ) * TERRAIN3D_REGION_HEIGHT_RANGE; }
+EA_FORCE_INLINE float t3dRegionCodecDecodeHeightNormalized( const float fNormalized ) { return s_fRegionHeightMin + CLAMP( fNormalized, 0.0f, 1.0f ) * s_fRegionHeightRange; }
 
-EA_FORCE_INLINE uint16_t t3dRegionCodecEncodeHeightU16( const float fHeight ) { return ( uint16_t ) ( CLAMP( Math::round( t3dRegionCodecEncodeHeightNormalized( fHeight ) * TERRAIN3D_REGION_HEIGHT_U16_SCALE ), 0.0f, TERRAIN3D_REGION_HEIGHT_U16_SCALE ) ); }
+EA_FORCE_INLINE uint16_t t3dRegionCodecEncodeHeightU16( const float fHeight ) { return ( uint16_t ) ( CLAMP( Math::round( t3dRegionCodecEncodeHeightNormalized( fHeight ) * s_fRegionHeightU16Scale ), 0.0f, s_fRegionHeightU16Scale ) ); }
 
-EA_FORCE_INLINE float t3dRegionCodecDecodeHeightU16( const uint16_t nValue ) { return TERRAIN3D_REGION_HEIGHT_MIN + ( ( float ) ( nValue ) / TERRAIN3D_REGION_HEIGHT_U16_SCALE ) * TERRAIN3D_REGION_HEIGHT_RANGE; }
+EA_FORCE_INLINE float t3dRegionCodecDecodeHeightU16( const uint16_t nValue ) { return s_fRegionHeightMin + ( ( float ) ( nValue ) / s_fRegionHeightU16Scale ) * s_fRegionHeightRange; }
 
 inline float t3dRegionCodecReadHeightPixel( const Image *pImage, const Vector2i &rPosition ) {
 	if ( !pImage ) {
@@ -140,8 +140,8 @@ inline Ref<Image> t3dRegionCodecConvertHeightToR16(
 		if ( !std::isfinite( fHeight ) ) {
 			fHeight = 0.0f;
 			++nNonFiniteCount;
-		} else if ( fHeight < TERRAIN3D_REGION_HEIGHT_MIN || fHeight > TERRAIN3D_REGION_HEIGHT_MAX ) {
-			fHeight = CLAMP( fHeight, TERRAIN3D_REGION_HEIGHT_MIN, TERRAIN3D_REGION_HEIGHT_MAX );
+		} else if ( fHeight < s_fRegionHeightMin || fHeight > s_fRegionHeightMax ) {
+			fHeight = CLAMP( fHeight, s_fRegionHeightMin, s_fRegionHeightMax );
 			++nClampedCount;
 		}
 

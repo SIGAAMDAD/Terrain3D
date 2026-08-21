@@ -7,9 +7,9 @@
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 
-constexpr uint64_t TERRAIN3D_COOK_DATABASE_MAGIC = 0x3142444b43443354ull; // T3DCKDB1
-constexpr uint32_t TERRAIN3D_COOK_DATABASE_VERSION = 1u;
-constexpr uint32_t TERRAIN3D_COOK_DATABASE_HEADER_BYTES = 40u;
+static constexpr uint64_t s_nCookDatabaseMagic = 0x3142444b43443354ull; // T3DCKDB1
+static constexpr uint32_t s_nCookDatabaseVersion = 1u;
+static constexpr uint32_t s_nCookDatabaseHeaderBytes = 40u;
 
 void T3DCookDatabase::reset( void ) {
 	m_bLoaded = false;
@@ -29,12 +29,12 @@ bool T3DCookDatabase::load(
 	if ( file.is_null() ) {
 		return false;
 	}
-	const uint64_t expected_bytes = TERRAIN3D_COOK_DATABASE_HEADER_BYTES +
-		( uint64_t ) TERRAIN3D_MAX_REGION_SLOTS * sizeof( uint64_t );
+	const uint64_t expected_bytes = s_nCookDatabaseHeaderBytes +
+		( uint64_t ) s_nMaxRegionSlots * sizeof( uint64_t );
 	if ( ( uint64_t ) file->get_length() != expected_bytes ||
-		file->get_64() != TERRAIN3D_COOK_DATABASE_MAGIC ||
-		file->get_32() != TERRAIN3D_COOK_DATABASE_VERSION ||
-		file->get_32() != TERRAIN3D_RUNTIME_PAGE_VERSION ||
+		file->get_64() != s_nCookDatabaseMagic ||
+		file->get_32() != s_nCookDatabaseVersion ||
+		file->get_32() != s_nRuntimePageVersion ||
 		( int ) file->get_32() != nRegionSize ) {
 		return false;
 	}
@@ -66,9 +66,9 @@ bool T3DCookDatabase::write(
 	if ( file.is_null() ) {
 		return false;
 	}
-	file->store_64( TERRAIN3D_COOK_DATABASE_MAGIC );
-	file->store_32( TERRAIN3D_COOK_DATABASE_VERSION );
-	file->store_32( TERRAIN3D_RUNTIME_PAGE_VERSION );
+	file->store_64( s_nCookDatabaseMagic );
+	file->store_32( s_nCookDatabaseVersion );
+	file->store_32( s_nRuntimePageVersion );
 	file->store_32( ( uint32_t ) nRegionSize );
 	file->store_32( 0u );
 	file->store_64( nMaterialSignature );

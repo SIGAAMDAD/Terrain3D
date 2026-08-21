@@ -26,19 +26,19 @@
 #include <cstdint>
 
 typedef struct t3dHlodTriangle_s {
-	Vector3 a;
-	Vector3 b;
-	Vector3 c;
-	Vector3 center;
-	AABB bounds;
+	Vector3 m_a;
+	Vector3 m_b;
+	Vector3 m_c;
+	Vector3 m_center;
+	AABB m_bounds;
 } t3dHlodTriangle_t;
 
 typedef struct t3dHlodBvhNode_s {
-	AABB bounds;
-	int left = -1;
-	int right = -1;
-	int begin = 0;
-	int count = 0;
+	AABB m_bounds;
+	int m_nLeft = -1;
+	int m_nRight = -1;
+	int m_nBegin = 0;
+	int m_nCount = 0;
 } t3dHlodBvhNode_t;
 
 EA_FORCE_INLINE static AABB t3dHlodBuilderBoundsFromPoint( const Vector3 &p ) { return AABB( p, Vector3() ); }
@@ -124,23 +124,23 @@ static int t3dHlodBuilderBuildBvhRecursive(
 	const int count
 ) {
 	t3dHlodBvhNode_t node;
-	node.begin = begin;
-	node.count = count;
+	node.m_nBegin = begin;
+	node.m_nCount = count;
 	AABB bounds;
 	AABB center_bounds;
 	bool first = true;
 	for ( int i = 0; i < count; ++i ) {
 		const t3dHlodTriangle_t &triangle = triangles[( size_t ) order[( size_t ) ( begin + i )]];
 		if ( first ) {
-			bounds = triangle.bounds;
-			center_bounds = t3dHlodBuilderBoundsFromPoint( triangle.center );
+			bounds = triangle.m_bounds;
+			center_bounds = t3dHlodBuilderBoundsFromPoint( triangle.m_center );
 			first = false;
 		} else {
-			bounds = bounds.merge( triangle.bounds );
-			center_bounds = center_bounds.expand( triangle.center );
+			bounds = bounds.merge( triangle.m_bounds );
+			center_bounds = center_bounds.expand( triangle.m_center );
 		}
 	}
-	node.bounds = bounds;
+	node.m_bounds = bounds;
 	const int node_index = ( int ) nodes.size();
 	nodes.push_back( node );
 	if ( count <= 8 ) { return node_index; }
@@ -150,14 +150,14 @@ static int t3dHlodBuilderBuildBvhRecursive(
 		order.begin() + begin,
 		order.begin() + begin + count,
 		[&triangles, axis]( const int lhs, const int rhs ) {
-			return t3dHlodBuilderComponent( triangles[( size_t ) lhs].center, axis ) <
-				t3dHlodBuilderComponent( triangles[( size_t ) rhs].center, axis );
+			return t3dHlodBuilderComponent( triangles[( size_t ) lhs].m_center, axis ) <
+				t3dHlodBuilderComponent( triangles[( size_t ) rhs].m_center, axis );
 		} );
 	const int left_count = count / 2;
 	const int right_count = count - left_count;
-	nodes[( size_t ) node_index].left = t3dHlodBuilderBuildBvhRecursive( triangles, order, nodes, begin, left_count );
-	nodes[( size_t ) node_index].right = t3dHlodBuilderBuildBvhRecursive( triangles, order, nodes, begin + left_count, right_count );
-	nodes[( size_t ) node_index].count = 0;
+	nodes[( size_t ) node_index].m_nLeft = t3dHlodBuilderBuildBvhRecursive( triangles, order, nodes, begin, left_count );
+	nodes[( size_t ) node_index].m_nRight = t3dHlodBuilderBuildBvhRecursive( triangles, order, nodes, begin + left_count, right_count );
+	nodes[( size_t ) node_index].m_nCount = 0;
 	return node_index;
 }
 
@@ -171,26 +171,26 @@ static void t3dHlodBuilderQueryBvhRecursive(
 ) {
 	if ( node_index < 0 ) { return; }
 	const t3dHlodBvhNode_t &node = nodes[( size_t ) node_index];
-	if ( t3dHlodBuilderPointAabbDistanceSquared( point, node.bounds ) >= best_squared ) { return; }
-	if ( node.count > 0 ) {
-		for ( int i = 0; i < node.count; ++i ) {
-			const t3dHlodTriangle_t &triangle = triangles[( size_t ) order[( size_t ) ( node.begin + i )]];
-			if ( t3dHlodBuilderPointAabbDistanceSquared( point, triangle.bounds ) >= best_squared ) { continue; }
-			best_squared = MIN( best_squared, t3dHlodBuilderPointTriangleDistanceSquared( point, triangle.a, triangle.b, triangle.c ) );
+	if ( t3dHlodBuilderPointAabbDistanceSquared( point, node.m_bounds ) >= best_squared ) { return; }
+	if ( node.m_nCount > 0 ) {
+		for ( int i = 0; i < node.m_nCount; ++i ) {
+			const t3dHlodTriangle_t &triangle = triangles[( size_t ) order[( size_t ) ( node.m_nBegin + i )]];
+			if ( t3dHlodBuilderPointAabbDistanceSquared( point, triangle.m_bounds ) >= best_squared ) { continue; }
+			best_squared = MIN( best_squared, t3dHlodBuilderPointTriangleDistanceSquared( point, triangle.m_a, triangle.m_b, triangle.m_c ) );
 		}
 		return;
 	}
 
-	const t3dHlodBvhNode_t &left = nodes[( size_t ) node.left];
-	const t3dHlodBvhNode_t &right = nodes[( size_t ) node.right];
-	const real_t left_distance = t3dHlodBuilderPointAabbDistanceSquared( point, left.bounds );
-	const real_t right_distance = t3dHlodBuilderPointAabbDistanceSquared( point, right.bounds );
+	const t3dHlodBvhNode_t &left = nodes[( size_t ) node.m_nLeft];
+	const t3dHlodBvhNode_t &right = nodes[( size_t ) node.m_nRight];
+	const real_t left_distance = t3dHlodBuilderPointAabbDistanceSquared( point, left.m_bounds );
+	const real_t right_distance = t3dHlodBuilderPointAabbDistanceSquared( point, right.m_bounds );
 	if ( left_distance <= right_distance ) {
-		t3dHlodBuilderQueryBvhRecursive( triangles, order, nodes, node.left, point, best_squared );
-		t3dHlodBuilderQueryBvhRecursive( triangles, order, nodes, node.right, point, best_squared );
+		t3dHlodBuilderQueryBvhRecursive( triangles, order, nodes, node.m_nLeft, point, best_squared );
+		t3dHlodBuilderQueryBvhRecursive( triangles, order, nodes, node.m_nRight, point, best_squared );
 	} else {
-		t3dHlodBuilderQueryBvhRecursive( triangles, order, nodes, node.right, point, best_squared );
-		t3dHlodBuilderQueryBvhRecursive( triangles, order, nodes, node.left, point, best_squared );
+		t3dHlodBuilderQueryBvhRecursive( triangles, order, nodes, node.m_nRight, point, best_squared );
+		t3dHlodBuilderQueryBvhRecursive( triangles, order, nodes, node.m_nLeft, point, best_squared );
 	}
 }
 
@@ -312,11 +312,11 @@ static real_t t3dHlodBuilderMeasureVertexDeviation( const Array &source_arrays, 
 		const int ic = proxy_indices[i + 2];
 		if ( ia < 0 || ib < 0 || ic < 0 || ia >= proxy_vertices.size() || ib >= proxy_vertices.size() || ic >= proxy_vertices.size() ) { continue; }
 		t3dHlodTriangle_t triangle;
-		triangle.a = proxy_vertices[ia];
-		triangle.b = proxy_vertices[ib];
-		triangle.c = proxy_vertices[ic];
-		triangle.center = ( triangle.a + triangle.b + triangle.c ) / 3.0f;
-		triangle.bounds = t3dHlodBuilderBoundsFromPoint( triangle.a ).expand( triangle.b ).expand( triangle.c );
+		triangle.m_a = proxy_vertices[ia];
+		triangle.m_b = proxy_vertices[ib];
+		triangle.m_c = proxy_vertices[ic];
+		triangle.m_center = ( triangle.m_a + triangle.m_b + triangle.m_c ) / 3.0f;
+		triangle.m_bounds = t3dHlodBuilderBoundsFromPoint( triangle.m_a ).expand( triangle.m_b ).expand( triangle.m_c );
 		triangles.push_back( triangle );
 	}
 	if ( triangles.empty() ) { return 0.0f; }
@@ -341,15 +341,15 @@ PackedInt32Array T3DHLODBuilder::getInstancerMeshIds( T3DRegion *const pRegion )
 	PackedInt32Array result;
 	if ( !pRegion ) { return result; }
 	const T3DInstanceStore &store = pRegion->getInstanceStore();
-	for ( const t3dInstanceMesh_t &mesh : store.meshes() ) {
+	for ( const t3dInstanceMesh_t &mesh : store.m_meshes() ) {
 		bool has_instances = false;
-		for ( const t3dInstanceCell_t &cell : mesh.cells ) {
-			if ( !cell.transforms.empty() ) {
+		for ( const t3dInstanceCell_t &cell : mesh.m_cells ) {
+			if ( !cell.m_transforms.empty() ) {
 				has_instances = true;
 				break;
 			}
 		}
-		if ( has_instances ) { result.push_back( mesh.id ); }
+		if ( has_instances ) { result.push_back( mesh.m_nId ); }
 	}
 	return result;
 }
@@ -359,7 +359,7 @@ Dictionary T3DHLODBuilder::buildInstancerSource(
 ) const {
 	Dictionary result;
 	result["ok"] = false;
-	if ( !pTerrain || !pRegion || pTerrain->getAssets().is_null() || nMeshId < 0 || nMeshId >= TERRAIN3D_MAX_MESH_ASSETS ) {
+	if ( !pTerrain || !pRegion || pTerrain->getAssets().is_null() || nMeshId < 0 || nMeshId >= s_nMaxMeshAssets ) {
 		result["error"] = "invalid Terrain3D instancer source";
 		return result;
 	}
@@ -387,11 +387,11 @@ Dictionary T3DHLODBuilder::buildInstancerSource(
 	Ref<ArrayMesh> merged;
 	merged.instantiate();
 	int64_t instance_count = 0;
-	for ( const t3dInstanceCell_t &cell : source_instances->cells ) {
-		instance_count += ( int64_t ) cell.transforms.size();
+	for ( const t3dInstanceCell_t &cell : source_instances->m_cells ) {
+		instance_count += ( int64_t ) cell.m_transforms.size();
 		if ( cell.usesColors() ) {
-			for ( const uint32_t color : cell.colors ) {
-				if ( color != TERRAIN3D_INSTANCE_WHITE_RGBA8 ) {
+			for ( const uint32_t color : cell.m_colors ) {
+				if ( color != s_nInstanceWhiteRgba8 ) {
 					result["error"] = "per-instance color tinting requires a dedicated HLOD material bake and is excluded from geometry-only proxies";
 					return result;
 				}
@@ -415,9 +415,9 @@ Dictionary T3DHLODBuilder::buildInstancerSource(
 		Ref<SurfaceTool> tool;
 		tool.instantiate();
 		tool->begin( Mesh::PRIMITIVE_TRIANGLES );
-		for ( const t3dInstanceCell_t &cell : source_instances->cells ) {
-			for ( size_t transform_index = 0; transform_index < cell.transforms.size(); ++transform_index ) {
-				tool->append_from( mesh, surface, cell.transforms[transform_index] );
+		for ( const t3dInstanceCell_t &cell : source_instances->m_cells ) {
+			for ( size_t transform_index = 0; transform_index < cell.m_transforms.size(); ++transform_index ) {
+				tool->append_from( mesh, surface, cell.m_transforms[transform_index] );
 			}
 		}
 		tool->index();

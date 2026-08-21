@@ -121,82 +121,82 @@ typedef enum t3dOceanShadingMode_e {
 } t3dOceanShadingMode_t;
 
 typedef struct t3dTriangleBuffer_s {
-	eastl::vector<Vector3> ownedVertices;
-	eastl::vector<Vector2> ownedUvs;
-	Vector3 *pExternalVertices = nullptr;
-	Vector2 *pExternalUvs = nullptr;
-	size_t nExternalCapacity = 0u;
-	size_t nExternalSize = 0u;
-	bool bOverflowed = false;
+	eastl::vector<Vector3> m_ownedVertices;
+	eastl::vector<Vector2> m_ownedUvs;
+	Vector3 *m_pExternalVertices = nullptr;
+	Vector2 *m_pExternalUvs = nullptr;
+	size_t m_nExternalCapacity = 0u;
+	size_t m_nExternalSize = 0u;
+	bool m_bOverflowed = false;
 
-	EA_FORCE_INLINE void bindExternal( Vector3 *const pVertices, Vector2 *const pUvs, const size_t nCapacity ) { pExternalVertices = pVertices; pExternalUvs = pUvs; nExternalCapacity = nCapacity; nExternalSize = 0u; bOverflowed = false; }
+	EA_FORCE_INLINE void bindExternal( Vector3 *const pVertices, Vector2 *const pUvs, const size_t nCapacity ) { m_pExternalVertices = pVertices; m_pExternalUvs = pUvs; m_nExternalCapacity = nCapacity; m_nExternalSize = 0u; m_bOverflowed = false; }
 
 	void reserve( const size_t nCapacity, const bool bUvs ) {
-		ownedVertices.reserve( nCapacity );
+		m_ownedVertices.reserve( nCapacity );
 		if ( bUvs ) {
-			ownedUvs.reserve( nCapacity );
+			m_ownedUvs.reserve( nCapacity );
 		}
 	}
 
 	void appendTriangle( const Vector3 &rA, const Vector3 &rB, const Vector3 &rC, const bool bUvs ) {
-		if ( pExternalVertices ) {
-			if ( nExternalSize + 3u > nExternalCapacity ) {
-				bOverflowed = true;
+		if ( m_pExternalVertices ) {
+			if ( m_nExternalSize + 3u > m_nExternalCapacity ) {
+				m_bOverflowed = true;
 				return;
 			}
-			pExternalVertices[nExternalSize] = rA;
-			pExternalVertices[nExternalSize + 1u] = rB;
-			pExternalVertices[nExternalSize + 2u] = rC;
-			if ( bUvs && pExternalUvs ) {
-				pExternalUvs[nExternalSize] = Vector2( rA.x, rA.z );
-				pExternalUvs[nExternalSize + 1u] = Vector2( rB.x, rB.z );
-				pExternalUvs[nExternalSize + 2u] = Vector2( rC.x, rC.z );
+			m_pExternalVertices[m_nExternalSize] = rA;
+			m_pExternalVertices[m_nExternalSize + 1u] = rB;
+			m_pExternalVertices[m_nExternalSize + 2u] = rC;
+			if ( bUvs && m_pExternalUvs ) {
+				m_pExternalUvs[m_nExternalSize] = Vector2( rA.x, rA.z );
+				m_pExternalUvs[m_nExternalSize + 1u] = Vector2( rB.x, rB.z );
+				m_pExternalUvs[m_nExternalSize + 2u] = Vector2( rC.x, rC.z );
 			}
-			nExternalSize += 3u;
+			m_nExternalSize += 3u;
 			return;
 		}
 
-		ownedVertices.push_back( rA );
-		ownedVertices.push_back( rB );
-		ownedVertices.push_back( rC );
+		m_ownedVertices.push_back( rA );
+		m_ownedVertices.push_back( rB );
+		m_ownedVertices.push_back( rC );
 		if ( bUvs ) {
-			ownedUvs.push_back( Vector2( rA.x, rA.z ) );
-			ownedUvs.push_back( Vector2( rB.x, rB.z ) );
-			ownedUvs.push_back( Vector2( rC.x, rC.z ) );
+			m_ownedUvs.push_back( Vector2( rA.x, rA.z ) );
+			m_ownedUvs.push_back( Vector2( rB.x, rB.z ) );
+			m_ownedUvs.push_back( Vector2( rC.x, rC.z ) );
 		}
 	}
 
-	EA_FORCE_INLINE size_t size( void ) const { return pExternalVertices ? nExternalSize : ownedVertices.size(); }
+	EA_FORCE_INLINE size_t size( void ) const { return m_pExternalVertices ? m_nExternalSize : m_ownedVertices.size(); }
 
-	EA_FORCE_INLINE size_t uvSize( void ) const { return pExternalVertices ? ( pExternalUvs ? nExternalSize : 0u ) : ownedUvs.size(); }
+	EA_FORCE_INLINE size_t uvSize( void ) const { return m_pExternalVertices ? ( m_pExternalUvs ? m_nExternalSize : 0u ) : m_ownedUvs.size(); }
 
-	EA_FORCE_INLINE const Vector3 *vertexData( void ) const { return pExternalVertices ? pExternalVertices : ownedVertices.data(); }
+	EA_FORCE_INLINE const Vector3 *vertexData( void ) const { return m_pExternalVertices ? m_pExternalVertices : m_ownedVertices.data(); }
 
-	EA_FORCE_INLINE const Vector2 *uvData( void ) const { return pExternalVertices ? pExternalUvs : ownedUvs.data(); }
+	EA_FORCE_INLINE const Vector2 *uvData( void ) const { return m_pExternalVertices ? m_pExternalUvs : m_ownedUvs.data(); }
 } t3dTriangleBuffer_t;
 
 typedef struct t3dBakeRowTask_s {
-	int32_t xStart = 0;
-	int32_t xEnd = 0;
-	int32_t zStart = 0;
-	int32_t zEnd = 0;
-	size_t iOutputOffset = 0u;
-	size_t nOutputCapacity = 0u;
+	int32_t m_nXStart = 0;
+	int32_t m_nXEnd = 0;
+	int32_t m_nZStart = 0;
+	int32_t m_nZEnd = 0;
+	size_t m_iOutputOffset = 0u;
+	size_t m_nOutputCapacity = 0u;
 } t3dBakeRowTask_t;
 
 typedef struct t3dBakeRegionSnapshot_s {
-	Vector2i location;
-	PackedByteArray heightData;
-	PackedByteArray controlData;
-	const uint8_t *pHeightBytes = nullptr;
-	const uint8_t *pControlBytes = nullptr;
+	Vector2i m_location;
+	PackedByteArray m_heightData;
+	PackedByteArray m_controlData;
+	const uint8_t *m_pHeightBytes = nullptr;
+	const uint8_t *m_pControlBytes = nullptr;
 } t3dBakeRegionSnapshot_t;
 
 typedef struct t3dBakeSnapshot_s {
-	int32_t nRegionSize = 0;
-	real_t fVertexSpacing = 1.f;
-	int32_t szRegionLookup[TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE * TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE] = {};
-	eastl::vector<t3dBakeRegionSnapshot_t> regions;
+	int32_t m_nRegionSize = 0;
+	real_t m_fVertexSpacing = 1.f;
+	int32_t m_szRegionLookup[s_nActiveMaxRegionMapSize * s_nActiveMaxRegionMapSize] = {};
+	eastl::vector<t3dBakeRegionSnapshot_t> m_regions;
 
 	const t3dBakeRegionSnapshot_t *getRegion( const int32_t iX, const int32_t iZ ) const;
 	void getSample( const int32_t iX, const int32_t iZ, uint32_t &nControl, real_t &fHeight ) const;
@@ -208,15 +208,15 @@ typedef struct t3dBakeSnapshot_s {
 } t3dBakeSnapshot_t;
 
 typedef struct t3dBakeTaskContext_s {
-	const T3DTerrain *pTerrain = nullptr;
-	const t3dBakeSnapshot_t *pSnapshot = nullptr;
-	const eastl::vector<t3dBakeRowTask_t> *pTasks = nullptr;
-	eastl::vector<t3dTriangleBuffer_t> *pBuffers = nullptr;
-	int32_t step = 1;
-	int32_t lod = 0;
-	t3dHeightFilter_t filter = HEIGHT_FILTER_NEAREST;
-	bool bGenerateUvs = false;
-	bool bRequireNav = false;
+	const T3DTerrain *m_pTerrain = nullptr;
+	const t3dBakeSnapshot_t *m_pSnapshot = nullptr;
+	const eastl::vector<t3dBakeRowTask_t> *m_pTasks = nullptr;
+	eastl::vector<t3dTriangleBuffer_t> *m_pBuffers = nullptr;
+	int32_t m_nStep = 1;
+	int32_t m_nLod = 0;
+	t3dHeightFilter_t m_filter = HEIGHT_FILTER_NEAREST;
+	bool m_bGenerateUvs = false;
+	bool m_bRequireNav = false;
 } t3dBakeTaskContext_t;
 
 class T3DTerrain : public Node3D {
@@ -259,8 +259,8 @@ private:
 
 	// Object references
 	T3DData *m_pData = nullptr;
-	Ref<T3DAssets> m_pAssets;
-	Ref<Resource> m_pAutoShaderProfile;
+	Ref<T3DAssets> m_assets;
+	Ref<Resource> m_autoShaderProfile;
 	T3DCollision *m_pCollision = nullptr;
 	T3DInstancer *m_pInstancer = nullptr;
 	T3DNodeStreamer *m_pNodeStreamer = nullptr;
@@ -288,8 +288,8 @@ private:
 	// Unified logical region-streaming policy. Every subsystem consumes this map;
 	// no renderer/object cache is allowed to invent a separate world footprint.
 	t3dRegionStreamingConfig_t m_regionStreamingConfig{};
-	uint8_t m_szRegionStreamingStates[TERRAIN3D_MAX_REGION_SLOTS] = {};
-	uint8_t m_szRegionStreamingPrefetch[TERRAIN3D_MAX_REGION_SLOTS] = {};
+	uint8_t m_szRegionStreamingStates[s_nMaxRegionSlots] = {};
+	uint8_t m_szRegionStreamingPrefetch[s_nMaxRegionSlots] = {};
 	Vector2i m_regionStreamingCenter = V2I_MAX;
 	Vector2i m_regionStreamingPredictedCenter = V2I_MAX;
 	Vector3 m_regionStreamingPreviousWorldPosition = V3_MAX;
@@ -339,12 +339,12 @@ private:
 	int m_nGpuRegionCacheBudgetMb = 16;
 	int m_nGpuRegionUploadBudgetLayers = 4;
 	int m_nGpuRegionUploadBudgetMb = 2;
-	int m_nGpuRegionSparePages = TERRAIN3D_GPU_CACHE_DEFAULT_SPARE_LAYERS;
-	int m_nGpuRegionRetireFrames = TERRAIN3D_GPU_CACHE_DEFAULT_RETIRE_FRAMES;
+	int m_nGpuRegionSparePages = s_nGpuCacheDefaultSpareLayers;
+	int m_nGpuRegionRetireFrames = s_nGpuCacheDefaultRetireFrames;
 	int m_nGpuRegionDetailLods = 0;
-	int m_nGpuRegionGuardRegions = TERRAIN3D_GPU_CACHE_DEFAULT_GUARD_REGIONS;
-	int m_nGpuRegionPrefetchRows = TERRAIN3D_GPU_CACHE_DEFAULT_PREFETCH_ROWS;
-	int m_nGpuRegionHysteresisTicks = TERRAIN3D_GPU_CACHE_DEFAULT_HYSTERESIS_TICKS;
+	int m_nGpuRegionGuardRegions = s_nGpuCacheDefaultGuardRegions;
+	int m_nGpuRegionPrefetchRows = s_nGpuCacheDefaultPrefetchRows;
+	int m_nGpuRegionHysteresisTicks = s_nGpuCacheDefaultHysteresisTicks;
 	int m_nGpuRegionColorResolutionDivisor = 1;
 	int m_nGpuRegionDerivedResolutionDivisor = 1;
 	int m_nGpuMiddleHeightResolutionDivisor = 1;
@@ -366,7 +366,7 @@ private:
 	int m_nInstanceRegionCacheBudgetMb = 16;
 	int m_nInstanceRegionLoadBudgetPages = 4;
 	int m_nInstanceRegionLoadBudgetMb = 2;
-	int m_nInstancerCellSize = TERRAIN3D_INSTANCE_DEFAULT_CELL_SIZE;
+	int m_nInstancerCellSize = s_nInstanceDefaultCellSize;
 	bool m_bInstancerCellStreamingEnabled = true;
 	bool m_bInstancerSingleLodBuffers = true;
 	real_t m_fInstancerCellStreamingMargin = 64.0f;
@@ -437,7 +437,7 @@ private:
 	T3DTargetNode3D m_clipmapTarget;
 	T3DTargetNode3D m_collisionTarget;
 	T3DTargetNode3D m_lightTarget;
-	T3DTargetNode3D m_camera; // Fallback target for clipmap and collision
+	T3DTargetNode3D m_hCamera; // Fallback target for clipmap and collision
 	Color m_lastLightColor = COLOR_WHITE;
 	Vector3 m_lastLightDirection = V3_ZERO;
 	bool m_bLightStateValid = false;
@@ -453,7 +453,7 @@ private:
 
 	// Terrain Mesh
 	T3DMesher *m_pTerrainMesher = nullptr;
-	Ref<T3DMaterial> m_pMaterial;
+	Ref<T3DMaterial> m_material;
 	int m_nMeshLods = 7;
 	int m_tessellationLevel = 0;
 	int m_nMeshSize = 48;
@@ -502,8 +502,8 @@ private:
 	RenderingServer::ShadowCastingSetting m_oceanCastShadows = RenderingServer::SHADOW_CASTING_SETTING_OFF;
 	GeometryInstance3D::GIMode m_oceanGiMode = GeometryInstance3D::GI_MODE_DISABLED;
 	uint32_t m_oceanRenderLayers = 1u;
-	Ref<Material> m_pOceanMaterial;
-	Ref<Shader> m_pOceanVariantShader;
+	Ref<Material> m_oceanMaterial;
+	Ref<Shader> m_oceanVariantShader;
 	String m_oceanVariantSource;
 	t3dOceanPerformancePreset_t m_oceanPerformancePreset = OCEAN_PRESET_BORDER_BALANCED;
 	int m_nOceanVertexWaveIterations = 1;
@@ -645,8 +645,8 @@ private:
 	) const;
 
 public:
-	static constexpr int64_t NATIVE_API_REVISION = 2026081802LL;
-	static constexpr const char *NATIVE_BUILD_ID = "a2.8.6-memory-zone";
+	static constexpr int64_t s_nNativeApiRevision = 2026081802LL;
+	static constexpr const char *s_pszNativeBuildId = "a2.8.6-memory-zone";
 	static t3dDebugLevel_t s_debugLevel; // Initialized in terrain_3d.cpp
 
 	T3DTerrain( void );
@@ -656,8 +656,8 @@ public:
 
 	// Terrain
 	EA_FORCE_INLINE String getVersion( void ) const { return m_version; }
-	EA_FORCE_INLINE int64_t getNativeApiRevision( void ) const { return NATIVE_API_REVISION; }
-	EA_FORCE_INLINE String getNativeBuildId( void ) const { return String( NATIVE_BUILD_ID ); }
+	EA_FORCE_INLINE int64_t getNativeApiRevision( void ) const { return s_nNativeApiRevision; }
+	EA_FORCE_INLINE String getNativeBuildId( void ) const { return String( s_pszNativeBuildId ); }
 	void setDebugLevel( const t3dDebugLevel_t level );
 	EA_FORCE_INLINE t3dDebugLevel_t getDebugLevel( void ) const { return s_debugLevel; }
 	void setDataDirectory( String dir );
@@ -667,9 +667,9 @@ public:
 	// Object references
 	EA_FORCE_INLINE T3DData *getData( void ) const { return m_pData; }
 	void setAssets( const Ref<T3DAssets> &rAssets );
-	EA_FORCE_INLINE Ref<T3DAssets> getAssets( void ) const { return m_pAssets; }
+	EA_FORCE_INLINE Ref<T3DAssets> getAssets( void ) const { return m_assets; }
 	void setAutoShaderProfile( const Ref<Resource> &rProfile );
-	EA_FORCE_INLINE Ref<Resource> getAutoShaderProfile( void ) const { return m_pAutoShaderProfile; }
+	EA_FORCE_INLINE Ref<Resource> getAutoShaderProfile( void ) const { return m_autoShaderProfile; }
 	EA_FORCE_INLINE T3DCollision *getCollision( void ) const { return m_pCollision; }
 	EA_FORCE_INLINE T3DInstancer *getInstancer( void ) const { return m_pInstancer; }
 	EA_FORCE_INLINE T3DNodeStreamer *getNodeStreamer( void ) const { return m_pNodeStreamer; }
@@ -720,19 +720,19 @@ public:
 	EA_FORCE_INLINE bool isInstancerCellStreamingEffective( void ) const { return effectiveInstancerCellStreamingEnabled(); }
 	EA_FORCE_INLINE bool isDynamicNodeStreamingEffective( void ) const { return effectiveDynamicNodeStreamingEnabled(); }
 	void setStreamingActiveRadius( int nRadius );
-	EA_FORCE_INLINE int getStreamingActiveRadius( void ) const { return m_regionStreamingConfig.activeRadius; }
+	EA_FORCE_INLINE int getStreamingActiveRadius( void ) const { return m_regionStreamingConfig.m_nActiveRadius; }
 	void setStreamingHotRadius( int nRadius );
-	EA_FORCE_INLINE int getStreamingHotRadius( void ) const { return m_regionStreamingConfig.hotRadius; }
+	EA_FORCE_INLINE int getStreamingHotRadius( void ) const { return m_regionStreamingConfig.m_nHotRadius; }
 	void setStreamingColdRadius( int nRadius );
-	EA_FORCE_INLINE int getStreamingColdRadius( void ) const { return m_regionStreamingConfig.coldRadius; }
+	EA_FORCE_INLINE int getStreamingColdRadius( void ) const { return m_regionStreamingConfig.m_nColdRadius; }
 	void setStreamingUnloadGuard( int nRegions );
-	EA_FORCE_INLINE int getStreamingUnloadGuard( void ) const { return m_regionStreamingConfig.unloadGuard; }
+	EA_FORCE_INLINE int getStreamingUnloadGuard( void ) const { return m_regionStreamingConfig.m_nUnloadGuard; }
 	void setStreamingPredictionEnabled( bool bEnabled );
-	EA_FORCE_INLINE bool isStreamingPredictionEnabled( void ) const { return m_regionStreamingConfig.bPredictionEnabled; }
+	EA_FORCE_INLINE bool isStreamingPredictionEnabled( void ) const { return m_regionStreamingConfig.m_bPredictionEnabled; }
 	void setStreamingPredictionLookahead( real_t fSeconds );
-	EA_FORCE_INLINE real_t getStreamingPredictionLookahead( void ) const { return ( real_t ) ( m_regionStreamingConfig.fPredictionLookaheadSeconds ); }
+	EA_FORCE_INLINE real_t getStreamingPredictionLookahead( void ) const { return ( real_t ) ( m_regionStreamingConfig.m_fPredictionLookaheadSeconds ); }
 	void setStreamingPredictionMaximumRegions( int nRegions );
-	EA_FORCE_INLINE int getStreamingPredictionMaximumRegions( void ) const { return m_regionStreamingConfig.predictionMaximumRegions; }
+	EA_FORCE_INLINE int getStreamingPredictionMaximumRegions( void ) const { return m_regionStreamingConfig.m_nPredictionMaximumRegions; }
 	t3dRegionStreamingState_t getRegionStreamingStateInternal( const Vector2i &vLocation ) const;
 	bool isRegionStreamingPrefetchInternal( const Vector2i &vLocation ) const;
 	EA_FORCE_INLINE const uint8_t *getRegionStreamingStatesInternal( void ) const { return m_szRegionStreamingStates; }
@@ -779,8 +779,8 @@ public:
 	EA_FORCE_INLINE int getEffectiveHlodMemoryBudgetMb( void ) const { return m_bHlodEnabled ? m_nEffectiveHlodMemoryBudgetMb : 0; }
 	EA_FORCE_INLINE int getEffectiveShaderCacheBudgetMb( void ) const { return m_nEffectiveShaderCacheBudgetMb; }
 	EA_FORCE_INLINE int64_t getMemoryBudgetPolicyGeneration( void ) const { return ( int64_t ) ( m_nMemoryBudgetPolicyGeneration ); }
-	EA_FORCE_INLINE bool isMemoryBudgetOvercommitted( void ) const { return m_nMemoryBudgetResult.bHardOvercommit; }
-	EA_FORCE_INLINE int64_t getMemoryBudgetHeadroomBytes( void ) const { return ( int64_t ) ( m_nMemoryBudgetResult.nHeadroomBytes ); }
+	EA_FORCE_INLINE bool isMemoryBudgetOvercommitted( void ) const { return m_nMemoryBudgetResult.m_bHardOvercommit; }
+	EA_FORCE_INLINE int64_t getMemoryBudgetHeadroomBytes( void ) const { return ( int64_t ) ( m_nMemoryBudgetResult.m_nHeadroomBytes ); }
 	void forceMemoryBudgetRebalance( void );
 	Dictionary getRuntimeDiagnostics( bool bDeep = false ) const;
 	Dictionary getRuntimeParitySnapshot( void ) const;
@@ -994,7 +994,7 @@ public:
 
 	// Target Tracking
 	void setCamera( Camera3D *pCamera );
-	EA_FORCE_INLINE Camera3D *getCamera( void ) const { return cast_to<Camera3D>( m_camera.ptr() ); }
+	EA_FORCE_INLINE Camera3D *getCamera( void ) const { return cast_to<Camera3D>( m_hCamera.ptr() ); }
 	void setClipmapTarget( Node3D *pNode );
 	EA_FORCE_INLINE Node3D *getClipmapTarget( void ) const { return m_clipmapTarget.ptr(); }
 	Vector3 getClipmapTargetPosition( void ) const;
@@ -1034,7 +1034,7 @@ public:
 	// Terrain Mesh
 	EA_FORCE_INLINE T3DMesher *getMesher( void ) const { return m_pTerrainMesher; }
 	void setMaterial( const Ref<T3DMaterial> &rMaterial );
-	EA_FORCE_INLINE Ref<T3DMaterial> getMaterial( void ) const { return m_pMaterial; }
+	EA_FORCE_INLINE Ref<T3DMaterial> getMaterial( void ) const { return m_material; }
 	void setMeshLods( const int nCount );
 	EA_FORCE_INLINE int getMeshLods( void ) const { return m_nMeshLods; }
 	void setRuntimeShaderTieringEnabled( bool bEnabled );
@@ -1084,14 +1084,14 @@ public:
 	EA_FORCE_INLINE uint32_t getRenderLayers( void ) const { return m_renderLayers; }
 
 	// Material Displacement Aliases
-	EA_FORCE_INLINE void setDisplacementScale( const real_t fDisplacementScale ) { m_pMaterial.is_valid() ? m_pMaterial->setDisplacementScale( fDisplacementScale ) : ( void ) 0; }
-	EA_FORCE_INLINE real_t getDisplacementScale( void ) const { return m_pMaterial.is_valid() ? m_pMaterial->getDisplacementScale() : 1.f; }
-	EA_FORCE_INLINE void setDisplacementSharpness( const real_t fDisplacementSharpness ) { m_pMaterial.is_valid() ? m_pMaterial->setDisplacementSharpness( fDisplacementSharpness ) : ( void ) 0; }
-	EA_FORCE_INLINE real_t getDisplacementSharpness( void ) const { return m_pMaterial.is_valid() ? m_pMaterial->getDisplacementSharpness() : 0.25f; }
-	EA_FORCE_INLINE void setBufferShaderOverrideEnabled( const bool bEnabled ) { m_pMaterial.is_valid() ? m_pMaterial->setBufferShaderOverrideEnabled( bEnabled ) : ( void ) 0; }
-	EA_FORCE_INLINE bool isBufferShaderOverrideEnabled( void ) const { return m_pMaterial.is_valid() ? m_pMaterial->isBufferShaderOverrideEnabled() : false; }
-	EA_FORCE_INLINE void setBufferShaderOverride( const Ref<Shader> &rShader ) { return m_pMaterial.is_valid() ? m_pMaterial->setBufferShaderOverride( rShader ) : ( void ) 0; }
-	EA_FORCE_INLINE Ref<Shader> getBufferShaderOverride( void ) const { return m_pMaterial.is_valid() ? m_pMaterial->getBufferShaderOverride() : Ref<Shader>(); }
+	EA_FORCE_INLINE void setDisplacementScale( const real_t fDisplacementScale ) { m_material.is_valid() ? m_material->setDisplacementScale( fDisplacementScale ) : ( void ) 0; }
+	EA_FORCE_INLINE real_t getDisplacementScale( void ) const { return m_material.is_valid() ? m_material->getDisplacementScale() : 1.f; }
+	EA_FORCE_INLINE void setDisplacementSharpness( const real_t fDisplacementSharpness ) { m_material.is_valid() ? m_material->setDisplacementSharpness( fDisplacementSharpness ) : ( void ) 0; }
+	EA_FORCE_INLINE real_t getDisplacementSharpness( void ) const { return m_material.is_valid() ? m_material->getDisplacementSharpness() : 0.25f; }
+	EA_FORCE_INLINE void setBufferShaderOverrideEnabled( const bool bEnabled ) { m_material.is_valid() ? m_material->setBufferShaderOverrideEnabled( bEnabled ) : ( void ) 0; }
+	EA_FORCE_INLINE bool isBufferShaderOverrideEnabled( void ) const { return m_material.is_valid() ? m_material->isBufferShaderOverrideEnabled() : false; }
+	EA_FORCE_INLINE void setBufferShaderOverride( const Ref<Shader> &rShader ) { return m_material.is_valid() ? m_material->setBufferShaderOverride( rShader ) : ( void ) 0; }
+	EA_FORCE_INLINE Ref<Shader> getBufferShaderOverride( void ) const { return m_material.is_valid() ? m_material->getBufferShaderOverride() : Ref<Shader>(); }
 
 	// Ocean Mesh
 	EA_FORCE_INLINE T3DMesher *getOceanMesher( void ) const { return m_pOceanMesher; }
@@ -1128,7 +1128,7 @@ public:
 	void setOceanShadingMode( const t3dOceanShadingMode_t mode );
 	EA_FORCE_INLINE t3dOceanShadingMode_t getOceanShadingMode( void ) const { return m_oceanShadingMode; }
 	void setOceanMaterial( const Ref<Material> &rMaterial );
-	EA_FORCE_INLINE Ref<Material> getOceanMaterial( void ) const { return m_pOceanMaterial; }
+	EA_FORCE_INLINE Ref<Material> getOceanMaterial( void ) const { return m_oceanMaterial; }
 
 	// Rendering
 	void setMouseLayer( const uint32_t nLayer );
@@ -1168,16 +1168,16 @@ public:
 	PackedStringArray _get_configuration_warnings( void ) const override;
 
 	// Overlay Aliases
-	EA_FORCE_INLINE void setShowRegionGrid( const bool bEnabled ) { m_pMaterial.is_valid() ? m_pMaterial->setShowRegionGrid( bEnabled ) : ( void ) 0; }
-	EA_FORCE_INLINE bool getShowRegionGrid( void ) const { return m_pMaterial.is_valid() ? m_pMaterial->getShowRegionGrid() : false; }
-	EA_FORCE_INLINE void setShowInstancerGrid( const bool bEnabled ) { m_pMaterial.is_valid() ? m_pMaterial->setShowInstancerGrid( bEnabled ) : ( void ) 0; }
-	EA_FORCE_INLINE bool getShowInstancerGrid( void ) const { return m_pMaterial.is_valid() ? m_pMaterial->getShowInstancerGrid() : false; }
-	EA_FORCE_INLINE void setShowVertexGrid( const bool bEnabled ) { m_pMaterial.is_valid() ? m_pMaterial->setShowVertexGrid( bEnabled ) : ( void ) 0; }
-	EA_FORCE_INLINE bool getShowVertexGrid( void ) const { return m_pMaterial.is_valid() ? m_pMaterial->getShowVertexGrid() : false; }
-	EA_FORCE_INLINE void setShowContours( const bool bEnabled ) { m_pMaterial.is_valid() ? m_pMaterial->setShowContours( bEnabled ) : ( void ) 0; }
-	EA_FORCE_INLINE bool getShowContours( void ) const { return m_pMaterial.is_valid() ? m_pMaterial->getShowContours() : false; }
-	EA_FORCE_INLINE void setShowNavigation( const bool bEnabled ) { m_pMaterial.is_valid() ? m_pMaterial->setShowNavigation( bEnabled ) : ( void ) 0; }
-	EA_FORCE_INLINE bool getShowNavigation( void ) const { return m_pMaterial.is_valid() ? m_pMaterial->getShowNavigation() : false; }
+	EA_FORCE_INLINE void setShowRegionGrid( const bool bEnabled ) { m_material.is_valid() ? m_material->setShowRegionGrid( bEnabled ) : ( void ) 0; }
+	EA_FORCE_INLINE bool getShowRegionGrid( void ) const { return m_material.is_valid() ? m_material->getShowRegionGrid() : false; }
+	EA_FORCE_INLINE void setShowInstancerGrid( const bool bEnabled ) { m_material.is_valid() ? m_material->setShowInstancerGrid( bEnabled ) : ( void ) 0; }
+	EA_FORCE_INLINE bool getShowInstancerGrid( void ) const { return m_material.is_valid() ? m_material->getShowInstancerGrid() : false; }
+	EA_FORCE_INLINE void setShowVertexGrid( const bool bEnabled ) { m_material.is_valid() ? m_material->setShowVertexGrid( bEnabled ) : ( void ) 0; }
+	EA_FORCE_INLINE bool getShowVertexGrid( void ) const { return m_material.is_valid() ? m_material->getShowVertexGrid() : false; }
+	EA_FORCE_INLINE void setShowContours( const bool bEnabled ) { m_material.is_valid() ? m_material->setShowContours( bEnabled ) : ( void ) 0; }
+	EA_FORCE_INLINE bool getShowContours( void ) const { return m_material.is_valid() ? m_material->getShowContours() : false; }
+	EA_FORCE_INLINE void setShowNavigation( const bool bEnabled ) { m_material.is_valid() ? m_material->setShowNavigation( bEnabled ) : ( void ) 0; }
+	EA_FORCE_INLINE bool getShowNavigation( void ) const { return m_material.is_valid() ? m_material->getShowNavigation() : false; }
 
 	void setComputeDisplacementEnabled( bool bEnabled );
 	EA_FORCE_INLINE bool getComputeDisplacementEnabled( void ) const { return m_bComputeDisplacementEnabled.load( std::memory_order_acquire ); }
@@ -1186,42 +1186,42 @@ public:
 	EA_FORCE_INLINE bool isComputeDisplacementActive( void ) const { return m_bComputeDisplacementActive.load( std::memory_order_acquire ); }
 
 	// Debug View Aliases
-	EA_FORCE_INLINE void setShowCheckered( const bool bEnabled ) { m_pMaterial.is_valid() ? m_pMaterial->setShowCheckered( bEnabled ) : ( void ) 0; }
-	EA_FORCE_INLINE bool getShowCheckered( void ) const { return m_pMaterial.is_valid() ? m_pMaterial->getShowCheckered() : false; }
-	EA_FORCE_INLINE void setShowGrey( const bool bEnabled ) { m_pMaterial.is_valid() ? m_pMaterial->setShowGrey( bEnabled ) : ( void ) 0; }
-	EA_FORCE_INLINE bool getShowGrey( void ) const { return m_pMaterial.is_valid() ? m_pMaterial->getShowGrey() : false; }
-	EA_FORCE_INLINE void setShowHeightmap( const bool bEnabled ) { m_pMaterial.is_valid() ? m_pMaterial->setShowHeightmap( bEnabled ) : ( void ) 0; }
-	EA_FORCE_INLINE bool getShowHeightmap( void ) const { return m_pMaterial.is_valid() ? m_pMaterial->getShowHeightmap() : false; }
-	EA_FORCE_INLINE void setShowJaggedness( const bool bEnabled ) { m_pMaterial.is_valid() ? m_pMaterial->setShowJaggedness( bEnabled ) : ( void ) 0; }
-	EA_FORCE_INLINE bool getShowJaggedness( void ) const { return m_pMaterial.is_valid() ? m_pMaterial->getShowJaggedness() : false; }
-	EA_FORCE_INLINE void setShowAutoshader( const bool bEnabled ) { m_pMaterial.is_valid() ? m_pMaterial->setShowAutoshader( bEnabled ) : ( void ) 0; }
-	EA_FORCE_INLINE bool getShowAutoshader( void ) const { return m_pMaterial.is_valid() ? m_pMaterial->getShowAutoshader() : false; }
-	EA_FORCE_INLINE void setShowControlTexture( const bool bEnabled ) { m_pMaterial.is_valid() ? m_pMaterial->setShowControlTexture( bEnabled ) : ( void ) 0; }
-	EA_FORCE_INLINE bool getShowControlTexture( void ) const { return m_pMaterial.is_valid() ? m_pMaterial->getShowControlTexture() : false; }
-	EA_FORCE_INLINE void setShowControlBlend( const bool bEnabled ) { m_pMaterial.is_valid() ? m_pMaterial->setShowControlBlend( bEnabled ) : ( void ) 0; }
-	EA_FORCE_INLINE bool getShowControlBlend( void ) const { return m_pMaterial.is_valid() ? m_pMaterial->getShowControlBlend() : false; }
-	EA_FORCE_INLINE void setShowControlAngle( const bool bEnabled ) { m_pMaterial.is_valid() ? m_pMaterial->setShowControlAngle( bEnabled ) : ( void ) 0; }
-	EA_FORCE_INLINE bool getShowControlAngle( void ) const { return m_pMaterial.is_valid() ? m_pMaterial->getShowControlAngle() : false; }
-	EA_FORCE_INLINE void setShowControlScale( const bool bEnabled ) { m_pMaterial.is_valid() ? m_pMaterial->setShowControlScale( bEnabled ) : ( void ) 0; }
-	EA_FORCE_INLINE bool getShowControlScale( void ) const { return m_pMaterial.is_valid() ? m_pMaterial->getShowControlScale() : false; }
-	EA_FORCE_INLINE void setShowColormap( const bool bEnabled ) { m_pMaterial.is_valid() ? m_pMaterial->setShowColormap( bEnabled ) : ( void ) 0; }
-	EA_FORCE_INLINE bool getShowColormap( void ) const { return m_pMaterial.is_valid() ? m_pMaterial->getShowColormap() : false; }
-	EA_FORCE_INLINE void setShowRoughmap( const bool bEnabled ) { m_pMaterial.is_valid() ? m_pMaterial->setShowRoughmap( bEnabled ) : ( void ) 0; }
-	EA_FORCE_INLINE bool getShowRoughmap( void ) const { return m_pMaterial.is_valid() ? m_pMaterial->getShowRoughmap() : false; }
-	EA_FORCE_INLINE void setShowDisplacementBuffer( const bool bEnabled ) { m_pMaterial.is_valid() ? m_pMaterial->setShowDisplacementBuffer( bEnabled ) : ( void ) 0; }
-	EA_FORCE_INLINE bool getShowDisplacementBuffer( void ) const { return m_pMaterial.is_valid() ? m_pMaterial->getShowDisplacementBuffer() : false; }
+	EA_FORCE_INLINE void setShowCheckered( const bool bEnabled ) { m_material.is_valid() ? m_material->setShowCheckered( bEnabled ) : ( void ) 0; }
+	EA_FORCE_INLINE bool getShowCheckered( void ) const { return m_material.is_valid() ? m_material->getShowCheckered() : false; }
+	EA_FORCE_INLINE void setShowGrey( const bool bEnabled ) { m_material.is_valid() ? m_material->setShowGrey( bEnabled ) : ( void ) 0; }
+	EA_FORCE_INLINE bool getShowGrey( void ) const { return m_material.is_valid() ? m_material->getShowGrey() : false; }
+	EA_FORCE_INLINE void setShowHeightmap( const bool bEnabled ) { m_material.is_valid() ? m_material->setShowHeightmap( bEnabled ) : ( void ) 0; }
+	EA_FORCE_INLINE bool getShowHeightmap( void ) const { return m_material.is_valid() ? m_material->getShowHeightmap() : false; }
+	EA_FORCE_INLINE void setShowJaggedness( const bool bEnabled ) { m_material.is_valid() ? m_material->setShowJaggedness( bEnabled ) : ( void ) 0; }
+	EA_FORCE_INLINE bool getShowJaggedness( void ) const { return m_material.is_valid() ? m_material->getShowJaggedness() : false; }
+	EA_FORCE_INLINE void setShowAutoshader( const bool bEnabled ) { m_material.is_valid() ? m_material->setShowAutoshader( bEnabled ) : ( void ) 0; }
+	EA_FORCE_INLINE bool getShowAutoshader( void ) const { return m_material.is_valid() ? m_material->getShowAutoshader() : false; }
+	EA_FORCE_INLINE void setShowControlTexture( const bool bEnabled ) { m_material.is_valid() ? m_material->setShowControlTexture( bEnabled ) : ( void ) 0; }
+	EA_FORCE_INLINE bool getShowControlTexture( void ) const { return m_material.is_valid() ? m_material->getShowControlTexture() : false; }
+	EA_FORCE_INLINE void setShowControlBlend( const bool bEnabled ) { m_material.is_valid() ? m_material->setShowControlBlend( bEnabled ) : ( void ) 0; }
+	EA_FORCE_INLINE bool getShowControlBlend( void ) const { return m_material.is_valid() ? m_material->getShowControlBlend() : false; }
+	EA_FORCE_INLINE void setShowControlAngle( const bool bEnabled ) { m_material.is_valid() ? m_material->setShowControlAngle( bEnabled ) : ( void ) 0; }
+	EA_FORCE_INLINE bool getShowControlAngle( void ) const { return m_material.is_valid() ? m_material->getShowControlAngle() : false; }
+	EA_FORCE_INLINE void setShowControlScale( const bool bEnabled ) { m_material.is_valid() ? m_material->setShowControlScale( bEnabled ) : ( void ) 0; }
+	EA_FORCE_INLINE bool getShowControlScale( void ) const { return m_material.is_valid() ? m_material->getShowControlScale() : false; }
+	EA_FORCE_INLINE void setShowColormap( const bool bEnabled ) { m_material.is_valid() ? m_material->setShowColormap( bEnabled ) : ( void ) 0; }
+	EA_FORCE_INLINE bool getShowColormap( void ) const { return m_material.is_valid() ? m_material->getShowColormap() : false; }
+	EA_FORCE_INLINE void setShowRoughmap( const bool bEnabled ) { m_material.is_valid() ? m_material->setShowRoughmap( bEnabled ) : ( void ) 0; }
+	EA_FORCE_INLINE bool getShowRoughmap( void ) const { return m_material.is_valid() ? m_material->getShowRoughmap() : false; }
+	EA_FORCE_INLINE void setShowDisplacementBuffer( const bool bEnabled ) { m_material.is_valid() ? m_material->setShowDisplacementBuffer( bEnabled ) : ( void ) 0; }
+	EA_FORCE_INLINE bool getShowDisplacementBuffer( void ) const { return m_material.is_valid() ? m_material->getShowDisplacementBuffer() : false; }
 
 	// PBR View Aliases
-	EA_FORCE_INLINE void setShowTextureAlbedo( const bool bEnabled ) { m_pMaterial.is_valid() ? m_pMaterial->setShowTextureAlbedo( bEnabled ) : ( void ) 0; }
-	EA_FORCE_INLINE bool getShowTextureAlbedo( void ) const { return m_pMaterial.is_valid() ? m_pMaterial->getShowTextureAlbedo() : false; }
-	EA_FORCE_INLINE void setShowTextureHeight( const bool bEnabled ) { m_pMaterial.is_valid() ? m_pMaterial->setShowTextureHeight( bEnabled ) : ( void ) 0; }
-	EA_FORCE_INLINE bool getShowTextureHeight( void ) const { return m_pMaterial.is_valid() ? m_pMaterial->getShowTextureHeight() : false; }
-	EA_FORCE_INLINE void setShowTextureNormal( const bool bEnabled ) { m_pMaterial.is_valid() ? m_pMaterial->setShowTextureNormal( bEnabled ) : ( void ) 0; }
-	EA_FORCE_INLINE bool getShowTextureNormal( void ) const { return m_pMaterial.is_valid() ? m_pMaterial->getShowTextureNormal() : false; }
-	EA_FORCE_INLINE void setShowTextureRough( const bool bEnabled ) { m_pMaterial.is_valid() ? m_pMaterial->setShowTextureRough( bEnabled ) : ( void ) 0; }
-	EA_FORCE_INLINE bool getShowTextureRough( void ) const { return m_pMaterial.is_valid() ? m_pMaterial->getShowTextureRough() : false; }
-	EA_FORCE_INLINE void setShowTextureAo( const bool bEnabled ) { m_pMaterial.is_valid() ? m_pMaterial->setShowTextureAo( bEnabled ) : ( void ) 0; }
-	EA_FORCE_INLINE bool getShowTextureAo( void ) const { return m_pMaterial.is_valid() ? m_pMaterial->getShowTextureAo() : false; }
+	EA_FORCE_INLINE void setShowTextureAlbedo( const bool bEnabled ) { m_material.is_valid() ? m_material->setShowTextureAlbedo( bEnabled ) : ( void ) 0; }
+	EA_FORCE_INLINE bool getShowTextureAlbedo( void ) const { return m_material.is_valid() ? m_material->getShowTextureAlbedo() : false; }
+	EA_FORCE_INLINE void setShowTextureHeight( const bool bEnabled ) { m_material.is_valid() ? m_material->setShowTextureHeight( bEnabled ) : ( void ) 0; }
+	EA_FORCE_INLINE bool getShowTextureHeight( void ) const { return m_material.is_valid() ? m_material->getShowTextureHeight() : false; }
+	EA_FORCE_INLINE void setShowTextureNormal( const bool bEnabled ) { m_material.is_valid() ? m_material->setShowTextureNormal( bEnabled ) : ( void ) 0; }
+	EA_FORCE_INLINE bool getShowTextureNormal( void ) const { return m_material.is_valid() ? m_material->getShowTextureNormal() : false; }
+	EA_FORCE_INLINE void setShowTextureRough( const bool bEnabled ) { m_material.is_valid() ? m_material->setShowTextureRough( bEnabled ) : ( void ) 0; }
+	EA_FORCE_INLINE bool getShowTextureRough( void ) const { return m_material.is_valid() ? m_material->getShowTextureRough() : false; }
+	EA_FORCE_INLINE void setShowTextureAo( const bool bEnabled ) { m_material.is_valid() ? m_material->setShowTextureAo( bEnabled ) : ( void ) 0; }
+	EA_FORCE_INLINE bool getShowTextureAo( void ) const { return m_material.is_valid() ? m_material->getShowTextureAo() : false; }
 
 protected:
 	void _notification( const int nWhat );

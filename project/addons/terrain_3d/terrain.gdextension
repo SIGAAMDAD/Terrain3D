@@ -1,6 +1,6 @@
 [configuration]
 
-entry_symbol = "terrain3dInit"
+entry_symbol = "t3dInit"
 compatibility_minimum = "4.7"
 
 [icons]

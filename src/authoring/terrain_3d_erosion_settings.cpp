@@ -39,18 +39,18 @@ void T3DErosionSettings::setCurve( Ref<Curve> &rTargetCurve, const Ref<Curve> &r
 }
 
 T3DErosionSettings::T3DErosionSettings( void ) {
-	m_pMasterIntensityCurve = makeFlatCurve( 1.0f );
-	m_pRainfallCurve = makeFlatCurve( 1.0f );
-	m_pWeatheringCurve = makeFlatCurve( 1.0f );
-	m_pOxidationCurve = makeFlatCurve( 1.0f );
-	m_pWindCurve = makeFlatCurve( 1.0f );
-	m_pWaveCurve = makeFlatCurve( 1.0f );
-	m_pTrafficCurve = makeFlatCurve( 1.0f );
-	m_pTemperatureCurve = makeFlatCurve( 0.5f, -1.0f, 1.0f );
-	m_pSeaLevelCurve = makeFlatCurve( 0.0f, -1000000.0f, 1000000.0f );
-	m_pSnowmeltCurve = makeFlatCurve( 1.0f );
-	m_pSaltWeatheringCurve = makeFlatCurve( 1.0f );
-	m_pDebrisFlowCurve = makeFlatCurve( 1.0f );
+	m_masterIntensityCurve = makeFlatCurve( 1.0f );
+	m_rainfallCurve = makeFlatCurve( 1.0f );
+	m_weatheringCurve = makeFlatCurve( 1.0f );
+	m_oxidationCurve = makeFlatCurve( 1.0f );
+	m_windCurve = makeFlatCurve( 1.0f );
+	m_waveCurve = makeFlatCurve( 1.0f );
+	m_trafficCurve = makeFlatCurve( 1.0f );
+	m_temperatureCurve = makeFlatCurve( 0.5f, -1.0f, 1.0f );
+	m_seaLevelCurve = makeFlatCurve( 0.0f, -1000000.0f, 1000000.0f );
+	m_snowmeltCurve = makeFlatCurve( 1.0f );
+	m_saltWeatheringCurve = makeFlatCurve( 1.0f );
+	m_debrisFlowCurve = makeFlatCurve( 1.0f );
 }
 
 #define SET_CLAMPED( methodName, methodSymbol, field_name, value_type, min_value, max_value )           \
@@ -119,7 +119,7 @@ SET_VALUE( preserve_holes, setPreserveHoles, m_bPreserveHoles, bool )
 SET_INSPECTOR_TOGGLE( apply_height, setApplyHeight, m_bApplyHeight )
 SET_CLAMPED( height_output_strength, setHeightOutputStrength, m_fHeightOutputStrength, float, 0.0f, 10.0f )
 SET_CLAMPED( global_intensity, setGlobalIntensity, m_fGlobalIntensity, float, 0.0f, 10.0f )
-SET_REF_VALUE( simulation_mask, setSimulationMask, m_pSimulationMask, Ref<Image> )
+SET_REF_VALUE( simulation_mask, setSimulationMask, m_simulationMask, Ref<Image> )
 SET_REF_VALUE( simulation_mask_world_rect, setSimulationMaskWorldRect, m_simulationMaskWorldRect, Rect2 )
 SET_VALUE( invert_simulation_mask, setInvertSimulationMask, m_bInvertSimulationMask, bool )
 SET_CLAMPED( edge_fade_distance_m, setEdgeFadeDistanceM, m_fEdgeFadeDistanceM, float, 0.0f, 10000000.0f )
@@ -179,7 +179,7 @@ SET_CLAMPED( wet_dry_weathering_m_per_cycle, setWetDryWeatheringMPerCycle, m_fWe
 SET_CLAMPED( wet_threshold, setWetThreshold, m_fWetThreshold, float, 0.0f, 1.0f )
 SET_CLAMPED( dry_threshold, setDryThreshold, m_fDryThreshold, float, 0.0f, 1.0f )
 SET_INSPECTOR_TOGGLE( salt_weathering_enabled, setSaltWeatheringEnabled, m_bSaltWeatheringEnabled )
-SET_REF_VALUE( salinity_mask, setSalinityMask, m_pSalinityMask, Ref<Image> )
+SET_REF_VALUE( salinity_mask, setSalinityMask, m_salinityMask, Ref<Image> )
 SET_REF_VALUE( salinity_world_rect, setSalinityWorldRect, m_salinityWorldRect, Rect2 )
 SET_CLAMPED( background_salinity, setBackgroundSalinity, m_fBackgroundSalinity, float, 0.0f, 1.0f )
 SET_CLAMPED( salt_weathering_m_per_year, setSaltWeatheringMPerYear, m_fSaltWeatheringMPerYear, float, 0.0f, 1000.0f )
@@ -245,7 +245,7 @@ SET_CLAMPED( wave_undercut_bias, setWaveUndercutBias, m_fWaveUndercutBias, float
 SET_CLAMPED( beach_smoothing, setBeachSmoothing, m_fBeachSmoothing, float, 0.0f, 1.0f )
 
 SET_INSPECTOR_TOGGLE( traffic_enabled, setTrafficEnabled, m_bTrafficEnabled )
-SET_REF_VALUE( traffic_mask, setTrafficMask, m_pTrafficMask, Ref<Image> )
+SET_REF_VALUE( traffic_mask, setTrafficMask, m_trafficMask, Ref<Image> )
 SET_REF_VALUE( traffic_world_rect, setTrafficWorldRect, m_trafficWorldRect, Rect2 )
 SET_CLAMPED( traffic_erosion_m_per_year, setTrafficErosionMPerYear, m_fTrafficErosionMPerYear, float, 0.0f, 1000.0f )
 SET_CLAMPED( traffic_compaction, setTrafficCompaction, m_fTrafficCompaction, float, 0.0f, 1.0f )
@@ -256,10 +256,10 @@ SET_CLAMPED( traffic_widening_cells, setTrafficWideningCells, m_nTrafficWidening
 
 SET_INSPECTOR_TOGGLE( stratigraphy_enabled, setStratigraphyEnabled, m_bStratigraphyEnabled )
 SET_CLAMPED( surface_layer_depth_m, setSurfaceLayerDepthM, m_fSurfaceLayerDepthM, float, 0.0f, 100000.0f )
-SET_REF_VALUE( surface_layer_depth_map, setSurfaceLayerDepthMap, m_pSurfaceLayerDepthMap, Ref<Image> )
+SET_REF_VALUE( surface_layer_depth_map, setSurfaceLayerDepthMap, m_surfaceLayerDepthMap, Ref<Image> )
 SET_REF_VALUE( surface_layer_depth_world_rect, setSurfaceLayerDepthWorldRect, m_surfaceLayerDepthWorldRect, Rect2 )
 SET_CLAMPED( bedrock_hardness, setBedrockHardness, m_fBedrockHardness, float, 0.0f, 1.0f )
-SET_REF_VALUE( bedrock_hardness_map, setBedrockHardnessMap, m_pBedrockHardnessMap, Ref<Image> )
+SET_REF_VALUE( bedrock_hardness_map, setBedrockHardnessMap, m_bedrockHardnessMap, Ref<Image> )
 SET_REF_VALUE( bedrock_hardness_world_rect, setBedrockHardnessWorldRect, m_bedrockHardnessWorldRect, Rect2 )
 SET_CLAMPED( stratigraphy_transition_width_m, setStratigraphyTransitionWidthM, m_fStratigraphyTransitionWidthM, float, 0.000001f, 100000.0f )
 
@@ -274,40 +274,40 @@ SET_REF_VALUE( oxidation_tint, setOxidationTint, m_oxidationTint, Color )
 SET_CLAMPED( oxidation_tint_strength, setOxidationTintStrength, m_fOxidationTintStrength, float, 0.0f, 1.0f )
 
 void T3DErosionSettings::setMasterIntensityCurve( const Ref<Curve> &rValue ) {
-	setCurve( m_pMasterIntensityCurve, rValue );
+	setCurve( m_masterIntensityCurve, rValue );
 }
 void T3DErosionSettings::setRainfallCurve( const Ref<Curve> &rValue ) {
-	setCurve( m_pRainfallCurve, rValue );
+	setCurve( m_rainfallCurve, rValue );
 }
 void T3DErosionSettings::setWeatheringCurve( const Ref<Curve> &rValue ) {
-	setCurve( m_pWeatheringCurve, rValue );
+	setCurve( m_weatheringCurve, rValue );
 }
 void T3DErosionSettings::setOxidationCurve( const Ref<Curve> &rValue ) {
-	setCurve( m_pOxidationCurve, rValue );
+	setCurve( m_oxidationCurve, rValue );
 }
 void T3DErosionSettings::setWindCurve( const Ref<Curve> &rValue ) {
-	setCurve( m_pWindCurve, rValue );
+	setCurve( m_windCurve, rValue );
 }
 void T3DErosionSettings::setWaveCurve( const Ref<Curve> &rValue ) {
-	setCurve( m_pWaveCurve, rValue );
+	setCurve( m_waveCurve, rValue );
 }
 void T3DErosionSettings::setTrafficCurve( const Ref<Curve> &rValue ) {
-	setCurve( m_pTrafficCurve, rValue );
+	setCurve( m_trafficCurve, rValue );
 }
 void T3DErosionSettings::setTemperatureCurve( const Ref<Curve> &rValue ) {
-	setCurve( m_pTemperatureCurve, rValue );
+	setCurve( m_temperatureCurve, rValue );
 }
 void T3DErosionSettings::setSeaLevelCurve( const Ref<Curve> &rValue ) {
-	setCurve( m_pSeaLevelCurve, rValue );
+	setCurve( m_seaLevelCurve, rValue );
 }
 void T3DErosionSettings::setSnowmeltCurve( const Ref<Curve> &rValue ) {
-	setCurve( m_pSnowmeltCurve, rValue );
+	setCurve( m_snowmeltCurve, rValue );
 }
 void T3DErosionSettings::setSaltWeatheringCurve( const Ref<Curve> &rValue ) {
-	setCurve( m_pSaltWeatheringCurve, rValue );
+	setCurve( m_saltWeatheringCurve, rValue );
 }
 void T3DErosionSettings::setDebrisFlowCurve( const Ref<Curve> &rValue ) {
-	setCurve( m_pDebrisFlowCurve, rValue );
+	setCurve( m_debrisFlowCurve, rValue );
 }
 
 #undef SET_INSPECTOR_TOGGLE

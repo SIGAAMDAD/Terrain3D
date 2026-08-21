@@ -13,7 +13,7 @@ using namespace godot;
 #endif
 
 // NOTE: These have module ending for custom module build compatibility.
-void initializeTerrain3dModule( ModuleInitializationLevel level );
-void uninitializeTerrain3dModule( ModuleInitializationLevel level );
+void t3dInitializeTerrain3DModule( ModuleInitializationLevel level );
+void t3dUninitializeTerrain3DModule( ModuleInitializationLevel level );
 
 #endif // TERRAIN3D_REGISTER_TYPES_H

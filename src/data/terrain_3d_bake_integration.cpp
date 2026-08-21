@@ -47,24 +47,24 @@
 
 
 bool T3DTerrain::bakeRegionSnapshotLess( const t3dBakeRegionSnapshot_t &rA, const t3dBakeRegionSnapshot_t &rB ) {
-	if ( rA.location.y != rB.location.y ) {
-		return rA.location.y < rB.location.y;
+	if ( rA.m_location.y != rB.m_location.y ) {
+		return rA.m_location.y < rB.m_location.y;
 	}
-	return rA.location.x < rB.location.x;
+	return rA.m_location.x < rB.m_location.x;
 }
 
 t3dBakeSnapshot_t T3DTerrain::createBakeSnapshot( void ) const {
 	t3dBakeSnapshot_t snapshot;
-	snapshot.nRegionSize = ( int32_t )m_nRegionSize;
-	snapshot.fVertexSpacing = m_fVertexSpacing;
-	std::fill_n( snapshot.szRegionLookup, TERRAIN3D_MAX_REGION_SLOTS, ( int32_t ) ( -1 ) );
+	snapshot.m_nRegionSize = ( int32_t )m_nRegionSize;
+	snapshot.m_fVertexSpacing = m_fVertexSpacing;
+	std::fill_n( snapshot.m_szRegionLookup, s_nMaxRegionSlots, ( int32_t ) ( -1 ) );
 
 	const TypedArray<Vector2i> region_locations = m_pData->getRegionLocations();
-	snapshot.regions.reserve( region_locations.size() );
+	snapshot.m_regions.reserve( region_locations.size() );
 	const int64_t expected_height_bytes =
-		( int64_t ) ( snapshot.nRegionSize ) * ( int64_t ) ( snapshot.nRegionSize ) * ( int64_t ) ( sizeof( uint16_t ) );
+		( int64_t ) ( snapshot.m_nRegionSize ) * ( int64_t ) ( snapshot.m_nRegionSize ) * ( int64_t ) ( sizeof( uint16_t ) );
 	const int64_t expected_control_bytes =
-		( int64_t ) ( snapshot.nRegionSize ) * ( int64_t ) ( snapshot.nRegionSize ) * ( int64_t ) ( sizeof( uint32_t ) );
+		( int64_t ) ( snapshot.m_nRegionSize ) * ( int64_t ) ( snapshot.m_nRegionSize ) * ( int64_t ) ( sizeof( uint32_t ) );
 
 	for ( const Vector2i regionLocation : region_locations ) {
 		if ( !m_pData->ensureCpuRegionResident( regionLocation ) ) {
@@ -79,21 +79,21 @@ t3dBakeSnapshot_t T3DTerrain::createBakeSnapshot( void ) const {
 		const Ref<Image> pHeightMap = pRegion->getHeightMap();
 		const Ref<Image> pControlMap = pRegion->getControlMap();
 		if ( pHeightMap.is_null() || pHeightMap->get_format() != Image::FORMAT_R16 ||
-			pHeightMap->get_width() != snapshot.nRegionSize || pHeightMap->get_height() != snapshot.nRegionSize ||
+			pHeightMap->get_width() != snapshot.m_nRegionSize || pHeightMap->get_height() != snapshot.m_nRegionSize ||
 			( pControlMap.is_valid() && ( pControlMap->get_format() != Image::FORMAT_RF ||
-				pControlMap->get_width() != snapshot.nRegionSize || pControlMap->get_height() != snapshot.nRegionSize ) ) ) {
+				pControlMap->get_width() != snapshot.m_nRegionSize || pControlMap->get_height() != snapshot.m_nRegionSize ) ) ) {
 			LOG( ERROR, "Skipping invalid terrain region during bake snapshot: ", regionLocation );
 			continue;
 		}
 
 		t3dBakeRegionSnapshot_t region_snapshot;
-		region_snapshot.location = regionLocation;
-		region_snapshot.heightData = pHeightMap->get_data();
+		region_snapshot.m_location = regionLocation;
+		region_snapshot.m_heightData = pHeightMap->get_data();
 		if ( pControlMap.is_valid() ) {
-			region_snapshot.controlData = pControlMap->get_data();
+			region_snapshot.m_controlData = pControlMap->get_data();
 		}
-		if ( region_snapshot.heightData.size() < expected_height_bytes ||
-			( pControlMap.is_valid() && region_snapshot.controlData.size() < expected_control_bytes ) ) {
+		if ( region_snapshot.m_heightData.size() < expected_height_bytes ||
+			( pControlMap.is_valid() && region_snapshot.m_controlData.size() < expected_control_bytes ) ) {
 			LOG( ERROR, "Skipping terrain region with incomplete map data during bake snapshot: ", regionLocation );
 			continue;
 		}
@@ -102,18 +102,18 @@ t3dBakeSnapshot_t T3DTerrain::createBakeSnapshot( void ) const {
 		if ( map_index < 0 ) {
 			continue;
 		}
-		snapshot.regions.push_back( std::move( region_snapshot ) );
+		snapshot.m_regions.push_back( std::move( region_snapshot ) );
 	}
 
 	// Keep adjacent terrain regions adjacent in the snapshot vector. Whole-terrain
 	// bake tasks iterate this order, so spatial sorting improves reuse of neighboring
 	// height/control payloads and makes worker task construction deterministic even
 	// when the resource's active-region order reflects edit history.
-	std::sort( snapshot.regions.begin(), snapshot.regions.end(), bakeRegionSnapshotLess );
-	for ( size_t region_index = 0; region_index < snapshot.regions.size(); ++region_index ) {
-		const int32_t map_index = T3DData::getRegionMapIndex( snapshot.regions[region_index].location );
+	std::sort( snapshot.m_regions.begin(), snapshot.m_regions.end(), bakeRegionSnapshotLess );
+	for ( size_t region_index = 0; region_index < snapshot.m_regions.size(); ++region_index ) {
+		const int32_t map_index = T3DData::getRegionMapIndex( snapshot.m_regions[region_index].m_location );
 		if ( map_index >= 0 ) {
-			snapshot.szRegionLookup[map_index] = ( int32_t ) ( region_index );
+			snapshot.m_szRegionLookup[map_index] = ( int32_t ) ( region_index );
 		}
 	}
 
@@ -123,12 +123,12 @@ t3dBakeSnapshot_t T3DTerrain::createBakeSnapshot( void ) const {
 void T3DTerrain::runBakeTaskRange( void *const pContext, const size_t nBegin, const size_t nEnd ) {
 	t3dBakeTaskContext_t *context = ( t3dBakeTaskContext_t * ) ( pContext );
 	for ( size_t task_index = nBegin; task_index < nEnd; ++task_index ) {
-		const t3dBakeRowTask_t &task = ( *context->pTasks )[task_index];
-		t3dTriangleBuffer_t &buffer = ( *context->pBuffers )[task_index];
-		for ( int32_t z = task.zStart; z < task.zEnd; z += context->step ) {
-			for ( int32_t x = task.xStart; x < task.xEnd; x += context->step ) {
-				context->pTerrain->generateTrianglePair( buffer, context->bGenerateUvs, context->lod, context->filter,
-					context->bRequireNav, x, z, context->pSnapshot );
+		const t3dBakeRowTask_t &task = ( *context->m_pTasks )[task_index];
+		t3dTriangleBuffer_t &buffer = ( *context->m_pBuffers )[task_index];
+		for ( int32_t z = task.m_nZStart; z < task.m_nZEnd; z += context->m_nStep ) {
+			for ( int32_t x = task.m_nXStart; x < task.m_nXEnd; x += context->m_nStep ) {
+				context->m_pTerrain->generateTrianglePair( buffer, context->m_bGenerateUvs, context->m_nLod, context->m_filter,
+					context->m_bRequireNav, x, z, context->m_pSnapshot );
 			}
 		}
 	}
@@ -168,16 +168,16 @@ void T3DTerrain::generateTriangles(
 		const int32_t nRegionSize = ( int32_t )m_nRegionSize;
 		const int32_t rows_per_task = 16;
 		t3dBakeSnapshot_t snapshot = createBakeSnapshot();
-		for ( t3dBakeRegionSnapshot_t &region : snapshot.regions ) {
-			region.pHeightBytes = region.heightData.ptr();
-			region.pControlBytes = region.controlData.is_empty() ? nullptr : region.controlData.ptr();
+		for ( t3dBakeRegionSnapshot_t &region : snapshot.m_regions ) {
+			region.m_pHeightBytes = region.m_heightData.ptr();
+			region.m_pControlBytes = region.m_controlData.is_empty() ? nullptr : region.m_controlData.ptr();
 		}
 		eastl::vector<t3dBakeRowTask_t> tasks;
-		tasks.reserve( snapshot.regions.size() * MAX( 1, nRegionSize / ( step * rows_per_task ) ) );
+		tasks.reserve( snapshot.m_regions.size() * MAX( 1, nRegionSize / ( step * rows_per_task ) ) );
 
 		size_t total_output_capacity = 0u;
-		for ( const t3dBakeRegionSnapshot_t &region : snapshot.regions ) {
-			const Vector2i region_loc = region.location;
+		for ( const t3dBakeRegionSnapshot_t &region : snapshot.m_regions ) {
+			const Vector2i region_loc = region.m_location;
 			const Vector2i region_pos = region_loc * nRegionSize;
 			const int32_t region_z_end = region_pos.y + nRegionSize;
 			for ( int32_t z = region_pos.y; z < region_z_end; z += step * rows_per_task ) {
@@ -193,7 +193,7 @@ void T3DTerrain::generateTriangles(
 				// Isolate adjacent worker slabs on independent cacheline boundaries. The
 				// merge uses each buffer's written size, so padding remains invisible.
 				ERR_FAIL_COND_MSG( total_output_capacity > std::numeric_limits<size_t>::max() -
-					( TERRAIN3D_BAKE_TASK_ALIGNMENT_ELEMENTS - 1u ),
+					( s_nBakeTaskAlignmentElements - 1u ),
 					"Terrain bake task alignment overflows size_t." );
 				total_output_capacity = TERRAIN3D_ALIGN_BAKE_TASK_OFFSET( total_output_capacity );
 				ERR_FAIL_COND_MSG( output_capacity > std::numeric_limits<size_t>::max() - total_output_capacity,
@@ -220,8 +220,8 @@ void T3DTerrain::generateTriangles(
 		buffers.resize( tasks.size() );
 		for ( size_t task_index = 0; task_index < tasks.size(); ++task_index ) {
 			const t3dBakeRowTask_t &task = tasks[task_index];
-			buffers[task_index].bindExternal( bake_vertex_slab.data() + task.iOutputOffset,
-				generate_uvs ? bake_uv_slab.data() + task.iOutputOffset : nullptr, task.nOutputCapacity );
+			buffers[task_index].bindExternal( bake_vertex_slab.data() + task.m_iOutputOffset,
+				generate_uvs ? bake_uv_slab.data() + task.m_iOutputOffset : nullptr, task.m_nOutputCapacity );
 		}
 		if ( !tasks.empty() ) {
 #if defined( __EMSCRIPTEN__ ) && !defined( __EMSCRIPTEN_PTHREADS__ )
@@ -232,15 +232,15 @@ void T3DTerrain::generateTriangles(
 #endif
 			const T3DParallelExecutor executor{( int32_t ) ( worker_count )};
 			t3dBakeTaskContext_t task_context;
-			task_context.pTerrain = this;
-			task_context.pSnapshot = &snapshot;
-			task_context.pTasks = &tasks;
-			task_context.pBuffers = &buffers;
-			task_context.step = step;
-			task_context.lod = nLod;
-			task_context.filter = filter;
-			task_context.bGenerateUvs = generate_uvs;
-			task_context.bRequireNav = bRequireNav;
+			task_context.m_pTerrain = this;
+			task_context.m_pSnapshot = &snapshot;
+			task_context.m_pTasks = &tasks;
+			task_context.m_pBuffers = &buffers;
+			task_context.m_nStep = step;
+			task_context.m_nLod = nLod;
+			task_context.m_filter = filter;
+			task_context.m_bGenerateUvs = generate_uvs;
+			task_context.m_bRequireNav = bRequireNav;
 
 			LOG( INFO, "Generating terrain bake geometry with up to ", worker_count, " persistent worker tasks across ",
 				tasks.size(), " chunks" );
@@ -248,7 +248,7 @@ void T3DTerrain::generateTriangles(
 		}
 
 		for ( const t3dTriangleBuffer_t &buffer : buffers ) {
-			ERR_FAIL_COND_MSG( buffer.bOverflowed,
+			ERR_FAIL_COND_MSG( buffer.m_bOverflowed,
 				"Terrain bake output exceeded its precomputed slab capacity. This indicates a bake sizing invariant failure." );
 		}
 	} else {
@@ -518,8 +518,8 @@ PackedVector3Array T3DTerrain::generateNavMeshSourceGeometry(
 	const TypedArray<Vector2i> locations = m_pData->getRegionLocations();
 	for ( const Vector2i location : locations ) {
 		const real_t region_world = ( real_t ) region_size * m_fVertexSpacing;
-		const real_t region_min_x = ( real_t ) location.x * region_world;
-		const real_t region_min_z = ( real_t ) location.y * region_world;
+		const real_t region_min_x = ( real_t ) location.m_nX * region_world;
+		const real_t region_min_z = ( real_t ) location.m_nY * region_world;
 		if ( rGlobalAabb.has_volume() ) {
 			if ( region_min_x + region_world < rGlobalAabb.position.x || region_min_x > rGlobalAabb.get_end().x ||
 				region_min_z + region_world < rGlobalAabb.position.z || region_min_z > rGlobalAabb.get_end().z ) {
@@ -535,10 +535,10 @@ PackedVector3Array T3DTerrain::generateNavMeshSourceGeometry(
 			continue;
 		}
 		PackedFloat32Array collision_heights; t3dNavigationMaskView_t navigation_view; t3dMinMaxLevelView_t minmax_view; int collision_width = 0;
-		const bool use_minmax = pMinMaxBlob && T3DRuntimeBakeCodec::getMinMaxLevelView( minmax_blob, 16, minmax_view ) && minmax_view.nSourceSide == region_size && minmax_view.nLevelSide > 0;
+		const bool use_minmax = pMinMaxBlob && T3DRuntimeBakeCodec::getMinMaxLevelView( minmax_blob, 16, minmax_view ) && minmax_view.m_nSourceSide == region_size && minmax_view.m_nLevelSide > 0;
 		if ( !T3DRuntimeBakeCodec::getNavigationMaskView( navigation_blob, navigation_view ) ||
 			!T3DRuntimeBakeCodec::decodeCollisionHeight( collision_blob, collision_heights, collision_width ) ||
-			navigation_view.nWidth != expected_width || collision_width != expected_width || ( pMinMaxBlob && !use_minmax ) ) {
+			navigation_view.m_nWidth != expected_width || collision_width != expected_width || ( pMinMaxBlob && !use_minmax ) ) {
 			LOG( ERROR, "Baked navigation/collision acceleration data does not match region ", location );
 			continue;
 		}
@@ -550,23 +550,23 @@ PackedVector3Array T3DTerrain::generateNavMeshSourceGeometry(
 		for ( int z = 0; z < region_size; ++z ) {
 			for ( int x = 0; x < region_size; ++x ) {
 				if ( use_minmax && x + 1 < region_size && z + 1 < region_size ) {
-					const int coarse_x0 = x * minmax_view.nLevelSide / minmax_view.nSourceSide;
-					const int coarse_z0 = z * minmax_view.nLevelSide / minmax_view.nSourceSide;
-					const int coarse_x1 = ( x + 1 ) * minmax_view.nLevelSide / minmax_view.nSourceSide;
-					const int coarse_z1 = ( z + 1 ) * minmax_view.nLevelSide / minmax_view.nSourceSide;
+					const int coarse_x0 = x * minmax_view.m_nLevelSide / minmax_view.m_nSourceSide;
+					const int coarse_z0 = z * minmax_view.m_nLevelSide / minmax_view.m_nSourceSide;
+					const int coarse_x1 = ( x + 1 ) * minmax_view.m_nLevelSide / minmax_view.m_nSourceSide;
+					const int coarse_z1 = ( z + 1 ) * minmax_view.m_nLevelSide / minmax_view.m_nSourceSide;
 					if ( coarse_x0 == coarse_x1 && coarse_z0 == coarse_z1 ) {
-						const Vector2 range = T3DRuntimeBakeCodec::getMinMaxRange( minmax_view, ( uint32_t ) ( coarse_z0 * minmax_view.nLevelSide + coarse_x0 ) );
+						const Vector2 range = T3DRuntimeBakeCodec::getMinMaxRange( minmax_view, ( uint32_t ) ( coarse_z0 * minmax_view.m_nLevelSide + coarse_x0 ) );
 						if ( range.y < aabb_min_y || range.x > aabb_max_y ) {
 							continue;
 						}
 					}
 				}
-				const int nav_width = navigation_view.nWidth; const int i1 = z * nav_width + x; const int i2 = i1 + 1; const int i3 = ( z + 1 ) * nav_width + x; const int i4 = i3 + 1;
+				const int nav_width = navigation_view.m_nWidth; const int i1 = z * nav_width + x; const int i2 = i1 + 1; const int i3 = ( z + 1 ) * nav_width + x; const int i4 = i3 + 1;
 				const bool valid1 = navigation_view.isValidSample( ( uint32_t ) i1 ); const bool valid2 = navigation_view.isValidSample( ( uint32_t ) i2 ); const bool valid3 = navigation_view.isValidSample( ( uint32_t ) i3 ); const bool valid4 = navigation_view.isValidSample( ( uint32_t ) i4 );
 				if ( !valid1 ) continue;
 				const bool nav1 = navigation_view.isNavigationSample( ( uint32_t ) i1 ); const bool nav2 = navigation_view.isNavigationSample( ( uint32_t ) i2 ); const bool nav3 = navigation_view.isNavigationSample( ( uint32_t ) i3 ); const bool nav4 = navigation_view.isNavigationSample( ( uint32_t ) i4 );
-				const int global_x = location.x * region_size + x;
-				const int global_z = location.y * region_size + z;
+				const int global_x = location.m_nX * region_size + x;
+				const int global_z = location.m_nY * region_size + z;
 				Vector3 v1( ( real_t ) global_x * m_fVertexSpacing, height_at( x, z ), ( real_t ) global_z * m_fVertexSpacing );
 				Vector3 v2( ( real_t ) ( global_x + 1 ) * m_fVertexSpacing, height_at( x + 1, z ), ( real_t ) global_z * m_fVertexSpacing );
 				Vector3 v3( ( real_t ) global_x * m_fVertexSpacing, height_at( x, z + 1 ), ( real_t ) ( global_z + 1 ) * m_fVertexSpacing );

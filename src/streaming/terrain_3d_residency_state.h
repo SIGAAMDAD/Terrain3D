@@ -13,50 +13,50 @@
 #include <cstdint>
 
 typedef struct t3dResidencyFrameState_s {
-	Vector3 worldPosition = V3_ZERO;
-	Vector2i streamingCenter = V2I_MAX;
-	Vector2i residencyCenter = V2I_MAX;
-	Vector2i predictedCenter = V2I_MAX;
-	Vector2i activeHeightCenter = V2I_MAX;
-	const uint8_t *pStreamingStates = nullptr;
-	const uint8_t *pStreamingPrefetch = nullptr;
-	uint64_t streamingGeneration = 0u;
-	int nRegionMapSize = 0;
-	int nStreamingActiveRadius = 0;
-	int nMiddleLods = 0;
-	int nGpuHysteresisTicks = TERRAIN3D_GPU_CACHE_DEFAULT_HYSTERESIS_TICKS;
-	bool bAuthoring = false;
-	bool bRuntimeTiering = false;
-	bool bCookedPagesEnabled = false;
-	bool bProfilingEnabled = false;
-	bool bCpuRegionCacheEnabled = false;
-	t3dRuntimePageConfig_t runtimePageConfig;
+	Vector3 m_worldPosition = V3_ZERO;
+	Vector2i m_streamingCenter = V2I_MAX;
+	Vector2i m_residencyCenter = V2I_MAX;
+	Vector2i m_predictedCenter = V2I_MAX;
+	Vector2i m_activeHeightCenter = V2I_MAX;
+	const uint8_t *m_pStreamingStates = nullptr;
+	const uint8_t *m_pStreamingPrefetch = nullptr;
+	uint64_t m_nStreamingGeneration = 0u;
+	int m_nRegionMapSize = 0;
+	int m_nStreamingActiveRadius = 0;
+	int m_nMiddleLods = 0;
+	int m_nGpuHysteresisTicks = s_nGpuCacheDefaultHysteresisTicks;
+	bool m_bAuthoring = false;
+	bool m_bRuntimeTiering = false;
+	bool m_bCookedPagesEnabled = false;
+	bool m_bProfilingEnabled = false;
+	bool m_bCpuRegionCacheEnabled = false;
+	t3dRuntimePageConfig_t m_runtimePageConfig;
 
 	bool containsLocation( const Vector2i &rLocation ) const {
-		if ( nRegionMapSize <= 0 ) {
+		if ( m_nRegionMapSize <= 0 ) {
 			return false;
 		}
-		const int half = nRegionMapSize / 2;
+		const int half = m_nRegionMapSize / 2;
 		return rLocation.x >= -half && rLocation.x < half &&
 			rLocation.y >= -half && rLocation.y < half;
 	}
 
 	t3dRegionStreamingState_t streamingState( const Vector2i &rLocation ) const {
-		if ( !pStreamingStates || !containsLocation( rLocation ) ) {
+		if ( !m_pStreamingStates || !containsLocation( rLocation ) ) {
 			return TERRAIN3D_REGION_STREAMING_UNLOADED;
 		}
 		const int mapIndex = T3DRegionRepository::getRegionMapIndex( rLocation );
 		return mapIndex >= 0 ?
-			( t3dRegionStreamingState_t ) ( pStreamingStates[mapIndex] ) :
+			( t3dRegionStreamingState_t ) ( m_pStreamingStates[mapIndex] ) :
 			TERRAIN3D_REGION_STREAMING_UNLOADED;
 	}
 
 	bool isPrefetch( const Vector2i &rLocation ) const {
-		if ( !pStreamingPrefetch || !containsLocation( rLocation ) ) {
+		if ( !m_pStreamingPrefetch || !containsLocation( rLocation ) ) {
 			return false;
 		}
 		const int mapIndex = T3DRegionRepository::getRegionMapIndex( rLocation );
-		return mapIndex >= 0 && pStreamingPrefetch[mapIndex] != 0u;
+		return mapIndex >= 0 && m_pStreamingPrefetch[mapIndex] != 0u;
 	}
 } t3dResidencyFrameState_t;
 

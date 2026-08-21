@@ -60,16 +60,16 @@ void T3DTerrain::syncLightShaderParameters( void ) {
 		return;
 	}
 
-	if ( m_pMaterial.is_valid() ) {
+	if ( m_material.is_valid() ) {
 		if ( bColorChanged ) {
-			m_pMaterial->setShaderParam( "_light_color", color );
+			m_material->setShaderParam( "_light_color", color );
 		}
 		if ( bDirectionChanged ) {
-			m_pMaterial->setShaderParam( "_light_direction", direction );
+			m_material->setShaderParam( "_light_direction", direction );
 		}
 	}
-	if ( m_pOceanMaterial.is_valid() ) {
-		ShaderMaterial *const pOceanShaderMaterial = Object::cast_to<ShaderMaterial>( m_pOceanMaterial.ptr() );
+	if ( m_oceanMaterial.is_valid() ) {
+		ShaderMaterial *const pOceanShaderMaterial = Object::cast_to<ShaderMaterial>( m_oceanMaterial.ptr() );
 		if ( pOceanShaderMaterial ) {
 			if ( bColorChanged ) {
 				pOceanShaderMaterial->set_shader_parameter( "_light_color", color );
@@ -101,21 +101,21 @@ void T3DTerrain::setupTerrainMesher( void ) {
 		m_pTerrainMesher = memnew( T3DMesher );
 	}
 	const eastl::array<RID, 3> materials = {
-		m_pMaterial->getMaterialRidForTier( SHADER_TIER_NEAR ),
-		m_pMaterial->getMaterialRidForTier( SHADER_TIER_MIDDLE ),
-		m_pMaterial->getMaterialRidForTier( SHADER_TIER_FAR ),
+		m_material->getMaterialRidForTier( SHADER_TIER_NEAR ),
+		m_material->getMaterialRidForTier( SHADER_TIER_MIDDLE ),
+		m_material->getMaterialRidForTier( SHADER_TIER_FAR ),
 	};
 	const eastl::array<RID, 3> shadow_materials = {
-		m_pMaterial->getShadowMaterialRidForTier( SHADER_TIER_NEAR ),
-		m_pMaterial->getShadowMaterialRidForTier( SHADER_TIER_MIDDLE ),
-		m_pMaterial->getShadowMaterialRidForTier( SHADER_TIER_FAR ),
+		m_material->getShadowMaterialRidForTier( SHADER_TIER_NEAR ),
+		m_material->getShadowMaterialRidForTier( SHADER_TIER_MIDDLE ),
+		m_material->getShadowMaterialRidForTier( SHADER_TIER_FAR ),
 	};
 	const bool bTieringActive = isRuntimeShaderTieringActive();
-	const int clipmap_levels = CLAMP( m_nMeshLods + m_tessellationLevel, 1, TERRAIN3D_MAX_CLIPMAP_LEVELS );
+	const int clipmap_levels = CLAMP( m_nMeshLods + m_tessellationLevel, 1, s_nMaxClipmapLevels );
 	const int near_lods = bTieringActive ? m_nRuntimeNearShaderLods : clipmap_levels;
 	const int middle_lods = bTieringActive ? m_nRuntimeMiddleShaderLods : 0;
-	const int update_budget = bTieringActive ? m_nRuntimeClipmapUpdateBudget : TERRAIN3D_MAX_CLIPMAP_LEVELS;
-	const bool bStateMeshBatching = m_pMaterial.is_valid() && !m_pMaterial->isShaderOverrideEnabled();
+	const int update_budget = bTieringActive ? m_nRuntimeClipmapUpdateBudget : s_nMaxClipmapLevels;
+	const bool bStateMeshBatching = m_material.is_valid() && !m_material->isShaderOverrideEnabled();
 	const eastl::array<bool, 3> tier_shadow_enabled = {
 		m_bNearShadowEnabled, m_bMiddleShadowEnabled, m_bFarShadowEnabled
 	};
@@ -155,17 +155,17 @@ void T3DTerrain::setupOceanMesher( void ) {
 			LOG( DEBUG, "Creating mesher" );
 			m_pOceanMesher = memnew( T3DMesher );
 		}
-		const RID ocean_rid = m_pOceanMaterial.is_valid() ? m_pOceanMaterial->get_rid() : RID();
+		const RID ocean_rid = m_oceanMaterial.is_valid() ? m_oceanMaterial->get_rid() : RID();
 		const eastl::array<RID, 3> ocean_materials = { ocean_rid, ocean_rid, ocean_rid };
 		m_pOceanMesher->initialize(
 			this, m_nOceanMeshSize, m_nOceanMeshLods, m_oceanTessellationLevel, m_fOceanVertexSpacing,
 			ocean_materials, ocean_materials, m_nOceanMeshLods + m_oceanTessellationLevel, 0,
-			TERRAIN3D_MAX_CLIPMAP_LEVELS, m_oceanRenderLayers, m_oceanCastShadows,
+			s_nMaxClipmapLevels, m_oceanRenderLayers, m_oceanCastShadows,
 			m_oceanGiMode, m_nOceanMeshLods + m_oceanTessellationLevel, { true, true, true },
 			{ -1, -1, -1 }, false );
 		m_pOceanMesher->updateAabbs( m_fOceanCullMargin, V2_ZERO );
-		if ( m_pOceanMaterial.is_valid() ) {
-			ShaderMaterial *const pOceanShaderMat = Object::cast_to<ShaderMaterial>( m_pOceanMaterial.ptr() );
+		if ( m_oceanMaterial.is_valid() ) {
+			ShaderMaterial *const pOceanShaderMat = Object::cast_to<ShaderMaterial>( m_oceanMaterial.ptr() );
 			if ( pOceanShaderMat ) {
 				pOceanShaderMat->set_shader_parameter( "_mesh_size", m_nOceanMeshSize );
 				pOceanShaderMat->set_shader_parameter( "_vertex_spacing", m_fOceanVertexSpacing );
@@ -224,11 +224,11 @@ void T3DTerrain::updateDisplacementBuffer( void ) {
 		m_pDBufferVp->set_size( Vector2i( m_nMeshSize * 4 * m_tessellationLevel, m_nMeshSize * 4 ) );
 		m_pDBufferRect->set_size( Vector2i( m_nMeshSize * 4 * m_tessellationLevel, m_nMeshSize * 4 ) );
 		LOG( INFO, "Updating displacement buffer to Size: ", m_pDBufferVp->get_size() );
-		if ( m_pMaterial.is_valid() && m_pMaterial->getMaterialRid().is_valid() ) {
+		if ( m_material.is_valid() && m_material->getMaterialRid().is_valid() ) {
 			// Keep a valid raster fallback bound until the asynchronous render-thread
 			// compute dispatch publishes its renderer-owned storage texture.
-			RS->canvas_item_set_material( m_pDBufferRect->get_canvas_item(), m_pMaterial->getBufferMaterialRid() );
-			RS->material_set_param( m_pMaterial->getMaterialRid(), "_displacement_buffer",
+			RS->canvas_item_set_material( m_pDBufferRect->get_canvas_item(), m_material->getBufferMaterialRid() );
+			RS->material_set_param( m_material->getMaterialRid(), "_displacement_buffer",
 								   m_pDBufferVp->get_texture()->get_rid() );
 			tryUpdateComputeDisplacement( getClipmapTargetPosition() );
 		}
@@ -239,8 +239,8 @@ bool T3DTerrain::tryUpdateComputeDisplacement( const Vector3 &rTargetPosition ) 
 	m_bComputeDisplacementActive.store( false, std::memory_order_release );
 	if ( !m_bComputeDisplacementEnabled.load( std::memory_order_acquire ) ||
 		m_bComputeDisplacementFailed.load( std::memory_order_acquire ) ||
-		m_bComputeDisplacementTearingDown.load( std::memory_order_acquire ) || !m_pData || m_pMaterial.is_null() ||
-		!m_pMaterial->getMaterialRid().is_valid() ) {
+		m_bComputeDisplacementTearingDown.load( std::memory_order_acquire ) || !m_pData || m_material.is_null() ||
+		!m_material->getMaterialRid().is_valid() ) {
 		return false;
 	}
 	T3DCompute *const pCompute = m_pData->getComputeBackend();
@@ -312,7 +312,7 @@ void T3DTerrain::renderUpdateComputeDisplacement( void ) {
 		!m_bComputeDisplacementTearingDown.load( std::memory_order_acquire ) ) {
 		RenderingServer *const pServer = RenderingServer::get_singleton();
 		if ( pServer ) {
-			pServer->material_set_param( request.materialRid, "_displacement_buffer", texture );
+			pServer->material_set_param( request.m_hMaterialRid, "_displacement_buffer", texture );
 			m_bComputeDisplacementActive.store( true, std::memory_order_release );
 		}
 	} else if ( !bSuccess && !m_bComputeDisplacementTearingDown.load( std::memory_order_acquire ) ) {
@@ -571,9 +571,9 @@ void T3DTerrain::updateRegionLabels( void ) {
 }
 
 void T3DTerrain::setCamera( Camera3D *const pCamera ) {
-	if ( m_camera.ptr() != pCamera ) {
+	if ( m_hCamera.ptr() != pCamera ) {
 		LOG( EXTREME, "t3dSetting_t camera: ", pCamera );
-		m_camera.setTarget( pCamera );
+		m_hCamera.setTarget( pCamera );
 		if ( m_clipmapTarget.isValid() ) {
 			set_physics_process( true );
 		}
@@ -593,7 +593,7 @@ void T3DTerrain::setClipmapTarget( Node3D *const pNode ) {
 Vector3 T3DTerrain::getClipmapTargetPosition( void ) const {
 	// In Editor, or no clipmap target, use camera
 	if ( IS_EDITOR || !m_clipmapTarget.getTarget() ) {
-		if ( Node3D *cam = m_camera.getTarget() ) {
+		if ( Node3D *cam = m_hCamera.getTarget() ) {
 			return cam->get_global_position();
 		}
 	}
@@ -616,7 +616,7 @@ void T3DTerrain::setCollisionTarget( Node3D *const pNode ) {
 Vector3 T3DTerrain::getCollisionTargetPosition( void ) const {
 	// In Editor, always prefer camera
 	if ( IS_EDITOR ) {
-		if ( Node3D *cam = m_camera.getTarget() ) {
+		if ( Node3D *cam = m_hCamera.getTarget() ) {
 			return cam->get_global_position();
 		}
 	}
@@ -626,7 +626,7 @@ Vector3 T3DTerrain::getCollisionTargetPosition( void ) const {
 	if ( Node3D *target = m_clipmapTarget.getTarget() ) {
 		return target->get_global_position();
 	}
-	if ( Node3D *cam = m_camera.getTarget() ) {
+	if ( Node3D *cam = m_hCamera.getTarget() ) {
 		return cam->get_global_position();
 	}
 	return V3_ZERO;
@@ -649,12 +649,12 @@ void T3DTerrain::updateEnvironmentShadowCasterMask( void ) {
 		m_bLightShadowMaskCaptured = true;
 	}
 
-	uint32_t mask = m_nEnvironmentShadowExternalMask | TERRAIN3D_LIGHTING_LAYER_REGIONAL;
+	uint32_t mask = m_nEnvironmentShadowExternalMask | s_nLightingLayerRegional;
 	if ( m_environmentShadowQuality >= ENVIRONMENT_SHADOW_NORMAL ) {
-		mask |= TERRAIN3D_LIGHTING_LAYER_LARGE;
+		mask |= s_nLightingLayerLarge;
 	}
 	if ( m_environmentShadowQuality >= ENVIRONMENT_SHADOW_ULTRA ) {
-		mask |= TERRAIN3D_LIGHTING_LAYER_FOLIAGE;
+		mask |= s_nLightingLayerFoliage;
 	}
 	pLight->set_shadow_caster_mask( mask );
 }
@@ -701,7 +701,7 @@ void T3DTerrain::updateEnvironmentDirectionalReceiverMask( void ) {
 		m_nLightCullMaskBeforeSemantic = pLight->get_cull_mask();
 		m_bLightCullMaskCaptured = true;
 	}
-	const uint32_t mask = m_nEnvironmentDirectionalExternalMask | TERRAIN3D_DIRECTIONAL_RECEIVER_LAYER;
+	const uint32_t mask = m_nEnvironmentDirectionalExternalMask | s_nDirectionalReceiverLayer;
 	pLight->set_cull_mask( mask & 0xFFFFFu );
 }
 
@@ -760,31 +760,31 @@ void T3DTerrain::snap( void ) {
 }
 
 void T3DTerrain::setMaterial( const Ref<T3DMaterial> &rMaterial ) {
-	if ( !differs( m_pMaterial, rMaterial ) ) {
+	if ( !differs( m_material, rMaterial ) ) {
 		return;
 	}
 	LOG( INFO, "Replacing terrain material" );
 	const bool bWasInitialized = m_bInitialized;
 	const bool bSuppliedMaterial = rMaterial.is_valid();
-	const Ref<T3DMaterial> pOldMaterial = m_pMaterial;
-	disconnectResourceSignals( m_pAssets, pOldMaterial );
+	const Ref<T3DMaterial> pOldMaterial = m_material;
+	disconnectResourceSignals( m_assets, pOldMaterial );
 	if ( pOldMaterial.is_valid() ) {
 		pOldMaterial->uninitialize( this );
 	}
-	m_pMaterial = rMaterial;
-	if ( m_pMaterial.is_null() ) {
-		m_pMaterial.instantiate();
+	m_material = rMaterial;
+	if ( m_material.is_null() ) {
+		m_material.instantiate();
 	}
 	if ( m_performanceTarget == PERFORMANCE_TARGET_XBOX360_EXPERIMENTAL && !bSuppliedMaterial ) {
-		m_pMaterial->setShaderPerformancePreset( SHADER_PRESET_XBOX_360_AUTHENTIC );
+		m_material->setShaderPerformancePreset( SHADER_PRESET_XBOX_360_AUTHENTIC );
 	}
 	m_bPerformanceProfileMaterialPendingApply = false;
 	m_bLightStateValid = false;
-	connectResourceSignals( m_pAssets, m_pMaterial );
+	connectResourceSignals( m_assets, m_material );
 	applyAutoShaderProfileMode();
 	if ( bWasInitialized ) {
-		m_pMaterial->initialize( this );
-		m_pMaterial->setEffectiveShaderVariantSourceBudgetMb( m_nEffectiveShaderCacheBudgetMb );
+		m_material->initialize( this );
+		m_material->setEffectiveShaderVariantSourceBudgetMb( m_nEffectiveShaderCacheBudgetMb );
 		serviceMemoryBudgetPolicy( true );
 		setupTerrainMesher();
 		updateDisplacementBuffer();
@@ -802,8 +802,8 @@ void T3DTerrain::setRuntimeShaderTieringEnabled( const bool bEnabled ) {
 	if ( bEnabled && m_pData && m_bInitialized && !m_pData->ensureFarAtlases() ) {
 		LOG( WARN, "Runtime far shader tier could not prepare coarse terrain atlases; far-tier rendering may use fallback textures until terrain data is ready." );
 	}
-	if ( m_pMaterial.is_valid() && m_pMaterial->isInitialized() ) {
-		m_pMaterial->update( FULL_REBUILD );
+	if ( m_material.is_valid() && m_material->isInitialized() ) {
+		m_material->update( FULL_REBUILD );
 	}
 	if ( m_bInitialized ) {
 		setupTerrainMesher();
@@ -860,7 +860,7 @@ void T3DTerrain::setRuntimeSyncDetailLods( const bool bEnabled ) {
 }
 
 void T3DTerrain::setRuntimeClipmapUpdateBudget( const int nCount ) {
-	const int count = CLAMP( nCount, 1, TERRAIN3D_MAX_CLIPMAP_LEVELS );
+	const int count = CLAMP( nCount, 1, s_nMaxClipmapLevels );
 	if ( m_nRuntimeClipmapUpdateBudget == count ) {
 		return;
 	}
@@ -883,8 +883,8 @@ void T3DTerrain::setMeshLods( const int nCount ) {
 	refreshPerformanceProfileConformity();
 	normalizeRuntimeTierLayout( true );
 	LOG( INFO, "t3dSetting_t mesh levels: ", m_nMeshLods );
-	if ( m_pTerrainMesher && m_pMaterial.is_valid() ) {
-		m_pMaterial->update();
+	if ( m_pTerrainMesher && m_material.is_valid() ) {
+		m_material->update();
 		setupTerrainMesher();
 	}
 	if ( m_pData && effectiveGpuRegionCacheEnabled() && !m_bDeferGpuRegionCacheReconfigure ) {
@@ -902,12 +902,12 @@ void T3DTerrain::setTessellationLevel( const int nLevel ) {
 	LOG( INFO, "t3dSetting_t tessellation level: ", nLevel );
 	// The optimized R8 displacement array exists only while tessellation is
 	// active. Crossing zero creates or frees it before rebuilding shaders.
-	if ( ( old_level == 0 ) != ( m_tessellationLevel == 0 ) && m_pAssets.is_valid() && m_pAssets->isInitialized() &&
-		m_pAssets->usesPackedPbr() ) {
-		m_pAssets->updateTextureList();
+	if ( ( old_level == 0 ) != ( m_tessellationLevel == 0 ) && m_assets.is_valid() && m_assets->isInitialized() &&
+		m_assets->usesPackedPbr() ) {
+		m_assets->updateTextureList();
 	}
-	if ( m_pTerrainMesher && m_pMaterial.is_valid() ) {
-		m_pMaterial->update( FULL_REBUILD );
+	if ( m_pTerrainMesher && m_material.is_valid() ) {
+		m_material->update( FULL_REBUILD );
 		setupTerrainMesher();
 		updateDisplacementBuffer();
 	}
@@ -924,8 +924,8 @@ void T3DTerrain::setMeshSize( const int nSize ) {
 	refreshPerformanceProfileConformity();
 	normalizeRuntimeTierLayout( true );
 	LOG( INFO, "t3dSetting_t mesh size: ", m_nMeshSize );
-	if ( m_pTerrainMesher && m_pMaterial.is_valid() ) {
-		m_pMaterial->update();
+	if ( m_pTerrainMesher && m_material.is_valid() ) {
+		m_material->update();
 		setupTerrainMesher();
 		updateDisplacementBuffer();
 	}
@@ -945,12 +945,12 @@ void T3DTerrain::setVertexSpacing( const real_t fSpacing ) {
 		return;
 	}
 	m_fVertexSpacing = 1.0f;
-	LOG( INFO, "t3dSetting_t fixed vertex spacing: 1 metre" );
-	if ( m_pCollision && m_pData && m_pInstancer && m_pMaterial.is_valid() ) {
+	LOG( INFO, "t3dSetting_t s_nFixed vertex spacing: 1 metre" );
+	if ( m_pCollision && m_pData && m_pInstancer && m_material.is_valid() ) {
 		m_pInstancer->updateVertexSpacing( m_fVertexSpacing );
 		m_pData->setVertexSpacingInternal( m_fVertexSpacing );
 		updateRegionLabels();
-		m_pMaterial->update();
+		m_material->update();
 		setupTerrainMesher();
 		m_pCollision->destroy();
 		m_pCollision->build();
@@ -979,7 +979,7 @@ void T3DTerrain::setCastShadows( const RenderingServer::ShadowCastingSetting cas
 }
 
 void T3DTerrain::setShadowLodCount( const int nCount ) {
-	SET_IF_DIFF( m_nShadowLodCount, CLAMP( nCount, 0, TERRAIN3D_MAX_CLIPMAP_LEVELS ) );
+	SET_IF_DIFF( m_nShadowLodCount, CLAMP( nCount, 0, s_nMaxClipmapLevels ) );
 	refreshPerformanceProfileConformity();
 	if ( m_pTerrainMesher ) {
 		m_pTerrainMesher->setShadowLodCount( m_nShadowLodCount );
@@ -1011,7 +1011,7 @@ void T3DTerrain::setFarShadowEnabled( const bool bEnabled ) {
 }
 
 void T3DTerrain::setNearShadowLodCount( const int nCount ) {
-	SET_IF_DIFF( m_nNearShadowLodCount, CLAMP( nCount, -1, TERRAIN3D_MAX_CLIPMAP_LEVELS ) );
+	SET_IF_DIFF( m_nNearShadowLodCount, CLAMP( nCount, -1, s_nMaxClipmapLevels ) );
 	if ( m_pTerrainMesher ) {
 		m_pTerrainMesher->setTierShadowLodCounts(
 			{ m_nNearShadowLodCount, m_nMiddleShadowLodCount, m_nFarShadowLodCount } );
@@ -1019,7 +1019,7 @@ void T3DTerrain::setNearShadowLodCount( const int nCount ) {
 }
 
 void T3DTerrain::setMiddleShadowLodCount( const int nCount ) {
-	SET_IF_DIFF( m_nMiddleShadowLodCount, CLAMP( nCount, -1, TERRAIN3D_MAX_CLIPMAP_LEVELS ) );
+	SET_IF_DIFF( m_nMiddleShadowLodCount, CLAMP( nCount, -1, s_nMaxClipmapLevels ) );
 	if ( m_pTerrainMesher ) {
 		m_pTerrainMesher->setTierShadowLodCounts(
 			{ m_nNearShadowLodCount, m_nMiddleShadowLodCount, m_nFarShadowLodCount } );
@@ -1027,7 +1027,7 @@ void T3DTerrain::setMiddleShadowLodCount( const int nCount ) {
 }
 
 void T3DTerrain::setFarShadowLodCount( const int nCount ) {
-	SET_IF_DIFF( m_nFarShadowLodCount, CLAMP( nCount, -1, TERRAIN3D_MAX_CLIPMAP_LEVELS ) );
+	SET_IF_DIFF( m_nFarShadowLodCount, CLAMP( nCount, -1, s_nMaxClipmapLevels ) );
 	if ( m_pTerrainMesher ) {
 		m_pTerrainMesher->setTierShadowLodCounts(
 			{ m_nNearShadowLodCount, m_nMiddleShadowLodCount, m_nFarShadowLodCount } );
@@ -1051,7 +1051,7 @@ void T3DTerrain::setRenderLayers( const uint32_t nLayers ) {
 }
 
 void T3DTerrain::updateOceanShaderVariant( void ) {
-	ShaderMaterial *const pMaterial = Object::cast_to<ShaderMaterial>( m_pOceanMaterial.ptr() );
+	ShaderMaterial *const pMaterial = Object::cast_to<ShaderMaterial>( m_oceanMaterial.ptr() );
 	if ( !pMaterial || pMaterial->get_shader().is_null() ) {
 		return;
 	}
@@ -1101,11 +1101,11 @@ void T3DTerrain::updateOceanShaderVariant( void ) {
 	code = code.replace( "render_mode cull_back, depth_draw_always, diffuse_burley, specular_schlick_ggx, "
 						"shadows_disabled, skip_vertex_transform;",
 						render_mode );
-	if ( m_pOceanVariantShader.is_null() ) {
-		m_pOceanVariantShader.instantiate();
+	if ( m_oceanVariantShader.is_null() ) {
+		m_oceanVariantShader.instantiate();
 	}
-	m_pOceanVariantShader->set_code( code );
-	pMaterial->set_shader( m_pOceanVariantShader );
+	m_oceanVariantShader->set_code( code );
+	pMaterial->set_shader( m_oceanVariantShader );
 }
 
 void T3DTerrain::setOceanPerformancePreset( const t3dOceanPerformancePreset_t preset ) {
@@ -1172,14 +1172,14 @@ void T3DTerrain::setOceanEnabled( const bool bEnabled ) {
 	SET_IF_DIFF( m_bOceanEnabled, bEnabled );
 	LOG( INFO, "t3dSetting_t ocean enabled: ", m_bOceanEnabled );
 	if ( m_bOceanEnabled ) {
-		if ( m_pOceanMaterial.is_null() ) {
+		if ( m_oceanMaterial.is_null() ) {
 			const String ocean_mat_path = ProjectSettings::get_singleton()->globalize_path( OCEAN_MATERIAL_PATH );
 			ResourceLoader *const pRl = ResourceLoader::get_singleton();
 			if ( pRl->exists( ocean_mat_path ) ) {
 				const Ref<ShaderMaterial> pOceanMat = pRl->load( ocean_mat_path );
 				if ( pOceanMat.is_valid() ) {
 					const Ref<ShaderMaterial> pLocalOcean = pOceanMat->duplicate( true );
-					m_pOceanMaterial = pLocalOcean.is_valid() ? pLocalOcean : pOceanMat;
+					m_oceanMaterial = pLocalOcean.is_valid() ? pLocalOcean : pOceanMat;
 				}
 			}
 		}
@@ -1253,9 +1253,9 @@ void T3DTerrain::setOceanRenderLayers( const uint32_t nLayers ) {
 }
 
 void T3DTerrain::setOceanMaterial( const Ref<Material> &rMaterial ) {
-	SET_IF_DIFF( m_pOceanMaterial, rMaterial );
+	SET_IF_DIFF( m_oceanMaterial, rMaterial );
 	m_oceanVariantSource = String();
-	m_pOceanVariantShader.unref();
+	m_oceanVariantShader.unref();
 	m_bLightStateValid = false;
 	LOG( INFO, "t3dSetting_t ocean material" );
 	if ( m_bOceanEnabled ) {
@@ -1273,8 +1273,8 @@ void T3DTerrain::setMouseLayer( const uint32_t nLayer ) {
 	// Mask off editor render layers by ORing user layers 1-20 and current mouse layer
 	setRenderLayers( ( m_renderLayers & 0xFFFFF ) | mouse_mask );
 	// Set terrain shader to exclude mouse camera from showing holes
-	if ( m_pMaterial.is_valid() ) {
-		m_pMaterial->setShaderParam( "_mouse_layer", mouse_mask );
+	if ( m_material.is_valid() ) {
+		m_material->setShaderParam( "_mouse_layer", mouse_mask );
 	}
 	// Set mouse camera to see only mouse layer
 	if ( m_pMouseCam ) {

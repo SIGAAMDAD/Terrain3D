@@ -23,37 +23,37 @@
 #include <utility>
 
 typedef struct t3dDerivedMapBuildContext_s {
-	t3dSamplingSource_t samplingSource;
-	eastl::vector<t3dDerivedMapTask_t> *pTasks = nullptr;
-	float *pWorkerHaloScratch = nullptr;
-	uint8_t *pOutputScratch = nullptr;
-	size_t nWorkerHaloElements = 0u;
-	int nRegionSize = 0;
-	float fVertexSpacing = 1.0f;
+	t3dSamplingSource_t m_samplingSource;
+	eastl::vector<t3dDerivedMapTask_t> *m_pTasks = nullptr;
+	float *m_pWorkerHaloScratch = nullptr;
+	uint8_t *m_pOutputScratch = nullptr;
+	size_t m_nWorkerHaloElements = 0u;
+	int m_nRegionSize = 0;
+	float m_fVertexSpacing = 1.0f;
 } t3dDerivedMapBuildContext_t;
 
 static void t3dMapEditServiceBuildDerivedMapRange( void *pContext, const size_t nBegin, const size_t nEnd, const int32_t nWorkerIndex ) {
 	t3dDerivedMapBuildContext_t *const pBuildContext = ( t3dDerivedMapBuildContext_t * ) ( pContext );
-	T3DSampler sampler( pBuildContext->samplingSource );
+	T3DSampler sampler( pBuildContext->m_samplingSource );
 	for ( size_t taskIndex = nBegin; taskIndex < nEnd; ++taskIndex ) {
-		t3dDerivedMapTask_t &task = ( *pBuildContext->pTasks )[taskIndex];
-		if ( task.bSuccess ) {
+		t3dDerivedMapTask_t &task = ( *pBuildContext->m_pTasks )[taskIndex];
+		if ( task.m_bSuccess ) {
 			continue;
 		}
-		const int width = task.dirtyRect.size.x;
-		const int height = task.dirtyRect.size.y;
-		if ( !task.bAvailable || width <= 0 || height <= 0 ) {
+		const int width = task.m_dirtyRect.size.x;
+		const int height = task.m_dirtyRect.size.y;
+		if ( !task.m_bAvailable || width <= 0 || height <= 0 ) {
 			continue;
 		}
 
 		const int haloStride = width + 2;
 		const size_t halo_elements = ( size_t ) haloStride * ( size_t ) ( height + 2 );
-		if ( pBuildContext->pWorkerHaloScratch == nullptr || pBuildContext->pOutputScratch == nullptr || halo_elements > pBuildContext->nWorkerHaloElements ) continue;
-		float *const pHalo = pBuildContext->pWorkerHaloScratch + ( size_t ) MAX( 0, nWorkerIndex ) * pBuildContext->nWorkerHaloElements;
-		const int64_t regionBaseX = ( int64_t ) ( task.location.x ) * pBuildContext->nRegionSize;
-		const int64_t regionBaseZ = ( int64_t ) ( task.location.y ) * pBuildContext->nRegionSize;
-		const int64_t haloGridX = regionBaseX + task.dirtyRect.position.x - 1;
-		const int64_t haloGridZ = regionBaseZ + task.dirtyRect.position.y - 1;
+		if ( pBuildContext->m_pWorkerHaloScratch == nullptr || pBuildContext->m_pOutputScratch == nullptr || halo_elements > pBuildContext->m_nWorkerHaloElements ) continue;
+		float *const pHalo = pBuildContext->m_pWorkerHaloScratch + ( size_t ) MAX( 0, nWorkerIndex ) * pBuildContext->m_nWorkerHaloElements;
+		const int64_t regionBaseX = ( int64_t ) ( task.m_location.x ) * pBuildContext->m_nRegionSize;
+		const int64_t regionBaseZ = ( int64_t ) ( task.m_location.y ) * pBuildContext->m_nRegionSize;
+		const int64_t haloGridX = regionBaseX + task.m_dirtyRect.position.x - 1;
+		const int64_t haloGridZ = regionBaseZ + task.m_dirtyRect.position.y - 1;
 		sampler.copyHeightRect( haloGridX, haloGridZ, width + 2, height + 2, pHalo, haloStride, false );
 		for ( int y = -1; y <= height; ++y ) {
 			for ( int x = -1; x <= width; ++x ) {
@@ -61,19 +61,19 @@ static void t3dMapEditServiceBuildDerivedMapRange( void *pContext, const size_t 
 				if ( std::isfinite( sample ) ) {
 					continue;
 				}
-				const int localX = task.dirtyRect.position.x + x;
-				const int localY = task.dirtyRect.position.y + y;
-				const int clampedX = CLAMP( localX, 0, pBuildContext->nRegionSize - 1 );
-				const int clampedY = CLAMP( localY, 0, pBuildContext->nRegionSize - 1 );
+				const int localX = task.m_dirtyRect.position.x + x;
+				const int localY = task.m_dirtyRect.position.y + y;
+				const int clampedX = CLAMP( localX, 0, pBuildContext->m_nRegionSize - 1 );
+				const int clampedY = CLAMP( localY, 0, pBuildContext->m_nRegionSize - 1 );
 				sample = sampler.sampleHeightGrid( regionBaseX + clampedX, regionBaseZ + clampedY, false );
 				sample = std::isfinite( sample ) ? sample : 0.0f;
 			}
 		}
 
-		if ( task.nOutputBytes != ( size_t ) width * ( size_t ) height * 2u ) continue;
+		if ( task.m_nOutputBytes != ( size_t ) width * ( size_t ) height * 2u ) continue;
 		t3dSimdDerivedNormalsRg8( pHalo, width, height, haloStride,
-			pBuildContext->fVertexSpacing, pBuildContext->pOutputScratch + task.nOutputOffset );
-		task.bSuccess = true;
+			pBuildContext->m_fVertexSpacing, pBuildContext->m_pOutputScratch + task.m_iOutputOffset );
+		task.m_bSuccess = true;
 	}
 }
 
@@ -172,15 +172,15 @@ const eastl::vector<t3dDerivedMapUpdate_t> &T3DMapEditService::regenerateDerived
 	eastl::vector<t3dDerivedMapTask_t> &tasks = m_derivedTaskScratch;
 	for ( const Vector2i &location : rRegionLocations ) {
 		t3dDerivedMapTask_t task;
-		task.location = location;
+		task.m_location = location;
 		T3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() ) {
 			tasks.push_back( std::move( task ) );
 			continue;
 		}
 
-		task.bAvailable = true;
-		task.dirtyRect = Rect2i( V2I_ZERO, V2I( m_pRepository->getRegionSize() ) );
+		task.m_bAvailable = true;
+		task.m_dirtyRect = Rect2i( V2I_ZERO, V2I( m_pRepository->getRegionSize() ) );
 		if ( pRegion->getDerivedNormalSlopeMap().is_valid() && rEditedArea.size.x > 0.0f && rEditedArea.size.z > 0.0f ) {
 			const Vector2 regionWorldOrigin = Vector2( location ) *
 				( real_t ) ( m_pRepository->getRegionSize() ) * m_pRepository->getVertexSpacing();
@@ -191,7 +191,7 @@ const eastl::vector<t3dDerivedMapUpdate_t> &T3DMapEditService::regenerateDerived
 			const Vector2 localEnd = ( editEnd - regionWorldOrigin ) / m_pRepository->getVertexSpacing();
 			const Vector2i pixelBegin = Vector2i( Math::floor( localBegin.x ), Math::floor( localBegin.y ) ) - V2I( 1 );
 			const Vector2i pixelEnd = Vector2i( Math::ceil( localEnd.x ), Math::ceil( localEnd.y ) ) + V2I( 1 );
-			task.dirtyRect = Rect2i( pixelBegin, pixelEnd - pixelBegin ).intersection(
+			task.m_dirtyRect = Rect2i( pixelBegin, pixelEnd - pixelBegin ).intersection(
 				Rect2i( V2I_ZERO, V2I( m_pRepository->getRegionSize() ) )
 			);
 		}
@@ -202,7 +202,7 @@ const eastl::vector<t3dDerivedMapUpdate_t> &T3DMapEditService::regenerateDerived
 	size_t eligibleTaskIndex = 0u;
 	for ( size_t taskIndex = 0u; taskIndex < tasks.size(); ++taskIndex ) {
 		const t3dDerivedMapTask_t &task = tasks[taskIndex];
-		if ( task.bAvailable && task.dirtyRect.size.x > 0 && task.dirtyRect.size.y > 0 ) {
+		if ( task.m_bAvailable && task.m_dirtyRect.size.x > 0 && task.m_dirtyRect.size.y > 0 ) {
 			eligibleTaskIndex = taskIndex;
 			++eligibleTaskCount;
 		}
@@ -213,11 +213,11 @@ const eastl::vector<t3dDerivedMapUpdate_t> &T3DMapEditService::regenerateDerived
 	size_t totalOutputBytes = 0u;
 	size_t maxHaloElements = 0u;
 	for ( t3dDerivedMapTask_t &task : tasks ) {
-		if ( !task.bAvailable || task.dirtyRect.size.x <= 0 || task.dirtyRect.size.y <= 0 ) continue;
-		task.nOutputOffset = totalOutputBytes;
-		task.nOutputBytes = ( size_t ) task.dirtyRect.size.x * ( size_t ) task.dirtyRect.size.y * 2u;
-		totalOutputBytes += task.nOutputBytes;
-		maxHaloElements = MAX( maxHaloElements, ( size_t ) ( task.dirtyRect.size.x + 2 ) * ( size_t ) ( task.dirtyRect.size.y + 2 ) );
+		if ( !task.m_bAvailable || task.m_dirtyRect.size.x <= 0 || task.m_dirtyRect.size.y <= 0 ) continue;
+		task.m_iOutputOffset = totalOutputBytes;
+		task.m_nOutputBytes = ( size_t ) task.m_dirtyRect.size.x * ( size_t ) task.m_dirtyRect.size.y * 2u;
+		totalOutputBytes += task.m_nOutputBytes;
+		maxHaloElements = MAX( maxHaloElements, ( size_t ) ( task.m_dirtyRect.size.x + 2 ) * ( size_t ) ( task.m_dirtyRect.size.y + 2 ) );
 	}
 	m_derivedOutputScratch.resize( totalOutputBytes );
 	m_fDerivedWorkerHaloScratch.resize( maxHaloElements * ( size_t ) workerCount );
@@ -225,15 +225,15 @@ const eastl::vector<t3dDerivedMapUpdate_t> &T3DMapEditService::regenerateDerived
 	const t3dSamplingSource_t samplingSource{m_pRepository, m_pSamplingStorage};
 	if ( pCompute && eligibleTaskCount == 1u ) {
 		t3dDerivedMapTask_t &task = tasks[eligibleTaskIndex];
-		const int width = task.dirtyRect.size.x;
-		const int height = task.dirtyRect.size.y;
+		const int width = task.m_dirtyRect.size.x;
+		const int height = task.m_dirtyRect.size.y;
 		const int haloStride = width + 2;
 		m_fDerivedHaloScratch.resize( ( size_t ) ( haloStride ) * ( size_t ) ( height + 2 ) );
 		T3DSampler sampler( samplingSource );
-		const int64_t regionBaseX = ( int64_t ) ( task.location.x ) * m_pRepository->getRegionSize();
-		const int64_t regionBaseZ = ( int64_t ) ( task.location.y ) * m_pRepository->getRegionSize();
-		const int64_t haloGridX = regionBaseX + task.dirtyRect.position.x - 1;
-		const int64_t haloGridZ = regionBaseZ + task.dirtyRect.position.y - 1;
+		const int64_t regionBaseX = ( int64_t ) ( task.m_location.x ) * m_pRepository->getRegionSize();
+		const int64_t regionBaseZ = ( int64_t ) ( task.m_location.y ) * m_pRepository->getRegionSize();
+		const int64_t haloGridX = regionBaseX + task.m_dirtyRect.position.x - 1;
+		const int64_t haloGridZ = regionBaseZ + task.m_dirtyRect.position.y - 1;
 		sampler.copyHeightRect( haloGridX, haloGridZ, width + 2, height + 2,
 			m_fDerivedHaloScratch.data(), haloStride, false );
 		for ( int y = -1; y <= height; ++y ) {
@@ -244,8 +244,8 @@ const eastl::vector<t3dDerivedMapUpdate_t> &T3DMapEditService::regenerateDerived
 				if ( std::isfinite( sample ) ) {
 					continue;
 				}
-				const int localX = task.dirtyRect.position.x + x;
-				const int localY = task.dirtyRect.position.y + y;
+				const int localX = task.m_dirtyRect.position.x + x;
+				const int localY = task.m_dirtyRect.position.y + y;
 				const int clampedX = CLAMP( localX, 0, m_pRepository->getRegionSize() - 1 );
 				const int clampedY = CLAMP( localY, 0, m_pRepository->getRegionSize() - 1 );
 				sample = sampler.sampleHeightGrid( regionBaseX + clampedX, regionBaseZ + clampedY, false );
@@ -260,36 +260,36 @@ const eastl::vector<t3dDerivedMapUpdate_t> &T3DMapEditService::regenerateDerived
 		) && rgbaOutput.size() >= ( int64_t ) ( width ) * ( int64_t ) ( height ) * 4 ) {
 			const uint8_t *const pRgba = rgbaOutput.ptr();
 			const size_t texelCount = ( size_t ) width * ( size_t ) height;
-			uint8_t *const pOutput = m_derivedOutputScratch.data() + task.nOutputOffset;
+			uint8_t *const pOutput = m_derivedOutputScratch.data() + task.m_iOutputOffset;
 			for ( size_t texel = 0u; texel < texelCount; ++texel ) {
 				pOutput[texel * 2u] = pRgba[texel * 4u];
 				pOutput[texel * 2u + 1u] = pRgba[texel * 4u + 2u];
 			}
-			task.bSuccess = true;
+			task.m_bSuccess = true;
 		}
 	}
 
 	const T3DParallelExecutor executor( workerCount );
 	t3dDerivedMapBuildContext_t buildContext;
-	buildContext.samplingSource = samplingSource;
-	buildContext.pTasks = &tasks;
-	buildContext.pWorkerHaloScratch = m_fDerivedWorkerHaloScratch.data();
-	buildContext.pOutputScratch = m_derivedOutputScratch.data();
-	buildContext.nWorkerHaloElements = maxHaloElements;
-	buildContext.nRegionSize = m_pRepository->getRegionSize();
-	buildContext.fVertexSpacing = ( float ) ( m_pRepository->getVertexSpacing() );
+	buildContext.m_samplingSource = samplingSource;
+	buildContext.m_pTasks = &tasks;
+	buildContext.m_pWorkerHaloScratch = m_fDerivedWorkerHaloScratch.data();
+	buildContext.m_pOutputScratch = m_derivedOutputScratch.data();
+	buildContext.m_nWorkerHaloElements = maxHaloElements;
+	buildContext.m_nRegionSize = m_pRepository->getRegionSize();
+	buildContext.m_fVertexSpacing = ( float ) ( m_pRepository->getVertexSpacing() );
 	executor.runStatic( tasks.size(), 1u, t3dMapEditServiceBuildDerivedMapRange, &buildContext );
 
 	m_derivedUpdateScratch.reserve( tasks.size() );
 	for ( t3dDerivedMapTask_t &task : tasks ) {
-		if ( !task.bAvailable || task.dirtyRect.size.x <= 0 || task.dirtyRect.size.y <= 0 ) {
+		if ( !task.m_bAvailable || task.m_dirtyRect.size.x <= 0 || task.m_dirtyRect.size.y <= 0 ) {
 			continue;
 		}
-		T3DRegion *const pRegion = m_pRepository->getRegionPtr( task.location );
+		T3DRegion *const pRegion = m_pRepository->getRegionPtr( task.m_location );
 		t3dDerivedMapUpdate_t update;
-		update.location = task.location;
-		update.dirtyRect = task.dirtyRect;
-		if ( !pRegion || pRegion->isDeleted() || !task.bSuccess ) {
+		update.m_location = task.m_location;
+		update.m_dirtyRect = task.m_dirtyRect;
+		if ( !pRegion || pRegion->isDeleted() || !task.m_bSuccess ) {
 			if ( pRegion ) {
 				pRegion->invalidateDerivedNormalSlopeMap();
 			}
@@ -298,10 +298,10 @@ const eastl::vector<t3dDerivedMapUpdate_t> &T3DMapEditService::regenerateDerived
 		}
 
 		PackedByteArray output;
-		output.resize( ( int64_t ) task.nOutputBytes );
-		if ( task.nOutputBytes > 0u ) std::memcpy( output.ptrw(), m_derivedOutputScratch.data() + task.nOutputOffset, task.nOutputBytes );
-		const int width = task.dirtyRect.size.x;
-		const int height = task.dirtyRect.size.y;
+		output.resize( ( int64_t ) task.m_nOutputBytes );
+		if ( task.m_nOutputBytes > 0u ) std::memcpy( output.ptrw(), m_derivedOutputScratch.data() + task.m_iOutputOffset, task.m_nOutputBytes );
+		const int width = task.m_dirtyRect.size.x;
+		const int height = task.m_dirtyRect.size.y;
 		const Ref<Image> pTile = Image::create_from_data( width, height, false, Image::FORMAT_RG8, output );
 		if ( pTile.is_null() ) {
 			pRegion->invalidateDerivedNormalSlopeMap();
@@ -309,8 +309,8 @@ const eastl::vector<t3dDerivedMapUpdate_t> &T3DMapEditService::regenerateDerived
 			continue;
 		}
 
-		if ( task.dirtyRect.position == V2I_ZERO &&
-			task.dirtyRect.size == V2I( m_pRepository->getRegionSize() ) ) {
+		if ( task.m_dirtyRect.position == V2I_ZERO &&
+			task.m_dirtyRect.size == V2I( m_pRepository->getRegionSize() ) ) {
 			pRegion->setDerivedNormalSlopeMapInternal( pTile );
 		} else {
 			Ref<Image> pDerived = pRegion->getDerivedNormalSlopeMap();
@@ -320,15 +320,15 @@ const eastl::vector<t3dDerivedMapUpdate_t> &T3DMapEditService::regenerateDerived
 				m_derivedUpdateScratch.push_back( update );
 				continue;
 			}
-			pDerived->blit_rect( pTile, Rect2i( V2I_ZERO, task.dirtyRect.size ), task.dirtyRect.position );
+			pDerived->blit_rect( pTile, Rect2i( V2I_ZERO, task.m_dirtyRect.size ), task.m_dirtyRect.position );
 			pRegion->setDerivedNormalSlopeMapInternal( pDerived );
 		}
 
 		if ( m_pSamplingStorage->isActiveOwner() ) {
-			m_pSamplingStorage->syncActiveDerived( task.location, pRegion, task.dirtyRect );
+			m_pSamplingStorage->syncActiveDerived( task.m_location, pRegion, task.m_dirtyRect );
 		}
-		m_pSamplingStorage->syncResidentDerived( task.location, pRegion, task.dirtyRect );
-		update.bSuccess = true;
+		m_pSamplingStorage->syncResidentDerived( task.m_location, pRegion, task.m_dirtyRect );
+		update.m_bSuccess = true;
 		m_derivedUpdateScratch.push_back( update );
 	}
 	return m_derivedUpdateScratch;
@@ -382,8 +382,8 @@ t3dMapMutation_t T3DMapEditService::commitMapEdits(
 			m_activeLocationScratch.size() * 3u,
 			( size_t ) ( m_pRepository->getRegionMapSize() ) * ( size_t ) ( m_pRepository->getRegionMapSize() )
 		) );
-		eastl::bitset<TERRAIN3D_MAX_REGION_SLOTS> derivedLocationSeen;
-		eastl::bitset<TERRAIN3D_MAX_REGION_SLOTS> activeLocationSeen;
+		eastl::bitset<s_nMaxRegionSlots> derivedLocationSeen;
+		eastl::bitset<s_nMaxRegionSlots> activeLocationSeen;
 		for ( const Vector2i &location : m_activeLocationScratch ) {
 			const int mapIndex = T3DRegionRepository::getRegionMapIndex( location );
 			if ( mapIndex >= 0 ) {
@@ -445,7 +445,7 @@ t3dMapMutation_t T3DMapEditService::commitMapEdits(
 			const Vector2 range = pRegion->getHeightRange();
 			const real_t worldSize = pRegion->getRegionSize() * m_pRepository->getVertexSpacing();
 			const AABB regionArea(
-				Vector3( location.x * worldSize, range.x, location.y * worldSize ),
+				Vector3( location.m_nX * worldSize, range.x, location.m_nY * worldSize ),
 				Vector3( worldSize, MAX( range.y - range.x, m_pRepository->getVertexSpacing() ), worldSize )
 			);
 			if ( bFirstRegion ) {
@@ -476,26 +476,26 @@ t3dMapMutation_t T3DMapEditService::commitMapEdits(
 
 void T3DMapEditService::finalizeMapEdits( const t3dMapMutation_t &rMutation, const bool bKeepEdited ) {
 	if ( !bKeepEdited && m_pRepository ) {
-		for ( const Vector2i &location : rMutation.changedLocations ) {
+		for ( const Vector2i &location : rMutation.m_changedLocations ) {
 			if ( T3DRegion *const pRegion = m_pRepository->getRegionPtr( location ) ) {
 				pRegion->setEdited( false );
 			}
 		}
 	}
-	if ( rMutation.editedArea.size.x > 0.0f && rMutation.editedArea.size.z > 0.0f ) {
-		addEditedArea( rMutation.editedArea );
+	if ( rMutation.m_editedArea.size.x > 0.0f && rMutation.m_editedArea.size.z > 0.0f ) {
+		addEditedArea( rMutation.m_editedArea );
 	}
 }
 
 void T3DMapEditService::recycleMutation( t3dMapMutation_t &&rMutation ) {
-	if ( rMutation.changedLocations.capacity() > m_activeLocationScratch.capacity() ) {
-		m_activeLocationScratch.swap( rMutation.changedLocations );
+	if ( rMutation.m_changedLocations.capacity() > m_activeLocationScratch.capacity() ) {
+		m_activeLocationScratch.swap( rMutation.m_changedLocations );
 	}
-	if ( rMutation.derivedLocations.capacity() > m_derivedLocationScratch.capacity() ) {
-		m_derivedLocationScratch.swap( rMutation.derivedLocations );
+	if ( rMutation.m_derivedLocations.capacity() > m_derivedLocationScratch.capacity() ) {
+		m_derivedLocationScratch.swap( rMutation.m_derivedLocations );
 	}
-	if ( rMutation.derivedUpdates.capacity() > m_derivedUpdateScratch.capacity() ) {
-		m_derivedUpdateScratch.swap( rMutation.derivedUpdates );
+	if ( rMutation.m_derivedUpdates.capacity() > m_derivedUpdateScratch.capacity() ) {
+		m_derivedUpdateScratch.swap( rMutation.m_derivedUpdates );
 	}
 	m_activeLocationScratch.clear();
 	m_derivedLocationScratch.clear();
@@ -811,10 +811,10 @@ Ref<Image> T3DMapEditService::layeredToImage(
 			bottomRight = location;
 			bFoundRegion = true;
 		} else {
-			topLeft.x = MIN( topLeft.x, location.x );
-			topLeft.y = MIN( topLeft.y, location.y );
-			bottomRight.x = MAX( bottomRight.x, location.x );
-			bottomRight.y = MAX( bottomRight.y, location.y );
+			topLeft.x = MIN( topLeft.x, location.m_nX );
+			topLeft.y = MIN( topLeft.y, location.m_nY );
+			bottomRight.x = MAX( bottomRight.x, location.m_nX );
+			bottomRight.y = MAX( bottomRight.y, location.m_nY );
 		}
 	}
 
@@ -880,11 +880,11 @@ t3dMapMutation_t T3DMapEditService::makeMutationResult(
 	const Vector2 &rEditedHeightRange
 ) {
 	t3dMapMutation_t result;
-	result.mapType = eMapType;
-	result.editedArea = rEditedArea;
-	result.editedHeightRange = rEditedHeightRange;
-	result.changedLocations.swap( m_activeLocationScratch );
-	result.derivedLocations.swap( m_derivedLocationScratch );
-	result.derivedUpdates.swap( m_derivedUpdateScratch );
+	result.m_mapType = eMapType;
+	result.m_editedArea = rEditedArea;
+	result.m_editedHeightRange = rEditedHeightRange;
+	result.m_changedLocations.swap( m_activeLocationScratch );
+	result.m_derivedLocations.swap( m_derivedLocationScratch );
+	result.m_derivedUpdates.swap( m_derivedUpdateScratch );
 	return result;
 }

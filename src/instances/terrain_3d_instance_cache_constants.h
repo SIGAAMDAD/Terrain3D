@@ -6,7 +6,7 @@
 
 #include <cstddef>
 
-static constexpr int TERRAIN3D_INSTANCE_CACHE_MAX_PAGES = 64;
-static constexpr size_t TERRAIN3D_INSTANCE_CACHE_MIB = 1024u * 1024u;
+static constexpr int s_nInstanceCacheMaxPages = 64;
+static constexpr size_t s_nInstanceCacheMib = 1024u * 1024u;
 
 #endif // TERRAIN3D_INSTANCE_CACHE_CONSTANTS_H
