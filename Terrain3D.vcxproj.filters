@@ -84,7 +84,10 @@
     <ClInclude Include=".github\actions\build-artifact\action.yml">
       <Filter>5. Headers</Filter>
     </ClInclude>
-  </ItemGroup>
+      <ClInclude Include="src\core\terrain_3d_integration_helpers.h">
+      <Filter>5. Headers</Filter>
+    </ClInclude>
+</ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\terrain_3d_mesher.cpp">
       <Filter>6. C++</Filter>
@@ -93,6 +96,30 @@
       <Filter>6. C++</Filter>
     </ClCompile>
     <ClCompile Include="src\terrain_3d.cpp">
+      <Filter>6. C++</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\terrain_3d_bindings.cpp">
+      <Filter>6. C++</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\terrain_3d_resources.cpp">
+      <Filter>6. C++</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\terrain_3d_runtime_diagnostics.cpp">
+      <Filter>6. C++</Filter>
+    </ClCompile>
+    <ClCompile Include="src\data\terrain_3d_bake_integration.cpp">
+      <Filter>6. C++</Filter>
+    </ClCompile>
+    <ClCompile Include="src\memory\terrain_3d_memory_policy.cpp">
+      <Filter>6. C++</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\terrain_3d_render_integration.cpp">
+      <Filter>6. C++</Filter>
+    </ClCompile>
+    <ClCompile Include="src\streaming\terrain_3d_runtime_profile.cpp">
+      <Filter>6. C++</Filter>
+    </ClCompile>
+    <ClCompile Include="src\streaming\terrain_3d_streaming_integration.cpp">
       <Filter>6. C++</Filter>
     </ClCompile>
     <ClCompile Include="src\terrain_3d_editor.cpp">

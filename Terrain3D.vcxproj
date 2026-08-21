@@ -147,6 +147,7 @@
     <ClInclude Include="src\terrain_3d_mesher.h" />
     <ClInclude Include="src\register_types.h" />
     <ClInclude Include="src\terrain_3d.h" />
+    <ClInclude Include="src\core\terrain_3d_integration_helpers.h" />
     <ClInclude Include="src\terrain_3d_asset_resource.h" />
     <ClInclude Include="src\terrain_3d_collision.h" />
     <ClInclude Include="src\terrain_3d_data.h" />
@@ -166,6 +167,14 @@
     <ClCompile Include="src\terrain_3d_mesher.cpp" />
     <ClCompile Include="src\register_types.cpp" />
     <ClCompile Include="src\terrain_3d.cpp" />
+    <ClCompile Include="src\core\terrain_3d_bindings.cpp" />
+    <ClCompile Include="src\core\terrain_3d_resources.cpp" />
+    <ClCompile Include="src\core\terrain_3d_runtime_diagnostics.cpp" />
+    <ClCompile Include="src\data\terrain_3d_bake_integration.cpp" />
+    <ClCompile Include="src\memory\terrain_3d_memory_policy.cpp" />
+    <ClCompile Include="src\rendering\terrain_3d_render_integration.cpp" />
+    <ClCompile Include="src\streaming\terrain_3d_runtime_profile.cpp" />
+    <ClCompile Include="src\streaming\terrain_3d_streaming_integration.cpp" />
     <ClCompile Include="src\terrain_3d_collision.cpp" />
     <ClCompile Include="src\terrain_3d_data.cpp" />
     <ClCompile Include="src\terrain_3d_editor.cpp" />
