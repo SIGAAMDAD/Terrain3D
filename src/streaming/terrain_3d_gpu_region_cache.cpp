@@ -49,14 +49,14 @@ static bool t3dGpuRegionCacheForEachSquareRing( const Vector2i &rCenter, const i
 	return true;
 }
 
-struct T3DControlCookSource {
+typedef struct t3dControlCookSource_s {
 	PackedByteArray nBytes;
 	bool bPresent = false;
 	bool bImplicit = true;
-};
+} t3dControlCookSource_t;
 
 static bool t3dGpuRegionCacheReadCookControl(
-	const eastl::array<T3DControlCookSource, 9> &rSources,
+	const eastl::array<t3dControlCookSource_t, 9> &rSources,
 	const int nRegionSize, const int iX, const int iZ, uint32_t &nControl
 ) {
 	int region_dx = 0;
@@ -77,7 +77,7 @@ static bool t3dGpuRegionCacheReadCookControl(
 		region_dz = 1;
 		local_z -= nRegionSize;
 	}
-	const T3DControlCookSource &source = rSources[( size_t ) ( ( region_dz + 1 ) * 3 + ( region_dx + 1 ) )];
+	const t3dControlCookSource_t &source = rSources[( size_t ) ( ( region_dz + 1 ) * 3 + ( region_dx + 1 ) )];
 	if ( !source.bPresent ) {
 		return false;
 	}
@@ -376,12 +376,12 @@ Ref<Image> T3DGpuRegionCache::makeMiddleCompositeImage(
 }
 
 Ref<Image> T3DGpuRegionCache::makeGpuRenderControlImage( const Vector2i &vLocation ) const {
-	eastl::array<T3DControlCookSource, 9> sources;
+	eastl::array<t3dControlCookSource_t, 9> sources;
 	for ( int dz = -1; dz <= 1; ++dz ) {
 		for ( int dx = -1; dx <= 1; ++dx ) {
 			const Vector2i location = vLocation + Vector2i( dx, dz );
 			const int source_index = ( dz + 1 ) * 3 + ( dx + 1 );
-			T3DControlCookSource &source = sources[( size_t ) ( source_index )];
+			t3dControlCookSource_t &source = sources[( size_t ) ( source_index )];
 			const T3DRegion *pRegion = m_regionRepository.getRegionPtr( location );
 			Ref<T3DRegion> pLoadedSource;
 			const bool bNeedsSourceLoad = !pRegion || pRegion->isDeleted() ||
@@ -1054,7 +1054,7 @@ int T3DGpuRegionCache::processPendingGpuRegionRepublishes( const int nLimit ) {
 }
 
 int T3DGpuRegionCache::collectDesiredGpuRegions(
-	const T3DResidencyFrameState &rFrame, const Vector2i &rCenter, Vector2i *pLocations,
+	const t3dResidencyFrameState_t &rFrame, const Vector2i &rCenter, Vector2i *pLocations,
 	const int nCapacity, t3dGpuCacheSelectionStats_t &rStats
 ) {
 	rStats = t3dGpuCacheSelectionStats_s();
@@ -1368,18 +1368,18 @@ bool T3DGpuRegionCache::uploadGpuRegionLayer(
 }
 
 bool T3DGpuRegionCache::isRuntimePageWanted( void *const pContext, const Vector2i &rLocation ) {
-	const T3DResidencyFrameState *const pFrame = static_cast<const T3DResidencyFrameState *>( pContext );
+	const t3dResidencyFrameState_t *const pFrame = static_cast<const t3dResidencyFrameState_t *>( pContext );
 	return pFrame && ( pFrame->streamingState( rLocation ) >= TERRAIN3D_REGION_STREAMING_HOT ||
 		pFrame->isPrefetch( rLocation ) );
 }
 
-bool T3DGpuRegionCache::serviceRuntimePages( const T3DResidencyFrameState &rFrame ) {
-	T3DRuntimePageServiceState state;
+bool T3DGpuRegionCache::serviceRuntimePages( const t3dResidencyFrameState_t &rFrame ) {
+	t3dRuntimePageServiceState_t state;
 	state.config = rFrame.runtimePageConfig;
 	state.predictedCenter = rFrame.predictedCenter;
 	state.streamingGeneration = rFrame.streamingGeneration;
 	state.pIsWanted = &T3DGpuRegionCache::isRuntimePageWanted;
-	state.pWantedContext = const_cast<T3DResidencyFrameState *>( &rFrame );
+	state.pWantedContext = const_cast<t3dResidencyFrameState_t *>( &rFrame );
 	m_runtimePageStore.service( state );
 	return true;
 }
@@ -1437,7 +1437,7 @@ bool T3DGpuRegionCache::configure(
 	return bStorageChanged;
 }
 
-T3DGpuRegionCacheUpdateResult T3DGpuRegionCache::update( const T3DResidencyFrameState &rFrame, const bool bForce, const int nEffectiveUploadLayers, T3DCompute *pCompute ) {
+t3dGpuRegionCacheUpdateResult_t T3DGpuRegionCache::update( const t3dResidencyFrameState_t &rFrame, const bool bForce, const int nEffectiveUploadLayers, T3DCompute *pCompute ) {
 	const T3DGpuRegionCacheLastScopeTimer serviceTimer( m_nGpuRegionServiceUsecLast, rFrame.bProfilingEnabled );
 	m_nGpuRegionStallFlagsLastTick = TERRAIN3D_PROFILE_STALL_NONE;
 	m_runtimePageStore.resetFrameStats();
@@ -1459,7 +1459,7 @@ T3DGpuRegionCacheUpdateResult T3DGpuRegionCache::update( const T3DResidencyFrame
 	m_nGpuRegionDerivedUpdatesLastTick = 0;
 	m_nGpuRegionRuntimeColorMipsLastTick = 0;
 	m_nGpuRegionRuntimeDerivedBuildsLastTick = 0;
-	const T3DRuntimePageStats runtime_page_stats = m_runtimePageStore.getStats();
+	const t3dRuntimePageStats_t runtime_page_stats = m_runtimePageStore.getStats();
 	m_nGpuRegionPreparedPagesLastTick = runtime_page_stats.nPreparedPages;
 	m_nGpuRegionPrepareWorkersLastTick = runtime_page_stats.nPrepareWorkers;
 	m_nGpuRegionEffectiveUploadLimitLastTick = m_nGpuRegionUploadBudgetLayers;
@@ -1472,7 +1472,7 @@ T3DGpuRegionCacheUpdateResult T3DGpuRegionCache::update( const T3DResidencyFrame
 	m_nGpuRegionHysteresisLastTick = 0;
 	m_nGpuRegionMissingRequiredLastTick = 0;
 	if ( !m_bGpuRegionCacheEnabled || m_regionRepository.getRegionSize() <= 0 || m_regionRepository.getVertexSpacing() <= 0.0f ) {
-		return T3DGpuRegionCacheUpdateResult{};
+		return t3dGpuRegionCacheUpdateResult_t{};
 	}
 	++m_nGpuRegionTick;
 	reclaimRetiredGpuRegionSlots();
@@ -1480,7 +1480,7 @@ T3DGpuRegionCacheUpdateResult T3DGpuRegionCache::update( const T3DResidencyFrame
 	const Vector2i prediction_delta = rFrame.predictedCenter - rFrame.streamingCenter;
 	m_gpuRegionPredictionDirection = Vector2i( SIGN( prediction_delta.x ), SIGN( prediction_delta.y ) );
 	if ( !m_bGpuRegionCacheTexturesReady && !rebuildTextures() ) {
-		return T3DGpuRegionCacheUpdateResult{};
+		return t3dGpuRegionCacheUpdateResult_t{};
 	}
 	const Vector2i center = rFrame.residencyCenter;
 	m_bGpuRegionCameraMovedLastTick = m_gpuRegionCacheCenter != V2I_MAX &&
@@ -1499,7 +1499,7 @@ T3DGpuRegionCacheUpdateResult T3DGpuRegionCache::update( const T3DResidencyFrame
 		if ( deferred_republish_count > 0 ) {
 			notePageTableChanged();
 		}
-		return T3DGpuRegionCacheUpdateResult{m_bPageTableChangedThisTick};
+		return t3dGpuRegionCacheUpdateResult_t{m_bPageTableChangedThisTick};
 	}
 
 	Vector2i desired[TERRAIN3D_GPU_CACHE_MAX_LAYERS];
@@ -1707,7 +1707,7 @@ T3DGpuRegionCacheUpdateResult T3DGpuRegionCache::update( const T3DResidencyFrame
 	if ( bMapChanged || deferred_republish_count > 0 ) {
 		notePageTableChanged();
 	}
-	return T3DGpuRegionCacheUpdateResult{m_bPageTableChangedThisTick};
+	return t3dGpuRegionCacheUpdateResult_t{m_bPageTableChangedThisTick};
 }
 
 
@@ -1815,8 +1815,8 @@ size_t T3DGpuRegionCache::getHardCapBytes( void ) const {
 	return managed_shared + estimateLayerBytes() * ( size_t ) ( TERRAIN3D_GPU_CACHE_MAX_LAYERS );
 }
 
-T3DGpuRegionCacheStats T3DGpuRegionCache::getStats( void ) const {
-	T3DGpuRegionCacheStats stats;
+t3dGpuRegionCacheStats_t T3DGpuRegionCache::getStats( void ) const {
+	t3dGpuRegionCacheStats_t stats;
 	stats.bEnabled = m_bGpuRegionCacheEnabled;
 	stats.bTexturesReady = m_bGpuRegionCacheTexturesReady;
 	stats.bSelectionPending = m_bGpuRegionCacheSelectionDirty;
@@ -1865,7 +1865,7 @@ T3DGpuRegionCacheStats T3DGpuRegionCache::getStats( void ) const {
 
 Dictionary T3DGpuRegionCache::getStatsDictionary( const bool bDetailed ) const {
 	Dictionary stats;
-	const T3DRuntimePageStats runtime = m_runtimePageStore.getStats();
+	const t3dRuntimePageStats_t runtime = m_runtimePageStore.getStats();
 	stats["enabled"] = m_bGpuRegionCacheEnabled;
 	stats["budget_mb"] = m_nGpuRegionCacheBudgetMb;
 	stats["allocation_budget_mb"] = m_pTerrain && m_pTerrain->isEditorAuthoringMode() ?

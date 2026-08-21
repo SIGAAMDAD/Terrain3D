@@ -21,34 +21,34 @@ class T3DCompute;
 class T3DRegionRepository;
 class T3DSamplingStorage;
 
-struct T3DDerivedMapUpdate {
+typedef struct t3dDerivedMapUpdate_s {
 	Vector2i location = V2I_MAX;
 	Rect2i dirtyRect;
 	bool bSuccess = false;
-};
+} t3dDerivedMapUpdate_t;
 
-struct T3DDerivedMapTask {
+typedef struct t3dDerivedMapTask_s {
 	Vector2i location = V2I_MAX;
 	Rect2i dirtyRect;
 	size_t nOutputOffset = 0u;
 	size_t nOutputBytes = 0u;
 	bool bAvailable = false;
 	bool bSuccess = false;
-};
+} t3dDerivedMapTask_t;
 
 // Owns one synchronous edit dispatch. Vectors are moved out of the service's
 // retained scratch so synchronous Godot signals can safely trigger nested edits.
 // recycleMutation() returns their capacity to the service after dispatch.
-struct T3DMapMutation {
+typedef struct t3dMapMutation_s {
 	t3dMapType_t mapType = REGION_TYPE_MAX;
 	AABB editedArea;
 	Vector2 editedHeightRange = V2_ZERO;
 	eastl::vector<Vector2i> changedLocations;
 	eastl::vector<Vector2i> derivedLocations;
-	eastl::vector<T3DDerivedMapUpdate> derivedUpdates;
+	eastl::vector<t3dDerivedMapUpdate_t> derivedUpdates;
 
 	EA_FORCE_INLINE bool valid( void ) const { return mapType >= TYPE_HEIGHT && mapType < REGION_TYPE_MAX && !changedLocations.empty(); }
-};
+} t3dMapMutation_t;
 
 // Owns authoritative terrain-map mutation mechanics and edit bookkeeping.
 // Renderer publication, far-atlas invalidation, collision/instance updates,
@@ -69,14 +69,14 @@ public:
 		Vector2i &rRegionLocation, Rect2i &rDirtyRect
 	);
 
-	T3DMapMutation commitMapEdits(
+	t3dMapMutation_t commitMapEdits(
 		t3dMapType_t eMapType, const eastl::vector<Vector2i> &rRegionLocations,
 		const AABB &rEditedArea, T3DCompute *pCompute
 	);
-	void finalizeMapEdits( const T3DMapMutation &rMutation, bool bKeepEdited );
-	void recycleMutation( T3DMapMutation &&rMutation );
+	void finalizeMapEdits( const t3dMapMutation_t &rMutation, bool bKeepEdited );
+	void recycleMutation( t3dMapMutation_t &&rMutation );
 
-	const eastl::vector<T3DDerivedMapUpdate> &regenerateDerivedMaps(
+	const eastl::vector<t3dDerivedMapUpdate_t> &regenerateDerivedMaps(
 		const eastl::vector<Vector2i> &rRegionLocations,
 		const AABB &rEditedArea, T3DCompute *pCompute
 	);
@@ -130,15 +130,15 @@ private:
 	Vector2 m_masterHeightRange = V2_ZERO;
 
 	// Reused on the synchronous edit path. Worker tasks receive retained, disjoint halo spans.
-	eastl::vector<T3DDerivedMapTask> m_derivedTaskScratch;
+	eastl::vector<t3dDerivedMapTask_t> m_derivedTaskScratch;
 	eastl::vector<float> m_fDerivedHaloScratch;
 	eastl::vector<float> m_fDerivedWorkerHaloScratch;
 	eastl::vector<uint8_t> m_derivedOutputScratch;
 	eastl::vector<Vector2i> m_activeLocationScratch;
 	eastl::vector<Vector2i> m_derivedLocationScratch;
-	eastl::vector<T3DDerivedMapUpdate> m_derivedUpdateScratch;
+	eastl::vector<t3dDerivedMapUpdate_t> m_derivedUpdateScratch;
 
-	T3DMapMutation makeMutationResult( t3dMapType_t eMapType, const AABB &rEditedArea,
+	t3dMapMutation_t makeMutationResult( t3dMapType_t eMapType, const AABB &rEditedArea,
 		const Vector2 &rEditedHeightRange );
 };
 

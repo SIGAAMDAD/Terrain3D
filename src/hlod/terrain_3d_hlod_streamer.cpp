@@ -106,19 +106,22 @@ void T3DHLODStreamer::compileLegacyNodePolicies( const Ref<T3DHLODManifest> &rMa
 	const PackedInt64Array nodeIds = rManifest->getNodeSpawnIds();
 	const PackedByteArray nodeLevels = rManifest->getNodeMinLevels();
 	const int nodeCount = MIN( nodeRegions.size(), MIN( nodeIds.size(), nodeLevels.size() ) );
-	struct IndexedPolicy { int region = 0; t3dNodePolicy_t policy; };
-	eastl::vector<IndexedPolicy> policies;
+	typedef struct t3dIndexedNodePolicy_s {
+		int region = 0;
+		t3dNodePolicy_t policy;
+	} t3dIndexedNodePolicy_t;
+	eastl::vector<t3dIndexedNodePolicy_t> policies;
 	policies.reserve( ( size_t ) nodeCount );
 	for ( int i = 0; i < nodeCount; ++i ) {
 		const int region = nodeRegions[i];
 		if ( region < 0 || region >= TERRAIN3D_MAX_REGION_SLOTS || nodeLevels[i] == 0 ) continue;
 		policies.push_back( {region, {nodeIds[i], nodeLevels[i]}} );
 	}
-	eastl::sort( policies.begin(), policies.end(), []( const IndexedPolicy &a, const IndexedPolicy &b ) {
+	eastl::sort( policies.begin(), policies.end(), []( const t3dIndexedNodePolicy_t &a, const t3dIndexedNodePolicy_t &b ) {
 		return a.region < b.region || ( a.region == b.region && a.policy.spawnId < b.policy.spawnId );
 	} );
 	m_nodePolicies.reserve( policies.size() );
-	for ( const IndexedPolicy &indexed : policies ) {
+	for ( const t3dIndexedNodePolicy_t &indexed : policies ) {
 		++m_nodePolicyOffsets[( size_t ) indexed.region + 1u];
 		m_nodePolicies.push_back( indexed.policy );
 	}
@@ -130,10 +133,10 @@ void T3DHLODStreamer::compileLegacyNodePolicies( const Ref<T3DHLODManifest> &rMa
 bool T3DHLODStreamer::compilePackedManifest( const Ref<T3DHLODManifest> &rManifest ) {
 	const PackedByteArray blob = rManifest->getRuntimeBlob();
 	if ( blob.is_empty() ) return false;
-	T3DHLODRuntimeData runtime;
+	t3dHlodRuntimeData_t runtime;
 	if ( !T3DHLODRuntimeCodec::decode( blob, runtime ) ) return false;
 	m_entries.reserve( runtime.entries.size() );
-	for ( const T3DHLODRuntimeEntryRecord &source : runtime.entries ) {
+	for ( const t3dHlodRuntimeEntryRecord_t &source : runtime.entries ) {
 		t3dEntry_t entry;
 		entry.level = source.level; entry.cluster = source.cluster; entry.regionMin = source.regionMin; entry.regionMax = source.regionMax;
 		entry.localBounds = source.localBounds; entry.packagePath = source.packagePath; entry.geometricError = source.geometricError;
@@ -147,7 +150,7 @@ bool T3DHLODStreamer::compilePackedManifest( const Ref<T3DHLODManifest> &rManife
 	m_roots = eastl::move( runtime.roots );
 	m_instancerMinLevels = eastl::move( runtime.instancerMinLevels );
 	m_nodePolicies.reserve( runtime.nodePolicies.size() );
-	for ( const T3DHLODRuntimeNodePolicyRecord &policy : runtime.nodePolicies ) m_nodePolicies.push_back( {policy.spawnId, policy.minLevel} );
+	for ( const t3dHlodRuntimeNodePolicyRecord_t &policy : runtime.nodePolicies ) m_nodePolicies.push_back( {policy.spawnId, policy.minLevel} );
 	m_nodePolicyOffsets = runtime.nodePolicyOffsets;
 	m_manifest = rManifest;
 	return true;

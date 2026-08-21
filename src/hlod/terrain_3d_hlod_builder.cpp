@@ -25,21 +25,21 @@
 #include <cmath>
 #include <cstdint>
 
-struct HlodTriangle {
+typedef struct t3dHlodTriangle_s {
 	Vector3 a;
 	Vector3 b;
 	Vector3 c;
 	Vector3 center;
 	AABB bounds;
-};
+} t3dHlodTriangle_t;
 
-struct HlodBvhNode {
+typedef struct t3dHlodBvhNode_s {
 	AABB bounds;
 	int left = -1;
 	int right = -1;
 	int begin = 0;
 	int count = 0;
-};
+} t3dHlodBvhNode_t;
 
 EA_FORCE_INLINE static AABB t3dHlodBuilderBoundsFromPoint( const Vector3 &p ) { return AABB( p, Vector3() ); }
 
@@ -117,20 +117,20 @@ static int t3dHlodBuilderLargestAxis( const Vector3 &size ) {
 EA_FORCE_INLINE static real_t t3dHlodBuilderComponent( const Vector3 &v, const int axis ) { return axis == 0 ? v.x : ( axis == 1 ? v.y : v.z ); }
 
 static int t3dHlodBuilderBuildBvhRecursive(
-	const eastl::vector<HlodTriangle> &triangles,
+	const eastl::vector<t3dHlodTriangle_t> &triangles,
 	eastl::vector<int> &order,
-	eastl::vector<HlodBvhNode> &nodes,
+	eastl::vector<t3dHlodBvhNode_t> &nodes,
 	const int begin,
 	const int count
 ) {
-	HlodBvhNode node;
+	t3dHlodBvhNode_t node;
 	node.begin = begin;
 	node.count = count;
 	AABB bounds;
 	AABB center_bounds;
 	bool first = true;
 	for ( int i = 0; i < count; ++i ) {
-		const HlodTriangle &triangle = triangles[( size_t ) order[( size_t ) ( begin + i )]];
+		const t3dHlodTriangle_t &triangle = triangles[( size_t ) order[( size_t ) ( begin + i )]];
 		if ( first ) {
 			bounds = triangle.bounds;
 			center_bounds = t3dHlodBuilderBoundsFromPoint( triangle.center );
@@ -162,27 +162,27 @@ static int t3dHlodBuilderBuildBvhRecursive(
 }
 
 static void t3dHlodBuilderQueryBvhRecursive(
-	const eastl::vector<HlodTriangle> &triangles,
+	const eastl::vector<t3dHlodTriangle_t> &triangles,
 	const eastl::vector<int> &order,
-	const eastl::vector<HlodBvhNode> &nodes,
+	const eastl::vector<t3dHlodBvhNode_t> &nodes,
 	const int node_index,
 	const Vector3 &point,
 	real_t &best_squared
 ) {
 	if ( node_index < 0 ) { return; }
-	const HlodBvhNode &node = nodes[( size_t ) node_index];
+	const t3dHlodBvhNode_t &node = nodes[( size_t ) node_index];
 	if ( t3dHlodBuilderPointAabbDistanceSquared( point, node.bounds ) >= best_squared ) { return; }
 	if ( node.count > 0 ) {
 		for ( int i = 0; i < node.count; ++i ) {
-			const HlodTriangle &triangle = triangles[( size_t ) order[( size_t ) ( node.begin + i )]];
+			const t3dHlodTriangle_t &triangle = triangles[( size_t ) order[( size_t ) ( node.begin + i )]];
 			if ( t3dHlodBuilderPointAabbDistanceSquared( point, triangle.bounds ) >= best_squared ) { continue; }
 			best_squared = MIN( best_squared, t3dHlodBuilderPointTriangleDistanceSquared( point, triangle.a, triangle.b, triangle.c ) );
 		}
 		return;
 	}
 
-	const HlodBvhNode &left = nodes[( size_t ) node.left];
-	const HlodBvhNode &right = nodes[( size_t ) node.right];
+	const t3dHlodBvhNode_t &left = nodes[( size_t ) node.left];
+	const t3dHlodBvhNode_t &right = nodes[( size_t ) node.right];
 	const real_t left_distance = t3dHlodBuilderPointAabbDistanceSquared( point, left.bounds );
 	const real_t right_distance = t3dHlodBuilderPointAabbDistanceSquared( point, right.bounds );
 	if ( left_distance <= right_distance ) {
@@ -304,14 +304,14 @@ static real_t t3dHlodBuilderMeasureVertexDeviation( const Array &source_arrays, 
 	const PackedInt32Array proxy_indices = proxy_arrays[Mesh::ARRAY_INDEX];
 	if ( source_vertices.is_empty() || proxy_vertices.is_empty() || proxy_indices.size() < 3 ) { return 0.0f; }
 
-	eastl::vector<HlodTriangle> triangles;
+	eastl::vector<t3dHlodTriangle_t> triangles;
 	triangles.reserve( ( size_t ) proxy_indices.size() / 3u );
 	for ( int i = 0; i + 2 < proxy_indices.size(); i += 3 ) {
 		const int ia = proxy_indices[i];
 		const int ib = proxy_indices[i + 1];
 		const int ic = proxy_indices[i + 2];
 		if ( ia < 0 || ib < 0 || ic < 0 || ia >= proxy_vertices.size() || ib >= proxy_vertices.size() || ic >= proxy_vertices.size() ) { continue; }
-		HlodTriangle triangle;
+		t3dHlodTriangle_t triangle;
 		triangle.a = proxy_vertices[ia];
 		triangle.b = proxy_vertices[ib];
 		triangle.c = proxy_vertices[ic];
@@ -324,7 +324,7 @@ static real_t t3dHlodBuilderMeasureVertexDeviation( const Array &source_arrays, 
 	eastl::vector<int> order;
 	order.resize( triangles.size() );
 	for ( int i = 0; i < ( int ) triangles.size(); ++i ) { order[( size_t ) i] = i; }
-	eastl::vector<HlodBvhNode> nodes;
+	eastl::vector<t3dHlodBvhNode_t> nodes;
 	nodes.reserve( triangles.size() * 2u );
 	const int root = t3dHlodBuilderBuildBvhRecursive( triangles, order, nodes, 0, ( int ) triangles.size() );
 	real_t max_squared = 0.0f;

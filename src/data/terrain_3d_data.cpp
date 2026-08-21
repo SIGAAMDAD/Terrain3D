@@ -358,8 +358,8 @@ void T3DData::syncCacheDefaultMaps( void ) {
 	m_farSurfaceAtlasCache.setConfig( getFarSurfaceAtlasConfig() );
 }
 
-T3DFarSurfaceAtlasConfig T3DData::getFarSurfaceAtlasConfig( void ) const {
-	T3DFarSurfaceAtlasConfig config;
+t3dFarSurfaceAtlasConfig_t T3DData::getFarSurfaceAtlasConfig( void ) const {
+	t3dFarSurfaceAtlasConfig_t config;
 	config.bRequired = isFarAtlasRequired();
 	config.bStrictCooked = m_pTerrain && m_pTerrain->isGpuRegionCookedPagesEnabled() &&
 		!m_pTerrain->isEditorAuthoringMode();
@@ -374,8 +374,8 @@ T3DFarSurfaceAtlasConfig T3DData::getFarSurfaceAtlasConfig( void ) const {
 	return config;
 }
 
-T3DMiddleHeightRegionCacheConfig T3DData::getMiddleHeightCacheConfig( void ) const {
-	T3DMiddleHeightRegionCacheConfig config;
+t3dMiddleHeightRegionCacheConfig_t T3DData::getMiddleHeightCacheConfig( void ) const {
+	t3dMiddleHeightRegionCacheConfig_t config;
 	config.bAuthoring = m_pTerrain && m_pTerrain->isEditorAuthoringMode();
 	config.nHotRadius = m_pTerrain ? m_pTerrain->getStreamingHotRadius() : 0;
 	config.nResolutionDivisor = config.bAuthoring ? 1 :
@@ -384,7 +384,7 @@ T3DMiddleHeightRegionCacheConfig T3DData::getMiddleHeightCacheConfig( void ) con
 	return config;
 }
 
-void T3DData::applyInstanceRegionCacheChanges( const T3DInstanceRegionCacheChanges &rChanges ) {
+void T3DData::applyInstanceRegionCacheChanges( const t3dInstanceRegionCacheChanges_t &rChanges ) {
 	if ( !m_pTerrain || !m_pTerrain->getInstancer() ) {
 		return;
 	}
@@ -664,8 +664,8 @@ Ref<Image> T3DData::makeGpuRenderControlImage( const Vector2i &vLocation ) const
 	return Image::create_from_data( m_regionRepository.getRegionSize(), m_regionRepository.getRegionSize(), false, Image::FORMAT_RF, output );
 }
 
-T3DRuntimePageConfig T3DData::getRuntimePageConfig( void ) const {
-	T3DRuntimePageConfig config;
+t3dRuntimePageConfig_t T3DData::getRuntimePageConfig( void ) const {
+	t3dRuntimePageConfig_t config;
 	if ( !m_pTerrain ) {
 		return config;
 	}
@@ -689,8 +689,8 @@ T3DRuntimePageConfig T3DData::getRuntimePageConfig( void ) const {
 	return config;
 }
 
-T3DResidencyFrameState T3DData::makeResidencyFrameState( const Vector3 &rWorldPosition ) const {
-	T3DResidencyFrameState frame;
+t3dResidencyFrameState_t T3DData::makeResidencyFrameState( const Vector3 &rWorldPosition ) const {
+	t3dResidencyFrameState_t frame;
 	frame.worldPosition = rWorldPosition;
 	frame.nRegionMapSize = m_regionRepository.getRegionMapSize();
 	const bool bGeometryReady = m_regionRepository.getRegionSize() > 0 &&
@@ -725,7 +725,7 @@ T3DResidencyFrameState T3DData::makeResidencyFrameState( const Vector3 &rWorldPo
 }
 
 bool T3DData::isRuntimePageWanted( void *const pContext, const Vector2i &rLocation ) {
-	const T3DResidencyFrameState *const pFrame = static_cast<const T3DResidencyFrameState *>( pContext );
+	const t3dResidencyFrameState_t *const pFrame = static_cast<const t3dResidencyFrameState_t *>( pContext );
 	return pFrame && ( pFrame->streamingState( rLocation ) >= TERRAIN3D_REGION_STREAMING_HOT ||
 		pFrame->isPrefetch( rLocation ) );
 }
@@ -759,13 +759,13 @@ void T3DData::requestGpuRuntimePage(
 	);
 }
 
-void T3DData::serviceGpuRuntimePagePrepare( const T3DResidencyFrameState &rFrame ) {
-	T3DRuntimePageServiceState state;
+void T3DData::serviceGpuRuntimePagePrepare( const t3dResidencyFrameState_t &rFrame ) {
+	t3dRuntimePageServiceState_t state;
 	state.config = rFrame.runtimePageConfig;
 	state.predictedCenter = rFrame.predictedCenter;
 	state.streamingGeneration = rFrame.streamingGeneration;
 	state.pIsWanted = &T3DData::isRuntimePageWanted;
-	state.pWantedContext = const_cast<T3DResidencyFrameState *>( &rFrame );
+	state.pWantedContext = const_cast<t3dResidencyFrameState_t *>( &rFrame );
 	m_runtimePageStore.service( state );
 }
 
@@ -804,7 +804,7 @@ bool T3DData::ensureCookedNodeDescriptors( const Vector2i &vLocation ) {
 
 PackedStringArray T3DData::getCookedSceneDependencies( const Vector2i &vLocation ) const {
 	PackedStringArray dependencies;
-	const T3DRuntimeWorldRegionRecord *const pRecord = m_runtimeWorldManifest.findRegion( vLocation );
+	const t3dRuntimeWorldRegionRecord_t *const pRecord = m_runtimeWorldManifest.findRegion( vLocation );
 	if ( !pRecord ) return dependencies;
 	const eastl::vector<uint16_t> &ids = m_runtimeWorldManifest.getRegionSceneDependencies();
 	const uint32_t end = pRecord->sceneDependencyFirst + pRecord->sceneDependencyCount;
@@ -888,7 +888,7 @@ bool T3DData::writeGpuRuntimePage( T3DRegion *const pRegion, String *const pErro
 		}
 	}
 
-	T3DRuntimePageCookPayload payload;
+	t3dRuntimePageCookPayload_t payload;
 	payload.height = pRegion->getHeightMap();
 	const Ref<Image> authored_control = pRegion->getControlMap();
 	if ( pRegion->hasChannel( TYPE_CONTROL ) ) {
@@ -1206,7 +1206,7 @@ bool T3DData::configureMiddleHeightCache( void ) {
 
 
 
-void T3DData::updateMiddleHeightResidencyInternal( const T3DResidencyFrameState &rFrame, const bool bForce ) {
+void T3DData::updateMiddleHeightResidencyInternal( const t3dResidencyFrameState_t &rFrame, const bool bForce ) {
 	m_middleHeightRegionCache.update(
 		rFrame, bForce, getEffectiveGpuRegionUploadBudgetLayers(), getMiddleHeightCacheConfig() );
 }
@@ -1328,7 +1328,7 @@ bool T3DData::ensureCpuSampleArea( const Vector3 &rWorldPosition, const int nRad
 }
 
 
-void T3DData::updateCpuRegionResidencyInternal( const T3DResidencyFrameState &rFrame, const bool bForce ) {
+void T3DData::updateCpuRegionResidencyInternal( const t3dResidencyFrameState_t &rFrame, const bool bForce ) {
 	m_cpuRegionCache.update( rFrame, bForce, getEffectiveCpuRegionLoadBudgetLayers() );
 }
 
@@ -1355,7 +1355,7 @@ void T3DData::emitGpuRegionMapChanged( void ) {
 
 
 void T3DData::resetInstanceRegionCache( const bool bRestoreAll ) {
-	T3DInstanceRegionCacheChanges changes;
+	t3dInstanceRegionCacheChanges_t changes;
 	m_instanceRegionCache.reset( bRestoreAll, &changes );
 	applyInstanceRegionCacheChanges( changes );
 }
@@ -1365,7 +1365,7 @@ void T3DData::resetInstanceRegionCache( const bool bRestoreAll ) {
 
 
 void T3DData::invalidateInstanceRegionLocation( const Vector2i &vLocation ) {
-	T3DInstanceRegionCacheChanges changes;
+	t3dInstanceRegionCacheChanges_t changes;
 	m_instanceRegionCache.invalidate( vLocation, &changes );
 	applyInstanceRegionCacheChanges( changes );
 }
@@ -1375,7 +1375,7 @@ void T3DData::invalidateInstanceRegionLocation( const Vector2i &vLocation ) {
 
 
 bool T3DData::ensureInstanceRegionResidentInternal( const Vector2i &vLocation, const bool bDemandLoad ) {
-	T3DInstanceRegionCacheChanges changes;
+	t3dInstanceRegionCacheChanges_t changes;
 	const bool bReady = m_instanceRegionCache.ensureResident( vLocation, bDemandLoad, &changes );
 	applyInstanceRegionCacheChanges( changes );
 	return bReady;
@@ -1386,7 +1386,7 @@ bool T3DData::ensureInstanceRegionResidentInternal( const Vector2i &vLocation, c
 
 
 bool T3DData::evictInstanceRegion( const Vector2i &vLocation ) {
-	T3DInstanceRegionCacheChanges changes;
+	t3dInstanceRegionCacheChanges_t changes;
 	const bool bEvicted = m_instanceRegionCache.evict( vLocation, &changes );
 	applyInstanceRegionCacheChanges( changes );
 	return bEvicted;
@@ -1397,14 +1397,14 @@ void T3DData::configureInstanceRegionCache(
 	const bool bEnabled, const int nBudgetMb,
 	const int nLoadPages, const int nLoadBudgetMb
 ) {
-	T3DInstanceRegionCacheChanges changes;
+	t3dInstanceRegionCacheChanges_t changes;
 	m_instanceRegionCache.configure( bEnabled, nBudgetMb, nLoadPages, nLoadBudgetMb, &changes );
 	applyInstanceRegionCacheChanges( changes );
 }
 
 
-void T3DData::updateInstanceRegionResidencyInternal( const T3DResidencyFrameState &rFrame, const bool bForce ) {
-	T3DInstanceRegionCacheChanges changes;
+void T3DData::updateInstanceRegionResidencyInternal( const t3dResidencyFrameState_t &rFrame, const bool bForce ) {
+	t3dInstanceRegionCacheChanges_t changes;
 	m_instanceRegionCache.update( rFrame, bForce, getEffectiveInstanceRegionLoadBudgetPages(), changes );
 	applyInstanceRegionCacheChanges( changes );
 }
@@ -1624,12 +1624,12 @@ void T3DData::configureGpuRegionCache(
 }
 
 
-void T3DData::updateGpuRegionResidencyInternal( const T3DResidencyFrameState &rFrame, const bool bForce ) {
+void T3DData::updateGpuRegionResidencyInternal( const t3dResidencyFrameState_t &rFrame, const bool bForce ) {
 	m_farSurfaceAtlasCache.resetFrameStats();
 	if ( isFarAtlasRequired() ) {
 		ensureFarAtlases();
 	}
-	const T3DGpuRegionCacheUpdateResult result = m_gpuRegionCache.update(
+	const t3dGpuRegionCacheUpdateResult_t result = m_gpuRegionCache.update(
 		rFrame, bForce, getEffectiveGpuRegionUploadBudgetLayers(), getComputeBackendIfCreated() );
 	if ( result.bPageTableChanged ) {
 		emitGpuRegionMapChanged();
@@ -1946,7 +1946,7 @@ void T3DData::setRegionLocations( const TypedArray<Vector2i> &vLocations ) {
 	// holes. The repository owns that stable slot topology; T3DData only performs
 	// the cache/render side effects caused by the topology change.
 	const bool bArraysReady = canUpdateRegionSlotsIncrementally();
-	const T3DRegionLocationReconcileResult reconcile = m_regionRepository.reconcileLocations( vLocations );
+	const t3dRegionLocationReconcileResult_t reconcile = m_regionRepository.reconcileLocations( vLocations );
 	if ( reconcile.bCapacityExceeded ) {
 		LOG( ERROR, "Region slot capacity exceeded while reconciling active locations" );
 	}
@@ -2555,7 +2555,7 @@ bool T3DData::ensurePersistenceRegionResident( void *const pContext, const Vecto
 	return pData && pData->ensureCpuRegionResidentInternal( rLocation, true );
 }
 
-void T3DData::processRegionSaveResult( const T3DRegionSaveResult &rResult ) {
+void T3DData::processRegionSaveResult( const t3dRegionSaveResult_t &rResult ) {
 	if ( rResult.bDeleted && !m_runtimePageStore.removePageForSource( rResult.path ) ) {
 		LOG( WARN, "Region deleted, but cooked runtime page could not be removed: ", rResult.path );
 	}
@@ -2597,9 +2597,9 @@ void T3DData::saveDirectory( const String &rDir ) {
 	if ( cook_on_save && !m_runtimeWorldManifest.buildAuthoringIndex( m_regionRepository ) ) {
 		LOG( ERROR, "Failed to build runtime-world dependency index before save-time cooking" );
 	}
-	const T3DDirectorySaveResult saveResult = m_regionPersistence.saveDirectory(
+	const t3dDirectorySaveResult_t saveResult = m_regionPersistence.saveDirectory(
 		rDir, m_pTerrain->getSave16Bit(), &T3DData::ensurePersistenceRegionResident, this );
-	for ( const T3DRegionSaveResult &regionResult : saveResult.regions ) {
+	for ( const t3dRegionSaveResult_t &regionResult : saveResult.regions ) {
 		processRegionSaveResult( regionResult );
 	}
 	if ( cook_on_save && !writeCookedGpuFarAtlases( rDir ) ) {
@@ -2621,7 +2621,7 @@ void T3DData::saveRegion( const Vector2i &rRegionLoc, const String &rDir, const 
 	if ( cook_on_save ) {
 		m_runtimeWorldManifest.buildAuthoringIndex( m_regionRepository );
 	}
-	const T3DRegionSaveResult result = m_regionPersistence.saveRegion(
+	const t3dRegionSaveResult_t result = m_regionPersistence.saveRegion(
 		rRegionLoc, rDir, b16Bit, &T3DData::ensurePersistenceRegionResident, this );
 	processRegionSaveResult( result );
 	if ( cook_on_save ) {
@@ -2792,7 +2792,7 @@ Dictionary T3DData::cookGpuRegionPages( void ) {
 		return result;
 	}
 
-	const T3DRuntimePageConfig runtime_page_config = getRuntimePageConfig();
+	const t3dRuntimePageConfig_t runtime_page_config = getRuntimePageConfig();
 	T3DCookDatabase cook_database;
 	const bool bCookDatabaseLoaded = cook_database.load(
 		data_dir, m_regionRepository.getRegionSize(), runtime_page_config.materialSourceSignature );
@@ -3006,12 +3006,12 @@ Dictionary T3DData::cookGpuRegionPages( void ) {
 }
 
 Error T3DData::loadDirectory( const String &rDir ) {
-	T3DStagedRepository staged;
+	t3dStagedRepository_t staged;
 	const bool bBoundedCpuLoad = m_cpuRegionCache.isEnabled();
 	LOG( INFO, "[terrain-data] Candidate repository load; CPU cache ",
 		bBoundedCpuLoad ? "bounded" : "authoring/unbounded", "; GPU cache ",
 		m_gpuRegionCache.isEnabled() ? "enabled" : "disabled" );
-	const T3DRuntimePageConfig runtime_page_config = getRuntimePageConfig();
+	const t3dRuntimePageConfig_t runtime_page_config = getRuntimePageConfig();
 	m_cpuRegionCache.setRuntimePageConfig( runtime_page_config );
 	const bool bCookedRuntimeManifest = bBoundedCpuLoad && runtime_page_config.bCookedPagesEnabled &&
 		!runtime_page_config.bEditorAuthoring;
@@ -3049,7 +3049,7 @@ Error T3DData::loadDirectory( const String &rDir ) {
 		int stagedHeightSlots[TERRAIN3D_MAX_REGION_SLOTS] = {};
 		size_t stagedHeightCount = 0u;
 		if ( !bCookedRuntimeManifest ) {
-			for ( const T3DStagedRegion &entry : staged.regions ) {
+			for ( const t3dStagedRegion_t &entry : staged.regions ) {
 				if ( entry.nActiveSlot < 0 || entry.stagedHeight.is_empty() ) {
 					LOG( ERROR, "Missing staged height payload for region ", entry.location );
 					m_regionPersistence.finishPublication( 0 );
@@ -3076,7 +3076,7 @@ Error T3DData::loadDirectory( const String &rDir ) {
 		// clear path. Reset old slots before publishing the staged candidate.
 		m_samplingStorage.resetActive();
 		activeStorageReady = true;
-		for ( const T3DStagedRegion &entry : staged.regions ) {
+		for ( const t3dStagedRegion_t &entry : staged.regions ) {
 			if ( !syncActiveRegion( entry.location, entry.pRegion.ptr() ) ) {
 				activeStorageReady = false;
 				break;
@@ -3155,7 +3155,7 @@ Error T3DData::loadDirectory( const String &rDir ) {
 		m_pTerrain->getInstancer()->updateMmis( -1, V2I_MAX, true );
 	}
 	m_regionPersistence.finishDirectoryLoad( true );
-	const T3DStartupLoadStats &loadStats = m_regionPersistence.getStartupLoadStats();
+	const t3dStartupLoadStats_t &loadStats = m_regionPersistence.getStartupLoadStats();
 	const double elapsedMs = ( double ) ( loadStats.nTotalUsecLast ) / 1000.0;
 	LOG( INFO, "Loaded ", m_regionRepository.getActiveRegionCount(), " terrain regions (",
 		m_regionRepository.getSlotCount(), " texture layers) in ", vformat( "%.2f", elapsedMs ),
@@ -3167,7 +3167,7 @@ Error T3DData::loadDirectory( const String &rDir ) {
 
 // TODO have load_directory call load_region, or make a load_file that loads a specific path
 void T3DData::loadRegion( const Vector2i &rRegionLoc, const String &rDir, const bool bUpdate ) {
-	const T3DRegionLoadResult result = m_regionPersistence.loadRegion( rRegionLoc, rDir );
+	const t3dRegionLoadResult_t result = m_regionPersistence.loadRegion( rRegionLoc, rDir );
 	if ( !result.succeeded() ) {
 		return;
 	}
@@ -3571,8 +3571,8 @@ void T3DData::updateMapRegions( const t3dMapType_t eMapType, const eastl::vector
 	}
 }
 
-void T3DData::publishDerivedMapUpdates( const eastl::vector<T3DDerivedMapUpdate> &rUpdates ) {
-	for ( const T3DDerivedMapUpdate &update : rUpdates ) {
+void T3DData::publishDerivedMapUpdates( const eastl::vector<t3dDerivedMapUpdate_t> &rUpdates ) {
+	for ( const t3dDerivedMapUpdate_t &update : rUpdates ) {
 		if ( !update.bSuccess ) {
 			continue;
 		}
@@ -3607,7 +3607,7 @@ void T3DData::regenerateDerivedMaps(
 	if ( rRegionLocations.empty() ) {
 		return;
 	}
-	const eastl::vector<T3DDerivedMapUpdate> &updates =
+	const eastl::vector<t3dDerivedMapUpdate_t> &updates =
 		m_mapEditService.regenerateDerivedMaps( rRegionLocations, rEditedArea, getComputeBackend() );
 	publishDerivedMapUpdates( updates );
 }
@@ -3622,7 +3622,7 @@ void T3DData::commitMapEdits(
 
 	const bool bKeepEdited = ( nFlags & MAP_EDIT_KEEP_EDITED ) != 0u;
 	T3DCompute *const pCompute = eMapType == TYPE_HEIGHT ? getComputeBackend() : nullptr;
-	T3DMapMutation mutation = m_mapEditService.commitMapEdits(
+	t3dMapMutation_t mutation = m_mapEditService.commitMapEdits(
 		eMapType, rRegionLocations, rEditedArea, pCompute
 	);
 	if ( !mutation.valid() ) {

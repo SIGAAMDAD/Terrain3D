@@ -26,7 +26,7 @@ class T3DRegion;
 class T3DRegionRepository;
 class T3DSamplingStorage;
 
-struct T3DFarSurfaceAtlasConfig {
+typedef struct t3dFarSurfaceAtlasConfig_s {
 	bool bRequired = false;
 	bool bStrictCooked = false;
 	int nHeightAtlasSide = TERRAIN3D_GPU_CACHE_FAR_HEIGHT_SIDE;
@@ -37,9 +37,9 @@ struct T3DFarSurfaceAtlasConfig {
 	Ref<Image> pDefaultColorMap;
 	Ref<T3DMaterial> pMaterial;
 	Ref<T3DAssets> pAssets;
-};
+} t3dFarSurfaceAtlasConfig_t;
 
-struct T3DFarSurfaceAtlasStats {
+typedef struct t3dFarSurfaceAtlasStats_s {
 	int nHeightUpdatesLastTick = 0;
 	int nColorUpdatesLastTick = 0;
 	int nHeightRegionsLastTick = 0;
@@ -65,7 +65,7 @@ struct T3DFarSurfaceAtlasStats {
 	bool bColorDirtyAll = true;
 	bool bCookedLoaded = false;
 	bool bCookedSaved = false;
-};
+} t3dFarSurfaceAtlasStats_t;
 
 class T3DFarSurfaceAtlasCache {
 public:
@@ -75,7 +75,7 @@ public:
 		T3DCpuRegionCache *pCpuRegionCache
 	);
 
-	void setConfig( const T3DFarSurfaceAtlasConfig &rConfig );
+	void setConfig( const t3dFarSurfaceAtlasConfig_t &rConfig );
 	void reset( void );
 	void resetFrameStats( void );
 	void invalidateSurface( void );
@@ -92,14 +92,14 @@ public:
 	bool isRegionColorDirty( const Vector2i &vLocation ) const;
 	int getDirtyRegionCount( void ) const;
 	size_t getImageBytes( void ) const;
-	T3DFarSurfaceAtlasStats getStats( void ) const;
+	t3dFarSurfaceAtlasStats_t getStats( void ) const;
 	Dictionary getStatsDictionary( void ) const;
 
 private:
 	T3DRegionRepository *m_pRepository = nullptr;
 	T3DSamplingStorage *m_pSamplingStorage = nullptr;
 	T3DCpuRegionCache *m_pCpuRegionCache = nullptr;
-	T3DFarSurfaceAtlasConfig m_config;
+	t3dFarSurfaceAtlasConfig_t m_config;
 
 	T3DGeneratedTexture m_generatedHeightMap;
 	T3DGeneratedTexture m_generatedColorMap;

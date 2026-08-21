@@ -18,7 +18,7 @@ class T3DRegionRepository;
 class T3DRuntimePageStore;
 class T3DSamplingStorage;
 
-struct T3DActiveHeightResidencyStats {
+typedef struct t3dActiveHeightResidencyStats_s {
 	int nReconciliationsLastTick = 0;
 	int nSlotsExaminedLastTick = 0;
 	int nRequiredLastTick = 0;
@@ -26,9 +26,9 @@ struct T3DActiveHeightResidencyStats {
 	int nPublishedLastTick = 0;
 	int nEvictedLastTick = 0;
 	int nPredictedRequestsLastTick = 0;
-};
+} t3dActiveHeightResidencyStats_t;
 
-struct T3DActiveHeightResidencyResult {
+typedef struct t3dActiveHeightResidencyResult_s {
 	static constexpr int CPU_REQUEST_CAPACITY = 25;
 	eastl::array<Vector2i, CPU_REQUEST_CAPACITY> cpuSourceRequests{};
 	int nCpuSourceRequestCount = 0;
@@ -38,7 +38,7 @@ struct T3DActiveHeightResidencyResult {
 			cpuSourceRequests[( size_t ) ( nCpuSourceRequestCount++ )] = rLocation;
 		}
 	}
-};
+} t3dActiveHeightResidencyResult_t;
 
 // Owns only the spatial policy for the fixed active-height sampling bank.
 // T3DSamplingStorage owns publication/leases; T3DRuntimePageStore owns cooked
@@ -55,8 +55,8 @@ public:
 	void reset( void );
 	EA_FORCE_INLINE void markDirty( void ) { m_bDirty = true; }
 	EA_FORCE_INLINE bool isDirty( void ) const { return m_bDirty; }
-	T3DActiveHeightResidencyResult update( const T3DResidencyFrameState &rFrame, bool bForce );
-	EA_FORCE_INLINE const T3DActiveHeightResidencyStats &getStats( void ) const { return m_stats; }
+	t3dActiveHeightResidencyResult_t update( const t3dResidencyFrameState_t &rFrame, bool bForce );
+	EA_FORCE_INLINE const t3dActiveHeightResidencyStats_t &getStats( void ) const { return m_stats; }
 
 private:
 	static constexpr int ACTIVE_RADIUS = 2;
@@ -68,7 +68,7 @@ private:
 	uint64_t m_nStreamingGenerationLast = 0u;
 	uint64_t m_nTopologyGenerationLast = 0u;
 	Vector2i m_center = V2I_MAX;
-	T3DActiveHeightResidencyStats m_stats;
+	t3dActiveHeightResidencyStats_t m_stats;
 };
 
 #endif // TERRAIN3D_ACTIVE_HEIGHT_RESIDENCY_H

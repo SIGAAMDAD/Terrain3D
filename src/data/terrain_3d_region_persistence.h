@@ -19,18 +19,18 @@
 
 class T3DRegionRepository;
 
-struct T3DStagedRegion {
+typedef struct t3dStagedRegion_s {
 	Vector2i location = V2I_MAX;
 	String path;
 	Ref<T3DRegion> pRegion;
 	PackedByteArray stagedHeight;
 	int nActiveSlot = -1;
-};
+} t3dStagedRegion_t;
 
 // Complete replacement candidate. No live repository state is mutated while
 // this object is being built or validated.
-struct T3DStagedRepository {
-	eastl::vector<T3DStagedRegion> regions;
+typedef struct t3dStagedRepository_s {
+	eastl::vector<t3dStagedRegion_t> regions;
 	Dictionary resources;
 	eastl::array<T3DRegion *, TERRAIN3D_MAX_REGION_SLOTS> regionPtrs = {};
 	eastl::array<Vector2i, TERRAIN3D_MAX_REGION_SLOTS> regionLocations = {};
@@ -40,9 +40,9 @@ struct T3DStagedRepository {
 
 	void reset( void );
 	EA_FORCE_INLINE int getRegionCount( void ) const { return ( int ) ( regions.size() ); }
-};
+} t3dStagedRepository_t;
 
-struct T3DRegionLoadResult {
+typedef struct t3dRegionLoadResult_s {
 	Error error = FAILED;
 	Vector2i location = V2I_MAX;
 	String path;
@@ -50,9 +50,9 @@ struct T3DRegionLoadResult {
 	bool bStorageUpgrade = false;
 
 	EA_FORCE_INLINE bool succeeded( void ) const { return error == OK && pRegion.is_valid(); }
-};
+} t3dRegionLoadResult_t;
 
-struct T3DRegionSaveResult {
+typedef struct t3dRegionSaveResult_s {
 	Error error = FAILED;
 	Vector2i location = V2I_MAX;
 	String path;
@@ -63,17 +63,17 @@ struct T3DRegionSaveResult {
 	bool bSkipped = false;
 
 	EA_FORCE_INLINE bool succeeded( void ) const { return error == OK || error == ERR_SKIP; }
-};
+} t3dRegionSaveResult_t;
 
-struct T3DDirectorySaveResult {
-	eastl::vector<T3DRegionSaveResult> regions;
+typedef struct t3dDirectorySaveResult_s {
+	eastl::vector<t3dRegionSaveResult_t> regions;
 	int nSaved = 0;
 	int nDeleted = 0;
 	int nSkipped = 0;
 	int nFailed = 0;
-};
+} t3dDirectorySaveResult_t;
 
-struct T3DStartupLoadStats {
+typedef struct t3dStartupLoadStats_s {
 	uint64_t nTotalUsecLast = 0u;
 	uint64_t nEnumerationUsecLast = 0u;
 	uint64_t nDeserializeUsecLast = 0u;
@@ -83,7 +83,7 @@ struct T3DStartupLoadStats {
 	int nRegionFilesLast = 0;
 	int nRegionsPublishedLast = 0;
 	bool bSucceededLast = false;
-};
+} t3dStartupLoadStats_t;
 
 // Owns T3DRegion resource serialization and staged repository loading.
 // Runtime residency, GPU publication, page cooking, Far-atlas cooking, and
@@ -96,15 +96,15 @@ public:
 	T3DRegionPersistence( const T3DRegionPersistence & ) = delete;
 	T3DRegionPersistence &operator=( const T3DRegionPersistence & ) = delete;
 
-	Error stageDirectory( const String &rDirectory, bool bBoundedCpuLoad, T3DStagedRepository &rStaged );
+	Error stageDirectory( const String &rDirectory, bool bBoundedCpuLoad, t3dStagedRepository_t &rStaged );
 	void beginPublication( void );
 	void finishPublication( int nPublishedRegions );
 	void beginFinalize( void );
 	void finishDirectoryLoad( bool bSucceeded );
-	void publishStagedPaths( T3DStagedRepository &rStaged ) const;
+	void publishStagedPaths( t3dStagedRepository_t &rStaged ) const;
 
-	T3DRegionLoadResult loadRegion( const Vector2i &rLocation, const String &rDirectory ) const;
-	void publishLoadedRegionPath( const T3DRegionLoadResult &rResult ) const;
+	t3dRegionLoadResult_t loadRegion( const Vector2i &rLocation, const String &rDirectory ) const;
+	void publishLoadedRegionPath( const t3dRegionLoadResult_t &rResult ) const;
 	bool loadRuntimeRegionSource(
 		const String &rPath, int nExpectedRegionSize, Ref<T3DRegion> &rSource
 	) const;
@@ -112,21 +112,21 @@ public:
 		const Ref<T3DRegion> &rCandidate, int nExpectedRegionSize, Ref<T3DRegion> &rSource
 	) const;
 
-	T3DRegionSaveResult saveRegion(
+	t3dRegionSaveResult_t saveRegion(
 		const Vector2i &rLocation, const String &rDirectory, bool b16Bit,
 		EnsureRegionResidentFn pEnsureResident = nullptr, void *pResidentContext = nullptr
 	);
-	T3DDirectorySaveResult saveDirectory(
+	t3dDirectorySaveResult_t saveDirectory(
 		const String &rDirectory, bool b16Bit,
 		EnsureRegionResidentFn pEnsureResident = nullptr, void *pResidentContext = nullptr
 	);
 
-	EA_FORCE_INLINE const T3DStartupLoadStats &getStartupLoadStats( void ) const { return m_startupLoadStats; }
+	EA_FORCE_INLINE const t3dStartupLoadStats_t &getStartupLoadStats( void ) const { return m_startupLoadStats; }
 	Dictionary getStartupLoadStatsDictionary( void ) const;
 
 private:
 	T3DRegionRepository *m_pRepository = nullptr;
-	T3DStartupLoadStats m_startupLoadStats;
+	t3dStartupLoadStats_t m_startupLoadStats;
 	uint64_t m_nLoadStartedUsec = 0u;
 	uint64_t m_nPublishStartedUsec = 0u;
 	uint64_t m_nFinalizeStartedUsec = 0u;

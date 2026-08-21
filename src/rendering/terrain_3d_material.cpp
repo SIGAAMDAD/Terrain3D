@@ -3872,8 +3872,8 @@ Dictionary T3DMaterial::cookRuntimeShaderPack( void ) {
 	m_bRuntimeShaderPackLoaded = false;
 	const t3dShaderVariantState_t base = captureVariantState();
 	const uint64_t state_signature = getVariantStateSignature( base );
-	struct Entry { uint8_t domain; uint8_t tier; String source; };
-	eastl::vector<Entry> entries;
+	typedef struct t3dShaderPackSourceEntry_s { uint8_t domain; uint8_t tier; String source; } t3dShaderPackSourceEntry_t;
+	eastl::vector<t3dShaderPackSourceEntry_t> entries;
 	for ( int tier = SHADER_TIER_NEAR; tier < SHADER_TIER_COUNT; ++tier ) {
 		entries.push_back( {0u, ( uint8_t ) tier, finalizeRuntimeShaderCode( generateShaderCode( base, ( t3dShaderTier_t ) tier, false ) )} );
 	}
@@ -3899,7 +3899,7 @@ Dictionary T3DMaterial::cookRuntimeShaderPack( void ) {
 	Ref<FileAccess> file = FileAccess::open( temporary, FileAccess::WRITE );
 	if ( file.is_null() ) { result["error"] = "Unable to open runtime shader pack."; return result; }
 	file->store_64( TERRAIN3D_SHADER_PACK_MAGIC ); file->store_32( TERRAIN3D_SHADER_PACK_VERSION ); file->store_32( ( uint32_t ) entries.size() ); file->store_64( state_signature );
-	for ( const Entry &entry : entries ) { file->store_8( entry.domain ); file->store_8( entry.tier ); file->store_16( 0u ); t3dMaterialStoreShaderPackString( file, entry.source ); }
+	for ( const t3dShaderPackSourceEntry_t &entry : entries ) { file->store_8( entry.domain ); file->store_8( entry.tier ); file->store_16( 0u ); t3dMaterialStoreShaderPackString( file, entry.source ); }
 	const Error write_error = file->get_error(); file->close();
 	if ( write_error != OK ) { DirAccess::remove_absolute( temporary ); result["error"] = "Runtime shader pack write failed."; return result; }
 	const String backup = path + ".bak";
@@ -3926,14 +3926,14 @@ bool T3DMaterial::loadRuntimeShaderPack( void ) {
 	if ( file->get_64() != TERRAIN3D_SHADER_PACK_MAGIC || file->get_32() != TERRAIN3D_SHADER_PACK_VERSION ) return false;
 	const uint32_t count = file->get_32(); const uint64_t signature = file->get_64();
 	if ( count < SHADER_TIER_COUNT || count > 128u || signature != getVariantStateSignature( captureVariantState() ) ) return false;
-	struct Entry { uint8_t domain; uint8_t tier; String source; }; eastl::vector<Entry> entries; entries.reserve( count );
-	for ( uint32_t i = 0; i < count; ++i ) { if ( file->get_position() + 4u > file->get_length() ) return false; Entry entry; entry.domain=file->get_8(); entry.tier=file->get_8(); file->get_16(); if(!t3dMaterialReadShaderPackString(file,entry.source)||entry.source.is_empty()) return false; entries.push_back(entry); }
+	typedef struct t3dShaderPackVerifyEntry_s { uint8_t domain; uint8_t tier; String source; } t3dShaderPackVerifyEntry_t; eastl::vector<t3dShaderPackVerifyEntry_t> entries; entries.reserve( count );
+	for ( uint32_t i = 0; i < count; ++i ) { if ( file->get_position() + 4u > file->get_length() ) return false; t3dShaderPackVerifyEntry_t entry; entry.domain=file->get_8(); entry.tier=file->get_8(); file->get_16(); if(!t3dMaterialReadShaderPackString(file,entry.source)||entry.source.is_empty()) return false; entries.push_back(entry); }
 	if ( file->get_position() != file->get_length() ) return false;
-	for ( size_t i = 0; i < entries.size(); ++i ) { const Entry &entry=entries[i]; if ( entry.domain==0u && entry.tier<SHADER_TIER_COUNT && m_szRuntimeShaderPackTierSource[entry.tier].is_empty() ) m_szRuntimeShaderPackTierSource[entry.tier]=entry.source; else if(entry.domain==1u && m_runtimeShaderPackBufferSource.is_empty()) m_runtimeShaderPackBufferSource=entry.source; }
+	for ( size_t i = 0; i < entries.size(); ++i ) { const t3dShaderPackVerifyEntry_t &entry=entries[i]; if ( entry.domain==0u && entry.tier<SHADER_TIER_COUNT && m_szRuntimeShaderPackTierSource[entry.tier].is_empty() ) m_szRuntimeShaderPackTierSource[entry.tier]=entry.source; else if(entry.domain==1u && m_runtimeShaderPackBufferSource.is_empty()) m_runtimeShaderPackBufferSource=entry.source; }
 	for ( int tier=SHADER_TIER_NEAR; tier<SHADER_TIER_COUNT; ++tier ) if(m_szRuntimeShaderPackTierSource[tier].is_empty()) return false;
 	m_nRuntimeShaderPackStateSignature=signature; m_bRuntimeShaderPackLoaded=true;
 	// Create engine shader objects in deterministic pack order; driver pipeline creation remains runtime-owned.
-	for ( const Entry &entry : entries ) { if(entry.domain==0u) getOrCreateShaderVariant(entry.source,SHADER_DOMAIN_RUNTIME,true,(t3dShaderTier_t)CLAMP((int)entry.tier,0,(int)SHADER_TIER_FAR)); else getOrCreateShaderVariant(entry.source,SHADER_DOMAIN_BUFFER,true); }
+	for ( const t3dShaderPackVerifyEntry_t &entry : entries ) { if(entry.domain==0u) getOrCreateShaderVariant(entry.source,SHADER_DOMAIN_RUNTIME,true,(t3dShaderTier_t)CLAMP((int)entry.tier,0,(int)SHADER_TIER_FAR)); else getOrCreateShaderVariant(entry.source,SHADER_DOMAIN_BUFFER,true); }
 	return true;
 }
 
@@ -3943,17 +3943,17 @@ void T3DMaterial::prewarmShaderVariants( void ) {
 
 void T3DMaterial::clearShaderVariantCache( void ) {
 	for ( int index = 0; index < m_nRuntimeShaderVariantCount; ++index ) {
-		m_szRuntimeShaderVariantEntries[index] = t3dShaderVariantEntry_t{};
+		m_szRuntimeShaderVariantEntries[index] = t3dShaderVariantt3dShaderPackVerifyEntry_t_t{};
 	}
 	m_nRuntimeShaderVariantCount = 0;
 	m_nRuntimeShaderVariantSourceBytes = 0;
 	for ( int index = 0; index < m_nEditorShaderVariantCount; ++index ) {
-		m_szEditorShaderVariantEntries[index] = t3dShaderVariantEntry_t{};
+		m_szEditorShaderVariantEntries[index] = t3dShaderVariantt3dShaderPackVerifyEntry_t_t{};
 	}
 	m_nEditorShaderVariantCount = 0;
 	m_nEditorShaderVariantSourceBytes = 0;
 	for ( int index = 0; index < m_nBufferShaderVariantCount; ++index ) {
-		m_szBufferShaderVariantEntries[index] = t3dShaderVariantEntry_t{};
+		m_szBufferShaderVariantEntries[index] = t3dShaderVariantt3dShaderPackVerifyEntry_t_t{};
 	}
 	m_nBufferShaderVariantCount = 0;
 	m_nBufferShaderVariantSourceBytes = 0;
@@ -3972,7 +3972,7 @@ int T3DMaterial::getSpeculativeShaderVariantCount( void ) const {
 	int speculative_count = 0;
 	const t3dShaderVariantDomain_t domains[] = {SHADER_DOMAIN_RUNTIME, SHADER_DOMAIN_EDITOR, SHADER_DOMAIN_BUFFER};
 	for ( const t3dShaderVariantDomain_t domain : domains ) {
-		const t3dShaderVariantEntry_t *pEntries = getShaderVariantEntries( domain );
+		const t3dShaderVariantt3dShaderPackVerifyEntry_t_t *pEntries = getShaderVariantEntries( domain );
 		const int entry_count = getShaderVariantCountForDomain( domain );
 		for ( int index = 0; index < entry_count; ++index ) {
 			if ( pEntries[index].bSpeculative ) {

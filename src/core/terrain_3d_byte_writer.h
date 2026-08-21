@@ -10,14 +10,14 @@
 #include <cstdint>
 #include <cstring>
 
-struct T3DByteWriter {
+typedef struct t3dByteWriter_s {
 	uint8_t *pData = nullptr;
 	size_t nCapacity = 0u;
 	size_t nOffset = 0u;
 	bool bValid = true;
 
-	T3DByteWriter() = default;
-	EA_FORCE_INLINE T3DByteWriter( uint8_t *pBytes, const size_t nBytes ) : pData( pBytes ), nCapacity( nBytes ) {}
+	t3dByteWriter_s() = default;
+	EA_FORCE_INLINE t3dByteWriter_s( uint8_t *pBytes, const size_t nBytes ) : pData( pBytes ), nCapacity( nBytes ) {}
 
 	EA_FORCE_INLINE bool canWrite( const size_t nBytes ) const { return bValid && nOffset <= nCapacity && nBytes <= nCapacity - nOffset; }
 	EA_FORCE_INLINE size_t offset() const { return nOffset; }
@@ -36,6 +36,6 @@ struct T3DByteWriter {
 
 private:
 	EA_FORCE_INLINE bool fail() { bValid = false; return false; }
-};
+} t3dByteWriter_t;
 
 #endif // TERRAIN3D_BYTE_WRITER_H

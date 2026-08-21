@@ -23,8 +23,8 @@
 #include <utility>
 
 typedef struct t3dDerivedMapBuildContext_s {
-	T3DSamplingSource samplingSource;
-	eastl::vector<T3DDerivedMapTask> *pTasks = nullptr;
+	t3dSamplingSource_t samplingSource;
+	eastl::vector<t3dDerivedMapTask_t> *pTasks = nullptr;
 	float *pWorkerHaloScratch = nullptr;
 	uint8_t *pOutputScratch = nullptr;
 	size_t nWorkerHaloElements = 0u;
@@ -36,7 +36,7 @@ static void t3dMapEditServiceBuildDerivedMapRange( void *pContext, const size_t 
 	t3dDerivedMapBuildContext_t *const pBuildContext = ( t3dDerivedMapBuildContext_t * ) ( pContext );
 	T3DSampler sampler( pBuildContext->samplingSource );
 	for ( size_t taskIndex = nBegin; taskIndex < nEnd; ++taskIndex ) {
-		T3DDerivedMapTask &task = ( *pBuildContext->pTasks )[taskIndex];
+		t3dDerivedMapTask_t &task = ( *pBuildContext->pTasks )[taskIndex];
 		if ( task.bSuccess ) {
 			continue;
 		}
@@ -157,7 +157,7 @@ Error T3DMapEditService::setPixel(
 	return OK;
 }
 
-const eastl::vector<T3DDerivedMapUpdate> &T3DMapEditService::regenerateDerivedMaps(
+const eastl::vector<t3dDerivedMapUpdate_t> &T3DMapEditService::regenerateDerivedMaps(
 	const eastl::vector<Vector2i> &rRegionLocations, const AABB &rEditedArea,
 	T3DCompute *const pCompute
 ) {
@@ -169,9 +169,9 @@ const eastl::vector<T3DDerivedMapUpdate> &T3DMapEditService::regenerateDerivedMa
 
 	m_derivedTaskScratch.clear();
 	m_derivedTaskScratch.reserve( rRegionLocations.size() );
-	eastl::vector<T3DDerivedMapTask> &tasks = m_derivedTaskScratch;
+	eastl::vector<t3dDerivedMapTask_t> &tasks = m_derivedTaskScratch;
 	for ( const Vector2i &location : rRegionLocations ) {
-		T3DDerivedMapTask task;
+		t3dDerivedMapTask_t task;
 		task.location = location;
 		T3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() ) {
@@ -201,7 +201,7 @@ const eastl::vector<T3DDerivedMapUpdate> &T3DMapEditService::regenerateDerivedMa
 	size_t eligibleTaskCount = 0u;
 	size_t eligibleTaskIndex = 0u;
 	for ( size_t taskIndex = 0u; taskIndex < tasks.size(); ++taskIndex ) {
-		const T3DDerivedMapTask &task = tasks[taskIndex];
+		const t3dDerivedMapTask_t &task = tasks[taskIndex];
 		if ( task.bAvailable && task.dirtyRect.size.x > 0 && task.dirtyRect.size.y > 0 ) {
 			eligibleTaskIndex = taskIndex;
 			++eligibleTaskCount;
@@ -212,7 +212,7 @@ const eastl::vector<T3DDerivedMapUpdate> &T3DMapEditService::regenerateDerivedMa
 	const int32_t workerCount = ( int32_t ) MIN<size_t>( ( size_t ) hardwareThreads, MAX<size_t>( 1u, tasks.size() ) );
 	size_t totalOutputBytes = 0u;
 	size_t maxHaloElements = 0u;
-	for ( T3DDerivedMapTask &task : tasks ) {
+	for ( t3dDerivedMapTask_t &task : tasks ) {
 		if ( !task.bAvailable || task.dirtyRect.size.x <= 0 || task.dirtyRect.size.y <= 0 ) continue;
 		task.nOutputOffset = totalOutputBytes;
 		task.nOutputBytes = ( size_t ) task.dirtyRect.size.x * ( size_t ) task.dirtyRect.size.y * 2u;
@@ -222,9 +222,9 @@ const eastl::vector<T3DDerivedMapUpdate> &T3DMapEditService::regenerateDerivedMa
 	m_derivedOutputScratch.resize( totalOutputBytes );
 	m_fDerivedWorkerHaloScratch.resize( maxHaloElements * ( size_t ) workerCount );
 
-	const T3DSamplingSource samplingSource{m_pRepository, m_pSamplingStorage};
+	const t3dSamplingSource_t samplingSource{m_pRepository, m_pSamplingStorage};
 	if ( pCompute && eligibleTaskCount == 1u ) {
-		T3DDerivedMapTask &task = tasks[eligibleTaskIndex];
+		t3dDerivedMapTask_t &task = tasks[eligibleTaskIndex];
 		const int width = task.dirtyRect.size.x;
 		const int height = task.dirtyRect.size.y;
 		const int haloStride = width + 2;
@@ -281,12 +281,12 @@ const eastl::vector<T3DDerivedMapUpdate> &T3DMapEditService::regenerateDerivedMa
 	executor.runStatic( tasks.size(), 1u, t3dMapEditServiceBuildDerivedMapRange, &buildContext );
 
 	m_derivedUpdateScratch.reserve( tasks.size() );
-	for ( T3DDerivedMapTask &task : tasks ) {
+	for ( t3dDerivedMapTask_t &task : tasks ) {
 		if ( !task.bAvailable || task.dirtyRect.size.x <= 0 || task.dirtyRect.size.y <= 0 ) {
 			continue;
 		}
 		T3DRegion *const pRegion = m_pRepository->getRegionPtr( task.location );
-		T3DDerivedMapUpdate update;
+		t3dDerivedMapUpdate_t update;
 		update.location = task.location;
 		update.dirtyRect = task.dirtyRect;
 		if ( !pRegion || pRegion->isDeleted() || !task.bSuccess ) {
@@ -334,7 +334,7 @@ const eastl::vector<T3DDerivedMapUpdate> &T3DMapEditService::regenerateDerivedMa
 	return m_derivedUpdateScratch;
 }
 
-T3DMapMutation T3DMapEditService::commitMapEdits(
+t3dMapMutation_t T3DMapEditService::commitMapEdits(
 	const t3dMapType_t eMapType, const eastl::vector<Vector2i> &rRegionLocations,
 	const AABB &rEditedArea, T3DCompute *const pCompute
 ) {
@@ -474,7 +474,7 @@ T3DMapMutation T3DMapEditService::commitMapEdits(
 	return makeMutationResult( eMapType, editedArea, editedHeightRange );
 }
 
-void T3DMapEditService::finalizeMapEdits( const T3DMapMutation &rMutation, const bool bKeepEdited ) {
+void T3DMapEditService::finalizeMapEdits( const t3dMapMutation_t &rMutation, const bool bKeepEdited ) {
 	if ( !bKeepEdited && m_pRepository ) {
 		for ( const Vector2i &location : rMutation.changedLocations ) {
 			if ( T3DRegion *const pRegion = m_pRepository->getRegionPtr( location ) ) {
@@ -487,7 +487,7 @@ void T3DMapEditService::finalizeMapEdits( const T3DMapMutation &rMutation, const
 	}
 }
 
-void T3DMapEditService::recycleMutation( T3DMapMutation &&rMutation ) {
+void T3DMapEditService::recycleMutation( t3dMapMutation_t &&rMutation ) {
 	if ( rMutation.changedLocations.capacity() > m_activeLocationScratch.capacity() ) {
 		m_activeLocationScratch.swap( rMutation.changedLocations );
 	}
@@ -866,20 +866,20 @@ Ref<Image> T3DMapEditService::layeredToImage(
 }
 
 size_t T3DMapEditService::getTransientScratchBytes( void ) const {
-	return m_derivedTaskScratch.capacity() * sizeof( T3DDerivedMapTask ) +
+	return m_derivedTaskScratch.capacity() * sizeof( t3dDerivedMapTask_t ) +
 		m_fDerivedHaloScratch.capacity() * sizeof( float ) +
 		m_fDerivedWorkerHaloScratch.capacity() * sizeof( float ) +
 		m_derivedOutputScratch.capacity() * sizeof( uint8_t ) +
 		m_activeLocationScratch.capacity() * sizeof( Vector2i ) +
 		m_derivedLocationScratch.capacity() * sizeof( Vector2i ) +
-		m_derivedUpdateScratch.capacity() * sizeof( T3DDerivedMapUpdate );
+		m_derivedUpdateScratch.capacity() * sizeof( t3dDerivedMapUpdate_t );
 }
 
-T3DMapMutation T3DMapEditService::makeMutationResult(
+t3dMapMutation_t T3DMapEditService::makeMutationResult(
 	const t3dMapType_t eMapType, const AABB &rEditedArea,
 	const Vector2 &rEditedHeightRange
 ) {
-	T3DMapMutation result;
+	t3dMapMutation_t result;
 	result.mapType = eMapType;
 	result.editedArea = rEditedArea;
 	result.editedHeightRange = rEditedHeightRange;

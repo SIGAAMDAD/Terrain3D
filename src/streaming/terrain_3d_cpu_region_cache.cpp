@@ -88,7 +88,7 @@ T3DCpuRegionCache::T3DCpuRegionCache(
 	std::fill_n( m_szLocations, TERRAIN3D_CPU_CACHE_MAX_LAYERS, V2I_MAX );
 }
 
-void T3DCpuRegionCache::setRuntimePageConfig( const T3DRuntimePageConfig &rConfig ) {
+void T3DCpuRegionCache::setRuntimePageConfig( const t3dRuntimePageConfig_t &rConfig ) {
 	m_runtimePageConfig = rConfig;
 }
 
@@ -277,7 +277,7 @@ bool T3DCpuRegionCache::takeSourceAsync( const Vector2i &vLocation, Ref<T3DRegio
 	return true;
 }
 
-void T3DCpuRegionCache::prewarmSources( const T3DResidencyFrameState &rFrame ) {
+void T3DCpuRegionCache::prewarmSources( const t3dResidencyFrameState_t &rFrame ) {
 	if ( !m_bEnabled || rFrame.bAuthoring || !m_pRepository ) {
 		return;
 	}
@@ -298,7 +298,7 @@ void T3DCpuRegionCache::prewarmSources( const T3DResidencyFrameState &rFrame ) {
 	}
 }
 
-void T3DCpuRegionCache::reapSourceAsync( const T3DResidencyFrameState &rFrame ) {
+void T3DCpuRegionCache::reapSourceAsync( const t3dResidencyFrameState_t &rFrame ) {
 	if ( m_nAsyncOutstanding <= 0 || rFrame.bAuthoring || !m_pRepository ) {
 		return;
 	}
@@ -560,7 +560,7 @@ bool T3DCpuRegionCache::restoreAllMaps( void ) {
 }
 
 int T3DCpuRegionCache::collectDesired(
-	const T3DResidencyFrameState &rFrame, const Vector2i &rCenter,
+	const t3dResidencyFrameState_t &rFrame, const Vector2i &rCenter,
 	Vector2i *const pLocations, const int nCapacity
 ) const {
 	if ( !pLocations || nCapacity <= 0 || !m_pRepository ) {
@@ -639,7 +639,7 @@ bool T3DCpuRegionCache::ensureSampleArea( const Vector3 &rWorldPosition, const i
 }
 
 void T3DCpuRegionCache::update(
-	const T3DResidencyFrameState &rFrame, const bool bForce, const int nEffectiveLoadLayers
+	const t3dResidencyFrameState_t &rFrame, const bool bForce, const int nEffectiveLoadLayers
 ) {
 	const T3DCpuRegionCacheScopeTimer serviceTimer( m_nServiceUsecLast, rFrame.bProfilingEnabled );
 	setRuntimePageConfig( rFrame.runtimePageConfig );
@@ -800,8 +800,8 @@ size_t T3DCpuRegionCache::getHardCapBytes( void ) const {
 	return estimateLayerBytes() * ( size_t ) ( TERRAIN3D_CPU_CACHE_MAX_LAYERS );
 }
 
-T3DCpuRegionCacheStats T3DCpuRegionCache::getStats( void ) const {
-	T3DCpuRegionCacheStats stats;
+t3dCpuRegionCacheStats_t T3DCpuRegionCache::getStats( void ) const {
+	t3dCpuRegionCacheStats_t stats;
 	stats.bEnabled = m_bEnabled;
 	stats.bSelectionPending = m_bSelectionDirty;
 	stats.nCapacity = m_nCapacity;

@@ -21,15 +21,15 @@
 #include <cstddef>
 #include <cstdint>
 
-struct T3DRegionLocationReconcileResult {
+typedef struct t3dRegionLocationReconcileResult_s {
 	eastl::vector<Vector2i> removedLocations;
 	eastl::vector<int> addedSlots;
 	int nOldSlotCount = 0;
 	bool bSlotsChanged = false;
 	bool bCapacityExceeded = false;
-};
+} t3dRegionLocationReconcileResult_t;
 
-struct T3DRegionRepositoryView {
+typedef struct t3dRegionRepositoryView_s {
 	const Vector2i *pSlots = nullptr;
 	T3DRegion *const *ppRegionMap = nullptr;
 	const uint16_t *pLogicalRegionMap = nullptr;
@@ -38,7 +38,7 @@ struct T3DRegionRepositoryView {
 	int nRegionMapSize = 0;
 	real_t fVertexSpacing = 1.0f;
 	uint64_t nTopologyGeneration = 0u;
-};
+} t3dRegionRepositoryView_t;
 
 class T3DRegionRepository {
 private:
@@ -101,13 +101,13 @@ public:
 	TypedArray<Vector2i> getActiveLocations( void ) const;
 	TypedArray<Vector2i> getSlots( void ) const;
 	PackedInt32Array getLogicalRegionMapPacked( void ) const;
-	T3DRegionRepositoryView getView( void ) const;
+	t3dRegionRepositoryView_t getView( void ) const;
 
 	bool storeRegion( const Vector2i &rLocation, const Ref<T3DRegion> &rRegion );
 	void eraseRegionResource( const Vector2i &rLocation );
 	int activateLocation( const Vector2i &rLocation, bool bPublishRegionMap );
 	int deactivateLocation( const Vector2i &rLocation );
-	T3DRegionLocationReconcileResult reconcileLocations( const TypedArray<Vector2i> &rLocations );
+	t3dRegionLocationReconcileResult_t reconcileLocations( const TypedArray<Vector2i> &rLocations );
 
 	void rebuildFreeSlots( void );
 	bool ensureSlotReserve( int nDesiredFreeSlots );

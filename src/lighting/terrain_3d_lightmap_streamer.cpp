@@ -65,12 +65,12 @@ static bool t3dLightmapStreamerForEachLightmapReceiver( T3DTerrain *const pTerra
 	if ( !pTerrain->isEditorAuthoringMode() ) {
 		T3DData *const pData = pTerrain->getData(); PackedByteArray blob;
 		if ( pData == nullptr || !pData->loadCookedLightingReceiversNow( rPackage->getClusterLocation(), blob ) ) return rPackage->getReceiverCount() == 0;
-		T3DLightingReceiverCursor cursor; if ( !T3DRuntimeBakeCodec::beginLightingReceivers( blob, cursor ) ) return false;
-		for ( uint32_t i = 0u; i < cursor.nCount; ++i ) { T3DRuntimeLightingReceiverRecord receiver; if ( !T3DRuntimeBakeCodec::nextLightingReceiver( cursor, receiver ) ) return false; rCallback( receiver ); }
+		t3dLightingReceiverCursor_t cursor; if ( !T3DRuntimeBakeCodec::beginLightingReceivers( blob, cursor ) ) return false;
+		for ( uint32_t i = 0u; i < cursor.nCount; ++i ) { t3dRuntimeLightingReceiverRecord_t receiver; if ( !T3DRuntimeBakeCodec::nextLightingReceiver( cursor, receiver ) ) return false; rCallback( receiver ); }
 		return true;
 	}
 	const Array &raw = rPackage->getBakedUserDataInternal(); if ( raw.is_empty() ) return rPackage->getReceiverCount() == 0; if ( ( raw.size() % 4 ) != 0 ) return false;
-	for ( int index = 0; index < raw.size(); index += 4 ) { T3DRuntimeLightingReceiverRecord receiver; receiver.path = raw[index]; receiver.uvScale = raw[index + 1]; receiver.sliceIndex = ( int ) raw[index + 2]; receiver.subInstance = ( int ) raw[index + 3]; rCallback( receiver ); }
+	for ( int index = 0; index < raw.size(); index += 4 ) { t3dRuntimeLightingReceiverRecord_t receiver; receiver.path = raw[index]; receiver.uvScale = raw[index + 1]; receiver.sliceIndex = ( int ) raw[index + 2]; receiver.subInstance = ( int ) raw[index + 3]; rCallback( receiver ); }
 	return true;
 }
 
@@ -213,7 +213,7 @@ bool T3DLightmapStreamer::collectReceiverState(
 	const Ref<T3DRegionLighting> &rPackage, uint64_t &nSignature, int &nReceiverCount
 ) const {
 	nSignature = TERRAIN3D_LIGHTMAP_FNV_OFFSET; nReceiverCount = 0; if ( m_pTerrain == nullptr || rPackage.is_null() ) return false;
-	const bool decoded = t3dLightmapStreamerForEachLightmapReceiver( m_pTerrain, rPackage, [&]( const T3DRuntimeLightingReceiverRecord &receiver ) {
+	const bool decoded = t3dLightmapStreamerForEachLightmapReceiver( m_pTerrain, rPackage, [&]( const t3dRuntimeLightingReceiverRecord_t &receiver ) {
 		Node *const pReceiver = t3dLightmapStreamerResolveLightmapReceiver( m_pTerrain, receiver.path ); if ( pReceiver == nullptr || !pReceiver->is_inside_tree() ) return;
 		nSignature = t3dLightmapStreamerHashReceiver( nSignature, receiver.path, pReceiver->get_instance_id() ); ++nReceiverCount;
 	} );
@@ -227,7 +227,7 @@ bool T3DLightmapStreamer::buildRuntimeData(
 ) const {
 	rData.unref(); nSignature = TERRAIN3D_LIGHTMAP_FNV_OFFSET; nReceiverCount = 0; if ( m_pTerrain == nullptr || rPackage.is_null() || rSource.is_null() ) return false;
 	const Ref<Resource> pDuplicated = rSource->duplicate( false ); Ref<LightmapGIData> pRuntimeData = pDuplicated; if ( pRuntimeData.is_null() ) return false; pRuntimeData->clear_users();
-	const bool decoded = t3dLightmapStreamerForEachLightmapReceiver( m_pTerrain, rPackage, [&]( const T3DRuntimeLightingReceiverRecord &receiver ) {
+	const bool decoded = t3dLightmapStreamerForEachLightmapReceiver( m_pTerrain, rPackage, [&]( const t3dRuntimeLightingReceiverRecord_t &receiver ) {
 		Node *const pReceiver = t3dLightmapStreamerResolveLightmapReceiver( m_pTerrain, receiver.path ); if ( pReceiver == nullptr || !pReceiver->is_inside_tree() ) return;
 		pRuntimeData->add_user( receiver.path, receiver.uvScale, receiver.sliceIndex, receiver.subInstance ); nSignature = t3dLightmapStreamerHashReceiver( nSignature, receiver.path, pReceiver->get_instance_id() ); ++nReceiverCount;
 	} );
@@ -358,16 +358,20 @@ void T3DLightmapStreamer::markDesired( const Vector2i &rCenter ) {
 	T3DData *const pData = m_pTerrain->getData(); T3DNodeStreamer *const pNodeStreamer = m_pTerrain->getNodeStreamer(); const bool authoring_full_residency = m_pTerrain->isEditorAuthoringMode();
 	const Vector2i *pLocations = pData->getRegionSlotsInternal(); T3DRegion *const *ppRegions = pData->getRegionPtrMapInternal(); const int slot_count = pData->getRegionSlotCountInternal(); int remaining_loads = authoring_full_residency ? MAX( 1, m_nLoadBudget ) : m_nLoadBudget;
 
-	struct Candidate { Ref<T3DRegionLighting> package; int64_t distance = INT64_MAX; Vector2i location = V2I_MAX; };
-	Candidate candidates[TERRAIN3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT]; int candidate_count = 0; int unique_count = 0; eastl::bitset<TERRAIN3D_MAX_REGION_SLOTS> seen_clusters;
-	auto candidateLess = []( const Candidate &a, const Candidate &b ) { if ( a.distance != b.distance ) return a.distance < b.distance; if ( a.location.y != b.location.y ) return a.location.y < b.location.y; return a.location.x < b.location.x; };
+	typedef struct t3dLightmapCandidate_s {
+		Ref<T3DRegionLighting> package;
+		int64_t distance = INT64_MAX;
+		Vector2i location = V2I_MAX;
+	} t3dLightmapCandidate_t;
+	t3dLightmapCandidate_t candidates[TERRAIN3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT]; int candidate_count = 0; int unique_count = 0; eastl::bitset<TERRAIN3D_MAX_REGION_SLOTS> seen_clusters;
+	auto candidateLess = []( const t3dLightmapCandidate_t &a, const t3dLightmapCandidate_t &b ) { if ( a.distance != b.distance ) return a.distance < b.distance; if ( a.location.y != b.location.y ) return a.location.y < b.location.y; return a.location.x < b.location.x; };
 	for ( int slot = 0; slot < slot_count; ++slot ) {
 		const Vector2i location = pLocations[slot]; if ( location == V2I_MAX ) continue; const t3dRegionStreamingState_t state = m_pTerrain->getRegionStreamingStateInternal( location );
 		if ( !( authoring_full_residency || state >= TERRAIN3D_REGION_STREAMING_COLD || ( pNodeStreamer != nullptr && pNodeStreamer->isRegionDesired( location ) ) ) ) continue;
 		T3DRegion *const pRegion = ppRegions[slot]; if ( pRegion == nullptr || !pRegion->hasLighting() ) continue; const Ref<T3DRegionLighting> package = pRegion->getLighting(); if ( package.is_null() ) continue;
 		const Vector2i package_location = package->getClusterLocation(); const int package_index = T3DRegionRepository::getRegionMapIndex( package_location );
 		if ( package_index >= 0 ) { if ( seen_clusters.test( ( size_t ) package_index ) ) continue; seen_clusters.set( ( size_t ) package_index ); } else { bool duplicate = false; for ( int i = 0; i < candidate_count; ++i ) if ( candidates[i].package == package ) { duplicate = true; break; } if ( duplicate ) continue; }
-		++unique_count; if ( unique_count > TERRAIN3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT ) ++m_nCapacityDeferredLastTick; const Vector2i delta = package_location - rCenter; Candidate candidate; candidate.package = package; candidate.location = package_location; candidate.distance = ( int64_t ) delta.x * delta.x + ( int64_t ) delta.y * delta.y;
+		++unique_count; if ( unique_count > TERRAIN3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT ) ++m_nCapacityDeferredLastTick; const Vector2i delta = package_location - rCenter; t3dLightmapCandidate_t candidate; candidate.package = package; candidate.location = package_location; candidate.distance = ( int64_t ) delta.x * delta.x + ( int64_t ) delta.y * delta.y;
 		int insert_at = candidate_count; while ( insert_at > 0 && candidateLess( candidate, candidates[insert_at - 1] ) ) --insert_at;
 		if ( candidate_count < TERRAIN3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT ) { for ( int i = candidate_count; i > insert_at; --i ) candidates[i] = candidates[i - 1]; candidates[insert_at] = candidate; ++candidate_count; }
 		else if ( insert_at < TERRAIN3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT ) { for ( int i = TERRAIN3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT - 1; i > insert_at; --i ) candidates[i] = candidates[i - 1]; candidates[insert_at] = candidate; }

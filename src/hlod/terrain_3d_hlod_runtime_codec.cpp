@@ -23,7 +23,7 @@ EA_FORCE_INLINE static uint64_t t3dHlodRuntimeCodecRu64(const uint8_t*p) { retur
 EA_FORCE_INLINE static int64_t t3dHlodRuntimeCodecRi64(const uint8_t*p) { return (int64_t)t3dHlodRuntimeCodecRu64(p); }
 EA_FORCE_INLINE static float t3dHlodRuntimeCodecRf32(const uint8_t*p) { uint32_t bits=t3dHlodRuntimeCodecRu32(p); float v=0; std::memcpy(&v,&bits,4); return v; }
 
-static bool t3dHlodRuntimeCodecParseEntry( const Variant &rValue, T3DHLODRuntimeEntryRecord &rEntry ) {
+static bool t3dHlodRuntimeCodecParseEntry( const Variant &rValue, t3dHlodRuntimeEntryRecord_t &rEntry ) {
 	if ( rValue.get_type() != Variant::DICTIONARY ) return false;
 	const Dictionary d = rValue;
 	if ( !d.has("level") || !d.has("cluster") || !d.has("region_min") || !d.has("region_max") || !d.has("package_path") ) return false;
@@ -44,23 +44,24 @@ PackedByteArray T3DHLODRuntimeCodec::encode(
 	const PackedByteArray &rNodeMinLevels
 ) {
 	PackedByteArray out;
-	eastl::vector<T3DHLODRuntimeEntryRecord> entries; entries.reserve( ( size_t ) rEntries.size() );
-	for ( int i = 0; i < rEntries.size(); ++i ) { T3DHLODRuntimeEntryRecord entry; if ( !t3dHlodRuntimeCodecParseEntry( rEntries[i], entry ) ) return PackedByteArray(); entries.push_back( entry ); }
+	eastl::vector<t3dHlodRuntimeEntryRecord_t> entries; entries.reserve( ( size_t ) rEntries.size() );
+	for ( int i = 0; i < rEntries.size(); ++i ) { t3dHlodRuntimeEntryRecord_t entry; if ( !t3dHlodRuntimeCodecParseEntry( rEntries[i], entry ) ) return PackedByteArray(); entries.push_back( entry ); }
 	for ( int i = 0; i < ( int ) entries.size(); ++i ) {
 		auto &entry = entries[( size_t ) i]; const Vector2i parent_cluster( t3dHlodRuntimeCodecFloorDiv( entry.cluster.x, 2 ), t3dHlodRuntimeCodecFloorDiv( entry.cluster.y, 2 ) ); int parent = -1;
 		for ( int j = 0; j < ( int ) entries.size(); ++j ) if ( entries[( size_t ) j].level == entry.level + 1 && entries[( size_t ) j].cluster == parent_cluster ) { parent = j; break; }
 		entry.parent = parent; if ( parent >= 0 ) { const int local_x = entry.cluster.x - parent_cluster.x * 2, local_y = entry.cluster.y - parent_cluster.y * 2; entries[( size_t ) parent].children[CLAMP( local_y, 0, 1 ) * 2 + CLAMP( local_x, 0, 1 )] = i; }
 	}
 	eastl::vector<int> roots; roots.reserve( entries.size() ); for ( int i = 0; i < ( int ) entries.size(); ++i ) if ( entries[( size_t ) i].parent < 0 ) roots.push_back( i );
-	struct NodeTmp { uint16_t region; int64_t spawn; uint8_t level; }; eastl::vector<NodeTmp> nodes;
+	typedef struct t3dHlodRuntimeNodeTemp_s { uint16_t region; int64_t spawn; uint8_t level; } t3dHlodRuntimeNodeTemp_t;
+	eastl::vector<t3dHlodRuntimeNodeTemp_t> nodes;
 	const int node_count = MIN( rNodeRegionIndices.size(), MIN( rNodeSpawnIds.size(), rNodeMinLevels.size() ) ); nodes.reserve( ( size_t ) node_count );
 	for ( int i = 0; i < node_count; ++i ) { const int region = rNodeRegionIndices[i]; const uint8_t level = rNodeMinLevels[i]; if ( region >= 0 && region < TERRAIN3D_MAX_REGION_SLOTS && level > 0 ) nodes.push_back( { ( uint16_t ) region, rNodeSpawnIds[i], level } ); }
-	eastl::sort( nodes.begin(), nodes.end(), []( const NodeTmp &a, const NodeTmp &b ) { return a.region < b.region || ( a.region == b.region && a.spawn < b.spawn ); } );
+	eastl::sort( nodes.begin(), nodes.end(), []( const t3dHlodRuntimeNodeTemp_t &a, const t3dHlodRuntimeNodeTemp_t &b ) { return a.region < b.region || ( a.region == b.region && a.spawn < b.spawn ); } );
 
 	eastl::vector<CharString> paths; paths.resize( entries.size() ); size_t total_bytes = 24u + roots.size() * 4u + ( size_t ) rInstancerMinLevels.size() + nodes.size() * 12u + entries.size() * 104u;
 	for ( size_t i = 0; i < entries.size(); ++i ) { paths[i] = entries[i].packagePath.utf8(); total_bytes += ( size_t ) MAX( paths[i].length(), 0 ); }
 	if ( total_bytes > ( size_t ) INT64_MAX ) return PackedByteArray(); out.resize( ( int64_t ) total_bytes ); if ( ( size_t ) out.size() != total_bytes ) return PackedByteArray();
-	T3DByteWriter writer( out.ptrw(), total_bytes ); writer.writeU32( HLOD_RUNTIME_MAGIC ); writer.writeU16( HLOD_RUNTIME_VERSION ); writer.writeU16( 0u ); writer.writeU32( ( uint32_t ) entries.size() ); writer.writeU32( ( uint32_t ) roots.size() ); writer.writeU32( ( uint32_t ) rInstancerMinLevels.size() ); writer.writeU32( ( uint32_t ) nodes.size() );
+	t3dByteWriter_t writer( out.ptrw(), total_bytes ); writer.writeU32( HLOD_RUNTIME_MAGIC ); writer.writeU16( HLOD_RUNTIME_VERSION ); writer.writeU16( 0u ); writer.writeU32( ( uint32_t ) entries.size() ); writer.writeU32( ( uint32_t ) roots.size() ); writer.writeU32( ( uint32_t ) rInstancerMinLevels.size() ); writer.writeU32( ( uint32_t ) nodes.size() );
 	for ( size_t i = 0; i < entries.size(); ++i ) {
 		const auto &entry = entries[i]; writer.writeU8( ( uint8_t ) entry.level ); writer.writeU8( 0u ); writer.writeU16( 0u ); writer.writeI32( entry.cluster.x ); writer.writeI32( entry.cluster.y ); writer.writeI32( entry.regionMin.x ); writer.writeI32( entry.regionMin.y ); writer.writeI32( entry.regionMax.x ); writer.writeI32( entry.regionMax.y );
 		writer.writeF32( entry.localBounds.position.x ); writer.writeF32( entry.localBounds.position.y ); writer.writeF32( entry.localBounds.position.z ); writer.writeF32( entry.localBounds.size.x ); writer.writeF32( entry.localBounds.size.y ); writer.writeF32( entry.localBounds.size.z ); writer.writeF32( ( float ) entry.geometricError );
@@ -71,14 +72,14 @@ PackedByteArray T3DHLODRuntimeCodec::encode(
 	return writer.complete() ? out : PackedByteArray();
 }
 
-bool T3DHLODRuntimeCodec::decode( const PackedByteArray &rBlob, T3DHLODRuntimeData &rData ) {
-	rData = T3DHLODRuntimeData{}; if ( rBlob.size() < 24 ) return false; const uint8_t *p = rBlob.ptr(); size_t offset = 0u; auto need = [&]( const size_t nBytes ) { return offset <= ( size_t ) rBlob.size() && nBytes <= ( size_t ) rBlob.size() - offset; };
+bool T3DHLODRuntimeCodec::decode( const PackedByteArray &rBlob, t3dHlodRuntimeData_t &rData ) {
+	rData = t3dHlodRuntimeData_t{}; if ( rBlob.size() < 24 ) return false; const uint8_t *p = rBlob.ptr(); size_t offset = 0u; auto need = [&]( const size_t nBytes ) { return offset <= ( size_t ) rBlob.size() && nBytes <= ( size_t ) rBlob.size() - offset; };
 	if ( t3dHlodRuntimeCodecRu32( p ) != HLOD_RUNTIME_MAGIC || t3dHlodRuntimeCodecRu16( p + 4 ) != HLOD_RUNTIME_VERSION ) return false; offset = 8u;
 	const uint32_t entry_count = t3dHlodRuntimeCodecRu32( p + offset ); offset += 4u; const uint32_t root_count = t3dHlodRuntimeCodecRu32( p + offset ); offset += 4u; const uint32_t mesh_bytes = t3dHlodRuntimeCodecRu32( p + offset ); offset += 4u; const uint32_t node_count = t3dHlodRuntimeCodecRu32( p + offset ); offset += 4u;
 	if ( entry_count > 65535u || root_count > entry_count || mesh_bytes > ( uint32_t ) ( TERRAIN3D_MAX_REGION_SLOTS * TERRAIN3D_MAX_MESH_ASSETS ) || node_count > 1000000u ) return false;
 	rData.entries.resize( entry_count );
 	for ( uint32_t i = 0u; i < entry_count; ++i ) {
-		if ( !need( 104u ) ) return false; T3DHLODRuntimeEntryRecord &entry = rData.entries[i]; entry.level = t3dHlodRuntimeCodecRu8( p + offset ); offset += 4u; entry.cluster = Vector2i( t3dHlodRuntimeCodecRi32( p + offset ), t3dHlodRuntimeCodecRi32( p + offset + 4u ) ); offset += 8u; entry.regionMin = Vector2i( t3dHlodRuntimeCodecRi32( p + offset ), t3dHlodRuntimeCodecRi32( p + offset + 4u ) ); offset += 8u; entry.regionMax = Vector2i( t3dHlodRuntimeCodecRi32( p + offset ), t3dHlodRuntimeCodecRi32( p + offset + 4u ) ); offset += 8u;
+		if ( !need( 104u ) ) return false; t3dHlodRuntimeEntryRecord_t &entry = rData.entries[i]; entry.level = t3dHlodRuntimeCodecRu8( p + offset ); offset += 4u; entry.cluster = Vector2i( t3dHlodRuntimeCodecRi32( p + offset ), t3dHlodRuntimeCodecRi32( p + offset + 4u ) ); offset += 8u; entry.regionMin = Vector2i( t3dHlodRuntimeCodecRi32( p + offset ), t3dHlodRuntimeCodecRi32( p + offset + 4u ) ); offset += 8u; entry.regionMax = Vector2i( t3dHlodRuntimeCodecRi32( p + offset ), t3dHlodRuntimeCodecRi32( p + offset + 4u ) ); offset += 8u;
 		entry.localBounds = AABB( Vector3( t3dHlodRuntimeCodecRf32( p + offset ), t3dHlodRuntimeCodecRf32( p + offset + 4u ), t3dHlodRuntimeCodecRf32( p + offset + 8u ) ), Vector3( t3dHlodRuntimeCodecRf32( p + offset + 12u ), t3dHlodRuntimeCodecRf32( p + offset + 16u ), t3dHlodRuntimeCodecRf32( p + offset + 20u ) ) ); offset += 24u; entry.geometricError = t3dHlodRuntimeCodecRf32( p + offset ); offset += 4u; entry.sourceSignature = t3dHlodRuntimeCodecRi64( p + offset ); offset += 8u; entry.buildSignature = t3dHlodRuntimeCodecRi64( p + offset ); offset += 8u; entry.estimatedGpuBytes = t3dHlodRuntimeCodecRi64( p + offset ); offset += 8u; entry.parent = t3dHlodRuntimeCodecRi32( p + offset ); offset += 4u; for ( int child = 0; child < 4; ++child ) { entry.children[child] = t3dHlodRuntimeCodecRi32( p + offset ); offset += 4u; }
 		if ( !need( 4u ) ) return false; const uint32_t len = t3dHlodRuntimeCodecRu32( p + offset ); offset += 4u; if ( !need( len ) ) return false; entry.packagePath = String::utf8( ( const char * ) ( p + offset ), ( int ) len ); offset += len;
 		if ( entry.level < 1 || entry.level > 6 || entry.packagePath.is_empty() || entry.parent < -1 || entry.parent >= ( int ) entry_count ) return false; for ( int child : entry.children ) if ( child < -1 || child >= ( int ) entry_count ) return false;

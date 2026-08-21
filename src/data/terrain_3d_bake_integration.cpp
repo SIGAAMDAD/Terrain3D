@@ -534,7 +534,7 @@ PackedVector3Array T3DTerrain::generateNavMeshSourceGeometry(
 			LOG( ERROR, "Missing/invalid baked navigation tile for region ", location );
 			continue;
 		}
-		PackedFloat32Array collision_heights; T3DNavigationMaskView navigation_view; T3DMinMaxLevelView minmax_view; int collision_width = 0;
+		PackedFloat32Array collision_heights; t3dNavigationMaskView_t navigation_view; t3dMinMaxLevelView_t minmax_view; int collision_width = 0;
 		const bool use_minmax = pMinMaxBlob && T3DRuntimeBakeCodec::getMinMaxLevelView( minmax_blob, 16, minmax_view ) && minmax_view.nSourceSide == region_size && minmax_view.nLevelSide > 0;
 		if ( !T3DRuntimeBakeCodec::getNavigationMaskView( navigation_blob, navigation_view ) ||
 			!T3DRuntimeBakeCodec::decodeCollisionHeight( collision_blob, collision_heights, collision_width ) ||

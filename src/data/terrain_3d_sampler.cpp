@@ -35,7 +35,7 @@ void t3dRegionCold_t::reset( void ) {
 	derivedData.clear();
 }
 
-T3DSampler::T3DSampler( const T3DSamplingSource &rSource )
+T3DSampler::T3DSampler( const t3dSamplingSource_t &rSource )
 	: m_source( rSource ) {
 	if ( m_source.valid() ) {
 		m_nSamplingGeneration = m_source.pStorage->getSamplingGeneration();

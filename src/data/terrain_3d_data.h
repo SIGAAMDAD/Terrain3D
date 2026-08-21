@@ -129,7 +129,7 @@ private:
 	Ref<Image> makeGpuRenderControlImage( const Vector2i &vLocation ) const;
 	Ref<Image> makeMiddleCompositeImage( const Vector2i &rLocation,
 		const Ref<Image> &rControl, const Ref<Image> &rColor ) const;
-	T3DRuntimePageConfig getRuntimePageConfig( void ) const;
+	t3dRuntimePageConfig_t getRuntimePageConfig( void ) const;
 	static bool isRuntimePageWanted( void *pContext, const Vector2i &rLocation );
 	uint64_t computeGpuRuntimePageSourceSignature( const T3DRegion *pRegion ) const;
 	bool readGpuRuntimePageSourceSignature( const String &rPagePath, uint64_t &nSignature ) const;
@@ -140,7 +140,7 @@ private:
 	) const;
 	void pollGpuRuntimePagePrepare( bool bWait );
 	void requestGpuRuntimePage( const Vector2i &vLocation, uint16_t nConsumers, uint8_t nPriority );
-	void serviceGpuRuntimePagePrepare( const T3DResidencyFrameState &rFrame );
+	void serviceGpuRuntimePagePrepare( const t3dResidencyFrameState_t &rFrame );
 	bool isGpuRuntimePagePreparePending( const Vector2i &vLocation ) const;
 	bool takePreparedRuntimeHeight(
 		const Vector2i &vLocation, uint16_t nConsumer, Ref<Image> &rHeight, bool bMiddle,
@@ -158,9 +158,9 @@ private:
 	int getRegionSlotReserve( void ) const;
 	bool canUpdateRegionSlotsIncrementally( void ) const;
 	void syncCacheDefaultMaps( void );
-	T3DFarSurfaceAtlasConfig getFarSurfaceAtlasConfig( void ) const;
-	T3DMiddleHeightRegionCacheConfig getMiddleHeightCacheConfig( void ) const;
-	void applyInstanceRegionCacheChanges( const T3DInstanceRegionCacheChanges &rChanges );
+	t3dFarSurfaceAtlasConfig_t getFarSurfaceAtlasConfig( void ) const;
+	t3dMiddleHeightRegionCacheConfig_t getMiddleHeightCacheConfig( void ) const;
+	void applyInstanceRegionCacheChanges( const t3dInstanceRegionCacheChanges_t &rChanges );
 	void resetGpuRegionCache( bool bClearTextures );
 	void armPendingGpuRegionRetirements( void );
 	void invalidateGpuRegionLocation( const Vector2i &vLocation );
@@ -172,7 +172,7 @@ private:
 	void markGpuFarRegionDirty( const Vector2i &vLocation, t3dMapType_t mapType );
 	void resetMiddleHeightCache( void );
 	bool configureMiddleHeightCache( void );
-	void updateMiddleHeightResidencyInternal( const T3DResidencyFrameState &rFrame, bool bForce );
+	void updateMiddleHeightResidencyInternal( const t3dResidencyFrameState_t &rFrame, bool bForce );
 	void resetCpuRegionCache( bool bReleaseCleanMaps );
 	void invalidateCpuRegionLocation( const Vector2i &vLocation );
 	bool requestCpuRegionSourceAsync( const Vector2i &vLocation );
@@ -190,12 +190,12 @@ private:
 		T3DRegion *pDstRegion
 	);
 	Error addRegionInternal( const Ref<T3DRegion> &rRegion, const bool bUpdate, const bool bSanitize );
-	void processRegionSaveResult( const T3DRegionSaveResult &rResult );
+	void processRegionSaveResult( const t3dRegionSaveResult_t &rResult );
 	static bool ensurePersistenceRegionResident( void *pContext, const Vector2i &rLocation );
-	T3DResidencyFrameState makeResidencyFrameState( const Vector3 &rWorldPosition ) const;
-	void updateCpuRegionResidencyInternal( const T3DResidencyFrameState &rFrame, bool bForce );
-	void updateInstanceRegionResidencyInternal( const T3DResidencyFrameState &rFrame, bool bForce );
-	void updateGpuRegionResidencyInternal( const T3DResidencyFrameState &rFrame, bool bForce );
+	t3dResidencyFrameState_t makeResidencyFrameState( const Vector3 &rWorldPosition ) const;
+	void updateCpuRegionResidencyInternal( const t3dResidencyFrameState_t &rFrame, bool bForce );
+	void updateInstanceRegionResidencyInternal( const t3dResidencyFrameState_t &rFrame, bool bForce );
+	void updateGpuRegionResidencyInternal( const t3dResidencyFrameState_t &rFrame, bool bForce );
 
 public:
 	T3DData( void );
@@ -223,13 +223,13 @@ public:
 	EA_FORCE_INLINE int getRegionSizeInternal( void ) const { return m_regionRepository.getRegionSize(); }
 	EA_FORCE_INLINE int getRegionMapSizeInternal( void ) const { return m_regionRepository.getRegionMapSize(); }
 	EA_FORCE_INLINE bool matchesRegionLayoutInternal( const int nRegionSize ) const { return m_regionRepository.getRegionSize() == nRegionSize && m_regionRepository.getRegionSizeVector() == V2I( nRegionSize ); }
-	EA_FORCE_INLINE T3DRegionRepositoryView getRegionRepositoryViewInternal( void ) const { return m_regionRepository.getView(); }
+	EA_FORCE_INLINE t3dRegionRepositoryView_t getRegionRepositoryViewInternal( void ) const { return m_regionRepository.getView(); }
 	EA_FORCE_INLINE uint64_t getRegionTopologyGenerationInternal( void ) const { return m_regionRepository.getTopologyGeneration(); }
 	EA_FORCE_INLINE void setVertexSpacingInternal( const real_t fVertexSpacing ) { m_regionRepository.setVertexSpacing( fVertexSpacing ); }
 	EA_FORCE_INLINE bool isRegionLocationValidInternal( const Vector2i &vLocation ) const { return m_regionRepository.isLocationValid( vLocation ); }
 	EA_FORCE_INLINE real_t getVertexSpacingInternal( void ) const { return m_regionRepository.getVertexSpacing(); }
-	T3DSamplingSource getSamplingSourceInternal( void ) const {
-		return T3DSamplingSource{ &m_regionRepository, &m_samplingStorage };
+	t3dSamplingSource_t getSamplingSourceInternal( void ) const {
+		return t3dSamplingSource_t{ &m_regionRepository, &m_samplingStorage };
 	}
 	TypedArray<T3DRegion> getRegionsActive( const bool bCopy = false, const bool bDeep = false ) const;
 	EA_FORCE_INLINE Dictionary getRegionsAll( void ) const { return m_regionRepository.getRegions(); }
@@ -381,7 +381,7 @@ public:
 	EA_FORCE_INLINE bool isCpuRegionCacheEnabled( void ) const { return m_cpuRegionCache.isEnabled(); }
 	EA_FORCE_INLINE int getCpuRegionCacheCapacity( void ) const { return m_cpuRegionCache.getCapacity(); }
 	void regenerateDerivedMaps( const eastl::vector<Vector2i> &rRegionLocations, const AABB &rEditedArea = AABB() );
-	void publishDerivedMapUpdates( const eastl::vector<T3DDerivedMapUpdate> &rUpdates );
+	void publishDerivedMapUpdates( const eastl::vector<t3dDerivedMapUpdate_t> &rUpdates );
 	Ref<T3DErosionJob> createErosionJob( const Ref<T3DErosionSettings> &rSettings );
 	EA_FORCE_INLINE RID getHeightMapsRid( void ) const { return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getHeightMapsRid() : m_generatedHeightMaps.getRid(); }
 	EA_FORCE_INLINE RID getDerivedMapsRid( void ) const { return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getDerivedMapsRid() : m_generatedDerivedMaps.getRid(); }

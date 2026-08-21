@@ -21,7 +21,7 @@ class T3DRegionRepository;
 class T3DSamplingStorage;
 
 
-struct T3DCpuRegionCacheStats {
+typedef struct t3dCpuRegionCacheStats_s {
 	bool bEnabled = false;
 	bool bSelectionPending = true;
 	int nCapacity = 0;
@@ -33,7 +33,7 @@ struct T3DCpuRegionCacheStats {
 	uint32_t nStallFlagsLastTick = 0u;
 	size_t nLoadBytesLastTick = 0u;
 	uint64_t nServiceUsecLast = 0u;
-};
+} t3dCpuRegionCacheStats_t;
 
 class T3DCpuRegionCache {
 public:
@@ -45,7 +45,7 @@ public:
 	);
 
 	bool configure( bool bEnabled, int nBudgetMb, int nLoadLayers, int nLoadBudgetMb );
-	void setRuntimePageConfig( const T3DRuntimePageConfig &rConfig );
+	void setRuntimePageConfig( const t3dRuntimePageConfig_t &rConfig );
 	void reset( bool bReleaseCleanMaps );
 	void refreshCapacity( void );
 	void invalidate( const Vector2i &vLocation );
@@ -54,7 +54,7 @@ public:
 	bool requestSourceAsync( const Vector2i &vLocation );
 	bool ensureResident( const Vector2i &vLocation, bool bDemandLoad = true );
 	bool ensureSampleArea( const Vector3 &rWorldPosition, int nRadiusTexels );
-	void update( const T3DResidencyFrameState &rFrame, bool bForce, int nEffectiveLoadLayers );
+	void update( const t3dResidencyFrameState_t &rFrame, bool bForce, int nEffectiveLoadLayers );
 
 	EA_FORCE_INLINE bool isEnabled( void ) const { return m_bEnabled; }
 	EA_FORCE_INLINE int getCapacity( void ) const { return m_nCapacity; }
@@ -68,7 +68,7 @@ public:
 	size_t getReservedBytes( void ) const;
 	size_t getMinimumBytes( void ) const;
 	size_t getHardCapBytes( void ) const;
-	T3DCpuRegionCacheStats getStats( void ) const;
+	t3dCpuRegionCacheStats_t getStats( void ) const;
 	Dictionary getStatsDictionary( bool bDetailed, int nEffectiveLoadLayers ) const;
 
 private:
@@ -76,7 +76,7 @@ private:
 	T3DRegionPersistence *m_pPersistence = nullptr;
 	T3DSamplingStorage *m_pSamplingStorage = nullptr;
 	T3DRuntimePageStore *m_pRuntimePageStore = nullptr;
-	T3DRuntimePageConfig m_runtimePageConfig;
+	t3dRuntimePageConfig_t m_runtimePageConfig;
 
 	bool m_bEnabled = false;
 	bool m_bSelectionDirty = true;
@@ -107,8 +107,8 @@ private:
 	int calculateCapacity( void ) const;
 	int findSlot( const Vector2i &vLocation ) const;
 	bool takeSourceAsync( const Vector2i &vLocation, Ref<T3DRegion> &rSource );
-	void prewarmSources( const T3DResidencyFrameState &rFrame );
-	void reapSourceAsync( const T3DResidencyFrameState &rFrame );
+	void prewarmSources( const t3dResidencyFrameState_t &rFrame );
+	void reapSourceAsync( const t3dResidencyFrameState_t &rFrame );
 	bool publishSlot( int iSlot, const Vector2i &vLocation, const Ref<T3DRegion> &rSource );
 	bool publishCookedSlot( int iSlot, const Vector2i &vLocation, const Ref<Image> &rHeight,
 		const Ref<Image> &rControl, const Ref<Image> &rColor, const Ref<Image> &rDerived );
@@ -118,7 +118,7 @@ private:
 	void releaseUntrackedMaps( void );
 	bool restoreAllMaps( void );
 	int collectDesired(
-		const T3DResidencyFrameState &rFrame, const Vector2i &rCenter,
+		const t3dResidencyFrameState_t &rFrame, const Vector2i &rCenter,
 		Vector2i *pLocations, int nCapacity
 	) const;
 };

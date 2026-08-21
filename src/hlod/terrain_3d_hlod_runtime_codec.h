@@ -19,7 +19,7 @@
 using namespace godot;
 #endif
 
-struct T3DHLODRuntimeEntryRecord {
+typedef struct t3dHlodRuntimeEntryRecord_s {
 	int level = 1;
 	Vector2i cluster = V2I_ZERO;
 	Vector2i regionMin = V2I_ZERO;
@@ -32,20 +32,20 @@ struct T3DHLODRuntimeEntryRecord {
 	int64_t estimatedGpuBytes = 0;
 	int parent = -1;
 	int children[4] = {-1, -1, -1, -1};
-};
+} t3dHlodRuntimeEntryRecord_t;
 
-struct T3DHLODRuntimeNodePolicyRecord {
+typedef struct t3dHlodRuntimeNodePolicyRecord_s {
 	int64_t spawnId = 0;
 	uint8_t minLevel = 0;
-};
+} t3dHlodRuntimeNodePolicyRecord_t;
 
-struct T3DHLODRuntimeData {
-	eastl::vector<T3DHLODRuntimeEntryRecord> entries;
+typedef struct t3dHlodRuntimeData_s {
+	eastl::vector<t3dHlodRuntimeEntryRecord_t> entries;
 	eastl::vector<int> roots;
 	eastl::vector<uint8_t> instancerMinLevels;
-	eastl::vector<T3DHLODRuntimeNodePolicyRecord> nodePolicies;
+	eastl::vector<t3dHlodRuntimeNodePolicyRecord_t> nodePolicies;
 	eastl::array<uint32_t, TERRAIN3D_MAX_REGION_SLOTS + 1> nodePolicyOffsets{};
-};
+} t3dHlodRuntimeData_t;
 
 class T3DHLODRuntimeCodec {
 public:
@@ -56,7 +56,7 @@ public:
 		const PackedInt64Array &rNodeSpawnIds,
 		const PackedByteArray &rNodeMinLevels
 	);
-	static bool decode( const PackedByteArray &rBlob, T3DHLODRuntimeData &rData );
+	static bool decode( const PackedByteArray &rBlob, t3dHlodRuntimeData_t &rData );
 };
 
 #endif // TERRAIN3D_HLOD_RUNTIME_CODEC_H

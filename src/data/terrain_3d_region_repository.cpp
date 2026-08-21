@@ -169,8 +169,8 @@ PackedInt32Array T3DRegionRepository::getLogicalRegionMapPacked( void ) const {
 	return regionMap;
 }
 
-T3DRegionRepositoryView T3DRegionRepository::getView( void ) const {
-	T3DRegionRepositoryView view;
+t3dRegionRepositoryView_t T3DRegionRepository::getView( void ) const {
+	t3dRegionRepositoryView_t view;
 	view.pSlots = m_szRegionLocations;
 	view.ppRegionMap = m_szRegionPtrMap;
 	view.pLogicalRegionMap = m_szRegionMap;
@@ -263,8 +263,8 @@ int T3DRegionRepository::deactivateLocation( const Vector2i &rLocation ) {
 	return slot;
 }
 
-T3DRegionLocationReconcileResult T3DRegionRepository::reconcileLocations( const TypedArray<Vector2i> &rLocations ) {
-	T3DRegionLocationReconcileResult result;
+t3dRegionLocationReconcileResult_t T3DRegionRepository::reconcileLocations( const TypedArray<Vector2i> &rLocations ) {
+	t3dRegionLocationReconcileResult_t result;
 	result.nOldSlotCount = m_nRegionLocationCount;
 	result.removedLocations.reserve( ( size_t ) ( m_nActiveRegionCount ) );
 	result.addedSlots.reserve( ( size_t ) ( rLocations.size() ) );

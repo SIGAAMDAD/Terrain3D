@@ -20,14 +20,14 @@ class T3DRegionRepository;
 class T3DRuntimePageStore;
 class T3DSamplingStorage;
 
-struct T3DMiddleHeightRegionCacheConfig {
+typedef struct t3dMiddleHeightRegionCacheConfig_s {
 	bool bAuthoring = false;
 	int nHotRadius = 0;
 	int nResolutionDivisor = 1;
 	int nRetireFrames = TERRAIN3D_GPU_CACHE_DEFAULT_RETIRE_FRAMES;
-};
+} t3dMiddleHeightRegionCacheConfig_t;
 
-struct T3DMiddleHeightRegionCacheStats {
+typedef struct t3dMiddleHeightRegionCacheStats_s {
 	int nResident = 0;
 	int nMappedCapacity = 0;
 	int nPhysicalLayers = 0;
@@ -39,7 +39,7 @@ struct T3DMiddleHeightRegionCacheStats {
 	size_t nReservedBytes = 0u;
 	bool bPageTableValid = false;
 	bool bHeightArrayValid = false;
-};
+} t3dMiddleHeightRegionCacheStats_t;
 
 class T3DMiddleHeightRegionCache {
 public:
@@ -50,9 +50,9 @@ public:
 	);
 
 	void reset( void );
-	bool configure( const T3DMiddleHeightRegionCacheConfig &rConfig );
-	void update( const T3DResidencyFrameState &rFrame, bool bForce, int nEffectiveUploadLayers,
-		const T3DMiddleHeightRegionCacheConfig &rConfig );
+	bool configure( const t3dMiddleHeightRegionCacheConfig_t &rConfig );
+	void update( const t3dResidencyFrameState_t &rFrame, bool bForce, int nEffectiveUploadLayers,
+		const t3dMiddleHeightRegionCacheConfig_t &rConfig );
 	void invalidate( const Vector2i &vLocation );
 	EA_FORCE_INLINE void markSelectionDirty( void ) { m_bSelectionDirty = true; }
 
@@ -64,7 +64,7 @@ public:
 	EA_FORCE_INLINE bool isReady( void ) const { return m_bTexturesReady; }
 	EA_FORCE_INLINE bool isSelectionDirty( void ) const { return m_bSelectionDirty; }
 	Ref<Image> makeHeightImage( const Vector2i &vLocation, bool bRuntimeResolution = false ) const;
-	T3DMiddleHeightRegionCacheStats getStats( void ) const;
+	t3dMiddleHeightRegionCacheStats_t getStats( void ) const;
 	Dictionary getStatsDictionary( void ) const;
 	size_t getReservedBytes( void ) const;
 
@@ -72,7 +72,7 @@ private:
 	T3DRegionRepository *m_pRepository = nullptr;
 	T3DSamplingStorage *m_pSamplingStorage = nullptr;
 	T3DRuntimePageStore *m_pRuntimePageStore = nullptr;
-	T3DMiddleHeightRegionCacheConfig m_config;
+	t3dMiddleHeightRegionCacheConfig_t m_config;
 
 	T3DGeneratedTexture m_generatedHeightMaps;
 	T3DGeneratedTexture m_generatedRegionMap;
@@ -97,7 +97,7 @@ private:
 
 	int findSlot( const Vector2i &vLocation ) const;
 	bool uploadLayer( int nLayer, const Vector2i &vLocation, const Ref<Image> &rPreparedHeight = Ref<Image>() );
-	int collectDesired( const T3DResidencyFrameState &rFrame, const Vector2i &rCenter,
+	int collectDesired( const t3dResidencyFrameState_t &rFrame, const Vector2i &rCenter,
 		Vector2i *pLocations, int nCapacity, int &rRequiredCount ) const;
 	bool updatePageTableTexture( void );
 };

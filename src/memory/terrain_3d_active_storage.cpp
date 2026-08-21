@@ -20,26 +20,26 @@
 static constexpr int TERRAIN3D_ACTIVE_PHYSICAL_PAGE_COUNT = 32;
 static constexpr int TERRAIN3D_ACTIVE_INVALID_PAGE = -1;
 
-enum t3dActiveOwnerState_t : uint32_t {
+typedef enum t3dActiveOwnerState_e : uint32_t {
 	TERRAIN3D_ACTIVE_OWNER_FREE = 0u,
 	TERRAIN3D_ACTIVE_OWNER_OWNED = 1u,
 	TERRAIN3D_ACTIVE_OWNER_DRAINING = 2u,
-};
+} t3dActiveOwnerState_t;
 
-enum t3dActivePageState_t : uint32_t {
+typedef enum t3dActivePageState_e : uint32_t {
 	TERRAIN3D_ACTIVE_PAGE_FREE = 0u,
 	TERRAIN3D_ACTIVE_PAGE_STAGING = 1u,
 	TERRAIN3D_ACTIVE_PAGE_PUBLISHED = 2u,
 	TERRAIN3D_ACTIVE_PAGE_RETIRING = 3u,
-};
+} t3dActivePageState_t;
 
-struct t3dActivePhysicalPage_t {
+typedef struct t3dActivePhysicalPage_s {
 	uint16_t *pHeight = nullptr;
 	std::atomic<uint32_t> nPins{0u};
 	std::atomic<uint32_t> nGeneration{1u};
 	std::atomic<int> iLogicalSlot{TERRAIN3D_ACTIVE_INVALID_PAGE};
 	std::atomic<uint32_t> nState{TERRAIN3D_ACTIVE_PAGE_FREE};
-};
+} t3dActivePhysicalPage_t;
 
 static t3dActivePhysicalPage_t s_szPhysicalPages[TERRAIN3D_ACTIVE_PHYSICAL_PAGE_COUNT];
 static std::atomic<int> s_szLogicalToPhysical[TERRAIN3D_ACTIVE_MAX_REGION_SLOTS];

@@ -72,7 +72,7 @@ void T3DMiddleHeightRegionCache::reset( void ) {
 	m_nStreamingGenerationLast = 0u;
 }
 
-bool T3DMiddleHeightRegionCache::configure( const T3DMiddleHeightRegionCacheConfig &rConfig ) {
+bool T3DMiddleHeightRegionCache::configure( const t3dMiddleHeightRegionCacheConfig_t &rConfig ) {
 	m_config = rConfig;
 	if ( !m_pRepository || m_pRepository->getRegionSize() <= 0 || m_pRepository->getRegionMapSize() <= 0 ||
 		m_pRepository->getActiveRegionCount() <= 0 ) {
@@ -214,7 +214,7 @@ bool T3DMiddleHeightRegionCache::uploadLayer(
 }
 
 int T3DMiddleHeightRegionCache::collectDesired(
-	const T3DResidencyFrameState &rFrame, const Vector2i &rCenter, Vector2i *pLocations,
+	const t3dResidencyFrameState_t &rFrame, const Vector2i &rCenter, Vector2i *pLocations,
 	const int nCapacity, int &rRequiredCount
 ) const {
 	rRequiredCount = 0;
@@ -317,8 +317,8 @@ void T3DMiddleHeightRegionCache::invalidate( const Vector2i &vLocation ) {
 }
 
 void T3DMiddleHeightRegionCache::update(
-	const T3DResidencyFrameState &rFrame, const bool bForce, const int nEffectiveUploadLayers,
-	const T3DMiddleHeightRegionCacheConfig &rConfig
+	const t3dResidencyFrameState_t &rFrame, const bool bForce, const int nEffectiveUploadLayers,
+	const t3dMiddleHeightRegionCacheConfig_t &rConfig
 ) {
 	m_config = rConfig;
 	const Vector2i &rCenter = rFrame.residencyCenter;
@@ -487,8 +487,8 @@ size_t T3DMiddleHeightRegionCache::getReservedBytes( void ) const {
 	return side * side * sizeof( uint16_t ) * ( size_t ) ( m_nPhysicalLayerCount ) + page_table;
 }
 
-T3DMiddleHeightRegionCacheStats T3DMiddleHeightRegionCache::getStats( void ) const {
-	T3DMiddleHeightRegionCacheStats stats;
+t3dMiddleHeightRegionCacheStats_t T3DMiddleHeightRegionCache::getStats( void ) const {
+	t3dMiddleHeightRegionCacheStats_t stats;
 	stats.nResident = m_nResidentCount;
 	stats.nMappedCapacity = m_nMappedCapacity;
 	stats.nPhysicalLayers = m_nPhysicalLayerCount;
@@ -504,7 +504,7 @@ T3DMiddleHeightRegionCacheStats T3DMiddleHeightRegionCache::getStats( void ) con
 }
 
 Dictionary T3DMiddleHeightRegionCache::getStatsDictionary( void ) const {
-	const T3DMiddleHeightRegionCacheStats values = getStats();
+	const t3dMiddleHeightRegionCacheStats_t values = getStats();
 	Dictionary stats;
 	stats["resident"] = values.nResident;
 	stats["mapped_capacity"] = values.nMappedCapacity;

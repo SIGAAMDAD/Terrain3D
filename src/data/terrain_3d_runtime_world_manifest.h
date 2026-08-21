@@ -18,8 +18,8 @@
 class T3DRegion;
 class T3DRegionRepository;
 class T3DRuntimePageStore;
-struct T3DRuntimePageConfig;
-struct T3DStagedRepository;
+typedef struct t3dRuntimePageConfig_s t3dRuntimePageConfig_t;
+typedef struct t3dStagedRepository_s t3dStagedRepository_t;
 
 static constexpr uint64_t TERRAIN3D_RUNTIME_WORLD_MANIFEST_MAGIC = 0x31464e4d57334454ull; // T3DWMNF1
 static constexpr uint32_t TERRAIN3D_RUNTIME_WORLD_MANIFEST_VERSION = 3u;
@@ -32,7 +32,7 @@ static constexpr uint16_t TERRAIN3D_RUNTIME_WORLD_ADJ_SW = 1u << 5u;
 static constexpr uint16_t TERRAIN3D_RUNTIME_WORLD_ADJ_W = 1u << 6u;
 static constexpr uint16_t TERRAIN3D_RUNTIME_WORLD_ADJ_NW = 1u << 7u;
 
-struct T3DRuntimeWorldRegionRecord {
+typedef struct t3dRuntimeWorldRegionRecord_s {
 	Vector2i location = V2I_MAX;
 	Vector2 heightRange = V2_ZERO;
 	uint32_t channelFlags = 0u;
@@ -61,7 +61,7 @@ struct T3DRuntimeWorldRegionRecord {
 	uint16_t lightmapTerrainProxyLod = 2u;
 	uint16_t reserved = 0u;
 	eastl::array<uint32_t, TERRAIN3D_MAX_MESH_ASSETS> instanceMeshCounts{};
-};
+} t3dRuntimeWorldRegionRecord_t;
 
 // Immutable cooked-world topology/dependency index. Runtime residency keeps
 // mutable slot state elsewhere; this object only owns cook-time facts.
@@ -71,11 +71,11 @@ public:
 	bool buildAuthoringIndex( const T3DRegionRepository &rRepository );
 	bool write(
 		const String &rDataDirectory, const T3DRegionRepository &rRepository,
-		const T3DRuntimePageStore &rPageStore, const T3DRuntimePageConfig &rConfig,
+		const T3DRuntimePageStore &rPageStore, const t3dRuntimePageConfig_t &rConfig,
 		PackedStringArray *pErrors = nullptr
 	);
 	bool load( const String &rDataDirectory, PackedStringArray *pErrors = nullptr );
-	bool stageRepository( const String &rDataDirectory, T3DStagedRepository &rStaged ) const;
+	bool stageRepository( const String &rDataDirectory, t3dStagedRepository_t &rStaged ) const;
 
 	String getPath( const String &rDataDirectory ) const;
 	EA_FORCE_INLINE bool isLoaded( void ) const { return m_bLoaded; }
@@ -88,12 +88,12 @@ public:
 	EA_FORCE_INLINE uint64_t getWorldSignature( void ) const { return m_nWorldSignature; }
 	EA_FORCE_INLINE uint64_t getMaterialSignature( void ) const { return m_nMaterialSignature; }
 	EA_FORCE_INLINE Vector2 getWorldHeightRange( void ) const { return m_worldHeightRange; }
-	const T3DRuntimeWorldRegionRecord *findRegion( const Vector2i &rLocation ) const;
-	EA_FORCE_INLINE uint8_t getRegionAdjacencyMask( const Vector2i &rLocation ) const { const T3DRuntimeWorldRegionRecord *record = findRegion( rLocation ); return record ? ( uint8_t ) ( record->flags & 0xffu ) : 0u; }
+	const t3dRuntimeWorldRegionRecord_t *findRegion( const Vector2i &rLocation ) const;
+	EA_FORCE_INLINE uint8_t getRegionAdjacencyMask( const Vector2i &rLocation ) const { const t3dRuntimeWorldRegionRecord_t *record = findRegion( rLocation ); return record ? ( uint8_t ) ( record->flags & 0xffu ) : 0u; }
 	int findSceneDependency( const String &rPath ) const;
 	const String &getSceneDependency( uint32_t nIndex ) const;
 	EA_FORCE_INLINE const eastl::vector<uint16_t> &getRegionSceneDependencies( void ) const { return m_regionSceneDependencies; }
-	EA_FORCE_INLINE const eastl::vector<T3DRuntimeWorldRegionRecord> &getRegions( void ) const { return m_regions; }
+	EA_FORCE_INLINE const eastl::vector<t3dRuntimeWorldRegionRecord_t> &getRegions( void ) const { return m_regions; }
 
 private:
 	bool m_bLoaded = false;
@@ -105,7 +105,7 @@ private:
 	uint64_t m_nWorldSignature = 0u;
 	uint64_t m_nMaterialSignature = 0u;
 	Vector2 m_worldHeightRange = V2_ZERO;
-	eastl::vector<T3DRuntimeWorldRegionRecord> m_regions;
+	eastl::vector<t3dRuntimeWorldRegionRecord_t> m_regions;
 	eastl::vector<String> m_sceneDependencies;
 	eastl::vector<uint16_t> m_regionSceneDependencies;
 	eastl::array<int16_t, TERRAIN3D_MAX_REGION_SLOTS> m_regionLookup{};

@@ -521,7 +521,7 @@ String T3DRuntimePageStore::getPagePath(
 }
 
 uint64_t T3DRuntimePageStore::computeSourceSignature(
-	const T3DRegion *const pRegion, const T3DRuntimePageConfig &rConfig
+	const T3DRegion *const pRegion, const t3dRuntimePageConfig_t &rConfig
 ) const {
 	if ( !pRegion || !m_pRepository ) {
 		return 0u;
@@ -914,7 +914,7 @@ bool T3DRuntimePageStore::loadSnapshot( t3dRuntimePreparedPage_t &rPage, const b
 }
 
 bool T3DRuntimePageStore::validatePageForRegion(
-	const T3DRegion *const pRegion, const T3DRuntimePageConfig &rConfig
+	const T3DRegion *const pRegion, const t3dRuntimePageConfig_t &rConfig
 ) const {
 	if ( !pRegion || !m_pRepository ) {
 		return false;
@@ -939,7 +939,7 @@ bool T3DRuntimePageStore::validatePageForRegion(
 }
 
 bool T3DRuntimePageStore::loadCpuMapsNow(
-	const Vector2i &rLocation, const T3DRuntimePageConfig &rConfig,
+	const Vector2i &rLocation, const t3dRuntimePageConfig_t &rConfig,
 	Ref<Image> &rHeight, Ref<Image> &rControl, Ref<Image> &rColor, Ref<Image> &rDerived
 ) const {
 	rHeight.unref(); rControl.unref(); rColor.unref(); rDerived.unref();
@@ -964,7 +964,7 @@ bool T3DRuntimePageStore::loadCpuMapsNow(
 }
 
 bool T3DRuntimePageStore::loadCollisionNow(
-	const Vector2i &rLocation, const T3DRuntimePageConfig &rConfig,
+	const Vector2i &rLocation, const t3dRuntimePageConfig_t &rConfig,
 	PackedByteArray &rHeight, PackedByteArray &rBounds, PackedByteArray &rHoleMask
 ) const {
 	rHeight.clear(); rBounds.clear(); rHoleMask.clear();
@@ -989,7 +989,7 @@ bool T3DRuntimePageStore::loadCollisionNow(
 }
 
 bool T3DRuntimePageStore::loadNavigationNow(
-	const Vector2i &rLocation, const T3DRuntimePageConfig &rConfig,
+	const Vector2i &rLocation, const t3dRuntimePageConfig_t &rConfig,
 	PackedByteArray &rNavigation, PackedByteArray *const pCollisionHeight,
 	PackedByteArray *const pMinMaxHeight
 ) const {
@@ -1019,7 +1019,7 @@ bool T3DRuntimePageStore::loadNavigationNow(
 }
 
 bool T3DRuntimePageStore::loadLightingReceiversNow(
-	const Vector2i &rLocation, const T3DRuntimePageConfig &rConfig, PackedByteArray &rReceivers
+	const Vector2i &rLocation, const t3dRuntimePageConfig_t &rConfig, PackedByteArray &rReceivers
 ) const {
 	rReceivers.clear();
 	if ( !m_pRepository || !rConfig.bCookedPagesEnabled ) return false;
@@ -1043,8 +1043,8 @@ bool T3DRuntimePageStore::loadLightingReceiversNow(
 }
 
 bool T3DRuntimePageStore::writePage(
-	T3DRegion *const pRegion, const T3DRuntimePageConfig &rConfig,
-	const T3DRuntimePageCookPayload &rPayload, String *const pError
+	T3DRegion *const pRegion, const t3dRuntimePageConfig_t &rConfig,
+	const t3dRuntimePageCookPayload_t &rPayload, String *const pError
 ) const {
 	if ( pError ) {
 		*pError = String();
@@ -1423,7 +1423,7 @@ void T3DRuntimePageStore::request(
 	}
 }
 
-void T3DRuntimePageStore::service( const T3DRuntimePageServiceState &rState ) {
+void T3DRuntimePageStore::service( const t3dRuntimePageServiceState_t &rState ) {
 	poll( false );
 	if ( !rState.config.bCookedPagesEnabled || !m_pRepository ) {
 		return;
@@ -1761,8 +1761,8 @@ bool T3DRuntimePageStore::takeGpuPage(
 	return loaded;
 }
 
-T3DRuntimePageStats T3DRuntimePageStore::getStats( void ) const {
-	T3DRuntimePageStats stats;
+t3dRuntimePageStats_t T3DRuntimePageStore::getStats( void ) const {
+	t3dRuntimePageStats_t stats;
 	stats.nPreparedPages = m_nPreparedPageCount;
 	stats.nPendingPages = m_bPrepareJobActive ? m_nPrepareWorkPageCount : 0;
 	stats.nQueuedPages = m_nQueuedCount;

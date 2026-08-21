@@ -54,7 +54,7 @@ typedef struct t3dRegionCold_s {
 
 class T3DSampler {
 public:
-	explicit T3DSampler( const T3DSamplingSource &rSource );
+	explicit T3DSampler( const t3dSamplingSource_t &rSource );
 
 	float sampleHeight( const Vector3 &rGlobalPosition );
 	float sampleHeightGrid( int64_t iGridX, int64_t iGridZ, bool bRespectHoles = false );
@@ -86,7 +86,7 @@ private:
 
 
 
-	T3DSamplingSource m_source;
+	t3dSamplingSource_t m_source;
 	eastl::array<t3dRegionView_t, TERRAIN3D_SAMPLER_CACHE_SIZE> m_szCache{};
 	eastl::array<t3dRegionCold_t, TERRAIN3D_SAMPLER_CACHE_SIZE> m_szCacheCold{};
 	t3dRegionView_t *m_pLastView = nullptr;

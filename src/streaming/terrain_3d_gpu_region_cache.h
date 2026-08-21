@@ -28,7 +28,7 @@ class T3DRuntimePageStore;
 class T3DSamplingStorage;
 class T3DTerrain;
 
-struct T3DGpuRegionCacheStats {
+typedef struct t3dGpuRegionCacheStats_s {
 	bool bEnabled = false;
 	bool bTexturesReady = false;
 	bool bSelectionPending = true;
@@ -72,11 +72,11 @@ struct T3DGpuRegionCacheStats {
 	uint64_t nServiceUsecLast = 0u;
 	uint64_t nPreparePublicationUsecLast = 0u;
 	uint64_t nPrepareEndToEndUsecLast = 0u;
-};
+} t3dGpuRegionCacheStats_t;
 
-struct T3DGpuRegionCacheUpdateResult {
+typedef struct t3dGpuRegionCacheUpdateResult_s {
 	bool bPageTableChanged = false;
-};
+} t3dGpuRegionCacheUpdateResult_t;
 
 class T3DGpuRegionCache {
 public:
@@ -99,8 +99,8 @@ public:
 		int nUploadBudgetMb, int nSparePages, int nRetireFrames
 	);
 	void reset( bool bClearTextures );
-	T3DGpuRegionCacheUpdateResult update(
-		const T3DResidencyFrameState &rFrame, bool bForce,
+	t3dGpuRegionCacheUpdateResult_t update(
+		const t3dResidencyFrameState_t &rFrame, bool bForce,
 		int nEffectiveUploadLayers, T3DCompute *pCompute
 	);
 	void invalidate( const Vector2i &vLocation );
@@ -148,7 +148,7 @@ public:
 	size_t getReservedBytes( void ) const;
 	size_t getMinimumBytes( void ) const;
 	size_t getHardCapBytes( void ) const;
-	T3DGpuRegionCacheStats getStats( void ) const;
+	t3dGpuRegionCacheStats_t getStats( void ) const;
 	Dictionary getStatsDictionary( bool bDetailed ) const;
 	EA_FORCE_INLINE void recordPageTableUpdate( void ) { ++m_nGpuRegionPageTableUpdatesLastTick; }
 
@@ -274,7 +274,7 @@ private:
 	bool uploadGpuRegionLayer( int nLayer, const Vector2i &vLocation, t3dMapType_t eMapType );
 	int processPendingGpuRegionRepublishes( int nLimit );
 	int collectDesiredGpuRegions(
-		const T3DResidencyFrameState &rFrame, const Vector2i &rCenter,
+		const t3dResidencyFrameState_t &rFrame, const Vector2i &rCenter,
 		Vector2i *pLocations, int nCapacity, t3dGpuCacheSelectionStats_t &rStats
 	);
 	Ref<Image> getRegionMapOrDefault( const T3DRegion *pRegion, t3dMapType_t eMapType ) const;
@@ -285,7 +285,7 @@ private:
 		const Vector2i &rLocation, const Ref<Image> &rControl,
 		const Ref<Image> &rColor
 	) const;
-	bool serviceRuntimePages( const T3DResidencyFrameState &rFrame );
+	bool serviceRuntimePages( const t3dResidencyFrameState_t &rFrame );
 	static bool isRuntimePageWanted( void *pContext, const Vector2i &rLocation );
 	EA_FORCE_INLINE void notePageTableChanged( void ) { m_bPageTableChangedThisTick = true; }
 };

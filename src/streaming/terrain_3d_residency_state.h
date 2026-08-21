@@ -12,7 +12,7 @@
 
 #include <cstdint>
 
-struct T3DResidencyFrameState {
+typedef struct t3dResidencyFrameState_s {
 	Vector3 worldPosition = V3_ZERO;
 	Vector2i streamingCenter = V2I_MAX;
 	Vector2i residencyCenter = V2I_MAX;
@@ -30,7 +30,7 @@ struct T3DResidencyFrameState {
 	bool bCookedPagesEnabled = false;
 	bool bProfilingEnabled = false;
 	bool bCpuRegionCacheEnabled = false;
-	T3DRuntimePageConfig runtimePageConfig;
+	t3dRuntimePageConfig_t runtimePageConfig;
 
 	bool containsLocation( const Vector2i &rLocation ) const {
 		if ( nRegionMapSize <= 0 ) {
@@ -58,6 +58,6 @@ struct T3DResidencyFrameState {
 		const int mapIndex = T3DRegionRepository::getRegionMapIndex( rLocation );
 		return mapIndex >= 0 && pStreamingPrefetch[mapIndex] != 0u;
 	}
-};
+} t3dResidencyFrameState_t;
 
 #endif // TERRAIN3D_RESIDENCY_STATE_H

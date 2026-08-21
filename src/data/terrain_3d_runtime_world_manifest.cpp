@@ -120,7 +120,7 @@ bool T3DRuntimeWorldManifest::hasRegion( const Vector2i &rLocation ) const {
 		( m_topologyBits[( size_t ) ( map_index >> 6 )] & ( 1ull << ( map_index & 63 ) ) ) != 0u;
 }
 
-const T3DRuntimeWorldRegionRecord *T3DRuntimeWorldManifest::findRegion( const Vector2i &rLocation ) const {
+const t3dRuntimeWorldRegionRecord_t *T3DRuntimeWorldManifest::findRegion( const Vector2i &rLocation ) const {
 	const int map_index = T3DRegionRepository::getRegionMapIndex( rLocation );
 	if ( map_index < 0 || map_index >= TERRAIN3D_MAX_REGION_SLOTS ) {
 		return nullptr;
@@ -145,7 +145,7 @@ bool T3DRuntimeWorldManifest::buildAuthoringIndex( const T3DRegionRepository &rR
 		if ( !pRegion || pRegion->isDeleted() ) {
 			continue;
 		}
-		T3DRuntimeWorldRegionRecord record;
+		t3dRuntimeWorldRegionRecord_t record;
 		record.location = location;
 		if ( first_region ) {
 			m_worldRegionMin = location;
@@ -241,7 +241,7 @@ bool T3DRuntimeWorldManifest::buildAuthoringIndex( const T3DRegionRepository &rR
 		Vector2i( 0, -1 ), Vector2i( 1, -1 ), Vector2i( 1, 0 ), Vector2i( 1, 1 ),
 		Vector2i( 0, 1 ), Vector2i( -1, 1 ), Vector2i( -1, 0 ), Vector2i( -1, -1 )
 	};
-	for ( T3DRuntimeWorldRegionRecord &record : m_regions ) {
+	for ( t3dRuntimeWorldRegionRecord_t &record : m_regions ) {
 		uint16_t adjacency = 0u;
 		for ( uint16_t bit = 0u; bit < 8u; ++bit ) {
 			if ( hasRegion( record.location + neighbors[bit] ) ) {
@@ -255,7 +255,7 @@ bool T3DRuntimeWorldManifest::buildAuthoringIndex( const T3DRegionRepository &rR
 
 bool T3DRuntimeWorldManifest::write(
 	const String &rDataDirectory, const T3DRegionRepository &rRepository,
-	const T3DRuntimePageStore &rPageStore, const T3DRuntimePageConfig &rConfig,
+	const T3DRuntimePageStore &rPageStore, const t3dRuntimePageConfig_t &rConfig,
 	PackedStringArray *const pErrors
 ) {
 	if ( !buildAuthoringIndex( rRepository ) ) {
@@ -266,7 +266,7 @@ bool T3DRuntimeWorldManifest::write(
 	uint64_t world_signature = 1469598103934665603ull;
 	t3dRuntimeWorldManifestHashU32( world_signature, ( uint32_t ) ( m_nRegionSize ) );
 	t3dRuntimeWorldManifestHashU32( world_signature, ( uint32_t ) ( m_regions.size() ) );
-	for ( T3DRuntimeWorldRegionRecord &record : m_regions ) {
+	for ( t3dRuntimeWorldRegionRecord_t &record : m_regions ) {
 		const T3DRegion *const pRegion = rRepository.getRegionPtr( record.location );
 		uint64_t page_signature = 0u;
 		const String page_path = rPageStore.getPagePath( pRegion, rDataDirectory );
@@ -317,7 +317,7 @@ bool T3DRuntimeWorldManifest::write(
 	pFile->store_32( 0u );
 	while ( pFile->get_position() < MANIFEST_HEADER_BYTES ) pFile->store_8( 0u );
 	for ( uint64_t bits : m_topologyBits ) pFile->store_64( bits );
-	for ( const T3DRuntimeWorldRegionRecord &record : m_regions ) {
+	for ( const t3dRuntimeWorldRegionRecord_t &record : m_regions ) {
 		pFile->store_32( ( uint32_t ) ( record.location.x ) );
 		pFile->store_32( ( uint32_t ) ( record.location.y ) );
 		pFile->store_float( ( float ) ( record.heightRange.x ) );
@@ -416,7 +416,7 @@ bool T3DRuntimeWorldManifest::load( const String &rDataDirectory, PackedStringAr
 	for ( uint64_t &bits : m_topologyBits ) bits = pFile->get_64();
 	m_regions.resize( region_count );
 	for ( uint32_t index = 0u; index < region_count; ++index ) {
-		T3DRuntimeWorldRegionRecord &record = m_regions[index];
+		t3dRuntimeWorldRegionRecord_t &record = m_regions[index];
 		record.location.x = ( int32_t ) ( pFile->get_32() );
 		record.location.y = ( int32_t ) ( pFile->get_32() );
 		record.heightRange.x = pFile->get_float();
@@ -473,7 +473,7 @@ bool T3DRuntimeWorldManifest::load( const String &rDataDirectory, PackedStringAr
 			return false;
 		}
 	}
-	for ( const T3DRuntimeWorldRegionRecord &record : m_regions ) {
+	for ( const t3dRuntimeWorldRegionRecord_t &record : m_regions ) {
 		if ( ( record.lightmapDependency != UINT32_MAX && record.lightmapDependency >= dependency_count ) ||
 			( record.lightmapDirectionalSignatureDependency != UINT32_MAX &&
 				record.lightmapDirectionalSignatureDependency >= dependency_count ) ) {
@@ -500,7 +500,7 @@ bool T3DRuntimeWorldManifest::load( const String &rDataDirectory, PackedStringAr
 }
 
 bool T3DRuntimeWorldManifest::stageRepository(
-	const String &rDataDirectory, T3DStagedRepository &rStaged
+	const String &rDataDirectory, t3dStagedRepository_t &rStaged
 ) const {
 	if ( !m_bLoaded || m_nRegionSize <= 0 || m_regions.empty() ) return false;
 	rStaged.reset();
@@ -508,7 +508,7 @@ bool T3DRuntimeWorldManifest::stageRepository(
 	rStaged.nTargetRegionSize = m_nRegionSize;
 	rStaged.regions.reserve( m_regions.size() );
 	for ( int slot = 0; slot < ( int ) ( m_regions.size() ); ++slot ) {
-		const T3DRuntimeWorldRegionRecord &record = m_regions[( size_t ) ( slot )];
+		const t3dRuntimeWorldRegionRecord_t &record = m_regions[( size_t ) ( slot )];
 		Ref<T3DRegion> pRegion;
 		pRegion.instantiate();
 		pRegion->setLocation( record.location );
@@ -536,7 +536,7 @@ bool T3DRuntimeWorldManifest::stageRepository(
 		}
 		pRegion->setModified( false );
 		pRegion->markRuntimeMapsCleanInternal();
-		T3DStagedRegion entry;
+		t3dStagedRegion_t entry;
 		entry.location = record.location;
 		entry.path = rDataDirectory.path_join( T3DUtil::locationToFilename( record.location ) );
 		entry.pRegion = pRegion;

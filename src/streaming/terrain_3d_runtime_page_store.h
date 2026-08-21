@@ -34,7 +34,7 @@ typedef enum t3dRuntimePageConsumer_e : uint16_t {
 	RUNTIME_PAGE_CONSUMER_TERRAIN_SHADOW = 1u << 8,
 } t3dRuntimePageConsumer_t;
 
-struct T3DRuntimePageConfig {
+typedef struct t3dRuntimePageConfig_s {
 	String dataDirectory;
 	uint64_t materialSourceSignature = 0u;
 	uint64_t collisionSurfaceSignature = 0u;
@@ -44,9 +44,9 @@ struct T3DRuntimePageConfig {
 	int prepareThreads = 2;
 	bool bCookedPagesEnabled = false;
 	bool bEditorAuthoring = false;
-};
+} t3dRuntimePageConfig_t;
 
-struct T3DRuntimePageCookPayload {
+typedef struct t3dRuntimePageCookPayload_s {
 	Ref<Image> height;
 	Ref<Image> pControl;
 	Ref<Image> pColor;
@@ -64,9 +64,9 @@ struct T3DRuntimePageCookPayload {
 	PackedByteArray lightingReceivers;
 	PackedByteArray multimeshFastStart;
 	uint32_t materialMask = 1u;
-};
+} t3dRuntimePageCookPayload_t;
 
-struct T3DRuntimePageStats {
+typedef struct t3dRuntimePageStats_s {
 	int nPreparedPages = 0;
 	int nPreparedLoadedPages = 0;
 	int nPendingPages = 0;
@@ -81,17 +81,17 @@ struct T3DRuntimePageStats {
 	uint64_t nPrepareMaterializeUsecLast = 0u;
 	uint64_t nPrepareWorkerUsecLast = 0u;
 	uint64_t nPrepareReadyWaitUsecLast = 0u;
-};
+} t3dRuntimePageStats_t;
 
-struct T3DRuntimePageServiceState {
+typedef struct t3dRuntimePageServiceState_s {
 	using IsWantedFn = bool ( * )( void *pContext, const Vector2i &rLocation );
 
-	T3DRuntimePageConfig config;
+	t3dRuntimePageConfig_t config;
 	Vector2i predictedCenter = V2I_MAX;
 	uint64_t streamingGeneration = 0u;
 	IsWantedFn pIsWanted = nullptr;
 	void *pWantedContext = nullptr;
-};
+} t3dRuntimePageServiceState_t;
 
 // Owns cooked runtime-page I/O, validation/materialization, merged consumer
 // requests, worker preparation, and prepared-page lifetime. Residency consumers
@@ -163,24 +163,24 @@ public:
 	void poll( bool bWait );
 
 	String getPagePath( const T3DRegion *pRegion, const String &rDataDirectory ) const;
-	uint64_t computeSourceSignature( const T3DRegion *pRegion, const T3DRuntimePageConfig &rConfig ) const;
+	uint64_t computeSourceSignature( const T3DRegion *pRegion, const t3dRuntimePageConfig_t &rConfig ) const;
 	bool readSourceSignature( const String &rPagePath, uint64_t &nSignature ) const;
 	uint32_t readMaterialMask( const String &rPagePath ) const;
 	bool removePageForSource( const String &rSourcePath ) const;
 	bool removePage( const String &rPagePath ) const;
-	bool validatePageForRegion( const T3DRegion *pRegion, const T3DRuntimePageConfig &rConfig ) const;
-	bool loadCpuMapsNow( const Vector2i &rLocation, const T3DRuntimePageConfig &rConfig,
+	bool validatePageForRegion( const T3DRegion *pRegion, const t3dRuntimePageConfig_t &rConfig ) const;
+	bool loadCpuMapsNow( const Vector2i &rLocation, const t3dRuntimePageConfig_t &rConfig,
 		Ref<Image> &rHeight, Ref<Image> &rControl, Ref<Image> &rColor, Ref<Image> &rDerived ) const;
-	bool loadCollisionNow( const Vector2i &rLocation, const T3DRuntimePageConfig &rConfig,
+	bool loadCollisionNow( const Vector2i &rLocation, const t3dRuntimePageConfig_t &rConfig,
 		PackedByteArray &rHeight, PackedByteArray &rBounds, PackedByteArray &rHoleMask ) const;
-	bool loadNavigationNow( const Vector2i &rLocation, const T3DRuntimePageConfig &rConfig,
+	bool loadNavigationNow( const Vector2i &rLocation, const t3dRuntimePageConfig_t &rConfig,
 		PackedByteArray &rNavigation, PackedByteArray *pCollisionHeight = nullptr,
 		PackedByteArray *pMinMaxHeight = nullptr ) const;
-	bool loadLightingReceiversNow( const Vector2i &rLocation, const T3DRuntimePageConfig &rConfig,
+	bool loadLightingReceiversNow( const Vector2i &rLocation, const t3dRuntimePageConfig_t &rConfig,
 		PackedByteArray &rReceivers ) const;
 	bool writePage(
-		T3DRegion *pRegion, const T3DRuntimePageConfig &rConfig,
-		const T3DRuntimePageCookPayload &rPayload, String *pError = nullptr
+		T3DRegion *pRegion, const t3dRuntimePageConfig_t &rConfig,
+		const t3dRuntimePageCookPayload_t &rPayload, String *pError = nullptr
 	) const;
 
 	bool collectPageSources(
@@ -189,7 +189,7 @@ public:
 	) const;
 
 	void request( const Vector2i &rLocation, uint16_t nConsumers, uint8_t nPriority, bool bEnabled );
-	void service( const T3DRuntimePageServiceState &rState );
+	void service( const t3dRuntimePageServiceState_t &rState );
 	bool isPending( const Vector2i &rLocation ) const;
 	bool isPrepared( const Vector2i &rLocation ) const;
 
@@ -211,7 +211,7 @@ public:
 		uint64_t *pRequestedUsec = nullptr
 	);
 
-	T3DRuntimePageStats getStats( void ) const;
+	t3dRuntimePageStats_t getStats( void ) const;
 	EA_FORCE_INLINE int getPreparedPageCount( void ) const { return m_nPreparedPageCount; }
 	EA_FORCE_INLINE int getPendingPageCount( void ) const { return m_bPrepareJobActive ? m_nPrepareWorkPageCount : 0; }
 	EA_FORCE_INLINE int getQueuedPageCount( void ) const { return m_nQueuedCount; }

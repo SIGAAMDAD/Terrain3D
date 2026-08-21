@@ -41,7 +41,7 @@ void T3DRegionResidency::reset( void ) {
 
 void T3DRegionResidency::update(
 	T3DData &rData,
-	const T3DResidencyFrameState &rFrame,
+	const t3dResidencyFrameState_t &rFrame,
 	const bool bForce
 ) {
 	if ( !m_pRepository || !m_pSamplingStorage || !m_pRuntimePageStore || !m_pActiveHeightResidency ||
@@ -53,7 +53,7 @@ void T3DRegionResidency::update(
 	rData.serviceGpuRuntimePagePrepare( rFrame );
 	rData.updateCpuRegionResidencyInternal( rFrame, bForce );
 
-	const T3DActiveHeightResidencyResult activeResult = m_pActiveHeightResidency->update( rFrame, bForce );
+	const t3dActiveHeightResidencyResult_t activeResult = m_pActiveHeightResidency->update( rFrame, bForce );
 	for ( int index = 0; index < activeResult.nCpuSourceRequestCount; ++index ) {
 		rData.requestCpuRegionSourceAsync( activeResult.cpuSourceRequests[( size_t ) ( index )] );
 	}
@@ -92,14 +92,14 @@ void T3DRegionResidency::appendRuntimeProfileSample(
 	const T3DData &,
 	t3dRuntimeProfileSample_t &rSample
 ) const {
-	const T3DRuntimePageStats runtimePageStats = m_pRuntimePageStore ?
-		m_pRuntimePageStore->getStats() : T3DRuntimePageStats{};
-	const T3DGpuRegionCacheStats gpu = m_pGpuRegionCache ? m_pGpuRegionCache->getStats() : T3DGpuRegionCacheStats{};
-	const T3DCpuRegionCacheStats cpu = m_pCpuRegionCache ? m_pCpuRegionCache->getStats() : T3DCpuRegionCacheStats{};
-	const T3DInstanceRegionCacheStats instance = m_pInstanceRegionCache ?
-		m_pInstanceRegionCache->getStats() : T3DInstanceRegionCacheStats{};
-	const T3DFarSurfaceAtlasStats far = m_pFarSurfaceAtlasCache ?
-		m_pFarSurfaceAtlasCache->getStats() : T3DFarSurfaceAtlasStats{};
+	const t3dRuntimePageStats_t runtimePageStats = m_pRuntimePageStore ?
+		m_pRuntimePageStore->getStats() : t3dRuntimePageStats_t{};
+	const t3dGpuRegionCacheStats_t gpu = m_pGpuRegionCache ? m_pGpuRegionCache->getStats() : t3dGpuRegionCacheStats_t{};
+	const t3dCpuRegionCacheStats_t cpu = m_pCpuRegionCache ? m_pCpuRegionCache->getStats() : t3dCpuRegionCacheStats_t{};
+	const t3dInstanceRegionCacheStats_t instance = m_pInstanceRegionCache ?
+		m_pInstanceRegionCache->getStats() : t3dInstanceRegionCacheStats_t{};
+	const t3dFarSurfaceAtlasStats_t far = m_pFarSurfaceAtlasCache ?
+		m_pFarSurfaceAtlasCache->getStats() : t3dFarSurfaceAtlasStats_t{};
 
 	rSample.stallFlags |= gpu.nStallFlagsLastTick | cpu.nStallFlagsLastTick | instance.nStallFlagsLastTick;
 	rSample.gpuResident = gpu.nResident;

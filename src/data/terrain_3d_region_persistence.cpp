@@ -18,7 +18,7 @@
 #include "eastl_config.h"
 #include <EASTL/bitset.h>
 
-void T3DStagedRepository::reset( void ) {
+void t3dStagedRepository_t::reset( void ) {
 	regions.clear();
 	resources.clear();
 	regionPtrs.fill( nullptr );
@@ -33,7 +33,7 @@ T3DRegionPersistence::T3DRegionPersistence( T3DRegionRepository *const pReposito
 }
 
 void T3DRegionPersistence::resetLoadStats( void ) {
-	m_startupLoadStats = T3DStartupLoadStats{};
+	m_startupLoadStats = t3dStartupLoadStats_t{};
 	m_nLoadStartedUsec = Time::get_singleton()->get_ticks_usec();
 	m_nPublishStartedUsec = 0u;
 	m_nFinalizeStartedUsec = 0u;
@@ -86,7 +86,7 @@ void T3DRegionPersistence::normalizeLoadedRegion(
 
 Error T3DRegionPersistence::stageDirectory(
 	const String &rDirectory, const bool bBoundedCpuLoad,
-	T3DStagedRepository &rStaged
+	t3dStagedRepository_t &rStaged
 ) {
 	rStaged.reset();
 	resetLoadStats();
@@ -117,7 +117,7 @@ Error T3DRegionPersistence::stageDirectory(
 	}
 
 	for ( const String &fname : files ) {
-		T3DStagedRegion entry;
+		t3dStagedRegion_t entry;
 		entry.location = T3DUtil::filenameToLocation( fname );
 		entry.path = rDirectory.path_join( fname );
 		rStaged.regions.push_back( entry );
@@ -134,7 +134,7 @@ Error T3DRegionPersistence::stageDirectory(
 
 	for ( int fileIndex = 0; fileIndex < files.size(); ++fileIndex ) {
 		const String &fname = files[fileIndex];
-		T3DStagedRegion &entry = rStaged.regions[( size_t ) ( fileIndex )];
+		t3dStagedRegion_t &entry = rStaged.regions[( size_t ) ( fileIndex )];
 		const int mapIndex = T3DRegionRepository::getRegionMapIndex( entry.location );
 		if ( mapIndex < 0 ) {
 			LOG( ERROR, "Invalid or out-of-bounds region file name: ", fname );
@@ -209,7 +209,7 @@ Error T3DRegionPersistence::stageDirectory(
 	const uint64_t stagingStartedUsec = Time::get_singleton()->get_ticks_usec();
 
 	for ( int slot = 0; slot < ( int ) ( rStaged.regions.size() ); ++slot ) {
-		T3DStagedRegion &entry = rStaged.regions[( size_t ) ( slot )];
+		t3dStagedRegion_t &entry = rStaged.regions[( size_t ) ( slot )];
 		const int mapIndex = T3DRegionRepository::getRegionMapIndex( entry.location );
 		if ( mapIndex < 0 ) {
 			return ERR_FILE_CORRUPT;
@@ -250,18 +250,18 @@ void T3DRegionPersistence::finishDirectoryLoad( const bool bSucceeded ) {
 	m_startupLoadStats.bSucceededLast = bSucceeded;
 }
 
-void T3DRegionPersistence::publishStagedPaths( T3DStagedRepository &rStaged ) const {
-	for ( T3DStagedRegion &entry : rStaged.regions ) {
+void T3DRegionPersistence::publishStagedPaths( t3dStagedRepository_t &rStaged ) const {
+	for ( t3dStagedRegion_t &entry : rStaged.regions ) {
 		if ( entry.pRegion.is_valid() ) {
 			entry.pRegion->take_over_path( entry.path );
 		}
 	}
 }
 
-T3DRegionLoadResult T3DRegionPersistence::loadRegion(
+t3dRegionLoadResult_t T3DRegionPersistence::loadRegion(
 	const Vector2i &rLocation, const String &rDirectory
 ) const {
-	T3DRegionLoadResult result;
+	t3dRegionLoadResult_t result;
 	result.location = rLocation;
 	if ( !m_pRepository || rDirectory.is_empty() ) {
 		result.error = ERR_INVALID_PARAMETER;
@@ -351,7 +351,7 @@ bool T3DRegionPersistence::loadRuntimeRegionSource(
 	return prepareRuntimeRegionSource( pLoaded, nExpectedRegionSize, rSource );
 }
 
-void T3DRegionPersistence::publishLoadedRegionPath( const T3DRegionLoadResult &rResult ) const {
+void T3DRegionPersistence::publishLoadedRegionPath( const t3dRegionLoadResult_t &rResult ) const {
 	if ( rResult.succeeded() ) {
 		rResult.pRegion->take_over_path( rResult.path );
 	}
@@ -371,11 +371,11 @@ void T3DRegionPersistence::updateEditorFile( const String &rPath ) {
 	}
 }
 
-T3DRegionSaveResult T3DRegionPersistence::saveRegion(
+t3dRegionSaveResult_t T3DRegionPersistence::saveRegion(
 	const Vector2i &rLocation, const String &rDirectory, const bool b16Bit,
 	EnsureRegionResidentFn pEnsureResident, void *pResidentContext
 ) {
-	T3DRegionSaveResult result;
+	t3dRegionSaveResult_t result;
 	result.location = rLocation;
 	if ( !m_pRepository ) {
 		result.error = ERR_UNCONFIGURED;
@@ -450,18 +450,18 @@ T3DRegionSaveResult T3DRegionPersistence::saveRegion(
 	return result;
 }
 
-T3DDirectorySaveResult T3DRegionPersistence::saveDirectory(
+t3dDirectorySaveResult_t T3DRegionPersistence::saveDirectory(
 	const String &rDirectory, const bool b16Bit,
 	EnsureRegionResidentFn pEnsureResident, void *pResidentContext
 ) {
-	T3DDirectorySaveResult result;
+	t3dDirectorySaveResult_t result;
 	if ( !m_pRepository ) {
 		return result;
 	}
 	const Array locations = m_pRepository->getRegionKeys();
 	result.regions.reserve( ( size_t ) ( locations.size() ) );
 	for ( const Vector2i location : locations ) {
-		T3DRegionSaveResult saveResult = saveRegion(
+		t3dRegionSaveResult_t saveResult = saveRegion(
 			location, rDirectory, b16Bit, pEnsureResident, pResidentContext );
 		if ( saveResult.bDeleted && saveResult.succeeded() ) {
 			++result.nDeleted;

@@ -36,7 +36,7 @@ public:
 	);
 
 	void reset( void );
-	void update( T3DData &rData, const T3DResidencyFrameState &rFrame, bool bForce );
+	void update( T3DData &rData, const t3dResidencyFrameState_t &rFrame, bool bForce );
 	void resetRuntimeCaches( T3DData &rData );
 	void appendRuntimeProfileSample( const T3DData &rData, t3dRuntimeProfileSample_t &rSample ) const;
 

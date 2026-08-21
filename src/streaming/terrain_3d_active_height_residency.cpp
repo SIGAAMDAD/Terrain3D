@@ -24,15 +24,15 @@ void T3DActiveHeightResidency::reset( void ) {
 	m_nStreamingGenerationLast = 0u;
 	m_nTopologyGenerationLast = 0u;
 	m_center = V2I_MAX;
-	m_stats = T3DActiveHeightResidencyStats{};
+	m_stats = t3dActiveHeightResidencyStats_t{};
 }
 
-T3DActiveHeightResidencyResult T3DActiveHeightResidency::update(
-	const T3DResidencyFrameState &rFrame,
+t3dActiveHeightResidencyResult_t T3DActiveHeightResidency::update(
+	const t3dResidencyFrameState_t &rFrame,
 	const bool bForce
 ) {
-	T3DActiveHeightResidencyResult result;
-	m_stats = T3DActiveHeightResidencyStats{};
+	t3dActiveHeightResidencyResult_t result;
+	m_stats = t3dActiveHeightResidencyStats_t{};
 	if ( !m_pRepository || !m_pSamplingStorage || !m_pRuntimePageStore ||
 		!m_pSamplingStorage->isActiveOwner() ) {
 		return result;

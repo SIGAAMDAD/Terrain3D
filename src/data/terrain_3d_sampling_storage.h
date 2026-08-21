@@ -18,12 +18,12 @@
 class T3DRegion;
 class T3DRegionRepository;
 
-struct T3DSamplingSource {
+typedef struct t3dSamplingSource_s {
 	const T3DRegionRepository *pRepository = nullptr;
 	const class T3DSamplingStorage *pStorage = nullptr;
 
 	EA_FORCE_INLINE bool valid( void ) const { return pRepository != nullptr && pStorage != nullptr; }
-};
+} t3dSamplingSource_t;
 
 // Owns the CPU publication mechanisms used by terrain sampling. Spatial policy
 // (which regions should be active/resident) stays outside this class; this class

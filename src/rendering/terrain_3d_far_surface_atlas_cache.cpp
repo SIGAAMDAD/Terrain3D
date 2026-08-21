@@ -21,11 +21,11 @@
 
 #include <cstring>
 
-struct FarSurfaceBakeData {
+typedef struct t3dFarSurfaceBakeData_s {
 	eastl::array<uint8_t, TERRAIN3D_MAX_TEXTURE_ASSETS> populated = {};
 	int nCount = 0;
 	int fallbackTexture = 0;
-};
+} t3dFarSurfaceBakeData_t;
 
 static void t3dFarSurfaceAtlasCacheFnv1a64Append( uint64_t &nHash, const uint8_t *pData, const size_t nSize ) {
 	for ( size_t i = 0; i < nSize; ++i ) {
@@ -99,8 +99,8 @@ static int t3dFarSurfaceAtlasCacheMaterialIntParam( T3DMaterial *pMaterial, cons
 	return value.get_type() == Variant::NIL ? nDefault : ( int ) ( value );
 }
 
-static void t3dFarSurfaceAtlasCacheBuildBakeData( const Ref<T3DAssets> &rAssets, FarSurfaceBakeData &rData ) {
-	rData = FarSurfaceBakeData();
+static void t3dFarSurfaceAtlasCacheBuildBakeData( const Ref<T3DAssets> &rAssets, t3dFarSurfaceBakeData_t &rData ) {
+	rData = t3dFarSurfaceBakeData_t();
 	if ( rAssets.is_null() ) {
 		return;
 	}
@@ -116,7 +116,7 @@ static void t3dFarSurfaceAtlasCacheBuildBakeData( const Ref<T3DAssets> &rAssets,
 	}
 }
 
-static int t3dFarSurfaceAtlasCacheResolveMaterialId( const FarSurfaceBakeData &rData, const int nTextureId ) {
+static int t3dFarSurfaceAtlasCacheResolveMaterialId( const t3dFarSurfaceBakeData_t &rData, const int nTextureId ) {
 	if ( nTextureId >= 0 && nTextureId < rData.nCount && rData.populated[( size_t ) ( nTextureId )] != 0u ) {
 		return nTextureId;
 	}
@@ -134,7 +134,7 @@ T3DFarSurfaceAtlasCache::T3DFarSurfaceAtlasCache(
 	reset();
 }
 
-void T3DFarSurfaceAtlasCache::setConfig( const T3DFarSurfaceAtlasConfig &rConfig ) {
+void T3DFarSurfaceAtlasCache::setConfig( const t3dFarSurfaceAtlasConfig_t &rConfig ) {
 	const bool layout_changed = rConfig.nHeightAtlasSide != m_config.nHeightAtlasSide ||
 		rConfig.nSurfaceAtlasSide != m_config.nSurfaceAtlasSide;
 	m_config = rConfig;
@@ -261,7 +261,7 @@ uint64_t T3DFarSurfaceAtlasCache::computeSourceSignature( void ) const {
 		const uint64_t modified = !path.is_empty() && FileAccess::file_exists( path ) ? FileAccess::get_modified_time( path ) : 0u;
 		t3dFarSurfaceAtlasCacheFnv1a64AppendU64( hash, modified );
 	}
-	FarSurfaceBakeData bake_data;
+	t3dFarSurfaceBakeData_t bake_data;
 	t3dFarSurfaceAtlasCacheBuildBakeData( m_config.pAssets, bake_data );
 	t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( bake_data.nCount ) );
 	t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( bake_data.fallbackTexture ) );
@@ -611,7 +611,7 @@ bool T3DFarSurfaceAtlasCache::patchColorRegion( const Vector2i &vLocation, Packe
 		control_bytes.size() < ( int64_t ) ( m_pRepository->getRegionSize() ) * m_pRepository->getRegionSize() * 4 ) {
 		return false;
 	}
-	FarSurfaceBakeData bake_data;
+	t3dFarSurfaceBakeData_t bake_data;
 	t3dFarSurfaceAtlasCacheBuildBakeData( m_config.pAssets, bake_data );
 	T3DMaterial *const pMaterial = m_config.pMaterial.ptr();
 	const bool auto_shader_enabled = pMaterial && pMaterial->getAutoShaderEnabled();
@@ -888,8 +888,8 @@ size_t T3DFarSurfaceAtlasCache::getImageBytes( void ) const {
 	return bytes;
 }
 
-T3DFarSurfaceAtlasStats T3DFarSurfaceAtlasCache::getStats( void ) const {
-	T3DFarSurfaceAtlasStats stats;
+t3dFarSurfaceAtlasStats_t T3DFarSurfaceAtlasCache::getStats( void ) const {
+	t3dFarSurfaceAtlasStats_t stats;
 	stats.nHeightUpdatesLastTick = m_nHeightUpdatesLastTick;
 	stats.nColorUpdatesLastTick = m_nColorUpdatesLastTick;
 	stats.nHeightRegionsLastTick = m_nHeightRegionsLastTick;
@@ -919,7 +919,7 @@ T3DFarSurfaceAtlasStats T3DFarSurfaceAtlasCache::getStats( void ) const {
 }
 
 Dictionary T3DFarSurfaceAtlasCache::getStatsDictionary( void ) const {
-	const T3DFarSurfaceAtlasStats values = getStats();
+	const t3dFarSurfaceAtlasStats_t values = getStats();
 	Dictionary stats;
 	stats["far_height_updates_last_tick"] = values.nHeightUpdatesLastTick;
 	stats["far_color_updates_last_tick"] = values.nColorUpdatesLastTick;
