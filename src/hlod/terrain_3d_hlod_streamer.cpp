@@ -41,20 +41,20 @@ void T3DHLODStreamer::destroy( void ) {
 }
 void T3DHLODStreamer::suspend( void ) {
 	uint8_t old[s_nMaxRegionSlots];
-	std::memcpy( old, m_regionRepresentationLevel, sizeof( old ) );
+	std::memcpy( old, m_szRegionRepresentationLevel, sizeof( old ) );
 	for ( int i = 0; i < ( int ) m_entries.size(); ++i ) {
 		deactivate( i );
 		m_entries[( size_t ) i].m_bDesired = false;
 		m_entries[( size_t ) i].m_bRetiring = false;
 		m_entries[( size_t ) i].m_nRetireReadyFrames = 0;
 	}
-	std::memset( m_regionRepresentationLevel, 0, sizeof( m_regionRepresentationLevel ) );
+	std::memset( m_szRegionRepresentationLevel, 0, sizeof( m_szRegionRepresentationLevel ) );
 	m_detailRequiredRegions = m_managedRegions;
 	if ( m_pTerrain ) { notifyRepresentationChanges( old ); }
 }
 void T3DHLODStreamer::clearRuntime( const bool bNotify, const bool bReleaseStorage ) {
 	uint8_t old[s_nMaxRegionSlots];
-	std::memcpy( old, m_regionRepresentationLevel, sizeof( old ) );
+	std::memcpy( old, m_szRegionRepresentationLevel, sizeof( old ) );
 	for ( int i = 0; i < ( int ) ( m_entries.size() ); ++i ) { deactivate( i ); }
 	if ( bReleaseStorage ) {
 		eastl::vector<t3dEntry_t>().swap( m_entries );
@@ -68,7 +68,7 @@ void T3DHLODStreamer::clearRuntime( const bool bNotify, const bool bReleaseStora
 		m_nodePolicies.clear();
 	}
 	m_nodePolicyOffsets.fill( 0u );
-	std::memset( m_regionRepresentationLevel, 0, sizeof( m_regionRepresentationLevel ) );
+	std::memset( m_szRegionRepresentationLevel, 0, sizeof( m_szRegionRepresentationLevel ) );
 	m_managedRegions.reset();
 	m_detailRequiredRegions.reset();
 	m_nResidentEstimatedBytes = 0;
@@ -267,7 +267,7 @@ bool T3DHLODStreamer::replacementReady( const t3dEntry_t &rEntry ) const {
 			// publishRepresentationMap contains only active, desired, non-retiring
 			// replacements. A proxy at any level is therefore sufficient for this
 			// region; otherwise the detailed publishers must acknowledge readiness.
-			if ( m_regionRepresentationLevel[region_index] > 0 ) { continue; }
+			if ( m_szRegionRepresentationLevel[region_index] > 0 ) { continue; }
 			if ( !m_pTerrain->isHlodDetailReady( region, region ) ) { return false; }
 		}
 	}
@@ -364,14 +364,14 @@ void T3DHLODStreamer::deactivate( const int index ) {
 }
 
 void T3DHLODStreamer::publishRepresentationMap( void ) {
-	uint8_t old[s_nMaxRegionSlots]; std::memcpy( old, m_regionRepresentationLevel, sizeof( old ) );
-	std::memset( m_regionRepresentationLevel, 0, sizeof( m_regionRepresentationLevel ) );
+	uint8_t old[s_nMaxRegionSlots]; std::memcpy( old, m_szRegionRepresentationLevel, sizeof( old ) );
+	std::memset( m_szRegionRepresentationLevel, 0, sizeof( m_szRegionRepresentationLevel ) );
 	m_detailRequiredRegions = m_managedRegions;
 	for ( const t3dEntry_t &entry : m_entries ) {
 		if ( !entry.m_bActive || entry.m_bRetiring || !entry.m_bDesired ) { continue; }
 		for ( int z = entry.m_regionMin.y; z <= entry.m_regionMax.y; ++z ) for ( int x = entry.m_regionMin.x; x <= entry.m_regionMax.x; ++x ) {
 			const int region = regionIndex( Vector2i( x, z ) );
-			if ( region >= 0 ) { m_regionRepresentationLevel[region] = MAX<uint8_t>( m_regionRepresentationLevel[region], ( uint8_t ) entry.m_nLevel ); m_detailRequiredRegions.reset( ( size_t ) region ); }
+			if ( region >= 0 ) { m_szRegionRepresentationLevel[region] = MAX<uint8_t>( m_szRegionRepresentationLevel[region], ( uint8_t ) entry.m_nLevel ); m_detailRequiredRegions.reset( ( size_t ) region ); }
 		}
 	}
 	notifyRepresentationChanges( old );
@@ -379,7 +379,7 @@ void T3DHLODStreamer::publishRepresentationMap( void ) {
 void T3DHLODStreamer::notifyRepresentationChanges( const uint8_t *pOldLevels ) {
 	if ( !m_pTerrain ) { return; }
 	for ( int i = 0; i < s_nMaxRegionSlots; ++i ) {
-		if ( pOldLevels[i] != m_regionRepresentationLevel[i] ) { m_pTerrain->onHlodRegionRepresentationChanged( regionFromIndex( i ) ); }
+		if ( pOldLevels[i] != m_szRegionRepresentationLevel[i] ) { m_pTerrain->onHlodRegionRepresentationChanged( regionFromIndex( i ) ); }
 	}
 }
 

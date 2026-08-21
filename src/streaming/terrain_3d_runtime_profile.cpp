@@ -197,8 +197,8 @@ void T3DTerrain::sampleRuntimeProfile( const t3dRuntimeProfileSample_t &rSample 
 		const uint64_t shader_creations = m_material->getShaderVariantCreationCount();
 		sample.m_nShaderUpdates = ( int ) ( shader_updates >= m_nRuntimeProfileShaderUpdatesSeen ?
 			shader_updates - m_nRuntimeProfileShaderUpdatesSeen : shader_updates );
-		sample.m_nShaderVariantCreations = ( int ) ( shader_creations >= m_runtimeProfileShaderCreationsSeen ?
-			shader_creations - m_runtimeProfileShaderCreationsSeen : shader_creations );
+		sample.m_nShaderVariantCreations = ( int ) ( shader_creations >= m_nRuntimeProfileShaderCreationsSeen ?
+			shader_creations - m_nRuntimeProfileShaderCreationsSeen : shader_creations );
 		if ( sample.m_nShaderUpdates > 0 || sample.m_nShaderVariantCreations > 0 ) {
 			sample.m_nShaderSourceSubmissionUsec = m_material->getShaderSourceSubmissionUsecLast();
 		}
@@ -206,7 +206,7 @@ void T3DTerrain::sampleRuntimeProfile( const t3dRuntimeProfileSample_t &rSample 
 			sample.m_nShaderUpdateUsec = m_material->getShaderUpdateUsecLast();
 		}
 		m_nRuntimeProfileShaderUpdatesSeen = shader_updates;
-		m_runtimeProfileShaderCreationsSeen = shader_creations;
+		m_nRuntimeProfileShaderCreationsSeen = shader_creations;
 	}
 
 	if ( sample.m_nGpuCameraMoved != 0 ) {
@@ -797,8 +797,8 @@ void T3DTerrain::setRuntimeBoundaryWorkPhasingEnabled( const bool bEnabled ) {
 	m_bRuntimeBoundaryWorkPhasingEnabled = bEnabled;
 	m_bRuntimeBoundaryNodeDeferredLastTick = false;
 	m_bRuntimeBoundaryInstancerDeferredLastTick = false;
-	m_runtimeBoundaryNodeDeferralStreak = 0;
-	m_runtimeBoundaryInstancerDeferralStreak = 0;
+	m_nRuntimeBoundaryNodeDeferralStreak = 0;
+	m_nRuntimeBoundaryInstancerDeferralStreak = 0;
 }
 
 void T3DTerrain::setRuntimeBoundaryNodeDelayFrames( const int nFrames ) {
@@ -828,8 +828,8 @@ Dictionary T3DTerrain::getRuntimeBoundaryPhasingStats( void ) const {
 	stats["instancer_delay_frames"] = m_nRuntimeBoundaryInstancerDelayFrames;
 	stats["node_deferred_last_tick"] = m_bRuntimeBoundaryNodeDeferredLastTick;
 	stats["instancer_deferred_last_tick"] = m_bRuntimeBoundaryInstancerDeferredLastTick;
-	stats["node_deferral_streak"] = m_runtimeBoundaryNodeDeferralStreak;
-	stats["instancer_deferral_streak"] = m_runtimeBoundaryInstancerDeferralStreak;
+	stats["node_deferral_streak"] = m_nRuntimeBoundaryNodeDeferralStreak;
+	stats["instancer_deferral_streak"] = m_nRuntimeBoundaryInstancerDeferralStreak;
 	stats["node_deferrals_total"] = ( int64_t ) ( m_nRuntimeBoundaryNodeDeferralsTotal );
 	stats["instancer_deferrals_total"] = ( int64_t ) ( m_nRuntimeBoundaryInstancerDeferralsTotal );
 	return stats;

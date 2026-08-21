@@ -353,7 +353,7 @@ private:
 	int32_t m_nSimulationRegionMask = 0;
 	int32_t m_nCellsPerRegionShift = 0;
 	size_t m_nCellsPerRegionMask = 0u;
-	int32_t m_resolutionScale = 1;
+	int32_t m_nResolutionScale = 1;
 	float m_fVertexSpacing = 1.0f;
 	float m_fCellSize = 1.0f;
 	size_t m_nCellsPerRegion = 0;
@@ -453,7 +453,7 @@ private:
 	std::atomic<bool> m_bPreviewWaiting{false};
 	std::atomic<int32_t> m_previewStepRequests{0};
 
-	uint64_t m_assetProfileHash = 0;
+	uint64_t m_nAssetProfileHash = 0;
 
 	std::atomic<int32_t> m_state{STATE_NEW};
 	std::atomic<int32_t> m_stage{STAGE_IDLE};
@@ -528,7 +528,7 @@ public:
 	bool isComplete( void ) const;
 	bool isSourceUnchanged( T3DData *pData ) const;
 	EA_FORCE_INLINE bool wasCancelled( void ) const { return m_state.load() == STATE_CANCELLED; }
-	EA_FORCE_INLINE int32_t getEffectiveResolutionScale( void ) const { return m_resolutionScale; }
+	EA_FORCE_INLINE int32_t getEffectiveResolutionScale( void ) const { return m_nResolutionScale; }
 	EA_FORCE_INLINE int32_t getCompletedSteps( void ) const { return m_nCompletedSteps.load(); }
 	EA_FORCE_INLINE bool isLivePreviewEnabled( void ) const { return m_config.m_bLivePreviewEnabled; }
 	EA_FORCE_INLINE bool isPreviewPaused( void ) const { return m_bPreviewPaused.load(); }

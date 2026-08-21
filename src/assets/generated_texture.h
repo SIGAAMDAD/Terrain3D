@@ -22,7 +22,7 @@ private:
 	int m_nSize = 0;
 	int m_nWidth = 0;
 	int m_nHeight = 0;
-	int m_format = -1;
+	int m_nFormat = -1;
 	bool m_bMipmaps = false;
 	bool m_bLayered = false;
 	size_t m_nPayloadBytes = 0u;

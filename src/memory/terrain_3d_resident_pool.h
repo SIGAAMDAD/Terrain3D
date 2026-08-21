@@ -125,7 +125,7 @@ public:
 	void invalidate( const Vector2i &rLocation );
 	EA_FORCE_INLINE int getCapacity( void ) const { return m_nCapacity; }
 	EA_FORCE_INLINE int getRegionSize( void ) const { return m_nRegionSize; }
-	EA_FORCE_INLINE uint32_t getChannels( void ) const { return m_channels; }
+	EA_FORCE_INLINE uint32_t getChannels( void ) const { return m_nChannels; }
 	EA_FORCE_INLINE size_t getReservedBytes( void ) const { return m_nBackingBytes + m_nMetadataBytes; }
 	EA_FORCE_INLINE size_t getBackingBytes( void ) const { return m_nBackingBytes; }
 	EA_FORCE_INLINE size_t getMetadataBytes( void ) const { return m_nMetadataBytes; }
@@ -142,7 +142,7 @@ private:
 
 	int m_nRegionSize = 0;
 	int m_nCapacity = 0;
-	uint32_t m_channels = 0u;
+	uint32_t m_nChannels = 0u;
 	size_t m_nTexelCount = 0u;
 	size_t m_nBackingBytes = 0u;
 	size_t m_nMetadataBytes = 0u;

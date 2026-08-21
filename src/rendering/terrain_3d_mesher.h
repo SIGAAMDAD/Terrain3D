@@ -105,13 +105,13 @@ private:
 	uint32_t m_nFarUpdatesLastSnap = 0u;
 	uint32_t m_nTeleportsLastSnap = 0u;
 	uint32_t m_nBufferUploadsLastSnap = 0u;
-	int m_tessellationLevel = 0;
+	int m_nTessellationLevel = 0;
 	int m_nLods = 0;
 	int m_nMeshSize = 0;
 	real_t m_fVertexSpacing = 1.f;
 	real_t m_fClipmapAabbMinY = -0.1f;
 	real_t m_fClipmapAabbSizeY = 0.2f;
-	uint32_t m_renderLayers = 1u;
+	uint32_t m_nRenderLayers = 1u;
 	RenderingServer::ShadowCastingSetting m_castShadows = RenderingServer::SHADOW_CASTING_SETTING_OFF;
 	GeometryInstance3D::GIMode m_giMode = GeometryInstance3D::GI_MODE_DISABLED;
 	int m_nShadowLodCount = 0;
@@ -247,20 +247,20 @@ public:
 	size_t getStreamingBufferBytes( void ) const;
 	EA_FORCE_INLINE void setLods( const int nLods ) { m_nLods = nLods; }
 	EA_FORCE_INLINE int getLods( void ) const { return m_nLods; }
-	EA_FORCE_INLINE void setTessellationLevel( const int nLevel ) { m_tessellationLevel = nLevel; }
-	EA_FORCE_INLINE int getTessellationLevel( void ) const { return m_tessellationLevel; }
+	EA_FORCE_INLINE void setTessellationLevel( const int nLevel ) { m_nTessellationLevel = nLevel; }
+	EA_FORCE_INLINE int getTessellationLevel( void ) const { return m_nTessellationLevel; }
 	EA_FORCE_INLINE void setMeshSize( const int nSize ) { m_nMeshSize = nSize; }
 	EA_FORCE_INLINE int getMeshSize( void ) const { return m_nMeshSize; }
 	EA_FORCE_INLINE void setVertexSpacing( const real_t fSpacing ) { m_fVertexSpacing = fSpacing; }
 	EA_FORCE_INLINE real_t getVertexSpacing( void ) const { return m_fVertexSpacing; }
 	void setRenderLayers( const uint32_t nLayers ) {
-		if ( m_renderLayers == nLayers ) {
+		if ( m_nRenderLayers == nLayers ) {
 			return;
 		}
-		m_renderLayers = nLayers;
+		m_nRenderLayers = nLayers;
 		update();
 	}
-	EA_FORCE_INLINE uint32_t getRenderLayers( void ) const { return m_renderLayers; }
+	EA_FORCE_INLINE uint32_t getRenderLayers( void ) const { return m_nRenderLayers; }
 	void setCastShadows( RenderingServer::ShadowCastingSetting castShadows );
 	EA_FORCE_INLINE void setGiMode( const GeometryInstance3D::GIMode giMode ) { m_giMode = giMode; update(); }
 	void setShadowLodCount( int nCount );

@@ -390,14 +390,14 @@ void T3DTerrain::applyStreamingPolicy( const bool bForceResidency ) {
 }
 
 int T3DTerrain::getTotalClipmapLevels( void ) const {
-	return CLAMP( m_nMeshLods + m_tessellationLevel, 1, s_nMaxClipmapLevels );
+	return CLAMP( m_nMeshLods + m_nTessellationLevel, 1, s_nMaxClipmapLevels );
 }
 
 real_t T3DTerrain::lodCountToRange( const int nLodCount ) const {
 	if ( nLodCount <= 0 ) {
 		return 0.0f;
 	}
-	const real_t fTessellationScale = ( real_t ) ( ( uint64_t ) ( 1 ) << ( uint64_t ) ( CLAMP( m_tessellationLevel, 0, 6 ) ) );
+	const real_t fTessellationScale = ( real_t ) ( ( uint64_t ) ( 1 ) << ( uint64_t ) ( CLAMP( m_nTessellationLevel, 0, 6 ) ) );
 	const real_t fBaseExtent = ( real_t ) ( m_nMeshSize * 2 + 6 ) * m_fVertexSpacing / fTessellationScale;
 	return fBaseExtent * ( real_t ) ( ( uint64_t ) ( 1 ) << ( uint64_t ) ( CLAMP( nLodCount - 1, 0, 15 ) ) );
 }

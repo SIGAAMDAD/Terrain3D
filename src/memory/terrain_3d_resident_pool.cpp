@@ -272,7 +272,7 @@ void T3DResidentRegionPool::clearUnlocked( void ) {
 	for ( std::atomic<int16_t> &mapping : m_szLocationToSlot ) mapping.store( -1, std::memory_order_relaxed );
 	m_nRegionSize = 0;
 	m_nCapacity = 0;
-	m_channels = 0u;
+	m_nChannels = 0u;
 	m_nTexelCount = 0u;
 	m_nBackingBytes = 0u;
 	m_nMetadataBytes = 0u;
@@ -286,7 +286,7 @@ bool T3DResidentRegionPool::configure( const int nRegionSize, const int nCapacit
 		( nChannels & RESIDENT_CHANNEL_HEIGHT ) == 0u ) {
 		return false;
 	}
-	if ( m_nRegionSize == nRegionSize && m_nCapacity == nCapacity && m_channels == nChannels && m_mapMemory.m_pAligned &&
+	if ( m_nRegionSize == nRegionSize && m_nCapacity == nCapacity && m_nChannels == nChannels && m_mapMemory.m_pAligned &&
 		m_pSlots ) {
 		return true;
 	}
@@ -312,7 +312,7 @@ bool T3DResidentRegionPool::configure( const int nRegionSize, const int nCapacit
 
 	m_nRegionSize = nRegionSize;
 	m_nCapacity = nCapacity;
-	m_channels = nChannels;
+	m_nChannels = nChannels;
 	m_nTexelCount = texel_count;
 	m_nBackingBytes = total_bytes;
 	m_nMetadataBytes = ( size_t ) nCapacity * sizeof( t3dSlot_t );
@@ -536,7 +536,7 @@ bool T3DResidentRegionPool::copyMapRect(
 		return false;
 	}
 	const uint32_t channel = eType == TYPE_CONTROL ? RESIDENT_CHANNEL_CONTROL : RESIDENT_CHANNEL_COLOR;
-	if ( ( m_channels & channel ) == 0u ) {
+	if ( ( m_nChannels & channel ) == 0u ) {
 		return true;
 	}
 	uint32_t *const plane = eType == TYPE_CONTROL ? slot.m_pControl : slot.m_pColor;
@@ -582,7 +582,7 @@ bool T3DResidentRegionPool::copyDerivedRect(
 		return false;
 	}
 	t3dSlot_t &slot = m_pSlots[( size_t ) ( iSlot )];
-	if ( ( m_channels & RESIDENT_CHANNEL_DERIVED ) == 0u ) {
+	if ( ( m_nChannels & RESIDENT_CHANNEL_DERIVED ) == 0u ) {
 		slot.nValidChannels.fetch_and( ( uint8_t ) ~RESIDENT_CHANNEL_DERIVED, std::memory_order_release );
 		return true;
 	}

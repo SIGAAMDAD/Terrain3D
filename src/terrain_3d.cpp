@@ -206,7 +206,7 @@ void T3DTerrain::initializeInternal( void ) {
 		snap();
 		LOG( INFO, "[lifecycle] Main subsystems ready: regions=", m_pData->getRegionCount(),
 			"; region_size=", ( int ) ( m_nRegionSize ), "; mesh_lods=", m_nMeshLods,
-			"; tessellation=", m_tessellationLevel );
+			"; tessellation=", m_nTessellationLevel );
 	}
 	serviceMemoryBudgetPolicy( true );
 	update_configuration_warnings();
@@ -279,15 +279,15 @@ void T3DTerrain::physicsProcess( const double fDelta ) {
 	const uint64_t boundary_age_frames = m_iRuntimePhysicsFrameIndex - m_nRuntimeBoundaryTransitionFrame;
 	m_bRuntimeBoundaryNodeDeferredLastTick = t3dBoundaryShouldDefer(
 		m_bRuntimeBoundaryWorkPhasingEnabled, effectiveDynamicNodeStreamingEnabled(),
-		boundary_age_frames, m_nRuntimeBoundaryNodeDelayFrames, m_runtimeBoundaryNodeDeferralStreak );
+		boundary_age_frames, m_nRuntimeBoundaryNodeDelayFrames, m_nRuntimeBoundaryNodeDeferralStreak );
 	m_bRuntimeBoundaryInstancerDeferredLastTick = t3dBoundaryShouldDefer(
 		m_bRuntimeBoundaryWorkPhasingEnabled, effectiveInstancerCellStreamingEnabled(),
 		boundary_age_frames, m_nRuntimeBoundaryInstancerDelayFrames,
-		m_runtimeBoundaryInstancerDeferralStreak );
-	m_runtimeBoundaryNodeDeferralStreak = m_bRuntimeBoundaryNodeDeferredLastTick ?
-		m_runtimeBoundaryNodeDeferralStreak + 1 : 0;
-	m_runtimeBoundaryInstancerDeferralStreak = m_bRuntimeBoundaryInstancerDeferredLastTick ?
-		m_runtimeBoundaryInstancerDeferralStreak + 1 : 0;
+		m_nRuntimeBoundaryInstancerDeferralStreak );
+	m_nRuntimeBoundaryNodeDeferralStreak = m_bRuntimeBoundaryNodeDeferredLastTick ?
+		m_nRuntimeBoundaryNodeDeferralStreak + 1 : 0;
+	m_nRuntimeBoundaryInstancerDeferralStreak = m_bRuntimeBoundaryInstancerDeferredLastTick ?
+		m_nRuntimeBoundaryInstancerDeferralStreak + 1 : 0;
 	if ( bProfileFrame ) {
 		profile_sample.m_fTargetX = ( float ) ( clipmap_target_position.x );
 		profile_sample.m_fTargetZ = ( float ) ( clipmap_target_position.z );
@@ -344,10 +344,10 @@ void T3DTerrain::physicsProcess( const double fDelta ) {
 		profile_sample.m_nLightmapStreamingUsec = now - phase_started_usec;
 		phase_started_usec = now;
 	}
-	if ( m_tessellationLevel > 0 ) {
+	if ( m_nTessellationLevel > 0 ) {
 		if ( m_pTerrainMesher && m_pDBufferVp && m_material.is_valid() ) {
 			const Vector2 target_position_2d = v3v2( clipmap_target_position );
-			const real_t fTessellationDensity = 1.0f / ( real_t ) ( 1u << ( uint32_t ) m_tessellationLevel );
+			const real_t fTessellationDensity = 1.0f / ( real_t ) ( 1u << ( uint32_t ) m_nTessellationLevel );
 			const real_t fBufferVertexSpacing = m_fVertexSpacing * fTessellationDensity;
 			const real_t fUpdateDistance = MAX( fBufferVertexSpacing, m_fDisplacementUpdateDistance );
 			if ( MAX( std::abs( m_lastBufferPosition.x - target_position_2d.x ),

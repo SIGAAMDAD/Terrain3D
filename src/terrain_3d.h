@@ -307,7 +307,7 @@ private:
 	t3dRuntimeProfileSample_t m_runtimeProfileLastSample;
 	uint64_t m_nRuntimeProfileSampleCount = 0u;
 	uint64_t m_nRuntimeProfileShaderUpdatesSeen = 0u;
-	uint64_t m_runtimeProfileShaderCreationsSeen = 0u;
+	uint64_t m_nRuntimeProfileShaderCreationsSeen = 0u;
 	bool m_bRuntimeProfilingEnabled = false;
 	bool m_bRuntimeAdaptiveWorkBudgetsEnabled = false;
 	uint64_t m_nRuntimeAdaptiveTargetUsec = 1000u;
@@ -329,8 +329,8 @@ private:
 	uint64_t m_nRuntimeBoundaryTransitionFrame = 0u;
 	uint64_t m_nRuntimeBoundaryNodeDeferralsTotal = 0u;
 	uint64_t m_nRuntimeBoundaryInstancerDeferralsTotal = 0u;
-	int m_runtimeBoundaryNodeDeferralStreak = 0;
-	int m_runtimeBoundaryInstancerDeferralStreak = 0;
+	int m_nRuntimeBoundaryNodeDeferralStreak = 0;
+	int m_nRuntimeBoundaryInstancerDeferralStreak = 0;
 	Vector2i m_runtimeBoundaryTargetRegion = V2I_MAX;
 	bool m_bRuntimeBoundaryNodeDeferredLastTick = false;
 	bool m_bRuntimeBoundaryInstancerDeferredLastTick = false;
@@ -455,7 +455,7 @@ private:
 	T3DMesher *m_pTerrainMesher = nullptr;
 	Ref<T3DMaterial> m_material;
 	int m_nMeshLods = 7;
-	int m_tessellationLevel = 0;
+	int m_nTessellationLevel = 0;
 	int m_nMeshSize = 48;
 	real_t m_fVertexSpacing = 1.0f;
 	real_t m_fCullMargin = 0.0f;
@@ -474,7 +474,7 @@ private:
 	int m_nRuntimePagePrepareThreads = 2;
 	bool m_bRuntimeSyncDetailLods = true;
 	GeometryInstance3D::GIMode m_giMode = GeometryInstance3D::GI_MODE_STATIC;
-	uint32_t m_renderLayers = 1u | ( 1u << 31u ); // Bit 1 and 32 for the cursor
+	uint32_t m_nRenderLayers = 1u | ( 1u << 31u ); // Bit 1 and 32 for the cursor
 
 	// Displacement Buffer
 	SubViewport *m_pDBufferVp = nullptr;
@@ -489,19 +489,19 @@ private:
 	real_t m_fDisplacementUpdateDistance = 0.25f;
 	std::mutex m_computeDisplacementMutex;
 	t3dDisplacementRequest_t m_computeDisplacementRequest;
-	uint64_t m_computeDisplacementRequestVersion = 0u;
+	uint64_t m_nComputeDisplacementRequestVersion = 0u;
 
 	// Ocean Mesh
 	T3DMesher *m_pOceanMesher = nullptr;
 	bool m_bOceanEnabled = false;
 	int m_nOceanMeshLods = 7;
-	int m_oceanTessellationLevel = 0;
+	int m_nOceanTessellationLevel = 0;
 	int m_nOceanMeshSize = 32;
 	real_t m_fOceanVertexSpacing = 4.0f;
 	real_t m_fOceanCullMargin = 20.0f;
 	RenderingServer::ShadowCastingSetting m_oceanCastShadows = RenderingServer::SHADOW_CASTING_SETTING_OFF;
 	GeometryInstance3D::GIMode m_oceanGiMode = GeometryInstance3D::GI_MODE_DISABLED;
-	uint32_t m_oceanRenderLayers = 1u;
+	uint32_t m_nOceanRenderLayers = 1u;
 	Ref<Material> m_oceanMaterial;
 	Ref<Shader> m_oceanVariantShader;
 	String m_oceanVariantSource;
@@ -519,7 +519,7 @@ private:
 	SubViewport *m_pMouseVp = nullptr;
 	Camera3D *m_pMouseCam = nullptr;
 	MeshInstance3D *m_pMouseQuad = nullptr;
-	uint32_t m_mouseLayer = 32u;
+	uint32_t m_nMouseLayer = 32u;
 	// Parent containers for child nodes
 	Node3D *m_pLabelParent = nullptr;
 
@@ -1055,7 +1055,7 @@ public:
 	void setRuntimePagePrepareThreads( int nCount );
 	EA_FORCE_INLINE int getRuntimePagePrepareThreads( void ) const { return m_nRuntimePagePrepareThreads; }
 	void setTessellationLevel( const int nLevel );
-	EA_FORCE_INLINE int getTessellationLevel( void ) const { return m_tessellationLevel; }
+	EA_FORCE_INLINE int getTessellationLevel( void ) const { return m_nTessellationLevel; }
 	void setMeshSize( const int nSize );
 	EA_FORCE_INLINE int getMeshSize( void ) const { return m_nMeshSize; }
 	void setVertexSpacing( const real_t fSpacing );
@@ -1081,7 +1081,7 @@ public:
 	void setGiMode( const GeometryInstance3D::GIMode giMode );
 	EA_FORCE_INLINE GeometryInstance3D::GIMode getGiMode( void ) const { return m_giMode; }
 	void setRenderLayers( const uint32_t nLayers );
-	EA_FORCE_INLINE uint32_t getRenderLayers( void ) const { return m_renderLayers; }
+	EA_FORCE_INLINE uint32_t getRenderLayers( void ) const { return m_nRenderLayers; }
 
 	// Material Displacement Aliases
 	EA_FORCE_INLINE void setDisplacementScale( const real_t fDisplacementScale ) { m_material.is_valid() ? m_material->setDisplacementScale( fDisplacementScale ) : ( void ) 0; }
@@ -1100,7 +1100,7 @@ public:
 	void setOceanMeshLods( const int nCount );
 	EA_FORCE_INLINE int getOceanMeshLods( void ) const { return m_nOceanMeshLods; }
 	void setOceanTessellationLevel( const int nLevel );
-	EA_FORCE_INLINE int getOceanTessellationLevel( void ) const { return m_oceanTessellationLevel; }
+	EA_FORCE_INLINE int getOceanTessellationLevel( void ) const { return m_nOceanTessellationLevel; }
 	void setOceanMeshSize( const int nSize );
 	EA_FORCE_INLINE int getOceanMeshSize( void ) const { return m_nOceanMeshSize; }
 	void setOceanVertexSpacing( const real_t fSpacing );
@@ -1112,7 +1112,7 @@ public:
 	void setOceanGiMode( const GeometryInstance3D::GIMode giMode );
 	EA_FORCE_INLINE GeometryInstance3D::GIMode getOceanGiMode( void ) const { return m_oceanGiMode; }
 	void setOceanRenderLayers( const uint32_t nLayers );
-	EA_FORCE_INLINE uint32_t getOceanRenderLayers( void ) const { return m_oceanRenderLayers; }
+	EA_FORCE_INLINE uint32_t getOceanRenderLayers( void ) const { return m_nOceanRenderLayers; }
 	void setOceanPerformancePreset( const t3dOceanPerformancePreset_t preset );
 	EA_FORCE_INLINE t3dOceanPerformancePreset_t getOceanPerformancePreset( void ) const { return m_oceanPerformancePreset; }
 	void setOceanVertexWaveIterations( const int nIterations );
@@ -1132,7 +1132,7 @@ public:
 
 	// Rendering
 	void setMouseLayer( const uint32_t nLayer );
-	EA_FORCE_INLINE uint32_t getMouseLayer( void ) const { return m_mouseLayer; }
+	EA_FORCE_INLINE uint32_t getMouseLayer( void ) const { return m_nMouseLayer; }
 	EA_FORCE_INLINE void setFreeEditorTextures( const bool bFreeTextures ) { m_bFreeEditorTextures = bFreeTextures; }
 	EA_FORCE_INLINE bool getFreeEditorTextures( void ) const { return m_bFreeEditorTextures; }
 	EA_FORCE_INLINE void setInstancerMode( const t3dInstancerMode_t mode ) { m_pInstancer ? m_pInstancer->setMode( mode ) : ( void ) 0; }

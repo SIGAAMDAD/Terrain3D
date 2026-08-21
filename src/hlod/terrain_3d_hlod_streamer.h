@@ -66,7 +66,7 @@ class T3DHLODStreamer : public Object {
 	eastl::vector<uint8_t> m_instancerMinLevels;
 	eastl::vector<t3dNodePolicy_t> m_nodePolicies;
 	eastl::array<uint32_t, s_nMaxRegionSlots + 1> m_nodePolicyOffsets{};
-	uint8_t m_regionRepresentationLevel[s_nMaxRegionSlots] = {};
+	uint8_t m_szRegionRepresentationLevel[s_nMaxRegionSlots] = {};
 	eastl::bitset<s_nMaxRegionSlots> m_managedRegions;
 	eastl::bitset<s_nMaxRegionSlots> m_detailRequiredRegions;
 	bool m_bEnabled = true;
@@ -148,7 +148,7 @@ public:
 	EA_FORCE_INLINE bool isRegionSuppressed( const Vector2i &rRegion, int nMinimumLevel = 1 ) const { return getRegionRepresentationLevel( rRegion ) >= CLAMP( nMinimumLevel, 1, 6 ); }
 	EA_FORCE_INLINE uint8_t getInstancerMinimumLevel( const Vector2i &rRegion, int nMeshId ) const { const int region = regionIndex( rRegion ); if ( region < 0 || nMeshId < 0 || nMeshId >= s_nMaxMeshAssets ) { return 0; } const size_t offset = ( size_t ) region * s_nMaxMeshAssets + ( size_t ) nMeshId; return offset < m_instancerMinLevels.size() ? m_instancerMinLevels[offset] : 0; }
 	uint8_t getNodeMinimumLevel( const Vector2i &rRegion, int64_t nSpawnId ) const;
-	EA_FORCE_INLINE uint8_t getRegionRepresentationLevel( const Vector2i &rRegion ) const { const int index = regionIndex( rRegion ); return index >= 0 ? m_regionRepresentationLevel[index] : 0; }
+	EA_FORCE_INLINE uint8_t getRegionRepresentationLevel( const Vector2i &rRegion ) const { const int index = regionIndex( rRegion ); return index >= 0 ? m_szRegionRepresentationLevel[index] : 0; }
 	EA_FORCE_INLINE int64_t getResidentEstimatedBytes( void ) const { return m_nResidentEstimatedBytes; }
 	EA_FORCE_INLINE bool isResidencyIdle( void ) const { return m_nLoadsLastTick == 0 && m_nRequestsLastTick == 0 && m_nUnloadsLastTick == 0; }
 	Dictionary getStats( void ) const;

@@ -311,7 +311,7 @@ void T3DCompute::freeDisplacementTexture( void ) {
 	freeRenderRid( m_hDisplacementMaterialBuffer );
 	freeRenderRid( m_hDisplacementOutputTexture );
 	m_nDisplacementRegionHash = 0u;
-	m_displacementMaterialHash = 0u;
+	m_nDisplacementMaterialHash = 0u;
 	m_bDisplacementRegionUploaded = false;
 	m_bDisplacementMaterialUploaded = false;
 	m_nDisplacementWidth = 0u;
@@ -559,7 +559,7 @@ bool T3DCompute::dispatchDisplacementRequest( const t3dDisplacementRequest_t &rR
 		m_nDisplacementRegionHash = rRequest.m_nRegionMapHash;
 		m_bDisplacementRegionUploaded = true;
 	}
-	if ( !m_bDisplacementMaterialUploaded || m_displacementMaterialHash != rRequest.m_nMaterialDataHash ) {
+	if ( !m_bDisplacementMaterialUploaded || m_nDisplacementMaterialHash != rRequest.m_nMaterialDataHash ) {
 		if ( rRequest.m_materialData.size() != 32 * 4 * ( int64_t ) ( sizeof( float ) ) ||
 			m_pRenderRd->buffer_update( m_hDisplacementMaterialBuffer, 0u, ( uint32_t ) ( rRequest.m_materialData.size() ),
 									  rRequest.m_materialData ) != OK ) {
@@ -567,7 +567,7 @@ bool T3DCompute::dispatchDisplacementRequest( const t3dDisplacementRequest_t &rR
 			m_bDisplacementMaterialUploaded = false;
 			return false;
 		}
-		m_displacementMaterialHash = rRequest.m_nMaterialDataHash;
+		m_nDisplacementMaterialHash = rRequest.m_nMaterialDataHash;
 		m_bDisplacementMaterialUploaded = true;
 	}
 

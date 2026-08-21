@@ -111,7 +111,7 @@ void T3DTerrain::setupTerrainMesher( void ) {
 		m_material->getShadowMaterialRidForTier( SHADER_TIER_FAR ),
 	};
 	const bool bTieringActive = isRuntimeShaderTieringActive();
-	const int clipmap_levels = CLAMP( m_nMeshLods + m_tessellationLevel, 1, s_nMaxClipmapLevels );
+	const int clipmap_levels = CLAMP( m_nMeshLods + m_nTessellationLevel, 1, s_nMaxClipmapLevels );
 	const int near_lods = bTieringActive ? m_nRuntimeNearShaderLods : clipmap_levels;
 	const int middle_lods = bTieringActive ? m_nRuntimeMiddleShaderLods : 0;
 	const int update_budget = bTieringActive ? m_nRuntimeClipmapUpdateBudget : s_nMaxClipmapLevels;
@@ -122,8 +122,8 @@ void T3DTerrain::setupTerrainMesher( void ) {
 	const eastl::array<int, 3> tier_shadow_lod_counts = {
 		m_nNearShadowLodCount, m_nMiddleShadowLodCount, m_nFarShadowLodCount
 	};
-	m_pTerrainMesher->initialize( this, m_nMeshSize, m_nMeshLods, m_tessellationLevel, m_fVertexSpacing, materials, shadow_materials,
-		near_lods, middle_lods, update_budget, m_renderLayers, m_castShadows, m_giMode, m_nShadowLodCount,
+	m_pTerrainMesher->initialize( this, m_nMeshSize, m_nMeshLods, m_nTessellationLevel, m_fVertexSpacing, materials, shadow_materials,
+		near_lods, middle_lods, update_budget, m_nRenderLayers, m_castShadows, m_giMode, m_nShadowLodCount,
 		tier_shadow_enabled, tier_shadow_lod_counts, bStateMeshBatching,
 		isGpuRegionCookedPagesEnabled() && !isEditorAuthoringModeInternal() );
 }
@@ -158,10 +158,10 @@ void T3DTerrain::setupOceanMesher( void ) {
 		const RID ocean_rid = m_oceanMaterial.is_valid() ? m_oceanMaterial->get_rid() : RID();
 		const eastl::array<RID, 3> ocean_materials = { ocean_rid, ocean_rid, ocean_rid };
 		m_pOceanMesher->initialize(
-			this, m_nOceanMeshSize, m_nOceanMeshLods, m_oceanTessellationLevel, m_fOceanVertexSpacing,
-			ocean_materials, ocean_materials, m_nOceanMeshLods + m_oceanTessellationLevel, 0,
-			s_nMaxClipmapLevels, m_oceanRenderLayers, m_oceanCastShadows,
-			m_oceanGiMode, m_nOceanMeshLods + m_oceanTessellationLevel, { true, true, true },
+			this, m_nOceanMeshSize, m_nOceanMeshLods, m_nOceanTessellationLevel, m_fOceanVertexSpacing,
+			ocean_materials, ocean_materials, m_nOceanMeshLods + m_nOceanTessellationLevel, 0,
+			s_nMaxClipmapLevels, m_nOceanRenderLayers, m_oceanCastShadows,
+			m_oceanGiMode, m_nOceanMeshLods + m_nOceanTessellationLevel, { true, true, true },
 			{ -1, -1, -1 }, false );
 		m_pOceanMesher->updateAabbs( m_fOceanCullMargin, V2_ZERO );
 		if ( m_oceanMaterial.is_valid() ) {
@@ -170,7 +170,7 @@ void T3DTerrain::setupOceanMesher( void ) {
 				pOceanShaderMat->set_shader_parameter( "_mesh_size", m_nOceanMeshSize );
 				pOceanShaderMat->set_shader_parameter( "_vertex_spacing", m_fOceanVertexSpacing );
 				pOceanShaderMat->set_shader_parameter( "_vertex_density", 1.0f / m_fOceanVertexSpacing );
-				pOceanShaderMat->set_shader_parameter( "_subdiv", pow( 2.f, ( real_t ) ( m_oceanTessellationLevel ) ) );
+				pOceanShaderMat->set_shader_parameter( "_subdiv", pow( 2.f, ( real_t ) ( m_nOceanTessellationLevel ) ) );
 			}
 		}
 	}
@@ -216,13 +216,13 @@ void T3DTerrain::updateDisplacementBuffer( void ) {
 	if ( !m_pDBufferVp ) {
 		return;
 	}
-	if ( m_tessellationLevel == 0 ) {
+	if ( m_nTessellationLevel == 0 ) {
 		invalidateComputeDisplacementRequest();
 		m_pDBufferVp->set_size( V2I_ZERO );
 		m_pDBufferRect->set_size( V2I_ZERO );
 	} else {
-		m_pDBufferVp->set_size( Vector2i( m_nMeshSize * 4 * m_tessellationLevel, m_nMeshSize * 4 ) );
-		m_pDBufferRect->set_size( Vector2i( m_nMeshSize * 4 * m_tessellationLevel, m_nMeshSize * 4 ) );
+		m_pDBufferVp->set_size( Vector2i( m_nMeshSize * 4 * m_nTessellationLevel, m_nMeshSize * 4 ) );
+		m_pDBufferRect->set_size( Vector2i( m_nMeshSize * 4 * m_nTessellationLevel, m_nMeshSize * 4 ) );
 		LOG( INFO, "Updating displacement buffer to Size: ", m_pDBufferVp->get_size() );
 		if ( m_material.is_valid() && m_material->getMaterialRid().is_valid() ) {
 			// Keep a valid raster fallback bound until the asynchronous render-thread
@@ -252,7 +252,7 @@ bool T3DTerrain::tryUpdateComputeDisplacement( const Vector3 &rTargetPosition ) 
 	{
 		std::lock_guard<std::mutex> lock( m_computeDisplacementMutex );
 		m_computeDisplacementRequest = std::move( request );
-		++m_computeDisplacementRequestVersion;
+		++m_nComputeDisplacementRequestVersion;
 	}
 	queueComputeDisplacementRender();
 	return true;
@@ -262,7 +262,7 @@ void T3DTerrain::invalidateComputeDisplacementRequest( void ) {
 	m_bComputeDisplacementActive.store( false, std::memory_order_release );
 	std::lock_guard<std::mutex> lock( m_computeDisplacementMutex );
 	m_computeDisplacementRequest = t3dDisplacementRequest_t{};
-	++m_computeDisplacementRequestVersion;
+	++m_nComputeDisplacementRequestVersion;
 }
 
 void T3DTerrain::queueComputeDisplacementRender( void ) {
@@ -294,7 +294,7 @@ void T3DTerrain::renderUpdateComputeDisplacement( void ) {
 	{
 		std::lock_guard<std::mutex> lock( m_computeDisplacementMutex );
 		request = m_computeDisplacementRequest;
-		request_version = m_computeDisplacementRequestVersion;
+		request_version = m_nComputeDisplacementRequestVersion;
 	}
 
 	bool bSuccess = false;
@@ -306,7 +306,7 @@ void T3DTerrain::renderUpdateComputeDisplacement( void ) {
 	bool bRequestCurrent = false;
 	{
 		std::lock_guard<std::mutex> lock( m_computeDisplacementMutex );
-		bRequestCurrent = m_computeDisplacementRequestVersion == request_version;
+		bRequestCurrent = m_nComputeDisplacementRequestVersion == request_version;
 	}
 	if ( bSuccess && bRequestCurrent && m_bComputeDisplacementEnabled.load( std::memory_order_acquire ) &&
 		!m_bComputeDisplacementTearingDown.load( std::memory_order_acquire ) ) {
@@ -326,7 +326,7 @@ void T3DTerrain::renderUpdateComputeDisplacement( void ) {
 	bool bNewerRequestValid = false;
 	{
 		std::lock_guard<std::mutex> lock( m_computeDisplacementMutex );
-		bNewerRequest = m_computeDisplacementRequestVersion != request_version;
+		bNewerRequest = m_nComputeDisplacementRequestVersion != request_version;
 		bNewerRequestValid = m_computeDisplacementRequest.valid();
 	}
 	if ( bNewerRequest && bNewerRequestValid && m_bComputeDisplacementEnabled.load( std::memory_order_acquire ) &&
@@ -397,7 +397,7 @@ void T3DTerrain::destroyDisplacementBuffer( void ) {
 	{
 		std::lock_guard<std::mutex> lock( m_computeDisplacementMutex );
 		m_computeDisplacementRequest = t3dDisplacementRequest_t{};
-		++m_computeDisplacementRequestVersion;
+		++m_nComputeDisplacementRequestVersion;
 	}
 	m_bComputeDisplacementTearingDown.store( false, std::memory_order_release );
 	LOG( DEBUG, "Freeing d_buffer_rect" );
@@ -469,8 +469,8 @@ void T3DTerrain::setupMousePicking( void ) {
 	m_pMouseQuad->set_position( Vector3( 0.f, 0.f, -0.5f ) );
 
 	// Set terrain, terrain shader, mouse camera, and screen quad to mouse layer
-	const uint32_t force_update_layer = m_mouseLayer;
-	m_mouseLayer = 0u;
+	const uint32_t force_update_layer = m_nMouseLayer;
+	m_nMouseLayer = 0u;
 	setMouseLayer( force_update_layer );
 }
 
@@ -754,7 +754,7 @@ void T3DTerrain::snap( void ) {
 	if ( m_pCollision ) {
 		m_pCollision->resetTargetPosition();
 	}
-	if ( m_tessellationLevel > 0 ) {
+	if ( m_nTessellationLevel > 0 ) {
 		m_lastBufferPosition = V2_MAX;
 	}
 }
@@ -895,14 +895,14 @@ void T3DTerrain::setMeshLods( const int nCount ) {
 }
 
 void T3DTerrain::setTessellationLevel( const int nLevel ) {
-	const int old_level = m_tessellationLevel;
-	SET_IF_DIFF( m_tessellationLevel, CLAMP( nLevel, 0, 6 ) );
+	const int old_level = m_nTessellationLevel;
+	SET_IF_DIFF( m_nTessellationLevel, CLAMP( nLevel, 0, 6 ) );
 	refreshPerformanceProfileConformity();
 	normalizeRuntimeTierLayout( true );
 	LOG( INFO, "t3dSetting_t tessellation level: ", nLevel );
 	// The optimized R8 displacement array exists only while tessellation is
 	// active. Crossing zero creates or frees it before rebuilding shaders.
-	if ( ( old_level == 0 ) != ( m_tessellationLevel == 0 ) && m_assets.is_valid() && m_assets->isInitialized() &&
+	if ( ( old_level == 0 ) != ( m_nTessellationLevel == 0 ) && m_assets.is_valid() && m_assets->isInitialized() &&
 		m_assets->usesPackedPbr() ) {
 		m_assets->updateTextureList();
 	}
@@ -1043,10 +1043,10 @@ void T3DTerrain::setGiMode( const GeometryInstance3D::GIMode giMode ) {
 }
 
 void T3DTerrain::setRenderLayers( const uint32_t nLayers ) {
-	SET_IF_DIFF( m_renderLayers, nLayers );
+	SET_IF_DIFF( m_nRenderLayers, nLayers );
 	LOG( INFO, "t3dSetting_t terrain render layers to: ", nLayers );
 	if ( m_pTerrainMesher ) {
-		m_pTerrainMesher->setRenderLayers( m_renderLayers );
+		m_pTerrainMesher->setRenderLayers( m_nRenderLayers );
 	}
 }
 
@@ -1199,7 +1199,7 @@ void T3DTerrain::setOceanMeshLods( const int nCount ) {
 }
 
 void T3DTerrain::setOceanTessellationLevel( const int nLevel ) {
-	SET_IF_DIFF( m_oceanTessellationLevel, CLAMP( nLevel, 0, 6 ) );
+	SET_IF_DIFF( m_nOceanTessellationLevel, CLAMP( nLevel, 0, 6 ) );
 	LOG( INFO, "t3dSetting_t ocean tessellation level: ", nLevel );
 	if ( m_bOceanEnabled ) {
 		setupOceanMesher();
@@ -1245,10 +1245,10 @@ void T3DTerrain::setOceanGiMode( const GeometryInstance3D::GIMode giMode ) {
 }
 
 void T3DTerrain::setOceanRenderLayers( const uint32_t nLayers ) {
-	SET_IF_DIFF( m_oceanRenderLayers, nLayers );
+	SET_IF_DIFF( m_nOceanRenderLayers, nLayers );
 	LOG( INFO, "t3dSetting_t ocean render layers to: ", nLayers );
 	if ( m_pOceanMesher ) {
-		m_pOceanMesher->setRenderLayers( m_oceanRenderLayers );
+		m_pOceanMesher->setRenderLayers( m_nOceanRenderLayers );
 	}
 }
 
@@ -1264,14 +1264,14 @@ void T3DTerrain::setOceanMaterial( const Ref<Material> &rMaterial ) {
 }
 
 void T3DTerrain::setMouseLayer( const uint32_t nLayer ) {
-	SET_IF_DIFF( m_mouseLayer, CLAMP( nLayer, 21u, 32u ) );
-	const uint32_t mouse_mask = 1 << ( m_mouseLayer - 1 );
-	LOG( INFO, "t3dSetting_t mouse layer: ", m_mouseLayer, " (", mouse_mask,
+	SET_IF_DIFF( m_nMouseLayer, CLAMP( nLayer, 21u, 32u ) );
+	const uint32_t mouse_mask = 1 << ( m_nMouseLayer - 1 );
+	LOG( INFO, "t3dSetting_t mouse layer: ", m_nMouseLayer, " (", mouse_mask,
 		") on terrain mesh, material, mouse camera, mouse quad" );
 
 	// Set terrain meshes to mouse layer
 	// Mask off editor render layers by ORing user layers 1-20 and current mouse layer
-	setRenderLayers( ( m_renderLayers & 0xFFFFF ) | mouse_mask );
+	setRenderLayers( ( m_nRenderLayers & 0xFFFFF ) | mouse_mask );
 	// Set terrain shader to exclude mouse camera from showing holes
 	if ( m_material.is_valid() ) {
 		m_material->setShaderParam( "_mouse_layer", mouse_mask );

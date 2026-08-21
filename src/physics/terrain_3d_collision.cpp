@@ -604,7 +604,7 @@ void T3DCollision::build( void ) {
 		m_pTerrain->add_child( m_pStaticBody, true );
 		m_pStaticBody->set_owner( m_pTerrain );
 		m_pStaticBody->set_collision_mask( m_nMask );
-		m_pStaticBody->set_collision_layer( m_layer );
+		m_pStaticBody->set_collision_layer( m_nLayer );
 		m_pStaticBody->set_collision_priority( m_fPriority );
 	} else {
 		LOG( INFO, "Building collision with Physics Server" );
@@ -613,7 +613,7 @@ void T3DCollision::build( void ) {
 		PS->body_set_space( m_hStaticBodyRid, m_pTerrain->get_world_3d()->get_space() );
 		PS->body_attach_object_instance_id( m_hStaticBodyRid, m_pTerrain->get_instance_id() );
 		PS->body_set_collision_mask( m_hStaticBodyRid, m_nMask );
-		PS->body_set_collision_layer( m_hStaticBodyRid, m_layer );
+		PS->body_set_collision_layer( m_hStaticBodyRid, m_nLayer );
 		PS->body_set_collision_priority( m_hStaticBodyRid, m_fPriority );
 	}
 	reloadPhysicsMaterial();
@@ -924,15 +924,15 @@ void T3DCollision::setRadius( const uint16_t nRadius ) {
 }
 
 void T3DCollision::setLayer( const uint32_t nLayers ) {
-	SET_IF_DIFF( m_layer, nLayers );
+	SET_IF_DIFF( m_nLayer, nLayers );
 	LOG( INFO, "t3dSetting_t collision layers: ", nLayers );
 	if ( usesEditorBackend() ) {
 		if ( m_pStaticBody ) {
-			m_pStaticBody->set_collision_layer( m_layer );
+			m_pStaticBody->set_collision_layer( m_nLayer );
 		}
 	} else {
 		if ( m_hStaticBodyRid.is_valid() ) {
-			PS->body_set_collision_layer( m_hStaticBodyRid, m_layer );
+			PS->body_set_collision_layer( m_hStaticBodyRid, m_nLayer );
 		}
 	}
 }
@@ -1069,7 +1069,7 @@ Dictionary T3DCollision::getStats( void ) const {
 	stats["update_skipped_unchanged_last"] = m_bUpdateSkippedUnchangedLast;
 	stats["rebuild_requested_last"] = m_bRebuildRequestedLast;
 	stats["full_region_slots"] = m_fullRegionSlots.size();
-	stats["physics_layer"] = ( int64_t ) ( m_layer );
+	stats["physics_layer"] = ( int64_t ) ( m_nLayer );
 	stats["physics_mask"] = ( int64_t ) ( m_nMask );
 	stats["priority"] = m_fPriority;
 	return stats;

@@ -70,12 +70,12 @@ private:
 	real_t m_fHeightOffset = 0.f;
 	real_t m_fDensity = 0.f;
 	ShadowCasting m_castShadows = s_shadowCastingOn;
-	uint32_t m_visibilityLayers = 1;
+	uint32_t m_nVisibilityLayers = 1;
 	Ref<Material> m_materialOverride;
 	Ref<Material> m_materialOverlay;
 	int m_iLastLod = s_nMeshMaxLodCount - 1;
 	int m_iLastShadowLod = s_nMeshMaxLodCount - 1;
-	int m_shadowImpostor = 0;
+	int m_nShadowImpostor = 0;
 	eastl::array<float, s_nMeshMaxLodCount> m_fLodRanges{};
 	real_t m_fFadeMargin = 0.f;
 
@@ -141,7 +141,7 @@ public:
 	EA_FORCE_INLINE ShadowCasting getCastShadows( void ) const { return m_castShadows; }
 	ShadowCasting getLodCastShadows( const int nLodId ) const;
 	void setVisibilityLayers( const uint32_t nLayers );
-	EA_FORCE_INLINE uint32_t getVisibilityLayers( void ) const { return m_visibilityLayers; }
+	EA_FORCE_INLINE uint32_t getVisibilityLayers( void ) const { return m_nVisibilityLayers; }
 	void setMaterialOverride( const Ref<Material> &rMaterial );
 	EA_FORCE_INLINE Ref<Material> getMaterialOverride( void ) const { return m_materialOverride; }
 	void setMaterialOverlay( const Ref<Material> &rMaterial );
@@ -158,7 +158,7 @@ public:
 	void setLastShadowLod( const int nLod );
 	EA_FORCE_INLINE int getLastShadowLod( void ) const { return m_iLastShadowLod; }
 	void setShadowImpostor( const int nLod );
-	EA_FORCE_INLINE int getShadowImpostor( void ) const { return m_shadowImpostor; }
+	EA_FORCE_INLINE int getShadowImpostor( void ) const { return m_nShadowImpostor; }
 
 	void setLodRange( const int nLod, const real_t fDistance );
 	real_t getLodRange( const int nLod ) const;

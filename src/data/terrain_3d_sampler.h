@@ -90,8 +90,8 @@ private:
 	eastl::array<t3dRegionView_t, s_nSamplerCacheSize> m_szCache{};
 	eastl::array<t3dRegionCold_t, s_nSamplerCacheSize> m_szCacheCold{};
 	t3dRegionView_t *m_pLastView = nullptr;
-	uint32_t m_stamp = 1;
-	uint32_t m_operation = 1u;
+	uint32_t m_nStamp = 1;
+	uint32_t m_nOperation = 1u;
 	uint64_t m_nSamplingGeneration = 0u;
 	int m_nRegionSize = 0;
 	int m_nRegionShift = -1;

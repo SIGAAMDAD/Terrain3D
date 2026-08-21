@@ -95,8 +95,8 @@ SET_CLAMPED( simulation_years, setSimulationYears, m_fSimulationYears, double, 0
 SET_CLAMPED( simulation_steps, setSimulationSteps, m_nSimulationSteps, int32_t, 1, 4096 )
 void T3DErosionSettings::setResolutionScale( const int32_t nValue ) {
 	const int32_t value = t3dErosionSettingsSanitizeResolutionScale( nValue );
-	if ( m_resolutionScale != value ) {
-		m_resolutionScale = value;
+	if ( m_nResolutionScale != value ) {
+		m_nResolutionScale = value;
 		emit_changed();
 	}
 }
@@ -106,7 +106,7 @@ SET_VALUE( live_preview_enabled, setLivePreviewEnabled, m_bLivePreviewEnabled, b
 SET_CLAMPED( live_preview_interval_steps, setLivePreviewIntervalSteps, m_nLivePreviewIntervalSteps, int32_t, 1, 256 )
 SET_VALUE( live_preview_start_paused, setLivePreviewStartPaused, m_bLivePreviewStartPaused, bool )
 SET_CLAMPED( thread_count, setThreadCount, m_nThreadCount, int32_t, 0, 64 )
-SET_VALUE( seed, setSeed, m_seed, int64_t )
+SET_VALUE( seed, setSeed, m_nSeed, int64_t )
 void T3DErosionSettings::setBoundaryMode( const t3dBoundaryMode_t eValue ) {
 	const t3dBoundaryMode_t value = ( t3dBoundaryMode_t ) ( CLAMP( ( int32_t ) ( eValue ), ( int32_t ) ( BOUNDARY_CLOSED ), ( int32_t ) ( BOUNDARY_OPEN ) ) );
 	if ( m_boundaryMode != value ) {

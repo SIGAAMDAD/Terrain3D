@@ -75,7 +75,7 @@ PackedStringArray T3DTerrain::_get_configuration_warnings( void ) const {
 }
 
 void T3DTerrain::_validate_property( PropertyInfo &rProperty ) const {
-	if ( m_tessellationLevel == 0 ) {
+	if ( m_nTessellationLevel == 0 ) {
 		// Hide all displacement properties
 		if ( rProperty.name == StringName( "displacement_scale" ) ||
 			rProperty.name == StringName( "displacement_sharpness" ) ||

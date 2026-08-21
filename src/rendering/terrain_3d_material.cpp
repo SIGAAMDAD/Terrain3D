@@ -1111,7 +1111,7 @@ Ref<Shader> T3DMaterial::getOrCreateShaderVariant(
 	const bool bPrewarm, const t3dShaderTier_t tier, t3dShaderValidationResult_t *pValidation
 ) {
 	const uint32_t source_bytes = ( uint32_t ) ( rCode.to_utf8_buffer().size() );
-	m_lastVariantRequestDomain = ( int ) ( domain );
+	m_nLastVariantRequestDomain = ( int ) ( domain );
 	m_bLastVariantRequestHit = false;
 	m_bLastVariantRequestPrewarm = bPrewarm;
 	m_nLastVariantRequestSourceBytes = source_bytes;
@@ -1343,8 +1343,8 @@ void T3DMaterial::recordVariantTransition( const t3dShaderVariantState_t &eState
 		if ( ( changed & bit ) == 0 ) {
 			continue;
 		}
-		m_observedVariantDimensions |= bit;
-		m_szVariantDimensionLastUsed[dimension] = ++m_variantTransitionClock;
+		m_nObservedVariantDimensions |= bit;
+		m_szVariantDimensionLastUsed[dimension] = ++m_nVariantTransitionClock;
 	}
 	m_lastBoundVariantState = eState;
 	m_bHasLastBoundVariantState = true;
@@ -1580,7 +1580,7 @@ void T3DMaterial::appendPotentialBranchStates(
 	uint64_t dimensions = getInferredPotentialDimensions( rBase );
 	if ( m_shaderVariantMode == SHADER_VARIANTS_PREWARM_ACTIVE_AND_RECENT ||
 		m_shaderVariantMode == SHADER_VARIANTS_PREWARM_FEATURE_MATRIX ) {
-		dimensions |= m_observedVariantDimensions;
+		dimensions |= m_nObservedVariantDimensions;
 	}
 
 	// Most recently adjusted dimensions are prewarmed first. The configurable cap
@@ -1643,7 +1643,7 @@ uint64_t T3DMaterial::getPrewarmSignature( void ) const {
 	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( m_nShaderVariantCacheLimit ) );
 	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( m_nShaderVariantPrewarmLimit ) );
 	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( m_nShaderVariantSourceBudgetMb ) );
-	t3dMaterialMixShaderSignature( signature, m_observedVariantDimensions );
+	t3dMaterialMixShaderSignature( signature, m_nObservedVariantDimensions );
 	for ( int dimension = 0; dimension < VARIANT_DIM_COUNT; ++dimension ) {
 		t3dMaterialMixShaderSignature( signature, m_szVariantDimensionLastUsed[dimension] );
 	}
@@ -1683,10 +1683,10 @@ void T3DMaterial::prewarmShaderVariantsInternal( const bool bForce ) {
 	}
 
 	const uint64_t signature = getPrewarmSignature();
-	if ( !bForce && signature == m_prewarmSignature ) {
+	if ( !bForce && signature == m_nPrewarmSignature ) {
 		return;
 	}
-	m_prewarmSignature = signature;
+	m_nPrewarmSignature = signature;
 	m_nLastPrewarmVariantCount = 0;
 	m_nLastPrewarmSkippedCount = 0;
 
@@ -2346,7 +2346,7 @@ void T3DMaterial::updateShader( void ) {
 	} else {
 		code = generateShaderCode( variant_state, SHADER_TIER_NEAR, IS_EDITOR );
 #ifdef DEBUG_ENABLED
-		if ( m_shaderRegressionInvalidTier == SHADER_TIER_NEAR ) {
+		if ( m_nShaderRegressionInvalidTier == SHADER_TIER_NEAR ) {
 			code += "\nvoid patch_a22_forced_invalid_near_shader() { float x = PATCH_A22_UNDEFINED_IDENTIFIER; }\n";
 		}
 #endif
@@ -2404,7 +2404,7 @@ void T3DMaterial::updateShader( void ) {
 			// remains visually complete and uses the normal Terrain3D editing surface.
 			String tier_code = finalizeRuntimeShaderCode( generateShaderCode( variant_state, tier ) );
 #ifdef DEBUG_ENABLED
-			if ( m_shaderRegressionInvalidTier == tier_value ) {
+			if ( m_nShaderRegressionInvalidTier == tier_value ) {
 				tier_code += "\nvoid patch01_forced_invalid_compact_shader() { float x = PATCH01_UNDEFINED_IDENTIFIER; }\n";
 			}
 #endif
@@ -3191,8 +3191,8 @@ void T3DMaterial::destroy( void ) {
 	m_nBufferShaderVariantCount = 0;
 	m_nBufferShaderVariantSourceBytes = 0;
 	m_bHasLastBoundVariantState = false;
-	m_observedVariantDimensions = 0;
-	m_variantTransitionClock = 0;
+	m_nObservedVariantDimensions = 0;
+	m_nVariantTransitionClock = 0;
 	for ( uint64_t &last_used : m_szVariantDimensionLastUsed ) {
 		last_used = 0;
 	}
@@ -3383,7 +3383,7 @@ void T3DMaterial::setShaderVariantCacheLimit( const int nLimit ) {
 	m_bPersistenceDirty = true;
 	LOG( INFO, "t3dSetting_t shader variant cache limit: ", limit );
 	trimShaderVariantCaches();
-	m_prewarmSignature = UINT64_MAX;
+	m_nPrewarmSignature = UINT64_MAX;
 	prewarmShaderVariants();
 	emit_changed();
 }
@@ -3393,7 +3393,7 @@ void T3DMaterial::setShaderVariantPrewarmLimit( const int nLimit ) {
 	SET_IF_DIFF( m_nShaderVariantPrewarmLimit, limit );
 	m_bPersistenceDirty = true;
 	LOG( INFO, "t3dSetting_t shader variant prewarm limit: ", limit );
-	m_prewarmSignature = UINT64_MAX;
+	m_nPrewarmSignature = UINT64_MAX;
 	prewarmShaderVariants();
 	emit_changed();
 }
@@ -3406,7 +3406,7 @@ void T3DMaterial::setShaderVariantSourceBudgetMb( const int nBudgetMb ) {
 	if ( m_pTerrain == nullptr ) {
 		setEffectiveShaderVariantSourceBudgetMb( budget_mb );
 	}
-	m_prewarmSignature = UINT64_MAX;
+	m_nPrewarmSignature = UINT64_MAX;
 	prewarmShaderVariants();
 	emit_changed();
 }
@@ -3418,7 +3418,7 @@ void T3DMaterial::setEffectiveShaderVariantSourceBudgetMb( const int nBudgetMb )
 	}
 	m_nShaderVariantEffectiveSourceBudgetMb = budget_mb;
 	trimShaderVariantCaches();
-	m_prewarmSignature = UINT64_MAX;
+	m_nPrewarmSignature = UINT64_MAX;
 	prewarmShaderVariants();
 }
 
@@ -3461,7 +3461,7 @@ void T3DMaterial::updateTierUniforms( const t3dShaderTier_t tier ) {
 void T3DMaterial::tierQualityChanged( const t3dShaderTier_t tier, const bool bRecompile ) {
 	m_shaderPerformancePreset = SHADER_PRESET_CUSTOM;
 	if ( bRecompile ) {
-		m_prewarmSignature = UINT64_MAX;
+		m_nPrewarmSignature = UINT64_MAX;
 		// Static tier dimensions replace shader RIDs. Rebind through the normal
 		// material update transaction so samplers and generated uniforms remain coherent.
 		update( FULL_REBUILD );
@@ -3958,12 +3958,12 @@ void T3DMaterial::clearShaderVariantCache( void ) {
 	m_nBufferShaderVariantCount = 0;
 	m_nBufferShaderVariantSourceBytes = 0;
 	m_bHasLastBoundVariantState = false;
-	m_observedVariantDimensions = 0;
-	m_variantTransitionClock = 0;
+	m_nObservedVariantDimensions = 0;
+	m_nVariantTransitionClock = 0;
 	for ( uint64_t &last_used : m_szVariantDimensionLastUsed ) {
 		last_used = 0;
 	}
-	m_prewarmSignature = UINT64_MAX;
+	m_nPrewarmSignature = UINT64_MAX;
 	m_nLastPrewarmVariantCount = 0;
 	m_nLastPrewarmSkippedCount = 0;
 }
@@ -4046,7 +4046,7 @@ Dictionary T3DMaterial::getShaderVariantDiagnostics( void ) const {
 	diagnostics["shader_parameter_list_queries"] = ( int64_t ) ( m_nShaderParameterListQueryCount );
 	diagnostics["shader_parameter_default_queries"] = ( int64_t ) ( m_nShaderParameterDefaultQueryCount );
 	diagnostics["shader_inspector_local_reads"] = ( int64_t ) ( m_nShaderInspectorRuntimeReadCount );
-	diagnostics["last_request_domain"] = m_lastVariantRequestDomain;
+	diagnostics["last_request_domain"] = m_nLastVariantRequestDomain;
 	diagnostics["last_request_hit"] = m_bLastVariantRequestHit;
 	diagnostics["last_request_prewarm"] = m_bLastVariantRequestPrewarm;
 	diagnostics["last_request_source_bytes"] = ( int64_t ) ( m_nLastVariantRequestSourceBytes );
@@ -4192,7 +4192,7 @@ void T3DMaterial::resetShaderVariantDiagnostics( void ) {
 	m_nShaderInspectorRuntimeReadCount = 0u;
 	m_nVariantValidationReflectionQueriesTotal = 0u;
 	m_nVariantValidationFailuresTotal = 0u;
-	m_lastVariantRequestDomain = -1;
+	m_nLastVariantRequestDomain = -1;
 	m_bLastVariantRequestHit = false;
 	m_bLastVariantRequestPrewarm = false;
 	m_nLastVariantRequestSourceBytes = 0u;
@@ -4201,10 +4201,10 @@ void T3DMaterial::resetShaderVariantDiagnostics( void ) {
 #ifdef DEBUG_ENABLED
 void T3DMaterial::setShaderRegressionInvalidTier( const int nTier ) {
 	const int requested_tier = ( nTier >= SHADER_TIER_NEAR && nTier < SHADER_TIER_COUNT ) ? nTier : -1;
-	if ( m_shaderRegressionInvalidTier == requested_tier ) {
+	if ( m_nShaderRegressionInvalidTier == requested_tier ) {
 		return;
 	}
-	m_shaderRegressionInvalidTier = requested_tier;
+	m_nShaderRegressionInvalidTier = requested_tier;
 	if ( m_pTerrain && isInitialized() ) {
 		updateShader();
 	}

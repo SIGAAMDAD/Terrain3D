@@ -55,7 +55,7 @@ Dictionary T3DTerrain::getHeightSourceDiagnostics( const Vector3 &rWorldPosition
 	const int lod_count = rangeToLodCount( distance );
 	const int mesh_lod = MAX( 0, lod_count - 1 );
 	const int first_far_lod = CLAMP( m_nRuntimeNearShaderLods + m_nRuntimeMiddleShaderLods, 0, 30 );
-	const real_t tessellation_scale = ( real_t ) ( ( uint64_t ) ( 1 ) << ( uint64_t ) ( CLAMP( m_tessellationLevel, 0, 6 ) ) );
+	const real_t tessellation_scale = ( real_t ) ( ( uint64_t ) ( 1 ) << ( uint64_t ) ( CLAMP( m_nTessellationLevel, 0, 6 ) ) );
 	const real_t mesh_spacing = m_fVertexSpacing * ( real_t ) ( ( uint64_t ) ( 1 ) << ( uint64_t ) ( CLAMP( mesh_lod, 0, 30 ) ) ) /
 		tessellation_scale;
 	const real_t far_source_spacing = m_fVertexSpacing * ( real_t ) ( s_nActiveWorldTexels ) /
@@ -463,7 +463,7 @@ Dictionary T3DTerrain::getRuntimeDiagnostics( const bool bDeep ) const {
 	clipmap["teleports"] = m_runtimeProfileLastSample.m_nClipmapTeleports;
 	clipmap["buffer_uploads"] = m_runtimeProfileLastSample.m_nClipmapBufferUploads;
 	clipmap["mesh_lods"] = m_nMeshLods;
-	clipmap["tessellation_level"] = m_tessellationLevel;
+	clipmap["tessellation_level"] = m_nTessellationLevel;
 	clipmap["total_levels"] = getTotalClipmapLevels();
 	clipmap["mesh_size"] = m_nMeshSize;
 	clipmap["vertex_spacing"] = m_fVertexSpacing;
@@ -604,13 +604,13 @@ void T3DTerrain::resetRuntimeDiagnostics( void ) {
 		m_material->resetShaderVariantDiagnostics();
 	}
 	m_nRuntimeProfileShaderUpdatesSeen = 0u;
-	m_runtimeProfileShaderCreationsSeen = 0u;
+	m_nRuntimeProfileShaderCreationsSeen = 0u;
 	m_nRuntimeAdaptiveBudgetState.m_nOverBudgetStreak = 0;
 	m_nRuntimeAdaptiveBudgetState.m_nUnderBudgetStreak = 0;
 	m_nRuntimeAdaptiveBudgetState.m_nAdjustmentCount = 0u;
 	m_nRuntimeBoundaryNodeDeferralsTotal = 0u;
 	m_nRuntimeBoundaryInstancerDeferralsTotal = 0u;
-	m_runtimeBoundaryNodeDeferralStreak = 0;
-	m_runtimeBoundaryInstancerDeferralStreak = 0;
+	m_nRuntimeBoundaryNodeDeferralStreak = 0;
+	m_nRuntimeBoundaryInstancerDeferralStreak = 0;
 }
 

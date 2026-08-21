@@ -99,7 +99,7 @@ private:
 
 	// Painter settings & variables
 	t3dTool_t m_tool = REGION;
-	t3dOperation_t m_operation = ADD;
+	t3dOperation_t m_nOperation = ADD;
 	Dictionary m_brushData;
 	Vector3 m_operationPosition = V3_ZERO;
 	Vector3 m_operationMovement = V3_ZERO;
@@ -113,7 +113,7 @@ private:
 	TypedArray<Vector2i> m_addedRemovedLocations; // Queue for added/removed locations
 	AABB m_modifiedArea;
 	Dictionary m_undoData; // See _get_undo_data for definition
-	uint64_t m_lastPenTick = 0;
+	uint64_t m_nLastPenTick = 0;
 
 	// Large brushes revisit the same source brush pixels millions of times. Cache gamma-adjusted
 	// alpha values and invalidate the cache whenever brush settings are replaced.
@@ -197,7 +197,7 @@ public:
 	void setTool( const t3dTool_t tool );
 	EA_FORCE_INLINE t3dTool_t getTool( void ) const { return m_tool; }
 	void setOperation( const t3dOperation_t operation );
-	EA_FORCE_INLINE t3dOperation_t getOperation( void ) const { return m_operation; }
+	EA_FORCE_INLINE t3dOperation_t getOperation( void ) const { return m_nOperation; }
 
 	void startOperation( const Vector3 &rGlobalPosition );
 	EA_FORCE_INLINE bool isOperating( void ) const { return m_bIsOperating; }

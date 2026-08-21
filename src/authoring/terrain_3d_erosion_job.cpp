@@ -484,8 +484,8 @@ typedef struct t3dErosionKernels_s {
 				t3dErosionJobWriteRf( pContext->m_pHeightBytes, source_index, source_height + delta );
 			}
 
-			const int32_t sx = CLAMP( x / job->m_resolutionScale, 0, job->m_nSimulationRegionSize - 1 );
-			const int32_t sy = CLAMP( y / job->m_resolutionScale, 0, job->m_nSimulationRegionSize - 1 );
+			const int32_t sx = CLAMP( x / job->m_nResolutionScale, 0, job->m_nSimulationRegionSize - 1 );
+			const int32_t sy = CLAMP( y / job->m_nResolutionScale, 0, job->m_nSimulationRegionSize - 1 );
 			const size_t sim_index = ( size_t ) ( pContext->m_nRegionId ) * job->m_nCellsPerRegion +
 				( size_t ) ( sy ) * ( size_t ) ( job->m_nSimulationRegionSize ) + ( size_t ) ( sx );
 			if ( pContext->m_pControlBytes ) {
@@ -2472,7 +2472,7 @@ bool T3DErosionJob::snapshotTextureProfiles( T3DData *const pData ) {
 			"Material output is enabled, but no T3DTextureAsset has an erosion transition texture configured." );
 		return false;
 	}
-	m_assetProfileHash = hashTextureProfiles( pData );
+	m_nAssetProfileHash = hashTextureProfiles( pData );
 	return true;
 }
 
@@ -2672,10 +2672,10 @@ bool T3DErosionJob::buildSimulationSnapshot( void ) {
 				double fHeightSum = 0.0;
 				int32_t valid_count = 0;
 				int32_t hole_count = 0;
-				for ( int32_t oy = 0; oy < m_resolutionScale; ++oy ) {
-					const int32_t source_y = sy * m_resolutionScale + oy;
-					for ( int32_t ox = 0; ox < m_resolutionScale; ++ox ) {
-						const int32_t source_x = sx * m_resolutionScale + ox;
+				for ( int32_t oy = 0; oy < m_nResolutionScale; ++oy ) {
+					const int32_t source_y = sy * m_nResolutionScale + oy;
+					for ( int32_t ox = 0; ox < m_nResolutionScale; ++ox ) {
+						const int32_t source_x = sx * m_nResolutionScale + ox;
 						const size_t source_index = ( size_t ) ( source_y ) * ( size_t ) ( m_nSourceRegionSize ) + ( size_t ) ( source_x );
 						const float fSourceHeight = t3dErosionJobReadRf( pHeightBytes, source_index );
 						const uint32_t control = pControlBytes ? asUint( t3dErosionJobReadRf( pControlBytes, source_index ) )
@@ -2693,7 +2693,7 @@ bool T3DErosionJob::buildSimulationSnapshot( void ) {
 				size_t index =
 					( size_t ) ( region_id ) * m_nCellsPerRegion + ( size_t ) ( sy ) * ( size_t ) ( m_nSimulationRegionSize ) + ( size_t ) ( sx );
 				bool bActive = valid_count > 0;
-				if ( m_config.m_bPreserveHoles && hole_count * 2 >= m_resolutionScale * m_resolutionScale ) {
+				if ( m_config.m_bPreserveHoles && hole_count * 2 >= m_nResolutionScale * m_nResolutionScale ) {
 					bActive = false;
 				}
 				m_active[index] = bActive ? ( uint8_t ) ( 1 ) : ( uint8_t ) ( 0 );
@@ -2704,8 +2704,8 @@ bool T3DErosionJob::buildSimulationSnapshot( void ) {
 				const Vector2i region_location = m_regions[( size_t ) ( region_id )].m_location;
 				const Vector2 world_position =
 					( Vector2(
-						region_location.x * m_nSourceRegionSize + sx * m_resolutionScale + m_resolutionScale * 0.5f,
-						region_location.y * m_nSourceRegionSize + sy * m_resolutionScale + m_resolutionScale * 0.5f ) ) *
+						region_location.x * m_nSourceRegionSize + sx * m_nResolutionScale + m_nResolutionScale * 0.5f,
+						region_location.y * m_nSourceRegionSize + sy * m_nResolutionScale + m_nResolutionScale * 0.5f ) ) *
 					m_fVertexSpacing;
 
 				float fSimulationWeight =
@@ -2814,10 +2814,10 @@ bool T3DErosionJob::buildSimulationSnapshot( void ) {
 				const float fAutoBlend = t3dErosionJobClamp01( ( m_config.m_fAutoSlope * 2.0f * ( fNormalY - 1.0f ) + 1.0f ) -
 												 m_config.m_fAutoHeightReduction * 0.01f * m_height[index] );
 
-				for ( int32_t oy = 0; oy < m_resolutionScale; ++oy ) {
-					const int32_t source_y = sy * m_resolutionScale + oy;
-					for ( int32_t ox = 0; ox < m_resolutionScale; ++ox ) {
-						const int32_t source_x = sx * m_resolutionScale + ox;
+				for ( int32_t oy = 0; oy < m_nResolutionScale; ++oy ) {
+					const int32_t source_y = sy * m_nResolutionScale + oy;
+					for ( int32_t ox = 0; ox < m_nResolutionScale; ++ox ) {
+						const int32_t source_x = sx * m_nResolutionScale + ox;
 						const size_t source_index = ( size_t ) ( source_y ) * ( size_t ) ( m_nSourceRegionSize ) + ( size_t ) ( source_x );
 						const uint32_t control = pControlBytes ? asUint( t3dErosionJobReadRf( pControlBytes, source_index ) )
 													 : s_nRegionDefaultControl;
@@ -3068,25 +3068,25 @@ Error T3DErosionJob::setup( T3DData *const pData, const Ref<T3DErosionSettings> 
 			m_nSourceControlSnapshotBytes += control_bytes_per_region;
 		}
 	}
-	m_resolutionScale = selectResolutionScale( locations.size() );
-	if ( m_nSourceRegionSize <= 0 || m_nSourceRegionSize % m_resolutionScale != 0 ) {
+	m_nResolutionScale = selectResolutionScale( locations.size() );
+	if ( m_nSourceRegionSize <= 0 || m_nSourceRegionSize % m_nResolutionScale != 0 ) {
 		setFailed( "The selected erosion resolution scale does not divide the Terrain3D region size." );
 		return ERR_INVALID_DATA;
 	}
 	const uint64_t budget = ( uint64_t ) ( m_config.m_nMemoryBudgetMb ) * 1024ULL * 1024ULL;
-	if ( estimateMemoryBytes( locations.size(), m_resolutionScale ) > budget ) {
+	if ( estimateMemoryBytes( locations.size(), m_nResolutionScale ) > budget ) {
 		setFailed( "The erosion working set exceeds memory_budget_mb even at the maximum supported resolution scale." );
 		return ERR_OUT_OF_MEMORY;
 	}
 
-	m_nSimulationRegionSize = m_nSourceRegionSize / m_resolutionScale;
+	m_nSimulationRegionSize = m_nSourceRegionSize / m_nResolutionScale;
 	if ( m_nSimulationRegionSize <= 0 || ( m_nSimulationRegionSize & ( m_nSimulationRegionSize - 1 ) ) != 0 ) {
 		setFailed( "Erosion simulation regions must remain power-of-two for cache-local indexing." );
 		return ERR_INVALID_DATA;
 	}
 	m_nSimulationRegionShift = ( int32_t ) ( t3dCountrZeroU32( ( uint32_t ) ( m_nSimulationRegionSize ) ) );
 	m_nSimulationRegionMask = m_nSimulationRegionSize - 1;
-	m_fCellSize = m_fVertexSpacing * ( float ) ( m_resolutionScale );
+	m_fCellSize = m_fVertexSpacing * ( float ) ( m_nResolutionScale );
 	m_nCellsPerRegion = ( size_t ) ( m_nSimulationRegionSize ) * ( size_t ) ( m_nSimulationRegionSize );
 	m_nCellsPerRegionShift = m_nSimulationRegionShift * 2;
 	m_nCellsPerRegionMask = m_nCellsPerRegion - 1u;
@@ -3675,7 +3675,7 @@ bool T3DErosionJob::verifySourceUnchanged( T3DData *const pData ) const {
 	if ( !pData || pData->getRegionCount() != ( int32_t ) ( m_regions.size() ) ) {
 		return false;
 	}
-	if ( hashTextureProfiles( pData ) != m_assetProfileHash ) {
+	if ( hashTextureProfiles( pData ) != m_nAssetProfileHash ) {
 		return false;
 	}
 	for ( const t3dRegionSnapshot_t &snapshot : m_regions ) {
@@ -3722,8 +3722,8 @@ float T3DErosionJob::sampleOutput(
 	if ( rMap.size() < m_nCellCount || nRegionId < 0 || nRegionId >= ( int32_t ) ( m_regions.size() ) ) {
 		return 0.0f;
 	}
-	const float fSimX = ( fSourceX + 0.5f ) / ( float ) ( m_resolutionScale ) - 0.5f;
-	const float fSimY = ( fSourceY + 0.5f ) / ( float ) ( m_resolutionScale ) - 0.5f;
+	const float fSimX = ( fSourceX + 0.5f ) / ( float ) ( m_nResolutionScale ) - 0.5f;
+	const float fSimY = ( fSourceY + 0.5f ) / ( float ) ( m_nResolutionScale ) - 0.5f;
 	const int32_t x0 = ( int32_t ) ( Math::floor( fSimX ) );
 	const int32_t y0 = ( int32_t ) ( Math::floor( fSimY ) );
 	const float fFx = fSimX - ( float ) ( x0 );
@@ -4111,7 +4111,7 @@ Dictionary T3DErosionJob::getStatistics( void ) const {
 	statistics["region_count"] = ( int32_t ) ( m_regions.size() );
 	statistics["source_region_size"] = m_nSourceRegionSize;
 	statistics["simulation_region_size"] = m_nSimulationRegionSize;
-	statistics["resolution_scale"] = m_resolutionScale;
+	statistics["resolution_scale"] = m_nResolutionScale;
 	statistics["cell_count"] = ( int64_t ) ( m_nCellCount );
 	statistics["completed_steps"] = m_nCompletedSteps.load();
 	statistics["simulation_years"] = m_config.m_fSimulationYears;
@@ -4305,8 +4305,8 @@ Ref<Image> T3DErosionJob::getRegionOutputMap(
 				fValue = fFinalHeight - fInitialHeight;
 			} else if ( output == OUTPUT_MATERIAL_ID ) {
 				if ( !m_materialTransitionKind.empty() ) {
-					const int32_t sx = bFullResolution ? CLAMP( x / m_resolutionScale, 0, m_nSimulationRegionSize - 1 ) : x;
-					const int32_t sy = bFullResolution ? CLAMP( y / m_resolutionScale, 0, m_nSimulationRegionSize - 1 ) : y;
+					const int32_t sx = bFullResolution ? CLAMP( x / m_nResolutionScale, 0, m_nSimulationRegionSize - 1 ) : x;
+					const int32_t sy = bFullResolution ? CLAMP( y / m_nResolutionScale, 0, m_nSimulationRegionSize - 1 ) : y;
 					const size_t index = ( size_t ) ( region_id ) * m_nCellsPerRegion +
 								   ( size_t ) ( sy ) * ( size_t ) ( m_nSimulationRegionSize ) + ( size_t ) ( sx );
 					const t3dMaterialTransitionKind_t kind = ( t3dMaterialTransitionKind_t ) ( m_materialTransitionKind[index] );

@@ -73,7 +73,7 @@ private:
 	t3dCollisionMode_t m_mode = DYNAMIC_GAME;
 	uint16_t m_nShapeSize = 16;
 	uint16_t m_nRadius = 64;
-	uint32_t m_layer = 1;
+	uint32_t m_nLayer = 1;
 	uint32_t m_nMask = 1;
 	real_t m_fPriority = 1.f;
 	Ref<PhysicsMaterial> m_physicsMaterial;
@@ -175,7 +175,7 @@ public:
 	void setRadius( const uint16_t nRadius );
 	EA_FORCE_INLINE uint16_t getRadius( void ) const { return m_nRadius; }
 	void setLayer( const uint32_t nLayers );
-	EA_FORCE_INLINE uint32_t getLayer( void ) const { return m_layer; }
+	EA_FORCE_INLINE uint32_t getLayer( void ) const { return m_nLayer; }
 	void setMask( const uint32_t nMask );
 	EA_FORCE_INLINE uint32_t getMask( void ) const { return m_nMask; }
 	void setPriority( const real_t fPriority );

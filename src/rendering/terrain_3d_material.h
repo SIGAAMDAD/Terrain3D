@@ -493,7 +493,7 @@ private:
 #ifdef DEBUG_ENABLED
 	uint64_t m_szTierUniformPublicationCount[SHADER_TIER_COUNT] = {};
 #endif
-	uint64_t m_prewarmSignature = UINT64_MAX;
+	uint64_t m_nPrewarmSignature = UINT64_MAX;
 	int m_nShaderVariantCacheLimit = 32;
 	int m_nShaderVariantPrewarmLimit = 8;
 	int m_nShaderVariantSourceBudgetMb = 8;
@@ -502,9 +502,9 @@ private:
 	int m_nLastPrewarmSkippedCount = 0;
 	t3dShaderVariantState_t m_lastBoundVariantState;
 	bool m_bHasLastBoundVariantState = false;
-	uint64_t m_observedVariantDimensions = 0;
+	uint64_t m_nObservedVariantDimensions = 0;
 	uint64_t m_szVariantDimensionLastUsed[VARIANT_DIM_COUNT] = {};
-	uint64_t m_variantTransitionClock = 0;
+	uint64_t m_nVariantTransitionClock = 0;
 	uint64_t m_nVariantCacheHitsTotal = 0;
 	uint64_t m_nVariantCacheMissesTotal = 0;
 	uint64_t m_nVariantCreationsTotal = 0;
@@ -519,13 +519,13 @@ private:
 	uint64_t m_nVariantValidationFailuresTotal = 0;
 	t3dShaderTierValidationState_t m_szShaderTierValidation[SHADER_TIER_COUNT] = {};
 #ifdef DEBUG_ENABLED
-	int m_shaderRegressionInvalidTier = -1;
+	int m_nShaderRegressionInvalidTier = -1;
 #endif
 	uint64_t m_nShaderUpdateUsecTotal = 0;
 	uint64_t m_nShaderUpdateUsecPeak = 0;
 	uint64_t m_nShaderUpdateUsecLast = 0;
 	uint64_t m_nShaderUpdateCount = 0;
-	int m_lastVariantRequestDomain = -1;
+	int m_nLastVariantRequestDomain = -1;
 	bool m_bLastVariantRequestHit = false;
 	bool m_bLastVariantRequestPrewarm = false;
 	uint32_t m_nLastVariantRequestSourceBytes = 0;

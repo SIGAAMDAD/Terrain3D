@@ -80,7 +80,7 @@ void T3DRegionLighting::setShadowmaskMode( const int nMode ) {
 	emit_changed();
 }
 
-T3D_SET_VALUE( bake_signature, setBakeSignature, m_bakeSignature, int64_t )
+T3D_SET_VALUE( bake_signature, setBakeSignature, m_nBakeSignature, int64_t )
 
 void T3DRegionLighting::setDirectionalLightSignature( const String &rSignature ) {
 	const String signature = rSignature.strip_edges();
@@ -90,7 +90,7 @@ void T3DRegionLighting::setDirectionalLightSignature( const String &rSignature )
 	m_directionalLightSignature = signature;
 	emit_changed();
 }
-T3D_SET_VALUE( baked_unix, setBakedUnix, m_bakedUnix, int64_t )
+T3D_SET_VALUE( baked_unix, setBakedUnix, m_nBakedUnix, int64_t )
 
 void T3DRegionLighting::setReceiverCount( const int nCount ) {
 	const int value = MAX( nCount, 0 );

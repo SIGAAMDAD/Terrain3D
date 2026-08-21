@@ -31,9 +31,9 @@ private:
 	int m_nTerrainProxyLod = 2;
 	int m_nContextRadiusRegions = 1;
 	int m_nShadowmaskMode = LightmapGIData::SHADOWMASK_MODE_OVERLAY;
-	int64_t m_bakeSignature = 0;
+	int64_t m_nBakeSignature = 0;
 	String m_directionalLightSignature;
-	int64_t m_bakedUnix = 0;
+	int64_t m_nBakedUnix = 0;
 	int m_nReceiverCount = 0;
 	int m_nContributorCount = 0;
 	int m_nLightmapTextureCount = 0;
@@ -73,11 +73,11 @@ public:
 	void setShadowmaskMode( int nMode );
 	EA_FORCE_INLINE int getShadowmaskMode( void ) const { return m_nShadowmaskMode; }
 	void setBakeSignature( int64_t nSignature );
-	EA_FORCE_INLINE int64_t getBakeSignature( void ) const { return m_bakeSignature; }
+	EA_FORCE_INLINE int64_t getBakeSignature( void ) const { return m_nBakeSignature; }
 	void setDirectionalLightSignature( const String &rSignature );
 	EA_FORCE_INLINE String getDirectionalLightSignature( void ) const { return m_directionalLightSignature; }
 	void setBakedUnix( int64_t nUnix );
-	EA_FORCE_INLINE int64_t getBakedUnix( void ) const { return m_bakedUnix; }
+	EA_FORCE_INLINE int64_t getBakedUnix( void ) const { return m_nBakedUnix; }
 	void setReceiverCount( int nCount );
 	EA_FORCE_INLINE int getReceiverCount( void ) const { return m_nReceiverCount; }
 	void setContributorCount( int nCount );

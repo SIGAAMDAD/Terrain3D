@@ -411,7 +411,7 @@ RID T3DMesher::instantiateStateMesh( const int nFirstLod, const int nLastLod ) {
 		}
 	}
 	const int highest_lod = MAX( nFirstLod, nLastLod );
-	const real_t fDensity = ( real_t ) ( 1.0 ) / ( real_t ) ( ( uint64_t ) ( 1 ) << CLAMP( m_tessellationLevel, 0, 30 ) );
+	const real_t fDensity = ( real_t ) ( 1.0 ) / ( real_t ) ( ( uint64_t ) ( 1 ) << CLAMP( m_nTessellationLevel, 0, 30 ) );
 	const real_t fScale = m_fVertexSpacing * fDensity * ( real_t ) ( ( uint64_t ) ( 1 ) << CLAMP( highest_lod, 0, 30 ) );
 	const real_t fRadius = ( m_fOffsetC + 2.0f ) * fScale * 2.0f;
 	const AABB initialAabb(
@@ -920,7 +920,7 @@ void T3DMesher::generateClipmap( void ) {
 	} else {
 		generateMeshTypes();
 	}
-	m_nClipmapLevelCount = CLAMP( m_nLods + m_tessellationLevel, 0, s_nMaxClipmapLevels );
+	m_nClipmapLevelCount = CLAMP( m_nLods + m_nTessellationLevel, 0, s_nMaxClipmapLevels );
 	rebuildRenderBatches();
 }
 
@@ -959,11 +959,11 @@ void T3DMesher::generateOffsetData( void ) {
 }
 
 void T3DMesher::generateLodCache( void ) {
-	m_nClipmapLevelCount = CLAMP( m_nLods + m_tessellationLevel, 0, s_nMaxClipmapLevels );
+	m_nClipmapLevelCount = CLAMP( m_nLods + m_nTessellationLevel, 0, s_nMaxClipmapLevels );
 	m_szLastLodPositions.fill( V2_MAX );
 	m_szLastLodTestX.fill( -1 );
 	m_szLastLodTestZ.fill( -1 );
-	const real_t fDensity = ( real_t ) ( 1.0 ) / ( real_t ) ( ( uint64_t ) ( 1 ) << CLAMP( m_tessellationLevel, 0, 30 ) );
+	const real_t fDensity = ( real_t ) ( 1.0 ) / ( real_t ) ( ( uint64_t ) ( 1 ) << CLAMP( m_nTessellationLevel, 0, 30 ) );
 	const real_t fBaseSpacing = m_fVertexSpacing * fDensity;
 	for ( int lod = 0; lod < m_nClipmapLevelCount; ++lod ) {
 		const real_t fMultiplier = ( real_t ) ( ( uint64_t ) ( 1 ) << CLAMP( lod, 0, 30 ) );
@@ -1053,10 +1053,10 @@ void T3DMesher::initialize(
 	m_nClipmapUpdateBudget = CLAMP( nClipmapUpdateBudget, 1, s_nMaxClipmapLevels );
 	m_bForceFullSnap = true;
 	m_nLods = nLods;
-	m_tessellationLevel = nTessellationLevel;
+	m_nTessellationLevel = nTessellationLevel;
 	m_nMeshSize = nMeshSize;
 	m_fVertexSpacing = fVertexSpacing;
-	m_renderLayers = nRenderLayers;
+	m_nRenderLayers = nRenderLayers;
 	m_castShadows = castShadows;
 	m_giMode = giMode;
 	m_nShadowLodCount = CLAMP( nShadowLodCount, 0, s_nMaxClipmapLevels );
@@ -1088,7 +1088,7 @@ void T3DMesher::setTierLayout(
 	const int nMiddleShaderLodCount, const int nClipmapUpdateBudget,
 	const bool bForceFullSnap
 ) {
-	const int total_levels = MAX( 0, m_nLods + m_tessellationLevel );
+	const int total_levels = MAX( 0, m_nLods + m_nTessellationLevel );
 	const int near_count = CLAMP( nNearShaderLodCount, 0, total_levels );
 	const int middle_count = CLAMP( nMiddleShaderLodCount, 0, total_levels - near_count );
 	const int update_budget = CLAMP( nClipmapUpdateBudget, 1, s_nMaxClipmapLevels );
@@ -1308,7 +1308,7 @@ void T3DMesher::updateInstanceRid(
 	RS->instance_set_visible( rRid, bVisible );
 	RS->instance_geometry_set_material_override( rRid, rMaterial );
 	RS->instance_set_scenario( rRid, m_hScenario );
-	RS->instance_set_layer_mask( rRid, m_renderLayers );
+	RS->instance_set_layer_mask( rRid, m_nRenderLayers );
 	RS->instance_geometry_set_cast_shadows_setting( rRid, castShadows );
 	RS->instance_geometry_set_flag( rRid, RenderingServer::INSTANCE_FLAG_USE_BAKED_LIGHT, bBakedLight );
 	RS->instance_geometry_set_flag( rRid, RenderingServer::INSTANCE_FLAG_USE_DYNAMIC_GI, bDynamicGi );

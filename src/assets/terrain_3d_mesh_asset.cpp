@@ -103,7 +103,7 @@ void T3DMeshAsset::assignGeneratedMesh( void ) {
 	m_pendingMeshes.push_back( createGeneratedMesh() );
 	m_iLastLod = 0;
 	m_iLastShadowLod = 0;
-	m_shadowImpostor = 0;
+	m_nShadowImpostor = 0;
 	if ( m_materialOverride.is_null() ) {
 		m_materialOverride = getMaterial();
 	}
@@ -165,12 +165,12 @@ void T3DMeshAsset::clear( void ) {
 	m_fHeightOffset = 0.f;
 	m_fDensity = 0.f;
 	m_castShadows = s_shadowCastingOn;
-	m_visibilityLayers = 1;
+	m_nVisibilityLayers = 1;
 	m_materialOverride.unref();
 	m_materialOverlay.unref();
 	m_iLastLod = s_nMeshMaxLodCount - 1;
 	m_iLastShadowLod = s_nMeshMaxLodCount - 1;
-	m_shadowImpostor = 0;
+	m_nShadowImpostor = 0;
 	clearLodRanges();
 	m_fFadeMargin = 0.f;
 	m_thumbnail.unref();
@@ -328,7 +328,7 @@ void T3DMeshAsset::setSceneFile( const Ref<PackedScene> &rSceneFile ) {
 		m_fDensity = CLAMP( 10.f / ( aabb.has_volume() ? aabb.get_volume() : 1.f ), 0.01f, 10.0f );
 		m_iLastLod = m_pendingMeshes.size() - 1;
 		m_iLastShadowLod = m_iLastLod;
-		m_shadowImpostor = 0;
+		m_nShadowImpostor = 0;
 		clearLodRanges();
 	} else {
 		setGeneratedType( TYPE_TEXTURE_CARD );
@@ -358,7 +358,7 @@ void T3DMeshAsset::setGeneratedType( const t3dGenType_t type ) {
 	if ( bEnteringGeneratedMode ) {
 		m_castShadows = s_shadowCastingOff;
 		m_iLastShadowLod = 0;
-		m_shadowImpostor = 0;
+		m_nShadowImpostor = 0;
 	}
 	invalidateThumbnail();
 	LOG( INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t generated type: ", m_generatedType );
@@ -412,7 +412,7 @@ ShadowCasting T3DMeshAsset::getLodCastShadows( const int nLodId ) const {
 		return s_shadowCastingOnly;
 	}
 	// Disable shadows if this lod uses the shadow impostor
-	if ( nLodId < m_shadowImpostor ) {
+	if ( nLodId < m_nShadowImpostor ) {
 		return s_shadowCastingOff;
 	}
 	// Disable shadows if this lod is too far
@@ -423,7 +423,7 @@ ShadowCasting T3DMeshAsset::getLodCastShadows( const int nLodId ) const {
 }
 
 inline void T3DMeshAsset::setVisibilityLayers( const uint32_t nLayers ) {
-	SET_IF_DIFF( m_visibilityLayers, nLayers );
+	SET_IF_DIFF( m_nVisibilityLayers, nLayers );
 	LOG( INFO, m_name, ": t3dSetting_t visibility layers: ", nLayers );
 	LOG( DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
@@ -475,8 +475,8 @@ void T3DMeshAsset::setLastLod( const int nLod ) {
 	if ( m_iLastShadowLod > m_iLastLod ) {
 		m_iLastShadowLod = m_iLastLod;
 	}
-	if ( m_shadowImpostor > m_iLastLod ) {
-		m_shadowImpostor = m_iLastLod;
+	if ( m_nShadowImpostor > m_iLastLod ) {
+		m_nShadowImpostor = m_iLastLod;
 	}
 	LOG( INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t last LOD: ", m_iLastLod );
 	LOG( DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
@@ -487,16 +487,16 @@ void T3DMeshAsset::setLastLod( const int nLod ) {
 void T3DMeshAsset::setLastShadowLod( const int nLod ) {
 	SET_IF_DIFF( m_iLastShadowLod, CLAMP( nLod, 0, m_iLastLod ) );
 	LOG( INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t last shadow LOD: ", m_iLastShadowLod );
-	if ( m_shadowImpostor > m_iLastShadowLod ) {
-		m_shadowImpostor = m_iLastShadowLod;
+	if ( m_nShadowImpostor > m_iLastShadowLod ) {
+		m_nShadowImpostor = m_iLastShadowLod;
 	}
 	LOG( DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
 
 void T3DMeshAsset::setShadowImpostor( const int nLod ) {
-	SET_IF_DIFF( m_shadowImpostor, CLAMP( nLod, 0, MIN( m_iLastLod, m_iLastShadowLod ) ) );
-	LOG( INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t shadow imposter LOD: ", m_shadowImpostor );
+	SET_IF_DIFF( m_nShadowImpostor, CLAMP( nLod, 0, MIN( m_iLastLod, m_iLastShadowLod ) ) );
+	LOG( INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t shadow imposter LOD: ", m_nShadowImpostor );
 	LOG( DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
@@ -529,7 +529,7 @@ real_t T3DMeshAsset::getLodRangeBegin( const int nLod ) const {
 
 real_t T3DMeshAsset::getLodRangeEnd( const int nLod ) const {
 	if ( nLod == s_nMeshShadowLodId ) {
-		return m_fLodRanges[MAX( m_shadowImpostor - 1, 0 )];
+		return m_fLodRanges[MAX( m_nShadowImpostor - 1, 0 )];
 	}
 	ASSERT( nLod >= 0 && nLod <= m_iLastLod, 0.f );
 	return m_fLodRanges[nLod];

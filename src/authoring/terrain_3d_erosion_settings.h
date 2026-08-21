@@ -28,14 +28,14 @@ private:
 	// General.
 	double m_fSimulationYears = 1000.0;
 	int32_t m_nSimulationSteps = 128;
-	int32_t m_resolutionScale = 8;
+	int32_t m_nResolutionScale = 8;
 	bool m_bAutoAdjustResolution = true;
 	int32_t m_nMemoryBudgetMb = 1024;
 	bool m_bLivePreviewEnabled = true;
 	int32_t m_nLivePreviewIntervalSteps = 4;
 	bool m_bLivePreviewStartPaused = false;
 	int32_t m_nThreadCount = 0;
-	int64_t m_seed = 1;
+	int64_t m_nSeed = 1;
 	t3dBoundaryMode_t m_boundaryMode = BOUNDARY_CLOSED;
 	float m_fMaxHeightChangePerStep = 0.5f;
 	bool m_bPreserveHoles = true;
@@ -223,7 +223,7 @@ public:
 	void setSimulationSteps( int32_t nValue );
 	EA_FORCE_INLINE int32_t getSimulationSteps( void ) const { return m_nSimulationSteps; }
 	void setResolutionScale( int32_t nValue );
-	EA_FORCE_INLINE int32_t getResolutionScale( void ) const { return m_resolutionScale; }
+	EA_FORCE_INLINE int32_t getResolutionScale( void ) const { return m_nResolutionScale; }
 	void setAutoAdjustResolution( bool bValue );
 	EA_FORCE_INLINE bool getAutoAdjustResolution( void ) const { return m_bAutoAdjustResolution; }
 	void setMemoryBudgetMb( int32_t nValue );
@@ -237,7 +237,7 @@ public:
 	void setThreadCount( int32_t nValue );
 	EA_FORCE_INLINE int32_t getThreadCount( void ) const { return m_nThreadCount; }
 	void setSeed( int64_t nValue );
-	EA_FORCE_INLINE int64_t getSeed( void ) const { return m_seed; }
+	EA_FORCE_INLINE int64_t getSeed( void ) const { return m_nSeed; }
 	void setBoundaryMode( t3dBoundaryMode_t eValue );
 	EA_FORCE_INLINE t3dBoundaryMode_t getBoundaryMode( void ) const { return m_boundaryMode; }
 	void setMaxHeightChangePerStep( float fValue );

@@ -15,7 +15,7 @@
 
 bool T3DGeneratedTexture::matchesLayout( const Ref<Image> &rImage ) const {
 	return rImage.is_valid() && !rImage->is_empty() && rImage->get_width() == m_nWidth &&
-		rImage->get_height() == m_nHeight && ( int ) ( rImage->get_format() ) == m_format &&
+		rImage->get_height() == m_nHeight && ( int ) ( rImage->get_format() ) == m_nFormat &&
 		rImage->has_mipmaps() == m_bMipmaps;
 }
 
@@ -37,7 +37,7 @@ void T3DGeneratedTexture::clear( void ) {
 	m_nSize = 0;
 	m_nWidth = 0;
 	m_nHeight = 0;
-	m_format = -1;
+	m_nFormat = -1;
 	m_bMipmaps = false;
 	m_bLayered = false;
 	m_nPayloadBytes = 0u;
@@ -51,7 +51,7 @@ void T3DGeneratedTexture::swap( T3DGeneratedTexture &rOther ) {
 	swap( m_nSize, rOther.m_nSize );
 	swap( m_nWidth, rOther.m_nWidth );
 	swap( m_nHeight, rOther.m_nHeight );
-	swap( m_format, rOther.m_format );
+	swap( m_nFormat, rOther.m_nFormat );
 	swap( m_bMipmaps, rOther.m_bMipmaps );
 	swap( m_bLayered, rOther.m_bLayered );
 	swap( m_nPayloadBytes, rOther.m_nPayloadBytes );
@@ -114,7 +114,7 @@ RID T3DGeneratedTexture::create( const TypedArray<Image> &rLayers ) {
 	m_nSize = rLayers.size();
 	m_nWidth = width;
 	m_nHeight = height;
-	m_format = format;
+	m_nFormat = format;
 	m_bMipmaps = bMipmaps;
 	m_bLayered = true;
 	m_nPayloadBytes = payload_bytes;
@@ -161,7 +161,7 @@ RID T3DGeneratedTexture::create( const Ref<Image> &rImage ) {
 	m_nSize = 1;
 	m_nWidth = rImage->get_width();
 	m_nHeight = rImage->get_height();
-	m_format = ( int ) ( rImage->get_format() );
+	m_nFormat = ( int ) ( rImage->get_format() );
 	m_bMipmaps = rImage->has_mipmaps();
 	m_bLayered = false;
 	m_nPayloadBytes = ( size_t ) ( rImage->get_data().size() );

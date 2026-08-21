@@ -55,8 +55,8 @@ void T3DSampler::resetCache( const uint64_t nGeneration ) {
 		m_szCache[( size_t ) ( index )] = t3dRegionView_t{};
 	}
 	m_pLastView = nullptr;
-	m_stamp = 1u;
-	m_operation = 1u;
+	m_nStamp = 1u;
+	m_nOperation = 1u;
 	m_nSamplingGeneration = nGeneration;
 	m_nRegionSize = m_source.m_pRepository ? m_source.m_pRepository->getRegionSize() : 0;
 	m_nRegionShift = m_nRegionSize > 0 && ( m_nRegionSize & ( m_nRegionSize - 1 ) ) == 0
@@ -87,8 +87,8 @@ bool T3DSampler::validateEpoch( void ) {
 	if ( current_generation != m_nSamplingGeneration ) {
 		resetCache( current_generation );
 	}
-	if ( ++m_operation == 0u ) {
-		m_operation = 1u;
+	if ( ++m_nOperation == 0u ) {
+		m_nOperation = 1u;
 		for ( t3dRegionView_t &entry : m_szCache ) {
 			entry.m_nValidatedOperation = 0u;
 		}
@@ -147,7 +147,7 @@ t3dRegionView_t *T3DSampler::validateCachedView(
 	if ( !pView || !pView->m_bLoaded || !pView->m_bValid || pView->m_location != rLocation ) {
 		return nullptr;
 	}
-	if ( pView->m_nValidatedOperation != m_operation ) {
+	if ( pView->m_nValidatedOperation != m_nOperation ) {
 		const uint32_t generation = m_source.m_pStorage->getRegionGeneration( rLocation );
 		if ( generation == 0u || generation != pView->m_nRegionGeneration ) {
 			resetView( pView );
@@ -156,9 +156,9 @@ t3dRegionView_t *T3DSampler::validateCachedView(
 			}
 			return nullptr;
 		}
-		pView->m_nValidatedOperation = m_operation;
+		pView->m_nValidatedOperation = m_nOperation;
 	}
-	pView->m_nStamp = ++m_stamp;
+	pView->m_nStamp = ++m_nStamp;
 	return pView;
 }
 
@@ -196,10 +196,10 @@ t3dRegionView_t *T3DSampler::getRegionViewUnchecked( const Vector2i &rLocation )
 	const size_t replacement_index = ( size_t ) ( pReplacement - m_szCache.data() );
 	t3dRegionCold_t &rCold = m_szCacheCold[replacement_index];
 	pReplacement->m_location = rLocation;
-	pReplacement->m_nStamp = ++m_stamp;
+	pReplacement->m_nStamp = ++m_nStamp;
 	pReplacement->m_bLoaded = true;
 	pReplacement->m_nRegionGeneration = m_source.m_pStorage->getRegionGeneration( rLocation );
-	pReplacement->m_nValidatedOperation = m_operation;
+	pReplacement->m_nValidatedOperation = m_nOperation;
 	pReplacement->m_bControlResolved = !pRegion->hasChannel( TYPE_CONTROL ) ||
 		pRegion->getMapPtr( TYPE_CONTROL ) != nullptr;
 

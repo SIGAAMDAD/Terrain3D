@@ -143,7 +143,7 @@ private:
 	RID m_hNearestSampler;
 	RID m_hLinearRepeatSampler;
 	uint64_t m_nDisplacementRegionHash = 0u;
-	uint64_t m_displacementMaterialHash = 0u;
+	uint64_t m_nDisplacementMaterialHash = 0u;
 	bool m_bDisplacementRegionUploaded = false;
 	bool m_bDisplacementMaterialUploaded = false;
 	uint32_t m_nDisplacementWidth = 0u;

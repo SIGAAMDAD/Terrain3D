@@ -236,37 +236,37 @@ EA_FORCE_INLINE static int32_t sanitizeSurfaceChannel( int32_t nChannel ) { retu
 
 void T3DPackedPBRTexture::setRoughnessChannel( const int32_t nChannel ) {
 	const int32_t channel = sanitizeSurfaceChannel( nChannel );
-	if ( m_roughnessChannel == channel ) {
+	if ( m_nRoughnessChannel == channel ) {
 		return;
 	}
-	m_roughnessChannel = channel;
+	m_nRoughnessChannel = channel;
 	invalidate();
 }
 
 void T3DPackedPBRTexture::setDisplacementChannel( const int32_t nChannel ) {
 	const int32_t channel = sanitizeSurfaceChannel( nChannel );
-	if ( m_displacementChannel == channel ) {
+	if ( m_nDisplacementChannel == channel ) {
 		return;
 	}
-	m_displacementChannel = channel;
+	m_nDisplacementChannel = channel;
 	invalidate();
 }
 
 void T3DPackedPBRTexture::setAoChannel( const int32_t nChannel ) {
 	const int32_t channel = sanitizeSurfaceChannel( nChannel );
-	if ( m_aoChannel == channel ) {
+	if ( m_nAoChannel == channel ) {
 		return;
 	}
-	m_aoChannel = channel;
+	m_nAoChannel = channel;
 	invalidate();
 }
 
 void T3DPackedPBRTexture::setMetallicChannel( const int32_t nChannel ) {
 	const int32_t channel = sanitizeSurfaceChannel( nChannel );
-	if ( m_metallicChannel == channel ) {
+	if ( m_nMetallicChannel == channel ) {
 		return;
 	}
-	m_metallicChannel = channel;
+	m_nMetallicChannel = channel;
 	// Stored for backward compatibility only; no rebuild is necessary.
 	emit_changed();
 }
@@ -340,10 +340,10 @@ bool T3DPackedPBRTexture::rebuild( void ) {
 	}
 
 	const Ref<Image> pSurface = T3DUtil::packSurfaceRgba8( pNormal, pRoughness, pAo, m_bInvertNormalGreen,
-														   m_roughnessChannel, m_aoChannel, m_bGenerateMipmaps );
+														   m_nRoughnessChannel, m_nAoChannel, m_bGenerateMipmaps );
 	const Ref<Image> pHeight =
 		pDisplacement.is_valid()
-			? T3DUtil::packDisplacementR8( pDisplacement, m_displacementChannel, m_bGenerateMipmaps )
+			? T3DUtil::packDisplacementR8( pDisplacement, m_nDisplacementChannel, m_bGenerateMipmaps )
 			: T3DUtil::getDefaultDisplacementImage( size, m_bGenerateMipmaps );
 	if ( pSurface.is_null() || pSurface->is_empty() || pHeight.is_null() || pHeight->is_empty() ) {
 		m_lastError = "T3DUtil failed to generate the surface/height images.";

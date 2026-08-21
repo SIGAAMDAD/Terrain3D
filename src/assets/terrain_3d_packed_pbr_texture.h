@@ -46,10 +46,10 @@ private:
 	Ref<Texture2D> m_metallicSource;
 	Vector2i m_outputSize = V2I( 512 );
 	bool m_bInvertNormalGreen = false;
-	int32_t m_roughnessChannel = CHANNEL_RED;
-	int32_t m_displacementChannel = CHANNEL_RED;
-	int32_t m_aoChannel = CHANNEL_RED;
-	int32_t m_metallicChannel = CHANNEL_RED;
+	int32_t m_nRoughnessChannel = CHANNEL_RED;
+	int32_t m_nDisplacementChannel = CHANNEL_RED;
+	int32_t m_nAoChannel = CHANNEL_RED;
+	int32_t m_nMetallicChannel = CHANNEL_RED;
 	bool m_bGenerateMipmaps = true;
 	bool m_bAutoRebuild = true;
 
@@ -110,13 +110,13 @@ public:
 	void setInvertNormalGreen( bool bEnabled );
 	EA_FORCE_INLINE bool getInvertNormalGreen( void ) const { return m_bInvertNormalGreen; }
 	void setRoughnessChannel( int32_t nChannel );
-	EA_FORCE_INLINE int32_t getRoughnessChannel( void ) const { return m_roughnessChannel; }
+	EA_FORCE_INLINE int32_t getRoughnessChannel( void ) const { return m_nRoughnessChannel; }
 	void setDisplacementChannel( int32_t nChannel );
-	EA_FORCE_INLINE int32_t getDisplacementChannel( void ) const { return m_displacementChannel; }
+	EA_FORCE_INLINE int32_t getDisplacementChannel( void ) const { return m_nDisplacementChannel; }
 	void setAoChannel( int32_t nChannel );
-	EA_FORCE_INLINE int32_t getAoChannel( void ) const { return m_aoChannel; }
+	EA_FORCE_INLINE int32_t getAoChannel( void ) const { return m_nAoChannel; }
 	void setMetallicChannel( int32_t nChannel );
-	EA_FORCE_INLINE int32_t getMetallicChannel( void ) const { return m_metallicChannel; }
+	EA_FORCE_INLINE int32_t getMetallicChannel( void ) const { return m_nMetallicChannel; }
 	void setGenerateMipmaps( bool bEnabled );
 	EA_FORCE_INLINE bool getGenerateMipmaps( void ) const { return m_bGenerateMipmaps; }
 	void setAutoRebuild( bool bEnabled );

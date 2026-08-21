@@ -295,14 +295,14 @@ Ref<T3DRegion> T3DEditor::operateRegion( const Vector2i &rRegionLoc ) {
 		return Ref<T3DRegion>();
 	}
 	if ( bCanPrint ) {
-		LOG( DEBUG, "t3dTool_t: ", m_tool, " Op: ", m_operation, " processing region ", rRegionLoc, ": ",
+		LOG( DEBUG, "t3dTool_t: ", m_tool, " Op: ", m_nOperation, " processing region ", rRegionLoc, ": ",
 			ptrToStr( *pRegion ) );
 	}
 
 	// Create new region if location is null or deleted
 	if ( pRegion.is_null() || ( pRegion.is_valid() && pRegion->isDeleted() ) ) {
 		// And tool is Add Region, or Height + auto_regions
-		if ( ( m_tool == REGION && m_operation == ADD ) ||
+		if ( ( m_tool == REGION && m_nOperation == ADD ) ||
 			( ( m_tool == SCULPT || m_tool == HEIGHT ) && m_brushData["auto_regions"] ) ) {
 			if ( !m_undoData.has( "region_locations" ) ) {
 				m_undoData["region_locations"] = pData->getRegionLocations().duplicate();
@@ -319,7 +319,7 @@ Ref<T3DRegion> T3DEditor::operateRegion( const Vector2i &rRegionLoc ) {
 	}
 
 	// If removing region
-	else if ( pRegion.is_valid() && m_tool == REGION && m_operation == SUBTRACT ) {
+	else if ( pRegion.is_valid() && m_tool == REGION && m_nOperation == SUBTRACT ) {
 		if ( !m_undoData.has( "region_locations" ) ) {
 			m_undoData["region_locations"] = pData->getRegionLocations().duplicate();
 		}
@@ -339,7 +339,7 @@ Ref<T3DRegion> T3DEditor::operateRegion( const Vector2i &rRegionLoc ) {
 }
 
 void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCameraDirection ) {
-	LOG( EXTREME, "Operating at ", rGlobalPosition, " tool type ", m_tool, " op ", m_operation );
+	LOG( EXTREME, "Operating at ", rGlobalPosition, " tool type ", m_tool, " op ", m_nOperation );
 
 	const t3dMapType_t map_type = getMapType();
 	if ( map_type == REGION_TYPE_MAX ) {
@@ -376,10 +376,10 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 	// a mouse click. This occasionally catches a pen click, but avoids most pen lifts.
 	real_t fMousePressure = CLAMP( ( real_t ) ( m_brushData.get( "mouse_pressure", 0.f ) ), 0.f, 1.f );
 	if ( fMousePressure > CMP_EPSILON && fMousePressure < 1.f ) {
-		m_lastPenTick = Time::get_singleton()->get_ticks_msec();
+		m_nLastPenTick = Time::get_singleton()->get_ticks_msec();
 	}
 	const uint64_t ticks = Time::get_singleton()->get_ticks_msec();
-	if ( fMousePressure < CMP_EPSILON && ticks - m_lastPenTick >= 100 ) {
+	if ( fMousePressure < CMP_EPSILON && ticks - m_nLastPenTick >= 100 ) {
 		fMousePressure = 1.f;
 	}
 	const real_t strength = fMousePressure * ( real_t )m_brushData["strength"];
@@ -433,9 +433,9 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 	edited_area.size = Vector3( fBrushSize, 0.f, fBrushSize );
 
 	if ( m_tool == INSTANCER ) {
-		if ( m_operation == SUBTRACT ) {
+		if ( m_nOperation == SUBTRACT ) {
 			m_pTerrain->getInstancer()->removeInstances( rGlobalPosition, m_brushData );
-		} else if ( m_operation == ADD ) {
+		} else if ( m_nOperation == ADD ) {
 			m_pTerrain->getInstancer()->addInstances( rGlobalPosition, m_brushData );
 		}
 		return;
@@ -457,20 +457,20 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 	const bool bUnrestrictedSlope = clamped_slope_range.y - clamped_slope_range.x > 89.99f;
 
 	const bool bComputeSupported =
-		m_operation != AVERAGE &&
-		( ( map_type == TYPE_HEIGHT && ( m_operation == ADD || m_operation == SUBTRACT || m_operation == GRADIENT ) ) ||
+		m_nOperation != AVERAGE &&
+		( ( map_type == TYPE_HEIGHT && ( m_nOperation == ADD || m_nOperation == SUBTRACT || m_nOperation == GRADIENT ) ) ||
 		 ( map_type == TYPE_CONTROL &&
 		  ( m_tool == TEXTURE || m_tool == AUTOSHADER || m_tool == HOLES || m_tool == NAVIGATION ) &&
-		  ( m_operation == ADD || m_operation == SUBTRACT || m_operation == REPLACE ) ) ||
+		  ( m_nOperation == ADD || m_nOperation == SUBTRACT || m_nOperation == REPLACE ) ) ||
 		 ( map_type == TYPE_COLOR && ( m_tool == COLOR || m_tool == ROUGHNESS ) &&
-		  ( m_operation == ADD || m_operation == SUBTRACT ) ) );
+		  ( m_nOperation == ADD || m_nOperation == SUBTRACT ) ) );
 	T3DCompute *const pComputeBackend = pData->getComputeBackend();
 	const bool bUseCompute =
 		bComputeSupported && total_samples >= 4096 && pComputeBackend && pComputeBackend->isAvailable();
 	// Average operations intentionally observe earlier writes in the same stamp.
 	// Other tools can edit detached byte planes and publish each region once,
 	// eliminating thousands of Image::get_pixelv/set_pixelv calls.
-	const bool bUseDirectMapAccess = m_operation != AVERAGE && ( bUseCompute || total_samples >= 1024 );
+	const bool bUseDirectMapAccess = m_nOperation != AVERAGE && ( bUseCompute || total_samples >= 1024 );
 
 	m_xAxisScratch.resize( ( size_t ) ( sample_count ) );
 	m_zAxisScratch.resize( ( size_t ) ( sample_count ) );
@@ -642,7 +642,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 					source_value = asUint( fSourceHeight );
 					edited_position.y = fSourceHeight;
 					edited_area = edited_area.expand( edited_position );
-					if ( m_operation == GRADIENT ) {
+					if ( m_nOperation == GRADIENT ) {
 						if ( gradient_points.size() != 2 ) {
 							bEligible = false;
 						} else {
@@ -702,7 +702,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 				edited_area = edited_area.expand( edited_position );
 				real_t fDestf = fSrcf;
 
-				switch ( m_operation ) {
+				switch ( m_nOperation ) {
 					case ADD: {
 						if ( m_tool == HEIGHT ) {
 							// Height
@@ -789,7 +789,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 						if ( !isBrushSlopeAllowed( brushSampler, bUnrestrictedSlope, clamped_slope_range, brushGlobalPosition ) ) {
 							continue;
 						}
-						switch ( m_operation ) {
+						switch ( m_nOperation ) {
 							// Base Paint
 							case REPLACE: {
 								if ( fBrushAlpha > 0.5f ) {
@@ -919,7 +919,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 					}
 					case AUTOSHADER: {
 						if ( fBrushAlpha > 0.5f ) {
-							bAutoshader = ( m_operation == ADD );
+							bAutoshader = ( m_nOperation == ADD );
 							uvscale = 0.f;
 							uvrotation = 0.f;
 						}
@@ -927,13 +927,13 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 					}
 					case HOLES: {
 						if ( fBrushAlpha > 0.5f ) {
-							bHole = ( m_operation == ADD );
+							bHole = ( m_nOperation == ADD );
 						}
 						break;
 					}
 					case NAVIGATION: {
 						if ( fBrushAlpha > 0.5f ) {
-							bNavigation = ( m_operation == ADD );
+							bNavigation = ( m_nOperation == ADD );
 						}
 						break;
 					}
@@ -965,7 +965,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 				}
 				switch ( m_tool ) {
 					case COLOR:
-						switch ( m_operation ) {
+						switch ( m_nOperation ) {
 							case ADD: {
 								dest = src.lerp( color, CLAMP( fBrushAlpha * strength, 0.f, 1.f ) );
 								dest.a = src.a;
@@ -993,7 +993,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 						 * Roughness 0 is saved as 0.5, but retreived is 0.498, or -0.4 roughness
 						 * We round the final amount in tool_settings.gd:_on_picked().
 						 */
-						switch ( m_operation ) {
+						switch ( m_nOperation ) {
 							case ADD: {
 								const real_t fTarget = .5f + .5f * roughness;
 								dest.a = Math::lerp( ( real_t ) ( src.a ), fTarget, CLAMP( fBrushAlpha * strength, 0.f, 1.f ) );
@@ -1034,7 +1034,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 		t3dBrushParams_t params;
 		params.m_nMapType = ( uint32_t ) ( map_type );
 		params.m_nTool = ( uint32_t ) ( m_tool );
-		params.m_nOperation = ( uint32_t ) ( m_operation );
+		params.m_nOperation = ( uint32_t ) ( m_nOperation );
 		params.m_fStrength = ( float ) ( strength );
 		params.m_fSelectedHeight = ( float ) ( fHeight );
 		params.m_fBrushCenterHeight = ( float ) ( rGlobalPosition.y );
@@ -1169,7 +1169,7 @@ void T3DEditor::storeUndo( void ) {
 
 	// Store regions that were removed or added
 	if ( m_addedRemovedLocations.size() > 0 ) {
-		if ( m_tool == REGION && m_operation == SUBTRACT ) {
+		if ( m_tool == REGION && m_nOperation == SUBTRACT ) {
 			m_undoData["removed_regions"] = m_addedRemovedLocations;
 			redo_data["added_regions"] = m_addedRemovedLocations;
 			LOG( DEBUG, "Removed regions: ", m_addedRemovedLocations );
@@ -1190,8 +1190,8 @@ void T3DEditor::storeUndo( void ) {
 	if ( m_pTerrain->getPlugin()->has_method( "create_undo_action" ) ) {
 		LOG( INFO, "Storing undo snapshot" );
 		String action_name = "Terrain3D Edit";
-		if ( bHasValidTool && m_operation >= 0 && m_operation < OP_MAX ) {
-			action_name = String( "Terrain3D " ) + TERRAIN3D_EDITOR_OPERATION_NAMES[m_operation] + String( " " ) + TERRAIN3D_EDITOR_TOOL_NAMES[m_tool];
+		if ( bHasValidTool && m_nOperation >= 0 && m_nOperation < OP_MAX ) {
+			action_name = String( "Terrain3D " ) + TERRAIN3D_EDITOR_OPERATION_NAMES[m_nOperation] + String( " " ) + TERRAIN3D_EDITOR_TOOL_NAMES[m_tool];
 		}
 		LOG( DEBUG, "Creating undo action: '", action_name, "'" );
 		m_pTerrain->getPlugin()->call( "create_undo_action", action_name );
@@ -1507,7 +1507,7 @@ void T3DEditor::setTool( const t3dTool_t tool ) {
 }
 
 void T3DEditor::setOperation( const t3dOperation_t operation ) {
-	SET_IF_DIFF( m_operation, CLAMP( operation, ( t3dOperation_t ) ( 0 ), OP_MAX ) );
+	SET_IF_DIFF( m_nOperation, CLAMP( operation, ( t3dOperation_t ) ( 0 ), OP_MAX ) );
 }
 
 // Called on mouse click
