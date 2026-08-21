@@ -154,7 +154,7 @@ bool t3dAlignedAllocation_t::allocate( const size_t nRequestedBytes, const size_
 		nRequestedBytes > std::numeric_limits<size_t>::max() - ( nAlignment - 1u ) ) {
 		return false;
 	}
-	pRaw = terrain3d_memory::allocate( nRequestedBytes + nAlignment - 1u );
+	pRaw = t3dMemoryAllocate( nRequestedBytes + nAlignment - 1u );
 	if ( !pRaw ) {
 		return false;
 	}
@@ -168,7 +168,7 @@ bool t3dAlignedAllocation_t::allocate( const size_t nRequestedBytes, const size_
 }
 
 void t3dAlignedAllocation_t::release( void ) {
-	if ( bOwned ) terrain3d_memory::release( pRaw );
+	if ( bOwned ) t3dMemoryRelease( pRaw );
 	pRaw = nullptr;
 	pAligned = nullptr;
 	nBytes = 0u;
@@ -205,7 +205,7 @@ bool T3DResidentRegionPool::allocateSlotsUnlocked( const int nCapacity ) {
 	if ( nCapacity <= 0 || ( size_t ) ( nCapacity ) > std::numeric_limits<size_t>::max() / sizeof( t3dSlot_t ) ) {
 		return false;
 	}
-	m_pSlots = ( t3dSlot_t * ) ( terrain3d_memory::allocate( ( size_t ) ( nCapacity ) * sizeof( t3dSlot_t ) ) );
+	m_pSlots = ( t3dSlot_t * ) ( t3dMemoryAllocate( ( size_t ) ( nCapacity ) * sizeof( t3dSlot_t ) ) );
 	if ( !m_pSlots ) {
 		return false;
 	}
@@ -262,7 +262,7 @@ void T3DResidentRegionPool::releaseSlotsUnlocked( void ) {
 		t3dSlot_t &slot = m_pSlots[( size_t ) ( i )];
 		slot.~t3dSlot_s();
 	}
-	if ( m_bSlotsOwned ) terrain3d_memory::release( m_pSlots );
+	if ( m_bSlotsOwned ) t3dMemoryRelease( m_pSlots );
 	m_pSlots = nullptr;
 	m_bSlotsOwned = false;
 }

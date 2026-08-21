@@ -230,12 +230,12 @@ static float sampleMask(
 	return CLAMP( fValue, 0.0f, 1.0f );
 }
 
-using terrain3d_autoshader_math::angleDistanceDegrees;
-using terrain3d_autoshader_math::fbmNoise;
-using terrain3d_autoshader_math::rangeWeight;
-using terrain3d_autoshader_math::ruleCanProcessPixel;
-using terrain3d_autoshader_math::smoothCurve;
-using terrain3d_autoshader_math::smootherCurve;
+using t3dAutoshaderAngleDistanceDegrees;
+using t3dAutoshaderFbmNoise;
+using t3dAutoshaderRangeWeight;
+using t3dAutoshaderRuleCanProcessPixel;
+using t3dAutoshaderSmoothCurve;
+using t3dAutoshaderSmootherCurve;
 
 static float applyRuleCurve( const t3dRuleConfig_t &rRule, const float fValue ) {
 	const float value = CLAMP( fValue, 0.0f, 1.0f );

@@ -1907,7 +1907,7 @@ void T3DInstancer::fillMultimeshBuffer(
 	float *const pWrite = rBuffer.ptrw();
 	const t3dPackedTransform_t *packed = rCell.transforms.data();
 	const uint32_t *pColors = rCell.colors.empty() ? nullptr : rCell.colors.data();
-	terrain3d_simd::packedTransformsToMultimesh( packed, pColors, transform_count, stride, pWrite );
+	t3dSimdPackedTransformsToMultimesh( packed, pColors, transform_count, stride, pWrite );
 
 	bool bAabbInitialized = false;
 	if ( pSourceMeshAabb && pCellAabb ) {

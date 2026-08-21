@@ -175,9 +175,9 @@ void T3DTerrain::refreshPerformanceProfileConformity( void ) {
 	t3dPerformanceProfileStatus_t next_status = PERFORMANCE_PROFILE_CUSTOM;
 	if ( m_performanceTarget == PERFORMANCE_TARGET_XBOX360_EXPERIMENTAL ) {
 		next_status = PERFORMANCE_PROFILE_EXACT;
-		for ( const terrain_3d_profile::t3dSetting_t &setting : terrain_3d_profile::XBOX360_EXPERIMENTAL_SETTINGS ) {
+		for ( const t3dPerformanceProfileSetting_t &setting : g_szXbox360ExperimentalSettings ) {
 			Object *pOwner = this;
-			if ( setting.owner == terrain_3d_profile::OWNER_MATERIAL ) {
+			if ( setting.owner == T3D_PROFILE_OWNER_MATERIAL ) {
 				if ( m_pMaterial.is_null() ) {
 					next_status = PERFORMANCE_PROFILE_MODIFIED;
 					break;
@@ -205,8 +205,8 @@ void T3DTerrain::onProfileOwnedResourceChanged( void ) {
 }
 
 void T3DTerrain::applyPerformanceProfileToTerrain( void ) {
-	for ( const terrain_3d_profile::t3dSetting_t &setting : terrain_3d_profile::XBOX360_EXPERIMENTAL_SETTINGS ) {
-		if ( setting.owner != terrain_3d_profile::OWNER_TERRAIN ) {
+	for ( const t3dPerformanceProfileSetting_t &setting : g_szXbox360ExperimentalSettings ) {
+		if ( setting.owner != T3D_PROFILE_OWNER_TERRAIN ) {
 			continue;
 		}
 		set( StringName( setting.pszProperty ), t3dPerformanceProfileValue( setting ) );

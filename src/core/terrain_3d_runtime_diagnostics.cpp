@@ -562,7 +562,7 @@ Dictionary T3DTerrain::getRuntimeDiagnostics( const bool bDeep ) const {
 		diagnostics["instance_cache"] = bDeep ? m_pData->getInstanceRegionCacheStats() : m_pData->getInstanceRegionCacheStatsFast();
 		diagnostics["startup_load"] = m_pData->getStartupLoadStats();
 	}
-	diagnostics["persistent_upload"] = T3DUploadBridge::getStats();
+	diagnostics["persistent_upload"] = t3dUploadBridgeGetStats();
 	diagnostics["aggregate"] = getRuntimeProfileAggregate();
 	diagnostics["active_render_pipeline"] = getShaderTierStatsDictionaries();
 	diagnostics["cache_inventory"] = getCacheInventory( bDeep );

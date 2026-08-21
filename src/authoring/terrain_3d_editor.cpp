@@ -78,13 +78,13 @@ Color T3DEditor::readMapPixel(
 	if ( !rEntry.bDirectAccess || !rEntry.pMapBytes ) {
 		const Color raw = rEntry.pMap->get_pixelv( rPixel );
 		return mapType == TYPE_HEIGHT
-			? Color( T3DRegionCodec::readHeightPixel( rEntry.pMap, rPixel ), 0.0f, 0.0f, 1.0f )
+			? Color( t3dRegionCodecReadHeightPixel( rEntry.pMap, rPixel ), 0.0f, 0.0f, 1.0f )
 			: raw;
 	}
 	if ( mapType == TYPE_HEIGHT ) {
 		uint16_t encoded = 0u;
 		std::memcpy( &encoded, rEntry.pMapBytes + iIndex * sizeof( uint16_t ), sizeof( uint16_t ) );
-		return Color( T3DRegionCodec::decodeHeightU16( encoded ), 0.0f, 0.0f, 1.0f );
+		return Color( t3dRegionCodecDecodeHeightU16( encoded ), 0.0f, 0.0f, 1.0f );
 	}
 	if ( mapType == TYPE_CONTROL ) {
 		return Color( asFloat( readU32( rEntry.pMapBytes, iIndex ) ), 0.0f, 0.0f, 1.0f );
@@ -111,14 +111,14 @@ void T3DEditor::writeMapPixel(
 ) {
 	if ( !rEntry.bDirectAccess || !rEntry.pMapBytes ) {
 		if ( mapType == TYPE_HEIGHT ) {
-			T3DRegionCodec::writeHeightPixel( rEntry.pMap, rPixel, clrValue.r );
+			t3dRegionCodecWriteHeightPixel( rEntry.pMap, rPixel, clrValue.r );
 		} else {
 			rEntry.pMap->set_pixelv( rPixel, clrValue );
 		}
 		return;
 	}
 	if ( mapType == TYPE_HEIGHT ) {
-		const uint16_t encoded = T3DRegionCodec::encodeHeightU16( clrValue.r );
+		const uint16_t encoded = t3dRegionCodecEncodeHeightU16( clrValue.r );
 		std::memcpy( rEntry.pMapBytes + iIndex * sizeof( uint16_t ), &encoded, sizeof( uint16_t ) );
 		return;
 	}

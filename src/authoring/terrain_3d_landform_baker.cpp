@@ -359,7 +359,7 @@ static bool validateHeightMap( const Image *pHeight, const int nRegionSize ) {
 	if ( format != Image::FORMAT_R16 && format != Image::FORMAT_RF ) {
 		return false;
 	}
-	const size_t expected_bytes = T3DRegionCodec::expectedHeightByteCount( nRegionSize, format );
+	const size_t expected_bytes = t3dRegionCodecExpectedHeightByteCount( nRegionSize, format );
 	return expected_bytes > 0u && ( size_t ) ( pHeight->get_data().size() ) == expected_bytes;
 }
 
@@ -827,7 +827,7 @@ static void decodeLandformRegions( void *pContext, const size_t nBegin, const si
 		edit.source_values.resize( context->pixel_count );
 		const uint8_t *pHeightRead = edit.height_snapshot.data();
 		for ( size_t index = 0; index < context->pixel_count; ++index ) {
-			const float fValue = T3DRegionCodec::readHeightBytes( pHeightRead, ( int ) ( index ), edit.height_format );
+			const float fValue = t3dRegionCodecReadHeightBytes( pHeightRead, ( int ) ( index ), edit.height_format );
 			if ( !std::isfinite( fValue ) ) {
 				edit.bCalculationValid = false;
 				context->pInvalidSource->store( true, std::memory_order_relaxed );
@@ -1114,7 +1114,7 @@ Dictionary T3DLandformBaker::apply(
 				continue;
 			}
 			if ( height_format == Image::FORMAT_R16 ) {
-				const uint16_t encoded = T3DRegionCodec::encodeHeightU16( fOutput );
+				const uint16_t encoded = t3dRegionCodecEncodeHeightU16( fOutput );
 				std::memcpy( pHeightWrite + index * sizeof( uint16_t ), &encoded, sizeof( uint16_t ) );
 			} else {
 				std::memcpy( pHeightWrite + index * sizeof( float ), &fOutput, sizeof( float ) );

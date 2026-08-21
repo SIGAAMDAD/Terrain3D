@@ -101,7 +101,7 @@ bool T3DMiddleHeightRegionCache::configure( const T3DMiddleHeightRegionCacheConf
 	const int height_side = MAX( 1, ( m_pRepository->getRegionSize() + divisor - 1 ) / divisor );
 	PackedByteArray default_height_bytes;
 	default_height_bytes.resize( ( int64_t ) ( height_side ) * ( int64_t ) ( height_side ) * 2 );
-	const uint16_t default_height = T3DRegionCodec::encodeHeightU16( 0.0f );
+	const uint16_t default_height = t3dRegionCodecEncodeHeightU16( 0.0f );
 	for ( int index = 0; index < height_side * height_side; ++index ) {
 		std::memcpy( default_height_bytes.ptrw() + ( size_t ) ( index ) * 2u, &default_height, sizeof( default_height ) );
 	}

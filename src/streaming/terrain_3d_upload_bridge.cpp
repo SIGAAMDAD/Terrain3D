@@ -23,9 +23,7 @@ Object *getUploadBridge( void ) {
 
 } // namespace
 
-namespace T3DUploadBridge {
-
-bool isAvailable( void ) {
+bool t3dUploadBridgeIsAvailable( void ) {
 	Object *pBridge = getUploadBridge();
 	if ( !pBridge ) {
 		return false;
@@ -34,8 +32,8 @@ bool isAvailable( void ) {
 	return result.get_type() == Variant::BOOL && ( bool ) ( result );
 }
 
-bool uploadTextureLayer( const RID texture, const Ref<Image> &rImage, const int nLayer ) {
-	if ( !texture.is_valid() || rImage.is_null() || rImage->is_empty() || nLayer < 0 ) {
+bool t3dUploadBridgeUploadTextureLayer( const RID hTexture, const Ref<Image> &rImage, const int iLayer ) {
+	if ( !hTexture.is_valid() || rImage.is_null() || rImage->is_empty() || iLayer < 0 ) {
 		return false;
 	}
 	Object *pBridge = getUploadBridge();
@@ -46,11 +44,11 @@ bool uploadTextureLayer( const RID texture, const Ref<Image> &rImage, const int 
 	if ( bytes.is_empty() ) {
 		return false;
 	}
-	const Variant result = pBridge->call( "upload_texture_layer", texture, nLayer, bytes );
+	const Variant result = pBridge->call( "upload_texture_layer", hTexture, iLayer, bytes );
 	return result.get_type() == Variant::BOOL && ( bool ) ( result );
 }
 
-RID createPersistentStorageBuffer( const uint32_t nSizeBytes ) {
+RID t3dUploadBridgeCreatePersistentStorageBuffer( const uint32_t nSizeBytes ) {
 	if ( nSizeBytes == 0u ) {
 		return RID();
 	}
@@ -65,7 +63,7 @@ RID createPersistentStorageBuffer( const uint32_t nSizeBytes ) {
 	return RID( result );
 }
 
-Dictionary getStats( void ) {
+Dictionary t3dUploadBridgeGetStats( void ) {
 	Object *pBridge = getUploadBridge();
 	if ( !pBridge ) {
 		return Dictionary();
@@ -76,5 +74,3 @@ Dictionary getStats( void ) {
 	}
 	return Dictionary( result );
 }
-
-} // namespace T3DUploadBridge

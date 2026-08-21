@@ -25,47 +25,45 @@ using namespace godot;
 // Height is stored as R16_UNORM rather than IEEE-754 half float. Half float has
 // only a 10-bit mantissa and steps of roughly 0.25-0.5 m at the game's expected
 // absolute heights. R16_UNORM over this fixed range retains ~1.76 cm precision.
-namespace T3DRegionCodec {
+EA_FORCE_INLINE float t3dRegionCodecEncodeHeightNormalized( const float fHeight ) { return CLAMP( ( fHeight - TERRAIN3D_REGION_HEIGHT_MIN ) * TERRAIN3D_REGION_HEIGHT_INV_RANGE, 0.0f, 1.0f ); }
 
-EA_FORCE_INLINE float encodeHeightNormalized( const float fHeight ) { return CLAMP( ( fHeight - TERRAIN3D_REGION_HEIGHT_MIN ) * TERRAIN3D_REGION_HEIGHT_INV_RANGE, 0.0f, 1.0f ); }
+EA_FORCE_INLINE float t3dRegionCodecDecodeHeightNormalized( const float fNormalized ) { return TERRAIN3D_REGION_HEIGHT_MIN + CLAMP( fNormalized, 0.0f, 1.0f ) * TERRAIN3D_REGION_HEIGHT_RANGE; }
 
-EA_FORCE_INLINE float decodeHeightNormalized( const float fNormalized ) { return TERRAIN3D_REGION_HEIGHT_MIN + CLAMP( fNormalized, 0.0f, 1.0f ) * TERRAIN3D_REGION_HEIGHT_RANGE; }
+EA_FORCE_INLINE uint16_t t3dRegionCodecEncodeHeightU16( const float fHeight ) { return ( uint16_t ) ( CLAMP( Math::round( t3dRegionCodecEncodeHeightNormalized( fHeight ) * TERRAIN3D_REGION_HEIGHT_U16_SCALE ), 0.0f, TERRAIN3D_REGION_HEIGHT_U16_SCALE ) ); }
 
-EA_FORCE_INLINE uint16_t encodeHeightU16( const float fHeight ) { return ( uint16_t ) ( CLAMP( Math::round( encodeHeightNormalized( fHeight ) * TERRAIN3D_REGION_HEIGHT_U16_SCALE ), 0.0f, TERRAIN3D_REGION_HEIGHT_U16_SCALE ) ); }
+EA_FORCE_INLINE float t3dRegionCodecDecodeHeightU16( const uint16_t nValue ) { return TERRAIN3D_REGION_HEIGHT_MIN + ( ( float ) ( nValue ) / TERRAIN3D_REGION_HEIGHT_U16_SCALE ) * TERRAIN3D_REGION_HEIGHT_RANGE; }
 
-EA_FORCE_INLINE float decodeHeightU16( const uint16_t nValue ) { return TERRAIN3D_REGION_HEIGHT_MIN + ( ( float ) ( nValue ) / TERRAIN3D_REGION_HEIGHT_U16_SCALE ) * TERRAIN3D_REGION_HEIGHT_RANGE; }
-
-inline float readHeightPixel( const Image *pImage, const Vector2i &rPosition ) {
+inline float t3dRegionCodecReadHeightPixel( const Image *pImage, const Vector2i &rPosition ) {
 	if ( !pImage ) {
 		return NAN;
 	}
 	const float fValue = pImage->get_pixelv( rPosition ).r;
-	return pImage->get_format() == Image::FORMAT_R16 ? decodeHeightNormalized( fValue ) : fValue;
+	return pImage->get_format() == Image::FORMAT_R16 ? t3dRegionCodecDecodeHeightNormalized( fValue ) : fValue;
 }
 
-inline void writeHeightPixel( Image *pImage, const Vector2i &rPosition, const float fHeight ) {
+inline void t3dRegionCodecWriteHeightPixel( Image *pImage, const Vector2i &rPosition, const float fHeight ) {
 	if ( !pImage ) {
 		return;
 	}
-	const float fValue = pImage->get_format() == Image::FORMAT_R16 ? encodeHeightNormalized( fHeight ) : fHeight;
+	const float fValue = pImage->get_format() == Image::FORMAT_R16 ? t3dRegionCodecEncodeHeightNormalized( fHeight ) : fHeight;
 	pImage->set_pixelv( rPosition, Color( fValue, 0.0f, 0.0f, 1.0f ) );
 }
 
-inline float readHeightBytes( const uint8_t *pBytes, const int iIndex, const Image::Format format ) {
+inline float t3dRegionCodecReadHeightBytes( const uint8_t *pBytes, const int iIndex, const Image::Format format ) {
 	if ( !pBytes || iIndex < 0 ) {
 		return NAN;
 	}
 	if ( format == Image::FORMAT_R16 ) {
 		uint16_t fValue = 0u;
 		std::memcpy( &fValue, pBytes + ( size_t ) ( iIndex ) * sizeof( uint16_t ), sizeof( uint16_t ) );
-		return decodeHeightU16( fValue );
+		return t3dRegionCodecDecodeHeightU16( fValue );
 	}
 	float fValue = NAN;
 	std::memcpy( &fValue, pBytes + ( size_t ) ( iIndex ) * sizeof( float ), sizeof( float ) );
 	return fValue;
 }
 
-inline size_t expectedHeightByteCount( const int nSize, const Image::Format format ) {
+inline size_t t3dRegionCodecExpectedHeightByteCount( const int nSize, const Image::Format format ) {
 	if ( nSize <= 0 ) {
 		return 0u;
 	}
@@ -80,18 +78,18 @@ inline size_t expectedHeightByteCount( const int nSize, const Image::Format form
 	}
 }
 
-inline bool hasValidHeightPayload( const Ref<Image> &rImage, const int nSize ) {
+inline bool t3dRegionCodecHasValidHeightPayload( const Ref<Image> &rImage, const int nSize ) {
 	if ( rImage.is_null() || nSize <= 0 || rImage->get_width() != nSize || rImage->get_height() != nSize ) {
 		return false;
 	}
-	const size_t expected = expectedHeightByteCount( nSize, rImage->get_format() );
+	const size_t expected = t3dRegionCodecExpectedHeightByteCount( nSize, rImage->get_format() );
 	return expected == 0u || ( size_t ) ( rImage->get_data().size() ) == expected;
 }
 
 // Converts legacy RF32 height storage directly from its byte plane into the
 // authoritative R16_UNORM representation. The function never reads beyond the
 // source payload and reports values that could not be represented exactly.
-inline Ref<Image> convertHeightToR16(
+inline Ref<Image> t3dRegionCodecConvertHeightToR16(
 	const Ref<Image> &rSource, const int nSize, uint32_t &nClampedCount,
 	uint32_t &nNonFiniteCount
 ) {
@@ -102,7 +100,7 @@ inline Ref<Image> convertHeightToR16(
 	}
 	if ( rSource.is_valid() && rSource->get_width() == nSize && rSource->get_height() == nSize &&
 		rSource->get_format() == Image::FORMAT_R16 ) {
-		return hasValidHeightPayload( rSource, nSize ) ? rSource : Ref<Image>();
+		return t3dRegionCodecHasValidHeightPayload( rSource, nSize ) ? rSource : Ref<Image>();
 	}
 	Ref<Image> pReadableSource = rSource;
 	if ( pReadableSource.is_valid() && pReadableSource->is_compressed() ) {
@@ -119,7 +117,7 @@ inline Ref<Image> convertHeightToR16(
 
 	const bool bDirectRf32 = pReadableSource.is_valid() && pReadableSource->get_width() == nSize &&
 		pReadableSource->get_height() == nSize && pReadableSource->get_format() == Image::FORMAT_RF &&
-		hasValidHeightPayload( pReadableSource, nSize );
+		t3dRegionCodecHasValidHeightPayload( pReadableSource, nSize );
 	PackedByteArray source_bytes;
 	const uint8_t *pRead = nullptr;
 	if ( bDirectRf32 ) {
@@ -147,15 +145,15 @@ inline Ref<Image> convertHeightToR16(
 			++nClampedCount;
 		}
 
-		const uint16_t encoded = encodeHeightU16( fHeight );
+		const uint16_t encoded = t3dRegionCodecEncodeHeightU16( fHeight );
 		std::memcpy( pWrite + index * sizeof( uint16_t ), &encoded, sizeof( uint16_t ) );
 	}
 	return Image::create_from_data( nSize, nSize, false, Image::FORMAT_R16, output );
 }
 
-EA_FORCE_INLINE Ref<Image> convertHeightToR16( const Ref<Image> &rSource, const int nSize ) { uint32_t clamped_count = 0u; uint32_t non_finite_count = 0u; return convertHeightToR16( rSource, nSize, clamped_count, non_finite_count ); }
+EA_FORCE_INLINE Ref<Image> t3dRegionCodecConvertHeightToR16( const Ref<Image> &rSource, const int nSize ) { uint32_t clamped_count = 0u; uint32_t non_finite_count = 0u; return t3dRegionCodecConvertHeightToR16( rSource, nSize, clamped_count, non_finite_count ); }
 
-inline Vector2 getHeightMinMax( const Ref<Image> &rImage ) {
+inline Vector2 t3dRegionCodecGetHeightMinMax( const Ref<Image> &rImage ) {
 	if ( rImage.is_null() || rImage->is_empty() ) {
 		return V2_ZERO;
 	}
@@ -165,7 +163,7 @@ inline Vector2 getHeightMinMax( const Ref<Image> &rImage ) {
 	const int height = rImage->get_height();
 	for ( int y = 0; y < height; ++y ) {
 		for ( int x = 0; x < width; ++x ) {
-			const float fValue = readHeightPixel( *rImage, Vector2i( x, y ) );
+			const float fValue = t3dRegionCodecReadHeightPixel( *rImage, Vector2i( x, y ) );
 			if ( std::isfinite( fValue ) ) {
 				fMinimum = MIN( fMinimum, fValue );
 				fMaximum = MAX( fMaximum, fValue );
@@ -175,8 +173,7 @@ inline Vector2 getHeightMinMax( const Ref<Image> &rImage ) {
 	return std::isfinite( fMinimum ) && std::isfinite( fMaximum ) ? Vector2( fMinimum, fMaximum ) : V2_ZERO;
 }
 
-EA_FORCE_INLINE Color defaultHeightColor( void ) { return Color( encodeHeightNormalized( 0.0f ), 0.0f, 0.0f, 1.0f ); }
+EA_FORCE_INLINE Color t3dRegionCodecDefaultHeightColor( void ) { return Color( t3dRegionCodecEncodeHeightNormalized( 0.0f ), 0.0f, 0.0f, 1.0f ); }
 
-} // namespace T3DRegionCodec
 
 #endif // TERRAIN3D_REGION_CODEC_H

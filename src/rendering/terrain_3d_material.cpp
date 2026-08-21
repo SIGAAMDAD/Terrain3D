@@ -409,8 +409,8 @@ t3dShaderVariantState_t T3DMaterial::captureVariantState( void ) const {
 }
 
 void T3DMaterial::applyXboxProfileManifestToState( t3dShaderVariantState_t &rState ) const {
-	for ( const terrain_3d_profile::t3dSetting_t &setting : terrain_3d_profile::XBOX360_EXPERIMENTAL_SETTINGS ) {
-		if ( setting.owner != terrain_3d_profile::OWNER_MATERIAL ) {
+	for ( const t3dPerformanceProfileSetting_t &setting : g_szXbox360ExperimentalSettings ) {
+		if ( setting.owner != T3D_PROFILE_OWNER_MATERIAL ) {
 			continue;
 		}
 		const char *property = setting.pszProperty;
@@ -441,8 +441,8 @@ void T3DMaterial::applyXboxProfileManifestToState( t3dShaderVariantState_t &rSta
 }
 
 void T3DMaterial::applyXboxProfileManifestToTiers( void ) {
-	for ( const terrain_3d_profile::t3dSetting_t &setting : terrain_3d_profile::XBOX360_EXPERIMENTAL_SETTINGS ) {
-		if ( setting.owner != terrain_3d_profile::OWNER_MATERIAL ) {
+	for ( const t3dPerformanceProfileSetting_t &setting : g_szXbox360ExperimentalSettings ) {
+		if ( setting.owner != T3D_PROFILE_OWNER_MATERIAL ) {
 			continue;
 		}
 		t3dTierQualityConfig_t *pQuality = nullptr;
@@ -3075,7 +3075,7 @@ void T3DMaterial::setShaderParameters( const Dictionary &rDict ) {
 // uninitialized materials.
 void T3DMaterial::initialize( T3DTerrain *pTerrain ) {
 	if ( pTerrain ) {
-		T3DTerrain *previous_owner = T3DOwnership::transfer( m_pTerrain, pTerrain );
+		T3DTerrain *previous_owner = t3dTransferOwner( m_pTerrain, pTerrain );
 		if ( previous_owner != pTerrain ) {
 			invalidateRegionPageTables();
 		}
@@ -3127,7 +3127,7 @@ void T3DMaterial::initialize( T3DTerrain *pTerrain ) {
 		// Far atlases are sampler2D, not sampler2DArray. Binding the layered
 		// dummy to them causes GL_INVALID_OPERATION on the compatibility renderer
 		// and repeated driver validation work during material updates.
-			const uint16_t encoded_zero_height = T3DRegionCodec::encodeHeightU16( 0.0f );
+			const uint16_t encoded_zero_height = t3dRegionCodecEncodeHeightU16( 0.0f );
 			PackedByteArray far_height_bytes;
 			far_height_bytes.resize( 2 );
 			std::memcpy( far_height_bytes.ptrw(), &encoded_zero_height, sizeof( encoded_zero_height ) );
@@ -3152,7 +3152,7 @@ void T3DMaterial::initialize( T3DTerrain *pTerrain ) {
 }
 
 void T3DMaterial::uninitialize( T3DTerrain *pTerrain ) {
-	if ( !T3DOwnership::release( m_pTerrain, pTerrain ) ) {
+	if ( !t3dReleaseOwner( m_pTerrain, pTerrain ) ) {
 		LOG( DEBUG, "Ignoring stale material uninitialize request from ", pTerrain, "; current owner: ", m_pTerrain );
 		return;
 	}

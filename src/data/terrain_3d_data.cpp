@@ -285,7 +285,7 @@ void T3DData::ensureDefaultMaps( void ) {
 		return;
 	}
 	if ( m_pDefaultHeightMap.is_null() || m_pDefaultHeightMap->get_width() != m_regionRepository.getRegionSize() ) {
-		m_pDefaultHeightMap = T3DUtil::getFilledImage( m_regionRepository.getRegionSizeVector(), T3DRegionCodec::defaultHeightColor(), false,
+		m_pDefaultHeightMap = T3DUtil::getFilledImage( m_regionRepository.getRegionSizeVector(), t3dRegionCodecDefaultHeightColor(), false,
 									 Image::FORMAT_R16 );
 	}
 	if ( m_pDefaultControlMap.is_null() || m_pDefaultControlMap->get_width() != m_regionRepository.getRegionSize() ) {
@@ -3762,7 +3762,7 @@ Color T3DData::getPixel( const t3dMapType_t eMapType, const Vector3 &rGlobalPosi
 		const int index = img_pos.y * m_regionRepository.getRegionSize() + img_pos.x;
 		switch ( eMapType ) {
 				case TYPE_HEIGHT:
-				return Color( T3DRegionCodec::decodeHeightU16( view.pHeight[index] ), 0.0f, 0.0f, 1.0f );
+				return Color( t3dRegionCodecDecodeHeightU16( view.pHeight[index] ), 0.0f, 0.0f, 1.0f );
 			default:
 				break;
 		}
@@ -3778,7 +3778,7 @@ Color T3DData::getPixel( const t3dMapType_t eMapType, const Vector3 &rGlobalPosi
 		return COLOR_NAN;
 	}
 	if ( eMapType == TYPE_HEIGHT ) {
-		return Color( T3DRegionCodec::readHeightPixel( pMap, img_pos ), 0.0f, 0.0f, 1.0f );
+		return Color( t3dRegionCodecReadHeightPixel( pMap, img_pos ), 0.0f, 0.0f, 1.0f );
 	}
 	return pMap->get_pixelv( img_pos );
 }

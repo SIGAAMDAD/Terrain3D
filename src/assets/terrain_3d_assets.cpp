@@ -1772,7 +1772,7 @@ void T3DAssets::setTexturePackingMode( const t3dTexturePackingMode_t eMode ) {
 
 void T3DAssets::initialize( T3DTerrain *pTerrain ) {
 	if ( pTerrain ) {
-		T3DTerrain *previous_owner = T3DOwnership::transfer( m_pTerrain, pTerrain );
+		T3DTerrain *previous_owner = t3dTransferOwner( m_pTerrain, pTerrain );
 		if ( previous_owner && previous_owner != pTerrain ) {
 			LOG( INFO, "Transferring asset runtime ownership from ", previous_owner, " to ", pTerrain );
 		}
@@ -1812,7 +1812,7 @@ void T3DAssets::initialize( T3DTerrain *pTerrain ) {
 }
 
 void T3DAssets::uninitialize( T3DTerrain *pTerrain ) {
-	if ( !T3DOwnership::release( m_pTerrain, pTerrain ) ) {
+	if ( !t3dReleaseOwner( m_pTerrain, pTerrain ) ) {
 		LOG( DEBUG, "Ignoring stale asset uninitialize request from ", pTerrain, "; current owner: ", m_pTerrain );
 		return;
 	}

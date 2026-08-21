@@ -88,7 +88,7 @@ public:
 			return false;
 		}
 
-		m_pRaw = terrain3d_memory::allocate( nBytes + nBaseAlignment - 1u );
+		m_pRaw = t3dMemoryAllocate( nBytes + nBaseAlignment - 1u );
 		if ( !m_pRaw ) {
 			return false;
 		}
@@ -106,7 +106,7 @@ public:
 	}
 
 	void release( void ) {
-		if ( m_pRaw ) terrain3d_memory::release( m_pRaw );
+		if ( m_pRaw ) t3dMemoryRelease( m_pRaw );
 		m_pRaw = nullptr;
 		m_pBase = nullptr;
 		m_nCapacity = 0u;

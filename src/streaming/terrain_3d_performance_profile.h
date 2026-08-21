@@ -11,60 +11,57 @@
 #include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
 
-namespace terrain_3d_profile {
+EA_FORCE_INLINE constexpr size_t t3dPerformanceProfileSettingCount( void ) { return g_nXbox360ExperimentalSettingCount; }
 
-EA_FORCE_INLINE constexpr size_t settingCount( void ) { return XBOX360_EXPERIMENTAL_SETTING_COUNT; }
+EA_FORCE_INLINE void t3dPerformanceProfileSignatureAppendByte( uint64_t &nHash, const uint8_t nByte ) { nHash ^= ( uint64_t ) ( nByte ); nHash *= TERRAIN3D_PROFILE_FNV_PRIME; }
 
-EA_FORCE_INLINE void signatureAppendByte( uint64_t &nHash, const uint8_t nByte ) { nHash ^= ( uint64_t ) ( nByte ); nHash *= TERRAIN3D_PROFILE_FNV_PRIME; }
-
-inline void signatureAppendUint32( uint64_t &nHash, const uint32_t nValue ) {
+inline void t3dPerformanceProfileSignatureAppendUint32( uint64_t &nHash, const uint32_t nValue ) {
 	for ( uint32_t shift = 0u; shift < 32u; shift += 8u ) {
-		signatureAppendByte( nHash, ( uint8_t ) ( ( nValue >> shift ) & 0xffu ) );
+		t3dPerformanceProfileSignatureAppendByte( nHash, ( uint8_t ) ( ( nValue >> shift ) & 0xffu ) );
 	}
 }
 
-inline void signatureAppendUint64( uint64_t &nHash, const uint64_t nValue ) {
+inline void t3dPerformanceProfileSignatureAppendUint64( uint64_t &nHash, const uint64_t nValue ) {
 	for ( uint32_t shift = 0u; shift < 64u; shift += 8u ) {
-		signatureAppendByte( nHash, ( uint8_t ) ( ( nValue >> shift ) & 0xffu ) );
+		t3dPerformanceProfileSignatureAppendByte( nHash, ( uint8_t ) ( ( nValue >> shift ) & 0xffu ) );
 	}
 }
 
-inline void signatureAppendString( uint64_t &nHash, const char *pszString ) {
+inline void t3dPerformanceProfileSignatureAppendString( uint64_t &nHash, const char *pszString ) {
 	for ( const char *pszCharacter = pszString; *pszCharacter != '\0'; ++pszCharacter ) {
-		signatureAppendByte( nHash, ( uint8_t ) ( *pszCharacter ) );
+		t3dPerformanceProfileSignatureAppendByte( nHash, ( uint8_t ) ( *pszCharacter ) );
 	}
-	signatureAppendByte( nHash, 0u );
+	t3dPerformanceProfileSignatureAppendByte( nHash, 0u );
 }
 
-inline uint64_t computeSignature( void ) {
+inline uint64_t t3dPerformanceProfileComputeSignature( void ) {
 	uint64_t nHash = TERRAIN3D_PROFILE_FNV_OFFSET;
-	signatureAppendUint32( nHash, TERRAIN3D_PROFILE_VERSION );
-	signatureAppendString( nHash, TERRAIN3D_PROFILE_KEY );
-	for ( const t3dSetting_t &setting : XBOX360_EXPERIMENTAL_SETTINGS ) {
-		signatureAppendByte( nHash, ( uint8_t ) ( setting.owner ) );
-		signatureAppendByte( nHash, ( uint8_t ) ( setting.kind ) );
-		signatureAppendString( nHash, setting.pszProperty );
+	t3dPerformanceProfileSignatureAppendUint32( nHash, TERRAIN3D_PROFILE_VERSION );
+	t3dPerformanceProfileSignatureAppendString( nHash, TERRAIN3D_PROFILE_KEY );
+	for ( const t3dPerformanceProfileSetting_t &setting : g_szXbox360ExperimentalSettings ) {
+		t3dPerformanceProfileSignatureAppendByte( nHash, ( uint8_t ) ( setting.owner ) );
+		t3dPerformanceProfileSignatureAppendByte( nHash, ( uint8_t ) ( setting.kind ) );
+		t3dPerformanceProfileSignatureAppendString( nHash, setting.pszProperty );
 		switch ( setting.kind ) {
-			case VALUE_INT:
-				signatureAppendUint64( nHash, ( uint64_t ) ( setting.intValue ) );
+			case T3D_PROFILE_VALUE_INT:
+				t3dPerformanceProfileSignatureAppendUint64( nHash, ( uint64_t ) ( setting.intValue ) );
 				break;
-			case VALUE_FLOAT: {
+			case T3D_PROFILE_VALUE_FLOAT: {
 				uint64_t bits = 0u;
-				static_assert( sizeof( bits ) == sizeof( setting.fFloatValue ), "profile float signature size mismatch" );
+				static_assert( sizeof( bits ) == sizeof( setting.fFloatValue ), "profile float t3dPerformanceProfileSignature size mismatch" );
 				std::memcpy( &bits, &setting.fFloatValue, sizeof( bits ) );
-				signatureAppendUint64( nHash, bits );
+				t3dPerformanceProfileSignatureAppendUint64( nHash, bits );
 				break;
 			}
-			case VALUE_BOOL:
-				signatureAppendByte( nHash, setting.bBoolValue ? 1u : 0u );
+			case T3D_PROFILE_VALUE_BOOL:
+				t3dPerformanceProfileSignatureAppendByte( nHash, setting.bBoolValue ? 1u : 0u );
 				break;
 		}
 	}
 	return nHash;
 }
 
-EA_FORCE_INLINE uint64_t signature( void ) { static const uint64_t s_nCachedSignature = computeSignature(); return s_nCachedSignature; }
+EA_FORCE_INLINE uint64_t t3dPerformanceProfileSignature( void ) { static const uint64_t s_nCachedSignature = t3dPerformanceProfileComputeSignature(); return s_nCachedSignature; }
 
-} // namespace terrain_3d_profile
 
 #endif // TERRAIN_3D_PERFORMANCE_PROFILE_H

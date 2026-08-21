@@ -116,7 +116,7 @@ bool T3DMemoryArena::initialize( const T3DMemoryArenaLayout &rLayout ) {
 		release();
 		return false;
 	}
-	m_pRaw = terrain3d_memory::allocate( m_nCapacity + m_nBaseAlignment - 1u );
+	m_pRaw = t3dMemoryAllocate( m_nCapacity + m_nBaseAlignment - 1u );
 	if ( !m_pRaw ) {
 		release();
 		return false;
@@ -148,7 +148,7 @@ bool T3DMemoryArena::seal( void ) {
 }
 
 void T3DMemoryArena::release( void ) {
-	terrain3d_memory::release( m_pRaw );
+	t3dMemoryRelease( m_pRaw );
 	m_pRaw = nullptr;
 	m_pBase = nullptr;
 	m_nCapacity = 0u;

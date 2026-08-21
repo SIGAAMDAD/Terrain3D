@@ -31,33 +31,33 @@ static inline void t3dAppendRuntimeProblem( Array &rProblems, const String &rSev
 	rProblems.push_back( problem );
 }
 
-static inline Variant t3dPerformanceProfileValue( const terrain_3d_profile::t3dSetting_t &rSetting ) {
+static inline Variant t3dPerformanceProfileValue( const t3dPerformanceProfileSetting_t &rSetting ) {
 	switch ( rSetting.kind ) {
-		case terrain_3d_profile::VALUE_INT:
+		case T3D_PROFILE_VALUE_INT:
 			return ( int64_t ) ( rSetting.intValue );
-		case terrain_3d_profile::VALUE_FLOAT:
+		case T3D_PROFILE_VALUE_FLOAT:
 			return rSetting.fFloatValue;
-		case terrain_3d_profile::VALUE_BOOL:
+		case T3D_PROFILE_VALUE_BOOL:
 			return rSetting.bBoolValue;
 	}
 	return Variant();
 }
 
 static inline bool t3dPerformanceProfileValueMatches( const Variant &rCurrent,
-		const terrain_3d_profile::t3dSetting_t &rSetting ) {
+		const t3dPerformanceProfileSetting_t &rSetting ) {
 	switch ( rSetting.kind ) {
-		case terrain_3d_profile::VALUE_INT:
+		case T3D_PROFILE_VALUE_INT:
 			return ( int64_t ) ( rCurrent ) == rSetting.intValue;
-		case terrain_3d_profile::VALUE_FLOAT:
+		case T3D_PROFILE_VALUE_FLOAT:
 			return Math::is_equal_approx( ( double ) ( rCurrent ), rSetting.fFloatValue );
-		case terrain_3d_profile::VALUE_BOOL:
+		case T3D_PROFILE_VALUE_BOOL:
 			return ( bool ) ( rCurrent ) == rSetting.bBoolValue;
 	}
 	return false;
 }
 
-static inline String t3dPerformanceProfileOwnerName( const terrain_3d_profile::t3dOwner_t owner ) {
-	return owner == terrain_3d_profile::OWNER_MATERIAL ? "T3DMaterial" : "T3DTerrain";
+static inline String t3dPerformanceProfileOwnerName( const t3dPerformanceProfileOwner_t owner ) {
+	return owner == T3D_PROFILE_OWNER_MATERIAL ? "T3DMaterial" : "T3DTerrain";
 }
 
 #define TERRAIN3D_ALIGN_BAKE_TASK_OFFSET( value ) \

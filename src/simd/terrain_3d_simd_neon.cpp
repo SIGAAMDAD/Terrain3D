@@ -16,12 +16,8 @@
 #include <algorithm>
 #include <cmath>
 
-namespace terrain3d_simd::detail {
-
 #if TERRAIN3D_COMPILED_NEON
-namespace {
-
-inline float32x4_t decode4Exact( const uint16_t *pSource ) {
+static inline float32x4_t t3dSimdNeonDecode4Exact( const uint16_t *pSource ) {
 	const uint16x4_t packed = vld1_u16( pSource );
 	const uint32x4_t half32 = vmovl_u16( packed );
 	const uint32x4_t exponent = vandq_u32( half32, vdupq_n_u32( 0x7c00u ) );
@@ -32,7 +28,7 @@ inline float32x4_t decode4Exact( const uint16_t *pSource ) {
 	if ( ( special_lanes[0] | special_lanes[1] | special_lanes[2] | special_lanes[3] ) != 0u ) {
 		alignas( 16 ) float fValues[4];
 		for ( int lane = 0; lane < 4; ++lane ) {
-			fValues[lane] = terrain3d_half::decode( pSource[lane] );
+			fValues[lane] = t3dHalfDecode( pSource[lane] );
 		}
 		return vld1q_f32( fValues );
 	}
@@ -42,7 +38,7 @@ inline float32x4_t decode4Exact( const uint16_t *pSource ) {
 	return vreinterpretq_f32_u32( bits );
 }
 
-inline float32x4_t reciprocalSqrt( const float32x4_t value ) {
+static inline float32x4_t t3dSimdNeonReciprocalSqrt( const float32x4_t value ) {
 #if defined( __aarch64__ ) || defined( _M_ARM64 )
 	return vdivq_f32( vdupq_n_f32( 1.0f ), vsqrtq_f32( value ) );
 #else
@@ -53,7 +49,7 @@ inline float32x4_t reciprocalSqrt( const float32x4_t value ) {
 #endif
 }
 
-inline void encodeNormal4( const float32x4_t argX, const float32x4_t argZ, uint8_t *pDestination ) {
+static inline void t3dSimdNeonEncodeNormal4( const float32x4_t argX, const float32x4_t argZ, uint8_t *pDestination ) {
 	const float32x4_t scale = vdupq_n_f32( TERRAIN3D_BYTE_MIDPOINT_FLOAT );
 	const float32x4_t half = vdupq_n_f32( 0.5f );
 	const float32x4_t zero = vdupq_n_f32( 0.0f );
@@ -72,7 +68,7 @@ inline void encodeNormal4( const float32x4_t argX, const float32x4_t argZ, uint8
 	}
 }
 
-inline void scalarNormalPixel(
+static inline void t3dSimdNeonScalarNormalPixel(
 	const float *pCenterRow, const float *pDownRow, const int iX,
 	const float fSpacing, uint8_t *pDestination
 ) {
@@ -84,28 +80,27 @@ inline void scalarNormalPixel(
 	pDestination[1] = ( uint8_t ) ( std::floor( std::max( 0.0f, std::min( TERRAIN3D_BYTE_MAX_FLOAT, ( fDz * fInverse + 1.0f ) * TERRAIN3D_BYTE_MIDPOINT_FLOAT ) ) + 0.5f ) );
 }
 
-} // namespace
 #endif
 
-bool neonBackendAvailableAtBuild( void ) {
+bool t3dSimdNeonBackendAvailableAtBuild( void ) {
 	return TERRAIN3D_COMPILED_NEON != 0;
 }
 
-void neonHalfToFloat( const uint16_t *pSource, float *pDestination, const size_t nCount ) {
+void t3dSimdNeonHalfToFloat( const uint16_t *pSource, float *pDestination, const size_t nCount ) {
 #if TERRAIN3D_COMPILED_NEON
 	size_t index = 0u;
 	for ( ; nCount - index >= 4u; index += 4u ) {
-		vst1q_f32( pDestination + index, decode4Exact( pSource + index ) );
+		vst1q_f32( pDestination + index, t3dSimdNeonDecode4Exact( pSource + index ) );
 	}
 	for ( ; index < nCount; ++index ) {
-		pDestination[index] = terrain3d_half::decode( pSource[index] );
+		pDestination[index] = t3dHalfDecode( pSource[index] );
 	}
 #else
-	scalarHalfToFloat( pSource, pDestination, nCount );
+	t3dSimdScalarHalfToFloat( pSource, pDestination, nCount );
 #endif
 }
 
-void neonPackedTransforms(
+void t3dSimdNeonPackedTransforms(
 	const t3dPackedTransform_t *pTransforms, const uint32_t *pColors,
 	const size_t nCount, const int nStride, float *pDestination
 ) {
@@ -114,8 +109,8 @@ void neonPackedTransforms(
 		const t3dPackedTransform_t &t = pTransforms[i];
 		float *pOut = pDestination + i * ( size_t ) ( nStride );
 		alignas( 16 ) float fBasis[8];
-		vst1q_f32( fBasis, decode4Exact( t.basis ) );
-		vst1q_f32( fBasis + 4, decode4Exact( t.basis + 4 ) );
+		vst1q_f32( fBasis, t3dSimdNeonDecode4Exact( t.basis ) );
+		vst1q_f32( fBasis + 4, t3dSimdNeonDecode4Exact( t.basis + 4 ) );
 		pOut[0] = fBasis[0];
 		pOut[1] = fBasis[1];
 		pOut[2] = fBasis[2];
@@ -126,7 +121,7 @@ void neonPackedTransforms(
 		pOut[7] = t.origin[1];
 		pOut[8] = fBasis[6];
 		pOut[9] = fBasis[7];
-		pOut[10] = terrain3d_half::decode( t.basis[8] );
+		pOut[10] = t3dHalfDecode( t.basis[8] );
 		pOut[11] = t.origin[2];
 		if ( nStride == 16 ) {
 			const uint32_t color = pColors ? pColors[i] : 0xffffffffu;
@@ -137,11 +132,11 @@ void neonPackedTransforms(
 		}
 	}
 #else
-	scalarPackedTransforms( pTransforms, pColors, nCount, nStride, pDestination );
+	t3dSimdScalarPackedTransforms( pTransforms, pColors, nCount, nStride, pDestination );
 #endif
 }
 
-void neonDerivedNormals(
+void t3dSimdNeonDerivedNormals(
 	const float *pHalo, const int nWidth, const int nHeight, const int nHaloStride,
 	const float fSpacing, uint8_t *pDestination
 ) {
@@ -158,20 +153,20 @@ void neonDerivedNormals(
 			const float32x4_t dz = vsubq_f32( center, vld1q_f32( pDownRow + x ) );
 			const float32x4_t length_sq = vaddq_f32( spacing_sq,
 				vaddq_f32( vmulq_f32( dx, dx ), vmulq_f32( dz, dz ) ) );
-			const float32x4_t inverse = reciprocalSqrt( length_sq );
-			encodeNormal4( vmulq_f32( dx, inverse ), vmulq_f32( dz, inverse ), pOut + ( size_t ) ( x ) * 2u );
+			const float32x4_t inverse = t3dSimdNeonReciprocalSqrt( length_sq );
+			t3dSimdNeonEncodeNormal4( vmulq_f32( dx, inverse ), vmulq_f32( dz, inverse ), pOut + ( size_t ) ( x ) * 2u );
 		}
 		for ( ; x < nWidth; ++x ) {
-			scalarNormalPixel( pCenterRow, pDownRow, x, fSpacing, pOut + ( size_t ) ( x ) * 2u );
+			t3dSimdNeonScalarNormalPixel( pCenterRow, pDownRow, x, fSpacing, pOut + ( size_t ) ( x ) * 2u );
 		}
 	}
 #else
-	scalarDerivedNormals( pHalo, nWidth, nHeight, nHaloStride, fSpacing, pDestination );
+	t3dSimdScalarDerivedNormals( pHalo, nWidth, nHeight, nHaloStride, fSpacing, pDestination );
 #endif
 }
 
 
-void neonUpdateCumulativeErosion(
+void t3dSimdNeonUpdateCumulativeErosion(
 	const uint8_t *pActive, const float *pInitialHeight, const float *pHeight,
 	float *pCumulativeErosion, const size_t nCount
 ) {
@@ -195,11 +190,9 @@ void neonUpdateCumulativeErosion(
 				vbslq_f32( mask, updated, current ) );
 		}
 	}
-	scalarUpdateCumulativeErosion( pActive + index, pInitialHeight + index, pHeight + index,
+	t3dSimdScalarUpdateCumulativeErosion( pActive + index, pInitialHeight + index, pHeight + index,
 		pCumulativeErosion + index, nCount - index );
 #else
-	scalarUpdateCumulativeErosion( pActive, pInitialHeight, pHeight, pCumulativeErosion, nCount );
+	t3dSimdScalarUpdateCumulativeErosion( pActive, pInitialHeight, pHeight, pCumulativeErosion, nCount );
 #endif
 }
-
-} // namespace terrain3d_simd::detail

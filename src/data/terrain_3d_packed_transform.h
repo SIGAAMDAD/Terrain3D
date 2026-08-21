@@ -34,9 +34,9 @@ typedef struct alignas( 32 ) t3dPackedTransform_s {
 		origin[1] = ( float ) ( rTransform.origin.y );
 		origin[2] = ( float ) ( rTransform.origin.z );
 		for ( int row = 0; row < 3; ++row ) {
-			basis[row * 3 + 0] = terrain3d_half::encode( ( float ) ( rTransform.basis[row].x ) );
-			basis[row * 3 + 1] = terrain3d_half::encode( ( float ) ( rTransform.basis[row].y ) );
-			basis[row * 3 + 2] = terrain3d_half::encode( ( float ) ( rTransform.basis[row].z ) );
+			basis[row * 3 + 0] = t3dHalfEncode( ( float ) ( rTransform.basis[row].x ) );
+			basis[row * 3 + 1] = t3dHalfEncode( ( float ) ( rTransform.basis[row].y ) );
+			basis[row * 3 + 2] = t3dHalfEncode( ( float ) ( rTransform.basis[row].z ) );
 		}
 		reserved = 0u;
 	}
@@ -45,8 +45,8 @@ typedef struct alignas( 32 ) t3dPackedTransform_s {
 		Basis unpacked_basis;
 		for ( int row = 0; row < 3; ++row ) {
 			unpacked_basis[row] = Vector3(
-				terrain3d_half::decode( basis[row * 3 + 0] ), terrain3d_half::decode( basis[row * 3 + 1] ),
-				terrain3d_half::decode( basis[row * 3 + 2] ) );
+				t3dHalfDecode( basis[row * 3 + 0] ), t3dHalfDecode( basis[row * 3 + 1] ),
+				t3dHalfDecode( basis[row * 3 + 2] ) );
 		}
 		return Transform3D( unpacked_basis, Vector3( origin[0], origin[1], origin[2] ) );
 	}
@@ -114,7 +114,7 @@ public:
 
 	EA_FORCE_INLINE Vector3 getOrigin( const size_t iIndex ) const { const t3dPackedTransform_t &packed = m_storage[iIndex]; return Vector3( packed.origin[0], packed.origin[1], packed.origin[2] ); }
 
-	EA_FORCE_INLINE Vector3 getUpAxis( const size_t iIndex ) const { const t3dPackedTransform_t &packed = m_storage[iIndex]; return Vector3( terrain3d_half::decode( packed.basis[1] ), terrain3d_half::decode( packed.basis[4] ), terrain3d_half::decode( packed.basis[7] ) ); }
+	EA_FORCE_INLINE Vector3 getUpAxis( const size_t iIndex ) const { const t3dPackedTransform_t &packed = m_storage[iIndex]; return Vector3( t3dHalfDecode( packed.basis[1] ), t3dHalfDecode( packed.basis[4] ), t3dHalfDecode( packed.basis[7] ) ); }
 
 	EA_FORCE_INLINE void setOriginY( const size_t iIndex, const real_t fY ) { m_storage[iIndex].origin[1] = ( float ) ( fY ); }
 

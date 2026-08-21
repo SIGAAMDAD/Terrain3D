@@ -237,7 +237,7 @@ Ref<Image> T3DRegion::materializeMap( const t3dMapType_t mapType ) {
 		return Ref<Image>();
 	}
 	if ( mapType == TYPE_HEIGHT ) {
-		pMap = T3DUtil::getFilledImage( V2I( m_nRegionSize ), T3DRegionCodec::defaultHeightColor(), false,
+		pMap = T3DUtil::getFilledImage( V2I( m_nRegionSize ), t3dRegionCodecDefaultHeightColor(), false,
 							 Image::FORMAT_R16 );
 	} else if ( mapType == TYPE_CONTROL ) {
 		pMap = T3DUtil::getFilledImage( V2I( m_nRegionSize ), COLOR_CONTROL, false, Image::FORMAT_RF );
@@ -492,9 +492,9 @@ Ref<Image> T3DRegion::sanitizeMap( const t3dMapType_t mapType, const Ref<Image> 
 	}
 	if ( mapType == TYPE_HEIGHT ) {
 		if ( rMap.is_valid() && rMap->get_format() == Image::FORMAT_R16 &&
-			!T3DRegionCodec::hasValidHeightPayload( rMap, m_nRegionSize ) ) {
+			!t3dRegionCodecHasValidHeightPayload( rMap, m_nRegionSize ) ) {
 			LOG( ERROR, "Rejected malformed R16 height payload for region ", m_location, ": expected ",
-				T3DRegionCodec::expectedHeightByteCount( m_nRegionSize, Image::FORMAT_R16 ), " bytes, received ",
+				t3dRegionCodecExpectedHeightByteCount( m_nRegionSize, Image::FORMAT_R16 ), " bytes, received ",
 				rMap->get_data().size() );
 			return Ref<Image>();
 		}
@@ -502,7 +502,7 @@ Ref<Image> T3DRegion::sanitizeMap( const t3dMapType_t mapType, const Ref<Image> 
 		uint32_t clamped_count = 0u;
 		uint32_t non_finite_count = 0u;
 		Ref<Image> pConverted =
-			T3DRegionCodec::convertHeightToR16( rMap, m_nRegionSize, clamped_count, non_finite_count );
+			t3dRegionCodecConvertHeightToR16( rMap, m_nRegionSize, clamped_count, non_finite_count );
 		if ( rMap.is_valid() && rMap->get_format() == Image::FORMAT_RF && pConverted.is_valid() ) {
 			LOG( INFO, "Converted internal RF32 height storage to R16 for region ", m_location, " (",
 				m_nRegionSize * m_nRegionSize, " samples)" );
@@ -606,7 +606,7 @@ void T3DRegion::updateHeights( const Vector2 &rLowHigh ) {
 }
 
 void T3DRegion::calcHeightRange( void ) {
-	const Vector2 range = T3DRegionCodec::getHeightMinMax( m_pHeightMap );
+	const Vector2 range = t3dRegionCodecGetHeightMinMax( m_pHeightMap );
 	if ( m_heightRange != range ) {
 		m_heightRange = range;
 		m_bModified = true;

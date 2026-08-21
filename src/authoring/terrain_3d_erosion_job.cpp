@@ -41,7 +41,7 @@ typedef struct alignas( 64 ) t3dDecodedHalfBlock_s {
 			std::fill_n( values, nCount, fFallback );
 			return;
 		}
-		terrain3d_simd::halfToFloat( rSource.data() + nBegin, values, nCount );
+		t3dSimdHalfToFloat( rSource.data() + nBegin, values, nCount );
 	}
 } t3dDecodedHalfBlock_t;
 
@@ -1362,7 +1362,7 @@ typedef struct t3dErosionKernels_s {
 		}
 
 	}
-	EA_FORCE_INLINE static void stratigraphy( t3dErosionKernelContext_t *pContext, const size_t begin, const size_t end, const int32_t iWorkerIndex ) { T3DErosionJob *job = pContext->job; ( void ) iWorkerIndex; terrain3d_simd::updateCumulativeErosion( job->m_active.data() + begin, job->m_initialHeight.data() + begin, job->m_height.data() + begin, job->m_cumulativeErosion.data() + begin, end - begin ); }
+	EA_FORCE_INLINE static void stratigraphy( t3dErosionKernelContext_t *pContext, const size_t begin, const size_t end, const int32_t iWorkerIndex ) { T3DErosionJob *job = pContext->job; ( void ) iWorkerIndex; t3dSimdUpdateCumulativeErosion( job->m_active.data() + begin, job->m_initialHeight.data() + begin, job->m_height.data() + begin, job->m_cumulativeErosion.data() + begin, end - begin ); }
 	static void exposure( t3dErosionKernelContext_t *pContext, const size_t begin, const size_t end, const int32_t iWorkerIndex ) {
 		T3DErosionJob *job = pContext->job;
 		( void ) iWorkerIndex;
@@ -2543,7 +2543,7 @@ bool T3DErosionJob::captureSourceRegions( T3DData *const pData ) {
 			snapshot.controlData.clear();
 		}
 		for ( size_t i = 0; i < texels; ++i ) {
-			writeRf( pHeightDst, i, T3DRegionCodec::readHeightBytes( pHeightSrc, ( int ) ( i ), Image::FORMAT_R16 ) );
+			writeRf( pHeightDst, i, t3dRegionCodecReadHeightBytes( pHeightSrc, ( int ) ( i ), Image::FORMAT_R16 ) );
 		}
 		snapshot.sourceHash = hashRegionImages( pHeightMap, pControlMap );
 		const int32_t map_index = T3DData::getRegionMapIndex( location );
@@ -3087,7 +3087,7 @@ Error T3DErosionJob::setup( T3DData *const pData, const Ref<T3DErosionSettings> 
 		setFailed( "Erosion simulation regions must remain power-of-two for cache-local indexing." );
 		return ERR_INVALID_DATA;
 	}
-	m_nSimulationRegionShift = ( int32_t ) ( terrain3d::countrZeroU32( ( uint32_t ) ( m_nSimulationRegionSize ) ) );
+	m_nSimulationRegionShift = ( int32_t ) ( t3dCountrZeroU32( ( uint32_t ) ( m_nSimulationRegionSize ) ) );
 	m_nSimulationRegionMask = m_nSimulationRegionSize - 1;
 	m_fCellSize = m_fVertexSpacing * ( float ) ( m_resolutionScale );
 	m_nCellsPerRegion = ( size_t ) ( m_nSimulationRegionSize ) * ( size_t ) ( m_nSimulationRegionSize );
@@ -3852,7 +3852,7 @@ Error T3DErosionJob::apply( T3DData *const pData, const bool bForce ) {
 		uint8_t *const pSourceHeightWrite = source_height_data.ptrw();
 		for ( size_t i = 0; i < source_pixel_count; ++i ) {
 			writeRf( pSourceHeightWrite, i,
-				T3DRegionCodec::readHeightBytes( encoded_height_data.ptr(), ( int ) ( i ), Image::FORMAT_R16 ) );
+				t3dRegionCodecReadHeightBytes( encoded_height_data.ptr(), ( int ) ( i ), Image::FORMAT_R16 ) );
 		}
 		PackedByteArray source_control_data;
 		if ( bRegionNeedsControl ) {
@@ -3952,7 +3952,7 @@ Error T3DErosionJob::apply( T3DData *const pData, const bool bForce ) {
 			output_height_data.resize( ( int64_t ) ( source_pixel_count * sizeof( uint16_t ) ) );
 			uint8_t *const pEncoded = output_height_data.ptrw();
 			for ( size_t i = 0; i < source_pixel_count; ++i ) {
-				const uint16_t value = T3DRegionCodec::encodeHeightU16( readRf( height_bytes, i ) );
+				const uint16_t value = t3dRegionCodecEncodeHeightU16( readRf( height_bytes, i ) );
 				std::memcpy( pEncoded + i * sizeof( uint16_t ), &value, sizeof( uint16_t ) );
 			}
 			pHeightMap->set_data( pHeightMap->get_width(), pHeightMap->get_height(), false, Image::FORMAT_R16,

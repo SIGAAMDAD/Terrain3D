@@ -354,14 +354,14 @@ bool T3DCompute::ensureDisplacementResources(
 		return false;
 	}
 	if ( !m_displacementRegionBuffer.is_valid() ) {
-		m_displacementRegionBuffer = T3DUploadBridge::createPersistentStorageBuffer( 4096u * sizeof( int32_t ) );
+		m_displacementRegionBuffer = t3dUploadBridgeCreatePersistentStorageBuffer( 4096u * sizeof( int32_t ) );
 		if ( !m_displacementRegionBuffer.is_valid() ) {
 			m_displacementRegionBuffer = m_pRenderRd->storage_buffer_create( 4096u * sizeof( int32_t ) );
 		}
 		m_bDisplacementRegionUploaded = false;
 	}
 	if ( !m_displacementMaterialBuffer.is_valid() ) {
-		m_displacementMaterialBuffer = T3DUploadBridge::createPersistentStorageBuffer( 32u * 4u * sizeof( float ) );
+		m_displacementMaterialBuffer = t3dUploadBridgeCreatePersistentStorageBuffer( 32u * 4u * sizeof( float ) );
 		if ( !m_displacementMaterialBuffer.is_valid() ) {
 			m_displacementMaterialBuffer = m_pRenderRd->storage_buffer_create( 32u * 4u * sizeof( float ) );
 		}

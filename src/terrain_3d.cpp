@@ -488,7 +488,7 @@ void t3dBakeSnapshot_t::getSample(
 		return;
 	}
 	const int32_t index = local_z * nRegionSize + local_x;
-	fHeight = ( real_t ) ( T3DRegionCodec::readHeightBytes( pRegion->pHeightBytes, index, Image::FORMAT_R16 ) );
+	fHeight = ( real_t ) ( t3dRegionCodecReadHeightBytes( pRegion->pHeightBytes, index, Image::FORMAT_R16 ) );
 	if ( pRegion->pControlBytes ) {
 		uint32_t control = TERRAIN3D_REGION_DEFAULT_CONTROL;
 		std::memcpy( &control, pRegion->pControlBytes + ( size_t ) ( index ) * sizeof( uint32_t ), sizeof( uint32_t ) );
@@ -532,7 +532,7 @@ bool t3dBakeSnapshot_t::getMinimumRect(
 				if ( isHole( sample_control ) ) {
 					return false;
 				}
-				fMinimum = MIN( fMinimum, ( real_t ) ( T3DRegionCodec::decodeHeightU16( pHeight[i] ) ) );
+				fMinimum = MIN( fMinimum, ( real_t ) ( t3dRegionCodecDecodeHeightU16( pHeight[i] ) ) );
 			}
 			copied += run;
 		}

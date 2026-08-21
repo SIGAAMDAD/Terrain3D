@@ -17,13 +17,10 @@
 #include <algorithm>
 #include <cmath>
 
-namespace terrain3d_simd::detail {
-
 #if TERRAIN3D_COMPILED_AVX2_F16C
-namespace {
-EA_FORCE_INLINE __m256 decode8( const uint16_t *pSource ) { return _mm256_cvtph_ps( _mm_loadu_si128( ( const __m128i * ) ( pSource ) ) ); }
+EA_FORCE_INLINE static __m256 t3dSimdAvx2Decode8( const uint16_t *pSource ) { return _mm256_cvtph_ps( _mm_loadu_si128( ( const __m128i * ) ( pSource ) ) ); }
 
-inline void encodeNormal8( const __m256 argX, const __m256 argZ, uint8_t *pDestination ) {
+static inline void t3dSimdAvx2EncodeNormal8( const __m256 argX, const __m256 argZ, uint8_t *pDestination ) {
 	const __m256 scale = _mm256_set1_ps( TERRAIN3D_BYTE_MIDPOINT_FLOAT );
 	const __m256 half = _mm256_set1_ps( 0.5f );
 	const __m256 zero = _mm256_setzero_ps();
@@ -45,7 +42,7 @@ inline void encodeNormal8( const __m256 argX, const __m256 argZ, uint8_t *pDesti
 	}
 }
 
-inline void scalarNormalPixel(
+static inline void t3dSimdAvx2ScalarNormalPixel(
 	const float *pCenterRow, const float *pDownRow, const int iX,
 	const float fSpacing, uint8_t *pDestination
 ) {
@@ -59,26 +56,26 @@ inline void scalarNormalPixel(
 }
 #endif
 
-bool avx2BackendAvailableAtBuild( void ) {
+bool t3dSimdAvx2BackendAvailableAtBuild( void ) {
 	return TERRAIN3D_COMPILED_AVX2_F16C != 0;
 }
 
-void avx2HalfToFloat( const uint16_t *pSource, float *pDestination, const size_t nCount ) {
+void t3dSimdAvx2HalfToFloat( const uint16_t *pSource, float *pDestination, const size_t nCount ) {
 #if TERRAIN3D_COMPILED_AVX2_F16C
 	size_t index = 0u;
 	for ( ; nCount - index >= 8u; index += 8u ) {
-		_mm256_storeu_ps( pDestination + index, decode8( pSource + index ) );
+		_mm256_storeu_ps( pDestination + index, t3dSimdAvx2Decode8( pSource + index ) );
 	}
 	for ( ; index < nCount; ++index ) {
-		pDestination[index] = terrain3d_half::decode( pSource[index] );
+		pDestination[index] = t3dHalfDecode( pSource[index] );
 	}
 	_mm256_zeroupper();
 #else
-	avxHalfToFloat( pSource, pDestination, nCount );
+	t3dSimdAvxHalfToFloat( pSource, pDestination, nCount );
 #endif
 }
 
-void avx2PackedTransforms(
+void t3dSimdAvx2PackedTransforms(
 	const t3dPackedTransform_t *pTransforms, const uint32_t *pColors,
 	const size_t nCount, const int nStride, float *pDestination
 ) {
@@ -87,7 +84,7 @@ void avx2PackedTransforms(
 		const t3dPackedTransform_t &t = pTransforms[i];
 		float *pOut = pDestination + i * ( size_t ) ( nStride );
 		alignas( 32 ) float fBasis[8];
-		_mm256_store_ps( fBasis, decode8( t.basis ) );
+		_mm256_store_ps( fBasis, t3dSimdAvx2Decode8( t.basis ) );
 		pOut[0] = fBasis[0];
 		pOut[1] = fBasis[1];
 		pOut[2] = fBasis[2];
@@ -98,7 +95,7 @@ void avx2PackedTransforms(
 		pOut[7] = t.origin[1];
 		pOut[8] = fBasis[6];
 		pOut[9] = fBasis[7];
-		pOut[10] = terrain3d_half::decode( t.basis[8] );
+		pOut[10] = t3dHalfDecode( t.basis[8] );
 		pOut[11] = t.origin[2];
 		if ( nStride == 16 ) {
 			const uint32_t color = pColors ? pColors[i] : 0xffffffffu;
@@ -114,11 +111,11 @@ void avx2PackedTransforms(
 	}
 	_mm256_zeroupper();
 #else
-	avxPackedTransforms( pTransforms, pColors, nCount, nStride, pDestination );
+	t3dSimdAvxPackedTransforms( pTransforms, pColors, nCount, nStride, pDestination );
 #endif
 }
 
-void avx2DerivedNormals(
+void t3dSimdAvx2DerivedNormals(
 	const float *pHalo, const int nWidth, const int nHeight, const int nHaloStride,
 	const float fSpacing, uint8_t *pDestination
 ) {
@@ -137,20 +134,20 @@ void avx2DerivedNormals(
 			const __m256 length = _mm256_sqrt_ps(
 				_mm256_add_ps( spacing_sq, _mm256_add_ps( _mm256_mul_ps( dx, dx ), _mm256_mul_ps( dz, dz ) ) ) );
 			const __m256 inverse = _mm256_div_ps( one, length );
-			encodeNormal8( _mm256_mul_ps( dx, inverse ), _mm256_mul_ps( dz, inverse ), pOut + ( size_t ) ( x ) * 2u );
+			t3dSimdAvx2EncodeNormal8( _mm256_mul_ps( dx, inverse ), _mm256_mul_ps( dz, inverse ), pOut + ( size_t ) ( x ) * 2u );
 		}
 		for ( ; x < nWidth; ++x ) {
-			scalarNormalPixel( pCenterRow, pDownRow, x, fSpacing, pOut + ( size_t ) ( x ) * 2u );
+			t3dSimdAvx2ScalarNormalPixel( pCenterRow, pDownRow, x, fSpacing, pOut + ( size_t ) ( x ) * 2u );
 		}
 	}
 	_mm256_zeroupper();
 #else
-	avxDerivedNormals( pHalo, nWidth, nHeight, nHaloStride, fSpacing, pDestination );
+	t3dSimdAvxDerivedNormals( pHalo, nWidth, nHeight, nHaloStride, fSpacing, pDestination );
 #endif
 }
 
 
-void avx2UpdateCumulativeErosion(
+void t3dSimdAvx2UpdateCumulativeErosion(
 	const uint8_t *pActive, const float *pInitialHeight, const float *pHeight,
 	float *pCumulativeErosion, const size_t nCount
 ) {
@@ -169,11 +166,9 @@ void avx2UpdateCumulativeErosion(
 			_mm256_blendv_ps( current, delta, _mm256_cmp_ps( current, delta, _CMP_LT_OQ ) );
 		_mm256_storeu_ps( pCumulativeErosion + index, _mm256_blendv_ps( current, updated, mask ) );
 	}
-	avxUpdateCumulativeErosion( pActive + index, pInitialHeight + index, pHeight + index,
+	t3dSimdAvxUpdateCumulativeErosion( pActive + index, pInitialHeight + index, pHeight + index,
 		pCumulativeErosion + index, nCount - index );
 #else
-	scalarUpdateCumulativeErosion( pActive, pInitialHeight, pHeight, pCumulativeErosion, nCount );
+	t3dSimdScalarUpdateCumulativeErosion( pActive, pInitialHeight, pHeight, pCumulativeErosion, nCount );
 #endif
 }
-
-} // namespace terrain3d_simd::detail

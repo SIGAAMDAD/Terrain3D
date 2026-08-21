@@ -290,7 +290,7 @@ bool T3DFarSurfaceAtlasCache::initializeImages( void ) {
 	const int surface_side = MAX( 1, m_config.nSurfaceAtlasSide );
 	if ( m_pHeightImage.is_null() || m_pHeightImage->get_width() != height_side ||
 		m_pHeightImage->get_height() != height_side || m_pHeightImage->get_format() != Image::FORMAT_R16 ) {
-		const uint16_t default_height = T3DRegionCodec::encodeHeightU16( 0.0f );
+		const uint16_t default_height = t3dRegionCodecEncodeHeightU16( 0.0f );
 		PackedByteArray bytes;
 		bytes.resize( ( int64_t ) ( height_side ) * height_side * 2 );
 		uint8_t *const pWrite = bytes.ptrw();
@@ -509,7 +509,7 @@ bool T3DFarSurfaceAtlasCache::patchHeightRegion( const Vector2i &vLocation, Pack
 		atlas_origin_y + samples_per_region > atlas_size ) {
 		return false;
 	}
-	const uint16_t default_height = T3DRegionCodec::encodeHeightU16( 0.0f );
+	const uint16_t default_height = t3dRegionCodecEncodeHeightU16( 0.0f );
 	const uint16_t *height = nullptr;
 	PackedByteArray region_height_bytes;
 	T3DRegion *const pRegion = m_pRepository->getRegionPtr( vLocation );
@@ -672,7 +672,7 @@ bool T3DFarSurfaceAtlasCache::patchColorRegion( const Vector2i &vLocation, Packe
 				float normal_y = 1.0f;
 				float height = 0.0f;
 				if ( height_valid ) {
-					height = T3DRegionCodec::decodeHeightU16( readU16Unaligned( pHeightRead, ( size_t ) ( center_index ) * 2u ) );
+					height = t3dRegionCodecDecodeHeightU16( readU16Unaligned( pHeightRead, ( size_t ) ( center_index ) * 2u ) );
 				}
 				if ( derived_valid ) {
 					const int derived_x = MIN( derived_width - 1, center_x * derived_width / m_pRepository->getRegionSize() );
@@ -684,8 +684,8 @@ bool T3DFarSurfaceAtlasCache::patchColorRegion( const Vector2i &vLocation, Packe
 				} else if ( height_valid ) {
 					const int sample_x = center_y * m_pRepository->getRegionSize() + MIN( m_pRepository->getRegionSize() - 1, center_x + 1 );
 					const int sample_z = MIN( m_pRepository->getRegionSize() - 1, center_y + 1 ) * m_pRepository->getRegionSize() + center_x;
-					const float height_x = T3DRegionCodec::decodeHeightU16( readU16Unaligned( pHeightRead, ( size_t ) ( sample_x ) * 2u ) );
-					const float height_z = T3DRegionCodec::decodeHeightU16( readU16Unaligned( pHeightRead, ( size_t ) ( sample_z ) * 2u ) );
+					const float height_x = t3dRegionCodecDecodeHeightU16( readU16Unaligned( pHeightRead, ( size_t ) ( sample_x ) * 2u ) );
+					const float height_z = t3dRegionCodecDecodeHeightU16( readU16Unaligned( pHeightRead, ( size_t ) ( sample_z ) * 2u ) );
 					const float spacing = MAX( ( float ) ( m_pRepository->getVertexSpacing() ), 0.0001f );
 					const float dx = height_x - height;
 					const float dz = height_z - height;
@@ -728,7 +728,7 @@ bool T3DFarSurfaceAtlasCache::rebuildHeightAtlas( void ) {
 	const uint64_t region_texels = samples_per_region > 0 ? ( uint64_t ) ( samples_per_region ) * samples_per_region : 0u;
 	if ( m_bHeightDirtyAll ) {
 		m_nHeightDirtyTexelsLast = atlas_texels;
-		const uint16_t default_height = T3DRegionCodec::encodeHeightU16( 0.0f );
+		const uint16_t default_height = t3dRegionCodecEncodeHeightU16( 0.0f );
 		uint8_t *const pWrite = atlas_bytes.ptrw();
 		for ( int index = 0; index < m_config.nHeightAtlasSide * m_config.nHeightAtlasSide; ++index ) {
 			std::memcpy( pWrite + ( size_t ) ( index ) * 2u, &default_height, sizeof( default_height ) );

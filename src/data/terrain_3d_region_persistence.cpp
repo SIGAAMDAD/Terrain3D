@@ -51,7 +51,7 @@ bool T3DRegionPersistence::validateHeightPayload( const Ref<T3DRegion> &rRegion,
 	if ( format != Image::FORMAT_R16 && format != Image::FORMAT_RF ) {
 		return true;
 	}
-	if ( T3DRegionCodec::hasValidHeightPayload( pHeight, rRegion->getRegionSize() ) ) {
+	if ( t3dRegionCodecHasValidHeightPayload( pHeight, rRegion->getRegionSize() ) ) {
 		return true;
 	}
 	LOG( ERROR, "Malformed height payload in file: ", rPath, ". Format: ", format,
@@ -323,7 +323,7 @@ bool T3DRegionPersistence::prepareRuntimeRegionSource(
 	}
 	const Ref<Image> pHeight = rCandidate->getHeightMap();
 	if ( pHeight.is_null() || pHeight->get_format() != Image::FORMAT_R16 ||
-		!T3DRegionCodec::hasValidHeightPayload( pHeight, nExpectedRegionSize ) ) {
+		!t3dRegionCodecHasValidHeightPayload( pHeight, nExpectedRegionSize ) ) {
 		return false;
 	}
 	rCandidate->setModified( false );

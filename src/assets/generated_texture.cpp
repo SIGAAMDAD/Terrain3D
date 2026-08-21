@@ -130,7 +130,7 @@ bool T3DGeneratedTexture::update( const Ref<Image> &rImage, const int nLayer ) {
 		return false;
 	}
 	LOG( EXTREME, "RenderingServer updating Texture2DArray at index: ", nLayer );
-	if ( !T3DUploadBridge::uploadTextureLayer( m_rid, rImage, nLayer ) ) {
+	if ( !t3dUploadBridgeUploadTextureLayer( m_rid, rImage, nLayer ) ) {
 		RS->texture_2d_update( m_rid, rImage, nLayer );
 	}
 	return true;
@@ -176,7 +176,7 @@ bool T3DGeneratedTexture::update2d( const Ref<Image> &rImage ) {
 		return false;
 	}
 	LOG( EXTREME, "RenderingServer updating Texture2D" );
-	if ( !T3DUploadBridge::uploadTextureLayer( m_rid, rImage, 0 ) ) {
+	if ( !t3dUploadBridgeUploadTextureLayer( m_rid, rImage, 0 ) ) {
 		RS->texture_2d_update( m_rid, rImage, 0 );
 	}
 	m_pImage = rImage;

@@ -13,8 +13,7 @@
 #include <godot_cpp/core/memory.hpp>
 #endif
 
-namespace terrain3d_memory {
-inline void *allocate( const size_t nBytes ) {
+inline void *t3dMemoryAllocate( const size_t nBytes ) {
 #if defined( TERRAIN3D_STANDALONE_ALLOCATOR_TEST )
 	return std::malloc( nBytes );
 #else
@@ -22,7 +21,7 @@ inline void *allocate( const size_t nBytes ) {
 #endif
 }
 
-inline void release( void *pPointer ) {
+inline void t3dMemoryRelease( void *pPointer ) {
 	if ( !pPointer ) {
 		return;
 	}
@@ -32,6 +31,5 @@ inline void release( void *pPointer ) {
 	memfree( pPointer );
 #endif
 }
-} // namespace terrain3d_memory
 
 #endif // TERRAIN3D_MEMORY_H

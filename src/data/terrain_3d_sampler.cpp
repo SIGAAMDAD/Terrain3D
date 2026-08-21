@@ -43,7 +43,7 @@ T3DSampler::T3DSampler( const T3DSamplingSource &rSource )
 		m_nSamplingGeneration = m_source.pStorage->getSamplingGeneration();
 		m_nRegionSize = m_source.pRepository->getRegionSize();
 		m_nRegionShift = m_nRegionSize > 0 && ( m_nRegionSize & ( m_nRegionSize - 1 ) ) == 0
-			? ( int ) ( terrain3d::countrZeroU32( ( uint32_t ) ( m_nRegionSize ) ) )
+			? ( int ) ( t3dCountrZeroU32( ( uint32_t ) ( m_nRegionSize ) ) )
 			: -1;
 		m_nRegionMask = m_nRegionShift >= 0 ? ( int64_t ) ( m_nRegionSize - 1 ) : 0;
 		m_fVertexSpacing = m_source.pRepository->getVertexSpacing();
@@ -62,7 +62,7 @@ void T3DSampler::resetCache( const uint64_t nGeneration ) {
 	m_nSamplingGeneration = nGeneration;
 	m_nRegionSize = m_source.pRepository ? m_source.pRepository->getRegionSize() : 0;
 	m_nRegionShift = m_nRegionSize > 0 && ( m_nRegionSize & ( m_nRegionSize - 1 ) ) == 0
-		? ( int ) ( terrain3d::countrZeroU32( ( uint32_t ) ( m_nRegionSize ) ) )
+		? ( int ) ( t3dCountrZeroU32( ( uint32_t ) ( m_nRegionSize ) ) )
 		: -1;
 	m_nRegionMask = m_nRegionShift >= 0 ? ( int64_t ) ( m_nRegionSize - 1 ) : 0;
 	m_fVertexSpacing = m_source.pRepository ? m_source.pRepository->getVertexSpacing() : 0.0f;
@@ -123,7 +123,7 @@ void T3DSampler::resolveAxis( const int64_t nGrid, int64_t &nRegion, int &nLocal
 }
 
 float T3DSampler::readHeight( const uint8_t *pBytes, const int iIndex ) {
-	return T3DRegionCodec::readHeightBytes( pBytes, iIndex, Image::FORMAT_R16 );
+	return t3dRegionCodecReadHeightBytes( pBytes, iIndex, Image::FORMAT_R16 );
 }
 
 uint32_t T3DSampler::readUint( const uint8_t *pBytes, const int iIndex ) {
@@ -626,14 +626,14 @@ bool T3DSampler::copyHeightRect(
 			const uint16_t *pHeight = ( const uint16_t * ) ( pView->pHeightBytes ) + index;
 			if ( !bRespectHoles ) {
 				for ( int i = 0; i < run; ++i ) {
-					destination[copied + i] = T3DRegionCodec::decodeHeightU16( pHeight[i] );
+					destination[copied + i] = t3dRegionCodecDecodeHeightU16( pHeight[i] );
 				}
 			} else {
 				for ( int i = 0; i < run; ++i ) {
 					const uint32_t control = readControl( pView, index + i );
 					destination[copied + i] = isHole( control )
 						? NAN
-						: T3DRegionCodec::decodeHeightU16( pHeight[i] );
+						: t3dRegionCodecDecodeHeightU16( pHeight[i] );
 				}
 			}
 			copied += run;
@@ -678,7 +678,7 @@ bool T3DSampler::minimumHeightRect(
 				if ( bRespectHoles && isHole( readControl( pView, index + i ) ) ) {
 					return false;
 				}
-				fMinimum = MIN( fMinimum, T3DRegionCodec::decodeHeightU16( pHeight[i] ) );
+				fMinimum = MIN( fMinimum, t3dRegionCodecDecodeHeightU16( pHeight[i] ) );
 			}
 			copied += run;
 		}

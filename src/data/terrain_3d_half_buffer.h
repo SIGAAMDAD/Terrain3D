@@ -12,9 +12,7 @@
 #include "core/terrain_3d_compiler.h"
 #include "memory/terrain_3d_linear_arena.h"
 
-namespace terrain3d_half {
-
-inline uint16_t encode( const float fValue ) {
+inline uint16_t t3dHalfEncode( const float fValue ) {
 	uint32_t bits = 0u;
 	std::memcpy( &bits, &fValue, sizeof( bits ) );
 	const uint16_t sign = ( uint16_t ) ( ( bits >> 16u ) & 0x8000u );
@@ -53,7 +51,7 @@ inline uint16_t encode( const float fValue ) {
 	return ( uint16_t ) ( sign | ( uint16_t ) ( ( uint32_t ) ( exponent ) << 10u ) | ( uint16_t ) ( mantissa >> 13u ) );
 }
 
-inline float decode( const uint16_t nValue ) {
+inline float t3dHalfDecode( const uint16_t nValue ) {
 	const uint32_t sign = ( uint32_t ) ( nValue & 0x8000u ) << 16u;
 	uint32_t exponent = ( nValue >> 10u ) & 0x1fu;
 	uint32_t mantissa = nValue & 0x03ffu;
@@ -84,7 +82,6 @@ inline float decode( const uint16_t nValue ) {
 	return fResult;
 }
 
-} // namespace terrain3d_half
 
 class T3DHalfBuffer {
 public:
@@ -95,7 +92,7 @@ public:
 		EA_FORCE_INLINE explicit T3DReference( uint16_t *const pStorage ) : m_pStorage( pStorage ) {}
 
 		T3DReference &operator=( const float fValue ) {
-			*m_pStorage = terrain3d_half::encode( fValue );
+			*m_pStorage = t3dHalfEncode( fValue );
 			return *this;
 		}
 
@@ -103,7 +100,7 @@ public:
 			return operator=( ( float ) ( rOther ) );
 		}
 
-		EA_FORCE_INLINE operator float( void ) const { return terrain3d_half::decode( *m_pStorage ); }
+		EA_FORCE_INLINE operator float( void ) const { return t3dHalfDecode( *m_pStorage ); }
 
 	private:
 		uint16_t *m_pStorage = nullptr;
@@ -119,7 +116,7 @@ public:
 			return false;
 		}
 		m_nSize = nCount;
-		const uint16_t encoded = terrain3d_half::encode( fValue );
+		const uint16_t encoded = t3dHalfEncode( fValue );
 		std::fill_n( m_pData, m_nSize, encoded );
 		return true;
 	}
@@ -131,7 +128,7 @@ public:
 	}
 
 	float operator[]( const size_t iIndex ) const {
-		return terrain3d_half::decode( m_pData[iIndex] );
+		return t3dHalfDecode( m_pData[iIndex] );
 	}
 
 	EA_FORCE_INLINE size_t size( void ) const { return m_nSize; }

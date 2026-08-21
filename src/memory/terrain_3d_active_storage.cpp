@@ -119,7 +119,7 @@ static void terrain3dActiveWaitForReadersUnsafe( void ) {
 
 static void terrain3dActiveFreeBackingUnsafe( void ) {
 	if ( s_bActiveHeightBackingOwned ) {
-		terrain3d_memory::release( s_pActiveHeightBackingRaw );
+		t3dMemoryRelease( s_pActiveHeightBackingRaw );
 	}
 	s_pActiveHeightBackingRaw = nullptr;
 	s_pActiveHeightBacking = nullptr;
@@ -166,13 +166,13 @@ static bool terrain3dActiveAllocateBackingUnsafe( const int nRegionSize ) {
 	if ( required == 0u || required > std::numeric_limits<size_t>::max() - TERRAIN3D_ACTIVE_STORAGE_ALIGNMENT ) {
 		return false;
 	}
-	void *const pRaw = terrain3d_memory::allocate( required + TERRAIN3D_ACTIVE_STORAGE_ALIGNMENT - 1u );
+	void *const pRaw = t3dMemoryAllocate( required + TERRAIN3D_ACTIVE_STORAGE_ALIGNMENT - 1u );
 	if ( !pRaw ) {
 		return false;
 	}
 	if ( !terrain3dActiveConfigureBackingUnsafe(
 		nRegionSize, pRaw, required + TERRAIN3D_ACTIVE_STORAGE_ALIGNMENT - 1u, true ) ) {
-		terrain3d_memory::release( pRaw );
+		t3dMemoryRelease( pRaw );
 		return false;
 	}
 	return true;
@@ -258,7 +258,7 @@ static bool terrain3dActiveCopyRegionUnsafe( const int iLogicalSlot, const T3DRe
 		bytes.resize( ( int64_t ) ( expected_bytes ) );
 		uint16_t *const pValues = ( uint16_t * ) ( bytes.ptrw() );
 		std::fill_n( pValues, expected_bytes / sizeof( uint16_t ),
-			T3DRegionCodec::encodeHeightU16( 0.0f ) );
+			t3dRegionCodecEncodeHeightU16( 0.0f ) );
 	} else {
 		return false;
 	}

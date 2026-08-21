@@ -16,12 +16,8 @@
 #define TERRAIN3D_COMPILED_SSE2 0
 #endif
 
-namespace terrain3d_simd::detail {
-
 #if TERRAIN3D_COMPILED_SSE2
-namespace {
-
-inline __m128 decode4NormalHalf( const uint16_t *pSource, bool &bHasSpecial ) {
+static inline __m128 t3dSimdSse2Decode4NormalHalf( const uint16_t *pSource, bool &bHasSpecial ) {
 	const __m128i packed16 = _mm_loadl_epi64( ( const __m128i * ) ( pSource ) );
 	const __m128i half32 = _mm_unpacklo_epi16( packed16, _mm_setzero_si128() );
 	const __m128i exponent = _mm_and_si128( half32, _mm_set1_epi32( 0x7c00 ) );
@@ -34,20 +30,20 @@ inline __m128 decode4NormalHalf( const uint16_t *pSource, bool &bHasSpecial ) {
 	return _mm_castsi128_ps( _mm_or_si128( sign, _mm_add_epi32( magnitude, bias ) ) );
 }
 
-inline __m128 decode4Exact( const uint16_t *pSource ) {
+static inline __m128 t3dSimdSse2Decode4Exact( const uint16_t *pSource ) {
 	bool bSpecial = false;
-	const __m128 result = decode4NormalHalf( pSource, bSpecial );
+	const __m128 result = t3dSimdSse2Decode4NormalHalf( pSource, bSpecial );
 	if ( !bSpecial ) {
 		return result;
 	}
 	alignas( 16 ) float fValues[4];
 	for ( int lane = 0; lane < 4; ++lane ) {
-		fValues[lane] = terrain3d_half::decode( pSource[lane] );
+		fValues[lane] = t3dHalfDecode( pSource[lane] );
 	}
 	return _mm_load_ps( fValues );
 }
 
-inline void encodeNormal4( __m128 x, __m128 z, uint8_t *pDestination ) {
+static inline void t3dSimdSse2EncodeNormal4( __m128 x, __m128 z, uint8_t *pDestination ) {
 	const __m128 scale = _mm_set1_ps( TERRAIN3D_BYTE_MIDPOINT_FLOAT );
 	const __m128 half = _mm_set1_ps( 0.5f );
 	const __m128 zero = _mm_setzero_ps();
@@ -65,7 +61,7 @@ inline void encodeNormal4( __m128 x, __m128 z, uint8_t *pDestination ) {
 }
 
 
-inline void scalarNormalPixel(
+static inline void t3dSimdSse2ScalarNormalPixel(
 	const float *pCenterRow, const float *pDownRow, const int iX,
 	const float fSpacing, uint8_t *pDestination
 ) {
@@ -77,14 +73,14 @@ inline void scalarNormalPixel(
 	pDestination[1] = ( uint8_t ) ( std::floor( std::max( 0.0f, std::min( TERRAIN3D_BYTE_MAX_FLOAT, ( fDz * fInverse + 1.0f ) * TERRAIN3D_BYTE_MIDPOINT_FLOAT ) ) + 0.5f ) );
 }
 
-inline void writeTransform(
+static inline void t3dSimdSse2WriteTransform(
 	const t3dPackedTransform_t &rTransform, const uint32_t nColor, const int nStride,
 	float *pDestination
 ) {
 	EA_FORCE_INLINE alignas( 16 ) float fBasis[12] = {};
-	_mm_store_ps( fBasis, decode4Exact( rTransform.basis ) );
-	_mm_store_ps( fBasis + 4, decode4Exact( rTransform.basis + 4 ) );
-	fBasis[8] = terrain3d_half::decode( rTransform.basis[8] );
+	_mm_store_ps( fBasis, t3dSimdSse2Decode4Exact( rTransform.basis ) );
+	_mm_store_ps( fBasis + 4, t3dSimdSse2Decode4Exact( rTransform.basis + 4 ) );
+	fBasis[8] = t3dHalfDecode( rTransform.basis[8] );
 	pDestination[0] = fBasis[0];
 	pDestination[1] = fBasis[1];
 	pDestination[2] = fBasis[2];
@@ -105,42 +101,41 @@ inline void writeTransform(
 	}
 }
 
-} // namespace
 #endif
 
-bool sse2BackendAvailableAtBuild( void ) {
+bool t3dSimdSse2BackendAvailableAtBuild( void ) {
 	return TERRAIN3D_COMPILED_SSE2 != 0;
 }
 
-void sse2HalfToFloat( const uint16_t *pSource, float *pDestination, const size_t nCount ) {
+void t3dSimdSse2HalfToFloat( const uint16_t *pSource, float *pDestination, const size_t nCount ) {
 #if TERRAIN3D_COMPILED_SSE2
 	size_t index = 0u;
 	for ( ; nCount - index >= 4u; index += 4u ) {
-		_mm_storeu_ps( pDestination + index, decode4Exact( pSource + index ) );
+		_mm_storeu_ps( pDestination + index, t3dSimdSse2Decode4Exact( pSource + index ) );
 	}
 	for ( ; index < nCount; ++index ) {
-		pDestination[index] = terrain3d_half::decode( pSource[index] );
+		pDestination[index] = t3dHalfDecode( pSource[index] );
 	}
 #else
-	scalarHalfToFloat( pSource, pDestination, nCount );
+	t3dSimdScalarHalfToFloat( pSource, pDestination, nCount );
 #endif
 }
 
-void sse2PackedTransforms(
+void t3dSimdSse2PackedTransforms(
 	const t3dPackedTransform_t *pTransforms, const uint32_t *pColors,
 	const size_t nCount, const int nStride, float *pDestination
 ) {
 #if TERRAIN3D_COMPILED_SSE2
 	for ( size_t i = 0u; i < nCount; ++i ) {
-		writeTransform( pTransforms[i], pColors ? pColors[i] : 0xffffffffu, nStride,
+		t3dSimdSse2WriteTransform( pTransforms[i], pColors ? pColors[i] : 0xffffffffu, nStride,
 			pDestination + i * ( size_t ) ( nStride ) );
 	}
 #else
-	scalarPackedTransforms( pTransforms, pColors, nCount, nStride, pDestination );
+	t3dSimdScalarPackedTransforms( pTransforms, pColors, nCount, nStride, pDestination );
 #endif
 }
 
-void sse2DerivedNormals(
+void t3dSimdSse2DerivedNormals(
 	const float *pHalo, const int nWidth, const int nHeight, const int nHaloStride,
 	const float fSpacing, uint8_t *pDestination
 ) {
@@ -157,19 +152,19 @@ void sse2DerivedNormals(
 			const __m128 dz = _mm_sub_ps( center, _mm_loadu_ps( pDownRow + x ) );
 			const __m128 length = _mm_sqrt_ps( _mm_add_ps( spacing_sq, _mm_add_ps( _mm_mul_ps( dx, dx ), _mm_mul_ps( dz, dz ) ) ) );
 			const __m128 inv = _mm_div_ps( _mm_set1_ps( 1.0f ), length );
-			encodeNormal4( _mm_mul_ps( dx, inv ), _mm_mul_ps( dz, inv ), pOut + ( size_t ) ( x ) * 2u );
+			t3dSimdSse2EncodeNormal4( _mm_mul_ps( dx, inv ), _mm_mul_ps( dz, inv ), pOut + ( size_t ) ( x ) * 2u );
 		}
 		for ( ; x < nWidth; ++x ) {
-			scalarNormalPixel( pCenterRow, pDownRow, x, fSpacing, pOut + ( size_t ) ( x ) * 2u );
+			t3dSimdSse2ScalarNormalPixel( pCenterRow, pDownRow, x, fSpacing, pOut + ( size_t ) ( x ) * 2u );
 		}
 	}
 #else
-	scalarDerivedNormals( pHalo, nWidth, nHeight, nHaloStride, fSpacing, pDestination );
+	t3dSimdScalarDerivedNormals( pHalo, nWidth, nHeight, nHaloStride, fSpacing, pDestination );
 #endif
 }
 
 
-void sse2UpdateCumulativeErosion(
+void t3dSimdSse2UpdateCumulativeErosion(
 	const uint8_t *pActive, const float *pInitialHeight, const float *pHeight,
 	float *pCumulativeErosion, const size_t nCount
 ) {
@@ -195,11 +190,9 @@ void sse2UpdateCumulativeErosion(
 		_mm_storeu_ps( pCumulativeErosion + index,
 			_mm_or_ps( _mm_and_ps( mask, updated ), _mm_andnot_ps( mask, current ) ) );
 	}
-	scalarUpdateCumulativeErosion( pActive + index, pInitialHeight + index, pHeight + index,
+	t3dSimdScalarUpdateCumulativeErosion( pActive + index, pInitialHeight + index, pHeight + index,
 		pCumulativeErosion + index, nCount - index );
 #else
-	scalarUpdateCumulativeErosion( pActive, pInitialHeight, pHeight, pCumulativeErosion, nCount );
+	t3dSimdScalarUpdateCumulativeErosion( pActive, pInitialHeight, pHeight, pCumulativeErosion, nCount );
 #endif
 }
-
-} // namespace terrain3d_simd::detail

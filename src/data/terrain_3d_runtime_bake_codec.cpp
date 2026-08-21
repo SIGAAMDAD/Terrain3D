@@ -124,7 +124,7 @@ PackedByteArray T3DRuntimeBakeCodec::encodeMinMaxHierarchy( const Ref<Image> &rH
 	const uint8_t *const pSource = source.ptr();
 	const uint32_t source_count = ( uint32_t ) nRegionSize * ( uint32_t ) nRegionSize;
 	writer.writeU32( ( uint32_t ) nRegionSize ); writer.writeU32( source_count );
-	for ( uint32_t i = 0u; i < source_count; ++i ) { const float h = T3DRegionCodec::readHeightBytes( pSource, ( int ) i, Image::FORMAT_R16 ); writer.writeF32( h ); writer.writeF32( h ); }
+	for ( uint32_t i = 0u; i < source_count; ++i ) { const float h = t3dRegionCodecReadHeightBytes( pSource, ( int ) i, Image::FORMAT_R16 ); writer.writeF32( h ); writer.writeF32( h ); }
 	if ( nRegionSize == 1 ) return writer.complete() ? bytes : PackedByteArray();
 
 	// Level 0 is emitted directly from the R16 source. Only the first reduced
@@ -139,7 +139,7 @@ PackedByteArray T3DRuntimeBakeCodec::encodeMinMaxHierarchy( const Ref<Image> &rH
 			float minimum = INFINITY; float maximum = -INFINITY;
 			for ( int dz = 0; dz < 2; ++dz ) for ( int dx = 0; dx < 2; ++dx ) {
 				const int sx = x * 2 + dx; const int sz = z * 2 + dz; if ( sx >= nRegionSize || sz >= nRegionSize ) continue;
-				const float h = T3DRegionCodec::readHeightBytes( pSource, sz * nRegionSize + sx, Image::FORMAT_R16 ); minimum = MIN( minimum, h ); maximum = MAX( maximum, h );
+				const float h = t3dRegionCodecReadHeightBytes( pSource, sz * nRegionSize + sx, Image::FORMAT_R16 ); minimum = MIN( minimum, h ); maximum = MAX( maximum, h );
 			}
 			ranges[( size_t ) z * side + x] = Vector2( minimum, maximum );
 		}

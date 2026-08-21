@@ -963,7 +963,7 @@ int T3DTerrain::getPerformanceProfileVersion( void ) const {
 }
 
 String T3DTerrain::getPerformanceProfileSignature( void ) const {
-	return String::num_uint64( terrain_3d_profile::signature(), 16, true );
+	return String::num_uint64( t3dPerformanceProfileSignature(), 16, true );
 }
 
 Dictionary T3DTerrain::getPerformanceProfileManifest( void ) const {
@@ -974,9 +974,9 @@ Dictionary T3DTerrain::getPerformanceProfileManifest( void ) const {
 	manifest["signature"] = getPerformanceProfileSignature();
 	manifest["target"] = ( int ) ( PERFORMANCE_TARGET_XBOX360_EXPERIMENTAL );
 	Array settings;
-	settings.resize( ( int ) ( terrain_3d_profile::settingCount() ) );
-	for ( size_t i = 0; i < terrain_3d_profile::settingCount(); ++i ) {
-		const terrain_3d_profile::t3dSetting_t &setting = terrain_3d_profile::XBOX360_EXPERIMENTAL_SETTINGS[i];
+	settings.resize( ( int ) ( t3dPerformanceProfileSettingCount() ) );
+	for ( size_t i = 0; i < t3dPerformanceProfileSettingCount(); ++i ) {
+		const t3dPerformanceProfileSetting_t &setting = g_szXbox360ExperimentalSettings[i];
 		Dictionary row;
 		row["owner"] = t3dPerformanceProfileOwnerName( setting.owner );
 		row["property"] = setting.pszProperty;
@@ -993,9 +993,9 @@ Array T3DTerrain::getPerformanceProfileDiff( void ) const {
 	if ( m_performanceTarget != PERFORMANCE_TARGET_XBOX360_EXPERIMENTAL ) {
 		return differences;
 	}
-	for ( const terrain_3d_profile::t3dSetting_t &setting : terrain_3d_profile::XBOX360_EXPERIMENTAL_SETTINGS ) {
+	for ( const t3dPerformanceProfileSetting_t &setting : g_szXbox360ExperimentalSettings ) {
 		const Object *pOwner = this;
-		if ( setting.owner == terrain_3d_profile::OWNER_MATERIAL ) {
+		if ( setting.owner == T3D_PROFILE_OWNER_MATERIAL ) {
 			if ( m_pMaterial.is_null() ) {
 				Dictionary row;
 				row["owner"] = "T3DMaterial";

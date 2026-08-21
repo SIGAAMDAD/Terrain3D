@@ -285,40 +285,38 @@ static constexpr size_t TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY = ( size_t ) ( 
 static constexpr int TERRAIN3D_RESIDENT_WORLD_HALF = TERRAIN3D_RESIDENT_WORLD_SIZE / 2;
 static constexpr int TERRAIN3D_RESIDENT_WORLD_SLOT_COUNT = TERRAIN3D_MAX_REGION_SLOTS;
 static constexpr size_t TERRAIN3D_INSTANCE_REGION_UPDATE_CAPACITY = TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY;
-namespace terrain_3d_profile {
+typedef enum t3dPerformanceProfileOwner_e : uint8_t {
+	T3D_PROFILE_OWNER_TERRAIN,
+	T3D_PROFILE_OWNER_MATERIAL,
+} t3dPerformanceProfileOwner_t;
 
-typedef enum t3dOwner_e : uint8_t {
-	OWNER_TERRAIN,
-	OWNER_MATERIAL,
-} t3dOwner_t;
+typedef enum t3dPerformanceProfileValueKind_e : uint8_t {
+	T3D_PROFILE_VALUE_INT,
+	T3D_PROFILE_VALUE_FLOAT,
+	T3D_PROFILE_VALUE_BOOL,
+} t3dPerformanceProfileValueKind_t;
 
-typedef enum t3dValueKind_e : uint8_t {
-	VALUE_INT,
-	VALUE_FLOAT,
-	VALUE_BOOL,
-} t3dValueKind_t;
-
-typedef struct t3dSetting_s {
-	t3dOwner_t owner;
-	t3dValueKind_t kind;
+typedef struct t3dPerformanceProfileSetting_s {
+	t3dPerformanceProfileOwner_t owner;
+	t3dPerformanceProfileValueKind_t kind;
 	const char *pszProperty;
 	int64_t intValue;
 	double fFloatValue;
 	bool bBoolValue;
-} t3dSetting_t;
+} t3dPerformanceProfileSetting_t;
 
-#define T3D_PROFILE_TERRAIN_INT( name, value ) { OWNER_TERRAIN, VALUE_INT, name, ( int64_t ) ( value ), 0.0, false },
-#define T3D_PROFILE_TERRAIN_FLOAT( name, value ) { OWNER_TERRAIN, VALUE_FLOAT, name, 0, ( double ) ( value ), false },
-#define T3D_PROFILE_TERRAIN_BOOL( name, value ) { OWNER_TERRAIN, VALUE_BOOL, name, 0, 0.0, ( bool ) ( value ) },
-#define T3D_PROFILE_MATERIAL_INT( name, value ) { OWNER_MATERIAL, VALUE_INT, name, ( int64_t ) ( value ), 0.0, false },
-#define T3D_PROFILE_MATERIAL_FLOAT( name, value ) { OWNER_MATERIAL, VALUE_FLOAT, name, 0, ( double ) ( value ), false },
-#define T3D_PROFILE_MATERIAL_BOOL( name, value ) { OWNER_MATERIAL, VALUE_BOOL, name, 0, 0.0, ( bool ) ( value ) },
+#define T3D_PROFILE_TERRAIN_INT( name, value ) { T3D_PROFILE_OWNER_TERRAIN, T3D_PROFILE_VALUE_INT, name, ( int64_t ) ( value ), 0.0, false },
+#define T3D_PROFILE_TERRAIN_FLOAT( name, value ) { T3D_PROFILE_OWNER_TERRAIN, T3D_PROFILE_VALUE_FLOAT, name, 0, ( double ) ( value ), false },
+#define T3D_PROFILE_TERRAIN_BOOL( name, value ) { T3D_PROFILE_OWNER_TERRAIN, T3D_PROFILE_VALUE_BOOL, name, 0, 0.0, ( bool ) ( value ) },
+#define T3D_PROFILE_MATERIAL_INT( name, value ) { T3D_PROFILE_OWNER_MATERIAL, T3D_PROFILE_VALUE_INT, name, ( int64_t ) ( value ), 0.0, false },
+#define T3D_PROFILE_MATERIAL_FLOAT( name, value ) { T3D_PROFILE_OWNER_MATERIAL, T3D_PROFILE_VALUE_FLOAT, name, 0, ( double ) ( value ), false },
+#define T3D_PROFILE_MATERIAL_BOOL( name, value ) { T3D_PROFILE_OWNER_MATERIAL, T3D_PROFILE_VALUE_BOOL, name, 0, 0.0, ( bool ) ( value ) },
 
-inline constexpr t3dSetting_t XBOX360_EXPERIMENTAL_SETTINGS[] = {
+inline constexpr t3dPerformanceProfileSetting_t g_szXbox360ExperimentalSettings[] = {
 #include "streaming/terrain_3d_performance_profile_manifest.inc"
 };
-inline constexpr size_t XBOX360_EXPERIMENTAL_SETTING_COUNT =
-	sizeof( XBOX360_EXPERIMENTAL_SETTINGS ) / sizeof( XBOX360_EXPERIMENTAL_SETTINGS[0] );
+inline constexpr size_t g_nXbox360ExperimentalSettingCount =
+	sizeof( g_szXbox360ExperimentalSettings ) / sizeof( g_szXbox360ExperimentalSettings[0] );
 
 #undef T3D_PROFILE_TERRAIN_INT
 #undef T3D_PROFILE_TERRAIN_FLOAT
@@ -327,7 +325,6 @@ inline constexpr size_t XBOX360_EXPERIMENTAL_SETTING_COUNT =
 #undef T3D_PROFILE_MATERIAL_FLOAT
 #undef T3D_PROFILE_MATERIAL_BOOL
 
-} // namespace terrain_3d_profile
 
 // End centralized native compile-time constants.
 

@@ -11,57 +11,54 @@
 
 typedef struct t3dPackedTransform_s t3dPackedTransform_t;
 
-namespace terrain3d_simd {
+typedef enum t3dSimdBackend_e : uint8_t {
+	T3D_SIMD_SCALAR = 0,
+	T3D_SIMD_SSE2,
+	T3D_SIMD_AVX_F16C,
+	T3D_SIMD_AVX2_F16C,
+	T3D_SIMD_NEON,
+} t3dSimdBackend_t;
 
-typedef enum t3dBackend_e : uint8_t {
-	SCALAR = 0,
-	SSE2,
-	AVX_F16C,
-	AVX2_F16C,
-	NEON,
-} t3dBackend_t;
+typedef struct t3dSimdCapabilities_s {
+	bool m_bSse2 = false;
+	bool m_bAvx = false;
+	bool m_bF16c = false;
+	bool m_bAvx2 = false;
+	bool m_bNeon = false;
+} t3dSimdCapabilities_t;
 
-typedef struct t3dCapabilities_s {
-	bool bSse2 = false;
-	bool bAvx = false;
-	bool bF16c = false;
-	bool bAvx2 = false;
-	bool bNeon = false;
-} t3dCapabilities_t;
+typedef struct t3dSimdDispatch_s {
+	t3dSimdBackend_t m_backend = T3D_SIMD_SCALAR;
+	void ( *m_pfnHalfToFloat )( const uint16_t *, float *, size_t ) = nullptr;
+	void ( *m_pfnPackedTransformsToMultimesh )(
+		const t3dPackedTransform_t *, const uint32_t *, size_t, int, float *
+	) = nullptr;
+	void ( *m_pfnDerivedNormalsRg8 )( const float *, int, int, int, float, uint8_t * ) = nullptr;
+	void ( *m_pfnUpdateCumulativeErosion )( const uint8_t *, const float *, const float *, float *, size_t ) = nullptr;
+} t3dSimdDispatch_t;
 
-typedef struct t3dDispatch_s {
-	t3dBackend_t backend = t3dBackend_t::SCALAR;
-	void ( *pfnHalfToFloat )( const uint16_t *, float *, size_t ) = nullptr;
-	void ( *pfnPackedTransformsToMultimesh )( const t3dPackedTransform_t *, const uint32_t *, size_t, int, float * ) =
-		nullptr;
-	void ( *pfnDerivedNormalsRg8 )( const float *, int, int, int, float, uint8_t * ) = nullptr;
-	void ( *pfnUpdateCumulativeErosion )( const uint8_t *, const float *, const float *, float *, size_t ) = nullptr;
-} t3dDispatch_t;
+const t3dSimdCapabilities_t &t3dSimdGetCapabilities( void );
+const t3dSimdDispatch_t &t3dSimdGetDispatch( void );
+t3dSimdBackend_t t3dSimdGetActiveBackend( void );
+const char *t3dSimdGetBackendName( t3dSimdBackend_t backend );
 
-const t3dCapabilities_t &capabilities( void );
-const t3dDispatch_t &dispatch( void );
-t3dBackend_t activeBackend( void );
-const char *backendName( t3dBackend_t backend );
-
-void halfToFloat( const uint16_t *pSource, float *pDestination, size_t nCount );
-void packedTransformsToMultimesh(
+void t3dSimdHalfToFloat( const uint16_t *pSource, float *pDestination, size_t nCount );
+void t3dSimdPackedTransformsToMultimesh(
 	const t3dPackedTransform_t *pTransforms, const uint32_t *pColors,
 	size_t nCount, int nStride, float *pDestination
 );
-void derivedNormalsRg8(
+void t3dSimdDerivedNormalsRg8(
 	const float *pHalo, int nWidth, int nHeight, int nHaloStride, float fSpacing,
 	uint8_t *pDestination
 );
-void updateCumulativeErosion(
+void t3dSimdUpdateCumulativeErosion(
 	const uint8_t *pActive, const float *pInitialHeight, const float *pHeight,
 	float *pCumulativeErosion, size_t nCount
 );
 
-// Test-only override. It rejects unsupported backends and does not bypass CPU or
-// operating-system feature checks. Passing SCALAR always succeeds.
-bool setBackendOverrideForTests( t3dBackend_t backend );
-void clearBackendOverrideForTests( void );
-
-} // namespace terrain3d_simd
+// Test-only override. Unsupported backends are rejected; CPU and OS feature
+// checks remain active. The scalar backend is always accepted.
+bool t3dSimdSetBackendOverrideForTests( t3dSimdBackend_t backend );
+void t3dSimdClearBackendOverrideForTests( void );
 
 #endif // TERRAIN3D_SIMD_H

@@ -98,10 +98,10 @@ public:
 		if ( n > std::numeric_limits<size_t>::max() - header_size - alignment_slack ) { recordFailure(); return nullptr; }
 		const size_t total = n + header_size + alignment_slack;
 		T3DMemoryZone *const pZone = T3DZoneAllocatorRouter::zone();
-		void *pRaw = pZone ? pZone->allocate( total, alignment ) : terrain3d_memory::allocate( total );
+		void *pRaw = pZone ? pZone->allocate( total, alignment ) : t3dMemoryAllocate( total );
 		uint8_t origin = pZone ? TERRAIN3D_ALLOCATION_ZONE : TERRAIN3D_ALLOCATION_BOOTSTRAP;
 		if ( !pRaw && pZone && T3DZoneAllocatorRouter::overflowPolicy() == TERRAIN3D_ALLOCATOR_OVERFLOW_HEAP ) {
-			pRaw = terrain3d_memory::allocate( total );
+			pRaw = t3dMemoryAllocate( total );
 			origin = TERRAIN3D_ALLOCATION_OVERFLOW;
 		}
 		if ( !pRaw ) { recordFailure(); return nullptr; }
@@ -127,7 +127,7 @@ public:
 		s_nLiveAllocations.fetch_sub( 1u, std::memory_order_relaxed );
 		if ( header.nOrigin == TERRAIN3D_ALLOCATION_OVERFLOW ) s_nOverflowLiveBytes.fetch_sub( header.nSize, std::memory_order_relaxed );
 		if ( header.nOrigin == TERRAIN3D_ALLOCATION_ZONE && header.pZone ) header.pZone->deallocate( header.pRaw );
-		else terrain3d_memory::release( header.pRaw );
+		else t3dMemoryRelease( header.pRaw );
 	}
 
 	static t3dEastlAllocationStats_t getAllocationStats( void ) {

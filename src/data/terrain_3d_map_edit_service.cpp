@@ -73,7 +73,7 @@ void terrain3dBuildDerivedMapRange( void *pContext, const size_t nBegin, const s
 		}
 
 		if ( task.nOutputBytes != ( size_t ) width * ( size_t ) height * 2u ) continue;
-		terrain3d_simd::derivedNormalsRg8( pHalo, width, height, haloStride,
+		t3dSimdDerivedNormalsRg8( pHalo, width, height, haloStride,
 			pBuildContext->fVertexSpacing, pBuildContext->pOutputScratch + task.nOutputOffset );
 		task.bSuccess = true;
 	}
@@ -153,7 +153,7 @@ Error T3DMapEditService::setPixel(
 		return ERR_UNAVAILABLE;
 	}
 	if ( eMapType == TYPE_HEIGHT ) {
-		T3DRegionCodec::writeHeightPixel( pMap, imagePosition, rPixel.r );
+		t3dRegionCodecWriteHeightPixel( pMap, imagePosition, rPixel.r );
 	} else {
 		pMap->set_pixelv( imagePosition, rPixel );
 	}
@@ -752,7 +752,7 @@ Error T3DMapEditService::importImages(
 					if ( pExistingMap.is_valid() && !pExistingMap->is_empty() ) {
 						for ( int y = 0; y < m_pRepository->getRegionSize(); ++y ) {
 							for ( int x = 0; x < m_pRepository->getRegionSize(); ++x ) {
-								const float height = T3DRegionCodec::readHeightPixel(
+								const float height = t3dRegionCodecReadHeightPixel(
 									*pExistingMap, Vector2i( x, y )
 								);
 								pRegionMap->set_pixel( x, y, Color( height, 0.0f, 0.0f, 1.0f ) );
@@ -859,7 +859,7 @@ Ref<Image> T3DMapEditService::layeredToImage(
 			for ( int y = 0; y < m_pRepository->getRegionSize(); ++y ) {
 				for ( int x = 0; x < m_pRepository->getRegionSize(); ++x ) {
 					pImage->set_pixel( imageLocation.x + x, imageLocation.y + y,
-						Color( T3DRegionCodec::readHeightPixel( *pSource, Vector2i( x, y ) ), 0.0f, 0.0f, 1.0f ) );
+						Color( t3dRegionCodecReadHeightPixel( *pSource, Vector2i( x, y ) ), 0.0f, 0.0f, 1.0f ) );
 				}
 			}
 		} else if ( pSource.is_valid() ) {
