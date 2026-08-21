@@ -112,14 +112,19 @@ typedef struct t3dinstanceMesh_s {
 } t3dinstanceMesh_t;
 
 class T3DInstanceStore {
+	static constexpr uint16_t INVALID_MESH_SLOT = UINT16_MAX;
 	eastl::vector<t3dinstanceMesh_t> m_meshes;
 	t3dinstanceLayout_t m_layout;
+	mutable uint16_t m_szMeshSlots[TERRAIN3D_MAX_MESH_ASSETS];
+	mutable bool m_bMeshLookupDirty = true;
 
 	static bool cellLess( const t3dinstanceCell_t &a, const Vector2i &b );
 	static bool meshLess( const t3dinstanceMesh_t &a, int b );
 	static size_t cellLowerBound( const eastl::vector<t3dinstanceCell_t> &cells, const Vector2i &location );
 	static size_t findCellIndex( const t3dinstanceMesh_t &mesh, const Vector2i &location );
 	size_t meshLowerBound( int nMeshId ) const;
+	void rebuildMeshLookup( void ) const;
+	EA_FORCE_INLINE void invalidateMeshLookup( void ) { m_bMeshLookupDirty = true; }
 
 public:
 	T3DInstanceStore( void );
@@ -130,6 +135,8 @@ public:
 	T3DInstanceStore &operator=( T3DInstanceStore &&rOther );
 
 	void clear( void );
+	void clearRetainCapacity( void );
+	void releaseStorage( void );
 	void compactStorage( void );
 
 	EA_FORCE_INLINE void setLayout( const t3dinstanceLayout_t &rLayout ) { m_layout = rLayout; }
@@ -138,7 +145,7 @@ public:
 	EA_FORCE_INLINE bool empty( void ) const { return m_meshes.empty(); }
 	EA_FORCE_INLINE size_t meshCount( void ) const { return m_meshes.size(); }
 	EA_FORCE_INLINE const eastl::vector<t3dinstanceMesh_t> &meshes( void ) const { return m_meshes; }
-	EA_FORCE_INLINE eastl::vector<t3dinstanceMesh_t> &meshesMut( void ) { return m_meshes; }
+	EA_FORCE_INLINE eastl::vector<t3dinstanceMesh_t> &meshesMut( void ) { invalidateMeshLookup(); return m_meshes; }
 
 	const t3dinstanceMesh_t *findMesh( int nMeshId ) const;
 	t3dinstanceMesh_t *findMesh( int nMeshId );

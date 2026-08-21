@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 #include "core/terrain_3d_compiler.h"
+#include "core/terrain_3d_byte_writer.h"
 #include "hlod/terrain_3d_hlod_runtime_codec.h"
 
 #include <EASTL/sort.h>
@@ -14,13 +15,6 @@ static constexpr uint32_t HLOD_RUNTIME_MAGIC = 0x32444c48u; // HLD2
 static constexpr uint16_t HLOD_RUNTIME_VERSION = 1u;
 
 EA_FORCE_INLINE static int floorDiv( const int value, const int divisor ) { if ( divisor <= 0 ) return 0; int quotient = value / divisor; if ( value < 0 && ( value % divisor ) != 0 ) --quotient; return quotient; }
-EA_FORCE_INLINE static void u8( PackedByteArray &b, uint8_t v ) { const int64_t o=b.size(); b.resize(o+1); b.ptrw()[o]=v; }
-EA_FORCE_INLINE static void u16( PackedByteArray &b, uint16_t v ) { const int64_t o=b.size(); b.resize(o+2); auto*p=b.ptrw()+o; p[0]=(uint8_t)v; p[1]=(uint8_t)(v>>8); }
-EA_FORCE_INLINE static void u32( PackedByteArray &b, uint32_t v ) { const int64_t o=b.size(); b.resize(o+4); auto*p=b.ptrw()+o; for(int i=0;i<4;++i)p[i]=(uint8_t)(v>>(8*i)); }
-EA_FORCE_INLINE static void i32( PackedByteArray &b, int32_t v ) { u32(b,(uint32_t)v); }
-EA_FORCE_INLINE static void u64( PackedByteArray &b, uint64_t v ) { u32(b,(uint32_t)v); u32(b,(uint32_t)(v>>32)); }
-EA_FORCE_INLINE static void i64( PackedByteArray &b, int64_t v ) { u64(b,(uint64_t)v); }
-EA_FORCE_INLINE static void f32( PackedByteArray &b, float v ) { uint32_t bits=0; std::memcpy(&bits,&v,4); u32(b,bits); }
 EA_FORCE_INLINE static uint8_t ru8(const uint8_t*p) { return p[0]; }
 EA_FORCE_INLINE static uint16_t ru16(const uint8_t*p) { return (uint16_t)(p[0]|((uint16_t)p[1]<<8)); }
 EA_FORCE_INLINE static uint32_t ru32(const uint8_t*p) { return (uint32_t)p[0]|((uint32_t)p[1]<<8)|((uint32_t)p[2]<<16)|((uint32_t)p[3]<<24); }
@@ -51,49 +45,48 @@ PackedByteArray T3DHLODRuntimeCodec::encode(
 	const PackedByteArray &rNodeMinLevels
 ) {
 	PackedByteArray out;
-	eastl::vector<T3DHLODRuntimeEntryRecord> entries;
-	entries.reserve((size_t)rEntries.size());
-	for(int i=0;i<rEntries.size();++i){ T3DHLODRuntimeEntryRecord e; if(!parseEntry(rEntries[i],e)) return PackedByteArray(); entries.push_back(e); }
-	for(int i=0;i<(int)entries.size();++i){
-		auto &e=entries[(size_t)i]; const Vector2i pc(floorDiv(e.cluster.x,2),floorDiv(e.cluster.y,2));
-		int parent=-1; for(int j=0;j<(int)entries.size();++j){if(entries[(size_t)j].level==e.level+1&&entries[(size_t)j].cluster==pc){parent=j;break;}}
-		e.parent=parent; if(parent>=0){const int lx=e.cluster.x-pc.x*2, ly=e.cluster.y-pc.y*2; entries[(size_t)parent].children[CLAMP(ly,0,1)*2+CLAMP(lx,0,1)]=i;}
+	eastl::vector<T3DHLODRuntimeEntryRecord> entries; entries.reserve( ( size_t ) rEntries.size() );
+	for ( int i = 0; i < rEntries.size(); ++i ) { T3DHLODRuntimeEntryRecord entry; if ( !parseEntry( rEntries[i], entry ) ) return PackedByteArray(); entries.push_back( entry ); }
+	for ( int i = 0; i < ( int ) entries.size(); ++i ) {
+		auto &entry = entries[( size_t ) i]; const Vector2i parent_cluster( floorDiv( entry.cluster.x, 2 ), floorDiv( entry.cluster.y, 2 ) ); int parent = -1;
+		for ( int j = 0; j < ( int ) entries.size(); ++j ) if ( entries[( size_t ) j].level == entry.level + 1 && entries[( size_t ) j].cluster == parent_cluster ) { parent = j; break; }
+		entry.parent = parent; if ( parent >= 0 ) { const int local_x = entry.cluster.x - parent_cluster.x * 2, local_y = entry.cluster.y - parent_cluster.y * 2; entries[( size_t ) parent].children[CLAMP( local_y, 0, 1 ) * 2 + CLAMP( local_x, 0, 1 )] = i; }
 	}
-	eastl::vector<int> roots; for(int i=0;i<(int)entries.size();++i) if(entries[(size_t)i].parent<0) roots.push_back(i);
-	struct NodeTmp{uint16_t region; int64_t spawn; uint8_t level;}; eastl::vector<NodeTmp> nodes;
-	const int node_count=MIN(rNodeRegionIndices.size(),MIN(rNodeSpawnIds.size(),rNodeMinLevels.size())); nodes.reserve((size_t)node_count);
-	for(int i=0;i<node_count;++i){const int region=rNodeRegionIndices[i]; const uint8_t level=rNodeMinLevels[i]; if(region>=0&&region<TERRAIN3D_MAX_REGION_SLOTS&&level>0)nodes.push_back({(uint16_t)region,rNodeSpawnIds[i],level});}
-	eastl::sort(nodes.begin(),nodes.end(),[](const NodeTmp&a,const NodeTmp&b){return a.region<b.region||(a.region==b.region&&a.spawn<b.spawn);});
+	eastl::vector<int> roots; roots.reserve( entries.size() ); for ( int i = 0; i < ( int ) entries.size(); ++i ) if ( entries[( size_t ) i].parent < 0 ) roots.push_back( i );
+	struct NodeTmp { uint16_t region; int64_t spawn; uint8_t level; }; eastl::vector<NodeTmp> nodes;
+	const int node_count = MIN( rNodeRegionIndices.size(), MIN( rNodeSpawnIds.size(), rNodeMinLevels.size() ) ); nodes.reserve( ( size_t ) node_count );
+	for ( int i = 0; i < node_count; ++i ) { const int region = rNodeRegionIndices[i]; const uint8_t level = rNodeMinLevels[i]; if ( region >= 0 && region < TERRAIN3D_MAX_REGION_SLOTS && level > 0 ) nodes.push_back( { ( uint16_t ) region, rNodeSpawnIds[i], level } ); }
+	eastl::sort( nodes.begin(), nodes.end(), []( const NodeTmp &a, const NodeTmp &b ) { return a.region < b.region || ( a.region == b.region && a.spawn < b.spawn ); } );
 
-	u32(out,HLOD_RUNTIME_MAGIC); u16(out,HLOD_RUNTIME_VERSION); u16(out,0); u32(out,(uint32_t)entries.size()); u32(out,(uint32_t)roots.size());
-	u32(out,(uint32_t)rInstancerMinLevels.size()); u32(out,(uint32_t)nodes.size());
-	for(const auto&e:entries){
-		u8(out,(uint8_t)e.level);u8(out,0);u16(out,0); i32(out,e.cluster.x);i32(out,e.cluster.y);i32(out,e.regionMin.x);i32(out,e.regionMin.y);i32(out,e.regionMax.x);i32(out,e.regionMax.y);
-		f32(out,e.localBounds.position.x);f32(out,e.localBounds.position.y);f32(out,e.localBounds.position.z);f32(out,e.localBounds.size.x);f32(out,e.localBounds.size.y);f32(out,e.localBounds.size.z);f32(out,(float)e.geometricError);
-		i64(out,e.sourceSignature);i64(out,e.buildSignature);i64(out,e.estimatedGpuBytes);i32(out,e.parent);for(int c:e.children)i32(out,c);
-		const CharString utf8=e.packagePath.utf8(); const uint32_t len=(uint32_t)MAX(utf8.length(),0); u32(out,len); const int64_t o=out.size();out.resize(o+len);if(len)std::memcpy(out.ptrw()+o,utf8.get_data(),len);
+	eastl::vector<CharString> paths; paths.resize( entries.size() ); size_t total_bytes = 24u + roots.size() * 4u + ( size_t ) rInstancerMinLevels.size() + nodes.size() * 12u + entries.size() * 104u;
+	for ( size_t i = 0; i < entries.size(); ++i ) { paths[i] = entries[i].packagePath.utf8(); total_bytes += ( size_t ) MAX( paths[i].length(), 0 ); }
+	if ( total_bytes > ( size_t ) INT64_MAX ) return PackedByteArray(); out.resize( ( int64_t ) total_bytes ); if ( ( size_t ) out.size() != total_bytes ) return PackedByteArray();
+	T3DByteWriter writer( out.ptrw(), total_bytes ); writer.writeU32( HLOD_RUNTIME_MAGIC ); writer.writeU16( HLOD_RUNTIME_VERSION ); writer.writeU16( 0u ); writer.writeU32( ( uint32_t ) entries.size() ); writer.writeU32( ( uint32_t ) roots.size() ); writer.writeU32( ( uint32_t ) rInstancerMinLevels.size() ); writer.writeU32( ( uint32_t ) nodes.size() );
+	for ( size_t i = 0; i < entries.size(); ++i ) {
+		const auto &entry = entries[i]; writer.writeU8( ( uint8_t ) entry.level ); writer.writeU8( 0u ); writer.writeU16( 0u ); writer.writeI32( entry.cluster.x ); writer.writeI32( entry.cluster.y ); writer.writeI32( entry.regionMin.x ); writer.writeI32( entry.regionMin.y ); writer.writeI32( entry.regionMax.x ); writer.writeI32( entry.regionMax.y );
+		writer.writeF32( entry.localBounds.position.x ); writer.writeF32( entry.localBounds.position.y ); writer.writeF32( entry.localBounds.position.z ); writer.writeF32( entry.localBounds.size.x ); writer.writeF32( entry.localBounds.size.y ); writer.writeF32( entry.localBounds.size.z ); writer.writeF32( ( float ) entry.geometricError );
+		writer.writeI64( entry.sourceSignature ); writer.writeI64( entry.buildSignature ); writer.writeI64( entry.estimatedGpuBytes ); writer.writeI32( entry.parent ); for ( int child : entry.children ) writer.writeI32( child ); const CharString &path = paths[i]; const uint32_t len = ( uint32_t ) MAX( path.length(), 0 ); writer.writeU32( len ); writer.writeBytes( path.get_data(), len );
 	}
-	for(int root:roots)u32(out,(uint32_t)root);
-	if(!rInstancerMinLevels.is_empty()){const int64_t o=out.size();out.resize(o+rInstancerMinLevels.size());std::memcpy(out.ptrw()+o,rInstancerMinLevels.ptr(),(size_t)rInstancerMinLevels.size());}
-	for(const auto&n:nodes){u16(out,n.region);u8(out,n.level);u8(out,0);i64(out,n.spawn);}
-	return out;
+	for ( int root : roots ) writer.writeU32( ( uint32_t ) root ); writer.writeBytes( rInstancerMinLevels.ptr(), ( size_t ) rInstancerMinLevels.size() );
+	for ( const auto &node : nodes ) { writer.writeU16( node.region ); writer.writeU8( node.level ); writer.writeU8( 0u ); writer.writeI64( node.spawn ); }
+	return writer.complete() ? out : PackedByteArray();
 }
 
 bool T3DHLODRuntimeCodec::decode( const PackedByteArray &rBlob, T3DHLODRuntimeData &rData ) {
-	rData=T3DHLODRuntimeData{}; if(rBlob.size()<24)return false; const uint8_t*p=rBlob.ptr(); size_t o=0;
-	auto need=[&](size_t n){return n<=(size_t)rBlob.size()-o;};
-	if(ru32(p)!=HLOD_RUNTIME_MAGIC||ru16(p+4)!=HLOD_RUNTIME_VERSION)return false; o=8;
-	const uint32_t ec=ru32(p+o);o+=4;const uint32_t rc=ru32(p+o);o+=4;const uint32_t mesh_bytes=ru32(p+o);o+=4;const uint32_t nc=ru32(p+o);o+=4;
-	if(ec>65535u||rc>ec||mesh_bytes>(uint32_t)(TERRAIN3D_MAX_REGION_SLOTS*TERRAIN3D_MAX_MESH_ASSETS)||nc>1000000u)return false;
-	rData.entries.reserve(ec);
-	for(uint32_t i=0;i<ec;++i){if(!need(104))return false;T3DHLODRuntimeEntryRecord e;e.level=ru8(p+o);o+=4;e.cluster=Vector2i(ri32(p+o),ri32(p+o+4));o+=8;e.regionMin=Vector2i(ri32(p+o),ri32(p+o+4));o+=8;e.regionMax=Vector2i(ri32(p+o),ri32(p+o+4));o+=8;
-		e.localBounds=AABB(Vector3(rf32(p+o),rf32(p+o+4),rf32(p+o+8)),Vector3(rf32(p+o+12),rf32(p+o+16),rf32(p+o+20)));o+=24;e.geometricError=rf32(p+o);o+=4;e.sourceSignature=ri64(p+o);o+=8;e.buildSignature=ri64(p+o);o+=8;e.estimatedGpuBytes=ri64(p+o);o+=8;e.parent=ri32(p+o);o+=4;for(int c=0;c<4;++c){e.children[c]=ri32(p+o);o+=4;} if(!need(4))return false;const uint32_t len=ru32(p+o);o+=4;if(!need(len))return false;e.packagePath=String::utf8((const char*)(p+o),(int)len);o+=len;
-		if(e.level<1||e.level>6||e.packagePath.is_empty()||e.parent < -1||e.parent>=(int)ec)return false;for(int c:e.children)if(c < -1||c>=(int)ec)return false;rData.entries.push_back(e);}
-	if(!need((size_t)rc*4u))return false;rData.roots.reserve(rc);for(uint32_t i=0;i<rc;++i){const int root=(int)ru32(p+o);o+=4;if(root<0||root>=(int)ec)return false;rData.roots.push_back(root);}
-	if(!need(mesh_bytes))return false;rData.instancerMinLevels.resize(mesh_bytes);if(mesh_bytes)std::memcpy(rData.instancerMinLevels.data(),p+o,mesh_bytes);o+=mesh_bytes;
-	if(!need((size_t)nc*12u))return false; rData.nodePolicies.reserve(nc);rData.nodePolicyOffsets.fill(0u);uint16_t previous_region=0;bool have=false;
-	struct DecNode{uint16_t region;T3DHLODRuntimeNodePolicyRecord policy;};eastl::vector<DecNode> decoded;decoded.reserve(nc);
-	for(uint32_t i=0;i<nc;++i){const uint16_t region=ru16(p+o);const uint8_t level=ru8(p+o+2);const int64_t spawn=ri64(p+o+4);o+=12;if(region>=TERRAIN3D_MAX_REGION_SLOTS||level==0)return false;if(have&&region<previous_region)return false;previous_region=region;have=true;decoded.push_back({region,{spawn,level}});++rData.nodePolicyOffsets[(size_t)region+1u];}
-	for(int i=0;i<TERRAIN3D_MAX_REGION_SLOTS;++i)rData.nodePolicyOffsets[(size_t)i+1u]+=rData.nodePolicyOffsets[(size_t)i];for(const auto&n:decoded)rData.nodePolicies.push_back(n.policy);
-	return o==(size_t)rBlob.size();
+	rData = T3DHLODRuntimeData{}; if ( rBlob.size() < 24 ) return false; const uint8_t *p = rBlob.ptr(); size_t offset = 0u; auto need = [&]( const size_t nBytes ) { return offset <= ( size_t ) rBlob.size() && nBytes <= ( size_t ) rBlob.size() - offset; };
+	if ( ru32( p ) != HLOD_RUNTIME_MAGIC || ru16( p + 4 ) != HLOD_RUNTIME_VERSION ) return false; offset = 8u;
+	const uint32_t entry_count = ru32( p + offset ); offset += 4u; const uint32_t root_count = ru32( p + offset ); offset += 4u; const uint32_t mesh_bytes = ru32( p + offset ); offset += 4u; const uint32_t node_count = ru32( p + offset ); offset += 4u;
+	if ( entry_count > 65535u || root_count > entry_count || mesh_bytes > ( uint32_t ) ( TERRAIN3D_MAX_REGION_SLOTS * TERRAIN3D_MAX_MESH_ASSETS ) || node_count > 1000000u ) return false;
+	rData.entries.resize( entry_count );
+	for ( uint32_t i = 0u; i < entry_count; ++i ) {
+		if ( !need( 104u ) ) return false; T3DHLODRuntimeEntryRecord &entry = rData.entries[i]; entry.level = ru8( p + offset ); offset += 4u; entry.cluster = Vector2i( ri32( p + offset ), ri32( p + offset + 4u ) ); offset += 8u; entry.regionMin = Vector2i( ri32( p + offset ), ri32( p + offset + 4u ) ); offset += 8u; entry.regionMax = Vector2i( ri32( p + offset ), ri32( p + offset + 4u ) ); offset += 8u;
+		entry.localBounds = AABB( Vector3( rf32( p + offset ), rf32( p + offset + 4u ), rf32( p + offset + 8u ) ), Vector3( rf32( p + offset + 12u ), rf32( p + offset + 16u ), rf32( p + offset + 20u ) ) ); offset += 24u; entry.geometricError = rf32( p + offset ); offset += 4u; entry.sourceSignature = ri64( p + offset ); offset += 8u; entry.buildSignature = ri64( p + offset ); offset += 8u; entry.estimatedGpuBytes = ri64( p + offset ); offset += 8u; entry.parent = ri32( p + offset ); offset += 4u; for ( int child = 0; child < 4; ++child ) { entry.children[child] = ri32( p + offset ); offset += 4u; }
+		if ( !need( 4u ) ) return false; const uint32_t len = ru32( p + offset ); offset += 4u; if ( !need( len ) ) return false; entry.packagePath = String::utf8( ( const char * ) ( p + offset ), ( int ) len ); offset += len;
+		if ( entry.level < 1 || entry.level > 6 || entry.packagePath.is_empty() || entry.parent < -1 || entry.parent >= ( int ) entry_count ) return false; for ( int child : entry.children ) if ( child < -1 || child >= ( int ) entry_count ) return false;
+	}
+	if ( !need( ( size_t ) root_count * 4u ) ) return false; rData.roots.resize( root_count ); for ( uint32_t i = 0u; i < root_count; ++i ) { const int root = ( int ) ru32( p + offset ); offset += 4u; if ( root < 0 || root >= ( int ) entry_count ) return false; rData.roots[i] = root; }
+	if ( !need( mesh_bytes ) ) return false; rData.instancerMinLevels.resize( mesh_bytes ); if ( mesh_bytes ) std::memcpy( rData.instancerMinLevels.data(), p + offset, mesh_bytes ); offset += mesh_bytes;
+	if ( !need( ( size_t ) node_count * 12u ) ) return false; rData.nodePolicies.resize( node_count ); rData.nodePolicyOffsets.fill( 0u ); uint16_t previous_region = 0u; bool have_region = false;
+	for ( uint32_t i = 0u; i < node_count; ++i ) { const uint16_t region = ru16( p + offset ); const uint8_t level = ru8( p + offset + 2u ); const int64_t spawn = ri64( p + offset + 4u ); offset += 12u; if ( region >= TERRAIN3D_MAX_REGION_SLOTS || level == 0u || ( have_region && region < previous_region ) ) return false; previous_region = region; have_region = true; rData.nodePolicies[i] = { spawn, level }; ++rData.nodePolicyOffsets[( size_t ) region + 1u]; }
+	for ( int i = 0; i < TERRAIN3D_MAX_REGION_SLOTS; ++i ) rData.nodePolicyOffsets[( size_t ) i + 1u] += rData.nodePolicyOffsets[( size_t ) i]; return offset == ( size_t ) rBlob.size();
 }

@@ -226,7 +226,8 @@ t3dregionUpdateState_t m_szRegionUpdates[TERRAIN3D_INSTANCE_REGION_UPDATE_CAPACI
 	eastl::vector<Transform3D> m_placementTransforms;
 	eastl::vector<Color> m_placementColors;
 	eastl::vector<t3dpendingPlacement_t> m_placementPending;
-	eastl::vector<T3DRegion *> m_pTouchedRegions;
+	T3DRegion *m_pTouchedRegions[TERRAIN3D_MAX_REGION_SLOTS] = {};
+	uint16_t m_nTouchedRegionCount = 0u;
 
 	static t3drenderCellKey_t makeRenderKey( const t3drenderCell_t &rCell );
 	static int getRegionTableIndex( const Vector2i &vRegion );

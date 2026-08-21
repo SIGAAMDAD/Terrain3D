@@ -128,36 +128,15 @@ int T3DNodeStreamer::findActiveNodeIndex( const t3dregionRuntime_t &rRuntime, co
 }
 
 void T3DNodeStreamer::trackActiveRegion( const int iIndex ) {
-	if ( iIndex < 0 || iIndex >= TERRAIN3D_MAX_REGION_SLOTS ) {
-		return;
-	}
-	t3dregionRuntime_t &runtime = m_szRegions[iIndex];
-	if ( runtime.iActiveListPosition >= 0 ) {
-		return;
-	}
-	runtime.iActiveListPosition = ( int ) ( m_activeRegionIndices.size() );
-	m_activeRegionIndices.push_back( iIndex );
-	m_nActiveRegionCount = ( int ) ( m_activeRegionIndices.size() );
+	if ( iIndex < 0 || iIndex >= TERRAIN3D_MAX_REGION_SLOTS ) return; t3dregionRuntime_t &runtime = m_szRegions[iIndex]; if ( runtime.iActiveListPosition >= 0 || m_nActiveRegionCount >= TERRAIN3D_MAX_REGION_SLOTS ) return;
+	runtime.iActiveListPosition = m_nActiveRegionCount; m_szActiveRegionIndices[m_nActiveRegionCount++] = ( uint16_t ) iIndex;
 }
 
 void T3DNodeStreamer::untrackActiveRegion( const int iIndex ) {
-	if ( iIndex < 0 || iIndex >= TERRAIN3D_MAX_REGION_SLOTS ) {
-		return;
-	}
-	t3dregionRuntime_t &runtime = m_szRegions[iIndex];
-	const int position = runtime.iActiveListPosition;
-	if ( position < 0 || position >= ( int ) ( m_activeRegionIndices.size() ) ) {
-		runtime.iActiveListPosition = -1;
-		return;
-	}
-	const int moved_index = m_activeRegionIndices.back();
-	m_activeRegionIndices[( size_t ) ( position )] = moved_index;
-	m_activeRegionIndices.pop_back();
-	runtime.iActiveListPosition = -1;
-	if ( moved_index != iIndex ) {
-		m_szRegions[moved_index].iActiveListPosition = position;
-	}
-	m_nActiveRegionCount = ( int ) ( m_activeRegionIndices.size() );
+	if ( iIndex < 0 || iIndex >= TERRAIN3D_MAX_REGION_SLOTS ) return; t3dregionRuntime_t &runtime = m_szRegions[iIndex]; const int position = runtime.iActiveListPosition;
+	if ( position < 0 || position >= m_nActiveRegionCount ) { runtime.iActiveListPosition = -1; return; }
+	const int moved_index = m_szActiveRegionIndices[m_nActiveRegionCount - 1]; --m_nActiveRegionCount; m_szActiveRegionIndices[position] = ( uint16_t ) moved_index; runtime.iActiveListPosition = -1;
+	if ( moved_index != iIndex ) m_szRegions[moved_index].iActiveListPosition = position;
 }
 
 void T3DNodeStreamer::setRegionLoading( t3dregionRuntime_t &rRuntime, const bool bLoading ) {
@@ -755,6 +734,7 @@ bool T3DNodeStreamer::activateRegion( const int iIndex, int &nNodeBudget ) {
 	}
 	const eastl::vector<T3DRegion::t3dstreamedNodeRuntimeDescriptor_t> &spawns =
 		pRegion->getStreamedNodesRuntimeInternal();
+	if ( runtime.nodes.capacity() < spawns.size() ) runtime.nodes.reserve( spawns.size() );
 	if ( !runtime.bRequestsStarted ) {
 		requestRegionScenes( pRegion->getLocation(), spawns );
 		runtime.bRequestsStarted = true;
@@ -813,7 +793,7 @@ int T3DNodeStreamer::getEffectiveRadiusRegions( void ) const {
 
 void T3DNodeStreamer::buildDesiredSet( const Vector2i &rCenter ) {
 	m_desiredRegions.reset();
-	m_desiredRegionIndices.clear();
+	m_nDesiredRegionCount = 0u;
 	if ( !m_pTerrain || !m_pTerrain->getData() ) {
 		return;
 	}
@@ -854,11 +834,11 @@ void T3DNodeStreamer::buildDesiredSet( const Vector2i &rCenter ) {
 			const int index = indexFromLocation( owner_location );
 			if ( index >= 0 ) {
 				m_desiredRegions.set( ( size_t ) index );
-				m_desiredRegionIndices.push_back( index );
+				if ( m_nDesiredRegionCount < TERRAIN3D_MAX_REGION_SLOTS ) m_szDesiredRegionIndices[m_nDesiredRegionCount++] = ( uint16_t ) index;
 			}
 		}
 	}
-	std::sort( m_desiredRegionIndices.begin(), m_desiredRegionIndices.end(), [rCenter]( const int a, const int b ) {
+	std::sort( m_szDesiredRegionIndices, m_szDesiredRegionIndices + m_nDesiredRegionCount, [rCenter]( const uint16_t a, const uint16_t b ) {
 		const Vector2i location_a = locationFromIndex( a );
 		const Vector2i location_b = locationFromIndex( b );
 		const int distance_a = MAX( Math::abs( location_a.x - rCenter.x ), Math::abs( location_a.y - rCenter.y ) );
@@ -935,8 +915,8 @@ void T3DNodeStreamer::updateResidency( const Vector3 &rTargetPosition, const boo
 	const bool bRebuildDesired = bForce || bOwnershipChanged || center != m_center;
 	if ( !bRebuildDesired && m_nLoadingRegionCount == 0 && !m_bHasPendingActivation ) {
 		bool bPendingUnload = false;
-		for ( const int index : m_activeRegionIndices ) {
-			++m_nActiveRegionsExaminedLastTick;
+		for ( int active_i = 0; active_i < m_nActiveRegionCount; ++active_i ) {
+			const int index = m_szActiveRegionIndices[active_i]; ++m_nActiveRegionsExaminedLastTick;
 			if ( !m_desiredRegions.test( ( size_t ) ( index ) ) ) {
 				bPendingUnload = true;
 				break;
@@ -956,8 +936,8 @@ void T3DNodeStreamer::updateResidency( const Vector3 &rTargetPosition, const boo
 		MAX( 1, getEffectiveUnloadRegionBudget() ) : getEffectiveUnloadRegionBudget();
 	int unload_budget = effective_unload_budget;
 	int active_position = 0;
-	while ( active_position < ( int ) ( m_activeRegionIndices.size() ) && unload_budget > 0 ) {
-		const int index = m_activeRegionIndices[( size_t ) ( active_position )];
+	while ( active_position < m_nActiveRegionCount && unload_budget > 0 ) {
+		const int index = m_szActiveRegionIndices[active_position];
 		++m_nActiveRegionsExaminedLastTick;
 		if ( !m_desiredRegions.test( ( size_t ) ( index ) ) ) {
 			deactivateRegion( index, true );
@@ -967,9 +947,9 @@ void T3DNodeStreamer::updateResidency( const Vector3 &rTargetPosition, const boo
 		++active_position;
 	}
 	if ( unload_budget == 0 ) {
-		for ( ; active_position < ( int ) ( m_activeRegionIndices.size() ); ++active_position ) {
+		for ( ; active_position < m_nActiveRegionCount; ++active_position ) {
 			++m_nActiveRegionsExaminedLastTick;
-			if ( !m_desiredRegions.test( ( size_t ) ( m_activeRegionIndices[( size_t ) ( active_position )] ) ) ) {
+			if ( !m_desiredRegions.test( ( size_t ) m_szActiveRegionIndices[active_position] ) ) {
 				m_bUnloadRegionBudgetLimitedLastTick = true;
 				break;
 			}
@@ -983,7 +963,8 @@ void T3DNodeStreamer::updateResidency( const Vector3 &rTargetPosition, const boo
 	// Desired owners are rebuilt only when selection changes and are sorted nearest
 	// first. Service that compact list directly instead of re-walking every square
 	// inside every radius on each activation tick.
-	for ( const int index : m_desiredRegionIndices ) {
+	for ( uint16_t desired_i = 0u; desired_i < m_nDesiredRegionCount; ++desired_i ) {
+		const int index = m_szDesiredRegionIndices[desired_i];
 		if ( node_budget <= 0 ) {
 			break;
 		}
@@ -999,7 +980,8 @@ void T3DNodeStreamer::updateResidency( const Vector3 &rTargetPosition, const boo
 			++m_nLoadsLastTick;
 		}
 	}
-	for ( const int index : m_desiredRegionIndices ) {
+	for ( uint16_t desired_i = 0u; desired_i < m_nDesiredRegionCount; ++desired_i ) {
+		const int index = m_szDesiredRegionIndices[desired_i];
 		if ( !m_szRegions[index].bActive ) {
 			m_bHasPendingActivation = true;
 			break;
@@ -1011,18 +993,18 @@ void T3DNodeStreamer::updateResidency( const Vector3 &rTargetPosition, const boo
 }
 
 void T3DNodeStreamer::suspend( void ) {
-	while ( !m_activeRegionIndices.empty() ) {
-		deactivateRegion( m_activeRegionIndices.back(), true );
+	while ( m_nActiveRegionCount > 0 ) {
+		deactivateRegion( m_szActiveRegionIndices[m_nActiveRegionCount - 1], true );
 	}
 	m_desiredRegions.reset();
-	m_desiredRegionIndices.clear();
+	m_nDesiredRegionCount = 0u;
 	m_bHasPendingActivation = false;
 	m_center = V2I_MAX;
 }
 
 void T3DNodeStreamer::destroy( const bool bCaptureState ) {
-	while ( !m_activeRegionIndices.empty() ) {
-		deactivateRegion( m_activeRegionIndices.back(), bCaptureState );
+	while ( m_nActiveRegionCount > 0 ) {
+		deactivateRegion( m_szActiveRegionIndices[m_nActiveRegionCount - 1], bCaptureState );
 	}
 	for ( int index = 0; index < TERRAIN3D_MAX_REGION_SLOTS; ++index ) {
 		// Normal residency churn retains node-vector capacity so revisiting a region
@@ -1031,8 +1013,7 @@ void T3DNodeStreamer::destroy( const bool bCaptureState ) {
 		eastl::vector<t3dactiveNode_t>().swap( m_szRegions[index].nodes );
 		m_szRegions[index].iActiveListPosition = -1;
 	}
-	eastl::vector<int>().swap( m_activeRegionIndices );
-	eastl::vector<int>().swap( m_desiredRegionIndices );
+	m_nActiveRegionCount = 0; m_nDesiredRegionCount = 0u;
 	eastl::vector<t3dmovableNodeRef_t>().swap( m_movableNodes );
 	destroyHost();
 	m_desiredRegions.reset();
@@ -1145,8 +1126,6 @@ size_t T3DNodeStreamer::getRetainedCapacityBytes( void ) const {
 	for ( int index = 0; index < TERRAIN3D_MAX_REGION_SLOTS; ++index ) {
 		bytes += m_szRegions[index].nodes.capacity() * sizeof( t3dactiveNode_t );
 	}
-	bytes += m_activeRegionIndices.capacity() * sizeof( int );
-	bytes += m_desiredRegionIndices.capacity() * sizeof( int );
 	bytes += m_movableNodes.capacity() * sizeof( t3dmovableNodeRef_t );
 	return bytes;
 }
@@ -1255,12 +1234,14 @@ Dictionary T3DNodeStreamer::getStats( void ) const {
 				virtual_nodes += pRegion->getStreamedNodeCount();
 			}
 		}
-		for ( const int index : m_desiredRegionIndices ) {
+		for ( uint16_t desired_i = 0u; desired_i < m_nDesiredRegionCount; ++desired_i ) {
+			const int index = m_szDesiredRegionIndices[desired_i];
 			if ( !m_szRegions[index].bActive ) {
 				++pending_regions;
 			}
 		}
-		for ( const int index : m_activeRegionIndices ) {
+		for ( int active_i = 0; active_i < m_nActiveRegionCount; ++active_i ) {
+			const int index = m_szActiveRegionIndices[active_i];
 			if ( !m_desiredRegions.test( ( size_t ) ( index ) ) ) {
 				++pending_unloads;
 			}
@@ -1272,7 +1253,7 @@ Dictionary T3DNodeStreamer::getStats( void ) const {
 		}
 	}
 	stats["virtual_nodes"] = virtual_nodes;
-	stats["desired_regions"] = ( int ) ( m_desiredRegionIndices.size() );
+	stats["desired_regions"] = ( int ) m_nDesiredRegionCount;
 	stats["pending_spawns"] = pending_spawns;
 	stats["pending_regions"] = pending_regions;
 	stats["pending_unloads"] = pending_unloads;

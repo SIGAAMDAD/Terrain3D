@@ -3,7 +3,7 @@
 #include "Terrain3DConstants.h"
 #include "lighting/terrain_3d_lightmap_streamer.h"
 
-#include <EASTL/sort.h>
+#include <EASTL/bitset.h>
 
 #include <godot_cpp/classes/resource_loader.hpp>
 #include <godot_cpp/core/class_db.hpp>
@@ -13,6 +13,7 @@
 
 #include "terrain_3d.h"
 #include "data/terrain_3d_data.h"
+#include "data/terrain_3d_region_repository.h"
 #include "streaming/terrain_3d_node_streamer.h"
 #include "data/terrain_3d_region.h"
 
@@ -56,6 +57,22 @@ Node *terrain3dResolveLightmapReceiver( T3DTerrain *pTerrain, const NodePath &rB
 	}
 	return pTerrain->get_node_or_null( NodePath( path ) );
 }
+
+
+template <typename Callback>
+bool terrain3dForEachLightmapReceiver( T3DTerrain *const pTerrain, const Ref<T3DRegionLighting> &rPackage, Callback &&rCallback ) {
+	if ( pTerrain == nullptr || rPackage.is_null() ) return false;
+	if ( !pTerrain->isEditorAuthoringMode() ) {
+		T3DData *const pData = pTerrain->getData(); PackedByteArray blob;
+		if ( pData == nullptr || !pData->loadCookedLightingReceiversNow( rPackage->getClusterLocation(), blob ) ) return rPackage->getReceiverCount() == 0;
+		T3DLightingReceiverCursor cursor; if ( !T3DRuntimeBakeCodec::beginLightingReceivers( blob, cursor ) ) return false;
+		for ( uint32_t i = 0u; i < cursor.nCount; ++i ) { T3DRuntimeLightingReceiverRecord receiver; if ( !T3DRuntimeBakeCodec::nextLightingReceiver( cursor, receiver ) ) return false; rCallback( receiver ); }
+		return true;
+	}
+	const Array &raw = rPackage->getBakedUserDataInternal(); if ( raw.is_empty() ) return rPackage->getReceiverCount() == 0; if ( ( raw.size() % 4 ) != 0 ) return false;
+	for ( int index = 0; index < raw.size(); index += 4 ) { T3DRuntimeLightingReceiverRecord receiver; receiver.path = raw[index]; receiver.uvScale = raw[index + 1]; receiver.sliceIndex = ( int ) raw[index + 2]; receiver.subInstance = ( int ) raw[index + 3]; rCallback( receiver ); }
+	return true;
+}
 } // namespace
 
 T3DLightmapStreamer::~T3DLightmapStreamer( void ) {
@@ -73,8 +90,8 @@ void T3DLightmapStreamer::initialize( T3DTerrain *const pTerrain ) {
 }
 
 void T3DLightmapStreamer::destroy( void ) {
-	while ( !m_active.empty() ) {
-		deactivate( m_active.size() - 1u );
+	while ( m_nActiveCount > 0u ) {
+		deactivate( ( size_t ) m_nActiveCount - 1u );
 	}
 	m_pTerrain = nullptr;
 	m_center = V2I_MAX;
@@ -83,8 +100,8 @@ void T3DLightmapStreamer::destroy( void ) {
 }
 
 void T3DLightmapStreamer::suspend( void ) {
-	while ( !m_active.empty() ) {
-		deactivate( m_active.size() - 1u );
+	while ( m_nActiveCount > 0u ) {
+		deactivate( ( size_t ) m_nActiveCount - 1u );
 	}
 	m_center = V2I_MAX;
 	m_nNodeRuntimeGeneration = 0u;
@@ -108,8 +125,8 @@ void T3DLightmapStreamer::setResidencyBudgetMb( const int nBudgetMb ) {
 	}
 	m_nResidencyBudgetMb = budget_mb;
 	const size_t budget_bytes = ( size_t ) ( getEffectiveResidencyBudgetMb() ) * 1024u * 1024u;
-	while ( !m_active.empty() && getResidentEstimatedBytes() > budget_bytes ) {
-		deactivate( m_active.size() - 1u );
+	while ( m_nActiveCount > 0u && getResidentEstimatedBytes() > budget_bytes ) {
+		deactivate( ( size_t ) m_nActiveCount - 1u );
 	}
 	m_center = V2I_MAX;
 }
@@ -133,10 +150,9 @@ void T3DLightmapStreamer::setRadiusRegions( const int nRadius ) {
 T3DLightmapStreamer::t3dactivePackage_t *T3DLightmapStreamer::findActive(
 	const Ref<T3DRegionLighting> &rPackage
 ) {
-	for ( t3dactivePackage_t &active : m_active ) {
-		if ( active.pPackage == rPackage ) {
-			return &active;
-		}
+	for ( uint8_t i = 0u; i < m_nActiveCount; ++i ) {
+		t3dactivePackage_t &active = m_szActive[i];
+		if ( active.pPackage == rPackage ) return &active;
 	}
 	return nullptr;
 }
@@ -144,10 +160,9 @@ T3DLightmapStreamer::t3dactivePackage_t *T3DLightmapStreamer::findActive(
 const T3DLightmapStreamer::t3dactivePackage_t *T3DLightmapStreamer::findActive(
 	const Ref<T3DRegionLighting> &rPackage
 ) const {
-	for ( const t3dactivePackage_t &active : m_active ) {
-		if ( active.pPackage == rPackage ) {
-			return &active;
-		}
+	for ( uint8_t i = 0u; i < m_nActiveCount; ++i ) {
+		const t3dactivePackage_t &active = m_szActive[i];
+		if ( active.pPackage == rPackage ) return &active;
 	}
 	return nullptr;
 }
@@ -195,47 +210,15 @@ T3DLightmapStreamer::t3dsourceLoadResult_t T3DLightmapStreamer::requestSourceDat
 	return SOURCE_LOAD_READY;
 }
 
-bool T3DLightmapStreamer::loadReceiverRecords(
-	const Ref<T3DRegionLighting> &rPackage, eastl::vector<T3DRuntimeLightingReceiverRecord> &rReceivers
-) const {
-	rReceivers.clear();
-	if ( m_pTerrain == nullptr || rPackage.is_null() ) return false;
-	if ( !m_pTerrain->isEditorAuthoringMode() ) {
-		T3DData *const pData = m_pTerrain->getData();
-		PackedByteArray blob;
-		if ( pData == nullptr || !pData->loadCookedLightingReceiversNow( rPackage->getClusterLocation(), blob ) ) {
-			return rPackage->getReceiverCount() == 0;
-		}
-		return T3DRuntimeBakeCodec::decodeLightingReceivers( blob, rReceivers );
-	}
-	const Array &raw = rPackage->getBakedUserDataInternal();
-	if ( raw.is_empty() ) return rPackage->getReceiverCount() == 0;
-	if ( ( raw.size() % 4 ) != 0 ) return false;
-	rReceivers.reserve( ( size_t ) ( raw.size() / 4 ) );
-	for ( int index = 0; index < raw.size(); index += 4 ) {
-		T3DRuntimeLightingReceiverRecord receiver;
-		receiver.path = raw[index]; receiver.uvScale = raw[index + 1];
-		receiver.sliceIndex = ( int ) raw[index + 2]; receiver.subInstance = ( int ) raw[index + 3];
-		rReceivers.push_back( receiver );
-	}
-	return true;
-}
-
 bool T3DLightmapStreamer::collectReceiverState(
 	const Ref<T3DRegionLighting> &rPackage, uint64_t &nSignature, int &nReceiverCount
 ) const {
-	nSignature = TERRAIN3D_LIGHTMAP_FNV_OFFSET;
-	nReceiverCount = 0;
-	if ( m_pTerrain == nullptr || rPackage.is_null() ) return false;
-	eastl::vector<T3DRuntimeLightingReceiverRecord> receivers;
-	if ( !loadReceiverRecords( rPackage, receivers ) ) return false;
-	for ( const T3DRuntimeLightingReceiverRecord &receiver : receivers ) {
-		Node *const pReceiver = terrain3dResolveLightmapReceiver( m_pTerrain, receiver.path );
-		if ( pReceiver == nullptr || !pReceiver->is_inside_tree() ) continue;
-		nSignature = terrain3dHashReceiver( nSignature, receiver.path, pReceiver->get_instance_id() );
-		++nReceiverCount;
-	}
-	return nReceiverCount > 0 || rPackage->hasProbeData();
+	nSignature = TERRAIN3D_LIGHTMAP_FNV_OFFSET; nReceiverCount = 0; if ( m_pTerrain == nullptr || rPackage.is_null() ) return false;
+	const bool decoded = terrain3dForEachLightmapReceiver( m_pTerrain, rPackage, [&]( const T3DRuntimeLightingReceiverRecord &receiver ) {
+		Node *const pReceiver = terrain3dResolveLightmapReceiver( m_pTerrain, receiver.path ); if ( pReceiver == nullptr || !pReceiver->is_inside_tree() ) return;
+		nSignature = terrain3dHashReceiver( nSignature, receiver.path, pReceiver->get_instance_id() ); ++nReceiverCount;
+	} );
+	return decoded && ( nReceiverCount > 0 || rPackage->hasProbeData() );
 }
 
 bool T3DLightmapStreamer::buildRuntimeData(
@@ -243,24 +226,13 @@ bool T3DLightmapStreamer::buildRuntimeData(
 	const Ref<LightmapGIData> &rSource, Ref<LightmapGIData> &rData,
 	uint64_t &nSignature, int &nReceiverCount
 ) const {
-	rData.unref(); nSignature = TERRAIN3D_LIGHTMAP_FNV_OFFSET; nReceiverCount = 0;
-	if ( m_pTerrain == nullptr || rPackage.is_null() || rSource.is_null() ) return false;
-	eastl::vector<T3DRuntimeLightingReceiverRecord> receivers;
-	if ( !loadReceiverRecords( rPackage, receivers ) ) return false;
-	const Ref<Resource> pDuplicated = rSource->duplicate( false );
-	Ref<LightmapGIData> pRuntimeData = pDuplicated;
-	if ( pRuntimeData.is_null() ) return false;
-	pRuntimeData->clear_users();
-	for ( const T3DRuntimeLightingReceiverRecord &receiver : receivers ) {
-		Node *const pReceiver = terrain3dResolveLightmapReceiver( m_pTerrain, receiver.path );
-		if ( pReceiver == nullptr || !pReceiver->is_inside_tree() ) continue;
-		pRuntimeData->add_user( receiver.path, receiver.uvScale, receiver.sliceIndex, receiver.subInstance );
-		nSignature = terrain3dHashReceiver( nSignature, receiver.path, pReceiver->get_instance_id() );
-		++nReceiverCount;
-	}
-	if ( nReceiverCount == 0 && !rPackage->hasProbeData() ) return false;
-	rData = pRuntimeData;
-	return true;
+	rData.unref(); nSignature = TERRAIN3D_LIGHTMAP_FNV_OFFSET; nReceiverCount = 0; if ( m_pTerrain == nullptr || rPackage.is_null() || rSource.is_null() ) return false;
+	const Ref<Resource> pDuplicated = rSource->duplicate( false ); Ref<LightmapGIData> pRuntimeData = pDuplicated; if ( pRuntimeData.is_null() ) return false; pRuntimeData->clear_users();
+	const bool decoded = terrain3dForEachLightmapReceiver( m_pTerrain, rPackage, [&]( const T3DRuntimeLightingReceiverRecord &receiver ) {
+		Node *const pReceiver = terrain3dResolveLightmapReceiver( m_pTerrain, receiver.path ); if ( pReceiver == nullptr || !pReceiver->is_inside_tree() ) return;
+		pRuntimeData->add_user( receiver.path, receiver.uvScale, receiver.sliceIndex, receiver.subInstance ); nSignature = terrain3dHashReceiver( nSignature, receiver.path, pReceiver->get_instance_id() ); ++nReceiverCount;
+	} );
+	if ( !decoded || ( nReceiverCount == 0 && !rPackage->hasProbeData() ) ) return false; rData = pRuntimeData; return true;
 }
 
 bool T3DLightmapStreamer::isPackageCompatibleWithActive( const Ref<T3DRegionLighting> &rPackage ) const {
@@ -268,7 +240,8 @@ bool T3DLightmapStreamer::isPackageCompatibleWithActive( const Ref<T3DRegionLigh
 		return false;
 	}
 	const String signature = rPackage->getDirectionalLightSignature();
-	for ( const t3dactivePackage_t &active : m_active ) {
+	for ( uint8_t i = 0u; i < m_nActiveCount; ++i ) {
+		const t3dactivePackage_t &active = m_szActive[i];
 		if ( active.pPackage.is_null() ) {
 			continue;
 		}
@@ -295,7 +268,7 @@ bool T3DLightmapStreamer::activate(
 		return true;
 	}
 	const int active_limit = TERRAIN3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT;
-	if ( ( int ) ( m_active.size() ) >= active_limit ) {
+	if ( ( int ) m_nActiveCount >= active_limit ) {
 		return false;
 	}
 	const size_t incoming_bytes = ( size_t ) ( MAX<int64_t>( 0, rPackage->getEstimatedGpuBytes() ) );
@@ -320,7 +293,7 @@ bool T3DLightmapStreamer::activate(
 	active.receiverSignature = nSignature;
 	active.nReceiverCount = nReceiverCount;
 	active.bDesired = true;
-	m_active.push_back( active );
+	m_szActive[m_nActiveCount++] = active;
 	m_nResidentEstimatedBytes += incoming_bytes;
 	++m_nLoadsLastTick;
 	++m_nLoadsTotal;
@@ -360,10 +333,8 @@ bool T3DLightmapStreamer::refreshActive(
 }
 
 void T3DLightmapStreamer::deactivate( const size_t iIndex ) {
-	if ( iIndex >= m_active.size() ) {
-		return;
-	}
-	t3dactivePackage_t &active = m_active[iIndex];
+	if ( iIndex >= m_nActiveCount ) return;
+	t3dactivePackage_t &active = m_szActive[iIndex];
 	if ( active.pNode != nullptr ) {
 		if ( active.pNode->get_parent() != nullptr ) {
 			active.pNode->get_parent()->remove_child( active.pNode );
@@ -372,165 +343,49 @@ void T3DLightmapStreamer::deactivate( const size_t iIndex ) {
 		active.pNode = nullptr;
 	}
 	const size_t removed_bytes = active.pPackage.is_valid() ? ( size_t ) ( MAX<int64_t>( 0, active.pPackage->getEstimatedGpuBytes() ) ) : 0u;
-	active.pRuntimeData.unref();
-	active.pSourceData.unref();
-	m_active.erase( m_active.begin() + iIndex );
+	active.pRuntimeData.unref(); active.pSourceData.unref(); active.pPackage.unref();
+	for ( size_t i = iIndex + 1u; i < m_nActiveCount; ++i ) m_szActive[i - 1u] = m_szActive[i];
+	--m_nActiveCount; m_szActive[m_nActiveCount] = t3dactivePackage_t();
 	m_nResidentEstimatedBytes = removed_bytes <= m_nResidentEstimatedBytes ? m_nResidentEstimatedBytes - removed_bytes : 0u;
 	++m_nUnloadsLastTick;
 	++m_nUnloadsTotal;
 }
 
 void T3DLightmapStreamer::markDesired( const Vector2i &rCenter ) {
-	m_bHasPendingActivation = false;
-	m_nPendingPackagesLastTick = 0;
-	m_nCapacityDeferredLastTick = 0;
-	for ( t3dactivePackage_t &pActive : m_active ) {
-		pActive.bDesired = false;
-	}
-	if ( m_pTerrain == nullptr || m_pTerrain->getData() == nullptr ) {
-		return;
-	}
+	m_bHasPendingActivation = false; m_nPendingPackagesLastTick = 0; m_nCapacityDeferredLastTick = 0;
+	for ( uint8_t i = 0u; i < m_nActiveCount; ++i ) m_szActive[i].bDesired = false;
+	if ( m_pTerrain == nullptr || m_pTerrain->getData() == nullptr ) return;
 
-	T3DData *const pData = m_pTerrain->getData();
-	T3DNodeStreamer *const pNodeStreamer = m_pTerrain->getNodeStreamer();
-	const bool authoring_full_residency = m_pTerrain->isEditorAuthoringMode();
-	const Vector2i *pLocations = pData->getRegionSlotsInternal();
-	T3DRegion *const *ppRegions = pData->getRegionPtrMapInternal();
-	const int slot_count = pData->getRegionSlotCountInternal();
-	int remaining_loads = authoring_full_residency ? MAX( 1, m_nLoadBudget ) : m_nLoadBudget;
+	T3DData *const pData = m_pTerrain->getData(); T3DNodeStreamer *const pNodeStreamer = m_pTerrain->getNodeStreamer(); const bool authoring_full_residency = m_pTerrain->isEditorAuthoringMode();
+	const Vector2i *pLocations = pData->getRegionSlotsInternal(); T3DRegion *const *ppRegions = pData->getRegionPtrMapInternal(); const int slot_count = pData->getRegionSlotCountInternal(); int remaining_loads = authoring_full_residency ? MAX( 1, m_nLoadBudget ) : m_nLoadBudget;
 
-	// Region slots are storage-order, not camera-order. Sort desired candidates by
-	// distance so a per-region package budget always favors the center and its
-	// nearest neighbors instead of whichever regions happened to occupy low slots.
-	eastl::vector<int> candidate_slots;
-	candidate_slots.reserve( ( size_t ) ( slot_count ) );
+	struct Candidate { Ref<T3DRegionLighting> package; int64_t distance = INT64_MAX; Vector2i location = V2I_MAX; };
+	Candidate candidates[TERRAIN3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT]; int candidate_count = 0; int unique_count = 0; eastl::bitset<TERRAIN3D_MAX_REGION_SLOTS> seen_clusters;
+	auto candidateLess = []( const Candidate &a, const Candidate &b ) { if ( a.distance != b.distance ) return a.distance < b.distance; if ( a.location.y != b.location.y ) return a.location.y < b.location.y; return a.location.x < b.location.x; };
 	for ( int slot = 0; slot < slot_count; ++slot ) {
-		const Vector2i location = pLocations[slot];
-		if ( location == V2I_MAX ) {
-			continue;
-		}
-		const t3dregionStreamingState_t state = m_pTerrain->getRegionStreamingStateInternal( location );
-		const bool bDesiredByTier = authoring_full_residency || state >= TERRAIN3D_REGION_STREAMING_COLD;
-		const bool bDesiredByNodeCoverage = pNodeStreamer != nullptr && pNodeStreamer->isRegionDesired( location );
-		if ( bDesiredByTier || bDesiredByNodeCoverage ) {
-			candidate_slots.push_back( slot );
-		}
+		const Vector2i location = pLocations[slot]; if ( location == V2I_MAX ) continue; const t3dregionStreamingState_t state = m_pTerrain->getRegionStreamingStateInternal( location );
+		if ( !( authoring_full_residency || state >= TERRAIN3D_REGION_STREAMING_COLD || ( pNodeStreamer != nullptr && pNodeStreamer->isRegionDesired( location ) ) ) ) continue;
+		T3DRegion *const pRegion = ppRegions[slot]; if ( pRegion == nullptr || !pRegion->hasLighting() ) continue; const Ref<T3DRegionLighting> package = pRegion->getLighting(); if ( package.is_null() ) continue;
+		const Vector2i package_location = package->getClusterLocation(); const int package_index = T3DRegionRepository::getRegionMapIndex( package_location );
+		if ( package_index >= 0 ) { if ( seen_clusters.test( ( size_t ) package_index ) ) continue; seen_clusters.set( ( size_t ) package_index ); } else { bool duplicate = false; for ( int i = 0; i < candidate_count; ++i ) if ( candidates[i].package == package ) { duplicate = true; break; } if ( duplicate ) continue; }
+		++unique_count; if ( unique_count > TERRAIN3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT ) ++m_nCapacityDeferredLastTick; const Vector2i delta = package_location - rCenter; Candidate candidate; candidate.package = package; candidate.location = package_location; candidate.distance = ( int64_t ) delta.x * delta.x + ( int64_t ) delta.y * delta.y;
+		int insert_at = candidate_count; while ( insert_at > 0 && candidateLess( candidate, candidates[insert_at - 1] ) ) --insert_at;
+		if ( candidate_count < TERRAIN3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT ) { for ( int i = candidate_count; i > insert_at; --i ) candidates[i] = candidates[i - 1]; candidates[insert_at] = candidate; ++candidate_count; }
+		else if ( insert_at < TERRAIN3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT ) { for ( int i = TERRAIN3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT - 1; i > insert_at; --i ) candidates[i] = candidates[i - 1]; candidates[insert_at] = candidate; }
 	}
-	eastl::sort( candidate_slots.begin(), candidate_slots.end(), [pLocations, &rCenter]( const int a, const int b ) {
-		const Vector2i da = pLocations[a] - rCenter;
-		const Vector2i db = pLocations[b] - rCenter;
-		const int64_t distance_a = ( int64_t ) ( da.x ) * da.x + ( int64_t ) ( da.y ) * da.y;
-		const int64_t distance_b = ( int64_t ) ( db.x ) * db.x + ( int64_t ) ( db.y ) * db.y;
-		if ( distance_a != distance_b ) {
-			return distance_a < distance_b;
-		}
-		if ( pLocations[a].y != pLocations[b].y ) {
-			return pLocations[a].y < pLocations[b].y;
-		}
-		return pLocations[a].x < pLocations[b].x;
-	} );
 
-	eastl::vector<Ref<T3DRegionLighting>> processed;
-	processed.reserve( TERRAIN3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT );
-
-	for ( const int slot : candidate_slots ) {
-		T3DRegion *const pRegion = ppRegions[slot];
-		if ( pRegion == nullptr || !pRegion->hasLighting() ) {
-			continue;
-		}
-		const Ref<T3DRegionLighting> package = pRegion->getLighting();
-		if ( package.is_null() ) {
-			continue;
-		}
-		bool bAlreadyProcessed = false;
-		for ( const Ref<T3DRegionLighting> &seen : processed ) {
-			if ( seen == package ) {
-				bAlreadyProcessed = true;
-				break;
-			}
-		}
-		if ( bAlreadyProcessed ) {
-			continue;
-		}
-		if ( ( int ) ( processed.size() ) >= TERRAIN3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT ) {
-			++m_nCapacityDeferredLastTick;
-			continue;
-		}
-		processed.push_back( package );
-
-		t3dactivePackage_t *pActive = findActive( package );
-		Ref<LightmapGIData> source_data;
-		if ( pActive != nullptr ) {
-			source_data = pActive->pSourceData;
-		} else {
-			const t3dsourceLoadResult_t load_result = requestSourceData( package, source_data );
-			if ( load_result == SOURCE_LOAD_PENDING ) {
-				m_bHasPendingActivation = true;
-				++m_nPendingPackagesLastTick;
-				continue;
-			}
-			if ( load_result != SOURCE_LOAD_READY ) {
-				continue;
-			}
-		}
-
-		Ref<LightmapGIData> pRuntimeData;
-		uint64_t receiver_signature = 0u;
-		int receiver_count = 0;
-		if ( pActive != nullptr ) {
-			const bool bHasActiveReceivers = collectReceiverState( package, receiver_signature, receiver_count );
-			if ( bHasActiveReceivers && pActive->pNode != nullptr &&
-				pActive->receiverSignature == receiver_signature && pActive->nReceiverCount == receiver_count ) {
-				pActive->bDesired = true;
-				continue;
-			}
-		}
-		const bool bHasActiveReceivers = buildRuntimeData( package, source_data, pRuntimeData,
-			receiver_signature, receiver_count );
-		if ( pActive != nullptr ) {
-			pActive->bDesired = bHasActiveReceivers;
-			if ( bHasActiveReceivers ) {
-				refreshActive( *pActive, pRuntimeData, receiver_signature, receiver_count );
-			} else if ( package->getReceiverCount() > 0 ) {
-				m_bHasPendingActivation = true;
-				++m_nPendingPackagesLastTick;
-			}
-			continue;
-		}
-		if ( !bHasActiveReceivers ) {
-			if ( package->getReceiverCount() > 0 ) {
-				m_bHasPendingActivation = true;
-				++m_nPendingPackagesLastTick;
-			}
-			continue;
-		}
-		if ( remaining_loads <= 0 ) {
-			m_bHasPendingActivation = true;
-			++m_nPendingPackagesLastTick;
-			continue;
-		}
-		if ( !isPackageCompatibleWithActive( package ) ) {
-			++m_nCompatibilityFailuresLastTick;
-			++m_nCompatibilityFailuresTotal;
-			m_bHasPendingActivation = true;
-			++m_nPendingPackagesLastTick;
-			ERR_PRINT_ONCE( "Terrain3D regional lightmap packages with incompatible shadowmask modes or directional-light signatures cannot be active together" );
-			continue;
-		}
-		const int active_limit = TERRAIN3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT;
-		if ( ( int ) ( m_active.size() ) >= active_limit ) {
-			m_bHasPendingActivation = true;
-			++m_nPendingPackagesLastTick;
-			++m_nCapacityDeferredLastTick;
-			continue;
-		}
-		if ( activate( package, source_data, pRuntimeData, receiver_signature, receiver_count ) ) {
-			--remaining_loads;
-		} else {
-			m_bHasPendingActivation = true;
-			++m_nPendingPackagesLastTick;
-			++m_nCapacityDeferredLastTick;
-		}
+	for ( int candidate_index = 0; candidate_index < candidate_count; ++candidate_index ) {
+		const Ref<T3DRegionLighting> package = candidates[candidate_index].package; t3dactivePackage_t *pActive = findActive( package ); Ref<LightmapGIData> source_data;
+		if ( pActive != nullptr ) source_data = pActive->pSourceData; else { const t3dsourceLoadResult_t load_result = requestSourceData( package, source_data ); if ( load_result == SOURCE_LOAD_PENDING ) { m_bHasPendingActivation = true; ++m_nPendingPackagesLastTick; continue; } if ( load_result != SOURCE_LOAD_READY ) continue; }
+		Ref<LightmapGIData> pRuntimeData; uint64_t receiver_signature = 0u; int receiver_count = 0;
+		if ( pActive != nullptr ) { const bool bHasActiveReceivers = collectReceiverState( package, receiver_signature, receiver_count ); if ( bHasActiveReceivers && pActive->pNode != nullptr && pActive->receiverSignature == receiver_signature && pActive->nReceiverCount == receiver_count ) { pActive->bDesired = true; continue; } }
+		const bool bHasActiveReceivers = buildRuntimeData( package, source_data, pRuntimeData, receiver_signature, receiver_count );
+		if ( pActive != nullptr ) { pActive->bDesired = bHasActiveReceivers; if ( bHasActiveReceivers ) refreshActive( *pActive, pRuntimeData, receiver_signature, receiver_count ); else if ( package->getReceiverCount() > 0 ) { m_bHasPendingActivation = true; ++m_nPendingPackagesLastTick; } continue; }
+		if ( !bHasActiveReceivers ) { if ( package->getReceiverCount() > 0 ) { m_bHasPendingActivation = true; ++m_nPendingPackagesLastTick; } continue; }
+		if ( remaining_loads <= 0 ) { m_bHasPendingActivation = true; ++m_nPendingPackagesLastTick; continue; }
+		if ( !isPackageCompatibleWithActive( package ) ) { ++m_nCompatibilityFailuresLastTick; ++m_nCompatibilityFailuresTotal; m_bHasPendingActivation = true; ++m_nPendingPackagesLastTick; ERR_PRINT_ONCE( "Terrain3D regional lightmap packages with incompatible shadowmask modes or directional-light signatures cannot be active together" ); continue; }
+		if ( m_nActiveCount >= TERRAIN3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT ) { m_bHasPendingActivation = true; ++m_nPendingPackagesLastTick; ++m_nCapacityDeferredLastTick; continue; }
+		if ( activate( package, source_data, pRuntimeData, receiver_signature, receiver_count ) ) --remaining_loads; else { m_bHasPendingActivation = true; ++m_nPendingPackagesLastTick; ++m_nCapacityDeferredLastTick; }
 	}
 }
 
@@ -556,9 +411,9 @@ void T3DLightmapStreamer::updateResidency( const Vector3 &rTargetPosition, const
 	markDesired( center );
 
 	int remaining_unloads = m_pTerrain->isEditorAuthoringMode() ? MAX( 1, m_nUnloadBudget ) : m_nUnloadBudget;
-	for ( size_t index = m_active.size(); index > 0u && remaining_unloads > 0; --index ) {
+	for ( size_t index = m_nActiveCount; index > 0u && remaining_unloads > 0; --index ) {
 		const size_t active_index = index - 1u;
-		if ( m_active[active_index].bDesired ) {
+		if ( m_szActive[active_index].bDesired ) {
 			continue;
 		}
 		deactivate( active_index );
@@ -572,7 +427,7 @@ Dictionary T3DLightmapStreamer::getStatsFast( void ) const {
 	stats["enabled"] = m_bEnabled;
 	stats["radius_regions"] = m_nRadiusRegions;
 	stats["unified_cold_radius"] = m_pTerrain ? m_pTerrain->getStreamingColdRadius() : 0;
-	stats["active_packages"] = ( int ) ( m_active.size() );
+	stats["active_packages"] = ( int ) m_nActiveCount;
 	stats["max_active_packages"] = TERRAIN3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT;
 	stats["pending_packages"] = m_nPendingPackagesLastTick;
 	stats["capacity_deferred"] = m_nCapacityDeferredLastTick;
@@ -600,7 +455,8 @@ Dictionary T3DLightmapStreamer::getStats( void ) const {
 	int shadowmask_textures = 0;
 	int active_receivers = 0;
 	int64_t estimated_gpu_bytes = 0;
-	for ( const t3dactivePackage_t &active : m_active ) {
+	for ( uint8_t i = 0u; i < m_nActiveCount; ++i ) {
+		const t3dactivePackage_t &active = m_szActive[i];
 		if ( active.pPackage.is_null() ) {
 			continue;
 		}
@@ -612,7 +468,7 @@ Dictionary T3DLightmapStreamer::getStats( void ) const {
 	stats["enabled"] = m_bEnabled;
 	stats["radius_regions"] = m_nRadiusRegions;
 	stats["unified_cold_radius"] = m_pTerrain ? m_pTerrain->getStreamingColdRadius() : 0;
-	stats["active_packages"] = ( int ) ( m_active.size() );
+	stats["active_packages"] = ( int ) m_nActiveCount;
 	stats["max_active_packages"] = TERRAIN3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT;
 	stats["active_receivers"] = active_receivers;
 	stats["pending_packages"] = m_nPendingPackagesLastTick;

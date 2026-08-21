@@ -445,13 +445,8 @@ void T3DInstanceRegionCache::update(
 			}
 			bool acceleration_valid = true;
 			if ( !instance_metadata.is_empty() ) {
-				eastl::vector<T3DRuntimeInstanceCellMetadata> cells;
-				acceleration_valid = T3DRuntimeBakeCodec::decodeInstanceMetadata( instance_metadata, cells );
-				uint64_t decoded_count = 0u;
-				for ( const T3DRuntimeInstanceCellMetadata &cell : cells ) {
-					decoded_count += cell.instanceCount;
-				}
-				acceleration_valid = acceleration_valid && decoded_count == preparedStore.instanceCount();
+				T3DInstanceMetadataView view; acceleration_valid = T3DRuntimeBakeCodec::getInstanceMetadataView( instance_metadata, view );
+				acceleration_valid = acceleration_valid && view.nInstanceCount == preparedStore.instanceCount();
 			}
 			if ( !acceleration_valid ) {
 				instance_metadata.clear();

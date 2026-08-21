@@ -156,7 +156,7 @@ bool terrain3dReadPageHeaders(
 	}
 	nOffset = TERRAIN3D_INSTANCE_PAGE_HEADER_BYTES;
 	if ( bDecode && pStore ) {
-		pStore->clear();
+		pStore->clearRetainCapacity();
 		pStore->setLayout( layout );
 	}
 	uint32_t decoded_total = 0u;
@@ -286,9 +286,6 @@ bool terrain3dReadPageHeaders(
 	}
 	nInstanceCount = decoded_total;
 	nMeshCount = mesh_count;
-	if ( bDecode && pStore ) {
-		pStore->compactStorage();
-	}
 	return true;
 }
 
@@ -371,23 +368,11 @@ bool T3DInstancePageCodec::decode(
 	const PackedByteArray &arrPage, T3DInstanceStore &rStore,
 	uint32_t *const pMeshCounts, uint32_t &nInstanceCount, uint16_t &nMeshCount
 ) {
-	if ( arrPage.is_empty() ) {
-		rStore.clear();
-		terrain3dClearMeshCounts( pMeshCounts );
-		nInstanceCount = 0u;
-		nMeshCount = 0u;
-		return true;
-	}
-	size_t offset = 0u;
-	T3DInstanceStore decoded;
-	if ( !terrain3dReadPageHeaders( arrPage, offset, pMeshCounts, nInstanceCount, nMeshCount, true, &decoded ) ) {
-		terrain3dClearMeshCounts( pMeshCounts );
-		nInstanceCount = 0u;
-		nMeshCount = 0u;
-		return false;
-	}
-	rStore = eastl::move( decoded );
-	return true;
+	if ( arrPage.is_empty() ) { rStore.clearRetainCapacity(); terrain3dClearMeshCounts( pMeshCounts ); nInstanceCount = 0u; nMeshCount = 0u; return true; }
+	uint32_t inspected_instances = 0u; uint16_t inspected_meshes = 0u; size_t inspect_offset = 0u;
+	if ( !terrain3dReadPageHeaders( arrPage, inspect_offset, nullptr, inspected_instances, inspected_meshes, false, nullptr ) ) { terrain3dClearMeshCounts( pMeshCounts ); nInstanceCount = 0u; nMeshCount = 0u; return false; }
+	size_t decode_offset = 0u; if ( !terrain3dReadPageHeaders( arrPage, decode_offset, pMeshCounts, nInstanceCount, nMeshCount, true, &rStore ) ) { terrain3dClearMeshCounts( pMeshCounts ); nInstanceCount = 0u; nMeshCount = 0u; return false; }
+	return nInstanceCount == inspected_instances && nMeshCount == inspected_meshes;
 }
 
 bool T3DInstancePageCodec::inspect(

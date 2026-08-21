@@ -453,6 +453,8 @@ T3DRuntimePageStore::T3DRuntimePageStore(
 	const T3DRegionPersistence *const pPersistence
 ) :
 		m_pRepository( pRepository ), m_pPersistence( pPersistence ) {
+	m_preparedByRegion.fill( ( int16_t ) -1 );
+	m_workByRegion.fill( ( int16_t ) -1 );
 }
 
 T3DRuntimePageStore::~T3DRuntimePageStore( void ) {
@@ -473,6 +475,8 @@ void T3DRuntimePageStore::reset( void ) {
 	m_nStreamingGenerationLast = 0u;
 	m_queuedConsumers.fill( 0u );
 	m_queuedPriorities.fill( 0u );
+	m_preparedByRegion.fill( ( int16_t ) -1 );
+	m_workByRegion.fill( ( int16_t ) -1 );
 	m_prepareContext = PrepareJobContext{};
 	m_nPrepareGroupId = WorkerThreadPool::INVALID_TASK_ID;
 	m_bPrepareJobActive = false;
@@ -1336,13 +1340,11 @@ void T3DRuntimePageStore::poll( const bool bWait ) {
 			m_queuedConsumers[( size_t ) ( map_index )] = 0u;
 			m_queuedPriorities[( size_t ) ( map_index )] = 0u;
 		}
-		int destination = -1;
-		for ( int ready_index = 0; ready_index < m_nPreparedPageCount; ++ready_index ) {
-			if ( m_preparedPages[( size_t ) ( ready_index )].location == work_page.location ) {
-				destination = ready_index;
-				work_page.consumerMask |= m_preparedPages[( size_t ) ( ready_index )].consumerMask;
-				break;
-			}
+		int destination = map_index >= 0 ? m_preparedByRegion[( size_t ) map_index] : -1;
+		if ( destination >= 0 && destination < m_nPreparedPageCount ) {
+			work_page.consumerMask |= m_preparedPages[( size_t ) destination].consumerMask;
+		} else {
+			destination = -1;
 		}
 		// A request can gain consumers while the worker is already reading the page.
 		// Re-materialize once with the final mask before publishing the snapshot;
@@ -1367,39 +1369,37 @@ void T3DRuntimePageStore::poll( const bool bWait ) {
 			destination = m_nPreparedPageCount++;
 		}
 		if ( destination >= 0 ) {
-			m_preparedPages[( size_t ) ( destination )] = std::move( work_page );
+			m_preparedPages[( size_t ) destination] = std::move( work_page );
+			if ( map_index >= 0 ) m_preparedByRegion[( size_t ) map_index] = ( int16_t ) destination;
 		}
+		if ( map_index >= 0 ) m_workByRegion[( size_t ) map_index] = ( int16_t ) -1;
 		work_page = PreparedPage{};
 	}
 	Time *const pTime = Time::get_singleton();
 	const uint64_t finished = pTime ? pTime->get_ticks_usec() : m_nPrepareJobStartedUsec;
 	m_nPrepareLatencyUsecLast = finished >= m_nPrepareJobStartedUsec ? finished - m_nPrepareJobStartedUsec : 0u;
 	m_nPrepareWorkPageCount = 0;
+	m_workByRegion.fill( ( int16_t ) -1 );
 	m_prepareContext = PrepareJobContext{};
 	m_nPrepareGroupId = WorkerThreadPool::INVALID_TASK_ID;
 	m_bPrepareJobActive = false;
 	m_nPrepareJobWorkers = 0;
 }
 
+int T3DRuntimePageStore::getPreparedIndex( const Vector2i &rLocation ) const {
+	const int map_index = T3DRegionRepository::getRegionMapIndex( rLocation ); if ( map_index < 0 ) return -1; const int index = m_preparedByRegion[( size_t ) map_index]; return index >= 0 && index < m_nPreparedPageCount && m_preparedPages[( size_t ) index].location == rLocation ? index : -1;
+}
+
+int T3DRuntimePageStore::getWorkIndex( const Vector2i &rLocation ) const {
+	const int map_index = T3DRegionRepository::getRegionMapIndex( rLocation ); if ( map_index < 0 ) return -1; const int index = m_workByRegion[( size_t ) map_index]; return index >= 0 && index < m_nPrepareWorkPageCount && m_workPages[( size_t ) index].location == rLocation ? index : -1;
+}
+
 bool T3DRuntimePageStore::isPending( const Vector2i &rLocation ) const {
-	if ( !m_bPrepareJobActive ) {
-		return false;
-	}
-	for ( int index = 0; index < m_nPrepareWorkPageCount; ++index ) {
-		if ( m_workPages[( size_t ) ( index )].location == rLocation ) {
-			return true;
-		}
-	}
-	return false;
+	return m_bPrepareJobActive && getWorkIndex( rLocation ) >= 0;
 }
 
 bool T3DRuntimePageStore::isPrepared( const Vector2i &rLocation ) const {
-	for ( int index = 0; index < m_nPreparedPageCount; ++index ) {
-		if ( m_preparedPages[( size_t ) ( index )].location == rLocation ) {
-			return true;
-		}
-	}
-	return false;
+	return getPreparedIndex( rLocation ) >= 0;
 }
 
 void T3DRuntimePageStore::request(
@@ -1410,13 +1410,8 @@ void T3DRuntimePageStore::request(
 		!m_pRepository->isLocationValid( rLocation ) || !m_pRepository->getRegionPtr( rLocation ) ) {
 		return;
 	}
-	for ( int ready_index = 0; ready_index < m_nPreparedPageCount; ++ready_index ) {
-		PreparedPage &ready = m_preparedPages[( size_t ) ( ready_index )];
-		if ( ready.location == rLocation ) {
-			ready.consumerMask |= nConsumers;
-			return;
-		}
-	}
+	const int ready_index = getPreparedIndex( rLocation );
+	if ( ready_index >= 0 ) { m_preparedPages[( size_t ) ready_index].consumerMask |= nConsumers; return; }
 	const int map_index = T3DRegionRepository::getRegionMapIndex( rLocation );
 	if ( map_index < 0 ) {
 		return;
@@ -1521,9 +1516,11 @@ void T3DRuntimePageStore::service( const T3DRuntimePageServiceState &rState ) {
 
 		const Vector2i location = m_pRepository->getSlotsData()[best_slot];
 		T3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
-		PreparedPage &page = m_workPages[( size_t ) ( m_nPrepareWorkPageCount++ )];
+		const int work_index = m_nPrepareWorkPageCount++;
+		PreparedPage &page = m_workPages[( size_t ) work_index];
 		page = PreparedPage{};
 		page.location = location;
+		m_workByRegion[( size_t ) best_map_index] = ( int16_t ) work_index;
 		page.pagePath = getPagePath( pRegion, rState.config.dataDirectory );
 		page.sourcePath = pRegion->get_path();
 		page.expectedChannelFlags = ( uint32_t ) ( pRegion->getChannelFlags() );
@@ -1575,14 +1572,16 @@ void T3DRuntimePageStore::service( const T3DRuntimePageServiceState &rState ) {
 }
 
 void T3DRuntimePageStore::consumePreparedIndex( const int nIndex ) {
-	if ( nIndex < 0 || nIndex >= m_nPreparedPageCount ) {
-		return;
-	}
+	if ( nIndex < 0 || nIndex >= m_nPreparedPageCount ) return;
+	const int removed_map_index = T3DRegionRepository::getRegionMapIndex( m_preparedPages[( size_t ) nIndex].location );
+	if ( removed_map_index >= 0 ) m_preparedByRegion[( size_t ) removed_map_index] = ( int16_t ) -1;
 	const int last = m_nPreparedPageCount - 1;
 	if ( nIndex != last ) {
-		m_preparedPages[( size_t ) ( nIndex )] = std::move( m_preparedPages[( size_t ) ( last )] );
+		m_preparedPages[( size_t ) nIndex] = std::move( m_preparedPages[( size_t ) last] );
+		const int moved_map_index = T3DRegionRepository::getRegionMapIndex( m_preparedPages[( size_t ) nIndex].location );
+		if ( moved_map_index >= 0 ) m_preparedByRegion[( size_t ) moved_map_index] = ( int16_t ) nIndex;
 	}
-	m_preparedPages[( size_t ) ( last )] = PreparedPage{};
+	m_preparedPages[( size_t ) last] = PreparedPage{};
 	--m_nPreparedPageCount;
 }
 
@@ -1595,11 +1594,8 @@ bool T3DRuntimePageStore::takeHeight(
 	if ( pNativeHeightBytes ) {
 		pNativeHeightBytes->clear();
 	}
-	for ( int index = 0; index < m_nPreparedPageCount; ++index ) {
-		PreparedPage &page = m_preparedPages[( size_t ) ( index )];
-		if ( page.location != rLocation || ( page.consumerMask & nConsumer ) == 0u ) {
-			continue;
-		}
+	const int index = getPreparedIndex( rLocation ); if ( index < 0 ) return false; PreparedPage &page = m_preparedPages[( size_t ) index];
+	if ( ( page.consumerMask & nConsumer ) == 0u ) return false;
 		if ( page.bLoaded ) {
 			rHeight = bMiddle ? page.pMiddleHeight : page.height;
 			if ( pNativeHeightBytes && !bMiddle ) {
@@ -1612,9 +1608,7 @@ bool T3DRuntimePageStore::takeHeight(
 		if ( page.consumerMask == 0u ) {
 			consumePreparedIndex( index );
 		}
-		return loaded;
-	}
-	return false;
+	return loaded;
 }
 
 bool T3DRuntimePageStore::takeInstance(
@@ -1622,12 +1616,8 @@ bool T3DRuntimePageStore::takeInstance(
 	PackedByteArray *const pInstanceMetadata, PackedByteArray *const pMultimeshFastStart
 ) {
 	poll( false );
-	for ( int index = 0; index < m_nPreparedPageCount; ++index ) {
-		PreparedPage &page = m_preparedPages[( size_t ) ( index )];
-		if ( page.location != rLocation ||
-			( page.consumerMask & RUNTIME_PAGE_CONSUMER_INSTANCE_STORE ) == 0u ) {
-			continue;
-		}
+	const int index = getPreparedIndex( rLocation ); if ( index < 0 ) return false; PreparedPage &page = m_preparedPages[( size_t ) index];
+	if ( ( page.consumerMask & RUNTIME_PAGE_CONSUMER_INSTANCE_STORE ) == 0u ) return false;
 		const bool loaded = page.bInstanceAttempted && page.bInstanceLoaded;
 		if ( loaded ) {
 			rStore = eastl::move( page.preparedInstanceStore );
@@ -1638,9 +1628,7 @@ bool T3DRuntimePageStore::takeInstance(
 		if ( page.consumerMask == 0u ) {
 			consumePreparedIndex( index );
 		}
-		return loaded;
-	}
-	return false;
+	return loaded;
 }
 
 bool T3DRuntimePageStore::takeCpuMaps(
@@ -1651,11 +1639,8 @@ bool T3DRuntimePageStore::takeCpuMaps(
 	rControl.unref();
 	rColor.unref();
 	rDerived.unref();
-	for ( int index = 0; index < m_nPreparedPageCount; ++index ) {
-		PreparedPage &page = m_preparedPages[( size_t ) ( index )];
-		if ( page.location != rLocation || ( page.consumerMask & RUNTIME_PAGE_CONSUMER_CPU_MAPS ) == 0u ) {
-			continue;
-		}
+	const int index = getPreparedIndex( rLocation ); if ( index < 0 ) return false; PreparedPage &page = m_preparedPages[( size_t ) index];
+	if ( ( page.consumerMask & RUNTIME_PAGE_CONSUMER_CPU_MAPS ) == 0u ) return false;
 		if ( page.bLoaded ) {
 			rHeight = page.height;
 			rControl = page.pControl;
@@ -1667,19 +1652,14 @@ bool T3DRuntimePageStore::takeCpuMaps(
 		if ( page.consumerMask == 0u ) {
 			consumePreparedIndex( index );
 		}
-		return loaded;
-	}
-	return false;
+	return loaded;
 }
 
 bool T3DRuntimePageStore::takeNodeDescriptors( const Vector2i &rLocation, PackedByteArray &rDescriptors ) {
 	poll( false );
 	rDescriptors.clear();
-	for ( int index = 0; index < m_nPreparedPageCount; ++index ) {
-		PreparedPage &page = m_preparedPages[( size_t ) ( index )];
-		if ( page.location != rLocation || ( page.consumerMask & RUNTIME_PAGE_CONSUMER_NODE_DESCRIPTORS ) == 0u ) {
-			continue;
-		}
+	const int index = getPreparedIndex( rLocation ); if ( index < 0 ) return false; PreparedPage &page = m_preparedPages[( size_t ) index];
+	if ( ( page.consumerMask & RUNTIME_PAGE_CONSUMER_NODE_DESCRIPTORS ) == 0u ) return false;
 		if ( page.bLoaded ) {
 			rDescriptors = page.nodeDescriptors;
 		}
@@ -1688,9 +1668,7 @@ bool T3DRuntimePageStore::takeNodeDescriptors( const Vector2i &rLocation, Packed
 		if ( page.consumerMask == 0u ) {
 			consumePreparedIndex( index );
 		}
-		return loaded;
-	}
-	return false;
+	return loaded;
 }
 
 bool T3DRuntimePageStore::takeCollision(
@@ -1700,11 +1678,8 @@ bool T3DRuntimePageStore::takeCollision(
 	rHeight.clear();
 	rBounds.clear();
 	rHoleMask.clear();
-	for ( int index = 0; index < m_nPreparedPageCount; ++index ) {
-		PreparedPage &page = m_preparedPages[( size_t ) ( index )];
-		if ( page.location != rLocation || ( page.consumerMask & RUNTIME_PAGE_CONSUMER_COLLISION ) == 0u ) {
-			continue;
-		}
+	const int index = getPreparedIndex( rLocation ); if ( index < 0 ) return false; PreparedPage &page = m_preparedPages[( size_t ) index];
+	if ( ( page.consumerMask & RUNTIME_PAGE_CONSUMER_COLLISION ) == 0u ) return false;
 		if ( page.bLoaded ) {
 			rHeight = page.collisionHeight;
 			rBounds = page.collisionBounds;
@@ -1715,19 +1690,14 @@ bool T3DRuntimePageStore::takeCollision(
 		if ( page.consumerMask == 0u ) {
 			consumePreparedIndex( index );
 		}
-		return loaded;
-	}
-	return false;
+	return loaded;
 }
 
 bool T3DRuntimePageStore::takeNavigation( const Vector2i &rLocation, PackedByteArray &rNavigation ) {
 	poll( false );
 	rNavigation.clear();
-	for ( int index = 0; index < m_nPreparedPageCount; ++index ) {
-		PreparedPage &page = m_preparedPages[( size_t ) ( index )];
-		if ( page.location != rLocation || ( page.consumerMask & RUNTIME_PAGE_CONSUMER_NAVIGATION ) == 0u ) {
-			continue;
-		}
+	const int index = getPreparedIndex( rLocation ); if ( index < 0 ) return false; PreparedPage &page = m_preparedPages[( size_t ) index];
+	if ( ( page.consumerMask & RUNTIME_PAGE_CONSUMER_NAVIGATION ) == 0u ) return false;
 		if ( page.bLoaded ) {
 			rNavigation = page.navigation;
 		}
@@ -1736,19 +1706,14 @@ bool T3DRuntimePageStore::takeNavigation( const Vector2i &rLocation, PackedByteA
 		if ( page.consumerMask == 0u ) {
 			consumePreparedIndex( index );
 		}
-		return loaded;
-	}
-	return false;
+	return loaded;
 }
 
 bool T3DRuntimePageStore::takeTerrainShadowMask( const Vector2i &rLocation, Ref<Image> &rShadowMask ) {
 	poll( false );
 	rShadowMask.unref();
-	for ( int index = 0; index < m_nPreparedPageCount; ++index ) {
-		PreparedPage &page = m_preparedPages[( size_t ) ( index )];
-		if ( page.location != rLocation || ( page.consumerMask & RUNTIME_PAGE_CONSUMER_TERRAIN_SHADOW ) == 0u ) {
-			continue;
-		}
+	const int index = getPreparedIndex( rLocation ); if ( index < 0 ) return false; PreparedPage &page = m_preparedPages[( size_t ) index];
+	if ( ( page.consumerMask & RUNTIME_PAGE_CONSUMER_TERRAIN_SHADOW ) == 0u ) return false;
 		if ( page.bLoaded ) {
 			rShadowMask = page.pTerrainShadowMask;
 		}
@@ -1757,9 +1722,7 @@ bool T3DRuntimePageStore::takeTerrainShadowMask( const Vector2i &rLocation, Ref<
 		if ( page.consumerMask == 0u ) {
 			consumePreparedIndex( index );
 		}
-		return loaded;
-	}
-	return false;
+	return loaded;
 }
 
 bool T3DRuntimePageStore::takeGpuPage(
@@ -1774,11 +1737,8 @@ bool T3DRuntimePageStore::takeGpuPage(
 	if ( pRequestedUsec ) {
 		*pRequestedUsec = 0u;
 	}
-	for ( int index = 0; index < m_nPreparedPageCount; ++index ) {
-		PreparedPage &page = m_preparedPages[( size_t ) ( index )];
-		if ( page.location != rLocation || ( page.consumerMask & RUNTIME_PAGE_CONSUMER_GPU_DETAIL ) == 0u ) {
-			continue;
-		}
+	const int index = getPreparedIndex( rLocation ); if ( index < 0 ) return false; PreparedPage &page = m_preparedPages[( size_t ) index];
+	if ( ( page.consumerMask & RUNTIME_PAGE_CONSUMER_GPU_DETAIL ) == 0u ) return false;
 		bAttempted = page.bAttempted;
 		if ( pRequestedUsec ) {
 			*pRequestedUsec = page.nRequestedUsec;
@@ -1802,9 +1762,7 @@ bool T3DRuntimePageStore::takeGpuPage(
 		if ( page.consumerMask == 0u ) {
 			consumePreparedIndex( index );
 		}
-		return loaded;
-	}
-	return false;
+	return loaded;
 }
 
 T3DRuntimePageStats T3DRuntimePageStore::getStats( void ) const {

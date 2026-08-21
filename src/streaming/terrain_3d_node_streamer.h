@@ -77,8 +77,9 @@ private:
 	Node3D *m_pHost = nullptr;
 	t3dregionRuntime_t m_szRegions[TERRAIN3D_MAX_REGION_SLOTS];
 	eastl::bitset<TERRAIN3D_MAX_REGION_SLOTS> m_desiredRegions;
-	eastl::vector<int> m_activeRegionIndices;
-	eastl::vector<int> m_desiredRegionIndices;
+	uint16_t m_szActiveRegionIndices[TERRAIN3D_MAX_REGION_SLOTS] = {};
+	uint16_t m_szDesiredRegionIndices[TERRAIN3D_MAX_REGION_SLOTS] = {};
+	uint16_t m_nDesiredRegionCount = 0u;
 	eastl::vector<t3dmovableNodeRef_t> m_movableNodes;
 	bool m_bEnabled = true;
 	int m_nRadiusRegions = 1;

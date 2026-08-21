@@ -47,8 +47,9 @@ private:
 	real_t m_fVertexSpacing = 1.0f;
 	bool m_bLoaded = false;
 
-	Dictionary m_regions;
+	Ref<T3DRegion> m_szRegionRefs[TERRAIN3D_MAX_REGION_SLOTS];
 	T3DRegion *m_szRegionPtrMap[TERRAIN3D_MAX_REGION_SLOTS] = {};
+	int m_nRegionResourceCount = 0;
 	Vector2i m_szRegionLocations[TERRAIN3D_MAX_REGION_SLOTS] = {};
 	int m_nRegionLocationCount = 0;
 	uint16_t m_szFreeRegionSlots[TERRAIN3D_MAX_REGION_SLOTS] = {};
@@ -85,9 +86,9 @@ public:
 	EA_FORCE_INLINE const Vector2i *getSlotsData( void ) const { return m_szRegionLocations; }
 	EA_FORCE_INLINE T3DRegion *const *getRegionPtrMapData( void ) const { return m_szRegionPtrMap; }
 	EA_FORCE_INLINE const uint16_t *getLogicalRegionMapData( void ) const { return m_szRegionMap; }
-	EA_FORCE_INLINE const Dictionary &getRegions( void ) const { return m_regions; }
-	EA_FORCE_INLINE Array getRegionKeys( void ) const { return m_regions.keys(); }
-	EA_FORCE_INLINE bool isEmpty( void ) const { return m_regions.is_empty(); }
+	Dictionary getRegions( void ) const;
+	Array getRegionKeys( void ) const;
+	EA_FORCE_INLINE bool isEmpty( void ) const { return m_nRegionResourceCount == 0; }
 
 	bool isLocationValid( const Vector2i &vLocation ) const;
 	Vector2i getRegionLocation( const Vector3 &rGlobalPosition ) const;

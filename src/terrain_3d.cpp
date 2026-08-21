@@ -6357,10 +6357,6 @@ PackedVector3Array T3DTerrain::generateNavMeshSourceGeometry(
 	const int region_size = ( int ) m_nRegionSize;
 	const int expected_width = region_size + 1;
 	const TypedArray<Vector2i> locations = m_pData->getRegionLocations();
-	auto bit_set = []( const PackedByteArray &rBits, const int nIndex ) -> bool {
-		return nIndex >= 0 && nIndex / 8 < rBits.size() &&
-			( rBits[nIndex / 8] & ( uint8_t ) ( 1u << ( nIndex & 7 ) ) ) != 0u;
-	};
 	for ( const Vector2i location : locations ) {
 		const real_t region_world = ( real_t ) region_size * m_fVertexSpacing;
 		const real_t region_min_x = ( real_t ) location.x * region_world;
@@ -6379,20 +6375,11 @@ PackedVector3Array T3DTerrain::generateNavMeshSourceGeometry(
 			LOG( T3DTerrain::ERROR, "Missing/invalid baked navigation tile for region ", location );
 			continue;
 		}
-		PackedByteArray valid_bits;
-		PackedByteArray nav_bits;
-		PackedFloat32Array collision_heights;
-		eastl::vector<Vector2> minmax_ranges;
-		int nav_width = 0;
-		int collision_width = 0;
-		int minmax_source_side = 0;
-		int minmax_level_side = 0;
-		const bool use_minmax = pMinMaxBlob && T3DRuntimeBakeCodec::decodeMinMaxLevel(
-			minmax_blob, 16, minmax_source_side, minmax_level_side, minmax_ranges ) &&
-			minmax_source_side == region_size && minmax_level_side > 0;
-		if ( !T3DRuntimeBakeCodec::decodeNavigationMask( navigation_blob, nav_width, valid_bits, nav_bits ) ||
+		PackedFloat32Array collision_heights; T3DNavigationMaskView navigation_view; T3DMinMaxLevelView minmax_view; int collision_width = 0;
+		const bool use_minmax = pMinMaxBlob && T3DRuntimeBakeCodec::getMinMaxLevelView( minmax_blob, 16, minmax_view ) && minmax_view.nSourceSide == region_size && minmax_view.nLevelSide > 0;
+		if ( !T3DRuntimeBakeCodec::getNavigationMaskView( navigation_blob, navigation_view ) ||
 			!T3DRuntimeBakeCodec::decodeCollisionHeight( collision_blob, collision_heights, collision_width ) ||
-			nav_width != expected_width || collision_width != expected_width || ( pMinMaxBlob && !use_minmax ) ) {
+			navigation_view.nWidth != expected_width || collision_width != expected_width || ( pMinMaxBlob && !use_minmax ) ) {
 			LOG( T3DTerrain::ERROR, "Baked navigation/collision acceleration data does not match region ", location );
 			continue;
 		}
@@ -6404,30 +6391,21 @@ PackedVector3Array T3DTerrain::generateNavMeshSourceGeometry(
 		for ( int z = 0; z < region_size; ++z ) {
 			for ( int x = 0; x < region_size; ++x ) {
 				if ( use_minmax && x + 1 < region_size && z + 1 < region_size ) {
-					const int coarse_x0 = x * minmax_level_side / minmax_source_side;
-					const int coarse_z0 = z * minmax_level_side / minmax_source_side;
-					const int coarse_x1 = ( x + 1 ) * minmax_level_side / minmax_source_side;
-					const int coarse_z1 = ( z + 1 ) * minmax_level_side / minmax_source_side;
+					const int coarse_x0 = x * minmax_view.nLevelSide / minmax_view.nSourceSide;
+					const int coarse_z0 = z * minmax_view.nLevelSide / minmax_view.nSourceSide;
+					const int coarse_x1 = ( x + 1 ) * minmax_view.nLevelSide / minmax_view.nSourceSide;
+					const int coarse_z1 = ( z + 1 ) * minmax_view.nLevelSide / minmax_view.nSourceSide;
 					if ( coarse_x0 == coarse_x1 && coarse_z0 == coarse_z1 ) {
-						const Vector2 range = minmax_ranges[( size_t ) ( coarse_z0 * minmax_level_side + coarse_x0 )];
+						const Vector2 range = T3DRuntimeBakeCodec::getMinMaxRange( minmax_view, ( uint32_t ) ( coarse_z0 * minmax_view.nLevelSide + coarse_x0 ) );
 						if ( range.y < aabb_min_y || range.x > aabb_max_y ) {
 							continue;
 						}
 					}
 				}
-				const int i1 = z * nav_width + x;
-				const int i2 = z * nav_width + x + 1;
-				const int i3 = ( z + 1 ) * nav_width + x;
-				const int i4 = i3 + 1;
-				const bool valid1 = bit_set( valid_bits, i1 );
-				const bool valid2 = bit_set( valid_bits, i2 );
-				const bool valid3 = bit_set( valid_bits, i3 );
-				const bool valid4 = bit_set( valid_bits, i4 );
+				const int nav_width = navigation_view.nWidth; const int i1 = z * nav_width + x; const int i2 = i1 + 1; const int i3 = ( z + 1 ) * nav_width + x; const int i4 = i3 + 1;
+				const bool valid1 = navigation_view.isValidSample( ( uint32_t ) i1 ); const bool valid2 = navigation_view.isValidSample( ( uint32_t ) i2 ); const bool valid3 = navigation_view.isValidSample( ( uint32_t ) i3 ); const bool valid4 = navigation_view.isValidSample( ( uint32_t ) i4 );
 				if ( !valid1 ) continue;
-				const bool nav1 = bit_set( nav_bits, i1 );
-				const bool nav2 = bit_set( nav_bits, i2 );
-				const bool nav3 = bit_set( nav_bits, i3 );
-				const bool nav4 = bit_set( nav_bits, i4 );
+				const bool nav1 = navigation_view.isNavigationSample( ( uint32_t ) i1 ); const bool nav2 = navigation_view.isNavigationSample( ( uint32_t ) i2 ); const bool nav3 = navigation_view.isNavigationSample( ( uint32_t ) i3 ); const bool nav4 = navigation_view.isNavigationSample( ( uint32_t ) i4 );
 				const int global_x = location.x * region_size + x;
 				const int global_z = location.y * region_size + z;
 				Vector3 v1( ( real_t ) global_x * m_fVertexSpacing, height_at( x, z ), ( real_t ) global_z * m_fVertexSpacing );

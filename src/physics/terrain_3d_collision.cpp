@@ -587,10 +587,8 @@ void T3DCollision::build( void ) {
 		shape_count = m_pTerrain->getData()->getRegionSlots().size();
 		hshape_size = m_pTerrain->getRegionSize() + 1;
 	}
-	m_shapeRecords.resize( ( size_t ) ( shape_count ) );
-	m_gridScratch.assign( ( size_t ) ( shape_count ), -1 );
-	m_inactiveShapeIds.clear();
-	m_inactiveShapeIds.reserve( ( size_t ) ( shape_count ) );
+	if ( shape_count < 0 || shape_count > TERRAIN3D_MAX_REGION_SLOTS ) { LOG( T3DTerrain::ERROR, "Collision shape count exceeds fixed scratch capacity: ", shape_count ); return; }
+	m_shapeRecords.resize( ( size_t ) shape_count ); m_nInactiveShapeCount = 0; std::fill_n( m_gridScratch.begin(), shape_count, -1 );
 	LOG( T3DTerrain::DEBUG, "Shape count: ", shape_count );
 	LOG( T3DTerrain::DEBUG, "Shape size: ", m_nShapeSize, ", hshape_size: ", hshape_size );
 	const Transform3D inactiveTransform( Basis(), V3_MAX );
@@ -673,11 +671,8 @@ void T3DCollision::update( const Vector2i &rRegionLoc, const bool bRebuild ) {
 			build();
 			return;
 		}
-		if ( ( int ) ( m_gridScratch.size() ) != grid_count ) {
-			m_gridScratch.resize( ( size_t ) ( grid_count ) );
-		}
-		std::fill( m_gridScratch.begin(), m_gridScratch.end(), -1 );
-		m_inactiveShapeIds.clear();
+		if ( grid_count > TERRAIN3D_MAX_REGION_SLOTS ) { LOG( T3DTerrain::ERROR, "Collision grid exceeds fixed scratch capacity: ", grid_count ); return; }
+		std::fill_n( m_gridScratch.begin(), grid_count, -1 ); m_nInactiveShapeCount = 0;
 
 		const Vector2i grid_offset = -V2I( grid_width / 2 );
 		const Vector2i grid_corner = snapped_position + grid_offset * m_nShapeSize;
@@ -691,7 +686,7 @@ void T3DCollision::update( const Vector2i &rRegionLoc, const bool bRebuild ) {
 			if ( bRebuild || record.gridPosition == V2I_MAX ) {
 				deactivateShape( shape_id );
 				++m_nShapesDeactivatedLastUpdate;
-				m_inactiveShapeIds.push_back( shape_id );
+				m_inactiveShapeIds[m_nInactiveShapeCount++] = shape_id;
 				continue;
 			}
 
@@ -710,7 +705,7 @@ void T3DCollision::update( const Vector2i &rRegionLoc, const bool bRebuild ) {
 
 			deactivateShape( shape_id );
 			++m_nShapesDeactivatedLastUpdate;
-			m_inactiveShapeIds.push_back( shape_id );
+			m_inactiveShapeIds[m_nInactiveShapeCount++] = shape_id;
 		}
 
 		for ( int grid_index = 0; grid_index < grid_count; ++grid_index ) {
@@ -726,12 +721,12 @@ void T3DCollision::update( const Vector2i &rRegionLoc, const bool bRebuild ) {
 			if ( !shapeAllowsCollision( shape_position, m_nShapeSize ) ) {
 				continue;
 			}
-			if ( m_inactiveShapeIds.empty() ) {
+			if ( m_nInactiveShapeCount <= 0 ) {
 				LOG( T3DTerrain::ERROR, "No more unused collision shapes; aborting grid update" );
 				break;
 			}
 
-			const int shape_id = m_inactiveShapeIds.back();
+			const int shape_id = m_inactiveShapeIds[m_nInactiveShapeCount - 1];
 			t3dcollisionShapeRecord_t &record = m_shapeRecords[( size_t ) ( shape_id )];
 			record.pendingHeightBuffer = ( uint8_t ) ( record.uploadedHeightBuffer ^ 1u );
 			PackedRealArray &height_buffer = record.szDynamicHeightBuffers[record.pendingHeightBuffer];
@@ -744,7 +739,7 @@ void T3DCollision::update( const Vector2i &rRegionLoc, const bool bRebuild ) {
 			if ( !shape_ready ) {
 				continue;
 			}
-			m_inactiveShapeIds.pop_back();
+			--m_nInactiveShapeCount;
 
 			Transform3D transform = record.data.transform;
 			transform.scale( Vector3( fSpacing, 1.0f, fSpacing ) );
@@ -807,8 +802,7 @@ void T3DCollision::destroy( void ) {
 	m_fullRegionSlots.clear();
 	m_nStreamingGenerationLast = 0u;
 	m_szFullStreamingResident.fill( 0u );
-	m_gridScratch.clear();
-	m_inactiveShapeIds.clear();
+	m_nInactiveShapeCount = 0;
 	m_fullHeightScratch.clear();
 	m_collisionSurfaceScratch.clear();
 	m_bakedRegionCache.clear();
@@ -962,8 +956,6 @@ RID T3DCollision::getRid( void ) const {
 
 size_t T3DCollision::getRetainedBufferBytes( void ) const {
 	size_t bytes = m_shapeRecords.capacity() * sizeof( t3dcollisionShapeRecord_t );
-	bytes += m_gridScratch.capacity() * sizeof( int32_t );
-	bytes += m_inactiveShapeIds.capacity() * sizeof( int32_t );
 	bytes += ( size_t ) ( m_fullHeightScratch.size() ) * sizeof( real_t );
 	bytes += ( size_t ) ( m_collisionSurfaceScratch.size() ) * sizeof( float );
 	bytes += m_collisionSurfaceBuilder.getRetainedBufferBytes();

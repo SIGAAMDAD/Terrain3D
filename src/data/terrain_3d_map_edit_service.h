@@ -122,6 +122,8 @@ private:
 
 	// Reused on the synchronous edit path. Worker tasks use private local halos.
 	eastl::vector<float> m_fDerivedHaloScratch;
+	eastl::vector<float> m_fDerivedWorkerHaloScratch;
+	eastl::vector<uint8_t> m_derivedOutputScratch;
 	eastl::vector<Vector2i> m_activeLocationScratch;
 	eastl::vector<Vector2i> m_derivedLocationScratch;
 	eastl::vector<T3DDerivedMapUpdate> m_derivedUpdateScratch;

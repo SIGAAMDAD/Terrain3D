@@ -4,8 +4,7 @@
 #ifndef TERRAIN3D_LIGHTMAP_STREAMER_H
 #define TERRAIN3D_LIGHTMAP_STREAMER_H
 
-#include "eastl_config.h"
-#include <EASTL/vector.h>
+#include "Terrain3DConstants.h"
 #include <godot_cpp/classes/lightmap_gi.hpp>
 #include <godot_cpp/classes/object.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
@@ -45,7 +44,8 @@ class T3DLightmapStreamer : public Object {
 	} t3dactivePackage_t;
 
 	T3DTerrain *m_pTerrain = nullptr;
-	eastl::vector<t3dactivePackage_t> m_active;
+	t3dactivePackage_t m_szActive[TERRAIN3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT];
+	uint8_t m_nActiveCount = 0u;
 	bool m_bEnabled = true;
 	int m_nRadiusRegions = 1;
 	int m_nLoadBudget = 2;
@@ -76,7 +76,6 @@ class T3DLightmapStreamer : public Object {
 		const Ref<T3DRegionLighting> &rPackage,
 		Ref<LightmapGIData> &rData
 	);
-	bool loadReceiverRecords( const Ref<T3DRegionLighting> &rPackage, eastl::vector<T3DRuntimeLightingReceiverRecord> &rReceivers ) const;
 	bool collectReceiverState(
 		const Ref<T3DRegionLighting> &rPackage, uint64_t &nSignature, int &nReceiverCount
 	) const;
@@ -122,7 +121,7 @@ public:
 	EA_FORCE_INLINE bool isResidencyIdle( void ) const { return m_nLoadsLastTick == 0 && m_nRefreshesLastTick == 0; }
 	Dictionary getStatsFast( void ) const;
 
-	EA_FORCE_INLINE int getActivePackageCount( void ) const { return ( int ) ( m_active.size() ); }
+	EA_FORCE_INLINE int getActivePackageCount( void ) const { return ( int ) m_nActiveCount; }
 	Dictionary getStats( void ) const;
 
 protected:

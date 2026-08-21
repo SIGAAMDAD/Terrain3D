@@ -126,7 +126,7 @@ void T3DInstancer::clearRegionRenderLists( void ) {
 		if ( !m_regionRenderMask.test( index ) ) {
 			continue;
 		}
-		eastl::vector<size_t>().swap( m_szRegionRenderIndices[index] );
+		m_szRegionRenderIndices[index].clear();
 	}
 	m_regionRenderMask.reset();
 }
@@ -136,7 +136,7 @@ void T3DInstancer::clearRegionLogicalLists( void ) {
 		if ( !m_regionLogicalMask.test( index ) ) {
 			continue;
 		}
-		eastl::vector<t3dcellUpdateKey_t>().swap( m_szRegionLogicalCells[index] );
+		m_szRegionLogicalCells[index].clear();
 	}
 	m_regionLogicalMask.reset();
 }
@@ -199,7 +199,7 @@ void T3DInstancer::eraseRenderCellAt( const size_t iIndex ) {
 			region_indices.pop_back();
 		}
 		if ( region_indices.empty() ) {
-			eastl::vector<size_t>().swap( region_indices );
+			region_indices.clear();
 			m_regionRenderMask.reset( ( size_t ) ( dead_region_index ) );
 		}
 	}
@@ -369,7 +369,7 @@ void T3DInstancer::eraseLogicalCellCount(
 			}
 		}
 		if ( region_cells.empty() ) {
-			eastl::vector<t3dcellUpdateKey_t>().swap( region_cells );
+			region_cells.clear();
 			m_regionLogicalMask.reset( ( size_t ) ( region_index ) );
 		}
 	}
@@ -576,7 +576,7 @@ void T3DInstancer::reconcileRegionRenderCells( T3DRegion *const pRegion, const i
 		if ( list_index >= region_indices->size() ) {
 			if ( region_indices->empty() ) {
 				const int region_index = getRegionTableIndex( regionLocation );
-				eastl::vector<size_t>().swap( *region_indices );
+				region_indices->clear();
 				if ( region_index >= 0 ) {
 					m_regionRenderMask.reset( ( size_t ) ( region_index ) );
 				}
@@ -2070,7 +2070,7 @@ void T3DInstancer::appendGlobalNative(
 
 	eastl::sort( m_placementPending.begin(), m_placementPending.end(), pendingPlacementRegionCellLess );
 
-	m_pTouchedRegions.clear();
+	m_nTouchedRegionCount = 0u;
 	const bool bWasMaterializing = m_bMaterializingUpdates;
 	m_bMaterializingUpdates = true;
 	size_t region_begin = 0;
@@ -2092,7 +2092,7 @@ void T3DInstancer::appendGlobalNative(
 			region->setModified( true );
 		}
 		if ( !bTemporaryPage ) {
-			m_pTouchedRegions.push_back( region );
+			if ( m_nTouchedRegionCount < TERRAIN3D_MAX_REGION_SLOTS ) m_pTouchedRegions[m_nTouchedRegionCount++] = region;
 		}
 
 		size_t begin = region_begin;
@@ -2132,9 +2132,7 @@ void T3DInstancer::appendGlobalNative(
 	}
 
 	if ( bUpdate ) {
-		for ( T3DRegion *const region : m_pTouchedRegions ) {
-			updateMmis( nMeshId, region->getLocation() );
-		}
+		for ( uint16_t i = 0u; i < m_nTouchedRegionCount; ++i ) updateMmis( nMeshId, m_pTouchedRegions[i]->getLocation() );
 	}
 }
 
@@ -2270,7 +2268,6 @@ void T3DInstancer::initialize( T3DTerrain *const pTerrain ) {
 	m_placementTransforms.reserve( 256 );
 	m_placementColors.reserve( 256 );
 	m_placementPending.reserve( 256 );
-	m_pTouchedRegions.reserve( 32 );
 	rebuildLogicalCountsFromStore();
 	if ( m_bCellStreamingEnabled ) {
 		m_lastStreamPosition = m_pTerrain->getClipmapTargetPosition();
@@ -3494,7 +3491,6 @@ size_t T3DInstancer::getRetainedContainerBytes( void ) const {
 	bytes += m_placementTransforms.capacity() * sizeof( Transform3D );
 	bytes += m_placementColors.capacity() * sizeof( Color );
 	bytes += m_placementPending.capacity() * sizeof( t3dpendingPlacement_t );
-	bytes += m_pTouchedRegions.capacity() * sizeof( T3DRegion * );
 	for ( size_t index = 0; index < TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY; ++index ) {
 		bytes += m_szRegionRenderIndices[index].capacity() * sizeof( size_t );
 		bytes += m_szRegionLogicalCells[index].capacity() * sizeof( t3dcellUpdateKey_t );

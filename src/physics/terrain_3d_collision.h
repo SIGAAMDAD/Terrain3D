@@ -75,8 +75,9 @@ private:
 	RID m_staticBodyRid;				  // Physics Server Static Body
 	StaticBody3D *m_pStaticBody = nullptr; // Editor mode StaticBody3D
 	eastl::vector<t3dcollisionShapeRecord_t> m_shapeRecords;
-	eastl::vector<int32_t> m_gridScratch;
-	eastl::vector<int32_t> m_inactiveShapeIds;
+	eastl::array<int32_t, TERRAIN3D_MAX_REGION_SLOTS> m_gridScratch{};
+	eastl::array<int32_t, TERRAIN3D_MAX_REGION_SLOTS> m_inactiveShapeIds{};
+	int m_nInactiveShapeCount = 0;
 	PackedRealArray m_fullHeightScratch;
 	PackedFloat32Array m_collisionSurfaceScratch;
 	T3DCollisionSurfaceBuilder m_collisionSurfaceBuilder;

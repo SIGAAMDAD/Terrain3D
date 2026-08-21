@@ -45,32 +45,44 @@ void weldClipmapGeometry(
 	PackedVector3Array &rVertices, PackedVector2Array &rMetadata,
 	PackedInt32Array &rIndices
 ) {
+	const int source_vertex_count = rVertices.size();
 	eastl::unordered_map<t3dclipmapVertexKey_t, int, t3dclipmapVertexKeyHash_t> unique_vertices;
-	unique_vertices.reserve( ( size_t ) ( rVertices.size() ) );
+	unique_vertices.reserve( ( size_t ) ( source_vertex_count ) );
 	PackedVector3Array welded_vertices;
 	PackedVector2Array welded_metadata;
 	PackedInt32Array remap;
-	remap.resize( rVertices.size() );
-	for ( int vertex_index = 0; vertex_index < rVertices.size(); ++vertex_index ) {
-		const Vector3 vertex = rVertices[vertex_index];
-		const Vector2 metadata = rMetadata[vertex_index];
+	welded_vertices.resize( source_vertex_count );
+	welded_metadata.resize( source_vertex_count );
+	remap.resize( source_vertex_count );
+	Vector3 *const pWeldedVertices = welded_vertices.ptrw();
+	Vector2 *const pWeldedMetadata = welded_metadata.ptrw();
+	int32_t *const pRemap = remap.ptrw();
+	const Vector3 *const pSourceVertices = rVertices.ptr();
+	const Vector2 *const pSourceMetadata = rMetadata.ptr();
+	int welded_count = 0;
+	for ( int vertex_index = 0; vertex_index < source_vertex_count; ++vertex_index ) {
+		const Vector3 &vertex = pSourceVertices[vertex_index];
+		const Vector2 &metadata = pSourceMetadata[vertex_index];
 		const t3dclipmapVertexKey_t key{
 			( int32_t ) ( Math::round( vertex.x ) ), ( int32_t ) ( Math::round( vertex.z ) ), ( uint8_t ) ( Math::round( metadata.x ) )
 		};
 		const eastl::unordered_map<t3dclipmapVertexKey_t, int, t3dclipmapVertexKeyHash_t>::const_iterator found = unique_vertices.find( key );
 		if ( found != unique_vertices.end() ) {
-			remap.set( vertex_index, found->second );
+			pRemap[vertex_index] = found->second;
 			continue;
 		}
-		const int welded_index = welded_vertices.size();
+		const int welded_index = welded_count++;
 		unique_vertices.emplace( key, welded_index );
-		welded_vertices.push_back( vertex );
-		welded_metadata.push_back( metadata );
-		remap.set( vertex_index, welded_index );
+		pWeldedVertices[welded_index] = vertex;
+		pWeldedMetadata[welded_index] = metadata;
+		pRemap[vertex_index] = welded_index;
 	}
+	int32_t *const pIndices = rIndices.ptrw();
 	for ( int index = 0; index < rIndices.size(); ++index ) {
-		rIndices.set( index, remap[rIndices[index]] );
+		pIndices[index] = pRemap[pIndices[index]];
 	}
+	welded_vertices.resize( welded_count );
+	welded_metadata.resize( welded_count );
 	rVertices = welded_vertices;
 	rMetadata = welded_metadata;
 }
@@ -85,13 +97,24 @@ void T3DMesher::appendGrid(
 	const float fPartId, const bool bStandardGrid
 ) {
 	const int vertex_base = rVertices.size();
+	const int index_base = rIndices.size();
+	const int vertex_count = ( rSize.x + 1 ) * ( rSize.y + 1 );
+	const int index_count = rSize.x * rSize.y * 6;
+	rVertices.resize( vertex_base + vertex_count );
+	rMetadata.resize( vertex_base + vertex_count );
+	rIndices.resize( index_base + index_count );
+	Vector3 *const pVertices = rVertices.ptrw();
+	Vector2 *const pMetadata = rMetadata.ptrw();
+	int32_t *const pIndices = rIndices.ptrw();
+	int vertex_write = vertex_base;
 	for ( int y = 0; y <= rSize.y; ++y ) {
 		for ( int x = 0; x <= rSize.x; ++x ) {
-			rVertices.push_back( rOrigin + Vector3( x, 0.0f, y ) );
-			rMetadata.push_back( Vector2( fPartId, 0.0f ) );
+			pVertices[vertex_write] = rOrigin + Vector3( x, 0.0f, y );
+			pMetadata[vertex_write++] = Vector2( fPartId, 0.0f );
 		}
 	}
 
+	int index_write = index_base;
 	for ( int y = 0; y < rSize.y; ++y ) {
 		for ( int x = 0; x < rSize.x; ++x ) {
 			const int bottom_left = vertex_base + y * ( rSize.x + 1 ) + x;
@@ -100,19 +123,19 @@ void T3DMesher::appendGrid(
 			const int top_right = top_left + 1;
 
 			if ( ( x + y ) % 2 == 0 || bStandardGrid ) {
-				rIndices.push_back( bottom_left );
-				rIndices.push_back( top_right );
-				rIndices.push_back( top_left );
-				rIndices.push_back( bottom_left );
-				rIndices.push_back( bottom_right );
-				rIndices.push_back( top_right );
+				pIndices[index_write++] = bottom_left;
+				pIndices[index_write++] = top_right;
+				pIndices[index_write++] = top_left;
+				pIndices[index_write++] = bottom_left;
+				pIndices[index_write++] = bottom_right;
+				pIndices[index_write++] = top_right;
 			} else {
-				rIndices.push_back( bottom_left );
-				rIndices.push_back( bottom_right );
-				rIndices.push_back( top_left );
-				rIndices.push_back( top_left );
-				rIndices.push_back( bottom_right );
-				rIndices.push_back( top_right );
+				pIndices[index_write++] = bottom_left;
+				pIndices[index_write++] = bottom_right;
+				pIndices[index_write++] = top_left;
+				pIndices[index_write++] = top_left;
+				pIndices[index_write++] = bottom_right;
+				pIndices[index_write++] = top_right;
 			}
 		}
 	}
@@ -207,18 +230,21 @@ bool T3DMesher::loadRuntimeGeometryPack( const String &rDataDirectory ) {
 		geometry.vertices.resize( ( int ) vertex_count );
 		geometry.metadata.resize( ( int ) metadata_count );
 		geometry.indices.resize( ( int ) index_count );
+		Vector3 *const pVertices = geometry.vertices.ptrw();
+		Vector2 *const pMetadata = geometry.metadata.ptrw();
+		int32_t *const pIndices = geometry.indices.ptrw();
 		for ( uint32_t i = 0; i < vertex_count; ++i ) {
-			geometry.vertices.set( ( int ) i, Vector3( file->get_float(), file->get_float(), file->get_float() ) );
+			pVertices[i] = Vector3( file->get_float(), file->get_float(), file->get_float() );
 		}
 		for ( uint32_t i = 0; i < metadata_count; ++i ) {
-			geometry.metadata.set( ( int ) i, Vector2( file->get_float(), file->get_float() ) );
+			pMetadata[i] = Vector2( file->get_float(), file->get_float() );
 		}
 		for ( uint32_t i = 0; i < index_count; ++i ) {
 			const int32_t index = ( int32_t ) file->get_32();
 			if ( index < 0 || ( uint32_t ) index >= vertex_count ) {
 				return false;
 			}
-			geometry.indices.set( ( int ) i, index );
+			pIndices[i] = index;
 		}
 		if ( file->get_error() != OK ) {
 			return false;
@@ -346,18 +372,36 @@ RID T3DMesher::instantiateMesh(
 }
 
 RID T3DMesher::instantiateStateMesh( const int nFirstLod, const int nLastLod ) {
+	int total_vertices = 0;
+	int total_indices = 0;
+	for ( int lod = nFirstLod; lod <= nLastLod; ++lod ) {
+		const t3dclipmapGeometry_t &geometry = m_szMeshGeometry[( size_t ) ( lod == 0 ? LOD0_MESH : OUTER_RING_MESH )];
+		total_vertices += geometry.vertices.size();
+		total_indices += geometry.indices.size();
+	}
 	PackedVector3Array vertices;
 	PackedVector2Array metadata;
 	PackedInt32Array indices;
+	vertices.resize( total_vertices );
+	metadata.resize( total_vertices );
+	indices.resize( total_indices );
+	Vector3 *const pVertices = vertices.ptrw();
+	Vector2 *const pMetadata = metadata.ptrw();
+	int32_t *const pIndices = indices.ptrw();
+	int vertex_write = 0;
+	int index_write = 0;
 	for ( int lod = nFirstLod; lod <= nLastLod; ++lod ) {
 		const t3dclipmapGeometry_t &geometry = m_szMeshGeometry[( size_t ) ( lod == 0 ? LOD0_MESH : OUTER_RING_MESH )];
-		const int vertex_base = vertices.size();
+		const int vertex_base = vertex_write;
+		const Vector3 *const pSourceVertices = geometry.vertices.ptr();
+		const Vector2 *const pSourceMetadata = geometry.metadata.ptr();
 		for ( int vertex_index = 0; vertex_index < geometry.vertices.size(); ++vertex_index ) {
-			vertices.push_back( geometry.vertices[vertex_index] );
-			metadata.push_back( Vector2( geometry.metadata[vertex_index].x, ( float ) ( lod ) ) );
+			pVertices[vertex_write] = pSourceVertices[vertex_index];
+			pMetadata[vertex_write++] = Vector2( pSourceMetadata[vertex_index].x, ( float ) ( lod ) );
 		}
-		for ( const int32_t index : geometry.indices ) {
-			indices.push_back( vertex_base + index );
+		const int32_t *const pSourceIndices = geometry.indices.ptr();
+		for ( int index = 0; index < geometry.indices.size(); ++index ) {
+			pIndices[index_write++] = vertex_base + pSourceIndices[index];
 		}
 	}
 	const int highest_lod = MAX( nFirstLod, nLastLod );

@@ -224,6 +224,8 @@ private:
 	const T3DRegionPersistence *m_pPersistence = nullptr;
 	eastl::array<PreparedPage, TERRAIN3D_GPU_CACHE_MAX_LAYERS> m_preparedPages{};
 	eastl::array<PreparedPage, TERRAIN3D_GPU_CACHE_MAX_LAYERS> m_workPages{};
+	eastl::array<int16_t, TERRAIN3D_MAX_REGION_SLOTS> m_preparedByRegion{};
+	eastl::array<int16_t, TERRAIN3D_MAX_REGION_SLOTS> m_workByRegion{};
 	PrepareJobContext m_prepareContext;
 	int m_nPreparedPageCount = 0;
 	int m_nPrepareWorkPageCount = 0;
@@ -244,6 +246,8 @@ private:
 	int m_nQueuedCount = 0;
 	uint64_t m_nStreamingGenerationLast = 0u;
 
+	int getPreparedIndex( const Vector2i &rLocation ) const;
+	int getWorkIndex( const Vector2i &rLocation ) const;
 	bool loadSourceRegion( const Vector2i &rLocation, Ref<T3DRegion> &rSource ) const;
 	static bool loadSnapshot( PreparedPage &rPage );
 	static void prepareTask( void *pContext, uint32_t iIndex );

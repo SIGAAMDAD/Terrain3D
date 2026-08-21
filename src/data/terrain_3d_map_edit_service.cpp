@@ -27,19 +27,23 @@ namespace {
 typedef struct t3dderivedMapTask_s {
 	Vector2i location;
 	Rect2i dirtyRect;
+	size_t nOutputOffset = 0u;
+	size_t nOutputBytes = 0u;
 	bool bAvailable = false;
 	bool bSuccess = false;
-	eastl::vector<uint8_t> output;
 } t3dderivedMapTask_t;
 
 typedef struct t3dderivedMapBuildContext_s {
 	T3DSamplingSource samplingSource;
 	eastl::vector<t3dderivedMapTask_t> *pTasks = nullptr;
+	float *pWorkerHaloScratch = nullptr;
+	uint8_t *pOutputScratch = nullptr;
+	size_t nWorkerHaloElements = 0u;
 	int nRegionSize = 0;
 	float fVertexSpacing = 1.0f;
 } t3dderivedMapBuildContext_t;
 
-void terrain3dBuildDerivedMapRange( void *pContext, const size_t nBegin, const size_t nEnd, const int32_t ) {
+void terrain3dBuildDerivedMapRange( void *pContext, const size_t nBegin, const size_t nEnd, const int32_t nWorkerIndex ) {
 	t3dderivedMapBuildContext_t *const pBuildContext = ( t3dderivedMapBuildContext_t * ) ( pContext );
 	T3DSampler sampler( pBuildContext->samplingSource );
 	for ( size_t taskIndex = nBegin; taskIndex < nEnd; ++taskIndex ) {
@@ -54,15 +58,17 @@ void terrain3dBuildDerivedMapRange( void *pContext, const size_t nBegin, const s
 		}
 
 		const int haloStride = width + 2;
-		eastl::vector<float> halo( ( size_t ) ( haloStride ) * ( size_t ) ( height + 2 ) );
+		const size_t halo_elements = ( size_t ) haloStride * ( size_t ) ( height + 2 );
+		if ( pBuildContext->pWorkerHaloScratch == nullptr || pBuildContext->pOutputScratch == nullptr || halo_elements > pBuildContext->nWorkerHaloElements ) continue;
+		float *const pHalo = pBuildContext->pWorkerHaloScratch + ( size_t ) MAX( 0, nWorkerIndex ) * pBuildContext->nWorkerHaloElements;
 		const int64_t regionBaseX = ( int64_t ) ( task.location.x ) * pBuildContext->nRegionSize;
 		const int64_t regionBaseZ = ( int64_t ) ( task.location.y ) * pBuildContext->nRegionSize;
 		const int64_t haloGridX = regionBaseX + task.dirtyRect.position.x - 1;
 		const int64_t haloGridZ = regionBaseZ + task.dirtyRect.position.y - 1;
-		sampler.copyHeightRect( haloGridX, haloGridZ, width + 2, height + 2, halo.data(), haloStride, false );
+		sampler.copyHeightRect( haloGridX, haloGridZ, width + 2, height + 2, pHalo, haloStride, false );
 		for ( int y = -1; y <= height; ++y ) {
 			for ( int x = -1; x <= width; ++x ) {
-				float &sample = halo[( size_t ) ( y + 1 ) * ( size_t ) ( haloStride ) + ( size_t ) ( x + 1 )];
+				float &sample = pHalo[( size_t ) ( y + 1 ) * ( size_t ) haloStride + ( size_t ) ( x + 1 )];
 				if ( std::isfinite( sample ) ) {
 					continue;
 				}
@@ -75,9 +81,9 @@ void terrain3dBuildDerivedMapRange( void *pContext, const size_t nBegin, const s
 			}
 		}
 
-		task.output.resize( ( size_t ) ( width ) * ( size_t ) ( height ) * 2u );
-		terrain3d_simd::derivedNormalsRg8( halo.data(), width, height, haloStride,
-			pBuildContext->fVertexSpacing, task.output.data() );
+		if ( task.nOutputBytes != ( size_t ) width * ( size_t ) height * 2u ) continue;
+		terrain3d_simd::derivedNormalsRg8( pHalo, width, height, haloStride,
+			pBuildContext->fVertexSpacing, pBuildContext->pOutputScratch + task.nOutputOffset );
 		task.bSuccess = true;
 	}
 }
@@ -94,6 +100,8 @@ void T3DMapEditService::reset( void ) {
 	m_editedArea = AABB();
 	m_masterHeightRange = V2_ZERO;
 	m_fDerivedHaloScratch.clear();
+	m_fDerivedWorkerHaloScratch.clear();
+	m_derivedOutputScratch.clear();
 	m_activeLocationScratch.clear();
 	m_derivedLocationScratch.clear();
 	m_derivedUpdateScratch.clear();
@@ -211,6 +219,20 @@ const eastl::vector<T3DDerivedMapUpdate> &T3DMapEditService::regenerateDerivedMa
 		}
 	}
 
+	const uint32_t hardwareThreads = MAX( 1u, ( uint32_t ) MAX( 1, OS::get_singleton()->get_processor_count() ) );
+	const int32_t workerCount = ( int32_t ) MIN<size_t>( ( size_t ) hardwareThreads, MAX<size_t>( 1u, tasks.size() ) );
+	size_t totalOutputBytes = 0u;
+	size_t maxHaloElements = 0u;
+	for ( t3dderivedMapTask_t &task : tasks ) {
+		if ( !task.bAvailable || task.dirtyRect.size.x <= 0 || task.dirtyRect.size.y <= 0 ) continue;
+		task.nOutputOffset = totalOutputBytes;
+		task.nOutputBytes = ( size_t ) task.dirtyRect.size.x * ( size_t ) task.dirtyRect.size.y * 2u;
+		totalOutputBytes += task.nOutputBytes;
+		maxHaloElements = MAX( maxHaloElements, ( size_t ) ( task.dirtyRect.size.x + 2 ) * ( size_t ) ( task.dirtyRect.size.y + 2 ) );
+	}
+	m_derivedOutputScratch.resize( totalOutputBytes );
+	m_fDerivedWorkerHaloScratch.resize( maxHaloElements * ( size_t ) workerCount );
+
 	const T3DSamplingSource samplingSource{m_pRepository, m_pSamplingStorage};
 	if ( pCompute && eligibleTaskCount == 1u ) {
 		t3dderivedMapTask_t &task = tasks[eligibleTaskIndex];
@@ -248,21 +270,23 @@ const eastl::vector<T3DDerivedMapUpdate> &T3DMapEditService::regenerateDerivedMa
 			( float ) ( m_pRepository->getVertexSpacing() ), rgbaOutput
 		) && rgbaOutput.size() >= ( int64_t ) ( width ) * ( int64_t ) ( height ) * 4 ) {
 			const uint8_t *const pRgba = rgbaOutput.ptr();
-			const size_t texelCount = ( size_t ) ( width ) * ( size_t ) ( height );
-			task.output.resize( texelCount * 2u );
+			const size_t texelCount = ( size_t ) width * ( size_t ) height;
+			uint8_t *const pOutput = m_derivedOutputScratch.data() + task.nOutputOffset;
 			for ( size_t texel = 0u; texel < texelCount; ++texel ) {
-				task.output[texel * 2u] = pRgba[texel * 4u];
-				task.output[texel * 2u + 1u] = pRgba[texel * 4u + 2u];
+				pOutput[texel * 2u] = pRgba[texel * 4u];
+				pOutput[texel * 2u + 1u] = pRgba[texel * 4u + 2u];
 			}
 			task.bSuccess = true;
 		}
 	}
 
-	const uint32_t hardwareThreads = MAX( 1u, ( uint32_t ) ( MAX( 1, OS::get_singleton()->get_processor_count() ) ) );
-	const T3DParallelExecutor executor( ( int32_t ) ( MIN<size_t>( ( size_t ) ( hardwareThreads ), tasks.size() ) ) );
+	const T3DParallelExecutor executor( workerCount );
 	t3dderivedMapBuildContext_t buildContext;
 	buildContext.samplingSource = samplingSource;
 	buildContext.pTasks = &tasks;
+	buildContext.pWorkerHaloScratch = m_fDerivedWorkerHaloScratch.data();
+	buildContext.pOutputScratch = m_derivedOutputScratch.data();
+	buildContext.nWorkerHaloElements = maxHaloElements;
 	buildContext.nRegionSize = m_pRepository->getRegionSize();
 	buildContext.fVertexSpacing = ( float ) ( m_pRepository->getVertexSpacing() );
 	executor.runStatic( tasks.size(), 1u, terrain3dBuildDerivedMapRange, &buildContext );
@@ -285,8 +309,8 @@ const eastl::vector<T3DDerivedMapUpdate> &T3DMapEditService::regenerateDerivedMa
 		}
 
 		PackedByteArray output;
-		output.resize( ( int64_t ) ( task.output.size() ) );
-		std::memcpy( output.ptrw(), task.output.data(), task.output.size() );
+		output.resize( ( int64_t ) task.nOutputBytes );
+		if ( task.nOutputBytes > 0u ) std::memcpy( output.ptrw(), m_derivedOutputScratch.data() + task.nOutputOffset, task.nOutputBytes );
 		const int width = task.dirtyRect.size.x;
 		const int height = task.dirtyRect.size.y;
 		const Ref<Image> pTile = Image::create_from_data( width, height, false, Image::FORMAT_RG8, output );
@@ -854,6 +878,8 @@ Ref<Image> T3DMapEditService::layeredToImage(
 
 size_t T3DMapEditService::getTransientScratchBytes( void ) const {
 	return m_fDerivedHaloScratch.capacity() * sizeof( float ) +
+		m_fDerivedWorkerHaloScratch.capacity() * sizeof( float ) +
+		m_derivedOutputScratch.capacity() * sizeof( uint8_t ) +
 		m_activeLocationScratch.capacity() * sizeof( Vector2i ) +
 		m_derivedLocationScratch.capacity() * sizeof( Vector2i ) +
 		m_derivedUpdateScratch.capacity() * sizeof( T3DDerivedMapUpdate );
