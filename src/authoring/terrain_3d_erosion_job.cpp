@@ -2982,13 +2982,13 @@ bool T3DErosionJob::snapshotTextureProfiles( T3DData *const pData ) {
 			}
 			if ( target == texture_id ) {
 				setFailed( String( "Texture asset " ) + itos( texture_id ) +
-						" contains an erosion transition to itself." );
+						String( " contains an erosion transition to itself." ) );
 				return false;
 			}
 			bHasTransition = true;
 			if ( pAssets->getTextureAsset( target ).is_null() ) {
 				setFailed( String( "Texture asset " ) + itos( texture_id ) +
-						" references missing erosion transition texture ID " + itos( target ) + "." );
+						String( " references missing erosion transition texture ID " ) + itos( target ) + String( "." ) );
 				return false;
 			}
 		}
@@ -3505,7 +3505,7 @@ bool T3DErosionJob::captureImageSnapshot( const Ref<Image> &rImage,
 			rImage->get_format(),
 			rImage->get_data() );
 	if ( pCopy.is_null() || pCopy->is_empty() ) {
-		setFailed( String( "Failed to snapshot erosion input image: " ) + pszLabel + "." );
+		setFailed( String( "Failed to snapshot erosion input image: " ) + String( pszLabel ) + String( "." ) );
 		return false;
 	}
 	pCopy->clear_mipmaps();
@@ -3515,7 +3515,7 @@ bool T3DErosionJob::captureImageSnapshot( const Ref<Image> &rImage,
 	rSnapshot.m_size = pCopy->get_size();
 	rSnapshot.m_rfData = pCopy->get_data();
 	if ( !rSnapshot.isValid() ) {
-		setFailed( String( "Erosion input image produced invalid RF data: " ) + pszLabel + "." );
+		setFailed( String( "Erosion input image produced invalid RF data: " ) + String( pszLabel ) + String( "." ) );
 		return false;
 	}
 	return true;

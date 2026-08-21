@@ -568,7 +568,7 @@ void T3DTerrain::updateRegionLabels( void ) {
 		for ( const Vector2i region_loc : region_locations ) {
 			Label3D *const pLabel = memnew( Label3D );
 			const String text = region_loc;
-			pLabel->set_name( "Label3D" + text.replace( " ", "" ) );
+			pLabel->set_name( String( "Label3D" ) + text.replace( " ", "" ) );
 			pLabel->set_pixel_size( .001f );
 			pLabel->set_billboard_mode( BaseMaterial3D::BILLBOARD_ENABLED );
 			pLabel->set_draw_flag( Label3D::FLAG_DOUBLE_SIDED, true );
@@ -1104,17 +1104,17 @@ void T3DTerrain::updateOceanShaderVariant( void ) {
 	}
 	String code = m_oceanVariantSource;
 	code = code.replace( "#define T3D_OCEAN_VERTEX_ITERATIONS 1",
-			"#define T3D_OCEAN_VERTEX_ITERATIONS " + String::num_int64( m_nOceanVertexWaveIterations ) );
+			String( "#define T3D_OCEAN_VERTEX_ITERATIONS " ) + String::num_int64( m_nOceanVertexWaveIterations ) );
 	code = code.replace( "#define T3D_OCEAN_FRAGMENT_ITERATIONS 3",
-			"#define T3D_OCEAN_FRAGMENT_ITERATIONS " + String::num_int64( m_nOceanFragmentWaveIterations ) );
+			String( "#define T3D_OCEAN_FRAGMENT_ITERATIONS " ) + String::num_int64( m_nOceanFragmentWaveIterations ) );
 	code = code.replace( "#define T3D_OCEAN_REFRACTION_MODE 2",
-			"#define T3D_OCEAN_REFRACTION_MODE " + String::num_int64( m_oceanRefractionMode ) );
+			String( "#define T3D_OCEAN_REFRACTION_MODE " ) + String::num_int64( m_oceanRefractionMode ) );
 	code = code.replace(
-			"#define T3D_OCEAN_FOAM_MODE 2", "#define T3D_OCEAN_FOAM_MODE " + String::num_int64( m_oceanFoamMode ) );
+			"#define T3D_OCEAN_FOAM_MODE 2", String( "#define T3D_OCEAN_FOAM_MODE " ) + String::num_int64( m_oceanFoamMode ) );
 	code = code.replace( "#define T3D_OCEAN_SCATTERING_MODE 2",
-			"#define T3D_OCEAN_SCATTERING_MODE " + String::num_int64( m_oceanScatteringMode ) );
+			String( "#define T3D_OCEAN_SCATTERING_MODE " ) + String::num_int64( m_oceanScatteringMode ) );
 	code = code.replace( "#define T3D_OCEAN_SHADING_MODE 2",
-			"#define T3D_OCEAN_SHADING_MODE " + String::num_int64( m_oceanShadingMode ) );
+			String( "#define T3D_OCEAN_SHADING_MODE " ) + String::num_int64( m_oceanShadingMode ) );
 	String render_mode = "render_mode cull_back, depth_draw_always, diffuse_burley, specular_schlick_ggx, "
 						 "shadows_disabled, skip_vertex_transform;";
 	switch ( m_oceanShadingMode ) {

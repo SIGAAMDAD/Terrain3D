@@ -1142,7 +1142,7 @@ Dictionary T3DTerrain::getPerformanceProfileManifest( void ) const {
 		Dictionary row;
 		row["owner"] = t3dPerformanceProfileOwnerName( setting.m_owner );
 		row["property"] = setting.m_pszProperty;
-		row["key"] = t3dPerformanceProfileOwnerName( setting.m_owner ) + "." + setting.m_pszProperty;
+		row["key"] = t3dPerformanceProfileOwnerName( setting.m_owner ) + String( "." ) + String( setting.m_pszProperty );
 		row["value"] = t3dPerformanceProfileValue( setting );
 		settings[( int )( i )] = row;
 	}
@@ -1177,7 +1177,7 @@ Array T3DTerrain::getPerformanceProfileDiff( void ) const {
 		Dictionary row;
 		row["owner"] = t3dPerformanceProfileOwnerName( setting.m_owner );
 		row["property"] = setting.m_pszProperty;
-		row["key"] = t3dPerformanceProfileOwnerName( setting.m_owner ) + "." + setting.m_pszProperty;
+		row["key"] = t3dPerformanceProfileOwnerName( setting.m_owner ) + String( "." ) + String( setting.m_pszProperty );
 		row["current"] = current;
 		row["expected"] = t3dPerformanceProfileValue( setting );
 		differences.push_back( row );

@@ -423,7 +423,7 @@ EA_FORCE_INLINE bool t3dRemoveFromTree( Node *pNode ) {
 }
 
 EA_FORCE_INLINE String t3dPtrToStr( const void *pPtr ) {
-	return "0x" + String::num_uint64( ( uint64_t )( pPtr ), 16, true );
+	return String( "0x" ) + String::num_uint64( ( uint64_t )( pPtr ), 16, true );
 }
 
 // Returns if A is shallow different from B

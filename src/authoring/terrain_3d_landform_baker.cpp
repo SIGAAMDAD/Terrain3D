@@ -743,8 +743,8 @@ t3dLandformBakerCreateCliffMaterial( T3DTerrain *pTerrain, const t3dSettings_t &
 	Ref<T3DTextureAsset> pAsset;
 	if ( pTerrain && pTerrain->getAssets().is_valid() ) {
 		pAsset = pTerrain->getAssets()->getTextureAsset( rSettings.m_nBaseTexture );
-		cache_key = String::num_uint64( ( uint64_t )( pTerrain->get_instance_id() ) ) + ":" +
-				String::num_int64( rSettings.m_nBaseTexture ) + ":" +
+		cache_key = String::num_uint64( ( uint64_t )( pTerrain->get_instance_id() ) ) + String( ":" ) +
+				String::num_int64( rSettings.m_nBaseTexture ) + String( ":" ) +
 				String::num_uint64( pAsset.is_valid() ? ( uint64_t )( pAsset->get_instance_id() ) : 0u );
 	}
 	if ( rCache.has( cache_key ) ) {

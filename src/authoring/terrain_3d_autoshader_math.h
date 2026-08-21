@@ -5,6 +5,7 @@
 #ifndef TERRAIN3D_AUTOSHADER_MATH_H
 #define TERRAIN3D_AUTOSHADER_MATH_H
 
+#include "Terrain3DConstants.h"
 #include "core/terrain_3d_compiler.h"
 
 #include <cmath>

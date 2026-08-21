@@ -953,7 +953,7 @@ bool T3DData::writeGpuRuntimePage( T3DRegion *const pRegion, String *const pErro
 				T3DRegion *const pNeighbor = getRegionPtr( neighbor );
 				if ( pNeighbor && !pNeighbor->isDeleted() && !ensureCpuRegionResidentInternal( neighbor, true ) ) {
 					if ( pError ) {
-						*pError = "collision bake neighbor could not be made CPU-resident: " + String( neighbor );
+						*pError = String( "collision bake neighbor could not be made CPU-resident: " ) + String( neighbor );
 					}
 					return false;
 				}
@@ -2612,7 +2612,7 @@ Dictionary T3DData::inspectGpuRegionPages( void ) {
 		if ( m_cpuRegionCache.isEnabled() && !ensureCpuRegionResidentInternal( location, true ) ) {
 			++source_unavailable;
 			needs_cook_regions.push_back( String( location ) );
-			errors.push_back( "Region " + String( location ) + ": unable to materialize source maps" );
+			errors.push_back( String( "Region " ) + String( location ) + String( ": unable to materialize source maps" ) );
 			continue;
 		}
 
@@ -2620,7 +2620,7 @@ Dictionary T3DData::inspectGpuRegionPages( void ) {
 		if ( expected_signature == 0u ) {
 			++source_unavailable;
 			needs_cook_regions.push_back( String( location ) );
-			errors.push_back( "Region " + String( location ) + ": source signature generation failed" );
+			errors.push_back( String( "Region " ) + String( location ) + String( ": source signature generation failed" ) );
 			continue;
 		}
 		if ( !FileAccess::file_exists( page_path ) ) {
@@ -2728,14 +2728,14 @@ Dictionary T3DData::cookGpuRegionPages( void ) {
 		T3DRegion *const pRegion = getRegionPtr( location );
 		if ( m_cpuRegionCache.isEnabled() && !ensureCpuRegionResidentInternal( location, true ) ) {
 			++failed;
-			errors.push_back( "Region " + String( location ) + ": unable to materialize source maps" );
+			errors.push_back( String( "Region " ) + String( location ) + String( ": unable to materialize source maps" ) );
 			continue;
 		}
 
 		const uint64_t expected_signature = computeGpuRuntimePageSourceSignature( pRegion );
 		if ( expected_signature == 0u ) {
 			++failed;
-			errors.push_back( "Region " + String( location ) + ": source signature generation failed" );
+			errors.push_back( String( "Region " ) + String( location ) + String( ": source signature generation failed" ) );
 			continue;
 		}
 		const String page_path = getGpuRuntimePagePath( pRegion );
@@ -2761,7 +2761,7 @@ Dictionary T3DData::cookGpuRegionPages( void ) {
 		} else {
 			cook_database.clearRegion( location );
 			++failed;
-			errors.push_back( "Region " + String( location ) + ": " +
+			errors.push_back( String( "Region " ) + String( location ) + String( ": " ) +
 					( cook_error.is_empty() ? String( "cook failed" ) : cook_error ) );
 		}
 	}
@@ -2779,7 +2779,7 @@ Dictionary T3DData::cookGpuRegionPages( void ) {
 			++orphan_removed;
 		} else {
 			++orphan_failed;
-			errors.push_back( "Unable to remove orphan runtime page: " + orphan_path );
+			errors.push_back( String( "Unable to remove orphan runtime page: " ) + orphan_path );
 		}
 	}
 
@@ -2795,7 +2795,7 @@ Dictionary T3DData::cookGpuRegionPages( void ) {
 			material_cache_result = pAssets->cookRuntimeMaterialCache();
 			bMaterialCacheCooked = ( bool )( material_cache_result.get( "complete", false ) );
 			if ( !bMaterialCacheCooked ) {
-				errors.push_back( "Runtime material cache cook failed: " +
+				errors.push_back( String( "Runtime material cache cook failed: " ) +
 						String( material_cache_result.get( "error", "unknown error" ) ) );
 			}
 		}
@@ -2808,7 +2808,7 @@ Dictionary T3DData::cookGpuRegionPages( void ) {
 			shader_pack_result = material->cookRuntimeShaderPack();
 			bShaderPackCooked = ( bool )shader_pack_result.get( "complete", false );
 			if ( !bShaderPackCooked ) {
-				errors.push_back( "Runtime shader pack cook failed: " +
+				errors.push_back( String( "Runtime shader pack cook failed: " ) +
 						String( shader_pack_result.get( "error", "unknown error" ) ) );
 			}
 		}
@@ -4062,7 +4062,7 @@ Error T3DData::exportImage( const String &rFileName, const t3dMapType_t eMapType
 	for ( int i = 0; i < s_badChars.length(); ++i ) {
 		for ( int j = 0; j < rFileName.length(); ++j ) {
 			if ( s_badChars[i] == rFileName[j] ) {
-				LOG( ERROR, "Invalid file path '" + rFileName + "'" );
+				LOG( ERROR, String( "Invalid file path '" ) + rFileName + String( "'" ) );
 				return FAILED;
 			}
 		}
@@ -4081,13 +4081,13 @@ Error T3DData::exportImage( const String &rFileName, const t3dMapType_t eMapType
 		}
 	}
 	if ( bIsSimpleFilename ) {
-		file_name = "res://" + file_name;
+		file_name = String( "res://" ) + file_name;
 	}
 
 	// Check if the file can be opened for writing
 	Ref<FileAccess> pFileRef = FileAccess::open( file_name, FileAccess::ModeFlags::WRITE );
 	if ( pFileRef.is_null() ) {
-		LOG( ERROR, "Cannot open file '" + file_name + "' for writing" );
+		LOG( ERROR, String( "Cannot open file '" ) + file_name + String( "' for writing" ) );
 		return FAILED;
 	}
 	pFileRef->close();

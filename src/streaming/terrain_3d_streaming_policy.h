@@ -14,8 +14,8 @@
 // Editor execution mode selects whether the authored repository is fully pinned
 // or the shipping residency policy is exercised exactly.
 typedef enum t3dEditorExecutionMode_e {
-	TERRAIN3D_EDITOR_EXECUTION_AUTHORING = 0,
-	TERRAIN3D_EDITOR_EXECUTION_RUNTIME_PROFILE = 1,
+	EDITOR_EXECUTION_AUTHORING = 0,
+	EDITOR_EXECUTION_RUNTIME_PROFILE = 1,
 } t3dEditorExecutionMode_t;
 
 // Every logical terrain region has exactly one authoritative runtime state.
@@ -49,15 +49,15 @@ typedef struct t3dRegionStreamingPrediction_s {
 } t3dRegionStreamingPrediction_t;
 
 EA_FORCE_INLINE constexpr bool t3dEditorExecutionModeIsValid( const int nMode ) noexcept {
-	return nMode >= TERRAIN3D_EDITOR_EXECUTION_AUTHORING && nMode <= TERRAIN3D_EDITOR_EXECUTION_RUNTIME_PROFILE;
+	return nMode >= EDITOR_EXECUTION_AUTHORING && nMode <= EDITOR_EXECUTION_RUNTIME_PROFILE;
 }
 
 EA_FORCE_INLINE constexpr bool t3dIsEditorAuthoringMode( const bool bEditorHint, const int nExecutionMode ) noexcept {
-	return bEditorHint && nExecutionMode == TERRAIN3D_EDITOR_EXECUTION_AUTHORING;
+	return bEditorHint && nExecutionMode == EDITOR_EXECUTION_AUTHORING;
 }
 
 EA_FORCE_INLINE constexpr bool t3dIsRuntimeProfileMode( const bool bEditorHint, const int nExecutionMode ) noexcept {
-	return bEditorHint && nExecutionMode == TERRAIN3D_EDITOR_EXECUTION_RUNTIME_PROFILE;
+	return bEditorHint && nExecutionMode == EDITOR_EXECUTION_RUNTIME_PROFILE;
 }
 
 EA_FORCE_INLINE constexpr bool t3dIsGpuPagingEffectivelyEnabled( const bool bConfiguredEnabled ) noexcept {

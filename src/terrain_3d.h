@@ -64,11 +64,6 @@ typedef enum t3dPerformanceProfileStatus_e {
 	PERFORMANCE_PROFILE_MODIFIED,
 } t3dPerformanceProfileStatus_t;
 
-typedef enum t3dEditorExecutionMode_e {
-	EDITOR_EXECUTION_AUTHORING = TERRAIN3D_EDITOR_EXECUTION_AUTHORING,
-	EDITOR_EXECUTION_RUNTIME_PROFILE = TERRAIN3D_EDITOR_EXECUTION_RUNTIME_PROFILE,
-} t3dEditorExecutionMode_t;
-
 typedef enum t3dEnvironmentShadowQuality_e {
 	ENVIRONMENT_SHADOW_LOW,
 	ENVIRONMENT_SHADOW_NORMAL,

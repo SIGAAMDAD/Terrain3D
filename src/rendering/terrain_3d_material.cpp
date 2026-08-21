@@ -119,7 +119,7 @@ static String t3dMaterialInjectShaderDefines( const String &rShader, const Packe
 	if ( rDefineLines.is_empty() ) {
 		return rShader;
 	}
-	const String defines = String( "\n" ).join( rDefineLines ) + "\n";
+	const String defines = String( "\n" ).join( rDefineLines ) + String( "\n" );
 	int declaration_end = -1;
 	const int render_mode_pos = rShader.find( "render_mode" );
 	if ( render_mode_pos >= 0 ) {
@@ -135,7 +135,7 @@ static String t3dMaterialInjectShaderDefines( const String &rShader, const Packe
 		UtilityFunctions::push_error( "T3DMaterial: Shader source is missing shader_type/render_mode declaration" );
 		return rShader;
 	}
-	return rShader.insert( declaration_end + 1, "\n" + defines );
+	return rShader.insert( declaration_end + 1, String( "\n" ) + defines );
 }
 
 static PackedColorArray t3dMaterialMakeTextureColorUniforms( const PackedColorArray &rSource ) {
@@ -154,7 +154,7 @@ static PackedColorArray t3dMaterialMakeTextureColorUniforms( const PackedColorAr
 
 EA_FORCE_INLINE static void
 t3dMaterialAppendDefine( PackedStringArray &rLines, const String &strName, const String &strValue ) {
-	rLines.push_back( "#define " + strName + " " + strValue );
+	rLines.push_back( String( "#define " ) + strName + String( " " ) + strValue );
 }
 
 EA_FORCE_INLINE static char32_t t3dMaterialCommentPeek( const String &rCode, const int iIndex ) {
@@ -196,7 +196,7 @@ t3dMaterialRequireShaderParameter( const Array &rParameterList, const char *pszN
 	if ( t3dMaterialShaderParameterListHas( rParameterList, name ) ) {
 		return true;
 	}
-	rFailureSummary = "Missing required reflected parameter: " + String( name );
+	rFailureSummary = String( "Missing required reflected parameter: " ) + String( name );
 	return false;
 }
 
@@ -1078,7 +1078,7 @@ t3dShaderValidationResult_t T3DMaterial::validateShaderVariant( const Ref<Shader
 			StringName( "_derived_maps" ) };
 		for ( const StringName &name : forbidden ) {
 			if ( t3dMaterialShaderParameterListHas( parameter_list, name ) ) {
-				result.m_failureSummary = "Far shader reflected forbidden streamed dependency: " + String( name );
+				result.m_failureSummary = String( "Far shader reflected forbidden streamed dependency: " ) + String( name );
 				return result;
 			}
 		}
@@ -2203,7 +2203,7 @@ String T3DMaterial::injectEditorCode( const String &rShader ) const {
 	const PackedStringArray editor_features = getEditorShaderFeatures();
 	PackedStringArray editor_defines;
 	for ( int index = 0; index < editor_features.size(); ++index ) {
-		t3dMaterialAppendDefine( editor_defines, "T3D_ENABLE_" + editor_features[index], "1" );
+		t3dMaterialAppendDefine( editor_defines, String( "T3D_ENABLE_" ) + editor_features[index], "1" );
 	}
 
 	String shader = t3dMaterialInjectShaderDefines( rShader, editor_defines );
@@ -3998,7 +3998,7 @@ Dictionary T3DMaterial::cookRuntimeShaderPack( void ) {
 	}
 	m_bRuntimeShaderPackLoaded = old_loaded;
 	const String path = m_pTerrain->getDataDirectory().path_join( "terrain3d_shaders.t3dshaderpack" );
-	const String temporary = path + ".tmp";
+	const String temporary = path + String( ".tmp" );
 	Ref<FileAccess> file = FileAccess::open( temporary, FileAccess::WRITE );
 	if ( file.is_null() ) {
 		result["error"] = "Unable to open runtime shader pack.";
@@ -4021,7 +4021,7 @@ Dictionary T3DMaterial::cookRuntimeShaderPack( void ) {
 		result["error"] = "Runtime shader pack write failed.";
 		return result;
 	}
-	const String backup = path + ".bak";
+	const String backup = path + String( ".bak" );
 	if ( FileAccess::file_exists( backup ) ) {
 		DirAccess::remove_absolute( backup );
 	}
@@ -4365,7 +4365,7 @@ String T3DMaterial::getTierShaderStatus( const t3dShaderTier_t argTier ) const {
 				"Fallback to Near; RID %d; %s", ( int64_t )( state.m_nActiveShaderRidId ), state.m_failureSummary );
 	}
 	if ( !state.m_bCompileValid ) {
-		return state.m_failureSummary.is_empty() ? "Not compiled" : "Invalid: " + state.m_failureSummary;
+		return state.m_failureSummary.is_empty() ? "Not compiled" : String( "Invalid: " ) + state.m_failureSummary;
 	}
 	return vformat( "Valid; RID %d; %d reflected parameters",
 			( int64_t )( state.m_nActiveShaderRidId ),
@@ -4784,7 +4784,7 @@ Error T3DMaterial::save( const String &rPath ) {
 		if ( !explicit_path && !m_bPersistenceDirty && FileAccess::file_exists( path ) ) {
 			return OK;
 		}
-		LOG( DEBUG, "Attempting to save external file: " + path );
+		LOG( DEBUG, String( "Attempting to save external file: " ) + path );
 		err = ResourceSaver::get_singleton()->save( this, path, ResourceSaver::FLAG_COMPRESS );
 		if ( err == OK ) {
 			m_bPersistenceDirty = false;

@@ -282,7 +282,7 @@ void T3DUtil::printArr( const String &strName, const Array &rArr, const int nLev
 			case Variant::OBJECT: {
 				Object *const pObj = cast_to<Object>( var );
 				const String str =
-						"Object#" + String::num_uint64( pObj->get_instance_id() ) + ", " + t3dPtrToStr( pObj );
+						String( "Object#" ) + String::num_uint64( pObj->get_instance_id() ) + String( ", " ) + t3dPtrToStr( pObj );
 				LOG( nLevel, i, ": ", str );
 				break;
 			}
@@ -311,7 +311,7 @@ void T3DUtil::printDict( const String &strName, const Dictionary &rDict, const i
 			case Variant::OBJECT: {
 				Object *const pObj = cast_to<Object>( var );
 				const String str =
-						"Object#" + String::num_uint64( pObj->get_instance_id() ) + ", " + t3dPtrToStr( pObj );
+						String( "Object#" ) + String::num_uint64( pObj->get_instance_id() ) + String( ", " ) + t3dPtrToStr( pObj );
 				LOG( nLevel, "\"", key, "\": ", str );
 				break;
 			}
@@ -361,7 +361,7 @@ Vector2i T3DUtil::stringToLocation( const String &rString ) {
 
 // Expects a v2i(-1,2) and returns terrain3d-01_02.res
 String T3DUtil::locationToFilename( const Vector2i &rRegionLoc ) {
-	return "terrain3d" + locationToString( rRegionLoc ) + ".res";
+	return String( "terrain3d" ) + locationToString( rRegionLoc ) + String( ".res" );
 }
 
 // Expects a v2i(-1,2) and returns -01_02

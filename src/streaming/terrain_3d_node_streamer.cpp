@@ -220,7 +220,7 @@ Node3D *T3DNodeStreamer::ensureRegionRoot( const int iIndex, T3DRegion *const pR
 	runtime.m_pRoot = memnew( Node3D );
 	const Vector2i location = pRegion->getLocation();
 	runtime.m_pRoot->set_name(
-			String( "Region_" ) + String::num_int64( location.m_nX ) + "_" + String::num_int64( location.m_nY ) );
+			String( "Region_" ) + String::num_int64( location.m_nX ) + String( "_" ) + String::num_int64( location.m_nY ) );
 	const real_t fWorldSize = ( real_t )( m_pTerrain->getRegionSize() ) * m_pTerrain->getVertexSpacing();
 	runtime.m_pRoot->set_position(
 			Vector3( ( real_t )( location.m_nX ) * fWorldSize, 0.0f, ( real_t )( location.m_nY ) * fWorldSize ) );

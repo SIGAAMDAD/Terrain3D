@@ -167,27 +167,27 @@ bool T3DCompute::ensurePipeline( t3dPipeline_t &rPipeline, const String &rPath, 
 	rPipeline.m_bAttempted = true;
 	ResourceLoader *const pLoader = ResourceLoader::get_singleton();
 	if ( !pLoader ) {
-		setError( "ResourceLoader unavailable while loading " + rPath );
+		setError( String( "ResourceLoader unavailable while loading " ) + rPath );
 		return false;
 	}
 	const Ref<RDShaderFile> pShaderFile = pLoader->load( rPath );
 	if ( pShaderFile.is_null() ) {
-		setError( "Compute shader resource is unavailable: " + rPath );
+		setError( String( "Compute shader resource is unavailable: " ) + rPath );
 		return false;
 	}
 	const Ref<RDShaderSPIRV> pSpirv = pShaderFile->get_spirv();
 	if ( pSpirv.is_null() ) {
-		setError( "Compute shader has no compiled SPIR-V: " + rPath );
+		setError( String( "Compute shader has no compiled SPIR-V: " ) + rPath );
 		return false;
 	}
 	rPipeline.m_hShader = m_pRd->shader_create_from_spirv( pSpirv, rName );
 	if ( !rPipeline.m_hShader.is_valid() ) {
-		setError( "Failed to create compute shader: " + rPath );
+		setError( String( "Failed to create compute shader: " ) + rPath );
 		return false;
 	}
 	rPipeline.m_hPipeline = m_pRd->compute_pipeline_create( rPipeline.m_hShader );
 	if ( !rPipeline.m_hPipeline.is_valid() ) {
-		setError( "Failed to create compute pipeline: " + rPath );
+		setError( String( "Failed to create compute pipeline: " ) + rPath );
 		m_pRd->free_rid( rPipeline.m_hShader );
 		rPipeline.m_hShader = RID();
 		return false;

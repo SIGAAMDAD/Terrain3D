@@ -400,7 +400,7 @@ bool T3DMesher::writeRuntimeGeometryPack( const String &rDataDirectory ) const {
 		}
 	}
 	const String path = rDataDirectory.path_join( "terrain3d_clipmap.t3dmeshpack" );
-	const String temporary = path + ".tmp";
+	const String temporary = path + String( ".tmp" );
 	Ref<FileAccess> file = FileAccess::open( temporary, FileAccess::WRITE );
 	if ( file.is_null() ) {
 		return false;
@@ -440,7 +440,7 @@ bool T3DMesher::writeRuntimeGeometryPack( const String &rDataDirectory ) const {
 		DirAccess::remove_absolute( temporary );
 		return false;
 	}
-	const String backup = path + ".bak";
+	const String backup = path + String( ".bak" );
 	DirAccess::remove_absolute( backup );
 	if ( FileAccess::file_exists( path ) && DirAccess::rename_absolute( path, backup ) != OK ) {
 		DirAccess::remove_absolute( temporary );

@@ -1440,7 +1440,7 @@ bool T3DRuntimePageStore::collectPageSources( const String &rDataDirectory,
 	rSourceFiles = T3DUtil::getFiles( data_directory, "terrain3d*.res" );
 	rSourceFiles.sort();
 	if ( rSourceFiles.is_empty() ) {
-		rErrors.push_back( "No Terrain3D region .res sources were found in " + data_directory );
+		rErrors.push_back( String( "No Terrain3D region .res sources were found in " ) + data_directory );
 		return false;
 	}
 
@@ -1451,26 +1451,27 @@ bool T3DRuntimePageStore::collectPageSources( const String &rDataDirectory,
 		const int map_index = T3DRegionRepository::getRegionMapIndex( location );
 		if ( map_index < 0 || !m_pRepository->isLocationValid( location ) ||
 				T3DUtil::locationToFilename( location ) != fname ) {
-			rErrors.push_back( "Malformed or out-of-range Terrain3D region source: " + fname );
+			rErrors.push_back( String( "Malformed or out-of-range Terrain3D region source: " ) + fname );
 			continue;
 		}
 		if ( source_locations.test( ( size_t )( map_index ) ) ) {
-			rErrors.push_back( "Duplicate Terrain3D region source location " + String( location ) );
+			rErrors.push_back( String( "Duplicate Terrain3D region source location " ) + String( location ) );
 			continue;
 		}
 		source_locations.set( ( size_t )( map_index ) );
 
 		T3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() ) {
-			rErrors.push_back( "Region source " + fname + " exists in the data directory but is not loaded" );
+			rErrors.push_back(
+					String( "Region source " ) + fname + String( " exists in the data directory but is not loaded" ) );
 			continue;
 		}
 		const String expected_path = data_directory.path_join( fname ).simplify_path();
 		const String loaded_path = pRegion->get_path().simplify_path();
 		if ( loaded_path != expected_path ) {
-			rErrors.push_back( "Region " + String( location ) + " is loaded from " +
+			rErrors.push_back( String( "Region " ) + String( location ) + String( " is loaded from " ) +
 					( loaded_path.is_empty() ? String( "<unsaved resource>" ) : loaded_path ) +
-					" instead of data-directory source " + expected_path );
+					String( " instead of data-directory source " ) + expected_path );
 			continue;
 		}
 		rLocations.push_back( location );
@@ -1481,7 +1482,7 @@ bool T3DRuntimePageStore::collectPageSources( const String &rDataDirectory,
 		const int map_index = T3DRegionRepository::getRegionMapIndex( location );
 		if ( map_index < 0 || !source_locations.test( ( size_t )( map_index ) ) ) {
 			rErrors.push_back(
-					"Loaded region " + String( location ) + " has no matching .res source in " + data_directory );
+					String( "Loaded region " ) + String( location ) + String( " has no matching .res source in " ) + data_directory );
 		}
 	}
 	return rErrors.is_empty();

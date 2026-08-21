@@ -339,7 +339,7 @@ bool T3DLightmapStreamer::activate( const Ref<T3DRegionLighting> &rPackage,
 	LightmapGI *const pLightmap = memnew( LightmapGI );
 	const Vector2i cluster = rPackage->getClusterLocation();
 	pLightmap->set_name(
-			String( "Terrain3DLightmapGI_" ) + String::num_int64( cluster.x ) + "_" + String::num_int64( cluster.y ) );
+			String( "Terrain3DLightmapGI_" ) + String::num_int64( cluster.x ) + String( "_" ) + String::num_int64( cluster.y ) );
 	pLightmap->set_light_data( rRuntimeData );
 	pLightmap->set_shadowmask_mode( ( LightmapGIData::ShadowmaskMode )( rPackage->getShadowmaskMode() ) );
 	m_pTerrain->add_child( pLightmap, false, Node::INTERNAL_MODE_BACK );
@@ -381,7 +381,7 @@ bool T3DLightmapStreamer::refreshActive( t3dActivePackage_t &rActive,
 	LightmapGI *const pLightmap = memnew( LightmapGI );
 	const Vector2i cluster = rActive.m_ackage->getClusterLocation();
 	pLightmap->set_name(
-			String( "Terrain3DLightmapGI_" ) + String::num_int64( cluster.x ) + "_" + String::num_int64( cluster.y ) );
+			String( "Terrain3DLightmapGI_" ) + String::num_int64( cluster.x ) + String( "_" ) + String::num_int64( cluster.y ) );
 	pLightmap->set_light_data( rRuntimeData );
 	pLightmap->set_shadowmask_mode( ( LightmapGIData::ShadowmaskMode )( rActive.m_ackage->getShadowmaskMode() ) );
 	m_pTerrain->add_child( pLightmap, false, Node::INTERNAL_MODE_BACK );

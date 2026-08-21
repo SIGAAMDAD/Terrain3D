@@ -240,12 +240,6 @@ static float t3dAutoshaderBakerSampleMask( const t3dMaskSource_t &rMask,
 	return CLAMP( fValue, 0.0f, 1.0f );
 }
 
-using t3dAutoshaderAngleDistanceDegrees;
-using t3dAutoshaderFbmNoise;
-using t3dAutoshaderRangeWeight;
-using t3dAutoshaderRuleCanProcessPixel;
-using t3dAutoshaderSmoothCurve;
-using t3dAutoshaderSmootherCurve;
 
 static float t3dAutoshaderBakerApplyRuleCurve( const t3dRuleConfig_t &rRule, const float fValue ) {
 	const float value = CLAMP( fValue, 0.0f, 1.0f );
@@ -262,9 +256,9 @@ static float t3dAutoshaderBakerApplyRuleCurve( const t3dRuleConfig_t &rRule, con
 		case 0:
 			return value;
 		case 2:
-			return smootherCurve( value );
+			return t3dAutoshaderSmootherCurve( value );
 		default:
-			return smoothCurve( value );
+			return t3dAutoshaderSmoothCurve( value );
 	}
 }
 
@@ -480,7 +474,7 @@ static bool t3dAutoshaderBakerBuildMetrics( T3DData *pData,
 			const float fWorldX = ( float )( grid_x )*fSpacing;
 			const float fWorldZ = ( float )( grid_z )*fSpacing;
 			if ( rNeeds.m_bNoise ) {
-				rMetrics.m_noise[index] = fbmNoise( fWorldX * fNoiseScale,
+				rMetrics.m_noise[index] = t3dAutoshaderFbmNoise( fWorldX * fNoiseScale,
 						fWorldZ * fNoiseScale,
 						noise_seed,
 						noise_octaves,
@@ -551,7 +545,7 @@ static bool t3dAutoshaderBakerBuildMetrics( T3DData *pData,
 				rMetrics.m_flow[index] = 1.0f;
 				rMetrics.m_flowOrder[index] = ( int32_t )( index );
 			}
-			EA_FORCE_INLINE std::sort( rMetrics.m_flowOrder.begin(),
+			std::sort( rMetrics.m_flowOrder.begin(),
 					rMetrics.m_flowOrder.end(),
 					t3dFlowOrderHeightGreater_t{ rMetrics.m_height.data() } );
 			float fMaximumFlow = 1.0f;
@@ -641,62 +635,62 @@ static float t3dAutoshaderBakerEvaluateRule( const t3dRuleConfig_t &rRule,
 	float fScore = 1.0f;
 	if ( rRule.m_bUseSlope ) {
 		fScore = MIN( fScore,
-				rangeWeight(
+				t3dAutoshaderRangeWeight(
 						rMetrics.m_slope[iIndex], rRule.m_slopeRange.x, rRule.m_slopeRange.y, rRule.m_fSlopeFalloff ) );
 	}
 	if ( rRule.m_bUseHeight ) {
 		fScore = MIN( fScore,
-				rangeWeight( rMetrics.m_height[iIndex],
+				t3dAutoshaderRangeWeight( rMetrics.m_height[iIndex],
 						rRule.m_heightRange.x,
 						rRule.m_heightRange.y,
 						rRule.m_fHeightFalloff ) );
 	}
 	if ( rRule.m_bUseCurvature ) {
 		fScore = MIN( fScore,
-				rangeWeight( rMetrics.m_curvature[iIndex],
+				t3dAutoshaderRangeWeight( rMetrics.m_curvature[iIndex],
 						rRule.m_curvatureRange.x,
 						rRule.m_curvatureRange.y,
 						rRule.m_fCurvatureFalloff ) );
 	}
 	if ( rRule.m_bUseConcavity ) {
 		fScore = MIN( fScore,
-				rangeWeight( rMetrics.m_concavity[iIndex],
+				t3dAutoshaderRangeWeight( rMetrics.m_concavity[iIndex],
 						rRule.m_concavityRange.x,
 						rRule.m_concavityRange.y,
 						rRule.m_fConcavityFalloff ) );
 	}
 	if ( rRule.m_bUseAspect ) {
 		const float fHalfWidth = rRule.m_fAspectWidth * 0.5f;
-		const float fDistance = angleDistanceDegrees( rMetrics.m_aspect[iIndex], rRule.m_fAspectCenter );
-		fScore = MIN( fScore, rangeWeight( fDistance, 0.0f, fHalfWidth, rRule.m_fAspectFalloff ) );
+		const float fDistance = t3dAutoshaderAngleDistanceDegrees( rMetrics.m_aspect[iIndex], rRule.m_fAspectCenter );
+		fScore = MIN( fScore, t3dAutoshaderRangeWeight( fDistance, 0.0f, fHalfWidth, rRule.m_fAspectFalloff ) );
 	}
 	if ( rRule.m_bUseFlow ) {
 		fScore = MIN( fScore,
-				rangeWeight(
+				t3dAutoshaderRangeWeight(
 						rMetrics.m_flow[iIndex], rRule.m_flowRange.x, rRule.m_flowRange.y, rRule.m_fFlowFalloff ) );
 	}
 	if ( rRule.m_bUseDeposition ) {
 		fScore = MIN( fScore,
-				rangeWeight( rMetrics.m_deposition[iIndex],
+				t3dAutoshaderRangeWeight( rMetrics.m_deposition[iIndex],
 						rRule.m_depositionRange.x,
 						rRule.m_depositionRange.y,
 						rRule.m_fDepositionFalloff ) );
 	}
 	if ( rRule.m_bUseWaterDistance ) {
 		fScore = MIN( fScore,
-				rangeWeight( rMetrics.m_waterDistance[iIndex],
+				t3dAutoshaderRangeWeight( rMetrics.m_waterDistance[iIndex],
 						rRule.m_waterDistanceRange.x,
 						rRule.m_waterDistanceRange.y,
 						rRule.m_fWaterDistanceFalloff ) );
 	}
 	if ( rRule.m_bUseNoise ) {
 		fScore = MIN( fScore,
-				rangeWeight(
+				t3dAutoshaderRangeWeight(
 						rMetrics.m_noise[iIndex], rRule.m_noiseRange.x, rRule.m_noiseRange.y, rRule.m_fNoiseFalloff ) );
 	}
 	if ( rRule.m_bUseBiome ) {
 		fScore = MIN( fScore,
-				rangeWeight(
+				t3dAutoshaderRangeWeight(
 						rMetrics.m_biome[iIndex], rRule.m_biomeRange.x, rRule.m_biomeRange.y, rRule.m_fBiomeFalloff ) );
 	}
 	return t3dAutoshaderBakerApplyRuleCurve( rRule, fScore );
@@ -821,7 +815,7 @@ static void t3dAutoshaderBakerBakeAutoshaderRegions( void *pContext,
 			float fMatchedScore = 0.0f;
 			for ( const t3dRuleConfig_t &rule : *context->m_pRules ) {
 				const bool bAllowManual =
-						ruleCanProcessPixel( bAutoPixel, context->m_bOnlyAutoPixels, rule.m_bOverwriteManual );
+						t3dAutoshaderRuleCanProcessPixel( bAutoPixel, context->m_bOnlyAutoPixels, rule.m_bOverwriteManual );
 				const float fScore = t3dAutoshaderBakerEvaluateRule( rule, metrics, index, control, bAllowManual );
 				if ( fScore > 0.0f ) {
 					pMatchedRule = &rule;
@@ -928,7 +922,7 @@ Dictionary T3DAutoShaderBaker::bakeRegions( T3DTerrain *const pTerrain,
 		if ( !t3dAutoshaderBakerTextureSlotIsPopulated( pAssets, rule.m_nBaseTexture ) ||
 				!t3dAutoshaderBakerTextureSlotIsPopulated( pAssets, rule.m_nOverlayTexture ) ) {
 			result["error"] =
-					String( "Material rule " ) + itos( rule.m_nOrder + 1 ) + " references a missing terrain texture.";
+					String( "Material rule " ) + itos( rule.m_nOrder + 1 ) + String( " references a missing terrain texture." );
 			return result;
 		}
 	}
@@ -998,16 +992,18 @@ Dictionary T3DAutoShaderBaker::bakeRegions( T3DTerrain *const pTerrain,
 	// second rollback path around partial native commits.
 	for ( t3dRegionWork_t &item : work ) {
 		if ( !data->ensureCpuRegionResident( item.m_location ) ) {
-			errors.push_back( "Could not page CPU terrain maps for region " + String( item.m_location ) + "." );
+			errors.push_back(
+					String( "Could not page CPU terrain maps for region " ) + String( item.m_location ) + String( "." ) );
 			continue;
 		}
 		T3DRegion *const pRegion = data->getRegionPtr( item.m_location );
 		if ( !item.m_bAvailable || !pRegion || pRegion->isDeleted() ) {
-			errors.push_back( "Region " + String( item.m_location ) + " is unavailable." );
+			errors.push_back( String( "Region " ) + String( item.m_location ) + String( " is unavailable." ) );
 			continue;
 		}
 		if ( !item.m_bSuccess ) {
-			errors.push_back( "Could not allocate or build metrics for region " + String( item.m_location ) + "." );
+			errors.push_back(
+					String( "Could not allocate or build metrics for region " ) + String( item.m_location ) + String( "." ) );
 			continue;
 		}
 		++processed_region_count;
@@ -1101,12 +1097,12 @@ Dictionary T3DAutoShaderBaker::clearBakedRegions( T3DTerrain *const pTerrain,
 	for ( int location_index = 0; location_index < locations.size(); ++location_index ) {
 		const Vector2i location = locations[location_index];
 		if ( !pData->ensureCpuRegionResident( location ) ) {
-			errors.push_back( "Could not page CPU terrain maps for region " + String( location ) + "." );
+			errors.push_back( String( "Could not page CPU terrain maps for region " ) + String( location ) + String( "." ) );
 			continue;
 		}
 		T3DRegion *const pRegion = pData->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() ) {
-			errors.push_back( "Region " + String( location ) + " is unavailable." );
+			errors.push_back( String( "Region " ) + String( location ) + String( " is unavailable." ) );
 			continue;
 		}
 		if ( pRegion->getControlMap().is_null() ) {
@@ -1117,7 +1113,7 @@ Dictionary T3DAutoShaderBaker::clearBakedRegions( T3DTerrain *const pTerrain,
 		PackedByteArray bytes = pRegion->getControlMap()->get_data();
 		if ( pRegion->getControlMap()->get_format() != Image::FORMAT_RF ||
 				( size_t )( bytes.size() ) < count * sizeof( uint32_t ) ) {
-			errors.push_back( "Region " + String( location ) + " has an invalid control map." );
+			errors.push_back( String( "Region " ) + String( location ) + String( " has an invalid control map." ) );
 			continue;
 		}
 		uint8_t *const pWrite = bytes.ptrw();

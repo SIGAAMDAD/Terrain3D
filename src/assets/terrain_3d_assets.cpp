@@ -2200,7 +2200,7 @@ Error T3DAssets::save( const String &rPath ) {
 		if ( !explicit_path && !m_bPersistenceDirty && FileAccess::file_exists( path ) ) {
 			return OK;
 		}
-		LOG( DEBUG, "Attempting to save external file: " + path );
+		LOG( DEBUG, String( "Attempting to save external file: " ) + path );
 		err = ResourceSaver::get_singleton()->save( this, path, ResourceSaver::FLAG_COMPRESS );
 		if ( err == OK ) {
 			m_bPersistenceDirty = false;

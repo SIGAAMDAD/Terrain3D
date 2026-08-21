@@ -29,19 +29,6 @@ typedef enum t3dInstancerMode_e {
 	NORMAL,
 } t3dInstancerMode_t;
 
-typedef struct t3dVector2iHash_s {
-	size_t operator()( const Vector2i &rValue ) const {
-		const uint64_t x = ( uint32_t )( rValue.x );
-		const uint64_t y = ( uint32_t )( rValue.y );
-		uint64_t h = ( x << 32 ) | y;
-		h ^= h >> 33;
-		h *= 0xff51afd7ed558ccdu;
-		h ^= h >> 33;
-		h *= 0xc4ceb9fe1a85ec53u;
-		return ( size_t )( h ^ ( h >> 33 ) );
-	}
-} t3dVector2iHash_t;
-
 typedef struct t3dRenderCellKey_s {
 	Vector2i m_region;
 	Vector2i m_cell;

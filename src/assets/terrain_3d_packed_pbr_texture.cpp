@@ -394,7 +394,7 @@ Error T3DPackedPBRTexture::saveDisplacementDds( const String &rPath ) {
 	}
 	const Error error = pImage->save_dds( rPath );
 	if ( error != OK ) {
-		m_lastError = "Failed to save R8 displacement DDS: " + rPath;
+		m_lastError = String( "Failed to save R8 displacement DDS: " ) + rPath;
 	}
 	return error;
 }

@@ -289,7 +289,7 @@ bool T3DRuntimeWorldManifest::write( const String &rDataDirectory,
 		const String page_path = rPageStore.getPagePath( pRegion, rDataDirectory );
 		if ( !rPageStore.readSourceSignature( page_path, page_signature ) || page_signature == 0u ) {
 			if ( pErrors ) {
-				pErrors->push_back( "Missing/invalid runtime page for manifest region " + String( record.m_location ) );
+				pErrors->push_back( String( "Missing/invalid runtime page for manifest region " ) + String( record.m_location ) );
 			}
 			return false;
 		}
@@ -311,8 +311,8 @@ bool T3DRuntimeWorldManifest::write( const String &rDataDirectory,
 	if ( path.is_empty() ) {
 		return false;
 	}
-	const String temporary = path + ".tmp";
-	const String backup = path + ".bak";
+	const String temporary = path + String( ".tmp" );
+	const String backup = path + String( ".bak" );
 	if ( FileAccess::file_exists( temporary ) ) {
 		DirAccess::remove_absolute( temporary );
 	}
@@ -427,7 +427,7 @@ bool T3DRuntimeWorldManifest::load( const String &rDataDirectory, PackedStringAr
 	Ref<FileAccess> pFile = FileAccess::open( path, FileAccess::READ );
 	if ( pFile.is_null() ) {
 		if ( pErrors ) {
-			pErrors->push_back( "Cooked world manifest is missing: " + path );
+			pErrors->push_back( String( "Cooked world manifest is missing: " ) + path );
 		}
 		return false;
 	}
@@ -553,7 +553,7 @@ bool T3DRuntimeWorldManifest::load( const String &rDataDirectory, PackedStringAr
 		const String page_path = source_path.get_basename() + String( ".t3dpage" );
 		if ( !FileAccess::file_exists( page_path ) ) {
 			if ( pErrors ) {
-				pErrors->push_back( "Cooked runtime page is missing: " + page_path );
+				pErrors->push_back( String( "Cooked runtime page is missing: " ) + page_path );
 			}
 			reset();
 			return false;

@@ -83,7 +83,7 @@ class T3DStaticExpressionParser {
 		} else if ( rName == "T3D_AUTO_SHADER_ENABLED" ) {
 			nValue = m_state.m_bAutoShaderEnabled ? 1 : 0;
 		} else {
-			m_error = "Unknown Terrain3D shader macro: " + rName;
+			m_error = String( "Unknown Terrain3D shader macro: " ) + rName;
 			return false;
 		}
 		return true;
@@ -220,7 +220,7 @@ public:
 		skipWhitespace();
 		if ( m_index != m_expression.length() ) {
 			rFailureSummary =
-					"Unsupported trailing syntax in Terrain3D shader expression: " + m_expression.substr( m_index );
+					String( "Unsupported trailing syntax in Terrain3D shader expression: " ) + m_expression.substr( m_index );
 			return false;
 		}
 		return true;
@@ -270,22 +270,22 @@ static bool t3dShaderSpecializerExpandShaderSourceRecursive( const String &rPath
 		String &rOutputSource,
 		String &rFailureSummary ) {
 	if ( rStack.size() >= s_nShaderMaxConditionalDepth ) {
-		rFailureSummary = "Terrain3D shader include depth exceeded while expanding: " + rPath;
+		rFailureSummary = String( "Terrain3D shader include depth exceeded while expanding: " ) + rPath;
 		return false;
 	}
 	if ( t3dShaderSpecializerIsPathInStack( rStack, rPath ) ) {
-		rFailureSummary = "Terrain3D shader include cycle detected at: " + rPath;
+		rFailureSummary = String( "Terrain3D shader include cycle detected at: " ) + rPath;
 		return false;
 	}
 
 	const Ref<FileAccess> file = FileAccess::open( rPath, FileAccess::READ );
 	if ( file.is_null() ) {
-		rFailureSummary = "Failed to open Terrain3D shader source: " + rPath;
+		rFailureSummary = String( "Failed to open Terrain3D shader source: " ) + rPath;
 		return false;
 	}
 	const String source = file->get_as_text();
 	if ( source.is_empty() ) {
-		rFailureSummary = "Terrain3D shader source is empty: " + rPath;
+		rFailureSummary = String( "Terrain3D shader source is empty: " ) + rPath;
 		return false;
 	}
 
@@ -304,7 +304,7 @@ static bool t3dShaderSpecializerExpandShaderSourceRecursive( const String &rPath
 		const int quote_end = quote_start >= 0 ? directive.find( "\"", quote_start + 1 ) : -1;
 		if ( quote_start < 0 || quote_end <= quote_start + 1 ) {
 			rStack.remove_at( rStack.size() - 1 );
-			rFailureSummary = "Malformed Terrain3D shader include in " + rPath + ": " + directive;
+			rFailureSummary = String( "Malformed Terrain3D shader include in " ) + rPath + String( ": " ) + directive;
 			return false;
 		}
 		String include_path = directive.substr( quote_start + 1, quote_end - quote_start - 1 );
@@ -341,13 +341,13 @@ bool t3dValidateAssembledShaderSource( const String &rSource, String &rFailureSu
 		const String directive = t3dShaderSpecializerGetShaderDirectiveCode( lines[line_index] );
 		if ( directive.begins_with( "#include" ) ) {
 			rFailureSummary =
-					"Unexpanded shader include remains at assembled line " + String::num_int64( line_index + 1 );
+					String( "Unexpanded shader include remains at assembled line " ) + String::num_int64( line_index + 1 );
 			return false;
 		}
 		if ( directive.find( "T3D_STANDALONE_DEFAULTS" ) >= 0 || directive.find( "T3D_TEMPLATE_CONTEXT" ) >= 0 ||
 				( directive.begins_with( "#" ) && directive.find( "T3D_" ) >= 0 ) ) {
-			rFailureSummary = "Unresolved Terrain3D preprocessing state remains at assembled line " +
-					String::num_int64( line_index + 1 ) + ": " + directive;
+			rFailureSummary = String( "Unresolved Terrain3D preprocessing state remains at assembled line " ) +
+					String::num_int64( line_index + 1 ) + String( ": " ) + directive;
 			return false;
 		}
 	}
@@ -372,7 +372,7 @@ bool t3dAssembleShaderSource( const String &rExpandedSource,
 		if ( directive == "// T3D_STANDALONE_DEFAULTS_BEGIN" ) {
 			if ( bSkipStandaloneDefaults ) {
 				rFailureSummary =
-						"Nested Terrain3D standalone-default block at line " + String::num_int64( line_index + 1 );
+						String( "Nested Terrain3D standalone-default block at line " ) + String::num_int64( line_index + 1 );
 				return false;
 			}
 			bSkipStandaloneDefaults = true;
@@ -380,7 +380,7 @@ bool t3dAssembleShaderSource( const String &rExpandedSource,
 		}
 		if ( directive == "// T3D_STANDALONE_DEFAULTS_END" ) {
 			if ( !bSkipStandaloneDefaults ) {
-				rFailureSummary = "Unmatched Terrain3D standalone-default terminator at line " +
+				rFailureSummary = String( "Unmatched Terrain3D standalone-default terminator at line " ) +
 						String::num_int64( line_index + 1 );
 				return false;
 			}
@@ -396,7 +396,7 @@ bool t3dAssembleShaderSource( const String &rExpandedSource,
 		if ( bIfdef || bIfndef ) {
 			if ( depth >= s_nShaderMaxConditionalDepth ) {
 				rFailureSummary =
-						"Terrain3D shader conditional depth exceeded at line " + String::num_int64( line_index + 1 );
+						String( "Terrain3D shader conditional depth exceeded at line " ) + String::num_int64( line_index + 1 );
 				return false;
 			}
 			const String macro = directive.substr( bIfdef ? 7 : 8 ).strip_edges();
@@ -429,7 +429,7 @@ bool t3dAssembleShaderSource( const String &rExpandedSource,
 		if ( directive.begins_with( "#if " ) ) {
 			if ( depth >= s_nShaderMaxConditionalDepth ) {
 				rFailureSummary =
-						"Terrain3D shader conditional depth exceeded at line " + String::num_int64( line_index + 1 );
+						String( "Terrain3D shader conditional depth exceeded at line " ) + String::num_int64( line_index + 1 );
 				return false;
 			}
 			const String expression = directive.substr( 4 ).strip_edges();
@@ -438,8 +438,9 @@ bool t3dAssembleShaderSource( const String &rExpandedSource,
 			if ( bOwned ) {
 				T3DStaticExpressionParser parser( expression, rState );
 				if ( !parser.evaluate( bValue, rFailureSummary ) ) {
-					rFailureSummary = "Terrain3D shader expression error at line " +
-							String::num_int64( line_index + 1 ) + ": " + rFailureSummary + " [" + expression + "]";
+					rFailureSummary = String( "Terrain3D shader expression error at line " ) +
+							String::num_int64( line_index + 1 ) + String( ": " ) + rFailureSummary + String( " [" ) +
+							expression + String( "]" );
 					return false;
 				}
 			}
@@ -457,7 +458,7 @@ bool t3dAssembleShaderSource( const String &rExpandedSource,
 
 		if ( directive.begins_with( "#elif " ) ) {
 			if ( depth <= 0 ) {
-				rFailureSummary = "Unmatched #elif at line " + String::num_int64( line_index + 1 );
+				rFailureSummary = String( "Unmatched #elif at line " ) + String::num_int64( line_index + 1 );
 				return false;
 			}
 			t3dConditionalFrame_t &frame = stack[depth - 1];
@@ -470,15 +471,16 @@ bool t3dAssembleShaderSource( const String &rExpandedSource,
 			}
 			const String expression = directive.substr( 6 ).strip_edges();
 			if ( !t3dShaderSpecializerIsTerrain3dStaticExpression( expression ) ) {
-				rFailureSummary = "Terrain3D-owned conditional mixes with non-Terrain3D #elif at line " +
+				rFailureSummary = String( "Terrain3D-owned conditional mixes with non-Terrain3D #elif at line " ) +
 						String::num_int64( line_index + 1 );
 				return false;
 			}
 			bool bValue = false;
 			T3DStaticExpressionParser parser( expression, rState );
 			if ( !parser.evaluate( bValue, rFailureSummary ) ) {
-				rFailureSummary = "Terrain3D shader #elif expression error at line " +
-						String::num_int64( line_index + 1 ) + ": " + rFailureSummary + " [" + expression + "]";
+				rFailureSummary = String( "Terrain3D shader #elif expression error at line " ) +
+						String::num_int64( line_index + 1 ) + String( ": " ) + rFailureSummary + String( " [" ) +
+						expression + String( "]" );
 				return false;
 			}
 			const bool bSelect = !frame.m_bBranchTaken && bValue;
@@ -489,7 +491,7 @@ bool t3dAssembleShaderSource( const String &rExpandedSource,
 
 		if ( directive == "#else" ) {
 			if ( depth <= 0 ) {
-				rFailureSummary = "Unmatched #else at line " + String::num_int64( line_index + 1 );
+				rFailureSummary = String( "Unmatched #else at line " ) + String::num_int64( line_index + 1 );
 				return false;
 			}
 			t3dConditionalFrame_t &frame = stack[depth - 1];
@@ -507,7 +509,7 @@ bool t3dAssembleShaderSource( const String &rExpandedSource,
 
 		if ( directive == "#endif" ) {
 			if ( depth <= 0 ) {
-				rFailureSummary = "Unmatched #endif at line " + String::num_int64( line_index + 1 );
+				rFailureSummary = String( "Unmatched #endif at line " ) + String::num_int64( line_index + 1 );
 				return false;
 			}
 			const t3dConditionalFrame_t frame = stack[--depth];

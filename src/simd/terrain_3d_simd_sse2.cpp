@@ -81,7 +81,7 @@ static inline void t3dSimdSse2WriteTransform( const t3dPackedTransform_t &rTrans
 		const uint32_t nColor,
 		const int nStride,
 		float *pDestination ) {
-	EA_FORCE_INLINE alignas( 16 ) float fBasis[12] = {};
+	alignas( 16 ) float fBasis[12] = {};
 	_mm_store_ps( fBasis, t3dSimdSse2Decode4Exact( rTransform.m_szBasis ) );
 	_mm_store_ps( fBasis + 4, t3dSimdSse2Decode4Exact( rTransform.m_szBasis + 4 ) );
 	fBasis[8] = t3dHalfDecode( rTransform.m_szBasis[8] );
