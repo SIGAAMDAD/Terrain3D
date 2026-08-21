@@ -10,6 +10,7 @@
 #include <numeric>
 #include <limits>
 
+#include "eastl_config.h"
 #include "core/terrain_3d_numeric_constants.h"
 #include "data/terrain_3d_runtime_page_constants.h"
 #include "instances/terrain_3d_instance_cache_constants.h"

@@ -6,10 +6,29 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <chrono>
-#include <condition_variable>
 #include <mutex>
 #include "core/terrain_3d_compiler.h"
+
+typedef struct t3dmemoryZoneStats_s {
+	size_t nReservedBytes = 0u;
+	size_t nLiveRequestedBytes = 0u;
+	size_t nLivePhysicalBytes = 0u;
+	size_t nLiveAllocationCount = 0u;
+	size_t nExtentFreeBytes = 0u;
+	size_t nSmallPageReservedBytes = 0u;
+	size_t nSmallPageReusablePayloadBytes = 0u;
+	size_t nSmallPageReusablePhysicalBytes = 0u;
+	size_t nLargeAllocationPhysicalBytes = 0u;
+	size_t nMetadataBytes = 0u;
+	size_t nAlignmentWasteBytes = 0u;
+	size_t nSizeClassWasteBytes = 0u;
+	size_t nInternalFragmentationBytes = 0u;
+	size_t nFailedAllocations = 0u;
+	uint32_t nActiveSmallPages = 0u;
+	uint32_t nPeakActiveSmallPages = 0u;
+	uint32_t nFreeExtentCount = 0u;
+	uint32_t nPeakFreeExtentCount = 0u;
+} t3dmemoryZoneStats_t;
 
 class T3DMemoryZone {
 public:
@@ -28,16 +47,16 @@ public:
 	bool initialize( void *pBacking, size_t nBytes );
 	void *allocate( size_t nBytes, size_t nAlignment = alignof( std::max_align_t ) );
 	void deallocate( void *pMemory );
-	void *reallocate( void *pMemory, size_t nBytes );
 	EA_FORCE_INLINE bool beginDraining() { std::lock_guard<std::mutex> lock( m_mutex ); if ( m_state != ACTIVE ) { return false; } m_state = DRAINING; return true; }
-	bool waitUntilDrained( std::chrono::milliseconds timeout );
 	bool release();
 
 	EA_FORCE_INLINE State state() const { std::lock_guard<std::mutex> lock( m_mutex ); return m_state; }
 	EA_FORCE_INLINE size_t capacity() const { return m_nCapacity; }
 	EA_FORCE_INLINE size_t liveAllocations() const { std::lock_guard<std::mutex> lock( m_mutex ); return m_nLiveAllocations; }
 	EA_FORCE_INLINE size_t liveBytes() const { std::lock_guard<std::mutex> lock( m_mutex ); return m_nLiveBytes; }
-	size_t freeBytes() const;
+	size_t freeExtentBytes( void ) const;
+	EA_FORCE_INLINE size_t freeBytes( void ) const { return freeExtentBytes(); }
+	t3dmemoryZoneStats_t getStats( void ) const;
 	EA_FORCE_INLINE bool owns( const void *pMemory ) const { return pMemory && m_pBase && static_cast<const uint8_t *>( pMemory ) > m_pBase && static_cast<const uint8_t *>( pMemory ) < m_pBase + m_nCapacity; }
 
 private:
@@ -50,6 +69,7 @@ private:
 		uint16_t classIndex = UINT16_MAX;
 		uint16_t liveBlocks = 0u;
 		uint16_t totalBlocks = 0u;
+		size_t liveRequestedBytes = 0u;
 		bool active = false;
 	};
 	struct AllocationHeader {
@@ -72,9 +92,16 @@ private:
 	SmallPage m_szSmallPages[MAX_SMALL_PAGES] = {};
 	size_t m_nLiveAllocations = 0u;
 	size_t m_nLiveBytes = 0u;
+	size_t m_nLivePhysicalBytes = 0u;
+	size_t m_nLiveMetadataBytes = 0u;
+	size_t m_nLiveAlignmentWasteBytes = 0u;
+	size_t m_nLiveSizeClassWasteBytes = 0u;
+	size_t m_nFailedAllocations = 0u;
+	uint32_t m_nActiveSmallPages = 0u;
+	uint32_t m_nPeakActiveSmallPages = 0u;
+	uint32_t m_nPeakFreeExtentCount = 0u;
 	State m_state = UNINITIALIZED;
 	mutable std::mutex m_mutex;
-	std::condition_variable m_drained;
 
 	EA_FORCE_INLINE static bool isPowerOfTwo( size_t nValue ) { return nValue && ( nValue & ( nValue - 1u ) ) == 0u; }
 	static bool alignUp( size_t nValue, size_t nAlignment, size_t &rValue );

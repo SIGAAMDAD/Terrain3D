@@ -3,6 +3,7 @@
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/file_access.hpp>
+#include "eastl_config.h"
 #include <EASTL/unordered_map.h>
 #include <godot_cpp/classes/world3d.hpp>
 #include <godot_cpp/core/version.hpp>

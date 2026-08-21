@@ -37,7 +37,6 @@ public:
 
 	bool configure( size_t nCapacityBytes );
 	bool reserveLow( size_t nBytes, size_t nAlignment, t3dmemoryArenaSlice_t &rSlice );
-	bool reserveHigh( size_t nBytes, size_t nAlignment, t3dmemoryArenaSlice_t &rSlice );
 	bool seal( void );
 
 	EA_FORCE_INLINE size_t capacity( void ) const { return m_nCapacity; }
@@ -47,7 +46,6 @@ public:
 	EA_FORCE_INLINE size_t maxAlignment( void ) const { return m_nMaxAlignment; }
 	EA_FORCE_INLINE bool valid( void ) const { return m_bValid; }
 	EA_FORCE_INLINE bool sealed( void ) const { return m_bSealed; }
-	bool contains( const t3dmemoryArenaSlice_t &rSlice ) const;
 
 private:
 	size_t m_nCapacity = 0u;

@@ -15,6 +15,7 @@
 #include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
+#include "eastl_config.h"
 #include <EASTL/bitset.h>
 
 void T3DStagedRepository::reset( void ) {

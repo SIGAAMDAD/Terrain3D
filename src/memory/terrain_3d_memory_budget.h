@@ -41,6 +41,7 @@ typedef struct t3dmemorySubsystemInput_s {
 typedef struct t3dmemoryBudgetInput_s {
 	uint64_t nTotalBudgetBytes = 0u;
 	uint64_t nFixedBytes = 0u;
+	uint64_t nAllocatorReserveBytes = 0u;
 	uint64_t nTransientReserveBytes = 0u;
 	eastl::array<t3dmemorySubsystemInput_t, TERRAIN3D_MEMORY_SUBSYSTEM_COUNT> subsystems{};
 } t3dmemoryBudgetInput_t;
@@ -55,6 +56,7 @@ typedef struct t3dmemorySubsystemAllocation_s {
 typedef struct t3dmemoryBudgetResult_s {
 	uint64_t nTotalBudgetBytes = 0u;
 	uint64_t nFixedBytes = 0u;
+	uint64_t nAllocatorReserveBytes = 0u;
 	uint64_t nTransientReserveBytes = 0u;
 	uint64_t nManagedBudgetBytes = 0u;
 	uint64_t nManualReservedBytes = 0u;
@@ -73,9 +75,12 @@ public:
 		t3dmemoryBudgetResult_t result;
 		result.nTotalBudgetBytes = rInput.nTotalBudgetBytes;
 		result.nFixedBytes = rInput.nFixedBytes;
+		result.nAllocatorReserveBytes = rInput.nAllocatorReserveBytes;
 		result.nTransientReserveBytes = rInput.nTransientReserveBytes;
-		const uint64_t fixed_and_transient = rInput.nFixedBytes > std::numeric_limits<uint64_t>::max() - rInput.nTransientReserveBytes ?
-			std::numeric_limits<uint64_t>::max() : rInput.nFixedBytes + rInput.nTransientReserveBytes;
+		const uint64_t fixed_and_allocator = rInput.nFixedBytes > std::numeric_limits<uint64_t>::max() - rInput.nAllocatorReserveBytes ?
+			std::numeric_limits<uint64_t>::max() : rInput.nFixedBytes + rInput.nAllocatorReserveBytes;
+		const uint64_t fixed_and_transient = fixed_and_allocator > std::numeric_limits<uint64_t>::max() - rInput.nTransientReserveBytes ?
+			std::numeric_limits<uint64_t>::max() : fixed_and_allocator + rInput.nTransientReserveBytes;
 		result.nManagedBudgetBytes = rInput.nTotalBudgetBytes > fixed_and_transient ?
 			rInput.nTotalBudgetBytes - fixed_and_transient : 0u;
 		if ( fixed_and_transient > rInput.nTotalBudgetBytes ) {

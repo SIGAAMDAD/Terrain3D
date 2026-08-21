@@ -15,6 +15,7 @@
 #include <godot_cpp/variant/packed_int32_array.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
 
+#include "eastl_config.h"
 #include <EASTL/bitset.h>
 #include <EASTL/vector.h>
 #include <cstddef>

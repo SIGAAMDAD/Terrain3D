@@ -2,6 +2,7 @@
 
 #ifndef TERRAIN3D_EASTL_CONFIG_H
 #define TERRAIN3D_EASTL_CONFIG_H
+#define TERRAIN3D_EASTL_CONFIGURED 1
 
 #include <atomic>
 #include <cstddef>
@@ -36,19 +37,20 @@
 #define EASTL_NAME_VAL( x ) x
 
 typedef struct t3deastlAllocationStats_s {
-	size_t nLiveBytes = 0;
-	size_t nPeakBytes = 0;
-	size_t nLiveAllocations = 0;
-	size_t nTotalAllocations = 0;
+	size_t nLiveBytes = 0u;
+	size_t nPeakBytes = 0u;
+	size_t nLiveAllocations = 0u;
+	size_t nTotalAllocations = 0u;
+	size_t nFailedAllocations = 0u;
+	size_t nOverflowAllocations = 0u;
+	size_t nOverflowLiveBytes = 0u;
 } t3deastlAllocationStats_t;
 
 typedef struct t3deastlAllocationHeader_s {
 	void *pRaw = nullptr;
 	T3DMemoryZone *pZone = nullptr;
+	size_t nSize = 0u;
 	uint8_t nOrigin = TERRAIN3D_ALLOCATION_BOOTSTRAP;
-#if EASTL_ASSERT_ENABLED
-	size_t nSize = 0;
-#endif
 } t3deastlAllocationHeader_t;
 
 inline constexpr size_t TERRAIN3D_EASTL_ALLOCATION_HEADER_SIZE = sizeof( t3deastlAllocationHeader_t );
@@ -56,22 +58,27 @@ inline constexpr size_t TERRAIN3D_EASTL_ALLOCATION_HEADER_SIZE = sizeof( t3deast
 class T3DEastlAllocator {
 	using AllocationHeader = t3deastlAllocationHeader_t;
 
-#if EASTL_ASSERT_ENABLED
-	inline static std::atomic<size_t> s_nLiveBytes{0};
-	inline static std::atomic<size_t> s_nPeakBytes{0};
-	inline static std::atomic<size_t> s_nLiveAllocations{0};
-	inline static std::atomic<size_t> s_nTotalAllocations{0};
+	inline static std::atomic<size_t> s_nLiveBytes{0u};
+	inline static std::atomic<size_t> s_nPeakBytes{0u};
+	inline static std::atomic<size_t> s_nLiveAllocations{0u};
+	inline static std::atomic<size_t> s_nTotalAllocations{0u};
+	inline static std::atomic<size_t> s_nFailedAllocations{0u};
+	inline static std::atomic<size_t> s_nOverflowAllocations{0u};
+	inline static std::atomic<size_t> s_nOverflowLiveBytes{0u};
 
-	static void recordAllocation( const size_t nSize ) {
+	static void recordAllocation( const size_t nSize, const uint8_t nOrigin ) {
 		const size_t live = s_nLiveBytes.fetch_add( nSize, std::memory_order_relaxed ) + nSize;
-		s_nLiveAllocations.fetch_add( 1, std::memory_order_relaxed );
-		s_nTotalAllocations.fetch_add( 1, std::memory_order_relaxed );
-		size_t peak = s_nPeakBytes.load( std::memory_order_relaxed );
-		while ( live > peak &&
-			   !s_nPeakBytes.compare_exchange_weak( peak, live, std::memory_order_relaxed, std::memory_order_relaxed ) ) {
+		s_nLiveAllocations.fetch_add( 1u, std::memory_order_relaxed );
+		s_nTotalAllocations.fetch_add( 1u, std::memory_order_relaxed );
+		if ( nOrigin == TERRAIN3D_ALLOCATION_OVERFLOW ) {
+			s_nOverflowAllocations.fetch_add( 1u, std::memory_order_relaxed );
+			s_nOverflowLiveBytes.fetch_add( nSize, std::memory_order_relaxed );
 		}
+		size_t peak = s_nPeakBytes.load( std::memory_order_relaxed );
+		while ( live > peak && !s_nPeakBytes.compare_exchange_weak( peak, live, std::memory_order_relaxed, std::memory_order_relaxed ) ) {}
 	}
-#endif
+
+	EA_FORCE_INLINE static void recordFailure( void ) { s_nFailedAllocations.fetch_add( 1u, std::memory_order_relaxed ); }
 
 public:
 	EA_FORCE_INLINE T3DEastlAllocator( const char * = EASTL_ALLOCATOR_DEFAULT_NAME ) {}
@@ -83,66 +90,55 @@ public:
 
 	EA_FORCE_INLINE void *allocate( const size_t n, int = 0 ) { return allocate( n, alignof( std::max_align_t ), 0, 0 ); }
 	void *allocate( const size_t n, size_t alignment, const size_t alignment_offset, int = 0 ) {
-		if ( alignment < alignof( void * ) ) {
-			alignment = alignof( void * );
-		}
-		if ( ( alignment & ( alignment - 1 ) ) != 0 ) {
-			return nullptr;
-		}
+		if ( alignment < alignof( void * ) ) alignment = alignof( void * );
+		if ( n == 0u ) return nullptr;
+		if ( ( alignment & ( alignment - 1u ) ) != 0u ) { recordFailure(); return nullptr; }
 		const size_t header_size = TERRAIN3D_EASTL_ALLOCATION_HEADER_SIZE;
-		const size_t alignment_slack = alignment - 1;
-		if ( n > std::numeric_limits<size_t>::max() - header_size - alignment_slack ) {
-			return nullptr;
-		}
-		const size_t extra = header_size + alignment_slack;
+		const size_t alignment_slack = alignment - 1u;
+		if ( n > std::numeric_limits<size_t>::max() - header_size - alignment_slack ) { recordFailure(); return nullptr; }
+		const size_t total = n + header_size + alignment_slack;
 		T3DMemoryZone *const pZone = T3DZoneAllocatorRouter::zone();
-		void *const pRaw = pZone ? pZone->allocate( n + extra, alignment ) : terrain3d_memory::allocate( n + extra );
-		if ( !pRaw ) {
-			return nullptr;
+		void *pRaw = pZone ? pZone->allocate( total, alignment ) : terrain3d_memory::allocate( total );
+		uint8_t origin = pZone ? TERRAIN3D_ALLOCATION_ZONE : TERRAIN3D_ALLOCATION_BOOTSTRAP;
+		if ( !pRaw && pZone && T3DZoneAllocatorRouter::overflowPolicy() == TERRAIN3D_ALLOCATOR_OVERFLOW_HEAP ) {
+			pRaw = terrain3d_memory::allocate( total );
+			origin = TERRAIN3D_ALLOCATION_OVERFLOW;
 		}
-		const uintptr_t begin = ( uintptr_t ) ( pRaw ) + header_size;
+		if ( !pRaw ) { recordFailure(); return nullptr; }
+		const uintptr_t begin = ( uintptr_t ) pRaw + header_size;
 		const uintptr_t effective_offset = ( uintptr_t ) ( alignment_offset & alignment_slack );
-		uintptr_t aligned = ( begin + effective_offset + alignment_slack ) & ~( uintptr_t ) ( alignment_slack );
+		uintptr_t aligned = ( begin + effective_offset + alignment_slack ) & ~( uintptr_t ) alignment_slack;
 		aligned -= effective_offset;
 		AllocationHeader header;
 		header.pRaw = pRaw;
 		header.pZone = pZone;
-		header.nOrigin = pZone ? TERRAIN3D_ALLOCATION_ZONE : TERRAIN3D_ALLOCATION_BOOTSTRAP;
-#if EASTL_ASSERT_ENABLED
 		header.nSize = n;
-		recordAllocation( n );
-#endif
-		// A nonzero EASTL alignment offset can make the user pointer unsuitable
-		// for an AllocationHeader. Store/load the metadata byte-wise instead of
-		// dereferencing a potentially misaligned header pointer.
+		header.nOrigin = origin;
 		std::memcpy( ( void * ) ( aligned - header_size ), &header, header_size );
-		return ( void * ) ( aligned );
+		recordAllocation( n, origin );
+		return ( void * ) aligned;
 	}
+
 	void deallocate( void *const p, size_t = 0 ) {
-		if ( !p ) {
-			return;
-		}
+		if ( !p ) return;
 		AllocationHeader header;
-		std::memcpy( &header, ( unsigned char * ) ( p ) - sizeof( AllocationHeader ), sizeof( AllocationHeader ) );
-#if EASTL_ASSERT_ENABLED
+		std::memcpy( &header, ( unsigned char * ) p - sizeof( AllocationHeader ), sizeof( AllocationHeader ) );
 		s_nLiveBytes.fetch_sub( header.nSize, std::memory_order_relaxed );
-		s_nLiveAllocations.fetch_sub( 1, std::memory_order_relaxed );
-#endif
-		if ( header.nOrigin == TERRAIN3D_ALLOCATION_ZONE && header.pZone ) {
-			header.pZone->deallocate( header.pRaw );
-		} else {
-			terrain3d_memory::release( header.pRaw );
-		}
+		s_nLiveAllocations.fetch_sub( 1u, std::memory_order_relaxed );
+		if ( header.nOrigin == TERRAIN3D_ALLOCATION_OVERFLOW ) s_nOverflowLiveBytes.fetch_sub( header.nSize, std::memory_order_relaxed );
+		if ( header.nOrigin == TERRAIN3D_ALLOCATION_ZONE && header.pZone ) header.pZone->deallocate( header.pRaw );
+		else terrain3d_memory::release( header.pRaw );
 	}
 
 	static t3deastlAllocationStats_t getAllocationStats( void ) {
 		t3deastlAllocationStats_t stats;
-#if EASTL_ASSERT_ENABLED
 		stats.nLiveBytes = s_nLiveBytes.load( std::memory_order_relaxed );
 		stats.nPeakBytes = s_nPeakBytes.load( std::memory_order_relaxed );
 		stats.nLiveAllocations = s_nLiveAllocations.load( std::memory_order_relaxed );
 		stats.nTotalAllocations = s_nTotalAllocations.load( std::memory_order_relaxed );
-#endif
+		stats.nFailedAllocations = s_nFailedAllocations.load( std::memory_order_relaxed );
+		stats.nOverflowAllocations = s_nOverflowAllocations.load( std::memory_order_relaxed );
+		stats.nOverflowLiveBytes = s_nOverflowLiveBytes.load( std::memory_order_relaxed );
 		return stats;
 	}
 

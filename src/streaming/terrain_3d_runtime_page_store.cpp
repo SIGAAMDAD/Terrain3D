@@ -17,6 +17,7 @@
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/time.hpp>
 
+#include "eastl_config.h"
 #include <EASTL/bitset.h>
 #include <algorithm>
 #include <climits>

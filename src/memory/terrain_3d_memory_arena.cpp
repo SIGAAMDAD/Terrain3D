@@ -48,13 +48,6 @@ bool T3DMemoryArenaLayout::reserveLow(
 	return reserve( false, nBytes, nAlignment, rSlice );
 }
 
-bool T3DMemoryArenaLayout::reserveHigh(
-	const size_t nBytes, const size_t nAlignment,
-	t3dmemoryArenaSlice_t &rSlice
-) {
-	return reserve( true, nBytes, nAlignment, rSlice );
-}
-
 bool T3DMemoryArenaLayout::reserve(
 	const bool bHigh, const size_t nBytes, const size_t nAlignment,
 	t3dmemoryArenaSlice_t &rSlice
@@ -102,14 +95,6 @@ bool T3DMemoryArenaLayout::seal( void ) {
 	}
 	m_bSealed = true;
 	return true;
-}
-
-bool T3DMemoryArenaLayout::contains( const t3dmemoryArenaSlice_t &rSlice ) const {
-	if ( !rSlice.reserved || !isPowerOfTwo( rSlice.alignment ) || rSlice.offset % rSlice.alignment != 0u ||
-		rSlice.offset > m_nCapacity ) {
-		return false;
-	}
-	return rSlice.size <= m_nCapacity - rSlice.offset;
 }
 
 T3DMemoryArena::~T3DMemoryArena( void ) {

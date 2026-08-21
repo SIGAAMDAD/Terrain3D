@@ -77,20 +77,6 @@ public:
 	T3DLinearArena( const T3DLinearArena & ) = delete;
 	T3DLinearArena &operator=( const T3DLinearArena & ) = delete;
 
-	bool bind( void *const pBacking, const size_t nBytes ) {
-		release();
-		if ( nBytes == 0u ) {
-			return true;
-		}
-		if ( !pBacking ) {
-			return false;
-		}
-		m_pBase = ( uint8_t * ) ( pBacking );
-		m_nCapacity = nBytes;
-		m_iOffset = 0u;
-		m_bOwnsBacking = false;
-		return true;
-	}
 
 	bool configure( const size_t nBytes, const size_t nBaseAlignment = TERRAIN3D_ARENA_DEFAULT_BASE_ALIGNMENT ) {
 		release();
@@ -111,19 +97,15 @@ public:
 		m_pBase = ( uint8_t * ) ( ( raw_address + mask ) & ~mask );
 		m_nCapacity = nBytes;
 		m_iOffset = 0u;
-		m_bOwnsBacking = true;
 		return true;
 	}
 
 	void release( void ) {
-		if ( m_bOwnsBacking && m_pRaw ) {
-			terrain3d_memory::release( m_pRaw );
-		}
+		if ( m_pRaw ) terrain3d_memory::release( m_pRaw );
 		m_pRaw = nullptr;
 		m_pBase = nullptr;
 		m_nCapacity = 0u;
 		m_iOffset = 0u;
-		m_bOwnsBacking = false;
 	}
 
 	EA_FORCE_INLINE void reset( void ) { m_iOffset = 0u; }
@@ -180,7 +162,6 @@ private:
 	uint8_t *m_pBase = nullptr;
 	size_t m_nCapacity = 0u;
 	size_t m_iOffset = 0u;
-	bool m_bOwnsBacking = false;
 };
 
 template <typename T> class T3DArenaBuffer {

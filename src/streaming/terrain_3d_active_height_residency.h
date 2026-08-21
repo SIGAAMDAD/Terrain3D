@@ -9,6 +9,7 @@
 #include "Terrain3DConstants.h"
 #include "streaming/terrain_3d_residency_state.h"
 
+#include "eastl_config.h"
 #include <EASTL/array.h>
 #include <cstddef>
 #include <cstdint>

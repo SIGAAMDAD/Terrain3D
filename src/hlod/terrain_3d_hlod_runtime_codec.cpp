@@ -3,6 +3,7 @@
 #include "core/terrain_3d_byte_writer.h"
 #include "hlod/terrain_3d_hlod_runtime_codec.h"
 
+#include "eastl_config.h"
 #include <EASTL/sort.h>
 #include <godot_cpp/variant/char_string.hpp>
 #include <godot_cpp/variant/dictionary.hpp>

@@ -420,6 +420,7 @@ private:
 	t3dmemoryBudgetInput_t buildMemoryBudgetInput( void ) const;
 	uint64_t calculateFixedMemoryBytes( void ) const;
 	uint64_t calculateTransientMemoryBytes( void ) const;
+	size_t calculateRuntimeAllocatorZoneBytes( void ) const;
 	void applyMemoryBudgetResult( const t3dmemoryBudgetResult_t &rResult, bool bForce );
 	static const char *memoryLimitReasonName( t3dmemoryLimitReason_t reason );
 	void sampleRuntimeProfile( const t3druntimeProfileSample_t &rSample );

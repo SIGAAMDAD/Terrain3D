@@ -2351,8 +2351,8 @@ bool T3DTerrain::initializeRuntimeMemory( void ) {
 	// Active/resident fixed page banks retain separate binding work until their
 	// P09 immutable-publication topology is enabled; they must never use this lock.
 	const size_t active_bytes = terrain3dActiveStorageRequiredBytes( ( int ) ( m_nRegionSize ) );
-	const size_t zone_bytes = 16u * TERRAIN3D_MEMORY_MIB;
-	if ( active_bytes == 0u || active_bytes > std::numeric_limits<size_t>::max() - zone_bytes -
+	const size_t zone_bytes = calculateRuntimeAllocatorZoneBytes();
+	if ( active_bytes == 0u || zone_bytes < T3DMemoryZone::SMALL_PAGE_BYTES || active_bytes > std::numeric_limits<size_t>::max() - zone_bytes -
 		2u * TERRAIN3D_ARENA_DEFAULT_BASE_ALIGNMENT ) return false;
 	T3DMemoryArenaLayout layout( active_bytes + zone_bytes + 2u * TERRAIN3D_ARENA_DEFAULT_BASE_ALIGNMENT );
 	if ( !layout.reserveLow( active_bytes, TERRAIN3D_ACTIVE_STORAGE_ALIGNMENT, m_runtimeActiveHeightSlice ) ||
@@ -2368,6 +2368,8 @@ bool T3DTerrain::initializeRuntimeMemory( void ) {
 		m_runtimeMemoryArena.release();
 		return false;
 	}
+	T3DZoneAllocatorRouter::setOverflowPolicy( Engine::get_singleton()->is_editor_hint() ?
+		TERRAIN3D_ALLOCATOR_OVERFLOW_HEAP : TERRAIN3D_ALLOCATOR_OVERFLOW_STRICT );
 	T3DZoneAllocatorRouter::install( &m_runtimeMemoryZone );
 	m_bRuntimeMemoryReady = true;
 	return true;
@@ -3132,6 +3134,20 @@ const char *T3DTerrain::memoryLimitReasonName( const t3dmemoryLimitReason_t reas
 	}
 }
 
+size_t T3DTerrain::calculateRuntimeAllocatorZoneBytes( void ) const {
+	const uint64_t total_bytes = ( uint64_t ) m_nTotalMemoryBudgetMb * TERRAIN3D_MEMORY_MIB;
+	const uint64_t transient_bytes = ( uint64_t ) m_nMemoryTransientReserveMb * TERRAIN3D_MEMORY_MIB;
+	const size_t active_bytes = terrain3dActiveStorageRequiredBytes( ( int ) m_nRegionSize );
+	uint64_t target = total_bytes / TERRAIN3D_RUNTIME_ALLOCATOR_BUDGET_DIVISOR;
+	target = MAX( target, ( uint64_t ) TERRAIN3D_RUNTIME_ALLOCATOR_MIN_BYTES );
+	target = MIN( target, ( uint64_t ) TERRAIN3D_RUNTIME_ALLOCATOR_MAX_BYTES );
+	const uint64_t fixed_floor = ( uint64_t ) active_bytes + transient_bytes;
+	if ( total_bytes <= fixed_floor + T3DMemoryZone::SMALL_PAGE_BYTES ) return 0u;
+	target = MIN( target, total_bytes - fixed_floor );
+	target &= ~( ( uint64_t ) T3DMemoryZone::SMALL_PAGE_BYTES - 1u );
+	return target >= T3DMemoryZone::SMALL_PAGE_BYTES && target <= SIZE_MAX ? ( size_t ) target : 0u;
+}
+
 uint64_t T3DTerrain::calculateFixedMemoryBytes( void ) const {
 	uint64_t bytes = sizeof( *this );
 	if ( m_pData ) {
@@ -3184,6 +3200,7 @@ t3dmemoryBudgetInput_t T3DTerrain::buildMemoryBudgetInput( void ) const {
 	t3dmemoryBudgetInput_t input;
 	input.nTotalBudgetBytes = ( uint64_t ) ( m_nTotalMemoryBudgetMb ) * TERRAIN3D_MEMORY_MIB;
 	input.nFixedBytes = calculateFixedMemoryBytes();
+	input.nAllocatorReserveBytes = m_runtimeMemoryZone.capacity() > 0u ? ( uint64_t ) m_runtimeMemoryZone.capacity() : ( uint64_t ) calculateRuntimeAllocatorZoneBytes();
 	input.nTransientReserveBytes = ( uint64_t ) ( m_nMemoryTransientReserveMb ) * TERRAIN3D_MEMORY_MIB;
 
 	t3dmemorySubsystemInput_t &gpu = input.subsystems[TERRAIN3D_MEMORY_GPU_TERRAIN_PAGES];
@@ -3456,6 +3473,9 @@ Dictionary T3DTerrain::getMemoryBudgetStats( void ) const {
 	stats["total_budget_bytes"] = ( int64_t ) ( ( uint64_t ) ( m_nTotalMemoryBudgetMb ) * TERRAIN3D_MEMORY_MIB );
 	stats["transient_reserve_mb"] = m_nMemoryTransientReserveMb;
 	stats["fixed_bytes"] = ( int64_t ) ( m_nMemoryBudgetResult.nFixedBytes );
+	stats["allocator_reserve_bytes"] = ( int64_t ) ( m_nMemoryBudgetResult.nAllocatorReserveBytes );
+	stats["allocator_target_bytes"] = ( int64_t ) calculateRuntimeAllocatorZoneBytes();
+	stats["allocator_overflow_policy"] = T3DZoneAllocatorRouter::overflowPolicy() == TERRAIN3D_ALLOCATOR_OVERFLOW_HEAP ? "heap" : "strict";
 	stats["managed_budget_bytes"] = ( int64_t ) ( m_nMemoryBudgetResult.nManagedBudgetBytes );
 	stats["managed_effective_bytes"] = ( int64_t ) ( m_nMemoryBudgetResult.nManagedEffectiveBytes );
 	stats["manual_reserved_bytes"] = ( int64_t ) ( m_nMemoryBudgetResult.nManualReservedBytes );
@@ -3553,17 +3573,37 @@ Dictionary T3DTerrain::getTrackedCurrentResidency( void ) const {
 	allocator_stats["peak_bytes"] = ( int64_t ) ( allocator.nPeakBytes );
 	allocator_stats["live_allocations"] = ( int64_t ) ( allocator.nLiveAllocations );
 	allocator_stats["total_allocations"] = ( int64_t ) ( allocator.nTotalAllocations );
+	allocator_stats["failed_allocations"] = ( int64_t ) ( allocator.nFailedAllocations );
+	allocator_stats["overflow_allocations"] = ( int64_t ) ( allocator.nOverflowAllocations );
+	allocator_stats["overflow_live_bytes"] = ( int64_t ) ( allocator.nOverflowLiveBytes );
 	allocator_stats["accuracy"] = "exact";
-	allocator_stats["source"] = "debug_allocator_telemetry";
+	allocator_stats["source"] = "release_safe_allocator_telemetry";
 	allocator_stats["included_in_total"] = false;
 	allocator_stats["note"] = "Cross-cutting EASTL telemetry overlaps subsystem container accounting and is not summed twice.";
 	memory["eastl_allocator"] = allocator_stats;
+	const t3dmemoryZoneStats_t zone = m_runtimeMemoryZone.getStats();
 	Dictionary zone_stats;
-	zone_stats["state"] = ( int ) ( m_runtimeMemoryZone.state() );
-	zone_stats["capacity_bytes"] = ( int64_t ) ( m_runtimeMemoryZone.capacity() );
-	zone_stats["live_bytes"] = ( int64_t ) ( m_runtimeMemoryZone.liveBytes() );
-	zone_stats["live_allocations"] = ( int64_t ) ( m_runtimeMemoryZone.liveAllocations() );
-	zone_stats["free_extent_bytes"] = ( int64_t ) ( m_runtimeMemoryZone.freeBytes() );
+	zone_stats["state"] = ( int ) m_runtimeMemoryZone.state();
+	zone_stats["reserved_bytes"] = ( int64_t ) zone.nReservedBytes;
+	zone_stats["live_requested_bytes"] = ( int64_t ) zone.nLiveRequestedBytes;
+	zone_stats["live_physical_bytes"] = ( int64_t ) zone.nLivePhysicalBytes;
+	zone_stats["live_allocations"] = ( int64_t ) zone.nLiveAllocationCount;
+	zone_stats["extent_free_bytes"] = ( int64_t ) zone.nExtentFreeBytes;
+	zone_stats["small_page_reserved_bytes"] = ( int64_t ) zone.nSmallPageReservedBytes;
+	zone_stats["small_page_reusable_payload_bytes"] = ( int64_t ) zone.nSmallPageReusablePayloadBytes;
+	zone_stats["small_page_reusable_physical_bytes"] = ( int64_t ) zone.nSmallPageReusablePhysicalBytes;
+	zone_stats["large_allocation_physical_bytes"] = ( int64_t ) zone.nLargeAllocationPhysicalBytes;
+	zone_stats["metadata_bytes"] = ( int64_t ) zone.nMetadataBytes;
+	zone_stats["alignment_waste_bytes"] = ( int64_t ) zone.nAlignmentWasteBytes;
+	zone_stats["size_class_waste_bytes"] = ( int64_t ) zone.nSizeClassWasteBytes;
+	zone_stats["internal_fragmentation_bytes"] = ( int64_t ) zone.nInternalFragmentationBytes;
+	zone_stats["failed_allocations"] = ( int64_t ) zone.nFailedAllocations;
+	zone_stats["active_small_pages"] = ( int64_t ) zone.nActiveSmallPages;
+	zone_stats["peak_active_small_pages"] = ( int64_t ) zone.nPeakActiveSmallPages;
+	zone_stats["free_extent_count"] = ( int64_t ) zone.nFreeExtentCount;
+	zone_stats["peak_free_extent_count"] = ( int64_t ) zone.nPeakFreeExtentCount;
+	zone_stats["overflow_policy"] = T3DZoneAllocatorRouter::overflowPolicy() == TERRAIN3D_ALLOCATOR_OVERFLOW_HEAP ? "heap" : "strict";
+	zone_stats["arena_reserved_bytes"] = ( int64_t ) m_runtimeMemoryArena.capacity();
 	zone_stats["arena_committed"] = m_runtimeMemoryArena.committed();
 	zone_stats["arena_sealed"] = m_runtimeMemoryArena.sealed();
 	memory["memory_zone"] = zone_stats;
@@ -3578,8 +3618,11 @@ Dictionary T3DTerrain::getTrackedCurrentResidency( void ) const {
 	external["note"] = "Unavailable values are excluded from tracked totals rather than estimated as zero.";
 	memory["external_untracked"] = external;
 
-	memory["tracked_current_residency_bytes"] = ( int64_t ) ( tracked_bytes );
-	memory["tracked_peak_residency_bytes"] = ( int64_t ) ( m_nTrackedMemoryPeakBytes );
+	memory["tracked_current_residency_bytes"] = ( int64_t ) tracked_bytes;
+	memory["tracked_logical_payload_bytes"] = ( int64_t ) tracked_bytes;
+	memory["native_runtime_arena_reserved_bytes"] = ( int64_t ) m_runtimeMemoryArena.capacity();
+	memory["allocator_zone_reserved_bytes"] = ( int64_t ) zone.nReservedBytes;
+	memory["tracked_peak_residency_bytes"] = ( int64_t ) m_nTrackedMemoryPeakBytes;
 	memory["budget"] = getMemoryBudgetStats();
 	memory["performance_target"] = ( int ) ( m_performanceTarget );
 	memory["performance_profile_status"] = ( int ) ( m_performanceProfileStatus );
@@ -3609,7 +3652,10 @@ Dictionary T3DTerrain::getRuntimeMemoryStatsFast( void ) const {
 	m_nTrackedMemoryPeakBytes = MAX( m_nTrackedMemoryPeakBytes, tracked_bytes );
 
 	memory["configured_budget_bytes"] = ( int64_t ) ( ( uint64_t ) ( m_nTotalMemoryBudgetMb ) * TERRAIN3D_MEMORY_MIB );
-	memory["current_known_bytes"] = ( int64_t ) ( tracked_bytes );
+	memory["current_known_bytes"] = ( int64_t ) tracked_bytes;
+	memory["logical_tracked_bytes"] = ( int64_t ) tracked_bytes;
+	memory["allocator_reserve_bytes"] = ( int64_t ) m_nMemoryBudgetResult.nAllocatorReserveBytes;
+	memory["budget_committed_bytes"] = ( int64_t ) ( fixed_bytes + m_nMemoryBudgetResult.nAllocatorReserveBytes + managed_bytes + transient_bytes );
 	memory["peak_known_bytes"] = ( int64_t ) ( m_nTrackedMemoryPeakBytes );
 	memory["fixed_bytes"] = ( int64_t ) ( fixed_bytes );
 	memory["managed_resident_bytes"] = ( int64_t ) ( managed_bytes );

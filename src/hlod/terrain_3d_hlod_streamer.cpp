@@ -1,6 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 #include "hlod/terrain_3d_hlod_streamer.h"
 #include <cmath>
+#include "eastl_config.h"
 #include <EASTL/sort.h>
 #include <cstring>
 #include <godot_cpp/classes/camera3d.hpp>

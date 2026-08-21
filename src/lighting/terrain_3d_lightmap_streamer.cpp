@@ -3,6 +3,7 @@
 #include "Terrain3DConstants.h"
 #include "lighting/terrain_3d_lightmap_streamer.h"
 
+#include "eastl_config.h"
 #include <EASTL/bitset.h>
 
 #include <godot_cpp/classes/resource_loader.hpp>

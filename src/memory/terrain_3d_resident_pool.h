@@ -77,11 +77,7 @@ public:
 	T3DResidentRegionPool &operator=( const T3DResidentRegionPool & ) = delete;
 
 	static size_t estimateSlotBytes( int nRegionSize, uint32_t nChannels );
-	static size_t estimateMetadataBytes( int nCapacity );
-	static size_t estimateBackingBytes( int nRegionSize, int nCapacity, uint32_t nChannels );
 	bool configure( int nRegionSize, int nCapacity, uint32_t nChannels );
-	bool bind( int nRegionSize, int nCapacity, uint32_t nChannels,
-		void *pMetadata, size_t nMetadataBytes, void *pBacking, size_t nBackingBytes );
 	void clear( void );
 	void resetResidency( void );
 	T3DResidentMapLease acquire( const Vector2i &rLocation, const T3DRegion *pRegion );
@@ -98,8 +94,9 @@ public:
 	EA_FORCE_INLINE int getCapacity( void ) const { return m_nCapacity; }
 	EA_FORCE_INLINE int getRegionSize( void ) const { return m_nRegionSize; }
 	EA_FORCE_INLINE uint32_t getChannels( void ) const { return m_channels; }
-	EA_FORCE_INLINE size_t getReservedBytes( void ) const { return m_nReservedBytes; }
-	EA_FORCE_INLINE size_t getSlotHunkBytes( void ) const { return m_iSlotLayout.stride; }
+	EA_FORCE_INLINE size_t getReservedBytes( void ) const { return m_nBackingBytes + m_nMetadataBytes; }
+	EA_FORCE_INLINE size_t getBackingBytes( void ) const { return m_nBackingBytes; }
+	EA_FORCE_INLINE size_t getMetadataBytes( void ) const { return m_nMetadataBytes; }
 
 private:
 typedef struct t3dalignedAllocation_s {
@@ -108,7 +105,6 @@ typedef struct t3dalignedAllocation_s {
 		size_t nBytes = 0u;
 		bool bOwned = false;
 		bool allocate( size_t nRequestedBytes, size_t nAlignment );
-		bool bind( void *pBacking, size_t nBackingBytes, size_t nAlignment );
 		void release( void );
 	} t3dalignedAllocation_t;
 
@@ -140,7 +136,8 @@ typedef struct t3dalignedAllocation_s {
 	int m_nCapacity = 0;
 	uint32_t m_channels = 0u;
 	size_t m_nTexelCount = 0u;
-	size_t m_nReservedBytes = 0u;
+	size_t m_nBackingBytes = 0u;
+	size_t m_nMetadataBytes = 0u;
 	t3dslotLayout_t m_iSlotLayout;
 	t3dalignedAllocation_t m_mapMemory;
 	t3dslot_t *m_pSlots = nullptr;

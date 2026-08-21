@@ -22,14 +22,6 @@ inline void *allocate( const size_t nBytes ) {
 #endif
 }
 
-inline void *reallocate( void *pPointer, const size_t nBytes ) {
-#if defined( TERRAIN3D_STANDALONE_ALLOCATOR_TEST )
-	return std::realloc( pPointer, nBytes );
-#else
-	return memrealloc( pPointer, nBytes );
-#endif
-}
-
 inline void release( void *pPointer ) {
 	if ( !pPointer ) {
 		return;

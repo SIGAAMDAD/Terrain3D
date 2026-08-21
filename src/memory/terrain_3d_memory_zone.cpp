@@ -26,6 +26,14 @@ bool T3DMemoryZone::initialize( void *const pBacking, const size_t nBytes ) {
 	for ( SmallPage &page : m_szSmallPages ) page = {};
 	m_nLiveAllocations = 0u;
 	m_nLiveBytes = 0u;
+	m_nLivePhysicalBytes = 0u;
+	m_nLiveMetadataBytes = 0u;
+	m_nLiveAlignmentWasteBytes = 0u;
+	m_nLiveSizeClassWasteBytes = 0u;
+	m_nFailedAllocations = 0u;
+	m_nActiveSmallPages = 0u;
+	m_nPeakActiveSmallPages = 0u;
+	m_nPeakFreeExtentCount = 1u;
 	m_state = ACTIVE;
 	return true;
 }
@@ -61,6 +69,7 @@ bool T3DMemoryZone::insertFreeExtentUnlocked( const size_t nOffset, const size_t
 			--m_nFreeExtentCount;
 		}
 	}
+	m_nPeakFreeExtentCount = std::max( m_nPeakFreeExtentCount, m_nFreeExtentCount );
 	return true;
 }
 
@@ -113,6 +122,8 @@ void *T3DMemoryZone::allocateSmallUnlocked( const int nClassIndex, const size_t 
 		page.blockStride = ( uint32_t ) stride;
 		page.totalBlocks = ( uint16_t ) ( SMALL_PAGE_BYTES / stride );
 		page.firstFree = 0u;
+		++m_nActiveSmallPages;
+		m_nPeakActiveSmallPages = std::max( m_nPeakActiveSmallPages, m_nActiveSmallPages );
 		for ( uint32_t block = 0u; block < page.totalBlocks; ++block ) {
 			uint8_t *payload = m_pBase + page.offset + ( size_t ) block * stride + sizeof( AllocationHeader );
 			*reinterpret_cast<uint32_t *>( payload ) = block + 1u < page.totalBlocks ? block + 1u : UINT32_MAX;
@@ -135,6 +146,11 @@ void *T3DMemoryZone::allocateSmallUnlocked( const int nClassIndex, const size_t 
 	header->classIndex = ( uint16_t ) nClassIndex;
 	++m_nLiveAllocations;
 	m_nLiveBytes += nBytes;
+	page.liveRequestedBytes += nBytes;
+	m_nLivePhysicalBytes += page.blockStride;
+	m_nLiveMetadataBytes += sizeof( AllocationHeader );
+	m_nLiveSizeClassWasteBytes += SMALL_CLASSES[nClassIndex] - nBytes;
+	m_nLiveAlignmentWasteBytes += page.blockStride - sizeof( AllocationHeader ) - SMALL_CLASSES[nClassIndex];
 	return payload;
 }
 
@@ -152,6 +168,9 @@ void *T3DMemoryZone::allocateLargeUnlocked( const size_t nBytes, const size_t nA
 	header->alignment = ( uint32_t ) nAlignment;
 	++m_nLiveAllocations;
 	m_nLiveBytes += nBytes;
+	m_nLivePhysicalBytes += used;
+	m_nLiveMetadataBytes += sizeof( AllocationHeader );
+	m_nLiveAlignmentWasteBytes += used - sizeof( AllocationHeader ) - nBytes;
 	return m_pBase + user_offset;
 }
 
@@ -163,7 +182,9 @@ void *T3DMemoryZone::allocateUnlocked( const size_t nBytes, const size_t nAlignm
 
 void *T3DMemoryZone::allocate( const size_t nBytes, const size_t nAlignment ) {
 	std::lock_guard<std::mutex> lock( m_mutex );
-	return allocateUnlocked( nBytes, std::max( nAlignment, ( size_t ) alignof( void * ) ) );
+	void *const pMemory = allocateUnlocked( nBytes, std::max( nAlignment, ( size_t ) alignof( void * ) ) );
+	if ( !pMemory ) ++m_nFailedAllocations;
+	return pMemory;
 }
 
 T3DMemoryZone::AllocationHeader *T3DMemoryZone::headerFor( void *const pMemory ) const {
@@ -177,74 +198,38 @@ void T3DMemoryZone::freeUnlocked( void *const pMemory ) {
 	AllocationHeader *const header = headerFor( pMemory );
 	if ( !header || header->magic != ALLOCATION_MAGIC ) return;
 	const size_t requested = header->requestedBytes;
+	const size_t physical = header->extentBytes;
+	const uint16_t page_index = header->pageIndex;
+	const uint16_t class_index = header->classIndex;
 	header->magic = 0u;
-	if ( header->pageIndex != UINT16_MAX ) {
-		const uint16_t page_index = header->pageIndex;
+	if ( page_index != UINT16_MAX ) {
 		SmallPage &page = m_szSmallPages[page_index];
 		const uint32_t block = ( uint32_t ) ( ( header->extentOffset - page.offset ) / page.blockStride );
 		*reinterpret_cast<uint32_t *>( pMemory ) = page.firstFree;
 		page.firstFree = block;
 		if ( page.liveBlocks > 0u ) --page.liveBlocks;
+		page.liveRequestedBytes -= requested;
+		m_nLiveSizeClassWasteBytes -= SMALL_CLASSES[class_index] - requested;
+		m_nLiveAlignmentWasteBytes -= page.blockStride - sizeof( AllocationHeader ) - SMALL_CLASSES[class_index];
 		if ( page.liveBlocks == 0u ) {
 			insertFreeExtentUnlocked( page.offset, page.bytes );
 			page = {};
+			if ( m_nActiveSmallPages > 0u ) --m_nActiveSmallPages;
 		}
 	} else {
-		insertFreeExtentUnlocked( header->extentOffset, header->extentBytes );
+		m_nLiveAlignmentWasteBytes -= physical - sizeof( AllocationHeader ) - requested;
+		insertFreeExtentUnlocked( header->extentOffset, physical );
 	}
 	--m_nLiveAllocations;
 	m_nLiveBytes -= requested;
-	if ( m_state == DRAINING && m_nLiveAllocations == 0u ) m_drained.notify_all();
+	m_nLivePhysicalBytes -= physical;
+	m_nLiveMetadataBytes -= sizeof( AllocationHeader );
 }
 
 void T3DMemoryZone::deallocate( void *const pMemory ) {
 	if ( !pMemory ) return;
 	std::lock_guard<std::mutex> lock( m_mutex );
 	freeUnlocked( pMemory );
-}
-
-void *T3DMemoryZone::reallocate( void *const pMemory, const size_t nBytes ) {
-	std::lock_guard<std::mutex> lock( m_mutex );
-	if ( !pMemory ) return allocateUnlocked( nBytes, alignof( std::max_align_t ) );
-	if ( nBytes == 0u ) { freeUnlocked( pMemory ); return nullptr; }
-	AllocationHeader *const header = headerFor( pMemory );
-	if ( !header || header->magic != ALLOCATION_MAGIC || m_state != ACTIVE ) return nullptr;
-	const size_t old_bytes = header->requestedBytes;
-	const size_t usable = header->pageIndex != UINT16_MAX ? SMALL_CLASSES[header->classIndex] :
-		header->extentOffset + header->extentBytes - ( ( uint8_t * ) pMemory - m_pBase );
-	if ( nBytes <= usable ) {
-		header->requestedBytes = nBytes;
-		m_nLiveBytes = m_nLiveBytes - old_bytes + nBytes;
-		if ( header->pageIndex == UINT16_MAX && nBytes < usable ) {
-			const size_t new_end = ( size_t ) ( ( uint8_t * ) pMemory - m_pBase ) + nBytes;
-			const size_t old_end = header->extentOffset + header->extentBytes;
-			if ( old_end > new_end ) { insertFreeExtentUnlocked( new_end, old_end - new_end ); header->extentBytes -= old_end - new_end; }
-		}
-		return pMemory;
-	}
-	if ( header->pageIndex == UINT16_MAX ) {
-		const size_t old_end = header->extentOffset + header->extentBytes;
-		const size_t needed = nBytes - usable;
-		for ( uint32_t i = 0u; i < m_nFreeExtentCount; ++i ) {
-			if ( m_szFreeExtents[i].offset == old_end && m_szFreeExtents[i].size >= needed ) {
-				m_szFreeExtents[i].offset += needed; m_szFreeExtents[i].size -= needed;
-				if ( m_szFreeExtents[i].size == 0u ) { for ( uint32_t m = i; m + 1u < m_nFreeExtentCount; ++m ) m_szFreeExtents[m] = m_szFreeExtents[m + 1u]; --m_nFreeExtentCount; }
-				header->extentBytes += needed; header->requestedBytes = nBytes; m_nLiveBytes += nBytes - old_bytes; return pMemory;
-			}
-		}
-	}
-	void *const replacement = allocateUnlocked( nBytes, header->alignment );
-	if ( !replacement ) return nullptr;
-	std::memcpy( replacement, pMemory, std::min( old_bytes, nBytes ) );
-	freeUnlocked( pMemory );
-	return replacement;
-}
-
-
-bool T3DMemoryZone::waitUntilDrained( const std::chrono::milliseconds timeout ) {
-	std::unique_lock<std::mutex> lock( m_mutex );
-	if ( m_state != DRAINING ) return m_nLiveAllocations == 0u;
-	return m_drained.wait_for( lock, timeout, [this]() { return m_nLiveAllocations == 0u; } );
 }
 
 bool T3DMemoryZone::release() {
@@ -254,6 +239,40 @@ bool T3DMemoryZone::release() {
 	m_pBase = nullptr; m_nCapacity = 0u; m_nFreeExtentCount = 0u; m_state = DEAD; return true;
 }
 
-size_t T3DMemoryZone::freeBytes() const {
-	std::lock_guard<std::mutex> lock( m_mutex ); size_t bytes = 0u; for ( uint32_t i = 0u; i < m_nFreeExtentCount; ++i ) bytes += m_szFreeExtents[i].size; return bytes;
+size_t T3DMemoryZone::freeExtentBytes( void ) const {
+	std::lock_guard<std::mutex> lock( m_mutex );
+	size_t bytes = 0u;
+	for ( uint32_t i = 0u; i < m_nFreeExtentCount; ++i ) bytes += m_szFreeExtents[i].size;
+	return bytes;
+}
+
+t3dmemoryZoneStats_t T3DMemoryZone::getStats( void ) const {
+	std::lock_guard<std::mutex> lock( m_mutex );
+	t3dmemoryZoneStats_t stats;
+	stats.nReservedBytes = m_nCapacity;
+	stats.nLiveRequestedBytes = m_nLiveBytes;
+	stats.nLivePhysicalBytes = m_nLivePhysicalBytes;
+	stats.nLiveAllocationCount = m_nLiveAllocations;
+	stats.nMetadataBytes = m_nLiveMetadataBytes;
+	stats.nAlignmentWasteBytes = m_nLiveAlignmentWasteBytes;
+	stats.nSizeClassWasteBytes = m_nLiveSizeClassWasteBytes;
+	stats.nInternalFragmentationBytes = m_nLivePhysicalBytes >= m_nLiveBytes ? m_nLivePhysicalBytes - m_nLiveBytes : 0u;
+	stats.nFailedAllocations = m_nFailedAllocations;
+	stats.nActiveSmallPages = m_nActiveSmallPages;
+	stats.nPeakActiveSmallPages = m_nPeakActiveSmallPages;
+	stats.nFreeExtentCount = m_nFreeExtentCount;
+	stats.nPeakFreeExtentCount = m_nPeakFreeExtentCount;
+	for ( uint32_t i = 0u; i < m_nFreeExtentCount; ++i ) stats.nExtentFreeBytes += m_szFreeExtents[i].size;
+	size_t small_live_physical = 0u;
+	for ( uint32_t i = 0u; i < MAX_SMALL_PAGES; ++i ) {
+		const SmallPage &page = m_szSmallPages[i];
+		if ( !page.active ) continue;
+		stats.nSmallPageReservedBytes += page.bytes;
+		const size_t free_blocks = page.totalBlocks >= page.liveBlocks ? ( size_t ) page.totalBlocks - page.liveBlocks : 0u;
+		stats.nSmallPageReusablePayloadBytes += free_blocks * SMALL_CLASSES[page.classIndex];
+		stats.nSmallPageReusablePhysicalBytes += free_blocks * page.blockStride;
+		small_live_physical += ( size_t ) page.liveBlocks * page.blockStride;
+	}
+	stats.nLargeAllocationPhysicalBytes = m_nLivePhysicalBytes >= small_live_physical ? m_nLivePhysicalBytes - small_live_physical : 0u;
+	return stats;
 }

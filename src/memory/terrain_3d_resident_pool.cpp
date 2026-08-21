@@ -148,19 +148,6 @@ size_t T3DResidentRegionPool::estimateSlotBytes( const int nRegionSize, const ui
 	return layout.stride;
 }
 
-size_t T3DResidentRegionPool::estimateMetadataBytes( const int nCapacity ) {
-	return nCapacity > 0 && ( size_t ) nCapacity <= std::numeric_limits<size_t>::max() / sizeof( t3dslot_t )
-		? ( size_t ) nCapacity * sizeof( t3dslot_t ) : 0u;
-}
-
-size_t T3DResidentRegionPool::estimateBackingBytes(
-	const int nRegionSize, const int nCapacity, const uint32_t nChannels
-) {
-	const size_t slot_bytes = estimateSlotBytes( nRegionSize, nChannels );
-	return slot_bytes > 0u && nCapacity > 0 && ( size_t ) nCapacity <= std::numeric_limits<size_t>::max() / slot_bytes
-		? ( size_t ) nCapacity * slot_bytes : 0u;
-}
-
 bool T3DResidentRegionPool::t3dalignedAllocation_t::allocate( const size_t nRequestedBytes, const size_t nAlignment ) {
 	release();
 	if ( nRequestedBytes == 0u || nAlignment == 0u || ( nAlignment & ( nAlignment - 1u ) ) != 0u ||
@@ -176,20 +163,6 @@ bool T3DResidentRegionPool::t3dalignedAllocation_t::allocate( const size_t nRequ
 	pAligned = ( uint8_t * ) ( ( start + mask ) & ~mask );
 	nBytes = nRequestedBytes;
 	bOwned = true;
-	std::memset( pAligned, 0, nBytes );
-	return true;
-}
-
-bool T3DResidentRegionPool::t3dalignedAllocation_t::bind(
-	void *const pBacking, const size_t nBackingBytes, const size_t nAlignment
-) {
-	release();
-	if ( !pBacking || nBackingBytes == 0u || nAlignment == 0u ||
-		( ( uintptr_t ) pBacking & ( nAlignment - 1u ) ) != 0u ) return false;
-	pRaw = pBacking;
-	pAligned = ( uint8_t * ) pBacking;
-	nBytes = nBackingBytes;
-	bOwned = false;
 	std::memset( pAligned, 0, nBytes );
 	return true;
 }
@@ -303,7 +276,8 @@ void T3DResidentRegionPool::clearUnlocked( void ) {
 	m_nCapacity = 0;
 	m_channels = 0u;
 	m_nTexelCount = 0u;
-	m_nReservedBytes = 0u;
+	m_nBackingBytes = 0u;
+	m_nMetadataBytes = 0u;
 	m_iSlotLayout = {};
 	m_iClockHand = 0;
 }
@@ -342,7 +316,8 @@ bool T3DResidentRegionPool::configure( const int nRegionSize, const int nCapacit
 	m_nCapacity = nCapacity;
 	m_channels = nChannels;
 	m_nTexelCount = texel_count;
-	m_nReservedBytes = total_bytes;
+	m_nBackingBytes = total_bytes;
+	m_nMetadataBytes = ( size_t ) nCapacity * sizeof( t3dslot_t );
 	m_iSlotLayout = layout;
 	if ( !allocateSlotsUnlocked( m_nCapacity ) ) {
 		clearUnlocked();
@@ -358,41 +333,6 @@ bool T3DResidentRegionPool::configure( const int nRegionSize, const int nCapacit
 			clearUnlocked();
 			return false;
 		}
-	}
-	for ( std::atomic<int16_t> &mapping : m_szLocationToSlot ) mapping.store( -1, std::memory_order_relaxed );
-	return true;
-}
-
-bool T3DResidentRegionPool::bind(
-	const int nRegionSize, const int nCapacity, const uint32_t nChannels,
-	void *const pMetadata, const size_t nMetadataBytes, void *const pBacking, const size_t nBackingBytes
-) {
-	std::lock_guard<std::mutex> lock( m_mutex );
-	if ( !pMetadata || !pBacking || nCapacity <= 0 || nCapacity > TERRAIN3D_RESIDENT_WORLD_SLOT_COUNT ||
-		nMetadataBytes < estimateMetadataBytes( nCapacity ) ||
-		( ( uintptr_t ) pMetadata & ( alignof( t3dslot_t ) - 1u ) ) != 0u ||
-		( ( uintptr_t ) pBacking & ( TERRAIN3D_RESIDENT_CACHE_ALIGNMENT - 1u ) ) != 0u || hasPinnedSlotsUnlocked() ) return false;
-	t3dslotLayout_t layout;
-	size_t texel_count = 0u;
-	if ( !buildSlotLayout( nRegionSize, nChannels, layout, texel_count ) ||
-		nBackingBytes < estimateBackingBytes( nRegionSize, nCapacity, nChannels ) ) return false;
-	clearUnlocked();
-	if ( !m_mapMemory.bind( pBacking, ( size_t ) nCapacity * layout.stride, TERRAIN3D_RESIDENT_CACHE_ALIGNMENT ) ) return false;
-	m_nRegionSize = nRegionSize;
-	m_nCapacity = nCapacity;
-	m_channels = nChannels;
-	m_nTexelCount = texel_count;
-	m_nReservedBytes = ( size_t ) nCapacity * layout.stride;
-	m_iSlotLayout = layout;
-	m_pSlots = ( t3dslot_t * ) pMetadata;
-	m_bSlotsOwned = false;
-	for ( int i = 0; i < nCapacity; ++i ) new ( &m_pSlots[( size_t ) i] ) t3dslot_t;
-	if ( !assignMapBankPointersUnlocked() ) {
-		clearUnlocked();
-		return false;
-	}
-	for ( int i = 0; i < nCapacity; ++i ) {
-		resetSlotStorage( i, false );
 	}
 	for ( std::atomic<int16_t> &mapping : m_szLocationToSlot ) mapping.store( -1, std::memory_order_relaxed );
 	return true;
