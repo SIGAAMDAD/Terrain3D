@@ -11,9 +11,7 @@
 #include "data/terrain_3d_region.h"
 #include "core/terrain_3d_util.h"
 
-namespace {
-
-bool imageIsDefaultControl( const Ref<Image> &rMap, const int nRegionSize ) {
+static bool t3dRegionImageIsDefaultControl( const Ref<Image> &rMap, const int nRegionSize ) {
 	if ( rMap.is_null() || rMap->get_format() != Image::FORMAT_RF || rMap->get_width() != nRegionSize ||
 		rMap->get_height() != nRegionSize ) {
 		return false;
@@ -34,7 +32,7 @@ bool imageIsDefaultControl( const Ref<Image> &rMap, const int nRegionSize ) {
 	return true;
 }
 
-bool imageIsDefaultColor( const Ref<Image> &rMap, const int nRegionSize ) {
+static bool t3dRegionImageIsDefaultColor( const Ref<Image> &rMap, const int nRegionSize ) {
 	if ( rMap.is_null() || rMap->get_format() != Image::FORMAT_RGBA8 || rMap->get_width() != nRegionSize ||
 		rMap->get_height() != nRegionSize ) {
 		return false;
@@ -57,9 +55,9 @@ bool imageIsDefaultColor( const Ref<Image> &rMap, const int nRegionSize ) {
 	return true;
 }
 
-EA_FORCE_INLINE int normalizeStreamedNodeBoundaryPolicy( const int nPolicy ) { return nPolicy == STREAMED_NODE_BOUNDARY_COVERAGE ? STREAMED_NODE_BOUNDARY_COVERAGE : STREAMED_NODE_BOUNDARY_ANCHOR; }
+EA_FORCE_INLINE static int t3dRegionNormalizeStreamedNodeBoundaryPolicy( const int nPolicy ) { return nPolicy == STREAMED_NODE_BOUNDARY_COVERAGE ? STREAMED_NODE_BOUNDARY_COVERAGE : STREAMED_NODE_BOUNDARY_ANCHOR; }
 
-void normalizeStreamedNodeCoverage(
+static void t3dRegionNormalizeStreamedNodeCoverage(
 	const int nPolicy, const Vector2i &rInputMin, const Vector2i &rInputMax,
 	Vector2i &rOutputMin, Vector2i &rOutputMax
 ) {
@@ -74,13 +72,13 @@ void normalizeStreamedNodeCoverage(
 	rOutputMax = Vector2i( MAX( inputMin.x, inputMax.x ), MAX( inputMin.y, inputMax.y ) );
 }
 
-EA_FORCE_INLINE int normalizeLightingClass( const int nClass ) { return CLAMP( nClass, ( int ) ( LIGHTING_CLASS_TERRAIN ), ( int ) ( LIGHTING_CLASS_REGIONAL_OCCLUDER ) ); }
+EA_FORCE_INLINE static int t3dRegionNormalizeLightingClass( const int nClass ) { return CLAMP( nClass, ( int ) ( LIGHTING_CLASS_TERRAIN ), ( int ) ( LIGHTING_CLASS_REGIONAL_OCCLUDER ) ); }
 
-EA_FORCE_INLINE int normalizeBakedLightingMode( const int nMode ) { return CLAMP( nMode, ( int ) ( BAKED_LIGHTING_DISABLED ), ( int ) ( BAKED_LIGHTING_MATERIAL_ONLY ) ); }
+EA_FORCE_INLINE static int t3dRegionNormalizeBakedLightingMode( const int nMode ) { return CLAMP( nMode, ( int ) ( BAKED_LIGHTING_DISABLED ), ( int ) ( BAKED_LIGHTING_MATERIAL_ONLY ) ); }
 
-void storeStreamedNodeLighting( Dictionary &rEntry, const Dictionary &dictSource ) {
-	rEntry["lighting_class"] = normalizeLightingClass( dictSource.has( "lighting_class" ) ? ( int ) ( dictSource["lighting_class"] ) : ( int ) ( LIGHTING_CLASS_MEDIUM_OBSTACLE ) );
-	rEntry["baked_lighting_mode"] = normalizeBakedLightingMode( dictSource.has( "baked_lighting_mode" ) ? ( int ) ( dictSource["baked_lighting_mode"] ) : ( int ) ( BAKED_LIGHTING_LIGHTMAP ) );
+static void t3dRegionStoreStreamedNodeLighting( Dictionary &rEntry, const Dictionary &dictSource ) {
+	rEntry["lighting_class"] = t3dRegionNormalizeLightingClass( dictSource.has( "lighting_class" ) ? ( int ) ( dictSource["lighting_class"] ) : ( int ) ( LIGHTING_CLASS_MEDIUM_OBSTACLE ) );
+	rEntry["baked_lighting_mode"] = t3dRegionNormalizeBakedLightingMode( dictSource.has( "baked_lighting_mode" ) ? ( int ) ( dictSource["baked_lighting_mode"] ) : ( int ) ( BAKED_LIGHTING_LIGHTMAP ) );
 	rEntry["contribute_baked_gi"] = dictSource.has( "contribute_baked_gi" ) ? ( bool ) ( dictSource["contribute_baked_gi"] ) : true;
 	rEntry["receive_dynamic_directional"] = dictSource.has( "receive_dynamic_directional" ) ? ( bool ) ( dictSource["receive_dynamic_directional"] ) : true;
 	rEntry["dynamic_shadow_eligible"] = dictSource.has( "dynamic_shadow_eligible" ) ? ( bool ) ( dictSource["dynamic_shadow_eligible"] ) : true;
@@ -91,20 +89,18 @@ void storeStreamedNodeLighting( Dictionary &rEntry, const Dictionary &dictSource
 	}
 }
 
-void storeStreamedNodeBoundary(
+static void t3dRegionStoreStreamedNodeBoundary(
 	Dictionary &rEntry, const int nPolicy,
 	const Vector2i &rCoverageMin, const Vector2i &rCoverageMax
 ) {
-	const int policy = normalizeStreamedNodeBoundaryPolicy( nPolicy );
+	const int policy = t3dRegionNormalizeStreamedNodeBoundaryPolicy( nPolicy );
 	Vector2i coverage_min;
 	Vector2i coverage_max;
-	normalizeStreamedNodeCoverage( policy, rCoverageMin, rCoverageMax, coverage_min, coverage_max );
+	t3dRegionNormalizeStreamedNodeCoverage( policy, rCoverageMin, rCoverageMax, coverage_min, coverage_max );
 	rEntry["boundary_policy"] = policy;
 	rEntry["coverage_min"] = coverage_min;
 	rEntry["coverage_max"] = coverage_max;
 }
-
-} // namespace
 
 /////////////////////
 // Public Functions
@@ -321,7 +317,7 @@ void T3DRegion::setControlMap( const Ref<Image> &rMap ) {
 	}
 	const Ref<Image> pOldMap = m_pControlMap;
 	Ref<Image> pMap = sanitizeMap( TYPE_CONTROL, rMap );
-	if ( imageIsDefaultControl( pMap, m_nRegionSize ) ) {
+	if ( t3dRegionImageIsDefaultControl( pMap, m_nRegionSize ) ) {
 		pMap.unref();
 	}
 	if ( pOldMap == pMap ) {
@@ -344,7 +340,7 @@ void T3DRegion::setColorMap( const Ref<Image> &rMap ) {
 	}
 	const Ref<Image> pOldMap = m_pColorMap;
 	Ref<Image> pMap = sanitizeMap( TYPE_COLOR, rMap );
-	if ( imageIsDefaultColor( pMap, m_nRegionSize ) ) {
+	if ( t3dRegionImageIsDefaultColor( pMap, m_nRegionSize ) ) {
 		pMap.unref();
 	}
 	if ( pOldMap == pMap ) {
@@ -423,9 +419,9 @@ void T3DRegion::sanitizeMaps( void ) {
 bool T3DRegion::isMapDefault( const t3dMapType_t mapType ) const {
 	switch ( mapType ) {
 		case TYPE_CONTROL:
-			return m_pControlMap.is_null() || imageIsDefaultControl( m_pControlMap, m_nRegionSize );
+			return m_pControlMap.is_null() || t3dRegionImageIsDefaultControl( m_pControlMap, m_nRegionSize );
 		case TYPE_COLOR:
-			return m_pColorMap.is_null() || imageIsDefaultColor( m_pColorMap, m_nRegionSize );
+			return m_pColorMap.is_null() || t3dRegionImageIsDefaultColor( m_pColorMap, m_nRegionSize );
 		default:
 			return false;
 	}
@@ -914,14 +910,14 @@ void T3DRegion::rebuildStreamedNodeRuntime( void ) {
 		descriptor.flags = entry.has( "flags" ) ? ( int ) ( entry["flags"] ) : 0;
 		descriptor.hlodMinLevel = CLAMP( entry.has( "hlod_min_level" ) ? ( int ) entry["hlod_min_level"] : 1, 1, 6 );
 		descriptor.boundaryPolicy = entry.has( "boundary_policy" ) ?
-			normalizeStreamedNodeBoundaryPolicy( ( int ) ( entry["boundary_policy"] ) ) :
+			t3dRegionNormalizeStreamedNodeBoundaryPolicy( ( int ) ( entry["boundary_policy"] ) ) :
 			STREAMED_NODE_BOUNDARY_ANCHOR;
 		descriptor.coverageMin = entry.has( "coverage_min" ) ? Vector2i( entry["coverage_min"] ) : V2I_ZERO;
 		descriptor.coverageMax = entry.has( "coverage_max" ) ? Vector2i( entry["coverage_max"] ) : V2I_ZERO;
-		normalizeStreamedNodeCoverage( descriptor.boundaryPolicy, descriptor.coverageMin,
+		t3dRegionNormalizeStreamedNodeCoverage( descriptor.boundaryPolicy, descriptor.coverageMin,
 			descriptor.coverageMax, descriptor.coverageMin, descriptor.coverageMax );
-		descriptor.lightingClass = normalizeLightingClass( entry.has( "lighting_class" ) ? ( int ) ( entry["lighting_class"] ) : ( int ) ( LIGHTING_CLASS_MEDIUM_OBSTACLE ) );
-		descriptor.bakedLightingMode = normalizeBakedLightingMode( entry.has( "baked_lighting_mode" ) ? ( int ) ( entry["baked_lighting_mode"] ) : ( int ) ( BAKED_LIGHTING_LIGHTMAP ) );
+		descriptor.lightingClass = t3dRegionNormalizeLightingClass( entry.has( "lighting_class" ) ? ( int ) ( entry["lighting_class"] ) : ( int ) ( LIGHTING_CLASS_MEDIUM_OBSTACLE ) );
+		descriptor.bakedLightingMode = t3dRegionNormalizeBakedLightingMode( entry.has( "baked_lighting_mode" ) ? ( int ) ( entry["baked_lighting_mode"] ) : ( int ) ( BAKED_LIGHTING_LIGHTMAP ) );
 		descriptor.bContributeBakedGi = entry.has( "contribute_baked_gi" ) ? ( bool ) ( entry["contribute_baked_gi"] ) : true;
 		descriptor.bReceiveDynamicDirectional = entry.has( "receive_dynamic_directional" ) ? ( bool ) ( entry["receive_dynamic_directional"] ) : true;
 		descriptor.bDynamicShadowEligible = entry.has( "dynamic_shadow_eligible" ) ? ( bool ) ( entry["dynamic_shadow_eligible"] ) : true;
@@ -1039,11 +1035,11 @@ void T3DRegion::setStreamedNodes( const Array &rNodes ) {
 			Dictionary( source["state"] ).duplicate( true ) : Dictionary();
 		entry["flags"] = source.has( "flags" ) ? ( int ) ( source["flags"] ) : 0;
 		entry["hlod_min_level"] = CLAMP( source.has( "hlod_min_level" ) ? ( int ) source["hlod_min_level"] : 1, 1, 6 );
-		storeStreamedNodeBoundary( entry,
+		t3dRegionStoreStreamedNodeBoundary( entry,
 			source.has( "boundary_policy" ) ? ( int ) ( source["boundary_policy"] ) : STREAMED_NODE_BOUNDARY_ANCHOR,
 			source.has( "coverage_min" ) ? Vector2i( source["coverage_min"] ) : V2I_ZERO,
 			source.has( "coverage_max" ) ? Vector2i( source["coverage_max"] ) : V2I_ZERO );
-		storeStreamedNodeLighting( entry, source );
+		t3dRegionStoreStreamedNodeLighting( entry, source );
 		m_streamedNodes.push_back( entry );
 	}
 	refreshStreamedNodeId();
@@ -1071,8 +1067,8 @@ int64_t T3DRegion::addStreamedNode(
 	entry["state"] = rState.duplicate( true );
 	entry["flags"] = nFlags;
 	entry["hlod_min_level"] = CLAMP( nHlodMinLevel, 1, 6 );
-	storeStreamedNodeBoundary( entry, nBoundaryPolicy, rCoverageMin, rCoverageMax );
-	storeStreamedNodeLighting( entry, Dictionary() );
+	t3dRegionStoreStreamedNodeBoundary( entry, nBoundaryPolicy, rCoverageMin, rCoverageMax );
+	t3dRegionStoreStreamedNodeLighting( entry, Dictionary() );
 	m_streamedNodes.push_back( entry );
 	rebuildStreamedNodeRuntime();
 	refreshStreamedNodeCoverage();
@@ -1099,8 +1095,8 @@ int64_t T3DRegion::addStreamedNodePath(
 	entry["state"] = rState.duplicate( true );
 	entry["flags"] = nFlags;
 	entry["hlod_min_level"] = CLAMP( nHlodMinLevel, 1, 6 );
-	storeStreamedNodeBoundary( entry, nBoundaryPolicy, rCoverageMin, rCoverageMax );
-	storeStreamedNodeLighting( entry, Dictionary() );
+	t3dRegionStoreStreamedNodeBoundary( entry, nBoundaryPolicy, rCoverageMin, rCoverageMax );
+	t3dRegionStoreStreamedNodeLighting( entry, Dictionary() );
 	m_streamedNodes.push_back( entry );
 	rebuildStreamedNodeRuntime();
 	refreshStreamedNodeCoverage();

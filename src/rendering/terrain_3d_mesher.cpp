@@ -17,13 +17,11 @@
 #include "rendering/terrain_3d_mesher.h"
 
 
-namespace {
 constexpr uint64_t TERRAIN3D_CLIPMAP_PACK_MAGIC = 0x314b504d504c4333ull; // 3CLMPPK1
 constexpr uint32_t TERRAIN3D_CLIPMAP_PACK_VERSION = 1u;
 constexpr uint32_t TERRAIN3D_CLIPMAP_WELD_PART_COUNT = 5u;
-EA_FORCE_INLINE int terrain3dGridVertexCount( const Vector2i &rSize ) { return ( rSize.x + 1 ) * ( rSize.y + 1 ); }
-EA_FORCE_INLINE int terrain3dGridIndexCount( const Vector2i &rSize ) { return rSize.x * rSize.y * 6; }
-}
+EA_FORCE_INLINE static int t3dMesherGridVertexCount( const Vector2i &rSize ) { return ( rSize.x + 1 ) * ( rSize.y + 1 ); }
+EA_FORCE_INLINE static int t3dMesherGridIndexCount( const Vector2i &rSize ) { return rSize.x * rSize.y * 6; }
 
 void weldClipmapGeometry(
 	PackedVector3Array &rVertices, PackedVector2Array &rMetadata,
@@ -155,7 +153,7 @@ t3dClipmapGeometry_t T3DMesher::generateCombinedGeometry( const bool bLod0 ) {
 
 	int total_vertices = 0;
 	int total_indices = 0;
-	auto measure_grid = [&]( const Vector2i &rSize ) { total_vertices += terrain3dGridVertexCount( rSize ); total_indices += terrain3dGridIndexCount( rSize ); };
+	auto measure_grid = [&]( const Vector2i &rSize ) { total_vertices += t3dMesherGridVertexCount( rSize ); total_indices += t3dMesherGridIndexCount( rSize ); };
 	if ( bLod0 ) {
 		for ( const Vector3 &position : m_szTilePosLod0 ) { ( void ) position; measure_grid( V2I( m_nMeshSize ) ); }
 		for ( const Vector3 &position : m_szTrimAPos ) { ( void ) position; measure_grid( Vector2i( 2, m_nMeshSize * 4 + 2 ) ); }

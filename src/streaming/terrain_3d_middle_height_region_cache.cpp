@@ -13,10 +13,8 @@
 #include <algorithm>
 #include <cstring>
 
-namespace {
-
 template <typename Callback>
-bool forEachSquareRing( const Vector2i &rCenter, const int nMaxRadius, Callback &&rCallback ) {
+static bool t3dMiddleHeightRegionCacheForEachSquareRing( const Vector2i &rCenter, const int nMaxRadius, Callback &&rCallback ) {
 	for ( int radius = 0; radius < nMaxRadius; ++radius ) {
 		if ( radius == 0 ) {
 			if ( !rCallback( rCenter ) ) {
@@ -39,8 +37,6 @@ bool forEachSquareRing( const Vector2i &rCenter, const int nMaxRadius, Callback 
 	}
 	return true;
 }
-
-} // namespace
 
 T3DMiddleHeightRegionCache::T3DMiddleHeightRegionCache(
 	T3DRegionRepository *pRepository,
@@ -231,7 +227,7 @@ int T3DMiddleHeightRegionCache::collectDesired(
 	for ( int state_value = ( int ) ( TERRAIN3D_REGION_STREAMING_ACTIVE );
 		state_value >= ( int ) ( TERRAIN3D_REGION_STREAMING_HOT ) && output_count < capacity; --state_value ) {
 		const t3dRegionStreamingState_t wanted = ( t3dRegionStreamingState_t ) ( state_value );
-		forEachSquareRing( rCenter, m_pRepository->getRegionMapSize(), [&]( const Vector2i &location ) {
+		t3dMiddleHeightRegionCacheForEachSquareRing( rCenter, m_pRepository->getRegionMapSize(), [&]( const Vector2i &location ) {
 			if ( output_count >= capacity ) {
 				return false;
 			}

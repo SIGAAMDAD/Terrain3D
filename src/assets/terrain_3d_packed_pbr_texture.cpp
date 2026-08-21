@@ -8,11 +8,7 @@
 #include "assets/terrain_3d_packed_pbr_texture.h"
 #include "core/terrain_3d_util.h"
 
-namespace {
-
-EA_FORCE_INLINE bool terrain3dIsPackedSurfaceFormat( const Image::Format format ) { return format == Image::FORMAT_RGBA8 || format == Image::FORMAT_DXT5 || format == Image::FORMAT_BPTC_RGBA; }
-
-} // namespace
+EA_FORCE_INLINE static bool t3dPackedPbrTextureIsPackedSurfaceFormat( const Image::Format format ) { return format == Image::FORMAT_RGBA8 || format == Image::FORMAT_DXT5 || format == Image::FORMAT_BPTC_RGBA; }
 
 void T3DPackedPBRTexture::disconnectSource( const Ref<Texture2D> &rSource ) {
 	if ( rSource.is_null() ) {
@@ -146,7 +142,7 @@ void T3DPackedPBRTexture::setGeneratedTexture( const Ref<ImageTexture> &rTexture
 void T3DPackedPBRTexture::setPackedTexture( const Ref<Texture2D> &rTexture ) {
 	if ( rTexture.is_valid() ) {
 		const Ref<Image> pImage = rTexture->get_image();
-		if ( pImage.is_null() || pImage->is_empty() || !terrain3dIsPackedSurfaceFormat( pImage->get_format() ) ) {
+		if ( pImage.is_null() || pImage->is_empty() || !t3dPackedPbrTextureIsPackedSurfaceFormat( pImage->get_format() ) ) {
 			m_lastError = "Packed PBR texture must be RGBA8, BC3/DXT5, or BC7/BPTC_RGBA: "
 				"R=normal X, G=normal Y, B=roughness, A=AO.";
 			LOG( ERROR, m_lastError );
@@ -305,7 +301,7 @@ bool T3DPackedPBRTexture::isValidSurfaceTexture( void ) const {
 		return false;
 	}
 	Ref<Image> pImage = pTexture->get_image();
-	return pImage.is_valid() && !pImage->is_empty() && terrain3dIsPackedSurfaceFormat( pImage->get_format() );
+	return pImage.is_valid() && !pImage->is_empty() && t3dPackedPbrTextureIsPackedSurfaceFormat( pImage->get_format() );
 }
 
 bool T3DPackedPBRTexture::isValidDisplacementTexture( void ) const {

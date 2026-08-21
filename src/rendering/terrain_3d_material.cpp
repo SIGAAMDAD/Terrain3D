@@ -28,16 +28,14 @@
 #include "rendering/terrain_3d_shader_specializer.h"
 #include "core/terrain_3d_util.h"
 
-namespace {
-
-EA_FORCE_INLINE void mixShaderSignature( uint64_t &nSignature, const uint64_t nValue ) { nSignature ^= nValue; nSignature *= 1099511628211ULL; }
+EA_FORCE_INLINE static void t3dMaterialMixShaderSignature( uint64_t &nSignature, const uint64_t nValue ) { nSignature ^= nValue; nSignature *= 1099511628211ULL; }
 
 static constexpr uint64_t TERRAIN3D_SHADER_PACK_MAGIC = 0x314b504853443354ull; // T3DSHPK1
 static constexpr uint32_t TERRAIN3D_SHADER_PACK_VERSION = 1u;
 
-EA_FORCE_INLINE static void terrain3dStoreShaderPackString( const Ref<FileAccess> &rFile, const String &rValue ) { const CharString utf8 = rValue.utf8(); const uint32_t bytes = ( uint32_t ) MAX( 0, utf8.length() ); rFile->store_32( bytes ); if ( bytes > 0u ) rFile->store_buffer( reinterpret_cast<const uint8_t *>( utf8.get_data() ), bytes ); }
+EA_FORCE_INLINE static void t3dMaterialStoreShaderPackString( const Ref<FileAccess> &rFile, const String &rValue ) { const CharString utf8 = rValue.utf8(); const uint32_t bytes = ( uint32_t ) MAX( 0, utf8.length() ); rFile->store_32( bytes ); if ( bytes > 0u ) rFile->store_buffer( reinterpret_cast<const uint8_t *>( utf8.get_data() ), bytes ); }
 
-static bool terrain3dReadShaderPackString( const Ref<FileAccess> &rFile, String &rValue ) {
+static bool t3dMaterialReadShaderPackString( const Ref<FileAccess> &rFile, String &rValue ) {
 	if ( rFile.is_null() || rFile->get_position() + 4u > rFile->get_length() ) return false;
 	const uint32_t bytes = rFile->get_32();
 	if ( bytes > 16u * 1024u * 1024u || rFile->get_position() + bytes > rFile->get_length() ) return false;
@@ -102,7 +100,7 @@ static constexpr const char *TERRAIN3D_SHADER_FEATURES[] = {
 };
 
 
-static String terrain3dInjectShaderDefines( const String &rShader, const PackedStringArray &rDefineLines ) {
+static String t3dMaterialInjectShaderDefines( const String &rShader, const PackedStringArray &rDefineLines ) {
 	if ( rDefineLines.is_empty() ) {
 		return rShader;
 	}
@@ -127,7 +125,7 @@ static String terrain3dInjectShaderDefines( const String &rShader, const PackedS
 
 
 
-static PackedColorArray terrain3dMakeTextureColorUniforms( const PackedColorArray &rSource ) {
+static PackedColorArray t3dMaterialMakeTextureColorUniforms( const PackedColorArray &rSource ) {
 	PackedColorArray colors;
 	colors.resize( TERRAIN3D_MAX_TEXTURE_ASSETS );
 	Color *pWrite = colors.ptrw();
@@ -141,11 +139,11 @@ static PackedColorArray terrain3dMakeTextureColorUniforms( const PackedColorArra
 	return colors;
 }
 
-EA_FORCE_INLINE static void terrain3dAppendDefine( PackedStringArray &rLines, const String &strName, const String &strValue ) { rLines.push_back( "#define " + strName + " " + strValue ); }
+EA_FORCE_INLINE static void t3dMaterialAppendDefine( PackedStringArray &rLines, const String &strName, const String &strValue ) { rLines.push_back( "#define " + strName + " " + strValue ); }
 
-EA_FORCE_INLINE static char32_t terrain3dCommentPeek( const String &rCode, const int iIndex ) { return iIndex < rCode.length() ? rCode[iIndex] : 0; }
+EA_FORCE_INLINE static char32_t t3dMaterialCommentPeek( const String &rCode, const int iIndex ) { return iIndex < rCode.length() ? rCode[iIndex] : 0; }
 
-static bool terrain3dCommentAdvance(
+static bool t3dMaterialCommentAdvance(
 	const String &rCode, int &iIndex, int &nLine,
 	Vector<char32_t> &rStripped, const char32_t target
 ) {
@@ -163,7 +161,7 @@ static bool terrain3dCommentAdvance(
 }
 
 
-static bool terrain3dShaderParameterListHas( const Array &rParameterList, const StringName &strName ) {
+static bool t3dMaterialShaderParameterListHas( const Array &rParameterList, const StringName &strName ) {
 	for ( int index = 0; index < rParameterList.size(); ++index ) {
 		const Dictionary parameter = rParameterList[index];
 		const StringName parameter_name = parameter.get( "name", StringName() );
@@ -174,19 +172,19 @@ static bool terrain3dShaderParameterListHas( const Array &rParameterList, const 
 	return false;
 }
 
-static bool terrain3dRequireShaderParameter(
+static bool t3dMaterialRequireShaderParameter(
 	const Array &rParameterList, const char *pszName,
 	String &rFailureSummary
 ) {
 	const StringName name( pszName );
-	if ( terrain3dShaderParameterListHas( rParameterList, name ) ) {
+	if ( t3dMaterialShaderParameterListHas( rParameterList, name ) ) {
 		return true;
 	}
 	rFailureSummary = "Missing required reflected parameter: " + String( name );
 	return false;
 }
 
-static String terrain3dCharVectorToString(
+static String t3dMaterialCharVectorToString(
 	const Vector<char32_t> &rCharacters, const int nStart = 0,
 	const int nEnd = -1
 ) {
@@ -200,8 +198,6 @@ static String terrain3dCharVectorToString(
 	result[count] = 0;
 	return result;
 }
-
-} // namespace
 
 ///////////////////////////
 // Private Functions
@@ -1033,34 +1029,34 @@ t3dShaderValidationResult_t T3DMaterial::validateShaderVariant(
 		return result;
 	}
 
-	if ( !terrain3dRequireShaderParameter( parameter_list, "_target_pos", result.failureSummary ) ||
-		!terrain3dRequireShaderParameter( parameter_list, "_far_height_map", result.failureSummary ) ||
-		!terrain3dRequireShaderParameter( parameter_list, "_far_color_map", result.failureSummary ) ||
-		!terrain3dRequireShaderParameter( parameter_list, "_clipmap_lod_states", result.failureSummary ) ) {
+	if ( !t3dMaterialRequireShaderParameter( parameter_list, "_target_pos", result.failureSummary ) ||
+		!t3dMaterialRequireShaderParameter( parameter_list, "_far_height_map", result.failureSummary ) ||
+		!t3dMaterialRequireShaderParameter( parameter_list, "_far_color_map", result.failureSummary ) ||
+		!t3dMaterialRequireShaderParameter( parameter_list, "_clipmap_lod_states", result.failureSummary ) ) {
 		return result;
 	}
 	if ( tier == SHADER_TIER_NEAR || tier == SHADER_TIER_MIDDLE ) {
-		if ( !terrain3dRequireShaderParameter( parameter_list, "_region_map_texture", result.failureSummary ) ||
-			!terrain3dRequireShaderParameter( parameter_list, "_logical_region_map_texture", result.failureSummary ) ) {
+		if ( !t3dMaterialRequireShaderParameter( parameter_list, "_region_map_texture", result.failureSummary ) ||
+			!t3dMaterialRequireShaderParameter( parameter_list, "_logical_region_map_texture", result.failureSummary ) ) {
 			return result;
 		}
 	}
 	if ( tier == SHADER_TIER_NEAR &&
-		!terrain3dRequireShaderParameter( parameter_list, "_height_maps", result.failureSummary ) ) {
+		!t3dMaterialRequireShaderParameter( parameter_list, "_height_maps", result.failureSummary ) ) {
 		return result;
 	}
 	if ( tier == SHADER_TIER_MIDDLE &&
-		( !terrain3dRequireShaderParameter( parameter_list, "_derived_maps", result.failureSummary ) ||
-			!terrain3dRequireShaderParameter( parameter_list, "_middle_height_region_map_texture", result.failureSummary ) ||
-			!terrain3dRequireShaderParameter( parameter_list, "_middle_height_maps", result.failureSummary ) ||
+		( !t3dMaterialRequireShaderParameter( parameter_list, "_derived_maps", result.failureSummary ) ||
+			!t3dMaterialRequireShaderParameter( parameter_list, "_middle_height_region_map_texture", result.failureSummary ) ||
+			!t3dMaterialRequireShaderParameter( parameter_list, "_middle_height_maps", result.failureSummary ) ||
 			( m_middleQuality.materialSamplingQuality == MATERIAL_SAMPLING_FAST &&
-				!terrain3dRequireShaderParameter( parameter_list, "_middle_composite_maps", result.failureSummary ) ) ) ) {
+				!t3dMaterialRequireShaderParameter( parameter_list, "_middle_composite_maps", result.failureSummary ) ) ) ) {
 		return result;
 	}
 	const bool bBakedMiddle = tier == SHADER_TIER_MIDDLE &&
 		m_middleQuality.materialSamplingQuality == MATERIAL_SAMPLING_FAST;
 	const char *const albedo_parameter = tier == SHADER_TIER_FAR ? "_far_albedo_array" : "_texture_array_albedo";
-	if ( !bBakedMiddle && !terrain3dRequireShaderParameter( parameter_list, albedo_parameter, result.failureSummary ) ) {
+	if ( !bBakedMiddle && !t3dMaterialRequireShaderParameter( parameter_list, albedo_parameter, result.failureSummary ) ) {
 		return result;
 	}
 	if ( tier == SHADER_TIER_FAR ) {
@@ -1070,7 +1066,7 @@ t3dShaderValidationResult_t T3DMaterial::validateShaderVariant(
 			StringName( "_derived_maps" )
 		};
 		for ( const StringName &name : forbidden ) {
-			if ( terrain3dShaderParameterListHas( parameter_list, name ) ) {
+			if ( t3dMaterialShaderParameterListHas( parameter_list, name ) ) {
 				result.failureSummary = "Far shader reflected forbidden streamed dependency: " + String( name );
 				return result;
 			}
@@ -1612,68 +1608,68 @@ void T3DMaterial::appendPotentialBranchStates(
 
 uint64_t T3DMaterial::getVariantStateSignature( const t3dShaderVariantState_t &state ) const {
 	uint64_t signature = 1469598103934665603ULL;
-	mixShaderSignature( signature, ( uint64_t ) state.worldBackground );
-	mixShaderSignature( signature, ( uint64_t ) state.textureFiltering );
-	mixShaderSignature( signature, ( uint64_t ) state.terrainSamplingMode );
-	mixShaderSignature( signature, ( uint64_t ) state.terrainNormalMode );
-	mixShaderSignature( signature, ( uint64_t ) state.colorSamplingMode );
-	mixShaderSignature( signature, ( uint64_t ) state.projectionMode );
-	mixShaderSignature( signature, ( uint64_t ) state.tessellationMaterialMode );
-	mixShaderSignature( signature, ( uint64_t ) state.surfaceDataMode );
-	mixShaderSignature( signature, ( uint64_t ) state.terrainShadingMode );
-	mixShaderSignature( signature, ( uint64_t ) state.detilingMode );
-	mixShaderSignature( signature, ( uint64_t ) state.textureSurfaceMode );
-	mixShaderSignature( signature, ( uint64_t ) state.worldNoiseShaderMode );
-	mixShaderSignature( signature, ( uint64_t ) state.bAutoShaderEnabled );
-	mixShaderSignature( signature, ( uint64_t ) state.bDualScalingEnabled );
-	mixShaderSignature( signature, ( uint64_t ) state.bMacroVariationEnabled );
-	mixShaderSignature( signature, ( uint64_t ) state.bOutputAlbedoEnabled );
-	mixShaderSignature( signature, ( uint64_t ) state.bOutputRoughnessEnabled );
-	mixShaderSignature( signature, ( uint64_t ) state.bOutputSpecularEnabled );
-	mixShaderSignature( signature, ( uint64_t ) state.bOutputNormalMapEnabled );
-	mixShaderSignature( signature, ( uint64_t ) state.bOutputAmbientOcclusionEnabled );
-	mixShaderSignature( signature, ( uint64_t ) state.bFastBlendCurve );
-	mixShaderSignature( signature, ( uint64_t ) state.bTessellationEnabled );
-	mixShaderSignature( signature, ( uint64_t ) state.bSurfacePacked );
-	mixShaderSignature( signature, ( uint64_t ) state.bControlMapsImplicit );
-	mixShaderSignature( signature, ( uint64_t ) state.bColorMapsImplicit );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.worldBackground );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.textureFiltering );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.terrainSamplingMode );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.terrainNormalMode );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.colorSamplingMode );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.projectionMode );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.tessellationMaterialMode );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.surfaceDataMode );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.terrainShadingMode );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.detilingMode );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.textureSurfaceMode );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.worldNoiseShaderMode );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.bAutoShaderEnabled );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.bDualScalingEnabled );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.bMacroVariationEnabled );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.bOutputAlbedoEnabled );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.bOutputRoughnessEnabled );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.bOutputSpecularEnabled );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.bOutputNormalMapEnabled );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.bOutputAmbientOcclusionEnabled );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.bFastBlendCurve );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.bTessellationEnabled );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.bSurfacePacked );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.bControlMapsImplicit );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) state.bColorMapsImplicit );
 	return signature;
 }
 
 uint64_t T3DMaterial::getPrewarmSignature( void ) const {
 	const t3dShaderVariantState_t state = captureVariantState();
 	uint64_t signature = 1469598103934665603ULL;
-	mixShaderSignature( signature, ( uint64_t ) ( m_shaderVariantMode ) );
-	mixShaderSignature( signature, ( uint64_t ) ( m_nShaderVariantCacheLimit ) );
-	mixShaderSignature( signature, ( uint64_t ) ( m_nShaderVariantPrewarmLimit ) );
-	mixShaderSignature( signature, ( uint64_t ) ( m_nShaderVariantSourceBudgetMb ) );
-	mixShaderSignature( signature, m_observedVariantDimensions );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( m_shaderVariantMode ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( m_nShaderVariantCacheLimit ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( m_nShaderVariantPrewarmLimit ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( m_nShaderVariantSourceBudgetMb ) );
+	t3dMaterialMixShaderSignature( signature, m_observedVariantDimensions );
 	for ( int dimension = 0; dimension < VARIANT_DIM_COUNT; ++dimension ) {
-		mixShaderSignature( signature, m_szVariantDimensionLastUsed[dimension] );
+		t3dMaterialMixShaderSignature( signature, m_szVariantDimensionLastUsed[dimension] );
 	}
-	mixShaderSignature( signature, ( uint64_t ) ( state.worldBackground ) );
-	mixShaderSignature( signature, ( uint64_t ) ( state.textureFiltering ) );
-	mixShaderSignature( signature, ( uint64_t ) ( state.terrainSamplingMode ) );
-	mixShaderSignature( signature, ( uint64_t ) ( state.terrainNormalMode ) );
-	mixShaderSignature( signature, ( uint64_t ) ( state.colorSamplingMode ) );
-	mixShaderSignature( signature, ( uint64_t ) ( state.projectionMode ) );
-	mixShaderSignature( signature, ( uint64_t ) ( state.tessellationMaterialMode ) );
-	mixShaderSignature( signature, ( uint64_t ) ( state.surfaceDataMode ) );
-	mixShaderSignature( signature, ( uint64_t ) ( state.terrainShadingMode ) );
-	mixShaderSignature( signature, ( uint64_t ) ( state.detilingMode ) );
-	mixShaderSignature( signature, ( uint64_t ) ( state.textureSurfaceMode ) );
-	mixShaderSignature( signature, ( uint64_t ) ( state.worldNoiseShaderMode ) );
-	mixShaderSignature( signature, ( uint64_t ) ( state.bAutoShaderEnabled ) );
-	mixShaderSignature( signature, ( uint64_t ) ( state.bDualScalingEnabled ) );
-	mixShaderSignature( signature, ( uint64_t ) ( state.bMacroVariationEnabled ) );
-	mixShaderSignature( signature, ( uint64_t ) ( state.bOutputAlbedoEnabled ) );
-	mixShaderSignature( signature, ( uint64_t ) ( state.bOutputRoughnessEnabled ) );
-	mixShaderSignature( signature, ( uint64_t ) ( state.bOutputSpecularEnabled ) );
-	mixShaderSignature( signature, ( uint64_t ) ( state.bOutputNormalMapEnabled ) );
-	mixShaderSignature( signature, ( uint64_t ) ( state.bOutputAmbientOcclusionEnabled ) );
-	mixShaderSignature( signature, ( uint64_t ) ( state.bFastBlendCurve ) );
-	mixShaderSignature( signature, ( uint64_t ) ( state.bTessellationEnabled ) );
-	mixShaderSignature( signature, ( uint64_t ) ( state.bSurfacePacked ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.worldBackground ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.textureFiltering ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.terrainSamplingMode ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.terrainNormalMode ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.colorSamplingMode ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.projectionMode ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.tessellationMaterialMode ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.surfaceDataMode ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.terrainShadingMode ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.detilingMode ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.textureSurfaceMode ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.worldNoiseShaderMode ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.bAutoShaderEnabled ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.bDualScalingEnabled ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.bMacroVariationEnabled ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.bOutputAlbedoEnabled ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.bOutputRoughnessEnabled ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.bOutputSpecularEnabled ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.bOutputNormalMapEnabled ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.bOutputAmbientOcclusionEnabled ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.bFastBlendCurve ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.bTessellationEnabled ) );
+	t3dMaterialMixShaderSignature( signature, ( uint64_t ) ( state.bSurfacePacked ) );
 	return signature;
 }
 
@@ -2044,13 +2040,13 @@ String T3DMaterial::stripComments( const String &rShader ) const {
 			}
 			stripped.push_back( c );
 		} else if ( c == '/' && strings_open == 0 ) {
-			const char32_t p = terrain3dCommentPeek( code, index );
+			const char32_t p = t3dMaterialCommentPeek( code, index );
 			if ( p == '/' ) { // Single line comment.
-				terrain3dCommentAdvance( code, index, line, stripped, '\n' );
+				t3dMaterialCommentAdvance( code, index, line, stripped, '\n' );
 			} else if ( p == '*' ) { // Start of a block comment.
 				index++;
-				while ( terrain3dCommentAdvance( code, index, line, stripped, '*' ) ) {
-					if ( terrain3dCommentPeek( code, index ) == '/' ) { // End of a block comment.
+				while ( t3dMaterialCommentAdvance( code, index, line, stripped, '*' ) ) {
+					if ( t3dMaterialCommentPeek( code, index ) == '/' ) { // End of a block comment.
 						index++;
 						break;
 					}
@@ -2059,7 +2055,7 @@ String T3DMaterial::stripComments( const String &rShader ) const {
 				stripped.push_back( c );
 			}
 		} else if ( c == '*' && strings_open == 0 ) {
-			if ( terrain3dCommentPeek( code, index ) == '/' ) { // Unmatched end of a block comment.
+			if ( t3dMaterialCommentPeek( code, index ) == '/' ) { // Unmatched end of a block comment.
 			} else {
 				stripped.push_back( c );
 			}
@@ -2070,7 +2066,7 @@ String T3DMaterial::stripComments( const String &rShader ) const {
 			stripped.push_back( c );
 		}
 	}
-	return terrain3dCharVectorToString( stripped );
+	return t3dMaterialCharVectorToString( stripped );
 }
 
 String T3DMaterial::generateBufferShaderCode( void ) const {
@@ -2179,10 +2175,10 @@ String T3DMaterial::injectEditorCode( const String &rShader ) const {
 	const PackedStringArray editor_features = getEditorShaderFeatures();
 	PackedStringArray editor_defines;
 	for ( int index = 0; index < editor_features.size(); ++index ) {
-		terrain3dAppendDefine( editor_defines, "T3D_ENABLE_" + editor_features[index], "1" );
+		t3dMaterialAppendDefine( editor_defines, "T3D_ENABLE_" + editor_features[index], "1" );
 	}
 
-	String shader = terrain3dInjectShaderDefines( rShader, editor_defines );
+	String shader = t3dMaterialInjectShaderDefines( rShader, editor_defines );
 	const String setup_include = "#include \"res://addons/terrain_3d/shaders/includes/editor_setup.gdshaderinc\"";
 	const String fragment_include = "#include \"res://addons/terrain_3d/shaders/includes/editor_fragment.gdshaderinc\"";
 	if ( shader.find( setup_include ) >= 0 && shader.find( fragment_include ) >= 0 ) {
@@ -2609,9 +2605,9 @@ bool T3DMaterial::updateRegionMapTexture(
 		return false;
 	}
 	uint64_t hash = 1469598103934665603ULL;
-	mixShaderSignature( hash, ( uint64_t ) ( nRegionMapSize ) );
+	t3dMaterialMixShaderSignature( hash, ( uint64_t ) ( nRegionMapSize ) );
 	for ( int index = 0; index < rRegionMap.size(); ++index ) {
-		mixShaderSignature( hash, ( uint64_t ) ( ( uint32_t ) ( rRegionMap[index] ) ) );
+		t3dMaterialMixShaderSignature( hash, ( uint64_t ) ( ( uint32_t ) ( rRegionMap[index] ) ) );
 	}
 	if ( m_generatedRegionMap.getRid().is_valid() && m_nRegionMapTextureHash == hash &&
 		m_nRegionMapTextureSize == nRegionMapSize ) {
@@ -2664,9 +2660,9 @@ bool T3DMaterial::updateLogicalRegionMapTexture(
 		return false;
 	}
 	uint64_t hash = 1469598103934665603ULL;
-	mixShaderSignature( hash, ( uint64_t ) ( nRegionMapSize ) );
+	t3dMaterialMixShaderSignature( hash, ( uint64_t ) ( nRegionMapSize ) );
 	for ( int index = 0; index < rRegionMap.size(); ++index ) {
-		mixShaderSignature( hash, ( uint64_t ) ( ( uint32_t ) ( rRegionMap[index] ) ) );
+		t3dMaterialMixShaderSignature( hash, ( uint64_t ) ( ( uint32_t ) ( rRegionMap[index] ) ) );
 	}
 	if ( m_generatedLogicalRegionMap.getRid().is_valid() &&
 		m_nLogicalRegionMapTextureHash == hash &&
@@ -2940,7 +2936,7 @@ void T3DMaterial::updateUniforms( const RID &rMaterial, const uint32_t nFlags ) 
 			MIN( pAssetList->getTextureColors().size(), TERRAIN3D_MAX_TEXTURE_ASSETS ) : 0;
 		RS->material_set_param( rMaterial, "_texture_color_count", texture_color_count );
 		RS->material_set_param( rMaterial, "_texture_color_array",
-			terrain3dMakeTextureColorUniforms( bAssetsReady ? pAssetList->getTextureColors() : PackedColorArray() ) );
+			t3dMaterialMakeTextureColorUniforms( bAssetsReady ? pAssetList->getTextureColors() : PackedColorArray() ) );
 		if ( rMaterial == m_szTierMaterials[SHADER_TIER_FAR] ) {
 			RS->material_set_param( rMaterial, "_far_material_max_lod",
 				bAssetsReady ? ( real_t ) ( pAssetList->getFarAlbedoArrayMaxLod() ) : ( real_t ) ( 0.0 ) );
@@ -3042,7 +3038,7 @@ void T3DMaterial::updateUniforms( const RID &rMaterial, const uint32_t nFlags ) 
 		}
 
 		RS->material_set_param( rMaterial, "_texture_color_array",
-			terrain3dMakeTextureColorUniforms( pAssetList->getTextureColors() ) );
+			t3dMaterialMakeTextureColorUniforms( pAssetList->getTextureColors() ) );
 		if ( bCompactTier ) {
 			RS->material_set_param( rMaterial, "_texture_color_count",
 				MIN( pAssetList->getTextureColors().size(), TERRAIN3D_MAX_TEXTURE_ASSETS ) );
@@ -3903,7 +3899,7 @@ Dictionary T3DMaterial::cookRuntimeShaderPack( void ) {
 	Ref<FileAccess> file = FileAccess::open( temporary, FileAccess::WRITE );
 	if ( file.is_null() ) { result["error"] = "Unable to open runtime shader pack."; return result; }
 	file->store_64( TERRAIN3D_SHADER_PACK_MAGIC ); file->store_32( TERRAIN3D_SHADER_PACK_VERSION ); file->store_32( ( uint32_t ) entries.size() ); file->store_64( state_signature );
-	for ( const Entry &entry : entries ) { file->store_8( entry.domain ); file->store_8( entry.tier ); file->store_16( 0u ); terrain3dStoreShaderPackString( file, entry.source ); }
+	for ( const Entry &entry : entries ) { file->store_8( entry.domain ); file->store_8( entry.tier ); file->store_16( 0u ); t3dMaterialStoreShaderPackString( file, entry.source ); }
 	const Error write_error = file->get_error(); file->close();
 	if ( write_error != OK ) { DirAccess::remove_absolute( temporary ); result["error"] = "Runtime shader pack write failed."; return result; }
 	const String backup = path + ".bak";
@@ -3931,7 +3927,7 @@ bool T3DMaterial::loadRuntimeShaderPack( void ) {
 	const uint32_t count = file->get_32(); const uint64_t signature = file->get_64();
 	if ( count < SHADER_TIER_COUNT || count > 128u || signature != getVariantStateSignature( captureVariantState() ) ) return false;
 	struct Entry { uint8_t domain; uint8_t tier; String source; }; eastl::vector<Entry> entries; entries.reserve( count );
-	for ( uint32_t i = 0; i < count; ++i ) { if ( file->get_position() + 4u > file->get_length() ) return false; Entry entry; entry.domain=file->get_8(); entry.tier=file->get_8(); file->get_16(); if(!terrain3dReadShaderPackString(file,entry.source)||entry.source.is_empty()) return false; entries.push_back(entry); }
+	for ( uint32_t i = 0; i < count; ++i ) { if ( file->get_position() + 4u > file->get_length() ) return false; Entry entry; entry.domain=file->get_8(); entry.tier=file->get_8(); file->get_16(); if(!t3dMaterialReadShaderPackString(file,entry.source)||entry.source.is_empty()) return false; entries.push_back(entry); }
 	if ( file->get_position() != file->get_length() ) return false;
 	for ( size_t i = 0; i < entries.size(); ++i ) { const Entry &entry=entries[i]; if ( entry.domain==0u && entry.tier<SHADER_TIER_COUNT && m_szRuntimeShaderPackTierSource[entry.tier].is_empty() ) m_szRuntimeShaderPackTierSource[entry.tier]=entry.source; else if(entry.domain==1u && m_runtimeShaderPackBufferSource.is_empty()) m_runtimeShaderPackBufferSource=entry.source; }
 	for ( int tier=SHADER_TIER_NEAR; tier<SHADER_TIER_COUNT; ++tier ) if(m_szRuntimeShaderPackTierSource[tier].is_empty()) return false;

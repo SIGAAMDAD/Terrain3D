@@ -22,8 +22,6 @@
 #include <limits>
 #include <utility>
 
-namespace {
-
 typedef struct t3dDerivedMapBuildContext_s {
 	T3DSamplingSource samplingSource;
 	eastl::vector<T3DDerivedMapTask> *pTasks = nullptr;
@@ -34,7 +32,7 @@ typedef struct t3dDerivedMapBuildContext_s {
 	float fVertexSpacing = 1.0f;
 } t3dDerivedMapBuildContext_t;
 
-void terrain3dBuildDerivedMapRange( void *pContext, const size_t nBegin, const size_t nEnd, const int32_t nWorkerIndex ) {
+static void t3dMapEditServiceBuildDerivedMapRange( void *pContext, const size_t nBegin, const size_t nEnd, const int32_t nWorkerIndex ) {
 	t3dDerivedMapBuildContext_t *const pBuildContext = ( t3dDerivedMapBuildContext_t * ) ( pContext );
 	T3DSampler sampler( pBuildContext->samplingSource );
 	for ( size_t taskIndex = nBegin; taskIndex < nEnd; ++taskIndex ) {
@@ -78,8 +76,6 @@ void terrain3dBuildDerivedMapRange( void *pContext, const size_t nBegin, const s
 		task.bSuccess = true;
 	}
 }
-
-} // namespace
 
 T3DMapEditService::T3DMapEditService(
 	T3DRegionRepository *const pRepository, T3DSamplingStorage *const pSamplingStorage
@@ -282,7 +278,7 @@ const eastl::vector<T3DDerivedMapUpdate> &T3DMapEditService::regenerateDerivedMa
 	buildContext.nWorkerHaloElements = maxHaloElements;
 	buildContext.nRegionSize = m_pRepository->getRegionSize();
 	buildContext.fVertexSpacing = ( float ) ( m_pRepository->getVertexSpacing() );
-	executor.runStatic( tasks.size(), 1u, terrain3dBuildDerivedMapRange, &buildContext );
+	executor.runStatic( tasks.size(), 1u, t3dMapEditServiceBuildDerivedMapRange, &buildContext );
 
 	m_derivedUpdateScratch.reserve( tasks.size() );
 	for ( T3DDerivedMapTask &task : tasks ) {

@@ -19,20 +19,18 @@
 #include "lighting/terrain_3d_lighting_policy.h"
 #include "data/terrain_3d_region.h"
 
-namespace {
-
 // Godot Variant types must not be constructed at shared-library load time:
 // GDExtension function pointers are installed only after dlopen() completes.
 // These accessors defer StringName construction until the streamer is used.
-EA_FORCE_INLINE static StringName terrain3dNodeMethodActivate( void ) { return StringName( "terrain3d_stream_activate" ); }
+EA_FORCE_INLINE static StringName t3dNodeStreamerNodeMethodActivate( void ) { return StringName( "terrain3d_stream_activate" ); }
 
-EA_FORCE_INLINE static StringName terrain3dNodeMethodDeactivate( void ) { return StringName( "terrain3d_stream_deactivate" ); }
+EA_FORCE_INLINE static StringName t3dNodeStreamerNodeMethodDeactivate( void ) { return StringName( "terrain3d_stream_deactivate" ); }
 
-EA_FORCE_INLINE static StringName terrain3dNodeMethodLoadState( void ) { return StringName( "terrain3d_stream_load_state" ); }
+EA_FORCE_INLINE static StringName t3dNodeStreamerNodeMethodLoadState( void ) { return StringName( "terrain3d_stream_load_state" ); }
 
-EA_FORCE_INLINE static StringName terrain3dNodeMethodSaveState( void ) { return StringName( "terrain3d_stream_save_state" ); }
+EA_FORCE_INLINE static StringName t3dNodeStreamerNodeMethodSaveState( void ) { return StringName( "terrain3d_stream_save_state" ); }
 
-static void terrain3dApplyStreamedLightingMetadata(
+static void t3dNodeStreamerApplyStreamedLightingMetadata(
 	Node *pNode,
 	const t3dStreamedNodeRuntimeDescriptor_t &rDescriptor,
 	const bool bShadowProxy = false, const bool bDisableVisibleShadow = false
@@ -73,12 +71,12 @@ static void terrain3dApplyStreamedLightingMetadata(
 		}
 	}
 	for ( int child_index = 0; child_index < pNode->get_child_count(); ++child_index ) {
-		terrain3dApplyStreamedLightingMetadata( pNode->get_child( child_index ), rDescriptor,
+		t3dNodeStreamerApplyStreamedLightingMetadata( pNode->get_child( child_index ), rDescriptor,
 			bShadowProxy, bDisableVisibleShadow );
 	}
 }
 
-static Node *terrain3dCreateShadowProxy( const t3dStreamedNodeRuntimeDescriptor_t &rDescriptor ) {
+static Node *t3dNodeStreamerCreateShadowProxy( const t3dStreamedNodeRuntimeDescriptor_t &rDescriptor ) {
 	Ref<PackedScene> proxy_scene = rDescriptor.pShadowProxyScene;
 	if ( proxy_scene.is_null() && !rDescriptor.shadowProxyScenePath.is_empty() ) {
 		proxy_scene = ResourceLoader::get_singleton()->load( rDescriptor.shadowProxyScenePath, "PackedScene" );
@@ -88,8 +86,6 @@ static Node *terrain3dCreateShadowProxy( const t3dStreamedNodeRuntimeDescriptor_
 	}
 	return proxy_scene->instantiate();
 }
-
-} // namespace
 
 T3DNodeStreamer::~T3DNodeStreamer( void ) {
 	destroy( false );
@@ -494,16 +490,16 @@ void T3DNodeStreamer::captureNodeState(
 	if ( pDescriptor ) {
 		state = pDescriptor->state.duplicate( true );
 	}
-	if ( pNode->has_method( terrain3dNodeMethodSaveState() ) ) {
-		const Variant result = pNode->call( terrain3dNodeMethodSaveState() );
+	if ( pNode->has_method( t3dNodeStreamerNodeMethodSaveState() ) ) {
+		const Variant result = pNode->call( t3dNodeStreamerNodeMethodSaveState() );
 		if ( result.get_type() == Variant::DICTIONARY ) {
 			state = Dictionary( result ).duplicate( true );
 		}
 	}
 	pRegion->updateStreamedNodeState( rActive.spawnId, local_transform, state, rActive.flags );
 	pNode = getActiveNode( rActive );
-	if ( pNode && pNode->has_method( terrain3dNodeMethodDeactivate() ) ) {
-		pNode->call( terrain3dNodeMethodDeactivate() );
+	if ( pNode && pNode->has_method( t3dNodeStreamerNodeMethodDeactivate() ) ) {
+		pNode->call( t3dNodeStreamerNodeMethodDeactivate() );
 	}
 }
 
@@ -622,28 +618,28 @@ t3dSpawnActivationResult_t T3DNodeStreamer::activateSpawn(
 		pNode3d->set_transform( rSpawn.transform );
 	}
 	const bool bHasShadowProxy = rSpawn.pShadowProxyScene.is_valid() || !rSpawn.shadowProxyScenePath.is_empty();
-	terrain3dApplyStreamedLightingMetadata( pNode, rSpawn, false, bHasShadowProxy );
+	t3dNodeStreamerApplyStreamedLightingMetadata( pNode, rSpawn, false, bHasShadowProxy );
 	if ( bHasShadowProxy && rSpawn.bDynamicShadowEligible ) {
-		Node *const proxy = terrain3dCreateShadowProxy( rSpawn );
+		Node *const proxy = t3dNodeStreamerCreateShadowProxy( rSpawn );
 		if ( proxy ) {
 			proxy->set_name( "ShadowProxy" );
-			terrain3dApplyStreamedLightingMetadata( proxy, rSpawn, true, false );
+			t3dNodeStreamerApplyStreamedLightingMetadata( proxy, rSpawn, true, false );
 			pNode->add_child( proxy );
 		}
 	}
 	rRuntime.pRoot->add_child( pNode );
 	const ObjectID objectId( pNode->get_instance_id() );
-	if ( !rSpawn.state.is_empty() && pNode->has_method( terrain3dNodeMethodLoadState() ) ) {
+	if ( !rSpawn.state.is_empty() && pNode->has_method( t3dNodeStreamerNodeMethodLoadState() ) ) {
 		const Dictionary state = rSpawn.state.duplicate( true );
-		pNode->call( terrain3dNodeMethodLoadState(), state );
+		pNode->call( t3dNodeStreamerNodeMethodLoadState(), state );
 		pNode = Object::cast_to<Node>( ObjectDB::get_instance( objectId ) );
 		if ( !pNode ) {
 			pRegion->removeStreamedNode( spawn_id );
 			return SPAWN_ACTIVATION_CONSUMED;
 		}
 	}
-	if ( pNode->has_method( terrain3dNodeMethodActivate() ) ) {
-		pNode->call( terrain3dNodeMethodActivate() );
+	if ( pNode->has_method( t3dNodeStreamerNodeMethodActivate() ) ) {
+		pNode->call( t3dNodeStreamerNodeMethodActivate() );
 		pNode = Object::cast_to<Node>( ObjectDB::get_instance( objectId ) );
 		if ( !pNode ) {
 			pRegion->removeStreamedNode( spawn_id );

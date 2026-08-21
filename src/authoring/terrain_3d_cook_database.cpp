@@ -7,11 +7,9 @@
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 
-namespace {
 constexpr uint64_t TERRAIN3D_COOK_DATABASE_MAGIC = 0x3142444b43443354ull; // T3DCKDB1
 constexpr uint32_t TERRAIN3D_COOK_DATABASE_VERSION = 1u;
 constexpr uint32_t TERRAIN3D_COOK_DATABASE_HEADER_BYTES = 40u;
-}
 
 void T3DCookDatabase::reset( void ) {
 	m_bLoaded = false;

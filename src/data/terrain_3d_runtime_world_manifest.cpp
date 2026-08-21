@@ -17,12 +17,11 @@
 #include <algorithm>
 #include <cstring>
 
-namespace {
 static constexpr uint32_t MANIFEST_HEADER_BYTES = 112u;
 static constexpr uint32_t MANIFEST_TOPOLOGY_BYTES = TERRAIN3D_MAX_REGION_SLOTS / 8u;
 static constexpr uint32_t MANIFEST_REGION_BASE_BYTES = 112u;
 
-static void hashBytes( uint64_t &nHash, const void *pData, const size_t nBytes ) {
+static void t3dRuntimeWorldManifestHashBytes( uint64_t &nHash, const void *pData, const size_t nBytes ) {
 	const uint8_t *const pRead = static_cast<const uint8_t *>( pData );
 	for ( size_t i = 0; i < nBytes; ++i ) {
 		nHash ^= pRead[i];
@@ -30,9 +29,9 @@ static void hashBytes( uint64_t &nHash, const void *pData, const size_t nBytes )
 	}
 }
 
-EA_FORCE_INLINE static void hashU32( uint64_t &nHash, const uint32_t nValue ) { hashBytes( nHash, &nValue, sizeof( nValue ) ); }
+EA_FORCE_INLINE static void t3dRuntimeWorldManifestHashU32( uint64_t &nHash, const uint32_t nValue ) { t3dRuntimeWorldManifestHashBytes( nHash, &nValue, sizeof( nValue ) ); }
 
-static void storeString( const Ref<FileAccess> &rFile, const String &rValue ) {
+static void t3dRuntimeWorldManifestStoreString( const Ref<FileAccess> &rFile, const String &rValue ) {
 	const CharString utf8 = rValue.utf8();
 	const uint32_t length = ( uint32_t ) ( MAX( 0, utf8.length() ) );
 	rFile->store_32( length );
@@ -41,7 +40,7 @@ static void storeString( const Ref<FileAccess> &rFile, const String &rValue ) {
 	}
 }
 
-static bool readString( const Ref<FileAccess> &rFile, String &rValue ) {
+static bool t3dRuntimeWorldManifestReadString( const Ref<FileAccess> &rFile, String &rValue ) {
 	if ( rFile.is_null() || rFile->get_position() + 4u > rFile->get_length() ) {
 		return false;
 	}
@@ -61,12 +60,11 @@ static bool readString( const Ref<FileAccess> &rFile, String &rValue ) {
 	return true;
 }
 
-static String descriptorScenePath( const t3dStreamedNodeRuntimeDescriptor_t &rDescriptor ) {
+static String t3dRuntimeWorldManifestDescriptorScenePath( const t3dStreamedNodeRuntimeDescriptor_t &rDescriptor ) {
 	if ( !rDescriptor.scenePath.is_empty() ) {
 		return rDescriptor.scenePath;
 	}
 	return rDescriptor.pScene.is_valid() ? rDescriptor.pScene->get_path() : String();
-}
 }
 
 void T3DRuntimeWorldManifest::reset( void ) {
@@ -185,7 +183,7 @@ bool T3DRuntimeWorldManifest::buildAuthoringIndex( const T3DRegionRepository &rR
 					record.nodeCoverageMax.y = MAX( record.nodeCoverageMax.y, descriptor.coverageMax.y );
 				}
 			}
-			const String scene_path = descriptorScenePath( descriptor );
+			const String scene_path = t3dRuntimeWorldManifestDescriptorScenePath( descriptor );
 			if ( scene_path.is_empty() ) {
 				continue;
 			}
@@ -266,8 +264,8 @@ bool T3DRuntimeWorldManifest::write(
 	}
 	m_nMaterialSignature = rConfig.materialSourceSignature;
 	uint64_t world_signature = 1469598103934665603ull;
-	hashU32( world_signature, ( uint32_t ) ( m_nRegionSize ) );
-	hashU32( world_signature, ( uint32_t ) ( m_regions.size() ) );
+	t3dRuntimeWorldManifestHashU32( world_signature, ( uint32_t ) ( m_nRegionSize ) );
+	t3dRuntimeWorldManifestHashU32( world_signature, ( uint32_t ) ( m_regions.size() ) );
 	for ( T3DRuntimeWorldRegionRecord &record : m_regions ) {
 		const T3DRegion *const pRegion = rRepository.getRegionPtr( record.location );
 		uint64_t page_signature = 0u;
@@ -279,11 +277,11 @@ bool T3DRuntimeWorldManifest::write(
 		record.pageSourceSignature = page_signature;
 		record.materialMask = rPageStore.readMaterialMask( page_path );
 		if ( record.materialMask == 0u ) record.materialMask = 1u;
-		hashBytes( world_signature, &record.location.x, sizeof( record.location.x ) );
-		hashBytes( world_signature, &record.location.y, sizeof( record.location.y ) );
-		hashBytes( world_signature, &record.pageSourceSignature, sizeof( record.pageSourceSignature ) );
-		hashBytes( world_signature, &record.materialMask, sizeof( record.materialMask ) );
-		hashBytes( world_signature, &record.flags, sizeof( record.flags ) );
+		t3dRuntimeWorldManifestHashBytes( world_signature, &record.location.x, sizeof( record.location.x ) );
+		t3dRuntimeWorldManifestHashBytes( world_signature, &record.location.y, sizeof( record.location.y ) );
+		t3dRuntimeWorldManifestHashBytes( world_signature, &record.pageSourceSignature, sizeof( record.pageSourceSignature ) );
+		t3dRuntimeWorldManifestHashBytes( world_signature, &record.materialMask, sizeof( record.materialMask ) );
+		t3dRuntimeWorldManifestHashBytes( world_signature, &record.flags, sizeof( record.flags ) );
 	}
 	m_nWorldSignature = world_signature;
 
@@ -354,7 +352,7 @@ bool T3DRuntimeWorldManifest::write(
 		for ( uint32_t count : record.instanceMeshCounts ) pFile->store_32( count );
 	}
 	for ( uint16_t dependency : m_regionSceneDependencies ) pFile->store_16( dependency );
-	for ( const String &dependency : m_sceneDependencies ) storeString( pFile, dependency );
+	for ( const String &dependency : m_sceneDependencies ) t3dRuntimeWorldManifestStoreString( pFile, dependency );
 	const Error write_error = pFile->get_error();
 	pFile->close();
 	if ( write_error != OK ) {
@@ -462,7 +460,7 @@ bool T3DRuntimeWorldManifest::load( const String &rDataDirectory, PackedStringAr
 	for ( uint32_t index = 0u; index < region_dependency_count; ++index ) m_regionSceneDependencies[index] = pFile->get_16();
 	m_sceneDependencies.resize( dependency_count );
 	for ( uint32_t index = 0u; index < dependency_count; ++index ) {
-		if ( !readString( pFile, m_sceneDependencies[index] ) ) {
+		if ( !t3dRuntimeWorldManifestReadString( pFile, m_sceneDependencies[index] ) ) {
 			if ( pErrors ) pErrors->push_back( "Cooked world manifest dependency table is truncated." );
 			reset();
 			return false;

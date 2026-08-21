@@ -94,9 +94,7 @@ size_t T3DInstanceStore::cellLowerBound(
 	return ( size_t ) ( eastl::lower_bound( cells.begin(), cells.end(), location, cellLess ) - cells.begin() );
 }
 
-namespace {
-EA_FORCE_INLINE static bool terrain3dInstanceMeshIdLess( const t3dInstanceMesh_t &rA, const t3dInstanceMesh_t &rB ) { return rA.id < rB.id; }
-}
+EA_FORCE_INLINE static bool t3dInstanceStoreInstanceMeshIdLess( const t3dInstanceMesh_t &rA, const t3dInstanceMesh_t &rB ) { return rA.id < rB.id; }
 
 size_t T3DInstanceStore::findCellIndex( const t3dInstanceMesh_t &mesh, const Vector2i &location ) {
 	const size_t cell_index = cellLowerBound( mesh.cells, location );
@@ -192,7 +190,7 @@ void T3DInstanceStore::swapMeshIds( const int nSrcId, const int nDstId ) {
 	if ( pDst != nullptr ) {
 		pDst->id = nSrcId;
 	}
-	eastl::sort( m_meshes.begin(), m_meshes.end(), terrain3dInstanceMeshIdLess ); rebuildMeshLookup();
+	eastl::sort( m_meshes.begin(), m_meshes.end(), t3dInstanceStoreInstanceMeshIdLess ); rebuildMeshLookup();
 }
 
 const t3dInstanceCell_t *T3DInstanceStore::findCell( const int nMeshId, const Vector2i &cell ) const {

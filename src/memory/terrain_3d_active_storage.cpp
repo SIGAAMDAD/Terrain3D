@@ -17,8 +17,6 @@
 
 #include "data/terrain_3d_region_codec.h"
 
-namespace {
-
 static constexpr int TERRAIN3D_ACTIVE_PHYSICAL_PAGE_COUNT = 32;
 static constexpr int TERRAIN3D_ACTIVE_INVALID_PAGE = -1;
 
@@ -59,11 +57,11 @@ static std::atomic<uint64_t> s_nActivePublications{0u};
 static uint32_t s_nClockHand = 0u;
 static std::mutex s_activeWriterMutex;
 
-EA_FORCE_INLINE static bool terrain3dActiveValidRegionSize( const int nRegionSize ) { return nRegionSize >= TERRAIN3D_ACTIVE_MIN_REGION_SIZE && nRegionSize <= TERRAIN3D_ACTIVE_WORLD_TEXELS && ( nRegionSize & ( nRegionSize - 1 ) ) == 0 && TERRAIN3D_ACTIVE_WORLD_TEXELS % nRegionSize == 0; }
+EA_FORCE_INLINE static bool t3dActiveStorageActiveValidRegionSize( const int nRegionSize ) { return nRegionSize >= TERRAIN3D_ACTIVE_MIN_REGION_SIZE && nRegionSize <= TERRAIN3D_ACTIVE_WORLD_TEXELS && ( nRegionSize & ( nRegionSize - 1 ) ) == 0 && TERRAIN3D_ACTIVE_WORLD_TEXELS % nRegionSize == 0; }
 
-EA_FORCE_INLINE static size_t terrain3dActivePageBytes( const int nRegionSize ) { const size_t size = nRegionSize > 0 ? ( size_t ) ( nRegionSize ) : 0u; return size * size * sizeof( uint16_t ); }
+EA_FORCE_INLINE static size_t t3dActiveStorageActivePageBytes( const int nRegionSize ) { const size_t size = nRegionSize > 0 ? ( size_t ) ( nRegionSize ) : 0u; return size * size * sizeof( uint16_t ); }
 
-static int terrain3dActiveLocationToSlot( const Vector2i &rLocation, const int nMapSize ) {
+static int t3dActiveStorageActiveLocationToSlot( const Vector2i &rLocation, const int nMapSize ) {
 	if ( nMapSize <= 0 || nMapSize > TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE ) {
 		return -1;
 	}
@@ -77,16 +75,16 @@ static int terrain3dActiveLocationToSlot( const Vector2i &rLocation, const int n
 	return y * nMapSize + x;
 }
 
-static void terrain3dActiveBumpGeneration( std::atomic<uint32_t> &rGeneration ) {
+static void t3dActiveStorageActiveBumpGeneration( std::atomic<uint32_t> &rGeneration ) {
 	const uint32_t next = rGeneration.fetch_add( 1u, std::memory_order_acq_rel ) + 1u;
 	if ( next == 0u ) {
 		rGeneration.store( 1u, std::memory_order_release );
 	}
 }
 
-EA_FORCE_INLINE static bool terrain3dActiveOwnerMatches( const void *pOwner ) { return pOwner && s_nActiveOwnerState.load( std::memory_order_acquire ) == TERRAIN3D_ACTIVE_OWNER_OWNED && s_pActiveOwner.load( std::memory_order_acquire ) == pOwner; }
+EA_FORCE_INLINE static bool t3dActiveStorageActiveOwnerMatches( const void *pOwner ) { return pOwner && s_nActiveOwnerState.load( std::memory_order_acquire ) == TERRAIN3D_ACTIVE_OWNER_OWNED && s_pActiveOwner.load( std::memory_order_acquire ) == pOwner; }
 
-static void terrain3dActiveClearMappingsUnsafe( void ) {
+static void t3dActiveStorageActiveClearMappingsUnsafe( void ) {
 	for ( int slot = 0; slot < TERRAIN3D_ACTIVE_MAX_REGION_SLOTS; ++slot ) {
 		s_szLogicalToPhysical[slot].store( TERRAIN3D_ACTIVE_INVALID_PAGE, std::memory_order_release );
 	}
@@ -97,11 +95,11 @@ static void terrain3dActiveClearMappingsUnsafe( void ) {
 		} else {
 			s_szPhysicalPages[page].nState.store( TERRAIN3D_ACTIVE_PAGE_RETIRING, std::memory_order_release );
 		}
-		terrain3dActiveBumpGeneration( s_szPhysicalPages[page].nGeneration );
+		t3dActiveStorageActiveBumpGeneration( s_szPhysicalPages[page].nGeneration );
 	}
 }
 
-static void terrain3dActiveWaitForReadersUnsafe( void ) {
+static void t3dActiveStorageActiveWaitForReadersUnsafe( void ) {
 	for ( ;; ) {
 		bool idle = true;
 		for ( int page = 0; page < TERRAIN3D_ACTIVE_PHYSICAL_PAGE_COUNT; ++page ) {
@@ -117,7 +115,7 @@ static void terrain3dActiveWaitForReadersUnsafe( void ) {
 	}
 }
 
-static void terrain3dActiveFreeBackingUnsafe( void ) {
+static void t3dActiveStorageActiveFreeBackingUnsafe( void ) {
 	if ( s_bActiveHeightBackingOwned ) {
 		t3dMemoryRelease( s_pActiveHeightBackingRaw );
 	}
@@ -131,7 +129,7 @@ static void terrain3dActiveFreeBackingUnsafe( void ) {
 	s_nActiveHeightBytes.store( 0u, std::memory_order_release );
 }
 
-static bool terrain3dActiveConfigureBackingUnsafe(
+static bool t3dActiveStorageActiveConfigureBackingUnsafe(
 	const int nRegionSize, void *pBacking, const size_t nBackingBytes, const bool bOwned
 ) {
 	const size_t required = terrain3dActiveStorageRequiredBytes( nRegionSize );
@@ -149,7 +147,7 @@ static bool terrain3dActiveConfigureBackingUnsafe(
 	s_pActiveHeightBacking = ( uint8_t * ) aligned;
 	s_bActiveHeightBackingOwned = bOwned;
 	std::memset( s_pActiveHeightBacking, 0, required );
-	const size_t page_bytes = terrain3dActivePageBytes( nRegionSize );
+	const size_t page_bytes = t3dActiveStorageActivePageBytes( nRegionSize );
 	for ( int page = 0; page < TERRAIN3D_ACTIVE_PHYSICAL_PAGE_COUNT; ++page ) {
 		s_szPhysicalPages[page].pHeight = ( uint16_t * ) ( s_pActiveHeightBacking + ( size_t ) ( page ) * page_bytes );
 		s_szPhysicalPages[page].nPins.store( 0u, std::memory_order_relaxed );
@@ -161,7 +159,7 @@ static bool terrain3dActiveConfigureBackingUnsafe(
 	return true;
 }
 
-static bool terrain3dActiveAllocateBackingUnsafe( const int nRegionSize ) {
+static bool t3dActiveStorageActiveAllocateBackingUnsafe( const int nRegionSize ) {
 	const size_t required = terrain3dActiveStorageRequiredBytes( nRegionSize );
 	if ( required == 0u || required > std::numeric_limits<size_t>::max() - TERRAIN3D_ACTIVE_STORAGE_ALIGNMENT ) {
 		return false;
@@ -170,7 +168,7 @@ static bool terrain3dActiveAllocateBackingUnsafe( const int nRegionSize ) {
 	if ( !pRaw ) {
 		return false;
 	}
-	if ( !terrain3dActiveConfigureBackingUnsafe(
+	if ( !t3dActiveStorageActiveConfigureBackingUnsafe(
 		nRegionSize, pRaw, required + TERRAIN3D_ACTIVE_STORAGE_ALIGNMENT - 1u, true ) ) {
 		t3dMemoryRelease( pRaw );
 		return false;
@@ -178,7 +176,7 @@ static bool terrain3dActiveAllocateBackingUnsafe( const int nRegionSize ) {
 	return true;
 }
 
-static int terrain3dActiveChooseStagingPageUnsafe( const int iPreservedPage ) {
+static int t3dActiveStorageActiveChooseStagingPageUnsafe( const int iPreservedPage ) {
 	for ( int pass = 0; pass < 2; ++pass ) {
 		for ( int offset = 0; offset < TERRAIN3D_ACTIVE_PHYSICAL_PAGE_COUNT; ++offset ) {
 			const int page = ( int ) ( ( s_nClockHand + ( uint32_t ) ( offset ) ) %
@@ -216,24 +214,24 @@ static int terrain3dActiveChooseStagingPageUnsafe( const int iPreservedPage ) {
 	return TERRAIN3D_ACTIVE_INVALID_PAGE;
 }
 
-static bool terrain3dActivePublishBytesUnsafe(
+static bool t3dActiveStorageActivePublishBytesUnsafe(
 	const int iLogicalSlot, const uint8_t *pHeightBytes, const size_t nHeightBytes
 ) {
 	const int region_size = s_nActiveRegionSize.load( std::memory_order_acquire );
-	const size_t expected_bytes = terrain3dActivePageBytes( region_size );
+	const size_t expected_bytes = t3dActiveStorageActivePageBytes( region_size );
 	if ( iLogicalSlot < 0 || iLogicalSlot >= TERRAIN3D_ACTIVE_MAX_REGION_SLOTS ||
 		!pHeightBytes || nHeightBytes != expected_bytes ) {
 		return false;
 	}
 	const int old_page = s_szLogicalToPhysical[iLogicalSlot].load( std::memory_order_acquire );
-	const int staging_page = terrain3dActiveChooseStagingPageUnsafe( old_page );
+	const int staging_page = t3dActiveStorageActiveChooseStagingPageUnsafe( old_page );
 	if ( staging_page < 0 ) {
 		return false;
 	}
 	t3dActivePhysicalPage_t &rStaging = s_szPhysicalPages[staging_page];
 	rStaging.nState.store( TERRAIN3D_ACTIVE_PAGE_STAGING, std::memory_order_release );
 	rStaging.iLogicalSlot.store( iLogicalSlot, std::memory_order_release );
-	terrain3dActiveBumpGeneration( rStaging.nGeneration );
+	t3dActiveStorageActiveBumpGeneration( rStaging.nGeneration );
 	std::memcpy( rStaging.pHeight, pHeightBytes, expected_bytes );
 	rStaging.nState.store( TERRAIN3D_ACTIVE_PAGE_PUBLISHED, std::memory_order_release );
 	const int replaced_page = s_szLogicalToPhysical[iLogicalSlot].exchange( staging_page, std::memory_order_acq_rel );
@@ -246,7 +244,7 @@ static bool terrain3dActivePublishBytesUnsafe(
 	return true;
 }
 
-static bool terrain3dActiveCopyRegionUnsafe( const int iLogicalSlot, const T3DRegion *pRegion ) {
+static bool t3dActiveStorageActiveCopyRegionUnsafe( const int iLogicalSlot, const T3DRegion *pRegion ) {
 	const int region_size = s_nActiveRegionSize.load( std::memory_order_acquire );
 	const Image *const pImage = pRegion ? pRegion->getMapPtr( TYPE_HEIGHT ) : nullptr;
 	PackedByteArray bytes;
@@ -254,7 +252,7 @@ static bool terrain3dActiveCopyRegionUnsafe( const int iLogicalSlot, const T3DRe
 		pImage->get_width() == region_size && pImage->get_height() == region_size ) {
 		bytes = pImage->get_data();
 	} else if ( !pImage ) {
-		const size_t expected_bytes = terrain3dActivePageBytes( region_size );
+		const size_t expected_bytes = t3dActiveStorageActivePageBytes( region_size );
 		bytes.resize( ( int64_t ) ( expected_bytes ) );
 		uint16_t *const pValues = ( uint16_t * ) ( bytes.ptrw() );
 		std::fill_n( pValues, expected_bytes / sizeof( uint16_t ),
@@ -262,22 +260,20 @@ static bool terrain3dActiveCopyRegionUnsafe( const int iLogicalSlot, const T3DRe
 	} else {
 		return false;
 	}
-	return terrain3dActivePublishBytesUnsafe( iLogicalSlot, bytes.ptr(), ( size_t ) ( bytes.size() ) );
+	return t3dActiveStorageActivePublishBytesUnsafe( iLogicalSlot, bytes.ptr(), ( size_t ) ( bytes.size() ) );
 }
 
-static void terrain3dActiveReleaseReader( const int iPhysicalPage ) {
+static void t3dActiveStorageActiveReleaseReader( const int iPhysicalPage ) {
 	if ( iPhysicalPage >= 0 && iPhysicalPage < TERRAIN3D_ACTIVE_PHYSICAL_PAGE_COUNT ) {
 		s_szPhysicalPages[iPhysicalPage].nPins.fetch_sub( 1u, std::memory_order_release );
 	}
 }
 
-} // namespace
-
 size_t terrain3dActiveStorageRequiredBytes( const int nRegionSize ) {
-	if ( !terrain3dActiveValidRegionSize( nRegionSize ) ) {
+	if ( !t3dActiveStorageActiveValidRegionSize( nRegionSize ) ) {
 		return 0u;
 	}
-	const size_t page_bytes = terrain3dActivePageBytes( nRegionSize );
+	const size_t page_bytes = t3dActiveStorageActivePageBytes( nRegionSize );
 	return page_bytes <= std::numeric_limits<size_t>::max() /
 		( size_t ) ( TERRAIN3D_ACTIVE_PHYSICAL_PAGE_COUNT )
 		? page_bytes * ( size_t ) ( TERRAIN3D_ACTIVE_PHYSICAL_PAGE_COUNT ) : 0u;
@@ -302,7 +298,7 @@ uint64_t terrain3dActiveStorageGetPublicationCount( void ) {
 bool terrain3dActiveStorageBind(
 	const void *const pOwner, const int nRegionSize, void *const pBacking, const size_t nBackingBytes
 ) {
-	if ( !pOwner || !pBacking || !terrain3dActiveValidRegionSize( nRegionSize ) ||
+	if ( !pOwner || !pBacking || !t3dActiveStorageActiveValidRegionSize( nRegionSize ) ||
 		( ( uintptr_t ) ( pBacking ) & ( TERRAIN3D_ACTIVE_STORAGE_ALIGNMENT - 1u ) ) != 0u ) {
 		return false;
 	}
@@ -312,10 +308,10 @@ bool terrain3dActiveStorageBind(
 		return false;
 	}
 	s_nActiveOwnerState.store( TERRAIN3D_ACTIVE_OWNER_DRAINING, std::memory_order_release );
-	terrain3dActiveClearMappingsUnsafe();
-	terrain3dActiveWaitForReadersUnsafe();
-	terrain3dActiveFreeBackingUnsafe();
-	if ( !terrain3dActiveConfigureBackingUnsafe( nRegionSize, pBacking, nBackingBytes, false ) ) {
+	t3dActiveStorageActiveClearMappingsUnsafe();
+	t3dActiveStorageActiveWaitForReadersUnsafe();
+	t3dActiveStorageActiveFreeBackingUnsafe();
+	if ( !t3dActiveStorageActiveConfigureBackingUnsafe( nRegionSize, pBacking, nBackingBytes, false ) ) {
 		s_nActiveOwnerState.store( TERRAIN3D_ACTIVE_OWNER_FREE, std::memory_order_release );
 		return false;
 	}
@@ -325,7 +321,7 @@ bool terrain3dActiveStorageBind(
 	s_pActiveOwner.store( pOwner, std::memory_order_release );
 	s_nActiveRegionSize.store( nRegionSize, std::memory_order_release );
 	s_nActiveRegionMapSize.store( TERRAIN3D_ACTIVE_WORLD_TEXELS / nRegionSize, std::memory_order_release );
-	terrain3dActiveBumpGeneration( s_nActiveOwnerGeneration );
+	t3dActiveStorageActiveBumpGeneration( s_nActiveOwnerGeneration );
 	s_nActiveOwnerState.store( TERRAIN3D_ACTIVE_OWNER_OWNED, std::memory_order_release );
 	return true;
 }
@@ -357,14 +353,14 @@ T3DActiveMapLease &T3DActiveMapLease::operator=( T3DActiveMapLease &&rOther ) no
 
 void T3DActiveMapLease::reset( void ) {
 	if ( m_iSlot >= 0 ) {
-		terrain3dActiveReleaseReader( m_iSlot );
+		t3dActiveStorageActiveReleaseReader( m_iSlot );
 	}
 	m_iSlot = -1;
 	m_view = {};
 }
 
 bool terrain3dActiveStorageClaim( const void *pOwner, const int nRegionSize ) {
-	if ( !pOwner || !terrain3dActiveValidRegionSize( nRegionSize ) ) {
+	if ( !pOwner || !t3dActiveStorageActiveValidRegionSize( nRegionSize ) ) {
 		return false;
 	}
 	std::lock_guard<std::mutex> lock( s_activeWriterMutex );
@@ -375,7 +371,7 @@ bool terrain3dActiveStorageClaim( const void *pOwner, const int nRegionSize ) {
 			s_nActiveRegionSize.load( std::memory_order_acquire ) == nRegionSize;
 	}
 	s_nActiveOwnerState.store( TERRAIN3D_ACTIVE_OWNER_DRAINING, std::memory_order_release );
-	if ( !terrain3dActiveAllocateBackingUnsafe( nRegionSize ) ) {
+	if ( !t3dActiveStorageActiveAllocateBackingUnsafe( nRegionSize ) ) {
 		s_nActiveOwnerState.store( TERRAIN3D_ACTIVE_OWNER_FREE, std::memory_order_release );
 		return false;
 	}
@@ -385,13 +381,13 @@ bool terrain3dActiveStorageClaim( const void *pOwner, const int nRegionSize ) {
 	s_pActiveOwner.store( pOwner, std::memory_order_release );
 	s_nActiveRegionSize.store( nRegionSize, std::memory_order_release );
 	s_nActiveRegionMapSize.store( TERRAIN3D_ACTIVE_WORLD_TEXELS / nRegionSize, std::memory_order_release );
-	terrain3dActiveBumpGeneration( s_nActiveOwnerGeneration );
+	t3dActiveStorageActiveBumpGeneration( s_nActiveOwnerGeneration );
 	s_nActiveOwnerState.store( TERRAIN3D_ACTIVE_OWNER_OWNED, std::memory_order_release );
 	return true;
 }
 
 bool terrain3dActiveStorageReconfigure( const void *pOwner, const int nRegionSize ) {
-	if ( !pOwner || !terrain3dActiveValidRegionSize( nRegionSize ) ) {
+	if ( !pOwner || !t3dActiveStorageActiveValidRegionSize( nRegionSize ) ) {
 		return false;
 	}
 	if ( !terrain3dActiveStorageIsOwner( pOwner ) ) {
@@ -405,22 +401,22 @@ bool terrain3dActiveStorageReconfigure( const void *pOwner, const int nRegionSiz
 		return false;
 	}
 	s_nActiveOwnerState.store( TERRAIN3D_ACTIVE_OWNER_DRAINING, std::memory_order_release );
-	terrain3dActiveClearMappingsUnsafe();
-	terrain3dActiveWaitForReadersUnsafe();
+	t3dActiveStorageActiveClearMappingsUnsafe();
+	t3dActiveStorageActiveWaitForReadersUnsafe();
 	const bool external = !s_bActiveHeightBackingOwned;
 	void *const pExternal = external ? s_pActiveHeightBacking : nullptr;
 	const size_t external_bytes = external ? s_nActiveHeightBytes.load( std::memory_order_acquire ) : 0u;
-	terrain3dActiveFreeBackingUnsafe();
+	t3dActiveStorageActiveFreeBackingUnsafe();
 	const bool configured = external
-		? terrain3dActiveConfigureBackingUnsafe( nRegionSize, pExternal, external_bytes, false )
-		: terrain3dActiveAllocateBackingUnsafe( nRegionSize );
+		? t3dActiveStorageActiveConfigureBackingUnsafe( nRegionSize, pExternal, external_bytes, false )
+		: t3dActiveStorageActiveAllocateBackingUnsafe( nRegionSize );
 	if ( !configured ) {
 		s_nActiveOwnerState.store( TERRAIN3D_ACTIVE_OWNER_FREE, std::memory_order_release );
 		return false;
 	}
 	s_nActiveRegionSize.store( nRegionSize, std::memory_order_release );
 	s_nActiveRegionMapSize.store( TERRAIN3D_ACTIVE_WORLD_TEXELS / nRegionSize, std::memory_order_release );
-	terrain3dActiveBumpGeneration( s_nActiveOwnerGeneration );
+	t3dActiveStorageActiveBumpGeneration( s_nActiveOwnerGeneration );
 	s_nActiveOwnerState.store( TERRAIN3D_ACTIVE_OWNER_OWNED, std::memory_order_release );
 	return true;
 }
@@ -434,36 +430,36 @@ void terrain3dActiveStorageRelease( const void *pOwner ) {
 		return;
 	}
 	s_nActiveOwnerState.store( TERRAIN3D_ACTIVE_OWNER_DRAINING, std::memory_order_release );
-	terrain3dActiveClearMappingsUnsafe();
-	terrain3dActiveWaitForReadersUnsafe();
-	terrain3dActiveFreeBackingUnsafe();
+	t3dActiveStorageActiveClearMappingsUnsafe();
+	t3dActiveStorageActiveWaitForReadersUnsafe();
+	t3dActiveStorageActiveFreeBackingUnsafe();
 	s_pActiveOwner.store( nullptr, std::memory_order_release );
 	s_nActiveRegionSize.store( 0, std::memory_order_release );
 	s_nActiveRegionMapSize.store( 0, std::memory_order_release );
-	terrain3dActiveBumpGeneration( s_nActiveOwnerGeneration );
+	t3dActiveStorageActiveBumpGeneration( s_nActiveOwnerGeneration );
 	s_nActiveOwnerState.store( TERRAIN3D_ACTIVE_OWNER_FREE, std::memory_order_release );
 }
 
 void terrain3dActiveStorageReset( const void *pOwner ) {
 	std::lock_guard<std::mutex> lock( s_activeWriterMutex );
-	if ( !terrain3dActiveOwnerMatches( pOwner ) ) {
+	if ( !t3dActiveStorageActiveOwnerMatches( pOwner ) ) {
 		return;
 	}
-	terrain3dActiveClearMappingsUnsafe();
-	terrain3dActiveBumpGeneration( s_nActiveOwnerGeneration );
+	t3dActiveStorageActiveClearMappingsUnsafe();
+	t3dActiveStorageActiveBumpGeneration( s_nActiveOwnerGeneration );
 }
 
 bool terrain3dActiveStorageIsOwner( const void *pOwner ) {
-	return terrain3dActiveOwnerMatches( pOwner );
+	return t3dActiveStorageActiveOwnerMatches( pOwner );
 }
 
 int terrain3dActiveStorageGetRegionMapSize( const void *pOwner ) {
-	return terrain3dActiveOwnerMatches( pOwner ) ?
+	return t3dActiveStorageActiveOwnerMatches( pOwner ) ?
 		s_nActiveRegionMapSize.load( std::memory_order_acquire ) : 0;
 }
 
 uint32_t terrain3dActiveStorageGetOwnerGeneration( const void *pOwner ) {
-	return terrain3dActiveOwnerMatches( pOwner ) ?
+	return t3dActiveStorageActiveOwnerMatches( pOwner ) ?
 		s_nActiveOwnerGeneration.load( std::memory_order_acquire ) : 0u;
 }
 
@@ -472,10 +468,10 @@ size_t terrain3dActiveStorageGetReservedBytes( void ) {
 }
 
 bool terrain3dActiveStorageContains( const void *pOwner, const Vector2i &rLocation ) {
-	if ( !terrain3dActiveOwnerMatches( pOwner ) ) {
+	if ( !t3dActiveStorageActiveOwnerMatches( pOwner ) ) {
 		return false;
 	}
-	const int logical_slot = terrain3dActiveLocationToSlot(
+	const int logical_slot = t3dActiveStorageActiveLocationToSlot(
 		rLocation, s_nActiveRegionMapSize.load( std::memory_order_acquire ) );
 	if ( logical_slot < 0 ) {
 		return false;
@@ -487,12 +483,12 @@ bool terrain3dActiveStorageContains( const void *pOwner, const Vector2i &rLocati
 }
 
 T3DActiveMapLease terrain3dActiveStorageAcquire( const void *pOwner, const Vector2i &rLocation ) {
-	if ( !terrain3dActiveOwnerMatches( pOwner ) ) {
+	if ( !t3dActiveStorageActiveOwnerMatches( pOwner ) ) {
 		return {};
 	}
 	const int map_size = s_nActiveRegionMapSize.load( std::memory_order_acquire );
 	const int region_size = s_nActiveRegionSize.load( std::memory_order_acquire );
-	const int logical_slot = terrain3dActiveLocationToSlot( rLocation, map_size );
+	const int logical_slot = t3dActiveStorageActiveLocationToSlot( rLocation, map_size );
 	if ( logical_slot < 0 ) {
 		return {};
 	}
@@ -509,7 +505,7 @@ T3DActiveMapLease terrain3dActiveStorageAcquire( const void *pOwner, const Vecto
 			continue;
 		}
 		rPage.nPins.fetch_add( 1u, std::memory_order_acq_rel );
-		const bool valid = terrain3dActiveOwnerMatches( pOwner ) &&
+		const bool valid = t3dActiveStorageActiveOwnerMatches( pOwner ) &&
 			s_szLogicalToPhysical[logical_slot].load( std::memory_order_acquire ) == page &&
 			rPage.nState.load( std::memory_order_acquire ) == TERRAIN3D_ACTIVE_PAGE_PUBLISHED &&
 			rPage.iLogicalSlot.load( std::memory_order_acquire ) == logical_slot &&
@@ -532,34 +528,34 @@ T3DActiveMapLease terrain3dActiveStorageAcquire( const void *pOwner, const Vecto
 bool terrain3dActiveStorageSyncRegion(
 	const void *pOwner, const Vector2i &rLocation, const T3DRegion *pRegion
 ) {
-	if ( !terrain3dActiveOwnerMatches( pOwner ) || !pRegion || pRegion->isDeleted() ||
+	if ( !t3dActiveStorageActiveOwnerMatches( pOwner ) || !pRegion || pRegion->isDeleted() ||
 		pRegion->getRegionSize() != s_nActiveRegionSize.load( std::memory_order_acquire ) ) {
 		return false;
 	}
-	const int logical_slot = terrain3dActiveLocationToSlot(
+	const int logical_slot = t3dActiveStorageActiveLocationToSlot(
 		rLocation, s_nActiveRegionMapSize.load( std::memory_order_acquire ) );
 	if ( logical_slot < 0 ) {
 		return false;
 	}
 	std::lock_guard<std::mutex> lock( s_activeWriterMutex );
-	return terrain3dActiveOwnerMatches( pOwner ) && terrain3dActiveCopyRegionUnsafe( logical_slot, pRegion );
+	return t3dActiveStorageActiveOwnerMatches( pOwner ) && t3dActiveStorageActiveCopyRegionUnsafe( logical_slot, pRegion );
 }
 
 bool terrain3dActiveStorageSyncHeightPage(
 	const void *pOwner, const Vector2i &rLocation,
 	const uint8_t *pHeightBytes, const size_t nHeightBytes
 ) {
-	if ( !terrain3dActiveOwnerMatches( pOwner ) || !pHeightBytes ) {
+	if ( !t3dActiveStorageActiveOwnerMatches( pOwner ) || !pHeightBytes ) {
 		return false;
 	}
-	const int logical_slot = terrain3dActiveLocationToSlot(
+	const int logical_slot = t3dActiveStorageActiveLocationToSlot(
 		rLocation, s_nActiveRegionMapSize.load( std::memory_order_acquire ) );
 	if ( logical_slot < 0 ) {
 		return false;
 	}
 	std::lock_guard<std::mutex> lock( s_activeWriterMutex );
-	return terrain3dActiveOwnerMatches( pOwner ) &&
-		terrain3dActivePublishBytesUnsafe( logical_slot, pHeightBytes, nHeightBytes );
+	return t3dActiveStorageActiveOwnerMatches( pOwner ) &&
+		t3dActiveStorageActivePublishBytesUnsafe( logical_slot, pHeightBytes, nHeightBytes );
 }
 
 bool terrain3dActiveStorageReplaceHeightPages(
@@ -584,18 +580,18 @@ bool terrain3dActiveStorageReplaceHeightPages(
 		}
 	}
 	std::lock_guard<std::mutex> lock( s_activeWriterMutex );
-	if ( !terrain3dActiveOwnerMatches( pOwner ) ) {
+	if ( !t3dActiveStorageActiveOwnerMatches( pOwner ) ) {
 		return false;
 	}
-	terrain3dActiveClearMappingsUnsafe();
-	const size_t page_bytes = terrain3dActivePageBytes( nRegionSize );
+	t3dActiveStorageActiveClearMappingsUnsafe();
+	const size_t page_bytes = t3dActiveStorageActivePageBytes( nRegionSize );
 	for ( size_t index = 0; index < nPageCount; ++index ) {
-		if ( !terrain3dActivePublishBytesUnsafe( pSlots[index], pHeightPages[index], page_bytes ) ) {
-			terrain3dActiveClearMappingsUnsafe();
+		if ( !t3dActiveStorageActivePublishBytesUnsafe( pSlots[index], pHeightPages[index], page_bytes ) ) {
+			t3dActiveStorageActiveClearMappingsUnsafe();
 			return false;
 		}
 	}
-	terrain3dActiveBumpGeneration( s_nActiveOwnerGeneration );
+	t3dActiveStorageActiveBumpGeneration( s_nActiveOwnerGeneration );
 	return true;
 }
 
@@ -613,22 +609,22 @@ bool terrain3dActiveStorageSyncMap(
 bool terrain3dActiveStorageSyncDerived(
 	const void *pOwner, const Vector2i &rLocation, const T3DRegion *pRegion, const Rect2i &
 ) {
-	return terrain3dActiveOwnerMatches( pOwner ) && pRegion && !pRegion->isDeleted() &&
-		terrain3dActiveLocationToSlot( rLocation,
+	return t3dActiveStorageActiveOwnerMatches( pOwner ) && pRegion && !pRegion->isDeleted() &&
+		t3dActiveStorageActiveLocationToSlot( rLocation,
 			s_nActiveRegionMapSize.load( std::memory_order_acquire ) ) >= 0;
 }
 
 void terrain3dActiveStorageInvalidate( const void *pOwner, const Vector2i &rLocation ) {
-	if ( !terrain3dActiveOwnerMatches( pOwner ) ) {
+	if ( !t3dActiveStorageActiveOwnerMatches( pOwner ) ) {
 		return;
 	}
-	const int logical_slot = terrain3dActiveLocationToSlot(
+	const int logical_slot = t3dActiveStorageActiveLocationToSlot(
 		rLocation, s_nActiveRegionMapSize.load( std::memory_order_acquire ) );
 	if ( logical_slot < 0 ) {
 		return;
 	}
 	std::lock_guard<std::mutex> lock( s_activeWriterMutex );
-	if ( !terrain3dActiveOwnerMatches( pOwner ) ) {
+	if ( !t3dActiveStorageActiveOwnerMatches( pOwner ) ) {
 		return;
 	}
 	const int page = s_szLogicalToPhysical[logical_slot].exchange(
@@ -636,6 +632,6 @@ void terrain3dActiveStorageInvalidate( const void *pOwner, const Vector2i &rLoca
 	if ( page >= 0 && page < TERRAIN3D_ACTIVE_PHYSICAL_PAGE_COUNT ) {
 		s_szPhysicalPages[page].iLogicalSlot.store( TERRAIN3D_ACTIVE_INVALID_PAGE, std::memory_order_release );
 		s_szPhysicalPages[page].nState.store( TERRAIN3D_ACTIVE_PAGE_RETIRING, std::memory_order_release );
-		terrain3dActiveBumpGeneration( s_szPhysicalPages[page].nGeneration );
+		t3dActiveStorageActiveBumpGeneration( s_szPhysicalPages[page].nGeneration );
 	}
 }

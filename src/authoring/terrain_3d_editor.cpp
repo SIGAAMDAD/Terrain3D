@@ -18,9 +18,6 @@
 #include "data/terrain_3d_sampler.h"
 #include "core/terrain_3d_util.h"
 
-namespace {
-
-
 typedef enum t3dEditSnapshotKind_e {
 	EDIT_SNAPSHOT_MAP = 0,
 	EDIT_SNAPSHOT_INSTANCES = 1,
@@ -28,8 +25,6 @@ typedef enum t3dEditSnapshotKind_e {
 
 #define TERRAIN3DEDITORQUANTIZERGBA8( value ) \
 	( uint32_t ) ( CLAMP( Math::round( ( value ) * TERRAIN3D_BYTE_MAX_FLOAT ), 0.0f, TERRAIN3D_BYTE_MAX_FLOAT ) )
-
-} // namespace
 
 ///////////////////////////
 // Private Functions

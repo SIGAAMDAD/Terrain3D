@@ -25,8 +25,6 @@
 #include <cmath>
 #include <cstdint>
 
-namespace {
-
 struct HlodTriangle {
 	Vector3 a;
 	Vector3 b;
@@ -43,9 +41,9 @@ struct HlodBvhNode {
 	int count = 0;
 };
 
-EA_FORCE_INLINE static AABB boundsFromPoint( const Vector3 &p ) { return AABB( p, Vector3() ); }
+EA_FORCE_INLINE static AABB t3dHlodBuilderBoundsFromPoint( const Vector3 &p ) { return AABB( p, Vector3() ); }
 
-static real_t pointAabbDistanceSquared( const Vector3 &p, const AABB &b ) {
+static real_t t3dHlodBuilderPointAabbDistanceSquared( const Vector3 &p, const AABB &b ) {
 	const Vector3 end = b.get_end();
 	real_t dx = 0.0f;
 	real_t dy = 0.0f;
@@ -62,7 +60,7 @@ static real_t pointAabbDistanceSquared( const Vector3 &p, const AABB &b ) {
 // Squared distance from a point to a triangle. This is the region-test form
 // from the standard closest-point construction and is branchy only in the
 // editor-only bake path.
-static real_t pointTriangleDistanceSquared(
+static real_t t3dHlodBuilderPointTriangleDistanceSquared(
 	const Vector3 &p, const Vector3 &a, const Vector3 &b, const Vector3 &c
 ) {
 	const Vector3 ab = b - a;
@@ -111,14 +109,14 @@ static real_t pointTriangleDistanceSquared(
 	return p.distance_squared_to( a + ab * v + ac * w );
 }
 
-static int largestAxis( const Vector3 &size ) {
+static int t3dHlodBuilderLargestAxis( const Vector3 &size ) {
 	if ( size.x >= size.y && size.x >= size.z ) { return 0; }
 	return size.y >= size.z ? 1 : 2;
 }
 
-EA_FORCE_INLINE static real_t component( const Vector3 &v, const int axis ) { return axis == 0 ? v.x : ( axis == 1 ? v.y : v.z ); }
+EA_FORCE_INLINE static real_t t3dHlodBuilderComponent( const Vector3 &v, const int axis ) { return axis == 0 ? v.x : ( axis == 1 ? v.y : v.z ); }
 
-static int buildBvhRecursive(
+static int t3dHlodBuilderBuildBvhRecursive(
 	const eastl::vector<HlodTriangle> &triangles,
 	eastl::vector<int> &order,
 	eastl::vector<HlodBvhNode> &nodes,
@@ -135,7 +133,7 @@ static int buildBvhRecursive(
 		const HlodTriangle &triangle = triangles[( size_t ) order[( size_t ) ( begin + i )]];
 		if ( first ) {
 			bounds = triangle.bounds;
-			center_bounds = boundsFromPoint( triangle.center );
+			center_bounds = t3dHlodBuilderBoundsFromPoint( triangle.center );
 			first = false;
 		} else {
 			bounds = bounds.merge( triangle.bounds );
@@ -147,23 +145,23 @@ static int buildBvhRecursive(
 	nodes.push_back( node );
 	if ( count <= 8 ) { return node_index; }
 
-	const int axis = largestAxis( center_bounds.size );
+	const int axis = t3dHlodBuilderLargestAxis( center_bounds.size );
 	eastl::sort(
 		order.begin() + begin,
 		order.begin() + begin + count,
 		[&triangles, axis]( const int lhs, const int rhs ) {
-			return component( triangles[( size_t ) lhs].center, axis ) <
-				component( triangles[( size_t ) rhs].center, axis );
+			return t3dHlodBuilderComponent( triangles[( size_t ) lhs].center, axis ) <
+				t3dHlodBuilderComponent( triangles[( size_t ) rhs].center, axis );
 		} );
 	const int left_count = count / 2;
 	const int right_count = count - left_count;
-	nodes[( size_t ) node_index].left = buildBvhRecursive( triangles, order, nodes, begin, left_count );
-	nodes[( size_t ) node_index].right = buildBvhRecursive( triangles, order, nodes, begin + left_count, right_count );
+	nodes[( size_t ) node_index].left = t3dHlodBuilderBuildBvhRecursive( triangles, order, nodes, begin, left_count );
+	nodes[( size_t ) node_index].right = t3dHlodBuilderBuildBvhRecursive( triangles, order, nodes, begin + left_count, right_count );
 	nodes[( size_t ) node_index].count = 0;
 	return node_index;
 }
 
-static void queryBvhRecursive(
+static void t3dHlodBuilderQueryBvhRecursive(
 	const eastl::vector<HlodTriangle> &triangles,
 	const eastl::vector<int> &order,
 	const eastl::vector<HlodBvhNode> &nodes,
@@ -173,30 +171,30 @@ static void queryBvhRecursive(
 ) {
 	if ( node_index < 0 ) { return; }
 	const HlodBvhNode &node = nodes[( size_t ) node_index];
-	if ( pointAabbDistanceSquared( point, node.bounds ) >= best_squared ) { return; }
+	if ( t3dHlodBuilderPointAabbDistanceSquared( point, node.bounds ) >= best_squared ) { return; }
 	if ( node.count > 0 ) {
 		for ( int i = 0; i < node.count; ++i ) {
 			const HlodTriangle &triangle = triangles[( size_t ) order[( size_t ) ( node.begin + i )]];
-			if ( pointAabbDistanceSquared( point, triangle.bounds ) >= best_squared ) { continue; }
-			best_squared = MIN( best_squared, pointTriangleDistanceSquared( point, triangle.a, triangle.b, triangle.c ) );
+			if ( t3dHlodBuilderPointAabbDistanceSquared( point, triangle.bounds ) >= best_squared ) { continue; }
+			best_squared = MIN( best_squared, t3dHlodBuilderPointTriangleDistanceSquared( point, triangle.a, triangle.b, triangle.c ) );
 		}
 		return;
 	}
 
 	const HlodBvhNode &left = nodes[( size_t ) node.left];
 	const HlodBvhNode &right = nodes[( size_t ) node.right];
-	const real_t left_distance = pointAabbDistanceSquared( point, left.bounds );
-	const real_t right_distance = pointAabbDistanceSquared( point, right.bounds );
+	const real_t left_distance = t3dHlodBuilderPointAabbDistanceSquared( point, left.bounds );
+	const real_t right_distance = t3dHlodBuilderPointAabbDistanceSquared( point, right.bounds );
 	if ( left_distance <= right_distance ) {
-		queryBvhRecursive( triangles, order, nodes, node.left, point, best_squared );
-		queryBvhRecursive( triangles, order, nodes, node.right, point, best_squared );
+		t3dHlodBuilderQueryBvhRecursive( triangles, order, nodes, node.left, point, best_squared );
+		t3dHlodBuilderQueryBvhRecursive( triangles, order, nodes, node.right, point, best_squared );
 	} else {
-		queryBvhRecursive( triangles, order, nodes, node.right, point, best_squared );
-		queryBvhRecursive( triangles, order, nodes, node.left, point, best_squared );
+		t3dHlodBuilderQueryBvhRecursive( triangles, order, nodes, node.right, point, best_squared );
+		t3dHlodBuilderQueryBvhRecursive( triangles, order, nodes, node.left, point, best_squared );
 	}
 }
 
-static bool hasUnsupportedStaticAttributes( const Array &arrays ) {
+static bool t3dHlodBuilderHasUnsupportedStaticAttributes( const Array &arrays ) {
 	for ( int channel = Mesh::ARRAY_CUSTOM0; channel <= Mesh::ARRAY_CUSTOM3; ++channel ) {
 		if ( channel < arrays.size() && arrays[channel].get_type() != Variant::NIL ) {
 			const PackedByteArray data = arrays[channel];
@@ -214,7 +212,7 @@ static bool hasUnsupportedStaticAttributes( const Array &arrays ) {
 	return false;
 }
 
-static Array compactSurfaceArrays( const Array &arrays, const PackedInt32Array &indices ) {
+static Array t3dHlodBuilderCompactSurfaceArrays( const Array &arrays, const PackedInt32Array &indices ) {
 	Array compact;
 	compact.resize( Mesh::ARRAY_MAX );
 	if ( arrays.size() <= Mesh::ARRAY_VERTEX || arrays[Mesh::ARRAY_VERTEX].get_type() != Variant::PACKED_VECTOR3_ARRAY ) {
@@ -291,7 +289,7 @@ static Array compactSurfaceArrays( const Array &arrays, const PackedInt32Array &
 	return compact;
 }
 
-static int64_t triangleCount( const Array &arrays ) {
+static int64_t t3dHlodBuilderTriangleCount( const Array &arrays ) {
 	if ( arrays.size() <= Mesh::ARRAY_VERTEX ) { return 0; }
 	const PackedInt32Array indices = arrays[Mesh::ARRAY_INDEX];
 	if ( !indices.is_empty() ) { return indices.size() / 3; }
@@ -299,7 +297,7 @@ static int64_t triangleCount( const Array &arrays ) {
 	return vertices.size() / 3;
 }
 
-static real_t measureVertexDeviation( const Array &source_arrays, const Array &proxy_arrays ) {
+static real_t t3dHlodBuilderMeasureVertexDeviation( const Array &source_arrays, const Array &proxy_arrays ) {
 	if ( source_arrays.size() <= Mesh::ARRAY_VERTEX || proxy_arrays.size() <= Mesh::ARRAY_INDEX ) { return 0.0f; }
 	const PackedVector3Array source_vertices = source_arrays[Mesh::ARRAY_VERTEX];
 	const PackedVector3Array proxy_vertices = proxy_arrays[Mesh::ARRAY_VERTEX];
@@ -318,7 +316,7 @@ static real_t measureVertexDeviation( const Array &source_arrays, const Array &p
 		triangle.b = proxy_vertices[ib];
 		triangle.c = proxy_vertices[ic];
 		triangle.center = ( triangle.a + triangle.b + triangle.c ) / 3.0f;
-		triangle.bounds = boundsFromPoint( triangle.a ).expand( triangle.b ).expand( triangle.c );
+		triangle.bounds = t3dHlodBuilderBoundsFromPoint( triangle.a ).expand( triangle.b ).expand( triangle.c );
 		triangles.push_back( triangle );
 	}
 	if ( triangles.empty() ) { return 0.0f; }
@@ -328,17 +326,15 @@ static real_t measureVertexDeviation( const Array &source_arrays, const Array &p
 	for ( int i = 0; i < ( int ) triangles.size(); ++i ) { order[( size_t ) i] = i; }
 	eastl::vector<HlodBvhNode> nodes;
 	nodes.reserve( triangles.size() * 2u );
-	const int root = buildBvhRecursive( triangles, order, nodes, 0, ( int ) triangles.size() );
+	const int root = t3dHlodBuilderBuildBvhRecursive( triangles, order, nodes, 0, ( int ) triangles.size() );
 	real_t max_squared = 0.0f;
 	for ( int i = 0; i < source_vertices.size(); ++i ) {
 		real_t best_squared = INFINITY;
-		queryBvhRecursive( triangles, order, nodes, root, source_vertices[i], best_squared );
+		t3dHlodBuilderQueryBvhRecursive( triangles, order, nodes, root, source_vertices[i], best_squared );
 		if ( std::isfinite( ( double ) best_squared ) ) { max_squared = MAX( max_squared, best_squared ); }
 	}
 	return Math::sqrt( max_squared );
 }
-
-} // namespace
 
 
 PackedInt32Array T3DHLODBuilder::getInstancerMeshIds( T3DRegion *const pRegion ) const {
@@ -412,7 +408,7 @@ Dictionary T3DHLODBuilder::buildInstancerSource(
 	for ( int surface = 0; surface < mesh->get_surface_count(); ++surface ) {
 		if ( !rs || ( Mesh::PrimitiveType ) mesh->_surface_get_primitive_type( surface ) != Mesh::PRIMITIVE_TRIANGLES ) { continue; }
 		const Array arrays = mesh->surface_get_arrays( surface );
-		if ( hasUnsupportedStaticAttributes( arrays ) ) {
+		if ( t3dHlodBuilderHasUnsupportedStaticAttributes( arrays ) ) {
 			result["error"] = "mesh uses custom/skinned vertex attributes unsupported by HLOD proxies";
 			return result;
 		}
@@ -429,7 +425,7 @@ Dictionary T3DHLODBuilder::buildInstancerSource(
 			asset->getMaterialOverride() : mesh->surface_get_material( surface );
 		tool->set_material( material );
 		merged = tool->commit( merged );
-		source_triangles += triangleCount( arrays ) * instance_count;
+		source_triangles += t3dHlodBuilderTriangleCount( arrays ) * instance_count;
 	}
 	if ( merged.is_null() || merged->get_surface_count() <= 0 ) {
 		result["error"] = "instancer source produced no triangle geometry";
@@ -465,7 +461,7 @@ Dictionary T3DHLODBuilder::simplifyMesh( const Ref<ArrayMesh> &rMesh, const real
 		source_tool->create_from( rMesh, surface );
 		source_tool->index();
 		const Array source_arrays = source_tool->commit_to_arrays();
-		if ( hasUnsupportedStaticAttributes( source_arrays ) ) {
+		if ( t3dHlodBuilderHasUnsupportedStaticAttributes( source_arrays ) ) {
 			result["error"] = "HLOD proxy simplification encountered custom/skinned vertex attributes";
 			return result;
 		}
@@ -479,12 +475,12 @@ Dictionary T3DHLODBuilder::simplifyMesh( const Ref<ArrayMesh> &rMesh, const real
 			const PackedInt32Array generated = source_tool->generate_lod( 1.0f, target_indices );
 			if ( generated.size() >= 3 && generated.size() <= source_indices.size() ) { simplified_indices = generated; }
 		}
-		const Array compact_arrays = compactSurfaceArrays( source_arrays, simplified_indices );
+		const Array compact_arrays = t3dHlodBuilderCompactSurfaceArrays( source_arrays, simplified_indices );
 		if ( compact_arrays.is_empty() ) {
 			result["error"] = "HLOD proxy vertex compaction failed";
 			return result;
 		}
-		max_error = MAX( max_error, measureVertexDeviation( source_arrays, compact_arrays ) );
+		max_error = MAX( max_error, t3dHlodBuilderMeasureVertexDeviation( source_arrays, compact_arrays ) );
 		proxy_triangles += simplified_indices.size() / 3;
 		output->add_surface_from_arrays( Mesh::PRIMITIVE_TRIANGLES, compact_arrays );
 		output->surface_set_material( output->get_surface_count() - 1, rMesh->surface_get_material( surface ) );

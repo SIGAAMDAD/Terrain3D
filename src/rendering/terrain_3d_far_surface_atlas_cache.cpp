@@ -21,28 +21,26 @@
 
 #include <cstring>
 
-namespace {
-
 struct FarSurfaceBakeData {
 	eastl::array<uint8_t, TERRAIN3D_MAX_TEXTURE_ASSETS> populated = {};
 	int nCount = 0;
 	int fallbackTexture = 0;
 };
 
-void fnv1a64Append( uint64_t &nHash, const uint8_t *pData, const size_t nSize ) {
+static void t3dFarSurfaceAtlasCacheFnv1a64Append( uint64_t &nHash, const uint8_t *pData, const size_t nSize ) {
 	for ( size_t i = 0; i < nSize; ++i ) {
 		nHash ^= ( uint64_t ) ( pData[i] );
 		nHash *= 1099511628211ull;
 	}
 }
 
-EA_FORCE_INLINE void fnv1a64AppendU32( uint64_t &nHash, const uint32_t nValue ) { fnv1a64Append( nHash, ( const uint8_t * ) ( &nValue ), sizeof( nValue ) ); }
+EA_FORCE_INLINE static void t3dFarSurfaceAtlasCacheFnv1a64AppendU32( uint64_t &nHash, const uint32_t nValue ) { t3dFarSurfaceAtlasCacheFnv1a64Append( nHash, ( const uint8_t * ) ( &nValue ), sizeof( nValue ) ); }
 
-EA_FORCE_INLINE void fnv1a64AppendU64( uint64_t &nHash, const uint64_t nValue ) { fnv1a64Append( nHash, ( const uint8_t * ) ( &nValue ), sizeof( nValue ) ); }
+EA_FORCE_INLINE static void t3dFarSurfaceAtlasCacheFnv1a64AppendU64( uint64_t &nHash, const uint64_t nValue ) { t3dFarSurfaceAtlasCacheFnv1a64Append( nHash, ( const uint8_t * ) ( &nValue ), sizeof( nValue ) ); }
 
-EA_FORCE_INLINE void fnv1a64AppendF32( uint64_t &nHash, const float fValue ) { uint32_t bits = 0u; std::memcpy( &bits, &fValue, sizeof( bits ) ); fnv1a64AppendU32( nHash, bits ); }
+EA_FORCE_INLINE static void t3dFarSurfaceAtlasCacheFnv1a64AppendF32( uint64_t &nHash, const float fValue ) { uint32_t bits = 0u; std::memcpy( &bits, &fValue, sizeof( bits ) ); t3dFarSurfaceAtlasCacheFnv1a64AppendU32( nHash, bits ); }
 
-uint32_t readU32Unaligned( const uint8_t *pBytes, const size_t nOffset ) {
+static uint32_t t3dFarSurfaceAtlasCacheReadU32Unaligned( const uint8_t *pBytes, const size_t nOffset ) {
 	uint32_t value = 0u;
 	if ( pBytes ) {
 		std::memcpy( &value, pBytes + nOffset, sizeof( value ) );
@@ -50,7 +48,7 @@ uint32_t readU32Unaligned( const uint8_t *pBytes, const size_t nOffset ) {
 	return value;
 }
 
-uint16_t readU16Unaligned( const uint8_t *pBytes, const size_t nOffset ) {
+static uint16_t t3dFarSurfaceAtlasCacheReadU16Unaligned( const uint8_t *pBytes, const size_t nOffset ) {
 	uint16_t value = 0u;
 	if ( pBytes ) {
 		std::memcpy( &value, pBytes + nOffset, sizeof( value ) );
@@ -58,9 +56,9 @@ uint16_t readU16Unaligned( const uint8_t *pBytes, const size_t nOffset ) {
 	return value;
 }
 
-EA_FORCE_INLINE uint8_t colorToByte( const float fValue ) { return ( uint8_t ) ( CLAMP( Math::round( fValue * TERRAIN3D_BYTE_MAX_FLOAT ), 0.0f, TERRAIN3D_BYTE_MAX_FLOAT ) ); }
+EA_FORCE_INLINE static uint8_t t3dFarSurfaceAtlasCacheColorToByte( const float fValue ) { return ( uint8_t ) ( CLAMP( Math::round( fValue * TERRAIN3D_BYTE_MAX_FLOAT ), 0.0f, TERRAIN3D_BYTE_MAX_FLOAT ) ); }
 
-void fillFarSurfaceEmpty( PackedByteArray &rBytes ) {
+static void t3dFarSurfaceAtlasCacheFillFarSurfaceEmpty( PackedByteArray &rBytes ) {
 	uint8_t *pWrite = rBytes.ptrw();
 	if ( !pWrite ) {
 		return;
@@ -75,7 +73,7 @@ void fillFarSurfaceEmpty( PackedByteArray &rBytes ) {
 	}
 }
 
-uint8_t farSurfaceAlpha( const float fSolidCoverage, const float fColorAlpha, const int nMaterialId ) {
+static uint8_t t3dFarSurfaceAtlasCacheFarSurfaceAlpha( const float fSolidCoverage, const float fColorAlpha, const int nMaterialId ) {
 	if ( fSolidCoverage < 0.5f ) {
 		return 0u;
 	}
@@ -85,7 +83,7 @@ uint8_t farSurfaceAlpha( const float fSolidCoverage, const float fColorAlpha, co
 	return ( uint8_t ) ( 0x80u | ( material << 2u ) | surface_alpha );
 }
 
-float materialFloatParam( T3DMaterial *pMaterial, const char *pszName, const float fDefault ) {
+static float t3dFarSurfaceAtlasCacheMaterialFloatParam( T3DMaterial *pMaterial, const char *pszName, const float fDefault ) {
 	if ( !pMaterial ) {
 		return fDefault;
 	}
@@ -93,7 +91,7 @@ float materialFloatParam( T3DMaterial *pMaterial, const char *pszName, const flo
 	return value.get_type() == Variant::NIL ? fDefault : ( float ) ( value );
 }
 
-int materialIntParam( T3DMaterial *pMaterial, const char *pszName, const int nDefault ) {
+static int t3dFarSurfaceAtlasCacheMaterialIntParam( T3DMaterial *pMaterial, const char *pszName, const int nDefault ) {
 	if ( !pMaterial ) {
 		return nDefault;
 	}
@@ -101,7 +99,7 @@ int materialIntParam( T3DMaterial *pMaterial, const char *pszName, const int nDe
 	return value.get_type() == Variant::NIL ? nDefault : ( int ) ( value );
 }
 
-void buildBakeData( const Ref<T3DAssets> &rAssets, FarSurfaceBakeData &rData ) {
+static void t3dFarSurfaceAtlasCacheBuildBakeData( const Ref<T3DAssets> &rAssets, FarSurfaceBakeData &rData ) {
 	rData = FarSurfaceBakeData();
 	if ( rAssets.is_null() ) {
 		return;
@@ -118,14 +116,12 @@ void buildBakeData( const Ref<T3DAssets> &rAssets, FarSurfaceBakeData &rData ) {
 	}
 }
 
-int resolveMaterialId( const FarSurfaceBakeData &rData, const int nTextureId ) {
+static int t3dFarSurfaceAtlasCacheResolveMaterialId( const FarSurfaceBakeData &rData, const int nTextureId ) {
 	if ( nTextureId >= 0 && nTextureId < rData.nCount && rData.populated[( size_t ) ( nTextureId )] != 0u ) {
 		return nTextureId;
 	}
 	return rData.fallbackTexture;
 }
-
-} // namespace
 
 T3DFarSurfaceAtlasCache::T3DFarSurfaceAtlasCache(
 	T3DRegionRepository *pRepository,
@@ -244,13 +240,13 @@ uint64_t T3DFarSurfaceAtlasCache::computeSourceSignature( void ) const {
 		return 0u;
 	}
 	uint64_t hash = 1469598103934665603ull;
-	fnv1a64AppendU32( hash, TERRAIN3D_GPU_FAR_ATLAS_VERSION );
-	fnv1a64AppendU32( hash, ( uint32_t ) ( m_pRepository->getRegionSize() ) );
-	fnv1a64AppendU32( hash, ( uint32_t ) ( m_pRepository->getRegionMapSize() ) );
-	fnv1a64AppendU32( hash, ( uint32_t ) ( m_config.nHeightAtlasSide ) );
-	fnv1a64AppendU32( hash, ( uint32_t ) ( m_config.nSurfaceAtlasSide ) );
-	fnv1a64AppendF32( hash, ( float ) ( m_pRepository->getVertexSpacing() ) );
-	fnv1a64AppendU32( hash, ( uint32_t ) ( m_pRepository->getActiveRegionCount() ) );
+	t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, TERRAIN3D_GPU_FAR_ATLAS_VERSION );
+	t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( m_pRepository->getRegionSize() ) );
+	t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( m_pRepository->getRegionMapSize() ) );
+	t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( m_config.nHeightAtlasSide ) );
+	t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( m_config.nSurfaceAtlasSide ) );
+	t3dFarSurfaceAtlasCacheFnv1a64AppendF32( hash, ( float ) ( m_pRepository->getVertexSpacing() ) );
+	t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( m_pRepository->getActiveRegionCount() ) );
 	for ( int map_index = 0; map_index < TERRAIN3D_MAX_REGION_SLOTS; ++map_index ) {
 		const Vector2i location(
 			map_index % TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE - TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE / 2,
@@ -260,27 +256,27 @@ uint64_t T3DFarSurfaceAtlasCache::computeSourceSignature( void ) const {
 		if ( !pRegion || pRegion->isDeleted() ) {
 			continue;
 		}
-		fnv1a64AppendU32( hash, ( uint32_t ) ( map_index ) );
+		t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( map_index ) );
 		const String path = pRegion->get_path();
 		const uint64_t modified = !path.is_empty() && FileAccess::file_exists( path ) ? FileAccess::get_modified_time( path ) : 0u;
-		fnv1a64AppendU64( hash, modified );
+		t3dFarSurfaceAtlasCacheFnv1a64AppendU64( hash, modified );
 	}
 	FarSurfaceBakeData bake_data;
-	buildBakeData( m_config.pAssets, bake_data );
-	fnv1a64AppendU32( hash, ( uint32_t ) ( bake_data.nCount ) );
-	fnv1a64AppendU32( hash, ( uint32_t ) ( bake_data.fallbackTexture ) );
+	t3dFarSurfaceAtlasCacheBuildBakeData( m_config.pAssets, bake_data );
+	t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( bake_data.nCount ) );
+	t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( bake_data.fallbackTexture ) );
 	for ( int index = 0; index < bake_data.nCount; ++index ) {
-		fnv1a64AppendU32( hash, ( uint32_t ) ( index ) );
-		fnv1a64AppendU32( hash, ( uint32_t ) ( bake_data.populated[( size_t ) ( index )] ) );
+		t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( index ) );
+		t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( bake_data.populated[( size_t ) ( index )] ) );
 	}
 	T3DMaterial *const pMaterial = m_config.pMaterial.ptr();
-	fnv1a64AppendU32( hash, pMaterial ? 1u : 0u );
+	t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, pMaterial ? 1u : 0u );
 	if ( pMaterial ) {
-		fnv1a64AppendU32( hash, pMaterial->getAutoShaderEnabled() ? 1u : 0u );
-		fnv1a64AppendF32( hash, materialFloatParam( pMaterial, "auto_slope", 1.0f ) );
-		fnv1a64AppendF32( hash, materialFloatParam( pMaterial, "auto_height_reduction", 0.1f ) );
-		fnv1a64AppendU32( hash, ( uint32_t ) ( materialIntParam( pMaterial, "auto_base_texture", 0 ) ) );
-		fnv1a64AppendU32( hash, ( uint32_t ) ( materialIntParam( pMaterial, "auto_overlay_texture", 1 ) ) );
+		t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, pMaterial->getAutoShaderEnabled() ? 1u : 0u );
+		t3dFarSurfaceAtlasCacheFnv1a64AppendF32( hash, t3dFarSurfaceAtlasCacheMaterialFloatParam( pMaterial, "auto_slope", 1.0f ) );
+		t3dFarSurfaceAtlasCacheFnv1a64AppendF32( hash, t3dFarSurfaceAtlasCacheMaterialFloatParam( pMaterial, "auto_height_reduction", 0.1f ) );
+		t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( t3dFarSurfaceAtlasCacheMaterialIntParam( pMaterial, "auto_base_texture", 0 ) ) );
+		t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t ) ( t3dFarSurfaceAtlasCacheMaterialIntParam( pMaterial, "auto_overlay_texture", 1 ) ) );
 	}
 	return hash;
 }
@@ -303,7 +299,7 @@ bool T3DFarSurfaceAtlasCache::initializeImages( void ) {
 		m_pColorImage->get_height() != surface_side || m_pColorImage->get_format() != Image::FORMAT_RGBA8 ) {
 		PackedByteArray bytes;
 		bytes.resize( ( int64_t ) ( surface_side ) * surface_side * 4 );
-		fillFarSurfaceEmpty( bytes );
+		t3dFarSurfaceAtlasCacheFillFarSurfaceEmpty( bytes );
 		m_pColorImage = Image::create_from_data( surface_side, surface_side, false, Image::FORMAT_RGBA8, bytes );
 	}
 	return m_pHeightImage.is_valid() && !m_pHeightImage->is_empty() &&
@@ -616,14 +612,14 @@ bool T3DFarSurfaceAtlasCache::patchColorRegion( const Vector2i &vLocation, Packe
 		return false;
 	}
 	FarSurfaceBakeData bake_data;
-	buildBakeData( m_config.pAssets, bake_data );
+	t3dFarSurfaceAtlasCacheBuildBakeData( m_config.pAssets, bake_data );
 	T3DMaterial *const pMaterial = m_config.pMaterial.ptr();
 	const bool auto_shader_enabled = pMaterial && pMaterial->getAutoShaderEnabled();
-	const float auto_slope = materialFloatParam( pMaterial, "auto_slope", 1.0f );
-	const float auto_height_reduction = materialFloatParam( pMaterial, "auto_height_reduction", 0.1f );
+	const float auto_slope = t3dFarSurfaceAtlasCacheMaterialFloatParam( pMaterial, "auto_slope", 1.0f );
+	const float auto_height_reduction = t3dFarSurfaceAtlasCacheMaterialFloatParam( pMaterial, "auto_height_reduction", 0.1f );
 	const int auto_layer_max = MAX( bake_data.nCount - 1, 0 );
-	const int auto_base_texture = CLAMP( materialIntParam( pMaterial, "auto_base_texture", 0 ), 0, auto_layer_max );
-	const int auto_overlay_texture = CLAMP( materialIntParam( pMaterial, "auto_overlay_texture", 1 ), 0, auto_layer_max );
+	const int auto_base_texture = CLAMP( t3dFarSurfaceAtlasCacheMaterialIntParam( pMaterial, "auto_base_texture", 0 ), 0, auto_layer_max );
+	const int auto_overlay_texture = CLAMP( t3dFarSurfaceAtlasCacheMaterialIntParam( pMaterial, "auto_overlay_texture", 1 ), 0, auto_layer_max );
 	const int source_step = MAX( 1, m_pRepository->getRegionSize() / samples_per_region );
 
 	for ( int y = 0; y < samples_per_region; ++y ) {
@@ -654,13 +650,13 @@ bool T3DFarSurfaceAtlasCache::patchColorRegion( const Vector2i &vLocation, Packe
 			const int center_x = MIN( m_pRepository->getRegionSize() - 1, region_x0 + ( region_x1 - region_x0 ) / 2 );
 			const int center_y = MIN( m_pRepository->getRegionSize() - 1, region_y0 + ( region_y1 - region_y0 ) / 2 );
 			const int center_index = center_y * m_pRepository->getRegionSize() + center_x;
-			const uint32_t control = readU32Unaligned( pControlRead, ( size_t ) ( center_index ) * 4u );
+			const uint32_t control = t3dFarSurfaceAtlasCacheReadU32Unaligned( pControlRead, ( size_t ) ( center_index ) * 4u );
 			float solid_coverage = 0.0f;
 			for ( int probe_y = 0; probe_y < 2; ++probe_y ) {
 				for ( int probe_x = 0; probe_x < 2; ++probe_x ) {
 					const int px = MIN( m_pRepository->getRegionSize() - 1, region_x0 + ( ( probe_x * 2 + 1 ) * source_step ) / 4 );
 					const int py = MIN( m_pRepository->getRegionSize() - 1, region_y0 + ( ( probe_y * 2 + 1 ) * source_step ) / 4 );
-					const uint32_t probe_control = readU32Unaligned( pControlRead,
+					const uint32_t probe_control = t3dFarSurfaceAtlasCacheReadU32Unaligned( pControlRead,
 						( size_t ) ( py * m_pRepository->getRegionSize() + px ) * 4u );
 					solid_coverage += isHole( probe_control ) ? 0.0f : 0.25f;
 				}
@@ -672,7 +668,7 @@ bool T3DFarSurfaceAtlasCache::patchColorRegion( const Vector2i &vLocation, Packe
 				float normal_y = 1.0f;
 				float height = 0.0f;
 				if ( height_valid ) {
-					height = t3dRegionCodecDecodeHeightU16( readU16Unaligned( pHeightRead, ( size_t ) ( center_index ) * 2u ) );
+					height = t3dRegionCodecDecodeHeightU16( t3dFarSurfaceAtlasCacheReadU16Unaligned( pHeightRead, ( size_t ) ( center_index ) * 2u ) );
 				}
 				if ( derived_valid ) {
 					const int derived_x = MIN( derived_width - 1, center_x * derived_width / m_pRepository->getRegionSize() );
@@ -684,8 +680,8 @@ bool T3DFarSurfaceAtlasCache::patchColorRegion( const Vector2i &vLocation, Packe
 				} else if ( height_valid ) {
 					const int sample_x = center_y * m_pRepository->getRegionSize() + MIN( m_pRepository->getRegionSize() - 1, center_x + 1 );
 					const int sample_z = MIN( m_pRepository->getRegionSize() - 1, center_y + 1 ) * m_pRepository->getRegionSize() + center_x;
-					const float height_x = t3dRegionCodecDecodeHeightU16( readU16Unaligned( pHeightRead, ( size_t ) ( sample_x ) * 2u ) );
-					const float height_z = t3dRegionCodecDecodeHeightU16( readU16Unaligned( pHeightRead, ( size_t ) ( sample_z ) * 2u ) );
+					const float height_x = t3dRegionCodecDecodeHeightU16( t3dFarSurfaceAtlasCacheReadU16Unaligned( pHeightRead, ( size_t ) ( sample_x ) * 2u ) );
+					const float height_z = t3dRegionCodecDecodeHeightU16( t3dFarSurfaceAtlasCacheReadU16Unaligned( pHeightRead, ( size_t ) ( sample_z ) * 2u ) );
 					const float spacing = MAX( ( float ) ( m_pRepository->getVertexSpacing() ), 0.0001f );
 					const float dx = height_x - height;
 					const float dz = height_z - height;
@@ -696,16 +692,16 @@ bool T3DFarSurfaceAtlasCache::patchColorRegion( const Vector2i &vLocation, Packe
 				blend = CLAMP( auto_slope * 2.0f * ( normal_y - 1.0f ) + 1.0f -
 					auto_height_reduction * 0.01f * height, 0.0f, 1.0f );
 			}
-			base_id = resolveMaterialId( bake_data, base_id );
-			overlay_id = resolveMaterialId( bake_data, overlay_id );
+			base_id = t3dFarSurfaceAtlasCacheResolveMaterialId( bake_data, base_id );
+			overlay_id = t3dFarSurfaceAtlasCacheResolveMaterialId( bake_data, overlay_id );
 			const int dominant_material = blend >= 0.5f ? overlay_id : base_id;
 			const float inv_samples = color_samples > 0 ? 1.0f / ( float ) ( color_samples ) : 0.0f;
 			const size_t atlas_offset = ( size_t ) ( ( atlas_origin_y + y ) * atlas_size + atlas_origin_x + x ) * 4u;
-			pAtlasWrite[atlas_offset] = colorToByte( ( float ) ( sum_r ) * inv_samples / TERRAIN3D_BYTE_MAX_FLOAT );
-			pAtlasWrite[atlas_offset + 1u] = colorToByte( ( float ) ( sum_g ) * inv_samples / TERRAIN3D_BYTE_MAX_FLOAT );
-			pAtlasWrite[atlas_offset + 2u] = colorToByte( ( float ) ( sum_b ) * inv_samples / TERRAIN3D_BYTE_MAX_FLOAT );
+			pAtlasWrite[atlas_offset] = t3dFarSurfaceAtlasCacheColorToByte( ( float ) ( sum_r ) * inv_samples / TERRAIN3D_BYTE_MAX_FLOAT );
+			pAtlasWrite[atlas_offset + 1u] = t3dFarSurfaceAtlasCacheColorToByte( ( float ) ( sum_g ) * inv_samples / TERRAIN3D_BYTE_MAX_FLOAT );
+			pAtlasWrite[atlas_offset + 2u] = t3dFarSurfaceAtlasCacheColorToByte( ( float ) ( sum_b ) * inv_samples / TERRAIN3D_BYTE_MAX_FLOAT );
 			const float color_alpha = color_samples > 0 ? ( float ) ( sum_a ) * inv_samples / TERRAIN3D_BYTE_MAX_FLOAT : 0.5f;
-			pAtlasWrite[atlas_offset + 3u] = farSurfaceAlpha( solid_coverage, color_alpha, dominant_material );
+			pAtlasWrite[atlas_offset + 3u] = t3dFarSurfaceAtlasCacheFarSurfaceAlpha( solid_coverage, color_alpha, dominant_material );
 		}
 	}
 	return true;
@@ -792,7 +788,7 @@ bool T3DFarSurfaceAtlasCache::rebuildColorAtlas( void ) {
 	const uint64_t region_texels = samples_per_region > 0 ? ( uint64_t ) ( samples_per_region ) * samples_per_region : 0u;
 	if ( m_bColorDirtyAll ) {
 		m_nColorDirtyTexelsLast = atlas_texels;
-		fillFarSurfaceEmpty( atlas_bytes );
+		t3dFarSurfaceAtlasCacheFillFarSurfaceEmpty( atlas_bytes );
 		for ( int slot = 0; slot < m_pRepository->getSlotCount(); ++slot ) {
 			const Vector2i location = m_pRepository->getSlotsData()[slot];
 			if ( location != V2I_MAX && patchColorRegion( location, atlas_bytes ) ) {

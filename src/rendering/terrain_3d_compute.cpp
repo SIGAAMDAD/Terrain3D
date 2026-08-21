@@ -26,23 +26,22 @@
 #include "data/terrain_3d_region_codec.h"
 #include "streaming/terrain_3d_upload_bridge.h"
 
-namespace {
 #define TERRAIN3D_CLAMP01( value ) std::clamp( ( value ), 0.0f, 1.0f )
 #define TERRAIN3D_LERP( a, b, t ) ( ( a ) + ( ( b ) - ( a ) ) * ( t ) )
 #define TERRAIN3D_UNPACK_COLOR( value, shift ) ( ( float ) ( ( ( value ) >> ( shift ) ) & 0xffu ) / TERRAIN3D_BYTE_MAX_FLOAT )
 #define TERRAIN3DQUANTIZECOLOR( value ) ( uint32_t ) ( std::clamp( std::round( ( value ) * TERRAIN3D_BYTE_MAX_FLOAT ), 0.0f, TERRAIN3D_BYTE_MAX_FLOAT ) )
 
-EA_FORCE_INLINE static float terrain3dBitsToFloat( const uint32_t nBits ) { float fValue = 0.0f; std::memcpy( &fValue, &nBits, sizeof( fValue ) ); return fValue; }
+EA_FORCE_INLINE static float t3dComputeBitsToFloat( const uint32_t nBits ) { float fValue = 0.0f; std::memcpy( &fValue, &nBits, sizeof( fValue ) ); return fValue; }
 
-EA_FORCE_INLINE static uint32_t terrain3dFloatToBits( const float fValue ) { uint32_t bits = 0u; std::memcpy( &bits, &fValue, sizeof( bits ) ); return bits; }
+EA_FORCE_INLINE static uint32_t t3dComputeFloatToBits( const float fValue ) { uint32_t bits = 0u; std::memcpy( &bits, &fValue, sizeof( bits ) ); return bits; }
 
-EA_FORCE_INLINE static uint32_t terrain3dPackColor( const float fR, const float fG, const float fB, const float fA ) { return TERRAIN3DQUANTIZECOLOR( fR ) | ( TERRAIN3DQUANTIZECOLOR( fG ) << 8u ) | ( TERRAIN3DQUANTIZECOLOR( fB ) << 16u ) | ( TERRAIN3DQUANTIZECOLOR( fA ) << 24u ); }
+EA_FORCE_INLINE static uint32_t t3dComputePackColor( const float fR, const float fG, const float fB, const float fA ) { return TERRAIN3DQUANTIZECOLOR( fR ) | ( TERRAIN3DQUANTIZECOLOR( fG ) << 8u ) | ( TERRAIN3DQUANTIZECOLOR( fB ) << 16u ) | ( TERRAIN3DQUANTIZECOLOR( fA ) << 24u ); }
 static_assert( sizeof( t3dBrushElement_t ) == 16u, "t3dBrushElement_t must match GLSL std430 uvec4 layout" );
 static_assert( sizeof( t3dBrushParams_t ) == 52u, "t3dBrushParams_t must match GLSL push-constant layout" );
 
-EA_FORCE_INLINE Ref<RDUniform> makeStorageUniform( const int nBinding, const RID &rBuffer ) { Ref<RDUniform> pUniform; pUniform.instantiate(); pUniform->set_uniform_type( RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER ); pUniform->set_binding( nBinding ); pUniform->add_id( rBuffer ); return pUniform; }
+EA_FORCE_INLINE static Ref<RDUniform> t3dComputeMakeStorageUniform( const int nBinding, const RID &rBuffer ) { Ref<RDUniform> pUniform; pUniform.instantiate(); pUniform->set_uniform_type( RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER ); pUniform->set_binding( nBinding ); pUniform->add_id( rBuffer ); return pUniform; }
 
-Ref<RDUniform> makeSampledTextureUniform( const int nBinding, const RID &rSampler, const RID &rTexture ) {
+static Ref<RDUniform> t3dComputeMakeSampledTextureUniform( const int nBinding, const RID &rSampler, const RID &rTexture ) {
 	Ref<RDUniform> pUniform;
 	pUniform.instantiate();
 	pUniform->set_uniform_type( RenderingDevice::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE );
@@ -52,9 +51,9 @@ Ref<RDUniform> makeSampledTextureUniform( const int nBinding, const RID &rSample
 	return pUniform;
 }
 
-EA_FORCE_INLINE Ref<RDUniform> makeImageUniform( const int nBinding, const RID &rTexture ) { Ref<RDUniform> pUniform; pUniform.instantiate(); pUniform->set_uniform_type( RenderingDevice::UNIFORM_TYPE_IMAGE ); pUniform->set_binding( nBinding ); pUniform->add_id( rTexture ); return pUniform; }
+EA_FORCE_INLINE static Ref<RDUniform> t3dComputeMakeImageUniform( const int nBinding, const RID &rTexture ) { Ref<RDUniform> pUniform; pUniform.instantiate(); pUniform->set_uniform_type( RenderingDevice::UNIFORM_TYPE_IMAGE ); pUniform->set_binding( nBinding ); pUniform->add_id( rTexture ); return pUniform; }
 
-uint64_t hashBytes( const uint8_t *pData, const size_t nSize ) {
+static uint64_t t3dComputeHashBytes( const uint8_t *pData, const size_t nSize ) {
 	uint64_t hash = 1469598103934665603ULL;
 	if ( !pData && nSize > 0u ) {
 		return 0u;
@@ -65,7 +64,6 @@ uint64_t hashBytes( const uint8_t *pData, const size_t nSize ) {
 	}
 	return hash;
 }
-} // namespace
 
 T3DCompute::~T3DCompute( void ) {
 	shutdown();
@@ -263,7 +261,7 @@ bool T3DCompute::ensureBrushCapacity( const uint32_t nBytes ) {
 		return false;
 	}
 	TypedArray<Ref<RDUniform>> pUniforms;
-	pUniforms.push_back( makeStorageUniform( 0, m_brushBuffer ) );
+	pUniforms.push_back( t3dComputeMakeStorageUniform( 0, m_brushBuffer ) );
 	m_brushUniformSet = m_pRd->uniform_set_create( pUniforms, m_brushPipeline.pShader, 0u );
 	if ( !m_brushUniformSet.is_valid() ) {
 		setError( "Failed to create brush compute uniform set" );
@@ -289,8 +287,8 @@ bool T3DCompute::ensureDerivedCapacity( const uint32_t nInputBytes, const uint32
 		return false;
 	}
 	TypedArray<Ref<RDUniform>> pUniforms;
-	pUniforms.push_back( makeStorageUniform( 0, m_derivedInputBuffer ) );
-	pUniforms.push_back( makeStorageUniform( 1, m_derivedOutputBuffer ) );
+	pUniforms.push_back( t3dComputeMakeStorageUniform( 0, m_derivedInputBuffer ) );
+	pUniforms.push_back( t3dComputeMakeStorageUniform( 1, m_derivedOutputBuffer ) );
 	m_derivedUniformSet = m_pRd->uniform_set_create( pUniforms, m_derivedPipeline.pShader, 0u );
 	if ( !m_derivedUniformSet.is_valid() ) {
 		setError( "Failed to create derived-map compute uniform set" );
@@ -490,10 +488,10 @@ bool T3DCompute::prepareDisplacementRequest(
 		material_data[( size_t ) ( i )].fScale = displacement.y;
 	}
 	rRequest.materialData = copyToBytes( material_data.data(), sizeof( material_data ) );
-	rRequest.regionMapHash = hashBytes( ( const uint8_t * ) ( rRequest.regionMap.ptr() ),
+	rRequest.regionMapHash = t3dComputeHashBytes( ( const uint8_t * ) ( rRequest.regionMap.ptr() ),
 										 ( size_t ) ( rRequest.regionMap.size() ) * sizeof( int32_t ) );
 	rRequest.materialDataHash =
-		hashBytes( rRequest.materialData.ptr(), ( size_t ) ( rRequest.materialData.size() ) );
+		t3dComputeHashBytes( rRequest.materialData.ptr(), ( size_t ) ( rRequest.materialData.size() ) );
 
 	typedef struct t3dDisplacementParams_s {
 		uint32_t nWidth, nHeight, nRegionSize, nRegionMapSize;
@@ -592,12 +590,12 @@ bool T3DCompute::dispatchDisplacementRequest( const t3dDisplacementRequest_t &rR
 	if ( bBindingsChanged ) {
 		freeRenderUniformSet( m_displacementUniformSet );
 		TypedArray<Ref<RDUniform>> pUniforms;
-		pUniforms.push_back( makeSampledTextureUniform( 0, m_nearestSampler, height_texture ) );
-		pUniforms.push_back( makeSampledTextureUniform( 1, m_nearestSampler, control_texture ) );
-		pUniforms.push_back( makeSampledTextureUniform( 2, m_linearRepeatSampler, displacement_texture ) );
-		pUniforms.push_back( makeImageUniform( 3, m_displacementOutputTexture ) );
-		pUniforms.push_back( makeStorageUniform( 4, m_displacementRegionBuffer ) );
-		pUniforms.push_back( makeStorageUniform( 5, m_displacementMaterialBuffer ) );
+		pUniforms.push_back( t3dComputeMakeSampledTextureUniform( 0, m_nearestSampler, height_texture ) );
+		pUniforms.push_back( t3dComputeMakeSampledTextureUniform( 1, m_nearestSampler, control_texture ) );
+		pUniforms.push_back( t3dComputeMakeSampledTextureUniform( 2, m_linearRepeatSampler, displacement_texture ) );
+		pUniforms.push_back( t3dComputeMakeImageUniform( 3, m_displacementOutputTexture ) );
+		pUniforms.push_back( t3dComputeMakeStorageUniform( 4, m_displacementRegionBuffer ) );
+		pUniforms.push_back( t3dComputeMakeStorageUniform( 5, m_displacementMaterialBuffer ) );
 		m_displacementUniformSet = m_pRenderRd->uniform_set_create( pUniforms, m_displacementPipeline.pShader, 0u );
 		if ( !m_displacementUniformSet.is_valid() ) {
 			setError( "Failed to bind displacement compute resources" );
@@ -638,9 +636,9 @@ void T3DCompute::processBrushCpu( eastl::vector<t3dBrushElement_t> &rElements, c
 		if ( ( e.flags & 1u ) == 0u ) {
 			continue;
 		}
-		const float fAlpha = terrain3dBitsToFloat( e.alpha );
+		const float fAlpha = t3dComputeBitsToFloat( e.alpha );
 		if ( p.mapType == TERRAIN3D_TYPE_HEIGHT_VALUE ) {
-			float fSource = terrain3dBitsToFloat( e.value );
+			float fSource = t3dComputeBitsToFloat( e.value );
 			if ( !std::isfinite( fSource ) ) {
 				fSource = 0.0f;
 			}
@@ -663,9 +661,9 @@ void T3DCompute::processBrushCpu( eastl::vector<t3dBrushElement_t> &rElements, c
 					fResult = fSource - fAmount;
 				}
 			} else if ( p.operation == TERRAIN3D_OP_GRADIENT_VALUE ) {
-				fResult = TERRAIN3D_LERP( fSource, terrain3dBitsToFloat( e.target ), TERRAIN3D_CLAMP01( fAmount ) );
+				fResult = TERRAIN3D_LERP( fSource, t3dComputeBitsToFloat( e.target ), TERRAIN3D_CLAMP01( fAmount ) );
 			}
-			e.value = terrain3dFloatToBits( fResult );
+			e.value = t3dComputeFloatToBits( fResult );
 		} else if ( p.mapType == TERRAIN3D_TYPE_CONTROL_VALUE ) {
 			uint32_t base = ( e.value >> 27u ) & 31u;
 			uint32_t overlay = ( e.value >> 22u ) & 31u;
@@ -770,7 +768,7 @@ void T3DCompute::processBrushCpu( eastl::vector<t3dBrushElement_t> &rElements, c
 				a = TERRAIN3D_LERP( a, fTarget, fWeight );
 				a = ( float ) ( ( int ) ( a * TERRAIN3D_BYTE_MAX_FLOAT ) ) / TERRAIN3D_BYTE_MAX_FLOAT;
 			}
-			e.value = terrain3dPackColor( fR, g, b, a );
+			e.value = t3dComputePackColor( fR, g, b, a );
 		}
 	}
 }

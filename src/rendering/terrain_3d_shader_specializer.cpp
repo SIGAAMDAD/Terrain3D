@@ -10,8 +10,6 @@
 
 using namespace godot;
 
-namespace {
-
 typedef enum t3dConditionalOwnership_e {
 	T3D_CONDITIONAL_PRESERVED,
 	T3D_CONDITIONAL_SPECIALIZED,
@@ -227,7 +225,7 @@ public:
 	}
 };
 
-bool containsEnabledFeature( const PackedStringArray &rFeatures, const String &rFeature ) {
+static bool t3dShaderSpecializerContainsEnabledFeature( const PackedStringArray &rFeatures, const String &rFeature ) {
 	for ( int index = 0; index < rFeatures.size(); ++index ) {
 		if ( rFeatures[index] == rFeature ) {
 			return true;
@@ -236,11 +234,11 @@ bool containsEnabledFeature( const PackedStringArray &rFeatures, const String &r
 	return false;
 }
 
-EA_FORCE_INLINE bool isTerrain3dFeatureMacro( const String &rName ) { return rName.begins_with( "T3D_ENABLE_" ); }
+EA_FORCE_INLINE static bool t3dShaderSpecializerIsTerrain3dFeatureMacro( const String &rName ) { return rName.begins_with( "T3D_ENABLE_" ); }
 
-EA_FORCE_INLINE bool isTerrain3dStaticExpression( const String &rExpression ) { return rExpression.find( "T3D_" ) >= 0; }
+EA_FORCE_INLINE static bool t3dShaderSpecializerIsTerrain3dStaticExpression( const String &rExpression ) { return rExpression.find( "T3D_" ) >= 0; }
 
-String getShaderDirectiveCode( const String &rLine ) {
+static String t3dShaderSpecializerGetShaderDirectiveCode( const String &rLine ) {
 	String directive = rLine.strip_edges();
 	if ( !directive.begins_with( "#" ) ) {
 		return directive;
@@ -252,7 +250,7 @@ String getShaderDirectiveCode( const String &rLine ) {
 	return directive;
 }
 
-bool isPathInStack( const Vector<String> &rStack, const String &rPath ) {
+static bool t3dShaderSpecializerIsPathInStack( const Vector<String> &rStack, const String &rPath ) {
 	for ( int index = 0; index < rStack.size(); ++index ) {
 		if ( rStack[index] == rPath ) {
 			return true;
@@ -261,7 +259,7 @@ bool isPathInStack( const Vector<String> &rStack, const String &rPath ) {
 	return false;
 }
 
-bool expandShaderSourceRecursive(
+static bool t3dShaderSpecializerExpandShaderSourceRecursive(
 	const String &rPath, Vector<String> &rStack,
 	String &rOutputSource, String &rFailureSummary
 ) {
@@ -269,7 +267,7 @@ bool expandShaderSourceRecursive(
 		rFailureSummary = "Terrain3D shader include depth exceeded while expanding: " + rPath;
 		return false;
 	}
-	if ( isPathInStack( rStack, rPath ) ) {
+	if ( t3dShaderSpecializerIsPathInStack( rStack, rPath ) ) {
 		rFailureSummary = "Terrain3D shader include cycle detected at: " + rPath;
 		return false;
 	}
@@ -290,7 +288,7 @@ bool expandShaderSourceRecursive(
 	PackedStringArray output;
 	for ( int line_index = 0; line_index < lines.size(); ++line_index ) {
 		const String &line = lines[line_index];
-		const String directive = getShaderDirectiveCode( line );
+		const String directive = t3dShaderSpecializerGetShaderDirectiveCode( line );
 		if ( !directive.begins_with( "#include" ) ) {
 			output.push_back( line );
 			continue;
@@ -308,7 +306,7 @@ bool expandShaderSourceRecursive(
 			include_path = rPath.get_base_dir().path_join( include_path ).simplify_path();
 		}
 		String expanded_include;
-		if ( !expandShaderSourceRecursive( include_path, rStack, expanded_include, rFailureSummary ) ) {
+		if ( !t3dShaderSpecializerExpandShaderSourceRecursive( include_path, rStack, expanded_include, rFailureSummary ) ) {
 			rStack.remove_at( rStack.size() - 1 );
 			return false;
 		}
@@ -323,15 +321,13 @@ bool expandShaderSourceRecursive(
 	return true;
 }
 
-} // namespace
-
 bool terrain3dExpandShaderIncludes(
 	const String &rRootPath, String &rOutputSource, String &rFailureSummary
 ) {
 	Vector<String> stack;
 	rOutputSource = String();
 	rFailureSummary = String();
-	return expandShaderSourceRecursive( rRootPath, stack, rOutputSource, rFailureSummary );
+	return t3dShaderSpecializerExpandShaderSourceRecursive( rRootPath, stack, rOutputSource, rFailureSummary );
 }
 
 bool terrain3dValidateAssembledShaderSource(
@@ -339,7 +335,7 @@ bool terrain3dValidateAssembledShaderSource(
 ) {
 	const PackedStringArray lines = rSource.split( "\n", true );
 	for ( int line_index = 0; line_index < lines.size(); ++line_index ) {
-		const String directive = getShaderDirectiveCode( lines[line_index] );
+		const String directive = t3dShaderSpecializerGetShaderDirectiveCode( lines[line_index] );
 		if ( directive.begins_with( "#include" ) ) {
 			rFailureSummary = "Unexpanded shader include remains at assembled line " +
 				String::num_int64( line_index + 1 );
@@ -370,7 +366,7 @@ bool terrain3dAssembleShaderSource(
 
 	for ( int line_index = 0; line_index < lines.size(); ++line_index ) {
 		const String &line = lines[line_index];
-		const String directive = getShaderDirectiveCode( line );
+		const String directive = t3dShaderSpecializerGetShaderDirectiveCode( line );
 		if ( directive == "// T3D_STANDALONE_DEFAULTS_BEGIN" ) {
 			if ( bSkipStandaloneDefaults ) {
 				rFailureSummary = "Nested Terrain3D standalone-default block at line " + String::num_int64( line_index + 1 );
@@ -404,10 +400,10 @@ bool terrain3dAssembleShaderSource(
 			if ( macro == "T3D_TEMPLATE_CONTEXT" ) {
 				bOwned = true;
 				bValue = true;
-			} else if ( isTerrain3dFeatureMacro( macro ) ) {
+			} else if ( t3dShaderSpecializerIsTerrain3dFeatureMacro( macro ) ) {
 				bOwned = true;
 				const String feature = macro.substr( String( "T3D_ENABLE_" ).length() );
-				bValue = containsEnabledFeature( rEnabledFeatures, feature );
+				bValue = t3dShaderSpecializerContainsEnabledFeature( rEnabledFeatures, feature );
 			}
 			if ( bIfndef ) {
 				bValue = !bValue;
@@ -431,7 +427,7 @@ bool terrain3dAssembleShaderSource(
 				return false;
 			}
 			const String expression = directive.substr( 4 ).strip_edges();
-			const bool bOwned = isTerrain3dStaticExpression( expression );
+			const bool bOwned = t3dShaderSpecializerIsTerrain3dStaticExpression( expression );
 			bool bValue = false;
 			if ( bOwned ) {
 				T3DStaticExpressionParser parser( expression, rState );
@@ -467,7 +463,7 @@ bool terrain3dAssembleShaderSource(
 				continue;
 			}
 			const String expression = directive.substr( 6 ).strip_edges();
-			if ( !isTerrain3dStaticExpression( expression ) ) {
+			if ( !t3dShaderSpecializerIsTerrain3dStaticExpression( expression ) ) {
 				rFailureSummary = "Terrain3D-owned conditional mixes with non-Terrain3D #elif at line " +
 					String::num_int64( line_index + 1 );
 				return false;

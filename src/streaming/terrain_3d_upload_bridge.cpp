@@ -7,9 +7,7 @@
 #include <godot_cpp/variant/string_name.hpp>
 #include <godot_cpp/variant/variant.hpp>
 
-namespace {
-
-Object *getUploadBridge( void ) {
+static Object *t3dUploadBridgeGetUploadBridge( void ) {
 	Engine *pEngine = Engine::get_singleton();
 	if ( !pEngine ) {
 		return nullptr;
@@ -21,10 +19,8 @@ Object *getUploadBridge( void ) {
 	return pEngine->get_singleton( s_singletonName );
 }
 
-} // namespace
-
 bool t3dUploadBridgeIsAvailable( void ) {
-	Object *pBridge = getUploadBridge();
+	Object *pBridge = t3dUploadBridgeGetUploadBridge();
 	if ( !pBridge ) {
 		return false;
 	}
@@ -36,7 +32,7 @@ bool t3dUploadBridgeUploadTextureLayer( const RID hTexture, const Ref<Image> &rI
 	if ( !hTexture.is_valid() || rImage.is_null() || rImage->is_empty() || iLayer < 0 ) {
 		return false;
 	}
-	Object *pBridge = getUploadBridge();
+	Object *pBridge = t3dUploadBridgeGetUploadBridge();
 	if ( !pBridge ) {
 		return false;
 	}
@@ -52,7 +48,7 @@ RID t3dUploadBridgeCreatePersistentStorageBuffer( const uint32_t nSizeBytes ) {
 	if ( nSizeBytes == 0u ) {
 		return RID();
 	}
-	Object *pBridge = getUploadBridge();
+	Object *pBridge = t3dUploadBridgeGetUploadBridge();
 	if ( !pBridge ) {
 		return RID();
 	}
@@ -64,7 +60,7 @@ RID t3dUploadBridgeCreatePersistentStorageBuffer( const uint32_t nSizeBytes ) {
 }
 
 Dictionary t3dUploadBridgeGetStats( void ) {
-	Object *pBridge = getUploadBridge();
+	Object *pBridge = t3dUploadBridgeGetUploadBridge();
 	if ( !pBridge ) {
 		return Dictionary();
 	}

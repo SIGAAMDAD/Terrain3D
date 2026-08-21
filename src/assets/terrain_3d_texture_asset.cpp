@@ -13,11 +13,7 @@
 // Private Functions
 ///////////////////////////
 
-namespace {
-
-EA_FORCE_INLINE bool terrain3dIsPackedSurfaceFormat( const Image::Format format ) { return format == Image::FORMAT_RGBA8 || format == Image::FORMAT_DXT5 || format == Image::FORMAT_BPTC_RGBA; }
-
-} // namespace
+EA_FORCE_INLINE static bool t3dTextureAssetIsPackedSurfaceFormat( const Image::Format format ) { return format == Image::FORMAT_RGBA8 || format == Image::FORMAT_DXT5 || format == Image::FORMAT_BPTC_RGBA; }
 
 // Note a null texture is considered a valid format
 bool T3DTextureAsset::isValidFormat( const Ref<Texture2D> &rTexture ) const {
@@ -235,7 +231,7 @@ void T3DTextureAsset::setSurfaceTexture( const Ref<Texture2D> &rTexture ) {
 	}
 	if ( rTexture.is_valid() ) {
 		const Ref<Image> pImg = rTexture->get_image();
-		if ( pImg.is_null() || !terrain3dIsPackedSurfaceFormat( pImg->get_format() ) ) {
+		if ( pImg.is_null() || !t3dTextureAssetIsPackedSurfaceFormat( pImg->get_format() ) ) {
 			LOG( ERROR, "Packed PBR textures must use RGBA8, BC3/DXT5, or BC7/BPTC_RGBA "
 				"(R=normal X, G=normal Y, B=roughness, A=AO)." );
 			return;
@@ -304,7 +300,7 @@ void T3DTextureAsset::setPbrTexture( const Ref<Texture2D> &rTexture ) {
 		LOG( ERROR, "Compatibility PBR texture image is invalid or empty." );
 		return;
 	}
-	if ( terrain3dIsPackedSurfaceFormat( pImage->get_format() ) ) {
+	if ( t3dTextureAssetIsPackedSurfaceFormat( pImage->get_format() ) ) {
 		m_pSurfaceTexture = rTexture;
 		m_pPbrTexture.unref();
 	} else if ( pImage->get_format() == Image::FORMAT_RGBA16I ) {

@@ -12,36 +12,32 @@
 #include <EASTL/internal/config.h>
 
 namespace eastl {
-namespace {
+static void t3dEastlRuntimeEastlAssertDefault( void *pInstructionPointer, const char *pszExpression, void *pContext );
 
-void terrain3dEastlAssertDefault( void *pInstructionPointer, const char *pszExpression, void *pContext );
+EASTL_AssertionFailureFunctionEx s_pfnAssertionFailure = t3dEastlRuntimeEastlAssertDefault;
+void *s_pAssertionFailureContext = nullptr;
+EASTL_AssertionFailureFunction s_pfnLegacyAssertionFailure = nullptr;
 
-EASTL_AssertionFailureFunctionEx assertion_failure_function = terrain3dEastlAssertDefault;
-void *assertion_failure_context = nullptr;
-EASTL_AssertionFailureFunction assertion_failure_legacy_function = nullptr;
-
-void terrain3dEastlAssertLegacyAdapter( void *pInstructionPointer, const char *pszExpression, void *pContext ) {
+static void t3dEastlRuntimeEastlAssertLegacyAdapter( void *pInstructionPointer, const char *pszExpression, void *pContext ) {
 	EA_UNUSED( pInstructionPointer );
 	EA_UNUSED( pContext );
-	if ( assertion_failure_legacy_function ) {
-		assertion_failure_legacy_function( pszExpression, assertion_failure_context );
+	if ( s_pfnLegacyAssertionFailure ) {
+		s_pfnLegacyAssertionFailure( pszExpression, s_pAssertionFailureContext );
 	}
 }
 
-EA_FORCE_INLINE void terrain3dEastlAssertDefault( void *pInstructionPointer, const char *pszExpression, void *pContext ) { EA_UNUSED( pInstructionPointer ); EA_UNUSED( pContext ); AssertionFailureFunctionDefault( pszExpression, nullptr ); }
-
-} // namespace
+EA_FORCE_INLINE static void t3dEastlRuntimeEastlAssertDefault( void *pInstructionPointer, const char *pszExpression, void *pContext ) { EA_UNUSED( pInstructionPointer ); EA_UNUSED( pContext ); AssertionFailureFunctionDefault( pszExpression, nullptr ); }
 
 void SetAssertionFailureFunction( EASTL_AssertionFailureFunction function, void *pContext ) {
-	assertion_failure_legacy_function = function;
-	assertion_failure_context = pContext;
-	assertion_failure_function = function ? terrain3dEastlAssertLegacyAdapter : terrain3dEastlAssertDefault;
+	s_pfnLegacyAssertionFailure = function;
+	s_pAssertionFailureContext = pContext;
+	s_pfnAssertionFailure = function ? t3dEastlRuntimeEastlAssertLegacyAdapter : t3dEastlRuntimeEastlAssertDefault;
 }
 
 void SetAssertionFailureFunction( EASTL_AssertionFailureFunctionEx function, void *pContext ) {
-	assertion_failure_legacy_function = nullptr;
-	assertion_failure_context = pContext;
-	assertion_failure_function = function ? function : terrain3dEastlAssertDefault;
+	s_pfnLegacyAssertionFailure = nullptr;
+	s_pAssertionFailureContext = pContext;
+	s_pfnAssertionFailure = function ? function : t3dEastlRuntimeEastlAssertDefault;
 }
 
 void AssertionFailureFunctionDefault( const char *pszExpression, void *pContext ) {
@@ -60,8 +56,8 @@ void AssertionFailure( const char *pszExpression ) {
 }
 
 void AssertionFailure( void *pInstructionPointer, const char *pszExpression ) {
-	if ( assertion_failure_function ) {
-		assertion_failure_function( pInstructionPointer, pszExpression, assertion_failure_context );
+	if ( s_pfnAssertionFailure ) {
+		s_pfnAssertionFailure( pInstructionPointer, pszExpression, s_pAssertionFailureContext );
 	}
 }
 

@@ -11,12 +11,10 @@
 #include "memory/terrain_3d_memory.h"
 #include "data/terrain_3d_region_codec.h"
 
-namespace {
 	static constexpr uint8_t TERRAIN3D_RESIDENT_SLOT_FREE = 0u;
 	static constexpr uint8_t TERRAIN3D_RESIDENT_SLOT_STAGING = 1u;
 	static constexpr uint8_t TERRAIN3D_RESIDENT_SLOT_PUBLISHED = 2u;
 	static constexpr uint8_t TERRAIN3D_RESIDENT_SLOT_RETIRING = 3u;
-}
 
 T3DResidentMapLease::T3DResidentMapLease(
 	T3DResidentRegionPool *const pPool, const int iSlot,

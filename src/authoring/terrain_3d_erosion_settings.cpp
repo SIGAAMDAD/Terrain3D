@@ -4,9 +4,7 @@
 
 #include <godot_cpp/core/class_db.hpp>
 
-namespace {
-
-inline int32_t sanitizeResolutionScale( int32_t nValue ) {
+static inline int32_t t3dErosionSettingsSanitizeResolutionScale( int32_t nValue ) {
 	if ( nValue <= 1 ) {
 		return 1;
 	}
@@ -21,8 +19,6 @@ inline int32_t sanitizeResolutionScale( int32_t nValue ) {
 	}
 	return 16;
 }
-
-} // namespace
 
 Ref<Curve> T3DErosionSettings::makeFlatCurve( const float fValue, const float fMin, const float fMax ) {
 	Ref<Curve> pCurve;
@@ -98,7 +94,7 @@ T3DErosionSettings::T3DErosionSettings( void ) {
 SET_CLAMPED( simulation_years, setSimulationYears, m_fSimulationYears, double, 0.000001, 1000000000.0 )
 SET_CLAMPED( simulation_steps, setSimulationSteps, m_nSimulationSteps, int32_t, 1, 4096 )
 void T3DErosionSettings::setResolutionScale( const int32_t nValue ) {
-	const int32_t value = sanitizeResolutionScale( nValue );
+	const int32_t value = t3dErosionSettingsSanitizeResolutionScale( nValue );
 	if ( m_resolutionScale != value ) {
 		m_resolutionScale = value;
 		emit_changed();

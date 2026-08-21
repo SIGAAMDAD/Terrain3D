@@ -16,14 +16,12 @@
 #include <algorithm>
 #include <cmath>
 
-namespace {
-
-class T3DCacheScopeTimer {
+class T3DCpuRegionCacheScopeTimer {
 	uint64_t m_startedUsec = 0u;
 	uint64_t *m_pElapsedUsec = nullptr;
 
 public:
-	T3DCacheScopeTimer( uint64_t &nElapsedUsec, const bool bEnabled ) {
+	T3DCpuRegionCacheScopeTimer( uint64_t &nElapsedUsec, const bool bEnabled ) {
 		nElapsedUsec = 0u;
 		if ( !bEnabled ) {
 			return;
@@ -33,7 +31,7 @@ public:
 		m_startedUsec = pTime ? pTime->get_ticks_usec() : 0u;
 	}
 
-	~T3DCacheScopeTimer( void ) {
+	~T3DCpuRegionCacheScopeTimer( void ) {
 		if ( !m_pElapsedUsec ) {
 			return;
 		}
@@ -44,7 +42,7 @@ public:
 };
 
 template <typename Callback>
-bool forEachSquareRing( const Vector2i &rCenter, const int nMaxRadius, Callback &&rCallback ) {
+static bool t3dCpuRegionCacheForEachSquareRing( const Vector2i &rCenter, const int nMaxRadius, Callback &&rCallback ) {
 	for ( int radius = 0; radius < nMaxRadius; ++radius ) {
 		if ( radius == 0 ) {
 			if ( !rCallback( rCenter ) ) {
@@ -68,7 +66,7 @@ bool forEachSquareRing( const Vector2i &rCenter, const int nMaxRadius, Callback 
 	return true;
 }
 
-Rect2i getRegionBoundsForArea( const Rect2i &rArea, const int nRegionSize ) {
+static Rect2i t3dCpuRegionCacheGetRegionBoundsForArea( const Rect2i &rArea, const int nRegionSize ) {
 	if ( nRegionSize <= 0 || rArea.size.x <= 0 || rArea.size.y <= 0 ) {
 		return Rect2i();
 	}
@@ -76,8 +74,6 @@ Rect2i getRegionBoundsForArea( const Rect2i &rArea, const int nRegionSize ) {
 	const Vector2i end = V2I_DIVIDE_CEIL( rArea.get_end(), nRegionSize );
 	return Rect2i( begin, end - begin );
 }
-
-} // namespace
 
 T3DCpuRegionCache::T3DCpuRegionCache(
 	T3DRegionRepository *const pRepository,
@@ -572,7 +568,7 @@ int T3DCpuRegionCache::collectDesired(
 	}
 	const int capacity = MIN( nCapacity, TERRAIN3D_CPU_CACHE_MAX_LAYERS );
 	int outputCount = 0;
-	forEachSquareRing( rCenter, m_pRepository->getRegionMapSize(), [&]( const Vector2i &location ) {
+	t3dCpuRegionCacheForEachSquareRing( rCenter, m_pRepository->getRegionMapSize(), [&]( const Vector2i &location ) {
 		if ( outputCount >= capacity ) {
 			return false;
 		}
@@ -628,7 +624,7 @@ bool T3DCpuRegionCache::ensureSampleArea( const Vector3 &rWorldPosition, const i
 		( int ) ( Math::floor( rWorldPosition.x / m_pRepository->getVertexSpacing() ) ),
 		( int ) ( Math::floor( rWorldPosition.z / m_pRepository->getVertexSpacing() ) ) );
 	const Vector2i extent( radius * 2 + 1, radius * 2 + 1 );
-	const Rect2i bounds = getRegionBoundsForArea(
+	const Rect2i bounds = t3dCpuRegionCacheGetRegionBoundsForArea(
 		Rect2i( center - Vector2i( radius, radius ), extent ), m_pRepository->getRegionSize() );
 	bool bSuccess = true;
 	for ( int y = bounds.position.y; y < bounds.get_end().y; ++y ) {
@@ -645,7 +641,7 @@ bool T3DCpuRegionCache::ensureSampleArea( const Vector3 &rWorldPosition, const i
 void T3DCpuRegionCache::update(
 	const T3DResidencyFrameState &rFrame, const bool bForce, const int nEffectiveLoadLayers
 ) {
-	const T3DCacheScopeTimer serviceTimer( m_nServiceUsecLast, rFrame.bProfilingEnabled );
+	const T3DCpuRegionCacheScopeTimer serviceTimer( m_nServiceUsecLast, rFrame.bProfilingEnabled );
 	setRuntimePageConfig( rFrame.runtimePageConfig );
 	m_nLoadsLastTick = 0;
 	m_nStallFlagsLastTick = TERRAIN3D_PROFILE_STALL_NONE;

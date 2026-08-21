@@ -22,8 +22,7 @@
 // Per-region packages therefore remain independent on disk, while residency is
 // prioritized around the streaming center and capped at that engine limit.
 
-namespace {
-uint64_t terrain3dHashReceiver( uint64_t nHash, const NodePath &rPath, const uint64_t nObjectId ) {
+static uint64_t t3dLightmapStreamerHashReceiver( uint64_t nHash, const NodePath &rPath, const uint64_t nObjectId ) {
 	const CharString utf8 = String( rPath ).utf8();
 	uint64_t hash = nHash;
 	for ( int index = 0; index < utf8.length(); ++index ) {
@@ -39,7 +38,7 @@ uint64_t terrain3dHashReceiver( uint64_t nHash, const NodePath &rPath, const uin
 	return hash;
 }
 
-Node *terrain3dResolveLightmapReceiver( T3DTerrain *pTerrain, const NodePath &rBakedPath ) {
+static Node *t3dLightmapStreamerResolveLightmapReceiver( T3DTerrain *pTerrain, const NodePath &rBakedPath ) {
 	if ( pTerrain == nullptr ) {
 		return nullptr;
 	}
@@ -61,7 +60,7 @@ Node *terrain3dResolveLightmapReceiver( T3DTerrain *pTerrain, const NodePath &rB
 
 
 template <typename Callback>
-bool terrain3dForEachLightmapReceiver( T3DTerrain *const pTerrain, const Ref<T3DRegionLighting> &rPackage, Callback &&rCallback ) {
+static bool t3dLightmapStreamerForEachLightmapReceiver( T3DTerrain *const pTerrain, const Ref<T3DRegionLighting> &rPackage, Callback &&rCallback ) {
 	if ( pTerrain == nullptr || rPackage.is_null() ) return false;
 	if ( !pTerrain->isEditorAuthoringMode() ) {
 		T3DData *const pData = pTerrain->getData(); PackedByteArray blob;
@@ -74,7 +73,6 @@ bool terrain3dForEachLightmapReceiver( T3DTerrain *const pTerrain, const Ref<T3D
 	for ( int index = 0; index < raw.size(); index += 4 ) { T3DRuntimeLightingReceiverRecord receiver; receiver.path = raw[index]; receiver.uvScale = raw[index + 1]; receiver.sliceIndex = ( int ) raw[index + 2]; receiver.subInstance = ( int ) raw[index + 3]; rCallback( receiver ); }
 	return true;
 }
-} // namespace
 
 T3DLightmapStreamer::~T3DLightmapStreamer( void ) {
 	destroy();
@@ -215,9 +213,9 @@ bool T3DLightmapStreamer::collectReceiverState(
 	const Ref<T3DRegionLighting> &rPackage, uint64_t &nSignature, int &nReceiverCount
 ) const {
 	nSignature = TERRAIN3D_LIGHTMAP_FNV_OFFSET; nReceiverCount = 0; if ( m_pTerrain == nullptr || rPackage.is_null() ) return false;
-	const bool decoded = terrain3dForEachLightmapReceiver( m_pTerrain, rPackage, [&]( const T3DRuntimeLightingReceiverRecord &receiver ) {
-		Node *const pReceiver = terrain3dResolveLightmapReceiver( m_pTerrain, receiver.path ); if ( pReceiver == nullptr || !pReceiver->is_inside_tree() ) return;
-		nSignature = terrain3dHashReceiver( nSignature, receiver.path, pReceiver->get_instance_id() ); ++nReceiverCount;
+	const bool decoded = t3dLightmapStreamerForEachLightmapReceiver( m_pTerrain, rPackage, [&]( const T3DRuntimeLightingReceiverRecord &receiver ) {
+		Node *const pReceiver = t3dLightmapStreamerResolveLightmapReceiver( m_pTerrain, receiver.path ); if ( pReceiver == nullptr || !pReceiver->is_inside_tree() ) return;
+		nSignature = t3dLightmapStreamerHashReceiver( nSignature, receiver.path, pReceiver->get_instance_id() ); ++nReceiverCount;
 	} );
 	return decoded && ( nReceiverCount > 0 || rPackage->hasProbeData() );
 }
@@ -229,9 +227,9 @@ bool T3DLightmapStreamer::buildRuntimeData(
 ) const {
 	rData.unref(); nSignature = TERRAIN3D_LIGHTMAP_FNV_OFFSET; nReceiverCount = 0; if ( m_pTerrain == nullptr || rPackage.is_null() || rSource.is_null() ) return false;
 	const Ref<Resource> pDuplicated = rSource->duplicate( false ); Ref<LightmapGIData> pRuntimeData = pDuplicated; if ( pRuntimeData.is_null() ) return false; pRuntimeData->clear_users();
-	const bool decoded = terrain3dForEachLightmapReceiver( m_pTerrain, rPackage, [&]( const T3DRuntimeLightingReceiverRecord &receiver ) {
-		Node *const pReceiver = terrain3dResolveLightmapReceiver( m_pTerrain, receiver.path ); if ( pReceiver == nullptr || !pReceiver->is_inside_tree() ) return;
-		pRuntimeData->add_user( receiver.path, receiver.uvScale, receiver.sliceIndex, receiver.subInstance ); nSignature = terrain3dHashReceiver( nSignature, receiver.path, pReceiver->get_instance_id() ); ++nReceiverCount;
+	const bool decoded = t3dLightmapStreamerForEachLightmapReceiver( m_pTerrain, rPackage, [&]( const T3DRuntimeLightingReceiverRecord &receiver ) {
+		Node *const pReceiver = t3dLightmapStreamerResolveLightmapReceiver( m_pTerrain, receiver.path ); if ( pReceiver == nullptr || !pReceiver->is_inside_tree() ) return;
+		pRuntimeData->add_user( receiver.path, receiver.uvScale, receiver.sliceIndex, receiver.subInstance ); nSignature = t3dLightmapStreamerHashReceiver( nSignature, receiver.path, pReceiver->get_instance_id() ); ++nReceiverCount;
 	} );
 	if ( !decoded || ( nReceiverCount == 0 && !rPackage->hasProbeData() ) ) return false; rData = pRuntimeData; return true;
 }

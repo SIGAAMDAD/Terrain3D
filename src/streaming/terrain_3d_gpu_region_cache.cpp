@@ -24,10 +24,8 @@
 #include <cstring>
 #include <limits>
 
-namespace {
-
 template <typename Callback>
-static bool terrain3dForEachSquareRing( const Vector2i &rCenter, const int nMaxRadius, Callback &&rCallback ) {
+static bool t3dGpuRegionCacheForEachSquareRing( const Vector2i &rCenter, const int nMaxRadius, Callback &&rCallback ) {
 	for ( int radius = 0; radius < nMaxRadius; ++radius ) {
 		if ( radius == 0 ) {
 			if ( !rCallback( rCenter ) ) {
@@ -57,7 +55,7 @@ struct T3DControlCookSource {
 	bool bImplicit = true;
 };
 
-static bool terrain3dReadCookControl(
+static bool t3dGpuRegionCacheReadCookControl(
 	const eastl::array<T3DControlCookSource, 9> &rSources,
 	const int nRegionSize, const int iX, const int iZ, uint32_t &nControl
 ) {
@@ -92,7 +90,7 @@ static bool terrain3dReadCookControl(
 	return true;
 }
 
-static uint32_t terrain3dReadU32Unaligned( const uint8_t *pBytes, const size_t nOffset ) {
+static uint32_t t3dGpuRegionCacheReadU32Unaligned( const uint8_t *pBytes, const size_t nOffset ) {
 	uint32_t value = 0u;
 	if ( pBytes ) {
 		std::memcpy( &value, pBytes + nOffset, sizeof( value ) );
@@ -100,7 +98,7 @@ static uint32_t terrain3dReadU32Unaligned( const uint8_t *pBytes, const size_t n
 	return value;
 }
 
-static uint32_t terrain3dMaterialMaskFromControlImage( const Ref<Image> &rControl ) {
+static uint32_t t3dGpuRegionCacheMaterialMaskFromControlImage( const Ref<Image> &rControl ) {
 	if ( rControl.is_null() || rControl->is_empty() || rControl->get_format() != Image::FORMAT_RF ) {
 		return 1u;
 	}
@@ -112,16 +110,16 @@ static uint32_t terrain3dMaterialMaskFromControlImage( const Ref<Image> &rContro
 	uint32_t mask = 0u;
 	const size_t texels = ( size_t ) ( bytes.size() ) / 4u;
 	for ( size_t index = 0; index < texels; ++index ) {
-		const uint32_t control = terrain3dReadU32Unaligned( pRead, index * 4u );
+		const uint32_t control = t3dGpuRegionCacheReadU32Unaligned( pRead, index * 4u );
 		mask |= 1u << ( uint32_t ) ( getBase( control ) & 31u );
 		mask |= 1u << ( uint32_t ) ( getOverlay( control ) & 31u );
 	}
 	return mask != 0u ? mask : 1u;
 }
 
-EA_FORCE_INLINE static uint8_t terrain3dColorToByte( const float fValue ) { return ( uint8_t ) ( CLAMP( Math::round( fValue * TERRAIN3D_BYTE_MAX_FLOAT ), 0.0f, TERRAIN3D_BYTE_MAX_FLOAT ) ); }
+EA_FORCE_INLINE static uint8_t t3dGpuRegionCacheColorToByte( const float fValue ) { return ( uint8_t ) ( CLAMP( Math::round( fValue * TERRAIN3D_BYTE_MAX_FLOAT ), 0.0f, TERRAIN3D_BYTE_MAX_FLOAT ) ); }
 
-static int terrain3dMaterialIntParam( T3DMaterial *pMaterial, const char *pszName, const int nDefault ) {
+static int t3dGpuRegionCacheMaterialIntParam( T3DMaterial *pMaterial, const char *pszName, const int nDefault ) {
 	if ( !pMaterial ) {
 		return nDefault;
 	}
@@ -129,14 +127,14 @@ static int terrain3dMaterialIntParam( T3DMaterial *pMaterial, const char *pszNam
 	return value.get_type() == Variant::NIL ? nDefault : ( int ) ( value );
 }
 
-EA_FORCE_INLINE static size_t terrain3dGpuImageBytes( const Ref<Image> &rImage ) { return rImage.is_valid() ? ( size_t ) ( rImage->get_data().size() ) : 0u; }
+EA_FORCE_INLINE static size_t t3dGpuRegionCacheGpuImageBytes( const Ref<Image> &rImage ) { return rImage.is_valid() ? ( size_t ) ( rImage->get_data().size() ) : 0u; }
 
-class T3DLastScopeTimer {
+class T3DGpuRegionCacheLastScopeTimer {
 	uint64_t m_nStartedUsec = 0u;
 	uint64_t *m_pElapsedUsec = nullptr;
 
 public:
-	T3DLastScopeTimer( uint64_t &nElapsedUsec, const bool bEnabled ) {
+	T3DGpuRegionCacheLastScopeTimer( uint64_t &nElapsedUsec, const bool bEnabled ) {
 		nElapsedUsec = 0u;
 		if ( !bEnabled ) {
 			return;
@@ -145,7 +143,7 @@ public:
 		Time *time = Time::get_singleton();
 		m_nStartedUsec = time ? time->get_ticks_usec() : 0u;
 	}
-	~T3DLastScopeTimer( void ) {
+	~T3DGpuRegionCacheLastScopeTimer( void ) {
 		if ( !m_pElapsedUsec ) {
 			return;
 		}
@@ -155,15 +153,15 @@ public:
 	}
 };
 
-class T3DProfileScopeTimer {
+class T3DGpuRegionCacheProfileScopeTimer {
 	uint64_t m_nStartedUsec = 0u;
 	uint64_t *m_pElapsedUsec = nullptr;
 	const uint64_t *m_pRequestUsec = nullptr;
 	uint64_t *m_pEndToEndUsec = nullptr;
 
 public:
-	EA_FORCE_INLINE T3DProfileScopeTimer( uint64_t &nElapsedUsec, const uint64_t &nRequestUsec, uint64_t &nEndToEndUsec ) : m_pElapsedUsec( &nElapsedUsec ), m_pRequestUsec( &nRequestUsec ), m_pEndToEndUsec( &nEndToEndUsec ) { Time *time = Time::get_singleton(); m_nStartedUsec = time ? time->get_ticks_usec() : 0u; }
-	~T3DProfileScopeTimer( void ) {
+	EA_FORCE_INLINE T3DGpuRegionCacheProfileScopeTimer( uint64_t &nElapsedUsec, const uint64_t &nRequestUsec, uint64_t &nEndToEndUsec ) : m_pElapsedUsec( &nElapsedUsec ), m_pRequestUsec( &nRequestUsec ), m_pEndToEndUsec( &nEndToEndUsec ) { Time *time = Time::get_singleton(); m_nStartedUsec = time ? time->get_ticks_usec() : 0u; }
+	~T3DGpuRegionCacheProfileScopeTimer( void ) {
 		Time *time = Time::get_singleton();
 		const uint64_t finished = time ? time->get_ticks_usec() : m_nStartedUsec;
 		if ( m_pElapsedUsec ) {
@@ -174,8 +172,6 @@ public:
 		}
 	}
 };
-
-} // namespace
 
 T3DGpuRegionCache::T3DGpuRegionCache(
 	T3DRegionRepository &rRepository,
@@ -326,7 +322,7 @@ Ref<Image> T3DGpuRegionCache::makeMiddleCompositeImage(
 		const int control_y = MIN( rControl->get_height() - 1, y * rControl->get_height() / height );
 		for ( int x = 0; x < width; ++x ) {
 			const int control_x = MIN( rControl->get_width() - 1, x * rControl->get_width() / width );
-			const uint32_t control = terrain3dReadU32Unaligned( pControl,
+			const uint32_t control = t3dGpuRegionCacheReadU32Unaligned( pControl,
 				( size_t ) ( control_y * rControl->get_width() + control_x ) * 4u );
 			const int base = ( int ) ( getBase( control ) );
 			const int overlay = ( int ) ( getOverlay( control ) );
@@ -365,9 +361,9 @@ Ref<Image> T3DGpuRegionCache::makeMiddleCompositeImage(
 			const float authored_r = ( float ) ( pColor[offset] ) / 255.0f;
 			const float authored_g = ( float ) ( pColor[offset + 1u] ) / 255.0f;
 			const float authored_b = ( float ) ( pColor[offset + 2u] ) / 255.0f;
-			pWrite[offset] = terrain3dColorToByte( authored_r * material_color.r );
-			pWrite[offset + 1u] = terrain3dColorToByte( authored_g * material_color.g );
-			pWrite[offset + 2u] = terrain3dColorToByte( authored_b * material_color.b );
+			pWrite[offset] = t3dGpuRegionCacheColorToByte( authored_r * material_color.r );
+			pWrite[offset + 1u] = t3dGpuRegionCacheColorToByte( authored_g * material_color.g );
+			pWrite[offset + 2u] = t3dGpuRegionCacheColorToByte( authored_b * material_color.b );
 			pWrite[offset + 3u] = isHole( control ) ? 0u :
 				( uint8_t ) ( 0x80u | ( ( uint32_t ) ( pColor[offset + 3u] ) * 127u + 127u ) / 255u );
 		}
@@ -421,7 +417,7 @@ Ref<Image> T3DGpuRegionCache::makeGpuRenderControlImage( const Vector2i &vLocati
 	for ( int z = 0; z < m_regionRepository.getRegionSize(); ++z ) {
 		for ( int x = 0; x < m_regionRepository.getRegionSize(); ++x ) {
 			uint32_t center = TERRAIN3D_REGION_DEFAULT_CONTROL;
-			if ( !terrain3dReadCookControl( sources, m_regionRepository.getRegionSize(), x, z, center ) ) {
+			if ( !t3dGpuRegionCacheReadCookControl( sources, m_regionRepository.getRegionSize(), x, z, center ) ) {
 				std::memcpy( pWrite + ( size_t ) ( z * m_regionRepository.getRegionSize() + x ) * sizeof( uint32_t ), &center, sizeof( uint32_t ) );
 				continue;
 			}
@@ -434,7 +430,7 @@ Ref<Image> T3DGpuRegionCache::makeGpuRenderControlImage( const Vector2i &vLocati
 			for ( int dz = -TERRAIN3D_RENDER_CONTROL_BLEND_RADIUS; dz <= TERRAIN3D_RENDER_CONTROL_BLEND_RADIUS; ++dz ) {
 				for ( int dx = -TERRAIN3D_RENDER_CONTROL_BLEND_RADIUS; dx <= TERRAIN3D_RENDER_CONTROL_BLEND_RADIUS; ++dx ) {
 					uint32_t pControl = TERRAIN3D_REGION_DEFAULT_CONTROL;
-					if ( !terrain3dReadCookControl( sources, m_regionRepository.getRegionSize(), x + dx, z + dz, pControl ) || isAuto( pControl ) || isHole( pControl ) ) {
+					if ( !t3dGpuRegionCacheReadCookControl( sources, m_regionRepository.getRegionSize(), x + dx, z + dz, pControl ) || isAuto( pControl ) || isHole( pControl ) ) {
 						continue;
 					}
 					const uint64_t spatial_weight = ( uint64_t ) ( TERRAIN3D_RENDER_CONTROL_KERNEL[dx + TERRAIN3D_RENDER_CONTROL_BLEND_RADIUS] * TERRAIN3D_RENDER_CONTROL_KERNEL[dz + TERRAIN3D_RENDER_CONTROL_BLEND_RADIUS] );
@@ -1085,7 +1081,7 @@ int T3DGpuRegionCache::collectDesiredGpuRegions(
 		return output_count < capacity;
 	};
 	auto append_state = [&]( const t3dRegionStreamingState_t wanted ) {
-		terrain3dForEachSquareRing( rCenter, m_regionRepository.getRegionMapSize(),
+		t3dGpuRegionCacheForEachSquareRing( rCenter, m_regionRepository.getRegionMapSize(),
 			[&]( const Vector2i &location ) { return append_location( location, wanted ); } );
 	};
 
@@ -1157,7 +1153,7 @@ bool T3DGpuRegionCache::uploadGpuRegionLayer(
 	const t3dMapType_t eMapType
 ) {
 	uint64_t prepared_request_usec = 0u;
-	const T3DProfileScopeTimer publicationTimer(
+	const T3DGpuRegionCacheProfileScopeTimer publicationTimer(
 		m_nGpuPreparePublicationUsecLast,
 		prepared_request_usec, m_nGpuPrepareEndToEndUsecLast
 	);
@@ -1299,7 +1295,7 @@ bool T3DGpuRegionCache::uploadGpuRegionLayer(
 		bUploadOk = m_generatedHeightMaps.update( pHeight, nLayer );
 		if ( bUploadOk ) {
 			++m_nGpuRegionHeightUpdatesLastTick;
-			const size_t bytes = terrain3dGpuImageBytes( pHeight );
+			const size_t bytes = t3dGpuRegionCacheGpuImageBytes( pHeight );
 			m_nGpuRegionHeightBytesLastTick += bytes;
 			m_nGpuRegionUploadBytesLastTick += bytes;
 		}
@@ -1308,7 +1304,7 @@ bool T3DGpuRegionCache::uploadGpuRegionLayer(
 		}
 		if ( bUploadOk && bDerivedChannelEnabled ) {
 			++m_nGpuRegionDerivedUpdatesLastTick;
-			const size_t bytes = terrain3dGpuImageBytes( pDerived );
+			const size_t bytes = t3dGpuRegionCacheGpuImageBytes( pDerived );
 			m_nGpuRegionDerivedBytesLastTick += bytes;
 			m_nGpuRegionUploadBytesLastTick += bytes;
 		}
@@ -1320,7 +1316,7 @@ bool T3DGpuRegionCache::uploadGpuRegionLayer(
 		bUploadOk = m_generatedControlMaps.update( pControl, nLayer );
 		if ( bUploadOk ) {
 			++m_nGpuRegionControlUpdatesLastTick;
-			const size_t bytes = terrain3dGpuImageBytes( pControl );
+			const size_t bytes = t3dGpuRegionCacheGpuImageBytes( pControl );
 			m_nGpuRegionControlBytesLastTick += bytes;
 			m_nGpuRegionUploadBytesLastTick += bytes;
 		}
@@ -1329,7 +1325,7 @@ bool T3DGpuRegionCache::uploadGpuRegionLayer(
 		bUploadOk = m_generatedColorMaps.update( pColor, nLayer );
 		if ( bUploadOk ) {
 			++m_nGpuRegionColorUpdatesLastTick;
-			const size_t bytes = terrain3dGpuImageBytes( pColor );
+			const size_t bytes = t3dGpuRegionCacheGpuImageBytes( pColor );
 			m_nGpuRegionColorBytesLastTick += bytes;
 			m_nGpuRegionUploadBytesLastTick += bytes;
 		}
@@ -1337,7 +1333,7 @@ bool T3DGpuRegionCache::uploadGpuRegionLayer(
 	if ( bUploadOk && eMapType == REGION_TYPE_MAX ) {
 		bUploadOk = m_generatedMiddleCompositeMaps.update( pMiddleComposite, nLayer );
 		if ( bUploadOk ) {
-			m_nGpuRegionUploadBytesLastTick += terrain3dGpuImageBytes( pMiddleComposite );
+			m_nGpuRegionUploadBytesLastTick += t3dGpuRegionCacheGpuImageBytes( pMiddleComposite );
 		}
 	}
 	if ( !bUploadOk ) {
@@ -1355,12 +1351,12 @@ bool T3DGpuRegionCache::uploadGpuRegionLayer(
 	}
 	m_szGpuRegionLayerChannelFlags[nLayer] = published_flags;
 	uint32_t material_mask = bCookedPage ? cooked_material_mask :
-		( pControl.is_valid() ? terrain3dMaterialMaskFromControlImage( pControl ) : 1u );
+		( pControl.is_valid() ? t3dGpuRegionCacheMaterialMaskFromControlImage( pControl ) : 1u );
 	if ( m_pTerrain ) {
 		const Ref<T3DMaterial> pMaterial = m_pTerrain->getMaterial();
 		if ( pMaterial.is_valid() && pMaterial->getAutoShaderEnabled() ) {
-			const int auto_base = CLAMP( terrain3dMaterialIntParam( pMaterial.ptr(), "auto_base_texture", 0 ), 0, 31 );
-			const int auto_overlay = CLAMP( terrain3dMaterialIntParam( pMaterial.ptr(), "auto_overlay_texture", 1 ), 0, 31 );
+			const int auto_base = CLAMP( t3dGpuRegionCacheMaterialIntParam( pMaterial.ptr(), "auto_base_texture", 0 ), 0, 31 );
+			const int auto_overlay = CLAMP( t3dGpuRegionCacheMaterialIntParam( pMaterial.ptr(), "auto_overlay_texture", 1 ), 0, 31 );
 			material_mask |= 1u << ( uint32_t ) ( auto_base );
 			material_mask |= 1u << ( uint32_t ) ( auto_overlay );
 		}
@@ -1442,7 +1438,7 @@ bool T3DGpuRegionCache::configure(
 }
 
 T3DGpuRegionCacheUpdateResult T3DGpuRegionCache::update( const T3DResidencyFrameState &rFrame, const bool bForce, const int nEffectiveUploadLayers, T3DCompute *pCompute ) {
-	const T3DLastScopeTimer serviceTimer( m_nGpuRegionServiceUsecLast, rFrame.bProfilingEnabled );
+	const T3DGpuRegionCacheLastScopeTimer serviceTimer( m_nGpuRegionServiceUsecLast, rFrame.bProfilingEnabled );
 	m_nGpuRegionStallFlagsLastTick = TERRAIN3D_PROFILE_STALL_NONE;
 	m_runtimePageStore.resetFrameStats();
 	m_pCompute = pCompute;

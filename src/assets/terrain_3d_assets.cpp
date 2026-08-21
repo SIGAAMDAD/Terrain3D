@@ -25,8 +25,6 @@
 // Private Functions
 ///////////////////////////
 
-namespace {
-
 static constexpr uint64_t TERRAIN3D_RUNTIME_MATERIAL_MAGIC = 0x5433444D41543031ull; // T3DMAT01
 static constexpr uint32_t TERRAIN3D_RUNTIME_MATERIAL_VERSION = 4u;
 static constexpr int TERRAIN3D_RUNTIME_MATERIAL_SPARE_LAYERS = 2;
@@ -42,7 +40,7 @@ static constexpr uint64_t TERRAIN3D_RUNTIME_MATERIAL_DESCRIPTOR_TABLE_BYTES =
 static constexpr uint64_t TERRAIN3D_RUNTIME_MATERIAL_DATA_OFFSET =
 	TERRAIN3D_RUNTIME_MATERIAL_HEADER_BYTES + TERRAIN3D_RUNTIME_MATERIAL_DESCRIPTOR_TABLE_BYTES;
 
-static uint32_t terrain3dMaterialChecksum( const uint8_t *const pData, const size_t nSize ) {
+static uint32_t t3dAssetsMaterialChecksum( const uint8_t *const pData, const size_t nSize ) {
 	uint32_t hash = 2166136261u;
 	for ( size_t index = 0; index < nSize; ++index ) {
 		hash ^= ( uint32_t ) ( pData[index] );
@@ -51,14 +49,14 @@ static uint32_t terrain3dMaterialChecksum( const uint8_t *const pData, const siz
 	return hash;
 }
 
-static void terrain3dMaterialHashU64( uint64_t &rHash, const uint64_t nValue ) {
+static void t3dAssetsMaterialHashU64( uint64_t &rHash, const uint64_t nValue ) {
 	for ( int shift = 0; shift < 64; shift += 8 ) {
 		rHash ^= ( nValue >> shift ) & 0xffu;
 		rHash *= 1099511628211ull;
 	}
 }
 
-static Color terrain3dMaterialAverageAlbedo( const Ref<Image> &rImage ) {
+static Color t3dAssetsMaterialAverageAlbedo( const Ref<Image> &rImage ) {
 	if ( rImage.is_null() || rImage->is_empty() ) {
 		return COLOR_WHITE;
 	}
@@ -73,16 +71,16 @@ static Color terrain3dMaterialAverageAlbedo( const Ref<Image> &rImage ) {
 	return pImage->get_pixel( 0, 0 );
 }
 
-static bool terrain3dIsNativePackedSurfaceFormat( const Image::Format format ) {
+static bool t3dAssetsIsNativePackedSurfaceFormat( const Image::Format format ) {
 	// Terrain3D's optimized surface uses all four channels (normal XY, roughness, AO).
 	// BC3 and BC7 preserve those channels and are directly usable by the sampler.
 	return format == Image::FORMAT_RGBA8 || format == Image::FORMAT_DXT5 ||
 		format == Image::FORMAT_BPTC_RGBA;
 }
 
-EA_FORCE_INLINE static bool terrain3dIsSupportedNativeArrayFormat( const Image::Format format ) { return format == Image::FORMAT_DXT1 || format == Image::FORMAT_DXT5 || format == Image::FORMAT_BPTC_RGBA || format == Image::FORMAT_RGTC_R || format == Image::FORMAT_RGTC_RG; }
+EA_FORCE_INLINE static bool t3dAssetsIsSupportedNativeArrayFormat( const Image::Format format ) { return format == Image::FORMAT_DXT1 || format == Image::FORMAT_DXT5 || format == Image::FORMAT_BPTC_RGBA || format == Image::FORMAT_RGTC_R || format == Image::FORMAT_RGTC_RG; }
 
-static Error terrain3dCompressArrayImageToFormat( const Ref<Image> &rImage, const Image::Format format ) {
+static Error t3dAssetsCompressArrayImageToFormat( const Ref<Image> &rImage, const Image::Format format ) {
 	if ( rImage.is_null() ) {
 		return ERR_INVALID_PARAMETER;
 	}
@@ -107,11 +105,11 @@ static Error terrain3dCompressArrayImageToFormat( const Ref<Image> &rImage, cons
 	}
 }
 
-static Ref<Image> terrain3dMakeArrayDefault(
+static Ref<Image> t3dAssetsMakeArrayDefault(
 	const Vector2i &rSize, const Image::Format format,
 	const bool bMipmaps, const Color &rDefaultColor
 ) {
-	if ( !terrain3dIsSupportedNativeArrayFormat( format ) ) {
+	if ( !t3dAssetsIsSupportedNativeArrayFormat( format ) ) {
 		return T3DUtil::getFilledImage( rSize, rDefaultColor, bMipmaps, format );
 	}
 	Image::Format working_format = Image::FORMAT_RGBA8;
@@ -123,19 +121,19 @@ static Ref<Image> terrain3dMakeArrayDefault(
 		working_format = Image::FORMAT_RG8;
 	}
 	Ref<Image> pImage = T3DUtil::getFilledImage( rSize, rDefaultColor, bMipmaps, working_format );
-	if ( pImage.is_null() || terrain3dCompressArrayImageToFormat( pImage, format ) != OK ||
+	if ( pImage.is_null() || t3dAssetsCompressArrayImageToFormat( pImage, format ) != OK ||
 		pImage->get_format() != format ) {
 		return Ref<Image>();
 	}
 	return pImage;
 }
 
-static Ref<Image> terrain3dPrepareArrayImage(
+static Ref<Image> t3dAssetsPrepareArrayImage(
 	const Ref<Texture2D> &rTexture, const Vector2i &rSize,
 	const Image::Format format, const bool bMipmaps, const Color &rDefaultColor
 ) {
 	if ( rTexture.is_null() ) {
-		return terrain3dMakeArrayDefault( rSize, format, bMipmaps, rDefaultColor );
+		return t3dAssetsMakeArrayDefault( rSize, format, bMipmaps, rDefaultColor );
 	}
 	Ref<Image> pImage = rTexture->get_image();
 	if ( pImage.is_null() || pImage->is_empty() ) {
@@ -156,11 +154,11 @@ static Ref<Image> terrain3dPrepareArrayImage(
 	if ( pImage->get_size() != rSize ) {
 		pImage->resize( rSize.x, rSize.y, Image::INTERPOLATE_LANCZOS );
 	}
-	if ( terrain3dIsSupportedNativeArrayFormat( format ) ) {
+	if ( t3dAssetsIsSupportedNativeArrayFormat( format ) ) {
 		if ( bMipmaps && pImage->generate_mipmaps() != OK ) {
 			return Ref<Image>();
 		}
-		if ( terrain3dCompressArrayImageToFormat( pImage, format ) != OK ) {
+		if ( t3dAssetsCompressArrayImageToFormat( pImage, format ) != OK ) {
 			return Ref<Image>();
 		}
 	} else {
@@ -175,9 +173,7 @@ static Ref<Image> terrain3dPrepareArrayImage(
 		pImage : Ref<Image>();
 }
 
-EA_FORCE_INLINE static void terrain3dReleaseGeneratedReplacements( T3DGeneratedTexture &rAlbedo, T3DGeneratedTexture &rNormal, T3DGeneratedTexture &rSurface, T3DGeneratedTexture &rDisplacement ) { rAlbedo.clear(); rNormal.clear(); rSurface.clear(); rDisplacement.clear(); }
-
-} // namespace
+EA_FORCE_INLINE static void t3dAssetsReleaseGeneratedReplacements( T3DGeneratedTexture &rAlbedo, T3DGeneratedTexture &rNormal, T3DGeneratedTexture &rSurface, T3DGeneratedTexture &rDisplacement ) { rAlbedo.clear(); rNormal.clear(); rSurface.clear(); rDisplacement.clear(); }
 
 String T3DAssets::getRuntimeMaterialCachePath( void ) const {
 	if ( !m_pTerrain || m_pTerrain->getDataDirectory().is_empty() ) {
@@ -188,23 +184,23 @@ String T3DAssets::getRuntimeMaterialCachePath( void ) const {
 
 uint64_t T3DAssets::computeRuntimeMaterialSourceSignature( void ) const {
 	uint64_t hash = 1469598103934665603ull;
-	terrain3dMaterialHashU64( hash, ( uint64_t ) ( m_texturePackingMode ) );
-	terrain3dMaterialHashU64( hash, ( uint64_t ) ( m_textureList.size() ) );
-	terrain3dMaterialHashU64( hash, m_pTerrain ? ( uint64_t ) ( m_pTerrain->getFarMaterialResolution() ) : 128u );
+	t3dAssetsMaterialHashU64( hash, ( uint64_t ) ( m_texturePackingMode ) );
+	t3dAssetsMaterialHashU64( hash, ( uint64_t ) ( m_textureList.size() ) );
+	t3dAssetsMaterialHashU64( hash, m_pTerrain ? ( uint64_t ) ( m_pTerrain->getFarMaterialResolution() ) : 128u );
 	for ( int index = 0; index < m_textureList.size(); ++index ) {
 		const Ref<T3DTextureAsset> pAsset = m_textureList[index];
-		terrain3dMaterialHashU64( hash, ( uint64_t ) ( index ) );
+		t3dAssetsMaterialHashU64( hash, ( uint64_t ) ( index ) );
 		if ( pAsset.is_null() ) {
 			continue;
 		}
 		auto append_resource = [&]( const auto &rResource ) {
 			if ( rResource.is_null() ) {
-				terrain3dMaterialHashU64( hash, 0u );
+				t3dAssetsMaterialHashU64( hash, 0u );
 				return;
 			}
 			const String path = rResource->get_path();
-			terrain3dMaterialHashU64( hash, ( uint64_t ) ( path.hash() ) );
-			terrain3dMaterialHashU64( hash, !path.is_empty() && FileAccess::file_exists( path ) ?
+			t3dAssetsMaterialHashU64( hash, ( uint64_t ) ( path.hash() ) );
+			t3dAssetsMaterialHashU64( hash, !path.is_empty() && FileAccess::file_exists( path ) ?
 				FileAccess::get_modified_time( path ) : 0u );
 		};
 		append_resource( pAsset->m_pAlbedoTexture );
@@ -416,7 +412,7 @@ Ref<Image> T3DAssets::loadRuntimeMaterialCookedImage( const int nLogicalId, cons
 	pFile->seek( info.nOffset );
 	const PackedByteArray bytes = pFile->get_buffer( info.nSize );
 	if ( bytes.size() != ( int64_t ) ( info.nSize ) ||
-		terrain3dMaterialChecksum( bytes.ptr(), ( size_t ) ( bytes.size() ) ) != info.nChecksum ) {
+		t3dAssetsMaterialChecksum( bytes.ptr(), ( size_t ) ( bytes.size() ) ) != info.nChecksum ) {
 		return Ref<Image>();
 	}
 	return Image::create_from_data( info.nWidth, info.nHeight, info.bMipmaps != 0u,
@@ -461,7 +457,7 @@ bool T3DAssets::initializeRuntimeMaterialPhysicalArrays( const int nLayerLimit )
 		!create_channel_array( replacement_normal, RUNTIME_MATERIAL_CHANNEL_NORMAL ) ||
 		!create_channel_array( replacement_surface, RUNTIME_MATERIAL_CHANNEL_SURFACE ) ||
 		!create_channel_array( replacement_displacement, RUNTIME_MATERIAL_CHANNEL_DISPLACEMENT ) ) {
-		terrain3dReleaseGeneratedReplacements( replacement_albedo, replacement_normal,
+		t3dAssetsReleaseGeneratedReplacements( replacement_albedo, replacement_normal,
 			replacement_surface, replacement_displacement );
 		return false;
 	}
@@ -469,7 +465,7 @@ bool T3DAssets::initializeRuntimeMaterialPhysicalArrays( const int nLayerLimit )
 	m_generatedNormalTextures.swap( replacement_normal );
 	m_generatedSurfaceTextures.swap( replacement_surface );
 	m_generatedDisplacementTextures.swap( replacement_displacement );
-	terrain3dReleaseGeneratedReplacements( replacement_albedo, replacement_normal,
+	t3dAssetsReleaseGeneratedReplacements( replacement_albedo, replacement_normal,
 		replacement_surface, replacement_displacement );
 
 	m_nRuntimeMaterialPhysicalLayers = physical_layers;
@@ -877,13 +873,13 @@ Dictionary T3DAssets::cookRuntimeMaterialCache( void ) {
 				break;
 			}
 			if ( channel == RUNTIME_MATERIAL_CHANNEL_ALBEDO ) {
-				descriptors[( size_t ) ( logical )].averageAlbedo = terrain3dMaterialAverageAlbedo( pImage );
+				descriptors[( size_t ) ( logical )].averageAlbedo = t3dAssetsMaterialAverageAlbedo( pImage );
 			}
 			const PackedByteArray bytes = pImage->get_data();
 			t3dRuntimeMaterialImageInfo_t &info = descriptors[( size_t ) ( logical )].channels[( size_t ) ( channel )];
 			info.nOffset = pFile->get_position();
 			info.nSize = ( uint32_t ) ( bytes.size() );
-			info.nChecksum = terrain3dMaterialChecksum( bytes.ptr(), ( size_t ) ( bytes.size() ) );
+			info.nChecksum = t3dAssetsMaterialChecksum( bytes.ptr(), ( size_t ) ( bytes.size() ) );
 			info.nWidth = pImage->get_width();
 			info.nHeight = pImage->get_height();
 			info.nFormat = ( int32_t ) ( pImage->get_format() );
@@ -1309,7 +1305,7 @@ void T3DAssets::validateArrayMember(
 	const Image::Format eFormat = pImage->get_format();
 	const bool bMipmaps = pImage->has_mipmaps();
 	const bool bAcceptedSurfaceCompression = bAllowCompressedSurface &&
-		eRequiredFormat == Image::FORMAT_RGBA8 && terrain3dIsNativePackedSurfaceFormat( eFormat );
+		eRequiredFormat == Image::FORMAT_RGBA8 && t3dAssetsIsNativePackedSurfaceFormat( eFormat );
 	if ( eRequiredFormat != Image::FORMAT_MAX && eFormat != eRequiredFormat && !bAcceptedSurfaceCompression ) {
 		m_pTerrain->setWarning( WARN_MISMATCHED_FORMAT, true );
 		LOG( ERROR, "Texture ID ", rAsset->getId(), " ", rLabel, " must use format ", ( int ) ( eRequiredFormat ),
@@ -1446,7 +1442,7 @@ void T3DAssets::updateTextureFiles( void ) {
 		TypedArray<Image> layers;
 		for ( const Ref<T3DTextureAsset> pAsset : m_textureList ) {
 			const Ref<Texture2D> pTexture = pAsset.is_valid() ? pAsset->m_pAlbedoTexture : Ref<Texture2D>();
-			const Ref<Image> pImage = terrain3dPrepareArrayImage( pTexture, albedoLayout.vSize, albedoLayout.eFormat,
+			const Ref<Image> pImage = t3dAssetsPrepareArrayImage( pTexture, albedoLayout.vSize, albedoLayout.eFormat,
 				albedoLayout.bMipmaps, COLOR_CHECKED );
 			if ( pImage.is_null() ) {
 				bReplacementOk = false;
@@ -1464,7 +1460,7 @@ void T3DAssets::updateTextureFiles( void ) {
 		TypedArray<Image> surface_layers;
 		for ( const Ref<T3DTextureAsset> pAsset : m_textureList ) {
 			const Ref<Texture2D> pTexture = pAsset.is_valid() ? pAsset->getEffectiveSurfaceTexture() : Ref<Texture2D>();
-			const Ref<Image> pImage = terrain3dPrepareArrayImage( pTexture, secondaryLayout.vSize, secondaryLayout.eFormat,
+			const Ref<Image> pImage = t3dAssetsPrepareArrayImage( pTexture, secondaryLayout.vSize, secondaryLayout.eFormat,
 				secondaryLayout.bMipmaps, Color( 0.5f, 0.5f, 1.0f, 1.0f ) );
 			if ( pImage.is_null() ) {
 				bReplacementOk = false;
@@ -1481,7 +1477,7 @@ void T3DAssets::updateTextureFiles( void ) {
 			TypedArray<Image> displacement_layers;
 			for ( const Ref<T3DTextureAsset> pAsset : m_textureList ) {
 				const Ref<Texture2D> pTexture = pAsset.is_valid() ? pAsset->getEffectiveDisplacementTexture() : Ref<Texture2D>();
-				const Ref<Image> pImage = terrain3dPrepareArrayImage( pTexture, displacementLayout.vSize,
+				const Ref<Image> pImage = t3dAssetsPrepareArrayImage( pTexture, displacementLayout.vSize,
 					displacementLayout.eFormat, displacementLayout.bMipmaps, Color( 0.5f, 0.0f, 0.0f, 1.0f ) );
 				if ( pImage.is_null() ) {
 					bReplacementOk = false;
@@ -1498,7 +1494,7 @@ void T3DAssets::updateTextureFiles( void ) {
 		TypedArray<Image> layers;
 		for ( const Ref<T3DTextureAsset> pAsset : m_textureList ) {
 			const Ref<Texture2D> pTexture = pAsset.is_valid() ? pAsset->m_pNormalTexture : Ref<Texture2D>();
-			const Ref<Image> pImage = terrain3dPrepareArrayImage( pTexture, secondaryLayout.vSize, secondaryLayout.eFormat,
+			const Ref<Image> pImage = t3dAssetsPrepareArrayImage( pTexture, secondaryLayout.vSize, secondaryLayout.eFormat,
 				secondaryLayout.bMipmaps, COLOR_NORMAL );
 			if ( pImage.is_null() ) {
 				bReplacementOk = false;
@@ -1513,7 +1509,7 @@ void T3DAssets::updateTextureFiles( void ) {
 	}
 
 	if ( !bReplacementOk ) {
-		terrain3dReleaseGeneratedReplacements( replacement_albedo, replacement_normal,
+		t3dAssetsReleaseGeneratedReplacements( replacement_albedo, replacement_normal,
 			replacement_surface, replacement_displacement );
 		LOG( ERROR, "Terrain texture-array rebuild failed. Keeping the last complete generated texture set." );
 		return;
@@ -1542,7 +1538,7 @@ void T3DAssets::updateTextureFiles( void ) {
 			continue;
 		}
 		if ( pAsset->m_pAlbedoTexture.is_null() ) {
-			const Ref<Image> pImage = terrain3dMakeArrayDefault( albedoLayout.vSize, albedoLayout.eFormat,
+			const Ref<Image> pImage = t3dAssetsMakeArrayDefault( albedoLayout.vSize, albedoLayout.eFormat,
 				albedoLayout.bMipmaps, COLOR_CHECKED );
 			if ( pImage.is_valid() ) {
 				pAsset->m_pAlbedoTexture = ImageTexture::create_from_image( pImage );
@@ -1550,21 +1546,21 @@ void T3DAssets::updateTextureFiles( void ) {
 		}
 		if ( bPackedPbr ) {
 			if ( pAsset->m_pPackedPbrResource.is_null() && pAsset->m_pSurfaceTexture.is_null() ) {
-				const Ref<Image> pImage = terrain3dMakeArrayDefault( secondaryLayout.vSize, secondaryLayout.eFormat,
+				const Ref<Image> pImage = t3dAssetsMakeArrayDefault( secondaryLayout.vSize, secondaryLayout.eFormat,
 					secondaryLayout.bMipmaps, Color( 0.5f, 0.5f, 1.0f, 1.0f ) );
 				if ( pImage.is_valid() ) {
 					pAsset->m_pSurfaceTexture = ImageTexture::create_from_image( pImage );
 				}
 			}
 			if ( bUseDisplacement && pAsset->m_pPackedPbrResource.is_null() && pAsset->m_pDisplacementTexture.is_null() ) {
-				const Ref<Image> pImage = terrain3dMakeArrayDefault( displacementLayout.vSize, displacementLayout.eFormat,
+				const Ref<Image> pImage = t3dAssetsMakeArrayDefault( displacementLayout.vSize, displacementLayout.eFormat,
 					displacementLayout.bMipmaps, Color( 0.5f, 0.0f, 0.0f, 1.0f ) );
 				if ( pImage.is_valid() ) {
 					pAsset->m_pDisplacementTexture = ImageTexture::create_from_image( pImage );
 				}
 			}
 		} else if ( pAsset->m_pNormalTexture.is_null() ) {
-			const Ref<Image> pImage = terrain3dMakeArrayDefault( secondaryLayout.vSize, secondaryLayout.eFormat,
+			const Ref<Image> pImage = t3dAssetsMakeArrayDefault( secondaryLayout.vSize, secondaryLayout.eFormat,
 				secondaryLayout.bMipmaps, COLOR_NORMAL );
 			if ( pImage.is_valid() ) {
 				pAsset->m_pNormalTexture = ImageTexture::create_from_image( pImage );
@@ -1572,7 +1568,7 @@ void T3DAssets::updateTextureFiles( void ) {
 		}
 	}
 
-	terrain3dReleaseGeneratedReplacements( replacement_albedo, replacement_normal,
+	t3dAssetsReleaseGeneratedReplacements( replacement_albedo, replacement_normal,
 		replacement_surface, replacement_displacement );
 	resetRuntimeMaterialCacheState( false );
 

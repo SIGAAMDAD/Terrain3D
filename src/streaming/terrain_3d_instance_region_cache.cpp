@@ -13,14 +13,12 @@
 
 #include <algorithm>
 
-namespace {
-
-class T3DCacheScopeTimer {
+class T3DInstanceRegionCacheScopeTimer {
 	uint64_t m_startedUsec = 0u;
 	uint64_t *m_pElapsedUsec = nullptr;
 
 public:
-	T3DCacheScopeTimer( uint64_t &nElapsedUsec, const bool bEnabled ) {
+	T3DInstanceRegionCacheScopeTimer( uint64_t &nElapsedUsec, const bool bEnabled ) {
 		nElapsedUsec = 0u;
 		if ( !bEnabled ) {
 			return;
@@ -29,7 +27,7 @@ public:
 		Time *const pTime = Time::get_singleton();
 		m_startedUsec = pTime ? pTime->get_ticks_usec() : 0u;
 	}
-	~T3DCacheScopeTimer( void ) {
+	~T3DInstanceRegionCacheScopeTimer( void ) {
 		if ( !m_pElapsedUsec ) {
 			return;
 		}
@@ -40,7 +38,7 @@ public:
 };
 
 template <typename Callback>
-bool forEachSquareRing( const Vector2i &rCenter, const int nMaxRadius, Callback &&rCallback ) {
+static bool t3dInstanceRegionCacheForEachSquareRing( const Vector2i &rCenter, const int nMaxRadius, Callback &&rCallback ) {
 	for ( int radius = 0; radius < nMaxRadius; ++radius ) {
 		if ( radius == 0 ) {
 			if ( !rCallback( rCenter ) ) {
@@ -63,8 +61,6 @@ bool forEachSquareRing( const Vector2i &rCenter, const int nMaxRadius, Callback 
 	}
 	return true;
 }
-
-} // namespace
 
 void T3DInstanceRegionCacheChanges::recordLoaded( const Vector2i &vLocation ) {
 	if ( nLoaded < TERRAIN3D_INSTANCE_CACHE_MAX_PAGES ) {
@@ -303,7 +299,7 @@ int T3DInstanceRegionCache::collectDesired(
 	for ( int stateValue = ( int ) ( TERRAIN3D_REGION_STREAMING_ACTIVE );
 		stateValue >= ( int ) ( TERRAIN3D_REGION_STREAMING_HOT ) && outputCount < capacity; --stateValue ) {
 		const t3dRegionStreamingState_t wanted = ( t3dRegionStreamingState_t ) ( stateValue );
-		forEachSquareRing( rCenter, m_pRepository->getRegionMapSize(), [&]( const Vector2i &location ) {
+		t3dInstanceRegionCacheForEachSquareRing( rCenter, m_pRepository->getRegionMapSize(), [&]( const Vector2i &location ) {
 			if ( outputCount >= capacity ) {
 				return false;
 			}
@@ -346,7 +342,7 @@ void T3DInstanceRegionCache::update(
 	const T3DResidencyFrameState &rFrame, const bool bForce,
 	const int nEffectiveLoadPages, T3DInstanceRegionCacheChanges &rChanges
 ) {
-	const T3DCacheScopeTimer serviceTimer( m_nServiceUsecLast, rFrame.bProfilingEnabled );
+	const T3DInstanceRegionCacheScopeTimer serviceTimer( m_nServiceUsecLast, rFrame.bProfilingEnabled );
 	m_nLoadsLastTick = 0;
 	m_nStallFlagsLastTick = TERRAIN3D_PROFILE_STALL_NONE;
 	m_nEvictionsLastTick = 0;

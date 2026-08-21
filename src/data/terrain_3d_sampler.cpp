@@ -17,8 +17,7 @@
 #include "data/terrain_3d_region.h"
 #include "data/terrain_3d_region_codec.h"
 
-namespace {
-static bool terrain3dSamplerIsExactVertex( const double fGridX, const double fGridZ, const float fVertexSpacing ) {
+static bool t3dSamplerSamplerIsExactVertex( const double fGridX, const double fGridZ, const float fVertexSpacing ) {
 	const int64_t rounded_x = ( int64_t ) ( Math::round( fGridX ) );
 	const int64_t rounded_z = ( int64_t ) ( Math::round( fGridZ ) );
 	const double fDx = ( fGridX - ( double ) ( rounded_x ) ) * ( double ) ( fVertexSpacing );
@@ -26,8 +25,7 @@ static bool terrain3dSamplerIsExactVertex( const double fGridX, const double fGr
 	return fDx * fDx + fDz * fDz < 0.0001;
 }
 
-EA_FORCE_INLINE static float terrain3dSamplerBilerp3x3( const float fHeights[3][3], const int iX, const int iZ, const real_t fFx, const real_t fFz ) { return Math::lerp( Math::lerp( fHeights[iZ][iX], fHeights[iZ][iX + 1], fFx ), Math::lerp( fHeights[iZ + 1][iX], fHeights[iZ + 1][iX + 1], fFx ), fFz ); }
-} // namespace
+EA_FORCE_INLINE static float t3dSamplerSamplerBilerp3x3( const float fHeights[3][3], const int iX, const int iZ, const real_t fFx, const real_t fFz ) { return Math::lerp( Math::lerp( fHeights[iZ][iX], fHeights[iZ][iX + 1], fFx ), Math::lerp( fHeights[iZ + 1][iX], fHeights[iZ + 1][iX + 1], fFx ), fFz ); }
 
 void t3dRegionCold_t::reset( void ) {
 	activeLease.reset();
@@ -407,7 +405,7 @@ Vector3 T3DSampler::sampleNormalUnchecked( const Vector3 &rGlobalPosition, float
 	const double fGridZ = ( double ) ( rGlobalPosition.z ) * m_fInverseVertexSpacing;
 	const int64_t x0 = ( int64_t ) ( Math::floor( fGridX ) );
 	const int64_t z0 = ( int64_t ) ( Math::floor( fGridZ ) );
-	const bool bExactVertex = terrain3dSamplerIsExactVertex( fGridX, fGridZ, m_fVertexSpacing );
+	const bool bExactVertex = t3dSamplerSamplerIsExactVertex( fGridX, fGridZ, m_fVertexSpacing );
 
 	float fHeights[3][3];
 	const int needed = bExactVertex ? 2 : 3;
@@ -455,9 +453,9 @@ Vector3 T3DSampler::sampleNormalUnchecked( const Vector3 &rGlobalPosition, float
 	if ( !bExactVertex ) {
 		const real_t fFx = ( real_t ) ( fGridX - ( double ) ( x0 ) );
 		const real_t fFz = ( real_t ) ( fGridZ - ( double ) ( z0 ) );
-		fHeight = terrain3dSamplerBilerp3x3( fHeights, 0, 0, fFx, fFz );
-		fHeightX = terrain3dSamplerBilerp3x3( fHeights, 1, 0, fFx, fFz );
-		fHeightZ = terrain3dSamplerBilerp3x3( fHeights, 0, 1, fFx, fFz );
+		fHeight = t3dSamplerSamplerBilerp3x3( fHeights, 0, 0, fFx, fFz );
+		fHeightX = t3dSamplerSamplerBilerp3x3( fHeights, 1, 0, fFx, fFz );
+		fHeightZ = t3dSamplerSamplerBilerp3x3( fHeights, 0, 1, fFx, fFz );
 	}
 	if ( pHeight ) {
 		*pHeight = fHeight;

@@ -34,15 +34,13 @@
 #include "physics/terrain_3d_collision_surface_builder.h"
 #include "lighting/terrain_3d_region_lighting.h"
 
-namespace {
-
 typedef struct t3dControlCookSource_s {
 	PackedByteArray nBytes;
 	bool bPresent = false;
 	bool bImplicit = true;
 } t3dControlCookSource_t;
 
-static bool terrain3dReadCookControl(
+static bool t3dDataReadCookControl(
 	const eastl::array<t3dControlCookSource_t, 9> &rSources,
 	const int nRegionSize, const int iX, const int iZ, uint32_t &nControl
 ) {
@@ -78,9 +76,9 @@ static bool terrain3dReadCookControl(
 	return true;
 }
 
-static uint32_t terrain3dReadU32Unaligned( const uint8_t *pBytes, const size_t nOffset );
+static uint32_t t3dDataReadU32Unaligned( const uint8_t *pBytes, const size_t nOffset );
 
-static uint32_t terrain3dMaterialMaskFromControlImage( const Ref<Image> &rControl ) {
+static uint32_t t3dDataMaterialMaskFromControlImage( const Ref<Image> &rControl ) {
 	if ( rControl.is_null() || rControl->is_empty() || rControl->get_format() != Image::FORMAT_RF ) {
 		return 1u;
 	}
@@ -92,32 +90,32 @@ static uint32_t terrain3dMaterialMaskFromControlImage( const Ref<Image> &rContro
 	uint32_t mask = 0u;
 	const size_t texels = ( size_t ) ( bytes.size() ) / 4u;
 	for ( size_t index = 0; index < texels; ++index ) {
-		const uint32_t control = terrain3dReadU32Unaligned( pRead, index * 4u );
+		const uint32_t control = t3dDataReadU32Unaligned( pRead, index * 4u );
 		mask |= 1u << ( uint32_t ) ( getBase( control ) & 31u );
 		mask |= 1u << ( uint32_t ) ( getOverlay( control ) & 31u );
 	}
 	return mask != 0u ? mask : 1u;
 }
 
-static void terrain3dFnv1a64Append( uint64_t &nHash, const uint8_t *pData, const size_t nSize ) {
+static void t3dDataFnv1a64Append( uint64_t &nHash, const uint8_t *pData, const size_t nSize ) {
 	for ( size_t index = 0u; index < nSize; ++index ) {
 		nHash ^= ( uint64_t ) ( pData[index] );
 		nHash *= 1099511628211ull;
 	}
 }
 
-EA_FORCE_INLINE static void terrain3dFnv1a64AppendU32( uint64_t &nHash, const uint32_t nValue ) { terrain3dFnv1a64Append( nHash, ( const uint8_t * ) ( &nValue ), sizeof( nValue ) ); }
+EA_FORCE_INLINE static void t3dDataFnv1a64AppendU32( uint64_t &nHash, const uint32_t nValue ) { t3dDataFnv1a64Append( nHash, ( const uint8_t * ) ( &nValue ), sizeof( nValue ) ); }
 
-EA_FORCE_INLINE static void terrain3dFnv1a64AppendU64( uint64_t &nHash, const uint64_t nValue ) { terrain3dFnv1a64Append( nHash, ( const uint8_t * ) ( &nValue ), sizeof( nValue ) ); }
+EA_FORCE_INLINE static void t3dDataFnv1a64AppendU64( uint64_t &nHash, const uint64_t nValue ) { t3dDataFnv1a64Append( nHash, ( const uint8_t * ) ( &nValue ), sizeof( nValue ) ); }
 
-EA_FORCE_INLINE static void terrain3dFnv1a64AppendF32( uint64_t &nHash, const float fValue ) { uint32_t bits = 0u; static_assert( sizeof( bits ) == sizeof( fValue ) ); std::memcpy( &bits, &fValue, sizeof( bits ) ); terrain3dFnv1a64AppendU32( nHash, bits ); }
+EA_FORCE_INLINE static void t3dDataFnv1a64AppendF32( uint64_t &nHash, const float fValue ) { uint32_t bits = 0u; static_assert( sizeof( bits ) == sizeof( fValue ) ); std::memcpy( &bits, &fValue, sizeof( bits ) ); t3dDataFnv1a64AppendU32( nHash, bits ); }
 
-class T3DLastScopeTimer {
+class T3DDataLastScopeTimer {
 	uint64_t _started_usec = 0u;
 	uint64_t *_elapsed_usec = nullptr;
 
 public:
-	T3DLastScopeTimer( uint64_t &nElapsedUsec, const bool bEnabled ) {
+	T3DDataLastScopeTimer( uint64_t &nElapsedUsec, const bool bEnabled ) {
 		nElapsedUsec = 0u;
 		if ( !bEnabled ) {
 			return;
@@ -126,7 +124,7 @@ public:
 		Time *time = Time::get_singleton();
 		_started_usec = time ? time->get_ticks_usec() : 0u;
 	}
-	~T3DLastScopeTimer( void ) {
+	~T3DDataLastScopeTimer( void ) {
 		if ( !_elapsed_usec ) {
 			return;
 		}
@@ -136,16 +134,16 @@ public:
 	}
 };
 
-class T3DProfileScopeTimer {
+class T3DDataProfileScopeTimer {
 	uint64_t _started_usec = 0u;
 	uint64_t *_elapsed_usec = nullptr;
 	const uint64_t *_request_usec = nullptr;
 	uint64_t *_end_to_end_usec = nullptr;
 
 public:
-	EA_FORCE_INLINE T3DProfileScopeTimer( uint64_t &nElapsedUsec, const uint64_t &nRequestUsec, uint64_t &nEndToEndUsec ) : _elapsed_usec( &nElapsedUsec ), _request_usec( &nRequestUsec ), _end_to_end_usec( &nEndToEndUsec ) { Time *time = Time::get_singleton(); _started_usec = time ? time->get_ticks_usec() : 0u; }
+	EA_FORCE_INLINE T3DDataProfileScopeTimer( uint64_t &nElapsedUsec, const uint64_t &nRequestUsec, uint64_t &nEndToEndUsec ) : _elapsed_usec( &nElapsedUsec ), _request_usec( &nRequestUsec ), _end_to_end_usec( &nEndToEndUsec ) { Time *time = Time::get_singleton(); _started_usec = time ? time->get_ticks_usec() : 0u; }
 
-	~T3DProfileScopeTimer( void ) {
+	~T3DDataProfileScopeTimer( void ) {
 		Time *time = Time::get_singleton();
 		const uint64_t finished_usec = time ? time->get_ticks_usec() : _started_usec;
 		if ( _elapsed_usec ) {
@@ -157,7 +155,7 @@ public:
 	}
 };
 
-static uint32_t terrain3dReadU32Unaligned( const uint8_t *pBytes, const size_t nOffset ) {
+static uint32_t t3dDataReadU32Unaligned( const uint8_t *pBytes, const size_t nOffset ) {
 	uint32_t value = 0u;
 	if ( pBytes ) {
 		std::memcpy( &value, pBytes + nOffset, sizeof( value ) );
@@ -165,9 +163,9 @@ static uint32_t terrain3dReadU32Unaligned( const uint8_t *pBytes, const size_t n
 	return value;
 }
 
-EA_FORCE_INLINE static uint8_t terrain3dColorToByte( const float fValue ) { return ( uint8_t ) ( CLAMP( Math::round( fValue * TERRAIN3D_BYTE_MAX_FLOAT ), 0.0f, TERRAIN3D_BYTE_MAX_FLOAT ) ); }
+EA_FORCE_INLINE static uint8_t t3dDataColorToByte( const float fValue ) { return ( uint8_t ) ( CLAMP( Math::round( fValue * TERRAIN3D_BYTE_MAX_FLOAT ), 0.0f, TERRAIN3D_BYTE_MAX_FLOAT ) ); }
 
-bool terrain3dRegionLocationValid( const Vector2i &vLocation, const int nMapSize ) {
+static bool t3dDataRegionLocationValid( const Vector2i &vLocation, const int nMapSize ) {
 	if ( nMapSize <= 0 ) {
 		return false;
 	}
@@ -179,7 +177,7 @@ bool terrain3dRegionLocationValid( const Vector2i &vLocation, const int nMapSize
 // area. Computing the exclusive end independently is required for offset and
 // negative-coordinate rectangles; ceil(area.size / region_size) is only valid
 // when the area starts on a region boundary.
-Rect2i getRegionBoundsForArea( const Rect2i &rArea, const int nRegionSize ) {
+static Rect2i t3dDataGetRegionBoundsForArea( const Rect2i &rArea, const int nRegionSize ) {
 	if ( nRegionSize <= 0 || rArea.size.x <= 0 || rArea.size.y <= 0 ) {
 		return Rect2i();
 	}
@@ -188,9 +186,6 @@ Rect2i getRegionBoundsForArea( const Rect2i &rArea, const int nRegionSize ) {
 	const Vector2i end = V2I_DIVIDE_CEIL( rArea.get_end(), nRegionSize );
 	return Rect2i( begin, end - begin );
 }
-
-
-} // namespace
 
 ///////////////////////////
 // Private Functions
@@ -502,7 +497,7 @@ Ref<Image> T3DData::makeMiddleCompositeImage(
 		const int control_y = MIN( rControl->get_height() - 1, y * rControl->get_height() / height );
 		for ( int x = 0; x < width; ++x ) {
 			const int control_x = MIN( rControl->get_width() - 1, x * rControl->get_width() / width );
-			const uint32_t control = terrain3dReadU32Unaligned( pControl,
+			const uint32_t control = t3dDataReadU32Unaligned( pControl,
 				( size_t ) ( control_y * rControl->get_width() + control_x ) * 4u );
 			const int base = ( int ) ( getBase( control ) );
 			const int overlay = ( int ) ( getOverlay( control ) );
@@ -541,9 +536,9 @@ Ref<Image> T3DData::makeMiddleCompositeImage(
 			const float authored_r = ( float ) ( pColor[offset] ) / 255.0f;
 			const float authored_g = ( float ) ( pColor[offset + 1u] ) / 255.0f;
 			const float authored_b = ( float ) ( pColor[offset + 2u] ) / 255.0f;
-			pWrite[offset] = terrain3dColorToByte( authored_r * material_color.r );
-			pWrite[offset + 1u] = terrain3dColorToByte( authored_g * material_color.g );
-			pWrite[offset + 2u] = terrain3dColorToByte( authored_b * material_color.b );
+			pWrite[offset] = t3dDataColorToByte( authored_r * material_color.r );
+			pWrite[offset + 1u] = t3dDataColorToByte( authored_g * material_color.g );
+			pWrite[offset + 2u] = t3dDataColorToByte( authored_b * material_color.b );
 			pWrite[offset + 3u] = isHole( control ) ? 0u :
 				( uint8_t ) ( 0x80u | ( ( uint32_t ) ( pColor[offset + 3u] ) * 127u + 127u ) / 255u );
 		}
@@ -597,7 +592,7 @@ Ref<Image> T3DData::makeGpuRenderControlImage( const Vector2i &vLocation ) const
 	for ( int z = 0; z < m_regionRepository.getRegionSize(); ++z ) {
 		for ( int x = 0; x < m_regionRepository.getRegionSize(); ++x ) {
 			uint32_t center = TERRAIN3D_REGION_DEFAULT_CONTROL;
-			if ( !terrain3dReadCookControl( sources, m_regionRepository.getRegionSize(), x, z, center ) ) {
+			if ( !t3dDataReadCookControl( sources, m_regionRepository.getRegionSize(), x, z, center ) ) {
 				std::memcpy( pWrite + ( size_t ) ( z * m_regionRepository.getRegionSize() + x ) * sizeof( uint32_t ), &center, sizeof( uint32_t ) );
 				continue;
 			}
@@ -610,7 +605,7 @@ Ref<Image> T3DData::makeGpuRenderControlImage( const Vector2i &vLocation ) const
 			for ( int dz = -TERRAIN3D_RENDER_CONTROL_BLEND_RADIUS; dz <= TERRAIN3D_RENDER_CONTROL_BLEND_RADIUS; ++dz ) {
 				for ( int dx = -TERRAIN3D_RENDER_CONTROL_BLEND_RADIUS; dx <= TERRAIN3D_RENDER_CONTROL_BLEND_RADIUS; ++dx ) {
 					uint32_t pControl = TERRAIN3D_REGION_DEFAULT_CONTROL;
-					if ( !terrain3dReadCookControl( sources, m_regionRepository.getRegionSize(), x + dx, z + dz, pControl ) || isAuto( pControl ) || isHole( pControl ) ) {
+					if ( !t3dDataReadCookControl( sources, m_regionRepository.getRegionSize(), x + dx, z + dz, pControl ) || isAuto( pControl ) || isHole( pControl ) ) {
 						continue;
 					}
 					const uint64_t spatial_weight = ( uint64_t ) ( TERRAIN3D_RENDER_CONTROL_KERNEL[dx + TERRAIN3D_RENDER_CONTROL_BLEND_RADIUS] * TERRAIN3D_RENDER_CONTROL_KERNEL[dz + TERRAIN3D_RENDER_CONTROL_BLEND_RADIUS] );
@@ -686,9 +681,9 @@ T3DRuntimePageConfig T3DData::getRuntimePageConfig( void ) const {
 	const Ref<T3DMaterial> material = m_pTerrain->getMaterial();
 	if ( material.is_valid() ) {
 		uint64_t collision_signature = 1469598103934665603ull;
-		terrain3dFnv1a64AppendU32( collision_signature, ( uint32_t ) material->getWorldBackground() );
-		terrain3dFnv1a64AppendF32( collision_signature, ( float ) ( real_t ) material->get( "ground_level" ) );
-		terrain3dFnv1a64AppendF32( collision_signature, ( float ) ( real_t ) material->get( "region_blend" ) );
+		t3dDataFnv1a64AppendU32( collision_signature, ( uint32_t ) material->getWorldBackground() );
+		t3dDataFnv1a64AppendF32( collision_signature, ( float ) ( real_t ) material->get( "ground_level" ) );
+		t3dDataFnv1a64AppendF32( collision_signature, ( float ) ( real_t ) material->get( "region_blend" ) );
 		config.collisionSurfaceSignature = collision_signature;
 	}
 	return config;
@@ -927,7 +922,7 @@ bool T3DData::writeGpuRuntimePage( T3DRegion *const pRegion, String *const pErro
 		}
 		payload.pTerrainShadowMask = shadow_mask;
 	}
-	payload.materialMask = payload.pControl.is_valid() ? terrain3dMaterialMaskFromControlImage( payload.pControl ) : 1u;
+	payload.materialMask = payload.pControl.is_valid() ? t3dDataMaterialMaskFromControlImage( payload.pControl ) : 1u;
 
 	// Bake compact logical masks from authored control data, not the render halo.
 	payload.holeMask = T3DRuntimeBakeCodec::encodeHoleMask( authored_control, region_size );
@@ -2098,7 +2093,7 @@ TypedArray<T3DRegion> T3DData::getRegionsActive( const bool bCopy, const bool bD
 // The callable receives: source T3DRegion, source Rect2i, dest Rect2i, (bindings)
 // Used with change_region_size, dest T3DRegion is bound as the 4th parameter
 void T3DData::doForRegions( const Rect2i &rArea, const Callable &rCallback ) {
-	const Rect2i location_bounds = getRegionBoundsForArea( rArea, m_regionRepository.getRegionSize() );
+	const Rect2i location_bounds = t3dDataGetRegionBoundsForArea( rArea, m_regionRepository.getRegionSize() );
 	if ( location_bounds.size.x <= 0 || location_bounds.size.y <= 0 ) {
 		return;
 	}
@@ -2171,11 +2166,11 @@ void T3DData::changeRegionSize( const int nNewSize ) {
 		worldMax.y = MAX( worldMax.y, region_end.y );
 	}
 
-	const Rect2i converted_bounds = getRegionBoundsForArea( Rect2i( worldMin, worldMax - worldMin ), nNewSize );
+	const Rect2i converted_bounds = t3dDataGetRegionBoundsForArea( Rect2i( worldMin, worldMax - worldMin ), nNewSize );
 	const Vector2i converted_last = converted_bounds.get_end() - Vector2i( 1, 1 );
 	const int target_map_size = TERRAIN3D_ACTIVE_WORLD_TEXELS / nNewSize;
-	if ( !terrain3dRegionLocationValid( converted_bounds.position, target_map_size ) ||
-		!terrain3dRegionLocationValid( converted_last, target_map_size ) ) {
+	if ( !t3dDataRegionLocationValid( converted_bounds.position, target_map_size ) ||
+		!t3dDataRegionLocationValid( converted_last, target_map_size ) ) {
 		LOG( ERROR, "Cannot change region size from ", m_regionRepository.getRegionSize(), " to ", nNewSize,
 			" without losing data. Converted region coordinates would span ", converted_bounds.position, " through ",
 			converted_last, ", but valid coordinates are ", -target_map_size / 2, " through ",
@@ -2198,7 +2193,7 @@ void T3DData::changeRegionSize( const int nNewSize ) {
 		}
 
 		const Rect2i srcArea( pSrcRegion->getLocation() * m_regionRepository.getRegionSize(), m_regionRepository.getRegionSizeVector() );
-		const Rect2i target_bounds = getRegionBoundsForArea( srcArea, nNewSize );
+		const Rect2i target_bounds = t3dDataGetRegionBoundsForArea( srcArea, nNewSize );
 		for ( int y = target_bounds.position.y; y < target_bounds.get_end().y; y++ ) {
 			for ( int x = target_bounds.position.x; x < target_bounds.get_end().x; x++ ) {
 				const Vector2i targetLocation( x, y );
