@@ -147,7 +147,7 @@ void T3DTerrain::onDataMapsChanged( void ) {
 	// have already transferred to the newly active Terrain3D. Only the current
 	// owner may rebind shared material state.
 	if ( m_pMaterial.is_valid() && m_pMaterial->isInitializedFor( this ) ) {
-		m_pMaterial->update( T3DMaterial::REGION_ARRAYS );
+		m_pMaterial->update( REGION_ARRAYS );
 	}
 }
 
@@ -160,7 +160,7 @@ void T3DTerrain::onGpuRegionPageTableChanged( void ) {
 void T3DTerrain::onAssetsTexturesChanged( void ) {
 	if ( m_pAssets.is_valid() && m_pAssets->isInitializedFor( this ) && m_pMaterial.is_valid() &&
 		m_pMaterial->isInitializedFor( this ) ) {
-		m_pMaterial->update( T3DMaterial::TEXTURE_ARRAYS );
+		m_pMaterial->update( TEXTURE_ARRAYS );
 		if ( m_pData ) {
 			m_pData->invalidateGpuFarSurface();
 		}
@@ -224,7 +224,7 @@ void T3DTerrain::setDataDirectory( const String dir ) {
 	const String old_lightmap_default = terrain3dDefaultRegionLightmapOutputDirectory( old_dir );
 	const bool bFollowLightmapDefault = m_regionLightmapOutputDirectory.is_empty() ||
 		m_regionLightmapOutputDirectory == old_lightmap_default;
-	LOG( T3DTerrain::INFO, "[data-transition] Requested data directory change: ", old_dir, " -> ", dir,
+	LOG( INFO, "[data-transition] Requested data directory change: ", old_dir, " -> ", dir,
 		"; initialized=", m_bInitialized, "; inside_tree=", is_inside_tree(),
 		"; inside_world=", m_bIsInsideWorld );
 
@@ -248,7 +248,7 @@ void T3DTerrain::setDataDirectory( const String dir ) {
 		if ( bFollowLightmapDefault ) {
 			m_regionLightmapOutputDirectory = terrain3dDefaultRegionLightmapOutputDirectory( dir );
 		}
-		LOG( T3DTerrain::INFO, "[data-transition] Updated save target without replacing terrain data" );
+		LOG( INFO, "[data-transition] Updated save target without replacing terrain data" );
 		update_configuration_warnings();
 		return;
 	}
@@ -261,7 +261,7 @@ void T3DTerrain::setDataDirectory( const String dir ) {
 		// their live consumers may observe the repository half way through that
 		// transition. In particular, the displacement compute path can have a queued
 		// render-thread request that contains the old terrain texture RIDs.
-		LOG( T3DTerrain::INFO, "[data-transition] Quiescing renderer, physics, streaming, and resource callbacks" );
+		LOG( INFO, "[data-transition] Quiescing renderer, physics, streaming, and resource callbacks" );
 		set_physics_process( false );
 		m_bInitialized = false;
 		destroyTerrainMesher();
@@ -289,12 +289,12 @@ void T3DTerrain::setDataDirectory( const String dir ) {
 		if ( pServer && !pServer->is_on_render_thread() ) {
 			pServer->force_sync();
 		}
-		LOG( T3DTerrain::INFO, "[data-transition] Runtime consumers quiesced; repository mutation may begin" );
+		LOG( INFO, "[data-transition] Runtime consumers quiesced; repository mutation may begin" );
 	}
 
 	Error transition_error = OK;
 	if ( bClearsRepository ) {
-		LOG( T3DTerrain::INFO, "[data-transition] Clearing active terrain repository" );
+		LOG( INFO, "[data-transition] Clearing active terrain repository" );
 		m_pData->clear();
 	} else {
 		transition_error = m_pData->loadDirectory( dir );
@@ -305,20 +305,20 @@ void T3DTerrain::setDataDirectory( const String dir ) {
 		if ( bFollowLightmapDefault ) {
 			m_regionLightmapOutputDirectory = terrain3dDefaultRegionLightmapOutputDirectory( dir );
 		}
-		LOG( T3DTerrain::INFO, "[data-transition] Repository mutation committed for ", dir );
+		LOG( INFO, "[data-transition] Repository mutation committed for ", dir );
 	} else {
-		LOG( T3DTerrain::ERROR, "[data-transition] Data directory change rejected; restoring previous terrain. Error: ",
+		LOG( ERROR, "[data-transition] Data directory change rejected; restoring previous terrain. Error: ",
 			transition_error );
 	}
 
 	if ( bWasInitialized ) {
-		LOG( T3DTerrain::INFO, "[data-transition] Recreating editor/runtime consumers from the committed repository" );
+		LOG( INFO, "[data-transition] Recreating editor/runtime consumers from the committed repository" );
 		initializeInternal();
 		setupMousePicking();
 		setupDisplacementBuffer();
 		updateDisplacementBuffer();
 		set_physics_process( bWasPhysicsProcessing );
-		LOG( T3DTerrain::INFO, "[data-transition] Consumer restore complete; initialized=", m_bInitialized,
+		LOG( INFO, "[data-transition] Consumer restore complete; initialized=", m_bInitialized,
 			"; physics_process=", is_physics_processing() );
 	} else if ( transition_error == OK ) {
 		// Preserve the old setter behavior for pre-tree/property-deserialization
@@ -346,7 +346,7 @@ void T3DTerrain::setAssets( const Ref<T3DAssets> &rAssets ) {
 	if ( !differs( m_pAssets, rAssets ) ) {
 		return;
 	}
-	LOG( T3DTerrain::INFO, "Replacing asset registry" );
+	LOG( INFO, "Replacing asset registry" );
 	const bool bWasInitialized = m_bInitialized;
 	const Ref<T3DAssets> pOldAssets = m_pAssets;
 	disconnectResourceSignals( pOldAssets, m_pMaterial );
@@ -368,7 +368,7 @@ void T3DTerrain::setAssets( const Ref<T3DAssets> &rAssets ) {
 			m_pInstancer->initialize( this );
 		}
 		if ( m_pMaterial.is_valid() ) {
-			m_pMaterial->update( T3DMaterial::FULL_REBUILD );
+			m_pMaterial->update( FULL_REBUILD );
 		}
 	} else {
 		initializeInternal();
@@ -378,36 +378,36 @@ void T3DTerrain::setAssets( const Ref<T3DAssets> &rAssets ) {
 
 void T3DTerrain::setEditor( T3DEditor *const pEditor ) {
 	if ( pEditor && pEditor->is_queued_for_deletion() ) {
-		LOG( T3DTerrain::ERROR, "Attempted to set a node queued for deletion" );
+		LOG( ERROR, "Attempted to set a node queued for deletion" );
 		return;
 	}
 	SET_IF_DIFF( m_pEditor, pEditor );
-	LOG( T3DTerrain::INFO, "t3dSetting_t T3DEditor: ", m_pEditor );
+	LOG( INFO, "t3dSetting_t T3DEditor: ", m_pEditor );
 	if ( m_pMaterial.is_valid() ) {
-		m_pMaterial->update( T3DMaterial::FULL_REBUILD );
+		m_pMaterial->update( FULL_REBUILD );
 	}
 }
 
 void T3DTerrain::setPlugin( Object *const pPlugin ) {
 	if ( pPlugin && pPlugin->is_queued_for_deletion() ) {
-		LOG( T3DTerrain::ERROR, "Attempted to set a node queued for deletion" );
+		LOG( ERROR, "Attempted to set a node queued for deletion" );
 		return;
 	}
 	SET_IF_DIFF( m_pEditorPlugin, pPlugin );
-	LOG( T3DTerrain::INFO, "t3dSetting_t Editor Plugin: ", m_pEditorPlugin );
+	LOG( INFO, "t3dSetting_t Editor Plugin: ", m_pEditorPlugin );
 }
 
 void T3DTerrain::setRegionSize( const t3dRegionSize_t size ) {
 	if ( size != SIZE_128 ) {
-		LOG( T3DTerrain::ERROR, "This Terrain3D fork is specialized for 128-sample regions and rejects all other sizes" );
+		LOG( ERROR, "This Terrain3D fork is specialized for 128-sample regions and rejects all other sizes" );
 		return;
 	}
 	if ( !isValidRegionSize( size ) ) {
-		LOG( T3DTerrain::ERROR, "Invalid region size: ", size, ". Must be power of 2, 64-2048" );
+		LOG( ERROR, "Invalid region size: ", size, ". Must be power of 2, 64-2048" );
 		return;
 	}
 	if ( ( int ) ( size ) % m_nInstancerCellSize != 0 ) {
-		LOG( T3DTerrain::ERROR, "Region size ", ( int ) ( size ), " is incompatible with instancer cell size ",
+		LOG( ERROR, "Region size ", ( int ) ( size ), " is incompatible with instancer cell size ",
 			m_nInstancerCellSize, ". Change instancer_cell_size first." );
 		return;
 	}
@@ -425,7 +425,7 @@ void T3DTerrain::setRegionSize( const t3dRegionSize_t size ) {
 	if ( bDataOwnerReady && !m_pData->matchesRegionLayoutInternal( ( int ) ( m_nRegionSize ) ) ) {
 		if ( !m_pData->setRegionSizeInternal( ( int ) ( m_nRegionSize ) ) ) {
 			m_nRegionSize = previous_size;
-			LOG( T3DTerrain::ERROR, "Region size change rejected because active terrain storage could not be reconfigured" );
+			LOG( ERROR, "Region size change rejected because active terrain storage could not be reconfigured" );
 			return;
 		}
 		m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(), m_nEffectiveGpuRegionCacheBudgetMb,
@@ -439,7 +439,7 @@ void T3DTerrain::setRegionSize( const t3dRegionSize_t size ) {
 		m_pData->configureResidentPool( 64 );
 		bDataChanged = true;
 	} else if ( m_pData && !bDataOwnerReady && bOwnerChanged ) {
-		LOG( T3DTerrain::DEBUG, "Deferring T3DData region-size reconciliation until data initialization: ",
+		LOG( DEBUG, "Deferring T3DData region-size reconciliation until data initialization: ",
 			( int ) ( m_nRegionSize ) );
 	}
 	// Equality of the owner property does not prove dependent state is already
@@ -447,12 +447,12 @@ void T3DTerrain::setRegionSize( const t3dRegionSize_t size ) {
 	if ( !bOwnerChanged && !bDataChanged ) {
 		return;
 	}
-	LOG( T3DTerrain::INFO, "t3dSetting_t region size: ", m_nRegionSize );
+	LOG( INFO, "t3dSetting_t region size: ", m_nRegionSize );
 	// Runtime migration updates dependent instance layouts only after the data
 	// object has been attached to this terrain. Pre-tree property deserialization
 	// is intentionally reconciled by T3DData::initialize().
 	if ( m_bInitialized && m_pInstancer && !m_pInstancer->refreshResidentRegionLayouts() ) {
-		LOG( T3DTerrain::ERROR, "Region size changed, but resident instance pages could not be repartitioned" );
+		LOG( ERROR, "Region size changed, but resident instance pages could not be repartitioned" );
 	}
 	if ( m_pMaterial.is_valid() && m_pMaterial->isInitialized() ) {
 		m_pMaterial->update();
@@ -467,6 +467,6 @@ void T3DTerrain::setSave16Bit( const bool bEnabled ) {
 	// Region persistence is now unconditionally compact R16. Retain the property
 	// for scene compatibility, but do not dirty every region: bounded CPU residency
 	// deliberately permits clean region resources to exist without map payloads.
-	LOG( T3DTerrain::INFO, "Save heightmaps as 16-bit: ", m_bSave16Bit );
+	LOG( INFO, "Save heightmaps as 16-bit: ", m_bSave16Bit );
 }
 

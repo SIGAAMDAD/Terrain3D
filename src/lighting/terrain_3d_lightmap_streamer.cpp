@@ -148,7 +148,7 @@ void T3DLightmapStreamer::setRadiusRegions( const int nRadius ) {
 	m_center = V2I_MAX;
 }
 
-T3DLightmapStreamer::t3dActivePackage_t *T3DLightmapStreamer::findActive(
+t3dActivePackage_t *T3DLightmapStreamer::findActive(
 	const Ref<T3DRegionLighting> &rPackage
 ) {
 	for ( uint8_t i = 0u; i < m_nActiveCount; ++i ) {
@@ -158,7 +158,7 @@ T3DLightmapStreamer::t3dActivePackage_t *T3DLightmapStreamer::findActive(
 	return nullptr;
 }
 
-const T3DLightmapStreamer::t3dActivePackage_t *T3DLightmapStreamer::findActive(
+const t3dActivePackage_t *T3DLightmapStreamer::findActive(
 	const Ref<T3DRegionLighting> &rPackage
 ) const {
 	for ( uint8_t i = 0u; i < m_nActiveCount; ++i ) {
@@ -168,7 +168,7 @@ const T3DLightmapStreamer::t3dActivePackage_t *T3DLightmapStreamer::findActive(
 	return nullptr;
 }
 
-T3DLightmapStreamer::t3dSourceLoadResult_t T3DLightmapStreamer::requestSourceData(
+t3dSourceLoadResult_t T3DLightmapStreamer::requestSourceData(
 	const Ref<T3DRegionLighting> &rPackage, Ref<LightmapGIData> &rData
 ) {
 	rData.unref();

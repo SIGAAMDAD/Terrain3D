@@ -22,69 +22,81 @@
 #include "assets/terrain_3d_assets.h"
 #include "lighting/terrain_3d_region_lighting.h"
 
+typedef enum t3dMapType_e {
+	TYPE_HEIGHT,
+	TYPE_CONTROL,
+	TYPE_COLOR,
+	REGION_TYPE_MAX,
+} t3dMapType_t;
+
+typedef enum t3dChannelFlag_e : uint8_t {
+	REGION_CHANNEL_CONTROL = 1u << 0,
+	REGION_CHANNEL_COLOR = 1u << 1,
+	REGION_CHANNEL_DERIVED = 1u << 2,
+	REGION_CHANNEL_MASK = REGION_CHANNEL_CONTROL | REGION_CHANNEL_COLOR | REGION_CHANNEL_DERIVED,
+} t3dChannelFlag_t;
+
+typedef enum t3dStreamedNodeBoundaryPolicy_e : int {
+	STREAMED_NODE_BOUNDARY_ANCHOR = 0,
+	STREAMED_NODE_BOUNDARY_COVERAGE = 1,
+} t3dStreamedNodeBoundaryPolicy_t;
+
+typedef enum t3dEnvironmentLightingClass_e : int {
+	LIGHTING_CLASS_TERRAIN = 0,
+	LIGHTING_CLASS_FOLIAGE_CLUTTER = 1,
+	LIGHTING_CLASS_MEDIUM_OBSTACLE = 2,
+	LIGHTING_CLASS_LARGE_OCCLUDER = 3,
+	LIGHTING_CLASS_REGIONAL_OCCLUDER = 4,
+} t3dEnvironmentLightingClass_t;
+
+typedef enum t3dBakedLightingMode_e : int {
+	BAKED_LIGHTING_DISABLED = 0,
+	BAKED_LIGHTING_LIGHTMAP = 1,
+	BAKED_LIGHTING_PROBE = 2,
+	BAKED_LIGHTING_MATERIAL_ONLY = 3,
+} t3dBakedLightingMode_t;
+
+typedef struct t3dStreamedNodeRuntimeDescriptor_s {
+	int64_t id = 0;
+	Ref<PackedScene> pScene;
+	String scenePath;
+	Transform3D transform;
+	Dictionary state;
+	int flags = 0;
+	int hlodMinLevel = 1;
+	int boundaryPolicy = STREAMED_NODE_BOUNDARY_ANCHOR;
+	Vector2i coverageMin = V2I_ZERO;
+	Vector2i coverageMax = V2I_ZERO;
+	int lightingClass = LIGHTING_CLASS_MEDIUM_OBSTACLE;
+	int bakedLightingMode = BAKED_LIGHTING_LIGHTMAP;
+	bool bContributeBakedGi = true;
+	bool bReceiveDynamicDirectional = true;
+	bool bDynamicShadowEligible = true;
+	Ref<PackedScene> pShadowProxyScene;
+	String shadowProxyScenePath;
+} t3dStreamedNodeRuntimeDescriptor_t;
+
 class T3DRegion : public Resource {
 	GDCLASS( T3DRegion, Resource );
 	friend class T3DData;
 	CLASS_NAME();
 
 public: // Constants
-	typedef enum t3dMapType_e {
-		TYPE_HEIGHT,
-		TYPE_CONTROL,
-		TYPE_COLOR,
-		TYPE_MAX,
-	} t3dMapType_t;
 
-	typedef enum t3dChannelFlag_e : uint8_t {
-		CHANNEL_CONTROL = 1u << 0,
-		CHANNEL_COLOR = 1u << 1,
-		CHANNEL_DERIVED = 1u << 2,
-		CHANNEL_MASK = CHANNEL_CONTROL | CHANNEL_COLOR | CHANNEL_DERIVED,
-	} t3dChannelFlag_t;
 
-	typedef enum t3dStreamedNodeBoundaryPolicy_e : int {
-		STREAMED_NODE_BOUNDARY_ANCHOR = 0,
-		STREAMED_NODE_BOUNDARY_COVERAGE = 1,
-	} t3dStreamedNodeBoundaryPolicy_t;
 
-	typedef enum t3dEnvironmentLightingClass_e : int {
-		LIGHTING_CLASS_TERRAIN = 0,
-		LIGHTING_CLASS_FOLIAGE_CLUTTER = 1,
-		LIGHTING_CLASS_MEDIUM_OBSTACLE = 2,
-		LIGHTING_CLASS_LARGE_OCCLUDER = 3,
-		LIGHTING_CLASS_REGIONAL_OCCLUDER = 4,
-	} t3dEnvironmentLightingClass_t;
 
-	typedef enum t3dBakedLightingMode_e : int {
-		BAKED_LIGHTING_DISABLED = 0,
-		BAKED_LIGHTING_LIGHTMAP = 1,
-		BAKED_LIGHTING_PROBE = 2,
-		BAKED_LIGHTING_MATERIAL_ONLY = 3,
-	} t3dBakedLightingMode_t;
+
+
+
+
+
 
 	// Runtime representation of the serialized streamed-node descriptor. The
 	// persisted Array<Dictionary> remains the editor/resource ABI, while the
 	// streamer consumes this typed cache so activation does not repeatedly hash
 	// Dictionary keys or convert Variants in hot traversal paths.
-	typedef struct t3dStreamedNodeRuntimeDescriptor_s {
-		int64_t id = 0;
-		Ref<PackedScene> pScene;
-		String scenePath;
-		Transform3D transform;
-		Dictionary state;
-		int flags = 0;
-		int hlodMinLevel = 1;
-		int boundaryPolicy = STREAMED_NODE_BOUNDARY_ANCHOR;
-		Vector2i coverageMin = V2I_ZERO;
-		Vector2i coverageMax = V2I_ZERO;
-		int lightingClass = LIGHTING_CLASS_MEDIUM_OBSTACLE;
-		int bakedLightingMode = BAKED_LIGHTING_LIGHTMAP;
-		bool bContributeBakedGi = true;
-		bool bReceiveDynamicDirectional = true;
-		bool bDynamicShadowEligible = true;
-		Ref<PackedScene> pShadowProxyScene;
-		String shadowProxyScenePath;
-	} t3dStreamedNodeRuntimeDescriptor_t;
+
 
 private:
 	// Import without persistence side effects. This is intentionally not bound to
@@ -186,14 +198,14 @@ public:
 			return true;
 		}
 		if ( mapType == TYPE_CONTROL ) {
-			return ( m_nChannelFlags & CHANNEL_CONTROL ) != 0u;
+			return ( m_nChannelFlags & REGION_CHANNEL_CONTROL ) != 0u;
 		}
 		if ( mapType == TYPE_COLOR ) {
-			return ( m_nChannelFlags & CHANNEL_COLOR ) != 0u;
+			return ( m_nChannelFlags & REGION_CHANNEL_COLOR ) != 0u;
 		}
 		return false;
 	}
-	EA_FORCE_INLINE bool hasDerivedChannel( void ) const { return ( m_nChannelFlags & CHANNEL_DERIVED ) != 0u; }
+	EA_FORCE_INLINE bool hasDerivedChannel( void ) const { return ( m_nChannelFlags & REGION_CHANNEL_DERIVED ) != 0u; }
 	EA_FORCE_INLINE Ref<Image> getDerivedNormalSlopeMap( void ) const { return m_pDerivedNormalSlopeMap; }
 	EA_FORCE_INLINE bool hasValidDerivedNormalSlopeMap( void ) const { return m_bDerivedNormalSlopeValid && m_pDerivedNormalSlopeMap.is_valid(); }
 	void setDerivedNormalSlopeMapInternal( const Ref<Image> &rMap );
@@ -330,10 +342,10 @@ protected:
 	static void _bind_methods( void );
 };
 
-using t3dMapType_t = T3DRegion::t3dMapType_t;
-VARIANT_ENUM_CAST( T3DRegion::t3dMapType_t );
-VARIANT_ENUM_CAST( T3DRegion::t3dChannelFlag_t );
-VARIANT_ENUM_CAST( T3DRegion::t3dStreamedNodeBoundaryPolicy_t );
-VARIANT_ENUM_CAST( T3DRegion::t3dEnvironmentLightingClass_t );
-VARIANT_ENUM_CAST( T3DRegion::t3dBakedLightingMode_t );
+using t3dMapType_t = t3dMapType_t;
+VARIANT_ENUM_CAST( t3dMapType_t );
+VARIANT_ENUM_CAST( t3dChannelFlag_t );
+VARIANT_ENUM_CAST( t3dStreamedNodeBoundaryPolicy_t );
+VARIANT_ENUM_CAST( t3dEnvironmentLightingClass_t );
+VARIANT_ENUM_CAST( t3dBakedLightingMode_t );
 #endif // TERRAIN3D_REGION_CLASS_H

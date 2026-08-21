@@ -959,9 +959,9 @@ Dictionary T3DAutoShaderBaker::bakeRegions(
 	}
 
 	if ( !changed_locations.empty() ) {
-		data->commitMapEdits( T3DRegion::TYPE_CONTROL, changed_locations, AABB(), T3DData::MAP_EDIT_SNAP |
-																		  T3DData::MAP_EDIT_UPDATE_INSTANCES |
-																		  T3DData::MAP_EDIT_UPDATE_COLLISION );
+		data->commitMapEdits( TYPE_CONTROL, changed_locations, AABB(), MAP_EDIT_SNAP |
+																		  MAP_EDIT_UPDATE_INSTANCES |
+																		  MAP_EDIT_UPDATE_COLLISION );
 	}
 	result["ok"] = true;
 	result["processed_regions"] = processed_region_count;
@@ -1084,9 +1084,9 @@ Dictionary T3DAutoShaderBaker::clearBakedRegions(
 		changed_pixels += item.changed_pixels;
 	}
 	if ( !changed_locations.empty() ) {
-		pData->commitMapEdits( T3DRegion::TYPE_CONTROL, changed_locations, AABB(), T3DData::MAP_EDIT_SNAP |
-																		  T3DData::MAP_EDIT_UPDATE_INSTANCES |
-																		  T3DData::MAP_EDIT_UPDATE_COLLISION );
+		pData->commitMapEdits( TYPE_CONTROL, changed_locations, AABB(), MAP_EDIT_SNAP |
+																		  MAP_EDIT_UPDATE_INSTANCES |
+																		  MAP_EDIT_UPDATE_COLLISION );
 	}
 	result["ok"] = true;
 	result["changed_regions"] = ( int ) ( changed_locations.size() );

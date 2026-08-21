@@ -39,21 +39,25 @@ using ShadowCasting = RenderingServer::ShadowCastingSetting;
  */
 
 
+typedef enum t3dHlodContribution_e {
+	HLOD_AUTO = 0,
+	HLOD_INCLUDE = 1,
+	HLOD_EXCLUDE = 2,
+} t3dHlodContribution_t;
+
+typedef enum t3dGenType_e {
+	TYPE_NONE,
+	TYPE_TEXTURE_CARD,
+	MESH_TYPE_MAX,
+} t3dGenType_t;
+
 class T3DMeshAsset : public T3DAssetResource {
 	GDCLASS( T3DMeshAsset, T3DAssetResource );
 	CLASS_NAME();
 
 public:
-	typedef enum t3dHlodContribution_e {
-		HLOD_AUTO = 0,
-		HLOD_INCLUDE = 1,
-		HLOD_EXCLUDE = 2,
-	} t3dHlodContribution_t;
-	typedef enum t3dGenType_e {
-		TYPE_NONE,
-		TYPE_TEXTURE_CARD,
-		TYPE_MAX,
-	} t3dGenType_t;
+
+
 private:
 	// Saved data
 	bool m_bEnabled = true;
@@ -190,8 +194,8 @@ protected:
 	static void _bind_methods( void );
 };
 
-VARIANT_ENUM_CAST( T3DMeshAsset::t3dGenType_t );
-VARIANT_ENUM_CAST( T3DMeshAsset::t3dHlodContribution_t );
+VARIANT_ENUM_CAST( t3dGenType_t );
+VARIANT_ENUM_CAST( t3dHlodContribution_t );
 
 inline TypedArray<Mesh> T3DMeshAsset::getMeshes( void ) const {
 	if ( !m_pendingMeshes.is_empty() ) {

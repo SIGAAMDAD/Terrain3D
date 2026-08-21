@@ -433,7 +433,7 @@ typedef struct t3dVector3Hash_s {
 
 #define IS_INIT_MESG( mesg, ret ) \
 	if ( !m_pTerrain ) {            \
-		LOG( T3DTerrain::ERROR, mesg );       \
+		LOG( ERROR, mesg );       \
 		return ret;             \
 	}
 
@@ -444,7 +444,7 @@ typedef struct t3dVector3Hash_s {
 
 #define IS_INIT_COND_MESG( cond, mesg, ret ) \
 	if ( !m_pTerrain || cond ) {               \
-		LOG( T3DTerrain::ERROR, mesg );                  \
+		LOG( ERROR, mesg );                  \
 		return ret;                        \
 	}
 
@@ -455,7 +455,7 @@ typedef struct t3dVector3Hash_s {
 
 #define IS_INSTANCER_INIT_MESG( mesg, ret )          \
 	if ( !m_pTerrain || !m_pTerrain->getInstancer() ) { \
-		LOG( T3DTerrain::ERROR, mesg );                          \
+		LOG( ERROR, mesg );                          \
 		return ret;                                \
 	}
 
@@ -466,7 +466,7 @@ typedef struct t3dVector3Hash_s {
 
 #define IS_DATA_INIT_MESG( mesg, ret )          \
 	if ( !m_pTerrain || !m_pTerrain->getData() ) { \
-		LOG( T3DTerrain::ERROR, mesg );                     \
+		LOG( ERROR, mesg );                     \
 		return ret;                           \
 	}
 

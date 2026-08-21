@@ -46,29 +46,29 @@
 #include "core/terrain_3d_util.h"
 
 // Initialize static member variable
-T3DTerrain::t3dDebugLevel_t T3DTerrain::s_debugLevel{T3DTerrain::ERROR};
+t3dDebugLevel_t T3DTerrain::s_debugLevel{ERROR};
 
 ///////////////////////////
 // Private Functions
 ///////////////////////////
 
 void T3DTerrain::initializeInternal( void ) {
-	LOG( T3DTerrain::INFO, "[lifecycle] Initialize request: initialized=", m_bInitialized,
+	LOG( INFO, "[lifecycle] Initialize request: initialized=", m_bInitialized,
 		"; inside_tree=", is_inside_tree(), "; inside_world=", m_bIsInsideWorld,
 		"; data_directory=", m_dataDirectory );
 	// Make blank objects if needed
 	if ( !m_pData ) {
-		LOG( T3DTerrain::DEBUG, "Creating blank data object" );
+		LOG( DEBUG, "Creating blank data object" );
 		m_pData = memnew( T3DData );
 	}
 	if ( !initializeRuntimeMemory() ) {
-		LOG( T3DTerrain::ERROR, "[lifecycle] Unable to initialize the fixed runtime memory image" );
+		LOG( ERROR, "[lifecycle] Unable to initialize the fixed runtime memory image" );
 		set_physics_process( false );
 		return;
 	}
 	bool bCreatedDefaultMaterial = false;
 	if ( m_pMaterial.is_null() ) {
-		LOG( T3DTerrain::DEBUG, "Creating blank material" );
+		LOG( DEBUG, "Creating blank material" );
 		m_pMaterial.instantiate();
 		bCreatedDefaultMaterial = true;
 	}
@@ -78,63 +78,63 @@ void T3DTerrain::initializeInternal( void ) {
 	if ( m_performanceTarget == PERFORMANCE_TARGET_XBOX360_EXPERIMENTAL &&
 		( bCreatedDefaultMaterial || m_bPerformanceProfileMaterialPendingApply ) ) {
 		m_pMaterial->setShaderPerformancePreset(
-			T3DMaterial::SHADER_PRESET_XBOX_360_AUTHENTIC );
+			SHADER_PRESET_XBOX_360_AUTHENTIC );
 		m_bPerformanceProfileMaterialPendingApply = false;
 	}
 	connectAutoShaderProfileSignal( m_pAutoShaderProfile );
 	applyAutoShaderProfileMode();
 	if ( m_pAssets.is_null() ) {
-		LOG( T3DTerrain::DEBUG, "Creating blank texture list" );
+		LOG( DEBUG, "Creating blank texture list" );
 		m_pAssets.instantiate();
 	}
 	if ( !m_pCollision ) {
-		LOG( T3DTerrain::DEBUG, "Creating collision manager" );
+		LOG( DEBUG, "Creating collision manager" );
 		m_pCollision = memnew( T3DCollision );
 	}
 	if ( !m_pInstancer ) {
-		LOG( T3DTerrain::DEBUG, "Creating instancer" );
+		LOG( DEBUG, "Creating instancer" );
 		m_pInstancer = memnew( T3DInstancer );
 	}
 	if ( !m_pNodeStreamer ) {
-		LOG( T3DTerrain::DEBUG, "Creating node streamer" );
+		LOG( DEBUG, "Creating node streamer" );
 		m_pNodeStreamer = memnew( T3DNodeStreamer );
 	}
 	if ( !m_pLightmapStreamer ) {
-		LOG( T3DTerrain::DEBUG, "Creating lightmap streamer" );
+		LOG( DEBUG, "Creating lightmap streamer" );
 		m_pLightmapStreamer = memnew( T3DLightmapStreamer );
 	}
 	if ( !m_pHlodStreamer ) {
-		LOG( T3DTerrain::DEBUG, "Creating HLOD streamer" );
+		LOG( DEBUG, "Creating HLOD streamer" );
 		m_pHlodStreamer = memnew( T3DHLODStreamer );
 	}
 	// Connect signals
 	// Any region was changed, update region labels
 	if ( !m_pData->is_connected( "region_map_changed", callable_mp( this, &T3DTerrain::updateRegionLabels ) ) ) {
-		LOG( T3DTerrain::DEBUG, "Connecting _data::region_map_changed signal to set_show_region_locations()" );
+		LOG( DEBUG, "Connecting _data::region_map_changed signal to set_show_region_locations()" );
 		m_pData->connect( "region_map_changed", callable_mp( this, &T3DTerrain::updateRegionLabels ) );
 	}
 	// Region layout changes are coalesced and update the existing dynamic
 	// collision pool instead of rebuilding every shape per editor event.
 	if ( !m_pData->is_connected( "region_map_changed",
 							 callable_mp( m_pCollision, &T3DCollision::onRegionMapChanged ) ) ) {
-		LOG( T3DTerrain::DEBUG, "Connecting _data::region_map_changed signal to on_region_map_changed()" );
+		LOG( DEBUG, "Connecting _data::region_map_changed signal to on_region_map_changed()" );
 		m_pData->connect( "region_map_changed", callable_mp( m_pCollision, &T3DCollision::onRegionMapChanged ) );
 	}
 	connectResourceSignals( m_pAssets, m_pMaterial );
 	refreshPerformanceProfileConformity();
 	// Height map was regenerated, update aabbs
 	if ( !m_pData->is_connected( "height_maps_changed", callable_mp( this, &T3DTerrain::updateMesherAabbs ) ) ) {
-		LOG( T3DTerrain::DEBUG, "Connecting _data::height_maps_changed signal to update_aabbs()" );
+		LOG( DEBUG, "Connecting _data::height_maps_changed signal to update_aabbs()" );
 		m_pData->connect( "height_maps_changed", callable_mp( this, &T3DTerrain::updateMesherAabbs ) );
 	}
 	// Initialize the system
 	if ( !m_bInitialized && m_bIsInsideWorld && is_inside_tree() ) {
-		LOG( T3DTerrain::INFO, "[lifecycle] Initializing main subsystems: gpu_cache=",
+		LOG( INFO, "[lifecycle] Initializing main subsystems: gpu_cache=",
 			effectiveGpuRegionCacheEnabled(), "; cpu_cache=", effectiveCpuRegionCacheEnabled(),
 			"; instance_cache=", effectiveInstanceRegionCacheEnabled() );
 		const Error data_error = m_pData->initialize( this );
 		if ( data_error != OK ) {
-			LOG( T3DTerrain::ERROR, "[lifecycle] Terrain data activation failed; dependent runtime systems will remain inactive. Error: ",
+			LOG( ERROR, "[lifecycle] Terrain data activation failed; dependent runtime systems will remain inactive. Error: ",
 				data_error, "; state=", m_pData->getRuntimeState() );
 			set_physics_process( false );
 			return;
@@ -155,7 +155,7 @@ void T3DTerrain::initializeInternal( void ) {
 		m_pData->ensureFarAtlases();
 		m_pMaterial->initialize( this );
 		if ( !m_pMaterial->isRenderShaderReady() ) {
-			LOG( T3DTerrain::ERROR, "[lifecycle] Terrain material failed to produce a valid render shader; "
+			LOG( ERROR, "[lifecycle] Terrain material failed to produce a valid render shader; "
 				"aborting terrain activation before render meshes are created." );
 			m_pMaterial->uninitialize( this );
 			m_pAssets->uninitialize( this );
@@ -204,7 +204,7 @@ void T3DTerrain::initializeInternal( void ) {
 		m_bInitialized = true;
 		updateRegionLabels();
 		snap();
-		LOG( T3DTerrain::INFO, "[lifecycle] Main subsystems ready: regions=", m_pData->getRegionCount(),
+		LOG( INFO, "[lifecycle] Main subsystems ready: regions=", m_pData->getRegionCount(),
 			"; region_size=", ( int ) ( m_nRegionSize ), "; mesh_lods=", m_nMeshLods,
 			"; tessellation=", m_tessellationLevel );
 	}
@@ -247,7 +247,7 @@ void T3DTerrain::physicsProcess( const double fDelta ) {
 		m_lastBufferPosition = V2_MAX;
 	}
 	if ( !m_camera.isValid() ) {
-		LOG( T3DTerrain::DEBUG, "Camera is null, getting the current one" );
+		LOG( DEBUG, "Camera is null, getting the current one" );
 		grabCamera();
 	}
 
@@ -422,14 +422,14 @@ void T3DTerrain::physicsProcess( const double fDelta ) {
 void T3DTerrain::grabCamera( void ) {
 	if ( IS_EDITOR ) {
 		m_camera.setTarget( EditorInterface::get_singleton()->get_editor_viewport_3d( 0 )->get_camera_3d() );
-		LOG( T3DTerrain::DEBUG, "Grabbing the first editor viewport camera: ", m_camera.getTarget() );
+		LOG( DEBUG, "Grabbing the first editor viewport camera: ", m_camera.getTarget() );
 	} else {
 		m_camera.setTarget( get_viewport()->get_camera_3d() );
-		LOG( T3DTerrain::DEBUG, "Grabbing the in-game viewport camera: ", m_camera.getTarget() );
+		LOG( DEBUG, "Grabbing the in-game viewport camera: ", m_camera.getTarget() );
 	}
 	if ( !m_camera.isValid() && !m_clipmapTarget.isValid() ) {
 		set_physics_process( false ); // No target to follow, disable snapping until one set
-		LOG( T3DTerrain::ERROR, "Cannot find clipmap target or active camera. LODs won't be updated. Set manually with "
+		LOG( ERROR, "Cannot find clipmap target or active camera. LODs won't be updated. Set manually with "
 				   "set_clipmap_target() or setCamera()" );
 	}
 }
@@ -450,7 +450,7 @@ void T3DTerrain::destroyContainers( void ) {
 	}
 }
 
-const T3DTerrain::t3dBakeRegionSnapshot_t *T3DTerrain::t3dBakeSnapshot_t::getRegion( const int32_t iX, const int32_t iZ ) const {
+const t3dBakeRegionSnapshot_t *t3dBakeSnapshot_t::getRegion( const int32_t iX, const int32_t iZ ) const {
 	if ( nRegionSize <= 0 ) {
 		return nullptr;
 	}
@@ -470,7 +470,7 @@ const T3DTerrain::t3dBakeRegionSnapshot_t *T3DTerrain::t3dBakeSnapshot_t::getReg
 	return &regions[( size_t ) ( region_index )];
 }
 
-void T3DTerrain::t3dBakeSnapshot_t::getSample(
+void t3dBakeSnapshot_t::getSample(
 	const int32_t iX, const int32_t iZ, uint32_t &nControl,
 	real_t &fHeight
 ) const {
@@ -499,7 +499,7 @@ void T3DTerrain::t3dBakeSnapshot_t::getSample(
 	return;
 }
 
-bool T3DTerrain::t3dBakeSnapshot_t::getMinimumRect(
+bool t3dBakeSnapshot_t::getMinimumRect(
 	const int32_t iX, const int32_t iZ, const int32_t nWidth,
 	const int32_t nHeight, real_t &fHeight
 ) const {
@@ -544,8 +544,8 @@ bool T3DTerrain::t3dBakeSnapshot_t::getMinimumRect(
 	return true;
 }
 
-Vector3 T3DTerrain::t3dBakeSnapshot_t::getMeshVertex(
-	const int32_t nLod, const T3DData::t3dHeightFilter_t filter,
+Vector3 t3dBakeSnapshot_t::getMeshVertex(
+	const int32_t nLod, const t3dHeightFilter_t filter,
 	const int32_t iX, const int32_t iZ, uint32_t &nControl
 ) const {
 	const int32_t step = 1 << CLAMP( nLod, 0, 8 );
@@ -555,7 +555,7 @@ Vector3 T3DTerrain::t3dBakeSnapshot_t::getMeshVertex(
 		fHeight = NAN;
 	}
 
-	if ( filter == T3DData::HEIGHT_FILTER_MINIMUM &&
+	if ( filter == HEIGHT_FILTER_MINIMUM &&
 		!getMinimumRect( iX - step / 2, iZ - step / 2, step, step, fHeight ) ) {
 		fHeight = NAN;
 	}
@@ -574,7 +574,7 @@ Vector3 T3DTerrain::t3dBakeSnapshot_t::getMeshVertex(
 ///////////////////////////
 
 T3DTerrain::T3DTerrain( void ) {
-	LOG( T3DTerrain::INFO, "Terrain3D v", m_version, " - https://github.com/TokisanGames/Terrain3D" );
+	LOG( INFO, "Terrain3D v", m_version, " - https://github.com/TokisanGames/Terrain3D" );
 	// Process the command line
 	PackedStringArray args = OS::get_singleton()->get_cmdline_args();
 	for ( int i = args.size() - 1; i >= 0; i-- ) {
@@ -582,13 +582,13 @@ T3DTerrain::T3DTerrain( void ) {
 		if ( arg.begins_with( "--terrain3d-debug=" ) ) {
 			String value = arg.rsplit( "=" )[1];
 			if ( value == "ERROR" ) {
-				setDebugLevel( T3DTerrain::ERROR );
+				setDebugLevel( ERROR );
 			} else if ( value == "INFO" ) {
-				setDebugLevel( T3DTerrain::INFO );
+				setDebugLevel( INFO );
 			} else if ( value == "DEBUG" ) {
-				setDebugLevel( T3DTerrain::DEBUG );
+				setDebugLevel( DEBUG );
 			} else if ( value == "EXTREME" ) {
-				setDebugLevel( T3DTerrain::EXTREME );
+				setDebugLevel( EXTREME );
 			}
 		}
 	}
@@ -608,8 +608,8 @@ T3DTerrain::~T3DTerrain( void ) {
 }
 
 void T3DTerrain::setDebugLevel( const t3dDebugLevel_t level ) {
-	SET_IF_DIFF( s_debugLevel, CLAMP( level, T3DTerrain::ERROR, T3DTerrain::EXTREME ) );
-	LOG( T3DTerrain::INFO, "t3dSetting_t debug level: ", s_debugLevel );
+	SET_IF_DIFF( s_debugLevel, CLAMP( level, ERROR, EXTREME ) );
+	LOG( INFO, "t3dSetting_t debug level: ", s_debugLevel );
 }
 
 EA_FORCE_INLINE static String terrain3dDefaultRegionLightmapOutputDirectory( const String &rDataDirectory ) { const String directory = rDataDirectory.strip_edges().trim_suffix( "/" ); return directory.is_empty() ? String() : directory.path_join( "lighting" ); }
@@ -676,7 +676,7 @@ void T3DTerrain::_notification( const int nWhat ) {
 
 		case NOTIFICATION_POSTINITIALIZE: {
 			// Object initialized, before script is attached
-			LOG( T3DTerrain::INFO, "NOTIFICATION_POSTINITIALIZE" );
+			LOG( INFO, "NOTIFICATION_POSTINITIALIZE" );
 			buildContainers();
 			break;
 		}
@@ -684,7 +684,7 @@ void T3DTerrain::_notification( const int nWhat ) {
 		case NOTIFICATION_ENTER_WORLD: {
 			// Node3D registered to new World3D resource
 			// Sent on scene changes
-			LOG( T3DTerrain::INFO, "NOTIFICATION_ENTER_WORLD" );
+			LOG( INFO, "NOTIFICATION_ENTER_WORLD" );
 			m_bIsInsideWorld = true;
 			// ENTER_WORLD and ENTER_TREE can be delivered in different relative
 			// orders during editor scene-tab transitions. Initialization is
@@ -699,7 +699,7 @@ void T3DTerrain::_notification( const int nWhat ) {
 		case NOTIFICATION_ENTER_TREE: {
 			// Node entered a SceneTree
 			// Sent on scene changes
-			LOG( T3DTerrain::INFO, "NOTIFICATION_ENTER_TREE" );
+			LOG( INFO, "NOTIFICATION_ENTER_TREE" );
 			set_as_top_level( true ); // Don't inherit transforms from parent. Global only.
 			set_notify_transform( true );
 			set_meta( "_edit_lock_", true );
@@ -708,7 +708,7 @@ void T3DTerrain::_notification( const int nWhat ) {
 			// Reload editor textures - Also see READY
 			if ( m_bFreeEditorTextures && !IS_EDITOR && m_pAssets.is_valid() &&
 				!m_pAssets->get_path().is_empty() && !m_pAssets->get_path().contains( "T3DAssets" ) ) {
-				LOG( T3DTerrain::INFO, "free_editor_textures enabled, reloading Assets path: ", m_pAssets->get_path() );
+				LOG( INFO, "free_editor_textures enabled, reloading Assets path: ", m_pAssets->get_path() );
 				m_pAssets =
 					ResourceLoader::get_singleton()->load( m_pAssets->get_path(), "", ResourceLoader::CACHE_MODE_IGNORE );
 			}
@@ -719,7 +719,7 @@ void T3DTerrain::_notification( const int nWhat ) {
 
 		case NOTIFICATION_READY: {
 			// Node is ready
-			LOG( T3DTerrain::INFO, "NOTIFICATION_READY" );
+			LOG( INFO, "NOTIFICATION_READY" );
 			// Optional: Run the testing suite
 			// #include "core/unit_testing.h"
 			// test_differs();
@@ -727,10 +727,10 @@ void T3DTerrain::_notification( const int nWhat ) {
 			// Clear editor textures - also see ENTER_TREE
 			if ( m_bFreeEditorTextures && !IS_EDITOR && m_pAssets.is_valid() ) {
 				if ( m_pAssets->get_path().contains( "T3DAssets" ) ) {
-					LOG( T3DTerrain::WARN, "free_editor_textures requires `Assets` be saved to a file. Do so, or disable the former "
+					LOG( WARN, "free_editor_textures requires `Assets` be saved to a file. Do so, or disable the former "
 							  "to turn off this warning" );
 				} else {
-					LOG( T3DTerrain::INFO, "free_editor_textures enabled, clearing texture assets" );
+					LOG( INFO, "free_editor_textures enabled, clearing texture assets" );
 					m_pAssets->clearTextures();
 				}
 			}
@@ -755,7 +755,7 @@ void T3DTerrain::_notification( const int nWhat ) {
 
 		case NOTIFICATION_VISIBILITY_CHANGED: {
 			// Node3D visibility changed
-			LOG( T3DTerrain::INFO, "NOTIFICATION_VISIBILITY_CHANGED" );
+			LOG( INFO, "NOTIFICATION_VISIBILITY_CHANGED" );
 			if ( m_pTerrainMesher ) {
 				m_pTerrainMesher->update();
 			}
@@ -774,27 +774,27 @@ void T3DTerrain::_notification( const int nWhat ) {
 
 		case NOTIFICATION_EXTENSION_RELOADED: {
 			// Object finished hot reloading
-			LOG( T3DTerrain::INFO, "NOTIFICATION_EXTENSION_RELOADED" );
+			LOG( INFO, "NOTIFICATION_EXTENSION_RELOADED" );
 			break;
 		}
 
 		case NOTIFICATION_EDITOR_PRE_SAVE: {
 			// Editor Node is about to save the current scene
-			LOG( T3DTerrain::INFO, "NOTIFICATION_EDITOR_PRE_SAVE" );
+			LOG( INFO, "NOTIFICATION_EDITOR_PRE_SAVE" );
 			if ( m_dataDirectory.is_empty() ) {
-				LOG( T3DTerrain::ERROR, "Data directory is empty. Set it to save regions to disk." );
+				LOG( ERROR, "Data directory is empty. Set it to save regions to disk." );
 			} else if ( !m_pData ) {
-				LOG( T3DTerrain::DEBUG, "Save requested, but no valid data object. Skipping" );
+				LOG( DEBUG, "Save requested, but no valid data object. Skipping" );
 			} else {
 				m_pData->saveDirectory( m_dataDirectory );
 			}
 			if ( !m_pMaterial.is_valid() ) {
-				LOG( T3DTerrain::DEBUG, "Save requested, but no valid material. Skipping" );
+				LOG( DEBUG, "Save requested, but no valid material. Skipping" );
 			} else {
 				m_pMaterial->save();
 			}
 			if ( !m_pAssets.is_valid() ) {
-				LOG( T3DTerrain::DEBUG, "Save requested, but no valid texture list. Skipping" );
+				LOG( DEBUG, "Save requested, but no valid texture list. Skipping" );
 			} else {
 				m_pAssets->save();
 			}
@@ -809,7 +809,7 @@ void T3DTerrain::_notification( const int nWhat ) {
 		case NOTIFICATION_CRASH: {
 			// Godot's crash handler reports engine is about to crash
 			// Only works on desktop if the crash handler is enabled
-			LOG( T3DTerrain::INFO, "NOTIFICATION_CRASH" );
+			LOG( INFO, "NOTIFICATION_CRASH" );
 			break;
 		}
 
@@ -818,7 +818,7 @@ void T3DTerrain::_notification( const int nWhat ) {
 		case NOTIFICATION_EXIT_TREE: {
 			// Node is about to exit a SceneTree
 			// Sent on scene changes
-			LOG( T3DTerrain::INFO, "NOTIFICATION_EXIT_TREE" );
+			LOG( INFO, "NOTIFICATION_EXIT_TREE" );
 			deactivateRuntime();
 			destroyMousePicking();
 			destroyDisplacementBuffer();
@@ -828,7 +828,7 @@ void T3DTerrain::_notification( const int nWhat ) {
 		case NOTIFICATION_EXIT_WORLD: {
 			// Node3D unregistered from current World3D
 			// Sent on scene changes
-			LOG( T3DTerrain::INFO, "NOTIFICATION_EXIT_WORLD" );
+			LOG( INFO, "NOTIFICATION_EXIT_WORLD" );
 			// Rendering/physics RIDs and process-static terrain storage belong to the
 			// active World3D. Preserve the loaded repository, but release every runtime
 			// owner so another scene can activate before this node is destroyed.
@@ -839,7 +839,7 @@ void T3DTerrain::_notification( const int nWhat ) {
 
 		case NOTIFICATION_PREDELETE: {
 			// Object is about to be deleted
-			LOG( T3DTerrain::INFO, "NOTIFICATION_PREDELETE" );
+			LOG( INFO, "NOTIFICATION_PREDELETE" );
 			disconnectAutoShaderProfileSignal( m_pAutoShaderProfile );
 			deactivateRuntime();
 			destroyTerrainMesher( true );

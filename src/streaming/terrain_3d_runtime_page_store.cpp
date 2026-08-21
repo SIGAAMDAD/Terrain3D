@@ -461,10 +461,10 @@ T3DRuntimePageStore::~T3DRuntimePageStore( void ) {
 void T3DRuntimePageStore::reset( void ) {
 	poll( true );
 	for ( int index = 0; index < m_nPreparedPageCount; ++index ) {
-		m_preparedPages[( size_t ) ( index )] = PreparedPage{};
+		m_preparedPages[( size_t ) ( index )] = t3dRuntimePreparedPage_t{};
 	}
 	for ( int index = 0; index < m_nPrepareWorkPageCount; ++index ) {
-		m_workPages[( size_t ) ( index )] = PreparedPage{};
+		m_workPages[( size_t ) ( index )] = t3dRuntimePreparedPage_t{};
 	}
 	m_nPreparedPageCount = 0;
 	m_nPrepareWorkPageCount = 0;
@@ -474,7 +474,7 @@ void T3DRuntimePageStore::reset( void ) {
 	m_queuedPriorities.fill( 0u );
 	m_preparedByRegion.fill( ( int16_t ) -1 );
 	m_workByRegion.fill( ( int16_t ) -1 );
-	m_prepareContext = PrepareJobContext{};
+	m_prepareContext = t3dRuntimePrepareJobContext_t{};
 	m_nPrepareGroupId = WorkerThreadPool::INVALID_TASK_ID;
 	m_bPrepareJobActive = false;
 	m_nPrepareJobWorkers = 0;
@@ -678,7 +678,7 @@ bool T3DRuntimePageStore::removePage( const String &rPagePath ) const {
 	return removed;
 }
 
-bool T3DRuntimePageStore::loadSnapshot( PreparedPage &rPage, const bool bPreserveMaterialized ) {
+bool T3DRuntimePageStore::loadSnapshot( t3dRuntimePreparedPage_t &rPage, const bool bPreserveMaterialized ) {
 	if ( !bPreserveMaterialized ) {
 		rPage.height.unref();
 		rPage.heightBytes.clear();
@@ -759,10 +759,10 @@ bool T3DRuntimePageStore::loadSnapshot( PreparedPage &rPage, const bool bPreserv
 		rPage.nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
 		return false;
 	}
-	const uint32_t optional_mask = ( uint32_t ) ( T3DRegion::CHANNEL_CONTROL | T3DRegion::CHANNEL_COLOR );
+	const uint32_t optional_mask = ( uint32_t ) ( REGION_CHANNEL_CONTROL | REGION_CHANNEL_COLOR );
 	const uint32_t expected_flags = rPage.expectedChannelFlags & optional_mask;
 	if ( ( header.channelFlags & optional_mask ) != expected_flags ||
-		( header.channelFlags & ( uint32_t ) ( T3DRegion::CHANNEL_DERIVED ) ) == 0u ||
+		( header.channelFlags & ( uint32_t ) ( REGION_CHANNEL_DERIVED ) ) == 0u ||
 		!terrain3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_HOLE_MASK ) ||
 		!terrain3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_COLLISION_HEIGHT ) ||
 		!terrain3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_COLLISION_BOUNDS ) ||
@@ -837,7 +837,7 @@ bool T3DRuntimePageStore::loadSnapshot( PreparedPage &rPage, const bool bPreserv
 			rPage.nValidationUsec, rPage.nMaterializeUsec );
 	}
 	if ( bNeedGpu || bNeedCpu ) {
-		if ( ( expected_flags & ( uint32_t ) ( T3DRegion::CHANNEL_CONTROL ) ) != 0u ) {
+		if ( ( expected_flags & ( uint32_t ) ( REGION_CHANNEL_CONTROL ) ) != 0u ) {
 			const t3dRuntimePageChannelInfo_t *const pControlChannel =
 				terrain3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_CONTROL );
 			if ( !pControlChannel ) {
@@ -846,7 +846,7 @@ bool T3DRuntimePageStore::loadSnapshot( PreparedPage &rPage, const bool bPreserv
 			if ( rPage.pControl.is_null() ) rPage.pControl = readImage( pFile, *pControlChannel, rPage.nFileReadUsec,
 				rPage.nValidationUsec, rPage.nMaterializeUsec );
 		}
-		if ( ( expected_flags & ( uint32_t ) ( T3DRegion::CHANNEL_COLOR ) ) != 0u ) {
+		if ( ( expected_flags & ( uint32_t ) ( REGION_CHANNEL_COLOR ) ) != 0u ) {
 			const t3dRuntimePageChannelInfo_t *const pColorChannel =
 				terrain3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_COLOR );
 			if ( !pColorChannel ) {
@@ -923,7 +923,7 @@ bool T3DRuntimePageStore::validatePageForRegion(
 	if ( !pRegion || !m_pRepository ) {
 		return false;
 	}
-	PreparedPage page;
+	t3dRuntimePreparedPage_t page;
 	page.location = pRegion->getLocation();
 	page.pagePath = getPagePath( pRegion, rConfig.dataDirectory );
 	page.sourcePath = pRegion->get_path();
@@ -950,7 +950,7 @@ bool T3DRuntimePageStore::loadCpuMapsNow(
 	if ( !m_pRepository || !rConfig.bCookedPagesEnabled ) return false;
 	T3DRegion *const pRegion = m_pRepository->getRegionPtr( rLocation );
 	if ( !pRegion || pRegion->isDeleted() ) return false;
-	PreparedPage page;
+	t3dRuntimePreparedPage_t page;
 	page.location = rLocation;
 	page.pagePath = getPagePath( pRegion, rConfig.dataDirectory );
 	page.sourcePath = pRegion->get_path();
@@ -975,7 +975,7 @@ bool T3DRuntimePageStore::loadCollisionNow(
 	if ( !m_pRepository || !rConfig.bCookedPagesEnabled ) return false;
 	T3DRegion *const pRegion = m_pRepository->getRegionPtr( rLocation );
 	if ( !pRegion || pRegion->isDeleted() ) return false;
-	PreparedPage page;
+	t3dRuntimePreparedPage_t page;
 	page.location = rLocation;
 	page.pagePath = getPagePath( pRegion, rConfig.dataDirectory );
 	page.sourcePath = pRegion->get_path();
@@ -1001,7 +1001,7 @@ bool T3DRuntimePageStore::loadNavigationNow(
 	if ( !m_pRepository || !rConfig.bCookedPagesEnabled ) return false;
 	T3DRegion *const pRegion = m_pRepository->getRegionPtr( rLocation );
 	if ( !pRegion || pRegion->isDeleted() ) return false;
-	PreparedPage page;
+	t3dRuntimePreparedPage_t page;
 	page.location = rLocation;
 	page.pagePath = getPagePath( pRegion, rConfig.dataDirectory );
 	page.sourcePath = pRegion->get_path();
@@ -1094,9 +1094,9 @@ bool T3DRuntimePageStore::writePage(
 		return fail( "terrain shadow mask must be a square mipmapped L8 image" );
 	}
 	const uint32_t optional_flags = ( uint32_t ) ( pRegion->getChannelFlags() ) &
-		( uint32_t ) ( T3DRegion::CHANNEL_CONTROL | T3DRegion::CHANNEL_COLOR );
-	if ( ( ( optional_flags & T3DRegion::CHANNEL_CONTROL ) != 0u ) != rPayload.pControl.is_valid() ||
-		( ( optional_flags & T3DRegion::CHANNEL_COLOR ) != 0u ) != rPayload.pColor.is_valid() ) {
+		( uint32_t ) ( REGION_CHANNEL_CONTROL | REGION_CHANNEL_COLOR );
+	if ( ( ( optional_flags & REGION_CHANNEL_CONTROL ) != 0u ) != rPayload.pControl.is_valid() ||
+		( ( optional_flags & REGION_CHANNEL_COLOR ) != 0u ) != rPayload.pColor.is_valid() ) {
 		return fail( "optional cooked channels do not match region channel metadata" );
 	}
 	if ( rPayload.materialMask == 0u ) {
@@ -1117,7 +1117,7 @@ bool T3DRuntimePageStore::writePage(
 	header.colorDivisor = ( uint32_t ) ( MAX( 1, rConfig.colorDivisor ) );
 	header.derivedDivisor = ( uint32_t ) ( MAX( 1, rConfig.derivedDivisor ) );
 	header.channelFlags = ( uint32_t ) ( pRegion->getChannelFlags() ) |
-		( uint32_t ) ( T3DRegion::CHANNEL_DERIVED );
+		( uint32_t ) ( REGION_CHANNEL_DERIVED );
 	header.sourceSignatureLo = ( uint32_t ) ( source_signature & 0xffffffffu );
 	header.sourceSignatureHi = ( uint32_t ) ( source_signature >> 32u );
 	header.blendRecipeVersion = TERRAIN3D_RUNTIME_PAGE_BLEND_RECIPE_VERSION;
@@ -1278,11 +1278,11 @@ bool T3DRuntimePageStore::collectPageSources(
 }
 
 void T3DRuntimePageStore::prepareTask( void *const pContext, const uint32_t iIndex ) {
-	PrepareJobContext *const context = ( PrepareJobContext * ) ( pContext );
+	t3dRuntimePrepareJobContext_t *const context = ( t3dRuntimePrepareJobContext_t * ) ( pContext );
 	if ( !context || !context->pPages || iIndex >= ( uint32_t ) ( context->nPageCount ) ) {
 		return;
 	}
-	PreparedPage &page = context->pPages[iIndex];
+	t3dRuntimePreparedPage_t &page = context->pPages[iIndex];
 	Time *const pTime = Time::get_singleton();
 	page.nWorkerStartedUsec = pTime ? pTime->get_ticks_usec() : page.nRequestedUsec;
 	page.bAttempted = true;
@@ -1316,7 +1316,7 @@ void T3DRuntimePageStore::poll( const bool bWait ) {
 	m_nPrepareMaterializeUsecLast = 0u;
 	m_nPrepareWorkerUsecLast = 0u;
 	for ( int work_index = 0; work_index < m_nPrepareWorkPageCount; ++work_index ) {
-		PreparedPage &work_page = m_workPages[( size_t ) ( work_index )];
+		t3dRuntimePreparedPage_t &work_page = m_workPages[( size_t ) ( work_index )];
 		if ( work_page.nWorkerStartedUsec >= work_page.nRequestedUsec ) {
 			m_nPrepareQueueWaitUsecLast = MAX(
 				m_nPrepareQueueWaitUsecLast, work_page.nWorkerStartedUsec - work_page.nRequestedUsec );
@@ -1373,14 +1373,14 @@ void T3DRuntimePageStore::poll( const bool bWait ) {
 			if ( map_index >= 0 ) m_preparedByRegion[( size_t ) map_index] = ( int16_t ) destination;
 		}
 		if ( map_index >= 0 ) m_workByRegion[( size_t ) map_index] = ( int16_t ) -1;
-		work_page = PreparedPage{};
+		work_page = t3dRuntimePreparedPage_t{};
 	}
 	Time *const pTime = Time::get_singleton();
 	const uint64_t finished = pTime ? pTime->get_ticks_usec() : m_nPrepareJobStartedUsec;
 	m_nPrepareLatencyUsecLast = finished >= m_nPrepareJobStartedUsec ? finished - m_nPrepareJobStartedUsec : 0u;
 	m_nPrepareWorkPageCount = 0;
 	m_workByRegion.fill( ( int16_t ) -1 );
-	m_prepareContext = PrepareJobContext{};
+	m_prepareContext = t3dRuntimePrepareJobContext_t{};
 	m_nPrepareGroupId = WorkerThreadPool::INVALID_TASK_ID;
 	m_bPrepareJobActive = false;
 	m_nPrepareJobWorkers = 0;
@@ -1517,8 +1517,8 @@ void T3DRuntimePageStore::service( const T3DRuntimePageServiceState &rState ) {
 		const Vector2i location = m_pRepository->getSlotsData()[best_slot];
 		T3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
 		const int work_index = m_nPrepareWorkPageCount++;
-		PreparedPage &page = m_workPages[( size_t ) work_index];
-		page = PreparedPage{};
+		t3dRuntimePreparedPage_t &page = m_workPages[( size_t ) work_index];
+		page = t3dRuntimePreparedPage_t{};
 		page.location = location;
 		m_workByRegion[( size_t ) best_map_index] = ( int16_t ) work_index;
 		page.pagePath = getPagePath( pRegion, rState.config.dataDirectory );
@@ -1581,7 +1581,7 @@ void T3DRuntimePageStore::consumePreparedIndex( const int nIndex ) {
 		const int moved_map_index = T3DRegionRepository::getRegionMapIndex( m_preparedPages[( size_t ) nIndex].location );
 		if ( moved_map_index >= 0 ) m_preparedByRegion[( size_t ) moved_map_index] = ( int16_t ) nIndex;
 	}
-	m_preparedPages[( size_t ) last] = PreparedPage{};
+	m_preparedPages[( size_t ) last] = t3dRuntimePreparedPage_t{};
 	--m_nPreparedPageCount;
 }
 
@@ -1594,7 +1594,7 @@ bool T3DRuntimePageStore::takeHeight(
 	if ( pNativeHeightBytes ) {
 		pNativeHeightBytes->clear();
 	}
-	const int index = getPreparedIndex( rLocation ); if ( index < 0 ) return false; PreparedPage &page = m_preparedPages[( size_t ) index];
+	const int index = getPreparedIndex( rLocation ); if ( index < 0 ) return false; t3dRuntimePreparedPage_t &page = m_preparedPages[( size_t ) index];
 	if ( ( page.consumerMask & nConsumer ) == 0u ) return false;
 		if ( page.bLoaded ) {
 			rHeight = bMiddle ? page.pMiddleHeight : page.height;
@@ -1616,7 +1616,7 @@ bool T3DRuntimePageStore::takeInstance(
 	PackedByteArray *const pInstanceMetadata, PackedByteArray *const pMultimeshFastStart
 ) {
 	poll( false );
-	const int index = getPreparedIndex( rLocation ); if ( index < 0 ) return false; PreparedPage &page = m_preparedPages[( size_t ) index];
+	const int index = getPreparedIndex( rLocation ); if ( index < 0 ) return false; t3dRuntimePreparedPage_t &page = m_preparedPages[( size_t ) index];
 	if ( ( page.consumerMask & RUNTIME_PAGE_CONSUMER_INSTANCE_STORE ) == 0u ) return false;
 		const bool loaded = page.bInstanceAttempted && page.bInstanceLoaded;
 		if ( loaded ) {
@@ -1639,7 +1639,7 @@ bool T3DRuntimePageStore::takeCpuMaps(
 	rControl.unref();
 	rColor.unref();
 	rDerived.unref();
-	const int index = getPreparedIndex( rLocation ); if ( index < 0 ) return false; PreparedPage &page = m_preparedPages[( size_t ) index];
+	const int index = getPreparedIndex( rLocation ); if ( index < 0 ) return false; t3dRuntimePreparedPage_t &page = m_preparedPages[( size_t ) index];
 	if ( ( page.consumerMask & RUNTIME_PAGE_CONSUMER_CPU_MAPS ) == 0u ) return false;
 		if ( page.bLoaded ) {
 			rHeight = page.height;
@@ -1658,7 +1658,7 @@ bool T3DRuntimePageStore::takeCpuMaps(
 bool T3DRuntimePageStore::takeNodeDescriptors( const Vector2i &rLocation, PackedByteArray &rDescriptors ) {
 	poll( false );
 	rDescriptors.clear();
-	const int index = getPreparedIndex( rLocation ); if ( index < 0 ) return false; PreparedPage &page = m_preparedPages[( size_t ) index];
+	const int index = getPreparedIndex( rLocation ); if ( index < 0 ) return false; t3dRuntimePreparedPage_t &page = m_preparedPages[( size_t ) index];
 	if ( ( page.consumerMask & RUNTIME_PAGE_CONSUMER_NODE_DESCRIPTORS ) == 0u ) return false;
 		if ( page.bLoaded ) {
 			rDescriptors = page.nodeDescriptors;
@@ -1678,7 +1678,7 @@ bool T3DRuntimePageStore::takeCollision(
 	rHeight.clear();
 	rBounds.clear();
 	rHoleMask.clear();
-	const int index = getPreparedIndex( rLocation ); if ( index < 0 ) return false; PreparedPage &page = m_preparedPages[( size_t ) index];
+	const int index = getPreparedIndex( rLocation ); if ( index < 0 ) return false; t3dRuntimePreparedPage_t &page = m_preparedPages[( size_t ) index];
 	if ( ( page.consumerMask & RUNTIME_PAGE_CONSUMER_COLLISION ) == 0u ) return false;
 		if ( page.bLoaded ) {
 			rHeight = page.collisionHeight;
@@ -1696,7 +1696,7 @@ bool T3DRuntimePageStore::takeCollision(
 bool T3DRuntimePageStore::takeNavigation( const Vector2i &rLocation, PackedByteArray &rNavigation ) {
 	poll( false );
 	rNavigation.clear();
-	const int index = getPreparedIndex( rLocation ); if ( index < 0 ) return false; PreparedPage &page = m_preparedPages[( size_t ) index];
+	const int index = getPreparedIndex( rLocation ); if ( index < 0 ) return false; t3dRuntimePreparedPage_t &page = m_preparedPages[( size_t ) index];
 	if ( ( page.consumerMask & RUNTIME_PAGE_CONSUMER_NAVIGATION ) == 0u ) return false;
 		if ( page.bLoaded ) {
 			rNavigation = page.navigation;
@@ -1712,7 +1712,7 @@ bool T3DRuntimePageStore::takeNavigation( const Vector2i &rLocation, PackedByteA
 bool T3DRuntimePageStore::takeTerrainShadowMask( const Vector2i &rLocation, Ref<Image> &rShadowMask ) {
 	poll( false );
 	rShadowMask.unref();
-	const int index = getPreparedIndex( rLocation ); if ( index < 0 ) return false; PreparedPage &page = m_preparedPages[( size_t ) index];
+	const int index = getPreparedIndex( rLocation ); if ( index < 0 ) return false; t3dRuntimePreparedPage_t &page = m_preparedPages[( size_t ) index];
 	if ( ( page.consumerMask & RUNTIME_PAGE_CONSUMER_TERRAIN_SHADOW ) == 0u ) return false;
 		if ( page.bLoaded ) {
 			rShadowMask = page.pTerrainShadowMask;
@@ -1737,7 +1737,7 @@ bool T3DRuntimePageStore::takeGpuPage(
 	if ( pRequestedUsec ) {
 		*pRequestedUsec = 0u;
 	}
-	const int index = getPreparedIndex( rLocation ); if ( index < 0 ) return false; PreparedPage &page = m_preparedPages[( size_t ) index];
+	const int index = getPreparedIndex( rLocation ); if ( index < 0 ) return false; t3dRuntimePreparedPage_t &page = m_preparedPages[( size_t ) index];
 	if ( ( page.consumerMask & RUNTIME_PAGE_CONSUMER_GPU_DETAIL ) == 0u ) return false;
 		bAttempted = page.bAttempted;
 		if ( pRequestedUsec ) {

@@ -18,44 +18,81 @@
 
 class T3DSampler;
 
+typedef enum t3dTool_e {
+	REGION,
+	SCULPT,
+	HEIGHT,
+	TEXTURE,
+	COLOR,
+	ROUGHNESS,
+	AUTOSHADER,
+	HOLES,
+	NAVIGATION,
+	INSTANCER,
+	ANGLE, // used for picking, TODO change to a picking tool
+	SCALE, // used for picking
+	LANDFORM,
+	TOOL_MAX,
+} t3dTool_t;
+
+typedef enum t3dOperation_e {
+	ADD,
+	SUBTRACT,
+	REPLACE,
+	AVERAGE,
+	GRADIENT,
+	OP_MAX,
+} t3dOperation_t;
+
+typedef enum t3dAverageMode_e {
+	AVG_HEIGHT,
+	AVG_BLEND,
+	AVG_ROUGHNESS,
+} t3dAverageMode_t;
+
+typedef struct t3dAxisSample_s {
+	real_t fOffset = 0.f;
+	real_t fGlobalPosition = 0.f;
+	int32_t regionLocation = 0;
+	int32_t mapPixel = 0;
+	real_t fCenteredUv = 0.f;
+} t3dAxisSample_t;
+
+typedef struct t3dRegionMapCache_s {
+	Ref<T3DRegion> pRegion;
+	Image *pMap = nullptr;
+	Image *pControlMap = nullptr;
+	PackedByteArray mapData;
+	PackedByteArray controlData;
+	uint8_t *pMapBytes = nullptr;
+	const uint8_t *pControlBytes = nullptr;
+	Vector2i location = V2I_ZERO;
+	Image::Format mapFormat = Image::FORMAT_MAX;
+	bool bMapHasMipmaps = false;
+	bool bMapWasImplicit = false;
+	bool bDirectAccess = false;
+	bool bModified = false;
+} t3dRegionMapCache_t;
+
+typedef struct t3dComputeWrite_s {
+	size_t iRegionIndex = 0u;
+	Vector2i mapPixel = V2I_ZERO;
+	uint32_t sourceValue = 0u;
+	Vector3 worldPosition = V3_ZERO;
+} t3dComputeWrite_t;
+
 class T3DEditor : public Object {
 	GDCLASS( T3DEditor, Object );
 	CLASS_NAME();
 
 public: // Constants
-	typedef enum t3dTool_e {
-		REGION,
-		SCULPT,
-		HEIGHT,
-		TEXTURE,
-		COLOR,
-		ROUGHNESS,
-		AUTOSHADER,
-		HOLES,
-		NAVIGATION,
-		INSTANCER,
-		ANGLE, // used for picking, TODO change to a picking tool
-		SCALE, // used for picking
-		LANDFORM,
-		TOOL_MAX,
-	} t3dTool_t;
 
 
-	typedef enum t3dOperation_e {
-		ADD,
-		SUBTRACT,
-		REPLACE,
-		AVERAGE,
-		GRADIENT,
-		OP_MAX,
-	} t3dOperation_t;
 
 
-	typedef enum t3dAverageMode_e {
-		AVG_HEIGHT,
-		AVG_BLEND,
-		AVG_ROUGHNESS,
-	} t3dAverageMode_t;
+
+
+
 
 private:
 	T3DTerrain *m_pTerrain = nullptr;
@@ -85,36 +122,11 @@ private:
 	real_t m_fCachedBrushGamma = -1.f;
 	eastl::vector<float> m_fBrushAlphaCache;
 
-	typedef struct t3dAxisSample_s {
-		real_t fOffset = 0.f;
-		real_t fGlobalPosition = 0.f;
-		int32_t regionLocation = 0;
-		int32_t mapPixel = 0;
-		real_t fCenteredUv = 0.f;
-	} t3dAxisSample_t;
 
-	typedef struct t3dRegionMapCache_s {
-		Ref<T3DRegion> pRegion;
-		Image *pMap = nullptr;
-		Image *pControlMap = nullptr;
-		PackedByteArray mapData;
-		PackedByteArray controlData;
-		uint8_t *pMapBytes = nullptr;
-		const uint8_t *pControlBytes = nullptr;
-		Vector2i location = V2I_ZERO;
-		Image::Format mapFormat = Image::FORMAT_MAX;
-		bool bMapHasMipmaps = false;
-		bool bMapWasImplicit = false;
-		bool bDirectAccess = false;
-		bool bModified = false;
-	} t3dRegionMapCache_t;
 
-	typedef struct t3dComputeWrite_s {
-		size_t iRegionIndex = 0u;
-		Vector2i mapPixel = V2I_ZERO;
-		uint32_t sourceValue = 0u;
-		Vector3 worldPosition = V3_ZERO;
-	} t3dComputeWrite_t;
+
+
+
 
 	// Reused for every stamp in one stroke. Ordinary brushes perform no heap
 	// allocation after their first stamp; pathological compute capacities are
@@ -122,7 +134,7 @@ private:
 	eastl::vector<t3dAxisSample_t> m_xAxisScratch;
 	eastl::vector<t3dAxisSample_t> m_zAxisScratch;
 	eastl::vector<t3dRegionMapCache_t> m_regionCacheScratch;
-	eastl::vector<T3DCompute::t3dBrushElement_t> m_computeElementScratch;
+	eastl::vector<t3dBrushElement_t> m_computeElementScratch;
 	eastl::vector<t3dComputeWrite_t> m_computeWriteScratch;
 	eastl::vector<Vector2i> m_modifiedRegionScratch;
 
@@ -151,7 +163,7 @@ private:
 		bool bMapWasImplicit = false
 	) const;
 	void applyEditSnapshot(
-		const Dictionary &rSnapshot, eastl::array<eastl::vector<Vector2i>, T3DRegion::TYPE_MAX> &rMapUpdates,
+		const Dictionary &rSnapshot, eastl::array<eastl::vector<Vector2i>, REGION_TYPE_MAX> &rMapUpdates,
 		bool &bInstancesChanged
 	);
 
@@ -198,8 +210,8 @@ protected:
 	static void _bind_methods( void );
 };
 
-VARIANT_ENUM_CAST( T3DEditor::t3dOperation_t );
-VARIANT_ENUM_CAST( T3DEditor::t3dTool_t );
+VARIANT_ENUM_CAST( t3dOperation_t );
+VARIANT_ENUM_CAST( t3dTool_t );
 
 // Inline functions
 
@@ -209,7 +221,7 @@ inline t3dMapType_t T3DEditor::getMapType( void ) const {
 		case HEIGHT:
 		case INSTANCER:
 		case LANDFORM:
-			return T3DRegion::TYPE_HEIGHT;
+			return TYPE_HEIGHT;
 			break;
 		case TEXTURE:
 		case AUTOSHADER:
@@ -217,14 +229,14 @@ inline t3dMapType_t T3DEditor::getMapType( void ) const {
 		case NAVIGATION:
 		case ANGLE:
 		case SCALE:
-			return T3DRegion::TYPE_CONTROL;
+			return TYPE_CONTROL;
 			break;
 		case COLOR:
 		case ROUGHNESS:
-			return T3DRegion::TYPE_COLOR;
+			return TYPE_COLOR;
 			break;
 		default:
-			return T3DRegion::TYPE_MAX;
+			return REGION_TYPE_MAX;
 	}
 }
 

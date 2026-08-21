@@ -59,17 +59,49 @@ private:
 };
 
 
+typedef enum t3dChannel_e : uint32_t {
+	RESIDENT_CHANNEL_HEIGHT = 1u << 0u,
+	RESIDENT_CHANNEL_CONTROL = 1u << 1u,
+	RESIDENT_CHANNEL_COLOR = 1u << 2u,
+	RESIDENT_CHANNEL_DERIVED = 1u << 3u,
+} t3dChannel_t;
+
+typedef struct t3dAlignedAllocation_s {
+	void *pRaw = nullptr;
+	uint8_t *pAligned = nullptr;
+	size_t nBytes = 0u;
+	bool bOwned = false;
+	bool allocate( size_t nRequestedBytes, size_t nAlignment );
+	void release( void );
+} t3dAlignedAllocation_t;
+
+typedef struct t3dSlotLayout_s {
+	size_t nHeightSlotBytes = 0u;
+	size_t nControlSlotBytes = 0u;
+	size_t nColorSlotBytes = 0u;
+	size_t nDerivedSlotBytes = 0u;
+	size_t stride = 0u;
+} t3dSlotLayout_t;
+
+typedef struct alignas( TERRAIN3D_RESIDENT_CACHE_ALIGNMENT ) t3dSlot_s {
+	Vector2i location = Vector2i( INT32_MAX, INT32_MAX );
+	std::atomic<uint32_t> nGeneration{1u};
+	std::atomic<uint32_t> nPinCount{0u};
+	std::atomic<uint8_t> nState{0u};
+	std::atomic<uint8_t> nValidChannels{0u};
+	std::atomic_bool bReferenced{false};
+	uint16_t *pHeight = nullptr;
+	uint32_t *pControl = nullptr;
+	uint32_t *pColor = nullptr;
+	uint8_t *pDerived = nullptr;
+} t3dSlot_t;
+
 class T3DResidentRegionPool {
 	friend class T3DResidentMapLease;
 
 public:
 
-	typedef enum t3dChannel_e : uint32_t {
-		CHANNEL_HEIGHT = 1u << 0u,
-		CHANNEL_CONTROL = 1u << 1u,
-		CHANNEL_COLOR = 1u << 2u,
-		CHANNEL_DERIVED = 1u << 3u,
-	} t3dChannel_t;
+
 
 	T3DResidentRegionPool( void ) = default;
 	~T3DResidentRegionPool( void );
@@ -99,38 +131,14 @@ public:
 	EA_FORCE_INLINE size_t getMetadataBytes( void ) const { return m_nMetadataBytes; }
 
 private:
-typedef struct t3dAlignedAllocation_s {
-		void *pRaw = nullptr;
-		uint8_t *pAligned = nullptr;
-		size_t nBytes = 0u;
-		bool bOwned = false;
-		bool allocate( size_t nRequestedBytes, size_t nAlignment );
-		void release( void );
-	} t3dAlignedAllocation_t;
 
-	typedef struct t3dSlotLayout_s {
-		size_t nHeightSlotBytes = 0u;
-		size_t nControlSlotBytes = 0u;
-		size_t nColorSlotBytes = 0u;
-		size_t nDerivedSlotBytes = 0u;
-		size_t stride = 0u;
-	} t3dSlotLayout_t;
+
+
 
 	// Replacement and lookup touch only the prefix below. Keep it in the first
 	// cacheline and prevent adjacent slot metadata from sharing that line; sparse
 	// allocation ownership and plane pointers are cold outside acquire/sync.
-	typedef struct alignas( TERRAIN3D_RESIDENT_CACHE_ALIGNMENT ) t3dSlot_s {
-		Vector2i location = Vector2i( INT32_MAX, INT32_MAX );
-		std::atomic<uint32_t> nGeneration{1u};
-		std::atomic<uint32_t> nPinCount{0u};
-		std::atomic<uint8_t> nState{0u};
-		std::atomic<uint8_t> nValidChannels{0u};
-		std::atomic_bool bReferenced{false};
-		uint16_t *pHeight = nullptr;
-		uint32_t *pControl = nullptr;
-		uint32_t *pColor = nullptr;
-		uint8_t *pDerived = nullptr;
-	} t3dSlot_t;
+
 
 	int m_nRegionSize = 0;
 	int m_nCapacity = 0;

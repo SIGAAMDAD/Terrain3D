@@ -23,25 +23,29 @@ class T3DTerrain;
 // Streams external LightmapGIData packages with terrain-region residency.
 // Region resources retain only package metadata; the heavy .lmbake payload and
 // its lightmap/shadowmask textures are requested when the cluster is desired.
+typedef enum t3dSourceLoadResult_e {
+	SOURCE_LOAD_PENDING,
+	SOURCE_LOAD_READY,
+	SOURCE_LOAD_FAILED,
+} t3dSourceLoadResult_t;
+
+typedef struct t3dActivePackage_s {
+	Ref<T3DRegionLighting> pPackage;
+	Ref<LightmapGIData> pSourceData;
+	Ref<LightmapGIData> pRuntimeData;
+	LightmapGI *pNode = nullptr;
+	uint64_t receiverSignature = 0u;
+	int nReceiverCount = 0;
+	bool bDesired = false;
+} t3dActivePackage_t;
+
 class T3DLightmapStreamer : public Object {
 	GDCLASS( T3DLightmapStreamer, Object );
 	CLASS_NAME();
 
-	typedef enum t3dSourceLoadResult_e {
-		SOURCE_LOAD_PENDING,
-		SOURCE_LOAD_READY,
-		SOURCE_LOAD_FAILED,
-	} t3dSourceLoadResult_t;
 
-	typedef struct t3dActivePackage_s {
-		Ref<T3DRegionLighting> pPackage;
-		Ref<LightmapGIData> pSourceData;
-		Ref<LightmapGIData> pRuntimeData;
-		LightmapGI *pNode = nullptr;
-		uint64_t receiverSignature = 0u;
-		int nReceiverCount = 0;
-		bool bDesired = false;
-	} t3dActivePackage_t;
+
+
 
 	T3DTerrain *m_pTerrain = nullptr;
 	t3dActivePackage_t m_szActive[TERRAIN3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT];

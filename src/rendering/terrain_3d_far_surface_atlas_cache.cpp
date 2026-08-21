@@ -228,11 +228,11 @@ Ref<Image> T3DFarSurfaceAtlasCache::getRegionMapOrDefault(
 		}
 	}
 	switch ( eMapType ) {
-		case T3DRegion::TYPE_HEIGHT:
+		case TYPE_HEIGHT:
 			return m_config.pDefaultHeightMap;
-		case T3DRegion::TYPE_CONTROL:
+		case TYPE_CONTROL:
 			return m_config.pDefaultControlMap;
-		case T3DRegion::TYPE_COLOR:
+		case TYPE_COLOR:
 			return m_config.pDefaultColorMap;
 		default:
 			return Ref<Image>();
@@ -451,12 +451,12 @@ bool T3DFarSurfaceAtlasCache::writeCooked( const String &rDirectory ) {
 }
 
 void T3DFarSurfaceAtlasCache::markAllDirty( const t3dMapType_t eMapType ) {
-	if ( eMapType == T3DRegion::TYPE_HEIGHT || eMapType == T3DRegion::TYPE_MAX ) {
+	if ( eMapType == TYPE_HEIGHT || eMapType == REGION_TYPE_MAX ) {
 		m_bHeightDirty = true;
 		m_bHeightDirtyAll = true;
 		m_heightDirtyRegions.reset();
 	}
-	if ( eMapType == T3DRegion::TYPE_CONTROL || eMapType == T3DRegion::TYPE_COLOR || eMapType == T3DRegion::TYPE_MAX ) {
+	if ( eMapType == TYPE_CONTROL || eMapType == TYPE_COLOR || eMapType == REGION_TYPE_MAX ) {
 		m_bColorDirty = true;
 		m_bColorDirtyAll = true;
 		m_colorDirtyRegions.reset();
@@ -473,13 +473,13 @@ void T3DFarSurfaceAtlasCache::markRegionDirty( const Vector2i &vLocation, const 
 	if ( map_index < 0 ) {
 		return;
 	}
-	if ( eMapType == T3DRegion::TYPE_HEIGHT || eMapType == T3DRegion::TYPE_MAX ) {
+	if ( eMapType == TYPE_HEIGHT || eMapType == REGION_TYPE_MAX ) {
 		m_bHeightDirty = true;
 		if ( !m_bHeightDirtyAll ) {
 			m_heightDirtyRegions.set( ( size_t ) ( map_index ) );
 		}
 	}
-	if ( eMapType == T3DRegion::TYPE_CONTROL || eMapType == T3DRegion::TYPE_COLOR || eMapType == T3DRegion::TYPE_MAX ) {
+	if ( eMapType == TYPE_CONTROL || eMapType == TYPE_COLOR || eMapType == REGION_TYPE_MAX ) {
 		m_bColorDirty = true;
 		if ( !m_bColorDirtyAll ) {
 			m_colorDirtyRegions.set( ( size_t ) ( map_index ) );
@@ -524,7 +524,7 @@ bool T3DFarSurfaceAtlasCache::patchHeightRegion( const Vector2i &vLocation, Pack
 		if ( lease.valid() ) {
 			height = lease.view().pHeight;
 		} else {
-			const Ref<Image> pHeight = getRegionMapOrDefault( pRegion, T3DRegion::TYPE_HEIGHT );
+			const Ref<Image> pHeight = getRegionMapOrDefault( pRegion, TYPE_HEIGHT );
 			if ( pHeight.is_valid() && pHeight->get_format() == Image::FORMAT_R16 ) {
 				region_height_bytes = pHeight->get_data();
 				if ( region_height_bytes.size() >= ( int64_t ) ( m_pRepository->getRegionSize() ) * m_pRepository->getRegionSize() * 2 ) {
@@ -587,9 +587,9 @@ bool T3DFarSurfaceAtlasCache::patchColorRegion( const Vector2i &vLocation, Packe
 	if ( m_pCpuRegionCache && m_pCpuRegionCache->isEnabled() && !m_pCpuRegionCache->ensureResident( vLocation, true ) ) {
 		return false;
 	}
-	const Ref<Image> pSourceColor = getRegionMapOrDefault( pRegion, T3DRegion::TYPE_COLOR );
-	const Ref<Image> pSourceControl = getRegionMapOrDefault( pRegion, T3DRegion::TYPE_CONTROL );
-	const Ref<Image> pSourceHeight = getRegionMapOrDefault( pRegion, T3DRegion::TYPE_HEIGHT );
+	const Ref<Image> pSourceColor = getRegionMapOrDefault( pRegion, TYPE_COLOR );
+	const Ref<Image> pSourceControl = getRegionMapOrDefault( pRegion, TYPE_CONTROL );
+	const Ref<Image> pSourceHeight = getRegionMapOrDefault( pRegion, TYPE_HEIGHT );
 	const Ref<Image> pSourceDerived = pRegion->getDerivedNormalSlopeMap();
 	if ( pSourceColor.is_null() || pSourceControl.is_null() || pSourceColor->get_format() != Image::FORMAT_RGBA8 ||
 		pSourceControl->get_format() != Image::FORMAT_RF ) {
@@ -844,7 +844,7 @@ bool T3DFarSurfaceAtlasCache::ensure( void ) {
 		if ( m_config.bStrictCooked ) {
 			return false;
 		}
-		markAllDirty( T3DRegion::TYPE_MAX );
+		markAllDirty( REGION_TYPE_MAX );
 	}
 	if ( ( m_bHeightDirty || !m_generatedHeightMap.getRid().is_valid() ) && !rebuildHeightAtlas() ) {
 		return false;

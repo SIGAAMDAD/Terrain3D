@@ -12,15 +12,17 @@
 #include "core/terrain_3d_compiler.h"
 #include "Terrain3DConstants.h"
 
+typedef enum t3dBoundaryMode_e {
+	BOUNDARY_CLOSED,
+	BOUNDARY_OPEN,
+} t3dBoundaryMode_t;
+
 class T3DErosionSettings : public Resource {
 	GDCLASS( T3DErosionSettings, Resource );
 	CLASS_NAME();
 
 public:
-	typedef enum t3dBoundaryMode_e {
-		BOUNDARY_CLOSED,
-		BOUNDARY_OPEN,
-	} t3dBoundaryMode_t;
+
 
 private:
 	// General.
@@ -554,5 +556,5 @@ protected:
 	static void _bind_methods( void );
 };
 
-VARIANT_ENUM_CAST( T3DErosionSettings::t3dBoundaryMode_t );
+VARIANT_ENUM_CAST( t3dBoundaryMode_t );
 #endif // TERRAIN3D_EROSION_SETTINGS_CLASS_H

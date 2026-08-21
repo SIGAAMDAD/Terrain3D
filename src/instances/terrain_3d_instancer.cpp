@@ -75,7 +75,7 @@ static uint64_t terrain3dRepositoryMeshInstanceCount( const T3DData *pData, cons
 // Private Functions
 ///////////////////////////
 
-T3DInstancer::t3dRenderCellKey_t T3DInstancer::makeRenderKey( const t3dRenderCell_t &rCell ) {
+t3dRenderCellKey_t T3DInstancer::makeRenderKey( const t3dRenderCell_t &rCell ) {
 	return t3dRenderCellKey_t{rCell.pRegion, rCell.cell, rCell.meshId, rCell.lod};
 }
 
@@ -222,7 +222,7 @@ void T3DInstancer::clearRegionLogicalLists( void ) {
 	m_regionLogicalMask.reset();
 }
 
-T3DInstancer::t3dRenderCell_t *T3DInstancer::findRenderCell(
+t3dRenderCell_t *T3DInstancer::findRenderCell(
 	const Vector2i &region, const int nMeshId, const int nLod,
 	const Vector2i &cell
 ) {
@@ -234,7 +234,7 @@ T3DInstancer::t3dRenderCell_t *T3DInstancer::findRenderCell(
 	return &m_renderCells[*pIndex];
 }
 
-T3DInstancer::t3dRenderCell_t *T3DInstancer::getOrCreateRenderCell(
+t3dRenderCell_t *T3DInstancer::getOrCreateRenderCell(
 	const Vector2i &region, const int nMeshId,
 	const int nLod, const Vector2i &cell
 ) {
@@ -244,7 +244,7 @@ T3DInstancer::t3dRenderCell_t *T3DInstancer::getOrCreateRenderCell(
 	}
 	const int region_index = getRegionTableIndex( region );
 	if ( region_index < 0 || region_index >= ( int ) ( TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY ) ) {
-		LOG( T3DTerrain::ERROR, "Instance cell region is outside the fixed terrain map: ", region );
+		LOG( ERROR, "Instance cell region is outside the fixed terrain map: ", region );
 		return nullptr;
 	}
 	t3dRenderCell_t value;
@@ -367,7 +367,7 @@ void T3DInstancer::setLogicalCellCount(
 	}
 	const int region_index = getRegionTableIndex( vRegion );
 	if ( region_index < 0 || region_index >= ( int ) ( TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY ) ) {
-		LOG( T3DTerrain::ERROR, "Logical instance cell region is outside the fixed terrain map: ", vRegion );
+		LOG( ERROR, "Logical instance cell region is outside the fixed terrain map: ", vRegion );
 		return;
 	}
 	const uint32_t new_count = nCount > ( size_t ) ( UINT32_MAX ) ? UINT32_MAX : ( uint32_t ) ( nCount );
@@ -653,7 +653,7 @@ void T3DInstancer::clearRegionUpdates( const bool bActive ) {
 void T3DInstancer::snapshotRegionUpdates( void ) {
 	clearRegionUpdates( true );
 	if ( m_nRegionUpdateCount > ( int ) ( TERRAIN3D_INSTANCE_REGION_UPDATE_CAPACITY ) ) {
-		LOG( T3DTerrain::ERROR, "Region update count exceeded fixed capacity during snapshot" );
+		LOG( ERROR, "Region update count exceeded fixed capacity during snapshot" );
 		m_nRegionUpdateCount = ( int ) ( TERRAIN3D_INSTANCE_REGION_UPDATE_CAPACITY );
 	}
 	for ( int list_index = 0; list_index < m_nRegionUpdateCount; ++list_index ) {
@@ -667,14 +667,14 @@ void T3DInstancer::snapshotRegionUpdates( void ) {
 	m_regionUpdateMask.reset();
 }
 
-T3DInstancer::t3dRegionUpdateState_t *T3DInstancer::getRegionUpdate( const Vector2i &vRegion ) {
+t3dRegionUpdateState_t *T3DInstancer::getRegionUpdate( const Vector2i &vRegion ) {
 	const int index = T3DData::getRegionMapIndex( vRegion );
 	if ( index < 0 ) {
 		return nullptr;
 	}
 	if ( !m_regionUpdateMask.test( ( size_t ) ( index ) ) ) {
 		if ( m_nRegionUpdateCount >= ( int ) ( TERRAIN3D_INSTANCE_REGION_UPDATE_CAPACITY ) ) {
-			LOG( T3DTerrain::ERROR, "Region update queue exceeded fixed terrain region capacity" );
+			LOG( ERROR, "Region update queue exceeded fixed terrain region capacity" );
 			return nullptr;
 		}
 		m_szRegionUpdateIndices[m_nRegionUpdateCount] = ( uint16_t ) ( index );
@@ -684,7 +684,7 @@ T3DInstancer::t3dRegionUpdateState_t *T3DInstancer::getRegionUpdate( const Vecto
 	return &m_szRegionUpdates[( size_t ) ( index )];
 }
 
-const T3DInstancer::t3dRegionUpdateState_t *T3DInstancer::findActiveRegionUpdate(
+const t3dRegionUpdateState_t *T3DInstancer::findActiveRegionUpdate(
 	const Vector2i &vRegion
 ) const {
 	const int index = T3DData::getRegionMapIndex( vRegion );
@@ -768,7 +768,7 @@ void T3DInstancer::refreshStreamingCache( void ) {
 		const real_t fRadius = fVisibilityEnd + m_fCellStreamingMargin + fCellWorldSize * 0.70710678f;
 		m_szMeshStreamingRadius[mesh_id] = fRadius;
 		if ( m_nFiniteStreamingMeshCount >= TERRAIN3D_MAX_MESH_ASSETS ) {
-			LOG( T3DTerrain::ERROR, "Finite streaming mesh list exceeded asset capacity" );
+			LOG( ERROR, "Finite streaming mesh list exceeded asset capacity" );
 			break;
 		}
 		m_szFiniteStreamingMeshIds[m_nFiniteStreamingMeshCount++] = ( uint16_t ) ( mesh_id );
@@ -867,7 +867,7 @@ Vector2i T3DInstancer::getGlobalCell( const Vector2i &vRegion, const Vector2i &v
 	return Vector2i( vRegion.x * cells_per_region + vCell.x, vRegion.y * cells_per_region + vCell.y );
 }
 
-T3DInstancer::t3dTransitionBucketKey_t T3DInstancer::getTransitionBucketKey( const t3dCellUpdateKey_t &rKey ) const {
+t3dTransitionBucketKey_t T3DInstancer::getTransitionBucketKey( const t3dCellUpdateKey_t &rKey ) const {
 	const Vector2i global_cell = getGlobalCell( rKey.pRegion, rKey.cell );
 	return t3dTransitionBucketKey_t{
 		Vector2i( floorDivCell( global_cell.x, TERRAIN3D_INSTANCE_TRANSITION_BUCKET_CELL_SPAN ),
@@ -985,7 +985,7 @@ bool T3DInstancer::transitionBucketMayCrossBoundary(
 	return false;
 }
 
-const T3DInstancer::t3dRenderCell_t *T3DInstancer::findSingleLodRenderCell( const t3dCellUpdateKey_t &rKey ) const {
+const t3dRenderCell_t *T3DInstancer::findSingleLodRenderCell( const t3dCellUpdateKey_t &rKey ) const {
 	for ( int lod = 0; lod < TERRAIN3D_MESH_MAX_LOD_COUNT; ++lod ) {
 		const t3dRenderCellKey_t render_key{rKey.pRegion, rKey.cell, rKey.meshId, lod};
 		const size_t *const pIndex = m_iRenderCellIndex.find( render_key );
@@ -1491,7 +1491,7 @@ void T3DInstancer::processUpdates( void ) {
 		// A complete cross-index audit is intentionally opt-in. Running it after
 		// every editor update on a large world would turn debug instrumentation
 		// into a new frame-time regression.
-		if ( T3DTerrain::s_debugLevel >= T3DTerrain::T3DTerrain::EXTREME ) {
+		if ( T3DTerrain::s_debugLevel >= T3DTerrain::EXTREME ) {
 			validateInternalState();
 		}
 #endif
@@ -1964,7 +1964,7 @@ PackedFloat32Array T3DInstancer::buildMultimeshBuffer(
 	return result;
 }
 
-T3DInstancer::t3dMultiMeshUpdateResult_t T3DInstancer::updateMultimesh(
+t3dMultiMeshUpdateResult_t T3DInstancer::updateMultimesh(
 	const int nMeshId, const int nLod,
 	const t3dInstanceCell_t &rCell,
 	t3dRenderCell_t &rRender,
@@ -2018,7 +2018,7 @@ Vector2i T3DInstancer::getCell( const Vector3 &rGlobalPosition, const int nRegio
 	return getCellForLocalPosition( rGlobalPosition, nRegionSize, m_nCellSize );
 }
 
-T3DInstancer::t3dUsableHeight_t
+t3dUsableHeight_t
 T3DInstancer::getUsableHeight(
 	T3DSampler &rSampler,
 	const Vector3 &rGlobalPosition,
@@ -2289,14 +2289,14 @@ void T3DInstancer::initialize( T3DTerrain *const pTerrain ) {
 		m_pTerrain = pTerrain;
 	}
 	IS_DATA_INIT_MESG( "Terrain3D not initialized yet", VOID );
-	LOG( T3DTerrain::INFO, "Initializing Instancer" );
+	LOG( INFO, "Initializing Instancer" );
 	t3dInstanceLayout_t active_layout;
 	if ( !terrain3dInstanceLayoutForRegion( ( int ) ( m_pTerrain->getRegionSize() ), m_nCellSize, active_layout ) ) {
-		LOG( T3DTerrain::ERROR, "Instancer cell layout is incompatible with region size" );
+		LOG( ERROR, "Instancer cell layout is incompatible with region size" );
 		return;
 	}
 	if ( !repartitionResidentRegions( active_layout ) ) {
-		LOG( T3DTerrain::ERROR, "Could not migrate resident instance page layouts" );
+		LOG( ERROR, "Could not migrate resident instance page layouts" );
 		return;
 	}
 	size_t estimated_render_cells = 0;
@@ -2382,7 +2382,7 @@ void T3DInstancer::suspendRendering( void ) {
 }
 
 void T3DInstancer::clearByMesh( const int nMeshId ) {
-	LOG( T3DTerrain::INFO, "Deleting Multimeshes in all regions with mesh_id: ", nMeshId );
+	LOG( INFO, "Deleting Multimeshes in all regions with mesh_id: ", nMeshId );
 	T3DRegion *const *ppRegionPtrs = m_pTerrain->getData()->getRegionPtrMapInternal();
 	for ( int region_index = 0; region_index < TERRAIN3D_MAX_REGION_SLOTS; ++region_index ) {
 		T3DRegion *const pRegion = ppRegionPtrs[region_index];
@@ -2396,7 +2396,7 @@ void T3DInstancer::clearByMesh( const int nMeshId ) {
 }
 
 void T3DInstancer::clearByLocation( const Vector2i &rRegionLoc, const int nMeshId ) {
-	LOG( T3DTerrain::INFO, "Deleting Multimeshes w/ mesh_id: ", nMeshId, " in region: ", rRegionLoc );
+	LOG( INFO, "Deleting Multimeshes w/ mesh_id: ", nMeshId, " in region: ", rRegionLoc );
 	const Ref<T3DRegion> pRegion = m_pTerrain->getData()->getRegion( rRegionLoc );
 	clearByRegion( pRegion, nMeshId );
 }
@@ -2424,13 +2424,13 @@ void T3DInstancer::clearByRegion( const Ref<T3DRegion> &rRegion, const int nMesh
 
 void T3DInstancer::destroyRegionMmis( const Vector2i &rRegionLoc ) {
 	eraseLogicalCellsByRegion( rRegionLoc );
-	if ( m_mode != DISABLED ) {
+	if ( m_mode != INSTANCER_DISABLED ) {
 		destroyMmisByRegion( rRegionLoc );
 	}
 }
 
 void T3DInstancer::setMode( const t3dInstancerMode_t mode ) {
-	LOG( T3DTerrain::INFO, "t3dSetting_t instancer mode: ", mode );
+	LOG( INFO, "t3dSetting_t instancer mode: ", mode );
 	if ( mode != m_mode ) {
 		m_mode = mode;
 		switch ( m_mode ) {
@@ -2450,7 +2450,7 @@ void T3DInstancer::addInstances( const Vector3 &rGlobalPosition, const Dictionar
 	IS_DATA_INIT_MESG( "Instancer isn't initialized.", VOID );
 	const int mesh_id = rParams.get( "asset_id", 0 );
 	if ( mesh_id < 0 || mesh_id >= m_pTerrain->getAssets()->getMeshCount() ) {
-		LOG( T3DTerrain::ERROR, "Mesh ID out of range: ", mesh_id, ", valid: 0 to ", m_pTerrain->getAssets()->getMeshCount() - 1 );
+		LOG( ERROR, "Mesh ID out of range: ", mesh_id, ", valid: 0 to ", m_pTerrain->getAssets()->getMeshCount() - 1 );
 		return;
 	}
 
@@ -2468,7 +2468,7 @@ void T3DInstancer::addInstances( const Vector3 &rGlobalPosition, const Dictionar
 	if ( count <= 0 ) {
 		return;
 	}
-	LOG( T3DTerrain::EXTREME, "Adding ", count, " instances at ", rGlobalPosition );
+	LOG( EXTREME, "Adding ", count, " instances at ", rGlobalPosition );
 
 	const real_t fFixedSpin = CLAMP( ( real_t ) ( rParams.get( "fixed_spin", 0.f ) ), .0f, 360.f );		// degrees
 	const real_t fRandomSpin = CLAMP( ( real_t ) ( rParams.get( "random_spin", 360.f ) ), 0.f, 360.f ); // degrees
@@ -2697,7 +2697,7 @@ void T3DInstancer::addMultimesh(
 	if ( instance_count <= 0 ) {
 		return;
 	}
-	LOG( T3DTerrain::INFO, "Extracting ", instance_count, " transforms from multimesh" );
+	LOG( INFO, "Extracting ", instance_count, " transforms from multimesh" );
 	const bool bUsesColors = rMultimesh->is_using_colors();
 	m_placementTransforms.resize( ( size_t ) ( instance_count ) );
 	m_placementColors.resize( ( size_t ) ( instance_count ) );
@@ -3108,20 +3108,20 @@ bool T3DInstancer::refreshResidentRegionLayouts( void ) {
 void T3DInstancer::setCellSize( const int nCellSize ) {
 	const int cell_size = CLAMP( nCellSize, TERRAIN3D_INSTANCE_MIN_CELL_SIZE, TERRAIN3D_INSTANCE_MAX_CELL_SIZE );
 	if ( cell_size != nCellSize || ( cell_size & ( cell_size - 1 ) ) != 0 ) {
-		LOG( T3DTerrain::ERROR, "Instance cell size must be a power of two from ", TERRAIN3D_INSTANCE_MIN_CELL_SIZE, " through ", TERRAIN3D_INSTANCE_MAX_CELL_SIZE );
+		LOG( ERROR, "Instance cell size must be a power of two from ", TERRAIN3D_INSTANCE_MIN_CELL_SIZE, " through ", TERRAIN3D_INSTANCE_MAX_CELL_SIZE );
 		return;
 	}
 	const int region_size = m_pTerrain ? ( int ) ( m_pTerrain->getRegionSize() ) : 128;
 	t3dInstanceLayout_t layout;
 	if ( !terrain3dInstanceLayoutForRegion( region_size, cell_size, layout ) ) {
-		LOG( T3DTerrain::ERROR, "Instance cell size ", cell_size, " must divide region size ", region_size );
+		LOG( ERROR, "Instance cell size ", cell_size, " must divide region size ", region_size );
 		return;
 	}
 	if ( m_nCellSize == cell_size ) {
 		return;
 	}
 	if ( m_pTerrain && m_pTerrain->getData() && !repartitionResidentRegions( layout ) ) {
-		LOG( T3DTerrain::ERROR, "Could not repartition resident instance pages for cell size ", cell_size );
+		LOG( ERROR, "Could not repartition resident instance pages for cell size ", cell_size );
 		return;
 	}
 	m_nCellSize = cell_size;
@@ -3176,7 +3176,7 @@ int T3DInstancer::floorDivCell( const int nValue, const int nDivisor ) {
 	return quotient - ( nValue % nDivisor < 0 ? 1 : 0 );
 }
 
-T3DInstancer::t3dCellInterval_t T3DInstancer::streamingRowInterval(
+t3dCellInterval_t T3DInstancer::streamingRowInterval(
 	const Vector3 &rPosition,
 	const real_t fRadius, const int iGlobalZ, const real_t fCellWorldSize,
 	const int nMinGlobalCell, const int nMaxGlobalCell
@@ -3375,7 +3375,7 @@ void T3DInstancer::copyPasteDfr(
 	const T3DRegion *pDstRegion
 ) {
 	if ( !pSrcRegion || !pDstRegion ) {
-		LOG( T3DTerrain::ERROR, "Source (", pSrcRegion, ") or destination (", pDstRegion, ") regions are null" );
+		LOG( ERROR, "Source (", pSrcRegion, ") or destination (", pDstRegion, ") regions are null" );
 		return;
 	}
 	T3DData *const pData = m_pTerrain->getData();
@@ -3384,7 +3384,7 @@ void T3DInstancer::copyPasteDfr(
 	if ( !terrain3dBeginInstancePageAccess( this, pData, src_region_loc, bTemporarySource ) ) {
 		return;
 	}
-	LOG( T3DTerrain::INFO, "Copying foliage data from src ", src_region_loc, " to dest ", pDstRegion->getLocation() );
+	LOG( INFO, "Copying foliage data from src ", src_region_loc, " to dest ", pDstRegion->getLocation() );
 
 	const real_t fVertexSpacing = m_pTerrain->getVertexSpacing();
 	const int src_region_size = pSrcRegion->getRegionSize();
@@ -3480,7 +3480,7 @@ void T3DInstancer::swapIds( const int nSrcId, const int nDstId ) {
 
 void T3DInstancer::updateMmis( const int nMeshId, const Vector2i &rRegionLoc, const bool bRebuild ) {
 	const int mesh_id = CLAMP( nMeshId, -1, TERRAIN3D_MAX_MESH_ASSETS - 1 );
-	const bool bRendererSuspended = m_mode == DISABLED || !m_pTerrain || !m_pTerrain->is_visible_in_tree();
+	const bool bRendererSuspended = m_mode == INSTANCER_DISABLED || !m_pTerrain || !m_pTerrain->is_visible_in_tree();
 	if ( bRendererSuspended ) {
 		if ( rRegionLoc == V2I_MAX ) {
 			if ( mesh_id < 0 ) {
@@ -3736,7 +3736,7 @@ Dictionary T3DInstancer::getStats( void ) const {
 void T3DInstancer::_bind_methods( void ) {
 	BIND_ENUM_CONSTANT( NORMAL );
 	// BIND_ENUM_CONSTANT(PLACEHOLDER);
-	BIND_ENUM_CONSTANT( DISABLED );
+	BIND_ENUM_CONSTANT( INSTANCER_DISABLED );
 
 	ClassDB::bind_method( D_METHOD( "clear_by_mesh", "mesh_id" ), &T3DInstancer::clearByMesh );
 	ClassDB::bind_method( D_METHOD( "clear_by_location", "region_location", "mesh_id" ),

@@ -24,155 +24,195 @@ class T3DAssets;
 class T3DSampler;
 
 
+typedef enum t3dInstancerMode_e {
+	INSTANCER_DISABLED,
+	// PLACEHOLDER,
+	NORMAL,
+} t3dInstancerMode_t;
+
+typedef struct t3dVector2iHash_s {
+	size_t operator()( const Vector2i &rValue ) const {
+		const uint64_t x = ( uint32_t ) ( rValue.x );
+		const uint64_t y = ( uint32_t ) ( rValue.y );
+		uint64_t h = ( x << 32 ) | y;
+		h ^= h >> 33;
+		h *= 0xff51afd7ed558ccdu;
+		h ^= h >> 33;
+		h *= 0xc4ceb9fe1a85ec53u;
+		return ( size_t ) ( h ^ ( h >> 33 ) );
+	}
+} t3dVector2iHash_t;
+
+typedef struct t3dRenderCellKey_s {
+	Vector2i pRegion;
+	Vector2i cell;
+	int meshId = -1;
+	int lod = 0;
+	bool operator==( const t3dRenderCellKey_s &rOther ) const {
+		return pRegion == rOther.pRegion && cell == rOther.cell && meshId == rOther.meshId && lod == rOther.lod;
+	}
+} t3dRenderCellKey_t;
+
+typedef struct t3dRenderCellKeyHash_s {
+	size_t operator()( const t3dRenderCellKey_t &rKey ) const {
+		size_t h = t3dVector2iHash_t{}( rKey.pRegion );
+		h ^= t3dVector2iHash_t{}( rKey.cell ) + ( size_t ) ( TERRAIN3D_HASH_GOLDEN_RATIO_32 ) + ( h << 6 ) + ( h >> 2 );
+		h ^= ( size_t ) ( ( uint32_t ) ( rKey.meshId ) ) * ( size_t ) ( TERRAIN3D_HASH_MIX_32 );
+		h ^= ( size_t ) ( ( uint32_t ) ( rKey.lod ) ) * ( size_t ) ( TERRAIN3D_HASH_MIX_32_SECONDARY );
+		return h;
+	}
+} t3dRenderCellKeyHash_t;
+
+typedef struct t3dCellUpdateKey_s {
+	Vector2i pRegion;
+	Vector2i cell;
+	int meshId = -1;
+	bool operator==( const t3dCellUpdateKey_s &rOther ) const {
+		return pRegion == rOther.pRegion && cell == rOther.cell && meshId == rOther.meshId;
+	}
+} t3dCellUpdateKey_t;
+
+typedef struct t3dCellUpdateKeyHash_s {
+	size_t operator()( const t3dCellUpdateKey_t &rKey ) const {
+		t3dRenderCellKey_t key{rKey.pRegion, rKey.cell, rKey.meshId, 0};
+		return t3dRenderCellKeyHash_t{}( key );
+	}
+} t3dCellUpdateKeyHash_t;
+
+typedef struct t3dRegionUpdateState_s {
+	bool bAllMeshes = false;
+	eastl::bitset<TERRAIN3D_MAX_MESH_ASSETS> meshes;
+} t3dRegionUpdateState_t;
+
+typedef struct t3dRenderCell_s {
+	Vector2i pRegion;
+	Vector2i cell;
+	int meshId = -1;
+	int lod = 0;
+	RID mmi;
+	RID multimesh;
+	RID boundMultimesh;
+	RID boundMesh;
+	uint32_t nRegionListNode = UINT32_MAX;
+	int nUploadedCount = 0;
+	uint32_t nUploadedRevision = 0;
+	uint32_t nSettingsRevision = 0;
+	uint32_t nAabbGeneration = 0;
+	bool bUsesColors = false;
+} t3dRenderCell_t;
+
+typedef struct t3dUsableHeight_s {
+	bool bValid = false;
+	real_t height = 0.f;
+	bool bRaycastHit = false;
+	Vector3 normal = V3_UP;
+} t3dUsableHeight_t;
+
+typedef struct t3dCellInterval_s {
+	int first = 1;
+	int last = 0;
+	EA_FORCE_INLINE bool valid( void ) const { return first <= last; }
+} t3dCellInterval_t;
+
+typedef struct t3dTransitionBucketKey_s {
+	Vector2i bucket;
+	int meshId = -1;
+	bool operator==( const t3dTransitionBucketKey_s &rOther ) const {
+		return bucket == rOther.bucket && meshId == rOther.meshId;
+	}
+} t3dTransitionBucketKey_t;
+
+typedef struct t3dTransitionBucketKeyHash_s {
+	size_t operator()( const t3dTransitionBucketKey_t &rKey ) const {
+		size_t h = t3dVector2iHash_t{}( rKey.bucket );
+		h ^= ( size_t ) ( ( uint32_t ) ( rKey.meshId ) ) * ( size_t ) ( TERRAIN3D_HASH_MIX_32 );
+		return h;
+	}
+} t3dTransitionBucketKeyHash_t;
+
+typedef struct t3dPendingPlacement_s {
+	T3DRegion *pRegion = nullptr;
+	Vector2i cell;
+	Transform3D transform;
+	Color pColor = COLOR_WHITE;
+	uint32_t owner = 0;
+} t3dPendingPlacement_t;
+
+typedef struct t3dLogicalCellState_s {
+	uint32_t nCount = 0;
+	uint32_t nRegionListNode = UINT32_MAX;
+} t3dLogicalCellState_t;
+
+typedef enum t3dMultiMeshUpdateResult_e : uint8_t {
+	UPDATED,
+	EMPTY,
+	MISSING_ASSET,
+	MISSING_MESH,
+} t3dMultiMeshUpdateResult_t;
+
+typedef struct t3dRegionList_s {
+	uint32_t nHead = UINT32_MAX;
+	uint32_t nCount = 0u;
+} t3dRegionList_t;
+
+typedef struct t3dRenderRegionNode_s {
+	size_t iRenderCell = 0u;
+	uint32_t nNext = UINT32_MAX;
+	uint32_t nPrev = UINT32_MAX;
+} t3dRenderRegionNode_t;
+
+typedef struct t3dLogicalRegionNode_s {
+	t3dCellUpdateKey_t key{};
+	uint32_t nNext = UINT32_MAX;
+	uint32_t nPrev = UINT32_MAX;
+} t3dLogicalRegionNode_t;
+
+typedef struct t3dTransitionBucketState_s {
+	uint32_t nHead = UINT32_MAX;
+	uint32_t nCount = 0u;
+} t3dTransitionBucketState_t;
+
+typedef struct t3dTransitionCellNode_s {
+	t3dCellUpdateKey_t key{};
+	uint32_t nNext = UINT32_MAX;
+} t3dTransitionCellNode_t;
+
 class T3DInstancer : public Object {
 	GDCLASS( T3DInstancer, Object );
 	CLASS_NAME();
 	friend T3DTerrain;
 
 public: // Constants
-typedef enum t3dInstancerMode_e {
-		DISABLED,
-		// PLACEHOLDER,
-		NORMAL,
-	} t3dInstancerMode_t;
+
 
 private:
 	T3DTerrain *m_pTerrain = nullptr;
 
-	typedef struct t3dVector2iHash_s {
-		size_t operator()( const Vector2i &rValue ) const {
-			const uint64_t x = ( uint32_t ) ( rValue.x );
-			const uint64_t y = ( uint32_t ) ( rValue.y );
-			uint64_t h = ( x << 32 ) | y;
-			h ^= h >> 33;
-			h *= 0xff51afd7ed558ccdu;
-			h ^= h >> 33;
-			h *= 0xc4ceb9fe1a85ec53u;
-			return ( size_t ) ( h ^ ( h >> 33 ) );
-		}
-	} t3dVector2iHash_t;
-	typedef struct t3dRenderCellKey_s {
-		Vector2i pRegion;
-		Vector2i cell;
-		int meshId = -1;
-		int lod = 0;
-		bool operator==( const t3dRenderCellKey_s &rOther ) const {
-			return pRegion == rOther.pRegion && cell == rOther.cell && meshId == rOther.meshId && lod == rOther.lod;
-		}
-	} t3dRenderCellKey_t;
-	typedef struct t3dRenderCellKeyHash_s {
-		size_t operator()( const t3dRenderCellKey_t &rKey ) const {
-			size_t h = t3dVector2iHash_t{}( rKey.pRegion );
-			h ^= t3dVector2iHash_t{}( rKey.cell ) + ( size_t ) ( TERRAIN3D_HASH_GOLDEN_RATIO_32 ) + ( h << 6 ) + ( h >> 2 );
-			h ^= ( size_t ) ( ( uint32_t ) ( rKey.meshId ) ) * ( size_t ) ( TERRAIN3D_HASH_MIX_32 );
-			h ^= ( size_t ) ( ( uint32_t ) ( rKey.lod ) ) * ( size_t ) ( TERRAIN3D_HASH_MIX_32_SECONDARY );
-			return h;
-		}
-	} t3dRenderCellKeyHash_t;
-	typedef struct t3dCellUpdateKey_s {
-		Vector2i pRegion;
-		Vector2i cell;
-		int meshId = -1;
-		bool operator==( const t3dCellUpdateKey_s &rOther ) const {
-			return pRegion == rOther.pRegion && cell == rOther.cell && meshId == rOther.meshId;
-		}
-	} t3dCellUpdateKey_t;
-	typedef struct t3dCellUpdateKeyHash_s {
-		size_t operator()( const t3dCellUpdateKey_t &rKey ) const {
-			t3dRenderCellKey_t key{rKey.pRegion, rKey.cell, rKey.meshId, 0};
-			return t3dRenderCellKeyHash_t{}( key );
-		}
-	} t3dCellUpdateKeyHash_t;
-	typedef struct t3dRegionUpdateState_s {
-		bool bAllMeshes = false;
-		eastl::bitset<TERRAIN3D_MAX_MESH_ASSETS> meshes;
-	} t3dRegionUpdateState_t;
-	typedef struct t3dRenderCell_s {
-		Vector2i pRegion;
-		Vector2i cell;
-		int meshId = -1;
-		int lod = 0;
-		RID mmi;
-		RID multimesh;
-		RID boundMultimesh;
-		RID boundMesh;
-		uint32_t nRegionListNode = UINT32_MAX;
-		int nUploadedCount = 0;
-		uint32_t nUploadedRevision = 0;
-		uint32_t nSettingsRevision = 0;
-		uint32_t nAabbGeneration = 0;
-		bool bUsesColors = false;
-	} t3dRenderCell_t;
-	typedef struct t3dUsableHeight_s {
-		bool bValid = false;
-		real_t height = 0.f;
-		bool bRaycastHit = false;
-		Vector3 normal = V3_UP;
-	} t3dUsableHeight_t;
-	typedef struct t3dCellInterval_s {
-		int first = 1;
-		int last = 0;
-		EA_FORCE_INLINE bool valid( void ) const { return first <= last; }
-	} t3dCellInterval_t;
-	typedef struct t3dTransitionBucketKey_s {
-		Vector2i bucket;
-		int meshId = -1;
-		bool operator==( const t3dTransitionBucketKey_s &rOther ) const {
-			return bucket == rOther.bucket && meshId == rOther.meshId;
-		}
-	} t3dTransitionBucketKey_t;
-	typedef struct t3dTransitionBucketKeyHash_s {
-		size_t operator()( const t3dTransitionBucketKey_t &rKey ) const {
-			size_t h = t3dVector2iHash_t{}( rKey.bucket );
-			h ^= ( size_t ) ( ( uint32_t ) ( rKey.meshId ) ) * ( size_t ) ( TERRAIN3D_HASH_MIX_32 );
-			return h;
-		}
-	} t3dTransitionBucketKeyHash_t;
 
-	typedef struct t3dPendingPlacement_s {
-		T3DRegion *pRegion = nullptr;
-		Vector2i cell;
-		Transform3D transform;
-		Color pColor = COLOR_WHITE;
-		uint32_t owner = 0;
-	} t3dPendingPlacement_t;
-	typedef struct t3dLogicalCellState_s {
-		uint32_t nCount = 0;
-		uint32_t nRegionListNode = UINT32_MAX;
-	} t3dLogicalCellState_t;
-	typedef enum t3dMultiMeshUpdateResult_e : uint8_t {
-		UPDATED,
-		EMPTY,
-		MISSING_ASSET,
-		MISSING_MESH,
-	} t3dMultiMeshUpdateResult_t;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 	// Runtime indices use contiguous open-addressing tables. reserve() establishes a
 	// high-water bucket array; ordinary streaming inserts/erases never allocate nodes.
 	using RenderCellIndex = T3DFlatHashMap<t3dRenderCellKey_t, size_t, t3dRenderCellKeyHash_t>;
 	using LogicalCellMap = T3DFlatHashMap<t3dCellUpdateKey_t, t3dLogicalCellState_t, t3dCellUpdateKeyHash_t>;
-	typedef struct t3dRegionList_s {
-		uint32_t nHead = UINT32_MAX;
-		uint32_t nCount = 0u;
-	} t3dRegionList_t;
-	typedef struct t3dRenderRegionNode_s {
-		size_t iRenderCell = 0u;
-		uint32_t nNext = UINT32_MAX;
-		uint32_t nPrev = UINT32_MAX;
-	} t3dRenderRegionNode_t;
-	typedef struct t3dLogicalRegionNode_s {
-		t3dCellUpdateKey_t key{};
-		uint32_t nNext = UINT32_MAX;
-		uint32_t nPrev = UINT32_MAX;
-	} t3dLogicalRegionNode_t;
-	typedef struct t3dTransitionBucketState_s {
-		uint32_t nHead = UINT32_MAX;
-		uint32_t nCount = 0u;
-	} t3dTransitionBucketState_t;
-	typedef struct t3dTransitionCellNode_s {
-		t3dCellUpdateKey_t key{};
-		uint32_t nNext = UINT32_MAX;
-	} t3dTransitionCellNode_t;
+
+
+
+
+
 	using TransitionBucketMap = T3DFlatHashMap<t3dTransitionBucketKey_t, t3dTransitionBucketState_t, t3dTransitionBucketKeyHash_t>;
 	using StreamingUpdateSet = T3DFlatHashSet<t3dCellUpdateKey_t, t3dCellUpdateKeyHash_t>;
 
@@ -433,7 +473,7 @@ public:
 
 	void setMode( const t3dInstancerMode_t mode );
 	EA_FORCE_INLINE t3dInstancerMode_t getMode( void ) const { return m_mode; }
-	EA_FORCE_INLINE bool isEnabled( void ) const { return m_mode != DISABLED; }
+	EA_FORCE_INLINE bool isEnabled( void ) const { return m_mode != INSTANCER_DISABLED; }
 
 	void addInstances( const Vector3 &rGlobalPosition, const Dictionary &rParams );
 	void removeInstances( const Vector3 &rGlobalPosition, const Dictionary &rParams );
@@ -528,8 +568,8 @@ protected:
 	static void _bind_methods( void );
 };
 
-using t3dInstancerMode_t = T3DInstancer::t3dInstancerMode_t;
-VARIANT_ENUM_CAST( T3DInstancer::t3dInstancerMode_t );
+using t3dInstancerMode_t = t3dInstancerMode_t;
+VARIANT_ENUM_CAST( t3dInstancerMode_t );
 
 // Allows us to instance every X function calls for sparse placement
 // Modifies _density_counter, not const!

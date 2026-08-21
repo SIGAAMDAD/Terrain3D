@@ -81,12 +81,12 @@ Ref<Image> T3DPackedPBRTexture::prepareSource(
 	}
 	Ref<Image> pImage = rSource->get_image();
 	if ( pImage.is_null() || pImage->is_empty() ) {
-		LOG( T3DTerrain::ERROR, "Surface/height ", rLabel, " source image is missing or empty." );
+		LOG( ERROR, "Surface/height ", rLabel, " source image is missing or empty." );
 		return Ref<Image>();
 	}
 	pImage = pImage->duplicate();
 	if ( pImage->is_compressed() && pImage->decompress() != OK ) {
-		LOG( T3DTerrain::ERROR, "Surface/height ", rLabel, " source could not be decompressed." );
+		LOG( ERROR, "Surface/height ", rLabel, " source could not be decompressed." );
 		return Ref<Image>();
 	}
 	if ( pImage->has_mipmaps() ) {
@@ -111,7 +111,7 @@ void T3DPackedPBRTexture::setGeneratedDisplacementTexture( const Ref<ImageTextur
 			const Ref<Image> pMigrated = T3DUtil::packDisplacementR8( pImage, 0, pImage->has_mipmaps() );
 			if ( pMigrated.is_valid() && !pMigrated->is_empty() ) {
 				m_pGeneratedDisplacementTexture = ImageTexture::create_from_image( pMigrated );
-				LOG( T3DTerrain::WARN, "Migrated serialized R16 displacement data to R8." );
+				LOG( WARN, "Migrated serialized R16 displacement data to R8." );
 			}
 		}
 	}
@@ -138,7 +138,7 @@ void T3DPackedPBRTexture::setGeneratedTexture( const Ref<ImageTexture> &rTexture
 			m_pGeneratedSurfaceTexture = ImageTexture::create_from_image( pSurface );
 			m_pGeneratedDisplacementTexture = ImageTexture::create_from_image( pDisplacement );
 			m_bDirty = false;
-			LOG( T3DTerrain::WARN, "Migrated serialized RGBA16UI packed PBR data to RGBA8 packed PBR + R8 displacement." );
+			LOG( WARN, "Migrated serialized RGBA16UI packed PBR data to RGBA8 packed PBR + R8 displacement." );
 		}
 	}
 }
@@ -149,7 +149,7 @@ void T3DPackedPBRTexture::setPackedTexture( const Ref<Texture2D> &rTexture ) {
 		if ( pImage.is_null() || pImage->is_empty() || !terrain3dIsPackedSurfaceFormat( pImage->get_format() ) ) {
 			m_lastError = "Packed PBR texture must be RGBA8, BC3/DXT5, or BC7/BPTC_RGBA: "
 				"R=normal X, G=normal Y, B=roughness, A=AO.";
-			LOG( T3DTerrain::ERROR, m_lastError );
+			LOG( ERROR, m_lastError );
 			return;
 		}
 	}
@@ -168,23 +168,23 @@ void T3DPackedPBRTexture::setDisplacementTexture( const Ref<Texture2D> &rTexture
 		Ref<Image> pImage = pTexture->get_image();
 		if ( pImage.is_null() || pImage->is_empty() ) {
 			m_lastError = "Displacement texture image is missing or empty.";
-			LOG( T3DTerrain::ERROR, m_lastError );
+			LOG( ERROR, m_lastError );
 			return;
 		}
 		if ( pImage->get_format() == Image::FORMAT_R16 ) {
 			const Ref<Image> pMigrated = T3DUtil::packDisplacementR8( pImage, 0, pImage->has_mipmaps() );
 			if ( pMigrated.is_null() || pMigrated->is_empty() ) {
 				m_lastError = "Could not migrate legacy R16 displacement texture to R8.";
-				LOG( T3DTerrain::ERROR, m_lastError );
+				LOG( ERROR, m_lastError );
 				return;
 			}
 			pTexture = ImageTexture::create_from_image( pMigrated );
 			pImage = pMigrated;
-			LOG( T3DTerrain::WARN, "Migrated legacy R16 displacement texture to R8." );
+			LOG( WARN, "Migrated legacy R16 displacement texture to R8." );
 		}
 		if ( pImage->get_format() != Image::FORMAT_R8 ) {
 			m_lastError = "Displacement texture must be R8_UNORM.";
-			LOG( T3DTerrain::ERROR, m_lastError );
+			LOG( ERROR, m_lastError );
 			return;
 		}
 	}
@@ -236,7 +236,7 @@ void T3DPackedPBRTexture::setInvertNormalGreen( const bool bEnabled ) {
 	invalidate();
 }
 
-EA_FORCE_INLINE static int32_t sanitizeSurfaceChannel( int32_t nChannel ) { return CLAMP( nChannel, ( int32_t ) ( T3DPackedPBRTexture::CHANNEL_RED ), ( int32_t ) ( T3DPackedPBRTexture::CHANNEL_ALPHA ) ); }
+EA_FORCE_INLINE static int32_t sanitizeSurfaceChannel( int32_t nChannel ) { return CLAMP( nChannel, ( int32_t ) ( CHANNEL_RED ), ( int32_t ) ( CHANNEL_ALPHA ) ); }
 
 void T3DPackedPBRTexture::setRoughnessChannel( const int32_t nChannel ) {
 	const int32_t channel = sanitizeSurfaceChannel( nChannel );
@@ -330,7 +330,7 @@ bool T3DPackedPBRTexture::rebuild( void ) {
 	}
 	if ( !hasRequiredSources() ) {
 		m_lastError = "Normal and roughness sources are required.";
-		LOG( T3DTerrain::ERROR, m_lastError );
+		LOG( ERROR, m_lastError );
 		return false;
 	}
 	const Vector2i size( MAX( m_outputSize.x, 1 ), MAX( m_outputSize.y, 1 ) );

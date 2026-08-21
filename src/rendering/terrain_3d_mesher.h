@@ -14,41 +14,49 @@
 class T3DTerrain;
 
 
+typedef enum t3dMeshType_e {
+	LOD0_MESH,
+	OUTER_RING_MESH,
+	MESH_TYPE_COUNT,
+} t3dMeshType_t;
+
+typedef struct t3dClipmapGeometry_s {
+	PackedVector3Array vertices;
+	PackedVector2Array metadata;
+	PackedInt32Array indices;
+	AABB aabb;
+} t3dClipmapGeometry_t;
+
+typedef struct t3dClipmapBatch_s {
+	RID mesh;
+	RID multimesh;
+	RID instance;
+	PackedFloat32Array transformBuffer;
+	Vector2 anchorPosition = V2_MAX;
+	uint8_t nCount = 0;
+	uint8_t firstLod = 0;
+	uint8_t lastLod = 0;
+	uint8_t tier = 0;
+	bool bCastsShadows = false;
+	bool bOwnsMesh = false;
+} t3dClipmapBatch_t;
+
+typedef struct t3dLodBatchSlot_s {
+	int8_t batch = -1;
+	int8_t instance = -1;
+} t3dLodBatchSlot_t;
+
 class T3DMesher {
 	CLASS_NAME_STATIC( "T3DMesher" );
 
 public: // Constants
-	typedef enum t3dMeshType_e {
-		LOD0_MESH,
-		OUTER_RING_MESH,
-		MESH_TYPE_COUNT,
-	} t3dMeshType_t;
+
 private:
-	typedef struct t3dClipmapGeometry_s {
-		PackedVector3Array vertices;
-		PackedVector2Array metadata;
-		PackedInt32Array indices;
-		AABB aabb;
-	} t3dClipmapGeometry_t;
 
-	typedef struct t3dClipmapBatch_s {
-		RID mesh;
-		RID multimesh;
-		RID instance;
-		PackedFloat32Array transformBuffer;
-		Vector2 anchorPosition = V2_MAX;
-		uint8_t nCount = 0;
-		uint8_t firstLod = 0;
-		uint8_t lastLod = 0;
-		uint8_t tier = 0;
-		bool bCastsShadows = false;
-		bool bOwnsMesh = false;
-	} t3dClipmapBatch_t;
 
-	typedef struct t3dLodBatchSlot_s {
-		int8_t batch = -1;
-		int8_t instance = -1;
-	} t3dLodBatchSlot_t;
+
+
+
 
 	T3DTerrain *m_pTerrain = nullptr;
 	RID m_scenario = RID();

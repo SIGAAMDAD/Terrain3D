@@ -37,8 +37,8 @@ EA_FORCE_INLINE static float terrain3dBitsToFloat( const uint32_t nBits ) { floa
 EA_FORCE_INLINE static uint32_t terrain3dFloatToBits( const float fValue ) { uint32_t bits = 0u; std::memcpy( &bits, &fValue, sizeof( bits ) ); return bits; }
 
 EA_FORCE_INLINE static uint32_t terrain3dPackColor( const float fR, const float fG, const float fB, const float fA ) { return TERRAIN3DQUANTIZECOLOR( fR ) | ( TERRAIN3DQUANTIZECOLOR( fG ) << 8u ) | ( TERRAIN3DQUANTIZECOLOR( fB ) << 16u ) | ( TERRAIN3DQUANTIZECOLOR( fA ) << 24u ); }
-static_assert( sizeof( T3DCompute::t3dBrushElement_t ) == 16u, "t3dBrushElement_t must match GLSL std430 uvec4 layout" );
-static_assert( sizeof( T3DCompute::t3dBrushParams_t ) == 52u, "t3dBrushParams_t must match GLSL push-constant layout" );
+static_assert( sizeof( t3dBrushElement_t ) == 16u, "t3dBrushElement_t must match GLSL std430 uvec4 layout" );
+static_assert( sizeof( t3dBrushParams_t ) == 52u, "t3dBrushParams_t must match GLSL push-constant layout" );
 
 EA_FORCE_INLINE Ref<RDUniform> makeStorageUniform( const int nBinding, const RID &rBuffer ) { Ref<RDUniform> pUniform; pUniform.instantiate(); pUniform->set_uniform_type( RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER ); pUniform->set_binding( nBinding ); pUniform->add_id( rBuffer ); return pUniform; }
 
@@ -430,11 +430,11 @@ bool T3DCompute::prepareDisplacementRequest(
 		setError( "Compute displacement requires the packed-PBR/R8 texture path" );
 		return false;
 	}
-	const T3DMaterial::t3dTextureFiltering_t filtering = pMaterial->getTextureFiltering();
-	if ( pMaterial->getProjectionEnabled() || pMaterial->getDetilingMode() != T3DMaterial::DETILING_DISABLED ||
+	const t3dTextureFiltering_t filtering = pMaterial->getTextureFiltering();
+	if ( pMaterial->getProjectionEnabled() || pMaterial->getDetilingMode() != DETILING_DISABLED ||
 		pMaterial->getBufferShaderOverride().is_valid() ||
-		pMaterial->getWorldBackground() == T3DMaterial::NOISE || filtering == T3DMaterial::NEAREST ||
-		filtering == T3DMaterial::NEAREST_ANISOTROPIC ) {
+		pMaterial->getWorldBackground() == NOISE || filtering == NEAREST ||
+		filtering == NEAREST_ANISOTROPIC ) {
 		setError( "Compute displacement falls back for projection, detiling, world-noise backgrounds, nearest "
 				   "filtering, or buffer shader overrides" );
 		return false;
@@ -528,9 +528,9 @@ bool T3DCompute::prepareDisplacementRequest(
 	params.autoOverlayTexture = ( uint32_t ) ( CLAMP( ( int ) ( pMaterial->getShaderParam( "auto_overlay_texture" ) ), 0, auto_layer_max ) );
 	params.auto_enabled = pMaterial->getAutoShaderEnabled() ? 1u : 0u;
 	params.sampling_mode = ( uint32_t ) ( pMaterial->getTerrainSamplingMode() );
-	const T3DMaterial::t3dShaderPerformancePreset_t preset = pMaterial->getShaderPerformancePreset();
+	const t3dShaderPerformancePreset_t preset = pMaterial->getShaderPerformancePreset();
 	params.bFastBlendCurve =
-		preset == T3DMaterial::SHADER_PRESET_XBOX_360 || preset == T3DMaterial::SHADER_PRESET_FASTEST ? 1u
+		preset == SHADER_PRESET_XBOX_360 || preset == SHADER_PRESET_FASTEST ? 1u
 																												  : 0u;
 	params.background_mode = ( uint32_t ) ( pMaterial->getWorldBackground() );
 	params.ground_level = ( float ) ( ( real_t ) ( pMaterial->getShaderParam( "ground_level" ) ) );

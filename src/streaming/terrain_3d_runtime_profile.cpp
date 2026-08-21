@@ -925,7 +925,7 @@ void T3DTerrain::setPerformanceTarget( const t3dPerformanceTarget_t target ) {
 	resetRuntimeAdaptiveWorkBudgets( true );
 	normalizeRuntimeTierLayout( true );
 	if ( m_pMaterial.is_valid() ) {
-		m_pMaterial->setShaderPerformancePreset( T3DMaterial::SHADER_PRESET_XBOX_360_AUTHENTIC );
+		m_pMaterial->setShaderPerformancePreset( SHADER_PRESET_XBOX_360_AUTHENTIC );
 	} else {
 		m_bPerformanceProfileMaterialPendingApply = true;
 	}
@@ -940,7 +940,7 @@ void T3DTerrain::setPerformanceTarget( const t3dPerformanceTarget_t target ) {
 	if ( m_nRegionSize != SIZE_128 || !Math::is_equal_approx( m_fVertexSpacing, ( real_t ) ( 1.0f ) ) ) {
 		m_performanceTarget = PERFORMANCE_TARGET_CUSTOM;
 		m_bPerformanceProfileMaterialPendingApply = false;
-		LOG( T3DTerrain::ERROR, "Xbox 360 performance target requires 128-sample regions at 1 metre vertex spacing" );
+		LOG( ERROR, "Xbox 360 performance target requires 128-sample regions at 1 metre vertex spacing" );
 	}
 	refreshPerformanceProfileConformity();
 	notify_property_list_changed();

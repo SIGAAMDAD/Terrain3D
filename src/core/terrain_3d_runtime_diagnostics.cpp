@@ -102,33 +102,33 @@ Array T3DTerrain::getShaderTierStatsDictionaries( void ) const {
 	const Dictionary shader_global = m_pMaterial->getShaderVariantDiagnostics();
 	const real_t fNearEnd = getRuntimeNearRangeEndM();
 	const real_t fMiddleEnd = getRuntimeMiddleRangeEndM();
-	for ( int tier = T3DMaterial::SHADER_TIER_NEAR; tier < T3DMaterial::SHADER_TIER_COUNT; ++tier ) {
+	for ( int tier = SHADER_TIER_NEAR; tier < SHADER_TIER_COUNT; ++tier ) {
 		Dictionary row = m_pMaterial->getShaderTierDiagnostics( tier );
-		const real_t fRangeStart = tier == T3DMaterial::SHADER_TIER_NEAR ? 0.0f :
-			( tier == T3DMaterial::SHADER_TIER_MIDDLE ? fNearEnd : fMiddleEnd );
-		const real_t fRangeEnd = tier == T3DMaterial::SHADER_TIER_NEAR ? fNearEnd :
-			( tier == T3DMaterial::SHADER_TIER_MIDDLE ? fMiddleEnd : -1.0f );
+		const real_t fRangeStart = tier == SHADER_TIER_NEAR ? 0.0f :
+			( tier == SHADER_TIER_MIDDLE ? fNearEnd : fMiddleEnd );
+		const real_t fRangeEnd = tier == SHADER_TIER_NEAR ? fNearEnd :
+			( tier == SHADER_TIER_MIDDLE ? fMiddleEnd : -1.0f );
 		row["diagnostics_version"] = TERRAIN3D_DIAGNOSTICS_VERSION;
-		row["tier_name"] = tier == T3DMaterial::SHADER_TIER_NEAR ? "Near" :
-			( tier == T3DMaterial::SHADER_TIER_MIDDLE ? "Middle" : "Far" );
+		row["tier_name"] = tier == SHADER_TIER_NEAR ? "Near" :
+			( tier == SHADER_TIER_MIDDLE ? "Middle" : "Far" );
 		row["range_start_m"] = fRangeStart;
 		row["range_end_m"] = fRangeEnd;
-		row["range_unbounded"] = tier == T3DMaterial::SHADER_TIER_FAR;
+		row["range_unbounded"] = tier == SHADER_TIER_FAR;
 		row["shader_rid"] = row.get( "active_shader_rid", ( int64_t ) ( 0 ) );
 		row["profile_target"] = ( int ) ( m_performanceTarget );
 		row["profile_name"] = m_performanceTarget == PERFORMANCE_TARGET_XBOX360_EXPERIMENTAL ? "Xbox 360 Experimental" : "Custom";
 		row["profile_status"] = ( int ) ( m_performanceProfileStatus );
 		row["profile_status_name"] = getPerformanceProfileStatusName();
 		const int filtering = ( int ) ( row.get( "texture_filtering", 0 ) );
-		row["texture_filtering_name"] = filtering == ( int ) ( T3DMaterial::LINEAR_ANISOTROPIC ) ? "Linear Anisotropic" :
-			( filtering == ( int ) ( T3DMaterial::LINEAR ) ? "Linear" :
-				( filtering == ( int ) ( T3DMaterial::NEAREST_ANISOTROPIC ) ? "Nearest Anisotropic" : "Nearest" ) );
+		row["texture_filtering_name"] = filtering == ( int ) ( LINEAR_ANISOTROPIC ) ? "Linear Anisotropic" :
+			( filtering == ( int ) ( LINEAR ) ? "Linear" :
+				( filtering == ( int ) ( NEAREST_ANISOTROPIC ) ? "Nearest Anisotropic" : "Nearest" ) );
 		const int lighting = ( int ) ( row.get( "lighting_model", 0 ) );
-		row["lighting_model_name"] = lighting == ( int ) ( T3DMaterial::TIER_LIGHTING_UNSHADED ) ? "Unshaded" :
-			( lighting == ( int ) ( T3DMaterial::TIER_LIGHTING_LAMBERT ) ? "Lambert" :
-				( lighting == ( int ) ( T3DMaterial::TIER_LIGHTING_BLINN_PHONG ) ? "Blinn-Phong" : "PBR/GGX" ) );
-		const bool bShadowEnabled = tier == T3DMaterial::SHADER_TIER_NEAR ? m_bNearShadowEnabled :
-			( tier == T3DMaterial::SHADER_TIER_MIDDLE ? m_bMiddleShadowEnabled : m_bFarShadowEnabled );
+		row["lighting_model_name"] = lighting == ( int ) ( TIER_LIGHTING_UNSHADED ) ? "Unshaded" :
+			( lighting == ( int ) ( TIER_LIGHTING_LAMBERT ) ? "Lambert" :
+				( lighting == ( int ) ( TIER_LIGHTING_BLINN_PHONG ) ? "Blinn-Phong" : "PBR/GGX" ) );
+		const bool bShadowEnabled = tier == SHADER_TIER_NEAR ? m_bNearShadowEnabled :
+			( tier == SHADER_TIER_MIDDLE ? m_bMiddleShadowEnabled : m_bFarShadowEnabled );
 		row["shadow_participates"] = bShadowEnabled && m_nShadowLodCount > 0;
 		row["render_batch_count"] = m_pTerrainMesher ? m_pTerrainMesher->getRenderBatchCountForTier( tier ) : 0;
 		row["shadow_batch_count"] = m_pTerrainMesher ? m_pTerrainMesher->getShadowBatchCountForTier( tier ) : 0;
@@ -140,20 +140,20 @@ Array T3DTerrain::getShaderTierStatsDictionaries( void ) const {
 		row["shader_update_usec_last"] = shader_global.get( "shader_update_usec_last", ( int64_t ) ( 0 ) );
 		Dictionary features;
 		features["compact_tier_active"] = row.get( "compact_tier_active", false );
-		features["textured_surface"] = ( int ) ( row.get( "texture_surface_mode", 0 ) ) != ( int ) ( T3DMaterial::TEXTURE_SURFACE_SILHOUETTE );
+		features["textured_surface"] = ( int ) ( row.get( "texture_surface_mode", 0 ) ) != ( int ) ( TEXTURE_SURFACE_SILHOUETTE );
 		features["authored_color"] = ( double ) ( row.get( "authored_color_contribution", 0.0 ) ) > 0.0;
 		features["wetness"] = ( double ) ( row.get( "wetness_contribution", 0.0 ) ) > 0.0;
-		features["detiling"] = ( int ) ( row.get( "detiling_quality", 0 ) ) != ( int ) ( T3DMaterial::TIER_DETILING_DISABLED );
-		features["derived_normals"] = ( int ) ( row.get( "terrain_normal_quality", 0 ) ) != ( int ) ( T3DMaterial::TERRAIN_NORMAL_QUALITY_GEOMETRY );
+		features["detiling"] = ( int ) ( row.get( "detiling_quality", 0 ) ) != ( int ) ( TIER_DETILING_DISABLED );
+		features["derived_normals"] = ( int ) ( row.get( "terrain_normal_quality", 0 ) ) != ( int ) ( TERRAIN_NORMAL_QUALITY_GEOMETRY );
 		row["feature_flags"] = features;
-		int modeled_fetches = tier == T3DMaterial::SHADER_TIER_FAR ? 2 : 3;
-		if ( ( int ) ( row.get( "material_sampling_quality", 0 ) ) != ( int ) ( T3DMaterial::MATERIAL_SAMPLING_FAST ) ) {
+		int modeled_fetches = tier == SHADER_TIER_FAR ? 2 : 3;
+		if ( ( int ) ( row.get( "material_sampling_quality", 0 ) ) != ( int ) ( MATERIAL_SAMPLING_FAST ) ) {
 			++modeled_fetches;
 		}
 		if ( ( bool ) ( features["derived_normals"] ) ) {
 			++modeled_fetches;
 		}
-		if ( ( int ) ( row.get( "surface_response_quality", 0 ) ) != ( int ) ( T3DMaterial::SURFACE_RESPONSE_SIMPLE ) ) {
+		if ( ( int ) ( row.get( "surface_response_quality", 0 ) ) != ( int ) ( SURFACE_RESPONSE_SIMPLE ) ) {
 			++modeled_fetches;
 		}
 		if ( ( bool ) ( features["authored_color"] ) ) {

@@ -6,6 +6,7 @@
 #define TERRAIN3D_FLAT_HASH_H
 
 #include "eastl_config.h"
+
 #include <EASTL/functional.h>
 #include <EASTL/utility.h>
 #include <EASTL/vector.h>
@@ -13,133 +14,145 @@
 #include <cstdint>
 #include <utility>
 
-// Small subsystem-oriented open-addressing table. It intentionally exposes only
-// the operations Terrain3D's bounded runtime state needs. Storage is contiguous,
-// reserve() is high-water only, clear() retains all capacity, and no node
-// allocation occurs after the bucket array has been established.
+typedef enum t3dFlatHashBucketState_e : uint8_t {
+	T3D_FLAT_HASH_BUCKET_EMPTY = 0u,
+	T3D_FLAT_HASH_BUCKET_OCCUPIED = 1u,
+} t3dFlatHashBucketState_t;
+
+// Compact open-addressing storage for bounded Terrain3D runtime tables. The map
+// retains capacity after clear() and performs no node allocations.
 template <typename Key, typename Value, typename Hash, typename Equal = eastl::equal_to<Key>>
 class T3DFlatHashMap {
 private:
-	typedef enum t3dBucketState_e : uint8_t {
-		EMPTY = 0u,
-		OCCUPIED = 1u,
-	} t3dBucketState_t;
-
-	typedef struct t3dBucket_s {
-		Key key{};
-		Value value{};
-		uint8_t state = EMPTY;
-	} t3dBucket_t;
-
-	eastl::vector<t3dBucket_t> m_buckets;
+	eastl::vector<Key> m_keys;
+	eastl::vector<Value> m_values;
+	eastl::vector<uint8_t> m_states;
 	size_t m_nSize = 0u;
 	Hash m_hash{};
 	Equal m_equal{};
 
-	EA_FORCE_INLINE static size_t nextPowerOfTwo( size_t value ) {
-		if ( value <= 8u ) {
+	EA_FORCE_INLINE static size_t nextPowerOfTwo( size_t nValue ) {
+		if ( nValue <= 8u ) {
 			return 8u;
 		}
-		--value;
-		value |= value >> 1u;
-		value |= value >> 2u;
-		value |= value >> 4u;
-		value |= value >> 8u;
-		value |= value >> 16u;
+		--nValue;
+		nValue |= nValue >> 1u;
+		nValue |= nValue >> 2u;
+		nValue |= nValue >> 4u;
+		nValue |= nValue >> 8u;
+		nValue |= nValue >> 16u;
 		if constexpr ( sizeof( size_t ) >= 8u ) {
-			value |= value >> 32u;
+			nValue |= nValue >> 32u;
 		}
-		return value + 1u;
+		return nValue + 1u;
 	}
 
 	EA_FORCE_INLINE static size_t bucketCountForEntries( const size_t nEntries ) {
-		// <= 70% occupancy keeps probe lengths stable without tombstones.
+		// Keep occupancy at or below 70% so linear-probe chains remain short.
 		return nextPowerOfTwo( ( nEntries * 10u + 6u ) / 7u + 1u );
 	}
 
 	EA_FORCE_INLINE size_t findBucketIndex( const Key &rKey ) const {
-		if ( m_buckets.empty() ) {
+		if ( m_states.empty() ) {
 			return SIZE_MAX;
 		}
-		const size_t mask = m_buckets.size() - 1u;
-		size_t index = m_hash( rKey ) & mask;
-		for ( size_t probe = 0u; probe < m_buckets.size(); ++probe ) {
-			const t3dBucket_t &bucket = m_buckets[index];
-			if ( bucket.state == EMPTY ) {
+		const size_t nMask = m_states.size() - 1u;
+		size_t iBucket = m_hash( rKey ) & nMask;
+		for ( size_t nProbe = 0u; nProbe < m_states.size(); ++nProbe ) {
+			if ( m_states[iBucket] == T3D_FLAT_HASH_BUCKET_EMPTY ) {
 				return SIZE_MAX;
 			}
-			if ( bucket.state == OCCUPIED && m_equal( bucket.key, rKey ) ) {
-				return index;
+			if ( m_states[iBucket] == T3D_FLAT_HASH_BUCKET_OCCUPIED && m_equal( m_keys[iBucket], rKey ) ) {
+				return iBucket;
 			}
-			index = ( index + 1u ) & mask;
+			iBucket = ( iBucket + 1u ) & nMask;
 		}
 		return SIZE_MAX;
 	}
 
 	EA_FORCE_INLINE size_t findInsertIndex( const Key &rKey, bool &rExisting ) const {
 		rExisting = false;
-		if ( m_buckets.empty() ) return SIZE_MAX;
-		const size_t mask = m_buckets.size() - 1u;
-		size_t index = m_hash( rKey ) & mask;
-		for ( size_t probe = 0u; probe < m_buckets.size(); ++probe ) {
-			const t3dBucket_t &bucket = m_buckets[index];
-			if ( bucket.state == EMPTY ) return index;
-			if ( m_equal( bucket.key, rKey ) ) { rExisting = true; return index; }
-			index = ( index + 1u ) & mask;
+		if ( m_states.empty() ) {
+			return SIZE_MAX;
+		}
+		const size_t nMask = m_states.size() - 1u;
+		size_t iBucket = m_hash( rKey ) & nMask;
+		for ( size_t nProbe = 0u; nProbe < m_states.size(); ++nProbe ) {
+			if ( m_states[iBucket] == T3D_FLAT_HASH_BUCKET_EMPTY ) {
+				return iBucket;
+			}
+			if ( m_equal( m_keys[iBucket], rKey ) ) {
+				rExisting = true;
+				return iBucket;
+			}
+			iBucket = ( iBucket + 1u ) & nMask;
 		}
 		return SIZE_MAX;
 	}
 
 	void rehash( const size_t nBucketCount ) {
-		eastl::vector<t3dBucket_t> old;
-		old.swap( m_buckets );
-		m_buckets.resize( nextPowerOfTwo( nBucketCount ) );
+		eastl::vector<Key> oldKeys;
+		eastl::vector<Value> oldValues;
+		eastl::vector<uint8_t> oldStates;
+		oldKeys.swap( m_keys );
+		oldValues.swap( m_values );
+		oldStates.swap( m_states );
+
+		const size_t nNewCount = nextPowerOfTwo( nBucketCount );
+		m_keys.resize( nNewCount );
+		m_values.resize( nNewCount );
+		m_states.resize( nNewCount, T3D_FLAT_HASH_BUCKET_EMPTY );
 		m_nSize = 0u;
-		for ( t3dBucket_t &bucket : old ) {
-			if ( bucket.state != OCCUPIED ) {
+
+		for ( size_t iBucket = 0u; iBucket < oldStates.size(); ++iBucket ) {
+			if ( oldStates[iBucket] != T3D_FLAT_HASH_BUCKET_OCCUPIED ) {
 				continue;
 			}
-			insertOrAssignNoGrow( eastl::move( bucket.key ), eastl::move( bucket.value ) );
+			insertOrAssignNoGrow( eastl::move( oldKeys[iBucket] ), eastl::move( oldValues[iBucket] ) );
 		}
 	}
 
 	EA_FORCE_INLINE Value *insertOrAssignNoGrow( Key &&rKey, Value &&rValue ) {
 		bool bExisting = false;
-		const size_t index = findInsertIndex( rKey, bExisting );
-		if ( index == SIZE_MAX ) {
+		const size_t iBucket = findInsertIndex( rKey, bExisting );
+		if ( iBucket == SIZE_MAX ) {
 			return nullptr;
 		}
-		t3dBucket_t &bucket = m_buckets[index];
 		if ( !bExisting ) {
-			bucket.key = eastl::move( rKey );
-			bucket.state = OCCUPIED;
+			m_keys[iBucket] = eastl::move( rKey );
+			m_states[iBucket] = T3D_FLAT_HASH_BUCKET_OCCUPIED;
 			++m_nSize;
 		}
-		bucket.value = eastl::move( rValue );
-		return &bucket.value;
+		m_values[iBucket] = eastl::move( rValue );
+		return &m_values[iBucket];
 	}
 
 	EA_FORCE_INLINE void ensureInsertCapacity( void ) {
-		if ( m_buckets.empty() ) { rehash( 8u ); return; }
-		if ( ( m_nSize + 1u ) * 10u >= m_buckets.size() * 7u ) rehash( m_buckets.size() * 2u );
+		if ( m_states.empty() ) {
+			rehash( 8u );
+			return;
+		}
+		if ( ( m_nSize + 1u ) * 10u >= m_states.size() * 7u ) {
+			rehash( m_states.size() * 2u );
+		}
 	}
 
 public:
 	EA_FORCE_INLINE void reserve( const size_t nEntries ) {
-		const size_t required = bucketCountForEntries( nEntries );
-		if ( required > m_buckets.size() ) {
-			rehash( required );
+		const size_t nRequired = bucketCountForEntries( nEntries );
+		if ( nRequired > m_states.size() ) {
+			rehash( nRequired );
 		}
 	}
 
 	EA_FORCE_INLINE Value *find( const Key &rKey ) {
-		const size_t index = findBucketIndex( rKey );
-		return index == SIZE_MAX ? nullptr : &m_buckets[index].value;
+		const size_t iBucket = findBucketIndex( rKey );
+		return iBucket == SIZE_MAX ? nullptr : &m_values[iBucket];
 	}
 
 	EA_FORCE_INLINE const Value *find( const Key &rKey ) const {
-		const size_t index = findBucketIndex( rKey );
-		return index == SIZE_MAX ? nullptr : &m_buckets[index].value;
+		const size_t iBucket = findBucketIndex( rKey );
+		return iBucket == SIZE_MAX ? nullptr : &m_values[iBucket];
 	}
 
 	EA_FORCE_INLINE bool contains( const Key &rKey ) const { return findBucketIndex( rKey ) != SIZE_MAX; }
@@ -164,56 +177,66 @@ public:
 	}
 
 	EA_FORCE_INLINE bool erase( const Key &rKey ) {
-		const size_t found = findBucketIndex( rKey );
-		if ( found == SIZE_MAX ) return false;
-		const size_t mask = m_buckets.size() - 1u;
-		m_buckets[found].state = EMPTY;
+		const size_t iFound = findBucketIndex( rKey );
+		if ( iFound == SIZE_MAX ) {
+			return false;
+		}
+
+		const size_t nMask = m_states.size() - 1u;
+		m_states[iFound] = T3D_FLAT_HASH_BUCKET_EMPTY;
 		--m_nSize;
-		// Reinsert the remainder of this probe cluster in place. This avoids tombstones
-		// and therefore avoids allocation-only cleanup rehashes during residency churn.
-		size_t index = ( found + 1u ) & mask;
-		while ( m_buckets[index].state == OCCUPIED ) {
-			Key key = eastl::move( m_buckets[index].key );
-			Value value = eastl::move( m_buckets[index].value );
-			m_buckets[index].state = EMPTY;
+
+		// Reinsert the remainder of the probe cluster so no tombstone cleanup is required.
+		size_t iBucket = ( iFound + 1u ) & nMask;
+		while ( m_states[iBucket] == T3D_FLAT_HASH_BUCKET_OCCUPIED ) {
+			Key key = eastl::move( m_keys[iBucket] );
+			Value value = eastl::move( m_values[iBucket] );
+			m_states[iBucket] = T3D_FLAT_HASH_BUCKET_EMPTY;
 			--m_nSize;
 			insertOrAssignNoGrow( eastl::move( key ), eastl::move( value ) );
-			index = ( index + 1u ) & mask;
+			iBucket = ( iBucket + 1u ) & nMask;
 		}
 		return true;
 	}
 
 	EA_FORCE_INLINE void clear( void ) {
-		for ( t3dBucket_t &bucket : m_buckets ) {
-			bucket.state = EMPTY;
+		for ( uint8_t &nState : m_states ) {
+			nState = T3D_FLAT_HASH_BUCKET_EMPTY;
 		}
 		m_nSize = 0u;
 	}
 
 	EA_FORCE_INLINE size_t size( void ) const { return m_nSize; }
-	EA_FORCE_INLINE size_t bucketCount( void ) const { return m_buckets.size(); }
-	EA_FORCE_INLINE size_t reservedBytes( void ) const { return m_buckets.capacity() * sizeof( t3dBucket_t ); }
+	EA_FORCE_INLINE size_t bucketCount( void ) const { return m_states.size(); }
+	EA_FORCE_INLINE size_t reservedBytes( void ) const {
+		return m_keys.capacity() * sizeof( Key ) + m_values.capacity() * sizeof( Value ) +
+			m_states.capacity() * sizeof( uint8_t );
+	}
 	EA_FORCE_INLINE bool empty( void ) const { return m_nSize == 0u; }
 
 	EA_FORCE_INLINE void swap( T3DFlatHashMap &rOther ) {
-		m_buckets.swap( rOther.m_buckets );
+		m_keys.swap( rOther.m_keys );
+		m_values.swap( rOther.m_values );
+		m_states.swap( rOther.m_states );
 		std::swap( m_nSize, rOther.m_nSize );
+		std::swap( m_hash, rOther.m_hash );
+		std::swap( m_equal, rOther.m_equal );
 	}
 
 	template <typename Fn>
 	EA_FORCE_INLINE void forEach( Fn &&rFn ) {
-		for ( t3dBucket_t &bucket : m_buckets ) {
-			if ( bucket.state == OCCUPIED ) {
-				rFn( bucket.key, bucket.value );
+		for ( size_t iBucket = 0u; iBucket < m_states.size(); ++iBucket ) {
+			if ( m_states[iBucket] == T3D_FLAT_HASH_BUCKET_OCCUPIED ) {
+				rFn( m_keys[iBucket], m_values[iBucket] );
 			}
 		}
 	}
 
 	template <typename Fn>
 	EA_FORCE_INLINE void forEach( Fn &&rFn ) const {
-		for ( const t3dBucket_t &bucket : m_buckets ) {
-			if ( bucket.state == OCCUPIED ) {
-				rFn( bucket.key, bucket.value );
+		for ( size_t iBucket = 0u; iBucket < m_states.size(); ++iBucket ) {
+			if ( m_states[iBucket] == T3D_FLAT_HASH_BUCKET_OCCUPIED ) {
+				rFn( m_keys[iBucket], m_values[iBucket] );
 			}
 		}
 	}
@@ -241,8 +264,16 @@ public:
 	EA_FORCE_INLINE size_t reservedBytes( void ) const { return m_map.reservedBytes(); }
 	EA_FORCE_INLINE bool empty( void ) const { return m_map.empty(); }
 	EA_FORCE_INLINE void swap( T3DFlatHashSet &rOther ) { m_map.swap( rOther.m_map ); }
-	template <typename Fn> EA_FORCE_INLINE void forEach( Fn &&rFn ) { m_map.forEach( [&]( const Key &rKey, uint8_t & ) { rFn( rKey ); } ); }
-	template <typename Fn> EA_FORCE_INLINE void forEach( Fn &&rFn ) const { m_map.forEach( [&]( const Key &rKey, const uint8_t & ) { rFn( rKey ); } ); }
+
+	template <typename Fn>
+	EA_FORCE_INLINE void forEach( Fn &&rFn ) {
+		m_map.forEach( [&]( const Key &rKey, uint8_t & ) { rFn( rKey ); } );
+	}
+
+	template <typename Fn>
+	EA_FORCE_INLINE void forEach( Fn &&rFn ) const {
+		m_map.forEach( [&]( const Key &rKey, const uint8_t & ) { rFn( rKey ); } );
+	}
 };
 
 #endif // TERRAIN3D_FLAT_HASH_H

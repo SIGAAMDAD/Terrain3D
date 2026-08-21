@@ -85,7 +85,7 @@ void T3DTerrain::syncLightShaderParameters( void ) {
 }
 
 void T3DTerrain::destroyCollision( const bool bFinal ) {
-	LOG( T3DTerrain::INFO, "Destroying Collision" );
+	LOG( INFO, "Destroying Collision" );
 	if ( m_pCollision ) {
 		m_pCollision->destroy();
 	}
@@ -97,18 +97,18 @@ void T3DTerrain::destroyCollision( const bool bFinal ) {
 
 void T3DTerrain::setupTerrainMesher( void ) {
 	if ( !m_pTerrainMesher ) {
-		LOG( T3DTerrain::DEBUG, "Creating mesher" );
+		LOG( DEBUG, "Creating mesher" );
 		m_pTerrainMesher = memnew( T3DMesher );
 	}
 	const eastl::array<RID, 3> materials = {
-		m_pMaterial->getMaterialRidForTier( T3DMaterial::SHADER_TIER_NEAR ),
-		m_pMaterial->getMaterialRidForTier( T3DMaterial::SHADER_TIER_MIDDLE ),
-		m_pMaterial->getMaterialRidForTier( T3DMaterial::SHADER_TIER_FAR ),
+		m_pMaterial->getMaterialRidForTier( SHADER_TIER_NEAR ),
+		m_pMaterial->getMaterialRidForTier( SHADER_TIER_MIDDLE ),
+		m_pMaterial->getMaterialRidForTier( SHADER_TIER_FAR ),
 	};
 	const eastl::array<RID, 3> shadow_materials = {
-		m_pMaterial->getShadowMaterialRidForTier( T3DMaterial::SHADER_TIER_NEAR ),
-		m_pMaterial->getShadowMaterialRidForTier( T3DMaterial::SHADER_TIER_MIDDLE ),
-		m_pMaterial->getShadowMaterialRidForTier( T3DMaterial::SHADER_TIER_FAR ),
+		m_pMaterial->getShadowMaterialRidForTier( SHADER_TIER_NEAR ),
+		m_pMaterial->getShadowMaterialRidForTier( SHADER_TIER_MIDDLE ),
+		m_pMaterial->getShadowMaterialRidForTier( SHADER_TIER_FAR ),
 	};
 	const bool bTieringActive = isRuntimeShaderTieringActive();
 	const int clipmap_levels = CLAMP( m_nMeshLods + m_tessellationLevel, 1, TERRAIN3D_MAX_CLIPMAP_LEVELS );
@@ -133,7 +133,7 @@ bool T3DTerrain::cookRuntimeClipmapGeometryPack( void ) const {
 }
 
 void T3DTerrain::destroyTerrainMesher( const bool bFinal ) {
-	LOG( T3DTerrain::INFO, "Destroying terrain mesher" );
+	LOG( INFO, "Destroying terrain mesher" );
 	if ( !m_pTerrainMesher ) {
 		return;
 	}
@@ -152,7 +152,7 @@ void T3DTerrain::setupOceanMesher( void ) {
 		// the requested compile-time variant before the mesher captures its RID.
 		updateOceanShaderVariant();
 		if ( !m_pOceanMesher ) {
-			LOG( T3DTerrain::DEBUG, "Creating mesher" );
+			LOG( DEBUG, "Creating mesher" );
 			m_pOceanMesher = memnew( T3DMesher );
 		}
 		const RID ocean_rid = m_pOceanMaterial.is_valid() ? m_pOceanMaterial->get_rid() : RID();
@@ -177,7 +177,7 @@ void T3DTerrain::setupOceanMesher( void ) {
 }
 
 void T3DTerrain::destroyOceanMesher( const bool bFinal ) {
-	LOG( T3DTerrain::INFO, "Destroying ocean mesher" );
+	LOG( INFO, "Destroying ocean mesher" );
 	if ( !m_pOceanMesher ) {
 		return;
 	}
@@ -191,11 +191,11 @@ void T3DTerrain::destroyOceanMesher( const bool bFinal ) {
 
 void T3DTerrain::setupDisplacementBuffer( void ) {
 	if ( !is_inside_tree() ) {
-		LOG( T3DTerrain::ERROR, "Not inside the tree, skipping displacement buffer setup" );
+		LOG( ERROR, "Not inside the tree, skipping displacement buffer setup" );
 		return;
 	}
 	destroyDisplacementBuffer();
-	LOG( T3DTerrain::INFO, "t3dSetting_t up displacement buffer" );
+	LOG( INFO, "t3dSetting_t up displacement buffer" );
 	m_pDBufferVp = memnew( SubViewport );
 	m_pDBufferVp->set_name( "DBufferViewport" );
 	add_child( m_pDBufferVp, true );
@@ -223,7 +223,7 @@ void T3DTerrain::updateDisplacementBuffer( void ) {
 	} else {
 		m_pDBufferVp->set_size( Vector2i( m_nMeshSize * 4 * m_tessellationLevel, m_nMeshSize * 4 ) );
 		m_pDBufferRect->set_size( Vector2i( m_nMeshSize * 4 * m_tessellationLevel, m_nMeshSize * 4 ) );
-		LOG( T3DTerrain::INFO, "Updating displacement buffer to Size: ", m_pDBufferVp->get_size() );
+		LOG( INFO, "Updating displacement buffer to Size: ", m_pDBufferVp->get_size() );
 		if ( m_pMaterial.is_valid() && m_pMaterial->getMaterialRid().is_valid() ) {
 			// Keep a valid raster fallback bound until the asynchronous render-thread
 			// compute dispatch publishes its renderer-owned storage texture.
@@ -244,7 +244,7 @@ bool T3DTerrain::tryUpdateComputeDisplacement( const Vector3 &rTargetPosition ) 
 		return false;
 	}
 	T3DCompute *const pCompute = m_pData->getComputeBackend();
-	T3DCompute::t3dDisplacementRequest_t request;
+	t3dDisplacementRequest_t request;
 	if ( !pCompute || !pCompute->prepareDisplacementRequest( this, rTargetPosition, request ) ) {
 		invalidateComputeDisplacementRequest();
 		return false;
@@ -261,7 +261,7 @@ bool T3DTerrain::tryUpdateComputeDisplacement( const Vector3 &rTargetPosition ) 
 void T3DTerrain::invalidateComputeDisplacementRequest( void ) {
 	m_bComputeDisplacementActive.store( false, std::memory_order_release );
 	std::lock_guard<std::mutex> lock( m_computeDisplacementMutex );
-	m_computeDisplacementRequest = T3DCompute::t3dDisplacementRequest_t{};
+	m_computeDisplacementRequest = t3dDisplacementRequest_t{};
 	++m_computeDisplacementRequestVersion;
 }
 
@@ -289,7 +289,7 @@ void T3DTerrain::queueComputeDisplacementRender( void ) {
 }
 
 void T3DTerrain::renderUpdateComputeDisplacement( void ) {
-	T3DCompute::t3dDisplacementRequest_t request;
+	t3dDisplacementRequest_t request;
 	uint64_t request_version = 0u;
 	{
 		std::lock_guard<std::mutex> lock( m_computeDisplacementMutex );
@@ -367,7 +367,7 @@ void T3DTerrain::destroyLabels( void ) {
 		return;
 	}
 	const Array labels = m_pLabelParent->get_children();
-	LOG( T3DTerrain::DEBUG, "Destroying ", labels.size(), " region labels" );
+	LOG( DEBUG, "Destroying ", labels.size(), " region labels" );
 	for ( const Variant &var : labels ) {
 		Node *const pLabel = cast_to<Node>( var );
 		if ( pLabel ) {
@@ -377,7 +377,7 @@ void T3DTerrain::destroyLabels( void ) {
 }
 
 void T3DTerrain::destroyDisplacementBuffer( void ) {
-	LOG( T3DTerrain::INFO, "[compute] Draining displacement work and releasing buffer resources" );
+	LOG( INFO, "[compute] Draining displacement work and releasing buffer resources" );
 	m_bComputeDisplacementTearingDown.store( true, std::memory_order_release );
 	RenderingServer *const pServer = RenderingServer::get_singleton();
 	if ( pServer && m_pData && m_pData->getComputeBackendIfCreated() ) {
@@ -396,16 +396,16 @@ void T3DTerrain::destroyDisplacementBuffer( void ) {
 	m_bComputeDisplacementFallbackRequested.store( false, std::memory_order_release );
 	{
 		std::lock_guard<std::mutex> lock( m_computeDisplacementMutex );
-		m_computeDisplacementRequest = T3DCompute::t3dDisplacementRequest_t{};
+		m_computeDisplacementRequest = t3dDisplacementRequest_t{};
 		++m_computeDisplacementRequestVersion;
 	}
 	m_bComputeDisplacementTearingDown.store( false, std::memory_order_release );
-	LOG( T3DTerrain::DEBUG, "Freeing d_buffer_rect" );
+	LOG( DEBUG, "Freeing d_buffer_rect" );
 	if ( m_pDBufferRect ) {
 		memdelete( m_pDBufferRect );
 		m_pDBufferRect = nullptr;
 	}
-	LOG( T3DTerrain::DEBUG, "Freeing d_buffer_vp" );
+	LOG( DEBUG, "Freeing d_buffer_vp" );
 	if ( m_pDBufferVp ) {
 		memdelete( m_pDBufferVp );
 		m_pDBufferVp = nullptr;
@@ -414,10 +414,10 @@ void T3DTerrain::destroyDisplacementBuffer( void ) {
 
 void T3DTerrain::setupMousePicking( void ) {
 	if ( !is_inside_tree() ) {
-		LOG( T3DTerrain::ERROR, "Not inside the tree, skipping mouse setup" );
+		LOG( ERROR, "Not inside the tree, skipping mouse setup" );
 		return;
 	}
-	LOG( T3DTerrain::INFO, "t3dSetting_t up mouse picker and get_intersection viewport, camera & screen quad" );
+	LOG( INFO, "t3dSetting_t up mouse picker and get_intersection viewport, camera & screen quad" );
 	m_pMouseVp = memnew( SubViewport );
 	m_pMouseVp->set_name( "MouseViewport" );
 	add_child( m_pMouseVp, true );
@@ -475,17 +475,17 @@ void T3DTerrain::setupMousePicking( void ) {
 }
 
 void T3DTerrain::destroyMousePicking( void ) {
-	LOG( T3DTerrain::DEBUG, "Freeing mouse_quad" );
+	LOG( DEBUG, "Freeing mouse_quad" );
 	if ( m_pMouseQuad ) {
 		memdelete( m_pMouseQuad );
 		m_pMouseQuad = nullptr;
 	}
-	LOG( T3DTerrain::DEBUG, "Freeing mouse_cam" );
+	LOG( DEBUG, "Freeing mouse_cam" );
 	if ( m_pMouseCam ) {
 		memdelete( m_pMouseCam );
 		m_pMouseCam = nullptr;
 	}
-	LOG( T3DTerrain::DEBUG, "Freeing mouse_vp" );
+	LOG( DEBUG, "Freeing mouse_vp" );
 	if ( m_pMouseVp ) {
 		memdelete( m_pMouseVp );
 		m_pMouseVp = nullptr;
@@ -493,7 +493,7 @@ void T3DTerrain::destroyMousePicking( void ) {
 }
 
 void T3DTerrain::destroyInstancer( void ) {
-	LOG( T3DTerrain::INFO, "Destroying Instancer" );
+	LOG( INFO, "Destroying Instancer" );
 	if ( m_pInstancer ) {
 		memdelete( m_pInstancer );
 		m_pInstancer = nullptr;
@@ -526,13 +526,13 @@ void T3DTerrain::destroyHlodStreamer( void ) {
 
 void T3DTerrain::setLabelDistance( const real_t fDistance ) {
 	SET_IF_DIFF( m_fLabelDistance, CLAMP( fDistance, 0.f, 100000.f ) );
-	LOG( T3DTerrain::INFO, "t3dSetting_t region label distance: ", m_fLabelDistance );
+	LOG( INFO, "t3dSetting_t region label distance: ", m_fLabelDistance );
 	updateRegionLabels();
 }
 
 void T3DTerrain::setLabelSize( const int nSize ) {
 	SET_IF_DIFF( m_nLabelSize, CLAMP( nSize, 24, 128 ) );
-	LOG( T3DTerrain::INFO, "t3dSetting_t region label size: ", m_nLabelSize );
+	LOG( INFO, "t3dSetting_t region label size: ", m_nLabelSize );
 	updateRegionLabels();
 }
 
@@ -540,7 +540,7 @@ void T3DTerrain::updateRegionLabels( void ) {
 	destroyLabels();
 	if ( m_pLabelParent && m_fLabelDistance > 0.f && m_pData ) {
 		const TypedArray<Vector2i> region_locations = m_pData->getRegionLocations();
-		LOG( T3DTerrain::DEBUG, "Creating ", region_locations.size(), " region labels" );
+		LOG( DEBUG, "Creating ", region_locations.size(), " region labels" );
 		for ( const Vector2i region_loc : region_locations ) {
 			Label3D *const pLabel = memnew( Label3D );
 			const String text = region_loc;
@@ -572,7 +572,7 @@ void T3DTerrain::updateRegionLabels( void ) {
 
 void T3DTerrain::setCamera( Camera3D *const pCamera ) {
 	if ( m_camera.ptr() != pCamera ) {
-		LOG( T3DTerrain::EXTREME, "t3dSetting_t camera: ", pCamera );
+		LOG( EXTREME, "t3dSetting_t camera: ", pCamera );
 		m_camera.setTarget( pCamera );
 		if ( m_clipmapTarget.isValid() ) {
 			set_physics_process( true );
@@ -582,7 +582,7 @@ void T3DTerrain::setCamera( Camera3D *const pCamera ) {
 
 void T3DTerrain::setClipmapTarget( Node3D *const pNode ) {
 	if ( m_clipmapTarget.ptr() != pNode ) {
-		LOG( T3DTerrain::INFO, "t3dSetting_t clipmap target: ", pNode );
+		LOG( INFO, "t3dSetting_t clipmap target: ", pNode );
 		m_clipmapTarget.setTarget( pNode );
 		if ( m_clipmapTarget.isValid() ) {
 			set_physics_process( true );
@@ -605,7 +605,7 @@ Vector3 T3DTerrain::getClipmapTargetPosition( void ) const {
 
 void T3DTerrain::setCollisionTarget( Node3D *const pNode ) {
 	if ( m_collisionTarget.ptr() != pNode ) {
-		LOG( T3DTerrain::INFO, "t3dSetting_t collision target: ", pNode );
+		LOG( INFO, "t3dSetting_t collision target: ", pNode );
 		m_collisionTarget.setTarget( pNode );
 		if ( m_collisionTarget.isValid() ) {
 			set_physics_process( true );
@@ -733,7 +733,7 @@ void T3DTerrain::setLightTarget( Node3D *const pNode ) {
 		}
 		m_bLightShadowMaskCaptured = false;
 		m_bLightCullMaskCaptured = false;
-		LOG( T3DTerrain::INFO, "t3dSetting_t directional light target: ", pNode );
+		LOG( INFO, "t3dSetting_t directional light target: ", pNode );
 		m_lightTarget.setTarget( pNode );
 		m_bLightStateValid = false;
 		updateEnvironmentShadowCasterMask();
@@ -763,7 +763,7 @@ void T3DTerrain::setMaterial( const Ref<T3DMaterial> &rMaterial ) {
 	if ( !differs( m_pMaterial, rMaterial ) ) {
 		return;
 	}
-	LOG( T3DTerrain::INFO, "Replacing terrain material" );
+	LOG( INFO, "Replacing terrain material" );
 	const bool bWasInitialized = m_bInitialized;
 	const bool bSuppliedMaterial = rMaterial.is_valid();
 	const Ref<T3DMaterial> pOldMaterial = m_pMaterial;
@@ -776,7 +776,7 @@ void T3DTerrain::setMaterial( const Ref<T3DMaterial> &rMaterial ) {
 		m_pMaterial.instantiate();
 	}
 	if ( m_performanceTarget == PERFORMANCE_TARGET_XBOX360_EXPERIMENTAL && !bSuppliedMaterial ) {
-		m_pMaterial->setShaderPerformancePreset( T3DMaterial::SHADER_PRESET_XBOX_360_AUTHENTIC );
+		m_pMaterial->setShaderPerformancePreset( SHADER_PRESET_XBOX_360_AUTHENTIC );
 	}
 	m_bPerformanceProfileMaterialPendingApply = false;
 	m_bLightStateValid = false;
@@ -798,12 +798,12 @@ void T3DTerrain::setMaterial( const Ref<T3DMaterial> &rMaterial ) {
 void T3DTerrain::setRuntimeShaderTieringEnabled( const bool bEnabled ) {
 	SET_IF_DIFF( m_bRuntimeShaderTieringEnabled, bEnabled );
 	refreshPerformanceProfileConformity();
-	LOG( T3DTerrain::INFO, "t3dSetting_t runtime shader tiering: ", bEnabled );
+	LOG( INFO, "t3dSetting_t runtime shader tiering: ", bEnabled );
 	if ( bEnabled && m_pData && m_bInitialized && !m_pData->ensureFarAtlases() ) {
-		LOG( T3DTerrain::WARN, "Runtime far shader tier could not prepare coarse terrain atlases; far-tier rendering may use fallback textures until terrain data is ready." );
+		LOG( WARN, "Runtime far shader tier could not prepare coarse terrain atlases; far-tier rendering may use fallback textures until terrain data is ready." );
 	}
 	if ( m_pMaterial.is_valid() && m_pMaterial->isInitialized() ) {
-		m_pMaterial->update( T3DMaterial::FULL_REBUILD );
+		m_pMaterial->update( FULL_REBUILD );
 	}
 	if ( m_bInitialized ) {
 		setupTerrainMesher();
@@ -882,7 +882,7 @@ void T3DTerrain::setMeshLods( const int nCount ) {
 	SET_IF_DIFF( m_nMeshLods, CLAMP( nCount, 1, 10 ) );
 	refreshPerformanceProfileConformity();
 	normalizeRuntimeTierLayout( true );
-	LOG( T3DTerrain::INFO, "t3dSetting_t mesh levels: ", m_nMeshLods );
+	LOG( INFO, "t3dSetting_t mesh levels: ", m_nMeshLods );
 	if ( m_pTerrainMesher && m_pMaterial.is_valid() ) {
 		m_pMaterial->update();
 		setupTerrainMesher();
@@ -899,7 +899,7 @@ void T3DTerrain::setTessellationLevel( const int nLevel ) {
 	SET_IF_DIFF( m_tessellationLevel, CLAMP( nLevel, 0, 6 ) );
 	refreshPerformanceProfileConformity();
 	normalizeRuntimeTierLayout( true );
-	LOG( T3DTerrain::INFO, "t3dSetting_t tessellation level: ", nLevel );
+	LOG( INFO, "t3dSetting_t tessellation level: ", nLevel );
 	// The optimized R8 displacement array exists only while tessellation is
 	// active. Crossing zero creates or frees it before rebuilding shaders.
 	if ( ( old_level == 0 ) != ( m_tessellationLevel == 0 ) && m_pAssets.is_valid() && m_pAssets->isInitialized() &&
@@ -907,7 +907,7 @@ void T3DTerrain::setTessellationLevel( const int nLevel ) {
 		m_pAssets->updateTextureList();
 	}
 	if ( m_pTerrainMesher && m_pMaterial.is_valid() ) {
-		m_pMaterial->update( T3DMaterial::FULL_REBUILD );
+		m_pMaterial->update( FULL_REBUILD );
 		setupTerrainMesher();
 		updateDisplacementBuffer();
 	}
@@ -923,7 +923,7 @@ void T3DTerrain::setMeshSize( const int nSize ) {
 	SET_IF_DIFF( m_nMeshSize, CLAMP( nSize & ~1, 8, 256 ) ); // Ensure even
 	refreshPerformanceProfileConformity();
 	normalizeRuntimeTierLayout( true );
-	LOG( T3DTerrain::INFO, "t3dSetting_t mesh size: ", m_nMeshSize );
+	LOG( INFO, "t3dSetting_t mesh size: ", m_nMeshSize );
 	if ( m_pTerrainMesher && m_pMaterial.is_valid() ) {
 		m_pMaterial->update();
 		setupTerrainMesher();
@@ -938,14 +938,14 @@ void T3DTerrain::setMeshSize( const int nSize ) {
 
 void T3DTerrain::setVertexSpacing( const real_t fSpacing ) {
 	if ( !Math::is_equal_approx( fSpacing, ( real_t ) ( 1.0f ) ) ) {
-		LOG( T3DTerrain::ERROR, "This Terrain3D fork requires 1 metre vertex spacing so every 128-sample region is exactly 128 metres wide" );
+		LOG( ERROR, "This Terrain3D fork requires 1 metre vertex spacing so every 128-sample region is exactly 128 metres wide" );
 		return;
 	}
 	if ( Math::is_equal_approx( m_fVertexSpacing, ( real_t ) ( 1.0f ) ) ) {
 		return;
 	}
 	m_fVertexSpacing = 1.0f;
-	LOG( T3DTerrain::INFO, "t3dSetting_t fixed vertex spacing: 1 metre" );
+	LOG( INFO, "t3dSetting_t fixed vertex spacing: 1 metre" );
 	if ( m_pCollision && m_pData && m_pInstancer && m_pMaterial.is_valid() ) {
 		m_pInstancer->updateVertexSpacing( m_fVertexSpacing );
 		m_pData->setVertexSpacingInternal( m_fVertexSpacing );
@@ -965,7 +965,7 @@ void T3DTerrain::setVertexSpacing( const real_t fSpacing ) {
 
 void T3DTerrain::setCullMargin( const real_t fMargin ) {
 	SET_IF_DIFF( m_fCullMargin, CLAMP( fMargin, 0.f, 100000.f ) );
-	LOG( T3DTerrain::INFO, "t3dSetting_t extra cull margin: ", m_fCullMargin );
+	LOG( INFO, "t3dSetting_t extra cull margin: ", m_fCullMargin );
 	if ( m_pTerrainMesher ) {
 		m_pTerrainMesher->updateAabbs();
 	}
@@ -1044,7 +1044,7 @@ void T3DTerrain::setGiMode( const GeometryInstance3D::GIMode giMode ) {
 
 void T3DTerrain::setRenderLayers( const uint32_t nLayers ) {
 	SET_IF_DIFF( m_renderLayers, nLayers );
-	LOG( T3DTerrain::INFO, "t3dSetting_t terrain render layers to: ", nLayers );
+	LOG( INFO, "t3dSetting_t terrain render layers to: ", nLayers );
 	if ( m_pTerrainMesher ) {
 		m_pTerrainMesher->setRenderLayers( m_renderLayers );
 	}
@@ -1170,7 +1170,7 @@ void T3DTerrain::setOceanFragmentWaveIterations( const int nIterations ) {
 }
 void T3DTerrain::setOceanEnabled( const bool bEnabled ) {
 	SET_IF_DIFF( m_bOceanEnabled, bEnabled );
-	LOG( T3DTerrain::INFO, "t3dSetting_t ocean enabled: ", m_bOceanEnabled );
+	LOG( INFO, "t3dSetting_t ocean enabled: ", m_bOceanEnabled );
 	if ( m_bOceanEnabled ) {
 		if ( m_pOceanMaterial.is_null() ) {
 			const String ocean_mat_path = ProjectSettings::get_singleton()->globalize_path( OCEAN_MATERIAL_PATH );
@@ -1192,7 +1192,7 @@ void T3DTerrain::setOceanEnabled( const bool bEnabled ) {
 
 void T3DTerrain::setOceanMeshLods( const int nCount ) {
 	SET_IF_DIFF( m_nOceanMeshLods, CLAMP( nCount, 1, 10 ) );
-	LOG( T3DTerrain::INFO, "t3dSetting_t ocean mesh levels: ", m_nOceanMeshLods );
+	LOG( INFO, "t3dSetting_t ocean mesh levels: ", m_nOceanMeshLods );
 	if ( m_bOceanEnabled ) {
 		setupOceanMesher();
 	}
@@ -1200,7 +1200,7 @@ void T3DTerrain::setOceanMeshLods( const int nCount ) {
 
 void T3DTerrain::setOceanTessellationLevel( const int nLevel ) {
 	SET_IF_DIFF( m_oceanTessellationLevel, CLAMP( nLevel, 0, 6 ) );
-	LOG( T3DTerrain::INFO, "t3dSetting_t ocean tessellation level: ", nLevel );
+	LOG( INFO, "t3dSetting_t ocean tessellation level: ", nLevel );
 	if ( m_bOceanEnabled ) {
 		setupOceanMesher();
 	}
@@ -1208,7 +1208,7 @@ void T3DTerrain::setOceanTessellationLevel( const int nLevel ) {
 
 void T3DTerrain::setOceanMeshSize( const int nSize ) {
 	SET_IF_DIFF( m_nOceanMeshSize, CLAMP( nSize & ~1, 8, 256 ) ); // Ensure even
-	LOG( T3DTerrain::INFO, "t3dSetting_t ocean mesh size: ", m_nOceanMeshSize );
+	LOG( INFO, "t3dSetting_t ocean mesh size: ", m_nOceanMeshSize );
 	if ( m_bOceanEnabled ) {
 		setupOceanMesher();
 	}
@@ -1216,7 +1216,7 @@ void T3DTerrain::setOceanMeshSize( const int nSize ) {
 
 void T3DTerrain::setOceanVertexSpacing( const real_t fSpacing ) {
 	SET_IF_DIFF( m_fOceanVertexSpacing, CLAMP( fSpacing, 0.25f, 100.0f ) );
-	LOG( T3DTerrain::INFO, "t3dSetting_t ocean vertex spacing: ", m_fOceanVertexSpacing );
+	LOG( INFO, "t3dSetting_t ocean vertex spacing: ", m_fOceanVertexSpacing );
 	if ( m_bOceanEnabled ) {
 		setupOceanMesher();
 	}
@@ -1224,7 +1224,7 @@ void T3DTerrain::setOceanVertexSpacing( const real_t fSpacing ) {
 
 void T3DTerrain::setOceanCullMargin( const real_t fMargin ) {
 	SET_IF_DIFF( m_fOceanCullMargin, CLAMP( fMargin, 0.f, 100000.f ) );
-	LOG( T3DTerrain::INFO, "t3dSetting_t extra cull margin: ", m_fOceanCullMargin );
+	LOG( INFO, "t3dSetting_t extra cull margin: ", m_fOceanCullMargin );
 	if ( m_pOceanMesher ) {
 		m_pOceanMesher->updateAabbs( m_fOceanCullMargin, V2_ZERO );
 	}
@@ -1246,7 +1246,7 @@ void T3DTerrain::setOceanGiMode( const GeometryInstance3D::GIMode giMode ) {
 
 void T3DTerrain::setOceanRenderLayers( const uint32_t nLayers ) {
 	SET_IF_DIFF( m_oceanRenderLayers, nLayers );
-	LOG( T3DTerrain::INFO, "t3dSetting_t ocean render layers to: ", nLayers );
+	LOG( INFO, "t3dSetting_t ocean render layers to: ", nLayers );
 	if ( m_pOceanMesher ) {
 		m_pOceanMesher->setRenderLayers( m_oceanRenderLayers );
 	}
@@ -1257,7 +1257,7 @@ void T3DTerrain::setOceanMaterial( const Ref<Material> &rMaterial ) {
 	m_oceanVariantSource = String();
 	m_pOceanVariantShader.unref();
 	m_bLightStateValid = false;
-	LOG( T3DTerrain::INFO, "t3dSetting_t ocean material" );
+	LOG( INFO, "t3dSetting_t ocean material" );
 	if ( m_bOceanEnabled ) {
 		setupOceanMesher();
 	}
@@ -1266,7 +1266,7 @@ void T3DTerrain::setOceanMaterial( const Ref<Material> &rMaterial ) {
 void T3DTerrain::setMouseLayer( const uint32_t nLayer ) {
 	SET_IF_DIFF( m_mouseLayer, CLAMP( nLayer, 21u, 32u ) );
 	const uint32_t mouse_mask = 1 << ( m_mouseLayer - 1 );
-	LOG( T3DTerrain::INFO, "t3dSetting_t mouse layer: ", m_mouseLayer, " (", mouse_mask,
+	LOG( INFO, "t3dSetting_t mouse layer: ", m_mouseLayer, " (", mouse_mask,
 		") on terrain mesh, material, mouse camera, mouse quad" );
 
 	// Set terrain meshes to mouse layer
@@ -1288,11 +1288,11 @@ void T3DTerrain::setMouseLayer( const uint32_t nLayer ) {
 
 Vector3 T3DTerrain::getIntersection( const Vector3 &rSrcPos, const Vector3 &rDirection, const bool bGpuMode ) {
 	if ( rDirection.is_zero_approx() || !rDirection.is_finite() ) {
-		LOG( T3DTerrain::ERROR, "Invalid direction vector: ", rDirection );
+		LOG( ERROR, "Invalid direction vector: ", rDirection );
 		return V3_NAN;
 	}
 	if ( !rSrcPos.is_finite() ) {
-		LOG( T3DTerrain::ERROR, "Invalid source vector: ", rSrcPos );
+		LOG( ERROR, "Invalid source vector: ", rSrcPos );
 		return V3_NAN;
 	}
 
@@ -1326,7 +1326,7 @@ Vector3 T3DTerrain::getIntersection( const Vector3 &rSrcPos, const Vector3 &rDir
 	} else {
 		// Get depth from perspective camera snapshot
 		if ( !m_pMouseCam ) {
-			LOG( T3DTerrain::ERROR, "Invalid mouse camera" );
+			LOG( ERROR, "Invalid mouse camera" );
 			return V3_NAN;
 		}
 		// Position mouse cam one unit behind the requested position

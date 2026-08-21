@@ -34,6 +34,18 @@ class T3DErosionJob;
 class T3DErosionSettings;
 class T3DCompute;
 
+typedef enum t3dHeightFilter_e {
+	HEIGHT_FILTER_NEAREST,
+	HEIGHT_FILTER_MINIMUM
+} t3dHeightFilter_t;
+
+typedef enum t3dMapEditCommitFlag_e : uint32_t {
+	MAP_EDIT_UPDATE_INSTANCES = 1u << 0,
+	MAP_EDIT_UPDATE_COLLISION = 1u << 1,
+	MAP_EDIT_SNAP = 1u << 2,
+	MAP_EDIT_KEEP_EDITED = 1u << 3,
+} t3dMapEditCommitFlag_t;
+
 class T3DData : public Object {
 	GDCLASS( T3DData, Object );
 	CLASS_NAME();
@@ -44,17 +56,9 @@ class T3DData : public Object {
 public:														 // Constants
 	// Maximum logical grid. The active grid is TERRAIN3D_ACTIVE_WORLD_TEXELS / region_size.
 
-	typedef enum t3dHeightFilter_e {
-		HEIGHT_FILTER_NEAREST,
-		HEIGHT_FILTER_MINIMUM
-	} t3dHeightFilter_t;
 
-	typedef enum t3dMapEditCommitFlag_e : uint32_t {
-		MAP_EDIT_UPDATE_INSTANCES = 1u << 0,
-		MAP_EDIT_UPDATE_COLLISION = 1u << 1,
-		MAP_EDIT_SNAP = 1u << 2,
-		MAP_EDIT_KEEP_EDITED = 1u << 3,
-	} t3dMapEditCommitFlag_t;
+
+
 
 
 private:
@@ -277,7 +281,7 @@ public:
 	TypedArray<Image> getColorMaps( void ) const;
 	TypedArray<Image> getMaps( const t3dMapType_t mapType ) const;
 	void updateMaps(
-		const t3dMapType_t mapType = T3DRegion::TYPE_MAX, const bool bAllRegions = true,
+		const t3dMapType_t mapType = REGION_TYPE_MAX, const bool bAllRegions = true,
 		const bool bGenerateMipmaps = false
 	);
 	void updateMapRegions( const t3dMapType_t mapType, const eastl::vector<Vector2i> &rRegionLocations );
@@ -455,7 +459,7 @@ public:
 		const TypedArray<Image> &rImages, const Vector3 &rGlobalPosition = V3_ZERO,
 		const real_t fOffset = 0.f, const real_t fScale = 1.f
 	);
-	Error exportImage( const String &rFileName, const t3dMapType_t mapType = T3DRegion::TYPE_HEIGHT ) const;
+	Error exportImage( const String &rFileName, const t3dMapType_t mapType = TYPE_HEIGHT ) const;
 	Ref<Image> layeredToImage( const t3dMapType_t mapType ) const;
 
 	// Utility
@@ -465,7 +469,7 @@ protected:
 	static void _bind_methods( void );
 };
 
-VARIANT_ENUM_CAST( T3DData::t3dHeightFilter_t );
+VARIANT_ENUM_CAST( t3dHeightFilter_t );
 
 // Inline Region Functions
 
@@ -489,13 +493,13 @@ EA_FORCE_INLINE Ref<T3DRegion> T3DData::getRegionp( const Vector3 &rGlobalPositi
 
 // Inline Map Functions
 
-EA_FORCE_INLINE void T3DData::setHeight( const Vector3 &rGlobalPosition, const real_t fHeight ) { setPixel( T3DRegion::TYPE_HEIGHT, rGlobalPosition, Color( fHeight, 0.f, 0.f, 1.f ) ); }
+EA_FORCE_INLINE void T3DData::setHeight( const Vector3 &rGlobalPosition, const real_t fHeight ) { setPixel( TYPE_HEIGHT, rGlobalPosition, Color( fHeight, 0.f, 0.f, 1.f ) ); }
 
-EA_FORCE_INLINE void T3DData::setColor( const Vector3 &rGlobalPosition, const Color &rColor ) { Color clr = rColor; clr.a = getRoughness( rGlobalPosition ); setPixel( T3DRegion::TYPE_COLOR, rGlobalPosition, clr ); }
+EA_FORCE_INLINE void T3DData::setColor( const Vector3 &rGlobalPosition, const Color &rColor ) { Color clr = rColor; clr.a = getRoughness( rGlobalPosition ); setPixel( TYPE_COLOR, rGlobalPosition, clr ); }
 
-EA_FORCE_INLINE Color T3DData::getColor( const Vector3 &rGlobalPosition ) const { Color clr = getPixel( T3DRegion::TYPE_COLOR, rGlobalPosition ); clr.a = 1.0f; return clr; }
+EA_FORCE_INLINE Color T3DData::getColor( const Vector3 &rGlobalPosition ) const { Color clr = getPixel( TYPE_COLOR, rGlobalPosition ); clr.a = 1.0f; return clr; }
 
-EA_FORCE_INLINE void T3DData::setControl( const Vector3 &rGlobalPosition, const uint32_t nControl ) { setPixel( T3DRegion::TYPE_CONTROL, rGlobalPosition, Color( asFloat( nControl ), 0.f, 0.f, 1.f ) ); }
+EA_FORCE_INLINE void T3DData::setControl( const Vector3 &rGlobalPosition, const uint32_t nControl ) { setPixel( TYPE_CONTROL, rGlobalPosition, Color( asFloat( nControl ), 0.f, 0.f, 1.f ) ); }
 
 EA_FORCE_INLINE void T3DData::setControlBaseId( const Vector3 &rGlobalPosition, const uint8_t nBase ) { const uint32_t control = getControl( rGlobalPosition ); const uint8_t base = CLAMP( nBase, ( uint8_t ) ( 0 ), ( uint8_t ) ( 31 ) ); setControl( rGlobalPosition, ( control & ~( 0x1F << 27 ) ) | encBase( base ) ); }
 
@@ -543,9 +547,9 @@ EA_FORCE_INLINE void T3DData::setControlAuto( const Vector3 &rGlobalPosition, co
 
 EA_FORCE_INLINE bool T3DData::getControlAuto( const Vector3 &rGlobalPosition ) const { const uint32_t control = getControl( rGlobalPosition ); return control == UINT32_MAX ? false : isAuto( control ); }
 
-EA_FORCE_INLINE void T3DData::setRoughness( const Vector3 &rGlobalPosition, const real_t fRoughness ) { Color clr = getPixel( T3DRegion::TYPE_COLOR, rGlobalPosition ); clr.a = fRoughness; setPixel( T3DRegion::TYPE_COLOR, rGlobalPosition, clr ); }
+EA_FORCE_INLINE void T3DData::setRoughness( const Vector3 &rGlobalPosition, const real_t fRoughness ) { Color clr = getPixel( TYPE_COLOR, rGlobalPosition ); clr.a = fRoughness; setPixel( TYPE_COLOR, rGlobalPosition, clr ); }
 
-EA_FORCE_INLINE real_t T3DData::getRoughness( const Vector3 &rGlobalPosition ) const { return getPixel( T3DRegion::TYPE_COLOR, rGlobalPosition ).a; }
+EA_FORCE_INLINE real_t T3DData::getRoughness( const Vector3 &rGlobalPosition ) const { return getPixel( TYPE_COLOR, rGlobalPosition ).a; }
 
 EA_FORCE_INLINE void T3DData::updateMasterHeight( const real_t fHeight ) { m_mapEditService.updateMasterHeight( fHeight ); }
 

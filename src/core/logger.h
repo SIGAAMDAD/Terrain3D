@@ -23,9 +23,9 @@
 #ifdef DEBUG_ENABLED
 #define LOG( level, ... )                                                                                 \
 	do {                                                                                                \
-		if ( level == T3DTerrain::ERROR ) {                                                                           \
+		if ( level == ERROR ) {                                                                           \
 			UtilityFunctions::push_error( __class__, ":", __func__, ":", __LINE__, ": ", __VA_ARGS__ );   \
-		} else if ( level == T3DTerrain::WARN ) {                                                                     \
+		} else if ( level == WARN ) {                                                                     \
 			UtilityFunctions::push_warning( __class__, ":", __func__, ":", __LINE__, ": ", __VA_ARGS__ ); \
 		} else if ( level <= T3DTerrain::s_debugLevel ) {                                                   \
 			UtilityFunctions::print( __class__, ":", __func__, ":", __LINE__, ": ", __VA_ARGS__ );        \

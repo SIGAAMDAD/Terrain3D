@@ -21,6 +21,41 @@ using namespace godot;
 
 class T3DTerrain;
 
+typedef enum t3dMode_e {
+	RIDGE = 0,
+	VALLEY,
+	SCARP,
+	BASIN,
+	PLATEAU,
+	TERRACE,
+	ROAD,
+	PASS,
+	TALUS,
+	HYDRAULIC_CHANNEL,
+	THERMAL_RELAXATION,
+	DUNE,
+	SHORELINE,
+	MORPHOLOGY,
+	OCCLUSION,
+	MODE_MAX,
+} t3dMode_t;
+
+typedef enum t3dMorphologyMode_e {
+	MORPH_EXPAND_PEAKS = 0,
+	MORPH_FILL_PITS,
+	MORPH_RIDGE_SHARPEN,
+	MORPH_VALLEY_SHARPEN,
+	MORPH_PLATEAU_CLEAN,
+	MORPH_MAX,
+} t3dMorphologyMode_t;
+
+typedef enum t3dGeometryMode_e {
+	GEOMETRY_TERRAIN_ONLY = 0,
+	GEOMETRY_MODULAR_INSTANCED,
+	GEOMETRY_PROCEDURAL_UNIQUE,
+	GEOMETRY_MAX,
+} t3dGeometryMode_t;
+
 class T3DLandformBaker : public RefCounted {
 	GDCLASS( T3DLandformBaker, RefCounted );
 	CLASS_NAME();
@@ -28,40 +63,11 @@ class T3DLandformBaker : public RefCounted {
 	mutable Dictionary m_materialCache;
 
 public:
-	typedef enum t3dMode_e {
-		RIDGE = 0,
-		VALLEY,
-		SCARP,
-		BASIN,
-		PLATEAU,
-		TERRACE,
-		ROAD,
-		PASS,
-		TALUS,
-		HYDRAULIC_CHANNEL,
-		THERMAL_RELAXATION,
-		DUNE,
-		SHORELINE,
-		MORPHOLOGY,
-		OCCLUSION,
-		MODE_MAX,
-	} t3dMode_t;
 
-	typedef enum t3dMorphologyMode_e {
-		MORPH_EXPAND_PEAKS = 0,
-		MORPH_FILL_PITS,
-		MORPH_RIDGE_SHARPEN,
-		MORPH_VALLEY_SHARPEN,
-		MORPH_PLATEAU_CLEAN,
-		MORPH_MAX,
-	} t3dMorphologyMode_t;
 
-	typedef enum t3dGeometryMode_e {
-		GEOMETRY_TERRAIN_ONLY = 0,
-		GEOMETRY_MODULAR_INSTANCED,
-		GEOMETRY_PROCEDURAL_UNIQUE,
-		GEOMETRY_MAX,
-	} t3dGeometryMode_t;
+
+
+
 
 	Dictionary apply( T3DTerrain *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings );
 	void restore( T3DTerrain *pTerrain, const Array &rSnapshots, const AABB &rEditedArea );
@@ -82,7 +88,7 @@ protected:
 	static void _bind_methods( void );
 };
 
-VARIANT_ENUM_CAST( T3DLandformBaker::t3dMode_t );
-VARIANT_ENUM_CAST( T3DLandformBaker::t3dMorphologyMode_t );
-VARIANT_ENUM_CAST( T3DLandformBaker::t3dGeometryMode_t );
+VARIANT_ENUM_CAST( t3dMode_t );
+VARIANT_ENUM_CAST( t3dMorphologyMode_t );
+VARIANT_ENUM_CAST( t3dGeometryMode_t );
 #endif // TERRAIN3D_LANDFORM_BAKER_H

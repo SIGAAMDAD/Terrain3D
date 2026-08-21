@@ -433,27 +433,27 @@ typedef struct t3dErosionKernels_s {
 		T3DErosionJob *job = rContext.job;
 		rContext.step = nStep;
 		rContext.fStepProgress = ( float ) ( nStep ) / ( float ) ( job->m_config.simulationSteps );
-		rContext.fMaster = MAX( 0.0f, job->sampleCurve( T3DErosionJob::CURVE_MASTER, nStep ) ) *
+		rContext.fMaster = MAX( 0.0f, job->sampleCurve( CURVE_MASTER, nStep ) ) *
 			job->m_config.fGlobalIntensity;
-		rContext.fWeatherCurve = MAX( 0.0f, job->sampleCurve( T3DErosionJob::CURVE_WEATHERING, nStep ) ) *
+		rContext.fWeatherCurve = MAX( 0.0f, job->sampleCurve( CURVE_WEATHERING, nStep ) ) *
 			rContext.fMaster;
-		rContext.fOxidationCurve = MAX( 0.0f, job->sampleCurve( T3DErosionJob::CURVE_OXIDATION, nStep ) ) *
+		rContext.fOxidationCurve = MAX( 0.0f, job->sampleCurve( CURVE_OXIDATION, nStep ) ) *
 			rContext.fMaster;
-		rContext.fRainfallCurve = MAX( 0.0f, job->sampleCurve( T3DErosionJob::CURVE_RAINFALL, nStep ) ) *
+		rContext.fRainfallCurve = MAX( 0.0f, job->sampleCurve( CURVE_RAINFALL, nStep ) ) *
 			rContext.fMaster;
-		rContext.fWindCurve = MAX( 0.0f, job->sampleCurve( T3DErosionJob::CURVE_WIND, nStep ) ) *
+		rContext.fWindCurve = MAX( 0.0f, job->sampleCurve( CURVE_WIND, nStep ) ) *
 			rContext.fMaster;
-		rContext.fWaveCurve = MAX( 0.0f, job->sampleCurve( T3DErosionJob::CURVE_WAVE, nStep ) ) *
+		rContext.fWaveCurve = MAX( 0.0f, job->sampleCurve( CURVE_WAVE, nStep ) ) *
 			rContext.fMaster;
-		rContext.fTrafficCurve = MAX( 0.0f, job->sampleCurve( T3DErosionJob::CURVE_TRAFFIC, nStep ) ) *
+		rContext.fTrafficCurve = MAX( 0.0f, job->sampleCurve( CURVE_TRAFFIC, nStep ) ) *
 			rContext.fMaster;
-		rContext.fSnowCurve = MAX( 0.0f, job->sampleCurve( T3DErosionJob::CURVE_SNOWMELT, nStep ) ) *
+		rContext.fSnowCurve = MAX( 0.0f, job->sampleCurve( CURVE_SNOWMELT, nStep ) ) *
 			rContext.fMaster;
-		rContext.fSaltCurve = MAX( 0.0f, job->sampleCurve( T3DErosionJob::CURVE_SALT_WEATHERING, nStep ) ) *
+		rContext.fSaltCurve = MAX( 0.0f, job->sampleCurve( CURVE_SALT_WEATHERING, nStep ) ) *
 			rContext.fMaster;
-		rContext.fDebrisCurve = MAX( 0.0f, job->sampleCurve( T3DErosionJob::CURVE_DEBRIS_FLOW, nStep ) ) *
+		rContext.fDebrisCurve = MAX( 0.0f, job->sampleCurve( CURVE_DEBRIS_FLOW, nStep ) ) *
 			rContext.fMaster;
-		rContext.fTemperature = job->sampleCurve( T3DErosionJob::CURVE_TEMPERATURE, nStep );
+		rContext.fTemperature = job->sampleCurve( CURVE_TEMPERATURE, nStep );
 
 		const bool storm_active = job->m_config.fStormFrequency >= 1.0f ||
 			hashUnit( job->m_config.seed ^ 0x5a17ULL, ( size_t ) ( nStep ), ( uint64_t ) ( nStep ) ) <=
@@ -492,10 +492,10 @@ typedef struct t3dErosionKernels_s {
 			const size_t sim_index = ( size_t ) ( pContext->region_id ) * job->m_nCellsPerRegion +
 				( size_t ) ( sy ) * ( size_t ) ( job->m_nSimulationRegionSize ) + ( size_t ) ( sx );
 			if ( pContext->pControlBytes ) {
-				const T3DErosionJob::t3dMaterialTransitionKind_t transition_kind =
-					( T3DErosionJob::t3dMaterialTransitionKind_t ) ( job->m_materialTransitionKind[sim_index] );
+				const t3dMaterialTransitionKind_t transition_kind =
+					( t3dMaterialTransitionKind_t ) ( job->m_materialTransitionKind[sim_index] );
 				const float transition_amount = clamp01( job->m_materialTransitionAmount[sim_index] );
-				if ( transition_kind != T3DErosionJob::TRANSITION_NONE && transition_amount > TERRAIN3D_EROSION_EPSILON ) {
+				if ( transition_kind != TRANSITION_NONE && transition_amount > TERRAIN3D_EROSION_EPSILON ) {
 					const uint32_t old_control = asUint( readRf( pContext->pControlSourceBytes, source_index ) );
 					const uint8_t old_base = getBase( old_control );
 					const uint8_t old_overlay = getOverlay( old_control );
@@ -815,7 +815,7 @@ typedef struct t3dErosionKernels_s {
 				if ( neighbor >= 0 && job->m_active[( size_t ) ( neighbor )] ) {
 					potential[( size_t ) ( dir )] =
 						MAX( 0.0f, surface - ( job->m_height[( size_t ) ( neighbor )] + job->m_water[( size_t ) ( neighbor )] ) );
-				} else if ( job->m_config.boundaryMode == T3DErosionSettings::BOUNDARY_OPEN ) {
+				} else if ( job->m_config.boundaryMode == BOUNDARY_OPEN ) {
 					potential[( size_t ) ( dir )] = job->m_water[index] * 0.5f;
 				}
 				total_potential += potential[( size_t ) ( dir )];
@@ -1454,22 +1454,22 @@ typedef struct t3dErosionKernels_s {
 					: 0.0f;
 
 			typedef struct t3dTransitionScore_s {
-				T3DErosionJob::t3dMaterialTransitionKind_t kind;
+				t3dMaterialTransitionKind_t kind;
 				float fScore;
 			} t3dTransitionScore_t;
 			const eastl::array<t3dTransitionScore_t, 8> scores = {
-				t3dTransitionScore_t{T3DErosionJob::TRANSITION_EXPOSED, lowering * ( 0.35f + 0.65f * slope ) * ( 1.0f - loose * 0.75f )},
-				t3dTransitionScore_t{T3DErosionJob::TRANSITION_WEATHERED, job->m_weathering[index] * ( 0.5f + 0.5f * ( 1.0f - slope ) )},
-				t3dTransitionScore_t{T3DErosionJob::TRANSITION_OXIDIZED, job->m_oxidation[index] * ( 1.0f - loose * 0.5f )},
-				t3dTransitionScore_t{T3DErosionJob::TRANSITION_COARSE_DEPOSIT, coarse_deposition * ( 0.35f + 0.65f * loose )},
-				t3dTransitionScore_t{T3DErosionJob::TRANSITION_FINE_DEPOSIT, fine_deposition * ( 1.0f - slope * 0.75f )},
-				t3dTransitionScore_t{T3DErosionJob::TRANSITION_SALT_WEATHERED, clamp01( safeDivide( job->m_saltWeathering[index], transition_depth ) )},
-				t3dTransitionScore_t{T3DErosionJob::TRANSITION_DESERT_PAVEMENT,
+				t3dTransitionScore_t{TRANSITION_EXPOSED, lowering * ( 0.35f + 0.65f * slope ) * ( 1.0f - loose * 0.75f )},
+				t3dTransitionScore_t{TRANSITION_WEATHERED, job->m_weathering[index] * ( 0.5f + 0.5f * ( 1.0f - slope ) )},
+				t3dTransitionScore_t{TRANSITION_OXIDIZED, job->m_oxidation[index] * ( 1.0f - loose * 0.5f )},
+				t3dTransitionScore_t{TRANSITION_COARSE_DEPOSIT, coarse_deposition * ( 0.35f + 0.65f * loose )},
+				t3dTransitionScore_t{TRANSITION_FINE_DEPOSIT, fine_deposition * ( 1.0f - slope * 0.75f )},
+				t3dTransitionScore_t{TRANSITION_SALT_WEATHERED, clamp01( safeDivide( job->m_saltWeathering[index], transition_depth ) )},
+				t3dTransitionScore_t{TRANSITION_DESERT_PAVEMENT,
 					job->m_desertPavement.empty() ? 0.0f : job->m_desertPavement[index]},
-				t3dTransitionScore_t{T3DErosionJob::TRANSITION_VARNISHED, varnish * job->m_oxidation[index] * ( 1.0f - loose )},
+				t3dTransitionScore_t{TRANSITION_VARNISHED, varnish * job->m_oxidation[index] * ( 1.0f - loose )},
 			};
 
-			T3DErosionJob::t3dMaterialTransitionKind_t best_kind = T3DErosionJob::TRANSITION_NONE;
+			t3dMaterialTransitionKind_t best_kind = TRANSITION_NONE;
 			float best_score = 0.0f;
 			for ( const t3dTransitionScore_t &candidate : scores ) {
 				if ( job->getTransitionTarget( source_texture, candidate.kind ) < 0 ) {
@@ -1480,7 +1480,7 @@ typedef struct t3dErosionKernels_s {
 					best_score = candidate.fScore;
 				}
 			}
-			if ( best_kind == T3DErosionJob::TRANSITION_NONE || best_score <= job->m_config.fMaterialTransitionThreshold ) {
+			if ( best_kind == TRANSITION_NONE || best_score <= job->m_config.fMaterialTransitionThreshold ) {
 				continue;
 			}
 			const float normalized = safeDivide( best_score - job->m_config.fMaterialTransitionThreshold,
@@ -3838,8 +3838,8 @@ Error T3DErosionJob::apply( T3DData *const pData, const bool bForce ) {
 				}
 			}
 		}
-		Ref<Image> pControlMap = bRegionNeedsControl ? pRegion->materializeMap( T3DRegion::TYPE_CONTROL ) : pRegion->getControlMap();
-		Ref<Image> pColorMap = bRegionNeedsColor ? pRegion->materializeMap( T3DRegion::TYPE_COLOR ) : pRegion->getColorMap();
+		Ref<Image> pControlMap = bRegionNeedsControl ? pRegion->materializeMap( TYPE_CONTROL ) : pRegion->getControlMap();
+		Ref<Image> pColorMap = bRegionNeedsColor ? pRegion->materializeMap( TYPE_COLOR ) : pRegion->getColorMap();
 
 		const PackedByteArray encoded_height_data = pHeightMap->get_data();
 		const size_t encoded_height_byte_count = source_pixel_count * sizeof( uint16_t );
@@ -3939,12 +3939,12 @@ Error T3DErosionJob::apply( T3DData *const pData, const bool bForce ) {
 		if ( control_bytes && std::memcmp( control_bytes, source_control_data.ptr(), control_buffer.size() ) == 0 ) {
 			control_buffer.clear();
 			control_bytes = nullptr;
-			pRegion->compactMapIfDefault( T3DRegion::TYPE_CONTROL );
+			pRegion->compactMapIfDefault( TYPE_CONTROL );
 		}
 		if ( color_bytes && std::memcmp( color_bytes, source_color_data.ptr(), color_buffer.size() ) == 0 ) {
 			color_buffer.clear();
 			color_bytes = nullptr;
-			pRegion->compactMapIfDefault( T3DRegion::TYPE_COLOR );
+			pRegion->compactMapIfDefault( TYPE_COLOR );
 		}
 
 		if ( height_bytes ) {
@@ -3964,7 +3964,7 @@ Error T3DErosionJob::apply( T3DData *const pData, const bool bForce ) {
 			std::memcpy( output_control_data.ptrw(), control_buffer.data(), control_buffer.size() );
 			pControlMap->set_data( pControlMap->get_width(), pControlMap->get_height(), pControlMap->has_mipmaps(),
 								  Image::FORMAT_RF, output_control_data );
-			pRegion->compactMapIfDefault( T3DRegion::TYPE_CONTROL );
+			pRegion->compactMapIfDefault( TYPE_CONTROL );
 			bAnyControlChanged = true;
 		}
 		if ( color_bytes ) {
@@ -3977,7 +3977,7 @@ Error T3DErosionJob::apply( T3DData *const pData, const bool bForce ) {
 		const bool bRegionColorChanged = color_bytes || ( bRegionNeedsColor && pColorMap.is_valid() && !bTintRgba8 );
 		if ( bRegionColorChanged ) {
 			pColorMap->clear_mipmaps();
-			pRegion->compactMapIfDefault( T3DRegion::TYPE_COLOR );
+			pRegion->compactMapIfDefault( TYPE_COLOR );
 			bAnyColorChanged = true;
 		}
 		const bool bRegionChanged = height_bytes || control_bytes || bRegionColorChanged;
@@ -4000,10 +4000,10 @@ Error T3DErosionJob::apply( T3DData *const pData, const bool bForce ) {
 		return ERR_DOES_NOT_EXIST;
 	}
 
-	t3dMapType_t changed_map_type = T3DRegion::TYPE_MAX;
+	t3dMapType_t changed_map_type = REGION_TYPE_MAX;
 	const int32_t changed_map_count = ( int32_t ) ( bHeightChanged ) + ( int32_t ) ( bControlChanged ) + ( int32_t ) ( bColorChanged );
 	if ( changed_map_count == 1 ) {
-		changed_map_type = bHeightChanged ? T3DRegion::TYPE_HEIGHT : ( bControlChanged ? T3DRegion::TYPE_CONTROL : T3DRegion::TYPE_COLOR );
+		changed_map_type = bHeightChanged ? TYPE_HEIGHT : ( bControlChanged ? TYPE_CONTROL : TYPE_COLOR );
 	}
 
 	// Publish all authoritative image replacements through one mutation boundary.

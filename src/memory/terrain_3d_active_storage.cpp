@@ -248,7 +248,7 @@ static bool terrain3dActivePublishBytesUnsafe(
 
 static bool terrain3dActiveCopyRegionUnsafe( const int iLogicalSlot, const T3DRegion *pRegion ) {
 	const int region_size = s_nActiveRegionSize.load( std::memory_order_acquire );
-	const Image *const pImage = pRegion ? pRegion->getMapPtr( T3DRegion::TYPE_HEIGHT ) : nullptr;
+	const Image *const pImage = pRegion ? pRegion->getMapPtr( TYPE_HEIGHT ) : nullptr;
 	PackedByteArray bytes;
 	if ( pImage && pImage->get_format() == Image::FORMAT_R16 &&
 		pImage->get_width() == region_size && pImage->get_height() == region_size ) {
@@ -603,10 +603,10 @@ bool terrain3dActiveStorageSyncMap(
 	const void *pOwner, const Vector2i &rLocation, const T3DRegion *pRegion,
 	const t3dMapType_t type, const Rect2i &
 ) {
-	if ( type < T3DRegion::TYPE_HEIGHT || type >= T3DRegion::TYPE_MAX ) {
+	if ( type < TYPE_HEIGHT || type >= REGION_TYPE_MAX ) {
 		return false;
 	}
-	return type == T3DRegion::TYPE_HEIGHT
+	return type == TYPE_HEIGHT
 		? terrain3dActiveStorageSyncRegion( pOwner, rLocation, pRegion ) : true;
 }
 

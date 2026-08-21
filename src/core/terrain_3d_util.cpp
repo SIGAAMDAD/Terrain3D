@@ -300,14 +300,14 @@ void T3DUtil::printDict( const String &strName, const Dictionary &rDict, const i
 }
 
 void T3DUtil::dumpGentex( const T3DGeneratedTexture &rGen, const String &strName ) {
-	LOG( T3DTerrain::MESG, "Generated ", strName, " RID: ", rGen.getRid(), ", dirty: ", rGen.isDirty(),
+	LOG( MESG, "Generated ", strName, " RID: ", rGen.getRid(), ", dirty: ", rGen.isDirty(),
 		", image: ", ptrToStr( *rGen.getImage() ) );
 }
 
 void T3DUtil::dumpMaps( const TypedArray<Image> &rMaps, const String &strName ) {
-	LOG( T3DTerrain::MESG, "Dumping ", strName, " array. Size: ", rMaps.size() );
+	LOG( MESG, "Dumping ", strName, " array. Size: ", rMaps.size() );
 	for ( const Ref<Image> pImg : rMaps ) {
-		LOG( T3DTerrain::MESG, "Map size: ", pImg->get_size(), ", eFormat: ", pImg->get_format(), ", ", ptrToStr( *pImg ) );
+		LOG( MESG, "Map size: ", pImg->get_size(), ", eFormat: ", pImg->get_format(), ", ", ptrToStr( *pImg ) );
 	}
 }
 
@@ -322,7 +322,7 @@ Vector2i T3DUtil::stringToLocation( const String &rString ) {
 	String x_str = rString.left( 3 ).replace( "_", "" );
 	String y_str = rString.right( 3 ).replace( "_", "" );
 	if ( !x_str.is_valid_int() || !y_str.is_valid_int() ) {
-		LOG( T3DTerrain::ERROR, "Malformed string '", rString, "'. Result: ", x_str, ", ", y_str );
+		LOG( ERROR, "Malformed string '", rString, "'. Result: ", x_str, ", ", y_str );
 		return V2I_MAX;
 	}
 	return Vector2i( x_str.to_int(), y_str.to_int() );
@@ -347,7 +347,7 @@ PackedStringArray T3DUtil::getFiles( const String &rDir, const String &rGlob ) {
 	PackedStringArray files;
 	Ref<DirAccess> pDa = DirAccess::open( rDir );
 	if ( pDa.is_null() ) {
-		LOG( T3DTerrain::ERROR, "Cannot open directory: ", rDir );
+		LOG( ERROR, "Cannot open directory: ", rDir );
 		return files;
 	}
 	const PackedStringArray dir_files = pDa->get_files();
@@ -356,7 +356,7 @@ PackedStringArray T3DUtil::getFiles( const String &rDir, const String &rGlob ) {
 		if ( !fname.matchn( rGlob ) ) {
 			continue;
 		}
-		LOG( T3DTerrain::DEBUG, "Found file: ", rDir + String( "/" ) + fname );
+		LOG( DEBUG, "Found file: ", rDir + String( "/" ) + fname );
 		files.push_back( fname );
 	}
 	return files;
@@ -386,16 +386,16 @@ Ref<Image> T3DUtil::blackToAlpha( const Ref<Image> &rImage ) {
  */
 Vector2 T3DUtil::getMinMax( const Ref<Image> &rImage ) {
 	if ( rImage.is_null() ) {
-		LOG( T3DTerrain::ERROR, "Provided image is not valid. Nothing to analyze" );
+		LOG( ERROR, "Provided image is not valid. Nothing to analyze" );
 		return V2( INFINITY );
 	} else if ( rImage->is_empty() ) {
-		LOG( T3DTerrain::ERROR, "Provided image is empty. Nothing to analyze" );
+		LOG( ERROR, "Provided image is empty. Nothing to analyze" );
 		return V2( INFINITY );
 	}
 
 	const Ref<Image> pSource = prepareSourceImage( rImage );
 	if ( pSource.is_null() ) {
-		LOG( T3DTerrain::ERROR, "Provided image could not be decompressed. Nothing to analyze" );
+		LOG( ERROR, "Provided image could not be decompressed. Nothing to analyze" );
 		return V2( INFINITY );
 	}
 	Vector2 min_max = Vector2( FLT_MAX, -FLT_MAX );
@@ -412,7 +412,7 @@ Vector2 T3DUtil::getMinMax( const Ref<Image> &rImage ) {
 		}
 	}
 
-	LOG( T3DTerrain::INFO, "Calculating minimum and maximum values of the image: ", min_max );
+	LOG( INFO, "Calculating minimum and maximum values of the image: ", min_max );
 	return min_max;
 }
 
@@ -422,19 +422,19 @@ Vector2 T3DUtil::getMinMax( const Ref<Image> &rImage ) {
  */
 Ref<Image> T3DUtil::getThumbnail( const Ref<Image> &rImage, const Vector2i &rSize ) {
 	if ( rImage.is_null() ) {
-		LOG( T3DTerrain::ERROR, "Provided image is not valid. Nothing to process" );
+		LOG( ERROR, "Provided image is not valid. Nothing to process" );
 		return Ref<Image>();
 	} else if ( rImage->is_empty() ) {
-		LOG( T3DTerrain::ERROR, "Provided image is empty. Nothing to process" );
+		LOG( ERROR, "Provided image is empty. Nothing to process" );
 		return Ref<Image>();
 	}
 	const Vector2i size = Vector2i( CLAMP( rSize.x, 8, 16384 ), CLAMP( rSize.y, 8, 16384 ) );
 
-	LOG( T3DTerrain::INFO, "Drawing a thumbnail sized: ", size );
+	LOG( INFO, "Drawing a thumbnail sized: ", size );
 	// Create a temporary work image scaled to desired width
 	Ref<Image> pImg = prepareSourceImage( rImage );
 	if ( pImg.is_null() ) {
-		LOG( T3DTerrain::ERROR, "Provided image could not be decompressed. Cannot create thumbnail" );
+		LOG( ERROR, "Provided image could not be decompressed. Cannot create thumbnail" );
 		return Ref<Image>();
 	}
 	pImg->resize( size.x, size.y, Image::INTERPOLATE_LANCZOS );
@@ -553,24 +553,24 @@ Ref<Image> T3DUtil::loadImage(
 	const Vector2 &rR16HeightRange, const Vector2i &rR16Size
 ) {
 	if ( rFileName.is_empty() ) {
-		LOG( T3DTerrain::ERROR, "No file specified. Nothing imported" );
+		LOG( ERROR, "No file specified. Nothing imported" );
 		return Ref<Image>();
 	}
 	if ( !FileAccess::file_exists( rFileName ) ) {
-		LOG( T3DTerrain::ERROR, "File ", rFileName, " does not exist. Nothing to import" );
+		LOG( ERROR, "File ", rFileName, " does not exist. Nothing to import" );
 		return Ref<Image>();
 	}
 
 	// Load file based on extension
 	Ref<Image> pImg;
-	LOG( T3DTerrain::INFO, "Attempting to load: ", rFileName );
+	LOG( INFO, "Attempting to load: ", rFileName );
 	String ext = rFileName.get_extension().to_lower();
 	const PackedStringArray imgloader_extensions =
 		PackedStringArray( Array::make( "bmp", "dds", "exr", "hdr", "jpg", "jpeg", "png", "tga", "svg", "webp" ) );
 
 	// If R16 integer eFormat (read/writeable by Krita)
 	if ( ext == "r16" || ext == "raw" ) {
-		LOG( T3DTerrain::DEBUG, "Loading file as an r16" );
+		LOG( DEBUG, "Loading file as an r16" );
 		Ref<FileAccess> pFile = FileAccess::open( rFileName, FileAccess::READ );
 		// If p_size is zero, assume square and try to auto detect size
 		Vector2i r16_size = rR16Size;
@@ -579,7 +579,7 @@ Ref<Image> T3DUtil::loadImage(
 			const int fsize = pFile->get_position();
 			const int fwidth = sqrt( fsize / 2 );
 			r16_size = V2I( fwidth );
-			LOG( T3DTerrain::DEBUG, "Total file size is: ", fsize, " calculated width: ", fwidth, " dimensions: ", r16_size );
+			LOG( DEBUG, "Total file size is: ", fsize, " calculated width: ", fwidth, " dimensions: ", r16_size );
 			pFile->seek( 0 );
 		}
 		pImg = Image::create_empty( r16_size.x, r16_size.y, false, Image::FORMAT_RF );
@@ -593,25 +593,25 @@ Ref<Image> T3DUtil::loadImage(
 
 		// If an Image extension, use Image loader
 	} else if ( imgloader_extensions.has( ext ) ) {
-		LOG( T3DTerrain::DEBUG, "ImageFormatLoader loading recognized file type: ", ext );
+		LOG( DEBUG, "ImageFormatLoader loading recognized file type: ", ext );
 		pImg = Image::load_from_file( rFileName );
 
 		// Else, see if Godot's resource loader will read it as an image: RES, TRES, etc
 	} else {
-		LOG( T3DTerrain::DEBUG, "Loading file as a resource" );
+		LOG( DEBUG, "Loading file as a resource" );
 		pImg = ResourceLoader::get_singleton()->load( rFileName, "",
 													( ResourceLoader::CacheMode ) ( nCacheMode ) );
 	}
 
 	if ( !pImg.is_valid() ) {
-		LOG( T3DTerrain::ERROR, "File", rFileName, " cannot be loaded" );
+		LOG( ERROR, "File", rFileName, " cannot be loaded" );
 		return Ref<Image>();
 	}
 	if ( pImg->is_empty() ) {
-		LOG( T3DTerrain::ERROR, "File", rFileName, " is empty" );
+		LOG( ERROR, "File", rFileName, " is empty" );
 		return Ref<Image>();
 	}
-	LOG( T3DTerrain::DEBUG, "Loaded Image size: ", pImg->get_size(), " eFormat: ", pImg->get_format() );
+	LOG( DEBUG, "Loaded Image size: ", pImg->get_size(), " eFormat: ", pImg->get_format() );
 	return pImg;
 }
 
@@ -625,33 +625,33 @@ Ref<Image> T3DUtil::packImage(
 	const int nAlphaChannel, const int nAoChannel
 ) {
 	if ( !rSrcRgb.is_valid() || !rSrcA.is_valid() ) {
-		LOG( T3DTerrain::ERROR, "Provided images are not valid. Cannot pack" );
+		LOG( ERROR, "Provided images are not valid. Cannot pack" );
 		return Ref<Image>();
 	}
 	const Ref<Image> pSrcRgb = prepareSourceImage( rSrcRgb );
 	const Ref<Image> pSrcA = prepareSourceImage( rSrcA );
 	const Ref<Image> pSrcAo = rSrcAo.is_valid() ? prepareSourceImage( rSrcAo ) : Ref<Image>();
 	if ( pSrcRgb.is_null() || pSrcA.is_null() || ( rSrcAo.is_valid() && pSrcAo.is_null() ) ) {
-		LOG( T3DTerrain::ERROR, "A source image could not be decompressed. Cannot pack" );
+		LOG( ERROR, "A source image could not be decompressed. Cannot pack" );
 		return Ref<Image>();
 	}
 	if ( rSrcRgb->get_size() != rSrcA->get_size() ) {
-		LOG( T3DTerrain::ERROR, "Provided images are not the same size. Cannot pack" );
+		LOG( ERROR, "Provided images are not the same size. Cannot pack" );
 		return Ref<Image>();
 	}
 	if ( rSrcRgb->is_empty() || rSrcA->is_empty() ) {
-		LOG( T3DTerrain::ERROR, "Provided images are empty. Cannot pack" );
+		LOG( ERROR, "Provided images are empty. Cannot pack" );
 		return Ref<Image>();
 	}
 	if ( nAlphaChannel < 0 || nAlphaChannel > 3 ) {
-		LOG( T3DTerrain::ERROR, "Source t3dChannel_t of Height/Roughness invalid. Cannot Pack" );
+		LOG( ERROR, "Source t3dChannel_t of Height/Roughness invalid. Cannot Pack" );
 		return Ref<Image>();
 	}
 
 	const bool bPackAo = pSrcAo.is_valid();
 	if ( bPackAo ) {
 		if ( rSrcRgb->get_size() != rSrcAo->get_size() ) {
-			LOG( T3DTerrain::ERROR, "Provided AO and normal images are not the same size. Cannot pack" );
+			LOG( ERROR, "Provided AO and normal images are not the same size. Cannot pack" );
 			return Ref<Image>();
 		}
 	}
@@ -673,7 +673,7 @@ Ref<Image> T3DUtil::packImage(
 	}
 
 	Ref<Image> pDst = Image::create_empty( rSrcRgb->get_width(), rSrcRgb->get_height(), false, Image::FORMAT_RGBA8 );
-	LOG( T3DTerrain::INFO, "Creating image from source RGB + source channel images" );
+	LOG( INFO, "Creating image from source RGB + source channel images" );
 	for ( int y = 0; y < rSrcRgb->get_height(); y++ ) {
 		for ( int x = 0; x < rSrcRgb->get_width(); x++ ) {
 			Color col = pSrcRgb->get_pixel( x, y );
@@ -710,13 +710,13 @@ Ref<Image> T3DUtil::packPbrRgba16ui(
 	const bool bGenerateMipmaps
 ) {
 	if ( rNormal.is_null() || rRoughness.is_null() || rDisplacement.is_null() ) {
-		LOG( T3DTerrain::ERROR, "Normal, roughness, and displacement images are required for packed PBR generation." );
+		LOG( ERROR, "Normal, roughness, and displacement images are required for packed PBR generation." );
 		return Ref<Image>();
 	}
 	const int channels[] = {nRoughnessChannel, nDisplacementChannel, nAoChannel, nMetallicChannel};
 	for ( const int channel : channels ) {
 		if ( channel < 0 || channel > 3 ) {
-			LOG( T3DTerrain::ERROR, "Packed PBR source channel must be between 0 and 3." );
+			LOG( ERROR, "Packed PBR source channel must be between 0 and 3." );
 			return Ref<Image>();
 		}
 	}
@@ -727,22 +727,22 @@ Ref<Image> T3DUtil::packPbrRgba16ui(
 	const Ref<Image> pAo = prepareRgbaFloatSource( rAo );
 	const Ref<Image> pMetallic = prepareRgbaFloatSource( rMetallic );
 	if ( pNormal.is_null() || pRoughness.is_null() || pDisplacement.is_null() ) {
-		LOG( T3DTerrain::ERROR, "A packed PBR source image could not be decompressed." );
+		LOG( ERROR, "A packed PBR source image could not be decompressed." );
 		return Ref<Image>();
 	}
 	if ( pNormal->is_empty() || pRoughness->is_empty() || pDisplacement->is_empty() ) {
-		LOG( T3DTerrain::ERROR, "Packed PBR source images cannot be empty." );
+		LOG( ERROR, "Packed PBR source images cannot be empty." );
 		return Ref<Image>();
 	}
 
 	const Vector2i size = pNormal->get_size();
 	if ( pRoughness->get_size() != size || pDisplacement->get_size() != size || !terrain3dValidateOptionalImage( pAo, size, "AO" ) ||
 		!terrain3dValidateOptionalImage( pMetallic, size, "Metallic" ) ) {
-		LOG( T3DTerrain::ERROR, "All packed PBR source images must have identical dimensions." );
+		LOG( ERROR, "All packed PBR source images must have identical dimensions." );
 		return Ref<Image>();
 	}
 	if ( !is_power_of_2( size.x ) || !is_power_of_2( size.y ) ) {
-		LOG( T3DTerrain::WARN, "Packed PBR image dimensions are not powers of two: ", size,
+		LOG( WARN, "Packed PBR image dimensions are not powers of two: ", size,
 			". Mipmaps remain valid but may be less efficient." );
 	}
 
@@ -813,7 +813,7 @@ Ref<Image> T3DUtil::packPbrRgba16ui(
 	}
 
 	if ( byte_offset != total_bytes ) {
-		LOG( T3DTerrain::ERROR, "Packed PBR byte count mismatch. Expected ", total_bytes, ", wrote ", byte_offset );
+		LOG( ERROR, "Packed PBR byte count mismatch. Expected ", total_bytes, ", wrote ", byte_offset );
 		return Ref<Image>();
 	}
 	return Image::create_from_data( size.x, size.y, mip_count > 1, Image::FORMAT_RGBA16I, data );
@@ -840,23 +840,23 @@ Ref<Image> T3DUtil::packSurfaceRgba8(
 	const bool bGenerateMipmaps
 ) {
 	if ( rNormal.is_null() || rRoughness.is_null() ) {
-		LOG( T3DTerrain::ERROR, "Normal and roughness images are required for surface texture generation." );
+		LOG( ERROR, "Normal and roughness images are required for surface texture generation." );
 		return Ref<Image>();
 	}
 	if ( nRoughnessChannel < 0 || nRoughnessChannel > 3 || nAoChannel < 0 || nAoChannel > 3 ) {
-		LOG( T3DTerrain::ERROR, "Surface source channels must be between 0 and 3." );
+		LOG( ERROR, "Surface source channels must be between 0 and 3." );
 		return Ref<Image>();
 	}
 	const Ref<Image> pNormal = prepareRgbaFloatSource( rNormal );
 	const Ref<Image> pRoughness = prepareRgbaFloatSource( rRoughness );
 	const Ref<Image> pAo = prepareRgbaFloatSource( rAo );
 	if ( pNormal.is_null() || pRoughness.is_null() || pNormal->is_empty() || pRoughness->is_empty() ) {
-		LOG( T3DTerrain::ERROR, "A surface source image could not be prepared." );
+		LOG( ERROR, "A surface source image could not be prepared." );
 		return Ref<Image>();
 	}
 	const Vector2i size = pNormal->get_size();
 	if ( pRoughness->get_size() != size || ( pAo.is_valid() && ( pAo->is_empty() || pAo->get_size() != size ) ) ) {
-		LOG( T3DTerrain::ERROR, "All surface source images must have identical dimensions." );
+		LOG( ERROR, "All surface source images must have identical dimensions." );
 		return Ref<Image>();
 	}
 
@@ -923,7 +923,7 @@ Ref<Image> T3DUtil::packDisplacementR8(
 	const bool bGenerateMipmaps
 ) {
 	if ( rDisplacement.is_null() || nDisplacementChannel < 0 || nDisplacementChannel > 3 ) {
-		LOG( T3DTerrain::ERROR, "A displacement image and source channel 0-3 are required." );
+		LOG( ERROR, "A displacement image and source channel 0-3 are required." );
 		return Ref<Image>();
 	}
 	const Ref<Image> pSource = prepareRgbaFloatSource( rDisplacement );
@@ -1049,7 +1049,7 @@ Ref<Image> T3DUtil::convertPackedPbrRgba16uiToDisplacement(
 
 Error T3DUtil::saveDisplacementR8Dds( const Ref<Image> &rDisplacement, const String &rPath ) {
 	if ( rDisplacement.is_null() || rDisplacement->is_empty() || rDisplacement->get_format() != Image::FORMAT_R8 ) {
-		LOG( T3DTerrain::ERROR, "DDS displacement export requires Image::FORMAT_R8." );
+		LOG( ERROR, "DDS displacement export requires Image::FORMAT_R8." );
 		return ERR_INVALID_DATA;
 	}
 	return rDisplacement->save_dds( rPath );
@@ -1058,16 +1058,16 @@ Error T3DUtil::saveDisplacementR8Dds( const Ref<Image> &rDisplacement, const Str
 // From source RGB, create a new L image that is scaled to use full 0 - 1 range.
 Ref<Image> T3DUtil::luminanceToHeight( const Ref<Image> &rSrcRgb ) {
 	if ( !rSrcRgb.is_valid() ) {
-		LOG( T3DTerrain::ERROR, "Provided images are not valid. Cannot pack" );
+		LOG( ERROR, "Provided images are not valid. Cannot pack" );
 		return Ref<Image>();
 	}
 	if ( rSrcRgb->is_empty() ) {
-		LOG( T3DTerrain::ERROR, "Provided images are empty. Cannot pack" );
+		LOG( ERROR, "Provided images are empty. Cannot pack" );
 		return Ref<Image>();
 	}
 	const Ref<Image> pSource = prepareSourceImage( rSrcRgb );
 	if ( pSource.is_null() ) {
-		LOG( T3DTerrain::ERROR, "Provided image could not be decompressed. Cannot pack" );
+		LOG( ERROR, "Provided image could not be decompressed. Cannot pack" );
 		return Ref<Image>();
 	}
 	real_t fLumContrast;
@@ -1114,9 +1114,9 @@ void T3DUtil::benchmark( T3DTerrain *const pTerrain ) {
 	for ( int i = 0; i < 3; i++ ) {
 		start_time = Time::get_singleton()->get_ticks_msec();
 		for ( int j = 0; j < 10000000; j++ ) {
-			col = pData->getPixel( T3DRegion::TYPE_HEIGHT, vec );
+			col = pData->getPixel( TYPE_HEIGHT, vec );
 		}
-		LOG( T3DTerrain::MESG, "getPixel() 10M: ", Time::get_singleton()->get_ticks_msec() - start_time, "ms" );
+		LOG( MESG, "getPixel() 10M: ", Time::get_singleton()->get_ticks_msec() - start_time, "ms" );
 	}
 
 	vec = Vector3( 0.5f, 0.f, 0.5f );
@@ -1125,13 +1125,13 @@ void T3DUtil::benchmark( T3DTerrain *const pTerrain ) {
 		for ( int j = 0; j < 1000000; j++ ) {
 			pData->getHeight( vec );
 		}
-		LOG( T3DTerrain::MESG, "getHeight() 1M interpolated: ", Time::get_singleton()->get_ticks_msec() - start_time, "ms" );
+		LOG( MESG, "getHeight() 1M interpolated: ", Time::get_singleton()->get_ticks_msec() - start_time, "ms" );
 	}
 
 	for ( int i = 0; i < 2; i++ ) {
 		start_time = Time::get_singleton()->get_ticks_msec();
 		pTerrain->bakeMesh( 0 );
-		LOG( T3DTerrain::MESG, "Bake ArrayMesh: ", Time::get_singleton()->get_ticks_msec() - start_time, "ms" );
+		LOG( MESG, "Bake ArrayMesh: ", Time::get_singleton()->get_ticks_msec() - start_time, "ms" );
 	}
 }
 

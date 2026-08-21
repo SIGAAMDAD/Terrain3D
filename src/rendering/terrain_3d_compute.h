@@ -28,56 +28,68 @@ using namespace godot;
 // existing Terrain3D transactions.
 class T3DTerrain;
 
+typedef struct t3dBrushElement_s {
+	uint32_t value = 0u;  // Height float bits, packed pControl, or RGBA8.
+	uint32_t alpha = 0u;  // Float bits.
+	uint32_t target = 0u; // Gradient/height target float bits.
+	uint32_t flags = 0u;  // Bit 0: eligible.
+} t3dBrushElement_t;
+
+typedef struct t3dDisplacementRequest_s {
+	// RenderingServer texture RIDs. The render callback resolves their
+	// global RenderingDevice texture RIDs on the render thread.
+	RID heightTexture;
+	RID controlTexture;
+	RID displacementTexture;
+	RID materialRid;
+	Ref<RDShaderSPIRV> pShaderSpirv;
+	PackedInt32Array regionMap;
+	PackedByteArray materialData;
+	PackedByteArray pushConstants;
+	uint64_t regionMapHash = 0u;
+	uint64_t materialDataHash = 0u;
+	uint32_t nWidth = 0u;
+	uint32_t nHeight = 0u;
+	uint32_t nRegionMapSize = 0u;
+
+	bool valid( void ) const {
+		return pShaderSpirv.is_valid() && heightTexture.is_valid() && controlTexture.is_valid() &&
+			   displacementTexture.is_valid() && materialRid.is_valid() &&
+			   nWidth > 0u && nHeight > 0u && nRegionMapSize > 0u && nRegionMapSize <= 64u &&
+			   regionMap.size() == ( int64_t ) ( nRegionMapSize ) * ( int64_t ) ( nRegionMapSize ) && !materialData.is_empty() &&
+			   !pushConstants.is_empty();
+	}
+} t3dDisplacementRequest_t;
+
+typedef struct t3dBrushParams_s {
+	uint32_t mapType = 0u;
+	uint32_t tool = 0u;
+	uint32_t operation = 0u;
+	uint32_t nCount = 0u;
+	float fStrength = 0.0f;
+	float fSelectedHeight = 0.0f;
+	float fBrushCenterHeight = 0.0f;
+	float fRoughness = 0.0f;
+	uint32_t colorRgba8 = 0xffffffffu;
+	uint32_t assetId = 0u;
+	uint32_t uvRotation = 0u;
+	uint32_t uvScale = 0u;
+	uint32_t featureFlags = 0u;
+} t3dBrushParams_t;
+
+typedef struct t3dPipeline_s {
+	RID pShader;
+	RID pipeline;
+	bool bAttempted = false;
+} t3dPipeline_t;
+
 class T3DCompute {
 public:
-	typedef struct t3dBrushElement_s {
-		uint32_t value = 0u;  // Height float bits, packed pControl, or RGBA8.
-		uint32_t alpha = 0u;  // Float bits.
-		uint32_t target = 0u; // Gradient/height target float bits.
-		uint32_t flags = 0u;  // Bit 0: eligible.
-	} t3dBrushElement_t;
 
-	typedef struct t3dDisplacementRequest_s {
-		// RenderingServer texture RIDs. The render callback resolves their
-		// global RenderingDevice texture RIDs on the render thread.
-		RID heightTexture;
-		RID controlTexture;
-		RID displacementTexture;
-		RID materialRid;
-		Ref<RDShaderSPIRV> pShaderSpirv;
-		PackedInt32Array regionMap;
-		PackedByteArray materialData;
-		PackedByteArray pushConstants;
-		uint64_t regionMapHash = 0u;
-		uint64_t materialDataHash = 0u;
-		uint32_t nWidth = 0u;
-		uint32_t nHeight = 0u;
-		uint32_t nRegionMapSize = 0u;
 
-		bool valid( void ) const {
-			return pShaderSpirv.is_valid() && heightTexture.is_valid() && controlTexture.is_valid() &&
-				   displacementTexture.is_valid() && materialRid.is_valid() &&
-				   nWidth > 0u && nHeight > 0u && nRegionMapSize > 0u && nRegionMapSize <= 64u &&
-				   regionMap.size() == ( int64_t ) ( nRegionMapSize ) * ( int64_t ) ( nRegionMapSize ) && !materialData.is_empty() &&
-				   !pushConstants.is_empty();
-		}
-	} t3dDisplacementRequest_t;
 
-	typedef struct t3dBrushParams_s {
-		uint32_t mapType = 0u;
-		uint32_t tool = 0u;
-		uint32_t operation = 0u;
-		uint32_t nCount = 0u;
-		float fStrength = 0.0f;
-		float fSelectedHeight = 0.0f;
-		float fBrushCenterHeight = 0.0f;
-		float fRoughness = 0.0f;
-		uint32_t colorRgba8 = 0xffffffffu;
-		uint32_t assetId = 0u;
-		uint32_t uvRotation = 0u;
-		uint32_t uvScale = 0u;
-		uint32_t featureFlags = 0u;
-	} t3dBrushParams_t;
+
+
 
 	T3DCompute( void ) = default;
 	~T3DCompute( void );
@@ -107,11 +119,7 @@ public:
 	void shutdownDisplacementResources( void );
 
 private:
-	typedef struct t3dPipeline_s {
-		RID pShader;
-		RID pipeline;
-		bool bAttempted = false;
-	} t3dPipeline_t;
+
 
 	RenderingDevice *m_pRd = nullptr;		   // Owned local device for readback workloads.
 	RenderingDevice *m_pRenderRd = nullptr; // Non-owning global renderer device.

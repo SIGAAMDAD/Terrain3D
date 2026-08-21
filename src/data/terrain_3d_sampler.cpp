@@ -29,7 +29,7 @@ static bool terrain3dSamplerIsExactVertex( const double fGridX, const double fGr
 EA_FORCE_INLINE static float terrain3dSamplerBilerp3x3( const float fHeights[3][3], const int iX, const int iZ, const real_t fFx, const real_t fFz ) { return Math::lerp( Math::lerp( fHeights[iZ][iX], fHeights[iZ][iX + 1], fFx ), Math::lerp( fHeights[iZ + 1][iX], fHeights[iZ + 1][iX + 1], fFx ), fFz ); }
 } // namespace
 
-void T3DSampler::t3dRegionCold_t::reset( void ) {
+void t3dRegionCold_t::reset( void ) {
 	activeLease.reset();
 	lease.reset();
 	heightData.clear();
@@ -142,7 +142,7 @@ uint32_t T3DSampler::readControl( const t3dRegionView_t *pView, const int iIndex
 	return pView->pControlBytes ? readUint( pView->pControlBytes, iIndex ) : TERRAIN3D_REGION_DEFAULT_CONTROL;
 }
 
-T3DSampler::t3dRegionView_t *T3DSampler::validateCachedView(
+t3dRegionView_t *T3DSampler::validateCachedView(
 	t3dRegionView_t *pView,
 	const Vector2i &rLocation
 ) {
@@ -164,7 +164,7 @@ T3DSampler::t3dRegionView_t *T3DSampler::validateCachedView(
 	return pView;
 }
 
-T3DSampler::t3dRegionView_t *T3DSampler::getRegionViewUnchecked( const Vector2i &rLocation ) {
+t3dRegionView_t *T3DSampler::getRegionViewUnchecked( const Vector2i &rLocation ) {
 	if ( !m_source.valid() ) {
 		return nullptr;
 	}
@@ -202,8 +202,8 @@ T3DSampler::t3dRegionView_t *T3DSampler::getRegionViewUnchecked( const Vector2i 
 	pReplacement->bLoaded = true;
 	pReplacement->nRegionGeneration = m_source.pStorage->getRegionGeneration( rLocation );
 	pReplacement->nValidatedOperation = m_operation;
-	pReplacement->bControlResolved = !pRegion->hasChannel( T3DRegion::TYPE_CONTROL ) ||
-		pRegion->getMapPtr( T3DRegion::TYPE_CONTROL ) != nullptr;
+	pReplacement->bControlResolved = !pRegion->hasChannel( TYPE_CONTROL ) ||
+		pRegion->getMapPtr( TYPE_CONTROL ) != nullptr;
 
 	T3DActiveMapLease active = m_source.pStorage->acquireActive( rLocation );
 	if ( active.valid() ) {
@@ -219,8 +219,8 @@ T3DSampler::t3dRegionView_t *T3DSampler::getRegionViewUnchecked( const Vector2i 
 			pReplacement->pDerivedBytes = ( const uint8_t * ) ( view.pDerived );
 			rCold.lease = std::move( pooled );
 		} else {
-		Image *const height = pRegion->getMapPtr( T3DRegion::TYPE_HEIGHT );
-		Image *const control = pRegion->getMapPtr( T3DRegion::TYPE_CONTROL );
+		Image *const height = pRegion->getMapPtr( TYPE_HEIGHT );
+		Image *const control = pRegion->getMapPtr( TYPE_CONTROL );
 		if ( !height || height->get_format() != Image::FORMAT_R16 ) {
 			return nullptr;
 		}
@@ -246,7 +246,7 @@ T3DSampler::t3dRegionView_t *T3DSampler::getRegionViewUnchecked( const Vector2i 
 	}
 
 	if ( !pReplacement->pControlBytes ) {
-		Image *const control = pRegion->getMapPtr( T3DRegion::TYPE_CONTROL );
+		Image *const control = pRegion->getMapPtr( TYPE_CONTROL );
 		if ( control ) {
 			if ( control->get_format() != Image::FORMAT_RF ) {
 				return nullptr;

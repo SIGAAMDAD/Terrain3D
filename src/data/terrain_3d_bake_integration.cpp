@@ -53,7 +53,7 @@ bool T3DTerrain::bakeRegionSnapshotLess( const t3dBakeRegionSnapshot_t &rA, cons
 	return rA.location.x < rB.location.x;
 }
 
-T3DTerrain::t3dBakeSnapshot_t T3DTerrain::createBakeSnapshot( void ) const {
+t3dBakeSnapshot_t T3DTerrain::createBakeSnapshot( void ) const {
 	t3dBakeSnapshot_t snapshot;
 	snapshot.nRegionSize = ( int32_t )m_nRegionSize;
 	snapshot.fVertexSpacing = m_fVertexSpacing;
@@ -68,7 +68,7 @@ T3DTerrain::t3dBakeSnapshot_t T3DTerrain::createBakeSnapshot( void ) const {
 
 	for ( const Vector2i regionLocation : region_locations ) {
 		if ( !m_pData->ensureCpuRegionResident( regionLocation ) ) {
-			LOG( T3DTerrain::ERROR, "Skipping terrain region that could not be paged for bake snapshot: ", regionLocation );
+			LOG( ERROR, "Skipping terrain region that could not be paged for bake snapshot: ", regionLocation );
 			continue;
 		}
 		T3DRegion *const pRegion = m_pData->getRegionPtr( regionLocation );
@@ -82,7 +82,7 @@ T3DTerrain::t3dBakeSnapshot_t T3DTerrain::createBakeSnapshot( void ) const {
 			pHeightMap->get_width() != snapshot.nRegionSize || pHeightMap->get_height() != snapshot.nRegionSize ||
 			( pControlMap.is_valid() && ( pControlMap->get_format() != Image::FORMAT_RF ||
 				pControlMap->get_width() != snapshot.nRegionSize || pControlMap->get_height() != snapshot.nRegionSize ) ) ) {
-			LOG( T3DTerrain::ERROR, "Skipping invalid terrain region during bake snapshot: ", regionLocation );
+			LOG( ERROR, "Skipping invalid terrain region during bake snapshot: ", regionLocation );
 			continue;
 		}
 
@@ -94,7 +94,7 @@ T3DTerrain::t3dBakeSnapshot_t T3DTerrain::createBakeSnapshot( void ) const {
 		}
 		if ( region_snapshot.heightData.size() < expected_height_bytes ||
 			( pControlMap.is_valid() && region_snapshot.controlData.size() < expected_control_bytes ) ) {
-			LOG( T3DTerrain::ERROR, "Skipping terrain region with incomplete map data during bake snapshot: ", regionLocation );
+			LOG( ERROR, "Skipping terrain region with incomplete map data during bake snapshot: ", regionLocation );
 			continue;
 		}
 
@@ -136,7 +136,7 @@ void T3DTerrain::runBakeTaskRange( void *const pContext, const size_t nBegin, co
 
 Vector3 T3DTerrain::getTriangleVertex(
 	const t3dBakeSnapshot_t *pSnapshot, const int32_t nLod,
-	const T3DData::t3dHeightFilter_t filter, const int32_t iX, const int32_t iZ,
+	const t3dHeightFilter_t filter, const int32_t iX, const int32_t iZ,
 	const Vector3 &rPosition, uint32_t &nControl
 ) const {
 	if ( pSnapshot ) {
@@ -149,7 +149,7 @@ Vector3 T3DTerrain::getTriangleVertex(
 
 void T3DTerrain::generateTriangles(
 	PackedVector3Array &rVertices, PackedVector2Array *const pUvs, const int32_t nLod,
-	const T3DData::t3dHeightFilter_t filter, const bool bRequireNav,
+	const t3dHeightFilter_t filter, const bool bRequireNav,
 	const AABB &rGlobalAabb
 ) const {
 	ERR_FAIL_COND( m_pData == nullptr );
@@ -242,7 +242,7 @@ void T3DTerrain::generateTriangles(
 			task_context.bGenerateUvs = generate_uvs;
 			task_context.bRequireNav = bRequireNav;
 
-			LOG( T3DTerrain::INFO, "Generating terrain bake geometry with up to ", worker_count, " persistent worker tasks across ",
+			LOG( INFO, "Generating terrain bake geometry with up to ", worker_count, " persistent worker tasks across ",
 				tasks.size(), " chunks" );
 			executor.run( tasks.size(), 1u, runBakeTaskRange, &task_context );
 		}
@@ -313,7 +313,7 @@ void T3DTerrain::generateTriangles(
 
 void T3DTerrain::generateTrianglePair(
 	t3dTriangleBuffer_t &rBuffer, const bool bGenerateUvs, const int32_t nLod,
-	const T3DData::t3dHeightFilter_t filter, const bool bRequireNav,
+	const t3dHeightFilter_t filter, const bool bRequireNav,
 	const int32_t x, const int32_t z, const t3dBakeSnapshot_t *pSnapshot
 ) const {
 	const int32_t step = 1 << CLAMP( nLod, 0, 8 );
@@ -377,7 +377,7 @@ Dictionary T3DTerrain::getRaycastResult(
 	}
 	PhysicsDirectSpaceState3D *pSpaceState = get_world_3d()->get_direct_space_state();
 	if ( !pSpaceState ) {
-		LOG( T3DTerrain::ERROR, "Invalid PhysicsDirectSpaceState3D" );
+		LOG( ERROR, "Invalid PhysicsDirectSpaceState3D" );
 		return Dictionary();
 	}
 	Ref<PhysicsRayQueryParameters3D> pQuery =
@@ -388,8 +388,8 @@ Dictionary T3DTerrain::getRaycastResult(
 	return pSpaceState->intersect_ray( pQuery );
 }
 
-Ref<Mesh> T3DTerrain::bakeMesh( const int nLod, const T3DData::t3dHeightFilter_t filter ) const {
-	LOG( T3DTerrain::INFO, "Baking mesh at lod: ", nLod, " with filter: ", filter );
+Ref<Mesh> T3DTerrain::bakeMesh( const int nLod, const t3dHeightFilter_t filter ) const {
+	LOG( INFO, "Baking mesh at lod: ", nLod, " with filter: ", filter );
 	Ref<Mesh> pResult;
 	ERR_FAIL_COND_V( m_pData == nullptr, pResult );
 
@@ -447,7 +447,7 @@ Ref<Mesh> T3DTerrain::bakeLightmapClusterMesh(
 
 	PackedVector3Array vertices;
 	PackedVector2Array terrain_uvs;
-	generateTriangles( vertices, &terrain_uvs, lod, T3DData::HEIGHT_FILTER_NEAREST, false, bounds );
+	generateTriangles( vertices, &terrain_uvs, lod, HEIGHT_FILTER_NEAREST, false, bounds );
 	ERR_FAIL_COND_V( vertices.is_empty() || vertices.size() != terrain_uvs.size(), pResult );
 
 	Ref<SurfaceTool> pSt;
@@ -473,12 +473,12 @@ Ref<Mesh> T3DTerrain::bakeLightmapClusterMesh(
 }
 
 Ref<ArrayOccluder3D> T3DTerrain::bakeOccluder( const int nLod ) const {
-	LOG( T3DTerrain::INFO, "Baking occluder at lod: ", nLod );
+	LOG( INFO, "Baking occluder at lod: ", nLod );
 	Ref<ArrayOccluder3D> pResult;
 	ERR_FAIL_COND_V( m_pData == nullptr, pResult );
 
 	PackedVector3Array vertices;
-	generateTriangles( vertices, nullptr, nLod, T3DData::HEIGHT_FILTER_MINIMUM, false, AABB() );
+	generateTriangles( vertices, nullptr, nLod, HEIGHT_FILTER_MINIMUM, false, AABB() );
 	ERR_FAIL_COND_V( vertices.is_empty(), pResult );
 
 	Ref<SurfaceTool> pSt;
@@ -505,11 +505,11 @@ PackedVector3Array T3DTerrain::generateNavMeshSourceGeometry(
 	const AABB &rGlobalAabb,
 	const bool bRequireNav
 ) const {
-	LOG( T3DTerrain::INFO, "Generating NavMesh source geometry from terrain" );
+	LOG( INFO, "Generating NavMesh source geometry from terrain" );
 	PackedVector3Array faces;
 	const bool strict_cooked = m_pData && isGpuRegionCookedPagesEnabled() && !isEditorAuthoringModeInternal();
 	if ( !strict_cooked ) {
-		generateTriangles( faces, nullptr, 0, T3DData::HEIGHT_FILTER_NEAREST, bRequireNav, rGlobalAabb );
+		generateTriangles( faces, nullptr, 0, HEIGHT_FILTER_NEAREST, bRequireNav, rGlobalAabb );
 		return faces;
 	}
 
@@ -531,7 +531,7 @@ PackedVector3Array T3DTerrain::generateNavMeshSourceGeometry(
 		PackedByteArray minmax_blob;
 		PackedByteArray *const pMinMaxBlob = rGlobalAabb.has_volume() ? &minmax_blob : nullptr;
 		if ( !m_pData->loadCookedNavigationTileNow( location, navigation_blob, &collision_blob, pMinMaxBlob ) ) {
-			LOG( T3DTerrain::ERROR, "Missing/invalid baked navigation tile for region ", location );
+			LOG( ERROR, "Missing/invalid baked navigation tile for region ", location );
 			continue;
 		}
 		PackedFloat32Array collision_heights; T3DNavigationMaskView navigation_view; T3DMinMaxLevelView minmax_view; int collision_width = 0;
@@ -539,7 +539,7 @@ PackedVector3Array T3DTerrain::generateNavMeshSourceGeometry(
 		if ( !T3DRuntimeBakeCodec::getNavigationMaskView( navigation_blob, navigation_view ) ||
 			!T3DRuntimeBakeCodec::decodeCollisionHeight( collision_blob, collision_heights, collision_width ) ||
 			navigation_view.nWidth != expected_width || collision_width != expected_width || ( pMinMaxBlob && !use_minmax ) ) {
-			LOG( T3DTerrain::ERROR, "Baked navigation/collision acceleration data does not match region ", location );
+			LOG( ERROR, "Baked navigation/collision acceleration data does not match region ", location );
 			continue;
 		}
 		auto height_at = [&]( const int x, const int z ) -> real_t {

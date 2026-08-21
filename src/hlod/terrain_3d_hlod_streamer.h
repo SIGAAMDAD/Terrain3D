@@ -23,37 +23,41 @@ using namespace godot;
 #endif
 class T3DTerrain;
 
+typedef struct t3dEntry_s {
+	int level = 1;
+	Vector2i cluster = V2I_ZERO;
+	Vector2i regionMin = V2I_ZERO;
+	Vector2i regionMax = V2I_ZERO;
+	AABB localBounds;
+	String packagePath;
+	real_t geometricError = 1.0f;
+	int64_t sourceSignature = 0;
+	int64_t buildSignature = 0;
+	int64_t estimatedGpuBytes = 0;
+	int parent = -1;
+	int children[4] = {-1, -1, -1, -1};
+	bool desired = false;
+	bool requestStarted = false;
+	bool loadFailed = false;
+	bool active = false;
+	bool retiring = false;
+	uint8_t retireReadyFrames = 0;
+	Ref<T3DHLODPackage> package;
+	RID instance;
+} t3dEntry_t;
+
+typedef struct t3dNodePolicy_s {
+	int64_t spawnId = 0;
+	uint8_t minLevel = 0;
+} t3dNodePolicy_t;
+
 class T3DHLODStreamer : public Object {
 	GDCLASS( T3DHLODStreamer, Object );
 	CLASS_NAME();
 
-	typedef struct t3dEntry_s {
-		int level = 1;
-		Vector2i cluster = V2I_ZERO;
-		Vector2i regionMin = V2I_ZERO;
-		Vector2i regionMax = V2I_ZERO;
-		AABB localBounds;
-		String packagePath;
-		real_t geometricError = 1.0f;
-		int64_t sourceSignature = 0;
-		int64_t buildSignature = 0;
-		int64_t estimatedGpuBytes = 0;
-		int parent = -1;
-		int children[4] = {-1, -1, -1, -1};
-		bool desired = false;
-		bool requestStarted = false;
-		bool loadFailed = false;
-		bool active = false;
-		bool retiring = false;
-		uint8_t retireReadyFrames = 0;
-		Ref<T3DHLODPackage> package;
-		RID instance;
-	} t3dEntry_t;
 
-	typedef struct t3dNodePolicy_s {
-		int64_t spawnId = 0;
-		uint8_t minLevel = 0;
-	} t3dNodePolicy_t;
+
+
 
 	T3DTerrain *m_pTerrain = nullptr;
 	Ref<T3DHLODManifest> m_manifest;

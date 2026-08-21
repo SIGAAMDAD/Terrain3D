@@ -97,6 +97,57 @@ struct T3DRuntimePageServiceState {
 // requests, worker preparation, and prepared-page lifetime. Residency consumers
 // decide which locations they want; this store performs one physical page read
 // that can satisfy all consumers of that location.
+typedef struct t3dRuntimePreparedPage_s {
+	Vector2i location = V2I_MAX;
+	String pagePath;
+	String sourcePath;
+	uint32_t expectedChannelFlags = 0u;
+	uint64_t expectedSourceSignature = 0u;
+	int nRegionSize = 0;
+	int colorDivisor = 1;
+	int derivedDivisor = 1;
+	int middleHeightDivisor = 1;
+	uint32_t materialMask = 1u;
+	uint16_t consumerMask = 0u;
+	PackedByteArray heightBytes;
+	Ref<Image> height;
+	Ref<Image> pControl;
+	Ref<Image> pColor;
+	Ref<Image> pDerived;
+	Ref<Image> pMiddleHeight;
+	Ref<Image> pMiddleComposite;
+	Ref<Image> pTerrainShadowMask;
+	PackedByteArray instancePage;
+	PackedByteArray holeMask;
+	PackedByteArray collisionHeight;
+	PackedByteArray collisionBounds;
+	PackedByteArray navigation;
+	PackedByteArray minMaxHeight;
+	PackedByteArray nodeDescriptors;
+	PackedByteArray instanceMetadata;
+	PackedByteArray lightingReceivers;
+	PackedByteArray multimeshFastStart;
+	T3DInstanceStore preparedInstanceStore;
+	uint64_t nRequestedUsec = 0u;
+	uint64_t nWorkerStartedUsec = 0u;
+	uint64_t nFileOpenUsec = 0u;
+	uint64_t nFileReadUsec = 0u;
+	uint64_t nValidationUsec = 0u;
+	uint64_t nMaterializeUsec = 0u;
+	uint64_t nWorkerFinishedUsec = 0u;
+	bool bAttempted = false;
+	bool bLoaded = false;
+	bool bInstanceAttempted = false;
+	bool bInstanceLoaded = false;
+	bool bLoadMinMax = false;
+	bool bEditorAuthoring = false;
+} t3dRuntimePreparedPage_t;
+
+typedef struct t3dRuntimePrepareJobContext_s {
+	t3dRuntimePreparedPage_t *pPages = nullptr;
+	int nPageCount = 0;
+} t3dRuntimePrepareJobContext_t;
+
 class T3DRuntimePageStore {
 public:
 	explicit T3DRuntimePageStore(
@@ -169,64 +220,17 @@ public:
 	EA_FORCE_INLINE int getTransientPageCount( void ) const { return m_nPreparedPageCount + m_nPrepareWorkPageCount; }
 
 private:
-	struct PreparedPage {
-		Vector2i location = V2I_MAX;
-		String pagePath;
-		String sourcePath;
-		uint32_t expectedChannelFlags = 0u;
-		uint64_t expectedSourceSignature = 0u;
-		int nRegionSize = 0;
-		int colorDivisor = 1;
-		int derivedDivisor = 1;
-		int middleHeightDivisor = 1;
-		uint32_t materialMask = 1u;
-		uint16_t consumerMask = 0u;
-		PackedByteArray heightBytes;
-		Ref<Image> height;
-		Ref<Image> pControl;
-		Ref<Image> pColor;
-		Ref<Image> pDerived;
-		Ref<Image> pMiddleHeight;
-		Ref<Image> pMiddleComposite;
-		Ref<Image> pTerrainShadowMask;
-		PackedByteArray instancePage;
-		PackedByteArray holeMask;
-		PackedByteArray collisionHeight;
-		PackedByteArray collisionBounds;
-		PackedByteArray navigation;
-		PackedByteArray minMaxHeight;
-		PackedByteArray nodeDescriptors;
-		PackedByteArray instanceMetadata;
-		PackedByteArray lightingReceivers;
-		PackedByteArray multimeshFastStart;
-		T3DInstanceStore preparedInstanceStore;
-		uint64_t nRequestedUsec = 0u;
-		uint64_t nWorkerStartedUsec = 0u;
-		uint64_t nFileOpenUsec = 0u;
-		uint64_t nFileReadUsec = 0u;
-		uint64_t nValidationUsec = 0u;
-		uint64_t nMaterializeUsec = 0u;
-		uint64_t nWorkerFinishedUsec = 0u;
-		bool bAttempted = false;
-		bool bLoaded = false;
-		bool bInstanceAttempted = false;
-		bool bInstanceLoaded = false;
-		bool bLoadMinMax = false;
-		bool bEditorAuthoring = false;
-	};
 
-	struct PrepareJobContext {
-		PreparedPage *pPages = nullptr;
-		int nPageCount = 0;
-	};
+
+
 
 	T3DRegionRepository *m_pRepository = nullptr;
 	const T3DRegionPersistence *m_pPersistence = nullptr;
-	eastl::array<PreparedPage, TERRAIN3D_GPU_CACHE_MAX_LAYERS> m_preparedPages{};
-	eastl::array<PreparedPage, TERRAIN3D_GPU_CACHE_MAX_LAYERS> m_workPages{};
+	eastl::array<t3dRuntimePreparedPage_t, TERRAIN3D_GPU_CACHE_MAX_LAYERS> m_preparedPages{};
+	eastl::array<t3dRuntimePreparedPage_t, TERRAIN3D_GPU_CACHE_MAX_LAYERS> m_workPages{};
 	eastl::array<int16_t, TERRAIN3D_MAX_REGION_SLOTS> m_preparedByRegion{};
 	eastl::array<int16_t, TERRAIN3D_MAX_REGION_SLOTS> m_workByRegion{};
-	PrepareJobContext m_prepareContext;
+	t3dRuntimePrepareJobContext_t m_prepareContext;
 	int m_nPreparedPageCount = 0;
 	int m_nPrepareWorkPageCount = 0;
 	int64_t m_nPrepareGroupId = godot::WorkerThreadPool::INVALID_TASK_ID;
@@ -249,7 +253,7 @@ private:
 	int getPreparedIndex( const Vector2i &rLocation ) const;
 	int getWorkIndex( const Vector2i &rLocation ) const;
 	bool loadSourceRegion( const Vector2i &rLocation, Ref<T3DRegion> &rSource ) const;
-	static bool loadSnapshot( PreparedPage &rPage, bool bPreserveMaterialized = false );
+	static bool loadSnapshot( t3dRuntimePreparedPage_t &rPage, bool bPreserveMaterialized = false );
 	static void prepareTask( void *pContext, uint32_t iIndex );
 	void consumePreparedIndex( int nIndex );
 };

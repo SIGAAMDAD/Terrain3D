@@ -80,7 +80,7 @@ bool T3DResidentRegionPool::buildSlotLayout(
 ) {
 	rLayout = {};
 	nTexelCount = 0u;
-	if ( nRegionSize <= 0 || ( nChannels & CHANNEL_HEIGHT ) == 0u ) {
+	if ( nRegionSize <= 0 || ( nChannels & RESIDENT_CHANNEL_HEIGHT ) == 0u ) {
 		return false;
 	}
 	const size_t size = ( size_t ) ( nRegionSize );
@@ -98,19 +98,19 @@ bool T3DResidentRegionPool::buildSlotLayout(
 	}
 	rLayout.nHeightSlotBytes = padded;
 	rLayout.stride = padded;
-	if ( ( nChannels & CHANNEL_CONTROL ) != 0u ) {
+	if ( ( nChannels & RESIDENT_CHANNEL_CONTROL ) != 0u ) {
 		if ( !alignUp( texels * sizeof( uint32_t ), TERRAIN3D_RESIDENT_CACHE_ALIGNMENT, padded ) ||
 			rLayout.stride > std::numeric_limits<size_t>::max() - padded ) { return false; }
 		rLayout.nControlSlotBytes = padded;
 		rLayout.stride += padded;
 	}
-	if ( ( nChannels & CHANNEL_COLOR ) != 0u ) {
+	if ( ( nChannels & RESIDENT_CHANNEL_COLOR ) != 0u ) {
 		if ( !alignUp( texels * sizeof( uint32_t ), TERRAIN3D_RESIDENT_CACHE_ALIGNMENT, padded ) ||
 			rLayout.stride > std::numeric_limits<size_t>::max() - padded ) { return false; }
 		rLayout.nColorSlotBytes = padded;
 		rLayout.stride += padded;
 	}
-	if ( ( nChannels & CHANNEL_DERIVED ) != 0u ) {
+	if ( ( nChannels & RESIDENT_CHANNEL_DERIVED ) != 0u ) {
 		if ( !alignUp( texels * sizeof( uint16_t ), TERRAIN3D_RESIDENT_CACHE_ALIGNMENT, padded ) ||
 			rLayout.stride > std::numeric_limits<size_t>::max() - padded ) { return false; }
 		rLayout.nDerivedSlotBytes = padded;
@@ -148,7 +148,7 @@ size_t T3DResidentRegionPool::estimateSlotBytes( const int nRegionSize, const ui
 	return layout.stride;
 }
 
-bool T3DResidentRegionPool::t3dAlignedAllocation_t::allocate( const size_t nRequestedBytes, const size_t nAlignment ) {
+bool t3dAlignedAllocation_t::allocate( const size_t nRequestedBytes, const size_t nAlignment ) {
 	release();
 	if ( nRequestedBytes == 0u || nAlignment == 0u || ( nAlignment & ( nAlignment - 1u ) ) != 0u ||
 		nRequestedBytes > std::numeric_limits<size_t>::max() - ( nAlignment - 1u ) ) {
@@ -167,7 +167,7 @@ bool T3DResidentRegionPool::t3dAlignedAllocation_t::allocate( const size_t nRequ
 	return true;
 }
 
-void T3DResidentRegionPool::t3dAlignedAllocation_t::release( void ) {
+void t3dAlignedAllocation_t::release( void ) {
 	if ( bOwned ) terrain3d_memory::release( pRaw );
 	pRaw = nullptr;
 	pAligned = nullptr;
@@ -285,7 +285,7 @@ void T3DResidentRegionPool::clearUnlocked( void ) {
 bool T3DResidentRegionPool::configure( const int nRegionSize, const int nCapacity, const uint32_t nChannels ) {
 	std::lock_guard<std::mutex> lock( m_mutex );
 	if ( nRegionSize <= 0 || nCapacity <= 0 || nCapacity > TERRAIN3D_RESIDENT_WORLD_SLOT_COUNT ||
-		( nChannels & CHANNEL_HEIGHT ) == 0u ) {
+		( nChannels & RESIDENT_CHANNEL_HEIGHT ) == 0u ) {
 		return false;
 	}
 	if ( m_nRegionSize == nRegionSize && m_nCapacity == nCapacity && m_channels == nChannels && m_mapMemory.pAligned &&
@@ -508,7 +508,7 @@ bool T3DResidentRegionPool::copyMapRect(
 	}
 	t3dSlot_t &slot = m_pSlots[( size_t ) ( iSlot )];
 	Image *const pImage = pRegion->getMapPtr( eType );
-	if ( eType == T3DRegion::TYPE_HEIGHT ) {
+	if ( eType == TYPE_HEIGHT ) {
 		if ( !slot.pHeight ) {
 			return true;
 		}
@@ -530,26 +530,26 @@ bool T3DResidentRegionPool::copyMapRect(
 				std::memcpy( slot.pHeight + offset, pSource + offset, ( size_t ) ( rect.size.x ) * sizeof( uint16_t ) );
 			}
 		}
-		slot.nValidChannels.fetch_and( ( uint8_t ) ~CHANNEL_DERIVED, std::memory_order_release );
+		slot.nValidChannels.fetch_and( ( uint8_t ) ~RESIDENT_CHANNEL_DERIVED, std::memory_order_release );
 		return true;
 	}
 
-	if ( eType != T3DRegion::TYPE_CONTROL && eType != T3DRegion::TYPE_COLOR ) {
+	if ( eType != TYPE_CONTROL && eType != TYPE_COLOR ) {
 		return false;
 	}
-	const uint32_t channel = eType == T3DRegion::TYPE_CONTROL ? CHANNEL_CONTROL : CHANNEL_COLOR;
+	const uint32_t channel = eType == TYPE_CONTROL ? RESIDENT_CHANNEL_CONTROL : RESIDENT_CHANNEL_COLOR;
 	if ( ( m_channels & channel ) == 0u ) {
 		return true;
 	}
-	uint32_t *const plane = eType == T3DRegion::TYPE_CONTROL ? slot.pControl : slot.pColor;
-	const uint8_t valid_bit = ( uint8_t ) ( eType == T3DRegion::TYPE_CONTROL ? CHANNEL_CONTROL : CHANNEL_COLOR );
+	uint32_t *const plane = eType == TYPE_CONTROL ? slot.pControl : slot.pColor;
+	const uint8_t valid_bit = ( uint8_t ) ( eType == TYPE_CONTROL ? RESIDENT_CHANNEL_CONTROL : RESIDENT_CHANNEL_COLOR );
 	const bool bPlaneValid = ( slot.nValidChannels.load( std::memory_order_acquire ) & valid_bit ) != 0u;
 	if ( !pImage ) {
 		slot.nValidChannels.fetch_and( ( uint8_t ) ~valid_bit, std::memory_order_release );
 		return true;
 	}
 	if ( !plane ) { return false; }
-	const Image::Format expected = eType == T3DRegion::TYPE_CONTROL ? Image::FORMAT_RF : Image::FORMAT_RGBA8;
+	const Image::Format expected = eType == TYPE_CONTROL ? Image::FORMAT_RF : Image::FORMAT_RGBA8;
 	if ( pImage->get_format() != expected || pImage->get_width() != m_nRegionSize || pImage->get_height() != m_nRegionSize ) {
 		return false;
 	}
@@ -584,15 +584,15 @@ bool T3DResidentRegionPool::copyDerivedRect(
 		return false;
 	}
 	t3dSlot_t &slot = m_pSlots[( size_t ) ( iSlot )];
-	if ( ( m_channels & CHANNEL_DERIVED ) == 0u ) {
-		slot.nValidChannels.fetch_and( ( uint8_t ) ~CHANNEL_DERIVED, std::memory_order_release );
+	if ( ( m_channels & RESIDENT_CHANNEL_DERIVED ) == 0u ) {
+		slot.nValidChannels.fetch_and( ( uint8_t ) ~RESIDENT_CHANNEL_DERIVED, std::memory_order_release );
 		return true;
 	}
 	const Ref<Image> pImage = pRegion->getDerivedNormalSlopeMap();
 	const size_t bytes = m_nTexelCount * 2u;
 	if ( pImage.is_null() || pImage->get_format() != Image::FORMAT_RG8 || pImage->get_width() != m_nRegionSize ||
 		pImage->get_height() != m_nRegionSize ) {
-		slot.nValidChannels.fetch_and( ( uint8_t ) ~CHANNEL_DERIVED, std::memory_order_release );
+		slot.nValidChannels.fetch_and( ( uint8_t ) ~RESIDENT_CHANNEL_DERIVED, std::memory_order_release );
 		return true;
 	}
 	if ( !slot.pDerived ) { return false; }
@@ -600,7 +600,7 @@ bool T3DResidentRegionPool::copyDerivedRect(
 	if ( ( size_t ) ( data.size() ) < bytes ) {
 		return false;
 	}
-	const bool bHadPlane = ( slot.nValidChannels.load( std::memory_order_acquire ) & CHANNEL_DERIVED ) != 0u;
+	const bool bHadPlane = ( slot.nValidChannels.load( std::memory_order_acquire ) & RESIDENT_CHANNEL_DERIVED ) != 0u;
 	const Rect2i bounds( V2I_ZERO, V2I( m_nRegionSize ) );
 	const Rect2i rect = rDirtyRect.size.x > 0 && rDirtyRect.size.y > 0 ? rDirtyRect.intersection( bounds ) : bounds;
 	if ( rect.size.x <= 0 || rect.size.y <= 0 ) {
@@ -614,7 +614,7 @@ bool T3DResidentRegionPool::copyDerivedRect(
 			std::memcpy( slot.pDerived + offset, data.ptr() + offset, ( size_t ) ( rect.size.x ) * 2u );
 		}
 	}
-	slot.nValidChannels.fetch_or( ( uint8_t ) CHANNEL_DERIVED, std::memory_order_release );
+	slot.nValidChannels.fetch_or( ( uint8_t ) RESIDENT_CHANNEL_DERIVED, std::memory_order_release );
 	return true;
 }
 
@@ -625,9 +625,9 @@ t3dResidentMapView_t T3DResidentRegionPool::getView( const int iSlot ) const {
 	}
 	const t3dSlot_t &slot = m_pSlots[( size_t ) ( iSlot )];
 	const uint8_t valid = slot.nValidChannels.load( std::memory_order_acquire );
-	return {slot.pHeight, ( valid & CHANNEL_CONTROL ) ? slot.pControl : nullptr,
-		( valid & CHANNEL_COLOR ) ? slot.pColor : nullptr,
-		( valid & CHANNEL_DERIVED ) ? slot.pDerived : nullptr,
+	return {slot.pHeight, ( valid & RESIDENT_CHANNEL_CONTROL ) ? slot.pControl : nullptr,
+		( valid & RESIDENT_CHANNEL_COLOR ) ? slot.pColor : nullptr,
+		( valid & RESIDENT_CHANNEL_DERIVED ) ? slot.pDerived : nullptr,
 		slot.nGeneration.load( std::memory_order_acquire )};
 }
 
@@ -667,8 +667,8 @@ bool T3DResidentRegionPool::ensureResident( const Vector2i &rLocation, const T3D
 	const int slot = chooseReplacementSlotUnlocked();
 	if ( slot < 0 ) return false;
 	assignSlot( slot, rLocation );
-	if ( !copyMap( slot, pRegion, T3DRegion::TYPE_HEIGHT ) || !copyMap( slot, pRegion, T3DRegion::TYPE_CONTROL ) ||
-		!copyMap( slot, pRegion, T3DRegion::TYPE_COLOR ) ) {
+	if ( !copyMap( slot, pRegion, TYPE_HEIGHT ) || !copyMap( slot, pRegion, TYPE_CONTROL ) ||
+		!copyMap( slot, pRegion, TYPE_COLOR ) ) {
 		retireSlotUnlocked( slot );
 		return false;
 	}

@@ -61,7 +61,7 @@ static bool readString( const Ref<FileAccess> &rFile, String &rValue ) {
 	return true;
 }
 
-static String descriptorScenePath( const T3DRegion::t3dStreamedNodeRuntimeDescriptor_t &rDescriptor ) {
+static String descriptorScenePath( const t3dStreamedNodeRuntimeDescriptor_t &rDescriptor ) {
 	if ( !rDescriptor.scenePath.is_empty() ) {
 		return rDescriptor.scenePath;
 	}
@@ -166,14 +166,14 @@ bool T3DRuntimeWorldManifest::buildAuthoringIndex( const T3DRegionRepository &rR
 		for ( int mesh = 0; mesh < TERRAIN3D_MAX_MESH_ASSETS; ++mesh ) {
 			record.instanceMeshCounts[( size_t ) ( mesh )] = pRegion->getInstanceCount( mesh );
 		}
-		const eastl::vector<T3DRegion::t3dStreamedNodeRuntimeDescriptor_t> &nodes = pRegion->getStreamedNodesRuntimeInternal();
+		const eastl::vector<t3dStreamedNodeRuntimeDescriptor_t> &nodes = pRegion->getStreamedNodesRuntimeInternal();
 		record.streamedNodeCount = ( uint16_t ) ( MIN( nodes.size(), ( size_t ) ( UINT16_MAX ) ) );
 		record.nodeCoverageMin = V2I_ZERO;
 		record.nodeCoverageMax = V2I_ZERO;
 		bool first_coverage = true;
 		record.sceneDependencyFirst = ( uint32_t ) ( m_regionSceneDependencies.size() );
-		for ( const T3DRegion::t3dStreamedNodeRuntimeDescriptor_t &descriptor : nodes ) {
-			if ( descriptor.boundaryPolicy == T3DRegion::STREAMED_NODE_BOUNDARY_COVERAGE ) {
+		for ( const t3dStreamedNodeRuntimeDescriptor_t &descriptor : nodes ) {
+			if ( descriptor.boundaryPolicy == STREAMED_NODE_BOUNDARY_COVERAGE ) {
 				if ( first_coverage ) {
 					record.nodeCoverageMin = descriptor.coverageMin;
 					record.nodeCoverageMax = descriptor.coverageMax;

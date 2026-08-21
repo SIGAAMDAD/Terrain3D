@@ -77,16 +77,16 @@ Color T3DEditor::readMapPixel(
 ) {
 	if ( !rEntry.bDirectAccess || !rEntry.pMapBytes ) {
 		const Color raw = rEntry.pMap->get_pixelv( rPixel );
-		return mapType == T3DRegion::TYPE_HEIGHT
+		return mapType == TYPE_HEIGHT
 			? Color( T3DRegionCodec::readHeightPixel( rEntry.pMap, rPixel ), 0.0f, 0.0f, 1.0f )
 			: raw;
 	}
-	if ( mapType == T3DRegion::TYPE_HEIGHT ) {
+	if ( mapType == TYPE_HEIGHT ) {
 		uint16_t encoded = 0u;
 		std::memcpy( &encoded, rEntry.pMapBytes + iIndex * sizeof( uint16_t ), sizeof( uint16_t ) );
 		return Color( T3DRegionCodec::decodeHeightU16( encoded ), 0.0f, 0.0f, 1.0f );
 	}
-	if ( mapType == T3DRegion::TYPE_CONTROL ) {
+	if ( mapType == TYPE_CONTROL ) {
 		return Color( asFloat( readU32( rEntry.pMapBytes, iIndex ) ), 0.0f, 0.0f, 1.0f );
 	}
 	const uint8_t *pRgba = rEntry.pMapBytes + iIndex * 4u;
@@ -110,19 +110,19 @@ void T3DEditor::writeMapPixel(
 	const Color &clrValue, const t3dMapType_t mapType
 ) {
 	if ( !rEntry.bDirectAccess || !rEntry.pMapBytes ) {
-		if ( mapType == T3DRegion::TYPE_HEIGHT ) {
+		if ( mapType == TYPE_HEIGHT ) {
 			T3DRegionCodec::writeHeightPixel( rEntry.pMap, rPixel, clrValue.r );
 		} else {
 			rEntry.pMap->set_pixelv( rPixel, clrValue );
 		}
 		return;
 	}
-	if ( mapType == T3DRegion::TYPE_HEIGHT ) {
+	if ( mapType == TYPE_HEIGHT ) {
 		const uint16_t encoded = T3DRegionCodec::encodeHeightU16( clrValue.r );
 		std::memcpy( rEntry.pMapBytes + iIndex * sizeof( uint16_t ), &encoded, sizeof( uint16_t ) );
 		return;
 	}
-	if ( mapType == T3DRegion::TYPE_CONTROL ) {
+	if ( mapType == TYPE_CONTROL ) {
 		const uint32_t bits = asUint( clrValue.r );
 		std::memcpy( rEntry.pMapBytes + iIndex * sizeof( uint32_t ), &bits, sizeof( uint32_t ) );
 		return;
@@ -183,11 +183,11 @@ Dictionary T3DEditor::captureEditSnapshot(
 	}
 
 	const t3dMapType_t map_type = rTemplate.has( "map_type" ) ? ( t3dMapType_t ) ( ( int ) ( rTemplate["map_type"] ) ) : getMapType();
-	if ( map_type < T3DRegion::TYPE_HEIGHT || map_type >= T3DRegion::TYPE_MAX ) {
+	if ( map_type < TYPE_HEIGHT || map_type >= REGION_TYPE_MAX ) {
 		return Dictionary();
 	}
 	snapshot["map_type"] = ( int ) ( map_type );
-	if ( bMapWasImplicit && ( map_type == T3DRegion::TYPE_CONTROL || map_type == T3DRegion::TYPE_COLOR ) ) {
+	if ( bMapWasImplicit && ( map_type == TYPE_CONTROL || map_type == TYPE_COLOR ) ) {
 		snapshot["map_absent"] = true;
 		return snapshot;
 	}
@@ -197,7 +197,7 @@ Dictionary T3DEditor::captureEditSnapshot(
 	}
 
 	snapshot["map"] = pMap->duplicate();
-	if ( map_type == T3DRegion::TYPE_HEIGHT ) {
+	if ( map_type == TYPE_HEIGHT ) {
 		snapshot["height_range"] = rRegion->getHeightRange();
 	}
 	return snapshot;
@@ -205,7 +205,7 @@ Dictionary T3DEditor::captureEditSnapshot(
 
 void T3DEditor::applyEditSnapshot(
 	const Dictionary &rSnapshot,
-	eastl::array<eastl::vector<Vector2i>, T3DRegion::TYPE_MAX> &rMapUpdates,
+	eastl::array<eastl::vector<Vector2i>, REGION_TYPE_MAX> &rMapUpdates,
 	bool &bInstancesChanged
 ) {
 	if ( !rSnapshot.has( "kind" ) || !rSnapshot.has( "location" ) ) {
@@ -234,11 +234,11 @@ void T3DEditor::applyEditSnapshot(
 		return;
 	}
 	const t3dMapType_t map_type = ( t3dMapType_t ) ( ( int ) ( rSnapshot["map_type"] ) );
-	if ( map_type < T3DRegion::TYPE_HEIGHT || map_type >= T3DRegion::TYPE_MAX ) {
+	if ( map_type < TYPE_HEIGHT || map_type >= REGION_TYPE_MAX ) {
 		return;
 	}
 	if ( ( bool ) ( rSnapshot.get( "map_absent", false ) ) ) {
-		if ( map_type == T3DRegion::TYPE_CONTROL || map_type == T3DRegion::TYPE_COLOR ) {
+		if ( map_type == TYPE_CONTROL || map_type == TYPE_COLOR ) {
 			pRegion->setMap( map_type, Ref<Image>() );
 			pRegion->setModified( true );
 			rMapUpdates[( size_t ) ( map_type )].push_back( location );
@@ -255,7 +255,7 @@ void T3DEditor::applyEditSnapshot(
 
 	const Ref<Image> pRestoredMap = pSnapshotMap->duplicate();
 	pRegion->setMap( map_type, pRestoredMap );
-	if ( map_type == T3DRegion::TYPE_HEIGHT && rSnapshot.has( "height_range" ) ) {
+	if ( map_type == TYPE_HEIGHT && rSnapshot.has( "height_range" ) ) {
 		pRegion->setHeightRange( rSnapshot["height_range"] );
 	}
 	pRegion->setModified( true );
@@ -264,7 +264,7 @@ void T3DEditor::applyEditSnapshot(
 
 // Sends the whole region aabb to edited_area
 void T3DEditor::sendRegionAabb( const Vector2i &rRegionLoc, const Vector2 &rHeightRange ) {
-	const T3DTerrain::t3dRegionSize_t region_size = m_pTerrain->getRegionSize();
+	const t3dRegionSize_t region_size = m_pTerrain->getRegionSize();
 	AABB edited_area;
 	edited_area.position = Vector3( rRegionLoc.x * region_size, rHeightRange.x, rRegionLoc.y * region_size );
 	edited_area.size = Vector3( region_size, rHeightRange.y - rHeightRange.x, region_size );
@@ -287,7 +287,7 @@ Ref<T3DRegion> T3DEditor::operateRegion( const Vector2i &rRegionLoc ) {
 	}
 	if ( !pData->isRegionLocationValidInternal( rRegionLoc ) ) {
 		if ( bCanPrint ) {
-			LOG( T3DTerrain::INFO, "Location ", rRegionLoc, " out of bounds. Max: ", -pData->getRegionMapSizeInternal() / 2,
+			LOG( INFO, "Location ", rRegionLoc, " out of bounds. Max: ", -pData->getRegionMapSizeInternal() / 2,
 				" to ", pData->getRegionMapSizeInternal() / 2 - 1 );
 		}
 		return Ref<T3DRegion>();
@@ -296,11 +296,11 @@ Ref<T3DRegion> T3DEditor::operateRegion( const Vector2i &rRegionLoc ) {
 	// Get Region & dump data if debug
 	Ref<T3DRegion> pRegion = pData->getRegion( rRegionLoc );
 	if ( pRegion.is_valid() && !pRegion->isDeleted() && !pData->ensureCpuRegionResident( rRegionLoc ) ) {
-		LOG( T3DTerrain::ERROR, "Unable to page CPU terrain maps for editor region ", rRegionLoc );
+		LOG( ERROR, "Unable to page CPU terrain maps for editor region ", rRegionLoc );
 		return Ref<T3DRegion>();
 	}
 	if ( bCanPrint ) {
-		LOG( T3DTerrain::DEBUG, "t3dTool_t: ", m_tool, " Op: ", m_operation, " processing region ", rRegionLoc, ": ",
+		LOG( DEBUG, "t3dTool_t: ", m_tool, " Op: ", m_operation, " processing region ", rRegionLoc, ": ",
 			ptrToStr( *pRegion ) );
 	}
 
@@ -312,10 +312,10 @@ Ref<T3DRegion> T3DEditor::operateRegion( const Vector2i &rRegionLoc ) {
 			if ( !m_undoData.has( "region_locations" ) ) {
 				m_undoData["region_locations"] = pData->getRegionLocations().duplicate();
 			}
-			LOG( T3DTerrain::DEBUG, "Adding blank region at: ", rRegionLoc, ", ptr: ", ptrToStr( *pRegion ) );
+			LOG( DEBUG, "Adding blank region at: ", rRegionLoc, ", ptr: ", ptrToStr( *pRegion ) );
 			pRegion = pData->addRegionBlank( rRegionLoc );
 			if ( pRegion.is_null() ) {
-				LOG( T3DTerrain::ERROR, "A new region cannot be created" );
+				LOG( ERROR, "A new region cannot be created" );
 				return pRegion;
 			}
 			m_editedRegions.push_back( pRegion ); // Ensure new region is added to the redo set
@@ -328,7 +328,7 @@ Ref<T3DRegion> T3DEditor::operateRegion( const Vector2i &rRegionLoc ) {
 		if ( !m_undoData.has( "region_locations" ) ) {
 			m_undoData["region_locations"] = pData->getRegionLocations().duplicate();
 		}
-		LOG( T3DTerrain::DEBUG, "Removing region at: ", rRegionLoc, ", ptr: ", ptrToStr( *pRegion ) );
+		LOG( DEBUG, "Removing region at: ", rRegionLoc, ", ptr: ", ptrToStr( *pRegion ) );
 		m_originalRegions.push_back( pRegion );
 		height_range = pRegion->getHeightRange();
 		m_pTerrain->getData()->removeRegion( pRegion );
@@ -344,11 +344,11 @@ Ref<T3DRegion> T3DEditor::operateRegion( const Vector2i &rRegionLoc ) {
 }
 
 void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCameraDirection ) {
-	LOG( T3DTerrain::EXTREME, "Operating at ", rGlobalPosition, " tool type ", m_tool, " op ", m_operation );
+	LOG( EXTREME, "Operating at ", rGlobalPosition, " tool type ", m_tool, " op ", m_operation );
 
 	const t3dMapType_t map_type = getMapType();
-	if ( map_type == T3DRegion::TYPE_MAX ) {
-		LOG( T3DTerrain::ERROR, "Invalid tool selected" );
+	if ( map_type == REGION_TYPE_MAX ) {
+		LOG( ERROR, "Invalid tool selected" );
 		return;
 	}
 
@@ -367,7 +367,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 
 	Image *const pBrushImage = cast_to<Image>( m_brushData["brush_image"] );
 	if ( !pBrushImage ) {
-		LOG( T3DTerrain::ERROR, "Invalid brush image. Returning" );
+		LOG( ERROR, "Invalid brush image. Returning" );
 		return;
 	}
 	const Vector2i img_size = m_brushData["brush_image_size"];
@@ -463,11 +463,11 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 
 	const bool bComputeSupported =
 		m_operation != AVERAGE &&
-		( ( map_type == T3DRegion::TYPE_HEIGHT && ( m_operation == ADD || m_operation == SUBTRACT || m_operation == GRADIENT ) ) ||
-		 ( map_type == T3DRegion::TYPE_CONTROL &&
+		( ( map_type == TYPE_HEIGHT && ( m_operation == ADD || m_operation == SUBTRACT || m_operation == GRADIENT ) ) ||
+		 ( map_type == TYPE_CONTROL &&
 		  ( m_tool == TEXTURE || m_tool == AUTOSHADER || m_tool == HOLES || m_tool == NAVIGATION ) &&
 		  ( m_operation == ADD || m_operation == SUBTRACT || m_operation == REPLACE ) ) ||
-		 ( map_type == T3DRegion::TYPE_COLOR && ( m_tool == COLOR || m_tool == ROUGHNESS ) &&
+		 ( map_type == TYPE_COLOR && ( m_tool == COLOR || m_tool == ROUGHNESS ) &&
 		  ( m_operation == ADD || m_operation == SUBTRACT ) ) );
 	T3DCompute *const pComputeBackend = pData->getComputeBackend();
 	const bool bUseCompute =
@@ -523,15 +523,15 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 			entry.pRegion = operateRegion( entry.location );
 			entry.bMapWasImplicit = entry.pRegion.is_valid() && entry.pRegion->getMapPtr( map_type ) == nullptr;
 			entry.pMap = entry.pRegion.is_valid() ? entry.pRegion->getMapPtrForWrite( map_type ) : nullptr;
-			entry.pControlMap = entry.pRegion.is_valid() ? entry.pRegion->getMapPtr( T3DRegion::TYPE_CONTROL ) : nullptr;
+			entry.pControlMap = entry.pRegion.is_valid() ? entry.pRegion->getMapPtr( TYPE_CONTROL ) : nullptr;
 			if ( !entry.pMap || !bUseDirectMapAccess ) {
 				continue;
 			}
 			entry.mapFormat = entry.pMap->get_format();
 			entry.bMapHasMipmaps = entry.pMap->has_mipmaps();
-			const Image::Format expected_format = map_type == T3DRegion::TYPE_HEIGHT ? Image::FORMAT_R16
-				: map_type == T3DRegion::TYPE_CONTROL ? Image::FORMAT_RF : Image::FORMAT_RGBA8;
-			const size_t bytes_per_texel = map_type == T3DRegion::TYPE_HEIGHT ? sizeof( uint16_t ) : sizeof( uint32_t );
+			const Image::Format expected_format = map_type == TYPE_HEIGHT ? Image::FORMAT_R16
+				: map_type == TYPE_CONTROL ? Image::FORMAT_RF : Image::FORMAT_RGBA8;
+			const size_t bytes_per_texel = map_type == TYPE_HEIGHT ? sizeof( uint16_t ) : sizeof( uint32_t );
 			const size_t expected_bytes = ( size_t ) ( region_size ) * ( size_t ) ( region_size ) * bytes_per_texel;
 			if ( entry.mapFormat != expected_format || entry.pMap->get_width() != region_size ||
 				entry.pMap->get_height() != region_size ) {
@@ -547,7 +547,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 			if ( !entry.bDirectAccess ) {
 				continue;
 			}
-			if ( map_type == T3DRegion::TYPE_CONTROL ) {
+			if ( map_type == TYPE_CONTROL ) {
 				entry.pControlBytes = entry.pMapBytes;
 			} else if ( entry.pControlMap && entry.pControlMap->get_format() == Image::FORMAT_RF &&
 				entry.pControlMap->get_width() == region_size && entry.pControlMap->get_height() == region_size ) {
@@ -562,7 +562,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 
 	m_computeElementScratch.clear();
 	m_computeWriteScratch.clear();
-	eastl::vector<T3DCompute::t3dBrushElement_t> &compute_elements = m_computeElementScratch;
+	eastl::vector<t3dBrushElement_t> &compute_elements = m_computeElementScratch;
 	eastl::vector<t3dComputeWrite_t> &compute_writes = m_computeWriteScratch;
 	if ( bUseCompute ) {
 		compute_elements.reserve( ( size_t ) ( total_samples ) );
@@ -629,7 +629,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 				z_sample.fGlobalPosition
 			);
 			Vector3 edited_position = brushGlobalPosition;
-			if ( map_type != T3DRegion::TYPE_HEIGHT ) {
+			if ( map_type != TYPE_HEIGHT ) {
 				edited_position.y = brushSampler.sampleHeight( edited_position );
 				edited_area = edited_area.expand( edited_position );
 			}
@@ -642,7 +642,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 				bool bEligible = true;
 				uint32_t source_value = 0u;
 				uint32_t target_value = 0u;
-				if ( map_type == T3DRegion::TYPE_HEIGHT ) {
+				if ( map_type == TYPE_HEIGHT ) {
 					const float fSourceHeight = std::isfinite( src.r ) ? src.r : 0.0f;
 					source_value = asUint( fSourceHeight );
 					edited_position.y = fSourceHeight;
@@ -671,7 +671,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 							}
 						}
 					}
-				} else if ( map_type == T3DRegion::TYPE_CONTROL ) {
+				} else if ( map_type == TYPE_CONTROL ) {
 					source_value = asUint( src.r );
 					if ( m_tool == TEXTURE ) {
 						bEligible = isBrushSlopeAllowed( brushSampler, bUnrestrictedSlope, clamped_slope_range, brushGlobalPosition );
@@ -689,7 +689,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 					}
 				}
 				if ( bEligible ) {
-					T3DCompute::t3dBrushElement_t element;
+					t3dBrushElement_t element;
 					element.value = source_value;
 					element.alpha = asUint( ( float ) ( fBrushAlpha ) );
 					element.target = target_value;
@@ -699,7 +699,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 				}
 				continue;
 			}
-			if ( map_type == T3DRegion::TYPE_HEIGHT ) {
+			if ( map_type == TYPE_HEIGHT ) {
 				real_t fSrcf = src.r;
 				// In case data in existing map has nan or inf saved, check, and reset to real number if required.
 				fSrcf = std::isnan( fSrcf ) ? 0.f : fSrcf;
@@ -779,7 +779,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 				edited_position.y = fDestf;
 				edited_area = edited_area.expand( edited_position );
 
-			} else if ( map_type == T3DRegion::TYPE_CONTROL ) {
+			} else if ( map_type == TYPE_CONTROL ) {
 				// Get current bit field from pixel
 				uint32_t base_id = getBase( src.r );
 				uint32_t overlay_id = getOverlay( src.r );
@@ -956,7 +956,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 				// Write back to pixel in FORMAT_RF. Must be a 32-bit float
 				dest = Color( asFloat( bits ), 0.f, 0.f, 1.f );
 
-			} else if ( map_type == T3DRegion::TYPE_COLOR ) {
+			} else if ( map_type == TYPE_COLOR ) {
 				// Filter by visible texture
 				if ( bTextureFilter ) {
 					const float fSrcCtrl = asFloat( readControlBits( region_entry, map_index, mapPixelPosition ) );
@@ -1036,7 +1036,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 	}
 
 	if ( bUseCompute && !compute_elements.empty() ) {
-		T3DCompute::t3dBrushParams_t params;
+		t3dBrushParams_t params;
 		params.mapType = ( uint32_t ) ( map_type );
 		params.tool = ( uint32_t ) ( m_tool );
 		params.operation = ( uint32_t ) ( m_operation );
@@ -1051,12 +1051,12 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 		params.featureFlags = ( bModifierAlt ? 1u : 0u ) | ( std::isfinite( rGlobalPosition.y ) ? 2u : 0u ) |
 							   ( bEnableTexture ? 4u : 0u ) | ( bEnableAngle ? 8u : 0u ) | ( bEnableScale ? 16u : 0u );
 		if ( !pComputeBackend->processBrush( compute_elements, params ) ) {
-			LOG( T3DTerrain::WARN,
+			LOG( WARN,
 				"Compute brush failed; using buffer-equivalent CPU fallback: ", pComputeBackend->getLastError() );
 			T3DCompute::processBrushCpu( compute_elements, params );
 		}
 		for ( size_t i = 0; i < compute_elements.size(); ++i ) {
-			const T3DCompute::t3dBrushElement_t &element = compute_elements[i];
+			const t3dBrushElement_t &element = compute_elements[i];
 			const t3dComputeWrite_t &write = compute_writes[i];
 			if ( element.value == write.sourceValue || write.iRegionIndex >= region_cache.size() ) {
 				continue;
@@ -1068,7 +1068,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 			backupRegion( entry.pRegion, entry.bMapWasImplicit );
 			const size_t map_index =
 				( size_t ) ( write.mapPixel.y ) * ( size_t ) ( region_size ) + ( size_t ) ( write.mapPixel.x );
-			if ( map_type == T3DRegion::TYPE_HEIGHT ) {
+			if ( map_type == TYPE_HEIGHT ) {
 				const float fResult = asFloat( element.value );
 				writeMapPixel( entry, map_index, write.mapPixel, Color( fResult, 0.f, 0.f, 1.f ), map_type );
 				entry.pRegion->updateHeight( fResult );
@@ -1076,7 +1076,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 				Vector3 result_position = write.worldPosition;
 				result_position.y = fResult;
 				edited_area = edited_area.expand( result_position );
-			} else if ( map_type == T3DRegion::TYPE_CONTROL ) {
+			} else if ( map_type == TYPE_CONTROL ) {
 				writeMapPixel( entry, map_index, write.mapPixel, Color( asFloat( element.value ), 0.f, 0.f, 1.f ), map_type );
 			} else {
 				writeMapPixel( entry, map_index, write.mapPixel, unpackColorRgba8( element.value ), map_type );
@@ -1093,7 +1093,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 			entry.pMap->set_data( region_size, region_size, entry.bMapHasMipmaps, entry.mapFormat, entry.mapData );
 		}
 			if ( entry.bMapWasImplicit && !entry.bModified && entry.pRegion.is_valid() &&
-				( map_type == T3DRegion::TYPE_CONTROL || map_type == T3DRegion::TYPE_COLOR ) ) {
+				( map_type == TYPE_CONTROL || map_type == TYPE_COLOR ) ) {
 				// Region coverage is resolved before slope/texture filters are evaluated.
 				// Drop transient default maps for covered regions that received no write.
 				entry.pRegion->compactMapIfDefault( map_type, false );
@@ -1110,16 +1110,16 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 		modified_region_locations.push_back( entry.location );
 	}
 
-	uint32_t commit_flags = T3DData::MAP_EDIT_KEEP_EDITED;
+	uint32_t commit_flags = MAP_EDIT_KEEP_EDITED;
 	if ( m_tool == HOLES || m_tool == HEIGHT || m_tool == SCULPT ) {
-		commit_flags |= T3DData::MAP_EDIT_UPDATE_INSTANCES;
+		commit_flags |= MAP_EDIT_UPDATE_INSTANCES;
 	}
-	if ( m_pTerrain->getCollisionMode() == T3DCollision::DYNAMIC_EDITOR &&
-		( map_type == T3DRegion::TYPE_HEIGHT || map_type == T3DRegion::TYPE_CONTROL ) ) {
-		commit_flags |= T3DData::MAP_EDIT_UPDATE_COLLISION;
+	if ( m_pTerrain->getCollisionMode() == DYNAMIC_EDITOR &&
+		( map_type == TYPE_HEIGHT || map_type == TYPE_CONTROL ) ) {
+		commit_flags |= MAP_EDIT_UPDATE_COLLISION;
 	}
 	if ( m_tool == HEIGHT || m_tool == SCULPT || m_tool == TEXTURE || m_tool == AUTOSHADER ) {
-		commit_flags |= T3DData::MAP_EDIT_SNAP;
+		commit_flags |= MAP_EDIT_SNAP;
 	}
 	// One typed commit owns persistence metadata, height ranges, texture-array
 	// uploads, instance/collision invalidation and coalesced notifications.
@@ -1132,7 +1132,7 @@ void T3DEditor::storeUndo( void ) {
 	if ( !bHasValidTool && m_originalRegions.is_empty() && m_editedRegions.is_empty() ) {
 		return;
 	}
-	LOG( T3DTerrain::DEBUG, "Finalize undo & redo snapshots" );
+	LOG( DEBUG, "Finalize undo & redo snapshots" );
 	Dictionary redo_data;
 	// Region locations are captured lazily only when the operation actually
 	// adds or removes a region. Ordinary painting avoids copying the full active
@@ -1155,20 +1155,20 @@ void T3DEditor::storeUndo( void ) {
 		redo_data["edit_snapshots"] = m_editedEditSnapshots.duplicate();
 	}
 
-	if ( T3DTerrain::s_debugLevel >= T3DTerrain::DEBUG ) {
-		LOG( T3DTerrain::DEBUG, "Storing Original Regions:" );
+	if ( T3DTerrain::s_debugLevel >= DEBUG ) {
+		LOG( DEBUG, "Storing Original Regions:" );
 		for ( const Ref<T3DRegion> pRegion : m_originalRegions ) {
 			if ( pRegion.is_valid() ) {
 				pRegion->dump();
 			}
 		}
-		LOG( T3DTerrain::DEBUG, "Storing Edited Regions:" );
+		LOG( DEBUG, "Storing Edited Regions:" );
 		for ( const Ref<T3DRegion> pRegion : m_editedRegions ) {
 			if ( pRegion.is_valid() ) {
 				pRegion->dump();
 			}
 		}
-		LOG( T3DTerrain::DEBUG, "Targeted edit snapshots: undo=", m_originalEditSnapshots.size(),
+		LOG( DEBUG, "Targeted edit snapshots: undo=", m_originalEditSnapshots.size(),
 			", redo=", m_editedEditSnapshots.size() );
 	}
 
@@ -1177,50 +1177,50 @@ void T3DEditor::storeUndo( void ) {
 		if ( m_tool == REGION && m_operation == SUBTRACT ) {
 			m_undoData["removed_regions"] = m_addedRemovedLocations;
 			redo_data["added_regions"] = m_addedRemovedLocations;
-			LOG( T3DTerrain::DEBUG, "Removed regions: ", m_addedRemovedLocations );
+			LOG( DEBUG, "Removed regions: ", m_addedRemovedLocations );
 		} else {
 			m_undoData["added_regions"] = m_addedRemovedLocations;
 			redo_data["removed_regions"] = m_addedRemovedLocations;
-			LOG( T3DTerrain::DEBUG, "Added regions: ", m_addedRemovedLocations );
+			LOG( DEBUG, "Added regions: ", m_addedRemovedLocations );
 		}
 	}
 
 	if ( m_pTerrain->getData()->getEditedArea().has_volume() ) {
 		m_undoData["edited_area"] = m_pTerrain->getData()->getEditedArea();
 		redo_data["edited_area"] = m_pTerrain->getData()->getEditedArea();
-		LOG( T3DTerrain::DEBUG, "Adding edited area to snapshots: ", m_undoData["edited_area"] );
+		LOG( DEBUG, "Adding edited area to snapshots: ", m_undoData["edited_area"] );
 	}
 
 	// Request the plugin store the undo/redo data.
 	if ( m_pTerrain->getPlugin()->has_method( "create_undo_action" ) ) {
-		LOG( T3DTerrain::INFO, "Storing undo snapshot" );
+		LOG( INFO, "Storing undo snapshot" );
 		String action_name = "Terrain3D Edit";
 		if ( bHasValidTool && m_operation >= 0 && m_operation < OP_MAX ) {
 			action_name = String( "Terrain3D " ) + TERRAIN3D_EDITOR_OPERATION_NAMES[m_operation] + String( " " ) + TERRAIN3D_EDITOR_TOOL_NAMES[m_tool];
 		}
-		LOG( T3DTerrain::DEBUG, "Creating undo action: '", action_name, "'" );
+		LOG( DEBUG, "Creating undo action: '", action_name, "'" );
 		m_pTerrain->getPlugin()->call( "create_undo_action", action_name );
 
-		LOG( T3DTerrain::DEBUG, "Storing undo snapshot: " );
-		T3DUtil::printDict( "_undo_data snapshot", m_undoData, T3DTerrain::DEBUG );
+		LOG( DEBUG, "Storing undo snapshot: " );
+		T3DUtil::printDict( "_undo_data snapshot", m_undoData, DEBUG );
 		m_pTerrain->getPlugin()->call( "add_undo_method", Callable( this, "apply_undo" ).bind( m_undoData.duplicate() ) );
 
-		LOG( T3DTerrain::DEBUG, "Storing redo snapshot: " );
-		T3DUtil::printDict( "redo_data snapshot", redo_data, T3DTerrain::DEBUG );
+		LOG( DEBUG, "Storing redo snapshot: " );
+		T3DUtil::printDict( "redo_data snapshot", redo_data, DEBUG );
 		m_pTerrain->getPlugin()->call( "add_do_method", Callable( this, "apply_undo" ).bind( redo_data ) );
 
-		LOG( T3DTerrain::DEBUG, "Committing undo action" );
+		LOG( DEBUG, "Committing undo action" );
 		m_pTerrain->getPlugin()->call( "commit_action", false );
 	}
 }
 
 void T3DEditor::applyUndo( const Dictionary &rData ) {
 	IS_INIT_COND_MESG( !m_pTerrain->getPlugin(), "_terrain isn't initialized, returning", VOID );
-	LOG( T3DTerrain::INFO, "Applying Undo/Redo data" );
+	LOG( INFO, "Applying Undo/Redo data" );
 
 	T3DData *const pData = m_pTerrain->getData();
 	eastl::vector<Vector2i> restored_region_locations;
-	eastl::array<eastl::vector<Vector2i>, T3DRegion::TYPE_MAX> restored_map_locations;
+	eastl::array<eastl::vector<Vector2i>, REGION_TYPE_MAX> restored_map_locations;
 	bool bInstancesChanged = false;
 
 	if ( rData.has( "edit_snapshots" ) ) {
@@ -1234,10 +1234,10 @@ void T3DEditor::applyUndo( const Dictionary &rData ) {
 	if ( rData.has( "edited_regions" ) ) {
 		T3DUtil::printArr( "Edited regions", rData["edited_regions"] );
 		const TypedArray<T3DRegion> undo_regions = rData["edited_regions"];
-		LOG( T3DTerrain::DEBUG, "Backup has ", undo_regions.size(), " edited regions" );
+		LOG( DEBUG, "Backup has ", undo_regions.size(), " edited regions" );
 		for ( Ref<T3DRegion> pRegion : undo_regions ) {
 			if ( pRegion.is_null() ) {
-				LOG( T3DTerrain::ERROR, "Null region saved in undo data. Please report this error." );
+				LOG( ERROR, "Null region saved in undo data. Please report this error." );
 				continue;
 			}
 			pRegion->sanitizeMaps(); // Live data may not have some maps so must be sanitized
@@ -1245,44 +1245,44 @@ void T3DEditor::applyUndo( const Dictionary &rData ) {
 			// pointer map, active slot and deferred renderer reconciliation agree.
 			const Error replace_error = pData->addRegion( pRegion, false );
 			if ( replace_error != OK ) {
-				LOG( T3DTerrain::ERROR, "Unable to restore undo region at ", pRegion->getLocation(), ": ", replace_error );
+				LOG( ERROR, "Unable to restore undo region at ", pRegion->getLocation(), ": ", replace_error );
 				continue;
 			}
 			pRegion->setModified( true ); // Tell update_maps() this region has layers that can be individually updated
 			pRegion->setEdited( true );	// Flag so update_maps() will include it
 			pRegion->setDeleted( false ); // Ensure region not marked for deletion
 			restored_region_locations.push_back( pRegion->getLocation() );
-			if ( T3DTerrain::s_debugLevel >= T3DTerrain::DEBUG ) {
-				LOG( T3DTerrain::DEBUG, "Restoring region:" );
+			if ( T3DTerrain::s_debugLevel >= DEBUG ) {
+				LOG( DEBUG, "Restoring region:" );
 				pRegion->dump();
 			}
 		}
 	}
 
 	if ( rData.has( "edited_area" ) ) {
-		LOG( T3DTerrain::DEBUG, "Edited area: ", rData["edited_area"] );
+		LOG( DEBUG, "Edited area: ", rData["edited_area"] );
 		pData->addEditedArea( rData["edited_area"] );
 	}
 
 	if ( rData.has( "added_regions" ) ) {
-		LOG( T3DTerrain::DEBUG, "Added regions: ", rData["added_regions"] );
+		LOG( DEBUG, "Added regions: ", rData["added_regions"] );
 		const TypedArray<Vector2i> region_locs = rData["added_regions"];
 		for ( const Vector2i region_loc : region_locs ) {
 			Ref<T3DRegion> pRegion = pData->getRegion( region_loc );
 			if ( pRegion.is_valid() ) {
-				LOG( T3DTerrain::DEBUG, "Marking region: ", region_loc, " +deleted, +modified, ", ptrToStr( *pRegion ) );
+				LOG( DEBUG, "Marking region: ", region_loc, " +deleted, +modified, ", ptrToStr( *pRegion ) );
 				pRegion->setDeleted( true );
 				pRegion->setModified( true );
 			}
 		}
 	}
 	if ( rData.has( "removed_regions" ) ) {
-		LOG( T3DTerrain::DEBUG, "Removed regions: ", rData["removed_regions"] );
+		LOG( DEBUG, "Removed regions: ", rData["removed_regions"] );
 		const TypedArray<Vector2i> region_locs = rData["removed_regions"];
 		for ( const Vector2i region_loc : region_locs ) {
 			Ref<T3DRegion> pRegion = pData->getRegion( region_loc );
 			if ( pRegion.is_valid() ) {
-				LOG( T3DTerrain::DEBUG, "Marking region: ", region_loc, " -deleted, +modified, ", ptrToStr( *pRegion ) );
+				LOG( DEBUG, "Marking region: ", region_loc, " -deleted, +modified, ", ptrToStr( *pRegion ) );
 				pRegion->setDeleted( false );
 				pRegion->setModified( true );
 				sendRegionAabb( region_loc, pRegion->getHeightRange() );
@@ -1299,15 +1299,15 @@ void T3DEditor::applyUndo( const Dictionary &rData ) {
 		const TypedArray<Vector2i> locations = rData["region_locations"];
 		m_pTerrain->getData()->setRegionLocations( locations.duplicate() );
 		bRestoredRegionLayout = true;
-		LOG( T3DTerrain::DEBUG, "Locations(", locations.size(), "): ", locations );
+		LOG( DEBUG, "Locations(", locations.size(), "): ", locations );
 	}
 	// Legacy/external undo payloads may omit region_locations. Only those require
 	// the old full rebuild fallback.
 	if ( ( rData.has( "added_regions" ) || rData.has( "removed_regions" ) ) && !bRestoredRegionLayout ) {
-		pData->updateMaps( T3DRegion::TYPE_MAX, true, false );
+		pData->updateMaps( REGION_TYPE_MAX, true, false );
 	}
 	const AABB restored_area = rData.has( "edited_area" ) ? AABB( rData["edited_area"] ) : AABB();
-	for ( int map_type = T3DRegion::TYPE_HEIGHT; map_type < T3DRegion::TYPE_MAX; ++map_type ) {
+	for ( int map_type = TYPE_HEIGHT; map_type < REGION_TYPE_MAX; ++map_type ) {
 		eastl::vector<Vector2i> commit_locations = restored_map_locations[( size_t ) ( map_type )];
 		commit_locations.insert( commit_locations.end(), restored_region_locations.begin(),
 								restored_region_locations.end() );
@@ -1317,9 +1317,9 @@ void T3DEditor::applyUndo( const Dictionary &rData ) {
 			continue;
 		}
 		uint32_t commit_flags = 0u;
-		if ( map_type == T3DRegion::TYPE_HEIGHT || map_type == T3DRegion::TYPE_CONTROL ) {
-			commit_flags |= T3DData::MAP_EDIT_UPDATE_INSTANCES | T3DData::MAP_EDIT_UPDATE_COLLISION |
-							T3DData::MAP_EDIT_SNAP;
+		if ( map_type == TYPE_HEIGHT || map_type == TYPE_CONTROL ) {
+			commit_flags |= MAP_EDIT_UPDATE_INSTANCES | MAP_EDIT_UPDATE_COLLISION |
+							MAP_EDIT_SNAP;
 		}
 		pData->commitMapEdits( ( t3dMapType_t ) ( map_type ), commit_locations, restored_area, commit_flags );
 	}
@@ -1355,15 +1355,15 @@ float T3DEditor::average(
 	int index;
 	switch ( mode ) {
 		case AVG_HEIGHT:
-			map_type = T3DRegion::TYPE_HEIGHT;
+			map_type = TYPE_HEIGHT;
 			index = 0; // Red
 			break;
 		case AVG_BLEND:
-			map_type = T3DRegion::TYPE_CONTROL;
+			map_type = TYPE_CONTROL;
 			index = 0; // Red
 			break;
 		case AVG_ROUGHNESS:
-			map_type = T3DRegion::TYPE_COLOR;
+			map_type = TYPE_COLOR;
 			index = 3; // Alpha
 			break;
 		default:
@@ -1401,19 +1401,19 @@ Color T3DEditor::average( const Vector3 &rGlobalPosition, const Color &clrBase )
 	const Vector3 down_position = rGlobalPosition - Vector3( 0.f, 0.f, fVertexSpacing );
 	const Vector3 up_position = rGlobalPosition + Vector3( 0.f, 0.f, fVertexSpacing );
 
-	Color left = pData->getPixel( T3DRegion::TYPE_COLOR, left_position ).srgb_to_linear();
+	Color left = pData->getPixel( TYPE_COLOR, left_position ).srgb_to_linear();
 	if ( std::isnan( left.r ) ) {
 		left = COLOR_WHITE;
 	}
-	Color right = pData->getPixel( T3DRegion::TYPE_COLOR, right_position ).srgb_to_linear();
+	Color right = pData->getPixel( TYPE_COLOR, right_position ).srgb_to_linear();
 	if ( std::isnan( right.r ) ) {
 		right = COLOR_WHITE;
 	}
-	Color up = pData->getPixel( T3DRegion::TYPE_COLOR, up_position ).srgb_to_linear();
+	Color up = pData->getPixel( TYPE_COLOR, up_position ).srgb_to_linear();
 	if ( std::isnan( up.r ) ) {
 		up = COLOR_WHITE;
 	}
-	Color down = pData->getPixel( T3DRegion::TYPE_COLOR, down_position ).srgb_to_linear();
+	Color down = pData->getPixel( TYPE_COLOR, down_position ).srgb_to_linear();
 	if ( std::isnan( down.r ) ) {
 		down = COLOR_WHITE;
 	}
@@ -1444,16 +1444,16 @@ void T3DEditor::setBrushData( const Dictionary &rData ) {
 			m_brushData["brush_image"] = pImg;
 			m_brushData["brush_image_size"] = pImg->get_size();
 		} else {
-			LOG( T3DTerrain::ERROR, "Brush data doesn't contain a valid image" );
+			LOG( ERROR, "Brush data doesn't contain a valid image" );
 		}
 		const Ref<Texture2D> pTex = brush_images[1];
 		if ( pTex.is_valid() && pTex->get_width() > 0 && pTex->get_height() > 0 ) {
 			m_brushData["brush_texture"] = pTex;
 		} else {
-			LOG( T3DTerrain::ERROR, "Brush data doesn't contain a valid texture" );
+			LOG( ERROR, "Brush data doesn't contain a valid texture" );
 		}
 	} else {
-		LOG( T3DTerrain::ERROR, "Brush data doesn't contain an image and texture" );
+		LOG( ERROR, "Brush data doesn't contain an image and texture" );
 	}
 
 	// Santize settings
@@ -1495,7 +1495,7 @@ void T3DEditor::setBrushData( const Dictionary &rData ) {
 	m_brushData["brush_spin_speed"] = CLAMP( ( real_t ) ( rData.get( "brush_spin_speed", 0.f ) ), 0.f, 1.f );
 	m_brushData["gradient_points"] = rData.get( "gradient_points", PackedVector3Array() );
 
-	T3DUtil::printDict( "set_brush_data() Santized brush data:", m_brushData, T3DTerrain::EXTREME );
+	T3DUtil::printDict( "set_brush_data() Santized brush data:", m_brushData, EXTREME );
 }
 
 void T3DEditor::setTool( const t3dTool_t tool ) {
@@ -1507,7 +1507,7 @@ void T3DEditor::setTool( const t3dTool_t tool ) {
 	m_tool = new_tool;
 	if ( m_pTerrain && ( m_tool == t3dTool_t::NAVIGATION || old_tool == t3dTool_t::NAVIGATION || m_tool == t3dTool_t::REGION ||
 					 old_tool == t3dTool_t::REGION ) ) {
-		m_pTerrain->getMaterial()->update( T3DMaterial::FULL_REBUILD );
+		m_pTerrain->getMaterial()->update( FULL_REBUILD );
 	}
 }
 
@@ -1518,7 +1518,7 @@ void T3DEditor::setOperation( const t3dOperation_t operation ) {
 // Called on mouse click
 void T3DEditor::startOperation( const Vector3 &rGlobalPosition ) {
 	IS_DATA_INIT_MESG( "Terrain isn't initialized", VOID );
-	LOG( T3DTerrain::INFO, "t3dSetting_t up undo snapshot" );
+	LOG( INFO, "t3dSetting_t up undo snapshot" );
 	m_undoData.clear();
 	m_bIsOperating = true;
 	m_originalRegions = TypedArray<T3DRegion>(); // New pointers instead of clear
@@ -1537,7 +1537,7 @@ void T3DEditor::startOperation( const Vector3 &rGlobalPosition ) {
 void T3DEditor::operate( const Vector3 &rGlobalPosition, const real_t fCameraDirection ) {
 	IS_DATA_INIT_MESG( "Terrain isn't initialized", VOID );
 	if ( !m_bIsOperating ) {
-		LOG( T3DTerrain::ERROR, "Run start_operation() before operating" );
+		LOG( ERROR, "Run start_operation() before operating" );
 		return;
 	}
 	m_operationMovement = rGlobalPosition - m_operationPosition;
@@ -1565,7 +1565,7 @@ void T3DEditor::operate( const Vector3 &rGlobalPosition, const real_t fCameraDir
 void T3DEditor::backupRegion( const Ref<T3DRegion> &rRegion, const bool bMapWasImplicit ) {
 	// Backup region once at the start of an operation. Once Edited is set, this is skipped
 	if ( m_bIsOperating && rRegion.is_valid() && !rRegion->isEdited() ) {
-		LOG( T3DTerrain::DEBUG, "Storing original copy of region: ", rRegion->getLocation() );
+		LOG( DEBUG, "Storing original copy of region: ", rRegion->getLocation() );
 		// A newly auto-created region is already represented by the add/remove
 		// snapshot and the redo region. Capturing another map snapshot is redundant.
 		if ( m_addedRemovedLocations.find( rRegion->getLocation() ) < 0 ) {
@@ -1582,8 +1582,8 @@ void T3DEditor::backupRegion( const Ref<T3DRegion> &rRegion, const bool bMapWasI
 		}
 		rRegion->setEdited( true );
 		rRegion->setModified( true );
-		if ( T3DTerrain::s_debugLevel >= T3DTerrain::DEBUG ) {
-			LOG( T3DTerrain::DEBUG, "Backed up region edit state" );
+		if ( T3DTerrain::s_debugLevel >= DEBUG ) {
+			LOG( DEBUG, "Backed up region edit state" );
 			rRegion->dump();
 		}
 	}
@@ -1597,7 +1597,7 @@ void T3DEditor::backupRegionFull( const Ref<T3DRegion> &rRegion ) {
 		return;
 	}
 
-	LOG( T3DTerrain::DEBUG, "Storing full original copy of region: ", rRegion->getLocation() );
+	LOG( DEBUG, "Storing full original copy of region: ", rRegion->getLocation() );
 	if ( m_addedRemovedLocations.find( rRegion->getLocation() ) < 0 ) {
 		const Ref<T3DRegion> pOrigRegion = rRegion->duplicate( true );
 		m_originalRegions.push_back( pOrigRegion );
@@ -1616,10 +1616,10 @@ void T3DEditor::trimBrushScratch( void ) {
 	m_modifiedRegionScratch.clear();
 
 	const size_t compute_bytes =
-		m_computeElementScratch.capacity() * sizeof( T3DCompute::t3dBrushElement_t ) +
+		m_computeElementScratch.capacity() * sizeof( t3dBrushElement_t ) +
 		m_computeWriteScratch.capacity() * sizeof( t3dComputeWrite_t );
 	if ( compute_bytes > TERRAIN3D_COMPUTE_SCRATCH_RETAIN_LIMIT ) {
-		eastl::vector<T3DCompute::t3dBrushElement_t>().swap( m_computeElementScratch );
+		eastl::vector<t3dBrushElement_t>().swap( m_computeElementScratch );
 		eastl::vector<t3dComputeWrite_t>().swap( m_computeWriteScratch );
 	}
 
@@ -1638,7 +1638,7 @@ void T3DEditor::trimBrushScratch( void ) {
 void T3DEditor::stopOperation( void ) {
 	IS_DATA_INIT_MESG( "Terrain isn't initialized", VOID );
 	// If undo was created and terrain actually modified, store it
-	LOG( T3DTerrain::DEBUG, "Backed up regions: ", m_originalRegions.size(), ", Edited regions: ", m_editedRegions.size(),
+	LOG( DEBUG, "Backed up regions: ", m_originalRegions.size(), ", Edited regions: ", m_editedRegions.size(),
 		", Targeted snapshots: ", m_originalEditSnapshots.size(),
 		", Added/Removed regions: ", m_addedRemovedLocations.size() );
 	if ( m_bIsOperating &&
@@ -1649,10 +1649,10 @@ void T3DEditor::stopOperation( void ) {
 			// Make duplicate for redo, necessary or redos won't work
 			const Ref<T3DRegion> pRedoRegion = pRegion->duplicate( true );
 			m_editedRegions[i] = pRedoRegion;
-			if ( T3DTerrain::s_debugLevel >= T3DTerrain::DEBUG ) {
-				LOG( T3DTerrain::DEBUG, "Edited region:" );
+			if ( T3DTerrain::s_debugLevel >= DEBUG ) {
+				LOG( DEBUG, "Edited region:" );
 				pRegion->dump();
-				LOG( T3DTerrain::DEBUG, "Redo region:" );
+				LOG( DEBUG, "Redo region:" );
 				pRedoRegion->dump();
 			}
 		}

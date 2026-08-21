@@ -737,7 +737,7 @@ void T3DTerrain::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_raycast_result", "src_pos", "direction", "collision_mask", "exclude_terrain" ),
 						 &T3DTerrain::getRaycastResult, DEFVAL( 0xFFFFFFFF ), DEFVAL( false ) );
 	ClassDB::bind_method( D_METHOD( "bake_mesh", "lod", "filter" ), &T3DTerrain::bakeMesh,
-						 DEFVAL( T3DData::HEIGHT_FILTER_NEAREST ) );
+						 DEFVAL( HEIGHT_FILTER_NEAREST ) );
 	ClassDB::bind_method( D_METHOD( "bake_region_lightmap_mesh", "region_location", "lod", "context_radius_regions", "texel_size" ),
 		&T3DTerrain::bakeRegionLightmapMesh, DEFVAL( 2 ), DEFVAL( 1 ), DEFVAL( 1.0f ) );
 	ClassDB::bind_method( D_METHOD( "bake_occluder", "lod" ), &T3DTerrain::bakeOccluder );

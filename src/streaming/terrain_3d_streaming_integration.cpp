@@ -358,7 +358,7 @@ void T3DTerrain::setStreamingPredictionMaximumRegions( const int nRegions ) {
 }
 
 void T3DTerrain::applyStreamingPolicy( const bool bForceResidency ) {
-	LOG( T3DTerrain::INFO, "[streaming-policy] Applying policy: force_residency=", bForceResidency,
+	LOG( INFO, "[streaming-policy] Applying policy: force_residency=", bForceResidency,
 		"; editor_mode=", ( int ) ( m_editorExecutionMode ),
 		"; gpu_cache=", effectiveGpuRegionCacheEnabled(),
 		"; cpu_cache=", effectiveCpuRegionCacheEnabled(),
@@ -447,7 +447,7 @@ void T3DTerrain::normalizeRuntimeTierLayout( const bool bSyncDetailLods ) {
 				m_nRuntimeMiddleShaderLods = CLAMP( m_nRuntimeMiddleShaderLods, 0,
 					total_levels - m_nRuntimeNearShaderLods );
 			}
-			LOG( T3DTerrain::WARN, "Clamped detailed terrain range to ", supported_lods,
+			LOG( WARN, "Clamped detailed terrain range to ", supported_lods,
 				" clipmap levels because the configured GPU page capacity cannot cover the requested footprint" );
 		}
 	}
@@ -518,7 +518,7 @@ void T3DTerrain::setEditorExecutionMode( const t3dEditorExecutionMode_t mode ) {
 		m_pCollision->build();
 	}
 	if ( m_pMaterial.is_valid() && m_pMaterial->isInitialized() ) {
-		m_pMaterial->update( T3DMaterial::FULL_REBUILD );
+		m_pMaterial->update( FULL_REBUILD );
 	}
 	if ( m_bInitialized ) {
 		const Vector3 target = getClipmapTargetPosition();
@@ -830,7 +830,7 @@ void T3DTerrain::setGpuFarQualityDivisor( const int nDivisor ) {
 			m_nGpuRegionSparePages, m_nGpuRegionRetireFrames );
 	}
 	if ( m_pMaterial.is_valid() && m_pMaterial->isInitializedFor( this ) ) {
-		m_pMaterial->update( T3DMaterial::UNIFORMS_ONLY );
+		m_pMaterial->update( UNIFORMS_ONLY );
 	}
 }
 
@@ -1007,7 +1007,7 @@ void T3DTerrain::setInstanceRegionLoadBudgetMb( const int nBudgetMb ) {
 void T3DTerrain::setInstancerCellSize( const int nCellSize ) {
 	if ( nCellSize < TERRAIN3D_INSTANCE_MIN_CELL_SIZE || nCellSize > TERRAIN3D_INSTANCE_MAX_CELL_SIZE ||
 		( nCellSize & ( nCellSize - 1 ) ) != 0 || ( int ) ( m_nRegionSize ) % nCellSize != 0 ) {
-		LOG( T3DTerrain::ERROR, "Instancer cell size must be a power of two from ", TERRAIN3D_INSTANCE_MIN_CELL_SIZE,
+		LOG( ERROR, "Instancer cell size must be a power of two from ", TERRAIN3D_INSTANCE_MIN_CELL_SIZE,
 			" through ", TERRAIN3D_INSTANCE_MAX_CELL_SIZE, " and divide region size ", ( int ) ( m_nRegionSize ) );
 		return;
 	}

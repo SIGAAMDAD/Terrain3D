@@ -29,6 +29,29 @@ class T3DRegionRepository;
 // resident pool continues to replace unrelated slots. Public operations check
 // repository topology once, then all sub-samples use unchecked in-cache access.
 
+typedef struct alignas( 64 ) t3dRegionView_s {
+	Vector2i location = Vector2i( INT32_MAX, INT32_MAX );
+	uint32_t nStamp = 0;
+	uint32_t nRegionGeneration = 0u;
+	uint32_t nValidatedOperation = 0u;
+	bool bLoaded = false;
+	bool bValid = false;
+	bool bControlResolved = false;
+	const uint8_t *pHeightBytes = nullptr;
+	const uint8_t *pControlBytes = nullptr;
+	const uint8_t *pDerivedBytes = nullptr;
+} t3dRegionView_t;
+
+typedef struct t3dRegionCold_s {
+	T3DActiveMapLease activeLease;
+	T3DResidentMapLease lease;
+	PackedByteArray heightData;
+	PackedByteArray controlData;
+	PackedByteArray derivedData;
+
+	void reset( void );
+} t3dRegionCold_t;
+
 class T3DSampler {
 public:
 	explicit T3DSampler( const T3DSamplingSource &rSource );
@@ -59,28 +82,9 @@ public:
 private:
 	// Cache probes and successful samples touch only this cacheline-aligned hot
 	// descriptor. Ownership and fallback containers live in the parallel cold bank.
-	typedef struct alignas( 64 ) t3dRegionView_s {
-		Vector2i location = Vector2i( INT32_MAX, INT32_MAX );
-		uint32_t nStamp = 0;
-		uint32_t nRegionGeneration = 0u;
-		uint32_t nValidatedOperation = 0u;
-		bool bLoaded = false;
-		bool bValid = false;
-		bool bControlResolved = false;
-		const uint8_t *pHeightBytes = nullptr;
-		const uint8_t *pControlBytes = nullptr;
-		const uint8_t *pDerivedBytes = nullptr;
-	} t3dRegionView_t;
 
-	typedef struct t3dRegionCold_s {
-		T3DActiveMapLease activeLease;
-		T3DResidentMapLease lease;
-		PackedByteArray heightData;
-		PackedByteArray controlData;
-		PackedByteArray derivedData;
 
-		void reset( void );
-	} t3dRegionCold_t;
+
 
 	T3DSamplingSource m_source;
 	eastl::array<t3dRegionView_t, TERRAIN3D_SAMPLER_CACHE_SIZE> m_szCache{};

@@ -29,49 +29,59 @@ using namespace godot;
 
 class T3DTerrain;
 
+typedef enum t3dStreamedNodeFlags_e {
+	NODE_FLAG_NONE = 0,
+	NODE_FLAG_DISABLED = 1 << 0,
+	// Static streamed nodes never participate in transform-based ownership migration.
+	// The default remains movable to preserve serialized behavior from older scenes.
+	NODE_FLAG_STATIC = 1 << 1,
+	// Static/render-only scene that may be replaced by an HLOD proxy.
+	NODE_FLAG_HLOD_VISUAL = 1 << 2,
+} t3dStreamedNodeFlags_t;
+
+typedef enum t3dSpawnActivationResult_e {
+	SPAWN_ACTIVATION_PENDING,
+	SPAWN_ACTIVATION_CONSUMED,
+	SPAWN_ACTIVATION_FAILED,
+} t3dSpawnActivationResult_t;
+
+typedef struct t3dActiveNode_s {
+	int64_t spawnId = 0;
+	ObjectID objectId;
+	int flags = 0;
+} t3dActiveNode_t;
+
+typedef struct t3dRegionRuntime_s {
+	Node3D *pRoot = nullptr;
+	eastl::vector<t3dActiveNode_t> nodes;
+	int nextSpawn = 0;
+	int iActiveListPosition = -1;
+	bool bRequestsStarted = false;
+	bool bLoading = false;
+	bool bActive = false;
+} t3dRegionRuntime_t;
+
+typedef struct t3dMovableNodeRef_s {
+	int iRegionIndex = -1;
+	int64_t spawnId = 0;
+	ObjectID objectId;
+} t3dMovableNodeRef_t;
+
 class T3DNodeStreamer : public Object {
 	GDCLASS( T3DNodeStreamer, Object );
 	CLASS_NAME();
 
 public:
-	typedef enum t3dStreamedNodeFlags_e {
-		NODE_FLAG_NONE = 0,
-		NODE_FLAG_DISABLED = 1 << 0,
-		// Static streamed nodes never participate in transform-based ownership migration.
-		// The default remains movable to preserve serialized behavior from older scenes.
-		NODE_FLAG_STATIC = 1 << 1,
-		// Static/render-only scene that may be replaced by an HLOD proxy.
-		NODE_FLAG_HLOD_VISUAL = 1 << 2,
-	} t3dStreamedNodeFlags_t;
+
 
 private:
-	typedef enum t3dSpawnActivationResult_e {
-		SPAWN_ACTIVATION_PENDING,
-		SPAWN_ACTIVATION_CONSUMED,
-		SPAWN_ACTIVATION_FAILED,
-	} t3dSpawnActivationResult_t;
 
-	typedef struct t3dActiveNode_s {
-		int64_t spawnId = 0;
-		ObjectID objectId;
-		int flags = 0;
-	} t3dActiveNode_t;
 
-	typedef struct t3dRegionRuntime_s {
-		Node3D *pRoot = nullptr;
-		eastl::vector<t3dActiveNode_t> nodes;
-		int nextSpawn = 0;
-		int iActiveListPosition = -1;
-		bool bRequestsStarted = false;
-		bool bLoading = false;
-		bool bActive = false;
-	} t3dRegionRuntime_t;
 
-	typedef struct t3dMovableNodeRef_s {
-		int iRegionIndex = -1;
-		int64_t spawnId = 0;
-		ObjectID objectId;
-	} t3dMovableNodeRef_t;
+
+
+
+
 
 	T3DTerrain *m_pTerrain = nullptr;
 	Node3D *m_pHost = nullptr;
@@ -136,11 +146,11 @@ private:
 	bool activateRegion( int iIndex, int &nNodeBudget );
 	t3dSpawnActivationResult_t activateSpawn(
 		T3DRegion *pRegion, t3dRegionRuntime_t &rRuntime,
-		const T3DRegion::t3dStreamedNodeRuntimeDescriptor_t &rSpawn
+		const t3dStreamedNodeRuntimeDescriptor_t &rSpawn
 	);
-	void requestRegionScenes( const Vector2i &rOwnerLocation, const eastl::vector<T3DRegion::t3dStreamedNodeRuntimeDescriptor_t> &rSpawns );
-	bool isHlodVisualSuppressed( const Vector2i &rOwnerLocation, const T3DRegion::t3dStreamedNodeRuntimeDescriptor_t &rSpawn ) const;
-	bool streamedSpawnCoverageIntersects( const Vector2i &rOwnerLocation, const T3DRegion::t3dStreamedNodeRuntimeDescriptor_t &rSpawn, const Vector2i &rTargetMin, const Vector2i &rTargetMax ) const;
+	void requestRegionScenes( const Vector2i &rOwnerLocation, const eastl::vector<t3dStreamedNodeRuntimeDescriptor_t> &rSpawns );
+	bool isHlodVisualSuppressed( const Vector2i &rOwnerLocation, const t3dStreamedNodeRuntimeDescriptor_t &rSpawn ) const;
+	bool streamedSpawnCoverageIntersects( const Vector2i &rOwnerLocation, const t3dStreamedNodeRuntimeDescriptor_t &rSpawn, const Vector2i &rTargetMin, const Vector2i &rTargetMax ) const;
 	int64_t addStreamedSceneInternal(
 		const Ref<PackedScene> &rScene, const String &rScenePath,
 		const Transform3D &rGlobalTransform, const Dictionary &rState, int nFlags, int nHlodMinLevel
@@ -214,5 +224,5 @@ protected:
 	static void _bind_methods( void );
 };
 
-VARIANT_ENUM_CAST( T3DNodeStreamer::t3dStreamedNodeFlags_t );
+VARIANT_ENUM_CAST( t3dStreamedNodeFlags_t );
 #endif // TERRAIN3D_NODE_STREAMER_H

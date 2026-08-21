@@ -90,9 +90,9 @@ bool T3DCollisionSurfaceBuilder::build(
 		return false;
 	}
 
-	const T3DMaterial::t3dWorldBackground_t background_mode = rMaterial->getWorldBackground();
-	const bool blend_background = background_mode == T3DMaterial::t3dWorldBackground_t::FLAT ||
-		background_mode == T3DMaterial::t3dWorldBackground_t::NOISE;
+	const t3dWorldBackground_t background_mode = rMaterial->getWorldBackground();
+	const bool blend_background = background_mode == t3dWorldBackground_t::FLAT ||
+		background_mode == t3dWorldBackground_t::NOISE;
 	const real_t ground_level = rMaterial->get( "ground_level" );
 	const real_t region_blend = rMaterial->get( "region_blend" );
 	const real_t region_texel_size = 1.0f / ( real_t ) ( region_size );

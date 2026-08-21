@@ -40,14 +40,14 @@ struct T3DDerivedMapTask {
 // retained scratch so synchronous Godot signals can safely trigger nested edits.
 // recycleMutation() returns their capacity to the service after dispatch.
 struct T3DMapMutation {
-	t3dMapType_t mapType = T3DRegion::TYPE_MAX;
+	t3dMapType_t mapType = REGION_TYPE_MAX;
 	AABB editedArea;
 	Vector2 editedHeightRange = V2_ZERO;
 	eastl::vector<Vector2i> changedLocations;
 	eastl::vector<Vector2i> derivedLocations;
 	eastl::vector<T3DDerivedMapUpdate> derivedUpdates;
 
-	EA_FORCE_INLINE bool valid( void ) const { return mapType >= T3DRegion::TYPE_HEIGHT && mapType < T3DRegion::TYPE_MAX && !changedLocations.empty(); }
+	EA_FORCE_INLINE bool valid( void ) const { return mapType >= TYPE_HEIGHT && mapType < REGION_TYPE_MAX && !changedLocations.empty(); }
 };
 
 // Owns authoritative terrain-map mutation mechanics and edit bookkeeping.

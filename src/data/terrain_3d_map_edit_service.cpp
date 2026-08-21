@@ -130,7 +130,7 @@ Error T3DMapEditService::setPixel(
 ) {
 	rRegionLocation = V2I_MAX;
 	rDirtyRect = Rect2i();
-	if ( !m_pRepository || eMapType < T3DRegion::TYPE_HEIGHT || eMapType >= T3DRegion::TYPE_MAX ) {
+	if ( !m_pRepository || eMapType < TYPE_HEIGHT || eMapType >= REGION_TYPE_MAX ) {
 		return ERR_INVALID_PARAMETER;
 	}
 
@@ -152,7 +152,7 @@ Error T3DMapEditService::setPixel(
 	if ( !pMap ) {
 		return ERR_UNAVAILABLE;
 	}
-	if ( eMapType == T3DRegion::TYPE_HEIGHT ) {
+	if ( eMapType == TYPE_HEIGHT ) {
 		T3DRegionCodec::writeHeightPixel( pMap, imagePosition, rPixel.r );
 	} else {
 		pMap->set_pixelv( imagePosition, rPixel );
@@ -345,8 +345,8 @@ T3DMapMutation T3DMapEditService::commitMapEdits(
 	m_activeLocationScratch.clear();
 	m_derivedLocationScratch.clear();
 	m_derivedUpdateScratch.clear();
-	if ( !m_pRepository || !m_pSamplingStorage || eMapType < T3DRegion::TYPE_HEIGHT ||
-		eMapType >= T3DRegion::TYPE_MAX || rRegionLocations.empty() ) {
+	if ( !m_pRepository || !m_pSamplingStorage || eMapType < TYPE_HEIGHT ||
+		eMapType >= REGION_TYPE_MAX || rRegionLocations.empty() ) {
 		return {};
 	}
 
@@ -364,7 +364,7 @@ T3DMapMutation T3DMapEditService::commitMapEdits(
 			continue;
 		}
 		pRegion->markMapEdited( eMapType, true );
-		if ( eMapType == T3DRegion::TYPE_CONTROL || eMapType == T3DRegion::TYPE_COLOR ) {
+		if ( eMapType == TYPE_CONTROL || eMapType == TYPE_COLOR ) {
 			pRegion->compactMapIfDefault( eMapType );
 		}
 		const Rect2i dirtyRect = getRegionDirtyRect(
@@ -381,7 +381,7 @@ T3DMapMutation T3DMapEditService::commitMapEdits(
 		return {};
 	}
 
-	if ( eMapType == T3DRegion::TYPE_HEIGHT ) {
+	if ( eMapType == TYPE_HEIGHT ) {
 		m_derivedLocationScratch.reserve( MIN<size_t>(
 			m_activeLocationScratch.size() * 3u,
 			( size_t ) ( m_pRepository->getRegionMapSize() ) * ( size_t ) ( m_pRepository->getRegionMapSize() )
@@ -462,7 +462,7 @@ T3DMapMutation T3DMapEditService::commitMapEdits(
 	}
 
 	Vector2 editedHeightRange = V2_ZERO;
-	if ( eMapType == T3DRegion::TYPE_HEIGHT ) {
+	if ( eMapType == TYPE_HEIGHT ) {
 		calculateHeightRange( false );
 		if ( std::isfinite( editedMinHeight ) && std::isfinite( editedMaxHeight ) ) {
 			editedHeightRange = Vector2( editedMinHeight, editedMaxHeight );
@@ -603,7 +603,7 @@ void T3DMapEditService::copyRegionMaps(
 	if ( !pSourceRegion || !pDestinationRegion ) {
 		return;
 	}
-	for ( int mapIndex = 0; mapIndex < T3DRegion::TYPE_MAX; ++mapIndex ) {
+	for ( int mapIndex = 0; mapIndex < REGION_TYPE_MAX; ++mapIndex ) {
 		const t3dMapType_t mapType = ( t3dMapType_t ) ( mapIndex );
 		Image *const pSourceImage = pSourceRegion->getMapPtr( mapType );
 		Image *pDestinationImage = pDestinationRegion->getMapPtr( mapType );
@@ -612,7 +612,7 @@ void T3DMapEditService::copyRegionMaps(
 			if ( pDestinationImage ) {
 				pDestinationImage->blit_rect( pSourceImage, rSourceRect, rDestinationRect.position );
 			}
-		} else if ( pDestinationImage && mapType != T3DRegion::TYPE_HEIGHT ) {
+		} else if ( pDestinationImage && mapType != TYPE_HEIGHT ) {
 			pDestinationImage->fill_rect( rDestinationRect, TERRAIN3D_REGION_MAP_DEFAULT_COLORS[mapIndex] );
 		}
 	}
@@ -624,12 +624,12 @@ Error T3DMapEditService::importImages(
 	void *const pAcquireContext, bool &rGenerateMipmaps
 ) {
 	rGenerateMipmaps = false;
-	if ( !m_pRepository || !pAcquireRegion || rImages.size() != T3DRegion::TYPE_MAX ) {
+	if ( !m_pRepository || !pAcquireRegion || rImages.size() != REGION_TYPE_MAX ) {
 		return ERR_INVALID_PARAMETER;
 	}
 
 	Vector2i imageSize = V2I_ZERO;
-	for ( int mapIndex = 0; mapIndex < T3DRegion::TYPE_MAX; ++mapIndex ) {
+	for ( int mapIndex = 0; mapIndex < REGION_TYPE_MAX; ++mapIndex ) {
 		const Ref<Image> pImage = rImages[mapIndex];
 		if ( pImage.is_null() || pImage->is_empty() ) {
 			continue;
@@ -652,8 +652,8 @@ Error T3DMapEditService::importImages(
 	}
 
 	TypedArray<Image> sourceImages;
-	sourceImages.resize( T3DRegion::TYPE_MAX );
-	for ( int mapIndex = 0; mapIndex < T3DRegion::TYPE_MAX; ++mapIndex ) {
+	sourceImages.resize( REGION_TYPE_MAX );
+	for ( int mapIndex = 0; mapIndex < REGION_TYPE_MAX; ++mapIndex ) {
 		const Ref<Image> pImage = rImages[mapIndex];
 		if ( pImage.is_null() ) {
 			continue;
@@ -669,7 +669,7 @@ Error T3DMapEditService::importImages(
 		}
 		sourceImages[mapIndex] = pReadable;
 
-		if ( mapIndex != T3DRegion::TYPE_HEIGHT ) {
+		if ( mapIndex != TYPE_HEIGHT ) {
 			continue;
 		}
 		Ref<Image> pAdjusted = Image::create_empty(
@@ -736,7 +736,7 @@ Error T3DMapEditService::importImages(
 			const int destinationX = overlapStartX - regionStartX;
 			const int destinationZ = overlapStartZ - regionStartZ;
 
-			for ( int mapIndex = 0; mapIndex < T3DRegion::TYPE_MAX; ++mapIndex ) {
+			for ( int mapIndex = 0; mapIndex < REGION_TYPE_MAX; ++mapIndex ) {
 				const Ref<Image> pImage = sourceImages[mapIndex];
 				if ( pImage.is_null() || pImage->is_empty() ) {
 					continue;
@@ -745,7 +745,7 @@ Error T3DMapEditService::importImages(
 				Ref<Image> pRegionMap;
 				const t3dMapType_t mapType = ( t3dMapType_t ) ( mapIndex );
 				const Ref<Image> pExistingMap = pRegion->getMap( mapType );
-				if ( mapType == T3DRegion::TYPE_HEIGHT ) {
+				if ( mapType == TYPE_HEIGHT ) {
 					pRegionMap = Image::create_empty(
 						m_pRepository->getRegionSize(), m_pRepository->getRegionSize(), false, Image::FORMAT_RF
 					);
@@ -779,7 +779,7 @@ Error T3DMapEditService::importImages(
 					Vector2i( destinationX, destinationZ )
 				);
 				pRegion->setMap( mapType, pRegionMap );
-				if ( mapType == T3DRegion::TYPE_COLOR ) {
+				if ( mapType == TYPE_COLOR ) {
 					rGenerateMipmaps = true;
 				}
 			}
@@ -797,9 +797,9 @@ Ref<Image> T3DMapEditService::layeredToImage(
 	if ( !m_pRepository || m_pRepository->getRegionSize() <= 0 ) {
 		return Ref<Image>();
 	}
-	const t3dMapType_t mapType = eMapType >= T3DRegion::TYPE_HEIGHT && eMapType < T3DRegion::TYPE_MAX
+	const t3dMapType_t mapType = eMapType >= TYPE_HEIGHT && eMapType < REGION_TYPE_MAX
 		? eMapType
-		: T3DRegion::TYPE_HEIGHT;
+		: TYPE_HEIGHT;
 
 	bool bFoundRegion = false;
 	Vector2i topLeft = V2I_ZERO;
@@ -825,7 +825,7 @@ Ref<Image> T3DMapEditService::layeredToImage(
 	if ( !bFoundRegion ) {
 		return T3DUtil::getFilledImage(
 			m_pRepository->getRegionSizeVector(), TERRAIN3D_REGION_MAP_DEFAULT_COLORS[mapType], false,
-			mapType == T3DRegion::TYPE_HEIGHT ? Image::FORMAT_RF : TERRAIN3D_REGION_MAP_FORMATS[mapType]
+			mapType == TYPE_HEIGHT ? Image::FORMAT_RF : TERRAIN3D_REGION_MAP_FORMATS[mapType]
 		);
 	}
 
@@ -833,7 +833,7 @@ Ref<Image> T3DMapEditService::layeredToImage(
 		m_pRepository->getRegionSize();
 	Ref<Image> pImage = T3DUtil::getFilledImage(
 		imageSize, TERRAIN3D_REGION_MAP_DEFAULT_COLORS[mapType], false,
-		mapType == T3DRegion::TYPE_HEIGHT ? Image::FORMAT_RF : TERRAIN3D_REGION_MAP_FORMATS[mapType]
+		mapType == TYPE_HEIGHT ? Image::FORMAT_RF : TERRAIN3D_REGION_MAP_FORMATS[mapType]
 	);
 
 	for ( int slot = 0; slot < m_pRepository->getSlotCount(); ++slot ) {
@@ -855,7 +855,7 @@ Ref<Image> T3DMapEditService::layeredToImage(
 
 		const Vector2i imageLocation = ( location - topLeft ) * m_pRepository->getRegionSize();
 		const Ref<Image> pSource = pRegion->getMap( mapType );
-		if ( mapType == T3DRegion::TYPE_HEIGHT && pSource.is_valid() ) {
+		if ( mapType == TYPE_HEIGHT && pSource.is_valid() ) {
 			for ( int y = 0; y < m_pRepository->getRegionSize(); ++y ) {
 				for ( int x = 0; x < m_pRepository->getRegionSize(); ++x ) {
 					pImage->set_pixel( imageLocation.x + x, imageLocation.y + y,
