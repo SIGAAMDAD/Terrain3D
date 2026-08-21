@@ -17,10 +17,10 @@ class T3DErosionSettings : public Resource {
 	CLASS_NAME();
 
 public:
-	typedef enum t3dboundaryMode_e {
+	typedef enum t3dBoundaryMode_e {
 		BOUNDARY_CLOSED,
 		BOUNDARY_OPEN,
-	} t3dboundaryMode_t;
+	} t3dBoundaryMode_t;
 
 private:
 	// General.
@@ -34,7 +34,7 @@ private:
 	bool m_bLivePreviewStartPaused = false;
 	int32_t m_nThreadCount = 0;
 	int64_t m_seed = 1;
-	t3dboundaryMode_t m_boundaryMode = BOUNDARY_CLOSED;
+	t3dBoundaryMode_t m_boundaryMode = BOUNDARY_CLOSED;
 	float m_fMaxHeightChangePerStep = 0.5f;
 	bool m_bPreserveHoles = true;
 	bool m_bApplyHeight = true;
@@ -236,8 +236,8 @@ public:
 	EA_FORCE_INLINE int32_t getThreadCount( void ) const { return m_nThreadCount; }
 	void setSeed( int64_t nValue );
 	EA_FORCE_INLINE int64_t getSeed( void ) const { return m_seed; }
-	void setBoundaryMode( t3dboundaryMode_t eValue );
-	EA_FORCE_INLINE t3dboundaryMode_t getBoundaryMode( void ) const { return m_boundaryMode; }
+	void setBoundaryMode( t3dBoundaryMode_t eValue );
+	EA_FORCE_INLINE t3dBoundaryMode_t getBoundaryMode( void ) const { return m_boundaryMode; }
 	void setMaxHeightChangePerStep( float fValue );
 	EA_FORCE_INLINE float getMaxHeightChangePerStep( void ) const { return m_fMaxHeightChangePerStep; }
 	void setPreserveHoles( bool bValue );
@@ -554,5 +554,5 @@ protected:
 	static void _bind_methods( void );
 };
 
-VARIANT_ENUM_CAST( T3DErosionSettings::t3dboundaryMode_t );
+VARIANT_ENUM_CAST( T3DErosionSettings::t3dBoundaryMode_t );
 #endif // TERRAIN3D_EROSION_SETTINGS_CLASS_H

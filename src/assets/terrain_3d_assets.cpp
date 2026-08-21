@@ -232,7 +232,7 @@ void T3DAssets::resetRuntimeMaterialCacheState( const bool bClearGeneratedArrays
 		m_runtimeMaterialPhysicalToLogical[( size_t ) ( index )] = -1;
 		m_runtimeMaterialLastUseTick[( size_t ) ( index )] = 0u;
 		m_runtimeMaterialRetireAfterTick[( size_t ) ( index )] = 0u;
-		m_runtimeMaterialCookedLayers[( size_t ) ( index )] = t3druntimeMaterialLayerInfo_t{};
+		m_runtimeMaterialCookedLayers[( size_t ) ( index )] = t3dRuntimeMaterialLayerInfo_t{};
 	}
 	if ( bClearGeneratedArrays ) {
 		m_generatedAlbedoTextures.clear();
@@ -304,10 +304,10 @@ bool T3DAssets::loadRuntimeMaterialCookedIndex( void ) {
 		return false;
 	}
 	const uint64_t file_length = pFile->get_length();
-	eastl::array<t3druntimeMaterialLayerInfo_t, TERRAIN3D_MAX_TEXTURE_ASSETS> loaded_layers{};
+	eastl::array<t3dRuntimeMaterialLayerInfo_t, TERRAIN3D_MAX_TEXTURE_ASSETS> loaded_layers{};
 	for ( int logical = 0; logical < TERRAIN3D_MAX_TEXTURE_ASSETS; ++logical ) {
 		for ( int channel = 0; channel < RUNTIME_MATERIAL_CHANNEL_COUNT; ++channel ) {
-			t3druntimeMaterialImageInfo_t &info = loaded_layers[( size_t ) ( logical )].channels[( size_t ) ( channel )];
+			t3dRuntimeMaterialImageInfo_t &info = loaded_layers[( size_t ) ( logical )].channels[( size_t ) ( channel )];
 			info.nOffset = pFile->get_64();
 			info.nSize = pFile->get_32();
 			info.nChecksum = pFile->get_32();
@@ -323,7 +323,7 @@ bool T3DAssets::loadRuntimeMaterialCookedIndex( void ) {
 				return false;
 			}
 		}
-		t3druntimeMaterialLayerInfo_t &layer = loaded_layers[( size_t ) ( logical )];
+		t3dRuntimeMaterialLayerInfo_t &layer = loaded_layers[( size_t ) ( logical )];
 		layer.averageAlbedo = Color( pFile->get_float(), pFile->get_float(), pFile->get_float(), pFile->get_float() );
 		layer.albedoColor = Color( pFile->get_float(), pFile->get_float(), pFile->get_float(), pFile->get_float() );
 		layer.normalDepth = pFile->get_float(); layer.aoStrength = pFile->get_float();
@@ -335,7 +335,7 @@ bool T3DAssets::loadRuntimeMaterialCookedIndex( void ) {
 		if ( logical < ( int ) texture_count && layer.nBundleIndex != ( uint32_t ) logical ) return false;
 	}
 	for ( uint32_t logical = 0u; logical < texture_count; ++logical ) {
-		const t3druntimeMaterialLayerInfo_t &layer = loaded_layers[( size_t ) ( logical )];
+		const t3dRuntimeMaterialLayerInfo_t &layer = loaded_layers[( size_t ) ( logical )];
 		if ( layer.channels[RUNTIME_MATERIAL_CHANNEL_ALBEDO].nSize == 0u ||
 			layer.channels[RUNTIME_MATERIAL_CHANNEL_FAR_ALBEDO].nSize == 0u ||
 			( m_texturePackingMode == TEXTURE_PACKING_LEGACY &&
@@ -364,7 +364,7 @@ void T3DAssets::publishRuntimeMaterialCookedSettings( void ) {
 	}
 	m_textureSettings.nCount = MIN( m_textureList.size(), TERRAIN3D_MAX_TEXTURE_ASSETS );
 	for ( int logical = 0; logical < m_textureSettings.nCount; ++logical ) {
-		const t3druntimeMaterialLayerInfo_t &layer = m_runtimeMaterialCookedLayers[( size_t ) logical];
+		const t3dRuntimeMaterialLayerInfo_t &layer = m_runtimeMaterialCookedLayers[( size_t ) logical];
 		m_textureSettings.colors[( size_t ) logical] = layer.albedoColor;
 		m_textureSettings.normal_depths[( size_t ) logical] = layer.normalDepth;
 		m_textureSettings.ao_strengths[( size_t ) logical] = layer.aoStrength;
@@ -404,7 +404,7 @@ Ref<Image> T3DAssets::loadRuntimeMaterialCookedImage( const int nLogicalId, cons
 		nChannel < 0 || nChannel >= RUNTIME_MATERIAL_CHANNEL_COUNT ) {
 		return Ref<Image>();
 	}
-	const t3druntimeMaterialImageInfo_t &info =
+	const t3dRuntimeMaterialImageInfo_t &info =
 		m_runtimeMaterialCookedLayers[( size_t ) ( nLogicalId )].channels[( size_t ) ( nChannel )];
 	if ( info.nSize == 0u ) {
 		return Ref<Image>();
@@ -833,14 +833,14 @@ Dictionary T3DAssets::cookRuntimeMaterialCache( void ) {
 		for ( int setting = 0; setting < 10; ++setting ) pFile->store_float( 0.0f );
 		pFile->store_32( ( uint32_t ) logical );
 	}
-	eastl::array<t3druntimeMaterialLayerInfo_t, TERRAIN3D_MAX_TEXTURE_ASSETS> descriptors{};
+	eastl::array<t3dRuntimeMaterialLayerInfo_t, TERRAIN3D_MAX_TEXTURE_ASSETS> descriptors{};
 	const RID channel_rids[RUNTIME_MATERIAL_CHANNEL_COUNT] = {
 		m_generatedAlbedoTextures.getRid(), m_generatedNormalTextures.getRid(),
 		m_generatedSurfaceTextures.getRid(), m_generatedDisplacementTextures.getRid(), RID()
 	};
 	bool ok = true;
 	for ( int logical = 0; logical < m_textureList.size() && ok; ++logical ) {
-		t3druntimeMaterialLayerInfo_t &layer = descriptors[( size_t ) logical];
+		t3dRuntimeMaterialLayerInfo_t &layer = descriptors[( size_t ) logical];
 		const Ref<T3DTextureAsset> pAsset = m_textureList[logical];
 		if ( pAsset.is_valid() ) {
 			layer.albedoColor = pAsset->getAlbedoColor(); layer.normalDepth = pAsset->getNormalDepth();
@@ -880,7 +880,7 @@ Dictionary T3DAssets::cookRuntimeMaterialCache( void ) {
 				descriptors[( size_t ) ( logical )].averageAlbedo = terrain3dMaterialAverageAlbedo( pImage );
 			}
 			const PackedByteArray bytes = pImage->get_data();
-			t3druntimeMaterialImageInfo_t &info = descriptors[( size_t ) ( logical )].channels[( size_t ) ( channel )];
+			t3dRuntimeMaterialImageInfo_t &info = descriptors[( size_t ) ( logical )].channels[( size_t ) ( channel )];
 			info.nOffset = pFile->get_position();
 			info.nSize = ( uint32_t ) ( bytes.size() );
 			info.nChecksum = terrain3dMaterialChecksum( bytes.ptr(), ( size_t ) ( bytes.size() ) );
@@ -895,7 +895,7 @@ Dictionary T3DAssets::cookRuntimeMaterialCache( void ) {
 		pFile->seek( descriptor_offset );
 		for ( int logical = 0; logical < TERRAIN3D_MAX_TEXTURE_ASSETS; ++logical ) {
 			for ( int channel = 0; channel < RUNTIME_MATERIAL_CHANNEL_COUNT; ++channel ) {
-				const t3druntimeMaterialImageInfo_t &info = descriptors[( size_t ) ( logical )].channels[( size_t ) ( channel )];
+				const t3dRuntimeMaterialImageInfo_t &info = descriptors[( size_t ) ( logical )].channels[( size_t ) ( channel )];
 				pFile->store_64( info.nOffset );
 				pFile->store_32( info.nSize );
 				pFile->store_32( info.nChecksum );
@@ -904,7 +904,7 @@ Dictionary T3DAssets::cookRuntimeMaterialCache( void ) {
 				pFile->store_32( ( uint32_t ) ( info.nFormat ) );
 				pFile->store_32( info.bMipmaps );
 			}
-			const t3druntimeMaterialLayerInfo_t &layer = descriptors[( size_t ) logical];
+			const t3dRuntimeMaterialLayerInfo_t &layer = descriptors[( size_t ) logical];
 			const Color average = layer.averageAlbedo;
 			pFile->store_float( average.r ); pFile->store_float( average.g ); pFile->store_float( average.b ); pFile->store_float( average.a );
 			pFile->store_float( layer.albedoColor.r ); pFile->store_float( layer.albedoColor.g );
@@ -948,7 +948,7 @@ Dictionary T3DAssets::cookRuntimeMaterialCache( void ) {
 	if ( published_valid ) {
 		for ( int logical = 0; logical < m_textureList.size() && published_valid; ++logical ) {
 			for ( int channel = 0; channel < RUNTIME_MATERIAL_CHANNEL_COUNT; ++channel ) {
-				const t3druntimeMaterialImageInfo_t &info =
+				const t3dRuntimeMaterialImageInfo_t &info =
 					m_runtimeMaterialCookedLayers[( size_t ) ( logical )].channels[( size_t ) ( channel )];
 				if ( info.nSize > 0u && loadRuntimeMaterialCookedImage( logical, channel ).is_null() ) {
 					published_valid = false;
@@ -1000,7 +1000,7 @@ Dictionary T3DAssets::cookRuntimeMaterialCache( void ) {
 	return result;
 }
 
-void T3DAssets::connectAssetSignals( const t3dassetType_t type, const Ref<T3DAssetResource> &rAsset ) {
+void T3DAssets::connectAssetSignals( const t3dAssetType_t type, const Ref<T3DAssetResource> &rAsset ) {
 	if ( rAsset.is_null() ) {
 		return;
 	}
@@ -1041,7 +1041,7 @@ void T3DAssets::connectAssetSignals( const t3dassetType_t type, const Ref<T3DAss
 	}
 }
 
-void T3DAssets::disconnectAssetSignals( const t3dassetType_t type, const Ref<T3DAssetResource> &rAsset ) {
+void T3DAssets::disconnectAssetSignals( const t3dAssetType_t type, const Ref<T3DAssetResource> &rAsset ) {
 	if ( rAsset.is_null() ) {
 		return;
 	}
@@ -1082,7 +1082,7 @@ void T3DAssets::disconnectAssetSignals( const t3dassetType_t type, const Ref<T3D
 	}
 }
 
-Ref<T3DAssetResource> T3DAssets::makePlaceholderAsset( const t3dassetType_t type, const int nId ) const {
+Ref<T3DAssetResource> T3DAssets::makePlaceholderAsset( const t3dAssetType_t type, const int nId ) const {
 	Ref<T3DAssetResource> pAsset;
 	if ( type == TYPE_TEXTURE ) {
 		Ref<T3DTextureAsset> pTexture;
@@ -1100,7 +1100,7 @@ Ref<T3DAssetResource> T3DAssets::makePlaceholderAsset( const t3dassetType_t type
 	return pAsset;
 }
 
-void T3DAssets::swapIds( const t3dassetType_t type, const int nSrcId, const int nDstId ) {
+void T3DAssets::swapIds( const t3dAssetType_t type, const int nSrcId, const int nDstId ) {
 	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Swapping asset ID: ", nSrcId, " and ID: ", nDstId );
 	Array list;
@@ -1159,7 +1159,7 @@ void T3DAssets::swapIds( const t3dassetType_t type, const int nSrcId, const int 
  * _set_asset_list attempts to keep the asset ID as saved in the resource file.
  * But if an ID is invalid or already taken, the new ID is changed to the next available one
  */
-void T3DAssets::setAssetList( const t3dassetType_t type, const TypedArray<T3DAssetResource> &rList ) {
+void T3DAssets::setAssetList( const t3dAssetType_t type, const TypedArray<T3DAssetResource> &rList ) {
 	m_bPersistenceDirty = true;
 	const int max_size = type == TYPE_TEXTURE ? TERRAIN3D_MAX_TEXTURE_ASSETS : type == TYPE_MESH ? TERRAIN3D_MAX_MESH_ASSETS : 0;
 	if ( max_size == 0 ) {
@@ -1235,9 +1235,9 @@ void T3DAssets::setAssetList( const t3dassetType_t type, const TypedArray<T3DAss
 	}
 }
 
-void T3DAssets::setAsset( const t3dassetType_t type, const int nId, const Ref<T3DAssetResource> &rAsset ) {
+void T3DAssets::setAsset( const t3dAssetType_t type, const int nId, const Ref<T3DAssetResource> &rAsset ) {
 	m_bPersistenceDirty = true;
-	LOG( T3DTerrain::INFO, "t3dsetting_t asset type: ", type, ", ID: ", nId, ", asset: ", rAsset );
+	LOG( T3DTerrain::INFO, "t3dSetting_t asset type: ", type, ", ID: ", nId, ", asset: ", rAsset );
 	const int max_size = type == TYPE_TEXTURE ? TERRAIN3D_MAX_TEXTURE_ASSETS : type == TYPE_MESH ? TERRAIN3D_MAX_MESH_ASSETS : 0;
 	if ( max_size == 0 || nId < 0 || nId >= max_size ) {
 		LOG( T3DTerrain::ERROR, "Invalid asset id: ", nId, " range is 0-", max_size - 1 );
@@ -1292,7 +1292,7 @@ void T3DAssets::setAsset( const t3dassetType_t type, const int nId, const Ref<T3
 
 void T3DAssets::validateArrayMember(
 	const Ref<Texture2D> &rTexture,
-	const Ref<T3DTextureAsset> &rAsset, const String &rLabel, t3dtextureArrayLayout_t &rLayout,
+	const Ref<T3DTextureAsset> &rAsset, const String &rLabel, t3dTextureArrayLayout_t &rLayout,
 	const Image::Format eRequiredFormat,
 	const bool bAllowCompressedSurface
 ) {
@@ -1360,9 +1360,9 @@ void T3DAssets::updateTextureFiles( void ) {
 
 	const bool bPackedPbr = usesPackedPbr();
 	const bool bUseDisplacement = bPackedPbr && m_pTerrain->getTessellationLevel() > 0;
-	t3dtextureArrayLayout_t albedoLayout;
-	t3dtextureArrayLayout_t secondaryLayout;
-	t3dtextureArrayLayout_t displacementLayout;
+	t3dTextureArrayLayout_t albedoLayout;
+	t3dTextureArrayLayout_t secondaryLayout;
+	t3dTextureArrayLayout_t displacementLayout;
 	m_pTerrain->setWarning( WARN_ALL, false );
 
 	for ( const Ref<T3DTextureAsset> pAsset : m_textureList ) {
@@ -1685,7 +1685,7 @@ void T3DAssets::setupThumbnailCreation( void ) {
 	if ( m_scenario.is_valid() ) {
 		return;
 	}
-	LOG( T3DTerrain::INFO, "t3dsetting_t up mesh thumbnail creation viewports" );
+	LOG( T3DTerrain::INFO, "t3dSetting_t up mesh thumbnail creation viewports" );
 	// Setup Mesh preview environment
 	m_scenario = RS->scenario_create();
 
@@ -1742,9 +1742,9 @@ void T3DAssets::destroyThumbnailCreation( void ) {
 	m_scenario = RID();
 }
 
-void T3DAssets::setTexturePackingMode( const t3dtexturePackingMode_t eMode ) {
-	const t3dtexturePackingMode_t mode =
-		( t3dtexturePackingMode_t ) ( CLAMP( ( int ) ( eMode ), ( int ) ( TEXTURE_PACKING_LEGACY ), ( int ) ( TEXTURE_PACKING_PACKED_PBR_R8 ) ) );
+void T3DAssets::setTexturePackingMode( const t3dTexturePackingMode_t eMode ) {
+	const t3dTexturePackingMode_t mode =
+		( t3dTexturePackingMode_t ) ( CLAMP( ( int ) ( eMode ), ( int ) ( TEXTURE_PACKING_LEGACY ), ( int ) ( TEXTURE_PACKING_PACKED_PBR_R8 ) ) );
 	if ( m_texturePackingMode == mode ) {
 		return;
 	}
@@ -1759,7 +1759,7 @@ void T3DAssets::setTexturePackingMode( const t3dtexturePackingMode_t eMode ) {
 	m_generatedNormalTextures.clear();
 	m_generatedSurfaceTextures.clear();
 	m_generatedDisplacementTextures.clear();
-	LOG( T3DTerrain::INFO, "t3dsetting_t texture packing mode: ", ( int ) ( m_texturePackingMode ) );
+	LOG( T3DTerrain::INFO, "t3dSetting_t texture packing mode: ", ( int ) ( m_texturePackingMode ) );
 	if ( m_pTerrain ) {
 		updateTextureList();
 		Ref<T3DMaterial> pMaterial = m_pTerrain->getMaterial();
@@ -1857,7 +1857,7 @@ void T3DAssets::setTextureAsset( const int nId, const Ref<T3DTextureAsset> &rTex
 	if ( nId < m_textureList.size() && m_textureList[nId] == rTexture ) {
 		return;
 	}
-	LOG( T3DTerrain::INFO, "t3dsetting_t texture id: ", nId );
+	LOG( T3DTerrain::INFO, "t3dSetting_t texture id: ", nId );
 	setAsset( TYPE_TEXTURE, nId, rTexture );
 	updateTextureList();
 }
@@ -1876,7 +1876,7 @@ TypedArray<T3DTextureAsset> T3DAssets::getTextureList( void ) const {
 }
 
 void T3DAssets::setTextureList( const TypedArray<T3DTextureAsset> &rTextureList ) {
-	LOG( T3DTerrain::INFO, "t3dsetting_t texture list with ", rTextureList.size(), " entries" );
+	LOG( T3DTerrain::INFO, "t3dSetting_t texture list with ", rTextureList.size(), " entries" );
 	if ( !differs( getTextureList(), rTextureList ) ) {
 		return;
 	}
@@ -1920,7 +1920,7 @@ void T3DAssets::setMeshAsset( const int nId, const Ref<T3DMeshAsset> &rMeshAsset
 	if ( nId < m_meshList.size() && m_meshList[nId] == rMeshAsset ) {
 		return;
 	}
-	LOG( T3DTerrain::INFO, "t3dsetting_t mesh id: ", nId, ", ", rMeshAsset );
+	LOG( T3DTerrain::INFO, "t3dSetting_t mesh id: ", nId, ", ", rMeshAsset );
 	if ( rMeshAsset.is_null() ) {
 		IS_INSTANCER_INIT( VOID );
 		m_pTerrain->getInstancer()->clearByMesh( nId );
@@ -1946,7 +1946,7 @@ TypedArray<T3DMeshAsset> T3DAssets::getMeshList( void ) const {
 }
 
 void T3DAssets::setMeshList( const TypedArray<T3DMeshAsset> &rMeshList ) {
-	LOG( T3DTerrain::INFO, "t3dsetting_t mesh list with ", rMeshList.size(), " entries" );
+	LOG( T3DTerrain::INFO, "t3dSetting_t mesh list with ", rMeshList.size(), " entries" );
 	if ( !differs( getMeshList(), rMeshList ) ) {
 		return;
 	}
@@ -2085,7 +2085,7 @@ Error T3DAssets::save( const String &rPath ) {
 		return ERR_FILE_NOT_FOUND;
 	}
 	if ( !rPath.is_empty() ) {
-		LOG( T3DTerrain::DEBUG, "t3dsetting_t file path to ", rPath );
+		LOG( T3DTerrain::DEBUG, "t3dSetting_t file path to ", rPath );
 		take_over_path( rPath );
 	}
 	// Avoid rewriting clean asset resources during scene pre-save. The nested

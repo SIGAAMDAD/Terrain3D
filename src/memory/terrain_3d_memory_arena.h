@@ -13,7 +13,7 @@
 #include <limits>
 
 
-typedef struct t3dmemoryArenaSlice_s {
+typedef struct t3dMemoryArenaSlice_s {
 	size_t offset = 0u;
 	size_t size = 0u;
 	size_t alignment = 1u;
@@ -21,14 +21,14 @@ typedef struct t3dmemoryArenaSlice_s {
 	bool reserved = false;
 
 	EA_FORCE_INLINE bool valid( void ) const { return reserved; }
-} t3dmemoryArenaSlice_t;
+} t3dMemoryArenaSlice_t;
 
-typedef struct t3dmemoryArenaSpan_s {
+typedef struct t3dMemoryArenaSpan_s {
 	uint8_t *data = nullptr;
 	size_t size = 0u;
 
 	EA_FORCE_INLINE bool valid( void ) const { return data != nullptr || size == 0u; }
-} t3dmemoryArenaSpan_t;
+} t3dMemoryArenaSpan_t;
 
 class T3DMemoryArenaLayout {
 public:
@@ -36,7 +36,7 @@ public:
 	explicit T3DMemoryArenaLayout( size_t nCapacityBytes );
 
 	bool configure( size_t nCapacityBytes );
-	bool reserveLow( size_t nBytes, size_t nAlignment, t3dmemoryArenaSlice_t &rSlice );
+	bool reserveLow( size_t nBytes, size_t nAlignment, t3dMemoryArenaSlice_t &rSlice );
 	bool seal( void );
 
 	EA_FORCE_INLINE size_t capacity( void ) const { return m_nCapacity; }
@@ -58,7 +58,7 @@ private:
 	static bool isPowerOfTwo( size_t nValue );
 	static bool alignUp( size_t nValue, size_t nAlignment, size_t &rAligned );
 	static size_t alignDown( size_t nValue, size_t nAlignment );
-	bool reserve( bool bHigh, size_t nBytes, size_t nAlignment, t3dmemoryArenaSlice_t &rSlice );
+	bool reserve( bool bHigh, size_t nBytes, size_t nAlignment, t3dMemoryArenaSlice_t &rSlice );
 };
 
 class T3DMemoryArena {
@@ -73,8 +73,8 @@ public:
 	bool seal( void );
 	void release( void );
 
-	t3dmemoryArenaSpan_t resolve( const t3dmemoryArenaSlice_t &rSlice );
-	t3dmemoryArenaSpan_t resolve( const t3dmemoryArenaSlice_t &rSlice ) const;
+	t3dMemoryArenaSpan_t resolve( const t3dMemoryArenaSlice_t &rSlice );
+	t3dMemoryArenaSpan_t resolve( const t3dMemoryArenaSlice_t &rSlice ) const;
 
 	EA_FORCE_INLINE size_t capacity( void ) const { return m_nCapacity; }
 	EA_FORCE_INLINE size_t baseAlignment( void ) const { return m_nBaseAlignment; }
@@ -91,7 +91,7 @@ private:
 	bool m_bCommitted = false;
 	bool m_bSealed = false;
 
-	bool sliceInBounds( const t3dmemoryArenaSlice_t &rSlice ) const;
+	bool sliceInBounds( const t3dMemoryArenaSlice_t &rSlice ) const;
 };
 
 #endif // TERRAIN3D_MEMORY_ARENA_H

@@ -20,7 +20,7 @@ namespace {
 
 T3DResidentMapLease::T3DResidentMapLease(
 	T3DResidentRegionPool *const pPool, const int iSlot,
-	const uint32_t nGeneration, const t3dresidentMapView_t &rView
+	const uint32_t nGeneration, const t3dResidentMapView_t &rView
 )
 	: m_pPool( pPool ), m_iSlot( ( int16_t ) ( iSlot ) ), m_nGeneration( nGeneration ), m_view( rView ) {
 }
@@ -76,7 +76,7 @@ bool T3DResidentRegionPool::alignUp( const size_t nValue, const size_t nAlignmen
 
 bool T3DResidentRegionPool::buildSlotLayout(
 	const int nRegionSize, const uint32_t nChannels,
-	t3dslotLayout_t &rLayout, size_t &nTexelCount
+	t3dSlotLayout_t &rLayout, size_t &nTexelCount
 ) {
 	rLayout = {};
 	nTexelCount = 0u;
@@ -140,7 +140,7 @@ bool T3DResidentRegionPool::addEstimatedOptionalBytes(
 }
 
 size_t T3DResidentRegionPool::estimateSlotBytes( const int nRegionSize, const uint32_t nChannels ) {
-	t3dslotLayout_t layout;
+	t3dSlotLayout_t layout;
 	size_t texel_count = 0u;
 	if ( !buildSlotLayout( nRegionSize, nChannels, layout, texel_count ) ) {
 		return 0u;
@@ -148,7 +148,7 @@ size_t T3DResidentRegionPool::estimateSlotBytes( const int nRegionSize, const ui
 	return layout.stride;
 }
 
-bool T3DResidentRegionPool::t3dalignedAllocation_t::allocate( const size_t nRequestedBytes, const size_t nAlignment ) {
+bool T3DResidentRegionPool::t3dAlignedAllocation_t::allocate( const size_t nRequestedBytes, const size_t nAlignment ) {
 	release();
 	if ( nRequestedBytes == 0u || nAlignment == 0u || ( nAlignment & ( nAlignment - 1u ) ) != 0u ||
 		nRequestedBytes > std::numeric_limits<size_t>::max() - ( nAlignment - 1u ) ) {
@@ -167,7 +167,7 @@ bool T3DResidentRegionPool::t3dalignedAllocation_t::allocate( const size_t nRequ
 	return true;
 }
 
-void T3DResidentRegionPool::t3dalignedAllocation_t::release( void ) {
+void T3DResidentRegionPool::t3dAlignedAllocation_t::release( void ) {
 	if ( bOwned ) terrain3d_memory::release( pRaw );
 	pRaw = nullptr;
 	pAligned = nullptr;
@@ -202,16 +202,16 @@ bool T3DResidentRegionPool::hasPinnedSlotsUnlocked( void ) const {
 
 bool T3DResidentRegionPool::allocateSlotsUnlocked( const int nCapacity ) {
 	releaseSlotsUnlocked();
-	if ( nCapacity <= 0 || ( size_t ) ( nCapacity ) > std::numeric_limits<size_t>::max() / sizeof( t3dslot_t ) ) {
+	if ( nCapacity <= 0 || ( size_t ) ( nCapacity ) > std::numeric_limits<size_t>::max() / sizeof( t3dSlot_t ) ) {
 		return false;
 	}
-	m_pSlots = ( t3dslot_t * ) ( terrain3d_memory::allocate( ( size_t ) ( nCapacity ) * sizeof( t3dslot_t ) ) );
+	m_pSlots = ( t3dSlot_t * ) ( terrain3d_memory::allocate( ( size_t ) ( nCapacity ) * sizeof( t3dSlot_t ) ) );
 	if ( !m_pSlots ) {
 		return false;
 	}
 	m_bSlotsOwned = true;
 	for ( int i = 0; i < nCapacity; ++i ) {
-		new ( &m_pSlots[( size_t ) ( i )] ) t3dslot_t;
+		new ( &m_pSlots[( size_t ) ( i )] ) t3dSlot_t;
 	}
 	return true;
 }
@@ -242,7 +242,7 @@ bool T3DResidentRegionPool::assignMapBankPointersUnlocked( void ) {
 		return false;
 	}
 	for ( int i = 0; i < m_nCapacity; ++i ) {
-		t3dslot_t &slot = m_pSlots[( size_t ) ( i )];
+		t3dSlot_t &slot = m_pSlots[( size_t ) ( i )];
 		slot.pHeight = ( uint16_t * ) ( pHeightBank + ( size_t ) ( i ) * m_iSlotLayout.nHeightSlotBytes );
 		slot.pControl = pControlBank ?
 			( uint32_t * ) ( pControlBank + ( size_t ) ( i ) * m_iSlotLayout.nControlSlotBytes ) : nullptr;
@@ -259,8 +259,8 @@ void T3DResidentRegionPool::releaseSlotsUnlocked( void ) {
 		return;
 	}
 	for ( int i = 0; i < m_nCapacity; ++i ) {
-		t3dslot_t &slot = m_pSlots[( size_t ) ( i )];
-		slot.~t3dslot_s();
+		t3dSlot_t &slot = m_pSlots[( size_t ) ( i )];
+		slot.~t3dSlot_s();
 	}
 	if ( m_bSlotsOwned ) terrain3d_memory::release( m_pSlots );
 	m_pSlots = nullptr;
@@ -301,7 +301,7 @@ bool T3DResidentRegionPool::configure( const int nRegionSize, const int nCapacit
 	}
 
 	clearUnlocked();
-	t3dslotLayout_t layout;
+	t3dSlotLayout_t layout;
 	size_t texel_count = 0u;
 	if ( !buildSlotLayout( nRegionSize, nChannels, layout, texel_count ) ||
 		( size_t ) ( nCapacity ) > std::numeric_limits<size_t>::max() / layout.stride ) {
@@ -317,7 +317,7 @@ bool T3DResidentRegionPool::configure( const int nRegionSize, const int nCapacit
 	m_channels = nChannels;
 	m_nTexelCount = texel_count;
 	m_nBackingBytes = total_bytes;
-	m_nMetadataBytes = ( size_t ) nCapacity * sizeof( t3dslot_t );
+	m_nMetadataBytes = ( size_t ) nCapacity * sizeof( t3dSlot_t );
 	m_iSlotLayout = layout;
 	if ( !allocateSlotsUnlocked( m_nCapacity ) ) {
 		clearUnlocked();
@@ -342,7 +342,7 @@ bool T3DResidentRegionPool::resetSlotStorage( const int iSlot, const bool bZero 
 	if ( !m_pSlots || iSlot < 0 || iSlot >= m_nCapacity ) {
 		return false;
 	}
-	t3dslot_t &slot = m_pSlots[( size_t ) ( iSlot )];
+	t3dSlot_t &slot = m_pSlots[( size_t ) ( iSlot )];
 	if ( bZero ) {
 		std::memset( slot.pHeight, 0, m_nTexelCount * sizeof( uint16_t ) );
 		if ( slot.pControl ) {
@@ -403,7 +403,7 @@ int T3DResidentRegionPool::chooseReplacementSlotUnlocked( void ) {
 		for ( int i = 0; i < m_nCapacity; ++i ) {
 			const int slot_index = m_iClockHand;
 			m_iClockHand = ( m_iClockHand + 1 ) % m_nCapacity;
-			t3dslot_t &slot = m_pSlots[( size_t ) ( slot_index )];
+			t3dSlot_t &slot = m_pSlots[( size_t ) ( slot_index )];
 			if ( slot.nPinCount.load( std::memory_order_acquire ) != 0u ||
 				slot.nState.load( std::memory_order_acquire ) != TERRAIN3D_RESIDENT_SLOT_PUBLISHED ) {
 				continue;
@@ -431,12 +431,12 @@ int T3DResidentRegionPool::findSlotUnlocked( const Vector2i &rLocation ) const {
 	if ( slot < 0 || slot >= m_nCapacity ) {
 		return -1;
 	}
-	const t3dslot_t &entry = m_pSlots[( size_t ) ( slot )];
+	const t3dSlot_t &entry = m_pSlots[( size_t ) ( slot )];
 	return entry.nState.load( std::memory_order_acquire ) == TERRAIN3D_RESIDENT_SLOT_PUBLISHED && entry.location == rLocation ? slot : -1;
 }
 
 void T3DResidentRegionPool::assignSlot( const int iSlot, const Vector2i &rLocation ) {
-	t3dslot_t &slot = m_pSlots[( size_t ) ( iSlot )];
+	t3dSlot_t &slot = m_pSlots[( size_t ) ( iSlot )];
 	if ( slot.nState.load( std::memory_order_acquire ) != TERRAIN3D_RESIDENT_SLOT_FREE ) {
 		const int old_index = locationIndex( slot.location );
 		if ( old_index >= 0 && m_szLocationToSlot[old_index].load( std::memory_order_acquire ) == iSlot ) {
@@ -453,7 +453,7 @@ void T3DResidentRegionPool::assignSlot( const int iSlot, const Vector2i &rLocati
 }
 
 void T3DResidentRegionPool::publishSlot( const int iSlot ) {
-	t3dslot_t &slot = m_pSlots[( size_t ) ( iSlot )];
+	t3dSlot_t &slot = m_pSlots[( size_t ) ( iSlot )];
 	const int index = locationIndex( slot.location );
 	if ( index < 0 ) return;
 	slot.nState.store( TERRAIN3D_RESIDENT_SLOT_PUBLISHED, std::memory_order_release );
@@ -464,7 +464,7 @@ void T3DResidentRegionPool::retireSlotUnlocked( const int iSlot ) {
 	if ( !m_pSlots || iSlot < 0 || iSlot >= m_nCapacity ) {
 		return;
 	}
-	t3dslot_t &slot = m_pSlots[( size_t ) ( iSlot )];
+	t3dSlot_t &slot = m_pSlots[( size_t ) ( iSlot )];
 	const int old_index = locationIndex( slot.location );
 	slot.nState.store( TERRAIN3D_RESIDENT_SLOT_RETIRING, std::memory_order_release );
 	if ( old_index >= 0 && m_szLocationToSlot[old_index].load( std::memory_order_acquire ) == iSlot ) {
@@ -483,20 +483,20 @@ void T3DResidentRegionPool::releaseLease( const int iSlot, const uint32_t nGener
 	if ( !m_pSlots || iSlot < 0 || iSlot >= m_nCapacity ) {
 		return;
 	}
-	t3dslot_t &slot = m_pSlots[( size_t ) ( iSlot )];
+	t3dSlot_t &slot = m_pSlots[( size_t ) ( iSlot )];
 	if ( slot.nGeneration.load( std::memory_order_acquire ) != nGeneration ) return;
 	uint32_t pins = slot.nPinCount.load( std::memory_order_acquire );
 	while ( pins > 0u && !slot.nPinCount.compare_exchange_weak(
 		pins, pins - 1u, std::memory_order_acq_rel, std::memory_order_acquire ) ) {}
 }
 
-bool T3DResidentRegionPool::copyMap( const int iSlot, const T3DRegion *pRegion, const t3dmapType_t eType ) {
+bool T3DResidentRegionPool::copyMap( const int iSlot, const T3DRegion *pRegion, const t3dMapType_t eType ) {
 	return copyMapRect( iSlot, pRegion, eType, Rect2i( V2I_ZERO, V2I( m_nRegionSize ) ) );
 }
 
 bool T3DResidentRegionPool::copyMapRect(
 	const int iSlot, const T3DRegion *pRegion,
-	const t3dmapType_t eType, const Rect2i &rDirtyRect
+	const t3dMapType_t eType, const Rect2i &rDirtyRect
 ) {
 	if ( !pRegion || iSlot < 0 || iSlot >= m_nCapacity ) {
 		return false;
@@ -506,7 +506,7 @@ bool T3DResidentRegionPool::copyMapRect(
 	if ( rect.size.x <= 0 || rect.size.y <= 0 ) {
 		return true;
 	}
-	t3dslot_t &slot = m_pSlots[( size_t ) ( iSlot )];
+	t3dSlot_t &slot = m_pSlots[( size_t ) ( iSlot )];
 	Image *const pImage = pRegion->getMapPtr( eType );
 	if ( eType == T3DRegion::TYPE_HEIGHT ) {
 		if ( !slot.pHeight ) {
@@ -583,7 +583,7 @@ bool T3DResidentRegionPool::copyDerivedRect(
 	if ( !pRegion || iSlot < 0 || iSlot >= m_nCapacity ) {
 		return false;
 	}
-	t3dslot_t &slot = m_pSlots[( size_t ) ( iSlot )];
+	t3dSlot_t &slot = m_pSlots[( size_t ) ( iSlot )];
 	if ( ( m_channels & CHANNEL_DERIVED ) == 0u ) {
 		slot.nValidChannels.fetch_and( ( uint8_t ) ~CHANNEL_DERIVED, std::memory_order_release );
 		return true;
@@ -618,12 +618,12 @@ bool T3DResidentRegionPool::copyDerivedRect(
 	return true;
 }
 
-t3dresidentMapView_t T3DResidentRegionPool::getView( const int iSlot ) const {
+t3dResidentMapView_t T3DResidentRegionPool::getView( const int iSlot ) const {
 	if ( iSlot < 0 || iSlot >= m_nCapacity ||
 		m_pSlots[( size_t ) ( iSlot )].nState.load( std::memory_order_acquire ) != TERRAIN3D_RESIDENT_SLOT_PUBLISHED ) {
 		return {};
 	}
-	const t3dslot_t &slot = m_pSlots[( size_t ) ( iSlot )];
+	const t3dSlot_t &slot = m_pSlots[( size_t ) ( iSlot )];
 	const uint8_t valid = slot.nValidChannels.load( std::memory_order_acquire );
 	return {slot.pHeight, ( valid & CHANNEL_CONTROL ) ? slot.pControl : nullptr,
 		( valid & CHANNEL_COLOR ) ? slot.pColor : nullptr,
@@ -640,7 +640,7 @@ T3DResidentMapLease T3DResidentRegionPool::acquire(
 	if ( index < 0 || !m_pSlots ) return {};
 	const int existing = m_szLocationToSlot[index].load( std::memory_order_acquire );
 	if ( existing < 0 || existing >= m_nCapacity ) return {};
-	t3dslot_t &entry = m_pSlots[( size_t ) ( existing )];
+	t3dSlot_t &entry = m_pSlots[( size_t ) ( existing )];
 	const uint32_t generation = entry.nGeneration.load( std::memory_order_acquire );
 	uint32_t pins = entry.nPinCount.load( std::memory_order_acquire );
 	do {
@@ -655,7 +655,7 @@ T3DResidentMapLease T3DResidentRegionPool::acquire(
 		return {};
 	}
 	entry.bReferenced.store( true, std::memory_order_relaxed );
-	const t3dresidentMapView_t view = getView( existing );
+	const t3dResidentMapView_t view = getView( existing );
 	if ( !view.valid() ) { entry.nPinCount.fetch_sub( 1u, std::memory_order_release ); return {}; }
 	return T3DResidentMapLease( this, existing, generation, view );
 }
@@ -679,12 +679,12 @@ bool T3DResidentRegionPool::ensureResident( const Vector2i &rLocation, const T3D
 
 void T3DResidentRegionPool::syncMap(
 	const Vector2i &rLocation, const T3DRegion *pRegion,
-	const t3dmapType_t eType, const Rect2i &rDirtyRect
+	const t3dMapType_t eType, const Rect2i &rDirtyRect
 ) {
 	std::lock_guard<std::mutex> lock( m_mutex );
 	const int slot = findSlotUnlocked( rLocation );
 	if ( slot >= 0 ) {
-		t3dslot_t &entry = m_pSlots[( size_t ) ( slot )];
+		t3dSlot_t &entry = m_pSlots[( size_t ) ( slot )];
 		entry.nState.store( TERRAIN3D_RESIDENT_SLOT_RETIRING, std::memory_order_release );
 		const int map_index = locationIndex( rLocation );
 		if ( map_index >= 0 ) m_szLocationToSlot[map_index].store( -1, std::memory_order_release );
@@ -707,7 +707,7 @@ void T3DResidentRegionPool::syncDerived(
 	std::lock_guard<std::mutex> lock( m_mutex );
 	const int slot = findSlotUnlocked( rLocation );
 	if ( slot >= 0 ) {
-		t3dslot_t &entry = m_pSlots[( size_t ) ( slot )];
+		t3dSlot_t &entry = m_pSlots[( size_t ) ( slot )];
 		entry.nState.store( TERRAIN3D_RESIDENT_SLOT_RETIRING, std::memory_order_release );
 		const int map_index = locationIndex( rLocation );
 		if ( map_index >= 0 ) m_szLocationToSlot[map_index].store( -1, std::memory_order_release );

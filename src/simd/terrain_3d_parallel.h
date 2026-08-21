@@ -30,7 +30,7 @@ public:
 private:
 	int32_t m_nTaskLimit = 1;
 
-	typedef struct t3ddispatch_s {
+	typedef struct t3dDispatch_s {
 		std::atomic<size_t> next{0u};
 		size_t nCount = 0u;
 		size_t grain = 1u;
@@ -56,10 +56,10 @@ private:
 			}
 		}
 
-		EA_FORCE_INLINE static void worker( void *const pUserdata, uint32_t ) { ( ( t3ddispatch_s * ) ( pUserdata ) )->process(); }
-	} t3ddispatch_t;
+		EA_FORCE_INLINE static void worker( void *const pUserdata, uint32_t ) { ( ( t3dDispatch_s * ) ( pUserdata ) )->process(); }
+	} t3dDispatch_t;
 
-	typedef struct t3dstaticDispatch_s {
+	typedef struct t3dStaticDispatch_s {
 		size_t nCount = 0u;
 		size_t alignment = 1u;
 		int32_t nTaskCount = 1;
@@ -88,10 +88,10 @@ private:
 			}
 		}
 
-		EA_FORCE_INLINE static void worker( void *const pUserdata, const uint32_t iIndex ) { ( ( t3dstaticDispatch_s * ) ( pUserdata ) )->process( ( int32_t ) ( iIndex ) ); }
-	} t3dstaticDispatch_t;
+		EA_FORCE_INLINE static void worker( void *const pUserdata, const uint32_t iIndex ) { ( ( t3dStaticDispatch_s * ) ( pUserdata ) )->process( ( int32_t ) ( iIndex ) ); }
+	} t3dStaticDispatch_t;
 
-	typedef struct t3dtileDispatchContext_s {
+	typedef struct t3dTileDispatchContext_s {
 		size_t nWidth = 0u;
 		size_t height = 0u;
 		size_t tileWidth = 1u;
@@ -99,10 +99,10 @@ private:
 		size_t tilesX = 0u;
 		TileTask task = nullptr;
 		void *pContext = nullptr;
-	} t3dtileDispatchContext_t;
+	} t3dTileDispatchContext_t;
 
 	static void runTileRange( void *const pContext, const size_t nBegin, const size_t nEnd, const int32_t nWorker ) {
-		t3dtileDispatchContext_t *const dispatch = ( t3dtileDispatchContext_t * ) ( pContext );
+		t3dTileDispatchContext_t *const dispatch = ( t3dTileDispatchContext_t * ) ( pContext );
 		for ( size_t tile = nBegin; tile < nEnd; ++tile ) {
 			const size_t tile_y = tile / dispatch->tilesX;
 			const size_t tile_x = tile - tile_y * dispatch->tilesX;
@@ -123,7 +123,7 @@ public:
 			return;
 		}
 
-		t3ddispatch_t dispatch;
+		t3dDispatch_t dispatch;
 		dispatch.nCount = nCount;
 		dispatch.grain = std::max<size_t>( 1u, nGrain );
 		dispatch.pContext = pContext;
@@ -144,7 +144,7 @@ public:
 		}
 
 		const WorkerPool::GroupID group =
-			pool->add_native_group_task( &t3ddispatch_t::worker, &dispatch, task_count, task_count, false );
+			pool->add_native_group_task( &t3dDispatch_t::worker, &dispatch, task_count, task_count, false );
 		if ( group == WorkerPool::INVALID_TASK_ID ) {
 			dispatch.process();
 			return;
@@ -158,7 +158,7 @@ public:
 			return;
 		}
 
-		t3dstaticDispatch_t dispatch;
+		t3dStaticDispatch_t dispatch;
 		dispatch.nCount = nCount;
 		dispatch.alignment = std::max<size_t>( 1u, nAlignment );
 		dispatch.pContext = pContext;
@@ -180,7 +180,7 @@ public:
 			return;
 		}
 		const WorkerPool::GroupID group = pool->add_native_group_task(
-			&t3dstaticDispatch_t::worker, &dispatch, dispatch.nTaskCount, dispatch.nTaskCount, false );
+			&t3dStaticDispatch_t::worker, &dispatch, dispatch.nTaskCount, dispatch.nTaskCount, false );
 		if ( group == WorkerPool::INVALID_TASK_ID ) {
 			dispatch.nTaskCount = 1;
 			dispatch.process( 0 );
@@ -198,7 +198,7 @@ public:
 			return;
 		}
 
-		t3dtileDispatchContext_t dispatch;
+		t3dTileDispatchContext_t dispatch;
 		dispatch.nWidth = nWidth;
 		dispatch.height = nHeight;
 		dispatch.tileWidth = std::max<size_t>( 1u, nTileWidth );

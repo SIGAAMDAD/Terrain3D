@@ -46,7 +46,7 @@
 #include "core/terrain_3d_util.h"
 
 // Initialize static member variable
-T3DTerrain::t3ddebugLevel_t T3DTerrain::s_debugLevel{T3DTerrain::ERROR};
+T3DTerrain::t3dDebugLevel_t T3DTerrain::s_debugLevel{T3DTerrain::ERROR};
 
 ///////////////////////////
 // Private Functions
@@ -251,7 +251,7 @@ void T3DTerrain::physicsProcess( const double fDelta ) {
 		grabCamera();
 	}
 
-	t3druntimeProfileSample_t profile_sample;
+	t3dRuntimeProfileSample_t profile_sample;
 	const bool bProfileFrame = m_bRuntimeProfilingEnabled;
 	const bool bAdaptiveFrame = m_bRuntimeAdaptiveWorkBudgetsEnabled;
 	const bool bMeasureFrame = bProfileFrame || bAdaptiveFrame;
@@ -450,7 +450,7 @@ void T3DTerrain::destroyContainers( void ) {
 	}
 }
 
-const T3DTerrain::t3dbakeRegionSnapshot_t *T3DTerrain::t3dbakeSnapshot_t::getRegion( const int32_t iX, const int32_t iZ ) const {
+const T3DTerrain::t3dBakeRegionSnapshot_t *T3DTerrain::t3dBakeSnapshot_t::getRegion( const int32_t iX, const int32_t iZ ) const {
 	if ( nRegionSize <= 0 ) {
 		return nullptr;
 	}
@@ -470,11 +470,11 @@ const T3DTerrain::t3dbakeRegionSnapshot_t *T3DTerrain::t3dbakeSnapshot_t::getReg
 	return &regions[( size_t ) ( region_index )];
 }
 
-void T3DTerrain::t3dbakeSnapshot_t::getSample(
+void T3DTerrain::t3dBakeSnapshot_t::getSample(
 	const int32_t iX, const int32_t iZ, uint32_t &nControl,
 	real_t &fHeight
 ) const {
-	const t3dbakeRegionSnapshot_t *pRegion = getRegion( iX, iZ );
+	const t3dBakeRegionSnapshot_t *pRegion = getRegion( iX, iZ );
 	if ( !pRegion || !pRegion->pHeightBytes ) {
 		nControl = UINT32_MAX;
 		fHeight = NAN;
@@ -499,7 +499,7 @@ void T3DTerrain::t3dbakeSnapshot_t::getSample(
 	return;
 }
 
-bool T3DTerrain::t3dbakeSnapshot_t::getMinimumRect(
+bool T3DTerrain::t3dBakeSnapshot_t::getMinimumRect(
 	const int32_t iX, const int32_t iZ, const int32_t nWidth,
 	const int32_t nHeight, real_t &fHeight
 ) const {
@@ -512,7 +512,7 @@ bool T3DTerrain::t3dbakeSnapshot_t::getMinimumRect(
 		int32_t copied = 0;
 		while ( copied < nWidth ) {
 			const int32_t global_x = iX + copied;
-			const t3dbakeRegionSnapshot_t *pRegion = getRegion( global_x, global_z );
+			const t3dBakeRegionSnapshot_t *pRegion = getRegion( global_x, global_z );
 			if ( !pRegion || !pRegion->pHeightBytes ) {
 				return false;
 			}
@@ -544,8 +544,8 @@ bool T3DTerrain::t3dbakeSnapshot_t::getMinimumRect(
 	return true;
 }
 
-Vector3 T3DTerrain::t3dbakeSnapshot_t::getMeshVertex(
-	const int32_t nLod, const T3DData::t3dheightFilter_t filter,
+Vector3 T3DTerrain::t3dBakeSnapshot_t::getMeshVertex(
+	const int32_t nLod, const T3DData::t3dHeightFilter_t filter,
 	const int32_t iX, const int32_t iZ, uint32_t &nControl
 ) const {
 	const int32_t step = 1 << CLAMP( nLod, 0, 8 );
@@ -607,9 +607,9 @@ T3DTerrain::~T3DTerrain( void ) {
 	}
 }
 
-void T3DTerrain::setDebugLevel( const t3ddebugLevel_t level ) {
+void T3DTerrain::setDebugLevel( const t3dDebugLevel_t level ) {
 	SET_IF_DIFF( s_debugLevel, CLAMP( level, T3DTerrain::ERROR, T3DTerrain::EXTREME ) );
-	LOG( T3DTerrain::INFO, "t3dsetting_t debug level: ", s_debugLevel );
+	LOG( T3DTerrain::INFO, "t3dSetting_t debug level: ", s_debugLevel );
 }
 
 EA_FORCE_INLINE static String terrain3dDefaultRegionLightmapOutputDirectory( const String &rDataDirectory ) { const String directory = rDataDirectory.strip_edges().trim_suffix( "/" ); return directory.is_empty() ? String() : directory.path_join( "lighting" ); }
@@ -626,10 +626,10 @@ EA_FORCE_INLINE static String terrain3dDefaultRegionLightmapOutputDirectory( con
 		updateOceanShaderVariant();                  \
 	}
 
-T3D_OCEAN_MODE_SETTER( setOceanRefractionMode, t3doceanRefractionMode_t, m_oceanRefractionMode )
-T3D_OCEAN_MODE_SETTER( setOceanFoamMode, t3doceanFoamMode_t, m_oceanFoamMode )
-T3D_OCEAN_MODE_SETTER( setOceanScatteringMode, t3doceanScatteringMode_t, m_oceanScatteringMode )
-T3D_OCEAN_MODE_SETTER( setOceanShadingMode, t3doceanShadingMode_t, m_oceanShadingMode )
+T3D_OCEAN_MODE_SETTER( setOceanRefractionMode, t3dOceanRefractionMode_t, m_oceanRefractionMode )
+T3D_OCEAN_MODE_SETTER( setOceanFoamMode, t3dOceanFoamMode_t, m_oceanFoamMode )
+T3D_OCEAN_MODE_SETTER( setOceanScatteringMode, t3dOceanScatteringMode_t, m_oceanScatteringMode )
+T3D_OCEAN_MODE_SETTER( setOceanShadingMode, t3dOceanShadingMode_t, m_oceanShadingMode )
 #undef T3D_OCEAN_MODE_SETTER
 
 /* Returns the point a ray intersects the ground using either raymarching or the GPU depth texture

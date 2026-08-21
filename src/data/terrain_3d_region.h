@@ -28,45 +28,45 @@ class T3DRegion : public Resource {
 	CLASS_NAME();
 
 public: // Constants
-	typedef enum t3dmapType_e {
+	typedef enum t3dMapType_e {
 		TYPE_HEIGHT,
 		TYPE_CONTROL,
 		TYPE_COLOR,
 		TYPE_MAX,
-	} t3dmapType_t;
+	} t3dMapType_t;
 
-	typedef enum t3dchannelFlag_e : uint8_t {
+	typedef enum t3dChannelFlag_e : uint8_t {
 		CHANNEL_CONTROL = 1u << 0,
 		CHANNEL_COLOR = 1u << 1,
 		CHANNEL_DERIVED = 1u << 2,
 		CHANNEL_MASK = CHANNEL_CONTROL | CHANNEL_COLOR | CHANNEL_DERIVED,
-	} t3dchannelFlag_t;
+	} t3dChannelFlag_t;
 
-	typedef enum t3dstreamedNodeBoundaryPolicy_e : int {
+	typedef enum t3dStreamedNodeBoundaryPolicy_e : int {
 		STREAMED_NODE_BOUNDARY_ANCHOR = 0,
 		STREAMED_NODE_BOUNDARY_COVERAGE = 1,
-	} t3dstreamedNodeBoundaryPolicy_t;
+	} t3dStreamedNodeBoundaryPolicy_t;
 
-	typedef enum t3denvironmentLightingClass_e : int {
+	typedef enum t3dEnvironmentLightingClass_e : int {
 		LIGHTING_CLASS_TERRAIN = 0,
 		LIGHTING_CLASS_FOLIAGE_CLUTTER = 1,
 		LIGHTING_CLASS_MEDIUM_OBSTACLE = 2,
 		LIGHTING_CLASS_LARGE_OCCLUDER = 3,
 		LIGHTING_CLASS_REGIONAL_OCCLUDER = 4,
-	} t3denvironmentLightingClass_t;
+	} t3dEnvironmentLightingClass_t;
 
-	typedef enum t3dbakedLightingMode_e : int {
+	typedef enum t3dBakedLightingMode_e : int {
 		BAKED_LIGHTING_DISABLED = 0,
 		BAKED_LIGHTING_LIGHTMAP = 1,
 		BAKED_LIGHTING_PROBE = 2,
 		BAKED_LIGHTING_MATERIAL_ONLY = 3,
-	} t3dbakedLightingMode_t;
+	} t3dBakedLightingMode_t;
 
 	// Runtime representation of the serialized streamed-node descriptor. The
 	// persisted Array<Dictionary> remains the editor/resource ABI, while the
 	// streamer consumes this typed cache so activation does not repeatedly hash
 	// Dictionary keys or convert Variants in hot traversal paths.
-	typedef struct t3dstreamedNodeRuntimeDescriptor_s {
+	typedef struct t3dStreamedNodeRuntimeDescriptor_s {
 		int64_t id = 0;
 		Ref<PackedScene> pScene;
 		String scenePath;
@@ -84,7 +84,7 @@ public: // Constants
 		bool bDynamicShadowEligible = true;
 		Ref<PackedScene> pShadowProxyScene;
 		String shadowProxyScenePath;
-	} t3dstreamedNodeRuntimeDescriptor_t;
+	} t3dStreamedNodeRuntimeDescriptor_t;
 
 private:
 	// Import without persistence side effects. This is intentionally not bound to
@@ -140,7 +140,7 @@ private:
 	// Dynamic nodes remain as compact spawn/state descriptors while their owning
 	// region is dormant. T3DNodeStreamer is the only runtime publisher.
 	Array m_streamedNodes;
-	eastl::vector<t3dstreamedNodeRuntimeDescriptor_t> m_streamedNodeRuntime;
+	eastl::vector<t3dStreamedNodeRuntimeDescriptor_t> m_streamedNodeRuntime;
 	uint64_t m_nNextStreamedNodeId = 1u;
 	Vector2i m_streamedNodeCoverageMin = V2I_ZERO;
 	Vector2i m_streamedNodeCoverageMax = V2I_ZERO;
@@ -165,9 +165,9 @@ public:
 	EA_FORCE_INLINE int getRegionSize( void ) const { return m_nRegionSize; }
 
 	// Maps
-	void setMap( const t3dmapType_t mapType, const Ref<Image> &rImage );
-	Ref<Image> getMap( const t3dmapType_t mapType ) const;
-	Image *getMapPtr( const t3dmapType_t mapType ) const;
+	void setMap( const t3dMapType_t mapType, const Ref<Image> &rImage );
+	Ref<Image> getMap( const t3dMapType_t mapType ) const;
+	Image *getMapPtr( const t3dMapType_t mapType ) const;
 	void setMaps( const TypedArray<Image> &rMaps );
 	TypedArray<Image> getMaps( void ) const;
 	void setHeightMap( const Ref<Image> &rMap );
@@ -176,12 +176,12 @@ public:
 	EA_FORCE_INLINE Ref<Image> getControlMap( void ) const { return m_pControlMap; }
 	void setColorMap( const Ref<Image> &rMap );
 	EA_FORCE_INLINE Ref<Image> getColorMap( void ) const { return m_pColorMap; }
-	Image *getMapPtrForWrite( const t3dmapType_t mapType );
-	Ref<Image> materializeMap( const t3dmapType_t mapType );
-	EA_FORCE_INLINE bool hasMap( const t3dmapType_t mapType ) const { return getMap( mapType ).is_valid(); }
+	Image *getMapPtrForWrite( const t3dMapType_t mapType );
+	Ref<Image> materializeMap( const t3dMapType_t mapType );
+	EA_FORCE_INLINE bool hasMap( const t3dMapType_t mapType ) const { return getMap( mapType ).is_valid(); }
 	void setChannelFlags( const int nFlags );
 	EA_FORCE_INLINE int getChannelFlags( void ) const { return ( int ) ( m_nChannelFlags ); }
-	bool hasChannel( const t3dmapType_t mapType ) const {
+	bool hasChannel( const t3dMapType_t mapType ) const {
 		if ( mapType == TYPE_HEIGHT ) {
 			return true;
 		}
@@ -199,13 +199,13 @@ public:
 	void setDerivedNormalSlopeMapInternal( const Ref<Image> &rMap );
 	EA_FORCE_INLINE void invalidateDerivedNormalSlopeMap( void ) { m_bDerivedNormalSlopeValid = false; }
 	void sanitizeMaps( void );
-	bool isMapDefault( const t3dmapType_t mapType ) const;
-	bool compactMapIfDefault( const t3dmapType_t mapType, const bool bMarkModified = true );
+	bool isMapDefault( const t3dMapType_t mapType ) const;
+	bool compactMapIfDefault( const t3dMapType_t mapType, const bool bMarkModified = true );
 	void compactDefaultMaps( void );
 	// Commit direct pixel edits performed through a mutable Image reference.
 	// Callers that mutate a map in place must invoke this once after the edit.
-	void markMapEdited( const t3dmapType_t mapType, const bool bRecalculateHeightRange = true );
-	Ref<Image> sanitizeMap( const t3dmapType_t mapType, const Ref<Image> &rMap ) const;
+	void markMapEdited( const t3dMapType_t mapType, const bool bRecalculateHeightRange = true );
+	Ref<Image> sanitizeMap( const t3dMapType_t mapType, const Ref<Image> &rMap ) const;
 	bool validateMapSize( const Ref<Image> &rMap ) const;
 
 	void setHeightRange( const Vector2 &rRange );
@@ -231,7 +231,7 @@ public:
 	EA_FORCE_INLINE uint64_t getCookedPageSourceSignatureInternal( void ) const { return m_nCookedPageSourceSignature; }
 	void setCookedInstanceMetadataInternal( const uint32_t *pMeshCounts, uint32_t nInstanceCount, uint16_t nMeshCount );
 	void setCookedStreamedNodeMetadataInternal( uint16_t nCount, const Vector2i &rCoverageMin, const Vector2i &rCoverageMax );
-	void adoptCookedStreamedNodeRuntimeInternal( eastl::vector<t3dstreamedNodeRuntimeDescriptor_t> &&rNodes );
+	void adoptCookedStreamedNodeRuntimeInternal( eastl::vector<t3dStreamedNodeRuntimeDescriptor_t> &&rNodes );
 	void adoptCookedRuntimeMapsInternal( const Ref<Image> &rHeight, const Ref<Image> &rControl, const Ref<Image> &rColor, const Ref<Image> &rDerived );
 	EA_FORCE_INLINE void importRuntimeMapsUnmodifiedInternal( const T3DRegion *pSource ) { importRuntimeMapsUnmodified( pSource ); }
 	EA_FORCE_INLINE void releaseRuntimeMapsUnmodifiedInternal( void ) { releaseRuntimeMapsUnmodified(); }
@@ -265,8 +265,8 @@ public:
 	void setStreamedNodes( const Array &rNodes );
 	EA_FORCE_INLINE Array getStreamedNodes( void ) const { return m_streamedNodes.duplicate( true ); }
 	EA_FORCE_INLINE const Array &getStreamedNodesInternal( void ) const { return m_streamedNodes; }
-	EA_FORCE_INLINE const eastl::vector<t3dstreamedNodeRuntimeDescriptor_t> &getStreamedNodesRuntimeInternal( void ) const { return m_streamedNodeRuntime; }
-	const t3dstreamedNodeRuntimeDescriptor_t *findStreamedNodeRuntimeInternal( const int64_t nId ) const;
+	EA_FORCE_INLINE const eastl::vector<t3dStreamedNodeRuntimeDescriptor_t> &getStreamedNodesRuntimeInternal( void ) const { return m_streamedNodeRuntime; }
+	const t3dStreamedNodeRuntimeDescriptor_t *findStreamedNodeRuntimeInternal( const int64_t nId ) const;
 	int64_t addStreamedNode(
 		const Ref<PackedScene> &rScene, const Transform3D &rLocalTransform,
 		const Dictionary &rState = Dictionary(), const int nFlags = 0, const int64_t nId = 0,
@@ -330,10 +330,10 @@ protected:
 	static void _bind_methods( void );
 };
 
-using t3dmapType_t = T3DRegion::t3dmapType_t;
-VARIANT_ENUM_CAST( T3DRegion::t3dmapType_t );
-VARIANT_ENUM_CAST( T3DRegion::t3dchannelFlag_t );
-VARIANT_ENUM_CAST( T3DRegion::t3dstreamedNodeBoundaryPolicy_t );
-VARIANT_ENUM_CAST( T3DRegion::t3denvironmentLightingClass_t );
-VARIANT_ENUM_CAST( T3DRegion::t3dbakedLightingMode_t );
+using t3dMapType_t = T3DRegion::t3dMapType_t;
+VARIANT_ENUM_CAST( T3DRegion::t3dMapType_t );
+VARIANT_ENUM_CAST( T3DRegion::t3dChannelFlag_t );
+VARIANT_ENUM_CAST( T3DRegion::t3dStreamedNodeBoundaryPolicy_t );
+VARIANT_ENUM_CAST( T3DRegion::t3dEnvironmentLightingClass_t );
+VARIANT_ENUM_CAST( T3DRegion::t3dBakedLightingMode_t );
 #endif // TERRAIN3D_REGION_CLASS_H

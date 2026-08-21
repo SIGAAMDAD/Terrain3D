@@ -22,12 +22,12 @@ class T3DPackedPBRTexture : public Resource {
 	CLASS_NAME();
 
 public:
-	typedef enum t3dsourceChannel_e {
+	typedef enum t3dSourceChannel_e {
 		CHANNEL_RED = 0,
 		CHANNEL_GREEN = 1,
 		CHANNEL_BLUE = 2,
 		CHANNEL_ALPHA = 3,
-	} t3dsourceChannel_t;
+	} t3dSourceChannel_t;
 
 private:
 	// Primary externally authored runtime textures.
@@ -140,5 +140,5 @@ public:
 	String getChannelLayout( void ) const;
 };
 
-VARIANT_ENUM_CAST( T3DPackedPBRTexture::t3dsourceChannel_t );
+VARIANT_ENUM_CAST( T3DPackedPBRTexture::t3dSourceChannel_t );
 #endif // TERRAIN3D_PACKED_PBR_TEXTURE_H

@@ -27,7 +27,7 @@ using namespace godot;
 // readers use it. Writers stage into an unpinned page and never mutate published
 // bytes in place. Control, color, and derived maps remain authoritative in
 // T3DRegion.
-typedef struct t3dactiveMapView_s {
+typedef struct t3dActiveMapView_s {
 	const uint16_t *pHeight = nullptr;
 	uint32_t nOwnerGeneration = 0u;
 	uint32_t nRegionGeneration = 0u;
@@ -35,7 +35,7 @@ typedef struct t3dactiveMapView_s {
 	int iSlot = -1;
 
 	EA_FORCE_INLINE bool valid( void ) const { return pHeight != nullptr && iSlot >= 0; }
-} t3dactiveMapView_t;
+} t3dActiveMapView_t;
 
 class T3DActiveMapLease {
 public:
@@ -47,15 +47,15 @@ public:
 	T3DActiveMapLease &operator=( T3DActiveMapLease &&rOther ) noexcept;
 
 	EA_FORCE_INLINE bool valid( void ) const { return m_view.valid(); }
-	EA_FORCE_INLINE const t3dactiveMapView_t &view( void ) const { return m_view; }
+	EA_FORCE_INLINE const t3dActiveMapView_t &view( void ) const { return m_view; }
 	void reset( void );
 
 private:
 	friend T3DActiveMapLease terrain3dActiveStorageAcquire( const void *, const Vector2i & );
 	int m_iSlot = -1;
-	t3dactiveMapView_t m_view;
+	t3dActiveMapView_t m_view;
 
-	T3DActiveMapLease( int iSlot, const t3dactiveMapView_t &rView );
+	T3DActiveMapLease( int iSlot, const t3dActiveMapView_t &rView );
 };
 
 bool terrain3dActiveStorageClaim( const void *pOwner, int nRegionSize );
@@ -89,7 +89,7 @@ bool terrain3dActiveStorageReplaceHeightPages(
 );
 bool terrain3dActiveStorageSyncMap(
 	const void *pOwner, const Vector2i &rLocation,
-	const T3DRegion *pRegion, t3dmapType_t type, const Rect2i &rDirtyRect = Rect2i()
+	const T3DRegion *pRegion, t3dMapType_t type, const Rect2i &rDirtyRect = Rect2i()
 );
 bool terrain3dActiveStorageSyncDerived(
 	const void *pOwner, const Vector2i &rLocation,

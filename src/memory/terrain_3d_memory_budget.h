@@ -11,7 +11,7 @@
 #include <limits>
 
 
-typedef enum t3dmemorySubsystem_e : uint8_t {
+typedef enum t3dMemorySubsystem_e : uint8_t {
 	TERRAIN3D_MEMORY_GPU_TERRAIN_PAGES = 0,
 	TERRAIN3D_MEMORY_CPU_TERRAIN_PAGES,
 	TERRAIN3D_MEMORY_INSTANCE_PAGES,
@@ -19,41 +19,41 @@ typedef enum t3dmemorySubsystem_e : uint8_t {
 	TERRAIN3D_MEMORY_HLOD_PROXIES,
 	TERRAIN3D_MEMORY_SHADER_CACHE,
 	TERRAIN3D_MEMORY_SUBSYSTEM_COUNT,
-} t3dmemorySubsystem_t;
+} t3dMemorySubsystem_t;
 
-typedef enum t3dmemoryLimitReason_e : uint8_t {
+typedef enum t3dMemoryLimitReason_e : uint8_t {
 	TERRAIN3D_MEMORY_LIMIT_NONE = 0,
 	TERRAIN3D_MEMORY_LIMIT_TOTAL_BUDGET,
 	TERRAIN3D_MEMORY_LIMIT_FIXED_CAP,
 	TERRAIN3D_MEMORY_LIMIT_MANUAL_OVERRIDE,
 	TERRAIN3D_MEMORY_LIMIT_DISABLED,
-} t3dmemoryLimitReason_t;
+} t3dMemoryLimitReason_t;
 
-typedef struct t3dmemorySubsystemInput_s {
+typedef struct t3dMemorySubsystemInput_s {
 	bool bEnabled = true;
 	bool bAutomatic = true;
 	uint64_t nManualBytes = 0u;
 	uint64_t nMinimumBytes = 0u;
 	uint64_t nHardCapBytes = std::numeric_limits<uint64_t>::max();
 	uint32_t weight = 1u;
-} t3dmemorySubsystemInput_t;
+} t3dMemorySubsystemInput_t;
 
-typedef struct t3dmemoryBudgetInput_s {
+typedef struct t3dMemoryBudgetInput_s {
 	uint64_t nTotalBudgetBytes = 0u;
 	uint64_t nFixedBytes = 0u;
 	uint64_t nAllocatorReserveBytes = 0u;
 	uint64_t nTransientReserveBytes = 0u;
-	eastl::array<t3dmemorySubsystemInput_t, TERRAIN3D_MEMORY_SUBSYSTEM_COUNT> subsystems{};
-} t3dmemoryBudgetInput_t;
+	eastl::array<t3dMemorySubsystemInput_t, TERRAIN3D_MEMORY_SUBSYSTEM_COUNT> subsystems{};
+} t3dMemoryBudgetInput_t;
 
-typedef struct t3dmemorySubsystemAllocation_s {
+typedef struct t3dMemorySubsystemAllocation_s {
 	uint64_t nRequestedBytes = 0u;
 	uint64_t nEffectiveBytes = 0u;
-	t3dmemoryLimitReason_t limitingReason = TERRAIN3D_MEMORY_LIMIT_NONE;
+	t3dMemoryLimitReason_t limitingReason = TERRAIN3D_MEMORY_LIMIT_NONE;
 	bool bBelowMinimum = false;
-} t3dmemorySubsystemAllocation_t;
+} t3dMemorySubsystemAllocation_t;
 
-typedef struct t3dmemoryBudgetResult_s {
+typedef struct t3dMemoryBudgetResult_s {
 	uint64_t nTotalBudgetBytes = 0u;
 	uint64_t nFixedBytes = 0u;
 	uint64_t nAllocatorReserveBytes = 0u;
@@ -64,15 +64,15 @@ typedef struct t3dmemoryBudgetResult_s {
 	uint64_t nManagedEffectiveBytes = 0u;
 	uint64_t nHeadroomBytes = 0u;
 	bool bHardOvercommit = false;
-	eastl::array<t3dmemorySubsystemAllocation_t, TERRAIN3D_MEMORY_SUBSYSTEM_COUNT> subsystems{};
-} t3dmemoryBudgetResult_t;
+	eastl::array<t3dMemorySubsystemAllocation_t, TERRAIN3D_MEMORY_SUBSYSTEM_COUNT> subsystems{};
+} t3dMemoryBudgetResult_t;
 
 class T3DMemoryBudgetCoordinator {
 	EA_FORCE_INLINE static uint64_t clampToCap( const uint64_t nBytes, const uint64_t nCap ) { return nBytes > nCap ? nCap : nBytes; }
 
 public:
-	static t3dmemoryBudgetResult_t calculate( const t3dmemoryBudgetInput_t &rInput ) {
-		t3dmemoryBudgetResult_t result;
+	static t3dMemoryBudgetResult_t calculate( const t3dMemoryBudgetInput_t &rInput ) {
+		t3dMemoryBudgetResult_t result;
 		result.nTotalBudgetBytes = rInput.nTotalBudgetBytes;
 		result.nFixedBytes = rInput.nFixedBytes;
 		result.nAllocatorReserveBytes = rInput.nAllocatorReserveBytes;
@@ -89,8 +89,8 @@ public:
 
 		uint64_t remaining = result.nManagedBudgetBytes;
 		for ( int index = 0; index < TERRAIN3D_MEMORY_SUBSYSTEM_COUNT; ++index ) {
-			const t3dmemorySubsystemInput_t &input = rInput.subsystems[( size_t ) ( index )];
-			t3dmemorySubsystemAllocation_t &allocation = result.subsystems[( size_t ) ( index )];
+			const t3dMemorySubsystemInput_t &input = rInput.subsystems[( size_t ) ( index )];
+			t3dMemorySubsystemAllocation_t &allocation = result.subsystems[( size_t ) ( index )];
 			if ( !input.bEnabled ) {
 				allocation.limitingReason = TERRAIN3D_MEMORY_LIMIT_DISABLED;
 				continue;
@@ -111,8 +111,8 @@ public:
 		}
 
 		for ( int index = 0; index < TERRAIN3D_MEMORY_SUBSYSTEM_COUNT; ++index ) {
-			const t3dmemorySubsystemInput_t &input = rInput.subsystems[( size_t ) ( index )];
-			t3dmemorySubsystemAllocation_t &allocation = result.subsystems[( size_t ) ( index )];
+			const t3dMemorySubsystemInput_t &input = rInput.subsystems[( size_t ) ( index )];
+			t3dMemorySubsystemAllocation_t &allocation = result.subsystems[( size_t ) ( index )];
 			if ( !input.bEnabled || !input.bAutomatic ) {
 				continue;
 			}
@@ -133,8 +133,8 @@ public:
 		for ( int pass = 0; pass < TERRAIN3D_MEMORY_SUBSYSTEM_COUNT && remaining > 0u; ++pass ) {
 			uint64_t total_weight = 0u;
 			for ( int index = 0; index < TERRAIN3D_MEMORY_SUBSYSTEM_COUNT; ++index ) {
-				const t3dmemorySubsystemInput_t &input = rInput.subsystems[( size_t ) ( index )];
-				const t3dmemorySubsystemAllocation_t &allocation = result.subsystems[( size_t ) ( index )];
+				const t3dMemorySubsystemInput_t &input = rInput.subsystems[( size_t ) ( index )];
+				const t3dMemorySubsystemAllocation_t &allocation = result.subsystems[( size_t ) ( index )];
 				if ( input.bEnabled && input.bAutomatic && allocation.nEffectiveBytes < input.nHardCapBytes ) {
 					total_weight += input.weight > 0u ? input.weight : 1u;
 				}
@@ -146,8 +146,8 @@ public:
 			uint64_t distributed = 0u;
 			uint64_t remaining_weight = total_weight;
 			for ( int index = 0; index < TERRAIN3D_MEMORY_SUBSYSTEM_COUNT; ++index ) {
-				const t3dmemorySubsystemInput_t &input = rInput.subsystems[( size_t ) ( index )];
-				t3dmemorySubsystemAllocation_t &allocation = result.subsystems[( size_t ) ( index )];
+				const t3dMemorySubsystemInput_t &input = rInput.subsystems[( size_t ) ( index )];
+				t3dMemorySubsystemAllocation_t &allocation = result.subsystems[( size_t ) ( index )];
 				if ( !input.bEnabled || !input.bAutomatic || allocation.nEffectiveBytes >= input.nHardCapBytes ) {
 					continue;
 				}
@@ -171,8 +171,8 @@ public:
 			}
 			if ( distributed == 0u ) {
 				for ( int index = 0; index < TERRAIN3D_MEMORY_SUBSYSTEM_COUNT; ++index ) {
-					const t3dmemorySubsystemInput_t &input = rInput.subsystems[( size_t ) ( index )];
-					t3dmemorySubsystemAllocation_t &allocation = result.subsystems[( size_t ) ( index )];
+					const t3dMemorySubsystemInput_t &input = rInput.subsystems[( size_t ) ( index )];
+					t3dMemorySubsystemAllocation_t &allocation = result.subsystems[( size_t ) ( index )];
 					if ( !input.bEnabled || !input.bAutomatic || allocation.nEffectiveBytes >= input.nHardCapBytes ) {
 						continue;
 					}
@@ -195,7 +195,7 @@ public:
 
 		result.nManagedEffectiveBytes = 0u;
 		for ( int index = 0; index < TERRAIN3D_MEMORY_SUBSYSTEM_COUNT; ++index ) {
-			t3dmemorySubsystemAllocation_t &allocation = result.subsystems[( size_t ) ( index )];
+			t3dMemorySubsystemAllocation_t &allocation = result.subsystems[( size_t ) ( index )];
 			result.nManagedEffectiveBytes += allocation.nEffectiveBytes;
 			if ( allocation.limitingReason == TERRAIN3D_MEMORY_LIMIT_NONE &&
 				allocation.nEffectiveBytes > 0u && remaining == 0u ) {

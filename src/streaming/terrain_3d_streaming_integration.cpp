@@ -98,12 +98,12 @@ void T3DTerrain::invalidateRegionStreamingPolicy( void ) {
 	m_bRegionStreamingDirty = true;
 }
 
-t3dregionStreamingState_t T3DTerrain::getRegionStreamingStateInternal( const Vector2i &vLocation ) const {
+t3dRegionStreamingState_t T3DTerrain::getRegionStreamingStateInternal( const Vector2i &vLocation ) const {
 	if ( !m_pData || !m_pData->isRegionLocationValidInternal( vLocation ) ) {
 		return TERRAIN3D_REGION_STREAMING_UNLOADED;
 	}
 	const int map_index = T3DData::getRegionMapIndex( vLocation );
-	return map_index >= 0 ? ( t3dregionStreamingState_t ) ( m_szRegionStreamingStates[map_index] ) :
+	return map_index >= 0 ? ( t3dRegionStreamingState_t ) ( m_szRegionStreamingStates[map_index] ) :
 		TERRAIN3D_REGION_STREAMING_UNLOADED;
 }
 
@@ -125,7 +125,7 @@ void T3DTerrain::updateRegionStreamingPolicy(
 	}
 	const int map_size = m_pData->getRegionMapSizeInternal();
 	const Vector2i raw_center = m_pData->getRegionLocation( rWorldPosition );
-	const t3dstreamingCoord_t policy_center = terrain3dStreamingClampCenter(
+	const t3dStreamingCoord_t policy_center = terrain3dStreamingClampCenter(
 		{ raw_center.x, raw_center.y }, map_size );
 	const Vector2i center( policy_center.x, policy_center.y );
 	const bool authoring = isEditorAuthoringModeInternal();
@@ -148,7 +148,7 @@ void T3DTerrain::updateRegionStreamingPolicy(
 		instant_x = ( ( double ) ( rWorldPosition.x - m_regionStreamingPreviousWorldPosition.x ) / region_world_size ) / delta;
 		instant_z = ( ( double ) ( rWorldPosition.z - m_regionStreamingPreviousWorldPosition.z ) / region_world_size ) / delta;
 	}
-	const t3dregionStreamingPrediction_t prediction = terrain3dStreamingPredict(
+	const t3dRegionStreamingPrediction_t prediction = terrain3dStreamingPredict(
 		{ center.x, center.y }, map_size, instant_x, instant_z,
 		m_fRegionStreamingVelocityX, m_fRegionStreamingVelocityZ, delta, m_regionStreamingConfig );
 	m_fRegionStreamingVelocityX = prediction.fVelocityXRegionsPerSecond;
@@ -175,7 +175,7 @@ void T3DTerrain::updateRegionStreamingPolicy(
 		} else if ( m_fRegionStreamingVelocityZ < -0.001 && local_z <= boundary_fraction ) {
 			prefetch_center.y = MIN( prefetch_center.y, center.y - 1 );
 		}
-		const t3dstreamingCoord_t clamped_prefetch = terrain3dStreamingClampCenter(
+		const t3dStreamingCoord_t clamped_prefetch = terrain3dStreamingClampCenter(
 			{ prefetch_center.x, prefetch_center.y }, map_size );
 		prefetch_center = Vector2i( clamped_prefetch.x, clamped_prefetch.y );
 	}
@@ -202,7 +202,7 @@ void T3DTerrain::updateRegionStreamingPolicy(
 		if ( map_index < 0 ) {
 			continue;
 		}
-		t3dregionStreamingState_t state = TERRAIN3D_REGION_STREAMING_ACTIVE;
+		t3dRegionStreamingState_t state = TERRAIN3D_REGION_STREAMING_ACTIVE;
 		if ( !authoring ) {
 			state = terrain3dStreamingClassify( { location.x, location.y },
 				{ center.x, center.y }, m_regionStreamingConfig );
@@ -218,7 +218,7 @@ void T3DTerrain::updateRegionStreamingPolicy(
 
 		if ( !authoring && m_regionStreamingConfig.bPredictionEnabled &&
 			m_regionStreamingPredictedCenter != center && state != TERRAIN3D_REGION_STREAMING_ACTIVE ) {
-			const t3dregionStreamingState_t predicted_state = terrain3dStreamingClassify(
+			const t3dRegionStreamingState_t predicted_state = terrain3dStreamingClassify(
 				{ location.x, location.y }, { m_regionStreamingPredictedCenter.x, m_regionStreamingPredictedCenter.y },
 				m_regionStreamingConfig );
 			if ( predicted_state > state ) {
@@ -495,7 +495,7 @@ void T3DTerrain::setEditorHlodPreview( const bool bEnabled ) {
 	emit_signal( "editor_execution_mode_changed", ( int ) m_editorExecutionMode );
 }
 
-void T3DTerrain::setEditorExecutionMode( const t3deditorExecutionMode_t mode ) {
+void T3DTerrain::setEditorExecutionMode( const t3dEditorExecutionMode_t mode ) {
 	if ( !terrain3dEditorExecutionModeIsValid( ( int ) ( mode ) ) ) {
 		return;
 	}

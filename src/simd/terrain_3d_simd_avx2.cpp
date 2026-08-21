@@ -79,12 +79,12 @@ void avx2HalfToFloat( const uint16_t *pSource, float *pDestination, const size_t
 }
 
 void avx2PackedTransforms(
-	const t3dpackedTransform_t *pTransforms, const uint32_t *pColors,
+	const t3dPackedTransform_t *pTransforms, const uint32_t *pColors,
 	const size_t nCount, const int nStride, float *pDestination
 ) {
 #if TERRAIN3D_COMPILED_AVX2_F16C
 	for ( size_t i = 0u; i < nCount; ++i ) {
-		const t3dpackedTransform_t &t = pTransforms[i];
+		const t3dPackedTransform_t &t = pTransforms[i];
 		float *pOut = pDestination + i * ( size_t ) ( nStride );
 		alignas( 32 ) float fBasis[8];
 		_mm256_store_ps( fBasis, decode8( t.basis ) );

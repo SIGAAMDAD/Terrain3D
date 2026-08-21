@@ -5,12 +5,12 @@
 #ifndef TERRAIN3D_CLIPMAP_BOUNDS_H
 #define TERRAIN3D_CLIPMAP_BOUNDS_H
 
-typedef struct t3dclipmapVerticalBounds_s {
+typedef struct t3dClipmapVerticalBounds_s {
 	double fMinY = -0.1;
 	double fSizeY = 0.2;
-} t3dclipmapVerticalBounds_t;
+} t3dClipmapVerticalBounds_t;
 
-inline t3dclipmapVerticalBounds_t terrain3dClipmapVerticalBounds(
+inline t3dClipmapVerticalBounds_t terrain3dClipmapVerticalBounds(
 	const double fHeightA,
 	const double fHeightB, const double fCullMargin
 ) {
@@ -22,7 +22,7 @@ inline t3dclipmapVerticalBounds_t terrain3dClipmapVerticalBounds(
 	const double fBoundsSpan = fHeightSpan > fMinimumSpan ? fHeightSpan : fMinimumSpan;
 	const double fHalfExtraSpan = ( fBoundsSpan - fHeightSpan ) * 0.5;
 
-	t3dclipmapVerticalBounds_t bounds;
+	t3dClipmapVerticalBounds_t bounds;
 	bounds.fMinY = fMinHeight - fMargin - fHalfExtraSpan;
 	bounds.fSizeY = fBoundsSpan + fMargin * 2.0;
 	return bounds;

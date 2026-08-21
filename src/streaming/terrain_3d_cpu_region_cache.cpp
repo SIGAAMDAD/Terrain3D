@@ -473,7 +473,7 @@ bool T3DCpuRegionCache::ensureResident( const Vector2i &vLocation, const bool bD
 	if ( targetSlot < 0 ) {
 		int farthestDistance = -1;
 		const Vector2i evictionCenter = m_center == V2I_MAX ? vLocation : m_center;
-		const t3dcpuCacheCoord_t center = {evictionCenter.x, evictionCenter.y};
+		const t3dCpuCacheCoord_t center = {evictionCenter.x, evictionCenter.y};
 		for ( int slot = 0; slot < m_nCapacity; ++slot ) {
 			const Vector2i oldLocation = m_szLocations[slot];
 			T3DRegion *const pOldRegion = m_pRepository->getRegionPtr( oldLocation );

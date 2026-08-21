@@ -44,17 +44,17 @@ class T3DData : public Object {
 public:														 // Constants
 	// Maximum logical grid. The active grid is TERRAIN3D_ACTIVE_WORLD_TEXELS / region_size.
 
-	typedef enum t3dheightFilter_e {
+	typedef enum t3dHeightFilter_e {
 		HEIGHT_FILTER_NEAREST,
 		HEIGHT_FILTER_MINIMUM
-	} t3dheightFilter_t;
+	} t3dHeightFilter_t;
 
-	typedef enum t3dmapEditCommitFlag_e : uint32_t {
+	typedef enum t3dMapEditCommitFlag_e : uint32_t {
 		MAP_EDIT_UPDATE_INSTANCES = 1u << 0,
 		MAP_EDIT_UPDATE_COLLISION = 1u << 1,
 		MAP_EDIT_SNAP = 1u << 2,
 		MAP_EDIT_KEEP_EDITED = 1u << 3,
-	} t3dmapEditCommitFlag_t;
+	} t3dMapEditCommitFlag_t;
 
 
 private:
@@ -119,7 +119,7 @@ private:
 	EA_FORCE_INLINE void resetResidentSamplingPoolInternal( void ) { m_samplingStorage.resetResidentPool(); }
 	Error rehydrateActiveStorage( void );
 	bool syncActiveRegion( const Vector2i &vLocation, const T3DRegion *pRegion );
-	Ref<Image> getRegionMapOrDefault( const T3DRegion *pRegion, t3dmapType_t mapType ) const;
+	Ref<Image> getRegionMapOrDefault( const T3DRegion *pRegion, t3dMapType_t mapType ) const;
 	Ref<Image> makeGpuColorImage( const Ref<Image> &rImage ) const;
 	Ref<Image> makeGpuDerivedImage( const Ref<Image> &rImage ) const;
 	Ref<Image> makeGpuRenderControlImage( const Vector2i &vLocation ) const;
@@ -149,7 +149,7 @@ private:
 		uint32_t &rMaterialMask, bool &bAttempted, uint64_t *pRequestedUsec = nullptr
 	);
 	bool writeGpuRuntimePage( T3DRegion *pRegion, String *pError = nullptr );
-	bool hasMaterializedMap( t3dmapType_t mapType ) const;
+	bool hasMaterializedMap( t3dMapType_t mapType ) const;
 	bool refreshImplicitMapState( void );
 	int getRegionSlotReserve( void ) const;
 	bool canUpdateRegionSlotsIncrementally( void ) const;
@@ -164,8 +164,8 @@ private:
 	void queueGpuRegionRepublish( const Vector2i &vLocation );
 	bool isFarAtlasRequired( void ) const;
 	bool writeCookedGpuFarAtlases( const String &rDirectory = String() );
-	void markAllGpuFarRegionsDirty( t3dmapType_t mapType );
-	void markGpuFarRegionDirty( const Vector2i &vLocation, t3dmapType_t mapType );
+	void markAllGpuFarRegionsDirty( t3dMapType_t mapType );
+	void markGpuFarRegionDirty( const Vector2i &vLocation, t3dMapType_t mapType );
 	void resetMiddleHeightCache( void );
 	bool configureMiddleHeightCache( void );
 	void updateMiddleHeightResidencyInternal( const T3DResidencyFrameState &rFrame, bool bForce );
@@ -177,10 +177,10 @@ private:
 	void resetInstanceRegionCache( bool bRestoreAll );
 	void invalidateInstanceRegionLocation( const Vector2i &vLocation );
 	bool ensureInstanceRegionResidentInternal( const Vector2i &vLocation, bool bDemandLoad );
-	void updateMapsBounded( const t3dmapType_t mapType, const bool bAllRegions );
+	void updateMapsBounded( const t3dMapType_t mapType, const bool bAllRegions );
 	void emitGpuRegionMapChanged( void );
 	void emitRegionLayoutChanged( const bool bTextureLayersChanged );
-	TypedArray<Image> getActiveMaps( const t3dmapType_t mapType ) const;
+	TypedArray<Image> getActiveMaps( const t3dMapType_t mapType ) const;
 	void copyPasteDfr(
 		const T3DRegion *pSrcRegion, const Rect2i &rSrcRect, const Rect2i &rDstRect,
 		T3DRegion *pDstRegion
@@ -275,18 +275,18 @@ public:
 	TypedArray<Image> getHeightMaps( void ) const;
 	TypedArray<Image> getControlMaps( void ) const;
 	TypedArray<Image> getColorMaps( void ) const;
-	TypedArray<Image> getMaps( const t3dmapType_t mapType ) const;
+	TypedArray<Image> getMaps( const t3dMapType_t mapType ) const;
 	void updateMaps(
-		const t3dmapType_t mapType = T3DRegion::TYPE_MAX, const bool bAllRegions = true,
+		const t3dMapType_t mapType = T3DRegion::TYPE_MAX, const bool bAllRegions = true,
 		const bool bGenerateMipmaps = false
 	);
-	void updateMapRegions( const t3dmapType_t mapType, const eastl::vector<Vector2i> &rRegionLocations );
+	void updateMapRegions( const t3dMapType_t mapType, const eastl::vector<Vector2i> &rRegionLocations );
 	void commitMapEdits(
-		const t3dmapType_t mapType, const eastl::vector<Vector2i> &rRegionLocations,
+		const t3dMapType_t mapType, const eastl::vector<Vector2i> &rRegionLocations,
 		const AABB &rEditedArea, const uint32_t nFlags
 	);
 	void commitMapEdit(
-		const t3dmapType_t mapType, const Vector2i &rRegionLocation,
+		const t3dMapType_t mapType, const Vector2i &rRegionLocation,
 		const Rect2i &rDirtyRect = Rect2i()
 	);
 	T3DCompute *getComputeBackend( void );
@@ -338,7 +338,7 @@ public:
 	void updateGpuRegionResidency( const Vector3 &rWorldPosition, bool bForce = false );
 	void updateRegionResidency( const Vector3 &rWorldPosition, bool bForce = false );
 	void resetRuntimeStreamingCaches( void );
-	void appendRuntimeProfileSample( t3druntimeProfileSample_t &rSample ) const;
+	void appendRuntimeProfileSample( t3dRuntimeProfileSample_t &rSample ) const;
 	EA_FORCE_INLINE bool isGpuRegionCacheEnabled( void ) const { return m_gpuRegionCache.isEnabled(); }
 	EA_FORCE_INLINE int getGpuRegionCacheCapacity( void ) const { return m_gpuRegionCache.getCapacity(); }
 	EA_FORCE_INLINE int getAuthoringGpuRegionBudgetMb( void ) const { return m_gpuRegionCache.getAuthoringBudgetMb(); }
@@ -400,8 +400,8 @@ public:
 	bool isGpuRegionColorChannelEnabled( void ) const;
 	bool isGpuRegionDerivedChannelEnabled( void ) const;
 
-	void setPixel( const t3dmapType_t mapType, const Vector3 &rGlobalPosition, const Color &rPixel );
-	Color getPixel( const t3dmapType_t mapType, const Vector3 &rGlobalPosition ) const;
+	void setPixel( const t3dMapType_t mapType, const Vector3 &rGlobalPosition, const Color &rPixel );
+	Color getPixel( const t3dMapType_t mapType, const Vector3 &rGlobalPosition ) const;
 	void setHeight( const Vector3 &rGlobalPosition, const real_t fHeight );
 	real_t getHeight( const Vector3 &rGlobalPosition ) const;
 	// Bulk sampling resolves and maps each touched region once for the batch.
@@ -440,7 +440,7 @@ public:
 		const Vector3 &rNormal = V3_ZERO
 	) const;
 	Vector3 getTextureId( const Vector3 &rGlobalPosition ) const;
-	Vector3 getMeshVertex( const int32_t nLod, const t3dheightFilter_t filter, const Vector3 &rGlobalPosition ) const;
+	Vector3 getMeshVertex( const int32_t nLod, const t3dHeightFilter_t filter, const Vector3 &rGlobalPosition ) const;
 
 	void addEditedArea( const AABB &rArea );
 	EA_FORCE_INLINE void clearEditedArea( void ) { m_mapEditService.clearEditedArea(); }
@@ -455,8 +455,8 @@ public:
 		const TypedArray<Image> &rImages, const Vector3 &rGlobalPosition = V3_ZERO,
 		const real_t fOffset = 0.f, const real_t fScale = 1.f
 	);
-	Error exportImage( const String &rFileName, const t3dmapType_t mapType = T3DRegion::TYPE_HEIGHT ) const;
-	Ref<Image> layeredToImage( const t3dmapType_t mapType ) const;
+	Error exportImage( const String &rFileName, const t3dMapType_t mapType = T3DRegion::TYPE_HEIGHT ) const;
+	Ref<Image> layeredToImage( const t3dMapType_t mapType ) const;
 
 	// Utility
 	void dump( const bool bVerbose = false ) const;
@@ -465,7 +465,7 @@ protected:
 	static void _bind_methods( void );
 };
 
-VARIANT_ENUM_CAST( T3DData::t3dheightFilter_t );
+VARIANT_ENUM_CAST( T3DData::t3dHeightFilter_t );
 
 // Inline Region Functions
 

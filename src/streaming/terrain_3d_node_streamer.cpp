@@ -34,7 +34,7 @@ EA_FORCE_INLINE static StringName terrain3dNodeMethodSaveState( void ) { return 
 
 static void terrain3dApplyStreamedLightingMetadata(
 	Node *pNode,
-	const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t &rDescriptor,
+	const T3DRegion::t3dStreamedNodeRuntimeDescriptor_t &rDescriptor,
 	const bool bShadowProxy = false, const bool bDisableVisibleShadow = false
 ) {
 	if ( !pNode ) {
@@ -78,7 +78,7 @@ static void terrain3dApplyStreamedLightingMetadata(
 	}
 }
 
-static Node *terrain3dCreateShadowProxy( const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t &rDescriptor ) {
+static Node *terrain3dCreateShadowProxy( const T3DRegion::t3dStreamedNodeRuntimeDescriptor_t &rDescriptor ) {
 	Ref<PackedScene> proxy_scene = rDescriptor.pShadowProxyScene;
 	if ( proxy_scene.is_null() && !rDescriptor.shadowProxyScenePath.is_empty() ) {
 		proxy_scene = ResourceLoader::get_singleton()->load( rDescriptor.shadowProxyScenePath, "PackedScene" );
@@ -104,13 +104,13 @@ int T3DNodeStreamer::indexFromLocation( const Vector2i &rLocation ) {
 	return T3DData::getRegionMapIndex( rLocation );
 }
 
-Node *T3DNodeStreamer::getActiveNode( const t3dactiveNode_t &rActive ) const {
+Node *T3DNodeStreamer::getActiveNode( const t3dActiveNode_t &rActive ) const {
 	Object *pObject = ObjectDB::get_instance( rActive.objectId );
 	return pObject ? Object::cast_to<Node>( pObject ) : nullptr;
 }
 
-bool T3DNodeStreamer::runtimeHasSpawn( const t3dregionRuntime_t &rRuntime, const int64_t nSpawnId ) const {
-	for ( const t3dactiveNode_t &active : rRuntime.nodes ) {
+bool T3DNodeStreamer::runtimeHasSpawn( const t3dRegionRuntime_t &rRuntime, const int64_t nSpawnId ) const {
+	for ( const t3dActiveNode_t &active : rRuntime.nodes ) {
 		if ( active.spawnId == nSpawnId ) {
 			return true;
 		}
@@ -118,7 +118,7 @@ bool T3DNodeStreamer::runtimeHasSpawn( const t3dregionRuntime_t &rRuntime, const
 	return false;
 }
 
-int T3DNodeStreamer::findActiveNodeIndex( const t3dregionRuntime_t &rRuntime, const int64_t nSpawnId ) const {
+int T3DNodeStreamer::findActiveNodeIndex( const t3dRegionRuntime_t &rRuntime, const int64_t nSpawnId ) const {
 	for ( int index = 0; index < ( int ) ( rRuntime.nodes.size() ); ++index ) {
 		if ( rRuntime.nodes[( size_t ) ( index )].spawnId == nSpawnId ) {
 			return index;
@@ -128,18 +128,18 @@ int T3DNodeStreamer::findActiveNodeIndex( const t3dregionRuntime_t &rRuntime, co
 }
 
 void T3DNodeStreamer::trackActiveRegion( const int iIndex ) {
-	if ( iIndex < 0 || iIndex >= TERRAIN3D_MAX_REGION_SLOTS ) return; t3dregionRuntime_t &runtime = m_szRegions[iIndex]; if ( runtime.iActiveListPosition >= 0 || m_nActiveRegionCount >= TERRAIN3D_MAX_REGION_SLOTS ) return;
+	if ( iIndex < 0 || iIndex >= TERRAIN3D_MAX_REGION_SLOTS ) return; t3dRegionRuntime_t &runtime = m_szRegions[iIndex]; if ( runtime.iActiveListPosition >= 0 || m_nActiveRegionCount >= TERRAIN3D_MAX_REGION_SLOTS ) return;
 	runtime.iActiveListPosition = m_nActiveRegionCount; m_szActiveRegionIndices[m_nActiveRegionCount++] = ( uint16_t ) iIndex;
 }
 
 void T3DNodeStreamer::untrackActiveRegion( const int iIndex ) {
-	if ( iIndex < 0 || iIndex >= TERRAIN3D_MAX_REGION_SLOTS ) return; t3dregionRuntime_t &runtime = m_szRegions[iIndex]; const int position = runtime.iActiveListPosition;
+	if ( iIndex < 0 || iIndex >= TERRAIN3D_MAX_REGION_SLOTS ) return; t3dRegionRuntime_t &runtime = m_szRegions[iIndex]; const int position = runtime.iActiveListPosition;
 	if ( position < 0 || position >= m_nActiveRegionCount ) { runtime.iActiveListPosition = -1; return; }
 	const int moved_index = m_szActiveRegionIndices[m_nActiveRegionCount - 1]; --m_nActiveRegionCount; m_szActiveRegionIndices[position] = ( uint16_t ) moved_index; runtime.iActiveListPosition = -1;
 	if ( moved_index != iIndex ) m_szRegions[moved_index].iActiveListPosition = position;
 }
 
-void T3DNodeStreamer::setRegionLoading( t3dregionRuntime_t &rRuntime, const bool bLoading ) {
+void T3DNodeStreamer::setRegionLoading( t3dRegionRuntime_t &rRuntime, const bool bLoading ) {
 	if ( rRuntime.bLoading == bLoading ) {
 		return;
 	}
@@ -148,11 +148,11 @@ void T3DNodeStreamer::setRegionLoading( t3dregionRuntime_t &rRuntime, const bool
 	m_nLoadingRegionCount = MAX( m_nLoadingRegionCount, 0 );
 }
 
-void T3DNodeStreamer::trackMovableNode( const int iRegionIndex, const t3dactiveNode_t &rActive ) {
+void T3DNodeStreamer::trackMovableNode( const int iRegionIndex, const t3dActiveNode_t &rActive ) {
 	if ( ( rActive.flags & NODE_FLAG_STATIC ) != 0 ) {
 		return;
 	}
-	t3dmovableNodeRef_t ref;
+	t3dMovableNodeRef_t ref;
 	ref.iRegionIndex = iRegionIndex;
 	ref.spawnId = rActive.spawnId;
 	ref.objectId = rActive.objectId;
@@ -176,7 +176,7 @@ void T3DNodeStreamer::untrackMovableNode( const int64_t nSpawnId ) {
 	}
 }
 
-void T3DNodeStreamer::eraseActiveNode( t3dregionRuntime_t &rRuntime, const int iNodeIndex ) {
+void T3DNodeStreamer::eraseActiveNode( t3dRegionRuntime_t &rRuntime, const int iNodeIndex ) {
 	if ( iNodeIndex < 0 || iNodeIndex >= ( int ) ( rRuntime.nodes.size() ) ) {
 		return;
 	}
@@ -192,7 +192,7 @@ Node3D *T3DNodeStreamer::ensureRegionRoot( const int iIndex, T3DRegion *const pR
 	if ( !m_pHost ) {
 		return nullptr;
 	}
-	t3dregionRuntime_t &runtime = m_szRegions[iIndex];
+	t3dRegionRuntime_t &runtime = m_szRegions[iIndex];
 	if ( runtime.pRoot ) {
 		return runtime.pRoot;
 	}
@@ -226,20 +226,20 @@ bool T3DNodeStreamer::migrateActiveNodes( void ) {
 	const Transform3D terrain_inverse = m_pTerrain->get_global_transform().affine_inverse();
 	for ( int movable_index = ( int ) ( m_movableNodes.size() ) - 1; movable_index >= 0; --movable_index ) {
 		++m_nNodesTestedForMigrationLastTick;
-		t3dmovableNodeRef_t &movable = m_movableNodes[( size_t ) ( movable_index )];
+		t3dMovableNodeRef_t &movable = m_movableNodes[( size_t ) ( movable_index )];
 		const int source_index = movable.iRegionIndex;
 		if ( source_index < 0 || source_index >= TERRAIN3D_MAX_REGION_SLOTS ) {
 			removeMovableNodeAt( movable_index );
 			continue;
 		}
-		t3dregionRuntime_t &source_runtime = m_szRegions[source_index];
+		t3dRegionRuntime_t &source_runtime = m_szRegions[source_index];
 		const int active_index = findActiveNodeIndex( source_runtime, movable.spawnId );
 		T3DRegion *const pSourceRegion = pData->getRegionPtr( locationFromIndex( source_index ) );
 		if ( active_index < 0 || !pSourceRegion ) {
 			removeMovableNodeAt( movable_index );
 			continue;
 		}
-		const t3dactiveNode_t active = source_runtime.nodes[( size_t ) ( active_index )];
+		const t3dActiveNode_t active = source_runtime.nodes[( size_t ) ( active_index )];
 		Node3D *const pNode = Object::cast_to<Node3D>( getActiveNode( active ) );
 		if ( !pNode ) {
 			pSourceRegion->removeStreamedNode( active.spawnId );
@@ -279,12 +279,12 @@ bool T3DNodeStreamer::migrateActiveNodes( void ) {
 			continue;
 		}
 
-		const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t *pSourceDescriptor =
+		const T3DRegion::t3dStreamedNodeRuntimeDescriptor_t *pSourceDescriptor =
 			pSourceRegion->findStreamedNodeRuntimeInternal( active.spawnId );
 		if ( !pSourceDescriptor ) {
 			continue;
 		}
-		const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t descriptor = *pSourceDescriptor;
+		const T3DRegion::t3dStreamedNodeRuntimeDescriptor_t descriptor = *pSourceDescriptor;
 		const String &scene_path = descriptor.scenePath;
 		const Ref<PackedScene> &scene = descriptor.pScene;
 		if ( scene_path.is_empty() && scene.is_null() ) {
@@ -337,7 +337,7 @@ bool T3DNodeStreamer::migrateActiveNodes( void ) {
 			continue;
 		}
 		pNode->reparent( pDestinationRoot, true );
-		t3dregionRuntime_t &destination_runtime = m_szRegions[destination_index];
+		t3dRegionRuntime_t &destination_runtime = m_szRegions[destination_index];
 		if ( !runtimeHasSpawn( destination_runtime, active.spawnId ) ) {
 			destination_runtime.nodes.push_back( active );
 		}
@@ -394,7 +394,7 @@ bool T3DNodeStreamer::spawnIdExists( const uint64_t nId ) const {
 		if ( !pRegion ) {
 			continue;
 		}
-		for ( const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t &spawn :
+		for ( const T3DRegion::t3dStreamedNodeRuntimeDescriptor_t &spawn :
 			pRegion->getStreamedNodesRuntimeInternal() ) {
 			if ( spawn.id > 0 && ( uint64_t ) ( spawn.id ) == nId ) {
 				return true;
@@ -447,7 +447,7 @@ void T3DNodeStreamer::refreshSpawnId( void ) {
 		if ( !pRegion ) {
 			continue;
 		}
-		for ( const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t &spawn :
+		for ( const T3DRegion::t3dStreamedNodeRuntimeDescriptor_t &spawn :
 			pRegion->getStreamedNodesRuntimeInternal() ) {
 			const int64_t signed_id = spawn.id;
 			if ( signed_id > 0 && ( uint64_t ) ( signed_id ) >= m_nNextSpawnId ) {
@@ -472,7 +472,7 @@ void T3DNodeStreamer::initialize( T3DTerrain *const pTerrain ) {
 
 void T3DNodeStreamer::captureNodeState(
 	T3DRegion *const pRegion, Node3D *const pRegionRoot,
-	const t3dactiveNode_t &rActive
+	const t3dActiveNode_t &rActive
 ) {
 	if ( !pRegion ) {
 		return;
@@ -489,7 +489,7 @@ void T3DNodeStreamer::captureNodeState(
 			pNode3d->get_transform();
 	}
 	Dictionary state;
-	const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t *pDescriptor =
+	const T3DRegion::t3dStreamedNodeRuntimeDescriptor_t *pDescriptor =
 		pRegion->findStreamedNodeRuntimeInternal( rActive.spawnId );
 	if ( pDescriptor ) {
 		state = pDescriptor->state.duplicate( true );
@@ -511,13 +511,13 @@ void T3DNodeStreamer::deactivateRegion( const int iIndex, const bool bCaptureSta
 	if ( iIndex < 0 || iIndex >= TERRAIN3D_MAX_REGION_SLOTS ) {
 		return;
 	}
-	t3dregionRuntime_t &runtime = m_szRegions[iIndex];
+	t3dRegionRuntime_t &runtime = m_szRegions[iIndex];
 	if ( !runtime.pRoot && !runtime.bActive && !runtime.bLoading ) {
 		return;
 	}
 	T3DRegion *const pRegion = m_pTerrain && m_pTerrain->getData() ?
 		m_pTerrain->getData()->getRegionPtr( locationFromIndex( iIndex ) ) : nullptr;
-	for ( const t3dactiveNode_t &active : runtime.nodes ) {
+	for ( const t3dActiveNode_t &active : runtime.nodes ) {
 		Node *pNode = getActiveNode( active );
 		if ( bCaptureState && pNode ) {
 			captureNodeState( pRegion, runtime.pRoot, active );
@@ -557,9 +557,9 @@ void T3DNodeStreamer::deactivateRegion( const int iIndex, const bool bCaptureSta
 	++m_nUnloadsLastTick;
 }
 
-T3DNodeStreamer::t3dspawnActivationResult_t T3DNodeStreamer::activateSpawn(
-	T3DRegion *const pRegion, t3dregionRuntime_t &rRuntime,
-	const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t &rSpawn
+T3DNodeStreamer::t3dSpawnActivationResult_t T3DNodeStreamer::activateSpawn(
+	T3DRegion *const pRegion, t3dRegionRuntime_t &rRuntime,
+	const T3DRegion::t3dStreamedNodeRuntimeDescriptor_t &rSpawn
 ) {
 	if ( !pRegion || rSpawn.id <= 0 ) {
 		return SPAWN_ACTIVATION_FAILED;
@@ -650,7 +650,7 @@ T3DNodeStreamer::t3dspawnActivationResult_t T3DNodeStreamer::activateSpawn(
 			return SPAWN_ACTIVATION_CONSUMED;
 		}
 	}
-	t3dactiveNode_t active;
+	t3dActiveNode_t active;
 	active.spawnId = spawn_id;
 	active.objectId = objectId;
 	active.flags = flags;
@@ -669,13 +669,13 @@ T3DNodeStreamer::t3dspawnActivationResult_t T3DNodeStreamer::activateSpawn(
 
 void T3DNodeStreamer::requestRegionScenes(
 	const Vector2i &rOwnerLocation,
-	const eastl::vector<T3DRegion::t3dstreamedNodeRuntimeDescriptor_t> &rSpawns
+	const eastl::vector<T3DRegion::t3dStreamedNodeRuntimeDescriptor_t> &rSpawns
 ) {
 	ResourceLoader *const pLoader = ResourceLoader::get_singleton();
 	if ( !pLoader ) {
 		return;
 	}
-	for ( const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t &spawn : rSpawns ) {
+	for ( const T3DRegion::t3dStreamedNodeRuntimeDescriptor_t &spawn : rSpawns ) {
 		if ( isHlodVisualSuppressed( rOwnerLocation, spawn ) ) {
 			continue;
 		}
@@ -705,7 +705,7 @@ bool T3DNodeStreamer::activateRegion( const int iIndex, int &nNodeBudget ) {
 	if ( !pRegion || pRegion->isDeleted() || pRegion->getStreamedNodeCount() == 0 ) {
 		return false;
 	}
-	t3dregionRuntime_t &runtime = m_szRegions[iIndex];
+	t3dRegionRuntime_t &runtime = m_szRegions[iIndex];
 	T3DData *const pData = m_pTerrain->getData();
 	if ( pRegion->getStreamedNodesRuntimeInternal().empty() && pRegion->getStreamedNodeCount() > 0 ) {
 		if ( !runtime.bRequestsStarted ) {
@@ -732,7 +732,7 @@ bool T3DNodeStreamer::activateRegion( const int iIndex, int &nNodeBudget ) {
 	if ( !ensureRegionRoot( iIndex, pRegion ) ) {
 		return false;
 	}
-	const eastl::vector<T3DRegion::t3dstreamedNodeRuntimeDescriptor_t> &spawns =
+	const eastl::vector<T3DRegion::t3dStreamedNodeRuntimeDescriptor_t> &spawns =
 		pRegion->getStreamedNodesRuntimeInternal();
 	if ( runtime.nodes.capacity() < spawns.size() ) runtime.nodes.reserve( spawns.size() );
 	if ( !runtime.bRequestsStarted ) {
@@ -740,7 +740,7 @@ bool T3DNodeStreamer::activateRegion( const int iIndex, int &nNodeBudget ) {
 		runtime.bRequestsStarted = true;
 	}
 	while ( runtime.nextSpawn < ( int ) ( spawns.size() ) && nNodeBudget > 0 ) {
-		const t3dspawnActivationResult_t result = activateSpawn( pRegion, runtime, spawns[( size_t ) ( runtime.nextSpawn )] );
+		const t3dSpawnActivationResult_t result = activateSpawn( pRegion, runtime, spawns[( size_t ) ( runtime.nextSpawn )] );
 		if ( result == SPAWN_ACTIVATION_PENDING ) {
 			++m_nScenePendingPollsLastTick;
 			break;
@@ -759,7 +759,7 @@ bool T3DNodeStreamer::activateRegion( const int iIndex, int &nNodeBudget ) {
 }
 
 bool T3DNodeStreamer::isHlodVisualSuppressed(
-	const Vector2i &rOwnerLocation, const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t &rSpawn
+	const Vector2i &rOwnerLocation, const T3DRegion::t3dStreamedNodeRuntimeDescriptor_t &rSpawn
 ) const {
 	if ( !m_pTerrain || ( rSpawn.flags & NODE_FLAG_HLOD_VISUAL ) == 0 ) { return false; }
 	const uint8_t baked_min = m_pTerrain->getHlodNodeMinimumLevel( rOwnerLocation, rSpawn.id );
@@ -767,7 +767,7 @@ bool T3DNodeStreamer::isHlodVisualSuppressed(
 }
 
 bool T3DNodeStreamer::streamedSpawnCoverageIntersects(
-	const Vector2i &rOwnerLocation, const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t &rSpawn,
+	const Vector2i &rOwnerLocation, const T3DRegion::t3dStreamedNodeRuntimeDescriptor_t &rSpawn,
 	const Vector2i &rTargetMin, const Vector2i &rTargetMax
 ) const {
 	if ( rOwnerLocation.x >= rTargetMin.x && rOwnerLocation.x <= rTargetMax.x &&
@@ -817,7 +817,7 @@ void T3DNodeStreamer::buildDesiredSet( const Vector2i &rCenter ) {
 			Math::abs( owner_location.y - rCenter.y ) );
 		const bool ordinary_owner_desired = full_authoring_residency || owner_distance <= radius;
 		bool region_desired = false;
-		for ( const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t &spawn : pRegion->getStreamedNodesRuntimeInternal() ) {
+		for ( const T3DRegion::t3dStreamedNodeRuntimeDescriptor_t &spawn : pRegion->getStreamedNodesRuntimeInternal() ) {
 			if ( ( spawn.flags & NODE_FLAG_DISABLED ) != 0 ) { continue; }
 			if ( ( spawn.flags & NODE_FLAG_HLOD_VISUAL ) != 0 ) {
 				const uint8_t baked_min = m_pTerrain->getHlodNodeMinimumLevel( owner_location, spawn.id );
@@ -968,7 +968,7 @@ void T3DNodeStreamer::updateResidency( const Vector3 &rTargetPosition, const boo
 		if ( node_budget <= 0 ) {
 			break;
 		}
-		t3dregionRuntime_t &runtime = m_szRegions[index];
+		t3dRegionRuntime_t &runtime = m_szRegions[index];
 		if ( !runtime.pRoot && region_budget <= 0 ) {
 			m_bLoadRegionBudgetLimitedLastTick = true;
 			m_bHasPendingActivation = true;
@@ -1010,11 +1010,11 @@ void T3DNodeStreamer::destroy( const bool bCaptureState ) {
 		// Normal residency churn retains node-vector capacity so revisiting a region
 		// does not return to the allocator. Full streamer teardown is the cold path
 		// where retained capacity should actually be released.
-		eastl::vector<t3dactiveNode_t>().swap( m_szRegions[index].nodes );
+		eastl::vector<t3dActiveNode_t>().swap( m_szRegions[index].nodes );
 		m_szRegions[index].iActiveListPosition = -1;
 	}
 	m_nActiveRegionCount = 0; m_nDesiredRegionCount = 0u;
-	eastl::vector<t3dmovableNodeRef_t>().swap( m_movableNodes );
+	eastl::vector<t3dMovableNodeRef_t>().swap( m_movableNodes );
 	destroyHost();
 	m_desiredRegions.reset();
 	m_pTerrain = nullptr;
@@ -1124,22 +1124,22 @@ bool T3DNodeStreamer::removeStreamedScene( const int64_t nSpawnId ) {
 size_t T3DNodeStreamer::getRetainedCapacityBytes( void ) const {
 	size_t bytes = 0u;
 	for ( int index = 0; index < TERRAIN3D_MAX_REGION_SLOTS; ++index ) {
-		bytes += m_szRegions[index].nodes.capacity() * sizeof( t3dactiveNode_t );
+		bytes += m_szRegions[index].nodes.capacity() * sizeof( t3dActiveNode_t );
 	}
-	bytes += m_movableNodes.capacity() * sizeof( t3dmovableNodeRef_t );
+	bytes += m_movableNodes.capacity() * sizeof( t3dMovableNodeRef_t );
 	return bytes;
 }
 
 void T3DNodeStreamer::onHlodRepresentationChanged( const Vector2i &rRegion ) {
 	const int index = indexFromLocation( rRegion );
 	if ( index < 0 || !m_pTerrain || !m_pTerrain->getData() ) { return; }
-	t3dregionRuntime_t &runtime = m_szRegions[index];
+	t3dRegionRuntime_t &runtime = m_szRegions[index];
 	T3DRegion *const pRegion = m_pTerrain->getData()->getRegionPtr( rRegion );
 	if ( !pRegion ) { return; }
 	for ( int i = ( int ) runtime.nodes.size() - 1; i >= 0; --i ) {
-		const t3dactiveNode_t active = runtime.nodes[( size_t ) i];
+		const t3dActiveNode_t active = runtime.nodes[( size_t ) i];
 		if ( ( active.flags & NODE_FLAG_HLOD_VISUAL ) == 0 ) { continue; }
-		const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t *spawn = pRegion->findStreamedNodeRuntimeInternal( active.spawnId );
+		const T3DRegion::t3dStreamedNodeRuntimeDescriptor_t *spawn = pRegion->findStreamedNodeRuntimeInternal( active.spawnId );
 		if ( !spawn || !isHlodVisualSuppressed( rRegion, *spawn ) ) { continue; }
 		Node *node = getActiveNode( active );
 		if ( node ) {
@@ -1170,8 +1170,8 @@ bool T3DNodeStreamer::areHlodVisualRegionsReady( const Vector2i &rRegionMin, con
 			if ( index < 0 ) { continue; }
 			T3DRegion *const pRegion = m_pTerrain->getData()->getRegionPtr( region );
 			if ( !pRegion ) { continue; }
-			const t3dregionRuntime_t &runtime = m_szRegions[index];
-			for ( const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t &spawn : pRegion->getStreamedNodesRuntimeInternal() ) {
+			const t3dRegionRuntime_t &runtime = m_szRegions[index];
+			for ( const T3DRegion::t3dStreamedNodeRuntimeDescriptor_t &spawn : pRegion->getStreamedNodesRuntimeInternal() ) {
 				if ( ( spawn.flags & NODE_FLAG_HLOD_VISUAL ) == 0 ) { continue; }
 				const uint8_t baked_min = m_pTerrain->getHlodNodeMinimumLevel( region, spawn.id );
 				if ( baked_min == 0 || m_pTerrain->isHlodRegionSuppressed( region, baked_min ) ) { continue; }

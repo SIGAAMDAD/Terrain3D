@@ -18,20 +18,20 @@ class T3DMesher {
 	CLASS_NAME_STATIC( "T3DMesher" );
 
 public: // Constants
-	typedef enum t3dmeshType_e {
+	typedef enum t3dMeshType_e {
 		LOD0_MESH,
 		OUTER_RING_MESH,
 		MESH_TYPE_COUNT,
-	} t3dmeshType_t;
+	} t3dMeshType_t;
 private:
-	typedef struct t3dclipmapGeometry_s {
+	typedef struct t3dClipmapGeometry_s {
 		PackedVector3Array vertices;
 		PackedVector2Array metadata;
 		PackedInt32Array indices;
 		AABB aabb;
-	} t3dclipmapGeometry_t;
+	} t3dClipmapGeometry_t;
 
-	typedef struct t3dclipmapBatch_s {
+	typedef struct t3dClipmapBatch_s {
 		RID mesh;
 		RID multimesh;
 		RID instance;
@@ -43,12 +43,12 @@ private:
 		uint8_t tier = 0;
 		bool bCastsShadows = false;
 		bool bOwnsMesh = false;
-	} t3dclipmapBatch_t;
+	} t3dClipmapBatch_t;
 
-	typedef struct t3dlodBatchSlot_s {
+	typedef struct t3dLodBatchSlot_s {
 		int8_t batch = -1;
 		int8_t instance = -1;
-	} t3dlodBatchSlot_t;
+	} t3dLodBatchSlot_t;
 
 	T3DTerrain *m_pTerrain = nullptr;
 	RID m_scenario = RID();
@@ -61,12 +61,12 @@ private:
 	Vector3 m_lastShaderTargetPosition = V3_MAX;
 
 	eastl::array<RID, MESH_TYPE_COUNT> m_szMeshRids{};
-	eastl::array<t3dclipmapGeometry_t, MESH_TYPE_COUNT> m_szMeshGeometry{};
+	eastl::array<t3dClipmapGeometry_t, MESH_TYPE_COUNT> m_szMeshGeometry{};
 	PackedVector4Array m_lodStateBuffer;
-	eastl::array<t3dclipmapBatch_t, TERRAIN3D_MAX_RENDER_BATCHES> m_szRenderBatches{};
-	eastl::array<t3dlodBatchSlot_t, TERRAIN3D_MAX_CLIPMAP_LEVELS> m_szLodBatchSlots{};
+	eastl::array<t3dClipmapBatch_t, TERRAIN3D_MAX_RENDER_BATCHES> m_szRenderBatches{};
+	eastl::array<t3dLodBatchSlot_t, TERRAIN3D_MAX_CLIPMAP_LEVELS> m_szLodBatchSlots{};
 	eastl::array<bool, TERRAIN3D_MAX_RENDER_BATCHES> m_bBatchDirty{};
-	eastl::array<t3dclipmapBatch_t, 3> m_szShadowStateBatches{};
+	eastl::array<t3dClipmapBatch_t, 3> m_szShadowStateBatches{};
 	eastl::array<bool, 3> m_bShadowStateBatchDirty{};
 	int m_nShadowBatchCount = 0;
 	int m_nRenderBatchCount = 0;
@@ -112,7 +112,7 @@ private:
 
 	void generateMeshTypes( void );
 	bool loadRuntimeGeometryPack( const String &rDataDirectory );
-	t3dclipmapGeometry_t generateCombinedGeometry( bool bLod0 );
+	t3dClipmapGeometry_t generateCombinedGeometry( bool bLod0 );
 	void appendGrid(
 		PackedVector3Array &rVertices, PackedVector2Array &rMetadata, PackedInt32Array &rIndices,
 		int &nVertexWrite, int &nIndexWrite, const Vector2i &vSize, const Vector3 &rOrigin,
@@ -123,14 +123,14 @@ private:
 		const PackedInt32Array &rIndices, const AABB &rAabb, bool bIncludeBasis = true
 	);
 	RID instantiateStateMesh( int nFirstLod, int nLastLod );
-	t3dclipmapBatch_t createBatch(
+	t3dClipmapBatch_t createBatch(
 		const RID &rMesh, int nCount, int nFirstLod, int nLastLod,
 		int nTier, bool bCastsShadows
 	);
-	t3dclipmapBatch_t createStateBatch( int nFirstLod, int nLastLod, int nTier, bool bCastsShadows );
-	void freeBatch( t3dclipmapBatch_t &rBatch );
+	t3dClipmapBatch_t createStateBatch( int nFirstLod, int nLastLod, int nTier, bool bCastsShadows );
+	void freeBatch( t3dClipmapBatch_t &rBatch );
 	void setBatchInstance(
-		t3dclipmapBatch_t &rBatch, int iIndex, const Transform3D &rTransform,
+		t3dClipmapBatch_t &rBatch, int iIndex, const Transform3D &rTransform,
 		int iTestX, int iTestZ
 	);
 	void flushDirtyBatches( void );
@@ -206,7 +206,7 @@ public:
 	int getShadowBatchCountForTier( const int nTier ) const {
 		int count = 0;
 		for ( int index = 0; index < m_nRenderBatchCount; ++index ) {
-			const t3dclipmapBatch_t &batch = m_szRenderBatches[( size_t ) ( index )];
+			const t3dClipmapBatch_t &batch = m_szRenderBatches[( size_t ) ( index )];
 			count += ( int ) ( batch.tier ) == nTier && batch.bCastsShadows ? 1 : 0;
 		}
 		for ( int index = 0; index < m_nShadowBatchCount; ++index ) {

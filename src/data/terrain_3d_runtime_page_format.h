@@ -13,7 +13,7 @@
 
  // T3PG, little endian.
 
-typedef enum t3druntimePageChannel_e : uint32_t {
+typedef enum t3dRuntimePageChannel_e : uint32_t {
 	TERRAIN3D_RUNTIME_PAGE_HEIGHT = 1u,
 	TERRAIN3D_RUNTIME_PAGE_CONTROL = 2u,
 	TERRAIN3D_RUNTIME_PAGE_COLOR = 3u,
@@ -35,14 +35,14 @@ typedef enum t3druntimePageChannel_e : uint32_t {
 	TERRAIN3D_RUNTIME_PAGE_LIGHTING_RECEIVERS = 19u,
 	TERRAIN3D_RUNTIME_PAGE_MULTIMESH_FAST_START = 20u,
 	TERRAIN3D_RUNTIME_PAGE_TERRAIN_SHADOW_MASK = 21u,
-} t3druntimePageChannel_t;
+} t3dRuntimePageChannel_t;
 
-typedef enum t3druntimePageCompression_e : uint32_t {
+typedef enum t3dRuntimePageCompression_e : uint32_t {
 	TERRAIN3D_RUNTIME_PAGE_COMPRESSION_NONE = 0u,
 	TERRAIN3D_RUNTIME_PAGE_COMPRESSION_RLE = 1u,
-} t3druntimePageCompression_t;
+} t3dRuntimePageCompression_t;
 
-typedef struct t3druntimePageChannelInfo_s {
+typedef struct t3dRuntimePageChannelInfo_s {
 	uint32_t type = 0u;
 	uint32_t format = 0u;
 	uint32_t compression = TERRAIN3D_RUNTIME_PAGE_COMPRESSION_NONE;
@@ -55,9 +55,9 @@ typedef struct t3druntimePageChannelInfo_s {
 	uint32_t alignment = TERRAIN3D_RUNTIME_PAGE_ALIGNMENT;
 	uint32_t checksum = 0u;
 	uint32_t signature = 0u;
-} t3druntimePageChannelInfo_t;
+} t3dRuntimePageChannelInfo_t;
 
-typedef struct t3druntimePageHeader_s {
+typedef struct t3dRuntimePageHeader_s {
 	uint32_t magic = TERRAIN3D_RUNTIME_PAGE_MAGIC;
 	uint32_t version = TERRAIN3D_RUNTIME_PAGE_VERSION;
 	uint32_t nHeaderBytes = TERRAIN3D_RUNTIME_PAGE_HEADER_BYTES;
@@ -68,7 +68,7 @@ typedef struct t3druntimePageHeader_s {
 	uint32_t nTotalBytes = TERRAIN3D_RUNTIME_PAGE_HEADER_BYTES;
 	uint32_t channelCount = 0u;
 	uint32_t channelTableOffset = 40u;
-	t3druntimePageChannelInfo_t szChannels[TERRAIN3D_RUNTIME_PAGE_CHANNEL_COUNT];
+	t3dRuntimePageChannelInfo_t szChannels[TERRAIN3D_RUNTIME_PAGE_CHANNEL_COUNT];
 	uint32_t sourceSignatureLo = 0u;
 	uint32_t sourceSignatureHi = 0u;
 	uint32_t blendRecipeVersion = 0u;
@@ -80,10 +80,10 @@ typedef struct t3druntimePageHeader_s {
 	int32_t regionZ = 0;
 	uint32_t boundsMinYBits = 0u;
 	uint32_t boundsMaxYBits = 0u;
-} t3druntimePageHeader_t;
+} t3dRuntimePageHeader_t;
 
-inline const t3druntimePageChannelInfo_t *terrain3dRuntimePageFindChannel(
-	const t3druntimePageHeader_t &rHeader, const t3druntimePageChannel_t channel
+inline const t3dRuntimePageChannelInfo_t *terrain3dRuntimePageFindChannel(
+	const t3dRuntimePageHeader_t &rHeader, const t3dRuntimePageChannel_t channel
 ) {
 	for ( uint32_t index = 0u; index < rHeader.channelCount; ++index ) {
 		if ( rHeader.szChannels[index].type == ( uint32_t ) ( channel ) ) {
@@ -114,7 +114,7 @@ inline uint32_t terrain3dRuntimePageChecksum( const uint8_t *pData, const size_t
 }
 
 inline bool terrain3dRuntimePageValidateHeader(
-	const t3druntimePageHeader_t &rHeader,
+	const t3dRuntimePageHeader_t &rHeader,
 	const uint64_t nFileBytes
 ) {
 	if ( rHeader.magic != TERRAIN3D_RUNTIME_PAGE_MAGIC ||
@@ -140,7 +140,7 @@ inline bool terrain3dRuntimePageValidateHeader(
 	}
 	uint32_t previous_end = rHeader.nHeaderBytes;
 	for ( uint32_t channel = 0u; channel < rHeader.channelCount; ++channel ) {
-		const t3druntimePageChannelInfo_t &info = rHeader.szChannels[channel];
+		const t3dRuntimePageChannelInfo_t &info = rHeader.szChannels[channel];
 		if ( info.type == 0u || info.compressedBytes == 0u || info.uncompressedBytes == 0u ||
 			( info.compression != TERRAIN3D_RUNTIME_PAGE_COMPRESSION_NONE &&
 				info.compression != TERRAIN3D_RUNTIME_PAGE_COMPRESSION_RLE ) ||

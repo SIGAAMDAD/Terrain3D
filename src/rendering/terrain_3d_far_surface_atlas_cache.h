@@ -80,8 +80,8 @@ public:
 	void resetFrameStats( void );
 	void invalidateSurface( void );
 	void invalidateLayout( void );
-	void markAllDirty( t3dmapType_t eMapType );
-	void markRegionDirty( const Vector2i &vLocation, t3dmapType_t eMapType );
+	void markAllDirty( t3dMapType_t eMapType );
+	void markRegionDirty( const Vector2i &vLocation, t3dMapType_t eMapType );
 	bool ensure( void );
 	bool writeCooked( const String &rDirectory = String() );
 
@@ -141,7 +141,7 @@ private:
 	bool patchColorRegion( const Vector2i &vLocation, PackedByteArray &rAtlasBytes );
 	bool rebuildHeightAtlas( void );
 	bool rebuildColorAtlas( void );
-	Ref<Image> getRegionMapOrDefault( const T3DRegion *pRegion, t3dmapType_t eMapType ) const;
+	Ref<Image> getRegionMapOrDefault( const T3DRegion *pRegion, t3dMapType_t eMapType ) const;
 };
 
 #endif // TERRAIN3D_FAR_SURFACE_ATLAS_CACHE_H

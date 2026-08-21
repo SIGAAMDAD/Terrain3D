@@ -219,7 +219,7 @@ String T3DFarSurfaceAtlasCache::getCookedPath( const String &rDirectory ) const 
 }
 
 Ref<Image> T3DFarSurfaceAtlasCache::getRegionMapOrDefault(
-	const T3DRegion *pRegion, const t3dmapType_t eMapType
+	const T3DRegion *pRegion, const t3dMapType_t eMapType
 ) const {
 	if ( pRegion && !pRegion->isDeleted() ) {
 		const Ref<Image> pMap = pRegion->getMap( eMapType );
@@ -450,7 +450,7 @@ bool T3DFarSurfaceAtlasCache::writeCooked( const String &rDirectory ) {
 	return true;
 }
 
-void T3DFarSurfaceAtlasCache::markAllDirty( const t3dmapType_t eMapType ) {
+void T3DFarSurfaceAtlasCache::markAllDirty( const t3dMapType_t eMapType ) {
 	if ( eMapType == T3DRegion::TYPE_HEIGHT || eMapType == T3DRegion::TYPE_MAX ) {
 		m_bHeightDirty = true;
 		m_bHeightDirtyAll = true;
@@ -465,7 +465,7 @@ void T3DFarSurfaceAtlasCache::markAllDirty( const t3dmapType_t eMapType ) {
 	m_bCookedSaved = false;
 }
 
-void T3DFarSurfaceAtlasCache::markRegionDirty( const Vector2i &vLocation, const t3dmapType_t eMapType ) {
+void T3DFarSurfaceAtlasCache::markRegionDirty( const Vector2i &vLocation, const t3dMapType_t eMapType ) {
 	if ( !m_pRepository || !m_pRepository->isLocationValid( vLocation ) ) {
 		return;
 	}

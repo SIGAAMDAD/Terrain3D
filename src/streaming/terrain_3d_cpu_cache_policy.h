@@ -13,10 +13,10 @@
 #include <limits>
 
 
-typedef struct t3dcpuCacheCoord_s {
+typedef struct t3dCpuCacheCoord_s {
 	int x = 0;
 	int y = 0;
-} t3dcpuCacheCoord_t;
+} t3dCpuCacheCoord_t;
 
 static inline bool terrain3dCpuCacheMultiply( const size_t nA, const size_t nB, size_t &nResult ) {
 	if ( nA != 0u && nB > std::numeric_limits<size_t>::max() / nA ) {
@@ -57,6 +57,6 @@ static inline int terrain3dCpuCacheCalculateCapacity(
 	return ( int ) ( legal_capacity > ( size_t ) ( nMaxLayers ) ? ( size_t ) ( nMaxLayers ) : legal_capacity );
 }
 
-EA_FORCE_INLINE static int terrain3dCpuCacheDistance( const t3dcpuCacheCoord_t &rA, const t3dcpuCacheCoord_t &rB ) { const int dx = rA.x >= rB.x ? rA.x - rB.x : rB.x - rA.x; const int dy = rA.y >= rB.y ? rA.y - rB.y : rB.y - rA.y; return dx > dy ? dx : dy; }
+EA_FORCE_INLINE static int terrain3dCpuCacheDistance( const t3dCpuCacheCoord_t &rA, const t3dCpuCacheCoord_t &rB ) { const int dx = rA.x >= rB.x ? rA.x - rB.x : rB.x - rA.x; const int dy = rA.y >= rB.y ? rA.y - rB.y : rB.y - rA.y; return dx > dy ? dx : dy; }
 
 #endif // TERRAIN3D_CPU_CACHE_POLICY_H

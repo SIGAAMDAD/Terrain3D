@@ -41,13 +41,13 @@ struct T3DResidencyFrameState {
 			rLocation.y >= -half && rLocation.y < half;
 	}
 
-	t3dregionStreamingState_t streamingState( const Vector2i &rLocation ) const {
+	t3dRegionStreamingState_t streamingState( const Vector2i &rLocation ) const {
 		if ( !pStreamingStates || !containsLocation( rLocation ) ) {
 			return TERRAIN3D_REGION_STREAMING_UNLOADED;
 		}
 		const int mapIndex = T3DRegionRepository::getRegionMapIndex( rLocation );
 		return mapIndex >= 0 ?
-			( t3dregionStreamingState_t ) ( pStreamingStates[mapIndex] ) :
+			( t3dRegionStreamingState_t ) ( pStreamingStates[mapIndex] ) :
 			TERRAIN3D_REGION_STREAMING_UNLOADED;
 	}
 

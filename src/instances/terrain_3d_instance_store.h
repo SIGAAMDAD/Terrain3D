@@ -25,7 +25,7 @@
 using namespace godot;
 #endif
 
-typedef struct t3dinstanceCell_s {
+typedef struct t3dInstanceCell_s {
 	Vector2i location;
 	T3DTransformArray transforms;
 	T3DSlabArray<uint32_t> colors; // RGBA8. Empty means all white.
@@ -39,17 +39,17 @@ typedef struct t3dinstanceCell_s {
 	bool bCachedAabbValid = false;
 
 	EA_FORCE_INLINE void bindPayloadPools(
-		T3DHighWaterSlab<t3dpackedTransform_t> *const pTransforms,
+		T3DHighWaterSlab<t3dPackedTransform_t> *const pTransforms,
 		T3DHighWaterSlab<uint32_t> *const pColors, T3DHighWaterSlab<uint32_t> *const pOwners
 	) { transforms.bind( pTransforms ); colors.bind( pColors ); owners.bind( pOwners ); }
 
 	EA_FORCE_INLINE void rebindPayloadPools(
-		T3DHighWaterSlab<t3dpackedTransform_t> *const pTransforms,
+		T3DHighWaterSlab<t3dPackedTransform_t> *const pTransforms,
 		T3DHighWaterSlab<uint32_t> *const pColors, T3DHighWaterSlab<uint32_t> *const pOwners
 	) { transforms.rebind( pTransforms ); colors.rebind( pColors ); owners.rebind( pOwners ); }
 
 	EA_FORCE_INLINE void relocatePayloadsExact(
-		T3DHighWaterSlab<t3dpackedTransform_t> *const pTransforms,
+		T3DHighWaterSlab<t3dPackedTransform_t> *const pTransforms,
 		T3DHighWaterSlab<uint32_t> *const pColors, T3DHighWaterSlab<uint32_t> *const pOwners
 	) { transforms.relocateExact( pTransforms ); colors.relocateExact( pColors ); owners.relocateExact( pOwners ); }
 
@@ -118,32 +118,32 @@ typedef struct t3dinstanceCell_s {
 			nRevision = 1;
 		}
 	}
-} t3dinstanceCell_t;
+} t3dInstanceCell_t;
 
-typedef struct t3dinstanceMesh_s {
+typedef struct t3dInstanceMesh_s {
 	int id = -1;
-	eastl::vector<t3dinstanceCell_t> cells;
-} t3dinstanceMesh_t;
+	eastl::vector<t3dInstanceCell_t> cells;
+} t3dInstanceMesh_t;
 
 class T3DInstanceStore {
 	static constexpr uint16_t INVALID_MESH_SLOT = UINT16_MAX;
-	eastl::vector<t3dinstanceMesh_t> m_meshes;
-	T3DHighWaterSlab<t3dpackedTransform_t> m_transformSlab;
+	eastl::vector<t3dInstanceMesh_t> m_meshes;
+	T3DHighWaterSlab<t3dPackedTransform_t> m_transformSlab;
 	T3DHighWaterSlab<uint32_t> m_colorSlab;
 	T3DHighWaterSlab<uint32_t> m_ownerSlab;
-	t3dinstanceLayout_t m_layout;
+	t3dInstanceLayout_t m_layout;
 	mutable uint16_t m_szMeshSlots[TERRAIN3D_MAX_MESH_ASSETS];
 	mutable bool m_bMeshLookupDirty = true;
 
-	static bool cellLess( const t3dinstanceCell_t &a, const Vector2i &b );
-	static bool meshLess( const t3dinstanceMesh_t &a, int b );
-	static size_t cellLowerBound( const eastl::vector<t3dinstanceCell_t> &cells, const Vector2i &location );
-	static size_t findCellIndex( const t3dinstanceMesh_t &mesh, const Vector2i &location );
+	static bool cellLess( const t3dInstanceCell_t &a, const Vector2i &b );
+	static bool meshLess( const t3dInstanceMesh_t &a, int b );
+	static size_t cellLowerBound( const eastl::vector<t3dInstanceCell_t> &cells, const Vector2i &location );
+	static size_t findCellIndex( const t3dInstanceMesh_t &mesh, const Vector2i &location );
 	size_t meshLowerBound( int nMeshId ) const;
 	void rebuildMeshLookup( void ) const;
 	void rebindPayloadPools( void );
 	void copyFrom( const T3DInstanceStore &rOther );
-	EA_FORCE_INLINE void bindCellPayloads( t3dinstanceCell_t &rCell ) { rCell.bindPayloadPools( &m_transformSlab, &m_colorSlab, &m_ownerSlab ); }
+	EA_FORCE_INLINE void bindCellPayloads( t3dInstanceCell_t &rCell ) { rCell.bindPayloadPools( &m_transformSlab, &m_colorSlab, &m_ownerSlab ); }
 	EA_FORCE_INLINE void invalidateMeshLookup( void ) { m_bMeshLookupDirty = true; }
 
 public:
@@ -161,28 +161,28 @@ public:
 	EA_FORCE_INLINE void reserveMeshCapacity( const size_t nMeshes ) { if ( nMeshes > m_meshes.capacity() ) m_meshes.reserve( nMeshes ); }
 	EA_FORCE_INLINE void reservePayloadCapacity( const size_t nTransforms, const size_t nColors, const size_t nOwners ) { m_transformSlab.reserve( nTransforms ); m_colorSlab.reserve( nColors ); m_ownerSlab.reserve( nOwners ); }
 
-	EA_FORCE_INLINE void setLayout( const t3dinstanceLayout_t &rLayout ) { m_layout = rLayout; }
-	EA_FORCE_INLINE const t3dinstanceLayout_t &getLayout( void ) const { return m_layout; }
+	EA_FORCE_INLINE void setLayout( const t3dInstanceLayout_t &rLayout ) { m_layout = rLayout; }
+	EA_FORCE_INLINE const t3dInstanceLayout_t &getLayout( void ) const { return m_layout; }
 	EA_FORCE_INLINE bool isValidCell( const Vector2i &rLocation ) const { return m_layout.contains( rLocation.x, rLocation.y ); }
 	EA_FORCE_INLINE bool empty( void ) const { return m_meshes.empty(); }
 	EA_FORCE_INLINE size_t meshCount( void ) const { return m_meshes.size(); }
-	EA_FORCE_INLINE const eastl::vector<t3dinstanceMesh_t> &meshes( void ) const { return m_meshes; }
-	EA_FORCE_INLINE eastl::vector<t3dinstanceMesh_t> &meshesMut( void ) { invalidateMeshLookup(); return m_meshes; }
+	EA_FORCE_INLINE const eastl::vector<t3dInstanceMesh_t> &meshes( void ) const { return m_meshes; }
+	EA_FORCE_INLINE eastl::vector<t3dInstanceMesh_t> &meshesMut( void ) { invalidateMeshLookup(); return m_meshes; }
 
-	const t3dinstanceMesh_t *findMesh( int nMeshId ) const;
-	t3dinstanceMesh_t *findMesh( int nMeshId );
-	t3dinstanceMesh_t &getOrCreateMesh( int nMeshId, size_t nReserveCells = 0 );
+	const t3dInstanceMesh_t *findMesh( int nMeshId ) const;
+	t3dInstanceMesh_t *findMesh( int nMeshId );
+	t3dInstanceMesh_t &getOrCreateMesh( int nMeshId, size_t nReserveCells = 0 );
 	bool eraseMesh( int nMeshId );
 	void swapMeshIds( int nSrcId, int nDstId );
 	EA_FORCE_INLINE bool hasMesh( const int nMeshId ) const { return findMesh( nMeshId ) != nullptr; }
 
-	const t3dinstanceCell_t *findCell( int nMeshId, const Vector2i &cell ) const;
-	t3dinstanceCell_t *findCell( int nMeshId, const Vector2i &cell );
-	t3dinstanceCell_t &getOrCreateCell(
+	const t3dInstanceCell_t *findCell( int nMeshId, const Vector2i &cell ) const;
+	t3dInstanceCell_t *findCell( int nMeshId, const Vector2i &cell );
+	t3dInstanceCell_t &getOrCreateCell(
 		int nMeshId, const Vector2i &cell, size_t nReserveInstances = 0,
 		bool bColorData = false, bool bOwnerData = false
 	);
-	t3dinstanceCell_t &getOrCreateCellExact(
+	t3dInstanceCell_t &getOrCreateCellExact(
 		int nMeshId, const Vector2i &cell, size_t nReserveInstances,
 		bool bColorData, bool bOwnerData
 	);

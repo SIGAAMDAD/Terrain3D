@@ -44,22 +44,22 @@ class T3DMeshAsset : public T3DAssetResource {
 	CLASS_NAME();
 
 public:
-	typedef enum t3dhlodContribution_e {
+	typedef enum t3dHlodContribution_e {
 		HLOD_AUTO = 0,
 		HLOD_INCLUDE = 1,
 		HLOD_EXCLUDE = 2,
-	} t3dhlodContribution_t;
-	typedef enum t3dgenType_e {
+	} t3dHlodContribution_t;
+	typedef enum t3dGenType_e {
 		TYPE_NONE,
 		TYPE_TEXTURE_CARD,
 		TYPE_MAX,
-	} t3dgenType_t;
+	} t3dGenType_t;
 private:
 	// Saved data
 	bool m_bEnabled = true;
 	Ref<PackedScene> m_pPackedScene;
-	t3dgenType_t m_generatedType = TYPE_NONE;
-	t3dhlodContribution_t m_hlodContribution = HLOD_AUTO;
+	t3dGenType_t m_generatedType = TYPE_NONE;
+	t3dHlodContribution_t m_hlodContribution = HLOD_AUTO;
 	int m_nHlodMinLevel = 1;
 	int m_nGeneratedFaces = 2;
 	Vector2 m_generatedSize = V2( 1.f );
@@ -83,7 +83,7 @@ private:
 
 	void clearLodRanges( void );
 	static bool sortLodNodes( const Node *pA, const Node *pB );
-	Ref<ArrayMesh> createGeneratedMesh( const t3dgenType_t type = TYPE_TEXTURE_CARD ) const;
+	Ref<ArrayMesh> createGeneratedMesh( const t3dGenType_t type = TYPE_TEXTURE_CARD ) const;
 	void assignGeneratedMesh( void );
 	EA_FORCE_INLINE void invalidateThumbnail( void ) { m_pThumbnail.unref(); }
 	Ref<Material> getMaterial( void );
@@ -116,8 +116,8 @@ public:
 	EA_FORCE_INLINE Ref<PackedScene> getSceneFile( void ) const { return m_pPackedScene; }
 	EA_FORCE_INLINE bool isSceneFilePending( void ) const { return m_pendingMeshes.size() > 0; }
 	void commitMeshes( void );
-	void setHlodContribution( t3dhlodContribution_t mode );
-	EA_FORCE_INLINE t3dhlodContribution_t getHlodContribution( void ) const { return m_hlodContribution; }
+	void setHlodContribution( t3dHlodContribution_t mode );
+	EA_FORCE_INLINE t3dHlodContribution_t getHlodContribution( void ) const { return m_hlodContribution; }
 	void setHlodMinLevel( int nLevel );
 	EA_FORCE_INLINE int getHlodMinLevel( void ) const { return m_nHlodMinLevel; }
 	bool isHlodEligible( void ) const {
@@ -125,8 +125,8 @@ public:
 		return m_hlodContribution == HLOD_INCLUDE || m_generatedType == TYPE_NONE;
 	}
 
-	void setGeneratedType( const t3dgenType_t type );
-	EA_FORCE_INLINE t3dgenType_t getGeneratedType( void ) const { return m_generatedType; }
+	void setGeneratedType( const t3dGenType_t type );
+	EA_FORCE_INLINE t3dGenType_t getGeneratedType( void ) const { return m_generatedType; }
 	Ref<Mesh> getMesh( const int nLod = 0 ) const;
 	EA_FORCE_INLINE void setThumbnail( const Ref<Texture2D> tex ) { m_pThumbnail = tex; }
 	void setHeightOffset( const real_t fOffset );
@@ -190,8 +190,8 @@ protected:
 	static void _bind_methods( void );
 };
 
-VARIANT_ENUM_CAST( T3DMeshAsset::t3dgenType_t );
-VARIANT_ENUM_CAST( T3DMeshAsset::t3dhlodContribution_t );
+VARIANT_ENUM_CAST( T3DMeshAsset::t3dGenType_t );
+VARIANT_ENUM_CAST( T3DMeshAsset::t3dHlodContribution_t );
 
 inline TypedArray<Mesh> T3DMeshAsset::getMeshes( void ) const {
 	if ( !m_pendingMeshes.is_empty() ) {

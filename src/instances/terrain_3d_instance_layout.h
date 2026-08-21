@@ -10,7 +10,7 @@
 #include <cstdint>
 
 
-typedef struct t3dinstanceLayout_s {
+typedef struct t3dInstanceLayout_s {
 	uint16_t nCellSize = TERRAIN3D_INSTANCE_DEFAULT_CELL_SIZE;
 	uint16_t cellsPerAxis = 4;
 
@@ -27,11 +27,11 @@ typedef struct t3dinstanceLayout_s {
 	EA_FORCE_INLINE bool contains( const int iX, const int iY ) const { return iX >= 0 && iY >= 0 && iX < ( int ) ( cellsPerAxis ) && iY < ( int ) ( cellsPerAxis ); }
 
 	EA_FORCE_INLINE uint32_t maximumCellCount( void ) const { return ( uint32_t ) ( cellsPerAxis ) * ( uint32_t ) ( cellsPerAxis ); }
-} t3dinstanceLayout_t;
+} t3dInstanceLayout_t;
 
 inline bool terrain3dInstanceLayoutForRegion(
 	const int nRegionSize, const int nCellSize,
-	t3dinstanceLayout_t &rLayout
+	t3dInstanceLayout_t &rLayout
 ) {
 	if ( nRegionSize <= 0 || nCellSize < TERRAIN3D_INSTANCE_MIN_CELL_SIZE ||
 		nCellSize > TERRAIN3D_INSTANCE_MAX_CELL_SIZE ||

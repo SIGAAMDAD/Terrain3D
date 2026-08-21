@@ -59,7 +59,7 @@ public:
 private:
 	// Cache probes and successful samples touch only this cacheline-aligned hot
 	// descriptor. Ownership and fallback containers live in the parallel cold bank.
-	typedef struct alignas( 64 ) t3dregionView_s {
+	typedef struct alignas( 64 ) t3dRegionView_s {
 		Vector2i location = Vector2i( INT32_MAX, INT32_MAX );
 		uint32_t nStamp = 0;
 		uint32_t nRegionGeneration = 0u;
@@ -70,9 +70,9 @@ private:
 		const uint8_t *pHeightBytes = nullptr;
 		const uint8_t *pControlBytes = nullptr;
 		const uint8_t *pDerivedBytes = nullptr;
-	} t3dregionView_t;
+	} t3dRegionView_t;
 
-	typedef struct t3dregionCold_s {
+	typedef struct t3dRegionCold_s {
 		T3DActiveMapLease activeLease;
 		T3DResidentMapLease lease;
 		PackedByteArray heightData;
@@ -80,12 +80,12 @@ private:
 		PackedByteArray derivedData;
 
 		void reset( void );
-	} t3dregionCold_t;
+	} t3dRegionCold_t;
 
 	T3DSamplingSource m_source;
-	eastl::array<t3dregionView_t, TERRAIN3D_SAMPLER_CACHE_SIZE> m_szCache{};
-	eastl::array<t3dregionCold_t, TERRAIN3D_SAMPLER_CACHE_SIZE> m_szCacheCold{};
-	t3dregionView_t *m_pLastView = nullptr;
+	eastl::array<t3dRegionView_t, TERRAIN3D_SAMPLER_CACHE_SIZE> m_szCache{};
+	eastl::array<t3dRegionCold_t, TERRAIN3D_SAMPLER_CACHE_SIZE> m_szCacheCold{};
+	t3dRegionView_t *m_pLastView = nullptr;
 	uint32_t m_stamp = 1;
 	uint32_t m_operation = 1u;
 	uint64_t m_nSamplingGeneration = 0u;
@@ -96,21 +96,21 @@ private:
 	double m_fInverseVertexSpacing = 0.0;
 
 	bool validateEpoch( void );
-	t3dregionView_t *validateCachedView( t3dregionView_t *pView, const Vector2i &rLocation );
-	t3dregionView_t *getRegionViewUnchecked( const Vector2i &rLocation );
-	bool resolveGridUnchecked( int64_t iGridX, int64_t iGridZ, t3dregionView_t *&pView, int &iIndex );
+	t3dRegionView_t *validateCachedView( t3dRegionView_t *pView, const Vector2i &rLocation );
+	t3dRegionView_t *getRegionViewUnchecked( const Vector2i &rLocation );
+	bool resolveGridUnchecked( int64_t iGridX, int64_t iGridZ, t3dRegionView_t *&pView, int &iIndex );
 	float sampleHeightGridUnchecked( int64_t iGridX, int64_t iGridZ, bool bRespectHoles );
 	uint32_t sampleControlGridUnchecked( int64_t iGridX, int64_t iGridZ );
 	float sampleHeightUnchecked( const Vector3 &rGlobalPosition );
 	Vector3 sampleNormalUnchecked( const Vector3 &rGlobalPosition, float *pHeight = nullptr );
 	Vector3 sampleSlopeNormalUnchecked( const Vector3 &rGlobalPosition );
 	void resetCache( uint64_t nGeneration );
-	void resetView( t3dregionView_t *pView );
+	void resetView( t3dRegionView_t *pView );
 	static int64_t floorDiv( int64_t nValue, int64_t nDivisor );
 	void resolveAxis( int64_t nGrid, int64_t &nRegion, int &nLocal ) const;
 	static float readHeight( const uint8_t *pBytes, int iIndex );
 	static uint32_t readUint( const uint8_t *pBytes, int iIndex );
-	static uint32_t readControl( const t3dregionView_t *pView, int iIndex );
+	static uint32_t readControl( const t3dRegionView_t *pView, int iIndex );
 };
 
 #endif // TERRAIN3D_SAMPLER_H

@@ -21,19 +21,19 @@ class T3DAssets : public Resource {
 	CLASS_NAME();
 
 public: // Constants
-	typedef enum t3dassetType_e {
+	typedef enum t3dAssetType_e {
 		TYPE_TEXTURE,
 		TYPE_MESH,
-	} t3dassetType_t;
+	} t3dAssetType_t;
 
-	typedef enum t3dtexturePackingMode_e {
+	typedef enum t3dTexturePackingMode_e {
 		TEXTURE_PACKING_LEGACY = 0,
 		TEXTURE_PACKING_PACKED_PBR_R8 = 1,
 		// Deprecated serialized alias for projects created by the intermediate
 		// RGBA16UI implementation. It resolves to the new packed-PBR/R8 path.
 		TEXTURE_PACKING_SURFACE_R16 = TEXTURE_PACKING_PACKED_PBR_R8,
 		TEXTURE_PACKING_PBR_RGBA16UI = TEXTURE_PACKING_PACKED_PBR_R8,
-	} t3dtexturePackingMode_t;
+	} t3dTexturePackingMode_t;
 
 
 private:
@@ -49,8 +49,8 @@ private:
 	T3DGeneratedTexture m_generatedSurfaceTextures;
 	T3DGeneratedTexture m_generatedDisplacementTextures;
 	T3DGeneratedTexture m_generatedFarAlbedoTextures;
-	t3dtexturePackingMode_t m_texturePackingMode = TEXTURE_PACKING_LEGACY;
-	typedef struct t3dtextureSettingsBlock_s {
+	t3dTexturePackingMode_t m_texturePackingMode = TEXTURE_PACKING_LEGACY;
+	typedef struct t3dTextureSettingsBlock_s {
 		eastl::array<Color, TERRAIN3D_MAX_TEXTURE_ASSETS> colors{};
 		eastl::array<float, TERRAIN3D_MAX_TEXTURE_ASSETS> normal_depths{};
 		eastl::array<float, TERRAIN3D_MAX_TEXTURE_ASSETS> ao_strengths{};
@@ -61,8 +61,8 @@ private:
 		eastl::array<Vector2, TERRAIN3D_MAX_TEXTURE_ASSETS> detiles{};
 		eastl::array<Vector2, TERRAIN3D_MAX_TEXTURE_ASSETS> displacements{};
 		int nCount = 0;
-	} t3dtextureSettingsBlock_t;
-	t3dtextureSettingsBlock_t m_textureSettings;
+	} t3dTextureSettingsBlock_t;
+	t3dTextureSettingsBlock_t m_textureSettings;
 	PackedColorArray m_textureColors;
 	PackedFloat32Array m_textureNormalDepths;
 	PackedFloat32Array m_textureAoStrengths;
@@ -73,15 +73,15 @@ private:
 	PackedVector2Array m_textureDetiles;
 	PackedVector2Array m_textureDisplacements;
 
-	typedef enum t3druntimeMaterialChannel_e {
+	typedef enum t3dRuntimeMaterialChannel_e {
 		RUNTIME_MATERIAL_CHANNEL_ALBEDO = 0,
 		RUNTIME_MATERIAL_CHANNEL_NORMAL = 1,
 		RUNTIME_MATERIAL_CHANNEL_SURFACE = 2,
 		RUNTIME_MATERIAL_CHANNEL_DISPLACEMENT = 3,
 		RUNTIME_MATERIAL_CHANNEL_FAR_ALBEDO = 4,
 		RUNTIME_MATERIAL_CHANNEL_COUNT = 5,
-	} t3druntimeMaterialChannel_t;
-	typedef struct t3druntimeMaterialImageInfo_s {
+	} t3dRuntimeMaterialChannel_t;
+	typedef struct t3dRuntimeMaterialImageInfo_s {
 		uint64_t nOffset = 0u;
 		uint32_t nSize = 0u;
 		uint32_t nChecksum = 0u;
@@ -89,9 +89,9 @@ private:
 		int32_t nHeight = 0;
 		int32_t nFormat = ( int32_t ) ( Image::FORMAT_MAX );
 		uint32_t bMipmaps = 0u;
-	} t3druntimeMaterialImageInfo_t;
-	typedef struct t3druntimeMaterialLayerInfo_s {
-		eastl::array<t3druntimeMaterialImageInfo_t, RUNTIME_MATERIAL_CHANNEL_COUNT> channels{};
+	} t3dRuntimeMaterialImageInfo_t;
+	typedef struct t3dRuntimeMaterialLayerInfo_s {
+		eastl::array<t3dRuntimeMaterialImageInfo_t, RUNTIME_MATERIAL_CHANNEL_COUNT> channels{};
 		Color averageAlbedo = COLOR_WHITE;
 		Color albedoColor = COLOR_WHITE;
 		float normalDepth = 1.0f;
@@ -103,8 +103,8 @@ private:
 		Vector2 detile = Vector2();
 		Vector2 displacement = Vector2();
 		uint32_t nBundleIndex = 0u;
-	} t3druntimeMaterialLayerInfo_t;
-	eastl::array<t3druntimeMaterialLayerInfo_t, TERRAIN3D_MAX_TEXTURE_ASSETS> m_runtimeMaterialCookedLayers{};
+	} t3dRuntimeMaterialLayerInfo_t;
+	eastl::array<t3dRuntimeMaterialLayerInfo_t, TERRAIN3D_MAX_TEXTURE_ASSETS> m_runtimeMaterialCookedLayers{};
 	eastl::array<int, TERRAIN3D_MAX_TEXTURE_ASSETS> m_runtimeMaterialLogicalToPhysical{};
 	eastl::array<int, TERRAIN3D_MAX_TEXTURE_ASSETS> m_runtimeMaterialPhysicalToLogical{};
 	eastl::array<uint64_t, TERRAIN3D_MAX_TEXTURE_ASSETS> m_runtimeMaterialLastUseTick{};
@@ -120,12 +120,12 @@ private:
 	bool m_bRuntimeMaterialCookedValid = false;
 	bool m_bRuntimeMaterialSourceTexturesReleased = false;
 
-	typedef struct t3dtextureArrayLayout_s {
+	typedef struct t3dTextureArrayLayout_s {
 		Vector2i vSize = V2I_ZERO;
 		Image::Format eFormat = Image::FORMAT_MAX;
 		bool bMipmaps = true;
 		bool bNeedsNormalization = false;
-	} t3dtextureArrayLayout_t;
+	} t3dTextureArrayLayout_t;
 
 	// Mesh Thumbnail Generation
 	RID m_scenario;
@@ -138,16 +138,16 @@ private:
 	RID m_fillLightInstance;
 	RID m_meshInstance;
 
-	void swapIds( const t3dassetType_t type, const int nSrcId, const int nDstId );
-	void connectAssetSignals( const t3dassetType_t type, const Ref<T3DAssetResource> &rAsset );
-	void disconnectAssetSignals( const t3dassetType_t type, const Ref<T3DAssetResource> &rAsset );
-	Ref<T3DAssetResource> makePlaceholderAsset( const t3dassetType_t type, const int nId ) const;
-	void setAssetList( const t3dassetType_t type, const TypedArray<T3DAssetResource> &rList );
-	void setAsset( const t3dassetType_t type, const int nId, const Ref<T3DAssetResource> &rAsset );
+	void swapIds( const t3dAssetType_t type, const int nSrcId, const int nDstId );
+	void connectAssetSignals( const t3dAssetType_t type, const Ref<T3DAssetResource> &rAsset );
+	void disconnectAssetSignals( const t3dAssetType_t type, const Ref<T3DAssetResource> &rAsset );
+	Ref<T3DAssetResource> makePlaceholderAsset( const t3dAssetType_t type, const int nId ) const;
+	void setAssetList( const t3dAssetType_t type, const TypedArray<T3DAssetResource> &rList );
+	void setAsset( const t3dAssetType_t type, const int nId, const Ref<T3DAssetResource> &rAsset );
 
 	void validateArrayMember(
 		const Ref<Texture2D> &rTexture, const Ref<T3DTextureAsset> &rAsset,
-		const String &rLabel, t3dtextureArrayLayout_t &rLayout,
+		const String &rLabel, t3dTextureArrayLayout_t &rLayout,
 		Image::Format eRequiredFormat = Image::FORMAT_MAX, bool bAllowCompressedSurface = false
 	);
 	void updateTextureFiles( void );
@@ -198,8 +198,8 @@ public:
 	EA_FORCE_INLINE size_t getGeneratedTexturePayloadBytes( void ) const { return m_generatedAlbedoTextures.payloadBytes() + m_generatedNormalTextures.payloadBytes() + m_generatedSurfaceTextures.payloadBytes() + m_generatedDisplacementTextures.payloadBytes() + m_generatedFarAlbedoTextures.payloadBytes(); }
 	// Deprecated compatibility alias.
 	EA_FORCE_INLINE RID getPbrArrayRid( void ) const { return getSurfaceArrayRid(); }
-	void setTexturePackingMode( const t3dtexturePackingMode_t mode );
-	EA_FORCE_INLINE t3dtexturePackingMode_t getTexturePackingMode( void ) const { return m_texturePackingMode; }
+	void setTexturePackingMode( const t3dTexturePackingMode_t mode );
+	EA_FORCE_INLINE t3dTexturePackingMode_t getTexturePackingMode( void ) const { return m_texturePackingMode; }
 	EA_FORCE_INLINE bool usesPackedPbr( void ) const { return m_texturePackingMode == TEXTURE_PACKING_PACKED_PBR_R8; }
 	// Deprecated compatibility name. The displacement plane is R8.
 	EA_FORCE_INLINE bool usesSurfaceR16( void ) const { return usesPackedPbr(); }
@@ -241,8 +241,8 @@ protected:
 	static void _bind_methods( void );
 };
 
-VARIANT_ENUM_CAST( T3DAssets::t3dassetType_t );
-VARIANT_ENUM_CAST( T3DAssets::t3dtexturePackingMode_t );
+VARIANT_ENUM_CAST( T3DAssets::t3dAssetType_t );
+VARIANT_ENUM_CAST( T3DAssets::t3dTexturePackingMode_t );
 
 inline Ref<T3DTextureAsset> T3DAssets::getTextureAsset( const int nId ) const {
 	if ( nId >= 0 && nId < m_textureList.size() ) {

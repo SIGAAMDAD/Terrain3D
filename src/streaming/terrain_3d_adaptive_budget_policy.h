@@ -8,53 +8,53 @@
 #include <cstdint>
 #include "core/terrain_3d_compiler.h"
 
-typedef struct t3dadaptiveBudgetValues_s {
+typedef struct t3dAdaptiveBudgetValues_s {
 	int nGpuPages = 4;
 	int nCpuPages = 4;
 	int nInstancePages = 4;
 	int instancerCells = 32;
 	int nNodeLoadRegions = 2;
 	int nNodeUnloadRegions = 4;
-} t3dadaptiveBudgetValues_t;
+} t3dAdaptiveBudgetValues_t;
 
-typedef struct t3dadaptiveBudgetLimits_s {
-	t3dadaptiveBudgetValues_t minimum;
-	t3dadaptiveBudgetValues_t maximum;
+typedef struct t3dAdaptiveBudgetLimits_s {
+	t3dAdaptiveBudgetValues_t minimum;
+	t3dAdaptiveBudgetValues_t maximum;
 	uint64_t nTargetUsec = 1000u;
 	uint64_t nHardMaxUsec = 2000u;
 	int nAdjustmentWindowFrames = 4;
-} t3dadaptiveBudgetLimits_t;
+} t3dAdaptiveBudgetLimits_t;
 
-typedef struct t3dadaptiveBudgetPressure_s {
+typedef struct t3dAdaptiveBudgetPressure_s {
 	bool bGpuLimited = false;
 	bool bCpuLimited = false;
 	bool bInstanceLimited = false;
 	bool bInstancerLimited = false;
 	bool bNodeLoadLimited = false;
 	bool bNodeUnloadLimited = false;
-} t3dadaptiveBudgetPressure_t;
+} t3dAdaptiveBudgetPressure_t;
 
-typedef enum t3dadaptiveBudgetReason_e {
+typedef enum t3dAdaptiveBudgetReason_e {
 	TERRAIN3D_ADAPTIVE_REASON_DISABLED = 0,
 	TERRAIN3D_ADAPTIVE_REASON_INITIALIZED,
 	TERRAIN3D_ADAPTIVE_REASON_HARD_LIMIT,
 	TERRAIN3D_ADAPTIVE_REASON_BACKLOG_RECOVERY,
 	TERRAIN3D_ADAPTIVE_REASON_UNDER_TARGET_NO_BACKLOG,
 	TERRAIN3D_ADAPTIVE_REASON_STABLE,
-} t3dadaptiveBudgetReason_t;
+} t3dAdaptiveBudgetReason_t;
 
-typedef struct t3dadaptiveBudgetState_s {
-	t3dadaptiveBudgetValues_t effective;
+typedef struct t3dAdaptiveBudgetState_s {
+	t3dAdaptiveBudgetValues_t effective;
 	int overBudgetStreak = 0;
 	int underBudgetStreak = 0;
 	uint64_t nAdjustmentCount = 0u;
-	t3dadaptiveBudgetReason_t reason = TERRAIN3D_ADAPTIVE_REASON_DISABLED;
+	t3dAdaptiveBudgetReason_t reason = TERRAIN3D_ADAPTIVE_REASON_DISABLED;
 	bool bInitialized = false;
-} t3dadaptiveBudgetState_t;
+} t3dAdaptiveBudgetState_t;
 
 EA_FORCE_INLINE int terrain3dAdaptiveClampValue( const int nValue, const int nMinimum, const int nMaximum ) { const int maximum = std::max( nMinimum, nMaximum ); return std::max( nMinimum, std::min( nValue, maximum ) ); }
 
-inline void terrain3dAdaptiveSanitizeLimits( t3dadaptiveBudgetLimits_t &rLimits ) {
+inline void terrain3dAdaptiveSanitizeLimits( t3dAdaptiveBudgetLimits_t &rLimits ) {
 	rLimits.maximum.nGpuPages = std::max( 0, rLimits.maximum.nGpuPages );
 	rLimits.maximum.nCpuPages = std::max( 0, rLimits.maximum.nCpuPages );
 	rLimits.maximum.nInstancePages = std::max( 0, rLimits.maximum.nInstancePages );
@@ -78,7 +78,7 @@ inline void terrain3dAdaptiveSanitizeLimits( t3dadaptiveBudgetLimits_t &rLimits 
 	rLimits.nAdjustmentWindowFrames = std::max( 1, rLimits.nAdjustmentWindowFrames );
 }
 
-EA_FORCE_INLINE void terrain3dAdaptiveReset( const t3dadaptiveBudgetLimits_t &rLimits, t3dadaptiveBudgetState_t &rState, const t3dadaptiveBudgetReason_t reason ) { rState.effective = rLimits.maximum; rState.overBudgetStreak = 0; rState.underBudgetStreak = 0; rState.reason = reason; rState.bInitialized = true; }
+EA_FORCE_INLINE void terrain3dAdaptiveReset( const t3dAdaptiveBudgetLimits_t &rLimits, t3dAdaptiveBudgetState_t &rState, const t3dAdaptiveBudgetReason_t reason ) { rState.effective = rLimits.maximum; rState.overBudgetStreak = 0; rState.underBudgetStreak = 0; rState.reason = reason; rState.bInitialized = true; }
 
 inline int terrain3dAdaptiveDecrease( const int nValue, const int nMinimum ) {
 	if ( nValue <= nMinimum ) {
@@ -97,8 +97,8 @@ inline int terrain3dAdaptiveIncrease( const int nValue, const int nMaximum ) {
 }
 
 inline void terrain3dAdaptiveClampState(
-	const t3dadaptiveBudgetLimits_t &rLimits,
-	t3dadaptiveBudgetState_t &rState
+	const t3dAdaptiveBudgetLimits_t &rLimits,
+	t3dAdaptiveBudgetState_t &rState
 ) {
 	rState.effective.nGpuPages = terrain3dAdaptiveClampValue( rState.effective.nGpuPages,
 		rLimits.minimum.nGpuPages, rLimits.maximum.nGpuPages );
@@ -115,9 +115,9 @@ inline void terrain3dAdaptiveClampState(
 }
 
 inline bool terrain3dAdaptiveStep(
-	const t3dadaptiveBudgetLimits_t &rLimits,
-	const t3dadaptiveBudgetPressure_t &rPressure, const uint64_t nMeasuredUsec,
-	t3dadaptiveBudgetState_t &rState
+	const t3dAdaptiveBudgetLimits_t &rLimits,
+	const t3dAdaptiveBudgetPressure_t &rPressure, const uint64_t nMeasuredUsec,
+	t3dAdaptiveBudgetState_t &rState
 ) {
 	if ( !rState.bInitialized ) {
 		terrain3dAdaptiveReset( rLimits, rState, TERRAIN3D_ADAPTIVE_REASON_INITIALIZED );
@@ -131,7 +131,7 @@ inline bool terrain3dAdaptiveStep(
 			rState.reason = TERRAIN3D_ADAPTIVE_REASON_STABLE;
 			return false;
 		}
-		const t3dadaptiveBudgetValues_t previous = rState.effective;
+		const t3dAdaptiveBudgetValues_t previous = rState.effective;
 		rState.effective.nGpuPages = terrain3dAdaptiveDecrease( rState.effective.nGpuPages,
 			rLimits.minimum.nGpuPages );
 		rState.effective.nCpuPages = terrain3dAdaptiveDecrease( rState.effective.nCpuPages,
@@ -164,7 +164,7 @@ inline bool terrain3dAdaptiveStep(
 			rState.reason = TERRAIN3D_ADAPTIVE_REASON_STABLE;
 			return false;
 		}
-		const t3dadaptiveBudgetValues_t previous = rState.effective;
+		const t3dAdaptiveBudgetValues_t previous = rState.effective;
 		if ( rPressure.bGpuLimited ) {
 			rState.effective.nGpuPages = terrain3dAdaptiveIncrease( rState.effective.nGpuPages,
 				rLimits.maximum.nGpuPages );

@@ -172,10 +172,10 @@ void T3DTerrain::refreshPerformanceProfileConformity( void ) {
 		return;
 	}
 
-	t3dperformanceProfileStatus_t next_status = PERFORMANCE_PROFILE_CUSTOM;
+	t3dPerformanceProfileStatus_t next_status = PERFORMANCE_PROFILE_CUSTOM;
 	if ( m_performanceTarget == PERFORMANCE_TARGET_XBOX360_EXPERIMENTAL ) {
 		next_status = PERFORMANCE_PROFILE_EXACT;
-		for ( const terrain_3d_profile::t3dsetting_t &setting : terrain_3d_profile::XBOX360_EXPERIMENTAL_SETTINGS ) {
+		for ( const terrain_3d_profile::t3dSetting_t &setting : terrain_3d_profile::XBOX360_EXPERIMENTAL_SETTINGS ) {
 			Object *pOwner = this;
 			if ( setting.owner == terrain_3d_profile::OWNER_MATERIAL ) {
 				if ( m_pMaterial.is_null() ) {
@@ -205,7 +205,7 @@ void T3DTerrain::onProfileOwnedResourceChanged( void ) {
 }
 
 void T3DTerrain::applyPerformanceProfileToTerrain( void ) {
-	for ( const terrain_3d_profile::t3dsetting_t &setting : terrain_3d_profile::XBOX360_EXPERIMENTAL_SETTINGS ) {
+	for ( const terrain_3d_profile::t3dSetting_t &setting : terrain_3d_profile::XBOX360_EXPERIMENTAL_SETTINGS ) {
 		if ( setting.owner != terrain_3d_profile::OWNER_TERRAIN ) {
 			continue;
 		}
@@ -382,7 +382,7 @@ void T3DTerrain::setEditor( T3DEditor *const pEditor ) {
 		return;
 	}
 	SET_IF_DIFF( m_pEditor, pEditor );
-	LOG( T3DTerrain::INFO, "t3dsetting_t T3DEditor: ", m_pEditor );
+	LOG( T3DTerrain::INFO, "t3dSetting_t T3DEditor: ", m_pEditor );
 	if ( m_pMaterial.is_valid() ) {
 		m_pMaterial->update( T3DMaterial::FULL_REBUILD );
 	}
@@ -394,10 +394,10 @@ void T3DTerrain::setPlugin( Object *const pPlugin ) {
 		return;
 	}
 	SET_IF_DIFF( m_pEditorPlugin, pPlugin );
-	LOG( T3DTerrain::INFO, "t3dsetting_t Editor Plugin: ", m_pEditorPlugin );
+	LOG( T3DTerrain::INFO, "t3dSetting_t Editor Plugin: ", m_pEditorPlugin );
 }
 
-void T3DTerrain::setRegionSize( const t3dregionSize_t size ) {
+void T3DTerrain::setRegionSize( const t3dRegionSize_t size ) {
 	if ( size != SIZE_128 ) {
 		LOG( T3DTerrain::ERROR, "This Terrain3D fork is specialized for 128-sample regions and rejects all other sizes" );
 		return;
@@ -411,7 +411,7 @@ void T3DTerrain::setRegionSize( const t3dregionSize_t size ) {
 			m_nInstancerCellSize, ". Change instancer_cell_size first." );
 		return;
 	}
-	const t3dregionSize_t previous_size = m_nRegionSize;
+	const t3dRegionSize_t previous_size = m_nRegionSize;
 	const bool bOwnerChanged = m_nRegionSize != size;
 	if ( bOwnerChanged ) {
 		refreshPerformanceProfileConformity();
@@ -447,7 +447,7 @@ void T3DTerrain::setRegionSize( const t3dregionSize_t size ) {
 	if ( !bOwnerChanged && !bDataChanged ) {
 		return;
 	}
-	LOG( T3DTerrain::INFO, "t3dsetting_t region size: ", m_nRegionSize );
+	LOG( T3DTerrain::INFO, "t3dSetting_t region size: ", m_nRegionSize );
 	// Runtime migration updates dependent instance layouts only after the data
 	// object has been attached to this terrain. Pre-tree property deserialization
 	// is intentionally reconciled by T3DData::initialize().

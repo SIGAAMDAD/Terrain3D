@@ -27,13 +27,13 @@ class T3DLightmapStreamer : public Object {
 	GDCLASS( T3DLightmapStreamer, Object );
 	CLASS_NAME();
 
-	typedef enum t3dsourceLoadResult_e {
+	typedef enum t3dSourceLoadResult_e {
 		SOURCE_LOAD_PENDING,
 		SOURCE_LOAD_READY,
 		SOURCE_LOAD_FAILED,
-	} t3dsourceLoadResult_t;
+	} t3dSourceLoadResult_t;
 
-	typedef struct t3dactivePackage_s {
+	typedef struct t3dActivePackage_s {
 		Ref<T3DRegionLighting> pPackage;
 		Ref<LightmapGIData> pSourceData;
 		Ref<LightmapGIData> pRuntimeData;
@@ -41,10 +41,10 @@ class T3DLightmapStreamer : public Object {
 		uint64_t receiverSignature = 0u;
 		int nReceiverCount = 0;
 		bool bDesired = false;
-	} t3dactivePackage_t;
+	} t3dActivePackage_t;
 
 	T3DTerrain *m_pTerrain = nullptr;
-	t3dactivePackage_t m_szActive[TERRAIN3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT];
+	t3dActivePackage_t m_szActive[TERRAIN3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT];
 	uint8_t m_nActiveCount = 0u;
 	bool m_bEnabled = true;
 	int m_nRadiusRegions = 1;
@@ -70,9 +70,9 @@ class T3DLightmapStreamer : public Object {
 	uint64_t m_nCompatibilityFailuresTotal = 0u;
 	size_t m_nResidentEstimatedBytes = 0u;
 
-	t3dactivePackage_t *findActive( const Ref<T3DRegionLighting> &rPackage );
-	const t3dactivePackage_t *findActive( const Ref<T3DRegionLighting> &rPackage ) const;
-	t3dsourceLoadResult_t requestSourceData(
+	t3dActivePackage_t *findActive( const Ref<T3DRegionLighting> &rPackage );
+	const t3dActivePackage_t *findActive( const Ref<T3DRegionLighting> &rPackage ) const;
+	t3dSourceLoadResult_t requestSourceData(
 		const Ref<T3DRegionLighting> &rPackage,
 		Ref<LightmapGIData> &rData
 	);
@@ -89,7 +89,7 @@ class T3DLightmapStreamer : public Object {
 		const Ref<LightmapGIData> &rRuntimeData, uint64_t nSignature, int nReceiverCount
 	);
 	bool refreshActive(
-		t3dactivePackage_t &rActive, const Ref<LightmapGIData> &rRuntimeData,
+		t3dActivePackage_t &rActive, const Ref<LightmapGIData> &rRuntimeData,
 		uint64_t nSignature, int nReceiverCount
 	);
 	bool isPackageCompatibleWithActive( const Ref<T3DRegionLighting> &rPackage ) const;

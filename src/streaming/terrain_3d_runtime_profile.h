@@ -16,7 +16,7 @@
 
 
 
-typedef enum t3druntimeProfileEvent_e : uint32_t {
+typedef enum t3dRuntimeProfileEvent_e : uint32_t {
 	TERRAIN3D_PROFILE_EVENT_NONE = 0u,
 	TERRAIN3D_PROFILE_EVENT_CAMERA_MOVED = 1u << 0u,
 	TERRAIN3D_PROFILE_EVENT_GPU_UPLOAD = 1u << 1u,
@@ -31,9 +31,9 @@ typedef enum t3druntimeProfileEvent_e : uint32_t {
 	TERRAIN3D_PROFILE_EVENT_INSTANCE_BACKLOG = 1u << 10u,
 	TERRAIN3D_PROFILE_EVENT_SHADER_UPDATE = 1u << 11u,
 	TERRAIN3D_PROFILE_EVENT_SHADER_VARIANT_CREATED = 1u << 12u,
-} t3druntimeProfileEvent_t;
+} t3dRuntimeProfileEvent_t;
 
-typedef enum t3druntimeProfileStall_e : uint32_t {
+typedef enum t3dRuntimeProfileStall_e : uint32_t {
 	TERRAIN3D_PROFILE_STALL_NONE = 0u,
 	TERRAIN3D_PROFILE_STALL_GPU_UPLOAD_LAYER_BUDGET = 1u << 0u,
 	TERRAIN3D_PROFILE_STALL_GPU_PREPARE_PENDING = 1u << 1u,
@@ -50,9 +50,9 @@ typedef enum t3druntimeProfileStall_e : uint32_t {
 	TERRAIN3D_PROFILE_STALL_CPU_LOAD_BYTE_BUDGET = 1u << 12u,
 	TERRAIN3D_PROFILE_STALL_CPU_PINNED_CAPACITY = 1u << 13u,
 	TERRAIN3D_PROFILE_STALL_INSTANCE_LOAD_BYTE_BUDGET = 1u << 14u,
-} t3druntimeProfileStall_t;
+} t3dRuntimeProfileStall_t;
 
-typedef struct t3druntimeProfileSample_s {
+typedef struct t3dRuntimeProfileSample_s {
 	uint64_t frameSequence = 0u;
 	uint64_t nPhysicsTotalUsec = 0u;
 	uint64_t nDataResidencyUsec = 0u;
@@ -138,21 +138,21 @@ typedef struct t3druntimeProfileSample_s {
 	int shaderVariantCreations = 0;
 	uint64_t nShaderSourceSubmissionUsec = 0u;
 	uint64_t nShaderUpdateUsec = 0u;
-} t3druntimeProfileSample_t;
+} t3dRuntimeProfileSample_t;
 
-typedef struct t3druntimeProfileHistory_s {
-	eastl::array<t3druntimeProfileSample_t, TERRAIN3D_RUNTIME_PROFILE_HISTORY_CAPACITY> samples{};
+typedef struct t3dRuntimeProfileHistory_s {
+	eastl::array<t3dRuntimeProfileSample_t, TERRAIN3D_RUNTIME_PROFILE_HISTORY_CAPACITY> samples{};
 	size_t iWriteIndex = 0u;
 	size_t nCount = 0u;
 
 	EA_FORCE_INLINE void reset( void ) noexcept { iWriteIndex = 0u; nCount = 0u; }
 
-	EA_FORCE_INLINE void push( const t3druntimeProfileSample_t &rSample ) noexcept { samples[iWriteIndex] = rSample; iWriteIndex = ( iWriteIndex + 1u ) % samples.size(); nCount = std::min( nCount + 1u, samples.size() ); }
+	EA_FORCE_INLINE void push( const t3dRuntimeProfileSample_t &rSample ) noexcept { samples[iWriteIndex] = rSample; iWriteIndex = ( iWriteIndex + 1u ) % samples.size(); nCount = std::min( nCount + 1u, samples.size() ); }
 
-	EA_FORCE_INLINE const t3druntimeProfileSample_t &getOldest( const size_t iIndex ) const noexcept { const size_t oldest = ( iWriteIndex + samples.size() - nCount ) % samples.size(); return samples[( oldest + iIndex ) % samples.size()]; }
-} t3druntimeProfileHistory_t;
+	EA_FORCE_INLINE const t3dRuntimeProfileSample_t &getOldest( const size_t iIndex ) const noexcept { const size_t oldest = ( iWriteIndex + samples.size() - nCount ) % samples.size(); return samples[( oldest + iIndex ) % samples.size()]; }
+} t3dRuntimeProfileHistory_t;
 
-typedef struct t3druntimeProfileAccumulator_s {
+typedef struct t3dRuntimeProfileAccumulator_s {
 	uint64_t nSampledTicks = 0u;
 	uint64_t nPhysicsTotalUsec = 0u;
 	uint64_t nPhysicsPeakUsec = 0u;
@@ -211,10 +211,10 @@ typedef struct t3druntimeProfileAccumulator_s {
 	uint64_t nNodeLoadFailuresTotal = 0u;
 
 	void reset( void ) noexcept {
-		*this = t3druntimeProfileAccumulator_s{};
+		*this = t3dRuntimeProfileAccumulator_s{};
 	}
 
-	void addSample( const t3druntimeProfileSample_t &rSample ) noexcept {
+	void addSample( const t3dRuntimeProfileSample_t &rSample ) noexcept {
 		++nSampledTicks;
 		nPhysicsTotalUsec += rSample.nPhysicsTotalUsec;
 		nPhysicsPeakUsec = std::max( nPhysicsPeakUsec, rSample.nPhysicsTotalUsec );
@@ -273,5 +273,5 @@ typedef struct t3druntimeProfileAccumulator_s {
 		nNodeUnloadsTotal += ( uint64_t ) ( std::max( rSample.nodeUnloads, 0 ) );
 		nNodeLoadFailuresTotal += ( uint64_t ) ( std::max( rSample.nNodeLoadFailures, 0 ) );
 	}
-} t3druntimeProfileAccumulator_t;
+} t3dRuntimeProfileAccumulator_t;
 #endif // TERRAIN3D_RUNTIME_PROFILE_H

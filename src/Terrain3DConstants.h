@@ -287,25 +287,25 @@ static constexpr int TERRAIN3D_RESIDENT_WORLD_SLOT_COUNT = TERRAIN3D_MAX_REGION_
 static constexpr size_t TERRAIN3D_INSTANCE_REGION_UPDATE_CAPACITY = TERRAIN3D_INSTANCE_REGION_TABLE_CAPACITY;
 namespace terrain_3d_profile {
 
-typedef enum t3downer_e : uint8_t {
+typedef enum t3dOwner_e : uint8_t {
 	OWNER_TERRAIN,
 	OWNER_MATERIAL,
-} t3downer_t;
+} t3dOwner_t;
 
-typedef enum t3dvalueKind_e : uint8_t {
+typedef enum t3dValueKind_e : uint8_t {
 	VALUE_INT,
 	VALUE_FLOAT,
 	VALUE_BOOL,
-} t3dvalueKind_t;
+} t3dValueKind_t;
 
-typedef struct t3dsetting_s {
-	t3downer_t owner;
-	t3dvalueKind_t kind;
+typedef struct t3dSetting_s {
+	t3dOwner_t owner;
+	t3dValueKind_t kind;
 	const char *pszProperty;
 	int64_t intValue;
 	double fFloatValue;
 	bool bBoolValue;
-} t3dsetting_t;
+} t3dSetting_t;
 
 #define T3D_PROFILE_TERRAIN_INT( name, value ) { OWNER_TERRAIN, VALUE_INT, name, ( int64_t ) ( value ), 0.0, false },
 #define T3D_PROFILE_TERRAIN_FLOAT( name, value ) { OWNER_TERRAIN, VALUE_FLOAT, name, 0, ( double ) ( value ), false },
@@ -314,7 +314,7 @@ typedef struct t3dsetting_s {
 #define T3D_PROFILE_MATERIAL_FLOAT( name, value ) { OWNER_MATERIAL, VALUE_FLOAT, name, 0, ( double ) ( value ), false },
 #define T3D_PROFILE_MATERIAL_BOOL( name, value ) { OWNER_MATERIAL, VALUE_BOOL, name, 0, 0.0, ( bool ) ( value ) },
 
-inline constexpr t3dsetting_t XBOX360_EXPERIMENTAL_SETTINGS[] = {
+inline constexpr t3dSetting_t XBOX360_EXPERIMENTAL_SETTINGS[] = {
 #include "streaming/terrain_3d_performance_profile_manifest.inc"
 };
 inline constexpr size_t XBOX360_EXPERIMENTAL_SETTING_COUNT =
@@ -384,30 +384,30 @@ static const Vector3 V3_NAN{NAN, NAN, NAN};
 static const Vector3 V3_UP{0.f, 1.f, 0.f};
 // static const Vector3 V3_DOWN{ 0.f, -1.f, 0.f };
 
-typedef struct t3dvector2iHash_s {
+typedef struct t3dVector2iHash_s {
 	std::size_t operator()( const Vector2i &v ) const {
 		std::size_t h1 = eastl::hash<int>()( v.x );
 		std::size_t h2 = eastl::hash<int>()( v.y );
 		return h1 ^ ( h2 << 1 );
 	}
-} t3dvector2iHash_t;
+} t3dVector2iHash_t;
 
-typedef struct t3dpairVector2iIntHash_s {
+typedef struct t3dPairVector2iIntHash_s {
 	std::size_t operator()( const eastl::pair<Vector2i, int> &p ) const {
-		std::size_t h1 = t3dvector2iHash_t{}( p.first );
+		std::size_t h1 = t3dVector2iHash_t{}( p.first );
 		std::size_t h2 = eastl::hash<int>{}( p.second );
 		return h1 ^ ( h2 << 1 );
 	}
-} t3dpairVector2iIntHash_t;
+} t3dPairVector2iIntHash_t;
 
-typedef struct t3dvector3Hash_s {
+typedef struct t3dVector3Hash_s {
 	std::size_t operator()( const Vector3 &v ) const {
 		std::size_t h1 = eastl::hash<float>()( v.x );
 		std::size_t h2 = eastl::hash<float>()( v.y );
 		std::size_t h3 = eastl::hash<float>()( v.z );
 		return h1 ^ ( h2 << 1 ) ^ ( h3 << 2 );
 	}
-} t3dvector3Hash_t;
+} t3dVector3Hash_t;
 
 // Set class name for logger.h
 

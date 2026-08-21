@@ -104,7 +104,7 @@ bool T3DSamplingStorage::replaceActiveHeightPages(
 }
 
 bool T3DSamplingStorage::syncActiveMap(
-	const Vector2i &rLocation, const T3DRegion *const pRegion, const t3dmapType_t eType, const Rect2i &rDirtyRect
+	const Vector2i &rLocation, const T3DRegion *const pRegion, const t3dMapType_t eType, const Rect2i &rDirtyRect
 ) {
 	return isActiveOwner() && terrain3dActiveStorageSyncMap( this, rLocation, pRegion, eType, rDirtyRect );
 }
@@ -202,7 +202,7 @@ void T3DSamplingStorage::invalidateResident( const Vector2i &rLocation ) {
 }
 
 void T3DSamplingStorage::syncResidentMap(
-	const Vector2i &rLocation, const T3DRegion *const pRegion, const t3dmapType_t eType, const Rect2i &rDirtyRect
+	const Vector2i &rLocation, const T3DRegion *const pRegion, const t3dMapType_t eType, const Rect2i &rDirtyRect
 ) {
 	if ( m_residentPool.getCapacity() > 0 ) {
 		m_residentPool.syncMap( rLocation, pRegion, eType, rDirtyRect );

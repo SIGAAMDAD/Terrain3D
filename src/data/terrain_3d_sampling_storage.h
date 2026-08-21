@@ -48,7 +48,7 @@ public:
 	bool syncActiveRegion( const Vector2i &rLocation, const T3DRegion *pRegion );
 	bool syncActiveHeightPage( const Vector2i &rLocation, const uint8_t *pHeightBytes, size_t nHeightBytes );
 	bool replaceActiveHeightPages( int nRegionSize, const uint8_t *const *ppHeightPages, const int *pSlots, size_t nPageCount );
-	bool syncActiveMap( const Vector2i &rLocation, const T3DRegion *pRegion, t3dmapType_t eType,
+	bool syncActiveMap( const Vector2i &rLocation, const T3DRegion *pRegion, t3dMapType_t eType,
 		const Rect2i &rDirtyRect = Rect2i() );
 	bool syncActiveDerived( const Vector2i &rLocation, const T3DRegion *pRegion,
 		const Rect2i &rDirtyRect = Rect2i() );
@@ -66,7 +66,7 @@ public:
 	void clearResidentPool( void );
 	void resetResidentPool( void );
 	void invalidateResident( const Vector2i &rLocation );
-	void syncResidentMap( const Vector2i &rLocation, const T3DRegion *pRegion, t3dmapType_t eType,
+	void syncResidentMap( const Vector2i &rLocation, const T3DRegion *pRegion, t3dMapType_t eType,
 		const Rect2i &rDirtyRect = Rect2i() );
 	void syncResidentDerived( const Vector2i &rLocation, const T3DRegion *pRegion,
 		const Rect2i &rDirtyRect = Rect2i() );

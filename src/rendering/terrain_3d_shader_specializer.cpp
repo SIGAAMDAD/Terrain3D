@@ -12,20 +12,20 @@ using namespace godot;
 
 namespace {
 
-typedef enum t3dconditionalOwnership_e {
+typedef enum t3dConditionalOwnership_e {
 	T3D_CONDITIONAL_PRESERVED,
 	T3D_CONDITIONAL_SPECIALIZED,
-} t3dconditionalOwnership_t;
+} t3dConditionalOwnership_t;
 
-typedef struct t3dconditionalFrame_s {
-	t3dconditionalOwnership_t ownership = T3D_CONDITIONAL_PRESERVED;
+typedef struct t3dConditionalFrame_s {
+	t3dConditionalOwnership_t ownership = T3D_CONDITIONAL_PRESERVED;
 	bool bParentEmit = true;
 	bool bBranchTaken = false;
-} t3dconditionalFrame_t;
+} t3dConditionalFrame_t;
 
 class T3DStaticExpressionParser {
 	const String &m_expression;
-	const t3dshaderStaticState_t &m_state;
+	const t3dShaderStaticState_t &m_state;
 	int m_index = 0;
 	String m_error;
 
@@ -210,7 +210,7 @@ class T3DStaticExpressionParser {
 	}
 
 public:
-	EA_FORCE_INLINE T3DStaticExpressionParser( const String &rExpression, const t3dshaderStaticState_t &rState ) : m_expression( rExpression ), m_state( rState ) {}
+	EA_FORCE_INLINE T3DStaticExpressionParser( const String &rExpression, const t3dShaderStaticState_t &rState ) : m_expression( rExpression ), m_state( rState ) {}
 
 	bool evaluate( bool &bValue, String &rFailureSummary ) {
 		if ( !parseOr( bValue ) ) {
@@ -357,13 +357,13 @@ bool terrain3dValidateAssembledShaderSource(
 }
 
 bool terrain3dAssembleShaderSource(
-	const String &rExpandedSource, const t3dshaderStaticState_t &rState,
+	const String &rExpandedSource, const t3dShaderStaticState_t &rState,
 	const PackedStringArray &rEnabledFeatures, String &rOutputSource,
 	String &rFailureSummary
 ) {
 	const PackedStringArray lines = rExpandedSource.split( "\n", true );
 	PackedStringArray output;
-	t3dconditionalFrame_t stack[TERRAIN3D_SHADER_MAX_CONDITIONAL_DEPTH] = {};
+	t3dConditionalFrame_t stack[TERRAIN3D_SHADER_MAX_CONDITIONAL_DEPTH] = {};
 	int depth = 0;
 	bool bEmit = true;
 	bool bSkipStandaloneDefaults = false;
@@ -413,7 +413,7 @@ bool terrain3dAssembleShaderSource(
 				bValue = !bValue;
 			}
 
-			t3dconditionalFrame_t &frame = stack[depth++];
+			t3dConditionalFrame_t &frame = stack[depth++];
 			frame.bParentEmit = bEmit;
 			frame.bBranchTaken = bOwned && bValue;
 			frame.ownership = bOwned ? T3D_CONDITIONAL_SPECIALIZED : T3D_CONDITIONAL_PRESERVED;
@@ -441,7 +441,7 @@ bool terrain3dAssembleShaderSource(
 					return false;
 				}
 			}
-			t3dconditionalFrame_t &frame = stack[depth++];
+			t3dConditionalFrame_t &frame = stack[depth++];
 			frame.bParentEmit = bEmit;
 			frame.bBranchTaken = bOwned && bValue;
 			frame.ownership = bOwned ? T3D_CONDITIONAL_SPECIALIZED : T3D_CONDITIONAL_PRESERVED;
@@ -458,7 +458,7 @@ bool terrain3dAssembleShaderSource(
 				rFailureSummary = "Unmatched #elif at line " + String::num_int64( line_index + 1 );
 				return false;
 			}
-			t3dconditionalFrame_t &frame = stack[depth - 1];
+			t3dConditionalFrame_t &frame = stack[depth - 1];
 			if ( frame.ownership == T3D_CONDITIONAL_PRESERVED ) {
 				if ( frame.bParentEmit ) {
 					output.push_back( line );
@@ -490,7 +490,7 @@ bool terrain3dAssembleShaderSource(
 				rFailureSummary = "Unmatched #else at line " + String::num_int64( line_index + 1 );
 				return false;
 			}
-			t3dconditionalFrame_t &frame = stack[depth - 1];
+			t3dConditionalFrame_t &frame = stack[depth - 1];
 			if ( frame.ownership == T3D_CONDITIONAL_PRESERVED ) {
 				if ( frame.bParentEmit ) {
 					output.push_back( line );
@@ -508,7 +508,7 @@ bool terrain3dAssembleShaderSource(
 				rFailureSummary = "Unmatched #endif at line " + String::num_int64( line_index + 1 );
 				return false;
 			}
-			const t3dconditionalFrame_t frame = stack[--depth];
+			const t3dConditionalFrame_t frame = stack[--depth];
 			if ( frame.ownership == T3D_CONDITIONAL_PRESERVED && frame.bParentEmit ) {
 				output.push_back( line );
 			}

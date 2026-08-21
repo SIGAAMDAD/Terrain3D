@@ -12,14 +12,14 @@
 #include <limits>
 
 
-typedef struct t3dinstanceCacheCoord_s {
+typedef struct t3dInstanceCacheCoord_s {
 	int x;
 	int y;
-} t3dinstanceCacheCoord_t;
+} t3dInstanceCacheCoord_t;
 
 inline int terrain3dInstanceCacheDistance(
-	const t3dinstanceCacheCoord_t a,
-	const t3dinstanceCacheCoord_t b
+	const t3dInstanceCacheCoord_t a,
+	const t3dInstanceCacheCoord_t b
 ) {
 	const int64_t dx = ( int64_t ) ( a.x ) - ( int64_t ) ( b.x );
 	const int64_t dy = ( int64_t ) ( a.y ) - ( int64_t ) ( b.y );

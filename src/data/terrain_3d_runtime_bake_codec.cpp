@@ -36,8 +36,8 @@ EA_FORCE_INLINE static uint32_t readControlPixel( const uint8_t *pControl, const
 EA_FORCE_INLINE static void setBit( uint8_t *pBytes, const uint32_t nIndex ) { pBytes[nIndex >> 3u] |= ( uint8_t ) ( 1u << ( nIndex & 7u ) ); }
 EA_FORCE_INLINE static bool resizeBytes( PackedByteArray &rBytes, const size_t nBytes ) { if ( nBytes > ( size_t ) INT64_MAX ) return false; rBytes.resize( ( int64_t ) nBytes ); return ( size_t ) rBytes.size() == nBytes; }
 
-EA_FORCE_INLINE static String descriptorScenePath( const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t &rDescriptor ) { if ( !rDescriptor.scenePath.is_empty() ) return rDescriptor.scenePath; return rDescriptor.pScene.is_valid() ? rDescriptor.pScene->get_path() : String(); }
-EA_FORCE_INLINE static String descriptorShadowPath( const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t &rDescriptor ) { if ( !rDescriptor.shadowProxyScenePath.is_empty() ) return rDescriptor.shadowProxyScenePath; return rDescriptor.pShadowProxyScene.is_valid() ? rDescriptor.pShadowProxyScene->get_path() : String(); }
+EA_FORCE_INLINE static String descriptorScenePath( const T3DRegion::t3dStreamedNodeRuntimeDescriptor_t &rDescriptor ) { if ( !rDescriptor.scenePath.is_empty() ) return rDescriptor.scenePath; return rDescriptor.pScene.is_valid() ? rDescriptor.pScene->get_path() : String(); }
+EA_FORCE_INLINE static String descriptorShadowPath( const T3DRegion::t3dStreamedNodeRuntimeDescriptor_t &rDescriptor ) { if ( !rDescriptor.shadowProxyScenePath.is_empty() ) return rDescriptor.shadowProxyScenePath; return rDescriptor.pShadowProxyScene.is_valid() ? rDescriptor.pShadowProxyScene->get_path() : String(); }
 }
 
 PackedByteArray T3DRuntimeBakeCodec::encodeHoleMask( const Ref<Image> &rControl, const int nRegionSize ) {
@@ -240,10 +240,10 @@ PackedByteArray T3DRuntimeBakeCodec::encodeNodeDescriptors( const T3DRegion &rRe
 
 bool T3DRuntimeBakeCodec::decodeNodeDescriptors( const PackedByteArray &rBlob, const T3DRuntimeWorldManifest &rManifest, T3DRegion &rRegion ) {
 	if ( rBlob.size() < 8 ) return false; const uint8_t *p = rBlob.ptr(); if ( readU32( p ) != NODE_MAGIC || readU16( p + 4 ) != BLOB_VERSION ) return false; const uint16_t count = readU16( p + 6 ); size_t offset = 8u;
-	eastl::vector<T3DRegion::t3dstreamedNodeRuntimeDescriptor_t> nodes; nodes.reserve( count );
+	eastl::vector<T3DRegion::t3dStreamedNodeRuntimeDescriptor_t> nodes; nodes.reserve( count );
 	for ( uint16_t i = 0u; i < count; ++i ) {
 		static constexpr size_t fixed = 8u + 2u + 2u + 4u + 2u + 2u + 16u + 2u + 2u + 4u + 48u + 4u;
-		if ( offset + fixed > ( size_t ) rBlob.size() ) return false; T3DRegion::t3dstreamedNodeRuntimeDescriptor_t node;
+		if ( offset + fixed > ( size_t ) rBlob.size() ) return false; T3DRegion::t3dStreamedNodeRuntimeDescriptor_t node;
 		node.id = ( int64_t ) readU64( p + offset ); offset += 8; const uint16_t scene_id = readU16( p + offset ); offset += 2; const uint16_t shadow_id = readU16( p + offset ); offset += 2;
 		node.scenePath = rManifest.getSceneDependency( scene_id ); if ( node.scenePath.is_empty() ) return false; if ( shadow_id != UINT16_MAX ) node.shadowProxyScenePath = rManifest.getSceneDependency( shadow_id );
 		node.flags = readI32( p + offset ); offset += 4; node.hlodMinLevel = readU16( p + offset ); offset += 2; node.boundaryPolicy = readU16( p + offset ); offset += 2;

@@ -315,13 +315,13 @@ PackedStringArray T3DMaterial::getEditorShaderFeatures( void ) const {
 }
 
 String T3DMaterial::prepareShaderSource(
-	const String &rShader, const t3dshaderVariantState_t &eState,
-	const Array &rExcludes, const t3dshaderTier_t tier,
+	const String &rShader, const t3dShaderVariantState_t &eState,
+	const Array &rExcludes, const t3dShaderTier_t tier,
 	const bool bIncludeEditorFeatures
 ) const {
 	const bool sample_surface_data = samplesSurfaceData( eState );
 
-	t3dshaderStaticState_t static_state;
+	t3dShaderStaticState_t static_state;
 	static_state.terrainSamplingMode = ( int ) ( eState.terrainSamplingMode );
 	static_state.terrainNormalMode = ( int ) ( eState.terrainNormalMode );
 	static_state.colorSamplingMode = ( int ) ( eState.colorSamplingMode );
@@ -366,7 +366,7 @@ String T3DMaterial::prepareShaderSource(
 	return assembled_shader;
 }
 
-bool T3DMaterial::samplesSurfaceData( const t3dshaderVariantState_t &eState ) const {
+bool T3DMaterial::samplesSurfaceData( const t3dShaderVariantState_t &eState ) const {
 	if ( eState.textureSurfaceMode == TEXTURE_SURFACE_SILHOUETTE ) {
 		return false;
 	}
@@ -380,8 +380,8 @@ bool T3DMaterial::samplesSurfaceData( const t3dshaderVariantState_t &eState ) co
 			eState.bOutputSpecularEnabled || eState.bOutputAmbientOcclusionEnabled;
 }
 
-T3DMaterial::t3dshaderVariantState_t T3DMaterial::captureVariantState( void ) const {
-	t3dshaderVariantState_t state;
+T3DMaterial::t3dShaderVariantState_t T3DMaterial::captureVariantState( void ) const {
+	t3dShaderVariantState_t state;
 	state.worldBackground = m_worldBackground;
 	state.projectionMode = m_projectionMode;
 	state.tessellationMaterialMode = m_tessellationMaterialMode;
@@ -408,18 +408,18 @@ T3DMaterial::t3dshaderVariantState_t T3DMaterial::captureVariantState( void ) co
 	return state;
 }
 
-void T3DMaterial::applyXboxProfileManifestToState( t3dshaderVariantState_t &rState ) const {
-	for ( const terrain_3d_profile::t3dsetting_t &setting : terrain_3d_profile::XBOX360_EXPERIMENTAL_SETTINGS ) {
+void T3DMaterial::applyXboxProfileManifestToState( t3dShaderVariantState_t &rState ) const {
+	for ( const terrain_3d_profile::t3dSetting_t &setting : terrain_3d_profile::XBOX360_EXPERIMENTAL_SETTINGS ) {
 		if ( setting.owner != terrain_3d_profile::OWNER_MATERIAL ) {
 			continue;
 		}
 		const char *property = setting.pszProperty;
 		if ( std::strcmp( property, "projection_mode" ) == 0 ) {
-			rState.projectionMode = ( t3dprojectionMode_t ) ( setting.intValue );
+			rState.projectionMode = ( t3dProjectionMode_t ) ( setting.intValue );
 		} else if ( std::strcmp( property, "tessellation_material_mode" ) == 0 ) {
-			rState.tessellationMaterialMode = ( t3dtessellationMaterialMode_t ) ( setting.intValue );
+			rState.tessellationMaterialMode = ( t3dTessellationMaterialMode_t ) ( setting.intValue );
 		} else if ( std::strcmp( property, "world_noise_shader_mode" ) == 0 ) {
-			rState.worldNoiseShaderMode = ( t3dworldNoiseShaderMode_t ) ( setting.intValue );
+			rState.worldNoiseShaderMode = ( t3dWorldNoiseShaderMode_t ) ( setting.intValue );
 		} else if ( std::strcmp( property, "auto_shader_enabled" ) == 0 ) {
 			rState.bAutoShaderEnabled = setting.bBoolValue;
 		} else if ( std::strcmp( property, "dual_scaling_enabled" ) == 0 ) {
@@ -441,11 +441,11 @@ void T3DMaterial::applyXboxProfileManifestToState( t3dshaderVariantState_t &rSta
 }
 
 void T3DMaterial::applyXboxProfileManifestToTiers( void ) {
-	for ( const terrain_3d_profile::t3dsetting_t &setting : terrain_3d_profile::XBOX360_EXPERIMENTAL_SETTINGS ) {
+	for ( const terrain_3d_profile::t3dSetting_t &setting : terrain_3d_profile::XBOX360_EXPERIMENTAL_SETTINGS ) {
 		if ( setting.owner != terrain_3d_profile::OWNER_MATERIAL ) {
 			continue;
 		}
-		t3dtierQualityConfig_t *pQuality = nullptr;
+		t3dTierQualityConfig_t *pQuality = nullptr;
 		const char *suffix = nullptr;
 		if ( std::strncmp( setting.pszProperty, "near_", 5 ) == 0 ) {
 			pQuality = &m_nearQuality;
@@ -461,21 +461,21 @@ void T3DMaterial::applyXboxProfileManifestToTiers( void ) {
 		}
 
 		if ( std::strcmp( suffix, "texture_filtering" ) == 0 ) {
-			pQuality->textureFiltering = ( t3dtextureFiltering_t ) ( setting.intValue );
+			pQuality->textureFiltering = ( t3dTextureFiltering_t ) ( setting.intValue );
 		} else if ( std::strcmp( suffix, "material_sampling_quality" ) == 0 ) {
-			pQuality->materialSamplingQuality = ( t3dmaterialSamplingQuality_t ) ( setting.intValue );
+			pQuality->materialSamplingQuality = ( t3dMaterialSamplingQuality_t ) ( setting.intValue );
 		} else if ( std::strcmp( suffix, "terrain_normal_quality" ) == 0 ) {
-			pQuality->terrainNormalQuality = ( t3dterrainNormalQuality_t ) ( setting.intValue );
+			pQuality->terrainNormalQuality = ( t3dTerrainNormalQuality_t ) ( setting.intValue );
 		} else if ( std::strcmp( suffix, "terrain_color_quality" ) == 0 ) {
-			pQuality->terrainColorQuality = ( t3dterrainColorQuality_t ) ( setting.intValue );
+			pQuality->terrainColorQuality = ( t3dTerrainColorQuality_t ) ( setting.intValue );
 		} else if ( std::strcmp( suffix, "surface_response_quality" ) == 0 ) {
-			pQuality->surfaceResponseQuality = ( t3dsurfaceResponseQuality_t ) ( setting.intValue );
+			pQuality->surfaceResponseQuality = ( t3dSurfaceResponseQuality_t ) ( setting.intValue );
 		} else if ( std::strcmp( suffix, "texture_surface_mode" ) == 0 ) {
-			pQuality->textureSurfaceMode = ( t3dtextureSurfaceMode_t ) ( setting.intValue );
+			pQuality->textureSurfaceMode = ( t3dTextureSurfaceMode_t ) ( setting.intValue );
 		} else if ( std::strcmp( suffix, "lighting_model" ) == 0 ) {
-			pQuality->lightingModel = ( t3dtierLightingModel_t ) ( setting.intValue );
+			pQuality->lightingModel = ( t3dTierLightingModel_t ) ( setting.intValue );
 		} else if ( std::strcmp( suffix, "detiling_quality" ) == 0 ) {
-			pQuality->detilingQuality = ( t3dtierDetilingQuality_t ) ( setting.intValue );
+			pQuality->detilingQuality = ( t3dTierDetilingQuality_t ) ( setting.intValue );
 		} else if ( std::strcmp( suffix, "authored_color_contribution" ) == 0 ) {
 			pQuality->fAuthoredColorContribution = ( real_t ) ( setting.fFloatValue );
 		} else if ( std::strcmp( suffix, "wetness_contribution" ) == 0 ) {
@@ -487,8 +487,8 @@ void T3DMaterial::applyXboxProfileManifestToTiers( void ) {
 }
 
 void T3DMaterial::applyPerformancePresetToState(
-	t3dshaderVariantState_t &rState,
-	const t3dshaderPerformancePreset_t ePreset
+	t3dShaderVariantState_t &rState,
+	const t3dShaderPerformancePreset_t ePreset
 ) const {
 	switch ( ePreset ) {
 		case SHADER_PRESET_CINEMATIC:
@@ -596,7 +596,7 @@ void T3DMaterial::applyPerformancePresetToState(
 	}
 }
 
-void T3DMaterial::applyPerformancePresetToTiers( const t3dshaderPerformancePreset_t ePreset ) {
+void T3DMaterial::applyPerformancePresetToTiers( const t3dShaderPerformancePreset_t ePreset ) {
 	// Presets seed the same semantic rows for all tiers. The authentic Xbox
 	// profile reads its owned values from the authoritative native manifest;
 	// the other material-only presets retain their local definitions.
@@ -715,7 +715,7 @@ void T3DMaterial::applyPerformancePresetToTiers( const t3dshaderPerformancePrese
 	}
 }
 
-void T3DMaterial::applyVariantState( const t3dshaderVariantState_t &eState ) {
+void T3DMaterial::applyVariantState( const t3dShaderVariantState_t &eState ) {
 	m_worldBackground = eState.worldBackground;
 	m_projectionMode = eState.projectionMode;
 	m_tessellationMaterialMode = eState.tessellationMaterialMode;
@@ -746,8 +746,8 @@ void T3DMaterial::applyVariantState( const t3dshaderVariantState_t &eState ) {
 		TIER_DETILING_DISABLED : TIER_DETILING_ROTATION;
 }
 
-T3DMaterial::t3dshaderVariantKey_t T3DMaterial::makeVariantCacheKey( const String &rCode ) const {
-	t3dshaderVariantKey_t key;
+T3DMaterial::t3dShaderVariantKey_t T3DMaterial::makeVariantCacheKey( const String &rCode ) const {
+	t3dShaderVariantKey_t key;
 	key.primaryHash = ( uint64_t ) ( rCode.hash() );
 	key.nSourceLength = ( uint32_t ) ( rCode.length() );
 
@@ -762,8 +762,8 @@ T3DMaterial::t3dshaderVariantKey_t T3DMaterial::makeVariantCacheKey( const Strin
 	return key;
 }
 
-T3DMaterial::t3dshaderVariantEntry_t *T3DMaterial::getShaderVariantEntries(
-	const t3dshaderVariantDomain_t domain
+T3DMaterial::t3dShaderVariantEntry_t *T3DMaterial::getShaderVariantEntries(
+	const t3dShaderVariantDomain_t domain
 ) {
 	switch ( domain ) {
 		case SHADER_DOMAIN_EDITOR:
@@ -776,8 +776,8 @@ T3DMaterial::t3dshaderVariantEntry_t *T3DMaterial::getShaderVariantEntries(
 	}
 }
 
-const T3DMaterial::t3dshaderVariantEntry_t *T3DMaterial::getShaderVariantEntries(
-	const t3dshaderVariantDomain_t domain
+const T3DMaterial::t3dShaderVariantEntry_t *T3DMaterial::getShaderVariantEntries(
+	const t3dShaderVariantDomain_t domain
 ) const {
 	switch ( domain ) {
 		case SHADER_DOMAIN_EDITOR:
@@ -790,7 +790,7 @@ const T3DMaterial::t3dshaderVariantEntry_t *T3DMaterial::getShaderVariantEntries
 	}
 }
 
-int &T3DMaterial::getShaderVariantCountForDomain( const t3dshaderVariantDomain_t domain ) {
+int &T3DMaterial::getShaderVariantCountForDomain( const t3dShaderVariantDomain_t domain ) {
 	switch ( domain ) {
 		case SHADER_DOMAIN_EDITOR:
 			return m_nEditorShaderVariantCount;
@@ -802,7 +802,7 @@ int &T3DMaterial::getShaderVariantCountForDomain( const t3dshaderVariantDomain_t
 	}
 }
 
-int T3DMaterial::getShaderVariantCountForDomain( const t3dshaderVariantDomain_t domain ) const {
+int T3DMaterial::getShaderVariantCountForDomain( const t3dShaderVariantDomain_t domain ) const {
 	switch ( domain ) {
 		case SHADER_DOMAIN_EDITOR:
 			return m_nEditorShaderVariantCount;
@@ -814,7 +814,7 @@ int T3DMaterial::getShaderVariantCountForDomain( const t3dshaderVariantDomain_t 
 	}
 }
 
-uint64_t &T3DMaterial::getShaderVariantDomainSourceBytes( const t3dshaderVariantDomain_t domain ) {
+uint64_t &T3DMaterial::getShaderVariantDomainSourceBytes( const t3dShaderVariantDomain_t domain ) {
 	switch ( domain ) {
 		case SHADER_DOMAIN_EDITOR:
 			return m_nEditorShaderVariantSourceBytes;
@@ -826,7 +826,7 @@ uint64_t &T3DMaterial::getShaderVariantDomainSourceBytes( const t3dshaderVariant
 	}
 }
 
-uint64_t T3DMaterial::getShaderVariantDomainSourceBytes( const t3dshaderVariantDomain_t domain ) const {
+uint64_t T3DMaterial::getShaderVariantDomainSourceBytes( const t3dShaderVariantDomain_t domain ) const {
 	switch ( domain ) {
 		case SHADER_DOMAIN_EDITOR:
 			return m_nEditorShaderVariantSourceBytes;
@@ -838,7 +838,7 @@ uint64_t T3DMaterial::getShaderVariantDomainSourceBytes( const t3dshaderVariantD
 	}
 }
 
-int T3DMaterial::getVariantPhysicalCapacity( const t3dshaderVariantDomain_t domain ) const {
+int T3DMaterial::getVariantPhysicalCapacity( const t3dShaderVariantDomain_t domain ) const {
 	switch ( domain ) {
 		case SHADER_DOMAIN_EDITOR:
 			return TERRAIN3D_MAX_EDITOR_SHADER_VARIANT_CACHE_LIMIT;
@@ -850,7 +850,7 @@ int T3DMaterial::getVariantPhysicalCapacity( const t3dshaderVariantDomain_t doma
 	}
 }
 
-int T3DMaterial::getVariantCacheLimit( const t3dshaderVariantDomain_t domain ) const {
+int T3DMaterial::getVariantCacheLimit( const t3dShaderVariantDomain_t domain ) const {
 	switch ( domain ) {
 		case SHADER_DOMAIN_EDITOR:
 			return MAX( TERRAIN3D_MIN_SHADER_VARIANT_CACHE_LIMIT, m_nShaderVariantCacheLimit / 4 );
@@ -882,8 +882,8 @@ bool T3DMaterial::isActiveShader( const Ref<Shader> &rShader ) const {
 	return false;
 }
 
-int T3DMaterial::findShaderVariant( const t3dshaderVariantDomain_t domain, const t3dshaderVariantKey_t &rKey ) const {
-	const t3dshaderVariantEntry_t *pEntries = getShaderVariantEntries( domain );
+int T3DMaterial::findShaderVariant( const t3dShaderVariantDomain_t domain, const t3dShaderVariantKey_t &rKey ) const {
+	const t3dShaderVariantEntry_t *pEntries = getShaderVariantEntries( domain );
 	const int count = getShaderVariantCountForDomain( domain );
 	for ( int index = 0; index < count; ++index ) {
 		if ( pEntries[index].key == rKey ) {
@@ -893,8 +893,8 @@ int T3DMaterial::findShaderVariant( const t3dshaderVariantDomain_t domain, const
 	return -1;
 }
 
-void T3DMaterial::eraseShaderVariant( const t3dshaderVariantDomain_t domain, const int iIndex ) {
-	t3dshaderVariantEntry_t *pEntries = getShaderVariantEntries( domain );
+void T3DMaterial::eraseShaderVariant( const t3dShaderVariantDomain_t domain, const int iIndex ) {
+	t3dShaderVariantEntry_t *pEntries = getShaderVariantEntries( domain );
 	int &count = getShaderVariantCountForDomain( domain );
 	uint64_t &retained_source_bytes = getShaderVariantDomainSourceBytes( domain );
 	if ( iIndex < 0 || iIndex >= count ) {
@@ -905,7 +905,7 @@ void T3DMaterial::eraseShaderVariant( const t3dshaderVariantDomain_t domain, con
 		pEntries[index] = std::move( pEntries[index + 1] );
 	}
 	--count;
-	pEntries[count] = t3dshaderVariantEntry_t{};
+	pEntries[count] = t3dShaderVariantEntry_t{};
 	if ( ( uint64_t ) ( source_bytes ) > retained_source_bytes ) {
 		LOG( T3DTerrain::ERROR, "Shader variant source-byte accounting underflow in domain ", ( int ) ( domain ), ": entry ",
 			source_bytes, ", retained ", retained_source_bytes );
@@ -917,10 +917,10 @@ void T3DMaterial::eraseShaderVariant( const t3dshaderVariantDomain_t domain, con
 }
 
 void T3DMaterial::touchShaderVariant(
-	const t3dshaderVariantDomain_t domain, const int iIndex,
+	const t3dShaderVariantDomain_t domain, const int iIndex,
 	const bool bActualUse
 ) {
-	t3dshaderVariantEntry_t *pEntries = getShaderVariantEntries( domain );
+	t3dShaderVariantEntry_t *pEntries = getShaderVariantEntries( domain );
 	const int count = getShaderVariantCountForDomain( domain );
 	if ( iIndex < 0 || iIndex >= count ) {
 		return;
@@ -931,7 +931,7 @@ void T3DMaterial::touchShaderVariant(
 	if ( iIndex == 0 ) {
 		return;
 	}
-	t3dshaderVariantEntry_t touched = std::move( pEntries[iIndex] );
+	t3dShaderVariantEntry_t touched = std::move( pEntries[iIndex] );
 	for ( int index = iIndex; index > 0; --index ) {
 		pEntries[index] = std::move( pEntries[index - 1] );
 	}
@@ -939,13 +939,13 @@ void T3DMaterial::touchShaderVariant(
 }
 
 bool T3DMaterial::evictLruShaderVariant(
-	const t3dshaderVariantDomain_t domain,
+	const t3dShaderVariantDomain_t domain,
 	const bool bSpeculativeOnly
 ) {
-	const t3dshaderVariantEntry_t *pEntries = getShaderVariantEntries( domain );
+	const t3dShaderVariantEntry_t *pEntries = getShaderVariantEntries( domain );
 	const int count = getShaderVariantCountForDomain( domain );
 	for ( int index = count - 1; index >= 0; --index ) {
-		const t3dshaderVariantEntry_t &entry = pEntries[index];
+		const t3dShaderVariantEntry_t &entry = pEntries[index];
 		if ( isActiveShader( entry.pShader ) ) {
 			continue;
 		}
@@ -959,7 +959,7 @@ bool T3DMaterial::evictLruShaderVariant(
 }
 
 bool T3DMaterial::evictBudgetLruShaderVariant(
-	const t3dshaderVariantDomain_t requestDomain,
+	const t3dShaderVariantDomain_t requestDomain,
 	const bool bSpeculativeOnly
 ) {
 	if ( evictLruShaderVariant( SHADER_DOMAIN_EDITOR, bSpeculativeOnly ) ) {
@@ -977,8 +977,8 @@ bool T3DMaterial::evictBudgetLruShaderVariant(
 }
 
 void T3DMaterial::trimShaderVariantCaches( void ) {
-	const t3dshaderVariantDomain_t domains[] = {SHADER_DOMAIN_RUNTIME, SHADER_DOMAIN_EDITOR, SHADER_DOMAIN_BUFFER};
-	for ( const t3dshaderVariantDomain_t domain : domains ) {
+	const t3dShaderVariantDomain_t domains[] = {SHADER_DOMAIN_RUNTIME, SHADER_DOMAIN_EDITOR, SHADER_DOMAIN_BUFFER};
+	for ( const t3dShaderVariantDomain_t domain : domains ) {
 		const int limit = getVariantCacheLimit( domain );
 		while ( getShaderVariantCountForDomain( domain ) > limit ) {
 			if ( !evictLruShaderVariant( domain, true ) && !evictLruShaderVariant( domain, false ) ) {
@@ -1010,10 +1010,10 @@ void T3DMaterial::submitShaderSource( const Ref<Shader> &rShader, const String &
 	m_nVariantSourceSubmissionUsecPeak = MAX( m_nVariantSourceSubmissionUsecPeak, elapsed_usec );
 }
 
-T3DMaterial::t3dshaderValidationResult_t T3DMaterial::validateShaderVariant(
-	const Ref<Shader> &rShader, const t3dshaderTier_t tier
+T3DMaterial::t3dShaderValidationResult_t T3DMaterial::validateShaderVariant(
+	const Ref<Shader> &rShader, const t3dShaderTier_t tier
 ) {
-	t3dshaderValidationResult_t result;
+	t3dShaderValidationResult_t result;
 	if ( rShader.is_null() ) {
 		result.failureSummary = "Shader resource is null";
 		return result;
@@ -1081,15 +1081,15 @@ T3DMaterial::t3dshaderValidationResult_t T3DMaterial::validateShaderVariant(
 }
 
 void T3DMaterial::recordShaderTierValidation(
-	const t3dshaderTier_t tier, const String &rCode,
-	const t3dshaderValidationResult_t &rValidation, const uint64_t nActiveShaderRidId,
+	const t3dShaderTier_t tier, const String &rCode,
+	const t3dShaderValidationResult_t &rValidation, const uint64_t nActiveShaderRidId,
 	const bool bFallbackToNear, const bool bCompactTierActive
 ) {
 	if ( tier < SHADER_TIER_NEAR || tier >= SHADER_TIER_COUNT ) {
 		return;
 	}
-	t3dshaderTierValidationState_t &state = m_szShaderTierValidation[tier];
-	const t3dshaderVariantKey_t next_key = makeVariantCacheKey( rCode );
+	t3dShaderTierValidationState_t &state = m_szShaderTierValidation[tier];
+	const t3dShaderVariantKey_t next_key = makeVariantCacheKey( rCode );
 	const bool bStateChanged = state.key.primaryHash != next_key.primaryHash ||
 		state.key.fingerprint != next_key.fingerprint || state.key.nSourceLength != next_key.nSourceLength ||
 		state.activeShaderRidId != nActiveShaderRidId || state.bCompileValid != rValidation.bValid ||
@@ -1111,8 +1111,8 @@ void T3DMaterial::recordShaderTierValidation(
 }
 
 Ref<Shader> T3DMaterial::getOrCreateShaderVariant(
-	const String &rCode, const t3dshaderVariantDomain_t domain,
-	const bool bPrewarm, const t3dshaderTier_t tier, t3dshaderValidationResult_t *pValidation
+	const String &rCode, const t3dShaderVariantDomain_t domain,
+	const bool bPrewarm, const t3dShaderTier_t tier, t3dShaderValidationResult_t *pValidation
 ) {
 	const uint32_t source_bytes = ( uint32_t ) ( rCode.to_utf8_buffer().size() );
 	m_lastVariantRequestDomain = ( int ) ( domain );
@@ -1120,7 +1120,7 @@ Ref<Shader> T3DMaterial::getOrCreateShaderVariant(
 	m_bLastVariantRequestPrewarm = bPrewarm;
 	m_nLastVariantRequestSourceBytes = source_bytes;
 	if ( pValidation ) {
-		*pValidation = t3dshaderValidationResult_t{};
+		*pValidation = t3dShaderValidationResult_t{};
 	}
 	if ( m_shaderVariantMode == SHADER_VARIANTS_DISABLED ) {
 		// Even with caching disabled, shader replacement must remain transactional.
@@ -1131,7 +1131,7 @@ Ref<Shader> T3DMaterial::getOrCreateShaderVariant(
 		++m_nVariantUncachedSubmissionsTotal;
 		submitShaderSource( shader, rCode );
 		if ( domain != SHADER_DOMAIN_BUFFER ) {
-			const t3dshaderValidationResult_t validation = validateShaderVariant( shader, tier );
+			const t3dShaderValidationResult_t validation = validateShaderVariant( shader, tier );
 			if ( pValidation ) {
 				*pValidation = validation;
 			}
@@ -1146,10 +1146,10 @@ Ref<Shader> T3DMaterial::getOrCreateShaderVariant(
 		return shader;
 	}
 
-	t3dshaderVariantEntry_t *pEntries = getShaderVariantEntries( domain );
+	t3dShaderVariantEntry_t *pEntries = getShaderVariantEntries( domain );
 	int &count = getShaderVariantCountForDomain( domain );
 	uint64_t &retained_source_bytes = getShaderVariantDomainSourceBytes( domain );
-	const t3dshaderVariantKey_t key = makeVariantCacheKey( rCode );
+	const t3dShaderVariantKey_t key = makeVariantCacheKey( rCode );
 	const int cached_index = findShaderVariant( domain, key );
 	if ( cached_index >= 0 ) {
 		if ( pEntries[cached_index].pShader.is_valid() ) {
@@ -1209,7 +1209,7 @@ Ref<Shader> T3DMaterial::getOrCreateShaderVariant(
 	Ref<Shader> pVariant;
 	pVariant.instantiate();
 	submitShaderSource( pVariant, rCode );
-	t3dshaderValidationResult_t validation;
+	t3dShaderValidationResult_t validation;
 	if ( domain != SHADER_DOMAIN_BUFFER ) {
 		validation = validateShaderVariant( pVariant, tier );
 		if ( !validation.bValid ) {
@@ -1230,7 +1230,7 @@ Ref<Shader> T3DMaterial::getOrCreateShaderVariant(
 	for ( int index = count; index > 0; --index ) {
 		pEntries[index] = std::move( pEntries[index - 1] );
 	}
-	t3dshaderVariantEntry_t &entry = pEntries[0];
+	t3dShaderVariantEntry_t &entry = pEntries[0];
 	entry.key = key;
 	entry.pShader = pVariant;
 	entry.nSourceBytes = source_bytes;
@@ -1246,8 +1246,8 @@ Ref<Shader> T3DMaterial::getOrCreateShaderVariant(
 }
 
 uint64_t T3DMaterial::getChangedVariantDimensions(
-	const t3dshaderVariantState_t &rPrevious,
-	const t3dshaderVariantState_t &rCurrent
+	const t3dShaderVariantState_t &rPrevious,
+	const t3dShaderVariantState_t &rCurrent
 ) const {
 	uint64_t changed = 0u;
 	if ( rPrevious.worldBackground != rCurrent.worldBackground ) {
@@ -1313,7 +1313,7 @@ uint64_t T3DMaterial::getChangedVariantDimensions(
 	return changed;
 }
 
-uint64_t T3DMaterial::getInferredPotentialDimensions( const t3dshaderVariantState_t &eState ) const {
+uint64_t T3DMaterial::getInferredPotentialDimensions( const t3dShaderVariantState_t &eState ) const {
 	uint64_t potential = 0u;
 	if ( eState.projectionMode != PROJECTION_DISABLED ) {
 		potential |= 1ULL << VARIANT_DIM_PROJECTION;
@@ -1336,7 +1336,7 @@ uint64_t T3DMaterial::getInferredPotentialDimensions( const t3dshaderVariantStat
 	return potential;
 }
 
-void T3DMaterial::recordVariantTransition( const t3dshaderVariantState_t &eState ) {
+void T3DMaterial::recordVariantTransition( const t3dShaderVariantState_t &eState ) {
 	uint64_t changed = getInferredPotentialDimensions( eState );
 	if ( m_bHasLastBoundVariantState ) {
 		changed |= getChangedVariantDimensions( m_lastBoundVariantState, eState );
@@ -1355,8 +1355,8 @@ void T3DMaterial::recordVariantTransition( const t3dshaderVariantState_t &eState
 }
 
 bool T3DMaterial::appendVariantState(
-	t3dshaderVariantState_t *pStates, int &nCount,
-	const t3dshaderVariantState_t &eState
+	t3dShaderVariantState_t *pStates, int &nCount,
+	const t3dShaderVariantState_t &eState
 ) const {
 	const int capacity = MIN( m_nShaderVariantPrewarmLimit, TERRAIN3D_MAX_SHADER_VARIANT_PREWARM_LIMIT );
 	if ( nCount >= capacity ) {
@@ -1367,17 +1367,17 @@ bool T3DMaterial::appendVariantState(
 }
 
 void T3DMaterial::appendDimensionStates(
-	t3dshaderVariantState_t *const pStates, int &nCount,
-	const t3dshaderVariantState_t &rBase,
-	const t3dshaderVariantDimension_t dimension
+	t3dShaderVariantState_t *const pStates, int &nCount,
+	const t3dShaderVariantState_t &rBase,
+	const t3dShaderVariantDimension_t dimension
 ) const {
-	t3dshaderVariantState_t state;
+	t3dShaderVariantState_t state;
 	switch ( dimension ) {
 		case VARIANT_DIM_WORLD_BACKGROUND:
 			for ( int value = NONE; value <= NOISE; ++value ) {
 				if ( value != rBase.worldBackground ) {
 					state = rBase;
-					state.worldBackground = ( t3dworldBackground_t ) ( value );
+					state.worldBackground = ( t3dWorldBackground_t ) ( value );
 					if ( !appendVariantState( pStates, nCount, state ) ) {
 						return;
 					}
@@ -1388,7 +1388,7 @@ void T3DMaterial::appendDimensionStates(
 			for ( int value = LINEAR_ANISOTROPIC; value <= NEAREST; ++value ) {
 				if ( value != rBase.textureFiltering ) {
 					state = rBase;
-					state.textureFiltering = ( t3dtextureFiltering_t ) ( value );
+					state.textureFiltering = ( t3dTextureFiltering_t ) ( value );
 					if ( !appendVariantState( pStates, nCount, state ) ) {
 						return;
 					}
@@ -1399,7 +1399,7 @@ void T3DMaterial::appendDimensionStates(
 			for ( int value = TERRAIN_SAMPLING_ADAPTIVE; value <= TERRAIN_SAMPLING_ADAPTIVE_2_CORNER; ++value ) {
 				if ( value != rBase.terrainSamplingMode ) {
 					state = rBase;
-					state.terrainSamplingMode = ( t3dterrainSamplingMode_t ) ( value );
+					state.terrainSamplingMode = ( t3dTerrainSamplingMode_t ) ( value );
 					if ( !appendVariantState( pStates, nCount, state ) ) {
 						return;
 					}
@@ -1410,7 +1410,7 @@ void T3DMaterial::appendDimensionStates(
 			for ( int value = TERRAIN_NORMAL_ADAPTIVE; value <= TERRAIN_NORMAL_HEIGHT_3_TAP; ++value ) {
 				if ( value != rBase.terrainNormalMode ) {
 					state = rBase;
-					state.terrainNormalMode = ( t3dterrainNormalMode_t ) ( value );
+					state.terrainNormalMode = ( t3dTerrainNormalMode_t ) ( value );
 					if ( !appendVariantState( pStates, nCount, state ) ) {
 						return;
 					}
@@ -1421,7 +1421,7 @@ void T3DMaterial::appendDimensionStates(
 			for ( int value = COLOR_SAMPLING_AUTO; value <= COLOR_SAMPLING_EXACT_4_TAP; ++value ) {
 				if ( value != rBase.colorSamplingMode ) {
 					state = rBase;
-					state.colorSamplingMode = ( t3dcolorSamplingMode_t ) ( value );
+					state.colorSamplingMode = ( t3dColorSamplingMode_t ) ( value );
 					if ( !appendVariantState( pStates, nCount, state ) ) {
 						return;
 					}
@@ -1432,7 +1432,7 @@ void T3DMaterial::appendDimensionStates(
 			for ( int value = PROJECTION_DISABLED; value <= PROJECTION_EXACT_PER_CORNER; ++value ) {
 				if ( value != rBase.projectionMode ) {
 					state = rBase;
-					state.projectionMode = ( t3dprojectionMode_t ) ( value );
+					state.projectionMode = ( t3dProjectionMode_t ) ( value );
 					if ( !appendVariantState( pStates, nCount, state ) ) {
 						return;
 					}
@@ -1452,7 +1452,7 @@ void T3DMaterial::appendDimensionStates(
 			for ( int value = SURFACE_DATA_AUTO; value <= SURFACE_DATA_ALBEDO_ONLY; ++value ) {
 				if ( value != rBase.surfaceDataMode ) {
 					state = rBase;
-					state.surfaceDataMode = ( t3dsurfaceDataMode_t ) ( value );
+					state.surfaceDataMode = ( t3dSurfaceDataMode_t ) ( value );
 					if ( !appendVariantState( pStates, nCount, state ) ) {
 						return;
 					}
@@ -1463,7 +1463,7 @@ void T3DMaterial::appendDimensionStates(
 			for ( int value = SHADING_BURLEY_GGX; value <= SHADING_XBOX_360_BLINN_PHONG; ++value ) {
 				if ( value != rBase.terrainShadingMode ) {
 					state = rBase;
-					state.terrainShadingMode = ( t3dterrainShadingMode_t ) ( value );
+					state.terrainShadingMode = ( t3dTerrainShadingMode_t ) ( value );
 					if ( !appendVariantState( pStates, nCount, state ) ) {
 						return;
 					}
@@ -1474,7 +1474,7 @@ void T3DMaterial::appendDimensionStates(
 			for ( int value = DETILING_CONTINUOUS; value <= DETILING_DISCRETE_16; ++value ) {
 				if ( value != rBase.detilingMode ) {
 					state = rBase;
-					state.detilingMode = ( t3ddetilingMode_t ) ( value );
+					state.detilingMode = ( t3dDetilingMode_t ) ( value );
 					if ( !appendVariantState( pStates, nCount, state ) ) {
 						return;
 					}
@@ -1493,7 +1493,7 @@ void T3DMaterial::appendDimensionStates(
 				for ( int value = WORLD_NOISE_DYNAMIC; value <= WORLD_NOISE_PROCEDURAL_FRAGMENT_NORMALS; ++value ) {
 					if ( value != rBase.worldNoiseShaderMode ) {
 						state = rBase;
-						state.worldNoiseShaderMode = ( t3dworldNoiseShaderMode_t ) ( value );
+						state.worldNoiseShaderMode = ( t3dWorldNoiseShaderMode_t ) ( value );
 						if ( !appendVariantState( pStates, nCount, state ) ) {
 							return;
 						}
@@ -1548,8 +1548,8 @@ void T3DMaterial::appendDimensionStates(
 }
 
 void T3DMaterial::appendPotentialBranchStates(
-	t3dshaderVariantState_t *const pStates, int &nCount,
-	const t3dshaderVariantState_t &rBase
+	t3dShaderVariantState_t *const pStates, int &nCount,
+	const t3dShaderVariantState_t &rBase
 ) const {
 	appendVariantState( pStates, nCount, rBase );
 
@@ -1561,22 +1561,22 @@ void T3DMaterial::appendPotentialBranchStates(
 			if ( preset < SHADER_PRESET_CINEMATIC || preset > SHADER_PRESET_MINIMUM ) {
 				continue;
 			}
-			t3dshaderVariantState_t state = rBase;
-			applyPerformancePresetToState( state, ( t3dshaderPerformancePreset_t ) ( preset ) );
+			t3dShaderVariantState_t state = rBase;
+			applyPerformancePresetToState( state, ( t3dShaderPerformancePreset_t ) ( preset ) );
 			appendVariantState( pStates, nCount, state );
 		}
 	} else if ( m_shaderPerformancePreset == SHADER_PRESET_XBOX_360_AUTHENTIC ) {
-		t3dshaderVariantState_t styled_state = rBase;
+		t3dShaderVariantState_t styled_state = rBase;
 		applyPerformancePresetToState( styled_state, SHADER_PRESET_RUNTIME_360 );
 		appendVariantState( pStates, nCount, styled_state );
-		t3dshaderVariantState_t high_state = rBase;
+		t3dShaderVariantState_t high_state = rBase;
 		applyPerformancePresetToState( high_state, SHADER_PRESET_HIGH );
 		appendVariantState( pStates, nCount, high_state );
 	} else {
-		t3dshaderVariantState_t styled_state = rBase;
+		t3dShaderVariantState_t styled_state = rBase;
 		applyPerformancePresetToState( styled_state, SHADER_PRESET_RUNTIME_360 );
 		appendVariantState( pStates, nCount, styled_state );
-		t3dshaderVariantState_t authentic_state = rBase;
+		t3dShaderVariantState_t authentic_state = rBase;
 		applyPerformancePresetToState( authentic_state, SHADER_PRESET_XBOX_360_AUTHENTIC );
 		appendVariantState( pStates, nCount, authentic_state );
 	}
@@ -1606,11 +1606,11 @@ void T3DMaterial::appendPotentialBranchStates(
 			break;
 		}
 		dimensions &= ~( 1ULL << ( uint64_t ) ( selected ) );
-		appendDimensionStates( pStates, nCount, rBase, ( t3dshaderVariantDimension_t ) ( selected ) );
+		appendDimensionStates( pStates, nCount, rBase, ( t3dShaderVariantDimension_t ) ( selected ) );
 	}
 }
 
-uint64_t T3DMaterial::getVariantStateSignature( const t3dshaderVariantState_t &state ) const {
+uint64_t T3DMaterial::getVariantStateSignature( const t3dShaderVariantState_t &state ) const {
 	uint64_t signature = 1469598103934665603ULL;
 	mixShaderSignature( signature, ( uint64_t ) state.worldBackground );
 	mixShaderSignature( signature, ( uint64_t ) state.textureFiltering );
@@ -1641,7 +1641,7 @@ uint64_t T3DMaterial::getVariantStateSignature( const t3dshaderVariantState_t &s
 }
 
 uint64_t T3DMaterial::getPrewarmSignature( void ) const {
-	const t3dshaderVariantState_t state = captureVariantState();
+	const t3dShaderVariantState_t state = captureVariantState();
 	uint64_t signature = 1469598103934665603ULL;
 	mixShaderSignature( signature, ( uint64_t ) ( m_shaderVariantMode ) );
 	mixShaderSignature( signature, ( uint64_t ) ( m_nShaderVariantCacheLimit ) );
@@ -1694,19 +1694,19 @@ void T3DMaterial::prewarmShaderVariantsInternal( const bool bForce ) {
 	m_nLastPrewarmVariantCount = 0;
 	m_nLastPrewarmSkippedCount = 0;
 
-	const t3dshaderVariantState_t base = captureVariantState();
-	t3dshaderVariantState_t states[TERRAIN3D_MAX_SHADER_VARIANT_PREWARM_LIMIT] = {};
+	const t3dShaderVariantState_t base = captureVariantState();
+	t3dShaderVariantState_t states[TERRAIN3D_MAX_SHADER_VARIANT_PREWARM_LIMIT] = {};
 	int state_count = 0;
 	appendPotentialBranchStates( states, state_count, base );
 
-	t3dshaderVariantKey_t seen_main[TERRAIN3D_MAX_SHADER_VARIANT_PREWARM_LIMIT] = {};
+	t3dShaderVariantKey_t seen_main[TERRAIN3D_MAX_SHADER_VARIANT_PREWARM_LIMIT] = {};
 	int seen_main_count = 0;
-	t3dshaderVariantKey_t seen_buffer[TERRAIN3D_MAX_SHADER_VARIANT_PREWARM_LIMIT] = {};
+	t3dShaderVariantKey_t seen_buffer[TERRAIN3D_MAX_SHADER_VARIANT_PREWARM_LIMIT] = {};
 	int seen_buffer_count = 0;
 	for ( int state_index = 0; state_index < state_count; ++state_index ) {
-		const t3dshaderVariantState_t &state = states[state_index];
+		const t3dShaderVariantState_t &state = states[state_index];
 		const String main_code = finalizeRuntimeShaderCode( generateShaderCode( state ) );
-		const t3dshaderVariantKey_t main_key = makeVariantCacheKey( main_code );
+		const t3dShaderVariantKey_t main_key = makeVariantCacheKey( main_code );
 		bool bMainSeen = false;
 		for ( int seen_index = 0; seen_index < seen_main_count; ++seen_index ) {
 			if ( seen_main[seen_index] == main_key ) {
@@ -1729,7 +1729,7 @@ void T3DMaterial::prewarmShaderVariantsInternal( const bool bForce ) {
 
 		if ( state.bTessellationEnabled && !m_bBufferShaderOverrideEnabled ) {
 			const String buffer_code = generateBufferShaderCode( state );
-			const t3dshaderVariantKey_t buffer_key = makeVariantCacheKey( buffer_code );
+			const t3dShaderVariantKey_t buffer_key = makeVariantCacheKey( buffer_code );
 			bool bBufferSeen = false;
 			for ( int seen_index = 0; seen_index < seen_buffer_count; ++seen_index ) {
 				if ( seen_buffer[seen_index] == buffer_key ) {
@@ -1755,7 +1755,7 @@ void T3DMaterial::prewarmShaderVariantsInternal( const bool bForce ) {
 	// Remove speculative entries from older branch neighborhoods. The cache is
 	// already in MRU-to-LRU order, so deletion requires only one bounded shift.
 	for ( int cache_index = m_nRuntimeShaderVariantCount - 1; cache_index >= 0; --cache_index ) {
-		const t3dshaderVariantEntry_t &entry = m_szRuntimeShaderVariantEntries[cache_index];
+		const t3dShaderVariantEntry_t &entry = m_szRuntimeShaderVariantEntries[cache_index];
 		bool bStillPredicted = false;
 		for ( int seen_index = 0; seen_index < seen_main_count; ++seen_index ) {
 			if ( seen_main[seen_index] == entry.key ) {
@@ -1768,7 +1768,7 @@ void T3DMaterial::prewarmShaderVariantsInternal( const bool bForce ) {
 		}
 	}
 	for ( int cache_index = m_nBufferShaderVariantCount - 1; cache_index >= 0; --cache_index ) {
-		const t3dshaderVariantEntry_t &entry = m_szBufferShaderVariantEntries[cache_index];
+		const t3dShaderVariantEntry_t &entry = m_szBufferShaderVariantEntries[cache_index];
 		bool bStillPredicted = false;
 		for ( int seen_index = 0; seen_index < seen_buffer_count; ++seen_index ) {
 			if ( seen_buffer[seen_index] == entry.key ) {
@@ -1793,13 +1793,13 @@ String T3DMaterial::generateShaderCode( void ) const {
 	return generateShaderCode( captureVariantState(), SHADER_TIER_NEAR );
 }
 
-String T3DMaterial::generateShaderCode( const t3dshaderVariantState_t &eState ) const {
+String T3DMaterial::generateShaderCode( const t3dShaderVariantState_t &eState ) const {
 	return generateShaderCode( eState, SHADER_TIER_NEAR );
 }
 
 void T3DMaterial::applyTierQualityToState(
-	t3dshaderVariantState_t &rState,
-	const t3dtierQualityConfig_t &rQuality, const t3dshaderTier_t tier
+	t3dShaderVariantState_t &rState,
+	const t3dTierQualityConfig_t &rQuality, const t3dShaderTier_t tier
 ) const {
 	rState.textureFiltering = rQuality.textureFiltering;
 	rState.terrainSamplingMode = rQuality.materialSamplingQuality == MATERIAL_SAMPLING_FAST ?
@@ -1832,10 +1832,10 @@ void T3DMaterial::applyTierQualityToState(
 	}
 }
 
-T3DMaterial::t3dshaderVariantState_t T3DMaterial::makeTierState(
-	const t3dshaderVariantState_t &eState, const t3dshaderTier_t tier
+T3DMaterial::t3dShaderVariantState_t T3DMaterial::makeTierState(
+	const t3dShaderVariantState_t &eState, const t3dShaderTier_t tier
 ) const {
-	t3dshaderVariantState_t state = eState;
+	t3dShaderVariantState_t state = eState;
 	if ( tier == SHADER_TIER_NEAR ) {
 		applyTierQualityToState( state, m_nearQuality, tier );
 	} else if ( tier == SHADER_TIER_MIDDLE ) {
@@ -1847,7 +1847,7 @@ T3DMaterial::t3dshaderVariantState_t T3DMaterial::makeTierState(
 }
 
 String T3DMaterial::generateShaderCode(
-	const t3dshaderVariantState_t &eState, const t3dshaderTier_t tier,
+	const t3dShaderVariantState_t &eState, const t3dShaderTier_t tier,
 	const bool bIncludeEditorFeatures
 ) const {
 	if ( !bIncludeEditorFeatures ) {
@@ -1863,7 +1863,7 @@ String T3DMaterial::generateShaderCode(
 			return String();
 		}
 	}
-	const t3dshaderVariantState_t tier_state = makeTierState( eState, tier );
+	const t3dShaderVariantState_t tier_state = makeTierState( eState, tier );
 	LOG( T3DTerrain::INFO, "Generating terrain shader tier ", ( int ) ( tier ) );
 	Array excludes;
 	if ( tier_state.worldBackground != NONE ) {
@@ -2077,7 +2077,7 @@ String T3DMaterial::generateBufferShaderCode( void ) const {
 	return generateBufferShaderCode( captureVariantState() );
 }
 
-String T3DMaterial::generateBufferShaderCode( const t3dshaderVariantState_t &eState ) const {
+String T3DMaterial::generateBufferShaderCode( const t3dShaderVariantState_t &eState ) const {
 	if ( m_bRuntimeShaderPackLoaded && getVariantStateSignature( eState ) == m_nRuntimeShaderPackStateSignature &&
 		!m_runtimeShaderPackBufferSource.is_empty() ) {
 		return m_runtimeShaderPackBufferSource;
@@ -2093,7 +2093,7 @@ String T3DMaterial::generateBufferShaderCode( const t3dshaderVariantState_t &eSt
 	// material PBR outputs, dual scaling, or macro variation. Normalize those
 	// dimensions before emitting defines so unrelated Inspector changes map to
 	// the same buffer shader instead of compiling duplicate programs.
-	t3dshaderVariantState_t buffer_state = eState;
+	t3dShaderVariantState_t buffer_state = eState;
 	buffer_state.terrainNormalMode = TERRAIN_NORMAL_ADAPTIVE;
 	buffer_state.colorSamplingMode = COLOR_SAMPLING_AUTO;
 	buffer_state.tessellationMaterialMode = TESSELLATION_GEOMETRY_ONLY;
@@ -2323,9 +2323,9 @@ void T3DMaterial::updateShader( void ) {
 		preloadShaders();
 	}
 	LOG( T3DTerrain::INFO, "Updating shader" );
-	const t3dshaderVariantState_t variant_state = captureVariantState();
+	const t3dShaderVariantState_t variant_state = captureVariantState();
 	String code;
-	t3dshaderValidationResult_t near_validation;
+	t3dShaderValidationResult_t near_validation;
 	const Ref<Shader> previous_near_shader = m_pShader;
 	const bool previous_near_ready = m_bNearShaderReady && previous_near_shader.is_valid() &&
 		previous_near_shader->get_rid().is_valid();
@@ -2354,7 +2354,7 @@ void T3DMaterial::updateShader( void ) {
 			code += "\nvoid patch_a22_forced_invalid_near_shader() { float x = PATCH_A22_UNDEFINED_IDENTIFIER; }\n";
 		}
 #endif
-		const t3dshaderVariantDomain_t domain = IS_EDITOR ? SHADER_DOMAIN_EDITOR : SHADER_DOMAIN_RUNTIME;
+		const t3dShaderVariantDomain_t domain = IS_EDITOR ? SHADER_DOMAIN_EDITOR : SHADER_DOMAIN_RUNTIME;
 		candidate_near_shader = getOrCreateShaderVariant(
 			code, domain, false, SHADER_TIER_NEAR, &near_validation );
 	}
@@ -2398,7 +2398,7 @@ void T3DMaterial::updateShader( void ) {
 
 	const bool bTieringActive = !m_bShaderOverrideEnabled && m_pTerrain->isRuntimeShaderTieringActive();
 	for ( int tier_value = SHADER_TIER_MIDDLE; tier_value < SHADER_TIER_COUNT; ++tier_value ) {
-		const t3dshaderTier_t tier = ( t3dshaderTier_t ) ( tier_value );
+		const t3dShaderTier_t tier = ( t3dShaderTier_t ) ( tier_value );
 		if ( !m_szTierMaterials[tier].is_valid() ) {
 			m_szTierMaterials[tier] = RS->material_create();
 		}
@@ -2412,7 +2412,7 @@ void T3DMaterial::updateShader( void ) {
 				tier_code += "\nvoid patch01_forced_invalid_compact_shader() { float x = PATCH01_UNDEFINED_IDENTIFIER; }\n";
 			}
 #endif
-			t3dshaderValidationResult_t validation;
+			t3dShaderValidationResult_t validation;
 			Ref<Shader> pCompactShader;
 			if ( m_shaderVariantMode == SHADER_VARIANTS_DISABLED ) {
 				// Compile into a detached candidate. Mutating the currently bound tier
@@ -2426,7 +2426,7 @@ void T3DMaterial::updateShader( void ) {
 					pCompactShader.unref();
 				}
 			} else {
-				const t3dshaderVariantDomain_t tier_domain = IS_EDITOR ? SHADER_DOMAIN_EDITOR : SHADER_DOMAIN_RUNTIME;
+				const t3dShaderVariantDomain_t tier_domain = IS_EDITOR ? SHADER_DOMAIN_EDITOR : SHADER_DOMAIN_RUNTIME;
 				pCompactShader = getOrCreateShaderVariant( tier_code, tier_domain, false, tier, &validation );
 			}
 
@@ -2705,7 +2705,7 @@ bool T3DMaterial::updateLogicalRegionMapTexture(
 	return true;
 }
 
-T3DMaterial::t3dpageTableBuildResult_t T3DMaterial::prepareRegionPageTables( void ) {
+T3DMaterial::t3dPageTableBuildResult_t T3DMaterial::prepareRegionPageTables( void ) {
 	if ( !m_pTerrain || !m_pTerrain->getData() ) {
 		return PAGE_TABLE_INVALID_TERRAIN_STATE;
 	}
@@ -2773,7 +2773,7 @@ void T3DMaterial::ensureShadowMaterials( void ) {
 		if ( !m_shaderTemplates.has( "main_shadow" ) ) {
 			return;
 		}
-		const t3dshaderVariantState_t state = captureVariantState();
+		const t3dShaderVariantState_t state = captureVariantState();
 		const String code = prepareShaderSource(
 			m_shaderTemplates["main_shadow"], state, Array(), SHADER_TIER_FAR, false );
 		if ( code.is_empty() ) {
@@ -2857,7 +2857,7 @@ void T3DMaterial::updateUniforms( const RID &rMaterial, const uint32_t nFlags ) 
 	}
 
 	const real_t fRegionSize = ( real_t ) ( m_pTerrain->getRegionSize() );
-	LOG( T3DTerrain::EXTREME, "t3dsetting_t region size in material: ", fRegionSize );
+	LOG( T3DTerrain::EXTREME, "t3dSetting_t region size in material: ", fRegionSize );
 	RS->material_set_param( rMaterial, "_region_size", fRegionSize );
 	RS->material_set_param( rMaterial, "_region_texel_size", 1.0f / fRegionSize );
 	const T3DInstancer *pInstancer = m_pTerrain->getInstancer();
@@ -2890,7 +2890,7 @@ void T3DMaterial::updateUniforms( const RID &rMaterial, const uint32_t nFlags ) 
 	}
 
 	const real_t fSpacing = m_pTerrain->getVertexSpacing();
-	LOG( T3DTerrain::EXTREME, "t3dsetting_t vertex spacing in material: ", fSpacing );
+	LOG( T3DTerrain::EXTREME, "t3dSetting_t vertex spacing in material: ", fSpacing );
 	RS->material_set_param( rMaterial, "_vertex_spacing", fSpacing );
 	RS->material_set_param( rMaterial, "_vertex_density", 1.0f / fSpacing );
 
@@ -2903,7 +2903,7 @@ void T3DMaterial::updateUniforms( const RID &rMaterial, const uint32_t nFlags ) 
 	RS->material_set_param( rMaterial, "_tessellation_level", fTessellationLevel );
 	RS->material_set_param( rMaterial, "_displacement_scale", m_fDisplacementScale );
 	RS->material_set_param( rMaterial, "_displacement_sharpness", m_fDisplacementSharpness );
-	const t3dtierQualityConfig_t *pTierQuality = nullptr;
+	const t3dTierQualityConfig_t *pTierQuality = nullptr;
 	if ( rMaterial == m_pMaterial ) {
 		pTierQuality = &m_nearQuality;
 	} else if ( rMaterial == m_szTierMaterials[SHADER_TIER_MIDDLE] ) {
@@ -3063,7 +3063,7 @@ void T3DMaterial::updateUniforms( const RID &rMaterial, const uint32_t nFlags ) 
 void T3DMaterial::setShaderParameters( const Dictionary &rDict ) {
 	SET_IF_DIFF( m_shaderParams, rDict );
 	m_bPersistenceDirty = true;
-	LOG( T3DTerrain::INFO, "t3dsetting_t shader params dictionary: ", rDict.size() );
+	LOG( T3DTerrain::INFO, "t3dSetting_t shader params dictionary: ", rDict.size() );
 }
 
 ///////////////////////////
@@ -3180,17 +3180,17 @@ void T3DMaterial::destroy( void ) {
 		source = String();
 	}
 	for ( int index = 0; index < m_nRuntimeShaderVariantCount; ++index ) {
-		m_szRuntimeShaderVariantEntries[index] = t3dshaderVariantEntry_t{};
+		m_szRuntimeShaderVariantEntries[index] = t3dShaderVariantEntry_t{};
 	}
 	m_nRuntimeShaderVariantCount = 0;
 	m_nRuntimeShaderVariantSourceBytes = 0;
 	for ( int index = 0; index < m_nEditorShaderVariantCount; ++index ) {
-		m_szEditorShaderVariantEntries[index] = t3dshaderVariantEntry_t{};
+		m_szEditorShaderVariantEntries[index] = t3dShaderVariantEntry_t{};
 	}
 	m_nEditorShaderVariantCount = 0;
 	m_nEditorShaderVariantSourceBytes = 0;
 	for ( int index = 0; index < m_nBufferShaderVariantCount; ++index ) {
-		m_szBufferShaderVariantEntries[index] = t3dshaderVariantEntry_t{};
+		m_szBufferShaderVariantEntries[index] = t3dShaderVariantEntry_t{};
 	}
 	m_nBufferShaderVariantCount = 0;
 	m_nBufferShaderVariantSourceBytes = 0;
@@ -3238,7 +3238,7 @@ void T3DMaterial::destroy( void ) {
 void T3DMaterial::update( const uint32_t nFlags ) {
 	bool bRebuildShader = ( nFlags & FULL_REBUILD ) != 0u;
 	if ( !bRebuildShader && ( nFlags & REGION_ARRAYS ) != 0u && m_bHasLastBoundVariantState ) {
-		const t3dshaderVariantState_t current_state = captureVariantState();
+		const t3dShaderVariantState_t current_state = captureVariantState();
 		bRebuildShader = current_state.bControlMapsImplicit != m_lastBoundVariantState.bControlMapsImplicit ||
 			current_state.bColorMapsImplicit != m_lastBoundVariantState.bColorMapsImplicit;
 	}
@@ -3246,7 +3246,7 @@ void T3DMaterial::update( const uint32_t nFlags ) {
 		updateShader();
 	}
 	if ( nFlags & REGION_ARRAYS ) {
-		const t3dpageTableBuildResult_t page_table_result = prepareRegionPageTables();
+		const t3dPageTableBuildResult_t page_table_result = prepareRegionPageTables();
 		if ( page_table_result != PAGE_TABLE_READY ) {
 			switch ( page_table_result ) {
 				case PAGE_TABLE_INVALID_TERRAIN_STATE: {
@@ -3295,7 +3295,7 @@ void T3DMaterial::updateEditorOverlay( void ) {
 
 void T3DMaterial::updateRegionPageTable( void ) {
 	IS_DATA_INIT( VOID );
-	const t3dpageTableBuildResult_t page_table_result = prepareRegionPageTables();
+	const t3dPageTableBuildResult_t page_table_result = prepareRegionPageTables();
 	if ( page_table_result != PAGE_TABLE_READY ) {
 		if ( page_table_result == PAGE_TABLE_INVALID_TERRAIN_STATE ) {
 			LOG( T3DTerrain::DEBUG, "Skipping region page-table publication while terrain runtime storage is inactive" );
@@ -3352,31 +3352,31 @@ void T3DMaterial::updateFarAtlasTextures( void ) {
 void T3DMaterial::setDisplacementScale( const real_t fDisplacementScale ) {
 	SET_IF_DIFF( m_fDisplacementScale, CLAMP( fDisplacementScale, 0.f, 2.f ) );
 	m_bPersistenceDirty = true;
-	LOG( T3DTerrain::INFO, "t3dsetting_t displacement scale: ", fDisplacementScale );
+	LOG( T3DTerrain::INFO, "t3dSetting_t displacement scale: ", fDisplacementScale );
 	update();
 }
 
 void T3DMaterial::setDisplacementSharpness( const real_t fDisplacementSharpness ) {
 	SET_IF_DIFF( m_fDisplacementSharpness, CLAMP( fDisplacementSharpness, 0.f, 1.f ) );
 	m_bPersistenceDirty = true;
-	LOG( T3DTerrain::INFO, "t3dsetting_t displacement sharpness: ", fDisplacementSharpness );
+	LOG( T3DTerrain::INFO, "t3dSetting_t displacement sharpness: ", fDisplacementSharpness );
 	update();
 	if ( m_pTerrain ) {
 		m_pTerrain->snap();
 	}
 }
 
-void T3DMaterial::setWorldBackground( const t3dworldBackground_t background ) {
+void T3DMaterial::setWorldBackground( const t3dWorldBackground_t background ) {
 	SET_IF_DIFF( m_worldBackground, background );
 	m_bPersistenceDirty = true;
 	LOG( T3DTerrain::INFO, "Enable world background: ", background );
 	update( FULL_REBUILD );
 }
 
-void T3DMaterial::setShaderVariantMode( const t3dshaderVariantMode_t mode ) {
+void T3DMaterial::setShaderVariantMode( const t3dShaderVariantMode_t mode ) {
 	SET_IF_DIFF( m_shaderVariantMode, mode );
 	m_bPersistenceDirty = true;
-	LOG( T3DTerrain::INFO, "t3dsetting_t shader variant mode: ", mode );
+	LOG( T3DTerrain::INFO, "t3dSetting_t shader variant mode: ", mode );
 	clearShaderVariantCache();
 	update( FULL_REBUILD );
 }
@@ -3385,7 +3385,7 @@ void T3DMaterial::setShaderVariantCacheLimit( const int nLimit ) {
 	const int limit = CLAMP( nLimit, TERRAIN3D_MIN_SHADER_VARIANT_CACHE_LIMIT, TERRAIN3D_MAX_SHADER_VARIANT_CACHE_LIMIT );
 	SET_IF_DIFF( m_nShaderVariantCacheLimit, limit );
 	m_bPersistenceDirty = true;
-	LOG( T3DTerrain::INFO, "t3dsetting_t shader variant cache limit: ", limit );
+	LOG( T3DTerrain::INFO, "t3dSetting_t shader variant cache limit: ", limit );
 	trimShaderVariantCaches();
 	m_prewarmSignature = UINT64_MAX;
 	prewarmShaderVariants();
@@ -3396,7 +3396,7 @@ void T3DMaterial::setShaderVariantPrewarmLimit( const int nLimit ) {
 	const int limit = CLAMP( nLimit, TERRAIN3D_MIN_SHADER_VARIANT_PREWARM_LIMIT, TERRAIN3D_MAX_SHADER_VARIANT_PREWARM_LIMIT );
 	SET_IF_DIFF( m_nShaderVariantPrewarmLimit, limit );
 	m_bPersistenceDirty = true;
-	LOG( T3DTerrain::INFO, "t3dsetting_t shader variant prewarm limit: ", limit );
+	LOG( T3DTerrain::INFO, "t3dSetting_t shader variant prewarm limit: ", limit );
 	m_prewarmSignature = UINT64_MAX;
 	prewarmShaderVariants();
 	emit_changed();
@@ -3406,7 +3406,7 @@ void T3DMaterial::setShaderVariantSourceBudgetMb( const int nBudgetMb ) {
 	const int budget_mb = CLAMP( nBudgetMb, TERRAIN3D_MIN_SHADER_VARIANT_SOURCE_BUDGET_MB, TERRAIN3D_MAX_SHADER_VARIANT_SOURCE_BUDGET_MB );
 	SET_IF_DIFF( m_nShaderVariantSourceBudgetMb, budget_mb );
 	m_bPersistenceDirty = true;
-	LOG( T3DTerrain::INFO, "t3dsetting_t shader variant source budget: ", budget_mb, " MiB" );
+	LOG( T3DTerrain::INFO, "t3dSetting_t shader variant source budget: ", budget_mb, " MiB" );
 	if ( m_pTerrain == nullptr ) {
 		setEffectiveShaderVariantSourceBudgetMb( budget_mb );
 	}
@@ -3426,17 +3426,17 @@ void T3DMaterial::setEffectiveShaderVariantSourceBudgetMb( const int nBudgetMb )
 	prewarmShaderVariants();
 }
 
-void T3DMaterial::setShaderPerformancePreset( const t3dshaderPerformancePreset_t ePreset ) {
+void T3DMaterial::setShaderPerformancePreset( const t3dShaderPerformancePreset_t ePreset ) {
 	if ( m_shaderPerformancePreset == ePreset && ePreset != SHADER_PRESET_CUSTOM ) {
 		return;
 	}
 
-	t3dshaderVariantState_t state = captureVariantState();
+	t3dShaderVariantState_t state = captureVariantState();
 	applyPerformancePresetToState( state, ePreset );
 	applyVariantState( state );
 	applyPerformancePresetToTiers( ePreset );
 	m_shaderPerformancePreset = ePreset;
-	LOG( T3DTerrain::INFO, "t3dsetting_t shader performance preset: ", ePreset );
+	LOG( T3DTerrain::INFO, "t3dSetting_t shader performance preset: ", ePreset );
 	// Changing the preset can replace the Middle/Far shader RIDs. Rebind every
 	// sampler and compact-tier uniform in the same transaction so the new shader
 	// never renders with default white sampler state or zeroed metadata arrays.
@@ -3444,7 +3444,7 @@ void T3DMaterial::setShaderPerformancePreset( const t3dshaderPerformancePreset_t
 	emit_changed();
 }
 
-void T3DMaterial::updateTierUniforms( const t3dshaderTier_t tier ) {
+void T3DMaterial::updateTierUniforms( const t3dShaderTier_t tier ) {
 	if ( !m_pTerrain ) {
 		return;
 	}
@@ -3462,7 +3462,7 @@ void T3DMaterial::updateTierUniforms( const t3dshaderTier_t tier ) {
 	}
 }
 
-void T3DMaterial::tierQualityChanged( const t3dshaderTier_t tier, const bool bRecompile ) {
+void T3DMaterial::tierQualityChanged( const t3dShaderTier_t tier, const bool bRecompile ) {
 	m_shaderPerformancePreset = SHADER_PRESET_CUSTOM;
 	if ( bRecompile ) {
 		m_prewarmSignature = UINT64_MAX;
@@ -3489,50 +3489,50 @@ void T3DMaterial::refreshGpuRegionChannelPolicy( void ) {
 		m_pTerrain->getGpuRegionSparePages(), m_pTerrain->getGpuRegionRetireFrames() );
 }
 
-void T3DMaterial::setNearTextureFiltering( const t3dtextureFiltering_t filtering ) {
+void T3DMaterial::setNearTextureFiltering( const t3dTextureFiltering_t filtering ) {
 	SET_IF_DIFF( m_nearQuality.textureFiltering, filtering );
 	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_NEAR );
 }
 
-void T3DMaterial::setNearMaterialSamplingQuality( const t3dmaterialSamplingQuality_t eQuality ) {
+void T3DMaterial::setNearMaterialSamplingQuality( const t3dMaterialSamplingQuality_t eQuality ) {
 	SET_IF_DIFF( m_nearQuality.materialSamplingQuality, eQuality );
 	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_NEAR );
 }
 
-void T3DMaterial::setNearTerrainNormalQuality( const t3dterrainNormalQuality_t eQuality ) {
+void T3DMaterial::setNearTerrainNormalQuality( const t3dTerrainNormalQuality_t eQuality ) {
 	SET_IF_DIFF( m_nearQuality.terrainNormalQuality, eQuality );
 	m_bPersistenceDirty = true;
 	refreshGpuRegionChannelPolicy();
 	tierQualityChanged( SHADER_TIER_NEAR );
 }
 
-void T3DMaterial::setNearTerrainColorQuality( const t3dterrainColorQuality_t eQuality ) {
+void T3DMaterial::setNearTerrainColorQuality( const t3dTerrainColorQuality_t eQuality ) {
 	SET_IF_DIFF( m_nearQuality.terrainColorQuality, eQuality );
 	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_NEAR );
 }
 
-void T3DMaterial::setNearSurfaceResponseQuality( const t3dsurfaceResponseQuality_t eQuality ) {
+void T3DMaterial::setNearSurfaceResponseQuality( const t3dSurfaceResponseQuality_t eQuality ) {
 	SET_IF_DIFF( m_nearQuality.surfaceResponseQuality, eQuality );
 	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_NEAR );
 }
 
-void T3DMaterial::setNearTextureSurfaceMode( const t3dtextureSurfaceMode_t mode ) {
+void T3DMaterial::setNearTextureSurfaceMode( const t3dTextureSurfaceMode_t mode ) {
 	SET_IF_DIFF( m_nearQuality.textureSurfaceMode, mode );
 	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_NEAR );
 }
 
-void T3DMaterial::setNearLightingModel( const t3dtierLightingModel_t model ) {
+void T3DMaterial::setNearLightingModel( const t3dTierLightingModel_t model ) {
 	SET_IF_DIFF( m_nearQuality.lightingModel, model );
 	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_NEAR );
 }
 
-void T3DMaterial::setNearDetilingQuality( const t3dtierDetilingQuality_t eQuality ) {
+void T3DMaterial::setNearDetilingQuality( const t3dTierDetilingQuality_t eQuality ) {
 	SET_IF_DIFF( m_nearQuality.detilingQuality, eQuality );
 	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_NEAR );
@@ -3558,50 +3558,50 @@ void T3DMaterial::setNearMaterialLodBias( const real_t fBias ) {
 	tierQualityChanged( SHADER_TIER_NEAR, false );
 }
 
-void T3DMaterial::setMiddleTextureFiltering( const t3dtextureFiltering_t filtering ) {
+void T3DMaterial::setMiddleTextureFiltering( const t3dTextureFiltering_t filtering ) {
 	SET_IF_DIFF( m_middleQuality.textureFiltering, filtering );
 	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_MIDDLE );
 }
 
-void T3DMaterial::setMiddleMaterialSamplingQuality( const t3dmaterialSamplingQuality_t eQuality ) {
+void T3DMaterial::setMiddleMaterialSamplingQuality( const t3dMaterialSamplingQuality_t eQuality ) {
 	SET_IF_DIFF( m_middleQuality.materialSamplingQuality, eQuality );
 	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_MIDDLE );
 }
 
-void T3DMaterial::setMiddleTerrainNormalQuality( const t3dterrainNormalQuality_t eQuality ) {
+void T3DMaterial::setMiddleTerrainNormalQuality( const t3dTerrainNormalQuality_t eQuality ) {
 	SET_IF_DIFF( m_middleQuality.terrainNormalQuality, eQuality );
 	m_bPersistenceDirty = true;
 	refreshGpuRegionChannelPolicy();
 	tierQualityChanged( SHADER_TIER_MIDDLE );
 }
 
-void T3DMaterial::setMiddleTerrainColorQuality( const t3dterrainColorQuality_t eQuality ) {
+void T3DMaterial::setMiddleTerrainColorQuality( const t3dTerrainColorQuality_t eQuality ) {
 	SET_IF_DIFF( m_middleQuality.terrainColorQuality, eQuality );
 	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_MIDDLE );
 }
 
-void T3DMaterial::setMiddleSurfaceResponseQuality( const t3dsurfaceResponseQuality_t eQuality ) {
+void T3DMaterial::setMiddleSurfaceResponseQuality( const t3dSurfaceResponseQuality_t eQuality ) {
 	SET_IF_DIFF( m_middleQuality.surfaceResponseQuality, eQuality );
 	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_MIDDLE );
 }
 
-void T3DMaterial::setMiddleTextureSurfaceMode( const t3dtextureSurfaceMode_t mode ) {
+void T3DMaterial::setMiddleTextureSurfaceMode( const t3dTextureSurfaceMode_t mode ) {
 	SET_IF_DIFF( m_middleQuality.textureSurfaceMode, mode );
 	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_MIDDLE );
 }
 
-void T3DMaterial::setMiddleLightingModel( const t3dtierLightingModel_t model ) {
+void T3DMaterial::setMiddleLightingModel( const t3dTierLightingModel_t model ) {
 	SET_IF_DIFF( m_middleQuality.lightingModel, model );
 	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_MIDDLE );
 }
 
-void T3DMaterial::setMiddleDetilingQuality( const t3dtierDetilingQuality_t eQuality ) {
+void T3DMaterial::setMiddleDetilingQuality( const t3dTierDetilingQuality_t eQuality ) {
 	SET_IF_DIFF( m_middleQuality.detilingQuality, eQuality );
 	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_MIDDLE );
@@ -3627,49 +3627,49 @@ void T3DMaterial::setMiddleMaterialLodBias( const real_t fBias ) {
 	tierQualityChanged( SHADER_TIER_MIDDLE, false );
 }
 
-void T3DMaterial::setFarTextureFiltering( const t3dtextureFiltering_t filtering ) {
+void T3DMaterial::setFarTextureFiltering( const t3dTextureFiltering_t filtering ) {
 	SET_IF_DIFF( m_farQuality.textureFiltering, filtering );
 	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_FAR );
 }
 
-void T3DMaterial::setFarMaterialSamplingQuality( const t3dmaterialSamplingQuality_t eQuality ) {
+void T3DMaterial::setFarMaterialSamplingQuality( const t3dMaterialSamplingQuality_t eQuality ) {
 	SET_IF_DIFF( m_farQuality.materialSamplingQuality, eQuality );
 	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_FAR );
 }
 
-void T3DMaterial::setFarTerrainNormalQuality( const t3dterrainNormalQuality_t eQuality ) {
+void T3DMaterial::setFarTerrainNormalQuality( const t3dTerrainNormalQuality_t eQuality ) {
 	SET_IF_DIFF( m_farQuality.terrainNormalQuality, eQuality );
 	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_FAR );
 }
 
-void T3DMaterial::setFarTerrainColorQuality( const t3dterrainColorQuality_t eQuality ) {
+void T3DMaterial::setFarTerrainColorQuality( const t3dTerrainColorQuality_t eQuality ) {
 	SET_IF_DIFF( m_farQuality.terrainColorQuality, eQuality );
 	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_FAR );
 }
 
-void T3DMaterial::setFarSurfaceResponseQuality( const t3dsurfaceResponseQuality_t eQuality ) {
+void T3DMaterial::setFarSurfaceResponseQuality( const t3dSurfaceResponseQuality_t eQuality ) {
 	SET_IF_DIFF( m_farQuality.surfaceResponseQuality, eQuality );
 	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_FAR );
 }
 
-void T3DMaterial::setFarTextureSurfaceMode( const t3dtextureSurfaceMode_t mode ) {
+void T3DMaterial::setFarTextureSurfaceMode( const t3dTextureSurfaceMode_t mode ) {
 	SET_IF_DIFF( m_farQuality.textureSurfaceMode, mode );
 	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_FAR );
 }
 
-void T3DMaterial::setFarLightingModel( const t3dtierLightingModel_t model ) {
+void T3DMaterial::setFarLightingModel( const t3dTierLightingModel_t model ) {
 	SET_IF_DIFF( m_farQuality.lightingModel, model );
 	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_FAR );
 }
 
-void T3DMaterial::setFarDetilingQuality( const t3dtierDetilingQuality_t eQuality ) {
+void T3DMaterial::setFarDetilingQuality( const t3dTierDetilingQuality_t eQuality ) {
 	SET_IF_DIFF( m_farQuality.detilingQuality, eQuality );
 	m_bPersistenceDirty = true;
 	tierQualityChanged( SHADER_TIER_FAR );
@@ -3694,43 +3694,43 @@ void T3DMaterial::setFarMaterialLodBias( const real_t fBias ) {
 }
 
 // Hidden serialized aliases map old enum/value domains onto the canonical rows.
-void T3DMaterial::setTextureFiltering( const t3dtextureFiltering_t filtering ) {
+void T3DMaterial::setTextureFiltering( const t3dTextureFiltering_t filtering ) {
 	setNearTextureFiltering( filtering );
 }
 
-void T3DMaterial::setMiddleTerrainSamplingMode( const t3dterrainSamplingMode_t mode ) {
+void T3DMaterial::setMiddleTerrainSamplingMode( const t3dTerrainSamplingMode_t mode ) {
 	setMiddleMaterialSamplingQuality( mode == TERRAIN_SAMPLING_SINGLE_SAMPLE ? MATERIAL_SAMPLING_FAST : MATERIAL_SAMPLING_FULL );
 }
 
-T3DMaterial::t3dterrainSamplingMode_t T3DMaterial::getMiddleTerrainSamplingMode( void ) const {
+T3DMaterial::t3dTerrainSamplingMode_t T3DMaterial::getMiddleTerrainSamplingMode( void ) const {
 	return m_middleQuality.materialSamplingQuality == MATERIAL_SAMPLING_FAST ? TERRAIN_SAMPLING_SINGLE_SAMPLE : TERRAIN_SAMPLING_ADAPTIVE_WEIGHTED;
 }
 
-void T3DMaterial::setMiddleTerrainNormalMode( const t3dterrainNormalMode_t mode ) {
+void T3DMaterial::setMiddleTerrainNormalMode( const t3dTerrainNormalMode_t mode ) {
 	setMiddleTerrainNormalQuality( mode == TERRAIN_NORMAL_GEOMETRY_DERIVATIVE ? TERRAIN_NORMAL_QUALITY_GEOMETRY : TERRAIN_NORMAL_QUALITY_DETAILED );
 }
 
-T3DMaterial::t3dterrainNormalMode_t T3DMaterial::getMiddleTerrainNormalMode( void ) const {
+T3DMaterial::t3dTerrainNormalMode_t T3DMaterial::getMiddleTerrainNormalMode( void ) const {
 	return m_middleQuality.terrainNormalQuality == TERRAIN_NORMAL_QUALITY_GEOMETRY ? TERRAIN_NORMAL_GEOMETRY_DERIVATIVE : TERRAIN_NORMAL_DERIVED_TEXTURE;
 }
 
-void T3DMaterial::setMiddleColorSamplingMode( const t3dcolorSamplingMode_t mode ) {
+void T3DMaterial::setMiddleColorSamplingMode( const t3dColorSamplingMode_t mode ) {
 	setMiddleTerrainColorQuality( mode == COLOR_SAMPLING_EXACT_4_TAP ? TERRAIN_COLOR_QUALITY_EXACT : TERRAIN_COLOR_QUALITY_FAST );
 }
 
-T3DMaterial::t3dcolorSamplingMode_t T3DMaterial::getMiddleColorSamplingMode( void ) const {
+T3DMaterial::t3dColorSamplingMode_t T3DMaterial::getMiddleColorSamplingMode( void ) const {
 	return m_middleQuality.terrainColorQuality == TERRAIN_COLOR_QUALITY_EXACT ? COLOR_SAMPLING_EXACT_4_TAP : COLOR_SAMPLING_HARDWARE_FILTERED;
 }
 
-void T3DMaterial::setMiddleSurfaceDataMode( const t3dsurfaceDataMode_t mode ) {
+void T3DMaterial::setMiddleSurfaceDataMode( const t3dSurfaceDataMode_t mode ) {
 	setMiddleSurfaceResponseQuality( mode == SURFACE_DATA_FULL ? SURFACE_RESPONSE_DETAILED : SURFACE_RESPONSE_SIMPLE );
 }
 
-T3DMaterial::t3dsurfaceDataMode_t T3DMaterial::getMiddleSurfaceDataMode( void ) const {
+T3DMaterial::t3dSurfaceDataMode_t T3DMaterial::getMiddleSurfaceDataMode( void ) const {
 	return m_middleQuality.surfaceResponseQuality == SURFACE_RESPONSE_DETAILED ? SURFACE_DATA_FULL : SURFACE_DATA_ALBEDO_ONLY;
 }
 
-void T3DMaterial::setMiddleTerrainShadingMode( const t3dterrainShadingMode_t mode ) {
+void T3DMaterial::setMiddleTerrainShadingMode( const t3dTerrainShadingMode_t mode ) {
 	if ( mode == SHADING_UNSHADED ) {
 		setMiddleLightingModel( TIER_LIGHTING_UNSHADED );
 	} else if ( mode == SHADING_XBOX_360_BLINN_PHONG ) {
@@ -3742,7 +3742,7 @@ void T3DMaterial::setMiddleTerrainShadingMode( const t3dterrainShadingMode_t mod
 	}
 }
 
-T3DMaterial::t3dterrainShadingMode_t T3DMaterial::getMiddleTerrainShadingMode( void ) const {
+T3DMaterial::t3dTerrainShadingMode_t T3DMaterial::getMiddleTerrainShadingMode( void ) const {
 	switch ( m_middleQuality.lightingModel ) {
 		case TIER_LIGHTING_UNSHADED: return SHADING_UNSHADED;
 		case TIER_LIGHTING_BLINN_PHONG: return SHADING_XBOX_360_BLINN_PHONG;
@@ -3751,11 +3751,11 @@ T3DMaterial::t3dterrainShadingMode_t T3DMaterial::getMiddleTerrainShadingMode( v
 	}
 }
 
-void T3DMaterial::setMiddleDetilingMode( const t3ddetilingMode_t mode ) {
+void T3DMaterial::setMiddleDetilingMode( const t3dDetilingMode_t mode ) {
 	setMiddleDetilingQuality( mode == DETILING_DISABLED ? TIER_DETILING_DISABLED : TIER_DETILING_ROTATION );
 }
 
-T3DMaterial::t3ddetilingMode_t T3DMaterial::getMiddleDetilingMode( void ) const {
+T3DMaterial::t3dDetilingMode_t T3DMaterial::getMiddleDetilingMode( void ) const {
 	return m_middleQuality.detilingQuality == TIER_DETILING_DISABLED ? DETILING_DISABLED : DETILING_DISCRETE_8;
 }
 
@@ -3771,7 +3771,7 @@ void T3DMaterial::setMiddleWetnessEnabled( const bool bEnabled ) {
 	setMiddleWetnessContribution( bEnabled ? 1.0f : 0.0f );
 }
 
-void T3DMaterial::setFarTerrainShadingMode( const t3dterrainShadingMode_t mode ) {
+void T3DMaterial::setFarTerrainShadingMode( const t3dTerrainShadingMode_t mode ) {
 	if ( mode == SHADING_UNSHADED ) {
 		setFarLightingModel( TIER_LIGHTING_UNSHADED );
 	} else if ( mode == SHADING_XBOX_360_BLINN_PHONG ) {
@@ -3783,7 +3783,7 @@ void T3DMaterial::setFarTerrainShadingMode( const t3dterrainShadingMode_t mode )
 	}
 }
 
-T3DMaterial::t3dterrainShadingMode_t T3DMaterial::getFarTerrainShadingMode( void ) const {
+T3DMaterial::t3dTerrainShadingMode_t T3DMaterial::getFarTerrainShadingMode( void ) const {
 	switch ( m_farQuality.lightingModel ) {
 		case TIER_LIGHTING_UNSHADED: return SHADING_UNSHADED;
 		case TIER_LIGHTING_BLINN_PHONG: return SHADING_XBOX_360_BLINN_PHONG;
@@ -3804,19 +3804,19 @@ void T3DMaterial::setFarWetnessEnabled( const bool bEnabled ) {
 	setFarWetnessContribution( bEnabled ? 1.0f : 0.0f );
 }
 
-void T3DMaterial::setTerrainSamplingMode( const t3dterrainSamplingMode_t mode ) {
+void T3DMaterial::setTerrainSamplingMode( const t3dTerrainSamplingMode_t mode ) {
 	setNearMaterialSamplingQuality( mode == TERRAIN_SAMPLING_SINGLE_SAMPLE ? MATERIAL_SAMPLING_FAST : MATERIAL_SAMPLING_FULL );
 }
 
-void T3DMaterial::setTerrainNormalMode( const t3dterrainNormalMode_t mode ) {
+void T3DMaterial::setTerrainNormalMode( const t3dTerrainNormalMode_t mode ) {
 	setNearTerrainNormalQuality( mode == TERRAIN_NORMAL_GEOMETRY_DERIVATIVE ? TERRAIN_NORMAL_QUALITY_GEOMETRY : TERRAIN_NORMAL_QUALITY_DETAILED );
 }
 
-void T3DMaterial::setColorSamplingMode( const t3dcolorSamplingMode_t mode ) {
+void T3DMaterial::setColorSamplingMode( const t3dColorSamplingMode_t mode ) {
 	setNearTerrainColorQuality( mode == COLOR_SAMPLING_EXACT_4_TAP ? TERRAIN_COLOR_QUALITY_EXACT : TERRAIN_COLOR_QUALITY_FAST );
 }
 
-void T3DMaterial::setProjectionMode( const t3dprojectionMode_t mode ) {
+void T3DMaterial::setProjectionMode( const t3dProjectionMode_t mode ) {
 	SET_IF_DIFF( m_projectionMode, mode );
 	m_bPersistenceDirty = true;
 	m_shaderPerformancePreset = SHADER_PRESET_CUSTOM;
@@ -3824,7 +3824,7 @@ void T3DMaterial::setProjectionMode( const t3dprojectionMode_t mode ) {
 	emit_changed();
 }
 
-void T3DMaterial::setTessellationMaterialMode( const t3dtessellationMaterialMode_t mode ) {
+void T3DMaterial::setTessellationMaterialMode( const t3dTessellationMaterialMode_t mode ) {
 	SET_IF_DIFF( m_tessellationMaterialMode, mode );
 	m_bPersistenceDirty = true;
 	m_shaderPerformancePreset = SHADER_PRESET_CUSTOM;
@@ -3832,15 +3832,15 @@ void T3DMaterial::setTessellationMaterialMode( const t3dtessellationMaterialMode
 	emit_changed();
 }
 
-void T3DMaterial::setSurfaceDataMode( const t3dsurfaceDataMode_t mode ) {
+void T3DMaterial::setSurfaceDataMode( const t3dSurfaceDataMode_t mode ) {
 	setNearSurfaceResponseQuality( mode == SURFACE_DATA_FULL ? SURFACE_RESPONSE_DETAILED : SURFACE_RESPONSE_SIMPLE );
 }
 
-void T3DMaterial::setTextureSurfaceMode( const t3dtextureSurfaceMode_t mode ) {
+void T3DMaterial::setTextureSurfaceMode( const t3dTextureSurfaceMode_t mode ) {
 	setNearTextureSurfaceMode( mode );
 }
 
-void T3DMaterial::setTerrainShadingMode( const t3dterrainShadingMode_t mode ) {
+void T3DMaterial::setTerrainShadingMode( const t3dTerrainShadingMode_t mode ) {
 	if ( mode == SHADING_UNSHADED ) {
 		setNearLightingModel( TIER_LIGHTING_UNSHADED );
 	} else if ( mode == SHADING_XBOX_360_BLINN_PHONG ) {
@@ -3852,15 +3852,15 @@ void T3DMaterial::setTerrainShadingMode( const t3dterrainShadingMode_t mode ) {
 	}
 }
 
-void T3DMaterial::setDetilingMode( const t3ddetilingMode_t mode ) {
+void T3DMaterial::setDetilingMode( const t3dDetilingMode_t mode ) {
 	setNearDetilingQuality( mode == DETILING_DISABLED ? TIER_DETILING_DISABLED : TIER_DETILING_ROTATION );
 }
 
-void T3DMaterial::setWorldNoiseShaderMode( const t3dworldNoiseShaderMode_t mode ) {
+void T3DMaterial::setWorldNoiseShaderMode( const t3dWorldNoiseShaderMode_t mode ) {
 	SET_IF_DIFF( m_worldNoiseShaderMode, mode );
 	m_bPersistenceDirty = true;
 	m_shaderPerformancePreset = SHADER_PRESET_CUSTOM;
-	LOG( T3DTerrain::INFO, "t3dsetting_t world-noise shader mode: ", mode );
+	LOG( T3DTerrain::INFO, "t3dSetting_t world-noise shader mode: ", mode );
 	update( FULL_REBUILD );
 	emit_changed();
 }
@@ -3874,25 +3874,25 @@ Dictionary T3DMaterial::cookRuntimeShaderPack( void ) {
 	}
 	const bool old_loaded = m_bRuntimeShaderPackLoaded;
 	m_bRuntimeShaderPackLoaded = false;
-	const t3dshaderVariantState_t base = captureVariantState();
+	const t3dShaderVariantState_t base = captureVariantState();
 	const uint64_t state_signature = getVariantStateSignature( base );
 	struct Entry { uint8_t domain; uint8_t tier; String source; };
 	eastl::vector<Entry> entries;
 	for ( int tier = SHADER_TIER_NEAR; tier < SHADER_TIER_COUNT; ++tier ) {
-		entries.push_back( {0u, ( uint8_t ) tier, finalizeRuntimeShaderCode( generateShaderCode( base, ( t3dshaderTier_t ) tier, false ) )} );
+		entries.push_back( {0u, ( uint8_t ) tier, finalizeRuntimeShaderCode( generateShaderCode( base, ( t3dShaderTier_t ) tier, false ) )} );
 	}
 	if ( base.bTessellationEnabled ) entries.push_back( {1u, 0u, generateBufferShaderCode( base )} );
-	t3dshaderVariantState_t states[TERRAIN3D_MAX_SHADER_VARIANT_PREWARM_LIMIT] = {};
+	t3dShaderVariantState_t states[TERRAIN3D_MAX_SHADER_VARIANT_PREWARM_LIMIT] = {};
 	int state_count = 0; appendPotentialBranchStates( states, state_count, base );
-	t3dshaderVariantKey_t seen[TERRAIN3D_MAX_SHADER_VARIANT_PREWARM_LIMIT * 2] = {};
+	t3dShaderVariantKey_t seen[TERRAIN3D_MAX_SHADER_VARIANT_PREWARM_LIMIT * 2] = {};
 	int seen_count = 0;
 	for ( int i = 0; i < state_count && ( int ) entries.size() < m_nShaderVariantPrewarmLimit + 4; ++i ) {
 		const String source = finalizeRuntimeShaderCode( generateShaderCode( states[i], SHADER_TIER_NEAR, false ) );
-		const t3dshaderVariantKey_t key = makeVariantCacheKey( source ); bool duplicate = false;
+		const t3dShaderVariantKey_t key = makeVariantCacheKey( source ); bool duplicate = false;
 		for ( int k = 0; k < seen_count; ++k ) if ( seen[k] == key ) { duplicate = true; break; }
 		if ( !duplicate ) { seen[seen_count++] = key; entries.push_back( {0u, ( uint8_t ) SHADER_TIER_NEAR, source} ); }
 		if ( states[i].bTessellationEnabled && ( int ) entries.size() < m_nShaderVariantPrewarmLimit + 4 ) {
-			const String buffer = generateBufferShaderCode( states[i] ); const t3dshaderVariantKey_t buffer_key = makeVariantCacheKey( buffer ); duplicate = false;
+			const String buffer = generateBufferShaderCode( states[i] ); const t3dShaderVariantKey_t buffer_key = makeVariantCacheKey( buffer ); duplicate = false;
 			for ( int k = 0; k < seen_count; ++k ) if ( seen[k] == buffer_key ) { duplicate = true; break; }
 			if ( !duplicate && seen_count < TERRAIN3D_MAX_SHADER_VARIANT_PREWARM_LIMIT * 2 ) { seen[seen_count++] = buffer_key; entries.push_back( {1u, 0u, buffer} ); }
 		}
@@ -3937,7 +3937,7 @@ bool T3DMaterial::loadRuntimeShaderPack( void ) {
 	for ( int tier=SHADER_TIER_NEAR; tier<SHADER_TIER_COUNT; ++tier ) if(m_szRuntimeShaderPackTierSource[tier].is_empty()) return false;
 	m_nRuntimeShaderPackStateSignature=signature; m_bRuntimeShaderPackLoaded=true;
 	// Create engine shader objects in deterministic pack order; driver pipeline creation remains runtime-owned.
-	for ( const Entry &entry : entries ) { if(entry.domain==0u) getOrCreateShaderVariant(entry.source,SHADER_DOMAIN_RUNTIME,true,(t3dshaderTier_t)CLAMP((int)entry.tier,0,(int)SHADER_TIER_FAR)); else getOrCreateShaderVariant(entry.source,SHADER_DOMAIN_BUFFER,true); }
+	for ( const Entry &entry : entries ) { if(entry.domain==0u) getOrCreateShaderVariant(entry.source,SHADER_DOMAIN_RUNTIME,true,(t3dShaderTier_t)CLAMP((int)entry.tier,0,(int)SHADER_TIER_FAR)); else getOrCreateShaderVariant(entry.source,SHADER_DOMAIN_BUFFER,true); }
 	return true;
 }
 
@@ -3947,17 +3947,17 @@ void T3DMaterial::prewarmShaderVariants( void ) {
 
 void T3DMaterial::clearShaderVariantCache( void ) {
 	for ( int index = 0; index < m_nRuntimeShaderVariantCount; ++index ) {
-		m_szRuntimeShaderVariantEntries[index] = t3dshaderVariantEntry_t{};
+		m_szRuntimeShaderVariantEntries[index] = t3dShaderVariantEntry_t{};
 	}
 	m_nRuntimeShaderVariantCount = 0;
 	m_nRuntimeShaderVariantSourceBytes = 0;
 	for ( int index = 0; index < m_nEditorShaderVariantCount; ++index ) {
-		m_szEditorShaderVariantEntries[index] = t3dshaderVariantEntry_t{};
+		m_szEditorShaderVariantEntries[index] = t3dShaderVariantEntry_t{};
 	}
 	m_nEditorShaderVariantCount = 0;
 	m_nEditorShaderVariantSourceBytes = 0;
 	for ( int index = 0; index < m_nBufferShaderVariantCount; ++index ) {
-		m_szBufferShaderVariantEntries[index] = t3dshaderVariantEntry_t{};
+		m_szBufferShaderVariantEntries[index] = t3dShaderVariantEntry_t{};
 	}
 	m_nBufferShaderVariantCount = 0;
 	m_nBufferShaderVariantSourceBytes = 0;
@@ -3974,9 +3974,9 @@ void T3DMaterial::clearShaderVariantCache( void ) {
 
 int T3DMaterial::getSpeculativeShaderVariantCount( void ) const {
 	int speculative_count = 0;
-	const t3dshaderVariantDomain_t domains[] = {SHADER_DOMAIN_RUNTIME, SHADER_DOMAIN_EDITOR, SHADER_DOMAIN_BUFFER};
-	for ( const t3dshaderVariantDomain_t domain : domains ) {
-		const t3dshaderVariantEntry_t *pEntries = getShaderVariantEntries( domain );
+	const t3dShaderVariantDomain_t domains[] = {SHADER_DOMAIN_RUNTIME, SHADER_DOMAIN_EDITOR, SHADER_DOMAIN_BUFFER};
+	for ( const t3dShaderVariantDomain_t domain : domains ) {
+		const t3dShaderVariantEntry_t *pEntries = getShaderVariantEntries( domain );
 		const int entry_count = getShaderVariantCountForDomain( domain );
 		for ( int index = 0; index < entry_count; ++index ) {
 			if ( pEntries[index].bSpeculative ) {
@@ -3995,8 +3995,8 @@ String T3DMaterial::getShaderRegressionSource(
 		preloadShaders();
 	}
 
-	const t3dshaderTier_t requested_tier = ( t3dshaderTier_t ) ( CLAMP( nTier, ( int ) ( SHADER_TIER_NEAR ), ( int ) ( SHADER_TIER_FAR ) ) );
-	t3dshaderVariantState_t state = captureVariantState();
+	const t3dShaderTier_t requested_tier = ( t3dShaderTier_t ) ( CLAMP( nTier, ( int ) ( SHADER_TIER_NEAR ), ( int ) ( SHADER_TIER_FAR ) ) );
+	t3dShaderVariantState_t state = captureVariantState();
 	state.bControlMapsImplicit = bControlMapsImplicit;
 	state.bColorMapsImplicit = bColorMapsImplicit;
 
@@ -4102,8 +4102,8 @@ Dictionary T3DMaterial::getShaderVariantDiagnostics( void ) const {
 Dictionary T3DMaterial::getShaderTierDiagnostics( const int nTier ) const {
 	Dictionary diagnostics;
 	const int tier = CLAMP( nTier, ( int ) ( SHADER_TIER_NEAR ), ( int ) ( SHADER_TIER_FAR ) );
-	const t3dshaderTierValidationState_t &state = m_szShaderTierValidation[tier];
-	const t3dtierQualityConfig_t &quality = tier == SHADER_TIER_NEAR ? m_nearQuality :
+	const t3dShaderTierValidationState_t &state = m_szShaderTierValidation[tier];
+	const t3dTierQualityConfig_t &quality = tier == SHADER_TIER_NEAR ? m_nearQuality :
 		( tier == SHADER_TIER_MIDDLE ? m_middleQuality : m_farQuality );
 	diagnostics["tier"] = tier;
 	diagnostics["variant_signature"] = String::num_uint64( state.key.primaryHash, 16, true );
@@ -4127,12 +4127,12 @@ Dictionary T3DMaterial::getShaderTierDiagnostics( const int nTier ) const {
 	diagnostics["authored_color_contribution"] = quality.fAuthoredColorContribution;
 	diagnostics["wetness_contribution"] = quality.fWetnessContribution;
 	diagnostics["material_lod_bias"] = quality.fMaterialLodBias;
-	diagnostics["range_context"] = getTierRangeContext( ( t3dshaderTier_t ) ( tier ) );
-	diagnostics["shadow_context"] = getTierShadowContext( ( t3dshaderTier_t ) ( tier ) );
+	diagnostics["range_context"] = getTierRangeContext( ( t3dShaderTier_t ) ( tier ) );
+	diagnostics["shadow_context"] = getTierShadowContext( ( t3dShaderTier_t ) ( tier ) );
 	return diagnostics;
 }
 
-String T3DMaterial::getTierRangeContext( const t3dshaderTier_t tier ) const {
+String T3DMaterial::getTierRangeContext( const t3dShaderTier_t tier ) const {
 	if ( !m_pTerrain ) {
 		return "Unavailable until attached to Terrain3D";
 	}
@@ -4147,7 +4147,7 @@ String T3DMaterial::getTierRangeContext( const t3dshaderTier_t tier ) const {
 	return vformat( "%.1f m onward", fMiddleEnd );
 }
 
-String T3DMaterial::getTierShadowContext( const t3dshaderTier_t tier ) const {
+String T3DMaterial::getTierShadowContext( const t3dShaderTier_t tier ) const {
 	if ( !m_pTerrain ) {
 		return "Unavailable until attached to Terrain3D";
 	}
@@ -4164,9 +4164,9 @@ String T3DMaterial::getTierShadowContext( const t3dshaderTier_t tier ) const {
 	return vformat( "Enabled to %.1f m", m_pTerrain->getRuntimeShadowRangeEndM() );
 }
 
-String T3DMaterial::getTierShaderStatus( const t3dshaderTier_t argTier ) const {
+String T3DMaterial::getTierShaderStatus( const t3dShaderTier_t argTier ) const {
 	const int tier = CLAMP( ( int ) ( argTier ), ( int ) ( SHADER_TIER_NEAR ), ( int ) ( SHADER_TIER_FAR ) );
-	const t3dshaderTierValidationState_t &state = m_szShaderTierValidation[tier];
+	const t3dShaderTierValidationState_t &state = m_szShaderTierValidation[tier];
 	if ( state.bFallbackToNear ) {
 		return vformat( "Fallback to Near; RID %d; %s", ( int64_t ) ( state.activeShaderRidId ), state.failureSummary );
 	}
@@ -4219,7 +4219,7 @@ Variant T3DMaterial::getTierRegressionMaterialParam( const int nTier, const Stri
 	if ( m_szTierUniformPublicationCount[tier] == 0u ) {
 		return Variant();
 	}
-	const t3dtierQualityConfig_t &quality = tier == SHADER_TIER_NEAR ? m_nearQuality :
+	const t3dTierQualityConfig_t &quality = tier == SHADER_TIER_NEAR ? m_nearQuality :
 		( tier == SHADER_TIER_MIDDLE ? m_middleQuality : m_farQuality );
 	if ( strName == StringName( "_tier_authored_color_contribution" ) ) {
 		return quality.fAuthoredColorContribution;
@@ -4308,7 +4308,7 @@ void T3DMaterial::setShaderOverride( const Ref<Shader> &rShader ) {
 	disconnectShaderOverrideSignals();
 	m_pShaderOverride = rShader;
 	m_bPersistenceDirty = true;
-	LOG( T3DTerrain::INFO, "t3dsetting_t override shader" );
+	LOG( T3DTerrain::INFO, "t3dSetting_t override shader" );
 	update( FULL_REBUILD );
 }
 
@@ -4333,12 +4333,12 @@ void T3DMaterial::setBufferShaderOverride( const Ref<Shader> &rShader ) {
 	disconnectShaderOverrideSignals();
 	m_pBufferShaderOverride = rShader;
 	m_bPersistenceDirty = true;
-	LOG( T3DTerrain::INFO, "t3dsetting_t override shader" );
+	LOG( T3DTerrain::INFO, "t3dSetting_t override shader" );
 	updateShader();
 }
 
 void T3DMaterial::setShaderParam( const StringName &strName, const Variant &rValue ) {
-	LOG( T3DTerrain::DEBUG, "t3dsetting_t shader parameter: ", strName );
+	LOG( T3DTerrain::DEBUG, "t3dSetting_t shader parameter: ", strName );
 	if ( strName.begins_with( "_" ) && m_pMaterial.is_valid() ) {
 		setRuntimeMaterialParam( strName, rValue );
 	} else {
@@ -4560,7 +4560,7 @@ Error T3DMaterial::save( const String &rPath ) {
 		return ERR_FILE_NOT_FOUND;
 	}
 	if ( !rPath.is_empty() ) {
-		LOG( T3DTerrain::DEBUG, "t3dsetting_t file path to ", rPath );
+		LOG( T3DTerrain::DEBUG, "t3dSetting_t file path to ", rPath );
 		take_over_path( rPath );
 	}
 

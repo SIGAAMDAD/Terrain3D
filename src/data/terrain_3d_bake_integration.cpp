@@ -46,15 +46,15 @@
 #include "core/terrain_3d_util.h"
 
 
-bool T3DTerrain::bakeRegionSnapshotLess( const t3dbakeRegionSnapshot_t &rA, const t3dbakeRegionSnapshot_t &rB ) {
+bool T3DTerrain::bakeRegionSnapshotLess( const t3dBakeRegionSnapshot_t &rA, const t3dBakeRegionSnapshot_t &rB ) {
 	if ( rA.location.y != rB.location.y ) {
 		return rA.location.y < rB.location.y;
 	}
 	return rA.location.x < rB.location.x;
 }
 
-T3DTerrain::t3dbakeSnapshot_t T3DTerrain::createBakeSnapshot( void ) const {
-	t3dbakeSnapshot_t snapshot;
+T3DTerrain::t3dBakeSnapshot_t T3DTerrain::createBakeSnapshot( void ) const {
+	t3dBakeSnapshot_t snapshot;
 	snapshot.nRegionSize = ( int32_t )m_nRegionSize;
 	snapshot.fVertexSpacing = m_fVertexSpacing;
 	std::fill_n( snapshot.szRegionLookup, TERRAIN3D_MAX_REGION_SLOTS, ( int32_t ) ( -1 ) );
@@ -86,7 +86,7 @@ T3DTerrain::t3dbakeSnapshot_t T3DTerrain::createBakeSnapshot( void ) const {
 			continue;
 		}
 
-		t3dbakeRegionSnapshot_t region_snapshot;
+		t3dBakeRegionSnapshot_t region_snapshot;
 		region_snapshot.location = regionLocation;
 		region_snapshot.heightData = pHeightMap->get_data();
 		if ( pControlMap.is_valid() ) {
@@ -121,10 +121,10 @@ T3DTerrain::t3dbakeSnapshot_t T3DTerrain::createBakeSnapshot( void ) const {
 }
 
 void T3DTerrain::runBakeTaskRange( void *const pContext, const size_t nBegin, const size_t nEnd ) {
-	t3dbakeTaskContext_t *context = ( t3dbakeTaskContext_t * ) ( pContext );
+	t3dBakeTaskContext_t *context = ( t3dBakeTaskContext_t * ) ( pContext );
 	for ( size_t task_index = nBegin; task_index < nEnd; ++task_index ) {
-		const t3dbakeRowTask_t &task = ( *context->pTasks )[task_index];
-		t3dtriangleBuffer_t &buffer = ( *context->pBuffers )[task_index];
+		const t3dBakeRowTask_t &task = ( *context->pTasks )[task_index];
+		t3dTriangleBuffer_t &buffer = ( *context->pBuffers )[task_index];
 		for ( int32_t z = task.zStart; z < task.zEnd; z += context->step ) {
 			for ( int32_t x = task.xStart; x < task.xEnd; x += context->step ) {
 				context->pTerrain->generateTrianglePair( buffer, context->bGenerateUvs, context->lod, context->filter,
@@ -135,8 +135,8 @@ void T3DTerrain::runBakeTaskRange( void *const pContext, const size_t nBegin, co
 }
 
 Vector3 T3DTerrain::getTriangleVertex(
-	const t3dbakeSnapshot_t *pSnapshot, const int32_t nLod,
-	const T3DData::t3dheightFilter_t filter, const int32_t iX, const int32_t iZ,
+	const t3dBakeSnapshot_t *pSnapshot, const int32_t nLod,
+	const T3DData::t3dHeightFilter_t filter, const int32_t iX, const int32_t iZ,
 	const Vector3 &rPosition, uint32_t &nControl
 ) const {
 	if ( pSnapshot ) {
@@ -149,13 +149,13 @@ Vector3 T3DTerrain::getTriangleVertex(
 
 void T3DTerrain::generateTriangles(
 	PackedVector3Array &rVertices, PackedVector2Array *const pUvs, const int32_t nLod,
-	const T3DData::t3dheightFilter_t filter, const bool bRequireNav,
+	const T3DData::t3dHeightFilter_t filter, const bool bRequireNav,
 	const AABB &rGlobalAabb
 ) const {
 	ERR_FAIL_COND( m_pData == nullptr );
 	const int32_t step = 1 << CLAMP( nLod, 0, 8 );
 	const bool generate_uvs = pUvs != nullptr;
-	eastl::vector<t3dtriangleBuffer_t> buffers;
+	eastl::vector<t3dTriangleBuffer_t> buffers;
 	T3DLinearArena bake_arena;
 	T3DArenaBuffer<Vector3> bake_vertex_slab;
 	T3DArenaBuffer<Vector2> bake_uv_slab;
@@ -167,16 +167,16 @@ void T3DTerrain::generateTriangles(
 
 		const int32_t nRegionSize = ( int32_t )m_nRegionSize;
 		const int32_t rows_per_task = 16;
-		t3dbakeSnapshot_t snapshot = createBakeSnapshot();
-		for ( t3dbakeRegionSnapshot_t &region : snapshot.regions ) {
+		t3dBakeSnapshot_t snapshot = createBakeSnapshot();
+		for ( t3dBakeRegionSnapshot_t &region : snapshot.regions ) {
 			region.pHeightBytes = region.heightData.ptr();
 			region.pControlBytes = region.controlData.is_empty() ? nullptr : region.controlData.ptr();
 		}
-		eastl::vector<t3dbakeRowTask_t> tasks;
+		eastl::vector<t3dBakeRowTask_t> tasks;
 		tasks.reserve( snapshot.regions.size() * MAX( 1, nRegionSize / ( step * rows_per_task ) ) );
 
 		size_t total_output_capacity = 0u;
-		for ( const t3dbakeRegionSnapshot_t &region : snapshot.regions ) {
+		for ( const t3dBakeRegionSnapshot_t &region : snapshot.regions ) {
 			const Vector2i region_loc = region.location;
 			const Vector2i region_pos = region_loc * nRegionSize;
 			const int32_t region_z_end = region_pos.y + nRegionSize;
@@ -219,7 +219,7 @@ void T3DTerrain::generateTriangles(
 			"Terrain bake scratch arena consumption did not match its precomputed layout." );
 		buffers.resize( tasks.size() );
 		for ( size_t task_index = 0; task_index < tasks.size(); ++task_index ) {
-			const t3dbakeRowTask_t &task = tasks[task_index];
+			const t3dBakeRowTask_t &task = tasks[task_index];
 			buffers[task_index].bindExternal( bake_vertex_slab.data() + task.iOutputOffset,
 				generate_uvs ? bake_uv_slab.data() + task.iOutputOffset : nullptr, task.nOutputCapacity );
 		}
@@ -231,7 +231,7 @@ void T3DTerrain::generateTriangles(
 			const uint32_t worker_count = std::min( {hardware_threads, ( uint32_t )tasks.size(), 32u} );
 #endif
 			const T3DParallelExecutor executor{( int32_t ) ( worker_count )};
-			t3dbakeTaskContext_t task_context;
+			t3dBakeTaskContext_t task_context;
 			task_context.pTerrain = this;
 			task_context.pSnapshot = &snapshot;
 			task_context.pTasks = &tasks;
@@ -247,14 +247,14 @@ void T3DTerrain::generateTriangles(
 			executor.run( tasks.size(), 1u, runBakeTaskRange, &task_context );
 		}
 
-		for ( const t3dtriangleBuffer_t &buffer : buffers ) {
+		for ( const t3dTriangleBuffer_t &buffer : buffers ) {
 			ERR_FAIL_COND_MSG( buffer.bOverflowed,
 				"Terrain bake output exceeded its precomputed slab capacity. This indicates a bake sizing invariant failure." );
 		}
 	} else {
 		// AABB generation is primarily used by runtime navigation baking. Keep it serial because these
 		// requests are generally small and thread setup costs can exceed the geometry work.
-		t3dtriangleBuffer_t buffer;
+		t3dTriangleBuffer_t buffer;
 		const int32_t z_start = ( int32_t )Math::ceil( rGlobalAabb.position.z / m_fVertexSpacing );
 		const int32_t z_end = ( int32_t )Math::floor( rGlobalAabb.get_end().z / m_fVertexSpacing ) + 1;
 		const int32_t x_start = ( int32_t )Math::ceil( rGlobalAabb.position.x / m_fVertexSpacing );
@@ -277,7 +277,7 @@ void T3DTerrain::generateTriangles(
 
 	size_t vertex_count = 0;
 	size_t uv_count = 0;
-	for ( const t3dtriangleBuffer_t &buffer : buffers ) {
+	for ( const t3dTriangleBuffer_t &buffer : buffers ) {
 		vertex_count += buffer.size();
 		uv_count += buffer.uvSize();
 	}
@@ -288,7 +288,7 @@ void T3DTerrain::generateTriangles(
 	if ( vertex_count > 0 ) {
 		Vector3 *const pVertexWrite = rVertices.ptrw();
 		size_t vertex_offset = 0;
-		for ( const t3dtriangleBuffer_t &buffer : buffers ) {
+		for ( const t3dTriangleBuffer_t &buffer : buffers ) {
 			if ( buffer.size() > 0u ) {
 				std::copy_n( buffer.vertexData(), buffer.size(), pVertexWrite + vertex_offset );
 			}
@@ -301,7 +301,7 @@ void T3DTerrain::generateTriangles(
 		if ( uv_count > 0 ) {
 			Vector2 *const pUvWrite = pUvs->ptrw();
 			size_t uv_offset = 0;
-			for ( const t3dtriangleBuffer_t &buffer : buffers ) {
+			for ( const t3dTriangleBuffer_t &buffer : buffers ) {
 				if ( buffer.uvSize() > 0u ) {
 					std::copy_n( buffer.uvData(), buffer.uvSize(), pUvWrite + uv_offset );
 				}
@@ -312,9 +312,9 @@ void T3DTerrain::generateTriangles(
 }
 
 void T3DTerrain::generateTrianglePair(
-	t3dtriangleBuffer_t &rBuffer, const bool bGenerateUvs, const int32_t nLod,
-	const T3DData::t3dheightFilter_t filter, const bool bRequireNav,
-	const int32_t x, const int32_t z, const t3dbakeSnapshot_t *pSnapshot
+	t3dTriangleBuffer_t &rBuffer, const bool bGenerateUvs, const int32_t nLod,
+	const T3DData::t3dHeightFilter_t filter, const bool bRequireNav,
+	const int32_t x, const int32_t z, const t3dBakeSnapshot_t *pSnapshot
 ) const {
 	const int32_t step = 1 << CLAMP( nLod, 0, 8 );
 	const Vector3 xz = Vector3( x, 0.0f, z ) * m_fVertexSpacing;
@@ -388,7 +388,7 @@ Dictionary T3DTerrain::getRaycastResult(
 	return pSpaceState->intersect_ray( pQuery );
 }
 
-Ref<Mesh> T3DTerrain::bakeMesh( const int nLod, const T3DData::t3dheightFilter_t filter ) const {
+Ref<Mesh> T3DTerrain::bakeMesh( const int nLod, const T3DData::t3dHeightFilter_t filter ) const {
 	LOG( T3DTerrain::INFO, "Baking mesh at lod: ", nLod, " with filter: ", filter );
 	Ref<Mesh> pResult;
 	ERR_FAIL_COND_V( m_pData == nullptr, pResult );

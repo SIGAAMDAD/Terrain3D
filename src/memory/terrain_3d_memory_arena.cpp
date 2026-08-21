@@ -43,14 +43,14 @@ bool T3DMemoryArenaLayout::configure( const size_t nCapacityBytes ) {
 
 bool T3DMemoryArenaLayout::reserveLow(
 	const size_t nBytes, const size_t nAlignment,
-	t3dmemoryArenaSlice_t &rSlice
+	t3dMemoryArenaSlice_t &rSlice
 ) {
 	return reserve( false, nBytes, nAlignment, rSlice );
 }
 
 bool T3DMemoryArenaLayout::reserve(
 	const bool bHigh, const size_t nBytes, const size_t nAlignment,
-	t3dmemoryArenaSlice_t &rSlice
+	t3dMemoryArenaSlice_t &rSlice
 ) {
 	if ( m_bSealed || !m_bValid ) {
 		return false;
@@ -68,7 +68,7 @@ bool T3DMemoryArenaLayout::reserve(
 			m_bValid = false;
 			return false;
 		}
-		const t3dmemoryArenaSlice_t slice = {aligned, nBytes, nAlignment, false, true};
+		const t3dMemoryArenaSlice_t slice = {aligned, nBytes, nAlignment, false, true};
 		rSlice = slice;
 		m_nLowCursor = aligned + nBytes;
 		return true;
@@ -83,7 +83,7 @@ bool T3DMemoryArenaLayout::reserve(
 		m_bValid = false;
 		return false;
 	}
-	const t3dmemoryArenaSlice_t slice = {candidate, nBytes, nAlignment, true, true};
+	const t3dMemoryArenaSlice_t slice = {candidate, nBytes, nAlignment, true, true};
 	rSlice = slice;
 	m_nHighCursor = candidate;
 	return true;
@@ -158,7 +158,7 @@ void T3DMemoryArena::release( void ) {
 	m_bSealed = false;
 }
 
-bool T3DMemoryArena::sliceInBounds( const t3dmemoryArenaSlice_t &rSlice ) const {
+bool T3DMemoryArena::sliceInBounds( const t3dMemoryArenaSlice_t &rSlice ) const {
 	if ( !rSlice.reserved || rSlice.offset > m_nCapacity || rSlice.alignment == 0u ||
 		( rSlice.alignment & ( rSlice.alignment - 1u ) ) != 0u ||
 		rSlice.offset % rSlice.alignment != 0u ) {
@@ -167,14 +167,14 @@ bool T3DMemoryArena::sliceInBounds( const t3dmemoryArenaSlice_t &rSlice ) const 
 	return rSlice.size <= m_nCapacity - rSlice.offset;
 }
 
-t3dmemoryArenaSpan_t T3DMemoryArena::resolve( const t3dmemoryArenaSlice_t &rSlice ) {
+t3dMemoryArenaSpan_t T3DMemoryArena::resolve( const t3dMemoryArenaSlice_t &rSlice ) {
 	if ( !initialized() || !sliceInBounds( rSlice ) ) {
 		return {};
 	}
 	return {m_pBase ? m_pBase + rSlice.offset : nullptr, rSlice.size};
 }
 
-t3dmemoryArenaSpan_t T3DMemoryArena::resolve( const t3dmemoryArenaSlice_t &rSlice ) const {
+t3dMemoryArenaSpan_t T3DMemoryArena::resolve( const t3dMemoryArenaSlice_t &rSlice ) const {
 	if ( !initialized() || !sliceInBounds( rSlice ) ) {
 		return {};
 	}

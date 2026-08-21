@@ -9,7 +9,7 @@
 #include <mutex>
 #include "core/terrain_3d_compiler.h"
 
-typedef struct t3dmemoryZoneStats_s {
+typedef struct t3dMemoryZoneStats_s {
 	size_t nReservedBytes = 0u;
 	size_t nLiveRequestedBytes = 0u;
 	size_t nLivePhysicalBytes = 0u;
@@ -28,7 +28,7 @@ typedef struct t3dmemoryZoneStats_s {
 	uint32_t nPeakActiveSmallPages = 0u;
 	uint32_t nFreeExtentCount = 0u;
 	uint32_t nPeakFreeExtentCount = 0u;
-} t3dmemoryZoneStats_t;
+} t3dMemoryZoneStats_t;
 
 class T3DMemoryZone {
 public:
@@ -56,7 +56,7 @@ public:
 	EA_FORCE_INLINE size_t liveBytes() const { std::lock_guard<std::mutex> lock( m_mutex ); return m_nLiveBytes; }
 	size_t freeExtentBytes( void ) const;
 	EA_FORCE_INLINE size_t freeBytes( void ) const { return freeExtentBytes(); }
-	t3dmemoryZoneStats_t getStats( void ) const;
+	t3dMemoryZoneStats_t getStats( void ) const;
 	EA_FORCE_INLINE bool owns( const void *pMemory ) const { return pMemory && m_pBase && static_cast<const uint8_t *>( pMemory ) > m_pBase && static_cast<const uint8_t *>( pMemory ) < m_pBase + m_nCapacity; }
 
 private:

@@ -30,14 +30,14 @@ class T3DTerrain;
 
 class T3DCompute {
 public:
-	typedef struct t3dbrushElement_s {
+	typedef struct t3dBrushElement_s {
 		uint32_t value = 0u;  // Height float bits, packed pControl, or RGBA8.
 		uint32_t alpha = 0u;  // Float bits.
 		uint32_t target = 0u; // Gradient/height target float bits.
 		uint32_t flags = 0u;  // Bit 0: eligible.
-	} t3dbrushElement_t;
+	} t3dBrushElement_t;
 
-	typedef struct t3ddisplacementRequest_s {
+	typedef struct t3dDisplacementRequest_s {
 		// RenderingServer texture RIDs. The render callback resolves their
 		// global RenderingDevice texture RIDs on the render thread.
 		RID heightTexture;
@@ -61,9 +61,9 @@ public:
 				   regionMap.size() == ( int64_t ) ( nRegionMapSize ) * ( int64_t ) ( nRegionMapSize ) && !materialData.is_empty() &&
 				   !pushConstants.is_empty();
 		}
-	} t3ddisplacementRequest_t;
+	} t3dDisplacementRequest_t;
 
-	typedef struct t3dbrushParams_s {
+	typedef struct t3dBrushParams_s {
 		uint32_t mapType = 0u;
 		uint32_t tool = 0u;
 		uint32_t operation = 0u;
@@ -77,7 +77,7 @@ public:
 		uint32_t uvRotation = 0u;
 		uint32_t uvScale = 0u;
 		uint32_t featureFlags = 0u;
-	} t3dbrushParams_t;
+	} t3dBrushParams_t;
 
 	T3DCompute( void ) = default;
 	~T3DCompute( void );
@@ -88,8 +88,8 @@ public:
 	bool isAvailable( void );
 	EA_FORCE_INLINE String getLastError( void ) const { std::lock_guard<std::mutex> lock( m_errorMutex ); return m_lastError; }
 
-	bool processBrush( eastl::vector<t3dbrushElement_t> &rElements, const t3dbrushParams_t &rParams );
-	static void processBrushCpu( eastl::vector<t3dbrushElement_t> &rElements, const t3dbrushParams_t &rParams );
+	bool processBrush( eastl::vector<t3dBrushElement_t> &rElements, const t3dBrushParams_t &rParams );
+	static void processBrushCpu( eastl::vector<t3dBrushElement_t> &rElements, const t3dBrushParams_t &rParams );
 	bool generateDerivedMap(
 		const eastl::vector<float> &fHeightHalo, int nWidth, int nHeight,
 		float fVertexSpacing, PackedByteArray &rRgba8
@@ -99,25 +99,25 @@ public:
 	// packed-PBR/R8 materials; all other variants retain the raster fallback.
 	bool prepareDisplacementRequest(
 		T3DTerrain *pTerrain, const Vector3 &rTargetPosition,
-		t3ddisplacementRequest_t &rRequest
+		t3dDisplacementRequest_t &rRequest
 	);
 	// Must execute through RenderingServer.call_on_render_thread().
-	bool dispatchDisplacementRequest( const t3ddisplacementRequest_t &rRequest, RID &rTexture );
+	bool dispatchDisplacementRequest( const t3dDisplacementRequest_t &rRequest, RID &rTexture );
 	// Must execute on the render thread before T3DCompute is destroyed.
 	void shutdownDisplacementResources( void );
 
 private:
-	typedef struct t3dpipeline_s {
+	typedef struct t3dPipeline_s {
 		RID pShader;
 		RID pipeline;
 		bool bAttempted = false;
-	} t3dpipeline_t;
+	} t3dPipeline_t;
 
 	RenderingDevice *m_pRd = nullptr;		   // Owned local device for readback workloads.
 	RenderingDevice *m_pRenderRd = nullptr; // Non-owning global renderer device.
-	t3dpipeline_t m_brushPipeline;
-	t3dpipeline_t m_derivedPipeline;
-	t3dpipeline_t m_displacementPipeline;
+	t3dPipeline_t m_brushPipeline;
+	t3dPipeline_t m_derivedPipeline;
+	t3dPipeline_t m_displacementPipeline;
 	Ref<RDShaderSPIRV> m_pDisplacementSpirv;
 	RID m_brushBuffer;
 	RID m_derivedInputBuffer;
@@ -150,17 +150,17 @@ private:
 
 	bool ensureDevice( void );
 	bool ensureRenderDevice( void );
-	bool ensurePipeline( t3dpipeline_t &rPipeline, const String &rPath, const String &rName );
-	bool ensureRenderPipeline( t3dpipeline_t &rPipeline, const Ref<RDShaderSPIRV> &rSpirv, const String &rName );
+	bool ensurePipeline( t3dPipeline_t &rPipeline, const String &rPath, const String &rName );
+	bool ensureRenderPipeline( t3dPipeline_t &rPipeline, const Ref<RDShaderSPIRV> &rSpirv, const String &rName );
 	bool ensureBrushCapacity( uint32_t nBytes );
 	bool ensureDerivedCapacity( uint32_t nInputBytes, uint32_t nOutputBytes );
 	bool ensureDisplacementResources( uint32_t nWidth, uint32_t nHeight, const Ref<RDShaderSPIRV> &rSpirv );
 	void freeUniformSet( RID &rUniformSet );
 	void freeBuffer( RID &rBuffer );
-	void freePipeline( t3dpipeline_t &rPipeline );
+	void freePipeline( t3dPipeline_t &rPipeline );
 	void freeRenderUniformSet( RID &rUniformSet );
 	void freeRenderRid( RID &rRid );
-	void freeRenderPipeline( t3dpipeline_t &rPipeline );
+	void freeRenderPipeline( t3dPipeline_t &rPipeline );
 	void freeDisplacementTexture( void );
 	void shutdown( void );
 	EA_FORCE_INLINE void setError( const String &rError ) { std::lock_guard<std::mutex> lock( m_errorMutex ); m_lastError = rError; }

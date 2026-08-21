@@ -36,7 +36,7 @@
 #define EASTL_NAME( x ) x
 #define EASTL_NAME_VAL( x ) x
 
-typedef struct t3deastlAllocationStats_s {
+typedef struct t3dEastlAllocationStats_s {
 	size_t nLiveBytes = 0u;
 	size_t nPeakBytes = 0u;
 	size_t nLiveAllocations = 0u;
@@ -44,19 +44,19 @@ typedef struct t3deastlAllocationStats_s {
 	size_t nFailedAllocations = 0u;
 	size_t nOverflowAllocations = 0u;
 	size_t nOverflowLiveBytes = 0u;
-} t3deastlAllocationStats_t;
+} t3dEastlAllocationStats_t;
 
-typedef struct t3deastlAllocationHeader_s {
+typedef struct t3dEastlAllocationHeader_s {
 	void *pRaw = nullptr;
 	T3DMemoryZone *pZone = nullptr;
 	size_t nSize = 0u;
 	uint8_t nOrigin = TERRAIN3D_ALLOCATION_BOOTSTRAP;
-} t3deastlAllocationHeader_t;
+} t3dEastlAllocationHeader_t;
 
-inline constexpr size_t TERRAIN3D_EASTL_ALLOCATION_HEADER_SIZE = sizeof( t3deastlAllocationHeader_t );
+inline constexpr size_t TERRAIN3D_EASTL_ALLOCATION_HEADER_SIZE = sizeof( t3dEastlAllocationHeader_t );
 
 class T3DEastlAllocator {
-	using AllocationHeader = t3deastlAllocationHeader_t;
+	using AllocationHeader = t3dEastlAllocationHeader_t;
 
 	inline static std::atomic<size_t> s_nLiveBytes{0u};
 	inline static std::atomic<size_t> s_nPeakBytes{0u};
@@ -130,8 +130,8 @@ public:
 		else terrain3d_memory::release( header.pRaw );
 	}
 
-	static t3deastlAllocationStats_t getAllocationStats( void ) {
-		t3deastlAllocationStats_t stats;
+	static t3dEastlAllocationStats_t getAllocationStats( void ) {
+		t3dEastlAllocationStats_t stats;
 		stats.nLiveBytes = s_nLiveBytes.load( std::memory_order_relaxed );
 		stats.nPeakBytes = s_nPeakBytes.load( std::memory_order_relaxed );
 		stats.nLiveAllocations = s_nLiveAllocations.load( std::memory_order_relaxed );

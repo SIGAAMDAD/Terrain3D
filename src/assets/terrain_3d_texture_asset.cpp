@@ -142,7 +142,7 @@ void T3DTextureAsset::setName( const String &rName ) {
 		LOG( T3DTerrain::WARN, "Name too long, truncating to 96 characters" );
 	}
 	SET_IF_DIFF( m_name, rName.left( 96 ) );
-	LOG( T3DTerrain::INFO, "t3dsetting_t name: ", m_name );
+	LOG( T3DTerrain::INFO, "t3dSetting_t name: ", m_name );
 	LOG( T3DTerrain::DEBUG, "Emitting setting_changed" );
 	emit_signal( "setting_changed" );
 }
@@ -150,7 +150,7 @@ void T3DTextureAsset::setName( const String &rName ) {
 void T3DTextureAsset::setId( const int nNewId ) {
 	const int old_id = m_nId;
 	SET_IF_DIFF( m_nId, CLAMP( nNewId, 0, TERRAIN3D_MAX_TEXTURE_ASSETS - 1 ) );
-	LOG( T3DTerrain::INFO, "t3dsetting_t texture id: ", m_nId );
+	LOG( T3DTerrain::INFO, "t3dSetting_t texture id: ", m_nId );
 	LOG( T3DTerrain::DEBUG, "Emitting id_changed, TYPE_TEXTURE, ", old_id, ", ", m_nId );
 	emit_signal( "id_changed", T3DAssets::TYPE_TEXTURE, old_id, m_nId );
 }
@@ -166,7 +166,7 @@ void T3DTextureAsset::setHighlighted( const bool bHighlighted ) {
 
 void T3DTextureAsset::setAlbedoColor( const Color &rColor ) {
 	SET_IF_DIFF( m_albedoColor, rColor );
-	LOG( T3DTerrain::INFO, "t3dsetting_t color: ", rColor );
+	LOG( T3DTerrain::INFO, "t3dSetting_t color: ", rColor );
 	LOG( T3DTerrain::DEBUG, "Emitting setting_changed" );
 	emit_signal( "setting_changed" );
 }
@@ -174,12 +174,12 @@ void T3DTextureAsset::setAlbedoColor( const Color &rColor ) {
 void T3DTextureAsset::setAlbedoTexture( const Ref<Texture2D> &rTexture ) {
 	if ( isValidFormat( rTexture ) ) {
 		SET_IF_DIFF( m_pAlbedoTexture, rTexture );
-		LOG( T3DTerrain::INFO, "t3dsetting_t albedo texture: ", rTexture );
+		LOG( T3DTerrain::INFO, "t3dSetting_t albedo texture: ", rTexture );
 		if ( rTexture.is_valid() ) {
 			const String filename = rTexture->get_path().get_file().get_basename();
 			if ( m_name == "New Texture" && !rTexture->get_path().contains( "::" ) && !filename.is_empty() ) {
 				m_name = filename;
-				LOG( T3DTerrain::INFO, "t3dsetting_t name based on filename: ", m_name );
+				LOG( T3DTerrain::INFO, "t3dSetting_t name based on filename: ", m_name );
 			}
 			Ref<Image> pImg = rTexture->get_image();
 			if ( !pImg->has_mipmaps() ) {
@@ -209,7 +209,7 @@ void T3DTextureAsset::setAlbedoTexture( const Ref<Texture2D> &rTexture ) {
 void T3DTextureAsset::setNormalTexture( const Ref<Texture2D> &rTexture ) {
 	if ( isValidFormat( rTexture ) ) {
 		SET_IF_DIFF( m_pNormalTexture, rTexture );
-		LOG( T3DTerrain::INFO, "t3dsetting_t normal texture: ", rTexture );
+		LOG( T3DTerrain::INFO, "t3dSetting_t normal texture: ", rTexture );
 		if ( rTexture.is_valid() ) {
 			const String filename = rTexture->get_path().get_file().get_basename();
 			const Ref<Image> pImg = rTexture->get_image();
@@ -249,7 +249,7 @@ void T3DTextureAsset::setSurfaceTexture( const Ref<Texture2D> &rTexture ) {
 		}
 	}
 	SET_IF_DIFF( m_pSurfaceTexture, rTexture );
-	LOG( T3DTerrain::INFO, "t3dsetting_t packed PBR texture: ", rTexture );
+	LOG( T3DTerrain::INFO, "t3dSetting_t packed PBR texture: ", rTexture );
 	emit_signal( "file_changed" );
 }
 
@@ -288,7 +288,7 @@ void T3DTextureAsset::setDisplacementTexture( const Ref<Texture2D> &rTexture ) {
 		}
 	}
 	SET_IF_DIFF( m_pDisplacementTexture, pTexture );
-	LOG( T3DTerrain::INFO, "t3dsetting_t R8 displacement texture: ", pTexture );
+	LOG( T3DTerrain::INFO, "t3dSetting_t R8 displacement texture: ", pTexture );
 	emit_signal( "file_changed" );
 }
 
@@ -334,7 +334,7 @@ void T3DTextureAsset::setPackedPbrResource( const Ref<T3DPackedPBRTexture> &rRes
 	m_pPackedPbrResource = rResource;
 	connectPackedPbrResource();
 	notify_property_list_changed();
-	LOG( T3DTerrain::INFO, "t3dsetting_t legacy packed-PBR compatibility resource: ", rResource );
+	LOG( T3DTerrain::INFO, "t3dSetting_t legacy packed-PBR compatibility resource: ", rResource );
 	emit_signal( "file_changed" );
 }
 
@@ -356,69 +356,69 @@ Ref<Texture2D> T3DTextureAsset::getEffectiveDisplacementTexture( void ) {
 
 void T3DTextureAsset::setMetallic( const real_t fMetallic ) {
 	SET_IF_DIFF( m_fMetallic, CLAMP( fMetallic, 0.0f, 1.0f ) );
-	LOG( T3DTerrain::INFO, "t3dsetting_t metallic: ", m_fMetallic );
+	LOG( T3DTerrain::INFO, "t3dSetting_t metallic: ", m_fMetallic );
 	emit_signal( "setting_changed" );
 }
 
 void T3DTextureAsset::setNormalDepth( const real_t fNormalDepth ) {
 	SET_IF_DIFF( m_fNormalDepth, CLAMP( fNormalDepth, 0.0f, 2.0f ) );
-	LOG( T3DTerrain::INFO, "t3dsetting_t normal_depth: ", m_fNormalDepth );
+	LOG( T3DTerrain::INFO, "t3dSetting_t normal_depth: ", m_fNormalDepth );
 	LOG( T3DTerrain::DEBUG, "Emitting setting_changed" );
 	emit_signal( "setting_changed" );
 }
 
 void T3DTextureAsset::setRoughness( const real_t fRoughness ) {
 	SET_IF_DIFF( m_fRoughness, CLAMP( fRoughness, -1.0f, 1.0f ) );
-	LOG( T3DTerrain::INFO, "t3dsetting_t roughness modifier: ", m_fRoughness );
+	LOG( T3DTerrain::INFO, "t3dSetting_t roughness modifier: ", m_fRoughness );
 	LOG( T3DTerrain::DEBUG, "Emitting setting_changed" );
 	emit_signal( "setting_changed" );
 }
 
 void T3DTextureAsset::setAoStrength( const real_t fAoStrength ) {
 	SET_IF_DIFF( m_fAoStrength, CLAMP( fAoStrength, 0.0f, 1.0f ) );
-	LOG( T3DTerrain::INFO, "t3dsetting_t ao_strength: ", m_fAoStrength );
+	LOG( T3DTerrain::INFO, "t3dSetting_t ao_strength: ", m_fAoStrength );
 	LOG( T3DTerrain::DEBUG, "Emitting setting_changed" );
 	emit_signal( "setting_changed" );
 }
 
 void T3DTextureAsset::setAoLightAffect( const real_t fAoLightAffect ) {
 	SET_IF_DIFF( m_fAoLightAffect, CLAMP( fAoLightAffect, 0.0f, 1.0f ) );
-	LOG( T3DTerrain::INFO, "t3dsetting_t ao_light_affect: ", m_fAoLightAffect );
+	LOG( T3DTerrain::INFO, "t3dSetting_t ao_light_affect: ", m_fAoLightAffect );
 	LOG( T3DTerrain::DEBUG, "Emitting setting_changed" );
 	emit_signal( "setting_changed" );
 }
 
 void T3DTextureAsset::setDisplacementScale( const real_t fDisplacementScale ) {
 	SET_IF_DIFF( m_fDisplacementScale, CLAMP( fDisplacementScale, 0.0f, 2.0f ) );
-	LOG( T3DTerrain::INFO, "t3dsetting_t displacement_scale: ", m_fDisplacementScale );
+	LOG( T3DTerrain::INFO, "t3dSetting_t displacement_scale: ", m_fDisplacementScale );
 	LOG( T3DTerrain::DEBUG, "Emitting setting_changed" );
 	emit_signal( "setting_changed" );
 }
 
 void T3DTextureAsset::setDisplacementOffset( const real_t fDisplacementOffset ) {
 	SET_IF_DIFF( m_fDisplacementOffset, CLAMP( fDisplacementOffset, -1.0f, 1.0f ) );
-	LOG( T3DTerrain::INFO, "t3dsetting_t displacement_offset: ", m_fDisplacementOffset );
+	LOG( T3DTerrain::INFO, "t3dSetting_t displacement_offset: ", m_fDisplacementOffset );
 	LOG( T3DTerrain::DEBUG, "Emitting setting_changed" );
 	emit_signal( "setting_changed" );
 }
 
 void T3DTextureAsset::setUvScale( const real_t fScale ) {
 	SET_IF_DIFF( m_fUvScale, CLAMP( fScale, 0.001f, 100.0f ) );
-	LOG( T3DTerrain::INFO, "t3dsetting_t uv_scale: ", m_fUvScale );
+	LOG( T3DTerrain::INFO, "t3dSetting_t uv_scale: ", m_fUvScale );
 	LOG( T3DTerrain::DEBUG, "Emitting setting_changed" );
 	emit_signal( "setting_changed" );
 }
 
 void T3DTextureAsset::setDetilingRotation( const real_t fDetilingRotation ) {
 	SET_IF_DIFF( m_fDetilingRotation, CLAMP( fDetilingRotation, 0.0f, 1.0f ) );
-	LOG( T3DTerrain::INFO, "t3dsetting_t detiling_rotation: ", m_fDetilingRotation );
+	LOG( T3DTerrain::INFO, "t3dSetting_t detiling_rotation: ", m_fDetilingRotation );
 	LOG( T3DTerrain::DEBUG, "Emitting setting_changed" );
 	emit_signal( "setting_changed" );
 }
 
 void T3DTextureAsset::setDetilingShift( const real_t fDetilingShift ) {
 	SET_IF_DIFF( m_fDetilingShift, CLAMP( fDetilingShift, 0.0f, 1.0f ) );
-	LOG( T3DTerrain::INFO, "t3dsetting_t detiling_shift: ", m_fDetilingShift );
+	LOG( T3DTerrain::INFO, "t3dSetting_t detiling_shift: ", m_fDetilingShift );
 	LOG( T3DTerrain::DEBUG, "Emitting setting_changed" );
 	emit_signal( "setting_changed" );
 }

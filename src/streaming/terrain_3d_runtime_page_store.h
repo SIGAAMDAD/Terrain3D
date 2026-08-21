@@ -22,7 +22,7 @@ class T3DRegion;
 class T3DRegionPersistence;
 class T3DRegionRepository;
 
-typedef enum t3druntimePageConsumer_e : uint16_t {
+typedef enum t3dRuntimePageConsumer_e : uint16_t {
 	RUNTIME_PAGE_CONSUMER_ACTIVE_HEIGHT = 1u << 0,
 	RUNTIME_PAGE_CONSUMER_MIDDLE_HEIGHT = 1u << 1,
 	RUNTIME_PAGE_CONSUMER_GPU_DETAIL = 1u << 2,
@@ -32,7 +32,7 @@ typedef enum t3druntimePageConsumer_e : uint16_t {
 	RUNTIME_PAGE_CONSUMER_COLLISION = 1u << 6,
 	RUNTIME_PAGE_CONSUMER_NAVIGATION = 1u << 7,
 	RUNTIME_PAGE_CONSUMER_TERRAIN_SHADOW = 1u << 8,
-} t3druntimePageConsumer_t;
+} t3dRuntimePageConsumer_t;
 
 struct T3DRuntimePageConfig {
 	String dataDirectory;

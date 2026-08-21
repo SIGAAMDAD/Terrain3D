@@ -106,12 +106,12 @@ void neonHalfToFloat( const uint16_t *pSource, float *pDestination, const size_t
 }
 
 void neonPackedTransforms(
-	const t3dpackedTransform_t *pTransforms, const uint32_t *pColors,
+	const t3dPackedTransform_t *pTransforms, const uint32_t *pColors,
 	const size_t nCount, const int nStride, float *pDestination
 ) {
 #if TERRAIN3D_COMPILED_NEON
 	for ( size_t i = 0u; i < nCount; ++i ) {
-		const t3dpackedTransform_t &t = pTransforms[i];
+		const t3dPackedTransform_t &t = pTransforms[i];
 		float *pOut = pDestination + i * ( size_t ) ( nStride );
 		alignas( 16 ) float fBasis[8];
 		vst1q_f32( fBasis, decode4Exact( t.basis ) );

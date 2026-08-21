@@ -23,17 +23,17 @@
 #include "memory/terrain_3d_linear_arena.h"
 
 class T3DData;
-typedef struct t3derosionKernels_s t3derosionKernels_t;
+typedef struct t3dErosionKernels_s t3dErosionKernels_t;
 
 
 class T3DErosionJob : public RefCounted {
 	GDCLASS( T3DErosionJob, RefCounted );
 	CLASS_NAME();
 	friend class T3DData;
-	friend struct t3derosionKernels_s;
+	friend struct t3dErosionKernels_s;
 
 public:
-	typedef enum t3djobState_e {
+	typedef enum t3dJobState_e {
 		STATE_NEW,
 		STATE_READY,
 		STATE_RUNNING,
@@ -41,9 +41,9 @@ public:
 		STATE_CANCELLED,
 		STATE_FAILED,
 		STATE_APPLIED,
-	} t3djobState_t;
+	} t3dJobState_t;
 
-	typedef enum t3doutputMap_e {
+	typedef enum t3dOutputMap_e {
 		OUTPUT_HEIGHT_DELTA,
 		OUTPUT_FLOW_ACCUMULATION,
 		OUTPUT_SEDIMENT,
@@ -68,10 +68,10 @@ public:
 		OUTPUT_STRATIGRAPHY,
 		OUTPUT_MATERIAL_ID,
 		OUTPUT_MAX,
-	} t3doutputMap_t;
+	} t3dOutputMap_t;
 
 private:
-typedef enum t3dmaterialTransitionKind_e : uint8_t {
+typedef enum t3dMaterialTransitionKind_e : uint8_t {
 		TRANSITION_NONE,
 		TRANSITION_EXPOSED,
 		TRANSITION_WEATHERED,
@@ -81,9 +81,9 @@ typedef enum t3dmaterialTransitionKind_e : uint8_t {
 		TRANSITION_SALT_WEATHERED,
 		TRANSITION_DESERT_PAVEMENT,
 		TRANSITION_VARNISHED,
-	} t3dmaterialTransitionKind_t;
+	} t3dMaterialTransitionKind_t;
 
-	typedef enum t3dstage_e {
+	typedef enum t3dStage_e {
 		STAGE_IDLE,
 		STAGE_SNAPSHOT,
 		STAGE_WEATHERING,
@@ -97,30 +97,30 @@ typedef enum t3dmaterialTransitionKind_e : uint8_t {
 		STAGE_COMPLETE,
 		STAGE_CANCELLED,
 		STAGE_FAILED,
-	} t3dstage_t;
+	} t3dStage_t;
 
-	typedef struct t3dregionSnapshot_s {
+	typedef struct t3dRegionSnapshot_s {
 		Vector2i location;
 		int32_t sourceOrder = 0;
 		uint64_t sourceHash = 0;
 		PackedByteArray heightData;
 		PackedByteArray controlData;
-	} t3dregionSnapshot_t;
+	} t3dRegionSnapshot_t;
 
-	typedef struct t3dimageSnapshot_s {
+	typedef struct t3dImageSnapshot_s {
 		Vector2i nSize;
 		PackedByteArray rfData;
 
 		EA_FORCE_INLINE bool isValid( void ) const { return nSize.x > 0 && nSize.y > 0 && rfData.size() >= ( int64_t ) ( nSize.x ) * ( int64_t ) ( nSize.y ) * ( int64_t ) ( sizeof( float ) ); }
 		EA_FORCE_INLINE void clear( void ) { nSize = Vector2i(); rfData.clear(); }
-	} t3dimageSnapshot_t;
+	} t3dImageSnapshot_t;
 
 	using FloatBuffer = T3DArenaBuffer<float>;
 	using HalfBuffer = T3DHalfBuffer;
 	using ByteBuffer = T3DArenaBuffer<uint8_t>;
 	using IndexBuffer = T3DArenaBuffer<int64_t>;
 
-	typedef struct t3dtextureErosionProfile_s {
+	typedef struct t3dTextureErosionProfile_s {
 		bool bValid = false;
 		bool bEnabled = true;
 		float fHardness = -1.0f;
@@ -143,9 +143,9 @@ typedef enum t3dmaterialTransitionKind_e : uint8_t {
 		int32_t saltWeatheredTextureId = -1;
 		int32_t pavementTextureId = -1;
 		int32_t varnishedTextureId = -1;
-	} t3dtextureErosionProfile_t;
+	} t3dTextureErosionProfile_t;
 
-	typedef enum t3dcurveId_e : uint8_t {
+	typedef enum t3dCurveId_e : uint8_t {
 		CURVE_MASTER,
 		CURVE_RAINFALL,
 		CURVE_WEATHERING,
@@ -159,9 +159,9 @@ typedef enum t3dmaterialTransitionKind_e : uint8_t {
 		CURVE_SALT_WEATHERING,
 		CURVE_DEBRIS_FLOW,
 		CURVE_COUNT,
-	} t3dcurveId_t;
+	} t3dCurveId_t;
 
-	typedef struct t3dconfig_s {
+	typedef struct t3dConfig_s {
 		double fSimulationYears = 1000.0;
 		int32_t simulationSteps = 128;
 		int32_t requestedResolutionScale = 8;
@@ -172,7 +172,7 @@ typedef enum t3dmaterialTransitionKind_e : uint8_t {
 		bool bLivePreviewStartPaused = false;
 		int32_t nThreadCount = 0;
 		uint64_t seed = 1;
-		T3DErosionSettings::t3dboundaryMode_t boundaryMode = T3DErosionSettings::BOUNDARY_CLOSED;
+		T3DErosionSettings::t3dBoundaryMode_t boundaryMode = T3DErosionSettings::BOUNDARY_CLOSED;
 		float fMaxHeightChangePerStep = 0.5f;
 		bool bPreserveHoles = true;
 		bool bApplyHeight = true;
@@ -316,17 +316,17 @@ typedef enum t3dmaterialTransitionKind_e : uint8_t {
 		int32_t autoOverlayTexture = 1;
 		float fAutoSlope = 1.0f;
 		float fAutoHeightReduction = 0.0f;
-		eastl::array<t3dtextureErosionProfile_t, TERRAIN3D_EROSION_TEXTURE_PROFILE_COUNT> szTextureProfiles;
+		eastl::array<t3dTextureErosionProfile_t, TERRAIN3D_EROSION_TEXTURE_PROFILE_COUNT> szTextureProfiles;
 		bool bOxidationColorEnabled = false;
 		Color oxidationTint = Color( 0.45f, 0.19f, 0.07f, 1.0f );
 		float fOxidationTintStrength = 0.45f;
 
 		eastl::vector<float> fCurveSamples;
 		int32_t curveStride = 0;
-	} t3dconfig_t;
+	} t3dConfig_t;
 
-	t3dconfig_t m_config;
-	eastl::vector<t3dregionSnapshot_t> m_regions;
+	t3dConfig_t m_config;
+	eastl::vector<t3dRegionSnapshot_t> m_regions;
 	eastl::vector<eastl::array<int32_t, 4>> m_szRegionNeighbors;
 	int32_t m_szRegionLookup[TERRAIN3D_EROSION_REGION_LOOKUP_CAPACITY] = {};
 	int32_t m_nSourceRegionSize = 0;
@@ -341,11 +341,11 @@ typedef enum t3dmaterialTransitionKind_e : uint8_t {
 	size_t m_nCellsPerRegion = 0;
 	size_t m_nCellCount = 0;
 	Rect2 m_terrainWorldRect;
-	t3dimageSnapshot_t m_simulationMaskSnapshot;
-	t3dimageSnapshot_t m_trafficMaskSnapshot;
-	t3dimageSnapshot_t m_salinityMaskSnapshot;
-	t3dimageSnapshot_t m_surfaceLayerDepthSnapshot;
-	t3dimageSnapshot_t m_bedrockHardnessSnapshot;
+	t3dImageSnapshot_t m_simulationMaskSnapshot;
+	t3dImageSnapshot_t m_trafficMaskSnapshot;
+	t3dImageSnapshot_t m_salinityMaskSnapshot;
+	t3dImageSnapshot_t m_surfaceLayerDepthSnapshot;
+	t3dImageSnapshot_t m_bedrockHardnessSnapshot;
 	uint64_t m_nInputSnapshotBytes = 0;
 	uint64_t m_nSourceControlSnapshotBytes = 0;
 
@@ -453,18 +453,18 @@ typedef enum t3dmaterialTransitionKind_e : uint8_t {
 	Error setup( T3DData *pData, const Ref<T3DErosionSettings> &rSettings );
 	void copyConfig( const Ref<T3DErosionSettings> &rSettings );
 	void sampleCurves( const Ref<T3DErosionSettings> &rSettings );
-	float sampleCurve( t3dcurveId_t curve, int32_t nStep ) const;
+	float sampleCurve( t3dCurveId_t curve, int32_t nStep ) const;
 	int32_t selectResolutionScale( int32_t nRegionCount ) const;
 	uint64_t estimateMemoryBytes( int32_t nRegionCount, int32_t nScale ) const;
 	bool allocateBuffers( void );
 	bool compactCompletedResults( void );
 	bool captureSourceRegions( T3DData *pData );
-	static bool regionSnapshotLess( const t3dregionSnapshot_t &rA, const t3dregionSnapshot_t &rB );
+	static bool regionSnapshotLess( const t3dRegionSnapshot_t &rA, const t3dRegionSnapshot_t &rB );
 	static float sampleImageSnapshot(
-		const t3dimageSnapshot_t &rImage, const Rect2 &rWorldRect,
+		const t3dImageSnapshot_t &rImage, const Rect2 &rWorldRect,
 		const Vector2 &rWorldPosition
 	);
-	bool captureImageSnapshot( const Ref<Image> &rImage, t3dimageSnapshot_t &rSnapshot, const char *pszLabel );
+	bool captureImageSnapshot( const Ref<Image> &rImage, t3dImageSnapshot_t &rSnapshot, const char *pszLabel );
 	bool buildSimulationSnapshot( void );
 	void releaseSourceSnapshots( void );
 	bool verifySourceUnchanged( T3DData *pData ) const;
@@ -479,7 +479,7 @@ typedef enum t3dmaterialTransitionKind_e : uint8_t {
 	float sampleOutput( const FloatBuffer &rMap, int32_t nRegionId, float fSourceX, float fSourceY ) const;
 	bool snapshotTextureProfiles( T3DData *pData );
 	uint64_t hashTextureProfiles( T3DData *pData ) const;
-	int32_t getTransitionTarget( int32_t nTextureId, t3dmaterialTransitionKind_t kind ) const;
+	int32_t getTransitionTarget( int32_t nTextureId, t3dMaterialTransitionKind_t kind ) const;
 	void partitionMaterial( float fGrainSize, float fAmount, float &fCoarse, float &fSand, float &fFine ) const;
 	float getLooseMaterial( size_t iIndex ) const;
 	float getSediment( size_t iIndex ) const;
@@ -488,7 +488,7 @@ typedef enum t3dmaterialTransitionKind_e : uint8_t {
 	void buildMaterialTransitions( void );
 	void setErrorMessage( const String &rMessage );
 	void setFailed( const String &rMessage );
-	void setStage( t3dstage_t stage, float fProgress );
+	void setStage( t3dStage_t stage, float fProgress );
 	bool allocatePreviewBuffer( void );
 	void publishPreviewSnapshot( int32_t nStep, bool bForce = false );
 	bool waitForPreviewPermission( void );
@@ -503,7 +503,7 @@ public:
 	void setPreviewPaused( bool bPaused );
 	void requestPreviewStep( void );
 	Error apply( T3DData *pData, bool bForce = false );
-	EA_FORCE_INLINE t3djobState_t getState( void ) const { return ( t3djobState_t ) ( m_state.load() ); }
+	EA_FORCE_INLINE t3dJobState_t getState( void ) const { return ( t3dJobState_t ) ( m_state.load() ); }
 	EA_FORCE_INLINE float getProgress( void ) const { return m_fProgress.load(); }
 	String getStageName( void ) const;
 	String getErrorMessage( void ) const;
@@ -525,7 +525,7 @@ public:
 	Ref<Image> getInitialRegionHeightMap( const Vector2i &rRegionLocation, bool bFullResolution = false ) const;
 	Ref<Image> getPreviewRegionHeightMap( const Vector2i &rRegionLocation, bool bFullResolution = false ) const;
 	Ref<Image> getRegionOutputMap(
-		const Vector2i &rRegionLocation, t3doutputMap_t output,
+		const Vector2i &rRegionLocation, t3dOutputMap_t output,
 		bool bFullResolution = false
 	) const;
 
@@ -533,6 +533,6 @@ protected:
 	static void _bind_methods( void );
 };
 
-VARIANT_ENUM_CAST( T3DErosionJob::t3djobState_t );
-VARIANT_ENUM_CAST( T3DErosionJob::t3doutputMap_t );
+VARIANT_ENUM_CAST( T3DErosionJob::t3dJobState_t );
+VARIANT_ENUM_CAST( T3DErosionJob::t3dOutputMap_t );
 #endif // TERRAIN3D_EROSION_JOB_CLASS_H

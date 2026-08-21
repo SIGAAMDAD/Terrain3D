@@ -78,7 +78,7 @@ inline void scalarNormalPixel(
 }
 
 inline void writeTransform(
-	const t3dpackedTransform_t &rTransform, const uint32_t nColor, const int nStride,
+	const t3dPackedTransform_t &rTransform, const uint32_t nColor, const int nStride,
 	float *pDestination
 ) {
 	EA_FORCE_INLINE alignas( 16 ) float fBasis[12] = {};
@@ -127,7 +127,7 @@ void sse2HalfToFloat( const uint16_t *pSource, float *pDestination, const size_t
 }
 
 void sse2PackedTransforms(
-	const t3dpackedTransform_t *pTransforms, const uint32_t *pColors,
+	const t3dPackedTransform_t *pTransforms, const uint32_t *pColors,
 	const size_t nCount, const int nStride, float *pDestination
 ) {
 #if TERRAIN3D_COMPILED_SSE2

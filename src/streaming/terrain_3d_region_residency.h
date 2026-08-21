@@ -38,7 +38,7 @@ public:
 	void reset( void );
 	void update( T3DData &rData, const T3DResidencyFrameState &rFrame, bool bForce );
 	void resetRuntimeCaches( T3DData &rData );
-	void appendRuntimeProfileSample( const T3DData &rData, t3druntimeProfileSample_t &rSample ) const;
+	void appendRuntimeProfileSample( const T3DData &rData, t3dRuntimeProfileSample_t &rSample ) const;
 
 	void setBudgetOverrides( int nGpuUploadLayers, int nCpuLoadLayers, int nInstanceLoadPages );
 	void clearBudgetOverrides( void );

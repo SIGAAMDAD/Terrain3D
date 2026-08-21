@@ -29,7 +29,7 @@ bool T3DMeshAsset::sortLodNodes( const Node *pA, const Node *pB ) {
 	return pA->get_name().right( 1 ) < pB->get_name().right( 1 );
 }
 
-Ref<ArrayMesh> T3DMeshAsset::createGeneratedMesh( const t3dgenType_t type ) const {
+Ref<ArrayMesh> T3DMeshAsset::createGeneratedMesh( const t3dGenType_t type ) const {
 	if ( type != TYPE_TEXTURE_CARD ) {
 		LOG( T3DTerrain::ERROR, "Only TYPE_TEXTURE_CARD is currently implemented" );
 		return Ref<ArrayMesh>();
@@ -181,7 +181,7 @@ void T3DMeshAsset::setName( const String &rName ) {
 		LOG( T3DTerrain::WARN, "Name too long, truncating to 96 characters" );
 	}
 	SET_IF_DIFF( m_name, rName.left( 96 ) );
-	LOG( T3DTerrain::INFO, "ID ", m_nId, ": t3dsetting_t name: ", m_name );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ": t3dSetting_t name: ", m_name );
 	LOG( T3DTerrain::DEBUG, "Emitting setting_changed, ID: ", m_nId );
 	emit_signal( "setting_changed", m_nId );
 }
@@ -189,7 +189,7 @@ void T3DMeshAsset::setName( const String &rName ) {
 void T3DMeshAsset::setId( const int nNewId ) {
 	const int old_id = m_nId;
 	SET_IF_DIFF( m_nId, CLAMP( nNewId, 0, TERRAIN3D_MAX_MESH_ASSETS - 1 ) );
-	LOG( T3DTerrain::INFO, m_name, ": t3dsetting_t mesh ID: ", m_nId );
+	LOG( T3DTerrain::INFO, m_name, ": t3dSetting_t mesh ID: ", m_nId );
 	LOG( T3DTerrain::DEBUG, "Emitting id_changed, TYPE_MESH, ", old_id, ", ", nNewId );
 	emit_signal( "id_changed", T3DAssets::TYPE_MESH, old_id, nNewId );
 }
@@ -221,7 +221,7 @@ Color T3DMeshAsset::getHighlightColor( void ) const {
 
 void T3DMeshAsset::setEnabled( const bool bEnabled ) {
 	SET_IF_DIFF( m_bEnabled, bEnabled );
-	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t enabled: ", m_bEnabled );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t enabled: ", m_bEnabled );
 	LOG( T3DTerrain::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
@@ -238,7 +238,7 @@ void T3DMeshAsset::updateInstanceCount( const int64_t nAmount ) {
 
 void T3DMeshAsset::setInstanceCount( const uint32_t nAmount ) {
 	SET_IF_DIFF( m_nInstanceCount, nAmount );
-	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t instance_count: ", m_nInstanceCount );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t instance_count: ", m_nInstanceCount );
 	LOG( T3DTerrain::DEBUG, "Emitting instance_count_changed" );
 	emit_signal( "instance_count_changed" );
 }
@@ -300,7 +300,7 @@ void T3DMeshAsset::setSceneFile( const Ref<PackedScene> &rSceneFile ) {
 			const String filename = m_pPackedScene->get_path().get_file().get_basename();
 			if ( m_name == "New Mesh" && !m_pPackedScene->get_path().contains( "::" ) ) {
 				m_name = filename;
-				LOG( T3DTerrain::INFO, "t3dsetting_t name based on filename: ", m_name );
+				LOG( T3DTerrain::INFO, "t3dSetting_t name based on filename: ", m_name );
 			}
 			Ref<Mesh> pMesh = pMi->get_mesh();
 			if ( pMesh.is_null() ) {
@@ -352,16 +352,16 @@ void T3DMeshAsset::commitMeshes( void ) {
 	m_pendingMeshes = TypedArray<Mesh>();
 }
 
-void T3DMeshAsset::setGeneratedType( const t3dgenType_t type ) {
+void T3DMeshAsset::setGeneratedType( const t3dGenType_t type ) {
 	const bool bEnteringGeneratedMode = m_generatedType == TYPE_NONE;
-	SET_IF_DIFF( m_generatedType, CLAMP( type, ( t3dgenType_t ) ( TYPE_NONE + 1 ), ( t3dgenType_t ) ( TYPE_MAX - 1 ) ) );
+	SET_IF_DIFF( m_generatedType, CLAMP( type, ( t3dGenType_t ) ( TYPE_NONE + 1 ), ( t3dGenType_t ) ( TYPE_MAX - 1 ) ) );
 	if ( bEnteringGeneratedMode ) {
 		m_castShadows = TERRAIN3D_SHADOW_CASTING_OFF;
 		m_iLastShadowLod = 0;
 		m_shadowImpostor = 0;
 	}
 	invalidateThumbnail();
-	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t generated type: ", m_generatedType );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t generated type: ", m_generatedType );
 	assignGeneratedMesh();
 	m_fDensity = 10.f;
 	LOG( T3DTerrain::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
@@ -378,21 +378,21 @@ Ref<Mesh> T3DMeshAsset::getMesh( const int nLod ) const {
 
 void T3DMeshAsset::setHeightOffset( const real_t fOffset ) {
 	SET_IF_DIFF( m_fHeightOffset, CLAMP( fOffset, -50.f, 50.f ) );
-	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t height offset: ", m_fHeightOffset );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t height offset: ", m_fHeightOffset );
 	LOG( T3DTerrain::DEBUG, "Emitting setting_changed, ID: ", m_nId );
 	emit_signal( "setting_changed", m_nId );
 }
 
 void T3DMeshAsset::setDensity( const real_t fDensity ) {
 	SET_IF_DIFF( m_fDensity, CLAMP( fDensity, 0.01f, 10.f ) );
-	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t mesh density: ", fDensity );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t mesh density: ", fDensity );
 	LOG( T3DTerrain::DEBUG, "Emitting setting_changed, ID: ", m_nId );
 	emit_signal( "setting_changed", m_nId );
 }
 
 void T3DMeshAsset::setCastShadows( const ShadowCasting castShadows ) {
 	SET_IF_DIFF( m_castShadows, castShadows );
-	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t shadow casting mode: ", m_castShadows );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t shadow casting mode: ", m_castShadows );
 	LOG( T3DTerrain::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
@@ -424,7 +424,7 @@ ShadowCasting T3DMeshAsset::getLodCastShadows( const int nLodId ) const {
 
 inline void T3DMeshAsset::setVisibilityLayers( const uint32_t nLayers ) {
 	SET_IF_DIFF( m_visibilityLayers, nLayers );
-	LOG( T3DTerrain::INFO, m_name, ": t3dsetting_t visibility layers: ", nLayers );
+	LOG( T3DTerrain::INFO, m_name, ": t3dSetting_t visibility layers: ", nLayers );
 	LOG( T3DTerrain::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
@@ -432,7 +432,7 @@ inline void T3DMeshAsset::setVisibilityLayers( const uint32_t nLayers ) {
 void T3DMeshAsset::setMaterialOverride( const Ref<Material> &rMaterial ) {
 	SET_IF_DIFF( m_pMaterialOverride, rMaterial );
 	invalidateThumbnail();
-	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t material override: ", rMaterial );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t material override: ", rMaterial );
 	LOG( T3DTerrain::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
@@ -440,7 +440,7 @@ void T3DMeshAsset::setMaterialOverride( const Ref<Material> &rMaterial ) {
 void T3DMeshAsset::setMaterialOverlay( const Ref<Material> &rMaterial ) {
 	SET_IF_DIFF( m_pMaterialOverlay, rMaterial );
 	invalidateThumbnail();
-	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t material overlay: ", rMaterial );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t material overlay: ", rMaterial );
 	LOG( T3DTerrain::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
@@ -448,7 +448,7 @@ void T3DMeshAsset::setMaterialOverlay( const Ref<Material> &rMaterial ) {
 void T3DMeshAsset::setGeneratedFaces( const int nCount ) {
 	SET_IF_DIFF( m_nGeneratedFaces, CLAMP( nCount, 1, 3 ) );
 	invalidateThumbnail();
-	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t generated face count: ", m_nGeneratedFaces );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t generated face count: ", m_nGeneratedFaces );
 	// If already a texture card, just recreate the mesh w/o other settings
 	if ( m_generatedType > TYPE_NONE && m_generatedType < TYPE_MAX && getMeshes().size() == 1 ) {
 		assignGeneratedMesh();
@@ -460,7 +460,7 @@ void T3DMeshAsset::setGeneratedFaces( const int nCount ) {
 void T3DMeshAsset::setGeneratedSize( const Vector2 &rSize ) {
 	SET_IF_DIFF( m_generatedSize, rSize );
 	invalidateThumbnail();
-	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t generated size: ", m_generatedSize );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t generated size: ", m_generatedSize );
 	// If already a texture card, just recreate the mesh w/o other settings
 	if ( m_generatedType > TYPE_NONE && m_generatedType < TYPE_MAX && getMeshes().size() == 1 ) {
 		assignGeneratedMesh();
@@ -478,7 +478,7 @@ void T3DMeshAsset::setLastLod( const int nLod ) {
 	if ( m_shadowImpostor > m_iLastLod ) {
 		m_shadowImpostor = m_iLastLod;
 	}
-	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t last LOD: ", m_iLastLod );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t last LOD: ", m_iLastLod );
 	LOG( T3DTerrain::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 	notify_property_list_changed();
@@ -486,7 +486,7 @@ void T3DMeshAsset::setLastLod( const int nLod ) {
 
 void T3DMeshAsset::setLastShadowLod( const int nLod ) {
 	SET_IF_DIFF( m_iLastShadowLod, CLAMP( nLod, 0, m_iLastLod ) );
-	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t last shadow LOD: ", m_iLastShadowLod );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t last shadow LOD: ", m_iLastShadowLod );
 	if ( m_shadowImpostor > m_iLastShadowLod ) {
 		m_shadowImpostor = m_iLastShadowLod;
 	}
@@ -496,7 +496,7 @@ void T3DMeshAsset::setLastShadowLod( const int nLod ) {
 
 void T3DMeshAsset::setShadowImpostor( const int nLod ) {
 	SET_IF_DIFF( m_shadowImpostor, CLAMP( nLod, 0, MIN( m_iLastLod, m_iLastShadowLod ) ) );
-	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t shadow imposter LOD: ", m_shadowImpostor );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t shadow imposter LOD: ", m_shadowImpostor );
 	LOG( T3DTerrain::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
@@ -507,7 +507,7 @@ void T3DMeshAsset::setLodRange( const int nLod, const real_t fDistance ) {
 		return;
 	}
 	SET_IF_DIFF( m_fLodRanges[nLod], CLAMP( ( float ) ( fDistance ), 0.f, 100000.f ) );
-	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t LOD ", nLod, " visibility range: ", m_fLodRanges[nLod] );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t LOD ", nLod, " visibility range: ", m_fLodRanges[nLod] );
 	LOG( T3DTerrain::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
@@ -538,7 +538,7 @@ real_t T3DMeshAsset::getLodRangeEnd( const int nLod ) const {
 void T3DMeshAsset::setFadeMargin( const real_t fFadeMargin ) {
 	const int max_range = CLAMP( m_fLodRanges[1] - m_fLodRanges[0], 0.f, 64.f );
 	SET_IF_DIFF( m_fFadeMargin, CLAMP( fFadeMargin, 0.f, max_range ) );
-	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dsetting_t visibility margin: ", m_fFadeMargin );
+	LOG( T3DTerrain::INFO, "ID ", m_nId, ", ", m_name, ": t3dSetting_t visibility margin: ", m_fFadeMargin );
 	LOG( T3DTerrain::DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
@@ -596,8 +596,8 @@ bool T3DMeshAsset::_property_get_revert( const StringName &rName, Variant &rProp
 	return false;
 }
 
-void T3DMeshAsset::setHlodContribution( const t3dhlodContribution_t mode ) {
-	const t3dhlodContribution_t value = ( t3dhlodContribution_t ) CLAMP( ( int ) mode, ( int ) HLOD_AUTO, ( int ) HLOD_EXCLUDE );
+void T3DMeshAsset::setHlodContribution( const t3dHlodContribution_t mode ) {
+	const t3dHlodContribution_t value = ( t3dHlodContribution_t ) CLAMP( ( int ) mode, ( int ) HLOD_AUTO, ( int ) HLOD_EXCLUDE );
 	if ( m_hlodContribution == value ) { return; }
 	m_hlodContribution = value;
 	emit_signal( "setting_changed" );

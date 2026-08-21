@@ -108,7 +108,7 @@ public:
 	bool republishAllResidents( T3DCompute *pCompute = nullptr );
 	void queueRepublish( const Vector2i &vLocation );
 	bool updateResidentLocation(
-		const Vector2i &vLocation, t3dmapType_t eMapType,
+		const Vector2i &vLocation, t3dMapType_t eMapType,
 		T3DCompute *pCompute = nullptr
 	);
 	void armPendingRetirements( void );
@@ -271,13 +271,13 @@ private:
 	void recordGpuRegionDeparture( int nLayer, bool bCountUnusedPrefetch );
 	void retireGpuRegionSlot( int nLayer );
 	void reclaimRetiredGpuRegionSlots( void );
-	bool uploadGpuRegionLayer( int nLayer, const Vector2i &vLocation, t3dmapType_t eMapType );
+	bool uploadGpuRegionLayer( int nLayer, const Vector2i &vLocation, t3dMapType_t eMapType );
 	int processPendingGpuRegionRepublishes( int nLimit );
 	int collectDesiredGpuRegions(
 		const T3DResidencyFrameState &rFrame, const Vector2i &rCenter,
-		Vector2i *pLocations, int nCapacity, t3dgpuCacheSelectionStats_t &rStats
+		Vector2i *pLocations, int nCapacity, t3dGpuCacheSelectionStats_t &rStats
 	);
-	Ref<Image> getRegionMapOrDefault( const T3DRegion *pRegion, t3dmapType_t eMapType ) const;
+	Ref<Image> getRegionMapOrDefault( const T3DRegion *pRegion, t3dMapType_t eMapType ) const;
 	Ref<Image> makeGpuColorImage( const Ref<Image> &rImage ) const;
 	Ref<Image> makeGpuDerivedImage( const Ref<Image> &rImage ) const;
 	Ref<Image> makeGpuRenderControlImage( const Vector2i &vLocation ) const;

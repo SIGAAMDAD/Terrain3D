@@ -40,7 +40,7 @@ struct T3DDerivedMapTask {
 // retained scratch so synchronous Godot signals can safely trigger nested edits.
 // recycleMutation() returns their capacity to the service after dispatch.
 struct T3DMapMutation {
-	t3dmapType_t mapType = T3DRegion::TYPE_MAX;
+	t3dMapType_t mapType = T3DRegion::TYPE_MAX;
 	AABB editedArea;
 	Vector2 editedHeightRange = V2_ZERO;
 	eastl::vector<Vector2i> changedLocations;
@@ -65,12 +65,12 @@ public:
 	void reset( void );
 
 	Error setPixel(
-		t3dmapType_t eMapType, const Vector3 &rGlobalPosition, const Color &rPixel,
+		t3dMapType_t eMapType, const Vector3 &rGlobalPosition, const Color &rPixel,
 		Vector2i &rRegionLocation, Rect2i &rDirtyRect
 	);
 
 	T3DMapMutation commitMapEdits(
-		t3dmapType_t eMapType, const eastl::vector<Vector2i> &rRegionLocations,
+		t3dMapType_t eMapType, const eastl::vector<Vector2i> &rRegionLocations,
 		const AABB &rEditedArea, T3DCompute *pCompute
 	);
 	void finalizeMapEdits( const T3DMapMutation &rMutation, bool bKeepEdited );
@@ -111,7 +111,7 @@ public:
 	);
 
 	Ref<Image> layeredToImage(
-		t3dmapType_t eMapType, EnsureRegionResidentFn pEnsureResident = nullptr,
+		t3dMapType_t eMapType, EnsureRegionResidentFn pEnsureResident = nullptr,
 		void *pResidentContext = nullptr
 	) const;
 
@@ -138,7 +138,7 @@ private:
 	eastl::vector<Vector2i> m_derivedLocationScratch;
 	eastl::vector<T3DDerivedMapUpdate> m_derivedUpdateScratch;
 
-	T3DMapMutation makeMutationResult( t3dmapType_t eMapType, const AABB &rEditedArea,
+	T3DMapMutation makeMutationResult( t3dMapType_t eMapType, const AABB &rEditedArea,
 		const Vector2 &rEditedHeightRange );
 };
 

@@ -246,9 +246,9 @@ size_t T3DMemoryZone::freeExtentBytes( void ) const {
 	return bytes;
 }
 
-t3dmemoryZoneStats_t T3DMemoryZone::getStats( void ) const {
+t3dMemoryZoneStats_t T3DMemoryZone::getStats( void ) const {
 	std::lock_guard<std::mutex> lock( m_mutex );
-	t3dmemoryZoneStats_t stats;
+	t3dMemoryZoneStats_t stats;
 	stats.nReservedBytes = m_nCapacity;
 	stats.nLiveRequestedBytes = m_nLiveBytes;
 	stats.nLivePhysicalBytes = m_nLivePhysicalBytes;

@@ -20,18 +20,18 @@
 template <typename Key, typename Value, typename Hash, typename Equal = eastl::equal_to<Key>>
 class T3DFlatHashMap {
 private:
-	typedef enum t3dbucketState_e : uint8_t {
+	typedef enum t3dBucketState_e : uint8_t {
 		EMPTY = 0u,
 		OCCUPIED = 1u,
-	} t3dbucketState_t;
+	} t3dBucketState_t;
 
-	typedef struct t3dbucket_s {
+	typedef struct t3dBucket_s {
 		Key key{};
 		Value value{};
 		uint8_t state = EMPTY;
-	} t3dbucket_t;
+	} t3dBucket_t;
 
-	eastl::vector<t3dbucket_t> m_buckets;
+	eastl::vector<t3dBucket_t> m_buckets;
 	size_t m_nSize = 0u;
 	Hash m_hash{};
 	Equal m_equal{};
@@ -64,7 +64,7 @@ private:
 		const size_t mask = m_buckets.size() - 1u;
 		size_t index = m_hash( rKey ) & mask;
 		for ( size_t probe = 0u; probe < m_buckets.size(); ++probe ) {
-			const t3dbucket_t &bucket = m_buckets[index];
+			const t3dBucket_t &bucket = m_buckets[index];
 			if ( bucket.state == EMPTY ) {
 				return SIZE_MAX;
 			}
@@ -82,7 +82,7 @@ private:
 		const size_t mask = m_buckets.size() - 1u;
 		size_t index = m_hash( rKey ) & mask;
 		for ( size_t probe = 0u; probe < m_buckets.size(); ++probe ) {
-			const t3dbucket_t &bucket = m_buckets[index];
+			const t3dBucket_t &bucket = m_buckets[index];
 			if ( bucket.state == EMPTY ) return index;
 			if ( m_equal( bucket.key, rKey ) ) { rExisting = true; return index; }
 			index = ( index + 1u ) & mask;
@@ -91,11 +91,11 @@ private:
 	}
 
 	void rehash( const size_t nBucketCount ) {
-		eastl::vector<t3dbucket_t> old;
+		eastl::vector<t3dBucket_t> old;
 		old.swap( m_buckets );
 		m_buckets.resize( nextPowerOfTwo( nBucketCount ) );
 		m_nSize = 0u;
-		for ( t3dbucket_t &bucket : old ) {
+		for ( t3dBucket_t &bucket : old ) {
 			if ( bucket.state != OCCUPIED ) {
 				continue;
 			}
@@ -109,7 +109,7 @@ private:
 		if ( index == SIZE_MAX ) {
 			return nullptr;
 		}
-		t3dbucket_t &bucket = m_buckets[index];
+		t3dBucket_t &bucket = m_buckets[index];
 		if ( !bExisting ) {
 			bucket.key = eastl::move( rKey );
 			bucket.state = OCCUPIED;
@@ -184,7 +184,7 @@ public:
 	}
 
 	EA_FORCE_INLINE void clear( void ) {
-		for ( t3dbucket_t &bucket : m_buckets ) {
+		for ( t3dBucket_t &bucket : m_buckets ) {
 			bucket.state = EMPTY;
 		}
 		m_nSize = 0u;
@@ -192,7 +192,7 @@ public:
 
 	EA_FORCE_INLINE size_t size( void ) const { return m_nSize; }
 	EA_FORCE_INLINE size_t bucketCount( void ) const { return m_buckets.size(); }
-	EA_FORCE_INLINE size_t reservedBytes( void ) const { return m_buckets.capacity() * sizeof( t3dbucket_t ); }
+	EA_FORCE_INLINE size_t reservedBytes( void ) const { return m_buckets.capacity() * sizeof( t3dBucket_t ); }
 	EA_FORCE_INLINE bool empty( void ) const { return m_nSize == 0u; }
 
 	EA_FORCE_INLINE void swap( T3DFlatHashMap &rOther ) {
@@ -202,7 +202,7 @@ public:
 
 	template <typename Fn>
 	EA_FORCE_INLINE void forEach( Fn &&rFn ) {
-		for ( t3dbucket_t &bucket : m_buckets ) {
+		for ( t3dBucket_t &bucket : m_buckets ) {
 			if ( bucket.state == OCCUPIED ) {
 				rFn( bucket.key, bucket.value );
 			}
@@ -211,7 +211,7 @@ public:
 
 	template <typename Fn>
 	EA_FORCE_INLINE void forEach( Fn &&rFn ) const {
-		for ( const t3dbucket_t &bucket : m_buckets ) {
+		for ( const t3dBucket_t &bucket : m_buckets ) {
 			if ( bucket.state == OCCUPIED ) {
 				rFn( bucket.key, bucket.value );
 			}

@@ -57,10 +57,10 @@ void T3DHLODStreamer::clearRuntime( const bool bNotify, const bool bReleaseStora
 	std::memcpy( old, m_regionRepresentationLevel, sizeof( old ) );
 	for ( int i = 0; i < ( int ) ( m_entries.size() ); ++i ) { deactivate( i ); }
 	if ( bReleaseStorage ) {
-		eastl::vector<t3dentry_t>().swap( m_entries );
+		eastl::vector<t3dEntry_t>().swap( m_entries );
 		eastl::vector<int>().swap( m_roots );
 		eastl::vector<uint8_t>().swap( m_instancerMinLevels );
-		eastl::vector<t3dnodePolicy_t>().swap( m_nodePolicies );
+		eastl::vector<t3dNodePolicy_t>().swap( m_nodePolicies );
 	} else {
 		m_entries.clear();
 		m_roots.clear();
@@ -85,9 +85,9 @@ int T3DHLODStreamer::findEntry( const int level, const Vector2i &rCluster ) cons
 }
 void T3DHLODStreamer::buildHierarchy( void ) {
 	m_roots.clear();
-	for ( t3dentry_t &entry : m_entries ) { entry.parent = -1; for ( int &child : entry.children ) { child = -1; } }
+	for ( t3dEntry_t &entry : m_entries ) { entry.parent = -1; for ( int &child : entry.children ) { child = -1; } }
 	for ( int i = 0; i < ( int ) m_entries.size(); ++i ) {
-		t3dentry_t &entry = m_entries[( size_t ) i];
+		t3dEntry_t &entry = m_entries[( size_t ) i];
 		const Vector2i parentCluster( floorDiv( entry.cluster.x, 2 ), floorDiv( entry.cluster.y, 2 ) );
 		const int parent = findEntry( entry.level + 1, parentCluster );
 		entry.parent = parent;
@@ -106,7 +106,7 @@ void T3DHLODStreamer::compileLegacyNodePolicies( const Ref<T3DHLODManifest> &rMa
 	const PackedInt64Array nodeIds = rManifest->getNodeSpawnIds();
 	const PackedByteArray nodeLevels = rManifest->getNodeMinLevels();
 	const int nodeCount = MIN( nodeRegions.size(), MIN( nodeIds.size(), nodeLevels.size() ) );
-	struct IndexedPolicy { int region = 0; t3dnodePolicy_t policy; };
+	struct IndexedPolicy { int region = 0; t3dNodePolicy_t policy; };
 	eastl::vector<IndexedPolicy> policies;
 	policies.reserve( ( size_t ) nodeCount );
 	for ( int i = 0; i < nodeCount; ++i ) {
@@ -134,7 +134,7 @@ bool T3DHLODStreamer::compilePackedManifest( const Ref<T3DHLODManifest> &rManife
 	if ( !T3DHLODRuntimeCodec::decode( blob, runtime ) ) return false;
 	m_entries.reserve( runtime.entries.size() );
 	for ( const T3DHLODRuntimeEntryRecord &source : runtime.entries ) {
-		t3dentry_t entry;
+		t3dEntry_t entry;
 		entry.level = source.level; entry.cluster = source.cluster; entry.regionMin = source.regionMin; entry.regionMax = source.regionMax;
 		entry.localBounds = source.localBounds; entry.packagePath = source.packagePath; entry.geometricError = source.geometricError;
 		entry.sourceSignature = source.sourceSignature; entry.buildSignature = source.buildSignature; entry.estimatedGpuBytes = source.estimatedGpuBytes;
@@ -169,7 +169,7 @@ bool T3DHLODStreamer::compileManifest( const Ref<T3DHLODManifest> &rManifest ) {
 		if ( Variant( entries[i] ).get_type() != Variant::DICTIONARY ) continue;
 		const Dictionary data = entries[i];
 		if ( !data.has( "level" ) || !data.has( "cluster" ) || !data.has( "region_min" ) || !data.has( "region_max" ) || !data.has( "package_path" ) ) continue;
-		t3dentry_t entry;
+		t3dEntry_t entry;
 		entry.level = CLAMP( ( int ) data["level"], 1, 6 ); entry.cluster = data["cluster"]; entry.regionMin = data["region_min"]; entry.regionMax = data["region_max"];
 		entry.localBounds = data.get( "local_bounds", AABB() ); entry.packagePath = String( data["package_path"] ); entry.geometricError = MAX( ( real_t ) data.get( "geometric_error", 1.0 ), 0.001f );
 		entry.sourceSignature = ( int64_t ) data.get( "source_signature", 0 ); entry.buildSignature = ( int64_t ) data.get( "build_signature", 0 ); entry.estimatedGpuBytes = MAX<int64_t>( ( int64_t ) data.get( "estimated_gpu_bytes", 0 ), 0 );
@@ -195,7 +195,7 @@ bool T3DHLODStreamer::reloadManifest( void ) {
 	return compileManifest( manifest );
 }
 
-bool T3DHLODStreamer::packageAcceptable( const t3dentry_t &rEntry, const Vector3 &rLocalTarget ) const {
+bool T3DHLODStreamer::packageAcceptable( const t3dEntry_t &rEntry, const Vector3 &rLocalTarget ) const {
 	if ( rEntry.level > m_nMaxLevel ) { return false; }
 	if ( m_nForcedDebugLevel >= 0 ) { return rEntry.level == m_nForcedDebugLevel; }
 	const real_t regionWorld = ( real_t ) m_pTerrain->getRegionSize() * m_pTerrain->getVertexSpacing();
@@ -225,7 +225,7 @@ bool T3DHLODStreamer::packageAcceptable( const t3dentry_t &rEntry, const Vector3
 }
 
 void T3DHLODStreamer::selectFallbackChildren( const int index, const Vector3 &rLocalTarget ) {
-	const t3dentry_t &entry = m_entries[( size_t ) index];
+	const t3dEntry_t &entry = m_entries[( size_t ) index];
 	// A leaf has no HLOD fallback. Leaving it undesired deliberately publishes
 	// detailed residency while the still-active proxy remains visible until the
 	// detailed publishers acknowledge readiness. Re-marking an active leaf as
@@ -254,7 +254,7 @@ bool T3DHLODStreamer::hasActiveDescendant( const int index ) const {
 	return false;
 }
 
-bool T3DHLODStreamer::replacementReady( const t3dentry_t &rEntry ) const {
+bool T3DHLODStreamer::replacementReady( const t3dEntry_t &rEntry ) const {
 	if ( !m_pTerrain ) { return true; }
 	for ( int z = rEntry.regionMin.y; z <= rEntry.regionMax.y; ++z ) {
 		for ( int x = rEntry.regionMin.x; x <= rEntry.regionMax.x; ++x ) {
@@ -273,7 +273,7 @@ bool T3DHLODStreamer::replacementReady( const t3dentry_t &rEntry ) const {
 
 void T3DHLODStreamer::selectRecursive( const int index, const Vector3 &rLocalTarget ) {
 	if ( index < 0 || index >= ( int ) m_entries.size() ) { return; }
-	t3dentry_t &entry = m_entries[( size_t ) index];
+	t3dEntry_t &entry = m_entries[( size_t ) index];
 	const bool preferred = !entry.loadFailed && packageAcceptable( entry, rLocalTarget );
 	if ( preferred ) {
 		entry.desired = true;
@@ -286,7 +286,7 @@ void T3DHLODStreamer::selectRecursive( const int index, const Vector3 &rLocalTar
 }
 
 bool T3DHLODStreamer::requestOrActivate( const int index ) {
-	t3dentry_t &entry = m_entries[( size_t ) index];
+	t3dEntry_t &entry = m_entries[( size_t ) index];
 	if ( entry.active || entry.loadFailed || entry.packagePath.is_empty() || !m_pTerrain || !m_pTerrain->is_inside_tree() ) { return entry.active; }
 	ResourceLoader *loader = ResourceLoader::get_singleton();
 	if ( !loader ) { return false; }
@@ -350,7 +350,7 @@ bool T3DHLODStreamer::requestOrActivate( const int index ) {
 }
 void T3DHLODStreamer::deactivate( const int index ) {
 	if ( index < 0 || index >= ( int ) m_entries.size() ) { return; }
-	t3dentry_t &entry = m_entries[( size_t ) index];
+	t3dEntry_t &entry = m_entries[( size_t ) index];
 	if ( entry.instance.is_valid() ) { RenderingServer::get_singleton()->free_rid( entry.instance ); entry.instance = RID(); ++m_nUnloadsLastTick; }
 	if ( entry.active ) {
 		const int64_t bytes = entry.package.is_valid() ? MAX<int64_t>( entry.estimatedGpuBytes, entry.package->getEstimatedGpuBytes() ) : entry.estimatedGpuBytes;
@@ -364,7 +364,7 @@ void T3DHLODStreamer::publishRepresentationMap( void ) {
 	uint8_t old[TERRAIN3D_MAX_REGION_SLOTS]; std::memcpy( old, m_regionRepresentationLevel, sizeof( old ) );
 	std::memset( m_regionRepresentationLevel, 0, sizeof( m_regionRepresentationLevel ) );
 	m_detailRequiredRegions = m_managedRegions;
-	for ( const t3dentry_t &entry : m_entries ) {
+	for ( const t3dEntry_t &entry : m_entries ) {
 		if ( !entry.active || entry.retiring || !entry.desired ) { continue; }
 		for ( int z = entry.regionMin.y; z <= entry.regionMax.y; ++z ) for ( int x = entry.regionMin.x; x <= entry.regionMax.x; ++x ) {
 			const int region = regionIndex( Vector2i( x, z ) );
@@ -402,7 +402,7 @@ void T3DHLODStreamer::updateResidency( const Vector3 &rTargetPosition, const boo
 	const bool rebuildSelection = bForce || m_bSelectionDirty || selectionContextChanged;
 
 	if ( rebuildSelection ) {
-		for ( t3dentry_t &entry : m_entries ) { entry.desired = false; }
+		for ( t3dEntry_t &entry : m_entries ) { entry.desired = false; }
 		for ( const int root : m_roots ) { selectRecursive( root, localTarget ); }
 		m_lastSelectionTarget = localTarget;
 		m_fLastSelectionProjectionValue = projectionValue;
@@ -412,7 +412,7 @@ void T3DHLODStreamer::updateResidency( const Vector3 &rTargetPosition, const boo
 		m_bSelectionDirty = false;
 	} else {
 		bool hasTransitionWork = false;
-		for ( const t3dentry_t &entry : m_entries ) {
+		for ( const t3dEntry_t &entry : m_entries ) {
 			if ( ( entry.desired && !entry.active && !entry.loadFailed ) || entry.retiring || ( entry.active && !entry.desired ) ) {
 				hasTransitionWork = true;
 				break;
@@ -424,7 +424,7 @@ void T3DHLODStreamer::updateResidency( const Vector3 &rTargetPosition, const boo
 	bool representationDirty = rebuildSelection;
 	int loadBudget = m_nLoadBudget;
 	for ( int i = 0; i < ( int ) m_entries.size() && loadBudget > 0; ++i ) {
-		t3dentry_t &entry = m_entries[( size_t ) i];
+		t3dEntry_t &entry = m_entries[( size_t ) i];
 		if ( entry.desired && !entry.active && !entry.loadFailed ) {
 			const bool wasRequested = entry.requestStarted;
 			const bool active = requestOrActivate( i );
@@ -435,7 +435,7 @@ void T3DHLODStreamer::updateResidency( const Vector3 &rTargetPosition, const boo
 
 	// Mark retirement/cancellation first, then publish once. The representation
 	// map must exclude newly retiring proxies before replacementReady() is tested.
-	for ( t3dentry_t &entry : m_entries ) {
+	for ( t3dEntry_t &entry : m_entries ) {
 		if ( !entry.active || entry.desired ) {
 			if ( entry.retiring ) { representationDirty = true; }
 			entry.retiring = false;
@@ -452,7 +452,7 @@ void T3DHLODStreamer::updateResidency( const Vector3 &rTargetPosition, const boo
 
 	int unloadBudget = m_nUnloadBudget;
 	for ( int i = 0; i < ( int ) m_entries.size() && unloadBudget > 0; ++i ) {
-		t3dentry_t &entry = m_entries[( size_t ) i];
+		t3dEntry_t &entry = m_entries[( size_t ) i];
 		if ( !entry.active || !entry.retiring ) { continue; }
 		if ( replacementReady( entry ) ) {
 			entry.retireReadyFrames = MIN<uint8_t>( ( uint8_t ) ( entry.retireReadyFrames + 1 ), 3 );
@@ -468,13 +468,13 @@ uint8_t T3DHLODStreamer::getNodeMinimumLevel( const Vector2i &rRegion, const int
 	const uint32_t begin = m_nodePolicyOffsets[( size_t ) region];
 	const uint32_t end = m_nodePolicyOffsets[( size_t ) region + 1u];
 	for ( uint32_t index = begin; index < end && index < m_nodePolicies.size(); ++index ) {
-		const t3dnodePolicy_t &policy = m_nodePolicies[index]; if ( policy.spawnId == nSpawnId ) return policy.minLevel;
+		const t3dNodePolicy_t &policy = m_nodePolicies[index]; if ( policy.spawnId == nSpawnId ) return policy.minLevel;
 	}
 	return 0;
 }
 Dictionary T3DHLODStreamer::getStats( void ) const {
 	Dictionary d; int active = 0, desired = 0, failed = 0, retiring = 0;
-	for ( const t3dentry_t &e : m_entries ) { active += e.active; desired += e.desired; failed += e.loadFailed; retiring += e.retiring; }
+	for ( const t3dEntry_t &e : m_entries ) { active += e.active; desired += e.desired; failed += e.loadFailed; retiring += e.retiring; }
 	d["entries"] = ( int ) m_entries.size(); d["active"] = active; d["desired"] = desired; d["failed"] = failed; d["retiring"] = retiring;
 	d["loads_last_tick"] = m_nLoadsLastTick; d["unloads_last_tick"] = m_nUnloadsLastTick; d["requests_last_tick"] = m_nRequestsLastTick; d["failures_last_tick"] = m_nFailuresLastTick; d["capacity_deferred_last_tick"] = m_nCapacityDeferredLastTick;
 	d["resident_estimated_bytes"] = m_nResidentEstimatedBytes; d["memory_budget_mb"] = m_nMemoryBudgetMb; d["transition_overcommit_bytes_last_tick"] = m_nTransitionOvercommitBytesLastTick; d["managed_regions"] = ( int ) m_managedRegions.count(); d["detail_required_regions"] = ( int ) m_detailRequiredRegions.count();
@@ -482,7 +482,7 @@ Dictionary T3DHLODStreamer::getStats( void ) const {
 }
 Array T3DHLODStreamer::getDebugEntries( void ) const {
 	Array out;
-	for ( const t3dentry_t &e : m_entries ) { Dictionary d; d["level"] = e.level; d["cluster"] = e.cluster; d["region_min"] = e.regionMin; d["region_max"] = e.regionMax; d["local_bounds"] = e.localBounds; d["package_path"] = e.packagePath; d["desired"] = e.desired; d["active"] = e.active; d["retiring"] = e.retiring; d["load_failed"] = e.loadFailed; d["request_started"] = e.requestStarted; out.push_back( d ); }
+	for ( const t3dEntry_t &e : m_entries ) { Dictionary d; d["level"] = e.level; d["cluster"] = e.cluster; d["region_min"] = e.regionMin; d["region_max"] = e.regionMax; d["local_bounds"] = e.localBounds; d["package_path"] = e.packagePath; d["desired"] = e.desired; d["active"] = e.active; d["retiring"] = e.retiring; d["load_failed"] = e.loadFailed; d["request_started"] = e.requestStarted; out.push_back( d ); }
 	return out;
 }
 void T3DHLODStreamer::_bind_methods( void ) {

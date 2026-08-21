@@ -40,7 +40,7 @@ inline uint64_t computeSignature( void ) {
 	uint64_t nHash = TERRAIN3D_PROFILE_FNV_OFFSET;
 	signatureAppendUint32( nHash, TERRAIN3D_PROFILE_VERSION );
 	signatureAppendString( nHash, TERRAIN3D_PROFILE_KEY );
-	for ( const t3dsetting_t &setting : XBOX360_EXPERIMENTAL_SETTINGS ) {
+	for ( const t3dSetting_t &setting : XBOX360_EXPERIMENTAL_SETTINGS ) {
 		signatureAppendByte( nHash, ( uint8_t ) ( setting.owner ) );
 		signatureAppendByte( nHash, ( uint8_t ) ( setting.kind ) );
 		signatureAppendString( nHash, setting.pszProperty );

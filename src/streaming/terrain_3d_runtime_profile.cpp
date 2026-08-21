@@ -46,8 +46,8 @@
 #include "core/terrain_3d_util.h"
 
 
-t3dadaptiveBudgetLimits_t T3DTerrain::getRuntimeAdaptiveBudgetLimits( void ) const {
-	t3dadaptiveBudgetLimits_t limits;
+t3dAdaptiveBudgetLimits_t T3DTerrain::getRuntimeAdaptiveBudgetLimits( void ) const {
+	t3dAdaptiveBudgetLimits_t limits;
 	limits.minimum.nGpuPages = m_nRuntimeAdaptiveMinGpuPages;
 	limits.minimum.nCpuPages = m_nRuntimeAdaptiveMinCpuPages;
 	limits.minimum.nInstancePages = m_nRuntimeAdaptiveMinInstancePages;
@@ -67,8 +67,8 @@ t3dadaptiveBudgetLimits_t T3DTerrain::getRuntimeAdaptiveBudgetLimits( void ) con
 	return limits;
 }
 
-t3dadaptiveBudgetPressure_t T3DTerrain::getRuntimeAdaptiveBudgetPressure( void ) const {
-	t3dadaptiveBudgetPressure_t pressure;
+t3dAdaptiveBudgetPressure_t T3DTerrain::getRuntimeAdaptiveBudgetPressure( void ) const {
+	t3dAdaptiveBudgetPressure_t pressure;
 	if ( m_pData ) {
 		pressure.bGpuLimited = effectiveGpuRegionCacheEnabled() &&
 			( m_pData->getGpuRegionStallFlagsLastTick() &
@@ -103,7 +103,7 @@ void T3DTerrain::applyRuntimeAdaptiveWorkBudgets( void ) {
 		}
 		return;
 	}
-	const t3dadaptiveBudgetValues_t &effective = m_nRuntimeAdaptiveBudgetState.effective;
+	const t3dAdaptiveBudgetValues_t &effective = m_nRuntimeAdaptiveBudgetState.effective;
 	if ( m_pData ) {
 		m_pData->setRuntimePageBudgetOverrides( effective.nGpuPages, effective.nCpuPages,
 			effective.nInstancePages );
@@ -118,7 +118,7 @@ void T3DTerrain::applyRuntimeAdaptiveWorkBudgets( void ) {
 }
 
 void T3DTerrain::resetRuntimeAdaptiveWorkBudgets( const bool bClearOverrides ) {
-	const t3dadaptiveBudgetLimits_t limits = getRuntimeAdaptiveBudgetLimits();
+	const t3dAdaptiveBudgetLimits_t limits = getRuntimeAdaptiveBudgetLimits();
 	terrain3dAdaptiveReset( limits, m_nRuntimeAdaptiveBudgetState,
 		m_bRuntimeAdaptiveWorkBudgetsEnabled ? TERRAIN3D_ADAPTIVE_REASON_INITIALIZED :
 		TERRAIN3D_ADAPTIVE_REASON_DISABLED );
@@ -143,8 +143,8 @@ void T3DTerrain::updateRuntimeAdaptiveWorkBudgets( void ) {
 	if ( !m_bRuntimeAdaptiveWorkBudgetsEnabled ) {
 		return;
 	}
-	const t3dadaptiveBudgetLimits_t limits = getRuntimeAdaptiveBudgetLimits();
-	const t3dadaptiveBudgetPressure_t pressure = getRuntimeAdaptiveBudgetPressure();
+	const t3dAdaptiveBudgetLimits_t limits = getRuntimeAdaptiveBudgetLimits();
+	const t3dAdaptiveBudgetPressure_t pressure = getRuntimeAdaptiveBudgetPressure();
 	terrain3dAdaptiveStep( limits, pressure, m_nRuntimeAdaptiveLastMeasuredUsec,
 		m_nRuntimeAdaptiveBudgetState );
 	applyRuntimeAdaptiveWorkBudgets();
@@ -168,8 +168,8 @@ String T3DTerrain::getRuntimeAdaptiveReasonName( void ) const {
 	}
 }
 
-void T3DTerrain::sampleRuntimeProfile( const t3druntimeProfileSample_t &rSample ) {
-	t3druntimeProfileSample_t sample = rSample;
+void T3DTerrain::sampleRuntimeProfile( const t3dRuntimeProfileSample_t &rSample ) {
+	t3dRuntimeProfileSample_t sample = rSample;
 	sample.frameSequence = ++m_nRuntimeProfileSampleCount;
 	if ( m_pData ) {
 		m_pData->appendRuntimeProfileSample( sample );
@@ -263,12 +263,12 @@ void T3DTerrain::sampleRuntimeProfile( const t3druntimeProfileSample_t &rSample 
 	m_runtimeProfileLastSample = sample;
 	m_runtimeProfileAccumulator.addSample( sample );
 	if ( !m_pRuntimeProfileHistory ) {
-		m_pRuntimeProfileHistory = memnew( t3druntimeProfileHistory_t );
+		m_pRuntimeProfileHistory = memnew( t3dRuntimeProfileHistory_t );
 	}
 	m_pRuntimeProfileHistory->push( sample );
 }
 
-void T3DTerrain::updateCacheThrashEvents( const t3druntimeProfileSample_t &rSample ) {
+void T3DTerrain::updateCacheThrashEvents( const t3dRuntimeProfileSample_t &rSample ) {
 	const bool bStates[3] = {
 		rSample.gpuMissingRequired > 0 || ( rSample.nGpuEvictions >= 2 && rSample.nGpuUploads >= 2 ),
 		rSample.nCpuEvictions >= 2 && rSample.cpuLoads >= 2,
@@ -289,12 +289,12 @@ void T3DTerrain::updateCacheThrashEvents( const t3druntimeProfileSample_t &rSamp
 
 void T3DTerrain::setRuntimeProfilingEnabled( const bool bEnabled ) {
 	if ( bEnabled && !m_pRuntimeProfileHistory ) {
-		m_pRuntimeProfileHistory = memnew( t3druntimeProfileHistory_t );
+		m_pRuntimeProfileHistory = memnew( t3dRuntimeProfileHistory_t );
 	}
 	m_bRuntimeProfilingEnabled = bEnabled;
 }
 
-Dictionary T3DTerrain::runtimeProfileSampleToDictionary( const t3druntimeProfileSample_t &rSample ) const {
+Dictionary T3DTerrain::runtimeProfileSampleToDictionary( const t3dRuntimeProfileSample_t &rSample ) const {
 	Dictionary sample;
 	sample["sequence"] = ( int64_t ) ( rSample.frameSequence );
 	sample["physics_total_usec"] = ( int64_t ) ( rSample.nPhysicsTotalUsec );
@@ -421,7 +421,7 @@ Array T3DTerrain::getRuntimeProfileStallNames( const uint32_t nFlags ) const {
 
 Array T3DTerrain::getRuntimeProfileProblems( void ) const {
 	Array problems;
-	const t3druntimeProfileSample_t &sample = m_runtimeProfileLastSample;
+	const t3dRuntimeProfileSample_t &sample = m_runtimeProfileLastSample;
 	if ( sample.gpuMissingRequired > 0 ) {
 		t3dAppendRuntimeProblem( problems, "error", "gpu_required_pages_missing", "gpu_streaming",
 			"Required detailed terrain pages are not resident.", sample.gpuMissingRequired );
@@ -565,7 +565,7 @@ Array T3DTerrain::getRuntimeProfileHistorySince( const int64_t nAfterSequence, c
 
 Dictionary T3DTerrain::getRuntimeProfileAggregate( void ) const {
 	Dictionary aggregate;
-	const t3druntimeProfileAccumulator_t &stats = m_runtimeProfileAccumulator;
+	const t3dRuntimeProfileAccumulator_t &stats = m_runtimeProfileAccumulator;
 	aggregate["sampled_ticks"] = ( int64_t ) ( stats.nSampledTicks );
 
 	Dictionary timing;
@@ -836,8 +836,8 @@ Dictionary T3DTerrain::getRuntimeBoundaryPhasingStats( void ) const {
 }
 
 Dictionary T3DTerrain::getRuntimeAdaptiveBudgetStats( void ) const {
-	const t3dadaptiveBudgetLimits_t limits = getRuntimeAdaptiveBudgetLimits();
-	const t3dadaptiveBudgetPressure_t pressure = getRuntimeAdaptiveBudgetPressure();
+	const t3dAdaptiveBudgetLimits_t limits = getRuntimeAdaptiveBudgetLimits();
+	const t3dAdaptiveBudgetPressure_t pressure = getRuntimeAdaptiveBudgetPressure();
 	Dictionary stats;
 	stats["enabled"] = m_bRuntimeAdaptiveWorkBudgetsEnabled;
 	stats["target_usec"] = ( int64_t ) ( limits.nTargetUsec );
@@ -877,7 +877,7 @@ Dictionary T3DTerrain::getRuntimeAdaptiveBudgetStats( void ) const {
 	minimum["node_unload_regions"] = limits.minimum.nNodeUnloadRegions;
 	stats["minimum"] = minimum;
 
-	t3dadaptiveBudgetState_t displayed_state = m_nRuntimeAdaptiveBudgetState;
+	t3dAdaptiveBudgetState_t displayed_state = m_nRuntimeAdaptiveBudgetState;
 	if ( !m_bRuntimeAdaptiveWorkBudgetsEnabled ) {
 		displayed_state.effective = limits.maximum;
 	} else {
@@ -903,7 +903,7 @@ Dictionary T3DTerrain::getRuntimeAdaptiveBudgetStats( void ) const {
 	return stats;
 }
 
-void T3DTerrain::setPerformanceTarget( const t3dperformanceTarget_t target ) {
+void T3DTerrain::setPerformanceTarget( const t3dPerformanceTarget_t target ) {
 	if ( target < PERFORMANCE_TARGET_CUSTOM || target > PERFORMANCE_TARGET_XBOX360_EXPERIMENTAL ) {
 		return;
 	}
@@ -976,7 +976,7 @@ Dictionary T3DTerrain::getPerformanceProfileManifest( void ) const {
 	Array settings;
 	settings.resize( ( int ) ( terrain_3d_profile::settingCount() ) );
 	for ( size_t i = 0; i < terrain_3d_profile::settingCount(); ++i ) {
-		const terrain_3d_profile::t3dsetting_t &setting = terrain_3d_profile::XBOX360_EXPERIMENTAL_SETTINGS[i];
+		const terrain_3d_profile::t3dSetting_t &setting = terrain_3d_profile::XBOX360_EXPERIMENTAL_SETTINGS[i];
 		Dictionary row;
 		row["owner"] = t3dPerformanceProfileOwnerName( setting.owner );
 		row["property"] = setting.pszProperty;
@@ -993,7 +993,7 @@ Array T3DTerrain::getPerformanceProfileDiff( void ) const {
 	if ( m_performanceTarget != PERFORMANCE_TARGET_XBOX360_EXPERIMENTAL ) {
 		return differences;
 	}
-	for ( const terrain_3d_profile::t3dsetting_t &setting : terrain_3d_profile::XBOX360_EXPERIMENTAL_SETTINGS ) {
+	for ( const terrain_3d_profile::t3dSetting_t &setting : terrain_3d_profile::XBOX360_EXPERIMENTAL_SETTINGS ) {
 		const Object *pOwner = this;
 		if ( setting.owner == terrain_3d_profile::OWNER_MATERIAL ) {
 			if ( m_pMaterial.is_null() ) {

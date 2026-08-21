@@ -8,7 +8,7 @@
 #include <godot_cpp/variant/packed_string_array.hpp>
 #include <godot_cpp/variant/string.hpp>
 
-typedef struct t3dshaderStaticState_s {
+typedef struct t3dShaderStaticState_s {
 	int terrainSamplingMode = 0;
 	int terrainNormalMode = 0;
 	int colorSamplingMode = 0;
@@ -26,7 +26,7 @@ typedef struct t3dshaderStaticState_s {
 	bool bControlMapsImplicit = false;
 	bool bColorMapsImplicit = false;
 	bool bAutoShaderEnabled = false;
-} t3dshaderStaticState_t;
+} t3dShaderStaticState_t;
 
 // Reads a root Terrain3D shader template and recursively expands every shader
 // include into one deterministic source unit. Repeated include occurrences are
@@ -42,7 +42,7 @@ bool terrain3dExpandShaderIncludes(
 // remain for Godot, but no T3D_* preprocessing state may survive this pass.
 bool terrain3dAssembleShaderSource(
 	const godot::String &rExpandedSource,
-	const t3dshaderStaticState_t &rState,
+	const t3dShaderStaticState_t &rState,
 	const godot::PackedStringArray &rEnabledFeatures,
 	godot::String &rOutputSource,
 	godot::String &rFailureSummary

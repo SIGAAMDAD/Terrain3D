@@ -21,14 +21,14 @@
 using namespace godot;
 #endif
 
-typedef struct t3dresidentMapView_s {
+typedef struct t3dResidentMapView_s {
 	const uint16_t *pHeight = nullptr;
 	const uint32_t *pControl = nullptr;
 	const uint32_t *pColor = nullptr;
 	const uint8_t *pDerived = nullptr;
 	uint32_t nGeneration = 0;
 	EA_FORCE_INLINE bool valid( void ) const { return pHeight != nullptr; }
-} t3dresidentMapView_t;
+} t3dResidentMapView_t;
 
 class T3DResidentRegionPool;
 
@@ -42,7 +42,7 @@ public:
 	T3DResidentMapLease &operator=( T3DResidentMapLease &&rOther ) noexcept;
 
 	EA_FORCE_INLINE bool valid( void ) const { return m_view.valid(); }
-	EA_FORCE_INLINE const t3dresidentMapView_t &getView( void ) const { return m_view; }
+	EA_FORCE_INLINE const t3dResidentMapView_t &getView( void ) const { return m_view; }
 	void reset( void );
 
 private:
@@ -50,11 +50,11 @@ private:
 	T3DResidentRegionPool *m_pPool = nullptr;
 	int16_t m_iSlot = -1;
 	uint32_t m_nGeneration = 0u;
-	t3dresidentMapView_t m_view;
+	t3dResidentMapView_t m_view;
 
 	T3DResidentMapLease(
 		T3DResidentRegionPool *pPool, int iSlot, uint32_t nGeneration,
-		const t3dresidentMapView_t &rView
+		const t3dResidentMapView_t &rView
 	);
 };
 
@@ -64,12 +64,12 @@ class T3DResidentRegionPool {
 
 public:
 
-	typedef enum t3dchannel_e : uint32_t {
+	typedef enum t3dChannel_e : uint32_t {
 		CHANNEL_HEIGHT = 1u << 0u,
 		CHANNEL_CONTROL = 1u << 1u,
 		CHANNEL_COLOR = 1u << 2u,
 		CHANNEL_DERIVED = 1u << 3u,
-	} t3dchannel_t;
+	} t3dChannel_t;
 
 	T3DResidentRegionPool( void ) = default;
 	~T3DResidentRegionPool( void );
@@ -83,7 +83,7 @@ public:
 	T3DResidentMapLease acquire( const Vector2i &rLocation, const T3DRegion *pRegion );
 	bool ensureResident( const Vector2i &rLocation, const T3DRegion *pRegion );
 	void syncMap(
-		const Vector2i &rLocation, const T3DRegion *pRegion, t3dmapType_t type,
+		const Vector2i &rLocation, const T3DRegion *pRegion, t3dMapType_t type,
 		const Rect2i &rDirtyRect = Rect2i()
 	);
 	void syncDerived(
@@ -99,27 +99,27 @@ public:
 	EA_FORCE_INLINE size_t getMetadataBytes( void ) const { return m_nMetadataBytes; }
 
 private:
-typedef struct t3dalignedAllocation_s {
+typedef struct t3dAlignedAllocation_s {
 		void *pRaw = nullptr;
 		uint8_t *pAligned = nullptr;
 		size_t nBytes = 0u;
 		bool bOwned = false;
 		bool allocate( size_t nRequestedBytes, size_t nAlignment );
 		void release( void );
-	} t3dalignedAllocation_t;
+	} t3dAlignedAllocation_t;
 
-	typedef struct t3dslotLayout_s {
+	typedef struct t3dSlotLayout_s {
 		size_t nHeightSlotBytes = 0u;
 		size_t nControlSlotBytes = 0u;
 		size_t nColorSlotBytes = 0u;
 		size_t nDerivedSlotBytes = 0u;
 		size_t stride = 0u;
-	} t3dslotLayout_t;
+	} t3dSlotLayout_t;
 
 	// Replacement and lookup touch only the prefix below. Keep it in the first
 	// cacheline and prevent adjacent slot metadata from sharing that line; sparse
 	// allocation ownership and plane pointers are cold outside acquire/sync.
-	typedef struct alignas( TERRAIN3D_RESIDENT_CACHE_ALIGNMENT ) t3dslot_s {
+	typedef struct alignas( TERRAIN3D_RESIDENT_CACHE_ALIGNMENT ) t3dSlot_s {
 		Vector2i location = Vector2i( INT32_MAX, INT32_MAX );
 		std::atomic<uint32_t> nGeneration{1u};
 		std::atomic<uint32_t> nPinCount{0u};
@@ -130,7 +130,7 @@ typedef struct t3dalignedAllocation_s {
 		uint32_t *pControl = nullptr;
 		uint32_t *pColor = nullptr;
 		uint8_t *pDerived = nullptr;
-	} t3dslot_t;
+	} t3dSlot_t;
 
 	int m_nRegionSize = 0;
 	int m_nCapacity = 0;
@@ -138,9 +138,9 @@ typedef struct t3dalignedAllocation_s {
 	size_t m_nTexelCount = 0u;
 	size_t m_nBackingBytes = 0u;
 	size_t m_nMetadataBytes = 0u;
-	t3dslotLayout_t m_iSlotLayout;
-	t3dalignedAllocation_t m_mapMemory;
-	t3dslot_t *m_pSlots = nullptr;
+	t3dSlotLayout_t m_iSlotLayout;
+	t3dAlignedAllocation_t m_mapMemory;
+	t3dSlot_t *m_pSlots = nullptr;
 	bool m_bSlotsOwned = false;
 	std::atomic<int16_t> m_szLocationToSlot[TERRAIN3D_RESIDENT_WORLD_SLOT_COUNT] = {};
 	mutable std::mutex m_mutex;
@@ -148,7 +148,7 @@ typedef struct t3dalignedAllocation_s {
 
 	static bool alignUp( size_t nValue, size_t nAlignment, size_t &nAligned );
 	static bool buildSlotLayout(
-		int nRegionSize, uint32_t nChannels, t3dslotLayout_t &rLayout,
+		int nRegionSize, uint32_t nChannels, t3dSlotLayout_t &rLayout,
 		size_t &nTexelCount
 	);
 	static bool addEstimatedOptionalBytes(
@@ -168,11 +168,11 @@ typedef struct t3dalignedAllocation_s {
 	void publishSlot( int iSlot );
 	void retireSlotUnlocked( int iSlot );
 	void releaseLease( int iSlot, uint32_t nGeneration );
-	bool copyMap( int iSlot, const T3DRegion *pRegion, t3dmapType_t type );
-	bool copyMapRect( int iSlot, const T3DRegion *pRegion, t3dmapType_t type, const Rect2i &rDirtyRect );
+	bool copyMap( int iSlot, const T3DRegion *pRegion, t3dMapType_t type );
+	bool copyMapRect( int iSlot, const T3DRegion *pRegion, t3dMapType_t type, const Rect2i &rDirtyRect );
 	bool copyDerived( int iSlot, const T3DRegion *pRegion );
 	bool copyDerivedRect( int iSlot, const T3DRegion *pRegion, const Rect2i &rDirtyRect );
-	t3dresidentMapView_t getView( int iSlot ) const;
+	t3dResidentMapView_t getView( int iSlot ) const;
 };
 
 #endif // TERRAIN3D_RESIDENT_POOL_H

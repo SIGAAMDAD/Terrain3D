@@ -15,7 +15,7 @@
 
 // Per-region reader/writer gate for the process-static terrain bank.
 // Writers announce themselves before waiting so later readers cannot starve them.
-typedef struct t3dactiveAccessGate_s {
+typedef struct t3dActiveAccessGate_s {
 	bool acquireRead( void ) {
 		uint32_t state = m_state.load( std::memory_order_acquire );
 		for ( ;; ) {
@@ -79,6 +79,6 @@ typedef struct t3dactiveAccessGate_s {
 
 private:
 	std::atomic<uint32_t> m_state{0u};
-} t3dactiveAccessGate_t;
+} t3dActiveAccessGate_t;
 
 #endif // TERRAIN3D_ACTIVE_ACCESS_H

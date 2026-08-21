@@ -29,7 +29,7 @@ static bool terrain3dSamplerIsExactVertex( const double fGridX, const double fGr
 EA_FORCE_INLINE static float terrain3dSamplerBilerp3x3( const float fHeights[3][3], const int iX, const int iZ, const real_t fFx, const real_t fFz ) { return Math::lerp( Math::lerp( fHeights[iZ][iX], fHeights[iZ][iX + 1], fFx ), Math::lerp( fHeights[iZ + 1][iX], fHeights[iZ + 1][iX + 1], fFx ), fFz ); }
 } // namespace
 
-void T3DSampler::t3dregionCold_t::reset( void ) {
+void T3DSampler::t3dRegionCold_t::reset( void ) {
 	activeLease.reset();
 	lease.reset();
 	heightData.clear();
@@ -54,7 +54,7 @@ T3DSampler::T3DSampler( const T3DSamplingSource &rSource )
 void T3DSampler::resetCache( const uint64_t nGeneration ) {
 	for ( int index = 0; index < TERRAIN3D_SAMPLER_CACHE_SIZE; ++index ) {
 		m_szCacheCold[( size_t ) ( index )].reset();
-		m_szCache[( size_t ) ( index )] = t3dregionView_t{};
+		m_szCache[( size_t ) ( index )] = t3dRegionView_t{};
 	}
 	m_pLastView = nullptr;
 	m_stamp = 1u;
@@ -69,7 +69,7 @@ void T3DSampler::resetCache( const uint64_t nGeneration ) {
 	m_fInverseVertexSpacing = m_fVertexSpacing > 0.0f ? 1.0 / ( double ) ( m_fVertexSpacing ) : 0.0;
 }
 
-void T3DSampler::resetView( t3dregionView_t *const pView ) {
+void T3DSampler::resetView( t3dRegionView_t *const pView ) {
 	if ( !pView ) {
 		return;
 	}
@@ -78,7 +78,7 @@ void T3DSampler::resetView( t3dregionView_t *const pView ) {
 		return;
 	}
 	m_szCacheCold[( size_t ) ( index )].reset();
-	*pView = t3dregionView_t{};
+	*pView = t3dRegionView_t{};
 }
 
 bool T3DSampler::validateEpoch( void ) {
@@ -91,7 +91,7 @@ bool T3DSampler::validateEpoch( void ) {
 	}
 	if ( ++m_operation == 0u ) {
 		m_operation = 1u;
-		for ( t3dregionView_t &entry : m_szCache ) {
+		for ( t3dRegionView_t &entry : m_szCache ) {
 			entry.nValidatedOperation = 0u;
 		}
 	}
@@ -135,15 +135,15 @@ uint32_t T3DSampler::readUint( const uint8_t *pBytes, const int iIndex ) {
 	return value;
 }
 
-uint32_t T3DSampler::readControl( const t3dregionView_t *pView, const int iIndex ) {
+uint32_t T3DSampler::readControl( const t3dRegionView_t *pView, const int iIndex ) {
 	if ( !pView || iIndex < 0 || !pView->bControlResolved ) {
 		return UINT32_MAX;
 	}
 	return pView->pControlBytes ? readUint( pView->pControlBytes, iIndex ) : TERRAIN3D_REGION_DEFAULT_CONTROL;
 }
 
-T3DSampler::t3dregionView_t *T3DSampler::validateCachedView(
-	t3dregionView_t *pView,
+T3DSampler::t3dRegionView_t *T3DSampler::validateCachedView(
+	t3dRegionView_t *pView,
 	const Vector2i &rLocation
 ) {
 	if ( !pView || !pView->bLoaded || !pView->bValid || pView->location != rLocation ) {
@@ -164,18 +164,18 @@ T3DSampler::t3dregionView_t *T3DSampler::validateCachedView(
 	return pView;
 }
 
-T3DSampler::t3dregionView_t *T3DSampler::getRegionViewUnchecked( const Vector2i &rLocation ) {
+T3DSampler::t3dRegionView_t *T3DSampler::getRegionViewUnchecked( const Vector2i &rLocation ) {
 	if ( !m_source.valid() ) {
 		return nullptr;
 	}
-	if ( t3dregionView_t *hit = validateCachedView( m_pLastView, rLocation ) ) {
+	if ( t3dRegionView_t *hit = validateCachedView( m_pLastView, rLocation ) ) {
 		return hit;
 	}
 
-	t3dregionView_t *pReplacement = &m_szCache[0];
-	for ( t3dregionView_t &entry : m_szCache ) {
+	t3dRegionView_t *pReplacement = &m_szCache[0];
+	for ( t3dRegionView_t &entry : m_szCache ) {
 		if ( entry.bLoaded && entry.location == rLocation ) {
-			if ( t3dregionView_t *hit = validateCachedView( &entry, rLocation ) ) {
+			if ( t3dRegionView_t *hit = validateCachedView( &entry, rLocation ) ) {
 				m_pLastView = hit;
 				return hit;
 			}
@@ -196,7 +196,7 @@ T3DSampler::t3dregionView_t *T3DSampler::getRegionViewUnchecked( const Vector2i 
 
 	resetView( pReplacement );
 	const size_t replacement_index = ( size_t ) ( pReplacement - m_szCache.data() );
-	t3dregionCold_t &rCold = m_szCacheCold[replacement_index];
+	t3dRegionCold_t &rCold = m_szCacheCold[replacement_index];
 	pReplacement->location = rLocation;
 	pReplacement->nStamp = ++m_stamp;
 	pReplacement->bLoaded = true;
@@ -207,13 +207,13 @@ T3DSampler::t3dregionView_t *T3DSampler::getRegionViewUnchecked( const Vector2i 
 
 	T3DActiveMapLease active = m_source.pStorage->acquireActive( rLocation );
 	if ( active.valid() ) {
-		const t3dactiveMapView_t &view = active.view();
+		const t3dActiveMapView_t &view = active.view();
 		pReplacement->pHeightBytes = ( const uint8_t * ) ( view.pHeight );
 		rCold.activeLease = std::move( active );
 	} else {
 		T3DResidentMapLease pooled = m_source.pStorage->acquireResident( rLocation, pRegion );
 		if ( pooled.valid() ) {
-			const t3dresidentMapView_t &view = pooled.getView();
+			const t3dResidentMapView_t &view = pooled.getView();
 			pReplacement->pHeightBytes = ( const uint8_t * ) ( view.pHeight );
 			pReplacement->pControlBytes = ( const uint8_t * ) ( view.pControl );
 			pReplacement->pDerivedBytes = ( const uint8_t * ) ( view.pDerived );
@@ -277,7 +277,7 @@ T3DSampler::t3dregionView_t *T3DSampler::getRegionViewUnchecked( const Vector2i 
 }
 
 bool T3DSampler::resolveGridUnchecked(
-	const int64_t iGridX, const int64_t iGridZ, t3dregionView_t *&pView,
+	const int64_t iGridX, const int64_t iGridZ, t3dRegionView_t *&pView,
 	int &iIndex
 ) {
 	int64_t region_x = 0;
@@ -304,7 +304,7 @@ float T3DSampler::sampleHeightGridUnchecked(
 	const int64_t iGridX, const int64_t iGridZ,
 	const bool bRespectHoles
 ) {
-	t3dregionView_t *pView = nullptr;
+	t3dRegionView_t *pView = nullptr;
 	int index = 0;
 	if ( !resolveGridUnchecked( iGridX, iGridZ, pView, index ) ) {
 		return NAN;
@@ -317,7 +317,7 @@ float T3DSampler::sampleHeightGridUnchecked(
 }
 
 uint32_t T3DSampler::sampleControlGridUnchecked( const int64_t iGridX, const int64_t iGridZ ) {
-	t3dregionView_t *pView = nullptr;
+	t3dRegionView_t *pView = nullptr;
 	int index = 0;
 	if ( !resolveGridUnchecked( iGridX, iGridZ, pView, index ) ) {
 		return UINT32_MAX;
@@ -349,7 +349,7 @@ float T3DSampler::sampleHeightUnchecked( const Vector3 &rGlobalPosition ) {
 	const double fGridZ = ( double ) ( rGlobalPosition.z ) * m_fInverseVertexSpacing;
 	const int64_t x0 = ( int64_t ) ( Math::floor( fGridX ) );
 	const int64_t z0 = ( int64_t ) ( Math::floor( fGridZ ) );
-	t3dregionView_t *pView = nullptr;
+	t3dRegionView_t *pView = nullptr;
 	int index = 0;
 	if ( !resolveGridUnchecked( x0, z0, pView, index ) ) {
 		return NAN;
@@ -411,7 +411,7 @@ Vector3 T3DSampler::sampleNormalUnchecked( const Vector3 &rGlobalPosition, float
 
 	float fHeights[3][3];
 	const int needed = bExactVertex ? 2 : 3;
-	t3dregionView_t *pView = nullptr;
+	t3dRegionView_t *pView = nullptr;
 	int index = 0;
 	if ( !resolveGridUnchecked( x0, z0, pView, index ) ) {
 		return V3_NAN;
@@ -485,7 +485,7 @@ bool T3DSampler::sampleHeightAndNormal(
 Vector3 T3DSampler::sampleSlopeNormalUnchecked( const Vector3 &rGlobalPosition ) {
 	const int64_t x = ( int64_t ) ( Math::round( ( double ) ( rGlobalPosition.x ) * m_fInverseVertexSpacing ) );
 	const int64_t z = ( int64_t ) ( Math::round( ( double ) ( rGlobalPosition.z ) * m_fInverseVertexSpacing ) );
-	t3dregionView_t *pView = nullptr;
+	t3dRegionView_t *pView = nullptr;
 	int index = 0;
 	if ( !resolveGridUnchecked( x, z, pView, index ) ) {
 		return V3_NAN;
@@ -615,7 +615,7 @@ bool T3DSampler::copyHeightRect(
 				copied += run;
 				continue;
 			}
-			t3dregionView_t *const pView = getRegionViewUnchecked( Vector2i( ( int32_t ) ( region_x ), ( int32_t ) ( region_z ) ) );
+			t3dRegionView_t *const pView = getRegionViewUnchecked( Vector2i( ( int32_t ) ( region_x ), ( int32_t ) ( region_z ) ) );
 			if ( !pView ) {
 				std::fill_n( destination + copied, run, NAN );
 				bComplete = false;
@@ -668,7 +668,7 @@ bool T3DSampler::minimumHeightRect(
 				return false;
 			}
 			const int run = MIN( nWidth - copied, m_nRegionSize - local_x );
-			t3dregionView_t *const pView = getRegionViewUnchecked( Vector2i( ( int32_t ) ( region_x ), ( int32_t ) ( region_z ) ) );
+			t3dRegionView_t *const pView = getRegionViewUnchecked( Vector2i( ( int32_t ) ( region_x ), ( int32_t ) ( region_z ) ) );
 			if ( !pView ) {
 				return false;
 			}

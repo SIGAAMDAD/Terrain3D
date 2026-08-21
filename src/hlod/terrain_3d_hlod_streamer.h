@@ -27,7 +27,7 @@ class T3DHLODStreamer : public Object {
 	GDCLASS( T3DHLODStreamer, Object );
 	CLASS_NAME();
 
-	typedef struct t3dentry_s {
+	typedef struct t3dEntry_s {
 		int level = 1;
 		Vector2i cluster = V2I_ZERO;
 		Vector2i regionMin = V2I_ZERO;
@@ -48,19 +48,19 @@ class T3DHLODStreamer : public Object {
 		uint8_t retireReadyFrames = 0;
 		Ref<T3DHLODPackage> package;
 		RID instance;
-	} t3dentry_t;
+	} t3dEntry_t;
 
-	typedef struct t3dnodePolicy_s {
+	typedef struct t3dNodePolicy_s {
 		int64_t spawnId = 0;
 		uint8_t minLevel = 0;
-	} t3dnodePolicy_t;
+	} t3dNodePolicy_t;
 
 	T3DTerrain *m_pTerrain = nullptr;
 	Ref<T3DHLODManifest> m_manifest;
-	eastl::vector<t3dentry_t> m_entries;
+	eastl::vector<t3dEntry_t> m_entries;
 	eastl::vector<int> m_roots;
 	eastl::vector<uint8_t> m_instancerMinLevels;
-	eastl::vector<t3dnodePolicy_t> m_nodePolicies;
+	eastl::vector<t3dNodePolicy_t> m_nodePolicies;
 	eastl::array<uint32_t, TERRAIN3D_MAX_REGION_SLOTS + 1> m_nodePolicyOffsets{};
 	uint8_t m_regionRepresentationLevel[TERRAIN3D_MAX_REGION_SLOTS] = {};
 	eastl::bitset<TERRAIN3D_MAX_REGION_SLOTS> m_managedRegions;
@@ -98,12 +98,12 @@ class T3DHLODStreamer : public Object {
 	bool compilePackedManifest( const Ref<T3DHLODManifest> &rManifest );
 	void compileLegacyNodePolicies( const Ref<T3DHLODManifest> &rManifest );
 	void buildHierarchy( void );
-	bool packageAcceptable( const t3dentry_t &rEntry, const Vector3 &rLocalTarget ) const;
+	bool packageAcceptable( const t3dEntry_t &rEntry, const Vector3 &rLocalTarget ) const;
 	void selectRecursive( int index, const Vector3 &rLocalTarget );
 	void selectFallbackChildren( int index, const Vector3 &rLocalTarget );
 	void clearDesiredDescendants( int index );
 	bool hasActiveDescendant( int index ) const;
-	bool replacementReady( const t3dentry_t &rEntry ) const;
+	bool replacementReady( const t3dEntry_t &rEntry ) const;
 	bool requestOrActivate( int index );
 	void deactivate( int index );
 	void publishRepresentationMap( void );

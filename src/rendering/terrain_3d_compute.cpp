@@ -37,8 +37,8 @@ EA_FORCE_INLINE static float terrain3dBitsToFloat( const uint32_t nBits ) { floa
 EA_FORCE_INLINE static uint32_t terrain3dFloatToBits( const float fValue ) { uint32_t bits = 0u; std::memcpy( &bits, &fValue, sizeof( bits ) ); return bits; }
 
 EA_FORCE_INLINE static uint32_t terrain3dPackColor( const float fR, const float fG, const float fB, const float fA ) { return TERRAIN3DQUANTIZECOLOR( fR ) | ( TERRAIN3DQUANTIZECOLOR( fG ) << 8u ) | ( TERRAIN3DQUANTIZECOLOR( fB ) << 16u ) | ( TERRAIN3DQUANTIZECOLOR( fA ) << 24u ); }
-static_assert( sizeof( T3DCompute::t3dbrushElement_t ) == 16u, "t3dbrushElement_t must match GLSL std430 uvec4 layout" );
-static_assert( sizeof( T3DCompute::t3dbrushParams_t ) == 52u, "t3dbrushParams_t must match GLSL push-constant layout" );
+static_assert( sizeof( T3DCompute::t3dBrushElement_t ) == 16u, "t3dBrushElement_t must match GLSL std430 uvec4 layout" );
+static_assert( sizeof( T3DCompute::t3dBrushParams_t ) == 52u, "t3dBrushParams_t must match GLSL push-constant layout" );
 
 EA_FORCE_INLINE Ref<RDUniform> makeStorageUniform( const int nBinding, const RID &rBuffer ) { Ref<RDUniform> pUniform; pUniform.instantiate(); pUniform->set_uniform_type( RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER ); pUniform->set_binding( nBinding ); pUniform->add_id( rBuffer ); return pUniform; }
 
@@ -133,7 +133,7 @@ bool T3DCompute::ensureRenderDevice( void ) {
 	return true;
 }
 
-bool T3DCompute::ensurePipeline( t3dpipeline_t &rPipeline, const String &rPath, const String &rName ) {
+bool T3DCompute::ensurePipeline( t3dPipeline_t &rPipeline, const String &rPath, const String &rName ) {
 	if ( rPipeline.pipeline.is_valid() ) {
 		return true;
 	}
@@ -172,7 +172,7 @@ bool T3DCompute::ensurePipeline( t3dpipeline_t &rPipeline, const String &rPath, 
 }
 
 bool T3DCompute::ensureRenderPipeline(
-	t3dpipeline_t &rPipeline, const Ref<RDShaderSPIRV> &rSpirv,
+	t3dPipeline_t &rPipeline, const Ref<RDShaderSPIRV> &rSpirv,
 	const String &rName
 ) {
 	if ( rPipeline.pipeline.is_valid() ) {
@@ -215,14 +215,14 @@ void T3DCompute::freeBuffer( RID &rBuffer ) {
 	rBuffer = RID();
 }
 
-void T3DCompute::freePipeline( t3dpipeline_t &rPipeline ) {
+void T3DCompute::freePipeline( t3dPipeline_t &rPipeline ) {
 	if ( m_pRd && rPipeline.pipeline.is_valid() ) {
 		m_pRd->free_rid( rPipeline.pipeline );
 	}
 	if ( m_pRd && rPipeline.pShader.is_valid() ) {
 		m_pRd->free_rid( rPipeline.pShader );
 	}
-	rPipeline = t3dpipeline_t{};
+	rPipeline = t3dPipeline_t{};
 }
 
 void T3DCompute::freeRenderUniformSet( RID &rUniformSet ) {
@@ -239,14 +239,14 @@ void T3DCompute::freeRenderRid( RID &rRid ) {
 	rRid = RID();
 }
 
-void T3DCompute::freeRenderPipeline( t3dpipeline_t &rPipeline ) {
+void T3DCompute::freeRenderPipeline( t3dPipeline_t &rPipeline ) {
 	if ( m_pRenderRd && rPipeline.pipeline.is_valid() ) {
 		m_pRenderRd->free_rid( rPipeline.pipeline );
 	}
 	if ( m_pRenderRd && rPipeline.pShader.is_valid() ) {
 		m_pRenderRd->free_rid( rPipeline.pShader );
 	}
-	rPipeline = t3dpipeline_t{};
+	rPipeline = t3dPipeline_t{};
 }
 
 bool T3DCompute::ensureBrushCapacity( const uint32_t nBytes ) {
@@ -417,9 +417,9 @@ bool T3DCompute::ensureDisplacementResources(
 
 bool T3DCompute::prepareDisplacementRequest(
 	T3DTerrain *const pTerrain, const Vector3 &rTargetPosition,
-	t3ddisplacementRequest_t &rRequest
+	t3dDisplacementRequest_t &rRequest
 ) {
-	rRequest = t3ddisplacementRequest_t{};
+	rRequest = t3dDisplacementRequest_t{};
 	if ( !pTerrain || pTerrain->getTessellationLevel() <= 0 ) {
 		return false;
 	}
@@ -430,7 +430,7 @@ bool T3DCompute::prepareDisplacementRequest(
 		setError( "Compute displacement requires the packed-PBR/R8 texture path" );
 		return false;
 	}
-	const T3DMaterial::t3dtextureFiltering_t filtering = pMaterial->getTextureFiltering();
+	const T3DMaterial::t3dTextureFiltering_t filtering = pMaterial->getTextureFiltering();
 	if ( pMaterial->getProjectionEnabled() || pMaterial->getDetilingMode() != T3DMaterial::DETILING_DISABLED ||
 		pMaterial->getBufferShaderOverride().is_valid() ||
 		pMaterial->getWorldBackground() == T3DMaterial::NOISE || filtering == T3DMaterial::NEAREST ||
@@ -474,13 +474,13 @@ bool T3DCompute::prepareDisplacementRequest(
 		return false;
 	}
 
-	typedef struct alignas( 16 ) t3dmaterialData_s {
+	typedef struct alignas( 16 ) t3dMaterialData_s {
 		float fUvScale;
 		float fOffset;
 		float fScale;
 		float fPad;
-	} t3dmaterialData_t;
-	eastl::array<t3dmaterialData_t, 32> material_data{};
+	} t3dMaterialData_t;
+	eastl::array<t3dMaterialData_t, 32> material_data{};
 	const PackedFloat32Array uv_scales = pAssets->getTextureUvScales();
 	const PackedVector2Array displacements = pAssets->getTextureDisplacements();
 	for ( int i = 0; i < 32; ++i ) {
@@ -495,7 +495,7 @@ bool T3DCompute::prepareDisplacementRequest(
 	rRequest.materialDataHash =
 		hashBytes( rRequest.materialData.ptr(), ( size_t ) ( rRequest.materialData.size() ) );
 
-	typedef struct t3ddisplacementParams_s {
+	typedef struct t3dDisplacementParams_s {
 		uint32_t nWidth, nHeight, nRegionSize, nRegionMapSize;
 		float fVertexSpacing, vertex_density, mesh_size, fTessellationLevel;
 		float fTargetX, fTargetZ, blend_sharpness, fDisplacementSharpness;
@@ -505,9 +505,9 @@ bool T3DCompute::prepareDisplacementRequest(
 		float ground_level, fRegionBlend;
 		float height_min, fHeightRange;
 		uint32_t bControlMapsImplicit, texture_layer_count, padding1, padding2;
-	} t3ddisplacementParams_t;
-	t3ddisplacementParams_t params{};
-	static_assert( sizeof( t3ddisplacementParams_t ) == 112u, "Displacement push constants must match GLSL" );
+	} t3dDisplacementParams_t;
+	t3dDisplacementParams_t params{};
+	static_assert( sizeof( t3dDisplacementParams_t ) == 112u, "Displacement push constants must match GLSL" );
 	params.nWidth = rRequest.nWidth;
 	params.nHeight = rRequest.nHeight;
 	params.nRegionSize = ( uint32_t ) ( pTerrain->getRegionSize() );
@@ -528,7 +528,7 @@ bool T3DCompute::prepareDisplacementRequest(
 	params.autoOverlayTexture = ( uint32_t ) ( CLAMP( ( int ) ( pMaterial->getShaderParam( "auto_overlay_texture" ) ), 0, auto_layer_max ) );
 	params.auto_enabled = pMaterial->getAutoShaderEnabled() ? 1u : 0u;
 	params.sampling_mode = ( uint32_t ) ( pMaterial->getTerrainSamplingMode() );
-	const T3DMaterial::t3dshaderPerformancePreset_t preset = pMaterial->getShaderPerformancePreset();
+	const T3DMaterial::t3dShaderPerformancePreset_t preset = pMaterial->getShaderPerformancePreset();
 	params.bFastBlendCurve =
 		preset == T3DMaterial::SHADER_PRESET_XBOX_360 || preset == T3DMaterial::SHADER_PRESET_FASTEST ? 1u
 																												  : 0u;
@@ -542,7 +542,7 @@ bool T3DCompute::prepareDisplacementRequest(
 	return rRequest.valid();
 }
 
-bool T3DCompute::dispatchDisplacementRequest( const t3ddisplacementRequest_t &rRequest, RID &rTexture ) {
+bool T3DCompute::dispatchDisplacementRequest( const t3dDisplacementRequest_t &rRequest, RID &rTexture ) {
 	rTexture = RID();
 	if ( !rRequest.valid() || !ensureRenderDevice() ||
 		!ensureDisplacementResources( rRequest.nWidth, rRequest.nHeight, rRequest.pShaderSpirv ) ) {
@@ -633,8 +633,8 @@ bool T3DCompute::isAvailable( void ) {
 	return ensureDevice();
 }
 
-void T3DCompute::processBrushCpu( eastl::vector<t3dbrushElement_t> &rElements, const t3dbrushParams_t &p ) {
-	for ( t3dbrushElement_t &e : rElements ) {
+void T3DCompute::processBrushCpu( eastl::vector<t3dBrushElement_t> &rElements, const t3dBrushParams_t &p ) {
+	for ( t3dBrushElement_t &e : rElements ) {
 		if ( ( e.flags & 1u ) == 0u ) {
 			continue;
 		}
@@ -775,7 +775,7 @@ void T3DCompute::processBrushCpu( eastl::vector<t3dbrushElement_t> &rElements, c
 	}
 }
 
-bool T3DCompute::processBrush( eastl::vector<t3dbrushElement_t> &rElements, const t3dbrushParams_t &rParams ) {
+bool T3DCompute::processBrush( eastl::vector<t3dBrushElement_t> &rElements, const t3dBrushParams_t &rParams ) {
 	if ( rElements.empty() ) {
 		return true;
 	}
@@ -787,7 +787,7 @@ bool T3DCompute::processBrush( eastl::vector<t3dbrushElement_t> &rElements, cons
 						  "Terrain3D brush compute" ) ) {
 		return false;
 	}
-	const uint64_t byte_count_64 = ( uint64_t ) ( rElements.size() ) * sizeof( t3dbrushElement_t );
+	const uint64_t byte_count_64 = ( uint64_t ) ( rElements.size() ) * sizeof( t3dBrushElement_t );
 	if ( byte_count_64 > std::numeric_limits<uint32_t>::max() ) {
 		setError( "Brush batch exceeds 4 GiB" );
 		return false;
@@ -801,7 +801,7 @@ bool T3DCompute::processBrush( eastl::vector<t3dbrushElement_t> &rElements, cons
 		setError( "Failed to upload brush compute batch" );
 		return false;
 	}
-	t3dbrushParams_t params = rParams;
+	t3dBrushParams_t params = rParams;
 	params.nCount = ( uint32_t ) ( rElements.size() );
 	const PackedByteArray push = copyToBytes( &params, sizeof( params ) );
 	const int64_t list = m_pRd->compute_list_begin();
@@ -856,13 +856,13 @@ bool T3DCompute::generateDerivedMap(
 		setError( "Failed to upload derived-map height halo" );
 		return false;
 	}
-	typedef struct t3dderivedParams_s {
+	typedef struct t3dDerivedParams_s {
 		uint32_t nWidth;
 		uint32_t height;
 		uint32_t halo_stride;
 		float fVertexSpacing;
-	} t3dderivedParams_t;
-	t3dderivedParams_t params{( uint32_t ) ( nWidth ), ( uint32_t ) ( nHeight ), ( uint32_t ) ( nWidth + 2 ), fVertexSpacing};
+	} t3dDerivedParams_t;
+	t3dDerivedParams_t params{( uint32_t ) ( nWidth ), ( uint32_t ) ( nHeight ), ( uint32_t ) ( nWidth + 2 ), fVertexSpacing};
 	const PackedByteArray push = copyToBytes( &params, sizeof( params ) );
 	const uint32_t count = ( uint32_t ) ( nWidth * nHeight );
 	const int64_t list = m_pRd->compute_list_begin();

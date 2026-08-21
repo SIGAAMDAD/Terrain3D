@@ -230,7 +230,7 @@ int T3DMiddleHeightRegionCache::collectDesired(
 	uint8_t selected_map[TERRAIN3D_MAX_REGION_SLOTS] = {};
 	for ( int state_value = ( int ) ( TERRAIN3D_REGION_STREAMING_ACTIVE );
 		state_value >= ( int ) ( TERRAIN3D_REGION_STREAMING_HOT ) && output_count < capacity; --state_value ) {
-		const t3dregionStreamingState_t wanted = ( t3dregionStreamingState_t ) ( state_value );
+		const t3dRegionStreamingState_t wanted = ( t3dRegionStreamingState_t ) ( state_value );
 		forEachSquareRing( rCenter, m_pRepository->getRegionMapSize(), [&]( const Vector2i &location ) {
 			if ( output_count >= capacity ) {
 				return false;

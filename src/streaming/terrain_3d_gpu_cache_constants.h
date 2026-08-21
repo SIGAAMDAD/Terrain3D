@@ -7,13 +7,13 @@
 #include <cstddef>
 #include <cstdint>
 
-typedef enum t3dgpuRegionSlotState_e : uint8_t {
+typedef enum t3dGpuRegionSlotState_e : uint8_t {
 	TERRAIN3D_GPU_SLOT_FREE = 0u,
 	TERRAIN3D_GPU_SLOT_STAGING = 1u,
 	TERRAIN3D_GPU_SLOT_READY = 2u,
 	TERRAIN3D_GPU_SLOT_MAPPED = 3u,
 	TERRAIN3D_GPU_SLOT_RETIRED = 4u,
-} t3dgpuRegionSlotState_t;
+} t3dGpuRegionSlotState_t;
 
 
 static constexpr int TERRAIN3D_GPU_CACHE_DEFAULT_GUARD_REGIONS = 1;

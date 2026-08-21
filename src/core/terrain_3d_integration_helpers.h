@@ -31,7 +31,7 @@ static inline void t3dAppendRuntimeProblem( Array &rProblems, const String &rSev
 	rProblems.push_back( problem );
 }
 
-static inline Variant t3dPerformanceProfileValue( const terrain_3d_profile::t3dsetting_t &rSetting ) {
+static inline Variant t3dPerformanceProfileValue( const terrain_3d_profile::t3dSetting_t &rSetting ) {
 	switch ( rSetting.kind ) {
 		case terrain_3d_profile::VALUE_INT:
 			return ( int64_t ) ( rSetting.intValue );
@@ -44,7 +44,7 @@ static inline Variant t3dPerformanceProfileValue( const terrain_3d_profile::t3ds
 }
 
 static inline bool t3dPerformanceProfileValueMatches( const Variant &rCurrent,
-		const terrain_3d_profile::t3dsetting_t &rSetting ) {
+		const terrain_3d_profile::t3dSetting_t &rSetting ) {
 	switch ( rSetting.kind ) {
 		case terrain_3d_profile::VALUE_INT:
 			return ( int64_t ) ( rCurrent ) == rSetting.intValue;
@@ -56,7 +56,7 @@ static inline bool t3dPerformanceProfileValueMatches( const Variant &rCurrent,
 	return false;
 }
 
-static inline String t3dPerformanceProfileOwnerName( const terrain_3d_profile::t3downer_t owner ) {
+static inline String t3dPerformanceProfileOwnerName( const terrain_3d_profile::t3dOwner_t owner ) {
 	return owner == terrain_3d_profile::OWNER_MATERIAL ? "T3DMaterial" : "T3DTerrain";
 }
 

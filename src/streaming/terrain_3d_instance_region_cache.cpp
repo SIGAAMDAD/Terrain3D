@@ -302,7 +302,7 @@ int T3DInstanceRegionCache::collectDesired(
 	int outputCount = 0;
 	for ( int stateValue = ( int ) ( TERRAIN3D_REGION_STREAMING_ACTIVE );
 		stateValue >= ( int ) ( TERRAIN3D_REGION_STREAMING_HOT ) && outputCount < capacity; --stateValue ) {
-		const t3dregionStreamingState_t wanted = ( t3dregionStreamingState_t ) ( stateValue );
+		const t3dRegionStreamingState_t wanted = ( t3dRegionStreamingState_t ) ( stateValue );
 		forEachSquareRing( rCenter, m_pRepository->getRegionMapSize(), [&]( const Vector2i &location ) {
 			if ( outputCount >= capacity ) {
 				return false;

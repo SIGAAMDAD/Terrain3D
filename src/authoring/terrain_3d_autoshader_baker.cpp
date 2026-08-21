@@ -33,7 +33,7 @@
 namespace {
 EA_FORCE_INLINE static bool terrain3dTextureSlotIsPopulated( const Ref<T3DAssets> &rAssets, const uint8_t nTextureId ) { return rAssets.is_valid() && rAssets->getTextureAsset( ( int ) ( nTextureId ) ).is_valid(); }
 
-typedef struct t3dmaskSource_s {
+typedef struct t3dMaskSource_s {
 	Ref<Image> pImage;
 	PackedByteArray rgba_float_data;
 	Rect2 world_rect;
@@ -43,9 +43,9 @@ typedef struct t3dmaskSource_s {
 	bool bInvert = false;
 
 	EA_FORCE_INLINE bool valid( void ) const { return nWidth > 0 && nHeight > 0 && !rgba_float_data.is_empty() && world_rect.size.x != 0.0f && world_rect.size.y != 0.0f; }
-} t3dmaskSource_t;
+} t3dMaskSource_t;
 
-typedef struct t3druleConfig_s {
+typedef struct t3dRuleConfig_s {
 	bool bEnabled = true;
 	int priority = 0;
 	int order = 0;
@@ -90,9 +90,9 @@ typedef struct t3druleConfig_s {
 	bool bUseExistingMaterial = false;
 	int existing_base = -1;
 	int existing_overlay = -1;
-} t3druleConfig_t;
+} t3dRuleConfig_t;
 
-typedef struct t3dregionWork_s {
+typedef struct t3dRegionWork_s {
 	Vector2i location;
 	bool available = false;
 	bool success = false;
@@ -101,18 +101,18 @@ typedef struct t3dregionWork_s {
 	int64_t skipped_manual = 0;
 	PackedByteArray controlBytes;
 	PackedByteArray outputBytes;
-} t3dregionWork_t;
+} t3dRegionWork_t;
 
-typedef struct t3dclearRegionWork_s {
+typedef struct t3dClearRegionWork_s {
 	Vector2i location;
 	PackedByteArray output_bytes;
 	int64_t changed_pixels = 0;
 	bool changed = false;
-} t3dclearRegionWork_t;
+} t3dClearRegionWork_t;
 
-EA_FORCE_INLINE static bool terrain3dRulePriorityGreater( const t3druleConfig_t &rA, const t3druleConfig_t &rB ) { return rA.priority > rB.priority; }
+EA_FORCE_INLINE static bool terrain3dRulePriorityGreater( const t3dRuleConfig_t &rA, const t3dRuleConfig_t &rB ) { return rA.priority > rB.priority; }
 
-typedef struct t3dmetricNeeds_s {
+typedef struct t3dMetricNeeds_s {
 	bool bSlope = false;
 	bool bCurvature = false;
 	bool bConcavity = false;
@@ -122,9 +122,9 @@ typedef struct t3dmetricNeeds_s {
 	bool bWaterDistance = false;
 	bool noise = false;
 	bool bBiome = false;
-} t3dmetricNeeds_t;
+} t3dMetricNeeds_t;
 
-typedef struct t3dmetricBuildConfig_s {
+typedef struct t3dMetricBuildConfig_s {
 	float fCurvatureScale = 1.0f;
 	float water_level = 0.0f;
 	float noise_scale = 0.01f;
@@ -132,10 +132,10 @@ typedef struct t3dmetricBuildConfig_s {
 	float fNoiseLacunarity = 2.0f;
 	float fNoiseGain = 0.5f;
 	uint32_t noise_seed = 1337u;
-} t3dmetricBuildConfig_t;
+} t3dMetricBuildConfig_t;
 
-static t3dmetricBuildConfig_t parseMetricBuildConfig( const Dictionary &rProfile ) {
-	t3dmetricBuildConfig_t config;
+static t3dMetricBuildConfig_t parseMetricBuildConfig( const Dictionary &rProfile ) {
+	t3dMetricBuildConfig_t config;
 	config.fCurvatureScale = MAX( ( float ) ( rProfile.get( "curvature_scale", 1.0f ) ), 0.0001f );
 	config.water_level = ( float ) ( rProfile.get( "water_level", 0.0f ) );
 	config.noise_scale = MAX( ( float ) ( rProfile.get( "noise_scale", 0.01f ) ), 0.000001f );
@@ -146,7 +146,7 @@ static t3dmetricBuildConfig_t parseMetricBuildConfig( const Dictionary &rProfile
 	return config;
 }
 
-typedef struct t3dregionMetrics_s {
+typedef struct t3dRegionMetrics_s {
 	T3DArenaBuffer<float> height;
 	T3DArenaBuffer<float> height_halo;
 	T3DArenaBuffer<float> slope;
@@ -160,21 +160,21 @@ typedef struct t3dregionMetrics_s {
 	T3DArenaBuffer<float> biome;
 	T3DArenaBuffer<int32_t> flow_order;
 	T3DArenaBuffer<uint32_t> output_control;
-} t3dregionMetrics_t;
+} t3dRegionMetrics_t;
 
 
-typedef struct t3dflowOrderHeightGreater_s {
+typedef struct t3dFlowOrderHeightGreater_s {
 	const float *height = nullptr;
 
 	bool operator()( const int32_t nA, const int32_t nB ) const {
 		return height[( size_t ) ( nA )] > height[( size_t ) ( nB )];
 	}
-} t3dflowOrderHeightGreater_t;
+} t3dFlowOrderHeightGreater_t;
 
 EA_FORCE_INLINE static Vector2 dictionaryRange( const Dictionary &rDictionary, const StringName &rName, const Vector2 &vDefault ) { const Variant value = rDictionary.get( rName, vDefault ); return value.get_type() == Variant::VECTOR2 ? Vector2( value ) : vDefault; }
 
-static t3dmaskSource_t parseMask( const Dictionary &rProfile, const StringName &rPrefix ) {
-	t3dmaskSource_t result;
+static t3dMaskSource_t parseMask( const Dictionary &rProfile, const StringName &rPrefix ) {
+	t3dMaskSource_t result;
 	const String prefix = String( rPrefix );
 	const Variant image_value = rProfile.get( prefix + String( "_image" ), Variant() );
 	if ( image_value.get_type() == Variant::OBJECT ) {
@@ -206,7 +206,7 @@ static t3dmaskSource_t parseMask( const Dictionary &rProfile, const StringName &
 
 
 static float sampleMask(
-	const t3dmaskSource_t &rMask, const float fWorldX, const float fWorldZ,
+	const t3dMaskSource_t &rMask, const float fWorldX, const float fWorldZ,
 	const float fDefault
 ) {
 	if ( !rMask.valid() ) {
@@ -237,7 +237,7 @@ using terrain3d_autoshader_math::ruleCanProcessPixel;
 using terrain3d_autoshader_math::smoothCurve;
 using terrain3d_autoshader_math::smootherCurve;
 
-static float applyRuleCurve( const t3druleConfig_t &rRule, const float fValue ) {
+static float applyRuleCurve( const t3dRuleConfig_t &rRule, const float fValue ) {
 	const float value = CLAMP( fValue, 0.0f, 1.0f );
 	if ( rRule.curve_lut.size() >= 2u ) {
 		const float fPosition = value * ( float ) ( rRule.curve_lut.size() - 1u );
@@ -256,8 +256,8 @@ static float applyRuleCurve( const t3druleConfig_t &rRule, const float fValue ) 
 	}
 }
 
-static t3druleConfig_t parseRule( const Dictionary &rDictionary, const int nOrder ) {
-	t3druleConfig_t rule;
+static t3dRuleConfig_t parseRule( const Dictionary &rDictionary, const int nOrder ) {
+	t3dRuleConfig_t rule;
 	rule.bEnabled = ( bool ) ( rDictionary.get( "enabled", true ) );
 	rule.priority = ( int ) ( rDictionary.get( "priority", 0 ) );
 	rule.order = nOrder;
@@ -313,9 +313,9 @@ static t3druleConfig_t parseRule( const Dictionary &rDictionary, const int nOrde
 	return rule;
 }
 
-static t3dmetricNeeds_t getMetricNeeds( const eastl::vector<t3druleConfig_t> &rRules ) {
-	t3dmetricNeeds_t needs;
-	for ( const t3druleConfig_t &rule : rRules ) {
+static t3dMetricNeeds_t getMetricNeeds( const eastl::vector<t3dRuleConfig_t> &rRules ) {
+	t3dMetricNeeds_t needs;
+	for ( const t3dRuleConfig_t &rule : rRules ) {
 		if ( !rule.bEnabled ) {
 			continue;
 		}
@@ -378,10 +378,10 @@ static void computeChamferDistance( float *pValues, const int nSize, const float
 }
 
 static bool buildMetrics(
-	T3DData *pData, const Vector2i &rLocation, const t3dmetricNeeds_t &rNeeds,
-	const t3dmetricBuildConfig_t &rConfig, const t3dmaskSource_t &rBiomeMask, const t3dmaskSource_t &rFlowMask,
-	const t3dmaskSource_t &rDepositionMask, const t3dmaskSource_t &rWaterMask, T3DLinearArena &rArena,
-	t3dregionMetrics_t &rMetrics
+	T3DData *pData, const Vector2i &rLocation, const t3dMetricNeeds_t &rNeeds,
+	const t3dMetricBuildConfig_t &rConfig, const t3dMaskSource_t &rBiomeMask, const t3dMaskSource_t &rFlowMask,
+	const t3dMaskSource_t &rDepositionMask, const t3dMaskSource_t &rWaterMask, T3DLinearArena &rArena,
+	t3dRegionMetrics_t &rMetrics
 ) {
 	const int size = pData->getRegionSizeInternal();
 	const size_t count = ( size_t ) ( size ) * ( size_t ) ( size );
@@ -517,7 +517,7 @@ static bool buildMetrics(
 				rMetrics.flow[index] = 1.0f;
 				rMetrics.flow_order[index] = ( int32_t ) ( index );
 			}
-			EA_FORCE_INLINE std::sort( rMetrics.flow_order.begin(), rMetrics.flow_order.end(), t3dflowOrderHeightGreater_t { rMetrics.height.data() } );
+			EA_FORCE_INLINE std::sort( rMetrics.flow_order.begin(), rMetrics.flow_order.end(), t3dFlowOrderHeightGreater_t { rMetrics.height.data() } );
 			float fMaximumFlow = 1.0f;
 			for ( size_t order_index = 0; order_index < count; ++order_index ) {
 				const int index = rMetrics.flow_order[order_index];
@@ -587,7 +587,7 @@ static bool buildMetrics(
 }
 
 static float evaluateRule(
-	const t3druleConfig_t &rRule, const t3dregionMetrics_t &rMetrics, const size_t iIndex,
+	const t3dRuleConfig_t &rRule, const t3dRegionMetrics_t &rMetrics, const size_t iIndex,
 	const uint32_t nControl, const bool bAllowManual
 ) {
 	if ( !rRule.bEnabled || ( !isAuto( nControl ) && !bAllowManual ) ) {
@@ -704,16 +704,16 @@ static TypedArray<Vector2i> normalizeLocations( T3DData *pData, const TypedArray
 	return result;
 }
 
-typedef struct t3dautoShaderRegionContext_s {
+typedef struct t3dAutoShaderRegionContext_s {
 	T3DData *data = nullptr;
-	eastl::vector<t3dregionWork_t> *pWork = nullptr;
-	const eastl::vector<t3druleConfig_t> *pRules = nullptr;
-	const t3dmetricNeeds_t *pNeeds = nullptr;
-	const t3dmetricBuildConfig_t *pMetricConfig = nullptr;
-	const t3dmaskSource_t *pBiomeMask = nullptr;
-	const t3dmaskSource_t *pFlowMask = nullptr;
-	const t3dmaskSource_t *pDepositionMask = nullptr;
-	const t3dmaskSource_t *pWaterMask = nullptr;
+	eastl::vector<t3dRegionWork_t> *pWork = nullptr;
+	const eastl::vector<t3dRuleConfig_t> *pRules = nullptr;
+	const t3dMetricNeeds_t *pNeeds = nullptr;
+	const t3dMetricBuildConfig_t *pMetricConfig = nullptr;
+	const t3dMaskSource_t *pBiomeMask = nullptr;
+	const t3dMaskSource_t *pFlowMask = nullptr;
+	const t3dMaskSource_t *pDepositionMask = nullptr;
+	const t3dMaskSource_t *pWaterMask = nullptr;
 	size_t pixel_count = 0u;
 	bool bOnlyAutoPixels = true;
 	bool bPreserveAutoMask = true;
@@ -721,17 +721,17 @@ typedef struct t3dautoShaderRegionContext_s {
 	uint8_t default_overlay = 0u;
 	uint8_t default_blend = 0u;
 	T3DLinearArena *pWorkerArenas = nullptr;
-} t3dautoShaderRegionContext_t;
+} t3dAutoShaderRegionContext_t;
 
 static void terrain3dBakeAutoshaderRegions( void *pContext, const size_t nBegin, const size_t nEnd, const int32_t nWorker ) {
-	t3dautoShaderRegionContext_t *context = ( t3dautoShaderRegionContext_t * ) ( pContext );
+	t3dAutoShaderRegionContext_t *context = ( t3dAutoShaderRegionContext_t * ) ( pContext );
 	for ( size_t work_index = nBegin; work_index < nEnd; ++work_index ) {
-		t3dregionWork_t &item = ( *context->pWork )[work_index];
+		t3dRegionWork_t &item = ( *context->pWork )[work_index];
 		if ( !item.available ) {
 			continue;
 		}
 		T3DLinearArena &arena = context->pWorkerArenas[MAX( nWorker, 0 )];
-		t3dregionMetrics_t metrics;
+		t3dRegionMetrics_t metrics;
 		if ( !buildMetrics( context->data, item.location, *context->pNeeds, *context->pMetricConfig,
 				*context->pBiomeMask, *context->pFlowMask, *context->pDepositionMask, *context->pWaterMask,
 				arena, metrics ) ) {
@@ -746,9 +746,9 @@ static void terrain3dBakeAutoshaderRegions( void *pContext, const size_t nBegin,
 			}
 			metrics.output_control[index] = control;
 			const bool bAutoPixel = isAuto( control );
-			const t3druleConfig_t *pMatchedRule = nullptr;
+			const t3dRuleConfig_t *pMatchedRule = nullptr;
 			float fMatchedScore = 0.0f;
-			for ( const t3druleConfig_t &rule : *context->pRules ) {
+			for ( const t3dRuleConfig_t &rule : *context->pRules ) {
 				const bool bAllowManual = ruleCanProcessPixel( bAutoPixel, context->bOnlyAutoPixels, rule.bOverwriteManual );
 				const float fScore = evaluateRule( rule, metrics, index, control, bAllowManual );
 				if ( fScore > 0.0f ) {
@@ -822,7 +822,7 @@ Dictionary T3DAutoShaderBaker::bakeRegions(
 		return result;
 	}
 	const Array rule_array = rules_value;
-	eastl::vector<t3druleConfig_t> rules;
+	eastl::vector<t3dRuleConfig_t> rules;
 	rules.reserve( ( size_t ) ( rule_array.size() ) );
 	for ( int index = 0; index < rule_array.size(); ++index ) {
 		if ( rule_array[index].get_type() == Variant::DICTIONARY ) {
@@ -830,7 +830,7 @@ Dictionary T3DAutoShaderBaker::bakeRegions(
 		}
 	}
 	std::stable_sort( rules.begin(), rules.end(), terrain3dRulePriorityGreater );
-	const t3dmetricNeeds_t needs = getMetricNeeds( rules );
+	const t3dMetricNeeds_t needs = getMetricNeeds( rules );
 	const bool only_auto_pixels = ( bool ) ( rProfile.get( "only_auto_pixels", true ) );
 	const bool preserve_auto_mask = ( bool ) ( rProfile.get( "preserve_auto_mask", true ) );
 	const uint8_t default_base = ( uint8_t ) ( CLAMP( ( int ) ( rProfile.get( "default_base_texture", 0 ) ), 0, 31 ) );
@@ -847,7 +847,7 @@ Dictionary T3DAutoShaderBaker::bakeRegions(
 		result["error"] = "The autoshader profile fallback references a missing terrain texture.";
 		return result;
 	}
-	for ( const t3druleConfig_t &rule : rules ) {
+	for ( const t3dRuleConfig_t &rule : rules ) {
 		if ( !rule.bEnabled ) {
 			continue;
 		}
@@ -858,11 +858,11 @@ Dictionary T3DAutoShaderBaker::bakeRegions(
 		}
 	}
 	const uint64_t profile_signature = ( uint64_t ) ( ( int64_t ) ( rProfile.get( "profile_signature", 0 ) ) );
-	const t3dmaskSource_t biome_mask = parseMask( rProfile, "biome_mask" );
-	const t3dmaskSource_t flow_mask = parseMask( rProfile, "flow_mask" );
-	const t3dmaskSource_t deposition_mask = parseMask( rProfile, "deposition_mask" );
-	const t3dmaskSource_t water_mask = parseMask( rProfile, "water_mask" );
-	const t3dmetricBuildConfig_t metric_config = parseMetricBuildConfig( rProfile );
+	const t3dMaskSource_t biome_mask = parseMask( rProfile, "biome_mask" );
+	const t3dMaskSource_t flow_mask = parseMask( rProfile, "flow_mask" );
+	const t3dMaskSource_t deposition_mask = parseMask( rProfile, "deposition_mask" );
+	const t3dMaskSource_t water_mask = parseMask( rProfile, "water_mask" );
+	const t3dMetricBuildConfig_t metric_config = parseMetricBuildConfig( rProfile );
 
 	eastl::vector<Vector2i> changed_locations;
 	changed_locations.reserve( ( size_t ) ( locations.size() ) );
@@ -874,9 +874,9 @@ Dictionary T3DAutoShaderBaker::bakeRegions(
 
 	const int size = data->getRegionSizeInternal();
 	const size_t count = ( size_t ) ( size ) * ( size_t ) ( size );
-	eastl::vector<t3dregionWork_t> work( ( size_t ) ( locations.size() ) );
+	eastl::vector<t3dRegionWork_t> work( ( size_t ) ( locations.size() ) );
 	for ( int location_index = 0; location_index < locations.size(); ++location_index ) {
-		t3dregionWork_t &item = work[( size_t ) ( location_index )];
+		t3dRegionWork_t &item = work[( size_t ) ( location_index )];
 		item.location = locations[location_index];
 		if ( !data->ensureCpuRegionResident( item.location ) ) {
 			continue;
@@ -897,7 +897,7 @@ Dictionary T3DAutoShaderBaker::bakeRegions(
 	const size_t worker_count = MAX<size_t>( 1u, MIN<size_t>( ( size_t ) hardware_threads, work.size() ) );
 	const T3DParallelExecutor executor( ( int32_t ) worker_count );
 	std::unique_ptr<T3DLinearArena[]> worker_arenas( new T3DLinearArena[worker_count] );
-	t3dautoShaderRegionContext_t bake_context;
+	t3dAutoShaderRegionContext_t bake_context;
 	bake_context.data = data;
 	bake_context.pWork = &work;
 	bake_context.pRules = &rules;
@@ -919,7 +919,7 @@ Dictionary T3DAutoShaderBaker::bakeRegions(
 	// Validate the complete batch before mutating region resources. Editor callers
 	// can therefore treat ok=false as "nothing was retained" without rebuilding a
 	// second rollback path around partial native commits.
-	for ( t3dregionWork_t &item : work ) {
+	for ( t3dRegionWork_t &item : work ) {
 		if ( !data->ensureCpuRegionResident( item.location ) ) {
 			errors.push_back( "Could not page CPU terrain maps for region " + String( item.location ) + "." );
 			continue;
@@ -944,7 +944,7 @@ Dictionary T3DAutoShaderBaker::bakeRegions(
 		return result;
 	}
 
-	for ( t3dregionWork_t &item : work ) {
+	for ( t3dRegionWork_t &item : work ) {
 		T3DRegion *const pRegion = data->getRegionPtr( item.location );
 		if ( !pRegion || pRegion->isDeleted() ) {
 			continue;
@@ -1018,7 +1018,7 @@ Dictionary T3DAutoShaderBaker::clearBakedRegions(
 	}
 	T3DData *const pData = pTerrain->getData();
 	const TypedArray<Vector2i> locations = normalizeLocations( pData, rRegionLocations );
-	eastl::vector<t3dclearRegionWork_t> work;
+	eastl::vector<t3dClearRegionWork_t> work;
 	work.reserve( ( size_t ) ( locations.size() ) );
 	PackedStringArray errors;
 	for ( int location_index = 0; location_index < locations.size(); ++location_index ) {
@@ -1044,7 +1044,7 @@ Dictionary T3DAutoShaderBaker::clearBakedRegions(
 			continue;
 		}
 		uint8_t *const pWrite = bytes.ptrw();
-		t3dclearRegionWork_t item;
+		t3dClearRegionWork_t item;
 		item.location = location;
 		for ( size_t index = 0; index < count; ++index ) {
 			uint32_t control = 0u;
@@ -1073,7 +1073,7 @@ Dictionary T3DAutoShaderBaker::clearBakedRegions(
 	eastl::vector<Vector2i> changed_locations;
 	changed_locations.reserve( work.size() );
 	int64_t changed_pixels = 0;
-	for ( t3dclearRegionWork_t &item : work ) {
+	for ( t3dClearRegionWork_t &item : work ) {
 		T3DRegion *const pRegion = pData->getRegionPtr( item.location );
 		if ( !pRegion || pRegion->isDeleted() ) {
 			continue;

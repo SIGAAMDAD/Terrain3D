@@ -50,77 +50,77 @@ class T3DTerrain : public Node3D {
 	CLASS_NAME();
 
 public: // Constants
-	typedef enum t3ddebugLevel_e {
+	typedef enum t3dDebugLevel_e {
 		MESG = -2,	 // Always print except in release builds
 		WARN = -1,	 // Always print except in release builds
 		ERROR = 0,	 // Always print except in release builds
 		INFO = 1,	 // Print every function call and important entries
 		DEBUG = 2,	 // Print details within functions
 		EXTREME = 3, // Continuous operations like snapping
-	} t3ddebugLevel_t;
+	} t3dDebugLevel_t;
 
-	typedef enum t3dperformanceTarget_e {
+	typedef enum t3dPerformanceTarget_e {
 		PERFORMANCE_TARGET_CUSTOM,
 		PERFORMANCE_TARGET_XBOX360_EXPERIMENTAL,
-	} t3dperformanceTarget_t;
+	} t3dPerformanceTarget_t;
 
-	typedef enum t3dperformanceProfileStatus_e {
+	typedef enum t3dPerformanceProfileStatus_e {
 		PERFORMANCE_PROFILE_CUSTOM,
 		PERFORMANCE_PROFILE_EXACT,
 		PERFORMANCE_PROFILE_MODIFIED,
-	} t3dperformanceProfileStatus_t;
+	} t3dPerformanceProfileStatus_t;
 
-	typedef enum t3deditorExecutionMode_e {
+	typedef enum t3dEditorExecutionMode_e {
 		EDITOR_EXECUTION_AUTHORING = TERRAIN3D_EDITOR_EXECUTION_AUTHORING,
 		EDITOR_EXECUTION_RUNTIME_PROFILE = TERRAIN3D_EDITOR_EXECUTION_RUNTIME_PROFILE,
-	} t3deditorExecutionMode_t;
+	} t3dEditorExecutionMode_t;
 
 
-	typedef enum t3denvironmentShadowQuality_e {
+	typedef enum t3dEnvironmentShadowQuality_e {
 		ENVIRONMENT_SHADOW_LOW,
 		ENVIRONMENT_SHADOW_NORMAL,
 		ENVIRONMENT_SHADOW_HIGH,
 		ENVIRONMENT_SHADOW_ULTRA,
-	} t3denvironmentShadowQuality_t;
+	} t3dEnvironmentShadowQuality_t;
 
-	typedef enum t3dregionSize_e {
+	typedef enum t3dRegionSize_e {
 		SIZE_64 = 64,
 		SIZE_128 = 128,
 		SIZE_256 = 256,
 		SIZE_512 = 512,
 		SIZE_1024 = 1024,
 		SIZE_2048 = 2048,
-	} t3dregionSize_t;
+	} t3dRegionSize_t;
 
-	typedef enum t3doceanPerformancePreset_e {
+	typedef enum t3dOceanPerformancePreset_e {
 		OCEAN_PRESET_CUSTOM,
 		OCEAN_PRESET_BORDER_MINIMUM,
 		OCEAN_PRESET_BORDER_BALANCED,
 		OCEAN_PRESET_HIGH,
 		OCEAN_PRESET_CINEMATIC,
-	} t3doceanPerformancePreset_t;
-	typedef enum t3doceanRefractionMode_e {
+	} t3dOceanPerformancePreset_t;
+	typedef enum t3dOceanRefractionMode_e {
 		OCEAN_REFRACTION_OFF,
 		OCEAN_REFRACTION_DEPTH_TINT,
 		OCEAN_REFRACTION_FULL
-	} t3doceanRefractionMode_t;
-	typedef enum t3doceanFoamMode_e {
+	} t3dOceanRefractionMode_t;
+	typedef enum t3dOceanFoamMode_e {
 		OCEAN_FOAM_OFF,
 		OCEAN_FOAM_SHORE,
 		OCEAN_FOAM_FULL
-	} t3doceanFoamMode_t;
-	typedef enum t3doceanScatteringMode_e {
+	} t3dOceanFoamMode_t;
+	typedef enum t3dOceanScatteringMode_e {
 		OCEAN_SCATTERING_OFF,
 		OCEAN_SCATTERING_APPROXIMATE,
 		OCEAN_SCATTERING_FULL
-	} t3doceanScatteringMode_t;
-	typedef enum t3doceanShadingMode_e {
+	} t3dOceanScatteringMode_t;
+	typedef enum t3dOceanShadingMode_e {
 		OCEAN_SHADING_LAMBERT_DIFFUSE,
 		OCEAN_SHADING_LAMBERT_GGX,
 		OCEAN_SHADING_BURLEY_GGX,
 		OCEAN_SHADING_UNSHADED,
 		OCEAN_SHADING_LAMBERT_VERTEX
-	} t3doceanShadingMode_t;
+	} t3dOceanShadingMode_t;
 
 private:
 	String m_version = "1.1.0-dev";
@@ -132,8 +132,8 @@ private:
 	// destruction drains all zone-backed allocations before the arena is released.
 	T3DMemoryArena m_runtimeMemoryArena;
 	T3DMemoryZone m_runtimeMemoryZone;
-	t3dmemoryArenaSlice_t m_runtimeActiveHeightSlice;
-	t3dmemoryArenaSlice_t m_runtimeZoneSlice;
+	t3dMemoryArenaSlice_t m_runtimeActiveHeightSlice;
+	t3dMemoryArenaSlice_t m_runtimeZoneSlice;
 	bool m_bRuntimeMemoryReady = false;
 
 	// Object references
@@ -149,15 +149,15 @@ private:
 	Object *m_pEditorPlugin = nullptr;
 
 	// Regions
-	t3dregionSize_t m_nRegionSize = SIZE_128;
+	t3dRegionSize_t m_nRegionSize = SIZE_128;
 	bool m_bSave16Bit = false;
-	t3dperformanceTarget_t m_performanceTarget = PERFORMANCE_TARGET_CUSTOM;
-	t3dperformanceProfileStatus_t m_performanceProfileStatus = PERFORMANCE_PROFILE_CUSTOM;
+	t3dPerformanceTarget_t m_performanceTarget = PERFORMANCE_TARGET_CUSTOM;
+	t3dPerformanceProfileStatus_t m_performanceProfileStatus = PERFORMANCE_PROFILE_CUSTOM;
 	bool m_bApplyingPerformanceTarget = false;
 	bool m_bPerformanceProfileMaterialPendingApply = false;
 	// Runtime settings remain stored in every mode. Authoring changes only the
 	// effective editor residency policy; profiling uses the exact runtime path.
-	t3deditorExecutionMode_t m_editorExecutionMode = EDITOR_EXECUTION_AUTHORING;
+	t3dEditorExecutionMode_t m_editorExecutionMode = EDITOR_EXECUTION_AUTHORING;
 	// Editor-only node preview keeps terrain authoring residency intact while
 	// exercising the shipping dynamic-node streamer around the editor camera.
 	bool m_bEditorNodeStreamingPreview = false;
@@ -166,7 +166,7 @@ private:
 
 	// Unified logical region-streaming policy. Every subsystem consumes this map;
 	// no renderer/object cache is allowed to invent a separate world footprint.
-	t3dregionStreamingConfig_t m_regionStreamingConfig{};
+	t3dRegionStreamingConfig_t m_regionStreamingConfig{};
 	uint8_t m_szRegionStreamingStates[TERRAIN3D_MAX_REGION_SLOTS] = {};
 	uint8_t m_szRegionStreamingPrefetch[TERRAIN3D_MAX_REGION_SLOTS] = {};
 	Vector2i m_regionStreamingCenter = V2I_MAX;
@@ -181,9 +181,9 @@ private:
 	int m_nRegionStreamingPrefetchCount = 0;
 	uint64_t m_nRegionStreamingGeneration = 0u;
 	bool m_bRegionStreamingDirty = true;
-	t3druntimeProfileAccumulator_t m_runtimeProfileAccumulator;
-	t3druntimeProfileHistory_t *m_pRuntimeProfileHistory = nullptr;
-	t3druntimeProfileSample_t m_runtimeProfileLastSample;
+	t3dRuntimeProfileAccumulator_t m_runtimeProfileAccumulator;
+	t3dRuntimeProfileHistory_t *m_pRuntimeProfileHistory = nullptr;
+	t3dRuntimeProfileSample_t m_runtimeProfileLastSample;
 	uint64_t m_nRuntimeProfileSampleCount = 0u;
 	uint64_t m_nRuntimeProfileShaderUpdatesSeen = 0u;
 	uint64_t m_runtimeProfileShaderCreationsSeen = 0u;
@@ -200,7 +200,7 @@ private:
 	int m_nRuntimeAdaptiveMinNodeUnloadRegions = 1;
 	uint64_t m_nRuntimeAdaptiveLastMeasuredUsec = 0u;
 	uint64_t m_nRuntimeAdaptiveControllerUsecLast = 0u;
-	t3dadaptiveBudgetState_t m_nRuntimeAdaptiveBudgetState;
+	t3dAdaptiveBudgetState_t m_nRuntimeAdaptiveBudgetState;
 	bool m_bRuntimeBoundaryWorkPhasingEnabled = true;
 	int m_nRuntimeBoundaryNodeDelayFrames = 1;
 	int m_nRuntimeBoundaryInstancerDelayFrames = 2;
@@ -299,7 +299,7 @@ private:
 	uint64_t m_nMemoryBudgetPolicyFrame = 0u;
 	uint64_t m_nMemoryBudgetPolicyGeneration = 0u;
 	mutable uint64_t m_nTrackedMemoryPeakBytes = 0u;
-	t3dmemoryBudgetResult_t m_nMemoryBudgetResult;
+	t3dMemoryBudgetResult_t m_nMemoryBudgetResult;
 	mutable uint64_t m_nDiagnosticsCollectionUsecLast = 0u;
 	mutable uint64_t m_nDiagnosticsCollectionUsecTotal = 0u;
 	mutable uint64_t m_nDiagnosticsCollectionUsecPeak = 0u;
@@ -321,7 +321,7 @@ private:
 	Vector3 m_lastLightDirection = V3_ZERO;
 	bool m_bLightStateValid = false;
 	bool m_bSemanticShadowPolicyEnabled = false;
-	t3denvironmentShadowQuality_t m_environmentShadowQuality = ENVIRONMENT_SHADOW_NORMAL;
+	t3dEnvironmentShadowQuality_t m_environmentShadowQuality = ENVIRONMENT_SHADOW_NORMAL;
 	uint32_t m_nEnvironmentShadowExternalMask = 1u;
 	uint32_t m_nLightShadowCasterMaskBeforeSemantic = 0xFFFFFu;
 	bool m_bLightShadowMaskCaptured = false;
@@ -367,7 +367,7 @@ private:
 	std::atomic_bool m_bComputeDisplacementTearingDown{false};
 	real_t m_fDisplacementUpdateDistance = 0.25f;
 	std::mutex m_computeDisplacementMutex;
-	T3DCompute::t3ddisplacementRequest_t m_computeDisplacementRequest;
+	T3DCompute::t3dDisplacementRequest_t m_computeDisplacementRequest;
 	uint64_t m_computeDisplacementRequestVersion = 0u;
 
 	// Ocean Mesh
@@ -384,13 +384,13 @@ private:
 	Ref<Material> m_pOceanMaterial;
 	Ref<Shader> m_pOceanVariantShader;
 	String m_oceanVariantSource;
-	t3doceanPerformancePreset_t m_oceanPerformancePreset = OCEAN_PRESET_BORDER_BALANCED;
+	t3dOceanPerformancePreset_t m_oceanPerformancePreset = OCEAN_PRESET_BORDER_BALANCED;
 	int m_nOceanVertexWaveIterations = 1;
 	int m_nOceanFragmentWaveIterations = 1;
-	t3doceanRefractionMode_t m_oceanRefractionMode = OCEAN_REFRACTION_DEPTH_TINT;
-	t3doceanFoamMode_t m_oceanFoamMode = OCEAN_FOAM_SHORE;
-	t3doceanScatteringMode_t m_oceanScatteringMode = OCEAN_SCATTERING_APPROXIMATE;
-	t3doceanShadingMode_t m_oceanShadingMode = OCEAN_SHADING_LAMBERT_GGX;
+	t3dOceanRefractionMode_t m_oceanRefractionMode = OCEAN_REFRACTION_DEPTH_TINT;
+	t3dOceanFoamMode_t m_oceanFoamMode = OCEAN_FOAM_SHORE;
+	t3dOceanScatteringMode_t m_oceanScatteringMode = OCEAN_SCATTERING_APPROXIMATE;
+	t3dOceanShadingMode_t m_oceanShadingMode = OCEAN_SHADING_LAMBERT_GGX;
 
 	// Rendering
 	bool m_bFreeEditorTextures = true;
@@ -417,26 +417,26 @@ private:
 	void validateRegionStreamingConfiguration( bool bReport = true ) const;
 	void markMemoryBudgetDirty( void );
 	void serviceMemoryBudgetPolicy( bool bForce );
-	t3dmemoryBudgetInput_t buildMemoryBudgetInput( void ) const;
+	t3dMemoryBudgetInput_t buildMemoryBudgetInput( void ) const;
 	uint64_t calculateFixedMemoryBytes( void ) const;
 	uint64_t calculateTransientMemoryBytes( void ) const;
 	size_t calculateRuntimeAllocatorZoneBytes( void ) const;
-	void applyMemoryBudgetResult( const t3dmemoryBudgetResult_t &rResult, bool bForce );
-	static const char *memoryLimitReasonName( t3dmemoryLimitReason_t reason );
-	void sampleRuntimeProfile( const t3druntimeProfileSample_t &rSample );
-	void updateCacheThrashEvents( const t3druntimeProfileSample_t &rSample );
+	void applyMemoryBudgetResult( const t3dMemoryBudgetResult_t &rResult, bool bForce );
+	static const char *memoryLimitReasonName( t3dMemoryLimitReason_t reason );
+	void sampleRuntimeProfile( const t3dRuntimeProfileSample_t &rSample );
+	void updateCacheThrashEvents( const t3dRuntimeProfileSample_t &rSample );
 	Dictionary getRuntimeMemoryStatsFast( void ) const;
 	Array getShaderTierStatsDictionaries( void ) const;
 	Array getCacheInventory( bool bDeep ) const;
 	Dictionary getCpuProfileStats( void ) const;
 	Dictionary getGpuInformationStats( void ) const;
-	Dictionary runtimeProfileSampleToDictionary( const t3druntimeProfileSample_t &rSample ) const;
+	Dictionary runtimeProfileSampleToDictionary( const t3dRuntimeProfileSample_t &rSample ) const;
 	Array getRuntimeProfileEventNames( uint32_t nFlags ) const;
 	Array getRuntimeProfileStallNames( uint32_t nFlags ) const;
 	Array getRuntimeProfileProblems( void ) const;
 	Dictionary getRuntimeProfileAggregate( void ) const;
-	t3dadaptiveBudgetLimits_t getRuntimeAdaptiveBudgetLimits( void ) const;
-	t3dadaptiveBudgetPressure_t getRuntimeAdaptiveBudgetPressure( void ) const;
+	t3dAdaptiveBudgetLimits_t getRuntimeAdaptiveBudgetLimits( void ) const;
+	t3dAdaptiveBudgetPressure_t getRuntimeAdaptiveBudgetPressure( void ) const;
 	void updateRuntimeAdaptiveWorkBudgets( void );
 	void applyRuntimeAdaptiveWorkBudgets( void );
 	void resetRuntimeAdaptiveWorkBudgets( bool bClearOverrides );
@@ -494,7 +494,7 @@ private:
 	void destroyLightmapStreamer( void );
 	void destroyHlodStreamer( void );
 
-	typedef struct t3dtriangleBuffer_s {
+	typedef struct t3dTriangleBuffer_s {
 		eastl::vector<Vector3> ownedVertices;
 		eastl::vector<Vector2> ownedUvs;
 		Vector3 *pExternalVertices = nullptr;
@@ -547,75 +547,75 @@ private:
 		EA_FORCE_INLINE const Vector3 *vertexData( void ) const { return pExternalVertices ? pExternalVertices : ownedVertices.data(); }
 
 		EA_FORCE_INLINE const Vector2 *uvData( void ) const { return pExternalVertices ? pExternalUvs : ownedUvs.data(); }
-	} t3dtriangleBuffer_t;
+	} t3dTriangleBuffer_t;
 
-	typedef struct t3dbakeRowTask_s {
+	typedef struct t3dBakeRowTask_s {
 		int32_t xStart = 0;
 		int32_t xEnd = 0;
 		int32_t zStart = 0;
 		int32_t zEnd = 0;
 		size_t iOutputOffset = 0u;
 		size_t nOutputCapacity = 0u;
-	} t3dbakeRowTask_t;
+	} t3dBakeRowTask_t;
 
-	typedef struct t3dbakeRegionSnapshot_s {
+	typedef struct t3dBakeRegionSnapshot_s {
 		Vector2i location;
 		PackedByteArray heightData;
 		PackedByteArray controlData;
 		const uint8_t *pHeightBytes = nullptr;
 		const uint8_t *pControlBytes = nullptr;
-	} t3dbakeRegionSnapshot_t;
+	} t3dBakeRegionSnapshot_t;
 
-	typedef struct t3dbakeSnapshot_s {
+	typedef struct t3dBakeSnapshot_s {
 		int32_t nRegionSize = 0;
 		real_t fVertexSpacing = 1.f;
 		int32_t szRegionLookup[TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE * TERRAIN3D_ACTIVE_MAX_REGION_MAP_SIZE] = {};
-		eastl::vector<t3dbakeRegionSnapshot_t> regions;
+		eastl::vector<t3dBakeRegionSnapshot_t> regions;
 
-		const t3dbakeRegionSnapshot_t *getRegion( const int32_t iX, const int32_t iZ ) const;
+		const t3dBakeRegionSnapshot_t *getRegion( const int32_t iX, const int32_t iZ ) const;
 		void getSample( const int32_t iX, const int32_t iZ, uint32_t &nControl, real_t &fHeight ) const;
 		bool getMinimumRect( int32_t iX, int32_t iZ, int32_t nWidth, int32_t nHeight, real_t &fHeight ) const;
 		Vector3 getMeshVertex(
-			const int32_t nLod, const T3DData::t3dheightFilter_t filter, const int32_t iX,
+			const int32_t nLod, const T3DData::t3dHeightFilter_t filter, const int32_t iX,
 			const int32_t iZ, uint32_t &nControl
 		) const;
-	} t3dbakeSnapshot_t;
+	} t3dBakeSnapshot_t;
 
-	typedef struct t3dbakeTaskContext_s {
+	typedef struct t3dBakeTaskContext_s {
 		const T3DTerrain *pTerrain = nullptr;
-		const t3dbakeSnapshot_t *pSnapshot = nullptr;
-		const eastl::vector<t3dbakeRowTask_t> *pTasks = nullptr;
-		eastl::vector<t3dtriangleBuffer_t> *pBuffers = nullptr;
+		const t3dBakeSnapshot_t *pSnapshot = nullptr;
+		const eastl::vector<t3dBakeRowTask_t> *pTasks = nullptr;
+		eastl::vector<t3dTriangleBuffer_t> *pBuffers = nullptr;
 		int32_t step = 1;
 		int32_t lod = 0;
-		T3DData::t3dheightFilter_t filter = T3DData::HEIGHT_FILTER_NEAREST;
+		T3DData::t3dHeightFilter_t filter = T3DData::HEIGHT_FILTER_NEAREST;
 		bool bGenerateUvs = false;
 		bool bRequireNav = false;
-	} t3dbakeTaskContext_t;
+	} t3dBakeTaskContext_t;
 
-	static bool bakeRegionSnapshotLess( const t3dbakeRegionSnapshot_t &rA, const t3dbakeRegionSnapshot_t &rB );
+	static bool bakeRegionSnapshotLess( const t3dBakeRegionSnapshot_t &rA, const t3dBakeRegionSnapshot_t &rB );
 	static void runBakeTaskRange( void *pContext, size_t nBegin, size_t nEnd );
 	Vector3 getTriangleVertex(
-		const t3dbakeSnapshot_t *pSnapshot, int32_t nLod, T3DData::t3dheightFilter_t filter,
+		const t3dBakeSnapshot_t *pSnapshot, int32_t nLod, T3DData::t3dHeightFilter_t filter,
 		int32_t iX, int32_t iZ, const Vector3 &rPosition, uint32_t &nControl
 	) const;
 
-	t3dbakeSnapshot_t createBakeSnapshot( void ) const;
+	t3dBakeSnapshot_t createBakeSnapshot( void ) const;
 	void generateTriangles(
 		PackedVector3Array &arrVertices, PackedVector2Array *pUvs, const int32_t nLod,
-		const T3DData::t3dheightFilter_t filter, const bool require_nav,
+		const T3DData::t3dHeightFilter_t filter, const bool require_nav,
 		const AABB &rGlobalAabb
 	) const;
 	void generateTrianglePair(
-		t3dtriangleBuffer_t &rBuffer, const bool bGenerateUvs, const int32_t nLod,
-		const T3DData::t3dheightFilter_t filter, const bool require_nav, const int32_t x,
-		const int32_t z, const t3dbakeSnapshot_t *pSnapshot = nullptr
+		t3dTriangleBuffer_t &rBuffer, const bool bGenerateUvs, const int32_t nLod,
+		const T3DData::t3dHeightFilter_t filter, const bool require_nav, const int32_t x,
+		const int32_t z, const t3dBakeSnapshot_t *pSnapshot = nullptr
 	) const;
 
 public:
 	static constexpr int64_t NATIVE_API_REVISION = 2026081802LL;
 	static constexpr const char *NATIVE_BUILD_ID = "a2.8.6-memory-zone";
-	static t3ddebugLevel_t s_debugLevel; // Initialized in terrain_3d.cpp
+	static t3dDebugLevel_t s_debugLevel; // Initialized in terrain_3d.cpp
 
 	T3DTerrain( void );
 	~T3DTerrain( void );
@@ -626,8 +626,8 @@ public:
 	EA_FORCE_INLINE String getVersion( void ) const { return m_version; }
 	EA_FORCE_INLINE int64_t getNativeApiRevision( void ) const { return NATIVE_API_REVISION; }
 	EA_FORCE_INLINE String getNativeBuildId( void ) const { return String( NATIVE_BUILD_ID ); }
-	void setDebugLevel( const t3ddebugLevel_t level );
-	EA_FORCE_INLINE t3ddebugLevel_t getDebugLevel( void ) const { return s_debugLevel; }
+	void setDebugLevel( const t3dDebugLevel_t level );
+	EA_FORCE_INLINE t3dDebugLevel_t getDebugLevel( void ) const { return s_debugLevel; }
 	void setDataDirectory( String dir );
 	EA_FORCE_INLINE String getDataDirectory( void ) const { return m_pData ? m_dataDirectory : ""; }
 	bool cookRuntimeClipmapGeometryPack( void ) const;
@@ -649,9 +649,9 @@ public:
 	EA_FORCE_INLINE Object *getPlugin( void ) const { return m_pEditorPlugin; }
 
 	// Regions
-	void setRegionSize( const t3dregionSize_t size );
-	EA_FORCE_INLINE t3dregionSize_t getRegionSize( void ) const { return m_nRegionSize; }
-	void changeRegionSize( const t3dregionSize_t size ) {
+	void setRegionSize( const t3dRegionSize_t size );
+	EA_FORCE_INLINE t3dRegionSize_t getRegionSize( void ) const { return m_nRegionSize; }
+	void changeRegionSize( const t3dRegionSize_t size ) {
 		if ( m_pData && m_pData->isInitializedFor( this ) ) {
 			m_pData->changeRegionSize( size );
 		} else {
@@ -664,17 +664,17 @@ public:
 	}
 	void setSave16Bit( const bool bEnabled );
 	EA_FORCE_INLINE bool getSave16Bit( void ) const { return m_bSave16Bit; }
-	void setPerformanceTarget( const t3dperformanceTarget_t target );
-	EA_FORCE_INLINE t3dperformanceTarget_t getPerformanceTarget( void ) const { return m_performanceTarget; }
-	EA_FORCE_INLINE t3dperformanceProfileStatus_t getPerformanceProfileStatus( void ) const { return m_performanceProfileStatus; }
+	void setPerformanceTarget( const t3dPerformanceTarget_t target );
+	EA_FORCE_INLINE t3dPerformanceTarget_t getPerformanceTarget( void ) const { return m_performanceTarget; }
+	EA_FORCE_INLINE t3dPerformanceProfileStatus_t getPerformanceProfileStatus( void ) const { return m_performanceProfileStatus; }
 	String getPerformanceProfileStatusName( void ) const;
 	int getPerformanceProfileVersion( void ) const;
 	String getPerformanceProfileSignature( void ) const;
 	Dictionary getPerformanceProfileManifest( void ) const;
 	Array getPerformanceProfileDiff( void ) const;
 	void resetPerformanceProfile( void );
-	void setEditorExecutionMode( t3deditorExecutionMode_t mode );
-	EA_FORCE_INLINE t3deditorExecutionMode_t getEditorExecutionMode( void ) const { return m_editorExecutionMode; }
+	void setEditorExecutionMode( t3dEditorExecutionMode_t mode );
+	EA_FORCE_INLINE t3dEditorExecutionMode_t getEditorExecutionMode( void ) const { return m_editorExecutionMode; }
 	void setEditorRuntimeStreamingPreview( bool bEnabled );
 	EA_FORCE_INLINE bool isEditorRuntimeStreamingPreview( void ) const { return m_editorExecutionMode == EDITOR_EXECUTION_RUNTIME_PROFILE; }
 	void setEditorNodeStreamingPreview( bool bEnabled );
@@ -701,7 +701,7 @@ public:
 	EA_FORCE_INLINE real_t getStreamingPredictionLookahead( void ) const { return ( real_t ) ( m_regionStreamingConfig.fPredictionLookaheadSeconds ); }
 	void setStreamingPredictionMaximumRegions( int nRegions );
 	EA_FORCE_INLINE int getStreamingPredictionMaximumRegions( void ) const { return m_regionStreamingConfig.predictionMaximumRegions; }
-	t3dregionStreamingState_t getRegionStreamingStateInternal( const Vector2i &vLocation ) const;
+	t3dRegionStreamingState_t getRegionStreamingStateInternal( const Vector2i &vLocation ) const;
 	bool isRegionStreamingPrefetchInternal( const Vector2i &vLocation ) const;
 	EA_FORCE_INLINE const uint8_t *getRegionStreamingStatesInternal( void ) const { return m_szRegionStreamingStates; }
 	EA_FORCE_INLINE const uint8_t *getRegionStreamingPrefetchInternal( void ) const { return m_szRegionStreamingPrefetch; }
@@ -972,8 +972,8 @@ public:
 	void setLightTarget( Node3D *pNode );
 	void setSemanticShadowPolicyEnabled( bool bEnabled );
 	EA_FORCE_INLINE bool isSemanticShadowPolicyEnabled( void ) const { return m_bSemanticShadowPolicyEnabled; }
-	void setEnvironmentShadowQuality( t3denvironmentShadowQuality_t eQuality );
-	EA_FORCE_INLINE t3denvironmentShadowQuality_t getEnvironmentShadowQuality( void ) const { return m_environmentShadowQuality; }
+	void setEnvironmentShadowQuality( t3dEnvironmentShadowQuality_t eQuality );
+	EA_FORCE_INLINE t3dEnvironmentShadowQuality_t getEnvironmentShadowQuality( void ) const { return m_environmentShadowQuality; }
 	void setEnvironmentShadowExternalMask( uint32_t nMask );
 	EA_FORCE_INLINE uint32_t getEnvironmentShadowExternalMask( void ) const { return m_nEnvironmentShadowExternalMask; }
 	void setSemanticDirectionalReceptionEnabled( bool bEnabled );
@@ -984,8 +984,8 @@ public:
 	void snap( void );
 
 	// Collision Aliases
-	EA_FORCE_INLINE void setCollisionMode( const t3dcollisionMode_t mode ) { m_pCollision ? m_pCollision->setMode( mode ) : ( void ) 0; }
-	EA_FORCE_INLINE t3dcollisionMode_t getCollisionMode( void ) const { return m_pCollision ? m_pCollision->getMode() : t3dcollisionMode_t::DYNAMIC_GAME; }
+	EA_FORCE_INLINE void setCollisionMode( const t3dCollisionMode_t mode ) { m_pCollision ? m_pCollision->setMode( mode ) : ( void ) 0; }
+	EA_FORCE_INLINE t3dCollisionMode_t getCollisionMode( void ) const { return m_pCollision ? m_pCollision->getMode() : t3dCollisionMode_t::DYNAMIC_GAME; }
 	EA_FORCE_INLINE void setCollisionShapeSize( const uint16_t nSize ) { m_pCollision ? m_pCollision->setShapeSize( nSize ) : ( void ) 0; }
 	EA_FORCE_INLINE uint16_t getCollisionShapeSize( void ) const { return m_pCollision ? m_pCollision->getShapeSize() : 16; }
 	EA_FORCE_INLINE void setCollisionRadius( const uint16_t nRadius ) { m_pCollision ? m_pCollision->setRadius( nRadius ) : ( void ) 0; }
@@ -1081,20 +1081,20 @@ public:
 	EA_FORCE_INLINE GeometryInstance3D::GIMode getOceanGiMode( void ) const { return m_oceanGiMode; }
 	void setOceanRenderLayers( const uint32_t nLayers );
 	EA_FORCE_INLINE uint32_t getOceanRenderLayers( void ) const { return m_oceanRenderLayers; }
-	void setOceanPerformancePreset( const t3doceanPerformancePreset_t preset );
-	EA_FORCE_INLINE t3doceanPerformancePreset_t getOceanPerformancePreset( void ) const { return m_oceanPerformancePreset; }
+	void setOceanPerformancePreset( const t3dOceanPerformancePreset_t preset );
+	EA_FORCE_INLINE t3dOceanPerformancePreset_t getOceanPerformancePreset( void ) const { return m_oceanPerformancePreset; }
 	void setOceanVertexWaveIterations( const int nIterations );
 	EA_FORCE_INLINE int getOceanVertexWaveIterations( void ) const { return m_nOceanVertexWaveIterations; }
 	void setOceanFragmentWaveIterations( const int nIterations );
 	EA_FORCE_INLINE int getOceanFragmentWaveIterations( void ) const { return m_nOceanFragmentWaveIterations; }
-	void setOceanRefractionMode( const t3doceanRefractionMode_t mode );
-	EA_FORCE_INLINE t3doceanRefractionMode_t getOceanRefractionMode( void ) const { return m_oceanRefractionMode; }
-	void setOceanFoamMode( const t3doceanFoamMode_t mode );
-	EA_FORCE_INLINE t3doceanFoamMode_t getOceanFoamMode( void ) const { return m_oceanFoamMode; }
-	void setOceanScatteringMode( const t3doceanScatteringMode_t mode );
-	EA_FORCE_INLINE t3doceanScatteringMode_t getOceanScatteringMode( void ) const { return m_oceanScatteringMode; }
-	void setOceanShadingMode( const t3doceanShadingMode_t mode );
-	EA_FORCE_INLINE t3doceanShadingMode_t getOceanShadingMode( void ) const { return m_oceanShadingMode; }
+	void setOceanRefractionMode( const t3dOceanRefractionMode_t mode );
+	EA_FORCE_INLINE t3dOceanRefractionMode_t getOceanRefractionMode( void ) const { return m_oceanRefractionMode; }
+	void setOceanFoamMode( const t3dOceanFoamMode_t mode );
+	EA_FORCE_INLINE t3dOceanFoamMode_t getOceanFoamMode( void ) const { return m_oceanFoamMode; }
+	void setOceanScatteringMode( const t3dOceanScatteringMode_t mode );
+	EA_FORCE_INLINE t3dOceanScatteringMode_t getOceanScatteringMode( void ) const { return m_oceanScatteringMode; }
+	void setOceanShadingMode( const t3dOceanShadingMode_t mode );
+	EA_FORCE_INLINE t3dOceanShadingMode_t getOceanShadingMode( void ) const { return m_oceanShadingMode; }
 	void setOceanMaterial( const Ref<Material> &rMaterial );
 	EA_FORCE_INLINE Ref<Material> getOceanMaterial( void ) const { return m_pOceanMaterial; }
 
@@ -1103,8 +1103,8 @@ public:
 	EA_FORCE_INLINE uint32_t getMouseLayer( void ) const { return m_mouseLayer; }
 	EA_FORCE_INLINE void setFreeEditorTextures( const bool bFreeTextures ) { m_bFreeEditorTextures = bFreeTextures; }
 	EA_FORCE_INLINE bool getFreeEditorTextures( void ) const { return m_bFreeEditorTextures; }
-	EA_FORCE_INLINE void setInstancerMode( const t3dinstancerMode_t mode ) { m_pInstancer ? m_pInstancer->setMode( mode ) : ( void ) 0; }
-	EA_FORCE_INLINE t3dinstancerMode_t getInstancerMode( void ) const { return m_pInstancer ? m_pInstancer->getMode() : t3dinstancerMode_t::NORMAL; }
+	EA_FORCE_INLINE void setInstancerMode( const t3dInstancerMode_t mode ) { m_pInstancer ? m_pInstancer->setMode( mode ) : ( void ) 0; }
+	EA_FORCE_INLINE t3dInstancerMode_t getInstancerMode( void ) const { return m_pInstancer ? m_pInstancer->getMode() : t3dInstancerMode_t::NORMAL; }
 
 	// Utility
 	Vector3 getIntersection( const Vector3 &rSrcPos, const Vector3 &rDirection, const bool bGpuMode = false );
@@ -1114,7 +1114,7 @@ public:
 	) const;
 	Ref<Mesh> bakeMesh(
 		const int nLod,
-		const T3DData::t3dheightFilter_t filter = T3DData::HEIGHT_FILTER_NEAREST
+		const T3DData::t3dHeightFilter_t filter = T3DData::HEIGHT_FILTER_NEAREST
 	) const;
 	Ref<Mesh> bakeRegionLightmapMesh(
 		const Vector2i &rRegionLocation, int nLod = 2,
@@ -1197,18 +1197,18 @@ protected:
 	static void _bind_methods( void );
 };
 
-VARIANT_ENUM_CAST( T3DTerrain::t3dperformanceTarget_t );
-VARIANT_ENUM_CAST( T3DTerrain::t3dperformanceProfileStatus_t );
-VARIANT_ENUM_CAST( T3DTerrain::t3deditorExecutionMode_t );
-VARIANT_ENUM_CAST( T3DTerrain::t3dregionSize_t );
-VARIANT_ENUM_CAST( T3DTerrain::t3ddebugLevel_t );
+VARIANT_ENUM_CAST( T3DTerrain::t3dPerformanceTarget_t );
+VARIANT_ENUM_CAST( T3DTerrain::t3dPerformanceProfileStatus_t );
+VARIANT_ENUM_CAST( T3DTerrain::t3dEditorExecutionMode_t );
+VARIANT_ENUM_CAST( T3DTerrain::t3dRegionSize_t );
+VARIANT_ENUM_CAST( T3DTerrain::t3dDebugLevel_t );
 
 
-VARIANT_ENUM_CAST( T3DTerrain::t3doceanPerformancePreset_t );
-VARIANT_ENUM_CAST( T3DTerrain::t3doceanRefractionMode_t );
-VARIANT_ENUM_CAST( T3DTerrain::t3doceanFoamMode_t );
-VARIANT_ENUM_CAST( T3DTerrain::t3doceanScatteringMode_t );
-VARIANT_ENUM_CAST( T3DTerrain::t3doceanShadingMode_t );
+VARIANT_ENUM_CAST( T3DTerrain::t3dOceanPerformancePreset_t );
+VARIANT_ENUM_CAST( T3DTerrain::t3dOceanRefractionMode_t );
+VARIANT_ENUM_CAST( T3DTerrain::t3dOceanFoamMode_t );
+VARIANT_ENUM_CAST( T3DTerrain::t3dOceanScatteringMode_t );
+VARIANT_ENUM_CAST( T3DTerrain::t3dOceanShadingMode_t );
 
-VARIANT_ENUM_CAST( T3DTerrain::t3denvironmentShadowQuality_t );
+VARIANT_ENUM_CAST( T3DTerrain::t3dEnvironmentShadowQuality_t );
 #endif // TERRAIN3D_CLASS_H

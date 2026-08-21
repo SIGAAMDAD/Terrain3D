@@ -36,14 +36,14 @@
 
 namespace {
 
-typedef struct t3dcontrolCookSource_s {
+typedef struct t3dControlCookSource_s {
 	PackedByteArray nBytes;
 	bool bPresent = false;
 	bool bImplicit = true;
-} t3dcontrolCookSource_t;
+} t3dControlCookSource_t;
 
 static bool terrain3dReadCookControl(
-	const eastl::array<t3dcontrolCookSource_t, 9> &rSources,
+	const eastl::array<t3dControlCookSource_t, 9> &rSources,
 	const int nRegionSize, const int iX, const int iZ, uint32_t &nControl
 ) {
 	int region_dx = 0;
@@ -64,7 +64,7 @@ static bool terrain3dReadCookControl(
 		region_dz = 1;
 		local_z -= nRegionSize;
 	}
-	const t3dcontrolCookSource_t &source =
+	const t3dControlCookSource_t &source =
 		rSources[( size_t ) ( ( region_dz + 1 ) * 3 + ( region_dx + 1 ) )];
 	if ( !source.bPresent ) {
 		return false;
@@ -301,7 +301,7 @@ void T3DData::ensureDefaultMaps( void ) {
 	syncCacheDefaultMaps();
 }
 
-Ref<Image> T3DData::getRegionMapOrDefault( const T3DRegion *pRegion, const t3dmapType_t eMapType ) const {
+Ref<Image> T3DData::getRegionMapOrDefault( const T3DRegion *pRegion, const t3dMapType_t eMapType ) const {
 	if ( pRegion && !pRegion->isDeleted() ) {
 		Ref<Image> pMap = pRegion->getMap( eMapType );
 		if ( pMap.is_valid() ) {
@@ -320,7 +320,7 @@ Ref<Image> T3DData::getRegionMapOrDefault( const T3DRegion *pRegion, const t3dma
 	}
 }
 
-bool T3DData::hasMaterializedMap( const t3dmapType_t eMapType ) const {
+bool T3DData::hasMaterializedMap( const t3dMapType_t eMapType ) const {
 	if ( eMapType != T3DRegion::TYPE_CONTROL && eMapType != T3DRegion::TYPE_COLOR ) {
 		return true;
 	}
@@ -556,12 +556,12 @@ Ref<Image> T3DData::makeMiddleCompositeImage(
 }
 
 Ref<Image> T3DData::makeGpuRenderControlImage( const Vector2i &vLocation ) const {
-	eastl::array<t3dcontrolCookSource_t, 9> sources;
+	eastl::array<t3dControlCookSource_t, 9> sources;
 	for ( int dz = -1; dz <= 1; ++dz ) {
 		for ( int dx = -1; dx <= 1; ++dx ) {
 			const Vector2i location = vLocation + Vector2i( dx, dz );
 			const int source_index = ( dz + 1 ) * 3 + ( dx + 1 );
-			t3dcontrolCookSource_t &source = sources[( size_t ) ( source_index )];
+			t3dControlCookSource_t &source = sources[( size_t ) ( source_index )];
 			const T3DRegion *pRegion = getRegionPtr( location );
 			Ref<T3DRegion> pLoadedSource;
 			const bool bNeedsSourceLoad = !pRegion || pRegion->isDeleted() ||
@@ -702,7 +702,7 @@ T3DResidencyFrameState T3DData::makeResidencyFrameState( const Vector3 &rWorldPo
 		m_regionRepository.getVertexSpacing() > 0.0f;
 	if ( bGeometryReady && frame.nRegionMapSize > 0 ) {
 		const Vector2i rawCenter = m_regionRepository.getRegionLocation( rWorldPosition );
-		const t3dgpuCacheCoord_t clampedCenter = terrain3dGpuCacheClampCenter(
+		const t3dGpuCacheCoord_t clampedCenter = terrain3dGpuCacheClampCenter(
 			{rawCenter.x, rawCenter.y}, frame.nRegionMapSize );
 		frame.residencyCenter = Vector2i( clampedCenter.x, clampedCenter.y );
 	}
@@ -1115,12 +1115,12 @@ bool T3DData::writeCookedGpuFarAtlases( const String &rDirectory ) {
 }
 
 
-void T3DData::markAllGpuFarRegionsDirty( const t3dmapType_t eMapType ) {
+void T3DData::markAllGpuFarRegionsDirty( const t3dMapType_t eMapType ) {
 	m_farSurfaceAtlasCache.markAllDirty( eMapType );
 }
 
 
-void T3DData::markGpuFarRegionDirty( const Vector2i &vLocation, const t3dmapType_t eMapType ) {
+void T3DData::markGpuFarRegionDirty( const Vector2i &vLocation, const t3dMapType_t eMapType ) {
 	m_farSurfaceAtlasCache.markRegionDirty( vLocation, eMapType );
 }
 
@@ -1435,7 +1435,7 @@ void T3DData::resetRuntimeStreamingCaches( void ) {
 	m_regionResidency.resetRuntimeCaches( *this );
 }
 
-void T3DData::appendRuntimeProfileSample( t3druntimeProfileSample_t &rSample ) const {
+void T3DData::appendRuntimeProfileSample( t3dRuntimeProfileSample_t &rSample ) const {
 	m_regionResidency.appendRuntimeProfileSample( *this, rSample );
 }
 
@@ -1449,7 +1449,7 @@ Dictionary T3DData::getInstanceRegionCacheStats( void ) const {
 }
 
 
-void T3DData::updateMapsBounded( const t3dmapType_t eMapType, const bool bAllRegions ) {
+void T3DData::updateMapsBounded( const t3dMapType_t eMapType, const bool bAllRegions ) {
 	const bool bImplicitStateChanged = refreshImplicitMapState();
 	bool bTopologyChanged = false;
 	if ( m_regionRepository.isRegionMapDirty() ) {
@@ -1522,7 +1522,7 @@ TypedArray<Vector2i> T3DData::getRegionLocations( void ) const {
 	return m_regionRepository.getActiveLocations();
 }
 
-TypedArray<Image> T3DData::getActiveMaps( const t3dmapType_t eMapType ) const {
+TypedArray<Image> T3DData::getActiveMaps( const t3dMapType_t eMapType ) const {
 	TypedArray<Image> maps;
 	if ( m_cpuRegionCache.isEnabled() ) {
 		LOG( T3DTerrain::ERROR, "Whole-world map arrays are unavailable while bounded CPU residency is enabled. "
@@ -1706,7 +1706,7 @@ Dictionary T3DData::getRuntimeResidencyGrid( const int nRadius ) const {
 			cell["offset"] = location - center;
 			const bool bValid = isRegionLocationValidInternal( location );
 			const bool bAuthored = bValid && hasRegion( location );
-			const t3dregionStreamingState_t state = m_pTerrain && bValid ?
+			const t3dRegionStreamingState_t state = m_pTerrain && bValid ?
 				m_pTerrain->getRegionStreamingStateInternal( location ) : TERRAIN3D_REGION_STREAMING_UNLOADED;
 			const bool predicted = m_pTerrain && bValid && m_pTerrain->isRegionStreamingPrefetchInternal( location );
 			cell["valid_region_coordinate"] = bValid;
@@ -2150,7 +2150,7 @@ void T3DData::changeRegionSize( const int nNewSize ) {
 
 	const TypedArray<T3DRegion> old_regions = getRegionsActive();
 	if ( old_regions.is_empty() ) {
-		m_pTerrain->setRegionSize( ( T3DTerrain::t3dregionSize_t ) ( nNewSize ) );
+		m_pTerrain->setRegionSize( ( T3DTerrain::t3dRegionSize_t ) ( nNewSize ) );
 		return;
 	}
 
@@ -2236,7 +2236,7 @@ void T3DData::changeRegionSize( const int nNewSize ) {
 	}
 
 	// Change region size
-	m_pTerrain->setRegionSize( ( T3DTerrain::t3dregionSize_t ) ( nNewSize ) );
+	m_pTerrain->setRegionSize( ( T3DTerrain::t3dRegionSize_t ) ( nNewSize ) );
 
 	// Add new regions and rebuild
 	for ( const Ref<T3DRegion> pRegion : new_regions ) {
@@ -3142,7 +3142,7 @@ Error T3DData::loadDirectory( const String &rDir ) {
 
 	LOG( T3DTerrain::DEBUG, "[terrain-data] Phase 4/4: cache policy, GPU textures, and sampling state" );
 	m_regionPersistence.beginFinalize();
-	m_pTerrain->setRegionSize( ( T3DTerrain::t3dregionSize_t ) ( staged.nTargetRegionSize ) );
+	m_pTerrain->setRegionSize( ( T3DTerrain::t3dRegionSize_t ) ( staged.nTargetRegionSize ) );
 	configureResidentPool( 64 );
 	configureCpuRegionCache(
 		m_pTerrain->isCpuRegionCacheEffective(), m_pTerrain->getEffectiveCpuRegionCacheBudgetMb(),
@@ -3178,8 +3178,8 @@ void T3DData::loadRegion( const Vector2i &rRegionLoc, const String &rDir, const 
 	}
 	const Ref<T3DRegion> pRegion = result.pRegion;
 	if ( m_regionRepository.isEmpty() ) {
-		m_pTerrain->setRegionSize( ( T3DTerrain::t3dregionSize_t ) ( pRegion->getRegionSize() ) );
-	} else if ( m_pTerrain->getRegionSize() != ( T3DTerrain::t3dregionSize_t ) ( pRegion->getRegionSize() ) ) {
+		m_pTerrain->setRegionSize( ( T3DTerrain::t3dRegionSize_t ) ( pRegion->getRegionSize() ) );
+	} else if ( m_pTerrain->getRegionSize() != ( T3DTerrain::t3dRegionSize_t ) ( pRegion->getRegionSize() ) ) {
 		LOG( T3DTerrain::ERROR, "Region size mismatch. First loaded: ", m_pTerrain->getRegionSize(),
 			" next: ", pRegion->getRegionSize(), " in file: ", result.path );
 		return;
@@ -3193,7 +3193,7 @@ void T3DData::loadRegion( const Vector2i &rRegionLoc, const String &rDir, const 
 	}
 }
 
-TypedArray<Image> T3DData::getMaps( const t3dmapType_t eMapType ) const {
+TypedArray<Image> T3DData::getMaps( const t3dMapType_t eMapType ) const {
 	if ( eMapType < 0 || eMapType >= T3DRegion::TYPE_MAX ) {
 		LOG( T3DTerrain::ERROR, "Specified map type out of range" );
 		return TypedArray<Image>();
@@ -3214,7 +3214,7 @@ TypedArray<Image> T3DData::getMaps( const t3dmapType_t eMapType ) const {
 	return TypedArray<Image>();
 }
 
-void T3DData::updateMaps( const t3dmapType_t eMapType, const bool bAllRegions, const bool bGenerateMipmaps ) {
+void T3DData::updateMaps( const t3dMapType_t eMapType, const bool bAllRegions, const bool bGenerateMipmaps ) {
 	( void ) bGenerateMipmaps; // GPU publication builds transient mip chains; CPU maps stay base-level only.
 	if ( isFarAtlasRequired() ) {
 		markAllGpuFarRegionsDirty( eMapType );
@@ -3448,7 +3448,7 @@ void T3DData::updateMaps( const t3dmapType_t eMapType, const bool bAllRegions, c
 	}
 }
 
-void T3DData::updateMapRegions( const t3dmapType_t eMapType, const eastl::vector<Vector2i> &rRegionLocations ) {
+void T3DData::updateMapRegions( const t3dMapType_t eMapType, const eastl::vector<Vector2i> &rRegionLocations ) {
 	if ( rRegionLocations.empty() ) {
 		return;
 	}
@@ -3618,7 +3618,7 @@ void T3DData::regenerateDerivedMaps(
 }
 
 void T3DData::commitMapEdits(
-	const t3dmapType_t eMapType, const eastl::vector<Vector2i> &rRegionLocations,
+	const t3dMapType_t eMapType, const eastl::vector<Vector2i> &rRegionLocations,
 	const AABB &rEditedArea, const uint32_t nFlags
 ) {
 	if ( eMapType < T3DRegion::TYPE_HEIGHT || eMapType >= T3DRegion::TYPE_MAX || rRegionLocations.empty() ) {
@@ -3682,7 +3682,7 @@ void T3DData::commitMapEdits(
 }
 
 void T3DData::commitMapEdit(
-	const t3dmapType_t eMapType, const Vector2i &rRegionLocation,
+	const t3dMapType_t eMapType, const Vector2i &rRegionLocation,
 	const Rect2i &rDirtyRect
 ) {
 	if ( eMapType < T3DRegion::TYPE_HEIGHT || eMapType >= T3DRegion::TYPE_MAX ) {
@@ -3712,7 +3712,7 @@ Ref<T3DErosionJob> T3DData::createErosionJob( const Ref<T3DErosionSettings> &rSe
 	return pJob;
 }
 
-void T3DData::setPixel( const t3dmapType_t eMapType, const Vector3 &rGlobalPosition, const Color &rPixel ) {
+void T3DData::setPixel( const t3dMapType_t eMapType, const Vector3 &rGlobalPosition, const Color &rPixel ) {
 	if ( eMapType < T3DRegion::TYPE_HEIGHT || eMapType >= T3DRegion::TYPE_MAX ) {
 		LOG( T3DTerrain::ERROR, "Specified map type out of range" );
 		return;
@@ -3735,7 +3735,7 @@ void T3DData::setPixel( const t3dmapType_t eMapType, const Vector3 &rGlobalPosit
 	commitMapEdit( eMapType, writtenLocation, dirtyRect );
 }
 
-Color T3DData::getPixel( const t3dmapType_t eMapType, const Vector3 &rGlobalPosition ) const {
+Color T3DData::getPixel( const t3dMapType_t eMapType, const Vector3 &rGlobalPosition ) const {
 	if ( eMapType < 0 || eMapType >= T3DRegion::TYPE_MAX ) {
 		LOG( T3DTerrain::ERROR, "Specified map type out of range" );
 		return COLOR_NAN;
@@ -3758,7 +3758,7 @@ Color T3DData::getPixel( const t3dmapType_t eMapType, const Vector3 &rGlobalPosi
 	img_pos = img_pos.clamp( V2I_ZERO, V2I( m_regionRepository.getRegionSize() - 1 ) );
 	const T3DActiveMapLease active = m_samplingStorage.acquireActive( region_loc );
 	if ( active.valid() ) {
-		const t3dactiveMapView_t &view = active.view();
+		const t3dActiveMapView_t &view = active.view();
 		const int index = img_pos.y * m_regionRepository.getRegionSize() + img_pos.x;
 		switch ( eMapType ) {
 				case T3DRegion::TYPE_HEIGHT:
@@ -3957,7 +3957,7 @@ Vector3 T3DData::getTextureId( const Vector3 &rGlobalPosition ) const {
  * p_global_position: X and Z coordinates of the vertex. Heights will be sampled around these coordinates.
  */
 Vector3 T3DData::getMeshVertex(
-	const int32_t nLod, const t3dheightFilter_t filter,
+	const int32_t nLod, const t3dHeightFilter_t filter,
 	const Vector3 &rGlobalPosition
 ) const {
 	const int32_t step = 1 << CLAMP( nLod, 0, 8 );
@@ -4037,7 +4037,7 @@ void T3DData::calcHeightRange( const bool bRecursive ) {
  * Imports an Image set (Height, Control, Color) into T3DData
  * It does NOT normalize values to 0-1. You must do that using get_min_max() and adjusting scale and offset.
  * Parameters:
- *	p_images - t3dmapType_t.TYPE_MAX sized array of Images for Height, Control, Color. Images can be blank or null
+ *	p_images - t3dMapType_t.TYPE_MAX sized array of Images for Height, Control, Color. Images can be blank or null
  *	p_global_position - X,0,Z location on the region map. Valid range is ~ (+/-8192, +/-8192)
  *	p_offset - Add this factor to all height values, can be negative
  *	p_scale - Scale all height values by this factor (applied after offset)
@@ -4093,7 +4093,7 @@ void T3DData::importImages(
  * r16 can be edited by Krita, however you must know the dimensions and min/max before reimporting
  * res/tres stores in Godot's native format.
  */
-Error T3DData::exportImage( const String &rFileName, const t3dmapType_t eMapType ) const {
+Error T3DData::exportImage( const String &rFileName, const t3dMapType_t eMapType ) const {
 	if ( eMapType < 0 || eMapType >= T3DRegion::TYPE_MAX ) {
 		LOG( T3DTerrain::ERROR, "Invalid map type specified: ", eMapType, " max: ", T3DRegion::TYPE_MAX - 1 );
 		return FAILED;
@@ -4185,7 +4185,7 @@ Error T3DData::exportImage( const String &rFileName, const t3dmapType_t eMapType
 	return FAILED;
 }
 
-Ref<Image> T3DData::layeredToImage( const t3dmapType_t eMapType ) const {
+Ref<Image> T3DData::layeredToImage( const t3dMapType_t eMapType ) const {
 	return m_mapEditService.layeredToImage(
 		eMapType,
 		[]( void *const pContext, const Vector2i &rLocation ) -> bool {

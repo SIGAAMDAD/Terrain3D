@@ -24,7 +24,7 @@
 
 namespace {
 
-typedef struct t3dderivedMapBuildContext_s {
+typedef struct t3dDerivedMapBuildContext_s {
 	T3DSamplingSource samplingSource;
 	eastl::vector<T3DDerivedMapTask> *pTasks = nullptr;
 	float *pWorkerHaloScratch = nullptr;
@@ -32,10 +32,10 @@ typedef struct t3dderivedMapBuildContext_s {
 	size_t nWorkerHaloElements = 0u;
 	int nRegionSize = 0;
 	float fVertexSpacing = 1.0f;
-} t3dderivedMapBuildContext_t;
+} t3dDerivedMapBuildContext_t;
 
 void terrain3dBuildDerivedMapRange( void *pContext, const size_t nBegin, const size_t nEnd, const int32_t nWorkerIndex ) {
-	t3dderivedMapBuildContext_t *const pBuildContext = ( t3dderivedMapBuildContext_t * ) ( pContext );
+	t3dDerivedMapBuildContext_t *const pBuildContext = ( t3dDerivedMapBuildContext_t * ) ( pContext );
 	T3DSampler sampler( pBuildContext->samplingSource );
 	for ( size_t taskIndex = nBegin; taskIndex < nEnd; ++taskIndex ) {
 		T3DDerivedMapTask &task = ( *pBuildContext->pTasks )[taskIndex];
@@ -125,7 +125,7 @@ Rect2i T3DMapEditService::getRegionDirtyRect(
 }
 
 Error T3DMapEditService::setPixel(
-	const t3dmapType_t eMapType, const Vector3 &rGlobalPosition, const Color &rPixel,
+	const t3dMapType_t eMapType, const Vector3 &rGlobalPosition, const Color &rPixel,
 	Vector2i &rRegionLocation, Rect2i &rDirtyRect
 ) {
 	rRegionLocation = V2I_MAX;
@@ -274,7 +274,7 @@ const eastl::vector<T3DDerivedMapUpdate> &T3DMapEditService::regenerateDerivedMa
 	}
 
 	const T3DParallelExecutor executor( workerCount );
-	t3dderivedMapBuildContext_t buildContext;
+	t3dDerivedMapBuildContext_t buildContext;
 	buildContext.samplingSource = samplingSource;
 	buildContext.pTasks = &tasks;
 	buildContext.pWorkerHaloScratch = m_fDerivedWorkerHaloScratch.data();
@@ -339,7 +339,7 @@ const eastl::vector<T3DDerivedMapUpdate> &T3DMapEditService::regenerateDerivedMa
 }
 
 T3DMapMutation T3DMapEditService::commitMapEdits(
-	const t3dmapType_t eMapType, const eastl::vector<Vector2i> &rRegionLocations,
+	const t3dMapType_t eMapType, const eastl::vector<Vector2i> &rRegionLocations,
 	const AABB &rEditedArea, T3DCompute *const pCompute
 ) {
 	m_activeLocationScratch.clear();
@@ -604,7 +604,7 @@ void T3DMapEditService::copyRegionMaps(
 		return;
 	}
 	for ( int mapIndex = 0; mapIndex < T3DRegion::TYPE_MAX; ++mapIndex ) {
-		const t3dmapType_t mapType = ( t3dmapType_t ) ( mapIndex );
+		const t3dMapType_t mapType = ( t3dMapType_t ) ( mapIndex );
 		Image *const pSourceImage = pSourceRegion->getMapPtr( mapType );
 		Image *pDestinationImage = pDestinationRegion->getMapPtr( mapType );
 		if ( pSourceImage ) {
@@ -743,7 +743,7 @@ Error T3DMapEditService::importImages(
 				}
 
 				Ref<Image> pRegionMap;
-				const t3dmapType_t mapType = ( t3dmapType_t ) ( mapIndex );
+				const t3dMapType_t mapType = ( t3dMapType_t ) ( mapIndex );
 				const Ref<Image> pExistingMap = pRegion->getMap( mapType );
 				if ( mapType == T3DRegion::TYPE_HEIGHT ) {
 					pRegionMap = Image::create_empty(
@@ -791,13 +791,13 @@ Error T3DMapEditService::importImages(
 }
 
 Ref<Image> T3DMapEditService::layeredToImage(
-	const t3dmapType_t eMapType, const EnsureRegionResidentFn pEnsureResident,
+	const t3dMapType_t eMapType, const EnsureRegionResidentFn pEnsureResident,
 	void *const pResidentContext
 ) const {
 	if ( !m_pRepository || m_pRepository->getRegionSize() <= 0 ) {
 		return Ref<Image>();
 	}
-	const t3dmapType_t mapType = eMapType >= T3DRegion::TYPE_HEIGHT && eMapType < T3DRegion::TYPE_MAX
+	const t3dMapType_t mapType = eMapType >= T3DRegion::TYPE_HEIGHT && eMapType < T3DRegion::TYPE_MAX
 		? eMapType
 		: T3DRegion::TYPE_HEIGHT;
 
@@ -880,7 +880,7 @@ size_t T3DMapEditService::getTransientScratchBytes( void ) const {
 }
 
 T3DMapMutation T3DMapEditService::makeMutationResult(
-	const t3dmapType_t eMapType, const AABB &rEditedArea,
+	const t3dMapType_t eMapType, const AABB &rEditedArea,
 	const Vector2 &rEditedHeightRange
 ) {
 	T3DMapMutation result;

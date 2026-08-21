@@ -15,7 +15,7 @@
  * Regular messages are filtered based on the user specified debug level.
  * Warnings and errors always print except in release builds.
  * EXTREME is for continuously called prints like inside snapping.
- * See Terrain3D::t3ddebugLevel_t and Terrain3D::debug_level.
+ * See Terrain3D::t3dDebugLevel_t and Terrain3D::debug_level.
  *
  * DEBUG logging is compiled out of non-DEBUG_ENABLED builds.
  */

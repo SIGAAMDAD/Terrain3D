@@ -111,8 +111,8 @@ SET_CLAMPED( live_preview_interval_steps, setLivePreviewIntervalSteps, m_nLivePr
 SET_VALUE( live_preview_start_paused, setLivePreviewStartPaused, m_bLivePreviewStartPaused, bool )
 SET_CLAMPED( thread_count, setThreadCount, m_nThreadCount, int32_t, 0, 64 )
 SET_VALUE( seed, setSeed, m_seed, int64_t )
-void T3DErosionSettings::setBoundaryMode( const t3dboundaryMode_t eValue ) {
-	const t3dboundaryMode_t value = ( t3dboundaryMode_t ) ( CLAMP( ( int32_t ) ( eValue ), ( int32_t ) ( BOUNDARY_CLOSED ), ( int32_t ) ( BOUNDARY_OPEN ) ) );
+void T3DErosionSettings::setBoundaryMode( const t3dBoundaryMode_t eValue ) {
+	const t3dBoundaryMode_t value = ( t3dBoundaryMode_t ) ( CLAMP( ( int32_t ) ( eValue ), ( int32_t ) ( BOUNDARY_CLOSED ), ( int32_t ) ( BOUNDARY_OPEN ) ) );
 	if ( m_boundaryMode != value ) {
 		m_boundaryMode = value;
 		emit_changed();

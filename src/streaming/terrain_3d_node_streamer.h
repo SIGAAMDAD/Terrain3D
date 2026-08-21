@@ -34,7 +34,7 @@ class T3DNodeStreamer : public Object {
 	CLASS_NAME();
 
 public:
-	typedef enum t3dstreamedNodeFlags_e {
+	typedef enum t3dStreamedNodeFlags_e {
 		NODE_FLAG_NONE = 0,
 		NODE_FLAG_DISABLED = 1 << 0,
 		// Static streamed nodes never participate in transform-based ownership migration.
@@ -42,45 +42,45 @@ public:
 		NODE_FLAG_STATIC = 1 << 1,
 		// Static/render-only scene that may be replaced by an HLOD proxy.
 		NODE_FLAG_HLOD_VISUAL = 1 << 2,
-	} t3dstreamedNodeFlags_t;
+	} t3dStreamedNodeFlags_t;
 
 private:
-	typedef enum t3dspawnActivationResult_e {
+	typedef enum t3dSpawnActivationResult_e {
 		SPAWN_ACTIVATION_PENDING,
 		SPAWN_ACTIVATION_CONSUMED,
 		SPAWN_ACTIVATION_FAILED,
-	} t3dspawnActivationResult_t;
+	} t3dSpawnActivationResult_t;
 
-	typedef struct t3dactiveNode_s {
+	typedef struct t3dActiveNode_s {
 		int64_t spawnId = 0;
 		ObjectID objectId;
 		int flags = 0;
-	} t3dactiveNode_t;
+	} t3dActiveNode_t;
 
-	typedef struct t3dregionRuntime_s {
+	typedef struct t3dRegionRuntime_s {
 		Node3D *pRoot = nullptr;
-		eastl::vector<t3dactiveNode_t> nodes;
+		eastl::vector<t3dActiveNode_t> nodes;
 		int nextSpawn = 0;
 		int iActiveListPosition = -1;
 		bool bRequestsStarted = false;
 		bool bLoading = false;
 		bool bActive = false;
-	} t3dregionRuntime_t;
+	} t3dRegionRuntime_t;
 
-	typedef struct t3dmovableNodeRef_s {
+	typedef struct t3dMovableNodeRef_s {
 		int iRegionIndex = -1;
 		int64_t spawnId = 0;
 		ObjectID objectId;
-	} t3dmovableNodeRef_t;
+	} t3dMovableNodeRef_t;
 
 	T3DTerrain *m_pTerrain = nullptr;
 	Node3D *m_pHost = nullptr;
-	t3dregionRuntime_t m_szRegions[TERRAIN3D_MAX_REGION_SLOTS];
+	t3dRegionRuntime_t m_szRegions[TERRAIN3D_MAX_REGION_SLOTS];
 	eastl::bitset<TERRAIN3D_MAX_REGION_SLOTS> m_desiredRegions;
 	uint16_t m_szActiveRegionIndices[TERRAIN3D_MAX_REGION_SLOTS] = {};
 	uint16_t m_szDesiredRegionIndices[TERRAIN3D_MAX_REGION_SLOTS] = {};
 	uint16_t m_nDesiredRegionCount = 0u;
-	eastl::vector<t3dmovableNodeRef_t> m_movableNodes;
+	eastl::vector<t3dMovableNodeRef_t> m_movableNodes;
 	bool m_bEnabled = true;
 	int m_nRadiusRegions = 1;
 	int m_nLoadRegionBudget = 2;
@@ -117,30 +117,30 @@ private:
 
 	static Vector2i locationFromIndex( int iIndex );
 	static int indexFromLocation( const Vector2i &rLocation );
-	Node *getActiveNode( const t3dactiveNode_t &rActive ) const;
-	bool runtimeHasSpawn( const t3dregionRuntime_t &rRuntime, int64_t nSpawnId ) const;
-	int findActiveNodeIndex( const t3dregionRuntime_t &rRuntime, int64_t nSpawnId ) const;
+	Node *getActiveNode( const t3dActiveNode_t &rActive ) const;
+	bool runtimeHasSpawn( const t3dRegionRuntime_t &rRuntime, int64_t nSpawnId ) const;
+	int findActiveNodeIndex( const t3dRegionRuntime_t &rRuntime, int64_t nSpawnId ) const;
 	void trackActiveRegion( int iIndex );
 	void untrackActiveRegion( int iIndex );
-	void setRegionLoading( t3dregionRuntime_t &rRuntime, bool bLoading );
-	void trackMovableNode( int iRegionIndex, const t3dactiveNode_t &rActive );
+	void setRegionLoading( t3dRegionRuntime_t &rRuntime, bool bLoading );
+	void trackMovableNode( int iRegionIndex, const t3dActiveNode_t &rActive );
 	void untrackMovableNode( int64_t nSpawnId );
 	void removeMovableNodeAt( int iIndex );
-	void eraseActiveNode( t3dregionRuntime_t &rRuntime, int iNodeIndex );
+	void eraseActiveNode( t3dRegionRuntime_t &rRuntime, int iNodeIndex );
 	Node3D *ensureRegionRoot( int iIndex, T3DRegion *pRegion );
 	bool migrateActiveNodes( void );
 	void ensureHost( void );
 	void destroyHost( void );
-	void captureNodeState( T3DRegion *pRegion, Node3D *pRegionRoot, const t3dactiveNode_t &rActive );
+	void captureNodeState( T3DRegion *pRegion, Node3D *pRegionRoot, const t3dActiveNode_t &rActive );
 	void deactivateRegion( int iIndex, bool bCaptureState );
 	bool activateRegion( int iIndex, int &nNodeBudget );
-	t3dspawnActivationResult_t activateSpawn(
-		T3DRegion *pRegion, t3dregionRuntime_t &rRuntime,
-		const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t &rSpawn
+	t3dSpawnActivationResult_t activateSpawn(
+		T3DRegion *pRegion, t3dRegionRuntime_t &rRuntime,
+		const T3DRegion::t3dStreamedNodeRuntimeDescriptor_t &rSpawn
 	);
-	void requestRegionScenes( const Vector2i &rOwnerLocation, const eastl::vector<T3DRegion::t3dstreamedNodeRuntimeDescriptor_t> &rSpawns );
-	bool isHlodVisualSuppressed( const Vector2i &rOwnerLocation, const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t &rSpawn ) const;
-	bool streamedSpawnCoverageIntersects( const Vector2i &rOwnerLocation, const T3DRegion::t3dstreamedNodeRuntimeDescriptor_t &rSpawn, const Vector2i &rTargetMin, const Vector2i &rTargetMax ) const;
+	void requestRegionScenes( const Vector2i &rOwnerLocation, const eastl::vector<T3DRegion::t3dStreamedNodeRuntimeDescriptor_t> &rSpawns );
+	bool isHlodVisualSuppressed( const Vector2i &rOwnerLocation, const T3DRegion::t3dStreamedNodeRuntimeDescriptor_t &rSpawn ) const;
+	bool streamedSpawnCoverageIntersects( const Vector2i &rOwnerLocation, const T3DRegion::t3dStreamedNodeRuntimeDescriptor_t &rSpawn, const Vector2i &rTargetMin, const Vector2i &rTargetMax ) const;
 	int64_t addStreamedSceneInternal(
 		const Ref<PackedScene> &rScene, const String &rScenePath,
 		const Transform3D &rGlobalTransform, const Dictionary &rState, int nFlags, int nHlodMinLevel
@@ -214,5 +214,5 @@ protected:
 	static void _bind_methods( void );
 };
 
-VARIANT_ENUM_CAST( T3DNodeStreamer::t3dstreamedNodeFlags_t );
+VARIANT_ENUM_CAST( T3DNodeStreamer::t3dStreamedNodeFlags_t );
 #endif // TERRAIN3D_NODE_STREAMER_H

@@ -345,9 +345,9 @@ PackedInt32Array T3DHLODBuilder::getInstancerMeshIds( T3DRegion *const pRegion )
 	PackedInt32Array result;
 	if ( !pRegion ) { return result; }
 	const T3DInstanceStore &store = pRegion->getInstanceStore();
-	for ( const t3dinstanceMesh_t &mesh : store.meshes() ) {
+	for ( const t3dInstanceMesh_t &mesh : store.meshes() ) {
 		bool has_instances = false;
-		for ( const t3dinstanceCell_t &cell : mesh.cells ) {
+		for ( const t3dInstanceCell_t &cell : mesh.cells ) {
 			if ( !cell.transforms.empty() ) {
 				has_instances = true;
 				break;
@@ -382,7 +382,7 @@ Dictionary T3DHLODBuilder::buildInstancerSource(
 		return result;
 	}
 	const T3DInstanceStore &store = pRegion->getInstanceStore();
-	const t3dinstanceMesh_t *const source_instances = store.findMesh( nMeshId );
+	const t3dInstanceMesh_t *const source_instances = store.findMesh( nMeshId );
 	if ( !source_instances ) {
 		result["error"] = "region contains no instances for the mesh asset";
 		return result;
@@ -391,7 +391,7 @@ Dictionary T3DHLODBuilder::buildInstancerSource(
 	Ref<ArrayMesh> merged;
 	merged.instantiate();
 	int64_t instance_count = 0;
-	for ( const t3dinstanceCell_t &cell : source_instances->cells ) {
+	for ( const t3dInstanceCell_t &cell : source_instances->cells ) {
 		instance_count += ( int64_t ) cell.transforms.size();
 		if ( cell.usesColors() ) {
 			for ( const uint32_t color : cell.colors ) {
@@ -419,7 +419,7 @@ Dictionary T3DHLODBuilder::buildInstancerSource(
 		Ref<SurfaceTool> tool;
 		tool.instantiate();
 		tool->begin( Mesh::PRIMITIVE_TRIANGLES );
-		for ( const t3dinstanceCell_t &cell : source_instances->cells ) {
+		for ( const t3dInstanceCell_t &cell : source_instances->cells ) {
 			for ( size_t transform_index = 0; transform_index < cell.transforms.size(); ++transform_index ) {
 				tool->append_from( mesh, surface, cell.transforms[transform_index] );
 			}

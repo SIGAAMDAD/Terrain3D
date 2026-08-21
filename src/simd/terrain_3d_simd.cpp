@@ -31,10 +31,10 @@
 namespace terrain3d_simd {
 namespace {
 
-t3dcapabilities_t s_capabilities;
-t3ddispatch_t s_szDispatchTables[5];
+t3dCapabilities_t s_capabilities;
+t3dDispatch_t s_szDispatchTables[5];
 std::once_flag s_initializeOnce;
-std::atomic<const t3ddispatch_t *> s_pActiveDispatch{nullptr};
+std::atomic<const t3dDispatch_t *> s_pActiveDispatch{nullptr};
 
 static uint64_t xgetbv0( void ) {
 #if defined( _MSC_VER ) && ( defined( _M_IX86 ) || defined( _M_X64 ) )
@@ -49,7 +49,7 @@ static uint64_t xgetbv0( void ) {
 #endif
 }
 
-static void detectX86( t3dcapabilities_t &rCaps ) {
+static void detectX86( t3dCapabilities_t &rCaps ) {
 #if defined( _MSC_VER ) && ( defined( _M_IX86 ) || defined( _M_X64 ) )
 	int registers[4] = {};
 	__cpuidex( registers, 0, 0 );
@@ -93,7 +93,7 @@ static void detectX86( t3dcapabilities_t &rCaps ) {
 #endif
 }
 
-static void detectArm( t3dcapabilities_t &rCaps ) {
+static void detectArm( t3dCapabilities_t &rCaps ) {
 #if defined( __aarch64__ ) || defined( _M_ARM64 )
 	rCaps.bNeon = true;
 #elif defined( __ARM_NEON ) || defined( __ARM_NEON__ )
@@ -109,37 +109,37 @@ static void detectArm( t3dcapabilities_t &rCaps ) {
 #endif
 }
 
-static t3ddispatch_t makeDispatch( const t3dbackend_t backend ) {
-	t3ddispatch_t result;
+static t3dDispatch_t makeDispatch( const t3dBackend_t backend ) {
+	t3dDispatch_t result;
 	result.backend = backend;
 	switch ( backend ) {
-		case t3dbackend_t::AVX2_F16C:
+		case t3dBackend_t::AVX2_F16C:
 			result.pfnHalfToFloat = detail::avx2HalfToFloat;
 			result.pfnPackedTransformsToMultimesh = detail::avx2PackedTransforms;
 			result.pfnDerivedNormalsRg8 = detail::avx2DerivedNormals;
 			result.pfnUpdateCumulativeErosion = detail::avx2UpdateCumulativeErosion;
 			break;
-		case t3dbackend_t::AVX_F16C:
+		case t3dBackend_t::AVX_F16C:
 			result.pfnHalfToFloat = detail::avxHalfToFloat;
 			result.pfnPackedTransformsToMultimesh = detail::avxPackedTransforms;
 			result.pfnDerivedNormalsRg8 = detail::avxDerivedNormals;
 			result.pfnUpdateCumulativeErosion = detail::avxUpdateCumulativeErosion;
 			break;
-		case t3dbackend_t::SSE2:
+		case t3dBackend_t::SSE2:
 			result.pfnHalfToFloat = detail::sse2HalfToFloat;
 			result.pfnPackedTransformsToMultimesh = detail::sse2PackedTransforms;
 			result.pfnDerivedNormalsRg8 = detail::sse2DerivedNormals;
 			result.pfnUpdateCumulativeErosion = detail::sse2UpdateCumulativeErosion;
 			break;
-		case t3dbackend_t::NEON:
+		case t3dBackend_t::NEON:
 			result.pfnHalfToFloat = detail::neonHalfToFloat;
 			result.pfnPackedTransformsToMultimesh = detail::neonPackedTransforms;
 			result.pfnDerivedNormalsRg8 = detail::neonDerivedNormals;
 			result.pfnUpdateCumulativeErosion = detail::neonUpdateCumulativeErosion;
 			break;
-		case t3dbackend_t::SCALAR:
+		case t3dBackend_t::SCALAR:
 		default:
-			result.backend = t3dbackend_t::SCALAR;
+			result.backend = t3dBackend_t::SCALAR;
 			result.pfnHalfToFloat = detail::scalarHalfToFloat;
 			result.pfnPackedTransformsToMultimesh = detail::scalarPackedTransforms;
 			result.pfnDerivedNormalsRg8 = detail::scalarDerivedNormals;
@@ -149,76 +149,76 @@ static t3ddispatch_t makeDispatch( const t3dbackend_t backend ) {
 	return result;
 }
 
-static bool backendSupported( const t3dbackend_t backend ) {
+static bool backendSupported( const t3dBackend_t backend ) {
 	switch ( backend ) {
-		case t3dbackend_t::AVX2_F16C:
+		case t3dBackend_t::AVX2_F16C:
 			return s_capabilities.bAvx2 && s_capabilities.bF16c && detail::avx2BackendAvailableAtBuild();
-		case t3dbackend_t::AVX_F16C:
+		case t3dBackend_t::AVX_F16C:
 			return s_capabilities.bAvx && s_capabilities.bF16c && detail::avxBackendAvailableAtBuild();
-		case t3dbackend_t::SSE2:
+		case t3dBackend_t::SSE2:
 			return s_capabilities.bSse2 && detail::sse2BackendAvailableAtBuild();
-		case t3dbackend_t::NEON:
+		case t3dBackend_t::NEON:
 			return s_capabilities.bNeon && detail::neonBackendAvailableAtBuild();
-		case t3dbackend_t::SCALAR:
+		case t3dBackend_t::SCALAR:
 		default:
 			return true;
 	}
 }
 
-static bool parseEnvironmentOverride( t3dbackend_t &rBackend ) {
+static bool parseEnvironmentOverride( t3dBackend_t &rBackend ) {
 	const char *value = std::getenv( "TERRAIN3D_SIMD" );
 	if ( !value || value[0] == '\0' ) {
 		return false;
 	}
 	if ( std::strcmp( value, "scalar" ) == 0 ) {
-		rBackend = t3dbackend_t::SCALAR;
+		rBackend = t3dBackend_t::SCALAR;
 		return true;
 	}
 	if ( std::strcmp( value, "sse2" ) == 0 || std::strcmp( value, "sse" ) == 0 ) {
-		rBackend = t3dbackend_t::SSE2;
+		rBackend = t3dBackend_t::SSE2;
 		return true;
 	}
 	if ( std::strcmp( value, "avx" ) == 0 || std::strcmp( value, "avx_f16c" ) == 0 ) {
-		rBackend = t3dbackend_t::AVX_F16C;
+		rBackend = t3dBackend_t::AVX_F16C;
 		return true;
 	}
 	if ( std::strcmp( value, "avx2" ) == 0 || std::strcmp( value, "avx2_f16c" ) == 0 ) {
-		rBackend = t3dbackend_t::AVX2_F16C;
+		rBackend = t3dBackend_t::AVX2_F16C;
 		return true;
 	}
 	if ( std::strcmp( value, "neon" ) == 0 ) {
-		rBackend = t3dbackend_t::NEON;
+		rBackend = t3dBackend_t::NEON;
 		return true;
 	}
 	return false;
 }
 
-EA_FORCE_INLINE static const t3ddispatch_t *dispatchTable( const t3dbackend_t backend ) { return &s_szDispatchTables[( size_t ) ( backend )]; }
+EA_FORCE_INLINE static const t3dDispatch_t *dispatchTable( const t3dBackend_t backend ) { return &s_szDispatchTables[( size_t ) ( backend )]; }
 
-static t3dbackend_t bestSupportedBackend( void ) {
-	if ( backendSupported( t3dbackend_t::AVX2_F16C ) ) {
-		return t3dbackend_t::AVX2_F16C;
+static t3dBackend_t bestSupportedBackend( void ) {
+	if ( backendSupported( t3dBackend_t::AVX2_F16C ) ) {
+		return t3dBackend_t::AVX2_F16C;
 	}
-	if ( backendSupported( t3dbackend_t::AVX_F16C ) ) {
-		return t3dbackend_t::AVX_F16C;
+	if ( backendSupported( t3dBackend_t::AVX_F16C ) ) {
+		return t3dBackend_t::AVX_F16C;
 	}
-	if ( backendSupported( t3dbackend_t::SSE2 ) ) {
-		return t3dbackend_t::SSE2;
+	if ( backendSupported( t3dBackend_t::SSE2 ) ) {
+		return t3dBackend_t::SSE2;
 	}
-	if ( backendSupported( t3dbackend_t::NEON ) ) {
-		return t3dbackend_t::NEON;
+	if ( backendSupported( t3dBackend_t::NEON ) ) {
+		return t3dBackend_t::NEON;
 	}
-	return t3dbackend_t::SCALAR;
+	return t3dBackend_t::SCALAR;
 }
 
 static void initialize( void ) {
 	detectX86( s_capabilities );
 	detectArm( s_capabilities );
 	for ( size_t index = 0u; index < 5u; ++index ) {
-		s_szDispatchTables[index] = makeDispatch( ( t3dbackend_t ) ( index ) );
+		s_szDispatchTables[index] = makeDispatch( ( t3dBackend_t ) ( index ) );
 	}
-	t3dbackend_t selected = bestSupportedBackend();
-	t3dbackend_t requested = t3dbackend_t::SCALAR;
+	t3dBackend_t selected = bestSupportedBackend();
+	t3dBackend_t requested = t3dBackend_t::SCALAR;
 	if ( parseEnvironmentOverride( requested ) && backendSupported( requested ) ) {
 		selected = requested;
 	}
@@ -240,11 +240,11 @@ void scalarHalfToFloat( const uint16_t *pSource, float *pDestination, const size
 }
 
 void scalarPackedTransforms(
-	const t3dpackedTransform_t *pTransforms, const uint32_t *pColors,
+	const t3dPackedTransform_t *pTransforms, const uint32_t *pColors,
 	const size_t nCount, const int nStride, float *pDestination
 ) {
 	for ( size_t i = 0; i < nCount; ++i ) {
-		const t3dpackedTransform_t &t = pTransforms[i];
+		const t3dPackedTransform_t &t = pTransforms[i];
 		float *pOut = pDestination + i * ( size_t ) ( nStride );
 		pOut[0] = terrain3d_half::decode( t.basis[0] );
 		pOut[1] = terrain3d_half::decode( t.basis[1] );
@@ -300,31 +300,31 @@ void scalarUpdateCumulativeErosion(
 
 } // namespace detail
 
-const t3dcapabilities_t &capabilities( void ) {
+const t3dCapabilities_t &capabilities( void ) {
 	ensureInitialized();
 	return s_capabilities;
 }
 
-const t3ddispatch_t &dispatch( void ) {
+const t3dDispatch_t &dispatch( void ) {
 	ensureInitialized();
 	return *s_pActiveDispatch.load( std::memory_order_acquire );
 }
 
-t3dbackend_t activeBackend( void ) {
+t3dBackend_t activeBackend( void ) {
 	return dispatch().backend;
 }
 
-const char *backendName( const t3dbackend_t backend ) {
+const char *backendName( const t3dBackend_t backend ) {
 	switch ( backend ) {
-		case t3dbackend_t::SSE2:
+		case t3dBackend_t::SSE2:
 			return "SSE2";
-		case t3dbackend_t::AVX_F16C:
+		case t3dBackend_t::AVX_F16C:
 			return "AVX/F16C";
-		case t3dbackend_t::AVX2_F16C:
+		case t3dBackend_t::AVX2_F16C:
 			return "AVX2/F16C";
-		case t3dbackend_t::NEON:
+		case t3dBackend_t::NEON:
 			return "NEON";
-		case t3dbackend_t::SCALAR:
+		case t3dBackend_t::SCALAR:
 		default:
 			return "Scalar";
 	}
@@ -338,7 +338,7 @@ void halfToFloat( const uint16_t *pSource, float *pDestination, const size_t nCo
 }
 
 void packedTransformsToMultimesh(
-	const t3dpackedTransform_t *pTransforms, const uint32_t *pColors,
+	const t3dPackedTransform_t *pTransforms, const uint32_t *pColors,
 	const size_t nCount, const int nStride, float *pDestination
 ) {
 	if ( !pTransforms || !pDestination || nCount == 0u || ( nStride != 12 && nStride != 16 ) ) {
@@ -379,7 +379,7 @@ void updateCumulativeErosion(
 	dispatch().pfnUpdateCumulativeErosion( pActive, pInitialHeight, pHeight, pCumulativeErosion, nCount );
 }
 
-bool setBackendOverrideForTests( const t3dbackend_t backend ) {
+bool setBackendOverrideForTests( const t3dBackend_t backend ) {
 	ensureInitialized();
 	if ( !backendSupported( backend ) ) {
 		return false;

@@ -147,8 +147,8 @@ void T3DMesher::appendGrid(
 	nIndexWrite = index_write;
 }
 
-T3DMesher::t3dclipmapGeometry_t T3DMesher::generateCombinedGeometry( const bool bLod0 ) {
-	t3dclipmapGeometry_t geometry;
+T3DMesher::t3dClipmapGeometry_t T3DMesher::generateCombinedGeometry( const bool bLod0 ) {
+	t3dClipmapGeometry_t geometry;
 	PackedVector3Array &vertices = geometry.vertices;
 	PackedVector2Array &metadata = geometry.metadata;
 	PackedInt32Array &indices = geometry.indices;
@@ -197,7 +197,7 @@ T3DMesher::t3dclipmapGeometry_t T3DMesher::generateCombinedGeometry( const bool 
 		edge_b.x = -m_fOffsetA;
 		appendGrid( vertices, metadata, indices, vertex_write, index_write, Vector2i( m_nMeshSize * 4 + 4, 2 ), edge_b, i == 0 ? TERRAIN3D_CLIPMAP_PART_EDGE_B0 : TERRAIN3D_CLIPMAP_PART_EDGE_B1, bLod0 );
 	}
-	if ( vertex_write != total_vertices || index_write != total_indices ) { LOG( T3DTerrain::ERROR, "Clipmap geometry preallocation count mismatch" ); return t3dclipmapGeometry_t{}; }
+	if ( vertex_write != total_vertices || index_write != total_indices ) { LOG( T3DTerrain::ERROR, "Clipmap geometry preallocation count mismatch" ); return t3dClipmapGeometry_t{}; }
 
 	const int source_vertex_count = vertices.size();
 	weldClipmapGeometry( vertices, metadata, indices );
@@ -224,7 +224,7 @@ bool T3DMesher::loadRuntimeGeometryPack( const String &rDataDirectory ) {
 	}
 	file->get_32();
 	for ( int type = 0; type < MESH_TYPE_COUNT; ++type ) {
-		t3dclipmapGeometry_t geometry;
+		t3dClipmapGeometry_t geometry;
 		const uint32_t vertex_count = file->get_32();
 		const uint32_t metadata_count = file->get_32();
 		const uint32_t index_count = file->get_32();
@@ -264,7 +264,7 @@ bool T3DMesher::loadRuntimeGeometryPack( const String &rDataDirectory ) {
 	}
 	if ( !m_bStateMeshBatching ) {
 		for ( int type = 0; type < MESH_TYPE_COUNT; ++type ) {
-			const t3dclipmapGeometry_t &geometry = m_szMeshGeometry[( size_t ) type];
+			const t3dClipmapGeometry_t &geometry = m_szMeshGeometry[( size_t ) type];
 			m_szMeshRids[( size_t ) type] = instantiateMesh(
 				geometry.vertices, geometry.metadata, geometry.indices, geometry.aabb );
 		}
@@ -277,7 +277,7 @@ bool T3DMesher::writeRuntimeGeometryPack( const String &rDataDirectory ) const {
 	if ( rDataDirectory.is_empty() || m_nMeshSize <= 0 ) {
 		return false;
 	}
-	for ( const t3dclipmapGeometry_t &geometry : m_szMeshGeometry ) {
+	for ( const t3dClipmapGeometry_t &geometry : m_szMeshGeometry ) {
 		if ( geometry.vertices.is_empty() || geometry.metadata.size() != geometry.vertices.size() ||
 			geometry.indices.is_empty() ) {
 			return false;
@@ -294,7 +294,7 @@ bool T3DMesher::writeRuntimeGeometryPack( const String &rDataDirectory ) const {
 	file->store_32( ( uint32_t ) m_nMeshSize );
 	file->store_32( MESH_TYPE_COUNT );
 	file->store_32( 0u );
-	for ( const t3dclipmapGeometry_t &geometry : m_szMeshGeometry ) {
+	for ( const t3dClipmapGeometry_t &geometry : m_szMeshGeometry ) {
 		file->store_32( ( uint32_t ) geometry.vertices.size() );
 		file->store_32( ( uint32_t ) geometry.metadata.size() );
 		file->store_32( ( uint32_t ) geometry.indices.size() );
@@ -344,7 +344,7 @@ void T3DMesher::generateMeshTypes( void ) {
 	m_szMeshGeometry[OUTER_RING_MESH] = generateCombinedGeometry( false );
 	if ( !m_bStateMeshBatching ) {
 		for ( int type = 0; type < MESH_TYPE_COUNT; ++type ) {
-			const t3dclipmapGeometry_t &geometry = m_szMeshGeometry[( size_t ) ( type )];
+			const t3dClipmapGeometry_t &geometry = m_szMeshGeometry[( size_t ) ( type )];
 			m_szMeshRids[( size_t ) ( type )] = instantiateMesh( geometry.vertices, geometry.metadata, geometry.indices, geometry.aabb );
 		}
 	}
@@ -383,7 +383,7 @@ RID T3DMesher::instantiateStateMesh( const int nFirstLod, const int nLastLod ) {
 	int total_vertices = 0;
 	int total_indices = 0;
 	for ( int lod = nFirstLod; lod <= nLastLod; ++lod ) {
-		const t3dclipmapGeometry_t &geometry = m_szMeshGeometry[( size_t ) ( lod == 0 ? LOD0_MESH : OUTER_RING_MESH )];
+		const t3dClipmapGeometry_t &geometry = m_szMeshGeometry[( size_t ) ( lod == 0 ? LOD0_MESH : OUTER_RING_MESH )];
 		total_vertices += geometry.vertices.size();
 		total_indices += geometry.indices.size();
 	}
@@ -399,7 +399,7 @@ RID T3DMesher::instantiateStateMesh( const int nFirstLod, const int nLastLod ) {
 	int vertex_write = 0;
 	int index_write = 0;
 	for ( int lod = nFirstLod; lod <= nLastLod; ++lod ) {
-		const t3dclipmapGeometry_t &geometry = m_szMeshGeometry[( size_t ) ( lod == 0 ? LOD0_MESH : OUTER_RING_MESH )];
+		const t3dClipmapGeometry_t &geometry = m_szMeshGeometry[( size_t ) ( lod == 0 ? LOD0_MESH : OUTER_RING_MESH )];
 		const int vertex_base = vertex_write;
 		const Vector3 *const pSourceVertices = geometry.vertices.ptr();
 		const Vector2 *const pSourceMetadata = geometry.metadata.ptr();
@@ -434,7 +434,7 @@ size_t T3DMesher::estimateGeometryPayloadBytes(
 ) const {
 	size_t bytes = 0u;
 	for ( int lod = nFirstLod; lod <= nLastLod; ++lod ) {
-		const t3dclipmapGeometry_t &geometry = m_szMeshGeometry[( size_t ) ( lod == 0 ? LOD0_MESH : OUTER_RING_MESH )];
+		const t3dClipmapGeometry_t &geometry = m_szMeshGeometry[( size_t ) ( lod == 0 ? LOD0_MESH : OUTER_RING_MESH )];
 		const size_t vertex_count = ( size_t ) ( geometry.vertices.size() );
 		bytes += vertex_count * ( sizeof( float ) * ( 3u + 2u ) );
 		if ( bIncludeBasis ) {
@@ -451,7 +451,7 @@ size_t T3DMesher::getVisibleGeometryPayloadBytes( void ) const {
 	}
 	size_t bytes = 0u;
 	for ( int batch_index = 0; batch_index < m_nRenderBatchCount; ++batch_index ) {
-		const t3dclipmapBatch_t &batch = m_szRenderBatches[( size_t ) ( batch_index )];
+		const t3dClipmapBatch_t &batch = m_szRenderBatches[( size_t ) ( batch_index )];
 		if ( batch.bOwnsMesh ) {
 			bytes += estimateGeometryPayloadBytes( batch.firstLod, batch.lastLod, false );
 		}
@@ -462,7 +462,7 @@ size_t T3DMesher::getVisibleGeometryPayloadBytes( void ) const {
 size_t T3DMesher::getShadowGeometryPayloadBytes( void ) const {
 	size_t bytes = 0u;
 	for ( int index = 0; index < m_nShadowBatchCount; ++index ) {
-		const t3dclipmapBatch_t &batch = m_szShadowStateBatches[( size_t ) ( index )];
+		const t3dClipmapBatch_t &batch = m_szShadowStateBatches[( size_t ) ( index )];
 		if ( batch.bOwnsMesh ) {
 			bytes += estimateGeometryPayloadBytes( batch.firstLod, batch.lastLod, false );
 		}
@@ -481,11 +481,11 @@ size_t T3DMesher::getStreamingBufferBytes( void ) const {
 	return bytes;
 }
 
-T3DMesher::t3dclipmapBatch_t T3DMesher::createBatch(
+T3DMesher::t3dClipmapBatch_t T3DMesher::createBatch(
 	const RID &rMesh, const int nCount,
 	const int nFirstLod, const int nLastLod, const int nTier, const bool bCastsShadows
 ) {
-	t3dclipmapBatch_t batch;
+	t3dClipmapBatch_t batch;
 	if ( !rMesh.is_valid() || nCount <= 0 || nCount > TERRAIN3D_MAX_BATCH_INSTANCES ) {
 		LOG( T3DTerrain::ERROR, "Invalid clipmap render batch request. Mesh valid: ", rMesh.is_valid(), ", count: ", nCount );
 		return batch;
@@ -517,11 +517,11 @@ T3DMesher::t3dclipmapBatch_t T3DMesher::createBatch(
 	return batch;
 }
 
-T3DMesher::t3dclipmapBatch_t T3DMesher::createStateBatch(
+T3DMesher::t3dClipmapBatch_t T3DMesher::createStateBatch(
 	const int nFirstLod,
 	const int nLastLod, const int nTier, const bool bCastsShadows
 ) {
-	t3dclipmapBatch_t batch;
+	t3dClipmapBatch_t batch;
 	if ( nFirstLod < 0 || nLastLod < nFirstLod || nLastLod >= m_nClipmapLevelCount ) {
 		LOG( T3DTerrain::ERROR, "Invalid state clipmap batch range: ", nFirstLod, "-", nLastLod );
 		return batch;
@@ -545,7 +545,7 @@ T3DMesher::t3dclipmapBatch_t T3DMesher::createStateBatch(
 	return batch;
 }
 
-void T3DMesher::freeBatch( t3dclipmapBatch_t &rBatch ) {
+void T3DMesher::freeBatch( t3dClipmapBatch_t &rBatch ) {
 	if ( rBatch.instance.is_valid() ) {
 		RS->free_rid( rBatch.instance );
 	}
@@ -555,11 +555,11 @@ void T3DMesher::freeBatch( t3dclipmapBatch_t &rBatch ) {
 	if ( rBatch.bOwnsMesh && rBatch.mesh.is_valid() ) {
 		RS->free_rid( rBatch.mesh );
 	}
-	rBatch = t3dclipmapBatch_t{};
+	rBatch = t3dClipmapBatch_t{};
 }
 
 void T3DMesher::setBatchInstance(
-	t3dclipmapBatch_t &rBatch, const int iIndex,
+	t3dClipmapBatch_t &rBatch, const int iIndex,
 	const Transform3D &rTransform, const int iTestX, const int iTestZ
 ) {
 	if ( !rBatch.multimesh.is_valid() || iIndex < 0 || iIndex >= rBatch.nCount ||
@@ -624,18 +624,18 @@ bool T3DMesher::usesDedicatedShadowBatches( void ) const {
 void T3DMesher::rebuildRenderBatches( void ) {
 	// Shadow-only batches may borrow visible state meshes. Free their instances
 	// before freeing the visible batches that own those mesh RIDs.
-	for ( t3dclipmapBatch_t &batch : m_szShadowStateBatches ) {
+	for ( t3dClipmapBatch_t &batch : m_szShadowStateBatches ) {
 		freeBatch( batch );
 	}
-	for ( t3dclipmapBatch_t &batch : m_szRenderBatches ) {
+	for ( t3dClipmapBatch_t &batch : m_szRenderBatches ) {
 		freeBatch( batch );
 	}
 	m_nRenderBatchCount = 0;
 	m_bBatchDirty.fill( false );
 	m_bShadowStateBatchDirty.fill( false );
 	m_nShadowBatchCount = 0;
-	for ( t3dlodBatchSlot_t &slot : m_szLodBatchSlots ) {
-		slot = t3dlodBatchSlot_t{};
+	for ( t3dLodBatchSlot_t &slot : m_szLodBatchSlots ) {
+		slot = t3dLodBatchSlot_t{};
 	}
 
 	const bool dedicated_shadows = usesDedicatedShadowBatches();
@@ -656,7 +656,7 @@ void T3DMesher::rebuildRenderBatches( void ) {
 			return;
 		}
 		const int count = end_lod - lod + 1;
-		t3dclipmapBatch_t batch;
+		t3dClipmapBatch_t batch;
 		if ( m_bStateMeshBatching ) {
 			batch = createStateBatch( lod, end_lod, tier, casts_shadows );
 		} else {
@@ -693,9 +693,9 @@ void T3DMesher::rebuildRenderBatches( void ) {
 				continue;
 			}
 
-			t3dclipmapBatch_t shadow_batch;
+			t3dClipmapBatch_t shadow_batch;
 			for ( int visible_index = 0; visible_index < m_nRenderBatchCount; ++visible_index ) {
-				const t3dclipmapBatch_t &visible = m_szRenderBatches[( size_t ) ( visible_index )];
+				const t3dClipmapBatch_t &visible = m_szRenderBatches[( size_t ) ( visible_index )];
 				if ( visible.firstLod == first_lod && visible.lastLod == last_lod && visible.mesh.is_valid() ) {
 					shadow_batch.mesh = visible.mesh;
 					shadow_batch.bOwnsMesh = false;
@@ -731,7 +731,7 @@ void T3DMesher::updateBatchCustomAabb( const int iBatchIndex ) {
 	if ( iBatchIndex < 0 || iBatchIndex >= m_nRenderBatchCount ) {
 		return;
 	}
-	t3dclipmapBatch_t &batch = m_szRenderBatches[( size_t ) ( iBatchIndex )];
+	t3dClipmapBatch_t &batch = m_szRenderBatches[( size_t ) ( iBatchIndex )];
 	bool bHasAabb = false;
 	AABB combined;
 	const Vector2 anchor = m_bStateMeshBatching ? batch.anchorPosition : Vector2();
@@ -784,7 +784,7 @@ void T3DMesher::refreshStateBatch( const int iBatchIndex, eastl::array<bool, 3> 
 	if ( iBatchIndex < 0 || iBatchIndex >= m_nRenderBatchCount ) {
 		return;
 	}
-	t3dclipmapBatch_t &batch = m_szRenderBatches[( size_t ) ( iBatchIndex )];
+	t3dClipmapBatch_t &batch = m_szRenderBatches[( size_t ) ( iBatchIndex )];
 	const Vector2 anchor = m_szLastLodPositions[( size_t ) ( batch.firstLod )];
 	if ( anchor == V2_MAX ) {
 		return;
@@ -815,7 +815,7 @@ void T3DMesher::refreshShadowStateBatch( const int nIndex ) {
 	if ( nIndex < 0 || nIndex >= m_nShadowBatchCount ) {
 		return;
 	}
-	t3dclipmapBatch_t &batch = m_szShadowStateBatches[( size_t ) ( nIndex )];
+	t3dClipmapBatch_t &batch = m_szShadowStateBatches[( size_t ) ( nIndex )];
 	if ( !batch.instance.is_valid() ) {
 		return;
 	}
@@ -895,7 +895,7 @@ void T3DMesher::flushDirtyBatches( void ) {
 		if ( !m_bBatchDirty[( size_t ) ( batch_index )] ) {
 			continue;
 		}
-		t3dclipmapBatch_t &batch = m_szRenderBatches[( size_t ) ( batch_index )];
+		t3dClipmapBatch_t &batch = m_szRenderBatches[( size_t ) ( batch_index )];
 		if ( batch.multimesh.is_valid() && !batch.transformBuffer.is_empty() ) {
 			RS->multimesh_set_buffer( batch.multimesh, batch.transformBuffer );
 			++m_nBufferUploadsLastSnap;
@@ -979,18 +979,18 @@ void T3DMesher::clearClipmap( void ) {
 	LOG( T3DTerrain::INFO, "Freeing clipmap render batches" );
 	// Free shadows-only instances first because they may borrow visible state
 	// meshes rather than owning duplicate geometry resources.
-	for ( t3dclipmapBatch_t &batch : m_szShadowStateBatches ) {
+	for ( t3dClipmapBatch_t &batch : m_szShadowStateBatches ) {
 		freeBatch( batch );
 	}
-	for ( t3dclipmapBatch_t &batch : m_szRenderBatches ) {
+	for ( t3dClipmapBatch_t &batch : m_szRenderBatches ) {
 		freeBatch( batch );
 	}
 	m_bShadowStateBatchDirty.fill( false );
 	m_nShadowBatchCount = 0;
 	m_nRenderBatchCount = 0;
 	m_bBatchDirty.fill( false );
-	for ( t3dlodBatchSlot_t &slot : m_szLodBatchSlots ) {
-		slot = t3dlodBatchSlot_t{};
+	for ( t3dLodBatchSlot_t &slot : m_szLodBatchSlots ) {
+		slot = t3dLodBatchSlot_t{};
 	}
 	m_nClipmapLevelCount = 0;
 }
@@ -1011,8 +1011,8 @@ void T3DMesher::clearMeshTypes( void ) {
 		}
 		rid = RID();
 	}
-	for ( t3dclipmapGeometry_t &geometry : m_szMeshGeometry ) {
-		geometry = t3dclipmapGeometry_t{};
+	for ( t3dClipmapGeometry_t &geometry : m_szMeshGeometry ) {
+		geometry = t3dClipmapGeometry_t{};
 	}
 }
 
@@ -1206,12 +1206,12 @@ bool T3DMesher::snapLevel( const int nLod, const Vector3 &rSnappedTarget ) {
 	m_szLastLodTestX[( size_t ) ( nLod )] = test_x;
 	m_szLastLodTestZ[( size_t ) ( nLod )] = test_z;
 
-	const t3dlodBatchSlot_t slot = m_szLodBatchSlots[( size_t ) ( nLod )];
+	const t3dLodBatchSlot_t slot = m_szLodBatchSlots[( size_t ) ( nLod )];
 	if ( slot.batch < 0 || slot.batch >= m_nRenderBatchCount ) {
 		LOG( T3DTerrain::ERROR, "Missing clipmap render batch for LOD ", nLod );
 		return false;
 	}
-	t3dclipmapBatch_t &batch = m_szRenderBatches[( size_t ) ( slot.batch )];
+	t3dClipmapBatch_t &batch = m_szRenderBatches[( size_t ) ( slot.batch )];
 	if ( !m_bStateMeshBatching ) {
 		Transform3D transform;
 		transform = transform.scaled( Vector3( m_fLodScales[( size_t ) ( nLod )], 1.0f, m_fLodScales[( size_t ) ( nLod )] ) );
@@ -1220,7 +1220,7 @@ bool T3DMesher::snapLevel( const int nLod, const Vector3 &rSnappedTarget ) {
 	}
 	m_bBatchDirty[( size_t ) ( slot.batch )] = true;
 	for ( int shadow_index = 0; shadow_index < m_nShadowBatchCount; ++shadow_index ) {
-		const t3dclipmapBatch_t &shadow_batch = m_szShadowStateBatches[( size_t ) ( shadow_index )];
+		const t3dClipmapBatch_t &shadow_batch = m_szShadowStateBatches[( size_t ) ( shadow_index )];
 		if ( nLod >= shadow_batch.firstLod && nLod <= shadow_batch.lastLod ) {
 			m_bShadowStateBatchDirty[( size_t ) ( shadow_index )] = true;
 		}
@@ -1331,14 +1331,14 @@ void T3DMesher::update( void ) {
 	const bool bTerrainVisible = m_pTerrain->is_visible_in_tree();
 	const bool bVisibleSurface = bTerrainVisible && m_castShadows != RenderingServer::SHADOW_CASTING_SETTING_SHADOWS_ONLY;
 	for ( int batch_index = 0; batch_index < m_nRenderBatchCount; ++batch_index ) {
-		const t3dclipmapBatch_t &batch = m_szRenderBatches[( size_t ) ( batch_index )];
+		const t3dClipmapBatch_t &batch = m_szRenderBatches[( size_t ) ( batch_index )];
 		const RID material = m_szMaterials[( size_t ) ( batch.tier )].is_valid() ? m_szMaterials[( size_t ) ( batch.tier )] : m_szMaterials[0];
 		const RenderingServer::ShadowCastingSetting shadows = batch.bCastsShadows ? m_castShadows :
 			RenderingServer::SHADOW_CASTING_SETTING_OFF;
 		updateInstanceRid( batch.instance, material, shadows, bVisibleSurface, bBakedLight, bDynamicGi );
 	}
 	for ( int shadow_index = 0; shadow_index < m_nShadowBatchCount; ++shadow_index ) {
-		const t3dclipmapBatch_t &batch = m_szShadowStateBatches[( size_t ) ( shadow_index )];
+		const t3dClipmapBatch_t &batch = m_szShadowStateBatches[( size_t ) ( shadow_index )];
 		const RID material = m_szShadowMaterials[( size_t ) ( batch.tier )].is_valid() ?
 			m_szShadowMaterials[( size_t ) ( batch.tier )] :
 			( m_szMaterials[( size_t ) ( batch.tier )].is_valid() ?
@@ -1352,7 +1352,7 @@ void T3DMesher::updateAabbs( const real_t fCullMargin, const Vector2 &rHeightRan
 	IS_DATA_INIT( VOID );
 	const real_t cull_margin = fCullMargin < 0.0f ? m_pTerrain->getCullMargin() : fCullMargin;
 	const Vector2 height_range = rHeightRange.x == FLT_MAX ? m_pTerrain->getData()->getHeightRange() : rHeightRange;
-	const t3dclipmapVerticalBounds_t vertical_bounds = terrain3dClipmapVerticalBounds(
+	const t3dClipmapVerticalBounds_t vertical_bounds = terrain3dClipmapVerticalBounds(
 		( double ) ( height_range.x ), ( double ) ( height_range.y ), ( double ) ( cull_margin ) );
 	m_fClipmapAabbMinY = ( real_t ) ( vertical_bounds.fMinY );
 	m_fClipmapAabbSizeY = ( real_t ) ( vertical_bounds.fSizeY );

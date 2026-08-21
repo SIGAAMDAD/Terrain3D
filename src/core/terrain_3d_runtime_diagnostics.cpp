@@ -49,7 +49,7 @@
 Dictionary T3DTerrain::getHeightSourceDiagnostics( const Vector3 &rWorldPosition ) const {
 	Dictionary diagnostics;
 	const Vector2i region = m_pData ? m_pData->getRegionLocation( rWorldPosition ) : V2I_MAX;
-	const t3dregionStreamingState_t state = getRegionStreamingStateInternal( region );
+	const t3dRegionStreamingState_t state = getRegionStreamingStateInternal( region );
 	const Vector3 target = getClipmapTargetPosition();
 	const real_t distance = MAX( Math::abs( rWorldPosition.x - target.x ), Math::abs( rWorldPosition.z - target.z ) );
 	const int lod_count = rangeToLodCount( distance );
@@ -217,7 +217,7 @@ Array T3DTerrain::getCacheInventory( const bool bDeep ) const {
 		( int64_t ) ( shader.get( "cache_misses_total", ( int64_t ) ( 0 ) ) )
 	};
 	for ( int index = 0; index < 5; ++index ) {
-		const t3dmemorySubsystemAllocation_t &allocation = m_nMemoryBudgetResult.subsystems[( size_t ) ( index )];
+		const t3dMemorySubsystemAllocation_t &allocation = m_nMemoryBudgetResult.subsystems[( size_t ) ( index )];
 		Dictionary row;
 		row["diagnostics_version"] = TERRAIN3D_DIAGNOSTICS_VERSION;
 		row["cache_name"] = TERRAIN3D_MEMORY_SUBSYSTEM_NAMES[index];
@@ -589,7 +589,7 @@ Dictionary T3DTerrain::getRuntimeDiagnostics( const bool bDeep ) const {
 }
 
 void T3DTerrain::resetRuntimeDiagnostics( void ) {
-	m_runtimeProfileLastSample = t3druntimeProfileSample_t{};
+	m_runtimeProfileLastSample = t3dRuntimeProfileSample_t{};
 	m_nRuntimeProfileSampleCount = 0u;
 	m_runtimeProfileAccumulator.reset();
 	m_nDiagnosticsCollectionUsecLast = 0u;

@@ -20,14 +20,14 @@ using namespace godot;
 
 // Two transforms fit exactly in one 64-byte cacheline. The 32-byte alignment
 // prevents an individual transform from straddling cachelines in EASTL storage.
-typedef struct alignas( 32 ) t3dpackedTransform_s {
+typedef struct alignas( 32 ) t3dPackedTransform_s {
 	float origin[3] = {0.0f, 0.0f, 0.0f};
 	uint16_t basis[9] = {};
 	uint16_t reserved = 0u;
 
-	EA_FORCE_INLINE t3dpackedTransform_s( void ) { set( Transform3D() ); }
+	EA_FORCE_INLINE t3dPackedTransform_s( void ) { set( Transform3D() ); }
 
-	EA_FORCE_INLINE explicit t3dpackedTransform_s( const Transform3D &rTransform ) { set( rTransform ); }
+	EA_FORCE_INLINE explicit t3dPackedTransform_s( const Transform3D &rTransform ) { set( rTransform ); }
 
 	void set( const Transform3D &rTransform ) {
 		origin[0] = ( float ) ( rTransform.origin.x );
@@ -50,16 +50,16 @@ typedef struct alignas( 32 ) t3dpackedTransform_s {
 		}
 		return Transform3D( unpacked_basis, Vector3( origin[0], origin[1], origin[2] ) );
 	}
-} t3dpackedTransform_t;
+} t3dPackedTransform_t;
 
-static_assert( sizeof( t3dpackedTransform_t ) == 32u, "Packed instance transforms must remain 32 bytes." );
-static_assert( alignof( t3dpackedTransform_t ) == 32u, "Packed instance transforms must remain 32-byte aligned." );
+static_assert( sizeof( t3dPackedTransform_t ) == 32u, "Packed instance transforms must remain 32 bytes." );
+static_assert( alignof( t3dPackedTransform_t ) == 32u, "Packed instance transforms must remain 32-byte aligned." );
 
 class T3DTransformArray {
 public:
 	class T3DReference {
 	public:
-		EA_FORCE_INLINE explicit T3DReference( t3dpackedTransform_t *const pTransform ) : m_pTransform( pTransform ) {}
+		EA_FORCE_INLINE explicit T3DReference( t3dPackedTransform_t *const pTransform ) : m_pTransform( pTransform ) {}
 
 		T3DReference &operator=( const Transform3D &rTransform ) {
 			m_pTransform->set( rTransform );
@@ -73,14 +73,14 @@ public:
 		EA_FORCE_INLINE operator Transform3D( void ) const { return m_pTransform->get(); }
 
 	private:
-		t3dpackedTransform_t *m_pTransform = nullptr;
+		t3dPackedTransform_t *m_pTransform = nullptr;
 	};
 
-	EA_FORCE_INLINE void bind( T3DHighWaterSlab<t3dpackedTransform_t> *const pSlab ) { m_storage.bind( pSlab ); }
+	EA_FORCE_INLINE void bind( T3DHighWaterSlab<t3dPackedTransform_t> *const pSlab ) { m_storage.bind( pSlab ); }
 
-	EA_FORCE_INLINE void rebind( T3DHighWaterSlab<t3dpackedTransform_t> *const pSlab ) { m_storage.rebind( pSlab ); }
+	EA_FORCE_INLINE void rebind( T3DHighWaterSlab<t3dPackedTransform_t> *const pSlab ) { m_storage.rebind( pSlab ); }
 
-	EA_FORCE_INLINE void relocateExact( T3DHighWaterSlab<t3dpackedTransform_t> *const pSlab ) { m_storage.relocateExact( pSlab ); }
+	EA_FORCE_INLINE void relocateExact( T3DHighWaterSlab<t3dPackedTransform_t> *const pSlab ) { m_storage.relocateExact( pSlab ); }
 
 	EA_FORCE_INLINE void reserve( const size_t nCount ) { m_storage.reserve( nCount ); }
 
@@ -92,7 +92,7 @@ public:
 
 	EA_FORCE_INLINE void shrinkToFit( void ) {}
 
-	EA_FORCE_INLINE void pushBack( const Transform3D &rTransform ) { m_storage.push_back( t3dpackedTransform_t( rTransform ) ); }
+	EA_FORCE_INLINE void pushBack( const Transform3D &rTransform ) { m_storage.push_back( t3dPackedTransform_t( rTransform ) ); }
 
 	EA_FORCE_INLINE size_t size( void ) const { return m_storage.size(); }
 
@@ -108,20 +108,20 @@ public:
 		return m_storage[iIndex].get();
 	}
 
-	EA_FORCE_INLINE const t3dpackedTransform_t *data( void ) const { return m_storage.data(); }
+	EA_FORCE_INLINE const t3dPackedTransform_t *data( void ) const { return m_storage.data(); }
 
-	EA_FORCE_INLINE t3dpackedTransform_t *data( void ) { return m_storage.data(); }
+	EA_FORCE_INLINE t3dPackedTransform_t *data( void ) { return m_storage.data(); }
 
-	EA_FORCE_INLINE Vector3 getOrigin( const size_t iIndex ) const { const t3dpackedTransform_t &packed = m_storage[iIndex]; return Vector3( packed.origin[0], packed.origin[1], packed.origin[2] ); }
+	EA_FORCE_INLINE Vector3 getOrigin( const size_t iIndex ) const { const t3dPackedTransform_t &packed = m_storage[iIndex]; return Vector3( packed.origin[0], packed.origin[1], packed.origin[2] ); }
 
-	EA_FORCE_INLINE Vector3 getUpAxis( const size_t iIndex ) const { const t3dpackedTransform_t &packed = m_storage[iIndex]; return Vector3( terrain3d_half::decode( packed.basis[1] ), terrain3d_half::decode( packed.basis[4] ), terrain3d_half::decode( packed.basis[7] ) ); }
+	EA_FORCE_INLINE Vector3 getUpAxis( const size_t iIndex ) const { const t3dPackedTransform_t &packed = m_storage[iIndex]; return Vector3( terrain3d_half::decode( packed.basis[1] ), terrain3d_half::decode( packed.basis[4] ), terrain3d_half::decode( packed.basis[7] ) ); }
 
 	EA_FORCE_INLINE void setOriginY( const size_t iIndex, const real_t fY ) { m_storage[iIndex].origin[1] = ( float ) ( fY ); }
 
-	EA_FORCE_INLINE void rescaleOriginXz( const size_t iIndex, const real_t fOldSpacing, const real_t fNewSpacing ) { t3dpackedTransform_t &packed = m_storage[iIndex]; packed.origin[0] = ( float ) ( ( real_t ) ( packed.origin[0] ) / fOldSpacing * fNewSpacing ); packed.origin[2] = ( float ) ( ( real_t ) ( packed.origin[2] ) / fOldSpacing * fNewSpacing ); }
+	EA_FORCE_INLINE void rescaleOriginXz( const size_t iIndex, const real_t fOldSpacing, const real_t fNewSpacing ) { t3dPackedTransform_t &packed = m_storage[iIndex]; packed.origin[0] = ( float ) ( ( real_t ) ( packed.origin[0] ) / fOldSpacing * fNewSpacing ); packed.origin[2] = ( float ) ( ( real_t ) ( packed.origin[2] ) / fOldSpacing * fNewSpacing ); }
 
 private:
-	T3DSlabArray<t3dpackedTransform_t> m_storage;
+	T3DSlabArray<t3dPackedTransform_t> m_storage;
 };
 
 #endif // TERRAIN3D_PACKED_TRANSFORM_H

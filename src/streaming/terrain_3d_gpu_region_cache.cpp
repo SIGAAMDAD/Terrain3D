@@ -210,7 +210,7 @@ void T3DGpuRegionCache::setDefaultMaps(
 	}
 }
 
-Ref<Image> T3DGpuRegionCache::getRegionMapOrDefault( const T3DRegion *pRegion, const t3dmapType_t eMapType ) const {
+Ref<Image> T3DGpuRegionCache::getRegionMapOrDefault( const T3DRegion *pRegion, const t3dMapType_t eMapType ) const {
 	if ( pRegion && !pRegion->isDeleted() ) {
 		Ref<Image> pMap = pRegion->getMap( eMapType );
 		if ( pMap.is_valid() ) {
@@ -1059,16 +1059,16 @@ int T3DGpuRegionCache::processPendingGpuRegionRepublishes( const int nLimit ) {
 
 int T3DGpuRegionCache::collectDesiredGpuRegions(
 	const T3DResidencyFrameState &rFrame, const Vector2i &rCenter, Vector2i *pLocations,
-	const int nCapacity, t3dgpuCacheSelectionStats_t &rStats
+	const int nCapacity, t3dGpuCacheSelectionStats_t &rStats
 ) {
-	rStats = t3dgpuCacheSelectionStats_s();
+	rStats = t3dGpuCacheSelectionStats_s();
 	if ( !pLocations || nCapacity <= 0 ) {
 		return 0;
 	}
 	const int capacity = MIN( nCapacity, TERRAIN3D_GPU_CACHE_MAX_LAYERS );
 	int output_count = 0;
 	uint8_t selected_map[TERRAIN3D_MAX_REGION_SLOTS] = {};
-	auto append_location = [&]( const Vector2i &location, const t3dregionStreamingState_t wanted ) {
+	auto append_location = [&]( const Vector2i &location, const t3dRegionStreamingState_t wanted ) {
 		if ( output_count >= capacity ) {
 			return false;
 		}
@@ -1084,7 +1084,7 @@ int T3DGpuRegionCache::collectDesiredGpuRegions(
 		selected_map[map_index] = 1u;
 		return output_count < capacity;
 	};
-	auto append_state = [&]( const t3dregionStreamingState_t wanted ) {
+	auto append_state = [&]( const t3dRegionStreamingState_t wanted ) {
 		terrain3dForEachSquareRing( rCenter, m_regionRepository.getRegionMapSize(),
 			[&]( const Vector2i &location ) { return append_location( location, wanted ); } );
 	};
@@ -1154,7 +1154,7 @@ int T3DGpuRegionCache::fillMaterialPriorityIds( uint8_t *const pIds, const int n
 
 bool T3DGpuRegionCache::uploadGpuRegionLayer(
 	const int nLayer, const Vector2i &vLocation,
-	const t3dmapType_t eMapType
+	const t3dMapType_t eMapType
 ) {
 	uint64_t prepared_request_usec = 0u;
 	const T3DProfileScopeTimer publicationTimer(
@@ -1507,7 +1507,7 @@ T3DGpuRegionCacheUpdateResult T3DGpuRegionCache::update( const T3DResidencyFrame
 	}
 
 	Vector2i desired[TERRAIN3D_GPU_CACHE_MAX_LAYERS];
-	t3dgpuCacheSelectionStats_t selection_stats;
+	t3dGpuCacheSelectionStats_t selection_stats;
 	int desired_count = collectDesiredGpuRegions( rFrame, center, desired, m_nGpuRegionCacheCapacity, selection_stats );
 	const int footprint_count = desired_count;
 	m_nGpuRegionRequiredLastTick = selection_stats.required;
@@ -1716,7 +1716,7 @@ T3DGpuRegionCacheUpdateResult T3DGpuRegionCache::update( const T3DResidencyFrame
 
 
 bool T3DGpuRegionCache::updateResidentLocation(
-	const Vector2i &vLocation, const t3dmapType_t eMapType, T3DCompute *pCompute
+	const Vector2i &vLocation, const t3dMapType_t eMapType, T3DCompute *pCompute
 ) {
 	m_pCompute = pCompute ? pCompute : m_pCompute;
 	const int layer = findGpuRegionSlot( vLocation );

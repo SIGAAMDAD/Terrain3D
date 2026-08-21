@@ -52,12 +52,12 @@ bool terrain3dMeasurePage(
 	nInstanceCount = 0u;
 	nMeshCount = 0u;
 	terrain3dClearMeshCounts( pMeshCounts );
-	const t3dinstanceLayout_t &layout = rStore.getLayout();
+	const t3dInstanceLayout_t &layout = rStore.getLayout();
 	if ( !layout.isValid() || rStore.meshCount() > ( uint16_t ) ( -1 ) ) {
 		return false;
 	}
 	bool bSeenMeshes[TERRAIN3D_MAX_MESH_ASSETS] = {};
-	for ( const t3dinstanceMesh_t &mesh : rStore.meshes() ) {
+	for ( const t3dInstanceMesh_t &mesh : rStore.meshes() ) {
 		if ( mesh.id < 0 || mesh.id >= TERRAIN3D_MAX_MESH_ASSETS ||
 			mesh.cells.size() > ( size_t ) ( ( uint32_t ) ( -1 ) ) || bSeenMeshes[mesh.id] ) {
 			return false;
@@ -71,7 +71,7 @@ bool terrain3dMeasurePage(
 		uint32_t mesh_instances = 0u;
 		Vector2i previousCell( -1, -1 );
 		bool bHavePreviousCell = false;
-		for ( const t3dinstanceCell_t &cell : mesh.cells ) {
+		for ( const t3dInstanceCell_t &cell : mesh.cells ) {
 			if ( !layout.contains( cell.location.x, cell.location.y ) || cell.transforms.size() > ( uint32_t ) ( -1 ) ) {
 				return false;
 			}
@@ -86,7 +86,7 @@ bool terrain3dMeasurePage(
 			size_t transform_bytes = 0u;
 			size_t sidecar_bytes = 0u;
 			size_t cell_bytes = TERRAIN3D_INSTANCE_PAGE_CELL_HEADER_BYTES;
-			if ( !terrain3dSizeMul( count, sizeof( t3dpackedTransform_t ), transform_bytes ) ||
+			if ( !terrain3dSizeMul( count, sizeof( t3dPackedTransform_t ), transform_bytes ) ||
 				!terrain3dSizeAdd( cell_bytes, transform_bytes, cell_bytes ) ) {
 				return false;
 			}
@@ -145,7 +145,7 @@ bool terrain3dReadPageHeaders(
 	}
 	const uint16_t mesh_count = terrain3dReadU16( pBytes + 6u );
 	const uint32_t declared_total = terrain3dReadU32( pBytes + 8u );
-	t3dinstanceLayout_t layout;
+	t3dInstanceLayout_t layout;
 	if ( version == TERRAIN3D_INSTANCE_PAGE_LEGACY_VERSION ) {
 		if ( terrain3dReadU32( pBytes + 12u ) != 0u ) {
 			return false;
@@ -192,7 +192,7 @@ bool terrain3dReadPageHeaders(
 		Vector2i previousCell( -1, -1 );
 		bool bHavePreviousCell = false;
 		uint32_t decoded_mesh_total = 0u;
-		t3dinstanceMesh_t *pDecodedMesh = nullptr;
+		t3dInstanceMesh_t *pDecodedMesh = nullptr;
 		if ( bDecode && pStore ) {
 			pDecodedMesh = &pStore->getOrCreateMesh( mesh_id, cell_count );
 		}
@@ -218,20 +218,20 @@ bool terrain3dReadPageHeaders(
 			bHavePreviousCell = true;
 			size_t transform_bytes = 0u;
 			size_t sidecar_bytes = 0u;
-			if ( !terrain3dSizeMul( ( size_t ) ( count ), sizeof( t3dpackedTransform_t ), transform_bytes ) ||
+			if ( !terrain3dSizeMul( ( size_t ) ( count ), sizeof( t3dPackedTransform_t ), transform_bytes ) ||
 				!terrain3dPageHas( nOffset, transform_bytes, page_size ) ) {
 				return false;
 			}
-			t3dinstanceCell_t *pDecodedCell = nullptr;
+			t3dInstanceCell_t *pDecodedCell = nullptr;
 			if ( bDecode && pDecodedMesh && pStore ) {
 				pDecodedCell = &pStore->getOrCreateCellExact( mesh_id, Vector2i( cell_x, cell_y ), count,
 					( flags & TERRAIN3D_INSTANCE_PAGE_CELL_COLORS ) != 0u,
 					( flags & TERRAIN3D_INSTANCE_PAGE_CELL_OWNERS ) != 0u );
 				pDecodedCell->transforms.resize( count );
-				t3dpackedTransform_t *pTransforms = pDecodedCell->transforms.data();
+				t3dPackedTransform_t *pTransforms = pDecodedCell->transforms.data();
 				for ( uint32_t index = 0u; index < count; ++index ) {
-					t3dpackedTransform_t &transform = pTransforms[index];
-					const uint8_t *pSource = pBytes + nOffset + ( size_t ) ( index ) * sizeof( t3dpackedTransform_t );
+					t3dPackedTransform_t &transform = pTransforms[index];
+					const uint8_t *pSource = pBytes + nOffset + ( size_t ) ( index ) * sizeof( t3dPackedTransform_t );
 					transform.origin[0] = terrain3dReadF32( pSource );
 					transform.origin[1] = terrain3dReadF32( pSource + 4u );
 					transform.origin[2] = terrain3dReadF32( pSource + 8u );
@@ -310,13 +310,13 @@ bool T3DInstancePageCodec::encode(
 	terrain3dWriteU16( pBytes + 4u, TERRAIN3D_INSTANCE_PAGE_VERSION );
 	terrain3dWriteU16( pBytes + 6u, nMeshCount );
 	terrain3dWriteU32( pBytes + 8u, nInstanceCount );
-	const t3dinstanceLayout_t &layout = rStore.getLayout();
+	const t3dInstanceLayout_t &layout = rStore.getLayout();
 	terrain3dWriteU16( pBytes + 12u, layout.nCellSize );
 	terrain3dWriteU16( pBytes + 14u, layout.cellsPerAxis );
 	size_t offset = TERRAIN3D_INSTANCE_PAGE_HEADER_BYTES;
-	for ( const t3dinstanceMesh_t &mesh : rStore.meshes() ) {
+	for ( const t3dInstanceMesh_t &mesh : rStore.meshes() ) {
 		uint32_t mesh_total = 0u;
-		for ( const t3dinstanceCell_t &cell : mesh.cells ) {
+		for ( const t3dInstanceCell_t &cell : mesh.cells ) {
 			mesh_total += ( uint32_t ) ( cell.transforms.size() );
 		}
 		terrain3dWriteU16( pBytes + offset, ( uint16_t ) ( mesh.id ) );
@@ -324,7 +324,7 @@ bool T3DInstancePageCodec::encode(
 		terrain3dWriteU32( pBytes + offset + 4u, ( uint32_t ) ( mesh.cells.size() ) );
 		terrain3dWriteU32( pBytes + offset + 8u, mesh_total );
 		offset += TERRAIN3D_INSTANCE_PAGE_MESH_HEADER_BYTES;
-		for ( const t3dinstanceCell_t &cell : mesh.cells ) {
+		for ( const t3dInstanceCell_t &cell : mesh.cells ) {
 			uint16_t flags = 0u;
 			if ( cell.usesColors() ) {
 				flags |= TERRAIN3D_INSTANCE_PAGE_CELL_COLORS;
@@ -339,9 +339,9 @@ bool T3DInstancePageCodec::encode(
 			terrain3dWriteU16( pBytes + offset + 6u, 0u );
 			terrain3dWriteU32( pBytes + offset + 8u, count );
 			offset += TERRAIN3D_INSTANCE_PAGE_CELL_HEADER_BYTES;
-			const t3dpackedTransform_t *pTransforms = cell.transforms.data();
+			const t3dPackedTransform_t *pTransforms = cell.transforms.data();
 			for ( uint32_t index = 0u; index < count; ++index ) {
-				const t3dpackedTransform_t &transform = pTransforms[index];
+				const t3dPackedTransform_t &transform = pTransforms[index];
 				terrain3dWriteF32( pBytes + offset, transform.origin[0] );
 				terrain3dWriteF32( pBytes + offset + 4u, transform.origin[1] );
 				terrain3dWriteF32( pBytes + offset + 8u, transform.origin[2] );
@@ -350,7 +350,7 @@ bool T3DInstancePageCodec::encode(
 						transform.basis[basis_index] );
 				}
 				terrain3dWriteU16( pBytes + offset + 30u, transform.reserved );
-				offset += sizeof( t3dpackedTransform_t );
+				offset += sizeof( t3dPackedTransform_t );
 			}
 			if ( cell.usesColors() ) {
 				for ( uint32_t index = 0u; index < count; ++index ) {

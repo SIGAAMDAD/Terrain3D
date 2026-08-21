@@ -90,7 +90,7 @@ void T3DRegionResidency::resetRuntimeCaches( T3DData &rData ) {
 
 void T3DRegionResidency::appendRuntimeProfileSample(
 	const T3DData &,
-	t3druntimeProfileSample_t &rSample
+	t3dRuntimeProfileSample_t &rSample
 ) const {
 	const T3DRuntimePageStats runtimePageStats = m_pRuntimePageStore ?
 		m_pRuntimePageStore->getStats() : T3DRuntimePageStats{};

@@ -23,7 +23,7 @@ class T3DEditor : public Object {
 	CLASS_NAME();
 
 public: // Constants
-	typedef enum t3dtool_e {
+	typedef enum t3dTool_e {
 		REGION,
 		SCULPT,
 		HEIGHT,
@@ -38,31 +38,31 @@ public: // Constants
 		SCALE, // used for picking
 		LANDFORM,
 		TOOL_MAX,
-	} t3dtool_t;
+	} t3dTool_t;
 
 
-	typedef enum t3doperation_e {
+	typedef enum t3dOperation_e {
 		ADD,
 		SUBTRACT,
 		REPLACE,
 		AVERAGE,
 		GRADIENT,
 		OP_MAX,
-	} t3doperation_t;
+	} t3dOperation_t;
 
 
-	typedef enum t3daverageMode_e {
+	typedef enum t3dAverageMode_e {
 		AVG_HEIGHT,
 		AVG_BLEND,
 		AVG_ROUGHNESS,
-	} t3daverageMode_t;
+	} t3dAverageMode_t;
 
 private:
 	T3DTerrain *m_pTerrain = nullptr;
 
 	// Painter settings & variables
-	t3dtool_t m_tool = REGION;
-	t3doperation_t m_operation = ADD;
+	t3dTool_t m_tool = REGION;
+	t3dOperation_t m_operation = ADD;
 	Dictionary m_brushData;
 	Vector3 m_operationPosition = V3_ZERO;
 	Vector3 m_operationMovement = V3_ZERO;
@@ -85,15 +85,15 @@ private:
 	real_t m_fCachedBrushGamma = -1.f;
 	eastl::vector<float> m_fBrushAlphaCache;
 
-	typedef struct t3daxisSample_s {
+	typedef struct t3dAxisSample_s {
 		real_t fOffset = 0.f;
 		real_t fGlobalPosition = 0.f;
 		int32_t regionLocation = 0;
 		int32_t mapPixel = 0;
 		real_t fCenteredUv = 0.f;
-	} t3daxisSample_t;
+	} t3dAxisSample_t;
 
-	typedef struct t3dregionMapCache_s {
+	typedef struct t3dRegionMapCache_s {
 		Ref<T3DRegion> pRegion;
 		Image *pMap = nullptr;
 		Image *pControlMap = nullptr;
@@ -107,23 +107,23 @@ private:
 		bool bMapWasImplicit = false;
 		bool bDirectAccess = false;
 		bool bModified = false;
-	} t3dregionMapCache_t;
+	} t3dRegionMapCache_t;
 
-	typedef struct t3dcomputeWrite_s {
+	typedef struct t3dComputeWrite_s {
 		size_t iRegionIndex = 0u;
 		Vector2i mapPixel = V2I_ZERO;
 		uint32_t sourceValue = 0u;
 		Vector3 worldPosition = V3_ZERO;
-	} t3dcomputeWrite_t;
+	} t3dComputeWrite_t;
 
 	// Reused for every stamp in one stroke. Ordinary brushes perform no heap
 	// allocation after their first stamp; pathological compute capacities are
 	// released at stroke end instead of becoming permanent editor memory.
-	eastl::vector<t3daxisSample_t> m_xAxisScratch;
-	eastl::vector<t3daxisSample_t> m_zAxisScratch;
-	eastl::vector<t3dregionMapCache_t> m_regionCacheScratch;
-	eastl::vector<T3DCompute::t3dbrushElement_t> m_computeElementScratch;
-	eastl::vector<t3dcomputeWrite_t> m_computeWriteScratch;
+	eastl::vector<t3dAxisSample_t> m_xAxisScratch;
+	eastl::vector<t3dAxisSample_t> m_zAxisScratch;
+	eastl::vector<t3dRegionMapCache_t> m_regionCacheScratch;
+	eastl::vector<T3DCompute::t3dBrushElement_t> m_computeElementScratch;
+	eastl::vector<t3dComputeWrite_t> m_computeWriteScratch;
 	eastl::vector<Vector2i> m_modifiedRegionScratch;
 
 	void trimBrushScratch( void );
@@ -136,13 +136,13 @@ private:
 	static Color unpackColorRgba8( uint32_t nValue );
 	static uint32_t readU32( const uint8_t *pBytes, size_t iIndex );
 	static Color readMapPixel(
-		const t3dregionMapCache_t &rEntry, size_t iIndex, const Vector2i &rPixel,
-		t3dmapType_t mapType
+		const t3dRegionMapCache_t &rEntry, size_t iIndex, const Vector2i &rPixel,
+		t3dMapType_t mapType
 	);
-	static uint32_t readControlBits( const t3dregionMapCache_t &rEntry, size_t iIndex, const Vector2i &rPixel );
+	static uint32_t readControlBits( const t3dRegionMapCache_t &rEntry, size_t iIndex, const Vector2i &rPixel );
 	static void writeMapPixel(
-		t3dregionMapCache_t &rEntry, size_t iIndex, const Vector2i &rPixel,
-		const Color &clrValue, t3dmapType_t mapType
+		t3dRegionMapCache_t &rEntry, size_t iIndex, const Vector2i &rPixel,
+		const Color &clrValue, t3dMapType_t mapType
 	);
 	static bool locationLess( const Vector2i &rA, const Vector2i &rB );
 	Dictionary captureEditSnapshot(
@@ -158,7 +158,7 @@ private:
 	void sendRegionAabb( const Vector2i &rRegionLoc, const Vector2 &rHeightRange = V2_ZERO );
 	Ref<T3DRegion> operateRegion( const Vector2i &rRegionLoc );
 	void operateMap( const Vector3 &rGlobalPosition, const real_t fCameraDirection );
-	t3dmapType_t getMapType( void ) const;
+	t3dMapType_t getMapType( void ) const;
 	bool isInBounds( const Point2i &rPixel, const Point2i &rSize ) const;
 	Vector2 getUvPosition(
 		const Vector3 &rGlobalPosition, const int nRegionSize,
@@ -168,7 +168,7 @@ private:
 	void storeUndo( void );
 	void applyUndo( const Dictionary &rData );
 	float average(
-		const t3daverageMode_t mode, const Vector3 &rGlobalPosition, const float fBase,
+		const t3dAverageMode_t mode, const Vector3 &rGlobalPosition, const float fBase,
 		const float fNanVal = 0.f, bool bAlt = false
 	) const;
 	Color average( const Vector3 &rGlobalPosition, const Color &clrBase ) const;
@@ -182,10 +182,10 @@ public:
 
 	void setBrushData( const Dictionary &rData );
 	EA_FORCE_INLINE Dictionary getBrushData( void ) const { return m_brushData; }
-	void setTool( const t3dtool_t tool );
-	EA_FORCE_INLINE t3dtool_t getTool( void ) const { return m_tool; }
-	void setOperation( const t3doperation_t operation );
-	EA_FORCE_INLINE t3doperation_t getOperation( void ) const { return m_operation; }
+	void setTool( const t3dTool_t tool );
+	EA_FORCE_INLINE t3dTool_t getTool( void ) const { return m_tool; }
+	void setOperation( const t3dOperation_t operation );
+	EA_FORCE_INLINE t3dOperation_t getOperation( void ) const { return m_operation; }
 
 	void startOperation( const Vector3 &rGlobalPosition );
 	EA_FORCE_INLINE bool isOperating( void ) const { return m_bIsOperating; }
@@ -198,12 +198,12 @@ protected:
 	static void _bind_methods( void );
 };
 
-VARIANT_ENUM_CAST( T3DEditor::t3doperation_t );
-VARIANT_ENUM_CAST( T3DEditor::t3dtool_t );
+VARIANT_ENUM_CAST( T3DEditor::t3dOperation_t );
+VARIANT_ENUM_CAST( T3DEditor::t3dTool_t );
 
 // Inline functions
 
-inline t3dmapType_t T3DEditor::getMapType( void ) const {
+inline t3dMapType_t T3DEditor::getMapType( void ) const {
 	switch ( m_tool ) {
 		case SCULPT:
 		case HEIGHT:
