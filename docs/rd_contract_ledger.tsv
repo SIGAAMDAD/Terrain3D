@@ -1,0 +1,48 @@
+section	title	batch	state	evidence
+1	Establish exact reference feature set	baseline	complete	docs/rd_reference
+2	Branch and repository hygiene	H	partial	branch/reference/identity established; final cleanup remains
+3	RenderingServer elimination policy	A-H	pending	static baseline frozen
+4	Unified RD ownership	A	pending	current Terrain3DRdContext is partial
+5	Threading and frame-state model	A	pending	mutex snapshot remains
+6	Terrain clipmap topology	A	partial	alpha topology exists; proof/tests remain
+7	Patch representation	A	partial	alpha patch records exist
+8	Near/middle/far terrain rendering	A,C	partial	three RD pipelines exist; parity remains
+9	Complete terrain material port	C	pending	native material publication remains
+10	Generated textures and terrain GPU caches	B	pending	RS ownership/bridging remains
+11	Terrain compute operations	B	partial	compute exists; ownership/sync audit remains
+12	Terrain culling	A	partial	GPU culling exists; CPU comparison/bounds proof remain
+13	Indirect terrain submission	A	partial	indexed indirect exists; validation/debug split remains
+14	Full regular-instancer RD conversion	D	pending	MultiMesh runtime remains
+15	Full HLOD RD conversion	E	pending	native HLOD instances remain
+16	Instance/HLOD material system	D,E	pending	native material RIDs remain
+17	Shadows	F	pending	native proxy/native shadows remain
+18	Lighting	F	partial	simple direct sun/ambient exists; native parity absent
+19	Forward+ integration decision	F	pending	engine bridge absent
+20	Motion vectors	F	pending	clean-break velocity path absent
+21	Depth behavior	F	partial	direct depth exists; native participation/parity absent
+22	Multiview and viewport lifecycle	F	partial	alpha framebuffer/view scaffolding exists
+23	Editor rendering	G	pending	native material/editor path remains
+24	Asset thumbnail/preview rendering	G	pending	native preview path remains
+25	Collision	H	preserved	must regression-test after renderer removal
+26	Navigation and non-rendering systems	H	preserved	must regression-test after renderer removal
+27	C# integration	G	partial	files restored; stale backend API cleanup remains
+28	GDScript integration	G	partial	files restored; stale backend API cleanup remains
+29	Project files and build system	G,H	partial	files/API override restored; fresh build matrix remains
+30	Memory architecture	A-H	pending	partial aggregate accounting only
+31	Diagnostics	A-H	partial	alpha counters exist; required coverage incomplete
+32	Device failure handling	A,F	pending	fallback-oriented alpha behavior remains
+33	Automated tests	A-H	pending	RD-specific contract suite incomplete
+34	Static audit before build	H	pending	baseline frozen; final justification/removal remains
+35	C++ validation	H	pending	fresh final builds required
+36	Shader validation	C,F,H	pending	all raw RD variants must compile in final paths
+37	GDScript validation	G,H	pending	fresh cacheless parse/import required
+38	C# validation	G,H	pending	fresh solution/project compile required
+39	Runtime visual validation	H	pending	final hardware traversal required
+40	Rendering feature validation	F,H	pending	final hardware feature matrix required
+41	Streaming validation	H	pending	176-region dataset traversal planned
+42	Memory validation	H	pending	steady-state plateau capture required
+43	Performance validation	H	pending	separate CPU/GPU/upload/VRAM measurements required
+44	Original-feature parity audit	H	pending	frozen matrix exists; final side-by-side remains
+45	Final independent audit	H	pending	second source-tree audit required
+46	Final Git state	H	pending	final squash/clean/history checks required
+47	Deliverable verification	H	pending	independent extracted-ZIP revalidation required

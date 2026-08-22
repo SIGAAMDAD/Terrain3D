@@ -1,0 +1,24 @@
+subsystem	batches	role	primary_files
+rd_context	A,B,C,D,E,F	Global RD gateway, ownership, accounting, failure/rebuild	src/rendering/rd/terrain_3d_rd_context.h;src/rendering/rd/terrain_3d_rd_context.cpp
+frame_publication	A,F	Main/streaming to render immutable state publication	src/rendering/rd/terrain_3d_render_coordinator.h;src/rendering/rd/terrain_3d_render_coordinator.cpp;src/rendering/rd/terrain_3d_rd_types.h
+clipmap_topology	A	Canonical packed topology and index selection	src/rendering/rd/terrain_3d_rd_topology.h;src/rendering/rd/terrain_3d_rd_topology.cpp
+terrain_submission	A,C,F	Terrain buffers, culling, raster, indirect draws and framebuffer state	src/rendering/rd/terrain_3d_rd_clipmap_renderer.h;src/rendering/rd/terrain_3d_rd_clipmap_renderer.cpp
+rd_shader_library	A,C,F	Raw shader loading/compilation/pipeline source	src/rendering/rd/terrain_3d_rd_shader_library.h;src/rendering/rd/terrain_3d_rd_shader_library.cpp
+compositor_adapter	F	Current pre-opaque GDExtension presentation adapter	src/rendering/rd/terrain_3d_rd_compositor_effect.h;src/rendering/rd/terrain_3d_rd_compositor_effect.cpp
+generated_textures	B	Terrain-owned generated texture creation/update lifecycle	src/assets/generated_texture.h;src/assets/generated_texture.cpp;src/assets/terrain_3d_assets.cpp
+terrain_compute	B	Displacement/edit/cache compute and RD selection/synchronization	src/rendering/terrain_3d_compute.h;src/rendering/terrain_3d_compute.cpp
+terrain_material	C,G	Authored material API, current native publication and production shader feature reference	src/rendering/terrain_3d_material.h;src/rendering/terrain_3d_material.cpp
+terrain_mesher	A,C,F	Frozen native terrain geometry/material/shadow behavior reference	src/rendering/terrain_3d_mesher.h;src/rendering/terrain_3d_mesher.cpp
+render_integration	A,F,G	Backend/proxy/native rendering integration and callbacks	src/rendering/terrain_3d_render_integration.cpp;src/terrain_3d.h;src/terrain_3d.cpp
+instance_logical_store	D,H	CPU instance layout/store/page/residency data to preserve	src/instances/terrain_3d_instance_store.h;src/instances/terrain_3d_instance_store.cpp;src/instances/terrain_3d_instance_layout.h;src/instances/terrain_3d_instance_page_codec.*
+instance_renderer	D,G	Current MultiMesh runtime and authoring APIs to migrate	src/instances/terrain_3d_instancer.h;src/instances/terrain_3d_instancer.cpp
+mesh_assets	D,E,G	Imported mesh/LOD/material source data	src/assets/terrain_3d_mesh_asset.h;src/assets/terrain_3d_mesh_asset.cpp;src/assets/terrain_3d_assets.cpp
+hlod_resources	E,H	CPU HLOD package/manifest/runtime codec to preserve	src/hlod/terrain_3d_hlod_package.*;src/hlod/terrain_3d_hlod_manifest.*;src/hlod/terrain_3d_hlod_runtime_codec.*
+hlod_renderer	E,G	Current HLOD native instance streamer to migrate	src/hlod/terrain_3d_hlod_streamer.h;src/hlod/terrain_3d_hlod_streamer.cpp
+lighting	F,H	Regional lighting/lightmap policy and resources	src/lighting/terrain_3d_lighting_policy.h;src/lighting/terrain_3d_lightmap_streamer.*;src/lighting/terrain_3d_region_lighting.*
+editor_scripts	G,H	Editor UI, profiler, material/instance/HLOD tooling	src/editor;project/addons/terrain_3d/src;project/addons/terrain_3d/tools;project/addons/terrain_3d/menu
+csharp	G,H	Managed wrapper parity	src/core/terrain_3d_bindings.cpp;project/addons/terrain_3d/csharp;project/Terrain3D.csproj;Terrain3D.sln
+collision	H	Height/collision behavior independent of renderer	src/physics;src/data
+streaming	B,D,E,H	Region/page/cache residency and upload scheduling	src/streaming;src/data;src/memory
+build	G,H	Native/API/editor project build definitions	SConstruct;project/addons/terrain_3d/terrain.gdextension;Terrain3D.sln;Terrain3D.vcxproj;thirdparty/godot_api/extension_api-4.7.1.json
+forward_plus_bridge	F	New small Godot 4.7.1 engine-side submission patch target	engine_patch

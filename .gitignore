@@ -44,3 +44,6 @@ export_presets.cfg
 
 # Visual Studio per-user settings
 *.vcxproj.user
+
+# RD local workflow tools
+.rd_tools/

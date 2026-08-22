@@ -1,0 +1,11 @@
+symbol	count	files
+RenderingServer	169	31
+MultiMesh	22	11
+mesh_create	1	1
+instance_create	3	3
+instance_set_base	4	3
+material_set_param	151	6
+Hybrid	6	3
+TODO	2	1
+FIXME	0	0
+placeholder	17	5
