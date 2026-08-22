@@ -47,3 +47,5 @@ export_presets.cfg
 
 # RD local workflow tools
 .rd_tools/
+
+.rd_logs/

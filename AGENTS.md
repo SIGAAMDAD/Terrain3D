@@ -1,78 +1,111 @@
-# Terrain3D RenderingDevice clean-break instructions
+# Terrain3D RD clean-break — Codex Ultra instructions
 
-This repository is the implementation workspace for the clean-break RenderingDevice branch.
+## Mission
+Finish `experiment/rendering-device` to the full completion contract and frozen-reference feature parity. Do not stop because terrain renders, C++ builds, shaders compile, or one batch passes.
 
-## Start here
+## Start — do not rediscover the repo
+On Windows run:
 
-Do not rediscover the project from scratch on every task.
+```bat
+tools\rd.cmd start
+```
 
-1. Run `python3 tools/rd.py next`.
-2. Run `python3 tools/rd.py context <batch>` for the batch it reports.
-3. Read only the files listed for that batch plus directly relevant callers.
-4. Run `python3 tools/rd.py contract <batch>` when exact acceptance criteria are needed. Open the full contract only if an ambiguity remains.
+Then read only the paths printed for the active batch. Use:
 
-Canonical short context:
+```bat
+tools\rd.cmd contract <BATCH>
+```
 
-- `docs/rd_codex_handoff.md`
+only when exact acceptance text is needed. The full contract and large manifests are reference material, not startup context.
+
+Canonical compact sources:
+- `CODEX_ULTRA_IMPLEMENTATION.md`
 - `docs/rd_codex_batches.tsv`
 - `docs/rd_contract_ledger.tsv`
 - `docs/rd_source_map.tsv`
-- `docs/rd_reference/reference_feature_matrix.md` only when parity details are needed
+- `docs/rd_reference/reference_feature_matrix.md` only for parity questions
 
-The frozen native/RD-alpha reference is tag `rd-alpha-pre-cleanbreak-reference` at commit `5d9e8b1c264867e147d5b9d1992acb883f82adb5`.
-The implementation branch must remain `experiment/rendering-device`.
-Never modify or move `main` or the frozen reference tag.
+Frozen reference: tag `rd-alpha-pre-cleanbreak-reference` at `5d9e8b1c264867e147d5b9d1992acb883f82adb5`.
+Required branch: `experiment/rendering-device`.
+Never move `main` or the frozen tag.
 
-## Non-negotiable architecture
+## Windows environment
+- Target: Windows x86-64, Godot 4.7.1 Mono.
+- Default Godot root: `D:\Godot_v4.7.1-stable_mono_win64`.
+- Hardware validation target: Intel Core Ultra 7 258V / Arc 140V.
+- Prefer the Godot `_console.exe` binary for automation when present.
+- Use the repository SCons cache and incremental builds. Do not clean/rebuild unless dependency state requires it.
+- Batch F may obtain exact Godot source tag `4.7.1-stable` into `.rd_tools`; do not clone engine source before Batch F.
 
-- Terrain3D owns its production rendering through RenderingDevice.
-- RenderingServer may remain only as the minimal Godot gateway needed to obtain/schedule access to the global RenderingDevice when no direct GDExtension equivalent exists.
-- Do not create Terrain3D geometry, instances, textures, materials, shadow proxies, or fallback rendering through RenderingServer.
-- No MultiMesh runtime renderer remains in the completed branch.
-- No Direct/Hybrid/native-proxy compatibility renderer remains in the completed branch.
+## Locked architecture
+- Terrain3D production rendering is RenderingDevice-owned.
+- RenderingServer may remain only as the minimum gateway to the global RenderingDevice where Godot exposes no direct GDExtension equivalent.
+- No Terrain3D RS geometry, instance, texture, material, shadow proxy, Hybrid path, or hidden fallback.
+- No MultiMesh runtime renderer at completion.
 - `Terrain3DRdContext` is the explicit GPU ownership/co-ordination boundary.
-- Ordinary frame consumption uses immutable published render state; no render-thread mutex in the steady-state frame path.
-- Do not create vertex buffers, index buffers, shaders, pipelines, uniform sets, or mesh allocations during stable camera traversal after warmup.
-- Preserve the reference branch's public/non-rendering behavior unless the completion contract explicitly removes an obsolete backend/proxy API.
-- Never delete a feature merely because its old implementation uses RenderingServer.
-- Do not introduce a second parallel RD abstraction when an existing RD owner can be extended.
+- Steady-state render consumption uses immutable published snapshots; no render-thread mutex.
+- No steady-state VB/IB/shader/pipeline/uniform-set/mesh allocation after warmup.
+- Regular instances and HLOD share the RD mesh/material cache unless measured lifetime constraints justify separate arenas.
+- Preserve reference functionality and non-rendering behavior. Never delete a feature because its reference implementation is RS-backed.
+- Exact Forward+ parity requires the small Godot 4.7.1 submission bridge specified in Batch F; commit the engine patch under `engine_patch/`.
 
-## Source and style
+## Token discipline — mandatory
+- Never `cat`/read the full completion contract, public API inventory, file manifests, or historical reports as routine context.
+- Never rescan the whole repo to learn architecture already present in `docs/rd_source_map.tsv`.
+- Use targeted `rg -n`, `git diff --name-only`, `git show <reference>:<path>`, and narrow file ranges.
+- Do not paste source, diffs, build logs, or long reasoning into chat. Logs belong in `.rd_logs/`.
+- Build/test wrappers print success tersely and only tail logs on failure.
+- Reuse the current workspace so cached context remains useful.
+- Work through a coherent batch before reporting. Commit at batch gates, not every tiny edit.
+- Final reports: <=250 words unless a hard blocker requires details. Report only commit, batch/state, checks, blocker, next batch.
+- Do not ask for confirmation when code/reference evidence resolves the question.
 
-- Follow `.clang-format` and the existing subsystem layout in `src/README.md`.
-- New native implementation files go in the subsystem that owns them; do not repopulate the `src` root.
-- Infer behavior from the frozen reference and current callers before deleting or renaming APIs.
-- Preserve unrelated user changes.
-- Do not add compatibility shims for the removed renderer. Update callers to the clean-break path.
+## Validation
+One-time:
 
-## Validation loop
+```bat
+tools\rd.cmd bootstrap
+```
 
-One-time workspace setup:
+Edit loop:
 
-`python3 tools/rd.py bootstrap`
+```bat
+tools\rd.cmd fast
+```
 
-During implementation:
+Batch gate:
 
-`python3 tools/rd.py fast`
+```bat
+tools\rd.cmd full
+```
 
-At a completed Codex batch:
+GPU smoke, normally Vulkan first on this Intel GPU:
 
-`python3 tools/rd.py full`
+```bat
+tools\rd.cmd gpu-smoke vulkan
+```
 
-Use `python3 tools/rd.py audit` for the concise forbidden-symbol report. Counts may decrease during migration; they must never increase without an explicit reason. The final clean-break audit is stricter than the intermediate baseline.
+Target D3D12 validation when the batch is GPU-relevant:
 
-If an external dependency prevents one validation step, report that exact step and continue with independent checks. Do not convert static inspection into a claim that code compiled or ran.
+```bat
+tools\rd.cmd gpu-smoke d3d12
+```
 
-## State tracking
+Final validation fixture (Batch H only):
 
-`docs/rd_codex_batches.tsv` is the high-level execution ledger. Update its state only after the batch gate is satisfied. `docs/rd_contract_ledger.tsv` maps all 47 completion-contract sections to those batches.
+```bat
+tools\rd.cmd fixture --verify
+```
 
-Do not declare the branch complete until the final batch passes the full contract, runtime/resource plateau checks, independent archive extraction, `git diff --check`, and `git fsck --full --strict`.
+Final strict legacy-symbol audit:
 
-## Codex response economy
+```bat
+tools\rd.cmd audit --final
+```
 
-Work in the repository rather than narrating intermediate reasoning. Final task reports should be compact: commit SHA, batch/state, validations run, exact blockers, and the next batch. Do not paste large diffs, source files, or repeated architecture summaries unless explicitly requested.
+`docs/rd_work/final_symbol_allowlist.tsv` is for genuinely justified final occurrences only. Do not use it to excuse old rendering architecture.
 
-All implementation commits must use:
+If Godot crashes, do not repeatedly relaunch the full editor. Use `tools\rd.cmd diagnose-godot`; inspect `.rd_logs`; isolate headless/import vs Vulkan vs D3D12. Continue compiler/static work while a GPU-specific failure is being isolated.
+Detailed Windows crash lane: `docs/windows_godot_cli_stability.md`.
 
-- author/committer: `Noah Van Til <nyvantil@gmail.com>`
+All implementation commits: `Noah Van Til <nyvantil@gmail.com>`.

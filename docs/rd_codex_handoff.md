@@ -1,105 +1,80 @@
-# RD clean-break: compact Codex handoff
+# RD clean-break: compact Codex Ultra handoff
 
-Use this file instead of rereading the full completion contract on every task.
+Use this file only when AGENTS.md does not already answer the question.
 
-## Repository identity
-
-- Required branch: `experiment/rendering-device`
-- Frozen reference tag: `rd-alpha-pre-cleanbreak-reference`
-- Frozen reference commit: `5d9e8b1c264867e147d5b9d1992acb883f82adb5`
-- Response-1 baseline commit: `fbba7511ade7bfbe43e6532bb1e8fe073f88732b`
-- Target engine: Godot 4.7.1 stable
-- C++ binding source: vendored godot-cpp 10.0.0-rc1 seeded with `thirdparty/godot_api/extension_api-4.7.1.json`
+## Identity
+- Branch: `experiment/rendering-device`
+- Frozen reference: `rd-alpha-pre-cleanbreak-reference`
+- Target: Godot 4.7.1 Mono, Windows x86-64
+- Local Godot root: `D:\Godot_v4.7.1-stable_mono_win64`
+- Hardware: Core Ultra 7 258V / Arc 140V
 - Commit identity: `Noah Van Til <nyvantil@gmail.com>`
 
-## What already exists
+## Resume with minimum context
 
-The current alpha already contains useful RD terrain work:
-
-- canonical packed clipmap topology;
-- 8-byte clipmap vertices;
-- 16/32-bit topology-index selection;
-- near/middle/far raw RD terrain shaders;
-- RD frame/material/patch buffers;
-- compute terrain frustum culling;
-- indexed indirect terrain drawing;
-- compositor integration and partial framebuffer/view lifecycle;
-- partial RD diagnostics/accounting.
-
-Keep and harden those systems rather than restarting the terrain renderer.
-
-## What still makes the alpha non-compliant
-
-- `Terrain3DRdContext` is not yet the complete GPU ownership layer.
-- frame snapshots still use a mutex-protected mutable publication model;
-- Terrain3D-generated textures/caches still cross RenderingServer ownership/bridging;
-- `Terrain3DMaterial` still publishes native Shader/ShaderMaterial state;
-- regular instances still use MultiMesh/native render instances;
-- HLOD still uses native RenderingServer instances;
-- native shadow proxies/fallback backend concepts still exist;
-- direct RD geometry does not yet have exact Forward+ depth/light/shadow/motion/GI/decal/probe participation;
-- editor overlays/previews still depend on native material/rendering paths;
-- C#/GDScript still expose stale backend/proxy assumptions;
-- RD-specific automated tests and final runtime/resource plateau validation remain incomplete.
-
-## Execution order
-
-The detailed 19-response roadmap is grouped into 8 Codex batches to avoid context resets:
-
-A. RD ownership + immutable snapshots + terrain topology/culling hardening.
-B. Direct RD terrain textures/caches + compute ownership.
-C. Material GPU ABI + full near/middle/far material/shader parity.
-D. RD mesh cache/arenas + regular instance storage/culling/indirect rendering.
-E. HLOD RD conversion using the same mesh cache/material system.
-F. Godot 4.7.1 Forward+ submission bridge + shadows/lighting/depth/motion + viewport lifecycle.
-G. Editor/preview RD rendering + public API/GDScript/C# obsolete-backend cleanup.
-H. Non-rendering regression, tests/builds, runtime dataset traversal, memory/performance plateau, final static/Git/archive audit.
-
-The exact mapping and gates are in `docs/rd_codex_batches.tsv`.
-
-## Commands
-
-Before editing a batch:
-
-```text
-python3 tools/rd.py next
-python3 tools/rd.py context A
+```bat
+tools\rd.cmd start
+tools\rd.cmd context <BATCH>
 ```
 
-One-time environment bootstrap:
+Only if exact acceptance text is needed:
 
-```text
-python3 tools/rd.py bootstrap
+```bat
+tools\rd.cmd contract <BATCH>
 ```
 
-Fast edit/compile loop:
+Do not routinely read the full contract, public API inventory, manifests, or historical audit reports.
 
-```text
-python3 tools/rd.py fast
+## Remaining architecture
+A: RD ownership + immutable snapshots + terrain topology/culling proof.
+B: direct RD terrain textures/caches + compute ownership.
+C: fixed material ABI + full near/middle/far shader/material parity.
+D: RD mesh cache/arenas + MultiMesh-free regular instancing.
+E: HLOD on the shared RD mesh/material path.
+F: exact Godot 4.7.1 Forward+ bridge + shadows/lighting/depth/motion/view lifecycle.
+G: editor/previews + native/GDScript/C# obsolete-backend cleanup.
+H: non-rendering regression + complete builds/tests/runtime/memory/performance/final package audit.
+
+Full compact implementation rules: `CODEX_ULTRA_IMPLEMENTATION.md`.
+
+## Validation
+
+```bat
+tools\rd.cmd bootstrap
+tools\rd.cmd fast
+tools\rd.cmd full
 ```
 
-Batch completion gate:
+GPU checks are separate from routine compile/import work:
 
-```text
-python3 tools/rd.py full
+```bat
+tools\rd.cmd gpu-smoke vulkan
+tools\rd.cmd gpu-smoke d3d12
 ```
 
-Exact contract text for only the active batch:
+For startup/crash isolation:
 
-```text
-python3 tools/rd.py contract A
+```bat
+tools\rd.cmd diagnose-godot
 ```
 
-Static migration view:
+Batch F only:
 
-```text
-python3 tools/rd.py audit
+```bat
+tools\rd.cmd engine-source --bootstrap
 ```
 
-The wrapper locates SCons and Godot when possible. `RD_GODOT=/absolute/path/to/Godot_v4.7.1-stable_linux.x86_64` overrides Godot discovery.
+Batch H validation data:
 
-## Context discipline
+```bat
+tools\rd.cmd fixture --verify
+```
 
-Prefer the batch context output and source map. Read the full 1,197-line completion contract only for the active contract sections. Do not repeatedly ingest historical audit documents unless the current code contradicts the compact state above.
+Final:
 
-At the end of a batch, update only the state/evidence columns in the ledgers, run the gate, commit, and move to the next batch. Keep the user-facing report short.
+```bat
+tools\rd.cmd audit --final
+tools\rd.cmd final
+```
+
+Build and Godot output is captured under `.rd_logs`; successful wrappers stay terse and failures print only a tail.

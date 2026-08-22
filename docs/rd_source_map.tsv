@@ -22,3 +22,5 @@ collision	H	Height/collision behavior independent of renderer	src/physics;src/da
 streaming	B,D,E,H	Region/page/cache residency and upload scheduling	src/streaming;src/data;src/memory
 build	G,H	Native/API/editor project build definitions	SConstruct;project/addons/terrain_3d/terrain.gdextension;Terrain3D.sln;Terrain3D.vcxproj;thirdparty/godot_api/extension_api-4.7.1.json
 forward_plus_bridge	F	New small Godot 4.7.1 engine-side submission patch target	engine_patch
+
+validation_fixture	H	Bundled compressed 176-region traversal fixture; extract only for final runtime validation	validation/terrain3d_00_02.zip;docs/rd_reference/terrain3d_00_02_manifest.tsv
