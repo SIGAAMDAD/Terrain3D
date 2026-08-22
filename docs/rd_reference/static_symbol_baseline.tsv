@@ -1,0 +1,100 @@
+symbol	total_occurrences	files
+RenderingServer	172	31
+MultiMesh	41	11
+mesh_create	3	2
+instance_create	8	4
+instance_set_base	4	3
+material_set_param	151	6
+Hybrid	6	3
+TODO	2	1
+FIXME	0	0
+placeholder	19	6
+
+# per-file details
+
+[RenderingServer] total=172 files=31
+7	src/Terrain3DConstants.h
+7	src/assets/generated_texture.cpp
+2	src/assets/terrain_3d_assets.cpp
+1	src/assets/terrain_3d_mesh_asset.h
+1	src/core/terrain_3d_bindings.cpp
+2	src/core/terrain_3d_resources.cpp
+1	src/data/terrain_3d_data.h
+5	src/hlod/terrain_3d_hlod_builder.cpp
+5	src/hlod/terrain_3d_hlod_streamer.cpp
+5	src/instances/terrain_3d_instancer.cpp
+2	src/instances/terrain_3d_instancer.h
+2	src/rendering/rd/terrain_3d_rd_clipmap_renderer.cpp
+2	src/rendering/rd/terrain_3d_rd_context.cpp
+4	src/rendering/rd/terrain_3d_render_coordinator.cpp
+15	src/rendering/terrain_3d_compute.cpp
+2	src/rendering/terrain_3d_compute.h
+10	src/rendering/terrain_3d_material.cpp
+1	src/rendering/terrain_3d_material.h
+24	src/rendering/terrain_3d_mesher.cpp
+5	src/rendering/terrain_3d_mesher.h
+8	src/rendering/terrain_3d_render_integration.cpp
+8	src/terrain_3d.h
+4	project/addons/terrain_3d/csharp/Terrain3D.cs
+2	project/addons/terrain_3d/csharp/Terrain3DMeshAsset.cs
+19	project/addons/terrain_3d/extras/particle_example/terrain_3D_particles.gd
+1	project/addons/terrain_3d/menu/channel_packer.gd
+4	project/addons/terrain_3d/setting_metadata.json
+1	project/addons/terrain_3d/src/runtime_profiler_overlay.gd
+6	project/addons/terrain_3d/src/runtime_profiler_window.gd
+15	project/addons/terrain_3d/src/ui.gd
+1	project/addons/terrain_3d/tools/hlod_baker.gd
+
+[MultiMesh] total=41 files=11
+9	src/instances/terrain_3d_instancer.cpp
+6	src/instances/terrain_3d_instancer.h
+2	src/rendering/terrain_3d_mesher.cpp
+1	project/addons/terrain_3d/csharp/Terrain3D.cs
+3	project/addons/terrain_3d/csharp/Terrain3DInstancer.cs
+2	project/addons/terrain_3d/extras/3rd_party/import_sgt.gd
+2	project/addons/terrain_3d/setting_metadata.json
+1	project/addons/terrain_3d/src/runtime_profiler_window.gd
+1	project/addons/terrain_3d/src/tool_settings.gd
+2	project/addons/terrain_3d/tools/hlod_baker.gd
+12	project/addons/terrain_3d/tools/streaming_converter.gd
+
+[mesh_create] total=3 files=2
+1	src/instances/terrain_3d_instancer.cpp
+2	src/rendering/terrain_3d_mesher.cpp
+
+[instance_create] total=8 files=4
+3	src/assets/terrain_3d_assets.cpp
+1	src/hlod/terrain_3d_hlod_streamer.cpp
+1	src/instances/terrain_3d_instancer.cpp
+3	src/rendering/terrain_3d_mesher.cpp
+
+[instance_set_base] total=4 files=3
+2	src/assets/terrain_3d_assets.cpp
+1	src/hlod/terrain_3d_hlod_streamer.cpp
+1	src/instances/terrain_3d_instancer.cpp
+
+[material_set_param] total=151 files=6
+110	src/rendering/terrain_3d_material.cpp
+6	src/rendering/terrain_3d_mesher.cpp
+2	src/rendering/terrain_3d_render_integration.cpp
+1	src/terrain_3d.cpp
+19	project/addons/terrain_3d/extras/particle_example/terrain_3D_particles.gd
+13	project/addons/terrain_3d/src/ui.gd
+
+[Hybrid] total=6 files=3
+1	src/core/terrain_3d_bindings.cpp
+3	project/addons/terrain_3d/setting_metadata.json
+2	project/addons/terrain_3d/src/runtime_profiler_window.gd
+
+[TODO] total=2 files=1
+2	project/addons/terrain_3d/src/asset_dock.gd
+
+[FIXME] total=0 files=0
+
+[placeholder] total=19 files=6
+9	src/assets/terrain_3d_assets.cpp
+1	project/addons/terrain_3d/menu/channel_packer.gd
+1	project/addons/terrain_3d/menu/directory_setup.tscn
+1	project/addons/terrain_3d/src/asset_dock.tscn
+1	project/addons/terrain_3d/src/shader_performance_panel.gd
+6	project/addons/terrain_3d/tools/region_workbench_scene.gd

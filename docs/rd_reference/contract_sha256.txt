@@ -1,0 +1,1 @@
+f5ca486e6b1dbf76f92372f34151f0e855b66fa6cf4a2f2e025ae98dbaee7221  docs/rendering_device_completion_contract.md

@@ -1,7 +1,8 @@
 # Terrain3D RenderingDevice Alpha
 
-Branch: `main`
-Baseline tag: `rd-alpha-baseline`
+Implementation branch: `experiment/rendering-device`
+Frozen pre-clean-break reference: `rd-alpha-pre-cleanbreak-reference` (`5d9e8b1`)
+Earlier reconstruction baseline: `rd-alpha-baseline` (`9bc792a`)
 Target: Godot 4.7.1, Forward+ first
 
 This branch contains the alpha RenderingDevice terrain backend while preserving the original RenderingServer path and the fork's existing streaming, authoring, collision, instancing, HLOD, baking, and editor systems.
