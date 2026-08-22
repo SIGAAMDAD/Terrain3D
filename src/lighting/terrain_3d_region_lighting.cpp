@@ -5,7 +5,7 @@
 #include <godot_cpp/core/class_db.hpp>
 
 #define T3D_SET_VALUE( methodName, methodSymbol, field_name, value_type ) \
-	void T3DRegionLighting::methodSymbol( value_type value ) { \
+	void Terrain3DRegionLighting::methodSymbol( value_type value ) { \
 		if ( field_name == value ) { \
 			return; \
 		} \
@@ -13,7 +13,7 @@
 		emit_changed(); \
 	}
 
-void T3DRegionLighting::setLightDataPath( const String &rPath ) {
+void Terrain3DRegionLighting::setLightDataPath( const String &rPath ) {
 	const String path = rPath.strip_edges();
 	if ( m_lightDataPath == path ) {
 		return;
@@ -22,7 +22,7 @@ void T3DRegionLighting::setLightDataPath( const String &rPath ) {
 	emit_changed();
 }
 
-void T3DRegionLighting::setTerrainShadowMaskPath( const String &rPath ) {
+void Terrain3DRegionLighting::setTerrainShadowMaskPath( const String &rPath ) {
 	const String path = rPath.strip_edges();
 	if ( m_terrainShadowMaskPath == path ) {
 		return;
@@ -31,9 +31,9 @@ void T3DRegionLighting::setTerrainShadowMaskPath( const String &rPath ) {
 	emit_changed();
 }
 
-void T3DRegionLighting::setBakedUserData( const Array &rData ) {
+void Terrain3DRegionLighting::setBakedUserData( const Array &rData ) {
 	if ( ( rData.size() % 4 ) != 0 ) {
-		ERR_PRINT( "T3DRegionLighting baked_user_data must contain four values per LightmapGI user" );
+		ERR_PRINT( "Terrain3DRegionLighting baked_user_data must contain four values per LightmapGI user" );
 		return;
 	}
 	m_bakedUserData = rData.duplicate( true );
@@ -44,7 +44,7 @@ T3D_SET_VALUE( cluster_location, setClusterLocation, m_clusterLocation, const Ve
 T3D_SET_VALUE( region_min, setRegionMin, m_regionMin, const Vector2i & )
 T3D_SET_VALUE( region_max, setRegionMax, m_regionMax, const Vector2i & )
 
-void T3DRegionLighting::setClusterSizeRegions( const int nSize ) {
+void Terrain3DRegionLighting::setClusterSizeRegions( const int nSize ) {
 	const int value = CLAMP( nSize, 1, 8 );
 	if ( m_nClusterSizeRegions == value ) {
 		return;
@@ -53,7 +53,7 @@ void T3DRegionLighting::setClusterSizeRegions( const int nSize ) {
 	emit_changed();
 }
 
-void T3DRegionLighting::setTerrainProxyLod( const int nLod ) {
+void Terrain3DRegionLighting::setTerrainProxyLod( const int nLod ) {
 	const int value = CLAMP( nLod, 0, 8 );
 	if ( m_nTerrainProxyLod == value ) {
 		return;
@@ -62,7 +62,7 @@ void T3DRegionLighting::setTerrainProxyLod( const int nLod ) {
 	emit_changed();
 }
 
-void T3DRegionLighting::setContextRadiusRegions( const int nRadius ) {
+void Terrain3DRegionLighting::setContextRadiusRegions( const int nRadius ) {
 	const int value = CLAMP( nRadius, 0, 4 );
 	if ( m_nContextRadiusRegions == value ) {
 		return;
@@ -71,7 +71,7 @@ void T3DRegionLighting::setContextRadiusRegions( const int nRadius ) {
 	emit_changed();
 }
 
-void T3DRegionLighting::setShadowmaskMode( const int nMode ) {
+void Terrain3DRegionLighting::setShadowmaskMode( const int nMode ) {
 	const int value = CLAMP( nMode,
 			( int )( LightmapGIData::SHADOWMASK_MODE_NONE ),
 			( int )( LightmapGIData::SHADOWMASK_MODE_OVERLAY ) );
@@ -84,7 +84,7 @@ void T3DRegionLighting::setShadowmaskMode( const int nMode ) {
 
 T3D_SET_VALUE( bake_signature, setBakeSignature, m_nBakeSignature, int64_t )
 
-void T3DRegionLighting::setDirectionalLightSignature( const String &rSignature ) {
+void Terrain3DRegionLighting::setDirectionalLightSignature( const String &rSignature ) {
 	const String signature = rSignature.strip_edges();
 	if ( m_directionalLightSignature == signature ) {
 		return;
@@ -94,7 +94,7 @@ void T3DRegionLighting::setDirectionalLightSignature( const String &rSignature )
 }
 T3D_SET_VALUE( baked_unix, setBakedUnix, m_nBakedUnix, int64_t )
 
-void T3DRegionLighting::setReceiverCount( const int nCount ) {
+void Terrain3DRegionLighting::setReceiverCount( const int nCount ) {
 	const int value = MAX( nCount, 0 );
 	if ( m_nReceiverCount == value ) {
 		return;
@@ -103,7 +103,7 @@ void T3DRegionLighting::setReceiverCount( const int nCount ) {
 	emit_changed();
 }
 
-void T3DRegionLighting::setContributorCount( const int nCount ) {
+void Terrain3DRegionLighting::setContributorCount( const int nCount ) {
 	const int value = MAX( nCount, 0 );
 	if ( m_nContributorCount == value ) {
 		return;
@@ -112,7 +112,7 @@ void T3DRegionLighting::setContributorCount( const int nCount ) {
 	emit_changed();
 }
 
-void T3DRegionLighting::setLightmapTextureCount( const int nCount ) {
+void Terrain3DRegionLighting::setLightmapTextureCount( const int nCount ) {
 	const int value = MAX( nCount, 0 );
 	if ( m_nLightmapTextureCount == value ) {
 		return;
@@ -121,7 +121,7 @@ void T3DRegionLighting::setLightmapTextureCount( const int nCount ) {
 	emit_changed();
 }
 
-void T3DRegionLighting::setShadowmaskTextureCount( const int nCount ) {
+void Terrain3DRegionLighting::setShadowmaskTextureCount( const int nCount ) {
 	const int value = MAX( nCount, 0 );
 	if ( m_nShadowmaskTextureCount == value ) {
 		return;
@@ -130,7 +130,7 @@ void T3DRegionLighting::setShadowmaskTextureCount( const int nCount ) {
 	emit_changed();
 }
 
-void T3DRegionLighting::setHasProbeData( const bool bHasProbes ) {
+void Terrain3DRegionLighting::setHasProbeData( const bool bHasProbes ) {
 	if ( m_bHasProbeData == bHasProbes ) {
 		return;
 	}
@@ -138,7 +138,7 @@ void T3DRegionLighting::setHasProbeData( const bool bHasProbes ) {
 	emit_changed();
 }
 
-void T3DRegionLighting::setDiskBytes( const int64_t nBytes ) {
+void Terrain3DRegionLighting::setDiskBytes( const int64_t nBytes ) {
 	const int64_t value = MAX( nBytes, ( int64_t )( 0 ) );
 	if ( m_nDiskBytes == value ) {
 		return;
@@ -147,7 +147,7 @@ void T3DRegionLighting::setDiskBytes( const int64_t nBytes ) {
 	emit_changed();
 }
 
-void T3DRegionLighting::setEstimatedGpuBytes( const int64_t nBytes ) {
+void Terrain3DRegionLighting::setEstimatedGpuBytes( const int64_t nBytes ) {
 	const int64_t value = MAX( nBytes, ( int64_t )( 0 ) );
 	if ( m_nEstimatedGpuBytes == value ) {
 		return;
@@ -160,7 +160,7 @@ T3D_SET_VALUE( source_scene, setSourceScene, m_sourceScene, const String & )
 
 #undef T3D_SET_VALUE
 
-int T3DRegionLighting::stripBakedUsersWithPathFragment( const String &rFragment ) {
+int Terrain3DRegionLighting::stripBakedUsersWithPathFragment( const String &rFragment ) {
 	if ( m_bakedUserData.is_empty() || rFragment.is_empty() ) {
 		return 0;
 	}
@@ -184,60 +184,60 @@ int T3DRegionLighting::stripBakedUsersWithPathFragment( const String &rFragment 
 	return removed;
 }
 
-void T3DRegionLighting::_bind_methods( void ) {
-	ClassDB::bind_method( D_METHOD( "set_light_data_path", "path" ), &T3DRegionLighting::setLightDataPath );
-	ClassDB::bind_method( D_METHOD( "get_light_data_path" ), &T3DRegionLighting::getLightDataPath );
-	ClassDB::bind_method( D_METHOD( "has_light_data" ), &T3DRegionLighting::hasLightData );
+void Terrain3DRegionLighting::_bind_methods( void ) {
+	ClassDB::bind_method( D_METHOD( "set_light_data_path", "path" ), &Terrain3DRegionLighting::setLightDataPath );
+	ClassDB::bind_method( D_METHOD( "get_light_data_path" ), &Terrain3DRegionLighting::getLightDataPath );
+	ClassDB::bind_method( D_METHOD( "has_light_data" ), &Terrain3DRegionLighting::hasLightData );
 	ClassDB::bind_method(
-			D_METHOD( "set_terrain_shadow_mask_path", "path" ), &T3DRegionLighting::setTerrainShadowMaskPath );
-	ClassDB::bind_method( D_METHOD( "get_terrain_shadow_mask_path" ), &T3DRegionLighting::getTerrainShadowMaskPath );
-	ClassDB::bind_method( D_METHOD( "has_terrain_shadow_mask" ), &T3DRegionLighting::hasTerrainShadowMask );
-	ClassDB::bind_method( D_METHOD( "set_baked_user_data", "data" ), &T3DRegionLighting::setBakedUserData );
-	ClassDB::bind_method( D_METHOD( "get_baked_user_data" ), &T3DRegionLighting::getBakedUserData );
-	ClassDB::bind_method( D_METHOD( "set_cluster_location", "location" ), &T3DRegionLighting::setClusterLocation );
-	ClassDB::bind_method( D_METHOD( "get_cluster_location" ), &T3DRegionLighting::getClusterLocation );
-	ClassDB::bind_method( D_METHOD( "set_region_min", "location" ), &T3DRegionLighting::setRegionMin );
-	ClassDB::bind_method( D_METHOD( "get_region_min" ), &T3DRegionLighting::getRegionMin );
-	ClassDB::bind_method( D_METHOD( "set_region_max", "location" ), &T3DRegionLighting::setRegionMax );
-	ClassDB::bind_method( D_METHOD( "get_region_max" ), &T3DRegionLighting::getRegionMax );
-	ClassDB::bind_method( D_METHOD( "set_cluster_size_regions", "size" ), &T3DRegionLighting::setClusterSizeRegions );
-	ClassDB::bind_method( D_METHOD( "get_cluster_size_regions" ), &T3DRegionLighting::getClusterSizeRegions );
-	ClassDB::bind_method( D_METHOD( "set_terrain_proxy_lod", "lod" ), &T3DRegionLighting::setTerrainProxyLod );
-	ClassDB::bind_method( D_METHOD( "get_terrain_proxy_lod" ), &T3DRegionLighting::getTerrainProxyLod );
+			D_METHOD( "set_terrain_shadow_mask_path", "path" ), &Terrain3DRegionLighting::setTerrainShadowMaskPath );
+	ClassDB::bind_method( D_METHOD( "get_terrain_shadow_mask_path" ), &Terrain3DRegionLighting::getTerrainShadowMaskPath );
+	ClassDB::bind_method( D_METHOD( "has_terrain_shadow_mask" ), &Terrain3DRegionLighting::hasTerrainShadowMask );
+	ClassDB::bind_method( D_METHOD( "set_baked_user_data", "data" ), &Terrain3DRegionLighting::setBakedUserData );
+	ClassDB::bind_method( D_METHOD( "get_baked_user_data" ), &Terrain3DRegionLighting::getBakedUserData );
+	ClassDB::bind_method( D_METHOD( "set_cluster_location", "location" ), &Terrain3DRegionLighting::setClusterLocation );
+	ClassDB::bind_method( D_METHOD( "get_cluster_location" ), &Terrain3DRegionLighting::getClusterLocation );
+	ClassDB::bind_method( D_METHOD( "set_region_min", "location" ), &Terrain3DRegionLighting::setRegionMin );
+	ClassDB::bind_method( D_METHOD( "get_region_min" ), &Terrain3DRegionLighting::getRegionMin );
+	ClassDB::bind_method( D_METHOD( "set_region_max", "location" ), &Terrain3DRegionLighting::setRegionMax );
+	ClassDB::bind_method( D_METHOD( "get_region_max" ), &Terrain3DRegionLighting::getRegionMax );
+	ClassDB::bind_method( D_METHOD( "set_cluster_size_regions", "size" ), &Terrain3DRegionLighting::setClusterSizeRegions );
+	ClassDB::bind_method( D_METHOD( "get_cluster_size_regions" ), &Terrain3DRegionLighting::getClusterSizeRegions );
+	ClassDB::bind_method( D_METHOD( "set_terrain_proxy_lod", "lod" ), &Terrain3DRegionLighting::setTerrainProxyLod );
+	ClassDB::bind_method( D_METHOD( "get_terrain_proxy_lod" ), &Terrain3DRegionLighting::getTerrainProxyLod );
 	ClassDB::bind_method(
-			D_METHOD( "set_context_radius_regions", "radius" ), &T3DRegionLighting::setContextRadiusRegions );
-	ClassDB::bind_method( D_METHOD( "get_context_radius_regions" ), &T3DRegionLighting::getContextRadiusRegions );
-	ClassDB::bind_method( D_METHOD( "set_shadowmask_mode", "mode" ), &T3DRegionLighting::setShadowmaskMode );
-	ClassDB::bind_method( D_METHOD( "get_shadowmask_mode" ), &T3DRegionLighting::getShadowmaskMode );
-	ClassDB::bind_method( D_METHOD( "set_bake_signature", "signature" ), &T3DRegionLighting::setBakeSignature );
-	ClassDB::bind_method( D_METHOD( "get_bake_signature" ), &T3DRegionLighting::getBakeSignature );
+			D_METHOD( "set_context_radius_regions", "radius" ), &Terrain3DRegionLighting::setContextRadiusRegions );
+	ClassDB::bind_method( D_METHOD( "get_context_radius_regions" ), &Terrain3DRegionLighting::getContextRadiusRegions );
+	ClassDB::bind_method( D_METHOD( "set_shadowmask_mode", "mode" ), &Terrain3DRegionLighting::setShadowmaskMode );
+	ClassDB::bind_method( D_METHOD( "get_shadowmask_mode" ), &Terrain3DRegionLighting::getShadowmaskMode );
+	ClassDB::bind_method( D_METHOD( "set_bake_signature", "signature" ), &Terrain3DRegionLighting::setBakeSignature );
+	ClassDB::bind_method( D_METHOD( "get_bake_signature" ), &Terrain3DRegionLighting::getBakeSignature );
 	ClassDB::bind_method( D_METHOD( "set_directional_light_signature", "signature" ),
-			&T3DRegionLighting::setDirectionalLightSignature );
+			&Terrain3DRegionLighting::setDirectionalLightSignature );
 	ClassDB::bind_method(
-			D_METHOD( "get_directional_light_signature" ), &T3DRegionLighting::getDirectionalLightSignature );
-	ClassDB::bind_method( D_METHOD( "set_baked_unix", "unix_time" ), &T3DRegionLighting::setBakedUnix );
-	ClassDB::bind_method( D_METHOD( "get_baked_unix" ), &T3DRegionLighting::getBakedUnix );
-	ClassDB::bind_method( D_METHOD( "set_receiver_count", "count" ), &T3DRegionLighting::setReceiverCount );
-	ClassDB::bind_method( D_METHOD( "get_receiver_count" ), &T3DRegionLighting::getReceiverCount );
-	ClassDB::bind_method( D_METHOD( "set_contributor_count", "count" ), &T3DRegionLighting::setContributorCount );
-	ClassDB::bind_method( D_METHOD( "get_contributor_count" ), &T3DRegionLighting::getContributorCount );
+			D_METHOD( "get_directional_light_signature" ), &Terrain3DRegionLighting::getDirectionalLightSignature );
+	ClassDB::bind_method( D_METHOD( "set_baked_unix", "unix_time" ), &Terrain3DRegionLighting::setBakedUnix );
+	ClassDB::bind_method( D_METHOD( "get_baked_unix" ), &Terrain3DRegionLighting::getBakedUnix );
+	ClassDB::bind_method( D_METHOD( "set_receiver_count", "count" ), &Terrain3DRegionLighting::setReceiverCount );
+	ClassDB::bind_method( D_METHOD( "get_receiver_count" ), &Terrain3DRegionLighting::getReceiverCount );
+	ClassDB::bind_method( D_METHOD( "set_contributor_count", "count" ), &Terrain3DRegionLighting::setContributorCount );
+	ClassDB::bind_method( D_METHOD( "get_contributor_count" ), &Terrain3DRegionLighting::getContributorCount );
 	ClassDB::bind_method(
-			D_METHOD( "set_lightmap_texture_count", "count" ), &T3DRegionLighting::setLightmapTextureCount );
-	ClassDB::bind_method( D_METHOD( "get_lightmap_texture_count" ), &T3DRegionLighting::getLightmapTextureCount );
+			D_METHOD( "set_lightmap_texture_count", "count" ), &Terrain3DRegionLighting::setLightmapTextureCount );
+	ClassDB::bind_method( D_METHOD( "get_lightmap_texture_count" ), &Terrain3DRegionLighting::getLightmapTextureCount );
 	ClassDB::bind_method(
-			D_METHOD( "set_shadowmask_texture_count", "count" ), &T3DRegionLighting::setShadowmaskTextureCount );
-	ClassDB::bind_method( D_METHOD( "get_shadowmask_texture_count" ), &T3DRegionLighting::getShadowmaskTextureCount );
-	ClassDB::bind_method( D_METHOD( "set_has_probe_data", "has_probes" ), &T3DRegionLighting::setHasProbeData );
-	ClassDB::bind_method( D_METHOD( "has_probe_data" ), &T3DRegionLighting::hasProbeData );
-	ClassDB::bind_method( D_METHOD( "set_disk_bytes", "bytes" ), &T3DRegionLighting::setDiskBytes );
-	ClassDB::bind_method( D_METHOD( "get_disk_bytes" ), &T3DRegionLighting::getDiskBytes );
-	ClassDB::bind_method( D_METHOD( "set_estimated_gpu_bytes", "bytes" ), &T3DRegionLighting::setEstimatedGpuBytes );
-	ClassDB::bind_method( D_METHOD( "get_estimated_gpu_bytes" ), &T3DRegionLighting::getEstimatedGpuBytes );
-	ClassDB::bind_method( D_METHOD( "set_source_scene", "path" ), &T3DRegionLighting::setSourceScene );
-	ClassDB::bind_method( D_METHOD( "get_source_scene" ), &T3DRegionLighting::getSourceScene );
-	ClassDB::bind_method( D_METHOD( "has_shadowmask" ), &T3DRegionLighting::hasShadowmask );
+			D_METHOD( "set_shadowmask_texture_count", "count" ), &Terrain3DRegionLighting::setShadowmaskTextureCount );
+	ClassDB::bind_method( D_METHOD( "get_shadowmask_texture_count" ), &Terrain3DRegionLighting::getShadowmaskTextureCount );
+	ClassDB::bind_method( D_METHOD( "set_has_probe_data", "has_probes" ), &Terrain3DRegionLighting::setHasProbeData );
+	ClassDB::bind_method( D_METHOD( "has_probe_data" ), &Terrain3DRegionLighting::hasProbeData );
+	ClassDB::bind_method( D_METHOD( "set_disk_bytes", "bytes" ), &Terrain3DRegionLighting::setDiskBytes );
+	ClassDB::bind_method( D_METHOD( "get_disk_bytes" ), &Terrain3DRegionLighting::getDiskBytes );
+	ClassDB::bind_method( D_METHOD( "set_estimated_gpu_bytes", "bytes" ), &Terrain3DRegionLighting::setEstimatedGpuBytes );
+	ClassDB::bind_method( D_METHOD( "get_estimated_gpu_bytes" ), &Terrain3DRegionLighting::getEstimatedGpuBytes );
+	ClassDB::bind_method( D_METHOD( "set_source_scene", "path" ), &Terrain3DRegionLighting::setSourceScene );
+	ClassDB::bind_method( D_METHOD( "get_source_scene" ), &Terrain3DRegionLighting::getSourceScene );
+	ClassDB::bind_method( D_METHOD( "has_shadowmask" ), &Terrain3DRegionLighting::hasShadowmask );
 	ClassDB::bind_method( D_METHOD( "strip_baked_users_with_path_fragment", "path_fragment" ),
-			&T3DRegionLighting::stripBakedUsersWithPathFragment );
+			&Terrain3DRegionLighting::stripBakedUsersWithPathFragment );
 
 	ADD_GROUP( "Bake Configuration", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "cluster_size_regions", PROPERTY_HINT_RANGE, "1,8,1" ),

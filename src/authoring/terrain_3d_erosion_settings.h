@@ -17,8 +17,8 @@ typedef enum t3dBoundaryMode_e {
 	BOUNDARY_OPEN,
 } t3dBoundaryMode_t;
 
-class T3DErosionSettings : public Resource {
-	GDCLASS( T3DErosionSettings, Resource );
+class Terrain3DErosionSettings : public Resource {
+	GDCLASS( Terrain3DErosionSettings, Resource );
 	CLASS_NAME();
 
 public:
@@ -213,8 +213,8 @@ private:
 	void setCurve( Ref<Curve> &rTargetCurve, const Ref<Curve> &rSourceCurve );
 
 public:
-	T3DErosionSettings( void );
-	~T3DErosionSettings( void ) = default;
+	Terrain3DErosionSettings( void );
+	~Terrain3DErosionSettings( void ) = default;
 
 	void setSimulationYears( double fValue );
 	EA_FORCE_INLINE double getSimulationYears( void ) const {

@@ -7,11 +7,14 @@
 
 #include "Terrain3DConstants.h"
 #include "eastl_config.h"
+#include "rendering/rd/terrain_3d_rd_types.h"
 
 #include <EASTL/array.h>
 #include <cstdint>
+#include <godot_cpp/classes/geometry_instance3d.hpp>
+#include <godot_cpp/classes/rendering_server.hpp>
 
-class T3DTerrain;
+class Terrain3D;
 
 typedef enum t3dMeshType_e {
 	LOD0_MESH,
@@ -45,12 +48,12 @@ typedef struct t3dLodBatchSlot_s {
 	int8_t m_nInstance = -1;
 } t3dLodBatchSlot_t;
 
-class T3DMesher {
-	CLASS_NAME_STATIC( "T3DMesher" );
+class Terrain3DMesher {
+	CLASS_NAME_STATIC( "Terrain3DMesher" );
 
 public: // Constants
 private:
-	T3DTerrain *m_pTerrain = nullptr;
+	Terrain3D *m_pTerrain = nullptr;
 	RID m_hScenario = RID();
 	eastl::array<Vector2, s_nMaxClipmapLevels> m_szLastLodPositions{};
 	eastl::array<int, s_nMaxClipmapLevels> m_szLastLodTestX{};
@@ -73,6 +76,8 @@ private:
 	int m_nClipmapLevelCount = 0;
 	bool m_bStateMeshBatching = false;
 	bool m_bRequireCookedGeometryPack = false;
+	bool m_bRenderSurfaceEnabled = true;
+	bool m_bNativeShadowProxyEnabled = false;
 
 	eastl::array<Vector3, s_nPairInstances> m_szTrimAPos{};
 	eastl::array<Vector3, s_nPairInstances> m_szTrimBPos{};
@@ -160,12 +165,12 @@ private:
 	size_t estimateGeometryPayloadBytes( int nFirstLod, int nLastLod, bool bIncludeBasis ) const;
 
 public:
-	EA_FORCE_INLINE T3DMesher( void ) {}
-	EA_FORCE_INLINE ~T3DMesher( void ) {
+	EA_FORCE_INLINE Terrain3DMesher( void ) {}
+	EA_FORCE_INLINE ~Terrain3DMesher( void ) {
 		destroy();
 	}
 
-	void initialize( T3DTerrain *pTerrain,
+	void initialize( Terrain3D *pTerrain,
 			const int nMeshSize,
 			const int nLods,
 			const int nTessellationLevel,
@@ -310,6 +315,12 @@ public:
 		m_giMode = giMode;
 		update();
 	}
+
+	EA_FORCE_INLINE const t3dClipmapGeometry_t &getClipmapGeometry( const t3dMeshType_t type ) const {
+		return m_szMeshGeometry[( size_t )( type )];
+	}
+	int fillRdPatches( t3dRdPatch_t *pPatches, int nCapacity ) const;
+	void setRdPresentation( bool bSurfaceEnabled, bool bShadowProxyEnabled );
 	void setShadowLodCount( int nCount );
 	void setTierShadowEnabled( const eastl::array<bool, 3> &bEnabled );
 	void setTierShadowLodCounts( const eastl::array<int, 3> &nCounts );

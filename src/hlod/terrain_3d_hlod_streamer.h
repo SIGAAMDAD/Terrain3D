@@ -22,7 +22,7 @@
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
 using namespace godot;
 #endif
-class T3DTerrain;
+class Terrain3D;
 
 typedef struct t3dEntry_s {
 	int m_nLevel = 1;
@@ -43,7 +43,7 @@ typedef struct t3dEntry_s {
 	bool m_bActive = false;
 	bool m_bRetiring = false;
 	uint8_t m_nRetireReadyFrames = 0;
-	Ref<T3DHLODPackage> m_ackage;
+	Ref<Terrain3DHLODPackage> m_ackage;
 	RID m_hInstance;
 } t3dEntry_t;
 
@@ -52,12 +52,12 @@ typedef struct t3dNodePolicy_s {
 	uint8_t m_nMinLevel = 0;
 } t3dNodePolicy_t;
 
-class T3DHLODStreamer : public Object {
-	GDCLASS( T3DHLODStreamer, Object );
+class Terrain3DHLODStreamer : public Object {
+	GDCLASS( Terrain3DHLODStreamer, Object );
 	CLASS_NAME();
 
-	T3DTerrain *m_pTerrain = nullptr;
-	Ref<T3DHLODManifest> m_manifest;
+	Terrain3D *m_pTerrain = nullptr;
+	Ref<Terrain3DHLODManifest> m_manifest;
 	eastl::vector<t3dEntry_t> m_entries;
 	eastl::vector<int> m_roots;
 	eastl::vector<uint8_t> m_instancerMinLevels;
@@ -95,9 +95,9 @@ class T3DHLODStreamer : public Object {
 	static Vector2i regionFromIndex( int index );
 	int findEntry( int level, const Vector2i &rCluster ) const;
 	void clearRuntime( bool bNotify, bool bReleaseStorage = false );
-	bool compileManifest( const Ref<T3DHLODManifest> &rManifest );
-	bool compilePackedManifest( const Ref<T3DHLODManifest> &rManifest );
-	void compileLegacyNodePolicies( const Ref<T3DHLODManifest> &rManifest );
+	bool compileManifest( const Ref<Terrain3DHLODManifest> &rManifest );
+	bool compilePackedManifest( const Ref<Terrain3DHLODManifest> &rManifest );
+	void compileLegacyNodePolicies( const Ref<Terrain3DHLODManifest> &rManifest );
 	void buildHierarchy( void );
 	bool packageAcceptable( const t3dEntry_t &rEntry, const Vector3 &rLocalTarget ) const;
 	void selectRecursive( int index, const Vector3 &rLocalTarget );
@@ -111,11 +111,11 @@ class T3DHLODStreamer : public Object {
 	void notifyRepresentationChanges( const uint8_t *pOldLevels );
 
 public:
-	T3DHLODStreamer( void ) = default;
-	EA_FORCE_INLINE ~T3DHLODStreamer( void ) {
+	Terrain3DHLODStreamer( void ) = default;
+	EA_FORCE_INLINE ~Terrain3DHLODStreamer( void ) {
 		destroy();
 	}
-	void initialize( T3DTerrain *pTerrain );
+	void initialize( Terrain3D *pTerrain );
 	void destroy( void );
 	void suspend( void );
 	bool reloadManifest( void );

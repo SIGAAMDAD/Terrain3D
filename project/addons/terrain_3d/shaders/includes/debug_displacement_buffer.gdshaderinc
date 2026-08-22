@@ -2,7 +2,7 @@
 
 #ifdef T3D_ENABLE_DEBUG_DISPLACEMENT_BUFFER
 	// Show displacement buffer
-	#ifdef DISPLACEMENT
+#ifdef T3D_ENABLE_DISPLACEMENT_UNIFORMS
 	{
 		float scale = MODEL_MATRIX[0][0];
 		float vertex_lerp = smoothstep(0.55, 0.95, (v_vertex_xz_dist / scale - _mesh_size - 4.0) / (_mesh_size - 2.0));
@@ -14,5 +14,5 @@
 		NORMAL_MAP = vec3(0.5, 0.5, 1.0);
 		AO = 1.0;
 	}
-	#endif
+#endif
 #endif

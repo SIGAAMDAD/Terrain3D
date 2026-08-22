@@ -16,7 +16,7 @@
 #include <godot_cpp/templates/vector.hpp>
 #include <godot_cpp/variant/packed_string_array.hpp>
 
-class T3DTerrain;
+class Terrain3D;
 
 typedef enum t3dWorldBackground_e {
 	NONE,
@@ -309,8 +309,8 @@ typedef enum t3dPageTableBuildResult_e {
 	PAGE_TABLE_TEXTURE_ALLOCATION_FAILED,
 } t3dPageTableBuildResult_t;
 
-class T3DMaterial : public Resource {
-	GDCLASS( T3DMaterial, Resource );
+class Terrain3DMaterial : public Resource {
+	GDCLASS( Terrain3DMaterial, Resource );
 	CLASS_NAME();
 
 	bool m_bPersistenceDirty = false;
@@ -363,7 +363,7 @@ public: // Constants
 	// noise source branches from the compiled shader.
 
 private:
-	T3DTerrain *m_pTerrain = nullptr;
+	Terrain3D *m_pTerrain = nullptr;
 
 	RID m_hMaterial;
 	RID m_hszTierMaterials[SHADER_TIER_COUNT] = {};
@@ -407,15 +407,15 @@ private:
 	Ref<Shader> m_connectedBufferShaderOverride;
 	real_t m_fDisplacementScale = 1.0f;
 	real_t m_fDisplacementSharpness = 0.5f;
-	T3DGeneratedTexture m_generatedDummy;
-	T3DGeneratedTexture m_generatedFarHeightDummy;
-	T3DGeneratedTexture m_generatedFarColorDummy;
-	T3DGeneratedTexture m_generatedSurfaceDummy;
-	T3DGeneratedTexture m_generatedDisplacementDummy;
-	T3DGeneratedTexture m_generatedRegionMap;
+	Terrain3DGeneratedTexture m_generatedDummy;
+	Terrain3DGeneratedTexture m_generatedFarHeightDummy;
+	Terrain3DGeneratedTexture m_generatedFarColorDummy;
+	Terrain3DGeneratedTexture m_generatedSurfaceDummy;
+	Terrain3DGeneratedTexture m_generatedDisplacementDummy;
+	Terrain3DGeneratedTexture m_generatedRegionMap;
 	uint64_t m_nRegionMapTextureHash = 0u;
 	int m_nRegionMapTextureSize = 0;
-	T3DGeneratedTexture m_generatedLogicalRegionMap;
+	Terrain3DGeneratedTexture m_generatedLogicalRegionMap;
 	uint64_t m_nLogicalRegionMapTextureHash = 0u;
 	int m_nLogicalRegionMapTextureSize = 0;
 	uint32_t m_nRegionPageTableOwnerGeneration = 0u;
@@ -643,21 +643,21 @@ private:
 	}
 
 public:
-	EA_FORCE_INLINE T3DMaterial( void ) {}
-	EA_FORCE_INLINE ~T3DMaterial( void ) {
+	EA_FORCE_INLINE Terrain3DMaterial( void ) {}
+	EA_FORCE_INLINE ~Terrain3DMaterial( void ) {
 		destroy();
 	}
-	void initialize( T3DTerrain *pTerrain );
+	void initialize( Terrain3D *pTerrain );
 	EA_FORCE_INLINE bool isInitialized( void ) const {
 		return m_pTerrain != nullptr;
 	}
-	EA_FORCE_INLINE bool isInitializedFor( const T3DTerrain *pTerrain ) const {
+	EA_FORCE_INLINE bool isInitializedFor( const Terrain3D *pTerrain ) const {
 		return m_pTerrain == pTerrain;
 	}
-	EA_FORCE_INLINE T3DTerrain *getTerrainOwner( void ) const {
+	EA_FORCE_INLINE Terrain3D *getTerrainOwner( void ) const {
 		return m_pTerrain;
 	}
-	void uninitialize( T3DTerrain *pTerrain );
+	void uninitialize( Terrain3D *pTerrain );
 	void destroy( void );
 
 	void update( const uint32_t nFlags = UNIFORMS_ONLY );

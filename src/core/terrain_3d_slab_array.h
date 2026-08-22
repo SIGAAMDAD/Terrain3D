@@ -18,17 +18,17 @@
 // arrays own only an offset/count/capacity tuple. Clearing the owner resets the
 // bump cursor while retaining the backing allocation, so cache-slot reuse does
 // not recreate hundreds of tiny vector allocations.
-template <typename T> class T3DHighWaterSlab {
+template <typename T> class Terrain3DHighWaterSlab {
 	eastl::vector<T> m_storage;
 	size_t m_nUsed = 0u;
 	size_t m_nGrowCount = 0u;
 
 public:
-	T3DHighWaterSlab( void ) = default;
-	T3DHighWaterSlab( const T3DHighWaterSlab & ) = delete;
-	T3DHighWaterSlab &operator=( const T3DHighWaterSlab & ) = delete;
-	T3DHighWaterSlab( T3DHighWaterSlab && ) noexcept = default;
-	T3DHighWaterSlab &operator=( T3DHighWaterSlab && ) noexcept = default;
+	Terrain3DHighWaterSlab( void ) = default;
+	Terrain3DHighWaterSlab( const Terrain3DHighWaterSlab & ) = delete;
+	Terrain3DHighWaterSlab &operator=( const Terrain3DHighWaterSlab & ) = delete;
+	Terrain3DHighWaterSlab( Terrain3DHighWaterSlab && ) noexcept = default;
+	Terrain3DHighWaterSlab &operator=( Terrain3DHighWaterSlab && ) noexcept = default;
 
 	EA_FORCE_INLINE void reserve( const size_t nCount ) {
 		if ( nCount > m_storage.capacity() ) {
@@ -85,19 +85,19 @@ public:
 	EA_FORCE_INLINE size_t residentBytes( void ) const {
 		return m_storage.capacity() * sizeof( T );
 	}
-	EA_FORCE_INLINE void swap( T3DHighWaterSlab<T> &rOther ) {
+	EA_FORCE_INLINE void swap( Terrain3DHighWaterSlab<T> &rOther ) {
 		m_storage.swap( rOther.m_storage );
 		std::swap( m_nUsed, rOther.m_nUsed );
 		std::swap( m_nGrowCount, rOther.m_nGrowCount );
 	}
 };
 
-// Non-owning logical array backed by a T3DHighWaterSlab. Growth relocates the
+// Non-owning logical array backed by a Terrain3DHighWaterSlab. Growth relocates the
 // logical array into a new high-water segment and copies its live elements.
 // Old segments are reclaimed wholesale by owner reset/compaction; normal
 // runtime mutation never performs per-cell frees.
-template <typename T> class T3DSlabArray {
-	T3DHighWaterSlab<T> *m_pSlab = nullptr;
+template <typename T> class Terrain3DSlabArray {
+	Terrain3DHighWaterSlab<T> *m_pSlab = nullptr;
 	size_t m_iOffset = 0u;
 	size_t m_nCount = 0u;
 	size_t m_nCapacity = 0u;
@@ -111,10 +111,10 @@ template <typename T> class T3DSlabArray {
 	}
 
 public:
-	T3DSlabArray( void ) = default;
-	T3DSlabArray( const T3DSlabArray & ) = delete;
-	T3DSlabArray &operator=( const T3DSlabArray & ) = delete;
-	EA_FORCE_INLINE T3DSlabArray( T3DSlabArray &&rOther ) noexcept :
+	Terrain3DSlabArray( void ) = default;
+	Terrain3DSlabArray( const Terrain3DSlabArray & ) = delete;
+	Terrain3DSlabArray &operator=( const Terrain3DSlabArray & ) = delete;
+	EA_FORCE_INLINE Terrain3DSlabArray( Terrain3DSlabArray &&rOther ) noexcept :
 			m_pSlab( rOther.m_pSlab ),
 			m_iOffset( rOther.m_iOffset ),
 			m_nCount( rOther.m_nCount ),
@@ -124,7 +124,7 @@ public:
 		rOther.m_nCount = 0u;
 		rOther.m_nCapacity = 0u;
 	}
-	EA_FORCE_INLINE T3DSlabArray &operator=( T3DSlabArray &&rOther ) noexcept {
+	EA_FORCE_INLINE Terrain3DSlabArray &operator=( Terrain3DSlabArray &&rOther ) noexcept {
 		if ( this != &rOther ) {
 			m_pSlab = rOther.m_pSlab;
 			m_iOffset = rOther.m_iOffset;
@@ -138,13 +138,13 @@ public:
 		return *this;
 	}
 
-	EA_FORCE_INLINE void bind( T3DHighWaterSlab<T> *const pSlab ) {
+	EA_FORCE_INLINE void bind( Terrain3DHighWaterSlab<T> *const pSlab ) {
 		m_pSlab = pSlab;
 		m_iOffset = 0u;
 		m_nCount = 0u;
 		m_nCapacity = 0u;
 	}
-	EA_FORCE_INLINE void rebind( T3DHighWaterSlab<T> *const pSlab ) {
+	EA_FORCE_INLINE void rebind( Terrain3DHighWaterSlab<T> *const pSlab ) {
 		m_pSlab = pSlab;
 	}
 	EA_FORCE_INLINE bool isBound( void ) const {
@@ -268,7 +268,7 @@ public:
 		return m_iOffset;
 	}
 
-	void relocateExact( T3DHighWaterSlab<T> *const pDestination ) {
+	void relocateExact( Terrain3DHighWaterSlab<T> *const pDestination ) {
 		if ( !pDestination ) {
 			return;
 		}

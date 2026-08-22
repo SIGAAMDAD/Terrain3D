@@ -250,7 +250,7 @@ static bool t3dActiveStorageActivePublishBytesUnsafe( const int m_iLogicalSlot,
 	return true;
 }
 
-static bool t3dActiveStorageActiveCopyRegionUnsafe( const int m_iLogicalSlot, const T3DRegion *pRegion ) {
+static bool t3dActiveStorageActiveCopyRegionUnsafe( const int m_iLogicalSlot, const Terrain3DRegion *pRegion ) {
 	const int region_size = s_nActiveRegionSize.load( std::memory_order_acquire );
 	const Image *const pImage = pRegion ? pRegion->getMapPtr( TYPE_HEIGHT ) : nullptr;
 	PackedByteArray bytes;
@@ -332,20 +332,20 @@ bool t3dActiveStorageBind( const void *const pOwner,
 	return true;
 }
 
-T3DActiveMapLease::T3DActiveMapLease( const int iSlot, const t3dActiveMapView_t &rView ) :
+Terrain3DActiveMapLease::Terrain3DActiveMapLease( const int iSlot, const t3dActiveMapView_t &rView ) :
 		m_iSlot( iSlot ), m_view( rView ) {}
 
-T3DActiveMapLease::~T3DActiveMapLease( void ) {
+Terrain3DActiveMapLease::~Terrain3DActiveMapLease( void ) {
 	reset();
 }
 
-T3DActiveMapLease::T3DActiveMapLease( T3DActiveMapLease &&rOther ) noexcept :
+Terrain3DActiveMapLease::Terrain3DActiveMapLease( Terrain3DActiveMapLease &&rOther ) noexcept :
 		m_iSlot( rOther.m_iSlot ), m_view( rOther.m_view ) {
 	rOther.m_iSlot = -1;
 	rOther.m_view = {};
 }
 
-T3DActiveMapLease &T3DActiveMapLease::operator=( T3DActiveMapLease &&rOther ) noexcept {
+Terrain3DActiveMapLease &Terrain3DActiveMapLease::operator=( Terrain3DActiveMapLease &&rOther ) noexcept {
 	if ( this != &rOther ) {
 		reset();
 		m_iSlot = rOther.m_iSlot;
@@ -356,7 +356,7 @@ T3DActiveMapLease &T3DActiveMapLease::operator=( T3DActiveMapLease &&rOther ) no
 	return *this;
 }
 
-void T3DActiveMapLease::reset( void ) {
+void Terrain3DActiveMapLease::reset( void ) {
 	if ( m_iSlot >= 0 ) {
 		t3dActiveStorageActiveReleaseReader( m_iSlot );
 	}
@@ -486,7 +486,7 @@ bool t3dActiveStorageContains( const void *pOwner, const Vector2i &rLocation ) {
 			s_szPhysicalPages[page].m_iLogicalSlot.load( std::memory_order_acquire ) == logical_slot;
 }
 
-T3DActiveMapLease t3dActiveStorageAcquire( const void *pOwner, const Vector2i &rLocation ) {
+Terrain3DActiveMapLease t3dActiveStorageAcquire( const void *pOwner, const Vector2i &rLocation ) {
 	if ( !t3dActiveStorageActiveOwnerMatches( pOwner ) ) {
 		return {};
 	}
@@ -521,7 +521,7 @@ T3DActiveMapLease t3dActiveStorageAcquire( const void *pOwner, const Vector2i &r
 			view.m_nRegionGeneration = generation;
 			view.m_nRegionSize = region_size;
 			view.m_iSlot = logical_slot;
-			return T3DActiveMapLease( page, view );
+			return Terrain3DActiveMapLease( page, view );
 		}
 		rPage.m_nPins.fetch_sub( 1u, std::memory_order_release );
 		s_nActiveReaderRetries.fetch_add( 1u, std::memory_order_relaxed );
@@ -529,7 +529,7 @@ T3DActiveMapLease t3dActiveStorageAcquire( const void *pOwner, const Vector2i &r
 	return {};
 }
 
-bool t3dActiveStorageSyncRegion( const void *pOwner, const Vector2i &rLocation, const T3DRegion *pRegion ) {
+bool t3dActiveStorageSyncRegion( const void *pOwner, const Vector2i &rLocation, const Terrain3DRegion *pRegion ) {
 	if ( !t3dActiveStorageActiveOwnerMatches( pOwner ) || !pRegion || pRegion->isDeleted() ||
 			pRegion->getRegionSize() != s_nActiveRegionSize.load( std::memory_order_acquire ) ) {
 		return false;
@@ -601,7 +601,7 @@ bool t3dActiveStorageReplaceHeightPages( const void *pOwner,
 
 bool t3dActiveStorageSyncMap( const void *pOwner,
 		const Vector2i &rLocation,
-		const T3DRegion *pRegion,
+		const Terrain3DRegion *pRegion,
 		const t3dMapType_t type,
 		const Rect2i & ) {
 	if ( type < TYPE_HEIGHT || type >= REGION_TYPE_MAX ) {
@@ -612,7 +612,7 @@ bool t3dActiveStorageSyncMap( const void *pOwner,
 
 bool t3dActiveStorageSyncDerived( const void *pOwner,
 		const Vector2i &rLocation,
-		const T3DRegion *pRegion,
+		const Terrain3DRegion *pRegion,
 		const Rect2i & ) {
 	return t3dActiveStorageActiveOwnerMatches( pOwner ) && pRegion && !pRegion->isDeleted() &&
 			t3dActiveStorageActiveLocationToSlot(

@@ -1,7 +1,7 @@
 # Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 # Importer for Terrain3D
 @tool
-extends T3DTerrain
+extends Terrain3D
 
 
 @export_tool_button("Clear All") var clear_all: Callable = reset_settings
@@ -28,9 +28,9 @@ func reset_terrain() -> void:
 	data_directory = ""
 	if not is_instance_valid(data):
 		return
-	for region: T3DRegion in data.get_regions_active():
+	for region: Terrain3DRegion in data.get_regions_active():
 		data.remove_region(region, false)
-	data.update_maps(int(T3DRegion.TYPE_MAX), true, false)
+	data.update_maps(int(Terrain3DRegion.REGION_TYPE_MAX), true, false)
 
 
 ## Recalculates min and max heights for all regions.
@@ -75,14 +75,14 @@ func set_r16_size(p_value: Vector2i) -> void:
 func _load_import_image(p_file_name: String, p_is_height: bool = false) -> Image:
 	var image: Image
 	if p_is_height:
-		image = T3DUtil.load_image(
+		image = Terrain3DUtil.load_image(
 			p_file_name,
 			ResourceLoader.CACHE_MODE_IGNORE,
 			r16_range,
 			r16_size
 		)
 	else:
-		image = T3DUtil.load_image(p_file_name, ResourceLoader.CACHE_MODE_IGNORE)
+		image = Terrain3DUtil.load_image(p_file_name, ResourceLoader.CACHE_MODE_IGNORE)
 	if not is_instance_valid(image) or image.is_empty():
 		push_error("Terrain3DImporter: Failed to load image: %s" % p_file_name)
 		return null
@@ -100,22 +100,22 @@ func start_import() -> void:
 	print("Terrain3DImporter: Importing files:\n\t%s\n\t%s\n\t%s" % [ height_file_name, control_file_name, color_file_name])
 
 	var imported_images: Array[Image]
-	imported_images.resize(T3DRegion.TYPE_MAX)
+	imported_images.resize(Terrain3DRegion.REGION_TYPE_MAX)
 	if not height_file_name.is_empty():
 		var height_image: Image = _load_import_image(height_file_name, true)
 		if not is_instance_valid(height_image):
 			return
-		imported_images[T3DRegion.TYPE_HEIGHT] = height_image
+		imported_images[Terrain3DRegion.TYPE_HEIGHT] = height_image
 	if not control_file_name.is_empty():
 		var control_image: Image = _load_import_image(control_file_name)
 		if not is_instance_valid(control_image):
 			return
-		imported_images[T3DRegion.TYPE_CONTROL] = control_image
+		imported_images[Terrain3DRegion.TYPE_CONTROL] = control_image
 	if not color_file_name.is_empty():
 		var color_image: Image = _load_import_image(color_file_name)
 		if not is_instance_valid(color_image):
 			return
-		imported_images[T3DRegion.TYPE_COLOR] = color_image
+		imported_images[Terrain3DRegion.TYPE_COLOR] = color_image
 		if is_instance_valid(assets) and is_instance_valid(material) and assets.get_texture_count() == 0:
 			material.show_checkered = false
 			material.show_colormap = true

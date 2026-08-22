@@ -1,5 +1,5 @@
 @tool
-class_name T3DRegionWorkbenchRegion
+class_name Terrain3DRegionWorkbenchRegion
 extends RefCounted
 
 var location: Vector2i = Vector2i.ZERO
@@ -13,13 +13,13 @@ var streamed_node_count: int = 0
 var committed_unix: int = 0
 
 
-static func from_value(p_value: Variant) -> T3DRegionWorkbenchRegion:
+static func from_value(p_value: Variant) -> Terrain3DRegionWorkbenchRegion:
 	if not p_value is Dictionary:
 		return null
-	var values := T3DRuntimeValueMap.from_value(p_value)
+	var values := Terrain3DRuntimeValueMap.from_value(p_value)
 	if values == null:
 		return null
-	var entry := T3DRegionWorkbenchRegion.new()
+	var entry := Terrain3DRegionWorkbenchRegion.new()
 	entry.location = _location_from_value(values.raw_value("location"))
 	entry.source_region_path = values.string_value("source_region_path")
 	entry.source_region_md5 = values.string_value("source_region_md5")

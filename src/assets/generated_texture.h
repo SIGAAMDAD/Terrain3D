@@ -11,7 +11,7 @@
 #include <cstddef>
 #include <godot_cpp/classes/image.hpp>
 
-class T3DGeneratedTexture {
+class Terrain3DGeneratedTexture {
 	CLASS_NAME_STATIC( "Terrain3DGenTex" );
 
 private:
@@ -30,7 +30,7 @@ private:
 
 public:
 	void clear( void );
-	void swap( T3DGeneratedTexture &rOther );
+	void swap( Terrain3DGeneratedTexture &rOther );
 	EA_FORCE_INLINE bool isDirty( void ) const {
 		return m_bDirty;
 	}

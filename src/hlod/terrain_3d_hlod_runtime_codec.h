@@ -48,7 +48,7 @@ typedef struct t3dHlodRuntimeData_s {
 	eastl::array<uint32_t, s_nMaxRegionSlots + 1> m_szNodePolicyOffsets{};
 } t3dHlodRuntimeData_t;
 
-class T3DHLODRuntimeCodec {
+class Terrain3DHLODRuntimeCodec {
 public:
 	static PackedByteArray encode( const Array &rEntries,
 			const PackedByteArray &rInstancerMinLevels,

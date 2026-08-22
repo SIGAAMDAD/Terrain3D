@@ -1,7 +1,7 @@
 # Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 # Asset Dock for Terrain3D
 @tool
-class_name T3DAssetDock
+class_name Terrain3DAssetDock
 extends PanelContainer
 
 signal confirmation_closed
@@ -29,17 +29,11 @@ var _confirmed: bool = false
 var search_box: TextEdit
 var search_button: Button
 
-#DEPRECATED 4.5
-#class EdDock extends EditorDock:
-	#func _update_layout(layout: int) -> void:
-		#layout 1 vertical, 2 horizontal, 4 window
-		#print("T3DAssetDock: _update_layout called with: ", layout)
-
 var _dock: EditorDock
 var _initialized: bool = false
-var plugin: T3DEditorPluginBase
+var plugin: Terrain3DEditorPluginBase
 var window: Window
-var _connected_assets: T3DAssets
+var _connected_assets: Terrain3DAssets
 
 
 func _notification(what: int) -> void:
@@ -48,7 +42,7 @@ func _notification(what: int) -> void:
 		update_layout()
 
 
-func initialize(p_plugin: T3DEditorPluginBase) -> void:
+func initialize(p_plugin: Terrain3DEditorPluginBase) -> void:
 	if p_plugin:
 		plugin = p_plugin
 
@@ -85,12 +79,12 @@ func initialize(p_plugin: T3DEditorPluginBase) -> void:
 	texture_list = ListContainer.new()
 	texture_list.name = "TextureList"
 	texture_list.plugin = plugin
-	texture_list.type = T3DAssets.TYPE_TEXTURE
+	texture_list.type = Terrain3DAssets.TYPE_TEXTURE
 	asset_container.add_child(texture_list, true)
 	mesh_list = ListContainer.new()
 	mesh_list.name = "MeshList"
 	mesh_list.plugin = plugin
-	mesh_list.type = T3DAssets.TYPE_MESH
+	mesh_list.type = Terrain3DAssets.TYPE_MESH
 	mesh_list.visible = false
 	asset_container.add_child(mesh_list, true)
 	current_list = texture_list
@@ -138,7 +132,7 @@ func _gui_input(p_event: InputEvent) -> void:
 	if p_event is InputEventMouseButton:
 		if search_box.has_focus():
 			if plugin.debug:
-				print("T3DAssetDock: _on_box_gui_input: search_box releasing focus")
+				print("Terrain3DAssetDock: _on_box_gui_input: search_box releasing focus")
 			search_box.release_focus()
 
 
@@ -170,7 +164,7 @@ func update_layout() -> void:
 	if not _initialized or not is_instance_valid(plugin):
 		return
 	if plugin.debug > 1:
-		print("T3DAssetDock: update_layout")
+		print("Terrain3DAssetDock: update_layout")
 
 	## Detect whether the dock is floating without depending on private editor hierarchy.
 	var editor_window: Window = plugin.godot_editor_window if is_instance_valid(plugin) else null
@@ -213,7 +207,7 @@ func update_layout() -> void:
 # When a floating asset dock has focus and the mouse returns, grab focus so cursor decal works
 func _on_godot_window_entered() -> void:
 	if is_instance_valid(plugin) and plugin.debug > 1:
-		print("T3DAssetDock: _on_godot_window_entered")
+		print("Terrain3DAssetDock: _on_godot_window_entered")
 	if is_instance_valid(plugin) and is_instance_valid(plugin.godot_editor_window) and \
 			is_instance_valid(window) and window.has_focus():
 		plugin.godot_editor_window.grab_focus()
@@ -222,7 +216,7 @@ func _on_godot_window_entered() -> void:
 func set_selected_by_asset_id(p_id: int, p_type: int) -> void:
 	search_box.text = ""
 	_on_search_text_changed()
-	if p_type == T3DAssets.TYPE_MESH:
+	if p_type == Terrain3DAssets.TYPE_MESH:
 		_on_meshes_pressed()
 		mesh_list.set_selected_asset_id(p_id)
 	else:
@@ -232,7 +226,7 @@ func set_selected_by_asset_id(p_id: int, p_type: int) -> void:
 
 func _on_search_text_changed() -> void:
 	if plugin.debug:
-		print("T3DAssetDock: _on_search_text_changed: ", search_box.text)
+		print("Terrain3DAssetDock: _on_search_text_changed: ", search_box.text)
 	search_box.text = search_box.text.strip_escapes()
 	var len: int = search_box.text.length()
 	if len > 0:
@@ -248,13 +242,13 @@ func _on_search_text_changed() -> void:
 
 func _on_search_button_pressed() -> void:
 	if plugin.debug:
-		print("T3DAssetDock: _on_search_button_pressed")
+		print("Terrain3DAssetDock: _on_search_button_pressed")
 	if search_box.text.length() > 0:
 		search_box.text = ""
 		_on_search_text_changed()
 	else:
 		if plugin.debug:
-			print("T3DAssetDock: _on_search_button_pressed: Search box grabbing focus")
+			print("Terrain3DAssetDock: _on_search_button_pressed: Search box grabbing focus")
 		search_box.grab_focus()
 
 
@@ -281,7 +275,7 @@ func _on_slider_changed(value: float) -> void:
 
 func _on_textures_pressed() -> void:
 	if plugin.debug:
-		print("T3DAssetDock: _on_textures_pressed")
+		print("Terrain3DAssetDock: _on_textures_pressed")
 	if _updating_list or current_list == texture_list:
 		return
 	_updating_list = true
@@ -299,7 +293,7 @@ func _on_textures_pressed() -> void:
 
 func _on_meshes_pressed() -> void:
 	if plugin.debug:
-		print("T3DAssetDock: _on_meshes_pressed")
+		print("Terrain3DAssetDock: _on_meshes_pressed")
 	if _updating_list or current_list == mesh_list:
 		return
 	_updating_list = true
@@ -317,11 +311,11 @@ func _on_meshes_pressed() -> void:
 
 func _on_tool_changed(p_tool: int, p_operation: int) -> void:
 	if plugin.debug:
-		print("T3DAssetDock: _on_tool_changed: ", p_tool, ", ", p_operation)
+		print("Terrain3DAssetDock: _on_tool_changed: ", p_tool, ", ", p_operation)
 	remove_all_highlights()
-	if p_tool == T3DEditor.INSTANCER:
+	if p_tool == Terrain3DEditor.INSTANCER:
 		_on_meshes_pressed()
-	elif p_tool in [ T3DEditor.TEXTURE, T3DEditor.COLOR, T3DEditor.ROUGHNESS ]:
+	elif p_tool in [ Terrain3DEditor.TEXTURE, Terrain3DEditor.COLOR, Terrain3DEditor.ROUGHNESS ]:
 		_on_textures_pressed()
 
 
@@ -332,9 +326,9 @@ func update_assets() -> void:
 	if not _initialized or not is_instance_valid(plugin):
 		return
 	if plugin.debug:
-		print("T3DAssetDock: update_assets: ", plugin.terrain.assets if plugin.terrain else "")
+		print("Terrain3DAssetDock: update_assets: ", plugin.terrain.assets if plugin.terrain else "")
 
-	var target_assets: T3DAssets = null
+	var target_assets: Terrain3DAssets = null
 	if plugin.is_terrain_valid():
 		target_assets = plugin.terrain.assets
 	var source_changed: bool = _connected_assets != target_assets
@@ -349,7 +343,7 @@ func update_assets() -> void:
 		current_list.update_asset_list()
 
 
-func _set_connected_assets(p_assets: T3DAssets) -> void:
+func _set_connected_assets(p_assets: Terrain3DAssets) -> void:
 	if _connected_assets == p_assets:
 		return
 	if is_instance_valid(_connected_assets):
@@ -370,11 +364,11 @@ func remove_all_highlights() -> void:
 	if not plugin.terrain:
 		return
 	for i: int in texture_list.entries.size():
-		var resource := texture_list.entries[i].resource as T3DTextureAsset
+		var resource := texture_list.entries[i].resource as Terrain3DTextureAsset
 		if resource and resource.is_highlighted():
 			resource.set_highlighted(false)
 	for i: int in mesh_list.entries.size():
-		var resource := mesh_list.entries[i].resource as T3DMeshAsset
+		var resource := mesh_list.entries[i].resource as Terrain3DMeshAsset
 		if resource and resource.is_highlighted():
 			resource.set_highlighted(false)
 
@@ -410,8 +404,8 @@ func save_editor_settings() -> void:
 
 
 class ListContainer extends Container:
-	var plugin: T3DEditorPluginBase
-	var type: int = int(T3DAssets.TYPE_TEXTURE)
+	var plugin: Terrain3DEditorPluginBase
+	var type: int = int(Terrain3DAssets.TYPE_TEXTURE)
 	var entries: Array[ListEntry]
 	var selected_id: int = 0
 	var height: float = 0.
@@ -446,24 +440,24 @@ class ListContainer extends Container:
 		clear()
 
 		# Grab terrain
-		var t: T3DTerrain = plugin.get_terrain()
+		var t: Terrain3D = plugin.get_terrain()
 		if not (t and t.assets):
 			return
 
-		if type == T3DAssets.TYPE_TEXTURE:
+		if type == Terrain3DAssets.TYPE_TEXTURE:
 			var texture_count: int = t.assets.get_texture_count()
 			for i: int in texture_count:
-				var texture: T3DTextureAsset = t.assets.get_texture_asset(i)
+				var texture: Terrain3DTextureAsset = t.assets.get_texture_asset(i)
 				add_item(texture, i)
-			if texture_count < T3DAssets.TERRAIN3D_MAX_TEXTURE_ASSETS:
+			if texture_count < Terrain3DAssets.MAX_TEXTURE_ASSETS:
 				add_item(null, texture_count)
 		else:
 			_request_mesh_thumbnails()
 			var mesh_count: int = t.assets.get_mesh_count()
 			for i: int in mesh_count:
-				var mesh: T3DMeshAsset = t.assets.get_mesh_asset(i)
+				var mesh: Terrain3DMeshAsset = t.assets.get_mesh_asset(i)
 				add_item(mesh, i)
-			if mesh_count < T3DAssets.TERRAIN3D_MAX_MESH_ASSETS:
+			if mesh_count < Terrain3DAssets.MAX_MESH_ASSETS:
 				add_item(null, mesh_count)
 		select_asset_or_first(previous_asset_id)
 
@@ -479,8 +473,8 @@ class ListContainer extends Container:
 
 		var res_id: int = p_asset_id
 		if res_id < 0:
-			var texture_asset := p_resource as T3DTextureAsset
-			var mesh_asset := p_resource as T3DMeshAsset
+			var texture_asset := p_resource as Terrain3DTextureAsset
+			var mesh_asset := p_resource as Terrain3DMeshAsset
 			if is_instance_valid(texture_asset):
 				res_id = texture_asset.id
 			elif is_instance_valid(mesh_asset):
@@ -499,8 +493,8 @@ class ListContainer extends Container:
 
 
 	func _connect_asset_id_signal(p_resource: Resource) -> void:
-		var texture_asset := p_resource as T3DTextureAsset
-		var mesh_asset := p_resource as T3DMeshAsset
+		var texture_asset := p_resource as Terrain3DTextureAsset
+		var mesh_asset := p_resource as Terrain3DMeshAsset
 		if is_instance_valid(texture_asset) and not texture_asset.id_changed.is_connected(set_selected_after_swap):
 			texture_asset.id_changed.connect(set_selected_after_swap)
 		elif is_instance_valid(mesh_asset) and not mesh_asset.id_changed.is_connected(set_selected_after_swap):
@@ -508,8 +502,8 @@ class ListContainer extends Container:
 
 
 	func _disconnect_asset_id_signal(p_resource: Resource) -> void:
-		var texture_asset := p_resource as T3DTextureAsset
-		var mesh_asset := p_resource as T3DMeshAsset
+		var texture_asset := p_resource as Terrain3DTextureAsset
+		var mesh_asset := p_resource as Terrain3DMeshAsset
 		if is_instance_valid(texture_asset) and texture_asset.id_changed.is_connected(set_selected_after_swap):
 			texture_asset.id_changed.disconnect(set_selected_after_swap)
 		elif is_instance_valid(mesh_asset) and mesh_asset.id_changed.is_connected(set_selected_after_swap):
@@ -522,12 +516,12 @@ class ListContainer extends Container:
 
 
 	func _on_resource_hovered(p_id: int) -> void:
-		if type == T3DAssets.TYPE_MESH:
+		if type == Terrain3DAssets.TYPE_MESH:
 			_request_mesh_thumbnails(p_id)
 
 
 	func _request_mesh_thumbnails(p_id: int = -1) -> void:
-		var terrain: T3DTerrain = plugin.get_terrain() if is_instance_valid(plugin) else null
+		var terrain: Terrain3D = plugin.get_terrain() if is_instance_valid(plugin) else null
 		if not is_instance_valid(terrain) or not is_instance_valid(terrain.assets):
 			return
 		if terrain.is_authoring_residency_readback_safe():
@@ -536,12 +530,12 @@ class ListContainer extends Container:
 		if _thumbnail_retry_pending:
 			return
 		_thumbnail_retry_pending = true
-		call_deferred("_retry_mesh_thumbnails_when_safe", p_id)
+		_retry_mesh_thumbnails_when_safe.call_deferred(p_id)
 
 
 	func _retry_mesh_thumbnails_when_safe(p_id: int) -> void:
 		while is_instance_valid(plugin):
-			var terrain: T3DTerrain = plugin.get_terrain()
+			var terrain: Terrain3D = plugin.get_terrain()
 			if not is_instance_valid(terrain) or not is_instance_valid(terrain.assets):
 				break
 			if terrain.is_authoring_residency_readback_safe():
@@ -564,10 +558,10 @@ class ListContainer extends Container:
 	func clicked_id(p_id: int) -> void:
 		# Select Tool if clicking an asset
 		plugin.select_terrain()
-		if type == T3DAssets.TYPE_TEXTURE and \
-				not plugin.editor.get_tool() in [ T3DEditor.TEXTURE, T3DEditor.COLOR, T3DEditor.ROUGHNESS ]:
+		if type == Terrain3DAssets.TYPE_TEXTURE and \
+				not plugin.editor.get_tool() in [ Terrain3DEditor.TEXTURE, Terrain3DEditor.COLOR, Terrain3DEditor.ROUGHNESS ]:
 			plugin.change_tool("PaintTexture")
-		elif type == T3DAssets.TYPE_MESH and plugin.editor.get_tool() != T3DEditor.INSTANCER:
+		elif type == Terrain3DAssets.TYPE_MESH and plugin.editor.get_tool() != Terrain3DEditor.INSTANCER:
 			plugin.change_tool("InstanceMeshes")
 		set_selected_id(p_id)
 
@@ -623,10 +617,10 @@ class ListContainer extends Container:
 		var res := entries[id].resource as Resource
 		if not res:
 			return -1
-		if type == T3DAssets.TYPE_MESH:
-			return (res as T3DMeshAsset).id
+		if type == Terrain3DAssets.TYPE_MESH:
+			return (res as Terrain3DMeshAsset).id
 		else:
-			return (res as T3DTextureAsset).id
+			return (res as Terrain3DTextureAsset).id
 
 
 	func _on_resource_inspected(p_resource: Resource) -> void:
@@ -646,7 +640,7 @@ class ListContainer extends Container:
 			await get_tree().process_frame
 
 		if plugin.is_terrain_valid():
-			if type == T3DAssets.TYPE_TEXTURE:
+			if type == Terrain3DAssets.TYPE_TEXTURE:
 				plugin.terrain.assets.set_texture_asset(p_id, p_resource)
 			else:
 				plugin.terrain.assets.set_mesh_asset(p_id, p_resource)
@@ -657,9 +651,9 @@ class ListContainer extends Container:
 		if _clear_request_pending or not is_instance_valid(p_resource):
 			return
 		_clear_request_pending = true
-		var asset_dock: T3DAssetDock = get_parent().get_parent().get_parent() as T3DAssetDock
+		var asset_dock: Terrain3DAssetDock = get_parent().get_parent().get_parent() as Terrain3DAssetDock
 		asset_dock._confirmed = false
-		if type == T3DAssets.TYPE_TEXTURE:
+		if type == Terrain3DAssets.TYPE_TEXTURE:
 			asset_dock.confirm_dialog.dialog_text = "Are you sure you want to clear this texture?"
 		else:
 			asset_dock.confirm_dialog.dialog_text = "Are you sure you want to clear this mesh and delete all instances?"
@@ -674,7 +668,7 @@ class ListContainer extends Container:
 			await get_tree().process_frame
 
 		if plugin.is_terrain_valid():
-			if type == T3DAssets.TYPE_TEXTURE:
+			if type == Terrain3DAssets.TYPE_TEXTURE:
 				plugin.terrain.assets.set_texture_asset(p_id, null)
 			else:
 				plugin.terrain.assets.set_mesh_asset(p_id, null)
@@ -709,7 +703,7 @@ class ListContainer extends Container:
 					Vector2(separation / columns, separation / columns)
 				height = maxf(height, entry.position.y + width)
 				id += 1
-				if type == T3DAssets.TYPE_MESH:
+				if type == Terrain3DAssets.TYPE_MESH:
 					entry.count_label.add_theme_font_size_override("font_size", count_font_size)
 				entry.name_label.add_theme_font_size_override("font_size", name_font_size)
 
@@ -739,7 +733,7 @@ class ListEntry extends MarginContainer:
 
 	var resource: Resource
 	var asset_id: int = -1
-	var type: int = int(T3DAssets.TYPE_TEXTURE)
+	var type: int = int(Terrain3DAssets.TYPE_TEXTURE)
 	var _thumbnail: Texture2D
 	var drop_data: bool = false
 	var is_hovered: bool = false
@@ -773,10 +767,10 @@ class ListEntry extends MarginContainer:
 		add_theme_constant_override("margin_left", 5)
 		add_theme_constant_override("margin_right", 5)
 
-		if resource is T3DTextureAsset:
-			is_highlighted = (resource as T3DTextureAsset).is_highlighted()
-		elif resource is T3DMeshAsset:
-			is_highlighted = (resource as T3DMeshAsset).is_highlighted()
+		if resource is Terrain3DTextureAsset:
+			is_highlighted = (resource as Terrain3DTextureAsset).is_highlighted()
+		elif resource is Terrain3DMeshAsset:
+			is_highlighted = (resource as Terrain3DMeshAsset).is_highlighted()
 
 		setup_buttons()
 		setup_label()
@@ -804,7 +798,7 @@ class ListEntry extends MarginContainer:
 		button_row.mouse_filter = Control.MOUSE_FILTER_PASS
 		add_child(button_row, true)
 
-		if type == T3DAssets.TYPE_MESH:
+		if type == Terrain3DAssets.TYPE_MESH:
 			button_enabled.set_texture_normal(enabled_icon)
 			button_enabled.set_texture_pressed(disabled_icon)
 			button_enabled.set_custom_minimum_size(icon_size)
@@ -821,7 +815,7 @@ class ListEntry extends MarginContainer:
 		button_highlight.set_custom_minimum_size(icon_size)
 		button_highlight.set_h_size_flags(Control.SIZE_SHRINK_END)
 		button_highlight.set_visible(resource != null)
-		button_highlight.tooltip_text = "Highlight " + ( "Instances" if type == T3DAssets.TYPE_MESH else "Texture" )
+		button_highlight.tooltip_text = "Highlight " + ( "Instances" if type == Terrain3DAssets.TYPE_MESH else "Texture" )
 		button_highlight.toggle_mode = true
 		button_highlight.mouse_filter = Control.MOUSE_FILTER_PASS
 		button_highlight.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
@@ -872,10 +866,10 @@ class ListEntry extends MarginContainer:
 
 	func get_resource_name() -> StringName:
 		if resource:
-			if resource is T3DMeshAsset:
-				return (resource as T3DMeshAsset).get_name()
-			elif resource is T3DTextureAsset:
-				return (resource as T3DTextureAsset).get_name()
+			if resource is Terrain3DMeshAsset:
+				return (resource as Terrain3DMeshAsset).get_name()
+			elif resource is Terrain3DTextureAsset:
+				return (resource as Terrain3DTextureAsset).get_name()
 		return ""
 
 
@@ -911,7 +905,7 @@ class ListEntry extends MarginContainer:
 		count_label.add_theme_constant_override("shadow_offset_x", 1)
 		count_label.add_theme_constant_override("shadow_offset_y", 1)
 		add_child(count_label, true)
-		var mesh_resource: T3DMeshAsset = resource as T3DMeshAsset
+		var mesh_resource: Terrain3DMeshAsset = resource as Terrain3DMeshAsset
 		if not mesh_resource:
 			return
 		if not mesh_resource.instance_count_changed.is_connected(update_count_label):
@@ -920,8 +914,8 @@ class ListEntry extends MarginContainer:
 
 
 	func update_count_label() -> void:
-		var mesh_resource: T3DMeshAsset = resource as T3DMeshAsset
-		if not type == T3DAssets.TYPE_MESH or \
+		var mesh_resource: Terrain3DMeshAsset = resource as Terrain3DMeshAsset
+		if not type == Terrain3DAssets.TYPE_MESH or \
 				( is_instance_valid(mesh_resource) and not mesh_resource.is_enabled() ):
 			count_label.text = ""
 			return
@@ -938,14 +932,14 @@ class ListEntry extends MarginContainer:
 				destroy_buttons()
 			NOTIFICATION_DRAW:
 				# Hide spacer if icons are crowding small textures
-				spacer.visible = size.x > 94. or type == T3DAssets.TYPE_TEXTURE
+				spacer.visible = size.x > 94. or type == Terrain3DAssets.TYPE_TEXTURE
 				var rect: Rect2 = Rect2(Vector2.ZERO, get_size())
 				if !resource:
 					draw_style_box(background, rect)
 					draw_texture(add_icon, (get_size() / 2) - (add_icon.get_size() / 2))
 				else:
-					var texture_asset := resource as T3DTextureAsset
-					var mesh_asset := resource as T3DMeshAsset
+					var texture_asset := resource as Terrain3DTextureAsset
+					var mesh_asset := resource as Terrain3DMeshAsset
 					_thumbnail = texture_asset.get_thumbnail() if is_instance_valid(texture_asset) else \
 						mesh_asset.get_thumbnail() if is_instance_valid(mesh_asset) else null
 					if _thumbnail:
@@ -989,10 +983,10 @@ class ListEntry extends MarginContainer:
 				MOUSE_BUTTON_LEFT:
 					# If `Add new` is clicked
 					if !resource:
-						if type == T3DAssets.TYPE_TEXTURE:
-							set_edited_resource(T3DTextureAsset.new(), false)
+						if type == Terrain3DAssets.TYPE_TEXTURE:
+							set_edited_resource(Terrain3DTextureAsset.new(), false)
 						else:
-							set_edited_resource(T3DMeshAsset.new(), false)
+							set_edited_resource(Terrain3DMeshAsset.new(), false)
 						_on_edit()
 					else:
 						emit_signal("clicked")
@@ -1018,28 +1012,28 @@ class ListEntry extends MarginContainer:
 		var drag_data: Dictionary = p_data
 		var files: PackedStringArray = drag_data["files"]
 		var res: Resource = load(files[0])
-		if res is Texture2D and type == T3DAssets.TYPE_TEXTURE:
-			var ta := T3DTextureAsset.new()
-			var current_texture := resource as T3DTextureAsset
+		if res is Texture2D and type == Terrain3DAssets.TYPE_TEXTURE:
+			var ta := Terrain3DTextureAsset.new()
+			var current_texture := resource as Terrain3DTextureAsset
 			if is_instance_valid(current_texture):
 				ta.id = current_texture.id
 			ta.set_albedo_texture(res)
 			set_edited_resource(ta, false)
-		elif res is T3DTextureAsset and type == T3DAssets.TYPE_TEXTURE:
-			var texture_res := res as T3DTextureAsset
-			var current_texture := resource as T3DTextureAsset
+		elif res is Terrain3DTextureAsset and type == Terrain3DAssets.TYPE_TEXTURE:
+			var texture_res := res as Terrain3DTextureAsset
+			var current_texture := resource as Terrain3DTextureAsset
 			if is_instance_valid(current_texture):
 				texture_res.id = current_texture.id
 			set_edited_resource(texture_res, false)
-		elif res is PackedScene and type == T3DAssets.TYPE_MESH:
-			var current_mesh := resource as T3DMeshAsset
+		elif res is PackedScene and type == Terrain3DAssets.TYPE_MESH:
+			var current_mesh := resource as Terrain3DMeshAsset
 			if not is_instance_valid(current_mesh):
-				current_mesh = T3DMeshAsset.new()
+				current_mesh = Terrain3DMeshAsset.new()
 			set_edited_resource(current_mesh, false)
 			current_mesh.set_scene_file(res)
-		elif res is T3DMeshAsset and type == T3DAssets.TYPE_MESH:
-			var mesh_res := res as T3DMeshAsset
-			var current_mesh := resource as T3DMeshAsset
+		elif res is Terrain3DMeshAsset and type == Terrain3DAssets.TYPE_MESH:
+			var mesh_res := res as Terrain3DMeshAsset
+			var current_mesh := resource as Terrain3DMeshAsset
 			if is_instance_valid(current_mesh):
 				mesh_res.id = current_mesh.id
 			set_edited_resource(mesh_res, false)
@@ -1049,8 +1043,8 @@ class ListEntry extends MarginContainer:
 	func _disconnect_resource_signals(p_resource: Resource) -> void:
 		if not is_instance_valid(p_resource):
 			return
-		var texture_asset := p_resource as T3DTextureAsset
-		var mesh_asset := p_resource as T3DMeshAsset
+		var texture_asset := p_resource as Terrain3DTextureAsset
+		var mesh_asset := p_resource as Terrain3DMeshAsset
 		if is_instance_valid(texture_asset):
 			if texture_asset.setting_changed.is_connected(_on_resource_changed):
 				texture_asset.setting_changed.disconnect(_on_resource_changed)
@@ -1068,8 +1062,8 @@ class ListEntry extends MarginContainer:
 	func _connect_resource_signals(p_resource: Resource) -> void:
 		if not is_instance_valid(p_resource):
 			return
-		var texture_asset := p_resource as T3DTextureAsset
-		var mesh_asset := p_resource as T3DMeshAsset
+		var texture_asset := p_resource as Terrain3DTextureAsset
+		var mesh_asset := p_resource as Terrain3DMeshAsset
 		if is_instance_valid(texture_asset):
 			if not texture_asset.setting_changed.is_connected(_on_resource_changed):
 				texture_asset.setting_changed.connect(_on_resource_changed)
@@ -1094,7 +1088,7 @@ class ListEntry extends MarginContainer:
 
 		var has_resource: bool = is_instance_valid(resource)
 		if button_enabled:
-			button_enabled.set_visible(has_resource and type == T3DAssets.TYPE_MESH)
+			button_enabled.set_visible(has_resource and type == Terrain3DAssets.TYPE_MESH)
 		if button_highlight:
 			button_highlight.set_visible(has_resource)
 		if button_edit:
@@ -1141,15 +1135,15 @@ class ListEntry extends MarginContainer:
 
 
 	func _on_enable() -> void:
-		var mesh_asset := resource as T3DMeshAsset
+		var mesh_asset := resource as Terrain3DMeshAsset
 		if is_instance_valid(mesh_asset):
 			mesh_asset.set_enabled(!mesh_asset.is_enabled())
 
 
 	func _on_highlight() -> void:
 		is_highlighted = !is_highlighted
-		var texture_asset := resource as T3DTextureAsset
-		var mesh_asset := resource as T3DMeshAsset
+		var texture_asset := resource as Terrain3DTextureAsset
+		var mesh_asset := resource as Terrain3DMeshAsset
 		if is_instance_valid(texture_asset):
 			texture_asset.set_highlighted(is_highlighted)
 		elif is_instance_valid(mesh_asset):

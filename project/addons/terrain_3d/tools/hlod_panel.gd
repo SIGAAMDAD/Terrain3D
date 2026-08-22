@@ -1,11 +1,11 @@
 # Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 @tool
-class_name T3DHLODPanel
+class_name Terrain3DHLODPanel
 extends Window
 
-var plugin: T3DEditorPluginBase
-var baker: T3DHLODBaker
-var terrain: T3DTerrain
+var plugin: Terrain3DEditorPluginBase
+var baker: Terrain3DHLODBaker
+var terrain: Terrain3D
 
 var _summary: Label
 var _runtime_status: Label
@@ -33,7 +33,7 @@ func _ready() -> void:
 	add_child(_poll_timer)
 
 
-func open(p_terrain: T3DTerrain) -> void:
+func open(p_terrain: Terrain3D) -> void:
 	terrain = p_terrain
 	_sync_controls_from_terrain()
 	_analyze()
@@ -177,8 +177,8 @@ func _convert_selected_hlod_visual() -> void:
 	_sync_active_terrain()
 	if not is_instance_valid(plugin) or not is_instance_valid(terrain):
 		return
-	plugin.call("convert_selected_to_hlod_visual", int(_conversion_min_level.value))
-	call_deferred("_analyze")
+	plugin.convert_selected_to_hlod_visual(int(_conversion_min_level.value))
+	_analyze.call_deferred()
 
 
 func _analyze() -> void:

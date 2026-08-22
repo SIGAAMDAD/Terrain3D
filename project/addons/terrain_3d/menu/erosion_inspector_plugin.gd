@@ -5,15 +5,15 @@ extends EditorInspectorPlugin
 
 const EROSION_PANEL_PATH: String = "res://addons/terrain_3d/menu/erosion_simulator.gd"
 
-var plugin: T3DEditorPluginBase
+var plugin: Terrain3DEditorPluginBase
 
 
 func _can_handle(p_object: Object) -> bool:
-	return p_object is T3DTerrain
+	return p_object is Terrain3D
 
 
 func _parse_begin(p_object: Object) -> void:
-	if not (p_object is T3DTerrain):
+	if not (p_object is Terrain3D):
 		return
 
 	# Keep the primary Terrain3D editor independent from the optional erosion UI.

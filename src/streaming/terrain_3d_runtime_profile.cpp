@@ -44,7 +44,7 @@
 #include <numeric>
 #include <utility>
 
-t3dAdaptiveBudgetLimits_t T3DTerrain::getRuntimeAdaptiveBudgetLimits( void ) const {
+t3dAdaptiveBudgetLimits_t Terrain3D::getRuntimeAdaptiveBudgetLimits( void ) const {
 	t3dAdaptiveBudgetLimits_t limits;
 	limits.m_minimum.m_nGpuPages = m_nRuntimeAdaptiveMinGpuPages;
 	limits.m_minimum.m_nCpuPages = m_nRuntimeAdaptiveMinCpuPages;
@@ -65,7 +65,7 @@ t3dAdaptiveBudgetLimits_t T3DTerrain::getRuntimeAdaptiveBudgetLimits( void ) con
 	return limits;
 }
 
-t3dAdaptiveBudgetPressure_t T3DTerrain::getRuntimeAdaptiveBudgetPressure( void ) const {
+t3dAdaptiveBudgetPressure_t Terrain3D::getRuntimeAdaptiveBudgetPressure( void ) const {
 	t3dAdaptiveBudgetPressure_t pressure;
 	if ( m_pData ) {
 		pressure.m_bGpuLimited = effectiveGpuRegionCacheEnabled() &&
@@ -84,7 +84,7 @@ t3dAdaptiveBudgetPressure_t T3DTerrain::getRuntimeAdaptiveBudgetPressure( void )
 	return pressure;
 }
 
-void T3DTerrain::applyRuntimeAdaptiveWorkBudgets( void ) {
+void Terrain3D::applyRuntimeAdaptiveWorkBudgets( void ) {
 	if ( !m_bRuntimeAdaptiveWorkBudgetsEnabled ) {
 		if ( m_pData ) {
 			m_pData->clearRuntimePageBudgetOverrides();
@@ -112,7 +112,7 @@ void T3DTerrain::applyRuntimeAdaptiveWorkBudgets( void ) {
 	}
 }
 
-void T3DTerrain::resetRuntimeAdaptiveWorkBudgets( const bool bClearOverrides ) {
+void Terrain3D::resetRuntimeAdaptiveWorkBudgets( const bool bClearOverrides ) {
 	const t3dAdaptiveBudgetLimits_t limits = getRuntimeAdaptiveBudgetLimits();
 	t3dAdaptiveReset( limits,
 			m_nRuntimeAdaptiveBudgetState,
@@ -135,7 +135,7 @@ void T3DTerrain::resetRuntimeAdaptiveWorkBudgets( const bool bClearOverrides ) {
 	applyRuntimeAdaptiveWorkBudgets();
 }
 
-void T3DTerrain::updateRuntimeAdaptiveWorkBudgets( void ) {
+void Terrain3D::updateRuntimeAdaptiveWorkBudgets( void ) {
 	if ( !m_bRuntimeAdaptiveWorkBudgetsEnabled ) {
 		return;
 	}
@@ -145,7 +145,7 @@ void T3DTerrain::updateRuntimeAdaptiveWorkBudgets( void ) {
 	applyRuntimeAdaptiveWorkBudgets();
 }
 
-String T3DTerrain::getRuntimeAdaptiveReasonName( void ) const {
+String Terrain3D::getRuntimeAdaptiveReasonName( void ) const {
 	switch ( m_nRuntimeAdaptiveBudgetState.m_reason ) {
 		case TERRAIN3D_ADAPTIVE_REASON_DISABLED:
 			return "disabled";
@@ -163,7 +163,7 @@ String T3DTerrain::getRuntimeAdaptiveReasonName( void ) const {
 	}
 }
 
-void T3DTerrain::sampleRuntimeProfile( const t3dRuntimeProfileSample_t &rSample ) {
+void Terrain3D::sampleRuntimeProfile( const t3dRuntimeProfileSample_t &rSample ) {
 	t3dRuntimeProfileSample_t sample = rSample;
 	sample.m_nFrameSequence = ++m_nRuntimeProfileSampleCount;
 	if ( m_pData ) {
@@ -265,7 +265,7 @@ void T3DTerrain::sampleRuntimeProfile( const t3dRuntimeProfileSample_t &rSample 
 	m_pRuntimeProfileHistory->push( sample );
 }
 
-void T3DTerrain::updateCacheThrashEvents( const t3dRuntimeProfileSample_t &rSample ) {
+void Terrain3D::updateCacheThrashEvents( const t3dRuntimeProfileSample_t &rSample ) {
 	const bool bStates[3] = {
 		rSample.m_nGpuMissingRequired > 0 || ( rSample.m_nGpuEvictions >= 2 && rSample.m_nGpuUploads >= 2 ),
 		rSample.m_nCpuEvictions >= 2 && rSample.m_nCpuLoads >= 2,
@@ -288,14 +288,14 @@ void T3DTerrain::updateCacheThrashEvents( const t3dRuntimeProfileSample_t &rSamp
 	}
 }
 
-void T3DTerrain::setRuntimeProfilingEnabled( const bool bEnabled ) {
+void Terrain3D::setRuntimeProfilingEnabled( const bool bEnabled ) {
 	if ( bEnabled && !m_pRuntimeProfileHistory ) {
 		m_pRuntimeProfileHistory = memnew( t3dRuntimeProfileHistory_t );
 	}
 	m_bRuntimeProfilingEnabled = bEnabled;
 }
 
-Dictionary T3DTerrain::runtimeProfileSampleToDictionary( const t3dRuntimeProfileSample_t &rSample ) const {
+Dictionary Terrain3D::runtimeProfileSampleToDictionary( const t3dRuntimeProfileSample_t &rSample ) const {
 	Dictionary sample;
 	sample["sequence"] = ( int64_t )( rSample.m_nFrameSequence );
 	sample["physics_total_usec"] = ( int64_t )( rSample.m_nPhysicsTotalUsec );
@@ -382,7 +382,7 @@ Dictionary T3DTerrain::runtimeProfileSampleToDictionary( const t3dRuntimeProfile
 	return sample;
 }
 
-Array T3DTerrain::getRuntimeProfileEventNames( const uint32_t nFlags ) const {
+Array Terrain3D::getRuntimeProfileEventNames( const uint32_t nFlags ) const {
 	Array names;
 	if ( ( nFlags & TERRAIN3D_PROFILE_EVENT_CAMERA_MOVED ) != 0u ) {
 		names.push_back( "camera_moved" );
@@ -426,7 +426,7 @@ Array T3DTerrain::getRuntimeProfileEventNames( const uint32_t nFlags ) const {
 	return names;
 }
 
-Array T3DTerrain::getRuntimeProfileStallNames( const uint32_t nFlags ) const {
+Array Terrain3D::getRuntimeProfileStallNames( const uint32_t nFlags ) const {
 	Array names;
 	if ( ( nFlags & TERRAIN3D_PROFILE_STALL_GPU_UPLOAD_LAYER_BUDGET ) != 0u ) {
 		names.push_back( "gpu_upload_layer_budget" );
@@ -476,7 +476,7 @@ Array T3DTerrain::getRuntimeProfileStallNames( const uint32_t nFlags ) const {
 	return names;
 }
 
-Array T3DTerrain::getRuntimeProfileProblems( void ) const {
+Array Terrain3D::getRuntimeProfileProblems( void ) const {
 	Array problems;
 	const t3dRuntimeProfileSample_t &sample = m_runtimeProfileLastSample;
 	if ( sample.m_nGpuMissingRequired > 0 ) {
@@ -666,7 +666,7 @@ Array T3DTerrain::getRuntimeProfileProblems( void ) const {
 	return problems;
 }
 
-Array T3DTerrain::getRuntimeProfileHistory( const int nMaxSamples ) const {
+Array Terrain3D::getRuntimeProfileHistory( const int nMaxSamples ) const {
 	Array history;
 	if ( !m_pRuntimeProfileHistory ) {
 		return history;
@@ -682,7 +682,7 @@ Array T3DTerrain::getRuntimeProfileHistory( const int nMaxSamples ) const {
 	return history;
 }
 
-Array T3DTerrain::getRuntimeProfileHistorySince( const int64_t nAfterSequence, const int nMaxSamples ) const {
+Array Terrain3D::getRuntimeProfileHistorySince( const int64_t nAfterSequence, const int nMaxSamples ) const {
 	Array history;
 	if ( !m_pRuntimeProfileHistory ) {
 		return history;
@@ -712,7 +712,7 @@ Array T3DTerrain::getRuntimeProfileHistorySince( const int64_t nAfterSequence, c
 	return history;
 }
 
-Dictionary T3DTerrain::getRuntimeProfileAggregate( void ) const {
+Dictionary Terrain3D::getRuntimeProfileAggregate( void ) const {
 	Dictionary aggregate;
 	const t3dRuntimeProfileAccumulator_t &stats = m_runtimeProfileAccumulator;
 	aggregate["sampled_ticks"] = ( int64_t )( stats.m_nSampledTicks );
@@ -851,7 +851,7 @@ Dictionary T3DTerrain::getRuntimeProfileAggregate( void ) const {
 	return aggregate;
 }
 
-void T3DTerrain::setRuntimeAdaptiveWorkBudgetsEnabled( const bool bEnabled ) {
+void Terrain3D::setRuntimeAdaptiveWorkBudgetsEnabled( const bool bEnabled ) {
 	if ( m_bRuntimeAdaptiveWorkBudgetsEnabled == bEnabled ) {
 		return;
 	}
@@ -861,7 +861,7 @@ void T3DTerrain::setRuntimeAdaptiveWorkBudgetsEnabled( const bool bEnabled ) {
 	notify_property_list_changed();
 }
 
-void T3DTerrain::setRuntimeAdaptiveTargetMs( const real_t fTargetMs ) {
+void Terrain3D::setRuntimeAdaptiveTargetMs( const real_t fTargetMs ) {
 	const uint64_t target_usec = ( uint64_t )( CLAMP( fTargetMs, ( real_t )( 0.05f ), ( real_t )( 50.0f ) ) * 1000.0f );
 	if ( m_nRuntimeAdaptiveTargetUsec == target_usec ) {
 		return;
@@ -873,7 +873,7 @@ void T3DTerrain::setRuntimeAdaptiveTargetMs( const real_t fTargetMs ) {
 	m_nRuntimeAdaptiveBudgetState.m_nUnderBudgetStreak = 0;
 }
 
-void T3DTerrain::setRuntimeAdaptiveHardMaxMs( const real_t fHardMaxMs ) {
+void Terrain3D::setRuntimeAdaptiveHardMaxMs( const real_t fHardMaxMs ) {
 	const uint64_t hard_max_usec =
 			( uint64_t )( CLAMP( fHardMaxMs, ( real_t )( 0.05f ), ( real_t )( 100.0f ) ) * 1000.0f );
 	const uint64_t normalized = MAX( hard_max_usec, m_nRuntimeAdaptiveTargetUsec );
@@ -886,7 +886,7 @@ void T3DTerrain::setRuntimeAdaptiveHardMaxMs( const real_t fHardMaxMs ) {
 	m_nRuntimeAdaptiveBudgetState.m_nUnderBudgetStreak = 0;
 }
 
-void T3DTerrain::setRuntimeAdaptiveAdjustmentWindowFrames( const int nFrames ) {
+void Terrain3D::setRuntimeAdaptiveAdjustmentWindowFrames( const int nFrames ) {
 	const int frames = CLAMP( nFrames, 1, 120 );
 	if ( m_nRuntimeAdaptiveAdjustmentWindowFrames == frames ) {
 		return;
@@ -897,7 +897,7 @@ void T3DTerrain::setRuntimeAdaptiveAdjustmentWindowFrames( const int nFrames ) {
 	m_nRuntimeAdaptiveBudgetState.m_nUnderBudgetStreak = 0;
 }
 
-void T3DTerrain::setRuntimeAdaptiveMinGpuPages( const int nPages ) {
+void Terrain3D::setRuntimeAdaptiveMinGpuPages( const int nPages ) {
 	const int pages = CLAMP( nPages, 0, 64 );
 	if ( m_nRuntimeAdaptiveMinGpuPages == pages ) {
 		return;
@@ -906,7 +906,7 @@ void T3DTerrain::setRuntimeAdaptiveMinGpuPages( const int nPages ) {
 	m_nRuntimeAdaptiveMinGpuPages = pages;
 }
 
-void T3DTerrain::setRuntimeAdaptiveMinCpuPages( const int nPages ) {
+void Terrain3D::setRuntimeAdaptiveMinCpuPages( const int nPages ) {
 	const int pages = CLAMP( nPages, 0, 64 );
 	if ( m_nRuntimeAdaptiveMinCpuPages == pages ) {
 		return;
@@ -915,7 +915,7 @@ void T3DTerrain::setRuntimeAdaptiveMinCpuPages( const int nPages ) {
 	m_nRuntimeAdaptiveMinCpuPages = pages;
 }
 
-void T3DTerrain::setRuntimeAdaptiveMinInstancePages( const int nPages ) {
+void Terrain3D::setRuntimeAdaptiveMinInstancePages( const int nPages ) {
 	const int pages = CLAMP( nPages, 0, 64 );
 	if ( m_nRuntimeAdaptiveMinInstancePages == pages ) {
 		return;
@@ -924,7 +924,7 @@ void T3DTerrain::setRuntimeAdaptiveMinInstancePages( const int nPages ) {
 	m_nRuntimeAdaptiveMinInstancePages = pages;
 }
 
-void T3DTerrain::setRuntimeAdaptiveMinInstancerCells( const int nCells ) {
+void Terrain3D::setRuntimeAdaptiveMinInstancerCells( const int nCells ) {
 	const int cells = CLAMP( nCells, 0, 65536 );
 	if ( m_nRuntimeAdaptiveMinInstancerCells == cells ) {
 		return;
@@ -933,7 +933,7 @@ void T3DTerrain::setRuntimeAdaptiveMinInstancerCells( const int nCells ) {
 	m_nRuntimeAdaptiveMinInstancerCells = cells;
 }
 
-void T3DTerrain::setRuntimeAdaptiveMinNodeLoadRegions( const int nRegions ) {
+void Terrain3D::setRuntimeAdaptiveMinNodeLoadRegions( const int nRegions ) {
 	const int regions = CLAMP( nRegions, 0, 64 );
 	if ( m_nRuntimeAdaptiveMinNodeLoadRegions == regions ) {
 		return;
@@ -942,7 +942,7 @@ void T3DTerrain::setRuntimeAdaptiveMinNodeLoadRegions( const int nRegions ) {
 	m_nRuntimeAdaptiveMinNodeLoadRegions = regions;
 }
 
-void T3DTerrain::setRuntimeAdaptiveMinNodeUnloadRegions( const int nRegions ) {
+void Terrain3D::setRuntimeAdaptiveMinNodeUnloadRegions( const int nRegions ) {
 	const int regions = CLAMP( nRegions, 0, 64 );
 	if ( m_nRuntimeAdaptiveMinNodeUnloadRegions == regions ) {
 		return;
@@ -951,7 +951,7 @@ void T3DTerrain::setRuntimeAdaptiveMinNodeUnloadRegions( const int nRegions ) {
 	m_nRuntimeAdaptiveMinNodeUnloadRegions = regions;
 }
 
-void T3DTerrain::setRuntimeBoundaryWorkPhasingEnabled( const bool bEnabled ) {
+void Terrain3D::setRuntimeBoundaryWorkPhasingEnabled( const bool bEnabled ) {
 	if ( m_bRuntimeBoundaryWorkPhasingEnabled == bEnabled ) {
 		return;
 	}
@@ -963,7 +963,7 @@ void T3DTerrain::setRuntimeBoundaryWorkPhasingEnabled( const bool bEnabled ) {
 	m_nRuntimeBoundaryInstancerDeferralStreak = 0;
 }
 
-void T3DTerrain::setRuntimeBoundaryNodeDelayFrames( const int nFrames ) {
+void Terrain3D::setRuntimeBoundaryNodeDelayFrames( const int nFrames ) {
 	const int frames = CLAMP( nFrames, 0, 8 );
 	if ( m_nRuntimeBoundaryNodeDelayFrames == frames ) {
 		return;
@@ -972,7 +972,7 @@ void T3DTerrain::setRuntimeBoundaryNodeDelayFrames( const int nFrames ) {
 	m_nRuntimeBoundaryNodeDelayFrames = frames;
 }
 
-void T3DTerrain::setRuntimeBoundaryInstancerDelayFrames( const int nFrames ) {
+void Terrain3D::setRuntimeBoundaryInstancerDelayFrames( const int nFrames ) {
 	const int frames = CLAMP( nFrames, 0, 8 );
 	if ( m_nRuntimeBoundaryInstancerDelayFrames == frames ) {
 		return;
@@ -981,7 +981,7 @@ void T3DTerrain::setRuntimeBoundaryInstancerDelayFrames( const int nFrames ) {
 	m_nRuntimeBoundaryInstancerDelayFrames = frames;
 }
 
-Dictionary T3DTerrain::getRuntimeBoundaryPhasingStats( void ) const {
+Dictionary Terrain3D::getRuntimeBoundaryPhasingStats( void ) const {
 	Dictionary stats;
 	stats["enabled"] = m_bRuntimeBoundaryWorkPhasingEnabled;
 	stats["target_region"] = m_runtimeBoundaryTargetRegion;
@@ -997,7 +997,7 @@ Dictionary T3DTerrain::getRuntimeBoundaryPhasingStats( void ) const {
 	return stats;
 }
 
-Dictionary T3DTerrain::getRuntimeAdaptiveBudgetStats( void ) const {
+Dictionary Terrain3D::getRuntimeAdaptiveBudgetStats( void ) const {
 	const t3dAdaptiveBudgetLimits_t limits = getRuntimeAdaptiveBudgetLimits();
 	const t3dAdaptiveBudgetPressure_t pressure = getRuntimeAdaptiveBudgetPressure();
 	Dictionary stats;
@@ -1065,7 +1065,7 @@ Dictionary T3DTerrain::getRuntimeAdaptiveBudgetStats( void ) const {
 	return stats;
 }
 
-void T3DTerrain::setPerformanceTarget( const t3dPerformanceTarget_t target ) {
+void Terrain3D::setPerformanceTarget( const t3dPerformanceTarget_t target ) {
 	if ( target < PERFORMANCE_TARGET_CUSTOM || target > PERFORMANCE_TARGET_XBOX360_EXPERIMENTAL ) {
 		return;
 	}
@@ -1108,7 +1108,7 @@ void T3DTerrain::setPerformanceTarget( const t3dPerformanceTarget_t target ) {
 	notify_property_list_changed();
 }
 
-String T3DTerrain::getPerformanceProfileStatusName( void ) const {
+String Terrain3D::getPerformanceProfileStatusName( void ) const {
 	switch ( m_performanceProfileStatus ) {
 		case PERFORMANCE_PROFILE_EXACT:
 			return "Exact";
@@ -1120,15 +1120,15 @@ String T3DTerrain::getPerformanceProfileStatusName( void ) const {
 	}
 }
 
-int T3DTerrain::getPerformanceProfileVersion( void ) const {
+int Terrain3D::getPerformanceProfileVersion( void ) const {
 	return ( int )( s_nProfileVersion );
 }
 
-String T3DTerrain::getPerformanceProfileSignature( void ) const {
+String Terrain3D::getPerformanceProfileSignature( void ) const {
 	return String::num_uint64( t3dPerformanceProfileSignature(), 16, true );
 }
 
-Dictionary T3DTerrain::getPerformanceProfileManifest( void ) const {
+Dictionary Terrain3D::getPerformanceProfileManifest( void ) const {
 	Dictionary manifest;
 	manifest["key"] = s_pszProfileKey;
 	manifest["display_name"] = s_pszProfileDisplayName;
@@ -1150,7 +1150,7 @@ Dictionary T3DTerrain::getPerformanceProfileManifest( void ) const {
 	return manifest;
 }
 
-Array T3DTerrain::getPerformanceProfileDiff( void ) const {
+Array Terrain3D::getPerformanceProfileDiff( void ) const {
 	Array differences;
 	if ( m_performanceTarget != PERFORMANCE_TARGET_XBOX360_EXPERIMENTAL ) {
 		return differences;
@@ -1160,9 +1160,9 @@ Array T3DTerrain::getPerformanceProfileDiff( void ) const {
 		if ( setting.m_owner == T3D_PROFILE_OWNER_MATERIAL ) {
 			if ( m_material.is_null() ) {
 				Dictionary row;
-				row["owner"] = "T3DMaterial";
+				row["owner"] = "Terrain3DMaterial";
 				row["property"] = setting.m_pszProperty;
-				row["key"] = String( "T3DMaterial." ) + setting.m_pszProperty;
+				row["key"] = String( "Terrain3DMaterial." ) + setting.m_pszProperty;
 				row["current"] = Variant();
 				row["expected"] = t3dPerformanceProfileValue( setting );
 				differences.push_back( row );
@@ -1185,7 +1185,7 @@ Array T3DTerrain::getPerformanceProfileDiff( void ) const {
 	return differences;
 }
 
-void T3DTerrain::resetPerformanceProfile( void ) {
+void Terrain3D::resetPerformanceProfile( void ) {
 	if ( m_performanceTarget != PERFORMANCE_TARGET_CUSTOM ) {
 		setPerformanceTarget( m_performanceTarget );
 	}

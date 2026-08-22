@@ -5,5 +5,4 @@
 // Terrain3D tessellation is active, so non-tessellated shaders do not bind or
 // sample displacement data.
 uniform highp sampler2DArray _texture_array_displacement : FILTER_METHOD, repeat_enable;
-#define SURFACE_DISPLACEMENT_ENABLED
 #endif

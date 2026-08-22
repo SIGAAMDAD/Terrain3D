@@ -14,8 +14,8 @@
 #include <cstdint>
 #include <godot_cpp/variant/dictionary.hpp>
 
-class T3DRegionRepository;
-class T3DRuntimePageStore;
+class Terrain3DRegionRepository;
+class Terrain3DRuntimePageStore;
 
 typedef struct t3dInstanceRegionCacheChanges_s {
 	Vector2i m_szLoaded[s_nInstanceCacheMaxPages] = {};
@@ -41,9 +41,9 @@ typedef struct t3dInstanceRegionCacheStats_s {
 	uint64_t m_nServiceUsecLast = 0u;
 } t3dInstanceRegionCacheStats_t;
 
-class T3DInstanceRegionCache {
+class Terrain3DInstanceRegionCache {
 public:
-	T3DInstanceRegionCache( T3DRegionRepository *pRepository, T3DRuntimePageStore *pRuntimePageStore );
+	Terrain3DInstanceRegionCache( Terrain3DRegionRepository *pRepository, Terrain3DRuntimePageStore *pRuntimePageStore );
 
 	void configure( bool bEnabled,
 			int nBudgetMb,
@@ -85,8 +85,8 @@ public:
 	Dictionary getStatsDictionary( bool bDetailed, int nEffectiveLoadPages ) const;
 
 private:
-	T3DRegionRepository *m_pRepository = nullptr;
-	T3DRuntimePageStore *m_pRuntimePageStore = nullptr;
+	Terrain3DRegionRepository *m_pRepository = nullptr;
+	Terrain3DRuntimePageStore *m_pRuntimePageStore = nullptr;
 
 	bool m_bEnabled = false;
 	bool m_bSelectionDirty = true;

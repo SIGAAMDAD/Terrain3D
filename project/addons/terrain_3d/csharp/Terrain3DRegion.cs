@@ -9,34 +9,34 @@ using Godot.Collections;
 namespace TokisanGames;
 
 [Tool]
-public partial class T3DRegion : Resource
+public partial class Terrain3DRegion : Resource
 {
 
-	private new static readonly StringName NativeName = new StringName("T3DRegion");
+	private new static readonly StringName NativeName = new StringName("Terrain3DRegion");
 
-	[Obsolete("Wrapper types cannot be constructed with constructors (it only instantiate the underlying T3DRegion object), please use the Instantiate() method instead.")]
-	protected T3DRegion() { }
+	[Obsolete("Wrapper types cannot be constructed with constructors (it only instantiate the underlying Terrain3DRegion object), please use the Instantiate() method instead.")]
+	protected Terrain3DRegion() { }
 
 	private static CSharpScript _wrapperScriptAsset;
 
 	/// <summary>
-	/// Try to cast the script on the supplied <paramref name="godotObject"/> to the <see cref="T3DRegion"/> wrapper type,
-	/// if no script has attached to the type, or the script attached to the type does not inherit the <see cref="T3DRegion"/> wrapper type,
-	/// a new instance of the <see cref="T3DRegion"/> wrapper script will get attaches to the <paramref name="godotObject"/>.
+	/// Try to cast the script on the supplied <paramref name="godotObject"/> to the <see cref="Terrain3DRegion"/> wrapper type,
+	/// if no script has attached to the type, or the script attached to the type does not inherit the <see cref="Terrain3DRegion"/> wrapper type,
+	/// a new instance of the <see cref="Terrain3DRegion"/> wrapper script will get attaches to the <paramref name="godotObject"/>.
 	/// </summary>
 	/// <remarks>The developer should only supply the <paramref name="godotObject"/> that represents the correct underlying GDExtension type.</remarks>
 	/// <param name="godotObject">The <paramref name="godotObject"/> that represents the correct underlying GDExtension type.</param>
-	/// <returns>The existing or a new instance of the <see cref="T3DRegion"/> wrapper script attached to the supplied <paramref name="godotObject"/>.</returns>
-	public new static T3DRegion Bind(GodotObject godotObject)
+	/// <returns>The existing or a new instance of the <see cref="Terrain3DRegion"/> wrapper script attached to the supplied <paramref name="godotObject"/>.</returns>
+	public new static Terrain3DRegion Bind(GodotObject godotObject)
 	{
 		if (!IsInstanceValid(godotObject))
 			return null;
 
-		if (godotObject is T3DRegion wrapperScriptInstance)
+		if (godotObject is Terrain3DRegion wrapperScriptInstance)
 			return wrapperScriptInstance;
 
 #if DEBUG
-		var expectedType = typeof(T3DRegion);
+		var expectedType = typeof(Terrain3DRegion);
 		var currentObjectClassName = godotObject.GetClass();
 		if (!ClassDB.IsParentClass(expectedType.Name, currentObjectClassName))
 			throw new InvalidOperationException($"The supplied GodotObject ({currentObjectClassName}) is not the {expectedType.Name} type.");
@@ -44,21 +44,21 @@ public partial class T3DRegion : Resource
 
 		if (_wrapperScriptAsset is null)
 		{
-			var scriptPathAttribute = typeof(T3DRegion).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
+			var scriptPathAttribute = typeof(Terrain3DRegion).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
 			if (scriptPathAttribute is null) throw new UnreachableException();
 			_wrapperScriptAsset = ResourceLoader.Load<CSharpScript>(scriptPathAttribute.Path);
 		}
 
 		var instanceId = godotObject.GetInstanceId();
 		godotObject.SetScript(_wrapperScriptAsset);
-		return (T3DRegion)InstanceFromId(instanceId);
+		return (Terrain3DRegion)InstanceFromId(instanceId);
 	}
 
 	/// <summary>
-	/// Creates an instance of the GDExtension <see cref="T3DRegion"/> type, and attaches a wrapper script instance to it.
+	/// Creates an instance of the GDExtension <see cref="Terrain3DRegion"/> type, and attaches a wrapper script instance to it.
 	/// </summary>
-	/// <returns>The wrapper instance linked to the underlying GDExtension "T3DRegion" type.</returns>
-	public new static T3DRegion Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
+	/// <returns>The wrapper instance linked to the underlying GDExtension "Terrain3DRegion" type.</returns>
+	public new static Terrain3DRegion Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
 
 	public enum MapType
 	{
@@ -197,9 +197,9 @@ public partial class T3DRegion : Resource
 	}
 
 	/// <summary>Persistent presence flags retained when paged map images are evicted.</summary>
-	public new T3DRegion.ChannelFlag ChannelFlags
+	public new Terrain3DRegion.ChannelFlag ChannelFlags
 	{
-		get => Get(GDExtensionPropertyName.ChannelFlags).As<T3DRegion.ChannelFlag>();
+		get => Get(GDExtensionPropertyName.ChannelFlags).As<Terrain3DRegion.ChannelFlag>();
 		set => Set(GDExtensionPropertyName.ChannelFlags, Variant.From(value));
 	}
 
@@ -310,10 +310,10 @@ public partial class T3DRegion : Resource
 	public new void Clear() =>
 		Call(GDExtensionMethodName.Clear, []);
 
-	public new void SetMap(T3DRegion.MapType mapType, Image map) =>
+	public new void SetMap(Terrain3DRegion.MapType mapType, Image map) =>
 		Call(GDExtensionMethodName.SetMap, [Variant.From(mapType), map]);
 
-	public new Image GetMap(T3DRegion.MapType mapType) =>
+	public new Image GetMap(Terrain3DRegion.MapType mapType) =>
 		Call(GDExtensionMethodName.GetMap, [Variant.From(mapType)]).As<Image>();
 
 	public new void SetMaps(Godot.Collections.Array maps) =>
@@ -325,7 +325,7 @@ public partial class T3DRegion : Resource
 	public new void SanitizeMaps() =>
 		Call(GDExtensionMethodName.SanitizeMaps, []);
 
-	public new Image SanitizeMap(T3DRegion.MapType mapType, Image map) =>
+	public new Image SanitizeMap(Terrain3DRegion.MapType mapType, Image map) =>
 		Call(GDExtensionMethodName.SanitizeMap, [Variant.From(mapType), map]).As<Image>();
 
 	public new bool ValidateMapSize(Image map) =>
@@ -349,8 +349,8 @@ public partial class T3DRegion : Resource
 	public new Godot.Collections.Dictionary GetData() =>
 		Call(GDExtensionMethodName.GetData, []).As<Godot.Collections.Dictionary>();
 
-	public new T3DRegion Duplicate(bool deep = false) =>
-		T3DRegion.Bind(Call(GDExtensionMethodName.Duplicate, [deep]).As<Resource>());
+	public new Terrain3DRegion Duplicate(bool deep = false) =>
+		Terrain3DRegion.Bind(Call(GDExtensionMethodName.Duplicate, [deep]).As<Resource>());
 
 	public new void Dump(bool verbose = false) =>
 		Call(GDExtensionMethodName.Dump, [verbose]);
@@ -359,12 +359,12 @@ public partial class T3DRegion : Resource
 
 file static class MapTypeExtensions
 {
-public static int SafeAsInt32(this T3DRegion.MapType enumValue) =>
+public static int SafeAsInt32(this Terrain3DRegion.MapType enumValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this T3DRegion.MapType enumValue, int defaultValue) =>
+public static int SafeAsInt32(this Terrain3DRegion.MapType enumValue, int defaultValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this T3DRegion.MapType? enumValue, int defaultValue = 0) =>
+public static int SafeAsInt32(this Terrain3DRegion.MapType? enumValue, int defaultValue = 0) =>
 enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
 }

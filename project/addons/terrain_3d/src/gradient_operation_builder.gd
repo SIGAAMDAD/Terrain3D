@@ -22,7 +22,7 @@ func is_picking() -> bool:
 	return not _get_point_picker().all_points_selected()
 
 
-func pick(p_global_position: Vector3, p_terrain: T3DTerrain) -> void:
+func pick(p_global_position: Vector3, p_terrain: Terrain3D) -> void:
 	if not _get_point_picker().all_points_selected():
 		_get_point_picker().add_point(p_global_position)
 
@@ -32,7 +32,7 @@ func is_ready() -> bool:
 
 
 # This function runs a "brush" operation from point1 to point2, when drawable is not checked
-func apply_operation(p_editor: T3DEditor, p_global_position: Vector3, p_camera_direction: float) -> void:
+func apply_operation(p_editor: Terrain3DEditor, p_global_position: Vector3, p_camera_direction: float) -> void:
 	var points: PackedVector3Array = _get_point_picker().get_points()
 	assert(points.size() == 2)
 	assert(not _is_drawable())

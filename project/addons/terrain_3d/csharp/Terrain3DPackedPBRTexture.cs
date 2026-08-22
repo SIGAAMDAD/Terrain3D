@@ -8,36 +8,36 @@ using Godot;
 namespace TokisanGames;
 
 [Tool]
-public partial class T3DPackedPBRTexture : Resource
+public partial class Terrain3DPackedPBRTexture : Resource
 {
-	private new static readonly StringName NativeName = new("T3DPackedPBRTexture");
+	private new static readonly StringName NativeName = new("Terrain3DPackedPBRTexture");
 
 	[Obsolete("Wrapper types cannot be constructed directly; use Instantiate().")]
-	protected T3DPackedPBRTexture() { }
+	protected Terrain3DPackedPBRTexture() { }
 
 	private static CSharpScript _wrapperScriptAsset;
 
-	public new static T3DPackedPBRTexture Bind(GodotObject godotObject)
+	public new static Terrain3DPackedPBRTexture Bind(GodotObject godotObject)
 	{
 		if (!IsInstanceValid(godotObject)) return null;
-		if (godotObject is T3DPackedPBRTexture wrapper) return wrapper;
+		if (godotObject is Terrain3DPackedPBRTexture wrapper) return wrapper;
 #if DEBUG
 		var currentObjectClassName = godotObject.GetClass();
-		if (!ClassDB.IsParentClass(nameof(T3DPackedPBRTexture), currentObjectClassName))
-			throw new InvalidOperationException($"The supplied object ({currentObjectClassName}) is not T3DPackedPBRTexture.");
+		if (!ClassDB.IsParentClass(nameof(Terrain3DPackedPBRTexture), currentObjectClassName))
+			throw new InvalidOperationException($"The supplied object ({currentObjectClassName}) is not Terrain3DPackedPBRTexture.");
 #endif
 		if (_wrapperScriptAsset is null)
 		{
-			var path = typeof(T3DPackedPBRTexture).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
+			var path = typeof(Terrain3DPackedPBRTexture).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
 			if (path is null) throw new UnreachableException();
 			_wrapperScriptAsset = ResourceLoader.Load<CSharpScript>(path.Path);
 		}
 		var instanceId = godotObject.GetInstanceId();
 		godotObject.SetScript(_wrapperScriptAsset);
-		return (T3DPackedPBRTexture)InstanceFromId(instanceId);
+		return (Terrain3DPackedPBRTexture)InstanceFromId(instanceId);
 	}
 
-	public new static T3DPackedPBRTexture Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
+	public new static Terrain3DPackedPBRTexture Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
 
 	public enum SourceChannel : long { Red = 0, Green = 1, Blue = 2, Alpha = 3 }
 
@@ -54,7 +54,7 @@ public partial class T3DPackedPBRTexture : Resource
 		public new static readonly StringName DisplacementSource = "displacement_source";
 		[Obsolete("Legacy serialized migration field. Use PackedTexture.")]
 		public new static readonly StringName AoSource = "ao_source";
-		[Obsolete("Legacy serialized migration field. Metallic is a T3DTextureAsset scalar.")]
+		[Obsolete("Legacy serialized migration field. Metallic is a Terrain3DTextureAsset scalar.")]
 		public new static readonly StringName MetallicSource = "metallic_source";
 		[Obsolete("Legacy serialized migration field.")]
 		public new static readonly StringName OutputSize = "output_size";
@@ -85,7 +85,7 @@ public partial class T3DPackedPBRTexture : Resource
 	public Texture2D DisplacementSource { get => Get(GDExtensionPropertyName.DisplacementSource).As<Texture2D>(); set => Set(GDExtensionPropertyName.DisplacementSource, value); }
 	[Obsolete("Legacy migration property. Use PackedTexture.")]
 	public Texture2D AoSource { get => Get(GDExtensionPropertyName.AoSource).As<Texture2D>(); set => Set(GDExtensionPropertyName.AoSource, value); }
-	[Obsolete("Legacy migration property. Metallic is a T3DTextureAsset scalar.")]
+	[Obsolete("Legacy migration property. Metallic is a Terrain3DTextureAsset scalar.")]
 	public Texture2D MetallicSource { get => Get(GDExtensionPropertyName.MetallicSource).As<Texture2D>(); set => Set(GDExtensionPropertyName.MetallicSource, value); }
 	[Obsolete("Legacy migration property.")]
 	public Vector2I OutputSize { get => Get(GDExtensionPropertyName.OutputSize).As<Vector2I>(); set => Set(GDExtensionPropertyName.OutputSize, value); }

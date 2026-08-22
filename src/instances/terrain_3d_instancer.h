@@ -19,9 +19,10 @@
 #include <godot_cpp/classes/multi_mesh.hpp>
 #include <godot_cpp/classes/multi_mesh_instance3d.hpp>
 
-class T3DTerrain;
-class T3DAssets;
-class T3DSampler;
+class Terrain3D;
+class Terrain3DData;
+class Terrain3DAssets;
+class Terrain3DSampler;
 
 typedef enum t3dInstancerMode_e {
 	INSTANCER_DISABLED,
@@ -120,7 +121,7 @@ typedef struct t3dTransitionBucketKeyHash_s {
 } t3dTransitionBucketKeyHash_t;
 
 typedef struct t3dPendingPlacement_s {
-	T3DRegion *m_pRegion = nullptr;
+	Terrain3DRegion *m_pRegion = nullptr;
 	Vector2i m_cell;
 	Transform3D m_transform;
 	Color m_color = s_colorWhite;
@@ -166,23 +167,23 @@ typedef struct t3dTransitionCellNode_s {
 	uint32_t m_nNext = UINT32_MAX;
 } t3dTransitionCellNode_t;
 
-class T3DInstancer : public Object {
-	GDCLASS( T3DInstancer, Object );
+class Terrain3DInstancer : public Object {
+	GDCLASS( Terrain3DInstancer, Object );
 	CLASS_NAME();
-	friend T3DTerrain;
+	friend Terrain3D;
 
 public: // Constants
 private:
-	T3DTerrain *m_pTerrain = nullptr;
+	Terrain3D *m_pTerrain = nullptr;
 
 	// Runtime indices use contiguous open-addressing tables. reserve() establishes a
 	// high-water bucket array; ordinary streaming inserts/erases never allocate nodes.
-	using RenderCellIndex = T3DFlatHashMap<t3dRenderCellKey_t, size_t, t3dRenderCellKeyHash_t>;
-	using LogicalCellMap = T3DFlatHashMap<t3dCellUpdateKey_t, t3dLogicalCellState_t, t3dCellUpdateKeyHash_t>;
+	using RenderCellIndex = Terrain3DFlatHashMap<t3dRenderCellKey_t, size_t, t3dRenderCellKeyHash_t>;
+	using LogicalCellMap = Terrain3DFlatHashMap<t3dCellUpdateKey_t, t3dLogicalCellState_t, t3dCellUpdateKeyHash_t>;
 
 	using TransitionBucketMap =
-			T3DFlatHashMap<t3dTransitionBucketKey_t, t3dTransitionBucketState_t, t3dTransitionBucketKeyHash_t>;
-	using StreamingUpdateSet = T3DFlatHashSet<t3dCellUpdateKey_t, t3dCellUpdateKeyHash_t>;
+			Terrain3DFlatHashMap<t3dTransitionBucketKey_t, t3dTransitionBucketState_t, t3dTransitionBucketKeyHash_t>;
+	using StreamingUpdateSet = Terrain3DFlatHashSet<t3dCellUpdateKey_t, t3dCellUpdateKeyHash_t>;
 
 	eastl::vector<t3dRenderCell_t> m_renderCells;
 	RenderCellIndex m_iRenderCellIndex;
@@ -258,7 +259,7 @@ private:
 	eastl::vector<Transform3D> m_placementTransforms;
 	eastl::vector<Color> m_placementColors;
 	eastl::vector<t3dPendingPlacement_t> m_placementPending;
-	T3DRegion *m_pszTouchedRegions[s_nMaxRegionSlots] = {};
+	Terrain3DRegion *m_pszTouchedRegions[s_nMaxRegionSlots] = {};
 	uint16_t m_nTouchedRegionCount = 0u;
 
 	static t3dRenderCellKey_t makeRenderKey( const t3dRenderCell_t &rCell );
@@ -277,7 +278,7 @@ private:
 	void eraseRenderCellAt( size_t iIndex );
 	void destroyRenderCells( void );
 	void resetRuntimeState( bool bClearLogicalCounts );
-	void reconcileRegionRenderCells( T3DRegion *pRegion, int nMeshId );
+	void reconcileRegionRenderCells( Terrain3DRegion *pRegion, int nMeshId );
 	void markLogicalMeshCountDirty( int nMeshId );
 	void setLogicalCellCount( const Vector2i &vRegion, int nMeshId, const Vector2i &vCell, size_t nCount );
 	void publishLogicalMeshCount( int nMeshId );
@@ -287,7 +288,7 @@ private:
 	void eraseLogicalCellsByLocation( const Vector2i &vRegion, int nMeshId );
 	void clearLogicalCellCounts( void );
 	void rebuildLogicalCountsFromStore( void );
-	void reconcileLogicalRegion( T3DRegion *pRegion, int nMeshId );
+	void reconcileLogicalRegion( Terrain3DRegion *pRegion, int nMeshId );
 	void swapLogicalMeshIds( int nSrcId, int nDstId );
 	bool hasPendingUpdates( void ) const;
 	bool hasPendingUpdatesForRegion( const Vector2i &rRegion ) const;
@@ -301,9 +302,9 @@ private:
 	void scheduleUpdateProcessing( void );
 	void cancelPendingCellUpdates( void );
 	void materializePendingUpdates( void );
-	void enqueueRegionCellUpdates( T3DRegion *pRegion, int nMeshId );
-	void enqueueRegionMeshUpdates( T3DRegion *pRegion, int nMeshId );
-	void enqueueAllRegions( T3DData *pData, int nMeshId );
+	void enqueueRegionCellUpdates( Terrain3DRegion *pRegion, int nMeshId );
+	void enqueueRegionMeshUpdates( Terrain3DRegion *pRegion, int nMeshId );
+	void enqueueAllRegions( Terrain3DData *pData, int nMeshId );
 	void processPendingCellUpdate( const t3dCellUpdateKey_t &rUpdate );
 #ifdef DEBUG_ENABLED
 	static bool reportInvariantFailure( const String &rMessage );
@@ -317,7 +318,7 @@ private:
 			const Vector3 &rTargetPosition ) const;
 	int selectCellLod( const Vector2i &vRegion,
 			const Vector2i &vCell,
-			const Ref<T3DMeshAsset> &rAsset,
+			const Ref<Terrain3DMeshAsset> &rAsset,
 			const Vector3 &rTargetPosition ) const;
 	Vector2i getGlobalCell( const Vector2i &vRegion, const Vector2i &vCell ) const;
 	t3dTransitionBucketKey_t getTransitionBucketKey( const t3dCellUpdateKey_t &rKey ) const;
@@ -325,7 +326,7 @@ private:
 	void untrackSingleLodCell( const t3dCellUpdateKey_t &rKey );
 	void clearSingleLodTransitionBuckets( void );
 	bool transitionBucketMayCrossBoundary( const t3dTransitionBucketKey_t &rBucket,
-			const Ref<T3DMeshAsset> &rAsset,
+			const Ref<Terrain3DMeshAsset> &rAsset,
 			const Vector3 &rPreviousPosition,
 			const Vector3 &rTargetPosition ) const;
 	const t3dRenderCell_t *findSingleLodRenderCell( const t3dCellUpdateKey_t &rKey ) const;
@@ -336,7 +337,7 @@ private:
 			bool bUpdate,
 			uint32_t owner = 0,
 			bool bBackup = true );
-	void appendRegionNative( T3DRegion *pRegion,
+	void appendRegionNative( Terrain3DRegion *pRegion,
 			int nMeshId,
 			const eastl::vector<Transform3D> &rXforms,
 			const eastl::vector<Color> &rColors,
@@ -361,26 +362,26 @@ private:
 	bool m_bStreamPositionValid = false;
 
 	Vector2i getCellForLocalPosition( const Vector3 &rLocalPosition, int nRegionSize, int nCellSize ) const;
-	bool buildRepartitionedStore( const T3DRegion *pRegion,
+	bool buildRepartitionedStore( const Terrain3DRegion *pRegion,
 			const t3dInstanceLayout_t &rLayout,
-			T3DInstanceStore &rStore ) const;
-	bool repartitionRegionStore( T3DRegion *pRegion, const t3dInstanceLayout_t &rLayout );
+			Terrain3DInstanceStore &rStore ) const;
+	bool repartitionRegionStore( Terrain3DRegion *pRegion, const t3dInstanceLayout_t &rLayout );
 	bool repartitionResidentRegions( const t3dInstanceLayout_t &rLayout );
 	uint32_t getDensityCount( const real_t fDensity );
-	int getMasterLod( const Ref<T3DMeshAsset> &rMa ) const;
+	int getMasterLod( const Ref<Terrain3DMeshAsset> &rMa ) const;
 	void processUpdates( void );
-	void updateMmiByRegion( T3DRegion *pRegion, const int nMeshId );
+	void updateMmiByRegion( Terrain3DRegion *pRegion, const int nMeshId );
 	void
-	updateMmiCell( T3DRegion *pRegion, const int nMeshId, t3dInstanceCell_t &rCell, const Ref<T3DMeshAsset> &rAsset );
+	updateMmiCell( Terrain3DRegion *pRegion, const int nMeshId, t3dInstanceCell_t &rCell, const Ref<Terrain3DMeshAsset> &rAsset );
 	void ensureUploadBuffer( t3dInstanceCell_t &rCell,
 			const Ref<Mesh> &rMasterMesh,
 			const AABB &aabbSourceMeshAabb,
 			bool bRebuildAabb,
 			bool &bReady );
-	void setMmiLodRanges( RID mmi, const Ref<T3DMeshAsset> &rMa, const int nLod );
+	void setMmiLodRanges( RID mmi, const Ref<Terrain3DMeshAsset> &rMa, const int nLod );
 	void updateVertexSpacing( const real_t fVertexSpacing );
 	// Renderer teardown never mutates persistent content accounting. Callers that
-	// change T3DInstanceStore must update logical counts explicitly.
+	// change Terrain3DInstanceStore must update logical counts explicitly.
 	void destroyMmisByRegion( const Vector2i &rRegionLoc );
 	void destroyMmiByLocation( const Vector2i &rRegionLoc, int nMeshId );
 	void destroyMmiByCell( const Vector2i &rRegionLoc, int nMeshId, Vector2i vCell, int nLod = INT32_MAX );
@@ -394,16 +395,16 @@ private:
 			real_t fCellWorldSize,
 			int nMinGlobalCell,
 			int nMaxGlobalCell ) const;
-	void queueStreamingCell( T3DData *pData, int nMeshId, int iGlobalX, int iGlobalZ, int nCellsPerRegion );
+	void queueStreamingCell( Terrain3DData *pData, int nMeshId, int iGlobalX, int iGlobalZ, int nCellsPerRegion );
 	void
-	queueStreamingInterval( T3DData *pData, int nMeshId, int iGlobalZ, int nFirst, int nLast, int nCellsPerRegion );
-	void queueStreamingDifference( T3DData *pData,
+	queueStreamingInterval( Terrain3DData *pData, int nMeshId, int iGlobalZ, int nFirst, int nLast, int nCellsPerRegion );
+	void queueStreamingDifference( Terrain3DData *pData,
 			int nMeshId,
 			int iGlobalZ,
 			const t3dCellInterval_t &rSource,
 			const t3dCellInterval_t &rOther,
 			int nCellsPerRegion );
-	void backupRegion( const Ref<T3DRegion> &rRegion );
+	void backupRegion( const Ref<Terrain3DRegion> &rRegion );
 	t3dMultiMeshUpdateResult_t updateMultimesh( const int nMeshId,
 			const int nLod,
 			const t3dInstanceCell_t &rCell,
@@ -416,7 +417,7 @@ private:
 			AABB *pCellAabb = nullptr ) const;
 	const PackedFloat32Array &buildUploadBuffer( const t3dInstanceCell_t &rCell ) const;
 	Vector2i getCell( const Vector3 &rGlobalPosition, const int nRegionSize ) const;
-	t3dUsableHeight_t getUsableHeight( T3DSampler &rSampler,
+	t3dUsableHeight_t getUsableHeight( Terrain3DSampler &rSampler,
 			const Vector3 &rGlobalPosition,
 			const Vector2 &rSlopeRange,
 			bool bOnCollision,
@@ -424,18 +425,18 @@ private:
 			bool bSampleNormal = false ) const;
 
 public:
-	EA_FORCE_INLINE T3DInstancer( void ) {}
-	EA_FORCE_INLINE ~T3DInstancer( void ) {
+	EA_FORCE_INLINE Terrain3DInstancer( void ) {}
+	EA_FORCE_INLINE ~Terrain3DInstancer( void ) {
 		destroy();
 	}
 
-	void initialize( T3DTerrain *pTerrain );
+	void initialize( Terrain3D *pTerrain );
 	void destroy( void );
 	void suspendRendering( void );
 
 	void clearByMesh( const int nMeshId );
 	void clearByLocation( const Vector2i &rRegionLoc, const int nMeshId );
-	void clearByRegion( const Ref<T3DRegion> &rRegion, const int nMeshId );
+	void clearByRegion( const Ref<Terrain3DRegion> &rRegion, const int nMeshId );
 	// Frees rendered MMIs for one region without modifying its stored instance data.
 	// Used when a terrain region is temporarily removed and may later be restored by undo.
 	void destroyRegionMmis( const Vector2i &rRegionLoc );
@@ -470,7 +471,7 @@ public:
 			const TypedArray<Transform3D> &rXforms,
 			const PackedColorArray &rColors,
 			const bool bUpdate = true );
-	void appendRegion( const Ref<T3DRegion> &rRegion,
+	void appendRegion( const Ref<Terrain3DRegion> &rRegion,
 			const int nMeshId,
 			const TypedArray<Transform3D> &rXforms,
 			const PackedColorArray &rColors,
@@ -513,7 +514,7 @@ public:
 		return m_nCellSize;
 	}
 	int getCellsPerRegionAxis( void ) const;
-	bool ensureRegionLayout( T3DRegion *pRegion );
+	bool ensureRegionLayout( Terrain3DRegion *pRegion );
 	bool refreshResidentRegionLayouts( void );
 	void setCellStreamingEnabled( bool bEnabled );
 	EA_FORCE_INLINE bool isCellStreamingEnabled( void ) const {
@@ -555,7 +556,7 @@ public:
 				m_nQueueAfterLastFrame > 0u;
 	}
 	int getClosestMeshId( const Vector3 &rGlobalPosition ) const;
-	void copyPasteDfr( const T3DRegion *pSrcRegion, const Rect2i &rSrcRect, const T3DRegion *pDstRegion );
+	void copyPasteDfr( const Terrain3DRegion *pSrcRegion, const Rect2i &rSrcRect, const Terrain3DRegion *pDstRegion );
 
 	void swapIds( const int nSrcId, const int nDstId );
 	void updateMmis( const int nMeshId = -1, const Vector2i &rRegionLoc = s_v2iMax, const bool bRebuild = false );
@@ -576,7 +577,7 @@ VARIANT_ENUM_CAST( t3dInstancerMode_t );
 
 // Allows us to instance every X function calls for sparse placement
 // Modifies _density_counter, not const!
-inline uint32_t T3DInstancer::getDensityCount( const real_t fDensity ) {
+inline uint32_t Terrain3DInstancer::getDensityCount( const real_t fDensity ) {
 	uint32_t count = 0;
 	if ( fDensity < 1.f && m_nDensityCounter++ % ( uint32_t )( 1.f / fDensity ) == 0 ) {
 		count = 1;
@@ -587,7 +588,7 @@ inline uint32_t T3DInstancer::getDensityCount( const real_t fDensity ) {
 }
 
 // Use lod0 to track instance counter and set AABB, but in shadows_only lod0 doesn't exist
-inline int T3DInstancer::getMasterLod( const Ref<T3DMeshAsset> &rMa ) const {
+inline int Terrain3DInstancer::getMasterLod( const Ref<Terrain3DMeshAsset> &rMa ) const {
 	if ( rMa.is_valid() && rMa->getCastShadows() == s_shadowCastingOnly ) {
 		return rMa->getShadowImpostor();
 	}

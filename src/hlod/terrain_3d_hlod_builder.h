@@ -14,20 +14,20 @@
 using namespace godot;
 #endif
 
-class T3DTerrain;
-class T3DRegion;
+class Terrain3D;
+class Terrain3DRegion;
 
 // Native geometry workhorse for the editor-only HLOD authoring pipeline.
 // GDScript owns orchestration/transactional publishing; this class keeps the
 // expensive instance-store traversal, vertex compaction and error measurement
 // out of Variant/Dictionary-heavy script loops.
-class T3DHLODBuilder : public RefCounted {
-	GDCLASS( T3DHLODBuilder, RefCounted );
+class Terrain3DHLODBuilder : public RefCounted {
+	GDCLASS( Terrain3DHLODBuilder, RefCounted );
 	CLASS_NAME();
 
 public:
-	PackedInt32Array getInstancerMeshIds( T3DRegion *pRegion ) const;
-	Dictionary buildInstancerSource( T3DTerrain *pTerrain, T3DRegion *pRegion, int nMeshId ) const;
+	PackedInt32Array getInstancerMeshIds( Terrain3DRegion *pRegion ) const;
+	Dictionary buildInstancerSource( Terrain3D *pTerrain, Terrain3DRegion *pRegion, int nMeshId ) const;
 	Dictionary simplifyMesh( const Ref<ArrayMesh> &rMesh, real_t fRatio ) const;
 
 protected:

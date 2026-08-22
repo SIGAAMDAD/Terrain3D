@@ -16,7 +16,7 @@ const TERRAIN_ICON: Texture2D = preload("res://addons/terrain_3d/icons/terrain3d
 const MENU_LABEL: String = "Terrain3D"
 const MENU_TOOLTIP: String = "Terrain3D tools and utilities"
 
-var plugin: T3DEditorPluginBase
+var plugin: Terrain3DEditorPluginBase
 var directory_setup: DirectoryWizard = DirectoryWizard.new()
 var packer: ChannelPacker = ChannelPacker.new()
 var baker: LodBaker = LodBaker.new()
@@ -246,7 +246,7 @@ func _on_menu_about_to_popup() -> void:
 		popup.set_item_disabled(MENU_BAKE_NAV_MESH, nav_regions.is_empty())
 		popup.set_item_disabled(MENU_SET_UP_NAVIGATION, not nav_regions.is_empty())
 	elif is_instance_valid(plugin) and is_instance_valid(plugin.nav_region):
-		var terrains: Array[T3DTerrain] = baker.find_nav_region_terrains(plugin.nav_region)
+		var terrains: Array[Terrain3D] = baker.find_nav_region_terrains(plugin.nav_region)
 		popup.set_item_disabled(MENU_BAKE_NAV_MESH, terrains.is_empty())
 		popup.set_item_disabled(MENU_SET_UP_NAVIGATION, true)
 	else:

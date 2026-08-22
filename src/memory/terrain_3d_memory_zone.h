@@ -6,6 +6,7 @@
 
 #include "core/terrain_3d_compiler.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
@@ -69,7 +70,7 @@ typedef struct t3dMemoryZoneAllocationHeader_s {
 static_assert( sizeof( t3dMemoryZoneAllocationHeader_t ) % 16u == 0u,
 		"Zone payload headers must preserve 16-byte small-block alignment" );
 
-class T3DMemoryZone {
+class Terrain3DMemoryZone {
 public:
 	static constexpr uint32_t s_nSmallClassCount = 9u;
 	static constexpr uint32_t
@@ -79,12 +80,12 @@ public:
 	static constexpr uint32_t s_nMaxSmallPages = 1024u;
 	static constexpr uint64_t s_nAllocationMagic = 0x5A4F4E453344544FULL;
 
-	T3DMemoryZone() = default;
-	EA_FORCE_INLINE ~T3DMemoryZone() {
+	Terrain3DMemoryZone() = default;
+	EA_FORCE_INLINE ~Terrain3DMemoryZone() {
 		release();
 	}
-	T3DMemoryZone( const T3DMemoryZone & ) = delete;
-	T3DMemoryZone &operator=( const T3DMemoryZone & ) = delete;
+	Terrain3DMemoryZone( const Terrain3DMemoryZone & ) = delete;
+	Terrain3DMemoryZone &operator=( const Terrain3DMemoryZone & ) = delete;
 
 	bool initialize( void *pBacking, size_t nBytes );
 	void *allocate( size_t nBytes, size_t nAlignment = alignof( std::max_align_t ) );

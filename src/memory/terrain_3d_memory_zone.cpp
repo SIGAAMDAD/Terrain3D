@@ -5,10 +5,11 @@
 #include <algorithm>
 #include <cstring>
 #include <limits>
+#include <mutex>
 
-constexpr uint32_t T3DMemoryZone::s_szSmallClasses[T3DMemoryZone::s_nSmallClassCount];
+constexpr uint32_t Terrain3DMemoryZone::s_szSmallClasses[Terrain3DMemoryZone::s_nSmallClassCount];
 
-bool T3DMemoryZone::alignUp( const size_t nValue, const size_t nAlignment, size_t &rValue ) {
+bool Terrain3DMemoryZone::alignUp( const size_t nValue, const size_t nAlignment, size_t &rValue ) {
 	if ( !isPowerOfTwo( nAlignment ) || nValue > std::numeric_limits<size_t>::max() - ( nAlignment - 1u ) ) {
 		return false;
 	}
@@ -16,7 +17,7 @@ bool T3DMemoryZone::alignUp( const size_t nValue, const size_t nAlignment, size_
 	return true;
 }
 
-bool T3DMemoryZone::initialize( void *const pBacking, const size_t nBytes ) {
+bool Terrain3DMemoryZone::initialize( void *const pBacking, const size_t nBytes ) {
 	std::lock_guard<std::mutex> lock( m_mutex );
 	if ( !pBacking || nBytes < s_nSmallPageBytes || m_state == T3D_MEMORY_ZONE_ACTIVE ||
 			m_state == T3D_MEMORY_ZONE_DRAINING ) {
@@ -43,7 +44,7 @@ bool T3DMemoryZone::initialize( void *const pBacking, const size_t nBytes ) {
 	return true;
 }
 
-int T3DMemoryZone::classIndexFor( const size_t nBytes, const size_t nAlignment ) const {
+int Terrain3DMemoryZone::classIndexFor( const size_t nBytes, const size_t nAlignment ) const {
 	if ( nAlignment > 16u ) {
 		return -1;
 	}
@@ -55,7 +56,7 @@ int T3DMemoryZone::classIndexFor( const size_t nBytes, const size_t nAlignment )
 	return -1;
 }
 
-bool T3DMemoryZone::insertFreeExtentUnlocked( const size_t nOffset, const size_t nBytes ) {
+bool Terrain3DMemoryZone::insertFreeExtentUnlocked( const size_t nOffset, const size_t nBytes ) {
 	if ( nBytes == 0u ) {
 		return true;
 	}
@@ -96,7 +97,7 @@ bool T3DMemoryZone::insertFreeExtentUnlocked( const size_t nOffset, const size_t
 	return true;
 }
 
-bool T3DMemoryZone::takeExtentUnlocked( const size_t nBytes,
+bool Terrain3DMemoryZone::takeExtentUnlocked( const size_t nBytes,
 		const size_t nAlignment,
 		const size_t nPrefixBytes,
 		size_t &rExtentOffset,
@@ -144,7 +145,7 @@ bool T3DMemoryZone::takeExtentUnlocked( const size_t nBytes,
 	return false;
 }
 
-void *T3DMemoryZone::allocateSmallUnlocked( const int nClassIndex, const size_t nBytes ) {
+void *Terrain3DMemoryZone::allocateSmallUnlocked( const int nClassIndex, const size_t nBytes ) {
 	uint32_t page_index = s_nMaxSmallPages;
 	for ( uint32_t i = 0u; i < s_nMaxSmallPages; ++i ) {
 		if ( m_szSmallPages[i].m_bActive && m_szSmallPages[i].m_iClass == nClassIndex &&
@@ -212,7 +213,7 @@ void *T3DMemoryZone::allocateSmallUnlocked( const int nClassIndex, const size_t 
 	return payload;
 }
 
-void *T3DMemoryZone::allocateLargeUnlocked( const size_t nBytes, const size_t nAlignment ) {
+void *Terrain3DMemoryZone::allocateLargeUnlocked( const size_t nBytes, const size_t nAlignment ) {
 	if ( nBytes >
 			std::numeric_limits<size_t>::max() - sizeof( t3dMemoryZoneAllocationHeader_t ) - ( nAlignment - 1u ) ) {
 		return nullptr;
@@ -239,7 +240,7 @@ void *T3DMemoryZone::allocateLargeUnlocked( const size_t nBytes, const size_t nA
 	return m_pBase + user_offset;
 }
 
-void *T3DMemoryZone::allocateUnlocked( const size_t nBytes, const size_t nAlignment ) {
+void *Terrain3DMemoryZone::allocateUnlocked( const size_t nBytes, const size_t nAlignment ) {
 	if ( m_state != T3D_MEMORY_ZONE_ACTIVE || nBytes == 0u || !isPowerOfTwo( nAlignment ) || nAlignment > UINT32_MAX ) {
 		return nullptr;
 	}
@@ -248,7 +249,7 @@ void *T3DMemoryZone::allocateUnlocked( const size_t nBytes, const size_t nAlignm
 							: allocateLargeUnlocked( nBytes, nAlignment );
 }
 
-void *T3DMemoryZone::allocate( const size_t nBytes, const size_t nAlignment ) {
+void *Terrain3DMemoryZone::allocate( const size_t nBytes, const size_t nAlignment ) {
 	std::lock_guard<std::mutex> lock( m_mutex );
 	void *const pMemory = allocateUnlocked( nBytes, std::max( nAlignment, ( size_t )alignof( void * ) ) );
 	if ( !pMemory ) {
@@ -257,19 +258,19 @@ void *T3DMemoryZone::allocate( const size_t nBytes, const size_t nAlignment ) {
 	return pMemory;
 }
 
-t3dMemoryZoneAllocationHeader_t *T3DMemoryZone::headerFor( void *const pMemory ) const {
+t3dMemoryZoneAllocationHeader_t *Terrain3DMemoryZone::headerFor( void *const pMemory ) const {
 	return owns( pMemory ) ? reinterpret_cast<t3dMemoryZoneAllocationHeader_t *>(
 									 static_cast<uint8_t *>( pMemory ) - sizeof( t3dMemoryZoneAllocationHeader_t ) )
 						   : nullptr;
 }
-const t3dMemoryZoneAllocationHeader_t *T3DMemoryZone::headerFor( const void *const pMemory ) const {
+const t3dMemoryZoneAllocationHeader_t *Terrain3DMemoryZone::headerFor( const void *const pMemory ) const {
 	return owns( pMemory )
 			? reinterpret_cast<const t3dMemoryZoneAllocationHeader_t *>(
 					  static_cast<const uint8_t *>( pMemory ) - sizeof( t3dMemoryZoneAllocationHeader_t ) )
 			: nullptr;
 }
 
-void T3DMemoryZone::freeUnlocked( void *const pMemory ) {
+void Terrain3DMemoryZone::freeUnlocked( void *const pMemory ) {
 	t3dMemoryZoneAllocationHeader_t *const header = headerFor( pMemory );
 	if ( !header || header->m_nMagic != s_nAllocationMagic ) {
 		return;
@@ -308,7 +309,7 @@ void T3DMemoryZone::freeUnlocked( void *const pMemory ) {
 	m_nLiveMetadataBytes -= sizeof( t3dMemoryZoneAllocationHeader_t );
 }
 
-void T3DMemoryZone::deallocate( void *const pMemory ) {
+void Terrain3DMemoryZone::deallocate( void *const pMemory ) {
 	if ( !pMemory ) {
 		return;
 	}
@@ -316,7 +317,7 @@ void T3DMemoryZone::deallocate( void *const pMemory ) {
 	freeUnlocked( pMemory );
 }
 
-bool T3DMemoryZone::release() {
+bool Terrain3DMemoryZone::release() {
 	std::lock_guard<std::mutex> lock( m_mutex );
 	if ( m_state == T3D_MEMORY_ZONE_UNINITIALIZED || m_state == T3D_MEMORY_ZONE_DEAD ) {
 		return true;
@@ -332,7 +333,7 @@ bool T3DMemoryZone::release() {
 	return true;
 }
 
-size_t T3DMemoryZone::freeExtentBytes( void ) const {
+size_t Terrain3DMemoryZone::freeExtentBytes( void ) const {
 	std::lock_guard<std::mutex> lock( m_mutex );
 	size_t bytes = 0u;
 	for ( uint32_t i = 0u; i < m_nFreeExtentCount; ++i ) {
@@ -341,7 +342,7 @@ size_t T3DMemoryZone::freeExtentBytes( void ) const {
 	return bytes;
 }
 
-t3dMemoryZoneStats_t T3DMemoryZone::getStats( void ) const {
+t3dMemoryZoneStats_t Terrain3DMemoryZone::getStats( void ) const {
 	std::lock_guard<std::mutex> lock( m_mutex );
 	t3dMemoryZoneStats_t stats;
 	stats.m_nReservedBytes = m_nCapacity;

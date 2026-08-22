@@ -1,5 +1,5 @@
 @tool
-class_name T3DRegionNodeDescriptor
+class_name Terrain3DRegionNodeDescriptor
 extends RefCounted
 
 const BOUNDARY_POLICY_BOUNDS: int = 1
@@ -22,13 +22,13 @@ var dynamic_shadow_eligible: bool = true
 var shadow_proxy_scene_path: String = ""
 
 
-static func from_value(p_value: Variant) -> T3DRegionNodeDescriptor:
+static func from_value(p_value: Variant) -> Terrain3DRegionNodeDescriptor:
 	if not p_value is Dictionary:
 		return null
-	var values := T3DRuntimeValueMap.from_value(p_value)
+	var values := Terrain3DRuntimeValueMap.from_value(p_value)
 	if values == null:
 		return null
-	var descriptor := T3DRegionNodeDescriptor.new()
+	var descriptor := Terrain3DRegionNodeDescriptor.new()
 	descriptor.id = values.int_value("id")
 	descriptor.scene_path = values.string_value("scene_path")
 	descriptor.scene = values.object_value("scene") as PackedScene
@@ -51,19 +51,19 @@ static func from_value(p_value: Variant) -> T3DRegionNodeDescriptor:
 	return descriptor
 
 
-static func list_from_value(p_value: Variant) -> Array[T3DRegionNodeDescriptor]:
-	var result: Array[T3DRegionNodeDescriptor] = []
+static func list_from_value(p_value: Variant) -> Array[Terrain3DRegionNodeDescriptor]:
+	var result: Array[Terrain3DRegionNodeDescriptor] = []
 	if not p_value is Array:
 		return result
 	var source: Array[Variant] = p_value
 	for entry: Variant in source:
-		var descriptor := T3DRegionNodeDescriptor.from_value(entry)
+		var descriptor := Terrain3DRegionNodeDescriptor.from_value(entry)
 		if descriptor != null:
 			result.push_back(descriptor)
 	return result
 
 
-static func values_from_list(p_descriptors: Array[T3DRegionNodeDescriptor]) -> Array[Variant]:
+static func values_from_list(p_descriptors: Array[Terrain3DRegionNodeDescriptor]) -> Array[Variant]:
 	var result: Array[Variant] = []
 	result.resize(p_descriptors.size())
 	for index: int in range(p_descriptors.size()):

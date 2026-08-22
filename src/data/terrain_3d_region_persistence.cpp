@@ -18,25 +18,25 @@
 #include <godot_cpp/variant/utility_functions.hpp>
 
 void t3dStagedRepository_t::reset( void ) {
-	regions.clear();
-	resources.clear();
-	regionPtrs.fill( nullptr );
-	regionLocations.fill( s_v2iMax );
-	logicalRegionMap.fill( 0u );
-	nTargetRegionSize = 0;
-	bBoundedCpuLoad = false;
+	m_regions.clear();
+	m_resources.clear();
+	m_pRegionPtrs.fill( nullptr );
+	m_regionLocations.fill( s_v2iMax );
+	m_logicalRegionMap.fill( 0u );
+	m_nTargetRegionSize = 0;
+	m_bBoundedCpuLoad = false;
 }
 
-T3DRegionPersistence::T3DRegionPersistence( T3DRegionRepository *const pRepository ) : m_pRepository( pRepository ) {}
+Terrain3DRegionPersistence::Terrain3DRegionPersistence( Terrain3DRegionRepository *const pRepository ) : m_pRepository( pRepository ) {}
 
-void T3DRegionPersistence::resetLoadStats( void ) {
+void Terrain3DRegionPersistence::resetLoadStats( void ) {
 	m_startupLoadStats = t3dStartupLoadStats_t{};
 	m_nLoadStartedUsec = Time::get_singleton()->get_ticks_usec();
 	m_nPublishStartedUsec = 0u;
 	m_nFinalizeStartedUsec = 0u;
 }
 
-bool T3DRegionPersistence::validateHeightPayload( const Ref<T3DRegion> &rRegion, const String &rPath ) {
+bool Terrain3DRegionPersistence::validateHeightPayload( const Ref<Terrain3DRegion> &rRegion, const String &rPath ) {
 	if ( rRegion.is_null() ) {
 		return false;
 	}
@@ -61,8 +61,8 @@ bool T3DRegionPersistence::validateHeightPayload( const Ref<T3DRegion> &rRegion,
 	return false;
 }
 
-void T3DRegionPersistence::normalizeLoadedRegion( const Vector2i &rLocation,
-		const Ref<T3DRegion> &rRegion,
+void Terrain3DRegionPersistence::normalizeLoadedRegion( const Vector2i &rLocation,
+		const Ref<Terrain3DRegion> &rRegion,
 		const bool bApplyRepositorySpacing,
 		bool &rStorageUpgrade ) const {
 	const Ref<Image> pLoadedHeight = rRegion->getHeightMap();
@@ -86,7 +86,7 @@ void T3DRegionPersistence::normalizeLoadedRegion( const Vector2i &rLocation,
 	rRegion->setModified( rStorageUpgrade || rRegion->isModified() );
 }
 
-Error T3DRegionPersistence::stageDirectory( const String &rDirectory,
+Error Terrain3DRegionPersistence::stageDirectory( const String &rDirectory,
 		const bool bBoundedCpuLoad,
 		t3dStagedRepository_t &rStaged ) {
 	rStaged.reset();
@@ -100,7 +100,7 @@ Error T3DRegionPersistence::stageDirectory( const String &rDirectory,
 	}
 
 	LOG( INFO, "Loading region files from ", rDirectory );
-	PackedStringArray files = T3DUtil::getFiles( rDirectory, "terrain3d*.res" );
+	PackedStringArray files = Terrain3DUtil::getFiles( rDirectory, "terrain3d*.res" );
 	files.sort();
 	m_startupLoadStats.m_nEnumerationUsecLast = Time::get_singleton()->get_ticks_usec() - m_nLoadStartedUsec;
 	m_startupLoadStats.m_nRegionFilesLast = files.size();
@@ -122,7 +122,7 @@ Error T3DRegionPersistence::stageDirectory( const String &rDirectory,
 
 	for ( const String &fname : files ) {
 		t3dStagedRegion_t entry;
-		entry.m_location = T3DUtil::filenameToLocation( fname );
+		entry.m_location = Terrain3DUtil::filenameToLocation( fname );
 		entry.m_path = rDirectory.path_join( fname );
 		rStaged.m_regions.push_back( entry );
 	}
@@ -139,7 +139,7 @@ Error T3DRegionPersistence::stageDirectory( const String &rDirectory,
 	for ( int fileIndex = 0; fileIndex < files.size(); ++fileIndex ) {
 		const String &fname = files[fileIndex];
 		t3dStagedRegion_t &entry = rStaged.m_regions[( size_t )( fileIndex )];
-		const int mapIndex = T3DRegionRepository::getRegionMapIndex( entry.m_location );
+		const int mapIndex = Terrain3DRegionRepository::getRegionMapIndex( entry.m_location );
 		if ( mapIndex < 0 ) {
 			LOG( ERROR, "Invalid or out-of-bounds region file name: ", fname );
 			return ERR_FILE_CORRUPT;
@@ -150,7 +150,7 @@ Error T3DRegionPersistence::stageDirectory( const String &rDirectory,
 		}
 		occupied.set( ( size_t )( mapIndex ) );
 
-		Ref<T3DRegion> region = pLoader->load( entry.m_path, "T3DRegion", ResourceLoader::CACHE_MODE_IGNORE );
+		Ref<Terrain3DRegion> region = pLoader->load( entry.m_path, "Terrain3DRegion", ResourceLoader::CACHE_MODE_IGNORE );
 		if ( region.is_null() ) {
 			LOG( ERROR, "Cannot load region at ", entry.m_path );
 			return ERR_FILE_CORRUPT;
@@ -226,7 +226,7 @@ Error T3DRegionPersistence::stageDirectory( const String &rDirectory,
 
 	for ( int slot = 0; slot < ( int )( rStaged.m_regions.size() ); ++slot ) {
 		t3dStagedRegion_t &entry = rStaged.m_regions[( size_t )( slot )];
-		const int mapIndex = T3DRegionRepository::getRegionMapIndex( entry.m_location );
+		const int mapIndex = Terrain3DRegionRepository::getRegionMapIndex( entry.m_location );
 		if ( mapIndex < 0 ) {
 			return ERR_FILE_CORRUPT;
 		}
@@ -241,22 +241,22 @@ Error T3DRegionPersistence::stageDirectory( const String &rDirectory,
 	return OK;
 }
 
-void T3DRegionPersistence::beginPublication( void ) {
+void Terrain3DRegionPersistence::beginPublication( void ) {
 	m_nPublishStartedUsec = Time::get_singleton()->get_ticks_usec();
 }
 
-void T3DRegionPersistence::finishPublication( const int nPublishedRegions ) {
+void Terrain3DRegionPersistence::finishPublication( const int nPublishedRegions ) {
 	if ( m_nPublishStartedUsec != 0u ) {
 		m_startupLoadStats.m_nPublishUsecLast = Time::get_singleton()->get_ticks_usec() - m_nPublishStartedUsec;
 	}
 	m_startupLoadStats.m_nRegionsPublishedLast = MAX( 0, nPublishedRegions );
 }
 
-void T3DRegionPersistence::beginFinalize( void ) {
+void Terrain3DRegionPersistence::beginFinalize( void ) {
 	m_nFinalizeStartedUsec = Time::get_singleton()->get_ticks_usec();
 }
 
-void T3DRegionPersistence::finishDirectoryLoad( const bool bSucceeded ) {
+void Terrain3DRegionPersistence::finishDirectoryLoad( const bool bSucceeded ) {
 	if ( m_nFinalizeStartedUsec != 0u ) {
 		m_startupLoadStats.m_nFinalizeUsecLast = Time::get_singleton()->get_ticks_usec() - m_nFinalizeStartedUsec;
 	}
@@ -266,7 +266,7 @@ void T3DRegionPersistence::finishDirectoryLoad( const bool bSucceeded ) {
 	m_startupLoadStats.m_bSucceededLast = bSucceeded;
 }
 
-void T3DRegionPersistence::publishStagedPaths( t3dStagedRepository_t &rStaged ) const {
+void Terrain3DRegionPersistence::publishStagedPaths( t3dStagedRepository_t &rStaged ) const {
 	for ( t3dStagedRegion_t &entry : rStaged.m_regions ) {
 		if ( entry.m_region.is_valid() ) {
 			entry.m_region->take_over_path( entry.m_path );
@@ -274,7 +274,7 @@ void T3DRegionPersistence::publishStagedPaths( t3dStagedRepository_t &rStaged ) 
 	}
 }
 
-t3dRegionLoadResult_t T3DRegionPersistence::loadRegion( const Vector2i &rLocation, const String &rDirectory ) const {
+t3dRegionLoadResult_t Terrain3DRegionPersistence::loadRegion( const Vector2i &rLocation, const String &rDirectory ) const {
 	t3dRegionLoadResult_t result;
 	result.m_location = rLocation;
 	if ( !m_pRepository || rDirectory.is_empty() ) {
@@ -282,7 +282,7 @@ t3dRegionLoadResult_t T3DRegionPersistence::loadRegion( const Vector2i &rLocatio
 		return result;
 	}
 
-	result.m_path = rDirectory.path_join( T3DUtil::locationToFilename( rLocation ) );
+	result.m_path = rDirectory.path_join( Terrain3DUtil::locationToFilename( rLocation ) );
 	LOG( INFO, "Loading region from location ", rLocation );
 	if ( !FileAccess::file_exists( result.m_path ) ) {
 		LOG( ERROR, "File ", result.m_path, " doesn't exist" );
@@ -295,7 +295,7 @@ t3dRegionLoadResult_t T3DRegionPersistence::loadRegion( const Vector2i &rLocatio
 		result.m_error = ERR_UNAVAILABLE;
 		return result;
 	}
-	result.m_region = pLoader->load( result.m_path, "T3DRegion", ResourceLoader::CACHE_MODE_IGNORE );
+	result.m_region = pLoader->load( result.m_path, "Terrain3DRegion", ResourceLoader::CACHE_MODE_IGNORE );
 	if ( result.m_region.is_null() ) {
 		LOG( ERROR, "Cannot load region at ", result.m_path );
 		result.m_error = ERR_FILE_CORRUPT;
@@ -332,9 +332,9 @@ t3dRegionLoadResult_t T3DRegionPersistence::loadRegion( const Vector2i &rLocatio
 	return result;
 }
 
-bool T3DRegionPersistence::prepareRuntimeRegionSource( const Ref<T3DRegion> &rCandidate,
+bool Terrain3DRegionPersistence::prepareRuntimeRegionSource( const Ref<Terrain3DRegion> &rCandidate,
 		const int nExpectedRegionSize,
-		Ref<T3DRegion> &rSource ) const {
+		Ref<Terrain3DRegion> &rSource ) const {
 	rSource.unref();
 	if ( rCandidate.is_null() || rCandidate->getRegionSize() != nExpectedRegionSize ) {
 		return false;
@@ -351,9 +351,9 @@ bool T3DRegionPersistence::prepareRuntimeRegionSource( const Ref<T3DRegion> &rCa
 	return true;
 }
 
-bool T3DRegionPersistence::loadRuntimeRegionSource( const String &rPath,
+bool Terrain3DRegionPersistence::loadRuntimeRegionSource( const String &rPath,
 		const int nExpectedRegionSize,
-		Ref<T3DRegion> &rSource ) const {
+		Ref<Terrain3DRegion> &rSource ) const {
 	rSource.unref();
 	if ( rPath.is_empty() || !FileAccess::file_exists( rPath ) ) {
 		return false;
@@ -362,18 +362,18 @@ bool T3DRegionPersistence::loadRuntimeRegionSource( const String &rPath,
 	if ( !pLoader ) {
 		return false;
 	}
-	const Ref<Resource> pResource = pLoader->load( rPath, "T3DRegion", ResourceLoader::CACHE_MODE_IGNORE );
-	const Ref<T3DRegion> pLoaded = pResource;
+	const Ref<Resource> pResource = pLoader->load( rPath, "Terrain3DRegion", ResourceLoader::CACHE_MODE_IGNORE );
+	const Ref<Terrain3DRegion> pLoaded = pResource;
 	return prepareRuntimeRegionSource( pLoaded, nExpectedRegionSize, rSource );
 }
 
-void T3DRegionPersistence::publishLoadedRegionPath( const t3dRegionLoadResult_t &rResult ) const {
+void Terrain3DRegionPersistence::publishLoadedRegionPath( const t3dRegionLoadResult_t &rResult ) const {
 	if ( rResult.succeeded() ) {
 		rResult.m_region->take_over_path( rResult.m_path );
 	}
 }
 
-void T3DRegionPersistence::updateEditorFile( const String &rPath ) {
+void Terrain3DRegionPersistence::updateEditorFile( const String &rPath ) {
 	if ( !IS_EDITOR || !rPath.begins_with( "res://" ) ) {
 		return;
 	}
@@ -387,7 +387,7 @@ void T3DRegionPersistence::updateEditorFile( const String &rPath ) {
 	}
 }
 
-t3dRegionSaveResult_t T3DRegionPersistence::saveRegion( const Vector2i &rLocation,
+t3dRegionSaveResult_t Terrain3DRegionPersistence::saveRegion( const Vector2i &rLocation,
 		const String &rDirectory,
 		const bool b16Bit,
 		EnsureRegionResidentFn pEnsureResident,
@@ -398,14 +398,14 @@ t3dRegionSaveResult_t T3DRegionPersistence::saveRegion( const Vector2i &rLocatio
 		result.m_error = ERR_UNCONFIGURED;
 		return result;
 	}
-	const Ref<T3DRegion> pRegion = m_pRepository->getRegion( rLocation );
+	const Ref<Terrain3DRegion> pRegion = m_pRepository->getRegion( rLocation );
 	if ( pRegion.is_null() ) {
 		LOG( ERROR, "No region found at: ", rLocation );
 		result.m_error = ERR_DOES_NOT_EXIST;
 		return result;
 	}
 	result.m_bFound = true;
-	const String fname = T3DUtil::locationToFilename( rLocation );
+	const String fname = Terrain3DUtil::locationToFilename( rLocation );
 	result.m_path = rDirectory.path_join( fname );
 
 	if ( pRegion->isDeleted() ) {
@@ -475,7 +475,7 @@ t3dRegionSaveResult_t T3DRegionPersistence::saveRegion( const Vector2i &rLocatio
 	return result;
 }
 
-t3dDirectorySaveResult_t T3DRegionPersistence::saveDirectory( const String &rDirectory,
+t3dDirectorySaveResult_t Terrain3DRegionPersistence::saveDirectory( const String &rDirectory,
 		const bool b16Bit,
 		EnsureRegionResidentFn pEnsureResident,
 		void *pResidentContext ) {
@@ -502,7 +502,7 @@ t3dDirectorySaveResult_t T3DRegionPersistence::saveDirectory( const String &rDir
 	return result;
 }
 
-Dictionary T3DRegionPersistence::getStartupLoadStatsDictionary( void ) const {
+Dictionary Terrain3DRegionPersistence::getStartupLoadStatsDictionary( void ) const {
 	Dictionary stats;
 	stats["total_usec_last"] = ( int64_t )( m_startupLoadStats.m_nTotalUsecLast );
 	stats["enumeration_usec_last"] = ( int64_t )( m_startupLoadStats.m_nEnumerationUsecLast );

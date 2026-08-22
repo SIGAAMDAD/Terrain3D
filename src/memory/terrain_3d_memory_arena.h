@@ -33,10 +33,10 @@ typedef struct t3dMemoryArenaSpan_s {
 	}
 } t3dMemoryArenaSpan_t;
 
-class T3DMemoryArenaLayout {
+class Terrain3DMemoryArenaLayout {
 public:
-	T3DMemoryArenaLayout( void ) = default;
-	explicit T3DMemoryArenaLayout( size_t nCapacityBytes );
+	Terrain3DMemoryArenaLayout( void ) = default;
+	explicit Terrain3DMemoryArenaLayout( size_t nCapacityBytes );
 
 	bool configure( size_t nCapacityBytes );
 	bool reserveLow( size_t nBytes, size_t nAlignment, t3dMemoryArenaSlice_t &rSlice );
@@ -78,14 +78,14 @@ private:
 	bool reserve( bool bHigh, size_t nBytes, size_t nAlignment, t3dMemoryArenaSlice_t &rSlice );
 };
 
-class T3DMemoryArena {
+class Terrain3DMemoryArena {
 public:
-	T3DMemoryArena( void ) = default;
-	~T3DMemoryArena( void );
-	T3DMemoryArena( const T3DMemoryArena & ) = delete;
-	T3DMemoryArena &operator=( const T3DMemoryArena & ) = delete;
+	Terrain3DMemoryArena( void ) = default;
+	~Terrain3DMemoryArena( void );
+	Terrain3DMemoryArena( const Terrain3DMemoryArena & ) = delete;
+	Terrain3DMemoryArena &operator=( const Terrain3DMemoryArena & ) = delete;
 
-	bool initialize( const T3DMemoryArenaLayout &rLayout );
+	bool initialize( const Terrain3DMemoryArenaLayout &rLayout );
 	bool commit( void );
 	bool seal( void );
 	void release( void );

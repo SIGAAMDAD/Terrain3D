@@ -82,20 +82,20 @@ inline float t3dHalfDecode( const uint16_t nValue ) {
 	return fResult;
 }
 
-class T3DHalfBuffer {
+class Terrain3DHalfBuffer {
 public:
 	using value_type = uint16_t;
 
-	class T3DReference {
+	class Terrain3DReference {
 	public:
-		EA_FORCE_INLINE explicit T3DReference( uint16_t *const pStorage ) : m_pStorage( pStorage ) {}
+		EA_FORCE_INLINE explicit Terrain3DReference( uint16_t *const pStorage ) : m_pStorage( pStorage ) {}
 
-		T3DReference &operator=( const float fValue ) {
+		Terrain3DReference &operator=( const float fValue ) {
 			*m_pStorage = t3dHalfEncode( fValue );
 			return *this;
 		}
 
-		T3DReference &operator=( const T3DReference &rOther ) {
+		Terrain3DReference &operator=( const Terrain3DReference &rOther ) {
 			return operator=( ( float )( rOther ) );
 		}
 
@@ -107,7 +107,7 @@ public:
 		uint16_t *m_pStorage = nullptr;
 	};
 
-	bool assign( T3DLinearArena &rArena, const size_t nCount, const float fValue ) {
+	bool assign( Terrain3DLinearArena &rArena, const size_t nCount, const float fValue ) {
 		clear();
 		if ( nCount == 0u ) {
 			return true;
@@ -127,8 +127,8 @@ public:
 		m_nSize = 0u;
 	}
 
-	T3DReference operator[]( const size_t iIndex ) {
-		return T3DReference( m_pData + iIndex );
+	Terrain3DReference operator[]( const size_t iIndex ) {
+		return Terrain3DReference( m_pData + iIndex );
 	}
 
 	float operator[]( const size_t iIndex ) const {

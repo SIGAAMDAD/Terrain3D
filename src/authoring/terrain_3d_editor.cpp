@@ -14,6 +14,8 @@
 
 #include <EASTL/array.h>
 #include <algorithm>
+#include <cmath>
+#include <cstring>
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/variant/callable.hpp>
@@ -29,7 +31,7 @@ typedef enum t3dEditSnapshotKind_e {
 // -----------------------------------------------------------------------------
 // Private functions
 
-bool T3DEditor::isBrushSlopeAllowed( T3DSampler &rSampler,
+bool Terrain3DEditor::isBrushSlopeAllowed( Terrain3DSampler &rSampler,
 		const bool bUnrestricted,
 		const Vector2 &vSlopeRange,
 		const Vector3 &rPosition ) {
@@ -45,19 +47,19 @@ bool T3DEditor::isBrushSlopeAllowed( T3DSampler &rSampler,
 	return vSlopeRange.x <= fDegrees && fDegrees <= vSlopeRange.y;
 }
 
-uint32_t T3DEditor::packColorRgba8( const Color &rColor ) {
+uint32_t Terrain3DEditor::packColorRgba8( const Color &rColor ) {
 	return TERRAIN3DEDITORQUANTIZERGBA8( rColor.r ) | ( TERRAIN3DEDITORQUANTIZERGBA8( rColor.g ) << 8u ) |
 			( TERRAIN3DEDITORQUANTIZERGBA8( rColor.b ) << 16u ) | ( TERRAIN3DEDITORQUANTIZERGBA8( rColor.a ) << 24u );
 }
 
-Color T3DEditor::unpackColorRgba8( const uint32_t nValue ) {
+Color Terrain3DEditor::unpackColorRgba8( const uint32_t nValue ) {
 	return Color( ( real_t )( nValue & 0xffu ) / s_fByteMaxFloat,
 			( real_t )( ( nValue >> 8u ) & 0xffu ) / s_fByteMaxFloat,
 			( real_t )( ( nValue >> 16u ) & 0xffu ) / s_fByteMaxFloat,
 			( real_t )( ( nValue >> 24u ) & 0xffu ) / s_fByteMaxFloat );
 }
 
-uint32_t T3DEditor::readU32( const uint8_t *pBytes, const size_t iIndex ) {
+uint32_t Terrain3DEditor::readU32( const uint8_t *pBytes, const size_t iIndex ) {
 	uint32_t value = s_nRegionDefaultControl;
 	if ( pBytes ) {
 		std::memcpy( &value, pBytes + iIndex * sizeof( uint32_t ), sizeof( uint32_t ) );
@@ -65,7 +67,7 @@ uint32_t T3DEditor::readU32( const uint8_t *pBytes, const size_t iIndex ) {
 	return value;
 }
 
-Color T3DEditor::readMapPixel( const t3dRegionMapCache_t &rEntry,
+Color Terrain3DEditor::readMapPixel( const t3dRegionMapCache_t &rEntry,
 		const size_t iIndex,
 		const Vector2i &rPixel,
 		const t3dMapType_t mapType ) {
@@ -90,14 +92,14 @@ Color T3DEditor::readMapPixel( const t3dRegionMapCache_t &rEntry,
 			( real_t )( pRgba[3] ) / s_fByteMaxFloat );
 }
 
-uint32_t T3DEditor::readControlBits( const t3dRegionMapCache_t &rEntry, const size_t iIndex, const Vector2i &rPixel ) {
+uint32_t Terrain3DEditor::readControlBits( const t3dRegionMapCache_t &rEntry, const size_t iIndex, const Vector2i &rPixel ) {
 	if ( rEntry.m_pControlBytes ) {
 		return readU32( rEntry.m_pControlBytes, iIndex );
 	}
 	return rEntry.m_pControlMap ? t3dAsUint( rEntry.m_pControlMap->get_pixelv( rPixel ).r ) : s_nRegionDefaultControl;
 }
 
-void T3DEditor::writeMapPixel( t3dRegionMapCache_t &rEntry,
+void Terrain3DEditor::writeMapPixel( t3dRegionMapCache_t &rEntry,
 		const size_t iIndex,
 		const Vector2i &rPixel,
 		const Color &clrValue,
@@ -127,11 +129,11 @@ void T3DEditor::writeMapPixel( t3dRegionMapCache_t &rEntry,
 	pRgba[3] = ( uint8_t )( TERRAIN3DEDITORQUANTIZERGBA8( clrValue.a ) );
 }
 
-bool T3DEditor::locationLess( const Vector2i &vA, const Vector2i &rB ) {
+bool Terrain3DEditor::locationLess( const Vector2i &vA, const Vector2i &rB ) {
 	return vA.x == rB.x ? vA.y < rB.y : vA.x < rB.x;
 }
 
-void T3DEditor::updateBrushAlphaCache( Image *const pBrushImage, const Vector2i &vImageSize, const real_t fGamma ) {
+void Terrain3DEditor::updateBrushAlphaCache( Image *const pBrushImage, const Vector2i &vImageSize, const real_t fGamma ) {
 	if ( m_pCachedBrushImage == pBrushImage && m_cachedBrushImageSize == vImageSize &&
 			Math::is_equal_approx( m_fCachedBrushGamma, fGamma ) &&
 			m_fBrushAlphaCache.size() == ( size_t )( vImageSize.x * vImageSize.y ) ) {
@@ -152,7 +154,7 @@ void T3DEditor::updateBrushAlphaCache( Image *const pBrushImage, const Vector2i 
 	}
 }
 
-Dictionary T3DEditor::captureEditSnapshot( const Ref<T3DRegion> &rRegion,
+Dictionary Terrain3DEditor::captureEditSnapshot( const Ref<Terrain3DRegion> &rRegion,
 		const Dictionary &rTemplate,
 		const bool bMapWasImplicit ) const {
 	Dictionary snapshot;
@@ -192,16 +194,16 @@ Dictionary T3DEditor::captureEditSnapshot( const Ref<T3DRegion> &rRegion,
 	return snapshot;
 }
 
-void T3DEditor::applyEditSnapshot( const Dictionary &rSnapshot,
+void Terrain3DEditor::applyEditSnapshot( const Dictionary &rSnapshot,
 		eastl::array<eastl::vector<Vector2i>, REGION_TYPE_MAX> &rMapUpdates,
 		bool &bInstancesChanged ) {
 	if ( !rSnapshot.has( "kind" ) || !rSnapshot.has( "location" ) ) {
 		return;
 	}
 
-	T3DData *const pData = m_pTerrain->getData();
+	Terrain3DData *const pData = m_pTerrain->getData();
 	const Vector2i location = rSnapshot["location"];
-	Ref<T3DRegion> pRegion = pData->getRegion( location );
+	Ref<Terrain3DRegion> pRegion = pData->getRegion( location );
 	if ( pRegion.is_null() || pRegion->isDeleted() ) {
 		return;
 	}
@@ -250,7 +252,7 @@ void T3DEditor::applyEditSnapshot( const Dictionary &rSnapshot,
 }
 
 // Sends the whole region aabb to edited_area
-void T3DEditor::sendRegionAabb( const Vector2i &rRegionLoc, const Vector2 &rHeightRange ) {
+void Terrain3DEditor::sendRegionAabb( const Vector2i &rRegionLoc, const Vector2 &rHeightRange ) {
 	const t3dRegionSize_t region_size = m_pTerrain->getRegionSize();
 	AABB edited_area;
 	edited_area.position = Vector3( rRegionLoc.x * region_size, rHeightRange.x, rRegionLoc.y * region_size );
@@ -261,10 +263,10 @@ void T3DEditor::sendRegionAabb( const Vector2i &rRegionLoc, const Vector2 &rHeig
 }
 
 // Process location to add new region, mark as deleted, or just retrieve
-Ref<T3DRegion> T3DEditor::operateRegion( const Vector2i &rRegionLoc ) {
+Ref<Terrain3DRegion> Terrain3DEditor::operateRegion( const Vector2i &rRegionLoc ) {
 	bool bChanged = false;
 	Vector2 height_range;
-	T3DData *const pData = m_pTerrain->getData();
+	Terrain3DData *const pData = m_pTerrain->getData();
 	// Check if in bounds, limiting errors
 	bool bCanPrint = false;
 	const uint64_t ticks = Time::get_singleton()->get_ticks_msec();
@@ -282,14 +284,14 @@ Ref<T3DRegion> T3DEditor::operateRegion( const Vector2i &rRegionLoc ) {
 					" to ",
 					pData->getRegionMapSizeInternal() / 2 - 1 );
 		}
-		return Ref<T3DRegion>();
+		return Ref<Terrain3DRegion>();
 	}
 
 	// Get Region & dump data if debug
-	Ref<T3DRegion> pRegion = pData->getRegion( rRegionLoc );
+	Ref<Terrain3DRegion> pRegion = pData->getRegion( rRegionLoc );
 	if ( pRegion.is_valid() && !pRegion->isDeleted() && !pData->ensureCpuRegionResident( rRegionLoc ) ) {
 		LOG( ERROR, "Unable to page CPU terrain maps for editor region ", rRegionLoc );
-		return Ref<T3DRegion>();
+		return Ref<Terrain3DRegion>();
 	}
 	if ( bCanPrint ) {
 		LOG( DEBUG,
@@ -342,7 +344,7 @@ Ref<T3DRegion> T3DEditor::operateRegion( const Vector2i &rRegionLoc ) {
 	return pRegion;
 }
 
-void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCameraDirection ) {
+void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCameraDirection ) {
 	LOG( EXTREME, "Operating at ", rGlobalPosition, " tool type ", m_tool, " op ", m_nOperation );
 
 	const t3dMapType_t map_type = getMapType();
@@ -355,7 +357,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 	const Vector2i region_vsize = V2I( region_size );
 
 	// If no region and can't add one, skip whole function. Checked again later
-	T3DData *const pData = m_pTerrain->getData();
+	Terrain3DData *const pData = m_pTerrain->getData();
 	if ( !pData->hasRegionp( rGlobalPosition ) &&
 			( !m_brushData["auto_regions"] || ( m_tool != SCULPT && m_tool != HEIGHT ) ) ) {
 		return;
@@ -396,7 +398,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 	const bool bTextureFilter = m_brushData["texture_filter"];
 	const int margin = m_brushData["margin"];
 	const int asset_id = m_brushData["asset_id"];
-	const Ref<T3DAssets> pAssets = m_pTerrain->getAssets();
+	const Ref<Terrain3DAssets> pAssets = m_pTerrain->getAssets();
 	if ( m_tool == TEXTURE && ( pAssets.is_null() || pAssets->getTextureAsset( asset_id ).is_null() ) ) {
 		return;
 	}
@@ -456,7 +458,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 	if ( bUseAlphaCache ) {
 		updateBrushAlphaCache( pBrushImage, img_size, fGamma );
 	}
-	T3DSampler brushSampler( pData->getSamplingSourceInternal() );
+	Terrain3DSampler brushSampler( pData->getSamplingSourceInternal() );
 	const Vector2 clamped_slope_range = CLAMP( slope_range, s_v2Zero, V2( 90.f ) );
 	const bool bUnrestrictedSlope = clamped_slope_range.y - clamped_slope_range.x > 89.99f;
 
@@ -468,7 +470,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 							( m_nOperation == ADD || m_nOperation == SUBTRACT || m_nOperation == REPLACE ) ) ||
 					( map_type == TYPE_COLOR && ( m_tool == COLOR || m_tool == ROUGHNESS ) &&
 							( m_nOperation == ADD || m_nOperation == SUBTRACT ) ) );
-	T3DCompute *const pComputeBackend = pData->getComputeBackend();
+	Terrain3DCompute *const pComputeBackend = pData->getComputeBackend();
 	const bool bUseCompute =
 			bComputeSupported && total_samples >= 4096 && pComputeBackend && pComputeBackend->isAvailable();
 	// Average operations intentionally observe earlier writes in the same stamp.
@@ -625,7 +627,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 			if ( !region_entry.m_pMap ) {
 				continue;
 			}
-			Ref<T3DRegion> &region = region_entry.m_region;
+			Ref<Terrain3DRegion> &region = region_entry.m_region;
 
 			const Vector2i mapPixelPosition( x_sample.m_nMapPixel, z_sample.m_nMapPixel );
 			if ( !isInBounds( mapPixelPosition, region_vsize ) ) {
@@ -1074,7 +1076,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 			LOG( WARN,
 					"Compute brush failed; using buffer-equivalent CPU fallback: ",
 					pComputeBackend->getLastError() );
-			T3DCompute::processBrushCpu( compute_elements, params );
+			Terrain3DCompute::processBrushCpu( compute_elements, params );
 		}
 		for ( size_t i = 0; i < compute_elements.size(); ++i ) {
 			const t3dBrushElement_t &element = compute_elements[i];
@@ -1151,7 +1153,7 @@ void T3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t fCamera
 	pData->commitMapEdits( map_type, modified_region_locations, edited_area, commit_flags );
 }
 
-void T3DEditor::storeUndo( void ) {
+void Terrain3DEditor::storeUndo( void ) {
 	IS_INIT_COND_MESG( !m_pTerrain->getPlugin(), "_terrain isn't initialized, returning", VOID );
 	const bool bHasValidTool = m_tool >= 0 && m_tool < TOOL_MAX;
 	if ( !bHasValidTool && m_originalRegions.is_empty() && m_editedRegions.is_empty() ) {
@@ -1180,15 +1182,15 @@ void T3DEditor::storeUndo( void ) {
 		redo_data["edit_snapshots"] = m_editedEditSnapshots.duplicate();
 	}
 
-	if ( T3DTerrain::s_debugLevel >= DEBUG ) {
+	if ( Terrain3D::s_debugLevel >= DEBUG ) {
 		LOG( DEBUG, "Storing Original Regions:" );
-		for ( const Ref<T3DRegion> pRegion : m_originalRegions ) {
+		for ( const Ref<Terrain3DRegion> pRegion : m_originalRegions ) {
 			if ( pRegion.is_valid() ) {
 				pRegion->dump();
 			}
 		}
 		LOG( DEBUG, "Storing Edited Regions:" );
-		for ( const Ref<T3DRegion> pRegion : m_editedRegions ) {
+		for ( const Ref<Terrain3DRegion> pRegion : m_editedRegions ) {
 			if ( pRegion.is_valid() ) {
 				pRegion->dump();
 			}
@@ -1231,12 +1233,12 @@ void T3DEditor::storeUndo( void ) {
 		m_pTerrain->getPlugin()->call( "create_undo_action", action_name );
 
 		LOG( DEBUG, "Storing undo snapshot: " );
-		T3DUtil::printDict( "_undo_data snapshot", m_undoData, DEBUG );
+		Terrain3DUtil::printDict( "_undo_data snapshot", m_undoData, DEBUG );
 		m_pTerrain->getPlugin()->call(
 				"add_undo_method", Callable( this, "apply_undo" ).bind( m_undoData.duplicate() ) );
 
 		LOG( DEBUG, "Storing redo snapshot: " );
-		T3DUtil::printDict( "redo_data snapshot", redo_data, DEBUG );
+		Terrain3DUtil::printDict( "redo_data snapshot", redo_data, DEBUG );
 		m_pTerrain->getPlugin()->call( "add_do_method", Callable( this, "apply_undo" ).bind( redo_data ) );
 
 		LOG( DEBUG, "Committing undo action" );
@@ -1244,11 +1246,11 @@ void T3DEditor::storeUndo( void ) {
 	}
 }
 
-void T3DEditor::applyUndo( const Dictionary &rData ) {
+void Terrain3DEditor::applyUndo( const Dictionary &rData ) {
 	IS_INIT_COND_MESG( !m_pTerrain->getPlugin(), "_terrain isn't initialized, returning", VOID );
 	LOG( INFO, "Applying Undo/Redo data" );
 
-	T3DData *const pData = m_pTerrain->getData();
+	Terrain3DData *const pData = m_pTerrain->getData();
 	eastl::vector<Vector2i> restored_region_locations;
 	eastl::array<eastl::vector<Vector2i>, REGION_TYPE_MAX> restored_map_locations;
 	bool bInstancesChanged = false;
@@ -1262,10 +1264,10 @@ void T3DEditor::applyUndo( const Dictionary &rData ) {
 	}
 
 	if ( rData.has( "edited_regions" ) ) {
-		T3DUtil::printArr( "Edited regions", rData["edited_regions"] );
-		const TypedArray<T3DRegion> undo_regions = rData["edited_regions"];
+		Terrain3DUtil::printArr( "Edited regions", rData["edited_regions"] );
+		const TypedArray<Terrain3DRegion> undo_regions = rData["edited_regions"];
 		LOG( DEBUG, "Backup has ", undo_regions.size(), " edited regions" );
-		for ( Ref<T3DRegion> pRegion : undo_regions ) {
+		for ( Ref<Terrain3DRegion> pRegion : undo_regions ) {
 			if ( pRegion.is_null() ) {
 				LOG( ERROR, "Null region saved in undo data. Please report this error." );
 				continue;
@@ -1282,7 +1284,7 @@ void T3DEditor::applyUndo( const Dictionary &rData ) {
 			pRegion->setEdited( true ); // Includes the region in the next map update.
 			pRegion->setDeleted( false ); // Ensure region not marked for deletion
 			restored_region_locations.push_back( pRegion->getLocation() );
-			if ( T3DTerrain::s_debugLevel >= DEBUG ) {
+			if ( Terrain3D::s_debugLevel >= DEBUG ) {
 				LOG( DEBUG, "Restoring region:" );
 				pRegion->dump();
 			}
@@ -1298,7 +1300,7 @@ void T3DEditor::applyUndo( const Dictionary &rData ) {
 		LOG( DEBUG, "Added regions: ", rData["added_regions"] );
 		const TypedArray<Vector2i> region_locs = rData["added_regions"];
 		for ( const Vector2i region_loc : region_locs ) {
-			Ref<T3DRegion> pRegion = pData->getRegion( region_loc );
+			Ref<Terrain3DRegion> pRegion = pData->getRegion( region_loc );
 			if ( pRegion.is_valid() ) {
 				LOG( DEBUG, "Marking region: ", region_loc, " +deleted, +modified, ", t3dPtrToStr( *pRegion ) );
 				pRegion->setDeleted( true );
@@ -1310,7 +1312,7 @@ void T3DEditor::applyUndo( const Dictionary &rData ) {
 		LOG( DEBUG, "Removed regions: ", rData["removed_regions"] );
 		const TypedArray<Vector2i> region_locs = rData["removed_regions"];
 		for ( const Vector2i region_loc : region_locs ) {
-			Ref<T3DRegion> pRegion = pData->getRegion( region_loc );
+			Ref<Terrain3DRegion> pRegion = pData->getRegion( region_loc );
 			if ( pRegion.is_valid() ) {
 				LOG( DEBUG, "Marking region: ", region_loc, " -deleted, +modified, ", t3dPtrToStr( *pRegion ) );
 				pRegion->setDeleted( false );
@@ -1355,8 +1357,8 @@ void T3DEditor::applyUndo( const Dictionary &rData ) {
 	}
 	// After TextureArray updates clear edited regions flag.
 	if ( rData.has( "edited_regions" ) ) {
-		const TypedArray<T3DRegion> undo_regions = rData["edited_regions"];
-		for ( Ref<T3DRegion> pRegion : undo_regions ) {
+		const TypedArray<Terrain3DRegion> undo_regions = rData["edited_regions"];
+		for ( Ref<Terrain3DRegion> pRegion : undo_regions ) {
 			if ( pRegion.is_valid() ) {
 				pRegion->setEdited( false );
 			}
@@ -1369,13 +1371,13 @@ void T3DEditor::applyUndo( const Dictionary &rData ) {
 }
 
 // Returns average of height, blend (as real_t(0-255)), or roughness. Overloaded version handles average color
-float T3DEditor::average( const t3dAverageMode_t mode,
+float Terrain3DEditor::average( const t3dAverageMode_t mode,
 		const Vector3 &rGlobalPosition,
 		const float fBase,
 		const float fNanVal,
 		const bool bAlt ) const {
 	IS_DATA_INIT( NAN );
-	T3DData *const pData = m_pTerrain->getData();
+	Terrain3DData *const pData = m_pTerrain->getData();
 	const real_t fVertexSpacing = m_pTerrain->getVertexSpacing();
 	const Vector3 left_position = rGlobalPosition - Vector3( fVertexSpacing, 0.f, 0.f );
 	const Vector3 right_position = rGlobalPosition + Vector3( fVertexSpacing, 0.f, 0.f );
@@ -1425,9 +1427,9 @@ float T3DEditor::average( const t3dAverageMode_t mode,
 	}
 }
 
-Color T3DEditor::average( const Vector3 &rGlobalPosition, const Color &clrBase ) const {
+Color Terrain3DEditor::average( const Vector3 &rGlobalPosition, const Color &clrBase ) const {
 	IS_DATA_INIT( s_colorNan );
-	T3DData *const pData = m_pTerrain->getData();
+	Terrain3DData *const pData = m_pTerrain->getData();
 	const real_t fVertexSpacing = m_pTerrain->getVertexSpacing();
 	const Vector3 left_position = rGlobalPosition - Vector3( fVertexSpacing, 0.f, 0.f );
 	const Vector3 right_position = rGlobalPosition + Vector3( fVertexSpacing, 0.f, 0.f );
@@ -1463,7 +1465,7 @@ Color T3DEditor::average( const Vector3 &rGlobalPosition, const Color &clrBase )
 
 // Sanitizes incoming brush data and applies editor defaults and clamps.
 // Only editor-owned fields are sanitized here; instancer-specific fields remain untouched.
-void T3DEditor::setBrushData( const Dictionary &rData ) {
+void Terrain3DEditor::setBrushData( const Dictionary &rData ) {
 	m_brushData = rData; // Same instance. Anything could be inserted after this, eg mouse_pressure
 	m_pCachedBrushImage = nullptr;
 	m_cachedBrushImageSize = s_v2iZero;
@@ -1491,7 +1493,7 @@ void T3DEditor::setBrushData( const Dictionary &rData ) {
 	}
 
 	// Sanitize scalar brush settings.
-	// Size is also constrained by operateMap() and T3DInstancer::addTransforms().
+	// Size is also constrained by operateMap() and Terrain3DInstancer::addTransforms().
 	m_brushData["size"] = CLAMP( ( real_t )( rData.get( "size", 10.f ) ), 0.1f, 4096.f ); // Diameter in meters
 	m_brushData["strength"] = CLAMP(
 			( real_t )( rData.get( "strength", .1f ) ) * .01f, .01f, 1000.f ); // 1-100k% (max of 1000m per click)
@@ -1529,10 +1531,10 @@ void T3DEditor::setBrushData( const Dictionary &rData ) {
 	m_brushData["brush_spin_speed"] = CLAMP( ( real_t )( rData.get( "brush_spin_speed", 0.f ) ), 0.f, 1.f );
 	m_brushData["gradient_points"] = rData.get( "gradient_points", PackedVector3Array() );
 
-	T3DUtil::printDict( "setBrushData() sanitized brush data:", m_brushData, EXTREME );
+	Terrain3DUtil::printDict( "setBrushData() sanitized brush data:", m_brushData, EXTREME );
 }
 
-void T3DEditor::setTool( const t3dTool_t tool ) {
+void Terrain3DEditor::setTool( const t3dTool_t tool ) {
 	const t3dTool_t new_tool = CLAMP( tool, ( t3dTool_t )( 0 ), TOOL_MAX );
 	if ( new_tool == m_tool ) {
 		return;
@@ -1546,18 +1548,18 @@ void T3DEditor::setTool( const t3dTool_t tool ) {
 	}
 }
 
-void T3DEditor::setOperation( const t3dOperation_t operation ) {
+void Terrain3DEditor::setOperation( const t3dOperation_t operation ) {
 	SET_IF_DIFF( m_nOperation, CLAMP( operation, ( t3dOperation_t )( 0 ), OP_MAX ) );
 }
 
 // Called on mouse click
-void T3DEditor::startOperation( const Vector3 &rGlobalPosition ) {
+void Terrain3DEditor::startOperation( const Vector3 &rGlobalPosition ) {
 	IS_DATA_INIT_MESG( "Terrain isn't initialized", VOID );
 	LOG( INFO, "Setting up undo snapshot" );
 	m_undoData.clear();
 	m_bIsOperating = true;
-	m_originalRegions = TypedArray<T3DRegion>(); // New pointers instead of clear
-	m_editedRegions = TypedArray<T3DRegion>();
+	m_originalRegions = TypedArray<Terrain3DRegion>(); // New pointers instead of clear
+	m_editedRegions = TypedArray<Terrain3DRegion>();
 	m_originalEditSnapshots = Array();
 	m_editedEditSnapshots = Array();
 	m_addedRemovedLocations = TypedArray<Vector2i>();
@@ -1569,7 +1571,7 @@ void T3DEditor::startOperation( const Vector3 &rGlobalPosition ) {
 }
 
 // Called on mouse movement with left mouse button down
-void T3DEditor::operate( const Vector3 &rGlobalPosition, const real_t fCameraDirection ) {
+void Terrain3DEditor::operate( const Vector3 &rGlobalPosition, const real_t fCameraDirection ) {
 	IS_DATA_INIT_MESG( "Terrain isn't initialized", VOID );
 	if ( !m_bIsOperating ) {
 		LOG( ERROR, "Run start_operation() before operating" );
@@ -1597,7 +1599,7 @@ void T3DEditor::operate( const Vector3 &rGlobalPosition, const real_t fCameraDir
 	}
 }
 
-void T3DEditor::backupRegion( const Ref<T3DRegion> &rRegion, const bool bMapWasImplicit ) {
+void Terrain3DEditor::backupRegion( const Ref<Terrain3DRegion> &rRegion, const bool bMapWasImplicit ) {
 	// Backup region once at the start of an operation. Once Edited is set, this is skipped
 	if ( m_bIsOperating && rRegion.is_valid() && !rRegion->isEdited() ) {
 		LOG( DEBUG, "Storing original copy of region: ", rRegion->getLocation() );
@@ -1605,7 +1607,7 @@ void T3DEditor::backupRegion( const Ref<T3DRegion> &rRegion, const bool bMapWasI
 		// snapshot and the redo region. Capturing another map snapshot is redundant.
 		if ( m_addedRemovedLocations.find( rRegion->getLocation() ) < 0 ) {
 			if ( m_tool == REGION ) {
-				const Ref<T3DRegion> pOrigRegion = rRegion->duplicate( true );
+				const Ref<Terrain3DRegion> pOrigRegion = rRegion->duplicate( true );
 				m_originalRegions.push_back( pOrigRegion );
 				m_editedRegions.push_back( rRegion );
 			} else {
@@ -1617,14 +1619,14 @@ void T3DEditor::backupRegion( const Ref<T3DRegion> &rRegion, const bool bMapWasI
 		}
 		rRegion->setEdited( true );
 		rRegion->setModified( true );
-		if ( T3DTerrain::s_debugLevel >= DEBUG ) {
+		if ( Terrain3D::s_debugLevel >= DEBUG ) {
 			LOG( DEBUG, "Backed up region edit state" );
 			rRegion->dump();
 		}
 	}
 }
 
-void T3DEditor::backupRegionFull( const Ref<T3DRegion> &rRegion ) {
+void Terrain3DEditor::backupRegionFull( const Ref<Terrain3DRegion> &rRegion ) {
 	// External editor jobs such as erosion can update height, control and color in
 	// one transaction. Preserve the complete region independently of the active
 	// brush tool so undo restores every channel changed by the job.
@@ -1634,7 +1636,7 @@ void T3DEditor::backupRegionFull( const Ref<T3DRegion> &rRegion ) {
 
 	LOG( DEBUG, "Storing full original copy of region: ", rRegion->getLocation() );
 	if ( m_addedRemovedLocations.find( rRegion->getLocation() ) < 0 ) {
-		const Ref<T3DRegion> pOrigRegion = rRegion->duplicate( true );
+		const Ref<Terrain3DRegion> pOrigRegion = rRegion->duplicate( true );
 		m_originalRegions.push_back( pOrigRegion );
 		m_editedRegions.push_back( rRegion );
 	}
@@ -1642,7 +1644,7 @@ void T3DEditor::backupRegionFull( const Ref<T3DRegion> &rRegion ) {
 	rRegion->setModified( true );
 }
 
-void T3DEditor::trimBrushScratch( void ) {
+void Terrain3DEditor::trimBrushScratch( void ) {
 	m_xAxisScratch.clear();
 	m_zAxisScratch.clear();
 	m_regionCacheScratch.clear();
@@ -1669,7 +1671,7 @@ void T3DEditor::trimBrushScratch( void ) {
 }
 
 // Called on left mouse button released
-void T3DEditor::stopOperation( void ) {
+void Terrain3DEditor::stopOperation( void ) {
 	IS_DATA_INIT_MESG( "Terrain isn't initialized", VOID );
 	// If undo was created and terrain actually modified, store it
 	LOG( DEBUG,
@@ -1685,12 +1687,12 @@ void T3DEditor::stopOperation( void ) {
 			( !m_addedRemovedLocations.is_empty() || !m_editedRegions.is_empty() ||
 					!m_originalEditSnapshots.is_empty() ) ) {
 		for ( int i = 0; i < m_editedRegions.size(); i++ ) {
-			Ref<T3DRegion> pRegion = m_editedRegions[i];
+			Ref<Terrain3DRegion> pRegion = m_editedRegions[i];
 			pRegion->setEdited( false );
 			// Make duplicate for redo, necessary or redos won't work
-			const Ref<T3DRegion> pRedoRegion = pRegion->duplicate( true );
+			const Ref<Terrain3DRegion> pRedoRegion = pRegion->duplicate( true );
 			m_editedRegions[i] = pRedoRegion;
-			if ( T3DTerrain::s_debugLevel >= DEBUG ) {
+			if ( Terrain3D::s_debugLevel >= DEBUG ) {
 				LOG( DEBUG, "Edited region:" );
 				pRegion->dump();
 				LOG( DEBUG, "Redo region:" );
@@ -1703,7 +1705,7 @@ void T3DEditor::stopOperation( void ) {
 				continue;
 			}
 			const Vector2i location = original_snapshot["location"];
-			Ref<T3DRegion> pRegion = m_pTerrain->getData()->getRegion( location );
+			Ref<Terrain3DRegion> pRegion = m_pTerrain->getData()->getRegion( location );
 			if ( pRegion.is_valid() ) {
 				const Dictionary redo_snapshot = captureEditSnapshot( pRegion, original_snapshot );
 				if ( !redo_snapshot.is_empty() ) {
@@ -1715,8 +1717,8 @@ void T3DEditor::stopOperation( void ) {
 		storeUndo();
 	}
 	m_undoData.clear();
-	m_originalRegions = TypedArray<T3DRegion>(); // New pointers instead of clear
-	m_editedRegions = TypedArray<T3DRegion>();
+	m_originalRegions = TypedArray<Terrain3DRegion>(); // New pointers instead of clear
+	m_editedRegions = TypedArray<Terrain3DRegion>();
 	m_originalEditSnapshots = Array();
 	m_editedEditSnapshots = Array();
 	m_addedRemovedLocations = TypedArray<Vector2i>();
@@ -1728,7 +1730,7 @@ void T3DEditor::stopOperation( void ) {
 // -----------------------------------------------------------------------------
 // Protected functions
 
-void T3DEditor::_bind_methods( void ) {
+void Terrain3DEditor::_bind_methods( void ) {
 	BIND_ENUM_CONSTANT( ADD );
 	BIND_ENUM_CONSTANT( SUBTRACT );
 	BIND_ENUM_CONSTANT( REPLACE );
@@ -1751,21 +1753,21 @@ void T3DEditor::_bind_methods( void ) {
 	BIND_ENUM_CONSTANT( REGION );
 	BIND_ENUM_CONSTANT( TOOL_MAX );
 
-	ClassDB::bind_method( D_METHOD( "set_terrain", "terrain" ), &T3DEditor::setTerrain );
-	ClassDB::bind_method( D_METHOD( "get_terrain" ), &T3DEditor::getTerrain );
+	ClassDB::bind_method( D_METHOD( "set_terrain", "terrain" ), &Terrain3DEditor::setTerrain );
+	ClassDB::bind_method( D_METHOD( "get_terrain" ), &Terrain3DEditor::getTerrain );
 
-	ClassDB::bind_method( D_METHOD( "set_brush_data", "data" ), &T3DEditor::setBrushData );
-	ClassDB::bind_method( D_METHOD( "set_tool", "tool" ), &T3DEditor::setTool );
-	ClassDB::bind_method( D_METHOD( "get_tool" ), &T3DEditor::getTool );
-	ClassDB::bind_method( D_METHOD( "set_operation", "operation" ), &T3DEditor::setOperation );
-	ClassDB::bind_method( D_METHOD( "get_operation" ), &T3DEditor::getOperation );
-	ClassDB::bind_method( D_METHOD( "start_operation", "position" ), &T3DEditor::startOperation );
-	ClassDB::bind_method( D_METHOD( "is_operating" ), &T3DEditor::isOperating );
-	ClassDB::bind_method( D_METHOD( "operate", "position", "camera_direction" ), &T3DEditor::operate );
+	ClassDB::bind_method( D_METHOD( "set_brush_data", "data" ), &Terrain3DEditor::setBrushData );
+	ClassDB::bind_method( D_METHOD( "set_tool", "tool" ), &Terrain3DEditor::setTool );
+	ClassDB::bind_method( D_METHOD( "get_tool" ), &Terrain3DEditor::getTool );
+	ClassDB::bind_method( D_METHOD( "set_operation", "operation" ), &Terrain3DEditor::setOperation );
+	ClassDB::bind_method( D_METHOD( "get_operation" ), &Terrain3DEditor::getOperation );
+	ClassDB::bind_method( D_METHOD( "start_operation", "position" ), &Terrain3DEditor::startOperation );
+	ClassDB::bind_method( D_METHOD( "is_operating" ), &Terrain3DEditor::isOperating );
+	ClassDB::bind_method( D_METHOD( "operate", "position", "camera_direction" ), &Terrain3DEditor::operate );
 	ClassDB::bind_method(
-			D_METHOD( "backup_region", "region", "map_was_implicit" ), &T3DEditor::backupRegion, DEFVAL( false ) );
-	ClassDB::bind_method( D_METHOD( "backup_region_full", "region" ), &T3DEditor::backupRegionFull );
-	ClassDB::bind_method( D_METHOD( "stop_operation" ), &T3DEditor::stopOperation );
+			D_METHOD( "backup_region", "region", "map_was_implicit" ), &Terrain3DEditor::backupRegion, DEFVAL( false ) );
+	ClassDB::bind_method( D_METHOD( "backup_region_full", "region" ), &Terrain3DEditor::backupRegionFull );
+	ClassDB::bind_method( D_METHOD( "stop_operation" ), &Terrain3DEditor::stopOperation );
 
-	ClassDB::bind_method( D_METHOD( "apply_undo", "data" ), &T3DEditor::applyUndo );
+	ClassDB::bind_method( D_METHOD( "apply_undo", "data" ), &Terrain3DEditor::applyUndo );
 }

@@ -15,9 +15,9 @@
 #include <cstdint>
 #include <godot_cpp/variant/dictionary.hpp>
 
-class T3DRegionRepository;
-class T3DRuntimePageStore;
-class T3DSamplingStorage;
+class Terrain3DRegionRepository;
+class Terrain3DRuntimePageStore;
+class Terrain3DSamplingStorage;
 
 typedef struct t3dMiddleHeightRegionCacheConfig_s {
 	bool m_bAuthoring = false;
@@ -40,11 +40,11 @@ typedef struct t3dMiddleHeightRegionCacheStats_s {
 	bool m_bHeightArrayValid = false;
 } t3dMiddleHeightRegionCacheStats_t;
 
-class T3DMiddleHeightRegionCache {
+class Terrain3DMiddleHeightRegionCache {
 public:
-	T3DMiddleHeightRegionCache( T3DRegionRepository *pRepository,
-			T3DSamplingStorage *pSamplingStorage,
-			T3DRuntimePageStore *pRuntimePageStore );
+	Terrain3DMiddleHeightRegionCache( Terrain3DRegionRepository *pRepository,
+			Terrain3DSamplingStorage *pSamplingStorage,
+			Terrain3DRuntimePageStore *pRuntimePageStore );
 
 	void reset( void );
 	bool configure( const t3dMiddleHeightRegionCacheConfig_t &rConfig );
@@ -84,13 +84,13 @@ public:
 	size_t getReservedBytes( void ) const;
 
 private:
-	T3DRegionRepository *m_pRepository = nullptr;
-	T3DSamplingStorage *m_pSamplingStorage = nullptr;
-	T3DRuntimePageStore *m_pRuntimePageStore = nullptr;
+	Terrain3DRegionRepository *m_pRepository = nullptr;
+	Terrain3DSamplingStorage *m_pSamplingStorage = nullptr;
+	Terrain3DRuntimePageStore *m_pRuntimePageStore = nullptr;
 	t3dMiddleHeightRegionCacheConfig_t m_config;
 
-	T3DGeneratedTexture m_generatedHeightMaps;
-	T3DGeneratedTexture m_generatedRegionMap;
+	Terrain3DGeneratedTexture m_generatedHeightMaps;
+	Terrain3DGeneratedTexture m_generatedRegionMap;
 	uint16_t m_szRegionMap[s_nMaxRegionSlots] = {};
 	Vector2i m_szLocations[s_nGpuHeightCacheMaxLayers] = {};
 	uint64_t m_szLastUseTick[s_nGpuHeightCacheMaxLayers] = {};

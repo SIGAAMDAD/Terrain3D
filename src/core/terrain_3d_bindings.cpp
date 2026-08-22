@@ -44,7 +44,7 @@
 #include <numeric>
 #include <utility>
 
-void T3DTerrain::setWarning( const uint8_t nWarning, const bool bEnabled ) {
+void Terrain3D::setWarning( const uint8_t nWarning, const bool bEnabled ) {
 	if ( bEnabled ) {
 		m_nWarnings |= nWarning;
 	} else {
@@ -53,7 +53,7 @@ void T3DTerrain::setWarning( const uint8_t nWarning, const bool bEnabled ) {
 	update_configuration_warnings();
 }
 
-PackedStringArray T3DTerrain::_get_configuration_warnings( void ) const {
+PackedStringArray Terrain3D::_get_configuration_warnings( void ) const {
 	PackedStringArray psa;
 	if ( m_dataDirectory.is_empty() ) {
 		psa.push_back( "No data directory specified. Select a directory then save the scene to write data." );
@@ -73,7 +73,7 @@ PackedStringArray T3DTerrain::_get_configuration_warnings( void ) const {
 	return psa;
 }
 
-void T3DTerrain::_validate_property( PropertyInfo &rProperty ) const {
+void Terrain3D::_validate_property( PropertyInfo &rProperty ) const {
 	if ( m_nTessellationLevel == 0 ) {
 		// Hide all displacement properties
 		if ( rProperty.name == StringName( "displacement_scale" ) ||
@@ -97,7 +97,7 @@ void T3DTerrain::_validate_property( PropertyInfo &rProperty ) const {
 	}
 }
 
-void T3DTerrain::_bind_methods( void ) {
+void Terrain3D::_bind_methods( void ) {
 	BIND_ENUM_CONSTANT( ENVIRONMENT_SHADOW_LOW );
 	BIND_ENUM_CONSTANT( ENVIRONMENT_SHADOW_NORMAL );
 	BIND_ENUM_CONSTANT( ENVIRONMENT_SHADOW_HIGH );
@@ -118,6 +118,12 @@ void T3DTerrain::_bind_methods( void ) {
 	BIND_ENUM_CONSTANT( PERFORMANCE_PROFILE_CUSTOM );
 	BIND_ENUM_CONSTANT( PERFORMANCE_PROFILE_EXACT );
 	BIND_ENUM_CONSTANT( PERFORMANCE_PROFILE_MODIFIED );
+	BIND_ENUM_CONSTANT( T3D_RENDER_BACKEND_RENDERING_SERVER );
+	BIND_ENUM_CONSTANT( T3D_RENDER_BACKEND_RENDERING_DEVICE_DIRECT );
+	BIND_ENUM_CONSTANT( T3D_RENDER_BACKEND_RENDERING_DEVICE_HYBRID );
+	BIND_ENUM_CONSTANT( T3D_RD_NATIVE_PROXY_DISABLED );
+	BIND_ENUM_CONSTANT( T3D_RD_NATIVE_PROXY_SHADOWS_ONLY );
+	BIND_ENUM_CONSTANT( T3D_RD_NATIVE_PROXY_FULL );
 	BIND_ENUM_CONSTANT( EDITOR_EXECUTION_AUTHORING );
 	BIND_ENUM_CONSTANT( EDITOR_EXECUTION_RUNTIME_PROFILE );
 	BIND_ENUM_CONSTANT( OCEAN_PRESET_CUSTOM );
@@ -140,686 +146,693 @@ void T3DTerrain::_bind_methods( void ) {
 	BIND_ENUM_CONSTANT( OCEAN_SHADING_UNSHADED );
 	BIND_ENUM_CONSTANT( OCEAN_SHADING_LAMBERT_VERTEX );
 
-	ClassDB::bind_method( D_METHOD( "get_version" ), &T3DTerrain::getVersion );
-	ClassDB::bind_method( D_METHOD( "get_native_api_revision" ), &T3DTerrain::getNativeApiRevision );
-	ClassDB::bind_method( D_METHOD( "get_native_build_id" ), &T3DTerrain::getNativeBuildId );
-	ClassDB::bind_method( D_METHOD( "is_initialized" ), &T3DTerrain::isInitialized );
-	ClassDB::bind_method( D_METHOD( "set_debug_level", "level" ), &T3DTerrain::setDebugLevel );
-	ClassDB::bind_method( D_METHOD( "get_debug_level" ), &T3DTerrain::getDebugLevel );
-	ClassDB::bind_method( D_METHOD( "set_data_directory", "directory" ), &T3DTerrain::setDataDirectory );
-	ClassDB::bind_method( D_METHOD( "get_data_directory" ), &T3DTerrain::getDataDirectory );
+	ClassDB::bind_method( D_METHOD( "get_version" ), &Terrain3D::getVersion );
+	ClassDB::bind_method( D_METHOD( "get_native_api_revision" ), &Terrain3D::getNativeApiRevision );
+	ClassDB::bind_method( D_METHOD( "get_native_build_id" ), &Terrain3D::getNativeBuildId );
+	ClassDB::bind_method( D_METHOD( "is_initialized" ), &Terrain3D::isInitialized );
+	ClassDB::bind_method( D_METHOD( "set_debug_level", "level" ), &Terrain3D::setDebugLevel );
+	ClassDB::bind_method( D_METHOD( "get_debug_level" ), &Terrain3D::getDebugLevel );
+	ClassDB::bind_method( D_METHOD( "set_data_directory", "directory" ), &Terrain3D::setDataDirectory );
+	ClassDB::bind_method( D_METHOD( "get_data_directory" ), &Terrain3D::getDataDirectory );
 	ClassDB::bind_method( D_METHOD( "set_editor_runtime_streaming_preview", "enabled" ),
-			&T3DTerrain::setEditorRuntimeStreamingPreview );
+			&Terrain3D::setEditorRuntimeStreamingPreview );
 	ClassDB::bind_method(
-			D_METHOD( "is_editor_runtime_streaming_preview" ), &T3DTerrain::isEditorRuntimeStreamingPreview );
+			D_METHOD( "is_editor_runtime_streaming_preview" ), &Terrain3D::isEditorRuntimeStreamingPreview );
 	ClassDB::bind_method(
-			D_METHOD( "set_editor_node_streaming_preview", "enabled" ), &T3DTerrain::setEditorNodeStreamingPreview );
+			D_METHOD( "set_editor_node_streaming_preview", "enabled" ), &Terrain3D::setEditorNodeStreamingPreview );
 	ClassDB::bind_method(
-			D_METHOD( "is_editor_node_streaming_preview_enabled" ), &T3DTerrain::isEditorNodeStreamingPreviewEnabled );
+			D_METHOD( "is_editor_node_streaming_preview_enabled" ), &Terrain3D::isEditorNodeStreamingPreviewEnabled );
 	ClassDB::bind_method(
-			D_METHOD( "is_editor_node_streaming_preview_active" ), &T3DTerrain::isEditorNodeStreamingPreviewActive );
-	ClassDB::bind_method( D_METHOD( "set_editor_hlod_preview", "enabled" ), &T3DTerrain::setEditorHlodPreview );
-	ClassDB::bind_method( D_METHOD( "is_editor_hlod_preview_enabled" ), &T3DTerrain::isEditorHlodPreviewEnabled );
-	ClassDB::bind_method( D_METHOD( "is_editor_hlod_preview_active" ), &T3DTerrain::isEditorHlodPreviewActive );
-	ClassDB::bind_method( D_METHOD( "set_editor_execution_mode", "mode" ), &T3DTerrain::setEditorExecutionMode );
-	ClassDB::bind_method( D_METHOD( "get_editor_execution_mode" ), &T3DTerrain::getEditorExecutionMode );
-	ClassDB::bind_method( D_METHOD( "get_memory_estimate" ), &T3DTerrain::getMemoryEstimate );
-	ClassDB::bind_method( D_METHOD( "get_tracked_current_residency" ), &T3DTerrain::getTrackedCurrentResidency );
-	ClassDB::bind_method( D_METHOD( "get_memory_budget_stats" ), &T3DTerrain::getMemoryBudgetStats );
-	ClassDB::bind_method( D_METHOD( "set_total_memory_budget_mb", "budget_mb" ), &T3DTerrain::setTotalMemoryBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_total_memory_budget_mb" ), &T3DTerrain::getTotalMemoryBudgetMb );
+			D_METHOD( "is_editor_node_streaming_preview_active" ), &Terrain3D::isEditorNodeStreamingPreviewActive );
+	ClassDB::bind_method( D_METHOD( "set_editor_hlod_preview", "enabled" ), &Terrain3D::setEditorHlodPreview );
+	ClassDB::bind_method( D_METHOD( "is_editor_hlod_preview_enabled" ), &Terrain3D::isEditorHlodPreviewEnabled );
+	ClassDB::bind_method( D_METHOD( "is_editor_hlod_preview_active" ), &Terrain3D::isEditorHlodPreviewActive );
+	ClassDB::bind_method( D_METHOD( "set_editor_execution_mode", "mode" ), &Terrain3D::setEditorExecutionMode );
+	ClassDB::bind_method( D_METHOD( "get_editor_execution_mode" ), &Terrain3D::getEditorExecutionMode );
+	ClassDB::bind_method( D_METHOD( "get_memory_estimate" ), &Terrain3D::getMemoryEstimate );
+	ClassDB::bind_method( D_METHOD( "get_tracked_current_residency" ), &Terrain3D::getTrackedCurrentResidency );
+	ClassDB::bind_method( D_METHOD( "get_memory_budget_stats" ), &Terrain3D::getMemoryBudgetStats );
+	ClassDB::bind_method( D_METHOD( "set_total_memory_budget_mb", "budget_mb" ), &Terrain3D::setTotalMemoryBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_total_memory_budget_mb" ), &Terrain3D::getTotalMemoryBudgetMb );
 	ClassDB::bind_method(
-			D_METHOD( "set_memory_transient_reserve_mb", "reserve_mb" ), &T3DTerrain::setMemoryTransientReserveMb );
-	ClassDB::bind_method( D_METHOD( "get_memory_transient_reserve_mb" ), &T3DTerrain::getMemoryTransientReserveMb );
+			D_METHOD( "set_memory_transient_reserve_mb", "reserve_mb" ), &Terrain3D::setMemoryTransientReserveMb );
+	ClassDB::bind_method( D_METHOD( "get_memory_transient_reserve_mb" ), &Terrain3D::getMemoryTransientReserveMb );
 	ClassDB::bind_method(
-			D_METHOD( "set_gpu_region_cache_budget_auto", "enabled" ), &T3DTerrain::setGpuRegionCacheBudgetAuto );
-	ClassDB::bind_method( D_METHOD( "is_gpu_region_cache_budget_auto" ), &T3DTerrain::isGpuRegionCacheBudgetAuto );
+			D_METHOD( "set_gpu_region_cache_budget_auto", "enabled" ), &Terrain3D::setGpuRegionCacheBudgetAuto );
+	ClassDB::bind_method( D_METHOD( "is_gpu_region_cache_budget_auto" ), &Terrain3D::isGpuRegionCacheBudgetAuto );
 	ClassDB::bind_method(
-			D_METHOD( "set_cpu_region_cache_budget_auto", "enabled" ), &T3DTerrain::setCpuRegionCacheBudgetAuto );
-	ClassDB::bind_method( D_METHOD( "is_cpu_region_cache_budget_auto" ), &T3DTerrain::isCpuRegionCacheBudgetAuto );
+			D_METHOD( "set_cpu_region_cache_budget_auto", "enabled" ), &Terrain3D::setCpuRegionCacheBudgetAuto );
+	ClassDB::bind_method( D_METHOD( "is_cpu_region_cache_budget_auto" ), &Terrain3D::isCpuRegionCacheBudgetAuto );
 	ClassDB::bind_method( D_METHOD( "set_instance_region_cache_budget_auto", "enabled" ),
-			&T3DTerrain::setInstanceRegionCacheBudgetAuto );
+			&Terrain3D::setInstanceRegionCacheBudgetAuto );
 	ClassDB::bind_method(
-			D_METHOD( "is_instance_region_cache_budget_auto" ), &T3DTerrain::isInstanceRegionCacheBudgetAuto );
+			D_METHOD( "is_instance_region_cache_budget_auto" ), &Terrain3D::isInstanceRegionCacheBudgetAuto );
 	ClassDB::bind_method(
-			D_METHOD( "set_lightmap_residency_budget_auto", "enabled" ), &T3DTerrain::setLightmapResidencyBudgetAuto );
-	ClassDB::bind_method( D_METHOD( "is_lightmap_residency_budget_auto" ), &T3DTerrain::isLightmapResidencyBudgetAuto );
-	ClassDB::bind_method( D_METHOD( "set_hlod_memory_budget_auto", "enabled" ), &T3DTerrain::setHlodMemoryBudgetAuto );
-	ClassDB::bind_method( D_METHOD( "is_hlod_memory_budget_auto" ), &T3DTerrain::isHlodMemoryBudgetAuto );
+			D_METHOD( "set_lightmap_residency_budget_auto", "enabled" ), &Terrain3D::setLightmapResidencyBudgetAuto );
+	ClassDB::bind_method( D_METHOD( "is_lightmap_residency_budget_auto" ), &Terrain3D::isLightmapResidencyBudgetAuto );
+	ClassDB::bind_method( D_METHOD( "set_hlod_memory_budget_auto", "enabled" ), &Terrain3D::setHlodMemoryBudgetAuto );
+	ClassDB::bind_method( D_METHOD( "is_hlod_memory_budget_auto" ), &Terrain3D::isHlodMemoryBudgetAuto );
 	ClassDB::bind_method(
-			D_METHOD( "set_lightmap_residency_budget_mb", "budget_mb" ), &T3DTerrain::setLightmapResidencyBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_lightmap_residency_budget_mb" ), &T3DTerrain::getLightmapResidencyBudgetMb );
+			D_METHOD( "set_lightmap_residency_budget_mb", "budget_mb" ), &Terrain3D::setLightmapResidencyBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_lightmap_residency_budget_mb" ), &Terrain3D::getLightmapResidencyBudgetMb );
 	ClassDB::bind_method(
-			D_METHOD( "set_shader_cache_budget_auto", "enabled" ), &T3DTerrain::setShaderCacheBudgetAuto );
-	ClassDB::bind_method( D_METHOD( "is_shader_cache_budget_auto" ), &T3DTerrain::isShaderCacheBudgetAuto );
+			D_METHOD( "set_shader_cache_budget_auto", "enabled" ), &Terrain3D::setShaderCacheBudgetAuto );
+	ClassDB::bind_method( D_METHOD( "is_shader_cache_budget_auto" ), &Terrain3D::isShaderCacheBudgetAuto );
 	ClassDB::bind_method(
-			D_METHOD( "get_effective_gpu_region_cache_budget_mb" ), &T3DTerrain::getEffectiveGpuRegionCacheBudgetMb );
+			D_METHOD( "get_effective_gpu_region_cache_budget_mb" ), &Terrain3D::getEffectiveGpuRegionCacheBudgetMb );
 	ClassDB::bind_method(
-			D_METHOD( "get_effective_cpu_region_cache_budget_mb" ), &T3DTerrain::getEffectiveCpuRegionCacheBudgetMb );
+			D_METHOD( "get_effective_cpu_region_cache_budget_mb" ), &Terrain3D::getEffectiveCpuRegionCacheBudgetMb );
 	ClassDB::bind_method( D_METHOD( "get_effective_instance_region_cache_budget_mb" ),
-			&T3DTerrain::getEffectiveInstanceRegionCacheBudgetMb );
+			&Terrain3D::getEffectiveInstanceRegionCacheBudgetMb );
 	ClassDB::bind_method( D_METHOD( "get_effective_lightmap_residency_budget_mb" ),
-			&T3DTerrain::getEffectiveLightmapResidencyBudgetMb );
+			&Terrain3D::getEffectiveLightmapResidencyBudgetMb );
 	ClassDB::bind_method(
-			D_METHOD( "get_effective_hlod_memory_budget_mb" ), &T3DTerrain::getEffectiveHlodMemoryBudgetMb );
+			D_METHOD( "get_effective_hlod_memory_budget_mb" ), &Terrain3D::getEffectiveHlodMemoryBudgetMb );
 	ClassDB::bind_method(
-			D_METHOD( "get_effective_shader_cache_budget_mb" ), &T3DTerrain::getEffectiveShaderCacheBudgetMb );
+			D_METHOD( "get_effective_shader_cache_budget_mb" ), &Terrain3D::getEffectiveShaderCacheBudgetMb );
 	ClassDB::bind_method(
-			D_METHOD( "get_memory_budget_policy_generation" ), &T3DTerrain::getMemoryBudgetPolicyGeneration );
-	ClassDB::bind_method( D_METHOD( "is_memory_budget_overcommitted" ), &T3DTerrain::isMemoryBudgetOvercommitted );
-	ClassDB::bind_method( D_METHOD( "get_memory_budget_headroom_bytes" ), &T3DTerrain::getMemoryBudgetHeadroomBytes );
-	ClassDB::bind_method( D_METHOD( "force_memory_budget_rebalance" ), &T3DTerrain::forceMemoryBudgetRebalance );
+			D_METHOD( "get_memory_budget_policy_generation" ), &Terrain3D::getMemoryBudgetPolicyGeneration );
+	ClassDB::bind_method( D_METHOD( "is_memory_budget_overcommitted" ), &Terrain3D::isMemoryBudgetOvercommitted );
+	ClassDB::bind_method( D_METHOD( "get_memory_budget_headroom_bytes" ), &Terrain3D::getMemoryBudgetHeadroomBytes );
+	ClassDB::bind_method( D_METHOD( "force_memory_budget_rebalance" ), &Terrain3D::forceMemoryBudgetRebalance );
 	ClassDB::bind_method( D_METHOD( "get_runtime_diagnostics", "deep_introspection" ),
-			&T3DTerrain::getRuntimeDiagnostics,
+			&Terrain3D::getRuntimeDiagnostics,
 			DEFVAL( false ) );
-	ClassDB::bind_method( D_METHOD( "get_runtime_parity_snapshot" ), &T3DTerrain::getRuntimeParitySnapshot );
-	ClassDB::bind_method( D_METHOD( "get_memory_stats_snapshot" ), &T3DTerrain::getMemoryStatsSnapshot );
-	ClassDB::bind_method( D_METHOD( "get_shader_tier_stats_snapshot" ), &T3DTerrain::getShaderTierStatsSnapshot );
+	ClassDB::bind_method( D_METHOD( "get_runtime_parity_snapshot" ), &Terrain3D::getRuntimeParitySnapshot );
+	ClassDB::bind_method( D_METHOD( "get_memory_stats_snapshot" ), &Terrain3D::getMemoryStatsSnapshot );
+	ClassDB::bind_method( D_METHOD( "get_shader_tier_stats_snapshot" ), &Terrain3D::getShaderTierStatsSnapshot );
 	ClassDB::bind_method( D_METHOD( "get_cache_stats_snapshot", "deep_introspection" ),
-			&T3DTerrain::getCacheStatsSnapshot,
+			&Terrain3D::getCacheStatsSnapshot,
 			DEFVAL( false ) );
-	ClassDB::bind_method( D_METHOD( "get_frame_stats_snapshot" ), &T3DTerrain::getFrameStatsSnapshot );
+	ClassDB::bind_method( D_METHOD( "get_frame_stats_snapshot" ), &Terrain3D::getFrameStatsSnapshot );
 	ClassDB::bind_method( D_METHOD( "get_runtime_profile_history", "max_samples" ),
-			&T3DTerrain::getRuntimeProfileHistory,
+			&Terrain3D::getRuntimeProfileHistory,
 			DEFVAL( 600 ) );
 	ClassDB::bind_method( D_METHOD( "get_runtime_profile_history_since", "after_sequence", "max_samples" ),
-			&T3DTerrain::getRuntimeProfileHistorySince,
+			&Terrain3D::getRuntimeProfileHistorySince,
 			DEFVAL( 600 ) );
-	ClassDB::bind_method( D_METHOD( "reset_runtime_diagnostics" ), &T3DTerrain::resetRuntimeDiagnostics );
+	ClassDB::bind_method( D_METHOD( "reset_runtime_diagnostics" ), &Terrain3D::resetRuntimeDiagnostics );
 	ClassDB::bind_method(
-			D_METHOD( "set_runtime_profiling_enabled", "enabled" ), &T3DTerrain::setRuntimeProfilingEnabled );
-	ClassDB::bind_method( D_METHOD( "is_runtime_profiling_enabled" ), &T3DTerrain::isRuntimeProfilingEnabled );
+			D_METHOD( "set_runtime_profiling_enabled", "enabled" ), &Terrain3D::setRuntimeProfilingEnabled );
+	ClassDB::bind_method( D_METHOD( "is_runtime_profiling_enabled" ), &Terrain3D::isRuntimeProfilingEnabled );
 	ClassDB::bind_method( D_METHOD( "set_runtime_adaptive_work_budgets_enabled", "enabled" ),
-			&T3DTerrain::setRuntimeAdaptiveWorkBudgetsEnabled );
+			&Terrain3D::setRuntimeAdaptiveWorkBudgetsEnabled );
 	ClassDB::bind_method(
-			D_METHOD( "is_runtime_adaptive_work_budgets_enabled" ), &T3DTerrain::isRuntimeAdaptiveWorkBudgetsEnabled );
+			D_METHOD( "is_runtime_adaptive_work_budgets_enabled" ), &Terrain3D::isRuntimeAdaptiveWorkBudgetsEnabled );
 	ClassDB::bind_method(
-			D_METHOD( "set_runtime_adaptive_target_ms", "target_ms" ), &T3DTerrain::setRuntimeAdaptiveTargetMs );
-	ClassDB::bind_method( D_METHOD( "get_runtime_adaptive_target_ms" ), &T3DTerrain::getRuntimeAdaptiveTargetMs );
+			D_METHOD( "set_runtime_adaptive_target_ms", "target_ms" ), &Terrain3D::setRuntimeAdaptiveTargetMs );
+	ClassDB::bind_method( D_METHOD( "get_runtime_adaptive_target_ms" ), &Terrain3D::getRuntimeAdaptiveTargetMs );
 	ClassDB::bind_method(
-			D_METHOD( "set_runtime_adaptive_hard_max_ms", "hard_max_ms" ), &T3DTerrain::setRuntimeAdaptiveHardMaxMs );
-	ClassDB::bind_method( D_METHOD( "get_runtime_adaptive_hard_max_ms" ), &T3DTerrain::getRuntimeAdaptiveHardMaxMs );
+			D_METHOD( "set_runtime_adaptive_hard_max_ms", "hard_max_ms" ), &Terrain3D::setRuntimeAdaptiveHardMaxMs );
+	ClassDB::bind_method( D_METHOD( "get_runtime_adaptive_hard_max_ms" ), &Terrain3D::getRuntimeAdaptiveHardMaxMs );
 	ClassDB::bind_method( D_METHOD( "set_runtime_adaptive_adjustment_window_frames", "frames" ),
-			&T3DTerrain::setRuntimeAdaptiveAdjustmentWindowFrames );
+			&Terrain3D::setRuntimeAdaptiveAdjustmentWindowFrames );
 	ClassDB::bind_method( D_METHOD( "get_runtime_adaptive_adjustment_window_frames" ),
-			&T3DTerrain::getRuntimeAdaptiveAdjustmentWindowFrames );
+			&Terrain3D::getRuntimeAdaptiveAdjustmentWindowFrames );
 	ClassDB::bind_method(
-			D_METHOD( "set_runtime_adaptive_min_gpu_pages", "pages" ), &T3DTerrain::setRuntimeAdaptiveMinGpuPages );
+			D_METHOD( "set_runtime_adaptive_min_gpu_pages", "pages" ), &Terrain3D::setRuntimeAdaptiveMinGpuPages );
 	ClassDB::bind_method(
-			D_METHOD( "get_runtime_adaptive_min_gpu_pages" ), &T3DTerrain::getRuntimeAdaptiveMinGpuPages );
+			D_METHOD( "get_runtime_adaptive_min_gpu_pages" ), &Terrain3D::getRuntimeAdaptiveMinGpuPages );
 	ClassDB::bind_method(
-			D_METHOD( "set_runtime_adaptive_min_cpu_pages", "pages" ), &T3DTerrain::setRuntimeAdaptiveMinCpuPages );
+			D_METHOD( "set_runtime_adaptive_min_cpu_pages", "pages" ), &Terrain3D::setRuntimeAdaptiveMinCpuPages );
 	ClassDB::bind_method(
-			D_METHOD( "get_runtime_adaptive_min_cpu_pages" ), &T3DTerrain::getRuntimeAdaptiveMinCpuPages );
+			D_METHOD( "get_runtime_adaptive_min_cpu_pages" ), &Terrain3D::getRuntimeAdaptiveMinCpuPages );
 	ClassDB::bind_method( D_METHOD( "set_runtime_adaptive_min_instance_pages", "pages" ),
-			&T3DTerrain::setRuntimeAdaptiveMinInstancePages );
+			&Terrain3D::setRuntimeAdaptiveMinInstancePages );
 	ClassDB::bind_method(
-			D_METHOD( "get_runtime_adaptive_min_instance_pages" ), &T3DTerrain::getRuntimeAdaptiveMinInstancePages );
+			D_METHOD( "get_runtime_adaptive_min_instance_pages" ), &Terrain3D::getRuntimeAdaptiveMinInstancePages );
 	ClassDB::bind_method( D_METHOD( "set_runtime_adaptive_min_instancer_cells", "cells" ),
-			&T3DTerrain::setRuntimeAdaptiveMinInstancerCells );
+			&Terrain3D::setRuntimeAdaptiveMinInstancerCells );
 	ClassDB::bind_method(
-			D_METHOD( "get_runtime_adaptive_min_instancer_cells" ), &T3DTerrain::getRuntimeAdaptiveMinInstancerCells );
+			D_METHOD( "get_runtime_adaptive_min_instancer_cells" ), &Terrain3D::getRuntimeAdaptiveMinInstancerCells );
 	ClassDB::bind_method( D_METHOD( "set_runtime_adaptive_min_node_load_regions", "regions" ),
-			&T3DTerrain::setRuntimeAdaptiveMinNodeLoadRegions );
+			&Terrain3D::setRuntimeAdaptiveMinNodeLoadRegions );
 	ClassDB::bind_method( D_METHOD( "get_runtime_adaptive_min_node_load_regions" ),
-			&T3DTerrain::getRuntimeAdaptiveMinNodeLoadRegions );
+			&Terrain3D::getRuntimeAdaptiveMinNodeLoadRegions );
 	ClassDB::bind_method( D_METHOD( "set_runtime_adaptive_min_node_unload_regions", "regions" ),
-			&T3DTerrain::setRuntimeAdaptiveMinNodeUnloadRegions );
+			&Terrain3D::setRuntimeAdaptiveMinNodeUnloadRegions );
 	ClassDB::bind_method( D_METHOD( "get_runtime_adaptive_min_node_unload_regions" ),
-			&T3DTerrain::getRuntimeAdaptiveMinNodeUnloadRegions );
-	ClassDB::bind_method( D_METHOD( "get_runtime_adaptive_budget_stats" ), &T3DTerrain::getRuntimeAdaptiveBudgetStats );
+			&Terrain3D::getRuntimeAdaptiveMinNodeUnloadRegions );
+	ClassDB::bind_method( D_METHOD( "get_runtime_adaptive_budget_stats" ), &Terrain3D::getRuntimeAdaptiveBudgetStats );
 	ClassDB::bind_method( D_METHOD( "set_runtime_boundary_work_phasing_enabled", "enabled" ),
-			&T3DTerrain::setRuntimeBoundaryWorkPhasingEnabled );
+			&Terrain3D::setRuntimeBoundaryWorkPhasingEnabled );
 	ClassDB::bind_method(
-			D_METHOD( "is_runtime_boundary_work_phasing_enabled" ), &T3DTerrain::isRuntimeBoundaryWorkPhasingEnabled );
+			D_METHOD( "is_runtime_boundary_work_phasing_enabled" ), &Terrain3D::isRuntimeBoundaryWorkPhasingEnabled );
 	ClassDB::bind_method( D_METHOD( "set_runtime_boundary_node_delay_frames", "frames" ),
-			&T3DTerrain::setRuntimeBoundaryNodeDelayFrames );
+			&Terrain3D::setRuntimeBoundaryNodeDelayFrames );
 	ClassDB::bind_method(
-			D_METHOD( "get_runtime_boundary_node_delay_frames" ), &T3DTerrain::getRuntimeBoundaryNodeDelayFrames );
+			D_METHOD( "get_runtime_boundary_node_delay_frames" ), &Terrain3D::getRuntimeBoundaryNodeDelayFrames );
 	ClassDB::bind_method( D_METHOD( "set_runtime_boundary_instancer_delay_frames", "frames" ),
-			&T3DTerrain::setRuntimeBoundaryInstancerDelayFrames );
+			&Terrain3D::setRuntimeBoundaryInstancerDelayFrames );
 	ClassDB::bind_method( D_METHOD( "get_runtime_boundary_instancer_delay_frames" ),
-			&T3DTerrain::getRuntimeBoundaryInstancerDelayFrames );
+			&Terrain3D::getRuntimeBoundaryInstancerDelayFrames );
 	ClassDB::bind_method(
-			D_METHOD( "get_runtime_boundary_phasing_stats" ), &T3DTerrain::getRuntimeBoundaryPhasingStats );
-	ClassDB::bind_method( D_METHOD( "is_editor_authoring_mode" ), &T3DTerrain::isEditorAuthoringMode );
+			D_METHOD( "get_runtime_boundary_phasing_stats" ), &Terrain3D::getRuntimeBoundaryPhasingStats );
+	ClassDB::bind_method( D_METHOD( "is_editor_authoring_mode" ), &Terrain3D::isEditorAuthoringMode );
 	ClassDB::bind_method(
-			D_METHOD( "is_authoring_residency_readback_safe" ), &T3DTerrain::isAuthoringResidencyReadbackSafe );
-	ClassDB::bind_method( D_METHOD( "is_gpu_region_cache_effective" ), &T3DTerrain::isGpuRegionCacheEffective );
-	ClassDB::bind_method( D_METHOD( "is_cpu_region_cache_effective" ), &T3DTerrain::isCpuRegionCacheEffective );
+			D_METHOD( "is_authoring_residency_readback_safe" ), &Terrain3D::isAuthoringResidencyReadbackSafe );
+	ClassDB::bind_method( D_METHOD( "is_gpu_region_cache_effective" ), &Terrain3D::isGpuRegionCacheEffective );
+	ClassDB::bind_method( D_METHOD( "is_cpu_region_cache_effective" ), &Terrain3D::isCpuRegionCacheEffective );
 	ClassDB::bind_method(
-			D_METHOD( "is_instance_region_cache_effective" ), &T3DTerrain::isInstanceRegionCacheEffective );
+			D_METHOD( "is_instance_region_cache_effective" ), &Terrain3D::isInstanceRegionCacheEffective );
 	ClassDB::bind_method(
-			D_METHOD( "is_instancer_cell_streaming_effective" ), &T3DTerrain::isInstancerCellStreamingEffective );
+			D_METHOD( "is_instancer_cell_streaming_effective" ), &Terrain3D::isInstancerCellStreamingEffective );
 	ClassDB::bind_method(
-			D_METHOD( "is_dynamic_node_streaming_effective" ), &T3DTerrain::isDynamicNodeStreamingEffective );
-	ClassDB::bind_method( D_METHOD( "set_performance_target", "target" ), &T3DTerrain::setPerformanceTarget );
-	ClassDB::bind_method( D_METHOD( "get_performance_target" ), &T3DTerrain::getPerformanceTarget );
-	ClassDB::bind_method( D_METHOD( "get_performance_profile_status" ), &T3DTerrain::getPerformanceProfileStatus );
+			D_METHOD( "is_dynamic_node_streaming_effective" ), &Terrain3D::isDynamicNodeStreamingEffective );
+	ClassDB::bind_method( D_METHOD( "set_performance_target", "target" ), &Terrain3D::setPerformanceTarget );
+	ClassDB::bind_method( D_METHOD( "get_performance_target" ), &Terrain3D::getPerformanceTarget );
+	ClassDB::bind_method( D_METHOD( "get_performance_profile_status" ), &Terrain3D::getPerformanceProfileStatus );
 	ClassDB::bind_method(
-			D_METHOD( "get_performance_profile_status_name" ), &T3DTerrain::getPerformanceProfileStatusName );
-	ClassDB::bind_method( D_METHOD( "get_performance_profile_version" ), &T3DTerrain::getPerformanceProfileVersion );
+			D_METHOD( "get_performance_profile_status_name" ), &Terrain3D::getPerformanceProfileStatusName );
+	ClassDB::bind_method( D_METHOD( "get_performance_profile_version" ), &Terrain3D::getPerformanceProfileVersion );
 	ClassDB::bind_method(
-			D_METHOD( "get_performance_profile_signature" ), &T3DTerrain::getPerformanceProfileSignature );
-	ClassDB::bind_method( D_METHOD( "get_performance_profile_manifest" ), &T3DTerrain::getPerformanceProfileManifest );
-	ClassDB::bind_method( D_METHOD( "get_performance_profile_diff" ), &T3DTerrain::getPerformanceProfileDiff );
-	ClassDB::bind_method( D_METHOD( "reset_performance_profile" ), &T3DTerrain::resetPerformanceProfile );
-	ClassDB::bind_method( D_METHOD( "set_streaming_active_radius", "radius" ), &T3DTerrain::setStreamingActiveRadius );
-	ClassDB::bind_method( D_METHOD( "get_streaming_active_radius" ), &T3DTerrain::getStreamingActiveRadius );
-	ClassDB::bind_method( D_METHOD( "set_streaming_hot_radius", "radius" ), &T3DTerrain::setStreamingHotRadius );
-	ClassDB::bind_method( D_METHOD( "get_streaming_hot_radius" ), &T3DTerrain::getStreamingHotRadius );
-	ClassDB::bind_method( D_METHOD( "set_streaming_cold_radius", "radius" ), &T3DTerrain::setStreamingColdRadius );
-	ClassDB::bind_method( D_METHOD( "get_streaming_cold_radius" ), &T3DTerrain::getStreamingColdRadius );
-	ClassDB::bind_method( D_METHOD( "set_streaming_unload_guard", "regions" ), &T3DTerrain::setStreamingUnloadGuard );
-	ClassDB::bind_method( D_METHOD( "get_streaming_unload_guard" ), &T3DTerrain::getStreamingUnloadGuard );
+			D_METHOD( "get_performance_profile_signature" ), &Terrain3D::getPerformanceProfileSignature );
+	ClassDB::bind_method( D_METHOD( "get_performance_profile_manifest" ), &Terrain3D::getPerformanceProfileManifest );
+	ClassDB::bind_method( D_METHOD( "get_performance_profile_diff" ), &Terrain3D::getPerformanceProfileDiff );
+	ClassDB::bind_method( D_METHOD( "reset_performance_profile" ), &Terrain3D::resetPerformanceProfile );
+	ClassDB::bind_method( D_METHOD( "set_streaming_active_radius", "radius" ), &Terrain3D::setStreamingActiveRadius );
+	ClassDB::bind_method( D_METHOD( "get_streaming_active_radius" ), &Terrain3D::getStreamingActiveRadius );
+	ClassDB::bind_method( D_METHOD( "set_streaming_hot_radius", "radius" ), &Terrain3D::setStreamingHotRadius );
+	ClassDB::bind_method( D_METHOD( "get_streaming_hot_radius" ), &Terrain3D::getStreamingHotRadius );
+	ClassDB::bind_method( D_METHOD( "set_streaming_cold_radius", "radius" ), &Terrain3D::setStreamingColdRadius );
+	ClassDB::bind_method( D_METHOD( "get_streaming_cold_radius" ), &Terrain3D::getStreamingColdRadius );
+	ClassDB::bind_method( D_METHOD( "set_streaming_unload_guard", "regions" ), &Terrain3D::setStreamingUnloadGuard );
+	ClassDB::bind_method( D_METHOD( "get_streaming_unload_guard" ), &Terrain3D::getStreamingUnloadGuard );
 	ClassDB::bind_method(
-			D_METHOD( "set_streaming_prediction_enabled", "enabled" ), &T3DTerrain::setStreamingPredictionEnabled );
-	ClassDB::bind_method( D_METHOD( "is_streaming_prediction_enabled" ), &T3DTerrain::isStreamingPredictionEnabled );
+			D_METHOD( "set_streaming_prediction_enabled", "enabled" ), &Terrain3D::setStreamingPredictionEnabled );
+	ClassDB::bind_method( D_METHOD( "is_streaming_prediction_enabled" ), &Terrain3D::isStreamingPredictionEnabled );
 	ClassDB::bind_method(
-			D_METHOD( "set_streaming_prediction_lookahead", "seconds" ), &T3DTerrain::setStreamingPredictionLookahead );
+			D_METHOD( "set_streaming_prediction_lookahead", "seconds" ), &Terrain3D::setStreamingPredictionLookahead );
 	ClassDB::bind_method(
-			D_METHOD( "get_streaming_prediction_lookahead" ), &T3DTerrain::getStreamingPredictionLookahead );
+			D_METHOD( "get_streaming_prediction_lookahead" ), &Terrain3D::getStreamingPredictionLookahead );
 	ClassDB::bind_method( D_METHOD( "set_streaming_prediction_maximum_regions", "regions" ),
-			&T3DTerrain::setStreamingPredictionMaximumRegions );
+			&Terrain3D::setStreamingPredictionMaximumRegions );
 	ClassDB::bind_method(
-			D_METHOD( "get_streaming_prediction_maximum_regions" ), &T3DTerrain::getStreamingPredictionMaximumRegions );
-	ClassDB::bind_method( D_METHOD( "get_region_streaming_state", "region" ), &T3DTerrain::getRegionStreamingState );
+			D_METHOD( "get_streaming_prediction_maximum_regions" ), &Terrain3D::getStreamingPredictionMaximumRegions );
+	ClassDB::bind_method( D_METHOD( "get_region_streaming_state", "region" ), &Terrain3D::getRegionStreamingState );
 	ClassDB::bind_method(
-			D_METHOD( "is_region_streaming_prefetch", "region" ), &T3DTerrain::isRegionStreamingPrefetch );
-	ClassDB::bind_method( D_METHOD( "get_region_streaming_stats" ), &T3DTerrain::getRegionStreamingStats );
+			D_METHOD( "is_region_streaming_prefetch", "region" ), &Terrain3D::isRegionStreamingPrefetch );
+	ClassDB::bind_method( D_METHOD( "get_region_streaming_stats" ), &Terrain3D::getRegionStreamingStats );
 	ClassDB::bind_method( D_METHOD( "get_region_streaming_configuration_status" ),
-			&T3DTerrain::getRegionStreamingConfigurationStatus );
+			&Terrain3D::getRegionStreamingConfigurationStatus );
 	ClassDB::bind_method(
-			D_METHOD( "get_height_source_diagnostics", "world_position" ), &T3DTerrain::getHeightSourceDiagnostics );
+			D_METHOD( "get_height_source_diagnostics", "world_position" ), &Terrain3D::getHeightSourceDiagnostics );
 	ClassDB::bind_method(
-			D_METHOD( "set_gpu_region_cache_enabled", "enabled" ), &T3DTerrain::setGpuRegionCacheEnabled );
-	ClassDB::bind_method( D_METHOD( "is_gpu_region_cache_enabled" ), &T3DTerrain::isGpuRegionCacheEnabled );
+			D_METHOD( "set_gpu_region_cache_enabled", "enabled" ), &Terrain3D::setGpuRegionCacheEnabled );
+	ClassDB::bind_method( D_METHOD( "is_gpu_region_cache_enabled" ), &Terrain3D::isGpuRegionCacheEnabled );
 	ClassDB::bind_method(
-			D_METHOD( "set_gpu_region_cache_budget_mb", "budget_mb" ), &T3DTerrain::setGpuRegionCacheBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_gpu_region_cache_budget_mb" ), &T3DTerrain::getGpuRegionCacheBudgetMb );
+			D_METHOD( "set_gpu_region_cache_budget_mb", "budget_mb" ), &Terrain3D::setGpuRegionCacheBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_gpu_region_cache_budget_mb" ), &Terrain3D::getGpuRegionCacheBudgetMb );
 	ClassDB::bind_method(
-			D_METHOD( "set_gpu_region_upload_budget_layers", "layers" ), &T3DTerrain::setGpuRegionUploadBudgetLayers );
+			D_METHOD( "set_gpu_region_upload_budget_layers", "layers" ), &Terrain3D::setGpuRegionUploadBudgetLayers );
 	ClassDB::bind_method(
-			D_METHOD( "get_gpu_region_upload_budget_layers" ), &T3DTerrain::getGpuRegionUploadBudgetLayers );
+			D_METHOD( "get_gpu_region_upload_budget_layers" ), &Terrain3D::getGpuRegionUploadBudgetLayers );
 	ClassDB::bind_method(
-			D_METHOD( "set_gpu_region_upload_budget_mb", "budget_mb" ), &T3DTerrain::setGpuRegionUploadBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_gpu_region_upload_budget_mb" ), &T3DTerrain::getGpuRegionUploadBudgetMb );
-	ClassDB::bind_method( D_METHOD( "set_gpu_region_spare_pages", "pages" ), &T3DTerrain::setGpuRegionSparePages );
-	ClassDB::bind_method( D_METHOD( "get_gpu_region_spare_pages" ), &T3DTerrain::getGpuRegionSparePages );
-	ClassDB::bind_method( D_METHOD( "set_gpu_region_retire_frames", "frames" ), &T3DTerrain::setGpuRegionRetireFrames );
-	ClassDB::bind_method( D_METHOD( "get_gpu_region_retire_frames" ), &T3DTerrain::getGpuRegionRetireFrames );
-	ClassDB::bind_method( D_METHOD( "set_gpu_region_detail_lods", "lods" ), &T3DTerrain::setGpuRegionDetailLods );
-	ClassDB::bind_method( D_METHOD( "get_gpu_region_detail_lods" ), &T3DTerrain::getGpuRegionDetailLods );
+			D_METHOD( "set_gpu_region_upload_budget_mb", "budget_mb" ), &Terrain3D::setGpuRegionUploadBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_gpu_region_upload_budget_mb" ), &Terrain3D::getGpuRegionUploadBudgetMb );
+	ClassDB::bind_method( D_METHOD( "set_gpu_region_spare_pages", "pages" ), &Terrain3D::setGpuRegionSparePages );
+	ClassDB::bind_method( D_METHOD( "get_gpu_region_spare_pages" ), &Terrain3D::getGpuRegionSparePages );
+	ClassDB::bind_method( D_METHOD( "set_gpu_region_retire_frames", "frames" ), &Terrain3D::setGpuRegionRetireFrames );
+	ClassDB::bind_method( D_METHOD( "get_gpu_region_retire_frames" ), &Terrain3D::getGpuRegionRetireFrames );
+	ClassDB::bind_method( D_METHOD( "set_gpu_region_detail_lods", "lods" ), &Terrain3D::setGpuRegionDetailLods );
+	ClassDB::bind_method( D_METHOD( "get_gpu_region_detail_lods" ), &Terrain3D::getGpuRegionDetailLods );
 	ClassDB::bind_method(
-			D_METHOD( "set_gpu_region_detail_range_end_m", "range_m" ), &T3DTerrain::setGpuRegionDetailRangeEndM );
-	ClassDB::bind_method( D_METHOD( "get_gpu_region_detail_range_end_m" ), &T3DTerrain::getGpuRegionDetailRangeEndM );
+			D_METHOD( "set_gpu_region_detail_range_end_m", "range_m" ), &Terrain3D::setGpuRegionDetailRangeEndM );
+	ClassDB::bind_method( D_METHOD( "get_gpu_region_detail_range_end_m" ), &Terrain3D::getGpuRegionDetailRangeEndM );
 	ClassDB::bind_method(
-			D_METHOD( "get_gpu_region_max_supported_detail_lods" ), &T3DTerrain::getGpuRegionMaxSupportedDetailLods );
+			D_METHOD( "get_gpu_region_max_supported_detail_lods" ), &Terrain3D::getGpuRegionMaxSupportedDetailLods );
 	ClassDB::bind_method( D_METHOD( "get_gpu_region_max_supported_detail_range_m" ),
-			&T3DTerrain::getGpuRegionMaxSupportedDetailRangeM );
+			&Terrain3D::getGpuRegionMaxSupportedDetailRangeM );
 	ClassDB::bind_method(
-			D_METHOD( "get_gpu_region_required_core_pages" ), &T3DTerrain::getGpuRegionRequiredCorePages );
-	ClassDB::bind_method( D_METHOD( "get_gpu_region_mapped_capacity" ), &T3DTerrain::getGpuRegionMappedCapacity );
-	ClassDB::bind_method( D_METHOD( "is_gpu_region_detail_range_valid" ), &T3DTerrain::isGpuRegionDetailRangeValid );
+			D_METHOD( "get_gpu_region_required_core_pages" ), &Terrain3D::getGpuRegionRequiredCorePages );
+	ClassDB::bind_method( D_METHOD( "get_gpu_region_mapped_capacity" ), &Terrain3D::getGpuRegionMappedCapacity );
+	ClassDB::bind_method( D_METHOD( "is_gpu_region_detail_range_valid" ), &Terrain3D::isGpuRegionDetailRangeValid );
 	ClassDB::bind_method(
-			D_METHOD( "set_gpu_region_guard_regions", "regions" ), &T3DTerrain::setGpuRegionGuardRegions );
-	ClassDB::bind_method( D_METHOD( "get_gpu_region_guard_regions" ), &T3DTerrain::getGpuRegionGuardRegions );
-	ClassDB::bind_method( D_METHOD( "set_gpu_region_prefetch_rows", "rows" ), &T3DTerrain::setGpuRegionPrefetchRows );
-	ClassDB::bind_method( D_METHOD( "get_gpu_region_prefetch_rows" ), &T3DTerrain::getGpuRegionPrefetchRows );
+			D_METHOD( "set_gpu_region_guard_regions", "regions" ), &Terrain3D::setGpuRegionGuardRegions );
+	ClassDB::bind_method( D_METHOD( "get_gpu_region_guard_regions" ), &Terrain3D::getGpuRegionGuardRegions );
+	ClassDB::bind_method( D_METHOD( "set_gpu_region_prefetch_rows", "rows" ), &Terrain3D::setGpuRegionPrefetchRows );
+	ClassDB::bind_method( D_METHOD( "get_gpu_region_prefetch_rows" ), &Terrain3D::getGpuRegionPrefetchRows );
 	ClassDB::bind_method(
-			D_METHOD( "set_gpu_region_hysteresis_ticks", "ticks" ), &T3DTerrain::setGpuRegionHysteresisTicks );
-	ClassDB::bind_method( D_METHOD( "get_gpu_region_hysteresis_ticks" ), &T3DTerrain::getGpuRegionHysteresisTicks );
+			D_METHOD( "set_gpu_region_hysteresis_ticks", "ticks" ), &Terrain3D::setGpuRegionHysteresisTicks );
+	ClassDB::bind_method( D_METHOD( "get_gpu_region_hysteresis_ticks" ), &Terrain3D::getGpuRegionHysteresisTicks );
 	ClassDB::bind_method( D_METHOD( "set_gpu_region_color_resolution_divisor", "divisor" ),
-			&T3DTerrain::setGpuRegionColorResolutionDivisor );
+			&Terrain3D::setGpuRegionColorResolutionDivisor );
 	ClassDB::bind_method(
-			D_METHOD( "get_gpu_region_color_resolution_divisor" ), &T3DTerrain::getGpuRegionColorResolutionDivisor );
+			D_METHOD( "get_gpu_region_color_resolution_divisor" ), &Terrain3D::getGpuRegionColorResolutionDivisor );
 	ClassDB::bind_method( D_METHOD( "set_gpu_region_derived_resolution_divisor", "divisor" ),
-			&T3DTerrain::setGpuRegionDerivedResolutionDivisor );
+			&Terrain3D::setGpuRegionDerivedResolutionDivisor );
 	ClassDB::bind_method( D_METHOD( "get_gpu_region_derived_resolution_divisor" ),
-			&T3DTerrain::getGpuRegionDerivedResolutionDivisor );
+			&Terrain3D::getGpuRegionDerivedResolutionDivisor );
 	ClassDB::bind_method( D_METHOD( "set_gpu_middle_height_resolution_divisor", "divisor" ),
-			&T3DTerrain::setGpuMiddleHeightResolutionDivisor );
+			&Terrain3D::setGpuMiddleHeightResolutionDivisor );
 	ClassDB::bind_method(
-			D_METHOD( "get_gpu_middle_height_resolution_divisor" ), &T3DTerrain::getGpuMiddleHeightResolutionDivisor );
+			D_METHOD( "get_gpu_middle_height_resolution_divisor" ), &Terrain3D::getGpuMiddleHeightResolutionDivisor );
 	ClassDB::bind_method(
-			D_METHOD( "set_editor_gpu_region_cache_pages", "pages" ), &T3DTerrain::setEditorGpuRegionCachePages );
-	ClassDB::bind_method( D_METHOD( "get_editor_gpu_region_cache_pages" ), &T3DTerrain::getEditorGpuRegionCachePages );
+			D_METHOD( "set_editor_gpu_region_cache_pages", "pages" ), &Terrain3D::setEditorGpuRegionCachePages );
+	ClassDB::bind_method( D_METHOD( "get_editor_gpu_region_cache_pages" ), &Terrain3D::getEditorGpuRegionCachePages );
 	ClassDB::bind_method( D_METHOD( "set_runtime_material_streaming_enabled", "enabled" ),
-			&T3DTerrain::setRuntimeMaterialStreamingEnabled );
+			&Terrain3D::setRuntimeMaterialStreamingEnabled );
 	ClassDB::bind_method(
-			D_METHOD( "is_runtime_material_streaming_enabled" ), &T3DTerrain::isRuntimeMaterialStreamingEnabled );
+			D_METHOD( "is_runtime_material_streaming_enabled" ), &Terrain3D::isRuntimeMaterialStreamingEnabled );
 	ClassDB::bind_method(
-			D_METHOD( "set_runtime_material_cache_layers", "layers" ), &T3DTerrain::setRuntimeMaterialCacheLayers );
-	ClassDB::bind_method( D_METHOD( "get_runtime_material_cache_layers" ), &T3DTerrain::getRuntimeMaterialCacheLayers );
+			D_METHOD( "set_runtime_material_cache_layers", "layers" ), &Terrain3D::setRuntimeMaterialCacheLayers );
+	ClassDB::bind_method( D_METHOD( "get_runtime_material_cache_layers" ), &Terrain3D::getRuntimeMaterialCacheLayers );
 	ClassDB::bind_method( D_METHOD( "set_runtime_material_upload_budget_layers", "layers" ),
-			&T3DTerrain::setRuntimeMaterialUploadBudgetLayers );
+			&Terrain3D::setRuntimeMaterialUploadBudgetLayers );
 	ClassDB::bind_method( D_METHOD( "get_runtime_material_upload_budget_layers" ),
-			&T3DTerrain::getRuntimeMaterialUploadBudgetLayers );
+			&Terrain3D::getRuntimeMaterialUploadBudgetLayers );
 	ClassDB::bind_method( D_METHOD( "set_runtime_release_source_material_textures", "enabled" ),
-			&T3DTerrain::setRuntimeReleaseSourceMaterialTextures );
+			&Terrain3D::setRuntimeReleaseSourceMaterialTextures );
 	ClassDB::bind_method( D_METHOD( "is_runtime_release_source_material_textures" ),
-			&T3DTerrain::isRuntimeReleaseSourceMaterialTextures );
-	ClassDB::bind_method( D_METHOD( "set_gpu_far_quality_divisor", "divisor" ), &T3DTerrain::setGpuFarQualityDivisor );
-	ClassDB::bind_method( D_METHOD( "get_gpu_far_quality_divisor" ), &T3DTerrain::getGpuFarQualityDivisor );
+			&Terrain3D::isRuntimeReleaseSourceMaterialTextures );
+	ClassDB::bind_method( D_METHOD( "set_gpu_far_quality_divisor", "divisor" ), &Terrain3D::setGpuFarQualityDivisor );
+	ClassDB::bind_method( D_METHOD( "get_gpu_far_quality_divisor" ), &Terrain3D::getGpuFarQualityDivisor );
 	ClassDB::bind_method(
-			D_METHOD( "set_far_material_resolution", "resolution" ), &T3DTerrain::setFarMaterialResolution );
-	ClassDB::bind_method( D_METHOD( "get_far_material_resolution" ), &T3DTerrain::getFarMaterialResolution );
+			D_METHOD( "set_far_material_resolution", "resolution" ), &Terrain3D::setFarMaterialResolution );
+	ClassDB::bind_method( D_METHOD( "get_far_material_resolution" ), &Terrain3D::getFarMaterialResolution );
 	ClassDB::bind_method(
-			D_METHOD( "set_far_control_resolution", "resolution" ), &T3DTerrain::setFarControlResolution );
-	ClassDB::bind_method( D_METHOD( "get_far_control_resolution" ), &T3DTerrain::getFarControlResolution );
-	ClassDB::bind_method( D_METHOD( "get_gpu_far_atlas_side" ), &T3DTerrain::getGpuFarAtlasSide );
-	ClassDB::bind_method( D_METHOD( "get_gpu_far_height_atlas_side" ), &T3DTerrain::getGpuFarHeightAtlasSide );
-	ClassDB::bind_method( D_METHOD( "get_gpu_far_surface_atlas_side" ), &T3DTerrain::getGpuFarSurfaceAtlasSide );
+			D_METHOD( "set_far_control_resolution", "resolution" ), &Terrain3D::setFarControlResolution );
+	ClassDB::bind_method( D_METHOD( "get_far_control_resolution" ), &Terrain3D::getFarControlResolution );
+	ClassDB::bind_method( D_METHOD( "get_gpu_far_atlas_side" ), &Terrain3D::getGpuFarAtlasSide );
+	ClassDB::bind_method( D_METHOD( "get_gpu_far_height_atlas_side" ), &Terrain3D::getGpuFarHeightAtlasSide );
+	ClassDB::bind_method( D_METHOD( "get_gpu_far_surface_atlas_side" ), &Terrain3D::getGpuFarSurfaceAtlasSide );
 	ClassDB::bind_method(
-			D_METHOD( "set_gpu_region_cooked_pages_enabled", "enabled" ), &T3DTerrain::setGpuRegionCookedPagesEnabled );
+			D_METHOD( "set_gpu_region_cooked_pages_enabled", "enabled" ), &Terrain3D::setGpuRegionCookedPagesEnabled );
 	ClassDB::bind_method(
-			D_METHOD( "is_gpu_region_cooked_pages_enabled" ), &T3DTerrain::isGpuRegionCookedPagesEnabled );
-	ClassDB::bind_method( D_METHOD( "set_gpu_region_cook_on_save", "enabled" ), &T3DTerrain::setGpuRegionCookOnSave );
-	ClassDB::bind_method( D_METHOD( "is_gpu_region_cook_on_save" ), &T3DTerrain::isGpuRegionCookOnSave );
-	ClassDB::bind_method( D_METHOD( "get_gpu_region_cache_stats" ), &T3DTerrain::getGpuRegionCacheStats );
+			D_METHOD( "is_gpu_region_cooked_pages_enabled" ), &Terrain3D::isGpuRegionCookedPagesEnabled );
+	ClassDB::bind_method( D_METHOD( "set_gpu_region_cook_on_save", "enabled" ), &Terrain3D::setGpuRegionCookOnSave );
+	ClassDB::bind_method( D_METHOD( "is_gpu_region_cook_on_save" ), &Terrain3D::isGpuRegionCookOnSave );
+	ClassDB::bind_method( D_METHOD( "get_gpu_region_cache_stats" ), &Terrain3D::getGpuRegionCacheStats );
 	ClassDB::bind_method(
-			D_METHOD( "set_cpu_region_cache_enabled", "enabled" ), &T3DTerrain::setCpuRegionCacheEnabled );
-	ClassDB::bind_method( D_METHOD( "is_cpu_region_cache_enabled" ), &T3DTerrain::isCpuRegionCacheEnabled );
+			D_METHOD( "set_cpu_region_cache_enabled", "enabled" ), &Terrain3D::setCpuRegionCacheEnabled );
+	ClassDB::bind_method( D_METHOD( "is_cpu_region_cache_enabled" ), &Terrain3D::isCpuRegionCacheEnabled );
 	ClassDB::bind_method(
-			D_METHOD( "set_cpu_region_cache_budget_mb", "budget_mb" ), &T3DTerrain::setCpuRegionCacheBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_cpu_region_cache_budget_mb" ), &T3DTerrain::getCpuRegionCacheBudgetMb );
+			D_METHOD( "set_cpu_region_cache_budget_mb", "budget_mb" ), &Terrain3D::setCpuRegionCacheBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_cpu_region_cache_budget_mb" ), &Terrain3D::getCpuRegionCacheBudgetMb );
 	ClassDB::bind_method(
-			D_METHOD( "set_cpu_region_load_budget_layers", "layers" ), &T3DTerrain::setCpuRegionLoadBudgetLayers );
-	ClassDB::bind_method( D_METHOD( "get_cpu_region_load_budget_layers" ), &T3DTerrain::getCpuRegionLoadBudgetLayers );
+			D_METHOD( "set_cpu_region_load_budget_layers", "layers" ), &Terrain3D::setCpuRegionLoadBudgetLayers );
+	ClassDB::bind_method( D_METHOD( "get_cpu_region_load_budget_layers" ), &Terrain3D::getCpuRegionLoadBudgetLayers );
 	ClassDB::bind_method(
-			D_METHOD( "set_cpu_region_load_budget_mb", "budget_mb" ), &T3DTerrain::setCpuRegionLoadBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_cpu_region_load_budget_mb" ), &T3DTerrain::getCpuRegionLoadBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_cpu_region_cache_stats" ), &T3DTerrain::getCpuRegionCacheStats );
+			D_METHOD( "set_cpu_region_load_budget_mb", "budget_mb" ), &Terrain3D::setCpuRegionLoadBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_cpu_region_load_budget_mb" ), &Terrain3D::getCpuRegionLoadBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_cpu_region_cache_stats" ), &Terrain3D::getCpuRegionCacheStats );
 	ClassDB::bind_method(
-			D_METHOD( "set_instance_region_cache_enabled", "enabled" ), &T3DTerrain::setInstanceRegionCacheEnabled );
-	ClassDB::bind_method( D_METHOD( "is_instance_region_cache_enabled" ), &T3DTerrain::isInstanceRegionCacheEnabled );
+			D_METHOD( "set_instance_region_cache_enabled", "enabled" ), &Terrain3D::setInstanceRegionCacheEnabled );
+	ClassDB::bind_method( D_METHOD( "is_instance_region_cache_enabled" ), &Terrain3D::isInstanceRegionCacheEnabled );
 	ClassDB::bind_method( D_METHOD( "set_instance_region_cache_budget_mb", "budget_mb" ),
-			&T3DTerrain::setInstanceRegionCacheBudgetMb );
+			&Terrain3D::setInstanceRegionCacheBudgetMb );
 	ClassDB::bind_method(
-			D_METHOD( "get_instance_region_cache_budget_mb" ), &T3DTerrain::getInstanceRegionCacheBudgetMb );
+			D_METHOD( "get_instance_region_cache_budget_mb" ), &Terrain3D::getInstanceRegionCacheBudgetMb );
 	ClassDB::bind_method( D_METHOD( "set_instance_region_load_budget_pages", "pages" ),
-			&T3DTerrain::setInstanceRegionLoadBudgetPages );
+			&Terrain3D::setInstanceRegionLoadBudgetPages );
 	ClassDB::bind_method(
-			D_METHOD( "get_instance_region_load_budget_pages" ), &T3DTerrain::getInstanceRegionLoadBudgetPages );
+			D_METHOD( "get_instance_region_load_budget_pages" ), &Terrain3D::getInstanceRegionLoadBudgetPages );
 	ClassDB::bind_method(
-			D_METHOD( "set_instance_region_load_budget_mb", "budget_mb" ), &T3DTerrain::setInstanceRegionLoadBudgetMb );
+			D_METHOD( "set_instance_region_load_budget_mb", "budget_mb" ), &Terrain3D::setInstanceRegionLoadBudgetMb );
 	ClassDB::bind_method(
-			D_METHOD( "get_instance_region_load_budget_mb" ), &T3DTerrain::getInstanceRegionLoadBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_instance_region_cache_stats" ), &T3DTerrain::getInstanceRegionCacheStats );
-	ClassDB::bind_method( D_METHOD( "set_instancer_cell_size", "cell_size" ), &T3DTerrain::setInstancerCellSize );
-	ClassDB::bind_method( D_METHOD( "get_instancer_cell_size" ), &T3DTerrain::getInstancerCellSize );
+			D_METHOD( "get_instance_region_load_budget_mb" ), &Terrain3D::getInstanceRegionLoadBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_instance_region_cache_stats" ), &Terrain3D::getInstanceRegionCacheStats );
+	ClassDB::bind_method( D_METHOD( "set_instancer_cell_size", "cell_size" ), &Terrain3D::setInstancerCellSize );
+	ClassDB::bind_method( D_METHOD( "get_instancer_cell_size" ), &Terrain3D::getInstancerCellSize );
 	ClassDB::bind_method( D_METHOD( "set_instancer_cell_streaming_enabled", "enabled" ),
-			&T3DTerrain::setInstancerCellStreamingEnabled );
+			&Terrain3D::setInstancerCellStreamingEnabled );
 	ClassDB::bind_method(
-			D_METHOD( "is_instancer_cell_streaming_enabled" ), &T3DTerrain::isInstancerCellStreamingEnabled );
+			D_METHOD( "is_instancer_cell_streaming_enabled" ), &Terrain3D::isInstancerCellStreamingEnabled );
 	ClassDB::bind_method(
-			D_METHOD( "set_instancer_single_lod_buffers", "enabled" ), &T3DTerrain::setInstancerSingleLodBuffers );
-	ClassDB::bind_method( D_METHOD( "is_instancer_single_lod_buffers" ), &T3DTerrain::isInstancerSingleLodBuffers );
+			D_METHOD( "set_instancer_single_lod_buffers", "enabled" ), &Terrain3D::setInstancerSingleLodBuffers );
+	ClassDB::bind_method( D_METHOD( "is_instancer_single_lod_buffers" ), &Terrain3D::isInstancerSingleLodBuffers );
 	ClassDB::bind_method(
-			D_METHOD( "set_instancer_cell_streaming_margin", "margin" ), &T3DTerrain::setInstancerCellStreamingMargin );
+			D_METHOD( "set_instancer_cell_streaming_margin", "margin" ), &Terrain3D::setInstancerCellStreamingMargin );
 	ClassDB::bind_method(
-			D_METHOD( "get_instancer_cell_streaming_margin" ), &T3DTerrain::getInstancerCellStreamingMargin );
+			D_METHOD( "get_instancer_cell_streaming_margin" ), &Terrain3D::getInstancerCellStreamingMargin );
 	ClassDB::bind_method( D_METHOD( "set_instancer_cell_streaming_update_distance", "distance" ),
-			&T3DTerrain::setInstancerCellStreamingUpdateDistance );
+			&Terrain3D::setInstancerCellStreamingUpdateDistance );
 	ClassDB::bind_method( D_METHOD( "get_instancer_cell_streaming_update_distance" ),
-			&T3DTerrain::getInstancerCellStreamingUpdateDistance );
+			&Terrain3D::getInstancerCellStreamingUpdateDistance );
 	ClassDB::bind_method(
-			D_METHOD( "set_instancer_update_cell_budget", "budget" ), &T3DTerrain::setInstancerUpdateCellBudget );
-	ClassDB::bind_method( D_METHOD( "get_instancer_update_cell_budget" ), &T3DTerrain::getInstancerUpdateCellBudget );
+			D_METHOD( "set_instancer_update_cell_budget", "budget" ), &Terrain3D::setInstancerUpdateCellBudget );
+	ClassDB::bind_method( D_METHOD( "get_instancer_update_cell_budget" ), &Terrain3D::getInstancerUpdateCellBudget );
 	ClassDB::bind_method(
-			D_METHOD( "set_dynamic_node_streaming_enabled", "enabled" ), &T3DTerrain::setDynamicNodeStreamingEnabled );
-	ClassDB::bind_method( D_METHOD( "is_dynamic_node_streaming_enabled" ), &T3DTerrain::isDynamicNodeStreamingEnabled );
+			D_METHOD( "set_dynamic_node_streaming_enabled", "enabled" ), &Terrain3D::setDynamicNodeStreamingEnabled );
+	ClassDB::bind_method( D_METHOD( "is_dynamic_node_streaming_enabled" ), &Terrain3D::isDynamicNodeStreamingEnabled );
 	ClassDB::bind_method(
-			D_METHOD( "set_lightmap_streaming_enabled", "enabled" ), &T3DTerrain::setLightmapStreamingEnabled );
-	ClassDB::bind_method( D_METHOD( "is_lightmap_streaming_enabled" ), &T3DTerrain::isLightmapStreamingEnabled );
-	ClassDB::bind_method( D_METHOD( "set_lightmap_stream_radius", "radius" ), &T3DTerrain::setLightmapStreamRadius );
-	ClassDB::bind_method( D_METHOD( "get_lightmap_stream_radius" ), &T3DTerrain::getLightmapStreamRadius );
-	ClassDB::bind_method( D_METHOD( "set_lightmap_load_budget", "budget" ), &T3DTerrain::setLightmapLoadBudget );
-	ClassDB::bind_method( D_METHOD( "get_lightmap_load_budget" ), &T3DTerrain::getLightmapLoadBudget );
-	ClassDB::bind_method( D_METHOD( "set_lightmap_unload_budget", "budget" ), &T3DTerrain::setLightmapUnloadBudget );
-	ClassDB::bind_method( D_METHOD( "get_lightmap_unload_budget" ), &T3DTerrain::getLightmapUnloadBudget );
-	ClassDB::bind_method( D_METHOD( "get_lightmap_streaming_stats" ), &T3DTerrain::getLightmapStreamingStats );
+			D_METHOD( "set_lightmap_streaming_enabled", "enabled" ), &Terrain3D::setLightmapStreamingEnabled );
+	ClassDB::bind_method( D_METHOD( "is_lightmap_streaming_enabled" ), &Terrain3D::isLightmapStreamingEnabled );
+	ClassDB::bind_method( D_METHOD( "set_lightmap_stream_radius", "radius" ), &Terrain3D::setLightmapStreamRadius );
+	ClassDB::bind_method( D_METHOD( "get_lightmap_stream_radius" ), &Terrain3D::getLightmapStreamRadius );
+	ClassDB::bind_method( D_METHOD( "set_lightmap_load_budget", "budget" ), &Terrain3D::setLightmapLoadBudget );
+	ClassDB::bind_method( D_METHOD( "get_lightmap_load_budget" ), &Terrain3D::getLightmapLoadBudget );
+	ClassDB::bind_method( D_METHOD( "set_lightmap_unload_budget", "budget" ), &Terrain3D::setLightmapUnloadBudget );
+	ClassDB::bind_method( D_METHOD( "get_lightmap_unload_budget" ), &Terrain3D::getLightmapUnloadBudget );
+	ClassDB::bind_method( D_METHOD( "get_lightmap_streaming_stats" ), &Terrain3D::getLightmapStreamingStats );
 	ClassDB::bind_method( D_METHOD( "set_region_lightmap_output_directory", "directory" ),
-			&T3DTerrain::setRegionLightmapOutputDirectory );
+			&Terrain3D::setRegionLightmapOutputDirectory );
 	ClassDB::bind_method(
-			D_METHOD( "get_region_lightmap_output_directory" ), &T3DTerrain::getRegionLightmapOutputDirectory );
-	ClassDB::bind_method( D_METHOD( "set_region_lightmap_proxy_lod", "lod" ), &T3DTerrain::setRegionLightmapProxyLod );
-	ClassDB::bind_method( D_METHOD( "get_region_lightmap_proxy_lod" ), &T3DTerrain::getRegionLightmapProxyLod );
+			D_METHOD( "get_region_lightmap_output_directory" ), &Terrain3D::getRegionLightmapOutputDirectory );
+	ClassDB::bind_method( D_METHOD( "set_region_lightmap_proxy_lod", "lod" ), &Terrain3D::setRegionLightmapProxyLod );
+	ClassDB::bind_method( D_METHOD( "get_region_lightmap_proxy_lod" ), &Terrain3D::getRegionLightmapProxyLod );
 	ClassDB::bind_method(
-			D_METHOD( "set_region_lightmap_context_radius", "radius" ), &T3DTerrain::setRegionLightmapContextRadius );
+			D_METHOD( "set_region_lightmap_context_radius", "radius" ), &Terrain3D::setRegionLightmapContextRadius );
 	ClassDB::bind_method(
-			D_METHOD( "get_region_lightmap_context_radius" ), &T3DTerrain::getRegionLightmapContextRadius );
+			D_METHOD( "get_region_lightmap_context_radius" ), &Terrain3D::getRegionLightmapContextRadius );
 	ClassDB::bind_method(
-			D_METHOD( "set_region_lightmap_texel_size", "texel_size" ), &T3DTerrain::setRegionLightmapTexelSize );
-	ClassDB::bind_method( D_METHOD( "get_region_lightmap_texel_size" ), &T3DTerrain::getRegionLightmapTexelSize );
+			D_METHOD( "set_region_lightmap_texel_size", "texel_size" ), &Terrain3D::setRegionLightmapTexelSize );
+	ClassDB::bind_method( D_METHOD( "get_region_lightmap_texel_size" ), &Terrain3D::getRegionLightmapTexelSize );
 	ClassDB::bind_method(
-			D_METHOD( "set_region_lightmap_bake_quality", "quality" ), &T3DTerrain::setRegionLightmapBakeQuality );
-	ClassDB::bind_method( D_METHOD( "get_region_lightmap_bake_quality" ), &T3DTerrain::getRegionLightmapBakeQuality );
+			D_METHOD( "set_region_lightmap_bake_quality", "quality" ), &Terrain3D::setRegionLightmapBakeQuality );
+	ClassDB::bind_method( D_METHOD( "get_region_lightmap_bake_quality" ), &Terrain3D::getRegionLightmapBakeQuality );
 	ClassDB::bind_method(
-			D_METHOD( "set_region_lightmap_shadowmask_mode", "mode" ), &T3DTerrain::setRegionLightmapShadowmaskMode );
+			D_METHOD( "set_region_lightmap_shadowmask_mode", "mode" ), &Terrain3D::setRegionLightmapShadowmaskMode );
 	ClassDB::bind_method(
-			D_METHOD( "get_region_lightmap_shadowmask_mode" ), &T3DTerrain::getRegionLightmapShadowmaskMode );
-	ClassDB::bind_method( D_METHOD( "set_hlod_enabled", "enabled" ), &T3DTerrain::setHlodEnabled );
-	ClassDB::bind_method( D_METHOD( "is_hlod_enabled" ), &T3DTerrain::isHlodEnabled );
-	ClassDB::bind_method( D_METHOD( "set_hlod_manifest_path", "path" ), &T3DTerrain::setHlodManifestPath );
-	ClassDB::bind_method( D_METHOD( "get_hlod_manifest_path" ), &T3DTerrain::getHlodManifestPath );
-	ClassDB::bind_method( D_METHOD( "set_hlod_target_error_pixels", "pixels" ), &T3DTerrain::setHlodTargetErrorPixels );
-	ClassDB::bind_method( D_METHOD( "get_hlod_target_error_pixels" ), &T3DTerrain::getHlodTargetErrorPixels );
-	ClassDB::bind_method( D_METHOD( "set_hlod_hysteresis", "ratio" ), &T3DTerrain::setHlodHysteresis );
-	ClassDB::bind_method( D_METHOD( "get_hlod_hysteresis" ), &T3DTerrain::getHlodHysteresis );
-	ClassDB::bind_method( D_METHOD( "set_hlod_max_level", "level" ), &T3DTerrain::setHlodMaxLevel );
-	ClassDB::bind_method( D_METHOD( "get_hlod_max_level" ), &T3DTerrain::getHlodMaxLevel );
-	ClassDB::bind_method( D_METHOD( "set_hlod_load_budget", "budget" ), &T3DTerrain::setHlodLoadBudget );
-	ClassDB::bind_method( D_METHOD( "get_hlod_load_budget" ), &T3DTerrain::getHlodLoadBudget );
-	ClassDB::bind_method( D_METHOD( "set_hlod_unload_budget", "budget" ), &T3DTerrain::setHlodUnloadBudget );
-	ClassDB::bind_method( D_METHOD( "get_hlod_unload_budget" ), &T3DTerrain::getHlodUnloadBudget );
-	ClassDB::bind_method( D_METHOD( "set_hlod_memory_budget_mb", "budget_mb" ), &T3DTerrain::setHlodMemoryBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_hlod_memory_budget_mb" ), &T3DTerrain::getHlodMemoryBudgetMb );
-	ClassDB::bind_method( D_METHOD( "set_hlod_max_shadow_level", "level" ), &T3DTerrain::setHlodMaxShadowLevel );
-	ClassDB::bind_method( D_METHOD( "get_hlod_max_shadow_level" ), &T3DTerrain::getHlodMaxShadowLevel );
-	ClassDB::bind_method( D_METHOD( "set_hlod_forced_debug_level", "level" ), &T3DTerrain::setHlodForcedDebugLevel );
-	ClassDB::bind_method( D_METHOD( "get_hlod_forced_debug_level" ), &T3DTerrain::getHlodForcedDebugLevel );
-	ClassDB::bind_method( D_METHOD( "reload_hlod_manifest" ), &T3DTerrain::reloadHlodManifest );
-	ClassDB::bind_method( D_METHOD( "get_hlod_streaming_stats" ), &T3DTerrain::getHlodStreamingStats );
-	ClassDB::bind_method( D_METHOD( "get_hlod_debug_entries" ), &T3DTerrain::getHlodDebugEntries );
+			D_METHOD( "get_region_lightmap_shadowmask_mode" ), &Terrain3D::getRegionLightmapShadowmaskMode );
+	ClassDB::bind_method( D_METHOD( "set_hlod_enabled", "enabled" ), &Terrain3D::setHlodEnabled );
+	ClassDB::bind_method( D_METHOD( "is_hlod_enabled" ), &Terrain3D::isHlodEnabled );
+	ClassDB::bind_method( D_METHOD( "set_hlod_manifest_path", "path" ), &Terrain3D::setHlodManifestPath );
+	ClassDB::bind_method( D_METHOD( "get_hlod_manifest_path" ), &Terrain3D::getHlodManifestPath );
+	ClassDB::bind_method( D_METHOD( "set_hlod_target_error_pixels", "pixels" ), &Terrain3D::setHlodTargetErrorPixels );
+	ClassDB::bind_method( D_METHOD( "get_hlod_target_error_pixels" ), &Terrain3D::getHlodTargetErrorPixels );
+	ClassDB::bind_method( D_METHOD( "set_hlod_hysteresis", "ratio" ), &Terrain3D::setHlodHysteresis );
+	ClassDB::bind_method( D_METHOD( "get_hlod_hysteresis" ), &Terrain3D::getHlodHysteresis );
+	ClassDB::bind_method( D_METHOD( "set_hlod_max_level", "level" ), &Terrain3D::setHlodMaxLevel );
+	ClassDB::bind_method( D_METHOD( "get_hlod_max_level" ), &Terrain3D::getHlodMaxLevel );
+	ClassDB::bind_method( D_METHOD( "set_hlod_load_budget", "budget" ), &Terrain3D::setHlodLoadBudget );
+	ClassDB::bind_method( D_METHOD( "get_hlod_load_budget" ), &Terrain3D::getHlodLoadBudget );
+	ClassDB::bind_method( D_METHOD( "set_hlod_unload_budget", "budget" ), &Terrain3D::setHlodUnloadBudget );
+	ClassDB::bind_method( D_METHOD( "get_hlod_unload_budget" ), &Terrain3D::getHlodUnloadBudget );
+	ClassDB::bind_method( D_METHOD( "set_hlod_memory_budget_mb", "budget_mb" ), &Terrain3D::setHlodMemoryBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_hlod_memory_budget_mb" ), &Terrain3D::getHlodMemoryBudgetMb );
+	ClassDB::bind_method( D_METHOD( "set_hlod_max_shadow_level", "level" ), &Terrain3D::setHlodMaxShadowLevel );
+	ClassDB::bind_method( D_METHOD( "get_hlod_max_shadow_level" ), &Terrain3D::getHlodMaxShadowLevel );
+	ClassDB::bind_method( D_METHOD( "set_hlod_forced_debug_level", "level" ), &Terrain3D::setHlodForcedDebugLevel );
+	ClassDB::bind_method( D_METHOD( "get_hlod_forced_debug_level" ), &Terrain3D::getHlodForcedDebugLevel );
+	ClassDB::bind_method( D_METHOD( "reload_hlod_manifest" ), &Terrain3D::reloadHlodManifest );
+	ClassDB::bind_method( D_METHOD( "get_hlod_streaming_stats" ), &Terrain3D::getHlodStreamingStats );
+	ClassDB::bind_method( D_METHOD( "get_hlod_debug_entries" ), &Terrain3D::getHlodDebugEntries );
 	ClassDB::bind_method(
-			D_METHOD( "set_dynamic_node_stream_radius", "radius" ), &T3DTerrain::setDynamicNodeStreamRadius );
-	ClassDB::bind_method( D_METHOD( "get_dynamic_node_stream_radius" ), &T3DTerrain::getDynamicNodeStreamRadius );
+			D_METHOD( "set_dynamic_node_stream_radius", "radius" ), &Terrain3D::setDynamicNodeStreamRadius );
+	ClassDB::bind_method( D_METHOD( "get_dynamic_node_stream_radius" ), &Terrain3D::getDynamicNodeStreamRadius );
 	ClassDB::bind_method(
-			D_METHOD( "set_dynamic_node_load_region_budget", "budget" ), &T3DTerrain::setDynamicNodeLoadRegionBudget );
+			D_METHOD( "set_dynamic_node_load_region_budget", "budget" ), &Terrain3D::setDynamicNodeLoadRegionBudget );
 	ClassDB::bind_method(
-			D_METHOD( "get_dynamic_node_load_region_budget" ), &T3DTerrain::getDynamicNodeLoadRegionBudget );
+			D_METHOD( "get_dynamic_node_load_region_budget" ), &Terrain3D::getDynamicNodeLoadRegionBudget );
 	ClassDB::bind_method(
-			D_METHOD( "set_dynamic_node_load_node_budget", "budget" ), &T3DTerrain::setDynamicNodeLoadNodeBudget );
-	ClassDB::bind_method( D_METHOD( "get_dynamic_node_load_node_budget" ), &T3DTerrain::getDynamicNodeLoadNodeBudget );
+			D_METHOD( "set_dynamic_node_load_node_budget", "budget" ), &Terrain3D::setDynamicNodeLoadNodeBudget );
+	ClassDB::bind_method( D_METHOD( "get_dynamic_node_load_node_budget" ), &Terrain3D::getDynamicNodeLoadNodeBudget );
 	ClassDB::bind_method( D_METHOD( "set_dynamic_node_unload_region_budget", "budget" ),
-			&T3DTerrain::setDynamicNodeUnloadRegionBudget );
+			&Terrain3D::setDynamicNodeUnloadRegionBudget );
 	ClassDB::bind_method(
-			D_METHOD( "get_dynamic_node_unload_region_budget" ), &T3DTerrain::getDynamicNodeUnloadRegionBudget );
+			D_METHOD( "get_dynamic_node_unload_region_budget" ), &Terrain3D::getDynamicNodeUnloadRegionBudget );
 	ClassDB::bind_method(
 			D_METHOD( "add_streamed_scene", "scene", "global_transform", "state", "flags", "hlod_min_level" ),
-			&T3DTerrain::addStreamedScene,
+			&Terrain3D::addStreamedScene,
 			DEFVAL( Dictionary() ),
 			DEFVAL( 0 ),
 			DEFVAL( 1 ) );
 	ClassDB::bind_method(
 			D_METHOD( "add_streamed_scene_path", "scene_path", "global_transform", "state", "flags", "hlod_min_level" ),
-			&T3DTerrain::addStreamedScenePath,
+			&Terrain3D::addStreamedScenePath,
 			DEFVAL( Dictionary() ),
 			DEFVAL( 0 ),
 			DEFVAL( 1 ) );
-	ClassDB::bind_method( D_METHOD( "remove_streamed_scene", "spawn_id" ), &T3DTerrain::removeStreamedScene );
-	ClassDB::bind_method( D_METHOD( "allocate_stream_owner_id" ), &T3DTerrain::allocateStreamOwnerId );
-	ClassDB::bind_method( D_METHOD( "set_next_stream_owner_id", "owner_id" ), &T3DTerrain::setNextStreamOwnerId );
-	ClassDB::bind_method( D_METHOD( "get_next_stream_owner_id" ), &T3DTerrain::getNextStreamOwnerId );
-	ClassDB::bind_method( D_METHOD( "get_node_streaming_stats" ), &T3DTerrain::getNodeStreamingStats );
+	ClassDB::bind_method( D_METHOD( "remove_streamed_scene", "spawn_id" ), &Terrain3D::removeStreamedScene );
+	ClassDB::bind_method( D_METHOD( "allocate_stream_owner_id" ), &Terrain3D::allocateStreamOwnerId );
+	ClassDB::bind_method( D_METHOD( "set_next_stream_owner_id", "owner_id" ), &Terrain3D::setNextStreamOwnerId );
+	ClassDB::bind_method( D_METHOD( "get_next_stream_owner_id" ), &Terrain3D::getNextStreamOwnerId );
+	ClassDB::bind_method( D_METHOD( "get_node_streaming_stats" ), &Terrain3D::getNodeStreamingStats );
 
 	// Object references
-	ClassDB::bind_method( D_METHOD( "get_data" ), &T3DTerrain::getData );
-	ClassDB::bind_method( D_METHOD( "set_material", "material" ), &T3DTerrain::setMaterial );
-	ClassDB::bind_method( D_METHOD( "get_material" ), &T3DTerrain::getMaterial );
-	ClassDB::bind_method( D_METHOD( "set_assets", "assets" ), &T3DTerrain::setAssets );
-	ClassDB::bind_method( D_METHOD( "set_auto_shader_profile", "profile" ), &T3DTerrain::setAutoShaderProfile );
-	ClassDB::bind_method( D_METHOD( "get_auto_shader_profile" ), &T3DTerrain::getAutoShaderProfile );
-	ClassDB::bind_method( D_METHOD( "get_assets" ), &T3DTerrain::getAssets );
-	ClassDB::bind_method( D_METHOD( "get_collision" ), &T3DTerrain::getCollision );
-	ClassDB::bind_method( D_METHOD( "get_instancer" ), &T3DTerrain::getInstancer );
-	ClassDB::bind_method( D_METHOD( "get_node_streamer" ), &T3DTerrain::getNodeStreamer );
-	ClassDB::bind_method( D_METHOD( "set_editor", "editor" ), &T3DTerrain::setEditor );
-	ClassDB::bind_method( D_METHOD( "get_editor" ), &T3DTerrain::getEditor );
-	ClassDB::bind_method( D_METHOD( "set_plugin", "plugin" ), &T3DTerrain::setPlugin );
-	ClassDB::bind_method( D_METHOD( "get_plugin" ), &T3DTerrain::getPlugin );
+	ClassDB::bind_method( D_METHOD( "get_data" ), &Terrain3D::getData );
+	ClassDB::bind_method( D_METHOD( "set_material", "material" ), &Terrain3D::setMaterial );
+	ClassDB::bind_method( D_METHOD( "get_material" ), &Terrain3D::getMaterial );
+	ClassDB::bind_method( D_METHOD( "set_assets", "assets" ), &Terrain3D::setAssets );
+	ClassDB::bind_method( D_METHOD( "set_auto_shader_profile", "profile" ), &Terrain3D::setAutoShaderProfile );
+	ClassDB::bind_method( D_METHOD( "get_auto_shader_profile" ), &Terrain3D::getAutoShaderProfile );
+	ClassDB::bind_method( D_METHOD( "get_assets" ), &Terrain3D::getAssets );
+	ClassDB::bind_method( D_METHOD( "get_collision" ), &Terrain3D::getCollision );
+	ClassDB::bind_method( D_METHOD( "get_instancer" ), &Terrain3D::getInstancer );
+	ClassDB::bind_method( D_METHOD( "get_node_streamer" ), &Terrain3D::getNodeStreamer );
+	ClassDB::bind_method( D_METHOD( "set_editor", "editor" ), &Terrain3D::setEditor );
+	ClassDB::bind_method( D_METHOD( "get_editor" ), &Terrain3D::getEditor );
+	ClassDB::bind_method( D_METHOD( "set_plugin", "plugin" ), &Terrain3D::setPlugin );
+	ClassDB::bind_method( D_METHOD( "get_plugin" ), &Terrain3D::getPlugin );
 
 	// Regions
-	ClassDB::bind_method( D_METHOD( "change_region_size", "size" ), &T3DTerrain::changeRegionSize );
-	ClassDB::bind_method( D_METHOD( "get_region_size" ), &T3DTerrain::getRegionSize );
-	ClassDB::bind_method( D_METHOD( "set_save_16_bit", "enabled" ), &T3DTerrain::setSave16Bit );
-	ClassDB::bind_method( D_METHOD( "get_save_16_bit" ), &T3DTerrain::getSave16Bit );
-	ClassDB::bind_method( D_METHOD( "set_label_distance", "distance" ), &T3DTerrain::setLabelDistance );
-	ClassDB::bind_method( D_METHOD( "get_label_distance" ), &T3DTerrain::getLabelDistance );
-	ClassDB::bind_method( D_METHOD( "set_label_size", "size" ), &T3DTerrain::setLabelSize );
-	ClassDB::bind_method( D_METHOD( "get_label_size" ), &T3DTerrain::getLabelSize );
+	ClassDB::bind_method( D_METHOD( "change_region_size", "size" ), &Terrain3D::changeRegionSize );
+	ClassDB::bind_method( D_METHOD( "get_region_size" ), &Terrain3D::getRegionSize );
+	ClassDB::bind_method( D_METHOD( "set_save_16_bit", "enabled" ), &Terrain3D::setSave16Bit );
+	ClassDB::bind_method( D_METHOD( "get_save_16_bit" ), &Terrain3D::getSave16Bit );
+	ClassDB::bind_method( D_METHOD( "set_label_distance", "distance" ), &Terrain3D::setLabelDistance );
+	ClassDB::bind_method( D_METHOD( "get_label_distance" ), &Terrain3D::getLabelDistance );
+	ClassDB::bind_method( D_METHOD( "set_label_size", "size" ), &Terrain3D::setLabelSize );
+	ClassDB::bind_method( D_METHOD( "get_label_size" ), &Terrain3D::getLabelSize );
 
 	// Target Tracking
-	ClassDB::bind_method( D_METHOD( "set_camera", "camera" ), &T3DTerrain::setCamera );
-	ClassDB::bind_method( D_METHOD( "get_camera" ), &T3DTerrain::getCamera );
-	ClassDB::bind_method( D_METHOD( "set_clipmap_target", "node" ), &T3DTerrain::setClipmapTarget );
-	ClassDB::bind_method( D_METHOD( "get_clipmap_target" ), &T3DTerrain::getClipmapTarget );
-	ClassDB::bind_method( D_METHOD( "get_clipmap_target_position" ), &T3DTerrain::getClipmapTargetPosition );
-	ClassDB::bind_method( D_METHOD( "set_collision_target", "node" ), &T3DTerrain::setCollisionTarget );
-	ClassDB::bind_method( D_METHOD( "get_collision_target" ), &T3DTerrain::getCollisionTarget );
-	ClassDB::bind_method( D_METHOD( "get_collision_target_position" ), &T3DTerrain::getCollisionTargetPosition );
-	ClassDB::bind_method( D_METHOD( "set_light_target", "node" ), &T3DTerrain::setLightTarget );
+	ClassDB::bind_method( D_METHOD( "set_camera", "camera" ), &Terrain3D::setCamera );
+	ClassDB::bind_method( D_METHOD( "get_camera" ), &Terrain3D::getCamera );
+	ClassDB::bind_method( D_METHOD( "set_clipmap_target", "node" ), &Terrain3D::setClipmapTarget );
+	ClassDB::bind_method( D_METHOD( "get_clipmap_target" ), &Terrain3D::getClipmapTarget );
+	ClassDB::bind_method( D_METHOD( "get_clipmap_target_position" ), &Terrain3D::getClipmapTargetPosition );
+	ClassDB::bind_method( D_METHOD( "set_collision_target", "node" ), &Terrain3D::setCollisionTarget );
+	ClassDB::bind_method( D_METHOD( "get_collision_target" ), &Terrain3D::getCollisionTarget );
+	ClassDB::bind_method( D_METHOD( "get_collision_target_position" ), &Terrain3D::getCollisionTargetPosition );
+	ClassDB::bind_method( D_METHOD( "set_light_target", "node" ), &Terrain3D::setLightTarget );
 	ClassDB::bind_method(
-			D_METHOD( "set_semantic_shadow_policy_enabled", "enabled" ), &T3DTerrain::setSemanticShadowPolicyEnabled );
-	ClassDB::bind_method( D_METHOD( "is_semantic_shadow_policy_enabled" ), &T3DTerrain::isSemanticShadowPolicyEnabled );
+			D_METHOD( "set_semantic_shadow_policy_enabled", "enabled" ), &Terrain3D::setSemanticShadowPolicyEnabled );
+	ClassDB::bind_method( D_METHOD( "is_semantic_shadow_policy_enabled" ), &Terrain3D::isSemanticShadowPolicyEnabled );
 	ClassDB::bind_method(
-			D_METHOD( "set_environment_shadow_quality", "quality" ), &T3DTerrain::setEnvironmentShadowQuality );
-	ClassDB::bind_method( D_METHOD( "get_environment_shadow_quality" ), &T3DTerrain::getEnvironmentShadowQuality );
+			D_METHOD( "set_environment_shadow_quality", "quality" ), &Terrain3D::setEnvironmentShadowQuality );
+	ClassDB::bind_method( D_METHOD( "get_environment_shadow_quality" ), &Terrain3D::getEnvironmentShadowQuality );
 	ClassDB::bind_method(
-			D_METHOD( "set_environment_shadow_external_mask", "mask" ), &T3DTerrain::setEnvironmentShadowExternalMask );
+			D_METHOD( "set_environment_shadow_external_mask", "mask" ), &Terrain3D::setEnvironmentShadowExternalMask );
 	ClassDB::bind_method(
-			D_METHOD( "get_environment_shadow_external_mask" ), &T3DTerrain::getEnvironmentShadowExternalMask );
+			D_METHOD( "get_environment_shadow_external_mask" ), &Terrain3D::getEnvironmentShadowExternalMask );
 	ClassDB::bind_method( D_METHOD( "set_semantic_directional_reception_enabled", "enabled" ),
-			&T3DTerrain::setSemanticDirectionalReceptionEnabled );
+			&Terrain3D::setSemanticDirectionalReceptionEnabled );
 	ClassDB::bind_method( D_METHOD( "is_semantic_directional_reception_enabled" ),
-			&T3DTerrain::isSemanticDirectionalReceptionEnabled );
+			&Terrain3D::isSemanticDirectionalReceptionEnabled );
 	ClassDB::bind_method( D_METHOD( "set_environment_directional_external_mask", "mask" ),
-			&T3DTerrain::setEnvironmentDirectionalExternalMask );
+			&Terrain3D::setEnvironmentDirectionalExternalMask );
 	ClassDB::bind_method( D_METHOD( "get_environment_directional_external_mask" ),
-			&T3DTerrain::getEnvironmentDirectionalExternalMask );
-	ClassDB::bind_method( D_METHOD( "get_light_target" ), &T3DTerrain::getLightTarget );
-	ClassDB::bind_method( D_METHOD( "snap" ), &T3DTerrain::snap );
+			&Terrain3D::getEnvironmentDirectionalExternalMask );
+	ClassDB::bind_method( D_METHOD( "get_light_target" ), &Terrain3D::getLightTarget );
+	ClassDB::bind_method( D_METHOD( "snap" ), &Terrain3D::snap );
 
 	// Collision
-	ClassDB::bind_method( D_METHOD( "set_collision_mode", "mode" ), &T3DTerrain::setCollisionMode );
-	ClassDB::bind_method( D_METHOD( "get_collision_mode" ), &T3DTerrain::getCollisionMode );
-	ClassDB::bind_method( D_METHOD( "set_collision_shape_size", "size" ), &T3DTerrain::setCollisionShapeSize );
-	ClassDB::bind_method( D_METHOD( "get_collision_shape_size" ), &T3DTerrain::getCollisionShapeSize );
-	ClassDB::bind_method( D_METHOD( "set_collision_radius", "radius" ), &T3DTerrain::setCollisionRadius );
-	ClassDB::bind_method( D_METHOD( "get_collision_radius" ), &T3DTerrain::getCollisionRadius );
-	ClassDB::bind_method( D_METHOD( "set_collision_layer", "layers" ), &T3DTerrain::setCollisionLayer );
-	ClassDB::bind_method( D_METHOD( "get_collision_layer" ), &T3DTerrain::getCollisionLayer );
-	ClassDB::bind_method( D_METHOD( "set_collision_mask", "mask" ), &T3DTerrain::setCollisionMask );
-	ClassDB::bind_method( D_METHOD( "get_collision_mask" ), &T3DTerrain::getCollisionMask );
-	ClassDB::bind_method( D_METHOD( "set_collision_priority", "priority" ), &T3DTerrain::setCollisionPriority );
-	ClassDB::bind_method( D_METHOD( "get_collision_priority" ), &T3DTerrain::getCollisionPriority );
-	ClassDB::bind_method( D_METHOD( "set_physics_material", "material" ), &T3DTerrain::setPhysicsMaterial );
-	ClassDB::bind_method( D_METHOD( "get_physics_material" ), &T3DTerrain::getPhysicsMaterial );
+	ClassDB::bind_method( D_METHOD( "set_collision_mode", "mode" ), &Terrain3D::setCollisionMode );
+	ClassDB::bind_method( D_METHOD( "get_collision_mode" ), &Terrain3D::getCollisionMode );
+	ClassDB::bind_method( D_METHOD( "set_collision_shape_size", "size" ), &Terrain3D::setCollisionShapeSize );
+	ClassDB::bind_method( D_METHOD( "get_collision_shape_size" ), &Terrain3D::getCollisionShapeSize );
+	ClassDB::bind_method( D_METHOD( "set_collision_radius", "radius" ), &Terrain3D::setCollisionRadius );
+	ClassDB::bind_method( D_METHOD( "get_collision_radius" ), &Terrain3D::getCollisionRadius );
+	ClassDB::bind_method( D_METHOD( "set_collision_layer", "layers" ), &Terrain3D::setCollisionLayer );
+	ClassDB::bind_method( D_METHOD( "get_collision_layer" ), &Terrain3D::getCollisionLayer );
+	ClassDB::bind_method( D_METHOD( "set_collision_mask", "mask" ), &Terrain3D::setCollisionMask );
+	ClassDB::bind_method( D_METHOD( "get_collision_mask" ), &Terrain3D::getCollisionMask );
+	ClassDB::bind_method( D_METHOD( "set_collision_priority", "priority" ), &Terrain3D::setCollisionPriority );
+	ClassDB::bind_method( D_METHOD( "get_collision_priority" ), &Terrain3D::getCollisionPriority );
+	ClassDB::bind_method( D_METHOD( "set_physics_material", "material" ), &Terrain3D::setPhysicsMaterial );
+	ClassDB::bind_method( D_METHOD( "get_physics_material" ), &Terrain3D::getPhysicsMaterial );
+
+	// Rendering backend experiment
+	ClassDB::bind_method( D_METHOD( "set_render_backend", "backend" ), &Terrain3D::setRenderBackend );
+	ClassDB::bind_method( D_METHOD( "get_render_backend" ), &Terrain3D::getRenderBackend );
+	ClassDB::bind_method( D_METHOD( "set_rd_native_proxy_mode", "mode" ), &Terrain3D::setRdNativeProxyMode );
+	ClassDB::bind_method( D_METHOD( "get_rd_native_proxy_mode" ), &Terrain3D::getRdNativeProxyMode );
+	ClassDB::bind_method( D_METHOD( "get_rd_renderer_diagnostics" ), &Terrain3D::getRdRendererDiagnostics );
 
 	// Terrain Mesh
-	ClassDB::bind_method( D_METHOD( "set_mesh_lods", "count" ), &T3DTerrain::setMeshLods );
-	ClassDB::bind_method( D_METHOD( "get_mesh_lods" ), &T3DTerrain::getMeshLods );
+	ClassDB::bind_method( D_METHOD( "set_mesh_lods", "count" ), &Terrain3D::setMeshLods );
+	ClassDB::bind_method( D_METHOD( "get_mesh_lods" ), &Terrain3D::getMeshLods );
 	ClassDB::bind_method(
-			D_METHOD( "set_runtime_shader_tiering_enabled", "enabled" ), &T3DTerrain::setRuntimeShaderTieringEnabled );
-	ClassDB::bind_method( D_METHOD( "is_runtime_shader_tiering_enabled" ), &T3DTerrain::isRuntimeShaderTieringEnabled );
-	ClassDB::bind_method( D_METHOD( "set_runtime_near_shader_lods", "count" ), &T3DTerrain::setRuntimeNearShaderLods );
-	ClassDB::bind_method( D_METHOD( "get_runtime_near_shader_lods" ), &T3DTerrain::getRuntimeNearShaderLods );
+			D_METHOD( "set_runtime_shader_tiering_enabled", "enabled" ), &Terrain3D::setRuntimeShaderTieringEnabled );
+	ClassDB::bind_method( D_METHOD( "is_runtime_shader_tiering_enabled" ), &Terrain3D::isRuntimeShaderTieringEnabled );
+	ClassDB::bind_method( D_METHOD( "set_runtime_near_shader_lods", "count" ), &Terrain3D::setRuntimeNearShaderLods );
+	ClassDB::bind_method( D_METHOD( "get_runtime_near_shader_lods" ), &Terrain3D::getRuntimeNearShaderLods );
 	ClassDB::bind_method(
-			D_METHOD( "set_runtime_middle_shader_lods", "count" ), &T3DTerrain::setRuntimeMiddleShaderLods );
-	ClassDB::bind_method( D_METHOD( "get_runtime_middle_shader_lods" ), &T3DTerrain::getRuntimeMiddleShaderLods );
-	ClassDB::bind_method( D_METHOD( "set_runtime_near_range_end_m", "range_m" ), &T3DTerrain::setRuntimeNearRangeEndM );
-	ClassDB::bind_method( D_METHOD( "get_runtime_near_range_end_m" ), &T3DTerrain::getRuntimeNearRangeEndM );
+			D_METHOD( "set_runtime_middle_shader_lods", "count" ), &Terrain3D::setRuntimeMiddleShaderLods );
+	ClassDB::bind_method( D_METHOD( "get_runtime_middle_shader_lods" ), &Terrain3D::getRuntimeMiddleShaderLods );
+	ClassDB::bind_method( D_METHOD( "set_runtime_near_range_end_m", "range_m" ), &Terrain3D::setRuntimeNearRangeEndM );
+	ClassDB::bind_method( D_METHOD( "get_runtime_near_range_end_m" ), &Terrain3D::getRuntimeNearRangeEndM );
 	ClassDB::bind_method(
-			D_METHOD( "set_runtime_middle_range_end_m", "range_m" ), &T3DTerrain::setRuntimeMiddleRangeEndM );
-	ClassDB::bind_method( D_METHOD( "get_runtime_middle_range_end_m" ), &T3DTerrain::getRuntimeMiddleRangeEndM );
+			D_METHOD( "set_runtime_middle_range_end_m", "range_m" ), &Terrain3D::setRuntimeMiddleRangeEndM );
+	ClassDB::bind_method( D_METHOD( "get_runtime_middle_range_end_m" ), &Terrain3D::getRuntimeMiddleRangeEndM );
 	ClassDB::bind_method(
-			D_METHOD( "set_runtime_sync_detail_lods", "enabled" ), &T3DTerrain::setRuntimeSyncDetailLods );
-	ClassDB::bind_method( D_METHOD( "is_runtime_sync_detail_lods" ), &T3DTerrain::isRuntimeSyncDetailLods );
+			D_METHOD( "set_runtime_sync_detail_lods", "enabled" ), &Terrain3D::setRuntimeSyncDetailLods );
+	ClassDB::bind_method( D_METHOD( "is_runtime_sync_detail_lods" ), &Terrain3D::isRuntimeSyncDetailLods );
 	ClassDB::bind_method(
-			D_METHOD( "set_runtime_clipmap_update_budget", "count" ), &T3DTerrain::setRuntimeClipmapUpdateBudget );
-	ClassDB::bind_method( D_METHOD( "get_runtime_clipmap_update_budget" ), &T3DTerrain::getRuntimeClipmapUpdateBudget );
+			D_METHOD( "set_runtime_clipmap_update_budget", "count" ), &Terrain3D::setRuntimeClipmapUpdateBudget );
+	ClassDB::bind_method( D_METHOD( "get_runtime_clipmap_update_budget" ), &Terrain3D::getRuntimeClipmapUpdateBudget );
 	ClassDB::bind_method(
-			D_METHOD( "set_runtime_page_prepare_threads", "count" ), &T3DTerrain::setRuntimePagePrepareThreads );
-	ClassDB::bind_method( D_METHOD( "get_runtime_page_prepare_threads" ), &T3DTerrain::getRuntimePagePrepareThreads );
-	ClassDB::bind_method( D_METHOD( "set_mesh_size", "size" ), &T3DTerrain::setMeshSize );
-	ClassDB::bind_method( D_METHOD( "get_mesh_size" ), &T3DTerrain::getMeshSize );
-	ClassDB::bind_method( D_METHOD( "set_tessellation_level", "size" ), &T3DTerrain::setTessellationLevel );
-	ClassDB::bind_method( D_METHOD( "get_tessellation_level" ), &T3DTerrain::getTessellationLevel );
-	ClassDB::bind_method( D_METHOD( "set_vertex_spacing", "scale" ), &T3DTerrain::setVertexSpacing );
-	ClassDB::bind_method( D_METHOD( "get_vertex_spacing" ), &T3DTerrain::getVertexSpacing );
-	ClassDB::bind_method( D_METHOD( "set_cull_margin", "margin" ), &T3DTerrain::setCullMargin );
-	ClassDB::bind_method( D_METHOD( "get_cull_margin" ), &T3DTerrain::getCullMargin );
-	ClassDB::bind_method( D_METHOD( "set_cast_shadows", "shadow_casting_setting" ), &T3DTerrain::setCastShadows );
-	ClassDB::bind_method( D_METHOD( "get_cast_shadows" ), &T3DTerrain::getCastShadows );
-	ClassDB::bind_method( D_METHOD( "set_shadow_lod_count", "lod_count" ), &T3DTerrain::setShadowLodCount );
-	ClassDB::bind_method( D_METHOD( "get_shadow_lod_count" ), &T3DTerrain::getShadowLodCount );
-	ClassDB::bind_method( D_METHOD( "set_near_shadow_enabled", "enabled" ), &T3DTerrain::setNearShadowEnabled );
-	ClassDB::bind_method( D_METHOD( "get_near_shadow_enabled" ), &T3DTerrain::getNearShadowEnabled );
-	ClassDB::bind_method( D_METHOD( "set_middle_shadow_enabled", "enabled" ), &T3DTerrain::setMiddleShadowEnabled );
-	ClassDB::bind_method( D_METHOD( "get_middle_shadow_enabled" ), &T3DTerrain::getMiddleShadowEnabled );
-	ClassDB::bind_method( D_METHOD( "set_far_shadow_enabled", "enabled" ), &T3DTerrain::setFarShadowEnabled );
-	ClassDB::bind_method( D_METHOD( "get_far_shadow_enabled" ), &T3DTerrain::getFarShadowEnabled );
-	ClassDB::bind_method( D_METHOD( "set_near_shadow_lod_count", "lod_count" ), &T3DTerrain::setNearShadowLodCount );
-	ClassDB::bind_method( D_METHOD( "get_near_shadow_lod_count" ), &T3DTerrain::getNearShadowLodCount );
+			D_METHOD( "set_runtime_page_prepare_threads", "count" ), &Terrain3D::setRuntimePagePrepareThreads );
+	ClassDB::bind_method( D_METHOD( "get_runtime_page_prepare_threads" ), &Terrain3D::getRuntimePagePrepareThreads );
+	ClassDB::bind_method( D_METHOD( "set_mesh_size", "size" ), &Terrain3D::setMeshSize );
+	ClassDB::bind_method( D_METHOD( "get_mesh_size" ), &Terrain3D::getMeshSize );
+	ClassDB::bind_method( D_METHOD( "set_tessellation_level", "size" ), &Terrain3D::setTessellationLevel );
+	ClassDB::bind_method( D_METHOD( "get_tessellation_level" ), &Terrain3D::getTessellationLevel );
+	ClassDB::bind_method( D_METHOD( "set_vertex_spacing", "scale" ), &Terrain3D::setVertexSpacing );
+	ClassDB::bind_method( D_METHOD( "get_vertex_spacing" ), &Terrain3D::getVertexSpacing );
+	ClassDB::bind_method( D_METHOD( "set_cull_margin", "margin" ), &Terrain3D::setCullMargin );
+	ClassDB::bind_method( D_METHOD( "get_cull_margin" ), &Terrain3D::getCullMargin );
+	ClassDB::bind_method( D_METHOD( "set_cast_shadows", "shadow_casting_setting" ), &Terrain3D::setCastShadows );
+	ClassDB::bind_method( D_METHOD( "get_cast_shadows" ), &Terrain3D::getCastShadows );
+	ClassDB::bind_method( D_METHOD( "set_shadow_lod_count", "lod_count" ), &Terrain3D::setShadowLodCount );
+	ClassDB::bind_method( D_METHOD( "get_shadow_lod_count" ), &Terrain3D::getShadowLodCount );
+	ClassDB::bind_method( D_METHOD( "set_near_shadow_enabled", "enabled" ), &Terrain3D::setNearShadowEnabled );
+	ClassDB::bind_method( D_METHOD( "get_near_shadow_enabled" ), &Terrain3D::getNearShadowEnabled );
+	ClassDB::bind_method( D_METHOD( "set_middle_shadow_enabled", "enabled" ), &Terrain3D::setMiddleShadowEnabled );
+	ClassDB::bind_method( D_METHOD( "get_middle_shadow_enabled" ), &Terrain3D::getMiddleShadowEnabled );
+	ClassDB::bind_method( D_METHOD( "set_far_shadow_enabled", "enabled" ), &Terrain3D::setFarShadowEnabled );
+	ClassDB::bind_method( D_METHOD( "get_far_shadow_enabled" ), &Terrain3D::getFarShadowEnabled );
+	ClassDB::bind_method( D_METHOD( "set_near_shadow_lod_count", "lod_count" ), &Terrain3D::setNearShadowLodCount );
+	ClassDB::bind_method( D_METHOD( "get_near_shadow_lod_count" ), &Terrain3D::getNearShadowLodCount );
 	ClassDB::bind_method(
-			D_METHOD( "set_middle_shadow_lod_count", "lod_count" ), &T3DTerrain::setMiddleShadowLodCount );
-	ClassDB::bind_method( D_METHOD( "get_middle_shadow_lod_count" ), &T3DTerrain::getMiddleShadowLodCount );
-	ClassDB::bind_method( D_METHOD( "set_far_shadow_lod_count", "lod_count" ), &T3DTerrain::setFarShadowLodCount );
-	ClassDB::bind_method( D_METHOD( "get_far_shadow_lod_count" ), &T3DTerrain::getFarShadowLodCount );
-	ClassDB::bind_method( D_METHOD( "set_gi_mode", "gi_mode" ), &T3DTerrain::setGiMode );
-	ClassDB::bind_method( D_METHOD( "get_gi_mode" ), &T3DTerrain::getGiMode );
-	ClassDB::bind_method( D_METHOD( "set_render_layers", "layers" ), &T3DTerrain::setRenderLayers );
-	ClassDB::bind_method( D_METHOD( "get_render_layers" ), &T3DTerrain::getRenderLayers );
+			D_METHOD( "set_middle_shadow_lod_count", "lod_count" ), &Terrain3D::setMiddleShadowLodCount );
+	ClassDB::bind_method( D_METHOD( "get_middle_shadow_lod_count" ), &Terrain3D::getMiddleShadowLodCount );
+	ClassDB::bind_method( D_METHOD( "set_far_shadow_lod_count", "lod_count" ), &Terrain3D::setFarShadowLodCount );
+	ClassDB::bind_method( D_METHOD( "get_far_shadow_lod_count" ), &Terrain3D::getFarShadowLodCount );
+	ClassDB::bind_method( D_METHOD( "set_gi_mode", "gi_mode" ), &Terrain3D::setGiMode );
+	ClassDB::bind_method( D_METHOD( "get_gi_mode" ), &Terrain3D::getGiMode );
+	ClassDB::bind_method( D_METHOD( "set_render_layers", "layers" ), &Terrain3D::setRenderLayers );
+	ClassDB::bind_method( D_METHOD( "get_render_layers" ), &Terrain3D::getRenderLayers );
 
 	// Terrain Displacement
-	ClassDB::bind_method( D_METHOD( "set_displacement_scale", "scale" ), &T3DTerrain::setDisplacementScale );
-	ClassDB::bind_method( D_METHOD( "get_displacement_scale" ), &T3DTerrain::getDisplacementScale );
+	ClassDB::bind_method( D_METHOD( "set_displacement_scale", "scale" ), &Terrain3D::setDisplacementScale );
+	ClassDB::bind_method( D_METHOD( "get_displacement_scale" ), &Terrain3D::getDisplacementScale );
 	ClassDB::bind_method(
-			D_METHOD( "set_displacement_sharpness", "sharpness" ), &T3DTerrain::setDisplacementSharpness );
-	ClassDB::bind_method( D_METHOD( "get_displacement_sharpness" ), &T3DTerrain::getDisplacementSharpness );
+			D_METHOD( "set_displacement_sharpness", "sharpness" ), &Terrain3D::setDisplacementSharpness );
+	ClassDB::bind_method( D_METHOD( "get_displacement_sharpness" ), &Terrain3D::getDisplacementSharpness );
 	ClassDB::bind_method(
-			D_METHOD( "set_buffer_shader_override_enabled", "enabled" ), &T3DTerrain::setBufferShaderOverrideEnabled );
-	ClassDB::bind_method( D_METHOD( "is_buffer_shader_override_enabled" ), &T3DTerrain::isBufferShaderOverrideEnabled );
-	ClassDB::bind_method( D_METHOD( "set_buffer_shader_override", "shader" ), &T3DTerrain::setBufferShaderOverride );
-	ClassDB::bind_method( D_METHOD( "get_buffer_shader_override" ), &T3DTerrain::getBufferShaderOverride );
+			D_METHOD( "set_buffer_shader_override_enabled", "enabled" ), &Terrain3D::setBufferShaderOverrideEnabled );
+	ClassDB::bind_method( D_METHOD( "is_buffer_shader_override_enabled" ), &Terrain3D::isBufferShaderOverrideEnabled );
+	ClassDB::bind_method( D_METHOD( "set_buffer_shader_override", "shader" ), &Terrain3D::setBufferShaderOverride );
+	ClassDB::bind_method( D_METHOD( "get_buffer_shader_override" ), &Terrain3D::getBufferShaderOverride );
 
 	// Ocean Mesh
-	ClassDB::bind_method( D_METHOD( "set_ocean_enabled", "enabled" ), &T3DTerrain::setOceanEnabled );
-	ClassDB::bind_method( D_METHOD( "is_ocean_enabled" ), &T3DTerrain::isOceanEnabled );
+	ClassDB::bind_method( D_METHOD( "set_ocean_enabled", "enabled" ), &Terrain3D::setOceanEnabled );
+	ClassDB::bind_method( D_METHOD( "is_ocean_enabled" ), &Terrain3D::isOceanEnabled );
 	ClassDB::bind_method(
-			D_METHOD( "set_ocean_performance_preset", "preset" ), &T3DTerrain::setOceanPerformancePreset );
-	ClassDB::bind_method( D_METHOD( "get_ocean_performance_preset" ), &T3DTerrain::getOceanPerformancePreset );
+			D_METHOD( "set_ocean_performance_preset", "preset" ), &Terrain3D::setOceanPerformancePreset );
+	ClassDB::bind_method( D_METHOD( "get_ocean_performance_preset" ), &Terrain3D::getOceanPerformancePreset );
 	ClassDB::bind_method(
-			D_METHOD( "set_ocean_vertex_wave_iterations", "iterations" ), &T3DTerrain::setOceanVertexWaveIterations );
-	ClassDB::bind_method( D_METHOD( "get_ocean_vertex_wave_iterations" ), &T3DTerrain::getOceanVertexWaveIterations );
+			D_METHOD( "set_ocean_vertex_wave_iterations", "iterations" ), &Terrain3D::setOceanVertexWaveIterations );
+	ClassDB::bind_method( D_METHOD( "get_ocean_vertex_wave_iterations" ), &Terrain3D::getOceanVertexWaveIterations );
 	ClassDB::bind_method( D_METHOD( "set_ocean_fragment_wave_iterations", "iterations" ),
-			&T3DTerrain::setOceanFragmentWaveIterations );
+			&Terrain3D::setOceanFragmentWaveIterations );
 	ClassDB::bind_method(
-			D_METHOD( "get_ocean_fragment_wave_iterations" ), &T3DTerrain::getOceanFragmentWaveIterations );
-	ClassDB::bind_method( D_METHOD( "set_ocean_refraction_mode", "mode" ), &T3DTerrain::setOceanRefractionMode );
-	ClassDB::bind_method( D_METHOD( "get_ocean_refraction_mode" ), &T3DTerrain::getOceanRefractionMode );
-	ClassDB::bind_method( D_METHOD( "set_ocean_foam_mode", "mode" ), &T3DTerrain::setOceanFoamMode );
-	ClassDB::bind_method( D_METHOD( "get_ocean_foam_mode" ), &T3DTerrain::getOceanFoamMode );
-	ClassDB::bind_method( D_METHOD( "set_ocean_scattering_mode", "mode" ), &T3DTerrain::setOceanScatteringMode );
-	ClassDB::bind_method( D_METHOD( "get_ocean_scattering_mode" ), &T3DTerrain::getOceanScatteringMode );
-	ClassDB::bind_method( D_METHOD( "set_ocean_shading_mode", "mode" ), &T3DTerrain::setOceanShadingMode );
-	ClassDB::bind_method( D_METHOD( "get_ocean_shading_mode" ), &T3DTerrain::getOceanShadingMode );
-	ClassDB::bind_method( D_METHOD( "set_ocean_mesh_lods", "count" ), &T3DTerrain::setOceanMeshLods );
-	ClassDB::bind_method( D_METHOD( "get_ocean_mesh_lods" ), &T3DTerrain::getOceanMeshLods );
-	ClassDB::bind_method( D_METHOD( "set_ocean_tessellation_level", "size" ), &T3DTerrain::setOceanTessellationLevel );
-	ClassDB::bind_method( D_METHOD( "get_ocean_tessellation_level" ), &T3DTerrain::getOceanTessellationLevel );
-	ClassDB::bind_method( D_METHOD( "set_ocean_mesh_size", "size" ), &T3DTerrain::setOceanMeshSize );
-	ClassDB::bind_method( D_METHOD( "get_ocean_mesh_size" ), &T3DTerrain::getOceanMeshSize );
-	ClassDB::bind_method( D_METHOD( "set_ocean_vertex_spacing", "scale" ), &T3DTerrain::setOceanVertexSpacing );
-	ClassDB::bind_method( D_METHOD( "get_ocean_vertex_spacing" ), &T3DTerrain::getOceanVertexSpacing );
-	ClassDB::bind_method( D_METHOD( "set_ocean_cull_margin", "margin" ), &T3DTerrain::setOceanCullMargin );
-	ClassDB::bind_method( D_METHOD( "get_ocean_cull_margin" ), &T3DTerrain::getOceanCullMargin );
+			D_METHOD( "get_ocean_fragment_wave_iterations" ), &Terrain3D::getOceanFragmentWaveIterations );
+	ClassDB::bind_method( D_METHOD( "set_ocean_refraction_mode", "mode" ), &Terrain3D::setOceanRefractionMode );
+	ClassDB::bind_method( D_METHOD( "get_ocean_refraction_mode" ), &Terrain3D::getOceanRefractionMode );
+	ClassDB::bind_method( D_METHOD( "set_ocean_foam_mode", "mode" ), &Terrain3D::setOceanFoamMode );
+	ClassDB::bind_method( D_METHOD( "get_ocean_foam_mode" ), &Terrain3D::getOceanFoamMode );
+	ClassDB::bind_method( D_METHOD( "set_ocean_scattering_mode", "mode" ), &Terrain3D::setOceanScatteringMode );
+	ClassDB::bind_method( D_METHOD( "get_ocean_scattering_mode" ), &Terrain3D::getOceanScatteringMode );
+	ClassDB::bind_method( D_METHOD( "set_ocean_shading_mode", "mode" ), &Terrain3D::setOceanShadingMode );
+	ClassDB::bind_method( D_METHOD( "get_ocean_shading_mode" ), &Terrain3D::getOceanShadingMode );
+	ClassDB::bind_method( D_METHOD( "set_ocean_mesh_lods", "count" ), &Terrain3D::setOceanMeshLods );
+	ClassDB::bind_method( D_METHOD( "get_ocean_mesh_lods" ), &Terrain3D::getOceanMeshLods );
+	ClassDB::bind_method( D_METHOD( "set_ocean_tessellation_level", "size" ), &Terrain3D::setOceanTessellationLevel );
+	ClassDB::bind_method( D_METHOD( "get_ocean_tessellation_level" ), &Terrain3D::getOceanTessellationLevel );
+	ClassDB::bind_method( D_METHOD( "set_ocean_mesh_size", "size" ), &Terrain3D::setOceanMeshSize );
+	ClassDB::bind_method( D_METHOD( "get_ocean_mesh_size" ), &Terrain3D::getOceanMeshSize );
+	ClassDB::bind_method( D_METHOD( "set_ocean_vertex_spacing", "scale" ), &Terrain3D::setOceanVertexSpacing );
+	ClassDB::bind_method( D_METHOD( "get_ocean_vertex_spacing" ), &Terrain3D::getOceanVertexSpacing );
+	ClassDB::bind_method( D_METHOD( "set_ocean_cull_margin", "margin" ), &Terrain3D::setOceanCullMargin );
+	ClassDB::bind_method( D_METHOD( "get_ocean_cull_margin" ), &Terrain3D::getOceanCullMargin );
 	ClassDB::bind_method(
-			D_METHOD( "set_ocean_cast_shadows", "shadow_casting_setting" ), &T3DTerrain::setOceanCastShadows );
-	ClassDB::bind_method( D_METHOD( "get_ocean_cast_shadows" ), &T3DTerrain::getOceanCastShadows );
-	ClassDB::bind_method( D_METHOD( "set_ocean_gi_mode", "gi_mode" ), &T3DTerrain::setOceanGiMode );
-	ClassDB::bind_method( D_METHOD( "get_ocean_gi_mode" ), &T3DTerrain::getOceanGiMode );
-	ClassDB::bind_method( D_METHOD( "set_ocean_render_layers", "layers" ), &T3DTerrain::setOceanRenderLayers );
-	ClassDB::bind_method( D_METHOD( "get_ocean_render_layers" ), &T3DTerrain::getOceanRenderLayers );
-	ClassDB::bind_method( D_METHOD( "set_ocean_material", "material" ), &T3DTerrain::setOceanMaterial );
-	ClassDB::bind_method( D_METHOD( "get_ocean_material" ), &T3DTerrain::getOceanMaterial );
+			D_METHOD( "set_ocean_cast_shadows", "shadow_casting_setting" ), &Terrain3D::setOceanCastShadows );
+	ClassDB::bind_method( D_METHOD( "get_ocean_cast_shadows" ), &Terrain3D::getOceanCastShadows );
+	ClassDB::bind_method( D_METHOD( "set_ocean_gi_mode", "gi_mode" ), &Terrain3D::setOceanGiMode );
+	ClassDB::bind_method( D_METHOD( "get_ocean_gi_mode" ), &Terrain3D::getOceanGiMode );
+	ClassDB::bind_method( D_METHOD( "set_ocean_render_layers", "layers" ), &Terrain3D::setOceanRenderLayers );
+	ClassDB::bind_method( D_METHOD( "get_ocean_render_layers" ), &Terrain3D::getOceanRenderLayers );
+	ClassDB::bind_method( D_METHOD( "set_ocean_material", "material" ), &Terrain3D::setOceanMaterial );
+	ClassDB::bind_method( D_METHOD( "get_ocean_material" ), &Terrain3D::getOceanMaterial );
 
 	// Rendering
-	ClassDB::bind_method( D_METHOD( "set_mouse_layer", "layer" ), &T3DTerrain::setMouseLayer );
-	ClassDB::bind_method( D_METHOD( "get_mouse_layer" ), &T3DTerrain::getMouseLayer );
-	ClassDB::bind_method( D_METHOD( "set_free_editor_textures" ), &T3DTerrain::setFreeEditorTextures );
-	ClassDB::bind_method( D_METHOD( "get_free_editor_textures" ), &T3DTerrain::getFreeEditorTextures );
-	ClassDB::bind_method( D_METHOD( "set_instancer_mode", "mode" ), &T3DTerrain::setInstancerMode );
-	ClassDB::bind_method( D_METHOD( "get_instancer_mode" ), &T3DTerrain::getInstancerMode );
+	ClassDB::bind_method( D_METHOD( "set_mouse_layer", "layer" ), &Terrain3D::setMouseLayer );
+	ClassDB::bind_method( D_METHOD( "get_mouse_layer" ), &Terrain3D::getMouseLayer );
+	ClassDB::bind_method( D_METHOD( "set_free_editor_textures" ), &Terrain3D::setFreeEditorTextures );
+	ClassDB::bind_method( D_METHOD( "get_free_editor_textures" ), &Terrain3D::getFreeEditorTextures );
+	ClassDB::bind_method( D_METHOD( "set_instancer_mode", "mode" ), &Terrain3D::setInstancerMode );
+	ClassDB::bind_method( D_METHOD( "get_instancer_mode" ), &Terrain3D::getInstancerMode );
 
 	// Overlays
-	ClassDB::bind_method( D_METHOD( "set_show_region_grid", "enabled" ), &T3DTerrain::setShowRegionGrid );
-	ClassDB::bind_method( D_METHOD( "get_show_region_grid" ), &T3DTerrain::getShowRegionGrid );
-	ClassDB::bind_method( D_METHOD( "set_show_instancer_grid", "enabled" ), &T3DTerrain::setShowInstancerGrid );
-	ClassDB::bind_method( D_METHOD( "get_show_instancer_grid" ), &T3DTerrain::getShowInstancerGrid );
-	ClassDB::bind_method( D_METHOD( "set_show_vertex_grid", "enabled" ), &T3DTerrain::setShowVertexGrid );
-	ClassDB::bind_method( D_METHOD( "get_show_vertex_grid" ), &T3DTerrain::getShowVertexGrid );
-	ClassDB::bind_method( D_METHOD( "set_show_contours", "enabled" ), &T3DTerrain::setShowContours );
-	ClassDB::bind_method( D_METHOD( "get_show_contours" ), &T3DTerrain::getShowContours );
-	ClassDB::bind_method( D_METHOD( "set_show_navigation", "enabled" ), &T3DTerrain::setShowNavigation );
-	ClassDB::bind_method( D_METHOD( "get_show_navigation" ), &T3DTerrain::getShowNavigation );
+	ClassDB::bind_method( D_METHOD( "set_show_region_grid", "enabled" ), &Terrain3D::setShowRegionGrid );
+	ClassDB::bind_method( D_METHOD( "get_show_region_grid" ), &Terrain3D::getShowRegionGrid );
+	ClassDB::bind_method( D_METHOD( "set_show_instancer_grid", "enabled" ), &Terrain3D::setShowInstancerGrid );
+	ClassDB::bind_method( D_METHOD( "get_show_instancer_grid" ), &Terrain3D::getShowInstancerGrid );
+	ClassDB::bind_method( D_METHOD( "set_show_vertex_grid", "enabled" ), &Terrain3D::setShowVertexGrid );
+	ClassDB::bind_method( D_METHOD( "get_show_vertex_grid" ), &Terrain3D::getShowVertexGrid );
+	ClassDB::bind_method( D_METHOD( "set_show_contours", "enabled" ), &Terrain3D::setShowContours );
+	ClassDB::bind_method( D_METHOD( "get_show_contours" ), &Terrain3D::getShowContours );
+	ClassDB::bind_method( D_METHOD( "set_show_navigation", "enabled" ), &Terrain3D::setShowNavigation );
+	ClassDB::bind_method( D_METHOD( "get_show_navigation" ), &Terrain3D::getShowNavigation );
 
 	// Debug Views
-	ClassDB::bind_method( D_METHOD( "set_show_checkered", "enabled" ), &T3DTerrain::setShowCheckered );
-	ClassDB::bind_method( D_METHOD( "get_show_checkered" ), &T3DTerrain::getShowCheckered );
-	ClassDB::bind_method( D_METHOD( "set_show_grey", "enabled" ), &T3DTerrain::setShowGrey );
-	ClassDB::bind_method( D_METHOD( "get_show_grey" ), &T3DTerrain::getShowGrey );
-	ClassDB::bind_method( D_METHOD( "set_show_heightmap", "enabled" ), &T3DTerrain::setShowHeightmap );
-	ClassDB::bind_method( D_METHOD( "get_show_heightmap" ), &T3DTerrain::getShowHeightmap );
-	ClassDB::bind_method( D_METHOD( "set_show_jaggedness", "enabled" ), &T3DTerrain::setShowJaggedness );
-	ClassDB::bind_method( D_METHOD( "get_show_jaggedness" ), &T3DTerrain::getShowJaggedness );
-	ClassDB::bind_method( D_METHOD( "set_show_autoshader", "enabled" ), &T3DTerrain::setShowAutoshader );
-	ClassDB::bind_method( D_METHOD( "get_show_autoshader" ), &T3DTerrain::getShowAutoshader );
-	ClassDB::bind_method( D_METHOD( "set_show_control_texture", "enabled" ), &T3DTerrain::setShowControlTexture );
-	ClassDB::bind_method( D_METHOD( "get_show_control_texture" ), &T3DTerrain::getShowControlTexture );
-	ClassDB::bind_method( D_METHOD( "set_show_control_blend", "enabled" ), &T3DTerrain::setShowControlBlend );
-	ClassDB::bind_method( D_METHOD( "get_show_control_blend" ), &T3DTerrain::getShowControlBlend );
-	ClassDB::bind_method( D_METHOD( "set_show_control_angle", "enabled" ), &T3DTerrain::setShowControlAngle );
-	ClassDB::bind_method( D_METHOD( "get_show_control_angle" ), &T3DTerrain::getShowControlAngle );
-	ClassDB::bind_method( D_METHOD( "set_show_control_scale", "enabled" ), &T3DTerrain::setShowControlScale );
-	ClassDB::bind_method( D_METHOD( "get_show_control_scale" ), &T3DTerrain::getShowControlScale );
-	ClassDB::bind_method( D_METHOD( "set_show_colormap", "enabled" ), &T3DTerrain::setShowColormap );
-	ClassDB::bind_method( D_METHOD( "get_show_colormap" ), &T3DTerrain::getShowColormap );
-	ClassDB::bind_method( D_METHOD( "set_show_roughmap", "enabled" ), &T3DTerrain::setShowRoughmap );
-	ClassDB::bind_method( D_METHOD( "get_show_roughmap" ), &T3DTerrain::getShowRoughmap );
+	ClassDB::bind_method( D_METHOD( "set_show_checkered", "enabled" ), &Terrain3D::setShowCheckered );
+	ClassDB::bind_method( D_METHOD( "get_show_checkered" ), &Terrain3D::getShowCheckered );
+	ClassDB::bind_method( D_METHOD( "set_show_grey", "enabled" ), &Terrain3D::setShowGrey );
+	ClassDB::bind_method( D_METHOD( "get_show_grey" ), &Terrain3D::getShowGrey );
+	ClassDB::bind_method( D_METHOD( "set_show_heightmap", "enabled" ), &Terrain3D::setShowHeightmap );
+	ClassDB::bind_method( D_METHOD( "get_show_heightmap" ), &Terrain3D::getShowHeightmap );
+	ClassDB::bind_method( D_METHOD( "set_show_jaggedness", "enabled" ), &Terrain3D::setShowJaggedness );
+	ClassDB::bind_method( D_METHOD( "get_show_jaggedness" ), &Terrain3D::getShowJaggedness );
+	ClassDB::bind_method( D_METHOD( "set_show_autoshader", "enabled" ), &Terrain3D::setShowAutoshader );
+	ClassDB::bind_method( D_METHOD( "get_show_autoshader" ), &Terrain3D::getShowAutoshader );
+	ClassDB::bind_method( D_METHOD( "set_show_control_texture", "enabled" ), &Terrain3D::setShowControlTexture );
+	ClassDB::bind_method( D_METHOD( "get_show_control_texture" ), &Terrain3D::getShowControlTexture );
+	ClassDB::bind_method( D_METHOD( "set_show_control_blend", "enabled" ), &Terrain3D::setShowControlBlend );
+	ClassDB::bind_method( D_METHOD( "get_show_control_blend" ), &Terrain3D::getShowControlBlend );
+	ClassDB::bind_method( D_METHOD( "set_show_control_angle", "enabled" ), &Terrain3D::setShowControlAngle );
+	ClassDB::bind_method( D_METHOD( "get_show_control_angle" ), &Terrain3D::getShowControlAngle );
+	ClassDB::bind_method( D_METHOD( "set_show_control_scale", "enabled" ), &Terrain3D::setShowControlScale );
+	ClassDB::bind_method( D_METHOD( "get_show_control_scale" ), &Terrain3D::getShowControlScale );
+	ClassDB::bind_method( D_METHOD( "set_show_colormap", "enabled" ), &Terrain3D::setShowColormap );
+	ClassDB::bind_method( D_METHOD( "get_show_colormap" ), &Terrain3D::getShowColormap );
+	ClassDB::bind_method( D_METHOD( "set_show_roughmap", "enabled" ), &Terrain3D::setShowRoughmap );
+	ClassDB::bind_method( D_METHOD( "get_show_roughmap" ), &Terrain3D::getShowRoughmap );
 	ClassDB::bind_method(
-			D_METHOD( "set_compute_displacement_enabled", "enabled" ), &T3DTerrain::setComputeDisplacementEnabled );
-	ClassDB::bind_method( D_METHOD( "get_compute_displacement_enabled" ), &T3DTerrain::getComputeDisplacementEnabled );
+			D_METHOD( "set_compute_displacement_enabled", "enabled" ), &Terrain3D::setComputeDisplacementEnabled );
+	ClassDB::bind_method( D_METHOD( "get_compute_displacement_enabled" ), &Terrain3D::getComputeDisplacementEnabled );
 	ClassDB::bind_method(
-			D_METHOD( "set_displacement_update_distance", "distance" ), &T3DTerrain::setDisplacementUpdateDistance );
-	ClassDB::bind_method( D_METHOD( "get_displacement_update_distance" ), &T3DTerrain::getDisplacementUpdateDistance );
-	ClassDB::bind_method( D_METHOD( "is_compute_displacement_active" ), &T3DTerrain::isComputeDisplacementActive );
+			D_METHOD( "set_displacement_update_distance", "distance" ), &Terrain3D::setDisplacementUpdateDistance );
+	ClassDB::bind_method( D_METHOD( "get_displacement_update_distance" ), &Terrain3D::getDisplacementUpdateDistance );
+	ClassDB::bind_method( D_METHOD( "is_compute_displacement_active" ), &Terrain3D::isComputeDisplacementActive );
 	ClassDB::bind_method(
-			D_METHOD( "set_show_displacement_buffer", "enabled" ), &T3DTerrain::setShowDisplacementBuffer );
-	ClassDB::bind_method( D_METHOD( "get_show_displacement_buffer" ), &T3DTerrain::getShowDisplacementBuffer );
+			D_METHOD( "set_show_displacement_buffer", "enabled" ), &Terrain3D::setShowDisplacementBuffer );
+	ClassDB::bind_method( D_METHOD( "get_show_displacement_buffer" ), &Terrain3D::getShowDisplacementBuffer );
 
 	// PBR Views
-	ClassDB::bind_method( D_METHOD( "set_show_texture_albedo", "enabled" ), &T3DTerrain::setShowTextureAlbedo );
-	ClassDB::bind_method( D_METHOD( "get_show_texture_albedo" ), &T3DTerrain::getShowTextureAlbedo );
-	ClassDB::bind_method( D_METHOD( "set_show_texture_height", "enabled" ), &T3DTerrain::setShowTextureHeight );
-	ClassDB::bind_method( D_METHOD( "get_show_texture_height" ), &T3DTerrain::getShowTextureHeight );
-	ClassDB::bind_method( D_METHOD( "set_show_texture_normal", "enabled" ), &T3DTerrain::setShowTextureNormal );
-	ClassDB::bind_method( D_METHOD( "get_show_texture_normal" ), &T3DTerrain::getShowTextureNormal );
-	ClassDB::bind_method( D_METHOD( "set_show_texture_rough", "enabled" ), &T3DTerrain::setShowTextureRough );
-	ClassDB::bind_method( D_METHOD( "get_show_texture_rough" ), &T3DTerrain::getShowTextureRough );
-	ClassDB::bind_method( D_METHOD( "set_show_texture_ao", "enabled" ), &T3DTerrain::setShowTextureAo );
-	ClassDB::bind_method( D_METHOD( "get_show_texture_ao" ), &T3DTerrain::getShowTextureAo );
+	ClassDB::bind_method( D_METHOD( "set_show_texture_albedo", "enabled" ), &Terrain3D::setShowTextureAlbedo );
+	ClassDB::bind_method( D_METHOD( "get_show_texture_albedo" ), &Terrain3D::getShowTextureAlbedo );
+	ClassDB::bind_method( D_METHOD( "set_show_texture_height", "enabled" ), &Terrain3D::setShowTextureHeight );
+	ClassDB::bind_method( D_METHOD( "get_show_texture_height" ), &Terrain3D::getShowTextureHeight );
+	ClassDB::bind_method( D_METHOD( "set_show_texture_normal", "enabled" ), &Terrain3D::setShowTextureNormal );
+	ClassDB::bind_method( D_METHOD( "get_show_texture_normal" ), &Terrain3D::getShowTextureNormal );
+	ClassDB::bind_method( D_METHOD( "set_show_texture_rough", "enabled" ), &Terrain3D::setShowTextureRough );
+	ClassDB::bind_method( D_METHOD( "get_show_texture_rough" ), &Terrain3D::getShowTextureRough );
+	ClassDB::bind_method( D_METHOD( "set_show_texture_ao", "enabled" ), &Terrain3D::setShowTextureAo );
+	ClassDB::bind_method( D_METHOD( "get_show_texture_ao" ), &Terrain3D::getShowTextureAo );
 
 	// Utility
 	ClassDB::bind_method( D_METHOD( "get_intersection", "src_pos", "direction", "gpu_mode" ),
-			&T3DTerrain::getIntersection,
+			&Terrain3D::getIntersection,
 			DEFVAL( false ) );
 	ClassDB::bind_method( D_METHOD( "get_raycast_result", "src_pos", "direction", "collision_mask", "exclude_terrain" ),
-			&T3DTerrain::getRaycastResult,
+			&Terrain3D::getRaycastResult,
 			DEFVAL( 0xFFFFFFFF ),
 			DEFVAL( false ) );
 	ClassDB::bind_method(
-			D_METHOD( "bake_mesh", "lod", "filter" ), &T3DTerrain::bakeMesh, DEFVAL( HEIGHT_FILTER_NEAREST ) );
+			D_METHOD( "bake_mesh", "lod", "filter" ), &Terrain3D::bakeMesh, DEFVAL( HEIGHT_FILTER_NEAREST ) );
 	ClassDB::bind_method(
 			D_METHOD( "bake_region_lightmap_mesh", "region_location", "lod", "context_radius_regions", "texel_size" ),
-			&T3DTerrain::bakeRegionLightmapMesh,
+			&Terrain3D::bakeRegionLightmapMesh,
 			DEFVAL( 2 ),
 			DEFVAL( 1 ),
 			DEFVAL( 1.0f ) );
-	ClassDB::bind_method( D_METHOD( "bake_occluder", "lod" ), &T3DTerrain::bakeOccluder );
+	ClassDB::bind_method( D_METHOD( "bake_occluder", "lod" ), &Terrain3D::bakeOccluder );
 	ClassDB::bind_method( D_METHOD( "generate_nav_mesh_source_geometry", "global_aabb", "require_nav" ),
-			&T3DTerrain::generateNavMeshSourceGeometry,
+			&Terrain3D::generateNavMeshSourceGeometry,
 			DEFVAL( true ) );
 
 	ADD_GROUP( "General / Data & Authoring", "" );
@@ -889,14 +902,14 @@ void T3DTerrain::_bind_methods( void ) {
 			"get_region_lightmap_shadowmask_mode" );
 
 	ADD_GROUP( "Resources", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "material", PROPERTY_HINT_RESOURCE_TYPE, "T3DMaterial" ),
+	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "material", PROPERTY_HINT_RESOURCE_TYPE, "Terrain3DMaterial" ),
 			"set_material",
 			"get_material" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "assets", PROPERTY_HINT_RESOURCE_TYPE, "T3DAssets" ),
+	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "assets", PROPERTY_HINT_RESOURCE_TYPE, "Terrain3DAssets" ),
 			"set_assets",
 			"get_assets" );
 	ADD_PROPERTY(
-			PropertyInfo( Variant::OBJECT, "auto_shader_profile", PROPERTY_HINT_RESOURCE_TYPE, "T3DAutoShaderProfile" ),
+			PropertyInfo( Variant::OBJECT, "auto_shader_profile", PROPERTY_HINT_RESOURCE_TYPE, "Terrain3DAutoShaderProfile" ),
 			"set_auto_shader_profile",
 			"get_auto_shader_profile" );
 	ADD_PROPERTY( PropertyInfo( Variant::OBJECT,
@@ -907,20 +920,20 @@ void T3DTerrain::_bind_methods( void ) {
 						  "Node3D" ),
 			"set_light_target",
 			"get_light_target" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE, "T3DData" ),
+	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE, "Terrain3DData" ),
 			"",
 			"get_data" );
 	ADD_PROPERTY(
-			PropertyInfo( Variant::OBJECT, "collision", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE, "T3DCollision" ),
+			PropertyInfo( Variant::OBJECT, "collision", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE, "Terrain3DCollision" ),
 			"",
 			"get_collision" );
 	ADD_PROPERTY(
-			PropertyInfo( Variant::OBJECT, "instancer", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE, "T3DInstancer" ),
+			PropertyInfo( Variant::OBJECT, "instancer", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE, "Terrain3DInstancer" ),
 			"",
 			"get_instancer" );
 	ADD_PROPERTY(
 			PropertyInfo(
-					Variant::OBJECT, "node_streamer", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE, "T3DNodeStreamer" ),
+					Variant::OBJECT, "node_streamer", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE, "Terrain3DNodeStreamer" ),
 			"",
 			"get_node_streamer" );
 
@@ -955,6 +968,16 @@ void T3DTerrain::_bind_methods( void ) {
 			"get_performance_profile_signature" );
 
 	ADD_GROUP( "Terrain Rendering", "" );
+
+	ADD_SUBGROUP( "RenderingDevice Experiment", "rd_" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "render_backend", PROPERTY_HINT_ENUM,
+				"RenderingServer,RenderingDevice Direct,RenderingDevice Hybrid" ),
+			"set_render_backend",
+			"get_render_backend" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "rd_native_proxy_mode", PROPERTY_HINT_ENUM,
+				"Disabled,Shadows Only,Full Native" ),
+			"set_rd_native_proxy_mode",
+			"get_rd_native_proxy_mode" );
 
 	ADD_SUBGROUP( "Geometry & Clipmap", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::OBJECT,

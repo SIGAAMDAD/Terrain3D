@@ -36,14 +36,14 @@ t3dMiddleHeightRegionCacheForEachSquareRing( const Vector2i &rCenter, const int 
 	return true;
 }
 
-T3DMiddleHeightRegionCache::T3DMiddleHeightRegionCache( T3DRegionRepository *pRepository,
-		T3DSamplingStorage *pSamplingStorage,
-		T3DRuntimePageStore *pRuntimePageStore ) :
+Terrain3DMiddleHeightRegionCache::Terrain3DMiddleHeightRegionCache( Terrain3DRegionRepository *pRepository,
+		Terrain3DSamplingStorage *pSamplingStorage,
+		Terrain3DRuntimePageStore *pRuntimePageStore ) :
 		m_pRepository( pRepository ), m_pSamplingStorage( pSamplingStorage ), m_pRuntimePageStore( pRuntimePageStore ) {
 	reset();
 }
 
-void T3DMiddleHeightRegionCache::reset( void ) {
+void Terrain3DMiddleHeightRegionCache::reset( void ) {
 	m_generatedHeightMaps.clear();
 	m_generatedRegionMap.clear();
 	std::fill_n( m_szRegionMap, s_nMaxRegionSlots, ( uint16_t )( 0 ) );
@@ -66,7 +66,7 @@ void T3DMiddleHeightRegionCache::reset( void ) {
 	m_nStreamingGenerationLast = 0u;
 }
 
-bool T3DMiddleHeightRegionCache::configure( const t3dMiddleHeightRegionCacheConfig_t &rConfig ) {
+bool Terrain3DMiddleHeightRegionCache::configure( const t3dMiddleHeightRegionCacheConfig_t &rConfig ) {
 	m_config = rConfig;
 	if ( !m_pRepository || m_pRepository->getRegionSize() <= 0 || m_pRepository->getRegionMapSize() <= 0 ||
 			m_pRepository->getActiveRegionCount() <= 0 ) {
@@ -120,11 +120,11 @@ bool T3DMiddleHeightRegionCache::configure( const t3dMiddleHeightRegionCacheConf
 	return updatePageTableTexture();
 }
 
-int T3DMiddleHeightRegionCache::findSlot( const Vector2i &vLocation ) const {
+int Terrain3DMiddleHeightRegionCache::findSlot( const Vector2i &vLocation ) const {
 	if ( !m_pRepository ) {
 		return -1;
 	}
-	const int map_index = T3DRegionRepository::getRegionMapIndex( vLocation );
+	const int map_index = Terrain3DRegionRepository::getRegionMapIndex( vLocation );
 	if ( !m_pRepository->isLocationValid( vLocation ) || map_index < 0 ) {
 		return -1;
 	}
@@ -136,19 +136,19 @@ int T3DMiddleHeightRegionCache::findSlot( const Vector2i &vLocation ) const {
 	return layer;
 }
 
-Ref<Image> T3DMiddleHeightRegionCache::makeHeightImage( const Vector2i &vLocation,
+Ref<Image> Terrain3DMiddleHeightRegionCache::makeHeightImage( const Vector2i &vLocation,
 		const bool bRuntimeResolution ) const {
 	if ( !m_pRepository || !m_pSamplingStorage ) {
 		return Ref<Image>();
 	}
-	T3DActiveMapLease lease = m_pSamplingStorage->acquireActive( vLocation );
+	Terrain3DActiveMapLease lease = m_pSamplingStorage->acquireActive( vLocation );
 	const uint16_t *pActiveHeight = nullptr;
 	PackedByteArray source_bytes;
 	const uint8_t *pSourceBytes = nullptr;
 	if ( lease.valid() && lease.view().m_nRegionSize == m_pRepository->getRegionSize() && lease.view().m_pHeight ) {
 		pActiveHeight = lease.view().m_pHeight;
 	} else {
-		const T3DRegion *const pRegion = m_pRepository->getRegionPtr( vLocation );
+		const Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( vLocation );
 		const Ref<Image> pHeight = pRegion && !pRegion->isDeleted() ? pRegion->getHeightMap() : Ref<Image>();
 		if ( pHeight.is_null() || pHeight->get_width() != m_pRepository->getRegionSize() ||
 				pHeight->get_height() != m_pRepository->getRegionSize() || pHeight->get_format() != Image::FORMAT_R16 ||
@@ -196,7 +196,7 @@ Ref<Image> T3DMiddleHeightRegionCache::makeHeightImage( const Vector2i &vLocatio
 	return Image::create_from_data( side, side, false, Image::FORMAT_R16, bytes );
 }
 
-bool T3DMiddleHeightRegionCache::uploadLayer( const int nLayer,
+bool Terrain3DMiddleHeightRegionCache::uploadLayer( const int nLayer,
 		const Vector2i &vLocation,
 		const Ref<Image> &rPreparedHeight ) {
 	if ( !m_bTexturesReady || nLayer < 0 || nLayer >= m_nPhysicalLayerCount ) {
@@ -213,7 +213,7 @@ bool T3DMiddleHeightRegionCache::uploadLayer( const int nLayer,
 	return true;
 }
 
-int T3DMiddleHeightRegionCache::collectDesired( const t3dResidencyFrameState_t &rFrame,
+int Terrain3DMiddleHeightRegionCache::collectDesired( const t3dResidencyFrameState_t &rFrame,
 		const Vector2i &rCenter,
 		Vector2i *pLocations,
 		const int nCapacity,
@@ -238,7 +238,7 @@ int T3DMiddleHeightRegionCache::collectDesired( const t3dResidencyFrameState_t &
 							rFrame.streamingState( location ) != wanted ) {
 						return true;
 					}
-					const int map_index = T3DRegionRepository::getRegionMapIndex( location );
+					const int map_index = Terrain3DRegionRepository::getRegionMapIndex( location );
 					if ( map_index < 0 || selected_map[map_index] != 0u ) {
 						return true;
 					}
@@ -250,7 +250,7 @@ int T3DMiddleHeightRegionCache::collectDesired( const t3dResidencyFrameState_t &
 	rRequiredCount = output_count;
 	for ( int slot = 0; slot < m_pRepository->getSlotCount() && output_count < capacity; ++slot ) {
 		const Vector2i location = m_pRepository->getSlotsData()[slot];
-		const int map_index = location == s_v2iMax ? -1 : T3DRegionRepository::getRegionMapIndex( location );
+		const int map_index = location == s_v2iMax ? -1 : Terrain3DRegionRepository::getRegionMapIndex( location );
 		if ( map_index < 0 || selected_map[map_index] != 0u || !m_pRepository->getRegionPtr( location ) ||
 				!rFrame.isPrefetch( location ) ) {
 			continue;
@@ -261,7 +261,7 @@ int T3DMiddleHeightRegionCache::collectDesired( const t3dResidencyFrameState_t &
 	return output_count;
 }
 
-bool T3DMiddleHeightRegionCache::updatePageTableTexture( void ) {
+bool Terrain3DMiddleHeightRegionCache::updatePageTableTexture( void ) {
 	if ( !m_pRepository || m_pRepository->getRegionMapSize() <= 0 ) {
 		return false;
 	}
@@ -279,8 +279,8 @@ bool T3DMiddleHeightRegionCache::updatePageTableTexture( void ) {
 			continue;
 		}
 		const Vector2i location = m_szLocations[layer];
-		const int x = location.m_nX + half;
-		const int y = location.m_nY + half;
+		const int x = location.x + half;
+		const int y = location.y + half;
 		if ( ( uint32_t )( x ) >= ( uint32_t )( m_pRepository->getRegionMapSize() ) ||
 				( uint32_t )( y ) >= ( uint32_t )( m_pRepository->getRegionMapSize() ) ) {
 			continue;
@@ -305,10 +305,10 @@ bool T3DMiddleHeightRegionCache::updatePageTableTexture( void ) {
 	return ok;
 }
 
-void T3DMiddleHeightRegionCache::invalidate( const Vector2i &vLocation ) {
+void Terrain3DMiddleHeightRegionCache::invalidate( const Vector2i &vLocation ) {
 	const int layer = findSlot( vLocation );
 	if ( layer >= 0 ) {
-		const int map_index = T3DRegionRepository::getRegionMapIndex( vLocation );
+		const int map_index = Terrain3DRegionRepository::getRegionMapIndex( vLocation );
 		if ( map_index >= 0 ) {
 			m_szRegionMap[map_index] = 0u;
 		}
@@ -321,7 +321,7 @@ void T3DMiddleHeightRegionCache::invalidate( const Vector2i &vLocation ) {
 	m_bSelectionDirty = true;
 }
 
-void T3DMiddleHeightRegionCache::update( const t3dResidencyFrameState_t &rFrame,
+void Terrain3DMiddleHeightRegionCache::update( const t3dResidencyFrameState_t &rFrame,
 		const bool bForce,
 		const int nEffectiveUploadLayers,
 		const t3dMiddleHeightRegionCacheConfig_t &rConfig ) {
@@ -384,7 +384,7 @@ void T3DMiddleHeightRegionCache::update( const t3dResidencyFrameState_t &rFrame,
 	m_nDesiredLastTick = desired_count;
 	uint8_t desired_map[s_nMaxRegionSlots] = {};
 	for ( int index = 0; index < desired_count; ++index ) {
-		const int map_index = T3DRegionRepository::getRegionMapIndex( desired[index] );
+		const int map_index = Terrain3DRegionRepository::getRegionMapIndex( desired[index] );
 		if ( map_index >= 0 ) {
 			desired_map[map_index] = 1u;
 		}
@@ -394,7 +394,7 @@ void T3DMiddleHeightRegionCache::update( const t3dResidencyFrameState_t &rFrame,
 			continue;
 		}
 		const Vector2i location = m_szLocations[layer];
-		const int map_index = T3DRegionRepository::getRegionMapIndex( location );
+		const int map_index = Terrain3DRegionRepository::getRegionMapIndex( location );
 		if ( map_index >= 0 && desired_map[map_index] != 0u ) {
 			m_szLastUseTick[layer] = m_nTick;
 			continue;
@@ -461,7 +461,7 @@ void T3DMiddleHeightRegionCache::update( const t3dResidencyFrameState_t &rFrame,
 		m_szLocations[free_layer] = location;
 		m_szLastUseTick[free_layer] = m_nTick;
 		m_szSlotStates[free_layer] = TERRAIN3D_GPU_SLOT_MAPPED;
-		const int map_index = T3DRegionRepository::getRegionMapIndex( location );
+		const int map_index = Terrain3DRegionRepository::getRegionMapIndex( location );
 		if ( map_index >= 0 ) {
 			m_szRegionMap[map_index] = ( uint16_t )( free_layer + 1 );
 		}
@@ -483,7 +483,7 @@ void T3DMiddleHeightRegionCache::update( const t3dResidencyFrameState_t &rFrame,
 	m_bSelectionDirty = !bAllDesiredResident || bRetirementPending || m_bPageTableDirty;
 }
 
-size_t T3DMiddleHeightRegionCache::getReservedBytes( void ) const {
+size_t Terrain3DMiddleHeightRegionCache::getReservedBytes( void ) const {
 	if ( !m_pRepository || m_nPhysicalLayerCount <= 0 || m_pRepository->getRegionSize() <= 0 ) {
 		return 0u;
 	}
@@ -494,7 +494,7 @@ size_t T3DMiddleHeightRegionCache::getReservedBytes( void ) const {
 	return side * side * sizeof( uint16_t ) * ( size_t )( m_nPhysicalLayerCount ) + page_table;
 }
 
-t3dMiddleHeightRegionCacheStats_t T3DMiddleHeightRegionCache::getStats( void ) const {
+t3dMiddleHeightRegionCacheStats_t Terrain3DMiddleHeightRegionCache::getStats( void ) const {
 	t3dMiddleHeightRegionCacheStats_t stats;
 	stats.m_nResident = m_nResidentCount;
 	stats.m_nMappedCapacity = m_nMappedCapacity;
@@ -510,7 +510,7 @@ t3dMiddleHeightRegionCacheStats_t T3DMiddleHeightRegionCache::getStats( void ) c
 	return stats;
 }
 
-Dictionary T3DMiddleHeightRegionCache::getStatsDictionary( void ) const {
+Dictionary Terrain3DMiddleHeightRegionCache::getStatsDictionary( void ) const {
 	const t3dMiddleHeightRegionCacheStats_t values = getStats();
 	Dictionary stats;
 	stats["resident"] = values.m_nResident;

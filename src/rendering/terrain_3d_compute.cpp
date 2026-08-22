@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <cmath>
 #include <godot_cpp/classes/rd_sampler_state.hpp>
 #include <godot_cpp/classes/rd_shader_file.hpp>
 #include <godot_cpp/classes/rd_shader_spirv.hpp>
@@ -91,11 +92,11 @@ static uint64_t t3dComputeHashBytes( const uint8_t *pData, const size_t nSize ) 
 	return hash;
 }
 
-T3DCompute::~T3DCompute( void ) {
+Terrain3DCompute::~Terrain3DCompute( void ) {
 	shutdown();
 }
 
-uint32_t T3DCompute::growthCapacity( const uint32_t nRequired ) {
+uint32_t Terrain3DCompute::growthCapacity( const uint32_t nRequired ) {
 	if ( nRequired == 0u ) {
 		return 0u;
 	}
@@ -109,7 +110,7 @@ uint32_t T3DCompute::growthCapacity( const uint32_t nRequired ) {
 	return ( uint32_t )( capacity );
 }
 
-PackedByteArray T3DCompute::copyToBytes( const void *pData, const size_t nSize ) {
+PackedByteArray Terrain3DCompute::copyToBytes( const void *pData, const size_t nSize ) {
 	PackedByteArray bytes;
 	if ( !pData || nSize == 0u || nSize > ( size_t )( std::numeric_limits<int64_t>::max() ) ) {
 		return bytes;
@@ -119,7 +120,7 @@ PackedByteArray T3DCompute::copyToBytes( const void *pData, const size_t nSize )
 	return bytes;
 }
 
-bool T3DCompute::ensureDevice( void ) {
+bool Terrain3DCompute::ensureDevice( void ) {
 	if ( m_pRd ) {
 		return true;
 	}
@@ -140,7 +141,7 @@ bool T3DCompute::ensureDevice( void ) {
 	return true;
 }
 
-bool T3DCompute::ensureRenderDevice( void ) {
+bool Terrain3DCompute::ensureRenderDevice( void ) {
 	if ( m_pRenderRd ) {
 		return true;
 	}
@@ -157,7 +158,7 @@ bool T3DCompute::ensureRenderDevice( void ) {
 	return true;
 }
 
-bool T3DCompute::ensurePipeline( t3dPipeline_t &rPipeline, const String &rPath, const String &rName ) {
+bool Terrain3DCompute::ensurePipeline( t3dPipeline_t &rPipeline, const String &rPath, const String &rName ) {
 	if ( rPipeline.m_hPipeline.is_valid() ) {
 		return true;
 	}
@@ -195,7 +196,7 @@ bool T3DCompute::ensurePipeline( t3dPipeline_t &rPipeline, const String &rPath, 
 	return true;
 }
 
-bool T3DCompute::ensureRenderPipeline( t3dPipeline_t &rPipeline,
+bool Terrain3DCompute::ensureRenderPipeline( t3dPipeline_t &rPipeline,
 		const Ref<RDShaderSPIRV> &rSpirv,
 		const String &rName ) {
 	if ( rPipeline.m_hPipeline.is_valid() ) {
@@ -224,21 +225,21 @@ bool T3DCompute::ensureRenderPipeline( t3dPipeline_t &rPipeline,
 	return true;
 }
 
-void T3DCompute::freeUniformSet( RID &rUniformSet ) {
+void Terrain3DCompute::freeUniformSet( RID &rUniformSet ) {
 	if ( m_pRd && rUniformSet.is_valid() ) {
 		m_pRd->free_rid( rUniformSet );
 	}
 	rUniformSet = RID();
 }
 
-void T3DCompute::freeBuffer( RID &rBuffer ) {
+void Terrain3DCompute::freeBuffer( RID &rBuffer ) {
 	if ( m_pRd && rBuffer.is_valid() ) {
 		m_pRd->free_rid( rBuffer );
 	}
 	rBuffer = RID();
 }
 
-void T3DCompute::freePipeline( t3dPipeline_t &rPipeline ) {
+void Terrain3DCompute::freePipeline( t3dPipeline_t &rPipeline ) {
 	if ( m_pRd && rPipeline.m_hPipeline.is_valid() ) {
 		m_pRd->free_rid( rPipeline.m_hPipeline );
 	}
@@ -248,21 +249,21 @@ void T3DCompute::freePipeline( t3dPipeline_t &rPipeline ) {
 	rPipeline = t3dPipeline_t{};
 }
 
-void T3DCompute::freeRenderUniformSet( RID &rUniformSet ) {
+void Terrain3DCompute::freeRenderUniformSet( RID &rUniformSet ) {
 	if ( m_pRenderRd && rUniformSet.is_valid() ) {
 		m_pRenderRd->free_rid( rUniformSet );
 	}
 	rUniformSet = RID();
 }
 
-void T3DCompute::freeRenderRid( RID &rRid ) {
+void Terrain3DCompute::freeRenderRid( RID &rRid ) {
 	if ( m_pRenderRd && rRid.is_valid() ) {
 		m_pRenderRd->free_rid( rRid );
 	}
 	rRid = RID();
 }
 
-void T3DCompute::freeRenderPipeline( t3dPipeline_t &rPipeline ) {
+void Terrain3DCompute::freeRenderPipeline( t3dPipeline_t &rPipeline ) {
 	if ( m_pRenderRd && rPipeline.m_hPipeline.is_valid() ) {
 		m_pRenderRd->free_rid( rPipeline.m_hPipeline );
 	}
@@ -272,7 +273,7 @@ void T3DCompute::freeRenderPipeline( t3dPipeline_t &rPipeline ) {
 	rPipeline = t3dPipeline_t{};
 }
 
-bool T3DCompute::ensureBrushCapacity( const uint32_t nBytes ) {
+bool Terrain3DCompute::ensureBrushCapacity( const uint32_t nBytes ) {
 	if ( nBytes <= m_nBrushCapacity && m_hBrushBuffer.is_valid() && m_hBrushUniformSet.is_valid() ) {
 		return true;
 	}
@@ -295,7 +296,7 @@ bool T3DCompute::ensureBrushCapacity( const uint32_t nBytes ) {
 	return true;
 }
 
-bool T3DCompute::ensureDerivedCapacity( const uint32_t nInputBytes, const uint32_t nOutputBytes ) {
+bool Terrain3DCompute::ensureDerivedCapacity( const uint32_t nInputBytes, const uint32_t nOutputBytes ) {
 	if ( nInputBytes <= m_nDerivedInputCapacity && nOutputBytes <= m_nDerivedOutputCapacity &&
 			m_hDerivedInputBuffer.is_valid() && m_hDerivedOutputBuffer.is_valid() && m_hDerivedUniformSet.is_valid() ) {
 		return true;
@@ -322,7 +323,7 @@ bool T3DCompute::ensureDerivedCapacity( const uint32_t nInputBytes, const uint32
 	return true;
 }
 
-void T3DCompute::freeDisplacementTexture( void ) {
+void Terrain3DCompute::freeDisplacementTexture( void ) {
 	freeRenderUniformSet( m_hDisplacementUniformSet );
 	RenderingServer *const pServer = RenderingServer::get_singleton();
 	if ( pServer && m_hDisplacementRsTexture.is_valid() ) {
@@ -343,7 +344,7 @@ void T3DCompute::freeDisplacementTexture( void ) {
 	m_nDisplacementHeight = 0u;
 }
 
-bool T3DCompute::ensureDisplacementResources( const uint32_t nWidth,
+bool Terrain3DCompute::ensureDisplacementResources( const uint32_t nWidth,
 		const uint32_t nHeight,
 		const Ref<RDShaderSPIRV> &rSpirv ) {
 	if ( !ensureRenderPipeline( m_displacementPipeline, rSpirv, "Terrain3D displacement compute" ) ) {
@@ -437,16 +438,16 @@ bool T3DCompute::ensureDisplacementResources( const uint32_t nWidth,
 	return true;
 }
 
-bool T3DCompute::prepareDisplacementRequest( T3DTerrain *const pTerrain,
+bool Terrain3DCompute::prepareDisplacementRequest( Terrain3D *const pTerrain,
 		const Vector3 &rTargetPosition,
 		t3dDisplacementRequest_t &rRequest ) {
 	rRequest = t3dDisplacementRequest_t{};
 	if ( !pTerrain || pTerrain->getTessellationLevel() <= 0 ) {
 		return false;
 	}
-	const Ref<T3DMaterial> pMaterial = pTerrain->getMaterial();
-	const Ref<T3DAssets> pAssets = pTerrain->getAssets();
-	T3DData *const data = pTerrain->getData();
+	const Ref<Terrain3DMaterial> pMaterial = pTerrain->getMaterial();
+	const Ref<Terrain3DAssets> pAssets = pTerrain->getAssets();
+	Terrain3DData *const data = pTerrain->getData();
 	if ( pMaterial.is_null() || pAssets.is_null() || !data || !pAssets->usesPackedPbr() ) {
 		setError( "Compute displacement requires the packed-PBR/R8 texture path" );
 		return false;
@@ -563,7 +564,7 @@ bool T3DCompute::prepareDisplacementRequest( T3DTerrain *const pTerrain,
 	return rRequest.valid();
 }
 
-bool T3DCompute::dispatchDisplacementRequest( const t3dDisplacementRequest_t &rRequest, RID &rTexture ) {
+bool Terrain3DCompute::dispatchDisplacementRequest( const t3dDisplacementRequest_t &rRequest, RID &rTexture ) {
 	rTexture = RID();
 	if ( !rRequest.valid() || !ensureRenderDevice() ||
 			!ensureDisplacementResources( rRequest.m_nWidth, rRequest.m_nHeight, rRequest.m_shaderSpirv ) ) {
@@ -646,7 +647,7 @@ bool T3DCompute::dispatchDisplacementRequest( const t3dDisplacementRequest_t &rR
 	return rTexture.is_valid();
 }
 
-void T3DCompute::shutdownDisplacementResources( void ) {
+void Terrain3DCompute::shutdownDisplacementResources( void ) {
 	freeDisplacementTexture();
 	freeRenderPipeline( m_displacementPipeline );
 	freeRenderRid( m_hNearestSampler );
@@ -655,11 +656,11 @@ void T3DCompute::shutdownDisplacementResources( void ) {
 	m_bRenderDeviceAttempted = false;
 }
 
-bool T3DCompute::isAvailable( void ) {
+bool Terrain3DCompute::isAvailable( void ) {
 	return ensureDevice();
 }
 
-void T3DCompute::processBrushCpu( eastl::vector<t3dBrushElement_t> &rElements, const t3dBrushParams_t &p ) {
+void Terrain3DCompute::processBrushCpu( eastl::vector<t3dBrushElement_t> &rElements, const t3dBrushParams_t &p ) {
 	for ( t3dBrushElement_t &e : rElements ) {
 		if ( ( e.m_nFlags & 1u ) == 0u ) {
 			continue;
@@ -807,7 +808,7 @@ void T3DCompute::processBrushCpu( eastl::vector<t3dBrushElement_t> &rElements, c
 	}
 }
 
-bool T3DCompute::processBrush( eastl::vector<t3dBrushElement_t> &rElements, const t3dBrushParams_t &rParams ) {
+bool Terrain3DCompute::processBrush( eastl::vector<t3dBrushElement_t> &rElements, const t3dBrushParams_t &rParams ) {
 	if ( rElements.empty() ) {
 		return true;
 	}
@@ -854,7 +855,7 @@ bool T3DCompute::processBrush( eastl::vector<t3dBrushElement_t> &rElements, cons
 	return true;
 }
 
-bool T3DCompute::generateDerivedMap( const eastl::vector<float> &fHeightHalo,
+bool Terrain3DCompute::generateDerivedMap( const eastl::vector<float> &fHeightHalo,
 		const int nWidth,
 		const int nHeight,
 		const float fVertexSpacing,
@@ -918,7 +919,7 @@ bool T3DCompute::generateDerivedMap( const eastl::vector<float> &fHeightHalo,
 	return true;
 }
 
-void T3DCompute::shutdown( void ) {
+void Terrain3DCompute::shutdown( void ) {
 	if ( !m_pRd ) {
 		return;
 	}

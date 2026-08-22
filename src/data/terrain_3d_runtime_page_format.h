@@ -85,7 +85,7 @@ typedef struct t3dRuntimePageHeader_s {
 inline const t3dRuntimePageChannelInfo_t *t3dRuntimePageFindChannel( const t3dRuntimePageHeader_t &rHeader,
 		const t3dRuntimePageChannel_t channel ) {
 	for ( uint32_t index = 0u; index < rHeader.m_nChannelCount; ++index ) {
-		if ( rHeader.m_szChannels[index].type == ( uint32_t )( channel ) ) {
+		if ( rHeader.m_szChannels[index].m_nType == ( uint32_t )( channel ) ) {
 			return &rHeader.m_szChannels[index];
 		}
 	}
@@ -142,7 +142,7 @@ inline bool t3dRuntimePageValidateHeader( const t3dRuntimePageHeader_t &rHeader,
 			return false;
 		}
 		for ( uint32_t previous = 0u; previous < channel; ++previous ) {
-			if ( rHeader.m_szChannels[previous].type == info.m_nType ) {
+			if ( rHeader.m_szChannels[previous].m_nType == info.m_nType ) {
 				return false;
 			}
 		}

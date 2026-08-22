@@ -1,7 +1,7 @@
 # Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
-# Focused editor for T3DTextureAsset erosion modifiers and transition targets.
+# Focused editor for Terrain3DTextureAsset erosion modifiers and transition targets.
 @tool
-class_name T3DErosionTextureProfiles
+class_name Terrain3DErosionTextureProfiles
 extends VBoxContainer
 
 const EditorUI = preload("res://addons/terrain_3d/src/editor_ui_util.gd")
@@ -153,8 +153,8 @@ class PanelParts:
 		body.add_child(title)
 
 
-var plugin: T3DEditorPluginBase
-var terrain: T3DTerrain
+var plugin: Terrain3DEditorPluginBase
+var terrain: Terrain3D
 var inspector_embedded: bool = false
 var _texture_picker: OptionButton
 var _profile_preset_picker: OptionButton
@@ -169,11 +169,11 @@ var _asset_foldable: FoldableContainer
 var _asset_inspector: EditorInspector
 
 
-func _get_terrain() -> T3DTerrain:
+func _get_terrain() -> Terrain3D:
 	if is_instance_valid(terrain):
 		return terrain
 	if is_instance_valid(plugin):
-		var plugin_terrain: T3DTerrain = plugin.terrain
+		var plugin_terrain: Terrain3D = plugin.terrain
 		if is_instance_valid(plugin_terrain):
 			return plugin_terrain
 	return null
@@ -454,7 +454,7 @@ func _build_panel() -> void:
 	_asset_foldable = FoldableContainer.new()
 	_asset_foldable.title = "Complete Texture Asset"
 	_asset_foldable.folded = true
-	_asset_foldable.tooltip_text = "Edit the selected T3DTextureAsset without leaving the Terrain3D Inspector."
+	_asset_foldable.tooltip_text = "Edit the selected Terrain3DTextureAsset without leaving the Terrain3D Inspector."
 	body.add_child(_asset_foldable)
 
 	_asset_inspector = EditorInspector.create_default_inspector()
@@ -511,7 +511,7 @@ func _add_physical_control(
 func _add_transition_control(p_parent: GridContainer, p_key: String, p_label: String) -> void:
 	var label: Label = Label.new()
 	label.text = p_label
-	var tooltip: String = SettingMetadata.tooltip("T3DTextureAsset", StringName(p_key))
+	var tooltip: String = SettingMetadata.tooltip("Terrain3DTextureAsset", StringName(p_key))
 	label.tooltip_text = tooltip
 	EditorUI.configure_form_label(label)
 	p_parent.add_child(label)
@@ -525,12 +525,12 @@ func _add_transition_control(p_parent: GridContainer, p_key: String, p_label: St
 
 func _refresh_texture_list() -> void:
 	_texture_picker.clear()
-	var active_terrain: T3DTerrain = _get_terrain()
+	var active_terrain: Terrain3D = _get_terrain()
 	if not is_instance_valid(active_terrain) or not active_terrain.assets:
 		return
-	var assets: T3DAssets = active_terrain.assets
+	var assets: Terrain3DAssets = active_terrain.assets
 	for texture_id: int in assets.get_texture_count():
-		var asset: T3DTextureAsset = assets.get_texture_asset(texture_id)
+		var asset: Terrain3DTextureAsset = assets.get_texture_asset(texture_id)
 		if not asset:
 			continue
 		var display_name: String = asset.name if not asset.name.is_empty() else "Texture %d" % texture_id
@@ -543,12 +543,12 @@ func _refresh_transition_picker(p_picker: OptionButton) -> void:
 	p_picker.clear()
 	p_picker.add_item("No transition")
 	p_picker.set_item_metadata(0, -1)
-	var active_terrain: T3DTerrain = _get_terrain()
+	var active_terrain: Terrain3D = _get_terrain()
 	if not is_instance_valid(active_terrain) or not active_terrain.assets:
 		return
-	var assets: T3DAssets = active_terrain.assets
+	var assets: Terrain3DAssets = active_terrain.assets
 	for texture_id: int in assets.get_texture_count():
-		var asset: T3DTextureAsset = assets.get_texture_asset(texture_id)
+		var asset: Terrain3DTextureAsset = assets.get_texture_asset(texture_id)
 		if not asset:
 			continue
 		var display_name: String = asset.name if not asset.name.is_empty() else "Texture %d" % texture_id
@@ -560,7 +560,7 @@ func _load_selected_texture(p_index: int) -> void:
 	if _syncing or p_index < 0 or p_index >= _texture_picker.item_count:
 		return
 	_selected_texture_id = _texture_picker.get_item_id(p_index)
-	var asset: T3DTextureAsset = _get_selected_asset()
+	var asset: Terrain3DTextureAsset = _get_selected_asset()
 	if not asset:
 		return
 	_syncing = true
@@ -607,8 +607,8 @@ func _update_transition_target_availability() -> void:
 			picker.set_item_disabled(index, target_id == _selected_texture_id)
 
 
-func _get_selected_asset() -> T3DTextureAsset:
-	var active_terrain: T3DTerrain = _get_terrain()
+func _get_selected_asset() -> Terrain3DTextureAsset:
+	var active_terrain: Terrain3D = _get_terrain()
 	if (
 		_selected_texture_id < 0
 		or not is_instance_valid(active_terrain)
@@ -621,7 +621,7 @@ func _get_selected_asset() -> T3DTextureAsset:
 func _on_enabled_toggled(p_enabled: bool) -> void:
 	if _syncing:
 		return
-	var asset: T3DTextureAsset = _get_selected_asset()
+	var asset: Terrain3DTextureAsset = _get_selected_asset()
 	if asset:
 		asset.erosion_enabled = p_enabled
 		_commit_asset_change(asset)
@@ -630,7 +630,7 @@ func _on_enabled_toggled(p_enabled: bool) -> void:
 func _on_physical_value_changed(p_value: float, p_key: String) -> void:
 	if _syncing:
 		return
-	var asset: T3DTextureAsset = _get_selected_asset()
+	var asset: Terrain3DTextureAsset = _get_selected_asset()
 	if not asset:
 		return
 	match p_key:
@@ -664,7 +664,7 @@ func _on_physical_value_changed(p_value: float, p_key: String) -> void:
 func _on_transition_selected(p_index: int, p_key: String) -> void:
 	if _syncing:
 		return
-	var asset: T3DTextureAsset = _get_selected_asset()
+	var asset: Terrain3DTextureAsset = _get_selected_asset()
 	if not asset:
 		return
 	var picker := _transition_controls[p_key] as OptionButton
@@ -715,7 +715,7 @@ func _profile_preset_values(p_index: int) -> Dictionary[String, float]:
 
 
 func _apply_profile_preset() -> void:
-	var asset: T3DTextureAsset = _get_selected_asset()
+	var asset: Terrain3DTextureAsset = _get_selected_asset()
 	if not asset:
 		return
 	var values: Dictionary[String, float] = _profile_preset_values(_profile_preset_picker.selected)
@@ -737,7 +737,7 @@ func _apply_profile_preset() -> void:
 
 
 func _copy_profile() -> void:
-	var asset: T3DTextureAsset = _get_selected_asset()
+	var asset: Terrain3DTextureAsset = _get_selected_asset()
 	if not asset:
 		return
 	_copy_buffer = CopiedProfile.new()
@@ -766,7 +766,7 @@ func _copy_profile() -> void:
 
 
 func _paste_profile() -> void:
-	var asset: T3DTextureAsset = _get_selected_asset()
+	var asset: Terrain3DTextureAsset = _get_selected_asset()
 	if not asset or _copy_buffer == null:
 		_status_label.text = "Copy a profile first."
 		return
@@ -796,7 +796,7 @@ func _paste_profile() -> void:
 
 
 func _clear_transitions() -> void:
-	var asset: T3DTextureAsset = _get_selected_asset()
+	var asset: Terrain3DTextureAsset = _get_selected_asset()
 	if not asset:
 		return
 	asset.erosion_exposed_texture_id = -1
@@ -818,7 +818,7 @@ func _reset_selected_profile() -> void:
 
 
 func _inspect_selected_asset() -> void:
-	var asset: T3DTextureAsset = _get_selected_asset()
+	var asset: Terrain3DTextureAsset = _get_selected_asset()
 	if not asset:
 		return
 	if is_instance_valid(_asset_inspector):
@@ -827,23 +827,23 @@ func _inspect_selected_asset() -> void:
 
 
 func _on_asset_property_edited(_property: String) -> void:
-	var asset: T3DTextureAsset = _get_selected_asset()
+	var asset: Terrain3DTextureAsset = _get_selected_asset()
 	if not asset:
 		return
 	_load_selected_texture(_texture_picker.selected)
 	_commit_asset_change(asset)
 
 
-func _commit_asset_change(p_asset: T3DTextureAsset) -> void:
+func _commit_asset_change(p_asset: Terrain3DTextureAsset) -> void:
 	p_asset.emit_changed()
-	var active_terrain: T3DTerrain = _get_terrain()
+	var active_terrain: Terrain3D = _get_terrain()
 	if is_instance_valid(active_terrain) and active_terrain.assets:
 		active_terrain.assets.emit_changed()
 	profiles_changed.emit()
 	_update_status(p_asset)
 
 
-func _update_status(p_asset: T3DTextureAsset) -> void:
+func _update_status(p_asset: Terrain3DTextureAsset) -> void:
 	var transitions: int = 0
 	for target_id: int in [
 		p_asset.erosion_exposed_texture_id,

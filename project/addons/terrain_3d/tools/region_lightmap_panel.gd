@@ -2,12 +2,12 @@
 # Batch editor UI for baking independent lightmap packages for every Terrain3D
 # region authored in the configured data directory.
 @tool
-class_name T3DRegionLightmapPanel
+class_name Terrain3DRegionLightmapPanel
 extends Window
 
-var plugin: T3DEditorPluginBase
-var baker: T3DRegionLightmapBaker
-var terrain: T3DTerrain
+var plugin: Terrain3DEditorPluginBase
+var baker: Terrain3DRegionLightmapBaker
+var terrain: Terrain3D
 
 var _dataset_summary: Label
 var _settings_summary: Label
@@ -49,7 +49,7 @@ func _ready() -> void:
 	hide()
 
 
-func open(p_terrain: T3DTerrain) -> void:
+func open(p_terrain: Terrain3D) -> void:
 	terrain = p_terrain
 	_refresh_dataset_summary()
 	_refresh_settings_summary()
@@ -185,10 +185,10 @@ func _refresh_dataset_summary() -> void:
 	var locations: Array[Vector2i] = baker.get_data_directory_regions(terrain)
 	var baked_count: int = 0
 	for location: Vector2i in locations:
-		var region: T3DRegion = terrain.data.get_region(location)
+		var region: Terrain3DRegion = terrain.data.get_region(location)
 		if is_instance_valid(region) and is_instance_valid(region.get_lighting()):
 			baked_count += 1
-	var output_directory: String = String(terrain.get("region_lightmap_output_directory")).strip_edges()
+	var output_directory: String = terrain.region_lightmap_output_directory.strip_edges()
 	_dataset_summary.text = "%d authored regions found in %s. %d currently have regional lighting packages. Output: %s" % [
 		locations.size(), terrain.data_directory, baked_count,
 		output_directory if not output_directory.is_empty() else "not configured"]
@@ -202,14 +202,14 @@ func _refresh_settings_summary() -> void:
 		return
 	var quality_names: PackedStringArray = PackedStringArray(["Low", "Medium", "High", "Ultra"])
 	var shadowmask_names: PackedStringArray = PackedStringArray(["None", "Replace", "Overlay"])
-	var quality: int = clampi(int(terrain.get("region_lightmap_bake_quality")), 0, quality_names.size() - 1)
-	var shadowmask: int = clampi(int(terrain.get("region_lightmap_shadowmask_mode")), 0, shadowmask_names.size() - 1)
-	var output_directory: String = String(terrain.get("region_lightmap_output_directory")).strip_edges()
+	var quality: int = clampi(terrain.region_lightmap_bake_quality, 0, quality_names.size() - 1)
+	var shadowmask: int = clampi(terrain.region_lightmap_shadowmask_mode, 0, shadowmask_names.size() - 1)
+	var output_directory: String = terrain.region_lightmap_output_directory.strip_edges()
 	_settings_summary.text = "Output: %s\nSettings: proxy LOD %d · context radius %d · %.2f m/texel · %s quality · %s shadowmask" % [
 		output_directory if not output_directory.is_empty() else "not configured",
-		int(terrain.get("region_lightmap_proxy_lod")),
-		int(terrain.get("region_lightmap_context_radius")),
-		float(terrain.get("region_lightmap_texel_size")),
+		terrain.region_lightmap_proxy_lod,
+		terrain.region_lightmap_context_radius,
+		terrain.region_lightmap_texel_size,
 		quality_names[quality], shadowmask_names[shadowmask]]
 
 
@@ -371,10 +371,8 @@ func _on_close_requested() -> void:
 
 
 func _sync_active_terrain() -> void:
-	if is_instance_valid(plugin):
-		var active_terrain: Variant = plugin.get("terrain")
-		if active_terrain is T3DTerrain and active_terrain != terrain:
-			terrain = active_terrain
+	if is_instance_valid(plugin) and is_instance_valid(plugin.terrain) and plugin.terrain != terrain:
+		terrain = plugin.terrain
 
 
 func _is_terrain_ready() -> bool:

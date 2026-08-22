@@ -93,7 +93,7 @@ t3dFarSurfaceAtlasCacheFarSurfaceAlpha( const float fSolidCoverage, const float 
 }
 
 static float
-t3dFarSurfaceAtlasCacheMaterialFloatParam( T3DMaterial *pMaterial, const char *pszName, const float fDefault ) {
+t3dFarSurfaceAtlasCacheMaterialFloatParam( Terrain3DMaterial *pMaterial, const char *pszName, const float fDefault ) {
 	if ( !pMaterial ) {
 		return fDefault;
 	}
@@ -101,7 +101,7 @@ t3dFarSurfaceAtlasCacheMaterialFloatParam( T3DMaterial *pMaterial, const char *p
 	return value.get_type() == Variant::NIL ? fDefault : ( float )( value );
 }
 
-static int t3dFarSurfaceAtlasCacheMaterialIntParam( T3DMaterial *pMaterial, const char *pszName, const int nDefault ) {
+static int t3dFarSurfaceAtlasCacheMaterialIntParam( Terrain3DMaterial *pMaterial, const char *pszName, const int nDefault ) {
 	if ( !pMaterial ) {
 		return nDefault;
 	}
@@ -109,7 +109,7 @@ static int t3dFarSurfaceAtlasCacheMaterialIntParam( T3DMaterial *pMaterial, cons
 	return value.get_type() == Variant::NIL ? nDefault : ( int )( value );
 }
 
-static void t3dFarSurfaceAtlasCacheBuildBakeData( const Ref<T3DAssets> &rAssets, t3dFarSurfaceBakeData_t &rData ) {
+static void t3dFarSurfaceAtlasCacheBuildBakeData( const Ref<Terrain3DAssets> &rAssets, t3dFarSurfaceBakeData_t &rData ) {
 	rData = t3dFarSurfaceBakeData_t();
 	if ( rAssets.is_null() ) {
 		return;
@@ -133,14 +133,14 @@ static int t3dFarSurfaceAtlasCacheResolveMaterialId( const t3dFarSurfaceBakeData
 	return rData.m_nFallbackTexture;
 }
 
-T3DFarSurfaceAtlasCache::T3DFarSurfaceAtlasCache( T3DRegionRepository *pRepository,
-		T3DSamplingStorage *pSamplingStorage,
-		T3DCpuRegionCache *pCpuRegionCache ) :
+Terrain3DFarSurfaceAtlasCache::Terrain3DFarSurfaceAtlasCache( Terrain3DRegionRepository *pRepository,
+		Terrain3DSamplingStorage *pSamplingStorage,
+		Terrain3DCpuRegionCache *pCpuRegionCache ) :
 		m_pRepository( pRepository ), m_pSamplingStorage( pSamplingStorage ), m_pCpuRegionCache( pCpuRegionCache ) {
 	reset();
 }
 
-void T3DFarSurfaceAtlasCache::setConfig( const t3dFarSurfaceAtlasConfig_t &rConfig ) {
+void Terrain3DFarSurfaceAtlasCache::setConfig( const t3dFarSurfaceAtlasConfig_t &rConfig ) {
 	const bool layout_changed = rConfig.m_nHeightAtlasSide != m_config.m_nHeightAtlasSide ||
 			rConfig.m_nSurfaceAtlasSide != m_config.m_nSurfaceAtlasSide;
 	m_config = rConfig;
@@ -149,7 +149,7 @@ void T3DFarSurfaceAtlasCache::setConfig( const t3dFarSurfaceAtlasConfig_t &rConf
 	}
 }
 
-void T3DFarSurfaceAtlasCache::reset( void ) {
+void Terrain3DFarSurfaceAtlasCache::reset( void ) {
 	m_generatedHeightMap.clear();
 	m_generatedColorMap.clear();
 	m_heightImage.unref();
@@ -183,14 +183,14 @@ void T3DFarSurfaceAtlasCache::reset( void ) {
 	m_nCookIoUsecLast = 0u;
 }
 
-void T3DFarSurfaceAtlasCache::resetFrameStats( void ) {
+void Terrain3DFarSurfaceAtlasCache::resetFrameStats( void ) {
 	m_nHeightUpdatesLastTick = 0;
 	m_nColorUpdatesLastTick = 0;
 	m_nHeightRegionsLastTick = 0;
 	m_nColorRegionsLastTick = 0;
 }
 
-void T3DFarSurfaceAtlasCache::invalidateSurface( void ) {
+void Terrain3DFarSurfaceAtlasCache::invalidateSurface( void ) {
 	m_generatedColorMap.clear();
 	m_colorImage.unref();
 	m_colorDirtyRegions.reset();
@@ -200,7 +200,7 @@ void T3DFarSurfaceAtlasCache::invalidateSurface( void ) {
 	m_bCookedSaved = false;
 }
 
-void T3DFarSurfaceAtlasCache::invalidateLayout( void ) {
+void Terrain3DFarSurfaceAtlasCache::invalidateLayout( void ) {
 	m_generatedHeightMap.clear();
 	m_generatedColorMap.clear();
 	m_heightImage.unref();
@@ -215,12 +215,12 @@ void T3DFarSurfaceAtlasCache::invalidateLayout( void ) {
 	m_bCookedSaved = false;
 }
 
-String T3DFarSurfaceAtlasCache::getCookedPath( const String &rDirectory ) const {
+String Terrain3DFarSurfaceAtlasCache::getCookedPath( const String &rDirectory ) const {
 	const String directory = !rDirectory.is_empty() ? rDirectory : m_config.m_dataDirectory;
 	return directory.is_empty() ? String() : directory.path_join( "terrain3d_far_atlas.t3dfar" );
 }
 
-Ref<Image> T3DFarSurfaceAtlasCache::getRegionMapOrDefault( const T3DRegion *pRegion,
+Ref<Image> Terrain3DFarSurfaceAtlasCache::getRegionMapOrDefault( const Terrain3DRegion *pRegion,
 		const t3dMapType_t eMapType ) const {
 	if ( pRegion && !pRegion->isDeleted() ) {
 		const Ref<Image> pMap = pRegion->getMap( eMapType );
@@ -240,7 +240,7 @@ Ref<Image> T3DFarSurfaceAtlasCache::getRegionMapOrDefault( const T3DRegion *pReg
 	}
 }
 
-uint64_t T3DFarSurfaceAtlasCache::computeSourceSignature( void ) const {
+uint64_t Terrain3DFarSurfaceAtlasCache::computeSourceSignature( void ) const {
 	if ( !m_pRepository ) {
 		return 0u;
 	}
@@ -255,7 +255,7 @@ uint64_t T3DFarSurfaceAtlasCache::computeSourceSignature( void ) const {
 	for ( int map_index = 0; map_index < s_nMaxRegionSlots; ++map_index ) {
 		const Vector2i location( map_index % s_nActiveMaxRegionMapSize - s_nActiveMaxRegionMapSize / 2,
 				map_index / s_nActiveMaxRegionMapSize - s_nActiveMaxRegionMapSize / 2 );
-		T3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
+		Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() ) {
 			continue;
 		}
@@ -273,7 +273,7 @@ uint64_t T3DFarSurfaceAtlasCache::computeSourceSignature( void ) const {
 		t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t )( index ) );
 		t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, ( uint32_t )( bake_data.m_populated[( size_t )( index )] ) );
 	}
-	T3DMaterial *const pMaterial = m_config.m_material.ptr();
+	Terrain3DMaterial *const pMaterial = m_config.m_material.ptr();
 	t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, pMaterial ? 1u : 0u );
 	if ( pMaterial ) {
 		t3dFarSurfaceAtlasCacheFnv1a64AppendU32( hash, pMaterial->getAutoShaderEnabled() ? 1u : 0u );
@@ -289,7 +289,7 @@ uint64_t T3DFarSurfaceAtlasCache::computeSourceSignature( void ) const {
 	return hash;
 }
 
-bool T3DFarSurfaceAtlasCache::initializeImages( void ) {
+bool Terrain3DFarSurfaceAtlasCache::initializeImages( void ) {
 	const int height_side = MAX( 1, m_config.m_nHeightAtlasSide );
 	const int surface_side = MAX( 1, m_config.m_nSurfaceAtlasSide );
 	if ( m_heightImage.is_null() || m_heightImage->get_width() != height_side ||
@@ -314,7 +314,7 @@ bool T3DFarSurfaceAtlasCache::initializeImages( void ) {
 			!m_colorImage->is_empty();
 }
 
-bool T3DFarSurfaceAtlasCache::loadCooked( void ) {
+bool Terrain3DFarSurfaceAtlasCache::loadCooked( void ) {
 	if ( !m_pRepository ) {
 		return false;
 	}
@@ -381,7 +381,7 @@ bool T3DFarSurfaceAtlasCache::loadCooked( void ) {
 	return true;
 }
 
-bool T3DFarSurfaceAtlasCache::writeCooked( const String &rDirectory ) {
+bool Terrain3DFarSurfaceAtlasCache::writeCooked( const String &rDirectory ) {
 	if ( !m_pRepository ) {
 		return false;
 	}
@@ -458,7 +458,7 @@ bool T3DFarSurfaceAtlasCache::writeCooked( const String &rDirectory ) {
 	return true;
 }
 
-void T3DFarSurfaceAtlasCache::markAllDirty( const t3dMapType_t eMapType ) {
+void Terrain3DFarSurfaceAtlasCache::markAllDirty( const t3dMapType_t eMapType ) {
 	if ( eMapType == TYPE_HEIGHT || eMapType == REGION_TYPE_MAX ) {
 		m_bHeightDirty = true;
 		m_bHeightDirtyAll = true;
@@ -473,11 +473,11 @@ void T3DFarSurfaceAtlasCache::markAllDirty( const t3dMapType_t eMapType ) {
 	m_bCookedSaved = false;
 }
 
-void T3DFarSurfaceAtlasCache::markRegionDirty( const Vector2i &vLocation, const t3dMapType_t eMapType ) {
+void Terrain3DFarSurfaceAtlasCache::markRegionDirty( const Vector2i &vLocation, const t3dMapType_t eMapType ) {
 	if ( !m_pRepository || !m_pRepository->isLocationValid( vLocation ) ) {
 		return;
 	}
-	const int map_index = T3DRegionRepository::getRegionMapIndex( vLocation );
+	const int map_index = Terrain3DRegionRepository::getRegionMapIndex( vLocation );
 	if ( map_index < 0 ) {
 		return;
 	}
@@ -497,7 +497,7 @@ void T3DFarSurfaceAtlasCache::markRegionDirty( const Vector2i &vLocation, const 
 	m_bCookedSaved = false;
 }
 
-bool T3DFarSurfaceAtlasCache::patchHeightRegion( const Vector2i &vLocation, PackedByteArray &rAtlasBytes ) {
+bool Terrain3DFarSurfaceAtlasCache::patchHeightRegion( const Vector2i &vLocation, PackedByteArray &rAtlasBytes ) {
 	if ( !m_pRepository ) {
 		return false;
 	}
@@ -520,8 +520,8 @@ bool T3DFarSurfaceAtlasCache::patchHeightRegion( const Vector2i &vLocation, Pack
 	const uint16_t default_height = t3dRegionCodecEncodeHeightU16( 0.0f );
 	const uint16_t *height = nullptr;
 	PackedByteArray region_height_bytes;
-	T3DRegion *const pRegion = m_pRepository->getRegionPtr( vLocation );
-	T3DActiveMapLease lease;
+	Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( vLocation );
+	Terrain3DActiveMapLease lease;
 	if ( pRegion && !pRegion->isDeleted() ) {
 		if ( m_pCpuRegionCache && m_pCpuRegionCache->isEnabled() &&
 				!m_pCpuRegionCache->ensureResident( vLocation, true ) ) {
@@ -561,7 +561,7 @@ bool T3DFarSurfaceAtlasCache::patchHeightRegion( const Vector2i &vLocation, Pack
 	return true;
 }
 
-bool T3DFarSurfaceAtlasCache::patchColorRegion( const Vector2i &vLocation, PackedByteArray &rAtlasBytes ) {
+bool Terrain3DFarSurfaceAtlasCache::patchColorRegion( const Vector2i &vLocation, PackedByteArray &rAtlasBytes ) {
 	if ( !m_pRepository ) {
 		return false;
 	}
@@ -582,7 +582,7 @@ bool T3DFarSurfaceAtlasCache::patchColorRegion( const Vector2i &vLocation, Packe
 	if ( !pAtlasWrite ) {
 		return false;
 	}
-	T3DRegion *const pRegion = m_pRepository->getRegionPtr( vLocation );
+	Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( vLocation );
 	if ( !pRegion || pRegion->isDeleted() ) {
 		for ( int y = 0; y < samples_per_region; ++y ) {
 			for ( int x = 0; x < samples_per_region; ++x ) {
@@ -632,7 +632,7 @@ bool T3DFarSurfaceAtlasCache::patchColorRegion( const Vector2i &vLocation, Packe
 	}
 	t3dFarSurfaceBakeData_t bake_data;
 	t3dFarSurfaceAtlasCacheBuildBakeData( m_config.m_assets, bake_data );
-	T3DMaterial *const pMaterial = m_config.m_material.ptr();
+	Terrain3DMaterial *const pMaterial = m_config.m_material.ptr();
 	const bool auto_shader_enabled = pMaterial && pMaterial->getAutoShaderEnabled();
 	const float auto_slope = t3dFarSurfaceAtlasCacheMaterialFloatParam( pMaterial, "auto_slope", 1.0f );
 	const float auto_height_reduction =
@@ -746,7 +746,7 @@ bool T3DFarSurfaceAtlasCache::patchColorRegion( const Vector2i &vLocation, Packe
 	return true;
 }
 
-bool T3DFarSurfaceAtlasCache::rebuildHeightAtlas( void ) {
+bool Terrain3DFarSurfaceAtlasCache::rebuildHeightAtlas( void ) {
 	if ( !m_config.m_bRequired || !m_pRepository || !m_pSamplingStorage || !m_pSamplingStorage->isActiveOwner() ||
 			!initializeImages() ) {
 		return false;
@@ -812,7 +812,7 @@ bool T3DFarSurfaceAtlasCache::rebuildHeightAtlas( void ) {
 	return true;
 }
 
-bool T3DFarSurfaceAtlasCache::rebuildColorAtlas( void ) {
+bool Terrain3DFarSurfaceAtlasCache::rebuildColorAtlas( void ) {
 	if ( !m_config.m_bRequired || !m_pRepository || !initializeImages() ) {
 		return false;
 	}
@@ -874,7 +874,7 @@ bool T3DFarSurfaceAtlasCache::rebuildColorAtlas( void ) {
 	return true;
 }
 
-bool T3DFarSurfaceAtlasCache::ensure( void ) {
+bool Terrain3DFarSurfaceAtlasCache::ensure( void ) {
 	if ( !m_config.m_bRequired || !m_pRepository || !m_pSamplingStorage || !m_pSamplingStorage->isActiveOwner() ||
 			m_pRepository->getRegionSize() <= 0 || m_pRepository->getRegionMapSize() <= 0 ) {
 		return false;
@@ -894,27 +894,27 @@ bool T3DFarSurfaceAtlasCache::ensure( void ) {
 	return isReady();
 }
 
-bool T3DFarSurfaceAtlasCache::isRegionHeightDirty( const Vector2i &vLocation ) const {
+bool Terrain3DFarSurfaceAtlasCache::isRegionHeightDirty( const Vector2i &vLocation ) const {
 	if ( m_bHeightDirtyAll ) {
 		return true;
 	}
 	const int index = m_pRepository && m_pRepository->isLocationValid( vLocation )
-			? T3DRegionRepository::getRegionMapIndex( vLocation )
+			? Terrain3DRegionRepository::getRegionMapIndex( vLocation )
 			: -1;
 	return index >= 0 && m_heightDirtyRegions.test( ( size_t )( index ) );
 }
 
-bool T3DFarSurfaceAtlasCache::isRegionColorDirty( const Vector2i &vLocation ) const {
+bool Terrain3DFarSurfaceAtlasCache::isRegionColorDirty( const Vector2i &vLocation ) const {
 	if ( m_bColorDirtyAll ) {
 		return true;
 	}
 	const int index = m_pRepository && m_pRepository->isLocationValid( vLocation )
-			? T3DRegionRepository::getRegionMapIndex( vLocation )
+			? Terrain3DRegionRepository::getRegionMapIndex( vLocation )
 			: -1;
 	return index >= 0 && m_colorDirtyRegions.test( ( size_t )( index ) );
 }
 
-int T3DFarSurfaceAtlasCache::getDirtyRegionCount( void ) const {
+int Terrain3DFarSurfaceAtlasCache::getDirtyRegionCount( void ) const {
 	if ( !m_pRepository ) {
 		return 0;
 	}
@@ -923,7 +923,7 @@ int T3DFarSurfaceAtlasCache::getDirtyRegionCount( void ) const {
 			: ( int )( ( m_heightDirtyRegions | m_colorDirtyRegions ).count() );
 }
 
-size_t T3DFarSurfaceAtlasCache::getImageBytes( void ) const {
+size_t Terrain3DFarSurfaceAtlasCache::getImageBytes( void ) const {
 	size_t bytes = 0u;
 	if ( m_heightImage.is_valid() ) {
 		bytes += ( size_t )( m_heightImage->get_data().size() );
@@ -934,7 +934,7 @@ size_t T3DFarSurfaceAtlasCache::getImageBytes( void ) const {
 	return bytes;
 }
 
-t3dFarSurfaceAtlasStats_t T3DFarSurfaceAtlasCache::getStats( void ) const {
+t3dFarSurfaceAtlasStats_t Terrain3DFarSurfaceAtlasCache::getStats( void ) const {
 	t3dFarSurfaceAtlasStats_t stats;
 	stats.m_nHeightUpdatesLastTick = m_nHeightUpdatesLastTick;
 	stats.m_nColorUpdatesLastTick = m_nColorUpdatesLastTick;
@@ -966,7 +966,7 @@ t3dFarSurfaceAtlasStats_t T3DFarSurfaceAtlasCache::getStats( void ) const {
 	return stats;
 }
 
-Dictionary T3DFarSurfaceAtlasCache::getStatsDictionary( void ) const {
+Dictionary Terrain3DFarSurfaceAtlasCache::getStatsDictionary( void ) const {
 	const t3dFarSurfaceAtlasStats_t values = getStats();
 	Dictionary stats;
 	stats["far_height_updates_last_tick"] = values.m_nHeightUpdatesLastTick;

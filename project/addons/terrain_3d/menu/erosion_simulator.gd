@@ -40,29 +40,29 @@ const OUTPUT_NAMES: PackedStringArray = [
 	"Material Transition",
 ]
 const OUTPUT_IDS: PackedInt32Array = [
-	T3DErosionJob.OUTPUT_HEIGHT_DELTA,
-	T3DErosionJob.OUTPUT_FLOW_ACCUMULATION,
-	T3DErosionJob.OUTPUT_SEDIMENT,
-	T3DErosionJob.OUTPUT_COARSE_SEDIMENT,
-	T3DErosionJob.OUTPUT_SAND_SEDIMENT,
-	T3DErosionJob.OUTPUT_FINE_SEDIMENT,
-	T3DErosionJob.OUTPUT_LOOSE_MATERIAL,
-	T3DErosionJob.OUTPUT_OXIDATION,
-	T3DErosionJob.OUTPUT_WEATHERING,
-	T3DErosionJob.OUTPUT_HYDRAULIC_DEPOSITION,
-	T3DErosionJob.OUTPUT_ALLUVIAL_DEPOSITION,
-	T3DErosionJob.OUTPUT_DEBRIS_FLOW_DEPOSITION,
-	T3DErosionJob.OUTPUT_WIND_DEPOSITION,
-	T3DErosionJob.OUTPUT_DUNE_DEPOSITION,
-	T3DErosionJob.OUTPUT_WAVE_DEPOSITION,
-	T3DErosionJob.OUTPUT_SALT_WEATHERING,
-	T3DErosionJob.OUTPUT_WET_DRY_CYCLES,
-	T3DErosionJob.OUTPUT_EXPOSURE_AGE,
-	T3DErosionJob.OUTPUT_SNOWPACK,
-	T3DErosionJob.OUTPUT_DESERT_PAVEMENT,
-	T3DErosionJob.OUTPUT_STRATIGRAPHY,
-	T3DErosionJob.OUTPUT_TRAFFIC,
-	T3DErosionJob.OUTPUT_MATERIAL_ID,
+	Terrain3DErosionJob.OUTPUT_HEIGHT_DELTA,
+	Terrain3DErosionJob.OUTPUT_FLOW_ACCUMULATION,
+	Terrain3DErosionJob.OUTPUT_SEDIMENT,
+	Terrain3DErosionJob.OUTPUT_COARSE_SEDIMENT,
+	Terrain3DErosionJob.OUTPUT_SAND_SEDIMENT,
+	Terrain3DErosionJob.OUTPUT_FINE_SEDIMENT,
+	Terrain3DErosionJob.OUTPUT_LOOSE_MATERIAL,
+	Terrain3DErosionJob.OUTPUT_OXIDATION,
+	Terrain3DErosionJob.OUTPUT_WEATHERING,
+	Terrain3DErosionJob.OUTPUT_HYDRAULIC_DEPOSITION,
+	Terrain3DErosionJob.OUTPUT_ALLUVIAL_DEPOSITION,
+	Terrain3DErosionJob.OUTPUT_DEBRIS_FLOW_DEPOSITION,
+	Terrain3DErosionJob.OUTPUT_WIND_DEPOSITION,
+	Terrain3DErosionJob.OUTPUT_DUNE_DEPOSITION,
+	Terrain3DErosionJob.OUTPUT_WAVE_DEPOSITION,
+	Terrain3DErosionJob.OUTPUT_SALT_WEATHERING,
+	Terrain3DErosionJob.OUTPUT_WET_DRY_CYCLES,
+	Terrain3DErosionJob.OUTPUT_EXPOSURE_AGE,
+	Terrain3DErosionJob.OUTPUT_SNOWPACK,
+	Terrain3DErosionJob.OUTPUT_DESERT_PAVEMENT,
+	Terrain3DErosionJob.OUTPUT_STRATIGRAPHY,
+	Terrain3DErosionJob.OUTPUT_TRAFFIC,
+	Terrain3DErosionJob.OUTPUT_MATERIAL_ID,
 ]
 
 class ColorizedOutput extends RefCounted:
@@ -93,8 +93,8 @@ class PanelParts:
 		body.add_child(title)
 
 
-var plugin: T3DEditorPluginBase
-var terrain: T3DTerrain
+var plugin: Terrain3DEditorPluginBase
+var terrain: Terrain3D
 
 var _section: FoldableContainer
 var _content_root: VBoxContainer
@@ -138,15 +138,15 @@ var _save_dialog: EditorFileDialog
 var _export_dialog: EditorFileDialog
 var _apply_confirmation: ConfirmationDialog
 var _thread: Thread
-var _job: T3DErosionJob
-var _settings: T3DErosionSettings
-var _active_run_settings: T3DErosionSettings
+var _job: Terrain3DErosionJob
+var _settings: Terrain3DErosionSettings
+var _active_run_settings: Terrain3DErosionSettings
 var _thread_joined: bool = true
 var _job_is_preview: bool = false
 var _syncing_controls: bool = false
 var _last_preview_image: Image
 var _last_raw_output_image: Image
-var _profile_editor: T3DErosionTextureProfiles
+var _profile_editor: Terrain3DErosionTextureProfiles
 var _advanced_foldable: FoldableContainer
 var _advanced_inspector: EditorInspector
 
@@ -156,7 +156,7 @@ func _enter_tree() -> void:
 	if is_instance_valid(plugin):
 		_settings = plugin.get_erosion_settings(_get_terrain())
 	if not is_instance_valid(_settings):
-		_settings = T3DErosionSettings.new()
+		_settings = Terrain3DErosionSettings.new()
 	_build_inspector_panel()
 	_sync_quick_controls_from_settings()
 	set_process(false)
@@ -173,11 +173,11 @@ func is_editor_ready() -> bool:
 	return is_instance_valid(_section)
 
 
-func _get_terrain() -> T3DTerrain:
+func _get_terrain() -> Terrain3D:
 	if is_instance_valid(terrain):
 		return terrain
 	if is_instance_valid(plugin):
-		var plugin_terrain: T3DTerrain = plugin.terrain
+		var plugin_terrain: Terrain3D = plugin.terrain
 		if is_instance_valid(plugin_terrain):
 			return plugin_terrain
 	return null
@@ -220,7 +220,7 @@ func _build_inspector_panel() -> void:
 	_tabs.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	_content_root.add_child(_tabs)
 	_build_setup_tab()
-	_profile_editor = ErosionProfileEditor.new() as T3DErosionTextureProfiles
+	_profile_editor = ErosionProfileEditor.new() as Terrain3DErosionTextureProfiles
 	_profile_editor.plugin = plugin
 	_profile_editor.terrain = _get_terrain()
 	_profile_editor.inspector_embedded = true
@@ -308,8 +308,8 @@ func _build_resource_toolbar(p_root: VBoxContainer) -> void:
 	resource_row.add_child(settings_label)
 
 	_settings_picker = EditorResourcePicker.new()
-	_settings_picker.base_type = "T3DErosionSettings"
-	_settings_picker.tooltip_text = "T3DErosionSettings resource edited and used by this erosion workflow. Every advanced property in the embedded Inspector carries the generated operational setting documentation."
+	_settings_picker.base_type = "Terrain3DErosionSettings"
+	_settings_picker.tooltip_text = "Terrain3DErosionSettings resource edited and used by this erosion workflow. Every advanced property in the embedded Inspector carries the generated operational setting documentation."
 	_settings_picker.edited_resource = _settings
 	EditorUI.configure_field_control(_settings_picker, 260.0)
 	_settings_picker.resource_changed.connect(_on_settings_changed)
@@ -375,7 +375,7 @@ func _build_setup_tab() -> void:
 		_preset_picker.add_item(preset_name)
 	_preset_picker.add_separator()
 	_preset_picker.add_item("Custom", CUSTOM_PRESET_INDEX)
-	_preset_picker.tooltip_text = "Starting parameter set for T3DErosionSettings. Selecting a preset writes the corresponding simulation values; Custom preserves the current edited values."
+	_preset_picker.tooltip_text = "Starting parameter set for Terrain3DErosionSettings. Selecting a preset writes the corresponding simulation values; Custom preserves the current edited values."
 	_preset_picker.item_selected.connect(_on_preset_selected)
 	EditorUI.configure_field_control(_preset_picker, 280.0)
 	preset_grid.add_child(_preset_picker)
@@ -421,7 +421,7 @@ func _build_setup_tab() -> void:
 	seed_row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_seed_spin = _make_spin(1.0, 2147483647.0, 1.0, true)
 	_seed_spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_seed_spin.tooltip_text = SettingMetadata.tooltip("T3DErosionSettings", &"seed")
+	_seed_spin.tooltip_text = SettingMetadata.tooltip("Terrain3DErosionSettings", &"seed")
 	_seed_spin.value_changed.connect(_on_seed_changed)
 	seed_row.add_child(_seed_spin)
 	var randomize_button: Button = Button.new()
@@ -509,7 +509,7 @@ func _build_setup_tab() -> void:
 	_advanced_foldable = FoldableContainer.new()
 	_advanced_foldable.title = "Advanced Erosion Settings and Curves"
 	_advanced_foldable.folded = true
-	_advanced_foldable.tooltip_text = "Edit the complete T3DErosionSettings resource inline."
+	_advanced_foldable.tooltip_text = "Edit the complete Terrain3DErosionSettings resource inline."
 	setup.add_child(_advanced_foldable)
 
 	_advanced_inspector = EditorInspector.create_default_inspector()
@@ -759,7 +759,7 @@ func _make_spin(p_min: float, p_max: float, p_step: float, p_allow_greater: bool
 func _add_process_toggle(p_parent: GridContainer, p_property: String, p_text: String) -> void:
 	var toggle: CheckButton = CheckButton.new()
 	toggle.text = p_text
-	toggle.tooltip_text = SettingMetadata.tooltip("T3DErosionSettings", StringName(p_property))
+	toggle.tooltip_text = SettingMetadata.tooltip("Terrain3DErosionSettings", StringName(p_property))
 	EditorUI.configure_compact_control(toggle)
 	toggle.toggled.connect(_on_process_toggled.bind(p_property))
 	_process_toggles[p_property] = toggle
@@ -780,7 +780,7 @@ func _on_texture_profiles_changed() -> void:
 
 
 func _on_settings_selected(p_resource: Resource, p_inspect: bool) -> void:
-	if p_resource is T3DErosionSettings:
+	if p_resource is Terrain3DErosionSettings:
 		_settings = p_resource
 		_store_settings()
 		if is_instance_valid(_advanced_inspector):
@@ -791,10 +791,10 @@ func _on_settings_selected(p_resource: Resource, p_inspect: bool) -> void:
 
 
 func _on_settings_changed(p_resource: Resource) -> void:
-	if p_resource is T3DErosionSettings:
+	if p_resource is Terrain3DErosionSettings:
 		_settings = p_resource
 	else:
-		_settings = T3DErosionSettings.new()
+		_settings = Terrain3DErosionSettings.new()
 		_settings_picker.edited_resource = _settings
 	_store_settings()
 	if is_instance_valid(_advanced_inspector):
@@ -806,7 +806,7 @@ func _on_settings_changed(p_resource: Resource) -> void:
 func _new_settings() -> void:
 	if _is_running():
 		return
-	_settings = T3DErosionSettings.new()
+	_settings = Terrain3DErosionSettings.new()
 	_settings_picker.edited_resource = _settings
 	_store_settings()
 	if is_instance_valid(_advanced_inspector):
@@ -818,7 +818,7 @@ func _new_settings() -> void:
 func _duplicate_settings() -> void:
 	if _is_running() or not _settings:
 		return
-	_settings = _settings.duplicate(true) as T3DErosionSettings
+	_settings = _settings.duplicate(true) as Terrain3DErosionSettings
 	_settings_picker.edited_resource = _settings
 	_store_settings()
 	if is_instance_valid(_advanced_inspector):
@@ -995,7 +995,7 @@ func _start_final_simulation() -> void:
 
 
 func _start_simulation(p_preview: bool) -> void:
-	var active_terrain: T3DTerrain = _get_terrain()
+	var active_terrain: Terrain3D = _get_terrain()
 	if _is_running() or not is_instance_valid(active_terrain) or not _settings:
 		return
 	var blocking_errors: Array[String] = _collect_blocking_errors(_settings)
@@ -1007,7 +1007,7 @@ func _start_simulation(p_preview: bool) -> void:
 		return
 
 	_job_is_preview = p_preview
-	_active_run_settings = _settings.duplicate(true) as T3DErosionSettings
+	_active_run_settings = _settings.duplicate(true) as Terrain3DErosionSettings
 	_active_run_settings.live_preview_enabled = _live_preview_toggle.button_pressed
 	_active_run_settings.live_preview_interval_steps = int(_preview_interval_spin.value)
 	_active_run_settings.live_preview_start_paused = _preview_start_paused_toggle.button_pressed
@@ -1030,7 +1030,7 @@ func _start_simulation(p_preview: bool) -> void:
 	)
 	_clear_result_preview()
 	_job = active_terrain.data.create_erosion_job(_active_run_settings)
-	if not _job or _job.get_state() == T3DErosionJob.STATE_FAILED:
+	if not _job or _job.get_state() == Terrain3DErosionJob.STATE_FAILED:
 		var message: String = "Failed to create erosion job."
 		if _job:
 			message = _job.get_error_message()
@@ -1074,7 +1074,7 @@ func _process(p_delta: float) -> void:
 		_join_thread()
 		set_process(false)
 		var result_text: String = _format_statistics(_job.get_statistics())
-		if _job_is_preview and _job.get_state() == T3DErosionJob.STATE_COMPLETED:
+		if _job_is_preview and _job.get_state() == Terrain3DErosionJob.STATE_COMPLETED:
 			result_text += "\n\n[color=yellow][b]Draft preview:[/b] This coarse result is inspection-only and cannot be applied.[/color]"
 		_summary_label.text = result_text
 		if is_instance_valid(_preview_window):
@@ -1099,7 +1099,7 @@ func _open_temporary_preview_scene() -> void:
 
 
 func _toggle_preview_pause() -> void:
-	if not _job or _job.get_state() != T3DErosionJob.STATE_RUNNING:
+	if not _job or _job.get_state() != Terrain3DErosionJob.STATE_RUNNING:
 		return
 	_job.set_preview_paused(not _job.is_preview_paused())
 	_update_live_preview_state(1.0)
@@ -1107,7 +1107,7 @@ func _toggle_preview_pause() -> void:
 
 
 func _advance_preview_step() -> void:
-	if not _job or _job.get_state() != T3DErosionJob.STATE_RUNNING:
+	if not _job or _job.get_state() != Terrain3DErosionJob.STATE_RUNNING:
 		return
 	_job.request_preview_step()
 	_update_live_preview_state(1.0)
@@ -1163,7 +1163,7 @@ func _on_preview_start_paused_toggled(p_enabled: bool) -> void:
 
 
 func _cancel_simulation() -> void:
-	if _job and _job.get_state() == T3DErosionJob.STATE_RUNNING:
+	if _job and _job.get_state() == Terrain3DErosionJob.STATE_RUNNING:
 		_job.cancel()
 		_stage_label.text = "Cancellation requested..."
 
@@ -1194,7 +1194,7 @@ func _request_apply_simulation() -> void:
 
 
 func _apply_simulation_confirmed() -> void:
-	var active_terrain: T3DTerrain = _get_terrain()
+	var active_terrain: Terrain3D = _get_terrain()
 	if not _can_apply_job() or not is_instance_valid(active_terrain):
 		return
 	if not _job.is_source_unchanged(active_terrain.data):
@@ -1206,16 +1206,16 @@ func _apply_simulation_confirmed() -> void:
 		_update_controls()
 		return
 
-	var regions: Array[T3DRegion] = []
+	var regions: Array[Terrain3DRegion] = []
 	for location: Vector2i in _job.get_region_locations():
-		var region: T3DRegion = active_terrain.data.get_region(location)
+		var region: Terrain3DRegion = active_terrain.data.get_region(location)
 		if not region:
 			_stage_label.text = "Cannot apply result"
 			_summary_label.text = "[color=red]A simulated terrain region no longer exists. Run the simulation again.[/color]"
 			return
 		regions.push_back(region)
 
-	var terrain_editor: T3DEditor
+	var terrain_editor: Terrain3DEditor
 	if is_instance_valid(plugin):
 		terrain_editor = plugin.editor
 	if not is_instance_valid(terrain_editor):
@@ -1223,7 +1223,7 @@ func _apply_simulation_confirmed() -> void:
 		_summary_label.text = "[color=red]Terrain3D editor transaction service is unavailable.[/color]"
 		return
 	terrain_editor.start_operation(Vector3.ZERO)
-	for region: T3DRegion in regions:
+	for region: Terrain3DRegion in regions:
 		terrain_editor.backup_region_full(region)
 	var error: Error = _job.apply(active_terrain.data)
 	terrain_editor.stop_operation()
@@ -1243,14 +1243,14 @@ func _apply_simulation_confirmed() -> void:
 func _can_apply_job() -> bool:
 	return (
 		_job != null
-		and _job.get_state() == T3DErosionJob.STATE_COMPLETED
+		and _job.get_state() == Terrain3DErosionJob.STATE_COMPLETED
 		and not _job_is_preview
 	)
 
 
 func _populate_result_preview() -> void:
 	_region_picker.clear()
-	if not _job or _job.get_state() != T3DErosionJob.STATE_COMPLETED:
+	if not _job or _job.get_state() != Terrain3DErosionJob.STATE_COMPLETED:
 		_clear_result_preview()
 		return
 	for location: Vector2i in _job.get_region_locations():
@@ -1272,7 +1272,7 @@ func _on_preview_resolution_toggled(_enabled: bool) -> void:
 func _refresh_result_preview() -> void:
 	if (
 		not _job
-		or _job.get_state() != T3DErosionJob.STATE_COMPLETED
+		or _job.get_state() != Terrain3DErosionJob.STATE_COMPLETED
 		or _region_picker.item_count == 0
 	):
 		_clear_result_preview()
@@ -1339,14 +1339,14 @@ func _colorize_output(p_source: Image, p_output_id: int) -> ColorizedOutput:
 		for x: int in width:
 			var value: float = p_source.get_pixel(x, y).r
 			var color: Color
-			if p_output_id == T3DErosionJob.OUTPUT_HEIGHT_DELTA:
+			if p_output_id == Terrain3DErosionJob.OUTPUT_HEIGHT_DELTA:
 				var normalized: float = clampf(value / absolute_range, -1.0, 1.0)
 				color = Color(0.12, 0.12, 0.12)
 				if normalized < 0.0:
 					color = Color(0.08, 0.32, 0.9).lerp(Color(0.12, 0.12, 0.12), 1.0 + normalized)
 				elif normalized > 0.0:
 					color = Color(0.12, 0.12, 0.12).lerp(Color(0.95, 0.48, 0.08), normalized)
-			elif p_output_id == T3DErosionJob.OUTPUT_MATERIAL_ID:
+			elif p_output_id == Terrain3DErosionJob.OUTPUT_MATERIAL_ID:
 				var material_id: int = int(roundf(value))
 				color = Color.from_hsv(fposmod(float(material_id) * 0.113, 1.0), 0.72, 0.92)
 			else:
@@ -1403,9 +1403,9 @@ func _clear_result_preview() -> void:
 		_preview_range_label.text = "No diagnostic map available."
 
 
-func _collect_blocking_errors(p_settings: T3DErosionSettings) -> Array[String]:
+func _collect_blocking_errors(p_settings: Terrain3DErosionSettings) -> Array[String]:
 	var errors: Array[String] = []
-	var active_terrain: T3DTerrain = _get_terrain()
+	var active_terrain: Terrain3D = _get_terrain()
 	if not is_instance_valid(active_terrain):
 		errors.push_back("The inspected Terrain3D node is no longer available.")
 	elif not is_instance_valid(active_terrain.data):
@@ -1458,13 +1458,13 @@ func _collect_blocking_errors(p_settings: T3DErosionSettings) -> Array[String]:
 
 
 func _count_texture_transitions() -> int:
-	var active_terrain: T3DTerrain = _get_terrain()
+	var active_terrain: Terrain3D = _get_terrain()
 	if not is_instance_valid(active_terrain) or not active_terrain.assets:
 		return 0
 	var count: int = 0
-	var assets: T3DAssets = active_terrain.assets
+	var assets: Terrain3DAssets = active_terrain.assets
 	for texture_id: int in assets.get_texture_count():
-		var asset: T3DTextureAsset = assets.get_texture_asset(texture_id)
+		var asset: Terrain3DTextureAsset = assets.get_texture_asset(texture_id)
 		if not asset or not asset.erosion_enabled:
 			continue
 		for target_id: int in [
@@ -1533,7 +1533,7 @@ func _update_controls() -> void:
 	else:
 		blocking_errors.push_back("No settings resource selected.")
 	if is_instance_valid(_terrain_label):
-		var active_terrain: T3DTerrain = _get_terrain()
+		var active_terrain: Terrain3D = _get_terrain()
 		if is_instance_valid(active_terrain) and is_instance_valid(active_terrain.data):
 			_terrain_label.text = (
 				"%s — %d regions — Inspector workflow"
@@ -1587,7 +1587,7 @@ func _update_advisory_text(p_blocking_errors: Array[String]) -> void:
 
 
 func _update_workload_estimate() -> void:
-	var active_terrain: T3DTerrain = _get_terrain()
+	var active_terrain: Terrain3D = _get_terrain()
 	if (
 		not is_instance_valid(_workload_label)
 		or not is_instance_valid(active_terrain)
@@ -1629,7 +1629,7 @@ func _update_workload_estimate() -> void:
 
 
 func _get_terrain_world_rect() -> Rect2:
-	var active_terrain: T3DTerrain = _get_terrain()
+	var active_terrain: Terrain3D = _get_terrain()
 	if not is_instance_valid(active_terrain):
 		return Rect2()
 	var locations: Array[Vector2i] = active_terrain.data.get_region_locations()
@@ -1669,7 +1669,7 @@ func _format_integer(p_value: int) -> String:
 func _invalidate_completed_job(p_message: String) -> void:
 	if _is_running():
 		return
-	if _job and _job.get_state() == T3DErosionJob.STATE_COMPLETED:
+	if _job and _job.get_state() == Terrain3DErosionJob.STATE_COMPLETED:
 		_job = null
 		_active_run_settings = null
 		_job_is_preview = false
@@ -1682,7 +1682,7 @@ func _invalidate_completed_job(p_message: String) -> void:
 
 
 func _is_running() -> bool:
-	return _job != null and _job.get_state() == T3DErosionJob.STATE_RUNNING
+	return _job != null and _job.get_state() == Terrain3DErosionJob.STATE_RUNNING
 
 
 func _refresh_editor_context() -> void:

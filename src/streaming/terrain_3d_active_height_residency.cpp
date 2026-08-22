@@ -9,14 +9,14 @@
 
 #include <godot_cpp/variant/utility_functions.hpp>
 
-T3DActiveHeightResidency::T3DActiveHeightResidency( T3DRegionRepository *const pRepository,
-		T3DSamplingStorage *const pSamplingStorage,
-		T3DRuntimePageStore *const pRuntimePageStore ) :
+Terrain3DActiveHeightResidency::Terrain3DActiveHeightResidency( Terrain3DRegionRepository *const pRepository,
+		Terrain3DSamplingStorage *const pSamplingStorage,
+		Terrain3DRuntimePageStore *const pRuntimePageStore ) :
 		m_pRepository( pRepository ),
 		m_pSamplingStorage( pSamplingStorage ),
 		m_pRuntimePageStore( pRuntimePageStore ) {}
 
-void T3DActiveHeightResidency::reset( void ) {
+void Terrain3DActiveHeightResidency::reset( void ) {
 	m_bDirty = true;
 	m_nStreamingGenerationLast = 0u;
 	m_nTopologyGenerationLast = 0u;
@@ -24,7 +24,7 @@ void T3DActiveHeightResidency::reset( void ) {
 	m_stats = t3dActiveHeightResidencyStats_t{};
 }
 
-t3dActiveHeightResidencyResult_t T3DActiveHeightResidency::update( const t3dResidencyFrameState_t &rFrame,
+t3dActiveHeightResidencyResult_t Terrain3DActiveHeightResidency::update( const t3dResidencyFrameState_t &rFrame,
 		const bool bForce ) {
 	t3dActiveHeightResidencyResult_t result;
 	m_stats = t3dActiveHeightResidencyStats_t{};
@@ -43,7 +43,7 @@ t3dActiveHeightResidencyResult_t T3DActiveHeightResidency::update( const t3dResi
 	for ( int slot = 0; slot < m_pRepository->getSlotCount(); ++slot ) {
 		++m_stats.m_nSlotsExaminedLastTick;
 		const Vector2i location = m_pRepository->getSlotsData()[slot];
-		T3DRegion *const pRegion = location == s_v2iMax ? nullptr : m_pRepository->getRegionPtr( location );
+		Terrain3DRegion *const pRegion = location == s_v2iMax ? nullptr : m_pRepository->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() ) {
 			continue;
 		}

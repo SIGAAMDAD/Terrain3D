@@ -39,10 +39,17 @@
 #include <godot_cpp/variant/typed_array.hpp>
 #include <mutex>
 
-class T3DEditor;
-class T3DNodeStreamer;
-class T3DLightmapStreamer;
-class T3DHLODStreamer;
+class Terrain3DEditor;
+class Terrain3DNodeStreamer;
+class Terrain3DLightmapStreamer;
+class Terrain3DHLODStreamer;
+class Terrain3DRenderCoordinator;
+
+
+EA_FORCE_INLINE String t3dDefaultRegionLightmapOutputDirectory( const String &rDataDirectory ) {
+	const String directory = rDataDirectory.strip_edges().trim_suffix( "/" );
+	return directory.is_empty() ? String() : directory.path_join( "lighting" );
+}
 
 typedef enum t3dDebugLevel_e {
 	MESG = -2, // Always print except in release builds
@@ -217,7 +224,7 @@ typedef struct t3dBakeSnapshot_s {
 } t3dBakeSnapshot_t;
 
 typedef struct t3dBakeTaskContext_s {
-	const T3DTerrain *m_pTerrain = nullptr;
+	const Terrain3D *m_pTerrain = nullptr;
 	const t3dBakeSnapshot_t *m_pSnapshot = nullptr;
 	const eastl::vector<t3dBakeRowTask_t> *m_pTasks = nullptr;
 	eastl::vector<t3dTriangleBuffer_t> *m_pBuffers = nullptr;
@@ -228,8 +235,8 @@ typedef struct t3dBakeTaskContext_s {
 	bool m_bRequireNav = false;
 } t3dBakeTaskContext_t;
 
-class T3DTerrain : public Node3D {
-	GDCLASS( T3DTerrain, Node3D );
+class Terrain3D : public Node3D {
+	GDCLASS( Terrain3D, Node3D );
 	CLASS_NAME();
 
 public: // Constants
@@ -241,22 +248,22 @@ private:
 	uint8_t m_nWarnings = 0u;
 	// Runtime memory ownership. Declaration order is intentional: allocator-backed
 	// containers are destroyed before the zone and its arena backing store.
-	T3DMemoryArena m_runtimeMemoryArena;
-	T3DMemoryZone m_runtimeMemoryZone;
+	Terrain3DMemoryArena m_runtimeMemoryArena;
+	Terrain3DMemoryZone m_runtimeMemoryZone;
 	t3dMemoryArenaSlice_t m_runtimeActiveHeightSlice;
 	t3dMemoryArenaSlice_t m_runtimeZoneSlice;
 	bool m_bRuntimeMemoryReady = false;
 
 	// Object references
-	T3DData *m_pData = nullptr;
-	Ref<T3DAssets> m_assets;
+	Terrain3DData *m_pData = nullptr;
+	Ref<Terrain3DAssets> m_assets;
 	Ref<Resource> m_autoShaderProfile;
-	T3DCollision *m_pCollision = nullptr;
-	T3DInstancer *m_pInstancer = nullptr;
-	T3DNodeStreamer *m_pNodeStreamer = nullptr;
-	T3DLightmapStreamer *m_pLightmapStreamer = nullptr;
-	T3DHLODStreamer *m_pHlodStreamer = nullptr;
-	T3DEditor *m_pEditor = nullptr;
+	Terrain3DCollision *m_pCollision = nullptr;
+	Terrain3DInstancer *m_pInstancer = nullptr;
+	Terrain3DNodeStreamer *m_pNodeStreamer = nullptr;
+	Terrain3DLightmapStreamer *m_pLightmapStreamer = nullptr;
+	Terrain3DHLODStreamer *m_pHlodStreamer = nullptr;
+	Terrain3DEditor *m_pEditor = nullptr;
 	Object *m_pEditorPlugin = nullptr;
 
 	// Regions
@@ -423,10 +430,10 @@ private:
 	int m_nLabelSize = 48;
 
 	// Tracked Targets
-	T3DTargetNode3D m_clipmapTarget;
-	T3DTargetNode3D m_collisionTarget;
-	T3DTargetNode3D m_lightTarget;
-	T3DTargetNode3D m_hCamera; // Fallback target for clipmap and collision
+	Terrain3DTargetNode3D m_clipmapTarget;
+	Terrain3DTargetNode3D m_collisionTarget;
+	Terrain3DTargetNode3D m_lightTarget;
+	Terrain3DTargetNode3D m_hCamera; // Fallback target for clipmap and collision
 	Color m_lastLightColor = s_colorWhite;
 	Vector3 m_lastLightDirection = s_v3Zero;
 	bool m_bLightStateValid = false;
@@ -441,8 +448,8 @@ private:
 	bool m_bLightCullMaskCaptured = false;
 
 	// Terrain Mesh
-	T3DMesher *m_pTerrainMesher = nullptr;
-	Ref<T3DMaterial> m_material;
+	Terrain3DMesher *m_pTerrainMesher = nullptr;
+	Ref<Terrain3DMaterial> m_material;
 	int m_nMeshLods = 7;
 	int m_nTessellationLevel = 0;
 	int m_nMeshSize = 48;
@@ -481,7 +488,7 @@ private:
 	uint64_t m_nComputeDisplacementRequestVersion = 0u;
 
 	// Ocean Mesh
-	T3DMesher *m_pOceanMesher = nullptr;
+	Terrain3DMesher *m_pOceanMesher = nullptr;
 	bool m_bOceanEnabled = false;
 	int m_nOceanMeshLods = 7;
 	int m_nOceanTessellationLevel = 0;
@@ -503,6 +510,9 @@ private:
 	t3dOceanShadingMode_t m_oceanShadingMode = OCEAN_SHADING_LAMBERT_GGX;
 
 	// Rendering
+	Terrain3DRenderCoordinator *m_pRenderCoordinator = nullptr;
+	t3dRenderBackend_t m_renderBackend = T3D_RENDER_BACKEND_RENDERING_SERVER;
+	t3dRdNativeProxyMode_t m_rdNativeProxyMode = T3D_RD_NATIVE_PROXY_SHADOWS_ONLY;
 	bool m_bFreeEditorTextures = true;
 	// Mouse cursor
 	SubViewport *m_pMouseVp = nullptr;
@@ -559,8 +569,8 @@ private:
 	int getTotalClipmapLevels( void ) const;
 	int rangeToLodCount( real_t fRangeM ) const;
 	real_t lodCountToRange( int nLodCount ) const;
-	void connectResourceSignals( const Ref<T3DAssets> &rAssets, const Ref<T3DMaterial> &rMaterial );
-	void disconnectResourceSignals( const Ref<T3DAssets> &rAssets, const Ref<T3DMaterial> &rMaterial );
+	void connectResourceSignals( const Ref<Terrain3DAssets> &rAssets, const Ref<Terrain3DMaterial> &rMaterial );
+	void disconnectResourceSignals( const Ref<Terrain3DAssets> &rAssets, const Ref<Terrain3DMaterial> &rMaterial );
 	void connectAutoShaderProfileSignal( const Ref<Resource> &rProfile );
 	void disconnectAutoShaderProfileSignal( const Ref<Resource> &rProfile );
 	void applyAutoShaderProfileMode( void );
@@ -575,6 +585,8 @@ private:
 	void destroyCollision( const bool bFinal = false );
 
 	void setupTerrainMesher( void );
+	void setupRenderCoordinator( void );
+	void destroyRenderCoordinator( bool bFinal = false );
 	EA_FORCE_INLINE void updateMesherAabbs( void ) {
 		m_pTerrainMesher ? m_pTerrainMesher->updateAabbs() : ( void )0;
 	}
@@ -635,12 +647,12 @@ private:
 			const t3dBakeSnapshot_t *pSnapshot = nullptr ) const;
 
 public:
-	static constexpr int64_t s_nNativeApiRevision = 2026081802LL;
-	static constexpr const char *s_pszNativeBuildId = "a2.8.6-memory-zone";
+	static constexpr int64_t s_nNativeApiRevision = 2026082203LL;
+	static constexpr const char *s_pszNativeBuildId = "a2.9.2-shader-preprocessor-repair";
 	static t3dDebugLevel_t s_debugLevel; // Initialized in terrain_3d.cpp
 
-	T3DTerrain( void );
-	~T3DTerrain( void );
+	Terrain3D( void );
+	~Terrain3D( void );
 	EA_FORCE_INLINE bool isInsideWorld( void ) const {
 		return m_bIsInsideWorld;
 	}
@@ -669,34 +681,34 @@ public:
 	bool cookRuntimeClipmapGeometryPack( void ) const;
 
 	// Object references
-	EA_FORCE_INLINE T3DData *getData( void ) const {
+	EA_FORCE_INLINE Terrain3DData *getData( void ) const {
 		return m_pData;
 	}
-	void setAssets( const Ref<T3DAssets> &rAssets );
-	EA_FORCE_INLINE Ref<T3DAssets> getAssets( void ) const {
+	void setAssets( const Ref<Terrain3DAssets> &rAssets );
+	EA_FORCE_INLINE Ref<Terrain3DAssets> getAssets( void ) const {
 		return m_assets;
 	}
 	void setAutoShaderProfile( const Ref<Resource> &rProfile );
 	EA_FORCE_INLINE Ref<Resource> getAutoShaderProfile( void ) const {
 		return m_autoShaderProfile;
 	}
-	EA_FORCE_INLINE T3DCollision *getCollision( void ) const {
+	EA_FORCE_INLINE Terrain3DCollision *getCollision( void ) const {
 		return m_pCollision;
 	}
-	EA_FORCE_INLINE T3DInstancer *getInstancer( void ) const {
+	EA_FORCE_INLINE Terrain3DInstancer *getInstancer( void ) const {
 		return m_pInstancer;
 	}
-	EA_FORCE_INLINE T3DNodeStreamer *getNodeStreamer( void ) const {
+	EA_FORCE_INLINE Terrain3DNodeStreamer *getNodeStreamer( void ) const {
 		return m_pNodeStreamer;
 	}
-	EA_FORCE_INLINE T3DLightmapStreamer *getLightmapStreamer( void ) const {
+	EA_FORCE_INLINE Terrain3DLightmapStreamer *getLightmapStreamer( void ) const {
 		return m_pLightmapStreamer;
 	}
-	EA_FORCE_INLINE T3DHLODStreamer *getHlodStreamer( void ) const {
+	EA_FORCE_INLINE Terrain3DHLODStreamer *getHlodStreamer( void ) const {
 		return m_pHlodStreamer;
 	}
-	void setEditor( T3DEditor *pEditor );
-	EA_FORCE_INLINE T3DEditor *getEditor( void ) const {
+	void setEditor( Terrain3DEditor *pEditor );
+	EA_FORCE_INLINE Terrain3DEditor *getEditor( void ) const {
 		return m_pEditor;
 	}
 	void setPlugin( Object *pPlugin );
@@ -713,10 +725,10 @@ public:
 		if ( m_pData && m_pData->isInitializedFor( this ) ) {
 			m_pData->changeRegionSize( size );
 		} else {
-			// Property deserialization can create T3DData before the node enters
-			// the tree/world and before T3DData::initialize() assigns its owner.
+			// Property deserialization can create Terrain3DData before the node enters
+			// the tree/world and before Terrain3DData::initialize() assigns its owner.
 			// At that stage there is no repository to migrate; retain the requested
-			// owner setting and let T3DData::initialize() reconcile storage later.
+			// owner setting and let Terrain3DData::initialize() reconcile storage later.
 			setRegionSize( size );
 		}
 	}
@@ -900,10 +912,10 @@ public:
 	void forceMemoryBudgetRebalance( void );
 	Dictionary getRuntimeDiagnostics( bool bDeep = false ) const;
 	Dictionary getRuntimeParitySnapshot( void ) const;
-	Ref<T3DMemoryStats> getMemoryStatsSnapshot( void ) const;
-	TypedArray<T3DShaderTierStats> getShaderTierStatsSnapshot( void ) const;
-	TypedArray<T3DCacheStats> getCacheStatsSnapshot( bool bDeep = false ) const;
-	Ref<T3DFrameStats> getFrameStatsSnapshot( void ) const;
+	Ref<Terrain3DMemoryStats> getMemoryStatsSnapshot( void ) const;
+	TypedArray<Terrain3DShaderTierStats> getShaderTierStatsSnapshot( void ) const;
+	TypedArray<Terrain3DCacheStats> getCacheStatsSnapshot( bool bDeep = false ) const;
+	Ref<Terrain3DFrameStats> getFrameStatsSnapshot( void ) const;
 	Array getRuntimeProfileHistory( int nMaxSamples = 600 ) const;
 	Array getRuntimeProfileHistorySince( int64_t nAfterSequence, int nMaxSamples = 600 ) const;
 	void resetRuntimeDiagnostics( void );
@@ -1366,11 +1378,11 @@ public:
 	}
 
 	// Terrain Mesh
-	EA_FORCE_INLINE T3DMesher *getMesher( void ) const {
+	EA_FORCE_INLINE Terrain3DMesher *getMesher( void ) const {
 		return m_pTerrainMesher;
 	}
-	void setMaterial( const Ref<T3DMaterial> &rMaterial );
-	EA_FORCE_INLINE Ref<T3DMaterial> getMaterial( void ) const {
+	void setMaterial( const Ref<Terrain3DMaterial> &rMaterial );
+	EA_FORCE_INLINE Ref<Terrain3DMaterial> getMaterial( void ) const {
 		return m_material;
 	}
 	void setMeshLods( const int nCount );
@@ -1465,6 +1477,12 @@ public:
 		return m_nRenderLayers;
 	}
 
+	void setRenderBackend( t3dRenderBackend_t backend );
+	EA_FORCE_INLINE t3dRenderBackend_t getRenderBackend( void ) const { return m_renderBackend; }
+	void setRdNativeProxyMode( t3dRdNativeProxyMode_t mode );
+	EA_FORCE_INLINE t3dRdNativeProxyMode_t getRdNativeProxyMode( void ) const { return m_rdNativeProxyMode; }
+	Dictionary getRdRendererDiagnostics( void ) const;
+
 	// Material Displacement Aliases
 	EA_FORCE_INLINE void setDisplacementScale( const real_t fDisplacementScale ) {
 		m_material.is_valid() ? m_material->setDisplacementScale( fDisplacementScale ) : ( void )0;
@@ -1492,7 +1510,7 @@ public:
 	}
 
 	// Ocean Mesh
-	EA_FORCE_INLINE T3DMesher *getOceanMesher( void ) const {
+	EA_FORCE_INLINE Terrain3DMesher *getOceanMesher( void ) const {
 		return m_pOceanMesher;
 	}
 	void setOceanEnabled( const bool bEnabled );

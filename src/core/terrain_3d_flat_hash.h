@@ -21,7 +21,7 @@ typedef enum t3dFlatHashBucketState_e : uint8_t {
 
 // Compact open-addressing storage for bounded Terrain3D runtime tables. The map
 // retains capacity after clear() and performs no node allocations.
-template <typename Key, typename Value, typename Hash, typename Equal = eastl::equal_to<Key>> class T3DFlatHashMap {
+template <typename Key, typename Value, typename Hash, typename Equal = eastl::equal_to<Key>> class Terrain3DFlatHashMap {
 private:
 	eastl::vector<Key> m_keys;
 	eastl::vector<Value> m_values;
@@ -221,7 +221,7 @@ public:
 		return m_nSize == 0u;
 	}
 
-	EA_FORCE_INLINE void swap( T3DFlatHashMap &rOther ) {
+	EA_FORCE_INLINE void swap( Terrain3DFlatHashMap &rOther ) {
 		m_keys.swap( rOther.m_keys );
 		m_values.swap( rOther.m_values );
 		m_states.swap( rOther.m_states );
@@ -247,9 +247,9 @@ public:
 	}
 };
 
-template <typename Key, typename Hash, typename Equal = eastl::equal_to<Key>> class T3DFlatHashSet {
+template <typename Key, typename Hash, typename Equal = eastl::equal_to<Key>> class Terrain3DFlatHashSet {
 private:
-	T3DFlatHashMap<Key, uint8_t, Hash, Equal> m_map;
+	Terrain3DFlatHashMap<Key, uint8_t, Hash, Equal> m_map;
 
 public:
 	EA_FORCE_INLINE void reserve( const size_t nEntries ) {
@@ -283,7 +283,7 @@ public:
 	EA_FORCE_INLINE bool empty( void ) const {
 		return m_map.empty();
 	}
-	EA_FORCE_INLINE void swap( T3DFlatHashSet &rOther ) {
+	EA_FORCE_INLINE void swap( Terrain3DFlatHashSet &rOther ) {
 		m_map.swap( rOther.m_map );
 	}
 

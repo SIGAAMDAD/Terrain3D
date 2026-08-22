@@ -14,10 +14,10 @@
 #include <cstdint>
 #include <godot_cpp/variant/dictionary.hpp>
 
-class T3DRegion;
-class T3DRegionPersistence;
-class T3DRegionRepository;
-class T3DSamplingStorage;
+class Terrain3DRegion;
+class Terrain3DRegionPersistence;
+class Terrain3DRegionRepository;
+class Terrain3DSamplingStorage;
 
 typedef struct t3dCpuRegionCacheStats_s {
 	bool m_bEnabled = false;
@@ -33,12 +33,12 @@ typedef struct t3dCpuRegionCacheStats_s {
 	uint64_t m_nServiceUsecLast = 0u;
 } t3dCpuRegionCacheStats_t;
 
-class T3DCpuRegionCache {
+class Terrain3DCpuRegionCache {
 public:
-	T3DCpuRegionCache( T3DRegionRepository *pRepository,
-			T3DRegionPersistence *pPersistence,
-			T3DSamplingStorage *pSamplingStorage,
-			T3DRuntimePageStore *pRuntimePageStore );
+	Terrain3DCpuRegionCache( Terrain3DRegionRepository *pRepository,
+			Terrain3DRegionPersistence *pPersistence,
+			Terrain3DSamplingStorage *pSamplingStorage,
+			Terrain3DRuntimePageStore *pRuntimePageStore );
 
 	bool configure( bool bEnabled, int nBudgetMb, int nLoadLayers, int nLoadBudgetMb );
 	void setRuntimePageConfig( const t3dRuntimePageConfig_t &rConfig );
@@ -46,7 +46,8 @@ public:
 	void refreshCapacity( void );
 	void invalidate( const Vector2i &vLocation );
 
-	bool loadSource( const Vector2i &vLocation, Ref<T3DRegion> &rSource ) const;
+	bool loadSource( const Vector2i &vLocation, Ref<Terrain3DRegion> &rSource ) const;
+	void releaseUntrackedMaps( void );
 	bool requestSourceAsync( const Vector2i &vLocation );
 	bool ensureResident( const Vector2i &vLocation, bool bDemandLoad = true );
 	bool ensureSampleArea( const Vector3 &rWorldPosition, int nRadiusTexels );
@@ -82,10 +83,10 @@ public:
 	Dictionary getStatsDictionary( bool bDetailed, int nEffectiveLoadLayers ) const;
 
 private:
-	T3DRegionRepository *m_pRepository = nullptr;
-	T3DRegionPersistence *m_pPersistence = nullptr;
-	T3DSamplingStorage *m_pSamplingStorage = nullptr;
-	T3DRuntimePageStore *m_pRuntimePageStore = nullptr;
+	Terrain3DRegionRepository *m_pRepository = nullptr;
+	Terrain3DRegionPersistence *m_pPersistence = nullptr;
+	Terrain3DSamplingStorage *m_pSamplingStorage = nullptr;
+	Terrain3DRuntimePageStore *m_pRuntimePageStore = nullptr;
 	t3dRuntimePageConfig_t m_runtimePageConfig;
 
 	bool m_bEnabled = false;
@@ -116,10 +117,10 @@ private:
 
 	int calculateCapacity( void ) const;
 	int findSlot( const Vector2i &vLocation ) const;
-	bool takeSourceAsync( const Vector2i &vLocation, Ref<T3DRegion> &rSource );
+	bool takeSourceAsync( const Vector2i &vLocation, Ref<Terrain3DRegion> &rSource );
 	void prewarmSources( const t3dResidencyFrameState_t &rFrame );
 	void reapSourceAsync( const t3dResidencyFrameState_t &rFrame );
-	bool publishSlot( int iSlot, const Vector2i &vLocation, const Ref<T3DRegion> &rSource );
+	bool publishSlot( int iSlot, const Vector2i &vLocation, const Ref<Terrain3DRegion> &rSource );
 	bool publishCookedSlot( int iSlot,
 			const Vector2i &vLocation,
 			const Ref<Image> &rHeight,
@@ -133,7 +134,6 @@ private:
 			Ref<Image> &rColor,
 			Ref<Image> &rDerived ) const;
 	bool evictSlot( int iSlot );
-	void releaseUntrackedMaps( void );
 	bool restoreAllMaps( void );
 	int collectDesired( const t3dResidencyFrameState_t &rFrame,
 			const Vector2i &rCenter,

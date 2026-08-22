@@ -1,6 +1,6 @@
 extends Node
 
-var terrain: T3DTerrain
+var terrain: Terrain3D
 
 
 func _ready() -> void:
@@ -17,24 +17,24 @@ func _ready() -> void:
 	$RuntimeNavigationBaker.enabled = true
 
 
-func create_terrain() -> T3DTerrain:
+func create_terrain() -> Terrain3D:
 	# Create textures
 	var green_gr := Gradient.new()
 	green_gr.set_color(0, Color.from_hsv(100./360., .35, .3))
 	green_gr.set_color(1, Color.from_hsv(120./360., .4, .37))
-	var green_ta: T3DTextureAsset = await create_texture_asset("Grass", green_gr, 1024)
+	var green_ta: Terrain3DTextureAsset = await create_texture_asset("Grass", green_gr, 1024)
 	green_ta.uv_scale = 0.02
 
 	var brown_gr := Gradient.new()
 	brown_gr.set_color(0, Color.from_hsv(30./360., .4, .3))
 	brown_gr.set_color(1, Color.from_hsv(30./360., .4, .4))
-	var brown_ta: T3DTextureAsset = await create_texture_asset("Dirt", brown_gr, 1024)
+	var brown_ta: Terrain3DTextureAsset = await create_texture_asset("Dirt", brown_gr, 1024)
 	brown_ta.uv_scale = 0.03
 
-	var grass_ma: T3DMeshAsset = create_mesh_asset("Grass", Color.from_hsv(120./360., .4, .37))
+	var grass_ma: Terrain3DMeshAsset = create_mesh_asset("Grass", Color.from_hsv(120./360., .4, .37))
 
 	# Create a terrain
-	terrain = T3DTerrain.new()
+	terrain = Terrain3D.new()
 	terrain.name = "Terrain3D"
 	# Optionally log to the console. Use the console version of Godot. See Troubleshooting doc.
 	#terrain.debug_level = Terrain3D.DEBUG
@@ -42,7 +42,7 @@ func create_terrain() -> T3DTerrain:
 	terrain.owner = get_tree().get_current_scene()
 
 	# Set material and assets
-	terrain.material.world_background = T3DMaterial.NONE
+	terrain.material.world_background = Terrain3DMaterial.NONE
 	terrain.material.auto_shader_enabled = true
 	terrain.material.set_shader_param("auto_slope", 10)
 	terrain.material.set_shader_param("blend_sharpness", .975)
@@ -57,7 +57,7 @@ func create_terrain() -> T3DTerrain:
 	for x in img.get_width():
 		for y in img.get_height():
 			img.set_pixel(x, y, Color(noise.get_noise_2d(x, y), 0., 0., 1.))
-	terrain.region_size = T3DTerrain.SIZE_1024
+	terrain.region_size = Terrain3D.SIZE_1024
 	terrain.data.import_images([img, null, null], Vector3(-1024, 0, -1024), 0.0, 150.0)
 
 	# Instance foliage
@@ -73,12 +73,12 @@ func create_terrain() -> T3DTerrain:
 	terrain.instancer.add_transforms(0, xforms)
 
 	# Enable the next line and `Debug/Visible Collision Shapes` to see collision
-	#terrain.collision.mode = T3DCollision.DYNAMIC_EDITOR
+	#terrain.collision.mode = Terrain3DCollision.DYNAMIC_EDITOR
 
 	return terrain
 
 
-func create_texture_asset(asset_name: String, gradient: Gradient, texture_size: int = 512) -> T3DTextureAsset:
+func create_texture_asset(asset_name: String, gradient: Gradient, texture_size: int = 512) -> Terrain3DTextureAsset:
 	# Create noise map
 	var fnl := FastNoiseLite.new()
 	fnl.frequency = 0.004
@@ -119,17 +119,17 @@ func create_texture_asset(asset_name: String, gradient: Gradient, texture_size: 
 	nrm_noise_img.generate_mipmaps()
 	var normal := ImageTexture.create_from_image(nrm_noise_img)
 
-	var ta := T3DTextureAsset.new()
+	var ta := Terrain3DTextureAsset.new()
 	ta.name = asset_name
 	ta.albedo_texture = albedo
 	ta.normal_texture = normal
 	return ta
 
 
-func create_mesh_asset(asset_name: String, color: Color) -> T3DMeshAsset:
-	var ma := T3DMeshAsset.new()
+func create_mesh_asset(asset_name: String, color: Color) -> Terrain3DMeshAsset:
+	var ma := Terrain3DMeshAsset.new()
 	ma.name = asset_name
-	ma.set_generated_type(T3DMeshAsset.TYPE_TEXTURE_CARD)
+	ma.set_generated_type(Terrain3DMeshAsset.TYPE_TEXTURE_CARD)
 	ma.height_offset = 0.5
 	ma.lod0_range = 128.0
 	ma.material_override.albedo_color = color

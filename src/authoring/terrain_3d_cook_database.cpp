@@ -12,16 +12,16 @@ static constexpr uint64_t s_nCookDatabaseMagic = 0x3142444b43443354ull; // T3DCK
 static constexpr uint32_t s_nCookDatabaseVersion = 1u;
 static constexpr uint32_t s_nCookDatabaseHeaderBytes = 40u;
 
-void T3DCookDatabase::reset( void ) {
+void Terrain3DCookDatabase::reset( void ) {
 	m_bLoaded = false;
 	m_regionSignatures.fill( 0u );
 }
 
-String T3DCookDatabase::getPath( const String &rDataDirectory ) const {
+String Terrain3DCookDatabase::getPath( const String &rDataDirectory ) const {
 	return rDataDirectory.path_join( "terrain3d_cook.t3ddb" );
 }
 
-bool T3DCookDatabase::load( const String &rDataDirectory, const int nRegionSize, const uint64_t nMaterialSignature ) {
+bool Terrain3DCookDatabase::load( const String &rDataDirectory, const int nRegionSize, const uint64_t nMaterialSignature ) {
 	reset();
 	const String path = getPath( rDataDirectory );
 	Ref<FileAccess> file = FileAccess::open( path, FileAccess::READ );
@@ -50,7 +50,7 @@ bool T3DCookDatabase::load( const String &rDataDirectory, const int nRegionSize,
 	return true;
 }
 
-bool T3DCookDatabase::write( const String &rDataDirectory,
+bool Terrain3DCookDatabase::write( const String &rDataDirectory,
 		const int nRegionSize,
 		const uint64_t nMaterialSignature ) const {
 	if ( rDataDirectory.is_empty() || nRegionSize <= 0 ) {
@@ -94,21 +94,21 @@ bool T3DCookDatabase::write( const String &rDataDirectory,
 	return true;
 }
 
-bool T3DCookDatabase::hasCurrentRegion( const Vector2i &rLocation, const uint64_t nSourceSignature ) const {
+bool Terrain3DCookDatabase::hasCurrentRegion( const Vector2i &rLocation, const uint64_t nSourceSignature ) const {
 	if ( !m_bLoaded || nSourceSignature == 0u ) {
 		return false;
 	}
-	const int index = T3DRegionRepository::getRegionMapIndex( rLocation );
+	const int index = Terrain3DRegionRepository::getRegionMapIndex( rLocation );
 	return index >= 0 && m_regionSignatures[( size_t )index] == nSourceSignature;
 }
 
-void T3DCookDatabase::setRegion( const Vector2i &rLocation, const uint64_t nSourceSignature ) {
-	const int index = T3DRegionRepository::getRegionMapIndex( rLocation );
+void Terrain3DCookDatabase::setRegion( const Vector2i &rLocation, const uint64_t nSourceSignature ) {
+	const int index = Terrain3DRegionRepository::getRegionMapIndex( rLocation );
 	if ( index >= 0 ) {
 		m_regionSignatures[( size_t )index] = nSourceSignature;
 	}
 }
 
-void T3DCookDatabase::clearRegion( const Vector2i &rLocation ) {
+void Terrain3DCookDatabase::clearRegion( const Vector2i &rLocation ) {
 	setRegion( rLocation, 0u );
 }

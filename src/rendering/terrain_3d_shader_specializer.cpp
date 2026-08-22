@@ -22,7 +22,7 @@ typedef struct t3dConditionalFrame_s {
 	bool m_bBranchTaken = false;
 } t3dConditionalFrame_t;
 
-class T3DStaticExpressionParser {
+class Terrain3DStaticExpressionParser {
 	const String &m_expression;
 	const t3dShaderStaticState_t &m_state;
 	int m_index = 0;
@@ -209,7 +209,7 @@ class T3DStaticExpressionParser {
 	}
 
 public:
-	EA_FORCE_INLINE T3DStaticExpressionParser( const String &rExpression, const t3dShaderStaticState_t &rState ) :
+	EA_FORCE_INLINE Terrain3DStaticExpressionParser( const String &rExpression, const t3dShaderStaticState_t &rState ) :
 			m_expression( rExpression ), m_state( rState ) {}
 
 	bool evaluate( bool &bValue, String &rFailureSummary ) {
@@ -344,6 +344,13 @@ bool t3dValidateAssembledShaderSource( const String &rSource, String &rFailureSu
 					String( "Unexpanded shader include remains at assembled line " ) + String::num_int64( line_index + 1 );
 			return false;
 		}
+		if ( directive.begins_with( "#if " ) || directive.begins_with( "#ifdef " ) ||
+				directive.begins_with( "#ifndef " ) || directive.begins_with( "#elif " ) || directive == "#else" ||
+				directive == "#endif" ) {
+			rFailureSummary = String( "Conditional shader directive escaped Terrain3D specialization at assembled line " ) +
+					String::num_int64( line_index + 1 ) + String( ": " ) + directive;
+			return false;
+		}
 		if ( directive.find( "T3D_STANDALONE_DEFAULTS" ) >= 0 || directive.find( "T3D_TEMPLATE_CONTEXT" ) >= 0 ||
 				( directive.begins_with( "#" ) && directive.find( "T3D_" ) >= 0 ) ) {
 			rFailureSummary = String( "Unresolved Terrain3D preprocessing state remains at assembled line " ) +
@@ -436,7 +443,7 @@ bool t3dAssembleShaderSource( const String &rExpandedSource,
 			const bool bOwned = t3dShaderSpecializerIsTerrain3dStaticExpression( expression );
 			bool bValue = false;
 			if ( bOwned ) {
-				T3DStaticExpressionParser parser( expression, rState );
+				Terrain3DStaticExpressionParser parser( expression, rState );
 				if ( !parser.evaluate( bValue, rFailureSummary ) ) {
 					rFailureSummary = String( "Terrain3D shader expression error at line " ) +
 							String::num_int64( line_index + 1 ) + String( ": " ) + rFailureSummary + String( " [" ) +
@@ -476,7 +483,7 @@ bool t3dAssembleShaderSource( const String &rExpandedSource,
 				return false;
 			}
 			bool bValue = false;
-			T3DStaticExpressionParser parser( expression, rState );
+			Terrain3DStaticExpressionParser parser( expression, rState );
 			if ( !parser.evaluate( bValue, rFailureSummary ) ) {
 				rFailureSummary = String( "Terrain3D shader #elif expression error at line " ) +
 						String::num_int64( line_index + 1 ) + String( ": " ) + rFailureSummary + String( " [" ) +

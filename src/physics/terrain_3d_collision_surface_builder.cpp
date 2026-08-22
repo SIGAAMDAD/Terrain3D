@@ -13,11 +13,11 @@
 #include <cfloat>
 #include <cmath>
 
-size_t T3DCollisionSurfaceBuilder::getRetainedBufferBytes( void ) const {
+size_t Terrain3DCollisionSurfaceBuilder::getRetainedBufferBytes( void ) const {
 	return m_fullHeightRowScratch.capacity() * sizeof( float );
 }
 
-void T3DCollisionSurfaceBuilder::refreshRegionBlendCurve( const int nRegionSize, const real_t fRegionBlend ) {
+void Terrain3DCollisionSurfaceBuilder::refreshRegionBlendCurve( const int nRegionSize, const real_t fRegionBlend ) {
 	if ( nRegionSize <= 0 ) {
 		m_fRegionBlendCurve.fill( 0.0f );
 		m_nRegionBlendCurveSize = 0;
@@ -43,7 +43,7 @@ void T3DCollisionSurfaceBuilder::refreshRegionBlendCurve( const int nRegionSize,
 	m_fRegionBlendCurveSetting = fRegionBlend;
 }
 
-real_t T3DCollisionSurfaceBuilder::getRegionBlendWeight( const int64_t nGridCoordinate ) const {
+real_t Terrain3DCollisionSurfaceBuilder::getRegionBlendWeight( const int64_t nGridCoordinate ) const {
 	if ( m_nRegionBlendCurveSize <= 0 ) {
 		return 0.0f;
 	}
@@ -54,7 +54,7 @@ real_t T3DCollisionSurfaceBuilder::getRegionBlendWeight( const int64_t nGridCoor
 	return m_fRegionBlendCurve[( size_t )( local )];
 }
 
-real_t T3DCollisionSurfaceBuilder::getRegionBlend( const int iX,
+real_t Terrain3DCollisionSurfaceBuilder::getRegionBlend( const int iX,
 		const int iZ,
 		const int iMinRegionX,
 		const int iMinRegionZ,
@@ -74,8 +74,8 @@ real_t T3DCollisionSurfaceBuilder::getRegionBlend( const int iX,
 	return ( 1.0f - blend ) * 2.0f;
 }
 
-bool T3DCollisionSurfaceBuilder::build( const T3DData *const pData,
-		const Ref<T3DMaterial> &rMaterial,
+bool Terrain3DCollisionSurfaceBuilder::build( const Terrain3DData *const pData,
+		const Ref<Terrain3DMaterial> &rMaterial,
 		const Vector2i &rPosition,
 		const int nSize,
 		PackedFloat32Array &rHeights,
@@ -89,7 +89,7 @@ bool T3DCollisionSurfaceBuilder::build( const T3DData *const pData,
 		return false;
 	}
 	const Vector2i origin_location = V2I_DIVIDE_FLOOR( rPosition, region_size );
-	const T3DRegion *const pOriginRegion = pData->getRegionPtr( origin_location );
+	const Terrain3DRegion *const pOriginRegion = pData->getRegionPtr( origin_location );
 	if ( !pOriginRegion || pOriginRegion->isDeleted() ) {
 		return false;
 	}
@@ -139,7 +139,7 @@ bool T3DCollisionSurfaceBuilder::build( const T3DData *const pData,
 		}
 		for ( int z = 0; z < presence_height; ++z ) {
 			for ( int x = 0; x < presence_width; ++x ) {
-				const T3DRegion *const pRegion =
+				const Terrain3DRegion *const pRegion =
 						pData->getRegionPtr( Vector2i( min_blend_region_x + x, min_blend_region_z + z ) );
 				m_regionPresenceScratch[( size_t )( z ) * ( size_t )( presence_width ) + ( size_t )( x )] =
 						pRegion && !pRegion->isDeleted() ? ( uint8_t )( 1 ) : ( uint8_t )( 0 );
@@ -157,7 +157,7 @@ bool T3DCollisionSurfaceBuilder::build( const T3DData *const pData,
 		}
 		pHeightScratch = m_fullHeightRowScratch.data();
 	}
-	T3DSampler sampler( pData->getSamplingSourceInternal() );
+	Terrain3DSampler sampler( pData->getSamplingSourceInternal() );
 	if ( !sampler.copyHeightRect( rPosition.x, rPosition.y, width, width, pHeightScratch, width, true ) ) {
 		return false;
 	}

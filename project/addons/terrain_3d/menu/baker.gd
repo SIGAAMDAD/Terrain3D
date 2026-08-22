@@ -23,9 +23,9 @@ If preferred, this setup can be canceled and the steps performed manually. For
 the best results, adjust the settings on the NavigationMesh resource to match
 the settings of your navigation agents and collisions."""
 
-var plugin: T3DEditorPluginBase
+var plugin: Terrain3DEditorPluginBase
 var bake_method: Callable
-var bake_lod_dialog: T3DBakeLodDialog
+var bake_lod_dialog: Terrain3DBakeLodDialog
 var confirm_dialog: ConfirmationDialog
 
 
@@ -76,7 +76,7 @@ func _bake_mesh() -> void:
 	if plugin.terrain.data.get_region_count() == 0:
 		push_error("Terrain3D has no active regions to bake")
 		return
-	var mesh: Mesh = plugin.terrain.bake_mesh(bake_lod_dialog.get_selected_lod(), int(T3DData.HEIGHT_FILTER_NEAREST))
+	var mesh: Mesh = plugin.terrain.bake_mesh(bake_lod_dialog.get_selected_lod(), int(Terrain3DData.HEIGHT_FILTER_NEAREST))
 	if !mesh:
 		push_error("Failed to bake mesh from Terrain3D")
 		return
@@ -157,30 +157,30 @@ func _bake_occluder() -> void:
 	undo.commit_action()
 
 
-func find_nav_region_terrains(p_nav_region: NavigationRegion3D) -> Array[T3DTerrain]:
-	var result: Array[T3DTerrain] = []
+func find_nav_region_terrains(p_nav_region: NavigationRegion3D) -> Array[Terrain3D]:
+	var result: Array[Terrain3D] = []
 	if not p_nav_region.navigation_mesh:
 		return result
 
 	var source_mode: NavigationMesh.SourceGeometryMode
 	source_mode = p_nav_region.navigation_mesh.geometry_source_geometry_mode
 	if source_mode == NavigationMesh.SOURCE_GEOMETRY_ROOT_NODE_CHILDREN:
-		result.append_array(p_nav_region.find_children("", "T3DTerrain", true, true))
+		result.append_array(p_nav_region.find_children("", "Terrain3D", true, true))
 		return result
 
 	var group_nodes: Array[Node] = p_nav_region.get_tree().get_nodes_in_group(p_nav_region.navigation_mesh.geometry_source_group_name)
 	for node: Node in group_nodes:
-		if node is T3DTerrain:
+		if node is Terrain3D:
 			result.push_back(node)
 		if source_mode == NavigationMesh.SOURCE_GEOMETRY_GROUPS_WITH_CHILDREN:
-			for child: Node in node.find_children("", "T3DTerrain", true, true):
-				if child is T3DTerrain:
-					result.push_back(child as T3DTerrain)
+			for child: Node in node.find_children("", "Terrain3D", true, true):
+				if child is Terrain3D:
+					result.push_back(child as Terrain3D)
 
 	return result
 
 
-func find_terrain_nav_regions(p_terrain: T3DTerrain) -> Array[NavigationRegion3D]:
+func find_terrain_nav_regions(p_terrain: Terrain3D) -> Array[NavigationRegion3D]:
 	var result: Array[NavigationRegion3D] = []
 	var root: Node = EditorInterface.get_edited_scene_root()
 	if not root:
@@ -220,7 +220,7 @@ func _bake_nav_region_nav_mesh(p_nav_region: NavigationRegion3D) -> void:
 	var source_geometry_data := NavigationMeshSourceGeometryData3D.new()
 	NavigationServer3D.parse_source_geometry_data(nav_mesh, source_geometry_data, p_nav_region)
 
-	for terrain: T3DTerrain in find_nav_region_terrains(p_nav_region):
+	for terrain: Terrain3D in find_nav_region_terrains(p_nav_region):
 		var aabb: AABB = nav_mesh.filter_baking_aabb
 		aabb.position += nav_mesh.filter_baking_aabb_offset
 		aabb = p_nav_region.global_transform * aabb
@@ -371,7 +371,7 @@ func _set_up_navigation() -> void:
 	if plugin.terrain.data.get_region_count() == 0:
 		push_error("Terrain3D has no active regions")
 		return
-	var terrain: T3DTerrain = plugin.terrain
+	var terrain: Terrain3D = plugin.terrain
 
 	var nav_region := NavigationRegion3D.new()
 	nav_region.name = &"NavigationRegion3D"
@@ -391,7 +391,7 @@ func _set_up_navigation() -> void:
 	bake_nav_mesh()
 
 
-func _do_set_up_navigation(p_nav_region: NavigationRegion3D, p_terrain: T3DTerrain) -> void:
+func _do_set_up_navigation(p_nav_region: NavigationRegion3D, p_terrain: Terrain3D) -> void:
 	var parent: Node = p_terrain.get_parent()
 	var index: int = p_terrain.get_index()
 	var t_owner: Node = p_terrain.owner
@@ -404,7 +404,7 @@ func _do_set_up_navigation(p_nav_region: NavigationRegion3D, p_terrain: T3DTerra
 	p_terrain.owner = t_owner
 
 
-func _undo_set_up_navigation(p_nav_region: NavigationRegion3D, p_terrain: T3DTerrain) -> void:
+func _undo_set_up_navigation(p_nav_region: NavigationRegion3D, p_terrain: Terrain3D) -> void:
 	assert(p_terrain.get_parent() == p_nav_region)
 
 	var parent: Node = p_nav_region.get_parent()

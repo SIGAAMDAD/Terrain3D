@@ -58,18 +58,24 @@ typedef struct alignas( 32 ) t3dPackedTransform_s {
 static_assert( sizeof( t3dPackedTransform_t ) == 32u, "Packed instance transforms must remain 32 bytes." );
 static_assert( alignof( t3dPackedTransform_t ) == 32u, "Packed instance transforms must remain 32-byte aligned." );
 
-class T3DTransformArray {
+class Terrain3DTransformArray {
 public:
-	class T3DReference {
-	public:
-		EA_FORCE_INLINE explicit T3DReference( t3dPackedTransform_t *const pTransform ) : m_pTransform( pTransform ) {}
+	Terrain3DTransformArray( void ) = default;
+	Terrain3DTransformArray( const Terrain3DTransformArray & ) = delete;
+	Terrain3DTransformArray &operator=( const Terrain3DTransformArray & ) = delete;
+	Terrain3DTransformArray( Terrain3DTransformArray && ) noexcept = default;
+	Terrain3DTransformArray &operator=( Terrain3DTransformArray && ) noexcept = default;
 
-		T3DReference &operator=( const Transform3D &rTransform ) {
+	class Terrain3DReference {
+	public:
+		EA_FORCE_INLINE explicit Terrain3DReference( t3dPackedTransform_t *const pTransform ) : m_pTransform( pTransform ) {}
+
+		Terrain3DReference &operator=( const Transform3D &rTransform ) {
 			m_pTransform->set( rTransform );
 			return *this;
 		}
 
-		T3DReference &operator=( const T3DReference &rOther ) {
+		Terrain3DReference &operator=( const Terrain3DReference &rOther ) {
 			return operator=( Transform3D( rOther ) );
 		}
 
@@ -81,15 +87,15 @@ public:
 		t3dPackedTransform_t *m_pTransform = nullptr;
 	};
 
-	EA_FORCE_INLINE void bind( T3DHighWaterSlab<t3dPackedTransform_t> *const pSlab ) {
+	EA_FORCE_INLINE void bind( Terrain3DHighWaterSlab<t3dPackedTransform_t> *const pSlab ) {
 		m_storage.bind( pSlab );
 	}
 
-	EA_FORCE_INLINE void rebind( T3DHighWaterSlab<t3dPackedTransform_t> *const pSlab ) {
+	EA_FORCE_INLINE void rebind( Terrain3DHighWaterSlab<t3dPackedTransform_t> *const pSlab ) {
 		m_storage.rebind( pSlab );
 	}
 
-	EA_FORCE_INLINE void relocateExact( T3DHighWaterSlab<t3dPackedTransform_t> *const pSlab ) {
+	EA_FORCE_INLINE void relocateExact( Terrain3DHighWaterSlab<t3dPackedTransform_t> *const pSlab ) {
 		m_storage.relocateExact( pSlab );
 	}
 
@@ -127,8 +133,8 @@ public:
 		return m_storage.empty();
 	}
 
-	T3DReference operator[]( const size_t iIndex ) {
-		return T3DReference( &m_storage[iIndex] );
+	Terrain3DReference operator[]( const size_t iIndex ) {
+		return Terrain3DReference( &m_storage[iIndex] );
 	}
 
 	Transform3D operator[]( const size_t iIndex ) const {
@@ -166,7 +172,7 @@ public:
 	}
 
 private:
-	T3DSlabArray<t3dPackedTransform_t> m_storage;
+	Terrain3DSlabArray<t3dPackedTransform_t> m_storage;
 };
 
 #endif // TERRAIN3D_PACKED_TRANSFORM_H

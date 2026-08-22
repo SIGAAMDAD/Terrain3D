@@ -22,7 +22,7 @@ using ShadowCasting = RenderingServer::ShadowCastingSetting;
 /* Mesh assets need different defaults for texture cards and scene meshes.
  * Serialized asset settings override those defaults, while newly created assets
  * receive defaults during initialize(). Loaded and newly created assets therefore
- * enter initialization through distinct T3DAssets paths.
+ * enter initialization through distinct Terrain3DAssets paths.
  */
 
 typedef enum t3dHlodContribution_e {
@@ -37,8 +37,8 @@ typedef enum t3dGenType_e {
 	MESH_TYPE_MAX,
 } t3dGenType_t;
 
-class T3DMeshAsset : public T3DAssetResource {
-	GDCLASS( T3DMeshAsset, T3DAssetResource );
+class Terrain3DMeshAsset : public Terrain3DAssetResource {
+	GDCLASS( Terrain3DMeshAsset, Terrain3DAssetResource );
 	CLASS_NAME();
 
 public:
@@ -80,10 +80,10 @@ private:
 	TypedArray<Mesh> getMeshes( void ) const;
 
 public:
-	EA_FORCE_INLINE T3DMeshAsset( void ) {
+	EA_FORCE_INLINE Terrain3DMeshAsset( void ) {
 		clear();
 	}
-	EA_FORCE_INLINE ~T3DMeshAsset( void ) {}
+	EA_FORCE_INLINE ~Terrain3DMeshAsset( void ) {}
 	void initialize( void ) override;
 	void clear( void ) override;
 
@@ -279,7 +279,7 @@ protected:
 VARIANT_ENUM_CAST( t3dGenType_t );
 VARIANT_ENUM_CAST( t3dHlodContribution_t );
 
-inline TypedArray<Mesh> T3DMeshAsset::getMeshes( void ) const {
+inline TypedArray<Mesh> Terrain3DMeshAsset::getMeshes( void ) const {
 	if ( !m_pendingMeshes.is_empty() ) {
 		return m_pendingMeshes;
 	}

@@ -12,7 +12,7 @@
 // -----------------------------------------------------------------------------
 // Private functions
 
-bool T3DGeneratedTexture::matchesLayout( const Ref<Image> &rImage ) const {
+bool Terrain3DGeneratedTexture::matchesLayout( const Ref<Image> &rImage ) const {
 	return rImage.is_valid() && !rImage->is_empty() && rImage->get_width() == m_nWidth &&
 			rImage->get_height() == m_nHeight && ( int )( rImage->get_format() ) == m_nFormat &&
 			rImage->has_mipmaps() == m_bMipmaps;
@@ -21,13 +21,13 @@ bool T3DGeneratedTexture::matchesLayout( const Ref<Image> &rImage ) const {
 // -----------------------------------------------------------------------------
 // Public functions
 
-void T3DGeneratedTexture::clear( void ) {
+void Terrain3DGeneratedTexture::clear( void ) {
 	if ( m_hRid.is_valid() ) {
-		LOG( EXTREME, "T3DGeneratedTexture freeing ", m_hRid );
+		LOG( EXTREME, "Terrain3DGeneratedTexture freeing ", m_hRid );
 		RS->free_rid( m_hRid );
 	}
 	if ( m_image.is_valid() ) {
-		LOG( EXTREME, "T3DGeneratedTexture unref image", m_image );
+		LOG( EXTREME, "Terrain3DGeneratedTexture unref image", m_image );
 		m_image.unref();
 	}
 	m_hRid = RID();
@@ -41,7 +41,7 @@ void T3DGeneratedTexture::clear( void ) {
 	m_nPayloadBytes = 0u;
 }
 
-void T3DGeneratedTexture::swap( T3DGeneratedTexture &rOther ) {
+void Terrain3DGeneratedTexture::swap( Terrain3DGeneratedTexture &rOther ) {
 	using std::swap;
 	swap( m_hRid, rOther.m_hRid );
 	swap( m_image, rOther.m_image );
@@ -55,7 +55,7 @@ void T3DGeneratedTexture::swap( T3DGeneratedTexture &rOther ) {
 	swap( m_nPayloadBytes, rOther.m_nPayloadBytes );
 }
 
-RID T3DGeneratedTexture::create( const TypedArray<Image> &rLayers ) {
+RID Terrain3DGeneratedTexture::create( const TypedArray<Image> &rLayers ) {
 	if ( rLayers.is_empty() ) {
 		clear();
 		return RID();
@@ -79,7 +79,7 @@ RID T3DGeneratedTexture::create( const TypedArray<Image> &rLayers ) {
 		}
 		payload_bytes += ( size_t )( pImage->get_data().size() );
 	}
-	if ( T3DTerrain::s_debugLevel >= DEBUG ) {
+	if ( Terrain3D::s_debugLevel >= DEBUG ) {
 		LOG( EXTREME, "RenderingServer creating Texture2DArray, layers size: ", rLayers.size() );
 		for ( int i = 0; i < rLayers.size(); i++ ) {
 			const Ref<Image> pImg = rLayers[i];
@@ -139,7 +139,7 @@ RID T3DGeneratedTexture::create( const TypedArray<Image> &rLayers ) {
 	return m_hRid;
 }
 
-bool T3DGeneratedTexture::update( const Ref<Image> &rImage, const int nLayer ) {
+bool Terrain3DGeneratedTexture::update( const Ref<Image> &rImage, const int nLayer ) {
 	if ( !m_hRid.is_valid() || m_bDirty || !m_bLayered || nLayer < 0 || nLayer >= m_nSize ||
 			!matchesLayout( rImage ) ) {
 		LOG( ERROR,
@@ -164,7 +164,7 @@ bool T3DGeneratedTexture::update( const Ref<Image> &rImage, const int nLayer ) {
 	return true;
 }
 
-RID T3DGeneratedTexture::create( const Ref<Image> &rImage ) {
+RID Terrain3DGeneratedTexture::create( const Ref<Image> &rImage ) {
 	if ( rImage.is_null() || rImage->is_empty() ) {
 		m_bDirty = true;
 		LOG( ERROR, "Cannot create generated Texture2D from an empty image" );
@@ -202,7 +202,7 @@ RID T3DGeneratedTexture::create( const Ref<Image> &rImage ) {
 	return m_hRid;
 }
 
-bool T3DGeneratedTexture::update2d( const Ref<Image> &rImage ) {
+bool Terrain3DGeneratedTexture::update2d( const Ref<Image> &rImage ) {
 	if ( !m_hRid.is_valid() || m_bDirty || m_bLayered || m_nSize != 1 || !matchesLayout( rImage ) ) {
 		LOG( ERROR,
 				"Rejected Texture2D update. RID valid: ",

@@ -111,8 +111,8 @@ const ADD_SEPARATOR: int = 0x8 # Add a vertical line before this entry
 const ADD_SPACER: int = 0x10 # Add a space before this entry
 const NO_SAVE: int = 0x20 # Don't save this in EditorSettings
 
-var plugin: T3DEditorPluginBase
-var asset_dock: T3DAssetDock
+var plugin: Terrain3DEditorPluginBase
+var asset_dock: Terrain3DAssetDock
 var brush_preview_material: ShaderMaterial
 var select_brush_button: Button
 var selected_brush_imgs: Array[Resource] = []
@@ -191,23 +191,23 @@ func _ready() -> void:
 
 	add_setting({ "name":"height", "type":SettingType.SLIDER, "list":main_list, "default":20,
 							"unit":"m", "range":Vector3(-500, 500, 0.1), "flags":ALLOW_OUT_OF_BOUNDS })
-	add_setting({ "name":"height_picker", "type":SettingType.PICKER, "list":main_list, "default":T3DEditor.HEIGHT,
+	add_setting({ "name":"height_picker", "type":SettingType.PICKER, "list":main_list, "default":Terrain3DEditor.HEIGHT,
 							"flags":NO_LABEL, "tooltip":"Pick Height from the terrain." })
 
 	add_setting({ "name":"color", "type":SettingType.COLOR_SELECT, "list":main_list,
 							"default":Color.WHITE, "flags":ADD_SEPARATOR })
-	add_setting({ "name":"color_picker", "type":SettingType.PICKER, "list":main_list, "default":T3DEditor.COLOR,
+	add_setting({ "name":"color_picker", "type":SettingType.PICKER, "list":main_list, "default":Terrain3DEditor.COLOR,
 							"flags":NO_LABEL, "tooltip":"Pick Color from the terrain." })
 
 	add_setting({ "name":"roughness", "type":SettingType.SLIDER, "list":main_list, "default":-50,
 							"unit":"%", "range":Vector3(-100, 100, 1), "flags":ADD_SEPARATOR })
-	add_setting({ "name":"roughness_picker", "type":SettingType.PICKER, "list":main_list, "default":T3DEditor.ROUGHNESS,
+	add_setting({ "name":"roughness_picker", "type":SettingType.PICKER, "list":main_list, "default":Terrain3DEditor.ROUGHNESS,
 							"flags":NO_LABEL, "tooltip":"Pick Wetness from the terrain." })
 
 	add_setting({ "name":"enable_texture", "label":"Texture", "type":SettingType.CHECKBOX,
 							"list":main_list, "default":true, "flags":ADD_SEPARATOR })
 
-	add_setting({ "name":"texture_picker", "type":SettingType.PICKER, "list":main_list, "default":T3DEditor.TEXTURE,
+	add_setting({ "name":"texture_picker", "type":SettingType.PICKER, "list":main_list, "default":Terrain3DEditor.TEXTURE,
 							"flags":NO_LABEL, "tooltip":"Pick Texture from the terrain." })
 
 	add_setting({ "name":"texture_filter", "label":"Texture Filter", "type":SettingType.CHECKBOX,
@@ -224,7 +224,7 @@ func _ready() -> void:
 							"list":main_list, "default":true, "flags":ADD_SEPARATOR })
 	add_setting({ "name":"angle", "type":SettingType.SLIDER, "list":main_list, "default":0,
 							"unit":"%", "range":Vector3(0, 337.5, 22.5), "flags":NO_LABEL })
-	add_setting({ "name":"angle_picker", "type":SettingType.PICKER, "list":main_list, "default":T3DEditor.ANGLE,
+	add_setting({ "name":"angle_picker", "type":SettingType.PICKER, "list":main_list, "default":Terrain3DEditor.ANGLE,
 							"flags":NO_LABEL, "tooltip":"Pick Angle from the terrain." })
 	add_setting({ "name":"dynamic_angle", "label":"Dynamic", "type":SettingType.CHECKBOX,
 							"list":main_list, "default":false, "flags":ADD_SPACER })
@@ -233,12 +233,12 @@ func _ready() -> void:
 							"list":main_list, "default":true, "flags":ADD_SEPARATOR })
 	add_setting({ "name":"scale", "label":"±", "type":SettingType.SLIDER, "list":main_list, "default":0,
 							"unit":"%", "range":Vector3(-60, 80, 20), "flags":NO_LABEL })
-	add_setting({ "name":"scale_picker", "type":SettingType.PICKER, "list":main_list, "default":T3DEditor.SCALE,
+	add_setting({ "name":"scale_picker", "type":SettingType.PICKER, "list":main_list, "default":Terrain3DEditor.SCALE,
 							"flags":NO_LABEL, "tooltip":"Pick Scale from the terrain." })
 
 	## Slope sculpting brush
 	add_setting({ "name":"gradient_points", "type":SettingType.MULTI_PICKER, "label":"Points",
-							"list":main_list, "default":T3DEditor.SCULPT, "flags":ADD_SEPARATOR })
+							"list":main_list, "default":Terrain3DEditor.SCULPT, "flags":ADD_SEPARATOR })
 	add_setting({ "name":"drawable", "type":SettingType.CHECKBOX, "list":main_list, "default":false,
 							"flags":ADD_SEPARATOR })
 	settings["drawable"].toggled.connect(_on_drawable_toggled)
@@ -246,7 +246,7 @@ func _ready() -> void:
 
 	## Semantic landform authoring
 	add_setting({ "name":"landform_mode", "label":"Landform", "type":SettingType.OPTION,
-							"list":main_list, "default":T3DLandformBaker.RIDGE,
+							"list":main_list, "default":Terrain3DLandformBaker.RIDGE,
 							"items":PackedStringArray(["Ridge", "Valley", "Scarp / Cliff", "Basin", "Plateau / Mesa",
 								"Terrace", "Road / Trail", "Mountain Pass", "Talus / Debris", "Hydraulic Channel",
 								"Thermal Relaxation", "Dune", "Shoreline", "Morphology", "Occlusion"]),
@@ -293,7 +293,7 @@ func _ready() -> void:
 	add_setting({ "name":"landform_iterations", "label":"Relaxation Passes", "type":SettingType.SLIDER,
 							"list":landform_shape_list, "default":4, "range":Vector3(1, 32, 1) })
 	add_setting({ "name":"landform_morphology", "label":"Morphology", "type":SettingType.OPTION,
-							"list":landform_shape_list, "default":T3DLandformBaker.MORPH_EXPAND_PEAKS,
+							"list":landform_shape_list, "default":Terrain3DLandformBaker.MORPH_EXPAND_PEAKS,
 							"items":PackedStringArray(["Expand Peaks", "Fill Pits", "Sharpen Ridges", "Sharpen Valleys", "Clean Plateaus"]) })
 	add_setting({ "name":"landform_path_spacing", "label":"Stroke Sampling", "type":SettingType.SLIDER,
 							"list":landform_shape_list, "default":2, "unit":"m", "range":Vector3(0.25, 32, 0.25),
@@ -327,7 +327,7 @@ func _ready() -> void:
 							"list":landform_mesh_list, "default":true,
 							"tooltip":"Builds terrain-only, reusable modular, or unique procedural cliff geometry from the stroke." })
 	add_setting({ "name":"landform_geometry_mode", "label":"Geometry Mode", "type":SettingType.OPTION,
-							"list":landform_mesh_list, "default":T3DLandformBaker.GEOMETRY_PROCEDURAL_UNIQUE,
+							"list":landform_mesh_list, "default":Terrain3DLandformBaker.GEOMETRY_PROCEDURAL_UNIQUE,
 							"items":PackedStringArray(["Terrain Only", "Modular Instanced", "Procedural Unique"]),
 							"tooltip":"Modular mode places reusable Terrain3D mesh assets. Procedural mode creates one hero ribbon mesh." })
 	add_setting({ "name":"landform_mesh_depth", "label":"Upper Cap Depth", "type":SettingType.SLIDER,
@@ -380,7 +380,7 @@ func _ready() -> void:
 
 	## Instancer
 	add_setting({ "name":"mesh_picker", "type":SettingType.PICKER, "list":main_list,
-							"default":T3DEditor.INSTANCER, "flags":NO_LABEL|ADD_SEPARATOR,
+							"default":Terrain3DEditor.INSTANCER, "flags":NO_LABEL|ADD_SEPARATOR,
 							"tooltip":"Pick a Mesh asset from the terrain, within an instancer cell. (See overlays.)" })
 
 	height_list = create_submenu(main_list, "Height", Layout.VERTICAL)
@@ -521,7 +521,7 @@ func add_brushes(p_parent: Control) -> void:
 			if !dir.current_is_dir() and file_name.ends_with(".exr"):
 				var img: Image = Image.load_from_file(BRUSH_PATH + "/" + file_name)
 				if img:
-					var value_range: Vector2 = T3DUtil.get_min_max(img)
+					var value_range: Vector2 = Terrain3DUtil.get_min_max(img)
 					if value_range.y - value_range.x < 0.333:
 						push_warning("'%s' has a low value range and may not be visible in the brush gallery or cursor" % file_name)
 					var thumbimg: Image = img.duplicate()
@@ -529,7 +529,7 @@ func add_brushes(p_parent: Control) -> void:
 
 					if thumbimg.get_width() != 84 or thumbimg.get_height() != 84:
 						thumbimg.resize(84, 84, Image.INTERPOLATE_CUBIC)
-					thumbimg = T3DUtil.black_to_alpha(thumbimg)
+					thumbimg = Terrain3DUtil.black_to_alpha(thumbimg)
 					thumbimg.convert(Image.FORMAT_LA8)
 					var thumbtex: ImageTexture = ImageTexture.create_from_image(thumbimg)
 
@@ -596,38 +596,38 @@ func _on_pick(p_type: int) -> void:
 
 func _on_picked(p_type: int, p_color: Color, p_global_position: Vector3) -> void:
 	match p_type:
-		T3DEditor.HEIGHT:
+		Terrain3DEditor.HEIGHT:
 			settings["height"].value = p_color.r if not is_nan(p_color.r) else 0.
-		T3DEditor.COLOR:
+		Terrain3DEditor.COLOR:
 			settings["color"].color = p_color if not is_nan(p_color.r) else Color.WHITE
-		T3DEditor.ROUGHNESS:
+		Terrain3DEditor.ROUGHNESS:
 			# This converts 0,1 to -100,100
 			# It also quantizes explicitly so picked values matches painted values
 			settings["roughness"].value = roundf(200. * float(int(p_color.a * 255.) / 255. - .5)) if not is_nan(p_color.r) else 0.
-		T3DEditor.ANGLE:
+		Terrain3DEditor.ANGLE:
 			settings["angle"].value = p_color.r
-		T3DEditor.SCALE:
+		Terrain3DEditor.SCALE:
 			settings["scale"].value = p_color.r
-		T3DEditor.INSTANCER:
+		Terrain3DEditor.INSTANCER:
 			if p_color.r < 0:
 				return
-			asset_dock.set_selected_by_asset_id(int(p_color.r), T3DAssets.TYPE_MESH)
-		T3DEditor.TEXTURE:
+			asset_dock.set_selected_by_asset_id(int(p_color.r), Terrain3DAssets.TYPE_MESH)
+		Terrain3DEditor.TEXTURE:
 			if p_color.r < 0:
 				return
-			asset_dock.set_selected_by_asset_id(int(p_color.r), T3DAssets.TYPE_TEXTURE)
+			asset_dock.set_selected_by_asset_id(int(p_color.r), Terrain3DAssets.TYPE_TEXTURE)
 	_notify_setting_changed()
 
 
 func _on_point_pick(p_type: int, p_name: String) -> void:
-	assert(p_type == T3DEditor.SCULPT)
+	assert(p_type == Terrain3DEditor.SCULPT)
 	if plugin.debug:
 		print("Terrain3DToolSettings: _on_pick: emitting picking: ", p_type, ", ", _on_point_picked)
 	emit_signal("picking", p_type, _on_point_picked.bind(p_name))
 
 
 func _on_point_picked(p_type: int, p_color: Color, p_global_position: Vector3, p_name: String) -> void:
-	assert(p_type == T3DEditor.SCULPT)
+	assert(p_type == Terrain3DEditor.SCULPT)
 	var point: Vector3 = p_global_position
 	point.y = p_color.r
 	settings[p_name].add_point(point)

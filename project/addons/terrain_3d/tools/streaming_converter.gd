@@ -1,7 +1,7 @@
 # Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 @tool
 extends Node
-class_name T3DStreamingConverter
+class_name Terrain3DStreamingConverter
 
 const MODE_META: StringName = &"terrain3d_stream_mode"
 const MODE_STATIC: StringName = &"static"
@@ -37,17 +37,17 @@ class DynamicDescriptor extends RefCounted:
 
 
 class ConversionRecord extends RefCounted:
-	var terrain: T3DTerrain
+	var terrain: Terrain3D
 	var roots: Array[SourceRecord] = []
 	var static_groups: Dictionary[int, StaticGroup] = {}
-	var planned_assets: Dictionary[int, T3DMeshAsset] = {}
+	var planned_assets: Dictionary[int, Terrain3DMeshAsset] = {}
 	var dynamic_nodes: Array[DynamicDescriptor] = []
 	var unsupported: PackedStringArray = PackedStringArray()
 	var spawn_ids: Array[int] = []
 	var owner_id: int = 0
 
 
-var plugin: T3DEditorPluginBase
+var plugin: Terrain3DEditorPluginBase
 var _next_token: int = 1
 var _records: Dictionary[int, ConversionRecord] = {}
 
@@ -61,7 +61,7 @@ func convert_selected_as_hlod_visual(min_level: int = 1) -> void:
 
 
 func _convert_selected_with_root_mode(root_mode: StringName, hlod_min_level: int) -> void:
-	var terrain: T3DTerrain = plugin.terrain if is_instance_valid(plugin) else null
+	var terrain: Terrain3D = plugin.terrain if is_instance_valid(plugin) else null
 	if not is_instance_valid(terrain) or not is_instance_valid(terrain.instancer):
 		push_error("Select a Terrain3D node before converting streamed objects")
 		return
@@ -95,7 +95,7 @@ func _convert_selected_with_root_mode(root_mode: StringName, hlod_min_level: int
 				record.unsupported.push_back(str(root.get_path()) + " [HLOD visual: " + reason + "]")
 			elif _append_dynamic(root, record.dynamic_nodes):
 				var descriptor: DynamicDescriptor = record.dynamic_nodes.back()
-				descriptor.flags = T3DNodeStreamer.NODE_FLAG_STATIC | T3DNodeStreamer.NODE_FLAG_HLOD_VISUAL
+				descriptor.flags = Terrain3DNodeStreamer.NODE_FLAG_STATIC | Terrain3DNodeStreamer.NODE_FLAG_HLOD_VISUAL
 				descriptor.hlod_min_level = hlod_min_level
 			else:
 				record.unsupported.push_back(str(root.get_path()) + " [HLOD visual scene packing failed]")
@@ -130,9 +130,9 @@ func _convert_selected_with_root_mode(root_mode: StringName, hlod_min_level: int
 
 func _scan_node(
 	node: Node,
-	terrain: T3DTerrain,
+	terrain: Terrain3D,
 	static_groups: Dictionary[int, StaticGroup],
-	planned_assets: Dictionary[int, T3DMeshAsset],
+	planned_assets: Dictionary[int, Terrain3DMeshAsset],
 	dynamic_nodes: Array[DynamicDescriptor],
 	unsupported: PackedStringArray
 ) -> bool:
@@ -152,7 +152,7 @@ func _scan_node(
 				return false
 			if _append_dynamic(node as Node3D, dynamic_nodes):
 				var descriptor: DynamicDescriptor = dynamic_nodes.back()
-				descriptor.flags = T3DNodeStreamer.NODE_FLAG_STATIC | T3DNodeStreamer.NODE_FLAG_HLOD_VISUAL
+				descriptor.flags = Terrain3DNodeStreamer.NODE_FLAG_STATIC | Terrain3DNodeStreamer.NODE_FLAG_HLOD_VISUAL
 				descriptor.hlod_min_level = clampi(int(node.get_meta(HLOD_MIN_LEVEL_META, 1)), 1, 6)
 				return true
 			unsupported.push_back(str(node.get_path()) + " [HLOD visual scene packing failed]")
@@ -199,9 +199,9 @@ func _scan_node(
 
 func _scan_children(
 	node: Node,
-	terrain: T3DTerrain,
+	terrain: Terrain3D,
 	static_groups: Dictionary[int, StaticGroup],
-	planned_assets: Dictionary[int, T3DMeshAsset],
+	planned_assets: Dictionary[int, Terrain3DMeshAsset],
 	dynamic_nodes: Array[DynamicDescriptor],
 	unsupported: PackedStringArray
 ) -> bool:
@@ -214,9 +214,9 @@ func _scan_children(
 
 func _append_static_mesh(
 	mesh_node: MeshInstance3D,
-	terrain: T3DTerrain,
+	terrain: Terrain3D,
 	static_groups: Dictionary[int, StaticGroup],
-	planned_assets: Dictionary[int, T3DMeshAsset]
+	planned_assets: Dictionary[int, Terrain3DMeshAsset]
 ) -> bool:
 	var overrides: Array[Material] = []
 	for surface: int in mesh_node.mesh.get_surface_count():
@@ -231,7 +231,7 @@ func _append_static_mesh(
 		planned_assets
 	)
 	if mesh_id < 0:
-		push_error("Terrain3D mesh asset capacity is exhausted; maximum is %d" % T3DAssets.TERRAIN3D_MAX_MESH_ASSETS)
+		push_error("Terrain3D mesh asset capacity is exhausted; maximum is %d" % Terrain3DAssets.MAX_MESH_ASSETS)
 		return false
 	_append_static_record(static_groups, mesh_id, mesh_node.global_transform, Color.WHITE)
 	return true
@@ -239,9 +239,9 @@ func _append_static_mesh(
 
 func _append_static_multimesh(
 	multimesh_node: MultiMeshInstance3D,
-	terrain: T3DTerrain,
+	terrain: Terrain3D,
 	static_groups: Dictionary[int, StaticGroup],
-	planned_assets: Dictionary[int, T3DMeshAsset]
+	planned_assets: Dictionary[int, Terrain3DMeshAsset]
 ) -> bool:
 	var multimesh: MultiMesh = multimesh_node.multimesh
 	if not multimesh or not multimesh.mesh:
@@ -259,7 +259,7 @@ func _append_static_multimesh(
 		planned_assets
 	)
 	if mesh_id < 0:
-		push_error("Terrain3D mesh asset capacity is exhausted; maximum is %d" % T3DAssets.TERRAIN3D_MAX_MESH_ASSETS)
+		push_error("Terrain3D mesh asset capacity is exhausted; maximum is %d" % Terrain3DAssets.MAX_MESH_ASSETS)
 		return false
 	var instance_count: int = multimesh.instance_count
 	if multimesh.visible_instance_count >= 0:
@@ -354,25 +354,25 @@ func _resource_key(resource: Resource) -> String:
 
 
 func _find_or_create_mesh_asset(
-	terrain: T3DTerrain,
+	terrain: Terrain3D,
 	mesh: Mesh,
 	source_name: String,
 	cast_shadow: int,
 	material_override: Material,
 	surface_overrides: Array[Material],
-	planned_assets: Dictionary[int, T3DMeshAsset]
+	planned_assets: Dictionary[int, Terrain3DMeshAsset]
 ) -> int:
 	var key: String = _mesh_key(mesh, cast_shadow, material_override, surface_overrides)
-	for mesh_id: int in T3DAssets.TERRAIN3D_MAX_MESH_ASSETS:
-		var existing: T3DMeshAsset = terrain.assets.get_mesh_asset(mesh_id) as T3DMeshAsset
+	for mesh_id: int in Terrain3DAssets.MAX_MESH_ASSETS:
+		var existing: Terrain3DMeshAsset = terrain.assets.get_mesh_asset(mesh_id) as Terrain3DMeshAsset
 		if existing and existing.has_meta(&"terrain3d_source_key") and existing.get_meta(&"terrain3d_source_key") == key:
 			return mesh_id
 	for planned_id: int in planned_assets:
-		var planned: T3DMeshAsset = planned_assets[planned_id]
+		var planned: Terrain3DMeshAsset = planned_assets[planned_id]
 		if planned and planned.has_meta(&"terrain3d_source_key") and planned.get_meta(&"terrain3d_source_key") == key:
 			return planned_id
 	var free_id: int = -1
-	for mesh_id: int in T3DAssets.TERRAIN3D_MAX_MESH_ASSETS:
+	for mesh_id: int in Terrain3DAssets.MAX_MESH_ASSETS:
 		if terrain.assets.get_mesh_asset(mesh_id) == null and not planned_assets.has(mesh_id):
 			free_id = mesh_id
 			break
@@ -396,7 +396,7 @@ func _find_or_create_mesh_asset(
 		scene_root.free()
 		return -1
 	scene_root.free()
-	var asset := T3DMeshAsset.new()
+	var asset := Terrain3DMeshAsset.new()
 	asset.resource_name = source_name
 	asset.scene_file = packed
 	asset.set_meta(&"terrain3d_source_key", key)
@@ -434,12 +434,12 @@ func _apply_conversion(token: int) -> void:
 	if not _records.has(token):
 		return
 	var record: ConversionRecord = _records[token]
-	var terrain: T3DTerrain = record.terrain
+	var terrain: Terrain3D = record.terrain
 	if not is_instance_valid(terrain):
 		return
 	for mesh_id: int in record.planned_assets:
-		var planned: T3DMeshAsset = record.planned_assets[mesh_id]
-		var current: T3DMeshAsset = terrain.assets.get_mesh_asset(mesh_id) as T3DMeshAsset
+		var planned: Terrain3DMeshAsset = record.planned_assets[mesh_id]
+		var current: Terrain3DMeshAsset = terrain.assets.get_mesh_asset(mesh_id) as Terrain3DMeshAsset
 		if current != null and current != planned:
 			push_error("Terrain3D mesh asset slot %d changed before conversion redo" % mesh_id)
 			return
@@ -486,13 +486,13 @@ func _revert_conversion(token: int) -> void:
 	if not _records.has(token):
 		return
 	var record: ConversionRecord = _records[token]
-	var terrain: T3DTerrain = record.terrain
+	var terrain: Terrain3D = record.terrain
 	if is_instance_valid(terrain):
 		terrain.instancer.remove_owned_instances(record.owner_id, true, false)
 		for spawn_id: int in record.spawn_ids:
 			terrain.remove_streamed_scene(spawn_id)
 		for mesh_id: int in record.planned_assets:
-			var planned: T3DMeshAsset = record.planned_assets[mesh_id]
+			var planned: Terrain3DMeshAsset = record.planned_assets[mesh_id]
 			if terrain.assets.get_mesh_asset(mesh_id) == planned and planned.get_instance_count() == 0:
 				terrain.assets.set_mesh_asset(mesh_id, null)
 	for source: SourceRecord in record.roots:

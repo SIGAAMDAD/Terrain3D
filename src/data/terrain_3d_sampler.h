@@ -20,7 +20,7 @@
 using namespace godot;
 #endif
 
-class T3DRegionRepository;
+class Terrain3DRegionRepository;
 
 // Low-overhead terrain query context. A sampler owns leases on a compact set of
 // resident region planes, so cached raw pointers remain valid while the global
@@ -41,8 +41,8 @@ typedef struct alignas( 64 ) t3dRegionView_s {
 } t3dRegionView_t;
 
 typedef struct t3dRegionCold_s {
-	T3DActiveMapLease m_activeLease;
-	T3DResidentMapLease m_lease;
+	Terrain3DActiveMapLease m_activeLease;
+	Terrain3DResidentMapLease m_lease;
 	PackedByteArray m_heightData;
 	PackedByteArray m_controlData;
 	PackedByteArray m_derivedData;
@@ -50,9 +50,9 @@ typedef struct t3dRegionCold_s {
 	void reset( void );
 } t3dRegionCold_t;
 
-class T3DSampler {
+class Terrain3DSampler {
 public:
-	explicit T3DSampler( const t3dSamplingSource_t &rSource );
+	explicit Terrain3DSampler( const t3dSamplingSource_t &rSource );
 
 	float sampleHeight( const Vector3 &rGlobalPosition );
 	float sampleHeightGrid( int64_t iGridX, int64_t iGridZ, bool bRespectHoles = false );

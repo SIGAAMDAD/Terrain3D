@@ -13,8 +13,8 @@
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
 
-class T3DRegionLighting : public Resource {
-	GDCLASS( T3DRegionLighting, Resource );
+class Terrain3DRegionLighting : public Resource {
+	GDCLASS( Terrain3DRegionLighting, Resource );
 	CLASS_NAME();
 
 private:
@@ -44,8 +44,8 @@ private:
 	String m_sourceScene;
 
 public:
-	T3DRegionLighting( void ) = default;
-	~T3DRegionLighting( void ) = default;
+	Terrain3DRegionLighting( void ) = default;
+	~Terrain3DRegionLighting( void ) = default;
 
 	void setLightDataPath( const String &rPath );
 	EA_FORCE_INLINE String getLightDataPath( void ) const {

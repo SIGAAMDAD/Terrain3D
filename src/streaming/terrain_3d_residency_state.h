@@ -44,7 +44,7 @@ typedef struct t3dResidencyFrameState_s {
 		if ( !m_pStreamingStates || !containsLocation( rLocation ) ) {
 			return TERRAIN3D_REGION_STREAMING_UNLOADED;
 		}
-		const int mapIndex = T3DRegionRepository::getRegionMapIndex( rLocation );
+		const int mapIndex = Terrain3DRegionRepository::getRegionMapIndex( rLocation );
 		return mapIndex >= 0 ? ( t3dRegionStreamingState_t )( m_pStreamingStates[mapIndex] )
 							 : TERRAIN3D_REGION_STREAMING_UNLOADED;
 	}
@@ -53,7 +53,7 @@ typedef struct t3dResidencyFrameState_s {
 		if ( !m_pStreamingPrefetch || !containsLocation( rLocation ) ) {
 			return false;
 		}
-		const int mapIndex = T3DRegionRepository::getRegionMapIndex( rLocation );
+		const int mapIndex = Terrain3DRegionRepository::getRegionMapIndex( rLocation );
 		return mapIndex >= 0 && m_pStreamingPrefetch[mapIndex] != 0u;
 	}
 } t3dResidencyFrameState_t;

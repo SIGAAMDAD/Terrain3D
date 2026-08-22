@@ -7,6 +7,7 @@
 
 #include "Terrain3DConstants.h"
 #include "assets/generated_texture.h"
+#include "data/terrain_3d_region.h"
 #include "eastl_config.h"
 #include "streaming/terrain_3d_gpu_cache_constants.h"
 
@@ -17,12 +18,12 @@
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/string.hpp>
 
-class T3DAssets;
-class T3DCpuRegionCache;
-class T3DMaterial;
-class T3DRegion;
-class T3DRegionRepository;
-class T3DSamplingStorage;
+class Terrain3DAssets;
+class Terrain3DCpuRegionCache;
+class Terrain3DMaterial;
+class Terrain3DRegion;
+class Terrain3DRegionRepository;
+class Terrain3DSamplingStorage;
 
 typedef struct t3dFarSurfaceAtlasConfig_s {
 	bool m_bRequired = false;
@@ -33,8 +34,8 @@ typedef struct t3dFarSurfaceAtlasConfig_s {
 	Ref<Image> m_defaultHeightMap;
 	Ref<Image> m_defaultControlMap;
 	Ref<Image> m_defaultColorMap;
-	Ref<T3DMaterial> m_material;
-	Ref<T3DAssets> m_assets;
+	Ref<Terrain3DMaterial> m_material;
+	Ref<Terrain3DAssets> m_assets;
 } t3dFarSurfaceAtlasConfig_t;
 
 typedef struct t3dFarSurfaceAtlasStats_s {
@@ -65,11 +66,11 @@ typedef struct t3dFarSurfaceAtlasStats_s {
 	bool m_bCookedSaved = false;
 } t3dFarSurfaceAtlasStats_t;
 
-class T3DFarSurfaceAtlasCache {
+class Terrain3DFarSurfaceAtlasCache {
 public:
-	T3DFarSurfaceAtlasCache( T3DRegionRepository *pRepository,
-			T3DSamplingStorage *pSamplingStorage,
-			T3DCpuRegionCache *pCpuRegionCache );
+	Terrain3DFarSurfaceAtlasCache( Terrain3DRegionRepository *pRepository,
+			Terrain3DSamplingStorage *pSamplingStorage,
+			Terrain3DCpuRegionCache *pCpuRegionCache );
 
 	void setConfig( const t3dFarSurfaceAtlasConfig_t &rConfig );
 	void reset( void );
@@ -98,13 +99,13 @@ public:
 	Dictionary getStatsDictionary( void ) const;
 
 private:
-	T3DRegionRepository *m_pRepository = nullptr;
-	T3DSamplingStorage *m_pSamplingStorage = nullptr;
-	T3DCpuRegionCache *m_pCpuRegionCache = nullptr;
+	Terrain3DRegionRepository *m_pRepository = nullptr;
+	Terrain3DSamplingStorage *m_pSamplingStorage = nullptr;
+	Terrain3DCpuRegionCache *m_pCpuRegionCache = nullptr;
 	t3dFarSurfaceAtlasConfig_t m_config;
 
-	T3DGeneratedTexture m_generatedHeightMap;
-	T3DGeneratedTexture m_generatedColorMap;
+	Terrain3DGeneratedTexture m_generatedHeightMap;
+	Terrain3DGeneratedTexture m_generatedColorMap;
 	Ref<Image> m_heightImage;
 	Ref<Image> m_colorImage;
 	eastl::bitset<s_nMaxRegionSlots> m_heightDirtyRegions;
@@ -143,7 +144,7 @@ private:
 	bool patchColorRegion( const Vector2i &vLocation, PackedByteArray &rAtlasBytes );
 	bool rebuildHeightAtlas( void );
 	bool rebuildColorAtlas( void );
-	Ref<Image> getRegionMapOrDefault( const T3DRegion *pRegion, t3dMapType_t eMapType ) const;
+	Ref<Image> getRegionMapOrDefault( const Terrain3DRegion *pRegion, t3dMapType_t eMapType ) const;
 };
 
 #endif // TERRAIN3D_FAR_SURFACE_ATLAS_CACHE_H

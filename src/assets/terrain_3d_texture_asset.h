@@ -12,10 +12,10 @@
 
 #include <godot_cpp/classes/texture2d.hpp>
 
-class T3DTextureAsset : public T3DAssetResource {
-	GDCLASS( T3DTextureAsset, T3DAssetResource );
+class Terrain3DTextureAsset : public Terrain3DAssetResource {
+	GDCLASS( Terrain3DTextureAsset, Terrain3DAssetResource );
 	CLASS_NAME();
-	friend class T3DAssets;
+	friend class Terrain3DAssets;
 
 	// Saved Data
 	Color m_albedoColor = Color( 1.f, 1.f, 1.f, 1.f );
@@ -25,7 +25,7 @@ class T3DTextureAsset : public T3DAssetResource {
 	// GIMP) and loaded directly; Terrain3D does not expose separate PBR channels.
 	Ref<Texture2D> m_surfaceTexture;
 	Ref<Texture2D> m_displacementTexture;
-	Ref<T3DPackedPBRTexture> m_packedPbrResource;
+	Ref<Terrain3DPackedPBRTexture> m_packedPbrResource;
 	// Serialized compatibility input for the former RGBA16UI implementation.
 	Ref<Texture2D> m_pbrTexture;
 	real_t m_fMetallic = 0.0f;
@@ -75,10 +75,10 @@ class T3DTextureAsset : public T3DAssetResource {
 	void setPackedPbrMode( bool bEnabled );
 
 public:
-	EA_FORCE_INLINE T3DTextureAsset( void ) {
+	EA_FORCE_INLINE Terrain3DTextureAsset( void ) {
 		clear();
 	}
-	EA_FORCE_INLINE ~T3DTextureAsset( void ) {}
+	EA_FORCE_INLINE ~Terrain3DTextureAsset( void ) {}
 	void initialize( void ) override;
 	void clear( void ) override;
 
@@ -141,8 +141,8 @@ public:
 		return m_pbrTexture;
 	}
 
-	void setPackedPbrResource( const Ref<T3DPackedPBRTexture> &rResource );
-	EA_FORCE_INLINE Ref<T3DPackedPBRTexture> getPackedPbrResource( void ) const {
+	void setPackedPbrResource( const Ref<Terrain3DPackedPBRTexture> &rResource );
+	EA_FORCE_INLINE Ref<Terrain3DPackedPBRTexture> getPackedPbrResource( void ) const {
 		return m_packedPbrResource;
 	}
 	Ref<Texture2D> getEffectiveSurfaceTexture( void );

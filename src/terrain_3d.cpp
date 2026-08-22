@@ -16,6 +16,7 @@
 #include "memory/terrain_3d_linear_arena.h"
 #include "memory/terrain_3d_zone_allocator.h"
 #include "rendering/terrain_3d_compute.h"
+#include "rendering/rd/terrain_3d_render_coordinator.h"
 #include "simd/terrain_3d_parallel.h"
 #include "streaming/terrain_3d_node_streamer.h"
 #include "streaming/terrain_3d_performance_profile.h"
@@ -23,6 +24,8 @@
 #include "streaming/terrain_3d_upload_bridge.h"
 
 #include <algorithm>
+#include <atomic>
+#include <cmath>
 #include <cstring>
 #include <godot_cpp/classes/compositor.hpp>
 #include <godot_cpp/classes/directional_light3d.hpp>
@@ -46,12 +49,12 @@
 #include <utility>
 
 // Initialize static member variable
-t3dDebugLevel_t T3DTerrain::s_debugLevel{ ERROR };
+t3dDebugLevel_t Terrain3D::s_debugLevel{ ERROR };
 
 // -----------------------------------------------------------------------------
 // Private functions
 
-void T3DTerrain::initializeInternal( void ) {
+void Terrain3D::initializeInternal( void ) {
 	LOG( INFO,
 			"[lifecycle] Initialize request: initialized=",
 			m_bInitialized,
@@ -64,7 +67,7 @@ void T3DTerrain::initializeInternal( void ) {
 	// Make blank objects if needed
 	if ( !m_pData ) {
 		LOG( DEBUG, "Creating blank data object" );
-		m_pData = memnew( T3DData );
+		m_pData = memnew( Terrain3DData );
 	}
 	if ( !initializeRuntimeMemory() ) {
 		LOG( ERROR, "[lifecycle] Unable to initialize the fixed runtime memory image" );
@@ -93,43 +96,43 @@ void T3DTerrain::initializeInternal( void ) {
 	}
 	if ( !m_pCollision ) {
 		LOG( DEBUG, "Creating collision manager" );
-		m_pCollision = memnew( T3DCollision );
+		m_pCollision = memnew( Terrain3DCollision );
 	}
 	if ( !m_pInstancer ) {
 		LOG( DEBUG, "Creating instancer" );
-		m_pInstancer = memnew( T3DInstancer );
+		m_pInstancer = memnew( Terrain3DInstancer );
 	}
 	if ( !m_pNodeStreamer ) {
 		LOG( DEBUG, "Creating node streamer" );
-		m_pNodeStreamer = memnew( T3DNodeStreamer );
+		m_pNodeStreamer = memnew( Terrain3DNodeStreamer );
 	}
 	if ( !m_pLightmapStreamer ) {
 		LOG( DEBUG, "Creating lightmap streamer" );
-		m_pLightmapStreamer = memnew( T3DLightmapStreamer );
+		m_pLightmapStreamer = memnew( Terrain3DLightmapStreamer );
 	}
 	if ( !m_pHlodStreamer ) {
 		LOG( DEBUG, "Creating HLOD streamer" );
-		m_pHlodStreamer = memnew( T3DHLODStreamer );
+		m_pHlodStreamer = memnew( Terrain3DHLODStreamer );
 	}
 	// Connect signals
 	// Any region was changed, update region labels
-	if ( !m_pData->is_connected( "region_map_changed", callable_mp( this, &T3DTerrain::updateRegionLabels ) ) ) {
+	if ( !m_pData->is_connected( "region_map_changed", callable_mp( this, &Terrain3D::updateRegionLabels ) ) ) {
 		LOG( DEBUG, "Connecting _data::region_map_changed signal to set_show_region_locations()" );
-		m_pData->connect( "region_map_changed", callable_mp( this, &T3DTerrain::updateRegionLabels ) );
+		m_pData->connect( "region_map_changed", callable_mp( this, &Terrain3D::updateRegionLabels ) );
 	}
 	// Region layout changes are coalesced and update the existing dynamic
 	// collision pool instead of rebuilding every shape per editor event.
 	if ( !m_pData->is_connected(
-				 "region_map_changed", callable_mp( m_pCollision, &T3DCollision::onRegionMapChanged ) ) ) {
+				 "region_map_changed", callable_mp( m_pCollision, &Terrain3DCollision::onRegionMapChanged ) ) ) {
 		LOG( DEBUG, "Connecting _data::region_map_changed signal to on_region_map_changed()" );
-		m_pData->connect( "region_map_changed", callable_mp( m_pCollision, &T3DCollision::onRegionMapChanged ) );
+		m_pData->connect( "region_map_changed", callable_mp( m_pCollision, &Terrain3DCollision::onRegionMapChanged ) );
 	}
 	connectResourceSignals( m_assets, m_material );
 	refreshPerformanceProfileConformity();
 	// Height map was regenerated, update aabbs
-	if ( !m_pData->is_connected( "height_maps_changed", callable_mp( this, &T3DTerrain::updateMesherAabbs ) ) ) {
+	if ( !m_pData->is_connected( "height_maps_changed", callable_mp( this, &Terrain3D::updateMesherAabbs ) ) ) {
 		LOG( DEBUG, "Connecting _data::height_maps_changed signal to update_aabbs()" );
-		m_pData->connect( "height_maps_changed", callable_mp( this, &T3DTerrain::updateMesherAabbs ) );
+		m_pData->connect( "height_maps_changed", callable_mp( this, &Terrain3D::updateMesherAabbs ) );
 	}
 	// Initialize the system
 	if ( !m_bInitialized && m_bIsInsideWorld && is_inside_tree() ) {
@@ -212,6 +215,7 @@ void T3DTerrain::initializeInternal( void ) {
 		m_pHlodStreamer->initialize( this );
 		applyRuntimeAdaptiveWorkBudgets();
 		setupTerrainMesher();
+		setupRenderCoordinator();
 		setupOceanMesher();
 		updateDisplacementBuffer();
 		m_bInitialized = true;
@@ -231,8 +235,9 @@ void T3DTerrain::initializeInternal( void ) {
 	update_configuration_warnings();
 }
 
-void T3DTerrain::deactivateRuntime( void ) {
+void Terrain3D::deactivateRuntime( void ) {
 	set_physics_process( false );
+	destroyRenderCoordinator();
 	destroyTerrainMesher();
 	destroyOceanMesher();
 	destroyHlodStreamer();
@@ -257,7 +262,7 @@ void T3DTerrain::deactivateRuntime( void ) {
  * This is a proxy for _process(delta) called by _notification() due to
  * https://github.com/godotengine/godot-cpp/issues/1022
  */
-void T3DTerrain::physicsProcess( const double fDelta ) {
+void Terrain3D::physicsProcess( const double fDelta ) {
 	if ( !m_bInitialized ) {
 		return;
 	}
@@ -389,6 +394,9 @@ void T3DTerrain::physicsProcess( const double fDelta ) {
 	} else if ( m_pTerrainMesher ) {
 		m_pTerrainMesher->snap( clipmap_target_position );
 	}
+	if ( m_pRenderCoordinator ) {
+		m_pRenderCoordinator->update();
+	}
 	if ( bProfileFrame ) {
 		const uint64_t now = Time::get_singleton()->get_ticks_usec();
 		profile_sample.m_nClipmapUsec = now - phase_started_usec;
@@ -445,7 +453,7 @@ void T3DTerrain::physicsProcess( const double fDelta ) {
  * If running in the editor, grab the first editor viewport camera.
  * The edited_scene_root is excluded in case the user already has a Camera3D in their scene.
  */
-void T3DTerrain::grabCamera( void ) {
+void Terrain3D::grabCamera( void ) {
 	if ( IS_EDITOR ) {
 		m_hCamera.setTarget( EditorInterface::get_singleton()->get_editor_viewport_3d( 0 )->get_camera_3d() );
 		LOG( DEBUG, "Grabbing the first editor viewport camera: ", m_hCamera.getTarget() );
@@ -461,7 +469,7 @@ void T3DTerrain::grabCamera( void ) {
 	}
 }
 
-void T3DTerrain::buildContainers( void ) {
+void Terrain3D::buildContainers( void ) {
 	if ( m_pLabelParent ) {
 		return;
 	}
@@ -470,7 +478,7 @@ void T3DTerrain::buildContainers( void ) {
 	add_child( m_pLabelParent, true );
 }
 
-void T3DTerrain::destroyContainers( void ) {
+void Terrain3D::destroyContainers( void ) {
 	if ( m_pLabelParent ) {
 		memdelete( m_pLabelParent );
 		m_pLabelParent = nullptr;
@@ -478,20 +486,20 @@ void T3DTerrain::destroyContainers( void ) {
 }
 
 const t3dBakeRegionSnapshot_t *t3dBakeSnapshot_t::getRegion( const int32_t iX, const int32_t iZ ) const {
-	if ( nRegionSize <= 0 ) {
+	if ( m_nRegionSize <= 0 ) {
 		return nullptr;
 	}
 
-	const Vector2i regionLocation( t3dDivideFloor( iX, nRegionSize ), t3dDivideFloor( iZ, nRegionSize ) );
-	const int32_t map_index = T3DData::getRegionMapIndex( regionLocation );
+	const Vector2i regionLocation( t3dDivideFloor( iX, m_nRegionSize ), t3dDivideFloor( iZ, m_nRegionSize ) );
+	const int32_t map_index = Terrain3DData::getRegionMapIndex( regionLocation );
 	if ( map_index < 0 ) {
 		return nullptr;
 	}
-	const int32_t region_index = szRegionLookup[map_index];
-	if ( region_index < 0 || region_index >= ( int32_t )regions.size() ) {
+	const int32_t region_index = m_szRegionLookup[map_index];
+	if ( region_index < 0 || region_index >= ( int32_t )m_regions.size() ) {
 		return nullptr;
 	}
-	return &regions[( size_t )( region_index )];
+	return &m_regions[( size_t )( region_index )];
 }
 
 void t3dBakeSnapshot_t::getSample( const int32_t iX, const int32_t iZ, uint32_t &nControl, real_t &fHeight ) const {
@@ -501,14 +509,14 @@ void t3dBakeSnapshot_t::getSample( const int32_t iX, const int32_t iZ, uint32_t 
 		fHeight = NAN;
 		return;
 	}
-	const int32_t local_x = iX - pRegion->m_location.x * nRegionSize;
-	const int32_t local_z = iZ - pRegion->m_location.y * nRegionSize;
-	if ( local_x < 0 || local_z < 0 || local_x >= nRegionSize || local_z >= nRegionSize ) {
+	const int32_t local_x = iX - pRegion->m_location.x * m_nRegionSize;
+	const int32_t local_z = iZ - pRegion->m_location.y * m_nRegionSize;
+	if ( local_x < 0 || local_z < 0 || local_x >= m_nRegionSize || local_z >= m_nRegionSize ) {
 		nControl = UINT32_MAX;
 		fHeight = NAN;
 		return;
 	}
-	const int32_t index = local_z * nRegionSize + local_x;
+	const int32_t index = local_z * m_nRegionSize + local_x;
 	fHeight = ( real_t )( t3dRegionCodecReadHeightBytes( pRegion->m_pHeightBytes, index, Image::FORMAT_R16 ) );
 	if ( pRegion->m_pControlBytes ) {
 		uint32_t control = s_nRegionDefaultControl;
@@ -526,7 +534,7 @@ bool t3dBakeSnapshot_t::getMinimumRect( const int32_t iX,
 		const int32_t nWidth,
 		const int32_t nHeight,
 		real_t &fHeight ) const {
-	if ( nRegionSize <= 0 || nWidth <= 0 || nHeight <= 0 ) {
+	if ( m_nRegionSize <= 0 || nWidth <= 0 || nHeight <= 0 ) {
 		return false;
 	}
 	real_t fMinimum = std::numeric_limits<real_t>::infinity();
@@ -539,13 +547,13 @@ bool t3dBakeSnapshot_t::getMinimumRect( const int32_t iX,
 			if ( !pRegion || !pRegion->m_pHeightBytes ) {
 				return false;
 			}
-			const int32_t local_x = global_x - pRegion->m_location.x * nRegionSize;
-			const int32_t local_z = global_z - pRegion->m_location.y * nRegionSize;
-			if ( local_x < 0 || local_z < 0 || local_x >= nRegionSize || local_z >= nRegionSize ) {
+			const int32_t local_x = global_x - pRegion->m_location.x * m_nRegionSize;
+			const int32_t local_z = global_z - pRegion->m_location.y * m_nRegionSize;
+			if ( local_x < 0 || local_z < 0 || local_x >= m_nRegionSize || local_z >= m_nRegionSize ) {
 				return false;
 			}
-			const int32_t run = MIN( nWidth - copied, nRegionSize - local_x );
-			const int32_t index = local_z * nRegionSize + local_x;
+			const int32_t run = MIN( nWidth - copied, m_nRegionSize - local_x );
+			const int32_t index = local_z * m_nRegionSize + local_x;
 			const uint16_t *pHeight = ( const uint16_t * )( pRegion->m_pHeightBytes ) + index;
 			const uint32_t *pControl =
 					pRegion->m_pControlBytes ? ( const uint32_t * )( pRegion->m_pControlBytes ) + index : nullptr;
@@ -582,7 +590,7 @@ Vector3 t3dBakeSnapshot_t::getMeshVertex( const int32_t nLod,
 		fHeight = NAN;
 	}
 
-	return Vector3( ( real_t )( iX )*fVertexSpacing, fHeight, ( real_t )( iZ )*fVertexSpacing );
+	return Vector3( ( real_t )( iX )*m_fVertexSpacing, fHeight, ( real_t )( iZ )*m_fVertexSpacing );
 }
 
 // Generates two triangles: Top 124, Bottom 143
@@ -594,7 +602,7 @@ Vector3 t3dBakeSnapshot_t::getMeshVertex( const int32_t nLod,
 // -----------------------------------------------------------------------------
 // Public functions
 
-T3DTerrain::T3DTerrain( void ) {
+Terrain3D::Terrain3D( void ) {
 	LOG( INFO, "Terrain3D v", m_version, " - https://github.com/TokisanGames/Terrain3D" );
 	// Process the command line
 	PackedStringArray args = OS::get_singleton()->get_cmdline_args();
@@ -615,31 +623,26 @@ T3DTerrain::T3DTerrain( void ) {
 	}
 }
 
-T3DTerrain::~T3DTerrain( void ) {
+Terrain3D::~Terrain3D( void ) {
 	if ( m_pRuntimeProfileHistory ) {
 		memdelete( m_pRuntimeProfileHistory );
 		m_pRuntimeProfileHistory = nullptr;
 	}
-	if ( T3DZoneAllocatorRouter::zone() == &m_runtimeMemoryZone ) {
-		T3DZoneAllocatorRouter::install( nullptr );
+	if ( Terrain3DZoneAllocatorRouter::zone() == &m_runtimeMemoryZone ) {
+		Terrain3DZoneAllocatorRouter::install( nullptr );
 	}
 	if ( m_runtimeMemoryZone.state() == T3D_MEMORY_ZONE_ACTIVE ) {
 		m_runtimeMemoryZone.beginDraining();
 	}
 }
 
-void T3DTerrain::setDebugLevel( const t3dDebugLevel_t level ) {
+void Terrain3D::setDebugLevel( const t3dDebugLevel_t level ) {
 	SET_IF_DIFF( s_debugLevel, CLAMP( level, ERROR, EXTREME ) );
 	LOG( INFO, "Setting debug level: ", s_debugLevel );
 }
 
-EA_FORCE_INLINE static String t3dDefaultRegionLightmapOutputDirectory( const String &rDataDirectory ) {
-	const String directory = rDataDirectory.strip_edges().trim_suffix( "/" );
-	return directory.is_empty() ? String() : directory.path_join( "lighting" );
-}
-
 #define T3D_OCEAN_MODE_SETTER( NAME, TYPE, FIELD ) \
-	void T3DTerrain::NAME( const TYPE valueArg ) { \
+	void Terrain3D::NAME( const TYPE valueArg ) { \
 		if ( FIELD == valueArg ) { \
 			return; \
 		} \
@@ -691,7 +694,7 @@ T3D_OCEAN_MODE_SETTER( setOceanShadingMode, t3dOceanShadingMode_t, m_oceanShadin
 
 // Notifications are defined in individual classes: Object, Node, Node3D
 // Listed below in order of operation
-void T3DTerrain::_notification( const int nWhat ) {
+void Terrain3D::_notification( const int nWhat ) {
 	switch ( nWhat ) {
 			/// Startup notifications
 
@@ -728,7 +731,7 @@ void T3DTerrain::_notification( const int nWhat ) {
 			setupDisplacementBuffer();
 			// Reload editor textures - Also see READY
 			if ( m_bFreeEditorTextures && !IS_EDITOR && m_assets.is_valid() && !m_assets->get_path().is_empty() &&
-					!m_assets->get_path().contains( "T3DAssets" ) ) {
+					!m_assets->get_path().contains( "Terrain3DAssets" ) ) {
 				LOG( INFO, "free_editor_textures enabled, reloading Assets path: ", m_assets->get_path() );
 				m_assets = ResourceLoader::get_singleton()->load(
 						m_assets->get_path(), "", ResourceLoader::CACHE_MODE_IGNORE );
@@ -743,7 +746,7 @@ void T3DTerrain::_notification( const int nWhat ) {
 			LOG( INFO, "NOTIFICATION_READY" );
 			// Clear editor textures - also see ENTER_TREE
 			if ( m_bFreeEditorTextures && !IS_EDITOR && m_assets.is_valid() ) {
-				if ( m_assets->get_path().contains( "T3DAssets" ) ) {
+				if ( m_assets->get_path().contains( "Terrain3DAssets" ) ) {
 					LOG( WARN,
 							"free_editor_textures requires `Assets` be saved to a file. Do so, or disable the former "
 							"to turn off this warning" );
@@ -860,6 +863,7 @@ void T3DTerrain::_notification( const int nWhat ) {
 			LOG( INFO, "NOTIFICATION_PREDELETE" );
 			disconnectAutoShaderProfileSignal( m_autoShaderProfile );
 			deactivateRuntime();
+			destroyRenderCoordinator( true );
 			destroyTerrainMesher( true );
 			destroyOceanMesher( true );
 			destroyHlodStreamer();

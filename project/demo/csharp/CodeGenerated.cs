@@ -6,7 +6,7 @@ using System.Linq;
 
 public partial class CodeGenerated : Node
 {
-	public T3DTerrain terrain;
+	public Terrain3D terrain;
 
 	public override void _Ready()
 	{
@@ -47,7 +47,7 @@ public partial class CodeGenerated : Node
 
 		var grassMa = CreateMeshAsset("Grass", Color.FromHsv(120f / 360f, 0.4f, 0.37f));
 		
-		terrain = T3DTerrain.Instantiate();
+		terrain = Terrain3D.Instantiate();
 		terrain.Name = "Terrain3D";
 		// Optionally log to the console. Use the console version of Godot. See Troubleshooting doc.
 		//terrain.DebugLevel = Terrain3D.DebugLevelEnum.Debug;
@@ -55,7 +55,7 @@ public partial class CodeGenerated : Node
 		terrain.Owner = GetTree().GetCurrentScene();
 		
 		var material = terrain.Material;
-		material.WorldBackground = T3DMaterial.WorldBackgroundEnum.None;
+		material.WorldBackground = Terrain3DMaterial.WorldBackgroundEnum.None;
 		material.AutoShaderEnabled = true;
 		material.SetShaderParam("auto_slope", 10f);
 		material.SetShaderParam("blend_sharpness", 0.975f);
@@ -74,7 +74,7 @@ public partial class CodeGenerated : Node
 				img.SetPixel(x, y, new Color(noise.GetNoise2D(x, y), 0f, 0f, 1f));
 			}
 		}
-		terrain.RegionSize = T3DTerrain.RegionSizeEnum.Size1024;
+		terrain.RegionSize = Terrain3D.RegionSizeEnum.Size1024;
 		var data = terrain.Data;
 		var images = new Godot.Collections.Array { img, new Variant(), new Variant() };
 		data.ImportImages(images, new Vector3(-1024, 0, -1024), 0.0, 150.0);
@@ -97,7 +97,7 @@ public partial class CodeGenerated : Node
 		instancer.AddTransforms(0, xforms);
 	}
 
-	private async Task<T3DTextureAsset> CreateTextureAsset(string assetName, Gradient gradient, int textureSize = 512)
+	private async Task<Terrain3DTextureAsset> CreateTextureAsset(string assetName, Gradient gradient, int textureSize = 512)
 	{
 		var fnl = new FastNoiseLite { Frequency = 0.004f };
 
@@ -146,18 +146,18 @@ public partial class CodeGenerated : Node
 		nrmNoiseImg.GenerateMipmaps();
 		var normal = ImageTexture.CreateFromImage(nrmNoiseImg);
 		
-		var ta = T3DTextureAsset.Instantiate();
+		var ta = Terrain3DTextureAsset.Instantiate();
 		ta.Name = assetName;
 		ta.AlbedoTexture = albedo;
 		ta.NormalTexture = normal;
 		return ta;
 	}
 
-	private T3DMeshAsset CreateMeshAsset(string assetName, Color color)
+	private Terrain3DMeshAsset CreateMeshAsset(string assetName, Color color)
 	{
-		var ma = T3DMeshAsset.Instantiate();
+		var ma = Terrain3DMeshAsset.Instantiate();
 		ma.Name = assetName;
-		ma.GeneratedType = T3DMeshAsset.GenType.TextureCard;
+		ma.GeneratedType = Terrain3DMeshAsset.GenType.TextureCard;
 		ma.HeightOffset = 0.5f;
 		ma.Lod0Range = 128.0f;
 		(ma.MaterialOverride as StandardMaterial3D).AlbedoColor = color;

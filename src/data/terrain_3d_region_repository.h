@@ -30,7 +30,7 @@ typedef struct t3dRegionLocationReconcileResult_s {
 
 typedef struct t3dRegionRepositoryView_s {
 	const Vector2i *m_pSlots = nullptr;
-	T3DRegion *const *m_ppRegionMap = nullptr;
+	Terrain3DRegion *const *m_ppRegionMap = nullptr;
 	const uint16_t *m_pLogicalRegionMap = nullptr;
 	int m_nSlotCount = 0;
 	int m_nRegionSize = 0;
@@ -39,7 +39,15 @@ typedef struct t3dRegionRepositoryView_s {
 	uint64_t m_nTopologyGeneration = 0u;
 } t3dRegionRepositoryView_t;
 
-class T3DRegionRepository {
+EA_FORCE_INLINE bool t3dRegionLocationValid( const Vector2i &rLocation, const int nMapSize ) {
+	if ( nMapSize <= 0 ) {
+		return false;
+	}
+	const int half = nMapSize / 2;
+	return rLocation.x >= -half && rLocation.x < half && rLocation.y >= -half && rLocation.y < half;
+}
+
+class Terrain3DRegionRepository {
 private:
 	int m_nRegionSize = 0;
 	int m_nRegionMapSize = 0;
@@ -47,8 +55,8 @@ private:
 	real_t m_fVertexSpacing = 1.0f;
 	bool m_bLoaded = false;
 
-	Ref<T3DRegion> m_szRegionRefs[s_nMaxRegionSlots];
-	T3DRegion *m_pszRegionPtrMap[s_nMaxRegionSlots] = {};
+	Ref<Terrain3DRegion> m_szRegionRefs[s_nMaxRegionSlots];
+	Terrain3DRegion *m_pszRegionPtrMap[s_nMaxRegionSlots] = {};
 	int m_nRegionResourceCount = 0;
 	Vector2i m_szRegionLocations[s_nMaxRegionSlots] = {};
 	int m_nRegionLocationCount = 0;
@@ -63,7 +71,7 @@ private:
 	int activateLocationInternal( const Vector2i &rLocation, bool bPublishRegionMap, bool bBumpGeneration );
 
 public:
-	T3DRegionRepository( void );
+	Terrain3DRegionRepository( void );
 
 	static int getRegionMapIndex( const Vector2i &rRegionLoc );
 
@@ -108,7 +116,7 @@ public:
 	EA_FORCE_INLINE const Vector2i *getSlotsData( void ) const {
 		return m_szRegionLocations;
 	}
-	EA_FORCE_INLINE T3DRegion *const *getRegionPtrMapData( void ) const {
+	EA_FORCE_INLINE Terrain3DRegion *const *getRegionPtrMapData( void ) const {
 		return m_pszRegionPtrMap;
 	}
 	EA_FORCE_INLINE const uint16_t *getLogicalRegionMapData( void ) const {
@@ -124,15 +132,15 @@ public:
 	Vector2i getRegionLocation( const Vector3 &rGlobalPosition ) const;
 	int getRegionId( const Vector2i &rRegionLoc ) const;
 	int findSlot( const Vector2i &rRegionLoc ) const;
-	T3DRegion *getRegionPtr( const Vector2i &rRegionLoc ) const;
-	Ref<T3DRegion> getRegion( const Vector2i &rRegionLoc ) const;
+	Terrain3DRegion *getRegionPtr( const Vector2i &rRegionLoc ) const;
+	Ref<Terrain3DRegion> getRegion( const Vector2i &rRegionLoc ) const;
 
 	TypedArray<Vector2i> getActiveLocations( void ) const;
 	TypedArray<Vector2i> getSlots( void ) const;
 	PackedInt32Array getLogicalRegionMapPacked( void ) const;
 	t3dRegionRepositoryView_t getView( void ) const;
 
-	bool storeRegion( const Vector2i &rLocation, const Ref<T3DRegion> &rRegion );
+	bool storeRegion( const Vector2i &rLocation, const Ref<Terrain3DRegion> &rRegion );
 	void eraseRegionResource( const Vector2i &rLocation );
 	int activateLocation( const Vector2i &rLocation, bool bPublishRegionMap );
 	int deactivateLocation( const Vector2i &rLocation );
@@ -142,7 +150,7 @@ public:
 	bool ensureSlotReserve( int nDesiredFreeSlots );
 	void rebuildRegionMapFromSlots( void );
 	void replaceAll( const Dictionary &rRegions,
-			T3DRegion *const *ppRegionMap,
+			Terrain3DRegion *const *ppRegionMap,
 			const Vector2i *pLocations,
 			int nLocationCount,
 			const uint16_t *pLogicalRegionMap );

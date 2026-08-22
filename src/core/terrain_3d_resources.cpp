@@ -44,71 +44,71 @@
 #include <numeric>
 #include <utility>
 
-void T3DTerrain::connectResourceSignals( const Ref<T3DAssets> &rAssets, const Ref<T3DMaterial> &rMaterial ) {
+void Terrain3D::connectResourceSignals( const Ref<Terrain3DAssets> &rAssets, const Ref<Terrain3DMaterial> &rMaterial ) {
 	if ( rMaterial.is_null() ) {
 		return;
 	}
-	const Callable maps_callback = callable_mp( this, &T3DTerrain::onDataMapsChanged );
+	const Callable maps_callback = callable_mp( this, &Terrain3D::onDataMapsChanged );
 	if ( m_pData && !m_pData->is_connected( "maps_changed", maps_callback ) ) {
 		m_pData->connect( "maps_changed", maps_callback );
 	}
-	const Callable page_table_callback = callable_mp( this, &T3DTerrain::onGpuRegionPageTableChanged );
+	const Callable page_table_callback = callable_mp( this, &Terrain3D::onGpuRegionPageTableChanged );
 	if ( m_pData && !m_pData->is_connected( "gpu_region_page_table_changed", page_table_callback ) ) {
 		m_pData->connect( "gpu_region_page_table_changed", page_table_callback );
 	}
-	const Callable textures_callback = callable_mp( this, &T3DTerrain::onAssetsTexturesChanged );
+	const Callable textures_callback = callable_mp( this, &Terrain3D::onAssetsTexturesChanged );
 	if ( rAssets.is_valid() && !rAssets->is_connected( "textures_changed", textures_callback ) ) {
 		rAssets->connect( "textures_changed", textures_callback );
 	}
-	const Callable material_callback = callable_mp( this, &T3DTerrain::onProfileOwnedResourceChanged );
+	const Callable material_callback = callable_mp( this, &Terrain3D::onProfileOwnedResourceChanged );
 	if ( !rMaterial->is_connected( "changed", material_callback ) ) {
 		rMaterial->connect( "changed", material_callback );
 	}
 }
 
-void T3DTerrain::disconnectResourceSignals( const Ref<T3DAssets> &rAssets, const Ref<T3DMaterial> &rMaterial ) {
+void Terrain3D::disconnectResourceSignals( const Ref<Terrain3DAssets> &rAssets, const Ref<Terrain3DMaterial> &rMaterial ) {
 	if ( rMaterial.is_null() ) {
 		return;
 	}
-	const Callable maps_callback = callable_mp( this, &T3DTerrain::onDataMapsChanged );
+	const Callable maps_callback = callable_mp( this, &Terrain3D::onDataMapsChanged );
 	if ( m_pData && m_pData->is_connected( "maps_changed", maps_callback ) ) {
 		m_pData->disconnect( "maps_changed", maps_callback );
 	}
-	const Callable page_table_callback = callable_mp( this, &T3DTerrain::onGpuRegionPageTableChanged );
+	const Callable page_table_callback = callable_mp( this, &Terrain3D::onGpuRegionPageTableChanged );
 	if ( m_pData && m_pData->is_connected( "gpu_region_page_table_changed", page_table_callback ) ) {
 		m_pData->disconnect( "gpu_region_page_table_changed", page_table_callback );
 	}
-	const Callable textures_callback = callable_mp( this, &T3DTerrain::onAssetsTexturesChanged );
+	const Callable textures_callback = callable_mp( this, &Terrain3D::onAssetsTexturesChanged );
 	if ( rAssets.is_valid() && rAssets->is_connected( "textures_changed", textures_callback ) ) {
 		rAssets->disconnect( "textures_changed", textures_callback );
 	}
-	const Callable material_callback = callable_mp( this, &T3DTerrain::onProfileOwnedResourceChanged );
+	const Callable material_callback = callable_mp( this, &Terrain3D::onProfileOwnedResourceChanged );
 	if ( rMaterial->is_connected( "changed", material_callback ) ) {
 		rMaterial->disconnect( "changed", material_callback );
 	}
 }
 
-void T3DTerrain::connectAutoShaderProfileSignal( const Ref<Resource> &rProfile ) {
+void Terrain3D::connectAutoShaderProfileSignal( const Ref<Resource> &rProfile ) {
 	if ( rProfile.is_null() ) {
 		return;
 	}
-	const Callable callback = callable_mp( this, &T3DTerrain::onAutoShaderProfileChanged );
+	const Callable callback = callable_mp( this, &Terrain3D::onAutoShaderProfileChanged );
 	if ( !rProfile->is_connected( "changed", callback ) ) {
 		rProfile->connect( "changed", callback );
 	}
 }
 
-void T3DTerrain::disconnectAutoShaderProfileSignal( const Ref<Resource> &rProfile ) {
+void Terrain3D::disconnectAutoShaderProfileSignal( const Ref<Resource> &rProfile ) {
 	if ( rProfile.is_null() ) {
 		return;
 	}
-	const Callable callback = callable_mp( this, &T3DTerrain::onAutoShaderProfileChanged );
+	const Callable callback = callable_mp( this, &Terrain3D::onAutoShaderProfileChanged );
 	if ( rProfile->is_connected( "changed", callback ) ) {
 		rProfile->disconnect( "changed", callback );
 	}
 }
 
-void T3DTerrain::applyAutoShaderProfileMode( void ) {
+void Terrain3D::applyAutoShaderProfileMode( void ) {
 	if ( m_material.is_null() ) {
 		return;
 	}
@@ -137,11 +137,11 @@ void T3DTerrain::applyAutoShaderProfileMode( void ) {
 	m_material->setAutoShaderEnabled( mode == s_nAutoshaderModeLegacyRuntime );
 }
 
-void T3DTerrain::onAutoShaderProfileChanged( void ) {
+void Terrain3D::onAutoShaderProfileChanged( void ) {
 	applyAutoShaderProfileMode();
 }
 
-void T3DTerrain::onDataMapsChanged( void ) {
+void Terrain3D::onDataMapsChanged( void ) {
 	// Signals can arrive from an inactive editor scene whose resource objects
 	// have already transferred to the newly active Terrain3D. Only the current
 	// owner may rebind shared material state.
@@ -150,13 +150,13 @@ void T3DTerrain::onDataMapsChanged( void ) {
 	}
 }
 
-void T3DTerrain::onGpuRegionPageTableChanged( void ) {
+void Terrain3D::onGpuRegionPageTableChanged( void ) {
 	if ( m_material.is_valid() && m_material->isInitializedFor( this ) ) {
 		m_material->updateRegionPageTable();
 	}
 }
 
-void T3DTerrain::onAssetsTexturesChanged( void ) {
+void Terrain3D::onAssetsTexturesChanged( void ) {
 	if ( m_assets.is_valid() && m_assets->isInitializedFor( this ) && m_material.is_valid() &&
 			m_material->isInitializedFor( this ) ) {
 		m_material->update( TEXTURE_ARRAYS );
@@ -166,7 +166,7 @@ void T3DTerrain::onAssetsTexturesChanged( void ) {
 	}
 }
 
-void T3DTerrain::refreshPerformanceProfileConformity( void ) {
+void Terrain3D::refreshPerformanceProfileConformity( void ) {
 	if ( m_bApplyingPerformanceTarget ) {
 		return;
 	}
@@ -198,12 +198,12 @@ void T3DTerrain::refreshPerformanceProfileConformity( void ) {
 	}
 }
 
-void T3DTerrain::onProfileOwnedResourceChanged( void ) {
+void Terrain3D::onProfileOwnedResourceChanged( void ) {
 	markMemoryBudgetDirty();
 	refreshPerformanceProfileConformity();
 }
 
-void T3DTerrain::applyPerformanceProfileToTerrain( void ) {
+void Terrain3D::applyPerformanceProfileToTerrain( void ) {
 	for ( const t3dPerformanceProfileSetting_t &setting : g_szXbox360ExperimentalSettings ) {
 		if ( setting.m_owner != T3D_PROFILE_OWNER_TERRAIN ) {
 			continue;
@@ -212,7 +212,7 @@ void T3DTerrain::applyPerformanceProfileToTerrain( void ) {
 	}
 }
 
-void T3DTerrain::setDataDirectory( const String dir ) {
+void Terrain3D::setDataDirectory( const String dir ) {
 	if ( m_dataDirectory == dir ) {
 		if ( m_regionLightmapOutputDirectory.is_empty() && !dir.is_empty() ) {
 			m_regionLightmapOutputDirectory = t3dDefaultRegionLightmapOutputDirectory( dir );
@@ -245,7 +245,7 @@ void T3DTerrain::setDataDirectory( const String dir ) {
 		return;
 	}
 
-	const bool bHasRegionFiles = !dir.is_empty() && !T3DUtil::getFiles( dir, "terrain3d*.res" ).is_empty();
+	const bool bHasRegionFiles = !dir.is_empty() && !Terrain3DUtil::getFiles( dir, "terrain3d*.res" ).is_empty();
 	const bool bClearsRepository = !old_dir.is_empty() && dir.is_empty();
 	const bool bReplacesRepository = bHasRegionFiles;
 	if ( !bClearsRepository && !bReplacesRepository ) {
@@ -289,7 +289,7 @@ void T3DTerrain::setDataDirectory( const String dir ) {
 			m_material->uninitialize( this );
 		}
 
-		// T3DGeneratedTexture replacement frees old renderer RIDs. Flush teardown
+		// Terrain3DGeneratedTexture replacement frees old renderer RIDs. Flush teardown
 		// commands first so Direct3D/Vulkan backends cannot execute an old draw or
 		// compute dispatch after the data object starts replacing those RIDs.
 		RenderingServer *const pServer = RenderingServer::get_singleton();
@@ -340,7 +340,7 @@ void T3DTerrain::setDataDirectory( const String dir ) {
 	update_configuration_warnings();
 }
 
-void T3DTerrain::setAutoShaderProfile( const Ref<Resource> &rProfile ) {
+void Terrain3D::setAutoShaderProfile( const Ref<Resource> &rProfile ) {
 	if ( m_autoShaderProfile == rProfile ) {
 		connectAutoShaderProfileSignal( m_autoShaderProfile );
 		applyAutoShaderProfileMode();
@@ -353,13 +353,13 @@ void T3DTerrain::setAutoShaderProfile( const Ref<Resource> &rProfile ) {
 	applyAutoShaderProfileMode();
 }
 
-void T3DTerrain::setAssets( const Ref<T3DAssets> &rAssets ) {
+void Terrain3D::setAssets( const Ref<Terrain3DAssets> &rAssets ) {
 	if ( !t3dDiffers( m_assets, rAssets ) ) {
 		return;
 	}
 	LOG( INFO, "Replacing asset registry" );
 	const bool bWasInitialized = m_bInitialized;
-	const Ref<T3DAssets> pOldAssets = m_assets;
+	const Ref<Terrain3DAssets> pOldAssets = m_assets;
 	disconnectResourceSignals( pOldAssets, m_material );
 	if ( bWasInitialized && m_pInstancer ) {
 		// Clear render records while the old registry still owns their counts.
@@ -387,19 +387,19 @@ void T3DTerrain::setAssets( const Ref<T3DAssets> &rAssets ) {
 	emit_signal( "assets_changed" );
 }
 
-void T3DTerrain::setEditor( T3DEditor *const pEditor ) {
+void Terrain3D::setEditor( Terrain3DEditor *const pEditor ) {
 	if ( pEditor && pEditor->is_queued_for_deletion() ) {
 		LOG( ERROR, "Attempted to set a node queued for deletion" );
 		return;
 	}
 	SET_IF_DIFF( m_pEditor, pEditor );
-	LOG( INFO, "Setting T3DEditor: ", m_pEditor );
+	LOG( INFO, "Setting Terrain3DEditor: ", m_pEditor );
 	if ( m_material.is_valid() ) {
 		m_material->update( FULL_REBUILD );
 	}
 }
 
-void T3DTerrain::setPlugin( Object *const pPlugin ) {
+void Terrain3D::setPlugin( Object *const pPlugin ) {
 	if ( pPlugin && pPlugin->is_queued_for_deletion() ) {
 		LOG( ERROR, "Attempted to set a node queued for deletion" );
 		return;
@@ -408,7 +408,7 @@ void T3DTerrain::setPlugin( Object *const pPlugin ) {
 	LOG( INFO, "Setting Editor Plugin: ", m_pEditorPlugin );
 }
 
-void T3DTerrain::setRegionSize( const t3dRegionSize_t size ) {
+void Terrain3D::setRegionSize( const t3dRegionSize_t size ) {
 	if ( size != SIZE_128 ) {
 		LOG( ERROR, "This Terrain3D fork is specialized for 128-sample regions and rejects all other sizes" );
 		return;
@@ -461,18 +461,18 @@ void T3DTerrain::setRegionSize( const t3dRegionSize_t size ) {
 		bDataChanged = true;
 	} else if ( m_pData && !bDataOwnerReady && bOwnerChanged ) {
 		LOG( DEBUG,
-				"Deferring T3DData region-size reconciliation until data initialization: ",
+				"Deferring Terrain3DData region-size reconciliation until data initialization: ",
 				( int )( m_nRegionSize ) );
 	}
 	// Equality of the owner property does not prove dependent state is already
-	// synchronized. Return only after T3DData has been reconciled.
+	// synchronized. Return only after Terrain3DData has been reconciled.
 	if ( !bOwnerChanged && !bDataChanged ) {
 		return;
 	}
 	LOG( INFO, "Setting region size: ", m_nRegionSize );
 	// Runtime migration updates dependent instance layouts only after the data
 	// object has been attached to this terrain. Pre-tree property deserialization
-	// is intentionally reconciled by T3DData::initialize().
+	// is intentionally reconciled by Terrain3DData::initialize().
 	if ( m_bInitialized && m_pInstancer && !m_pInstancer->refreshResidentRegionLayouts() ) {
 		LOG( ERROR, "Region size changed, but resident instance pages could not be repartitioned" );
 	}
@@ -484,7 +484,7 @@ void T3DTerrain::setRegionSize( const t3dRegionSize_t size ) {
 	}
 }
 
-void T3DTerrain::setSave16Bit( const bool bEnabled ) {
+void Terrain3D::setSave16Bit( const bool bEnabled ) {
 	SET_IF_DIFF( m_bSave16Bit, bEnabled );
 	// Region persistence is now unconditionally compact R16. Retain the property
 	// for scene compatibility, but do not dirty every region: bounded CPU residency

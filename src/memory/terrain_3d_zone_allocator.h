@@ -21,12 +21,12 @@ typedef enum t3dAllocatorOverflowPolicy_e : uint8_t {
 	TERRAIN3D_ALLOCATOR_OVERFLOW_HEAP,
 } t3dAllocatorOverflowPolicy_t;
 
-class T3DZoneAllocatorRouter {
+class Terrain3DZoneAllocatorRouter {
 public:
-	EA_FORCE_INLINE static void install( T3DMemoryZone *pZone ) {
+	EA_FORCE_INLINE static void install( Terrain3DMemoryZone *pZone ) {
 		s_pZone.store( pZone, std::memory_order_release );
 	}
-	EA_FORCE_INLINE static T3DMemoryZone *zone( void ) {
+	EA_FORCE_INLINE static Terrain3DMemoryZone *zone( void ) {
 		return s_pZone.load( std::memory_order_acquire );
 	}
 	EA_FORCE_INLINE static void setOverflowPolicy( const t3dAllocatorOverflowPolicy_t policy ) {
@@ -37,7 +37,7 @@ public:
 	}
 
 private:
-	inline static std::atomic<T3DMemoryZone *> s_pZone{ nullptr };
+	inline static std::atomic<Terrain3DMemoryZone *> s_pZone{ nullptr };
 	inline static std::atomic<uint8_t> s_nOverflowPolicy{ TERRAIN3D_ALLOCATOR_OVERFLOW_STRICT };
 };
 

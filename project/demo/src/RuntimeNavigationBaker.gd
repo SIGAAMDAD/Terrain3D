@@ -7,7 +7,7 @@ signal bake_finished
 @export var travel_cost: float = 1.0 : set = set_travel_cost
 @export_flags_3d_navigation var navigation_layers: int = 1 : set = set_navigation_layers
 @export var template: NavigationMesh : set = set_template
-@export var terrain: T3DTerrain
+@export var terrain: Terrain3D
 @export var player: Node3D
 @export var mesh_size := Vector3(256, 512, 256)
 @export var min_rebake_distance: float = 64.0
@@ -16,7 +16,7 @@ signal bake_finished
 @export var log_timing: bool = false
 
 var _scene_geometry: NavigationMeshSourceGeometryData3D
-var _current_center := Vector3(INF,INF,INF)
+var _current_center := Vector3(INF, INF, INF)
 
 var _bake_task_id: int = -1
 var _bake_task_timer: float = 0.0
@@ -24,7 +24,7 @@ var _bake_cooldown_timer: float = 0.0
 var _nav_region: NavigationRegion3D
 
 
-func _ready():
+func _ready() -> void:
 	_nav_region = NavigationRegion3D.new()
 	_nav_region.navigation_layers = navigation_layers
 	_nav_region.enabled = enabled
@@ -50,16 +50,16 @@ func set_enabled(p_value: bool) -> void:
 	enabled = p_value
 	if _nav_region:
 		_nav_region.enabled = enabled
-	set_process(enabled and template)
+	set_process(enabled and template != null)
 
 
-func set_enter_cost(p_value: bool) -> void:
+func set_enter_cost(p_value: float) -> void:
 	enter_cost = p_value
 	if _nav_region:
 		_nav_region.enter_cost = enter_cost
 
 
-func set_travel_cost(p_value: bool) -> void:
+func set_travel_cost(p_value: float) -> void:
 	travel_cost = p_value
 	if _nav_region:
 		_nav_region.travel_cost = travel_cost
@@ -73,7 +73,7 @@ func set_navigation_layers(p_value: int) -> void:
 
 func set_template(p_value: NavigationMesh) -> void:
 	template = p_value
-	set_process(enabled and template)
+	set_process(enabled and template != null)
 	_update_map_cell_size()
 
 
@@ -83,7 +83,7 @@ func parse_scene() -> void:
 
 
 func _update_map_cell_size() -> void:
-	if get_viewport() and template:
+	if get_viewport() != null and template != null:
 		var map := get_viewport().find_world_3d().navigation_map
 		NavigationServer3D.map_set_cell_size(map, template.cell_size)
 		NavigationServer3D.map_set_cell_height(map, template.cell_height)
@@ -93,7 +93,7 @@ func _process(p_delta: float) -> void:
 	if _bake_task_id != -1:
 		_bake_task_timer += p_delta
 	
-	if not player or _bake_task_id != -1:
+	if player == null or _bake_task_id != -1:
 		return
 	
 	if _bake_cooldown_timer > 0.0:
@@ -124,7 +124,7 @@ func _task_bake(p_center: Vector3) -> void:
 	var source_geometry: NavigationMeshSourceGeometryData3D
 	source_geometry = _scene_geometry.duplicate()
 	
-	if terrain:
+	if terrain != null:
 		var aabb: AABB = nav_mesh.filter_baking_aabb
 		aabb.position += nav_mesh.filter_baking_aabb_offset
 		var faces: PackedVector3Array = terrain.generate_nav_mesh_source_geometry(aabb, false)
@@ -144,7 +144,7 @@ func _bake_finished(p_nav_mesh: NavigationMesh) -> void:
 	_bake_task_timer = 0.0
 	_bake_task_id = -1
 	
-	if p_nav_mesh:
+	if p_nav_mesh != null:
 		_nav_region.navigation_mesh = p_nav_mesh
 	
 	bake_finished.emit()

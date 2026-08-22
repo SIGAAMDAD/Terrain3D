@@ -4,6 +4,7 @@
 #ifndef TERRAIN3D_INSTANCE_PAGE_CODEC_H
 #define TERRAIN3D_INSTANCE_PAGE_CODEC_H
 
+#include "Terrain3DConstants.h"
 #include "assets/terrain_3d_assets.h"
 #include "instances/terrain_3d_instance_store.h"
 
@@ -15,15 +16,17 @@
 using namespace godot;
 #endif
 
-class T3DInstancePageCodec {
+class Terrain3DInstancePageCodec {
+	CLASS_NAME_STATIC( "Terrain3DInstancePageCodec" );
+
 public:
-	static bool encode( const T3DInstanceStore &rStore,
+	static bool encode( const Terrain3DInstanceStore &rStore,
 			PackedByteArray &rPage,
 			uint32_t *pMeshCounts,
 			uint32_t &nInstanceCount,
 			uint16_t &nMeshCount );
 	static bool decode( const PackedByteArray &rPage,
-			T3DInstanceStore &rStore,
+			Terrain3DInstanceStore &rStore,
 			uint32_t *pMeshCounts,
 			uint32_t &nInstanceCount,
 			uint16_t &nMeshCount );

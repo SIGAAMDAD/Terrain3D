@@ -16,12 +16,12 @@
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/string.hpp>
 
-class T3DRegionRepository;
+class Terrain3DRegionRepository;
 
 typedef struct t3dStagedRegion_s {
 	Vector2i m_location = s_v2iMax;
 	String m_path;
-	Ref<T3DRegion> m_region;
+	Ref<Terrain3DRegion> m_region;
 	PackedByteArray m_stagedHeight;
 	int m_nActiveSlot = -1;
 } t3dStagedRegion_t;
@@ -31,7 +31,7 @@ typedef struct t3dStagedRegion_s {
 typedef struct t3dStagedRepository_s {
 	eastl::vector<t3dStagedRegion_t> m_regions;
 	Dictionary m_resources;
-	eastl::array<T3DRegion *, s_nMaxRegionSlots> m_pRegionPtrs = {};
+	eastl::array<Terrain3DRegion *, s_nMaxRegionSlots> m_pRegionPtrs = {};
 	eastl::array<Vector2i, s_nMaxRegionSlots> m_regionLocations = {};
 	eastl::array<uint16_t, s_nMaxRegionSlots> m_logicalRegionMap = {};
 	int m_nTargetRegionSize = 0;
@@ -47,7 +47,7 @@ typedef struct t3dRegionLoadResult_s {
 	Error m_error = FAILED;
 	Vector2i m_location = s_v2iMax;
 	String m_path;
-	Ref<T3DRegion> m_region;
+	Ref<Terrain3DRegion> m_region;
 	bool m_bStorageUpgrade = false;
 
 	EA_FORCE_INLINE bool succeeded( void ) const {
@@ -90,16 +90,18 @@ typedef struct t3dStartupLoadStats_s {
 	bool m_bSucceededLast = false;
 } t3dStartupLoadStats_t;
 
-// Owns T3DRegion resource serialization and staged repository loading.
+// Owns Terrain3DRegion resource serialization and staged repository loading.
 // Runtime residency, GPU publication, page cooking, Far-atlas cooking, and
 // terrain notifications are deliberately outside this class.
-class T3DRegionPersistence {
+class Terrain3DRegionPersistence {
+	CLASS_NAME_STATIC( "Terrain3DRegionPersistence" );
+
 public:
 	using EnsureRegionResidentFn = bool ( * )( void *pContext, const Vector2i &rLocation );
 
-	explicit T3DRegionPersistence( T3DRegionRepository *pRepository );
-	T3DRegionPersistence( const T3DRegionPersistence & ) = delete;
-	T3DRegionPersistence &operator=( const T3DRegionPersistence & ) = delete;
+	explicit Terrain3DRegionPersistence( Terrain3DRegionRepository *pRepository );
+	Terrain3DRegionPersistence( const Terrain3DRegionPersistence & ) = delete;
+	Terrain3DRegionPersistence &operator=( const Terrain3DRegionPersistence & ) = delete;
 
 	Error stageDirectory( const String &rDirectory, bool bBoundedCpuLoad, t3dStagedRepository_t &rStaged );
 	void beginPublication( void );
@@ -110,10 +112,10 @@ public:
 
 	t3dRegionLoadResult_t loadRegion( const Vector2i &rLocation, const String &rDirectory ) const;
 	void publishLoadedRegionPath( const t3dRegionLoadResult_t &rResult ) const;
-	bool loadRuntimeRegionSource( const String &rPath, int nExpectedRegionSize, Ref<T3DRegion> &rSource ) const;
-	bool prepareRuntimeRegionSource( const Ref<T3DRegion> &rCandidate,
+	bool loadRuntimeRegionSource( const String &rPath, int nExpectedRegionSize, Ref<Terrain3DRegion> &rSource ) const;
+	bool prepareRuntimeRegionSource( const Ref<Terrain3DRegion> &rCandidate,
 			int nExpectedRegionSize,
-			Ref<T3DRegion> &rSource ) const;
+			Ref<Terrain3DRegion> &rSource ) const;
 
 	t3dRegionSaveResult_t saveRegion( const Vector2i &rLocation,
 			const String &rDirectory,
@@ -131,7 +133,7 @@ public:
 	Dictionary getStartupLoadStatsDictionary( void ) const;
 
 private:
-	T3DRegionRepository *m_pRepository = nullptr;
+	Terrain3DRegionRepository *m_pRepository = nullptr;
 	t3dStartupLoadStats_t m_startupLoadStats;
 	uint64_t m_nLoadStartedUsec = 0u;
 	uint64_t m_nPublishStartedUsec = 0u;
@@ -139,9 +141,9 @@ private:
 
 	void resetLoadStats( void );
 	static void updateEditorFile( const String &rPath );
-	static bool validateHeightPayload( const Ref<T3DRegion> &rRegion, const String &rPath );
+	static bool validateHeightPayload( const Ref<Terrain3DRegion> &rRegion, const String &rPath );
 	void normalizeLoadedRegion( const Vector2i &rLocation,
-			const Ref<T3DRegion> &rRegion,
+			const Ref<Terrain3DRegion> &rRegion,
 			bool bApplyRepositorySpacing,
 			bool &rStorageUpgrade ) const;
 };

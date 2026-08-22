@@ -37,7 +37,7 @@ static uint64_t t3dLightmapStreamerHashReceiver( uint64_t nHash, const NodePath 
 	return hash;
 }
 
-static Node *t3dLightmapStreamerResolveLightmapReceiver( T3DTerrain *pTerrain, const NodePath &rBakedPath ) {
+static Node *t3dLightmapStreamerResolveLightmapReceiver( Terrain3D *pTerrain, const NodePath &rBakedPath ) {
 	if ( pTerrain == nullptr ) {
 		return nullptr;
 	}
@@ -58,25 +58,25 @@ static Node *t3dLightmapStreamerResolveLightmapReceiver( T3DTerrain *pTerrain, c
 }
 
 template <typename Callback>
-static bool t3dLightmapStreamerForEachLightmapReceiver( T3DTerrain *const pTerrain,
-		const Ref<T3DRegionLighting> &rPackage,
+static bool t3dLightmapStreamerForEachLightmapReceiver( Terrain3D *const pTerrain,
+		const Ref<Terrain3DRegionLighting> &rPackage,
 		Callback &&rCallback ) {
 	if ( pTerrain == nullptr || rPackage.is_null() ) {
 		return false;
 	}
 	if ( !pTerrain->isEditorAuthoringMode() ) {
-		T3DData *const pData = pTerrain->getData();
+		Terrain3DData *const pData = pTerrain->getData();
 		PackedByteArray blob;
 		if ( pData == nullptr || !pData->loadCookedLightingReceiversNow( rPackage->getClusterLocation(), blob ) ) {
 			return rPackage->getReceiverCount() == 0;
 		}
 		t3dLightingReceiverCursor_t cursor;
-		if ( !T3DRuntimeBakeCodec::beginLightingReceivers( blob, cursor ) ) {
+		if ( !Terrain3DRuntimeBakeCodec::beginLightingReceivers( blob, cursor ) ) {
 			return false;
 		}
 		for ( uint32_t i = 0u; i < cursor.m_nCount; ++i ) {
 			t3dRuntimeLightingReceiverRecord_t receiver;
-			if ( !T3DRuntimeBakeCodec::nextLightingReceiver( cursor, receiver ) ) {
+			if ( !Terrain3DRuntimeBakeCodec::nextLightingReceiver( cursor, receiver ) ) {
 				return false;
 			}
 			rCallback( receiver );
@@ -101,11 +101,11 @@ static bool t3dLightmapStreamerForEachLightmapReceiver( T3DTerrain *const pTerra
 	return true;
 }
 
-T3DLightmapStreamer::~T3DLightmapStreamer( void ) {
+Terrain3DLightmapStreamer::~Terrain3DLightmapStreamer( void ) {
 	destroy();
 }
 
-void T3DLightmapStreamer::initialize( T3DTerrain *const pTerrain ) {
+void Terrain3DLightmapStreamer::initialize( Terrain3D *const pTerrain ) {
 	if ( m_pTerrain == pTerrain ) {
 		return;
 	}
@@ -115,7 +115,7 @@ void T3DLightmapStreamer::initialize( T3DTerrain *const pTerrain ) {
 	m_nNodeRuntimeGeneration = 0u;
 }
 
-void T3DLightmapStreamer::destroy( void ) {
+void Terrain3DLightmapStreamer::destroy( void ) {
 	while ( m_nActiveCount > 0u ) {
 		deactivate( ( size_t )m_nActiveCount - 1u );
 	}
@@ -125,7 +125,7 @@ void T3DLightmapStreamer::destroy( void ) {
 	m_bHasPendingActivation = false;
 }
 
-void T3DLightmapStreamer::suspend( void ) {
+void Terrain3DLightmapStreamer::suspend( void ) {
 	while ( m_nActiveCount > 0u ) {
 		deactivate( ( size_t )m_nActiveCount - 1u );
 	}
@@ -134,7 +134,7 @@ void T3DLightmapStreamer::suspend( void ) {
 	m_bHasPendingActivation = false;
 }
 
-void T3DLightmapStreamer::setEnabled( const bool bEnabled ) {
+void Terrain3DLightmapStreamer::setEnabled( const bool bEnabled ) {
 	if ( m_bEnabled == bEnabled ) {
 		return;
 	}
@@ -144,7 +144,7 @@ void T3DLightmapStreamer::setEnabled( const bool bEnabled ) {
 	}
 }
 
-void T3DLightmapStreamer::setResidencyBudgetMb( const int nBudgetMb ) {
+void Terrain3DLightmapStreamer::setResidencyBudgetMb( const int nBudgetMb ) {
 	const int budget_mb = CLAMP( nBudgetMb, 1, 1024 );
 	if ( m_nResidencyBudgetMb == budget_mb ) {
 		return;
@@ -157,14 +157,14 @@ void T3DLightmapStreamer::setResidencyBudgetMb( const int nBudgetMb ) {
 	m_center = s_v2iMax;
 }
 
-int T3DLightmapStreamer::getEffectiveResidencyBudgetMb( void ) const {
+int Terrain3DLightmapStreamer::getEffectiveResidencyBudgetMb( void ) const {
 	// The terrain memory-budget coordinator already assigns this subsystem's
 	// residency budget. Authoring pins successfully loaded packages, but does not
 	// manufacture a second editor-only allowance outside that aggregate budget.
 	return MAX( 1, m_nResidencyBudgetMb );
 }
 
-void T3DLightmapStreamer::setRadiusRegions( const int nRadius ) {
+void Terrain3DLightmapStreamer::setRadiusRegions( const int nRadius ) {
 	const int radius = CLAMP( nRadius, 0, 16 );
 	if ( m_nRadiusRegions == radius ) {
 		return;
@@ -173,7 +173,7 @@ void T3DLightmapStreamer::setRadiusRegions( const int nRadius ) {
 	m_center = s_v2iMax;
 }
 
-t3dActivePackage_t *T3DLightmapStreamer::findActive( const Ref<T3DRegionLighting> &rPackage ) {
+t3dActivePackage_t *Terrain3DLightmapStreamer::findActive( const Ref<Terrain3DRegionLighting> &rPackage ) {
 	for ( uint8_t i = 0u; i < m_nActiveCount; ++i ) {
 		t3dActivePackage_t &active = m_szActive[i];
 		if ( active.m_ackage == rPackage ) {
@@ -183,7 +183,7 @@ t3dActivePackage_t *T3DLightmapStreamer::findActive( const Ref<T3DRegionLighting
 	return nullptr;
 }
 
-const t3dActivePackage_t *T3DLightmapStreamer::findActive( const Ref<T3DRegionLighting> &rPackage ) const {
+const t3dActivePackage_t *Terrain3DLightmapStreamer::findActive( const Ref<Terrain3DRegionLighting> &rPackage ) const {
 	for ( uint8_t i = 0u; i < m_nActiveCount; ++i ) {
 		const t3dActivePackage_t &active = m_szActive[i];
 		if ( active.m_ackage == rPackage ) {
@@ -193,7 +193,7 @@ const t3dActivePackage_t *T3DLightmapStreamer::findActive( const Ref<T3DRegionLi
 	return nullptr;
 }
 
-t3dSourceLoadResult_t T3DLightmapStreamer::requestSourceData( const Ref<T3DRegionLighting> &rPackage,
+t3dSourceLoadResult_t Terrain3DLightmapStreamer::requestSourceData( const Ref<Terrain3DRegionLighting> &rPackage,
 		Ref<LightmapGIData> &rData ) {
 	rData.unref();
 	if ( rPackage.is_null() || !rPackage->hasLightData() ) {
@@ -235,7 +235,7 @@ t3dSourceLoadResult_t T3DLightmapStreamer::requestSourceData( const Ref<T3DRegio
 	return SOURCE_LOAD_READY;
 }
 
-bool T3DLightmapStreamer::collectReceiverState( const Ref<T3DRegionLighting> &rPackage,
+bool Terrain3DLightmapStreamer::collectReceiverState( const Ref<Terrain3DRegionLighting> &rPackage,
 		uint64_t &nSignature,
 		int &nReceiverCount ) const {
 	nSignature = s_nLightmapFnvOffset;
@@ -256,7 +256,7 @@ bool T3DLightmapStreamer::collectReceiverState( const Ref<T3DRegionLighting> &rP
 	return decoded && ( nReceiverCount > 0 || rPackage->hasProbeData() );
 }
 
-bool T3DLightmapStreamer::buildRuntimeData( const Ref<T3DRegionLighting> &rPackage,
+bool Terrain3DLightmapStreamer::buildRuntimeData( const Ref<Terrain3DRegionLighting> &rPackage,
 		const Ref<LightmapGIData> &rSource,
 		Ref<LightmapGIData> &rData,
 		uint64_t &nSignature,
@@ -292,7 +292,7 @@ bool T3DLightmapStreamer::buildRuntimeData( const Ref<T3DRegionLighting> &rPacka
 	return true;
 }
 
-bool T3DLightmapStreamer::isPackageCompatibleWithActive( const Ref<T3DRegionLighting> &rPackage ) const {
+bool Terrain3DLightmapStreamer::isPackageCompatibleWithActive( const Ref<Terrain3DRegionLighting> &rPackage ) const {
 	if ( rPackage.is_null() ) {
 		return false;
 	}
@@ -313,7 +313,7 @@ bool T3DLightmapStreamer::isPackageCompatibleWithActive( const Ref<T3DRegionLigh
 	return true;
 }
 
-bool T3DLightmapStreamer::activate( const Ref<T3DRegionLighting> &rPackage,
+bool Terrain3DLightmapStreamer::activate( const Ref<Terrain3DRegionLighting> &rPackage,
 		const Ref<LightmapGIData> &rSourceData,
 		const Ref<LightmapGIData> &rRuntimeData,
 		const uint64_t nSignature,
@@ -359,7 +359,7 @@ bool T3DLightmapStreamer::activate( const Ref<T3DRegionLighting> &rPackage,
 	return true;
 }
 
-bool T3DLightmapStreamer::refreshActive( t3dActivePackage_t &rActive,
+bool Terrain3DLightmapStreamer::refreshActive( t3dActivePackage_t &rActive,
 		const Ref<LightmapGIData> &rRuntimeData,
 		const uint64_t nSignature,
 		const int nReceiverCount ) {
@@ -394,7 +394,7 @@ bool T3DLightmapStreamer::refreshActive( t3dActivePackage_t &rActive,
 	return true;
 }
 
-void T3DLightmapStreamer::deactivate( const size_t iIndex ) {
+void Terrain3DLightmapStreamer::deactivate( const size_t iIndex ) {
 	if ( iIndex >= m_nActiveCount ) {
 		return;
 	}
@@ -422,7 +422,7 @@ void T3DLightmapStreamer::deactivate( const size_t iIndex ) {
 	++m_nUnloadsTotal;
 }
 
-void T3DLightmapStreamer::markDesired( const Vector2i &rCenter ) {
+void Terrain3DLightmapStreamer::markDesired( const Vector2i &rCenter ) {
 	m_bHasPendingActivation = false;
 	m_nPendingPackagesLastTick = 0;
 	m_nCapacityDeferredLastTick = 0;
@@ -433,16 +433,16 @@ void T3DLightmapStreamer::markDesired( const Vector2i &rCenter ) {
 		return;
 	}
 
-	T3DData *const pData = m_pTerrain->getData();
-	T3DNodeStreamer *const pNodeStreamer = m_pTerrain->getNodeStreamer();
+	Terrain3DData *const pData = m_pTerrain->getData();
+	Terrain3DNodeStreamer *const pNodeStreamer = m_pTerrain->getNodeStreamer();
 	const bool authoring_full_residency = m_pTerrain->isEditorAuthoringMode();
 	const Vector2i *pLocations = pData->getRegionSlotsInternal();
-	T3DRegion *const *ppRegions = pData->getRegionPtrMapInternal();
+	Terrain3DRegion *const *ppRegions = pData->getRegionPtrMapInternal();
 	const int slot_count = pData->getRegionSlotCountInternal();
 	int remaining_loads = authoring_full_residency ? MAX( 1, m_nLoadBudget ) : m_nLoadBudget;
 
 	typedef struct t3dLightmapCandidate_s {
-		Ref<T3DRegionLighting> m_ackage;
+		Ref<Terrain3DRegionLighting> m_ackage;
 		int64_t m_nDistance = INT64_MAX;
 		Vector2i m_location = s_v2iMax;
 	} t3dLightmapCandidate_t;
@@ -469,16 +469,16 @@ void T3DLightmapStreamer::markDesired( const Vector2i &rCenter ) {
 					 ( pNodeStreamer != nullptr && pNodeStreamer->isRegionDesired( location ) ) ) ) {
 			continue;
 		}
-		T3DRegion *const pRegion = ppRegions[slot];
+		Terrain3DRegion *const pRegion = ppRegions[slot];
 		if ( pRegion == nullptr || !pRegion->hasLighting() ) {
 			continue;
 		}
-		const Ref<T3DRegionLighting> package = pRegion->getLighting();
+		const Ref<Terrain3DRegionLighting> package = pRegion->getLighting();
 		if ( package.is_null() ) {
 			continue;
 		}
 		const Vector2i package_location = package->getClusterLocation();
-		const int package_index = T3DRegionRepository::getRegionMapIndex( package_location );
+		const int package_index = Terrain3DRegionRepository::getRegionMapIndex( package_location );
 		if ( package_index >= 0 ) {
 			if ( seen_clusters.test( ( size_t )package_index ) ) {
 				continue;
@@ -524,7 +524,7 @@ void T3DLightmapStreamer::markDesired( const Vector2i &rCenter ) {
 	}
 
 	for ( int candidate_index = 0; candidate_index < candidate_count; ++candidate_index ) {
-		const Ref<T3DRegionLighting> package = candidates[candidate_index].m_ackage;
+		const Ref<Terrain3DRegionLighting> package = candidates[candidate_index].m_ackage;
 		t3dActivePackage_t *pActive = findActive( package );
 		Ref<LightmapGIData> source_data;
 		if ( pActive != nullptr ) {
@@ -601,7 +601,7 @@ void T3DLightmapStreamer::markDesired( const Vector2i &rCenter ) {
 	}
 }
 
-void T3DLightmapStreamer::updateResidency( const Vector3 &rTargetPosition, const bool bForce ) {
+void Terrain3DLightmapStreamer::updateResidency( const Vector3 &rTargetPosition, const bool bForce ) {
 	m_nLoadsLastTick = 0;
 	m_nUnloadsLastTick = 0;
 	m_nRefreshesLastTick = 0;
@@ -611,7 +611,7 @@ void T3DLightmapStreamer::updateResidency( const Vector3 &rTargetPosition, const
 	if ( !m_bEnabled || m_pTerrain == nullptr || m_pTerrain->getData() == nullptr ) {
 		return;
 	}
-	T3DNodeStreamer *const pNodeStreamer = m_pTerrain->getNodeStreamer();
+	Terrain3DNodeStreamer *const pNodeStreamer = m_pTerrain->getNodeStreamer();
 	const uint64_t node_generation = pNodeStreamer != nullptr ? pNodeStreamer->getRuntimeGeneration() : 0u;
 	const bool bReceiverSetChanged = node_generation != m_nNodeRuntimeGeneration;
 	const Vector2i center = m_pTerrain->getData()->getRegionLocation( rTargetPosition );
@@ -633,7 +633,7 @@ void T3DLightmapStreamer::updateResidency( const Vector3 &rTargetPosition, const
 	}
 }
 
-Dictionary T3DLightmapStreamer::getStatsFast( void ) const {
+Dictionary Terrain3DLightmapStreamer::getStatsFast( void ) const {
 	Dictionary stats;
 	stats["enabled"] = m_bEnabled;
 	stats["radius_regions"] = m_nRadiusRegions;
@@ -660,7 +660,7 @@ Dictionary T3DLightmapStreamer::getStatsFast( void ) const {
 	return stats;
 }
 
-Dictionary T3DLightmapStreamer::getStats( void ) const {
+Dictionary Terrain3DLightmapStreamer::getStats( void ) const {
 	Dictionary stats;
 	int lightmap_textures = 0;
 	int shadowmask_textures = 0;
@@ -704,26 +704,26 @@ Dictionary T3DLightmapStreamer::getStats( void ) const {
 	return stats;
 }
 
-void T3DLightmapStreamer::_bind_methods( void ) {
-	ClassDB::bind_method( D_METHOD( "initialize", "terrain" ), &T3DLightmapStreamer::initialize );
-	ClassDB::bind_method( D_METHOD( "destroy" ), &T3DLightmapStreamer::destroy );
+void Terrain3DLightmapStreamer::_bind_methods( void ) {
+	ClassDB::bind_method( D_METHOD( "initialize", "terrain" ), &Terrain3DLightmapStreamer::initialize );
+	ClassDB::bind_method( D_METHOD( "destroy" ), &Terrain3DLightmapStreamer::destroy );
 	ClassDB::bind_method( D_METHOD( "update_residency", "target_position", "force" ),
-			&T3DLightmapStreamer::updateResidency,
+			&Terrain3DLightmapStreamer::updateResidency,
 			DEFVAL( false ) );
-	ClassDB::bind_method( D_METHOD( "suspend" ), &T3DLightmapStreamer::suspend );
-	ClassDB::bind_method( D_METHOD( "set_enabled", "enabled" ), &T3DLightmapStreamer::setEnabled );
-	ClassDB::bind_method( D_METHOD( "is_enabled" ), &T3DLightmapStreamer::isEnabled );
-	ClassDB::bind_method( D_METHOD( "set_radius_regions", "radius" ), &T3DLightmapStreamer::setRadiusRegions );
-	ClassDB::bind_method( D_METHOD( "get_radius_regions" ), &T3DLightmapStreamer::getRadiusRegions );
-	ClassDB::bind_method( D_METHOD( "set_load_budget", "budget" ), &T3DLightmapStreamer::setLoadBudget );
-	ClassDB::bind_method( D_METHOD( "get_load_budget" ), &T3DLightmapStreamer::getLoadBudget );
-	ClassDB::bind_method( D_METHOD( "set_unload_budget", "budget" ), &T3DLightmapStreamer::setUnloadBudget );
-	ClassDB::bind_method( D_METHOD( "get_unload_budget" ), &T3DLightmapStreamer::getUnloadBudget );
+	ClassDB::bind_method( D_METHOD( "suspend" ), &Terrain3DLightmapStreamer::suspend );
+	ClassDB::bind_method( D_METHOD( "set_enabled", "enabled" ), &Terrain3DLightmapStreamer::setEnabled );
+	ClassDB::bind_method( D_METHOD( "is_enabled" ), &Terrain3DLightmapStreamer::isEnabled );
+	ClassDB::bind_method( D_METHOD( "set_radius_regions", "radius" ), &Terrain3DLightmapStreamer::setRadiusRegions );
+	ClassDB::bind_method( D_METHOD( "get_radius_regions" ), &Terrain3DLightmapStreamer::getRadiusRegions );
+	ClassDB::bind_method( D_METHOD( "set_load_budget", "budget" ), &Terrain3DLightmapStreamer::setLoadBudget );
+	ClassDB::bind_method( D_METHOD( "get_load_budget" ), &Terrain3DLightmapStreamer::getLoadBudget );
+	ClassDB::bind_method( D_METHOD( "set_unload_budget", "budget" ), &Terrain3DLightmapStreamer::setUnloadBudget );
+	ClassDB::bind_method( D_METHOD( "get_unload_budget" ), &Terrain3DLightmapStreamer::getUnloadBudget );
 	ClassDB::bind_method(
-			D_METHOD( "set_residency_budget_mb", "budget_mb" ), &T3DLightmapStreamer::setResidencyBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_residency_budget_mb" ), &T3DLightmapStreamer::getResidencyBudgetMb );
-	ClassDB::bind_method( D_METHOD( "get_active_package_count" ), &T3DLightmapStreamer::getActivePackageCount );
-	ClassDB::bind_method( D_METHOD( "get_stats" ), &T3DLightmapStreamer::getStats );
+			D_METHOD( "set_residency_budget_mb", "budget_mb" ), &Terrain3DLightmapStreamer::setResidencyBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_residency_budget_mb" ), &Terrain3DLightmapStreamer::getResidencyBudgetMb );
+	ClassDB::bind_method( D_METHOD( "get_active_package_count" ), &Terrain3DLightmapStreamer::getActivePackageCount );
+	ClassDB::bind_method( D_METHOD( "get_stats" ), &Terrain3DLightmapStreamer::getStats );
 
 	ADD_GROUP( "Residency", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "enabled" ), "set_enabled", "is_enabled" );

@@ -19,7 +19,5 @@
 // equivalent arithmetic is valid, so keep this portable expansion centralized.
 #define fma(a, b, c) ((a) * (b) + (c))
 
-#if CURRENT_RENDERER == RENDERER_COMPATIBILITY
-#define dFdxCoarse(a) dFdx(a)
-#define dFdyCoarse(a) dFdy(a)
-#endif
+// Compatibility renderer derivative fallback is applied by Terrain3DMaterial
+// after specialization. Forward+/Mobile retain their native coarse derivatives.

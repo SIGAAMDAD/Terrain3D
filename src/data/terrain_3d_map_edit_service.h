@@ -16,9 +16,9 @@
 #include <godot_cpp/variant/rect2i.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
 
-class T3DCompute;
-class T3DRegionRepository;
-class T3DSamplingStorage;
+class Terrain3DCompute;
+class Terrain3DRegionRepository;
+class Terrain3DSamplingStorage;
 
 typedef struct t3dDerivedMapUpdate_s {
 	Vector2i m_location = s_v2iMax;
@@ -54,14 +54,14 @@ typedef struct t3dMapMutation_s {
 // Owns authoritative terrain-map mutation mechanics and edit bookkeeping.
 // Renderer publication, far-atlas invalidation, collision/instance updates,
 // terrain snapping, and Godot signal emission remain integration concerns.
-class T3DMapEditService {
+class Terrain3DMapEditService {
 public:
 	using EnsureRegionResidentFn = bool ( * )( void *pContext, const Vector2i &rLocation );
-	using AcquireEditableRegionFn = Error ( * )( void *pContext, const Vector2i &rLocation, Ref<T3DRegion> &rRegion );
+	using AcquireEditableRegionFn = Error ( * )( void *pContext, const Vector2i &rLocation, Ref<Terrain3DRegion> &rRegion );
 
-	T3DMapEditService( T3DRegionRepository *pRepository, T3DSamplingStorage *pSamplingStorage );
-	T3DMapEditService( const T3DMapEditService & ) = delete;
-	T3DMapEditService &operator=( const T3DMapEditService & ) = delete;
+	Terrain3DMapEditService( Terrain3DRegionRepository *pRepository, Terrain3DSamplingStorage *pSamplingStorage );
+	Terrain3DMapEditService( const Terrain3DMapEditService & ) = delete;
+	Terrain3DMapEditService &operator=( const Terrain3DMapEditService & ) = delete;
 
 	void reset( void );
 
@@ -74,13 +74,13 @@ public:
 	t3dMapMutation_t commitMapEdits( t3dMapType_t eMapType,
 			const eastl::vector<Vector2i> &rRegionLocations,
 			const AABB &rEditedArea,
-			T3DCompute *pCompute );
+			Terrain3DCompute *pCompute );
 	void finalizeMapEdits( const t3dMapMutation_t &rMutation, bool bKeepEdited );
 	void recycleMutation( t3dMapMutation_t &&rMutation );
 
 	const eastl::vector<t3dDerivedMapUpdate_t> &regenerateDerivedMaps( const eastl::vector<Vector2i> &rRegionLocations,
 			const AABB &rEditedArea,
-			T3DCompute *pCompute );
+			Terrain3DCompute *pCompute );
 
 	bool buildRegionEditArea( const Vector2i &rRegionLocation, const Rect2i &rDirtyRect, AABB &rEditedArea ) const;
 
@@ -104,10 +104,10 @@ public:
 			EnsureRegionResidentFn pEnsureResident = nullptr,
 			void *pResidentContext = nullptr );
 
-	void copyRegionMaps( const T3DRegion *pSourceRegion,
+	void copyRegionMaps( const Terrain3DRegion *pSourceRegion,
 			const Rect2i &rSourceRect,
 			const Rect2i &rDestinationRect,
-			T3DRegion *pDestinationRegion ) const;
+			Terrain3DRegion *pDestinationRegion ) const;
 
 	Error importImages( const TypedArray<Image> &rImages,
 			const Vector3 &rGlobalPosition,
@@ -130,8 +130,8 @@ public:
 			int nMargin = 0 );
 
 private:
-	T3DRegionRepository *m_pRepository = nullptr;
-	T3DSamplingStorage *m_pSamplingStorage = nullptr;
+	Terrain3DRegionRepository *m_pRepository = nullptr;
+	Terrain3DSamplingStorage *m_pSamplingStorage = nullptr;
 
 	AABB m_editedArea;
 	Vector2 m_masterHeightRange = s_v2Zero;

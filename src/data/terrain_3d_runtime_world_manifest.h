@@ -15,9 +15,9 @@
 #include <godot_cpp/variant/vector2.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
 
-class T3DRegion;
-class T3DRegionRepository;
-class T3DRuntimePageStore;
+class Terrain3DRegion;
+class Terrain3DRegionRepository;
+class Terrain3DRuntimePageStore;
 typedef struct t3dRuntimePageConfig_s t3dRuntimePageConfig_t;
 typedef struct t3dStagedRepository_s t3dStagedRepository_t;
 
@@ -65,13 +65,13 @@ typedef struct t3dRuntimeWorldRegionRecord_s {
 
 // Immutable cooked-world topology/dependency index. Runtime residency keeps
 // mutable slot state elsewhere; this object only owns cook-time facts.
-class T3DRuntimeWorldManifest {
+class Terrain3DRuntimeWorldManifest {
 public:
 	void reset( void );
-	bool buildAuthoringIndex( const T3DRegionRepository &rRepository );
+	bool buildAuthoringIndex( const Terrain3DRegionRepository &rRepository );
 	bool write( const String &rDataDirectory,
-			const T3DRegionRepository &rRepository,
-			const T3DRuntimePageStore &rPageStore,
+			const Terrain3DRegionRepository &rRepository,
+			const Terrain3DRuntimePageStore &rPageStore,
 			const t3dRuntimePageConfig_t &rConfig,
 			PackedStringArray *pErrors = nullptr );
 	bool load( const String &rDataDirectory, PackedStringArray *pErrors = nullptr );

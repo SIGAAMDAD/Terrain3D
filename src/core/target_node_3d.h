@@ -10,7 +10,7 @@
 
 #include <godot_cpp/classes/node3d.hpp>
 
-class T3DTargetNode3D {
+class Terrain3DTargetNode3D {
 	CLASS_NAME_STATIC( "Terrain3DTargetNode3D" );
 
 private:

@@ -15,10 +15,10 @@ const MODE_NAMES: PackedStringArray = [
 	"Morphology", "Occlusion"
 ]
 
-var plugin: T3DEditorPluginBase
-var asset_dock: T3DAssetDock
+var plugin: Terrain3DEditorPluginBase
+var asset_dock: Terrain3DAssetDock
 var tool_settings: ToolSettings
-var baker: T3DLandformBaker = T3DLandformBaker.new()
+var baker: Terrain3DLandformBaker = Terrain3DLandformBaker.new()
 var path: PackedVector3Array = PackedVector3Array()
 var drawing: bool = false
 var preview_instance: MeshInstance3D
@@ -69,15 +69,15 @@ func cancel_stroke() -> void:
 func _apply_path(p_path: PackedVector3Array) -> bool:
 	if not plugin or not plugin.terrain or not tool_settings:
 		return false
-	var settings: T3DLandformSettings = _build_settings()
+	var settings: Terrain3DLandformSettings = _build_settings()
 	var landform_id: int = _create_landform_id(plugin.terrain, p_path, settings)
-	var result: T3DLandformNativeResult = T3DLandformNativeResult.from_apply_value(
+	var result: Terrain3DLandformNativeResult = Terrain3DLandformNativeResult.from_apply_value(
 		baker.apply(plugin.terrain, p_path, settings.to_dictionary()))
 	if not result.ok:
 		push_warning("Terrain3D landform: %s" % (result.error if not result.error.is_empty() else "Operation failed."))
 		return false
 
-	var placements: T3DLandformPlacements = result.placements
+	var placements: Terrain3DLandformPlacements = result.placements
 	if not placements.is_empty():
 		if result.modules_ok:
 			_add_module_placements(plugin.terrain, landform_id, placements)
@@ -87,7 +87,7 @@ func _apply_path(p_path: PackedVector3Array) -> bool:
 
 	var generated_landform: Node3D
 	var stores_landform_source: bool = settings.generate_mesh and settings.mode in [
-		T3DLandformBaker.SCARP, T3DLandformBaker.OCCLUSION
+		Terrain3DLandformBaker.SCARP, Terrain3DLandformBaker.OCCLUSION
 	]
 	if result.mesh or result.collision_mesh or not placements.is_empty() or stores_landform_source:
 		generated_landform = _create_generated_landform(
@@ -117,8 +117,8 @@ func _apply_path(p_path: PackedVector3Array) -> bool:
 	return true
 
 
-func _build_settings() -> T3DLandformSettings:
-	var settings := T3DLandformSettings.new()
+func _build_settings() -> Terrain3DLandformSettings:
+	var settings := Terrain3DLandformSettings.new()
 	settings.mode = int(tool_settings.get_setting("landform_mode"))
 	settings.morphology_mode = int(tool_settings.get_setting("landform_morphology"))
 	settings.width = float(tool_settings.get_setting("landform_width"))
@@ -183,7 +183,7 @@ func regenerate_landform(p_landform: Node3D, p_use_current_settings: bool = true
 	if not is_instance_valid(p_landform) or not bool(p_landform.get_meta(&"terrain3d_generated_landform", false)):
 		push_warning("Terrain3D landform: select a generated landform root or one of its children.")
 		return null
-	var terrain: T3DTerrain = p_landform.get_parent() as T3DTerrain
+	var terrain: Terrain3D = p_landform.get_parent() as Terrain3D
 	if not terrain:
 		push_warning("Terrain3D landform: the generated landform is no longer parented to Terrain3D.")
 		return null
@@ -192,10 +192,10 @@ func regenerate_landform(p_landform: Node3D, p_use_current_settings: bool = true
 		push_warning("Terrain3D landform: the stored source path is incomplete.")
 		return null
 
-	var old_settings: T3DLandformSettings = T3DLandformSettings.from_value(
+	var old_settings: Terrain3DLandformSettings = Terrain3DLandformSettings.from_value(
 		p_landform.get_meta(&"terrain3d_landform_settings", {}))
 	old_settings.mode = int(p_landform.get_meta(&"terrain3d_landform_mode", old_settings.mode))
-	var settings: T3DLandformSettings = _build_settings() if p_use_current_settings and tool_settings \
+	var settings: Terrain3DLandformSettings = _build_settings() if p_use_current_settings and tool_settings \
 		else old_settings.duplicate_settings()
 	settings.mode = old_settings.mode
 	settings.generate_mesh = true
@@ -204,12 +204,12 @@ func regenerate_landform(p_landform: Node3D, p_use_current_settings: bool = true
 		push_warning("Terrain3D landform: the selected node has no valid ownership ID.")
 		return null
 
-	var placements := T3DLandformPlacements.new()
+	var placements := Terrain3DLandformPlacements.new()
 	var module_count: int = 0
 	var mesh: ArrayMesh
 	match settings.geometry_mode:
-		T3DLandformBaker.GEOMETRY_MODULAR_INSTANCED:
-			var modules: T3DLandformNativeResult = T3DLandformNativeResult.from_modules_value(
+		Terrain3DLandformBaker.GEOMETRY_MODULAR_INSTANCED:
+			var modules: Terrain3DLandformNativeResult = Terrain3DLandformNativeResult.from_modules_value(
 				baker.build_cliff_modules(terrain, source_path, settings.to_dictionary()))
 			if not modules.modules_ok:
 				push_warning("Terrain3D modular cliff: %s" % (
@@ -217,20 +217,20 @@ func regenerate_landform(p_landform: Node3D, p_use_current_settings: bool = true
 				return null
 			placements = modules.placements
 			module_count = modules.module_count
-		T3DLandformBaker.GEOMETRY_PROCEDURAL_UNIQUE:
+		Terrain3DLandformBaker.GEOMETRY_PROCEDURAL_UNIQUE:
 			mesh = baker.build_cliff_mesh(terrain, source_path, settings.to_dictionary())
 			if not mesh:
 				push_warning("Terrain3D landform: procedural cliff regeneration produced no mesh.")
 				return null
 
 	var collision_mesh: ArrayMesh
-	if settings.generate_collision and settings.geometry_mode != T3DLandformBaker.GEOMETRY_TERRAIN_ONLY:
+	if settings.generate_collision and settings.geometry_mode != Terrain3DLandformBaker.GEOMETRY_TERRAIN_ONLY:
 		collision_mesh = baker.build_cliff_collision_mesh(terrain, source_path, settings.to_dictionary())
 
-	var old_placements: T3DLandformPlacements = T3DLandformPlacements.from_value(
+	var old_placements: Terrain3DLandformPlacements = Terrain3DLandformPlacements.from_value(
 		p_landform.get_meta(&"terrain3d_landform_module_placements", {}))
 	if old_placements.is_empty() and int(p_landform.get_meta(&"terrain3d_landform_module_count", 0)) > 0:
-		var old_modules: T3DLandformNativeResult = T3DLandformNativeResult.from_modules_value(
+		var old_modules: Terrain3DLandformNativeResult = Terrain3DLandformNativeResult.from_modules_value(
 			baker.build_cliff_modules(terrain, source_path, old_settings.to_dictionary()))
 		if old_modules.modules_ok:
 			old_placements = old_modules.placements
@@ -260,11 +260,11 @@ func _stored_landform_path(p_landform: Node3D) -> PackedVector3Array:
 
 
 func _replace_generated_landform(
-	p_terrain: T3DTerrain,
+	p_terrain: Terrain3D,
 	p_remove: Node3D,
 	p_add: Node3D,
 	p_landform_id: int,
-	p_placements: T3DLandformPlacements
+	p_placements: Terrain3DLandformPlacements
 ) -> void:
 	_remove_generated_landform(p_terrain, p_remove)
 	if p_placements.is_empty():
@@ -274,8 +274,8 @@ func _replace_generated_landform(
 	_add_generated_landform(p_terrain, p_add)
 
 
-func _create_landform_id(p_terrain: T3DTerrain, p_path: PackedVector3Array,
-		p_settings: T3DLandformSettings) -> int:
+func _create_landform_id(p_terrain: Terrain3D, p_path: PackedVector3Array,
+		p_settings: Terrain3DLandformSettings) -> int:
 	var candidate: int = int(hash([
 		Time.get_unix_time_from_system(),
 		Time.get_ticks_usec(),
@@ -288,7 +288,7 @@ func _create_landform_id(p_terrain: T3DTerrain, p_path: PackedVector3Array,
 	return candidate
 
 
-func _landform_id_exists(p_terrain: T3DTerrain, p_landform_id: int) -> bool:
+func _landform_id_exists(p_terrain: Terrain3D, p_landform_id: int) -> bool:
 	for child: Node in p_terrain.get_children():
 		if int(child.get_meta(&"terrain3d_landform_id", 0)) == p_landform_id:
 			return true
@@ -298,11 +298,11 @@ func _landform_id_exists(p_terrain: T3DTerrain, p_landform_id: int) -> bool:
 func _create_generated_landform(
 	p_mesh: ArrayMesh,
 	p_collision_mesh: ArrayMesh,
-	p_settings: T3DLandformSettings,
+	p_settings: Terrain3DLandformSettings,
 	p_path: PackedVector3Array,
 	p_landform_id: int,
 	p_module_count: int,
-	p_placements: T3DLandformPlacements
+	p_placements: Terrain3DLandformPlacements
 ) -> Node3D:
 	var root := Node3D.new()
 	root.name = "Terrain3D_%s_Landform" % _mode_name(p_settings.mode)
@@ -337,7 +337,7 @@ func _create_generated_landform(
 	return root
 
 
-func _add_generated_landform(p_terrain: T3DTerrain, p_instance: Node3D) -> void:
+func _add_generated_landform(p_terrain: Terrain3D, p_instance: Node3D) -> void:
 	if not is_instance_valid(p_terrain) or not is_instance_valid(p_instance):
 		return
 	if p_instance.get_parent() != p_terrain:
@@ -347,29 +347,29 @@ func _add_generated_landform(p_terrain: T3DTerrain, p_instance: Node3D) -> void:
 		_set_owner_recursive(p_instance, edited_root)
 
 
-func _remove_generated_landform(p_terrain: T3DTerrain, p_instance: Node3D) -> void:
+func _remove_generated_landform(p_terrain: Terrain3D, p_instance: Node3D) -> void:
 	if is_instance_valid(p_terrain) and is_instance_valid(p_instance) and p_instance.get_parent() == p_terrain:
 		p_terrain.remove_child(p_instance)
 
 
-func _add_module_placements(p_terrain: T3DTerrain, p_landform_id: int,
-		p_placements: T3DLandformPlacements) -> void:
+func _add_module_placements(p_terrain: Terrain3D, p_landform_id: int,
+		p_placements: Terrain3DLandformPlacements) -> void:
 	if not is_instance_valid(p_terrain) or p_landform_id <= 0 or p_placements.is_empty():
 		return
-	var instancer: T3DInstancer = p_terrain.get_instancer()
+	var instancer: Terrain3DInstancer = p_terrain.get_instancer()
 	if not instancer:
 		return
 	instancer.remove_owned_instances(p_landform_id, false, false)
-	for group: T3DLandformPlacements.PlacementGroup in p_placements.groups:
+	for group: Terrain3DLandformPlacements.PlacementGroup in p_placements.groups:
 		instancer.add_owned_transforms(
 			group.mesh_id, group.transforms, p_landform_id, PackedColorArray(), false, false)
 	instancer.update_mmis()
 
 
-func _remove_module_placements(p_terrain: T3DTerrain, p_landform_id: int) -> void:
+func _remove_module_placements(p_terrain: Terrain3D, p_landform_id: int) -> void:
 	if not is_instance_valid(p_terrain) or p_landform_id <= 0:
 		return
-	var instancer: T3DInstancer = p_terrain.get_instancer()
+	var instancer: Terrain3DInstancer = p_terrain.get_instancer()
 	if instancer:
 		instancer.remove_owned_instances(p_landform_id, true, false)
 
@@ -407,7 +407,7 @@ func _update_preview() -> void:
 		preview_mesh.surface_add_vertex(point + Vector3.UP * lift)
 	preview_mesh.surface_end()
 
-	if int(tool_settings.get_setting("landform_mode")) != T3DLandformBaker.SCARP:
+	if int(tool_settings.get_setting("landform_mode")) != Terrain3DLandformBaker.SCARP:
 		return
 	var side: float = -1.0 if int(tool_settings.get_setting("landform_cliff_side")) == 0 else 1.0
 	var indicator_length: float = maxf(float(tool_settings.get_setting("landform_width")) * 0.22, 2.0)

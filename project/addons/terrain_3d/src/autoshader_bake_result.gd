@@ -1,5 +1,5 @@
 @tool
-class_name T3DAutoShaderBakeResult
+class_name Terrain3DAutoShaderBakeResult
 extends RefCounted
 
 var ok: bool = false
@@ -11,17 +11,17 @@ var changed_regions: int = 0
 var changed_pixels: int = 0
 
 
-static func failure(p_error: String) -> T3DAutoShaderBakeResult:
-	var result := T3DAutoShaderBakeResult.new()
+static func failure(p_error: String) -> Terrain3DAutoShaderBakeResult:
+	var result := Terrain3DAutoShaderBakeResult.new()
 	result.error = p_error
 	return result
 
 
-static func from_value(p_value: Variant) -> T3DAutoShaderBakeResult:
+static func from_value(p_value: Variant) -> Terrain3DAutoShaderBakeResult:
 	if not p_value is Dictionary:
 		return failure("Autoshader baker returned an invalid result.")
-	var values := T3DRuntimeValueMap.from_value(p_value)
-	var result := T3DAutoShaderBakeResult.new()
+	var values := Terrain3DRuntimeValueMap.from_value(p_value)
+	var result := Terrain3DAutoShaderBakeResult.new()
 	result.ok = values.bool_value("ok")
 	result.error = values.string_value("error")
 	result.errors = values.string_array("errors")

@@ -102,7 +102,7 @@ typedef struct t3dParallelTileDispatchContext_s {
 	void *m_pContext = nullptr;
 } t3dParallelTileDispatchContext_t;
 
-class T3DParallelExecutor {
+class Terrain3DParallelExecutor {
 private:
 	int32_t m_nTaskLimit = 1;
 
@@ -126,7 +126,7 @@ public:
 	typedef t3dParallelStaticRangeTask_t StaticRangeTask;
 	typedef t3dParallelTileTask_t TileTask;
 
-	EA_FORCE_INLINE explicit T3DParallelExecutor( const int32_t nTaskLimit ) :
+	EA_FORCE_INLINE explicit Terrain3DParallelExecutor( const int32_t nTaskLimit ) :
 			m_nTaskLimit( std::max( 1, nTaskLimit ) ) {}
 
 	void run( const size_t nCount, const size_t nGrain, const RangeTask pTask, void *const pContext ) const {

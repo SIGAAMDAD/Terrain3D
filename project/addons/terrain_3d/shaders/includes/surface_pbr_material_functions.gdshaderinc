@@ -41,7 +41,7 @@ void sample_texture_data(const vec2 uv, const int id, const vec2 ddx_uv, const v
 	// Keep the blend-height term neutral unless tessellated material-height mode
 	// explicitly binds and samples the dedicated R8 displacement array.
 	float height = 0.5;
-#ifdef SURFACE_DISPLACEMENT_ENABLED
+#ifdef T3D_ENABLE_SURFACE_DISPLACEMENT_UNIFORM
 	height = textureGrad(_texture_array_displacement, vec3(uv, float(t3d_mat_layer(id))), ddx_uv, ddy_uv).r;
 #endif
 	albedo_height = vec4(albedo.rgb * _texture_color_array[id].rgb, height);
@@ -65,7 +65,7 @@ void sample_texture_data(const vec2 uv, const int id, const vec2 ddx_uv, const v
 	normal_rough = vec4(0.0, 1.0, 0.0, 1.0);
 	ao = 1.0;
 #endif
-#ifdef SURFACE_DISPLACEMENT_ENABLED
+#ifdef T3D_ENABLE_SURFACE_DISPLACEMENT_UNIFORM
 	// Preserve Terrain3D's historical suppression of texture AO on raised
 	// displacement while compiling the entire dependency out without tessellation.
 	ao = mix(ao, 1.0, height * height);

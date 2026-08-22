@@ -2,7 +2,7 @@
 # Builds a temporary, region-scoped LightmapGI hierarchy from the active Terrain3D
 # scene and publishes one independent lighting package per authored terrain region.
 @tool
-class_name T3DRegionLightmapBaker
+class_name Terrain3DRegionLightmapBaker
 extends Node
 
 const BAKE_WORLD_NAME: StringName = &"Terrain3DLightmapBakeWorld"
@@ -29,12 +29,15 @@ const META_RECEIVER_COUNT: StringName = &"terrain3d_lightmap_receiver_count"
 const META_SHADOWMASK_EXPECTED: StringName = &"terrain3d_lightmap_shadowmask_expected"
 const META_BAKE_SIGNATURE: StringName = &"terrain3d_lightmap_bake_signature"
 const META_DIRECTIONAL_LIGHT_SIGNATURE: StringName = &"terrain3d_directional_light_signature"
+const LIGHTMAP_EDITOR_BAKE_METHOD: StringName = &"_bake"
+const LIGHTMAP_USER_DATA_METHOD: StringName = &"_get_user_data"
+const LIGHTMAP_PROBE_DATA_METHOD: StringName = &"_get_probe_data"
 
-var plugin: EditorPlugin
+var plugin: Terrain3DEditorPluginBase
 
 
-func get_data_directory_regions(terrain: T3DTerrain = null) -> Array[Vector2i]:
-	var source_terrain: T3DTerrain = terrain if is_instance_valid(terrain) else _get_active_terrain()
+func get_data_directory_regions(terrain: Terrain3D = null) -> Array[Vector2i]:
+	var source_terrain: Terrain3D = terrain if is_instance_valid(terrain) else _get_active_terrain()
 	var locations: Array[Vector2i] = []
 	if not _validate_source_terrain(source_terrain, false):
 		return locations
@@ -46,7 +49,7 @@ func get_data_directory_regions(terrain: T3DTerrain = null) -> Array[Vector2i]:
 	for file_name: String in files:
 		if not file_name.begins_with("terrain3d") or not file_name.ends_with(".res"):
 			continue
-		var location: Vector2i = T3DUtil.filename_to_location(file_name)
+		var location: Vector2i = Terrain3DUtil.filename_to_location(file_name)
 		if location == Vector2i(2147483647, 2147483647):
 			continue
 		locations.append(location)
@@ -54,14 +57,14 @@ func get_data_directory_regions(terrain: T3DTerrain = null) -> Array[Vector2i]:
 	return locations
 
 
-func prepare_output_directory(terrain: T3DTerrain = null) -> Dictionary:
-	var source_terrain: T3DTerrain = terrain if is_instance_valid(terrain) else _get_active_terrain()
+func prepare_output_directory(terrain: Terrain3D = null) -> Dictionary:
+	var source_terrain: Terrain3D = terrain if is_instance_valid(terrain) else _get_active_terrain()
 	if not _validate_source_terrain(source_terrain):
 		return {"ok": false, "path": "", "error": "Terrain3D data is unavailable."}
-	var configured: String = String(source_terrain.get("region_lightmap_output_directory")).strip_edges()
+	var configured: String = source_terrain.region_lightmap_output_directory.strip_edges()
 	if configured.is_empty():
 		configured = source_terrain.data_directory.trim_suffix("/").path_join("lighting")
-		source_terrain.set("region_lightmap_output_directory", configured)
+		source_terrain.region_lightmap_output_directory = configured
 	var normalized: String = configured.simplify_path().trim_suffix("/")
 	if normalized.is_empty():
 		return {"ok": false, "path": "", "error": "The regional lightmap output path is empty."}
@@ -79,8 +82,8 @@ func prepare_output_directory(terrain: T3DTerrain = null) -> Dictionary:
 	return {"ok": true, "path": normalized, "error": ""}
 
 
-func audit_region_packages(terrain: T3DTerrain = null) -> Dictionary:
-	var source_terrain: T3DTerrain = terrain if is_instance_valid(terrain) else _get_active_terrain()
+func audit_region_packages(terrain: Terrain3D = null) -> Dictionary:
+	var source_terrain: Terrain3D = terrain if is_instance_valid(terrain) else _get_active_terrain()
 	var report: Dictionary = {
 		"expected": 0, "current": 0, "missing": [], "stale_source_signatures": [],
 		"incompatible_light_signature": [], "incompatible_shadowmask_mode": [], "orphans": [],
@@ -103,14 +106,14 @@ func audit_region_packages(terrain: T3DTerrain = null) -> Dictionary:
 		if not FileAccess.file_exists(package_path) or not FileAccess.file_exists(String(paths["data"])):
 			(report["missing"] as Array).append(location)
 			continue
-		var package: Resource = ResourceLoader.load(package_path, "T3DRegionLighting", ResourceLoader.CACHE_MODE_IGNORE)
+		var package := ResourceLoader.load(package_path, "Terrain3DRegionLighting", ResourceLoader.CACHE_MODE_IGNORE) as Terrain3DRegionLighting
 		if not is_instance_valid(package):
 			(report["missing"] as Array).append(location)
 			continue
 		report["current"] = int(report["current"]) + 1
-		if int(package.get("shadowmask_mode")) != int(settings["shadowmask_mode"]):
+		if package.shadowmask_mode != int(settings["shadowmask_mode"]):
 			(report["incompatible_shadowmask_mode"] as Array).append(location)
-		var package_light_signature: String = String(package.get("directional_light_signature"))
+		var package_light_signature: String = package.directional_light_signature
 		if not active_light_signature.is_empty() and package_light_signature != active_light_signature:
 			(report["incompatible_light_signature"] as Array).append(location)
 		if not _ensure_region_loaded(source_terrain, location):
@@ -119,7 +122,7 @@ func audit_region_packages(terrain: T3DTerrain = null) -> Dictionary:
 		var expected_signature: int = _build_bake_signature(
 			scene_root, source_terrain, location, int(settings["proxy_lod"]),
 			int(settings["context_radius"]), float(settings["texel_size"]), int(settings["shadowmask_mode"]))
-		if int(package.get("bake_signature")) != expected_signature:
+		if package.bake_signature != expected_signature:
 			(report["stale_source_signatures"] as Array).append(location)
 	var output_dir: DirAccess = DirAccess.open(String(output["path"]))
 	if output_dir != null:
@@ -148,7 +151,7 @@ func bake_prepared_with_editor() -> Dictionary:
 			"automatic": false,
 			"error": "Godot's LightmapGI editor baker could not be located. The prepared region is still selected for manual baking.",
 		}
-	editor_baker.call("_bake")
+	editor_baker.call(LIGHTMAP_EDITOR_BAKE_METHOD)
 	await get_tree().process_frame
 	if not is_prepared_bake_complete():
 		return {
@@ -161,7 +164,7 @@ func bake_prepared_with_editor() -> Dictionary:
 
 func prepare_region_bake(location: Vector2i) -> bool:
 	var root: Node = EditorInterface.get_edited_scene_root()
-	var terrain: T3DTerrain = _get_active_terrain()
+	var terrain: Terrain3D = _get_active_terrain()
 	if not is_instance_valid(root) or not _validate_source_terrain(terrain):
 		return false
 	if not _ensure_region_loaded(terrain, location):
@@ -272,7 +275,7 @@ func prepare_region_bake(location: Vector2i) -> bool:
 
 func finalize_prepared_bake() -> bool:
 	var root: Node = EditorInterface.get_edited_scene_root()
-	var terrain: T3DTerrain = _get_active_terrain()
+	var terrain: Terrain3D = _get_active_terrain()
 	if not is_instance_valid(root) or not _validate_source_terrain(terrain):
 		return false
 	var bake_world := root.get_node_or_null(NodePath(String(BAKE_WORLD_NAME))) as Node3D
@@ -289,12 +292,15 @@ func finalize_prepared_bake() -> bool:
 		return false
 
 	var location: Vector2i = bake_world.get_meta(META_REGION_LOCATION, Vector2i(9999, 9999))
-	var region: T3DRegion = terrain.data.get_region(location)
+	var region: Terrain3DRegion = terrain.data.get_region(location)
 	if not is_instance_valid(region):
 		push_error("Terrain3D region %s disappeared after the bake was prepared" % location)
 		return false
-	var raw_user_data: Array = light_data.call("_get_user_data")
-	if (raw_user_data.size() % 4) != 0:
+	if not light_data.has_method(LIGHTMAP_USER_DATA_METHOD):
+		push_error("Godot 4.7 LightmapGIData no longer exposes the internal baked-user payload required by Terrain3D regional lightmaps.")
+		return false
+	var raw_user_data: Array = light_data.call(LIGHTMAP_USER_DATA_METHOD)
+	if (raw_user_data.size() % 4) != 0 or raw_user_data.size() / 4 != light_data.get_user_count():
 		push_error("LightmapGIData returned malformed baked-user metadata")
 		return false
 	var shadowmask_count: int = light_data.shadowmask_textures.size()
@@ -335,36 +341,39 @@ func finalize_prepared_bake() -> bool:
 			push_error("Unable to publish Terrain3D terrain shadow mask: %s" % error_string(shadow_save_error))
 			return false
 
-	var package := ClassDB.instantiate("T3DRegionLighting") as T3DRegionLighting
+	var package := Terrain3DRegionLighting.new()
 	if not is_instance_valid(package):
-		push_error("T3DRegionLighting is not registered. Rebuild/reload the Terrain3D extension.")
+		push_error("Terrain3DRegionLighting is not registered. Rebuild/reload the Terrain3D extension.")
 		return false
-	package.set("light_data_path", final_data_path)
-	package.set("terrain_shadow_mask_path", terrain_shadow_path)
-	package.set("baked_user_data", baked_user_data)
-	package.set("cluster_location", location)
-	package.set("region_min", location)
-	package.set("region_max", location)
-	package.set("cluster_size_regions", 1)
-	package.set("terrain_proxy_lod", int(bake_world.get_meta(META_PROXY_LOD, DEFAULT_PROXY_LOD)))
-	package.set("context_radius_regions", int(bake_world.get_meta(META_CONTEXT_RADIUS, DEFAULT_CONTEXT_RADIUS)))
-	package.set("shadowmask_mode", int(lightmap.shadowmask_mode))
-	package.set("bake_signature", int(bake_world.get_meta(META_BAKE_SIGNATURE, 0)))
-	package.set("directional_light_signature", String(
-		bake_world.get_meta(META_DIRECTIONAL_LIGHT_SIGNATURE, "")))
-	package.set("baked_unix", int(Time.get_unix_time_from_system()))
-	package.set("receiver_count", int(baked_user_data.size() / 4))
-	package.set("contributor_count", int(bake_world.get_meta(META_CONTRIBUTOR_COUNT, 1)))
-	package.set("lightmap_texture_count", light_data.lightmap_textures.size())
-	package.set("shadowmask_texture_count", light_data.shadowmask_textures.size())
-	var probe_data: Dictionary = light_data.call("_get_probe_data")
+	package.light_data_path = final_data_path
+	package.terrain_shadow_mask_path = terrain_shadow_path
+	package.baked_user_data = baked_user_data
+	package.cluster_location = location
+	package.region_min = location
+	package.region_max = location
+	package.cluster_size_regions = 1
+	package.terrain_proxy_lod = int(bake_world.get_meta(META_PROXY_LOD, DEFAULT_PROXY_LOD))
+	package.context_radius_regions = int(bake_world.get_meta(META_CONTEXT_RADIUS, DEFAULT_CONTEXT_RADIUS))
+	package.shadowmask_mode = int(lightmap.shadowmask_mode)
+	package.bake_signature = int(bake_world.get_meta(META_BAKE_SIGNATURE, 0))
+	package.directional_light_signature = String(
+		bake_world.get_meta(META_DIRECTIONAL_LIGHT_SIGNATURE, ""))
+	package.baked_unix = int(Time.get_unix_time_from_system())
+	package.receiver_count = int(baked_user_data.size() / 4)
+	package.contributor_count = int(bake_world.get_meta(META_CONTRIBUTOR_COUNT, 1))
+	package.lightmap_texture_count = light_data.lightmap_textures.size()
+	package.shadowmask_texture_count = light_data.shadowmask_textures.size()
+	if not light_data.has_method(LIGHTMAP_PROBE_DATA_METHOD):
+		push_error("Godot 4.7 LightmapGIData no longer exposes the internal probe payload required by Terrain3D regional lightmaps.")
+		return false
+	var probe_data: Dictionary = light_data.call(LIGHTMAP_PROBE_DATA_METHOD)
 	var probe_points: PackedVector3Array = probe_data.get("points", PackedVector3Array())
-	package.set("has_probe_data", not probe_points.is_empty())
-	package.set("estimated_gpu_bytes", _estimate_baked_texture_bytes(light_data) +
-		(terrain_shadow_mask.get_data().size() if terrain_shadow_mask != null else 0))
-	package.set("disk_bytes", _resource_file_bytes(final_data_path) +
-		(_resource_file_bytes(terrain_shadow_path) if not terrain_shadow_path.is_empty() else 0))
-	package.set("source_scene", root.scene_file_path)
+	package.has_probe_data = not probe_points.is_empty()
+	package.estimated_gpu_bytes = _estimate_baked_texture_bytes(light_data) + \
+		(terrain_shadow_mask.get_data().size() if terrain_shadow_mask != null else 0)
+	package.disk_bytes = _resource_file_bytes(final_data_path) + \
+		(_resource_file_bytes(terrain_shadow_path) if not terrain_shadow_path.is_empty() else 0)
+	package.source_scene = root.scene_file_path
 
 	var package_path: String = String(bake_world.get_meta(META_PACKAGE_PATH, ""))
 	if package_path.is_empty():
@@ -425,7 +434,7 @@ func select_prepared_lightmap() -> bool:
 	return true
 
 
-func _validate_source_terrain(terrain: T3DTerrain, report_error: bool = true) -> bool:
+func _validate_source_terrain(terrain: Terrain3D, report_error: bool = true) -> bool:
 	if not is_instance_valid(terrain):
 		if report_error:
 			push_error("Select a Terrain3D node before preparing regional lightmaps")
@@ -441,33 +450,33 @@ func _validate_source_terrain(terrain: T3DTerrain, report_error: bool = true) ->
 	return true
 
 
-func _get_active_terrain() -> T3DTerrain:
-	if is_instance_valid(plugin) and is_instance_valid(plugin.get("terrain")):
-		return plugin.get("terrain") as T3DTerrain
+func _get_active_terrain() -> Terrain3D:
+	if is_instance_valid(plugin) and is_instance_valid(plugin.terrain):
+		return plugin.terrain
 	var root: Node = EditorInterface.get_edited_scene_root()
 	return _find_terrain(root) if is_instance_valid(root) else null
 
 
-func _ensure_region_loaded(terrain: T3DTerrain, location: Vector2i) -> bool:
+func _ensure_region_loaded(terrain: Terrain3D, location: Vector2i) -> bool:
 	if is_instance_valid(terrain.data.get_region(location)):
 		return true
 	terrain.data.load_region(location, terrain.data_directory, true)
 	return is_instance_valid(terrain.data.get_region(location))
 
 
-func _get_bake_settings(terrain: T3DTerrain) -> Dictionary:
+func _get_bake_settings(terrain: Terrain3D) -> Dictionary:
 	return {
-		"output_directory": String(terrain.get("region_lightmap_output_directory")).strip_edges().trim_suffix("/"),
-		"proxy_lod": clampi(int(terrain.get("region_lightmap_proxy_lod")), 0, 8),
-		"context_radius": clampi(int(terrain.get("region_lightmap_context_radius")), 0, 4),
-		"texel_size": clampf(float(terrain.get("region_lightmap_texel_size")), 0.05, 16.0),
-		"bake_quality": clampi(int(terrain.get("region_lightmap_bake_quality")), 0, 3),
-		"shadowmask_mode": clampi(int(terrain.get("region_lightmap_shadowmask_mode")), 0, 2),
+		"output_directory": terrain.region_lightmap_output_directory.strip_edges().trim_suffix("/"),
+		"proxy_lod": clampi(terrain.region_lightmap_proxy_lod, 0, 8),
+		"context_radius": clampi(terrain.region_lightmap_context_radius, 0, 4),
+		"texel_size": clampf(terrain.region_lightmap_texel_size, 0.05, 16.0),
+		"bake_quality": clampi(terrain.region_lightmap_bake_quality, 0, 3),
+		"shadowmask_mode": clampi(terrain.region_lightmap_shadowmask_mode, 0, 2),
 	}
 
 
 func _find_editor_lightmap_plugin(node: Node) -> Node:
-	if node.get_class() == "LightmapGIEditorPlugin" and node.has_method("_bake"):
+	if node.get_class() == "LightmapGIEditorPlugin" and node.has_method(LIGHTMAP_EDITOR_BAKE_METHOD):
 		return node
 	for child: Node in node.get_children():
 		var found: Node = _find_editor_lightmap_plugin(child)
@@ -480,8 +489,8 @@ func _region_location_less(a: Vector2i, b: Vector2i) -> bool:
 	return a.y < b.y or (a.y == b.y and a.x < b.x)
 
 
-func _region_output_paths(terrain: T3DTerrain, location: Vector2i) -> Dictionary:
-	var output_dir: String = String(terrain.get("region_lightmap_output_directory")).strip_edges()
+func _region_output_paths(terrain: Terrain3D, location: Vector2i) -> Dictionary:
+	var output_dir: String = terrain.region_lightmap_output_directory.strip_edges()
 	if output_dir.is_empty():
 		output_dir = terrain.data_directory.trim_suffix("/").path_join("lighting")
 	output_dir = output_dir.simplify_path().trim_suffix("/")
@@ -495,7 +504,7 @@ func _region_output_paths(terrain: T3DTerrain, location: Vector2i) -> Dictionary
 	}
 
 
-func _populate_geometry_context(bake_world: Node3D, terrain: T3DTerrain,
+func _populate_geometry_context(bake_world: Node3D, terrain: Terrain3D,
 		location: Vector2i, context_radius: int) -> int:
 	var context := Node3D.new()
 	context.name = GEOMETRY_CONTEXT_NAME
@@ -506,7 +515,7 @@ func _populate_geometry_context(bake_world: Node3D, terrain: T3DTerrain,
 	for region_y: int in range(location.y - context_radius, location.y + context_radius + 1):
 		for region_x: int in range(location.x - context_radius, location.x + context_radius + 1):
 			var context_location := Vector2i(region_x, region_y)
-			var region: T3DRegion = terrain.data.get_region(context_location)
+			var region: Terrain3DRegion = terrain.data.get_region(context_location)
 			if not is_instance_valid(region):
 				continue
 			var region_root := Node3D.new()
@@ -522,15 +531,15 @@ func _populate_geometry_context(bake_world: Node3D, terrain: T3DTerrain,
 	return count
 
 
-func _populate_region_contributors(region_root: Node3D, terrain: T3DTerrain,
+func _populate_region_contributors(region_root: Node3D, terrain: Terrain3D,
 		location: Vector2i, include_lightmap_receivers: bool) -> int:
-	var region: T3DRegion = terrain.data.get_region(location)
+	var region: Terrain3DRegion = terrain.data.get_region(location)
 	if not is_instance_valid(region):
 		return 0
 	var count: int = 0
-	var descriptors: Array[T3DRegionNodeDescriptor] = T3DRegionNodeDescriptor.list_from_value(
+	var descriptors: Array[Terrain3DRegionNodeDescriptor] = Terrain3DRegionNodeDescriptor.list_from_value(
 		region.get_streamed_nodes())
-	for descriptor: T3DRegionNodeDescriptor in descriptors:
+	for descriptor: Terrain3DRegionNodeDescriptor in descriptors:
 		if not descriptor.contribute_baked_gi:
 			continue
 		if not include_lightmap_receivers and descriptor.baked_lighting_mode == BAKED_LIGHTMAP:
@@ -546,14 +555,14 @@ func _populate_region_contributors(region_root: Node3D, terrain: T3DTerrain,
 	return count
 
 
-func _populate_region_receivers(region_root: Node3D, terrain: T3DTerrain, location: Vector2i) -> int:
-	var region: T3DRegion = terrain.data.get_region(location)
+func _populate_region_receivers(region_root: Node3D, terrain: Terrain3D, location: Vector2i) -> int:
+	var region: Terrain3DRegion = terrain.data.get_region(location)
 	if not is_instance_valid(region):
 		return 0
 	var count: int = 0
-	var descriptors: Array[T3DRegionNodeDescriptor] = T3DRegionNodeDescriptor.list_from_value(
+	var descriptors: Array[Terrain3DRegionNodeDescriptor] = Terrain3DRegionNodeDescriptor.list_from_value(
 		region.get_streamed_nodes())
-	for descriptor: T3DRegionNodeDescriptor in descriptors:
+	for descriptor: Terrain3DRegionNodeDescriptor in descriptors:
 		if descriptor.baked_lighting_mode != BAKED_LIGHTMAP:
 			continue
 		var node: Node3D = _instantiate_descriptor(descriptor)
@@ -567,7 +576,7 @@ func _populate_region_receivers(region_root: Node3D, terrain: T3DTerrain, locati
 	return count
 
 
-func _instantiate_descriptor(descriptor: T3DRegionNodeDescriptor) -> Node3D:
+func _instantiate_descriptor(descriptor: Terrain3DRegionNodeDescriptor) -> Node3D:
 	var packed: PackedScene = descriptor.scene
 	if not descriptor.scene_path.is_empty():
 		packed = load(descriptor.scene_path) as PackedScene
@@ -592,7 +601,7 @@ func _configure_static_lightmap_receiver(node: Node) -> void:
 
 
 func _copy_scene_lighting_context(bake_world: Node3D, scene_root: Node,
-		terrain: T3DTerrain) -> Dictionary:
+		terrain: Terrain3D) -> Dictionary:
 	var context := Node3D.new()
 	context.name = LIGHTING_CONTEXT_NAME
 	bake_world.add_child(context)
@@ -692,7 +701,7 @@ func _contains_temporary_baked_users(users: Array) -> bool:
 	return false
 
 
-func _build_bake_signature(scene_root: Node, terrain: T3DTerrain, location: Vector2i,
+func _build_bake_signature(scene_root: Node, terrain: Terrain3D, location: Vector2i,
 		proxy_lod: int, context_radius: int, texel_size: float, shadowmask_mode: int) -> int:
 	var parts: PackedStringArray = PackedStringArray([
 		"terrain3d-region-lightmap-v2",
@@ -708,17 +717,17 @@ func _build_bake_signature(scene_root: Node, terrain: T3DTerrain, location: Vect
 	for region_y: int in range(location.y - context_radius, location.y + context_radius + 1):
 		for region_x: int in range(location.x - context_radius, location.x + context_radius + 1):
 			var context_location := Vector2i(region_x, region_y)
-			var region: T3DRegion = terrain.data.get_region(context_location)
+			var region: Terrain3DRegion = terrain.data.get_region(context_location)
 			if not is_instance_valid(region):
 				continue
 			var region_path: String = terrain.data_directory.trim_suffix("/").path_join(
-				T3DUtil.location_to_filename(context_location))
+				Terrain3DUtil.location_to_filename(context_location))
 			if FileAccess.file_exists(region_path):
 				parts.append(region_path)
 				parts.append(FileAccess.get_md5(region_path))
-			var descriptors: Array[T3DRegionNodeDescriptor] = T3DRegionNodeDescriptor.list_from_value(
+			var descriptors: Array[Terrain3DRegionNodeDescriptor] = Terrain3DRegionNodeDescriptor.list_from_value(
 				region.get_streamed_nodes())
-			for descriptor: T3DRegionNodeDescriptor in descriptors:
+			for descriptor: Terrain3DRegionNodeDescriptor in descriptors:
 				if not descriptor.scene_path.is_empty() and FileAccess.file_exists(descriptor.scene_path):
 					parts.append(descriptor.scene_path)
 					parts.append(FileAccess.get_md5(descriptor.scene_path))
@@ -931,7 +940,7 @@ func _publish_image_transactionally(image: Image, final_path: String) -> Error:
 	return OK
 
 
-func _publish_package_transactionally(package: Resource, final_path: String) -> Error:
+func _publish_package_transactionally(package: Terrain3DRegionLighting, final_path: String) -> Error:
 	var directory: String = final_path.get_base_dir()
 	var base_name: String = final_path.get_file().trim_suffix(".t3dlight.tres")
 	var staging_path: String = directory.path_join(base_name + ".publishing.t3dlight.tres")
@@ -941,9 +950,9 @@ func _publish_package_transactionally(package: Resource, final_path: String) -> 
 	var save_error: Error = ResourceSaver.save(package, staging_path)
 	if save_error != OK:
 		return save_error
-	var validation: Resource = ResourceLoader.load(
-		staging_path, "T3DRegionLighting", ResourceLoader.CACHE_MODE_IGNORE)
-	if not is_instance_valid(validation) or String(validation.get("light_data_path")).is_empty():
+	var validation := ResourceLoader.load(
+		staging_path, "Terrain3DRegionLighting", ResourceLoader.CACHE_MODE_IGNORE) as Terrain3DRegionLighting
+	if not is_instance_valid(validation) or validation.light_data_path.is_empty():
 		_remove_file_if_present(staging_path)
 		return ERR_FILE_CORRUPT
 	var absolute_final: String = ProjectSettings.globalize_path(final_path)
@@ -1000,11 +1009,11 @@ func _clear_children(node: Node) -> void:
 		child.free()
 
 
-func _find_terrain(node: Node) -> T3DTerrain:
-	if node is T3DTerrain:
-		return node as T3DTerrain
+func _find_terrain(node: Node) -> Terrain3D:
+	if node is Terrain3D:
+		return node as Terrain3D
 	for child: Node in node.get_children():
-		var found: T3DTerrain = _find_terrain(child)
+		var found: Terrain3D = _find_terrain(child)
 		if is_instance_valid(found):
 			return found
 	return null

@@ -17,7 +17,7 @@
 #include <godot_cpp/classes/static_body3d.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 
-class T3DTerrain;
+class Terrain3D;
 
 typedef enum t3dCollisionMode_e {
 	COLLISION_DISABLED,
@@ -58,13 +58,13 @@ typedef struct t3dCollisionRegionCacheEntry_s {
 	uint64_t m_nLastUseTick = 0u;
 } t3dCollisionRegionCacheEntry_t;
 
-class T3DCollision : public Object {
-	GDCLASS( T3DCollision, Object );
+class Terrain3DCollision : public Object {
+	GDCLASS( Terrain3DCollision, Object );
 	CLASS_NAME();
 
 public: // Constants
 private:
-	T3DTerrain *m_pTerrain = nullptr;
+	Terrain3D *m_pTerrain = nullptr;
 
 	// Public settings
 	t3dCollisionMode_t m_mode = DYNAMIC_GAME;
@@ -86,7 +86,7 @@ private:
 	int m_nInactiveShapeCount = 0;
 	PackedRealArray m_fullHeightScratch;
 	PackedFloat32Array m_collisionSurfaceScratch;
-	T3DCollisionSurfaceBuilder m_collisionSurfaceBuilder;
+	Terrain3DCollisionSurfaceBuilder m_collisionSurfaceBuilder;
 
 	static constexpr int s_nCollisionBakedCacheAxis = ( 2 * ( 256 + 64 + s_nMinRegionSize ) / s_nMinRegionSize ) + 1;
 	static constexpr int s_nBakedCacheCapacity = s_nCollisionBakedCacheAxis * s_nCollisionBakedCacheAxis;
@@ -146,13 +146,13 @@ private:
 	bool shapeAllowsCollision( const Vector2i &rPosition, const int nSize ) const;
 
 public:
-	EA_FORCE_INLINE T3DCollision( void ) {
+	EA_FORCE_INLINE Terrain3DCollision( void ) {
 		m_bakedRegionByMap.fill( ( int16_t )-1 );
 	}
-	EA_FORCE_INLINE ~T3DCollision( void ) {
+	EA_FORCE_INLINE ~Terrain3DCollision( void ) {
 		destroy();
 	}
-	void initialize( T3DTerrain *pTerrain );
+	void initialize( Terrain3D *pTerrain );
 
 	void build( void );
 	void onRegionMapChanged( void );
@@ -209,12 +209,12 @@ protected:
 };
 VARIANT_ENUM_CAST( t3dCollisionMode_t );
 
-EA_FORCE_INLINE Vector2i T3DCollision::snapToGrid( const Vector2i &rPos ) const {
+EA_FORCE_INLINE Vector2i Terrain3DCollision::snapToGrid( const Vector2i &rPos ) const {
 	return Vector2i( t3dIntRoundMult( rPos.x, ( int32_t )( m_nShapeSize ) ),
 			t3dIntRoundMult( rPos.y, ( int32_t )( m_nShapeSize ) ) );
 }
 
-EA_FORCE_INLINE Vector2i T3DCollision::snapToGrid( const Vector3 &rPos ) const {
+EA_FORCE_INLINE Vector2i Terrain3DCollision::snapToGrid( const Vector3 &rPos ) const {
 	return Vector2i( Math::floor( rPos.x / ( real_t )( m_nShapeSize ) + 0.5f ),
 				   Math::floor( rPos.z / ( real_t )( m_nShapeSize ) + 0.5f ) ) *
 			m_nShapeSize;

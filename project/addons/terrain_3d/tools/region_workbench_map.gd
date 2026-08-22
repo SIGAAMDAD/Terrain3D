@@ -1,5 +1,5 @@
 @tool
-class_name T3DRegionWorkbenchMap
+class_name Terrain3DRegionWorkbenchMap
 extends Control
 
 signal selection_changed(locations)

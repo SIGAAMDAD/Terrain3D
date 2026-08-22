@@ -13,8 +13,8 @@
 
 #include <EASTL/array.h>
 
-class T3DTerrain;
-class T3DInstancer;
+class Terrain3D;
+class Terrain3DInstancer;
 
 typedef enum t3dAssetType_e {
 	TYPE_TEXTURE,
@@ -84,24 +84,27 @@ typedef struct t3dTextureArrayLayout_s {
 	bool m_bNeedsNormalization = false;
 } t3dTextureArrayLayout_t;
 
-class T3DAssets : public Resource {
-	GDCLASS( T3DAssets, Resource );
+class Terrain3DAssets : public Resource {
+	GDCLASS( Terrain3DAssets, Resource );
 	CLASS_NAME();
 
 public: // Constants
+	static constexpr int MAX_TEXTURE_ASSETS = s_nMaxTextureAssets;
+	static constexpr int MAX_MESH_ASSETS = s_nMaxMeshAssets;
+
 private:
-	T3DTerrain *m_pTerrain = nullptr;
+	Terrain3D *m_pTerrain = nullptr;
 	bool m_bSuppressTextureChanged = false;
 	bool m_bPersistenceDirty = false;
 
-	TypedArray<T3DTextureAsset> m_textureList;
-	TypedArray<T3DMeshAsset> m_meshList;
+	TypedArray<Terrain3DTextureAsset> m_textureList;
+	TypedArray<Terrain3DMeshAsset> m_meshList;
 
-	T3DGeneratedTexture m_generatedAlbedoTextures;
-	T3DGeneratedTexture m_generatedNormalTextures;
-	T3DGeneratedTexture m_generatedSurfaceTextures;
-	T3DGeneratedTexture m_generatedDisplacementTextures;
-	T3DGeneratedTexture m_generatedFarAlbedoTextures;
+	Terrain3DGeneratedTexture m_generatedAlbedoTextures;
+	Terrain3DGeneratedTexture m_generatedNormalTextures;
+	Terrain3DGeneratedTexture m_generatedSurfaceTextures;
+	Terrain3DGeneratedTexture m_generatedDisplacementTextures;
+	Terrain3DGeneratedTexture m_generatedFarAlbedoTextures;
 	t3dTexturePackingMode_t m_texturePackingMode = TEXTURE_PACKING_LEGACY;
 
 	t3dTextureSettingsBlock_t m_textureSettings;
@@ -143,14 +146,14 @@ private:
 	RID m_hMeshInstance;
 
 	void swapIds( const t3dAssetType_t type, const int nSrcId, const int nDstId );
-	void connectAssetSignals( const t3dAssetType_t type, const Ref<T3DAssetResource> &rAsset );
-	void disconnectAssetSignals( const t3dAssetType_t type, const Ref<T3DAssetResource> &rAsset );
-	Ref<T3DAssetResource> makePlaceholderAsset( const t3dAssetType_t type, const int nId ) const;
-	void setAssetList( const t3dAssetType_t type, const TypedArray<T3DAssetResource> &rList );
-	void setAsset( const t3dAssetType_t type, const int nId, const Ref<T3DAssetResource> &rAsset );
+	void connectAssetSignals( const t3dAssetType_t type, const Ref<Terrain3DAssetResource> &rAsset );
+	void disconnectAssetSignals( const t3dAssetType_t type, const Ref<Terrain3DAssetResource> &rAsset );
+	Ref<Terrain3DAssetResource> makePlaceholderAsset( const t3dAssetType_t type, const int nId ) const;
+	void setAssetList( const t3dAssetType_t type, const TypedArray<Terrain3DAssetResource> &rList );
+	void setAsset( const t3dAssetType_t type, const int nId, const Ref<Terrain3DAssetResource> &rAsset );
 
 	void validateArrayMember( const Ref<Texture2D> &rTexture,
-			const Ref<T3DTextureAsset> &rAsset,
+			const Ref<Terrain3DTextureAsset> &rAsset,
 			const String &rLabel,
 			t3dTextureArrayLayout_t &rLayout,
 			Image::Format eRequiredFormat = Image::FORMAT_MAX,
@@ -177,27 +180,27 @@ private:
 	void resetRuntimeMaterialCacheState( bool bClearGeneratedArrays );
 
 public:
-	EA_FORCE_INLINE T3DAssets( void ) {}
-	EA_FORCE_INLINE ~T3DAssets( void ) {
+	EA_FORCE_INLINE Terrain3DAssets( void ) {}
+	EA_FORCE_INLINE ~Terrain3DAssets( void ) {
 		destroy();
 	}
-	void initialize( T3DTerrain *pTerrain );
+	void initialize( Terrain3D *pTerrain );
 	EA_FORCE_INLINE bool isInitialized( void ) const {
 		return m_pTerrain != nullptr;
 	}
-	EA_FORCE_INLINE bool isInitializedFor( const T3DTerrain *pTerrain ) const {
+	EA_FORCE_INLINE bool isInitializedFor( const Terrain3D *pTerrain ) const {
 		return m_pTerrain == pTerrain;
 	}
-	EA_FORCE_INLINE T3DTerrain *getTerrainOwner( void ) const {
+	EA_FORCE_INLINE Terrain3D *getTerrainOwner( void ) const {
 		return m_pTerrain;
 	}
-	void uninitialize( T3DTerrain *pTerrain );
+	void uninitialize( Terrain3D *pTerrain );
 	void destroy( void );
 
-	void setTextureAsset( const int nId, const Ref<T3DTextureAsset> &rTexture );
-	Ref<T3DTextureAsset> getTextureAsset( const int nId ) const;
-	void setTextureList( const TypedArray<T3DTextureAsset> &rTextureList );
-	TypedArray<T3DTextureAsset> getTextureList( void ) const;
+	void setTextureAsset( const int nId, const Ref<Terrain3DTextureAsset> &rTexture );
+	Ref<Terrain3DTextureAsset> getTextureAsset( const int nId ) const;
+	void setTextureList( const TypedArray<Terrain3DTextureAsset> &rTextureList );
+	TypedArray<Terrain3DTextureAsset> getTextureList( void ) const;
 	EA_FORCE_INLINE int getTextureCount( void ) const {
 		return m_textureList.size();
 	}
@@ -299,10 +302,10 @@ public:
 		resetRuntimeMaterialCacheState( false );
 	}
 
-	void setMeshAsset( const int nId, const Ref<T3DMeshAsset> &rMeshAsset );
-	Ref<T3DMeshAsset> getMeshAsset( const int nId ) const;
-	void setMeshList( const TypedArray<T3DMeshAsset> &rMeshList );
-	TypedArray<T3DMeshAsset> getMeshList( void ) const;
+	void setMeshAsset( const int nId, const Ref<Terrain3DMeshAsset> &rMeshAsset );
+	Ref<Terrain3DMeshAsset> getMeshAsset( const int nId ) const;
+	void setMeshList( const TypedArray<Terrain3DMeshAsset> &rMeshList );
+	TypedArray<Terrain3DMeshAsset> getMeshList( void ) const;
 	EA_FORCE_INLINE int getMeshCount( void ) const {
 		return m_meshList.size();
 	}
@@ -319,19 +322,19 @@ protected:
 VARIANT_ENUM_CAST( t3dAssetType_t );
 VARIANT_ENUM_CAST( t3dTexturePackingMode_t );
 
-inline Ref<T3DTextureAsset> T3DAssets::getTextureAsset( const int nId ) const {
+inline Ref<Terrain3DTextureAsset> Terrain3DAssets::getTextureAsset( const int nId ) const {
 	if ( nId >= 0 && nId < m_textureList.size() ) {
-		const Ref<T3DTextureAsset> pAsset = m_textureList[nId];
-		return pAsset.is_valid() && !pAsset->m_bPlaceholder ? pAsset : Ref<T3DTextureAsset>();
+		const Ref<Terrain3DTextureAsset> pAsset = m_textureList[nId];
+		return pAsset.is_valid() && !pAsset->m_bPlaceholder ? pAsset : Ref<Terrain3DTextureAsset>();
 	}
-	return Ref<T3DTextureAsset>();
+	return Ref<Terrain3DTextureAsset>();
 }
 
-inline Ref<T3DMeshAsset> T3DAssets::getMeshAsset( const int nId ) const {
+inline Ref<Terrain3DMeshAsset> Terrain3DAssets::getMeshAsset( const int nId ) const {
 	if ( nId >= 0 && nId < m_meshList.size() ) {
-		const Ref<T3DMeshAsset> pAsset = m_meshList[nId];
-		return pAsset.is_valid() && !pAsset->m_bPlaceholder ? pAsset : Ref<T3DMeshAsset>();
+		const Ref<Terrain3DMeshAsset> pAsset = m_meshList[nId];
+		return pAsset.is_valid() && !pAsset->m_bPlaceholder ? pAsset : Ref<Terrain3DMeshAsset>();
 	}
-	return Ref<T3DMeshAsset>();
+	return Ref<Terrain3DMeshAsset>();
 }
 #endif // TERRAIN3D_ASSETS_CLASS_H

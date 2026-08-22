@@ -31,14 +31,14 @@ var _initializing: bool = false
 func _enter_tree() -> void:
 	if Engine.is_editor_hint():
 		editor_description = "Isolated Terrain3D workspace. The Terrain3D node loads only checked-out editable regions; neighboring dependency snapshots remain outside its data directory and are used only for cooking/lightmapping. Edit streamed objects under RegionNodes/Region_X_Z, then use Terrain3D > Commit Workbench Regions to publish the batch."
-	call_deferred("_ensure_workbench_terrain")
+	_ensure_workbench_terrain.call_deferred()
 
 
 func _ensure_workbench_terrain() -> void:
 	if _initializing:
 		return
 	_initializing = true
-	var manifest: T3DRegionWorkbenchManifest = _read_manifest()
+	var manifest: Terrain3DRegionWorkbenchManifest = _read_manifest()
 	if manifest == null:
 		_initializing = false
 		return
@@ -46,25 +46,16 @@ func _ensure_workbench_terrain() -> void:
 		push_error("Terrain3D Workbench predates isolated cook-context storage. Reopen it from the source terrain so only selected regions are loaded.")
 		_initializing = false
 		return
-	if not ClassDB.class_exists("T3DTerrain"):
-		push_error("Terrain3D GDExtension is not loaded")
-		_initializing = false
-		return
-
-	var terrain := get_node_or_null("Terrain3D") as Node3D
+	var terrain := get_node_or_null("Terrain3D") as Terrain3D
 	var created_terrain: bool = false
 	if not is_instance_valid(terrain):
-		terrain = ClassDB.instantiate("T3DTerrain") as Node3D
-		if not is_instance_valid(terrain):
-			push_error("Unable to instantiate Terrain3D for region workbench")
-			_initializing = false
-			return
+		terrain = Terrain3D.new()
 		created_terrain = true
 		terrain.name = "Terrain3D"
 
 		var available_properties: Dictionary[String, bool] = _property_name_set(terrain)
 		var properties: Dictionary[String, Variant] = manifest.terrain_properties
-		# Region geometry must be configured before data_directory causes T3DData
+		# Region geometry must be configured before data_directory causes Terrain3DData
 		# to load. The manifest fields are authoritative even if an older property
 		# snapshot omitted these settings.
 		if available_properties.has("region_size"):
@@ -103,11 +94,11 @@ func _ensure_workbench_terrain() -> void:
 		EditorInterface.get_selection().add_node(terrain)
 		if created_terrain:
 			EditorInterface.mark_scene_as_unsaved()
-		call_deferred("_focus_workbench_view", manifest)
+		_focus_workbench_view.call_deferred(manifest)
 	_initializing = false
 
 
-func _focus_workbench_view(manifest: T3DRegionWorkbenchManifest) -> void:
+func _focus_workbench_view(manifest: Terrain3DRegionWorkbenchManifest) -> void:
 	if not Engine.is_editor_hint():
 		return
 	await get_tree().process_frame
@@ -139,7 +130,7 @@ func _focus_workbench_view(manifest: T3DRegionWorkbenchManifest) -> void:
 	# editable checkout on screen. Terrain coordinates remain untouched.
 	camera.global_position = target + Vector3(distance * 0.72, distance * 0.92, distance * 0.72)
 	camera.look_at(target, Vector3.UP)
-	var terrain := get_node_or_null("Terrain3D") as T3DTerrain
+	var terrain := get_node_or_null("Terrain3D") as Terrain3D
 	if is_instance_valid(terrain):
 		# Bind the same editor camera immediately so the clipmap and residency center
 		# move with the viewport before the first editor input event reaches the plugin.
@@ -147,7 +138,7 @@ func _focus_workbench_view(manifest: T3DRegionWorkbenchManifest) -> void:
 		terrain.snap()
 
 
-func _ensure_region_center(manifest: T3DRegionWorkbenchManifest) -> void:
+func _ensure_region_center(manifest: Terrain3DRegionWorkbenchManifest) -> void:
 	if has_node("RegionCenter"):
 		return
 	var locations: Array[Vector2i] = manifest.get_region_locations()
@@ -172,7 +163,7 @@ func _ensure_region_center(manifest: T3DRegionWorkbenchManifest) -> void:
 		marker.owner = self
 
 
-func _ensure_region_nodes(terrain: Node3D, manifest: T3DRegionWorkbenchManifest) -> void:
+func _ensure_region_nodes(terrain: Node3D, manifest: Terrain3DRegionWorkbenchManifest) -> void:
 	var region_nodes := get_node_or_null(NodePath(String(REGION_NODES_NAME))) as Node3D
 	if not is_instance_valid(region_nodes):
 		region_nodes = Node3D.new()
@@ -182,8 +173,8 @@ func _ensure_region_nodes(terrain: Node3D, manifest: T3DRegionWorkbenchManifest)
 		if Engine.is_editor_hint():
 			region_nodes.owner = self
 
-	var typed_terrain := terrain as T3DTerrain
-	var data: T3DData = null
+	var typed_terrain := terrain as Terrain3D
+	var data: Terrain3DData = null
 	for _attempt: int in range(8):
 		data = typed_terrain.data if is_instance_valid(typed_terrain) else null
 		if is_instance_valid(data):
@@ -193,13 +184,8 @@ func _ensure_region_nodes(terrain: Node3D, manifest: T3DRegionWorkbenchManifest)
 		push_error("Unable to initialize Terrain3D data for the region workbench")
 		return
 
-	# The data layer owns the authoritative Workbench edit boundary as well as the
-	# brush editor. This protects read-only dependency rings from non-brush tools.
-	if data.has_method("set_editable_region_locations"):
-		data.set_editable_region_locations(manifest.get_region_locations())
-
 	var world_region_size: float = float(manifest.region_size) * manifest.vertex_spacing
-	for entry: T3DRegionWorkbenchRegion in manifest.regions:
+	for entry: Terrain3DRegionWorkbenchRegion in manifest.regions:
 		var location: Vector2i = entry.location
 		var container_name: String = "Region_%d_%d" % [location.x, location.y]
 		var region_container := region_nodes.get_node_or_null(NodePath(container_name)) as Node3D
@@ -218,7 +204,7 @@ func _ensure_region_nodes(terrain: Node3D, manifest: T3DRegionWorkbenchManifest)
 			if Engine.is_editor_hint():
 				region_container.owner = self
 
-		var region: T3DRegion = null
+		var region: Terrain3DRegion = null
 		for _attempt: int in range(8):
 			region = data.get_region(location)
 			if is_instance_valid(region):
@@ -228,9 +214,9 @@ func _ensure_region_nodes(terrain: Node3D, manifest: T3DRegionWorkbenchManifest)
 			push_error("Unable to load region %s for region-node editing" % location)
 			continue
 
-		var descriptors: Array[T3DRegionNodeDescriptor] = \
-			T3DRegionNodeDescriptor.list_from_value(region.get_streamed_nodes())
-		for descriptor: T3DRegionNodeDescriptor in descriptors:
+		var descriptors: Array[Terrain3DRegionNodeDescriptor] = \
+			Terrain3DRegionNodeDescriptor.list_from_value(region.get_streamed_nodes())
+		for descriptor: Terrain3DRegionNodeDescriptor in descriptors:
 			var node: Node = _instantiate_streamed_node(descriptor)
 			if not is_instance_valid(node):
 				node = _make_missing_node_placeholder(descriptor)
@@ -249,7 +235,7 @@ func _ensure_region_nodes(terrain: Node3D, manifest: T3DRegionWorkbenchManifest)
 		EditorInterface.mark_scene_as_unsaved()
 
 
-func _instantiate_streamed_node(descriptor: T3DRegionNodeDescriptor) -> Node:
+func _instantiate_streamed_node(descriptor: Terrain3DRegionNodeDescriptor) -> Node:
 	var packed_scene: PackedScene = null
 	if not descriptor.scene_path.is_empty():
 		var resource: Resource = load(descriptor.scene_path)
@@ -266,14 +252,14 @@ func _instantiate_streamed_node(descriptor: T3DRegionNodeDescriptor) -> Node:
 	return node
 
 
-func _make_missing_node_placeholder(descriptor: T3DRegionNodeDescriptor) -> Node3D:
+func _make_missing_node_placeholder(descriptor: Terrain3DRegionNodeDescriptor) -> Node3D:
 	var placeholder := Node3D.new()
 	placeholder.name = "MissingRegionNode_%d" % descriptor.id
 	placeholder.set_meta(NODE_META_LOAD_ERROR, true)
 	return placeholder
 
 
-func _apply_descriptor_metadata(node: Node, descriptor: T3DRegionNodeDescriptor) -> void:
+func _apply_descriptor_metadata(node: Node, descriptor: Terrain3DRegionNodeDescriptor) -> void:
 	node.set_meta(NODE_META_ID, descriptor.id)
 	node.set_meta(NODE_META_FLAGS, descriptor.flags)
 	node.set_meta(NODE_META_STATE, descriptor.state.duplicate(true))
@@ -304,11 +290,11 @@ func _property_name_set(object: Object) -> Dictionary[String, bool]:
 	return names
 
 
-func _read_manifest() -> T3DRegionWorkbenchManifest:
+func _read_manifest() -> Terrain3DRegionWorkbenchManifest:
 	if manifest_path.is_empty() or not FileAccess.file_exists(manifest_path):
 		push_error("Terrain3D workbench manifest is missing: %s" % manifest_path)
 		return null
-	var manifest: T3DRegionWorkbenchManifest = T3DRegionWorkbenchManifest.from_value(
+	var manifest: Terrain3DRegionWorkbenchManifest = Terrain3DRegionWorkbenchManifest.from_value(
 		JSON.parse_string(FileAccess.get_file_as_string(manifest_path)))
 	if manifest == null:
 		push_error("Terrain3D workbench manifest is invalid: %s" % manifest_path)

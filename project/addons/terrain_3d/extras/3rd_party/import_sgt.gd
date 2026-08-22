@@ -16,11 +16,11 @@
 # Use clear_instances to erase all instances that match the assign_mesh_id.
 #
 # The add_transforms function (called by add_multimesh) applies the height_offset specified in the
-# T3DMeshAsset.
+# Terrain3DMeshAsset.
 # Once the transforms are imported, you can reassign any mesh you like into this mesh slot.
 
 @tool
-extends T3DTerrain
+extends Terrain3D
 
 @export var simple_grass_textured: MultiMeshInstance3D
 @export var assign_mesh_id: int

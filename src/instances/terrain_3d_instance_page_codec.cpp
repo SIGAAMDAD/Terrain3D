@@ -68,7 +68,7 @@ static void t3dInstancePageCodecClearMeshCounts( uint32_t *pMeshCounts ) {
 	}
 }
 
-static bool t3dInstancePageCodecMeasurePage( const T3DInstanceStore &rStore,
+static bool t3dInstancePageCodecMeasurePage( const Terrain3DInstanceStore &rStore,
 		size_t &nBytes,
 		uint32_t *pMeshCounts,
 		uint32_t &nInstanceCount,
@@ -155,7 +155,7 @@ static bool t3dInstancePageCodecReadPageHeaders( const PackedByteArray &arrPage,
 		uint32_t &nInstanceCount,
 		uint16_t &nMeshCount,
 		bool bDecode,
-		T3DInstanceStore *pStore,
+		Terrain3DInstanceStore *pStore,
 		size_t *const pColorCount = nullptr,
 		size_t *const pOwnerCount = nullptr ) {
 	t3dInstancePageCodecClearMeshCounts( pMeshCounts );
@@ -344,7 +344,7 @@ static bool t3dInstancePageCodecReadPageHeaders( const PackedByteArray &arrPage,
 	return true;
 }
 
-bool T3DInstancePageCodec::encode( const T3DInstanceStore &rStore,
+bool Terrain3DInstancePageCodec::encode( const Terrain3DInstanceStore &rStore,
 		PackedByteArray &rPage,
 		uint32_t *const pMeshCounts,
 		uint32_t &nInstanceCount,
@@ -418,8 +418,8 @@ bool T3DInstancePageCodec::encode( const T3DInstanceStore &rStore,
 	return offset == page_bytes;
 }
 
-bool T3DInstancePageCodec::decode( const PackedByteArray &arrPage,
-		T3DInstanceStore &rStore,
+bool Terrain3DInstancePageCodec::decode( const PackedByteArray &arrPage,
+		Terrain3DInstanceStore &rStore,
 		uint32_t *const pMeshCounts,
 		uint32_t &nInstanceCount,
 		uint16_t &nMeshCount ) {
@@ -462,7 +462,7 @@ bool T3DInstancePageCodec::decode( const PackedByteArray &arrPage,
 	return nInstanceCount == inspected_instances && nMeshCount == inspected_meshes;
 }
 
-bool T3DInstancePageCodec::inspect( const PackedByteArray &arrPage,
+bool Terrain3DInstancePageCodec::inspect( const PackedByteArray &arrPage,
 		uint32_t *const pMeshCounts,
 		uint32_t &nInstanceCount,
 		uint16_t &nMeshCount ) {

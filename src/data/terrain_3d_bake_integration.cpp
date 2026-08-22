@@ -22,6 +22,7 @@
 #include "terrain_3d.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <godot_cpp/classes/compositor.hpp>
 #include <godot_cpp/classes/directional_light3d.hpp>
@@ -44,14 +45,14 @@
 #include <numeric>
 #include <utility>
 
-bool T3DTerrain::bakeRegionSnapshotLess( const t3dBakeRegionSnapshot_t &rA, const t3dBakeRegionSnapshot_t &rB ) {
+bool Terrain3D::bakeRegionSnapshotLess( const t3dBakeRegionSnapshot_t &rA, const t3dBakeRegionSnapshot_t &rB ) {
 	if ( rA.m_location.y != rB.m_location.y ) {
 		return rA.m_location.y < rB.m_location.y;
 	}
 	return rA.m_location.x < rB.m_location.x;
 }
 
-t3dBakeSnapshot_t T3DTerrain::createBakeSnapshot( void ) const {
+t3dBakeSnapshot_t Terrain3D::createBakeSnapshot( void ) const {
 	t3dBakeSnapshot_t snapshot;
 	snapshot.m_nRegionSize = ( int32_t )m_nRegionSize;
 	snapshot.m_fVertexSpacing = m_fVertexSpacing;
@@ -69,7 +70,7 @@ t3dBakeSnapshot_t T3DTerrain::createBakeSnapshot( void ) const {
 			LOG( ERROR, "Skipping terrain region that could not be paged for bake snapshot: ", regionLocation );
 			continue;
 		}
-		T3DRegion *const pRegion = m_pData->getRegionPtr( regionLocation );
+		Terrain3DRegion *const pRegion = m_pData->getRegionPtr( regionLocation );
 		if ( !pRegion || pRegion->isDeleted() ) {
 			continue;
 		}
@@ -99,7 +100,7 @@ t3dBakeSnapshot_t T3DTerrain::createBakeSnapshot( void ) const {
 			continue;
 		}
 
-		const int32_t map_index = T3DData::getRegionMapIndex( regionLocation );
+		const int32_t map_index = Terrain3DData::getRegionMapIndex( regionLocation );
 		if ( map_index < 0 ) {
 			continue;
 		}
@@ -112,7 +113,7 @@ t3dBakeSnapshot_t T3DTerrain::createBakeSnapshot( void ) const {
 	// when the resource's active-region order reflects edit history.
 	std::sort( snapshot.m_regions.begin(), snapshot.m_regions.end(), bakeRegionSnapshotLess );
 	for ( size_t region_index = 0; region_index < snapshot.m_regions.size(); ++region_index ) {
-		const int32_t map_index = T3DData::getRegionMapIndex( snapshot.m_regions[region_index].m_location );
+		const int32_t map_index = Terrain3DData::getRegionMapIndex( snapshot.m_regions[region_index].m_location );
 		if ( map_index >= 0 ) {
 			snapshot.m_szRegionLookup[map_index] = ( int32_t )( region_index );
 		}
@@ -121,7 +122,7 @@ t3dBakeSnapshot_t T3DTerrain::createBakeSnapshot( void ) const {
 	return snapshot;
 }
 
-void T3DTerrain::runBakeTaskRange( void *const pContext, const size_t nBegin, const size_t nEnd ) {
+void Terrain3D::runBakeTaskRange( void *const pContext, const size_t nBegin, const size_t nEnd ) {
 	t3dBakeTaskContext_t *context = ( t3dBakeTaskContext_t * )( pContext );
 	for ( size_t task_index = nBegin; task_index < nEnd; ++task_index ) {
 		const t3dBakeRowTask_t &task = ( *context->m_pTasks )[task_index];
@@ -141,7 +142,7 @@ void T3DTerrain::runBakeTaskRange( void *const pContext, const size_t nBegin, co
 	}
 }
 
-Vector3 T3DTerrain::getTriangleVertex( const t3dBakeSnapshot_t *pSnapshot,
+Vector3 Terrain3D::getTriangleVertex( const t3dBakeSnapshot_t *pSnapshot,
 		const int32_t nLod,
 		const t3dHeightFilter_t filter,
 		const int32_t iX,
@@ -156,7 +157,7 @@ Vector3 T3DTerrain::getTriangleVertex( const t3dBakeSnapshot_t *pSnapshot,
 	return vertex;
 }
 
-void T3DTerrain::generateTriangles( PackedVector3Array &rVertices,
+void Terrain3D::generateTriangles( PackedVector3Array &rVertices,
 		PackedVector2Array *const pUvs,
 		const int32_t nLod,
 		const t3dHeightFilter_t filter,
@@ -166,9 +167,9 @@ void T3DTerrain::generateTriangles( PackedVector3Array &rVertices,
 	const int32_t step = 1 << CLAMP( nLod, 0, 8 );
 	const bool generate_uvs = pUvs != nullptr;
 	eastl::vector<t3dTriangleBuffer_t> buffers;
-	T3DLinearArena bake_arena;
-	T3DArenaBuffer<Vector3> bake_vertex_slab;
-	T3DArenaBuffer<Vector2> bake_uv_slab;
+	Terrain3DLinearArena bake_arena;
+	Terrain3DArenaBuffer<Vector3> bake_vertex_slab;
+	Terrain3DArenaBuffer<Vector2> bake_uv_slab;
 
 	// Whole-terrain bakes are split into row chunks. This parallelizes even a single large region,
 	// while keeping each worker's output isolated and preserving deterministic merge order.
@@ -216,7 +217,7 @@ void T3DTerrain::generateTriangles( PackedVector3Array &rVertices,
 			}
 		}
 
-		T3DLinearArenaLayout bake_layout;
+		Terrain3DLinearArenaLayout bake_layout;
 		const bool bLayoutValid = bake_layout.addArray<Vector3>( total_output_capacity ) &&
 				( !generate_uvs || bake_layout.addArray<Vector2>( total_output_capacity ) );
 		ERR_FAIL_COND_MSG( !bLayoutValid || !bake_layout.valid() || !bake_arena.configure( bake_layout.size() ),
@@ -244,7 +245,7 @@ void T3DTerrain::generateTriangles( PackedVector3Array &rVertices,
 					MAX( 1u, ( uint32_t )( MAX( 1, OS::get_singleton()->get_processor_count() ) ) );
 			const uint32_t worker_count = std::min( { hardware_threads, ( uint32_t )tasks.size(), 32u } );
 #endif
-			const T3DParallelExecutor executor{ ( int32_t )( worker_count ) };
+			const Terrain3DParallelExecutor executor{ ( int32_t )( worker_count ) };
 			t3dBakeTaskContext_t task_context;
 			task_context.m_pTerrain = this;
 			task_context.m_pSnapshot = &snapshot;
@@ -330,7 +331,7 @@ void T3DTerrain::generateTriangles( PackedVector3Array &rVertices,
 	}
 }
 
-void T3DTerrain::generateTrianglePair( t3dTriangleBuffer_t &rBuffer,
+void Terrain3D::generateTrianglePair( t3dTriangleBuffer_t &rBuffer,
 		const bool bGenerateUvs,
 		const int32_t nLod,
 		const t3dHeightFilter_t filter,
@@ -390,7 +391,7 @@ void T3DTerrain::generateTrianglePair( t3dTriangleBuffer_t &rBuffer,
 	}
 }
 
-Dictionary T3DTerrain::getRaycastResult( const Vector3 &rSrcPos,
+Dictionary Terrain3D::getRaycastResult( const Vector3 &rSrcPos,
 		const Vector3 &rDirection,
 		const uint32_t nColMask,
 		const bool bExcludeSelf ) const {
@@ -410,7 +411,7 @@ Dictionary T3DTerrain::getRaycastResult( const Vector3 &rSrcPos,
 	return pSpaceState->intersect_ray( pQuery );
 }
 
-Ref<Mesh> T3DTerrain::bakeMesh( const int nLod, const t3dHeightFilter_t filter ) const {
+Ref<Mesh> Terrain3D::bakeMesh( const int nLod, const t3dHeightFilter_t filter ) const {
 	LOG( INFO, "Baking mesh at lod: ", nLod, " with filter: ", filter );
 	Ref<Mesh> pResult;
 	ERR_FAIL_COND_V( m_pData == nullptr, pResult );
@@ -437,14 +438,14 @@ Ref<Mesh> T3DTerrain::bakeMesh( const int nLod, const t3dHeightFilter_t filter )
 	return pResult;
 }
 
-Ref<Mesh> T3DTerrain::bakeRegionLightmapMesh( const Vector2i &rRegionLocation,
+Ref<Mesh> Terrain3D::bakeRegionLightmapMesh( const Vector2i &rRegionLocation,
 		const int nLod,
 		const int nContextRadiusRegions,
 		const real_t fTexelSize ) const {
 	return bakeLightmapClusterMesh( rRegionLocation, rRegionLocation, nLod, nContextRadiusRegions, fTexelSize );
 }
 
-Ref<Mesh> T3DTerrain::bakeLightmapClusterMesh( const Vector2i &rRegionMin,
+Ref<Mesh> Terrain3D::bakeLightmapClusterMesh( const Vector2i &rRegionMin,
 		const Vector2i &rRegionMax,
 		const int nLod,
 		const int nContextRadiusRegions,
@@ -494,7 +495,7 @@ Ref<Mesh> T3DTerrain::bakeLightmapClusterMesh( const Vector2i &rRegionMin,
 	return pResult;
 }
 
-Ref<ArrayOccluder3D> T3DTerrain::bakeOccluder( const int nLod ) const {
+Ref<ArrayOccluder3D> Terrain3D::bakeOccluder( const int nLod ) const {
 	LOG( INFO, "Baking occluder at lod: ", nLod );
 	Ref<ArrayOccluder3D> pResult;
 	ERR_FAIL_COND_V( m_pData == nullptr, pResult );
@@ -523,7 +524,7 @@ Ref<ArrayOccluder3D> T3DTerrain::bakeOccluder( const int nLod ) const {
 	return pResult;
 }
 
-PackedVector3Array T3DTerrain::generateNavMeshSourceGeometry( const AABB &rGlobalAabb, const bool bRequireNav ) const {
+PackedVector3Array Terrain3D::generateNavMeshSourceGeometry( const AABB &rGlobalAabb, const bool bRequireNav ) const {
 	LOG( INFO, "Generating NavMesh source geometry from terrain" );
 	PackedVector3Array faces;
 	const bool strict_cooked = m_pData && isGpuRegionCookedPagesEnabled() && !isEditorAuthoringModeInternal();
@@ -537,8 +538,8 @@ PackedVector3Array T3DTerrain::generateNavMeshSourceGeometry( const AABB &rGloba
 	const TypedArray<Vector2i> locations = m_pData->getRegionLocations();
 	for ( const Vector2i location : locations ) {
 		const real_t region_world = ( real_t )region_size * m_fVertexSpacing;
-		const real_t region_min_x = ( real_t )location.m_nX * region_world;
-		const real_t region_min_z = ( real_t )location.m_nY * region_world;
+		const real_t region_min_x = ( real_t )location.x * region_world;
+		const real_t region_min_z = ( real_t )location.y * region_world;
 		if ( rGlobalAabb.has_volume() ) {
 			if ( region_min_x + region_world < rGlobalAabb.position.x || region_min_x > rGlobalAabb.get_end().x ||
 					region_min_z + region_world < rGlobalAabb.position.z || region_min_z > rGlobalAabb.get_end().z ) {
@@ -558,10 +559,10 @@ PackedVector3Array T3DTerrain::generateNavMeshSourceGeometry( const AABB &rGloba
 		t3dMinMaxLevelView_t minmax_view;
 		int collision_width = 0;
 		const bool use_minmax = pMinMaxBlob &&
-				T3DRuntimeBakeCodec::getMinMaxLevelView( minmax_blob, 16, minmax_view ) &&
+				Terrain3DRuntimeBakeCodec::getMinMaxLevelView( minmax_blob, 16, minmax_view ) &&
 				minmax_view.m_nSourceSide == region_size && minmax_view.m_nLevelSide > 0;
-		if ( !T3DRuntimeBakeCodec::getNavigationMaskView( navigation_blob, navigation_view ) ||
-				!T3DRuntimeBakeCodec::decodeCollisionHeight( collision_blob, collision_heights, collision_width ) ||
+		if ( !Terrain3DRuntimeBakeCodec::getNavigationMaskView( navigation_blob, navigation_view ) ||
+				!Terrain3DRuntimeBakeCodec::decodeCollisionHeight( collision_blob, collision_heights, collision_width ) ||
 				navigation_view.m_nWidth != expected_width || collision_width != expected_width ||
 				( pMinMaxBlob && !use_minmax ) ) {
 			LOG( ERROR, "Baked navigation/collision acceleration data does not match region ", location );
@@ -580,7 +581,7 @@ PackedVector3Array T3DTerrain::generateNavMeshSourceGeometry( const AABB &rGloba
 					const int coarse_x1 = ( x + 1 ) * minmax_view.m_nLevelSide / minmax_view.m_nSourceSide;
 					const int coarse_z1 = ( z + 1 ) * minmax_view.m_nLevelSide / minmax_view.m_nSourceSide;
 					if ( coarse_x0 == coarse_x1 && coarse_z0 == coarse_z1 ) {
-						const Vector2 range = T3DRuntimeBakeCodec::getMinMaxRange(
+						const Vector2 range = Terrain3DRuntimeBakeCodec::getMinMaxRange(
 								minmax_view, ( uint32_t )( coarse_z0 * minmax_view.m_nLevelSide + coarse_x0 ) );
 						if ( range.y < aabb_min_y || range.x > aabb_max_y ) {
 							continue;
@@ -603,8 +604,8 @@ PackedVector3Array T3DTerrain::generateNavMeshSourceGeometry( const AABB &rGloba
 				const bool nav2 = navigation_view.isNavigationSample( ( uint32_t )i2 );
 				const bool nav3 = navigation_view.isNavigationSample( ( uint32_t )i3 );
 				const bool nav4 = navigation_view.isNavigationSample( ( uint32_t )i4 );
-				const int global_x = location.m_nX * region_size + x;
-				const int global_z = location.m_nY * region_size + z;
+				const int global_x = location.x * region_size + x;
+				const int global_z = location.y * region_size + z;
 				Vector3 v1( ( real_t )global_x * m_fVertexSpacing,
 						height_at( x, z ),
 						( real_t )global_z * m_fVertexSpacing );

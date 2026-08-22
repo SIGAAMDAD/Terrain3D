@@ -26,7 +26,7 @@ using namespace godot;
 // - the renderer-owned global RenderingDevice for render-thread displacement generation.
 // The caller retains terrain mutation ownership and publishes results through the
 // existing Terrain3D transactions.
-class T3DTerrain;
+class Terrain3D;
 
 typedef struct t3dBrushElement_s {
 	uint32_t m_nValue = 0u; // Height float bits, packed pControl, or RGBA8.
@@ -83,13 +83,13 @@ typedef struct t3dPipeline_s {
 	bool m_bAttempted = false;
 } t3dPipeline_t;
 
-class T3DCompute {
+class Terrain3DCompute {
 public:
-	T3DCompute( void ) = default;
-	~T3DCompute( void );
+	Terrain3DCompute( void ) = default;
+	~Terrain3DCompute( void );
 
-	T3DCompute( const T3DCompute & ) = delete;
-	T3DCompute &operator=( const T3DCompute & ) = delete;
+	Terrain3DCompute( const Terrain3DCompute & ) = delete;
+	Terrain3DCompute &operator=( const Terrain3DCompute & ) = delete;
 
 	bool isAvailable( void );
 	EA_FORCE_INLINE String getLastError( void ) const {
@@ -107,12 +107,12 @@ public:
 	// Builds a render-thread-safe snapshot without touching the global RenderingDevice.
 	// The raw GLSL path is intentionally restricted to non-projected, non-detiled
 	// packed-PBR/R8 materials; all other variants retain the raster fallback.
-	bool prepareDisplacementRequest( T3DTerrain *pTerrain,
+	bool prepareDisplacementRequest( Terrain3D *pTerrain,
 			const Vector3 &rTargetPosition,
 			t3dDisplacementRequest_t &rRequest );
 	// Must execute through RenderingServer.call_on_render_thread().
 	bool dispatchDisplacementRequest( const t3dDisplacementRequest_t &rRequest, RID &rTexture );
-	// Must execute on the render thread before T3DCompute is destroyed.
+	// Must execute on the render thread before Terrain3DCompute is destroyed.
 	void shutdownDisplacementResources( void );
 
 private:

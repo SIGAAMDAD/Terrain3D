@@ -5,10 +5,10 @@
 [ext_resource type="PackedScene" uid="uid://bb2lp50sjndus" path="res://demo/components/Environment.tscn" id="3_egbwy"]
 [ext_resource type="PackedScene" uid="uid://domhm87hbhbg1" path="res://demo/components/Player.tscn" id="3_ht63y"]
 [ext_resource type="PackedScene" uid="uid://djhl3foqkj4e2" path="res://demo/components/Tunnel.tscn" id="3_kdh0b"]
-[ext_resource type="T3DMaterial" uid="uid://ccvn15t8km0ft" path="res://demo/data/M_terrain.tres" id="5_fwrtk"]
+[ext_resource type="Terrain3DMaterial" uid="uid://ccvn15t8km0ft" path="res://demo/data/M_terrain.tres" id="5_fwrtk"]
 [ext_resource type="Material" uid="uid://cgk4glwmc4vk2" path="res://addons/terrain_3d/extras/shaders/M_ocean.tres" id="7_fwrtk"]
 [ext_resource type="PackedScene" uid="uid://d3sr0a7dxfkr8" path="res://addons/terrain_3d/extras/particle_example/Terrain3DParticles.tscn" id="8_fwrtk"]
-[ext_resource type="T3DAssets" uid="uid://dal3jhw6241qg" path="res://demo/data/assets.tres" id="8_g2of2"]
+[ext_resource type="Terrain3DAssets" uid="uid://dal3jhw6241qg" path="res://demo/data/assets.tres" id="8_g2of2"]
 
 [node name="Demo" type="Node"]
 script = ExtResource("1_k7qca")
@@ -25,7 +25,7 @@ transform = Transform3D(0.176947, 0, -0.98422, 0, 1, 0, 0.98422, 0, 0.176947, 22
 [node name="Terrain3DParticles" parent="." node_paths=PackedStringArray("terrain") instance=ExtResource("8_fwrtk")]
 terrain = NodePath("../Terrain3D")
 
-[node name="Terrain3D" type="T3DTerrain" parent="." node_paths=PackedStringArray("light_target", "collision_target", "clipmap_target")]
+[node name="Terrain3D" type="Terrain3D" parent="." node_paths=PackedStringArray("light_target", "collision_target", "clipmap_target")]
 data_directory = "res://demo/data"
 material = ExtResource("5_fwrtk")
 assets = ExtResource("8_g2of2")

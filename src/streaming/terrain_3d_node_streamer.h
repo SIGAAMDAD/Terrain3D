@@ -26,7 +26,7 @@
 using namespace godot;
 #endif
 
-class T3DTerrain;
+class Terrain3D;
 
 typedef enum t3dStreamedNodeFlags_e {
 	NODE_FLAG_NONE = 0,
@@ -66,13 +66,13 @@ typedef struct t3dMovableNodeRef_s {
 	ObjectID m_hObjectId;
 } t3dMovableNodeRef_t;
 
-class T3DNodeStreamer : public Object {
-	GDCLASS( T3DNodeStreamer, Object );
+class Terrain3DNodeStreamer : public Object {
+	GDCLASS( Terrain3DNodeStreamer, Object );
 	CLASS_NAME();
 
 public:
 private:
-	T3DTerrain *m_pTerrain = nullptr;
+	Terrain3D *m_pTerrain = nullptr;
 	Node3D *m_pHost = nullptr;
 	t3dRegionRuntime_t m_szRegions[s_nMaxRegionSlots];
 	eastl::bitset<s_nMaxRegionSlots> m_desiredRegions;
@@ -126,15 +126,15 @@ private:
 	void untrackMovableNode( int64_t nSpawnId );
 	void removeMovableNodeAt( int iIndex );
 	void eraseActiveNode( t3dRegionRuntime_t &rRuntime, int iNodeIndex );
-	Node3D *ensureRegionRoot( int iIndex, T3DRegion *pRegion );
+	Node3D *ensureRegionRoot( int iIndex, Terrain3DRegion *pRegion );
 	bool migrateActiveNodes( void );
 	void ensureHost( void );
 	void destroyHost( void );
-	void captureNodeState( T3DRegion *pRegion, Node3D *pRegionRoot, const t3dActiveNode_t &rActive );
+	void captureNodeState( Terrain3DRegion *pRegion, Node3D *pRegionRoot, const t3dActiveNode_t &rActive );
 	void deactivateRegion( int iIndex, bool bCaptureState );
 	bool activateRegion( int iIndex, int &nNodeBudget );
 	t3dSpawnActivationResult_t
-	activateSpawn( T3DRegion *pRegion, t3dRegionRuntime_t &rRuntime, const t3dStreamedNodeRuntimeDescriptor_t &rSpawn );
+	activateSpawn( Terrain3DRegion *pRegion, t3dRegionRuntime_t &rRuntime, const t3dStreamedNodeRuntimeDescriptor_t &rSpawn );
 	void requestRegionScenes( const Vector2i &rOwnerLocation,
 			const eastl::vector<t3dStreamedNodeRuntimeDescriptor_t> &rSpawns );
 	bool isHlodVisualSuppressed( const Vector2i &rOwnerLocation,
@@ -157,10 +157,10 @@ private:
 	void refreshSpawnId( void );
 
 public:
-	EA_FORCE_INLINE T3DNodeStreamer( void ) {}
-	~T3DNodeStreamer( void );
+	EA_FORCE_INLINE Terrain3DNodeStreamer( void ) {}
+	~Terrain3DNodeStreamer( void );
 
-	void initialize( T3DTerrain *pTerrain );
+	void initialize( Terrain3D *pTerrain );
 	void destroy( bool bCaptureState = true );
 	void updateResidency( const Vector3 &rTargetPosition, bool bForce = false );
 	void deferUpdateForFrame( void );

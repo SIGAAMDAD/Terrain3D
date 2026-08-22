@@ -8,6 +8,7 @@
 #include "Terrain3DConstants.h"
 #include "assets/generated_texture.h"
 #include "core/terrain_3d_compiler.h"
+#include "data/terrain_3d_region.h"
 #include "streaming/terrain_3d_gpu_cache_constants.h"
 #include "streaming/terrain_3d_gpu_cache_policy.h"
 #include "streaming/terrain_3d_residency_state.h"
@@ -18,14 +19,14 @@
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
 
-class T3DCompute;
-class T3DCpuRegionCache;
-class T3DMapEditService;
-class T3DRegion;
-class T3DRegionRepository;
-class T3DRuntimePageStore;
-class T3DSamplingStorage;
-class T3DTerrain;
+class Terrain3DCompute;
+class Terrain3DCpuRegionCache;
+class Terrain3DMapEditService;
+class Terrain3DRegion;
+class Terrain3DRegionRepository;
+class Terrain3DRuntimePageStore;
+class Terrain3DSamplingStorage;
+class Terrain3D;
 
 typedef struct t3dGpuRegionCacheStats_s {
 	bool m_bEnabled = false;
@@ -77,15 +78,17 @@ typedef struct t3dGpuRegionCacheUpdateResult_s {
 	bool m_bPageTableChanged = false;
 } t3dGpuRegionCacheUpdateResult_t;
 
-class T3DGpuRegionCache {
-public:
-	T3DGpuRegionCache( T3DRegionRepository &rRepository,
-			T3DSamplingStorage &rSamplingStorage,
-			T3DMapEditService &rMapEditService,
-			T3DRuntimePageStore &rRuntimePageStore,
-			T3DCpuRegionCache &rCpuRegionCache );
+class Terrain3DGpuRegionCache {
+	CLASS_NAME_STATIC( "Terrain3DGpuRegionCache" );
 
-	EA_FORCE_INLINE void setTerrain( T3DTerrain *pTerrain ) {
+public:
+	Terrain3DGpuRegionCache( Terrain3DRegionRepository &rRepository,
+			Terrain3DSamplingStorage &rSamplingStorage,
+			Terrain3DMapEditService &rMapEditService,
+			Terrain3DRuntimePageStore &rRuntimePageStore,
+			Terrain3DCpuRegionCache &rCpuRegionCache );
+
+	EA_FORCE_INLINE void setTerrain( Terrain3D *pTerrain ) {
 		m_pTerrain = pTerrain;
 	}
 	void setDefaultMaps( const Ref<Image> &rHeight,
@@ -102,12 +105,12 @@ public:
 			int nRetireFrames );
 	void reset( bool bClearTextures );
 	t3dGpuRegionCacheUpdateResult_t
-	update( const t3dResidencyFrameState_t &rFrame, bool bForce, int nEffectiveUploadLayers, T3DCompute *pCompute );
+	update( const t3dResidencyFrameState_t &rFrame, bool bForce, int nEffectiveUploadLayers, Terrain3DCompute *pCompute );
 	void invalidate( const Vector2i &vLocation );
-	bool republish( const Vector2i &vLocation, T3DCompute *pCompute = nullptr );
-	bool republishAllResidents( T3DCompute *pCompute = nullptr );
+	bool republish( const Vector2i &vLocation, Terrain3DCompute *pCompute = nullptr );
+	bool republishAllResidents( Terrain3DCompute *pCompute = nullptr );
 	void queueRepublish( const Vector2i &vLocation );
-	bool updateResidentLocation( const Vector2i &vLocation, t3dMapType_t eMapType, T3DCompute *pCompute = nullptr );
+	bool updateResidentLocation( const Vector2i &vLocation, t3dMapType_t eMapType, Terrain3DCompute *pCompute = nullptr );
 	void armPendingRetirements( void );
 	EA_FORCE_INLINE void markSelectionDirty( void ) {
 		m_bGpuRegionCacheSelectionDirty = true;
@@ -190,13 +193,13 @@ public:
 	}
 
 private:
-	T3DRegionRepository &m_regionRepository;
-	T3DSamplingStorage &m_samplingStorage;
-	T3DMapEditService &m_mapEditService;
-	T3DRuntimePageStore &m_runtimePageStore;
-	T3DCpuRegionCache &m_cpuRegionCache;
-	T3DTerrain *m_pTerrain = nullptr;
-	T3DCompute *m_pCompute = nullptr;
+	Terrain3DRegionRepository &m_regionRepository;
+	Terrain3DSamplingStorage &m_samplingStorage;
+	Terrain3DMapEditService &m_mapEditService;
+	Terrain3DRuntimePageStore &m_runtimePageStore;
+	Terrain3DCpuRegionCache &m_cpuRegionCache;
+	Terrain3D *m_pTerrain = nullptr;
+	Terrain3DCompute *m_pCompute = nullptr;
 
 	Ref<Image> m_defaultHeightMap;
 	Ref<Image> m_defaultControlMap;
@@ -205,11 +208,11 @@ private:
 	bool m_bControlMapsImplicit = true;
 	bool m_bColorMapsImplicit = true;
 
-	T3DGeneratedTexture m_generatedHeightMaps;
-	T3DGeneratedTexture m_generatedControlMaps;
-	T3DGeneratedTexture m_generatedColorMaps;
-	T3DGeneratedTexture m_generatedDerivedMaps;
-	T3DGeneratedTexture m_generatedMiddleCompositeMaps;
+	Terrain3DGeneratedTexture m_generatedHeightMaps;
+	Terrain3DGeneratedTexture m_generatedControlMaps;
+	Terrain3DGeneratedTexture m_generatedColorMaps;
+	Terrain3DGeneratedTexture m_generatedDerivedMaps;
+	Terrain3DGeneratedTexture m_generatedMiddleCompositeMaps;
 
 	bool m_bGpuRegionCacheEnabled = false;
 	bool m_bGpuRegionCacheTexturesReady = false;
@@ -299,8 +302,8 @@ private:
 	int calculateGpuRegionRequestedPages( void ) const;
 	int calculateGpuRegionPhysicalLayers( int nMappedCapacity ) const;
 	int calculateAuthoringGpuRegionBudgetMb( void ) const;
-	int estimateGpuRegionUploadCalls( const T3DRegion *pRegion, int nLayer ) const;
-	size_t estimateGpuRegionUploadBytes( const T3DRegion *pRegion, int nLayer ) const;
+	int estimateGpuRegionUploadCalls( const Terrain3DRegion *pRegion, int nLayer ) const;
+	size_t estimateGpuRegionUploadBytes( const Terrain3DRegion *pRegion, int nLayer ) const;
 	int getGpuRegionTextureUpdateCallsLastTick( void ) const;
 	bool rebuildTextures( void );
 	int findGpuRegionSlot( const Vector2i &vLocation ) const;
@@ -315,7 +318,7 @@ private:
 			Vector2i *pLocations,
 			int nCapacity,
 			t3dGpuCacheSelectionStats_t &rStats );
-	Ref<Image> getRegionMapOrDefault( const T3DRegion *pRegion, t3dMapType_t eMapType ) const;
+	Ref<Image> getRegionMapOrDefault( const Terrain3DRegion *pRegion, t3dMapType_t eMapType ) const;
 	Ref<Image> makeGpuColorImage( const Ref<Image> &rImage ) const;
 	Ref<Image> makeGpuDerivedImage( const Ref<Image> &rImage ) const;
 	Ref<Image> makeGpuRenderControlImage( const Vector2i &vLocation ) const;

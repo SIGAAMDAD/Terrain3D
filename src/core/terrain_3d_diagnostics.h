@@ -25,8 +25,8 @@ EA_FORCE_INLINE String t3dDiagnosticsGetString( const Dictionary &rValues, const
 	return String( rValues.get( rKey, String() ) );
 }
 
-class T3DMemoryStats : public RefCounted {
-	GDCLASS( T3DMemoryStats, RefCounted );
+class Terrain3DMemoryStats : public RefCounted {
+	GDCLASS( Terrain3DMemoryStats, RefCounted );
 	CLASS_NAME();
 
 	Dictionary m_values;
@@ -76,8 +76,8 @@ protected:
 	static void _bind_methods( void );
 };
 
-class T3DShaderTierStats : public RefCounted {
-	GDCLASS( T3DShaderTierStats, RefCounted );
+class Terrain3DShaderTierStats : public RefCounted {
+	GDCLASS( Terrain3DShaderTierStats, RefCounted );
 	CLASS_NAME();
 
 	Dictionary m_values;
@@ -130,8 +130,8 @@ protected:
 	static void _bind_methods( void );
 };
 
-class T3DCacheStats : public RefCounted {
-	GDCLASS( T3DCacheStats, RefCounted );
+class Terrain3DCacheStats : public RefCounted {
+	GDCLASS( Terrain3DCacheStats, RefCounted );
 	CLASS_NAME();
 
 	Dictionary m_values;
@@ -181,8 +181,8 @@ protected:
 	static void _bind_methods( void );
 };
 
-class T3DFrameStats : public RefCounted {
-	GDCLASS( T3DFrameStats, RefCounted );
+class Terrain3DFrameStats : public RefCounted {
+	GDCLASS( Terrain3DFrameStats, RefCounted );
 	CLASS_NAME();
 
 	Dictionary m_values;

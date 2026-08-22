@@ -67,7 +67,7 @@ typedef struct t3dMemoryBudgetResult_s {
 	eastl::array<t3dMemorySubsystemAllocation_t, TERRAIN3D_MEMORY_SUBSYSTEM_COUNT> m_szSubsystems{};
 } t3dMemoryBudgetResult_t;
 
-class T3DMemoryBudgetCoordinator {
+class Terrain3DMemoryBudgetCoordinator {
 	EA_FORCE_INLINE static uint64_t clampToCap( const uint64_t nBytes, const uint64_t nCap ) {
 		return nBytes > nCap ? nCap : nBytes;
 	}

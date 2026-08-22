@@ -12,7 +12,7 @@
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
 
-class T3DCookDatabase {
+class Terrain3DCookDatabase {
 public:
 	void reset( void );
 	bool load( const String &rDataDirectory, int nRegionSize, uint64_t nMaterialSignature );

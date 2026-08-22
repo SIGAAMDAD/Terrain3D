@@ -11,15 +11,15 @@
 #include <godot_cpp/classes/resource.hpp>
 #include <godot_cpp/classes/texture2d.hpp>
 
-class T3DAssets;
+class Terrain3DAssets;
 
-// Parent class of T3DMeshAsset and T3DTextureAsset
-class T3DAssetResource : public Resource {
-	friend class T3DAssets;
+// Parent class of Terrain3DMeshAsset and Terrain3DTextureAsset
+class Terrain3DAssetResource : public Resource {
+	friend class Terrain3DAssets;
 
 public:
-	EA_FORCE_INLINE T3DAssetResource( void ) {}
-	EA_FORCE_INLINE ~T3DAssetResource( void ) {}
+	EA_FORCE_INLINE Terrain3DAssetResource( void ) {}
+	EA_FORCE_INLINE ~Terrain3DAssetResource( void ) {}
 
 	virtual void initialize( void ) = 0;
 	virtual void clear( void ) = 0;

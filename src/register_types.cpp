@@ -17,6 +17,7 @@
 #include "hlod/terrain_3d_hlod_streamer.h"
 #include "lighting/terrain_3d_lightmap_streamer.h"
 #include "lighting/terrain_3d_region_lighting.h"
+#include "rendering/rd/terrain_3d_rd_compositor_effect.h"
 #include "register_types.h"
 #include "streaming/terrain_3d_node_streamer.h"
 #include "terrain_3d.h"
@@ -27,33 +28,34 @@ void t3dInitializeTerrain3DModule( ModuleInitializationLevel level ) {
 	if ( level != MODULE_INITIALIZATION_LEVEL_SCENE ) {
 		return;
 	}
-	ClassDB::register_class<T3DTerrain>();
-	ClassDB::register_class<T3DMemoryStats>();
-	ClassDB::register_class<T3DShaderTierStats>();
-	ClassDB::register_class<T3DCacheStats>();
-	ClassDB::register_class<T3DFrameStats>();
-	ClassDB::register_class<T3DAutoShaderBaker>();
-	ClassDB::register_class<T3DAssets>();
-	ClassDB::register_class<T3DErosionSettings>();
-	ClassDB::register_class<T3DData>();
-	ClassDB::register_class<T3DErosionJob>();
-	ClassDB::register_class<T3DEditor>();
-	ClassDB::register_class<T3DLandformBaker>();
-	ClassDB::register_class<T3DCollision>();
-	ClassDB::register_class<T3DInstancer>();
-	ClassDB::register_class<T3DLightmapStreamer>();
-	ClassDB::register_class<T3DHLODBuilder>();
-	ClassDB::register_class<T3DHLODPackage>();
-	ClassDB::register_class<T3DHLODManifest>();
-	ClassDB::register_class<T3DHLODStreamer>();
-	ClassDB::register_class<T3DNodeStreamer>();
-	ClassDB::register_class<T3DMaterial>();
-	ClassDB::register_class<T3DMeshAsset>();
-	ClassDB::register_class<T3DRegion>();
-	ClassDB::register_class<T3DRegionLighting>();
-	ClassDB::register_class<T3DPackedPBRTexture>();
-	ClassDB::register_class<T3DTextureAsset>();
-	ClassDB::register_class<T3DUtil>();
+	ClassDB::register_class<Terrain3D>();
+	ClassDB::register_class<Terrain3DRdCompositorEffect>();
+	ClassDB::register_class<Terrain3DMemoryStats>();
+	ClassDB::register_class<Terrain3DShaderTierStats>();
+	ClassDB::register_class<Terrain3DCacheStats>();
+	ClassDB::register_class<Terrain3DFrameStats>();
+	ClassDB::register_class<Terrain3DAutoShaderBaker>();
+	ClassDB::register_class<Terrain3DAssets>();
+	ClassDB::register_class<Terrain3DErosionSettings>();
+	ClassDB::register_class<Terrain3DData>();
+	ClassDB::register_class<Terrain3DErosionJob>();
+	ClassDB::register_class<Terrain3DEditor>();
+	ClassDB::register_class<Terrain3DLandformBaker>();
+	ClassDB::register_class<Terrain3DCollision>();
+	ClassDB::register_class<Terrain3DInstancer>();
+	ClassDB::register_class<Terrain3DLightmapStreamer>();
+	ClassDB::register_class<Terrain3DHLODBuilder>();
+	ClassDB::register_class<Terrain3DHLODPackage>();
+	ClassDB::register_class<Terrain3DHLODManifest>();
+	ClassDB::register_class<Terrain3DHLODStreamer>();
+	ClassDB::register_class<Terrain3DNodeStreamer>();
+	ClassDB::register_class<Terrain3DMaterial>();
+	ClassDB::register_class<Terrain3DMeshAsset>();
+	ClassDB::register_class<Terrain3DRegion>();
+	ClassDB::register_class<Terrain3DRegionLighting>();
+	ClassDB::register_class<Terrain3DPackedPBRTexture>();
+	ClassDB::register_class<Terrain3DTextureAsset>();
+	ClassDB::register_class<Terrain3DUtil>();
 }
 
 void t3dUninitializeTerrain3DModule( ModuleInitializationLevel level ) {

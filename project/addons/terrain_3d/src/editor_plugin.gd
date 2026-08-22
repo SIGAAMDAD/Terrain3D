@@ -5,7 +5,7 @@ extends "res://addons/terrain_3d/src/editor_plugin_base.gd"
 
 
 # Includes
-const T3DUI = preload("res://addons/terrain_3d/src/ui.gd")
+const Terrain3DUI = preload("res://addons/terrain_3d/src/ui.gd")
 const ASSET_DOCK: PackedScene = preload("res://addons/terrain_3d/src/asset_dock.tscn")
 const ErosionInspectorPlugin = preload("res://addons/terrain_3d/menu/erosion_inspector_plugin.gd")
 const ShaderPerformancePanel = preload("res://addons/terrain_3d/src/shader_performance_panel.gd")
@@ -22,12 +22,12 @@ const TOOL_MENU_AUTOSHADER: String = "Terrain3D: Material Rules"
 const TOOL_MENU_CONVERT_STREAMING: String = "Terrain3D: Convert Selected Objects to Region Streaming"
 const TOOL_MENU_LIGHTMAP: String = "Terrain3D: Bake Region Lightmaps"
 const TOOL_MENU_HLOD: String = "Terrain3D: HLOD"
-const EXPECTED_NATIVE_API_REVISION: int = 2026081802
-const EXPECTED_NATIVE_BUILD_ID: String = "a2.8.6-memory-zone"
+const EXPECTED_NATIVE_API_REVISION: int = 2026082203
+const EXPECTED_NATIVE_BUILD_ID: String = "a2.9.2-shader-preprocessor-repair"
 
 # Editor Plugin
-var ui: T3DUI
-var asset_dock: T3DAssetDock
+var ui: Terrain3DUI
+var asset_dock: Terrain3DAssetDock
 var erosion_inspector_plugin: ErosionInspectorPlugin
 var shader_performance_panel: ShaderPerformancePanel
 var autoshader_panel: AutoShaderPanel
@@ -39,16 +39,16 @@ var hlod_panel: HLODPanel
 
 class ErosionSettingsCacheEntry extends RefCounted:
 	var terrain_ref: WeakRef
-	var settings: T3DErosionSettings
+	var settings: Terrain3DErosionSettings
 
-	func _init(p_terrain: T3DTerrain, p_settings: T3DErosionSettings) -> void:
+	func _init(p_terrain: Terrain3D, p_settings: Terrain3DErosionSettings) -> void:
 		terrain_ref = weakref(p_terrain)
 		settings = p_settings
 
 var erosion_settings_cache: Dictionary[int, ErosionSettingsCacheEntry] = {}
 
 # Terrain
-var _last_terrain: T3DTerrain
+var _last_terrain: Terrain3D
 
 # Input
 var _last_modifiers: int = 0
@@ -66,13 +66,13 @@ func _init() -> void:
 func _enter_tree() -> void:
 	if debug:
 		print("Terrain3DEditorPlugin: _enter_tree")
-	editor = T3DEditor.new()
+	editor = Terrain3DEditor.new()
 	setup_editor_settings()
-	ui = T3DUI.new()
+	ui = Terrain3DUI.new()
 	ui.plugin = self
 	add_child(ui)
 
-	asset_dock = ASSET_DOCK.instantiate() as T3DAssetDock
+	asset_dock = ASSET_DOCK.instantiate() as Terrain3DAssetDock
 	asset_dock.initialize(self)
 	ui.set_asset_dock(asset_dock)
 	ui.toolbar.tool_changed.connect(asset_dock._on_tool_changed)
@@ -192,21 +192,21 @@ func _disconnect_editor_signals() -> void:
 	godot_editor_window = null
 
 
-func get_erosion_settings(p_terrain: T3DTerrain) -> T3DErosionSettings:
+func get_erosion_settings(p_terrain: Terrain3D) -> Terrain3DErosionSettings:
 	if not is_instance_valid(p_terrain):
-		return T3DErosionSettings.new()
+		return Terrain3DErosionSettings.new()
 	var terrain_id := p_terrain.get_instance_id()
 	if erosion_settings_cache.has(terrain_id):
 		var entry: ErosionSettingsCacheEntry = erosion_settings_cache[terrain_id]
-		var cached_terrain := entry.terrain_ref.get_ref() as T3DTerrain if entry.terrain_ref else null
+		var cached_terrain := entry.terrain_ref.get_ref() as Terrain3D if entry.terrain_ref else null
 		if cached_terrain == p_terrain and is_instance_valid(entry.settings):
 			return entry.settings
-	var settings := T3DErosionSettings.new()
+	var settings := Terrain3DErosionSettings.new()
 	erosion_settings_cache[terrain_id] = ErosionSettingsCacheEntry.new(p_terrain, settings)
 	return settings
 
 
-func set_erosion_settings(p_terrain: T3DTerrain, p_settings: T3DErosionSettings) -> void:
+func set_erosion_settings(p_terrain: Terrain3D, p_settings: Terrain3DErosionSettings) -> void:
 	if not is_instance_valid(p_terrain) or not is_instance_valid(p_settings):
 		return
 	erosion_settings_cache[p_terrain.get_instance_id()] = ErosionSettingsCacheEntry.new(p_terrain, p_settings)
@@ -292,7 +292,7 @@ func _open_terrain_tools_menu() -> void:
 	# a reliable fallback when a crowded editor layout clips the toolbar button.
 	EditorInterface.set_main_screen_editor("3D")
 	ui.terrain_menu.show()
-	ui.terrain_menu.call_deferred("open_menu")
+	ui.terrain_menu.open_menu.call_deferred()
 
 
 
@@ -309,21 +309,21 @@ func _on_inspector_mouse_entered() -> void:
 # Click NavRegion3D, Terrain3D:		_handles(Terrain3D), _make_visible(true), _edit(Terrain3D)
 # Click Terrain3D, NavRegion3D:		_handles(NavReg3D), _make_visible(true), _edit(NavReg3D)
 func _handles(p_object: Object) -> bool:
-	if p_object is T3DTerrain:
+	if p_object is Terrain3D:
 		return true
 	elif p_object is NavigationRegion3D and is_instance_valid(_last_terrain):
 		return true
 
-	# T3DObjects requires access to EditorUndoRedoManager. The only way to make sure it
+	# Terrain3DObjects requires access to EditorUndoRedoManager. The only way to make sure it
 	# always has it, is to pass it in here. _edit is NOT called if the node is cut and pasted.
-	elif p_object is T3DObjects:
-		var objects := p_object as T3DObjects
+	elif p_object is Terrain3DObjects:
+		var objects := p_object as Terrain3DObjects
 		objects.editor_setup(self)
 	elif p_object is Node3D:
 		var node := p_object as Node3D
 		var parent := node.get_parent()
-		if parent is T3DObjects:
-			(parent as T3DObjects).editor_setup(self)
+		if parent is Terrain3DObjects:
+			(parent as Terrain3DObjects).editor_setup(self)
 
 	return false
 
@@ -333,8 +333,8 @@ func _edit(p_object: Object) -> void:
 		_clear()
 		return
 
-	if p_object is T3DTerrain:
-		_bind_terrain(p_object as T3DTerrain)
+	if p_object is Terrain3D:
+		_bind_terrain(p_object as Terrain3D)
 	else:
 		_clear()
 
@@ -346,16 +346,11 @@ func _edit(p_object: Object) -> void:
 			nav_region = null
 
 
-func _validate_native_contract(p_terrain: T3DTerrain) -> bool:
+func _validate_native_contract(p_terrain: Terrain3D) -> bool:
 	if not is_instance_valid(p_terrain):
 		return false
-	if not p_terrain.has_method("get_native_api_revision") or not p_terrain.has_method("get_native_build_id"):
-		if not _native_contract_error_reported:
-			push_error("Terrain3D native/script revision mismatch. The loaded native library predates this addon source. Expected native API %d (%s). Close Godot, rebuild the Windows GDExtension from this source tree, and ensure terrain.gdextension points at that DLL." % [EXPECTED_NATIVE_API_REVISION, EXPECTED_NATIVE_BUILD_ID])
-			_native_contract_error_reported = true
-		return false
-	var revision := int(p_terrain.call("get_native_api_revision"))
-	var build_id := String(p_terrain.call("get_native_build_id"))
+	var revision: int = p_terrain.get_native_api_revision()
+	var build_id: String = p_terrain.get_native_build_id()
 	if revision != EXPECTED_NATIVE_API_REVISION or build_id != EXPECTED_NATIVE_BUILD_ID:
 		if not _native_contract_error_reported:
 			push_error("Terrain3D native/script revision mismatch. Expected API %d (%s), loaded API %d (%s). Refusing to bind the editor UI to mixed native/script revisions." % [EXPECTED_NATIVE_API_REVISION, EXPECTED_NATIVE_BUILD_ID, revision, build_id])
@@ -365,7 +360,7 @@ func _validate_native_contract(p_terrain: T3DTerrain) -> bool:
 	return true
 
 
-func _bind_terrain(p_terrain: T3DTerrain) -> void:
+func _bind_terrain(p_terrain: Terrain3D) -> void:
 	if not _validate_native_contract(p_terrain):
 		_detach_current_terrain()
 		return
@@ -423,8 +418,8 @@ func _detach_current_terrain() -> void:
 	if is_instance_valid(editor):
 		if editor.is_operating():
 			editor.stop_operation()
-		editor.set_tool(int(T3DEditor.TOOL_MAX))
-		editor.set_operation(int(T3DEditor.OP_MAX))
+		editor.set_tool(int(Terrain3DEditor.TOOL_MAX))
+		editor.set_operation(int(Terrain3DEditor.OP_MAX))
 		editor.set_terrain(null)
 
 	var previous := terrain
@@ -472,7 +467,7 @@ func _forward_3d_gui_input(p_viewport_camera: Camera3D, p_event: InputEvent) -> 
 	ui.update_decal()
 
 	# If region tool, grab mouse position without considering height
-	if editor.get_tool() == T3DEditor.REGION:
+	if editor.get_tool() == Terrain3DEditor.REGION:
 		var t: float = -Vector3(0, 1, 0).dot(camera_pos) / Vector3(0, 1, 0).dot(camera_dir)
 		mouse_global_position = (camera_pos + t * camera_dir)
 	else:
@@ -491,7 +486,7 @@ func _forward_3d_gui_input(p_viewport_camera: Camera3D, p_event: InputEvent) -> 
 			var region_position: Vector2 = ( Vector2(mouse_global_position.x, mouse_global_position.z) \
 				/ (terrain.get_region_size() * terrain.get_vertex_spacing()) ).floor()
 
-			if _input_mode > 0 and editor.get_tool() == T3DEditor.LANDFORM:
+			if _input_mode > 0 and editor.get_tool() == Terrain3DEditor.LANDFORM:
 				ui.append_landform_stroke(mouse_global_position)
 				return AFTER_GUI_INPUT_STOP
 
@@ -506,7 +501,7 @@ func _forward_3d_gui_input(p_viewport_camera: Camera3D, p_event: InputEvent) -> 
 
 	if p_event is InputEventMouseButton and _input_mode > 0:
 		if p_event.is_pressed():
-			if editor.get_tool() == T3DEditor.LANDFORM:
+			if editor.get_tool() == Terrain3DEditor.LANDFORM:
 				ui.begin_landform_stroke(mouse_global_position)
 				return AFTER_GUI_INPUT_STOP
 
@@ -516,18 +511,18 @@ func _forward_3d_gui_input(p_viewport_camera: Camera3D, p_event: InputEvent) -> 
 				if not ui.operation_builder or not ui.operation_builder.is_ready():
 					return AFTER_GUI_INPUT_STOP
 
-			if modifier_ctrl and editor.get_tool() == T3DEditor.HEIGHT:
+			if modifier_ctrl and editor.get_tool() == Terrain3DEditor.HEIGHT:
 				var height: float = terrain.data.get_height(mouse_global_position)
 				ui.brush_data["height"] = height
 				ui.tool_settings.set_setting("height", height)
 
 			# If adjusting regions
-			if editor.get_tool() == T3DEditor.REGION:
+			if editor.get_tool() == Terrain3DEditor.REGION:
 				# Skip regions that already exist or don't
 				var has_region: bool = terrain.data.has_regionp(mouse_global_position)
 				var op: int = editor.get_operation()
-				if	( has_region and op == T3DEditor.ADD) or \
-					( not has_region and op == T3DEditor.SUBTRACT ):
+				if	( has_region and op == Terrain3DEditor.ADD) or \
+					( not has_region and op == Terrain3DEditor.SUBTRACT ):
 					return AFTER_GUI_INPUT_STOP
 
 			# If an automatic operation is ready to go (e.g. gradient)
@@ -541,7 +536,7 @@ func _forward_3d_gui_input(p_viewport_camera: Camera3D, p_event: InputEvent) -> 
 			return AFTER_GUI_INPUT_STOP
 
 		# _input_apply released, save undo data
-		elif editor.get_tool() == T3DEditor.LANDFORM:
+		elif editor.get_tool() == Terrain3DEditor.LANDFORM:
 			ui.finish_landform_stroke(mouse_global_position)
 			return AFTER_GUI_INPUT_STOP
 		elif editor.is_operating():
@@ -602,7 +597,7 @@ func _read_input(p_event: InputEvent = null) -> AfterGUIInput:
 	if _input_mode == 0 and is_instance_valid(editor):
 		if editor.is_operating() and is_terrain_valid():
 			editor.stop_operation()
-		if editor.get_tool() == T3DEditor.LANDFORM and is_instance_valid(ui):
+		if editor.get_tool() == Terrain3DEditor.LANDFORM and is_instance_valid(ui):
 			ui.finish_landform_stroke(mouse_global_position)
 
 	## Determine modifiers pressed.
@@ -637,7 +632,7 @@ func _read_input(p_event: InputEvent = null) -> AfterGUIInput:
 		and key_event.pressed
 		and consume_hotkey(key_event)
 	):
-		EditorInterface.get_editor_viewport_3d().set_input_as_handled()
+		EditorInterface.get_editor_viewport_3d(0).set_input_as_handled()
 		return AFTER_GUI_INPUT_STOP
 
 	# Brush data is cleared on set_tool, or clicking textures in the asset dock.
@@ -675,7 +670,7 @@ func consume_hotkey(p_event: InputEventKey) -> bool:
 	# Handle non-repeatable keys
 	match p_event.keycode:
 		KEY_ESCAPE:
-			if editor.get_tool() == T3DEditor.LANDFORM:
+			if editor.get_tool() == Terrain3DEditor.LANDFORM:
 				ui.cancel_landform_stroke()
 				return true
 			return false
@@ -742,8 +737,8 @@ func _on_scene_changed(scene_root: Node) -> void:
 			not scene_root.is_ancestor_of(_last_terrain):
 		_last_terrain = null
 
-	for node: Node in scene_root.find_children("", "T3DObjects"):
-		var objects := node as T3DObjects
+	for node: Node in scene_root.find_children("", "Terrain3DObjects"):
+		var objects := node as Terrain3DObjects
 		if is_instance_valid(objects):
 			objects.editor_setup(self)
 
@@ -751,7 +746,7 @@ func _on_scene_changed(scene_root: Node) -> void:
 		asset_dock.update_assets()
 
 
-func get_terrain() -> T3DTerrain:
+func get_terrain() -> Terrain3D:
 	if is_terrain_valid():
 		return terrain
 	elif is_instance_valid(_last_terrain) and is_terrain_valid(_last_terrain):
@@ -760,8 +755,8 @@ func get_terrain() -> T3DTerrain:
 		return null
 
 
-func is_terrain_valid(p_terrain: T3DTerrain = null) -> bool:
-	var t: T3DTerrain
+func is_terrain_valid(p_terrain: Terrain3D = null) -> bool:
+	var t: Terrain3D
 	if p_terrain:
 		t = p_terrain
 	else:
@@ -778,7 +773,7 @@ func is_selected() -> bool:
 	var selected: Array[Node] = EditorInterface.get_selection().get_selected_nodes()
 	for node: Node in selected:
 		if ( is_instance_valid(_last_terrain) and node.get_instance_id() == _last_terrain.get_instance_id() ) or \
-			node is T3DTerrain:
+			node is Terrain3D:
 			return true
 	return false
 

@@ -19,7 +19,7 @@
 using namespace godot;
 #endif
 
-class T3DTerrain;
+class Terrain3D;
 
 typedef enum t3dMode_e {
 	RIDGE = 0,
@@ -56,21 +56,21 @@ typedef enum t3dGeometryMode_e {
 	GEOMETRY_MAX,
 } t3dGeometryMode_t;
 
-class T3DLandformBaker : public RefCounted {
-	GDCLASS( T3DLandformBaker, RefCounted );
+class Terrain3DLandformBaker : public RefCounted {
+	GDCLASS( Terrain3DLandformBaker, RefCounted );
 	CLASS_NAME();
 
 	mutable Dictionary m_materialCache;
 
 public:
-	Dictionary apply( T3DTerrain *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings );
-	void restore( T3DTerrain *pTerrain, const Array &rSnapshots, const AABB &rEditedArea );
+	Dictionary apply( Terrain3D *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings );
+	void restore( Terrain3D *pTerrain, const Array &rSnapshots, const AABB &rEditedArea );
 	Ref<ArrayMesh>
-	buildCliffMesh( T3DTerrain *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings ) const;
+	buildCliffMesh( Terrain3D *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings ) const;
 	Dictionary
-	buildCliffModules( T3DTerrain *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings ) const;
+	buildCliffModules( Terrain3D *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings ) const;
 	Ref<ArrayMesh>
-	buildCliffCollisionMesh( T3DTerrain *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings ) const;
+	buildCliffCollisionMesh( Terrain3D *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings ) const;
 
 protected:
 	static void _bind_methods( void );

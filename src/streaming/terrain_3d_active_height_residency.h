@@ -14,9 +14,9 @@
 #include <cstddef>
 #include <cstdint>
 
-class T3DRegionRepository;
-class T3DRuntimePageStore;
-class T3DSamplingStorage;
+class Terrain3DRegionRepository;
+class Terrain3DRuntimePageStore;
+class Terrain3DSamplingStorage;
 
 typedef struct t3dActiveHeightResidencyStats_s {
 	int m_nReconciliationsLastTick = 0;
@@ -41,14 +41,14 @@ typedef struct t3dActiveHeightResidencyResult_s {
 } t3dActiveHeightResidencyResult_t;
 
 // Owns only the spatial policy for the fixed active-height sampling bank.
-// T3DSamplingStorage owns publication/leases; T3DRuntimePageStore owns cooked
+// Terrain3DSamplingStorage owns publication/leases; Terrain3DRuntimePageStore owns cooked
 // page preparation. Missing authoritative CPU sources are returned to the
 // region-residency coordinator instead of introducing a cache/facade back-edge.
-class T3DActiveHeightResidency {
+class Terrain3DActiveHeightResidency {
 public:
-	T3DActiveHeightResidency( T3DRegionRepository *pRepository,
-			T3DSamplingStorage *pSamplingStorage,
-			T3DRuntimePageStore *pRuntimePageStore );
+	Terrain3DActiveHeightResidency( Terrain3DRegionRepository *pRepository,
+			Terrain3DSamplingStorage *pSamplingStorage,
+			Terrain3DRuntimePageStore *pRuntimePageStore );
 
 	void reset( void );
 	EA_FORCE_INLINE void markDirty( void ) {
@@ -65,9 +65,9 @@ public:
 private:
 	static constexpr int s_nActiveRadius = 2;
 
-	T3DRegionRepository *m_pRepository = nullptr;
-	T3DSamplingStorage *m_pSamplingStorage = nullptr;
-	T3DRuntimePageStore *m_pRuntimePageStore = nullptr;
+	Terrain3DRegionRepository *m_pRepository = nullptr;
+	Terrain3DSamplingStorage *m_pSamplingStorage = nullptr;
+	Terrain3DRuntimePageStore *m_pRuntimePageStore = nullptr;
 	bool m_bDirty = true;
 	uint64_t m_nStreamingGenerationLast = 0u;
 	uint64_t m_nTopologyGenerationLast = 0u;

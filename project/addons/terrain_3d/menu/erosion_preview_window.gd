@@ -6,14 +6,14 @@ extends Window
 const EditorUI = preload("res://addons/terrain_3d/src/editor_ui_util.gd")
 const DETAIL_VERTEX_BUDGETS: Array[int] = [75000, 150000, 300000]
 
-var _job: T3DErosionJob
+var _job: Terrain3DErosionJob
 class PreviewSample extends RefCounted:
 	var location: Vector2i = Vector2i.ZERO
 	var current: Image
 	var initial: Image
 
 
-var _terrain: T3DTerrain
+var _terrain: Terrain3D
 var _status_label: Label
 var _stage_label: Label
 var _step_label: Label
@@ -57,7 +57,7 @@ func _ready() -> void:
 	)
 
 
-func configure(p_terrain: T3DTerrain, p_job: T3DErosionJob) -> void:
+func configure(p_terrain: Terrain3D, p_job: Terrain3DErosionJob) -> void:
 	_terrain = p_terrain
 	_job = p_job
 	_last_revision = -1
@@ -78,7 +78,7 @@ func clear_job() -> void:
 
 func open_preview() -> void:
 	if not _built:
-		call_deferred("open_preview")
+		open_preview.call_deferred()
 		return
 	var popup_size: Vector2i = EditorUI.popup_size_for_screen(
 		self,
@@ -96,8 +96,8 @@ func refresh_from_job(p_force: bool = false) -> void:
 	var state: int = _job.get_state()
 	var revision: int = int(_job.get_preview_revision())
 	var completed: bool = (
-		state == T3DErosionJob.STATE_COMPLETED
-		or state == T3DErosionJob.STATE_APPLIED
+		state == Terrain3DErosionJob.STATE_COMPLETED
+		or state == Terrain3DErosionJob.STATE_APPLIED
 	)
 	if not p_force and revision == _last_revision and not completed:
 		_update_controls()
@@ -627,7 +627,7 @@ func _update_controls() -> void:
 	if not _built or not is_instance_valid(_status_label):
 		return
 	var valid_job: bool = is_instance_valid(_job)
-	var running: bool = valid_job and _job.get_state() == T3DErosionJob.STATE_RUNNING
+	var running: bool = valid_job and _job.get_state() == Terrain3DErosionJob.STATE_RUNNING
 	var live_enabled: bool = running and _job.is_live_preview_enabled()
 	_pause_button.disabled = not live_enabled
 	_step_button.disabled = not live_enabled
@@ -637,8 +637,8 @@ func _update_controls() -> void:
 		_pause_button.text = "Resume" if _job.is_preview_paused() else "Pause"
 		var state: int = _job.get_state()
 		var completed: bool = (
-			state == T3DErosionJob.STATE_COMPLETED
-			or state == T3DErosionJob.STATE_APPLIED
+			state == Terrain3DErosionJob.STATE_COMPLETED
+			or state == Terrain3DErosionJob.STATE_APPLIED
 		)
 		var step: int = int(_job.get_completed_steps()) if completed else int(_job.get_preview_step())
 		var total: int = maxi(1, int(_job.get_simulation_steps()))
@@ -650,9 +650,9 @@ func _update_controls() -> void:
 			" — paused at boundary" if _job.is_preview_waiting() else "",
 		]
 		_progress_bar.value = progress * 100.0
-		if state == T3DErosionJob.STATE_RUNNING and _job.get_preview_revision() <= 0:
+		if state == Terrain3DErosionJob.STATE_RUNNING and _job.get_preview_revision() <= 0:
 			_status_label.text = "Preparing the first terrain snapshot. The authored terrain remains untouched."
-		elif state == T3DErosionJob.STATE_RUNNING and not _job.is_live_preview_enabled():
+		elif state == Terrain3DErosionJob.STATE_RUNNING and not _job.is_live_preview_enabled():
 			_status_label.text = "Live snapshots are disabled. The final simulated terrain will remain viewable after completion."
 		else:
 			_status_label.text = "%s vertices in the disposable preview mesh." % _format_integer(_last_vertex_count)

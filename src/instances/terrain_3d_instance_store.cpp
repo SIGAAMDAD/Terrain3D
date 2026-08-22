@@ -2,7 +2,19 @@
 
 #include "core/terrain_3d_compiler.h"
 
-T3DInstanceStore::T3DInstanceStore( T3DInstanceStore &&rOther ) :
+template <typename T> static void t3dInstanceStoreCompactMoveVector( eastl::vector<T> &rValues ) {
+	if ( rValues.size() == rValues.capacity() ) {
+		return;
+	}
+	eastl::vector<T> compacted;
+	compacted.reserve( rValues.size() );
+	for ( T &value : rValues ) {
+		compacted.push_back( eastl::move( value ) );
+	}
+	rValues.swap( compacted );
+}
+
+Terrain3DInstanceStore::Terrain3DInstanceStore( Terrain3DInstanceStore &&rOther ) :
 		m_meshes( eastl::move( rOther.m_meshes ) ),
 		m_transformSlab( eastl::move( rOther.m_transformSlab ) ),
 		m_colorSlab( eastl::move( rOther.m_colorSlab ) ),
@@ -17,14 +29,14 @@ T3DInstanceStore::T3DInstanceStore( T3DInstanceStore &&rOther ) :
 	rOther.rebuildMeshLookup();
 }
 
-T3DInstanceStore &T3DInstanceStore::operator=( const T3DInstanceStore &rOther ) {
+Terrain3DInstanceStore &Terrain3DInstanceStore::operator=( const Terrain3DInstanceStore &rOther ) {
 	if ( this != &rOther ) {
 		copyFrom( rOther );
 	}
 	return *this;
 }
 
-T3DInstanceStore &T3DInstanceStore::operator=( T3DInstanceStore &&rOther ) {
+Terrain3DInstanceStore &Terrain3DInstanceStore::operator=( Terrain3DInstanceStore &&rOther ) {
 	if ( this == &rOther ) {
 		return *this;
 	}
@@ -43,7 +55,7 @@ T3DInstanceStore &T3DInstanceStore::operator=( T3DInstanceStore &&rOther ) {
 	return *this;
 }
 
-void T3DInstanceStore::rebindPayloadPools( void ) {
+void Terrain3DInstanceStore::rebindPayloadPools( void ) {
 	for ( t3dInstanceMesh_t &mesh : m_meshes ) {
 		for ( t3dInstanceCell_t &cell : mesh.m_cells ) {
 			cell.rebindPayloadPools( &m_transformSlab, &m_colorSlab, &m_ownerSlab );
@@ -51,7 +63,7 @@ void T3DInstanceStore::rebindPayloadPools( void ) {
 	}
 }
 
-void T3DInstanceStore::copyFrom( const T3DInstanceStore &rOther ) {
+void Terrain3DInstanceStore::copyFrom( const Terrain3DInstanceStore &rOther ) {
 	clearRetainCapacity();
 	m_layout = rOther.m_layout;
 	size_t transform_count = 0u;
@@ -102,15 +114,15 @@ void T3DInstanceStore::copyFrom( const T3DInstanceStore &rOther ) {
 	rebuildMeshLookup();
 }
 
-bool T3DInstanceStore::cellLess( const t3dInstanceCell_t &a, const Vector2i &b ) {
+bool Terrain3DInstanceStore::cellLess( const t3dInstanceCell_t &a, const Vector2i &b ) {
 	return a.m_location.x < b.x || ( a.m_location.x == b.x && a.m_location.y < b.y );
 }
 
-bool T3DInstanceStore::meshLess( const t3dInstanceMesh_t &a, const int b ) {
+bool Terrain3DInstanceStore::meshLess( const t3dInstanceMesh_t &a, const int b ) {
 	return a.m_nId < b;
 }
 
-size_t T3DInstanceStore::cellLowerBound( const eastl::vector<t3dInstanceCell_t> &cells, const Vector2i &location ) {
+size_t Terrain3DInstanceStore::cellLowerBound( const eastl::vector<t3dInstanceCell_t> &cells, const Vector2i &location ) {
 	return ( size_t )( eastl::lower_bound( cells.begin(), cells.end(), location, cellLess ) - cells.begin() );
 }
 
@@ -119,17 +131,17 @@ EA_FORCE_INLINE static bool t3dInstanceStoreInstanceMeshIdLess( const t3dInstanc
 	return rA.m_nId < rB.m_nId;
 }
 
-size_t T3DInstanceStore::findCellIndex( const t3dInstanceMesh_t &mesh, const Vector2i &location ) {
+size_t Terrain3DInstanceStore::findCellIndex( const t3dInstanceMesh_t &mesh, const Vector2i &location ) {
 	const size_t cell_index = cellLowerBound( mesh.m_cells, location );
 	return cell_index < mesh.m_cells.size() && mesh.m_cells[cell_index].m_location == location ? cell_index
 																							   : mesh.m_cells.size();
 }
 
-size_t T3DInstanceStore::meshLowerBound( const int nMeshId ) const {
+size_t Terrain3DInstanceStore::meshLowerBound( const int nMeshId ) const {
 	return ( size_t )( eastl::lower_bound( m_meshes.begin(), m_meshes.end(), nMeshId, meshLess ) - m_meshes.begin() );
 }
 
-void T3DInstanceStore::rebuildMeshLookup( void ) const {
+void Terrain3DInstanceStore::rebuildMeshLookup( void ) const {
 	for ( uint16_t &slot : m_szMeshSlots ) {
 		slot = s_nInvalidMeshSlot;
 	}
@@ -142,7 +154,7 @@ void T3DInstanceStore::rebuildMeshLookup( void ) const {
 	m_bMeshLookupDirty = false;
 }
 
-void T3DInstanceStore::clearRetainCapacity( void ) {
+void Terrain3DInstanceStore::clearRetainCapacity( void ) {
 	m_meshes.clear();
 	m_transformSlab.reset();
 	m_colorSlab.reset();
@@ -150,24 +162,23 @@ void T3DInstanceStore::clearRetainCapacity( void ) {
 	invalidateMeshLookup();
 }
 
-void T3DInstanceStore::releaseStorage( void ) {
-	m_meshes.clear();
-	m_meshes.shrink_to_fit();
+void Terrain3DInstanceStore::releaseStorage( void ) {
+	eastl::vector<t3dInstanceMesh_t>().swap( m_meshes );
 	m_transformSlab.release();
 	m_colorSlab.release();
 	m_ownerSlab.release();
 	rebuildMeshLookup();
 }
 
-void T3DInstanceStore::compactStorage( void ) {
-	T3DHighWaterSlab<t3dPackedTransform_t> compact_transforms;
-	T3DHighWaterSlab<uint32_t> compact_colors;
-	T3DHighWaterSlab<uint32_t> compact_owners;
+void Terrain3DInstanceStore::compactStorage( void ) {
+	Terrain3DHighWaterSlab<t3dPackedTransform_t> compact_transforms;
+	Terrain3DHighWaterSlab<uint32_t> compact_colors;
+	Terrain3DHighWaterSlab<uint32_t> compact_owners;
 	for ( t3dInstanceMesh_t &mesh : m_meshes ) {
 		for ( t3dInstanceCell_t &cell : mesh.m_cells ) {
 			cell.relocatePayloadsExact( &compact_transforms, &compact_colors, &compact_owners );
 		}
-		mesh.m_cells.shrink_to_fit();
+		t3dInstanceStoreCompactMoveVector( mesh.m_cells );
 	}
 	compact_transforms.compactBacking();
 	compact_colors.compactBacking();
@@ -175,11 +186,11 @@ void T3DInstanceStore::compactStorage( void ) {
 	m_transformSlab.swap( compact_transforms );
 	m_colorSlab.swap( compact_colors );
 	m_ownerSlab.swap( compact_owners );
+	t3dInstanceStoreCompactMoveVector( m_meshes );
 	rebindPayloadPools();
-	m_meshes.shrink_to_fit();
 }
 
-const t3dInstanceMesh_t *T3DInstanceStore::findMesh( const int nMeshId ) const {
+const t3dInstanceMesh_t *Terrain3DInstanceStore::findMesh( const int nMeshId ) const {
 	if ( m_bMeshLookupDirty ) {
 		rebuildMeshLookup();
 	}
@@ -191,7 +202,7 @@ const t3dInstanceMesh_t *T3DInstanceStore::findMesh( const int nMeshId ) const {
 	return mesh_index < m_meshes.size() && m_meshes[mesh_index].m_nId == nMeshId ? &m_meshes[mesh_index] : nullptr;
 }
 
-t3dInstanceMesh_t *T3DInstanceStore::findMesh( const int nMeshId ) {
+t3dInstanceMesh_t *Terrain3DInstanceStore::findMesh( const int nMeshId ) {
 	if ( m_bMeshLookupDirty ) {
 		rebuildMeshLookup();
 	}
@@ -203,7 +214,7 @@ t3dInstanceMesh_t *T3DInstanceStore::findMesh( const int nMeshId ) {
 	return mesh_index < m_meshes.size() && m_meshes[mesh_index].m_nId == nMeshId ? &m_meshes[mesh_index] : nullptr;
 }
 
-t3dInstanceMesh_t &T3DInstanceStore::getOrCreateMesh( const int nMeshId, const size_t nReserveCells ) {
+t3dInstanceMesh_t &Terrain3DInstanceStore::getOrCreateMesh( const int nMeshId, const size_t nReserveCells ) {
 	const size_t mesh_index = meshLowerBound( nMeshId );
 	if ( mesh_index >= m_meshes.size() || m_meshes[mesh_index].m_nId != nMeshId ) {
 		t3dInstanceMesh_t mesh;
@@ -217,7 +228,7 @@ t3dInstanceMesh_t &T3DInstanceStore::getOrCreateMesh( const int nMeshId, const s
 	return m_meshes[mesh_index];
 }
 
-bool T3DInstanceStore::eraseMesh( const int nMeshId ) {
+bool Terrain3DInstanceStore::eraseMesh( const int nMeshId ) {
 	const size_t mesh_index = meshLowerBound( nMeshId );
 	if ( mesh_index >= m_meshes.size() || m_meshes[mesh_index].m_nId != nMeshId ) {
 		return false;
@@ -227,7 +238,7 @@ bool T3DInstanceStore::eraseMesh( const int nMeshId ) {
 	return true;
 }
 
-void T3DInstanceStore::swapMeshIds( const int nSrcId, const int nDstId ) {
+void Terrain3DInstanceStore::swapMeshIds( const int nSrcId, const int nDstId ) {
 	t3dInstanceMesh_t *pSrc = findMesh( nSrcId );
 	t3dInstanceMesh_t *pDst = findMesh( nDstId );
 	if ( pSrc != nullptr ) {
@@ -240,7 +251,7 @@ void T3DInstanceStore::swapMeshIds( const int nSrcId, const int nDstId ) {
 	rebuildMeshLookup();
 }
 
-const t3dInstanceCell_t *T3DInstanceStore::findCell( const int nMeshId, const Vector2i &cell ) const {
+const t3dInstanceCell_t *Terrain3DInstanceStore::findCell( const int nMeshId, const Vector2i &cell ) const {
 	const t3dInstanceMesh_t *pMesh = findMesh( nMeshId );
 	if ( pMesh == nullptr ) {
 		return nullptr;
@@ -249,7 +260,7 @@ const t3dInstanceCell_t *T3DInstanceStore::findCell( const int nMeshId, const Ve
 	return cell_index < pMesh->m_cells.size() ? &pMesh->m_cells[cell_index] : nullptr;
 }
 
-t3dInstanceCell_t *T3DInstanceStore::findCell( const int nMeshId, const Vector2i &cell ) {
+t3dInstanceCell_t *Terrain3DInstanceStore::findCell( const int nMeshId, const Vector2i &cell ) {
 	t3dInstanceMesh_t *pMesh = findMesh( nMeshId );
 	if ( pMesh == nullptr ) {
 		return nullptr;
@@ -258,7 +269,7 @@ t3dInstanceCell_t *T3DInstanceStore::findCell( const int nMeshId, const Vector2i
 	return cell_index < pMesh->m_cells.size() ? &pMesh->m_cells[cell_index] : nullptr;
 }
 
-t3dInstanceCell_t &T3DInstanceStore::getOrCreateCell( const int nMeshId,
+t3dInstanceCell_t &Terrain3DInstanceStore::getOrCreateCell( const int nMeshId,
 		const Vector2i &cell,
 		const size_t reserve_instances,
 		const bool bColorData,
@@ -278,7 +289,7 @@ t3dInstanceCell_t &T3DInstanceStore::getOrCreateCell( const int nMeshId,
 	return mesh.m_cells[cell_index];
 }
 
-t3dInstanceCell_t &T3DInstanceStore::getOrCreateCellExact( const int nMeshId,
+t3dInstanceCell_t &Terrain3DInstanceStore::getOrCreateCellExact( const int nMeshId,
 		const Vector2i &cell,
 		const size_t reserve_instances,
 		const bool bColorData,
@@ -298,7 +309,7 @@ t3dInstanceCell_t &T3DInstanceStore::getOrCreateCellExact( const int nMeshId,
 	return mesh.m_cells[cell_index];
 }
 
-bool T3DInstanceStore::eraseCell( const int nMeshId, const Vector2i &cell ) {
+bool Terrain3DInstanceStore::eraseCell( const int nMeshId, const Vector2i &cell ) {
 	t3dInstanceMesh_t *pMesh = findMesh( nMeshId );
 	if ( pMesh == nullptr ) {
 		return false;
@@ -314,7 +325,7 @@ bool T3DInstanceStore::eraseCell( const int nMeshId, const Vector2i &cell ) {
 	return true;
 }
 
-void T3DInstanceStore::importDictionary( const Dictionary &instances ) {
+void Terrain3DInstanceStore::importDictionary( const Dictionary &instances ) {
 	clearRetainCapacity();
 	const Array mesh_ids = instances.keys();
 	m_meshes.reserve( mesh_ids.size() );
@@ -379,7 +390,7 @@ void T3DInstanceStore::importDictionary( const Dictionary &instances ) {
 	rebuildMeshLookup();
 }
 
-bool T3DInstanceStore::equalsDictionary( const Dictionary &instances ) const {
+bool Terrain3DInstanceStore::equalsDictionary( const Dictionary &instances ) const {
 	if ( instances.size() != ( int )( m_meshes.size() ) ) {
 		return false;
 	}
@@ -433,7 +444,7 @@ bool T3DInstanceStore::equalsDictionary( const Dictionary &instances ) const {
 	return true;
 }
 
-Dictionary T3DInstanceStore::exportDictionary( void ) const {
+Dictionary Terrain3DInstanceStore::exportDictionary( void ) const {
 	Dictionary result;
 	for ( size_t mesh_index = 0; mesh_index < m_meshes.size(); ++mesh_index ) {
 		const t3dInstanceMesh_t &mesh = m_meshes[mesh_index];
@@ -474,7 +485,7 @@ Dictionary T3DInstanceStore::exportDictionary( void ) const {
 	return result;
 }
 
-size_t T3DInstanceStore::instanceCount( const int nMeshId ) const {
+size_t Terrain3DInstanceStore::instanceCount( const int nMeshId ) const {
 	size_t count = 0;
 	if ( nMeshId >= 0 ) {
 		const t3dInstanceMesh_t *pMesh = findMesh( nMeshId );
@@ -494,7 +505,7 @@ size_t T3DInstanceStore::instanceCount( const int nMeshId ) const {
 	}
 	return count;
 }
-size_t T3DInstanceStore::residentBytes( void ) const {
+size_t Terrain3DInstanceStore::residentBytes( void ) const {
 	size_t bytes = m_meshes.capacity() * sizeof( t3dInstanceMesh_t );
 	for ( const t3dInstanceMesh_t &mesh : m_meshes ) {
 		bytes += mesh.m_cells.capacity() * sizeof( t3dInstanceCell_t );

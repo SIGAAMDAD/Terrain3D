@@ -8,6 +8,7 @@
 
 #include <EASTL/vector.h>
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/engine.hpp>
@@ -51,10 +52,10 @@ EA_FORCE_INLINE static float t3dUtilRgbaFloatChannel( const uint8_t *pBytes, con
 	return fValue;
 }
 
-static T3DParallelExecutor t3dUtilAuthoringExecutor( const size_t nItemCount ) {
+static Terrain3DParallelExecutor t3dUtilAuthoringExecutor( const size_t nItemCount ) {
 	const uint32_t hardware_threads = MAX( 1u, ( uint32_t )( MAX( 1, OS::get_singleton()->get_processor_count() ) ) );
 	const size_t useful_tasks = MAX<size_t>( 1u, nItemCount / 16384u );
-	return T3DParallelExecutor( ( int32_t )( MIN<size_t>( ( size_t )( hardware_threads ), useful_tasks ) ) );
+	return Terrain3DParallelExecutor( ( int32_t )( MIN<size_t>( ( size_t )( hardware_threads ), useful_tasks ) ) );
 }
 
 EA_FORCE_INLINE static uint16_t t3dUtilQuantizeU16( const real_t fValue ) {
@@ -144,7 +145,7 @@ static bool t3dUtilValidateOptionalImage( const Ref<Image> &rImage, const Vector
 		return true;
 	}
 	if ( rImage->is_empty() || rImage->get_size() != rSize ) {
-		UtilityFunctions::push_error( "T3DUtil: ", pszName, " image size must match the normal image size: ", rSize );
+		UtilityFunctions::push_error( "Terrain3DUtil: ", pszName, " image size must match the normal image size: ", rSize );
 		return false;
 	}
 	return true;
@@ -266,7 +267,7 @@ static void t3dUtilBuildDisplacementRange( void *pContext, const size_t nBegin, 
 // -----------------------------------------------------------------------------
 // Public functions
 
-void T3DUtil::printArr( const String &strName, const Array &rArr, const int nLevel ) {
+void Terrain3DUtil::printArr( const String &strName, const Array &rArr, const int nLevel ) {
 	LOG( nLevel, "Array[", rArr.size(), "]: ", strName );
 	for ( int i = 0; i < rArr.size(); i++ ) {
 		const Variant var = rArr[i];
@@ -294,7 +295,7 @@ void T3DUtil::printArr( const String &strName, const Array &rArr, const int nLev
 	}
 }
 
-void T3DUtil::printDict( const String &strName, const Dictionary &rDict, const int nLevel ) {
+void Terrain3DUtil::printDict( const String &strName, const Dictionary &rDict, const int nLevel ) {
 	LOG( nLevel, "Dictionary: ", strName );
 	const Array keys = rDict.keys();
 	for ( const StringName key : keys ) {
@@ -323,7 +324,7 @@ void T3DUtil::printDict( const String &strName, const Dictionary &rDict, const i
 	}
 }
 
-void T3DUtil::dumpGentex( const T3DGeneratedTexture &rGen, const String &strName ) {
+void Terrain3DUtil::dumpGentex( const Terrain3DGeneratedTexture &rGen, const String &strName ) {
 	LOG( MESG,
 			"Generated ",
 			strName,
@@ -335,7 +336,7 @@ void T3DUtil::dumpGentex( const T3DGeneratedTexture &rGen, const String &strName
 			t3dPtrToStr( *rGen.getImage() ) );
 }
 
-void T3DUtil::dumpMaps( const TypedArray<Image> &rMaps, const String &strName ) {
+void Terrain3DUtil::dumpMaps( const TypedArray<Image> &rMaps, const String &strName ) {
 	LOG( MESG, "Dumping ", strName, " array. Size: ", rMaps.size() );
 	for ( const Ref<Image> pImg : rMaps ) {
 		LOG( MESG, "Map size: ", pImg->get_size(), ", eFormat: ", pImg->get_format(), ", ", t3dPtrToStr( *pImg ) );
@@ -343,13 +344,13 @@ void T3DUtil::dumpMaps( const TypedArray<Image> &rMaps, const String &strName ) 
 }
 
 // Expects a filename in a String like: "terrain3d-01_02.res" which returns (-1, 2)
-Vector2i T3DUtil::filenameToLocation( const String &rFilename ) {
+Vector2i Terrain3DUtil::filenameToLocation( const String &rFilename ) {
 	String location_string = rFilename.trim_prefix( "terrain3d" ).trim_suffix( ".res" );
 	return stringToLocation( location_string );
 }
 
 // Expects a string formatted as: "±##±##" which returns (##,##)
-Vector2i T3DUtil::stringToLocation( const String &rString ) {
+Vector2i Terrain3DUtil::stringToLocation( const String &rString ) {
 	String x_str = rString.left( 3 ).replace( "_", "" );
 	String y_str = rString.right( 3 ).replace( "_", "" );
 	if ( !x_str.is_valid_int() || !y_str.is_valid_int() ) {
@@ -360,12 +361,12 @@ Vector2i T3DUtil::stringToLocation( const String &rString ) {
 }
 
 // Expects a v2i(-1,2) and returns terrain3d-01_02.res
-String T3DUtil::locationToFilename( const Vector2i &rRegionLoc ) {
+String Terrain3DUtil::locationToFilename( const Vector2i &rRegionLoc ) {
 	return String( "terrain3d" ) + locationToString( rRegionLoc ) + String( ".res" );
 }
 
 // Expects a v2i(-1,2) and returns -01_02
-String T3DUtil::locationToString( const Vector2i &rRegionLoc ) {
+String Terrain3DUtil::locationToString( const Vector2i &rRegionLoc ) {
 	const String POS_REGION_FORMAT = "_%02d";
 	const String NEG_REGION_FORMAT = "%03d";
 	String x_str, y_str;
@@ -374,7 +375,7 @@ String T3DUtil::locationToString( const Vector2i &rRegionLoc ) {
 	return x_str + y_str;
 }
 
-PackedStringArray T3DUtil::getFiles( const String &rDir, const String &rGlob ) {
+PackedStringArray Terrain3DUtil::getFiles( const String &rDir, const String &rGlob ) {
 	PackedStringArray files;
 	Ref<DirAccess> pDa = DirAccess::open( rDir );
 	if ( pDa.is_null() ) {
@@ -393,7 +394,7 @@ PackedStringArray T3DUtil::getFiles( const String &rDir, const String &rGlob ) {
 	return files;
 }
 
-Ref<Image> T3DUtil::blackToAlpha( const Ref<Image> &rImage ) {
+Ref<Image> Terrain3DUtil::blackToAlpha( const Ref<Image> &rImage ) {
 	const Ref<Image> pSource = t3dUtilPrepareSourceImage( rImage );
 	if ( pSource.is_null() ) {
 		return Ref<Image>();
@@ -415,7 +416,7 @@ Ref<Image> T3DUtil::blackToAlpha( const Ref<Image> &rImage ) {
 /**
  * Returns the minimum and maximum values for a heightmap (red channel only)
  */
-Vector2 T3DUtil::getMinMax( const Ref<Image> &rImage ) {
+Vector2 Terrain3DUtil::getMinMax( const Ref<Image> &rImage ) {
 	if ( rImage.is_null() ) {
 		LOG( ERROR, "Provided image is not valid. Nothing to analyze" );
 		return V2( INFINITY );
@@ -451,7 +452,7 @@ Vector2 T3DUtil::getMinMax( const Ref<Image> &rImage ) {
  * Returns a Image of a float heightmap normalized to RGB8 greyscale and scaled
  * Minimum of 8x8
  */
-Ref<Image> T3DUtil::getThumbnail( const Ref<Image> &rImage, const Vector2i &rSize ) {
+Ref<Image> Terrain3DUtil::getThumbnail( const Ref<Image> &rImage, const Vector2i &rSize ) {
 	if ( rImage.is_null() ) {
 		LOG( ERROR, "Provided image is not valid. Nothing to process" );
 		return Ref<Image>();
@@ -505,7 +506,7 @@ Ref<Image> T3DUtil::getThumbnail( const Ref<Image> &rImage, const Vector2i &rSiz
  * unreliable, offering little control over the output eFormat, choosing automatically and
  * often wrong. We have selected a few compressed formats it gets right.
  */
-Ref<Image> T3DUtil::getFilledImage( const Vector2i &rSize,
+Ref<Image> Terrain3DUtil::getFilledImage( const Vector2i &rSize,
 		const Color &rColor,
 		const bool bCreateMipmaps,
 		const Image::Format eRequestedFormat ) {
@@ -579,7 +580,7 @@ Ref<Image> T3DUtil::getFilledImage( const Vector2i &rSize,
  *	p_height_range - R16 eFormat: x=Min & y=Max value ranges. Required for R16 import
  *	p_size - R16 eFormat: Image dimensions. Default (0,0) auto detects f/ square images. Required f/ non-square R16
  */
-Ref<Image> T3DUtil::loadImage( const String &rFileName,
+Ref<Image> Terrain3DUtil::loadImage( const String &rFileName,
 		const int nCacheMode,
 		const Vector2 &rR16HeightRange,
 		const Vector2i &rR16Size ) {
@@ -649,7 +650,7 @@ Ref<Image> T3DUtil::loadImage( const String &rFileName,
  * If p_invert_green is true, the destination green channel will be 1.0 - input green channel.
  * If p_invert_alpha is true, the destination alpha channel will be 1.0 - input source channel.
  */
-Ref<Image> T3DUtil::packImage( const Ref<Image> &rSrcRgb,
+Ref<Image> Terrain3DUtil::packImage( const Ref<Image> &rSrcRgb,
 		const Ref<Image> &rSrcA,
 		const Ref<Image> &rSrcAo,
 		const bool bInvertGreen,
@@ -734,7 +735,7 @@ Ref<Image> T3DUtil::packImage( const Ref<Image> &rSrcRgb,
 	return pDst;
 }
 
-Ref<Image> T3DUtil::packPbrRgba16ui( const Ref<Image> &rNormal,
+Ref<Image> Terrain3DUtil::packPbrRgba16ui( const Ref<Image> &rNormal,
 		const Ref<Image> &rRoughness,
 		const Ref<Image> &rDisplacement,
 		const Ref<Image> &rAo,
@@ -799,7 +800,7 @@ Ref<Image> T3DUtil::packPbrRgba16ui( const Ref<Image> &rNormal,
 	const uint8_t *pDisplacementBytes = displacement_data.ptr();
 	const uint8_t *pAoBytes = ao_data.is_empty() ? nullptr : ao_data.ptr();
 	const uint8_t *pMetallicBytes = metallic_data.is_empty() ? nullptr : metallic_data.ptr();
-	const T3DParallelExecutor executor = t3dUtilAuthoringExecutor( pixel_count );
+	const Terrain3DParallelExecutor executor = t3dUtilAuthoringExecutor( pixel_count );
 	t3dPackedPBRBuildContext_t build_context;
 	build_context.m_pNormal = pNormalBytes;
 	build_context.m_pRoughness = pRoughnessBytes;
@@ -858,7 +859,7 @@ Ref<Image> T3DUtil::packPbrRgba16ui( const Ref<Image> &rNormal,
 	return Image::create_from_data( size.x, size.y, mip_count > 1, Image::FORMAT_RGBA16I, data );
 }
 
-Ref<Image> T3DUtil::getDefaultPackedPbrImage( const Vector2i &rSize, const bool bCreateMipmaps ) {
+Ref<Image> Terrain3DUtil::getDefaultPackedPbrImage( const Vector2i &rSize, const bool bCreateMipmaps ) {
 	if ( rSize.x <= 0 || rSize.y <= 0 ) {
 		return Ref<Image>();
 	}
@@ -872,7 +873,7 @@ Ref<Image> T3DUtil::getDefaultPackedPbrImage( const Vector2i &rSize, const bool 
 			pNormal, pRoughness, pDisplacement, Ref<Image>(), Ref<Image>(), false, 0, 0, 0, 0, bCreateMipmaps );
 }
 
-Ref<Image> T3DUtil::packSurfaceRgba8( const Ref<Image> &rNormal,
+Ref<Image> Terrain3DUtil::packSurfaceRgba8( const Ref<Image> &rNormal,
 		const Ref<Image> &rRoughness,
 		const Ref<Image> &rAo,
 		const bool bInvertNormalGreen,
@@ -910,7 +911,7 @@ Ref<Image> T3DUtil::packSurfaceRgba8( const Ref<Image> &rNormal,
 	const uint8_t *pNormalBytes = normal_data.ptr();
 	const uint8_t *pRoughnessBytes = roughness_data.ptr();
 	const uint8_t *pAoBytes = ao_data.is_empty() ? nullptr : ao_data.ptr();
-	const T3DParallelExecutor executor = t3dUtilAuthoringExecutor( pixel_count );
+	const Terrain3DParallelExecutor executor = t3dUtilAuthoringExecutor( pixel_count );
 	t3dSurfaceBuildContext_t surface_context;
 	surface_context.m_pNormal = pNormalBytes;
 	surface_context.m_pRoughness = pRoughnessBytes;
@@ -958,7 +959,7 @@ Ref<Image> T3DUtil::packSurfaceRgba8( const Ref<Image> &rNormal,
 	return Image::create_from_data( size.x, size.y, mip_count > 1, Image::FORMAT_RGBA8, data );
 }
 
-Ref<Image> T3DUtil::packDisplacementR8( const Ref<Image> &rDisplacement,
+Ref<Image> Terrain3DUtil::packDisplacementR8( const Ref<Image> &rDisplacement,
 		const int nDisplacementChannel,
 		const bool bGenerateMipmaps ) {
 	if ( rDisplacement.is_null() || nDisplacementChannel < 0 || nDisplacementChannel > 3 ) {
@@ -975,7 +976,7 @@ Ref<Image> T3DUtil::packDisplacementR8( const Ref<Image> &rDisplacement,
 	PackedByteArray output;
 	output.resize( ( int64_t )( pixel_count ) );
 	uint8_t *const pDestination = output.ptrw();
-	const T3DParallelExecutor executor = t3dUtilAuthoringExecutor( pixel_count );
+	const Terrain3DParallelExecutor executor = t3dUtilAuthoringExecutor( pixel_count );
 	t3dDisplacementBuildContext_t displacement_context;
 	displacement_context.m_pSource = pSourceBytes;
 	displacement_context.m_pDestination = pDestination;
@@ -989,7 +990,7 @@ Ref<Image> T3DUtil::packDisplacementR8( const Ref<Image> &rDisplacement,
 	return pResult;
 }
 
-Ref<Image> T3DUtil::getDefaultSurfaceImage( const Vector2i &rSize, const bool bCreateMipmaps ) {
+Ref<Image> Terrain3DUtil::getDefaultSurfaceImage( const Vector2i &rSize, const bool bCreateMipmaps ) {
 	if ( rSize.x <= 0 || rSize.y <= 0 ) {
 		return Ref<Image>();
 	}
@@ -1001,7 +1002,7 @@ Ref<Image> T3DUtil::getDefaultSurfaceImage( const Vector2i &rSize, const bool bC
 	return pResult;
 }
 
-Ref<Image> T3DUtil::getDefaultDisplacementImage( const Vector2i &rSize, const bool bCreateMipmaps ) {
+Ref<Image> Terrain3DUtil::getDefaultDisplacementImage( const Vector2i &rSize, const bool bCreateMipmaps ) {
 	if ( rSize.x <= 0 || rSize.y <= 0 ) {
 		return Ref<Image>();
 	}
@@ -1013,7 +1014,7 @@ Ref<Image> T3DUtil::getDefaultDisplacementImage( const Vector2i &rSize, const bo
 	return pResult;
 }
 
-Ref<Image> T3DUtil::convertPackedPbrRgba16uiToSurface( const Ref<Image> &rPacked, const bool bGenerateMipmaps ) {
+Ref<Image> Terrain3DUtil::convertPackedPbrRgba16uiToSurface( const Ref<Image> &rPacked, const bool bGenerateMipmaps ) {
 	if ( rPacked.is_null() || rPacked->is_empty() || rPacked->get_format() != Image::FORMAT_RGBA16I ) {
 		return Ref<Image>();
 	}
@@ -1056,7 +1057,7 @@ Ref<Image> T3DUtil::convertPackedPbrRgba16uiToSurface( const Ref<Image> &rPacked
 	return pResult;
 }
 
-Ref<Image> T3DUtil::convertPackedPbrRgba16uiToDisplacement( const Ref<Image> &rPacked, const bool bGenerateMipmaps ) {
+Ref<Image> Terrain3DUtil::convertPackedPbrRgba16uiToDisplacement( const Ref<Image> &rPacked, const bool bGenerateMipmaps ) {
 	if ( rPacked.is_null() || rPacked->is_empty() || rPacked->get_format() != Image::FORMAT_RGBA16I ) {
 		return Ref<Image>();
 	}
@@ -1080,7 +1081,7 @@ Ref<Image> T3DUtil::convertPackedPbrRgba16uiToDisplacement( const Ref<Image> &rP
 	return pResult;
 }
 
-Error T3DUtil::saveDisplacementR8Dds( const Ref<Image> &rDisplacement, const String &rPath ) {
+Error Terrain3DUtil::saveDisplacementR8Dds( const Ref<Image> &rDisplacement, const String &rPath ) {
 	if ( rDisplacement.is_null() || rDisplacement->is_empty() || rDisplacement->get_format() != Image::FORMAT_R8 ) {
 		LOG( ERROR, "DDS displacement export requires Image::FORMAT_R8." );
 		return ERR_INVALID_DATA;
@@ -1089,7 +1090,7 @@ Error T3DUtil::saveDisplacementR8Dds( const Ref<Image> &rDisplacement, const Str
 }
 
 // From source RGB, create a new L image that is scaled to use full 0 - 1 range.
-Ref<Image> T3DUtil::luminanceToHeight( const Ref<Image> &rSrcRgb ) {
+Ref<Image> Terrain3DUtil::luminanceToHeight( const Ref<Image> &rSrcRgb ) {
 	if ( !rSrcRgb.is_valid() ) {
 		LOG( ERROR, "Provided images are not valid. Cannot pack" );
 		return Ref<Image>();
@@ -1133,11 +1134,11 @@ Ref<Image> T3DUtil::luminanceToHeight( const Ref<Image> &rSrcRgb ) {
 	return pDst;
 }
 
-void T3DUtil::benchmark( T3DTerrain *const pTerrain ) {
+void Terrain3DUtil::benchmark( Terrain3D *const pTerrain ) {
 	if ( !pTerrain ) {
 		return;
 	}
-	const T3DData *pData = pTerrain->getData();
+	const Terrain3DData *pData = pTerrain->getData();
 	if ( !pData ) {
 		return;
 	}
@@ -1171,50 +1172,50 @@ void T3DUtil::benchmark( T3DTerrain *const pTerrain ) {
 // -----------------------------------------------------------------------------
 // Protected functions
 
-void T3DUtil::_bind_methods( void ) {
+void Terrain3DUtil::_bind_methods( void ) {
 	// Control map converters
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "as_float", "value" ), &t3dAsFloat );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "as_uint", "value" ), &t3dAsUint );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "get_base", "pixel" ), &t3dGdGetBase );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "enc_base", "base" ), &t3dGdEncBase );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "get_overlay", "pixel" ), &t3dGdGetOverlay );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "enc_overlay", "overlay" ), &t3dGdEncOverlay );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "get_blend", "pixel" ), &t3dGdGetBlend );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "enc_blend", "blend" ), &t3dGdEncBlend );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "get_uv_rotation", "pixel" ), &t3dGdGetUvRotation );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "enc_uv_rotation", "rotation" ), &t3dGdEncUvRotation );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "get_uv_scale", "pixel" ), &t3dGdGetUvScale );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "enc_uv_scale", "scale" ), &t3dGdEncUvScale );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "is_hole", "pixel" ), &t3dGdIsHole );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "enc_hole", "pixel" ), &t3dEncHole );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "is_nav", "pixel" ), &t3dGdIsNav );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "enc_nav", "pixel" ), &t3dEncNav );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "is_auto", "pixel" ), &t3dGdIsAuto );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "enc_auto", "pixel" ), &t3dEncAuto );
+	ClassDB::bind_static_method( "Terrain3DUtil", D_METHOD( "as_float", "value" ), &t3dAsFloat );
+	ClassDB::bind_static_method( "Terrain3DUtil", D_METHOD( "as_uint", "value" ), &t3dAsUint );
+	ClassDB::bind_static_method( "Terrain3DUtil", D_METHOD( "get_base", "pixel" ), &t3dGdGetBase );
+	ClassDB::bind_static_method( "Terrain3DUtil", D_METHOD( "enc_base", "base" ), &t3dGdEncBase );
+	ClassDB::bind_static_method( "Terrain3DUtil", D_METHOD( "get_overlay", "pixel" ), &t3dGdGetOverlay );
+	ClassDB::bind_static_method( "Terrain3DUtil", D_METHOD( "enc_overlay", "overlay" ), &t3dGdEncOverlay );
+	ClassDB::bind_static_method( "Terrain3DUtil", D_METHOD( "get_blend", "pixel" ), &t3dGdGetBlend );
+	ClassDB::bind_static_method( "Terrain3DUtil", D_METHOD( "enc_blend", "blend" ), &t3dGdEncBlend );
+	ClassDB::bind_static_method( "Terrain3DUtil", D_METHOD( "get_uv_rotation", "pixel" ), &t3dGdGetUvRotation );
+	ClassDB::bind_static_method( "Terrain3DUtil", D_METHOD( "enc_uv_rotation", "rotation" ), &t3dGdEncUvRotation );
+	ClassDB::bind_static_method( "Terrain3DUtil", D_METHOD( "get_uv_scale", "pixel" ), &t3dGdGetUvScale );
+	ClassDB::bind_static_method( "Terrain3DUtil", D_METHOD( "enc_uv_scale", "scale" ), &t3dGdEncUvScale );
+	ClassDB::bind_static_method( "Terrain3DUtil", D_METHOD( "is_hole", "pixel" ), &t3dGdIsHole );
+	ClassDB::bind_static_method( "Terrain3DUtil", D_METHOD( "enc_hole", "pixel" ), &t3dEncHole );
+	ClassDB::bind_static_method( "Terrain3DUtil", D_METHOD( "is_nav", "pixel" ), &t3dGdIsNav );
+	ClassDB::bind_static_method( "Terrain3DUtil", D_METHOD( "enc_nav", "pixel" ), &t3dEncNav );
+	ClassDB::bind_static_method( "Terrain3DUtil", D_METHOD( "is_auto", "pixel" ), &t3dGdIsAuto );
+	ClassDB::bind_static_method( "Terrain3DUtil", D_METHOD( "enc_auto", "pixel" ), &t3dEncAuto );
 
 	// String functions
 	ClassDB::bind_static_method(
-			"T3DUtil", D_METHOD( "filename_to_location", "filename" ), &T3DUtil::filenameToLocation );
+			"Terrain3DUtil", D_METHOD( "filename_to_location", "filename" ), &Terrain3DUtil::filenameToLocation );
 	ClassDB::bind_static_method(
-			"T3DUtil", D_METHOD( "location_to_filename", "region_location" ), &T3DUtil::locationToFilename );
+			"Terrain3DUtil", D_METHOD( "location_to_filename", "region_location" ), &Terrain3DUtil::locationToFilename );
 	ClassDB::bind_static_method(
-			"T3DUtil", D_METHOD( "location_to_string", "region_location" ), &T3DUtil::locationToString );
+			"Terrain3DUtil", D_METHOD( "location_to_string", "region_location" ), &Terrain3DUtil::locationToString );
 
 	// Image handling
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "black_to_alpha", "image" ), &T3DUtil::blackToAlpha );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "get_min_max", "image" ), &T3DUtil::getMinMax );
+	ClassDB::bind_static_method( "Terrain3DUtil", D_METHOD( "black_to_alpha", "image" ), &Terrain3DUtil::blackToAlpha );
+	ClassDB::bind_static_method( "Terrain3DUtil", D_METHOD( "get_min_max", "image" ), &Terrain3DUtil::getMinMax );
 	ClassDB::bind_static_method(
-			"T3DUtil", D_METHOD( "get_thumbnail", "image", "size" ), &T3DUtil::getThumbnail, DEFVAL( V2I( 256 ) ) );
-	ClassDB::bind_static_method( "T3DUtil",
+			"Terrain3DUtil", D_METHOD( "get_thumbnail", "image", "size" ), &Terrain3DUtil::getThumbnail, DEFVAL( V2I( 256 ) ) );
+	ClassDB::bind_static_method( "Terrain3DUtil",
 			D_METHOD( "get_filled_image", "size", "color", "create_mipmaps", "eFormat" ),
-			&T3DUtil::getFilledImage );
-	ClassDB::bind_static_method( "T3DUtil",
+			&Terrain3DUtil::getFilledImage );
+	ClassDB::bind_static_method( "Terrain3DUtil",
 			D_METHOD( "load_image", "file_name", "cache_mode", "r16_height_range", "r16_size" ),
-			&T3DUtil::loadImage,
+			&Terrain3DUtil::loadImage,
 			DEFVAL( ResourceLoader::CACHE_MODE_IGNORE ),
 			DEFVAL( Vector2( 0.f, 255.f ) ),
 			DEFVAL( s_v2iZero ) );
-	ClassDB::bind_static_method( "T3DUtil",
+	ClassDB::bind_static_method( "Terrain3DUtil",
 			D_METHOD( "pack_image",
 					"src_rgb",
 					"src_a",
@@ -1224,13 +1225,13 @@ void T3DUtil::_bind_methods( void ) {
 					"normalize_alpha",
 					"alpha_channel",
 					"ao_channel" ),
-			&T3DUtil::packImage,
+			&Terrain3DUtil::packImage,
 			DEFVAL( false ),
 			DEFVAL( false ),
 			DEFVAL( false ),
 			DEFVAL( 0 ),
 			DEFVAL( 0 ) );
-	ClassDB::bind_static_method( "T3DUtil",
+	ClassDB::bind_static_method( "Terrain3DUtil",
 			D_METHOD( "pack_pbr_rgba16ui",
 					"normal",
 					"roughness",
@@ -1243,7 +1244,7 @@ void T3DUtil::_bind_methods( void ) {
 					"ao_channel",
 					"metallic_channel",
 					"generate_mipmaps" ),
-			&T3DUtil::packPbrRgba16ui,
+			&Terrain3DUtil::packPbrRgba16ui,
 			DEFVAL( Ref<Image>() ),
 			DEFVAL( Ref<Image>() ),
 			DEFVAL( false ),
@@ -1252,7 +1253,7 @@ void T3DUtil::_bind_methods( void ) {
 			DEFVAL( 0 ),
 			DEFVAL( 0 ),
 			DEFVAL( true ) );
-	ClassDB::bind_static_method( "T3DUtil",
+	ClassDB::bind_static_method( "Terrain3DUtil",
 			D_METHOD( "pack_surface_rgba8",
 					"normal",
 					"roughness",
@@ -1261,27 +1262,27 @@ void T3DUtil::_bind_methods( void ) {
 					"roughness_channel",
 					"ao_channel",
 					"generate_mipmaps" ),
-			&T3DUtil::packSurfaceRgba8,
+			&Terrain3DUtil::packSurfaceRgba8,
 			DEFVAL( Ref<Image>() ),
 			DEFVAL( false ),
 			DEFVAL( 0 ),
 			DEFVAL( 0 ),
 			DEFVAL( true ) );
-	ClassDB::bind_static_method( "T3DUtil",
+	ClassDB::bind_static_method( "Terrain3DUtil",
 			D_METHOD( "pack_displacement_r8", "displacement", "channel", "generate_mipmaps" ),
-			&T3DUtil::packDisplacementR8,
+			&Terrain3DUtil::packDisplacementR8,
 			DEFVAL( 0 ),
 			DEFVAL( true ) );
-	ClassDB::bind_static_method( "T3DUtil",
+	ClassDB::bind_static_method( "Terrain3DUtil",
 			D_METHOD( "save_displacement_r8_dds", "displacement", "path" ),
-			&T3DUtil::saveDisplacementR8Dds );
-	ClassDB::bind_static_method( "T3DUtil",
+			&Terrain3DUtil::saveDisplacementR8Dds );
+	ClassDB::bind_static_method( "Terrain3DUtil",
 			D_METHOD( "pack_displacement_r16", "displacement", "channel", "generate_mipmaps" ),
-			&T3DUtil::packDisplacementR16,
+			&Terrain3DUtil::packDisplacementR16,
 			DEFVAL( 0 ),
 			DEFVAL( true ) );
-	ClassDB::bind_static_method( "T3DUtil",
+	ClassDB::bind_static_method( "Terrain3DUtil",
 			D_METHOD( "save_displacement_r16_dds", "displacement", "path" ),
-			&T3DUtil::saveDisplacementR16Dds );
-	ClassDB::bind_static_method( "T3DUtil", D_METHOD( "luminance_to_height", "src_rgb" ), &T3DUtil::luminanceToHeight );
+			&Terrain3DUtil::saveDisplacementR16Dds );
+	ClassDB::bind_static_method( "Terrain3DUtil", D_METHOD( "luminance_to_height", "src_rgb" ), &Terrain3DUtil::luminanceToHeight );
 }

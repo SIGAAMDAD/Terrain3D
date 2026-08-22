@@ -24,8 +24,8 @@ typedef enum t3dSourceChannel_e {
 	CHANNEL_ALPHA = 3,
 } t3dSourceChannel_t;
 
-class T3DPackedPBRTexture : public Resource {
-	GDCLASS( T3DPackedPBRTexture, Resource );
+class Terrain3DPackedPBRTexture : public Resource {
+	GDCLASS( Terrain3DPackedPBRTexture, Resource );
 	CLASS_NAME();
 
 public:
@@ -40,7 +40,7 @@ private:
 	Ref<Texture2D> m_displacementSource;
 	Ref<Texture2D> m_aoSource;
 	// Retained only so older resources deserialize cleanly. Metallic is now a
-	// per-material scalar on T3DTextureAsset and is not packed per pixel.
+	// per-material scalar on Terrain3DTextureAsset and is not packed per pixel.
 	Ref<Texture2D> m_metallicSource;
 	Vector2i m_outputSize = V2I( 512 );
 	bool m_bInvertNormalGreen = false;
@@ -82,8 +82,8 @@ protected:
 	void _validate_property( PropertyInfo &rProperty ) const;
 
 public:
-	T3DPackedPBRTexture( void ) = default;
-	~T3DPackedPBRTexture( void ) = default;
+	Terrain3DPackedPBRTexture( void ) = default;
+	~Terrain3DPackedPBRTexture( void ) = default;
 
 	void setPackedTexture( const Ref<Texture2D> &rTexture );
 	EA_FORCE_INLINE Ref<Texture2D> getPackedTexture( void ) const {

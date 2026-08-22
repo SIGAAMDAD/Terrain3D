@@ -74,9 +74,9 @@ typedef struct t3dStreamedNodeRuntimeDescriptor_s {
 	String m_shadowProxyScenePath;
 } t3dStreamedNodeRuntimeDescriptor_t;
 
-class T3DRegion : public Resource {
-	GDCLASS( T3DRegion, Resource );
-	friend class T3DData;
+class Terrain3DRegion : public Resource {
+	GDCLASS( Terrain3DRegion, Resource );
+	friend class Terrain3DData;
 	CLASS_NAME();
 
 public: // Constants
@@ -88,7 +88,7 @@ private:
 	// Import without persistence side effects. This is intentionally not bound to
 	// ClassDB; only trusted loading/reconstruction code may bypass mutation flags.
 	void importInstancesUnmodified( const Dictionary &rInstances );
-	void importRuntimeMapsUnmodified( const T3DRegion *pSource );
+	void importRuntimeMapsUnmodified( const Terrain3DRegion *pSource );
 	void releaseRuntimeMapsUnmodified( void );
 	void markRuntimeMapsClean( void );
 	bool hasRuntimeMapPayload( void ) const;
@@ -121,7 +121,7 @@ private:
 	bool m_bRuntimeMapsModified = false;
 	// Instancer. Expanded native stores are pageable; the compact binary page remains
 	// serialized with the region and is sufficient for dormant regions.
-	mutable T3DInstanceStore m_instanceStore;
+	mutable Terrain3DInstanceStore m_instanceStore;
 	mutable PackedByteArray m_instancePage;
 	mutable bool m_bInstanceStoreResident = true;
 	mutable bool m_bInstanceStoreModified = false;
@@ -136,14 +136,14 @@ private:
 	Vector2i m_cookedStreamedNodeCoverageMax = s_v2iZero;
 
 	// Dynamic nodes remain as compact spawn/state descriptors while their owning
-	// region is dormant. T3DNodeStreamer is the only runtime publisher.
+	// region is dormant. Terrain3DNodeStreamer is the only runtime publisher.
 	Array m_streamedNodes;
 	eastl::vector<t3dStreamedNodeRuntimeDescriptor_t> m_streamedNodeRuntime;
 	uint64_t m_nNextStreamedNodeId = 1u;
 	Vector2i m_streamedNodeCoverageMin = s_v2iZero;
 	Vector2i m_streamedNodeCoverageMax = s_v2iZero;
 	bool m_bStreamedNodeHasExtendedCoverage = false;
-	Ref<T3DRegionLighting> m_lighting;
+	Ref<Terrain3DRegionLighting> m_lighting;
 	real_t m_fVertexSpacing = 1.f; // Spacing that instancer transforms are currently scaled by.
 
 	// Working data not saved to disk
@@ -153,8 +153,8 @@ private:
 	Vector2i m_location = s_v2iMax;
 
 public:
-	T3DRegion( void );
-	~T3DRegion( void );
+	Terrain3DRegion( void );
+	~Terrain3DRegion( void );
 
 	void clear( void );
 	void setVersion( const real_t fVersion );
@@ -245,7 +245,7 @@ public:
 	PackedByteArray getInstancePage( void ) const;
 	bool ensureInstanceStoreResident( void ) const;
 	bool evictInstanceStore( void );
-	void adoptPreparedInstanceStoreInternal( T3DInstanceStore &&rStore );
+	void adoptPreparedInstanceStoreInternal( Terrain3DInstanceStore &&rStore );
 	void adoptCookedInstanceAccelerationInternal( const PackedByteArray &rMetadata, const PackedByteArray &rFastStart );
 	EA_FORCE_INLINE const PackedByteArray &getCookedInstanceMetadataInternal( void ) const {
 		return m_cookedInstanceMetadata;
@@ -268,7 +268,7 @@ public:
 			const Ref<Image> &rControl,
 			const Ref<Image> &rColor,
 			const Ref<Image> &rDerived );
-	EA_FORCE_INLINE void importRuntimeMapsUnmodifiedInternal( const T3DRegion *pSource ) {
+	EA_FORCE_INLINE void importRuntimeMapsUnmodifiedInternal( const Terrain3DRegion *pSource ) {
 		importRuntimeMapsUnmodified( pSource );
 	}
 	EA_FORCE_INLINE void releaseRuntimeMapsUnmodifiedInternal( void ) {
@@ -308,17 +308,17 @@ public:
 		}
 		return m_nInstanceMeshCount;
 	}
-	EA_FORCE_INLINE const T3DInstanceStore &getInstanceStore( void ) const {
+	EA_FORCE_INLINE const Terrain3DInstanceStore &getInstanceStore( void ) const {
 		ensureInstanceStoreResident();
 		return m_instanceStore;
 	}
-	EA_FORCE_INLINE T3DInstanceStore &getInstanceStoreMut( void ) {
+	EA_FORCE_INLINE Terrain3DInstanceStore &getInstanceStoreMut( void ) {
 		ensureInstanceStoreResident();
 		m_bModified = true;
 		m_bInstanceStoreModified = true;
 		return m_instanceStore;
 	}
-	EA_FORCE_INLINE T3DInstanceStore &getInstanceStoreInternal( void ) {
+	EA_FORCE_INLINE Terrain3DInstanceStore &getInstanceStoreInternal( void ) {
 		ensureInstanceStoreResident();
 		return m_instanceStore;
 	}
@@ -376,8 +376,8 @@ public:
 				( m_cookedStreamedNodeCoverageMin != s_v2iZero || m_cookedStreamedNodeCoverageMax != s_v2iZero );
 	}
 
-	void setLighting( const Ref<T3DRegionLighting> &rLighting );
-	EA_FORCE_INLINE Ref<T3DRegionLighting> getLighting( void ) const {
+	void setLighting( const Ref<Terrain3DRegionLighting> &rLighting );
+	EA_FORCE_INLINE Ref<Terrain3DRegionLighting> getLighting( void ) const {
 		return m_lighting;
 	}
 	EA_FORCE_INLINE bool hasLighting( void ) const {
@@ -421,12 +421,12 @@ public:
 	Error save( const String &rPath = "", const bool b16Bit = false );
 
 	// Utility
-	// Detached-resource helper used by T3DData's replacement transaction.
+	// Detached-resource helper used by Terrain3DData's replacement transaction.
 	// Deliberately not bound to scripts because attached regions require repository,
 	// renderer, collision, and persistence reconciliation.
 	void setData( const Dictionary &rData );
 	Dictionary getData( void ) const;
-	Ref<T3DRegion> duplicate( const bool bDeep = false );
+	Ref<Terrain3DRegion> duplicate( const bool bDeep = false );
 	void dump( const bool bVerbose = false ) const;
 
 protected:

@@ -1,4 +1,5 @@
 #include <godot_cpp/classes/os.hpp>
+#include <mutex>
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "assets/terrain_3d_assets.h"
@@ -30,7 +31,7 @@
 typedef struct alignas( 64 ) t3dDecodedHalfBlock_s {
 	float m_szValues[s_nErosionHalfDecodeBlock] = {};
 
-	void load( const T3DHalfBuffer &rSource, const size_t nBegin, const size_t nCount, const float fFallback = 0.0f ) {
+	void load( const Terrain3DHalfBuffer &rSource, const size_t nBegin, const size_t nCount, const float fFallback = 0.0f ) {
 		if ( rSource.empty() ) {
 			std::fill_n( m_szValues, nCount, fFallback );
 			return;
@@ -107,7 +108,7 @@ t3dErosionJobCheckedScaledCount( const size_t nCellCount, const size_t nMultipli
 	return true;
 }
 
-static inline bool t3dErosionJobPlanFloatBuffer( T3DLinearArenaLayout &rLayout,
+static inline bool t3dErosionJobPlanFloatBuffer( Terrain3DLinearArenaLayout &rLayout,
 		const bool bEnabled,
 		const size_t nCellCount,
 		const size_t nMultiplier = 1u ) {
@@ -119,22 +120,22 @@ static inline bool t3dErosionJobPlanFloatBuffer( T3DLinearArenaLayout &rLayout,
 }
 
 EA_FORCE_INLINE static bool
-t3dErosionJobPlanHalfBuffer( T3DLinearArenaLayout &rLayout, const bool bEnabled, const size_t nCellCount ) {
+t3dErosionJobPlanHalfBuffer( Terrain3DLinearArenaLayout &rLayout, const bool bEnabled, const size_t nCellCount ) {
 	return !bEnabled || rLayout.addArray<uint16_t>( nCellCount );
 }
 
 EA_FORCE_INLINE static bool
-t3dErosionJobPlanByteBuffer( T3DLinearArenaLayout &rLayout, const bool bEnabled, const size_t nCellCount ) {
+t3dErosionJobPlanByteBuffer( Terrain3DLinearArenaLayout &rLayout, const bool bEnabled, const size_t nCellCount ) {
 	return !bEnabled || rLayout.addArray<uint8_t>( nCellCount );
 }
 
 EA_FORCE_INLINE static bool
-t3dErosionJobPlanIndexBuffer( T3DLinearArenaLayout &rLayout, const bool bEnabled, const size_t nCellCount ) {
+t3dErosionJobPlanIndexBuffer( Terrain3DLinearArenaLayout &rLayout, const bool bEnabled, const size_t nCellCount ) {
 	return !bEnabled || rLayout.addArray<int64_t>( nCellCount );
 }
 
-static inline bool t3dErosionJobAssignFloatBuffer( T3DLinearArena &rArena,
-		T3DArenaBuffer<float> &fBuffer,
+static inline bool t3dErosionJobAssignFloatBuffer( Terrain3DLinearArena &rArena,
+		Terrain3DArenaBuffer<float> &fBuffer,
 		const bool bEnabled,
 		const size_t nCellCount,
 		const float fInitial,
@@ -148,8 +149,8 @@ static inline bool t3dErosionJobAssignFloatBuffer( T3DLinearArena &rArena,
 			fBuffer.assign( rArena, count, fInitial );
 }
 
-static inline bool t3dErosionJobAssignHalfBuffer( T3DLinearArena &rArena,
-		T3DHalfBuffer &rBuffer,
+static inline bool t3dErosionJobAssignHalfBuffer( Terrain3DLinearArena &rArena,
+		Terrain3DHalfBuffer &rBuffer,
 		const bool bEnabled,
 		const size_t nCellCount,
 		const float fInitial ) {
@@ -160,8 +161,8 @@ static inline bool t3dErosionJobAssignHalfBuffer( T3DLinearArena &rArena,
 	return rBuffer.assign( rArena, nCellCount, fInitial );
 }
 
-static inline bool t3dErosionJobAssignByteBuffer( T3DLinearArena &rArena,
-		T3DArenaBuffer<uint8_t> &nBuffer,
+static inline bool t3dErosionJobAssignByteBuffer( Terrain3DLinearArena &rArena,
+		Terrain3DArenaBuffer<uint8_t> &nBuffer,
 		const bool bEnabled,
 		const size_t nCellCount,
 		const uint8_t nInitial ) {
@@ -172,8 +173,8 @@ static inline bool t3dErosionJobAssignByteBuffer( T3DLinearArena &rArena,
 	return nBuffer.assign( rArena, nCellCount, nInitial );
 }
 
-static inline bool t3dErosionJobAssignIndexBuffer( T3DLinearArena &rArena,
-		T3DArenaBuffer<int64_t> &nBuffer,
+static inline bool t3dErosionJobAssignIndexBuffer( Terrain3DLinearArena &rArena,
+		Terrain3DArenaBuffer<int64_t> &nBuffer,
 		const bool bEnabled,
 		const size_t nCellCount,
 		const int64_t nInitial ) {
@@ -185,37 +186,37 @@ static inline bool t3dErosionJobAssignIndexBuffer( T3DLinearArena &rArena,
 }
 
 typedef struct t3dErosionResultBuffers_s {
-	T3DArenaBuffer<uint8_t> m_bActive;
-	T3DArenaBuffer<float> m_initialHeight;
-	T3DArenaBuffer<float> m_height;
-	T3DArenaBuffer<float> m_sedimentCoarse;
-	T3DArenaBuffer<float> m_sedimentSand;
-	T3DArenaBuffer<float> m_sedimentFine;
-	T3DArenaBuffer<float> m_surfaceCoarse;
-	T3DArenaBuffer<float> m_surfaceSand;
-	T3DArenaBuffer<float> m_surfaceFine;
-	T3DArenaBuffer<float> m_oxidation;
-	T3DArenaBuffer<float> m_flowAccumulation;
-	T3DArenaBuffer<float> m_hydraulicDeposition;
-	T3DArenaBuffer<float> m_windDeposition;
-	T3DArenaBuffer<float> m_waveDeposition;
-	T3DArenaBuffer<float> m_weathering;
-	T3DArenaBuffer<float> m_traffic;
-	T3DArenaBuffer<float> m_alluvialDeposition;
-	T3DArenaBuffer<float> m_debrisFlowDeposition;
-	T3DArenaBuffer<float> m_duneDeposition;
-	T3DArenaBuffer<float> m_saltWeathering;
-	T3DArenaBuffer<float> m_wetDryCycles;
-	T3DArenaBuffer<float> m_snowpack;
-	T3DArenaBuffer<float> m_exposureAge;
-	T3DArenaBuffer<float> m_desertPavement;
-	T3DArenaBuffer<float> m_cumulativeErosion;
-	T3DArenaBuffer<uint8_t> m_dominantTexture;
-	T3DArenaBuffer<uint8_t> m_materialTransitionKind;
-	T3DArenaBuffer<float> m_materialTransitionAmount;
+	Terrain3DArenaBuffer<uint8_t> m_bActive;
+	Terrain3DArenaBuffer<float> m_initialHeight;
+	Terrain3DArenaBuffer<float> m_height;
+	Terrain3DArenaBuffer<float> m_sedimentCoarse;
+	Terrain3DArenaBuffer<float> m_sedimentSand;
+	Terrain3DArenaBuffer<float> m_sedimentFine;
+	Terrain3DArenaBuffer<float> m_surfaceCoarse;
+	Terrain3DArenaBuffer<float> m_surfaceSand;
+	Terrain3DArenaBuffer<float> m_surfaceFine;
+	Terrain3DArenaBuffer<float> m_oxidation;
+	Terrain3DArenaBuffer<float> m_flowAccumulation;
+	Terrain3DArenaBuffer<float> m_hydraulicDeposition;
+	Terrain3DArenaBuffer<float> m_windDeposition;
+	Terrain3DArenaBuffer<float> m_waveDeposition;
+	Terrain3DArenaBuffer<float> m_weathering;
+	Terrain3DArenaBuffer<float> m_traffic;
+	Terrain3DArenaBuffer<float> m_alluvialDeposition;
+	Terrain3DArenaBuffer<float> m_debrisFlowDeposition;
+	Terrain3DArenaBuffer<float> m_duneDeposition;
+	Terrain3DArenaBuffer<float> m_saltWeathering;
+	Terrain3DArenaBuffer<float> m_wetDryCycles;
+	Terrain3DArenaBuffer<float> m_snowpack;
+	Terrain3DArenaBuffer<float> m_exposureAge;
+	Terrain3DArenaBuffer<float> m_desertPavement;
+	Terrain3DArenaBuffer<float> m_cumulativeErosion;
+	Terrain3DArenaBuffer<uint8_t> m_dominantTexture;
+	Terrain3DArenaBuffer<uint8_t> m_materialTransitionKind;
+	Terrain3DArenaBuffer<float> m_materialTransitionAmount;
 } t3dErosionResultBuffers_t;
 
-static inline bool t3dErosionJobFloatBufferIsZero( const T3DArenaBuffer<float> &fBuffer ) {
+static inline bool t3dErosionJobFloatBufferIsZero( const Terrain3DArenaBuffer<float> &fBuffer ) {
 	for ( const float fValue : fBuffer ) {
 		if ( Math::abs( fValue ) > s_fErosionEpsilon ) {
 			return false;
@@ -224,25 +225,25 @@ static inline bool t3dErosionJobFloatBufferIsZero( const T3DArenaBuffer<float> &
 	return true;
 }
 
-static inline void t3dErosionJobClearFloatBufferIfZero( T3DArenaBuffer<float> &fBuffer ) {
+static inline void t3dErosionJobClearFloatBufferIfZero( Terrain3DArenaBuffer<float> &fBuffer ) {
 	if ( !fBuffer.empty() && t3dErosionJobFloatBufferIsZero( fBuffer ) ) {
 		fBuffer.clear();
 	}
 }
 
-EA_FORCE_INLINE static bool t3dErosionJobPlanResultFloat( T3DLinearArenaLayout &rLayout,
-		const T3DArenaBuffer<float> &fSource ) {
+EA_FORCE_INLINE static bool t3dErosionJobPlanResultFloat( Terrain3DLinearArenaLayout &rLayout,
+		const Terrain3DArenaBuffer<float> &fSource ) {
 	return fSource.empty() || rLayout.addArray<float>( fSource.size() );
 }
 
-EA_FORCE_INLINE static bool t3dErosionJobPlanResultByte( T3DLinearArenaLayout &rLayout,
-		const T3DArenaBuffer<uint8_t> &nSource ) {
+EA_FORCE_INLINE static bool t3dErosionJobPlanResultByte( Terrain3DLinearArenaLayout &rLayout,
+		const Terrain3DArenaBuffer<uint8_t> &nSource ) {
 	return nSource.empty() || rLayout.addArray<uint8_t>( nSource.size() );
 }
 
-static inline bool t3dErosionJobCopyResultFloat( T3DLinearArena &rArena,
-		const T3DArenaBuffer<float> &fSource,
-		T3DArenaBuffer<float> &fDestination ) {
+static inline bool t3dErosionJobCopyResultFloat( Terrain3DLinearArena &rArena,
+		const Terrain3DArenaBuffer<float> &fSource,
+		Terrain3DArenaBuffer<float> &fDestination ) {
 	if ( fSource.empty() ) {
 		fDestination.clear();
 		return true;
@@ -250,9 +251,9 @@ static inline bool t3dErosionJobCopyResultFloat( T3DLinearArena &rArena,
 	return fDestination.allocateUninitialized( rArena, fSource.size() ) && fDestination.copyFrom( fSource );
 }
 
-static inline bool t3dErosionJobCopyResultByte( T3DLinearArena &rArena,
-		const T3DArenaBuffer<uint8_t> &nSource,
-		T3DArenaBuffer<uint8_t> &nDestination ) {
+static inline bool t3dErosionJobCopyResultByte( Terrain3DLinearArena &rArena,
+		const Terrain3DArenaBuffer<uint8_t> &nSource,
+		Terrain3DArenaBuffer<uint8_t> &nDestination ) {
 	if ( nSource.empty() ) {
 		nDestination.clear();
 		return true;
@@ -305,7 +306,7 @@ static inline bool t3dErosionJobAddImageSnapshotBytes( uint64_t &nTotal, const R
 	return true;
 }
 
-using ParallelExecutor = T3DParallelExecutor;
+using ParallelExecutor = Terrain3DParallelExecutor;
 
 typedef struct t3dErosionFinalStatistics_s {
 	double m_fEroded = 0.0;
@@ -341,7 +342,7 @@ typedef enum t3dErosionKernel_e : uint8_t {
 } t3dErosionKernel_t;
 
 typedef struct t3dErosionKernelContext_s {
-	T3DErosionJob *m_pJob = nullptr;
+	Terrain3DErosionJob *m_pJob = nullptr;
 	t3dErosionKernel_t m_kernel = t3dErosionKernel_t::WEATHERING;
 	float m_fYearsStep = 0.0f;
 	float m_fTalusGradient = 0.0f;
@@ -374,7 +375,7 @@ typedef struct t3dErosionKernelContext_s {
 } t3dErosionKernelContext_t;
 
 typedef struct t3dErosionApplyContext_s {
-	T3DErosionJob *m_pJob = nullptr;
+	Terrain3DErosionJob *m_pJob = nullptr;
 	int32_t m_nRegionId = -1;
 	const uint8_t *m_pHeightSourceBytes = nullptr;
 	const uint8_t *m_pControlSourceBytes = nullptr;
@@ -463,7 +464,7 @@ typedef struct t3dErosionKernels_s {
 	}
 
 	static void prepareStep( t3dErosionKernelContext_t &rContext, const int32_t nStep, float &fPreviousTemperature ) {
-		T3DErosionJob *job = rContext.m_pJob;
+		Terrain3DErosionJob *job = rContext.m_pJob;
 		rContext.m_nStep = nStep;
 		rContext.m_fStepProgress = ( float )( nStep ) / ( float )( job->m_config.m_nSimulationSteps );
 		rContext.m_fMaster = MAX( 0.0f, job->sampleCurve( CURVE_MASTER, nStep ) ) * job->m_config.m_fGlobalIntensity;
@@ -496,7 +497,7 @@ typedef struct t3dErosionKernels_s {
 
 	static void applyRegion( void *pUserData, const size_t nBegin, const size_t nEnd ) {
 		t3dErosionApplyContext_t *pContext = ( t3dErosionApplyContext_t * )( pUserData );
-		T3DErosionJob *job = pContext->m_pJob;
+		Terrain3DErosionJob *job = pContext->m_pJob;
 		for ( size_t source_index = nBegin; source_index < nEnd; ++source_index ) {
 			const float source_height = t3dErosionJobReadRf( pContext->m_pHeightSourceBytes, source_index );
 			if ( std::isnan( source_height ) ) {
@@ -589,7 +590,7 @@ typedef struct t3dErosionKernels_s {
 			const size_t begin,
 			const size_t end,
 			const int32_t iWorkerIndex ) {
-		T3DErosionJob *job = pContext->m_pJob;
+		Terrain3DErosionJob *job = pContext->m_pJob;
 		( void )iWorkerIndex;
 
 		t3dDecodedHalfBlock_t substrate_hardness;
@@ -731,7 +732,7 @@ typedef struct t3dErosionKernels_s {
 			const size_t begin,
 			const size_t end,
 			const int32_t iWorkerIndex ) {
-		T3DErosionJob *job = pContext->m_pJob;
+		Terrain3DErosionJob *job = pContext->m_pJob;
 		( void )iWorkerIndex;
 
 		t3dDecodedHalfBlock_t fCohesion;
@@ -780,7 +781,7 @@ typedef struct t3dErosionKernels_s {
 			const size_t begin,
 			const size_t end,
 			const int32_t iWorkerIndex ) {
-		T3DErosionJob *job = pContext->m_pJob;
+		Terrain3DErosionJob *job = pContext->m_pJob;
 		( void )iWorkerIndex;
 
 		t3dDecodedHalfBlock_t fGrainSize;
@@ -818,7 +819,7 @@ typedef struct t3dErosionKernels_s {
 	}
 	static void
 	rainfall( t3dErosionKernelContext_t *pContext, const size_t begin, const size_t end, const int32_t iWorkerIndex ) {
-		T3DErosionJob *job = pContext->m_pJob;
+		Terrain3DErosionJob *job = pContext->m_pJob;
 		( void )iWorkerIndex;
 
 		t3dDecodedHalfBlock_t fInfiltrationMultiplier;
@@ -867,7 +868,7 @@ typedef struct t3dErosionKernels_s {
 			const size_t begin,
 			const size_t end,
 			const int32_t iWorkerIndex ) {
-		T3DErosionJob *job = pContext->m_pJob;
+		Terrain3DErosionJob *job = pContext->m_pJob;
 		( void )iWorkerIndex;
 
 		for ( size_t index = begin; index < end; ++index ) {
@@ -903,7 +904,7 @@ typedef struct t3dErosionKernels_s {
 			const size_t begin,
 			const size_t end,
 			const int32_t iWorkerIndex ) {
-		T3DErosionJob *job = pContext->m_pJob;
+		Terrain3DErosionJob *job = pContext->m_pJob;
 		( void )iWorkerIndex;
 
 		for ( size_t index = begin; index < end; ++index ) {
@@ -930,7 +931,7 @@ typedef struct t3dErosionKernels_s {
 			const size_t begin,
 			const size_t end,
 			const int32_t iWorkerIndex ) {
-		T3DErosionJob *job = pContext->m_pJob;
+		Terrain3DErosionJob *job = pContext->m_pJob;
 		( void )iWorkerIndex;
 
 		t3dDecodedHalfBlock_t fHydraulicErodibility;
@@ -1028,7 +1029,7 @@ typedef struct t3dErosionKernels_s {
 			const size_t begin,
 			const size_t end,
 			const int32_t iWorkerIndex ) {
-		T3DErosionJob *job = pContext->m_pJob;
+		Terrain3DErosionJob *job = pContext->m_pJob;
 		( void )iWorkerIndex;
 
 		for ( size_t index = begin; index < end; ++index ) {
@@ -1089,7 +1090,7 @@ typedef struct t3dErosionKernels_s {
 			const size_t begin,
 			const size_t end,
 			const int32_t iWorkerIndex ) {
-		T3DErosionJob *job = pContext->m_pJob;
+		Terrain3DErosionJob *job = pContext->m_pJob;
 		( void )iWorkerIndex;
 
 		for ( size_t index = begin; index < end; ++index ) {
@@ -1137,7 +1138,7 @@ typedef struct t3dErosionKernels_s {
 			const size_t begin,
 			const size_t end,
 			const int32_t iWorkerIndex ) {
-		T3DErosionJob *job = pContext->m_pJob;
+		Terrain3DErosionJob *job = pContext->m_pJob;
 		( void )iWorkerIndex;
 
 		for ( size_t index = begin; index < end; ++index ) {
@@ -1216,7 +1217,7 @@ typedef struct t3dErosionKernels_s {
 			const size_t begin,
 			const size_t end,
 			const int32_t iWorkerIndex ) {
-		T3DErosionJob *job = pContext->m_pJob;
+		Terrain3DErosionJob *job = pContext->m_pJob;
 		( void )iWorkerIndex;
 
 		for ( size_t index = begin; index < end; ++index ) {
@@ -1245,7 +1246,7 @@ typedef struct t3dErosionKernels_s {
 	}
 	static void
 	duneFlux( t3dErosionKernelContext_t *pContext, const size_t begin, const size_t end, const int32_t iWorkerIndex ) {
-		T3DErosionJob *job = pContext->m_pJob;
+		Terrain3DErosionJob *job = pContext->m_pJob;
 		( void )iWorkerIndex;
 
 		for ( size_t index = begin; index < end; ++index ) {
@@ -1277,7 +1278,7 @@ typedef struct t3dErosionKernels_s {
 	}
 	static void
 	duneApply( t3dErosionKernelContext_t *pContext, const size_t begin, const size_t end, const int32_t iWorkerIndex ) {
-		T3DErosionJob *job = pContext->m_pJob;
+		Terrain3DErosionJob *job = pContext->m_pJob;
 		( void )iWorkerIndex;
 
 		for ( size_t index = begin; index < end; ++index ) {
@@ -1301,7 +1302,7 @@ typedef struct t3dErosionKernels_s {
 	}
 	static void
 	pavement( t3dErosionKernelContext_t *pContext, const size_t begin, const size_t end, const int32_t iWorkerIndex ) {
-		T3DErosionJob *job = pContext->m_pJob;
+		Terrain3DErosionJob *job = pContext->m_pJob;
 		( void )iWorkerIndex;
 
 		for ( size_t index = begin; index < end; ++index ) {
@@ -1325,7 +1326,7 @@ typedef struct t3dErosionKernels_s {
 			const size_t begin,
 			const size_t end,
 			const int32_t iWorkerIndex ) {
-		T3DErosionJob *job = pContext->m_pJob;
+		Terrain3DErosionJob *job = pContext->m_pJob;
 		( void )iWorkerIndex;
 
 		for ( size_t index = begin; index < end; ++index ) {
@@ -1387,7 +1388,7 @@ typedef struct t3dErosionKernels_s {
 			const size_t begin,
 			const size_t end,
 			const int32_t iWorkerIndex ) {
-		T3DErosionJob *job = pContext->m_pJob;
+		Terrain3DErosionJob *job = pContext->m_pJob;
 		( void )iWorkerIndex;
 
 		for ( size_t index = begin; index < end; ++index ) {
@@ -1421,7 +1422,7 @@ typedef struct t3dErosionKernels_s {
 			const size_t begin,
 			const size_t end,
 			const int32_t iWorkerIndex ) {
-		T3DErosionJob *job = pContext->m_pJob;
+		Terrain3DErosionJob *job = pContext->m_pJob;
 		( void )iWorkerIndex;
 
 		for ( size_t index = begin; index < end; ++index ) {
@@ -1450,7 +1451,7 @@ typedef struct t3dErosionKernels_s {
 	}
 	static void
 	traffic( t3dErosionKernelContext_t *pContext, const size_t begin, const size_t end, const int32_t iWorkerIndex ) {
-		T3DErosionJob *job = pContext->m_pJob;
+		Terrain3DErosionJob *job = pContext->m_pJob;
 		( void )iWorkerIndex;
 
 		for ( size_t index = begin; index < end; ++index ) {
@@ -1492,7 +1493,7 @@ typedef struct t3dErosionKernels_s {
 			const size_t begin,
 			const size_t end,
 			const int32_t iWorkerIndex ) {
-		T3DErosionJob *job = pContext->m_pJob;
+		Terrain3DErosionJob *job = pContext->m_pJob;
 		( void )iWorkerIndex;
 		t3dSimdUpdateCumulativeErosion( job->m_active.data() + begin,
 				job->m_initialHeight.data() + begin,
@@ -1502,7 +1503,7 @@ typedef struct t3dErosionKernels_s {
 	}
 	static void
 	exposure( t3dErosionKernelContext_t *pContext, const size_t begin, const size_t end, const int32_t iWorkerIndex ) {
-		T3DErosionJob *job = pContext->m_pJob;
+		Terrain3DErosionJob *job = pContext->m_pJob;
 		( void )iWorkerIndex;
 
 		for ( size_t index = begin; index < end; ++index ) {
@@ -1531,7 +1532,7 @@ typedef struct t3dErosionKernels_s {
 			const size_t begin,
 			const size_t end,
 			const int32_t iWorkerIndex ) {
-		T3DErosionJob *job = pContext->m_pJob;
+		Terrain3DErosionJob *job = pContext->m_pJob;
 		const int32_t worker_index = iWorkerIndex;
 
 		t3dErosionFinalStatistics_t local;
@@ -1555,7 +1556,7 @@ typedef struct t3dErosionKernels_s {
 			const size_t begin,
 			const size_t end,
 			const int32_t iWorkerIndex ) {
-		T3DErosionJob *job = pContext->m_pJob;
+		Terrain3DErosionJob *job = pContext->m_pJob;
 		const int32_t worker_index = iWorkerIndex;
 
 		float local_maximum = s_fErosionEpsilon;
@@ -1570,7 +1571,7 @@ typedef struct t3dErosionKernels_s {
 			const size_t begin,
 			const size_t end,
 			const int32_t iWorkerIndex ) {
-		T3DErosionJob *job = pContext->m_pJob;
+		Terrain3DErosionJob *job = pContext->m_pJob;
 		( void )iWorkerIndex;
 
 		for ( size_t index = begin; index < end; ++index ) {
@@ -1674,28 +1675,28 @@ EA_FORCE_INLINE static void t3dErosionRunDynamicKernel( const ParallelExecutor &
 	rExecutor.run( nCount, nGrain, t3dErosionKernels_t::dispatchDynamic, &rContext );
 }
 
-T3DErosionJob::T3DErosionJob( void ) {
+Terrain3DErosionJob::Terrain3DErosionJob( void ) {
 	std::fill_n( m_szRegionLookup, 1024, ( int32_t )( -1 ) );
 }
 
-void T3DErosionJob::setErrorMessage( const String &rMessage ) {
+void Terrain3DErosionJob::setErrorMessage( const String &rMessage ) {
 	std::lock_guard<std::mutex> lock( m_statusMutex );
 	m_errorMessage = rMessage;
 }
 
-void T3DErosionJob::setFailed( const String &rMessage ) {
+void Terrain3DErosionJob::setFailed( const String &rMessage ) {
 	setErrorMessage( rMessage );
 	m_stage.store( STAGE_FAILED );
 	m_state.store( STATE_FAILED );
 	m_fProgress.store( 1.0f );
 }
 
-void T3DErosionJob::setStage( const t3dStage_t stage, const float fProgress ) {
+void Terrain3DErosionJob::setStage( const t3dStage_t stage, const float fProgress ) {
 	m_stage.store( stage );
 	m_fProgress.store( t3dErosionJobClamp01( fProgress ) );
 }
 
-void T3DErosionJob::copyConfig( const Ref<T3DErosionSettings> &rSettings ) {
+void Terrain3DErosionJob::copyConfig( const Ref<Terrain3DErosionSettings> &rSettings ) {
 	m_config.m_fSimulationYears = rSettings->getSimulationYears();
 	m_config.m_nSimulationSteps = rSettings->getSimulationSteps();
 	m_config.m_nRequestedResolutionScale = rSettings->getResolutionScale();
@@ -1850,7 +1851,7 @@ void T3DErosionJob::copyConfig( const Ref<T3DErosionSettings> &rSettings ) {
 	m_config.m_fOxidationTintStrength = rSettings->getOxidationTintStrength();
 }
 
-void T3DErosionJob::sampleCurves( const Ref<T3DErosionSettings> &rSettings ) {
+void Terrain3DErosionJob::sampleCurves( const Ref<Terrain3DErosionSettings> &rSettings ) {
 	const int32_t steps = m_config.m_nSimulationSteps;
 	m_config.m_nCurveStride = steps;
 	m_config.m_curveSamples.resize( ( size_t )( CURVE_COUNT ) * ( size_t )( steps ) );
@@ -1882,7 +1883,7 @@ void T3DErosionJob::sampleCurves( const Ref<T3DErosionSettings> &rSettings ) {
 	}
 }
 
-float T3DErosionJob::sampleCurve( const t3dCurveId_t curve, const int32_t nStep ) const {
+float Terrain3DErosionJob::sampleCurve( const t3dCurveId_t curve, const int32_t nStep ) const {
 	if ( m_config.m_nCurveStride <= 0 || m_config.m_curveSamples.empty() ) {
 		if ( curve == CURVE_TEMPERATURE ) {
 			return 0.5f;
@@ -1896,7 +1897,7 @@ float T3DErosionJob::sampleCurve( const t3dCurveId_t curve, const int32_t nStep 
 	return m_config.m_curveSamples[( size_t )( curve ) * ( size_t )( m_config.m_nCurveStride ) + ( size_t )( step )];
 }
 
-uint64_t T3DErosionJob::estimateMemoryBytes( const int32_t nRegionCount, const int32_t nScale ) const {
+uint64_t Terrain3DErosionJob::estimateMemoryBytes( const int32_t nRegionCount, const int32_t nScale ) const {
 	if ( m_nSourceRegionSize <= 0 || nScale <= 0 || nRegionCount <= 0 ) {
 		return std::numeric_limits<uint64_t>::max();
 	}
@@ -1993,7 +1994,7 @@ uint64_t T3DErosionJob::estimateMemoryBytes( const int32_t nRegionCount, const i
 	return source_snapshot_bytes + m_nInputSnapshotBytes + working_bytes + working_bytes / 5ULL + 1024ULL * 1024ULL;
 }
 
-int32_t T3DErosionJob::selectResolutionScale( const int32_t nRegionCount ) const {
+int32_t Terrain3DErosionJob::selectResolutionScale( const int32_t nRegionCount ) const {
 	int32_t scale = m_config.m_nRequestedResolutionScale;
 	const uint64_t budget = ( uint64_t )( m_config.m_nMemoryBudgetMb ) * 1024ULL * 1024ULL;
 	if ( !m_config.m_bAutoAdjustResolution ) {
@@ -2005,7 +2006,7 @@ int32_t T3DErosionJob::selectResolutionScale( const int32_t nRegionCount ) const
 	return scale;
 }
 
-bool T3DErosionJob::allocateBuffers( void ) {
+bool Terrain3DErosionJob::allocateBuffers( void ) {
 	const bool bWeatherStage = m_config.m_bWeatheringEnabled || m_config.m_bOxidationEnabled ||
 			m_config.m_bWetDryEnabled || m_config.m_bSaltWeatheringEnabled || m_config.m_bExposureAgeEnabled ||
 			m_config.m_bStratigraphyEnabled;
@@ -2092,8 +2093,8 @@ bool T3DErosionJob::allocateBuffers( void ) {
 	m_persistentMemory.release();
 	m_phaseMemory.release();
 
-	T3DLinearArenaLayout persistent_layout;
-	T3DLinearArenaLayout phase_layout;
+	Terrain3DLinearArenaLayout persistent_layout;
+	Terrain3DLinearArenaLayout phase_layout;
 	bool bLayoutValid = true;
 	t3dErosionJobKeepValid( t3dErosionJobPlanByteBuffer( persistent_layout, true, m_nCellCount ), bLayoutValid );
 	t3dErosionJobKeepValid( t3dErosionJobPlanFloatBuffer( persistent_layout, true, m_nCellCount, 1u ), bLayoutValid );
@@ -2548,7 +2549,7 @@ bool T3DErosionJob::allocateBuffers( void ) {
 	return true;
 }
 
-bool T3DErosionJob::allocatePreviewBuffer( void ) {
+bool Terrain3DErosionJob::allocatePreviewBuffer( void ) {
 	std::lock_guard<std::mutex> lock( m_previewMutex );
 	m_previewHeight.clear();
 	m_previewMemory.release();
@@ -2560,7 +2561,7 @@ bool T3DErosionJob::allocatePreviewBuffer( void ) {
 	if ( !m_config.m_bLivePreviewEnabled ) {
 		return true;
 	}
-	T3DLinearArenaLayout layout;
+	Terrain3DLinearArenaLayout layout;
 	if ( !layout.addArray<float>( m_nCellCount ) || !layout.valid() ||
 			!m_previewMemory.ensureCapacity( layout.size() ) ||
 			!m_previewHeight.allocateUninitialized( m_previewMemory, m_nCellCount ) ||
@@ -2573,7 +2574,7 @@ bool T3DErosionJob::allocatePreviewBuffer( void ) {
 	return true;
 }
 
-void T3DErosionJob::publishPreviewSnapshot( const int32_t nStep, const bool bForce ) {
+void Terrain3DErosionJob::publishPreviewSnapshot( const int32_t nStep, const bool bForce ) {
 	if ( !m_config.m_bLivePreviewEnabled || m_previewHeight.empty() || m_height.empty() ) {
 		return;
 	}
@@ -2592,7 +2593,7 @@ void T3DErosionJob::publishPreviewSnapshot( const int32_t nStep, const bool bFor
 	}
 }
 
-bool T3DErosionJob::waitForPreviewPermission( void ) {
+bool Terrain3DErosionJob::waitForPreviewPermission( void ) {
 	if ( !m_config.m_bLivePreviewEnabled || !m_bPreviewPaused.load() ) {
 		return !m_bCancelRequested.load();
 	}
@@ -2614,7 +2615,7 @@ bool T3DErosionJob::waitForPreviewPermission( void ) {
 	return true;
 }
 
-Ref<Image> T3DErosionJob::makeHeightImage( const FloatBuffer &rSource,
+Ref<Image> Terrain3DErosionJob::makeHeightImage( const FloatBuffer &rSource,
 		const int32_t nRegionId,
 		const bool bFullResolution ) const {
 	if ( rSource.empty() || nRegionId < 0 || nRegionId >= ( int32_t )( m_regions.size() ) ) {
@@ -2640,7 +2641,7 @@ Ref<Image> T3DErosionJob::makeHeightImage( const FloatBuffer &rSource,
 	return Image::create_from_data( size, size, false, Image::FORMAT_RF, image_data );
 }
 
-bool T3DErosionJob::compactCompletedResults( void ) {
+bool Terrain3DErosionJob::compactCompletedResults( void ) {
 	{
 		std::lock_guard<std::mutex> lock( m_statusMutex );
 		m_bResultsCompacted = false;
@@ -2684,7 +2685,7 @@ bool T3DErosionJob::compactCompletedResults( void ) {
 	}
 
 	t3dErosionResultBuffers_t result;
-	T3DLinearArenaLayout layout;
+	Terrain3DLinearArenaLayout layout;
 	bool valid = true;
 	t3dErosionJobKeepValid( t3dErosionJobPlanResultByte( layout, m_active ), valid );
 	t3dErosionJobKeepValid( t3dErosionJobPlanResultFloat( layout, m_initialHeight ), valid );
@@ -2854,7 +2855,7 @@ bool T3DErosionJob::compactCompletedResults( void ) {
 	return true;
 }
 
-uint64_t T3DErosionJob::hashRegionImages( const Ref<Image> &rHeight, const Ref<Image> &rControl ) const {
+uint64_t Terrain3DErosionJob::hashRegionImages( const Ref<Image> &rHeight, const Ref<Image> &rControl ) const {
 	uint64_t hash = s_nErosionFnvOffset;
 	if ( rHeight.is_valid() ) {
 		t3dErosionJobFnvHashPackedBytes( hash, rHeight->get_data() );
@@ -2868,11 +2869,11 @@ uint64_t T3DErosionJob::hashRegionImages( const Ref<Image> &rHeight, const Ref<I
 	return hash;
 }
 
-uint64_t T3DErosionJob::hashTextureProfiles( T3DData *const pData ) const {
+uint64_t Terrain3DErosionJob::hashTextureProfiles( Terrain3DData *const pData ) const {
 	if ( !pData || !pData->m_pTerrain ) {
 		return 0;
 	}
-	const Ref<T3DAssets> pAssets = pData->m_pTerrain->getAssets();
+	const Ref<Terrain3DAssets> pAssets = pData->m_pTerrain->getAssets();
 	if ( pAssets.is_null() ) {
 		return 0;
 	}
@@ -2880,7 +2881,7 @@ uint64_t T3DErosionJob::hashTextureProfiles( T3DData *const pData ) const {
 	uint64_t hash = s_nErosionFnvOffset;
 
 	for ( int32_t texture_id = 0; texture_id < s_nErosionTextureProfileCount; ++texture_id ) {
-		const Ref<T3DTextureAsset> pAsset = pAssets->getTextureAsset( texture_id );
+		const Ref<Terrain3DTextureAsset> pAsset = pAssets->getTextureAsset( texture_id );
 		t3dErosionJobFnvHashU8( hash, pAsset.is_valid() ? 1u : 0u );
 		if ( pAsset.is_null() ) {
 			continue;
@@ -2910,7 +2911,7 @@ uint64_t T3DErosionJob::hashTextureProfiles( T3DData *const pData ) const {
 	}
 
 	if ( m_config.m_bResolveAutoMaterials ) {
-		const Ref<T3DMaterial> pMaterial = pData->m_pTerrain->getMaterial();
+		const Ref<Terrain3DMaterial> pMaterial = pData->m_pTerrain->getMaterial();
 		t3dErosionJobFnvHashU8( hash, ( pMaterial.is_valid() && pMaterial->getAutoShaderEnabled() ) ? 1u : 0u );
 		if ( pMaterial.is_valid() ) {
 			t3dErosionJobFnvHashI32(
@@ -2925,21 +2926,21 @@ uint64_t T3DErosionJob::hashTextureProfiles( T3DData *const pData ) const {
 	return hash;
 }
 
-bool T3DErosionJob::snapshotTextureProfiles( T3DData *const pData ) {
+bool Terrain3DErosionJob::snapshotTextureProfiles( Terrain3DData *const pData ) {
 	if ( !pData || !pData->m_pTerrain ) {
-		setFailed( "Erosion requires T3DData initialized by a Terrain3D node so texture assets can be resolved." );
+		setFailed( "Erosion requires Terrain3DData initialized by a Terrain3D node so texture assets can be resolved." );
 		return false;
 	}
-	const Ref<T3DAssets> pAssets = pData->m_pTerrain->getAssets();
+	const Ref<Terrain3DAssets> pAssets = pData->m_pTerrain->getAssets();
 	if ( pAssets.is_null() ) {
-		setFailed( "Erosion could not read the T3DAssets resource." );
+		setFailed( "Erosion could not read the Terrain3DAssets resource." );
 		return false;
 	}
 
 	bool bHasTransition = false;
 	for ( int32_t texture_id = 0; texture_id < s_nErosionTextureProfileCount; ++texture_id ) {
 		t3dTextureErosionProfile_t &profile = m_config.m_textureProfiles[( size_t )( texture_id )];
-		const Ref<T3DTextureAsset> pAsset = pAssets->getTextureAsset( texture_id );
+		const Ref<Terrain3DTextureAsset> pAsset = pAssets->getTextureAsset( texture_id );
 		if ( pAsset.is_null() ) {
 			continue;
 		}
@@ -2995,7 +2996,7 @@ bool T3DErosionJob::snapshotTextureProfiles( T3DData *const pData ) {
 	}
 
 	if ( m_config.m_bResolveAutoMaterials ) {
-		const Ref<T3DMaterial> pMaterial = pData->m_pTerrain->getMaterial();
+		const Ref<Terrain3DMaterial> pMaterial = pData->m_pTerrain->getMaterial();
 		if ( pMaterial.is_valid() ) {
 			m_config.m_bAutoShaderEnabled = pMaterial->getAutoShaderEnabled();
 			m_config.m_nAutoBaseTexture = CLAMP( ( int32_t )( pMaterial->getShaderParam( "auto_base_texture" ) ),
@@ -3011,20 +3012,20 @@ bool T3DErosionJob::snapshotTextureProfiles( T3DData *const pData ) {
 	}
 
 	if ( m_config.m_bMaterialOutputEnabled && !bHasTransition ) {
-		setFailed( "Material output is enabled, but no T3DTextureAsset has an erosion transition texture configured." );
+		setFailed( "Material output is enabled, but no Terrain3DTextureAsset has an erosion transition texture configured." );
 		return false;
 	}
 	m_nAssetProfileHash = hashTextureProfiles( pData );
 	return true;
 }
 
-bool T3DErosionJob::regionSnapshotLess( const t3dRegionSnapshot_t &rA, const t3dRegionSnapshot_t &rB ) {
+bool Terrain3DErosionJob::regionSnapshotLess( const t3dRegionSnapshot_t &rA, const t3dRegionSnapshot_t &rB ) {
 	return rA.m_location.y == rB.m_location.y ? rA.m_location.x < rB.m_location.x : rA.m_location.y < rB.m_location.y;
 }
 
-bool T3DErosionJob::captureSourceRegions( T3DData *const pData ) {
+bool Terrain3DErosionJob::captureSourceRegions( Terrain3DData *const pData ) {
 	if ( !pData ) {
-		setFailed( "Erosion source capture requires valid T3DData." );
+		setFailed( "Erosion source capture requires valid Terrain3DData." );
 		return false;
 	}
 	const TypedArray<Vector2i> locations = pData->getRegionLocations();
@@ -3041,7 +3042,7 @@ bool T3DErosionJob::captureSourceRegions( T3DData *const pData ) {
 			setFailed( "A terrain region could not be paged into the CPU map cache for erosion capture." );
 			return false;
 		}
-		const Ref<T3DRegion> pRegion = pData->getRegion( location );
+		const Ref<Terrain3DRegion> pRegion = pData->getRegion( location );
 		if ( pRegion.is_null() ) {
 			setFailed( "An active terrain region disappeared while creating the erosion source snapshot." );
 			return false;
@@ -3088,7 +3089,7 @@ bool T3DErosionJob::captureSourceRegions( T3DData *const pData ) {
 					pHeightDst, i, t3dRegionCodecReadHeightBytes( pHeightSrc, ( int )( i ), Image::FORMAT_R16 ) );
 		}
 		snapshot.m_nSourceHash = hashRegionImages( pHeightMap, pControlMap );
-		const int32_t map_index = T3DData::getRegionMapIndex( location );
+		const int32_t map_index = Terrain3DData::getRegionMapIndex( location );
 		if ( map_index >= 0 ) {
 			m_szRegionLookup[map_index] = region_id;
 		}
@@ -3099,7 +3100,7 @@ bool T3DErosionJob::captureSourceRegions( T3DData *const pData ) {
 	std::sort( m_regions.begin(), m_regions.end(), regionSnapshotLess );
 	std::fill_n( m_szRegionLookup, 1024, ( int32_t )( -1 ) );
 	for ( int32_t region_id = 0; region_id < ( int32_t )( m_regions.size() ); ++region_id ) {
-		const int32_t map_index = T3DData::getRegionMapIndex( m_regions[( size_t )( region_id )].m_location );
+		const int32_t map_index = Terrain3DData::getRegionMapIndex( m_regions[( size_t )( region_id )].m_location );
 		if ( map_index >= 0 ) {
 			m_szRegionLookup[map_index] = region_id;
 		}
@@ -3109,7 +3110,7 @@ bool T3DErosionJob::captureSourceRegions( T3DData *const pData ) {
 		const Vector2i location = m_regions[( size_t )( region_id )].m_location;
 		eastl::array<int32_t, s_nErosionDirectionCount> &neighbors = m_szRegionNeighbors[( size_t )( region_id )];
 		for ( int32_t direction = 0; direction < s_nErosionDirectionCount; ++direction ) {
-			const int32_t map_index = T3DData::getRegionMapIndex(
+			const int32_t map_index = Terrain3DData::getRegionMapIndex(
 					location + Vector2i( s_szErosionDirectionX[direction], s_szErosionDirectionY[direction] ) );
 			neighbors[( size_t )( direction )] = map_index >= 0 ? m_szRegionLookup[map_index] : -1;
 		}
@@ -3117,7 +3118,7 @@ bool T3DErosionJob::captureSourceRegions( T3DData *const pData ) {
 	return true;
 }
 
-void T3DErosionJob::releaseSourceSnapshots( void ) {
+void Terrain3DErosionJob::releaseSourceSnapshots( void ) {
 	for ( t3dRegionSnapshot_t &snapshot : m_regions ) {
 		snapshot.m_heightData.clear();
 		snapshot.m_controlData.clear();
@@ -3129,7 +3130,7 @@ void T3DErosionJob::releaseSourceSnapshots( void ) {
 	m_bedrockHardnessSnapshot.clear();
 }
 
-float T3DErosionJob::sampleImageSnapshot( const t3dImageSnapshot_t &rImage,
+float Terrain3DErosionJob::sampleImageSnapshot( const t3dImageSnapshot_t &rImage,
 		const Rect2 &rWorldRect,
 		const Vector2 &rWorldPosition ) {
 	if ( !rImage.isValid() || rWorldRect.size.x <= s_fErosionEpsilon || rWorldRect.size.y <= s_fErosionEpsilon ) {
@@ -3156,7 +3157,7 @@ float T3DErosionJob::sampleImageSnapshot( const t3dImageSnapshot_t &rImage,
 	return t3dErosionJobClamp01( Math::lerp( Math::lerp( fV00, fV10, fFx ), Math::lerp( fV01, fV11, fFx ), fFy ) );
 }
 
-bool T3DErosionJob::buildSimulationSnapshot( void ) {
+bool Terrain3DErosionJob::buildSimulationSnapshot( void ) {
 	const int32_t region_count = ( int32_t )( m_regions.size() );
 	if ( region_count <= 0 ) {
 		setFailed( "Erosion source snapshot contains no active regions." );
@@ -3167,10 +3168,10 @@ bool T3DErosionJob::buildSimulationSnapshot( void ) {
 	Vector2i maximumLocation( INT32_MIN, INT32_MIN );
 	for ( int32_t region_id = 0; region_id < region_count; ++region_id ) {
 		const Vector2i location = m_regions[( size_t )( region_id )].m_location;
-		minimumLocation.x = MIN( minimumLocation.x, location.m_nX );
-		minimumLocation.y = MIN( minimumLocation.y, location.m_nY );
-		maximumLocation.x = MAX( maximumLocation.x, location.m_nX );
-		maximumLocation.y = MAX( maximumLocation.y, location.m_nY );
+		minimumLocation.x = MIN( minimumLocation.x, location.x );
+		minimumLocation.y = MIN( minimumLocation.y, location.y );
+		maximumLocation.x = MAX( maximumLocation.x, location.x );
+		maximumLocation.y = MAX( maximumLocation.y, location.y );
 	}
 
 	const Vector2 world_min =
@@ -3492,7 +3493,7 @@ bool T3DErosionJob::buildSimulationSnapshot( void ) {
 	return true;
 }
 
-bool T3DErosionJob::captureImageSnapshot( const Ref<Image> &rImage,
+bool Terrain3DErosionJob::captureImageSnapshot( const Ref<Image> &rImage,
 		t3dImageSnapshot_t &rSnapshot,
 		const char *pszLabel ) {
 	rSnapshot.clear();
@@ -3521,12 +3522,12 @@ bool T3DErosionJob::captureImageSnapshot( const Ref<Image> &rImage,
 	return true;
 }
 
-Error T3DErosionJob::setup( T3DData *const pData, const Ref<T3DErosionSettings> &rSettings ) {
+Error Terrain3DErosionJob::setup( Terrain3DData *const pData, const Ref<Terrain3DErosionSettings> &rSettings ) {
 	if ( m_state.load() != STATE_NEW ) {
 		return ERR_ALREADY_IN_USE;
 	}
 	if ( !pData || rSettings.is_null() ) {
-		setFailed( "Erosion job setup requires valid T3DData and T3DErosionSettings objects." );
+		setFailed( "Erosion job setup requires valid Terrain3DData and Terrain3DErosionSettings objects." );
 		return ERR_INVALID_PARAMETER;
 	}
 	if ( pData->getRegionCount() <= 0 ) {
@@ -3604,7 +3605,7 @@ Error T3DErosionJob::setup( T3DData *const pData, const Ref<T3DErosionSettings> 
 	}
 
 	TypedArray<Vector2i> locations = pData->getRegionLocations();
-	const Ref<T3DRegion> pFirstRegion = pData->getRegion( Vector2i( locations[0] ) );
+	const Ref<Terrain3DRegion> pFirstRegion = pData->getRegion( Vector2i( locations[0] ) );
 	if ( pFirstRegion.is_null() ) {
 		setFailed( "Terrain3D's first active region could not be read." );
 		return ERR_DOES_NOT_EXIST;
@@ -3620,7 +3621,7 @@ Error T3DErosionJob::setup( T3DData *const pData, const Ref<T3DErosionSettings> 
 			setFailed( "A terrain region could not be paged into the CPU map cache during erosion preflight." );
 			return ERR_CANT_OPEN;
 		}
-		const Ref<T3DRegion> pRegion = pData->getRegion( location );
+		const Ref<Terrain3DRegion> pRegion = pData->getRegion( location );
 		if ( pRegion.is_valid() && pRegion->getControlMap().is_valid() ) {
 			if ( m_nSourceControlSnapshotBytes > std::numeric_limits<uint64_t>::max() - control_bytes_per_region ) {
 				setFailed( "Erosion control snapshot dimensions overflow the memory preflight." );
@@ -3673,7 +3674,7 @@ Error T3DErosionJob::setup( T3DData *const pData, const Ref<T3DErosionSettings> 
 	return OK;
 }
 
-int64_t T3DErosionJob::neighborIndex( const size_t iIndex, const int32_t nDx, const int32_t nDy ) const {
+int64_t Terrain3DErosionJob::neighborIndex( const size_t iIndex, const int32_t nDx, const int32_t nDy ) const {
 	const size_t local_index = iIndex & m_nCellsPerRegionMask;
 	int32_t x = 0;
 	int32_t y = 0;
@@ -3726,14 +3727,14 @@ int64_t T3DErosionJob::neighborIndex( const size_t iIndex, const int32_t nDx, co
 			( size_t )( y ) * ( size_t )( m_nSimulationRegionSize ) + ( size_t )( x ) );
 }
 
-uint64_t T3DErosionJob::stochasticIndex( const size_t iIndex ) const {
+uint64_t Terrain3DErosionJob::stochasticIndex( const size_t iIndex ) const {
 	const size_t region_id = iIndex >> m_nCellsPerRegionShift;
 	const size_t local_index = iIndex & m_nCellsPerRegionMask;
 	return ( uint64_t )( m_regions[region_id].m_nSourceOrder ) * ( uint64_t )( m_nCellsPerRegion ) +
 			( uint64_t )( local_index );
 }
 
-void T3DErosionJob::partitionMaterial( const float fGrainSize,
+void Terrain3DErosionJob::partitionMaterial( const float fGrainSize,
 		const float fAmount,
 		float &fCoarse,
 		float &fSand,
@@ -3747,21 +3748,21 @@ void T3DErosionJob::partitionMaterial( const float fGrainSize,
 	fFine = fAmount * fFineWeight;
 }
 
-float T3DErosionJob::getLooseMaterial( const size_t iIndex ) const {
+float Terrain3DErosionJob::getLooseMaterial( const size_t iIndex ) const {
 	if ( m_surfaceCoarse.empty() ) {
 		return 0.0f;
 	}
 	return MAX( 0.0f, m_surfaceCoarse[iIndex] + m_surfaceSand[iIndex] + m_surfaceFine[iIndex] );
 }
 
-float T3DErosionJob::getSediment( const size_t iIndex ) const {
+float Terrain3DErosionJob::getSediment( const size_t iIndex ) const {
 	if ( m_sedimentCoarse.empty() ) {
 		return 0.0f;
 	}
 	return MAX( 0.0f, m_sedimentCoarse[iIndex] + m_sedimentSand[iIndex] + m_sedimentFine[iIndex] );
 }
 
-float T3DErosionJob::entrainSurface( size_t iIndex, const float fAmount, float &fCoarse, float &fSand, float &fFine ) {
+float Terrain3DErosionJob::entrainSurface( size_t iIndex, const float fAmount, float &fCoarse, float &fSand, float &fFine ) {
 	fCoarse = 0.0f;
 	fSand = 0.0f;
 	fFine = 0.0f;
@@ -3798,13 +3799,13 @@ float T3DErosionJob::entrainSurface( size_t iIndex, const float fAmount, float &
 	return fAmount - fRemaining;
 }
 
-void T3DErosionJob::depositSurface( size_t iIndex, const float fCoarse, const float fSand, const float fFine ) {
+void Terrain3DErosionJob::depositSurface( size_t iIndex, const float fCoarse, const float fSand, const float fFine ) {
 	m_surfaceCoarse[iIndex] += MAX( 0.0f, fCoarse );
 	m_surfaceSand[iIndex] += MAX( 0.0f, fSand );
 	m_surfaceFine[iIndex] += MAX( 0.0f, fFine );
 }
 
-float T3DErosionJob::getSlope( const size_t iIndex ) const {
+float Terrain3DErosionJob::getSlope( const size_t iIndex ) const {
 	if ( !m_active[iIndex] ) {
 		return 0.0f;
 	}
@@ -3819,7 +3820,7 @@ float T3DErosionJob::getSlope( const size_t iIndex ) const {
 	return t3dErosionJobSafeDivide( fMaximumDifference, m_fCellSize );
 }
 
-void T3DErosionJob::run( void ) {
+void Terrain3DErosionJob::run( void ) {
 	int32_t expected_state = STATE_READY;
 	if ( !m_state.compare_exchange_strong( expected_state, STATE_RUNNING ) ) {
 		if ( expected_state == STATE_NEW ) {
@@ -4185,7 +4186,7 @@ void T3DErosionJob::run( void ) {
 	}
 }
 
-int32_t T3DErosionJob::getTransitionTarget( const int32_t nTextureId, const t3dMaterialTransitionKind_t kind ) const {
+int32_t Terrain3DErosionJob::getTransitionTarget( const int32_t nTextureId, const t3dMaterialTransitionKind_t kind ) const {
 	if ( nTextureId < 0 || nTextureId >= s_nErosionTextureProfileCount ) {
 		return -1;
 	}
@@ -4215,7 +4216,7 @@ int32_t T3DErosionJob::getTransitionTarget( const int32_t nTextureId, const t3dM
 	}
 }
 
-void T3DErosionJob::buildMaterialTransitions( void ) {
+void Terrain3DErosionJob::buildMaterialTransitions( void ) {
 	std::fill( m_materialTransitionKind.begin(), m_materialTransitionKind.end(), ( uint8_t )( TRANSITION_NONE ) );
 	std::fill( m_materialTransitionAmount.begin(), m_materialTransitionAmount.end(), 0.0f );
 
@@ -4237,12 +4238,12 @@ void T3DErosionJob::buildMaterialTransitions( void ) {
 			executor, kernel_context, t3dErosionKernel_t::MATERIAL_TRANSITIONS, m_nCellCount, alignment );
 }
 
-void T3DErosionJob::cancel( void ) {
+void Terrain3DErosionJob::cancel( void ) {
 	m_bCancelRequested.store( true );
 	m_previewCondition.notify_all();
 }
 
-void T3DErosionJob::setPreviewPaused( const bool bPaused ) {
+void Terrain3DErosionJob::setPreviewPaused( const bool bPaused ) {
 	if ( !m_config.m_bLivePreviewEnabled || isComplete() ) {
 		return;
 	}
@@ -4253,7 +4254,7 @@ void T3DErosionJob::setPreviewPaused( const bool bPaused ) {
 	m_previewCondition.notify_all();
 }
 
-void T3DErosionJob::requestPreviewStep( void ) {
+void Terrain3DErosionJob::requestPreviewStep( void ) {
 	if ( !m_config.m_bLivePreviewEnabled || isComplete() ) {
 		return;
 	}
@@ -4262,7 +4263,7 @@ void T3DErosionJob::requestPreviewStep( void ) {
 	m_previewCondition.notify_all();
 }
 
-bool T3DErosionJob::verifySourceUnchanged( T3DData *const pData ) const {
+bool Terrain3DErosionJob::verifySourceUnchanged( Terrain3DData *const pData ) const {
 	if ( !pData || pData->getRegionCount() != ( int32_t )( m_regions.size() ) ) {
 		return false;
 	}
@@ -4273,7 +4274,7 @@ bool T3DErosionJob::verifySourceUnchanged( T3DData *const pData ) const {
 		if ( !pData->ensureCpuRegionResident( snapshot.m_location ) ) {
 			return false;
 		}
-		const Ref<T3DRegion> pRegion = pData->getRegion( snapshot.m_location );
+		const Ref<Terrain3DRegion> pRegion = pData->getRegion( snapshot.m_location );
 		if ( pRegion.is_null() || pRegion->getRegionSize() != m_nSourceRegionSize ||
 				!Math::is_equal_approx( pRegion->getVertexSpacing(), m_fVertexSpacing ) ) {
 			return false;
@@ -4295,7 +4296,7 @@ bool T3DErosionJob::verifySourceUnchanged( T3DData *const pData ) const {
 	return true;
 }
 
-float T3DErosionJob::sampleOutputCell( const FloatBuffer &rMap,
+float Terrain3DErosionJob::sampleOutputCell( const FloatBuffer &rMap,
 		const int32_t nRegionId,
 		const int32_t iBaseX,
 		const int32_t iBaseY,
@@ -4310,7 +4311,7 @@ float T3DErosionJob::sampleOutputCell( const FloatBuffer &rMap,
 	return rMap[( size_t )( resolved )];
 }
 
-float T3DErosionJob::sampleOutput( const FloatBuffer &rMap,
+float Terrain3DErosionJob::sampleOutput( const FloatBuffer &rMap,
 		const int32_t nRegionId,
 		const float fSourceX,
 		const float fSourceY ) const {
@@ -4332,7 +4333,7 @@ float T3DErosionJob::sampleOutput( const FloatBuffer &rMap,
 	return Math::lerp( Math::lerp( fV00, fV10, fFx ), Math::lerp( fV01, fV11, fFx ), fFy );
 }
 
-Error T3DErosionJob::apply( T3DData *const pData, const bool bForce ) {
+Error Terrain3DErosionJob::apply( Terrain3DData *const pData, const bool bForce ) {
 	std::lock_guard<std::mutex> applyLock( m_applyMutex );
 	setErrorMessage( String() );
 	if ( m_state.load() != STATE_COMPLETED ) {
@@ -4340,7 +4341,7 @@ Error T3DErosionJob::apply( T3DData *const pData, const bool bForce ) {
 		return ERR_UNCONFIGURED;
 	}
 	if ( !pData ) {
-		setErrorMessage( "Erosion apply requires a valid T3DData object." );
+		setErrorMessage( "Erosion apply requires a valid Terrain3DData object." );
 		return ERR_INVALID_PARAMETER;
 	}
 	if ( !m_config.m_bApplyHeight && !m_config.m_bMaterialOutputEnabled && !m_config.m_bOxidationColorEnabled ) {
@@ -4353,7 +4354,7 @@ Error T3DErosionJob::apply( T3DData *const pData, const bool bForce ) {
 		return ERR_INVALID_DATA;
 	}
 
-	eastl::vector<Ref<T3DRegion>> pApplyRegions;
+	eastl::vector<Ref<Terrain3DRegion>> pApplyRegions;
 	eastl::vector<Vector2i> applied_locations;
 	pApplyRegions.reserve( m_regions.size() );
 	applied_locations.reserve( m_regions.size() );
@@ -4362,7 +4363,7 @@ Error T3DErosionJob::apply( T3DData *const pData, const bool bForce ) {
 			setErrorMessage( "A terrain region could not be paged into the CPU map cache before erosion apply." );
 			return ERR_CANT_OPEN;
 		}
-		const Ref<T3DRegion> pRegion = pData->getRegion( snapshot.m_location );
+		const Ref<Terrain3DRegion> pRegion = pData->getRegion( snapshot.m_location );
 		if ( pRegion.is_null() ) {
 			setErrorMessage( "A terrain region captured by the erosion snapshot no longer exists." );
 			return ERR_DOES_NOT_EXIST;
@@ -4405,7 +4406,7 @@ Error T3DErosionJob::apply( T3DData *const pData, const bool bForce ) {
 	bool bAnyColorChanged = false;
 
 	for ( int32_t region_id = 0; region_id < ( int32_t )( pApplyRegions.size() ); ++region_id ) {
-		Ref<T3DRegion> pRegion = pApplyRegions[( size_t )( region_id )];
+		Ref<Terrain3DRegion> pRegion = pApplyRegions[( size_t )( region_id )];
 		if ( !pData->ensureCpuRegionResident( pRegion->getLocation() ) ) {
 			setErrorMessage( "A terrain region could not be paged into the CPU map cache during erosion apply." );
 			return ERR_CANT_OPEN;
@@ -4637,10 +4638,10 @@ Error T3DErosionJob::apply( T3DData *const pData, const bool bForce ) {
 	pData->addEditedArea( edited_area );
 
 	if ( bGeometryOrControlChanged && pData->m_pTerrain ) {
-		if ( T3DInstancer *const instancer = pData->m_pTerrain->getInstancer() ) {
+		if ( Terrain3DInstancer *const instancer = pData->m_pTerrain->getInstancer() ) {
 			instancer->updateTransforms( edited_area );
 		}
-		if ( T3DCollision *const collision = pData->m_pTerrain->getCollision(); collision && collision->isEnabled() ) {
+		if ( Terrain3DCollision *const collision = pData->m_pTerrain->getCollision(); collision && collision->isEnabled() ) {
 			if ( collision->isDynamicMode() ) {
 				collision->update( s_v2iMax, true );
 			} else {
@@ -4655,16 +4656,16 @@ Error T3DErosionJob::apply( T3DData *const pData, const bool bForce ) {
 	return OK;
 }
 
-bool T3DErosionJob::isSourceUnchanged( T3DData *pData ) const {
+bool Terrain3DErosionJob::isSourceUnchanged( Terrain3DData *pData ) const {
 	return pData && verifySourceUnchanged( pData );
 }
 
-bool T3DErosionJob::isComplete( void ) const {
+bool Terrain3DErosionJob::isComplete( void ) const {
 	const int32_t state = m_state.load();
 	return state == STATE_COMPLETED || state == STATE_APPLIED || state == STATE_CANCELLED || state == STATE_FAILED;
 }
 
-String T3DErosionJob::getStageName( void ) const {
+String Terrain3DErosionJob::getStageName( void ) const {
 	switch ( ( t3dStage_t )( m_stage.load() ) ) {
 		case STAGE_SNAPSHOT:
 			return "Snapshot";
@@ -4695,7 +4696,7 @@ String T3DErosionJob::getStageName( void ) const {
 	}
 }
 
-Dictionary T3DErosionJob::getStatistics( void ) const {
+Dictionary Terrain3DErosionJob::getStatistics( void ) const {
 	double fTotalEroded = 0.0;
 	double fTotalDeposited = 0.0;
 	float fMaximumLowering = 0.0f;
@@ -4742,12 +4743,12 @@ Dictionary T3DErosionJob::getStatistics( void ) const {
 	return statistics;
 }
 
-String T3DErosionJob::getErrorMessage( void ) const {
+String Terrain3DErosionJob::getErrorMessage( void ) const {
 	std::lock_guard<std::mutex> lock( m_statusMutex );
 	return m_errorMessage;
 }
 
-TypedArray<Vector2i> T3DErosionJob::getRegionLocations( void ) const {
+TypedArray<Vector2i> Terrain3DErosionJob::getRegionLocations( void ) const {
 	TypedArray<Vector2i> locations;
 	for ( const t3dRegionSnapshot_t &region : m_regions ) {
 		locations.push_back( region.m_location );
@@ -4755,14 +4756,14 @@ TypedArray<Vector2i> T3DErosionJob::getRegionLocations( void ) const {
 	return locations;
 }
 
-Ref<Image> T3DErosionJob::getInitialRegionHeightMap( const Vector2i &rRegionLocation,
+Ref<Image> Terrain3DErosionJob::getInitialRegionHeightMap( const Vector2i &rRegionLocation,
 		const bool bFullResolution ) const {
 	const int32_t state = m_state.load();
 	if ( ( state == STATE_RUNNING && m_previewRevision.load() <= 0 ) ||
 			( state != STATE_RUNNING && state != STATE_COMPLETED && state != STATE_APPLIED ) ) {
 		return Ref<Image>();
 	}
-	const int32_t map_index = T3DData::getRegionMapIndex( rRegionLocation );
+	const int32_t map_index = Terrain3DData::getRegionMapIndex( rRegionLocation );
 	if ( map_index < 0 ) {
 		return Ref<Image>();
 	}
@@ -4774,9 +4775,9 @@ Ref<Image> T3DErosionJob::getInitialRegionHeightMap( const Vector2i &rRegionLoca
 	return makeHeightImage( m_initialHeight, region_id, bFullResolution );
 }
 
-Ref<Image> T3DErosionJob::getPreviewRegionHeightMap( const Vector2i &rRegionLocation,
+Ref<Image> Terrain3DErosionJob::getPreviewRegionHeightMap( const Vector2i &rRegionLocation,
 		const bool bFullResolution ) const {
-	const int32_t map_index = T3DData::getRegionMapIndex( rRegionLocation );
+	const int32_t map_index = Terrain3DData::getRegionMapIndex( rRegionLocation );
 	if ( map_index < 0 ) {
 		return Ref<Image>();
 	}
@@ -4800,7 +4801,7 @@ Ref<Image> T3DErosionJob::getPreviewRegionHeightMap( const Vector2i &rRegionLoca
 	return makeHeightImage( m_previewHeight, region_id, bFullResolution );
 }
 
-Ref<Image> T3DErosionJob::getRegionOutputMap( const Vector2i &rRegionLocation,
+Ref<Image> Terrain3DErosionJob::getRegionOutputMap( const Vector2i &rRegionLocation,
 		const t3dOutputMap_t output,
 		const bool bFullResolution ) const {
 	if ( m_state.load() != STATE_COMPLETED && m_state.load() != STATE_APPLIED ) {
@@ -4809,7 +4810,7 @@ Ref<Image> T3DErosionJob::getRegionOutputMap( const Vector2i &rRegionLocation,
 	if ( output < 0 || output >= OUTPUT_MAX ) {
 		return Ref<Image>();
 	}
-	const int32_t map_index = T3DData::getRegionMapIndex( rRegionLocation );
+	const int32_t map_index = Terrain3DData::getRegionMapIndex( rRegionLocation );
 	if ( map_index < 0 ) {
 		return Ref<Image>();
 	}
@@ -4952,7 +4953,7 @@ Ref<Image> T3DErosionJob::getRegionOutputMap( const Vector2i &rRegionLocation,
 	return Image::create_from_data( size, size, false, Image::FORMAT_RF, image_data );
 }
 
-void T3DErosionJob::_bind_methods( void ) {
+void Terrain3DErosionJob::_bind_methods( void ) {
 	BIND_ENUM_CONSTANT( STATE_NEW );
 	BIND_ENUM_CONSTANT( STATE_READY );
 	BIND_ENUM_CONSTANT( STATE_RUNNING );
@@ -4986,37 +4987,37 @@ void T3DErosionJob::_bind_methods( void ) {
 	BIND_ENUM_CONSTANT( OUTPUT_MATERIAL_ID );
 	BIND_ENUM_CONSTANT( OUTPUT_MAX );
 
-	ClassDB::bind_method( D_METHOD( "run" ), &T3DErosionJob::run );
-	ClassDB::bind_method( D_METHOD( "cancel" ), &T3DErosionJob::cancel );
-	ClassDB::bind_method( D_METHOD( "set_preview_paused", "paused" ), &T3DErosionJob::setPreviewPaused );
-	ClassDB::bind_method( D_METHOD( "request_preview_step" ), &T3DErosionJob::requestPreviewStep );
-	ClassDB::bind_method( D_METHOD( "apply", "data", "force" ), &T3DErosionJob::apply, DEFVAL( false ) );
-	ClassDB::bind_method( D_METHOD( "get_state" ), &T3DErosionJob::getState );
-	ClassDB::bind_method( D_METHOD( "get_progress" ), &T3DErosionJob::getProgress );
-	ClassDB::bind_method( D_METHOD( "get_stage_name" ), &T3DErosionJob::getStageName );
-	ClassDB::bind_method( D_METHOD( "get_error_message" ), &T3DErosionJob::getErrorMessage );
-	ClassDB::bind_method( D_METHOD( "is_complete" ), &T3DErosionJob::isComplete );
-	ClassDB::bind_method( D_METHOD( "is_source_unchanged", "data" ), &T3DErosionJob::isSourceUnchanged );
-	ClassDB::bind_method( D_METHOD( "was_cancelled" ), &T3DErosionJob::wasCancelled );
-	ClassDB::bind_method( D_METHOD( "get_effective_resolution_scale" ), &T3DErosionJob::getEffectiveResolutionScale );
-	ClassDB::bind_method( D_METHOD( "get_completed_steps" ), &T3DErosionJob::getCompletedSteps );
-	ClassDB::bind_method( D_METHOD( "is_live_preview_enabled" ), &T3DErosionJob::isLivePreviewEnabled );
-	ClassDB::bind_method( D_METHOD( "is_preview_paused" ), &T3DErosionJob::isPreviewPaused );
-	ClassDB::bind_method( D_METHOD( "is_preview_waiting" ), &T3DErosionJob::isPreviewWaiting );
-	ClassDB::bind_method( D_METHOD( "get_preview_revision" ), &T3DErosionJob::getPreviewRevision );
-	ClassDB::bind_method( D_METHOD( "get_preview_step" ), &T3DErosionJob::getPreviewStep );
-	ClassDB::bind_method( D_METHOD( "get_simulation_steps" ), &T3DErosionJob::getSimulationSteps );
-	ClassDB::bind_method( D_METHOD( "get_simulation_region_size" ), &T3DErosionJob::getSimulationRegionSize );
-	ClassDB::bind_method( D_METHOD( "get_preview_cell_size" ), &T3DErosionJob::getPreviewCellSize );
-	ClassDB::bind_method( D_METHOD( "get_statistics" ), &T3DErosionJob::getStatistics );
-	ClassDB::bind_method( D_METHOD( "get_region_locations" ), &T3DErosionJob::getRegionLocations );
+	ClassDB::bind_method( D_METHOD( "run" ), &Terrain3DErosionJob::run );
+	ClassDB::bind_method( D_METHOD( "cancel" ), &Terrain3DErosionJob::cancel );
+	ClassDB::bind_method( D_METHOD( "set_preview_paused", "paused" ), &Terrain3DErosionJob::setPreviewPaused );
+	ClassDB::bind_method( D_METHOD( "request_preview_step" ), &Terrain3DErosionJob::requestPreviewStep );
+	ClassDB::bind_method( D_METHOD( "apply", "data", "force" ), &Terrain3DErosionJob::apply, DEFVAL( false ) );
+	ClassDB::bind_method( D_METHOD( "get_state" ), &Terrain3DErosionJob::getState );
+	ClassDB::bind_method( D_METHOD( "get_progress" ), &Terrain3DErosionJob::getProgress );
+	ClassDB::bind_method( D_METHOD( "get_stage_name" ), &Terrain3DErosionJob::getStageName );
+	ClassDB::bind_method( D_METHOD( "get_error_message" ), &Terrain3DErosionJob::getErrorMessage );
+	ClassDB::bind_method( D_METHOD( "is_complete" ), &Terrain3DErosionJob::isComplete );
+	ClassDB::bind_method( D_METHOD( "is_source_unchanged", "data" ), &Terrain3DErosionJob::isSourceUnchanged );
+	ClassDB::bind_method( D_METHOD( "was_cancelled" ), &Terrain3DErosionJob::wasCancelled );
+	ClassDB::bind_method( D_METHOD( "get_effective_resolution_scale" ), &Terrain3DErosionJob::getEffectiveResolutionScale );
+	ClassDB::bind_method( D_METHOD( "get_completed_steps" ), &Terrain3DErosionJob::getCompletedSteps );
+	ClassDB::bind_method( D_METHOD( "is_live_preview_enabled" ), &Terrain3DErosionJob::isLivePreviewEnabled );
+	ClassDB::bind_method( D_METHOD( "is_preview_paused" ), &Terrain3DErosionJob::isPreviewPaused );
+	ClassDB::bind_method( D_METHOD( "is_preview_waiting" ), &Terrain3DErosionJob::isPreviewWaiting );
+	ClassDB::bind_method( D_METHOD( "get_preview_revision" ), &Terrain3DErosionJob::getPreviewRevision );
+	ClassDB::bind_method( D_METHOD( "get_preview_step" ), &Terrain3DErosionJob::getPreviewStep );
+	ClassDB::bind_method( D_METHOD( "get_simulation_steps" ), &Terrain3DErosionJob::getSimulationSteps );
+	ClassDB::bind_method( D_METHOD( "get_simulation_region_size" ), &Terrain3DErosionJob::getSimulationRegionSize );
+	ClassDB::bind_method( D_METHOD( "get_preview_cell_size" ), &Terrain3DErosionJob::getPreviewCellSize );
+	ClassDB::bind_method( D_METHOD( "get_statistics" ), &Terrain3DErosionJob::getStatistics );
+	ClassDB::bind_method( D_METHOD( "get_region_locations" ), &Terrain3DErosionJob::getRegionLocations );
 	ClassDB::bind_method( D_METHOD( "get_initial_region_height_map", "region_location", "full_resolution" ),
-			&T3DErosionJob::getInitialRegionHeightMap,
+			&Terrain3DErosionJob::getInitialRegionHeightMap,
 			DEFVAL( false ) );
 	ClassDB::bind_method( D_METHOD( "get_preview_region_height_map", "region_location", "full_resolution" ),
-			&T3DErosionJob::getPreviewRegionHeightMap,
+			&Terrain3DErosionJob::getPreviewRegionHeightMap,
 			DEFVAL( false ) );
 	ClassDB::bind_method( D_METHOD( "get_region_output_map", "region_location", "output", "full_resolution" ),
-			&T3DErosionJob::getRegionOutputMap,
+			&Terrain3DErosionJob::getRegionOutputMap,
 			DEFVAL( false ) );
 }

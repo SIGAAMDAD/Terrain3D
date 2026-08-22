@@ -61,7 +61,7 @@ static inline bool t3dPerformanceProfileValueMatches( const Variant &rCurrent,
 }
 
 static inline String t3dPerformanceProfileOwnerName( const t3dPerformanceProfileOwner_t owner ) {
-	return owner == T3D_PROFILE_OWNER_MATERIAL ? "T3DMaterial" : "T3DTerrain";
+	return owner == T3D_PROFILE_OWNER_MATERIAL ? "Terrain3DMaterial" : "Terrain3D";
 }
 
 #define TERRAIN3D_ALIGN_BAKE_TASK_OFFSET( value ) \

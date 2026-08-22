@@ -71,7 +71,7 @@ static bool t3dHlodRuntimeCodecParseEntry( const Variant &rValue, t3dHlodRuntime
 	return !rEntry.m_packagePath.is_empty();
 }
 
-PackedByteArray T3DHLODRuntimeCodec::encode( const Array &rEntries,
+PackedByteArray Terrain3DHLODRuntimeCodec::encode( const Array &rEntries,
 		const PackedByteArray &rInstancerMinLevels,
 		const PackedInt32Array &rNodeRegionIndices,
 		const PackedInt64Array &rNodeSpawnIds,
@@ -198,7 +198,7 @@ PackedByteArray T3DHLODRuntimeCodec::encode( const Array &rEntries,
 	return writer.complete() ? out : PackedByteArray();
 }
 
-bool T3DHLODRuntimeCodec::decode( const PackedByteArray &rBlob, t3dHlodRuntimeData_t &rData ) {
+bool Terrain3DHLODRuntimeCodec::decode( const PackedByteArray &rBlob, t3dHlodRuntimeData_t &rData ) {
 	rData = t3dHlodRuntimeData_t{};
 	if ( rBlob.size() < 24 ) {
 		return false;

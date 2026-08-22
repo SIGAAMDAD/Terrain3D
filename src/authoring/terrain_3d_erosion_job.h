@@ -21,7 +21,7 @@
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <mutex>
 
-class T3DData;
+class Terrain3DData;
 typedef struct t3dErosionKernels_s t3dErosionKernels_t;
 
 typedef enum t3dJobState_e {
@@ -316,18 +316,18 @@ typedef struct t3dConfig_s {
 	int32_t m_nCurveStride = 0;
 } t3dConfig_t;
 
-class T3DErosionJob : public RefCounted {
-	GDCLASS( T3DErosionJob, RefCounted );
+class Terrain3DErosionJob : public RefCounted {
+	GDCLASS( Terrain3DErosionJob, RefCounted );
 	CLASS_NAME();
-	friend class T3DData;
+	friend class Terrain3DData;
 	friend struct t3dErosionKernels_s;
 
 public:
 private:
-	using FloatBuffer = T3DArenaBuffer<float>;
-	using HalfBuffer = T3DHalfBuffer;
-	using ByteBuffer = T3DArenaBuffer<uint8_t>;
-	using IndexBuffer = T3DArenaBuffer<int64_t>;
+	using FloatBuffer = Terrain3DArenaBuffer<float>;
+	using HalfBuffer = Terrain3DHalfBuffer;
+	using ByteBuffer = Terrain3DArenaBuffer<uint8_t>;
+	using IndexBuffer = Terrain3DArenaBuffer<int64_t>;
 
 	t3dConfig_t m_config;
 	eastl::vector<t3dRegionSnapshot_t> m_regions;
@@ -355,10 +355,10 @@ private:
 
 	// The persistent and scratch maps use independent exact-size slabs. Both
 	// reject upstream allocations, so the configured budget is enforceable.
-	T3DLinearArena m_persistentMemory;
-	T3DLinearArena m_phaseMemory;
-	T3DLinearArena m_resultMemory;
-	T3DLinearArena m_previewMemory;
+	Terrain3DLinearArena m_persistentMemory;
+	Terrain3DLinearArena m_phaseMemory;
+	Terrain3DLinearArena m_resultMemory;
+	Terrain3DLinearArena m_previewMemory;
 	bool m_bResultsCompacted = false;
 	uint64_t m_nRetainedResultBytes = 0u;
 
@@ -454,22 +454,22 @@ private:
 	float m_fMaximumRaising = 0.0f;
 	std::atomic<int32_t> m_nCompletedSteps{ 0 };
 
-	Error setup( T3DData *pData, const Ref<T3DErosionSettings> &rSettings );
-	void copyConfig( const Ref<T3DErosionSettings> &rSettings );
-	void sampleCurves( const Ref<T3DErosionSettings> &rSettings );
+	Error setup( Terrain3DData *pData, const Ref<Terrain3DErosionSettings> &rSettings );
+	void copyConfig( const Ref<Terrain3DErosionSettings> &rSettings );
+	void sampleCurves( const Ref<Terrain3DErosionSettings> &rSettings );
 	float sampleCurve( t3dCurveId_t curve, int32_t nStep ) const;
 	int32_t selectResolutionScale( int32_t nRegionCount ) const;
 	uint64_t estimateMemoryBytes( int32_t nRegionCount, int32_t nScale ) const;
 	bool allocateBuffers( void );
 	bool compactCompletedResults( void );
-	bool captureSourceRegions( T3DData *pData );
+	bool captureSourceRegions( Terrain3DData *pData );
 	static bool regionSnapshotLess( const t3dRegionSnapshot_t &rA, const t3dRegionSnapshot_t &rB );
 	static float
 	sampleImageSnapshot( const t3dImageSnapshot_t &rImage, const Rect2 &rWorldRect, const Vector2 &rWorldPosition );
 	bool captureImageSnapshot( const Ref<Image> &rImage, t3dImageSnapshot_t &rSnapshot, const char *pszLabel );
 	bool buildSimulationSnapshot( void );
 	void releaseSourceSnapshots( void );
-	bool verifySourceUnchanged( T3DData *pData ) const;
+	bool verifySourceUnchanged( Terrain3DData *pData ) const;
 	uint64_t hashRegionImages( const Ref<Image> &rHeight, const Ref<Image> &rControl ) const;
 	int64_t neighborIndex( size_t iIndex, int32_t nDx, int32_t nDy ) const;
 	uint64_t stochasticIndex( size_t iIndex ) const;
@@ -481,8 +481,8 @@ private:
 			int32_t iX,
 			int32_t iY ) const;
 	float sampleOutput( const FloatBuffer &rMap, int32_t nRegionId, float fSourceX, float fSourceY ) const;
-	bool snapshotTextureProfiles( T3DData *pData );
-	uint64_t hashTextureProfiles( T3DData *pData ) const;
+	bool snapshotTextureProfiles( Terrain3DData *pData );
+	uint64_t hashTextureProfiles( Terrain3DData *pData ) const;
 	int32_t getTransitionTarget( int32_t nTextureId, t3dMaterialTransitionKind_t kind ) const;
 	void partitionMaterial( float fGrainSize, float fAmount, float &fCoarse, float &fSand, float &fFine ) const;
 	float getLooseMaterial( size_t iIndex ) const;
@@ -499,14 +499,14 @@ private:
 	Ref<Image> makeHeightImage( const FloatBuffer &rSource, int32_t nRegionId, bool bFullResolution ) const;
 
 public:
-	T3DErosionJob( void );
-	~T3DErosionJob( void ) = default;
+	Terrain3DErosionJob( void );
+	~Terrain3DErosionJob( void ) = default;
 
 	void run( void );
 	void cancel( void );
 	void setPreviewPaused( bool bPaused );
 	void requestPreviewStep( void );
-	Error apply( T3DData *pData, bool bForce = false );
+	Error apply( Terrain3DData *pData, bool bForce = false );
 	EA_FORCE_INLINE t3dJobState_t getState( void ) const {
 		return ( t3dJobState_t )( m_state.load() );
 	}
@@ -516,7 +516,7 @@ public:
 	String getStageName( void ) const;
 	String getErrorMessage( void ) const;
 	bool isComplete( void ) const;
-	bool isSourceUnchanged( T3DData *pData ) const;
+	bool isSourceUnchanged( Terrain3DData *pData ) const;
 	EA_FORCE_INLINE bool wasCancelled( void ) const {
 		return m_state.load() == STATE_CANCELLED;
 	}

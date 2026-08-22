@@ -5,9 +5,11 @@
 #include "memory/terrain_3d_memory.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstring>
 #include <godot_cpp/classes/image.hpp>
 #include <limits>
+#include <mutex>
 #include <new>
 
 static constexpr uint8_t s_nResidentSlotFree = 0u;
@@ -15,16 +17,16 @@ static constexpr uint8_t s_nResidentSlotStaging = 1u;
 static constexpr uint8_t s_nResidentSlotPublished = 2u;
 static constexpr uint8_t s_nResidentSlotRetiring = 3u;
 
-T3DResidentMapLease::T3DResidentMapLease( T3DResidentRegionPool *const pPool,
+Terrain3DResidentMapLease::Terrain3DResidentMapLease( Terrain3DResidentRegionPool *const pPool,
 		const int iSlot,
 		const uint32_t nGeneration,
 		const t3dResidentMapView_t &rView ) :
 		m_pPool( pPool ), m_iSlot( ( int16_t )( iSlot ) ), m_nGeneration( nGeneration ), m_view( rView ) {}
-T3DResidentMapLease::~T3DResidentMapLease( void ) {
+Terrain3DResidentMapLease::~Terrain3DResidentMapLease( void ) {
 	reset();
 }
 
-T3DResidentMapLease::T3DResidentMapLease( T3DResidentMapLease &&rOther ) noexcept :
+Terrain3DResidentMapLease::Terrain3DResidentMapLease( Terrain3DResidentMapLease &&rOther ) noexcept :
 		m_pPool( rOther.m_pPool ),
 		m_iSlot( rOther.m_iSlot ),
 		m_nGeneration( rOther.m_nGeneration ),
@@ -35,7 +37,7 @@ T3DResidentMapLease::T3DResidentMapLease( T3DResidentMapLease &&rOther ) noexcep
 	rOther.m_view = {};
 }
 
-T3DResidentMapLease &T3DResidentMapLease::operator=( T3DResidentMapLease &&rOther ) noexcept {
+Terrain3DResidentMapLease &Terrain3DResidentMapLease::operator=( Terrain3DResidentMapLease &&rOther ) noexcept {
 	if ( this == &rOther ) {
 		return *this;
 	}
@@ -51,7 +53,7 @@ T3DResidentMapLease &T3DResidentMapLease::operator=( T3DResidentMapLease &&rOthe
 	return *this;
 }
 
-void T3DResidentMapLease::reset( void ) {
+void Terrain3DResidentMapLease::reset( void ) {
 	if ( m_pPool && m_iSlot >= 0 ) {
 		m_pPool->releaseLease( m_iSlot, m_nGeneration );
 	}
@@ -61,7 +63,7 @@ void T3DResidentMapLease::reset( void ) {
 	m_view = {};
 }
 
-bool T3DResidentRegionPool::alignUp( const size_t nValue, const size_t nAlignment, size_t &nAligned ) {
+bool Terrain3DResidentRegionPool::alignUp( const size_t nValue, const size_t nAlignment, size_t &nAligned ) {
 	if ( nAlignment == 0u || ( nAlignment & ( nAlignment - 1u ) ) != 0u ) {
 		return false;
 	}
@@ -73,7 +75,7 @@ bool T3DResidentRegionPool::alignUp( const size_t nValue, const size_t nAlignmen
 	return true;
 }
 
-bool T3DResidentRegionPool::buildSlotLayout( const int nRegionSize,
+bool Terrain3DResidentRegionPool::buildSlotLayout( const int nRegionSize,
 		const uint32_t nChannels,
 		t3dSlotLayout_t &rLayout,
 		size_t &nTexelCount ) {
@@ -125,7 +127,7 @@ bool T3DResidentRegionPool::buildSlotLayout( const int nRegionSize,
 	return rLayout.m_nStride > 0u;
 }
 
-bool T3DResidentRegionPool::addEstimatedOptionalBytes( const uint32_t nChannels,
+bool Terrain3DResidentRegionPool::addEstimatedOptionalBytes( const uint32_t nChannels,
 		const uint32_t nChannel,
 		const size_t nTexelCount,
 		const size_t nBytesPerTexel,
@@ -145,7 +147,7 @@ bool T3DResidentRegionPool::addEstimatedOptionalBytes( const uint32_t nChannels,
 	return true;
 }
 
-size_t T3DResidentRegionPool::estimateSlotBytes( const int nRegionSize, const uint32_t nChannels ) {
+size_t Terrain3DResidentRegionPool::estimateSlotBytes( const int nRegionSize, const uint32_t nChannels ) {
 	t3dSlotLayout_t layout;
 	size_t texel_count = 0u;
 	if ( !buildSlotLayout( nRegionSize, nChannels, layout, texel_count ) ) {
@@ -160,41 +162,41 @@ bool t3dAlignedAllocation_t::allocate( const size_t nRequestedBytes, const size_
 			nRequestedBytes > std::numeric_limits<size_t>::max() - ( nAlignment - 1u ) ) {
 		return false;
 	}
-	pRaw = t3dMemoryAllocate( nRequestedBytes + nAlignment - 1u );
-	if ( !pRaw ) {
+	m_pRaw = t3dMemoryAllocate( nRequestedBytes + nAlignment - 1u );
+	if ( !m_pRaw ) {
 		return false;
 	}
-	const uintptr_t start = ( uintptr_t )( pRaw );
+	const uintptr_t start = ( uintptr_t )( m_pRaw );
 	const uintptr_t mask = ( uintptr_t )( nAlignment - 1u );
-	pAligned = ( uint8_t * )( ( start + mask ) & ~mask );
-	nBytes = nRequestedBytes;
-	bOwned = true;
-	std::memset( pAligned, 0, nBytes );
+	m_pAligned = ( uint8_t * )( ( start + mask ) & ~mask );
+	m_nBytes = nRequestedBytes;
+	m_bOwned = true;
+	std::memset( m_pAligned, 0, m_nBytes );
 	return true;
 }
 
 void t3dAlignedAllocation_t::release( void ) {
-	if ( bOwned ) {
-		t3dMemoryRelease( pRaw );
+	if ( m_bOwned ) {
+		t3dMemoryRelease( m_pRaw );
 	}
-	pRaw = nullptr;
-	pAligned = nullptr;
-	nBytes = 0u;
-	bOwned = false;
+	m_pRaw = nullptr;
+	m_pAligned = nullptr;
+	m_nBytes = 0u;
+	m_bOwned = false;
 }
 
-T3DResidentRegionPool::~T3DResidentRegionPool( void ) {
+Terrain3DResidentRegionPool::~Terrain3DResidentRegionPool( void ) {
 	clear();
 }
 
-int T3DResidentRegionPool::locationIndex( const Vector2i &rLocation ) {
+int Terrain3DResidentRegionPool::locationIndex( const Vector2i &rLocation ) {
 	const int x = rLocation.x + s_nResidentWorldHalf;
 	const int y = rLocation.y + s_nResidentWorldHalf;
 	return ( x < 0 || x >= s_nResidentWorldSize || y < 0 || y >= s_nResidentWorldSize ) ? -1
 																						: y * s_nResidentWorldSize + x;
 }
 
-bool T3DResidentRegionPool::hasPinnedSlotsUnlocked( void ) const {
+bool Terrain3DResidentRegionPool::hasPinnedSlotsUnlocked( void ) const {
 	if ( !m_pSlots ) {
 		return false;
 	}
@@ -206,7 +208,7 @@ bool T3DResidentRegionPool::hasPinnedSlotsUnlocked( void ) const {
 	return false;
 }
 
-bool T3DResidentRegionPool::allocateSlotsUnlocked( const int nCapacity ) {
+bool Terrain3DResidentRegionPool::allocateSlotsUnlocked( const int nCapacity ) {
 	releaseSlotsUnlocked();
 	if ( nCapacity <= 0 || ( size_t )( nCapacity ) > std::numeric_limits<size_t>::max() / sizeof( t3dSlot_t ) ) {
 		return false;
@@ -222,7 +224,7 @@ bool T3DResidentRegionPool::allocateSlotsUnlocked( const int nCapacity ) {
 	return true;
 }
 
-bool T3DResidentRegionPool::assignMapBankPointersUnlocked( void ) {
+bool Terrain3DResidentRegionPool::assignMapBankPointersUnlocked( void ) {
 	if ( !m_pSlots || !m_mapMemory.m_pAligned || m_nCapacity <= 0 ) {
 		return false;
 	}
@@ -260,7 +262,7 @@ bool T3DResidentRegionPool::assignMapBankPointersUnlocked( void ) {
 	return true;
 }
 
-void T3DResidentRegionPool::releaseSlotsUnlocked( void ) {
+void Terrain3DResidentRegionPool::releaseSlotsUnlocked( void ) {
 	if ( !m_pSlots ) {
 		return;
 	}
@@ -275,7 +277,7 @@ void T3DResidentRegionPool::releaseSlotsUnlocked( void ) {
 	m_bSlotsOwned = false;
 }
 
-void T3DResidentRegionPool::clearUnlocked( void ) {
+void Terrain3DResidentRegionPool::clearUnlocked( void ) {
 	releaseSlotsUnlocked();
 	m_mapMemory.release();
 	for ( std::atomic<int16_t> &mapping : m_szLocationToSlot ) {
@@ -291,7 +293,7 @@ void T3DResidentRegionPool::clearUnlocked( void ) {
 	m_iClockHand = 0;
 }
 
-bool T3DResidentRegionPool::configure( const int nRegionSize, const int nCapacity, const uint32_t nChannels ) {
+bool Terrain3DResidentRegionPool::configure( const int nRegionSize, const int nCapacity, const uint32_t nChannels ) {
 	std::lock_guard<std::mutex> lock( m_mutex );
 	if ( nRegionSize <= 0 || nCapacity <= 0 || nCapacity > s_nResidentWorldSlotCount ||
 			( nChannels & RESIDENT_CHANNEL_HEIGHT ) == 0u ) {
@@ -349,7 +351,7 @@ bool T3DResidentRegionPool::configure( const int nRegionSize, const int nCapacit
 	return true;
 }
 
-bool T3DResidentRegionPool::resetSlotStorage( const int iSlot, const bool bZero ) {
+bool Terrain3DResidentRegionPool::resetSlotStorage( const int iSlot, const bool bZero ) {
 	if ( !m_pSlots || iSlot < 0 || iSlot >= m_nCapacity ) {
 		return false;
 	}
@@ -370,7 +372,7 @@ bool T3DResidentRegionPool::resetSlotStorage( const int iSlot, const bool bZero 
 	return slot.m_pHeight != nullptr;
 }
 
-void T3DResidentRegionPool::resetResidency( void ) {
+void Terrain3DResidentRegionPool::resetResidency( void ) {
 	std::lock_guard<std::mutex> lock( m_mutex );
 	if ( !m_pSlots ) {
 		return;
@@ -389,12 +391,12 @@ void T3DResidentRegionPool::resetResidency( void ) {
 	m_iClockHand = 0;
 }
 
-void T3DResidentRegionPool::clear( void ) {
+void Terrain3DResidentRegionPool::clear( void ) {
 	std::lock_guard<std::mutex> lock( m_mutex );
 	clearUnlocked();
 }
 
-int T3DResidentRegionPool::chooseReplacementSlotUnlocked( void ) {
+int Terrain3DResidentRegionPool::chooseReplacementSlotUnlocked( void ) {
 	if ( !m_pSlots || m_nCapacity <= 0 ) {
 		return -1;
 	}
@@ -439,7 +441,7 @@ int T3DResidentRegionPool::chooseReplacementSlotUnlocked( void ) {
 	return -1;
 }
 
-int T3DResidentRegionPool::findSlotUnlocked( const Vector2i &rLocation ) const {
+int Terrain3DResidentRegionPool::findSlotUnlocked( const Vector2i &rLocation ) const {
 	const int index = locationIndex( rLocation );
 	if ( index < 0 ) {
 		return -1;
@@ -454,7 +456,7 @@ int T3DResidentRegionPool::findSlotUnlocked( const Vector2i &rLocation ) const {
 			: -1;
 }
 
-void T3DResidentRegionPool::assignSlot( const int iSlot, const Vector2i &rLocation ) {
+void Terrain3DResidentRegionPool::assignSlot( const int iSlot, const Vector2i &rLocation ) {
 	t3dSlot_t &slot = m_pSlots[( size_t )( iSlot )];
 	if ( slot.m_nState.load( std::memory_order_acquire ) != s_nResidentSlotFree ) {
 		const int old_index = locationIndex( slot.m_location );
@@ -473,7 +475,7 @@ void T3DResidentRegionPool::assignSlot( const int iSlot, const Vector2i &rLocati
 	slot.m_nState.store( s_nResidentSlotStaging, std::memory_order_release );
 }
 
-void T3DResidentRegionPool::publishSlot( const int iSlot ) {
+void Terrain3DResidentRegionPool::publishSlot( const int iSlot ) {
 	t3dSlot_t &slot = m_pSlots[( size_t )( iSlot )];
 	const int index = locationIndex( slot.m_location );
 	if ( index < 0 ) {
@@ -483,7 +485,7 @@ void T3DResidentRegionPool::publishSlot( const int iSlot ) {
 	m_szLocationToSlot[index].store( ( int16_t )( iSlot ), std::memory_order_release );
 }
 
-void T3DResidentRegionPool::retireSlotUnlocked( const int iSlot ) {
+void Terrain3DResidentRegionPool::retireSlotUnlocked( const int iSlot ) {
 	if ( !m_pSlots || iSlot < 0 || iSlot >= m_nCapacity ) {
 		return;
 	}
@@ -506,7 +508,7 @@ void T3DResidentRegionPool::retireSlotUnlocked( const int iSlot ) {
 	slot.m_nState.store( s_nResidentSlotFree, std::memory_order_release );
 }
 
-void T3DResidentRegionPool::releaseLease( const int iSlot, const uint32_t nGeneration ) {
+void Terrain3DResidentRegionPool::releaseLease( const int iSlot, const uint32_t nGeneration ) {
 	if ( !m_pSlots || iSlot < 0 || iSlot >= m_nCapacity ) {
 		return;
 	}
@@ -521,12 +523,12 @@ void T3DResidentRegionPool::releaseLease( const int iSlot, const uint32_t nGener
 	}
 }
 
-bool T3DResidentRegionPool::copyMap( const int iSlot, const T3DRegion *pRegion, const t3dMapType_t eType ) {
+bool Terrain3DResidentRegionPool::copyMap( const int iSlot, const Terrain3DRegion *pRegion, const t3dMapType_t eType ) {
 	return copyMapRect( iSlot, pRegion, eType, Rect2i( s_v2iZero, V2I( m_nRegionSize ) ) );
 }
 
-bool T3DResidentRegionPool::copyMapRect( const int iSlot,
-		const T3DRegion *pRegion,
+bool Terrain3DResidentRegionPool::copyMapRect( const int iSlot,
+		const Terrain3DRegion *pRegion,
 		const t3dMapType_t eType,
 		const Rect2i &rDirtyRect ) {
 	if ( !pRegion || iSlot < 0 || iSlot >= m_nCapacity ) {
@@ -607,11 +609,11 @@ bool T3DResidentRegionPool::copyMapRect( const int iSlot,
 	return true;
 }
 
-bool T3DResidentRegionPool::copyDerived( const int iSlot, const T3DRegion *pRegion ) {
+bool Terrain3DResidentRegionPool::copyDerived( const int iSlot, const Terrain3DRegion *pRegion ) {
 	return copyDerivedRect( iSlot, pRegion, Rect2i( s_v2iZero, V2I( m_nRegionSize ) ) );
 }
 
-bool T3DResidentRegionPool::copyDerivedRect( const int iSlot, const T3DRegion *pRegion, const Rect2i &rDirtyRect ) {
+bool Terrain3DResidentRegionPool::copyDerivedRect( const int iSlot, const Terrain3DRegion *pRegion, const Rect2i &rDirtyRect ) {
 	if ( !pRegion || iSlot < 0 || iSlot >= m_nCapacity ) {
 		return false;
 	}
@@ -653,7 +655,7 @@ bool T3DResidentRegionPool::copyDerivedRect( const int iSlot, const T3DRegion *p
 	return true;
 }
 
-t3dResidentMapView_t T3DResidentRegionPool::getView( const int iSlot ) const {
+t3dResidentMapView_t Terrain3DResidentRegionPool::getView( const int iSlot ) const {
 	if ( iSlot < 0 || iSlot >= m_nCapacity ||
 			m_pSlots[( size_t )( iSlot )].m_nState.load( std::memory_order_acquire ) != s_nResidentSlotPublished ) {
 		return {};
@@ -667,7 +669,7 @@ t3dResidentMapView_t T3DResidentRegionPool::getView( const int iSlot ) const {
 		slot.m_nGeneration.load( std::memory_order_acquire ) };
 }
 
-T3DResidentMapLease T3DResidentRegionPool::acquire( const Vector2i &rLocation, const T3DRegion *pRegion ) {
+Terrain3DResidentMapLease Terrain3DResidentRegionPool::acquire( const Vector2i &rLocation, const Terrain3DRegion *pRegion ) {
 	( void )pRegion;
 	const int index = locationIndex( rLocation );
 	if ( index < 0 || !m_pSlots ) {
@@ -699,10 +701,10 @@ T3DResidentMapLease T3DResidentRegionPool::acquire( const Vector2i &rLocation, c
 		entry.m_nPinCount.fetch_sub( 1u, std::memory_order_release );
 		return {};
 	}
-	return T3DResidentMapLease( this, existing, generation, view );
+	return Terrain3DResidentMapLease( this, existing, generation, view );
 }
 
-bool T3DResidentRegionPool::ensureResident( const Vector2i &rLocation, const T3DRegion *pRegion ) {
+bool Terrain3DResidentRegionPool::ensureResident( const Vector2i &rLocation, const Terrain3DRegion *pRegion ) {
 	if ( !pRegion || pRegion->isDeleted() ) {
 		return false;
 	}
@@ -725,8 +727,8 @@ bool T3DResidentRegionPool::ensureResident( const Vector2i &rLocation, const T3D
 	return true;
 }
 
-void T3DResidentRegionPool::syncMap( const Vector2i &rLocation,
-		const T3DRegion *pRegion,
+void Terrain3DResidentRegionPool::syncMap( const Vector2i &rLocation,
+		const Terrain3DRegion *pRegion,
 		const t3dMapType_t eType,
 		const Rect2i &rDirtyRect ) {
 	std::lock_guard<std::mutex> lock( m_mutex );
@@ -750,8 +752,8 @@ void T3DResidentRegionPool::syncMap( const Vector2i &rLocation,
 	}
 }
 
-void T3DResidentRegionPool::syncDerived( const Vector2i &rLocation,
-		const T3DRegion *pRegion,
+void Terrain3DResidentRegionPool::syncDerived( const Vector2i &rLocation,
+		const Terrain3DRegion *pRegion,
 		const Rect2i &rDirtyRect ) {
 	std::lock_guard<std::mutex> lock( m_mutex );
 	const int slot = findSlotUnlocked( rLocation );
@@ -774,7 +776,7 @@ void T3DResidentRegionPool::syncDerived( const Vector2i &rLocation,
 	}
 }
 
-void T3DResidentRegionPool::invalidate( const Vector2i &rLocation ) {
+void Terrain3DResidentRegionPool::invalidate( const Vector2i &rLocation ) {
 	std::lock_guard<std::mutex> lock( m_mutex );
 	const int slot = findSlotUnlocked( rLocation );
 	if ( slot >= 0 ) {

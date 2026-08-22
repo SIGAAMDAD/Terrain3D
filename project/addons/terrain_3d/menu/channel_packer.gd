@@ -25,7 +25,7 @@ enum OutputFormat {
 	DDS_GPU_NATIVE,
 }
 
-var plugin: T3DEditorPluginBase
+var plugin: Terrain3DEditorPluginBase
 var window: Window
 var save_file_dialog: EditorFileDialog
 var open_file_dialog: EditorFileDialog
@@ -284,7 +284,7 @@ func _init_texture_picker(p_parent: Node, p_image_index: int) -> void:
 	clear_button.tooltip_text = "Clear the loaded %s source without modifying the file on disk." % source_name
 	texture_button_base.tooltip_text = "Preview for the %s source. Click to browse, or drop one image file here." % source_name
 	texture_button_base.set_script(load(DRAG_DROP_SCRIPT) as GDScript)
-	var texture_button: T3DChannelPackerDragDrop = texture_button_base as T3DChannelPackerDragDrop
+	var texture_button: Terrain3DChannelPackerDragDrop = texture_button_base as Terrain3DChannelPackerDragDrop
 	if texture_button == null:
 		push_error("Unable to initialize Terrain3D channel-packer drag/drop button")
 		return
@@ -395,7 +395,7 @@ func _init_texture_picker(p_parent: Node, p_image_index: int) -> void:
 				_show_message(ERROR, "Albedo Image Required for Operation")
 			else:
 				line_edit.text = "Generated Height"
-				var height_texture: Image = T3DUtil.luminance_to_height(images[IMAGE_ALBEDO])
+				var height_texture: Image = Terrain3DUtil.luminance_to_height(images[IMAGE_ALBEDO])
 				if height_texture.is_empty():
 					_show_message(ERROR, "Height Texture Generation error")
 				# blur the image by resizing down and back..
@@ -535,8 +535,8 @@ func _on_save_file_selected(p_dst_path: String) -> void:
 		queue_pack_normal_roughness = false
 		packing_albedo = false
 		_configure_save_dialog(true)
-		save_file_dialog.call_deferred("popup_centered_ratio")
-		save_file_dialog.call_deferred("grab_focus")
+		save_file_dialog.popup_centered_ratio.call_deferred()
+		save_file_dialog.grab_focus.call_deferred()
 
 
 func _target_size_for(p_image: Image) -> Vector2i:
@@ -604,12 +604,12 @@ func _pack_albedo_displacement_dds(p_albedo: Image, p_height: Image, p_dst_path:
 	# height conversion must not leave a valid-looking orphan albedo asset behind.
 	# Reuse the same native alpha-channel transformation used by PNG output so
 	# Depth->Height and Normalize Height have identical semantics in DDS mode.
-	var transformed_height: Image = T3DUtil.pack_image(height, height, null, false,
+	var transformed_height: Image = Terrain3DUtil.pack_image(height, height, null, false,
 		invert_height_checkbox.button_pressed, normalize_height_checkbox.button_pressed, height_channel_selected, 0)
 	if not transformed_height:
 		_show_message(ERROR, "Height channel conversion failed.")
 		return FAILED
-	var displacement: Image = T3DUtil.pack_displacement_r8(transformed_height, 3,
+	var displacement: Image = Terrain3DUtil.pack_displacement_r8(transformed_height, 3,
 		generate_mipmaps_checkbox.button_pressed)
 	if not displacement or displacement.get_format() != Image.FORMAT_R8:
 		_show_message(ERROR, "R8 displacement packing failed.")
@@ -645,13 +645,13 @@ func _pack_surface_dds(p_normal: Image, p_roughness: Image, p_ao: Image, p_dst_p
 	var packed_roughness_source: Image = roughness
 	var packed_roughness_channel: int = roughness_channel_selected
 	if invert_smooth_checkbox.button_pressed:
-		packed_roughness_source = T3DUtil.pack_image(roughness, roughness, null, false, true, false,
+		packed_roughness_source = Terrain3DUtil.pack_image(roughness, roughness, null, false, true, false,
 			roughness_channel_selected, 0)
 		packed_roughness_channel = 3
 		if not packed_roughness_source:
 			_show_message(ERROR, "Smoothness to roughness conversion failed.")
 			return FAILED
-	var surface: Image = T3DUtil.pack_surface_rgba8(normal, packed_roughness_source, ao,
+	var surface: Image = Terrain3DUtil.pack_surface_rgba8(normal, packed_roughness_source, ao,
 		invert_green_checkbox.button_pressed, packed_roughness_channel, occlusion_channel_selected,
 		generate_mipmaps_checkbox.button_pressed)
 	if not surface or surface.get_format() != Image.FORMAT_RGBA8:
@@ -664,7 +664,7 @@ func _pack_surface_dds(p_normal: Image, p_roughness: Image, p_ao: Image, p_dst_p
 	if error != OK or surface.get_format() != Image.FORMAT_BPTC_RGBA:
 		# BC3 is a supported four-channel fallback. It is reported explicitly because
 		# its normal/roughness quality is below BC7 even though memory is identical.
-		surface = T3DUtil.pack_surface_rgba8(normal, packed_roughness_source, ao,
+		surface = Terrain3DUtil.pack_surface_rgba8(normal, packed_roughness_source, ao,
 			invert_green_checkbox.button_pressed, packed_roughness_channel, occlusion_channel_selected,
 			generate_mipmaps_checkbox.button_pressed)
 		error = surface.compress_from_channels(Image.COMPRESS_S3TC, Image.USED_CHANNELS_RGBA)
@@ -818,7 +818,7 @@ func _pack_textures(p_rgb_image: Image, p_a_image: Image, p_ao_image: Image, p_d
 		elif p_align_normals:
 			_show_message(INFO, "Alignment OK, skipping Normal Orthogonalization")
 
-		var output_image: Image = T3DUtil.pack_image(rgb_image, alpha_image, ao_image,
+		var output_image: Image = Terrain3DUtil.pack_image(rgb_image, alpha_image, ao_image,
 			p_invert_green, p_invert_smooth, p_normalize_height, p_alpha_channel, p_occlusion_channel)
 
 		if not output_image:

@@ -15,7 +15,7 @@
 #include <godot_cpp/classes/world3d.hpp>
 #include <godot_cpp/core/class_db.hpp>
 
-int T3DHLODStreamer::floorDiv( const int value, const int divisor ) {
+int Terrain3DHLODStreamer::floorDiv( const int value, const int divisor ) {
 	if ( divisor <= 0 ) {
 		return 0;
 	}
@@ -25,15 +25,15 @@ int T3DHLODStreamer::floorDiv( const int value, const int divisor ) {
 	}
 	return quotient;
 }
-int T3DHLODStreamer::regionIndex( const Vector2i &rRegion ) {
-	return T3DData::getRegionMapIndex( rRegion );
+int Terrain3DHLODStreamer::regionIndex( const Vector2i &rRegion ) {
+	return Terrain3DData::getRegionMapIndex( rRegion );
 }
-Vector2i T3DHLODStreamer::regionFromIndex( const int index ) {
+Vector2i Terrain3DHLODStreamer::regionFromIndex( const int index ) {
 	const int size = s_nActiveMaxRegionMapSize;
 	return Vector2i( index % size - size / 2, index / size - size / 2 );
 }
 
-void T3DHLODStreamer::initialize( T3DTerrain *const pTerrain ) {
+void Terrain3DHLODStreamer::initialize( Terrain3D *const pTerrain ) {
 	if ( m_pTerrain == pTerrain ) {
 		return;
 	}
@@ -41,12 +41,12 @@ void T3DHLODStreamer::initialize( T3DTerrain *const pTerrain ) {
 	m_pTerrain = pTerrain;
 	reloadManifest();
 }
-void T3DHLODStreamer::destroy( void ) {
+void Terrain3DHLODStreamer::destroy( void ) {
 	clearRuntime( true, true );
 	m_pTerrain = nullptr;
 	m_manifest.unref();
 }
-void T3DHLODStreamer::suspend( void ) {
+void Terrain3DHLODStreamer::suspend( void ) {
 	uint8_t old[s_nMaxRegionSlots];
 	std::memcpy( old, m_szRegionRepresentationLevel, sizeof( old ) );
 	for ( int i = 0; i < ( int )m_entries.size(); ++i ) {
@@ -61,7 +61,7 @@ void T3DHLODStreamer::suspend( void ) {
 		notifyRepresentationChanges( old );
 	}
 }
-void T3DHLODStreamer::clearRuntime( const bool bNotify, const bool bReleaseStorage ) {
+void Terrain3DHLODStreamer::clearRuntime( const bool bNotify, const bool bReleaseStorage ) {
 	uint8_t old[s_nMaxRegionSlots];
 	std::memcpy( old, m_szRegionRepresentationLevel, sizeof( old ) );
 	for ( int i = 0; i < ( int )( m_entries.size() ); ++i ) {
@@ -90,7 +90,7 @@ void T3DHLODStreamer::clearRuntime( const bool bNotify, const bool bReleaseStora
 	}
 }
 
-int T3DHLODStreamer::findEntry( const int level, const Vector2i &rCluster ) const {
+int Terrain3DHLODStreamer::findEntry( const int level, const Vector2i &rCluster ) const {
 	for ( int i = 0; i < ( int )( m_entries.size() ); ++i ) {
 		if ( m_entries[( size_t )i].m_nLevel == level && m_entries[( size_t )i].m_cluster == rCluster ) {
 			return i;
@@ -98,7 +98,7 @@ int T3DHLODStreamer::findEntry( const int level, const Vector2i &rCluster ) cons
 	}
 	return -1;
 }
-void T3DHLODStreamer::buildHierarchy( void ) {
+void Terrain3DHLODStreamer::buildHierarchy( void ) {
 	m_roots.clear();
 	for ( t3dEntry_t &entry : m_entries ) {
 		entry.m_nParent = -1;
@@ -122,7 +122,7 @@ void T3DHLODStreamer::buildHierarchy( void ) {
 	}
 }
 
-void T3DHLODStreamer::compileLegacyNodePolicies( const Ref<T3DHLODManifest> &rManifest ) {
+void Terrain3DHLODStreamer::compileLegacyNodePolicies( const Ref<Terrain3DHLODManifest> &rManifest ) {
 	m_nodePolicies.clear();
 	m_nodePolicyOffsets.fill( 0u );
 	const PackedInt32Array nodeRegions = rManifest->getNodeRegionIndices();
@@ -157,13 +157,13 @@ void T3DHLODStreamer::compileLegacyNodePolicies( const Ref<T3DHLODManifest> &rMa
 	}
 }
 
-bool T3DHLODStreamer::compilePackedManifest( const Ref<T3DHLODManifest> &rManifest ) {
+bool Terrain3DHLODStreamer::compilePackedManifest( const Ref<Terrain3DHLODManifest> &rManifest ) {
 	const PackedByteArray blob = rManifest->getRuntimeBlob();
 	if ( blob.is_empty() ) {
 		return false;
 	}
 	t3dHlodRuntimeData_t runtime;
-	if ( !T3DHLODRuntimeCodec::decode( blob, runtime ) ) {
+	if ( !Terrain3DHLODRuntimeCodec::decode( blob, runtime ) ) {
 		return false;
 	}
 	m_entries.reserve( runtime.m_entries.size() );
@@ -199,12 +199,12 @@ bool T3DHLODStreamer::compilePackedManifest( const Ref<T3DHLODManifest> &rManife
 	for ( const t3dHlodRuntimeNodePolicyRecord_t &policy : runtime.m_nodePolicies ) {
 		m_nodePolicies.push_back( { policy.m_nSpawnId, policy.m_nMinLevel } );
 	}
-	m_nodePolicyOffsets = runtime.nodePolicyOffsets;
+	m_nodePolicyOffsets = runtime.m_szNodePolicyOffsets;
 	m_manifest = rManifest;
 	return true;
 }
 
-bool T3DHLODStreamer::compileManifest( const Ref<T3DHLODManifest> &rManifest ) {
+bool Terrain3DHLODStreamer::compileManifest( const Ref<Terrain3DHLODManifest> &rManifest ) {
 	if ( rManifest.is_null() || !m_pTerrain || rManifest->getFormat() != 1 ||
 			rManifest->getRegionMapSize() != s_nActiveMaxRegionMapSize ||
 			rManifest->getRegionSize() != ( int )m_pTerrain->getRegionSize() ||
@@ -262,7 +262,7 @@ bool T3DHLODStreamer::compileManifest( const Ref<T3DHLODManifest> &rManifest ) {
 	return true;
 }
 
-bool T3DHLODStreamer::reloadManifest( void ) {
+bool Terrain3DHLODStreamer::reloadManifest( void ) {
 	clearRuntime( true );
 	m_manifest.unref();
 	if ( !m_bEnabled || !m_pTerrain || m_manifestPath.is_empty() ||
@@ -270,12 +270,12 @@ bool T3DHLODStreamer::reloadManifest( void ) {
 		return false;
 	}
 	const Ref<Resource> resource = ResourceLoader::get_singleton()->load(
-			m_manifestPath, "T3DHLODManifest", ResourceLoader::CACHE_MODE_REPLACE );
-	const Ref<T3DHLODManifest> manifest = resource;
+			m_manifestPath, "Terrain3DHLODManifest", ResourceLoader::CACHE_MODE_REPLACE );
+	const Ref<Terrain3DHLODManifest> manifest = resource;
 	return compileManifest( manifest );
 }
 
-bool T3DHLODStreamer::packageAcceptable( const t3dEntry_t &rEntry, const Vector3 &rLocalTarget ) const {
+bool Terrain3DHLODStreamer::packageAcceptable( const t3dEntry_t &rEntry, const Vector3 &rLocalTarget ) const {
 	if ( rEntry.m_nLevel > m_nMaxLevel ) {
 		return false;
 	}
@@ -310,7 +310,7 @@ bool T3DHLODStreamer::packageAcceptable( const t3dEntry_t &rEntry, const Vector3
 	return projectedError <= threshold;
 }
 
-void T3DHLODStreamer::selectFallbackChildren( const int index, const Vector3 &rLocalTarget ) {
+void Terrain3DHLODStreamer::selectFallbackChildren( const int index, const Vector3 &rLocalTarget ) {
 	const t3dEntry_t &entry = m_entries[( size_t )index];
 	// A leaf has no HLOD fallback. Leaving it undesired deliberately publishes
 	// detailed residency while the still-active proxy remains visible until the
@@ -322,7 +322,7 @@ void T3DHLODStreamer::selectFallbackChildren( const int index, const Vector3 &rL
 		}
 	}
 }
-void T3DHLODStreamer::clearDesiredDescendants( const int index ) {
+void Terrain3DHLODStreamer::clearDesiredDescendants( const int index ) {
 	if ( index < 0 || index >= ( int )m_entries.size() ) {
 		return;
 	}
@@ -335,7 +335,7 @@ void T3DHLODStreamer::clearDesiredDescendants( const int index ) {
 	}
 }
 
-bool T3DHLODStreamer::hasActiveDescendant( const int index ) const {
+bool Terrain3DHLODStreamer::hasActiveDescendant( const int index ) const {
 	if ( index < 0 || index >= ( int )m_entries.size() ) {
 		return false;
 	}
@@ -350,7 +350,7 @@ bool T3DHLODStreamer::hasActiveDescendant( const int index ) const {
 	return false;
 }
 
-bool T3DHLODStreamer::replacementReady( const t3dEntry_t &rEntry ) const {
+bool Terrain3DHLODStreamer::replacementReady( const t3dEntry_t &rEntry ) const {
 	if ( !m_pTerrain ) {
 		return true;
 	}
@@ -375,7 +375,7 @@ bool T3DHLODStreamer::replacementReady( const t3dEntry_t &rEntry ) const {
 	return true;
 }
 
-void T3DHLODStreamer::selectRecursive( const int index, const Vector3 &rLocalTarget ) {
+void Terrain3DHLODStreamer::selectRecursive( const int index, const Vector3 &rLocalTarget ) {
 	if ( index < 0 || index >= ( int )m_entries.size() ) {
 		return;
 	}
@@ -393,7 +393,7 @@ void T3DHLODStreamer::selectRecursive( const int index, const Vector3 &rLocalTar
 	selectFallbackChildren( index, rLocalTarget );
 }
 
-bool T3DHLODStreamer::requestOrActivate( const int index ) {
+bool Terrain3DHLODStreamer::requestOrActivate( const int index ) {
 	t3dEntry_t &entry = m_entries[( size_t )index];
 	if ( entry.m_bActive || entry.m_bLoadFailed || entry.m_packagePath.is_empty() || !m_pTerrain ||
 			!m_pTerrain->is_inside_tree() ) {
@@ -406,7 +406,7 @@ bool T3DHLODStreamer::requestOrActivate( const int index ) {
 	ResourceLoader::ThreadLoadStatus status = loader->load_threaded_get_status( entry.m_packagePath );
 	if ( status == ResourceLoader::THREAD_LOAD_INVALID_RESOURCE && !entry.m_bRequestStarted ) {
 		const Error error = loader->load_threaded_request(
-				entry.m_packagePath, "T3DHLODPackage", true, ResourceLoader::CACHE_MODE_REUSE );
+				entry.m_packagePath, "Terrain3DHLODPackage", true, ResourceLoader::CACHE_MODE_REUSE );
 		entry.m_bRequestStarted = error == OK;
 		entry.m_bLoadFailed = error != OK;
 		if ( error == OK ) {
@@ -481,7 +481,7 @@ bool T3DHLODStreamer::requestOrActivate( const int index ) {
 	++m_nLoadsLastTick;
 	return true;
 }
-void T3DHLODStreamer::deactivate( const int index ) {
+void Terrain3DHLODStreamer::deactivate( const int index ) {
 	if ( index < 0 || index >= ( int )m_entries.size() ) {
 		return;
 	}
@@ -505,7 +505,7 @@ void T3DHLODStreamer::deactivate( const int index ) {
 	m_bSelectionDirty = true;
 }
 
-void T3DHLODStreamer::publishRepresentationMap( void ) {
+void Terrain3DHLODStreamer::publishRepresentationMap( void ) {
 	uint8_t old[s_nMaxRegionSlots];
 	std::memcpy( old, m_szRegionRepresentationLevel, sizeof( old ) );
 	std::memset( m_szRegionRepresentationLevel, 0, sizeof( m_szRegionRepresentationLevel ) );
@@ -527,7 +527,7 @@ void T3DHLODStreamer::publishRepresentationMap( void ) {
 	}
 	notifyRepresentationChanges( old );
 }
-void T3DHLODStreamer::notifyRepresentationChanges( const uint8_t *pOldLevels ) {
+void Terrain3DHLODStreamer::notifyRepresentationChanges( const uint8_t *pOldLevels ) {
 	if ( !m_pTerrain ) {
 		return;
 	}
@@ -538,7 +538,7 @@ void T3DHLODStreamer::notifyRepresentationChanges( const uint8_t *pOldLevels ) {
 	}
 }
 
-void T3DHLODStreamer::updateResidency( const Vector3 &rTargetPosition, const bool bForce ) {
+void Terrain3DHLODStreamer::updateResidency( const Vector3 &rTargetPosition, const bool bForce ) {
 	m_nLoadsLastTick = m_nUnloadsLastTick = m_nRequestsLastTick = m_nFailuresLastTick = m_nCapacityDeferredLastTick = 0;
 	m_nTransitionOvercommitBytesLastTick = 0;
 	if ( !m_bEnabled || !m_pTerrain || m_manifest.is_null() ) {
@@ -645,7 +645,7 @@ void T3DHLODStreamer::updateResidency( const Vector3 &rTargetPosition, const boo
 	}
 }
 
-uint8_t T3DHLODStreamer::getNodeMinimumLevel( const Vector2i &rRegion, const int64_t nSpawnId ) const {
+uint8_t Terrain3DHLODStreamer::getNodeMinimumLevel( const Vector2i &rRegion, const int64_t nSpawnId ) const {
 	const int region = regionIndex( rRegion );
 	if ( region < 0 ) {
 		return 0;
@@ -660,7 +660,7 @@ uint8_t T3DHLODStreamer::getNodeMinimumLevel( const Vector2i &rRegion, const int
 	}
 	return 0;
 }
-Dictionary T3DHLODStreamer::getStats( void ) const {
+Dictionary Terrain3DHLODStreamer::getStats( void ) const {
 	Dictionary d;
 	int active = 0, desired = 0, failed = 0, retiring = 0;
 	for ( const t3dEntry_t &e : m_entries ) {
@@ -686,7 +686,7 @@ Dictionary T3DHLODStreamer::getStats( void ) const {
 	d["detail_required_regions"] = ( int )m_detailRequiredRegions.count();
 	return d;
 }
-Array T3DHLODStreamer::getDebugEntries( void ) const {
+Array Terrain3DHLODStreamer::getDebugEntries( void ) const {
 	Array out;
 	for ( const t3dEntry_t &e : m_entries ) {
 		Dictionary d;
@@ -705,13 +705,13 @@ Array T3DHLODStreamer::getDebugEntries( void ) const {
 	}
 	return out;
 }
-void T3DHLODStreamer::_bind_methods( void ) {
-	ClassDB::bind_method( D_METHOD( "reload_manifest" ), &T3DHLODStreamer::reloadManifest );
-	ClassDB::bind_method( D_METHOD( "get_stats" ), &T3DHLODStreamer::getStats );
-	ClassDB::bind_method( D_METHOD( "get_debug_entries" ), &T3DHLODStreamer::getDebugEntries );
+void Terrain3DHLODStreamer::_bind_methods( void ) {
+	ClassDB::bind_method( D_METHOD( "reload_manifest" ), &Terrain3DHLODStreamer::reloadManifest );
+	ClassDB::bind_method( D_METHOD( "get_stats" ), &Terrain3DHLODStreamer::getStats );
+	ClassDB::bind_method( D_METHOD( "get_debug_entries" ), &Terrain3DHLODStreamer::getDebugEntries );
 	ClassDB::bind_method( D_METHOD( "is_region_suppressed", "region", "minimum_level" ),
-			&T3DHLODStreamer::isRegionSuppressed,
+			&Terrain3DHLODStreamer::isRegionSuppressed,
 			DEFVAL( 1 ) );
 	ClassDB::bind_method(
-			D_METHOD( "get_region_representation_level", "region" ), &T3DHLODStreamer::getRegionRepresentationLevel );
+			D_METHOD( "get_region_representation_level", "region" ), &Terrain3DHLODStreamer::getRegionRepresentationLevel );
 }

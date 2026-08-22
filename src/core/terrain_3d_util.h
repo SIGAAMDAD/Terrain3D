@@ -9,27 +9,30 @@
 #include "assets/generated_texture.h"
 #include "core/terrain_3d_compiler.h"
 
+#include <cmath>
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
+#include <limits>
+#include <type_traits>
 
-class T3DTerrain;
+class Terrain3D;
 
 // This file holds stateless utility functions for both C++ and GDScript
 // The class exposes static member and inline functions to GDscript
 // The inline helpers below are free functions shared by Terrain3D subsystems.
 // However some of these inline functions are also exposed to GDScript
 
-class T3DUtil : public Object {
-	GDCLASS( T3DUtil, Object );
-	CLASS_NAME_STATIC( "T3DUtil" );
+class Terrain3DUtil : public Object {
+	GDCLASS( Terrain3DUtil, Object );
+	CLASS_NAME_STATIC( "Terrain3DUtil" );
 
 public:
 	// Print info to the console
 	static void printArr( const String &rName, const Array &rArr, const int nLevel = 2 ); // Level 2: DEBUG
 	static void printDict( const String &rName, const Dictionary &rDict, const int nLevel = 2 ); // Level 2: DEBUG
-	static void dumpGentex( const T3DGeneratedTexture &rGen, const String &rName = "" );
+	static void dumpGentex( const Terrain3DGeneratedTexture &rGen, const String &rName = "" );
 	static void dumpMaps( const TypedArray<Image> &rMaps, const String &rName = "" );
 
 	// String functions
@@ -107,7 +110,7 @@ public:
 		return saveDisplacementR8Dds( rDisplacement, rPath );
 	}
 	static Ref<Image> luminanceToHeight( const Ref<Image> &rSrcRgb );
-	static void benchmark( T3DTerrain *pTerrain );
+	static void benchmark( Terrain3D *pTerrain );
 
 protected:
 	static void _bind_methods( void );
@@ -170,7 +173,7 @@ template <typename T> inline T t3dIntRoundMult( const T numToRound, const T mult
 	static_assert( std::numeric_limits<T>::is_integer, "Only integer types are allowed" );
 	ASSERT( multiple != 0, 0 );
 	T abs_num;
-	EA_FORCE_INLINE if constexpr ( std::is_signed_v<T> ) {
+	if constexpr ( std::is_signed_v<T> ) {
 		abs_num = std::abs( numToRound );
 	} else {
 		abs_num = numToRound;
@@ -184,9 +187,9 @@ template <typename T> inline T t3dIntRoundMult( const T numToRound, const T mult
 // Integer division with rounding up, down, nearest
 // https : //stackoverflow.com/questions/2422712/rounding-integer-division-instead-of-truncating/58568736#58568736
 #define V2I_DIVIDE_CEIL( v, f ) \
-	Vector2i( t3dIntDivideCeil( v.x, ( int32_t )( f ) ), t3dIntDivideCeil( v.y, ( int32_t )( f ) ) )
+	Vector2i( t3dIntDivideCeil( ( v ).x, ( int32_t )( f ) ), t3dIntDivideCeil( ( v ).y, ( int32_t )( f ) ) )
 #define V2I_DIVIDE_FLOOR( v, f ) \
-	Vector2i( t3dIntDivideFloor( v.x, ( int32_t )( f ) ), t3dIntDivideFloor( v.y, ( int32_t )( f ) ) )
+	Vector2i( t3dIntDivideFloor( ( v ).x, ( int32_t )( f ) ), t3dIntDivideFloor( ( v ).y, ( int32_t )( f ) ) )
 
 // Integer division rounding up
 template <typename T> EA_FORCE_INLINE T t3dIntDivideCeil( const T numer, const T denom ) {

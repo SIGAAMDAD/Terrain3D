@@ -10,9 +10,7 @@ if (i_normal.y <= 0.7071067811865475) { // sqrt(0.5)
 		xz = vec2(-xz.y, xz.x);
 		i_pos = floor(vec2(dot(i_pos, xz), -h));
 		i_uv = vec2(dot(i_vertex.xz, xz), -i_vertex.y);
-		#ifndef IS_DISPLACEMENT_BUFFER
 		i_dd.xy = vec2(dot(base_ddx.xz, xz), -base_ddx.y);
 		i_dd.zw = vec2(dot(base_ddy.xz, xz), -base_ddy.y);
-		#endif
 	}
 #endif

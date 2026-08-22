@@ -9,34 +9,34 @@ using Godot.Collections;
 namespace TokisanGames;
 
 [Tool]
-public partial class T3DEditor : GodotObject
+public partial class Terrain3DEditor : GodotObject
 {
 
-	private new static readonly StringName NativeName = new StringName("T3DEditor");
+	private new static readonly StringName NativeName = new StringName("Terrain3DEditor");
 
-	[Obsolete("Wrapper types cannot be constructed with constructors (it only instantiate the underlying T3DEditor object), please use the Instantiate() method instead.")]
-	protected T3DEditor() { }
+	[Obsolete("Wrapper types cannot be constructed with constructors (it only instantiate the underlying Terrain3DEditor object), please use the Instantiate() method instead.")]
+	protected Terrain3DEditor() { }
 
 	private static CSharpScript _wrapperScriptAsset;
 
 	/// <summary>
-	/// Try to cast the script on the supplied <paramref name="godotObject"/> to the <see cref="T3DEditor"/> wrapper type,
-	/// if no script has attached to the type, or the script attached to the type does not inherit the <see cref="T3DEditor"/> wrapper type,
-	/// a new instance of the <see cref="T3DEditor"/> wrapper script will get attaches to the <paramref name="godotObject"/>.
+	/// Try to cast the script on the supplied <paramref name="godotObject"/> to the <see cref="Terrain3DEditor"/> wrapper type,
+	/// if no script has attached to the type, or the script attached to the type does not inherit the <see cref="Terrain3DEditor"/> wrapper type,
+	/// a new instance of the <see cref="Terrain3DEditor"/> wrapper script will get attaches to the <paramref name="godotObject"/>.
 	/// </summary>
 	/// <remarks>The developer should only supply the <paramref name="godotObject"/> that represents the correct underlying GDExtension type.</remarks>
 	/// <param name="godotObject">The <paramref name="godotObject"/> that represents the correct underlying GDExtension type.</param>
-	/// <returns>The existing or a new instance of the <see cref="T3DEditor"/> wrapper script attached to the supplied <paramref name="godotObject"/>.</returns>
-	public new static T3DEditor Bind(GodotObject godotObject)
+	/// <returns>The existing or a new instance of the <see cref="Terrain3DEditor"/> wrapper script attached to the supplied <paramref name="godotObject"/>.</returns>
+	public new static Terrain3DEditor Bind(GodotObject godotObject)
 	{
 		if (!IsInstanceValid(godotObject))
 			return null;
 
-		if (godotObject is T3DEditor wrapperScriptInstance)
+		if (godotObject is Terrain3DEditor wrapperScriptInstance)
 			return wrapperScriptInstance;
 
 #if DEBUG
-		var expectedType = typeof(T3DEditor);
+		var expectedType = typeof(Terrain3DEditor);
 		var currentObjectClassName = godotObject.GetClass();
 		if (!ClassDB.IsParentClass(expectedType.Name, currentObjectClassName))
 			throw new InvalidOperationException($"The supplied GodotObject ({currentObjectClassName}) is not the {expectedType.Name} type.");
@@ -44,21 +44,21 @@ public partial class T3DEditor : GodotObject
 
 		if (_wrapperScriptAsset is null)
 		{
-			var scriptPathAttribute = typeof(T3DEditor).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
+			var scriptPathAttribute = typeof(Terrain3DEditor).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
 			if (scriptPathAttribute is null) throw new UnreachableException();
 			_wrapperScriptAsset = ResourceLoader.Load<CSharpScript>(scriptPathAttribute.Path);
 		}
 
 		var instanceId = godotObject.GetInstanceId();
 		godotObject.SetScript(_wrapperScriptAsset);
-		return (T3DEditor)InstanceFromId(instanceId);
+		return (Terrain3DEditor)InstanceFromId(instanceId);
 	}
 
 	/// <summary>
-	/// Creates an instance of the GDExtension <see cref="T3DEditor"/> type, and attaches a wrapper script instance to it.
+	/// Creates an instance of the GDExtension <see cref="Terrain3DEditor"/> type, and attaches a wrapper script instance to it.
 	/// </summary>
-	/// <returns>The wrapper instance linked to the underlying GDExtension "T3DEditor" type.</returns>
-	public new static T3DEditor Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
+	/// <returns>The wrapper instance linked to the underlying GDExtension "Terrain3DEditor" type.</returns>
+	public new static Terrain3DEditor Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
 
 	public enum Operation
 	{
@@ -151,27 +151,27 @@ public partial class T3DEditor : GodotObject
 		public new static readonly StringName ApplyUndo = "apply_undo";
 	}
 
-	public new void SetTerrain(T3DTerrain terrain) =>
+	public new void SetTerrain(Terrain3D terrain) =>
 		Call(GDExtensionMethodName.SetTerrain, [terrain]);
 
-	public new T3DTerrain GetTerrain() =>
-		T3DTerrain.Bind(Call(GDExtensionMethodName.GetTerrain, []).As<Node3D>());
+	public new Terrain3D GetTerrain() =>
+		Terrain3D.Bind(Call(GDExtensionMethodName.GetTerrain, []).As<Node3D>());
 
 	public new void SetBrushData(Godot.Collections.Dictionary data) =>
 		Call(GDExtensionMethodName.SetBrushData, [data]);
 
 
-	public new void SetTool(T3DEditor.Tool tool) =>
+	public new void SetTool(Terrain3DEditor.Tool tool) =>
 		Call(GDExtensionMethodName.SetTool, [Variant.From(tool)]);
 
-	public new T3DEditor.Tool GetTool() =>
-		Call(GDExtensionMethodName.GetTool, []).As<T3DEditor.Tool>();
+	public new Terrain3DEditor.Tool GetTool() =>
+		Call(GDExtensionMethodName.GetTool, []).As<Terrain3DEditor.Tool>();
 
-	public new void SetOperation(T3DEditor.Operation operation) =>
+	public new void SetOperation(Terrain3DEditor.Operation operation) =>
 		Call(GDExtensionMethodName.SetOperation, [Variant.From(operation)]);
 
-	public new T3DEditor.Operation GetOperation() =>
-		Call(GDExtensionMethodName.GetOperation, []).As<T3DEditor.Operation>();
+	public new Terrain3DEditor.Operation GetOperation() =>
+		Call(GDExtensionMethodName.GetOperation, []).As<Terrain3DEditor.Operation>();
 
 	public new void StartOperation(Vector3 position) =>
 		Call(GDExtensionMethodName.StartOperation, [position]);
@@ -182,7 +182,7 @@ public partial class T3DEditor : GodotObject
 	public new void Operate(Vector3 position, double cameraDirection) =>
 		Call(GDExtensionMethodName.Operate, [position, cameraDirection]);
 
-	public new void BackupRegion(T3DRegion region) =>
+	public new void BackupRegion(Terrain3DRegion region) =>
 		Call(GDExtensionMethodName.BackupRegion, [region]);
 
 	public new void StopOperation() =>
@@ -195,24 +195,24 @@ public partial class T3DEditor : GodotObject
 
 file static class OperationExtensions
 {
-public static int SafeAsInt32(this T3DEditor.Operation enumValue) =>
+public static int SafeAsInt32(this Terrain3DEditor.Operation enumValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this T3DEditor.Operation enumValue, int defaultValue) =>
+public static int SafeAsInt32(this Terrain3DEditor.Operation enumValue, int defaultValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this T3DEditor.Operation? enumValue, int defaultValue = 0) =>
+public static int SafeAsInt32(this Terrain3DEditor.Operation? enumValue, int defaultValue = 0) =>
 enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
 }
 
 file static class ToolExtensions
 {
-public static int SafeAsInt32(this T3DEditor.Tool enumValue) =>
+public static int SafeAsInt32(this Terrain3DEditor.Tool enumValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this T3DEditor.Tool enumValue, int defaultValue) =>
+public static int SafeAsInt32(this Terrain3DEditor.Tool enumValue, int defaultValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this T3DEditor.Tool? enumValue, int defaultValue = 0) =>
+public static int SafeAsInt32(this Terrain3DEditor.Tool? enumValue, int defaultValue = 0) =>
 enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
 }

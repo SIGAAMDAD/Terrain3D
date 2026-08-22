@@ -7,8 +7,6 @@ shader_type canvas_item;
 // the buffer directly via RID (avoids GPU > CPU > GPU copies) as alpha
 // is premultiplied by the renderer.
 
-#define IS_DISPLACEMENT_BUFFER
-
 // Defined Constants
 #define COLOR_MAP_DEF vec4(1.0, 1.0, 1.0, 0.5)
 #define DIV_255 0.003921568627450 // 1. / 255.
@@ -30,10 +28,8 @@ shader_type canvas_item;
 // Use a portable arithmetic expansion on every renderer. Some low-end/mobile
 // shader compilers reject the fma() builtin even when the same arithmetic is valid.
 #define fma(a, b, c) ((a) * (b) + (c))
-#if CURRENT_RENDERER == RENDERER_COMPATIBILITY
-    #define dFdxCoarse(a) dFdx(a)
-    #define dFdyCoarse(a) dFdy(a)
-#endif
+// Compatibility renderer derivative fallback is applied by Terrain3DMaterial
+// after specialization. Forward+/Mobile retain their native coarse derivatives.
 
 // Private uniforms
 uniform float _tessellation_level = 0.;
@@ -247,7 +243,7 @@ void accumulate_material(const mat3 TNB, const float weight, const ivec3 index, 
 	// Projection
 	vec2 i_uv = i_vertex.xz;
 	mat2 p_align = mat2(1.);
-#include "res://addons/terrain_3d/shaders/includes/projection.gdshaderinc"
+#include "res://addons/terrain_3d/shaders/includes/projection_displacement.gdshaderinc"
 
 	// Control map rotation. Must be applied seperatley from detiling to maintain UV continuity.
 	vec2 c_cs_angle = _control_rotation_cs[int(control >> 10u & 0xFu)];

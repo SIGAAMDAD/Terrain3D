@@ -4,6 +4,7 @@
 #ifndef TERRAIN3D_RUNTIME_BAKE_CODEC_H
 #define TERRAIN3D_RUNTIME_BAKE_CODEC_H
 
+#include "Terrain3DConstants.h"
 #include "eastl_config.h"
 
 #include <EASTL/vector.h>
@@ -17,8 +18,8 @@
 #include <godot_cpp/variant/packed_int32_array.hpp>
 #include <godot_cpp/variant/rect2.hpp>
 
-class T3DRegion;
-class T3DRuntimeWorldManifest;
+class Terrain3DRegion;
+class Terrain3DRuntimeWorldManifest;
 
 typedef struct t3dRuntimeInstanceCellMetadata_s {
 	uint16_t m_nMeshId = 0u;
@@ -74,7 +75,9 @@ typedef struct t3dLightingReceiverCursor_s {
 	uint32_t m_iIndex = 0u;
 } t3dLightingReceiverCursor_t;
 
-class T3DRuntimeBakeCodec {
+class Terrain3DRuntimeBakeCodec {
+	CLASS_NAME_STATIC( "Terrain3DRuntimeBakeCodec" );
+
 public:
 	static PackedByteArray encodeHoleMask( const Ref<Image> &rControl, int nRegionSize );
 	static PackedByteArray encodeNavigationMask( const Ref<Image> &rControl, int nRegionSize );
@@ -97,22 +100,22 @@ public:
 	static bool decodeCollisionHeight( const PackedByteArray &rBlob, PackedFloat32Array &rHeights, int &nWidth );
 	static bool
 	decodeCollisionBounds( const PackedByteArray &rBlob, float &fMinHeight, float &fMaxHeight, int &nWidth );
-	static PackedByteArray encodeNodeDescriptors( const T3DRegion &rRegion, const T3DRuntimeWorldManifest &rManifest );
+	static PackedByteArray encodeNodeDescriptors( const Terrain3DRegion &rRegion, const Terrain3DRuntimeWorldManifest &rManifest );
 	static bool
-	decodeNodeDescriptors( const PackedByteArray &rBlob, const T3DRuntimeWorldManifest &rManifest, T3DRegion &rRegion );
-	static PackedByteArray encodeInstanceMetadata( const T3DRegion &rRegion );
+	decodeNodeDescriptors( const PackedByteArray &rBlob, const Terrain3DRuntimeWorldManifest &rManifest, Terrain3DRegion &rRegion );
+	static PackedByteArray encodeInstanceMetadata( const Terrain3DRegion &rRegion );
 	static bool getInstanceMetadataView( const PackedByteArray &rBlob, t3dInstanceMetadataView_t &rView );
 	static t3dRuntimeInstanceCellMetadata_t getInstanceMetadataRecord( const t3dInstanceMetadataView_t &rView,
 			uint32_t nIndex );
 	static bool decodeInstanceMetadata( const PackedByteArray &rBlob,
 			eastl::vector<t3dRuntimeInstanceCellMetadata_t> &rCells );
-	static PackedByteArray encodeLightingReceivers( const T3DRegion &rRegion );
+	static PackedByteArray encodeLightingReceivers( const Terrain3DRegion &rRegion );
 	static bool beginLightingReceivers( const PackedByteArray &rBlob, t3dLightingReceiverCursor_t &rCursor );
 	static bool nextLightingReceiver( t3dLightingReceiverCursor_t &rCursor,
 			t3dRuntimeLightingReceiverRecord_t &rReceiver );
 	static bool decodeLightingReceivers( const PackedByteArray &rBlob,
 			eastl::vector<t3dRuntimeLightingReceiverRecord_t> &rReceivers );
-	static PackedByteArray encodeMultimeshFastStart( const T3DRegion &rRegion, int nMinimumCellInstances = 256 );
+	static PackedByteArray encodeMultimeshFastStart( const Terrain3DRegion &rRegion, int nMinimumCellInstances = 256 );
 	static bool findMultimeshFastStart( const PackedByteArray &rBlob,
 			uint16_t nMeshId,
 			const Vector2i &rCell,

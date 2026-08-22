@@ -8,6 +8,7 @@
 #include "memory/terrain_3d_memory.h"
 #include "memory/terrain_3d_zone_allocator.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -48,14 +49,14 @@ typedef struct t3dEastlAllocationStats_s {
 
 typedef struct t3dEastlAllocationHeader_s {
 	void *m_pRaw = nullptr;
-	T3DMemoryZone *m_pZone = nullptr;
+	Terrain3DMemoryZone *m_pZone = nullptr;
 	size_t m_nSize = 0u;
 	uint8_t m_nOrigin = TERRAIN3D_ALLOCATION_BOOTSTRAP;
 } t3dEastlAllocationHeader_t;
 
 static constexpr size_t s_nEastlAllocationHeaderSize = sizeof( t3dEastlAllocationHeader_t );
 
-class T3DEastlAllocator {
+class Terrain3DEastlAllocator {
 	using AllocationHeader = t3dEastlAllocationHeader_t;
 
 	inline static std::atomic<size_t> s_nLiveBytes{ 0u };
@@ -86,10 +87,10 @@ class T3DEastlAllocator {
 	}
 
 public:
-	EA_FORCE_INLINE T3DEastlAllocator( const char * = EASTL_ALLOCATOR_DEFAULT_NAME ) {}
-	T3DEastlAllocator( const T3DEastlAllocator & ) = default;
-	EA_FORCE_INLINE T3DEastlAllocator( const T3DEastlAllocator &, const char * ) {}
-	T3DEastlAllocator &operator=( const T3DEastlAllocator & ) = default;
+	EA_FORCE_INLINE Terrain3DEastlAllocator( const char * = EASTL_ALLOCATOR_DEFAULT_NAME ) {}
+	Terrain3DEastlAllocator( const Terrain3DEastlAllocator & ) = default;
+	EA_FORCE_INLINE Terrain3DEastlAllocator( const Terrain3DEastlAllocator &, const char * ) {}
+	Terrain3DEastlAllocator &operator=( const Terrain3DEastlAllocator & ) = default;
 	EA_FORCE_INLINE const char *getName( void ) const {
 		return EASTL_ALLOCATOR_DEFAULT_NAME;
 	}
@@ -116,10 +117,10 @@ public:
 			return nullptr;
 		}
 		const size_t total = n + header_size + alignment_slack;
-		T3DMemoryZone *const pZone = T3DZoneAllocatorRouter::zone();
+		Terrain3DMemoryZone *const pZone = Terrain3DZoneAllocatorRouter::zone();
 		void *pRaw = pZone ? pZone->allocate( total, alignment ) : t3dMemoryAllocate( total );
 		uint8_t origin = pZone ? TERRAIN3D_ALLOCATION_ZONE : TERRAIN3D_ALLOCATION_BOOTSTRAP;
-		if ( !pRaw && pZone && T3DZoneAllocatorRouter::overflowPolicy() == TERRAIN3D_ALLOCATOR_OVERFLOW_HEAP ) {
+		if ( !pRaw && pZone && Terrain3DZoneAllocatorRouter::overflowPolicy() == TERRAIN3D_ALLOCATOR_OVERFLOW_HEAP ) {
 			pRaw = t3dMemoryAllocate( total );
 			origin = TERRAIN3D_ALLOCATION_OVERFLOW;
 		}
@@ -171,16 +172,16 @@ public:
 		return stats;
 	}
 
-	friend bool operator==( const T3DEastlAllocator &, const T3DEastlAllocator & ) {
+	friend bool operator==( const Terrain3DEastlAllocator &, const Terrain3DEastlAllocator & ) {
 		return true;
 	}
-	friend bool operator!=( const T3DEastlAllocator &, const T3DEastlAllocator & ) {
+	friend bool operator!=( const Terrain3DEastlAllocator &, const Terrain3DEastlAllocator & ) {
 		return false;
 	}
 };
-#define EASTLAllocatorType T3DEastlAllocator
-EA_FORCE_INLINE static T3DEastlAllocator *T3DGetDefaultEastlAllocator( void ) {
-	static T3DEastlAllocator s_allocator;
+#define EASTLAllocatorType Terrain3DEastlAllocator
+EA_FORCE_INLINE static Terrain3DEastlAllocator *T3DGetDefaultEastlAllocator( void ) {
+	static Terrain3DEastlAllocator s_allocator;
 	return &s_allocator;
 }
 #define EASTLAllocatorDefault T3DGetDefaultEastlAllocator

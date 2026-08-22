@@ -15,12 +15,12 @@
 #include <cstddef>
 #include <cstdint>
 
-class T3DRegion;
-class T3DRegionRepository;
+class Terrain3DRegion;
+class Terrain3DRegionRepository;
 
 typedef struct t3dSamplingSource_s {
-	const T3DRegionRepository *m_pRepository = nullptr;
-	const class T3DSamplingStorage *m_pStorage = nullptr;
+	const Terrain3DRegionRepository *m_pRepository = nullptr;
+	const class Terrain3DSamplingStorage *m_pStorage = nullptr;
 
 	EA_FORCE_INLINE bool valid( void ) const {
 		return m_pRepository != nullptr && m_pStorage != nullptr;
@@ -30,12 +30,12 @@ typedef struct t3dSamplingSource_s {
 // Owns the CPU publication mechanisms used by terrain sampling. Spatial policy
 // (which regions should be active/resident) stays outside this class; this class
 // only owns storage, leases, and the epochs that make sampler-local caches safe.
-class T3DSamplingStorage {
+class Terrain3DSamplingStorage {
 public:
-	T3DSamplingStorage( void );
-	~T3DSamplingStorage( void );
-	T3DSamplingStorage( const T3DSamplingStorage & ) = delete;
-	T3DSamplingStorage &operator=( const T3DSamplingStorage & ) = delete;
+	Terrain3DSamplingStorage( void );
+	~Terrain3DSamplingStorage( void );
+	Terrain3DSamplingStorage( const Terrain3DSamplingStorage & ) = delete;
+	Terrain3DSamplingStorage &operator=( const Terrain3DSamplingStorage & ) = delete;
 
 	bool claimOrReconfigureActive( int nRegionSize );
 	bool bindActive( int nRegionSize, void *pBacking, size_t nBackingBytes );
@@ -49,21 +49,21 @@ public:
 		return m_nActiveStorageGeneration;
 	}
 
-	EA_FORCE_INLINE T3DActiveMapLease acquireActive( const Vector2i &rLocation ) const {
-		return isActiveOwner() ? t3dActiveStorageAcquire( this, rLocation ) : T3DActiveMapLease();
+	EA_FORCE_INLINE Terrain3DActiveMapLease acquireActive( const Vector2i &rLocation ) const {
+		return isActiveOwner() ? t3dActiveStorageAcquire( this, rLocation ) : Terrain3DActiveMapLease();
 	}
 	bool containsActive( const Vector2i &rLocation ) const;
-	bool syncActiveRegion( const Vector2i &rLocation, const T3DRegion *pRegion );
+	bool syncActiveRegion( const Vector2i &rLocation, const Terrain3DRegion *pRegion );
 	bool syncActiveHeightPage( const Vector2i &rLocation, const uint8_t *pHeightBytes, size_t nHeightBytes );
 	bool replaceActiveHeightPages( int nRegionSize,
 			const uint8_t *const *ppHeightPages,
 			const int *pSlots,
 			size_t nPageCount );
 	bool syncActiveMap( const Vector2i &rLocation,
-			const T3DRegion *pRegion,
+			const Terrain3DRegion *pRegion,
 			t3dMapType_t eType,
 			const Rect2i &rDirtyRect = Rect2i() );
-	bool syncActiveDerived( const Vector2i &rLocation, const T3DRegion *pRegion, const Rect2i &rDirtyRect = Rect2i() );
+	bool syncActiveDerived( const Vector2i &rLocation, const Terrain3DRegion *pRegion, const Rect2i &rDirtyRect = Rect2i() );
 	void invalidateActive( const Vector2i &rLocation );
 
 	size_t getActiveReservedBytes( void ) const;
@@ -72,7 +72,7 @@ public:
 	uint64_t getActiveReaderMutexCount( void ) const;
 	uint64_t getActivePublicationCount( void ) const;
 
-	T3DResidentMapLease acquireResident( const Vector2i &rLocation, const T3DRegion *pRegion ) const;
+	Terrain3DResidentMapLease acquireResident( const Vector2i &rLocation, const Terrain3DRegion *pRegion ) const;
 	bool configureResidentPool( int nRegionSize,
 			int nRegionMapSize,
 			bool bControlMapsImplicit,
@@ -82,11 +82,11 @@ public:
 	void resetResidentPool( void );
 	void invalidateResident( const Vector2i &rLocation );
 	void syncResidentMap( const Vector2i &rLocation,
-			const T3DRegion *pRegion,
+			const Terrain3DRegion *pRegion,
 			t3dMapType_t eType,
 			const Rect2i &rDirtyRect = Rect2i() );
 	void
-	syncResidentDerived( const Vector2i &rLocation, const T3DRegion *pRegion, const Rect2i &rDirtyRect = Rect2i() );
+	syncResidentDerived( const Vector2i &rLocation, const Terrain3DRegion *pRegion, const Rect2i &rDirtyRect = Rect2i() );
 	size_t getResidentReservedBytes( void ) const;
 
 	void invalidateAllSamplers( void );
@@ -101,7 +101,7 @@ public:
 
 private:
 	uint32_t m_nActiveStorageGeneration = 0u;
-	mutable T3DResidentRegionPool m_residentPool;
+	mutable Terrain3DResidentRegionPool m_residentPool;
 	std::atomic<uint64_t> m_nSamplingGeneration{ 1u };
 	eastl::array<std::atomic<uint32_t>, s_nMaxRegionSlots> m_szRegionSamplingGenerations;
 

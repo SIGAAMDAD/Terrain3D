@@ -355,7 +355,7 @@ static func get_description(p_index: int) -> String:
 	return PRESET_DESCRIPTIONS[p_index]
 
 
-static func apply(p_settings: T3DErosionSettings, p_index: int) -> void:
+static func apply(p_settings: Terrain3DErosionSettings, p_index: int) -> void:
 	if not p_settings or p_index < 0 or p_index >= PRESET_NAMES.size():
 		return
 	_reset_process_defaults(p_settings)
@@ -393,7 +393,7 @@ static func apply(p_settings: T3DErosionSettings, p_index: int) -> void:
 
 
 static func _apply_values(
-		p_settings: T3DErosionSettings,
+		p_settings: Terrain3DErosionSettings,
 		p_floats: Dictionary[StringName, float],
 		p_ints: Dictionary[StringName, int],
 		p_bools: Dictionary[StringName, bool],
@@ -431,8 +431,8 @@ static func _make_snowmelt_pulse_curve() -> Curve:
 	return curve
 
 
-static func _reset_process_defaults(p_settings: T3DErosionSettings) -> void:
-	var defaults := T3DErosionSettings.new()
+static func _reset_process_defaults(p_settings: Terrain3DErosionSettings) -> void:
+	var defaults := Terrain3DErosionSettings.new()
 	for property: Dictionary[StringName, Variant] in defaults.get_property_list():
 		var usage := int(property.get("usage", 0))
 		if (usage & PROPERTY_USAGE_STORAGE) == 0:

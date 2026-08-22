@@ -9,34 +9,34 @@ using Godot.Collections;
 namespace TokisanGames;
 
 [Tool]
-public partial class T3DAssets : Resource
+public partial class Terrain3DAssets : Resource
 {
 
-	private new static readonly StringName NativeName = new StringName("T3DAssets");
+	private new static readonly StringName NativeName = new StringName("Terrain3DAssets");
 
-	[Obsolete("Wrapper types cannot be constructed with constructors (it only instantiate the underlying T3DAssets object), please use the Instantiate() method instead.")]
-	protected T3DAssets() { }
+	[Obsolete("Wrapper types cannot be constructed with constructors (it only instantiate the underlying Terrain3DAssets object), please use the Instantiate() method instead.")]
+	protected Terrain3DAssets() { }
 
 	private static CSharpScript _wrapperScriptAsset;
 
 	/// <summary>
-	/// Try to cast the script on the supplied <paramref name="godotObject"/> to the <see cref="T3DAssets"/> wrapper type,
-	/// if no script has attached to the type, or the script attached to the type does not inherit the <see cref="T3DAssets"/> wrapper type,
-	/// a new instance of the <see cref="T3DAssets"/> wrapper script will get attaches to the <paramref name="godotObject"/>.
+	/// Try to cast the script on the supplied <paramref name="godotObject"/> to the <see cref="Terrain3DAssets"/> wrapper type,
+	/// if no script has attached to the type, or the script attached to the type does not inherit the <see cref="Terrain3DAssets"/> wrapper type,
+	/// a new instance of the <see cref="Terrain3DAssets"/> wrapper script will get attaches to the <paramref name="godotObject"/>.
 	/// </summary>
 	/// <remarks>The developer should only supply the <paramref name="godotObject"/> that represents the correct underlying GDExtension type.</remarks>
 	/// <param name="godotObject">The <paramref name="godotObject"/> that represents the correct underlying GDExtension type.</param>
-	/// <returns>The existing or a new instance of the <see cref="T3DAssets"/> wrapper script attached to the supplied <paramref name="godotObject"/>.</returns>
-	public new static T3DAssets Bind(GodotObject godotObject)
+	/// <returns>The existing or a new instance of the <see cref="Terrain3DAssets"/> wrapper script attached to the supplied <paramref name="godotObject"/>.</returns>
+	public new static Terrain3DAssets Bind(GodotObject godotObject)
 	{
 		if (!IsInstanceValid(godotObject))
 			return null;
 
-		if (godotObject is T3DAssets wrapperScriptInstance)
+		if (godotObject is Terrain3DAssets wrapperScriptInstance)
 			return wrapperScriptInstance;
 
 #if DEBUG
-		var expectedType = typeof(T3DAssets);
+		var expectedType = typeof(Terrain3DAssets);
 		var currentObjectClassName = godotObject.GetClass();
 		if (!ClassDB.IsParentClass(expectedType.Name, currentObjectClassName))
 			throw new InvalidOperationException($"The supplied GodotObject ({currentObjectClassName}) is not the {expectedType.Name} type.");
@@ -44,21 +44,21 @@ public partial class T3DAssets : Resource
 
 		if (_wrapperScriptAsset is null)
 		{
-			var scriptPathAttribute = typeof(T3DAssets).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
+			var scriptPathAttribute = typeof(Terrain3DAssets).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
 			if (scriptPathAttribute is null) throw new UnreachableException();
 			_wrapperScriptAsset = ResourceLoader.Load<CSharpScript>(scriptPathAttribute.Path);
 		}
 
 		var instanceId = godotObject.GetInstanceId();
 		godotObject.SetScript(_wrapperScriptAsset);
-		return (T3DAssets)InstanceFromId(instanceId);
+		return (Terrain3DAssets)InstanceFromId(instanceId);
 	}
 
 	/// <summary>
-	/// Creates an instance of the GDExtension <see cref="T3DAssets"/> type, and attaches a wrapper script instance to it.
+	/// Creates an instance of the GDExtension <see cref="Terrain3DAssets"/> type, and attaches a wrapper script instance to it.
 	/// </summary>
-	/// <returns>The wrapper instance linked to the underlying GDExtension "T3DAssets" type.</returns>
-	public new static T3DAssets Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
+	/// <returns>The wrapper instance linked to the underlying GDExtension "Terrain3DAssets" type.</returns>
+	public new static Terrain3DAssets Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
 
 	public enum AssetType
 	{
@@ -277,11 +277,11 @@ public partial class T3DAssets : Resource
 		public new static readonly StringName Save = "save";
 	}
 
-	public new void SetTextureAsset(long id, T3DTextureAsset texture) =>
+	public new void SetTextureAsset(long id, Terrain3DTextureAsset texture) =>
 		Call(GDExtensionMethodName.SetTextureAsset, [id, texture]);
 
-	public new T3DTextureAsset GetTextureAsset(long id) =>
-		T3DTextureAsset.Bind(Call(GDExtensionMethodName.GetTextureAsset, [id]).As<Resource>());
+	public new Terrain3DTextureAsset GetTextureAsset(long id) =>
+		Terrain3DTextureAsset.Bind(Call(GDExtensionMethodName.GetTextureAsset, [id]).As<Resource>());
 
 	public new long GetTextureCount() =>
 		Call(GDExtensionMethodName.GetTextureCount, []).As<long>();
@@ -344,11 +344,11 @@ public partial class T3DAssets : Resource
 	public new void UpdateTextureList() =>
 		Call(GDExtensionMethodName.UpdateTextureList, []);
 
-	public new void SetMeshAsset(long id, T3DMeshAsset mesh) =>
+	public new void SetMeshAsset(long id, Terrain3DMeshAsset mesh) =>
 		Call(GDExtensionMethodName.SetMeshAsset, [id, mesh]);
 
-	public new T3DMeshAsset GetMeshAsset(long id) =>
-		T3DMeshAsset.Bind(Call(GDExtensionMethodName.GetMeshAsset, [id]).As<Resource>());
+	public new Terrain3DMeshAsset GetMeshAsset(long id) =>
+		Terrain3DMeshAsset.Bind(Call(GDExtensionMethodName.GetMeshAsset, [id]).As<Resource>());
 
 	public new long GetMeshCount() =>
 		Call(GDExtensionMethodName.GetMeshCount, []).As<long>();
@@ -366,24 +366,24 @@ public partial class T3DAssets : Resource
 
 file static class AssetTypeExtensions
 {
-public static int SafeAsInt32(this T3DAssets.AssetType enumValue) =>
+public static int SafeAsInt32(this Terrain3DAssets.AssetType enumValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this T3DAssets.AssetType enumValue, int defaultValue) =>
+public static int SafeAsInt32(this Terrain3DAssets.AssetType enumValue, int defaultValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this T3DAssets.AssetType? enumValue, int defaultValue = 0) =>
+public static int SafeAsInt32(this Terrain3DAssets.AssetType? enumValue, int defaultValue = 0) =>
 enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
 }
 
 file static class TexturePackingModeExtensions
 {
-public static int SafeAsInt32(this T3DAssets.TexturePackingMode enumValue) =>
+public static int SafeAsInt32(this Terrain3DAssets.TexturePackingMode enumValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this T3DAssets.TexturePackingMode enumValue, int defaultValue) =>
+public static int SafeAsInt32(this Terrain3DAssets.TexturePackingMode enumValue, int defaultValue) =>
 Convert.ToInt32(enumValue);
 
-public static int SafeAsInt32(this T3DAssets.TexturePackingMode? enumValue, int defaultValue = 0) =>
+public static int SafeAsInt32(this Terrain3DAssets.TexturePackingMode? enumValue, int defaultValue = 0) =>
 enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
 }

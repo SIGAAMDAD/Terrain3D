@@ -20,23 +20,22 @@
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
-    <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{b8850c81-3339-46a9-9668-caa004e84629}</ProjectGuid>
+    <Keyword>MakeFileProj</Keyword>
+    <ProjectGuid>{B8850C81-3339-46A9-9668-CAA004E84629}</ProjectGuid>
     <RootNamespace>Terrain3D</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>Makefile</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>Makefile</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
-    <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
@@ -46,17 +45,14 @@
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>Makefile</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
-    <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
-  <ImportGroup Label="ExtensionSettings">
-  </ImportGroup>
-  <ImportGroup Label="Shared">
-  </ImportGroup>
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="Shared" />
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
@@ -70,221 +66,395 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <NMakeBuildCommandLine>scons dev_build=yes</NMakeBuildCommandLine>
-    <NMakeReBuildCommandLine>scons dev_build=yes</NMakeReBuildCommandLine>
-    <NMakeCleanCommandLine>scons --clean</NMakeCleanCommandLine>
-    <NMakeIncludeSearchPath>$(SolutionDir)\src;$(SolutionDir)\thirdparty\EASTL\include;$(SolutionDir)\thirdparty\EABase\include\Common;$(SolutionDir)\godot-cpp\gdextension;$(SolutionDir)\godot-cpp\gen\include;$(SolutionDir)\godot-cpp\include</NMakeIncludeSearchPath>
-    <AdditionalOptions>/std:c++17</AdditionalOptions>
-    <OutDir>.vs</OutDir>
-    <IntDir>.vs</IntDir>
-    <NMakePreprocessorDefinitions>GDEXTENSION</NMakePreprocessorDefinitions>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <NMakeBuildCommandLine>scons platform=windows target=template_debug arch=x86_32 dev_build=yes</NMakeBuildCommandLine>
+    <NMakeReBuildCommandLine>scons --clean platform=windows target=template_debug arch=x86_32 &amp;&amp; scons platform=windows target=template_debug arch=x86_32 dev_build=yes</NMakeReBuildCommandLine>
+    <NMakeCleanCommandLine>scons --clean platform=windows target=template_debug arch=x86_32</NMakeCleanCommandLine>
+    <NMakeOutput>$(ProjectDir)project\addons\terrain_3d\bin\libterrain.windows.debug.x86_32.dll</NMakeOutput>
+    <NMakeIncludeSearchPath>$(ProjectDir)src;$(ProjectDir)thirdparty\EASTL\include;$(ProjectDir)thirdparty\EABase\include\Common;$(ProjectDir)godot-cpp\gdextension;$(ProjectDir)godot-cpp\gen\include;$(ProjectDir)godot-cpp\include</NMakeIncludeSearchPath>
+    <NMakePreprocessorDefinitions>GDEXTENSION;%(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
   </PropertyGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <ClCompile>
-      <WarningLevel>Level3</WarningLevel>
-      <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <ConformanceMode>true</ConformanceMode>
-    </ClCompile>
-    <Link>
-      <SubSystem>Console</SubSystem>
-      <GenerateDebugInformation>true</GenerateDebugInformation>
-    </Link>
-  </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <ClCompile>
-      <WarningLevel>Level3</WarningLevel>
-      <FunctionLevelLinking>true</FunctionLevelLinking>
-      <IntrinsicFunctions>true</IntrinsicFunctions>
-      <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <ConformanceMode>true</ConformanceMode>
-    </ClCompile>
-    <Link>
-      <SubSystem>Console</SubSystem>
-      <EnableCOMDATFolding>true</EnableCOMDATFolding>
-      <OptimizeReferences>true</OptimizeReferences>
-      <GenerateDebugInformation>true</GenerateDebugInformation>
-    </Link>
-  </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <ClCompile>
-      <WarningLevel>Level3</WarningLevel>
-      <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <ConformanceMode>true</ConformanceMode>
-    </ClCompile>
-    <Link>
-      <SubSystem>Console</SubSystem>
-      <GenerateDebugInformation>true</GenerateDebugInformation>
-    </Link>
-    <BuildLog>
-      <Path>.vs/Terrain3D-build.log</Path>
-    </BuildLog>
-  </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <ClCompile>
-      <WarningLevel>Level3</WarningLevel>
-      <FunctionLevelLinking>true</FunctionLevelLinking>
-      <IntrinsicFunctions>true</IntrinsicFunctions>
-      <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <ConformanceMode>true</ConformanceMode>
-    </ClCompile>
-    <Link>
-      <SubSystem>Console</SubSystem>
-      <EnableCOMDATFolding>true</EnableCOMDATFolding>
-      <OptimizeReferences>true</OptimizeReferences>
-      <GenerateDebugInformation>true</GenerateDebugInformation>
-    </Link>
-  </ItemDefinitionGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <NMakeBuildCommandLine>scons platform=windows target=template_release arch=x86_32</NMakeBuildCommandLine>
+    <NMakeReBuildCommandLine>scons --clean platform=windows target=template_release arch=x86_32 &amp;&amp; scons platform=windows target=template_release arch=x86_32</NMakeReBuildCommandLine>
+    <NMakeCleanCommandLine>scons --clean platform=windows target=template_release arch=x86_32</NMakeCleanCommandLine>
+    <NMakeOutput>$(ProjectDir)project\addons\terrain_3d\bin\libterrain.windows.release.x86_32.dll</NMakeOutput>
+    <NMakeIncludeSearchPath>$(ProjectDir)src;$(ProjectDir)thirdparty\EASTL\include;$(ProjectDir)thirdparty\EABase\include\Common;$(ProjectDir)godot-cpp\gdextension;$(ProjectDir)godot-cpp\gen\include;$(ProjectDir)godot-cpp\include</NMakeIncludeSearchPath>
+    <NMakePreprocessorDefinitions>GDEXTENSION;%(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <NMakeBuildCommandLine>scons platform=windows target=template_debug arch=x86_64 dev_build=yes</NMakeBuildCommandLine>
+    <NMakeReBuildCommandLine>scons --clean platform=windows target=template_debug arch=x86_64 &amp;&amp; scons platform=windows target=template_debug arch=x86_64 dev_build=yes</NMakeReBuildCommandLine>
+    <NMakeCleanCommandLine>scons --clean platform=windows target=template_debug arch=x86_64</NMakeCleanCommandLine>
+    <NMakeOutput>$(ProjectDir)project\addons\terrain_3d\bin\libterrain.windows.debug.x86_64.dll</NMakeOutput>
+    <NMakeIncludeSearchPath>$(ProjectDir)src;$(ProjectDir)thirdparty\EASTL\include;$(ProjectDir)thirdparty\EABase\include\Common;$(ProjectDir)godot-cpp\gdextension;$(ProjectDir)godot-cpp\gen\include;$(ProjectDir)godot-cpp\include</NMakeIncludeSearchPath>
+    <NMakePreprocessorDefinitions>GDEXTENSION;%(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <NMakeBuildCommandLine>scons platform=windows target=template_release arch=x86_64</NMakeBuildCommandLine>
+    <NMakeReBuildCommandLine>scons --clean platform=windows target=template_release arch=x86_64 &amp;&amp; scons platform=windows target=template_release arch=x86_64</NMakeReBuildCommandLine>
+    <NMakeCleanCommandLine>scons --clean platform=windows target=template_release arch=x86_64</NMakeCleanCommandLine>
+    <NMakeOutput>$(ProjectDir)project\addons\terrain_3d\bin\libterrain.windows.release.x86_64.dll</NMakeOutput>
+    <NMakeIncludeSearchPath>$(ProjectDir)src;$(ProjectDir)thirdparty\EASTL\include;$(ProjectDir)thirdparty\EABase\include\Common;$(ProjectDir)godot-cpp\gdextension;$(ProjectDir)godot-cpp\gen\include;$(ProjectDir)godot-cpp\include</NMakeIncludeSearchPath>
+    <NMakePreprocessorDefinitions>GDEXTENSION;%(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
+  </PropertyGroup>
   <ItemGroup>
-    <ClInclude Include=".github\actions\build-artifact\action.yml" />
-    <ClInclude Include="src\constants.h" />
-    <ClInclude Include="src\generated_texture.h" />
-    <ClInclude Include="src\target_node_3d.h" />
-    <ClInclude Include="src\terrain_3d_mesher.h" />
-    <ClInclude Include="src\register_types.h" />
-    <ClInclude Include="src\terrain_3d.h" />
+    <ClInclude Include="src\Terrain3DConstants.h" />
+    <ClInclude Include="src\assets\generated_texture.h" />
+    <ClInclude Include="src\assets\terrain_3d_asset_resource.h" />
+    <ClInclude Include="src\assets\terrain_3d_assets.h" />
+    <ClInclude Include="src\assets\terrain_3d_mesh_asset.h" />
+    <ClInclude Include="src\assets\terrain_3d_packed_pbr_texture.h" />
+    <ClInclude Include="src\assets\terrain_3d_texture_asset.h" />
+    <ClInclude Include="src\authoring\terrain_3d_autoshader_baker.h" />
+    <ClInclude Include="src\authoring\terrain_3d_autoshader_math.h" />
+    <ClInclude Include="src\authoring\terrain_3d_cook_database.h" />
+    <ClInclude Include="src\authoring\terrain_3d_editor.h" />
+    <ClInclude Include="src\authoring\terrain_3d_erosion_job.h" />
+    <ClInclude Include="src\authoring\terrain_3d_erosion_settings.h" />
+    <ClInclude Include="src\authoring\terrain_3d_landform_baker.h" />
+    <ClInclude Include="src\core\logger.h" />
+    <ClInclude Include="src\core\target_node_3d.h" />
+    <ClInclude Include="src\core\terrain_3d_byte_writer.h" />
+    <ClInclude Include="src\core\terrain_3d_compiler.h" />
+    <ClInclude Include="src\core\terrain_3d_cpp17_compat.h" />
+    <ClInclude Include="src\core\terrain_3d_diagnostics.h" />
+    <ClInclude Include="src\core\terrain_3d_flat_hash.h" />
     <ClInclude Include="src\core\terrain_3d_integration_helpers.h" />
-    <ClInclude Include="src\terrain_3d_asset_resource.h" />
-    <ClInclude Include="src\terrain_3d_collision.h" />
-    <ClInclude Include="src\terrain_3d_data.h" />
-    <ClInclude Include="src\terrain_3d_editor.h" />
-    <ClInclude Include="src\logger.h" />
-    <ClInclude Include="src\terrain_3d_instancer.h" />
-    <ClInclude Include="src\terrain_3d_mesh_asset.h" />
-    <ClInclude Include="src\terrain_3d_region.h" />
-    <ClInclude Include="src\terrain_3d_texture_asset.h" />
-    <ClInclude Include="src\terrain_3d_util.h" />
-    <ClInclude Include="src\terrain_3d_material.h" />
-    <ClInclude Include="src\terrain_3d_assets.h" />
-    <ClInclude Include="src\unit_testing.h" />
+    <ClInclude Include="src\core\terrain_3d_limits.h" />
+    <ClInclude Include="src\core\terrain_3d_numeric_constants.h" />
+    <ClInclude Include="src\core\terrain_3d_owner.h" />
+    <ClInclude Include="src\core\terrain_3d_slab_array.h" />
+    <ClInclude Include="src\core\terrain_3d_util.h" />
+    <ClInclude Include="src\core\unit_testing.h" />
+    <ClInclude Include="src\data\terrain_3d_data.h" />
+    <ClInclude Include="src\data\terrain_3d_half_buffer.h" />
+    <ClInclude Include="src\data\terrain_3d_map_edit_service.h" />
+    <ClInclude Include="src\data\terrain_3d_packed_transform.h" />
+    <ClInclude Include="src\data\terrain_3d_region.h" />
+    <ClInclude Include="src\data\terrain_3d_region_codec.h" />
+    <ClInclude Include="src\data\terrain_3d_region_persistence.h" />
+    <ClInclude Include="src\data\terrain_3d_region_repository.h" />
+    <ClInclude Include="src\data\terrain_3d_runtime_bake_codec.h" />
+    <ClInclude Include="src\data\terrain_3d_runtime_page_constants.h" />
+    <ClInclude Include="src\data\terrain_3d_runtime_page_format.h" />
+    <ClInclude Include="src\data\terrain_3d_runtime_world_manifest.h" />
+    <ClInclude Include="src\data\terrain_3d_sampler.h" />
+    <ClInclude Include="src\data\terrain_3d_sampling_storage.h" />
+    <ClInclude Include="src\eastl_config.h" />
+    <ClInclude Include="src\hlod\terrain_3d_hlod_builder.h" />
+    <ClInclude Include="src\hlod\terrain_3d_hlod_manifest.h" />
+    <ClInclude Include="src\hlod\terrain_3d_hlod_package.h" />
+    <ClInclude Include="src\hlod\terrain_3d_hlod_runtime_codec.h" />
+    <ClInclude Include="src\hlod\terrain_3d_hlod_streamer.h" />
+    <ClInclude Include="src\instances\terrain_3d_instance_cache_constants.h" />
+    <ClInclude Include="src\instances\terrain_3d_instance_cache_policy.h" />
+    <ClInclude Include="src\instances\terrain_3d_instance_layout.h" />
+    <ClInclude Include="src\instances\terrain_3d_instance_page_codec.h" />
+    <ClInclude Include="src\instances\terrain_3d_instance_store.h" />
+    <ClInclude Include="src\instances\terrain_3d_instancer.h" />
+    <ClInclude Include="src\lighting\terrain_3d_lighting_policy.h" />
+    <ClInclude Include="src\lighting\terrain_3d_lightmap_streamer.h" />
+    <ClInclude Include="src\lighting\terrain_3d_region_lighting.h" />
+    <ClInclude Include="src\memory\terrain_3d_active_access.h" />
+    <ClInclude Include="src\memory\terrain_3d_active_storage.h" />
+    <ClInclude Include="src\memory\terrain_3d_linear_arena.h" />
+    <ClInclude Include="src\memory\terrain_3d_memory.h" />
+    <ClInclude Include="src\memory\terrain_3d_memory_arena.h" />
+    <ClInclude Include="src\memory\terrain_3d_memory_budget.h" />
+    <ClInclude Include="src\memory\terrain_3d_memory_constants.h" />
+    <ClInclude Include="src\memory\terrain_3d_memory_zone.h" />
+    <ClInclude Include="src\memory\terrain_3d_resident_pool.h" />
+    <ClInclude Include="src\memory\terrain_3d_zone_allocator.h" />
+    <ClInclude Include="src\physics\terrain_3d_collision.h" />
+    <ClInclude Include="src\physics\terrain_3d_collision_surface_builder.h" />
+    <ClInclude Include="src\register_types.h" />
+    <ClInclude Include="src\rendering\rd\terrain_3d_rd_clipmap_renderer.h" />
+    <ClInclude Include="src\rendering\rd\terrain_3d_rd_compositor_effect.h" />
+    <ClInclude Include="src\rendering\rd\terrain_3d_rd_types.h" />
+    <ClInclude Include="src\rendering\rd\terrain_3d_render_coordinator.h" />
+    <ClInclude Include="src\rendering\terrain_3d_clipmap_bounds.h" />
+    <ClInclude Include="src\rendering\terrain_3d_compute.h" />
+    <ClInclude Include="src\rendering\terrain_3d_far_surface_atlas_cache.h" />
+    <ClInclude Include="src\rendering\terrain_3d_material.h" />
+    <ClInclude Include="src\rendering\terrain_3d_mesher.h" />
+    <ClInclude Include="src\rendering\terrain_3d_shader_specializer.h" />
+    <ClInclude Include="src\simd\terrain_3d_parallel.h" />
+    <ClInclude Include="src\simd\terrain_3d_simd.h" />
+    <ClInclude Include="src\simd\terrain_3d_simd_internal.h" />
+    <ClInclude Include="src\streaming\terrain_3d_active_height_residency.h" />
+    <ClInclude Include="src\streaming\terrain_3d_adaptive_budget_policy.h" />
+    <ClInclude Include="src\streaming\terrain_3d_boundary_phase_policy.h" />
+    <ClInclude Include="src\streaming\terrain_3d_cpu_cache_policy.h" />
+    <ClInclude Include="src\streaming\terrain_3d_cpu_region_cache.h" />
+    <ClInclude Include="src\streaming\terrain_3d_gpu_cache_constants.h" />
+    <ClInclude Include="src\streaming\terrain_3d_gpu_cache_policy.h" />
+    <ClInclude Include="src\streaming\terrain_3d_gpu_region_cache.h" />
+    <ClInclude Include="src\streaming\terrain_3d_instance_region_cache.h" />
+    <ClInclude Include="src\streaming\terrain_3d_middle_height_region_cache.h" />
+    <ClInclude Include="src\streaming\terrain_3d_node_streamer.h" />
+    <ClInclude Include="src\streaming\terrain_3d_performance_profile.h" />
+    <ClInclude Include="src\streaming\terrain_3d_performance_profile_manifest.inc" />
+    <ClInclude Include="src\streaming\terrain_3d_region_residency.h" />
+    <ClInclude Include="src\streaming\terrain_3d_residency_state.h" />
+    <ClInclude Include="src\streaming\terrain_3d_runtime_page_store.h" />
+    <ClInclude Include="src\streaming\terrain_3d_runtime_profile.h" />
+    <ClInclude Include="src\streaming\terrain_3d_streaming_policy.h" />
+    <ClInclude Include="src\streaming\terrain_3d_upload_bridge.h" />
+    <ClInclude Include="src\terrain_3d.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\generated_texture.cpp" />
-    <ClCompile Include="src\terrain_3d_mesher.cpp" />
-    <ClCompile Include="src\register_types.cpp" />
-    <ClCompile Include="src\terrain_3d.cpp" />
+    <ClCompile Include="src\assets\generated_texture.cpp" />
+    <ClCompile Include="src\assets\terrain_3d_assets.cpp" />
+    <ClCompile Include="src\assets\terrain_3d_mesh_asset.cpp" />
+    <ClCompile Include="src\assets\terrain_3d_packed_pbr_texture.cpp" />
+    <ClCompile Include="src\assets\terrain_3d_texture_asset.cpp" />
+    <ClCompile Include="src\authoring\terrain_3d_autoshader_baker.cpp" />
+    <ClCompile Include="src\authoring\terrain_3d_cook_database.cpp" />
+    <ClCompile Include="src\authoring\terrain_3d_editor.cpp" />
+    <ClCompile Include="src\authoring\terrain_3d_erosion_job.cpp" />
+    <ClCompile Include="src\authoring\terrain_3d_erosion_settings.cpp" />
+    <ClCompile Include="src\authoring\terrain_3d_landform_baker.cpp" />
+    <ClCompile Include="src\core\eastl_runtime.cpp" />
     <ClCompile Include="src\core\terrain_3d_bindings.cpp" />
+    <ClCompile Include="src\core\terrain_3d_diagnostics.cpp" />
     <ClCompile Include="src\core\terrain_3d_resources.cpp" />
     <ClCompile Include="src\core\terrain_3d_runtime_diagnostics.cpp" />
+    <ClCompile Include="src\core\terrain_3d_util.cpp" />
+    <ClCompile Include="src\core\unit_testing.cpp" />
     <ClCompile Include="src\data\terrain_3d_bake_integration.cpp" />
+    <ClCompile Include="src\data\terrain_3d_data.cpp" />
+    <ClCompile Include="src\data\terrain_3d_map_edit_service.cpp" />
+    <ClCompile Include="src\data\terrain_3d_region.cpp" />
+    <ClCompile Include="src\data\terrain_3d_region_persistence.cpp" />
+    <ClCompile Include="src\data\terrain_3d_region_repository.cpp" />
+    <ClCompile Include="src\data\terrain_3d_runtime_bake_codec.cpp" />
+    <ClCompile Include="src\data\terrain_3d_runtime_world_manifest.cpp" />
+    <ClCompile Include="src\data\terrain_3d_sampler.cpp" />
+    <ClCompile Include="src\data\terrain_3d_sampling_storage.cpp" />
+    <ClCompile Include="src\hlod\terrain_3d_hlod_builder.cpp" />
+    <ClCompile Include="src\hlod\terrain_3d_hlod_manifest.cpp" />
+    <ClCompile Include="src\hlod\terrain_3d_hlod_package.cpp" />
+    <ClCompile Include="src\hlod\terrain_3d_hlod_runtime_codec.cpp" />
+    <ClCompile Include="src\hlod\terrain_3d_hlod_streamer.cpp" />
+    <ClCompile Include="src\instances\terrain_3d_instance_page_codec.cpp" />
+    <ClCompile Include="src\instances\terrain_3d_instance_store.cpp" />
+    <ClCompile Include="src\instances\terrain_3d_instancer.cpp" />
+    <ClCompile Include="src\lighting\terrain_3d_lightmap_streamer.cpp" />
+    <ClCompile Include="src\lighting\terrain_3d_region_lighting.cpp" />
+    <ClCompile Include="src\memory\terrain_3d_active_storage.cpp" />
+    <ClCompile Include="src\memory\terrain_3d_memory_arena.cpp" />
     <ClCompile Include="src\memory\terrain_3d_memory_policy.cpp" />
+    <ClCompile Include="src\memory\terrain_3d_memory_zone.cpp" />
+    <ClCompile Include="src\memory\terrain_3d_resident_pool.cpp" />
+    <ClCompile Include="src\physics\terrain_3d_collision.cpp" />
+    <ClCompile Include="src\physics\terrain_3d_collision_surface_builder.cpp" />
+    <ClCompile Include="src\register_types.cpp" />
+    <ClCompile Include="src\rendering\rd\terrain_3d_rd_clipmap_renderer.cpp" />
+    <ClCompile Include="src\rendering\rd\terrain_3d_rd_compositor_effect.cpp" />
+    <ClCompile Include="src\rendering\rd\terrain_3d_render_coordinator.cpp" />
+    <ClCompile Include="src\rendering\terrain_3d_compute.cpp" />
+    <ClCompile Include="src\rendering\terrain_3d_far_surface_atlas_cache.cpp" />
+    <ClCompile Include="src\rendering\terrain_3d_material.cpp" />
+    <ClCompile Include="src\rendering\terrain_3d_mesher.cpp" />
     <ClCompile Include="src\rendering\terrain_3d_render_integration.cpp" />
+    <ClCompile Include="src\rendering\terrain_3d_shader_specializer.cpp" />
+    <ClCompile Include="src\simd\terrain_3d_simd.cpp" />
+    <ClCompile Include="src\simd\terrain_3d_simd_avx.cpp" />
+    <ClCompile Include="src\simd\terrain_3d_simd_avx2.cpp" />
+    <ClCompile Include="src\simd\terrain_3d_simd_neon.cpp" />
+    <ClCompile Include="src\simd\terrain_3d_simd_sse2.cpp" />
+    <ClCompile Include="src\streaming\terrain_3d_active_height_residency.cpp" />
+    <ClCompile Include="src\streaming\terrain_3d_cpu_region_cache.cpp" />
+    <ClCompile Include="src\streaming\terrain_3d_gpu_region_cache.cpp" />
+    <ClCompile Include="src\streaming\terrain_3d_instance_region_cache.cpp" />
+    <ClCompile Include="src\streaming\terrain_3d_middle_height_region_cache.cpp" />
+    <ClCompile Include="src\streaming\terrain_3d_node_streamer.cpp" />
+    <ClCompile Include="src\streaming\terrain_3d_region_residency.cpp" />
+    <ClCompile Include="src\streaming\terrain_3d_runtime_page_store.cpp" />
     <ClCompile Include="src\streaming\terrain_3d_runtime_profile.cpp" />
     <ClCompile Include="src\streaming\terrain_3d_streaming_integration.cpp" />
-    <ClCompile Include="src\terrain_3d_collision.cpp" />
-    <ClCompile Include="src\terrain_3d_data.cpp" />
-    <ClCompile Include="src\terrain_3d_editor.cpp" />
-    <ClCompile Include="src\terrain_3d_instancer.cpp" />
-    <ClCompile Include="src\terrain_3d_material.cpp" />
-    <ClCompile Include="src\terrain_3d_mesh_asset.cpp" />
-    <ClCompile Include="src\terrain_3d_region.cpp" />
-    <ClCompile Include="src\terrain_3d_texture_asset.cpp" />
-    <ClCompile Include="src\terrain_3d_assets.cpp" />
-    <ClCompile Include="src\terrain_3d_util.cpp" />
-    <ClCompile Include="src\unit_testing.cpp" />
+    <ClCompile Include="src\streaming\terrain_3d_upload_bridge.cpp" />
+    <ClCompile Include="src\terrain_3d.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include=".github\actions\dependencies\action.yml" />
-    <None Include=".github\actions\load-cache\action.yml" />
-    <None Include=".github\ISSUE_TEMPLATE\bug_report.yml" />
-    <None Include=".github\ISSUE_TEMPLATE\config.yml" />
-    <None Include=".github\ISSUE_TEMPLATE\feature_request.yml" />
-    <None Include=".github\workflows\android.yml" />
-    <None Include=".github\workflows\build.yml" />
-    <None Include=".github\workflows\ios.yml" />
-    <None Include=".github\workflows\linux.yml" />
-    <None Include=".github\workflows\macos.yml" />
-    <None Include=".github\workflows\web.yml" />
-    <None Include=".github\workflows\windows.yml" />
+    <None Include=".clang-format" />
+    <None Include=".gitattributes" />
     <None Include=".gitignore" />
-    <None Include="AUTHORS.md" />
-    <None Include="doc\build_docs.sh" />
-    <None Include="doc\conf.py" />
-    <None Include="doc\docs\collision.md" />
-    <None Include="doc\docs\contributing.md" />
-    <None Include="doc\docs\generating_csharp_bindings.md" />
-    <None Include="doc\docs\introduction.md" />
-    <None Include="doc\docs\double_precision.md" />
-    <None Include="doc\docs\games.md" />
-    <None Include="doc\docs\instancer.md" />
-    <None Include="doc\docs\keyboard_shortcuts.md" />
-    <None Include="doc\docs\maintainers.md" />
-    <None Include="doc\docs\platforms.md" />
-    <None Include="doc\docs\nightly_builds.md" />
-    <None Include="doc\docs\press.md" />
-    <None Include="doc\docs\data_format.md" />
-    <None Include="doc\docs\heightmaps.md" />
-    <None Include="doc\docs\programming_languages.rst" />
-    <None Include="doc\docs\displacement.md" />
-    <None Include="doc\docs\texture_painting.md" />
-    <None Include="doc\docs\user_interface.md" />
-    <None Include="doc\index.rst" />
-    <None Include="doc\docs\tips_environment.md">
-      <SubType>
-      </SubType>
-    </None>
-    <None Include="project\addons\terrain_3d\extras\shaders\lightweight.gdshader" />
-    <None Include="project\addons\terrain_3d\extras\shaders\minimum.gdshader" />
-    <None Include="project\addons\terrain_3d\extras\shaders\ocean_shader.gdshader" />
-    <None Include="project\addons\terrain_3d\plugin.cfg" />
-    <None Include="project\addons\terrain_3d\terrain.gdextension" />
-    <None Include="README.md" />
     <None Include="SConstruct" />
-    <None Include="src\shaders\debug_views.glsl" />
-    <None Include="src\shaders\displacement.glsl" />
-    <None Include="src\shaders\displacement_buffer.glsl" />
-    <None Include="src\shaders\macro_variation.glsl" />
-    <None Include="src\shaders\main.glsl" />
-    <None Include="src\shaders\max_regions.glsl" />
-    <None Include="src\shaders\overlays.glsl" />
-    <None Include="src\shaders\pbr_views.glsl">
-      <FileType>Document</FileType>
-    </None>
-    <None Include="src\shaders\projection.glsl" />
-    <None Include="src\shaders\samplers.glsl" />
-    <None Include="src\shaders\backgrounds.glsl" />
-    <None Include="src\shaders\editor_functions.glsl" />
-    <None Include="src\shaders\dual_scaling.glsl" />
-    <None Include="src\shaders\auto_shader.glsl" />
-  </ItemGroup>
-  <ItemGroup>
-    <Text Include=".readthedocs.yaml" />
-    <Text Include="doc\docs\import_export.md" />
-    <Text Include="doc\docs\occlusion_culling.md" />
-    <Text Include="doc\docs\shader_design.md" />
-    <Text Include="doc\docs\system_architecture.md" />
-    <Text Include="doc\docs\installation.md" />
-    <Text Include="doc\docs\controlmap_format.md" />
-    <Text Include="doc\docs\getting_help.md" />
-    <Text Include="doc\docs\tutorial_videos.md" />
-    <Text Include="doc\docs\troubleshooting.md" />
-    <Text Include="doc\docs\tips_technical.md" />
-    <Text Include="doc\docs\texture_prep.md" />
-    <Text Include="doc\docs\building_from_source.md" />
-    <Text Include="doc\requirements.txt" />
-    <Text Include="doc\_static\theme_overrides.css" />
-    <Text Include="LICENSE.txt" />
-    <Text Include="doc\docs\navigation.md" />
-    <Text Include="src\shaders\gpu_depth.glsl" />
-  </ItemGroup>
-  <ItemGroup>
-    <Xml Include="doc\doc_classes\Terrain3D.xml" />
-    <Xml Include="doc\doc_classes\Terrain3DCollision.xml" />
-    <Xml Include="doc\doc_classes\Terrain3DData.xml" />
-    <Xml Include="doc\doc_classes\Terrain3DEditor.xml" />
-    <Xml Include="doc\doc_classes\Terrain3DInstancer.xml" />
-    <Xml Include="doc\doc_classes\Terrain3DMaterial.xml" />
-    <Xml Include="doc\doc_classes\Terrain3DMeshAsset.xml" />
-    <Xml Include="doc\doc_classes\Terrain3DRegion.xml" />
-    <Xml Include="doc\doc_classes\Terrain3DTextureAsset.xml" />
-    <Xml Include="doc\doc_classes\Terrain3DAssets.xml" />
-    <Xml Include="doc\doc_classes\Terrain3DUtil.xml" />
+    <None Include="docs\api_shader_repair_report.md" />
+    <None Include="docs\compile_audit.md" />
+    <None Include="docs\gdscript_modernization_audit.md" />
+    <None Include="docs\rendering_device_conversion_patch.md" />
+    <None Include="docs\rendering_device_editor_experiment.md" />
+    <None Include="docs\rendering_device_implementation_plan.md" />
+    <None Include="project\Terrain3D.csproj" />
+    <None Include="project\Terrain3D.sln" />
+    <None Include="project\addons\terrain_3d\compute\terrain_brush.glsl" />
+    <None Include="project\addons\terrain_3d\compute\terrain_derived.glsl" />
+    <None Include="project\addons\terrain_3d\compute\terrain_displacement.glsl" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3D.cs" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3DAssets.cs" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3DCollision.cs" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3DData.cs" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3DEditor.cs" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3DErosionJob.cs" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3DErosionSettings.cs" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3DInstancer.cs" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3DMaterial.cs" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3DMeshAsset.cs" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3DPackedPBRTexture.cs" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3DRegion.cs" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3DTextureAsset.cs" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3DUtil.cs" />
+    <None Include="project\addons\terrain_3d\plugin.cfg" />
+    <None Include="project\addons\terrain_3d\setting_metadata.json" />
+    <None Include="project\addons\terrain_3d\shaders\displacement_buffer.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\auto_shader.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\auto_shader_uniforms.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\blend_weight_functions.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\blinn_phong.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\clipmap_batching_functions.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\clipmap_vertex_setup.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\debug_autoshader.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\debug_checkered.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\debug_colormap.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\debug_control_angle.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\debug_control_blend.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\debug_control_scale.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\debug_control_texture.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\debug_displacement_buffer.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\debug_grey.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\debug_heightmap.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\debug_heightmap_setup.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\debug_jaggedness.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\debug_roughmap.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\displacement_functions.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\displacement_uniforms.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\displacement_vertex.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\dual_scaling.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\dual_scaling_condition_0.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\dual_scaling_condition_1.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\dual_scaling_factor.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\dual_scaling_mix.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\dual_scaling_uniforms.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\editor_decal_render.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\editor_decal_setup.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\editor_fragment.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\editor_navigation.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\editor_region_grid.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\editor_setup.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\far\far_fragment_body.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\far\far_lighting.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\far\far_terrain_functions.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\far\far_uniforms.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\far\far_vertex_body.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\far_flat_functions.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\far_none_fragment.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\far_none_functions.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\flat_fragment.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\flat_functions.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\flat_uniforms.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\flat_vertex.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\legacy_pbr_displacement_functions.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\legacy_pbr_material_functions.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\legacy_pbr_uniforms.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\macro_variation.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\macro_variation_uniforms.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\material_layer_map.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\middle\middle_fragment_body.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\middle\middle_lighting.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\middle\middle_terrain_functions.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\middle\middle_uniforms.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\middle\middle_vertex_body.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\middle_color_functions.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\middle_none_fragment.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\near\material_sampling\adaptive.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\near\material_sampling\cinematic.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\near\material_sampling\distance_adaptive.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\near\material_sampling\single.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\near\material_sampling\two_corner.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\near\material_sampling\weighted.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\near\near_detailed_material.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\near\near_detiling_functions.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\near\near_fragment_material.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\near\near_fragment_terrain.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\near\near_lighting.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\near\near_material_functions.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\near\near_pbr_outputs.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\near\near_terrain_functions.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\near\near_types.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\near\near_uniforms.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\near\near_vertex_body.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\near_far_cached_material.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\none_check.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\none_functions.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\output_albedo.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\output_albedo_grey.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\output_ambient_occlusion.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\output_metallic.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\output_normal_map.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\output_roughness.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\output_specular.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\output_specular_none.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\overlay_contours_render.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\overlay_contours_setup.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\overlay_instancer_grid.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\overlay_instancer_grid_setup.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\overlay_vertex_grid.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\pbr_texture_albedo.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\pbr_texture_ao.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\pbr_texture_height.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\pbr_texture_normal.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\pbr_texture_roughness.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\projection.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\render_vertex_world_setup.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\runtime_material_streaming.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\shadow\shadow_height_functions.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\shadow\shadow_uniforms.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\shadow\shadow_vertex_body.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\shared\terrain_render_samplers.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\surface_displacement_uniform.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\surface_pbr_core_functions.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\surface_pbr_displacement_functions.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\surface_pbr_material_functions.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\surface_pbr_uniforms.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\terrain_common_defines.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\terrain_common_uniforms.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\terrain_control_lookup.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\terrain_far_atlas_bounds.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\terrain_far_color.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\terrain_far_color_filtered.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\terrain_far_height.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\terrain_far_normal.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\terrain_far_surface.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\terrain_height_decode.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\terrain_height_interpolation.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\terrain_material_sampling.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\terrain_middle_height_uniforms.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\terrain_missing_texture.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\terrain_region_lookup.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\terrain_region_map_uniform.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\terrain_render_common_uniforms.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\terrain_render_varyings.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\texture_samplers_linear.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\texture_samplers_linear_anisotropic.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\texture_samplers_nearest.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\texture_samplers_nearest_anisotropic.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\world_noise_fragment.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\world_noise_functions.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\world_noise_uniforms.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\world_noise_vertex.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\wrapped_diffuse_light.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\main.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\main_far.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\main_middle.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\main_shadow.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\terrain.gdextension" />
+    <None Include="project\project.godot" />
+    <None Include="src\shaders\gpu_depth.glsl" />
+    <None Include="tools\generate_msvc_project.py" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-  <ImportGroup Label="ExtensionTargets">
-  </ImportGroup>
+  <ImportGroup Label="ExtensionTargets" />
 </Project>

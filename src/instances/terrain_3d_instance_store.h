@@ -27,9 +27,9 @@ using namespace godot;
 
 typedef struct t3dInstanceCell_s {
 	Vector2i m_location;
-	T3DTransformArray m_transforms;
-	T3DSlabArray<uint32_t> m_colors; // RGBA8. Empty means all white.
-	T3DSlabArray<uint32_t> m_owners; // Sparse semantic owner IDs. Empty means owner 0.
+	Terrain3DTransformArray m_transforms;
+	Terrain3DSlabArray<uint32_t> m_colors; // RGBA8. Empty means all white.
+	Terrain3DSlabArray<uint32_t> m_owners; // Sparse semantic owner IDs. Empty means owner 0.
 	uint32_t m_nRevision = 1;
 	bool m_bModified = true;
 	AABB m_cachedAabb;
@@ -38,25 +38,31 @@ typedef struct t3dInstanceCell_s {
 	uint32_t m_nCachedAabbGeneration = 0;
 	bool m_bCachedAabbValid = false;
 
-	EA_FORCE_INLINE void bindPayloadPools( T3DHighWaterSlab<t3dPackedTransform_t> *const pTransforms,
-			T3DHighWaterSlab<uint32_t> *const pColors,
-			T3DHighWaterSlab<uint32_t> *const pOwners ) {
+	t3dInstanceCell_s( void ) = default;
+	t3dInstanceCell_s( const t3dInstanceCell_s & ) = delete;
+	t3dInstanceCell_s &operator=( const t3dInstanceCell_s & ) = delete;
+	t3dInstanceCell_s( t3dInstanceCell_s && ) noexcept = default;
+	t3dInstanceCell_s &operator=( t3dInstanceCell_s && ) noexcept = default;
+
+	EA_FORCE_INLINE void bindPayloadPools( Terrain3DHighWaterSlab<t3dPackedTransform_t> *const pTransforms,
+			Terrain3DHighWaterSlab<uint32_t> *const pColors,
+			Terrain3DHighWaterSlab<uint32_t> *const pOwners ) {
 		m_transforms.bind( pTransforms );
 		m_colors.bind( pColors );
 		m_owners.bind( pOwners );
 	}
 
-	EA_FORCE_INLINE void rebindPayloadPools( T3DHighWaterSlab<t3dPackedTransform_t> *const pTransforms,
-			T3DHighWaterSlab<uint32_t> *const pColors,
-			T3DHighWaterSlab<uint32_t> *const pOwners ) {
+	EA_FORCE_INLINE void rebindPayloadPools( Terrain3DHighWaterSlab<t3dPackedTransform_t> *const pTransforms,
+			Terrain3DHighWaterSlab<uint32_t> *const pColors,
+			Terrain3DHighWaterSlab<uint32_t> *const pOwners ) {
 		m_transforms.rebind( pTransforms );
 		m_colors.rebind( pColors );
 		m_owners.rebind( pOwners );
 	}
 
-	EA_FORCE_INLINE void relocatePayloadsExact( T3DHighWaterSlab<t3dPackedTransform_t> *const pTransforms,
-			T3DHighWaterSlab<uint32_t> *const pColors,
-			T3DHighWaterSlab<uint32_t> *const pOwners ) {
+	EA_FORCE_INLINE void relocatePayloadsExact( Terrain3DHighWaterSlab<t3dPackedTransform_t> *const pTransforms,
+			Terrain3DHighWaterSlab<uint32_t> *const pColors,
+			Terrain3DHighWaterSlab<uint32_t> *const pOwners ) {
 		m_transforms.relocateExact( pTransforms );
 		m_colors.relocateExact( pColors );
 		m_owners.relocateExact( pOwners );
@@ -160,14 +166,20 @@ typedef struct t3dInstanceCell_s {
 typedef struct t3dInstanceMesh_s {
 	int m_nId = -1;
 	eastl::vector<t3dInstanceCell_t> m_cells;
+
+	t3dInstanceMesh_s( void ) = default;
+	t3dInstanceMesh_s( const t3dInstanceMesh_s & ) = delete;
+	t3dInstanceMesh_s &operator=( const t3dInstanceMesh_s & ) = delete;
+	t3dInstanceMesh_s( t3dInstanceMesh_s && ) noexcept = default;
+	t3dInstanceMesh_s &operator=( t3dInstanceMesh_s && ) noexcept = default;
 } t3dInstanceMesh_t;
 
-class T3DInstanceStore {
+class Terrain3DInstanceStore {
 	static constexpr uint16_t s_nInvalidMeshSlot = UINT16_MAX;
 	eastl::vector<t3dInstanceMesh_t> m_meshes;
-	T3DHighWaterSlab<t3dPackedTransform_t> m_transformSlab;
-	T3DHighWaterSlab<uint32_t> m_colorSlab;
-	T3DHighWaterSlab<uint32_t> m_ownerSlab;
+	Terrain3DHighWaterSlab<t3dPackedTransform_t> m_transformSlab;
+	Terrain3DHighWaterSlab<uint32_t> m_colorSlab;
+	Terrain3DHighWaterSlab<uint32_t> m_ownerSlab;
 	t3dInstanceLayout_t m_layout;
 	mutable uint16_t m_szMeshSlots[s_nMaxMeshAssets];
 	mutable bool m_bMeshLookupDirty = true;
@@ -179,7 +191,7 @@ class T3DInstanceStore {
 	size_t meshLowerBound( int nMeshId ) const;
 	void rebuildMeshLookup( void ) const;
 	void rebindPayloadPools( void );
-	void copyFrom( const T3DInstanceStore &rOther );
+	void copyFrom( const Terrain3DInstanceStore &rOther );
 	EA_FORCE_INLINE void bindCellPayloads( t3dInstanceCell_t &rCell ) {
 		rCell.bindPayloadPools( &m_transformSlab, &m_colorSlab, &m_ownerSlab );
 	}
@@ -188,16 +200,16 @@ class T3DInstanceStore {
 	}
 
 public:
-	EA_FORCE_INLINE T3DInstanceStore( void ) {
+	EA_FORCE_INLINE Terrain3DInstanceStore( void ) {
 		rebuildMeshLookup();
 	}
-	EA_FORCE_INLINE ~T3DInstanceStore( void ) = default;
-	EA_FORCE_INLINE T3DInstanceStore( const T3DInstanceStore &rOther ) {
+	EA_FORCE_INLINE ~Terrain3DInstanceStore( void ) = default;
+	EA_FORCE_INLINE Terrain3DInstanceStore( const Terrain3DInstanceStore &rOther ) {
 		copyFrom( rOther );
 	}
-	T3DInstanceStore( T3DInstanceStore &&rOther );
-	T3DInstanceStore &operator=( const T3DInstanceStore &rOther );
-	T3DInstanceStore &operator=( T3DInstanceStore &&rOther );
+	Terrain3DInstanceStore( Terrain3DInstanceStore &&rOther );
+	Terrain3DInstanceStore &operator=( const Terrain3DInstanceStore &rOther );
+	Terrain3DInstanceStore &operator=( Terrain3DInstanceStore &&rOther );
 
 	EA_FORCE_INLINE void clear( void ) {
 		clearRetainCapacity();

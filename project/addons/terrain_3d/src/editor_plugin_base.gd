@@ -1,18 +1,19 @@
 # Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 # Typed contract shared by Terrain3D editor-side helpers.
 @tool
-class_name T3DEditorPluginBase
+@abstract
+class_name Terrain3DEditorPluginBase
 extends EditorPlugin
 
 var debug: int = 0
-var editor: T3DEditor
+var editor: Terrain3DEditor
 var editor_settings: EditorSettings
 var godot_editor_window: Window
 var viewport: SubViewport
 var mouse_global_position: Vector3 = Vector3.ZERO
 var mouse_in_main: bool = false
 
-var terrain: T3DTerrain
+var terrain: Terrain3D
 var nav_region: NavigationRegion3D
 
 var modifier_ctrl: bool = false
@@ -22,69 +23,40 @@ var _input_mode: int = 0
 var rmb_release_time: int = 0
 
 
-func _read_input(_p_event: InputEvent = null) -> AfterGUIInput:
-	return AFTER_GUI_INPUT_PASS
+@abstract func _read_input(_p_event: InputEvent = null) -> AfterGUIInput
 
+@abstract func get_erosion_settings(_p_terrain: Terrain3D) -> Terrain3DErosionSettings
 
-func get_erosion_settings(_p_terrain: T3DTerrain) -> T3DErosionSettings:
-	return T3DErosionSettings.new()
+@abstract func set_erosion_settings(_p_terrain: Terrain3D, _p_settings: Terrain3DErosionSettings) -> void
 
+@abstract func open_erosion_simulator() -> void
 
-func set_erosion_settings(_p_terrain: T3DTerrain, _p_settings: T3DErosionSettings) -> void:
-	pass
+@abstract func open_shader_performance() -> void
 
+@abstract func open_autoshader_baker() -> void
 
-func open_erosion_simulator() -> void:
-	pass
+@abstract func open_region_lightmap_baker() -> void
 
+@abstract func open_hlod_panel() -> void
 
-func open_shader_performance() -> void:
-	pass
+@abstract func convert_selected_to_hlod_visual(_p_min_level: int = 1) -> void
 
+@abstract func get_region_lightmap_baker() -> Node
 
-func open_autoshader_baker() -> void:
-	pass
+@abstract func get_terrain() -> Terrain3D
 
+@abstract func is_terrain_valid(_p_terrain: Terrain3D = null) -> bool
 
+@abstract func select_terrain() -> void
 
-func open_region_lightmap_baker() -> void:
-	pass
+@abstract func set_setting(_p_path: String, _p_value: Variant) -> void
 
+@abstract func get_setting(_p_path: String, _p_default: Variant) -> Variant
 
-func get_region_lightmap_baker() -> Node:
-	return null
+@abstract func has_setting(_p_path: String) -> bool
 
+@abstract func erase_setting(_p_path: String) -> void
 
-func get_terrain() -> T3DTerrain:
-	return terrain
+@abstract func change_tool(_p_tool_name: String) -> void
 
-
-func is_terrain_valid(_p_terrain: T3DTerrain = null) -> bool:
-	return false
-
-
-func select_terrain() -> void:
-	pass
-
-
-func set_setting(_p_path: String, _p_value: Variant) -> void:
-	pass
-
-
-func get_setting(_p_path: String, p_default: Variant) -> Variant:
-	return p_default
-
-
-func has_setting(_p_path: String) -> bool:
-	return false
-
-
-func erase_setting(_p_path: String) -> void:
-	pass
-
-func change_tool(_p_tool_name: String) -> void:
-	pass
-
-
-func notify_ui_setting_changed() -> void:
-	pass
+@abstract func notify_ui_setting_changed() -> void

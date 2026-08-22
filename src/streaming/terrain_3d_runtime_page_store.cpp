@@ -21,6 +21,7 @@
 #include <godot_cpp/classes/editor_interface.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/time.hpp>
+#include <utility>
 
 static void t3dRuntimePageStoreFnv1a64Append( uint64_t &nHash, const uint8_t *pData, const size_t nSize ) {
 	for ( size_t index = 0u; index < nSize; ++index ) {
@@ -507,18 +508,18 @@ static void t3dRuntimePageStoreUpdateEditorFile( const String &rPath ) {
 	}
 }
 
-T3DRuntimePageStore::T3DRuntimePageStore( T3DRegionRepository *const pRepository,
-		const T3DRegionPersistence *const pPersistence ) :
+Terrain3DRuntimePageStore::Terrain3DRuntimePageStore( Terrain3DRegionRepository *const pRepository,
+		const Terrain3DRegionPersistence *const pPersistence ) :
 		m_pRepository( pRepository ), m_pPersistence( pPersistence ) {
 	m_preparedByRegion.fill( ( int16_t )-1 );
 	m_workByRegion.fill( ( int16_t )-1 );
 }
 
-T3DRuntimePageStore::~T3DRuntimePageStore( void ) {
+Terrain3DRuntimePageStore::~Terrain3DRuntimePageStore( void ) {
 	reset();
 }
 
-void T3DRuntimePageStore::reset( void ) {
+void Terrain3DRuntimePageStore::reset( void ) {
 	poll( true );
 	for ( int index = 0; index < m_nPreparedPageCount; ++index ) {
 		m_preparedPages[( size_t )( index )] = t3dRuntimePreparedPage_t{};
@@ -541,7 +542,7 @@ void T3DRuntimePageStore::reset( void ) {
 	resetFrameStats();
 }
 
-void T3DRuntimePageStore::resetFrameStats( void ) {
+void Terrain3DRuntimePageStore::resetFrameStats( void ) {
 	m_nPrepareLatencyUsecLast = 0u;
 	m_nPrepareQueueWaitUsecLast = 0u;
 	m_nPrepareFileOpenUsecLast = 0u;
@@ -552,36 +553,36 @@ void T3DRuntimePageStore::resetFrameStats( void ) {
 	m_nPrepareReadyWaitUsecLast = 0u;
 }
 
-bool T3DRuntimePageStore::loadSourceRegion( const Vector2i &rLocation, Ref<T3DRegion> &rSource ) const {
+bool Terrain3DRuntimePageStore::loadSourceRegion( const Vector2i &rLocation, Ref<Terrain3DRegion> &rSource ) const {
 	rSource.unref();
 	if ( !m_pRepository ) {
 		return false;
 	}
-	T3DRegion *const pRegion = m_pRepository->getRegionPtr( rLocation );
+	Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( rLocation );
 	if ( !pRegion || pRegion->isDeleted() ) {
 		return false;
 	}
 	if ( pRegion->hasRuntimeMapPayloadInternal() ) {
-		rSource = Ref<T3DRegion>( pRegion );
+		rSource = Ref<Terrain3DRegion>( pRegion );
 		return true;
 	}
 	return m_pPersistence &&
 			m_pPersistence->loadRuntimeRegionSource( pRegion->get_path(), m_pRepository->getRegionSize(), rSource );
 }
 
-String T3DRuntimePageStore::getPagePath( const T3DRegion *const pRegion, const String &rDataDirectory ) const {
+String Terrain3DRuntimePageStore::getPagePath( const Terrain3DRegion *const pRegion, const String &rDataDirectory ) const {
 	if ( !pRegion ) {
 		return String();
 	}
 	if ( !rDataDirectory.is_empty() ) {
 		const String source_path = rDataDirectory.trim_suffix( "/" ) + String( "/" ) +
-				T3DUtil::locationToFilename( pRegion->getLocation() );
+				Terrain3DUtil::locationToFilename( pRegion->getLocation() );
 		return source_path.get_basename() + String( ".t3dpage" );
 	}
 	return pRegion->get_path().is_empty() ? String() : pRegion->get_path().get_basename() + String( ".t3dpage" );
 }
 
-uint64_t T3DRuntimePageStore::computeSourceSignature( const T3DRegion *const pRegion,
+uint64_t Terrain3DRuntimePageStore::computeSourceSignature( const Terrain3DRegion *const pRegion,
 		const t3dRuntimePageConfig_t &rConfig ) const {
 	if ( !pRegion || !m_pRepository ) {
 		return 0u;
@@ -599,8 +600,8 @@ uint64_t T3DRuntimePageStore::computeSourceSignature( const T3DRegion *const pRe
 	t3dRuntimePageStoreFnv1a64AppendU32( hash, ( uint32_t )( pRegion->getLocation().x ) );
 	t3dRuntimePageStoreFnv1a64AppendU32( hash, ( uint32_t )( pRegion->getLocation().y ) );
 
-	Ref<T3DRegion> pLoadedOwner;
-	const T3DRegion *pOwner = pRegion;
+	Ref<Terrain3DRegion> pLoadedOwner;
+	const Terrain3DRegion *pOwner = pRegion;
 	if ( !pOwner->hasRuntimeMapPayloadInternal() && loadSourceRegion( pOwner->getLocation(), pLoadedOwner ) ) {
 		pOwner = pLoadedOwner.ptr();
 	}
@@ -622,7 +623,7 @@ uint64_t T3DRuntimePageStore::computeSourceSignature( const T3DRegion *const pRe
 		t3dRuntimePageStoreFnv1a64Append( hash, instance_page.ptr(), ( size_t )( instance_page.size() ) );
 	}
 
-	const Ref<T3DRegionLighting> lighting = pOwner->getLighting();
+	const Ref<Terrain3DRegionLighting> lighting = pOwner->getLighting();
 	if ( lighting.is_valid() ) {
 		t3dRuntimePageStoreFnv1a64AppendU64( hash, ( uint64_t )( lighting->getBakeSignature() ) );
 		t3dRuntimePageStoreFnv1a64AppendU32( hash, ( uint32_t )( lighting->getShadowmaskMode() ) );
@@ -635,8 +636,8 @@ uint64_t T3DRuntimePageStore::computeSourceSignature( const T3DRegion *const pRe
 	const Vector2i height_dependency_offsets[3] = { Vector2i( 1, 0 ), Vector2i( 0, 1 ), Vector2i( 1, 1 ) };
 	for ( int dependency = 0; dependency < 3; ++dependency ) {
 		const Vector2i location = pRegion->getLocation() + height_dependency_offsets[dependency];
-		T3DRegion *region = m_pRepository->getRegionPtr( location );
-		Ref<T3DRegion> pLoadedSource;
+		Terrain3DRegion *region = m_pRepository->getRegionPtr( location );
+		Ref<Terrain3DRegion> pLoadedSource;
 		if ( ( !region || region->getHeightMap().is_null() ) && loadSourceRegion( location, pLoadedSource ) ) {
 			region = pLoadedSource.ptr();
 		}
@@ -656,8 +657,8 @@ uint64_t T3DRuntimePageStore::computeSourceSignature( const T3DRegion *const pRe
 	for ( int dz = -1; dz <= 1; ++dz ) {
 		for ( int dx = -1; dx <= 1; ++dx ) {
 			const Vector2i location = pRegion->getLocation() + Vector2i( dx, dz );
-			T3DRegion *region = m_pRepository->getRegionPtr( location );
-			Ref<T3DRegion> pLoadedSource;
+			Terrain3DRegion *region = m_pRepository->getRegionPtr( location );
+			Ref<Terrain3DRegion> pLoadedSource;
 			if ( ( !region || region->getControlMap().is_null() ) && loadSourceRegion( location, pLoadedSource ) ) {
 				region = pLoadedSource.ptr();
 			}
@@ -680,7 +681,7 @@ uint64_t T3DRuntimePageStore::computeSourceSignature( const T3DRegion *const pRe
 	return hash;
 }
 
-bool T3DRuntimePageStore::readSourceSignature( const String &rPagePath, uint64_t &nSignature ) const {
+bool Terrain3DRuntimePageStore::readSourceSignature( const String &rPagePath, uint64_t &nSignature ) const {
 	nSignature = 0u;
 	if ( rPagePath.is_empty() || !FileAccess::file_exists( rPagePath ) ) {
 		return false;
@@ -701,7 +702,7 @@ bool T3DRuntimePageStore::readSourceSignature( const String &rPagePath, uint64_t
 	return nSignature != 0u;
 }
 
-uint32_t T3DRuntimePageStore::readMaterialMask( const String &rPagePath ) const {
+uint32_t Terrain3DRuntimePageStore::readMaterialMask( const String &rPagePath ) const {
 	if ( rPagePath.is_empty() || !FileAccess::file_exists( rPagePath ) ) {
 		return 0u;
 	}
@@ -717,11 +718,11 @@ uint32_t T3DRuntimePageStore::readMaterialMask( const String &rPagePath ) const 
 	return t3dRuntimePageValidateHeader( header, pFile->get_length() ) ? header.m_nMaterialMask : 0u;
 }
 
-bool T3DRuntimePageStore::removePageForSource( const String &rSourcePath ) const {
+bool Terrain3DRuntimePageStore::removePageForSource( const String &rSourcePath ) const {
 	return removePage( rSourcePath.is_empty() ? String() : rSourcePath.get_basename() + String( ".t3dpage" ) );
 }
 
-bool T3DRuntimePageStore::removePage( const String &rPagePath ) const {
+bool Terrain3DRuntimePageStore::removePage( const String &rPagePath ) const {
 	if ( rPagePath.is_empty() || !FileAccess::file_exists( rPagePath ) ) {
 		return true;
 	}
@@ -732,7 +733,7 @@ bool T3DRuntimePageStore::removePage( const String &rPagePath ) const {
 	return removed;
 }
 
-bool T3DRuntimePageStore::loadSnapshot( t3dRuntimePreparedPage_t &rPage, const bool bPreserveMaterialized ) {
+bool Terrain3DRuntimePageStore::loadSnapshot( t3dRuntimePreparedPage_t &rPage, const bool bPreserveMaterialized ) {
 	if ( !bPreserveMaterialized ) {
 		rPage.m_height.unref();
 		rPage.m_heightBytes.clear();
@@ -1027,7 +1028,7 @@ bool T3DRuntimePageStore::loadSnapshot( t3dRuntimePreparedPage_t &rPage, const b
 	return true;
 }
 
-bool T3DRuntimePageStore::validatePageForRegion( const T3DRegion *const pRegion,
+bool Terrain3DRuntimePageStore::validatePageForRegion( const Terrain3DRegion *const pRegion,
 		const t3dRuntimePageConfig_t &rConfig ) const {
 	if ( !pRegion || !m_pRepository ) {
 		return false;
@@ -1043,7 +1044,7 @@ bool T3DRuntimePageStore::validatePageForRegion( const T3DRegion *const pRegion,
 	page.m_nDerivedDivisor = MAX( 1, rConfig.m_nDerivedDivisor );
 	page.m_nMiddleHeightDivisor = MAX( 1, rConfig.m_nMiddleHeightDivisor );
 	page.m_nConsumerMask = RUNTIME_PAGE_CONSUMER_GPU_DETAIL | RUNTIME_PAGE_CONSUMER_MIDDLE_HEIGHT;
-	const Ref<T3DRegionLighting> lighting = pRegion->getLighting();
+	const Ref<Terrain3DRegionLighting> lighting = pRegion->getLighting();
 	if ( lighting.is_valid() && lighting->hasTerrainShadowMask() ) {
 		page.m_nConsumerMask |= RUNTIME_PAGE_CONSUMER_TERRAIN_SHADOW;
 	}
@@ -1051,7 +1052,7 @@ bool T3DRuntimePageStore::validatePageForRegion( const T3DRegion *const pRegion,
 	return loadSnapshot( page );
 }
 
-bool T3DRuntimePageStore::loadCpuMapsNow( const Vector2i &rLocation,
+bool Terrain3DRuntimePageStore::loadCpuMapsNow( const Vector2i &rLocation,
 		const t3dRuntimePageConfig_t &rConfig,
 		Ref<Image> &rHeight,
 		Ref<Image> &rControl,
@@ -1064,7 +1065,7 @@ bool T3DRuntimePageStore::loadCpuMapsNow( const Vector2i &rLocation,
 	if ( !m_pRepository || !rConfig.m_bCookedPagesEnabled ) {
 		return false;
 	}
-	T3DRegion *const pRegion = m_pRepository->getRegionPtr( rLocation );
+	Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( rLocation );
 	if ( !pRegion || pRegion->isDeleted() ) {
 		return false;
 	}
@@ -1090,7 +1091,7 @@ bool T3DRuntimePageStore::loadCpuMapsNow( const Vector2i &rLocation,
 	return rHeight.is_valid() && rDerived.is_valid();
 }
 
-bool T3DRuntimePageStore::loadCollisionNow( const Vector2i &rLocation,
+bool Terrain3DRuntimePageStore::loadCollisionNow( const Vector2i &rLocation,
 		const t3dRuntimePageConfig_t &rConfig,
 		PackedByteArray &rHeight,
 		PackedByteArray &rBounds,
@@ -1101,7 +1102,7 @@ bool T3DRuntimePageStore::loadCollisionNow( const Vector2i &rLocation,
 	if ( !m_pRepository || !rConfig.m_bCookedPagesEnabled ) {
 		return false;
 	}
-	T3DRegion *const pRegion = m_pRepository->getRegionPtr( rLocation );
+	Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( rLocation );
 	if ( !pRegion || pRegion->isDeleted() ) {
 		return false;
 	}
@@ -1126,7 +1127,7 @@ bool T3DRuntimePageStore::loadCollisionNow( const Vector2i &rLocation,
 	return !rHeight.is_empty() && !rBounds.is_empty() && !rHoleMask.is_empty();
 }
 
-bool T3DRuntimePageStore::loadNavigationNow( const Vector2i &rLocation,
+bool Terrain3DRuntimePageStore::loadNavigationNow( const Vector2i &rLocation,
 		const t3dRuntimePageConfig_t &rConfig,
 		PackedByteArray &rNavigation,
 		PackedByteArray *const pCollisionHeight,
@@ -1141,7 +1142,7 @@ bool T3DRuntimePageStore::loadNavigationNow( const Vector2i &rLocation,
 	if ( !m_pRepository || !rConfig.m_bCookedPagesEnabled ) {
 		return false;
 	}
-	T3DRegion *const pRegion = m_pRepository->getRegionPtr( rLocation );
+	Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( rLocation );
 	if ( !pRegion || pRegion->isDeleted() ) {
 		return false;
 	}
@@ -1173,14 +1174,14 @@ bool T3DRuntimePageStore::loadNavigationNow( const Vector2i &rLocation,
 			( !pMinMaxHeight || !pMinMaxHeight->is_empty() );
 }
 
-bool T3DRuntimePageStore::loadLightingReceiversNow( const Vector2i &rLocation,
+bool Terrain3DRuntimePageStore::loadLightingReceiversNow( const Vector2i &rLocation,
 		const t3dRuntimePageConfig_t &rConfig,
 		PackedByteArray &rReceivers ) const {
 	rReceivers.clear();
 	if ( !m_pRepository || !rConfig.m_bCookedPagesEnabled ) {
 		return false;
 	}
-	T3DRegion *const pRegion = m_pRepository->getRegionPtr( rLocation );
+	Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( rLocation );
 	if ( !pRegion || pRegion->isDeleted() ) {
 		return false;
 	}
@@ -1209,7 +1210,7 @@ bool T3DRuntimePageStore::loadLightingReceiversNow( const Vector2i &rLocation,
 	return !rReceivers.is_empty();
 }
 
-bool T3DRuntimePageStore::writePage( T3DRegion *const pRegion,
+bool Terrain3DRuntimePageStore::writePage( Terrain3DRegion *const pRegion,
 		const t3dRuntimePageConfig_t &rConfig,
 		const t3dRuntimePageCookPayload_t &rPayload,
 		String *const pError ) const {
@@ -1420,7 +1421,7 @@ bool T3DRuntimePageStore::writePage( T3DRegion *const pRegion,
 	return true;
 }
 
-bool T3DRuntimePageStore::collectPageSources( const String &rDataDirectory,
+bool Terrain3DRuntimePageStore::collectPageSources( const String &rDataDirectory,
 		PackedStringArray &rSourceFiles,
 		eastl::vector<Vector2i> &rLocations,
 		PackedStringArray &rErrors ) const {
@@ -1437,7 +1438,7 @@ bool T3DRuntimePageStore::collectPageSources( const String &rDataDirectory,
 		return false;
 	}
 
-	rSourceFiles = T3DUtil::getFiles( data_directory, "terrain3d*.res" );
+	rSourceFiles = Terrain3DUtil::getFiles( data_directory, "terrain3d*.res" );
 	rSourceFiles.sort();
 	if ( rSourceFiles.is_empty() ) {
 		rErrors.push_back( String( "No Terrain3D region .res sources were found in " ) + data_directory );
@@ -1447,10 +1448,10 @@ bool T3DRuntimePageStore::collectPageSources( const String &rDataDirectory,
 	eastl::bitset<s_nActiveMaxRegionMapSize * s_nActiveMaxRegionMapSize> source_locations;
 	rLocations.reserve( ( size_t )( rSourceFiles.size() ) );
 	for ( const String &fname : rSourceFiles ) {
-		const Vector2i location = T3DUtil::filenameToLocation( fname );
-		const int map_index = T3DRegionRepository::getRegionMapIndex( location );
+		const Vector2i location = Terrain3DUtil::filenameToLocation( fname );
+		const int map_index = Terrain3DRegionRepository::getRegionMapIndex( location );
 		if ( map_index < 0 || !m_pRepository->isLocationValid( location ) ||
-				T3DUtil::locationToFilename( location ) != fname ) {
+				Terrain3DUtil::locationToFilename( location ) != fname ) {
 			rErrors.push_back( String( "Malformed or out-of-range Terrain3D region source: " ) + fname );
 			continue;
 		}
@@ -1460,7 +1461,7 @@ bool T3DRuntimePageStore::collectPageSources( const String &rDataDirectory,
 		}
 		source_locations.set( ( size_t )( map_index ) );
 
-		T3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
+		Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() ) {
 			rErrors.push_back(
 					String( "Region source " ) + fname + String( " exists in the data directory but is not loaded" ) );
@@ -1479,7 +1480,7 @@ bool T3DRuntimePageStore::collectPageSources( const String &rDataDirectory,
 
 	const TypedArray<Vector2i> loaded_locations = m_pRepository->getActiveLocations();
 	for ( const Vector2i location : loaded_locations ) {
-		const int map_index = T3DRegionRepository::getRegionMapIndex( location );
+		const int map_index = Terrain3DRegionRepository::getRegionMapIndex( location );
 		if ( map_index < 0 || !source_locations.test( ( size_t )( map_index ) ) ) {
 			rErrors.push_back(
 					String( "Loaded region " ) + String( location ) + String( " has no matching .res source in " ) + data_directory );
@@ -1488,7 +1489,7 @@ bool T3DRuntimePageStore::collectPageSources( const String &rDataDirectory,
 	return rErrors.is_empty();
 }
 
-void T3DRuntimePageStore::prepareTask( void *const pContext, const uint32_t iIndex ) {
+void Terrain3DRuntimePageStore::prepareTask( void *const pContext, const uint32_t iIndex ) {
 	t3dRuntimePrepareJobContext_t *const context = ( t3dRuntimePrepareJobContext_t * )( pContext );
 	if ( !context || !context->m_pPages || iIndex >= ( uint32_t )( context->m_nPageCount ) ) {
 		return;
@@ -1503,13 +1504,13 @@ void T3DRuntimePageStore::prepareTask( void *const pContext, const uint32_t iInd
 		uint32_t mesh_counts[s_nMaxMeshAssets] = {};
 		uint32_t instance_count = 0u;
 		uint16_t mesh_count = 0u;
-		page.m_bInstanceLoaded = T3DInstancePageCodec::decode(
+		page.m_bInstanceLoaded = Terrain3DInstancePageCodec::decode(
 				page.m_instancePage, page.m_preparedInstanceStore, mesh_counts, instance_count, mesh_count );
 	}
 	page.m_nWorkerFinishedUsec = pTime ? pTime->get_ticks_usec() : page.m_nWorkerStartedUsec;
 }
 
-void T3DRuntimePageStore::poll( const bool bWait ) {
+void Terrain3DRuntimePageStore::poll( const bool bWait ) {
 	if ( !m_bPrepareJobActive ) {
 		return;
 	}
@@ -1542,7 +1543,7 @@ void T3DRuntimePageStore::poll( const bool bWait ) {
 		m_nPrepareMaterializeUsecLast += work_page.m_nMaterializeUsec;
 
 		const uint16_t worker_consumer_mask = work_page.m_nConsumerMask;
-		const int map_index = T3DRegionRepository::getRegionMapIndex( work_page.m_location );
+		const int map_index = Terrain3DRegionRepository::getRegionMapIndex( work_page.m_location );
 		if ( map_index >= 0 ) {
 			work_page.m_nConsumerMask |= m_queuedConsumers[( size_t )( map_index )];
 			if ( m_queuedConsumers[( size_t )( map_index )] != 0u ) {
@@ -1571,7 +1572,7 @@ void T3DRuntimePageStore::poll( const bool bWait ) {
 				uint32_t mesh_counts[s_nMaxMeshAssets] = {};
 				uint32_t instance_count = 0u;
 				uint16_t mesh_count = 0u;
-				work_page.m_bInstanceLoaded = T3DInstancePageCodec::decode( work_page.m_instancePage,
+				work_page.m_bInstanceLoaded = Terrain3DInstancePageCodec::decode( work_page.m_instancePage,
 						work_page.m_preparedInstanceStore,
 						mesh_counts,
 						instance_count,
@@ -1603,8 +1604,8 @@ void T3DRuntimePageStore::poll( const bool bWait ) {
 	m_nPrepareJobWorkers = 0;
 }
 
-int T3DRuntimePageStore::getPreparedIndex( const Vector2i &rLocation ) const {
-	const int map_index = T3DRegionRepository::getRegionMapIndex( rLocation );
+int Terrain3DRuntimePageStore::getPreparedIndex( const Vector2i &rLocation ) const {
+	const int map_index = Terrain3DRegionRepository::getRegionMapIndex( rLocation );
 	if ( map_index < 0 ) {
 		return -1;
 	}
@@ -1614,8 +1615,8 @@ int T3DRuntimePageStore::getPreparedIndex( const Vector2i &rLocation ) const {
 			: -1;
 }
 
-int T3DRuntimePageStore::getWorkIndex( const Vector2i &rLocation ) const {
-	const int map_index = T3DRegionRepository::getRegionMapIndex( rLocation );
+int Terrain3DRuntimePageStore::getWorkIndex( const Vector2i &rLocation ) const {
+	const int map_index = Terrain3DRegionRepository::getRegionMapIndex( rLocation );
 	if ( map_index < 0 ) {
 		return -1;
 	}
@@ -1624,15 +1625,15 @@ int T3DRuntimePageStore::getWorkIndex( const Vector2i &rLocation ) const {
 																												 : -1;
 }
 
-bool T3DRuntimePageStore::isPending( const Vector2i &rLocation ) const {
+bool Terrain3DRuntimePageStore::isPending( const Vector2i &rLocation ) const {
 	return m_bPrepareJobActive && getWorkIndex( rLocation ) >= 0;
 }
 
-bool T3DRuntimePageStore::isPrepared( const Vector2i &rLocation ) const {
+bool Terrain3DRuntimePageStore::isPrepared( const Vector2i &rLocation ) const {
 	return getPreparedIndex( rLocation ) >= 0;
 }
 
-void T3DRuntimePageStore::request( const Vector2i &rLocation,
+void Terrain3DRuntimePageStore::request( const Vector2i &rLocation,
 		const uint16_t nConsumers,
 		const uint8_t nPriority,
 		const bool bEnabled ) {
@@ -1645,7 +1646,7 @@ void T3DRuntimePageStore::request( const Vector2i &rLocation,
 		m_preparedPages[( size_t )ready_index].m_nConsumerMask |= nConsumers;
 		return;
 	}
-	const int map_index = T3DRegionRepository::getRegionMapIndex( rLocation );
+	const int map_index = Terrain3DRegionRepository::getRegionMapIndex( rLocation );
 	if ( map_index < 0 ) {
 		return;
 	}
@@ -1659,7 +1660,7 @@ void T3DRuntimePageStore::request( const Vector2i &rLocation,
 	}
 }
 
-void T3DRuntimePageStore::service( const t3dRuntimePageServiceState_t &rState ) {
+void Terrain3DRuntimePageStore::service( const t3dRuntimePageServiceState_t &rState ) {
 	poll( false );
 	if ( !rState.m_config.m_bCookedPagesEnabled || !m_pRepository ) {
 		return;
@@ -1712,11 +1713,11 @@ void T3DRuntimePageStore::service( const t3dRuntimePageServiceState_t &rState ) 
 			if ( location == s_v2iMax ) {
 				continue;
 			}
-			const int map_index = T3DRegionRepository::getRegionMapIndex( location );
+			const int map_index = Terrain3DRegionRepository::getRegionMapIndex( location );
 			if ( map_index < 0 || m_queuedConsumers[( size_t )( map_index )] == 0u || isPending( location ) ) {
 				continue;
 			}
-			T3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
+			Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
 			if ( !pRegion || pRegion->isDeleted() || !pRegion->runtimeMapsEvictableInternal() ) {
 				m_queuedConsumers[( size_t )( map_index )] = 0u;
 				m_queuedPriorities[( size_t )( map_index )] = 0u;
@@ -1724,8 +1725,8 @@ void T3DRuntimePageStore::service( const t3dRuntimePageServiceState_t &rState ) 
 				continue;
 			}
 			const uint8_t priority = m_queuedPriorities[( size_t )( map_index )];
-			const int distance = MAX( Math::abs( location.m_nX - rState.m_predictedCenter.x ),
-					Math::abs( location.m_nY - rState.m_predictedCenter.y ) );
+			const int distance = MAX( Math::abs( location.x - rState.m_predictedCenter.x ),
+					Math::abs( location.y - rState.m_predictedCenter.y ) );
 			if ( priority < best_priority || ( priority == best_priority && distance < best_distance ) ||
 					( priority == best_priority && distance == best_distance && map_index < best_map_index ) ) {
 				best_slot = slot;
@@ -1739,7 +1740,7 @@ void T3DRuntimePageStore::service( const t3dRuntimePageServiceState_t &rState ) 
 		}
 
 		const Vector2i location = m_pRepository->getSlotsData()[best_slot];
-		T3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
+		Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
 		const int work_index = m_nPrepareWorkPageCount++;
 		t3dRuntimePreparedPage_t &page = m_workPages[( size_t )work_index];
 		page = t3dRuntimePreparedPage_t{};
@@ -1797,12 +1798,12 @@ void T3DRuntimePageStore::service( const t3dRuntimePageServiceState_t &rState ) 
 	m_bPrepareJobActive = true;
 }
 
-void T3DRuntimePageStore::consumePreparedIndex( const int nIndex ) {
+void Terrain3DRuntimePageStore::consumePreparedIndex( const int nIndex ) {
 	if ( nIndex < 0 || nIndex >= m_nPreparedPageCount ) {
 		return;
 	}
 	const int removed_map_index =
-			T3DRegionRepository::getRegionMapIndex( m_preparedPages[( size_t )nIndex].m_location );
+			Terrain3DRegionRepository::getRegionMapIndex( m_preparedPages[( size_t )nIndex].m_location );
 	if ( removed_map_index >= 0 ) {
 		m_preparedByRegion[( size_t )removed_map_index] = ( int16_t )-1;
 	}
@@ -1810,7 +1811,7 @@ void T3DRuntimePageStore::consumePreparedIndex( const int nIndex ) {
 	if ( nIndex != last ) {
 		m_preparedPages[( size_t )nIndex] = std::move( m_preparedPages[( size_t )last] );
 		const int moved_map_index =
-				T3DRegionRepository::getRegionMapIndex( m_preparedPages[( size_t )nIndex].m_location );
+				Terrain3DRegionRepository::getRegionMapIndex( m_preparedPages[( size_t )nIndex].m_location );
 		if ( moved_map_index >= 0 ) {
 			m_preparedByRegion[( size_t )moved_map_index] = ( int16_t )nIndex;
 		}
@@ -1819,7 +1820,7 @@ void T3DRuntimePageStore::consumePreparedIndex( const int nIndex ) {
 	--m_nPreparedPageCount;
 }
 
-bool T3DRuntimePageStore::takeHeight( const Vector2i &rLocation,
+bool Terrain3DRuntimePageStore::takeHeight( const Vector2i &rLocation,
 		const uint16_t nConsumer,
 		Ref<Image> &rHeight,
 		const bool bMiddle,
@@ -1853,8 +1854,8 @@ bool T3DRuntimePageStore::takeHeight( const Vector2i &rLocation,
 	return loaded;
 }
 
-bool T3DRuntimePageStore::takeInstance( const Vector2i &rLocation,
-		T3DInstanceStore &rStore,
+bool Terrain3DRuntimePageStore::takeInstance( const Vector2i &rLocation,
+		Terrain3DInstanceStore &rStore,
 		PackedByteArray *const pInstanceMetadata,
 		PackedByteArray *const pMultimeshFastStart ) {
 	poll( false );
@@ -1883,7 +1884,7 @@ bool T3DRuntimePageStore::takeInstance( const Vector2i &rLocation,
 	return loaded;
 }
 
-bool T3DRuntimePageStore::takeCpuMaps( const Vector2i &rLocation,
+bool Terrain3DRuntimePageStore::takeCpuMaps( const Vector2i &rLocation,
 		Ref<Image> &rHeight,
 		Ref<Image> &rControl,
 		Ref<Image> &rColor,
@@ -1915,7 +1916,7 @@ bool T3DRuntimePageStore::takeCpuMaps( const Vector2i &rLocation,
 	return loaded;
 }
 
-bool T3DRuntimePageStore::takeNodeDescriptors( const Vector2i &rLocation, PackedByteArray &rDescriptors ) {
+bool Terrain3DRuntimePageStore::takeNodeDescriptors( const Vector2i &rLocation, PackedByteArray &rDescriptors ) {
 	poll( false );
 	rDescriptors.clear();
 	const int index = getPreparedIndex( rLocation );
@@ -1937,7 +1938,7 @@ bool T3DRuntimePageStore::takeNodeDescriptors( const Vector2i &rLocation, Packed
 	return loaded;
 }
 
-bool T3DRuntimePageStore::takeCollision( const Vector2i &rLocation,
+bool Terrain3DRuntimePageStore::takeCollision( const Vector2i &rLocation,
 		PackedByteArray &rHeight,
 		PackedByteArray &rBounds,
 		PackedByteArray &rHoleMask ) {
@@ -1966,7 +1967,7 @@ bool T3DRuntimePageStore::takeCollision( const Vector2i &rLocation,
 	return loaded;
 }
 
-bool T3DRuntimePageStore::takeNavigation( const Vector2i &rLocation, PackedByteArray &rNavigation ) {
+bool Terrain3DRuntimePageStore::takeNavigation( const Vector2i &rLocation, PackedByteArray &rNavigation ) {
 	poll( false );
 	rNavigation.clear();
 	const int index = getPreparedIndex( rLocation );
@@ -1988,7 +1989,7 @@ bool T3DRuntimePageStore::takeNavigation( const Vector2i &rLocation, PackedByteA
 	return loaded;
 }
 
-bool T3DRuntimePageStore::takeTerrainShadowMask( const Vector2i &rLocation, Ref<Image> &rShadowMask ) {
+bool Terrain3DRuntimePageStore::takeTerrainShadowMask( const Vector2i &rLocation, Ref<Image> &rShadowMask ) {
 	poll( false );
 	rShadowMask.unref();
 	const int index = getPreparedIndex( rLocation );
@@ -2010,7 +2011,7 @@ bool T3DRuntimePageStore::takeTerrainShadowMask( const Vector2i &rLocation, Ref<
 	return loaded;
 }
 
-bool T3DRuntimePageStore::takeGpuPage( const Vector2i &rLocation,
+bool Terrain3DRuntimePageStore::takeGpuPage( const Vector2i &rLocation,
 		Ref<Image> &rHeight,
 		Ref<Image> &rControl,
 		Ref<Image> &rColor,
@@ -2058,7 +2059,7 @@ bool T3DRuntimePageStore::takeGpuPage( const Vector2i &rLocation,
 	return loaded;
 }
 
-t3dRuntimePageStats_t T3DRuntimePageStore::getStats( void ) const {
+t3dRuntimePageStats_t Terrain3DRuntimePageStore::getStats( void ) const {
 	t3dRuntimePageStats_t stats;
 	stats.m_nPreparedPages = m_nPreparedPageCount;
 	stats.m_nPendingPages = m_bPrepareJobActive ? m_nPrepareWorkPageCount : 0;

@@ -44,7 +44,7 @@
 #include <numeric>
 #include <utility>
 
-Dictionary T3DTerrain::getHeightSourceDiagnostics( const Vector3 &rWorldPosition ) const {
+Dictionary Terrain3D::getHeightSourceDiagnostics( const Vector3 &rWorldPosition ) const {
 	Dictionary diagnostics;
 	const Vector2i region = m_pData ? m_pData->getRegionLocation( rWorldPosition ) : s_v2iMax;
 	const t3dRegionStreamingState_t state = getRegionStreamingStateInternal( region );
@@ -94,7 +94,7 @@ Dictionary T3DTerrain::getHeightSourceDiagnostics( const Vector3 &rWorldPosition
 	return diagnostics;
 }
 
-Array T3DTerrain::getShaderTierStatsDictionaries( void ) const {
+Array Terrain3D::getShaderTierStatsDictionaries( void ) const {
 	Array tiers;
 	if ( m_material.is_null() ) {
 		return tiers;
@@ -178,7 +178,7 @@ Array T3DTerrain::getShaderTierStatsDictionaries( void ) const {
 	return tiers;
 }
 
-Array T3DTerrain::getCacheInventory( const bool bDeep ) const {
+Array Terrain3D::getCacheInventory( const bool bDeep ) const {
 	Array caches;
 	const Dictionary gpu = m_pData
 			? ( bDeep ? m_pData->getGpuRegionCacheStats() : m_pData->getGpuRegionCacheStatsFast() )
@@ -305,7 +305,7 @@ Array T3DTerrain::getCacheInventory( const bool bDeep ) const {
 	return caches;
 }
 
-Dictionary T3DTerrain::getCpuProfileStats( void ) const {
+Dictionary Terrain3D::getCpuProfileStats( void ) const {
 	Dictionary cpu;
 	cpu["gpu_page_cache_service_cpu_usec"] = ( int64_t )( m_runtimeProfileLastSample.m_nGpuCacheServiceUsec );
 	cpu["gpu_page_preparation_worker_cpu_usec"] = ( int64_t )( m_runtimeProfileLastSample.m_nGpuPrepareWorkerUsec );
@@ -339,7 +339,7 @@ Dictionary T3DTerrain::getCpuProfileStats( void ) const {
 	return cpu;
 }
 
-Dictionary T3DTerrain::getGpuInformationStats( void ) const {
+Dictionary Terrain3D::getGpuInformationStats( void ) const {
 	Dictionary info;
 	Dictionary measured;
 	measured["classification"] = "Measured";
@@ -365,7 +365,7 @@ Dictionary T3DTerrain::getGpuInformationStats( void ) const {
 	return info;
 }
 
-Dictionary T3DTerrain::getRuntimeParitySnapshot( void ) const {
+Dictionary Terrain3D::getRuntimeParitySnapshot( void ) const {
 	Dictionary snapshot;
 	snapshot["native_api_revision"] = s_nNativeApiRevision;
 	snapshot["native_build_id"] = String( s_pszNativeBuildId );
@@ -404,18 +404,18 @@ Dictionary T3DTerrain::getRuntimeParitySnapshot( void ) const {
 	return snapshot;
 }
 
-Ref<T3DMemoryStats> T3DTerrain::getMemoryStatsSnapshot( void ) const {
-	Ref<T3DMemoryStats> pStats;
+Ref<Terrain3DMemoryStats> Terrain3D::getMemoryStatsSnapshot( void ) const {
+	Ref<Terrain3DMemoryStats> pStats;
 	pStats.instantiate();
 	pStats->setValues( getRuntimeMemoryStatsFast() );
 	return pStats;
 }
 
-TypedArray<T3DShaderTierStats> T3DTerrain::getShaderTierStatsSnapshot( void ) const {
-	TypedArray<T3DShaderTierStats> output;
+TypedArray<Terrain3DShaderTierStats> Terrain3D::getShaderTierStatsSnapshot( void ) const {
+	TypedArray<Terrain3DShaderTierStats> output;
 	const Array values = getShaderTierStatsDictionaries();
 	for ( int index = 0; index < values.size(); ++index ) {
-		Ref<T3DShaderTierStats> pStats;
+		Ref<Terrain3DShaderTierStats> pStats;
 		pStats.instantiate();
 		pStats->setValues( values[index] );
 		output.push_back( pStats );
@@ -423,11 +423,11 @@ TypedArray<T3DShaderTierStats> T3DTerrain::getShaderTierStatsSnapshot( void ) co
 	return output;
 }
 
-TypedArray<T3DCacheStats> T3DTerrain::getCacheStatsSnapshot( const bool bDeep ) const {
-	TypedArray<T3DCacheStats> output;
+TypedArray<Terrain3DCacheStats> Terrain3D::getCacheStatsSnapshot( const bool bDeep ) const {
+	TypedArray<Terrain3DCacheStats> output;
 	const Array values = getCacheInventory( bDeep );
 	for ( int index = 0; index < values.size(); ++index ) {
-		Ref<T3DCacheStats> pStats;
+		Ref<Terrain3DCacheStats> pStats;
 		pStats.instantiate();
 		pStats->setValues( values[index] );
 		output.push_back( pStats );
@@ -435,8 +435,8 @@ TypedArray<T3DCacheStats> T3DTerrain::getCacheStatsSnapshot( const bool bDeep ) 
 	return output;
 }
 
-Ref<T3DFrameStats> T3DTerrain::getFrameStatsSnapshot( void ) const {
-	Ref<T3DFrameStats> pStats;
+Ref<Terrain3DFrameStats> Terrain3D::getFrameStatsSnapshot( void ) const {
+	Ref<Terrain3DFrameStats> pStats;
 	pStats.instantiate();
 	Dictionary values = runtimeProfileSampleToDictionary( m_runtimeProfileLastSample );
 	values["diagnostics_version"] = s_nDiagnosticsVersion;
@@ -445,7 +445,7 @@ Ref<T3DFrameStats> T3DTerrain::getFrameStatsSnapshot( void ) const {
 	return pStats;
 }
 
-Dictionary T3DTerrain::getRuntimeDiagnostics( const bool bDeep ) const {
+Dictionary Terrain3D::getRuntimeDiagnostics( const bool bDeep ) const {
 	const uint64_t collection_started_usec = Time::get_singleton()->get_ticks_usec();
 	Dictionary diagnostics;
 	diagnostics["diagnostics_version"] = s_nDiagnosticsVersion;
@@ -632,7 +632,7 @@ Dictionary T3DTerrain::getRuntimeDiagnostics( const bool bDeep ) const {
 	return diagnostics;
 }
 
-void T3DTerrain::resetRuntimeDiagnostics( void ) {
+void Terrain3D::resetRuntimeDiagnostics( void ) {
 	m_runtimeProfileLastSample = t3dRuntimeProfileSample_t{};
 	m_nRuntimeProfileSampleCount = 0u;
 	m_runtimeProfileAccumulator.reset();

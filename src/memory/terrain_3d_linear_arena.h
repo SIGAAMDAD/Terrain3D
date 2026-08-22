@@ -17,7 +17,7 @@
 #include <type_traits>
 #include <utility>
 
-class T3DLinearArenaLayout {
+class Terrain3DLinearArenaLayout {
 public:
 	bool add( const size_t nBytes, const size_t nAlignment, size_t *pOffset = nullptr ) {
 		if ( nBytes == 0u ) {
@@ -73,14 +73,14 @@ private:
 	}
 };
 
-class T3DLinearArena {
+class Terrain3DLinearArena {
 public:
-	T3DLinearArena( void ) = default;
-	EA_FORCE_INLINE ~T3DLinearArena( void ) {
+	Terrain3DLinearArena( void ) = default;
+	EA_FORCE_INLINE ~Terrain3DLinearArena( void ) {
 		release();
 	}
-	T3DLinearArena( const T3DLinearArena & ) = delete;
-	T3DLinearArena &operator=( const T3DLinearArena & ) = delete;
+	Terrain3DLinearArena( const Terrain3DLinearArena & ) = delete;
+	Terrain3DLinearArena &operator=( const Terrain3DLinearArena & ) = delete;
 
 	bool configure( const size_t nBytes, const size_t nBaseAlignment = s_nArenaDefaultBaseAlignment ) {
 		release();
@@ -193,7 +193,7 @@ private:
 	size_t m_iOffset = 0u;
 };
 
-template <typename T> class T3DArenaBuffer {
+template <typename T> class Terrain3DArenaBuffer {
 	static_assert( std::is_trivially_copyable_v<T>, "Arena buffers support trivially copyable values only." );
 	static_assert( std::is_trivially_destructible_v<T>, "Arena buffers support trivially destructible values only." );
 
@@ -202,11 +202,11 @@ public:
 	using iterator = T *;
 	using const_iterator = const T *;
 
-	T3DArenaBuffer() = default;
-	T3DArenaBuffer( const T3DArenaBuffer & ) = delete;
-	T3DArenaBuffer &operator=( const T3DArenaBuffer & ) = delete;
+	Terrain3DArenaBuffer() = default;
+	Terrain3DArenaBuffer( const Terrain3DArenaBuffer & ) = delete;
+	Terrain3DArenaBuffer &operator=( const Terrain3DArenaBuffer & ) = delete;
 
-	bool allocateUninitialized( T3DLinearArena &rArena, const size_t nCount ) {
+	bool allocateUninitialized( Terrain3DLinearArena &rArena, const size_t nCount ) {
 		clear();
 		if ( nCount == 0u ) {
 			return true;
@@ -220,7 +220,7 @@ public:
 		return true;
 	}
 
-	bool assign( T3DLinearArena &rArena, const size_t nCount, const T &rValue ) {
+	bool assign( Terrain3DLinearArena &rArena, const size_t nCount, const T &rValue ) {
 		if ( !allocateUninitialized( rArena, nCount ) ) {
 			return false;
 		}
@@ -235,12 +235,12 @@ public:
 		m_nSize = 0u;
 	}
 
-	EA_FORCE_INLINE void swap( T3DArenaBuffer &rOther ) noexcept {
+	EA_FORCE_INLINE void swap( Terrain3DArenaBuffer &rOther ) noexcept {
 		std::swap( m_pData, rOther.m_pData );
 		std::swap( m_nSize, rOther.m_nSize );
 	}
 
-	bool copyFrom( const T3DArenaBuffer &rOther ) {
+	bool copyFrom( const Terrain3DArenaBuffer &rOther ) {
 		if ( m_nSize != rOther.m_nSize ) {
 			return false;
 		}

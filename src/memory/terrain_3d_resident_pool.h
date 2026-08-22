@@ -30,16 +30,16 @@ typedef struct t3dResidentMapView_s {
 	}
 } t3dResidentMapView_t;
 
-class T3DResidentRegionPool;
+class Terrain3DResidentRegionPool;
 
-class T3DResidentMapLease {
+class Terrain3DResidentMapLease {
 public:
-	T3DResidentMapLease( void ) = default;
-	~T3DResidentMapLease( void );
-	T3DResidentMapLease( const T3DResidentMapLease & ) = delete;
-	T3DResidentMapLease &operator=( const T3DResidentMapLease & ) = delete;
-	T3DResidentMapLease( T3DResidentMapLease &&rOther ) noexcept;
-	T3DResidentMapLease &operator=( T3DResidentMapLease &&rOther ) noexcept;
+	Terrain3DResidentMapLease( void ) = default;
+	~Terrain3DResidentMapLease( void );
+	Terrain3DResidentMapLease( const Terrain3DResidentMapLease & ) = delete;
+	Terrain3DResidentMapLease &operator=( const Terrain3DResidentMapLease & ) = delete;
+	Terrain3DResidentMapLease( Terrain3DResidentMapLease &&rOther ) noexcept;
+	Terrain3DResidentMapLease &operator=( Terrain3DResidentMapLease &&rOther ) noexcept;
 
 	EA_FORCE_INLINE bool valid( void ) const {
 		return m_view.valid();
@@ -50,13 +50,13 @@ public:
 	void reset( void );
 
 private:
-	friend class T3DResidentRegionPool;
-	T3DResidentRegionPool *m_pPool = nullptr;
+	friend class Terrain3DResidentRegionPool;
+	Terrain3DResidentRegionPool *m_pPool = nullptr;
 	int16_t m_iSlot = -1;
 	uint32_t m_nGeneration = 0u;
 	t3dResidentMapView_t m_view;
 
-	T3DResidentMapLease( T3DResidentRegionPool *pPool,
+	Terrain3DResidentMapLease( Terrain3DResidentRegionPool *pPool,
 			int iSlot,
 			uint32_t nGeneration,
 			const t3dResidentMapView_t &rView );
@@ -99,26 +99,26 @@ typedef struct alignas( s_nResidentCacheAlignment ) t3dSlot_s {
 	uint8_t *m_pDerived = nullptr;
 } t3dSlot_t;
 
-class T3DResidentRegionPool {
-	friend class T3DResidentMapLease;
+class Terrain3DResidentRegionPool {
+	friend class Terrain3DResidentMapLease;
 
 public:
-	T3DResidentRegionPool( void ) = default;
-	~T3DResidentRegionPool( void );
-	T3DResidentRegionPool( const T3DResidentRegionPool & ) = delete;
-	T3DResidentRegionPool &operator=( const T3DResidentRegionPool & ) = delete;
+	Terrain3DResidentRegionPool( void ) = default;
+	~Terrain3DResidentRegionPool( void );
+	Terrain3DResidentRegionPool( const Terrain3DResidentRegionPool & ) = delete;
+	Terrain3DResidentRegionPool &operator=( const Terrain3DResidentRegionPool & ) = delete;
 
 	static size_t estimateSlotBytes( int nRegionSize, uint32_t nChannels );
 	bool configure( int nRegionSize, int nCapacity, uint32_t nChannels );
 	void clear( void );
 	void resetResidency( void );
-	T3DResidentMapLease acquire( const Vector2i &rLocation, const T3DRegion *pRegion );
-	bool ensureResident( const Vector2i &rLocation, const T3DRegion *pRegion );
+	Terrain3DResidentMapLease acquire( const Vector2i &rLocation, const Terrain3DRegion *pRegion );
+	bool ensureResident( const Vector2i &rLocation, const Terrain3DRegion *pRegion );
 	void syncMap( const Vector2i &rLocation,
-			const T3DRegion *pRegion,
+			const Terrain3DRegion *pRegion,
 			t3dMapType_t type,
 			const Rect2i &rDirtyRect = Rect2i() );
-	void syncDerived( const Vector2i &rLocation, const T3DRegion *pRegion, const Rect2i &rDirtyRect = Rect2i() );
+	void syncDerived( const Vector2i &rLocation, const Terrain3DRegion *pRegion, const Rect2i &rDirtyRect = Rect2i() );
 	void invalidate( const Vector2i &rLocation );
 	EA_FORCE_INLINE int getCapacity( void ) const {
 		return m_nCapacity;
@@ -178,10 +178,10 @@ private:
 	void publishSlot( int iSlot );
 	void retireSlotUnlocked( int iSlot );
 	void releaseLease( int iSlot, uint32_t nGeneration );
-	bool copyMap( int iSlot, const T3DRegion *pRegion, t3dMapType_t type );
-	bool copyMapRect( int iSlot, const T3DRegion *pRegion, t3dMapType_t type, const Rect2i &rDirtyRect );
-	bool copyDerived( int iSlot, const T3DRegion *pRegion );
-	bool copyDerivedRect( int iSlot, const T3DRegion *pRegion, const Rect2i &rDirtyRect );
+	bool copyMap( int iSlot, const Terrain3DRegion *pRegion, t3dMapType_t type );
+	bool copyMapRect( int iSlot, const Terrain3DRegion *pRegion, t3dMapType_t type, const Rect2i &rDirtyRect );
+	bool copyDerived( int iSlot, const Terrain3DRegion *pRegion );
+	bool copyDerivedRect( int iSlot, const Terrain3DRegion *pRegion, const Rect2i &rDirtyRect );
 	t3dResidentMapView_t getView( int iSlot ) const;
 };
 

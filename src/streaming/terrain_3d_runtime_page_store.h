@@ -17,9 +17,9 @@
 #include <godot_cpp/variant/packed_string_array.hpp>
 #include <godot_cpp/variant/string.hpp>
 
-class T3DRegion;
-class T3DRegionPersistence;
-class T3DRegionRepository;
+class Terrain3DRegion;
+class Terrain3DRegionPersistence;
+class Terrain3DRegionRepository;
 
 typedef enum t3dRuntimePageConsumer_e : uint16_t {
 	RUNTIME_PAGE_CONSUMER_ACTIVE_HEIGHT = 1u << 0,
@@ -126,7 +126,7 @@ typedef struct t3dRuntimePreparedPage_s {
 	PackedByteArray m_instanceMetadata;
 	PackedByteArray m_lightingReceivers;
 	PackedByteArray m_multimeshFastStart;
-	T3DInstanceStore m_preparedInstanceStore;
+	Terrain3DInstanceStore m_preparedInstanceStore;
 	uint64_t m_nRequestedUsec = 0u;
 	uint64_t m_nWorkerStartedUsec = 0u;
 	uint64_t m_nFileOpenUsec = 0u;
@@ -147,24 +147,24 @@ typedef struct t3dRuntimePrepareJobContext_s {
 	int m_nPageCount = 0;
 } t3dRuntimePrepareJobContext_t;
 
-class T3DRuntimePageStore {
+class Terrain3DRuntimePageStore {
 public:
-	explicit T3DRuntimePageStore( T3DRegionRepository *pRepository, const T3DRegionPersistence *pPersistence );
-	~T3DRuntimePageStore( void );
-	T3DRuntimePageStore( const T3DRuntimePageStore & ) = delete;
-	T3DRuntimePageStore &operator=( const T3DRuntimePageStore & ) = delete;
+	explicit Terrain3DRuntimePageStore( Terrain3DRegionRepository *pRepository, const Terrain3DRegionPersistence *pPersistence );
+	~Terrain3DRuntimePageStore( void );
+	Terrain3DRuntimePageStore( const Terrain3DRuntimePageStore & ) = delete;
+	Terrain3DRuntimePageStore &operator=( const Terrain3DRuntimePageStore & ) = delete;
 
 	void reset( void );
 	void resetFrameStats( void );
 	void poll( bool bWait );
 
-	String getPagePath( const T3DRegion *pRegion, const String &rDataDirectory ) const;
-	uint64_t computeSourceSignature( const T3DRegion *pRegion, const t3dRuntimePageConfig_t &rConfig ) const;
+	String getPagePath( const Terrain3DRegion *pRegion, const String &rDataDirectory ) const;
+	uint64_t computeSourceSignature( const Terrain3DRegion *pRegion, const t3dRuntimePageConfig_t &rConfig ) const;
 	bool readSourceSignature( const String &rPagePath, uint64_t &nSignature ) const;
 	uint32_t readMaterialMask( const String &rPagePath ) const;
 	bool removePageForSource( const String &rSourcePath ) const;
 	bool removePage( const String &rPagePath ) const;
-	bool validatePageForRegion( const T3DRegion *pRegion, const t3dRuntimePageConfig_t &rConfig ) const;
+	bool validatePageForRegion( const Terrain3DRegion *pRegion, const t3dRuntimePageConfig_t &rConfig ) const;
 	bool loadCpuMapsNow( const Vector2i &rLocation,
 			const t3dRuntimePageConfig_t &rConfig,
 			Ref<Image> &rHeight,
@@ -184,7 +184,7 @@ public:
 	bool loadLightingReceiversNow( const Vector2i &rLocation,
 			const t3dRuntimePageConfig_t &rConfig,
 			PackedByteArray &rReceivers ) const;
-	bool writePage( T3DRegion *pRegion,
+	bool writePage( Terrain3DRegion *pRegion,
 			const t3dRuntimePageConfig_t &rConfig,
 			const t3dRuntimePageCookPayload_t &rPayload,
 			String *pError = nullptr ) const;
@@ -205,7 +205,7 @@ public:
 			bool bMiddle,
 			PackedByteArray *pNativeHeightBytes = nullptr );
 	bool takeInstance( const Vector2i &rLocation,
-			T3DInstanceStore &rStore,
+			Terrain3DInstanceStore &rStore,
 			PackedByteArray *pInstanceMetadata = nullptr,
 			PackedByteArray *pMultimeshFastStart = nullptr );
 	bool takeCpuMaps( const Vector2i &rLocation,
@@ -251,8 +251,8 @@ public:
 	}
 
 private:
-	T3DRegionRepository *m_pRepository = nullptr;
-	const T3DRegionPersistence *m_pPersistence = nullptr;
+	Terrain3DRegionRepository *m_pRepository = nullptr;
+	const Terrain3DRegionPersistence *m_pPersistence = nullptr;
 	eastl::array<t3dRuntimePreparedPage_t, s_nGpuCacheMaxLayers> m_preparedPages{};
 	eastl::array<t3dRuntimePreparedPage_t, s_nGpuCacheMaxLayers> m_workPages{};
 	eastl::array<int16_t, s_nMaxRegionSlots> m_preparedByRegion{};
@@ -279,7 +279,7 @@ private:
 
 	int getPreparedIndex( const Vector2i &rLocation ) const;
 	int getWorkIndex( const Vector2i &rLocation ) const;
-	bool loadSourceRegion( const Vector2i &rLocation, Ref<T3DRegion> &rSource ) const;
+	bool loadSourceRegion( const Vector2i &rLocation, Ref<Terrain3DRegion> &rSource ) const;
 	static bool loadSnapshot( t3dRuntimePreparedPage_t &rPage, bool bPreserveMaterialized = false );
 	static void prepareTask( void *pContext, uint32_t iIndex );
 	void consumePreparedIndex( int nIndex );
