@@ -17,13 +17,15 @@ func _ready() -> void:
 	if sky3d_script == null:
 		return
 	$Environment.queue_free()
-	var sky3d := sky3d_script.new()
+	var sky3d: Node = sky3d_script.new() as Node
+	if sky3d == null:
+		return
 	sky3d.name = "Sky3D"
 	add_child(sky3d, true)
 	move_child(sky3d, 1)
 	sky3d.owner = self
-	sky3d.current_time = 10
-	sky3d.enable_editor_time = false
+	sky3d.set("current_time", 10)
+	sky3d.set("enable_editor_time", false)
 
 
 func _is_editor_plugin_enabled(plugin_name: StringName) -> bool:

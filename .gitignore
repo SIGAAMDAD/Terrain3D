@@ -41,3 +41,6 @@ export_presets.cfg
 # Editors
 .vscode/
 .vs/
+
+# Visual Studio per-user settings
+*.vcxproj.user

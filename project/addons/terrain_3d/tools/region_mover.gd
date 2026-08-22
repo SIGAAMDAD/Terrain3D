@@ -6,12 +6,12 @@
 @tool
 extends Terrain3D
 
-const INVALIDATED_DATASET_FILES: PackedStringArray = PackedStringArray([
+const INVALIDATED_DATASET_FILES := [
 	"terrain3d_far_atlas.t3dfar",
 	"terrain3d_world.t3dmanifest",
 	"terrain3d_cook.t3ddb",
 	"terrain3d_hlod_manifest.tres",
-])
+]
 
 class MovePlan extends RefCounted:
 	var source_location: Vector2i

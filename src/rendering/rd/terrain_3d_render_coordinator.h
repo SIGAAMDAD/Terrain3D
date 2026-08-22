@@ -7,7 +7,10 @@
 
 #include "rendering/rd/terrain_3d_rd_clipmap_renderer.h"
 #include "rendering/rd/terrain_3d_rd_compositor_effect.h"
+#include "rendering/rd/terrain_3d_rd_shader_library.h"
 #include "rendering/rd/terrain_3d_rd_types.h"
+
+#include <cstddef>
 
 #include <atomic>
 #include <godot_cpp/classes/compositor.hpp>
@@ -25,28 +28,23 @@ private:
 	Ref<Compositor> m_attachedCompositor;
 	uint64_t m_nAttachedCameraId = 0u;
 	bool m_bCreatedCompositor = false;
-	t3dRenderBackend_t m_backend = T3D_RENDER_BACKEND_RENDERING_SERVER;
-	t3dRdNativeProxyMode_t m_proxyMode = T3D_RD_NATIVE_PROXY_SHADOWS_ONLY;
+	std::atomic<t3dRenderBackend_t> m_backend{ T3D_RENDER_BACKEND_RENDERING_SERVER };
+	std::atomic<t3dRdNativeProxyMode_t> m_proxyMode{ T3D_RD_NATIVE_PROXY_SHADOWS_ONLY };
 
 	mutable std::mutex m_snapshotMutex;
 	t3dRdFrameSnapshot_t m_snapshot;
 	PackedByteArray m_regionMapBytes;
-	uint64_t m_nRegionMapHash = 0u;
+	uint64_t m_nRegionTopologyGeneration = 0u;
 	uint64_t m_nRegionMapGeneration = 0u;
 	RID m_hHeightTextureRs;
 	RID m_hControlTextureRs;
 	RID m_hColorTextureRs;
 	RID m_hAlbedoTextureRs;
+	RID m_hNormalTextureRs;
+	RID m_hSurfaceTextureRs;
+	RID m_hDisplacementTextureRs;
 
-	PackedByteArray m_lod0Vertices;
-	PackedByteArray m_lod0Indices;
-	PackedByteArray m_outerVertices;
-	PackedByteArray m_outerIndices;
-	uint32_t m_nLod0VertexCount = 0u;
-	uint32_t m_nLod0IndexCount = 0u;
-	uint32_t m_nOuterVertexCount = 0u;
-	uint32_t m_nOuterIndexCount = 0u;
-	Ref<RDShaderSPIRV> m_shaderSpirv;
+	Terrain3DRdShaderLibrary m_shaderLibrary;
 	Terrain3DRdClipmapRenderer m_renderer;
 	std::atomic_bool m_bRendererInitialized{ false };
 	std::atomic_bool m_bRenderEnabled{ false };
@@ -57,8 +55,8 @@ private:
 	mutable std::mutex m_diagnosticsMutex;
 	String m_initializationError;
 
-	uint64_t hashRegionMap( const PackedInt32Array &rMap ) const;
-	void buildTopologyCopies( void );
+	uint64_t hashBytes( const void *pData, size_t nBytes ) const;
+	void buildMaterialState( t3dRdFrameSnapshot_t &rSnapshot ) const;
 	void publishSnapshot( void );
 	void updateNativeProxy( void );
 	void attachEffectToActiveCamera( void );
@@ -78,8 +76,8 @@ public:
 	void shutdownRendererOnRenderThread( void );
 	Dictionary getDiagnostics( void ) const;
 
-	EA_FORCE_INLINE t3dRenderBackend_t getBackend( void ) const { return m_backend; }
-	EA_FORCE_INLINE t3dRdNativeProxyMode_t getProxyMode( void ) const { return m_proxyMode; }
+	EA_FORCE_INLINE t3dRenderBackend_t getBackend( void ) const { return m_backend.load( std::memory_order_acquire ); }
+	EA_FORCE_INLINE t3dRdNativeProxyMode_t getProxyMode( void ) const { return m_proxyMode.load( std::memory_order_acquire ); }
 };
 
 #endif // TERRAIN3D_RENDER_COORDINATOR_H

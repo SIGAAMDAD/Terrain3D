@@ -3,8 +3,12 @@ from glob import glob
 from pathlib import Path
 import os
 
-# TODO: Do not copy environment after godot-cpp/test is updated <https://github.com/godotengine/godot-cpp/blob/master/test/SConstruct>.
-env = SConscript("godot-cpp/SConstruct")
+# godot-cpp 10.0.0-rc1 predates Godot 4.7.  Seed its build environment with
+# the retained 4.7.1 API by default so a plain project build cannot silently
+# fall back to the embedded 4.6 API.
+godot_cpp_env = Environment(tools=["default"], PLATFORM="")
+godot_cpp_env["custom_api_file"] = File("thirdparty/godot_api/extension_api-4.7.1.json").abspath
+env = SConscript("godot-cpp/SConstruct", exports={"env": godot_cpp_env})
 
 # Add source files.
 env.Append(CPPPATH=[

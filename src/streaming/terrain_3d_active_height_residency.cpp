@@ -49,7 +49,9 @@ t3dActiveHeightResidencyResult_t Terrain3DActiveHeightResidency::update( const t
 		}
 
 		const Vector2i delta = location - rFrame.m_activeHeightCenter;
-		const bool insideActiveBank = MAX( ABS( delta.x ), ABS( delta.y ) ) <= s_nActiveRadius;
+		const int deltaX = delta.x < 0 ? -delta.x : delta.x;
+		const int deltaY = delta.y < 0 ? -delta.y : delta.y;
+		const bool insideActiveBank = MAX( deltaX, deltaY ) <= s_nActiveRadius;
 		const bool required = insideActiveBank &&
 				( rFrame.m_bAuthoring || rFrame.streamingState( location ) >= TERRAIN3D_REGION_STREAMING_HOT );
 		const bool predicted = !rFrame.m_bAuthoring && rFrame.isPrefetch( location );

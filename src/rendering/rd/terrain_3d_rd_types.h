@@ -14,6 +14,9 @@
 
 using namespace godot;
 
+static constexpr uint32_t s_nRdMaterialLayerCount = 32u;
+static constexpr uint32_t s_nRdDrawGroupCount = 4u;
+
 typedef enum t3dRenderBackend_e {
 	T3D_RENDER_BACKEND_RENDERING_SERVER = 0,
 	T3D_RENDER_BACKEND_RENDERING_DEVICE_DIRECT = 1,
@@ -26,13 +29,20 @@ typedef enum t3dRdNativeProxyMode_e {
 	T3D_RD_NATIVE_PROXY_FULL = 2,
 } t3dRdNativeProxyMode_t;
 
+typedef enum t3dRdDrawGroup_e {
+	T3D_RD_DRAW_GROUP_LOD0_NEAR = 0,
+	T3D_RD_DRAW_GROUP_OUTER_NEAR = 1,
+	T3D_RD_DRAW_GROUP_OUTER_MIDDLE = 2,
+	T3D_RD_DRAW_GROUP_OUTER_FAR = 3,
+} t3dRdDrawGroup_t;
+
 typedef struct t3dRdClipmapVertex_s {
-	float m_fX = 0.0f;
-	float m_fY = 0.0f;
-	float m_fZ = 0.0f;
-	float m_fPartCode = 0.0f;
+	int16_t m_nGridX = 0;
+	int16_t m_nGridZ = 0;
+	uint16_t m_nPartCode = 0u;
+	uint16_t m_nFlags = 0u;
 } t3dRdClipmapVertex_t;
-static_assert( sizeof( t3dRdClipmapVertex_t ) == 16u, "RD clipmap vertex ABI changed" );
+static_assert( sizeof( t3dRdClipmapVertex_t ) == 8u, "RD clipmap vertex ABI changed" );
 
 typedef struct t3dRdPatch_s {
 	float m_fOriginX = 0.0f;
@@ -46,8 +56,29 @@ typedef struct t3dRdPatch_s {
 } t3dRdPatch_t;
 static_assert( sizeof( t3dRdPatch_t ) == 32u, "RD patch ABI changed" );
 
+typedef struct t3dRdMaterialLayer_s {
+	float m_fColorR = 1.0f;
+	float m_fColorG = 1.0f;
+	float m_fColorB = 1.0f;
+	float m_fColorA = 1.0f;
+	float m_fUvScale = 0.1f;
+	float m_fNormalDepth = 1.0f;
+	float m_fRoughness = 1.0f;
+	float m_fMetallic = 0.0f;
+	float m_fAoStrength = 1.0f;
+	float m_fAoLightAffect = 0.0f;
+	float m_fDetileRotation = 0.0f;
+	float m_fDetileShift = 0.0f;
+	float m_fDisplacementOffset = 0.0f;
+	float m_fDisplacementScale = 0.0f;
+	float m_fPhysicalLayer = 0.0f;
+	float m_fFlags = 0.0f;
+} t3dRdMaterialLayer_t;
+static_assert( sizeof( t3dRdMaterialLayer_t ) == 64u, "RD material layer ABI changed" );
+
 typedef struct t3dRdFrameSnapshot_s {
 	uint64_t m_nGeneration = 0u;
+	uint64_t m_nMaterialGeneration = 0u;
 	uint32_t m_nPatchCount = 0u;
 	uint32_t m_nRegionSize = 128u;
 	uint32_t m_nRegionMapSize = 0u;
@@ -57,11 +88,20 @@ typedef struct t3dRdFrameSnapshot_s {
 	float m_fHeightMin = s_fRegionHeightMin;
 	float m_fHeightRange = s_fRegionHeightRange;
 	float m_fAmbient = 0.28f;
+	float m_fFogDensity = 0.0f;
+	float m_fFogStart = 0.0f;
+	float m_fFogEnd = 1000000.0f;
+	float m_fFogCurve = 1.0f;
+	uint32_t m_nFogMode = 0u;
+	float m_fDisplacementScale = 1.0f;
+	bool m_bDisplacementEnabled = false;
 	Vector3 m_targetPosition = Vector3();
 	float m_fSubdiv = 1.0f;
 	Color m_lightColor = Color( 1.0, 1.0, 1.0, 1.0 );
 	Vector3 m_lightDirection = Vector3( 0.0, -1.0, 0.0 );
+	Color m_fogColor = Color( 0.0, 0.0, 0.0, 1.0 );
 	t3dRdPatch_t m_szPatches[s_nMaxClipmapLevels]{};
+	t3dRdMaterialLayer_t m_szMaterials[s_nRdMaterialLayerCount]{};
 } t3dRdFrameSnapshot_t;
 
 typedef struct alignas( 16 ) t3dRdFrameUniforms_s {
@@ -86,20 +126,41 @@ typedef struct alignas( 16 ) t3dRdFrameUniforms_s {
 	float m_fTargetZ = 0.0f;
 	float m_fSubdiv = 1.0f;
 	float m_fTargetPadding = 0.0f;
+	float m_fCameraX = 0.0f;
+	float m_fCameraY = 0.0f;
+	float m_fCameraZ = 0.0f;
+	float m_fCameraPadding = 0.0f;
+	float m_fFogR = 0.0f;
+	float m_fFogG = 0.0f;
+	float m_fFogB = 0.0f;
+	float m_fFogDensity = 0.0f;
+	float m_fFogStart = 0.0f;
+	float m_fFogEnd = 1000000.0f;
+	float m_fFogCurve = 1.0f;
+	float m_fFogMode = 0.0f;
+	float m_fDisplacementScale = 1.0f;
+	float m_fDisplacementEnabled = 0.0f;
+	float m_fDisplacementPadding0 = 0.0f;
+	float m_fDisplacementPadding1 = 0.0f;
 } t3dRdFrameUniforms_t;
-static_assert( sizeof( t3dRdFrameUniforms_t ) == 144u, "RD frame UBO must match GLSL std140 layout" );
+static_assert( sizeof( t3dRdFrameUniforms_t ) == 208u, "RD frame UBO must match GLSL std140 layout" );
 
-typedef struct t3dRdDrawPushConstants_s {
-	float m_fOriginX = 0.0f;
-	float m_fOriginZ = 0.0f;
-	float m_fScale = 1.0f;
-	float m_fLod = 0.0f;
-	float m_fTier = 0.0f;
-	float m_fStitchX = 1.0f;
-	float m_fStitchZ = 1.0f;
-	float m_fFlags = 0.0f;
-} t3dRdDrawPushConstants_t;
-static_assert( sizeof( t3dRdDrawPushConstants_t ) == 32u, "RD push constants must match GLSL layout" );
+typedef struct t3dRdIndexedIndirectCommand_s {
+	uint32_t m_nIndexCount = 0u;
+	uint32_t m_nInstanceCount = 0u;
+	uint32_t m_nFirstIndex = 0u;
+	int32_t m_nVertexOffset = 0;
+	uint32_t m_nFirstInstance = 0u;
+} t3dRdIndexedIndirectCommand_t;
+static_assert( sizeof( t3dRdIndexedIndirectCommand_t ) == 20u, "RD indexed indirect command ABI changed" );
+
+typedef struct t3dRdCullPushConstants_s {
+	uint32_t m_nPatchCount = 0u;
+	uint32_t m_nLod0IndexCount = 0u;
+	uint32_t m_nOuterIndexCount = 0u;
+	uint32_t m_nMaxPatches = s_nMaxClipmapLevels;
+} t3dRdCullPushConstants_t;
+static_assert( sizeof( t3dRdCullPushConstants_t ) == 16u, "RD cull push constants ABI changed" );
 
 VARIANT_ENUM_CAST( t3dRenderBackend_t );
 VARIANT_ENUM_CAST( t3dRdNativeProxyMode_t );
