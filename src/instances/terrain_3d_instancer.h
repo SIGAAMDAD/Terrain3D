@@ -11,13 +11,13 @@
 #include "data/terrain_3d_region.h"
 #include "eastl_config.h"
 #include "instances/terrain_3d_instance_layout.h"
+#include "rendering/rd/terrain_3d_rd_instance_renderer.h"
 
 #include <EASTL/bitset.h>
 #include <EASTL/vector.h>
 #include <array>
 #include <cstdint>
 #include <godot_cpp/classes/multi_mesh.hpp>
-#include <godot_cpp/classes/multi_mesh_instance3d.hpp>
 
 class Terrain3D;
 class Terrain3DData;
@@ -77,10 +77,6 @@ typedef struct t3dRenderCell_s {
 	Vector2i m_cell;
 	int m_nMeshId = -1;
 	int m_nLod = 0;
-	RID m_hMmi;
-	RID m_hMultimesh;
-	RID m_hBoundMultimesh;
-	RID m_hBoundMesh;
 	uint32_t m_nRegionListNode = UINT32_MAX;
 	int m_nUploadedCount = 0;
 	uint32_t m_nUploadedRevision = 0;
@@ -133,12 +129,6 @@ typedef struct t3dLogicalCellState_s {
 	uint32_t m_nRegionListNode = UINT32_MAX;
 } t3dLogicalCellState_t;
 
-typedef enum t3dMultiMeshUpdateResult_e : uint8_t {
-	UPDATED,
-	EMPTY,
-	MISSING_ASSET,
-	MISSING_MESH,
-} t3dMultiMeshUpdateResult_t;
 
 typedef struct t3dRegionList_s {
 	uint32_t m_nHead = UINT32_MAX;
@@ -217,8 +207,8 @@ private:
 	uint16_t m_szActiveRegionUpdateIndices[s_nInstanceRegionUpdateCapacity] = {};
 	int m_nActiveRegionUpdateCount = 0;
 	StreamingUpdateSet m_activeStreamingUpdates;
-	// Dirty requests are converted into stable cell keys before touching the
-	// RenderingServer. Processing a bounded number of keys per pre-draw frame
+	// Dirty requests are converted into stable cell keys before publishing the
+	// immutable RD instance scene. Processing a bounded number of keys per frame
 	// prevents global asset or region changes from becoming one unbounded hitch.
 	eastl::vector<t3dCellUpdateKey_t> m_pendingCellUpdates;
 	eastl::vector<t3dCellUpdateKey_t> m_buildingCellUpdates;
@@ -261,8 +251,10 @@ private:
 	eastl::vector<t3dPendingPlacement_t> m_placementPending;
 	Terrain3DRegion *m_pszTouchedRegions[s_nMaxRegionSlots] = {};
 	uint16_t m_nTouchedRegionCount = 0u;
+	uint64_t m_nRdPublicationGeneration = 1u;
 
 	static t3dRenderCellKey_t makeRenderKey( const t3dRenderCell_t &rCell );
+	void markRdPublicationDirty( void );
 	static int getRegionTableIndex( const Vector2i &vRegion );
 	uint32_t allocateRenderRegionNode( size_t iRenderCell, uint16_t nRegionIndex );
 	void releaseRenderRegionNode( uint32_t nNode, uint16_t nRegionIndex );
@@ -350,9 +342,8 @@ private:
 	uint32_t m_nDensityCounter = 0;
 	int m_nCellSize = s_nInstanceDefaultCellSize;
 	bool m_bCellStreamingEnabled = true;
-	// Keeps one visible MultiMesh transform allocation per logical cell. The
-	// legacy path retains one full transform buffer per LOD to support renderer
-	// cross-fades.
+	// Single-LOD mode publishes one resident render descriptor per logical cell.
+	// Disabling it retains one logical descriptor per LOD for reference-style cross-fades.
 	bool m_bSingleLodInstanceBuffers = true;
 	real_t m_fCellStreamingMargin = 64.f;
 	real_t m_fCellStreamingStep = 16.f;
@@ -373,12 +364,7 @@ private:
 	void updateMmiByRegion( Terrain3DRegion *pRegion, const int nMeshId );
 	void
 	updateMmiCell( Terrain3DRegion *pRegion, const int nMeshId, t3dInstanceCell_t &rCell, const Ref<Terrain3DMeshAsset> &rAsset );
-	void ensureUploadBuffer( t3dInstanceCell_t &rCell,
-			const Ref<Mesh> &rMasterMesh,
-			const AABB &aabbSourceMeshAabb,
-			bool bRebuildAabb,
-			bool &bReady );
-	void setMmiLodRanges( RID mmi, const Ref<Terrain3DMeshAsset> &rMa, const int nLod );
+	void ensureCellAabb( t3dInstanceCell_t &rCell, const AABB &rSourceMeshAabb );
 	void updateVertexSpacing( const real_t fVertexSpacing );
 	// Renderer teardown never mutates persistent content accounting. Callers that
 	// change Terrain3DInstanceStore must update logical counts explicitly.
@@ -405,17 +391,10 @@ private:
 			const t3dCellInterval_t &rOther,
 			int nCellsPerRegion );
 	void backupRegion( const Ref<Terrain3DRegion> &rRegion );
-	t3dMultiMeshUpdateResult_t updateMultimesh( const int nMeshId,
-			const int nLod,
-			const t3dInstanceCell_t &rCell,
-			t3dRenderCell_t &rRender,
-			bool bUseColors,
-			const PackedFloat32Array &rUploadBuffer );
 	void fillMultimeshBuffer( const t3dInstanceCell_t &rCell,
 			PackedFloat32Array &rBuffer,
 			const AABB *pSourceMeshAabb = nullptr,
 			AABB *pCellAabb = nullptr ) const;
-	const PackedFloat32Array &buildUploadBuffer( const t3dInstanceCell_t &rCell ) const;
 	Vector2i getCell( const Vector3 &rGlobalPosition, const int nRegionSize ) const;
 	t3dUsableHeight_t getUsableHeight( Terrain3DSampler &rSampler,
 			const Vector3 &rGlobalPosition,
@@ -437,7 +416,7 @@ public:
 	void clearByMesh( const int nMeshId );
 	void clearByLocation( const Vector2i &rRegionLoc, const int nMeshId );
 	void clearByRegion( const Ref<Terrain3DRegion> &rRegion, const int nMeshId );
-	// Frees rendered MMIs for one region without modifying its stored instance data.
+	// Frees resident render-cell descriptors for one region without modifying stored instance data.
 	// Used when a terrain region is temporarily removed and may later be restored by undo.
 	void destroyRegionMmis( const Vector2i &rRegionLoc );
 
@@ -561,10 +540,13 @@ public:
 	void swapIds( const int nSrcId, const int nDstId );
 	void updateMmis( const int nMeshId = -1, const Vector2i &rRegionLoc = s_v2iMax, const bool bRebuild = false );
 
-	// Builds the exact packed RenderingServer buffer used by Terrain3D's
-	// MultiMeshes: 12 transform floats, plus RGBA only when a cell uses non-white colors.
+	// Compatibility helper for public authoring/import APIs that still accept a
+	// MultiMesh buffer. The runtime renderer does not consume this representation.
 	PackedFloat32Array buildMultimeshBuffer( const TypedArray<Transform3D> &rXforms,
 			const PackedColorArray &rColors = PackedColorArray() ) const;
+
+	std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> buildRdInstanceSnapshot( void ) const;
+	EA_FORCE_INLINE uint64_t getRdPublicationGeneration( void ) const { return m_nRdPublicationGeneration; }
 
 	EA_FORCE_INLINE void resetDensityCounter( void ) {
 		m_nDensityCounter = 0;

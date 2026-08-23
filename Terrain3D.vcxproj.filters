@@ -318,6 +318,12 @@
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_culling.h">
       <Filter>src\rendering\rd</Filter>
     </ClInclude>
+    <ClInclude Include="src\rendering\rd\terrain_3d_rd_instance_renderer.h">
+      <Filter>src\rendering\rd</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\terrain_3d_rd_mesh_cache.h">
+      <Filter>src\rendering\rd</Filter>
+    </ClInclude>
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_shader_library.h">
       <Filter>src\rendering\rd</Filter>
     </ClInclude>
@@ -567,6 +573,12 @@
       <Filter>src\rendering\rd</Filter>
     </ClCompile>
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_culling.cpp">
+      <Filter>src\rendering\rd</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\terrain_3d_rd_instance_renderer.cpp">
+      <Filter>src\rendering\rd</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\terrain_3d_rd_mesh_cache.cpp">
       <Filter>src\rendering\rd</Filter>
     </ClCompile>
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_shader_library.cpp">

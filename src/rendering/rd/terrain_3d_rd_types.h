@@ -9,8 +9,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <godot_cpp/variant/aabb.hpp>
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/projection.hpp>
+#include <godot_cpp/variant/vector2i.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 
 using namespace godot;
@@ -22,6 +24,13 @@ static constexpr uint32_t s_nRdInvalidFrameSnapshotIndex = s_nRdFrameSnapshotSlo
 static constexpr uint64_t s_nRdFrameSnapshotTokenIndexMask = 0x3u;
 static constexpr uint64_t s_nRdFrameSnapshotTokenPublishedMask = uint64_t( 1u ) << 63u;
 static constexpr uint64_t s_nRdFrameSnapshotGenerationMax = ( uint64_t( 1u ) << 61u ) - 1u;
+
+EA_FORCE_INLINE constexpr uint32_t t3dRdPackGodotRgba32ForGpu( const uint32_t nRgba32 ) {
+	// Godot Color::to_rgba32() returns 0xRRGGBBAA. RD R8G8B8A8 vertex data
+	// and GLSL unpackUnorm4x8() consume R from the lowest-address/lowest-order byte.
+	return ( ( nRgba32 & 0xFF000000u ) >> 24u ) | ( ( nRgba32 & 0x00FF0000u ) >> 8u ) |
+			( ( nRgba32 & 0x0000FF00u ) << 8u ) | ( ( nRgba32 & 0x000000FFu ) << 24u );
+}
 
 EA_FORCE_INLINE constexpr uint64_t
 t3dRdMakeFrameSnapshotToken( const uint32_t nIndex, const uint64_t nGeneration, const bool bPublished ) {
@@ -330,6 +339,153 @@ static_assert( offsetof( t3dRdEditorOverlayConfig_t, m_fHeightmapBlackHeight ) =
 static_assert( offsetof( t3dRdEditorOverlayConfig_t, m_fContourColorR ) == 160u, "RD editor contour ABI changed" );
 static_assert( offsetof( t3dRdEditorOverlayConfig_t, m_fInstancerCellSize ) == 176u, "RD editor grid ABI changed" );
 
+
+// Batch D regular-instance ABI. Mesh handles are generation-safe: a handle is
+// only valid while its generation matches the owning Terrain3DRdMeshCache.
+typedef struct t3dRdMeshHandle_s {
+	uint32_t m_nSlot = UINT32_MAX;
+	uint32_t m_nGeneration = 0u;
+
+	EA_FORCE_INLINE bool valid( void ) const {
+		return m_nSlot != UINT32_MAX && m_nGeneration != 0u;
+	}
+	EA_FORCE_INLINE bool operator==( const t3dRdMeshHandle_s &rOther ) const {
+		return m_nSlot == rOther.m_nSlot && m_nGeneration == rOther.m_nGeneration;
+	}
+} t3dRdMeshHandle_t;
+static_assert( sizeof( t3dRdMeshHandle_t ) == 8u, "RD mesh handle ABI changed" );
+
+typedef struct t3dRdSurfaceHandle_s {
+	uint32_t m_nSlot = UINT32_MAX;
+	uint32_t m_nGeneration = 0u;
+
+	EA_FORCE_INLINE bool valid( void ) const {
+		return m_nSlot != UINT32_MAX && m_nGeneration != 0u;
+	}
+} t3dRdSurfaceHandle_t;
+static_assert( sizeof( t3dRdSurfaceHandle_t ) == 8u, "RD surface handle ABI changed" );
+
+// One interleaved static-mesh vertex. Normals/tangents are signed normalized
+// 16-bit components and UVs are binary16. This keeps imported geometry at
+// 48 bytes/vertex while preserving the attributes used by Terrain3D assets.
+typedef struct alignas( 16 ) t3dRdMeshVertex_s {
+	float m_szPosition[3] = { 0.0f, 0.0f, 0.0f };
+	uint32_t m_nColorRgba8 = 0xFFFFFFFFu;
+	int16_t m_szNormal[4] = { 0, 32767, 0, 0 };
+	int16_t m_szTangent[4] = { 32767, 0, 0, 32767 };
+	uint16_t m_szUv[2] = { 0u, 0u };
+	uint16_t m_szUv2[2] = { 0u, 0u };
+	uint32_t m_nPadding0 = 0u;
+	uint32_t m_nPadding1 = 0u;
+} t3dRdMeshVertex_t;
+static_assert( sizeof( t3dRdMeshVertex_t ) == 48u, "RD mesh vertex ABI changed" );
+static_assert( offsetof( t3dRdMeshVertex_t, m_nColorRgba8 ) == 12u, "RD mesh color offset changed" );
+static_assert( offsetof( t3dRdMeshVertex_t, m_szNormal ) == 16u, "RD mesh normal offset changed" );
+static_assert( offsetof( t3dRdMeshVertex_t, m_szTangent ) == 24u, "RD mesh tangent offset changed" );
+static_assert( offsetof( t3dRdMeshVertex_t, m_szUv ) == 32u, "RD mesh UV offset changed" );
+
+// Production static-instance record: 32 bytes. Position stays float32; rotation
+// is a normalized quaternion packed as snorm16x4; scale is binary16x3; color is
+// RGBA8. Mesh/material/region state is cell-level and is not redundantly stored
+// per instance.
+typedef struct alignas( 16 ) t3dRdInstanceRecord_s {
+	float m_szPosition[3] = { 0.0f, 0.0f, 0.0f };
+	uint32_t m_nQuaternion01 = 0u;
+	uint32_t m_nQuaternion23 = 0u;
+	uint32_t m_nScale01 = 0u;
+	uint32_t m_nScale2Flags = 0u;
+	uint32_t m_nColorRgba8 = 0xFFFFFFFFu;
+} t3dRdInstanceRecord_t;
+static_assert( sizeof( t3dRdInstanceRecord_t ) == 32u, "RD instance record ABI changed" );
+static_assert( offsetof( t3dRdInstanceRecord_t, m_nQuaternion01 ) == 12u, "RD instance rotation offset changed" );
+static_assert( offsetof( t3dRdInstanceRecord_t, m_nColorRgba8 ) == 28u, "RD instance color offset changed" );
+
+typedef enum t3dRdInstanceFlags_e : uint32_t {
+	T3D_RD_INSTANCE_NONE = 0u,
+	T3D_RD_INSTANCE_CAST_SHADOWS = 1u << 0u,
+	T3D_RD_INSTANCE_DOUBLE_SIDED = 1u << 1u,
+	T3D_RD_INSTANCE_SHADOWS_ONLY = 1u << 2u,
+	T3D_RD_INSTANCE_HIGHLIGHTED = 1u << 3u,
+	T3D_RD_INSTANCE_CULL_FRONT = 1u << 4u,
+	T3D_RD_INSTANCE_SHADOW_DOUBLE_SIDED = 1u << 5u,
+	T3D_RD_INSTANCE_ALPHA_BLEND = 1u << 6u,
+	T3D_RD_INSTANCE_ALPHA_DEPTH_PREPASS = 1u << 7u,
+	T3D_RD_INSTANCE_FADE_ACTIVE = 1u << 24u,
+	T3D_RD_INSTANCE_FADE_SHIFT = 8u,
+	T3D_RD_INSTANCE_FADE_MASK = 0x00FFFF00u,
+	T3D_RD_INSTANCE_DEPTH_PREPASS_PASS = 1u << 31u,
+} t3dRdInstanceFlags_t;
+
+// CPU publication descriptor for one logical resident cell/LOD. The renderer
+// uses the AABB for coarse rejection, then writes visible-instance indices into
+// a single persistent indirection buffer grouped by mesh surface/material.
+typedef struct t3dRdInstanceCell_s {
+	int32_t m_nRegionX = 0;
+	int32_t m_nRegionZ = 0;
+	int16_t m_nCellX = 0;
+	int16_t m_nCellZ = 0;
+	uint16_t m_nMeshAssetId = 0u;
+	int16_t m_nLod = 0;
+	uint32_t m_nFirstInstance = 0u;
+	uint32_t m_nInstanceCount = 0u;
+	uint32_t m_nRevision = 0u;
+	uint32_t m_nSettingsRevision = 0u;
+	uint32_t m_nVisibilityLayers = 1u;
+	uint32_t m_nFlags = 0u;
+	float m_fLodBegin = 0.0f;
+	float m_fLodEnd = 0.0f;
+	float m_fFadeMargin = 0.0f;
+	float m_fPadding0 = 0.0f;
+	AABB m_bounds;
+} t3dRdInstanceCell_t;
+
+// Material subset extracted from imported BaseMaterial3D resources. Texture
+// object IDs are immutable publication keys resolved by the direct-RD mesh
+// cache into Terrain3D-owned texture RIDs without native material proxies.
+typedef enum t3dRdInstanceMaterialFlags_e : uint32_t {
+	T3D_RD_INSTANCE_MATERIAL_NONE = 0u,
+	T3D_RD_INSTANCE_MATERIAL_ALPHA_SCISSOR = 1u << 0u,
+	T3D_RD_INSTANCE_MATERIAL_DOUBLE_SIDED = 1u << 1u,
+	T3D_RD_INSTANCE_MATERIAL_HAS_ALBEDO_TEXTURE = 1u << 2u,
+	T3D_RD_INSTANCE_MATERIAL_HAS_NORMAL_TEXTURE = 1u << 3u,
+	T3D_RD_INSTANCE_MATERIAL_HAS_ORM_TEXTURE = 1u << 4u,
+	T3D_RD_INSTANCE_MATERIAL_EMISSIVE = 1u << 5u,
+	T3D_RD_INSTANCE_MATERIAL_TEXTURE_REPEAT = 1u << 6u,
+	T3D_RD_INSTANCE_MATERIAL_VERTEX_COLOR = 1u << 7u,
+	T3D_RD_INSTANCE_MATERIAL_VERTEX_COLOR_SRGB = 1u << 8u,
+	T3D_RD_INSTANCE_MATERIAL_CULL_FRONT = 1u << 9u,
+	T3D_RD_INSTANCE_MATERIAL_NORMAL_MAPPING = 1u << 10u,
+	T3D_RD_INSTANCE_MATERIAL_AO_ENABLED = 1u << 11u,
+	T3D_RD_INSTANCE_MATERIAL_UNSHADED = 1u << 12u,
+	T3D_RD_INSTANCE_MATERIAL_DONT_RECEIVE_SHADOWS = 1u << 13u,
+	T3D_RD_INSTANCE_MATERIAL_ALPHA_BLEND = 1u << 14u,
+	T3D_RD_INSTANCE_MATERIAL_ALPHA_DEPTH_PREPASS = 1u << 15u,
+	T3D_RD_INSTANCE_MATERIAL_FILTER_SHIFT = 16u,
+	T3D_RD_INSTANCE_MATERIAL_FILTER_MASK = 7u << T3D_RD_INSTANCE_MATERIAL_FILTER_SHIFT,
+	T3D_RD_INSTANCE_MATERIAL_ROUGHNESS_TEXTURE = 1u << 19u,
+} t3dRdInstanceMaterialFlags_t;
+
+typedef struct alignas( 16 ) t3dRdInstanceMaterial_s {
+	float m_szAlbedo[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+	float m_fMetallic = 0.0f;
+	float m_fRoughness = 1.0f;
+	float m_fAo = 1.0f;
+	float m_fAlphaScissor = 0.5f;
+	float m_szEmission[3] = { 0.0f, 0.0f, 0.0f };
+	uint32_t m_nFlags = 0u;
+	float m_fNormalScale = 1.0f;
+	uint32_t m_nReserved0 = 0u;
+	uint32_t m_nAlbedoTextureIdLow = 0u;
+	uint32_t m_nAlbedoTextureIdHigh = 0u;
+	uint32_t m_nNormalTextureIdLow = 0u;
+	uint32_t m_nNormalTextureIdHigh = 0u;
+	uint32_t m_nOrmTextureIdLow = 0u;
+	uint32_t m_nOrmTextureIdHigh = 0u;
+} t3dRdInstanceMaterial_t;
+static_assert( sizeof( t3dRdInstanceMaterial_t ) == 80u, "RD instance material ABI changed" );
+static_assert( offsetof( t3dRdInstanceMaterial_t, m_fNormalScale ) == 48u, "RD instance normal-scale ABI changed" );
+static_assert( offsetof( t3dRdInstanceMaterial_t, m_nAlbedoTextureIdLow ) == 56u, "RD instance texture ABI changed" );
+
 typedef struct t3dRdFrameSnapshot_s {
 	uint64_t m_nPublicationGeneration = 0u;
 	uint64_t m_nGeneration = 0u;
@@ -343,6 +499,7 @@ typedef struct t3dRdFrameSnapshot_s {
 	uint32_t m_nRegionMapSize = 0u;
 	uint32_t m_nMeshSize = 48u;
 	uint32_t m_nMaterialLayerCount = 1u;
+	uint32_t m_nCameraCullMask = UINT32_MAX;
 	float m_fVertexSpacing = 1.0f;
 	float m_fHeightMin = s_fRegionHeightMin;
 	float m_fHeightRange = s_fRegionHeightRange;

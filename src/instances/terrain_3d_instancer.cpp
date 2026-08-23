@@ -10,6 +10,7 @@
 #include "data/terrain_3d_region.h"
 #include "data/terrain_3d_runtime_bake_codec.h"
 #include "data/terrain_3d_sampler.h"
+#include "data/terrain_3d_half_buffer.h"
 #include "simd/terrain_3d_simd.h"
 
 #include <algorithm>
@@ -19,9 +20,33 @@
 #include <godot_cpp/classes/world3d.hpp>
 #include <limits>
 #include <utility>
+#include <unordered_map>
 
 static_assert( s_nInstanceRegionTableCapacity == ( size_t )( s_nMaxRegionSlots ),
 		"Instancer region tables must cover every Terrain3DData region slot" );
+
+
+static uint32_t t3dPackInstanceSnormPair( const float x, const float y ) {
+	const int16_t px = ( int16_t )( std::lround( CLAMP( x, -1.0f, 1.0f ) * 32767.0f ) );
+	const int16_t py = ( int16_t )( std::lround( CLAMP( y, -1.0f, 1.0f ) * 32767.0f ) );
+	return ( uint32_t )( ( uint16_t )( px ) ) | ( ( uint32_t )( ( uint16_t )( py ) ) << 16u );
+}
+
+static t3dRdInstanceRecord_t t3dPackRdInstanceRecord( const Transform3D &rTransform, const uint32_t nColor ) {
+	t3dRdInstanceRecord_t record;
+	record.m_szPosition[0] = ( float )( rTransform.origin.x );
+	record.m_szPosition[1] = ( float )( rTransform.origin.y );
+	record.m_szPosition[2] = ( float )( rTransform.origin.z );
+	const Vector3 scale = rTransform.basis.get_scale();
+	const Quaternion rotation = rTransform.basis.orthonormalized().get_rotation_quaternion().normalized();
+	record.m_nQuaternion01 = t3dPackInstanceSnormPair( ( float )( rotation.x ), ( float )( rotation.y ) );
+	record.m_nQuaternion23 = t3dPackInstanceSnormPair( ( float )( rotation.z ), ( float )( rotation.w ) );
+	record.m_nScale01 = ( uint32_t )( t3dHalfEncode( ( float )( scale.x ) ) ) |
+			( ( uint32_t )( t3dHalfEncode( ( float )( scale.y ) ) ) << 16u );
+	record.m_nScale2Flags = ( uint32_t )( t3dHalfEncode( ( float )( scale.z ) ) );
+	record.m_nColorRgba8 = t3dRdPackGodotRgba32ForGpu( nColor );
+	return record;
+}
 
 static bool
 t3dBeginInstancePageAccess( Terrain3DInstancer *pInstancer, Terrain3DData *pData, const Vector2i &rLocation, bool &bTemporary ) {
@@ -74,6 +99,10 @@ static uint64_t t3dRepositoryMeshInstanceCount( const Terrain3DData *pData, cons
 
 t3dRenderCellKey_t Terrain3DInstancer::makeRenderKey( const t3dRenderCell_t &rCell ) {
 	return t3dRenderCellKey_t{ rCell.m_region, rCell.m_cell, rCell.m_nMeshId, rCell.m_nLod };
+}
+
+void Terrain3DInstancer::markRdPublicationDirty( void ) {
+	if ( ++m_nRdPublicationGeneration == 0u ) m_nRdPublicationGeneration = 1u;
 }
 
 int Terrain3DInstancer::getRegionTableIndex( const Vector2i &vRegion ) {
@@ -256,6 +285,7 @@ Terrain3DInstancer::getOrCreateRenderCell( const Vector2i &region, const int nMe
 		m_renderCells.pop_back();
 		return nullptr;
 	}
+	markRdPublicationDirty();
 	return &render_cell;
 }
 
@@ -269,12 +299,6 @@ void Terrain3DInstancer::eraseRenderCellAt( const size_t iIndex ) {
 	if ( dead_region_index >= 0 && dead_region_index < ( int )( s_nInstanceRegionTableCapacity ) ) {
 		releaseRenderRegionNode( dead.m_nRegionListNode, ( uint16_t )( dead_region_index ) );
 	}
-	if ( dead.m_hMmi.is_valid() ) {
-		RS->free_rid( dead.m_hMmi );
-	}
-	if ( dead.m_nLod != s_nMeshShadowLodId && dead.m_hMultimesh.is_valid() ) {
-		RS->free_rid( dead.m_hMultimesh );
-	}
 
 	const size_t last = m_renderCells.size() - 1u;
 	if ( iIndex != last ) {
@@ -286,6 +310,7 @@ void Terrain3DInstancer::eraseRenderCellAt( const size_t iIndex ) {
 		}
 	}
 	m_renderCells.pop_back();
+	markRdPublicationDirty();
 }
 
 void Terrain3DInstancer::eraseRenderCell( const Vector2i &region, const int nMeshId, const int nLod, const Vector2i &cell ) {
@@ -1536,260 +1561,99 @@ void Terrain3DInstancer::updateMmiCell( Terrain3DRegion *const pRegion,
 		const int nMeshId,
 		t3dInstanceCell_t &rCell,
 		const Ref<Terrain3DMeshAsset> &rAsset ) {
-	const Vector2i regionLocation = pRegion->getLocation();
+	const Vector2i region_location = pRegion->getLocation();
 	const Vector2i cell_location = rCell.m_location;
-	const t3dCellUpdateKey_t transition_key{ regionLocation, cell_location, nMeshId };
+	const t3dCellUpdateKey_t transition_key{ region_location, cell_location, nMeshId };
 	if ( rCell.m_transforms.empty() ) {
-		eraseLogicalCellCount( regionLocation, nMeshId, cell_location );
+		eraseLogicalCellCount( region_location, nMeshId, cell_location );
 		untrackSingleLodCell( transition_key );
-		destroyMmiByCell( regionLocation, nMeshId, cell_location );
+		destroyMmiByCell( region_location, nMeshId, cell_location );
 		return;
 	}
-	setLogicalCellCount( regionLocation, nMeshId, cell_location, rCell.m_transforms.size() );
-	if ( !cellShouldBeResident( regionLocation, cell_location, nMeshId ) ) {
+	setLogicalCellCount( region_location, nMeshId, cell_location, rCell.m_transforms.size() );
+	if ( !cellShouldBeResident( region_location, cell_location, nMeshId ) ) {
 		untrackSingleLodCell( transition_key );
-		destroyMmiByCell( regionLocation, nMeshId, cell_location );
+		destroyMmiByCell( region_location, nMeshId, cell_location );
 		return;
 	}
 
 	const Vector3 lod_target = m_bStreamPositionValid ? m_lastStreamPosition : m_pTerrain->getClipmapTargetPosition();
 	const int selected_lod = m_bSingleLodInstanceBuffers
-			? selectCellLod( regionLocation, cell_location, rAsset, lod_target )
+			? selectCellLod( region_location, cell_location, rAsset, lod_target )
 			: INT32_MAX;
 	if ( m_bSingleLodInstanceBuffers && selected_lod < 0 ) {
 		untrackSingleLodCell( transition_key );
-		destroyMmiByCell( regionLocation, nMeshId, cell_location );
+		destroyMmiByCell( region_location, nMeshId, cell_location );
 		return;
 	}
-	if ( m_bSingleLodInstanceBuffers ) {
-		trackSingleLodCell( transition_key );
-	}
+	if ( m_bSingleLodInstanceBuffers ) trackSingleLodCell( transition_key );
 
 	for ( int lod = 0; lod < s_nMeshMaxLodCount; ++lod ) {
-		const bool bInvalidLegacyLod = lod > rAsset->getLastLod() ||
+		const bool invalid_legacy_lod = lod > rAsset->getLastLod() ||
 				( rAsset->getCastShadows() == s_shadowCastingOnly &&
 						( lod > rAsset->getLastShadowLod() || lod < rAsset->getShadowImpostor() ) );
 		if ( ( m_bSingleLodInstanceBuffers && lod != selected_lod ) ||
-				( !m_bSingleLodInstanceBuffers && bInvalidLegacyLod ) ) {
-			destroyMmiByCell( regionLocation, nMeshId, cell_location, lod );
-		}
+				( !m_bSingleLodInstanceBuffers && invalid_legacy_lod ) )
+			destroyMmiByCell( region_location, nMeshId, cell_location, lod );
 	}
-	const bool bShadowDisabled = m_bSingleLodInstanceBuffers || rAsset->getShadowImpostor() == 0 ||
+	const bool shadow_disabled = m_bSingleLodInstanceBuffers || rAsset->getShadowImpostor() == 0 ||
 			rAsset->getCastShadows() == s_shadowCastingOff;
-	if ( bShadowDisabled ) {
-		destroyMmiByCell( regionLocation, nMeshId, cell_location, s_nMeshShadowLodId );
-	}
+	if ( shadow_disabled ) destroyMmiByCell( region_location, nMeshId, cell_location, s_nMeshShadowLodId );
 
-	const Ref<Mesh> pMasterMesh = rAsset->getMesh( getMasterLod( rAsset ) );
-	const AABB source_mesh_aabb = pMasterMesh.is_valid() ? pMasterMesh->get_aabb() : AABB();
-	const bool bSourceMeshChanged =
-			!rCell.m_bCachedAabbValid || !rCell.m_cachedSourceMeshAabb.is_equal_approx( source_mesh_aabb );
-	const bool bRebuildAabb =
-			!rCell.m_bCachedAabbValid || rCell.m_nCachedAabbRevision != rCell.m_nRevision || bSourceMeshChanged;
-	bool bUploadBufferReady = false;
-	PackedFloat32Array cooked_fast_start_buffer;
-	uint32_t cooked_fast_start_count = 0u;
-	const bool bCookedFastStart = !rCell.m_bModified &&
-			Terrain3DRuntimeBakeCodec::findMultimeshFastStart( pRegion->getCookedMultimeshFastStartInternal(),
-					( uint16_t )nMeshId,
-					cell_location,
-					cooked_fast_start_buffer,
-					cooked_fast_start_count ) &&
-			cooked_fast_start_count == rCell.m_transforms.size();
-	if ( bCookedFastStart && bRebuildAabb ) {
-		bool initialized = false;
-		AABB cooked_aabb;
-		const float *const values = cooked_fast_start_buffer.ptr();
-		for ( uint32_t instance = 0u; instance < cooked_fast_start_count; ++instance ) {
-			const float *const record = values + ( size_t )instance * 16u;
-			Basis basis;
-			basis[0] = Vector3( record[0], record[1], record[2] );
-			basis[1] = Vector3( record[4], record[5], record[6] );
-			basis[2] = Vector3( record[8], record[9], record[10] );
-			const AABB transformed =
-					Transform3D( basis, Vector3( record[3], record[7], record[11] ) ).xform( source_mesh_aabb );
-			if ( !initialized ) {
-				cooked_aabb = transformed;
-				initialized = true;
-			} else {
-				cooked_aabb.merge_with( transformed );
-			}
-		}
-		rCell.m_cachedAabb = initialized ? cooked_aabb : AABB();
-		rCell.m_cachedSourceMeshAabb = source_mesh_aabb;
-		rCell.m_nCachedAabbRevision = rCell.m_nRevision;
-		if ( ++rCell.m_nCachedAabbGeneration == 0 ) {
-			rCell.m_nCachedAabbGeneration = 1;
-		}
-		rCell.m_bCachedAabbValid = true;
-	}
+	const Ref<Mesh> master_mesh = rAsset->getMesh( getMasterLod( rAsset ) );
+	const AABB source_mesh_aabb = master_mesh.is_valid() ? master_mesh->get_aabb() : AABB();
+	const bool source_changed = !rCell.m_bCachedAabbValid ||
+			!rCell.m_cachedSourceMeshAabb.is_equal_approx( source_mesh_aabb );
+	if ( !rCell.m_bCachedAabbValid || rCell.m_nCachedAabbRevision != rCell.m_nRevision || source_changed )
+		ensureCellAabb( rCell, source_mesh_aabb );
 
-	RID shadow_source;
 	for ( int lod = rAsset->getLastLod(); lod >= s_nMeshShadowLodId; --lod ) {
-		if ( m_bSingleLodInstanceBuffers && lod != selected_lod ) {
-			continue;
-		}
-		if ( lod == s_nMeshShadowLodId && bShadowDisabled ) {
-			continue;
-		}
+		if ( m_bSingleLodInstanceBuffers && lod != selected_lod ) continue;
+		if ( lod == s_nMeshShadowLodId && shadow_disabled ) continue;
 		if ( rAsset->getCastShadows() == s_shadowCastingOnly && lod >= 0 &&
-				( lod > rAsset->getLastShadowLod() || lod < rAsset->getShadowImpostor() ) ) {
+				( lod > rAsset->getLastShadowLod() || lod < rAsset->getShadowImpostor() ) ) continue;
+		const int source_lod = lod == s_nMeshShadowLodId ? rAsset->getShadowImpostor() : lod;
+		if ( source_lod < 0 || source_lod >= rAsset->getLodCount() || rAsset->getMesh( source_lod ).is_null() ) {
+			eraseRenderCell( region_location, nMeshId, lod, cell_location );
 			continue;
 		}
-
-		t3dRenderCell_t *const pRenderPtr = getOrCreateRenderCell( regionLocation, nMeshId, lod, cell_location );
-		if ( !pRenderPtr ) {
-			continue;
-		}
-		t3dRenderCell_t &pRender = *pRenderPtr;
-		const bool bNewMmi = !pRender.m_hMmi.is_valid();
-		if ( bNewMmi ) {
-			++m_nNewRenderInstancesLastFrame;
-			pRender.m_hMmi = RS->instance_create();
-			RS->instance_set_scenario( pRender.m_hMmi, m_pTerrain->get_world_3d()->get_scenario() );
-			Transform3D region_transform;
-			region_transform.origin.x = regionLocation.x * pRegion->getRegionSize() * m_pTerrain->getVertexSpacing();
-			region_transform.origin.z = regionLocation.y * pRegion->getRegionSize() * m_pTerrain->getVertexSpacing();
-			RS->instance_set_transform( pRender.m_hMmi, region_transform );
-		}
-		const bool bSettingsChanged = bNewMmi || pRender.m_nSettingsRevision != m_szMeshSettingsRevision[nMeshId];
-		if ( bSettingsChanged ) {
-			if ( rAsset->isHighlighted() ) {
-				RS->instance_geometry_set_material_override( pRender.m_hMmi,
-						rAsset->getHighlightMaterial().is_valid() ? rAsset->getHighlightMaterial()->get_rid() : RID() );
-				RS->instance_geometry_set_material_overlay( pRender.m_hMmi, RID() );
-			} else {
-				RS->instance_geometry_set_material_override( pRender.m_hMmi,
-						rAsset->getMaterialOverride().is_valid() ? rAsset->getMaterialOverride()->get_rid() : RID() );
-				RS->instance_geometry_set_material_overlay( pRender.m_hMmi,
-						rAsset->getMaterialOverlay().is_valid() ? rAsset->getMaterialOverlay()->get_rid() : RID() );
-			}
-			RS->instance_geometry_set_cast_shadows_setting( pRender.m_hMmi, rAsset->getLodCastShadows( lod ) );
-			RS->instance_set_layer_mask( pRender.m_hMmi, rAsset->getVisibilityLayers() );
-			setMmiLodRanges( pRender.m_hMmi, rAsset, lod );
-			pRender.m_nSettingsRevision = m_szMeshSettingsRevision[nMeshId];
-		}
-
-		if ( lod == s_nMeshShadowLodId ) {
-			pRender.m_hMultimesh = shadow_source;
-		} else {
-			const bool bUploadUsesColors = bCookedFastStart ? true : rCell.usesColors();
-			if ( !pRender.m_hMultimesh.is_valid() || rCell.m_bModified ||
-					pRender.m_nUploadedRevision != rCell.m_nRevision || pRender.m_bUsesColors != bUploadUsesColors ) {
-				const PackedFloat32Array *pUpload = &cooked_fast_start_buffer;
-				if ( !bCookedFastStart ) {
-					ensureUploadBuffer( rCell, pMasterMesh, source_mesh_aabb, bRebuildAabb, bUploadBufferReady );
-					pUpload = &m_uploadBuffer;
-				}
-				const t3dMultiMeshUpdateResult_t result =
-						updateMultimesh( nMeshId, lod, rCell, pRender, bUploadUsesColors, *pUpload );
-				if ( result != t3dMultiMeshUpdateResult_t::UPDATED ) {
-					eraseRenderCell( regionLocation, nMeshId, lod, cell_location );
-					continue;
-				}
-				++m_nMultimeshUploadsLastFrame;
-				m_nInstanceRecordsUploadedLastFrame += ( uint64_t )( rCell.m_transforms.size() );
-				m_nMultimeshUploadBytesLastFrame += ( uint64_t )( pUpload->size() ) * sizeof( float );
-				pRender.m_nUploadedRevision = rCell.m_nRevision;
-				pRender.m_bUsesColors = bUploadUsesColors;
-			} else if ( bSettingsChanged ) {
-				const Ref<Mesh> pMesh = rAsset->getMesh( lod );
-				if ( pMesh.is_null() ) {
-					eraseRenderCell( regionLocation, nMeshId, lod, cell_location );
-					continue;
-				}
-				if ( pRender.m_hBoundMesh != pMesh->get_rid() ) {
-					RS->multimesh_set_mesh( pRender.m_hMultimesh, pMesh->get_rid() );
-					pRender.m_hBoundMesh = pMesh->get_rid();
-				}
-			}
-		}
-		if ( lod == s_nMeshShadowLodId && !pRender.m_hMultimesh.is_valid() ) {
-			eraseRenderCell( regionLocation, nMeshId, lod, cell_location );
-			continue;
-		}
-		if ( pRender.m_hMultimesh.is_valid() && pRender.m_hBoundMultimesh != pRender.m_hMultimesh ) {
-			RS->instance_set_base( pRender.m_hMmi, pRender.m_hMultimesh );
-			pRender.m_hBoundMultimesh = pRender.m_hMultimesh;
-		}
-		if ( lod == rAsset->getShadowImpostor() ) {
-			shadow_source = pRender.m_hMultimesh;
+		t3dRenderCell_t *const render = getOrCreateRenderCell( region_location, nMeshId, lod, cell_location );
+		if ( !render ) continue;
+		const bool changed = render->m_nUploadedCount != ( int )( rCell.m_transforms.size() ) ||
+				render->m_nUploadedRevision != rCell.m_nRevision ||
+				render->m_nSettingsRevision != m_szMeshSettingsRevision[nMeshId] ||
+				render->m_nAabbGeneration != rCell.m_nCachedAabbGeneration ||
+				render->m_bUsesColors != rCell.usesColors();
+		render->m_nUploadedCount = ( int )( rCell.m_transforms.size() );
+		render->m_nUploadedRevision = rCell.m_nRevision;
+		render->m_nSettingsRevision = m_szMeshSettingsRevision[nMeshId];
+		render->m_nAabbGeneration = rCell.m_nCachedAabbGeneration;
+		render->m_bUsesColors = rCell.usesColors();
+		if ( changed ) {
+			++m_nMultimeshUploadsLastFrame;
+			m_nInstanceRecordsUploadedLastFrame += ( uint64_t )( rCell.m_transforms.size() );
+			m_nMultimeshUploadBytesLastFrame += ( uint64_t )( rCell.m_transforms.size() ) * sizeof( t3dRdInstanceRecord_t );
+			markRdPublicationDirty();
 		}
 	}
 	rCell.m_bModified = false;
-	if ( bRebuildAabb && !bUploadBufferReady && !bCookedFastStart ) {
-		ensureUploadBuffer( rCell, pMasterMesh, source_mesh_aabb, bRebuildAabb, bUploadBufferReady );
-	}
-
-	for ( int lod = s_nMeshShadowLodId; lod <= rAsset->getLastLod(); ++lod ) {
-		t3dRenderCell_t *pRender = findRenderCell( regionLocation, nMeshId, lod, cell_location );
-		if ( !pRender || !pRender->m_hMmi.is_valid() || pRender->m_nAabbGeneration == rCell.m_nCachedAabbGeneration ) {
-			continue;
-		}
-		if ( lod >= 0 && pRender->m_hMultimesh.is_valid() && lod != getMasterLod( rAsset ) ) {
-			RS->multimesh_set_custom_aabb( pRender->m_hMultimesh, rCell.m_cachedAabb );
-		}
-		RS->instance_set_custom_aabb( pRender->m_hMmi, rCell.m_cachedAabb );
-		pRender->m_nAabbGeneration = rCell.m_nCachedAabbGeneration;
-	}
 }
 
-void Terrain3DInstancer::ensureUploadBuffer( t3dInstanceCell_t &rCell,
-		const Ref<Mesh> &rMasterMesh,
-		const AABB &aabbSourceMeshAabb,
-		const bool bRebuildAabb,
-		bool &bReady ) {
-	if ( bReady ) {
-		return;
-	}
-	if ( bRebuildAabb && rMasterMesh.is_valid() ) {
-		fillMultimeshBuffer( rCell, m_uploadBuffer, &aabbSourceMeshAabb, &rCell.m_cachedAabb );
-	} else {
-		fillMultimeshBuffer( rCell, m_uploadBuffer );
-		if ( bRebuildAabb ) {
-			rCell.m_cachedAabb = AABB();
+void Terrain3DInstancer::ensureCellAabb( t3dInstanceCell_t &rCell, const AABB &rSourceMeshAabb ) {
+	bool initialized = false;
+	AABB bounds;
+	if ( rSourceMeshAabb.has_volume() ) {
+		for ( size_t i = 0u; i < rCell.m_transforms.size(); ++i ) {
+			const AABB transformed = ( ( Transform3D )( rCell.m_transforms[i] ) ).xform( rSourceMeshAabb );
+			if ( !initialized ) { bounds = transformed; initialized = true; }
+			else bounds.merge_with( transformed );
 		}
 	}
-	if ( bRebuildAabb ) {
-		rCell.m_cachedSourceMeshAabb = aabbSourceMeshAabb;
-		rCell.m_nCachedAabbRevision = rCell.m_nRevision;
-		if ( ++rCell.m_nCachedAabbGeneration == 0 ) {
-			rCell.m_nCachedAabbGeneration = 1;
-		}
-		rCell.m_bCachedAabbValid = true;
-	}
-	bReady = true;
-}
-
-void Terrain3DInstancer::setMmiLodRanges( const RID mmi, const Ref<Terrain3DMeshAsset> &rMa, const int nLod ) {
-	if ( !mmi || rMa.is_null() ) {
-		return;
-	}
-	if ( m_bSingleLodInstanceBuffers ) {
-		RS->instance_geometry_set_visibility_range(
-				mmi, 0.0f, 0.0f, 0.0f, 0.0f, RenderingServer::VISIBILITY_RANGE_FADE_DISABLED );
-		return;
-	}
-	int source_lod = nLod;
-	real_t fLodBegin = rMa->getLodRangeBegin( source_lod );
-	real_t fLodEnd = rMa->getLodRangeEnd( source_lod );
-	if ( source_lod == s_nMeshShadowLodId ) {
-		source_lod = rMa->getShadowImpostor();
-		fLodBegin = 0.f;
-		fLodEnd = rMa->getLodRangeBegin( source_lod );
-	}
-	const real_t fMargin = rMa->getFadeMargin();
-	if ( fMargin > 0.f ) {
-		fLodBegin = MAX( fLodBegin < 0.001f ? 0.f : fLodBegin - fMargin, 0.f );
-		fLodEnd = MAX( fLodEnd < 0.001f ? 0.f : fLodEnd + fMargin, 0.f );
-		const real_t fBeginMargin = fLodBegin < 0.001f ? 0.f : fMargin;
-		const real_t fEndMargin = fLodEnd < 0.001f ? 0.f : fMargin;
-		RS->instance_geometry_set_visibility_range(
-				mmi, fLodBegin, fLodEnd, fBeginMargin, fEndMargin, RenderingServer::VISIBILITY_RANGE_FADE_SELF );
-	} else {
-		RS->instance_geometry_set_visibility_range(
-				mmi, fLodBegin, fLodEnd, 0.f, 0.f, RenderingServer::VISIBILITY_RANGE_FADE_DISABLED );
-	}
+	rCell.m_cachedAabb = initialized ? bounds : AABB();
+	rCell.m_cachedSourceMeshAabb = rSourceMeshAabb;
+	rCell.m_nCachedAabbRevision = rCell.m_nRevision;
+	if ( ++rCell.m_nCachedAabbGeneration == 0u ) rCell.m_nCachedAabbGeneration = 1u;
+	rCell.m_bCachedAabbValid = true;
 }
 
 void Terrain3DInstancer::updateVertexSpacing( const real_t fVertexSpacing ) {
@@ -1941,12 +1805,6 @@ void Terrain3DInstancer::fillMultimeshBuffer( const t3dInstanceCell_t &rCell,
 	}
 }
 
-const PackedFloat32Array &Terrain3DInstancer::buildUploadBuffer( const t3dInstanceCell_t &rCell ) const {
-	// RenderingServer upload is main-thread owned. Keep this scratch private so
-	// public callers cannot retain it and trigger copy-on-write detachment here.
-	fillMultimeshBuffer( rCell, m_uploadBuffer );
-	return m_uploadBuffer;
-}
 
 PackedFloat32Array Terrain3DInstancer::buildMultimeshBuffer( const TypedArray<Transform3D> &rXforms,
 		const PackedColorArray &rColors ) const {
@@ -1973,46 +1831,101 @@ PackedFloat32Array Terrain3DInstancer::buildMultimeshBuffer( const TypedArray<Tr
 	return result;
 }
 
-t3dMultiMeshUpdateResult_t Terrain3DInstancer::updateMultimesh( const int nMeshId,
-		const int nLod,
-		const t3dInstanceCell_t &rCell,
-		t3dRenderCell_t &rRender,
-		const bool bUseColors,
-		const PackedFloat32Array &rUploadBuffer ) {
-	if ( rCell.m_transforms.empty() ) {
-		return t3dMultiMeshUpdateResult_t::EMPTY;
+
+std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> Terrain3DInstancer::buildRdInstanceSnapshot( void ) const {
+	std::shared_ptr<t3dRdInstanceSceneSnapshot_t> snapshot = std::make_shared<t3dRdInstanceSceneSnapshot_t>();
+	snapshot->m_nGeneration = m_nRdPublicationGeneration;
+	if ( !m_pTerrain || !m_pTerrain->getData() || m_pTerrain->getAssets().is_null() || m_renderCells.empty() ) {
+		return snapshot;
 	}
-	const Ref<Terrain3DMeshAsset> pAsset = m_pTerrain->getAssets()->getMeshAsset( nMeshId );
-	if ( pAsset.is_null() ) {
-		return t3dMultiMeshUpdateResult_t::MISSING_ASSET;
+
+	typedef struct t3dRdCellRange_s {
+		uint32_t m_nFirst = 0u;
+		uint32_t m_nCount = 0u;
+	} t3dRdCellRange_t;
+	std::unordered_map<t3dCellUpdateKey_t, t3dRdCellRange_t, t3dCellUpdateKeyHash_t> ranges;
+	ranges.reserve( m_renderCells.size() );
+	snapshot->m_cells.reserve( m_renderCells.size() );
+
+	Terrain3DData *const data = m_pTerrain->getData();
+	const Ref<Terrain3DAssets> assets = m_pTerrain->getAssets();
+	const float region_world_size = ( float )( m_pTerrain->getRegionSize() ) * ( float )( m_pTerrain->getVertexSpacing() );
+	for ( const t3dRenderCell_t &render : m_renderCells ) {
+		if ( render.m_nMeshId < 0 || render.m_nMeshId >= s_nMaxMeshAssets ) continue;
+		Terrain3DRegion *const region = data->getRegionPtr( render.m_region );
+		if ( !region || region->isDeleted() ) continue;
+		const t3dInstanceCell_t *const source_cell = region->getInstanceStore().findCell( render.m_nMeshId, render.m_cell );
+		if ( !source_cell || source_cell->m_transforms.empty() ) continue;
+		const Ref<Terrain3DMeshAsset> asset = assets->getMeshAsset( render.m_nMeshId );
+		if ( asset.is_null() || !asset->isEnabled() ) continue;
+
+		const t3dCellUpdateKey_t key{ render.m_region, render.m_cell, render.m_nMeshId };
+		auto found = ranges.find( key );
+		if ( found == ranges.end() ) {
+			t3dRdCellRange_t range;
+			range.m_nFirst = ( uint32_t )( snapshot->m_instances.size() );
+			range.m_nCount = ( uint32_t )( MIN<size_t>( source_cell->m_transforms.size(), UINT32_MAX ) );
+			snapshot->m_instances.reserve( snapshot->m_instances.size() + range.m_nCount );
+			const Vector3 region_offset( ( real_t )( render.m_region.x ) * region_world_size,
+					0.0,
+					( real_t )( render.m_region.y ) * region_world_size );
+			for ( uint32_t i = 0u; i < range.m_nCount; ++i ) {
+				Transform3D transform = ( Transform3D )( source_cell->m_transforms[( size_t )( i )] );
+				transform.origin += region_offset;
+				const uint32_t color = source_cell->m_colors.empty() ? s_nInstanceWhiteRgba8 : source_cell->m_colors[( size_t )( i )];
+				snapshot->m_instances.push_back( t3dPackRdInstanceRecord( transform, color ) );
+			}
+			found = ranges.emplace( key, range ).first;
+		}
+
+		const int source_lod = render.m_nLod == s_nMeshShadowLodId ? asset->getShadowImpostor() : render.m_nLod;
+		if ( source_lod < 0 || source_lod >= asset->getLodCount() || asset->getMesh( source_lod ).is_null() ) continue;
+
+		t3dRdInstanceCell_t cell;
+		cell.m_nRegionX = render.m_region.x;
+		cell.m_nRegionZ = render.m_region.y;
+		cell.m_nCellX = ( int16_t )( CLAMP( render.m_cell.x, ( int )( INT16_MIN ), ( int )( INT16_MAX ) ) );
+		cell.m_nCellZ = ( int16_t )( CLAMP( render.m_cell.y, ( int )( INT16_MIN ), ( int )( INT16_MAX ) ) );
+		cell.m_nMeshAssetId = ( uint16_t )( render.m_nMeshId );
+		cell.m_nLod = ( int16_t )( source_lod );
+		cell.m_nFirstInstance = found->second.m_nFirst;
+		cell.m_nInstanceCount = found->second.m_nCount;
+		cell.m_nRevision = render.m_nUploadedRevision;
+		cell.m_nSettingsRevision = render.m_nSettingsRevision;
+		cell.m_nVisibilityLayers = asset->getVisibilityLayers();
+		cell.m_fFadeMargin = ( float )( asset->getFadeMargin() );
+
+		const ShadowCasting cast = asset->getLodCastShadows( render.m_nLod );
+		if ( cast != s_shadowCastingOff ) cell.m_nFlags |= T3D_RD_INSTANCE_CAST_SHADOWS;
+		if ( cast == RenderingServer::SHADOW_CASTING_SETTING_DOUBLE_SIDED ) cell.m_nFlags |= T3D_RD_INSTANCE_SHADOW_DOUBLE_SIDED;
+		if ( cast == s_shadowCastingOnly || render.m_nLod == s_nMeshShadowLodId ) cell.m_nFlags |= T3D_RD_INSTANCE_SHADOWS_ONLY;
+		if ( asset->isHighlighted() ) cell.m_nFlags |= T3D_RD_INSTANCE_HIGHLIGHTED;
+
+		if ( m_bSingleLodInstanceBuffers ) {
+			// Single-LOD mode matches the retained RS path: CPU transition selection
+			// owns visibility and the renderer does not add another range cutoff.
+			cell.m_fLodBegin = 0.0f;
+			cell.m_fLodEnd = 0.0f;
+		} else {
+			cell.m_fLodBegin = render.m_nLod == s_nMeshShadowLodId ? 0.0f
+					: ( float )( asset->getLodRangeBegin( source_lod ) );
+			cell.m_fLodEnd = render.m_nLod == s_nMeshShadowLodId
+					? ( float )( asset->getLodRangeBegin( source_lod ) )
+					: ( float )( asset->getLodRangeEnd( source_lod ) );
+			if ( cell.m_fFadeMargin > 0.0f ) {
+				if ( cell.m_fLodBegin > 0.001f ) cell.m_fLodBegin = MAX( cell.m_fLodBegin - cell.m_fFadeMargin, 0.0f );
+				if ( cell.m_fLodEnd > 0.001f ) cell.m_fLodEnd += cell.m_fFadeMargin;
+			}
+		}
+
+		const Vector3 region_offset( ( real_t )( render.m_region.x ) * region_world_size,
+				0.0,
+				( real_t )( render.m_region.y ) * region_world_size );
+		cell.m_bounds = source_cell->m_cachedAabb;
+		cell.m_bounds.position += region_offset;
+		snapshot->m_cells.push_back( cell );
 	}
-	const Ref<Mesh> pMesh = pAsset->getMesh( nLod );
-	if ( pMesh.is_null() ) {
-		return t3dMultiMeshUpdateResult_t::MISSING_MESH;
-	}
-	const int instance_count = ( int )( rCell.m_transforms.size() );
-	const bool bNewMultimesh = !rRender.m_hMultimesh.is_valid();
-	if ( bNewMultimesh ) {
-		rRender.m_hMultimesh = RS->multimesh_create();
-	}
-	// Reallocate only when capacity/layout must change. Transform-only updates
-	// with a stable count become one packed buffer upload on the retained RID.
-	if ( bNewMultimesh || rRender.m_bUsesColors != bUseColors || rRender.m_nUploadedCount != instance_count ) {
-		RS->multimesh_allocate_data( rRender.m_hMultimesh,
-				instance_count,
-				RenderingServer::MULTIMESH_TRANSFORM_3D,
-				bUseColors,
-				false,
-				false );
-		rRender.m_nUploadedCount = instance_count;
-	}
-	const RID mesh_rid = pMesh->get_rid();
-	if ( rRender.m_hBoundMesh != mesh_rid ) {
-		RS->multimesh_set_mesh( rRender.m_hMultimesh, mesh_rid );
-		rRender.m_hBoundMesh = mesh_rid;
-	}
-	RS->multimesh_set_buffer( rRender.m_hMultimesh, rUploadBuffer );
-	return t3dMultiMeshUpdateResult_t::UPDATED;
+	return snapshot;
 }
 
 Vector2i Terrain3DInstancer::getCellForLocalPosition( const Vector3 &rLocalPosition,
@@ -3591,8 +3504,7 @@ size_t Terrain3DInstancer::getRetainedContainerBytes( void ) const {
 size_t Terrain3DInstancer::getActiveMultimeshBytes( void ) const {
 	size_t bytes = 0u;
 	for ( const t3dRenderCell_t &cell : m_renderCells ) {
-		bytes += ( size_t )( MAX( cell.m_nUploadedCount, 0 ) ) * ( size_t )( cell.m_bUsesColors ? 16 : 12 ) *
-				sizeof( float );
+		bytes += ( size_t )( MAX( cell.m_nUploadedCount, 0 ) ) * sizeof( t3dRdInstanceRecord_t );
 	}
 	return bytes;
 }
@@ -3677,8 +3589,7 @@ Dictionary Terrain3DInstancer::getStats( void ) const {
 	int higher_lod_cells = 0;
 	for ( const t3dRenderCell_t &cell : m_renderCells ) {
 		uploaded_instances += ( uint64_t )( MAX( cell.m_nUploadedCount, 0 ) );
-		active_multimesh_bytes += ( uint64_t )( MAX( cell.m_nUploadedCount, 0 ) ) *
-				( uint64_t )( cell.m_bUsesColors ? 16 : 12 ) * sizeof( float );
+		active_multimesh_bytes += ( uint64_t )( MAX( cell.m_nUploadedCount, 0 ) ) * sizeof( t3dRdInstanceRecord_t );
 		if ( cell.m_nLod <= 0 ) {
 			++lod0_cells;
 		} else if ( cell.m_nLod == 1 ) {
@@ -3702,6 +3613,7 @@ Dictionary Terrain3DInstancer::getStats( void ) const {
 	stats["render_cells_higher_lod"] = higher_lod_cells;
 	stats["uploaded_instances"] = ( int64_t )( uploaded_instances );
 	stats["active_multimesh_bytes"] = ( int64_t )( active_multimesh_bytes );
+	stats["active_rd_instance_bytes"] = ( int64_t )( active_multimesh_bytes );
 	stats["logical_cells"] = ( int64_t )( m_logicalCellCounts.size() );
 	stats["logical_instances"] = ( int64_t )( logical_instances );
 	stats["region_updates"] = m_nRegionUpdateCount;
@@ -3715,7 +3627,9 @@ Dictionary Terrain3DInstancer::getStats( void ) const {
 	stats["processed_cell_updates_last_frame"] = ( int64_t )( m_nProcessedCellUpdatesLastFrame );
 	stats["skipped_cell_updates_last_frame"] = ( int64_t )( m_nSkippedCellUpdatesLastFrame );
 	stats["multimesh_uploads_last_frame"] = ( int64_t )( m_nMultimeshUploadsLastFrame );
+	stats["rd_instance_publications_last_frame"] = ( int64_t )( m_nMultimeshUploadsLastFrame );
 	stats["multimesh_upload_bytes_last_frame"] = ( int64_t )( m_nMultimeshUploadBytesLastFrame );
+	stats["rd_instance_publication_bytes_last_frame"] = ( int64_t )( m_nMultimeshUploadBytesLastFrame );
 	stats["instance_records_uploaded_last_frame"] = ( int64_t )( m_nInstanceRecordsUploadedLastFrame );
 	stats["new_render_instances_last_frame"] = ( int64_t )( m_nNewRenderInstancesLastFrame );
 	stats["materialize_usec_last_frame"] = ( int64_t )( m_nMaterializeUsecLastFrame );

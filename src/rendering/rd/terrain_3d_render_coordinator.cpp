@@ -509,6 +509,15 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 	snapshot.m_fHeightRange = s_fRegionHeightRange;
 	snapshot.m_fDisplacementScale = ( float )( m_pTerrain->getDisplacementScale() );
 	snapshot.m_bDisplacementEnabled = m_pTerrain->getTessellationLevel() > 0;
+	Camera3D *publication_camera = nullptr;
+	if ( Engine::get_singleton()->is_editor_hint() ) {
+		EditorInterface *const editor = EditorInterface::get_singleton();
+		SubViewport *const viewport = editor ? editor->get_editor_viewport_3d( 0 ) : nullptr;
+		publication_camera = viewport ? viewport->get_camera_3d() : nullptr;
+	} else if ( m_pTerrain->get_viewport() ) {
+		publication_camera = m_pTerrain->get_viewport()->get_camera_3d();
+	}
+	snapshot.m_nCameraCullMask = publication_camera ? publication_camera->get_cull_mask() : UINT32_MAX;
 	snapshot.m_nPatchCount = ( uint32_t )( m_pTerrain->getMesher()->fillRdPatches( snapshot.m_szPatches, s_nMaxClipmapLevels ) );
 	const float displacement_padding = snapshot.m_bDisplacementEnabled ? std::abs( snapshot.m_fDisplacementScale ) : 0.0f;
 	for ( uint32_t i = 0u; i < snapshot.m_nPatchCount; ++i ) {
@@ -664,6 +673,29 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 	m_bPublishedResourcesInitialized = true;
 	snapshot.m_nTerrainTextureGeneration = m_nTerrainTextureGeneration;
 	snapshot.m_nMaterialTextureGeneration = m_nMaterialTextureGeneration;
+
+	const Ref<Terrain3DAssets> instance_assets = m_pTerrain->getAssets();
+	const uint64_t mesh_fingerprint = Terrain3DRdMeshCache::computeSourceFingerprint( instance_assets );
+	if ( !m_cachedInstanceMeshes || mesh_fingerprint != m_nInstanceMeshFingerprint ) {
+		m_nInstanceMeshGeneration = advanceGeneration( m_nInstanceMeshGeneration );
+		String mesh_error;
+		m_cachedInstanceMeshes = Terrain3DRdMeshCache::buildSourceSnapshot(
+				instance_assets, mesh_fingerprint, m_nInstanceMeshGeneration, &mesh_error );
+		if ( !m_cachedInstanceMeshes ) {
+			std::lock_guard<std::mutex> lock( m_diagnosticsMutex );
+			m_initializationError = "Failed to publish RD instance meshes: " + mesh_error;
+			return;
+		}
+		m_nInstanceMeshFingerprint = mesh_fingerprint;
+	}
+	Terrain3DInstancer *const instancer = m_pTerrain->getInstancer();
+	const uint64_t instance_generation = instancer ? instancer->getRdPublicationGeneration() : 0u;
+	if ( !m_cachedInstanceScene || instance_generation != m_nInstanceSceneGeneration ) {
+		m_cachedInstanceScene = instancer ? instancer->buildRdInstanceSnapshot() : std::make_shared<t3dRdInstanceSceneSnapshot_t>();
+		m_nInstanceSceneGeneration = instance_generation;
+	}
+	publication.m_instanceMeshes = m_cachedInstanceMeshes;
+	publication.m_instanceScene = m_cachedInstanceScene;
 
 	uint64_t publication_generation = m_nNextSnapshotGeneration;
 	if ( publication_generation == 0u || publication_generation > s_nRdFrameSnapshotGenerationMax ) publication_generation = 1u;
@@ -843,15 +875,16 @@ bool Terrain3DRenderCoordinator::initializeRendererOnRenderThread( void ) {
 	const bool ready = m_shaderLibrary.isReady() && m_renderer.initialize( m_shaderLibrary.getNear(),
 			m_shaderLibrary.getMiddle(),
 			m_shaderLibrary.getFar(),
-			m_shaderLibrary.getCull() );
+			m_shaderLibrary.getCull() ) && m_instanceRenderer.initialize( m_shaderLibrary.getInstances() );
 	m_bRendererInitialized.store( ready, std::memory_order_release );
 	m_bRendererFailed.store( false, std::memory_order_release );
 	if ( !ready ) {
+		m_instanceRenderer.shutdown();
 		m_renderer.shutdown();
 		const uint32_t failures = m_nConsecutiveRenderFailures.fetch_add( 1u, std::memory_order_acq_rel ) + 1u;
 		if ( failures >= 8u ) m_bRendererFailed.store( true, std::memory_order_release );
 		std::lock_guard<std::mutex> lock( m_diagnosticsMutex );
-		m_initializationError = m_shaderLibrary.isReady() ? m_renderer.getLastError() : m_shaderLibrary.getLastError();
+		m_initializationError = m_shaderLibrary.isReady() ? ( !m_instanceRenderer.getLastError().is_empty() ? m_instanceRenderer.getLastError() : m_renderer.getLastError() ) : m_shaderLibrary.getLastError();
 	}
 	return ready;
 }
@@ -865,6 +898,8 @@ void Terrain3DRenderCoordinator::initialize( Terrain3D *const pTerrain ) {
 	const bool bDirectDebug = os && os->get_environment( "TERRAIN3D_RD_DIRECT_DRAW" ) == "1";
 	m_renderer.setCullingComparisonEnabled( bCompareCulling );
 	m_renderer.setDirectDrawDebugEnabled( bDirectDebug );
+	const bool bInstanceDirectDebug = os && os->get_environment( "TERRAIN3D_RD_INSTANCE_DIRECT_DRAW" ) == "1";
+	m_instanceRenderer.setDirectDrawDebugEnabled( bDirectDebug || bInstanceDirectDebug );
 	m_backend.store( bCompareCulling || bDirectDebug ? T3D_RENDER_BACKEND_RENDERING_DEVICE_DIRECT :
 			m_pTerrain->getRenderBackend(),
 			std::memory_order_release );
@@ -904,6 +939,7 @@ void Terrain3DRenderCoordinator::shutdown( void ) {
 			server->call_on_render_thread( callable_mp( m_effect.ptr(), &Terrain3DRdCompositorEffect::shutdownRendererOnRenderThread ) );
 			server->force_sync();
 		} else {
+			m_instanceRenderer.shutdown();
 			m_renderer.shutdown();
 			m_bRendererInitialized.store( false, std::memory_order_release );
 		}
@@ -920,6 +956,11 @@ void Terrain3DRenderCoordinator::shutdown( void ) {
 	m_nMacroNoiseSourceId = 0u;
 	m_nEditorBrushSourceId = 0u;
 	m_shaderLibrary.clear();
+	m_cachedInstanceMeshes.reset();
+	m_cachedInstanceScene.reset();
+	m_nInstanceMeshFingerprint = 0u;
+	m_nInstanceMeshGeneration = 0u;
+	m_nInstanceSceneGeneration = 0u;
 	resetSnapshotPublication();
 	m_pTerrain = nullptr;
 }
@@ -960,6 +1001,7 @@ void Terrain3DRenderCoordinator::setProxyMode( const t3dRdNativeProxyMode_t mode
 }
 
 void Terrain3DRenderCoordinator::shutdownRendererOnRenderThread( void ) {
+	m_instanceRenderer.shutdown();
 	m_renderer.shutdown();
 	m_bRendererInitialized.store( false, std::memory_order_release );
 }
@@ -971,15 +1013,16 @@ void Terrain3DRenderCoordinator::render( RenderData *const pRenderData ) {
 	const t3dRdFrameSnapshotSlot_t *const publication = acquireSnapshotOnRenderThread();
 	if ( !publication ) return;
 	const t3dRdFrameSnapshot_t &snapshot = publication->m_snapshot;
-	if ( snapshot.m_nPatchCount == 0u || publication->m_regionMapBytes.is_empty() ) {
-		m_nConsecutiveRenderFailures.store( 0u, std::memory_order_release );
-		return;
-	}
+	const bool bHasTerrain = snapshot.m_nPatchCount > 0u && !publication->m_regionMapBytes.is_empty();
 	const t3dRenderBackend_t backend = m_backend.load( std::memory_order_acquire );
 	const t3dRdNativeProxyMode_t proxy_mode = m_proxyMode.load( std::memory_order_acquire );
 	const bool bNativeSurface = backend == T3D_RENDER_BACKEND_RENDERING_DEVICE_HYBRID || proxy_mode == T3D_RD_NATIVE_PROXY_FULL;
 	const bool bColorWrite = !bNativeSurface;
-	if ( m_renderer.render( pRenderData,
+	const bool instances_ok = m_instanceRenderer.render( pRenderData,
+			publication->m_instanceMeshes,
+			publication->m_instanceScene,
+			snapshot.m_nCameraCullMask );
+	const bool terrain_ok = !bHasTerrain || ( instances_ok && m_renderer.render( pRenderData,
 			 snapshot,
 			 publication->m_regionMapBytes,
 			 snapshot.m_nRegionMapGeneration,
@@ -1000,13 +1043,16 @@ void Terrain3DRenderCoordinator::render( RenderData *const pRenderData ) {
 			 publication->m_resources.m_hWorldNoiseTextureRd,
 			 publication->m_resources.m_hMacroNoiseTextureRd,
 			 publication->m_resources.m_hEditorBrushTextureRd,
-			 bColorWrite ) ) {
+			 bColorWrite ) );
+	const bool render_ok = instances_ok && terrain_ok;
+	if ( render_ok ) {
 		m_nConsecutiveRenderFailures.store( 0u, std::memory_order_release );
 	} else {
 		const uint32_t failures = m_nConsecutiveRenderFailures.fetch_add( 1u, std::memory_order_acq_rel ) + 1u;
 		// Resource/render failures are fatal to the current ownership generation.
 		// Tear it down on this render thread; a later callback reconstructs from
 		// immutable CPU publication without reviving the native renderer.
+		m_instanceRenderer.shutdown();
 		m_renderer.shutdown();
 		m_bRendererInitialized.store( false, std::memory_order_release );
 		if ( failures >= 8u ) m_bRendererFailed.store( true, std::memory_order_release );
@@ -1016,6 +1062,7 @@ void Terrain3DRenderCoordinator::render( RenderData *const pRenderData ) {
 Dictionary Terrain3DRenderCoordinator::getDiagnostics( void ) const {
 	Dictionary result;
 	const Dictionary renderer = m_renderer.getDiagnostics();
+	const Dictionary instances = m_instanceRenderer.getDiagnostics();
 	const t3dRenderBackend_t backend = m_backend.load( std::memory_order_acquire );
 	const t3dRdNativeProxyMode_t proxy_mode = m_proxyMode.load( std::memory_order_acquire );
 	result["backend"] = ( int )( backend );
@@ -1047,9 +1094,15 @@ Dictionary Terrain3DRenderCoordinator::getDiagnostics( void ) const {
 			( int64_t )( m_nSkippedSnapshotGenerations.load( std::memory_order_acquire ) );
 	result["stale_snapshots"] = ( int64_t )( m_nStaleSnapshots.load( std::memory_order_acquire ) );
 	result["renderer"] = renderer;
+	result["instances"] = instances;
 	result["shaders"] = m_shaderLibrary.getDiagnostics();
 	result["frames_rendered"] = renderer.get( "frames_rendered", 0 );
-	result["draws_rendered"] = renderer.get( "draws_rendered", 0 );
+	result["draws_rendered"] = ( int64_t )( renderer.get( "draws_rendered", 0 ) ) + ( int64_t )( instances.get( "instance_draws", 0 ) );
+	result["static_instances"] = instances.get( "static_instances", 0 );
+	result["visible_instances"] = instances.get( "visible_instances", 0 );
+	result["instance_draw_packets"] = instances.get( "instance_draw_packets", 0 );
+	result["instance_depth_packets"] = instances.get( "depth_packets", 0 );
+	result["instance_shadow_packets"] = instances.get( "shadow_packets", 0 );
 	result["indirect_draws"] = renderer.get( "indirect_draws", 0 );
 	result["cull_dispatches"] = renderer.get( "cull_dispatches", 0 );
 	result["patch_uploads"] = renderer.get( "patch_uploads", 0 );

@@ -46,6 +46,8 @@ bool Terrain3DRdShaderLibrary::load( void ) {
 	if ( m_far.is_null() ) return false;
 	m_cull = loadShader( "res://addons/terrain_3d/rd/terrain_cull.glsl" );
 	if ( m_cull.is_null() ) return false;
+	m_instances = loadShader( "res://addons/terrain_3d/rd/terrain_instances.glsl" );
+	if ( m_instances.is_null() ) return false;
 	m_lastError = String();
 	return true;
 }
@@ -55,6 +57,7 @@ void Terrain3DRdShaderLibrary::clear( void ) {
 	m_middle.unref();
 	m_far.unref();
 	m_cull.unref();
+	m_instances.unref();
 }
 
 Dictionary Terrain3DRdShaderLibrary::getDiagnostics( void ) const {
@@ -63,6 +66,7 @@ Dictionary Terrain3DRdShaderLibrary::getDiagnostics( void ) const {
 	result["middle_loaded"] = m_middle.is_valid();
 	result["far_loaded"] = m_far.is_valid();
 	result["cull_loaded"] = m_cull.is_valid();
+	result["instances_loaded"] = m_instances.is_valid();
 	result["last_error"] = m_lastError;
 	return result;
 }

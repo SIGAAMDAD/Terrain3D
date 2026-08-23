@@ -30,6 +30,7 @@ bool t3dTestRdCullingAndIndirect( void );
 bool t3dTestRdContextDiagnostics( void );
 bool t3dTestRdTextureLayouts( void );
 bool t3dTestRdMaterialAbi( void );
+bool t3dTestRdInstanceAbi( void );
 bool t3dRunRdCpuTests( void );
 
 #endif // UNIT_TESTING_H

@@ -7,6 +7,7 @@
 
 #include "assets/generated_texture.h"
 #include "rendering/rd/terrain_3d_rd_clipmap_renderer.h"
+#include "rendering/rd/terrain_3d_rd_instance_renderer.h"
 #include "rendering/rd/terrain_3d_rd_compositor_effect.h"
 #include "rendering/rd/terrain_3d_rd_shader_library.h"
 #include "rendering/rd/terrain_3d_rd_types.h"
@@ -18,6 +19,7 @@
 #include <godot_cpp/classes/compositor.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <mutex>
+#include <memory>
 
 class Terrain3D;
 class Terrain3DMaterial;
@@ -58,6 +60,8 @@ private:
 		t3dRdFrameSnapshot_t m_snapshot;
 		PackedByteArray m_regionMapBytes;
 		t3dRdPublishedResources_t m_resources;
+		std::shared_ptr<const t3dRdMeshSourceSnapshot_t> m_instanceMeshes;
+		std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> m_instanceScene;
 	} t3dRdFrameSnapshotSlot_t;
 
 	std::array<t3dRdFrameSnapshotSlot_t, s_nRdFrameSnapshotSlotCount> m_snapshotSlots{};
@@ -106,6 +110,12 @@ private:
 	uint64_t m_nEditorBrushSourceId = 0u;
 	Terrain3DRdShaderLibrary m_shaderLibrary;
 	Terrain3DRdClipmapRenderer m_renderer;
+	Terrain3DRdInstanceRenderer m_instanceRenderer;
+	std::shared_ptr<const t3dRdMeshSourceSnapshot_t> m_cachedInstanceMeshes;
+	std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> m_cachedInstanceScene;
+	uint64_t m_nInstanceMeshFingerprint = 0u;
+	uint64_t m_nInstanceMeshGeneration = 0u;
+	uint64_t m_nInstanceSceneGeneration = 0u;
 	std::atomic_bool m_bRendererInitialized{ false };
 	std::atomic_bool m_bRenderEnabled{ false };
 	std::atomic_bool m_bRendererFailed{ false };

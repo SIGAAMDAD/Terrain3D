@@ -173,6 +173,8 @@
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_compositor_effect.h" />
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_context.h" />
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_culling.h" />
+    <ClInclude Include="src\rendering\rd\terrain_3d_rd_instance_renderer.h" />
+    <ClInclude Include="src\rendering\rd\terrain_3d_rd_mesh_cache.h" />
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_shader_library.h" />
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_texture_manager.h" />
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_topology.h" />
@@ -258,6 +260,8 @@
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_compositor_effect.cpp" />
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_context.cpp" />
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_culling.cpp" />
+    <ClCompile Include="src\rendering\rd\terrain_3d_rd_instance_renderer.cpp" />
+    <ClCompile Include="src\rendering\rd\terrain_3d_rd_mesh_cache.cpp" />
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_shader_library.cpp" />
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_texture_manager.cpp" />
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_topology.cpp" />

@@ -5,6 +5,7 @@
 #include "core/terrain_3d_compiler.h"
 #include "core/terrain_3d_util.h"
 #include "rendering/rd/terrain_3d_rd_culling.h"
+#include "rendering/rd/terrain_3d_rd_mesh_cache.h"
 #include "rendering/rd/terrain_3d_rd_texture_manager.h"
 #include "rendering/rd/terrain_3d_rd_topology.h"
 #include "rendering/rd/terrain_3d_rd_types.h"
@@ -467,6 +468,59 @@ bool t3dRunRdMaterialAbiTests( t3dRdUnitTestState_t &rState ) {
 	return rState.m_nFailed == 0u;
 }
 
+bool t3dRunRdInstanceAbiTests( t3dRdUnitTestState_t &rState ) {
+	rState.expect( sizeof( t3dRdMeshHandle_t ) == 8u && sizeof( t3dRdSurfaceHandle_t ) == 8u,
+			"RD mesh and surface handles remain compact generation-safe pairs" );
+	rState.expect( sizeof( t3dRdMeshVertex_t ) == 48u &&
+				offsetof( t3dRdMeshVertex_t, m_nColorRgba8 ) == 12u &&
+				offsetof( t3dRdMeshVertex_t, m_szNormal ) == 16u &&
+				offsetof( t3dRdMeshVertex_t, m_szUv ) == 32u,
+			"RD instance mesh vertex ABI pins packed attributes and stride" );
+	rState.expect( sizeof( t3dRdInstanceRecord_t ) == 32u &&
+				offsetof( t3dRdInstanceRecord_t, m_nQuaternion01 ) == 12u &&
+				offsetof( t3dRdInstanceRecord_t, m_nColorRgba8 ) == 28u,
+			"RD regular-instance record remains 32 bytes with fixed packed offsets" );
+	rState.expect( t3dRdPackGodotRgba32ForGpu( 0x11223344u ) == 0x44332211u &&
+				t3dRdPackGodotRgba32ForGpu( 0xFFFFFFFFu ) == 0xFFFFFFFFu,
+			"RD RGBA8 packing converts Godot numeric channel order to GPU byte order" );
+	rState.expect( sizeof( t3dRdInstanceMaterial_t ) == 80u &&
+				offsetof( t3dRdInstanceMaterial_t, m_fNormalScale ) == 48u &&
+				offsetof( t3dRdInstanceMaterial_t, m_nAlbedoTextureIdLow ) == 56u,
+			"RD regular-instance material table remains std430-compatible with normal scale and texture keys" );
+	t3dRdInstanceMaterial_t material;
+	material.m_nFlags = T3D_RD_INSTANCE_MATERIAL_VERTEX_COLOR | T3D_RD_INSTANCE_MATERIAL_NORMAL_MAPPING |
+			T3D_RD_INSTANCE_MATERIAL_TEXTURE_REPEAT | T3D_RD_INSTANCE_MATERIAL_CULL_FRONT |
+			T3D_RD_INSTANCE_MATERIAL_ALPHA_BLEND | T3D_RD_INSTANCE_MATERIAL_ALPHA_DEPTH_PREPASS |
+			T3D_RD_INSTANCE_MATERIAL_ROUGHNESS_TEXTURE;
+	material.m_fNormalScale = 0.4f;
+	rState.expect( ( material.m_nFlags & T3D_RD_INSTANCE_MATERIAL_VERTEX_COLOR ) != 0u &&
+				( material.m_nFlags & T3D_RD_INSTANCE_MATERIAL_NORMAL_MAPPING ) != 0u &&
+				( material.m_nFlags & T3D_RD_INSTANCE_MATERIAL_TEXTURE_REPEAT ) != 0u &&
+				( material.m_nFlags & T3D_RD_INSTANCE_MATERIAL_CULL_FRONT ) != 0u &&
+				( material.m_nFlags & T3D_RD_INSTANCE_MATERIAL_ALPHA_BLEND ) != 0u &&
+				( material.m_nFlags & T3D_RD_INSTANCE_MATERIAL_ALPHA_DEPTH_PREPASS ) != 0u &&
+				( material.m_nFlags & T3D_RD_INSTANCE_MATERIAL_ROUGHNESS_TEXTURE ) != 0u &&
+				Math::is_equal_approx( material.m_fNormalScale, 0.4f ),
+			"RD regular-instance material ABI preserves filtering/culling/vertex-color/normal/alpha/roughness state" );
+	const t3dRdMeshHandle_t valid_handle{ 7u, 3u };
+	const t3dRdMeshHandle_t stale_handle{ 7u, 2u };
+	rState.expect( valid_handle.valid() && stale_handle.valid() && !( valid_handle == stale_handle ),
+			"RD mesh handles distinguish stale generations at identical slots" );
+	rState.expect( Terrain3DRdMeshCache::nextArenaCapacity( 1u, 4u * 1024u * 1024u ) == 4u * 1024u * 1024u &&
+				Terrain3DRdMeshCache::nextArenaCapacity( 4u * 1024u * 1024u + 1u, 4u * 1024u * 1024u ) == 8u * 1024u * 1024u,
+			"RD mesh arenas use deterministic power-of-two growth above the static minimum" );
+	t3dRdInstanceCell_t cell;
+	cell.m_nFirstInstance = 17u;
+	cell.m_nInstanceCount = 23u;
+	cell.m_nFlags = T3D_RD_INSTANCE_CAST_SHADOWS | T3D_RD_INSTANCE_SHADOW_DOUBLE_SIDED;
+	rState.expect( cell.m_nFirstInstance == 17u && cell.m_nInstanceCount == 23u &&
+				( cell.m_nFlags & T3D_RD_INSTANCE_CAST_SHADOWS ) != 0u &&
+				( cell.m_nFlags & T3D_RD_INSTANCE_SHADOW_DOUBLE_SIDED ) != 0u &&
+				( cell.m_nFlags & T3D_RD_INSTANCE_DOUBLE_SIDED ) == 0u,
+			"RD instance cell publication keeps shadow double-sided state separate from color-pass culling" );
+	return rState.m_nFailed == 0u;
+}
+
 bool t3dRunRdTextureLayoutTests( t3dRdUnitTestState_t &rState ) {
 	RenderingDevice::DataFormat format = RenderingDevice::DATA_FORMAT_MAX;
 	rState.expect( Terrain3DRdTextureManager::imageFormatToDataFormat( Image::FORMAT_R16, format ) &&
@@ -718,6 +772,14 @@ bool t3dTestRdMaterialAbi( void ) {
 	return state.m_nFailed == 0u;
 }
 
+bool t3dTestRdInstanceAbi( void ) {
+	t3dRdUnitTestState_t state;
+	UtilityFunctions::print( "=== Testing RD regular-instance ABI contracts ===" );
+	t3dRunRdInstanceAbiTests( state );
+	UtilityFunctions::print( "=== RD regular-instance ABI tests: ", state.m_nPassed, " passed, ", state.m_nFailed, " failed ===" );
+	return state.m_nFailed == 0u;
+}
+
 bool t3dRunRdCpuTests( void ) {
 	t3dRdUnitTestState_t state;
 	UtilityFunctions::print( "=== Running Terrain3D RD CPU tests ===" );
@@ -727,6 +789,7 @@ bool t3dRunRdCpuTests( void ) {
 	t3dRunRdContextDiagnosticTests( state );
 	t3dRunRdTextureLayoutTests( state );
 	t3dRunRdMaterialAbiTests( state );
+	t3dRunRdInstanceAbiTests( state );
 	UtilityFunctions::print( "=== Terrain3D RD CPU tests: ", state.m_nPassed, " passed, ", state.m_nFailed, " failed ===" );
 	return state.m_nFailed == 0u;
 }

@@ -355,6 +355,103 @@ def rd_batch_c_material_check() -> bool:
     return True
 
 
+
+def rd_batch_d_instance_check() -> bool:
+    checks: list[tuple[str, bool]] = []
+    types = (REPO / "src" / "rendering" / "rd" / "terrain_3d_rd_types.h").read_text(encoding="utf-8", errors="ignore")
+    mesh_h = (REPO / "src" / "rendering" / "rd" / "terrain_3d_rd_mesh_cache.h").read_text(encoding="utf-8", errors="ignore")
+    mesh_cpp = (REPO / "src" / "rendering" / "rd" / "terrain_3d_rd_mesh_cache.cpp").read_text(encoding="utf-8", errors="ignore")
+    instance_h = (REPO / "src" / "rendering" / "rd" / "terrain_3d_rd_instance_renderer.h").read_text(encoding="utf-8", errors="ignore")
+    instance_cpp = (REPO / "src" / "rendering" / "rd" / "terrain_3d_rd_instance_renderer.cpp").read_text(encoding="utf-8", errors="ignore")
+    instancer_h = (REPO / "src" / "instances" / "terrain_3d_instancer.h").read_text(encoding="utf-8", errors="ignore")
+    instancer_cpp = (REPO / "src" / "instances" / "terrain_3d_instancer.cpp").read_text(encoding="utf-8", errors="ignore")
+    coordinator_h = (REPO / "src" / "rendering" / "rd" / "terrain_3d_render_coordinator.h").read_text(encoding="utf-8", errors="ignore")
+    coordinator_cpp = (REPO / "src" / "rendering" / "rd" / "terrain_3d_render_coordinator.cpp").read_text(encoding="utf-8", errors="ignore")
+    shader_library = (REPO / "src" / "rendering" / "rd" / "terrain_3d_rd_shader_library.cpp").read_text(encoding="utf-8", errors="ignore")
+    shader = (REPO / "project" / "addons" / "terrain_3d" / "rd" / "terrain_instances.glsl").read_text(encoding="utf-8", errors="ignore")
+    vcxproj = (REPO / "Terrain3D.vcxproj").read_text(encoding="utf-8", errors="ignore")
+    filters = (REPO / "Terrain3D.vcxproj.filters").read_text(encoding="utf-8", errors="ignore")
+
+    render_cell_match = re.search(r"typedef struct t3dRenderCell_s\s*\{(.*?)\}\s*t3dRenderCell_t;", instancer_h, re.S)
+    render_cell_body = render_cell_match.group(1) if render_cell_match else ""
+    runtime_multimesh_calls = (
+        "multimesh_create(", "multimesh_allocate_data(", "multimesh_set_buffer(",
+        "instance_create(", "instance_set_base(", "instance_set_scenario(",
+    )
+
+    checks += [
+        ("generation-safe mesh handle ABI", "sizeof( t3dRdMeshHandle_t ) == 8u" in types and "m_nGeneration" in types),
+        ("generation-safe surface handle ABI", "sizeof( t3dRdSurfaceHandle_t ) == 8u" in types),
+        ("48-byte static mesh vertex ABI", "sizeof( t3dRdMeshVertex_t ) == 48u" in types),
+        ("32-byte packed instance ABI", "sizeof( t3dRdInstanceRecord_t ) == 32u" in types),
+        ("Godot RGBA32 is repacked to GPU byte order", "t3dRdPackGodotRgba32ForGpu" in types and "t3dRdPackGodotRgba32ForGpu" in instancer_cpp and "t3dRdPackGodotRgba32ForGpu" in mesh_cpp),
+        ("80-byte extracted material ABI", "sizeof( t3dRdInstanceMaterial_t ) == 80u" in types),
+        ("mesh source publication", "t3dRdMeshSourceSnapshot_t" in mesh_h and "buildSourceSnapshot" in mesh_h),
+        ("large shared static mesh arenas", "s_nMinVertexArenaBytes = 4u * 1024u * 1024u" in mesh_cpp and "s_nMinIndexArenaBytes = 2u * 1024u * 1024u" in mesh_cpp),
+        ("explicit arena growth", "nextArenaCapacity" in mesh_h and "while ( capacity < nRequiredBytes ) capacity <<= 1u" in mesh_cpp),
+        ("shared vertex arena", "vertex_buffer_create" in mesh_cpp and "T3D.Instance.MeshVertexArena" in mesh_cpp),
+        ("shared index arenas", mesh_cpp.count("index_buffer_create") >= 1 and "T3D.Instance.MeshIndexArena16" in mesh_cpp and "T3D.Instance.MeshIndexArena32" in mesh_cpp),
+        ("U16/U32 index selection", "max_index <= 65535u" in mesh_cpp and "INDEX_BUFFER_FORMAT_UINT16" in mesh_cpp and "INDEX_BUFFER_FORMAT_UINT32" in mesh_cpp),
+        ("generation checked mesh resolution", "rHandle.m_nGeneration == m_nGeneration" in mesh_cpp),
+        ("material subset extraction", "Object::cast_to<BaseMaterial3D>" in mesh_cpp and "TEXTURE_ALBEDO" in mesh_cpp and "TEXTURE_NORMAL" in mesh_cpp and "TEXTURE_ORM" in mesh_cpp),
+        ("separate roughness texture/channel parity", "TEXTURE_ROUGHNESS" in mesh_cpp and "get_roughness_texture_channel" in mesh_cpp and "T3D_RD_INSTANCE_MATERIAL_ROUGHNESS_TEXTURE" in mesh_cpp and "MATERIAL_ROUGHNESS_TEXTURE" in shader and "material_texture_channel" in shader),
+        ("material table deduplicates packed state", "std::memcmp( &rMaterials[i], &packed, sizeof( packed ) ) == 0" in mesh_cpp),
+        ("material texture identity participates in source fingerprint", "t3dRdHashTexture" in mesh_cpp and "texture_rid.get_id()" in mesh_cpp),
+        ("direct RD imported material textures", "Terrain3DRdTextureManager::buildLayout" in mesh_cpp and "pManager->createTexture" in mesh_cpp and "getTextureRid" in mesh_h),
+        ("BaseMaterial vertex color and normal scale extracted", "FLAG_ALBEDO_FROM_VERTEX_COLOR" in mesh_cpp and "FLAG_SRGB_VERTEX_COLOR" in mesh_cpp and "get_normal_scale" in mesh_cpp),
+        ("BaseMaterial cull/shading/AO state extracted", "CULL_FRONT" in mesh_cpp and "SHADING_MODE_UNSHADED" in mesh_cpp and "FEATURE_AMBIENT_OCCLUSION" in mesh_cpp),
+        ("material edits participate in source fingerprint", "t3dRdHashMaterial" in mesh_cpp and "get_metallic" in mesh_cpp and "get_roughness" in mesh_cpp),
+        ("mesh shape metadata participates in source fingerprint", "_surface_get_array_len" in mesh_cpp and "_surface_get_array_index_len" in mesh_cpp and "mesh->get_aabb()" in mesh_cpp),
+        ("logical instancer publishes immutable RD scene", "buildRdInstanceSnapshot" in instancer_cpp and "std::shared_ptr<const t3dRdInstanceSceneSnapshot_t>" in instancer_h),
+        ("logical cell instance ranges are deduplicated", "std::unordered_map<t3dCellUpdateKey_t, t3dRdCellRange_t" in instancer_cpp and "m_nFirstInstance" in instancer_cpp),
+        ("instance publication generation invalidation", "markRdPublicationDirty" in instancer_cpp and "m_nRdPublicationGeneration" in instancer_h),
+        ("runtime render cells own no GPU RIDs", bool(render_cell_body) and "RID" not in render_cell_body and "MultiMesh" not in render_cell_body),
+        ("runtime instancer has no MultiMesh/RS creation calls", all(token not in instancer_cpp for token in runtime_multimesh_calls)),
+        ("MultiMesh retained only as authoring input", "void Terrain3DInstancer::addMultimesh" in instancer_cpp and "The runtime renderer does not consume this representation" in instancer_h),
+        ("persistent instance buffers", all(token in instance_h for token in ("m_hInstanceBuffer", "m_hVisibleIndexBuffer", "m_hMaterialBuffer", "m_hIndirectBuffer"))),
+        ("publication-time visibility/indirect capacity", "packet_capacity" in instance_cpp and "visible_index_capacity" in instance_cpp and "visible_index_capacity += cell.m_nInstanceCount" in instance_cpp and "indirect_bytes" in instance_cpp),
+        ("dirty instance span detection", "std::memcmp( previous + offset" in instance_cpp and "first_changed" in instance_cpp and "last_changed" in instance_cpp),
+        ("dirty instance subrange upload", "buffer_update( m_hInstanceBuffer, first_byte, uploaded_bytes" in instance_cpp and "instance_dirty_upload_ranges" in instance_cpp),
+        ("coarse AABB culling", "isCellVisible" in instance_cpp and "m_bounds.get_center()" in instance_cpp and "corners[8]" in instance_cpp),
+        ("visibility-layer culling", "cell.m_nVisibilityLayers & nVisibilityMask" in instance_cpp),
+        ("distance/LOD culling", "m_fLodBegin" in instance_cpp and "m_fLodEnd" in instance_cpp),
+        ("visibility-range fade-self parity", "m_fFadeMargin" in instance_cpp and "T3D_RD_INSTANCE_FADE_ACTIVE" in instance_cpp and "fade_unorm" in instance_cpp and "INSTANCE_FADE_ACTIVE" in shader and "gl_FragCoord" in shader),
+        ("mesh/material grouping", "m_nSurfaceSlot" in instance_cpp and "m_nMaterial" in instance_cpp and "m_nOverlayMaterial" in instance_cpp),
+        ("visible indices flattened after grouping", "m_visibleIndices.insert" in instance_cpp and "group.m_indices" in instance_cpp),
+        ("indexed indirect submission", "draw_list_draw_indirect" in instance_cpp and "t3dRdIndexedIndirectCommand_t" in instance_h),
+        ("debug direct-draw path", "TERRAIN3D_RD_INSTANCE_DIRECT_DRAW" in coordinator_cpp and "draw_list_draw( list, true" in instance_cpp),
+        ("depth packets published", "m_depthPackets" in instance_h and "m_depthPackets.push_back" in instance_cpp),
+        ("shadow packets published", "m_shadowPackets" in instance_h and "m_shadowPackets.push_back" in instance_cpp and "T3D_RD_INSTANCE_CAST_SHADOWS" in instance_cpp),
+        ("instance shader loaded by RD shader library", "terrain_instances.glsl" in shader_library),
+        ("instance shader has vertex+fragment stages", shader.count("#[vertex]") == 1 and shader.count("#[fragment]") == 1),
+        ("instance shader descriptor ABI", all(token in shader for token in ("binding = 0", "binding = 1", "binding = 2", "binding = 3", "InstanceRecord", "InstanceMaterial"))),
+        ("instance shader consumes packed transforms/colors", "unpackSnorm2x16" in shader and "unpackHalf2x16" in shader and "unpackUnorm4x8" in shader),
+        ("instance material descriptor set binds albedo/normal/ORM pairs", all(token in instance_cpp for token in ("ensureMaterialSamplers", "ensureFallbackMaterialTextures", "rebuildMaterialBindings", "t3dRdInstanceTextureUniform")) and shader.count("layout(set = 1, binding =") == 6),
+        ("instance shader samples albedo normal and ORM", all(token in shader for token in ("base_albedo_texture", "base_normal_texture", "base_orm_texture", "overlay_albedo_texture", "overlay_normal_texture", "overlay_orm_texture", "decode_normal", "material.normal_scale"))),
+        ("instance material filtering/repeat sampler policy", "set_use_anisotropy" in instance_cpp and "SAMPLER_REPEAT_MODE_REPEAT" in instance_cpp and "T3D_RD_INSTANCE_MATERIAL_FILTER_MASK" in instance_cpp),
+        ("material alpha-scissor and vertex-color parity", "MATERIAL_ALPHA_SCISSOR" in shader and "MATERIAL_VERTEX_COLOR" in shader and "discard" in shader and "srgb_to_linear" in shader),
+        ("alpha blend and depth-prepass material extraction", "TRANSPARENCY_ALPHA" in mesh_cpp and "TRANSPARENCY_ALPHA_DEPTH_PRE_PASS" in mesh_cpp and "T3D_RD_INSTANCE_ALPHA_BLEND" in mesh_cpp and "T3D_RD_INSTANCE_ALPHA_DEPTH_PREPASS" in mesh_cpp),
+        ("transparent cells stay independently sortable", "if ( !alpha_blend && !range_fade )" in instance_cpp and "m_fSortDistanceSq" in instance_h and "std::stable_sort" in instance_cpp),
+        ("alpha depth prepass is two-pass with color writes disabled", "m_szPipeline[9]" in instance_h and "opacity_mode == 2u" in instance_cpp and "set_write_r( false )" in instance_cpp and "T3D_RD_INSTANCE_DEPTH_PREPASS_PASS" in instance_cpp and "INSTANCE_DEPTH_PREPASS_PASS" in shader),
+        ("alpha color pass uses persistent blend variants", "BLEND_FACTOR_SRC_ALPHA" in instance_cpp and "BLEND_FACTOR_ONE_MINUS_SRC_ALPHA" in instance_cpp and "pipeline_index += 3u" in instance_cpp),
+        ("material cull modes use persistent pipeline variants", "m_szPipeline[9]" in instance_h and all(token in instance_cpp for token in ("POLYGON_CULL_BACK", "POLYGON_CULL_FRONT", "POLYGON_CULL_DISABLED", "T3D_RD_INSTANCE_CULL_FRONT"))),
+        ("shadow double-sided state is separate from color culling", "T3D_RD_INSTANCE_SHADOW_DOUBLE_SIDED" in types and "T3D_RD_INSTANCE_SHADOW_DOUBLE_SIDED" in instancer_cpp and "T3D_RD_INSTANCE_DOUBLE_SIDED" in mesh_cpp),
+        ("immutable mesh/scene snapshot publication", "std::shared_ptr<const t3dRdMeshSourceSnapshot_t>" in coordinator_h and "std::shared_ptr<const t3dRdInstanceSceneSnapshot_t>" in coordinator_h),
+        ("instances render independently of terrain patch presence", "const bool bHasTerrain" in coordinator_cpp and "const bool instances_ok = m_instanceRenderer.render" in coordinator_cpp and "!bHasTerrain ||" in coordinator_cpp),
+        ("instance diagnostics surfaced", "instance_depth_packets" in coordinator_cpp and "instance_shadow_packets" in coordinator_cpp and "visible_instances" in coordinator_cpp),
+        ("Visual Studio project includes Batch D sources", "terrain_3d_rd_instance_renderer.cpp" in vcxproj and "terrain_3d_rd_mesh_cache.cpp" in vcxproj and "terrain_3d_rd_instance_renderer.h" in vcxproj and "terrain_3d_rd_mesh_cache.h" in vcxproj),
+        ("Visual Studio filters include Batch D sources", "terrain_3d_rd_instance_renderer.cpp" in filters and "terrain_3d_rd_mesh_cache.cpp" in filters),
+    ]
+
+    failed = [label for label, passed in checks if not passed]
+    if failed:
+        for label in failed:
+            print(f"FAIL Batch D instance contract: {label}")
+        print(f"Batch D instance contract: {len(checks) - len(failed)}/{len(checks)} passed")
+        return False
+    print(f"OK Batch D instance contract: {len(checks)}/{len(checks)} passed")
+    return True
+
 def iter_scan_files() -> list[Path]:
     files: list[Path] = []
     for root in SCAN_ROOTS:
@@ -862,7 +959,7 @@ def git_fsck() -> bool:
 
 
 def validate_fast(static_only: bool = False) -> int:
-    checks = [branch_check(), reference_check(), diff_check(), build_contract_check(), rd_shader_abi_check(), rd_batch_c_material_check(), audit_symbols(strict_growth=True)]
+    checks = [branch_check(), reference_check(), diff_check(), build_contract_check(), rd_shader_abi_check(), rd_batch_c_material_check(), rd_batch_d_instance_check(), audit_symbols(strict_growth=True)]
     if not static_only:
         checks.append(build_extension("editor"))
     return 0 if all(checks) else 1
@@ -876,6 +973,7 @@ def validate_full() -> int:
         build_contract_check(),
         rd_shader_abi_check(),
         rd_batch_c_material_check(),
+        rd_batch_d_instance_check(),
         audit_symbols(strict_growth=True),
         build_extension("editor"),
         godot_headless_import(),
@@ -894,6 +992,7 @@ def validate_final() -> int:
         build_contract_check(),
         rd_shader_abi_check(),
         rd_batch_c_material_check(),
+        rd_batch_d_instance_check(),
         audit_symbols(strict_growth=True, final=True),
         build_extension("editor"),
         build_extension("template_release"),
