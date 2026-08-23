@@ -134,17 +134,6 @@ private:
 	bool m_bRuntimeMaterialCookedValid = false;
 	bool m_bRuntimeMaterialSourceTexturesReleased = false;
 
-	// Mesh Thumbnail Generation
-	RID m_hScenario;
-	RID m_hViewport;
-	RID m_hViewportTexture;
-	RID m_hCamera;
-	RID m_hKeyLight;
-	RID m_hKeyLightInstance;
-	RID m_hFillLight;
-	RID m_hFillLightInstance;
-	RID m_hMeshInstance;
-
 	void swapIds( const t3dAssetType_t type, const int nSrcId, const int nDstId );
 	void connectAssetSignals( const t3dAssetType_t type, const Ref<Terrain3DAssetResource> &rAsset );
 	void disconnectAssetSignals( const t3dAssetType_t type, const Ref<Terrain3DAssetResource> &rAsset );
@@ -165,8 +154,6 @@ private:
 	void updateMeshInternal( const int nId, bool bPersistentChange );
 	void updateMesh( const int nId );
 	void updateMeshPreview( const int nId );
-	void setupThumbnailCreation( void );
-	void destroyThumbnailCreation( void );
 	String getRuntimeMaterialCachePath( void ) const;
 	uint64_t computeRuntimeMaterialSourceSignature( void ) const;
 	bool loadRuntimeMaterialCookedIndex( void );

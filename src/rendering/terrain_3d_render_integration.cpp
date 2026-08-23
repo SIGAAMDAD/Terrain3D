@@ -1460,32 +1460,10 @@ void Terrain3D::destroyRenderCoordinator( const bool bFinal ) {
 	}
 }
 
-void Terrain3D::setRenderBackend( const t3dRenderBackend_t backend ) {
-	const t3dRenderBackend_t clamped = ( t3dRenderBackend_t )( CLAMP(
-			( int )( backend ), ( int )( T3D_RENDER_BACKEND_RENDERING_SERVER ),
-			( int )( T3D_RENDER_BACKEND_RENDERING_DEVICE_HYBRID ) ) );
-	if ( m_renderBackend == clamped ) {
-		return;
-	}
-	m_renderBackend = clamped;
-	if ( m_pRenderCoordinator ) {
-		m_pRenderCoordinator->setBackend( m_renderBackend );
-	}
-	notify_property_list_changed();
-}
-
-void Terrain3D::setRdNativeProxyMode( const t3dRdNativeProxyMode_t mode ) {
-	const t3dRdNativeProxyMode_t clamped = ( t3dRdNativeProxyMode_t )( CLAMP(
-			( int )( mode ), ( int )( T3D_RD_NATIVE_PROXY_DISABLED ), ( int )( T3D_RD_NATIVE_PROXY_FULL ) ) );
-	if ( m_rdNativeProxyMode == clamped ) {
-		return;
-	}
-	m_rdNativeProxyMode = clamped;
-	if ( m_pRenderCoordinator ) {
-		m_pRenderCoordinator->setProxyMode( m_rdNativeProxyMode );
-	}
-}
-
 Dictionary Terrain3D::getRdRendererDiagnostics( void ) const {
 	return m_pRenderCoordinator ? m_pRenderCoordinator->getDiagnostics() : Dictionary();
+}
+
+Ref<Image> Terrain3D::createRdMeshPreview( const uint16_t nAssetId, const Vector2i &rSize ) {
+	return m_pRenderCoordinator ? m_pRenderCoordinator->createMeshPreview( nAssetId, rSize ) : Ref<Image>();
 }

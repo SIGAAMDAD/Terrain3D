@@ -1776,66 +1776,8 @@ void Terrain3DAssets::updateMeshPreview( const int nId ) {
 	updateMeshInternal( nId, false );
 }
 
-void Terrain3DAssets::setupThumbnailCreation( void ) {
-	IS_INIT( VOID );
-	if ( m_hScenario.is_valid() ) {
-		return;
-	}
-	LOG( INFO, "Setting up mesh thumbnail creation viewports" );
-	// Setup Mesh preview environment
-	m_hScenario = RS->scenario_create();
-
-	m_hViewport = RS->viewport_create();
-	RS->viewport_set_update_mode( m_hViewport, RenderingServer::VIEWPORT_UPDATE_DISABLED );
-	RS->viewport_set_scenario( m_hViewport, m_hScenario );
-	RS->viewport_set_size( m_hViewport, 128, 128 );
-	RS->viewport_set_transparent_background( m_hViewport, true );
-	RS->viewport_set_active( m_hViewport, true );
-	m_hViewportTexture = RS->viewport_get_texture( m_hViewport );
-
-	m_hCamera = RS->camera_create();
-	RS->viewport_attach_camera( m_hViewport, m_hCamera );
-	RS->camera_set_transform( m_hCamera, Transform3D( Basis(), Vector3( 0, 0, 3 ) ) );
-	RS->camera_set_orthogonal( m_hCamera, 1.0, 0.01, 1000.0 );
-
-	m_hKeyLight = RS->directional_light_create();
-	m_hKeyLightInstance = RS->instance_create2( m_hKeyLight, m_hScenario );
-	RS->instance_set_transform( m_hKeyLightInstance, Transform3D().looking_at( V3( -1 ), s_v3Up ) );
-
-	m_hFillLight = RS->directional_light_create();
-	RS->light_set_color( m_hFillLight, Color( 0.3, 0.3, 0.3 ) );
-	m_hFillLightInstance = RS->instance_create2( m_hFillLight, m_hScenario );
-	RS->instance_set_transform( m_hFillLightInstance, Transform3D().looking_at( s_v3Up, Vector3( 0, 0, 1 ) ) );
-
-	m_hMeshInstance = RS->instance_create();
-	RS->instance_set_scenario( m_hMeshInstance, m_hScenario );
-}
-
 // -----------------------------------------------------------------------------
 // Public functions
-
-void Terrain3DAssets::destroyThumbnailCreation( void ) {
-	if ( !m_hScenario.is_valid() ) {
-		return;
-	}
-	RS->free_rid( m_hMeshInstance );
-	RS->free_rid( m_hFillLightInstance );
-	RS->free_rid( m_hFillLight );
-	RS->free_rid( m_hKeyLightInstance );
-	RS->free_rid( m_hKeyLight );
-	RS->free_rid( m_hCamera );
-	RS->free_rid( m_hViewport );
-	RS->free_rid( m_hScenario );
-	m_hMeshInstance = RID();
-	m_hFillLightInstance = RID();
-	m_hFillLight = RID();
-	m_hKeyLightInstance = RID();
-	m_hKeyLight = RID();
-	m_hCamera = RID();
-	m_hViewportTexture = RID();
-	m_hViewport = RID();
-	m_hScenario = RID();
-}
 
 void Terrain3DAssets::setTexturePackingMode( const t3dTexturePackingMode_t eMode ) {
 	const t3dTexturePackingMode_t mode = ( t3dTexturePackingMode_t )( CLAMP(
@@ -1940,7 +1882,6 @@ void Terrain3DAssets::destroy( void ) {
 	m_textureDisplacements.clear();
 	resetRuntimeMaterialCacheState( false );
 
-	destroyThumbnailCreation();
 }
 
 // Called when creating a new asset
@@ -2055,104 +1996,35 @@ void Terrain3DAssets::setMeshList( const TypedArray<Terrain3DMeshAsset> &rMeshLi
 // p_id = -1 for all meshes
 // Adapted from godot\editor\plugins\editor_preview_plugins.cpp:EditorMeshPreviewPlugin
 void Terrain3DAssets::createMeshThumbnails( const int nId, const Vector2i &rSize, const bool bForce ) {
-	if ( !IS_EDITOR ) {
-		return;
-	}
-	if ( m_pTerrain && !m_pTerrain->isAuthoringResidencyReadbackSafe() ) {
+	if ( !IS_EDITOR || !m_pTerrain ) return;
+	if ( !m_pTerrain->isAuthoringResidencyReadbackSafe() ) {
 		LOG( DEBUG, "Deferring mesh thumbnail GPU readback until Authoring residency is idle" );
 		return;
 	}
-	LOG( INFO, "Creating mesh thumbnails for ID: ", nId, ", size: ", rSize );
+	LOG( INFO, "Creating RD mesh thumbnails for ID: ", nId, ", size: ", rSize );
 	const int max = getMeshCount();
-	if ( nId < -1 || nId >= max ) {
-		return;
-	}
-	int start, end;
-	if ( nId < 0 ) {
-		start = 0;
-		end = max;
-	} else {
-		start = CLAMP( nId, 0, max - 1 );
-		end = CLAMP( nId + 1, 0, max );
-	}
+	if ( nId < -1 || nId >= max || max <= 0 ) return;
+	const int start_id = nId < 0 ? 0 : CLAMP( nId, 0, max - 1 );
+	const int end_id = nId < 0 ? max : CLAMP( nId + 1, 0, max );
 	const Vector2i size = CLAMP( rSize, V2I( 2 ), V2I( 4096 ) );
-
-	LOG( DEBUG, "Creating thumbnails for ids: ", start, " through ", end - 1 );
-	for ( int i = start; i < end; i++ ) {
-		Ref<Terrain3DMeshAsset> pMa = getMeshAsset( i );
-		LOG( EXTREME, i, ": Getting Terrain3DMeshAsset: ", t3dPtrToStr( *pMa ) );
-		if ( pMa.is_null() ) {
+	for ( int i = start_id; i < end_id; ++i ) {
+		const Ref<Terrain3DMeshAsset> asset = getMeshAsset( i );
+		if ( asset.is_null() ) {
 			LOG( ERROR, i, ": Terrain3DMeshAsset is null, skipping" );
 			continue;
 		}
-		if ( !bForce && pMa->getThumbnail().is_valid() ) {
-			LOG( EXTREME, "Thumbnail already generated, skipping" );
+		if ( !bForce && asset->getThumbnail().is_valid() ) continue;
+		if ( asset->getMesh( 0 ).is_null() ) {
+			LOG( ERROR, i, ": Mesh LOD0 is null, skipping thumbnail" );
 			continue;
 		}
-		// Setup mesh
-		if ( !m_hMeshInstance.is_valid() ) {
-			setupThumbnailCreation();
-			if ( !m_hMeshInstance.is_valid() ) {
-				LOG( ERROR, "Mesh thumbnail preview resources could not be created" );
-				break;
-			}
-		}
-		const Ref<Mesh> pMesh = pMa->getMesh( 0 );
-		LOG( EXTREME, i, ": Getting Mesh 0: ", pMesh );
-		if ( pMesh.is_null() ) {
-			LOG( ERROR, i, ": Mesh is null, skipping" );
+		const Ref<Image> image = m_pTerrain->createRdMeshPreview( ( uint16_t )( i ), size );
+		if ( image.is_null() ) {
+			LOG( ERROR, i, ": RenderingDevice mesh preview failed" );
 			continue;
 		}
-		RS->instance_set_base( m_hMeshInstance, pMesh->get_rid() );
-
-		// Setup material
-		Ref<Material> pMat = pMa->getMaterialOverride();
-		RID rid = pMat.is_valid() ? pMat->get_rid() : RID();
-		RS->instance_geometry_set_material_override( m_hMeshInstance, rid );
-		pMat = pMa->getMaterialOverlay();
-		rid = pMat.is_valid() ? pMat->get_rid() : RID();
-		RS->instance_geometry_set_material_overlay( m_hMeshInstance, rid );
-
-		// Setup scene
-		AABB aabb = pMesh->get_aabb();
-		const Vector3 ofs = aabb.get_center();
-		aabb.position -= ofs;
-		Transform3D xform;
-		xform.basis = Basis().rotated( s_v3Up, -Math_PI * 0.125f );
-		xform.basis = Basis().rotated( Vector3( 1.f, 0.f, 0.f ), Math_PI * 0.125f ) * xform.basis;
-		const AABB rot_aabb = xform.xform( aabb );
-		real_t fM = MAX( rot_aabb.size.x, rot_aabb.size.y ) * 0.5f;
-		if ( fM == 0.f ) {
-			fM = 1.f;
-		}
-		fM = .5f / fM;
-		xform.basis.scale( V3( fM ) );
-		xform.origin = -xform.basis.xform( ofs );
-		xform.origin.z -= rot_aabb.size.z * 2.f;
-		RS->instance_set_transform( m_hMeshInstance, xform );
-
-		// Capture image
-		RS->viewport_set_size( m_hViewport, size.x, size.y );
-		RS->viewport_set_update_mode( m_hViewport, RenderingServer::VIEWPORT_UPDATE_ONCE );
-		RS->force_draw();
-
-		const Ref<Image> pImg = RS->texture_2d_get( m_hViewportTexture );
-		RS->instance_set_base( m_hMeshInstance, RID() ); // Clear mesh
-		if ( pImg.is_valid() ) {
-			LOG( EXTREME,
-					i,
-					": Retrieving image: ",
-					pImg,
-					" size: ",
-					pImg->get_size(),
-					" format: ",
-					pImg->get_format() );
-			pMa->setThumbnail( ImageTexture::create_from_image( pImg ) );
-		} else {
-			LOG( ERROR, "_viewport_texture is null. Couldn't create thumbnail picture" );
-		}
+		asset->setThumbnail( ImageTexture::create_from_image( image ) );
 	}
-	destroyThumbnailCreation();
 }
 
 void Terrain3DAssets::updateMeshList( void ) {

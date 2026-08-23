@@ -83,18 +83,6 @@ static_assert( t3dRdFrameSnapshotTokenGeneration( t3dRdMakeFrameSnapshotToken( 2
 static_assert( t3dRdFrameSnapshotTokenIsPublished( t3dRdMakeFrameSnapshotToken( 2u, 17u, true ) ),
 		"RD frame publication token state changed" );
 
-typedef enum t3dRenderBackend_e {
-	T3D_RENDER_BACKEND_RENDERING_SERVER = 0,
-	T3D_RENDER_BACKEND_RENDERING_DEVICE_DIRECT = 1,
-	T3D_RENDER_BACKEND_RENDERING_DEVICE_HYBRID = 2,
-} t3dRenderBackend_t;
-
-typedef enum t3dRdNativeProxyMode_e {
-	T3D_RD_NATIVE_PROXY_DISABLED = 0,
-	T3D_RD_NATIVE_PROXY_SHADOWS_ONLY = 1,
-	T3D_RD_NATIVE_PROXY_FULL = 2,
-} t3dRdNativeProxyMode_t;
-
 static constexpr uint32_t s_nRdForwardBridgeAbiVersion = 7u;
 static constexpr uint32_t s_nRdForwardMaxViews = 2u;
 
@@ -752,8 +740,5 @@ typedef struct t3dRdDrawPushConstants_s {
 	uint32_t m_nPadding1 = 0u;
 } t3dRdDrawPushConstants_t;
 static_assert( sizeof( t3dRdDrawPushConstants_t ) == 16u, "RD draw push constants ABI changed" );
-
-VARIANT_ENUM_CAST( t3dRenderBackend_t );
-VARIANT_ENUM_CAST( t3dRdNativeProxyMode_t );
 
 #endif // TERRAIN3D_RD_TYPES_H

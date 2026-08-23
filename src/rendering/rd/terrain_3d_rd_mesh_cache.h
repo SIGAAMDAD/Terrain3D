@@ -118,13 +118,14 @@ public:
 	static uint64_t computeSourceFingerprint( const Ref<Terrain3DAssets> &rAssets,
 			const std::vector<t3dRdExternalMeshSource_t> &rExternalMeshes );
 	static std::shared_ptr<const t3dRdMeshSourceSnapshot_t>
-	buildSourceSnapshot( const Ref<Terrain3DAssets> &rAssets, uint64_t nFingerprint, uint64_t nGeneration, String *pError = nullptr );
+	buildSourceSnapshot( const Ref<Terrain3DAssets> &rAssets, uint64_t nFingerprint, uint64_t nGeneration, String *pError = nullptr, bool bIncludeDisabled = false );
 	static std::shared_ptr<const t3dRdMeshSourceSnapshot_t>
 	buildSourceSnapshot( const Ref<Terrain3DAssets> &rAssets,
 			const std::vector<t3dRdExternalMeshSource_t> &rExternalMeshes,
 			uint64_t nFingerprint,
 			uint64_t nGeneration,
-			String *pError = nullptr );
+			String *pError = nullptr,
+			bool bIncludeDisabled = false );
 
 	bool upload( const std::shared_ptr<const t3dRdMeshSourceSnapshot_t> &pSnapshot );
 	void shutdown( void );

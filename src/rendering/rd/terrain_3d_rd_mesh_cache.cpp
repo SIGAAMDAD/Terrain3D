@@ -466,9 +466,10 @@ std::shared_ptr<const t3dRdMeshSourceSnapshot_t> Terrain3DRdMeshCache::buildSour
 		const Ref<Terrain3DAssets> &rAssets,
 		const uint64_t nFingerprint,
 		const uint64_t nGeneration,
-		String *const pError ) {
+		String *const pError,
+		const bool bIncludeDisabled ) {
 	const std::vector<t3dRdExternalMeshSource_t> empty;
-	return buildSourceSnapshot( rAssets, empty, nFingerprint, nGeneration, pError );
+	return buildSourceSnapshot( rAssets, empty, nFingerprint, nGeneration, pError, bIncludeDisabled );
 }
 
 std::shared_ptr<const t3dRdMeshSourceSnapshot_t> Terrain3DRdMeshCache::buildSourceSnapshot(
@@ -476,7 +477,8 @@ std::shared_ptr<const t3dRdMeshSourceSnapshot_t> Terrain3DRdMeshCache::buildSour
 		const std::vector<t3dRdExternalMeshSource_t> &rExternalMeshes,
 		const uint64_t nFingerprint,
 		const uint64_t nGeneration,
-		String *const pError ) {
+		String *const pError,
+		const bool bIncludeDisabled ) {
 	if ( rAssets.is_null() && rExternalMeshes.empty() ) {
 		t3dRdSetError( pError, "Terrain3D mesh sources unavailable" );
 		return nullptr;
@@ -487,7 +489,7 @@ std::shared_ptr<const t3dRdMeshSourceSnapshot_t> Terrain3DRdMeshCache::buildSour
 	const int mesh_count = rAssets.is_valid() ? rAssets->getMeshCount() : 0;
 	for ( int asset_id = 0; asset_id < mesh_count; ++asset_id ) {
 		const Ref<Terrain3DMeshAsset> asset = rAssets->getMeshAsset( asset_id );
-		if ( asset.is_null() || !asset->isEnabled() ) continue;
+		if ( asset.is_null() || ( !bIncludeDisabled && !asset->isEnabled() ) ) continue;
 		const Ref<Material> override_material = asset->isHighlighted() && asset->getHighlightMaterial().is_valid()
 				? asset->getHighlightMaterial() : asset->getMaterialOverride();
 		const uint16_t overlay_material = asset->isHighlighted() ? UINT16_MAX

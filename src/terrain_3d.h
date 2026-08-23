@@ -512,8 +512,6 @@ private:
 
 	// Rendering
 	Terrain3DRenderCoordinator *m_pRenderCoordinator = nullptr;
-	t3dRenderBackend_t m_renderBackend = T3D_RENDER_BACKEND_RENDERING_SERVER;
-	t3dRdNativeProxyMode_t m_rdNativeProxyMode = T3D_RD_NATIVE_PROXY_SHADOWS_ONLY;
 	bool m_bFreeEditorTextures = true;
 	// Mouse cursor
 	SubViewport *m_pMouseVp = nullptr;
@@ -1478,11 +1476,8 @@ public:
 		return m_nRenderLayers;
 	}
 
-	void setRenderBackend( t3dRenderBackend_t backend );
-	EA_FORCE_INLINE t3dRenderBackend_t getRenderBackend( void ) const { return m_renderBackend; }
-	void setRdNativeProxyMode( t3dRdNativeProxyMode_t mode );
-	EA_FORCE_INLINE t3dRdNativeProxyMode_t getRdNativeProxyMode( void ) const { return m_rdNativeProxyMode; }
 	Dictionary getRdRendererDiagnostics( void ) const;
+	Ref<Image> createRdMeshPreview( uint16_t nAssetId, const Vector2i &rSize );
 
 	// Material Displacement Aliases
 	EA_FORCE_INLINE void setDisplacementScale( const real_t fDisplacementScale ) {

@@ -117,12 +117,6 @@ void Terrain3D::_bind_methods( void ) {
 	BIND_ENUM_CONSTANT( PERFORMANCE_PROFILE_CUSTOM );
 	BIND_ENUM_CONSTANT( PERFORMANCE_PROFILE_EXACT );
 	BIND_ENUM_CONSTANT( PERFORMANCE_PROFILE_MODIFIED );
-	BIND_ENUM_CONSTANT( T3D_RENDER_BACKEND_RENDERING_SERVER );
-	BIND_ENUM_CONSTANT( T3D_RENDER_BACKEND_RENDERING_DEVICE_DIRECT );
-	BIND_ENUM_CONSTANT( T3D_RENDER_BACKEND_RENDERING_DEVICE_HYBRID );
-	BIND_ENUM_CONSTANT( T3D_RD_NATIVE_PROXY_DISABLED );
-	BIND_ENUM_CONSTANT( T3D_RD_NATIVE_PROXY_SHADOWS_ONLY );
-	BIND_ENUM_CONSTANT( T3D_RD_NATIVE_PROXY_FULL );
 	BIND_ENUM_CONSTANT( EDITOR_EXECUTION_AUTHORING );
 	BIND_ENUM_CONSTANT( EDITOR_EXECUTION_RUNTIME_PROFILE );
 	BIND_ENUM_CONSTANT( OCEAN_PRESET_CUSTOM );
@@ -632,11 +626,6 @@ void Terrain3D::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "set_physics_material", "material" ), &Terrain3D::setPhysicsMaterial );
 	ClassDB::bind_method( D_METHOD( "get_physics_material" ), &Terrain3D::getPhysicsMaterial );
 
-	// Rendering backend experiment
-	ClassDB::bind_method( D_METHOD( "set_render_backend", "backend" ), &Terrain3D::setRenderBackend );
-	ClassDB::bind_method( D_METHOD( "get_render_backend" ), &Terrain3D::getRenderBackend );
-	ClassDB::bind_method( D_METHOD( "set_rd_native_proxy_mode", "mode" ), &Terrain3D::setRdNativeProxyMode );
-	ClassDB::bind_method( D_METHOD( "get_rd_native_proxy_mode" ), &Terrain3D::getRdNativeProxyMode );
 	ClassDB::bind_method( D_METHOD( "get_rd_renderer_diagnostics" ), &Terrain3D::getRdRendererDiagnostics );
 
 	// Terrain Mesh
@@ -967,16 +956,6 @@ void Terrain3D::_bind_methods( void ) {
 			"get_performance_profile_signature" );
 
 	ADD_GROUP( "Terrain Rendering", "" );
-
-	ADD_SUBGROUP( "RenderingDevice Experiment", "rd_" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "render_backend", PROPERTY_HINT_ENUM,
-				"RenderingServer,RenderingDevice Direct,RenderingDevice Hybrid" ),
-			"set_render_backend",
-			"get_render_backend" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "rd_native_proxy_mode", PROPERTY_HINT_ENUM,
-				"Disabled,Shadows Only,Full Native" ),
-			"set_rd_native_proxy_mode",
-			"get_rd_native_proxy_mode" );
 
 	ADD_SUBGROUP( "Geometry & Clipmap", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::OBJECT,

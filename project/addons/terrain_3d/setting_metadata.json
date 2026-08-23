@@ -1970,32 +1970,6 @@
       "tooltip": "Purpose: Fixed at 128 samples in this specialized fork. Runtime and editor attempts to select another region size are rejected.\nVisual: Reports live/generated state only; no visual state is authored.\nGPU: None.\nCPU: On-demand read-only query only.\nMemory: None.\nChange cost: Read-only query; no mutation or rebuild occurs.\nRuntime: Generated/read-only; cannot be authored.\nDependencies/conflicts: Generated from live resource/runtime state. Read-only and not an authoring input.\nProfile ownership: Xbox 360 Experimental\nSubsystem/tier: Region Authoring / Global\nState: Generated/read-only; visibility=basic",
       "visibility": "basic"
     },
-    "Terrain3D.rd_native_proxy_mode": {
-      "class_name": "Terrain3D",
-      "display_name": "RD Native Proxy Mode",
-      "group_path": "Terrain Rendering / RenderingDevice Experiment",
-      "key": "Terrain3D.rd_native_proxy_mode",
-      "profile_ownership": "none",
-      "property_name": "rd_native_proxy_mode",
-      "state": "editable",
-      "subsystem": "terrain_rendering",
-      "tier": "global",
-      "tooltip": "Purpose: Controls how much native Godot geometry remains registered while the direct RenderingDevice terrain path is active. Disabled removes the native proxy, Shadows Only keeps a native shadow caster, and Full Native keeps normal Godot render-list participation for comparison, GI, lightmapping, decals, reflection probes, and other standard 3D features.\nVisual: Changes whether native Terrain3D geometry is also submitted beside the direct RD experiment.\nGPU: Can add native shadow-only or full native terrain submission on top of the direct RD pass.\nCPU: Adds the corresponding native RenderingServer submission/visibility work when a proxy mode is enabled.\nMemory: Reuses the existing native terrain representation; no second terrain-data residency system is created.\nChange cost: Reconfigures the experiment presentation path and native proxy state.\nRuntime: Live/editor-safe for experiment switching.\nDependencies/conflicts: Applies when Render Backend uses a RenderingDevice experiment mode. Full Native is intended for feature-parity comparison rather than isolated RD cost measurement.\nProfile ownership: None\nSubsystem/tier: Terrain Rendering / Global\nState: Editable; visibility=advanced",
-      "visibility": "advanced"
-    },
-    "Terrain3D.render_backend": {
-      "class_name": "Terrain3D",
-      "display_name": "Render Backend",
-      "group_path": "Terrain Rendering / RenderingDevice Experiment",
-      "key": "Terrain3D.render_backend",
-      "profile_ownership": "none",
-      "property_name": "render_backend",
-      "state": "editable",
-      "subsystem": "terrain_rendering",
-      "tier": "global",
-      "tooltip": "Purpose: Selects the Terrain3D presentation backend used by the editor experiment: RenderingServer, direct RenderingDevice, or hybrid native-plus-RD rendering.\nVisual: Direct and Hybrid modes render the experimental RD terrain for side-by-side behavior and quality comparison.\nGPU: Direct mode submits explicit Terrain3D RD buffers and pipelines; Hybrid also keeps the normal Godot terrain submission active.\nCPU: Switching backend changes presentation/submission work but does not replace region streaming, authoring, collision, or bake systems.\nMemory: Direct RD owns explicit clipmap GPU buffers while reusing resident Terrain3D textures; Hybrid also retains the native renderer representation.\nChange cost: Reconfigures the active terrain presentation backend and compositor integration.\nRuntime: Live/editor-safe for experiment switching; failed RD initialization falls back to the native path.\nDependencies/conflicts: RenderingDevice modes require a renderer exposing the global RenderingDevice. Standard native 3D feature participation depends on RD Native Proxy Mode.\nProfile ownership: None\nSubsystem/tier: Terrain Rendering / Global\nState: Editable; visibility=basic",
-      "visibility": "basic"
-    },
     "Terrain3D.render_layers": {
       "class_name": "Terrain3D",
       "display_name": "Render Layers",

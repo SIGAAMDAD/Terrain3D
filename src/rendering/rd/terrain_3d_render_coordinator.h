@@ -35,8 +35,6 @@ private:
 	Ref<Compositor> m_attachedCompositor;
 	uint64_t m_nAttachedCameraId = 0u;
 	bool m_bCreatedCompositor = false;
-	std::atomic<t3dRenderBackend_t> m_backend{ T3D_RENDER_BACKEND_RENDERING_SERVER };
-	std::atomic<t3dRdNativeProxyMode_t> m_proxyMode{ T3D_RD_NATIVE_PROXY_SHADOWS_ONLY };
 
 	typedef struct t3dRdPublishedResources_s {
 		RID m_hHeightTextureRd;
@@ -115,6 +113,18 @@ private:
 	Terrain3DRdShaderLibrary m_shaderLibrary;
 	Terrain3DRdClipmapRenderer m_renderer;
 	Terrain3DRdInstanceRenderer m_instanceRenderer;
+	Terrain3DRdInstanceRenderer m_previewRenderer;
+	bool m_bPreviewRendererInitialized = false;
+	std::shared_ptr<const t3dRdMeshSourceSnapshot_t> m_cachedPreviewMeshes;
+	uint64_t m_nPreviewMeshFingerprint = 0u;
+	uint64_t m_nPreviewMeshGeneration = 0u;
+	std::mutex m_previewCallMutex;
+	std::mutex m_previewStateMutex;
+	std::shared_ptr<const t3dRdMeshSourceSnapshot_t> m_pendingPreviewMeshes;
+	uint16_t m_nPendingPreviewAssetId = 0u;
+	Vector2i m_pendingPreviewSize;
+	Ref<Image> m_pendingPreviewImage;
+	String m_pendingPreviewError;
 	std::shared_ptr<const t3dRdMeshSourceSnapshot_t> m_cachedInstanceMeshes;
 	std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> m_cachedRegularInstanceScene;
 	std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> m_cachedHlodInstanceScene;
@@ -178,7 +188,7 @@ private:
 	const t3dRdFrameSnapshotSlot_t *acquireSnapshotOnRenderThread( void );
 	void resetSnapshotPublication( void );
 	void recordStaleSnapshot( uint64_t nToken );
-	void updateNativeProxy( void );
+	void enforceRdPresentation( void );
 	void attachEffectToActiveCamera( void );
 	void detachEffect( void );
 	bool initializeRendererOnRenderThread( void );
@@ -196,15 +206,13 @@ public:
 	void initialize( Terrain3D *pTerrain );
 	void shutdown( void );
 	void update( void );
-	void setBackend( t3dRenderBackend_t backend );
-	void setProxyMode( t3dRdNativeProxyMode_t mode );
 	void render( RenderData *pRenderData );
 	void renderForwardPass( const t3dRdForwardPassContext_t &rContext );
 	void shutdownRendererOnRenderThread( void );
+	void renderPreviewOnRenderThread( void );
+	Ref<Image> createMeshPreview( uint16_t nAssetId, const Vector2i &rSize );
 	Dictionary getDiagnostics( void ) const;
 
-	EA_FORCE_INLINE t3dRenderBackend_t getBackend( void ) const { return m_backend.load( std::memory_order_acquire ); }
-	EA_FORCE_INLINE t3dRdNativeProxyMode_t getProxyMode( void ) const { return m_proxyMode.load( std::memory_order_acquire ); }
 };
 
 #endif // TERRAIN3D_RENDER_COORDINATOR_H

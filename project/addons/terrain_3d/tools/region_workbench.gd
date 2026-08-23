@@ -71,8 +71,6 @@ const TERRAIN_SCALAR_PROPERTIES: PackedStringArray = [
 	"compute_displacement_enabled",
 	"displacement_update_distance",
 	"buffer_shader_override_enabled",
-	"render_backend",
-	"rd_native_proxy_mode",
 	"total_memory_budget_mb",
 	"memory_transient_reserve_mb",
 	"gpu_region_cache_budget_auto",

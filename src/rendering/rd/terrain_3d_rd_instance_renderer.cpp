@@ -2,6 +2,8 @@
 
 #include "rendering/rd/terrain_3d_rd_instance_renderer.h"
 
+#include "data/terrain_3d_half_buffer.h"
+
 #include <godot_cpp/classes/rd_pipeline_color_blend_state.hpp>
 #include <godot_cpp/classes/rd_pipeline_color_blend_state_attachment.hpp>
 #include <godot_cpp/classes/rd_pipeline_depth_stencil_state.hpp>
@@ -15,6 +17,7 @@
 #include <godot_cpp/classes/render_scene_buffers.hpp>
 #include <godot_cpp/classes/render_scene_buffers_rd.hpp>
 #include <godot_cpp/classes/render_scene_data.hpp>
+#include <godot_cpp/variant/packed_color_array.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
 
 #include <algorithm>
@@ -95,6 +98,28 @@ bool t3dRdMotionCellsMatch( const t3dRdInstanceCell_t &rCurrent, const t3dRdInst
 		return rCurrent.m_nMeshSourceKey == rPrevious.m_nMeshSourceKey && rCurrent.m_nRevision == rPrevious.m_nRevision;
 	}
 	return rCurrent.m_nMeshAssetId == rPrevious.m_nMeshAssetId;
+}
+
+uint32_t t3dRdPreviewPackSnormPair( const float x, const float y ) {
+	const int16_t px = ( int16_t )( std::lround( CLAMP( x, -1.0f, 1.0f ) * 32767.0f ) );
+	const int16_t py = ( int16_t )( std::lround( CLAMP( y, -1.0f, 1.0f ) * 32767.0f ) );
+	return ( uint32_t )( ( uint16_t )( px ) ) | ( ( uint32_t )( ( uint16_t )( py ) ) << 16u );
+}
+
+t3dRdInstanceRecord_t t3dRdPreviewInstanceRecord( const Transform3D &rTransform ) {
+	t3dRdInstanceRecord_t record;
+	record.m_szPosition[0] = ( float )( rTransform.origin.x );
+	record.m_szPosition[1] = ( float )( rTransform.origin.y );
+	record.m_szPosition[2] = ( float )( rTransform.origin.z );
+	const Vector3 scale = rTransform.basis.get_scale();
+	const Quaternion rotation = rTransform.basis.orthonormalized().get_rotation_quaternion().normalized();
+	record.m_nQuaternion01 = t3dRdPreviewPackSnormPair( ( float )( rotation.x ), ( float )( rotation.y ) );
+	record.m_nQuaternion23 = t3dRdPreviewPackSnormPair( ( float )( rotation.z ), ( float )( rotation.w ) );
+	record.m_nScale01 = ( uint32_t )( t3dHalfEncode( ( float )( scale.x ) ) ) |
+			( ( uint32_t )( t3dHalfEncode( ( float )( scale.y ) ) ) << 16u );
+	record.m_nScale2Flags = ( uint32_t )( t3dHalfEncode( ( float )( scale.z ) ) );
+	record.m_nColorRgba8 = t3dRdPackGodotRgba32ForGpu( 0xffffffffu );
+	return record;
 }
 } // namespace
 
@@ -651,7 +676,8 @@ bool Terrain3DRdInstanceRenderer::buildPackets( const t3dRdInstanceSceneSnapshot
 		const uint32_t nViewCount,
 		const Vector3 &rCamera,
 		const uint32_t nVisibilityMask,
-		const bool bShadowPass ) {
+		const bool bShadowPass,
+		const bool bSkipFrustum ) {
 	typedef struct t3dRdPacketBuildGroup_s {
 		t3dRdInstanceDrawPacket_t m_packet;
 		std::vector<uint32_t> m_indices;
@@ -672,8 +698,8 @@ bool Terrain3DRdInstanceRenderer::buildPackets( const t3dRdInstanceSceneSnapshot
 				t3dRdRegularMeshSourceKey( cell.m_nMeshAssetId, cell.m_nLod ) );
 		const t3dRdMeshSourceLod_t *const lod = m_meshCache.resolveMesh( mesh );
 		if ( !lod ) continue;
-		bool visible = false;
-		if ( !bShadowPass && hlod && nViewCount == 1u ) {
+		bool visible = bSkipFrustum && cell.m_nInstanceCount > 0u && ( !bShadowPass || ( cell.m_nFlags & T3D_RD_INSTANCE_CAST_SHADOWS ) != 0u );
+		if ( !visible && !bShadowPass && hlod && nViewCount == 1u ) {
 			visible = cell.m_nInstanceCount > 0u && ( cell.m_nFlags & T3D_RD_INSTANCE_SHADOWS_ONLY ) == 0u;
 		} else {
 			for ( uint32_t view = 0u; view < nViewCount && !visible; ++view ) {
@@ -984,7 +1010,11 @@ bool Terrain3DRdInstanceRenderer::drawView( const uint32_t nView,
 	if ( rd->buffer_update( m_hFrameBuffer, 0u, sizeof( frame ), m_frameBytes ) != OK ) return false;
 	m_context.recordBufferUpdate( sizeof( frame ) );
 	if ( !dispatchHlodCull( nVisibilityMask ) ) return false;
-	const int64_t list = rd->draw_list_begin( state.m_hFramebuffer, RenderingDevice::DRAW_DEFAULT_ALL );
+	PackedColorArray clear_colors;
+	if ( m_bPreviewClear ) clear_colors.push_back( Color( 0.0f, 0.0f, 0.0f, 0.0f ) );
+	const int64_t list = m_bPreviewClear
+			? rd->draw_list_begin( state.m_hFramebuffer, RenderingDevice::DRAW_DEFAULT_ALL, clear_colors, 1.0f )
+			: rd->draw_list_begin( state.m_hFramebuffer, RenderingDevice::DRAW_DEFAULT_ALL );
 	if ( list == RenderingDevice::INVALID_ID ) return false;
 	rd->draw_list_bind_uniform_set( list, m_hUniformSet, 0u );
 	uint32_t bound_pipeline = UINT32_MAX;
@@ -1040,6 +1070,65 @@ bool Terrain3DRdInstanceRenderer::drawView( const uint32_t nView,
 	return true;
 }
 
+void Terrain3DRdInstanceRenderer::freePreviewTargets( void ) {
+	if ( m_szViewStates[0].m_hColor == m_hPreviewColorTexture || m_szViewStates[0].m_hDepth == m_hPreviewDepthTexture ) {
+		freeViewState( m_szViewStates[0] );
+	}
+	const uint64_t color_bytes = ( uint64_t )( MAX( m_previewSize.x, 0 ) ) * ( uint64_t )( MAX( m_previewSize.y, 0 ) ) * 4u;
+	const uint64_t depth_bytes = ( uint64_t )( MAX( m_previewSize.x, 0 ) ) * ( uint64_t )( MAX( m_previewSize.y, 0 ) ) * 4u;
+	m_context.freeResource( m_hPreviewColorTexture, color_bytes );
+	m_context.freeResource( m_hPreviewDepthTexture, depth_bytes );
+	m_hPreviewColorTexture = RID();
+	m_hPreviewDepthTexture = RID();
+	m_previewSize = Vector2i();
+}
+
+bool Terrain3DRdInstanceRenderer::ensurePreviewTargets( const Vector2i &rSize ) {
+	if ( rSize.x < 2 || rSize.y < 2 ) return false;
+	if ( m_hPreviewColorTexture.is_valid() && m_hPreviewDepthTexture.is_valid() && m_previewSize == rSize ) return true;
+	freePreviewTargets();
+	RenderingDevice *const rd = m_context.getDevice();
+	if ( !rd ) return false;
+	m_context.beginResourceRebuild();
+	Ref<RDTextureView> view;
+	view.instantiate();
+	Ref<RDTextureFormat> color_format;
+	color_format.instantiate();
+	color_format->set_width( ( uint32_t )( rSize.x ) );
+	color_format->set_height( ( uint32_t )( rSize.y ) );
+	color_format->set_depth( 1u );
+	color_format->set_array_layers( 1u );
+	color_format->set_mipmaps( 1u );
+	color_format->set_texture_type( RenderingDevice::TEXTURE_TYPE_2D );
+	color_format->set_format( RenderingDevice::DATA_FORMAT_R8G8B8A8_UNORM );
+	color_format->set_usage_bits( RenderingDevice::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT |
+			RenderingDevice::TEXTURE_USAGE_CAN_COPY_FROM_BIT );
+	m_hPreviewColorTexture = rd->texture_create( color_format, view );
+	const uint64_t bytes = ( uint64_t )( rSize.x ) * ( uint64_t )( rSize.y ) * 4u;
+	if ( !m_hPreviewColorTexture.is_valid() || !m_context.registerResource( m_hPreviewColorTexture,
+			"T3D.EditorPreview.Color", Terrain3DRdContext::RESOURCE_TEXTURE, Terrain3DRdContext::MEMORY_TERRAIN_TEXTURE, bytes ) ) {
+		m_context.endResourceRebuild(); freePreviewTargets(); return false;
+	}
+	Ref<RDTextureFormat> depth_format;
+	depth_format.instantiate();
+	depth_format->set_width( ( uint32_t )( rSize.x ) );
+	depth_format->set_height( ( uint32_t )( rSize.y ) );
+	depth_format->set_depth( 1u );
+	depth_format->set_array_layers( 1u );
+	depth_format->set_mipmaps( 1u );
+	depth_format->set_texture_type( RenderingDevice::TEXTURE_TYPE_2D );
+	depth_format->set_format( RenderingDevice::DATA_FORMAT_D32_SFLOAT );
+	depth_format->set_usage_bits( RenderingDevice::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT );
+	m_hPreviewDepthTexture = rd->texture_create( depth_format, view );
+	if ( !m_hPreviewDepthTexture.is_valid() || !m_context.registerResource( m_hPreviewDepthTexture,
+			"T3D.EditorPreview.Depth", Terrain3DRdContext::RESOURCE_TEXTURE, Terrain3DRdContext::MEMORY_TERRAIN_TEXTURE, bytes ) ) {
+		m_context.endResourceRebuild(); freePreviewTargets(); return false;
+	}
+	m_previewSize = rSize;
+	m_context.endResourceRebuild();
+	return true;
+}
+
 bool Terrain3DRdInstanceRenderer::initialize( const Ref<RDShaderSPIRV> &rShader, const Ref<RDShaderSPIRV> &rHlodCullShader,
 		const t3dRdForwardShaderBundle_t &rForwardShaders ) {
 	if ( !ensureDevice() || !ensureShader( rShader ) || !ensureForwardShaders( rForwardShaders ) || !ensureHlodCullShader( rHlodCullShader ) ) return false;
@@ -1051,6 +1140,7 @@ bool Terrain3DRdInstanceRenderer::initialize( const Ref<RDShaderSPIRV> &rShader,
 
 void Terrain3DRdInstanceRenderer::shutdown( void ) {
 	for ( t3dRdInstanceViewState_t &state : m_szViewStates ) freeViewState( state );
+	freePreviewTargets();
 	m_forwardLighting.shutdown();
 	freeForwardPipelines();
 	freeMaterialBindings();
@@ -1090,6 +1180,7 @@ void Terrain3DRdInstanceRenderer::shutdown( void ) {
 	m_hlodDescriptors.clear();
 	m_nStaticInstances = 0u;
 	m_nVisibleInstances = 0u;
+	m_nPreviewSceneGeneration = 0u;
 	m_nHlodCullDescriptors = 0u;
 	m_nForwardPreparedScenePass = 0u;
 	m_nForwardPreparedViewportKey = 0u;
@@ -1149,6 +1240,93 @@ bool Terrain3DRdInstanceRenderer::render( RenderData *const pRenderData,
 	}
 	++m_nFrames;
 	m_nStaticInstances = pScene->m_instances.size();
+	m_lastError = String();
+	return true;
+}
+
+bool Terrain3DRdInstanceRenderer::renderPreview(
+		const std::shared_ptr<const t3dRdMeshSourceSnapshot_t> &pMeshes,
+		const uint16_t nAssetId,
+		const Vector2i &rSize,
+		Ref<Image> &rImage ) {
+	rImage.unref();
+	if ( !pMeshes || !ensureDevice() || !ensurePreviewTargets( rSize ) ) {
+		setError( "RD editor preview resources are unavailable" );
+		return false;
+	}
+	if ( pMeshes->m_nGeneration != m_meshCache.getSourceGeneration() && !m_materialBindings.empty() ) {
+		m_context.beginResourceRebuild(); freeMaterialBindings(); m_context.endResourceRebuild();
+	}
+	if ( !m_meshCache.upload( pMeshes ) || !uploadMaterials() ) {
+		setError( "Failed to upload RD editor preview mesh/material data" );
+		return false;
+	}
+	const t3dRdMeshHandle_t mesh = m_meshCache.getMeshHandle( nAssetId, 0 );
+	const t3dRdMeshSourceLod_t *const lod = m_meshCache.resolveMesh( mesh );
+	if ( !lod ) {
+		setError( "RD editor preview mesh handle is unavailable" );
+		return false;
+	}
+	const AABB source_bounds = lod->m_bounds;
+	const Vector3 center = source_bounds.get_center();
+	AABB centered = source_bounds;
+	centered.position -= center;
+	Transform3D xform;
+	xform.basis = Basis().rotated( Vector3( 0.0f, 1.0f, 0.0f ), -Math_PI * 0.125f );
+	xform.basis = Basis().rotated( Vector3( 1.0f, 0.0f, 0.0f ), Math_PI * 0.125f ) * xform.basis;
+	const AABB rotated = xform.xform( centered );
+	float extent = ( float )( MAX( rotated.size.x, rotated.size.y ) );
+	if ( extent <= 0.0001f ) extent = 1.0f;
+	const float scale = 0.9f / extent;
+	xform.basis.scale( Vector3( scale, scale, scale ) );
+	xform.origin = -xform.basis.xform( center );
+
+	std::shared_ptr<t3dRdInstanceSceneSnapshot_t> scene = std::make_shared<t3dRdInstanceSceneSnapshot_t>();
+	scene->m_nGeneration = ++m_nPreviewSceneGeneration;
+	if ( scene->m_nGeneration == 0u ) scene->m_nGeneration = ++m_nPreviewSceneGeneration;
+	scene->m_instances.push_back( t3dRdPreviewInstanceRecord( xform ) );
+	t3dRdInstanceCell_t cell;
+	cell.m_nMeshSourceKey = t3dRdRegularMeshSourceKey( nAssetId, 0 );
+	cell.m_nMeshAssetId = nAssetId;
+	cell.m_nFirstInstance = 0u;
+	cell.m_nInstanceCount = 1u;
+	cell.m_nVisibilityLayers = 1u;
+	cell.m_bounds = xform.xform( source_bounds );
+	scene->m_cells.push_back( cell );
+	if ( !uploadScene( scene ) ) {
+		setError( "Failed to upload RD editor preview instance" );
+		return false;
+	}
+
+	const float aspect = ( float )( rSize.x ) / ( float )( MAX( rSize.y, 1 ) );
+	const Projection projection = Projection::create_orthogonal_aspect( 1.1f, aspect, 0.01f, 1000.0f );
+	const Transform3D camera( Basis(), Vector3( 0.0f, 0.0f, 3.0f ) );
+	const Projection view( camera.affine_inverse() );
+	const Projection view_projection = projection * view;
+	if ( !buildPackets( *scene, &view_projection, 1u, camera.origin, 1u, false, true ) || !uploadVisibility() ||
+			!ensureViewState( 0u, m_hPreviewColorTexture, m_hPreviewDepthTexture, RenderingDevice::TEXTURE_SAMPLES_1 ) ) {
+		setError( "Failed to prepare RD editor preview draw" );
+		return false;
+	}
+	m_bPreviewClear = true;
+	const bool draw_ok = drawView( 0u, view_projection, camera.origin, 1u );
+	m_bPreviewClear = false;
+	if ( !draw_ok ) {
+		setError( "Failed to draw RD editor preview" );
+		return false;
+	}
+	RenderingDevice *const rd = m_context.getDevice();
+	const PackedByteArray bytes = rd->texture_get_data( m_hPreviewColorTexture, 0u );
+	if ( bytes.size() != ( int64_t )( rSize.x ) * ( int64_t )( rSize.y ) * 4 ) {
+		setError( "RD editor preview readback size is invalid" );
+		return false;
+	}
+	rImage = Image::create_from_data( rSize.x, rSize.y, false, Image::FORMAT_RGBA8, bytes );
+	if ( rImage.is_null() ) {
+		setError( "RD editor preview image creation failed" );
+		return false;
+	}
+	rImage->flip_y();
 	m_lastError = String();
 	return true;
 }

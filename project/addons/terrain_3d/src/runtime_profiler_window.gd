@@ -399,24 +399,8 @@ func _update_rd_renderer_product() -> void:
 	if not is_instance_valid(terrain):
 		return
 	var diagnostics: Dictionary = terrain.get_rd_renderer_diagnostics()
-	var backend: int = int(diagnostics.get("backend", Terrain3D.T3D_RENDER_BACKEND_RENDERING_SERVER))
-	var proxy_mode: int = int(diagnostics.get("proxy_mode", Terrain3D.T3D_RD_NATIVE_PROXY_SHADOWS_ONLY))
-	var backend_name: String = "RenderingServer"
-	match backend:
-		Terrain3D.T3D_RENDER_BACKEND_RENDERING_DEVICE_DIRECT:
-			backend_name = "RenderingDevice Direct"
-		Terrain3D.T3D_RENDER_BACKEND_RENDERING_DEVICE_HYBRID:
-			backend_name = "RenderingDevice Hybrid"
-	var proxy_name: String = "Disabled"
-	match proxy_mode:
-		Terrain3D.T3D_RD_NATIVE_PROXY_SHADOWS_ONLY:
-			proxy_name = "Shadows only"
-		Terrain3D.T3D_RD_NATIVE_PROXY_FULL:
-			proxy_name = "Full native"
 	var rows: Array[Array] = [
-		["Backend", backend_name, "Selected Terrain3D presentation backend"],
-		["Native proxy setting", proxy_name, "Legacy API setting; RD production keeps native Terrain3D proxy geometry disabled"],
-		["Native surface", "yes" if bool(diagnostics.get("native_surface_enabled", false)) else "no", "Native terrain color/material surface currently participates"],
+		["Rendering path", "RenderingDevice / Forward+", "Terrain3D production rendering is RD-owned and submits into native Forward+ passes"],
 		["RD color writes", "yes" if bool(diagnostics.get("color_write_enabled", false)) else "no", "Terrain3D-owned Forward+ color submission active for the RD backend"],
 		["RD render enabled", "yes" if bool(diagnostics.get("render_enabled", false)) else "no", "Native Forward+ Terrain3D submission enabled"],
 		["RD initialized", "yes" if bool(diagnostics.get("renderer_initialized", false)) else "no", "Direct RD resources and pipelines initialized"],

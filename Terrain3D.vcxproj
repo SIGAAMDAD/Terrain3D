@@ -173,8 +173,8 @@
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_compositor_effect.h" />
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_context.h" />
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_culling.h" />
-    <ClInclude Include="src\rendering\rd\terrain_3d_rd_forward_plus_bridge.h" />
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_forward_lighting.h" />
+    <ClInclude Include="src\rendering\rd\terrain_3d_rd_forward_plus_bridge.h" />
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_forward_shader_bundle.h" />
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_instance_renderer.h" />
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_mesh_cache.h" />
@@ -263,8 +263,8 @@
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_compositor_effect.cpp" />
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_context.cpp" />
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_culling.cpp" />
-    <ClCompile Include="src\rendering\rd\terrain_3d_rd_forward_plus_bridge.cpp" />
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_forward_lighting.cpp" />
+    <ClCompile Include="src\rendering\rd\terrain_3d_rd_forward_plus_bridge.cpp" />
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_instance_renderer.cpp" />
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_mesh_cache.cpp" />
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_shader_library.cpp" />
@@ -302,6 +302,15 @@
     <None Include="docs\api_shader_repair_report.md" />
     <None Include="docs\compile_audit.md" />
     <None Include="docs\gdscript_modernization_audit.md" />
+    <None Include="docs\rd_batch_f1_forward_plus_bridge.md" />
+    <None Include="docs\rd_batch_f2_native_depth_opaque.md" />
+    <None Include="docs\rd_batch_f3_native_shadows.md" />
+    <None Include="docs\rd_batch_f4_native_lighting.md" />
+    <None Include="docs\rd_batch_f5_motion_vectors.md" />
+    <None Include="docs\rd_batch_f6_scene_integrations.md" />
+    <None Include="docs\rd_batch_f7_multiview_lifecycle.md" />
+    <None Include="docs\rd_batch_f8_consolidation.md" />
+    <None Include="docs\rd_batch_g_editor_integration.md" />
     <None Include="docs\rd_codex_handoff.md" />
     <None Include="docs\rd_reference\dependency_audit.md" />
     <None Include="docs\rd_reference\public_api_delta_baseline_to_alpha.md" />

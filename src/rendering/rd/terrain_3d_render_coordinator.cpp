@@ -925,12 +925,10 @@ bool Terrain3DRenderCoordinator::isForwardBridgeReady( void ) const {
 }
 
 void Terrain3DRenderCoordinator::updateRenderRoute( void ) {
-	const t3dRenderBackend_t backend = m_backend.load( std::memory_order_acquire );
-	const bool bRd = backend != T3D_RENDER_BACKEND_RENDERING_SERVER;
 	const bool bBridgeReady = isForwardBridgeReady();
-	m_bRenderEnabled.store( bRd && bBridgeReady && !m_bFailureLatched, std::memory_order_release );
-	if ( m_effect.is_valid() ) m_effect->set_enabled( bRd && m_bCompositorDebugEnabled && !m_bFailureLatched );
-	if ( bRd && !bBridgeReady ) {
+	m_bRenderEnabled.store( bBridgeReady && !m_bFailureLatched, std::memory_order_release );
+	if ( m_effect.is_valid() ) m_effect->set_enabled( m_bCompositorDebugEnabled && !m_bFailureLatched );
+	if ( !bBridgeReady ) {
 		Terrain3DRdForwardPlusBridgeAdapter *const pBridge = Terrain3DRdForwardPlusBridgeAdapter::getSingleton();
 		const String bridge_error = pBridge ? pBridge->getLastError() :
 				String( "Terrain3D Forward+ bridge adapter is unavailable" );
@@ -939,24 +937,14 @@ void Terrain3DRenderCoordinator::updateRenderRoute( void ) {
 	}
 }
 
-void Terrain3DRenderCoordinator::updateNativeProxy( void ) {
-	if ( !m_pTerrain || !m_pTerrain->getMesher() ) return;
-	const t3dRenderBackend_t backend = m_backend.load( std::memory_order_acquire );
-	const t3dRdNativeProxyMode_t proxy_mode = m_proxyMode.load( std::memory_order_acquire );
-	const bool bRd = backend != T3D_RENDER_BACKEND_RENDERING_SERVER;
-	if ( bRd ) {
-		// Batch F3 clean break: RD production owns both visual and shadow geometry.
-		// Public proxy settings remain for API compatibility but cannot resurrect native geometry.
+void Terrain3DRenderCoordinator::enforceRdPresentation( void ) {
+	if ( m_pTerrain && m_pTerrain->getMesher() ) {
 		m_pTerrain->getMesher()->setRdPresentation( false, false );
-		return;
 	}
-	( void )( proxy_mode );
-	m_pTerrain->getMesher()->setRdPresentation( true, false );
 }
 
 void Terrain3DRenderCoordinator::attachEffectToActiveCamera( void ) {
-	if ( !m_pTerrain || m_effect.is_null() || !m_bCompositorDebugEnabled ||
-		m_backend.load( std::memory_order_acquire ) == T3D_RENDER_BACKEND_RENDERING_SERVER ) return;
+	if ( !m_pTerrain || m_effect.is_null() || !m_bCompositorDebugEnabled ) return;
 	Camera3D *camera = nullptr;
 	if ( Engine::get_singleton()->is_editor_hint() ) {
 		EditorInterface *const editor = EditorInterface::get_singleton();
@@ -1049,10 +1037,6 @@ void Terrain3DRenderCoordinator::initialize( Terrain3D *const pTerrain ) {
 	m_renderer.setDirectDrawDebugEnabled( bDirectDebug );
 	const bool bInstanceDirectDebug = os && os->get_environment( "TERRAIN3D_RD_INSTANCE_DIRECT_DRAW" ) == "1";
 	m_instanceRenderer.setDirectDrawDebugEnabled( bDirectDebug || bInstanceDirectDebug );
-	m_backend.store( bCompareCulling || bDirectDebug ? T3D_RENDER_BACKEND_RENDERING_DEVICE_DIRECT :
-			m_pTerrain->getRenderBackend(),
-			std::memory_order_release );
-	m_proxyMode.store( m_pTerrain->getRdNativeProxyMode(), std::memory_order_release );
 	m_bRendererFailed.store( false, std::memory_order_release );
 	m_nConsecutiveRenderFailures.store( 0u, std::memory_order_release );
 	m_bFailureLatched = false;
@@ -1075,7 +1059,7 @@ void Terrain3DRenderCoordinator::initialize( Terrain3D *const pTerrain ) {
 	}
 	publishSnapshot();
 	updateRenderRoute();
-	updateNativeProxy();
+	enforceRdPresentation();
 	if ( m_bCompositorDebugEnabled ) attachEffectToActiveCamera();
 }
 
@@ -1091,6 +1075,7 @@ void Terrain3DRenderCoordinator::shutdown( void ) {
 			server->call_on_render_thread( callable_mp( m_effect.ptr(), &Terrain3DRdCompositorEffect::shutdownRendererOnRenderThread ) );
 			server->force_sync();
 		} else {
+			if ( m_bPreviewRendererInitialized ) { m_previewRenderer.shutdown(); m_bPreviewRendererInitialized = false; }
 			m_instanceRenderer.shutdown();
 			m_renderer.shutdown();
 			m_bRendererInitialized.store( false, std::memory_order_release );
@@ -1101,10 +1086,7 @@ void Terrain3DRenderCoordinator::shutdown( void ) {
 	if ( m_effect.is_valid() ) m_effect->setCoordinator( nullptr );
 	detachEffect();
 	m_effect.unref();
-	if ( m_pTerrain && m_pTerrain->getMesher() ) {
-		const bool bNativeBackend = m_backend.load( std::memory_order_acquire ) == T3D_RENDER_BACKEND_RENDERING_SERVER;
-		m_pTerrain->getMesher()->setRdPresentation( bNativeBackend, false );
-	}
+	enforceRdPresentation();
 	m_worldNoiseCache.clear();
 	m_macroNoiseTexture.clear();
 	m_editorBrushTexture.clear();
@@ -1112,6 +1094,15 @@ void Terrain3DRenderCoordinator::shutdown( void ) {
 	m_nEditorBrushSourceId = 0u;
 	m_shaderLibrary.clear();
 	m_cachedInstanceMeshes.reset();
+	m_cachedPreviewMeshes.reset();
+	m_nPreviewMeshFingerprint = 0u;
+	m_nPreviewMeshGeneration = 0u;
+	{
+		std::lock_guard<std::mutex> lock( m_previewStateMutex );
+		m_pendingPreviewMeshes.reset();
+		m_pendingPreviewImage.unref();
+		m_pendingPreviewError = String();
+	}
 	m_cachedRegularInstanceScene.reset();
 	m_cachedHlodInstanceScene.reset();
 	m_cachedInstanceScene.reset();
@@ -1139,43 +1130,96 @@ void Terrain3DRenderCoordinator::update( void ) {
 		if ( m_pTerrain->getMesher() ) m_pTerrain->getMesher()->setRdPresentation( false, false );
 	}
 	updateRenderRoute();
-	updateNativeProxy();
-	if ( m_backend.load( std::memory_order_acquire ) != T3D_RENDER_BACKEND_RENDERING_SERVER &&
-			m_bCompositorDebugEnabled && !m_bFailureLatched ) {
+	enforceRdPresentation();
+	if ( m_bCompositorDebugEnabled && !m_bFailureLatched ) {
 		attachEffectToActiveCamera();
 	} else if ( !m_bCompositorDebugEnabled ) {
 		detachEffect();
 	}
 }
 
-void Terrain3DRenderCoordinator::setBackend( const t3dRenderBackend_t backend ) {
-	if ( m_backend.load( std::memory_order_acquire ) == backend ) return;
-	m_backend.store( backend, std::memory_order_release );
-	if ( backend != T3D_RENDER_BACKEND_RENDERING_SERVER ) {
-		m_bRendererFailed.store( false, std::memory_order_release );
-		m_bFailureLatched = false;
-	}
-	updateRenderRoute();
-	updateNativeProxy();
-	if ( backend == T3D_RENDER_BACKEND_RENDERING_SERVER || !m_bCompositorDebugEnabled ) detachEffect();
-	else attachEffectToActiveCamera();
-}
-
-void Terrain3DRenderCoordinator::setProxyMode( const t3dRdNativeProxyMode_t mode ) {
-	if ( m_proxyMode.load( std::memory_order_acquire ) == mode ) return;
-	m_proxyMode.store( mode, std::memory_order_release );
-	updateNativeProxy();
-}
-
 void Terrain3DRenderCoordinator::shutdownRendererOnRenderThread( void ) {
+	if ( m_bPreviewRendererInitialized ) {
+		m_previewRenderer.shutdown();
+		m_bPreviewRendererInitialized = false;
+	}
 	m_instanceRenderer.shutdown();
 	m_renderer.shutdown();
 	resetForwardLifecycle();
 	m_bRendererInitialized.store( false, std::memory_order_release );
 }
 
+void Terrain3DRenderCoordinator::renderPreviewOnRenderThread( void ) {
+	std::shared_ptr<const t3dRdMeshSourceSnapshot_t> meshes;
+	uint16_t asset_id = 0u;
+	Vector2i size;
+	{
+		std::lock_guard<std::mutex> lock( m_previewStateMutex );
+		meshes = m_pendingPreviewMeshes;
+		asset_id = m_nPendingPreviewAssetId;
+		size = m_pendingPreviewSize;
+		m_pendingPreviewImage.unref();
+		m_pendingPreviewError = String();
+	}
+	if ( !meshes || !m_shaderLibrary.isReady() ) {
+		std::lock_guard<std::mutex> lock( m_previewStateMutex );
+		m_pendingPreviewError = "RD editor preview source/shaders are unavailable";
+		return;
+	}
+	if ( !m_bPreviewRendererInitialized ) {
+		m_bPreviewRendererInitialized = m_previewRenderer.initialize( m_shaderLibrary.getInstances(),
+				m_shaderLibrary.getHlodCull(), m_shaderLibrary.getForwardBundle() );
+	}
+	Ref<Image> image;
+	const bool ok = m_bPreviewRendererInitialized && m_previewRenderer.renderPreview( meshes, asset_id, size, image );
+	std::lock_guard<std::mutex> lock( m_previewStateMutex );
+	m_pendingPreviewImage = image;
+	if ( !ok ) m_pendingPreviewError = m_previewRenderer.getLastError();
+}
+
+Ref<Image> Terrain3DRenderCoordinator::createMeshPreview( const uint16_t nAssetId, const Vector2i &rSize ) {
+	std::lock_guard<std::mutex> call_lock( m_previewCallMutex );
+	if ( !m_pTerrain || rSize.x < 2 || rSize.y < 2 || !m_effect.is_valid() ) return Ref<Image>();
+	const Ref<Terrain3DAssets> assets = m_pTerrain->getAssets();
+	if ( assets.is_null() || nAssetId >= ( uint16_t )( assets->getMeshCount() ) ) return Ref<Image>();
+	const uint64_t fingerprint = Terrain3DRdMeshCache::computeSourceFingerprint( assets );
+	if ( !m_cachedPreviewMeshes || fingerprint != m_nPreviewMeshFingerprint ) {
+		String error;
+		m_nPreviewMeshGeneration = advanceGeneration( m_nPreviewMeshGeneration );
+		m_cachedPreviewMeshes = Terrain3DRdMeshCache::buildSourceSnapshot( assets, fingerprint, m_nPreviewMeshGeneration, &error, true );
+		if ( !m_cachedPreviewMeshes ) {
+			std::lock_guard<std::mutex> lock( m_diagnosticsMutex );
+			m_initializationError = error;
+			return Ref<Image>();
+		}
+		m_nPreviewMeshFingerprint = fingerprint;
+	}
+	{
+		std::lock_guard<std::mutex> lock( m_previewStateMutex );
+		m_pendingPreviewMeshes = m_cachedPreviewMeshes;
+		m_nPendingPreviewAssetId = nAssetId;
+		m_pendingPreviewSize = rSize;
+		m_pendingPreviewImage.unref();
+		m_pendingPreviewError = String();
+	}
+	RenderingServer *const server = RenderingServer::get_singleton();
+	if ( !server ) return Ref<Image>();
+	if ( server->is_on_render_thread() ) {
+		renderPreviewOnRenderThread();
+	} else {
+		server->call_on_render_thread( callable_mp( m_effect.ptr(), &Terrain3DRdCompositorEffect::renderPreviewOnRenderThread ) );
+		server->force_sync();
+	}
+	std::lock_guard<std::mutex> lock( m_previewStateMutex );
+	if ( m_pendingPreviewImage.is_null() && !m_pendingPreviewError.is_empty() ) {
+		std::lock_guard<std::mutex> diagnostics_lock( m_diagnosticsMutex );
+		m_initializationError = m_pendingPreviewError;
+	}
+	return m_pendingPreviewImage;
+}
+
 void Terrain3DRenderCoordinator::render( RenderData *const pRenderData ) {
-	if ( !m_bCompositorDebugEnabled || m_backend.load( std::memory_order_acquire ) == T3D_RENDER_BACKEND_RENDERING_SERVER ||
+	if ( !m_bCompositorDebugEnabled ||
 			!pRenderData ) return;
 	++m_nCallbackCount;
 	if ( !initializeRendererOnRenderThread() ) return;
@@ -1183,10 +1227,7 @@ void Terrain3DRenderCoordinator::render( RenderData *const pRenderData ) {
 	if ( !publication ) return;
 	const t3dRdFrameSnapshot_t &snapshot = publication->m_snapshot;
 	const bool bHasTerrain = snapshot.m_nPatchCount > 0u && !publication->m_regionMapBytes.is_empty();
-	const t3dRenderBackend_t backend = m_backend.load( std::memory_order_acquire );
-	const t3dRdNativeProxyMode_t proxy_mode = m_proxyMode.load( std::memory_order_acquire );
-	const bool bNativeSurface = backend == T3D_RENDER_BACKEND_RENDERING_DEVICE_HYBRID || proxy_mode == T3D_RD_NATIVE_PROXY_FULL;
-	const bool bColorWrite = !bNativeSurface;
+	const bool bColorWrite = true;
 	const bool instances_ok = m_instanceRenderer.render( pRenderData,
 			publication->m_instanceMeshes,
 			publication->m_instanceScene,
@@ -1276,8 +1317,7 @@ bool Terrain3DRenderCoordinator::prepareForwardLifecycle( t3dRdForwardPassContex
 }
 
 void Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContext_t &rContext ) {
-	if ( !m_bRenderEnabled.load( std::memory_order_acquire ) ||
-			m_backend.load( std::memory_order_acquire ) == T3D_RENDER_BACKEND_RENDERING_SERVER ) return;
+	if ( !m_bRenderEnabled.load( std::memory_order_acquire ) ) return;
 	m_nForwardPassCallbacks.fetch_add( 1u, std::memory_order_relaxed );
 	m_nLastForwardScenePass.store( rContext.m_nScenePass, std::memory_order_release );
 	m_nLastForwardDrawList.store( rContext.m_nDrawList, std::memory_order_release );
@@ -1362,10 +1402,6 @@ Dictionary Terrain3DRenderCoordinator::getDiagnostics( void ) const {
 	Dictionary result;
 	const Dictionary renderer = m_renderer.getDiagnostics();
 	const Dictionary instances = m_instanceRenderer.getDiagnostics();
-	const t3dRenderBackend_t backend = m_backend.load( std::memory_order_acquire );
-	const t3dRdNativeProxyMode_t proxy_mode = m_proxyMode.load( std::memory_order_acquire );
-	result["backend"] = ( int )( backend );
-	result["proxy_mode"] = ( int )( proxy_mode );
 	result["native_shadow_proxy_active"] = false;
 	result["render_enabled"] = m_bRenderEnabled.load( std::memory_order_acquire );
 	result["forward_plus_bridge_attached"] = m_bForwardBridgeAttached;
@@ -1452,9 +1488,8 @@ Dictionary Terrain3DRenderCoordinator::getDiagnostics( void ) const {
 	result["native_shadow_proxy_available"] = false;
 	result["multiview_supported"] = true;
 	result["single_view_only"] = false;
-	const bool bNativeSurface = backend == T3D_RENDER_BACKEND_RENDERING_SERVER;
-	result["native_surface_enabled"] = bNativeSurface;
-	result["color_write_enabled"] = backend != T3D_RENDER_BACKEND_RENDERING_SERVER;
+	result["native_surface_enabled"] = false;
+	result["color_write_enabled"] = true;
 	result["hybrid_depth_only"] = false;
 	const Dictionary forward_lighting = renderer.get( "forward_lighting", Dictionary() );
 	result["clustered_light_path_active"] = forward_lighting.get( "forward_light_resources_ready", false );

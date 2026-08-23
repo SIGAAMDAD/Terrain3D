@@ -13,6 +13,8 @@ SOLUTION_GUID = "{119F9825-B9FE-4F51-9225-7EA96BF5BF7F}"
 WORKSPACE_GUID = "{5AFB489B-6E62-5B44-8C5B-5091889BDF90}"
 VC_PROJECT_TYPE_GUID = "{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}"
 SOLUTION_FOLDER_TYPE_GUID = "{66A26720-8FB5-11D2-AA7E-00C04F688DDE}"
+CS_PROJECT_TYPE_GUID = "{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}"
+CS_PROJECT_GUID = "{E3C3EDF1-6587-443E-B932-EBA7704DB53E}"
 
 CONFIGS = (
     ("Debug", "Win32", "template_debug", "x86_32", True),
@@ -198,6 +200,8 @@ def make_sln() -> str:
         "MinimumVisualStudioVersion = 10.0.40219.1",
         f'Project("{VC_PROJECT_TYPE_GUID}") = "Terrain3D", "Terrain3D.vcxproj", "{PROJECT_GUID}"',
         "EndProject",
+        f'Project("{CS_PROJECT_TYPE_GUID}") = "Terrain3D.Managed", "project\\Terrain3D.csproj", "{CS_PROJECT_GUID}"',
+        "EndProject",
         f'Project("{SOLUTION_FOLDER_TYPE_GUID}") = "Workspace", "Workspace", "{WORKSPACE_GUID}"',
         "\tProjectSection(SolutionItems) = preProject",
     ]
@@ -220,6 +224,9 @@ def make_sln() -> str:
         solution_platform = "x86" if platform == "Win32" else platform
         lines.append(f"\t\t{PROJECT_GUID}.{config}|{solution_platform}.ActiveCfg = {config}|{platform}")
         lines.append(f"\t\t{PROJECT_GUID}.{config}|{solution_platform}.Build.0 = {config}|{platform}")
+        managed_config = "Debug" if config == "Debug" else "ExportRelease"
+        lines.append(f"\t\t{CS_PROJECT_GUID}.{config}|{solution_platform}.ActiveCfg = {managed_config}|Any CPU")
+        lines.append(f"\t\t{CS_PROJECT_GUID}.{config}|{solution_platform}.Build.0 = {managed_config}|Any CPU")
     lines.extend([
         "\tEndGlobalSection",
         "\tGlobalSection(SolutionProperties) = preSolution",

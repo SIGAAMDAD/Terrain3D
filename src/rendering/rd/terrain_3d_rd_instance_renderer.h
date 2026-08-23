@@ -9,6 +9,7 @@
 #include "rendering/rd/terrain_3d_rd_forward_lighting.h"
 #include "rendering/rd/terrain_3d_rd_types.h"
 
+#include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/rd_shader_spirv.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <memory>
@@ -107,6 +108,10 @@ private:
 	uint32_t m_nHlodDescriptorCapacityBytes = 0u;
 	uint64_t m_nUploadedSceneGeneration = 0u;
 	uint64_t m_nUploadedMeshGeneration = 0u;
+	RID m_hPreviewColorTexture;
+	RID m_hPreviewDepthTexture;
+	Vector2i m_previewSize;
+	bool m_bPreviewClear = false;
 	bool m_bDirectDrawDebug = false;
 	bool m_bMotionDebug = false;
 	String m_lastError;
@@ -134,6 +139,7 @@ private:
 	PackedByteArray m_hlodDescriptorBytes;
 	PackedByteArray m_hlodCullPushBytes;
 	uint64_t m_nFrames = 0u;
+	uint64_t m_nPreviewSceneGeneration = 0u;
 	uint64_t m_nDraws = 0u;
 	uint64_t m_nVisibleInstances = 0u;
 	uint64_t m_nStaticInstances = 0u;
@@ -178,12 +184,14 @@ private:
 	bool uploadScene( const std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> &pScene );
 	bool prepareMotionHistory( const t3dRdInstanceSceneSnapshot_t &rScene, uint64_t nRenderFrame );
 	bool uploadMaterials( void );
-	bool buildPackets( const t3dRdInstanceSceneSnapshot_t &rScene, const Projection *pViewProjections, uint32_t nViewCount, const Vector3 &rCamera, uint32_t nVisibilityMask, bool bShadowPass );
+	bool buildPackets( const t3dRdInstanceSceneSnapshot_t &rScene, const Projection *pViewProjections, uint32_t nViewCount, const Vector3 &rCamera, uint32_t nVisibilityMask, bool bShadowPass, bool bSkipFrustum = false );
 	bool uploadVisibility( void );
 	bool uploadShadowVisibility( void );
 	bool uploadHlodDescriptors( void );
 	bool dispatchHlodCull( uint32_t nVisibilityMask );
 	bool ensureViewState( uint32_t nView, const RID &rColor, const RID &rDepth, RenderingDevice::TextureSamples samples );
+	bool ensurePreviewTargets( const Vector2i &rSize );
+	void freePreviewTargets( void );
 	void freeViewState( t3dRdInstanceViewState_t &rState );
 	bool drawView( uint32_t nView, const Projection &rViewProjection, const Vector3 &rCamera, uint32_t nVisibilityMask );
 	bool drawForwardView( const t3dRdForwardPassContext_t &rContext );
@@ -206,6 +214,7 @@ public:
 			const std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> &pScene,
 			uint32_t nVisibilityMask );
 	bool renderForwardPass( const t3dRdForwardPassContext_t &rContext );
+	bool renderPreview( const std::shared_ptr<const t3dRdMeshSourceSnapshot_t> &pMeshes, uint16_t nAssetId, const Vector2i &rSize, Ref<Image> &rImage );
 	Dictionary getDiagnostics( void ) const;
 	EA_FORCE_INLINE void setDirectDrawDebugEnabled( bool bEnabled ) { m_bDirectDrawDebug = bEnabled; }
 	EA_FORCE_INLINE void setMotionDebugEnabled( bool bEnabled ) { m_bMotionDebug = bEnabled; }

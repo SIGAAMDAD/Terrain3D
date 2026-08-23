@@ -318,10 +318,10 @@
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_culling.h">
       <Filter>src\rendering\rd</Filter>
     </ClInclude>
-    <ClInclude Include="src\rendering\rd\terrain_3d_rd_forward_plus_bridge.h">
+    <ClInclude Include="src\rendering\rd\terrain_3d_rd_forward_lighting.h">
       <Filter>src\rendering\rd</Filter>
     </ClInclude>
-    <ClInclude Include="src\rendering\rd\terrain_3d_rd_forward_lighting.h">
+    <ClInclude Include="src\rendering\rd\terrain_3d_rd_forward_plus_bridge.h">
       <Filter>src\rendering\rd</Filter>
     </ClInclude>
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_forward_shader_bundle.h">
@@ -584,10 +584,10 @@
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_culling.cpp">
       <Filter>src\rendering\rd</Filter>
     </ClCompile>
-    <ClCompile Include="src\rendering\rd\terrain_3d_rd_forward_plus_bridge.cpp">
+    <ClCompile Include="src\rendering\rd\terrain_3d_rd_forward_lighting.cpp">
       <Filter>src\rendering\rd</Filter>
     </ClCompile>
-    <ClCompile Include="src\rendering\rd\terrain_3d_rd_forward_lighting.cpp">
+    <ClCompile Include="src\rendering\rd\terrain_3d_rd_forward_plus_bridge.cpp">
       <Filter>src\rendering\rd</Filter>
     </ClCompile>
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_instance_renderer.cpp">
@@ -695,6 +695,33 @@
       <Filter>docs</Filter>
     </None>
     <None Include="docs\gdscript_modernization_audit.md">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="docs\rd_batch_f1_forward_plus_bridge.md">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="docs\rd_batch_f2_native_depth_opaque.md">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="docs\rd_batch_f3_native_shadows.md">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="docs\rd_batch_f4_native_lighting.md">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="docs\rd_batch_f5_motion_vectors.md">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="docs\rd_batch_f6_scene_integrations.md">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="docs\rd_batch_f7_multiview_lifecycle.md">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="docs\rd_batch_f8_consolidation.md">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="docs\rd_batch_g_editor_integration.md">
       <Filter>docs</Filter>
     </None>
     <None Include="docs\rd_codex_handoff.md">

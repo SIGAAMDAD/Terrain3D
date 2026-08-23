@@ -23,6 +23,7 @@ public:
 	Terrain3DRdCompositorEffect( void );
 	void setCoordinator( Terrain3DRenderCoordinator *pCoordinator );
 	void shutdownRendererOnRenderThread( void );
+	void renderPreviewOnRenderThread( void );
 	void _render_callback( int32_t nEffectCallbackType, godot::RenderData *pRenderData ) override;
 };
 
