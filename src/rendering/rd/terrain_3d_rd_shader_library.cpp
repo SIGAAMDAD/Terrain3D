@@ -39,7 +39,7 @@ Ref<RDShaderSPIRV> Terrain3DRdShaderLibrary::loadShader( const String &rPath, co
 bool Terrain3DRdShaderLibrary::load( void ) {
 	clear();
 	static const char *const version_names[T3D_RD_FORWARD_SHADER_VARIANT_MAX] = {
-		"color", "color_specular", "color_motion", "color_specular_motion",
+		"color_native", "color_specular", "color_motion", "color_specular_motion",
 		"depth", "depth_normal_roughness", "depth_normal_roughness_voxel_gi",
 	};
 	static const char *const terrain_paths[3] = {
@@ -53,16 +53,18 @@ bool Terrain3DRdShaderLibrary::load( void ) {
 			if ( m_forward.m_szTerrain[tier][variant].is_null() ) return false;
 		}
 	}
-	m_near = m_forward.m_szTerrain[0][T3D_RD_FORWARD_SHADER_COLOR];
-	m_middle = m_forward.m_szTerrain[1][T3D_RD_FORWARD_SHADER_COLOR];
-	m_far = m_forward.m_szTerrain[2][T3D_RD_FORWARD_SHADER_COLOR];
+	m_near = loadShader( terrain_paths[0], StringName( "color" ) );
+	m_middle = loadShader( terrain_paths[1], StringName( "color" ) );
+	m_far = loadShader( terrain_paths[2], StringName( "color" ) );
+	if ( m_near.is_null() || m_middle.is_null() || m_far.is_null() ) return false;
 	m_cull = loadShader( "res://addons/terrain_3d/rd/terrain_cull.glsl" );
 	if ( m_cull.is_null() ) return false;
 	for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant ) {
 		m_forward.m_szInstances[variant] = loadShader( "res://addons/terrain_3d/rd/terrain_instances.glsl", StringName( version_names[variant] ) );
 		if ( m_forward.m_szInstances[variant].is_null() ) return false;
 	}
-	m_instances = m_forward.m_szInstances[T3D_RD_FORWARD_SHADER_COLOR];
+	m_instances = loadShader( "res://addons/terrain_3d/rd/terrain_instances.glsl", StringName( "color" ) );
+	if ( m_instances.is_null() ) return false;
 	m_hlodCull = loadShader( "res://addons/terrain_3d/rd/terrain_hlod_cull.glsl" );
 	if ( m_hlodCull.is_null() ) return false;
 	m_lastError = String();

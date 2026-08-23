@@ -95,7 +95,7 @@ typedef enum t3dRdNativeProxyMode_e {
 	T3D_RD_NATIVE_PROXY_FULL = 2,
 } t3dRdNativeProxyMode_t;
 
-static constexpr uint32_t s_nRdForwardBridgeAbiVersion = 3u;
+static constexpr uint32_t s_nRdForwardBridgeAbiVersion = 4u;
 static constexpr uint32_t s_nRdForwardMaxViews = 2u;
 
 typedef enum t3dRdForwardCallbackPhase_e {
@@ -181,6 +181,14 @@ typedef struct t3dRdForwardPassContext_s {
 	bool m_bShadowDualParaboloidFlip = false;
 	uint32_t m_nClusterSize = 0u;
 	uint32_t m_nClusterMaxElements = 0u;
+	uint32_t m_nClusterShift = 0u;
+	uint32_t m_nClusterWidth = 0u;
+	uint32_t m_nClusterTypeSize = 0u;
+	uint32_t m_nClusterMaxElementsDiv32 = 0u;
+	uint32_t m_nDirectionalLightCount = 0u;
+	bool m_bDirectionalLightSoftShadows = false;
+	float m_fCameraZNear = 0.0f;
+	float m_fCameraZFar = 0.0f;
 	RID m_hNativeFramebuffer;
 	RID m_hDirectionalLightBuffer;
 	RID m_hOmniLightBuffer;

@@ -56,7 +56,8 @@ static bool t3dRdAdoptResource( Terrain3DRdContext &rContext,
 }
 
 Terrain3DRdClipmapRenderer::Terrain3DRdClipmapRenderer( void ) :
-	m_context( Terrain3DRdContext::getShared() ) {}
+	m_context( Terrain3DRdContext::getShared() ),
+	m_forwardLighting( m_context ) {}
 
 Terrain3DRdClipmapRenderer::~Terrain3DRdClipmapRenderer( void ) { shutdown(); }
 
@@ -160,8 +161,7 @@ bool Terrain3DRdClipmapRenderer::ensureForwardShaders( const t3dRdForwardShaderB
 	RenderingDevice *const rd = m_context.getDevice();
 	if ( !rd ) return false;
 	for ( uint32_t tier = 0u; tier < 3u; ++tier ) {
-		m_hszForwardShaders[tier][T3D_RD_FORWARD_SHADER_COLOR] = m_hszShaders[tier];
-		for ( uint32_t variant = 1u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant ) {
+		for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant ) {
 			if ( m_hszForwardShaders[tier][variant].is_valid() ) continue;
 			const Ref<RDShaderSPIRV> spirv = rShaders.m_szTerrain[tier][variant];
 			if ( spirv.is_null() ) {
@@ -862,6 +862,7 @@ bool Terrain3DRdClipmapRenderer::initialize( const Ref<RDShaderSPIRV> &rNear,
 void Terrain3DRdClipmapRenderer::shutdown( void ) {
 	std::lock_guard<std::mutex> state_lock( m_resourceStateMutex );
 	for ( t3dRdViewState_t &state : m_szViewStates ) freeViewState( state );
+	m_forwardLighting.shutdown();
 	freeForwardPipelines();
 	freeUniformSets();
 	m_szTopology[LOD0_MESH].releaseGpu( m_context );
@@ -881,7 +882,7 @@ void Terrain3DRdClipmapRenderer::shutdown( void ) {
 	m_context.freeResource( m_hCullPipeline );
 	m_context.freeResource( m_hCullShader );
 	for ( uint32_t tier = 0u; tier < 3u; ++tier ) {
-		for ( uint32_t variant = 1u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant )
+		for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant )
 			m_context.freeResource( m_hszForwardShaders[tier][variant] );
 	}
 	for ( RID &shader : m_hszShaders ) m_context.freeResource( shader );
@@ -1467,6 +1468,19 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassConte
 		m_nForwardPreparedSnapshotGeneration = rSnapshot.m_nPublicationGeneration;
 		m_forwardPreparedCullPassKind = rContext.m_passKind;
 	}
+	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE ) {
+		if ( !m_forwardLighting.prepare( rContext, rSnapshot.m_nRenderLayers ) ) {
+			setError( String( "Failed to prepare Terrain3D Forward+ native lighting: " ) +
+					String( m_forwardLighting.getDiagnostics().get( "forward_light_last_error", "unknown" ) ) );
+			return false;
+		}
+		for ( uint32_t tier = 0u; tier < 3u; ++tier ) {
+			if ( !m_forwardLighting.ensureSet( m_hszForwardShaders[tier][variant] ).is_valid() ) {
+				setError( "Failed to cache Terrain3D Forward+ terrain lighting descriptor" );
+				return false;
+			}
+		}
+	}
 	if ( !ensureForwardPipelines( rContext, variant ) ) return false;
 	clearError();
 	return true;
@@ -1491,6 +1505,11 @@ bool Terrain3DRdClipmapRenderer::drawForwardView( const t3dRdForwardPassContext_
 		const Terrain3DRdTopology &topology = group == T3D_RD_DRAW_GROUP_LOD0_NEAR ? m_szTopology[LOD0_MESH] : m_szTopology[OUTER_RING_MESH];
 		rd->draw_list_bind_render_pipeline( draw_list, entry->m_hszPipelines[tier] );
 		rd->draw_list_bind_uniform_set( draw_list, m_hszRasterUniformSets[tier], 0u );
+		if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE ) {
+			const RID lighting_set = m_forwardLighting.getSet( m_hszForwardShaders[tier][variant] );
+			if ( !lighting_set.is_valid() ) return false;
+			rd->draw_list_bind_uniform_set( draw_list, lighting_set, 2u );
+		}
 		rd->draw_list_bind_vertex_array( draw_list, topology.getVertexArray() );
 		rd->draw_list_bind_index_array( draw_list, topology.getIndexArray() );
 		if ( direct ) {
@@ -1575,6 +1594,7 @@ Dictionary Terrain3DRdClipmapRenderer::getDiagnostics( void ) const {
 	result["gpu_culling"] = m_bGpuCullingReady.load( std::memory_order_acquire );
 	result["fallback_displacement_texture"] = m_hFallbackDisplacementTexture.is_valid();
 	result["max_views"] = ( int64_t )( s_nMaxViews );
+	result["forward_lighting"] = m_forwardLighting.getDiagnostics();
 	result["last_error"] = getLastError();
 	return result;
 }

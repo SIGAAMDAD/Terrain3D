@@ -594,9 +594,9 @@ def rd_batch_f1_forward_bridge_check() -> bool:
     )
 
     checks += [
-        ("bridge ABI is synchronized on extension side", "s_nBridgeAbiVersion = 3u" in bridge_h and "s_nRdForwardBridgeAbiVersion = 3u" in types),
+        ("bridge ABI is synchronized on extension side", "s_nBridgeAbiVersion = 4u" in bridge_h and "s_nRdForwardBridgeAbiVersion = 4u" in types),
         ("engine singleton name fixed", 's_pszEngineSingletonName = "Terrain3DForwardPlusBridge"' in bridge_h and "class Terrain3DForwardPlusBridge" in patch),
-        ("engine ABI exposes required lifecycle API", all(token in patch for token in engine_methods) and "ABI_VERSION = 3" in patch),
+        ("engine ABI exposes required lifecycle API", all(token in patch for token in engine_methods) and "ABI_VERSION = 4" in patch),
         ("engine callback slot is atomic", "std::atomic<CallbackSlot *> callback_slot" in patch and "callback_slot.load(std::memory_order_acquire)" in patch),
         ("engine callback reclamation is reader-safe", "callback_readers.fetch_add" in patch and "callback_readers.fetch_sub" in patch and "callback_readers.load" in patch),
         ("engine callback invocation is synchronous", "slot->callable.call(p_packet)" in patch and "call_deferred" not in patch),
@@ -725,7 +725,7 @@ def rd_batch_f3_native_shadow_check() -> bool:
     patch = (REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch").read_text(encoding="utf-8", errors="ignore")
     ledger = (REPO / "docs" / "rd_contract_ledger.tsv").read_text(encoding="utf-8", errors="ignore")
     checks = [
-        ("ABI 3 is matched on engine and extension sides", "s_nRdForwardBridgeAbiVersion = 3u" in types and "ABI_VERSION = 3" in patch),
+        ("current ABI retains F3 shadow packet on engine and extension sides", "s_nRdForwardBridgeAbiVersion = 4u" in types and "ABI_VERSION = 4" in patch),
         ("shadow packet carries exact light/cascade identity", all(x in patch for x in ("shadow_light_instance", "shadow_pass_index", "shadow_light_type")) and all(x in bridge for x in ('StringName( "shadow_light_instance" )', 'StringName( "shadow_pass_index" )'))),
         ("shadow packet carries masks/bias/range/atlas metadata", all(x in patch for x in ("shadow_caster_mask", "shadow_light_cull_mask", "shadow_bias", "shadow_normal_bias", "shadow_bias_scale", "shadow_range_begin", "shadow_range", "shadow_atlas_rect", "shadow_atlas_size"))),
         ("shadow VP uses exact light projection and transform", "p_projection * shadow_view" in patch),
@@ -753,6 +753,68 @@ def rd_batch_f3_native_shadow_check() -> bool:
     print(f"OK Batch F3 native shadow contract: {len(checks)}/{len(checks)} passed")
     return True
 
+
+
+def rd_batch_f4_native_lighting_check() -> bool:
+    rd = REPO / "src" / "rendering" / "rd"
+    types = (rd / "terrain_3d_rd_types.h").read_text(encoding="utf-8", errors="ignore")
+    bridge_h = (rd / "terrain_3d_rd_forward_plus_bridge.h").read_text(encoding="utf-8", errors="ignore")
+    bridge = (rd / "terrain_3d_rd_forward_plus_bridge.cpp").read_text(encoding="utf-8", errors="ignore")
+    lighting_h = (rd / "terrain_3d_rd_forward_lighting.h").read_text(encoding="utf-8", errors="ignore")
+    lighting = (rd / "terrain_3d_rd_forward_lighting.cpp").read_text(encoding="utf-8", errors="ignore")
+    clip = (rd / "terrain_3d_rd_clipmap_renderer.cpp").read_text(encoding="utf-8", errors="ignore")
+    inst = (rd / "terrain_3d_rd_instance_renderer.cpp").read_text(encoding="utf-8", errors="ignore")
+    shader_lib = (rd / "terrain_3d_rd_shader_library.cpp").read_text(encoding="utf-8", errors="ignore")
+    include = (REPO / "project" / "addons" / "terrain_3d" / "rd" / "terrain_forward_lighting_inc.glsl").read_text(encoding="utf-8", errors="ignore")
+    terrain = [(REPO / "project" / "addons" / "terrain_3d" / "rd" / f"terrain_clipmap_{tier}.glsl").read_text(encoding="utf-8", errors="ignore") for tier in ("near", "middle", "far")]
+    instance_shader = (REPO / "project" / "addons" / "terrain_3d" / "rd" / "terrain_instances.glsl").read_text(encoding="utf-8", errors="ignore")
+    patch = (REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch").read_text(encoding="utf-8", errors="ignore")
+    ledger = (REPO / "docs" / "rd_contract_ledger.tsv").read_text(encoding="utf-8", errors="ignore")
+    vcx = (REPO / "Terrain3D.vcxproj").read_text(encoding="utf-8", errors="ignore")
+    filters = (REPO / "Terrain3D.vcxproj.filters").read_text(encoding="utf-8", errors="ignore")
+    exact_cluster = all(token in include for token in (
+        "cluster_pos = uvec2(gl_FragCoord.xy) >> cluster_shift",
+        "(cluster_width * cluster_pos.y + cluster_pos.x) * stride",
+        "item_min = item_min_max & 0xffffu",
+        "item_max = item_min_max >> 16u",
+        "item_from = min(item_min >> 5u, max_words)",
+        "t3d_cluster_range_mask(word, item_min, item_max)",
+        "cluster_type_size * type_index",
+    ))
+    checks = [
+        ("ABI 4 is synchronized for F4", "s_nRdForwardBridgeAbiVersion = 4u" in types and "s_nBridgeAbiVersion = 4u" in bridge_h and "ABI_VERSION = 4" in patch),
+        ("bridge exposes exact native cluster metadata", all(x in types for x in ("m_nClusterShift", "m_nClusterWidth", "m_nClusterTypeSize", "m_nClusterMaxElementsDiv32")) and all(x in patch for x in ("cluster_shift", "cluster_width", "cluster_type_size", "cluster_max_elements_div_32"))),
+        ("bridge exposes directional count and camera depth range", all(x in types for x in ("m_nDirectionalLightCount", "m_bDirectionalLightSoftShadows", "m_fCameraZNear", "m_fCameraZFar")) and all(x in bridge for x in ("directional_light_count", "directional_light_soft_shadows", "camera_z_near", "camera_z_far"))),
+        ("native directional/omni/spot/area/cluster buffers are borrowed", all(x in lighting for x in ("m_hDirectionalLightBuffer", "m_hOmniLightBuffer", "m_hSpotLightBuffer", "m_hAreaLightBuffer", "m_hClusterBuffer")) and "registerResource( rContext.m_h" not in lighting),
+        ("lighting descriptors are cached by native RID key", "t3dRdForwardLightKey_t" in lighting_h and "if ( !m_bKeyValid || !( key == m_key ) )" in lighting and "freeSets();" in lighting),
+        ("descriptor creation is outside native submit bodies", "uniform_set_create" in lighting and "uniform_set_create" not in clip[clip.find("bool Terrain3DRdClipmapRenderer::drawForwardView"):clip.find("bool Terrain3DRdClipmapRenderer::renderForwardPass")] and "uniform_set_create" not in inst[inst.find("bool Terrain3DRdInstanceRenderer::drawForwardView"):inst.find("bool Terrain3DRdInstanceRenderer::renderForwardPass")]),
+        ("terrain and instance/HLOD bind native lighting set 2", "draw_list_bind_uniform_set( draw_list, lighting_set, 2u )" in clip and "draw_list_bind_uniform_set( draw_list, lighting_set, 2u )" in inst),
+        ("native color shaders are isolated from diagnostic color", "color_native" in shader_lib and all('color_native = "#define T3D_FORWARD_NATIVE_LIGHTING"' in sh for sh in terrain + [instance_shader])),
+        ("shared shader mirrors Godot native light structs", all(x in include for x in ("T3DNativeLightData", "T3DNativeDirectionalLightData", "shadow_matrix1", "shadow_split_offsets", "atlas_rect", "area_width", "area_height", "cone_attenuation", "specular_amount", "mask"))),
+        ("Godot 4.7.1 cluster addressing is implemented", exact_cluster),
+        ("cluster item words are bounds-clamped", "min(item_min >> 5u, max_words)" in include and "min(item_max == 0u" in include and "cluster_pos.y >= cluster_height" in include),
+        ("directional light comes from native buffer", "t3d_directional_lights.data[i]" in include and "light.color * light.energy" in include),
+        ("omni lights use native range/attenuation and clustered membership", "t3d_omni_lights.data[light_index]" in include and "t3d_native_attenuation" in include),
+        ("spot lights use native cone/range/attenuation", "t3d_spot_lights.data[light_index]" in include and "spot_rim" in include and "light.cone_attenuation" in include),
+        ("area lights use native one-sided rectangle/closest-point behavior", all(x in include for x in ("t3d_area_lights.data[light_index]", "dot(light.direction, view_position - light.position) <= 0.0", "closest_point = light.position", "light.inv_radius", "width_length * height_length"))),
+        ("directional shadows use native cascades/bias/opacity/sampler", all(x in include for x in ("t3d_directional_shadow", "shadow_split_offsets", "shadow_normal_bias", "shadow_opacity", "t3d_directional_shadow_atlas", "sampler2DShadow"))),
+        ("omni and spot shadows use native atlas/bias representation", all(x in include for x in ("t3d_omni_shadow", "flip_offset = light.direction.xy", "local_normal = normalize(mat3(light.shadow_matrix) * view_normal)", "1.0 - abs(dot(local_normal, shadow_dir))", "t3d_spot_shadow", "light.atlas_rect", "light.shadow_matrix"))),
+        ("area shadow receiving follows native dual-paraboloid representation", "t3d_area_shadow" in include and "light.cone_attenuation" in include and "light.soft_shadow_size > 0.0" in include),
+        ("surface/light masks gate all native contributions", "(light.mask & surface_mask) == 0u" in include and "push_data.visibility_layers" in instance_shader and "m_nRenderLayers" in clip),
+        ("terrain keeps ambient/AO/fog/material response", all("frame_data.light_direction_ambient.w * ao" in sh and "apply_fog(lit)" in sh and "material.roughness" in sh and "material.metallic" in sh for sh in terrain)),
+        ("instance hardcoded light is diagnostic-only", "#ifdef T3D_FORWARD_NATIVE_LIGHTING" in instance_shader and "debug_light_direction" in instance_shader and "t3d_forward_direct_lighting" in instance_shader),
+        ("regular instances and HLOD share the native lighting shader path", "m_drawPackets" in inst and "T3D_RD_INSTANCE_HLOD" in inst and "m_hszForwardShaders[variant]" in inst),
+        ("F4 lighting adapter is in Windows project files", "terrain_3d_rd_forward_lighting.cpp" in vcx and "terrain_3d_rd_forward_lighting.h" in vcx and "terrain_3d_rd_forward_lighting.cpp" in filters),
+        ("F4 ledger records direct-light convergence without preempting F6 lightmap/GI work", "18\tLighting\tF\tpartial" in ledger and "F6 still owns required lightmap/GI integration" in ledger),
+        ("engine patch remains syntactically parseable", run_quiet(["git", "apply", "--stat", str(REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch")], label="batch_f4_patch_parse")),
+    ]
+    failed = [label for label, ok in checks if not ok]
+    if failed:
+        for label in failed: print(f"FAIL Batch F4 native lighting contract: {label}")
+        print(f"Batch F4 native lighting contract: {len(checks)-len(failed)}/{len(checks)} passed")
+        return False
+    print(f"OK Batch F4 native lighting contract: {len(checks)}/{len(checks)} passed")
+    return True
 
 def iter_scan_files() -> list[Path]:
     files: list[Path] = []
@@ -1261,7 +1323,7 @@ def git_fsck() -> bool:
 
 
 def validate_fast(static_only: bool = False) -> int:
-    checks = [branch_check(), reference_check(), diff_check(), build_contract_check(), rd_shader_abi_check(), rd_batch_c_material_check(), rd_batch_d_instance_check(), rd_batch_e_hlod_check(), rd_batch_f1_forward_bridge_check(), rd_batch_f2_native_depth_opaque_check(), rd_batch_f3_native_shadow_check(), audit_symbols(strict_growth=True)]
+    checks = [branch_check(), reference_check(), diff_check(), build_contract_check(), rd_shader_abi_check(), rd_batch_c_material_check(), rd_batch_d_instance_check(), rd_batch_e_hlod_check(), rd_batch_f1_forward_bridge_check(), rd_batch_f2_native_depth_opaque_check(), rd_batch_f3_native_shadow_check(), rd_batch_f4_native_lighting_check(), audit_symbols(strict_growth=True)]
     if not static_only:
         checks.append(build_extension("editor"))
     return 0 if all(checks) else 1
@@ -1280,6 +1342,7 @@ def validate_full() -> int:
         rd_batch_f1_forward_bridge_check(),
         rd_batch_f2_native_depth_opaque_check(),
         rd_batch_f3_native_shadow_check(),
+        rd_batch_f4_native_lighting_check(),
         audit_symbols(strict_growth=True),
         build_extension("editor"),
         godot_headless_import(),
@@ -1303,6 +1366,7 @@ def validate_final() -> int:
         rd_batch_f1_forward_bridge_check(),
         rd_batch_f2_native_depth_opaque_check(),
         rd_batch_f3_native_shadow_check(),
+        rd_batch_f4_native_lighting_check(),
         audit_symbols(strict_growth=True, final=True),
         build_extension("editor"),
         build_extension("template_release"),

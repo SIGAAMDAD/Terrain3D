@@ -337,6 +337,25 @@ bool Terrain3DRdForwardPlusBridgeAdapter::parsePacket(
 		return false;
 	}
 
+	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "cluster_shift" ), value, rError ) || value < 0 ) return false;
+	rContext.m_nClusterShift = ( uint32_t )( value );
+	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "cluster_width" ), value, rError ) || value < 0 ) return false;
+	rContext.m_nClusterWidth = ( uint32_t )( value );
+	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "cluster_type_size" ), value, rError ) || value < 0 ) return false;
+	rContext.m_nClusterTypeSize = ( uint32_t )( value );
+	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "cluster_max_elements_div_32" ), value, rError ) || value < 0 ) return false;
+	rContext.m_nClusterMaxElementsDiv32 = ( uint32_t )( value );
+	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "directional_light_count" ), value, rError ) || value < 0 ) return false;
+	rContext.m_nDirectionalLightCount = ( uint32_t )( value );
+	const Variant directional_soft_shadow_value = rPacket.get( StringName( "directional_light_soft_shadows" ), Variant() );
+	if ( directional_soft_shadow_value.get_type() != Variant::BOOL ) {
+		rError = "Forward+ bridge packet directional_light_soft_shadows is missing or malformed";
+		return false;
+	}
+	rContext.m_bDirectionalLightSoftShadows = ( bool )( directional_soft_shadow_value );
+	if ( !t3dRdForwardReadRequiredFloat( rPacket, StringName( "camera_z_near" ), rContext.m_fCameraZNear, rError ) ||
+			!t3dRdForwardReadRequiredFloat( rPacket, StringName( "camera_z_far" ), rContext.m_fCameraZFar, rError ) ) return false;
+
 	rContext.m_hNativeFramebuffer = t3dRdForwardReadRid( rPacket, StringName( "native_framebuffer" ) );
 	rContext.m_hDirectionalLightBuffer = t3dRdForwardReadRid( rPacket, StringName( "directional_light_buffer" ) );
 	rContext.m_hOmniLightBuffer = t3dRdForwardReadRid( rPacket, StringName( "omni_light_buffer" ) );

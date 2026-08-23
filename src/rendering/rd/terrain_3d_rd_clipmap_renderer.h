@@ -8,6 +8,7 @@
 #include "rendering/rd/terrain_3d_rd_context.h"
 #include "rendering/rd/terrain_3d_rd_culling.h"
 #include "rendering/rd/terrain_3d_rd_forward_shader_bundle.h"
+#include "rendering/rd/terrain_3d_rd_forward_lighting.h"
 #include "rendering/rd/terrain_3d_rd_topology.h"
 #include "rendering/rd/terrain_3d_rd_types.h"
 
@@ -57,6 +58,7 @@ private:
 	} t3dRdForwardPipelineEntry_t;
 
 	Terrain3DRdContext &m_context;
+	Terrain3DRdForwardLighting m_forwardLighting;
 	Terrain3DRdTopology m_szTopology[MESH_TYPE_COUNT];
 	RID m_hszShaders[3];
 	RID m_hszForwardShaders[3][T3D_RD_FORWARD_SHADER_VARIANT_MAX];

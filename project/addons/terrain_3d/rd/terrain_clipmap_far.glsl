@@ -1,8 +1,9 @@
 #[versions]
 color = "";
-color_specular = "#define T3D_FORWARD_SPECULAR";
-color_motion = "#define T3D_FORWARD_MOTION";
-color_specular_motion = "#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION";
+color_native = "#define T3D_FORWARD_NATIVE_LIGHTING";
+color_specular = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR";
+color_motion = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION";
+color_specular_motion = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION";
 depth = "#define T3D_FORWARD_DEPTH";
 depth_normal_roughness = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS";
 depth_normal_roughness_voxel_gi = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_FORWARD_VOXEL_GI";
@@ -441,6 +442,7 @@ void main() {
 #[fragment]
 #version 450
 #VERSION_DEFINES
+#include "terrain_forward_lighting_inc.glsl"
 #define T3D_TIER 2
 #define T3D_DIV_255 0.0039215686274509803921568627451
 #define T3D_TAU_16 0.39269908169872415480783042290994
@@ -1085,26 +1087,26 @@ vec3 apply_surface_normal(vec3 terrain_normal, vec3 tangent_normal) {
 }
 vec3 light_material(vec3 albedo, vec3 normal, float roughness, float metallic, float ao, TierMaterialConfig tier_config) {
     if (tier_config.lighting_model == 0u) return albedo;
+    vec3 ambient = albedo * frame_data.light_direction_ambient.w * ao;
+#ifdef T3D_FORWARD_NATIVE_LIGHTING
+    float specular_scale = (material_config.output_flags & T3D_OUTPUT_SPECULAR) != 0u ? 1.0 : 0.0;
+    vec3 direct = t3d_forward_direct_lighting(albedo, world_position, normalize(normal), frame_data.view_matrix,
+        frame_data.camera_params.xyz, roughness, metallic, specular_scale, t3d_forward_light_frame.scene_params.y,
+        tier_config.lighting_model, true);
+    return ambient + direct;
+#else
     vec3 light_dir = normalize(-frame_data.light_direction_ambient.xyz);
     float ndotl = max(dot(normal, light_dir), 0.0);
-    vec3 ambient = albedo * frame_data.light_direction_ambient.w * ao;
     vec3 diffuse = albedo * frame_data.light_color.rgb * ndotl;
     if (tier_config.lighting_model == 1u) return ambient + diffuse;
     vec3 view_dir = normalize(frame_data.camera_params.xyz - world_position);
     vec3 half_dir = normalize(light_dir + view_dir);
     float gloss = max(1.0 - roughness, 0.0);
-    float spec_power = mix(4.0, 128.0, gloss * gloss);
-    float specular_term = pow(max(dot(normal, half_dir), 0.0), spec_power) * gloss;
+    float specular_term = pow(max(dot(normal, half_dir), 0.0), mix(4.0, 128.0, gloss * gloss)) * gloss;
     if ((material_config.output_flags & T3D_OUTPUT_SPECULAR) == 0u) specular_term = 0.0;
-    if (tier_config.lighting_model == 2u) {
-        vec3 specular_color = mix(vec3(0.04), albedo, metallic);
-        return ambient + diffuse * (1.0 - metallic * 0.6) + specular_color * specular_term * frame_data.light_color.rgb;
-    }
-    vec3 f0 = mix(vec3(0.04), albedo, metallic);
-    float fresnel = pow(1.0 - max(dot(normal, view_dir), 0.0), 5.0);
-    vec3 F = mix(f0, vec3(1.0), fresnel);
-    vec3 kd = (vec3(1.0) - F) * (1.0 - metallic);
-    return ambient + (kd * albedo / 3.14159265 + F * specular_term) * frame_data.light_color.rgb * ndotl;
+    vec3 specular_color = mix(vec3(0.04), albedo, metallic);
+    return ambient + diffuse * (1.0 - metallic * 0.6) + specular_color * specular_term * frame_data.light_color.rgb;
+#endif
 }
 vec3 apply_fog(vec3 lit) {
     float fog_density = max(frame_data.fog_params.w, 0.0);

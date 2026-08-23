@@ -6,6 +6,7 @@
 
 #include "rendering/rd/terrain_3d_rd_mesh_cache.h"
 #include "rendering/rd/terrain_3d_rd_forward_shader_bundle.h"
+#include "rendering/rd/terrain_3d_rd_forward_lighting.h"
 #include "rendering/rd/terrain_3d_rd_types.h"
 
 #include <godot_cpp/classes/rd_shader_spirv.hpp>
@@ -72,6 +73,7 @@ private:
 	} t3dRdInstanceForwardPipelineEntry_t;
 
 	Terrain3DRdContext &m_context;
+	Terrain3DRdForwardLighting m_forwardLighting;
 	Terrain3DRdMeshCache m_meshCache;
 	t3dRdInstanceViewState_t m_szViewStates[s_nMaxViews]{};
 	RID m_hShader;

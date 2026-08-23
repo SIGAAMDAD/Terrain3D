@@ -22,7 +22,7 @@ index 0000000000..8ff7f0f001
 +	GDCLASS(Terrain3DForwardPlusBridge, Object);
 +
 +public:
-+	static constexpr int ABI_VERSION = 3;
++	static constexpr int ABI_VERSION = 4;
 +
 +	enum PassKind {
 +		PASS_INVALID = 0,
@@ -293,7 +293,7 @@ diff --git a/servers/rendering/renderer_rd/forward_clustered/render_forward_clus
 index 370d3b66ce..f100000003 100644
 --- a/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp
 +++ b/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp
-@@ -611,11 +611,122 @@ void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_lis
+@@ -611,11 +611,130 @@ void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_lis
  	}
  }
  
@@ -368,6 +368,14 @@ index 370d3b66ce..f100000003 100644
 +
 +	packet["cluster_size"] = int64_t(p_render_data != nullptr ? p_render_data->cluster_size : 0);
 +	packet["cluster_max_elements"] = int64_t(p_render_data != nullptr ? p_render_data->cluster_max_elements : 0);
++	packet["cluster_shift"] = int64_t(p_render_data != nullptr ? scene_state.ubo.cluster_shift : 0);
++	packet["cluster_width"] = int64_t(p_render_data != nullptr ? scene_state.ubo.cluster_width : 0);
++	packet["cluster_type_size"] = int64_t(p_render_data != nullptr ? scene_state.ubo.cluster_type_size : 0);
++	packet["cluster_max_elements_div_32"] = int64_t(p_render_data != nullptr ? scene_state.ubo.max_cluster_element_count_div_32 : 0);
++	packet["directional_light_count"] = int64_t(p_render_data != nullptr ? p_render_data->directional_light_count : 0);
++	packet["directional_light_soft_shadows"] = p_render_data != nullptr && p_render_data->directional_light_soft_shadows;
++	packet["camera_z_near"] = p_render_data != nullptr && p_render_data->scene_data != nullptr ? p_render_data->scene_data->z_near : 0.0;
++	packet["camera_z_far"] = p_render_data != nullptr && p_render_data->scene_data != nullptr ? p_render_data->scene_data->z_far : 0.0;
 +	packet["cluster_buffer"] = p_render_data != nullptr ? p_render_data->cluster_buffer : RID();
 +
 +	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();

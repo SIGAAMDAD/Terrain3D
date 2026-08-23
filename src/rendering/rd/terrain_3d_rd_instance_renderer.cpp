@@ -29,13 +29,17 @@ typedef struct alignas( 16 ) t3dRdInstanceFrame_s {
 } t3dRdInstanceFrame_t;
 static_assert( sizeof( t3dRdInstanceFrame_t ) == 144u, "Instance frame ABI changed" );
 
-typedef struct t3dRdInstancePush_s {
+typedef struct alignas( 16 ) t3dRdInstancePush_s {
 	uint32_t m_nMaterial = UINT16_MAX;
 	uint32_t m_nOverlayMaterial = UINT16_MAX;
 	uint32_t m_nVisibleBase = 0u;
 	uint32_t m_nFlags = 0u;
+	uint32_t m_nVisibilityLayers = UINT32_MAX;
+	uint32_t m_nReserved0 = 0u;
+	uint32_t m_nReserved1 = 0u;
+	uint32_t m_nReserved2 = 0u;
 } t3dRdInstancePush_t;
-static_assert( sizeof( t3dRdInstancePush_t ) == 16u, "Instance push ABI changed" );
+static_assert( sizeof( t3dRdInstancePush_t ) == 32u, "Instance push ABI changed" );
 
 typedef struct t3dRdHlodCullPush_s {
 	uint32_t m_nDescriptorCount = 0u;
@@ -79,7 +83,9 @@ uint32_t t3dRdNextCapacity( const uint32_t nRequired, const uint32_t nMinimum ) 
 }
 } // namespace
 
-Terrain3DRdInstanceRenderer::Terrain3DRdInstanceRenderer( void ) : m_context( Terrain3DRdContext::getShared() ) {}
+Terrain3DRdInstanceRenderer::Terrain3DRdInstanceRenderer( void ) :
+	m_context( Terrain3DRdContext::getShared() ),
+	m_forwardLighting( m_context ) {}
 Terrain3DRdInstanceRenderer::~Terrain3DRdInstanceRenderer( void ) { shutdown(); }
 
 void Terrain3DRdInstanceRenderer::setError( const String &rError ) { m_lastError = rError; }
@@ -95,8 +101,7 @@ bool Terrain3DRdInstanceRenderer::ensureShader( const Ref<RDShaderSPIRV> &rShade
 bool Terrain3DRdInstanceRenderer::ensureForwardShaders( const t3dRdForwardShaderBundle_t &rShaders ) {
 	RenderingDevice *const rd = m_context.getDevice();
 	if ( !rd ) return false;
-	m_hszForwardShaders[T3D_RD_FORWARD_SHADER_COLOR] = m_hShader;
-	for ( uint32_t variant = 1u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant ) {
+	for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant ) {
 		if ( m_hszForwardShaders[variant].is_valid() ) continue;
 		const Ref<RDShaderSPIRV> spirv = rShaders.m_szInstances[variant];
 		if ( spirv.is_null() ) { setError( "Missing Terrain3D Forward+ instance shader variant" ); return false; }
@@ -898,7 +903,7 @@ bool Terrain3DRdInstanceRenderer::drawView( const uint32_t nView,
 		rd->draw_list_bind_uniform_set( list, material_set, 1u );
 		const uint32_t draw_flags = depth_prepass ? packet.m_nFlags | T3D_RD_INSTANCE_DEPTH_PREPASS_PASS : packet.m_nFlags;
 		t3dRdInstancePush_t push{ packet.m_nMaterial, packet.m_nOverlayMaterial,
-				m_bDirectDrawDebug ? packet.m_nFirstVisible : 0u, draw_flags };
+				m_bDirectDrawDebug ? packet.m_nFirstVisible : 0u, draw_flags, packet.m_nVisibilityLayers, 0u, 0u, 0u };
 		m_pushBytes.resize( sizeof( push ) );
 		std::memcpy( m_pushBytes.ptrw(), &push, sizeof( push ) );
 		rd->draw_list_set_push_constant( list, m_pushBytes, sizeof( push ) );
@@ -941,6 +946,7 @@ bool Terrain3DRdInstanceRenderer::initialize( const Ref<RDShaderSPIRV> &rShader,
 
 void Terrain3DRdInstanceRenderer::shutdown( void ) {
 	for ( t3dRdInstanceViewState_t &state : m_szViewStates ) freeViewState( state );
+	m_forwardLighting.shutdown();
 	freeForwardPipelines();
 	freeMaterialBindings();
 	m_meshCache.shutdown();
@@ -961,7 +967,7 @@ void Terrain3DRdInstanceRenderer::shutdown( void ) {
 	m_context.freeResource( m_hHlodCullDescriptorBuffer, m_nHlodDescriptorCapacityBytes );
 	m_context.freeResource( m_hHlodCullPipeline );
 	m_context.freeResource( m_hHlodCullShader );
-	for ( uint32_t variant = 1u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant ) m_context.freeResource( m_hszForwardShaders[variant] );
+	for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant ) m_context.freeResource( m_hszForwardShaders[variant] );
 	m_context.freeResource( m_hShader );
 	for ( RID &shader : m_hszForwardShaders ) shader = RID();
 	m_nInstanceCapacityBytes = m_nVisibleCapacityBytes = m_nShadowVisibleCapacityBytes = m_nMaterialCapacityBytes = m_nIndirectCapacityBytes = m_nShadowIndirectCapacityBytes = 0u;
@@ -1088,6 +1094,13 @@ bool Terrain3DRdInstanceRenderer::prepareForwardPass( const t3dRdForwardPassCont
 		setError( "Failed to update Terrain3D native Forward+ instance frame buffer" ); return false;
 	}
 	m_context.recordBufferUpdate( sizeof( frame ) );
+	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE ) {
+		if ( !m_forwardLighting.prepare( rContext, nVisibilityMask ) ||
+				!m_forwardLighting.ensureSet( m_hszForwardShaders[variant] ).is_valid() ) {
+			setError( "Failed to prepare Terrain3D Forward+ instance/HLOD native lighting" );
+			return false;
+		}
+	}
 	if ( !ensureForwardPipelines( rContext, variant ) ) return false;
 	m_bForwardPreparedHasDraws = shadow_pass ? !m_shadowPackets.empty() : !m_drawPackets.empty();
 	m_lastError = String();
@@ -1110,6 +1123,11 @@ bool Terrain3DRdInstanceRenderer::drawForwardView( const t3dRdForwardPassContext
 	const bool shadow_pass = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW;
 	const std::vector<t3dRdInstanceDrawPacket_t> &packets = shadow_pass ? m_shadowPackets : m_drawPackets;
 	rd->draw_list_bind_uniform_set( draw_list, shadow_pass ? m_hShadowUniformSet : m_hUniformSet, 0u );
+	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE ) {
+		const RID lighting_set = m_forwardLighting.getSet( m_hszForwardShaders[variant] );
+		if ( !lighting_set.is_valid() ) return false;
+		rd->draw_list_bind_uniform_set( draw_list, lighting_set, 2u );
+	}
 	rd->draw_list_bind_vertex_array( draw_list, m_meshCache.getVertexArray() );
 	uint32_t bound_pipeline = UINT32_MAX;
 	for ( uint32_t i = 0u; i < ( uint32_t )( packets.size() ); ++i ) {
@@ -1140,7 +1158,8 @@ bool Terrain3DRdInstanceRenderer::drawForwardView( const t3dRdForwardPassContext
 		if ( !material_set.is_valid() ) return false;
 		rd->draw_list_bind_uniform_set( draw_list, material_set, 1u );
 		const uint32_t draw_flags = depth_prepass ? packet.m_nFlags | T3D_RD_INSTANCE_DEPTH_PREPASS_PASS : packet.m_nFlags;
-		t3dRdInstancePush_t push{ packet.m_nMaterial, packet.m_nOverlayMaterial, m_bDirectDrawDebug ? packet.m_nFirstVisible : 0u, draw_flags };
+		t3dRdInstancePush_t push{ packet.m_nMaterial, packet.m_nOverlayMaterial, m_bDirectDrawDebug ? packet.m_nFirstVisible : 0u,
+				draw_flags, packet.m_nVisibilityLayers, 0u, 0u, 0u };
 		m_pushBytes.resize( sizeof( push ) ); std::memcpy( m_pushBytes.ptrw(), &push, sizeof( push ) );
 		rd->draw_list_set_push_constant( draw_list, m_pushBytes, sizeof( push ) );
 		if ( m_bDirectDrawDebug ) rd->draw_list_draw( draw_list, true, packet.m_nVisibleCount, 0u );
@@ -1185,6 +1204,7 @@ Dictionary Terrain3DRdInstanceRenderer::getDiagnostics( void ) const {
 	result["hlod_gpu_cull_dispatches"] = ( int64_t )( m_nHlodCullDispatches );
 	result["hlod_descriptor_capacity_bytes"] = ( int64_t )( m_nHlodDescriptorCapacityBytes );
 	result["direct_draw_debug"] = m_bDirectDrawDebug;
+	result["forward_lighting"] = m_forwardLighting.getDiagnostics();
 	result["last_error"] = m_lastError;
 	return result;
 }

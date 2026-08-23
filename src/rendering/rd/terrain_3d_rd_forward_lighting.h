@@ -1,0 +1,95 @@
+// Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
+
+#pragma once
+
+#ifndef TERRAIN3D_RD_FORWARD_LIGHTING_H
+#define TERRAIN3D_RD_FORWARD_LIGHTING_H
+
+#include "rendering/rd/terrain_3d_rd_context.h"
+#include "rendering/rd/terrain_3d_rd_types.h"
+
+#include <godot_cpp/variant/dictionary.hpp>
+#include <godot_cpp/variant/packed_byte_array.hpp>
+#include <vector>
+
+using namespace godot;
+
+// Terrain3D-owned descriptor adapter for borrowed Godot Forward+ lighting state.
+// Borrowed engine RIDs are never registered or freed here. Only the small frame
+// UBO, fallback shadow resources, and shader-specific descriptor sets are owned.
+class Terrain3DRdForwardLighting {
+private:
+	typedef struct alignas( 16 ) t3dRdForwardLightFrame_s {
+		uint32_t m_nClusterShift = 0u;
+		uint32_t m_nClusterWidth = 0u;
+		uint32_t m_nClusterTypeSize = 0u;
+		uint32_t m_nClusterMaxElementsDiv32 = 0u;
+		uint32_t m_nDirectionalLightCount = 0u;
+		uint32_t m_nDefaultSurfaceMask = UINT32_MAX;
+		uint32_t m_nShadowFlags = 0u;
+		uint32_t m_nDirectionalSoftShadows = 0u;
+		float m_fCameraZNear = 0.0f;
+		float m_fCameraZFar = 0.0f;
+		float m_fInvCameraZFar = 0.0f;
+		float m_fPadding0 = 0.0f;
+		uint32_t m_nRenderWidth = 0u;
+		uint32_t m_nRenderHeight = 0u;
+		uint32_t m_nClusterMaxElements = 0u;
+		uint32_t m_nPadding1 = 0u;
+	} t3dRdForwardLightFrame_t;
+	static_assert( sizeof( t3dRdForwardLightFrame_t ) == 64u, "Forward lighting UBO ABI changed" );
+
+	typedef struct t3dRdForwardLightKey_s {
+		RID m_hDirectional;
+		RID m_hOmni;
+		RID m_hSpot;
+		RID m_hArea;
+		RID m_hCluster;
+		RID m_hShadowAtlas;
+		RID m_hDirectionalShadowAtlas;
+		RID m_hShadowSampler;
+
+		bool operator==( const t3dRdForwardLightKey_s &rOther ) const {
+			return m_hDirectional == rOther.m_hDirectional && m_hOmni == rOther.m_hOmni &&
+					m_hSpot == rOther.m_hSpot && m_hArea == rOther.m_hArea && m_hCluster == rOther.m_hCluster &&
+					m_hShadowAtlas == rOther.m_hShadowAtlas && m_hDirectionalShadowAtlas == rOther.m_hDirectionalShadowAtlas &&
+					m_hShadowSampler == rOther.m_hShadowSampler;
+		}
+	} t3dRdForwardLightKey_t;
+
+	typedef struct t3dRdForwardLightSet_s {
+		RID m_hShader;
+		RID m_hSet;
+	} t3dRdForwardLightSet_t;
+
+	Terrain3DRdContext &m_context;
+	RID m_hFrameBuffer;
+	RID m_hFallbackShadowTexture;
+	RID m_hFallbackShadowSampler;
+	t3dRdForwardLightKey_t m_key{};
+	bool m_bKeyValid = false;
+	uint64_t m_nDeviceGeneration = 0u;
+	uint64_t m_nSetRebuilds = 0u;
+	uint64_t m_nFrameUpdates = 0u;
+	std::vector<t3dRdForwardLightSet_t> m_sets;
+	PackedByteArray m_frameBytes;
+	String m_lastError;
+
+	void setError( const String &rError );
+	bool ensureOwnedResources( void );
+	void freeSets( void );
+	RID resolveShadowTexture( const RID &rNative ) const;
+	RID resolveShadowSampler( const RID &rNative ) const;
+
+public:
+	explicit Terrain3DRdForwardLighting( Terrain3DRdContext &rContext );
+	~Terrain3DRdForwardLighting( void );
+
+	bool prepare( const t3dRdForwardPassContext_t &rContext, uint32_t nDefaultSurfaceMask );
+	RID ensureSet( const RID &rShader );
+	RID getSet( const RID &rShader ) const;
+	void shutdown( void );
+	Dictionary getDiagnostics( void ) const;
+};
+
+#endif // TERRAIN3D_RD_FORWARD_LIGHTING_H

@@ -321,6 +321,9 @@
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_forward_plus_bridge.h">
       <Filter>src\rendering\rd</Filter>
     </ClInclude>
+    <ClInclude Include="src\rendering\rd\terrain_3d_rd_forward_lighting.h">
+      <Filter>src\rendering\rd</Filter>
+    </ClInclude>
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_forward_shader_bundle.h">
       <Filter>src\rendering\rd</Filter>
     </ClInclude>
@@ -582,6 +585,9 @@
       <Filter>src\rendering\rd</Filter>
     </ClCompile>
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_forward_plus_bridge.cpp">
+      <Filter>src\rendering\rd</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\terrain_3d_rd_forward_lighting.cpp">
       <Filter>src\rendering\rd</Filter>
     </ClCompile>
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_instance_renderer.cpp">

@@ -1,8 +1,9 @@
 #[versions]
 color = "";
-color_specular = "#define T3D_FORWARD_SPECULAR";
-color_motion = "#define T3D_FORWARD_MOTION";
-color_specular_motion = "#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION";
+color_native = "#define T3D_FORWARD_NATIVE_LIGHTING";
+color_specular = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR";
+color_motion = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION";
+color_specular_motion = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION";
 depth = "#define T3D_FORWARD_DEPTH";
 depth_normal_roughness = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS";
 depth_normal_roughness_voxel_gi = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_FORWARD_VOXEL_GI";
@@ -40,6 +41,10 @@ layout(push_constant, std430) uniform InstancePush {
 	uint overlay_material_index;
 	uint visible_base;
 	uint flags;
+	uint visibility_layers;
+	uint reserved0;
+	uint reserved1;
+	uint reserved2;
 } push_data;
 
 layout(location = 0) out vec3 vertex_normal;
@@ -47,6 +52,7 @@ layout(location = 1) out vec4 vertex_tangent;
 layout(location = 2) out vec4 mesh_vertex_color;
 layout(location = 3) out vec4 instance_color;
 layout(location = 4) out vec2 vertex_uv;
+layout(location = 5) out vec3 vertex_world_position;
 
 vec3 rotate_quaternion(vec4 q, vec3 v) {
 	return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v);
@@ -76,12 +82,20 @@ void main() {
 	mesh_vertex_color = in_color;
 	instance_color = unpackUnorm4x8(record.color_rgba8);
 	vertex_uv = in_uv;
+	vertex_world_position = world_position;
 	gl_Position = frame_data.view_projection * vec4(world_position, 1.0);
 }
 
 #[fragment]
 #version 450
 #VERSION_DEFINES
+#include "terrain_forward_lighting_inc.glsl"
+
+layout(set = 0, binding = 0, std140) uniform InstanceFrameFragment {
+	mat4 view_projection;
+	mat4 view_matrix;
+	vec4 camera_position;
+} frame_data;
 
 struct InstanceMaterial {
 	vec4 albedo;
@@ -106,6 +120,10 @@ layout(push_constant, std430) uniform InstancePush {
 	uint overlay_material_index;
 	uint visible_base;
 	uint flags;
+	uint visibility_layers;
+	uint reserved0;
+	uint reserved1;
+	uint reserved2;
 } push_data;
 
 layout(location = 0) in vec3 vertex_normal;
@@ -113,6 +131,7 @@ layout(location = 1) in vec4 vertex_tangent;
 layout(location = 2) in vec4 mesh_vertex_color;
 layout(location = 3) in vec4 instance_color;
 layout(location = 4) in vec2 vertex_uv;
+layout(location = 5) in vec3 vertex_world_position;
 #ifdef T3D_FORWARD_DEPTH
 #ifdef T3D_FORWARD_NORMAL_ROUGHNESS
 layout(location = 0) out vec4 out_normal_roughness;
@@ -263,12 +282,16 @@ void main() {
 	if (unshaded) {
 		lit = final_color.rgb + emission;
 	} else {
-		vec3 light_direction = normalize(vec3(0.34, 0.83, 0.44));
-		float ndotl = max(dot(normalize(normal), light_direction), 0.0);
-		float diffuse_weight = 1.0 - metallic * 0.65;
-		float roughness_floor = mix(0.10, 0.30, roughness);
 		float ambient = (0.22 + 0.08 * roughness) * ao;
-		lit = final_color.rgb * (ambient + diffuse_weight * ndotl * (1.0 - roughness_floor)) + emission;
+#ifdef T3D_FORWARD_NATIVE_LIGHTING
+		vec3 direct = t3d_forward_direct_lighting(final_color.rgb, vertex_world_position, normalize(normal), frame_data.view_matrix,
+				frame_data.camera_position.xyz, roughness, metallic, 1.0, push_data.visibility_layers, 2u, true);
+		lit = final_color.rgb * ambient + direct + emission;
+#else
+		vec3 debug_light_direction = normalize(vec3(0.34, 0.83, 0.44));
+		float ndotl = max(dot(normalize(normal), debug_light_direction), 0.0);
+		lit = final_color.rgb * (ambient + (1.0 - metallic * 0.65) * ndotl * (1.0 - mix(0.10, 0.30, roughness))) + emission;
+#endif
 	}
 	out_color = vec4(lit, final_color.a);
 #ifdef T3D_FORWARD_SPECULAR
