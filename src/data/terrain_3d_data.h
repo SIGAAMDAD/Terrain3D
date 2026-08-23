@@ -94,7 +94,7 @@ private:
 	bool m_bStartupBulkLoad = false;
 	bool m_bSkipSlotReserveOnce = false;
 
-	// These contain the TextureArray RIDs from the RenderingServer. In bounded
+	// These contain direct RenderingDevice Texture2DArray RIDs. In bounded
 	// residency mode they hold physical cache layers rather than repository slots.
 	Terrain3DGeneratedTexture m_generatedHeightMaps;
 	Terrain3DGeneratedTexture m_generatedControlMaps;

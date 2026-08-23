@@ -19,7 +19,6 @@
 #include "streaming/terrain_3d_node_streamer.h"
 #include "streaming/terrain_3d_performance_profile.h"
 #include "streaming/terrain_3d_streaming_policy.h"
-#include "streaming/terrain_3d_upload_bridge.h"
 #include "terrain_3d.h"
 
 #include <algorithm>
@@ -293,7 +292,13 @@ void Terrain3D::invalidateComputeDisplacementRequest( void ) {
 	m_bComputeDisplacementActive.store( false, std::memory_order_release );
 	std::lock_guard<std::mutex> lock( m_computeDisplacementMutex );
 	m_computeDisplacementRequest = t3dDisplacementRequest_t{};
+	m_hComputeDisplacementTextureRd = RID();
 	++m_nComputeDisplacementRequestVersion;
+}
+
+RID Terrain3D::getComputeDisplacementTextureRid( void ) const {
+	std::lock_guard<std::mutex> lock( m_computeDisplacementMutex );
+	return m_hComputeDisplacementTextureRd;
 }
 
 void Terrain3D::queueComputeDisplacementRender( void ) {
@@ -338,14 +343,16 @@ void Terrain3D::renderUpdateComputeDisplacement( void ) {
 	{
 		std::lock_guard<std::mutex> lock( m_computeDisplacementMutex );
 		bRequestCurrent = m_nComputeDisplacementRequestVersion == request_version;
+		if ( bSuccess && bRequestCurrent && m_bComputeDisplacementEnabled.load( std::memory_order_acquire ) &&
+				!m_bComputeDisplacementTearingDown.load( std::memory_order_acquire ) ) {
+			m_hComputeDisplacementTextureRd = texture;
+		} else if ( bRequestCurrent ) {
+			m_hComputeDisplacementTextureRd = RID();
+		}
 	}
 	if ( bSuccess && bRequestCurrent && m_bComputeDisplacementEnabled.load( std::memory_order_acquire ) &&
 			!m_bComputeDisplacementTearingDown.load( std::memory_order_acquire ) ) {
-		RenderingServer *const pServer = RenderingServer::get_singleton();
-		if ( pServer ) {
-			pServer->material_set_param( request.m_hMaterialRid, "_displacement_buffer", texture );
-			m_bComputeDisplacementActive.store( true, std::memory_order_release );
-		}
+		m_bComputeDisplacementActive.store( true, std::memory_order_release );
 	} else if ( !bSuccess && !m_bComputeDisplacementTearingDown.load( std::memory_order_acquire ) ) {
 		m_bComputeDisplacementActive.store( false, std::memory_order_release );
 		m_bComputeDisplacementFailed.store( true, std::memory_order_release );
@@ -368,6 +375,10 @@ void Terrain3D::renderUpdateComputeDisplacement( void ) {
 }
 
 void Terrain3D::renderShutdownComputeDisplacement( void ) {
+	{
+		std::lock_guard<std::mutex> lock( m_computeDisplacementMutex );
+		m_hComputeDisplacementTextureRd = RID();
+	}
 	Terrain3DCompute *const pCompute = m_pData ? m_pData->getComputeBackendIfCreated() : nullptr;
 	if ( pCompute ) {
 		pCompute->shutdownDisplacementResources();
@@ -428,6 +439,7 @@ void Terrain3D::destroyDisplacementBuffer( void ) {
 	{
 		std::lock_guard<std::mutex> lock( m_computeDisplacementMutex );
 		m_computeDisplacementRequest = t3dDisplacementRequest_t{};
+		m_hComputeDisplacementTextureRd = RID();
 		++m_nComputeDisplacementRequestVersion;
 	}
 	m_bComputeDisplacementTearingDown.store( false, std::memory_order_release );

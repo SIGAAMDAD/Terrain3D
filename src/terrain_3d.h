@@ -483,8 +483,9 @@ private:
 	std::atomic_bool m_bComputeDisplacementFallbackRequested{ false };
 	std::atomic_bool m_bComputeDisplacementTearingDown{ false };
 	real_t m_fDisplacementUpdateDistance = 0.25f;
-	std::mutex m_computeDisplacementMutex;
+	mutable std::mutex m_computeDisplacementMutex;
 	t3dDisplacementRequest_t m_computeDisplacementRequest;
+	RID m_hComputeDisplacementTextureRd;
 	uint64_t m_nComputeDisplacementRequestVersion = 0u;
 
 	// Ocean Mesh
@@ -1669,6 +1670,7 @@ public:
 	EA_FORCE_INLINE bool isComputeDisplacementActive( void ) const {
 		return m_bComputeDisplacementActive.load( std::memory_order_acquire );
 	}
+	RID getComputeDisplacementTextureRid( void ) const;
 
 	// Debug View Aliases
 	EA_FORCE_INLINE void setShowCheckered( const bool bEnabled ) {

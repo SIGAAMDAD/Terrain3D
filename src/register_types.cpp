@@ -11,6 +11,7 @@
 #include "authoring/terrain_3d_erosion_settings.h"
 #include "authoring/terrain_3d_landform_baker.h"
 #include "core/terrain_3d_diagnostics.h"
+#include "core/unit_testing.h"
 #include "hlod/terrain_3d_hlod_builder.h"
 #include "hlod/terrain_3d_hlod_manifest.h"
 #include "hlod/terrain_3d_hlod_package.h"
@@ -18,11 +19,16 @@
 #include "lighting/terrain_3d_lightmap_streamer.h"
 #include "lighting/terrain_3d_region_lighting.h"
 #include "rendering/rd/terrain_3d_rd_compositor_effect.h"
+#include "rendering/rd/terrain_3d_rd_context.h"
+#include "rendering/rd/terrain_3d_rd_texture_manager.h"
 #include "register_types.h"
 #include "streaming/terrain_3d_node_streamer.h"
 #include "terrain_3d.h"
 
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/classes/os.hpp>
+
+#include <cstdlib>
 
 void t3dInitializeTerrain3DModule( ModuleInitializationLevel level ) {
 	if ( level != MODULE_INITIALIZATION_LEVEL_SCENE ) {
@@ -30,6 +36,8 @@ void t3dInitializeTerrain3DModule( ModuleInitializationLevel level ) {
 	}
 	ClassDB::register_class<Terrain3D>();
 	ClassDB::register_class<Terrain3DRdCompositorEffect>();
+	ClassDB::register_internal_class<Terrain3DRdTextureManager>();
+	Terrain3DRdTextureManager::initializeSingleton();
 	ClassDB::register_class<Terrain3DMemoryStats>();
 	ClassDB::register_class<Terrain3DShaderTierStats>();
 	ClassDB::register_class<Terrain3DCacheStats>();
@@ -56,12 +64,18 @@ void t3dInitializeTerrain3DModule( ModuleInitializationLevel level ) {
 	ClassDB::register_class<Terrain3DPackedPBRTexture>();
 	ClassDB::register_class<Terrain3DTextureAsset>();
 	ClassDB::register_class<Terrain3DUtil>();
+	OS *const os = OS::get_singleton();
+	if ( os && os->get_environment( "TERRAIN3D_RUN_RD_CPU_TESTS" ) == "1" && !t3dRunRdCpuTests() ) {
+		std::exit( EXIT_FAILURE );
+	}
 }
 
 void t3dUninitializeTerrain3DModule( ModuleInitializationLevel level ) {
 	if ( level != MODULE_INITIALIZATION_LEVEL_SCENE ) {
 		return;
 	}
+	Terrain3DRdTextureManager::shutdownSingleton();
+	Terrain3DRdContext::shutdownShared();
 }
 
 #ifdef GDEXTENSION

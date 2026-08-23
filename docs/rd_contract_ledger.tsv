@@ -6,10 +6,10 @@ section	title	batch	state	evidence
 5	Threading and frame-state model	A	pending	mutex snapshot remains
 6	Terrain clipmap topology	A	partial	alpha topology exists; proof/tests remain
 7	Patch representation	A	partial	alpha patch records exist
-8	Near/middle/far terrain rendering	A,C	partial	three RD pipelines exist; parity remains
-9	Complete terrain material port	C	pending	native material publication remains
-10	Generated textures and terrain GPU caches	B	pending	RS ownership/bridging remains
-11	Terrain compute operations	B	partial	compute exists; ownership/sync audit remains
+8	Near/middle/far terrain rendering	A,C	complete	direct RD near/middle/far pipelines publish fixed material ABI, tier samplers and direct terrain caches; Batch C material parity contract passes
+9	Complete terrain material port	C	complete	fixed RD material ABI, direct cache/sampler publication and near/middle/far production material parity implemented; Batch C contract passes
+10	Generated textures and terrain GPU caches	B	complete	generated terrain textures and visible terrain GPU caches are direct RenderingDevice-owned resources with explicit lifetime/accounting
+11	Terrain compute operations	B	complete	visible compute resources publish direct RD RIDs; local RD sync remains confined to CPU readback jobs
 12	Terrain culling	A	partial	GPU culling exists; CPU comparison/bounds proof remain
 13	Indirect terrain submission	A	partial	indexed indirect exists; validation/debug split remains
 14	Full regular-instancer RD conversion	D	pending	MultiMesh runtime remains
@@ -34,7 +34,7 @@ section	title	batch	state	evidence
 33	Automated tests	A-H	pending	RD-specific contract suite incomplete
 34	Static audit before build	H	pending	baseline frozen; final justification/removal remains
 35	C++ validation	H	pending	fresh final builds required
-36	Shader validation	C,F,H	pending	all raw RD variants must compile in final paths
+36	Shader validation	C,F,H	partial	Batch C raw RD shader structure and compile-error rejection are covered; final Godot/GPU shader validation remains in F/H
 37	GDScript validation	G,H	pending	fresh cacheless parse/import required
 38	C# validation	G,H	pending	fresh solution/project compile required
 39	Runtime visual validation	H	pending	final hardware traversal required

@@ -24,5 +24,12 @@
 	} while ( 0 )
 
 void t3dTestDiffers( void );
+bool t3dTestRdTopology( void );
+bool t3dTestRdAbiAndPublication( void );
+bool t3dTestRdCullingAndIndirect( void );
+bool t3dTestRdContextDiagnostics( void );
+bool t3dTestRdTextureLayouts( void );
+bool t3dTestRdMaterialAbi( void );
+bool t3dRunRdCpuTests( void );
 
 #endif // UNIT_TESTING_H

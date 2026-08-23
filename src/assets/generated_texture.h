@@ -10,23 +10,32 @@
 
 #include <cstddef>
 #include <godot_cpp/classes/image.hpp>
+#include <godot_cpp/variant/rect2i.hpp>
 
 class Terrain3DGeneratedTexture {
 	CLASS_NAME_STATIC( "Terrain3DGenTex" );
 
 private:
 	RID m_hRid = RID();
+	RID m_hRegionStagingRid = RID();
 	Ref<Image> m_image;
+	TypedArray<Image> m_layers;
 	bool m_bDirty = false;
 	int m_nSize = 0;
 	int m_nWidth = 0;
 	int m_nHeight = 0;
 	int m_nFormat = -1;
+	int m_nRegionStagingWidth = 0;
+	int m_nRegionStagingHeight = 0;
+	int m_nRegionStagingFormat = -1;
 	bool m_bMipmaps = false;
 	bool m_bLayered = false;
 	size_t m_nPayloadBytes = 0u;
+	size_t m_nRegionStagingBytes = 0u;
 
 	bool matchesLayout( const Ref<Image> &rImage ) const;
+	bool ensureRegionStaging( const Ref<Image> &rImage );
+	String getResourceName( const String &rSuffix = String() ) const;
 
 public:
 	void clear( void );
@@ -35,9 +44,10 @@ public:
 		return m_bDirty;
 	}
 	RID create( const TypedArray<Image> &rLayers );
-	bool update( const Ref<Image> &rImage, const int nLayer );
+	bool update( const Ref<Image> &rImage, int nLayer );
 	RID create( const Ref<Image> &rImage );
 	bool update2d( const Ref<Image> &rImage );
+	bool updateRegion2d( const Ref<Image> &rImage, const Rect2i &rDestination );
 	EA_FORCE_INLINE Ref<Image> getImage( void ) const {
 		return m_image;
 	}

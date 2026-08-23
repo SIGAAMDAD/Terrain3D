@@ -795,14 +795,31 @@ bool Terrain3DFarSurfaceAtlasCache::rebuildHeightAtlas( void ) {
 			m_config.m_nHeightAtlasSide, m_config.m_nHeightAtlasSide, false, Image::FORMAT_R16, atlas_bytes );
 	m_nHeightProcessingUsecLast = pTime ? pTime->get_ticks_usec() - started_usec : 0u;
 	const uint64_t publication_started = pTime ? pTime->get_ticks_usec() : 0u;
-	const bool uploaded = m_generatedHeightMap.getRid().is_valid()
-			? m_generatedHeightMap.update2d( m_heightImage )
-			: m_generatedHeightMap.create( m_heightImage ).is_valid();
+	bool uploaded = true;
+	const bool bFullUpload = m_bHeightDirtyAll || !m_generatedHeightMap.getRid().is_valid();
+	if ( bFullUpload ) {
+		uploaded = m_generatedHeightMap.getRid().is_valid() ? m_generatedHeightMap.update2d( m_heightImage )
+														  : m_generatedHeightMap.create( m_heightImage ).is_valid();
+		m_nHeightUploadedBytesLast = uploaded ? ( uint64_t )( atlas_bytes.size() ) : 0u;
+	} else {
+		const int atlas_half = m_pRepository->getRegionMapSize() / 2;
+		for ( size_t index = 0; uploaded && index < s_nMaxRegionSlots; ++index ) {
+			if ( !m_heightDirtyRegions.test( index ) ) continue;
+			const Vector2i location( ( int )( index % s_nActiveMaxRegionMapSize ) - s_nActiveMaxRegionMapSize / 2,
+					( int )( index / s_nActiveMaxRegionMapSize ) - s_nActiveMaxRegionMapSize / 2 );
+			const Rect2i destination( ( location.x + atlas_half ) * samples_per_region,
+					( location.y + atlas_half ) * samples_per_region,
+					samples_per_region,
+					samples_per_region );
+			const Ref<Image> region = m_heightImage->get_region( destination );
+			uploaded = region.is_valid() && !region->is_empty() && m_generatedHeightMap.updateRegion2d( region, destination );
+			if ( uploaded ) m_nHeightUploadedBytesLast += ( uint64_t )( region->get_data().size() );
+		}
+	}
 	m_nHeightPublicationUsecLast = pTime ? pTime->get_ticks_usec() - publication_started : 0u;
 	if ( !uploaded ) {
 		return false;
 	}
-	m_nHeightUploadedBytesLast = ( uint64_t )( atlas_bytes.size() );
 	m_nHeightUploadedBytesTotal += m_nHeightUploadedBytesLast;
 	++m_nHeightPublicationCount;
 	m_bHeightDirty = false;
@@ -857,14 +874,31 @@ bool Terrain3DFarSurfaceAtlasCache::rebuildColorAtlas( void ) {
 			m_config.m_nSurfaceAtlasSide, m_config.m_nSurfaceAtlasSide, false, Image::FORMAT_RGBA8, atlas_bytes );
 	m_nColorProcessingUsecLast = pTime ? pTime->get_ticks_usec() - started_usec : 0u;
 	const uint64_t publication_started = pTime ? pTime->get_ticks_usec() : 0u;
-	const bool uploaded = m_generatedColorMap.getRid().is_valid()
-			? m_generatedColorMap.update2d( m_colorImage )
-			: m_generatedColorMap.create( m_colorImage ).is_valid();
+	bool uploaded = true;
+	const bool bFullUpload = m_bColorDirtyAll || !m_generatedColorMap.getRid().is_valid();
+	if ( bFullUpload ) {
+		uploaded = m_generatedColorMap.getRid().is_valid() ? m_generatedColorMap.update2d( m_colorImage )
+														 : m_generatedColorMap.create( m_colorImage ).is_valid();
+		m_nColorUploadedBytesLast = uploaded ? ( uint64_t )( atlas_bytes.size() ) : 0u;
+	} else {
+		const int atlas_half = m_pRepository->getRegionMapSize() / 2;
+		for ( size_t index = 0; uploaded && index < s_nMaxRegionSlots; ++index ) {
+			if ( !m_colorDirtyRegions.test( index ) ) continue;
+			const Vector2i location( ( int )( index % s_nActiveMaxRegionMapSize ) - s_nActiveMaxRegionMapSize / 2,
+					( int )( index / s_nActiveMaxRegionMapSize ) - s_nActiveMaxRegionMapSize / 2 );
+			const Rect2i destination( ( location.x + atlas_half ) * samples_per_region,
+					( location.y + atlas_half ) * samples_per_region,
+					samples_per_region,
+					samples_per_region );
+			const Ref<Image> region = m_colorImage->get_region( destination );
+			uploaded = region.is_valid() && !region->is_empty() && m_generatedColorMap.updateRegion2d( region, destination );
+			if ( uploaded ) m_nColorUploadedBytesLast += ( uint64_t )( region->get_data().size() );
+		}
+	}
 	m_nColorPublicationUsecLast = pTime ? pTime->get_ticks_usec() - publication_started : 0u;
 	if ( !uploaded ) {
 		return false;
 	}
-	m_nColorUploadedBytesLast = ( uint64_t )( atlas_bytes.size() );
 	m_nColorUploadedBytesTotal += m_nColorUploadedBytesLast;
 	++m_nColorPublicationCount;
 	m_bColorDirty = false;

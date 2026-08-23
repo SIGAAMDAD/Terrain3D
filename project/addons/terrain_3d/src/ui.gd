@@ -67,7 +67,7 @@ var _touchscreen_invert_active: bool = false
 
 # 3 Editor decals: 0 = cursor, 1 = slope point1, 2 = slope point2
 var mat_rid: RID
-var editor_brush_texture_rid: RID = RID()
+var editor_brush_texture: Texture2D
 var editor_decal_position: Array[Vector2] = [Vector2(), Vector2(), Vector2()]
 var editor_decal_rotation: Array[float] = [0., 0., 0.]
 var editor_decal_size: Array[float] = [0., 0., 0.]
@@ -80,11 +80,10 @@ var editor_decal_fade: float :
 		editor_decal_fade = value
 		if editor_decal_color.size() > 0:
 			editor_decal_color[0].a = value
-			if is_shader_valid():
-				RenderingServer.material_set_param(mat_rid, "_editor_decal_color", editor_decal_color)
-				if value < 0.001:
-					var r_map: PackedInt32Array = plugin.terrain.data.get_region_map()
-					RenderingServer.material_set_param(mat_rid, "_region_map", r_map)
+			_set_editor_material_param("_editor_decal_color", editor_decal_color)
+			if value < 0.001 and is_instance_valid(plugin) and is_instance_valid(plugin.terrain):
+				var r_map: PackedInt32Array = plugin.terrain.data.get_region_map()
+				_set_editor_material_param("_region_map", r_map)
 
 
 func _enter_tree() -> void:
@@ -717,7 +716,7 @@ func update_decal() -> void:
 		var half_r_size: float = r_size * 0.5
 		var pos: Vector2 = (Vector2(plugin.mouse_global_position.x, plugin.mouse_global_position.z) +
 			Vector2(half_r_size, half_r_size)).snappedf(r_size) - Vector2(half_r_size, half_r_size)
-		editor_brush_texture_rid = region_texture.get_rid()
+		editor_brush_texture = region_texture
 		editor_decal_position[0] = pos
 		editor_decal_size[0] = r_size
 		editor_decal_rotation[0] = 0.0
@@ -759,7 +758,7 @@ func update_decal() -> void:
 
 	## Brushing Operations
 	else:
-		editor_brush_texture_rid = brush_data["brush"][1].get_rid()
+		editor_brush_texture = brush_data["brush"][1]
 		var decal_size: float = float(brush_data["size"])
 		if plugin.editor.get_tool() == Terrain3DEditor.LANDFORM:
 			decal_size = float(brush_data.get("landform_width", decal_size))
@@ -878,16 +877,25 @@ func update_decal() -> void:
 			editor_decal_color[i].a = maxf(0.1, editor_decal_color[i].a - .25)
 
 	editor_decal_fade = editor_decal_color[0].a
-	# Update Shader params
-	if is_shader_valid():
-		RenderingServer.material_set_param(mat_rid, "_editor_brush_texture", editor_brush_texture_rid)
-		RenderingServer.material_set_param(mat_rid, "_editor_decal_position", editor_decal_position)
-		RenderingServer.material_set_param(mat_rid, "_editor_decal_rotation", editor_decal_rotation)
-		RenderingServer.material_set_param(mat_rid, "_editor_decal_size", editor_decal_size)
-		RenderingServer.material_set_param(mat_rid, "_editor_decal_color", editor_decal_color)
-		RenderingServer.material_set_param(mat_rid, "_editor_decal_visible", editor_decal_visible)
-		RenderingServer.material_set_param(mat_rid, "_editor_decal_part", editor_decal_part)
-		RenderingServer.material_set_param(mat_rid, "_region_map", r_map)
+	# Publish editor state through Terrain3DMaterial. This keeps the authored
+	# Texture2D available to the direct RenderingDevice path while the material
+	# compatibility path still translates textures to native RIDs.
+	_set_editor_material_param("_editor_brush_texture", editor_brush_texture)
+	_set_editor_material_param("_editor_decal_position", editor_decal_position)
+	_set_editor_material_param("_editor_decal_rotation", editor_decal_rotation)
+	_set_editor_material_param("_editor_decal_size", editor_decal_size)
+	_set_editor_material_param("_editor_decal_color", editor_decal_color)
+	_set_editor_material_param("_editor_decal_visible", editor_decal_visible)
+	_set_editor_material_param("_editor_decal_part", editor_decal_part)
+	_set_editor_material_param("_region_map", r_map)
+
+
+func _set_editor_material_param(p_name: StringName, p_value: Variant) -> void:
+	if not is_instance_valid(plugin) or not is_instance_valid(plugin.terrain):
+		return
+	if not is_instance_valid(plugin.terrain.material):
+		return
+	plugin.terrain.material.set_shader_param(p_name, p_value)
 
 
 func is_shader_valid() -> bool:
@@ -905,16 +913,16 @@ func is_shader_valid() -> bool:
 
 func hide_decal() -> void:
 	editor_decal_visible = [false, false, false]
-	if is_shader_valid():
+	_set_editor_material_param("_editor_decal_visible", editor_decal_visible)
+	if is_instance_valid(plugin) and is_instance_valid(plugin.terrain):
 		var r_map: PackedInt32Array = plugin.terrain.data.get_region_map()
-		RenderingServer.material_set_param(mat_rid, "_editor_decal_visible", editor_decal_visible)
-		RenderingServer.material_set_param(mat_rid, "_region_map", r_map)
+		_set_editor_material_param("_region_map", r_map)
 
 
 # These array sizes are reset to 0 when closing scenes for some unknown reason, so check and reset
 func reset_decal_arrays() -> void:
 	if editor_decal_color.size() < 3:
-		editor_brush_texture_rid = RID()
+		editor_brush_texture = null
 		editor_decal_position = [Vector2(), Vector2(), Vector2()]
 		editor_decal_rotation = [0., 0., 0.]
 		editor_decal_size = [0., 0., 0.]
@@ -925,8 +933,7 @@ func reset_decal_arrays() -> void:
 
 func set_decal_rotation(p_rot: float) -> void:
 	editor_decal_rotation[0] = p_rot
-	if is_shader_valid():
-		RenderingServer.material_set_param(mat_rid, "_editor_decal_rotation", editor_decal_rotation)
+	_set_editor_material_param("_editor_decal_rotation", editor_decal_rotation)
 
 
 func _on_picking(p_type: int, p_callback: Callable) -> void:

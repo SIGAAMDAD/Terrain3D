@@ -36,12 +36,10 @@ typedef struct t3dBrushElement_s {
 } t3dBrushElement_t;
 
 typedef struct t3dDisplacementRequest_s {
-	// RenderingServer texture RIDs. The render callback resolves their
-	// global RenderingDevice texture RIDs on the render thread.
+	// Direct global RenderingDevice texture RIDs published by Terrain3D generated resources.
 	RID m_hHeightTexture;
 	RID m_hControlTexture;
 	RID m_hDisplacementTexture;
-	RID m_hMaterialRid;
 	Ref<RDShaderSPIRV> m_shaderSpirv;
 	PackedInt32Array m_regionMap;
 	PackedByteArray m_materialData;
@@ -54,7 +52,7 @@ typedef struct t3dDisplacementRequest_s {
 
 	bool valid( void ) const {
 		return m_shaderSpirv.is_valid() && m_hHeightTexture.is_valid() && m_hControlTexture.is_valid() &&
-				m_hDisplacementTexture.is_valid() && m_hMaterialRid.is_valid() && m_nWidth > 0u && m_nHeight > 0u &&
+				m_hDisplacementTexture.is_valid() && m_nWidth > 0u && m_nHeight > 0u &&
 				m_nRegionMapSize > 0u && m_nRegionMapSize <= 64u &&
 				m_regionMap.size() == ( int64_t )( m_nRegionMapSize ) * ( int64_t )( m_nRegionMapSize ) &&
 				!m_materialData.is_empty() && !m_pushConstants.is_empty();
@@ -131,7 +129,6 @@ private:
 	RID m_hDisplacementRegionBuffer;
 	RID m_hDisplacementMaterialBuffer;
 	RID m_hDisplacementOutputTexture;
-	RID m_hDisplacementRsTexture;
 	RID m_hDisplacementBoundHeight;
 	RID m_hDisplacementBoundControl;
 	RID m_hDisplacementBoundDisplacement;

@@ -75,7 +75,7 @@ def log_path(name: str) -> Path:
 
 
 def run_quiet(
-    command: list[str],
+    command: list[str] | str,
     *,
     label: str,
     cwd: Path = REPO,
@@ -160,6 +160,198 @@ def build_contract_check() -> bool:
         print("FAIL Windows GDExtension library names do not match SConstruct/MSVC output")
         return False
     print("OK Windows GDExtension build/load names")
+    return True
+
+
+def rd_shader_abi_check() -> bool:
+    shader_dir = REPO / "project" / "addons" / "terrain_3d" / "rd"
+    shader_names = (
+        "terrain_clipmap_near.glsl",
+        "terrain_clipmap_middle.glsl",
+        "terrain_clipmap_far.glsl",
+        "terrain_cull.glsl",
+    )
+    expected_patch_fields = (
+        "origin", "scale", "lod", "tier", "stitch_x", "stitch_z", "flags",
+        "bounds_min_y", "bounds_max_y", "bounds_half_extent",
+        "previous_origin_x", "previous_origin_z", "previous_scale", "padding_0", "padding_1",
+    )
+    for name in shader_names:
+        path = shader_dir / name
+        source = path.read_text(encoding="utf-8", errors="ignore")
+        match = re.search(r"struct\s+PatchData\s*\{([^}]*)\}\s*;", source, re.DOTALL)
+        fields = tuple(re.findall(r"\b(?:vec2|float|uint)\s+(\w+)\s*;", match.group(1))) if match else ()
+        if fields != expected_patch_fields:
+            print(f"FAIL RD PatchData ABI mismatch: {path.relative_to(REPO)}")
+            return False
+        if name.startswith("terrain_clipmap_") and not re.search(
+            r"layout\s*\(\s*push_constant\s*,\s*std430\s*\)\s*uniform\s+DrawData", source
+        ):
+            print(f"FAIL RD direct-draw push constants missing: {path.relative_to(REPO)}")
+            return False
+    print("OK RD C++/GLSL patch and direct-draw ABI declarations")
+    return True
+
+
+def rd_batch_c_material_check() -> bool:
+    checks: list[tuple[str, bool]] = []
+
+    types = (REPO / "src" / "rendering" / "rd" / "terrain_3d_rd_types.h").read_text(encoding="utf-8", errors="ignore")
+    renderer = (REPO / "src" / "rendering" / "rd" / "terrain_3d_rd_clipmap_renderer.cpp").read_text(encoding="utf-8", errors="ignore")
+    coordinator = (REPO / "src" / "rendering" / "rd" / "terrain_3d_render_coordinator.cpp").read_text(encoding="utf-8", errors="ignore")
+    shader_library = (REPO / "src" / "rendering" / "rd" / "terrain_3d_rd_shader_library.cpp").read_text(encoding="utf-8", errors="ignore")
+    material_cpp = (REPO / "src" / "rendering" / "terrain_3d_material.cpp").read_text(encoding="utf-8", errors="ignore")
+    editor_ui = (REPO / "project" / "addons" / "terrain_3d" / "src" / "ui.gd").read_text(encoding="utf-8", errors="ignore")
+    sampler_start = renderer.find("bool Terrain3DRdClipmapRenderer::ensureSamplers")
+    sampler_end = renderer.find("bool Terrain3DRdClipmapRenderer::ensureBuffers", sampler_start)
+    sampler_body = renderer[sampler_start:sampler_end] if sampler_start >= 0 and sampler_end > sampler_start else ""
+
+    checks += [
+        ("material layer ABI size", 'sizeof( t3dRdMaterialLayer_t ) == 64u' in types),
+        ("material layer integral texture index", 'uint32_t m_nPhysicalLayer' in types),
+        ("material layer integral flags", 'uint32_t m_nFlags' in types),
+        ("tier material ABI size", 'sizeof( t3dRdTierMaterialConfig_t ) == 48u' in types),
+        ("material config ABI size", 'sizeof( t3dRdMaterialConfig_t ) == 384u' in types),
+        ("material config tier offset", 'offsetof( t3dRdMaterialConfig_t, m_szTier ) == 240u' in types),
+        ("snapshot owns fixed material config", 't3dRdMaterialConfig_t m_materialConfig{}' in types),
+        ("persistent material config buffer", 'm_hMaterialConfigBuffer' in renderer and 'storage_buffer_create( material_config_bytes )' in renderer),
+        ("material config descriptor binding", 't3dRdBufferUniform( 13' in renderer),
+        ("derived cache descriptor", 't3dRdTextureUniform( 14' in renderer),
+        ("middle composite descriptor", 't3dRdTextureUniform( 15' in renderer),
+        ("middle height descriptor", 't3dRdTextureUniform( 16' in renderer),
+        ("middle region descriptor", 't3dRdTextureUniform( 17' in renderer),
+        ("far height descriptor", 't3dRdTextureUniform( 18' in renderer),
+        ("far color descriptor", 't3dRdTextureUniform( 19' in renderer),
+        ("far albedo descriptor", 't3dRdTextureUniform( 20' in renderer),
+        ("world-noise cache descriptor", 't3dRdTextureUniform( 21' in renderer),
+        ("editor overlay ABI size", 'sizeof( t3dRdEditorDecal_t ) == 48u' in types and 'sizeof( t3dRdEditorOverlayConfig_t ) == 192u' in types),
+        ("editor overlay ABI offsets", 'offsetof( t3dRdEditorOverlayConfig_t, m_fHeightmapBlackHeight ) == 144u' in types and 'offsetof( t3dRdEditorOverlayConfig_t, m_fContourColorR ) == 160u' in types and 'offsetof( t3dRdEditorOverlayConfig_t, m_fInstancerCellSize ) == 176u' in types),
+        ("snapshot owns fixed editor overlay", 't3dRdEditorOverlayConfig_t m_editorOverlayConfig{}' in types),
+        ("persistent editor overlay buffer", 'm_hEditorOverlayBuffer' in renderer and 'storage_buffer_create( editor_overlay_bytes )' in renderer),
+        ("editor overlay descriptor", 't3dRdBufferUniform( 23' in renderer),
+        ("editor brush descriptor", 't3dRdTextureUniform( 24' in renderer),
+        ("direct editor brush publication", 'ensureEditorBrushTexture' in coordinator and 'replacement.create( image )' in coordinator and 'm_editorBrushTexture.swap( replacement )' in coordinator and 'm_hEditorBrushTextureRd' in coordinator),
+        ("runtime editor state survives native material absence", 'if ( strName.begins_with( "_" ) )' in material_cpp and '&& m_hMaterial.is_valid()' not in material_cpp[material_cpp.find('void Terrain3DMaterial::setShaderParam'):material_cpp.find('Variant Terrain3DMaterial::getShaderParam')]),
+        ("runtime texture object retained for RD publication", 'm_runtimeMaterialParams[strName] = rValue;' in material_cpp and 'const Ref<Texture> texture = rValue;' in material_cpp and 'native_value = texture->get_rid();' in material_cpp),
+        ("editor UI publishes through Terrain3DMaterial", '_set_editor_material_param("_editor_brush_texture", editor_brush_texture)' in editor_ui and 'plugin.terrain.material.set_shader_param(p_name, p_value)' in editor_ui),
+        ("editor UI avoids direct native editor-param writes", re.search(r'RenderingServer\.material_set_param\(mat_rid,\s*"_(?:editor|region_map)', editor_ui) is None),
+        ("tier-specific material samplers", 'm_hszMaterialSamplers[4]' in (REPO / "src" / "rendering" / "rd" / "terrain_3d_rd_clipmap_renderer.h").read_text(encoding="utf-8", errors="ignore") and 'm_nszBoundTierFiltering' in renderer),
+        ("material and map sampler retries are independent", 'if ( !m_hszMaterialSamplers[i].is_valid() )' in sampler_body and 'if ( !m_hszMapSamplers[i].is_valid() )' in sampler_body and 'continue;' not in sampler_body),
+        ("anisotropic material sampler modes", 'set_use_anisotropy' in renderer and 'set_anisotropy_max' in renderer),
+        ("packed logical+physical region publication", '0x80000000u' in coordinator and 'getLogicalRegionMap()' in coordinator),
+        ("direct world-noise cache publication", 'm_worldNoiseCache.create' in coordinator and 'get_seamless_image( 1024, 1024' in coordinator),
+        ("direct derived publication", 'getDerivedMapsRid()' in coordinator),
+        ("direct middle publication", 'getMiddleCompositeMapsRid()' in coordinator and 'getMiddleHeightMapsRid()' in coordinator),
+        ("direct far publication", 'getFarHeightMapRid()' in coordinator and 'getFarColorMapRid()' in coordinator and 'getFarAlbedoArrayRid()' in coordinator),
+        ("shader loader rejects compile errors", 'get_stage_compile_error' in shader_library and 'RD shader compile failed' in shader_library),
+    ]
+
+    shader_dir = REPO / "project" / "addons" / "terrain_3d" / "rd"
+    expected_material_config_fields = (
+        "feature_flags", "debug_flags", "output_flags", "background_mode", "projection_mode",
+        "tessellation_material_mode", "world_noise_mode", "reserved_0", "displacement_sharpness",
+        "blend_sharpness", "distant_normal_scale", "ground_level", "region_blend", "bias_distance",
+        "mipmap_bias", "depth_blur", "auto_slope", "auto_height_reduction", "auto_base_texture",
+        "auto_overlay_texture", "dual_scale_texture", "reserved_1", "dual_scale_reduction",
+        "tri_scale_reduction", "dual_scale_far", "dual_scale_near", "noise1_scale", "noise2_scale",
+        "noise1_rotation_x", "noise1_rotation_y", "macro_variation1_r", "macro_variation1_g",
+        "macro_variation1_b", "macro_variation_slope", "macro_variation2_r", "macro_variation2_g",
+        "macro_variation2_b", "macro_variation_padding", "noise1_offset_x", "noise1_offset_y",
+        "world_noise_cache_period", "world_noise_lod_distance", "world_noise_scale", "world_noise_height",
+        "world_noise_max_octaves", "world_noise_min_octaves", "world_noise_cache_enabled",
+        "world_noise_fragment_normals", "world_noise_offset_x", "world_noise_offset_y", "world_noise_offset_z",
+        "world_noise_padding", "silhouette_r", "silhouette_g", "silhouette_b", "silhouette_a",
+        "contour_step", "editor_overlay_opacity", "reserved_2", "reserved_3", "tier",
+    )
+    expected_tier_fields = (
+        "sampling_mode", "normal_mode", "color_mode", "surface_response", "texture_surface_mode",
+        "lighting_model", "detiling_mode", "filtering", "authored_color_contribution",
+        "wetness_contribution", "material_lod_bias", "quality_lod_offset",
+    )
+    expected_layer_fields = ("color", "pbr0", "pbr1", "displacement", "physical_layer", "flags")
+
+    def struct_fields(source: str, struct_name: str) -> list[tuple[str, ...]]:
+        bodies = re.findall(rf"struct\s+{struct_name}\s*\{{(.*?)\}};", source, flags=re.S)
+        result: list[tuple[str, ...]] = []
+        for body in bodies:
+            names: list[str] = []
+            for declaration in body.split(";"):
+                declaration = declaration.strip()
+                if not declaration:
+                    continue
+                token = declaration.split()[-1]
+                names.append(token.split("[")[0])
+            result.append(tuple(names))
+        return result
+
+    required_shader_tokens = (
+        "struct MaterialLayer",
+        "uint physical_layer;",
+        "uint flags;",
+        "struct MaterialConfig",
+        "MaterialConfigBuffer",
+        "binding = 13",
+        "binding = 14",
+        "binding = 15",
+        "binding = 16",
+        "binding = 17",
+        "binding = 18",
+        "binding = 19",
+        "binding = 20",
+        "binding = 21",
+        "binding = 23",
+        "binding = 24",
+        "struct EditorOverlayConfig",
+        "editor_brush_texture",
+        "T3D_FEATURE_WORLD_NOISE_CACHE",
+        "cache_mode",
+        "logical_region_present(",
+        "read_control(",
+        "decode_control(",
+        "sample_detailed_material(",
+        "sample_middle_composite(",
+        "sample_far_surface(",
+        "auto_control(",
+        "project_material_uv(",
+        "apply_detiling(",
+        "T3D_FEATURE_DUAL_SCALING",
+        "apply_macro_variation(",
+        "apply_fragment_world_noise_normal(",
+        "world_noise_uses_fragment_normals(",
+        "light_material(",
+        "apply_fog(",
+        "fractal_contour_lines(",
+        "apply_editor_decals(",
+        "debug_visualization(",
+        "editor_overlay.heightmap_contour",
+        "editor_overlay.contour_color",
+        "editor_overlay.instancer_grid",
+        "discard;",
+    )
+    for tier, name in enumerate(("terrain_clipmap_near.glsl", "terrain_clipmap_middle.glsl", "terrain_clipmap_far.glsl")):
+        source = (shader_dir / name).read_text(encoding="utf-8", errors="ignore")
+        checks.append((f"{name} tier identity", source.count(f"#define T3D_TIER {tier}") == 2))
+        checks.append((f"{name} vertex+fragment stages", source.count("#[vertex]") == 1 and source.count("#[fragment]") == 1))
+        checks.append((f"{name} balanced braces", source.count("{") == source.count("}")))
+        config_layouts = struct_fields(source, "MaterialConfig")
+        tier_layouts = struct_fields(source, "TierMaterialConfig")
+        layer_layouts = struct_fields(source, "MaterialLayer")
+        checks.append((f"{name} material config GLSL ABI", len(config_layouts) == 2 and all(fields == expected_material_config_fields for fields in config_layouts)))
+        checks.append((f"{name} tier config GLSL ABI", len(tier_layouts) == 2 and all(fields == expected_tier_fields for fields in tier_layouts)))
+        checks.append((f"{name} layer GLSL ABI", len(layer_layouts) == 1 and layer_layouts[0] == expected_layer_fields))
+        checks.append((f"{name} material parity surface", all(token in source for token in required_shader_tokens)))
+        checks.append((f"{name} world-noise cache declared in both stages", source.count("binding = 21") == 2))
+        checks.append((f"{name} editor overlay fragment bindings", source.count("binding = 23") == 1 and source.count("binding = 24") == 1))
+        checks.append((f"{name} editor and debug parity", "apply_editor_decals(lit)" in source and "((control >> 1u) & 1u) != 0u" in source and "white_height < black_height" in source))
+        checks.append((f"{name} no opaque sampler assignment", re.search(r"\bsampler\w*\s+\w+\s*=", source) is None))
+
+    failed = [label for label, passed in checks if not passed]
+    if failed:
+        for label in failed:
+            print(f"FAIL Batch C material contract: {label}")
+        print(f"Batch C material contract: {len(checks) - len(failed)}/{len(checks)} passed")
+        return False
+    print(f"OK Batch C material contract: {len(checks)}/{len(checks)} passed")
     return True
 
 
@@ -465,7 +657,12 @@ def build_extension(target: str = "editor") -> bool:
         vsdev = discover_vsdevcmd()
         if vsdev:
             command_line = subprocess.list2cmdline(args)
-            args = ["cmd.exe", "/d", "/s", "/c", f'call "{vsdev}" -arch=x64 -host_arch=x64 >nul && {command_line}']
+            # cmd.exe does not use the MSVC argv parser. Passing the command as
+            # a list makes subprocess.list2cmdline() escape the embedded quotes
+            # as \"; cmd treats those backslashes literally and cannot find the
+            # developer-environment batch file. A raw command line preserves the
+            # quoting expected by cmd while keeping the SCons arguments quoted.
+            args = f'cmd.exe /d /c call "{vsdev}" -arch=x64 -host_arch=x64 >nul && {command_line}'
     return run_quiet(args, label=f"build_{target}", env=env, timeout=1800)
 
 
@@ -491,7 +688,9 @@ def godot_editor_headless() -> bool:
         print("FAIL Godot 4.7.1 missing")
         return False
     command = base + ["--headless", "--render-thread", "safe", "--editor", "--quit-after", "5", "--log-file", str(log_path("godot_editor_engine"))]
-    return run_quiet(command, label="godot_editor_headless", timeout=300)
+    env = os.environ.copy()
+    env["TERRAIN3D_RUN_RD_CPU_TESTS"] = "1"
+    return run_quiet(command, label="godot_editor_headless", env=env, timeout=300)
 
 
 def godot_build_solutions() -> bool:
@@ -540,7 +739,22 @@ def godot_gpu_smoke(driver: str) -> bool:
         "--quit-after", "120",
         "--log-file", str(log_path(f"godot_gpu_{driver}_engine")),
     ]
-    return run_quiet(command, label=f"godot_gpu_{driver}", timeout=180)
+    env = os.environ.copy()
+    env["TERRAIN3D_RD_COMPARE_CULL"] = "1"
+    ok = run_quiet(command, label=f"godot_gpu_{driver}", env=env, timeout=180)
+    if not ok:
+        return False
+    validation_text = "\n".join(
+        path.read_text(encoding="utf-8", errors="ignore")
+        for path in (log_path(f"godot_gpu_{driver}"), log_path(f"godot_gpu_{driver}_engine"))
+        if path.is_file()
+    )
+    marker = "[RD validation] GPU/CPU culling comparison passed"
+    if marker not in validation_text:
+        print(f"FAIL gpu_{driver}: RD GPU/CPU culling comparison did not execute")
+        return False
+    print(f"OK gpu_{driver}: RD GPU/CPU culling comparison")
+    return True
 
 
 def diagnose_godot() -> int:
@@ -648,7 +862,7 @@ def git_fsck() -> bool:
 
 
 def validate_fast(static_only: bool = False) -> int:
-    checks = [branch_check(), reference_check(), diff_check(), build_contract_check(), audit_symbols(strict_growth=True)]
+    checks = [branch_check(), reference_check(), diff_check(), build_contract_check(), rd_shader_abi_check(), rd_batch_c_material_check(), audit_symbols(strict_growth=True)]
     if not static_only:
         checks.append(build_extension("editor"))
     return 0 if all(checks) else 1
@@ -660,6 +874,8 @@ def validate_full() -> int:
         reference_check(),
         diff_check(),
         build_contract_check(),
+        rd_shader_abi_check(),
+        rd_batch_c_material_check(),
         audit_symbols(strict_growth=True),
         build_extension("editor"),
         godot_headless_import(),
@@ -676,6 +892,8 @@ def validate_final() -> int:
         reference_check(),
         diff_check(),
         build_contract_check(),
+        rd_shader_abi_check(),
+        rd_batch_c_material_check(),
         audit_symbols(strict_growth=True, final=True),
         build_extension("editor"),
         build_extension("template_release"),

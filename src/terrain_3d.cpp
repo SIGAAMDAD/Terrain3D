@@ -21,7 +21,6 @@
 #include "streaming/terrain_3d_node_streamer.h"
 #include "streaming/terrain_3d_performance_profile.h"
 #include "streaming/terrain_3d_streaming_policy.h"
-#include "streaming/terrain_3d_upload_bridge.h"
 
 #include <algorithm>
 #include <atomic>

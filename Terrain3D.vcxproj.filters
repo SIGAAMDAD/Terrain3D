@@ -7,6 +7,9 @@
     <Filter Include="docs">
       <UniqueIdentifier>{F144E4D6-AB9B-512D-A78D-BBB7905269BA}</UniqueIdentifier>
     </Filter>
+    <Filter Include="docs\rd_reference">
+      <UniqueIdentifier>{A6A5C8F2-94A0-5D4C-938A-7E6B4B26D11B}</UniqueIdentifier>
+    </Filter>
     <Filter Include="project">
       <UniqueIdentifier>{DE839D58-5190-537A-AF53-9C98436340C7}</UniqueIdentifier>
     </Filter>
@@ -309,6 +312,21 @@
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_compositor_effect.h">
       <Filter>src\rendering\rd</Filter>
     </ClInclude>
+    <ClInclude Include="src\rendering\rd\terrain_3d_rd_context.h">
+      <Filter>src\rendering\rd</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\terrain_3d_rd_culling.h">
+      <Filter>src\rendering\rd</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\terrain_3d_rd_shader_library.h">
+      <Filter>src\rendering\rd</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\terrain_3d_rd_texture_manager.h">
+      <Filter>src\rendering\rd</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\terrain_3d_rd_topology.h">
+      <Filter>src\rendering\rd</Filter>
+    </ClInclude>
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_types.h">
       <Filter>src\rendering\rd</Filter>
     </ClInclude>
@@ -394,9 +412,6 @@
       <Filter>src\streaming</Filter>
     </ClInclude>
     <ClInclude Include="src\streaming\terrain_3d_streaming_policy.h">
-      <Filter>src\streaming</Filter>
-    </ClInclude>
-    <ClInclude Include="src\streaming\terrain_3d_upload_bridge.h">
       <Filter>src\streaming</Filter>
     </ClInclude>
     <ClInclude Include="src\terrain_3d.h">
@@ -548,6 +563,21 @@
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_compositor_effect.cpp">
       <Filter>src\rendering\rd</Filter>
     </ClCompile>
+    <ClCompile Include="src\rendering\rd\terrain_3d_rd_context.cpp">
+      <Filter>src\rendering\rd</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\terrain_3d_rd_culling.cpp">
+      <Filter>src\rendering\rd</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\terrain_3d_rd_shader_library.cpp">
+      <Filter>src\rendering\rd</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\terrain_3d_rd_texture_manager.cpp">
+      <Filter>src\rendering\rd</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\terrain_3d_rd_topology.cpp">
+      <Filter>src\rendering\rd</Filter>
+    </ClCompile>
     <ClCompile Include="src\rendering\rd\terrain_3d_render_coordinator.cpp">
       <Filter>src\rendering\rd</Filter>
     </ClCompile>
@@ -614,9 +644,6 @@
     <ClCompile Include="src\streaming\terrain_3d_streaming_integration.cpp">
       <Filter>src\streaming</Filter>
     </ClCompile>
-    <ClCompile Include="src\streaming\terrain_3d_upload_bridge.cpp">
-      <Filter>src\streaming</Filter>
-    </ClCompile>
     <ClCompile Include="src\terrain_3d.cpp">
       <Filter>src</Filter>
     </ClCompile>
@@ -643,6 +670,27 @@
     <None Include="docs\gdscript_modernization_audit.md">
       <Filter>docs</Filter>
     </None>
+    <None Include="docs\rd_codex_handoff.md">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="docs\rd_reference\dependency_audit.md">
+      <Filter>docs\rd_reference</Filter>
+    </None>
+    <None Include="docs\rd_reference\public_api_delta_baseline_to_alpha.md">
+      <Filter>docs\rd_reference</Filter>
+    </None>
+    <None Include="docs\rd_reference\public_api_inventory.md">
+      <Filter>docs\rd_reference</Filter>
+    </None>
+    <None Include="docs\rd_reference\reference_feature_matrix.md">
+      <Filter>docs\rd_reference</Filter>
+    </None>
+    <None Include="docs\rd_reference\repository_reconstruction_report.md">
+      <Filter>docs\rd_reference</Filter>
+    </None>
+    <None Include="docs\rendering_device_completion_contract.md">
+      <Filter>docs</Filter>
+    </None>
     <None Include="docs\rendering_device_conversion_patch.md">
       <Filter>docs</Filter>
     </None>
@@ -650,6 +698,12 @@
       <Filter>docs</Filter>
     </None>
     <None Include="docs\rendering_device_implementation_plan.md">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="docs\shader_preprocessor_repair.md">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="docs\windows_godot_cli_stability.md">
       <Filter>docs</Filter>
     </None>
     <None Include="project\Terrain3D.csproj">
@@ -1012,6 +1066,9 @@
     <None Include="project\addons\terrain_3d\shaders\includes\projection.gdshaderinc">
       <Filter>project\addons\terrain_3d\shaders\includes</Filter>
     </None>
+    <None Include="project\addons\terrain_3d\shaders\includes\projection_displacement.gdshaderinc">
+      <Filter>project\addons\terrain_3d\shaders\includes</Filter>
+    </None>
     <None Include="project\addons\terrain_3d\shaders\includes\render_vertex_world_setup.gdshaderinc">
       <Filter>project\addons\terrain_3d\shaders\includes</Filter>
     </None>
@@ -1148,6 +1205,12 @@
       <Filter>src\shaders</Filter>
     </None>
     <None Include="tools\generate_msvc_project.py">
+      <Filter>tools</Filter>
+    </None>
+    <None Include="tools\generate_rd_reference_inventory.py">
+      <Filter>tools</Filter>
+    </None>
+    <None Include="tools\rd.py">
       <Filter>tools</Filter>
     </None>
   </ItemGroup>

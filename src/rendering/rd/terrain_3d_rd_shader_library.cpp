@@ -19,6 +19,19 @@ Ref<RDShaderSPIRV> Terrain3DRdShaderLibrary::loadShader( const String &rPath ) {
 	Ref<RDShaderSPIRV> spirv = shader_file->get_spirv();
 	if ( spirv.is_null() ) {
 		m_lastError = "RD shader has no SPIR-V: " + rPath;
+		return Ref<RDShaderSPIRV>();
+	}
+	const RenderingDevice::ShaderStage stages[] = {
+		RenderingDevice::SHADER_STAGE_VERTEX,
+		RenderingDevice::SHADER_STAGE_FRAGMENT,
+		RenderingDevice::SHADER_STAGE_COMPUTE,
+	};
+	for ( const RenderingDevice::ShaderStage stage : stages ) {
+		const String compile_error = spirv->get_stage_compile_error( stage );
+		if ( !compile_error.is_empty() ) {
+			m_lastError = "RD shader compile failed: " + rPath + " :: " + compile_error;
+			return Ref<RDShaderSPIRV>();
+		}
 	}
 	return spirv;
 }

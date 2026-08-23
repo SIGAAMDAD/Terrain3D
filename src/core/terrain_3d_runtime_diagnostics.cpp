@@ -18,7 +18,7 @@
 #include "streaming/terrain_3d_node_streamer.h"
 #include "streaming/terrain_3d_performance_profile.h"
 #include "streaming/terrain_3d_streaming_policy.h"
-#include "streaming/terrain_3d_upload_bridge.h"
+#include "rendering/rd/terrain_3d_rd_texture_manager.h"
 #include "terrain_3d.h"
 
 #include <algorithm>
@@ -604,7 +604,8 @@ Dictionary Terrain3D::getRuntimeDiagnostics( const bool bDeep ) const {
 				bDeep ? m_pData->getInstanceRegionCacheStats() : m_pData->getInstanceRegionCacheStatsFast();
 		diagnostics["startup_load"] = m_pData->getStartupLoadStats();
 	}
-	diagnostics["persistent_upload"] = t3dUploadBridgeGetStats();
+	Terrain3DRdTextureManager *const pTextureManager = Terrain3DRdTextureManager::getSingleton();
+	diagnostics["persistent_upload"] = pTextureManager ? pTextureManager->getStats() : Dictionary();
 	diagnostics["aggregate"] = getRuntimeProfileAggregate();
 	diagnostics["active_render_pipeline"] = getShaderTierStatsDictionaries();
 	diagnostics["cache_inventory"] = getCacheInventory( bDeep );

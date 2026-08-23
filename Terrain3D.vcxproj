@@ -171,6 +171,11 @@
     <ClInclude Include="src\register_types.h" />
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_clipmap_renderer.h" />
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_compositor_effect.h" />
+    <ClInclude Include="src\rendering\rd\terrain_3d_rd_context.h" />
+    <ClInclude Include="src\rendering\rd\terrain_3d_rd_culling.h" />
+    <ClInclude Include="src\rendering\rd\terrain_3d_rd_shader_library.h" />
+    <ClInclude Include="src\rendering\rd\terrain_3d_rd_texture_manager.h" />
+    <ClInclude Include="src\rendering\rd\terrain_3d_rd_topology.h" />
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_types.h" />
     <ClInclude Include="src\rendering\rd\terrain_3d_render_coordinator.h" />
     <ClInclude Include="src\rendering\terrain_3d_clipmap_bounds.h" />
@@ -200,7 +205,6 @@
     <ClInclude Include="src\streaming\terrain_3d_runtime_page_store.h" />
     <ClInclude Include="src\streaming\terrain_3d_runtime_profile.h" />
     <ClInclude Include="src\streaming\terrain_3d_streaming_policy.h" />
-    <ClInclude Include="src\streaming\terrain_3d_upload_bridge.h" />
     <ClInclude Include="src\terrain_3d.h" />
   </ItemGroup>
   <ItemGroup>
@@ -252,6 +256,11 @@
     <ClCompile Include="src\register_types.cpp" />
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_clipmap_renderer.cpp" />
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_compositor_effect.cpp" />
+    <ClCompile Include="src\rendering\rd\terrain_3d_rd_context.cpp" />
+    <ClCompile Include="src\rendering\rd\terrain_3d_rd_culling.cpp" />
+    <ClCompile Include="src\rendering\rd\terrain_3d_rd_shader_library.cpp" />
+    <ClCompile Include="src\rendering\rd\terrain_3d_rd_texture_manager.cpp" />
+    <ClCompile Include="src\rendering\rd\terrain_3d_rd_topology.cpp" />
     <ClCompile Include="src\rendering\rd\terrain_3d_render_coordinator.cpp" />
     <ClCompile Include="src\rendering\terrain_3d_compute.cpp" />
     <ClCompile Include="src\rendering\terrain_3d_far_surface_atlas_cache.cpp" />
@@ -274,7 +283,6 @@
     <ClCompile Include="src\streaming\terrain_3d_runtime_page_store.cpp" />
     <ClCompile Include="src\streaming\terrain_3d_runtime_profile.cpp" />
     <ClCompile Include="src\streaming\terrain_3d_streaming_integration.cpp" />
-    <ClCompile Include="src\streaming\terrain_3d_upload_bridge.cpp" />
     <ClCompile Include="src\terrain_3d.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -285,9 +293,18 @@
     <None Include="docs\api_shader_repair_report.md" />
     <None Include="docs\compile_audit.md" />
     <None Include="docs\gdscript_modernization_audit.md" />
+    <None Include="docs\rd_codex_handoff.md" />
+    <None Include="docs\rd_reference\dependency_audit.md" />
+    <None Include="docs\rd_reference\public_api_delta_baseline_to_alpha.md" />
+    <None Include="docs\rd_reference\public_api_inventory.md" />
+    <None Include="docs\rd_reference\reference_feature_matrix.md" />
+    <None Include="docs\rd_reference\repository_reconstruction_report.md" />
+    <None Include="docs\rendering_device_completion_contract.md" />
     <None Include="docs\rendering_device_conversion_patch.md" />
     <None Include="docs\rendering_device_editor_experiment.md" />
     <None Include="docs\rendering_device_implementation_plan.md" />
+    <None Include="docs\shader_preprocessor_repair.md" />
+    <None Include="docs\windows_godot_cli_stability.md" />
     <None Include="project\Terrain3D.csproj" />
     <None Include="project\Terrain3D.sln" />
     <None Include="project\addons\terrain_3d\compute\terrain_brush.glsl" />
@@ -408,6 +425,7 @@
     <None Include="project\addons\terrain_3d\shaders\includes\pbr_texture_normal.gdshaderinc" />
     <None Include="project\addons\terrain_3d\shaders\includes\pbr_texture_roughness.gdshaderinc" />
     <None Include="project\addons\terrain_3d\shaders\includes\projection.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\includes\projection_displacement.gdshaderinc" />
     <None Include="project\addons\terrain_3d\shaders\includes\render_vertex_world_setup.gdshaderinc" />
     <None Include="project\addons\terrain_3d\shaders\includes\runtime_material_streaming.gdshaderinc" />
     <None Include="project\addons\terrain_3d\shaders\includes\shadow\shadow_height_functions.gdshaderinc" />
@@ -454,6 +472,8 @@
     <None Include="project\project.godot" />
     <None Include="src\shaders\gpu_depth.glsl" />
     <None Include="tools\generate_msvc_project.py" />
+    <None Include="tools\generate_rd_reference_inventory.py" />
+    <None Include="tools\rd.py" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

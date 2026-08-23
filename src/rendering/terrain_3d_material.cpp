@@ -2340,12 +2340,21 @@ void Terrain3DMaterial::connectShaderOverrideSignals( void ) {
 
 void Terrain3DMaterial::setRuntimeMaterialParam( const StringName &strName, const Variant &rValue ) {
 	m_runtimeMaterialParams[strName] = rValue;
+
+	Variant native_value = rValue;
+	if ( rValue.get_type() == Variant::OBJECT ) {
+		const Ref<Texture> texture = rValue;
+		if ( texture.is_valid() ) {
+			native_value = texture->get_rid();
+		}
+	}
+
 	if ( m_hMaterial.is_valid() ) {
-		RS->material_set_param( m_hMaterial, strName, rValue );
+		RS->material_set_param( m_hMaterial, strName, native_value );
 	}
 	for ( int tier = SHADER_TIER_MIDDLE; tier < SHADER_TIER_COUNT; ++tier ) {
 		if ( m_hszTierMaterials[tier].is_valid() ) {
-			RS->material_set_param( m_hszTierMaterials[tier], strName, rValue );
+			RS->material_set_param( m_hszTierMaterials[tier], strName, native_value );
 		}
 	}
 }
@@ -3316,7 +3325,7 @@ void Terrain3DMaterial::update( const uint32_t nFlags ) {
 					LOG( ERROR, "Cannot build terrain page tables: invalid region-map dimensions" );
 					break;
 				case PAGE_TABLE_TEXTURE_ALLOCATION_FAILED:
-					LOG( ERROR, "Cannot build terrain page tables: RenderingServer texture allocation/update failed" );
+					LOG( ERROR, "Cannot build terrain page tables: generated RenderingDevice texture allocation/update failed" );
 					break;
 				default:
 					break;
@@ -4551,7 +4560,7 @@ void Terrain3DMaterial::setBufferShaderOverride( const Ref<Shader> &rShader ) {
 
 void Terrain3DMaterial::setShaderParam( const StringName &strName, const Variant &rValue ) {
 	LOG( DEBUG, "Setting shader parameter: ", strName );
-	if ( strName.begins_with( "_" ) && m_hMaterial.is_valid() ) {
+	if ( strName.begins_with( "_" ) ) {
 		setRuntimeMaterialParam( strName, rValue );
 	} else {
 		_set( strName, rValue );

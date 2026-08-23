@@ -24,6 +24,14 @@ struct PatchData {
 	uint stitch_x;
 	uint stitch_z;
 	uint flags;
+	float bounds_min_y;
+	float bounds_max_y;
+	float bounds_half_extent;
+	float previous_origin_x;
+	float previous_origin_z;
+	float previous_scale;
+	float padding_0;
+	float padding_1;
 };
 layout(set = 0, binding = 9, std430) readonly buffer PatchBuffer { PatchData patches[]; };
 layout(set = 0, binding = 10, std430) writeonly buffer VisibleBuffer { uint visible_indices[]; };
@@ -50,9 +58,9 @@ uint draw_group(PatchData patch_data) {
 }
 
 bool patch_visible(PatchData patch_data) {
-	float half_extent = (frame_data.mesh_params.y * 4.0 + 12.0) * patch_data.scale;
-	float min_y = frame_data.terrain_params.z;
-	float max_y = frame_data.terrain_params.z + frame_data.terrain_params.w;
+	float half_extent = patch_data.bounds_half_extent;
+	float min_y = patch_data.bounds_min_y;
+	float max_y = patch_data.bounds_max_y;
 	vec2 center_xz = patch_data.origin;
 	vec4 corners[8];
 	corners[0] = frame_data.view_projection * vec4(center_xz.x - half_extent, min_y, center_xz.y - half_extent, 1.0);
@@ -79,14 +87,6 @@ bool patch_visible(PatchData patch_data) {
 
 void main() {
 	uint id = gl_GlobalInvocationID.x;
-	if (id == 0u) {
-		commands[0] = IndexedIndirectCommand(cull_data.lod0_index_count, 0u, 0u, 0, 0u * cull_data.max_patches);
-		commands[1] = IndexedIndirectCommand(cull_data.outer_index_count, 0u, 0u, 0, 1u * cull_data.max_patches);
-		commands[2] = IndexedIndirectCommand(cull_data.outer_index_count, 0u, 0u, 0, 2u * cull_data.max_patches);
-		commands[3] = IndexedIndirectCommand(cull_data.outer_index_count, 0u, 0u, 0, 3u * cull_data.max_patches);
-	}
-	memoryBarrierBuffer();
-	barrier();
 	if (id >= min(cull_data.patch_count, cull_data.max_patches)) return;
 	PatchData patch_data = patches[id];
 	if (!patch_visible(patch_data)) return;

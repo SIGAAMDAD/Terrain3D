@@ -6,155 +6,425 @@ layout(location = 0) in ivec2 in_grid;
 layout(location = 1) in uvec2 in_meta;
 
 layout(set = 0, binding = 0, std140) uniform FrameData {
-	mat4 view_projection;
-	vec4 light_direction_ambient;
-	vec4 light_color;
-	vec4 terrain_params;
-	vec4 mesh_params;
-	vec4 target_params;
-	vec4 camera_params;
-	vec4 fog_params;
-	vec4 fog_depth_params;
-	vec4 displacement_params;
+    mat4 view_projection;
+    vec4 light_direction_ambient;
+    vec4 light_color;
+    vec4 terrain_params;
+    vec4 mesh_params;
+    vec4 target_params;
+    vec4 camera_params;
+    vec4 fog_params;
+    vec4 fog_depth_params;
+    vec4 displacement_params;
 } frame_data;
 
 layout(set = 0, binding = 1, std430) readonly buffer RegionMapData { int region_map[]; };
 layout(set = 0, binding = 2) uniform sampler2DArray height_maps;
 layout(set = 0, binding = 12) uniform sampler2D displacement_buffer;
+layout(set = 0, binding = 14) uniform sampler2DArray derived_maps;
+layout(set = 0, binding = 16) uniform sampler2DArray middle_height_maps;
+layout(set = 0, binding = 17) uniform sampler2D middle_height_region_map;
+layout(set = 0, binding = 18) uniform sampler2D far_height_map;
+layout(set = 0, binding = 21) uniform sampler2D world_noise_cache;
+
+struct TierMaterialConfig {
+    uint sampling_mode;
+    uint normal_mode;
+    uint color_mode;
+    uint surface_response;
+    uint texture_surface_mode;
+    uint lighting_model;
+    uint detiling_mode;
+    uint filtering;
+    float authored_color_contribution;
+    float wetness_contribution;
+    float material_lod_bias;
+    float quality_lod_offset;
+};
+
+struct MaterialConfig {
+    uint feature_flags;
+    uint debug_flags;
+    uint output_flags;
+    uint background_mode;
+    uint projection_mode;
+    uint tessellation_material_mode;
+    uint world_noise_mode;
+    uint reserved_0;
+    float displacement_sharpness;
+    float blend_sharpness;
+    float distant_normal_scale;
+    float ground_level;
+    float region_blend;
+    float bias_distance;
+    float mipmap_bias;
+    float depth_blur;
+    float auto_slope;
+    float auto_height_reduction;
+    uint auto_base_texture;
+    uint auto_overlay_texture;
+    uint dual_scale_texture;
+    uint reserved_1;
+    float dual_scale_reduction;
+    float tri_scale_reduction;
+    float dual_scale_far;
+    float dual_scale_near;
+    float noise1_scale;
+    float noise2_scale;
+    float noise1_rotation_x;
+    float noise1_rotation_y;
+    float macro_variation1_r;
+    float macro_variation1_g;
+    float macro_variation1_b;
+    float macro_variation_slope;
+    float macro_variation2_r;
+    float macro_variation2_g;
+    float macro_variation2_b;
+    float macro_variation_padding;
+    float noise1_offset_x;
+    float noise1_offset_y;
+    float world_noise_cache_period;
+    float world_noise_lod_distance;
+    float world_noise_scale;
+    float world_noise_height;
+    uint world_noise_max_octaves;
+    uint world_noise_min_octaves;
+    uint world_noise_cache_enabled;
+    uint world_noise_fragment_normals;
+    float world_noise_offset_x;
+    float world_noise_offset_y;
+    float world_noise_offset_z;
+    float world_noise_padding;
+    float silhouette_r;
+    float silhouette_g;
+    float silhouette_b;
+    float silhouette_a;
+    float contour_step;
+    float editor_overlay_opacity;
+    float reserved_2;
+    float reserved_3;
+    TierMaterialConfig tier[3];
+};
+layout(set = 0, binding = 13, std430) readonly buffer MaterialConfigBuffer { MaterialConfig material_config; };
 
 struct PatchData {
-	vec2 origin;
-	float scale;
-	uint lod;
-	uint tier;
-	uint stitch_x;
-	uint stitch_z;
-	uint flags;
+    vec2 origin;
+    float scale;
+    uint lod;
+    uint tier;
+    uint stitch_x;
+    uint stitch_z;
+    uint flags;
+    float bounds_min_y;
+    float bounds_max_y;
+    float bounds_half_extent;
+    float previous_origin_x;
+    float previous_origin_z;
+    float previous_scale;
+    float padding_0;
+    float padding_1;
 };
 layout(set = 0, binding = 9, std430) readonly buffer PatchBuffer { PatchData patches[]; };
 layout(set = 0, binding = 10, std430) readonly buffer VisibleBuffer { uint visible_indices[]; };
+layout(push_constant, std430) uniform DrawData {
+    uint direct_patch_index;
+    uint direct_mode;
+    uint padding_0;
+    uint padding_1;
+} draw_data;
 
 layout(location = 0) out vec3 world_position;
 layout(location = 1) out vec3 world_normal;
 layout(location = 2) flat out uint patch_tier;
+layout(location = 3) flat out int terrain_region_layer;
+layout(location = 4) out vec2 terrain_world_texel;
+
+const uint T3D_FEATURE_WORLD_NOISE = 1u << 5u;
+const uint T3D_FEATURE_WORLD_NOISE_CACHE = 1u << 12u;
+const uint T3D_FEATURE_MACRO_NOISE = 1u << 13u;
+const uint T3D_FEATURE_DISPLACEMENT = 1u << 6u;
+const uint T3D_FEATURE_DERIVED_MAPS = 1u << 7u;
+const uint T3D_FEATURE_MIDDLE_HEIGHT = 1u << 9u;
+const uint T3D_FEATURE_FAR_ATLAS = 1u << 10u;
 
 int floor_div_i(int value, int divisor) {
-	int q = value / divisor;
-	int r = value - q * divisor;
-	return (r != 0 && ((r < 0) != (divisor < 0))) ? q - 1 : q;
+    int q = value / divisor;
+    int r = value - q * divisor;
+    return (r != 0 && ((r < 0) != (divisor < 0))) ? q - 1 : q;
 }
-
 int floor_mod_i(int value, int divisor) { return value - floor_div_i(value, divisor) * divisor; }
 
-int region_layer(ivec2 region_cell) {
-	int map_size = int(frame_data.terrain_params.y + 0.5);
-	ivec2 map_pos = region_cell + ivec2(map_size / 2);
-	if (map_pos.x < 0 || map_pos.y < 0 || map_pos.x >= map_size || map_pos.y >= map_size) return -1;
-	return region_map[map_pos.y * map_size + map_pos.x] - 1;
+uint packed_region_cell(ivec2 region_cell) {
+    int map_size = int(frame_data.terrain_params.y + 0.5);
+    ivec2 map_pos = region_cell + ivec2(map_size / 2);
+    if (map_pos.x < 0 || map_pos.y < 0 || map_pos.x >= map_size || map_pos.y >= map_size) return 0u;
+    return uint(region_map[map_pos.y * map_size + map_pos.x]);
+}
+int region_layer(ivec2 region_cell) { return int(packed_region_cell(region_cell) & 0xFFFFu) - 1; }
+bool logical_region_present(ivec2 region_cell) { return (packed_region_cell(region_cell) & 0x80000000u) != 0u; }
+float region_presence(ivec2 base_cell, vec2 weights) {
+    float a = logical_region_present(base_cell) ? 1.0 : 0.0;
+    float b = logical_region_present(base_cell + ivec2(1, 0)) ? 1.0 : 0.0;
+    float c = logical_region_present(base_cell + ivec2(0, 1)) ? 1.0 : 0.0;
+    float d = logical_region_present(base_cell + ivec2(1, 1)) ? 1.0 : 0.0;
+    return mix(mix(a, b, weights.x), mix(c, d, weights.x), weights.y);
+}
+float region_background_blend(vec2 world_texel) {
+    float region_size = max(frame_data.terrain_params.x, 1.0);
+    vec2 uv2 = world_texel / region_size - vec2(0.5011);
+    ivec2 base_cell = ivec2(floor(uv2));
+    vec2 f = fract(uv2);
+    float blend_factor = 2.0 + 126.0 * (1.0 - clamp(material_config.region_blend, 0.0, 1.0));
+    float half_width = clamp(0.75 / blend_factor, 1.0 / 1024.0, 0.499);
+    vec2 weights = smoothstep(vec2(0.5 - half_width), vec2(0.5 + half_width), f);
+    return clamp((1.0 - region_presence(base_cell, weights)) * 2.0, 0.0, 1.0);
 }
 
 float decode_height(float encoded) { return fma(encoded, frame_data.terrain_params.w, frame_data.terrain_params.z); }
-
-float sample_height_texel(ivec2 texel) {
-	int region_size = int(frame_data.terrain_params.x + 0.5);
-	ivec2 region_cell = ivec2(floor_div_i(texel.x, region_size), floor_div_i(texel.y, region_size));
-	int layer = region_layer(region_cell);
-	if (layer < 0) return frame_data.terrain_params.z;
-	ivec2 local = ivec2(floor_mod_i(texel.x, region_size), floor_mod_i(texel.y, region_size));
-	ivec3 size3 = textureSize(height_maps, 0);
-	local = clamp(local, ivec2(0), size3.xy - ivec2(1));
-	return decode_height(texelFetch(height_maps, ivec3(local, layer), 0).r);
+bool far_atlas_contains(vec2 world_texel) {
+    float half_world_size = frame_data.terrain_params.x * frame_data.terrain_params.y * 0.5;
+    return all(greaterThanEqual(world_texel, vec2(-half_world_size))) && all(lessThan(world_texel, vec2(half_world_size)));
+}
+vec2 far_height_uv(vec2 world_texel) {
+    float world_size = max(frame_data.terrain_params.x * frame_data.terrain_params.y, 1.0);
+    vec2 atlas_size = vec2(textureSize(far_height_map, 0));
+    vec2 half_texel = vec2(0.5) / max(atlas_size, vec2(1.0));
+    return clamp((world_texel + vec2(world_size * 0.5)) / world_size + half_texel, half_texel, vec2(1.0) - half_texel);
+}
+float sample_far_height(vec2 world_texel) {
+    if ((material_config.feature_flags & T3D_FEATURE_FAR_ATLAS) == 0u || !far_atlas_contains(world_texel)) return material_config.ground_level;
+    return decode_height(textureLod(far_height_map, far_height_uv(world_texel), 0.0).r);
 }
 
+float world_noise_hash(vec2 v) {
+    return fract(1e4 * sin(fma(17.0, v.x, v.y * 0.1)) * (0.1 + abs(sin(fma(v.y, 13.0, v.x)))));
+}
+vec3 world_noise_2d(vec2 x) {
+    vec2 f = fract(x);
+    vec2 f2 = f * f;
+    vec2 f3 = f2 * f;
+    vec2 s = f - 1.0;
+    vec2 u = f3 * fma(vec2(6.0), f2, fma(vec2(-15.0), f, vec2(10.0)));
+    vec2 du = 30.0 * f2 * s * s;
+    vec2 p = floor(x);
+    float a = world_noise_hash(p);
+    float b = world_noise_hash(p + vec2(1.0, 0.0));
+    float c = world_noise_hash(p + vec2(0.0, 1.0));
+    float d = world_noise_hash(p + vec2(1.0, 1.0));
+    float k0 = a;
+    float k1 = b - a;
+    float k2 = c - a;
+    float k3 = d - (b + k2);
+    return vec3(fma(k2, u.y, fma(u.x, fma(k3, u.y, k1), k0)), du * fma(vec2(k3), u.yx, vec2(k1, k2)));
+}
+float procedural_world_noise(vec2 world_texel) {
+    vec2 p = (world_texel + vec2(material_config.world_noise_offset_x, material_config.world_noise_offset_z) * 1024.0) *
+        material_config.world_noise_scale * (0.1 / 1024.0);
+    float distance_to_target = length(world_texel * frame_data.mesh_params.x - frame_data.target_params.xy);
+    int max_octaves = int(clamp(material_config.world_noise_max_octaves, 0u, 15u));
+    int min_octaves = min(int(material_config.world_noise_min_octaves), max_octaves);
+    int octaves = int(clamp(float(max_octaves) - floor(distance_to_target / max(material_config.world_noise_lod_distance, 1.0)),
+        float(min_octaves), float(max_octaves)));
+    bool cache_mode = material_config.world_noise_mode == 1u || material_config.world_noise_mode == 2u ||
+        (material_config.world_noise_mode == 0u && material_config.world_noise_cache_enabled != 0u);
+    if (cache_mode && (material_config.feature_flags & T3D_FEATURE_WORLD_NOISE_CACHE) != 0u) {
+        float max_lod = max(log2(float(textureSize(world_noise_cache, 0).x)), 0.0);
+        float cache_lod = clamp(float(max_octaves - octaves), 0.0, max_lod);
+        vec2 cache_uv = p / max(material_config.world_noise_cache_period, 0.001);
+        return textureLod(world_noise_cache, cache_uv, cache_lod).r * 2.0 - 1.0;
+    }
+    float value = 0.0;
+    float amplitude = 1.0;
+    vec2 derivative = vec2(0.0);
+    for (int octave = 0; octave < 15; ++octave) {
+        if (octave >= octaves) break;
+        vec3 n = world_noise_2d(p);
+        derivative += n.yz;
+        value += amplitude * n.x / (1.0 + dot(derivative, derivative));
+        amplitude *= 0.5;
+        p = mat2(vec2(0.8, -0.6), vec2(0.6, 0.8)) * p * 2.0;
+    }
+    return value;
+}
+float world_noise_height(vec2 world_texel) {
+    float weight = region_background_blend(world_texel);
+    if (weight <= 0.5) return material_config.ground_level;
+    float noise_value = procedural_world_noise(world_texel);
+    float noise_height = noise_value * material_config.world_noise_height * 10.0 + material_config.world_noise_offset_y * 100.0;
+    return material_config.ground_level + noise_height * smoothstep(0.5, 1.0, weight);
+}
+bool world_noise_uses_fragment_normals() {
+#if T3D_TIER != 0
+    return false;
+#else
+    if (material_config.background_mode != 2u || (material_config.feature_flags & T3D_FEATURE_WORLD_NOISE) == 0u) return false;
+    if (material_config.world_noise_mode == 2u || material_config.world_noise_mode == 4u) return true;
+    return material_config.world_noise_mode == 0u && material_config.world_noise_fragment_normals != 0u;
+#endif
+}
+float sample_background_height(vec2 world_texel) {
+    if (material_config.background_mode == 2u && (material_config.feature_flags & T3D_FEATURE_WORLD_NOISE) != 0u) return world_noise_height(world_texel);
+    return material_config.ground_level;
+}
+float sample_background_normal_height(vec2 world_texel) {
+    return world_noise_uses_fragment_normals() ? material_config.ground_level : sample_background_height(world_texel);
+}
+
+float sample_primary_height_texel_mode(ivec2 texel, bool normal_sample) {
+    int region_size = int(frame_data.terrain_params.x + 0.5);
+    ivec2 region_cell = ivec2(floor_div_i(texel.x, region_size), floor_div_i(texel.y, region_size));
+    int layer = region_layer(region_cell);
+    if (layer < 0) return (material_config.feature_flags & T3D_FEATURE_FAR_ATLAS) != 0u && far_atlas_contains(vec2(texel)) ? sample_far_height(vec2(texel)) : (normal_sample ? sample_background_normal_height(vec2(texel)) : sample_background_height(vec2(texel)));
+    ivec2 local = ivec2(floor_mod_i(texel.x, region_size), floor_mod_i(texel.y, region_size));
+    ivec3 size3 = textureSize(height_maps, 0);
+    local = clamp(local, ivec2(0), size3.xy - ivec2(1));
+    return decode_height(texelFetch(height_maps, ivec3(local, layer), 0).r);
+}
+int middle_height_layer(ivec2 region_cell) {
+    if ((material_config.feature_flags & T3D_FEATURE_MIDDLE_HEIGHT) == 0u) return -1;
+    int map_size = int(frame_data.terrain_params.y + 0.5);
+    ivec2 map_pos = region_cell + ivec2(map_size / 2);
+    ivec2 texture_size = textureSize(middle_height_region_map, 0);
+    if (map_pos.x < 0 || map_pos.y < 0 || map_pos.x >= min(map_size, texture_size.x) || map_pos.y >= min(map_size, texture_size.y)) return -1;
+    return int(round(texelFetch(middle_height_region_map, map_pos, 0).r * 65535.0)) - 1;
+}
+float sample_middle_height_texel_mode(ivec2 texel, bool normal_sample) {
+    int region_size = int(frame_data.terrain_params.x + 0.5);
+    ivec2 region_cell = ivec2(floor_div_i(texel.x, region_size), floor_div_i(texel.y, region_size));
+    int layer = middle_height_layer(region_cell);
+    if (layer < 0) return (material_config.feature_flags & T3D_FEATURE_FAR_ATLAS) != 0u && far_atlas_contains(vec2(texel)) ? sample_far_height(vec2(texel)) : (normal_sample ? sample_background_normal_height(vec2(texel)) : sample_background_height(vec2(texel)));
+    ivec2 local = ivec2(floor_mod_i(texel.x, region_size), floor_mod_i(texel.y, region_size));
+    ivec3 size3 = textureSize(middle_height_maps, 0);
+    if (size3.x == region_size && size3.y == region_size) {
+        return decode_height(texelFetch(middle_height_maps, ivec3(clamp(local, ivec2(0), size3.xy - ivec2(1)), layer), 0).r);
+    }
+    vec2 uv = (vec2(local) + vec2(0.5)) / vec2(region_size);
+    return decode_height(textureLod(middle_height_maps, vec3(clamp(uv, vec2(0.0), vec2(1.0)), float(layer)), 0.0).r);
+}
+float sample_height_texel_mode(ivec2 texel, bool normal_sample) {
+#if T3D_TIER == 0
+    return sample_primary_height_texel_mode(texel, normal_sample);
+#elif T3D_TIER == 1
+    return sample_middle_height_texel_mode(texel, normal_sample);
+#else
+    if ((material_config.feature_flags & T3D_FEATURE_FAR_ATLAS) != 0u && far_atlas_contains(vec2(texel))) return sample_far_height(vec2(texel));
+    return normal_sample ? sample_background_normal_height(vec2(texel)) : sample_background_height(vec2(texel));
+#endif
+}
+float sample_height_texel(ivec2 texel) { return sample_height_texel_mode(texel, false); }
 float sample_height_nearest(vec2 world_xz) {
-	vec2 world_texel = world_xz / frame_data.mesh_params.x;
-	return sample_height_texel(ivec2(round(world_texel)));
+    return sample_height_texel_mode(ivec2(round(world_xz / frame_data.mesh_params.x)), false);
+}
+float sample_normal_height_nearest(vec2 world_xz) {
+    return sample_height_texel_mode(ivec2(round(world_xz / frame_data.mesh_params.x)), true);
+}
+float sample_height_interpolated(vec2 world_xz) {
+    vec2 world_texel = world_xz / frame_data.mesh_params.x;
+    ivec2 base = ivec2(floor(world_texel));
+    vec2 f = fract(world_texel);
+    float h00 = sample_height_texel(base);
+    float h10 = sample_height_texel(base + ivec2(1, 0));
+    float h01 = sample_height_texel(base + ivec2(0, 1));
+    float h11 = sample_height_texel(base + ivec2(1, 1));
+    return mix(mix(h00, h10, f.x), mix(h01, h11, f.x), f.y);
 }
 
-float sample_height_interpolated(vec2 world_xz) {
-	vec2 world_texel = world_xz / frame_data.mesh_params.x;
-	ivec2 base = ivec2(floor(world_texel));
-	vec2 f = fract(world_texel);
-	float h00 = sample_height_texel(base);
-	float h10 = sample_height_texel(base + ivec2(1, 0));
-	float h01 = sample_height_texel(base + ivec2(0, 1));
-	float h11 = sample_height_texel(base + ivec2(1, 1));
-	return mix(mix(h00, h10, f.x), mix(h01, h11, f.x), f.y);
+vec3 sample_derived_normal(vec2 world_xz, vec3 fallback_normal) {
+#if T3D_TIER == 0
+    if ((material_config.feature_flags & T3D_FEATURE_DERIVED_MAPS) == 0u || material_config.tier[0].normal_mode != 3u) return fallback_normal;
+    vec2 world_texel = world_xz / frame_data.mesh_params.x;
+    int region_size = int(frame_data.terrain_params.x + 0.5);
+    ivec2 texel = ivec2(floor(world_texel));
+    ivec2 region_cell = ivec2(floor_div_i(texel.x, region_size), floor_div_i(texel.y, region_size));
+    int layer = region_layer(region_cell);
+    if (layer < 0) return fallback_normal;
+    ivec2 local = ivec2(floor_mod_i(texel.x, region_size), floor_mod_i(texel.y, region_size));
+    ivec3 size3 = textureSize(derived_maps, 0);
+    vec2 uv = (vec2(local) + vec2(0.5)) / vec2(region_size);
+    vec2 encoded = textureLod(derived_maps, vec3(uv, float(layer)), 0.0).rg;
+    vec2 xz = encoded * 2.0 - 1.0;
+    float yy = sqrt(max(1.0 - dot(xz, xz), 0.0));
+    return normalize(vec3(xz.x, yy, xz.y));
+#else
+    return fallback_normal;
+#endif
 }
 
 float edge_axis_offset(int edge_index, int test_axis) {
-	float mesh_size = frame_data.mesh_params.y;
-	if (edge_index == 0) return test_axis == 2 ? -(4.0 * mesh_size + 6.0) : 0.0;
-	if (test_axis == 0) return 4.0 * mesh_size + 8.0;
-	return test_axis == 2 ? -2.0 : 0.0;
+    float mesh_size = frame_data.mesh_params.y;
+    if (edge_index == 0) return test_axis == 2 ? -(4.0 * mesh_size + 6.0) : 0.0;
+    if (test_axis == 0) return 4.0 * mesh_size + 8.0;
+    return test_axis == 2 ? -2.0 : 0.0;
 }
-
 vec2 edge_offset(uint part_code, PatchData patch_data) {
-	int part = int(part_code);
-	int sx = clamp(int(patch_data.stitch_x), 0, 2);
-	int sz = clamp(int(patch_data.stitch_z), 0, 2);
-	if (part == 1) return vec2(edge_axis_offset(0, sx), -2.0 * float(sz - 1));
-	if (part == 2) return vec2(edge_axis_offset(1, sx), -2.0 * float(sz - 1));
-	if (part == 3) return vec2(0.0, edge_axis_offset(0, sz));
-	if (part == 4) return vec2(0.0, edge_axis_offset(1, sz));
-	return vec2(0.0);
+    int part = int(part_code);
+    int sx = clamp(int(patch_data.stitch_x), 0, 2);
+    int sz = clamp(int(patch_data.stitch_z), 0, 2);
+    if (part == 1) return vec2(edge_axis_offset(0, sx), -2.0 * float(sz - 1));
+    if (part == 2) return vec2(edge_axis_offset(1, sx), -2.0 * float(sz - 1));
+    if (part == 3) return vec2(0.0, edge_axis_offset(0, sz));
+    if (part == 4) return vec2(0.0, edge_axis_offset(1, sz));
+    return vec2(0.0);
 }
-
 vec3 clipmap_morph(vec2 world_xz, vec2 grid_xz, float scale) {
-	float inv_scale = 1.0 / max(scale, 1e-6);
-	vec2 target_xz = frame_data.target_params.xy;
-	float max_xz = max(abs(world_xz.x - target_xz.x), abs(world_xz.y - target_xz.y));
-	float denominator = max(frame_data.mesh_params.y - 4.0, 1.0);
-	float morph = smoothstep(0.0, 1.0, (max_xz * inv_scale - frame_data.mesh_params.y - 4.0) / denominator);
-	vec2 vertex_fract = fract(grid_xz * 0.5) * 2.0;
-	vec2 shift;
-	float subdiv = max(frame_data.target_params.z, 1.0);
-	if (scale < frame_data.mesh_params.x / subdiv + 1e-6) {
-		float alternate = round(fract(round(mod(world_xz.y * inv_scale, 4.0)) * round(mod(world_xz.x * inv_scale, 4.0)) * 0.25));
-		shift = mix(vertex_fract, vec2(vertex_fract.x, -vertex_fract.y), alternate);
-	} else {
-		shift = vertex_fract * round((fract(world_xz * 0.25 * inv_scale) - 0.5) * 4.0);
-	}
-	return vec3(shift, morph);
+    float inv_scale = 1.0 / max(scale, 1e-6);
+    vec2 target_xz = frame_data.target_params.xy;
+    float max_xz = max(abs(world_xz.x - target_xz.x), abs(world_xz.y - target_xz.y));
+    float denominator = max(frame_data.mesh_params.y - 4.0, 1.0);
+    float morph = smoothstep(0.0, 1.0, (max_xz * inv_scale - frame_data.mesh_params.y - 4.0) / denominator);
+    vec2 vertex_fract = fract(grid_xz * 0.5) * 2.0;
+    vec2 shift;
+    float subdiv = max(frame_data.target_params.z, 1.0);
+    if (scale < frame_data.mesh_params.x / subdiv + 1e-6) {
+        float alternate = round(fract(round(mod(world_xz.y * inv_scale, 4.0)) * round(mod(world_xz.x * inv_scale, 4.0)) * 0.25));
+        shift = mix(vertex_fract, vec2(vertex_fract.x, -vertex_fract.y), alternate);
+    } else {
+        shift = vertex_fract * round((fract(world_xz * 0.25 * inv_scale) - 0.5) * 4.0);
+    }
+    return vec3(shift, morph);
 }
-
 vec3 sample_clipmap_displacement(vec2 world_xz, float clipmap_scale) {
-	if (frame_data.displacement_params.y < 0.5 || frame_data.target_params.z <= 1.0) return vec3(0.0);
-	float vertex_density = 1.0 / max(frame_data.mesh_params.x, 1e-6);
-	float lod_scale = floor(log2(1.0 / max(clipmap_scale * vertex_density, 1e-6)));
-	float sample_scale = exp2(lod_scale) * 0.5;
-	float subdivision_levels = max(log2(frame_data.target_params.z), 1.0);
-	vec2 position_texel = world_xz * vertex_density;
-	vec2 displacement_uv = (sample_scale * position_texel - round(frame_data.target_params.xy * vertex_density * sample_scale))
-		/ max(frame_data.mesh_params.y * 2.0, 1.0) + vec2(0.5);
-	displacement_uv.x += lod_scale - 1.0;
-	displacement_uv.x /= subdivision_levels;
-	if (any(lessThan(displacement_uv, vec2(0.0))) || any(greaterThan(displacement_uv, vec2(1.0)))) return vec3(0.0);
-	return (textureLod(displacement_buffer, displacement_uv, 0.0).rgb * 2.0 - 1.0) * frame_data.displacement_params.x;
+    if ((material_config.feature_flags & T3D_FEATURE_DISPLACEMENT) == 0u || frame_data.displacement_params.y < 0.5 || frame_data.target_params.z <= 1.0) return vec3(0.0);
+    float vertex_density = 1.0 / max(frame_data.mesh_params.x, 1e-6);
+    float lod_scale = floor(log2(1.0 / max(clipmap_scale * vertex_density, 1e-6)));
+    float sample_scale = exp2(lod_scale) * 0.5;
+    float subdivision_levels = max(log2(frame_data.target_params.z), 1.0);
+    vec2 position_texel = world_xz * vertex_density;
+    vec2 displacement_uv = (sample_scale * position_texel - round(frame_data.target_params.xy * vertex_density * sample_scale))
+        / max(frame_data.mesh_params.y * 2.0, 1.0) + vec2(0.5);
+    displacement_uv.x += lod_scale - 1.0;
+    displacement_uv.x /= subdivision_levels;
+    if (any(lessThan(displacement_uv, vec2(0.0))) || any(greaterThan(displacement_uv, vec2(1.0)))) return vec3(0.0);
+    return (textureLod(displacement_buffer, displacement_uv, 0.0).rgb * 2.0 - 1.0) * frame_data.displacement_params.x;
 }
 
 void main() {
-	uint patch_index = visible_indices[gl_InstanceIndex];
-	PatchData patch_data = patches[patch_index];
-	vec2 grid = vec2(in_grid) + edge_offset(in_meta.x, patch_data);
-	vec2 start_world_xz = grid * patch_data.scale + patch_data.origin;
-	vec3 morph = clipmap_morph(start_world_xz, grid, patch_data.scale);
-	vec2 end_world_xz = start_world_xz - morph.xy * patch_data.scale;
-	vec2 world_xz = mix(start_world_xz, end_world_xz, morph.z);
-	float height = patch_data.scale < frame_data.mesh_params.x ? sample_height_interpolated(world_xz)
-		: mix(sample_height_nearest(start_world_xz), sample_height_nearest(end_world_xz), morph.z);
-	float normal_step = max(frame_data.mesh_params.x, patch_data.scale);
-	float h_l = sample_height_nearest(world_xz - vec2(normal_step, 0.0));
-	float h_r = sample_height_nearest(world_xz + vec2(normal_step, 0.0));
-	float h_d = sample_height_nearest(world_xz - vec2(0.0, normal_step));
-	float h_u = sample_height_nearest(world_xz + vec2(0.0, normal_step));
-	world_normal = normalize(vec3(h_l - h_r, 2.0 * normal_step, h_d - h_u));
-	vec3 displacement_start = sample_clipmap_displacement(start_world_xz, patch_data.scale);
-	vec3 displacement_end = sample_clipmap_displacement(end_world_xz, patch_data.scale * 2.0);
-	vec3 displacement = mix(displacement_start, displacement_end, morph.z);
-	world_position = vec3(world_xz.x, height, world_xz.y) + displacement;
-	patch_tier = patch_data.tier;
-	gl_Position = frame_data.view_projection * vec4(world_position, 1.0);
+    uint patch_index = draw_data.direct_mode != 0u ? draw_data.direct_patch_index : visible_indices[gl_InstanceIndex];
+    PatchData patch_data = patches[patch_index];
+    vec2 grid = vec2(in_grid) + edge_offset(in_meta.x, patch_data);
+    vec2 start_world_xz = grid * patch_data.scale + patch_data.origin;
+    vec3 morph = clipmap_morph(start_world_xz, grid, patch_data.scale);
+    vec2 end_world_xz = start_world_xz - morph.xy * patch_data.scale;
+    vec2 world_xz = mix(start_world_xz, end_world_xz, morph.z);
+    float height = patch_data.scale < frame_data.mesh_params.x ? sample_height_interpolated(world_xz)
+        : mix(sample_height_nearest(start_world_xz), sample_height_nearest(end_world_xz), morph.z);
+    float normal_step = max(frame_data.mesh_params.x, patch_data.scale);
+    float h_l = sample_normal_height_nearest(world_xz - vec2(normal_step, 0.0));
+    float h_r = sample_normal_height_nearest(world_xz + vec2(normal_step, 0.0));
+    float h_d = sample_normal_height_nearest(world_xz - vec2(0.0, normal_step));
+    float h_u = sample_normal_height_nearest(world_xz + vec2(0.0, normal_step));
+    vec3 geometry_normal = normalize(vec3(h_l - h_r, 2.0 * normal_step, h_d - h_u));
+    world_normal = sample_derived_normal(world_xz, geometry_normal);
+    vec3 displacement_start = sample_clipmap_displacement(start_world_xz, patch_data.scale);
+    vec3 displacement_end = sample_clipmap_displacement(end_world_xz, patch_data.scale * 2.0);
+    vec3 displacement = mix(displacement_start, displacement_end, morph.z);
+    world_position = vec3(world_xz.x, height, world_xz.y) + displacement;
+    terrain_world_texel = world_xz / frame_data.mesh_params.x;
+    int region_size = int(frame_data.terrain_params.x + 0.5);
+    ivec2 texel = ivec2(floor(terrain_world_texel));
+    terrain_region_layer = region_layer(ivec2(floor_div_i(texel.x, region_size), floor_div_i(texel.y, region_size)));
+    patch_tier = patch_data.tier;
+    gl_Position = frame_data.view_projection * vec4(world_position, 1.0);
 }
 
 #[fragment]
@@ -166,199 +436,881 @@ void main() {
 layout(location = 0) in vec3 world_position;
 layout(location = 1) in vec3 world_normal;
 layout(location = 2) flat in uint patch_tier;
+layout(location = 3) flat in int terrain_region_layer;
+layout(location = 4) in vec2 terrain_world_texel;
 layout(location = 0) out vec4 out_color;
 
 layout(set = 0, binding = 0, std140) uniform FrameData {
-	mat4 view_projection;
-	vec4 light_direction_ambient;
-	vec4 light_color;
-	vec4 terrain_params;
-	vec4 mesh_params;
-	vec4 target_params;
-	vec4 camera_params;
-	vec4 fog_params;
-	vec4 fog_depth_params;
-	vec4 displacement_params;
+    mat4 view_projection;
+    vec4 light_direction_ambient;
+    vec4 light_color;
+    vec4 terrain_params;
+    vec4 mesh_params;
+    vec4 target_params;
+    vec4 camera_params;
+    vec4 fog_params;
+    vec4 fog_depth_params;
+    vec4 displacement_params;
 } frame_data;
 layout(set = 0, binding = 1, std430) readonly buffer RegionMapData { int region_map[]; };
+layout(set = 0, binding = 2) uniform sampler2DArray height_maps;
 layout(set = 0, binding = 3) uniform sampler2DArray control_maps;
 layout(set = 0, binding = 4) uniform sampler2DArray color_maps;
 layout(set = 0, binding = 5) uniform sampler2DArray albedo_maps;
 layout(set = 0, binding = 6) uniform sampler2DArray normal_maps;
 layout(set = 0, binding = 7) uniform sampler2DArray surface_maps;
+layout(set = 0, binding = 12) uniform sampler2D displacement_buffer;
+layout(set = 0, binding = 14) uniform sampler2DArray derived_maps;
+layout(set = 0, binding = 15) uniform sampler2DArray middle_composite_maps;
+layout(set = 0, binding = 16) uniform sampler2DArray middle_height_maps;
+layout(set = 0, binding = 17) uniform sampler2D middle_height_region_map;
+layout(set = 0, binding = 18) uniform sampler2D far_height_map;
+layout(set = 0, binding = 19) uniform sampler2D far_color_map;
+layout(set = 0, binding = 20) uniform sampler2DArray far_albedo_maps;
+layout(set = 0, binding = 21) uniform sampler2D world_noise_cache;
+layout(set = 0, binding = 22) uniform sampler2D macro_noise_texture;
+
+struct EditorDecal {
+    vec4 transform; // world position.xy, size, rotation
+    vec4 color;
+    uvec4 state; // visible, part flags, padding
+};
+struct EditorOverlayConfig {
+    EditorDecal decals[3];
+    vec4 heightmap_contour; // black height, white height, interval, thickness
+    vec4 contour_color;
+    vec4 instancer_grid; // cell size, padding
+};
+layout(set = 0, binding = 23, std430) readonly buffer EditorOverlayBuffer { EditorOverlayConfig editor_overlay; };
+layout(set = 0, binding = 24) uniform sampler2D editor_brush_texture;
 
 struct MaterialLayer {
-	vec4 color;
-	vec4 pbr0;
-	vec4 pbr1;
-	vec4 displacement;
+    vec4 color;
+    vec4 pbr0;
+    vec4 pbr1;
+    vec2 displacement;
+    uint physical_layer;
+    uint flags;
 };
 layout(set = 0, binding = 8, std430) readonly buffer MaterialBuffer { MaterialLayer materials[]; };
 
+struct TierMaterialConfig {
+    uint sampling_mode;
+    uint normal_mode;
+    uint color_mode;
+    uint surface_response;
+    uint texture_surface_mode;
+    uint lighting_model;
+    uint detiling_mode;
+    uint filtering;
+    float authored_color_contribution;
+    float wetness_contribution;
+    float material_lod_bias;
+    float quality_lod_offset;
+};
+struct MaterialConfig {
+    uint feature_flags;
+    uint debug_flags;
+    uint output_flags;
+    uint background_mode;
+    uint projection_mode;
+    uint tessellation_material_mode;
+    uint world_noise_mode;
+    uint reserved_0;
+    float displacement_sharpness;
+    float blend_sharpness;
+    float distant_normal_scale;
+    float ground_level;
+    float region_blend;
+    float bias_distance;
+    float mipmap_bias;
+    float depth_blur;
+    float auto_slope;
+    float auto_height_reduction;
+    uint auto_base_texture;
+    uint auto_overlay_texture;
+    uint dual_scale_texture;
+    uint reserved_1;
+    float dual_scale_reduction;
+    float tri_scale_reduction;
+    float dual_scale_far;
+    float dual_scale_near;
+    float noise1_scale;
+    float noise2_scale;
+    float noise1_rotation_x;
+    float noise1_rotation_y;
+    float macro_variation1_r;
+    float macro_variation1_g;
+    float macro_variation1_b;
+    float macro_variation_slope;
+    float macro_variation2_r;
+    float macro_variation2_g;
+    float macro_variation2_b;
+    float macro_variation_padding;
+    float noise1_offset_x;
+    float noise1_offset_y;
+    float world_noise_cache_period;
+    float world_noise_lod_distance;
+    float world_noise_scale;
+    float world_noise_height;
+    uint world_noise_max_octaves;
+    uint world_noise_min_octaves;
+    uint world_noise_cache_enabled;
+    uint world_noise_fragment_normals;
+    float world_noise_offset_x;
+    float world_noise_offset_y;
+    float world_noise_offset_z;
+    float world_noise_padding;
+    float silhouette_r;
+    float silhouette_g;
+    float silhouette_b;
+    float silhouette_a;
+    float contour_step;
+    float editor_overlay_opacity;
+    float reserved_2;
+    float reserved_3;
+    TierMaterialConfig tier[3];
+};
+layout(set = 0, binding = 13, std430) readonly buffer MaterialConfigBuffer { MaterialConfig material_config; };
+
+const uint T3D_FEATURE_AUTO_SHADER = 1u << 0u;
+const uint T3D_FEATURE_DUAL_SCALING = 1u << 1u;
+const uint T3D_FEATURE_MACRO_VARIATION = 1u << 2u;
+const uint T3D_FEATURE_CONTROL_IMPLICIT = 1u << 3u;
+const uint T3D_FEATURE_COLOR_IMPLICIT = 1u << 4u;
+const uint T3D_FEATURE_WORLD_NOISE = 1u << 5u;
+const uint T3D_FEATURE_WORLD_NOISE_CACHE = 1u << 12u;
+const uint T3D_FEATURE_MACRO_NOISE = 1u << 13u;
+const uint T3D_FEATURE_DISPLACEMENT = 1u << 6u;
+const uint T3D_FEATURE_DERIVED_MAPS = 1u << 7u;
+const uint T3D_FEATURE_MIDDLE_COMPOSITE = 1u << 8u;
+const uint T3D_FEATURE_MIDDLE_HEIGHT = 1u << 9u;
+const uint T3D_FEATURE_FAR_ATLAS = 1u << 10u;
+const uint T3D_FEATURE_FAR_ALBEDO = 1u << 11u;
+const uint T3D_LAYER_PACKED_SURFACE = 1u << 0u;
+const uint T3D_LAYER_RESIDENT = 1u << 1u;
+const uint T3D_OUTPUT_ALBEDO = 1u << 0u;
+const uint T3D_OUTPUT_ROUGHNESS = 1u << 1u;
+const uint T3D_OUTPUT_SPECULAR = 1u << 2u;
+const uint T3D_OUTPUT_NORMAL = 1u << 3u;
+const uint T3D_OUTPUT_AO = 1u << 4u;
+
+const uint T3D_DEBUG_REGION_GRID = 1u << 0u;
+const uint T3D_DEBUG_INSTANCER_GRID = 1u << 1u;
+const uint T3D_DEBUG_VERTEX_GRID = 1u << 2u;
+const uint T3D_DEBUG_CONTOURS = 1u << 3u;
+const uint T3D_DEBUG_NAVIGATION = 1u << 4u;
+const uint T3D_DEBUG_CHECKERED = 1u << 5u;
+const uint T3D_DEBUG_GREY = 1u << 6u;
+const uint T3D_DEBUG_HEIGHTMAP = 1u << 7u;
+const uint T3D_DEBUG_JAGGEDNESS = 1u << 8u;
+const uint T3D_DEBUG_AUTOSHADER = 1u << 9u;
+const uint T3D_DEBUG_CONTROL_TEXTURE = 1u << 10u;
+const uint T3D_DEBUG_CONTROL_BLEND = 1u << 11u;
+const uint T3D_DEBUG_CONTROL_ANGLE = 1u << 12u;
+const uint T3D_DEBUG_CONTROL_SCALE = 1u << 13u;
+const uint T3D_DEBUG_COLORMAP = 1u << 14u;
+const uint T3D_DEBUG_ROUGHMAP = 1u << 15u;
+const uint T3D_DEBUG_DISPLACEMENT = 1u << 16u;
+const uint T3D_DEBUG_TEX_ALBEDO = 1u << 17u;
+const uint T3D_DEBUG_TEX_HEIGHT = 1u << 18u;
+const uint T3D_DEBUG_TEX_NORMAL = 1u << 19u;
+const uint T3D_DEBUG_TEX_ROUGH = 1u << 20u;
+const uint T3D_DEBUG_TEX_AO = 1u << 21u;
+
 int floor_div_i(int value, int divisor) {
-	int q = value / divisor;
-	int r = value - q * divisor;
-	return (r != 0 && ((r < 0) != (divisor < 0))) ? q - 1 : q;
+    int q = value / divisor;
+    int r = value - q * divisor;
+    return (r != 0 && ((r < 0) != (divisor < 0))) ? q - 1 : q;
 }
 int floor_mod_i(int value, int divisor) { return value - floor_div_i(value, divisor) * divisor; }
-int region_layer(ivec2 region_cell) {
-	int map_size = int(frame_data.terrain_params.y + 0.5);
-	ivec2 map_pos = region_cell + ivec2(map_size / 2);
-	if (map_pos.x < 0 || map_pos.y < 0 || map_pos.x >= map_size || map_pos.y >= map_size) return -1;
-	return region_map[map_pos.y * map_size + map_pos.x] - 1;
+uint packed_region_cell(ivec2 region_cell) {
+    int map_size = int(frame_data.terrain_params.y + 0.5);
+    ivec2 map_pos = region_cell + ivec2(map_size / 2);
+    if (map_pos.x < 0 || map_pos.y < 0 || map_pos.x >= map_size || map_pos.y >= map_size) return 0u;
+    return uint(region_map[map_pos.y * map_size + map_pos.x]);
+}
+int region_layer(ivec2 region_cell) { return int(packed_region_cell(region_cell) & 0xFFFFu) - 1; }
+bool logical_region_present(ivec2 region_cell) { return (packed_region_cell(region_cell) & 0x80000000u) != 0u; }
+float region_presence(ivec2 base_cell, vec2 weights) {
+    float a = logical_region_present(base_cell) ? 1.0 : 0.0;
+    float b = logical_region_present(base_cell + ivec2(1, 0)) ? 1.0 : 0.0;
+    float c = logical_region_present(base_cell + ivec2(0, 1)) ? 1.0 : 0.0;
+    float d = logical_region_present(base_cell + ivec2(1, 1)) ? 1.0 : 0.0;
+    return mix(mix(a, b, weights.x), mix(c, d, weights.x), weights.y);
+}
+float region_background_blend(vec2 world_texel) {
+    float region_size = max(frame_data.terrain_params.x, 1.0);
+    vec2 uv2 = world_texel / region_size - vec2(0.5011);
+    ivec2 base_cell = ivec2(floor(uv2));
+    vec2 f = fract(uv2);
+    float blend_factor = 2.0 + 126.0 * (1.0 - clamp(material_config.region_blend, 0.0, 1.0));
+    float half_width = clamp(0.75 / blend_factor, 1.0 / 1024.0, 0.499);
+    vec2 weights = smoothstep(vec2(0.5 - half_width), vec2(0.5 + half_width), f);
+    return clamp((1.0 - region_presence(base_cell, weights)) * 2.0, 0.0, 1.0);
 }
 
-uint read_control(ivec2 texel, int layer) {
-	if (layer < 0) return 0u;
-	int region_size = int(frame_data.terrain_params.x + 0.5);
-	ivec2 local = ivec2(floor_mod_i(texel.x, region_size), floor_mod_i(texel.y, region_size));
-	ivec3 size3 = textureSize(control_maps, 0);
-	local = clamp(local, ivec2(0), size3.xy - ivec2(1));
-	return floatBitsToUint(texelFetch(control_maps, ivec3(local, layer), 0).r);
+#if T3D_TIER == 0
+float fragment_world_noise_hash(vec2 v) {
+    return fract(1e4 * sin(fma(17.0, v.x, v.y * 0.1)) * (0.1 + abs(sin(fma(v.y, 13.0, v.x)))));
+}
+vec3 fragment_world_noise_2d(vec2 x) {
+    vec2 f = fract(x);
+    vec2 f2 = f * f;
+    vec2 f3 = f2 * f;
+    vec2 s = f - 1.0;
+    vec2 u = f3 * fma(vec2(6.0), f2, fma(vec2(-15.0), f, vec2(10.0)));
+    vec2 du = 30.0 * f2 * s * s;
+    vec2 p = floor(x);
+    float a = fragment_world_noise_hash(p);
+    float b = fragment_world_noise_hash(p + vec2(1.0, 0.0));
+    float c = fragment_world_noise_hash(p + vec2(0.0, 1.0));
+    float d = fragment_world_noise_hash(p + vec2(1.0, 1.0));
+    float k1 = b - a;
+    float k2 = c - a;
+    float k3 = d - (b + k2);
+    return vec3(fma(k2, u.y, fma(u.x, fma(k3, u.y, k1), a)), du * fma(vec2(k3), u.yx, vec2(k1, k2)));
+}
+float fragment_world_noise_value(vec2 world_texel) {
+    vec2 p = (world_texel + vec2(material_config.world_noise_offset_x, material_config.world_noise_offset_z) * 1024.0) *
+        material_config.world_noise_scale * (0.1 / 1024.0);
+    float distance_to_target = length(world_texel * frame_data.mesh_params.x - frame_data.target_params.xy);
+    int max_octaves = int(clamp(material_config.world_noise_max_octaves, 0u, 15u));
+    int min_octaves = min(int(material_config.world_noise_min_octaves), max_octaves);
+    int octaves = int(clamp(float(max_octaves) - floor(distance_to_target / max(material_config.world_noise_lod_distance, 1.0)),
+        float(min_octaves), float(max_octaves)));
+    bool cache_mode = material_config.world_noise_mode == 1u || material_config.world_noise_mode == 2u ||
+        (material_config.world_noise_mode == 0u && material_config.world_noise_cache_enabled != 0u);
+    if (cache_mode && (material_config.feature_flags & T3D_FEATURE_WORLD_NOISE_CACHE) != 0u) {
+        float max_lod = max(log2(float(textureSize(world_noise_cache, 0).x)), 0.0);
+        float cache_lod = clamp(float(max_octaves - octaves), 0.0, max_lod);
+        vec2 cache_uv = p / max(material_config.world_noise_cache_period, 0.001);
+        return textureLod(world_noise_cache, cache_uv, cache_lod).r * 2.0 - 1.0;
+    }
+    float value = 0.0;
+    float amplitude = 1.0;
+    vec2 derivative = vec2(0.0);
+    for (int octave = 0; octave < 15; ++octave) {
+        if (octave >= octaves) break;
+        vec3 n = fragment_world_noise_2d(p);
+        derivative += n.yz;
+        value += amplitude * n.x / (1.0 + dot(derivative, derivative));
+        amplitude *= 0.5;
+        p = mat2(vec2(0.8, -0.6), vec2(0.6, 0.8)) * p * 2.0;
+    }
+    return value;
+}
+float fragment_world_noise_height_with_weight(vec2 world_texel, float weight) {
+    if (weight <= 0.5) return material_config.ground_level;
+    float noise_value = fragment_world_noise_value(world_texel);
+    float noise_height = noise_value * material_config.world_noise_height * 10.0 + material_config.world_noise_offset_y * 100.0;
+    return material_config.ground_level + noise_height * smoothstep(0.5, 1.0, weight);
+}
+bool fragment_world_noise_normals_enabled() {
+    if (material_config.background_mode != 2u || (material_config.feature_flags & T3D_FEATURE_WORLD_NOISE) == 0u) return false;
+    if (material_config.world_noise_mode == 2u || material_config.world_noise_mode == 4u) return true;
+    return material_config.world_noise_mode == 0u && material_config.world_noise_fragment_normals != 0u;
+}
+vec3 apply_fragment_world_noise_normal(vec3 base_normal, vec2 world_texel) {
+    if (!fragment_world_noise_normals_enabled()) return base_normal;
+    float half_world_size = frame_data.terrain_params.x * frame_data.terrain_params.y * 0.5;
+    bool inside_far_atlas = all(greaterThanEqual(world_texel, vec2(-half_world_size))) && all(lessThan(world_texel, vec2(half_world_size)));
+    if ((material_config.feature_flags & T3D_FEATURE_FAR_ATLAS) != 0u && inside_far_atlas) return base_normal;
+    float weight = region_background_blend(world_texel);
+    if (weight <= 0.5) return base_normal;
+    float h = fragment_world_noise_height_with_weight(world_texel, weight);
+    float hx = fragment_world_noise_height_with_weight(world_texel + vec2(1.0, 0.0), weight);
+    float hz = fragment_world_noise_height_with_weight(world_texel + vec2(0.0, 1.0), weight);
+    float world_step = max(frame_data.mesh_params.x, 0.0001);
+    float base_y = max(base_normal.y, 0.0001);
+    vec2 base_delta = base_normal.xz * (world_step / base_y);
+    return normalize(vec3(base_delta.x + h - hx, world_step, base_delta.y + h - hz));
+}
+#else
+vec3 apply_fragment_world_noise_normal(vec3 base_normal, vec2 world_texel) { return base_normal; }
+#endif
+bool far_atlas_contains(vec2 world_texel) {
+    float half_world_size = frame_data.terrain_params.x * frame_data.terrain_params.y * 0.5;
+    return all(greaterThanEqual(world_texel, vec2(-half_world_size))) && all(lessThan(world_texel, vec2(half_world_size)));
+}
+vec2 far_atlas_uv(vec2 world_texel) {
+    float world_size = max(frame_data.terrain_params.x * frame_data.terrain_params.y, 1.0);
+    return clamp((world_texel + vec2(world_size * 0.5)) / world_size, vec2(0.0), vec2(1.0));
+}
+vec4 sample_far_surface(vec2 world_texel) {
+    if ((material_config.feature_flags & T3D_FEATURE_FAR_ATLAS) == 0u || !far_atlas_contains(world_texel)) return vec4(1.0, 1.0, 1.0, 0.0);
+    ivec2 size2 = textureSize(far_color_map, 0);
+    ivec2 coord = clamp(ivec2(floor(far_atlas_uv(world_texel) * vec2(size2))), ivec2(0), size2 - ivec2(1));
+    return texelFetch(far_color_map, coord, 0);
+}
+uint decode_far_surface_bits(float packed_alpha) { return uint(round(clamp(packed_alpha, 0.0, 1.0) * 255.0)); }
+bool far_surface_solid(uint bits) { return (bits & 0x80u) != 0u; }
+int far_surface_material(uint bits) { return int((bits >> 2u) & 0x1Fu); }
+float far_surface_alpha(uint bits) { return float(bits & 0x3u) * (1.0 / 3.0); }
+
+uint read_control(ivec2 texel) {
+    if ((material_config.feature_flags & T3D_FEATURE_CONTROL_IMPLICIT) != 0u) return 0u;
+    int region_size = int(frame_data.terrain_params.x + 0.5);
+    ivec2 region_cell = ivec2(floor_div_i(texel.x, region_size), floor_div_i(texel.y, region_size));
+    int layer = region_layer(region_cell);
+    if (layer < 0) return 0u;
+    ivec2 local = ivec2(floor_mod_i(texel.x, region_size), floor_mod_i(texel.y, region_size));
+    ivec3 size3 = textureSize(control_maps, 0);
+    local = clamp(local, ivec2(0), size3.xy - ivec2(1));
+    return floatBitsToUint(texelFetch(control_maps, ivec3(local, layer), 0).r);
+}
+vec4 color_texel(ivec2 texel) {
+    if ((material_config.feature_flags & T3D_FEATURE_COLOR_IMPLICIT) != 0u) return vec4(1.0);
+    int region_size = int(frame_data.terrain_params.x + 0.5);
+    ivec2 region_cell = ivec2(floor_div_i(texel.x, region_size), floor_div_i(texel.y, region_size));
+    int layer = region_layer(region_cell);
+    if (layer < 0) return sample_far_surface(vec2(texel));
+    ivec2 local = ivec2(floor_mod_i(texel.x, region_size), floor_mod_i(texel.y, region_size));
+    ivec3 size3 = textureSize(color_maps, 0);
+    local = clamp(local, ivec2(0), size3.xy - ivec2(1));
+    return texelFetch(color_maps, ivec3(local, layer), 0);
+}
+vec4 sample_color_exact(vec2 world_texel) {
+    ivec2 base = ivec2(floor(world_texel));
+    vec2 f = fract(world_texel);
+    vec4 c00 = color_texel(base);
+    vec4 c10 = color_texel(base + ivec2(1, 0));
+    vec4 c01 = color_texel(base + ivec2(0, 1));
+    vec4 c11 = color_texel(base + ivec2(1, 1));
+    return mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y);
+}
+vec4 sample_color_map(vec2 world_texel, TierMaterialConfig tier_config) {
+    if ((material_config.feature_flags & T3D_FEATURE_COLOR_IMPLICIT) != 0u) return vec4(1.0);
+    if (terrain_region_layer < 0) return sample_far_surface(world_texel);
+    if (tier_config.color_mode == 2u) return sample_color_exact(world_texel);
+    int region_size = int(frame_data.terrain_params.x + 0.5);
+    ivec2 texel = ivec2(floor(world_texel));
+    ivec2 region_cell = ivec2(floor_div_i(texel.x, region_size), floor_div_i(texel.y, region_size));
+    int layer = region_layer(region_cell);
+    if (layer < 0) return sample_far_surface(world_texel);
+    ivec2 local = ivec2(floor_mod_i(texel.x, region_size), floor_mod_i(texel.y, region_size));
+    ivec3 size3 = textureSize(color_maps, 0);
+    vec2 uv = (vec2(local) + fract(world_texel) + vec2(0.5)) / vec2(max(size3.xy, ivec2(1)));
+    return textureLod(color_maps, vec3(uv, float(layer)), 0.0);
+}
+vec4 sample_middle_composite(vec2 world_texel) {
+    if ((material_config.feature_flags & T3D_FEATURE_MIDDLE_COMPOSITE) == 0u || terrain_region_layer < 0) return vec4(0.0);
+    int region_size = int(frame_data.terrain_params.x + 0.5);
+    ivec2 texel = ivec2(floor(world_texel));
+    ivec2 local = ivec2(floor_mod_i(texel.x, region_size), floor_mod_i(texel.y, region_size));
+    ivec3 size3 = textureSize(middle_composite_maps, 0);
+    vec2 uv = (vec2(local) + fract(world_texel) + vec2(0.5)) / vec2(region_size);
+    return textureLod(middle_composite_maps, vec3(clamp(uv, vec2(0.0), vec2(1.0)), float(terrain_region_layer)), 0.0);
 }
 
-vec4 color_texel(ivec2 local_coord, ivec2 region_cell, ivec2 map_size) {
-	ivec2 region_delta = ivec2(0);
-	if (local_coord.x < 0) { local_coord.x += map_size.x; region_delta.x = -1; }
-	else if (local_coord.x >= map_size.x) { local_coord.x -= map_size.x; region_delta.x = 1; }
-	if (local_coord.y < 0) { local_coord.y += map_size.y; region_delta.y = -1; }
-	else if (local_coord.y >= map_size.y) { local_coord.y -= map_size.y; region_delta.y = 1; }
-	int layer = region_layer(region_cell + region_delta);
-	return layer >= 0 ? texelFetch(color_maps, ivec3(local_coord, layer), 0) : vec4(1.0);
+float hash21(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
 }
-
-vec4 sample_color_map(vec2 world_xz) {
-	float region_size = frame_data.terrain_params.x;
-	vec2 world_texel = world_xz / frame_data.mesh_params.x;
-	vec2 world_region_uv = (world_texel + vec2(0.5)) / region_size;
-	vec2 region_pos = floor(world_region_uv);
-	vec2 local_uv = world_region_uv - region_pos;
-	ivec2 map_size = textureSize(color_maps, 0).xy;
-	vec2 color_texel_pos = local_uv * vec2(map_size) - vec2(0.5);
-	ivec2 base = ivec2(floor(color_texel_pos));
-	vec2 f = fract(color_texel_pos);
-	ivec2 region_cell = ivec2(region_pos);
-	vec4 c00 = color_texel(base, region_cell, map_size);
-	vec4 c10 = color_texel(base + ivec2(1, 0), region_cell, map_size);
-	vec4 c01 = color_texel(base + ivec2(0, 1), region_cell, map_size);
-	vec4 c11 = color_texel(base + ivec2(1, 1), region_cell, map_size);
-	return mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y);
+float value_noise(vec2 p) {
+    ivec2 i = ivec2(floor(p));
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash21(vec2(i));
+    float b = hash21(vec2(i + ivec2(1, 0)));
+    float c = hash21(vec2(i + ivec2(0, 1)));
+    float d = hash21(vec2(i + ivec2(1, 1)));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
-
 vec2 rotate_uv(vec2 uv, float angle) {
-	float s = sin(angle);
-	float c = cos(angle);
-	return mat2(c, -s, s, c) * uv;
+    float s = sin(angle);
+    float c = cos(angle);
+    return mat2(c, -s, s, c) * uv;
 }
-
+vec2 project_material_uv(vec3 position, vec3 normal, float scale, uint projection_mode) {
+    if (projection_mode == 0u) return position.xz * scale;
+    vec3 axis = abs(normal);
+    if (axis.y >= axis.x && axis.y >= axis.z) return position.xz * scale;
+    if (axis.x >= axis.z) return position.zy * scale;
+    return position.xy * scale;
+}
+vec2 apply_detiling(vec2 uv, vec2 world_xz, uint mode, MaterialLayer layer) {
+    if (mode == 2u) return uv;
+    vec2 cell = floor(world_xz * max(layer.pbr0.x, 0.000001) * 0.25);
+    float selector = hash21(cell + vec2(float(layer.physical_layer), 19.0));
+    float shift = layer.pbr1.w;
+    if (mode == 3u) return uv + vec2(selector - 0.5) * shift;
+    uint sectors = mode == 4u ? 4u : (mode == 5u ? 16u : 8u);
+    float angle = floor(selector * float(sectors)) * 6.28318530718 / float(sectors) * layer.pbr1.z;
+    return rotate_uv(uv, angle) + vec2(fract(selector * 7.13) - 0.5, fract(selector * 13.71) - 0.5) * shift;
+}
 vec3 decode_surface_normal(vec2 encoded_xy) {
-	vec2 normal_xy = fma(encoded_xy, vec2(2.0), vec2(-1.0));
-	float len_sq = dot(normal_xy, normal_xy);
-	if (len_sq > 1.0) { normal_xy *= inversesqrt(len_sq); len_sq = 1.0; }
-	return vec3(normal_xy.x, sqrt(max(1.0 - len_sq, 0.0)), normal_xy.y);
+    vec2 normal_xy = fma(encoded_xy, vec2(2.0), vec2(-1.0));
+    float len_sq = dot(normal_xy, normal_xy);
+    if (len_sq > 1.0) { normal_xy *= inversesqrt(len_sq); len_sq = 1.0; }
+    return vec3(normal_xy.x, sqrt(max(1.0 - len_sq, 0.0)), normal_xy.y);
 }
 
 struct SampledMaterial {
-	vec3 albedo;
-	vec3 tangent_normal;
-	float roughness;
-	float ao;
-	float metallic;
+    vec3 albedo;
+    vec3 tangent_normal;
+    float roughness;
+    float ao;
+    float metallic;
+    float height;
+    float ao_affect;
+    float total_weight;
+    int logical_id;
 };
-
-SampledMaterial sample_material(int logical_id, vec2 world_xz, float control_scale, float control_angle) {
-	int count = max(int(frame_data.mesh_params.w + 0.5), 1);
-	int id = clamp(logical_id, 0, count - 1);
-	MaterialLayer layer = materials[id];
-	int texture_layers = max(textureSize(albedo_maps, 0).z, 1);
-	int physical = clamp(int(layer.displacement.z + 0.5), 0, texture_layers - 1);
-	float uv_scale = max(layer.pbr0.x, 0.000001) * control_scale;
-	vec2 uv = rotate_uv(world_xz * uv_scale, control_angle);
-	float lod_bias = T3D_TIER == 0 ? 0.0 : (T3D_TIER == 1 ? 1.0 : 2.0);
-	bool resident = layer.displacement.w >= 2.0;
-	bool packed_surface = mod(layer.displacement.w, 2.0) > 0.5;
-	vec4 albedo_texel = resident ? textureLod(albedo_maps, vec3(uv, float(physical)), lod_bias) : vec4(1.0);
-	SampledMaterial result;
-	result.albedo = albedo_texel.rgb * layer.color.rgb;
-	result.tangent_normal = vec3(0.0, 1.0, 0.0);
-	result.roughness = 1.0;
-	result.ao = 1.0;
-	result.metallic = layer.pbr0.w;
-	if (resident && T3D_TIER <= 1) {
-		if (packed_surface && textureSize(surface_maps, 0).z > physical) {
-			vec4 surface = textureLod(surface_maps, vec3(uv, float(physical)), lod_bias);
-			result.roughness = clamp(surface.b + layer.pbr0.z, 0.0, 1.0);
-			result.ao = mix(1.0, surface.a, clamp(layer.pbr1.x, 0.0, 1.0));
-			if (T3D_TIER == 0) result.tangent_normal = decode_surface_normal(surface.rg);
-		} else if (textureSize(normal_maps, 0).z > physical) {
-			vec4 legacy = textureLod(normal_maps, vec3(uv, float(physical)), lod_bias);
-			result.roughness = clamp(legacy.a + layer.pbr0.z, 0.0, 1.0);
-			vec3 decoded = fma(legacy.xzy, vec3(2.0), vec3(-1.0));
-			float length_value = length(decoded);
-			result.ao = mix(1.0, max(length_value * 2.0 - 1.0, 0.0), clamp(layer.pbr1.x, 0.0, 1.0));
-			if (T3D_TIER == 0 && length_value > 0.00001) result.tangent_normal = decoded / length_value;
-		}
-	}
-	return result;
+SampledMaterial material_zero() {
+    SampledMaterial r;
+    r.albedo = vec3(0.0);
+    r.tangent_normal = vec3(0.0, 0.0, 0.0);
+    r.roughness = 0.0;
+    r.ao = 0.0;
+    r.metallic = 0.0;
+    r.height = 0.0;
+    r.ao_affect = 0.0;
+    r.total_weight = 0.0;
+    r.logical_id = 0;
+    return r;
+}
+void accumulate_material(inout SampledMaterial dst, SampledMaterial src, float weight) {
+    dst.albedo += src.albedo * weight;
+    dst.tangent_normal += src.tangent_normal * weight;
+    dst.roughness += src.roughness * weight;
+    dst.ao += src.ao * weight;
+    dst.metallic += src.metallic * weight;
+    dst.height += src.height * weight;
+    dst.ao_affect += src.ao_affect * weight;
+    dst.total_weight += weight;
+    if (weight > 0.5) dst.logical_id = src.logical_id;
+}
+SampledMaterial sample_material(int logical_id, vec2 world_xz, vec3 terrain_normal, float control_scale, float control_angle, TierMaterialConfig tier_config, bool use_far_array) {
+    int count = max(int(frame_data.mesh_params.w + 0.5), 1);
+    int id = clamp(logical_id, 0, count - 1);
+    MaterialLayer layer = materials[id];
+    bool resident = (layer.flags & T3D_LAYER_RESIDENT) != 0u;
+    bool packed_surface = (layer.flags & T3D_LAYER_PACKED_SURFACE) != 0u;
+    int texture_layers = max(use_far_array ? textureSize(far_albedo_maps, 0).z : textureSize(albedo_maps, 0).z, 1);
+    int physical = clamp(int(layer.physical_layer), 0, texture_layers - 1);
+    float uv_scale = max(layer.pbr0.x, 0.000001) * max(control_scale, 0.1);
+    vec2 uv = project_material_uv(vec3(world_xz.x, world_position.y, world_xz.y), terrain_normal, uv_scale, material_config.projection_mode);
+    uv = rotate_uv(uv, control_angle);
+    uv = apply_detiling(uv, world_xz, tier_config.detiling_mode, layer);
+    float lod_bias = tier_config.material_lod_bias + tier_config.quality_lod_offset;
+    vec4 albedo_texel = vec4(1.0);
+    if (resident) {
+        albedo_texel = use_far_array ? texture(far_albedo_maps, vec3(uv, float(physical)), lod_bias)
+            : texture(albedo_maps, vec3(uv, float(physical)), lod_bias);
+    }
+    if ((material_config.feature_flags & T3D_FEATURE_DUAL_SCALING) != 0u && uint(id) == material_config.dual_scale_texture) {
+        float distance_to_camera = length(frame_data.camera_params.xyz - world_position);
+        float far_factor = smoothstep(material_config.dual_scale_near, max(material_config.dual_scale_far, material_config.dual_scale_near + 0.001), distance_to_camera);
+        vec2 far_uv = project_material_uv(vec3(world_xz.x, world_position.y, world_xz.y), terrain_normal,
+            uv_scale * max(material_config.dual_scale_reduction, 0.001), material_config.projection_mode);
+        far_uv = rotate_uv(far_uv, control_angle);
+        vec4 far_texel = vec4(1.0);
+        if (resident) {
+            far_texel = use_far_array ? texture(far_albedo_maps, vec3(far_uv, float(physical)), lod_bias + 1.0)
+                : texture(albedo_maps, vec3(far_uv, float(physical)), lod_bias + 1.0);
+        }
+        albedo_texel = mix(albedo_texel, far_texel, far_factor);
+    }
+    SampledMaterial result = material_zero();
+    result.albedo = albedo_texel.rgb * layer.color.rgb;
+    result.height = albedo_texel.a;
+    result.tangent_normal = vec3(0.0, 1.0, 0.0);
+    result.roughness = clamp(1.0 + layer.pbr0.z, 0.0, 1.0);
+    result.ao = 1.0;
+    result.ao_affect = layer.pbr1.y;
+    result.metallic = clamp(layer.pbr0.w, 0.0, 1.0);
+    result.total_weight = 1.0;
+    result.logical_id = id;
+    if (resident && !use_far_array && tier_config.surface_response != 0u) {
+        if (packed_surface && textureSize(surface_maps, 0).z > physical) {
+            vec4 surface = texture(surface_maps, vec3(uv, float(physical)), lod_bias);
+            result.roughness = clamp(surface.b + layer.pbr0.z, 0.0, 1.0);
+            result.ao = mix(1.0, surface.a, clamp(layer.pbr1.x, 0.0, 1.0));
+            result.tangent_normal = decode_surface_normal(surface.rg);
+        } else if (textureSize(normal_maps, 0).z > physical) {
+            vec4 legacy = texture(normal_maps, vec3(uv, float(physical)), lod_bias);
+            result.roughness = clamp(legacy.a + layer.pbr0.z, 0.0, 1.0);
+            vec3 decoded = fma(legacy.xzy, vec3(2.0), vec3(-1.0));
+            float normal_length = length(decoded);
+            result.ao = mix(1.0, max(normal_length * 2.0 - 1.0, 0.0), clamp(layer.pbr1.x, 0.0, 1.0));
+            if (normal_length > 0.00001) result.tangent_normal = decoded / normal_length;
+        }
+    }
+    return result;
 }
 
-SampledMaterial blend_material(SampledMaterial a, SampledMaterial b, float t) {
-	SampledMaterial r;
-	r.albedo = mix(a.albedo, b.albedo, t);
-	r.tangent_normal = normalize(mix(a.tangent_normal, b.tangent_normal, t));
-	r.roughness = mix(a.roughness, b.roughness, t);
-	r.ao = mix(a.ao, b.ao, t);
-	r.metallic = mix(a.metallic, b.metallic, t);
-	return r;
+uint auto_control(uint authored_control, vec3 terrain_normal, float height, bool outside_region) {
+    bool auto_enabled = (material_config.feature_flags & T3D_FEATURE_AUTO_SHADER) != 0u;
+    bool use_auto = auto_enabled && (outside_region || (authored_control & 1u) != 0u);
+    if (!use_auto) return authored_control;
+    float auto_blend = clamp(fma(material_config.auto_slope * 2.0, terrain_normal.y - 1.0, 1.0)
+        - material_config.auto_height_reduction * 0.01 * height, 0.0, 1.0);
+    uint base_id = material_config.auto_base_texture & 0x1Fu;
+    uint overlay_id = material_config.auto_overlay_texture & 0x1Fu;
+    bool swap_pair = base_id > overlay_id;
+    uint canonical_base = swap_pair ? overlay_id : base_id;
+    uint canonical_overlay = swap_pair ? base_id : overlay_id;
+    float canonical_blend = swap_pair ? 1.0 - auto_blend : auto_blend;
+    return (canonical_base << 27u) | (canonical_overlay << 22u) |
+        ((uint(fma(canonical_blend, 255.0, 0.5)) & 0xFFu) << 14u);
+}
+void decode_control(uint control, out int base_id, out int overlay_id, out float blend, out float angle, out float scale) {
+    base_id = int((control >> 27u) & 0x1Fu);
+    overlay_id = int((control >> 22u) & 0x1Fu);
+    blend = float((control >> 14u) & 0xFFu) * T3D_DIV_255;
+    angle = -float((control >> 10u) & 0xFu) * T3D_TAU_16;
+    uint encoded_scale = (control >> 7u) & 0x7u;
+    scale = 0.9 - float(((encoded_scale + 3u) % 8u) + 1u) * 0.1;
+}
+SampledMaterial sample_control_pair(uint raw_control, vec2 world_xz, vec3 terrain_normal, TierMaterialConfig tier_config, float weight) {
+    uint control = auto_control(raw_control, terrain_normal, world_position.y, terrain_region_layer < 0);
+    int base_id;
+    int overlay_id;
+    float blend;
+    float angle;
+    float scale;
+    decode_control(control, base_id, overlay_id, blend, angle, scale);
+    bool use_far_array = T3D_TIER == 2 && (material_config.feature_flags & T3D_FEATURE_FAR_ALBEDO) != 0u;
+    SampledMaterial base = sample_material(base_id, world_xz, terrain_normal, scale, angle, tier_config, use_far_array);
+    SampledMaterial overlay = overlay_id == base_id ? base : sample_material(overlay_id, world_xz, terrain_normal, scale, angle, tier_config, use_far_array);
+#if T3D_TIER == 0
+    float height_delta = (overlay.height - base.height) * material_config.displacement_sharpness;
+    float height_blend = clamp((blend - 0.5) * (1.0 + material_config.blend_sharpness * 4.0) + 0.5 + height_delta * 0.25, 0.0, 1.0);
+#else
+    float height_blend = smoothstep(0.12, 0.88, blend);
+#endif
+    SampledMaterial result = material_zero();
+    accumulate_material(result, base, 1.0 - height_blend);
+    accumulate_material(result, overlay, height_blend);
+    result.total_weight = weight;
+    return result;
+}
+
+vec4 corner_weights(vec2 world_texel) {
+    vec2 f = fract(world_texel);
+    return vec4((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
+}
+bool use_bilinear_controls(TierMaterialConfig tier_config) {
+    if (tier_config.sampling_mode == 2u) return false;
+    if (tier_config.sampling_mode == 1u) return true;
+    float footprint = max(length(dFdx(world_position.xz)), length(dFdy(world_position.xz))) / max(frame_data.mesh_params.x, 0.0001);
+    bool adaptive = footprint < 16.0;
+    if (tier_config.sampling_mode == 4u) adaptive = adaptive && length(frame_data.camera_params.xyz - world_position) < material_config.bias_distance;
+    return adaptive;
+}
+SampledMaterial sample_detailed_material(vec2 world_texel, vec3 terrain_normal, TierMaterialConfig tier_config) {
+    ivec2 base_texel = ivec2(floor(world_texel));
+    if (!use_bilinear_controls(tier_config)) {
+        return sample_control_pair(read_control(base_texel), world_position.xz, terrain_normal, tier_config, 1.0);
+    }
+    ivec2 offsets[4] = ivec2[4](ivec2(0, 0), ivec2(1, 0), ivec2(0, 1), ivec2(1, 1));
+    vec4 weights = corner_weights(world_texel);
+    if (tier_config.sampling_mode == 5u) {
+        int first = 0;
+        int second = 1;
+        for (int i = 1; i < 4; ++i) {
+            if (weights[i] > weights[first]) { second = first; first = i; }
+            else if (i != first && weights[i] > weights[second]) second = i;
+        }
+        for (int i = 0; i < 4; ++i) if (i != first && i != second) weights[i] = 0.0;
+        weights /= max(dot(weights, vec4(1.0)), 0.00001);
+    }
+    SampledMaterial result = material_zero();
+    for (int i = 0; i < 4; ++i) {
+        if (weights[i] <= 0.00001) continue;
+        SampledMaterial corner = sample_control_pair(read_control(base_texel + offsets[i]), world_position.xz, terrain_normal, tier_config, weights[i]);
+        float inv = 1.0 / max(corner.total_weight, 0.00001);
+        corner.albedo *= inv;
+        corner.tangent_normal *= inv;
+        corner.roughness *= inv;
+        corner.ao *= inv;
+        corner.metallic *= inv;
+        corner.height *= inv;
+        corner.ao_affect *= inv;
+        corner.total_weight = 1.0;
+        accumulate_material(result, corner, weights[i]);
+    }
+    return result;
+}
+
+vec3 apply_macro_variation(vec3 albedo, vec2 world_texel, vec3 terrain_normal) {
+    if ((material_config.feature_flags & T3D_FEATURE_MACRO_VARIATION) == 0u) return albedo;
+    vec2 noise_uv = world_texel * material_config.noise1_scale * 0.1 + vec2(material_config.noise1_offset_x, material_config.noise1_offset_y);
+    vec2 rotated = vec2(material_config.noise1_rotation_x * noise_uv.x + material_config.noise1_rotation_y * noise_uv.y,
+        material_config.noise1_rotation_x * noise_uv.y - material_config.noise1_rotation_y * noise_uv.x);
+    bool use_noise_texture = (material_config.feature_flags & T3D_FEATURE_MACRO_NOISE) != 0u;
+    float noise1 = use_noise_texture ? texture(macro_noise_texture, rotated).r : value_noise(rotated);
+    float noise2_uv_scale = material_config.noise2_scale * 0.1;
+    float noise2 = use_noise_texture ? texture(macro_noise_texture, world_texel * noise2_uv_scale).r : value_noise(world_texel * noise2_uv_scale);
+    vec3 macro1 = vec3(material_config.macro_variation1_r, material_config.macro_variation1_g, material_config.macro_variation1_b);
+    vec3 macro2 = vec3(material_config.macro_variation2_r, material_config.macro_variation2_g, material_config.macro_variation2_b);
+    vec3 macro = mix(macro1, vec3(1.0), noise1) * mix(macro2, vec3(1.0), noise2);
+    return albedo * mix(vec3(1.0), macro, clamp(terrain_normal.y + material_config.macro_variation_slope, 0.0, 1.0));
+}
+
+vec3 apply_surface_normal(vec3 terrain_normal, vec3 tangent_normal) {
+    vec3 tangent = normalize(cross(terrain_normal, abs(terrain_normal.z) < 0.99 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0)));
+    vec3 bitangent = normalize(cross(terrain_normal, tangent));
+    return normalize(tangent * tangent_normal.x + terrain_normal * tangent_normal.y + bitangent * tangent_normal.z);
+}
+vec3 light_material(vec3 albedo, vec3 normal, float roughness, float metallic, float ao, TierMaterialConfig tier_config) {
+    if (tier_config.lighting_model == 0u) return albedo;
+    vec3 light_dir = normalize(-frame_data.light_direction_ambient.xyz);
+    float ndotl = max(dot(normal, light_dir), 0.0);
+    vec3 ambient = albedo * frame_data.light_direction_ambient.w * ao;
+    vec3 diffuse = albedo * frame_data.light_color.rgb * ndotl;
+    if (tier_config.lighting_model == 1u) return ambient + diffuse;
+    vec3 view_dir = normalize(frame_data.camera_params.xyz - world_position);
+    vec3 half_dir = normalize(light_dir + view_dir);
+    float gloss = max(1.0 - roughness, 0.0);
+    float spec_power = mix(4.0, 128.0, gloss * gloss);
+    float specular_term = pow(max(dot(normal, half_dir), 0.0), spec_power) * gloss;
+    if ((material_config.output_flags & T3D_OUTPUT_SPECULAR) == 0u) specular_term = 0.0;
+    if (tier_config.lighting_model == 2u) {
+        vec3 specular_color = mix(vec3(0.04), albedo, metallic);
+        return ambient + diffuse * (1.0 - metallic * 0.6) + specular_color * specular_term * frame_data.light_color.rgb;
+    }
+    vec3 f0 = mix(vec3(0.04), albedo, metallic);
+    float fresnel = pow(1.0 - max(dot(normal, view_dir), 0.0), 5.0);
+    vec3 F = mix(f0, vec3(1.0), fresnel);
+    vec3 kd = (vec3(1.0) - F) * (1.0 - metallic);
+    return ambient + (kd * albedo / 3.14159265 + F * specular_term) * frame_data.light_color.rgb * ndotl;
+}
+vec3 apply_fog(vec3 lit) {
+    float fog_density = max(frame_data.fog_params.w, 0.0);
+    if (fog_density <= 0.0 && frame_data.fog_depth_params.w <= 0.5) return lit;
+    float distance_to_camera = length(frame_data.camera_params.xyz - world_position);
+    float fog = 0.0;
+    if (frame_data.fog_depth_params.w > 0.5) {
+        float fog_range = max(frame_data.fog_depth_params.y - frame_data.fog_depth_params.x, 1e-4);
+        fog = clamp((distance_to_camera - frame_data.fog_depth_params.x) / fog_range, 0.0, 1.0);
+        fog = pow(fog, max(frame_data.fog_depth_params.z, 0.01));
+    } else {
+        fog = 1.0 - exp(-fog_density * distance_to_camera);
+    }
+    return mix(lit, frame_data.fog_params.rgb, clamp(fog, 0.0, 1.0));
+}
+
+float fractal_contour_lines(float thickness, float interval, vec3 spatial_coords, vec3 normal, vec3 base_ddx, vec3 base_ddy, vec3 camera_pos) {
+    float depth = max(log(max(length(spatial_coords - camera_pos) / interval, 1e-6)) * (1.0 / log(2.0)) - 1.0, 1.0);
+    float interval_a = interval * exp2(max(floor(depth) - 1.0, 1.0)) * 0.5;
+    float interval_b = interval * exp2(max(floor(depth), 1.0)) * 0.5;
+    float interval_c = interval * exp2(max(floor(depth + 0.5) - 1.0, 1.0)) * 0.5;
+    float y_fwidth = max(abs(base_ddx.y) + abs(base_ddy.y), 1e-6);
+    thickness *= smoothstep(0.0, 0.0125, clamp(1.0 - normal.y, 0.0, 1.0));
+    float mi = max(0.0, thickness - 1.0);
+    float ma = max(1.0, thickness);
+    float mx = max(0.0, 1.0 - thickness);
+    float inv_a = 1.0 / max(interval_a, 1e-6);
+    float inv_b = 1.0 / max(interval_b, 1e-6);
+    float inv_c = 1.0 / max(interval_c, 1e-6);
+    float f_a = abs(fract((spatial_coords.y + interval_a * 0.5) * inv_a) - 0.5);
+    float f_b = abs(fract((spatial_coords.y + interval_b * 0.5) * inv_b) - 0.5);
+    float f_c = abs(fract((spatial_coords.y + interval_c * 0.5) * inv_c) - 0.5);
+    float df_a = max(y_fwidth * inv_a, 1e-6);
+    float df_b = max(y_fwidth * inv_b, 1e-6);
+    float df_c = max(y_fwidth * inv_c, 1e-6);
+    float denom = max(ma - mi, 1e-6);
+    float line_a = clamp((f_a - df_a * mi) / (df_a * denom), mx, 1.0);
+    float line_b = clamp((f_b - df_b * mi) / (df_b * denom), mx, 1.0);
+    float line_c = clamp((f_c - df_c * mi) / (df_c * denom), mx, 1.0);
+    float phase = fract(depth - 0.5);
+    return mix(mix(line_a, line_b, fract(depth)), line_c, 4.0 * phase * (1.0 - phase));
+}
+
+float editor_reticle(vec2 world_xz, EditorDecal decal) {
+    float camera_distance = clamp(length(frame_data.camera_params.xyz - world_position), 0.001, 4000.0);
+    float sqrt_distance = sqrt(camera_distance);
+    float view_scale = 16.0 / sqrt_distance;
+    vec2 cross_uv = (world_xz - decal.transform.xy) * view_scale;
+    float brush_radius = max(decal.transform.z * 0.5 * view_scale, 1.0);
+    float line_start = brush_radius + log2(camera_distance);
+    float line_end = 2.5 * line_start;
+    float line_thickness = 0.03 * length(cross_uv) + 0.03 * sqrt_distance;
+    vec2 d = abs(cross_uv);
+    float horizontal = smoothstep(line_thickness, 0.0, d.y) * step(d.x, line_end) * step(line_start, d.x);
+    float vertical = smoothstep(line_thickness, 0.0, d.x) * step(d.y, line_end) * step(line_start, d.y);
+    float distance_from_center = length(cross_uv);
+    float circle_outer = smoothstep(brush_radius + line_thickness, brush_radius, distance_from_center);
+    float circle_inner = 1.0 - smoothstep(brush_radius, brush_radius - line_thickness, distance_from_center);
+    return clamp(horizontal + vertical + circle_outer * circle_inner, 0.0, 1.0);
+}
+
+vec3 apply_editor_decals(vec3 color) {
+    for (int i = 0; i < 3; ++i) {
+        EditorDecal decal = editor_overlay.decals[i];
+        if (decal.state.x == 0u) continue;
+        float size = max(decal.transform.z, 1e-6);
+        float c = cos(decal.transform.w);
+        float sn = sin(decal.transform.w);
+        vec2 local = world_position.xz - decal.transform.xy;
+        vec2 rotated = vec2(c * local.x - sn * local.y, sn * local.x + c * local.y);
+        vec2 decal_uv = rotated / size;
+        float mask = 0.0;
+        if (i == 0 && (decal.state.y & 1u) != 0u && abs(decal_uv.x) <= 0.499 && abs(decal_uv.y) <= 0.499) {
+            mask = texture(editor_brush_texture, decal_uv + vec2(0.5)).r;
+        }
+        if ((decal.state.y & 2u) != 0u) mask += editor_reticle(world_position.xz, decal);
+        mask = clamp(mask, 0.0, 1.0);
+        color = mix(color, decal.color.rgb, mask * mask * decal.color.a);
+    }
+    return color;
+}
+
+vec3 debug_visualization(vec3 color, vec4 color_map, uint control, SampledMaterial material, vec3 terrain_normal, bool used_auto) {
+    uint flags = material_config.debug_flags;
+    if ((flags & T3D_DEBUG_GREY) != 0u) color = vec3(dot(color, vec3(0.299, 0.587, 0.114)));
+    if ((flags & T3D_DEBUG_CHECKERED) != 0u) {
+        float checker = mod(floor(terrain_world_texel.x * 0.125) + floor(terrain_world_texel.y * 0.125), 2.0);
+        color = mix(vec3(0.12), vec3(0.85), checker);
+    }
+    if ((flags & T3D_DEBUG_HEIGHTMAP) != 0u) {
+        float black_height = editor_overlay.heightmap_contour.x;
+        float white_height = editor_overlay.heightmap_contour.y;
+        float low_height = min(black_height, white_height);
+        float high_height = max(black_height, white_height);
+        float normalized_height = clamp((world_position.y - low_height) / max(high_height - low_height, 1e-6), 0.0, 1.0);
+        normalized_height = mix(normalized_height, 1.0 - normalized_height, float(white_height < black_height));
+        color = vec3(smoothstep(0.0, 1.0, normalized_height));
+    }
+    if ((flags & T3D_DEBUG_JAGGEDNESS) != 0u) color = vec3(1.0 - terrain_normal.y, terrain_normal.y, 0.0);
+    if ((flags & T3D_DEBUG_AUTOSHADER) != 0u) color = used_auto ? vec3(1.0, 0.2, 0.05) : vec3(0.05, 0.3, 1.0);
+    if ((flags & T3D_DEBUG_CONTROL_TEXTURE) != 0u) color = vec3(float((control >> 27u) & 0x1Fu) / 31.0, float((control >> 22u) & 0x1Fu) / 31.0, float(control & 0xFFu) / 255.0);
+    if ((flags & T3D_DEBUG_CONTROL_BLEND) != 0u) color = vec3(float((control >> 14u) & 0xFFu) * T3D_DIV_255);
+    if ((flags & T3D_DEBUG_CONTROL_ANGLE) != 0u) color = vec3(float((control >> 10u) & 0xFu) / 15.0, 0.25, 1.0 - float((control >> 10u) & 0xFu) / 15.0);
+    if ((flags & T3D_DEBUG_CONTROL_SCALE) != 0u) color = vec3(float((control >> 7u) & 0x7u) / 7.0);
+    if ((flags & T3D_DEBUG_COLORMAP) != 0u) color = color_map.rgb;
+    if ((flags & T3D_DEBUG_ROUGHMAP) != 0u || (flags & T3D_DEBUG_TEX_ROUGH) != 0u) color = vec3(material.roughness);
+    if ((flags & T3D_DEBUG_TEX_ALBEDO) != 0u) color = material.albedo;
+    if ((flags & T3D_DEBUG_TEX_HEIGHT) != 0u) color = vec3(material.height);
+    if ((flags & T3D_DEBUG_TEX_NORMAL) != 0u) color = material.tangent_normal * 0.5 + 0.5;
+    if ((flags & T3D_DEBUG_TEX_AO) != 0u) color = vec3(material.ao);
+    if ((flags & T3D_DEBUG_DISPLACEMENT) != 0u) color = vec3(length(textureLod(displacement_buffer, vec2(0.5), 0.0).rgb * 2.0 - 1.0));
+    if ((flags & T3D_DEBUG_REGION_GRID) != 0u) {
+        vec2 region_uv = fract(terrain_world_texel / frame_data.terrain_params.x);
+        float line = step(min(min(region_uv.x, 1.0 - region_uv.x), min(region_uv.y, 1.0 - region_uv.y)), 0.01);
+        color = mix(color, vec3(1.0, 0.2, 0.0), line * material_config.editor_overlay_opacity);
+    }
+    if ((flags & T3D_DEBUG_VERTEX_GRID) != 0u) {
+        vec2 vertex_uv = abs(fract(terrain_world_texel) - 0.5);
+        float line = 1.0 - smoothstep(0.45, 0.5, max(vertex_uv.x, vertex_uv.y));
+        color = mix(color, vec3(0.2, 1.0, 0.3), line * 0.35 * material_config.editor_overlay_opacity);
+    }
+    if ((flags & T3D_DEBUG_INSTANCER_GRID) != 0u) {
+        float cell_size = max(editor_overlay.instancer_grid.x, 1.0);
+        vec2 cell = abs(fract((world_position.xz + cell_size * 0.5) / cell_size) - 0.5) * cell_size;
+        float grid_distance = min(cell.x, cell.y);
+        float line_thickness = 0.01 * sqrt(max(length(frame_data.camera_params.xyz - world_position), 0.001));
+        float line = 1.0 - smoothstep(line_thickness - fwidth(grid_distance), line_thickness + fwidth(grid_distance), grid_distance);
+        color = mix(color, vec3(0.05), line * material_config.editor_overlay_opacity);
+    }
+    if ((flags & T3D_DEBUG_CONTOURS) != 0u) {
+        float interval = max(editor_overlay.heightmap_contour.z, 0.25);
+        float thickness = max(editor_overlay.heightmap_contour.w, 0.0);
+        vec3 base_ddx = dFdx(world_position);
+        vec3 base_ddy = dFdy(world_position);
+        vec3 geometric_normal = normalize(cross(base_ddy, base_ddx));
+        float contour_line = fractal_contour_lines(thickness, interval, world_position, geometric_normal, base_ddx, base_ddy, frame_data.camera_params.xyz);
+        color = mix(color, editor_overlay.contour_color.rgb, (1.0 - contour_line) * editor_overlay.contour_color.a * material_config.editor_overlay_opacity);
+    }
+    if ((flags & T3D_DEBUG_NAVIGATION) != 0u && ((control >> 1u) & 1u) != 0u) {
+        color *= mix(vec3(1.0), vec3(0.5, 0.0, 0.85), material_config.editor_overlay_opacity);
+    }
+    return color;
 }
 
 void main() {
-	vec2 world_xz = world_position.xz;
-	ivec2 control_texel = ivec2(floor(world_xz / frame_data.mesh_params.x));
-	int region_size = int(frame_data.terrain_params.x + 0.5);
-	ivec2 region_cell = ivec2(floor_div_i(control_texel.x, region_size), floor_div_i(control_texel.y, region_size));
-	int region = region_layer(region_cell);
-	uint control = read_control(control_texel, region);
-	if (((control >> 2u) & 1u) != 0u) discard;
-	int base_id = int((control >> 27u) & 0x1Fu);
-	int overlay_id = int((control >> 22u) & 0x1Fu);
-	float blend = float((control >> 14u) & 0xFFu) * T3D_DIV_255;
-	float angle = float((control >> 10u) & 0xFu) * T3D_TAU_16;
-	uint encoded_scale = (control >> 7u) & 0x7u;
-	float control_scale = 0.9 - float(((encoded_scale + 3u) % 8u) + 1u) * 0.1;
-	SampledMaterial material = sample_material(base_id, world_xz, control_scale, angle);
-	if (overlay_id != base_id && blend > 0.0001) material = blend_material(material, sample_material(overlay_id, world_xz, control_scale, angle), blend);
+    TierMaterialConfig tier_config = material_config.tier[T3D_TIER];
+    vec2 world_texel = terrain_world_texel;
+    vec3 terrain_normal = normalize(world_normal);
+    if (tier_config.normal_mode == 2u) terrain_normal = normalize(cross(dFdy(world_position), dFdx(world_position)));
+    else if (tier_config.normal_mode < 2u) terrain_normal = apply_fragment_world_noise_normal(terrain_normal, world_texel);
 
-	vec3 normal = normalize(world_normal);
-	if (T3D_TIER == 0) {
-		vec3 tangent = normalize(vec3(1.0, -normal.x / max(normal.y, 0.05), 0.0));
-		vec3 bitangent = normalize(cross(normal, tangent));
-		normal = normalize(tangent * material.tangent_normal.x + normal * material.tangent_normal.y + bitangent * material.tangent_normal.z);
-	}
-	vec4 color_map = sample_color_map(world_xz);
-	vec3 albedo = material.albedo * color_map.rgb;
-	vec3 light_dir = normalize(-frame_data.light_direction_ambient.xyz);
-	float ndotl = max(dot(normal, light_dir), 0.0);
-	vec3 view_dir = normalize(frame_data.camera_params.xyz - world_position);
-	vec3 half_dir = normalize(light_dir + view_dir);
-	float spec_power = mix(128.0, 4.0, material.roughness);
-	float specular = pow(max(dot(normal, half_dir), 0.0), spec_power) * (1.0 - material.roughness);
-	vec3 diffuse = albedo * frame_data.light_color.rgb * ndotl;
-	vec3 ambient = albedo * frame_data.light_direction_ambient.w * material.ao;
-	vec3 f0 = mix(vec3(0.04), albedo, clamp(material.metallic, 0.0, 1.0));
-	vec3 lit = ambient + diffuse * mix(vec3(1.0), vec3(0.4), material.metallic) + f0 * specular * frame_data.light_color.rgb;
-	float fog_density = max(frame_data.fog_params.w, 0.0);
-	if (fog_density > 0.0 || frame_data.fog_depth_params.w > 0.5) {
-		float distance_to_camera = length(frame_data.camera_params.xyz - world_position);
-		float fog = 0.0;
-		if (frame_data.fog_depth_params.w > 0.5) {
-			float fog_range = max(frame_data.fog_depth_params.y - frame_data.fog_depth_params.x, 1e-4);
-			fog = clamp((distance_to_camera - frame_data.fog_depth_params.x) / fog_range, 0.0, 1.0);
-			fog = pow(fog, max(frame_data.fog_depth_params.z, 0.01));
-		} else {
-			fog = 1.0 - exp(-fog_density * distance_to_camera);
-		}
-		lit = mix(lit, frame_data.fog_params.rgb, clamp(fog, 0.0, 1.0));
-	}
-	out_color = vec4(lit, 1.0);
+    vec4 far_surface = sample_far_surface(world_texel);
+    uint far_bits = decode_far_surface_bits(far_surface.a);
+    bool outside_region = terrain_region_layer < 0;
+    if (outside_region && material_config.background_mode == 0u && !far_surface_solid(far_bits)) discard;
+
+    uint nearest_control = read_control(ivec2(floor(world_texel)));
+    bool used_auto = (material_config.feature_flags & T3D_FEATURE_AUTO_SHADER) != 0u && (outside_region || (nearest_control & 1u) != 0u);
+    if (!outside_region && ((nearest_control >> 2u) & 1u) != 0u) discard;
+
+    vec4 color_map = sample_color_map(world_texel, tier_config);
+    SampledMaterial material = material_zero();
+
+#if T3D_TIER == 2
+    if ((material_config.feature_flags & T3D_FEATURE_FAR_ATLAS) != 0u && far_surface_solid(far_bits)) {
+        int material_id = far_surface_material(far_bits);
+        material = sample_material(material_id, world_position.xz, terrain_normal, 1.0, 0.0, tier_config,
+            (material_config.feature_flags & T3D_FEATURE_FAR_ALBEDO) != 0u);
+        color_map = far_surface;
+        color_map.a = far_surface_alpha(far_bits);
+    } else {
+        material = sample_control_pair(nearest_control, world_position.xz, terrain_normal, tier_config, 1.0);
+    }
+#elif T3D_TIER == 1
+    vec4 composite = sample_middle_composite(world_texel);
+    if (tier_config.sampling_mode == 2u && (material_config.feature_flags & T3D_FEATURE_MIDDLE_COMPOSITE) != 0u && terrain_region_layer >= 0) {
+        uint composite_bits = uint(round(clamp(composite.a, 0.0, 1.0) * 255.0));
+        if ((composite_bits & 0x80u) == 0u) discard;
+        material = material_zero();
+        material.albedo = composite.rgb;
+        material.tangent_normal = vec3(0.0, 1.0, 0.0);
+        material.roughness = 1.0;
+        material.ao = 1.0;
+        material.total_weight = 1.0;
+        color_map = vec4(1.0, 1.0, 1.0, float(composite_bits & 0x7Fu) * (1.0 / 127.0));
+    } else if (outside_region && far_surface_solid(far_bits)) {
+        material = sample_material(far_surface_material(far_bits), world_position.xz, terrain_normal, 1.0, 0.0, tier_config,
+            (material_config.feature_flags & T3D_FEATURE_FAR_ALBEDO) != 0u);
+        color_map = far_surface;
+        color_map.a = far_surface_alpha(far_bits);
+    } else {
+        material = sample_detailed_material(world_texel, terrain_normal, tier_config);
+    }
+#else
+    if (outside_region && far_surface_solid(far_bits)) {
+        material = sample_material(far_surface_material(far_bits), world_position.xz, terrain_normal, 1.0, 0.0, tier_config,
+            (material_config.feature_flags & T3D_FEATURE_FAR_ALBEDO) != 0u);
+        color_map = far_surface;
+        color_map.a = far_surface_alpha(far_bits);
+    } else {
+        material = sample_detailed_material(world_texel, terrain_normal, tier_config);
+    }
+#endif
+
+    float inv_weight = 1.0 / max(material.total_weight, 0.00001);
+    material.albedo *= inv_weight;
+    material.tangent_normal = normalize(material.tangent_normal * inv_weight + vec3(0.0, 0.00001, 0.0));
+    material.roughness = clamp(material.roughness * inv_weight, 0.0, 1.0);
+    material.ao = clamp(material.ao * inv_weight, 0.0, 1.0);
+    material.metallic = clamp(material.metallic * inv_weight, 0.0, 1.0);
+    material.height *= inv_weight;
+    material.ao_affect *= inv_weight;
+
+    if (tier_config.texture_surface_mode == 1u) {
+        material.albedo = vec3(material_config.silhouette_r, material_config.silhouette_g, material_config.silhouette_b);
+        material.roughness = 1.0;
+        material.metallic = 0.0;
+        material.ao = 1.0;
+        material.tangent_normal = vec3(0.0, 1.0, 0.0);
+    }
+
+    material.albedo = apply_macro_variation(material.albedo, world_texel, terrain_normal);
+    material.albedo *= mix(vec3(1.0), color_map.rgb, clamp(tier_config.authored_color_contribution, 0.0, 1.0));
+    float wetness = clamp(fma(color_map.a, -2.0, 1.0), 0.0, 1.0) * clamp(tier_config.wetness_contribution, 0.0, 1.0);
+    material.roughness = clamp(material.roughness - wetness, 0.0, 1.0);
+
+    vec3 final_normal = terrain_normal;
+    if ((material_config.output_flags & T3D_OUTPUT_NORMAL) != 0u && tier_config.surface_response != 0u) final_normal = apply_surface_normal(terrain_normal, material.tangent_normal);
+    if ((material_config.output_flags & T3D_OUTPUT_ALBEDO) == 0u) material.albedo = vec3(1.0);
+    if ((material_config.output_flags & T3D_OUTPUT_ROUGHNESS) == 0u) material.roughness = 1.0;
+    if ((material_config.output_flags & T3D_OUTPUT_AO) == 0u) material.ao = 1.0;
+
+    vec3 lit = light_material(material.albedo, final_normal, material.roughness, material.metallic, material.ao, tier_config);
+    lit = debug_visualization(lit, color_map, nearest_control, material, terrain_normal, used_auto);
+    lit = apply_editor_decals(lit);
+    out_color = vec4(apply_fog(lit), 1.0);
 }
