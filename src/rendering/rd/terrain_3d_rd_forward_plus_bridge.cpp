@@ -180,13 +180,26 @@ bool Terrain3DRdForwardPlusBridgeAdapter::parsePacket(
 		return false;
 	}
 	rContext.m_nBridgeAbiVersion = ( uint32_t )( value );
+	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "phase" ), value, rError ) ||
+			value < T3D_RD_FORWARD_PHASE_PREPARE || value > T3D_RD_FORWARD_PHASE_SUBMIT ) {
+		if ( rError.is_empty() ) rError = "Forward+ bridge packet has an invalid callback phase";
+		return false;
+	}
+	rContext.m_phase = ( t3dRdForwardCallbackPhase_t )( value );
 	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "pass_kind" ), value, rError ) ) return false;
 	if ( value <= T3D_RD_FORWARD_PASS_INVALID || value >= T3D_RD_FORWARD_PASS_MAX ) {
 		rError = vformat( "Forward+ bridge packet has unsupported pass kind: %d", value );
 		return false;
 	}
 	rContext.m_passKind = ( t3dRdForwardPassKind_t )( value );
-	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "draw_list" ), value, rError ) || value < 0 ) {
+	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "native_pass_mode" ), value, rError ) ||
+			value < T3D_RD_FORWARD_NATIVE_PASS_COLOR || value > T3D_RD_FORWARD_NATIVE_PASS_SDF ) {
+		if ( rError.is_empty() ) rError = "Forward+ bridge packet has an invalid native pass mode";
+		return false;
+	}
+	rContext.m_nativePassMode = ( t3dRdForwardNativePassMode_t )( value );
+	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "draw_list" ), value, rError ) ||
+			( rContext.m_phase == T3D_RD_FORWARD_PHASE_SUBMIT && value < 0 ) ) {
 		if ( rError.is_empty() ) rError = "Forward+ bridge packet has an invalid native draw-list ID";
 		return false;
 	}
@@ -206,6 +219,12 @@ bool Terrain3DRdForwardPlusBridgeAdapter::parsePacket(
 	rContext.m_nScenePass = ( uint64_t )( value );
 	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "color_pass_flags" ), value, rError ) || value < 0 ) return false;
 	rContext.m_nColorPassFlags = ( uint32_t )( value );
+	const Variant depth_prepass_value = rPacket.get( StringName( "depth_prepass_active" ), Variant() );
+	if ( depth_prepass_value.get_type() != Variant::BOOL ) {
+		rError = "Forward+ bridge packet depth_prepass_active is missing or malformed";
+		return false;
+	}
+	rContext.m_bDepthPrepassActive = ( bool )( depth_prepass_value );
 	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "camera_visible_layers" ), value, rError ) || value < 0 ) return false;
 	rContext.m_nCameraVisibleLayers = ( uint32_t )( value );
 

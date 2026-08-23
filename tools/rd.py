@@ -496,7 +496,7 @@ def rd_batch_e_hlod_check() -> bool:
         ("coordinator caches HLOD publication independently", "m_cachedHlodInstanceScene" in coordinator_h and "m_cachedHlodMeshSources" in coordinator_h and "hlod_changed" in coordinator_cpp),
         ("coordinator merges HLOD into shared mesh cache", "computeSourceFingerprint(\n\t\t\tinstance_assets, m_cachedHlodMeshSources )" in coordinator_cpp and "m_cachedHlodMeshSources," in coordinator_cpp),
         ("coordinator merges regular and HLOD instance tables with offset", "instance_offset" in coordinator_cpp and "cell.m_nFirstInstance += instance_offset" in coordinator_cpp),
-        ("HLOD uses shared regular-instance renderer", "m_instanceRenderer.initialize( m_shaderLibrary.getInstances(), m_shaderLibrary.getHlodCull() )" in coordinator_cpp and "Terrain3DRdHlodRenderer" not in coordinator_cpp),
+        ("HLOD uses shared regular-instance renderer", "m_instanceRenderer.initialize( m_shaderLibrary.getInstances()," in coordinator_cpp and "m_shaderLibrary.getHlodCull()" in coordinator_cpp and "Terrain3DRdHlodRenderer" not in coordinator_cpp),
         ("HLOD instance flag is explicit and outside fade mask", "T3D_RD_INSTANCE_HLOD = 1u << 25u" in types and "T3D_RD_INSTANCE_FADE_MASK" in types),
         ("HLOD cull descriptor ABI is fixed", "sizeof( t3dRdHlodCullDescriptor_t ) == 48u" in types and "offsetof( t3dRdHlodCullDescriptor_t, m_nVisibilityLayers ) == 32u" in types),
         ("persistent HLOD descriptor resources exist", "m_hHlodCullDescriptorBuffer" in instance_h and "m_hHlodCullUniformSet" in instance_h and "m_nHlodDescriptorCapacityBytes" in instance_h),
@@ -575,9 +575,9 @@ def rd_batch_f1_forward_bridge_check() -> bool:
         "T3D_RD_FORWARD_PASS_REFLECTION",
     )
     packet_fields = (
-        "m_nBridgeAbiVersion", "m_passKind", "m_nDrawList", "m_nFramebufferFormat",
+        "m_nBridgeAbiVersion", "m_phase", "m_passKind", "m_nativePassMode", "m_nDrawList", "m_nFramebufferFormat",
         "m_nViewCount", "m_nScenePass", "m_renderRegion", "m_renderSize",
-        "m_nColorPassFlags", "m_bReverseCull", "m_bReflectionProbeRender",
+        "m_nColorPassFlags", "m_bDepthPrepassActive", "m_bReverseCull", "m_bReflectionProbeRender",
         "m_cameraTransform", "m_previousCameraTransform", "m_szViewProjection",
         "m_szPreviousViewProjection", "m_szEyeOffset", "m_nCameraVisibleLayers",
         "m_hDirectionalLightBuffer", "m_hOmniLightBuffer", "m_hSpotLightBuffer",
@@ -594,9 +594,9 @@ def rd_batch_f1_forward_bridge_check() -> bool:
     )
 
     checks += [
-        ("bridge ABI fixed at version 1 on extension side", "s_nBridgeAbiVersion = 1u" in bridge_h and "s_nRdForwardBridgeAbiVersion = 1u" in types),
+        ("bridge ABI is synchronized on extension side", "s_nBridgeAbiVersion = 2u" in bridge_h and "s_nRdForwardBridgeAbiVersion = 2u" in types),
         ("engine singleton name fixed", 's_pszEngineSingletonName = "Terrain3DForwardPlusBridge"' in bridge_h and "class Terrain3DForwardPlusBridge" in patch),
-        ("engine ABI exposes required lifecycle API", all(token in patch for token in engine_methods) and "ABI_VERSION = 1" in patch),
+        ("engine ABI exposes required lifecycle API", all(token in patch for token in engine_methods) and "ABI_VERSION = 2" in patch),
         ("engine callback slot is atomic", "std::atomic<CallbackSlot *> callback_slot" in patch and "callback_slot.load(std::memory_order_acquire)" in patch),
         ("engine callback reclamation is reader-safe", "callback_readers.fetch_add" in patch and "callback_readers.fetch_sub" in patch and "callback_readers.load" in patch),
         ("engine callback invocation is synchronous", "slot->callable.call(p_packet)" in patch and "call_deferred" not in patch),
@@ -614,7 +614,7 @@ def rd_batch_f1_forward_bridge_check() -> bool:
         ("malformed packets are rejected", "m_nPacketsRejected" in bridge_h and "Forward+ bridge packet missing required field" in bridge_cpp and "return false" in bridge_cpp),
         ("native draw-list identity reaches coordinator", "m_nLastDrawList" in bridge_h and "m_nDrawList" in coordinator_cpp and "renderForwardPass( const t3dRdForwardPassContext_t" in coordinator_h),
         ("coordinator has dedicated Forward+ entry point", "renderForwardPass( const t3dRdForwardPassContext_t &rContext )" in coordinator_h and "Terrain3DRenderCoordinator::renderForwardPass" in coordinator_cpp),
-        ("F1 coordinator entry point remains plumbing only", "F1 establishes the synchronous native-pass boundary only" in coordinator_cpp),
+        ("coordinator retains dedicated synchronous Forward+ entry point", "Terrain3DRenderCoordinator::renderForwardPass" in coordinator_cpp and "T3D_RD_FORWARD_PHASE_PREPARE" in coordinator_cpp and "T3D_RD_FORWARD_PHASE_SUBMIT" in coordinator_cpp),
         ("production route requires ready bridge", "isForwardBridgeReady" in coordinator_cpp and "m_bRenderEnabled" in coordinator_cpp),
         ("bridge absence and ABI failures emit a visible engine error", "UtilityFunctions::push_error" in bridge_cpp and "production RenderingDevice rendering is disabled" in bridge_cpp and "ABI mismatch" in bridge_cpp),
         ("missing bridge disables native presentation rather than proxy fallback", "setRdPresentation( false, false )" in coordinator_cpp and "missing/wrong bridge is a visible production failure" in coordinator_cpp),
@@ -644,6 +644,75 @@ def rd_batch_f1_forward_bridge_check() -> bool:
         return False
     print(f"OK Batch F1 Forward+ bridge contract: {len(checks)}/{len(checks)} passed")
     return True
+
+def rd_batch_f2_native_depth_opaque_check() -> bool:
+    rd_dir = REPO / "src" / "rendering" / "rd"
+    types = (rd_dir / "terrain_3d_rd_types.h").read_text(encoding="utf-8", errors="ignore")
+    bridge_cpp = (rd_dir / "terrain_3d_rd_forward_plus_bridge.cpp").read_text(encoding="utf-8", errors="ignore")
+    clip_h = (rd_dir / "terrain_3d_rd_clipmap_renderer.h").read_text(encoding="utf-8", errors="ignore")
+    clip_cpp = (rd_dir / "terrain_3d_rd_clipmap_renderer.cpp").read_text(encoding="utf-8", errors="ignore")
+    inst_h = (rd_dir / "terrain_3d_rd_instance_renderer.h").read_text(encoding="utf-8", errors="ignore")
+    inst_cpp = (rd_dir / "terrain_3d_rd_instance_renderer.cpp").read_text(encoding="utf-8", errors="ignore")
+    coordinator = (rd_dir / "terrain_3d_render_coordinator.cpp").read_text(encoding="utf-8", errors="ignore")
+    shader_lib = (rd_dir / "terrain_3d_rd_shader_library.cpp").read_text(encoding="utf-8", errors="ignore")
+    patch = (REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch").read_text(encoding="utf-8", errors="ignore")
+    shaders = [
+        (REPO / "project" / "addons" / "terrain_3d" / "rd" / name).read_text(encoding="utf-8", errors="ignore")
+        for name in ("terrain_clipmap_near.glsl", "terrain_clipmap_middle.glsl", "terrain_clipmap_far.glsl", "terrain_instances.glsl")
+    ]
+    vcxproj = (REPO / "Terrain3D.vcxproj").read_text(encoding="utf-8", errors="ignore")
+    filters = (REPO / "Terrain3D.vcxproj.filters").read_text(encoding="utf-8", errors="ignore")
+
+    def function_body(text: str, signature: str, next_signature: str | None = None) -> str:
+        start = text.find(signature)
+        if start < 0:
+            return ""
+        if next_signature:
+            end = text.find(next_signature, start + len(signature))
+            if end >= 0:
+                return text[start:end]
+        return text[start:]
+
+    clip_submit = function_body(clip_cpp, "bool Terrain3DRdClipmapRenderer::drawForwardView", "bool Terrain3DRdClipmapRenderer::renderForwardPass")
+    inst_submit = function_body(inst_cpp, "bool Terrain3DRdInstanceRenderer::drawForwardView", "bool Terrain3DRdInstanceRenderer::renderForwardPass")
+    checks = [
+        ("ABI2 prepare/submit phase is typed", "T3D_RD_FORWARD_PHASE_PREPARE" in types and "T3D_RD_FORWARD_PHASE_SUBMIT" in types and "native_pass_mode" in patch),
+        ("bridge parses native pass mode and depth-prepass state", 'StringName( "native_pass_mode" )' in bridge_cpp and 'StringName( "depth_prepass_active" )' in bridge_cpp),
+        ("engine prepares before opening native draw list", "PHASE_PREPARE" in patch and patch.find("PHASE_PREPARE") < patch.find("draw_list_begin")),
+        ("engine submits while native draw list is open", "PHASE_SUBMIT" in patch and "_terrain3d_forward_plus_submit(draw_list" in patch),
+        ("engine passes combined current and previous VP", "view_projection[view] * view_matrix" in patch and "prev_view_projection[view] * previous_view_matrix" in patch),
+        ("terrain has native prepare and submit APIs", "prepareForwardPass" in clip_h and "renderForwardPass" in clip_h and "drawForwardView" in clip_cpp),
+        ("instances/HLOD have native prepare and submit APIs", "prepareForwardPass" in inst_h and "renderForwardPass" in inst_h and "drawForwardView" in inst_cpp),
+        ("native submit paths never begin/end draw lists", "draw_list_begin" not in clip_submit and "draw_list_end" not in clip_submit and "draw_list_begin" not in inst_submit and "draw_list_end" not in inst_submit),
+        ("native submit paths never update buffers or create pipelines", "buffer_update" not in clip_submit and "render_pipeline_create" not in clip_submit and "buffer_update" not in inst_submit and "render_pipeline_create" not in inst_submit),
+        ("native terrain pipeline is framebuffer keyed", all(t in clip_h for t in ("m_nFramebufferFormat", "m_samples", "m_nViewCount", "m_bReverseCull", "m_bDepthPrepassActive"))),
+        ("native instance pipeline is framebuffer keyed", all(t in inst_h for t in ("m_nFramebufferFormat", "m_samples", "m_nViewCount", "m_bReverseCull", "m_bDepthPrepassActive"))),
+        ("native main depth is reversed-Z", clip_cpp.count("COMPARE_OP_GREATER_OR_EQUAL") >= 1 and inst_cpp.count("COMPARE_OP_GREATER_OR_EQUAL") >= 1),
+        ("opaque depth-prepass uses equality without depth write", "COMPARE_OP_EQUAL" in clip_cpp and "set_enable_depth_write( !key.m_bDepthPrepassActive )" in clip_cpp and "COMPARE_OP_EQUAL" in inst_cpp),
+        ("terrain pipeline variants cover native depth attachments", all(t in clip_cpp for t in ("T3D_RD_FORWARD_SHADER_DEPTH", "T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS", "T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI"))),
+        ("instance pipeline variants cover native depth attachments", all(t in inst_cpp for t in ("T3D_RD_FORWARD_SHADER_DEPTH", "T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS", "T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI"))),
+        ("shader library loads all F2 variants", "depth_normal_roughness_voxel_gi" in shader_lib and "getForwardBundle" in (rd_dir / "terrain_3d_rd_shader_library.h").read_text(encoding="utf-8", errors="ignore")),
+        ("all F2 shaders declare version variants", all("#[versions]" in sh and "depth_normal_roughness_voxel_gi" in sh for sh in shaders)),
+        ("native normal/roughness output is view-space", all("view_matrix" in sh and "mat3(frame_data.view_matrix)" in sh for sh in shaders)),
+        ("terrain depth retains hole discard behavior", all("outside_region" in sh and "discard" in sh and "T3D_FORWARD_DEPTH" in sh for sh in shaders[:3])),
+        ("instance depth retains alpha-scissor/depth-prepass behavior", "MATERIAL_ALPHA_SCISSOR" in shaders[3] and "INSTANCE_DEPTH_PREPASS_PASS" in shaders[3] and "discard" in shaders[3]),
+        ("regular opaque excludes alpha blend", "else if ( alpha_blend )" in inst_cpp and "continue;" in inst_submit),
+        ("alpha-blend depth prepass remains represented", "T3D_RD_INSTANCE_ALPHA_DEPTH_PREPASS" in inst_cpp and "T3D_RD_INSTANCE_DEPTH_PREPASS_PASS" in inst_cpp),
+        ("HLOD remains in shared draw packet and indirect stream", "T3D_RD_INSTANCE_HLOD" in inst_cpp and "m_hIndirectBuffer" in inst_submit and "m_drawPackets" in inst_submit),
+        ("coordinator routes depth and opaque through native path", "T3D_RD_FORWARD_PASS_DEPTH" in coordinator and "T3D_RD_FORWARD_PASS_OPAQUE" in coordinator and "prepareForwardPass" in coordinator and "renderForwardPass" in coordinator),
+        ("submit failure does not mutate RD ownership while list is open", "Do not destroy or rebuild RD resources" in coordinator),
+        ("compositor remains explicit debug lane", "TERRAIN3D_RD_DEBUG_COMPOSITOR" in coordinator and "!m_bCompositorDebugEnabled" in coordinator),
+        ("forward shader bundle is in Windows project", "terrain_3d_rd_forward_shader_bundle.h" in vcxproj and "terrain_3d_rd_forward_shader_bundle.h" in filters),
+    ]
+    failed = [label for label, ok in checks if not ok]
+    if failed:
+        for label in failed:
+            print(f"FAIL Batch F2 native depth/opaque contract: {label}")
+        print(f"Batch F2 native depth/opaque contract: {len(checks)-len(failed)}/{len(checks)} passed")
+        return False
+    print(f"OK Batch F2 native depth/opaque contract: {len(checks)}/{len(checks)} passed")
+    return True
+
 
 def iter_scan_files() -> list[Path]:
     files: list[Path] = []
@@ -1152,7 +1221,7 @@ def git_fsck() -> bool:
 
 
 def validate_fast(static_only: bool = False) -> int:
-    checks = [branch_check(), reference_check(), diff_check(), build_contract_check(), rd_shader_abi_check(), rd_batch_c_material_check(), rd_batch_d_instance_check(), rd_batch_e_hlod_check(), rd_batch_f1_forward_bridge_check(), audit_symbols(strict_growth=True)]
+    checks = [branch_check(), reference_check(), diff_check(), build_contract_check(), rd_shader_abi_check(), rd_batch_c_material_check(), rd_batch_d_instance_check(), rd_batch_e_hlod_check(), rd_batch_f1_forward_bridge_check(), rd_batch_f2_native_depth_opaque_check(), audit_symbols(strict_growth=True)]
     if not static_only:
         checks.append(build_extension("editor"))
     return 0 if all(checks) else 1
@@ -1169,6 +1238,7 @@ def validate_full() -> int:
         rd_batch_d_instance_check(),
         rd_batch_e_hlod_check(),
         rd_batch_f1_forward_bridge_check(),
+        rd_batch_f2_native_depth_opaque_check(),
         audit_symbols(strict_growth=True),
         build_extension("editor"),
         godot_headless_import(),
@@ -1190,6 +1260,7 @@ def validate_final() -> int:
         rd_batch_d_instance_check(),
         rd_batch_e_hlod_check(),
         rd_batch_f1_forward_bridge_check(),
+        rd_batch_f2_native_depth_opaque_check(),
         audit_symbols(strict_growth=True, final=True),
         build_extension("editor"),
         build_extension("template_release"),

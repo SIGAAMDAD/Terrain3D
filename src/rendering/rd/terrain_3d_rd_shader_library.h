@@ -5,6 +5,8 @@
 #ifndef TERRAIN3D_RD_SHADER_LIBRARY_H
 #define TERRAIN3D_RD_SHADER_LIBRARY_H
 #include "core/terrain_3d_compiler.h"
+#include "rendering/rd/terrain_3d_rd_forward_shader_bundle.h"
+#include "rendering/rd/terrain_3d_rd_types.h"
 
 #include <godot_cpp/classes/rd_shader_spirv.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
@@ -20,9 +22,10 @@ private:
 	Ref<RDShaderSPIRV> m_cull;
 	Ref<RDShaderSPIRV> m_instances;
 	Ref<RDShaderSPIRV> m_hlodCull;
+	t3dRdForwardShaderBundle_t m_forward;
 	String m_lastError;
 
-	Ref<RDShaderSPIRV> loadShader( const String &rPath );
+	Ref<RDShaderSPIRV> loadShader( const String &rPath, const StringName &rVersion = StringName() );
 
 public:
 	bool load( void );
@@ -37,6 +40,13 @@ public:
 	EA_FORCE_INLINE Ref<RDShaderSPIRV> getCull( void ) const { return m_cull; }
 	EA_FORCE_INLINE Ref<RDShaderSPIRV> getInstances( void ) const { return m_instances; }
 	EA_FORCE_INLINE Ref<RDShaderSPIRV> getHlodCull( void ) const { return m_hlodCull; }
+	EA_FORCE_INLINE Ref<RDShaderSPIRV> getTerrainForward( const uint32_t nTier, const t3dRdForwardShaderVariant_t variant ) const {
+		return nTier < 3u && variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX ? m_forward.m_szTerrain[nTier][variant] : Ref<RDShaderSPIRV>();
+	}
+	EA_FORCE_INLINE Ref<RDShaderSPIRV> getInstanceForward( const t3dRdForwardShaderVariant_t variant ) const {
+		return variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX ? m_forward.m_szInstances[variant] : Ref<RDShaderSPIRV>();
+	}
+	EA_FORCE_INLINE const t3dRdForwardShaderBundle_t &getForwardBundle( void ) const { return m_forward; }
 	EA_FORCE_INLINE String getLastError( void ) const { return m_lastError; }
 	Dictionary getDiagnostics( void ) const;
 };

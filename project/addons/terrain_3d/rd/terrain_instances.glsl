@@ -1,5 +1,15 @@
+#[versions]
+color = "";
+color_specular = "#define T3D_FORWARD_SPECULAR";
+color_motion = "#define T3D_FORWARD_MOTION";
+color_specular_motion = "#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION";
+depth = "#define T3D_FORWARD_DEPTH";
+depth_normal_roughness = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS";
+depth_normal_roughness_voxel_gi = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_FORWARD_VOXEL_GI";
+
 #[vertex]
 #version 450
+#VERSION_DEFINES
 
 layout(location = 0) in vec3 in_position;
 layout(location = 1) in vec4 in_color;
@@ -10,6 +20,7 @@ layout(location = 5) in vec2 in_uv2;
 
 layout(set = 0, binding = 0, std140) uniform InstanceFrame {
 	mat4 view_projection;
+	mat4 view_matrix;
 	vec4 camera_position;
 } frame_data;
 
@@ -70,6 +81,7 @@ void main() {
 
 #[fragment]
 #version 450
+#VERSION_DEFINES
 
 struct InstanceMaterial {
 	vec4 albedo;
@@ -101,7 +113,22 @@ layout(location = 1) in vec4 vertex_tangent;
 layout(location = 2) in vec4 mesh_vertex_color;
 layout(location = 3) in vec4 instance_color;
 layout(location = 4) in vec2 vertex_uv;
+#ifdef T3D_FORWARD_DEPTH
+#ifdef T3D_FORWARD_NORMAL_ROUGHNESS
+layout(location = 0) out vec4 out_normal_roughness;
+#ifdef T3D_FORWARD_VOXEL_GI
+layout(location = 1) out uvec2 out_voxel_gi;
+#endif
+#endif
+#else
 layout(location = 0) out vec4 out_color;
+#ifdef T3D_FORWARD_SPECULAR
+layout(location = 1) out vec4 out_specular;
+#endif
+#ifdef T3D_FORWARD_MOTION
+layout(location = 2) out vec2 out_motion;
+#endif
+#endif
 
 const uint MATERIAL_ALPHA_SCISSOR = 1u << 0u;
 const uint MATERIAL_HAS_ALBEDO_TEXTURE = 1u << 2u;
@@ -223,6 +250,15 @@ void main() {
 		if (dither > visibility_fade) discard;
 	}
 
+#ifdef T3D_FORWARD_DEPTH
+#ifdef T3D_FORWARD_NORMAL_ROUGHNESS
+	out_normal_roughness = vec4(normalize(mat3(frame_data.view_matrix) * normal) * 0.5 + 0.5, roughness * (127.0 / 255.0));
+#ifdef T3D_FORWARD_VOXEL_GI
+	out_voxel_gi = uvec2(0xffu, 0xffu);
+#endif
+#endif
+#else
+
 	vec3 lit;
 	if (unshaded) {
 		lit = final_color.rgb + emission;
@@ -235,4 +271,11 @@ void main() {
 		lit = final_color.rgb * (ambient + diffuse_weight * ndotl * (1.0 - roughness_floor)) + emission;
 	}
 	out_color = vec4(lit, final_color.a);
+#ifdef T3D_FORWARD_SPECULAR
+	out_specular = vec4(0.0);
+#endif
+#ifdef T3D_FORWARD_MOTION
+	out_motion = vec2(0.0);
+#endif
+#endif // T3D_FORWARD_DEPTH
 }

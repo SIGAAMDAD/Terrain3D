@@ -9,7 +9,7 @@ This directory contains the **minimal engine-side part of Terrain3D Batch F1**. 
 - Commit: `a13da4feb8d8aefc283c3763d33a2f170a18d541`
 - Patched base blobs: `render_forward_clustered.cpp` `370d3b66ce817d9accf17f6339625e7120a6f238`, `render_forward_clustered.h` `be97ee2d96af1e17fc9fb490cf94c91e9e2a4d31`, `register_server_types.cpp` `de403337857720babbb9f805166053b74ff4e42b`
 - Terrain3D bridge singleton: `Terrain3DForwardPlusBridge`
-- Bridge ABI: `1`
+- Bridge ABI: `2`
 
 Do not apply this patch to another Godot revision without auditing the Forward+ call sites and bumping the bridge ABI if packet semantics change.
 
@@ -19,12 +19,12 @@ Do not apply this patch to another Godot revision without auditing the Forward+ 
 
 - `servers/rendering/renderer_rd/forward_clustered/terrain3d_forward_plus_bridge.h/.cpp`;
 - singleton registration and deterministic teardown in `servers/register_server_types.cpp`;
-- a synchronous callback immediately before Godot closes selected native Forward+ draw lists;
+- synchronous PREPARE callbacks immediately before selected native draw lists open and SUBMIT callbacks while those same draw lists are open;
 - explicit F1 pass kinds for `depth`, `opaque`, `shadow`, and `motion`;
 - reserved ABI pass kinds for `material`, `SDF`, `GI`, and `reflection` so F6 data can be carried without replacing the F1 ABI;
 - native pass packet fields for draw-list/framebuffer identity, view state, current/previous camera state, cluster/light/shadow data, lightmap data, reflection data, decal data, and native base/render-pass uniform-set RIDs.
 
-The bridge owns **no Terrain3D geometry, buffers, textures, materials, or instances**. It does not begin or end a Terrain3D draw list. Godot opens the native draw list; the bridge synchronously lends its ID and native scene state to the extension; Godot closes the list after the callback returns.
+The bridge owns **no Terrain3D geometry, buffers, textures, materials, or instances**. It does not begin or end a Terrain3D draw list. Godot first invokes PREPARE so Terrain3D can update buffers, dispatch culling, and populate generation-driven pipeline caches. Godot then opens the native draw list and invokes SUBMIT while that same list is active; SUBMIT only binds/draws and never opens, closes, or mutates persistent RD resources. Godot closes the list after SUBMIT returns.
 There is **no hidden or deferred callback queue**: invocation is synchronous on the renderer thread and returns before the native draw list is closed.
 
 ## Apply
@@ -55,7 +55,7 @@ Use the project-specific build flags required by the local Godot build, but do n
 At Terrain3D scene-module initialization the extension:
 
 1. queries `Engine` for `Terrain3DForwardPlusBridge`;
-2. checks `get_abi_version() == 1`;
+2. checks `get_abi_version() == 2`;
 3. verifies `register_callback`, `unregister_callback`, `has_callback`, and `collect_retired_callbacks`;
 4. registers exactly one extension callback;
 5. converts every accepted `Dictionary` packet into `t3dRdForwardPassContext_t` exactly once at the boundary;
@@ -74,7 +74,7 @@ The patch invokes the bridge only from the selected native `_render_list_with_dr
 
 It does **not** infer bridge pass kinds from `PASS_MODE_SHADOW`; this avoids accidentally treating GPU-particle collision-heightfield rendering as a Terrain3D scene shadow pass.
 
-F1 only establishes these insertion points. F2 implements actual terrain/regular-instance/HLOD depth and opaque draw submission; F3 implements native shadows; later chunks consume the reserved scene resources.
+F1 established these insertion points. F2 upgrades the bridge to ABI 2 with synchronous PREPARE/SUBMIT phases and implements actual terrain/regular-instance/HLOD depth and opaque draw submission. F3 implements native shadows; later chunks consume the reserved scene resources.
 
 ## Missing/wrong bridge behavior
 
@@ -112,7 +112,7 @@ The F1 static contract verifies the patch package, ABI, engine hook markers, pac
 For full engine validation, use an exact source checkout and run `git apply --check`, build the patched Godot editor, then start Terrain3D under Forward+ and confirm diagnostics report:
 
 - `forward_plus_bridge_present = true` (inside bridge diagnostics as `bridge_present`);
-- `observed_abi = 1`;
+- `observed_abi = 2`;
 - `callback_registered = true`;
 - native pass packets arriving with non-negative draw-list IDs.
 

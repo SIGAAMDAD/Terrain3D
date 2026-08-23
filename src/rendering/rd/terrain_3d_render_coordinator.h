@@ -134,6 +134,8 @@ private:
 	std::atomic_uint64_t m_nLastForwardScenePass{ 0u };
 	std::atomic_int64_t m_nLastForwardDrawList{ -1 };
 	std::atomic_uint32_t m_nLastForwardPassKind{ T3D_RD_FORWARD_PASS_INVALID };
+	uint64_t m_nForwardPreparedScenePass = 0u;
+	bool m_bForwardPreparedHasTerrain = false;
 	std::atomic_uint32_t m_nConsecutiveRenderFailures{ 0u };
 	mutable std::mutex m_diagnosticsMutex;
 	String m_initializationError;

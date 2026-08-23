@@ -1,5 +1,15 @@
+#[versions]
+color = "";
+color_specular = "#define T3D_FORWARD_SPECULAR";
+color_motion = "#define T3D_FORWARD_MOTION";
+color_specular_motion = "#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION";
+depth = "#define T3D_FORWARD_DEPTH";
+depth_normal_roughness = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS";
+depth_normal_roughness_voxel_gi = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_FORWARD_VOXEL_GI";
+
 #[vertex]
 #version 450
+#VERSION_DEFINES
 #define T3D_TIER 2
 
 layout(location = 0) in ivec2 in_grid;
@@ -7,6 +17,7 @@ layout(location = 1) in uvec2 in_meta;
 
 layout(set = 0, binding = 0, std140) uniform FrameData {
     mat4 view_projection;
+    mat4 view_matrix;
     vec4 light_direction_ambient;
     vec4 light_color;
     vec4 terrain_params;
@@ -429,6 +440,7 @@ void main() {
 
 #[fragment]
 #version 450
+#VERSION_DEFINES
 #define T3D_TIER 2
 #define T3D_DIV_255 0.0039215686274509803921568627451
 #define T3D_TAU_16 0.39269908169872415480783042290994
@@ -438,10 +450,26 @@ layout(location = 1) in vec3 world_normal;
 layout(location = 2) flat in uint patch_tier;
 layout(location = 3) flat in int terrain_region_layer;
 layout(location = 4) in vec2 terrain_world_texel;
+#ifdef T3D_FORWARD_DEPTH
+#ifdef T3D_FORWARD_NORMAL_ROUGHNESS
+layout(location = 0) out vec4 out_normal_roughness;
+#ifdef T3D_FORWARD_VOXEL_GI
+layout(location = 1) out uvec2 out_voxel_gi;
+#endif
+#endif
+#else
 layout(location = 0) out vec4 out_color;
+#ifdef T3D_FORWARD_SPECULAR
+layout(location = 1) out vec4 out_specular;
+#endif
+#ifdef T3D_FORWARD_MOTION
+layout(location = 2) out vec2 out_motion;
+#endif
+#endif
 
 layout(set = 0, binding = 0, std140) uniform FrameData {
     mat4 view_projection;
+    mat4 view_matrix;
     vec4 light_direction_ambient;
     vec4 light_color;
     vec4 terrain_params;
@@ -1237,6 +1265,28 @@ void main() {
     bool used_auto = (material_config.feature_flags & T3D_FEATURE_AUTO_SHADER) != 0u && (outside_region || (nearest_control & 1u) != 0u);
     if (!outside_region && ((nearest_control >> 2u) & 1u) != 0u) discard;
 
+#ifdef T3D_FORWARD_DEPTH
+#if T3D_TIER == 1
+    if (tier_config.sampling_mode == 2u && (material_config.feature_flags & T3D_FEATURE_MIDDLE_COMPOSITE) != 0u && terrain_region_layer >= 0) {
+        vec4 depth_composite = sample_middle_composite(world_texel);
+        uint depth_composite_bits = uint(round(clamp(depth_composite.a, 0.0, 1.0) * 255.0));
+        if ((depth_composite_bits & 0x80u) == 0u) discard;
+    }
+#endif
+#ifdef T3D_FORWARD_NORMAL_ROUGHNESS
+    // Godot decodes and normalizes this vector; the best-fit-normal LUT used
+    // by native shaders improves 8-bit precision but is not required for a
+    // valid normalized value. Static geometry marks roughness in the lower
+    // half of the channel exactly like Forward+ native static surfaces.
+    out_normal_roughness = vec4(normalize(mat3(frame_data.view_matrix) * terrain_normal) * 0.5 + 0.5, 127.0 / 255.0);
+#ifdef T3D_FORWARD_VOXEL_GI
+    // F6 replaces this neutral "no VoxelGI instance" value with native GI
+    // membership; F2 only needs attachment-compatible depth participation.
+    out_voxel_gi = uvec2(0xffu, 0xffu);
+#endif
+#endif
+#else
+
     vec4 color_map = sample_color_map(world_texel, tier_config);
     SampledMaterial material = material_zero();
 
@@ -1313,4 +1363,12 @@ void main() {
     lit = debug_visualization(lit, color_map, nearest_control, material, terrain_normal, used_auto);
     lit = apply_editor_decals(lit);
     out_color = vec4(apply_fog(lit), 1.0);
+#ifdef T3D_FORWARD_SPECULAR
+    out_specular = vec4(0.0);
+#endif
+#ifdef T3D_FORWARD_MOTION
+    // F5 replaces the neutral value with previous-frame velocity.
+    out_motion = vec2(0.0);
+#endif
+#endif // T3D_FORWARD_DEPTH
 }

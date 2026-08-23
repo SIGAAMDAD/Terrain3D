@@ -3,7 +3,7 @@ new file mode 100644
 index 0000000000..8ff7f0f001
 --- /dev/null
 +++ b/servers/rendering/renderer_rd/forward_clustered/terrain3d_forward_plus_bridge.h
-@@ -0,0 +1,72 @@
+@@ -0,0 +1,78 @@
 +/**************************************************************************/
 +/*  terrain3d_forward_plus_bridge.h                                       */
 +/**************************************************************************/
@@ -22,7 +22,7 @@ index 0000000000..8ff7f0f001
 +	GDCLASS(Terrain3DForwardPlusBridge, Object);
 +
 +public:
-+	static constexpr int ABI_VERSION = 1;
++	static constexpr int ABI_VERSION = 2;
 +
 +	enum PassKind {
 +		PASS_INVALID = 0,
@@ -34,6 +34,11 @@ index 0000000000..8ff7f0f001
 +		PASS_SDF = 6,
 +		PASS_GI = 7,
 +		PASS_REFLECTION = 8,
++	};
++
++	enum CallbackPhase {
++		PHASE_PREPARE = 0,
++		PHASE_SUBMIT = 1,
 +	};
 +
 +private:
@@ -76,12 +81,13 @@ index 0000000000..8ff7f0f001
 +};
 +
 +VARIANT_ENUM_CAST(Terrain3DForwardPlusBridge::PassKind);
++VARIANT_ENUM_CAST(Terrain3DForwardPlusBridge::CallbackPhase);
 diff --git a/servers/rendering/renderer_rd/forward_clustered/terrain3d_forward_plus_bridge.cpp b/servers/rendering/renderer_rd/forward_clustered/terrain3d_forward_plus_bridge.cpp
 new file mode 100644
 index 0000000000..8ff7f0f002
 --- /dev/null
 +++ b/servers/rendering/renderer_rd/forward_clustered/terrain3d_forward_plus_bridge.cpp
-@@ -0,0 +1,108 @@
+@@ -0,0 +1,110 @@
 +/**************************************************************************/
 +/*  terrain3d_forward_plus_bridge.cpp                                     */
 +/**************************************************************************/
@@ -113,6 +119,8 @@ index 0000000000..8ff7f0f002
 +	BIND_ENUM_CONSTANT(PASS_SDF);
 +	BIND_ENUM_CONSTANT(PASS_GI);
 +	BIND_ENUM_CONSTANT(PASS_REFLECTION);
++	BIND_ENUM_CONSTANT(PHASE_PREPARE);
++	BIND_ENUM_CONSTANT(PHASE_SUBMIT);
 +}
 +
 +bool Terrain3DForwardPlusBridge::register_callback(const Callable &p_callback) {
@@ -262,20 +270,20 @@ index be97ee2d96..f100000002 100644
  	_FORCE_INLINE_ void _render_list_template(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element);
  	void _render_list(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element);
 -	void _render_list_with_draw_list(RenderListParameters *p_params, RID p_framebuffer, BitField<RD::DrawFlags> p_draw_flags = RD::DRAW_DEFAULT_ALL, const Vector<Color> &p_clear_color_values = Vector<Color>(), float p_clear_depth_value = 0.0, uint32_t p_clear_stencil_value = 0, const Rect2 &p_region = Rect2());
-+	void _terrain3d_forward_plus_submit(RD::DrawListID p_draw_list, RID p_framebuffer, const RenderListParameters *p_params, Terrain3DForwardPlusBridge::PassKind p_pass_kind, const RenderDataRD *p_render_data, RID p_radiance_texture, const SceneState::ShadowPass *p_shadow_pass);
-+	void _render_list_with_draw_list(RenderListParameters *p_params, RID p_framebuffer, BitField<RD::DrawFlags> p_draw_flags = RD::DRAW_DEFAULT_ALL, const Vector<Color> &p_clear_color_values = Vector<Color>(), float p_clear_depth_value = 0.0, uint32_t p_clear_stencil_value = 0, const Rect2 &p_region = Rect2(), Terrain3DForwardPlusBridge::PassKind p_terrain3d_pass_kind = Terrain3DForwardPlusBridge::PASS_INVALID, const RenderDataRD *p_terrain3d_render_data = nullptr, RID p_terrain3d_radiance_texture = RID(), const SceneState::ShadowPass *p_terrain3d_shadow_pass = nullptr);
++	void _terrain3d_forward_plus_submit(RD::DrawListID p_draw_list, RID p_framebuffer, const RenderListParameters *p_params, Terrain3DForwardPlusBridge::PassKind p_pass_kind, Terrain3DForwardPlusBridge::CallbackPhase p_phase, const RenderDataRD *p_render_data, RID p_radiance_texture, const SceneState::ShadowPass *p_shadow_pass, bool p_depth_prepass_active);
++	void _render_list_with_draw_list(RenderListParameters *p_params, RID p_framebuffer, BitField<RD::DrawFlags> p_draw_flags = RD::DRAW_DEFAULT_ALL, const Vector<Color> &p_clear_color_values = Vector<Color>(), float p_clear_depth_value = 0.0, uint32_t p_clear_stencil_value = 0, const Rect2 &p_region = Rect2(), Terrain3DForwardPlusBridge::PassKind p_terrain3d_pass_kind = Terrain3DForwardPlusBridge::PASS_INVALID, const RenderDataRD *p_terrain3d_render_data = nullptr, RID p_terrain3d_radiance_texture = RID(), const SceneState::ShadowPass *p_terrain3d_shadow_pass = nullptr, bool p_terrain3d_depth_prepass_active = false);
  
  	uint32_t _setup_environment(const RenderDataRD *p_render_data, bool p_no_fog, const Size2i &p_screen_size, const Size2 &p_viewport_size, const Color &p_default_bg_color, bool p_opaque_render_buffers = false, bool p_apply_alpha_multiplier = false, bool p_pancake_shadows = false);
 diff --git a/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp b/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp
 index 370d3b66ce..f100000003 100644
 --- a/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp
 +++ b/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp
-@@ -611,11 +611,99 @@ void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_lis
+@@ -611,11 +611,107 @@ void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_lis
  	}
  }
  
 -void RenderForwardClustered::_render_list_with_draw_list(RenderListParameters *p_params, RID p_framebuffer, BitField<RD::DrawFlags> p_draw_flags, const Vector<Color> &p_clear_color_values, float p_clear_depth_value, uint32_t p_clear_stencil_value, const Rect2 &p_region) {
-+void RenderForwardClustered::_terrain3d_forward_plus_submit(RD::DrawListID p_draw_list, RID p_framebuffer, const RenderListParameters *p_params, Terrain3DForwardPlusBridge::PassKind p_pass_kind, const RenderDataRD *p_render_data, RID p_radiance_texture, const SceneState::ShadowPass *p_shadow_pass) {
++void RenderForwardClustered::_terrain3d_forward_plus_submit(RD::DrawListID p_draw_list, RID p_framebuffer, const RenderListParameters *p_params, Terrain3DForwardPlusBridge::PassKind p_pass_kind, Terrain3DForwardPlusBridge::CallbackPhase p_phase, const RenderDataRD *p_render_data, RID p_radiance_texture, const SceneState::ShadowPass *p_shadow_pass, bool p_depth_prepass_active) {
 +	Terrain3DForwardPlusBridge *bridge = Terrain3DForwardPlusBridge::get_singleton();
 +	if (bridge == nullptr || !bridge->has_callback()) {
 +		return;
@@ -283,12 +291,15 @@ index 370d3b66ce..f100000003 100644
 +
 +	Dictionary packet;
 +	packet["bridge_abi"] = Terrain3DForwardPlusBridge::ABI_VERSION;
++	packet["phase"] = int64_t(p_phase);
 +	packet["pass_kind"] = int64_t(p_pass_kind);
++	packet["native_pass_mode"] = int64_t(p_params->pass_mode);
 +	packet["draw_list"] = int64_t(p_draw_list);
 +	packet["framebuffer_format"] = int64_t(p_params->framebuffer_format);
 +	packet["view_count"] = int64_t(p_shadow_pass != nullptr ? 1 : (p_render_data && p_render_data->scene_data ? p_render_data->scene_data->view_count : p_params->view_count));
 +	packet["scene_pass"] = int64_t(get_scene_pass());
 +	packet["color_pass_flags"] = int64_t(p_params->color_pass_flags);
++	packet["depth_prepass_active"] = p_depth_prepass_active;
 +	packet["reverse_cull"] = p_params->reverse_cull;
 +	packet["reflection_probe_render"] = p_render_data != nullptr && p_render_data->reflection_probe.is_valid();
 +	packet["native_framebuffer"] = p_framebuffer;
@@ -311,9 +322,11 @@ index 370d3b66ce..f100000003 100644
 +		packet["camera_visible_layers"] = int64_t(scene_data->camera_visible_layers);
 +		packet["camera_transform"] = scene_data->cam_transform;
 +		packet["previous_camera_transform"] = scene_data->prev_cam_transform;
++		const Projection view_matrix = Projection(scene_data->cam_transform.affine_inverse());
++		const Projection previous_view_matrix = Projection(scene_data->prev_cam_transform.affine_inverse());
 +		for (uint32_t view = 0; view < scene_data->view_count; ++view) {
-+			view_projections.push_back(scene_data->view_projection[view]);
-+			previous_view_projections.push_back(scene_data->prev_view_projection[view]);
++			view_projections.push_back(scene_data->view_projection[view] * view_matrix);
++			previous_view_projections.push_back(scene_data->prev_view_projection[view] * previous_view_matrix);
 +			eye_offsets.push_back(scene_data->view_eye_offset[view]);
 +		}
 +	} else {
@@ -360,13 +373,16 @@ index 370d3b66ce..f100000003 100644
 +	bridge->invoke(packet);
 +}
 +
-+void RenderForwardClustered::_render_list_with_draw_list(RenderListParameters *p_params, RID p_framebuffer, BitField<RD::DrawFlags> p_draw_flags, const Vector<Color> &p_clear_color_values, float p_clear_depth_value, uint32_t p_clear_stencil_value, const Rect2 &p_region, Terrain3DForwardPlusBridge::PassKind p_terrain3d_pass_kind, const RenderDataRD *p_terrain3d_render_data, RID p_terrain3d_radiance_texture, const SceneState::ShadowPass *p_terrain3d_shadow_pass) {
++void RenderForwardClustered::_render_list_with_draw_list(RenderListParameters *p_params, RID p_framebuffer, BitField<RD::DrawFlags> p_draw_flags, const Vector<Color> &p_clear_color_values, float p_clear_depth_value, uint32_t p_clear_stencil_value, const Rect2 &p_region, Terrain3DForwardPlusBridge::PassKind p_terrain3d_pass_kind, const RenderDataRD *p_terrain3d_render_data, RID p_terrain3d_radiance_texture, const SceneState::ShadowPass *p_terrain3d_shadow_pass, bool p_terrain3d_depth_prepass_active) {
  	RD::FramebufferFormatID fb_format = RD::get_singleton()->framebuffer_get_format(p_framebuffer);
  	p_params->framebuffer_format = fb_format;
++	if (p_terrain3d_pass_kind != Terrain3DForwardPlusBridge::PASS_INVALID) {
++		_terrain3d_forward_plus_submit(RD::INVALID_ID, p_framebuffer, p_params, p_terrain3d_pass_kind, Terrain3DForwardPlusBridge::PHASE_PREPARE, p_terrain3d_render_data, p_terrain3d_radiance_texture, p_terrain3d_shadow_pass, p_terrain3d_depth_prepass_active);
++	}
  	RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_framebuffer, p_draw_flags, p_clear_color_values, p_clear_depth_value, p_clear_stencil_value, p_region);
  	_render_list(draw_list, fb_format, p_params, 0, p_params->element_count);
 +	if (p_terrain3d_pass_kind != Terrain3DForwardPlusBridge::PASS_INVALID) {
-+		_terrain3d_forward_plus_submit(draw_list, p_framebuffer, p_params, p_terrain3d_pass_kind, p_terrain3d_render_data, p_terrain3d_radiance_texture, p_terrain3d_shadow_pass);
++		_terrain3d_forward_plus_submit(draw_list, p_framebuffer, p_params, p_terrain3d_pass_kind, Terrain3DForwardPlusBridge::PHASE_SUBMIT, p_terrain3d_render_data, p_terrain3d_radiance_texture, p_terrain3d_shadow_pass, p_terrain3d_depth_prepass_active);
 +	}
  	RD::get_singleton()->draw_list_end();
  }
@@ -385,7 +401,7 @@ index 370d3b66ce..f100000003 100644
  			RID opaque_framebuffer = using_motion_pass ? rb_data->get_color_pass_fb(opaque_color_pass_flags) : color_framebuffer;
  			RenderListParameters render_list_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(), render_list[RENDER_LIST_OPAQUE].element_info.ptr(), render_list[RENDER_LIST_OPAQUE].elements.size(), reverse_cull, PASS_MODE_COLOR, opaque_color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, base_specialization);
 -			_render_list_with_draw_list(&render_list_params, opaque_framebuffer, RD::DrawFlags(load_color ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_COLOR_ALL) | (depth_pre_pass ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_DEPTH), c, 0.0f, 0u, p_render_data->render_region);
-+			_render_list_with_draw_list(&render_list_params, opaque_framebuffer, RD::DrawFlags(load_color ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_COLOR_ALL) | (depth_pre_pass ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_DEPTH), c, 0.0f, 0u, p_render_data->render_region, Terrain3DForwardPlusBridge::PASS_OPAQUE, p_render_data, radiance_texture);
++			_render_list_with_draw_list(&render_list_params, opaque_framebuffer, RD::DrawFlags(load_color ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_COLOR_ALL) | (depth_pre_pass ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_DEPTH), c, 0.0f, 0u, p_render_data->render_region, Terrain3DForwardPlusBridge::PASS_OPAQUE, p_render_data, radiance_texture, nullptr, depth_pre_pass);
  		}
  		RD::get_singleton()->draw_command_end_label();
  		if (using_motion_pass) {

@@ -156,6 +156,138 @@ bool Terrain3DRdClipmapRenderer::ensureShaders( const Ref<RDShaderSPIRV> &rNear,
 	return true;
 }
 
+bool Terrain3DRdClipmapRenderer::ensureForwardShaders( const t3dRdForwardShaderBundle_t &rShaders ) {
+	RenderingDevice *const rd = m_context.getDevice();
+	if ( !rd ) return false;
+	for ( uint32_t tier = 0u; tier < 3u; ++tier ) {
+		m_hszForwardShaders[tier][T3D_RD_FORWARD_SHADER_COLOR] = m_hszShaders[tier];
+		for ( uint32_t variant = 1u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant ) {
+			if ( m_hszForwardShaders[tier][variant].is_valid() ) continue;
+			const Ref<RDShaderSPIRV> spirv = rShaders.m_szTerrain[tier][variant];
+			if ( spirv.is_null() ) {
+				setError( "Missing Terrain3D Forward+ terrain shader variant" );
+				return false;
+			}
+			RID shader = rd->shader_create_from_spirv( spirv );
+			const String name = String( "T3D.Forward.Shader.Terrain." ) + String::num_int64( tier ) + "." + String::num_int64( variant );
+			if ( !shader.is_valid() || !t3dRdAdoptResource( m_context, rd, shader, name, Terrain3DRdContext::RESOURCE_SHADER ) ) {
+				setError( "Failed to create Terrain3D Forward+ terrain shader variant" );
+				return false;
+			}
+			m_hszForwardShaders[tier][variant] = shader;
+		}
+	}
+	m_forwardPipelines.reserve( 24u );
+	return true;
+}
+
+void Terrain3DRdClipmapRenderer::freeForwardPipelines( void ) {
+	for ( t3dRdForwardPipelineEntry_t &entry : m_forwardPipelines ) {
+		for ( RID &pipeline : entry.m_hszPipelines ) m_context.freeResource( pipeline );
+	}
+	m_forwardPipelines.clear();
+	m_bLastForwardPipelineKeyValid = false;
+}
+
+bool Terrain3DRdClipmapRenderer::selectForwardVariant( const t3dRdForwardPassContext_t &rContext,
+		t3dRdForwardShaderVariant_t &rVariant ) const {
+	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_DEPTH ) {
+		switch ( rContext.m_nativePassMode ) {
+			case T3D_RD_FORWARD_NATIVE_PASS_DEPTH: rVariant = T3D_RD_FORWARD_SHADER_DEPTH; return true;
+			case T3D_RD_FORWARD_NATIVE_PASS_DEPTH_NORMAL_ROUGHNESS: rVariant = T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS; return true;
+			case T3D_RD_FORWARD_NATIVE_PASS_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI: rVariant = T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI; return true;
+			default: return false;
+		}
+	}
+	if ( rContext.m_passKind != T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_nativePassMode != T3D_RD_FORWARD_NATIVE_PASS_COLOR ) return false;
+	const bool specular = ( rContext.m_nColorPassFlags & ( 1u << 1u ) ) != 0u;
+	const bool motion = ( rContext.m_nColorPassFlags & ( 1u << 3u ) ) != 0u;
+	rVariant = specular ? ( motion ? T3D_RD_FORWARD_SHADER_COLOR_SPECULAR_MOTION : T3D_RD_FORWARD_SHADER_COLOR_SPECULAR ) :
+			( motion ? T3D_RD_FORWARD_SHADER_COLOR_MOTION : T3D_RD_FORWARD_SHADER_COLOR );
+	return true;
+}
+
+const Terrain3DRdClipmapRenderer::t3dRdForwardPipelineEntry_t *Terrain3DRdClipmapRenderer::findForwardPipeline(
+		const t3dRdForwardPipelineKey_t &rKey ) const {
+	for ( const t3dRdForwardPipelineEntry_t &entry : m_forwardPipelines ) {
+		if ( entry.m_key == rKey ) return &entry;
+	}
+	return nullptr;
+}
+
+bool Terrain3DRdClipmapRenderer::ensureForwardPipelines( const t3dRdForwardPassContext_t &rContext,
+		const t3dRdForwardShaderVariant_t variant ) {
+	RenderingDevice *const rd = m_context.getDevice();
+	if ( !rd || rContext.m_nFramebufferFormat < 0 ) return false;
+	t3dRdForwardPipelineKey_t key;
+	key.m_nFramebufferFormat = rContext.m_nFramebufferFormat;
+	key.m_variant = variant;
+	key.m_samples = rd->framebuffer_format_get_texture_samples( rContext.m_nFramebufferFormat, 0u );
+	key.m_nViewCount = rContext.m_nViewCount;
+	key.m_bReverseCull = rContext.m_bReverseCull;
+	key.m_bDepthPrepassActive = rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE && rContext.m_bDepthPrepassActive;
+	if ( findForwardPipeline( key ) ) {
+		m_lastForwardPipelineKey = key;
+		m_bLastForwardPipelineKeyValid = true;
+		return true;
+	}
+
+	t3dRdForwardPipelineEntry_t entry;
+	entry.m_key = key;
+	Ref<RDPipelineRasterizationState> raster;
+	raster.instantiate();
+	raster->set_cull_mode( RenderingDevice::POLYGON_CULL_DISABLED );
+	raster->set_front_face( RenderingDevice::POLYGON_FRONT_FACE_CLOCKWISE );
+	Ref<RDPipelineMultisampleState> multisample;
+	multisample.instantiate();
+	multisample->set_sample_count( key.m_samples );
+	Ref<RDPipelineDepthStencilState> depth;
+	depth.instantiate();
+	depth->set_enable_depth_test( true );
+	depth->set_enable_depth_write( !key.m_bDepthPrepassActive );
+	depth->set_depth_compare_operator( key.m_bDepthPrepassActive ? RenderingDevice::COMPARE_OP_EQUAL : RenderingDevice::COMPARE_OP_GREATER_OR_EQUAL );
+	Ref<RDPipelineColorBlendState> blend;
+	blend.instantiate();
+	uint32_t blend_count = 0u;
+	if ( variant <= T3D_RD_FORWARD_SHADER_COLOR_SPECULAR_MOTION ) blend_count = 3u;
+	else if ( variant == T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS ) blend_count = 1u;
+	else if ( variant == T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI ) blend_count = 2u;
+	if ( blend_count > 0u ) {
+		TypedArray<Ref<RDPipelineColorBlendStateAttachment>> attachments;
+		for ( uint32_t i = 0u; i < blend_count; ++i ) {
+			Ref<RDPipelineColorBlendStateAttachment> attachment;
+			attachment.instantiate();
+			attachment->set_enable_blend( false );
+			attachments.push_back( attachment );
+		}
+		blend->set_attachments( attachments );
+	}
+
+	m_context.beginResourceRebuild();
+	for ( uint32_t tier = 0u; tier < 3u; ++tier ) {
+		entry.m_hszPipelines[tier] = rd->render_pipeline_create( m_hszForwardShaders[tier][variant],
+				rContext.m_nFramebufferFormat,
+				m_nVertexFormat,
+				RenderingDevice::RENDER_PRIMITIVE_TRIANGLES,
+				raster,
+				multisample,
+				depth,
+				blend );
+		const String name = String( "T3D.Forward.Pipeline.Terrain." ) + String::num_int64( variant ) + "." + String::num_int64( tier );
+		if ( !entry.m_hszPipelines[tier].is_valid() || !t3dRdAdoptResource( m_context, rd, entry.m_hszPipelines[tier], name, Terrain3DRdContext::RESOURCE_RASTER_PIPELINE ) ) {
+			for ( RID &pipeline : entry.m_hszPipelines ) m_context.freeResource( pipeline );
+			m_context.endResourceRebuild();
+			setError( "Failed to create framebuffer-compatible Terrain3D Forward+ terrain pipeline" );
+			return false;
+		}
+	}
+	m_context.endResourceRebuild();
+	m_forwardPipelines.push_back( entry );
+	m_lastForwardPipelineKey = key;
+	m_bLastForwardPipelineKeyValid = true;
+	return true;
+}
+
 bool Terrain3DRdClipmapRenderer::ensureSamplers( void ) {
 	RenderingDevice *const rd = m_context.getDevice();
 	if ( !rd ) return false;
@@ -654,11 +786,12 @@ bool Terrain3DRdClipmapRenderer::ensureViewState( const uint32_t nView,
 bool Terrain3DRdClipmapRenderer::initialize( const Ref<RDShaderSPIRV> &rNear,
 		const Ref<RDShaderSPIRV> &rMiddle,
 		const Ref<RDShaderSPIRV> &rFar,
-		const Ref<RDShaderSPIRV> &rCull ) {
+		const Ref<RDShaderSPIRV> &rCull,
+		const t3dRdForwardShaderBundle_t &rForwardShaders ) {
 	std::lock_guard<std::mutex> state_lock( m_resourceStateMutex );
 	if ( isReady() ) return true;
-	if ( !ensureDevice() || !ensureShaders( rNear, rMiddle, rFar, rCull ) || !ensureSamplers() ||
-			!ensureFallbackTextures() || !ensureBuffers() ) return false;
+	if ( !ensureDevice() || !ensureShaders( rNear, rMiddle, rFar, rCull ) || !ensureForwardShaders( rForwardShaders ) ||
+			!ensureSamplers() || !ensureFallbackTextures() || !ensureBuffers() ) return false;
 	RenderingDevice *const rd = m_context.getDevice();
 	TypedArray<Ref<RDVertexAttribute>> attributes;
 	Ref<RDVertexAttribute> grid;
@@ -701,6 +834,7 @@ bool Terrain3DRdClipmapRenderer::initialize( const Ref<RDShaderSPIRV> &rNear,
 void Terrain3DRdClipmapRenderer::shutdown( void ) {
 	std::lock_guard<std::mutex> state_lock( m_resourceStateMutex );
 	for ( t3dRdViewState_t &state : m_szViewStates ) freeViewState( state );
+	freeForwardPipelines();
 	freeUniformSets();
 	m_szTopology[LOD0_MESH].releaseGpu( m_context );
 	m_szTopology[OUTER_RING_MESH].releaseGpu( m_context );
@@ -718,6 +852,10 @@ void Terrain3DRdClipmapRenderer::shutdown( void ) {
 	m_context.freeResource( m_hTerrainSampler );
 	m_context.freeResource( m_hCullPipeline );
 	m_context.freeResource( m_hCullShader );
+	for ( uint32_t tier = 0u; tier < 3u; ++tier ) {
+		for ( uint32_t variant = 1u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant )
+			m_context.freeResource( m_hszForwardShaders[tier][variant] );
+	}
 	for ( RID &shader : m_hszShaders ) m_context.freeResource( shader );
 	m_context.releaseVertexFormat( m_nVertexFormat );
 	m_hIndirectBuffer = RID();
@@ -735,7 +873,11 @@ void Terrain3DRdClipmapRenderer::shutdown( void ) {
 	m_hCullPipeline = RID();
 	m_hCullShader = RID();
 	for ( RID &shader : m_hszShaders ) shader = RID();
+	for ( auto &tier : m_hszForwardShaders ) for ( RID &shader : tier ) shader = RID();
 	m_nVertexFormat = RenderingDevice::INVALID_FORMAT_ID;
+	m_nForwardPreparedScenePass = 0u;
+	m_nForwardPreparedSnapshotGeneration = 0u;
+	m_bLastForwardPipelineKeyValid = false;
 	m_nRegionMapCapacityBytes = 0u;
 	m_nRegionMapGeneration = 0u;
 	m_nMaterialGeneration = 0u;
@@ -767,9 +909,11 @@ void Terrain3DRdClipmapRenderer::copyProjection( const Projection &rProjection, 
 
 bool Terrain3DRdClipmapRenderer::updateFrameUniforms( const t3dRdFrameSnapshot_t &rSnapshot,
 		const Projection &rViewProjection,
+		const Projection &rView,
 		const Vector3 &rCamera ) {
 	t3dRdFrameUniforms_t frame{};
 	copyProjection( rViewProjection, frame.m_mViewProjection );
+	copyProjection( rView, frame.m_mView );
 	frame.m_fLightDirectionX = ( float )( rSnapshot.m_lightDirection.x );
 	frame.m_fLightDirectionY = ( float )( rSnapshot.m_lightDirection.y );
 	frame.m_fLightDirectionZ = ( float )( rSnapshot.m_lightDirection.z );
@@ -1141,7 +1285,7 @@ bool Terrain3DRdClipmapRenderer::render( RenderData *const pRenderData,
 		const Projection view_projection = scene_data->get_view_projection( view ) * view_matrix;
 		Vector3 eye_position = camera_transform.origin;
 		if ( view_count > 1u ) eye_position += camera_transform.basis.xform( scene_data->get_view_eye_offset( view ) );
-		if ( !updateFrameUniforms( rSnapshot, view_projection, eye_position ) ) {
+		if ( !updateFrameUniforms( rSnapshot, view_projection, view_matrix, eye_position ) ) {
 			setError( "Failed to update Terrain3D frame uniforms" );
 			return false;
 		}
@@ -1190,6 +1334,168 @@ bool Terrain3DRdClipmapRenderer::render( RenderData *const pRenderData,
 	m_context.recordSubmissionCounts( bDirectDebug ? 0u : view_count * s_nRdDrawGroupCount,
 			bDirectDebug || !bGpuCulling ? 0u : view_count );
 	m_context.recordSuccessfulPass( Terrain3DRdContext::PASS_TERRAIN_CLIPMAP, gpu_frame_id );
+	m_context.markWarmupComplete();
+	clearError();
+	return true;
+}
+
+bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassContext_t &rContext,
+		const t3dRdFrameSnapshot_t &rSnapshot,
+		const PackedByteArray &rRegionMapBytes,
+		const uint64_t nRegionMapGeneration,
+		const RID &rHeightTextureRd,
+		const RID &rDerivedTextureRd,
+		const RID &rControlTextureRd,
+		const RID &rColorTextureRd,
+		const RID &rMiddleCompositeTextureRd,
+		const RID &rMiddleHeightTextureRd,
+		const RID &rMiddleHeightRegionMapTextureRd,
+		const RID &rFarHeightTextureRd,
+		const RID &rFarColorTextureRd,
+		const RID &rAlbedoTextureRd,
+		const RID &rFarAlbedoTextureRd,
+		const RID &rNormalTextureRd,
+		const RID &rSurfaceTextureRd,
+		const RID &rDisplacementTextureRd,
+		const RID &rWorldNoiseTextureRd,
+		const RID &rMacroNoiseTextureRd,
+		const RID &rEditorBrushTextureRd ) {
+	if ( rContext.m_phase != T3D_RD_FORWARD_PHASE_PREPARE ) return false;
+	if ( !isReady() || !m_context.validateDevice() || rSnapshot.m_nPatchCount == 0u || rRegionMapBytes.is_empty() ) return false;
+	if ( rContext.m_nViewCount != 1u ) {
+		setError( "F2 native terrain submission supports one Forward+ view; multiview is completed in F7" );
+		return false;
+	}
+	t3dRdForwardShaderVariant_t variant;
+	if ( !selectForwardVariant( rContext, variant ) ) return false;
+
+	const RID height = rHeightTextureRd;
+	const RID control = rControlTextureRd;
+	const RID color_map = rColorTextureRd;
+	RID derived = rDerivedTextureRd;
+	RID middle_composite = rMiddleCompositeTextureRd;
+	RID middle_height = rMiddleHeightTextureRd;
+	RID middle_height_region_map = rMiddleHeightRegionMapTextureRd;
+	RID far_height = rFarHeightTextureRd;
+	RID far_color = rFarColorTextureRd;
+	RID albedo = rAlbedoTextureRd;
+	RID far_albedo = rFarAlbedoTextureRd;
+	RID normal = rNormalTextureRd;
+	RID surface = rSurfaceTextureRd;
+	RID displacement = rDisplacementTextureRd;
+	RID world_noise = rWorldNoiseTextureRd;
+	RID macro_noise = rMacroNoiseTextureRd;
+	RID editor_brush = rEditorBrushTextureRd;
+	if ( !albedo.is_valid() ) albedo = color_map;
+	if ( !surface.is_valid() ) surface = normal.is_valid() ? normal : albedo;
+	if ( !normal.is_valid() ) normal = surface;
+	if ( !displacement.is_valid() ) displacement = m_hFallbackDisplacementTexture;
+	if ( !derived.is_valid() ) derived = m_hFallbackArrayTexture;
+	if ( !middle_composite.is_valid() ) middle_composite = m_hFallbackArrayTexture;
+	if ( !middle_height.is_valid() ) middle_height = m_hFallbackArrayTexture;
+	if ( !middle_height_region_map.is_valid() ) middle_height_region_map = m_hFallbackDisplacementTexture;
+	if ( !far_height.is_valid() ) far_height = m_hFallbackDisplacementTexture;
+	if ( !far_color.is_valid() ) far_color = m_hFallbackDisplacementTexture;
+	if ( !far_albedo.is_valid() ) far_albedo = albedo.is_valid() ? albedo : m_hFallbackArrayTexture;
+	if ( !world_noise.is_valid() ) world_noise = m_hFallbackDisplacementTexture;
+	if ( !macro_noise.is_valid() ) macro_noise = m_hFallbackDisplacementTexture;
+	if ( !editor_brush.is_valid() ) editor_brush = m_hFallbackDisplacementTexture;
+	if ( !height.is_valid() || !control.is_valid() || !color_map.is_valid() || !albedo.is_valid() ||
+			!normal.is_valid() || !surface.is_valid() || !displacement.is_valid() ) {
+		setError( "Terrain3D direct RenderingDevice textures are incomplete" );
+		return false;
+	}
+
+	if ( m_nForwardPreparedScenePass != rContext.m_nScenePass )
+		m_context.beginFrame( rContext.m_nScenePass, rSnapshot.m_nPublicationGeneration );
+	if ( !uploadSnapshotBuffers( rSnapshot, rRegionMapBytes, nRegionMapGeneration ) ||
+			!ensureUniformSets( height, derived, control, color_map, middle_composite, middle_height,
+					middle_height_region_map, far_height, far_color, albedo, far_albedo, normal, surface,
+					displacement, world_noise, macro_noise, editor_brush, rSnapshot.m_materialConfig ) ||
+			!updateFrameUniforms( rSnapshot, rContext.m_szViewProjection[0], Projection( rContext.m_cameraTransform.affine_inverse() ), rContext.m_cameraTransform.origin ) ) {
+		setError( "Failed to prepare Terrain3D native Forward+ frame state" );
+		return false;
+	}
+
+	const bool recull = m_nForwardPreparedScenePass != rContext.m_nScenePass ||
+			m_nForwardPreparedSnapshotGeneration != rSnapshot.m_nPublicationGeneration;
+	if ( recull ) {
+		if ( !Terrain3DRdCpuCuller::build( rSnapshot, rContext.m_szViewProjection[0],
+				m_szTopology[LOD0_MESH].getIndexCount(), m_szTopology[OUTER_RING_MESH].getIndexCount(), m_cpuCullResult ) ) {
+			++m_nIndirectValidationFailures;
+			setError( "Terrain3D CPU reference culler rejected native Forward+ patch bounds" );
+			return false;
+		}
+		m_nVisiblePatches.store( m_cpuCullResult.m_nVisibleCount, std::memory_order_release );
+		if ( !m_bDirectDrawDebugEnabled.load( std::memory_order_acquire ) ) {
+			if ( m_bGpuCullingReady.load( std::memory_order_acquire ) ) {
+				if ( !runGpuCulling( rSnapshot ) ) return false;
+			} else if ( !uploadCpuIndirect( m_cpuCullResult ) ) return false;
+		}
+		m_nForwardPreparedScenePass = rContext.m_nScenePass;
+		m_nForwardPreparedSnapshotGeneration = rSnapshot.m_nPublicationGeneration;
+	}
+	if ( !ensureForwardPipelines( rContext, variant ) ) return false;
+	clearError();
+	return true;
+}
+
+bool Terrain3DRdClipmapRenderer::drawForwardView( const t3dRdForwardPassContext_t &rContext ) {
+	if ( rContext.m_nDrawList < 0 || !m_bLastForwardPipelineKeyValid ) return false;
+	t3dRdForwardShaderVariant_t variant;
+	if ( !selectForwardVariant( rContext, variant ) || variant != m_lastForwardPipelineKey.m_variant ||
+			rContext.m_nFramebufferFormat != m_lastForwardPipelineKey.m_nFramebufferFormat ||
+			rContext.m_nViewCount != m_lastForwardPipelineKey.m_nViewCount ||
+			rContext.m_bReverseCull != m_lastForwardPipelineKey.m_bReverseCull ||
+			( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE && rContext.m_bDepthPrepassActive ) != m_lastForwardPipelineKey.m_bDepthPrepassActive ) return false;
+	const t3dRdForwardPipelineEntry_t *const entry = findForwardPipeline( m_lastForwardPipelineKey );
+	if ( !entry ) return false;
+	RenderingDevice *const rd = m_context.getDevice();
+	const int64_t draw_list = rContext.m_nDrawList;
+	const bool direct = m_bDirectDrawDebugEnabled.load( std::memory_order_acquire );
+	for ( uint32_t group = 0u; group < s_nRdDrawGroupCount; ++group ) {
+		const uint32_t tier = group <= 1u ? 0u : ( group == 2u ? 1u : 2u );
+		const Terrain3DRdTopology &topology = group == T3D_RD_DRAW_GROUP_LOD0_NEAR ? m_szTopology[LOD0_MESH] : m_szTopology[OUTER_RING_MESH];
+		rd->draw_list_bind_render_pipeline( draw_list, entry->m_hszPipelines[tier] );
+		rd->draw_list_bind_uniform_set( draw_list, m_hszRasterUniformSets[tier], 0u );
+		rd->draw_list_bind_vertex_array( draw_list, topology.getVertexArray() );
+		rd->draw_list_bind_index_array( draw_list, topology.getIndexArray() );
+		if ( direct ) {
+			const uint32_t count = m_cpuCullResult.m_szCommands[group].m_nInstanceCount;
+			for ( uint32_t slot = 0u; slot < count; ++slot ) {
+				t3dRdDrawPushConstants_t constants{};
+				constants.m_nDirectPatchIndex = m_cpuCullResult.m_szVisibleIndices[group * s_nMaxClipmapLevels + slot];
+				constants.m_nDirectMode = 1u;
+				std::memcpy( m_drawPushBytes.ptrw(), &constants, sizeof( constants ) );
+				rd->draw_list_set_push_constant( draw_list, m_drawPushBytes, sizeof( constants ) );
+				rd->draw_list_draw( draw_list, true, 1u, 0u );
+				++m_nDirectDebugDraws;
+			}
+			m_nDrawsRendered += count;
+		} else {
+			constexpr uint32_t indirect_buffer_bytes = sizeof( t3dRdIndexedIndirectCommand_t ) * s_nRdDrawGroupCount;
+			if ( !Terrain3DRdCpuCuller::isCommandRangeValid( group, indirect_buffer_bytes ) ) return false;
+			const t3dRdDrawPushConstants_t constants{};
+			std::memcpy( m_drawPushBytes.ptrw(), &constants, sizeof( constants ) );
+			rd->draw_list_set_push_constant( draw_list, m_drawPushBytes, sizeof( constants ) );
+			rd->draw_list_draw_indirect( draw_list, true, m_hIndirectBuffer,
+					group * sizeof( t3dRdIndexedIndirectCommand_t ), 1u, sizeof( t3dRdIndexedIndirectCommand_t ) );
+			++m_nIndirectDraws;
+			++m_nDrawsRendered;
+		}
+	}
+	return true;
+}
+
+bool Terrain3DRdClipmapRenderer::renderForwardPass( const t3dRdForwardPassContext_t &rContext ) {
+	if ( rContext.m_phase != T3D_RD_FORWARD_PHASE_SUBMIT ) return false;
+	if ( m_nForwardPreparedScenePass != rContext.m_nScenePass ) return false;
+	if ( !drawForwardView( rContext ) ) {
+		setError( "Failed to submit Terrain3D terrain onto native Forward+ draw list" );
+		return false;
+	}
+	++m_nFramesRendered;
+	m_context.recordSubmissionCounts( m_bDirectDrawDebugEnabled.load( std::memory_order_acquire ) ? 0u : s_nRdDrawGroupCount, 0u );
 	m_context.markWarmupComplete();
 	clearError();
 	return true;

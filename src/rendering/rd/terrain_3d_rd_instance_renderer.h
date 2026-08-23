@@ -5,6 +5,7 @@
 #define TERRAIN3D_RD_INSTANCE_RENDERER_H
 
 #include "rendering/rd/terrain_3d_rd_mesh_cache.h"
+#include "rendering/rd/terrain_3d_rd_forward_shader_bundle.h"
 #include "rendering/rd/terrain_3d_rd_types.h"
 
 #include <godot_cpp/classes/rd_shader_spirv.hpp>
@@ -51,11 +52,29 @@ private:
 		RID m_hDepth;
 		RenderingDevice::TextureSamples m_samples = RenderingDevice::TEXTURE_SAMPLES_1;
 	} t3dRdInstanceViewState_t;
+	typedef struct t3dRdInstanceForwardPipelineKey_s {
+		int64_t m_nFramebufferFormat = RenderingDevice::INVALID_ID;
+		t3dRdForwardShaderVariant_t m_variant = T3D_RD_FORWARD_SHADER_COLOR;
+		RenderingDevice::TextureSamples m_samples = RenderingDevice::TEXTURE_SAMPLES_1;
+		uint32_t m_nViewCount = 1u;
+		bool m_bReverseCull = false;
+		bool m_bDepthPrepassActive = false;
+		bool operator==( const t3dRdInstanceForwardPipelineKey_s &rOther ) const {
+			return m_nFramebufferFormat == rOther.m_nFramebufferFormat && m_variant == rOther.m_variant &&
+					m_samples == rOther.m_samples && m_nViewCount == rOther.m_nViewCount &&
+					m_bReverseCull == rOther.m_bReverseCull && m_bDepthPrepassActive == rOther.m_bDepthPrepassActive;
+		}
+	} t3dRdInstanceForwardPipelineKey_t;
+	typedef struct t3dRdInstanceForwardPipelineEntry_s {
+		t3dRdInstanceForwardPipelineKey_t m_key;
+		RID m_hszPipelines[3];
+	} t3dRdInstanceForwardPipelineEntry_t;
 
 	Terrain3DRdContext &m_context;
 	Terrain3DRdMeshCache m_meshCache;
 	t3dRdInstanceViewState_t m_szViewStates[s_nMaxViews]{};
 	RID m_hShader;
+	RID m_hszForwardShaders[T3D_RD_FORWARD_SHADER_VARIANT_MAX];
 	RID m_hHlodCullShader;
 	RID m_hHlodCullPipeline;
 	RID m_hHlodCullDescriptorBuffer;
@@ -86,6 +105,7 @@ private:
 	std::vector<t3dRdInstanceDrawPacket_t> m_shadowPackets;
 	std::vector<t3dRdInstanceMaterialPairBinding_t> m_materialBindings;
 	std::vector<t3dRdHlodCullDescriptor_t> m_hlodDescriptors;
+	std::vector<t3dRdInstanceForwardPipelineEntry_t> m_forwardPipelines;
 	PackedByteArray m_frameBytes;
 	PackedByteArray m_instanceBytes;
 	PackedByteArray m_dirtyInstanceBytes;
@@ -104,9 +124,19 @@ private:
 	uint64_t m_nDirtyUploadRanges = 0u;
 	uint64_t m_nHlodCullDispatches = 0u;
 	uint64_t m_nHlodCullDescriptors = 0u;
+	uint64_t m_nForwardPreparedScenePass = 0u;
+	uint64_t m_nForwardPreparedSceneGeneration = 0u;
+	t3dRdInstanceForwardPipelineKey_t m_lastForwardPipelineKey{};
+	bool m_bLastForwardPipelineKeyValid = false;
+	bool m_bForwardPreparedHasDraws = false;
 
 	bool ensureDevice( void );
 	bool ensureShader( const Ref<RDShaderSPIRV> &rShader );
+	bool ensureForwardShaders( const t3dRdForwardShaderBundle_t &rShaders );
+	void freeForwardPipelines( void );
+	bool selectForwardVariant( const t3dRdForwardPassContext_t &rContext, t3dRdForwardShaderVariant_t &rVariant ) const;
+	bool ensureForwardPipelines( const t3dRdForwardPassContext_t &rContext, t3dRdForwardShaderVariant_t variant );
+	const t3dRdInstanceForwardPipelineEntry_t *findForwardPipeline( const t3dRdInstanceForwardPipelineKey_t &rKey ) const;
 	bool ensureHlodCullShader( const Ref<RDShaderSPIRV> &rShader );
 	bool ensureBuffer( RID &rRid, uint32_t &rCapacity, uint32_t nRequired, const String &rName,
 			Terrain3DRdContext::ResourceType type, Terrain3DRdContext::MemoryCategory memory );
@@ -126,6 +156,7 @@ private:
 	bool ensureViewState( uint32_t nView, const RID &rColor, const RID &rDepth, RenderingDevice::TextureSamples samples );
 	void freeViewState( t3dRdInstanceViewState_t &rState );
 	bool drawView( uint32_t nView, const Projection &rViewProjection, const Vector3 &rCamera, uint32_t nVisibilityMask );
+	bool drawForwardView( const t3dRdForwardPassContext_t &rContext );
 	bool isCellVisible( const t3dRdInstanceCell_t &rCell, const Projection &rViewProjection, const Vector3 &rCamera ) const;
 	void setError( const String &rError );
 
@@ -133,12 +164,18 @@ public:
 	Terrain3DRdInstanceRenderer( void );
 	~Terrain3DRdInstanceRenderer( void );
 
-	bool initialize( const Ref<RDShaderSPIRV> &rShader, const Ref<RDShaderSPIRV> &rHlodCullShader );
+	bool initialize( const Ref<RDShaderSPIRV> &rShader, const Ref<RDShaderSPIRV> &rHlodCullShader,
+			const t3dRdForwardShaderBundle_t &rForwardShaders );
 	void shutdown( void );
 	bool render( RenderData *pRenderData,
 			const std::shared_ptr<const t3dRdMeshSourceSnapshot_t> &pMeshes,
 			const std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> &pScene,
 			uint32_t nVisibilityMask );
+	bool prepareForwardPass( const t3dRdForwardPassContext_t &rContext,
+			const std::shared_ptr<const t3dRdMeshSourceSnapshot_t> &pMeshes,
+			const std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> &pScene,
+			uint32_t nVisibilityMask );
+	bool renderForwardPass( const t3dRdForwardPassContext_t &rContext );
 	Dictionary getDiagnostics( void ) const;
 	EA_FORCE_INLINE void setDirectDrawDebugEnabled( bool bEnabled ) { m_bDirectDrawDebug = bEnabled; }
 	EA_FORCE_INLINE const std::vector<t3dRdInstanceDrawPacket_t> &getDepthPackets( void ) const { return m_depthPackets; }

@@ -7,6 +7,7 @@
 
 #include "rendering/rd/terrain_3d_rd_context.h"
 #include "rendering/rd/terrain_3d_rd_culling.h"
+#include "rendering/rd/terrain_3d_rd_forward_shader_bundle.h"
 #include "rendering/rd/terrain_3d_rd_topology.h"
 #include "rendering/rd/terrain_3d_rd_types.h"
 
@@ -15,6 +16,7 @@
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <mutex>
+#include <vector>
 
 namespace godot {
 class RenderData;
@@ -33,9 +35,30 @@ private:
 		bool m_bColorWrite = true;
 	} t3dRdViewState_t;
 
+	typedef struct t3dRdForwardPipelineKey_s {
+		int64_t m_nFramebufferFormat = RenderingDevice::INVALID_ID;
+		t3dRdForwardShaderVariant_t m_variant = T3D_RD_FORWARD_SHADER_COLOR;
+		RenderingDevice::TextureSamples m_samples = RenderingDevice::TEXTURE_SAMPLES_1;
+		uint32_t m_nViewCount = 1u;
+		bool m_bReverseCull = false;
+		bool m_bDepthPrepassActive = false;
+
+		bool operator==( const t3dRdForwardPipelineKey_s &rOther ) const {
+			return m_nFramebufferFormat == rOther.m_nFramebufferFormat && m_variant == rOther.m_variant &&
+					m_samples == rOther.m_samples && m_nViewCount == rOther.m_nViewCount &&
+					m_bReverseCull == rOther.m_bReverseCull && m_bDepthPrepassActive == rOther.m_bDepthPrepassActive;
+		}
+	} t3dRdForwardPipelineKey_t;
+
+	typedef struct t3dRdForwardPipelineEntry_s {
+		t3dRdForwardPipelineKey_t m_key;
+		RID m_hszPipelines[3];
+	} t3dRdForwardPipelineEntry_t;
+
 	Terrain3DRdContext &m_context;
 	Terrain3DRdTopology m_szTopology[MESH_TYPE_COUNT];
 	RID m_hszShaders[3];
+	RID m_hszForwardShaders[3][T3D_RD_FORWARD_SHADER_VARIANT_MAX];
 	RID m_hCullShader;
 	RID m_hCullPipeline;
 	RID m_hTerrainSampler;
@@ -72,6 +95,7 @@ private:
 	RID m_hBoundEditorBrushTexture;
 	uint32_t m_nszBoundTierFiltering[3] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
 	t3dRdViewState_t m_szViewStates[s_nMaxViews]{};
+	std::vector<t3dRdForwardPipelineEntry_t> m_forwardPipelines;
 	int64_t m_nVertexFormat = RenderingDevice::INVALID_FORMAT_ID;
 	uint32_t m_nRegionMapCapacityBytes = 0u;
 	uint64_t m_nRegionMapGeneration = 0u;
@@ -79,6 +103,10 @@ private:
 	uint64_t m_nPatchGeneration = 0u;
 	t3dRdPatch_t m_szUploadedPatches[s_nMaxClipmapLevels]{};
 	uint32_t m_nUploadedPatchCount = 0u;
+	uint64_t m_nForwardPreparedScenePass = 0u;
+	uint64_t m_nForwardPreparedSnapshotGeneration = 0u;
+	t3dRdForwardPipelineKey_t m_lastForwardPipelineKey{};
+	bool m_bLastForwardPipelineKeyValid = false;
 	bool m_bPatchUploadInitialized = false;
 	std::atomic_bool m_bGpuCullingReady{ false };
 	std::atomic_uint64_t m_nFramesRendered{ 0u };
@@ -118,6 +146,11 @@ private:
 			const Ref<RDShaderSPIRV> &rMiddle,
 			const Ref<RDShaderSPIRV> &rFar,
 			const Ref<RDShaderSPIRV> &rCull );
+	bool ensureForwardShaders( const t3dRdForwardShaderBundle_t &rShaders );
+	void freeForwardPipelines( void );
+	bool selectForwardVariant( const t3dRdForwardPassContext_t &rContext, t3dRdForwardShaderVariant_t &rVariant ) const;
+	bool ensureForwardPipelines( const t3dRdForwardPassContext_t &rContext, t3dRdForwardShaderVariant_t variant );
+	const t3dRdForwardPipelineEntry_t *findForwardPipeline( const t3dRdForwardPipelineKey_t &rKey ) const;
 	bool ensureSamplers( void );
 	bool ensureFallbackTextures( void );
 	bool ensureBuffers( void );
@@ -145,7 +178,7 @@ private:
 			const RID &rDepth,
 			RenderingDevice::TextureSamples samples,
 			bool bColorWrite );
-	bool updateFrameUniforms( const t3dRdFrameSnapshot_t &rSnapshot, const Projection &rViewProjection, const Vector3 &rCamera );
+	bool updateFrameUniforms( const t3dRdFrameSnapshot_t &rSnapshot, const Projection &rViewProjection, const Projection &rView, const Vector3 &rCamera );
 	bool uploadSnapshotBuffers( const t3dRdFrameSnapshot_t &rSnapshot,
 			const PackedByteArray &rRegionMapBytes,
 			uint64_t nRegionMapGeneration );
@@ -156,6 +189,7 @@ private:
 			const t3dRdCpuCullResult_t &rExpected );
 	bool drawView( uint32_t nView );
 	bool drawViewDirect( uint32_t nView, const t3dRdCpuCullResult_t &rCullResult );
+	bool drawForwardView( const t3dRdForwardPassContext_t &rContext );
 	void copyProjection( const Projection &rProjection, float *pDestination ) const;
 
 public:
@@ -166,7 +200,8 @@ public:
 	bool initialize( const Ref<RDShaderSPIRV> &rNear,
 			const Ref<RDShaderSPIRV> &rMiddle,
 			const Ref<RDShaderSPIRV> &rFar,
-			const Ref<RDShaderSPIRV> &rCull );
+			const Ref<RDShaderSPIRV> &rCull,
+			const t3dRdForwardShaderBundle_t &rForwardShaders );
 	void shutdown( void );
 	bool render( RenderData *pRenderData,
 			const t3dRdFrameSnapshot_t &rSnapshot,
@@ -190,6 +225,28 @@ public:
 			const RID &rMacroNoiseTextureRd,
 			const RID &rEditorBrushTextureRd,
 			bool bColorWrite );
+	bool prepareForwardPass( const t3dRdForwardPassContext_t &rContext,
+			const t3dRdFrameSnapshot_t &rSnapshot,
+			const PackedByteArray &rRegionMapBytes,
+			uint64_t nRegionMapGeneration,
+			const RID &rHeightTextureRd,
+			const RID &rDerivedTextureRd,
+			const RID &rControlTextureRd,
+			const RID &rColorTextureRd,
+			const RID &rMiddleCompositeTextureRd,
+			const RID &rMiddleHeightTextureRd,
+			const RID &rMiddleHeightRegionMapTextureRd,
+			const RID &rFarHeightTextureRd,
+			const RID &rFarColorTextureRd,
+			const RID &rAlbedoTextureRd,
+			const RID &rFarAlbedoTextureRd,
+			const RID &rNormalTextureRd,
+			const RID &rSurfaceTextureRd,
+			const RID &rDisplacementTextureRd,
+			const RID &rWorldNoiseTextureRd,
+			const RID &rMacroNoiseTextureRd,
+			const RID &rEditorBrushTextureRd );
+	bool renderForwardPass( const t3dRdForwardPassContext_t &rContext );
 	Dictionary getDiagnostics( void ) const;
 	EA_FORCE_INLINE void setCullingComparisonEnabled( const bool bEnabled ) {
 		m_bCullingComparisonEnabled.store( bEnabled, std::memory_order_release );

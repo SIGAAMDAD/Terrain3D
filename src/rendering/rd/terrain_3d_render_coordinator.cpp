@@ -965,7 +965,10 @@ bool Terrain3DRenderCoordinator::initializeRendererOnRenderThread( void ) {
 	const bool ready = m_shaderLibrary.isReady() && m_renderer.initialize( m_shaderLibrary.getNear(),
 			m_shaderLibrary.getMiddle(),
 			m_shaderLibrary.getFar(),
-			m_shaderLibrary.getCull() ) && m_instanceRenderer.initialize( m_shaderLibrary.getInstances(), m_shaderLibrary.getHlodCull() );
+			m_shaderLibrary.getCull(),
+			m_shaderLibrary.getForwardBundle() ) && m_instanceRenderer.initialize( m_shaderLibrary.getInstances(),
+			m_shaderLibrary.getHlodCull(),
+			m_shaderLibrary.getForwardBundle() );
 	m_bRendererInitialized.store( ready, std::memory_order_release );
 	m_bRendererFailed.store( false, std::memory_order_release );
 	if ( !ready ) {
@@ -1166,15 +1169,58 @@ void Terrain3DRenderCoordinator::render( RenderData *const pRenderData ) {
 
 void Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContext_t &rContext ) {
 	if ( !m_bRenderEnabled.load( std::memory_order_acquire ) ||
-			m_backend.load( std::memory_order_acquire ) == T3D_RENDER_BACKEND_RENDERING_SERVER ) {
-		return;
-	}
-	// F1 establishes the synchronous native-pass boundary only. F2 adds the
-	// actual terrain/instance/HLOD submission onto rContext.m_nDrawList.
+			m_backend.load( std::memory_order_acquire ) == T3D_RENDER_BACKEND_RENDERING_SERVER ) return;
 	m_nForwardPassCallbacks.fetch_add( 1u, std::memory_order_relaxed );
 	m_nLastForwardScenePass.store( rContext.m_nScenePass, std::memory_order_release );
 	m_nLastForwardDrawList.store( rContext.m_nDrawList, std::memory_order_release );
 	m_nLastForwardPassKind.store( ( uint32_t )( rContext.m_passKind ), std::memory_order_release );
+	if ( rContext.m_passKind != T3D_RD_FORWARD_PASS_DEPTH && rContext.m_passKind != T3D_RD_FORWARD_PASS_OPAQUE ) return;
+
+	if ( rContext.m_phase == T3D_RD_FORWARD_PHASE_PREPARE ) {
+		if ( !initializeRendererOnRenderThread() ) return;
+		const t3dRdFrameSnapshotSlot_t *const publication = acquireSnapshotOnRenderThread();
+		if ( !publication ) return;
+		const t3dRdFrameSnapshot_t &snapshot = publication->m_snapshot;
+		const bool has_terrain = snapshot.m_nPatchCount > 0u && !publication->m_regionMapBytes.is_empty();
+		m_nForwardPreparedScenePass = rContext.m_nScenePass;
+		m_bForwardPreparedHasTerrain = has_terrain;
+		const bool instances_ok = m_instanceRenderer.prepareForwardPass( rContext, publication->m_instanceMeshes,
+				publication->m_instanceScene, rContext.m_nCameraVisibleLayers );
+		const bool terrain_ok = !has_terrain || ( instances_ok && m_renderer.prepareForwardPass( rContext, snapshot,
+				publication->m_regionMapBytes, snapshot.m_nRegionMapGeneration,
+				publication->m_resources.m_hHeightTextureRd, publication->m_resources.m_hDerivedTextureRd,
+				publication->m_resources.m_hControlTextureRd, publication->m_resources.m_hColorTextureRd,
+				publication->m_resources.m_hMiddleCompositeTextureRd, publication->m_resources.m_hMiddleHeightTextureRd,
+				publication->m_resources.m_hMiddleHeightRegionMapTextureRd, publication->m_resources.m_hFarHeightTextureRd,
+				publication->m_resources.m_hFarColorTextureRd, publication->m_resources.m_hAlbedoTextureRd,
+				publication->m_resources.m_hFarAlbedoTextureRd, publication->m_resources.m_hNormalTextureRd,
+				publication->m_resources.m_hSurfaceTextureRd, publication->m_resources.m_hDisplacementTextureRd,
+				publication->m_resources.m_hWorldNoiseTextureRd, publication->m_resources.m_hMacroNoiseTextureRd,
+				publication->m_resources.m_hEditorBrushTextureRd ) );
+		if ( instances_ok && terrain_ok ) {
+			m_nConsecutiveRenderFailures.store( 0u, std::memory_order_release );
+			return;
+		}
+		const uint32_t failures = m_nConsecutiveRenderFailures.fetch_add( 1u, std::memory_order_acq_rel ) + 1u;
+		m_instanceRenderer.shutdown();
+		m_renderer.shutdown();
+		m_bRendererInitialized.store( false, std::memory_order_release );
+		if ( failures >= 8u ) m_bRendererFailed.store( true, std::memory_order_release );
+		return;
+	}
+
+	if ( rContext.m_phase != T3D_RD_FORWARD_PHASE_SUBMIT || !m_bRendererInitialized.load( std::memory_order_acquire ) ||
+			m_nForwardPreparedScenePass != rContext.m_nScenePass ) return;
+	const bool instances_ok = m_instanceRenderer.renderForwardPass( rContext );
+	const bool terrain_ok = !m_bForwardPreparedHasTerrain || m_renderer.renderForwardPass( rContext );
+	if ( instances_ok && terrain_ok ) {
+		m_nConsecutiveRenderFailures.store( 0u, std::memory_order_release );
+		return;
+	}
+	// The native draw list is open here. Do not destroy or rebuild RD resources
+	// until a later PREPARE callback, where resource mutation is legal.
+	const uint32_t failures = m_nConsecutiveRenderFailures.fetch_add( 1u, std::memory_order_acq_rel ) + 1u;
+	if ( failures >= 8u ) m_bRendererFailed.store( true, std::memory_order_release );
 }
 
 Dictionary Terrain3DRenderCoordinator::getDiagnostics( void ) const {

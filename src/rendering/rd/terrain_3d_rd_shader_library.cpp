@@ -5,7 +5,7 @@
 #include <godot_cpp/classes/rd_shader_file.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
 
-Ref<RDShaderSPIRV> Terrain3DRdShaderLibrary::loadShader( const String &rPath ) {
+Ref<RDShaderSPIRV> Terrain3DRdShaderLibrary::loadShader( const String &rPath, const StringName &rVersion ) {
 	ResourceLoader *const loader = ResourceLoader::get_singleton();
 	if ( !loader ) {
 		m_lastError = "ResourceLoader is unavailable while loading " + rPath;
@@ -16,9 +16,9 @@ Ref<RDShaderSPIRV> Terrain3DRdShaderLibrary::loadShader( const String &rPath ) {
 		m_lastError = "Failed to load RD shader file: " + rPath;
 		return Ref<RDShaderSPIRV>();
 	}
-	Ref<RDShaderSPIRV> spirv = shader_file->get_spirv();
+	Ref<RDShaderSPIRV> spirv = shader_file->get_spirv( rVersion );
 	if ( spirv.is_null() ) {
-		m_lastError = "RD shader has no SPIR-V: " + rPath;
+		m_lastError = "RD shader has no SPIR-V: " + rPath + ( rVersion.is_empty() ? String() : String( " version=" ) + String( rVersion ) );
 		return Ref<RDShaderSPIRV>();
 	}
 	const RenderingDevice::ShaderStage stages[] = {
@@ -38,16 +38,31 @@ Ref<RDShaderSPIRV> Terrain3DRdShaderLibrary::loadShader( const String &rPath ) {
 
 bool Terrain3DRdShaderLibrary::load( void ) {
 	clear();
-	m_near = loadShader( "res://addons/terrain_3d/rd/terrain_clipmap_near.glsl" );
-	if ( m_near.is_null() ) return false;
-	m_middle = loadShader( "res://addons/terrain_3d/rd/terrain_clipmap_middle.glsl" );
-	if ( m_middle.is_null() ) return false;
-	m_far = loadShader( "res://addons/terrain_3d/rd/terrain_clipmap_far.glsl" );
-	if ( m_far.is_null() ) return false;
+	static const char *const version_names[T3D_RD_FORWARD_SHADER_VARIANT_MAX] = {
+		"color", "color_specular", "color_motion", "color_specular_motion",
+		"depth", "depth_normal_roughness", "depth_normal_roughness_voxel_gi",
+	};
+	static const char *const terrain_paths[3] = {
+		"res://addons/terrain_3d/rd/terrain_clipmap_near.glsl",
+		"res://addons/terrain_3d/rd/terrain_clipmap_middle.glsl",
+		"res://addons/terrain_3d/rd/terrain_clipmap_far.glsl",
+	};
+	for ( uint32_t tier = 0u; tier < 3u; ++tier ) {
+		for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant ) {
+			m_forward.m_szTerrain[tier][variant] = loadShader( terrain_paths[tier], StringName( version_names[variant] ) );
+			if ( m_forward.m_szTerrain[tier][variant].is_null() ) return false;
+		}
+	}
+	m_near = m_forward.m_szTerrain[0][T3D_RD_FORWARD_SHADER_COLOR];
+	m_middle = m_forward.m_szTerrain[1][T3D_RD_FORWARD_SHADER_COLOR];
+	m_far = m_forward.m_szTerrain[2][T3D_RD_FORWARD_SHADER_COLOR];
 	m_cull = loadShader( "res://addons/terrain_3d/rd/terrain_cull.glsl" );
 	if ( m_cull.is_null() ) return false;
-	m_instances = loadShader( "res://addons/terrain_3d/rd/terrain_instances.glsl" );
-	if ( m_instances.is_null() ) return false;
+	for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant ) {
+		m_forward.m_szInstances[variant] = loadShader( "res://addons/terrain_3d/rd/terrain_instances.glsl", StringName( version_names[variant] ) );
+		if ( m_forward.m_szInstances[variant].is_null() ) return false;
+	}
+	m_instances = m_forward.m_szInstances[T3D_RD_FORWARD_SHADER_COLOR];
 	m_hlodCull = loadShader( "res://addons/terrain_3d/rd/terrain_hlod_cull.glsl" );
 	if ( m_hlodCull.is_null() ) return false;
 	m_lastError = String();
@@ -61,6 +76,10 @@ void Terrain3DRdShaderLibrary::clear( void ) {
 	m_cull.unref();
 	m_instances.unref();
 	m_hlodCull.unref();
+	for ( uint32_t tier = 0u; tier < 3u; ++tier ) {
+		for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant ) m_forward.m_szTerrain[tier][variant].unref();
+	}
+	for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant ) m_forward.m_szInstances[variant].unref();
 }
 
 Dictionary Terrain3DRdShaderLibrary::getDiagnostics( void ) const {

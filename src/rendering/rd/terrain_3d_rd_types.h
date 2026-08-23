@@ -95,8 +95,38 @@ typedef enum t3dRdNativeProxyMode_e {
 	T3D_RD_NATIVE_PROXY_FULL = 2,
 } t3dRdNativeProxyMode_t;
 
-static constexpr uint32_t s_nRdForwardBridgeAbiVersion = 1u;
+static constexpr uint32_t s_nRdForwardBridgeAbiVersion = 2u;
 static constexpr uint32_t s_nRdForwardMaxViews = 2u;
+
+typedef enum t3dRdForwardCallbackPhase_e {
+	T3D_RD_FORWARD_PHASE_PREPARE = 0,
+	T3D_RD_FORWARD_PHASE_SUBMIT = 1,
+} t3dRdForwardCallbackPhase_t;
+
+// Mirrors RenderForwardClustered::PassMode in Godot 4.7.1. This is part of
+// the versioned bridge ABI so F2 can build pipelines with the exact native
+// attachment/output contract instead of guessing from pass kind alone.
+typedef enum t3dRdForwardNativePassMode_e {
+	T3D_RD_FORWARD_NATIVE_PASS_COLOR = 0,
+	T3D_RD_FORWARD_NATIVE_PASS_SHADOW = 1,
+	T3D_RD_FORWARD_NATIVE_PASS_SHADOW_DP = 2,
+	T3D_RD_FORWARD_NATIVE_PASS_DEPTH = 3,
+	T3D_RD_FORWARD_NATIVE_PASS_DEPTH_NORMAL_ROUGHNESS = 4,
+	T3D_RD_FORWARD_NATIVE_PASS_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI = 5,
+	T3D_RD_FORWARD_NATIVE_PASS_DEPTH_MATERIAL = 6,
+	T3D_RD_FORWARD_NATIVE_PASS_SDF = 7,
+} t3dRdForwardNativePassMode_t;
+
+typedef enum t3dRdForwardShaderVariant_e {
+	T3D_RD_FORWARD_SHADER_COLOR = 0,
+	T3D_RD_FORWARD_SHADER_COLOR_SPECULAR,
+	T3D_RD_FORWARD_SHADER_COLOR_MOTION,
+	T3D_RD_FORWARD_SHADER_COLOR_SPECULAR_MOTION,
+	T3D_RD_FORWARD_SHADER_DEPTH,
+	T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS,
+	T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI,
+	T3D_RD_FORWARD_SHADER_VARIANT_MAX,
+} t3dRdForwardShaderVariant_t;
 
 typedef enum t3dRdForwardPassKind_e {
 	T3D_RD_FORWARD_PASS_INVALID = 0,
@@ -115,7 +145,9 @@ typedef enum t3dRdForwardPassKind_e {
 // Terrain3D owns none of the native RIDs in this structure.
 typedef struct t3dRdForwardPassContext_s {
 	uint32_t m_nBridgeAbiVersion = s_nRdForwardBridgeAbiVersion;
+	t3dRdForwardCallbackPhase_t m_phase = T3D_RD_FORWARD_PHASE_PREPARE;
 	t3dRdForwardPassKind_t m_passKind = T3D_RD_FORWARD_PASS_INVALID;
+	t3dRdForwardNativePassMode_t m_nativePassMode = T3D_RD_FORWARD_NATIVE_PASS_COLOR;
 	int64_t m_nDrawList = -1;
 	int64_t m_nFramebufferFormat = -1;
 	uint32_t m_nViewCount = 1u;
@@ -123,6 +155,7 @@ typedef struct t3dRdForwardPassContext_s {
 	Rect2i m_renderRegion;
 	Vector2i m_renderSize;
 	uint32_t m_nColorPassFlags = 0u;
+	bool m_bDepthPrepassActive = false;
 	bool m_bReverseCull = false;
 	bool m_bReflectionProbeRender = false;
 	Transform3D m_cameraTransform;
@@ -614,6 +647,7 @@ typedef struct t3dRdFrameSnapshot_s {
 
 typedef struct alignas( 16 ) t3dRdFrameUniforms_s {
 	float m_mViewProjection[16]{};
+	float m_mView[16]{};
 	float m_fLightDirectionX = 0.0f;
 	float m_fLightDirectionY = -1.0f;
 	float m_fLightDirectionZ = 0.0f;
@@ -651,7 +685,7 @@ typedef struct alignas( 16 ) t3dRdFrameUniforms_s {
 	float m_fDisplacementPadding0 = 0.0f;
 	float m_fDisplacementPadding1 = 0.0f;
 } t3dRdFrameUniforms_t;
-static_assert( sizeof( t3dRdFrameUniforms_t ) == 208u, "RD frame UBO must match GLSL std140 layout" );
+static_assert( sizeof( t3dRdFrameUniforms_t ) == 272u, "RD frame UBO must match GLSL std140 layout" );
 
 typedef struct t3dRdIndexedIndirectCommand_s {
 	uint32_t m_nIndexCount = 0u;
