@@ -11,7 +11,7 @@ Terrain3DRdCompositorEffect::Terrain3DRdCompositorEffect( void ) {
 	set_needs_motion_vectors( false );
 	set_needs_normal_roughness( false );
 	set_needs_separate_specular( false );
-	set_enabled( true );
+	set_enabled( false );
 }
 
 void Terrain3DRdCompositorEffect::setCoordinator( Terrain3DRenderCoordinator *const pCoordinator ) {

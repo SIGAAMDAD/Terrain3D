@@ -530,6 +530,121 @@ def rd_batch_e_hlod_check() -> bool:
     print(f"OK Batch E HLOD contract: {len(checks)}/{len(checks)} passed")
     return True
 
+def rd_batch_f1_forward_bridge_check() -> bool:
+    checks: list[tuple[str, bool]] = []
+    rd_dir = REPO / "src" / "rendering" / "rd"
+    patch_path = REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch"
+    readme_path = REPO / "engine_patch" / "README.md"
+    doc_path = REPO / "docs" / "rd_batch_f1_forward_plus_bridge.md"
+    required = [
+        rd_dir / "terrain_3d_rd_forward_plus_bridge.h",
+        rd_dir / "terrain_3d_rd_forward_plus_bridge.cpp",
+        patch_path,
+        readme_path,
+        doc_path,
+    ]
+    checks.append(("required F1 files exist", all(path.is_file() for path in required)))
+    if not all(path.is_file() for path in required):
+        failed = [label for label, passed in checks if not passed]
+        for label in failed:
+            print(f"FAIL Batch F1 Forward+ bridge contract: {label}")
+        return False
+
+    bridge_h = required[0].read_text(encoding="utf-8", errors="ignore")
+    bridge_cpp = required[1].read_text(encoding="utf-8", errors="ignore")
+    patch = patch_path.read_text(encoding="utf-8", errors="ignore")
+    readme = readme_path.read_text(encoding="utf-8", errors="ignore")
+    doc = doc_path.read_text(encoding="utf-8", errors="ignore")
+    types = (rd_dir / "terrain_3d_rd_types.h").read_text(encoding="utf-8", errors="ignore")
+    coordinator_h = (rd_dir / "terrain_3d_render_coordinator.h").read_text(encoding="utf-8", errors="ignore")
+    coordinator_cpp = (rd_dir / "terrain_3d_render_coordinator.cpp").read_text(encoding="utf-8", errors="ignore")
+    compositor_cpp = (rd_dir / "terrain_3d_rd_compositor_effect.cpp").read_text(encoding="utf-8", errors="ignore")
+    register_cpp = (REPO / "src" / "register_types.cpp").read_text(encoding="utf-8", errors="ignore")
+    vcxproj = (REPO / "Terrain3D.vcxproj").read_text(encoding="utf-8", errors="ignore")
+    vcxproj_filters = (REPO / "Terrain3D.vcxproj.filters").read_text(encoding="utf-8", errors="ignore")
+
+    exact_revision = "a13da4feb8d8aefc283c3763d33a2f170a18d541"
+    pass_tokens = (
+        "T3D_RD_FORWARD_PASS_DEPTH",
+        "T3D_RD_FORWARD_PASS_OPAQUE",
+        "T3D_RD_FORWARD_PASS_SHADOW",
+        "T3D_RD_FORWARD_PASS_MOTION",
+        "T3D_RD_FORWARD_PASS_MATERIAL",
+        "T3D_RD_FORWARD_PASS_SDF",
+        "T3D_RD_FORWARD_PASS_GI",
+        "T3D_RD_FORWARD_PASS_REFLECTION",
+    )
+    packet_fields = (
+        "m_nBridgeAbiVersion", "m_passKind", "m_nDrawList", "m_nFramebufferFormat",
+        "m_nViewCount", "m_nScenePass", "m_renderRegion", "m_renderSize",
+        "m_nColorPassFlags", "m_bReverseCull", "m_bReflectionProbeRender",
+        "m_cameraTransform", "m_previousCameraTransform", "m_szViewProjection",
+        "m_szPreviousViewProjection", "m_szEyeOffset", "m_nCameraVisibleLayers",
+        "m_hDirectionalLightBuffer", "m_hOmniLightBuffer", "m_hSpotLightBuffer",
+        "m_hAreaLightBuffer", "m_hClusterBuffer", "m_nClusterSize", "m_nClusterMaxElements",
+        "m_hShadowAtlasTexture", "m_hDirectionalShadowAtlasTexture", "m_hNativeShadowSampler",
+        "m_hLightmapBuffer", "m_hLightmapCaptureBuffer", "m_hReflectionProbeBuffer",
+        "m_hReflectionAtlasTexture", "m_hRadianceTexture", "m_hDecalBuffer",
+        "m_hDecalAtlasTexture", "m_hDecalAtlasSrgbTexture", "m_hAreaLightAtlasTexture",
+        "m_hBaseUniformSet", "m_hRenderPassUniformSet",
+    )
+    engine_methods = (
+        "get_abi_version", "register_callback", "unregister_callback", "has_callback",
+        "collect_retired_callbacks",
+    )
+
+    checks += [
+        ("bridge ABI fixed at version 1 on extension side", "s_nBridgeAbiVersion = 1u" in bridge_h and "s_nRdForwardBridgeAbiVersion = 1u" in types),
+        ("engine singleton name fixed", 's_pszEngineSingletonName = "Terrain3DForwardPlusBridge"' in bridge_h and "class Terrain3DForwardPlusBridge" in patch),
+        ("engine ABI exposes required lifecycle API", all(token in patch for token in engine_methods) and "ABI_VERSION = 1" in patch),
+        ("engine callback slot is atomic", "std::atomic<CallbackSlot *> callback_slot" in patch and "callback_slot.load(std::memory_order_acquire)" in patch),
+        ("engine callback reclamation is reader-safe", "callback_readers.fetch_add" in patch and "callback_readers.fetch_sub" in patch and "callback_readers.load" in patch),
+        ("engine callback invocation is synchronous", "slot->callable.call(p_packet)" in patch and "call_deferred" not in patch),
+        ("engine bridge owns no Terrain3D GPU resource", "Terrain3DRdContext" not in patch and "vertex_buffer_create" not in patch and "index_buffer_create" not in patch),
+        ("engine singleton registration and teardown are deterministic", "GDREGISTER_CLASS(Terrain3DForwardPlusBridge)" in patch and "Engine::get_singleton()->add_singleton" in patch and "remove_singleton" in patch and "memdelete(terrain3d_forward_plus_bridge)" in patch),
+        ("extension validates all required bridge methods", all(token in bridge_cpp for token in engine_methods)),
+        ("extension validates ABI before registration", "abi != s_nBridgeAbiVersion" in bridge_cpp and bridge_cpp.find("abi != s_nBridgeAbiVersion") < bridge_cpp.find('m_pEngineBridge->call( StringName( "register_callback" )')),
+        ("extension registration/unregistration exists", "connectEngineBridge" in bridge_cpp and "disconnectEngineBridge" in bridge_cpp and "m_bCallbackRegistered" in bridge_h),
+        ("callback retirement is synchronized before extension release", "force_sync" in bridge_cpp and "collect_retired_callbacks" in bridge_cpp),
+        ("coordinator fanout is fixed and atomic", "std::array<std::atomic<Terrain3DRenderCoordinator *>" in bridge_h and "s_nMaxCoordinators = 64u" in bridge_h),
+        ("dynamic packet is parsed once at bridge boundary", "parsePacket( rPacket, context" in bridge_cpp and "renderForwardPass( context )" in bridge_cpp),
+        ("typed pass context reserves complete F1 scene ABI", all(token in types for token in packet_fields)),
+        ("typed pass enum reserves F2-F6 pass kinds", all(token in types for token in pass_tokens)),
+        ("view arrays are bounded", "s_nRdForwardMaxViews = 2u" in types and "value > ( int64_t )( s_nRdForwardMaxViews )" in bridge_cpp),
+        ("malformed packets are rejected", "m_nPacketsRejected" in bridge_h and "Forward+ bridge packet missing required field" in bridge_cpp and "return false" in bridge_cpp),
+        ("native draw-list identity reaches coordinator", "m_nLastDrawList" in bridge_h and "m_nDrawList" in coordinator_cpp and "renderForwardPass( const t3dRdForwardPassContext_t" in coordinator_h),
+        ("coordinator has dedicated Forward+ entry point", "renderForwardPass( const t3dRdForwardPassContext_t &rContext )" in coordinator_h and "Terrain3DRenderCoordinator::renderForwardPass" in coordinator_cpp),
+        ("F1 coordinator entry point remains plumbing only", "F1 establishes the synchronous native-pass boundary only" in coordinator_cpp),
+        ("production route requires ready bridge", "isForwardBridgeReady" in coordinator_cpp and "m_bRenderEnabled" in coordinator_cpp),
+        ("bridge absence and ABI failures emit a visible engine error", "UtilityFunctions::push_error" in bridge_cpp and "production RenderingDevice rendering is disabled" in bridge_cpp and "ABI mismatch" in bridge_cpp),
+        ("missing bridge disables native presentation rather than proxy fallback", "setRdPresentation( false, false )" in coordinator_cpp and "missing/wrong bridge is a visible production failure" in coordinator_cpp),
+        ("compositor lane is explicit debug-only", "TERRAIN3D_RD_DEBUG_COMPOSITOR" in coordinator_cpp and "set_enabled( false )" in compositor_cpp),
+        ("adapter lifecycle registered with extension", "Terrain3DRdForwardPlusBridgeAdapter::initializeSingleton" in register_cpp and "Terrain3DRdForwardPlusBridgeAdapter::shutdownSingleton" in register_cpp),
+        ("Windows project includes F1 adapter source", "terrain_3d_rd_forward_plus_bridge.cpp" in vcxproj and "terrain_3d_rd_forward_plus_bridge.h" in vcxproj),
+        ("Windows project filters include F1 adapter source", "terrain_3d_rd_forward_plus_bridge.cpp" in vcxproj_filters and "terrain_3d_rd_forward_plus_bridge.h" in vcxproj_filters),
+        ("engine patch targets exact stable source revision in docs", exact_revision in readme and exact_revision in doc and "4.7.1-stable" in readme),
+        ("engine patch base blobs match exact 4.7.1-stable files", all(token in patch for token in ("index 370d3b66ce", "index be97ee2d96", "index de40333785"))),
+        ("engine patch is syntactically parseable by git", run_quiet(["git", "apply", "--stat", str(patch_path)], label="batch_f1_patch_parse")),
+        ("native render helper submits while Godot draw list remains open", "_terrain3d_forward_plus_submit(draw_list" in patch and patch.find("_terrain3d_forward_plus_submit(draw_list") < patch.find("draw_list_end();", patch.find("_terrain3d_forward_plus_submit(draw_list"))),
+        ("engine patch does not begin a Terrain3D-owned draw list", not any(line.startswith("+") and "draw_list_begin(" in line for line in patch.splitlines()) and "_terrain3d_forward_plus_submit" in patch),
+        ("depth hook is explicit", "Terrain3DForwardPlusBridge::PASS_DEPTH, p_render_data" in patch),
+        ("opaque hook is explicit", "Terrain3DForwardPlusBridge::PASS_OPAQUE, p_render_data" in patch),
+        ("motion hook is explicit", "Terrain3DForwardPlusBridge::PASS_MOTION, p_render_data" in patch),
+        ("shadow hook is explicit", "Terrain3DForwardPlusBridge::PASS_SHADOW" in patch and "&shadow_pass" in patch),
+        ("F6-relevant borrowed resources are present in engine packet", all(token in patch for token in ("lightmap_buffer", "reflection_probe_buffer", "decal_buffer", "radiance_texture"))),
+        ("engine patch documents no hidden queue", "synchronous" in readme.lower() and "no hidden" in readme.lower()),
+        ("F1 architecture documentation exists", "Forward+ bridge" in doc and "F2" in doc and "RenderingDevice" in doc),
+    ]
+
+    failed = [label for label, passed in checks if not passed]
+    if failed:
+        for label in failed:
+            print(f"FAIL Batch F1 Forward+ bridge contract: {label}")
+        print(f"Batch F1 Forward+ bridge contract: {len(checks) - len(failed)}/{len(checks)} passed")
+        return False
+    print(f"OK Batch F1 Forward+ bridge contract: {len(checks)}/{len(checks)} passed")
+    return True
+
 def iter_scan_files() -> list[Path]:
     files: list[Path] = []
     for root in SCAN_ROOTS:
@@ -1037,7 +1152,7 @@ def git_fsck() -> bool:
 
 
 def validate_fast(static_only: bool = False) -> int:
-    checks = [branch_check(), reference_check(), diff_check(), build_contract_check(), rd_shader_abi_check(), rd_batch_c_material_check(), rd_batch_d_instance_check(), rd_batch_e_hlod_check(), audit_symbols(strict_growth=True)]
+    checks = [branch_check(), reference_check(), diff_check(), build_contract_check(), rd_shader_abi_check(), rd_batch_c_material_check(), rd_batch_d_instance_check(), rd_batch_e_hlod_check(), rd_batch_f1_forward_bridge_check(), audit_symbols(strict_growth=True)]
     if not static_only:
         checks.append(build_extension("editor"))
     return 0 if all(checks) else 1
@@ -1053,6 +1168,7 @@ def validate_full() -> int:
         rd_batch_c_material_check(),
         rd_batch_d_instance_check(),
         rd_batch_e_hlod_check(),
+        rd_batch_f1_forward_bridge_check(),
         audit_symbols(strict_growth=True),
         build_extension("editor"),
         godot_headless_import(),
@@ -1073,6 +1189,7 @@ def validate_final() -> int:
         rd_batch_c_material_check(),
         rd_batch_d_instance_check(),
         rd_batch_e_hlod_check(),
+        rd_batch_f1_forward_bridge_check(),
         audit_symbols(strict_growth=True, final=True),
         build_extension("editor"),
         build_extension("template_release"),

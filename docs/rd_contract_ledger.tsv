@@ -17,7 +17,7 @@ section	title	batch	state	evidence
 16	Instance/HLOD material system	D,E	complete	Batch D shared direct-RD material extraction/bindings cover albedo/normal/ORM/separate roughness, PBR/scissor/blend/depth-prepass/cull/vertex+instance color/filter/repeat/aniso and deduplication; Batch E routes HLOD package surfaces through the same mesh/material cache with no HLOD-native material ownership
 17	Shadows	F	pending	native proxy/native shadows remain
 18	Lighting	F	partial	simple direct sun/ambient exists; native parity absent
-19	Forward+ integration decision	F	pending	engine bridge absent
+19	Forward+ integration decision	F	partial	Batch F1 implements ABI 1 Terrain3DForwardPlusBridge engine singleton, exact 4.7.1-stable engine patch, typed GDExtension adapter, deterministic callback lifetime, and native depth/opaque/shadow/motion invitation points; actual draw submission/lighting/motion/GI/lifecycle remain F2-F7
 20	Motion vectors	F	pending	clean-break velocity path absent
 21	Depth behavior	F	partial	direct depth exists; native participation/parity absent
 22	Multiview and viewport lifecycle	F	partial	alpha framebuffer/view scaffolding exists
@@ -29,9 +29,9 @@ section	title	batch	state	evidence
 28	GDScript integration	G	partial	files restored; stale backend API cleanup remains
 29	Project files and build system	G,H	partial	files/API override restored; fresh build matrix remains
 30	Memory architecture	A-H	partial	Batches D-E share growable static mesh arenas, persistent instance/visible/material/indirect buffers and direct imported-texture ownership for regular instances and HLOD; HLOD adds one persistent cull-descriptor buffer and no per-package GPU resources; aggregate/final plateau validation remains later batches
-31	Diagnostics	A-H	partial	Batches D-E diagnostics expose instance, visible, draw, depth, shadow, mesh/material, arena/buffer publication and HLOD GPU-cull descriptor/dispatch/capacity counters; final diagnostics coverage remains later batches
-32	Device failure handling	A,F	pending	fallback-oriented alpha behavior remains
-33	Automated tests	A-H	partial	Batch C 70-point, Batch D 61-point and Batch E 46-point static regression contracts pass; CPU ABI regressions include HLOD descriptor/source-key invariants and compile with the full native source tree; Godot-hosted/runtime suites remain environment-dependent and later-batch validation
+31	Diagnostics	A-H	partial	Batches D-E diagnostics expose instance/visible/draw/depth/shadow/mesh/material/arena/buffer/HLOD counters; Batch F1 adds bridge present/ready/registered, ABI, packet acceptance/rejection and last native pass/scene/draw-list diagnostics; final coverage remains later batches
+32	Device failure handling	A,F	partial	Batch F1 makes missing/wrong Forward+ bridge a visible RD production failure, disables native proxy resurrection and keeps compositor fallback explicit debug-only; later failure/lifecycle convergence remains F2-F8/H
+33	Automated tests	A-H	partial	Batch C 70-point, Batch D 61-point, Batch E 46-point and Batch F1 41-point static regression contracts pass; CPU ABI regressions include HLOD and Forward+ typed bridge invariants; Godot-hosted/runtime suites remain environment-dependent and later-batch validation
 34	Static audit before build	H	pending	baseline frozen; final justification/removal remains
 35	C++ validation	H	pending	fresh final builds required
 36	Shader validation	C,F,H	partial	Batch C raw RD shader structure and compile-error rejection are covered; final Godot/GPU shader validation remains in F/H

@@ -12,6 +12,9 @@
 #include <godot_cpp/variant/aabb.hpp>
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/projection.hpp>
+#include <godot_cpp/variant/rect2i.hpp>
+#include <godot_cpp/variant/rid.hpp>
+#include <godot_cpp/variant/transform3d.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 
@@ -91,6 +94,66 @@ typedef enum t3dRdNativeProxyMode_e {
 	T3D_RD_NATIVE_PROXY_SHADOWS_ONLY = 1,
 	T3D_RD_NATIVE_PROXY_FULL = 2,
 } t3dRdNativeProxyMode_t;
+
+static constexpr uint32_t s_nRdForwardBridgeAbiVersion = 1u;
+static constexpr uint32_t s_nRdForwardMaxViews = 2u;
+
+typedef enum t3dRdForwardPassKind_e {
+	T3D_RD_FORWARD_PASS_INVALID = 0,
+	T3D_RD_FORWARD_PASS_DEPTH = 1,
+	T3D_RD_FORWARD_PASS_OPAQUE = 2,
+	T3D_RD_FORWARD_PASS_SHADOW = 3,
+	T3D_RD_FORWARD_PASS_MOTION = 4,
+	T3D_RD_FORWARD_PASS_MATERIAL = 5,
+	T3D_RD_FORWARD_PASS_SDF = 6,
+	T3D_RD_FORWARD_PASS_GI = 7,
+	T3D_RD_FORWARD_PASS_REFLECTION = 8,
+	T3D_RD_FORWARD_PASS_MAX,
+} t3dRdForwardPassKind_t;
+
+// Borrowed Forward+ state is valid only for the synchronous bridge callback.
+// Terrain3D owns none of the native RIDs in this structure.
+typedef struct t3dRdForwardPassContext_s {
+	uint32_t m_nBridgeAbiVersion = s_nRdForwardBridgeAbiVersion;
+	t3dRdForwardPassKind_t m_passKind = T3D_RD_FORWARD_PASS_INVALID;
+	int64_t m_nDrawList = -1;
+	int64_t m_nFramebufferFormat = -1;
+	uint32_t m_nViewCount = 1u;
+	uint64_t m_nScenePass = 0u;
+	Rect2i m_renderRegion;
+	Vector2i m_renderSize;
+	uint32_t m_nColorPassFlags = 0u;
+	bool m_bReverseCull = false;
+	bool m_bReflectionProbeRender = false;
+	Transform3D m_cameraTransform;
+	Transform3D m_previousCameraTransform;
+	Projection m_szViewProjection[s_nRdForwardMaxViews];
+	Projection m_szPreviousViewProjection[s_nRdForwardMaxViews];
+	Vector3 m_szEyeOffset[s_nRdForwardMaxViews];
+	uint32_t m_nCameraVisibleLayers = UINT32_MAX;
+	uint32_t m_nClusterSize = 0u;
+	uint32_t m_nClusterMaxElements = 0u;
+	RID m_hNativeFramebuffer;
+	RID m_hDirectionalLightBuffer;
+	RID m_hOmniLightBuffer;
+	RID m_hSpotLightBuffer;
+	RID m_hAreaLightBuffer;
+	RID m_hClusterBuffer;
+	RID m_hShadowAtlasTexture;
+	RID m_hDirectionalShadowAtlasTexture;
+	RID m_hNativeShadowSampler;
+	RID m_hLightmapBuffer;
+	RID m_hLightmapCaptureBuffer;
+	RID m_hReflectionProbeBuffer;
+	RID m_hReflectionAtlasTexture;
+	RID m_hRadianceTexture;
+	RID m_hDecalBuffer;
+	RID m_hDecalAtlasTexture;
+	RID m_hDecalAtlasSrgbTexture;
+	RID m_hAreaLightAtlasTexture;
+	RID m_hBaseUniformSet;
+	RID m_hRenderPassUniformSet;
+} t3dRdForwardPassContext_t;
 
 typedef enum t3dRdDrawGroup_e {
 	T3D_RD_DRAW_GROUP_LOD0_NEAR = 0,

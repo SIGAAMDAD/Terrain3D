@@ -318,6 +318,9 @@
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_culling.h">
       <Filter>src\rendering\rd</Filter>
     </ClInclude>
+    <ClInclude Include="src\rendering\rd\terrain_3d_rd_forward_plus_bridge.h">
+      <Filter>src\rendering\rd</Filter>
+    </ClInclude>
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_instance_renderer.h">
       <Filter>src\rendering\rd</Filter>
     </ClInclude>
@@ -573,6 +576,9 @@
       <Filter>src\rendering\rd</Filter>
     </ClCompile>
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_culling.cpp">
+      <Filter>src\rendering\rd</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\terrain_3d_rd_forward_plus_bridge.cpp">
       <Filter>src\rendering\rd</Filter>
     </ClCompile>
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_instance_renderer.cpp">

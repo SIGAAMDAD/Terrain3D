@@ -1,0 +1,422 @@
+diff --git a/servers/rendering/renderer_rd/forward_clustered/terrain3d_forward_plus_bridge.h b/servers/rendering/renderer_rd/forward_clustered/terrain3d_forward_plus_bridge.h
+new file mode 100644
+index 0000000000..8ff7f0f001
+--- /dev/null
++++ b/servers/rendering/renderer_rd/forward_clustered/terrain3d_forward_plus_bridge.h
+@@ -0,0 +1,72 @@
++/**************************************************************************/
++/*  terrain3d_forward_plus_bridge.h                                       */
++/**************************************************************************/
++
++#pragma once
++
++#include "core/object/object.h"
++#include "core/templates/local_vector.h"
++#include "core/variant/callable.h"
++#include "core/variant/dictionary.h"
++
++#include <atomic>
++#include <mutex>
++
++class Terrain3DForwardPlusBridge : public Object {
++	GDCLASS(Terrain3DForwardPlusBridge, Object);
++
++public:
++	static constexpr int ABI_VERSION = 1;
++
++	enum PassKind {
++		PASS_INVALID = 0,
++		PASS_DEPTH = 1,
++		PASS_OPAQUE = 2,
++		PASS_SHADOW = 3,
++		PASS_MOTION = 4,
++		PASS_MATERIAL = 5,
++		PASS_SDF = 6,
++		PASS_GI = 7,
++		PASS_REFLECTION = 8,
++	};
++
++private:
++	static Terrain3DForwardPlusBridge *singleton;
++
++	struct CallbackSlot {
++		Callable callable;
++		std::atomic_bool active{ true };
++
++		explicit CallbackSlot(const Callable &p_callable) : callable(p_callable) {}
++	};
++
++	std::atomic<CallbackSlot *> callback_slot{ nullptr };
++	mutable std::atomic_uint32_t callback_readers{ 0 };
++	std::mutex callback_mutex;
++	LocalVector<CallbackSlot *> retired_callbacks;
++
++protected:
++	static void _bind_methods();
++
++public:
++	Terrain3DForwardPlusBridge();
++	static Terrain3DForwardPlusBridge *get_singleton() { return singleton; }
++
++	int get_abi_version() const { return ABI_VERSION; }
++	bool register_callback(const Callable &p_callback);
++	bool unregister_callback(const Callable &p_callback);
++	bool has_callback() const;
++
++	// Deletion of an unregistered Callable is deliberately separated from the
++	// renderer-thread pointer exchange. The extension calls force_sync() before
++	// this method so a callback can never outlive the loaded GDExtension.
++	void collect_retired_callbacks();
++
++	// Renderer-only synchronous entry point. The active slot is immutable and
++	// no mutex is acquired by normal Forward+ pass traversal.
++	bool invoke(const Dictionary &p_packet) const;
++
++	~Terrain3DForwardPlusBridge();
++};
++
++VARIANT_ENUM_CAST(Terrain3DForwardPlusBridge::PassKind);
+diff --git a/servers/rendering/renderer_rd/forward_clustered/terrain3d_forward_plus_bridge.cpp b/servers/rendering/renderer_rd/forward_clustered/terrain3d_forward_plus_bridge.cpp
+new file mode 100644
+index 0000000000..8ff7f0f002
+--- /dev/null
++++ b/servers/rendering/renderer_rd/forward_clustered/terrain3d_forward_plus_bridge.cpp
+@@ -0,0 +1,108 @@
++/**************************************************************************/
++/*  terrain3d_forward_plus_bridge.cpp                                     */
++/**************************************************************************/
++
++#include "terrain3d_forward_plus_bridge.h"
++
++#include "core/object/class_db.h"
++
++Terrain3DForwardPlusBridge *Terrain3DForwardPlusBridge::singleton = nullptr;
++
++Terrain3DForwardPlusBridge::Terrain3DForwardPlusBridge() {
++	ERR_FAIL_COND(singleton != nullptr);
++	singleton = this;
++}
++
++void Terrain3DForwardPlusBridge::_bind_methods() {
++	ClassDB::bind_method(D_METHOD("get_abi_version"), &Terrain3DForwardPlusBridge::get_abi_version);
++	ClassDB::bind_method(D_METHOD("register_callback", "callback"), &Terrain3DForwardPlusBridge::register_callback);
++	ClassDB::bind_method(D_METHOD("unregister_callback", "callback"), &Terrain3DForwardPlusBridge::unregister_callback);
++	ClassDB::bind_method(D_METHOD("has_callback"), &Terrain3DForwardPlusBridge::has_callback);
++	ClassDB::bind_method(D_METHOD("collect_retired_callbacks"), &Terrain3DForwardPlusBridge::collect_retired_callbacks);
++
++	BIND_ENUM_CONSTANT(PASS_INVALID);
++	BIND_ENUM_CONSTANT(PASS_DEPTH);
++	BIND_ENUM_CONSTANT(PASS_OPAQUE);
++	BIND_ENUM_CONSTANT(PASS_SHADOW);
++	BIND_ENUM_CONSTANT(PASS_MOTION);
++	BIND_ENUM_CONSTANT(PASS_MATERIAL);
++	BIND_ENUM_CONSTANT(PASS_SDF);
++	BIND_ENUM_CONSTANT(PASS_GI);
++	BIND_ENUM_CONSTANT(PASS_REFLECTION);
++}
++
++bool Terrain3DForwardPlusBridge::register_callback(const Callable &p_callback) {
++	ERR_FAIL_COND_V_MSG(!p_callback.is_valid(), false, "Terrain3D Forward+ bridge rejected an invalid callback.");
++	std::lock_guard<std::mutex> lock(callback_mutex);
++	ERR_FAIL_COND_V_MSG(callback_slot.load(std::memory_order_acquire) != nullptr, false, "Terrain3D Forward+ bridge already has a registered callback.");
++
++	CallbackSlot *slot = memnew(CallbackSlot(p_callback));
++	callback_slot.store(slot, std::memory_order_release);
++	return true;
++}
++
++bool Terrain3DForwardPlusBridge::unregister_callback(const Callable &p_callback) {
++	std::lock_guard<std::mutex> lock(callback_mutex);
++	CallbackSlot *slot = callback_slot.load(std::memory_order_acquire);
++	if (slot == nullptr) {
++		return false;
++	}
++	if (slot->callable != p_callback) {
++		return false;
++	}
++
++	CallbackSlot *expected = slot;
++	if (!callback_slot.compare_exchange_strong(expected, nullptr, std::memory_order_acq_rel, std::memory_order_acquire)) {
++		return false;
++	}
++	slot->active.store(false, std::memory_order_release);
++	retired_callbacks.push_back(slot);
++	return true;
++}
++
++bool Terrain3DForwardPlusBridge::has_callback() const {
++	CallbackSlot *slot = callback_slot.load(std::memory_order_acquire);
++	return slot != nullptr && slot->active.load(std::memory_order_acquire);
++}
++
++void Terrain3DForwardPlusBridge::collect_retired_callbacks() {
++	std::lock_guard<std::mutex> lock(callback_mutex);
++	if (callback_readers.load(std::memory_order_acquire) != 0) {
++		return;
++	}
++	for (CallbackSlot *slot : retired_callbacks) {
++		memdelete(slot);
++	}
++	retired_callbacks.clear();
++}
++
++bool Terrain3DForwardPlusBridge::invoke(const Dictionary &p_packet) const {
++	// Increment before loading the slot. An unregistering thread can therefore
++	// reclaim retired slots only after every reader that could have observed
++	// the old pointer has left this synchronous callback.
++	callback_readers.fetch_add(1, std::memory_order_acq_rel);
++	CallbackSlot *slot = callback_slot.load(std::memory_order_acquire);
++	if (slot == nullptr || !slot->active.load(std::memory_order_acquire)) {
++		callback_readers.fetch_sub(1, std::memory_order_release);
++		return false;
++	}
++
++	Variant result = slot->callable.call(p_packet);
++	callback_readers.fetch_sub(1, std::memory_order_release);
++	return result.get_type() != Variant::BOOL || bool(result);
++}
++
++Terrain3DForwardPlusBridge::~Terrain3DForwardPlusBridge() {
++	if (singleton == this) {
++		singleton = nullptr;
++	}
++	CallbackSlot *slot = callback_slot.exchange(nullptr, std::memory_order_acq_rel);
++	if (slot != nullptr) {
++		slot->active.store(false, std::memory_order_release);
++		memdelete(slot);
++	}
++	for (CallbackSlot *retired : retired_callbacks) {
++		memdelete(retired);
++	}
++	retired_callbacks.clear();
++}
+diff --git a/servers/register_server_types.cpp b/servers/register_server_types.cpp
+index de40333785..f100000001 100644
+--- a/servers/register_server_types.cpp
++++ b/servers/register_server_types.cpp
+@@ -60,6 +60,7 @@
+ #include "servers/movie_writer/movie_writer.h"
+ #include "servers/movie_writer/movie_writer_pngwav.h"
+ #include "servers/rendering/renderer_rd/framebuffer_cache_rd.h"
++#include "servers/rendering/renderer_rd/forward_clustered/terrain3d_forward_plus_bridge.h"
+ #include "servers/rendering/renderer_rd/storage_rd/render_data_rd.h"
+ #include "servers/rendering/renderer_rd/storage_rd/render_scene_buffers_rd.h"
+ #include "servers/rendering/renderer_rd/storage_rd/render_scene_data_rd.h"
+@@ -134,6 +135,7 @@ static bool has_server_feature_callback(const String &p_feature) {
+ }
+ 
+ static MovieWriterPNGWAV *writer_pngwav = nullptr;
++static Terrain3DForwardPlusBridge *terrain3d_forward_plus_bridge = nullptr;
+ void register_server_types() {
+ 	OS::get_singleton()->benchmark_begin_measure("Servers", "Register Extensions");
+ 
+@@ -209,6 +211,10 @@ void register_server_types() {
+ #endif
+ 	}
+ 	GDREGISTER_ABSTRACT_CLASS(RenderingDevice);
++	GDREGISTER_CLASS(Terrain3DForwardPlusBridge);
++	terrain3d_forward_plus_bridge = memnew(Terrain3DForwardPlusBridge);
++	Engine::get_singleton()->add_singleton(Engine::Singleton("Terrain3DForwardPlusBridge", terrain3d_forward_plus_bridge, "Terrain3DForwardPlusBridge"));
++
+ 	GDREGISTER_CLASS(ShaderIncludeDB);
+ 	GDREGISTER_CLASS(RDTextureFormat);
+ 	GDREGISTER_CLASS(RDTextureView);
+@@ -344,6 +350,11 @@ void register_server_types() {
+ 
+ void unregister_server_types() {
+ 	OS::get_singleton()->benchmark_begin_measure("Servers", "Unregister Extensions");
++	if (terrain3d_forward_plus_bridge != nullptr) {
++		Engine::get_singleton()->remove_singleton("Terrain3DForwardPlusBridge");
++		memdelete(terrain3d_forward_plus_bridge);
++		terrain3d_forward_plus_bridge = nullptr;
++	}
+ 
+ 	ServersDebugger::deinitialize();
+ 	memdelete(shader_types);
+diff --git a/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h b/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h
+index be97ee2d96..f100000002 100644
+--- a/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h
++++ b/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h
+@@ -35,6 +35,7 @@
+ #include "servers/rendering/renderer_rd/effects/ss_effects.h"
+ #include "servers/rendering/renderer_rd/effects/taa.h"
+ #include "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h"
++#include "servers/rendering/renderer_rd/forward_clustered/terrain3d_forward_plus_bridge.h"
+ #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
+ #include "servers/rendering/renderer_rd/shaders/forward_clustered/best_fit_normal.glsl.gen.h"
+ #include "servers/rendering/renderer_rd/shaders/forward_clustered/integrate_dfg.glsl.gen.h"
+@@ -403,6 +404,12 @@ private:
+ 			bool flip_cull;
+ 
+ 			uint32_t uniform_buffer_index;
++			Transform3D camera_transform;
++			Transform3D previous_camera_transform;
++			Projection view_projection;
++			Projection previous_view_projection;
++			Vector3 eye_offset;
++			uint32_t camera_visible_layers = UINT32_MAX;
+ 		};
+ 		LocalVector<ShadowPass> shadow_passes;
+ 
+@@ -433,5 +440,6 @@ private:
+ 	_FORCE_INLINE_ void _render_list_template(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element);
+ 	void _render_list(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element);
+-	void _render_list_with_draw_list(RenderListParameters *p_params, RID p_framebuffer, BitField<RD::DrawFlags> p_draw_flags = RD::DRAW_DEFAULT_ALL, const Vector<Color> &p_clear_color_values = Vector<Color>(), float p_clear_depth_value = 0.0, uint32_t p_clear_stencil_value = 0, const Rect2 &p_region = Rect2());
++	void _terrain3d_forward_plus_submit(RD::DrawListID p_draw_list, RID p_framebuffer, const RenderListParameters *p_params, Terrain3DForwardPlusBridge::PassKind p_pass_kind, const RenderDataRD *p_render_data, RID p_radiance_texture, const SceneState::ShadowPass *p_shadow_pass);
++	void _render_list_with_draw_list(RenderListParameters *p_params, RID p_framebuffer, BitField<RD::DrawFlags> p_draw_flags = RD::DRAW_DEFAULT_ALL, const Vector<Color> &p_clear_color_values = Vector<Color>(), float p_clear_depth_value = 0.0, uint32_t p_clear_stencil_value = 0, const Rect2 &p_region = Rect2(), Terrain3DForwardPlusBridge::PassKind p_terrain3d_pass_kind = Terrain3DForwardPlusBridge::PASS_INVALID, const RenderDataRD *p_terrain3d_render_data = nullptr, RID p_terrain3d_radiance_texture = RID(), const SceneState::ShadowPass *p_terrain3d_shadow_pass = nullptr);
+ 
+ 	uint32_t _setup_environment(const RenderDataRD *p_render_data, bool p_no_fog, const Size2i &p_screen_size, const Size2 &p_viewport_size, const Color &p_default_bg_color, bool p_opaque_render_buffers = false, bool p_apply_alpha_multiplier = false, bool p_pancake_shadows = false);
+diff --git a/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp b/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp
+index 370d3b66ce..f100000003 100644
+--- a/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp
++++ b/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp
+@@ -611,11 +611,99 @@ void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_lis
+ 	}
+ }
+ 
+-void RenderForwardClustered::_render_list_with_draw_list(RenderListParameters *p_params, RID p_framebuffer, BitField<RD::DrawFlags> p_draw_flags, const Vector<Color> &p_clear_color_values, float p_clear_depth_value, uint32_t p_clear_stencil_value, const Rect2 &p_region) {
++void RenderForwardClustered::_terrain3d_forward_plus_submit(RD::DrawListID p_draw_list, RID p_framebuffer, const RenderListParameters *p_params, Terrain3DForwardPlusBridge::PassKind p_pass_kind, const RenderDataRD *p_render_data, RID p_radiance_texture, const SceneState::ShadowPass *p_shadow_pass) {
++	Terrain3DForwardPlusBridge *bridge = Terrain3DForwardPlusBridge::get_singleton();
++	if (bridge == nullptr || !bridge->has_callback()) {
++		return;
++	}
++
++	Dictionary packet;
++	packet["bridge_abi"] = Terrain3DForwardPlusBridge::ABI_VERSION;
++	packet["pass_kind"] = int64_t(p_pass_kind);
++	packet["draw_list"] = int64_t(p_draw_list);
++	packet["framebuffer_format"] = int64_t(p_params->framebuffer_format);
++	packet["view_count"] = int64_t(p_shadow_pass != nullptr ? 1 : (p_render_data && p_render_data->scene_data ? p_render_data->scene_data->view_count : p_params->view_count));
++	packet["scene_pass"] = int64_t(get_scene_pass());
++	packet["color_pass_flags"] = int64_t(p_params->color_pass_flags);
++	packet["reverse_cull"] = p_params->reverse_cull;
++	packet["reflection_probe_render"] = p_render_data != nullptr && p_render_data->reflection_probe.is_valid();
++	packet["native_framebuffer"] = p_framebuffer;
++	packet["render_size"] = RD::get_singleton()->framebuffer_get_size(p_framebuffer);
++
++	Array view_projections;
++	Array previous_view_projections;
++	Array eye_offsets;
++	if (p_shadow_pass != nullptr) {
++		packet["render_region"] = p_shadow_pass->rect;
++		packet["camera_visible_layers"] = int64_t(p_shadow_pass->camera_visible_layers);
++		packet["camera_transform"] = p_shadow_pass->camera_transform;
++		packet["previous_camera_transform"] = p_shadow_pass->previous_camera_transform;
++		view_projections.push_back(p_shadow_pass->view_projection);
++		previous_view_projections.push_back(p_shadow_pass->previous_view_projection);
++		eye_offsets.push_back(p_shadow_pass->eye_offset);
++	} else if (p_render_data != nullptr && p_render_data->scene_data != nullptr) {
++		const RenderSceneDataRD *scene_data = p_render_data->scene_data;
++		packet["render_region"] = p_render_data->render_region;
++		packet["camera_visible_layers"] = int64_t(scene_data->camera_visible_layers);
++		packet["camera_transform"] = scene_data->cam_transform;
++		packet["previous_camera_transform"] = scene_data->prev_cam_transform;
++		for (uint32_t view = 0; view < scene_data->view_count; ++view) {
++			view_projections.push_back(scene_data->view_projection[view]);
++			previous_view_projections.push_back(scene_data->prev_view_projection[view]);
++			eye_offsets.push_back(scene_data->view_eye_offset[view]);
++		}
++	} else {
++		return;
++	}
++	packet["view_projections"] = view_projections;
++	packet["previous_view_projections"] = previous_view_projections;
++	packet["eye_offsets"] = eye_offsets;
++
++	packet["cluster_size"] = int64_t(p_render_data != nullptr ? p_render_data->cluster_size : 0);
++	packet["cluster_max_elements"] = int64_t(p_render_data != nullptr ? p_render_data->cluster_max_elements : 0);
++	packet["cluster_buffer"] = p_render_data != nullptr ? p_render_data->cluster_buffer : RID();
++
++	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
++	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
++	packet["directional_light_buffer"] = light_storage->get_directional_light_buffer();
++	packet["omni_light_buffer"] = light_storage->get_omni_light_buffer();
++	packet["spot_light_buffer"] = light_storage->get_spot_light_buffer();
++	packet["area_light_buffer"] = light_storage->get_area_light_buffer();
++	packet["reflection_probe_buffer"] = light_storage->get_reflection_probe_buffer();
++	packet["directional_shadow_atlas_texture"] = light_storage->directional_shadow_get_texture();
++	packet["shadow_sampler"] = shadow_sampler;
++	packet["lightmap_buffer"] = scene_state.lightmap_buffer;
++	packet["lightmap_capture_buffer"] = scene_state.lightmap_capture_buffer;
++	packet["decal_buffer"] = texture_storage->get_decal_buffer();
++	packet["decal_atlas_texture"] = texture_storage->decal_atlas_get_texture();
++	packet["decal_atlas_srgb_texture"] = texture_storage->decal_atlas_get_texture_srgb();
++	packet["area_light_atlas_texture"] = texture_storage->area_light_atlas_get_texture();
++	packet["base_uniform_set"] = render_base_uniform_set;
++	packet["render_pass_uniform_set"] = p_params->render_pass_uniform_set;
++	packet["radiance_texture"] = p_radiance_texture;
++
++	RID shadow_atlas_texture;
++	if (p_render_data != nullptr && p_render_data->shadow_atlas.is_valid() && light_storage->owns_shadow_atlas(p_render_data->shadow_atlas)) {
++		shadow_atlas_texture = light_storage->shadow_atlas_get_texture(p_render_data->shadow_atlas);
++	}
++	packet["shadow_atlas_texture"] = shadow_atlas_texture;
++	RID reflection_atlas_texture;
++	if (p_render_data != nullptr && p_render_data->reflection_atlas.is_valid()) {
++		reflection_atlas_texture = light_storage->reflection_atlas_get_texture(p_render_data->reflection_atlas);
++	}
++	packet["reflection_atlas_texture"] = reflection_atlas_texture;
++
++	bridge->invoke(packet);
++}
++
++void RenderForwardClustered::_render_list_with_draw_list(RenderListParameters *p_params, RID p_framebuffer, BitField<RD::DrawFlags> p_draw_flags, const Vector<Color> &p_clear_color_values, float p_clear_depth_value, uint32_t p_clear_stencil_value, const Rect2 &p_region, Terrain3DForwardPlusBridge::PassKind p_terrain3d_pass_kind, const RenderDataRD *p_terrain3d_render_data, RID p_terrain3d_radiance_texture, const SceneState::ShadowPass *p_terrain3d_shadow_pass) {
+ 	RD::FramebufferFormatID fb_format = RD::get_singleton()->framebuffer_get_format(p_framebuffer);
+ 	p_params->framebuffer_format = fb_format;
+ 	RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_framebuffer, p_draw_flags, p_clear_color_values, p_clear_depth_value, p_clear_stencil_value, p_region);
+ 	_render_list(draw_list, fb_format, p_params, 0, p_params->element_count);
++	if (p_terrain3d_pass_kind != Terrain3DForwardPlusBridge::PASS_INVALID) {
++		_terrain3d_forward_plus_submit(draw_list, p_framebuffer, p_params, p_terrain3d_pass_kind, p_terrain3d_render_data, p_terrain3d_radiance_texture, p_terrain3d_shadow_pass);
++	}
+ 	RD::get_singleton()->draw_list_end();
+ }
+ 
+@@ -1920,7 +2023,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Col
+ 		RID rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_OPAQUE, nullptr, RID(), samplers, depth_prepass_uniform_buffer_index);
+ 		bool finish_depth = using_ssao || using_ssil || using_sdfgi || using_voxelgi || ce_pre_opaque_resolved_depth || ce_post_opaque_resolved_depth;
+ 		RenderListParameters render_list_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(), render_list[RENDER_LIST_OPAQUE].element_info.ptr(), render_list[RENDER_LIST_OPAQUE].elements.size(), reverse_cull, depth_pass_mode, 0, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, base_specialization);
+-		_render_list_with_draw_list(&render_list_params, depth_framebuffer, RD::DrawFlags(needs_pre_resolve ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_ALL), depth_pass_clear, 0.0f, 0u, p_render_data->render_region);
++		_render_list_with_draw_list(&render_list_params, depth_framebuffer, RD::DrawFlags(needs_pre_resolve ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_ALL), depth_pass_clear, 0.0f, 0u, p_render_data->render_region, Terrain3DForwardPlusBridge::PASS_DEPTH, p_render_data, radiance_texture);
+ 		RD::get_singleton()->draw_command_end_label();
+ 		if (use_msaa) {
+ 			RENDER_TIMESTAMP("Resolve Depth Pre-Pass (MSAA)");
+@@ -1993,7 +2096,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Col
+ 			uint32_t opaque_color_pass_flags = using_motion_pass ? (color_pass_flags & ~uint32_t(COLOR_PASS_FLAG_MOTION_VECTORS)) : color_pass_flags;
+ 			RID opaque_framebuffer = using_motion_pass ? rb_data->get_color_pass_fb(opaque_color_pass_flags) : color_framebuffer;
+ 			RenderListParameters render_list_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(), render_list[RENDER_LIST_OPAQUE].element_info.ptr(), render_list[RENDER_LIST_OPAQUE].elements.size(), reverse_cull, PASS_MODE_COLOR, opaque_color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, base_specialization);
+-			_render_list_with_draw_list(&render_list_params, opaque_framebuffer, RD::DrawFlags(load_color ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_COLOR_ALL) | (depth_pre_pass ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_DEPTH), c, 0.0f, 0u, p_render_data->render_region);
++			_render_list_with_draw_list(&render_list_params, opaque_framebuffer, RD::DrawFlags(load_color ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_COLOR_ALL) | (depth_pre_pass ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_DEPTH), c, 0.0f, 0u, p_render_data->render_region, Terrain3DForwardPlusBridge::PASS_OPAQUE, p_render_data, radiance_texture);
+ 		}
+ 		RD::get_singleton()->draw_command_end_label();
+ 		if (using_motion_pass) {
+@@ -2015,7 +2118,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Col
+ 
+ 			rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_MOTION, p_render_data, radiance_texture, samplers, opaque_pass_uniform_buffer_index, true);
+ 			RenderListParameters render_list_params(render_list[RENDER_LIST_MOTION].elements.ptr(), render_list[RENDER_LIST_MOTION].element_info.ptr(), render_list[RENDER_LIST_MOTION].elements.size(), reverse_cull, PASS_MODE_COLOR, color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, base_specialization);
+-			_render_list_with_draw_list(&render_list_params, color_framebuffer);
++			_render_list_with_draw_list(&render_list_params, color_framebuffer, RD::DRAW_DEFAULT_ALL, Vector<Color>(), 0.0f, 0u, Rect2(), Terrain3DForwardPlusBridge::PASS_MOTION, p_render_data, radiance_texture);
+ 			RD::get_singleton()->draw_command_end_label();
+ 		}
+ 	}
+@@ -2574,6 +2677,12 @@ void RenderForwardClustered::_render_shadow_append(RID p_framebuffer, const Paged
+ 		shadow_pass.clear_depth = p_begin || p_clear_region;
+ 		shadow_pass.rect = p_rect;
+ 
++		shadow_pass.camera_transform = p_transform;
++		shadow_pass.previous_camera_transform = p_transform;
++		shadow_pass.view_projection = p_projection;
++		shadow_pass.previous_view_projection = p_projection;
++		shadow_pass.eye_offset = Vector3();
++		shadow_pass.camera_visible_layers = UINT32_MAX;
+ 		shadow_pass.uniform_buffer_index = uniform_buffer_index;
+ 
+ 		scene_state.shadow_passes.push_back(shadow_pass);
+@@ -2597,7 +2706,7 @@ void RenderForwardClustered::_render_shadow_end() {
+ 	RD::get_singleton()->draw_command_begin_label("Shadow Render");
+ 	for (SceneState::ShadowPass &shadow_pass : scene_state.shadow_passes) {
+ 		RenderListParameters render_list_parameters(render_list[RENDER_LIST_SECONDARY].elements.ptr() + shadow_pass.element_from, render_list[RENDER_LIST_SECONDARY].element_info.ptr() + shadow_pass.element_from, shadow_pass.element_count, shadow_pass.flip_cull, shadow_pass.pass_mode, 0, true, false, shadow_pass.rp_uniform_set, false, Vector2(), shadow_pass.lod_distance_multiplier, shadow_pass.screen_mesh_lod_threshold, 1, shadow_pass.element_from);
+-		_render_list_with_draw_list(&render_list_parameters, shadow_pass.framebuffer, shadow_pass.clear_depth ? RD::DRAW_CLEAR_DEPTH : RD::DRAW_DEFAULT_ALL, Vector<Color>(), 0.0f, 0, shadow_pass.rect);
++		_render_list_with_draw_list(&render_list_parameters, shadow_pass.framebuffer, shadow_pass.clear_depth ? RD::DRAW_CLEAR_DEPTH : RD::DRAW_DEFAULT_ALL, Vector<Color>(), 0.0f, 0, shadow_pass.rect, Terrain3DForwardPlusBridge::PASS_SHADOW, nullptr, RID(), &shadow_pass);
+ 	}
+ 	RD::get_singleton()->draw_command_end_label();
+ }

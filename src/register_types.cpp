@@ -20,6 +20,7 @@
 #include "lighting/terrain_3d_region_lighting.h"
 #include "rendering/rd/terrain_3d_rd_compositor_effect.h"
 #include "rendering/rd/terrain_3d_rd_context.h"
+#include "rendering/rd/terrain_3d_rd_forward_plus_bridge.h"
 #include "rendering/rd/terrain_3d_rd_texture_manager.h"
 #include "register_types.h"
 #include "streaming/terrain_3d_node_streamer.h"
@@ -38,6 +39,8 @@ void t3dInitializeTerrain3DModule( ModuleInitializationLevel level ) {
 	ClassDB::register_class<Terrain3DRdCompositorEffect>();
 	ClassDB::register_internal_class<Terrain3DRdTextureManager>();
 	Terrain3DRdTextureManager::initializeSingleton();
+	ClassDB::register_internal_class<Terrain3DRdForwardPlusBridgeAdapter>();
+	Terrain3DRdForwardPlusBridgeAdapter::initializeSingleton();
 	ClassDB::register_class<Terrain3DMemoryStats>();
 	ClassDB::register_class<Terrain3DShaderTierStats>();
 	ClassDB::register_class<Terrain3DCacheStats>();
@@ -74,6 +77,7 @@ void t3dUninitializeTerrain3DModule( ModuleInitializationLevel level ) {
 	if ( level != MODULE_INITIALIZATION_LEVEL_SCENE ) {
 		return;
 	}
+	Terrain3DRdForwardPlusBridgeAdapter::shutdownSingleton();
 	Terrain3DRdTextureManager::shutdownSingleton();
 	Terrain3DRdContext::shutdownShared();
 }

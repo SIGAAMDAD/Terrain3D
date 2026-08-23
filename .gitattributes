@@ -1,2 +1,5 @@
 # Normalize EOL for all files that Git considers text files.
 * text=auto eol=lf
+
+# Patch files contain diff syntax whose context prefix can legitimately precede tabs.
+engine_patch/*.patch whitespace=-blank-at-eol,-space-before-tab

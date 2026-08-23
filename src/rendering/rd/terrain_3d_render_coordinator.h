@@ -24,6 +24,7 @@
 
 class Terrain3D;
 class Terrain3DMaterial;
+class Terrain3DRdForwardPlusBridgeAdapter;
 
 class Terrain3DRenderCoordinator {
 	CLASS_NAME_STATIC( "Terrain3DRenderCoordinator" );
@@ -126,7 +127,13 @@ private:
 	std::atomic_bool m_bRenderEnabled{ false };
 	std::atomic_bool m_bRendererFailed{ false };
 	bool m_bFallbackActive = false;
+	bool m_bForwardBridgeAttached = false;
+	bool m_bCompositorDebugEnabled = false;
 	std::atomic_uint64_t m_nCallbackCount{ 0u };
+	std::atomic_uint64_t m_nForwardPassCallbacks{ 0u };
+	std::atomic_uint64_t m_nLastForwardScenePass{ 0u };
+	std::atomic_int64_t m_nLastForwardDrawList{ -1 };
+	std::atomic_uint32_t m_nLastForwardPassKind{ T3D_RD_FORWARD_PASS_INVALID };
 	std::atomic_uint32_t m_nConsecutiveRenderFailures{ 0u };
 	mutable std::mutex m_diagnosticsMutex;
 	String m_initializationError;
@@ -146,6 +153,10 @@ private:
 	void attachEffectToActiveCamera( void );
 	void detachEffect( void );
 	bool initializeRendererOnRenderThread( void );
+	bool attachForwardBridge( void );
+	void detachForwardBridge( void );
+	bool isForwardBridgeReady( void ) const;
+	void updateRenderRoute( void );
 
 public:
 	Terrain3DRenderCoordinator( void ) = default;
@@ -157,6 +168,7 @@ public:
 	void setBackend( t3dRenderBackend_t backend );
 	void setProxyMode( t3dRdNativeProxyMode_t mode );
 	void render( RenderData *pRenderData );
+	void renderForwardPass( const t3dRdForwardPassContext_t &rContext );
 	void shutdownRendererOnRenderThread( void );
 	Dictionary getDiagnostics( void ) const;
 
