@@ -5,48 +5,23 @@ Frozen pre-clean-break reference: `rd-alpha-pre-cleanbreak-reference` (`5d9e8b1`
 Earlier reconstruction baseline: `rd-alpha-baseline` (`9bc792a`)
 Target: Godot 4.7.1, Forward+ first
 
-This branch contains the alpha RenderingDevice terrain backend while preserving the original RenderingServer path and the fork's existing streaming, authoring, collision, instancing, HLOD, baking, and editor systems.
+This branch is the clean-break RenderingDevice implementation in progress. Batches A-E have removed Terrain3D-owned RenderingServer rendering for terrain-generated GPU textures, the regular instancer, and runtime HLOD submission. The remaining rendering integration work is the Godot 4.7.1 Forward+ bridge in Batch F, followed by editor/API cleanup and the final regression/validation batch.
 
-## Backend modes
+## Implemented RenderingDevice path through Batch E
 
-### RenderingServer
+The current direct path owns and publishes:
 
-The original native Terrain3D rendering path. It remains the fallback and reference renderer.
+- canonical near/middle/far terrain topology, patch state, fixed material ABI, generated terrain textures/caches, compute culling and indexed indirect terrain submission;
+- direct RD material sampling for terrain and imported instance/HLOD materials;
+- shared static mesh vertex/index arenas with generation-safe handles;
+- packed persistent regular-instance storage, visibility/LOD/fade processing, grouped indirect draws, depth/shadow packet publication, alpha/scissor/depth-prepass variants and imported texture/sampler ownership;
+- runtime HLOD package publication into the same mesh/material cache, CPU residency/selection, RD descriptor/state buffers, GPU AABB/layer visibility culling, bounded indirect commands, shadow participation, and deterministic unload/reload generation invalidation.
 
-### RenderingDevice Direct
+Runtime regular instances no longer allocate MultiMesh renderers, and the HLOD streamer no longer allocates native RenderingServer render instances. Collision, navigation, runtime page streaming, persistence, baking/lightmap workflows and authoring data remain CPU/non-rendering systems and are preserved for the final regression batch.
 
-Terrain clipmap color and depth are submitted from a `PRE_OPAQUE` compositor callback using Terrain3D-owned RenderingDevice resources:
+## Forward+ boundary still pending Batch F
 
-- canonical LOD0 and outer-ring topology uploaded once;
-- 8-byte packed clipmap vertices;
-- 16-bit indices when the welded topology permits them, otherwise 32-bit;
-- persistent frame, material, patch, visible-index, region-map, and indirect buffers;
-- separate near, middle, and far raster pipelines;
-- direct resident Terrain3D texture RID bridging without duplicating texture residency;
-- displacement-buffer sampling;
-- terrain color/control/material/PBR sampling;
-- directional-light, ambient-light, and environment-fog inputs;
-- compute frustum culling with CPU indirect-command fallback;
-- indexed indirect draws;
-- per-view framebuffer/pipeline state for multiview;
-- explicit buffer/texture/resource/upload diagnostics;
-- optional native shadow-only proxy so Godot can continue to populate its directional shadow passes.
-
-### RenderingDevice Hybrid
-
-The native Terrain3D surface remains active for full Godot material/lighting/GI/decal/depth-prepass behavior. The RenderingDevice backend remains active for packed topology, explicit buffer ownership, compute culling, indirect submission, and matching terrain depth, but its color write mask is disabled. This avoids the old alpha's double-color rendering while providing a parity/test mode for the direct backend.
-
-Selecting `Full Native` as the native proxy while using Direct mode has the same depth-only RD behavior to avoid two color surfaces.
-
-## Existing fork systems retained
-
-The alpha does not disable or replace the fork's non-clipmap systems. Regular Terrain3D instancing and HLOD continue through their existing RenderingServer integration in both RD modes, while the terrain clipmap is the explicitly owned RD path. Collision, runtime page streaming, caches, lightmap/bake tooling, compute displacement generation, editor tooling, and GDScript authoring tools remain the existing implementation.
-
-## GDExtension rendering boundary
-
-A compositor callback is not an engine render-list insertion hook. Direct mode therefore cannot retroactively enter the Forward+ depth prepass that already ran before `PRE_OPAQUE`, nor can it register itself in Godot's private clustered-light, GI, decal, reflection-probe, or motion-vector geometry lists. Hybrid mode exists when those native features are required without giving up RD topology/culling/depth validation.
-
-Native shadow casting in Direct mode is provided by the shadow-only RenderingServer proxy. Exact native Forward+ participation for a fully direct terrain surface requires the engine-side submission bridge described in `docs/rendering_device_conversion_patch.md`; it cannot be implemented purely inside a GDExtension without modifying Godot itself.
+A GDExtension compositor callback is not an engine render-list insertion hook. Exact participation in Godot's private Forward+ depth-prepass, clustered/local-light, selected shadow, velocity, GI, decal and reflection-probe lists requires the minimal Godot 4.7.1 engine-side submission bridge specified in `docs/rendering_device_conversion_patch.md`. Batch F owns that bridge and removes the remaining native shadow/fallback assumptions.
 
 ## Build
 
@@ -64,13 +39,13 @@ The expected Linux editor output is:
 project/addons/terrain_3d/bin/libterrain.linux.debug.x86_64.so
 ```
 
-## Validation performed for this snapshot
+## Validation performed for the Batch E snapshot
 
-- all 75 Terrain3D C++ translation units compiled against bindings generated from the supplied Godot 4.7.1 stable API;
-- the Linux x86-64 debug GDExtension linked successfully;
-- all 74 GDScript files pass Godot 4.7.1 `--check-only` parsing;
-- Godot 4.7.1 imports the near/middle/far RD raster shaders and compute-cull shader without GLSL/SPIR-V errors;
-- a cacheless headless Godot 4.7.1 editor startup reimports the project and all four RD shaders with zero hard load/parse/shader errors;
-- `git diff --check` passes.
+- Batch C static material contract: 70/70 pass;
+- Batch D static regular-instance contract: 61/61 pass;
+- Batch E static HLOD contract: 46/46 pass;
+- all 78 Terrain3D C++ translation units pass GCC 14.2 C++17 syntax compilation against bindings generated from the supplied Godot 4.7.1 API;
+- all 78 Terrain3D C++ translation units also produce native object files with the same include/define set;
+- `git diff --check` and `git fsck --full --strict` pass.
 
-The validation environment has no Vulkan ICD / presentable Vulkan device, so an actual Forward+ GPU frame cannot be executed here. GPU-frame testing should therefore start with RenderingDevice Hybrid, then Direct, on D3D12/Vulkan hardware.
+The current execution environment does not contain SCons, a runnable Godot 4.7.1 editor, or .NET, so the Godot-hosted/runtime lanes of `tools/rd.py full` cannot execute here. Vulkan/D3D12 runtime validation remains at the explicit GPU gates in Batches F/H rather than being inferred from static compilation.

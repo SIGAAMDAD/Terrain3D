@@ -20,6 +20,7 @@
 #include <godot_cpp/variant/dictionary.hpp>
 #include <mutex>
 #include <memory>
+#include <vector>
 
 class Terrain3D;
 class Terrain3DMaterial;
@@ -112,10 +113,15 @@ private:
 	Terrain3DRdClipmapRenderer m_renderer;
 	Terrain3DRdInstanceRenderer m_instanceRenderer;
 	std::shared_ptr<const t3dRdMeshSourceSnapshot_t> m_cachedInstanceMeshes;
+	std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> m_cachedRegularInstanceScene;
+	std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> m_cachedHlodInstanceScene;
 	std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> m_cachedInstanceScene;
+	std::vector<t3dRdExternalMeshSource_t> m_cachedHlodMeshSources;
 	uint64_t m_nInstanceMeshFingerprint = 0u;
 	uint64_t m_nInstanceMeshGeneration = 0u;
 	uint64_t m_nInstanceSceneGeneration = 0u;
+	uint64_t m_nHlodSceneGeneration = 0u;
+	uint64_t m_nCombinedInstanceSceneGeneration = 0u;
 	std::atomic_bool m_bRendererInitialized{ false };
 	std::atomic_bool m_bRenderEnabled{ false };
 	std::atomic_bool m_bRendererFailed{ false };

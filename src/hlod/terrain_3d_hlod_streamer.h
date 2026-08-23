@@ -8,16 +8,18 @@
 #include "hlod/terrain_3d_hlod_manifest.h"
 #include "hlod/terrain_3d_hlod_package.h"
 #include "hlod/terrain_3d_hlod_runtime_codec.h"
+#include "rendering/rd/terrain_3d_rd_instance_renderer.h"
 
 #include <EASTL/bitset.h>
 #include <EASTL/vector.h>
 #include <godot_cpp/classes/object.hpp>
 #include <godot_cpp/variant/aabb.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
-#include <godot_cpp/variant/rid.hpp>
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
 #include <godot_cpp/variant/vector3.hpp>
+#include <memory>
+#include <vector>
 
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
 using namespace godot;
@@ -44,7 +46,6 @@ typedef struct t3dEntry_s {
 	bool m_bRetiring = false;
 	uint8_t m_nRetireReadyFrames = 0;
 	Ref<Terrain3DHLODPackage> m_ackage;
-	RID m_hInstance;
 } t3dEntry_t;
 
 typedef struct t3dNodePolicy_s {
@@ -89,6 +90,7 @@ class Terrain3DHLODStreamer : public Object {
 	int m_nLastSelectionProjection = -1;
 	bool m_bHasSelectionContext = false;
 	bool m_bSelectionDirty = true;
+	uint64_t m_nRdPublicationGeneration = 1u;
 
 	static int floorDiv( int value, int divisor );
 	static int regionIndex( const Vector2i &rRegion );
@@ -109,6 +111,8 @@ class Terrain3DHLODStreamer : public Object {
 	void deactivate( int index );
 	void publishRepresentationMap( void );
 	void notifyRepresentationChanges( const uint8_t *pOldLevels );
+	void markRdPublicationDirty( void );
+	static uint64_t rdMeshSourceKey( int nEntryIndex );
 
 public:
 	Terrain3DHLODStreamer( void ) = default;
@@ -200,7 +204,12 @@ public:
 		return m_nMemoryBudgetMb;
 	}
 	EA_FORCE_INLINE void setMaxShadowLevel( int nLevel ) {
-		m_nMaxShadowLevel = CLAMP( nLevel, 0, 6 );
+		const int value = CLAMP( nLevel, 0, 6 );
+		if ( m_nMaxShadowLevel == value ) {
+			return;
+		}
+		m_nMaxShadowLevel = value;
+		markRdPublicationDirty();
 	}
 	EA_FORCE_INLINE int getMaxShadowLevel( void ) const {
 		return m_nMaxShadowLevel;
@@ -248,6 +257,11 @@ public:
 	EA_FORCE_INLINE bool isResidencyIdle( void ) const {
 		return m_nLoadsLastTick == 0 && m_nRequestsLastTick == 0 && m_nUnloadsLastTick == 0;
 	}
+	EA_FORCE_INLINE uint64_t getRdPublicationGeneration( void ) const {
+		return m_nRdPublicationGeneration;
+	}
+	void fillRdMeshSources( std::vector<t3dRdExternalMeshSource_t> &rSources ) const;
+	std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> buildRdInstanceSnapshot( void ) const;
 	Dictionary getStats( void ) const;
 	Array getDebugEntries( void ) const;
 

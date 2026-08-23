@@ -25,6 +25,10 @@ tools\rd.cmd contract <BATCH>
 
 Do not routinely read the full contract, public API inventory, manifests, or historical audit reports.
 
+## Current resume point
+- Batches A-E complete.
+- Next batch: F — exact Godot 4.7.1 Forward+ bridge and native feature parity.
+
 ## Remaining architecture
 A: RD ownership + immutable snapshots + terrain topology/culling proof.
 B: direct RD terrain textures/caches + compute ownership.

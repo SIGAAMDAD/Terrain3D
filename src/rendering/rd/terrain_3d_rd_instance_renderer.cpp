@@ -36,6 +36,14 @@ typedef struct t3dRdInstancePush_s {
 } t3dRdInstancePush_t;
 static_assert( sizeof( t3dRdInstancePush_t ) == 16u, "Instance push ABI changed" );
 
+typedef struct t3dRdHlodCullPush_s {
+	uint32_t m_nDescriptorCount = 0u;
+	uint32_t m_nVisibilityMask = UINT32_MAX;
+	uint32_t m_nCommandCount = 0u;
+	uint32_t m_nReserved0 = 0u;
+} t3dRdHlodCullPush_t;
+static_assert( sizeof( t3dRdHlodCullPush_t ) == 16u, "HLOD cull push ABI changed" );
+
 Ref<RDUniform> t3dRdInstanceBufferUniform( const int nBinding, const RenderingDevice::UniformType type, const RID &rRid ) {
 	Ref<RDUniform> uniform; uniform.instantiate(); uniform->set_binding( nBinding ); uniform->set_uniform_type( type ); uniform->add_id( rRid ); return uniform;
 }
@@ -83,6 +91,28 @@ bool Terrain3DRdInstanceRenderer::ensureShader( const Ref<RDShaderSPIRV> &rShade
 	return true;
 }
 
+bool Terrain3DRdInstanceRenderer::ensureHlodCullShader( const Ref<RDShaderSPIRV> &rShader ) {
+	if ( m_hHlodCullShader.is_valid() && m_hHlodCullPipeline.is_valid() ) return true;
+	if ( rShader.is_null() ) {
+		setError( "Missing Terrain3D HLOD cull shader" );
+		return false;
+	}
+	RenderingDevice *const rd = m_context.getDevice();
+	m_hHlodCullShader = rd->shader_create_from_spirv( rShader, "T3D.HlodCullShader" );
+	if ( !m_hHlodCullShader.is_valid() || !m_context.registerResource( m_hHlodCullShader, "T3D.HLOD.CullShader",
+			Terrain3DRdContext::RESOURCE_SHADER, Terrain3DRdContext::MEMORY_NONE, 0u ) ) {
+		setError( "Failed to create Terrain3D HLOD cull shader" );
+		return false;
+	}
+	m_hHlodCullPipeline = rd->compute_pipeline_create( m_hHlodCullShader );
+	if ( !m_hHlodCullPipeline.is_valid() || !m_context.registerResource( m_hHlodCullPipeline, "T3D.HLOD.CullPipeline",
+			Terrain3DRdContext::RESOURCE_COMPUTE_PIPELINE, Terrain3DRdContext::MEMORY_NONE, 0u ) ) {
+		setError( "Failed to create Terrain3D HLOD cull pipeline" );
+		return false;
+	}
+	return true;
+}
+
 bool Terrain3DRdInstanceRenderer::ensureBuffer( RID &rRid, uint32_t &rCapacity, const uint32_t nRequired,
 		const String &rName, const Terrain3DRdContext::ResourceType type, const Terrain3DRdContext::MemoryCategory memory ) {
 	if ( rRid.is_valid() && rCapacity >= nRequired ) return true;
@@ -106,6 +136,9 @@ bool Terrain3DRdInstanceRenderer::ensureBuffers( const uint32_t nInstanceBytes,
 	const bool replace_indirect = !m_hIndirectBuffer.is_valid() || m_nIndirectCapacityBytes < nIndirectBytes;
 	if ( ( replace_instance || replace_visible || replace_material || replace_indirect ) && m_hUniformSet.is_valid() ) {
 		m_context.freeResource( m_hUniformSet );
+	}
+	if ( replace_indirect && m_hHlodCullUniformSet.is_valid() ) {
+		m_context.freeResource( m_hHlodCullUniformSet );
 	}
 	if ( !m_hFrameBuffer.is_valid() ) {
 		RenderingDevice *const rd = m_context.getDevice();
@@ -287,11 +320,11 @@ bool Terrain3DRdInstanceRenderer::uploadScene(
 	uint64_t packet_capacity = 0u;
 	uint64_t visible_index_capacity = 0u;
 	for ( const t3dRdInstanceCell_t &cell : pScene->m_cells ) {
-		const t3dRdMeshHandle_t mesh = m_meshCache.getMeshHandle( cell.m_nMeshAssetId, MAX( ( int )( cell.m_nLod ), 0 ) );
+		const t3dRdMeshHandle_t mesh = m_meshCache.getMeshHandleBySourceKey( cell.m_nMeshSourceKey != 0u ? cell.m_nMeshSourceKey : t3dRdRegularMeshSourceKey( cell.m_nMeshAssetId, cell.m_nLod ) );
 		const t3dRdMeshSourceLod_t *const lod = m_meshCache.resolveMesh( mesh );
 		if ( lod ) {
 			packet_capacity += lod->m_nSurfaceCount;
-			visible_index_capacity += cell.m_nInstanceCount;
+			visible_index_capacity += ( uint64_t )( cell.m_nInstanceCount ) * ( uint64_t )( lod->m_nSurfaceCount );
 		}
 		if ( packet_capacity > UINT32_MAX / sizeof( t3dRdIndexedIndirectCommand_t ) ) {
 			setError( "RD instance indirect packet capacity exceeds 32-bit buffer limits" );
@@ -392,18 +425,21 @@ bool Terrain3DRdInstanceRenderer::buildPackets( const t3dRdInstanceSceneSnapshot
 	m_drawPackets.clear();
 	m_depthPackets.clear();
 	m_shadowPackets.clear();
+	m_hlodDescriptors.clear();
 	groups.reserve( rScene.m_cells.size() );
 
 	for ( const t3dRdInstanceCell_t &cell : rScene.m_cells ) {
-		if ( ( cell.m_nVisibilityLayers & nVisibilityMask ) == 0u ) continue;
+		const bool hlod = ( cell.m_nFlags & T3D_RD_INSTANCE_HLOD ) != 0u;
+		if ( !hlod && ( cell.m_nVisibilityLayers & nVisibilityMask ) == 0u ) continue;
 		if ( ( uint64_t )( cell.m_nFirstInstance ) + ( uint64_t )( cell.m_nInstanceCount ) > rScene.m_instances.size() ) {
 			setError( "RD instance cell range exceeds published instance table" );
 			return false;
 		}
-		const t3dRdMeshHandle_t mesh = m_meshCache.getMeshHandle( cell.m_nMeshAssetId, MAX( ( int )( cell.m_nLod ), 0 ) );
+		const t3dRdMeshHandle_t mesh = m_meshCache.getMeshHandleBySourceKey( cell.m_nMeshSourceKey != 0u ? cell.m_nMeshSourceKey : t3dRdRegularMeshSourceKey( cell.m_nMeshAssetId, cell.m_nLod ) );
 		const t3dRdMeshSourceLod_t *const lod = m_meshCache.resolveMesh( mesh );
 		if ( !lod ) continue;
-		const bool visible = isCellVisible( cell, rViewProjection, rCamera );
+		const bool visible = hlod ? ( cell.m_nInstanceCount > 0u && ( cell.m_nFlags & T3D_RD_INSTANCE_SHADOWS_ONLY ) == 0u )
+				: isCellVisible( cell, rViewProjection, rCamera );
 		uint32_t cell_draw_flags = cell.m_nFlags;
 		if ( visible && cell.m_fFadeMargin > 0.0f ) {
 			const float distance = ( float )( cell.m_bounds.get_center().distance_to( rCamera ) );
@@ -427,14 +463,16 @@ bool Terrain3DRdInstanceRenderer::buildPackets( const t3dRdInstanceSceneSnapshot
 				const bool alpha_blend = ( draw_flags & T3D_RD_INSTANCE_ALPHA_BLEND ) != 0u;
 				const bool range_fade = ( draw_flags & T3D_RD_INSTANCE_FADE_ACTIVE ) != 0u;
 				t3dRdPacketBuildGroup_t *group = nullptr;
-				if ( !alpha_blend && !range_fade ) {
-					for ( t3dRdPacketBuildGroup_t &candidate : groups ) {
-						if ( candidate.m_packet.m_nSurfaceSlot == handle.m_nSlot &&
-								candidate.m_packet.m_nFlags == draw_flags &&
-								candidate.m_packet.m_nMaterial == surface->m_nMaterial &&
-								candidate.m_packet.m_nOverlayMaterial == surface->m_nOverlayMaterial ) {
-							group = &candidate;
-							break;
+				if ( !hlod ) {
+					if ( !alpha_blend && !range_fade ) {
+						for ( t3dRdPacketBuildGroup_t &candidate : groups ) {
+							if ( candidate.m_packet.m_nSurfaceSlot == handle.m_nSlot &&
+									candidate.m_packet.m_nFlags == draw_flags &&
+									candidate.m_packet.m_nMaterial == surface->m_nMaterial &&
+									candidate.m_packet.m_nOverlayMaterial == surface->m_nOverlayMaterial ) {
+								group = &candidate;
+								break;
+							}
 						}
 					}
 				}
@@ -446,6 +484,8 @@ bool Terrain3DRdInstanceRenderer::buildPackets( const t3dRdInstanceSceneSnapshot
 					created.m_packet.m_nFlags = draw_flags;
 					created.m_packet.m_fSortDistanceSq = ( float )( cell.m_bounds.get_center().distance_squared_to( rCamera ) );
 					created.m_packet.m_indexFormat = ( RenderingDevice::IndexBufferFormat )( surface->m_nIndexFormat );
+					created.m_packet.m_cullBounds = cell.m_bounds;
+					created.m_packet.m_nVisibilityLayers = cell.m_nVisibilityLayers;
 					groups.push_back( std::move( created ) );
 					group = &groups.back();
 				}
@@ -462,6 +502,8 @@ bool Terrain3DRdInstanceRenderer::buildPackets( const t3dRdInstanceSceneSnapshot
 				shadow.m_nMaterial = surface->m_nMaterial;
 				shadow.m_nOverlayMaterial = surface->m_nOverlayMaterial;
 				shadow.m_nFlags = draw_flags;
+				shadow.m_cullBounds = cell.m_bounds;
+				shadow.m_nVisibilityLayers = cell.m_nVisibilityLayers;
 				shadow.m_indexFormat = ( RenderingDevice::IndexBufferFormat )( surface->m_nIndexFormat );
 				shadow.m_command.m_nIndexCount = surface->m_nIndexCount;
 				shadow.m_command.m_nInstanceCount = cell.m_nInstanceCount;
@@ -499,6 +541,25 @@ bool Terrain3DRdInstanceRenderer::buildPackets( const t3dRdInstanceSceneSnapshot
 		if ( alpha_a ) return a.m_fSortDistanceSq > b.m_fSortDistanceSq;
 		return false;
 	} );
+	m_hlodDescriptors.reserve( m_drawPackets.size() );
+	for ( uint32_t command_index = 0u; command_index < ( uint32_t )( m_drawPackets.size() ); ++command_index ) {
+		const t3dRdInstanceDrawPacket_t &packet = m_drawPackets[command_index];
+		if ( ( packet.m_nFlags & T3D_RD_INSTANCE_HLOD ) == 0u ) continue;
+		t3dRdHlodCullDescriptor_t descriptor;
+		const Vector3 center = packet.m_cullBounds.get_center();
+		const Vector3 extent = packet.m_cullBounds.size * 0.5f;
+		descriptor.m_szBoundsCenter[0] = ( float )( center.x );
+		descriptor.m_szBoundsCenter[1] = ( float )( center.y );
+		descriptor.m_szBoundsCenter[2] = ( float )( center.z );
+		descriptor.m_szBoundsExtent[0] = ( float )( extent.x );
+		descriptor.m_szBoundsExtent[1] = ( float )( extent.y );
+		descriptor.m_szBoundsExtent[2] = ( float )( extent.z );
+		descriptor.m_nVisibilityLayers = packet.m_nVisibilityLayers;
+		descriptor.m_nCommandIndex = command_index;
+		descriptor.m_nFirstVisible = packet.m_nFirstVisible;
+		m_hlodDescriptors.push_back( descriptor );
+	}
+	m_nHlodCullDescriptors = m_hlodDescriptors.size();
 	m_nVisibleInstances = m_visibleIndices.size();
 	return true;
 }
@@ -529,6 +590,66 @@ bool Terrain3DRdInstanceRenderer::uploadVisibility( void ) {
 		if ( rd->buffer_update( m_hIndirectBuffer, 0u, indirect_bytes, m_indirectBytes ) != OK ) return false;
 	}
 	m_context.recordBufferUpdate( visible_bytes + indirect_bytes );
+	return uploadHlodDescriptors();
+}
+
+bool Terrain3DRdInstanceRenderer::uploadHlodDescriptors( void ) {
+	if ( m_hlodDescriptors.empty() ) return true;
+	const uint64_t bytes64 = m_hlodDescriptors.size() * sizeof( t3dRdHlodCullDescriptor_t );
+	if ( bytes64 > UINT32_MAX ) {
+		setError( "RD HLOD descriptor publication exceeds 32-bit buffer limits" );
+		return false;
+	}
+	const uint32_t bytes = ( uint32_t )( bytes64 );
+	const bool replace = !m_hHlodCullDescriptorBuffer.is_valid() || m_nHlodDescriptorCapacityBytes < bytes;
+	if ( replace && m_hHlodCullUniformSet.is_valid() ) m_context.freeResource( m_hHlodCullUniformSet );
+	m_context.beginResourceRebuild();
+	const bool buffer_ok = ensureBuffer( m_hHlodCullDescriptorBuffer,
+			m_nHlodDescriptorCapacityBytes,
+			MAX( bytes, ( uint32_t )( sizeof( t3dRdHlodCullDescriptor_t ) ) ),
+			"T3D.HLOD.CullDescriptors",
+			Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
+			Terrain3DRdContext::MEMORY_INSTANCE );
+	m_context.endResourceRebuild();
+	if ( !buffer_ok ) return false;
+	m_hlodDescriptorBytes.resize( bytes );
+	std::memcpy( m_hlodDescriptorBytes.ptrw(), m_hlodDescriptors.data(), bytes );
+	if ( m_context.getDevice()->buffer_update( m_hHlodCullDescriptorBuffer, 0u, bytes, m_hlodDescriptorBytes ) != OK ) return false;
+	m_context.recordBufferUpdate( bytes );
+	if ( !m_hHlodCullUniformSet.is_valid() ) {
+		TypedArray<Ref<RDUniform>> uniforms;
+		uniforms.push_back( t3dRdInstanceBufferUniform( 0, RenderingDevice::UNIFORM_TYPE_UNIFORM_BUFFER, m_hFrameBuffer ) );
+		uniforms.push_back( t3dRdInstanceBufferUniform( 1, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hHlodCullDescriptorBuffer ) );
+		uniforms.push_back( t3dRdInstanceBufferUniform( 2, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hIndirectBuffer ) );
+		m_hHlodCullUniformSet = m_context.getDevice()->uniform_set_create( uniforms, m_hHlodCullShader, 0u );
+		if ( !m_hHlodCullUniformSet.is_valid() || !m_context.registerResource( m_hHlodCullUniformSet,
+				"T3D.HLOD.CullUniformSet", Terrain3DRdContext::RESOURCE_UNIFORM_SET, Terrain3DRdContext::MEMORY_NONE, 0u ) ) {
+			setError( "Failed to create Terrain3D HLOD cull uniform set" );
+			return false;
+		}
+	}
+	return true;
+}
+
+bool Terrain3DRdInstanceRenderer::dispatchHlodCull( const uint32_t nVisibilityMask ) {
+	if ( m_hlodDescriptors.empty() ) return true;
+	if ( !m_hHlodCullPipeline.is_valid() || !m_hHlodCullUniformSet.is_valid() ) return false;
+	RenderingDevice *const rd = m_context.getDevice();
+	t3dRdHlodCullPush_t push;
+	push.m_nDescriptorCount = ( uint32_t )( m_hlodDescriptors.size() );
+	push.m_nVisibilityMask = nVisibilityMask;
+	push.m_nCommandCount = ( uint32_t )( m_drawPackets.size() );
+	m_hlodCullPushBytes.resize( sizeof( push ) );
+	std::memcpy( m_hlodCullPushBytes.ptrw(), &push, sizeof( push ) );
+	const int64_t list = rd->compute_list_begin();
+	if ( list == RenderingDevice::INVALID_ID ) return false;
+	rd->compute_list_bind_compute_pipeline( list, m_hHlodCullPipeline );
+	rd->compute_list_bind_uniform_set( list, m_hHlodCullUniformSet, 0u );
+	rd->compute_list_set_push_constant( list, m_hlodCullPushBytes, sizeof( push ) );
+	rd->compute_list_dispatch( list, ( push.m_nDescriptorCount + 31u ) / 32u, 1u, 1u );
+	rd->compute_list_add_barrier( list );
+	rd->compute_list_end();
+	++m_nHlodCullDispatches;
 	return true;
 }
 
@@ -640,7 +761,8 @@ bool Terrain3DRdInstanceRenderer::ensureViewState( const uint32_t nView,
 
 bool Terrain3DRdInstanceRenderer::drawView( const uint32_t nView,
 		const Projection &rViewProjection,
-		const Vector3 &rCamera ) {
+		const Vector3 &rCamera,
+		const uint32_t nVisibilityMask ) {
 	if ( nView >= s_nMaxViews ) return false;
 	RenderingDevice *const rd = m_context.getDevice();
 	t3dRdInstanceViewState_t &state = m_szViewStates[nView];
@@ -659,6 +781,7 @@ bool Terrain3DRdInstanceRenderer::drawView( const uint32_t nView,
 	std::memcpy( m_frameBytes.ptrw(), &frame, sizeof( frame ) );
 	if ( rd->buffer_update( m_hFrameBuffer, 0u, sizeof( frame ), m_frameBytes ) != OK ) return false;
 	m_context.recordBufferUpdate( sizeof( frame ) );
+	if ( !dispatchHlodCull( nVisibilityMask ) ) return false;
 	const int64_t list = rd->draw_list_begin( state.m_hFramebuffer, RenderingDevice::DRAW_DEFAULT_ALL );
 	if ( list == RenderingDevice::INVALID_ID ) return false;
 	rd->draw_list_bind_uniform_set( list, m_hUniformSet, 0u );
@@ -715,7 +838,7 @@ bool Terrain3DRdInstanceRenderer::drawView( const uint32_t nView,
 	return true;
 }
 
-bool Terrain3DRdInstanceRenderer::initialize( const Ref<RDShaderSPIRV> &rShader ) { if(!ensureDevice()||!ensureShader(rShader))return false;m_frameBytes.resize(sizeof(t3dRdInstanceFrame_t));m_pushBytes.resize(sizeof(t3dRdInstancePush_t));return true; }
+bool Terrain3DRdInstanceRenderer::initialize( const Ref<RDShaderSPIRV> &rShader, const Ref<RDShaderSPIRV> &rHlodCullShader ) { if(!ensureDevice()||!ensureShader(rShader)||!ensureHlodCullShader(rHlodCullShader))return false;m_frameBytes.resize(sizeof(t3dRdInstanceFrame_t));m_pushBytes.resize(sizeof(t3dRdInstancePush_t));m_hlodCullPushBytes.resize(sizeof(t3dRdHlodCullPush_t));return true; }
 
 void Terrain3DRdInstanceRenderer::shutdown( void ) {
 	for ( t3dRdInstanceViewState_t &state : m_szViewStates ) freeViewState( state );
@@ -731,15 +854,22 @@ void Terrain3DRdInstanceRenderer::shutdown( void ) {
 	m_context.freeResource( m_hVisibleIndexBuffer, m_nVisibleCapacityBytes );
 	m_context.freeResource( m_hMaterialBuffer, m_nMaterialCapacityBytes );
 	m_context.freeResource( m_hIndirectBuffer, m_nIndirectCapacityBytes );
+	m_context.freeResource( m_hHlodCullUniformSet );
+	m_context.freeResource( m_hHlodCullDescriptorBuffer, m_nHlodDescriptorCapacityBytes );
+	m_context.freeResource( m_hHlodCullPipeline );
+	m_context.freeResource( m_hHlodCullShader );
 	m_context.freeResource( m_hShader );
 	m_nInstanceCapacityBytes = m_nVisibleCapacityBytes = m_nMaterialCapacityBytes = m_nIndirectCapacityBytes = 0u;
+	m_nHlodDescriptorCapacityBytes = 0u;
 	m_nUploadedSceneGeneration = m_nUploadedMeshGeneration = 0u;
 	m_visibleIndices.clear();
 	m_drawPackets.clear();
 	m_depthPackets.clear();
 	m_shadowPackets.clear();
+	m_hlodDescriptors.clear();
 	m_nStaticInstances = 0u;
 	m_nVisibleInstances = 0u;
+	m_nHlodCullDescriptors = 0u;
 }
 
 bool Terrain3DRdInstanceRenderer::render( RenderData *const pRenderData,
@@ -754,6 +884,8 @@ bool Terrain3DRdInstanceRenderer::render( RenderData *const pRenderData,
 		m_drawPackets.clear();
 		m_depthPackets.clear();
 		m_shadowPackets.clear();
+		m_hlodDescriptors.clear();
+		m_nHlodCullDescriptors = 0u;
 		return true;
 	}
 	if ( pMeshes && pMeshes->m_nGeneration != m_meshCache.getSourceGeneration() && !m_materialBindings.empty() ) {
@@ -782,7 +914,7 @@ bool Terrain3DRdInstanceRenderer::render( RenderData *const pRenderData,
 		if ( !buildPackets( *pScene, view_projection, eye, nVisibilityMask ) || !uploadVisibility() ) return false;
 		const RID color = view_count > 1u ? buffers->get_color_layer( view, msaa ) : buffers->get_color_texture( msaa );
 		const RID depth = view_count > 1u ? buffers->get_depth_layer( view, msaa ) : buffers->get_depth_texture( msaa );
-		if ( !ensureViewState( view, color, depth, samples ) || !drawView( view, view_projection, eye ) ) return false;
+		if ( !ensureViewState( view, color, depth, samples ) || !drawView( view, view_projection, eye, nVisibilityMask ) ) return false;
 	}
 	++m_nFrames;
 	m_nStaticInstances = pScene->m_instances.size();
@@ -810,6 +942,9 @@ Dictionary Terrain3DRdInstanceRenderer::getDiagnostics( void ) const {
 	result["instance_draw_packets"] = ( int64_t )( m_drawPackets.size() );
 	result["depth_packets"] = ( int64_t )( m_depthPackets.size() );
 	result["shadow_packets"] = ( int64_t )( m_shadowPackets.size() );
+	result["hlod_gpu_cull_descriptors"] = ( int64_t )( m_nHlodCullDescriptors );
+	result["hlod_gpu_cull_dispatches"] = ( int64_t )( m_nHlodCullDispatches );
+	result["hlod_descriptor_capacity_bytes"] = ( int64_t )( m_nHlodDescriptorCapacityBytes );
 	result["direct_draw_debug"] = m_bDirectDrawDebug;
 	result["last_error"] = m_lastError;
 	return result;

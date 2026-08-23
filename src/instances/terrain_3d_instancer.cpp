@@ -1888,6 +1888,7 @@ std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> Terrain3DInstancer::buildRdI
 		cell.m_nCellZ = ( int16_t )( CLAMP( render.m_cell.y, ( int )( INT16_MIN ), ( int )( INT16_MAX ) ) );
 		cell.m_nMeshAssetId = ( uint16_t )( render.m_nMeshId );
 		cell.m_nLod = ( int16_t )( source_lod );
+		cell.m_nMeshSourceKey = t3dRdRegularMeshSourceKey( cell.m_nMeshAssetId, cell.m_nLod );
 		cell.m_nFirstInstance = found->second.m_nFirst;
 		cell.m_nInstanceCount = found->second.m_nCount;
 		cell.m_nRevision = render.m_nUploadedRevision;

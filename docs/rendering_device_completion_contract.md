@@ -429,17 +429,17 @@ No MultiMesh remains.
 
 Reuse the same mesh cache.
 
-- [ ] no HLOD RenderingServer instances
-- [ ] HLOD package resolves to RD mesh handles
-- [ ] HLOD descriptor buffer
-- [ ] HLOD transform/state buffer
-- [ ] HLOD residency remains CPU-controlled
-- [ ] HLOD visibility culling
-- [ ] HLOD LOD/distance rules
-- [ ] HLOD indirect draws
-- [ ] shadow participation
-- [ ] correct unload/reload behavior
-- [ ] separate arena class only if actual lifetime differences justify it
+- [x] no HLOD RenderingServer instances
+- [x] HLOD package resolves to RD mesh handles
+- [x] HLOD descriptor buffer
+- [x] HLOD transform/state buffer
+- [x] HLOD residency remains CPU-controlled
+- [x] HLOD visibility culling
+- [x] HLOD LOD/distance rules
+- [x] HLOD indirect draws
+- [x] shadow participation
+- [x] correct unload/reload behavior
+- [x] separate arena class only if actual lifetime differences justify it
 
 ---
 
@@ -447,24 +447,24 @@ Reuse the same mesh cache.
 
 Translate the material subset actually used by the fork.
 
-- [ ] imported material extraction
-- [ ] BaseMaterial3D parameters used by assets
-- [ ] albedo texture
-- [ ] normal texture
-- [ ] ORM/PBR fields used by project
-- [ ] alpha scissor
-- [ ] culling mode
-- [ ] double-sided behavior
-- [ ] vertex color
-- [ ] instance color
-- [ ] roughness
-- [ ] metallic
-- [ ] AO
-- [ ] emissive if supported by original fork
-- [ ] texture filtering
-- [ ] sampler policy
-- [ ] shadow alpha behavior
-- [ ] material-table deduplication
+- [x] imported material extraction
+- [x] BaseMaterial3D parameters used by assets
+- [x] albedo texture
+- [x] normal texture
+- [x] ORM/PBR fields used by project
+- [x] alpha scissor
+- [x] culling mode
+- [x] double-sided behavior
+- [x] vertex color
+- [x] instance color
+- [x] roughness
+- [x] metallic
+- [x] AO
+- [x] emissive if supported by original fork
+- [x] texture filtering
+- [x] sampler policy
+- [x] shadow alpha behavior
+- [x] material-table deduplication
 
 No native material RID is required at runtime.
 

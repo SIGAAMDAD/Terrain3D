@@ -8,6 +8,7 @@
 #include "rendering/rd/terrain_3d_rd_types.h"
 #include "rendering/rd/terrain_3d_rd_texture_manager.h"
 
+#include <godot_cpp/classes/mesh.hpp>
 #include <godot_cpp/classes/rd_vertex_attribute.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <memory>
@@ -16,6 +17,7 @@
 class Terrain3DAssets;
 
 typedef struct t3dRdMeshSourceSurface_s {
+	uint64_t m_nSourceKey = 0u;
 	uint16_t m_nAssetId = 0u;
 	int16_t m_nLod = 0;
 	uint16_t m_nSurface = 0u;
@@ -31,6 +33,7 @@ typedef struct t3dRdMeshSourceSurface_s {
 } t3dRdMeshSourceSurface_t;
 
 typedef struct t3dRdMeshSourceLod_s {
+	uint64_t m_nSourceKey = 0u;
 	uint16_t m_nAssetId = 0u;
 	int16_t m_nLod = 0;
 	uint32_t m_nFirstSurface = 0u;
@@ -38,6 +41,11 @@ typedef struct t3dRdMeshSourceLod_s {
 	AABB m_bounds;
 } t3dRdMeshSourceLod_t;
 
+
+typedef struct t3dRdExternalMeshSource_s {
+	uint64_t m_nSourceKey = 0u;
+	Ref<Mesh> m_mesh;
+} t3dRdExternalMeshSource_t;
 
 typedef struct t3dRdImportedTextureSource_s {
 	uint64_t m_nSourceId = 0u;
@@ -87,6 +95,7 @@ private:
 	std::vector<t3dRdMeshSourceLod_t> m_lods;
 	std::vector<t3dRdInstanceMaterial_t> m_materials;
 	std::vector<t3dRdImportedTextureGpu_t> m_textures;
+	std::shared_ptr<const t3dRdMeshSourceSnapshot_t> m_lastUploadedSnapshot;
 
 	bool ensureVertexFormat( void );
 	bool ensureArena( RID &rBuffer,
@@ -106,13 +115,22 @@ public:
 
 	static uint32_t nextArenaCapacity( uint32_t nRequiredBytes, uint32_t nMinimumBytes );
 	static uint64_t computeSourceFingerprint( const Ref<Terrain3DAssets> &rAssets );
+	static uint64_t computeSourceFingerprint( const Ref<Terrain3DAssets> &rAssets,
+			const std::vector<t3dRdExternalMeshSource_t> &rExternalMeshes );
 	static std::shared_ptr<const t3dRdMeshSourceSnapshot_t>
 	buildSourceSnapshot( const Ref<Terrain3DAssets> &rAssets, uint64_t nFingerprint, uint64_t nGeneration, String *pError = nullptr );
+	static std::shared_ptr<const t3dRdMeshSourceSnapshot_t>
+	buildSourceSnapshot( const Ref<Terrain3DAssets> &rAssets,
+			const std::vector<t3dRdExternalMeshSource_t> &rExternalMeshes,
+			uint64_t nFingerprint,
+			uint64_t nGeneration,
+			String *pError = nullptr );
 
 	bool upload( const std::shared_ptr<const t3dRdMeshSourceSnapshot_t> &pSnapshot );
 	void shutdown( void );
 
 	t3dRdMeshHandle_t getMeshHandle( uint16_t nAssetId, int nLod ) const;
+	t3dRdMeshHandle_t getMeshHandleBySourceKey( uint64_t nSourceKey ) const;
 	const t3dRdMeshSourceLod_t *resolveMesh( const t3dRdMeshHandle_t &rHandle ) const;
 	t3dRdSurfaceHandle_t getSurfaceHandle( const t3dRdMeshHandle_t &rMesh, uint32_t nSurface ) const;
 	const t3dRdMeshSourceSurface_t *resolveSurface( const t3dRdSurfaceHandle_t &rHandle ) const;

@@ -2,6 +2,7 @@
 #include "hlod/terrain_3d_hlod_streamer.h"
 
 #include "data/terrain_3d_data.h"
+#include "data/terrain_3d_half_buffer.h"
 #include "eastl_config.h"
 #include "terrain_3d.h"
 
@@ -9,10 +10,8 @@
 #include <cmath>
 #include <cstring>
 #include <godot_cpp/classes/camera3d.hpp>
-#include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
 #include <godot_cpp/classes/viewport.hpp>
-#include <godot_cpp/classes/world3d.hpp>
 #include <godot_cpp/core/class_db.hpp>
 
 int Terrain3DHLODStreamer::floorDiv( const int value, const int divisor ) {
@@ -31,6 +30,60 @@ int Terrain3DHLODStreamer::regionIndex( const Vector2i &rRegion ) {
 Vector2i Terrain3DHLODStreamer::regionFromIndex( const int index ) {
 	const int size = s_nActiveMaxRegionMapSize;
 	return Vector2i( index % size - size / 2, index / size - size / 2 );
+}
+
+void Terrain3DHLODStreamer::markRdPublicationDirty( void ) {
+	++m_nRdPublicationGeneration;
+	if ( m_nRdPublicationGeneration == 0u ) {
+		m_nRdPublicationGeneration = 1u;
+	}
+}
+
+uint64_t Terrain3DHLODStreamer::rdMeshSourceKey( const int nEntryIndex ) {
+	return t3dRdHlodMeshSourceKey( ( uint32_t )( nEntryIndex ) );
+}
+
+static uint32_t t3dPackHlodSnormPair( const float x, const float y ) {
+	const int16_t px = ( int16_t )( std::lround( CLAMP( x, -1.0f, 1.0f ) * 32767.0f ) );
+	const int16_t py = ( int16_t )( std::lround( CLAMP( y, -1.0f, 1.0f ) * 32767.0f ) );
+	return ( uint32_t )( ( uint16_t )( px ) ) | ( ( uint32_t )( ( uint16_t )( py ) ) << 16u );
+}
+
+static t3dRdInstanceRecord_t t3dPackHlodInstanceRecord( const Transform3D &rTransform ) {
+	t3dRdInstanceRecord_t record;
+	record.m_szPosition[0] = ( float )( rTransform.origin.x );
+	record.m_szPosition[1] = ( float )( rTransform.origin.y );
+	record.m_szPosition[2] = ( float )( rTransform.origin.z );
+	const Vector3 scale = rTransform.basis.get_scale();
+	const Quaternion rotation = rTransform.basis.orthonormalized().get_rotation_quaternion().normalized();
+	record.m_nQuaternion01 = t3dPackHlodSnormPair( ( float )( rotation.x ), ( float )( rotation.y ) );
+	record.m_nQuaternion23 = t3dPackHlodSnormPair( ( float )( rotation.z ), ( float )( rotation.w ) );
+	record.m_nScale01 = ( uint32_t )( t3dHalfEncode( ( float )( scale.x ) ) ) |
+			( ( uint32_t )( t3dHalfEncode( ( float )( scale.y ) ) ) << 16u );
+	record.m_nScale2Flags = ( uint32_t )( t3dHalfEncode( ( float )( scale.z ) ) );
+	record.m_nColorRgba8 = 0xFFFFFFFFu;
+	return record;
+}
+
+static AABB t3dTransformHlodBounds( const Transform3D &rTransform, const AABB &rBounds ) {
+	const Vector3 minimum = rBounds.position;
+	const Vector3 maximum = rBounds.get_end();
+	Vector3 first = rTransform.xform( minimum );
+	Vector3 outMin = first;
+	Vector3 outMax = first;
+	for ( int corner = 1; corner < 8; ++corner ) {
+		const Vector3 local( ( corner & 1 ) != 0 ? maximum.x : minimum.x,
+				( corner & 2 ) != 0 ? maximum.y : minimum.y,
+				( corner & 4 ) != 0 ? maximum.z : minimum.z );
+		const Vector3 world = rTransform.xform( local );
+		outMin.x = MIN( outMin.x, world.x );
+		outMin.y = MIN( outMin.y, world.y );
+		outMin.z = MIN( outMin.z, world.z );
+		outMax.x = MAX( outMax.x, world.x );
+		outMax.y = MAX( outMax.y, world.y );
+		outMax.z = MAX( outMax.z, world.z );
+	}
+	return AABB( outMin, outMax - outMin );
 }
 
 void Terrain3DHLODStreamer::initialize( Terrain3D *const pTerrain ) {
@@ -455,20 +508,6 @@ bool Terrain3DHLODStreamer::requestOrActivate( const int index ) {
 		}
 		m_nTransitionOvercommitBytesLastTick = m_nResidentEstimatedBytes + bytes - budget;
 	}
-	RenderingServer *rs = RenderingServer::get_singleton();
-	if ( !rs || m_pTerrain->get_world_3d().is_null() ) {
-		return false;
-	}
-	entry.m_hInstance = rs->instance_create();
-	rs->instance_set_base( entry.m_hInstance, entry.m_ackage->getMesh()->get_rid() );
-	rs->instance_set_scenario( entry.m_hInstance, m_pTerrain->get_world_3d()->get_scenario() );
-	const real_t regionWorld = ( real_t )m_pTerrain->getRegionSize() * m_pTerrain->getVertexSpacing();
-	Transform3D local;
-	local.origin = Vector3( entry.m_regionMin.x * regionWorld, 0.0f, entry.m_regionMin.y * regionWorld );
-	rs->instance_set_transform( entry.m_hInstance, m_pTerrain->get_global_transform() * local );
-	rs->instance_geometry_set_cast_shadows_setting( entry.m_hInstance,
-			entry.m_nLevel <= m_nMaxShadowLevel ? RenderingServer::SHADOW_CASTING_SETTING_ON
-												: RenderingServer::SHADOW_CASTING_SETTING_OFF );
 	entry.m_bActive = true;
 	entry.m_bRetiring = false;
 	entry.m_nRetireReadyFrames = 0;
@@ -478,6 +517,7 @@ bool Terrain3DHLODStreamer::requestOrActivate( const int index ) {
 	// candidates instead of rendering on top of their parent for another tick.
 	clearDesiredDescendants( index );
 	m_nResidentEstimatedBytes += bytes;
+	markRdPublicationDirty();
 	++m_nLoadsLastTick;
 	return true;
 }
@@ -486,12 +526,9 @@ void Terrain3DHLODStreamer::deactivate( const int index ) {
 		return;
 	}
 	t3dEntry_t &entry = m_entries[( size_t )index];
-	if ( entry.m_hInstance.is_valid() ) {
-		RenderingServer::get_singleton()->free_rid( entry.m_hInstance );
-		entry.m_hInstance = RID();
-		++m_nUnloadsLastTick;
-	}
+	const bool wasPublished = entry.m_bActive;
 	if ( entry.m_bActive ) {
+		++m_nUnloadsLastTick;
 		const int64_t bytes = entry.m_ackage.is_valid()
 				? MAX<int64_t>( entry.m_nEstimatedGpuBytes, entry.m_ackage->getEstimatedGpuBytes() )
 				: entry.m_nEstimatedGpuBytes;
@@ -503,6 +540,7 @@ void Terrain3DHLODStreamer::deactivate( const int index ) {
 	entry.m_ackage.unref();
 	entry.m_bRequestStarted = false;
 	m_bSelectionDirty = true;
+	if ( wasPublished ) markRdPublicationDirty();
 }
 
 void Terrain3DHLODStreamer::publishRepresentationMap( void ) {
@@ -660,6 +698,71 @@ uint8_t Terrain3DHLODStreamer::getNodeMinimumLevel( const Vector2i &rRegion, con
 	}
 	return 0;
 }
+void Terrain3DHLODStreamer::fillRdMeshSources( std::vector<t3dRdExternalMeshSource_t> &rSources ) const {
+	rSources.clear();
+	rSources.reserve( m_entries.size() );
+	for ( int i = 0; i < ( int )( m_entries.size() ); ++i ) {
+		const t3dEntry_t &entry = m_entries[( size_t )( i )];
+		if ( !entry.m_bActive || entry.m_ackage.is_null() || entry.m_ackage->getMesh().is_null() ) {
+			continue;
+		}
+		t3dRdExternalMeshSource_t source;
+		source.m_nSourceKey = rdMeshSourceKey( i );
+		source.m_mesh = entry.m_ackage->getMesh();
+		rSources.push_back( source );
+	}
+}
+
+std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> Terrain3DHLODStreamer::buildRdInstanceSnapshot( void ) const {
+	std::shared_ptr<t3dRdInstanceSceneSnapshot_t> snapshot = std::make_shared<t3dRdInstanceSceneSnapshot_t>();
+	snapshot->m_nGeneration = m_nRdPublicationGeneration;
+	if ( !m_pTerrain ) {
+		return snapshot;
+	}
+
+	const real_t regionWorld = ( real_t )( m_pTerrain->getRegionSize() ) * m_pTerrain->getVertexSpacing();
+	const Transform3D terrainTransform = m_pTerrain->get_global_transform();
+	snapshot->m_instances.reserve( m_entries.size() );
+	snapshot->m_cells.reserve( m_entries.size() );
+	for ( int i = 0; i < ( int )( m_entries.size() ); ++i ) {
+		const t3dEntry_t &entry = m_entries[( size_t )( i )];
+		if ( !entry.m_bActive || entry.m_ackage.is_null() || entry.m_ackage->getMesh().is_null() ) {
+			continue;
+		}
+
+		Transform3D local;
+		local.origin = Vector3( entry.m_regionMin.x * regionWorld, 0.0f, entry.m_regionMin.y * regionWorld );
+		const Transform3D transform = terrainTransform * local;
+		const uint32_t firstInstance = ( uint32_t )( snapshot->m_instances.size() );
+		snapshot->m_instances.push_back( t3dPackHlodInstanceRecord( transform ) );
+
+		t3dRdInstanceCell_t cell;
+		cell.m_nMeshSourceKey = rdMeshSourceKey( i );
+		cell.m_nRegionX = entry.m_regionMin.x;
+		cell.m_nRegionZ = entry.m_regionMin.y;
+		cell.m_nCellX = ( int16_t )( CLAMP( entry.m_cluster.x, ( int )( INT16_MIN ), ( int )( INT16_MAX ) ) );
+		cell.m_nCellZ = ( int16_t )( CLAMP( entry.m_cluster.y, ( int )( INT16_MIN ), ( int )( INT16_MAX ) ) );
+		cell.m_nMeshAssetId = UINT16_MAX;
+		cell.m_nLod = ( int16_t )( entry.m_nLevel );
+		cell.m_nFirstInstance = firstInstance;
+		cell.m_nInstanceCount = 1u;
+		cell.m_nRevision = ( uint32_t )( ( uint64_t )( entry.m_nBuildSignature ) & 0xFFFFFFFFull );
+		cell.m_nSettingsRevision = ( uint32_t )( m_nRdPublicationGeneration & 0xFFFFFFFFull );
+		cell.m_nVisibilityLayers = 1u;
+		cell.m_nFlags = T3D_RD_INSTANCE_HLOD;
+		if ( entry.m_nLevel <= m_nMaxShadowLevel ) {
+			cell.m_nFlags |= T3D_RD_INSTANCE_CAST_SHADOWS;
+		}
+		cell.m_fLodBegin = 0.0f;
+		cell.m_fLodEnd = 0.0f;
+		cell.m_fFadeMargin = 0.0f;
+		const AABB package_bounds = entry.m_ackage.is_valid() ? entry.m_ackage->getLocalBounds() : entry.m_localBounds;
+		cell.m_bounds = t3dTransformHlodBounds( transform, package_bounds );
+		snapshot->m_cells.push_back( cell );
+	}
+	return snapshot;
+}
+
 Dictionary Terrain3DHLODStreamer::getStats( void ) const {
 	Dictionary d;
 	int active = 0, desired = 0, failed = 0, retiring = 0;
@@ -684,6 +787,7 @@ Dictionary Terrain3DHLODStreamer::getStats( void ) const {
 	d["transition_overcommit_bytes_last_tick"] = m_nTransitionOvercommitBytesLastTick;
 	d["managed_regions"] = ( int )m_managedRegions.count();
 	d["detail_required_regions"] = ( int )m_detailRequiredRegions.count();
+	d["rd_publication_generation"] = ( int64_t )( m_nRdPublicationGeneration );
 	return d;
 }
 Array Terrain3DHLODStreamer::getDebugEntries( void ) const {

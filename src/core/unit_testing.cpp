@@ -480,6 +480,20 @@ bool t3dRunRdInstanceAbiTests( t3dRdUnitTestState_t &rState ) {
 				offsetof( t3dRdInstanceRecord_t, m_nQuaternion01 ) == 12u &&
 				offsetof( t3dRdInstanceRecord_t, m_nColorRgba8 ) == 28u,
 			"RD regular-instance record remains 32 bytes with fixed packed offsets" );
+	rState.expect( sizeof( t3dRdHlodCullDescriptor_t ) == 48u &&
+				offsetof( t3dRdHlodCullDescriptor_t, m_nVisibilityLayers ) == 32u &&
+				offsetof( t3dRdHlodCullDescriptor_t, m_nCommandIndex ) == 36u &&
+				offsetof( t3dRdHlodCullDescriptor_t, m_nFirstVisible ) == 40u,
+			"RD HLOD cull descriptor pins bounds, visibility, and indirect command offsets" );
+	const uint64_t regular_key_a = t3dRdRegularMeshSourceKey( 4u, 1 );
+	const uint64_t regular_key_b = t3dRdRegularMeshSourceKey( 4u, 2 );
+	const uint64_t hlod_key_a = t3dRdHlodMeshSourceKey( 0u );
+	const uint64_t hlod_key_b = t3dRdHlodMeshSourceKey( 1u );
+	rState.expect( regular_key_a != regular_key_b && hlod_key_a != hlod_key_b && regular_key_a != hlod_key_a &&
+				( regular_key_a & 0xF000000000000000ull ) == 0x1000000000000000ull &&
+				( hlod_key_a & 0xF000000000000000ull ) == 0x2000000000000000ull &&
+				( T3D_RD_INSTANCE_HLOD & T3D_RD_INSTANCE_FADE_MASK ) == 0u,
+			"RD HLOD source and instance namespaces remain disjoint from regular LOD/fade state" );
 	rState.expect( t3dRdPackGodotRgba32ForGpu( 0x11223344u ) == 0x44332211u &&
 				t3dRdPackGodotRgba32ForGpu( 0xFFFFFFFFu ) == 0xFFFFFFFFu,
 			"RD RGBA8 packing converts Godot numeric channel order to GPU byte order" );

@@ -36,6 +36,8 @@ typedef struct t3dRdInstanceDrawPacket_s {
 	uint32_t m_nFlags = 0u;
 	float m_fSortDistanceSq = 0.0f;
 	RenderingDevice::IndexBufferFormat m_indexFormat = RenderingDevice::INDEX_BUFFER_FORMAT_UINT16;
+	AABB m_cullBounds;
+	uint32_t m_nVisibilityLayers = 1u;
 	t3dRdIndexedIndirectCommand_t m_command{};
 } t3dRdInstanceDrawPacket_t;
 
@@ -54,6 +56,10 @@ private:
 	Terrain3DRdMeshCache m_meshCache;
 	t3dRdInstanceViewState_t m_szViewStates[s_nMaxViews]{};
 	RID m_hShader;
+	RID m_hHlodCullShader;
+	RID m_hHlodCullPipeline;
+	RID m_hHlodCullDescriptorBuffer;
+	RID m_hHlodCullUniformSet;
 	RID m_hFrameBuffer;
 	RID m_hInstanceBuffer;
 	RID m_hVisibleIndexBuffer;
@@ -69,6 +75,7 @@ private:
 	uint32_t m_nVisibleCapacityBytes = 0u;
 	uint32_t m_nMaterialCapacityBytes = 0u;
 	uint32_t m_nIndirectCapacityBytes = 0u;
+	uint32_t m_nHlodDescriptorCapacityBytes = 0u;
 	uint64_t m_nUploadedSceneGeneration = 0u;
 	uint64_t m_nUploadedMeshGeneration = 0u;
 	bool m_bDirectDrawDebug = false;
@@ -78,6 +85,7 @@ private:
 	std::vector<t3dRdInstanceDrawPacket_t> m_depthPackets;
 	std::vector<t3dRdInstanceDrawPacket_t> m_shadowPackets;
 	std::vector<t3dRdInstanceMaterialPairBinding_t> m_materialBindings;
+	std::vector<t3dRdHlodCullDescriptor_t> m_hlodDescriptors;
 	PackedByteArray m_frameBytes;
 	PackedByteArray m_instanceBytes;
 	PackedByteArray m_dirtyInstanceBytes;
@@ -85,6 +93,8 @@ private:
 	PackedByteArray m_materialBytes;
 	PackedByteArray m_indirectBytes;
 	PackedByteArray m_pushBytes;
+	PackedByteArray m_hlodDescriptorBytes;
+	PackedByteArray m_hlodCullPushBytes;
 	uint64_t m_nFrames = 0u;
 	uint64_t m_nDraws = 0u;
 	uint64_t m_nVisibleInstances = 0u;
@@ -92,9 +102,12 @@ private:
 	uint64_t m_nSceneUploads = 0u;
 	uint64_t m_nDirtyUploadBytes = 0u;
 	uint64_t m_nDirtyUploadRanges = 0u;
+	uint64_t m_nHlodCullDispatches = 0u;
+	uint64_t m_nHlodCullDescriptors = 0u;
 
 	bool ensureDevice( void );
 	bool ensureShader( const Ref<RDShaderSPIRV> &rShader );
+	bool ensureHlodCullShader( const Ref<RDShaderSPIRV> &rShader );
 	bool ensureBuffer( RID &rRid, uint32_t &rCapacity, uint32_t nRequired, const String &rName,
 			Terrain3DRdContext::ResourceType type, Terrain3DRdContext::MemoryCategory memory );
 	bool ensureBuffers( uint32_t nInstanceBytes, uint32_t nVisibleBytes, uint32_t nMaterialBytes, uint32_t nIndirectBytes );
@@ -108,9 +121,11 @@ private:
 	bool uploadMaterials( void );
 	bool buildPackets( const t3dRdInstanceSceneSnapshot_t &rScene, const Projection &rViewProjection, const Vector3 &rCamera, uint32_t nVisibilityMask );
 	bool uploadVisibility( void );
+	bool uploadHlodDescriptors( void );
+	bool dispatchHlodCull( uint32_t nVisibilityMask );
 	bool ensureViewState( uint32_t nView, const RID &rColor, const RID &rDepth, RenderingDevice::TextureSamples samples );
 	void freeViewState( t3dRdInstanceViewState_t &rState );
-	bool drawView( uint32_t nView, const Projection &rViewProjection, const Vector3 &rCamera );
+	bool drawView( uint32_t nView, const Projection &rViewProjection, const Vector3 &rCamera, uint32_t nVisibilityMask );
 	bool isCellVisible( const t3dRdInstanceCell_t &rCell, const Projection &rViewProjection, const Vector3 &rCamera ) const;
 	void setError( const String &rError );
 
@@ -118,7 +133,7 @@ public:
 	Terrain3DRdInstanceRenderer( void );
 	~Terrain3DRdInstanceRenderer( void );
 
-	bool initialize( const Ref<RDShaderSPIRV> &rShader );
+	bool initialize( const Ref<RDShaderSPIRV> &rShader, const Ref<RDShaderSPIRV> &rHlodCullShader );
 	void shutdown( void );
 	bool render( RenderData *pRenderData,
 			const std::shared_ptr<const t3dRdMeshSourceSnapshot_t> &pMeshes,

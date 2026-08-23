@@ -409,7 +409,7 @@ def rd_batch_d_instance_check() -> bool:
         ("runtime instancer has no MultiMesh/RS creation calls", all(token not in instancer_cpp for token in runtime_multimesh_calls)),
         ("MultiMesh retained only as authoring input", "void Terrain3DInstancer::addMultimesh" in instancer_cpp and "The runtime renderer does not consume this representation" in instancer_h),
         ("persistent instance buffers", all(token in instance_h for token in ("m_hInstanceBuffer", "m_hVisibleIndexBuffer", "m_hMaterialBuffer", "m_hIndirectBuffer"))),
-        ("publication-time visibility/indirect capacity", "packet_capacity" in instance_cpp and "visible_index_capacity" in instance_cpp and "visible_index_capacity += cell.m_nInstanceCount" in instance_cpp and "indirect_bytes" in instance_cpp),
+        ("publication-time visibility/indirect capacity", "packet_capacity" in instance_cpp and "visible_index_capacity" in instance_cpp and "visible_index_capacity +=" in instance_cpp and "cell.m_nInstanceCount" in instance_cpp and "indirect_bytes" in instance_cpp),
         ("dirty instance span detection", "std::memcmp( previous + offset" in instance_cpp and "first_changed" in instance_cpp and "last_changed" in instance_cpp),
         ("dirty instance subrange upload", "buffer_update( m_hInstanceBuffer, first_byte, uploaded_bytes" in instance_cpp and "instance_dirty_upload_ranges" in instance_cpp),
         ("coarse AABB culling", "isCellVisible" in instance_cpp and "m_bounds.get_center()" in instance_cpp and "corners[8]" in instance_cpp),
@@ -450,6 +450,84 @@ def rd_batch_d_instance_check() -> bool:
         print(f"Batch D instance contract: {len(checks) - len(failed)}/{len(checks)} passed")
         return False
     print(f"OK Batch D instance contract: {len(checks)}/{len(checks)} passed")
+    return True
+
+
+def rd_batch_e_hlod_check() -> bool:
+    checks: list[tuple[str, bool]] = []
+    types = (REPO / "src" / "rendering" / "rd" / "terrain_3d_rd_types.h").read_text(encoding="utf-8", errors="ignore")
+    mesh_h = (REPO / "src" / "rendering" / "rd" / "terrain_3d_rd_mesh_cache.h").read_text(encoding="utf-8", errors="ignore")
+    mesh_cpp = (REPO / "src" / "rendering" / "rd" / "terrain_3d_rd_mesh_cache.cpp").read_text(encoding="utf-8", errors="ignore")
+    instance_h = (REPO / "src" / "rendering" / "rd" / "terrain_3d_rd_instance_renderer.h").read_text(encoding="utf-8", errors="ignore")
+    instance_cpp = (REPO / "src" / "rendering" / "rd" / "terrain_3d_rd_instance_renderer.cpp").read_text(encoding="utf-8", errors="ignore")
+    instancer_cpp = (REPO / "src" / "instances" / "terrain_3d_instancer.cpp").read_text(encoding="utf-8", errors="ignore")
+    streamer_h = (REPO / "src" / "hlod" / "terrain_3d_hlod_streamer.h").read_text(encoding="utf-8", errors="ignore")
+    streamer_cpp = (REPO / "src" / "hlod" / "terrain_3d_hlod_streamer.cpp").read_text(encoding="utf-8", errors="ignore")
+    coordinator_h = (REPO / "src" / "rendering" / "rd" / "terrain_3d_render_coordinator.h").read_text(encoding="utf-8", errors="ignore")
+    coordinator_cpp = (REPO / "src" / "rendering" / "rd" / "terrain_3d_render_coordinator.cpp").read_text(encoding="utf-8", errors="ignore")
+    shader_library = (REPO / "src" / "rendering" / "rd" / "terrain_3d_rd_shader_library.cpp").read_text(encoding="utf-8", errors="ignore")
+    shader = (REPO / "project" / "addons" / "terrain_3d" / "rd" / "terrain_hlod_cull.glsl").read_text(encoding="utf-8", errors="ignore")
+
+    hlod_native_calls = (
+        "instance_create(", "instance_set_base(", "instance_set_scenario(",
+        "instance_set_transform(", "instance_set_cast_shadows_setting(", "free_rid(",
+    )
+    checks += [
+        ("HLOD entry owns no native render RID", "RID m_hInstance" not in streamer_h and "m_hInstance" not in streamer_cpp),
+        ("HLOD streamer performs no native instance allocation/submission", all(token not in streamer_cpp for token in hlod_native_calls) and "RenderingServer" not in streamer_cpp),
+        ("HLOD publication has deterministic generation", "m_nRdPublicationGeneration" in streamer_h and "markRdPublicationDirty" in streamer_cpp),
+        ("HLOD mesh source keys use a disjoint stable namespace", "t3dRdHlodMeshSourceKey" in types and "0x2000000000000000ull" in types and "t3dRdHlodMeshSourceKey" in streamer_cpp),
+        ("regular mesh source keys remain disjoint", "0x1000000000000000ull" in types and "t3dRdRegularMeshSourceKey" in instancer_cpp),
+        ("active HLOD packages publish shared mesh sources", "fillRdMeshSources" in streamer_cpp and "t3dRdExternalMeshSource_t" in streamer_cpp and "entry.m_ackage->getMesh()" in streamer_cpp),
+        ("active HLOD packages publish immutable instance snapshot", "buildRdInstanceSnapshot" in streamer_cpp and "T3D_RD_INSTANCE_HLOD" in streamer_cpp and "m_nMeshSourceKey = rdMeshSourceKey" in streamer_cpp),
+        ("HLOD publication uses package-local bounds", "getLocalBounds()" in streamer_cpp and "t3dTransformHlodBounds" in streamer_cpp),
+        ("retiring HLOD remains published until deterministic deactivation", "if ( !entry.m_bActive || entry.m_ackage.is_null()" in streamer_cpp and "m_bRetiring" not in streamer_cpp[streamer_cpp.find("void Terrain3DHLODStreamer::fillRdMeshSources"):streamer_cpp.find("std::shared_ptr<const t3dRdInstanceSceneSnapshot_t>")]),
+        ("CPU HLOD projected-error selection is preserved", "packageAcceptable" in streamer_cpp and "m_fTargetErrorPixels" in streamer_cpp and "m_fHysteresis" in streamer_cpp),
+        ("CPU HLOD residency budgets are preserved", all(token in streamer_cpp for token in ("m_nLoadBudget", "m_nUnloadBudget", "m_nMemoryBudgetMb", "m_nTransitionOvercommitBytesLastTick"))),
+        ("no-hole parent promotion/retirement is preserved", "hasActiveDescendant" in streamer_cpp and "replacementReady" in streamer_cpp and "m_nRetireReadyFrames >= 2" in streamer_cpp),
+        ("shared mesh cache accepts external HLOD sources", "t3dRdExternalMeshSource_t" in mesh_h and "rExternalMeshes" in mesh_cpp),
+        ("HLOD-only mesh publication does not require regular instance assets", "rAssets.is_null() && rExternalMeshes.empty()" in mesh_cpp and "const int mesh_count = rAssets.is_valid() ? rAssets->getMeshCount() : 0" in mesh_cpp),
+        ("HLOD residency churn updates only changed shared-arena spans", "m_lastUploadedSnapshot" in mesh_h and "upload_changed_span" in mesh_cpp and "std::memcmp( current + first, previous + first, 32u )" in mesh_cpp),
+        ("external HLOD source keys participate in fingerprint", "hash = t3dRdHashU64( hash, source.m_nSourceKey )" in mesh_cpp),
+        ("duplicate external source keys are rejected", "Duplicate HLOD mesh source key in RD publication" in mesh_cpp),
+        ("external source keys cannot alias regular/shared mesh sources", "HLOD mesh source key collides with an existing RD mesh source" in mesh_cpp),
+        ("source-key lookup returns current generation handle", "getMeshHandleBySourceKey" in mesh_cpp and "return t3dRdMeshHandle_t{ i, m_nGeneration }" in mesh_cpp),
+        ("mesh resolution retains generation validation", "rHandle.m_nGeneration == m_nGeneration" in mesh_cpp),
+        ("coordinator caches HLOD publication independently", "m_cachedHlodInstanceScene" in coordinator_h and "m_cachedHlodMeshSources" in coordinator_h and "hlod_changed" in coordinator_cpp),
+        ("coordinator merges HLOD into shared mesh cache", "computeSourceFingerprint(\n\t\t\tinstance_assets, m_cachedHlodMeshSources )" in coordinator_cpp and "m_cachedHlodMeshSources," in coordinator_cpp),
+        ("coordinator merges regular and HLOD instance tables with offset", "instance_offset" in coordinator_cpp and "cell.m_nFirstInstance += instance_offset" in coordinator_cpp),
+        ("HLOD uses shared regular-instance renderer", "m_instanceRenderer.initialize( m_shaderLibrary.getInstances(), m_shaderLibrary.getHlodCull() )" in coordinator_cpp and "Terrain3DRdHlodRenderer" not in coordinator_cpp),
+        ("HLOD instance flag is explicit and outside fade mask", "T3D_RD_INSTANCE_HLOD = 1u << 25u" in types and "T3D_RD_INSTANCE_FADE_MASK" in types),
+        ("HLOD cull descriptor ABI is fixed", "sizeof( t3dRdHlodCullDescriptor_t ) == 48u" in types and "offsetof( t3dRdHlodCullDescriptor_t, m_nVisibilityLayers ) == 32u" in types),
+        ("persistent HLOD descriptor resources exist", "m_hHlodCullDescriptorBuffer" in instance_h and "m_hHlodCullUniformSet" in instance_h and "m_nHlodDescriptorCapacityBytes" in instance_h),
+        ("HLOD compute shader is loaded and required", "terrain_hlod_cull.glsl" in shader_library and "m_hlodCull" in shader_library),
+        ("HLOD compute shader has frame/descriptor/indirect bindings", all(token in shader for token in ("binding = 0", "binding = 1", "binding = 2", "HlodCullDescriptor", "IndexedIndirectCommand"))),
+        ("HLOD compute shader has fixed push ABI", "layout(push_constant, std430)" in shader and all(token in shader for token in ("descriptor_count", "visibility_mask", "command_count"))),
+        ("HLOD GPU culling performs 8-corner clip test", "vec4 corners[8]" in shader and shader.count("corners[") >= 9 and "bounds_visible" in shader),
+        ("HLOD GPU visibility uses layer mask", "descriptor.visibility_layers & cull_data.visibility_mask" in shader),
+        ("HLOD GPU visibility writes indirect instance count", "commands[descriptor.command_index].instance_count" in shader),
+        ("regular cells remain CPU culled while HLOD is GPU culled", "if ( !hlod && ( cell.m_nVisibilityLayers & nVisibilityMask ) == 0u )" in instance_cpp and "const bool visible = hlod ?" in instance_cpp),
+        ("HLOD packets remain independently addressable for GPU cull", "if ( !hlod )" in instance_cpp and "m_hlodDescriptors.reserve" in instance_cpp),
+        ("multi-surface HLOD visibility reserves one visible span per surface", "visible_index_capacity += ( uint64_t )( cell.m_nInstanceCount ) * ( uint64_t )( lod->m_nSurfaceCount )" in instance_cpp),
+        ("HLOD descriptor references post-sort indirect command index", "descriptor.m_nCommandIndex = command_index" in instance_cpp and "std::stable_sort( m_drawPackets.begin()" in instance_cpp),
+        ("HLOD cull dispatch updates persistent indirect buffer", "m_hIndirectBuffer" in instance_cpp and "dispatchHlodCull" in instance_cpp and "compute_list_dispatch" in instance_cpp),
+        ("HLOD cull bindings are invalidated when indirect storage grows", "if ( replace_indirect && m_hHlodCullUniformSet.is_valid() )" in instance_cpp and "m_context.freeResource( m_hHlodCullUniformSet )" in instance_cpp),
+        ("HLOD cull inserts compute-to-draw barrier", "compute_list_add_barrier" in instance_cpp and "dispatchHlodCull( nVisibilityMask )" in instance_cpp),
+        ("HLOD cull has no CPU readback or sync", "buffer_get_data" not in instance_cpp[instance_cpp.find("bool Terrain3DRdInstanceRenderer::dispatchHlodCull"):instance_cpp.find("void Terrain3DRdInstanceRenderer::freeViewState")] and ".sync(" not in instance_cpp),
+        ("HLOD shadow policy is published", "entry.m_nLevel <= m_nMaxShadowLevel" in streamer_cpp and "T3D_RD_INSTANCE_CAST_SHADOWS" in streamer_cpp),
+        ("HLOD participates in shared shadow packets", "m_shadowPackets.push_back" in instance_cpp and "shadow.m_cullBounds = cell.m_bounds" in instance_cpp and "shadow.m_nVisibilityLayers = cell.m_nVisibilityLayers" in instance_cpp),
+        ("HLOD imported materials use shared mesh material path", "t3dRdAppendMeshSource" in mesh_cpp and "t3dRdAddMaterial" in mesh_cpp and "rebuildMaterialBindings" in instance_cpp),
+        ("HLOD deactivation releases package and invalidates publication", "entry.m_ackage.unref()" in streamer_cpp and "if ( wasPublished ) markRdPublicationDirty()" in streamer_cpp),
+        ("HLOD renderer exposes cull diagnostics", all(token in instance_cpp for token in ("hlod_gpu_cull_descriptors", "hlod_gpu_cull_dispatches", "hlod_descriptor_capacity_bytes"))),
+    ]
+
+    failed = [label for label, passed in checks if not passed]
+    if failed:
+        for label in failed:
+            print(f"FAIL Batch E HLOD contract: {label}")
+        print(f"Batch E HLOD contract: {len(checks) - len(failed)}/{len(checks)} passed")
+        return False
+    print(f"OK Batch E HLOD contract: {len(checks)}/{len(checks)} passed")
     return True
 
 def iter_scan_files() -> list[Path]:
@@ -959,7 +1037,7 @@ def git_fsck() -> bool:
 
 
 def validate_fast(static_only: bool = False) -> int:
-    checks = [branch_check(), reference_check(), diff_check(), build_contract_check(), rd_shader_abi_check(), rd_batch_c_material_check(), rd_batch_d_instance_check(), audit_symbols(strict_growth=True)]
+    checks = [branch_check(), reference_check(), diff_check(), build_contract_check(), rd_shader_abi_check(), rd_batch_c_material_check(), rd_batch_d_instance_check(), rd_batch_e_hlod_check(), audit_symbols(strict_growth=True)]
     if not static_only:
         checks.append(build_extension("editor"))
     return 0 if all(checks) else 1
@@ -974,6 +1052,7 @@ def validate_full() -> int:
         rd_shader_abi_check(),
         rd_batch_c_material_check(),
         rd_batch_d_instance_check(),
+        rd_batch_e_hlod_check(),
         audit_symbols(strict_growth=True),
         build_extension("editor"),
         godot_headless_import(),
@@ -993,6 +1072,7 @@ def validate_final() -> int:
         rd_shader_abi_check(),
         rd_batch_c_material_check(),
         rd_batch_d_instance_check(),
+        rd_batch_e_hlod_check(),
         audit_symbols(strict_growth=True, final=True),
         build_extension("editor"),
         build_extension("template_release"),

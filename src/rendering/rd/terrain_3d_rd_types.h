@@ -411,6 +411,7 @@ typedef enum t3dRdInstanceFlags_e : uint32_t {
 	T3D_RD_INSTANCE_ALPHA_BLEND = 1u << 6u,
 	T3D_RD_INSTANCE_ALPHA_DEPTH_PREPASS = 1u << 7u,
 	T3D_RD_INSTANCE_FADE_ACTIVE = 1u << 24u,
+	T3D_RD_INSTANCE_HLOD = 1u << 25u,
 	T3D_RD_INSTANCE_FADE_SHIFT = 8u,
 	T3D_RD_INSTANCE_FADE_MASK = 0x00FFFF00u,
 	T3D_RD_INSTANCE_DEPTH_PREPASS_PASS = 1u << 31u,
@@ -419,7 +420,16 @@ typedef enum t3dRdInstanceFlags_e : uint32_t {
 // CPU publication descriptor for one logical resident cell/LOD. The renderer
 // uses the AABB for coarse rejection, then writes visible-instance indices into
 // a single persistent indirection buffer grouped by mesh surface/material.
+EA_FORCE_INLINE constexpr uint64_t t3dRdRegularMeshSourceKey( const uint16_t nAssetId, const int16_t nLod ) {
+	return 0x1000000000000000ull | ( uint64_t )( nAssetId ) | ( ( uint64_t )( ( uint16_t )( nLod ) ) << 16u );
+}
+
+EA_FORCE_INLINE constexpr uint64_t t3dRdHlodMeshSourceKey( const uint32_t nEntryIndex ) {
+	return 0x2000000000000000ull | ( uint64_t )( nEntryIndex + 1u );
+}
+
 typedef struct t3dRdInstanceCell_s {
+	uint64_t m_nMeshSourceKey = 0u;
 	int32_t m_nRegionX = 0;
 	int32_t m_nRegionZ = 0;
 	int16_t m_nCellX = 0;
@@ -438,6 +448,23 @@ typedef struct t3dRdInstanceCell_s {
 	float m_fPadding0 = 0.0f;
 	AABB m_bounds;
 } t3dRdInstanceCell_t;
+
+
+// Batch E HLOD culling descriptor. One descriptor is emitted per HLOD draw
+// packet because each surface owns a distinct indirect command while sharing
+// the package transform/state record. The compute cull pass only mutates the
+// command instance count; geometry/material ownership stays in the shared mesh
+// cache and instance renderer.
+typedef struct alignas( 16 ) t3dRdHlodCullDescriptor_s {
+	float m_szBoundsCenter[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	float m_szBoundsExtent[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	uint32_t m_nVisibilityLayers = 1u;
+	uint32_t m_nCommandIndex = 0u;
+	uint32_t m_nFirstVisible = 0u;
+	uint32_t m_nReserved0 = 0u;
+} t3dRdHlodCullDescriptor_t;
+static_assert( sizeof( t3dRdHlodCullDescriptor_t ) == 48u, "RD HLOD descriptor ABI changed" );
+static_assert( offsetof( t3dRdHlodCullDescriptor_t, m_nVisibilityLayers ) == 32u, "RD HLOD descriptor flags ABI changed" );
 
 // Material subset extracted from imported BaseMaterial3D resources. Texture
 // object IDs are immutable publication keys resolved by the direct-RD mesh

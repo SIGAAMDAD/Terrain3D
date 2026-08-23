@@ -24,7 +24,7 @@ Retain and harden rather than restart:
 - compositor/framebuffer scaffolding;
 - partial diagnostics/accounting.
 
-The branch is still incomplete because generated terrain textures, authored materials, normal instancing, HLOD, native shadows/Forward+ participation, portions of editor rendering, and stale backend APIs remain native/bridged.
+Batches A-E are complete. The remaining clean-break work is the Godot 4.7.1 Forward+ submission bridge and native feature parity, editor/preview and stale API cleanup, then complete cross-system/runtime/performance validation and final packaging.
 
 ## 3. Non-negotiable end-state
 

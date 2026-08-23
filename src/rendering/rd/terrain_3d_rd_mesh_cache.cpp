@@ -247,6 +247,150 @@ bool t3dRdAppendBytes( PackedByteArray &rDestination, const void *const pSource,
 void t3dRdSetError( String *const pError, const String &rError ) {
 	if ( pError ) *pError = rError;
 }
+
+
+bool t3dRdAppendMeshSource( const Ref<Mesh> &rMesh,
+		const uint64_t nSourceKey,
+		const uint16_t nAssetId,
+		const int16_t nLod,
+		const Ref<Material> &rOverrideMaterial,
+		const uint16_t nOverlayMaterial,
+		t3dRdMeshSourceSnapshot_t &rResult,
+		String *const pError ) {
+	if ( rMesh.is_null() || rMesh->get_surface_count() <= 0 ) return true;
+	if ( nSourceKey == 0u ) {
+		t3dRdSetError( pError, "RD static mesh source key is invalid" );
+		return false;
+	}
+	t3dRdMeshSourceLod_t lod_record;
+	lod_record.m_nSourceKey = nSourceKey;
+	lod_record.m_nAssetId = nAssetId;
+	lod_record.m_nLod = nLod;
+	lod_record.m_nFirstSurface = ( uint32_t )( rResult.m_surfaces.size() );
+	lod_record.m_bounds = rMesh->get_aabb();
+	for ( int surface = 0; surface < rMesh->get_surface_count(); ++surface ) {
+		if ( rMesh->_surface_get_primitive_type( surface ) != Mesh::PRIMITIVE_TRIANGLES ) continue;
+		const Array arrays = rMesh->surface_get_arrays( surface );
+		if ( arrays.size() <= Mesh::ARRAY_VERTEX || arrays[Mesh::ARRAY_VERTEX].get_type() != Variant::PACKED_VECTOR3_ARRAY ) continue;
+		const PackedVector3Array positions = arrays[Mesh::ARRAY_VERTEX];
+		if ( positions.is_empty() || positions.size() > ( int64_t )( UINT32_MAX ) ) continue;
+		const PackedVector3Array normals = arrays.size() > Mesh::ARRAY_NORMAL && arrays[Mesh::ARRAY_NORMAL].get_type() == Variant::PACKED_VECTOR3_ARRAY
+				? ( PackedVector3Array )( arrays[Mesh::ARRAY_NORMAL] ) : PackedVector3Array();
+		const PackedFloat32Array tangents = arrays.size() > Mesh::ARRAY_TANGENT && arrays[Mesh::ARRAY_TANGENT].get_type() == Variant::PACKED_FLOAT32_ARRAY
+				? ( PackedFloat32Array )( arrays[Mesh::ARRAY_TANGENT] ) : PackedFloat32Array();
+		const PackedColorArray colors = arrays.size() > Mesh::ARRAY_COLOR && arrays[Mesh::ARRAY_COLOR].get_type() == Variant::PACKED_COLOR_ARRAY
+				? ( PackedColorArray )( arrays[Mesh::ARRAY_COLOR] ) : PackedColorArray();
+		const PackedVector2Array uvs = arrays.size() > Mesh::ARRAY_TEX_UV && arrays[Mesh::ARRAY_TEX_UV].get_type() == Variant::PACKED_VECTOR2_ARRAY
+				? ( PackedVector2Array )( arrays[Mesh::ARRAY_TEX_UV] ) : PackedVector2Array();
+		const PackedVector2Array uv2s = arrays.size() > Mesh::ARRAY_TEX_UV2 && arrays[Mesh::ARRAY_TEX_UV2].get_type() == Variant::PACKED_VECTOR2_ARRAY
+				? ( PackedVector2Array )( arrays[Mesh::ARRAY_TEX_UV2] ) : PackedVector2Array();
+		const PackedInt32Array indices = arrays.size() > Mesh::ARRAY_INDEX && arrays[Mesh::ARRAY_INDEX].get_type() == Variant::PACKED_INT32_ARRAY
+				? ( PackedInt32Array )( arrays[Mesh::ARRAY_INDEX] ) : PackedInt32Array();
+		const uint32_t vertex_count = ( uint32_t )( positions.size() );
+		const uint32_t vertex_offset = ( uint32_t )( rResult.m_vertexBytes.size() / sizeof( t3dRdMeshVertex_t ) );
+		for ( uint32_t vertex = 0u; vertex < vertex_count; ++vertex ) {
+			t3dRdMeshVertex_t packed;
+			const Vector3 position = positions[( int64_t )( vertex )];
+			packed.m_szPosition[0] = ( float )( position.x );
+			packed.m_szPosition[1] = ( float )( position.y );
+			packed.m_szPosition[2] = ( float )( position.z );
+			packed.m_nColorRgba8 = vertex < ( uint32_t )( colors.size() )
+					? t3dRdPackGodotRgba32ForGpu( colors[( int64_t )( vertex )].to_rgba32() ) : 0xffffffffu;
+			const Vector3 normal = vertex < ( uint32_t )( normals.size() ) ? normals[( int64_t )( vertex )] : Vector3( 0, 1, 0 );
+			packed.m_szNormal[0] = t3dRdPackSnorm16( ( float )( normal.x ) );
+			packed.m_szNormal[1] = t3dRdPackSnorm16( ( float )( normal.y ) );
+			packed.m_szNormal[2] = t3dRdPackSnorm16( ( float )( normal.z ) );
+			packed.m_szNormal[3] = 0;
+			if ( tangents.size() >= ( int64_t )( vertex + 1u ) * 4 ) {
+				for ( uint32_t component = 0u; component < 4u; ++component )
+					packed.m_szTangent[component] = t3dRdPackSnorm16( tangents[( int64_t )( vertex * 4u + component )] );
+			}
+			const Vector2 uv = vertex < ( uint32_t )( uvs.size() ) ? uvs[( int64_t )( vertex )] : Vector2();
+			const Vector2 uv2 = vertex < ( uint32_t )( uv2s.size() ) ? uv2s[( int64_t )( vertex )] : Vector2();
+			packed.m_szUv[0] = t3dHalfEncode( ( float )( uv.x ) );
+			packed.m_szUv[1] = t3dHalfEncode( ( float )( uv.y ) );
+			packed.m_szUv2[0] = t3dHalfEncode( ( float )( uv2.x ) );
+			packed.m_szUv2[1] = t3dHalfEncode( ( float )( uv2.y ) );
+			if ( !t3dRdAppendBytes( rResult.m_vertexBytes, &packed, sizeof( packed ) ) ) {
+				t3dRdSetError( pError, "RD static mesh vertex arena exceeds 32-bit address space" );
+				return false;
+			}
+		}
+		uint32_t max_index = vertex_count - 1u;
+		const uint32_t index_count = indices.is_empty() ? vertex_count : ( uint32_t )( indices.size() );
+		if ( ( index_count % 3u ) != 0u ) {
+			t3dRdSetError( pError, "RD static mesh has a non-triangle index count" );
+			return false;
+		}
+		if ( !indices.is_empty() ) {
+			max_index = 0u;
+			for ( int64_t i = 0; i < indices.size(); ++i ) {
+				if ( indices[i] < 0 || ( uint32_t )( indices[i] ) >= vertex_count ) {
+					t3dRdSetError( pError, "RD static mesh has an out-of-range index" );
+					return false;
+				}
+				max_index = MAX( max_index, ( uint32_t )( indices[i] ) );
+			}
+		}
+		t3dRdMeshSourceSurface_t record;
+		record.m_nSourceKey = nSourceKey;
+		record.m_nAssetId = nAssetId;
+		record.m_nLod = nLod;
+		record.m_nSurface = ( uint16_t )( MIN( surface, ( int )( UINT16_MAX ) ) );
+		record.m_nVertexOffset = vertex_offset;
+		record.m_nVertexCount = vertex_count;
+		record.m_nIndexCount = index_count;
+		bool bounds_initialized = false;
+		AABB surface_bounds;
+		for ( int64_t vertex = 0; vertex < positions.size(); ++vertex ) {
+			const Vector3 position = positions[vertex];
+			if ( !bounds_initialized ) {
+				surface_bounds = AABB( position, Vector3() );
+				bounds_initialized = true;
+			} else {
+				surface_bounds.expand_to( position );
+			}
+		}
+		record.m_bounds = surface_bounds;
+		const Ref<Material> material = rOverrideMaterial.is_valid() ? rOverrideMaterial : rMesh->surface_get_material( surface );
+		record.m_nMaterial = t3dRdAddMaterial( material, rResult.m_materials, rResult.m_textures );
+		record.m_nOverlayMaterial = nOverlayMaterial;
+		const uint32_t base_flags = record.m_nMaterial == UINT16_MAX ? 0u : rResult.m_materials[record.m_nMaterial].m_nFlags;
+		const uint32_t overlay_flags = record.m_nOverlayMaterial == UINT16_MAX ? base_flags : rResult.m_materials[record.m_nOverlayMaterial].m_nFlags;
+		const bool base_double = ( base_flags & T3D_RD_INSTANCE_MATERIAL_DOUBLE_SIDED ) != 0u;
+		const bool overlay_double = ( overlay_flags & T3D_RD_INSTANCE_MATERIAL_DOUBLE_SIDED ) != 0u;
+		const bool base_front = ( base_flags & T3D_RD_INSTANCE_MATERIAL_CULL_FRONT ) != 0u;
+		const bool overlay_front = ( overlay_flags & T3D_RD_INSTANCE_MATERIAL_CULL_FRONT ) != 0u;
+		if ( base_double || overlay_double || ( record.m_nOverlayMaterial != UINT16_MAX && base_front != overlay_front ) ) {
+			record.m_nFlags |= T3D_RD_INSTANCE_DOUBLE_SIDED;
+		} else if ( base_front ) {
+			record.m_nFlags |= T3D_RD_INSTANCE_CULL_FRONT;
+		}
+		if ( ( ( base_flags | overlay_flags ) & T3D_RD_INSTANCE_MATERIAL_ALPHA_BLEND ) != 0u )
+			record.m_nFlags |= T3D_RD_INSTANCE_ALPHA_BLEND;
+		if ( ( ( base_flags | overlay_flags ) & T3D_RD_INSTANCE_MATERIAL_ALPHA_DEPTH_PREPASS ) != 0u )
+			record.m_nFlags |= T3D_RD_INSTANCE_ALPHA_DEPTH_PREPASS;
+		if ( max_index <= 65535u ) {
+			record.m_nIndexFormat = ( uint32_t )( RenderingDevice::INDEX_BUFFER_FORMAT_UINT16 );
+			record.m_nIndexOffset = ( uint32_t )( rResult.m_index16Bytes.size() / sizeof( uint16_t ) );
+			for ( uint32_t i = 0u; i < index_count; ++i ) {
+				const uint16_t packed = ( uint16_t )( indices.is_empty() ? i : ( uint32_t )( indices[( int64_t )( i )] ) );
+				if ( !t3dRdAppendBytes( rResult.m_index16Bytes, &packed, sizeof( packed ) ) ) return false;
+			}
+		} else {
+			record.m_nIndexFormat = ( uint32_t )( RenderingDevice::INDEX_BUFFER_FORMAT_UINT32 );
+			record.m_nIndexOffset = ( uint32_t )( rResult.m_index32Bytes.size() / sizeof( uint32_t ) );
+			for ( uint32_t i = 0u; i < index_count; ++i ) {
+				const uint32_t packed = indices.is_empty() ? i : ( uint32_t )( indices[( int64_t )( i )] );
+				if ( !t3dRdAppendBytes( rResult.m_index32Bytes, &packed, sizeof( packed ) ) ) return false;
+			}
+		}
+		rResult.m_surfaces.push_back( record );
+	}
+	lod_record.m_nSurfaceCount = ( uint32_t )( rResult.m_surfaces.size() ) - lod_record.m_nFirstSurface;
+	if ( lod_record.m_nSurfaceCount > 0u ) rResult.m_lods.push_back( lod_record );
+	return true;
+}
 } // namespace
 
 Terrain3DRdMeshCache::Terrain3DRdMeshCache( void ) : m_context( Terrain3DRdContext::getShared() ) {}
@@ -260,12 +404,22 @@ uint32_t Terrain3DRdMeshCache::nextArenaCapacity( const uint32_t nRequiredBytes,
 }
 
 uint64_t Terrain3DRdMeshCache::computeSourceFingerprint( const Ref<Terrain3DAssets> &rAssets ) {
-	if ( rAssets.is_null() ) return 0u;
+	const std::vector<t3dRdExternalMeshSource_t> empty;
+	return computeSourceFingerprint( rAssets, empty );
+}
+
+uint64_t Terrain3DRdMeshCache::computeSourceFingerprint( const Ref<Terrain3DAssets> &rAssets,
+		const std::vector<t3dRdExternalMeshSource_t> &rExternalMeshes ) {
+	if ( rAssets.is_null() && rExternalMeshes.empty() ) return 0u;
 	uint64_t hash = s_nFnvOffset;
-	hash = t3dRdHashU64( hash, ( uint64_t )( rAssets->getMeshCount() ) );
-	for ( int asset_id = 0; asset_id < rAssets->getMeshCount(); ++asset_id ) {
+	const int mesh_count = rAssets.is_valid() ? rAssets->getMeshCount() : 0;
+	hash = t3dRdHashU64( hash, ( uint64_t )( mesh_count ) );
+	for ( int asset_id = 0; asset_id < mesh_count; ++asset_id ) {
 		const Ref<Terrain3DMeshAsset> asset = rAssets->getMeshAsset( asset_id );
-		if ( asset.is_null() ) { hash = t3dRdHashU64( hash, 0u ); continue; }
+		if ( asset.is_null() ) {
+			hash = t3dRdHashU64( hash, 0u );
+			continue;
+		}
 		hash = t3dRdHashU64( hash, ( uint64_t )( asset->isEnabled() ) );
 		hash = t3dRdHashU64( hash, ( uint64_t )( asset->isHighlighted() ) );
 		hash = t3dRdHashU64( hash, ( uint64_t )( asset->getLodCount() ) );
@@ -274,6 +428,7 @@ uint64_t Terrain3DRdMeshCache::computeSourceFingerprint( const Ref<Terrain3DAsse
 		hash = t3dRdHashMaterial( hash, asset->getHighlightMaterial() );
 		for ( int lod = 0; lod < asset->getLodCount(); ++lod ) {
 			const Ref<Mesh> mesh = asset->getMesh( lod );
+			hash = t3dRdHashU64( hash, t3dRdRegularMeshSourceKey( ( uint16_t )( asset_id ), ( int16_t )( lod ) ) );
 			hash = t3dRdHashU64( hash, t3dRdObjectId( mesh.ptr() ) );
 			if ( mesh.is_null() ) continue;
 			hash = t3dRdHashU64( hash, ( uint64_t )( mesh->get_surface_count() ) );
@@ -288,6 +443,22 @@ uint64_t Terrain3DRdMeshCache::computeSourceFingerprint( const Ref<Terrain3DAsse
 			}
 		}
 	}
+	hash = t3dRdHashU64( hash, ( uint64_t )( rExternalMeshes.size() ) );
+	for ( const t3dRdExternalMeshSource_t &source : rExternalMeshes ) {
+		hash = t3dRdHashU64( hash, source.m_nSourceKey );
+		hash = t3dRdHashU64( hash, t3dRdObjectId( source.m_mesh.ptr() ) );
+		if ( source.m_mesh.is_null() ) continue;
+		hash = t3dRdHashU64( hash, ( uint64_t )( source.m_mesh->get_surface_count() ) );
+		const AABB bounds = source.m_mesh->get_aabb();
+		hash = t3dRdHashVector3( hash, bounds.position );
+		hash = t3dRdHashVector3( hash, bounds.size );
+		for ( int surface = 0; surface < source.m_mesh->get_surface_count(); ++surface ) {
+			hash = t3dRdHashU64( hash, ( uint64_t )( source.m_mesh->_surface_get_primitive_type( surface ) ) );
+			hash = t3dRdHashU64( hash, ( uint64_t )( MAX( source.m_mesh->_surface_get_array_len( surface ), 0 ) ) );
+			hash = t3dRdHashU64( hash, ( uint64_t )( MAX( source.m_mesh->_surface_get_array_index_len( surface ), 0 ) ) );
+			hash = t3dRdHashMaterial( hash, source.m_mesh->surface_get_material( surface ) );
+		}
+	}
 	return hash == 0u ? 1u : hash;
 }
 
@@ -296,11 +467,25 @@ std::shared_ptr<const t3dRdMeshSourceSnapshot_t> Terrain3DRdMeshCache::buildSour
 		const uint64_t nFingerprint,
 		const uint64_t nGeneration,
 		String *const pError ) {
-	if ( rAssets.is_null() ) { t3dRdSetError( pError, "Terrain3D assets unavailable" ); return nullptr; }
+	const std::vector<t3dRdExternalMeshSource_t> empty;
+	return buildSourceSnapshot( rAssets, empty, nFingerprint, nGeneration, pError );
+}
+
+std::shared_ptr<const t3dRdMeshSourceSnapshot_t> Terrain3DRdMeshCache::buildSourceSnapshot(
+		const Ref<Terrain3DAssets> &rAssets,
+		const std::vector<t3dRdExternalMeshSource_t> &rExternalMeshes,
+		const uint64_t nFingerprint,
+		const uint64_t nGeneration,
+		String *const pError ) {
+	if ( rAssets.is_null() && rExternalMeshes.empty() ) {
+		t3dRdSetError( pError, "Terrain3D mesh sources unavailable" );
+		return nullptr;
+	}
 	std::shared_ptr<t3dRdMeshSourceSnapshot_t> result = std::make_shared<t3dRdMeshSourceSnapshot_t>();
 	result->m_nFingerprint = nFingerprint;
 	result->m_nGeneration = nGeneration == 0u ? 1u : nGeneration;
-	for ( int asset_id = 0; asset_id < rAssets->getMeshCount(); ++asset_id ) {
+	const int mesh_count = rAssets.is_valid() ? rAssets->getMeshCount() : 0;
+	for ( int asset_id = 0; asset_id < mesh_count; ++asset_id ) {
 		const Ref<Terrain3DMeshAsset> asset = rAssets->getMeshAsset( asset_id );
 		if ( asset.is_null() || !asset->isEnabled() ) continue;
 		const Ref<Material> override_material = asset->isHighlighted() && asset->getHighlightMaterial().is_valid()
@@ -309,108 +494,39 @@ std::shared_ptr<const t3dRdMeshSourceSnapshot_t> Terrain3DRdMeshCache::buildSour
 				: t3dRdAddMaterial( asset->getMaterialOverlay(), result->m_materials, result->m_textures );
 		for ( int lod = 0; lod < asset->getLodCount(); ++lod ) {
 			const Ref<Mesh> mesh = asset->getMesh( lod );
-			if ( mesh.is_null() || mesh->get_surface_count() <= 0 ) continue;
-			t3dRdMeshSourceLod_t lod_record;
-			lod_record.m_nAssetId = ( uint16_t )( asset_id );
-			lod_record.m_nLod = ( int16_t )( lod );
-			lod_record.m_nFirstSurface = ( uint32_t )( result->m_surfaces.size() );
-			lod_record.m_bounds = mesh->get_aabb();
-			for ( int surface = 0; surface < mesh->get_surface_count(); ++surface ) {
-				if ( mesh->_surface_get_primitive_type( surface ) != Mesh::PRIMITIVE_TRIANGLES ) continue;
-				const Array arrays = mesh->surface_get_arrays( surface );
-				if ( arrays.size() <= Mesh::ARRAY_VERTEX || arrays[Mesh::ARRAY_VERTEX].get_type() != Variant::PACKED_VECTOR3_ARRAY ) continue;
-				const PackedVector3Array positions = arrays[Mesh::ARRAY_VERTEX];
-				if ( positions.is_empty() || positions.size() > ( int64_t )( UINT32_MAX ) ) continue;
-				const PackedVector3Array normals = arrays.size() > Mesh::ARRAY_NORMAL && arrays[Mesh::ARRAY_NORMAL].get_type() == Variant::PACKED_VECTOR3_ARRAY
-						? ( PackedVector3Array )( arrays[Mesh::ARRAY_NORMAL] ) : PackedVector3Array();
-				const PackedFloat32Array tangents = arrays.size() > Mesh::ARRAY_TANGENT && arrays[Mesh::ARRAY_TANGENT].get_type() == Variant::PACKED_FLOAT32_ARRAY
-						? ( PackedFloat32Array )( arrays[Mesh::ARRAY_TANGENT] ) : PackedFloat32Array();
-				const PackedColorArray colors = arrays.size() > Mesh::ARRAY_COLOR && arrays[Mesh::ARRAY_COLOR].get_type() == Variant::PACKED_COLOR_ARRAY
-						? ( PackedColorArray )( arrays[Mesh::ARRAY_COLOR] ) : PackedColorArray();
-				const PackedVector2Array uvs = arrays.size() > Mesh::ARRAY_TEX_UV && arrays[Mesh::ARRAY_TEX_UV].get_type() == Variant::PACKED_VECTOR2_ARRAY
-						? ( PackedVector2Array )( arrays[Mesh::ARRAY_TEX_UV] ) : PackedVector2Array();
-				const PackedVector2Array uv2s = arrays.size() > Mesh::ARRAY_TEX_UV2 && arrays[Mesh::ARRAY_TEX_UV2].get_type() == Variant::PACKED_VECTOR2_ARRAY
-						? ( PackedVector2Array )( arrays[Mesh::ARRAY_TEX_UV2] ) : PackedVector2Array();
-				const PackedInt32Array indices = arrays.size() > Mesh::ARRAY_INDEX && arrays[Mesh::ARRAY_INDEX].get_type() == Variant::PACKED_INT32_ARRAY
-						? ( PackedInt32Array )( arrays[Mesh::ARRAY_INDEX] ) : PackedInt32Array();
-				const uint32_t vertex_count = ( uint32_t )( positions.size() );
-				const uint32_t vertex_offset = ( uint32_t )( result->m_vertexBytes.size() / sizeof( t3dRdMeshVertex_t ) );
-				for ( uint32_t vertex = 0u; vertex < vertex_count; ++vertex ) {
-					t3dRdMeshVertex_t packed;
-					const Vector3 position = positions[( int64_t )( vertex )];
-					packed.m_szPosition[0] = ( float )( position.x );
-					packed.m_szPosition[1] = ( float )( position.y );
-					packed.m_szPosition[2] = ( float )( position.z );
-					packed.m_nColorRgba8 = vertex < ( uint32_t )( colors.size() ) ? t3dRdPackGodotRgba32ForGpu( colors[( int64_t )( vertex )].to_rgba32() ) : 0xffffffffu;
-					const Vector3 normal = vertex < ( uint32_t )( normals.size() ) ? normals[( int64_t )( vertex )] : Vector3( 0, 1, 0 );
-					packed.m_szNormal[0] = t3dRdPackSnorm16( ( float )( normal.x ) );
-					packed.m_szNormal[1] = t3dRdPackSnorm16( ( float )( normal.y ) );
-					packed.m_szNormal[2] = t3dRdPackSnorm16( ( float )( normal.z ) );
-					packed.m_szNormal[3] = 0;
-					if ( tangents.size() >= ( int64_t )( vertex + 1u ) * 4 ) {
-						for ( uint32_t component = 0u; component < 4u; ++component )
-							packed.m_szTangent[component] = t3dRdPackSnorm16( tangents[( int64_t )( vertex * 4u + component )] );
-					}
-					const Vector2 uv = vertex < ( uint32_t )( uvs.size() ) ? uvs[( int64_t )( vertex )] : Vector2();
-					const Vector2 uv2 = vertex < ( uint32_t )( uv2s.size() ) ? uv2s[( int64_t )( vertex )] : Vector2();
-					packed.m_szUv[0] = t3dHalfEncode( ( float )( uv.x ) ); packed.m_szUv[1] = t3dHalfEncode( ( float )( uv.y ) );
-					packed.m_szUv2[0] = t3dHalfEncode( ( float )( uv2.x ) ); packed.m_szUv2[1] = t3dHalfEncode( ( float )( uv2.y ) );
-					if ( !t3dRdAppendBytes( result->m_vertexBytes, &packed, sizeof( packed ) ) ) { t3dRdSetError( pError, "Mesh vertex arena exceeds 32-bit RD address space" ); return nullptr; }
-				}
-				uint32_t max_index = vertex_count - 1u;
-				const uint32_t index_count = indices.is_empty() ? vertex_count : ( uint32_t )( indices.size() );
-				if ( ( index_count % 3u ) != 0u ) { t3dRdSetError( pError, "Terrain3D instance mesh has a non-triangle index count" ); return nullptr; }
-				if ( !indices.is_empty() ) {
-					max_index = 0u;
-					for ( int64_t i = 0; i < indices.size(); ++i ) {
-						if ( indices[i] < 0 || ( uint32_t )( indices[i] ) >= vertex_count ) { t3dRdSetError( pError, "Terrain3D instance mesh has an out-of-range index" ); return nullptr; }
-						max_index = MAX( max_index, ( uint32_t )( indices[i] ) );
-					}
-				}
-				t3dRdMeshSourceSurface_t record;
-				record.m_nAssetId = ( uint16_t )( asset_id ); record.m_nLod = ( int16_t )( lod ); record.m_nSurface = ( uint16_t )( surface );
-				record.m_nVertexOffset = vertex_offset; record.m_nVertexCount = vertex_count; record.m_nIndexCount = index_count;
-				bool bounds_initialized = false;
-				AABB surface_bounds;
-				for ( int64_t vertex = 0; vertex < positions.size(); ++vertex ) {
-					const Vector3 position = positions[vertex];
-					if ( !bounds_initialized ) { surface_bounds = AABB( position, Vector3() ); bounds_initialized = true; }
-					else surface_bounds.expand_to( position );
-				}
-				record.m_bounds = surface_bounds;
-				const Ref<Material> material = override_material.is_valid() ? override_material : mesh->surface_get_material( surface );
-				record.m_nMaterial = t3dRdAddMaterial( material, result->m_materials, result->m_textures ); record.m_nOverlayMaterial = overlay_material;
-				const uint32_t base_flags = record.m_nMaterial == UINT16_MAX ? 0u : result->m_materials[record.m_nMaterial].m_nFlags;
-				const uint32_t overlay_flags = record.m_nOverlayMaterial == UINT16_MAX ? base_flags : result->m_materials[record.m_nOverlayMaterial].m_nFlags;
-				const bool base_double = ( base_flags & T3D_RD_INSTANCE_MATERIAL_DOUBLE_SIDED ) != 0u;
-				const bool overlay_double = ( overlay_flags & T3D_RD_INSTANCE_MATERIAL_DOUBLE_SIDED ) != 0u;
-				const bool base_front = ( base_flags & T3D_RD_INSTANCE_MATERIAL_CULL_FRONT ) != 0u;
-				const bool overlay_front = ( overlay_flags & T3D_RD_INSTANCE_MATERIAL_CULL_FRONT ) != 0u;
-				if ( base_double || overlay_double || ( record.m_nOverlayMaterial != UINT16_MAX && base_front != overlay_front ) ) {
-					record.m_nFlags |= T3D_RD_INSTANCE_DOUBLE_SIDED;
-				} else if ( base_front ) {
-					record.m_nFlags |= T3D_RD_INSTANCE_CULL_FRONT;
-				}
-				if ( ( ( base_flags | overlay_flags ) & T3D_RD_INSTANCE_MATERIAL_ALPHA_BLEND ) != 0u ) {
-					record.m_nFlags |= T3D_RD_INSTANCE_ALPHA_BLEND;
-				}
-				if ( ( ( base_flags | overlay_flags ) & T3D_RD_INSTANCE_MATERIAL_ALPHA_DEPTH_PREPASS ) != 0u ) {
-					record.m_nFlags |= T3D_RD_INSTANCE_ALPHA_DEPTH_PREPASS;
-				}
-				if ( max_index <= 65535u ) {
-					record.m_nIndexFormat = ( uint32_t )( RenderingDevice::INDEX_BUFFER_FORMAT_UINT16 );
-					record.m_nIndexOffset = ( uint32_t )( result->m_index16Bytes.size() / sizeof( uint16_t ) );
-					for ( uint32_t i = 0u; i < index_count; ++i ) { const uint16_t packed = ( uint16_t )( indices.is_empty() ? i : ( uint32_t )( indices[( int64_t )( i )] ) ); if ( !t3dRdAppendBytes( result->m_index16Bytes, &packed, sizeof( packed ) ) ) return nullptr; }
-				} else {
-					record.m_nIndexFormat = ( uint32_t )( RenderingDevice::INDEX_BUFFER_FORMAT_UINT32 );
-					record.m_nIndexOffset = ( uint32_t )( result->m_index32Bytes.size() / sizeof( uint32_t ) );
-					for ( uint32_t i = 0u; i < index_count; ++i ) { const uint32_t packed = indices.is_empty() ? i : ( uint32_t )( indices[( int64_t )( i )] ); if ( !t3dRdAppendBytes( result->m_index32Bytes, &packed, sizeof( packed ) ) ) return nullptr; }
-				}
-				result->m_surfaces.push_back( record );
-			}
-			lod_record.m_nSurfaceCount = ( uint32_t )( result->m_surfaces.size() ) - lod_record.m_nFirstSurface;
-			if ( lod_record.m_nSurfaceCount > 0u ) result->m_lods.push_back( lod_record );
+			if ( !t3dRdAppendMeshSource( mesh,
+						t3dRdRegularMeshSourceKey( ( uint16_t )( asset_id ), ( int16_t )( lod ) ),
+						( uint16_t )( asset_id ),
+						( int16_t )( lod ),
+						override_material,
+						overlay_material,
+						*result,
+						pError ) ) return nullptr;
 		}
+	}
+	std::vector<uint64_t> external_keys;
+	external_keys.reserve( rExternalMeshes.size() );
+	for ( const t3dRdExternalMeshSource_t &source : rExternalMeshes ) {
+		if ( source.m_nSourceKey == 0u || source.m_mesh.is_null() ) continue;
+		if ( std::find( external_keys.begin(), external_keys.end(), source.m_nSourceKey ) != external_keys.end() ) {
+			t3dRdSetError( pError, "Duplicate HLOD mesh source key in RD publication" );
+			return nullptr;
+		}
+		for ( const t3dRdMeshSourceLod_t &existing : result->m_lods ) {
+			if ( existing.m_nSourceKey == source.m_nSourceKey ) {
+				t3dRdSetError( pError, "HLOD mesh source key collides with an existing RD mesh source" );
+				return nullptr;
+			}
+		}
+		external_keys.push_back( source.m_nSourceKey );
+		if ( !t3dRdAppendMeshSource( source.m_mesh,
+					source.m_nSourceKey,
+					UINT16_MAX,
+					0,
+					Ref<Material>(),
+					UINT16_MAX,
+					*result,
+					pError ) ) return nullptr;
 	}
 	if ( pError ) *pError = String();
 	return result;
@@ -523,22 +639,79 @@ bool Terrain3DRdMeshCache::upload( const std::shared_ptr<const t3dRdMeshSourceSn
 	if ( pSnapshot->m_nGeneration == m_nSourceGeneration && isReady() ) return true;
 	if ( !m_context.initialize() || !m_context.validateDevice() || !ensureVertexFormat() ) return false;
 	const bool grow_vertex = !m_hVertexArena.is_valid() || m_nVertexCapacityBytes < ( uint32_t )( pSnapshot->m_vertexBytes.size() );
-	const bool grow_i16 = !pSnapshot->m_index16Bytes.is_empty() && ( !m_hIndex16Arena.is_valid() || m_nIndex16CapacityBytes < ( uint32_t )( pSnapshot->m_index16Bytes.size() ) );
-	const bool grow_i32 = !pSnapshot->m_index32Bytes.is_empty() && ( !m_hIndex32Arena.is_valid() || m_nIndex32CapacityBytes < ( uint32_t )( pSnapshot->m_index32Bytes.size() ) );
+	const bool grow_i16 = !pSnapshot->m_index16Bytes.is_empty() &&
+			( !m_hIndex16Arena.is_valid() || m_nIndex16CapacityBytes < ( uint32_t )( pSnapshot->m_index16Bytes.size() ) );
+	const bool grow_i32 = !pSnapshot->m_index32Bytes.is_empty() &&
+			( !m_hIndex32Arena.is_valid() || m_nIndex32CapacityBytes < ( uint32_t )( pSnapshot->m_index32Bytes.size() ) );
 	m_context.beginResourceRebuild();
-	if ( !syncTextures( pSnapshot ) ) { m_context.endResourceRebuild(); return false; }
-	const bool arenas_ok = ensureArena( m_hVertexArena, m_nVertexCapacityBytes, ( uint32_t )( pSnapshot->m_vertexBytes.size() ), "T3D.Instance.MeshVertexArena", Terrain3DRdContext::RESOURCE_VERTEX_BUFFER, Terrain3DRdContext::MEMORY_MESH_VERTEX_ARENA ) &&
-			ensureArena( m_hIndex16Arena, m_nIndex16CapacityBytes, ( uint32_t )( pSnapshot->m_index16Bytes.size() ), "T3D.Instance.MeshIndexArena16", Terrain3DRdContext::RESOURCE_INDEX_BUFFER, Terrain3DRdContext::MEMORY_MESH_INDEX_ARENA ) &&
-			ensureArena( m_hIndex32Arena, m_nIndex32CapacityBytes, ( uint32_t )( pSnapshot->m_index32Bytes.size() ), "T3D.Instance.MeshIndexArena32", Terrain3DRdContext::RESOURCE_INDEX_BUFFER, Terrain3DRdContext::MEMORY_MESH_INDEX_ARENA );
-	if ( !arenas_ok || ( ( grow_vertex || grow_i16 || grow_i32 || !m_hVertexArray.is_valid() ) && !rebuildArrays() ) ) { m_context.endResourceRebuild(); return false; }
+	if ( !syncTextures( pSnapshot ) ) {
+		m_context.endResourceRebuild();
+		return false;
+	}
+	const bool arenas_ok = ensureArena( m_hVertexArena, m_nVertexCapacityBytes,
+			( uint32_t )( pSnapshot->m_vertexBytes.size() ), "T3D.Instance.MeshVertexArena",
+			Terrain3DRdContext::RESOURCE_VERTEX_BUFFER, Terrain3DRdContext::MEMORY_MESH_VERTEX_ARENA ) &&
+			ensureArena( m_hIndex16Arena, m_nIndex16CapacityBytes,
+					( uint32_t )( pSnapshot->m_index16Bytes.size() ), "T3D.Instance.MeshIndexArena16",
+					Terrain3DRdContext::RESOURCE_INDEX_BUFFER, Terrain3DRdContext::MEMORY_MESH_INDEX_ARENA ) &&
+			ensureArena( m_hIndex32Arena, m_nIndex32CapacityBytes,
+					( uint32_t )( pSnapshot->m_index32Bytes.size() ), "T3D.Instance.MeshIndexArena32",
+					Terrain3DRdContext::RESOURCE_INDEX_BUFFER, Terrain3DRdContext::MEMORY_MESH_INDEX_ARENA );
+	if ( !arenas_ok || ( ( grow_vertex || grow_i16 || grow_i32 || !m_hVertexArray.is_valid() ) && !rebuildArrays() ) ) {
+		m_context.endResourceRebuild();
+		return false;
+	}
+
 	RenderingDevice *const rd = m_context.getDevice();
-	if ( !pSnapshot->m_vertexBytes.is_empty() && rd->buffer_update( m_hVertexArena, 0u, ( uint32_t )( pSnapshot->m_vertexBytes.size() ), pSnapshot->m_vertexBytes ) != OK ) { m_context.endResourceRebuild(); return false; }
-	if ( !pSnapshot->m_index16Bytes.is_empty() && rd->buffer_update( m_hIndex16Arena, 0u, ( uint32_t )( pSnapshot->m_index16Bytes.size() ), pSnapshot->m_index16Bytes ) != OK ) { m_context.endResourceRebuild(); return false; }
-	if ( !pSnapshot->m_index32Bytes.is_empty() && rd->buffer_update( m_hIndex32Arena, 0u, ( uint32_t )( pSnapshot->m_index32Bytes.size() ), pSnapshot->m_index32Bytes ) != OK ) { m_context.endResourceRebuild(); return false; }
-	m_context.recordBufferUpdate( pSnapshot->m_vertexBytes.size() + pSnapshot->m_index16Bytes.size() + pSnapshot->m_index32Bytes.size() );
+	uint64_t uploaded_bytes = 0u;
+	auto upload_changed_span = [&]( const RID &rBuffer,
+			const PackedByteArray &rCurrent,
+			const PackedByteArray *pPrevious,
+			const bool bForceFull ) -> bool {
+		const uint32_t current_size = ( uint32_t )( rCurrent.size() );
+		if ( current_size == 0u ) return true;
+		uint32_t first = 0u;
+		uint32_t last = current_size;
+		if ( !bForceFull && pPrevious ) {
+			const uint32_t previous_size = ( uint32_t )( pPrevious->size() );
+			const uint32_t common = MIN( current_size, previous_size );
+			const uint8_t *const current = rCurrent.ptr();
+			const uint8_t *const previous = pPrevious->ptr();
+			while ( first + 32u <= common && std::memcmp( current + first, previous + first, 32u ) == 0 ) first += 32u;
+			while ( first < common && current[first] == previous[first] ) ++first;
+			if ( first == current_size ) return true;
+			while ( last > first && last <= previous_size && current[last - 1u] == previous[last - 1u] ) --last;
+		}
+		if ( last <= first ) return true;
+		const uint32_t bytes = last - first;
+		PackedByteArray dirty;
+		dirty.resize( bytes );
+		std::memcpy( dirty.ptrw(), rCurrent.ptr() + first, bytes );
+		if ( rd->buffer_update( rBuffer, first, bytes, dirty ) != OK ) return false;
+		uploaded_bytes += bytes;
+		return true;
+	};
+
+	const t3dRdMeshSourceSnapshot_t *const previous = m_lastUploadedSnapshot.get();
+	if ( !upload_changed_span( m_hVertexArena, pSnapshot->m_vertexBytes,
+			previous ? &previous->m_vertexBytes : nullptr, grow_vertex || !previous ) ||
+			!upload_changed_span( m_hIndex16Arena, pSnapshot->m_index16Bytes,
+					previous ? &previous->m_index16Bytes : nullptr, grow_i16 || !previous ) ||
+			!upload_changed_span( m_hIndex32Arena, pSnapshot->m_index32Bytes,
+					previous ? &previous->m_index32Bytes : nullptr, grow_i32 || !previous ) ) {
+		m_context.endResourceRebuild();
+		return false;
+	}
+	m_context.recordBufferUpdate( uploaded_bytes );
 	m_context.endResourceRebuild();
-	m_nVertexUsedBytes = ( uint32_t )( pSnapshot->m_vertexBytes.size() ); m_nIndex16UsedBytes = ( uint32_t )( pSnapshot->m_index16Bytes.size() ); m_nIndex32UsedBytes = ( uint32_t )( pSnapshot->m_index32Bytes.size() );
-	m_surfaces = pSnapshot->m_surfaces; m_lods = pSnapshot->m_lods; m_materials = pSnapshot->m_materials; m_nSourceGeneration = pSnapshot->m_nGeneration;
+	m_nVertexUsedBytes = ( uint32_t )( pSnapshot->m_vertexBytes.size() );
+	m_nIndex16UsedBytes = ( uint32_t )( pSnapshot->m_index16Bytes.size() );
+	m_nIndex32UsedBytes = ( uint32_t )( pSnapshot->m_index32Bytes.size() );
+	m_surfaces = pSnapshot->m_surfaces;
+	m_lods = pSnapshot->m_lods;
+	m_materials = pSnapshot->m_materials;
+	m_lastUploadedSnapshot = pSnapshot;
+	m_nSourceGeneration = pSnapshot->m_nGeneration;
 	if ( ++m_nGeneration == 0u ) m_nGeneration = 1u;
 	return true;
 }
@@ -546,11 +719,16 @@ bool Terrain3DRdMeshCache::upload( const std::shared_ptr<const t3dRdMeshSourceSn
 void Terrain3DRdMeshCache::shutdown( void ) {
 	discardTextures();
 	discardArrays(); m_context.freeResource( m_hVertexArena, m_nVertexCapacityBytes ); m_context.freeResource( m_hIndex16Arena, m_nIndex16CapacityBytes ); m_context.freeResource( m_hIndex32Arena, m_nIndex32CapacityBytes ); m_context.releaseVertexFormat( m_nVertexFormat );
-	m_nVertexCapacityBytes = m_nIndex16CapacityBytes = m_nIndex32CapacityBytes = 0u; m_nVertexUsedBytes = m_nIndex16UsedBytes = m_nIndex32UsedBytes = 0u; m_nGeneration = 0u; m_nSourceGeneration = 0u; m_surfaces.clear(); m_lods.clear(); m_materials.clear();
+	m_nVertexCapacityBytes = m_nIndex16CapacityBytes = m_nIndex32CapacityBytes = 0u; m_nVertexUsedBytes = m_nIndex16UsedBytes = m_nIndex32UsedBytes = 0u; m_nGeneration = 0u; m_nSourceGeneration = 0u; m_surfaces.clear(); m_lods.clear(); m_materials.clear(); m_lastUploadedSnapshot.reset();
 }
 
 t3dRdMeshHandle_t Terrain3DRdMeshCache::getMeshHandle( const uint16_t nAssetId, const int nLod ) const {
-	for ( uint32_t i = 0u; i < ( uint32_t )( m_lods.size() ); ++i ) if ( m_lods[i].m_nAssetId == nAssetId && m_lods[i].m_nLod == nLod ) return t3dRdMeshHandle_t{ i, m_nGeneration };
+	return getMeshHandleBySourceKey( t3dRdRegularMeshSourceKey( nAssetId, ( int16_t )( nLod ) ) );
+}
+
+t3dRdMeshHandle_t Terrain3DRdMeshCache::getMeshHandleBySourceKey( const uint64_t nSourceKey ) const {
+	for ( uint32_t i = 0u; i < ( uint32_t )( m_lods.size() ); ++i )
+		if ( m_lods[i].m_nSourceKey == nSourceKey ) return t3dRdMeshHandle_t{ i, m_nGeneration };
 	return t3dRdMeshHandle_t{};
 }
 const t3dRdMeshSourceLod_t *Terrain3DRdMeshCache::resolveMesh( const t3dRdMeshHandle_t &rHandle ) const { return rHandle.m_nGeneration == m_nGeneration && rHandle.m_nSlot < m_lods.size() ? &m_lods[rHandle.m_nSlot] : nullptr; }

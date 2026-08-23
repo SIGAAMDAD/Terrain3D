@@ -5,6 +5,7 @@
 #include "assets/terrain_3d_assets.h"
 #include "core/logger.h"
 #include "instances/terrain_3d_instancer.h"
+#include "hlod/terrain_3d_hlod_streamer.h"
 #include "rendering/terrain_3d_material.h"
 #include "terrain_3d.h"
 
@@ -675,24 +676,74 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 	snapshot.m_nMaterialTextureGeneration = m_nMaterialTextureGeneration;
 
 	const Ref<Terrain3DAssets> instance_assets = m_pTerrain->getAssets();
-	const uint64_t mesh_fingerprint = Terrain3DRdMeshCache::computeSourceFingerprint( instance_assets );
+	Terrain3DHLODStreamer *const hlod_streamer = m_pTerrain->getHlodStreamer();
+	const uint64_t hlod_generation = hlod_streamer ? hlod_streamer->getRdPublicationGeneration() : 0u;
+	const bool hlod_changed = !m_cachedHlodInstanceScene || hlod_generation != m_nHlodSceneGeneration;
+	if ( hlod_changed ) {
+		m_cachedHlodMeshSources.clear();
+		if ( hlod_streamer ) {
+			hlod_streamer->fillRdMeshSources( m_cachedHlodMeshSources );
+			m_cachedHlodInstanceScene = hlod_streamer->buildRdInstanceSnapshot();
+		} else {
+			m_cachedHlodInstanceScene = std::make_shared<t3dRdInstanceSceneSnapshot_t>();
+		}
+		m_nHlodSceneGeneration = hlod_generation;
+	}
+
+	const uint64_t mesh_fingerprint = Terrain3DRdMeshCache::computeSourceFingerprint(
+			instance_assets, m_cachedHlodMeshSources );
 	if ( !m_cachedInstanceMeshes || mesh_fingerprint != m_nInstanceMeshFingerprint ) {
 		m_nInstanceMeshGeneration = advanceGeneration( m_nInstanceMeshGeneration );
 		String mesh_error;
 		m_cachedInstanceMeshes = Terrain3DRdMeshCache::buildSourceSnapshot(
-				instance_assets, mesh_fingerprint, m_nInstanceMeshGeneration, &mesh_error );
+				instance_assets,
+				m_cachedHlodMeshSources,
+				mesh_fingerprint,
+				m_nInstanceMeshGeneration,
+				&mesh_error );
 		if ( !m_cachedInstanceMeshes ) {
 			std::lock_guard<std::mutex> lock( m_diagnosticsMutex );
-			m_initializationError = "Failed to publish RD instance meshes: " + mesh_error;
+			m_initializationError = "Failed to publish RD instance/HLOD meshes: " + mesh_error;
 			return;
 		}
 		m_nInstanceMeshFingerprint = mesh_fingerprint;
 	}
+
 	Terrain3DInstancer *const instancer = m_pTerrain->getInstancer();
 	const uint64_t instance_generation = instancer ? instancer->getRdPublicationGeneration() : 0u;
-	if ( !m_cachedInstanceScene || instance_generation != m_nInstanceSceneGeneration ) {
-		m_cachedInstanceScene = instancer ? instancer->buildRdInstanceSnapshot() : std::make_shared<t3dRdInstanceSceneSnapshot_t>();
+	const bool regular_changed = !m_cachedRegularInstanceScene || instance_generation != m_nInstanceSceneGeneration;
+	if ( regular_changed ) {
+		m_cachedRegularInstanceScene = instancer ? instancer->buildRdInstanceSnapshot()
+				: std::make_shared<t3dRdInstanceSceneSnapshot_t>();
 		m_nInstanceSceneGeneration = instance_generation;
+	}
+	if ( !m_cachedInstanceScene || regular_changed || hlod_changed ) {
+		std::shared_ptr<t3dRdInstanceSceneSnapshot_t> combined = std::make_shared<t3dRdInstanceSceneSnapshot_t>();
+		m_nCombinedInstanceSceneGeneration = advanceGeneration( m_nCombinedInstanceSceneGeneration );
+		combined->m_nGeneration = m_nCombinedInstanceSceneGeneration;
+		const size_t regular_instance_count = m_cachedRegularInstanceScene ? m_cachedRegularInstanceScene->m_instances.size() : 0u;
+		const size_t hlod_instance_count = m_cachedHlodInstanceScene ? m_cachedHlodInstanceScene->m_instances.size() : 0u;
+		const size_t regular_cell_count = m_cachedRegularInstanceScene ? m_cachedRegularInstanceScene->m_cells.size() : 0u;
+		const size_t hlod_cell_count = m_cachedHlodInstanceScene ? m_cachedHlodInstanceScene->m_cells.size() : 0u;
+		combined->m_instances.reserve( regular_instance_count + hlod_instance_count );
+		combined->m_cells.reserve( regular_cell_count + hlod_cell_count );
+		if ( m_cachedRegularInstanceScene ) {
+			combined->m_instances.insert( combined->m_instances.end(),
+					m_cachedRegularInstanceScene->m_instances.begin(), m_cachedRegularInstanceScene->m_instances.end() );
+			combined->m_cells.insert( combined->m_cells.end(),
+					m_cachedRegularInstanceScene->m_cells.begin(), m_cachedRegularInstanceScene->m_cells.end() );
+		}
+		if ( m_cachedHlodInstanceScene ) {
+			const uint32_t instance_offset = ( uint32_t )( combined->m_instances.size() );
+			combined->m_instances.insert( combined->m_instances.end(),
+					m_cachedHlodInstanceScene->m_instances.begin(), m_cachedHlodInstanceScene->m_instances.end() );
+			for ( const t3dRdInstanceCell_t &source_cell : m_cachedHlodInstanceScene->m_cells ) {
+				t3dRdInstanceCell_t cell = source_cell;
+				cell.m_nFirstInstance += instance_offset;
+				combined->m_cells.push_back( cell );
+			}
+		}
+		m_cachedInstanceScene = combined;
 	}
 	publication.m_instanceMeshes = m_cachedInstanceMeshes;
 	publication.m_instanceScene = m_cachedInstanceScene;
@@ -875,7 +926,7 @@ bool Terrain3DRenderCoordinator::initializeRendererOnRenderThread( void ) {
 	const bool ready = m_shaderLibrary.isReady() && m_renderer.initialize( m_shaderLibrary.getNear(),
 			m_shaderLibrary.getMiddle(),
 			m_shaderLibrary.getFar(),
-			m_shaderLibrary.getCull() ) && m_instanceRenderer.initialize( m_shaderLibrary.getInstances() );
+			m_shaderLibrary.getCull() ) && m_instanceRenderer.initialize( m_shaderLibrary.getInstances(), m_shaderLibrary.getHlodCull() );
 	m_bRendererInitialized.store( ready, std::memory_order_release );
 	m_bRendererFailed.store( false, std::memory_order_release );
 	if ( !ready ) {
@@ -957,10 +1008,15 @@ void Terrain3DRenderCoordinator::shutdown( void ) {
 	m_nEditorBrushSourceId = 0u;
 	m_shaderLibrary.clear();
 	m_cachedInstanceMeshes.reset();
+	m_cachedRegularInstanceScene.reset();
+	m_cachedHlodInstanceScene.reset();
 	m_cachedInstanceScene.reset();
+	m_cachedHlodMeshSources.clear();
 	m_nInstanceMeshFingerprint = 0u;
 	m_nInstanceMeshGeneration = 0u;
 	m_nInstanceSceneGeneration = 0u;
+	m_nHlodSceneGeneration = 0u;
+	m_nCombinedInstanceSceneGeneration = 0u;
 	resetSnapshotPublication();
 	m_pTerrain = nullptr;
 }
