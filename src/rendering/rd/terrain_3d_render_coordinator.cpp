@@ -6,6 +6,7 @@
 #include "core/logger.h"
 #include "instances/terrain_3d_instancer.h"
 #include "hlod/terrain_3d_hlod_streamer.h"
+#include "lighting/terrain_3d_region_lighting.h"
 #include "rendering/terrain_3d_material.h"
 #include "rendering/rd/terrain_3d_rd_forward_plus_bridge.h"
 #include "terrain_3d.h"
@@ -602,24 +603,63 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 	Terrain3DData *const data = m_pTerrain->getData();
 	const Ref<Terrain3DAssets> assets = m_pTerrain->getAssets();
 	const uint64_t region_topology_generation = data->getRegionTopologyGenerationInternal();
-	PackedByteArray region_bytes;
-	if ( !m_bRegionMapInitialized || region_topology_generation != m_nRegionTopologyGeneration ) {
-		const PackedInt32Array region_map = data->getRegionMap();
-		const PackedInt32Array logical_region_map = data->getLogicalRegionMap();
-		if ( region_map.size() != logical_region_map.size() ) {
-			LOG( ERROR, "Physical/logical region map sizes diverged" );
-			return;
+	const PackedInt32Array region_map = data->getRegionMap();
+	const PackedInt32Array logical_region_map = data->getLogicalRegionMap();
+	if ( region_map.size() != logical_region_map.size() ) {
+		LOG( ERROR, "Physical/logical region map sizes diverged" );
+		return;
+	}
+	const int region_map_size = data->getRegionMapSizeInternal();
+	const int region_map_half = region_map_size / 2;
+	uint64_t region_lighting_signature = 1469598103934665603ull;
+	for ( int64_t i = 0; i < logical_region_map.size(); ++i ) {
+		if ( logical_region_map[i] == 0 ) continue;
+		const Vector2i location( ( int )( i % region_map_size ) - region_map_half,
+				( int )( i / region_map_size ) - region_map_half );
+		Terrain3DRegion *const pRegion = data->getRegionPtr( location );
+		uint64_t value = ( uint64_t )( ( uint32_t )( location.x ) ) |
+				( ( uint64_t )( ( uint32_t )( location.y ) ) << 32u );
+		if ( pRegion && !pRegion->isDeleted() ) {
+			const Ref<Terrain3DRegionLighting> lighting = pRegion->getLighting();
+			if ( lighting.is_valid() ) {
+				value ^= ( uint64_t )( CLAMP( lighting->getShadowmaskMode(), 0, 2 ) + 1 ) << 8u;
+				value ^= ( uint64_t )( lighting->hasTerrainShadowMask() ? 1u : 0u ) << 16u;
+				value ^= ( uint64_t )( lighting->getBakeSignature() );
+			}
 		}
+		region_lighting_signature ^= value;
+		region_lighting_signature *= 1099511628211ull;
+	}
+	const bool bRegionLightingChanged = !m_bRegionMapInitialized || region_lighting_signature != m_nRegionLightingSignature;
+	if ( bRegionLightingChanged && !data->refreshTerrainShadowMasksInternal() ) {
+		LOG( ERROR, "Unable to refresh Terrain3D regional shadowmask residency after lighting change" );
+		return;
+	}
+	PackedByteArray region_bytes;
+	if ( !m_bRegionMapInitialized || region_topology_generation != m_nRegionTopologyGeneration || bRegionLightingChanged ) {
 		region_bytes.resize( region_map.size() * ( int64_t )( sizeof( uint32_t ) ) );
 		uint8_t *const pPackedRegionMap = region_bytes.ptrw();
 		for ( int64_t i = 0; i < region_map.size(); ++i ) {
 			const uint32_t nPhysicalLayer = ( uint32_t )( CLAMP( region_map[i], 0, 0xFFFF ) );
 			const uint32_t nLogicalPresent = logical_region_map[i] != 0 ? 0x80000000u : 0u;
-			const uint32_t nPacked = nPhysicalLayer | nLogicalPresent;
+			uint32_t nShadowmaskMode = 0u;
+			if ( nLogicalPresent != 0u ) {
+				const Vector2i location( ( int )( i % region_map_size ) - region_map_half,
+						( int )( i / region_map_size ) - region_map_half );
+				Terrain3DRegion *const pRegion = data->getRegionPtr( location );
+				if ( pRegion && !pRegion->isDeleted() ) {
+					const Ref<Terrain3DRegionLighting> lighting = pRegion->getLighting();
+					if ( lighting.is_valid() && lighting->hasTerrainShadowMask() ) {
+						nShadowmaskMode = ( uint32_t )( CLAMP( lighting->getShadowmaskMode(), 0, 2 ) );
+					}
+				}
+			}
+			const uint32_t nPacked = nPhysicalLayer | ( nShadowmaskMode << 16u ) | nLogicalPresent;
 			std::memcpy( pPackedRegionMap + i * ( int64_t )( sizeof( uint32_t ) ), &nPacked, sizeof( nPacked ) );
 		}
 		m_regionMapBytes = region_bytes;
 		m_nRegionTopologyGeneration = region_topology_generation;
+		m_nRegionLightingSignature = region_lighting_signature;
 		m_nRegionMapGeneration = advanceGeneration( m_nRegionMapGeneration );
 		m_bRegionMapInitialized = true;
 	}
@@ -644,6 +684,7 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 	resources.m_hControlTextureRd = data->getControlMapsRid();
 	resources.m_hColorTextureRd = data->getColorMapsRid();
 	resources.m_hMiddleCompositeTextureRd = data->getMiddleCompositeMapsRid();
+	resources.m_hTerrainShadowMaskTextureRd = data->getTerrainShadowMasksRid();
 	resources.m_hMiddleHeightTextureRd = data->getMiddleHeightMapsRid();
 	resources.m_hMiddleHeightRegionMapTextureRd = data->getMiddleHeightRegionMapRid();
 	resources.m_hFarHeightTextureRd = data->getFarHeightMapRid();
@@ -665,6 +706,7 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 			resources.m_hControlTextureRd != m_lastPublishedResources.m_hControlTextureRd ||
 			resources.m_hColorTextureRd != m_lastPublishedResources.m_hColorTextureRd ||
 			resources.m_hMiddleCompositeTextureRd != m_lastPublishedResources.m_hMiddleCompositeTextureRd ||
+			resources.m_hTerrainShadowMaskTextureRd != m_lastPublishedResources.m_hTerrainShadowMaskTextureRd ||
 			resources.m_hMiddleHeightTextureRd != m_lastPublishedResources.m_hMiddleHeightTextureRd ||
 			resources.m_hMiddleHeightRegionMapTextureRd != m_lastPublishedResources.m_hMiddleHeightRegionMapTextureRd ||
 			resources.m_hFarHeightTextureRd != m_lastPublishedResources.m_hFarHeightTextureRd ||
@@ -845,6 +887,7 @@ void Terrain3DRenderCoordinator::resetSnapshotPublication( void ) {
 	for ( t3dRdFrameSnapshotSlot_t &slot : m_snapshotSlots ) slot = t3dRdFrameSnapshotSlot_t{};
 	m_regionMapBytes.clear();
 	m_nRegionTopologyGeneration = 0u;
+	m_nRegionLightingSignature = 0u;
 	m_nRegionMapGeneration = 0u;
 	m_nLastRegionCacheSourceGeneration = 0u;
 	m_nRegionCacheGeneration = 0u;
@@ -1151,6 +1194,7 @@ void Terrain3DRenderCoordinator::render( RenderData *const pRenderData ) {
 			 publication->m_resources.m_hControlTextureRd,
 			 publication->m_resources.m_hColorTextureRd,
 			 publication->m_resources.m_hMiddleCompositeTextureRd,
+			 publication->m_resources.m_hTerrainShadowMaskTextureRd,
 			 publication->m_resources.m_hMiddleHeightTextureRd,
 			 publication->m_resources.m_hMiddleHeightRegionMapTextureRd,
 			 publication->m_resources.m_hFarHeightTextureRd,
@@ -1207,7 +1251,8 @@ void Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 				publication->m_regionMapBytes, snapshot.m_nRegionMapGeneration,
 				publication->m_resources.m_hHeightTextureRd, publication->m_resources.m_hDerivedTextureRd,
 				publication->m_resources.m_hControlTextureRd, publication->m_resources.m_hColorTextureRd,
-				publication->m_resources.m_hMiddleCompositeTextureRd, publication->m_resources.m_hMiddleHeightTextureRd,
+				publication->m_resources.m_hMiddleCompositeTextureRd, publication->m_resources.m_hTerrainShadowMaskTextureRd,
+				publication->m_resources.m_hMiddleHeightTextureRd,
 				publication->m_resources.m_hMiddleHeightRegionMapTextureRd, publication->m_resources.m_hFarHeightTextureRd,
 				publication->m_resources.m_hFarColorTextureRd, publication->m_resources.m_hAlbedoTextureRd,
 				publication->m_resources.m_hFarAlbedoTextureRd, publication->m_resources.m_hNormalTextureRd,

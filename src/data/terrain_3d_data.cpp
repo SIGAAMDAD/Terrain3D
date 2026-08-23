@@ -284,6 +284,7 @@ void Terrain3DData::clear( void ) {
 	m_bControlMapsImplicit = true;
 	m_bColorMapsImplicit = true;
 	m_generatedHeightMaps.clear();
+	m_generatedTerrainShadowMasks.clear();
 	m_generatedControlMaps.clear();
 	m_generatedColorMaps.clear();
 	m_generatedDerivedMaps.clear();
@@ -578,6 +579,41 @@ Ref<Image> Terrain3DData::makeMiddleCompositeImage( const Vector2i &rLocation,
 		return Ref<Image>();
 	}
 	return pComposite;
+}
+
+Ref<Image> Terrain3DData::makeTerrainShadowMaskImage( const Terrain3DRegion *const pRegion ) const {
+	const int region_size = m_regionRepository.getRegionSize();
+	if ( region_size <= 0 ) {
+		return Ref<Image>();
+	}
+	Ref<Image> image;
+	if ( pRegion && !pRegion->isDeleted() ) {
+		const Ref<Terrain3DRegionLighting> lighting = pRegion->getLighting();
+		if ( lighting.is_valid() && lighting->hasTerrainShadowMask() ) {
+			const Ref<Resource> resource = ResourceLoader::get_singleton()->load( lighting->getTerrainShadowMaskPath() );
+			image = resource;
+		}
+	}
+	if ( image.is_null() || image->is_empty() ) {
+		return Terrain3DUtil::getFilledImage( V2I( region_size ), Color( 1.0, 1.0, 1.0, 1.0 ), true, Image::FORMAT_L8 );
+	}
+	image = image->duplicate();
+	if ( image->is_compressed() && image->decompress() != OK ) {
+		return Ref<Image>();
+	}
+	if ( image->has_mipmaps() ) {
+		image->clear_mipmaps();
+	}
+	if ( image->get_format() != Image::FORMAT_L8 ) {
+		image->convert( Image::FORMAT_L8 );
+	}
+	if ( image->get_width() != region_size || image->get_height() != region_size ) {
+		image->resize( region_size, region_size, Image::INTERPOLATE_BILINEAR );
+	}
+	if ( image->generate_mipmaps() != OK ) {
+		return Ref<Image>();
+	}
+	return image;
 }
 
 Ref<Image> Terrain3DData::makeGpuRenderControlImage( const Vector2i &vLocation ) const {
@@ -3057,6 +3093,7 @@ Error Terrain3DData::loadDirectory( const String &rDir ) {
 	m_bColorMapsImplicit = true;
 	m_mapEditService.reset();
 	m_generatedHeightMaps.clear();
+	m_generatedTerrainShadowMasks.clear();
 	m_generatedControlMaps.clear();
 	m_generatedColorMaps.clear();
 	m_generatedDerivedMaps.clear();
@@ -3138,6 +3175,37 @@ void Terrain3DData::loadRegion( const Vector2i &rRegionLoc, const String &rDir, 
 	}
 }
 
+bool Terrain3DData::refreshTerrainShadowMasksInternal( void ) {
+	if ( m_gpuRegionCache.isEnabled() ) {
+		return m_gpuRegionCache.refreshTerrainShadowMasks();
+	}
+	const int slot_count = m_regionRepository.getSlotCount();
+	if ( slot_count <= 0 ) {
+		m_generatedTerrainShadowMasks.clear();
+		return true;
+	}
+	TypedArray<Image> shadow_masks;
+	shadow_masks.resize( slot_count );
+	for ( int slot = 0; slot < slot_count; ++slot ) {
+		const Vector2i location = m_regionRepository.getSlotsData()[slot];
+		const Terrain3DRegion *const pRegion = location == s_v2iMax ? nullptr : getRegionPtr( location );
+		const Ref<Image> pShadowMask = makeTerrainShadowMaskImage( pRegion && !pRegion->isDeleted() ? pRegion : nullptr );
+		if ( pShadowMask.is_null() ) {
+			return false;
+		}
+		shadow_masks[slot] = pShadowMask;
+	}
+	if ( m_generatedTerrainShadowMasks.getRid().is_valid() && m_generatedTerrainShadowMasks.size() == slot_count ) {
+		for ( int slot = 0; slot < slot_count; ++slot ) {
+			if ( !m_generatedTerrainShadowMasks.update( shadow_masks[slot], slot ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+	return m_generatedTerrainShadowMasks.create( shadow_masks ).is_valid();
+}
+
 TypedArray<Image> Terrain3DData::getMaps( const t3dMapType_t eMapType ) const {
 	if ( eMapType < 0 || eMapType >= REGION_TYPE_MAX ) {
 		LOG( ERROR, "Specified map type out of range" );
@@ -3186,6 +3254,7 @@ void Terrain3DData::updateMaps( const t3dMapType_t eMapType, const bool bAllRegi
 		LOG( EXTREME, "Marking dirty maps of type: ", eMapType );
 		if ( bSlotCapacityChanged || eMapType == REGION_TYPE_MAX ) {
 			m_generatedHeightMaps.clear();
+	m_generatedTerrainShadowMasks.clear();
 			m_generatedControlMaps.clear();
 			m_generatedColorMaps.clear();
 			m_generatedDerivedMaps.clear();
@@ -3193,6 +3262,7 @@ void Terrain3DData::updateMaps( const t3dMapType_t eMapType, const bool bAllRegi
 			switch ( eMapType ) {
 				case TYPE_HEIGHT:
 					m_generatedHeightMaps.clear();
+	m_generatedTerrainShadowMasks.clear();
 					m_generatedDerivedMaps.clear();
 					break;
 				case TYPE_CONTROL:
@@ -3235,6 +3305,8 @@ void Terrain3DData::updateMaps( const t3dMapType_t eMapType, const bool bAllRegi
 		const int slot_count = m_regionRepository.getSlotCount();
 		TypedArray<Image> gpu_control_maps;
 		TypedArray<Image> gpu_color_maps;
+		TypedArray<Image> gpu_shadow_masks;
+		gpu_shadow_masks.resize( slot_count );
 		if ( bRebuildHeight ) {
 			m_heightMaps.resize( slot_count );
 			m_mapEditService.resetHeightRange();
@@ -3279,12 +3351,19 @@ void Terrain3DData::updateMaps( const t3dMapType_t eMapType, const bool bAllRegi
 				m_colorMaps[slot] = getRegionMapOrDefault( bValid ? pRegion : nullptr, TYPE_COLOR );
 				gpu_color_maps[slot] = makeGpuColorImage( m_colorMaps[slot] );
 			}
+			const Ref<Image> pShadowMask = makeTerrainShadowMaskImage( bValid ? pRegion : nullptr );
+			gpu_shadow_masks[slot] = pShadowMask;
+			if ( pShadowMask.is_null() ) {
+				LOG( ERROR, "Failed to prepare terrain shadowmask layer for region ", location );
+				return;
+			}
 			if ( bRebuildDerived ) {
 				const Ref<Image> pDerived = bValid ? pRegion->getDerivedNormalSlopeMap() : Ref<Image>();
 				m_derivedMaps[slot] = pDerived.is_valid() ? pDerived : m_defaultDerivedMap;
 			}
 		}
 
+		m_generatedTerrainShadowMasks.create( gpu_shadow_masks );
 		if ( bRebuildHeight ) {
 			m_generatedHeightMaps.create( m_heightMaps );
 			bAnyChanged = true;

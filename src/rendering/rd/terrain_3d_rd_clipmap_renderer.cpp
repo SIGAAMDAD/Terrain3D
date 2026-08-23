@@ -587,6 +587,7 @@ void Terrain3DRdClipmapRenderer::freeUniformSets( void ) {
 	m_hBoundControlTexture = RID();
 	m_hBoundColorTexture = RID();
 	m_hBoundMiddleCompositeTexture = RID();
+	m_hBoundTerrainShadowMaskTexture = RID();
 	m_hBoundMiddleHeightTexture = RID();
 	m_hBoundMiddleHeightRegionMapTexture = RID();
 	m_hBoundFarHeightTexture = RID();
@@ -607,6 +608,7 @@ bool Terrain3DRdClipmapRenderer::ensureUniformSets( const RID &rHeight,
 		const RID &rControl,
 		const RID &rColor,
 		const RID &rMiddleComposite,
+		const RID &rTerrainShadowMask,
 		const RID &rMiddleHeight,
 		const RID &rMiddleHeightRegionMap,
 		const RID &rFarHeight,
@@ -625,7 +627,8 @@ bool Terrain3DRdClipmapRenderer::ensureUniformSets( const RID &rHeight,
 			( !m_bGpuCullingReady.load( std::memory_order_acquire ) || m_hCullUniformSet.is_valid() ) &&
 			m_hBoundHeightTexture == rHeight && m_hBoundDerivedTexture == rDerived &&
 			m_hBoundControlTexture == rControl && m_hBoundColorTexture == rColor &&
-			m_hBoundMiddleCompositeTexture == rMiddleComposite && m_hBoundMiddleHeightTexture == rMiddleHeight &&
+			m_hBoundMiddleCompositeTexture == rMiddleComposite && m_hBoundTerrainShadowMaskTexture == rTerrainShadowMask &&
+			m_hBoundMiddleHeightTexture == rMiddleHeight &&
 			m_hBoundMiddleHeightRegionMapTexture == rMiddleHeightRegionMap && m_hBoundFarHeightTexture == rFarHeight &&
 			m_hBoundFarColorTexture == rFarColor && m_hBoundAlbedoTexture == rAlbedo &&
 			m_hBoundFarAlbedoTexture == rFarAlbedo &&
@@ -667,6 +670,7 @@ bool Terrain3DRdClipmapRenderer::ensureUniformSets( const RID &rHeight,
 		uniforms.push_back( t3dRdTextureUniform( 22, m_hszMaterialSamplers[nFiltering], rMacroNoise ) );
 		uniforms.push_back( t3dRdBufferUniform( 23, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hEditorOverlayBuffer ) );
 		uniforms.push_back( t3dRdTextureUniform( 24, m_hszMapSamplers[1], rEditorBrush ) );
+		uniforms.push_back( t3dRdTextureUniform( 25, m_hszMapSamplers[1], rTerrainShadowMask ) );
 		m_hszRasterUniformSets[i] = rd->uniform_set_create( uniforms, m_hszShaders[i], 0u );
 		const String name = String( "T3D.UniformSet.Raster." ) + String::num_int64( i );
 		if ( !m_hszRasterUniformSets[i].is_valid() ) {
@@ -702,6 +706,7 @@ bool Terrain3DRdClipmapRenderer::ensureUniformSets( const RID &rHeight,
 	m_hBoundControlTexture = rControl;
 	m_hBoundColorTexture = rColor;
 	m_hBoundMiddleCompositeTexture = rMiddleComposite;
+	m_hBoundTerrainShadowMaskTexture = rTerrainShadowMask;
 	m_hBoundMiddleHeightTexture = rMiddleHeight;
 	m_hBoundMiddleHeightRegionMapTexture = rMiddleHeightRegionMap;
 	m_hBoundFarHeightTexture = rFarHeight;
@@ -1229,6 +1234,7 @@ bool Terrain3DRdClipmapRenderer::render( RenderData *const pRenderData,
 		const RID &rControlTextureRd,
 		const RID &rColorTextureRd,
 		const RID &rMiddleCompositeTextureRd,
+		const RID &rTerrainShadowMaskTextureRd,
 		const RID &rMiddleHeightTextureRd,
 		const RID &rMiddleHeightRegionMapTextureRd,
 		const RID &rFarHeightTextureRd,
@@ -1258,6 +1264,7 @@ bool Terrain3DRdClipmapRenderer::render( RenderData *const pRenderData,
 	const RID color_map = rColorTextureRd;
 	RID derived = rDerivedTextureRd;
 	RID middle_composite = rMiddleCompositeTextureRd;
+	RID terrain_shadow_mask = rTerrainShadowMaskTextureRd;
 	RID middle_height = rMiddleHeightTextureRd;
 	RID middle_height_region_map = rMiddleHeightRegionMapTextureRd;
 	RID far_height = rFarHeightTextureRd;
@@ -1276,6 +1283,7 @@ bool Terrain3DRdClipmapRenderer::render( RenderData *const pRenderData,
 	if ( !displacement.is_valid() ) displacement = m_hFallbackDisplacementTexture;
 	if ( !derived.is_valid() ) derived = m_hFallbackArrayTexture;
 	if ( !middle_composite.is_valid() ) middle_composite = m_hFallbackArrayTexture;
+	if ( !terrain_shadow_mask.is_valid() ) terrain_shadow_mask = m_hFallbackArrayTexture;
 	if ( !middle_height.is_valid() ) middle_height = m_hFallbackArrayTexture;
 	if ( !middle_height_region_map.is_valid() ) middle_height_region_map = m_hFallbackDisplacementTexture;
 	if ( !far_height.is_valid() ) far_height = m_hFallbackDisplacementTexture;
@@ -1296,6 +1304,7 @@ bool Terrain3DRdClipmapRenderer::render( RenderData *const pRenderData,
 			control,
 			color_map,
 			middle_composite,
+			terrain_shadow_mask,
 			middle_height,
 			middle_height_region_map,
 			far_height,
@@ -1390,6 +1399,7 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassConte
 		const RID &rControlTextureRd,
 		const RID &rColorTextureRd,
 		const RID &rMiddleCompositeTextureRd,
+		const RID &rTerrainShadowMaskTextureRd,
 		const RID &rMiddleHeightTextureRd,
 		const RID &rMiddleHeightRegionMapTextureRd,
 		const RID &rFarHeightTextureRd,
@@ -1416,6 +1426,7 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassConte
 	const RID color_map = rColorTextureRd;
 	RID derived = rDerivedTextureRd;
 	RID middle_composite = rMiddleCompositeTextureRd;
+	RID terrain_shadow_mask = rTerrainShadowMaskTextureRd;
 	RID middle_height = rMiddleHeightTextureRd;
 	RID middle_height_region_map = rMiddleHeightRegionMapTextureRd;
 	RID far_height = rFarHeightTextureRd;
@@ -1434,6 +1445,7 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassConte
 	if ( !displacement.is_valid() ) displacement = m_hFallbackDisplacementTexture;
 	if ( !derived.is_valid() ) derived = m_hFallbackArrayTexture;
 	if ( !middle_composite.is_valid() ) middle_composite = m_hFallbackArrayTexture;
+	if ( !terrain_shadow_mask.is_valid() ) terrain_shadow_mask = m_hFallbackArrayTexture;
 	if ( !middle_height.is_valid() ) middle_height = m_hFallbackArrayTexture;
 	if ( !middle_height_region_map.is_valid() ) middle_height_region_map = m_hFallbackDisplacementTexture;
 	if ( !far_height.is_valid() ) far_height = m_hFallbackDisplacementTexture;
@@ -1451,7 +1463,7 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassConte
 	if ( m_nForwardPreparedScenePass != rContext.m_nScenePass )
 		m_context.beginFrame( rContext.m_nScenePass, rSnapshot.m_nPublicationGeneration );
 	if ( !uploadSnapshotBuffers( rSnapshot, rRegionMapBytes, nRegionMapGeneration ) ||
-			!ensureUniformSets( height, derived, control, color_map, middle_composite, middle_height,
+			!ensureUniformSets( height, derived, control, color_map, middle_composite, terrain_shadow_mask, middle_height,
 					middle_height_region_map, far_height, far_color, albedo, far_albedo, normal, surface,
 					displacement, world_noise, macro_noise, editor_brush, rSnapshot.m_materialConfig ) ||
 			!updateFrameUniforms( rSnapshot, rContext.m_szViewProjection[0], Projection( rContext.m_cameraTransform.affine_inverse() ),

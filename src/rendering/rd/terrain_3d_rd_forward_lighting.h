@@ -31,11 +31,11 @@ private:
 		float m_fCameraZNear = 0.0f;
 		float m_fCameraZFar = 0.0f;
 		float m_fInvCameraZFar = 0.0f;
-		float m_fPadding0 = 0.0f;
+		float m_fReflectionAtlasBorderSize = 0.0f;
 		uint32_t m_nRenderWidth = 0u;
 		uint32_t m_nRenderHeight = 0u;
 		uint32_t m_nClusterMaxElements = 0u;
-		uint32_t m_nPadding1 = 0u;
+		uint32_t m_nSceneFeatureFlags = 0u;
 	} t3dRdForwardLightFrame_t;
 	static_assert( sizeof( t3dRdForwardLightFrame_t ) == 64u, "Forward lighting UBO ABI changed" );
 
@@ -48,12 +48,20 @@ private:
 		RID m_hShadowAtlas;
 		RID m_hDirectionalShadowAtlas;
 		RID m_hShadowSampler;
+		RID m_hReflectionProbeBuffer;
+		RID m_hReflectionAtlas;
+		RID m_hDecalBuffer;
+		RID m_hDecalAtlas;
+		RID m_hDecalAtlasSrgb;
 
 		bool operator==( const t3dRdForwardLightKey_s &rOther ) const {
 			return m_hDirectional == rOther.m_hDirectional && m_hOmni == rOther.m_hOmni &&
 					m_hSpot == rOther.m_hSpot && m_hArea == rOther.m_hArea && m_hCluster == rOther.m_hCluster &&
 					m_hShadowAtlas == rOther.m_hShadowAtlas && m_hDirectionalShadowAtlas == rOther.m_hDirectionalShadowAtlas &&
-					m_hShadowSampler == rOther.m_hShadowSampler;
+					m_hShadowSampler == rOther.m_hShadowSampler &&
+					m_hReflectionProbeBuffer == rOther.m_hReflectionProbeBuffer && m_hReflectionAtlas == rOther.m_hReflectionAtlas &&
+					m_hDecalBuffer == rOther.m_hDecalBuffer &&
+					m_hDecalAtlas == rOther.m_hDecalAtlas && m_hDecalAtlasSrgb == rOther.m_hDecalAtlasSrgb;
 		}
 	} t3dRdForwardLightKey_t;
 
@@ -66,11 +74,16 @@ private:
 	RID m_hFrameBuffer;
 	RID m_hFallbackShadowTexture;
 	RID m_hFallbackShadowSampler;
+	RID m_hFallbackStorageBuffer;
+	RID m_hFallbackColorTexture;
+	RID m_hFallbackColorArrayTexture;
+	RID m_hLinearSampler;
 	t3dRdForwardLightKey_t m_key{};
 	bool m_bKeyValid = false;
 	uint64_t m_nDeviceGeneration = 0u;
 	uint64_t m_nSetRebuilds = 0u;
 	uint64_t m_nFrameUpdates = 0u;
+	uint64_t m_nSceneResourceChanges = 0u;
 	std::vector<t3dRdForwardLightSet_t> m_sets;
 	PackedByteArray m_frameBytes;
 	String m_lastError;
@@ -80,6 +93,9 @@ private:
 	void freeSets( void );
 	RID resolveShadowTexture( const RID &rNative ) const;
 	RID resolveShadowSampler( const RID &rNative ) const;
+	RID resolveStorageBuffer( const RID &rNative ) const;
+	RID resolveColorTexture( const RID &rNative ) const;
+	RID resolveColorArrayTexture( const RID &rNative ) const;
 
 public:
 	explicit Terrain3DRdForwardLighting( Terrain3DRdContext &rContext );

@@ -180,6 +180,7 @@ uint packed_region_cell(ivec2 region_cell) {
     return uint(region_map[map_pos.y * map_size + map_pos.x]);
 }
 int region_layer(ivec2 region_cell) { return int(packed_region_cell(region_cell) & 0xFFFFu) - 1; }
+uint region_shadowmask_mode(ivec2 region_cell) { return (packed_region_cell(region_cell) >> 16u) & 0x3u; }
 bool logical_region_present(ivec2 region_cell) { return (packed_region_cell(region_cell) & 0x80000000u) != 0u; }
 float region_presence(ivec2 base_cell, vec2 weights) {
     float a = logical_region_present(base_cell) ? 1.0 : 0.0;
@@ -533,6 +534,7 @@ struct EditorOverlayConfig {
 };
 layout(set = 0, binding = 23, std430) readonly buffer EditorOverlayBuffer { EditorOverlayConfig editor_overlay; };
 layout(set = 0, binding = 24) uniform sampler2D editor_brush_texture;
+layout(set = 0, binding = 25) uniform sampler2DArray terrain_shadow_masks;
 
 struct MaterialLayer {
     vec4 color;
@@ -681,6 +683,7 @@ uint packed_region_cell(ivec2 region_cell) {
     return uint(region_map[map_pos.y * map_size + map_pos.x]);
 }
 int region_layer(ivec2 region_cell) { return int(packed_region_cell(region_cell) & 0xFFFFu) - 1; }
+uint region_shadowmask_mode(ivec2 region_cell) { return (packed_region_cell(region_cell) >> 16u) & 0x3u; }
 bool logical_region_present(ivec2 region_cell) { return (packed_region_cell(region_cell) & 0x80000000u) != 0u; }
 float region_presence(ivec2 base_cell, vec2 weights) {
     float a = logical_region_present(base_cell) ? 1.0 : 0.0;
@@ -1105,14 +1108,26 @@ vec3 apply_surface_normal(vec3 terrain_normal, vec3 tangent_normal) {
     vec3 bitangent = normalize(cross(terrain_normal, tangent));
     return normalize(tangent * tangent_normal.x + terrain_normal * tangent_normal.y + bitangent * tangent_normal.z);
 }
+float sample_terrain_shadowmask(vec2 world_texel, int layer) {
+    if (layer < 0) return 1.0;
+    float region_size = max(frame_data.terrain_params.x, 1.0);
+    ivec2 region_cell = ivec2(floor(world_texel / region_size));
+    vec2 local_texel = world_texel - vec2(region_cell) * region_size;
+    vec2 uv = clamp(local_texel / region_size, vec2(0.0), vec2(1.0));
+    return texture(terrain_shadow_masks, vec3(uv, float(layer))).r;
+}
+
 vec3 light_material(vec3 albedo, vec3 normal, float roughness, float metallic, float ao, TierMaterialConfig tier_config) {
     if (tier_config.lighting_model == 0u) return albedo;
     vec3 ambient = albedo * frame_data.light_direction_ambient.w * ao;
 #ifdef T3D_FORWARD_NATIVE_LIGHTING
     float specular_scale = (material_config.output_flags & T3D_OUTPUT_SPECULAR) != 0u ? 1.0 : 0.0;
+    ivec2 shadow_region = ivec2(floor(terrain_world_texel / max(frame_data.terrain_params.x, 1.0)));
+    uint shadowmask_mode = region_shadowmask_mode(shadow_region);
+    float shadowmask_visibility = shadowmask_mode != 0u ? sample_terrain_shadowmask(terrain_world_texel, terrain_region_layer) : 1.0;
     vec3 direct = t3d_forward_direct_lighting(albedo, world_position, normalize(normal), frame_data.view_matrix,
         frame_data.camera_params.xyz, roughness, metallic, specular_scale, t3d_forward_light_frame.scene_params.y,
-        tier_config.lighting_model, true);
+        tier_config.lighting_model, true, shadowmask_mode, shadowmask_visibility);
     return ambient + direct;
 #else
     vec3 light_dir = normalize(-frame_data.light_direction_ambient.xyz);
@@ -1381,7 +1396,22 @@ void main() {
     if ((material_config.output_flags & T3D_OUTPUT_ROUGHNESS) == 0u) material.roughness = 1.0;
     if ((material_config.output_flags & T3D_OUTPUT_AO) == 0u) material.ao = 1.0;
 
-    vec3 lit = light_material(material.albedo, final_normal, material.roughness, material.metallic, material.ao, tier_config);
+    vec3 scene_emission = vec3(0.0);
+#ifdef T3D_FORWARD_NATIVE_LIGHTING
+    vec3 scene_view_position = (frame_data.view_matrix * vec4(world_position, 1.0)).xyz;
+    vec3 scene_view_normal = normalize(mat3(frame_data.view_matrix) * final_normal);
+    t3d_forward_apply_decals(scene_view_position, t3d_forward_light_frame.scene_params.y, material.albedo,
+        scene_view_normal, material.roughness, material.metallic, material.ao, scene_emission);
+    final_normal = normalize(transpose(mat3(frame_data.view_matrix)) * scene_view_normal);
+#endif
+    vec3 lit = light_material(material.albedo, final_normal, material.roughness, material.metallic, material.ao, tier_config) + scene_emission;
+#ifdef T3D_FORWARD_NATIVE_LIGHTING
+    vec3 reflection_view_position = (frame_data.view_matrix * vec4(world_position, 1.0)).xyz;
+    vec3 reflection_view_normal = normalize(mat3(frame_data.view_matrix) * final_normal);
+    vec3 reflection_view_direction = normalize(-reflection_view_position);
+    lit += t3d_forward_reflection(reflection_view_position, reflection_view_normal, reflection_view_direction,
+        material.roughness, material.metallic, material.albedo, t3d_forward_light_frame.scene_params.y);
+#endif
     lit = debug_visualization(lit, color_map, nearest_control, material, terrain_normal, used_auto);
     lit = apply_editor_decals(lit);
     out_color = vec4(apply_fog(lit), 1.0);

@@ -315,9 +315,17 @@ void main() {
 	} else {
 		float ambient = (0.22 + 0.08 * roughness) * ao;
 #ifdef T3D_FORWARD_NATIVE_LIGHTING
+		vec3 view_position = (frame_data.view_matrix * vec4(vertex_world_position, 1.0)).xyz;
+		vec3 view_normal = normalize(mat3(frame_data.view_matrix) * normal);
+		t3d_forward_apply_decals(view_position, push_data.visibility_layers, final_color.rgb, view_normal,
+				roughness, metallic, ao, emission);
+		normal = normalize(transpose(mat3(frame_data.view_matrix)) * view_normal);
 		vec3 direct = t3d_forward_direct_lighting(final_color.rgb, vertex_world_position, normalize(normal), frame_data.view_matrix,
-				frame_data.camera_position.xyz, roughness, metallic, 1.0, push_data.visibility_layers, 2u, true);
+				frame_data.camera_position.xyz, roughness, metallic, 1.0, push_data.visibility_layers, 2u, true, 0u, 1.0);
 		lit = final_color.rgb * ambient + direct + emission;
+		vec3 reflection_view_direction = normalize(-view_position);
+		lit += t3d_forward_reflection(view_position, view_normal, reflection_view_direction,
+				roughness, metallic, final_color.rgb, push_data.visibility_layers);
 #else
 		vec3 debug_light_direction = normalize(vec3(0.34, 0.83, 0.44));
 		float ndotl = max(dot(normalize(normal), debug_light_direction), 0.0);

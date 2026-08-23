@@ -55,7 +55,7 @@ Use the project-specific build flags required by the local Godot build, but do n
 At Terrain3D scene-module initialization the extension:
 
 1. queries `Engine` for `Terrain3DForwardPlusBridge`;
-2. checks `get_abi_version() == 5`;
+2. checks `get_abi_version() == 6`;
 3. verifies `register_callback`, `unregister_callback`, `has_callback`, and `collect_retired_callbacks`;
 4. registers exactly one extension callback;
 5. converts every accepted `Dictionary` packet into `t3dRdForwardPassContext_t` exactly once at the boundary;
@@ -74,7 +74,7 @@ The patch invokes the bridge only from the selected native `_render_list_with_dr
 
 It does **not** infer bridge pass kinds from `PASS_MODE_SHADOW`; this avoids accidentally treating GPU-particle collision-heightfield rendering as a Terrain3D scene shadow pass.
 
-F1 established these insertion points. F2 upgraded the bridge to ABI 2 with synchronous PREPARE/SUBMIT phases and native depth/opaque submission. F3 upgraded it to ABI 3 for native terrain/regular-instance/HLOD shadow submission and production shadow-proxy removal. F4 upgraded it to ABI 4 with exact Forward+ cluster addressing, native directional-light count/depth metadata, and native clustered directional/omni/spot/area lighting plus shadow receiving. F5 upgrades it to ABI 5 with corrected jittered current/previous view-projection state, current/previous TAA jitter, native motion-history validity, and motion-pass depth-prepass state. F6-F7 consume the remaining reserved GI/lifecycle state.
+F1 established these insertion points. F2 upgraded the bridge to ABI 2 with synchronous PREPARE/SUBMIT phases and native depth/opaque submission. F3 upgraded it to ABI 3 for native terrain/regular-instance/HLOD shadow submission and production shadow-proxy removal. F4 upgraded it to ABI 4 with exact Forward+ cluster addressing, native directional-light count/depth metadata, and native clustered directional/omni/spot/area lighting plus shadow receiving. F5 upgraded it to ABI 5 with corrected jittered current/previous view-projection state, current/previous TAA jitter, native motion-history validity, and motion-pass depth-prepass state. F6 upgrades it to ABI 6 and activates the reserved native decal/reflection/lightmap-resource fields, while preserving the fork's regional terrain-shadowmask bake path. F7 owns the remaining multiview/lifecycle state.
 
 ## Missing/wrong bridge behavior
 
@@ -112,7 +112,7 @@ The F1 static contract verifies the patch package, ABI, engine hook markers, pac
 For full engine validation, use an exact source checkout and run `git apply --check`, build the patched Godot editor, then start Terrain3D under Forward+ and confirm diagnostics report:
 
 - `forward_plus_bridge_present = true` (inside bridge diagnostics as `bridge_present`);
-- `observed_abi = 5`;
+- `observed_abi = 6`;
 - `callback_registered = true`;
 - native pass packets arriving with non-negative draw-list IDs.
 

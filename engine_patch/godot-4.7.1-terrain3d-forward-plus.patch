@@ -22,7 +22,7 @@ index 0000000000..8ff7f0f001
 +	GDCLASS(Terrain3DForwardPlusBridge, Object);
 +
 +public:
-+	static constexpr int ABI_VERSION = 5;
++	static constexpr int ABI_VERSION = 6;
 +
 +	enum PassKind {
 +		PASS_INVALID = 0,
@@ -293,7 +293,7 @@ diff --git a/servers/rendering/renderer_rd/forward_clustered/render_forward_clus
 index 370d3b66ce..f100000003 100644
 --- a/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp
 +++ b/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp
-@@ -611,11 +611,143 @@ void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_lis
+@@ -611,11 +611,144 @@ void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_lis
  	}
  }
  
@@ -389,6 +389,7 @@ index 370d3b66ce..f100000003 100644
 +	packet["directional_light_soft_shadows"] = p_render_data != nullptr && p_render_data->directional_light_soft_shadows;
 +	packet["camera_z_near"] = p_render_data != nullptr && p_render_data->scene_data != nullptr ? p_render_data->scene_data->z_near : 0.0;
 +	packet["camera_z_far"] = p_render_data != nullptr && p_render_data->scene_data != nullptr ? p_render_data->scene_data->z_far : 0.0;
++	packet["reflection_atlas_border_size"] = p_render_data != nullptr && p_render_data->scene_data != nullptr ? p_render_data->scene_data->reflection_atlas_border_size.x : 0.0;
 +	packet["cluster_buffer"] = p_render_data != nullptr ? p_render_data->cluster_buffer : RID();
 +
 +	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();

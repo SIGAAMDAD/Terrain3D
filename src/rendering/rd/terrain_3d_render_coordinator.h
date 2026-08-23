@@ -44,6 +44,7 @@ private:
 		RID m_hControlTextureRd;
 		RID m_hColorTextureRd;
 		RID m_hMiddleCompositeTextureRd;
+		RID m_hTerrainShadowMaskTextureRd;
 		RID m_hMiddleHeightTextureRd;
 		RID m_hMiddleHeightRegionMapTextureRd;
 		RID m_hFarHeightTextureRd;
@@ -87,6 +88,7 @@ private:
 
 	PackedByteArray m_regionMapBytes;
 	uint64_t m_nRegionTopologyGeneration = 0u;
+	uint64_t m_nRegionLightingSignature = 0u;
 	uint64_t m_nRegionMapGeneration = 0u;
 	uint64_t m_nLastRegionCacheSourceGeneration = 0u;
 	uint64_t m_nRegionCacheGeneration = 0u;

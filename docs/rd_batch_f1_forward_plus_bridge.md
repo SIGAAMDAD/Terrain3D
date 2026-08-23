@@ -10,7 +10,7 @@ F1 establishes the synchronous integration boundary between Godot 4.7.1 Forward+
 Godot Forward+ owns native pass + draw list + scene data
                     |
                     v
-        Terrain3DForwardPlusBridge ABI 4
+        Terrain3DForwardPlusBridge ABI 6
                     |
                     v
  Terrain3DRdForwardPlusBridgeAdapter
@@ -24,7 +24,7 @@ Godot Forward+ owns native pass + draw list + scene data
 
 The engine bridge owns no Terrain3D GPU resource. The extension borrows native RIDs only for the synchronous callback lifetime.
 
-## Current ABI 4 pass kinds
+## Current ABI 6 pass kinds
 
 | Value | Kind | F1 hook |
 |---:|---|---|
@@ -38,7 +38,7 @@ The engine bridge owns no Terrain3D GPU resource. The extension borrows native R
 | 7 | GI | reserved for later Batch F |
 | 8 | reflection | reserved for later Batch F |
 
-## Current ABI 4 packet
+## Current ABI 6 packet
 
 The engine sends one `Dictionary`; the extension validates and converts it once into `t3dRdForwardPassContext_t`.
 
@@ -65,7 +65,7 @@ The extension itself registers one engine callback and fans out to a bounded arr
 
 ## Production and diagnostic routes
 
-Production RD routing requires `Terrain3DForwardPlusBridge` ABI 4. A missing/wrong bridge disables production RD submission and records the reason. No native Terrain3D surface or shadow proxy is resurrected to conceal that failure.
+Production RD routing requires `Terrain3DForwardPlusBridge` ABI 6. A missing/wrong bridge disables production RD submission and records the reason. No native Terrain3D surface or shadow proxy is resurrected to conceal that failure.
 
 The legacy compositor callback is disabled by default. `TERRAIN3D_RD_DEBUG_COMPOSITOR=1` is the explicit diagnostic opt-in and is never treated as native Forward+ parity.
 
@@ -76,7 +76,7 @@ The legacy compositor callback is disabled by default. `TERRAIN3D_RD_DEBUG_COMPO
 ```text
 Godot tag:    4.7.1-stable
 Godot commit: a13da4feb8d8aefc283c3763d33a2f170a18d541
-Bridge ABI:   4
+Bridge ABI:   6
 ```
 
 The patch hooks real Forward+ draw-list call sites and deliberately avoids compositor timing. The shadow hook is explicit rather than inferred from the generic shadow pass mode so particle-collision heightfield draws remain unrelated.
@@ -91,4 +91,4 @@ The patch hooks real Forward+ draw-list call sites and deliberately avoids compo
 - application/build/ABI contract: `engine_patch/README.md`;
 - regression gate: `tools/rd.py` (`rd_batch_f1_forward_bridge_check`).
 
-F2 superseded the original F1 ABI with ABI 2 by adding synchronous PREPARE/SUBMIT phases. F3 advanced the packet to ABI 3 for native shadow-pass identity and caster metadata. F4 advances it to ABI 4 with exact Forward+ clustered-lighting addressing, directional-light count, and camera depth metadata. F1 ownership and callback-lifetime guarantees remain unchanged.
+F2 superseded the original F1 ABI with ABI 2 by adding synchronous PREPARE/SUBMIT phases. F3 advanced the packet to ABI 3 for native shadow-pass identity and caster metadata. F4 advanced it to ABI 4 with exact Forward+ clustered-lighting addressing, directional-light count, and camera depth metadata. F5 advanced it to ABI 5 for temporal state and native motion vectors. F6 advances it to ABI 6 for the active native decal/reflection/regional-lighting integration. F1 ownership and callback-lifetime guarantees remain unchanged.

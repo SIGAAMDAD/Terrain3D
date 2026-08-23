@@ -58,6 +58,7 @@ typedef struct t3dGpuRegionCacheStats_s {
 	int m_nControlUpdatesLastTick = 0;
 	int m_nColorUpdatesLastTick = 0;
 	int m_nDerivedUpdatesLastTick = 0;
+	int m_nTerrainShadowUpdatesLastTick = 0;
 	int m_nRuntimeColorMipsLastTick = 0;
 	int m_nRuntimeDerivedBuildsLastTick = 0;
 	int m_nPreparedPagesLastTick = 0;
@@ -109,6 +110,7 @@ public:
 	void invalidate( const Vector2i &vLocation );
 	bool republish( const Vector2i &vLocation, Terrain3DCompute *pCompute = nullptr );
 	bool republishAllResidents( Terrain3DCompute *pCompute = nullptr );
+	bool refreshTerrainShadowMasks( void );
 	void queueRepublish( const Vector2i &vLocation );
 	bool updateResidentLocation( const Vector2i &vLocation, t3dMapType_t eMapType, Terrain3DCompute *pCompute = nullptr );
 	void armPendingRetirements( void );
@@ -175,6 +177,9 @@ public:
 	EA_FORCE_INLINE RID getMiddleCompositeMapsRid( void ) const {
 		return m_generatedMiddleCompositeMaps.getRid();
 	}
+	EA_FORCE_INLINE RID getTerrainShadowMasksRid( void ) const {
+		return m_generatedTerrainShadowMasks.getRid();
+	}
 	TypedArray<Vector2i> getRenderRegionSlots( void ) const;
 	int getSlotStateForLocation( const Vector2i &vLocation ) const;
 	EA_FORCE_INLINE const uint16_t *getRegionMapData( void ) const {
@@ -213,6 +218,7 @@ private:
 	Terrain3DGeneratedTexture m_generatedColorMaps;
 	Terrain3DGeneratedTexture m_generatedDerivedMaps;
 	Terrain3DGeneratedTexture m_generatedMiddleCompositeMaps;
+	Terrain3DGeneratedTexture m_generatedTerrainShadowMasks;
 
 	bool m_bGpuRegionCacheEnabled = false;
 	bool m_bGpuRegionCacheTexturesReady = false;
@@ -255,6 +261,7 @@ private:
 	int m_nGpuRegionControlUpdatesLastTick = 0;
 	int m_nGpuRegionColorUpdatesLastTick = 0;
 	int m_nGpuRegionDerivedUpdatesLastTick = 0;
+	int m_nGpuRegionTerrainShadowUpdatesLastTick = 0;
 	int m_nGpuRegionRuntimeColorMipsLastTick = 0;
 	int m_nGpuRegionRuntimeDerivedBuildsLastTick = 0;
 	int m_nGpuRegionPreparedPagesLastTick = 0;
@@ -292,6 +299,7 @@ private:
 	TypedArray<Image> m_gpuColorMaps;
 	TypedArray<Image> m_gpuDerivedMaps;
 	TypedArray<Image> m_gpuMiddleCompositeMaps;
+	TypedArray<Image> m_gpuTerrainShadowMasks;
 	uint64_t m_nGpuRegionServiceUsecLast = 0u;
 	uint64_t m_nGpuPreparePublicationUsecLast = 0u;
 	uint64_t m_nGpuPrepareEndToEndUsecLast = 0u;
@@ -321,6 +329,7 @@ private:
 	Ref<Image> getRegionMapOrDefault( const Terrain3DRegion *pRegion, t3dMapType_t eMapType ) const;
 	Ref<Image> makeGpuColorImage( const Ref<Image> &rImage ) const;
 	Ref<Image> makeGpuDerivedImage( const Ref<Image> &rImage ) const;
+	Ref<Image> makeTerrainShadowMaskImage( const Terrain3DRegion *pRegion ) const;
 	Ref<Image> makeGpuRenderControlImage( const Vector2i &vLocation ) const;
 	Ref<Image>
 	makeMiddleCompositeImage( const Vector2i &rLocation, const Ref<Image> &rControl, const Ref<Image> &rColor ) const;

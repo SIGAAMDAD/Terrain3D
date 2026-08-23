@@ -101,6 +101,7 @@ private:
 	Terrain3DGeneratedTexture m_generatedColorMaps;
 	Terrain3DGeneratedTexture m_generatedDerivedMaps;
 	Terrain3DGeneratedTexture m_generatedMiddleCompositeMaps;
+	Terrain3DGeneratedTexture m_generatedTerrainShadowMasks;
 	// Optional compute backend. It is lazy so Compatibility/headless runtimes
 	// retain the existing CPU path without constructing RenderingDevice state.
 	Terrain3DCompute *m_pCompute = nullptr;
@@ -128,6 +129,7 @@ private:
 	Ref<Image> getRegionMapOrDefault( const Terrain3DRegion *pRegion, t3dMapType_t mapType ) const;
 	Ref<Image> makeGpuColorImage( const Ref<Image> &rImage ) const;
 	Ref<Image> makeGpuDerivedImage( const Ref<Image> &rImage ) const;
+	Ref<Image> makeTerrainShadowMaskImage( const Terrain3DRegion *pRegion ) const;
 	Ref<Image> makeGpuRenderControlImage( const Vector2i &vLocation ) const;
 	Ref<Image>
 	makeMiddleCompositeImage( const Vector2i &rLocation, const Ref<Image> &rControl, const Ref<Image> &rColor ) const;
@@ -475,6 +477,11 @@ public:
 	EA_FORCE_INLINE RID getMiddleCompositeMapsRid( void ) const {
 		return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getMiddleCompositeMapsRid()
 											: m_generatedMiddleCompositeMaps.getRid();
+	}
+	bool refreshTerrainShadowMasksInternal( void );
+	EA_FORCE_INLINE RID getTerrainShadowMasksRid( void ) const {
+		return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getTerrainShadowMasksRid()
+											: m_generatedTerrainShadowMasks.getRid();
 	}
 	EA_FORCE_INLINE RID getMiddleHeightMapsRid( void ) const {
 		return m_middleHeightRegionCache.getHeightMapsRid();

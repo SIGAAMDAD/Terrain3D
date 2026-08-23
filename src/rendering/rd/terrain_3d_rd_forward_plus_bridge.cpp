@@ -366,7 +366,8 @@ bool Terrain3DRdForwardPlusBridgeAdapter::parsePacket(
 	}
 	rContext.m_bDirectionalLightSoftShadows = ( bool )( directional_soft_shadow_value );
 	if ( !t3dRdForwardReadRequiredFloat( rPacket, StringName( "camera_z_near" ), rContext.m_fCameraZNear, rError ) ||
-			!t3dRdForwardReadRequiredFloat( rPacket, StringName( "camera_z_far" ), rContext.m_fCameraZFar, rError ) ) return false;
+			!t3dRdForwardReadRequiredFloat( rPacket, StringName( "camera_z_far" ), rContext.m_fCameraZFar, rError ) ||
+			!t3dRdForwardReadRequiredFloat( rPacket, StringName( "reflection_atlas_border_size" ), rContext.m_fReflectionAtlasBorderSize, rError ) ) return false;
 
 	rContext.m_hNativeFramebuffer = t3dRdForwardReadRid( rPacket, StringName( "native_framebuffer" ) );
 	rContext.m_hDirectionalLightBuffer = t3dRdForwardReadRid( rPacket, StringName( "directional_light_buffer" ) );

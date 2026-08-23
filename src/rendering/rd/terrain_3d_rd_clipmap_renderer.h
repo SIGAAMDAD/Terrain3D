@@ -84,6 +84,7 @@ private:
 	RID m_hBoundControlTexture;
 	RID m_hBoundColorTexture;
 	RID m_hBoundMiddleCompositeTexture;
+	RID m_hBoundTerrainShadowMaskTexture;
 	RID m_hBoundMiddleHeightTexture;
 	RID m_hBoundMiddleHeightRegionMapTexture;
 	RID m_hBoundFarHeightTexture;
@@ -165,6 +166,7 @@ private:
 			const RID &rControl,
 			const RID &rColor,
 			const RID &rMiddleComposite,
+			const RID &rTerrainShadowMask,
 			const RID &rMiddleHeight,
 			const RID &rMiddleHeightRegionMap,
 			const RID &rFarHeight,
@@ -219,6 +221,7 @@ public:
 			const RID &rControlTextureRd,
 			const RID &rColorTextureRd,
 			const RID &rMiddleCompositeTextureRd,
+			const RID &rTerrainShadowMaskTextureRd,
 			const RID &rMiddleHeightTextureRd,
 			const RID &rMiddleHeightRegionMapTextureRd,
 			const RID &rFarHeightTextureRd,
@@ -241,6 +244,7 @@ public:
 			const RID &rControlTextureRd,
 			const RID &rColorTextureRd,
 			const RID &rMiddleCompositeTextureRd,
+			const RID &rTerrainShadowMaskTextureRd,
 			const RID &rMiddleHeightTextureRd,
 			const RID &rMiddleHeightRegionMapTextureRd,
 			const RID &rFarHeightTextureRd,

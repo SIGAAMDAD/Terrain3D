@@ -95,7 +95,7 @@ typedef enum t3dRdNativeProxyMode_e {
 	T3D_RD_NATIVE_PROXY_FULL = 2,
 } t3dRdNativeProxyMode_t;
 
-static constexpr uint32_t s_nRdForwardBridgeAbiVersion = 5u;
+static constexpr uint32_t s_nRdForwardBridgeAbiVersion = 6u;
 static constexpr uint32_t s_nRdForwardMaxViews = 2u;
 
 typedef enum t3dRdForwardCallbackPhase_e {
@@ -192,6 +192,7 @@ typedef struct t3dRdForwardPassContext_s {
 	bool m_bDirectionalLightSoftShadows = false;
 	float m_fCameraZNear = 0.0f;
 	float m_fCameraZFar = 0.0f;
+	float m_fReflectionAtlasBorderSize = 0.0f;
 	RID m_hNativeFramebuffer;
 	RID m_hDirectionalLightBuffer;
 	RID m_hOmniLightBuffer;
