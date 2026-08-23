@@ -998,6 +998,9 @@ void Terrain3DRenderCoordinator::initialize( Terrain3D *const pTerrain ) {
 	const bool bCompareCulling = os && os->get_environment( "TERRAIN3D_RD_COMPARE_CULL" ) == "1";
 	const bool bDirectDebug = os && os->get_environment( "TERRAIN3D_RD_DIRECT_DRAW" ) == "1";
 	m_bCompositorDebugEnabled = os && os->get_environment( "TERRAIN3D_RD_DEBUG_COMPOSITOR" ) == "1";
+	m_bMotionDebugEnabled = os && os->get_environment( "TERRAIN3D_RD_DEBUG_MOTION" ) == "1";
+	m_renderer.setMotionDebugEnabled( m_bMotionDebugEnabled );
+	m_instanceRenderer.setMotionDebugEnabled( m_bMotionDebugEnabled );
 	m_renderer.setCullingComparisonEnabled( bCompareCulling );
 	m_renderer.setDirectDrawDebugEnabled( bDirectDebug );
 	const bool bInstanceDirectDebug = os && os->get_environment( "TERRAIN3D_RD_INSTANCE_DIRECT_DRAW" ) == "1";
@@ -1072,6 +1075,7 @@ void Terrain3DRenderCoordinator::shutdown( void ) {
 	m_nCombinedInstanceSceneGeneration = 0u;
 	resetSnapshotPublication();
 	m_bCompositorDebugEnabled = false;
+	m_bMotionDebugEnabled = false;
 	m_pTerrain = nullptr;
 }
 
@@ -1182,8 +1186,9 @@ void Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 	m_nLastForwardScenePass.store( rContext.m_nScenePass, std::memory_order_release );
 	m_nLastForwardDrawList.store( rContext.m_nDrawList, std::memory_order_release );
 	m_nLastForwardPassKind.store( ( uint32_t )( rContext.m_passKind ), std::memory_order_release );
+	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION ) m_nMotionPassCallbacks.fetch_add( 1u, std::memory_order_relaxed );
 	if ( rContext.m_passKind != T3D_RD_FORWARD_PASS_DEPTH && rContext.m_passKind != T3D_RD_FORWARD_PASS_OPAQUE &&
-			rContext.m_passKind != T3D_RD_FORWARD_PASS_SHADOW ) return;
+			rContext.m_passKind != T3D_RD_FORWARD_PASS_SHADOW && rContext.m_passKind != T3D_RD_FORWARD_PASS_MOTION ) return;
 
 	if ( rContext.m_phase == T3D_RD_FORWARD_PHASE_PREPARE ) {
 		if ( !initializeRendererOnRenderThread() ) return;
@@ -1251,6 +1256,9 @@ Dictionary Terrain3DRenderCoordinator::getDiagnostics( void ) const {
 	result["last_forward_scene_pass"] = ( int64_t )( m_nLastForwardScenePass.load( std::memory_order_acquire ) );
 	result["last_forward_draw_list"] = m_nLastForwardDrawList.load( std::memory_order_acquire );
 	result["last_forward_pass_kind"] = ( int64_t )( m_nLastForwardPassKind.load( std::memory_order_acquire ) );
+	result["motion_pass_callbacks"] = ( int64_t )( m_nMotionPassCallbacks.load( std::memory_order_acquire ) );
+	result["native_motion_vectors_active"] = m_nMotionPassCallbacks.load( std::memory_order_acquire ) > 0u;
+	result["motion_debug_enabled"] = m_bMotionDebugEnabled;
 	result["compositor_debug_lane"] = m_bCompositorDebugEnabled;
 	Terrain3DRdForwardPlusBridgeAdapter *const pForwardBridge = Terrain3DRdForwardPlusBridgeAdapter::getSingleton();
 	result["forward_plus_bridge"] = pForwardBridge ? pForwardBridge->getDiagnostics() : Dictionary();

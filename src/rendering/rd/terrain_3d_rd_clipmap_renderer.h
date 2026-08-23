@@ -130,6 +130,7 @@ private:
 	std::atomic_bool m_bHasError{ false };
 	std::atomic_bool m_bCullingComparisonEnabled{ false };
 	std::atomic_bool m_bDirectDrawDebugEnabled{ false };
+	std::atomic_bool m_bMotionDebugEnabled{ false };
 	t3dRdCpuCullResult_t m_cpuCullResult{};
 	PackedByteArray m_frameUploadBytes;
 	PackedByteArray m_materialUploadBytes;
@@ -182,7 +183,9 @@ private:
 			const RID &rDepth,
 			RenderingDevice::TextureSamples samples,
 			bool bColorWrite );
-	bool updateFrameUniforms( const t3dRdFrameSnapshot_t &rSnapshot, const Projection &rViewProjection, const Projection &rView, const Vector3 &rCamera );
+	bool updateFrameUniforms( const t3dRdFrameSnapshot_t &rSnapshot, const Projection &rViewProjection, const Projection &rView, const Vector3 &rCamera,
+			const Projection &rPreviousViewProjection = Projection(), const Vector2 &rTaaJitter = Vector2(),
+			const Vector2 &rPreviousTaaJitter = Vector2(), bool bHistoryValid = false );
 	bool uploadSnapshotBuffers( const t3dRdFrameSnapshot_t &rSnapshot,
 			const PackedByteArray &rRegionMapBytes,
 			uint64_t nRegionMapGeneration );
@@ -263,6 +266,9 @@ public:
 	}
 	EA_FORCE_INLINE bool isDirectDrawDebugEnabled( void ) const {
 		return m_bDirectDrawDebugEnabled.load( std::memory_order_acquire );
+	}
+	EA_FORCE_INLINE void setMotionDebugEnabled( const bool bEnabled ) {
+		m_bMotionDebugEnabled.store( bEnabled, std::memory_order_release );
 	}
 
 	EA_FORCE_INLINE bool isReady( void ) const {

@@ -31,7 +31,7 @@ class Terrain3DRdForwardPlusBridgeAdapter : public Object {
 	CLASS_NAME_STATIC( "Terrain3DRdForwardPlusBridgeAdapter" );
 
 public:
-	static constexpr uint32_t s_nBridgeAbiVersion = 4u;
+	static constexpr uint32_t s_nBridgeAbiVersion = 5u;
 	static constexpr uint32_t s_nMaxCoordinators = 64u;
 	static constexpr const char *s_pszEngineSingletonName = "Terrain3DForwardPlusBridge";
 

@@ -84,6 +84,7 @@ private:
 	RID m_hHlodCullUniformSet;
 	RID m_hFrameBuffer;
 	RID m_hInstanceBuffer;
+	RID m_hPreviousInstanceBuffer;
 	RID m_hVisibleIndexBuffer;
 	RID m_hShadowVisibleIndexBuffer;
 	RID m_hMaterialBuffer;
@@ -97,6 +98,7 @@ private:
 	RID m_hFallbackOrmTexture;
 	uint64_t m_nMaterialBindingGeneration = 0u;
 	uint32_t m_nInstanceCapacityBytes = 0u;
+	uint32_t m_nPreviousInstanceCapacityBytes = 0u;
 	uint32_t m_nVisibleCapacityBytes = 0u;
 	uint32_t m_nShadowVisibleCapacityBytes = 0u;
 	uint32_t m_nMaterialCapacityBytes = 0u;
@@ -106,8 +108,12 @@ private:
 	uint64_t m_nUploadedSceneGeneration = 0u;
 	uint64_t m_nUploadedMeshGeneration = 0u;
 	bool m_bDirectDrawDebug = false;
+	bool m_bMotionDebug = false;
 	String m_lastError;
 	std::vector<uint32_t> m_visibleIndices;
+	std::vector<t3dRdInstanceRecord_t> m_motionHistoryRecords;
+	std::vector<t3dRdInstanceCell_t> m_motionHistoryCells;
+	std::vector<t3dRdInstanceRecord_t> m_motionPreviousRecords;
 	std::vector<uint32_t> m_shadowVisibleIndices;
 	std::vector<t3dRdInstanceDrawPacket_t> m_drawPackets;
 	std::vector<t3dRdInstanceDrawPacket_t> m_depthPackets;
@@ -117,6 +123,7 @@ private:
 	std::vector<t3dRdInstanceForwardPipelineEntry_t> m_forwardPipelines;
 	PackedByteArray m_frameBytes;
 	PackedByteArray m_instanceBytes;
+	PackedByteArray m_previousInstanceBytes;
 	PackedByteArray m_dirtyInstanceBytes;
 	PackedByteArray m_visibleBytes;
 	PackedByteArray m_shadowVisibleBytes;
@@ -136,6 +143,11 @@ private:
 	uint64_t m_nHlodCullDispatches = 0u;
 	uint64_t m_nHlodCullDescriptors = 0u;
 	uint64_t m_nForwardPreparedScenePass = 0u;
+	uint64_t m_nMotionHistoryScenePass = UINT64_MAX;
+	uint64_t m_nMotionHistorySceneGeneration = 0u;
+	uint64_t m_nMotionHistoryResets = 0u;
+	uint64_t m_nMotionHistoryMatches = 0u;
+	bool m_bMotionHistoryNeedsAdvance = false;
 	uint64_t m_nForwardPreparedSceneGeneration = 0u;
 	t3dRdForwardPassKind_t m_forwardPreparedPacketPassKind = T3D_RD_FORWARD_PASS_INVALID;
 	uint32_t m_nForwardPreparedVisibilityMask = UINT32_MAX;
@@ -163,6 +175,7 @@ private:
 	void freeMaterialBindings( void );
 	RID getMaterialBinding( uint32_t nMaterial, uint32_t nOverlayMaterial ) const;
 	bool uploadScene( const std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> &pScene );
+	bool prepareMotionHistory( const t3dRdInstanceSceneSnapshot_t &rScene, uint64_t nScenePass, bool bCameraHistoryValid );
 	bool uploadMaterials( void );
 	bool buildPackets( const t3dRdInstanceSceneSnapshot_t &rScene, const Projection &rViewProjection, const Vector3 &rCamera, uint32_t nVisibilityMask, bool bShadowPass );
 	bool uploadVisibility( void );
@@ -194,6 +207,7 @@ public:
 	bool renderForwardPass( const t3dRdForwardPassContext_t &rContext );
 	Dictionary getDiagnostics( void ) const;
 	EA_FORCE_INLINE void setDirectDrawDebugEnabled( bool bEnabled ) { m_bDirectDrawDebug = bEnabled; }
+	EA_FORCE_INLINE void setMotionDebugEnabled( bool bEnabled ) { m_bMotionDebug = bEnabled; }
 	EA_FORCE_INLINE const std::vector<t3dRdInstanceDrawPacket_t> &getDepthPackets( void ) const { return m_depthPackets; }
 	EA_FORCE_INLINE const std::vector<t3dRdInstanceDrawPacket_t> &getShadowPackets( void ) const { return m_shadowPackets; }
 	EA_FORCE_INLINE String getLastError( void ) const { return m_lastError; }

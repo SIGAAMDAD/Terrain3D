@@ -129,8 +129,10 @@ private:
 	bool m_bFallbackActive = false;
 	bool m_bForwardBridgeAttached = false;
 	bool m_bCompositorDebugEnabled = false;
+	bool m_bMotionDebugEnabled = false;
 	std::atomic_uint64_t m_nCallbackCount{ 0u };
 	std::atomic_uint64_t m_nForwardPassCallbacks{ 0u };
+	std::atomic_uint64_t m_nMotionPassCallbacks{ 0u };
 	std::atomic_uint64_t m_nLastForwardScenePass{ 0u };
 	std::atomic_int64_t m_nLastForwardDrawList{ -1 };
 	std::atomic_uint32_t m_nLastForwardPassKind{ T3D_RD_FORWARD_PASS_INVALID };

@@ -204,9 +204,10 @@ bool Terrain3DRdClipmapRenderer::selectForwardVariant( const t3dRdForwardPassCon
 			default: return false;
 		}
 	}
-	if ( rContext.m_passKind != T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_nativePassMode != T3D_RD_FORWARD_NATIVE_PASS_COLOR ) return false;
+	if ( ( rContext.m_passKind != T3D_RD_FORWARD_PASS_OPAQUE && rContext.m_passKind != T3D_RD_FORWARD_PASS_MOTION ) ||
+			rContext.m_nativePassMode != T3D_RD_FORWARD_NATIVE_PASS_COLOR ) return false;
 	const bool specular = ( rContext.m_nColorPassFlags & ( 1u << 1u ) ) != 0u;
-	const bool motion = ( rContext.m_nColorPassFlags & ( 1u << 3u ) ) != 0u;
+	const bool motion = rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION || ( rContext.m_nColorPassFlags & ( 1u << 3u ) ) != 0u;
 	rVariant = specular ? ( motion ? T3D_RD_FORWARD_SHADER_COLOR_SPECULAR_MOTION : T3D_RD_FORWARD_SHADER_COLOR_SPECULAR ) :
 			( motion ? T3D_RD_FORWARD_SHADER_COLOR_MOTION : T3D_RD_FORWARD_SHADER_COLOR );
 	return true;
@@ -251,7 +252,7 @@ bool Terrain3DRdClipmapRenderer::ensureForwardPipelines( const t3dRdForwardPassC
 	key.m_samples = rd->framebuffer_format_get_texture_samples( rContext.m_nFramebufferFormat, 0u );
 	key.m_nViewCount = rContext.m_nViewCount;
 	key.m_bReverseCull = rContext.m_bReverseCull;
-	key.m_bDepthPrepassActive = rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE && rContext.m_bDepthPrepassActive;
+	key.m_bDepthPrepassActive = ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION ) && rContext.m_bDepthPrepassActive;
 	if ( findForwardPipeline( key ) ) {
 		m_lastForwardPipelineKey = key;
 		m_bLastForwardPipelineKeyValid = true;
@@ -940,10 +941,21 @@ void Terrain3DRdClipmapRenderer::copyProjection( const Projection &rProjection, 
 bool Terrain3DRdClipmapRenderer::updateFrameUniforms( const t3dRdFrameSnapshot_t &rSnapshot,
 		const Projection &rViewProjection,
 		const Projection &rView,
-		const Vector3 &rCamera ) {
+		const Vector3 &rCamera,
+		const Projection &rPreviousViewProjection,
+		const Vector2 &rTaaJitter,
+		const Vector2 &rPreviousTaaJitter,
+		const bool bHistoryValid ) {
 	t3dRdFrameUniforms_t frame{};
 	copyProjection( rViewProjection, frame.m_mViewProjection );
 	copyProjection( rView, frame.m_mView );
+	copyProjection( bHistoryValid ? rPreviousViewProjection : rViewProjection, frame.m_mPreviousViewProjection );
+	frame.m_szMotionJitter[0] = ( float )( rTaaJitter.x );
+	frame.m_szMotionJitter[1] = ( float )( rTaaJitter.y );
+	frame.m_szMotionJitter[2] = ( float )( bHistoryValid ? rPreviousTaaJitter.x : rTaaJitter.x );
+	frame.m_szMotionJitter[3] = ( float )( bHistoryValid ? rPreviousTaaJitter.y : rTaaJitter.y );
+	frame.m_szMotionParams[0] = bHistoryValid ? 1.0f : 0.0f;
+	frame.m_szMotionParams[1] = m_bMotionDebugEnabled.load( std::memory_order_acquire ) ? 1.0f : 0.0f;
 	frame.m_fLightDirectionX = ( float )( rSnapshot.m_lightDirection.x );
 	frame.m_fLightDirectionY = ( float )( rSnapshot.m_lightDirection.y );
 	frame.m_fLightDirectionZ = ( float )( rSnapshot.m_lightDirection.z );
@@ -1442,7 +1454,9 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassConte
 			!ensureUniformSets( height, derived, control, color_map, middle_composite, middle_height,
 					middle_height_region_map, far_height, far_color, albedo, far_albedo, normal, surface,
 					displacement, world_noise, macro_noise, editor_brush, rSnapshot.m_materialConfig ) ||
-			!updateFrameUniforms( rSnapshot, rContext.m_szViewProjection[0], Projection( rContext.m_cameraTransform.affine_inverse() ), rContext.m_cameraTransform.origin ) ) {
+			!updateFrameUniforms( rSnapshot, rContext.m_szViewProjection[0], Projection( rContext.m_cameraTransform.affine_inverse() ),
+				rContext.m_cameraTransform.origin, rContext.m_szPreviousViewProjection[0], rContext.m_taaJitter,
+				rContext.m_previousTaaJitter, rContext.m_bMotionVectorsEnabled ) ) {
 		setError( "Failed to prepare Terrain3D native Forward+ frame state" );
 		return false;
 	}
@@ -1468,7 +1482,7 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassConte
 		m_nForwardPreparedSnapshotGeneration = rSnapshot.m_nPublicationGeneration;
 		m_forwardPreparedCullPassKind = rContext.m_passKind;
 	}
-	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE ) {
+	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION ) {
 		if ( !m_forwardLighting.prepare( rContext, rSnapshot.m_nRenderLayers ) ) {
 			setError( String( "Failed to prepare Terrain3D Forward+ native lighting: " ) +
 					String( m_forwardLighting.getDiagnostics().get( "forward_light_last_error", "unknown" ) ) );
@@ -1494,7 +1508,7 @@ bool Terrain3DRdClipmapRenderer::drawForwardView( const t3dRdForwardPassContext_
 			rContext.m_nViewCount != m_lastForwardPipelineKey.m_nViewCount ||
 			rContext.m_passKind != m_lastForwardPipelineKey.m_passKind ||
 			rContext.m_bReverseCull != m_lastForwardPipelineKey.m_bReverseCull ||
-			( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE && rContext.m_bDepthPrepassActive ) != m_lastForwardPipelineKey.m_bDepthPrepassActive ) return false;
+			( ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION ) && rContext.m_bDepthPrepassActive ) != m_lastForwardPipelineKey.m_bDepthPrepassActive ) return false;
 	const t3dRdForwardPipelineEntry_t *const entry = findForwardPipeline( m_lastForwardPipelineKey );
 	if ( !entry ) return false;
 	RenderingDevice *const rd = m_context.getDevice();
@@ -1505,7 +1519,7 @@ bool Terrain3DRdClipmapRenderer::drawForwardView( const t3dRdForwardPassContext_
 		const Terrain3DRdTopology &topology = group == T3D_RD_DRAW_GROUP_LOD0_NEAR ? m_szTopology[LOD0_MESH] : m_szTopology[OUTER_RING_MESH];
 		rd->draw_list_bind_render_pipeline( draw_list, entry->m_hszPipelines[tier] );
 		rd->draw_list_bind_uniform_set( draw_list, m_hszRasterUniformSets[tier], 0u );
-		if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE ) {
+		if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION ) {
 			const RID lighting_set = m_forwardLighting.getSet( m_hszForwardShaders[tier][variant] );
 			if ( !lighting_set.is_valid() ) return false;
 			rd->draw_list_bind_uniform_set( draw_list, lighting_set, 2u );

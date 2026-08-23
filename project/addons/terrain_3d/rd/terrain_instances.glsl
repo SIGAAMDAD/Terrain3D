@@ -22,7 +22,10 @@ layout(location = 5) in vec2 in_uv2;
 layout(set = 0, binding = 0, std140) uniform InstanceFrame {
 	mat4 view_projection;
 	mat4 view_matrix;
+	mat4 previous_view_projection;
 	vec4 camera_position;
+	vec4 motion_jitter;
+	vec4 motion_params;
 } frame_data;
 
 struct InstanceRecord {
@@ -35,6 +38,7 @@ struct InstanceRecord {
 };
 layout(set = 0, binding = 1, std430) readonly buffer InstanceRecords { InstanceRecord records[]; };
 layout(set = 0, binding = 2, std430) readonly buffer VisibleIndices { uint visible_indices[]; };
+layout(set = 0, binding = 4, std430) readonly buffer PreviousInstanceRecords { InstanceRecord previous_records[]; };
 
 layout(push_constant, std430) uniform InstancePush {
 	uint material_index;
@@ -53,9 +57,22 @@ layout(location = 2) out vec4 mesh_vertex_color;
 layout(location = 3) out vec4 instance_color;
 layout(location = 4) out vec2 vertex_uv;
 layout(location = 5) out vec3 vertex_world_position;
+#ifdef T3D_FORWARD_MOTION
+layout(location = 6) out vec4 current_screen_position;
+layout(location = 7) out vec4 previous_screen_position;
+#endif
 
 vec3 rotate_quaternion(vec4 q, vec3 v) {
 	return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v);
+}
+
+vec3 instance_world_position(InstanceRecord record, vec3 local_vertex) {
+	vec2 q01 = unpackSnorm2x16(record.quaternion01);
+	vec2 q23 = unpackSnorm2x16(record.quaternion23);
+	vec4 quaternion = normalize(vec4(q01.x, q01.y, q23.x, q23.y));
+	vec2 scale01 = unpackHalf2x16(record.scale01);
+	vec2 scale2_flags = unpackHalf2x16(record.scale2_flags & 0x0000ffffu);
+	return record.position + rotate_quaternion(quaternion, local_vertex * vec3(scale01, scale2_flags.x));
 }
 
 void main() {
@@ -83,7 +100,14 @@ void main() {
 	instance_color = unpackUnorm4x8(record.color_rgba8);
 	vertex_uv = in_uv;
 	vertex_world_position = world_position;
-	gl_Position = frame_data.view_projection * vec4(world_position, 1.0);
+	vec4 current_clip = frame_data.view_projection * vec4(world_position, 1.0);
+	gl_Position = current_clip;
+#ifdef T3D_FORWARD_MOTION
+	current_screen_position = current_clip;
+	vec3 previous_world_position = instance_world_position(previous_records[record_index], in_position);
+	previous_screen_position = frame_data.motion_params.x > 0.5 ?
+		frame_data.previous_view_projection * vec4(previous_world_position, 1.0) : current_clip;
+#endif
 }
 
 #[fragment]
@@ -94,7 +118,10 @@ void main() {
 layout(set = 0, binding = 0, std140) uniform InstanceFrameFragment {
 	mat4 view_projection;
 	mat4 view_matrix;
+	mat4 previous_view_projection;
 	vec4 camera_position;
+	vec4 motion_jitter;
+	vec4 motion_params;
 } frame_data;
 
 struct InstanceMaterial {
@@ -132,6 +159,10 @@ layout(location = 2) in vec4 mesh_vertex_color;
 layout(location = 3) in vec4 instance_color;
 layout(location = 4) in vec2 vertex_uv;
 layout(location = 5) in vec3 vertex_world_position;
+#ifdef T3D_FORWARD_MOTION
+layout(location = 6) in vec4 current_screen_position;
+layout(location = 7) in vec4 previous_screen_position;
+#endif
 #ifdef T3D_FORWARD_DEPTH
 #ifdef T3D_FORWARD_NORMAL_ROUGHNESS
 layout(location = 0) out vec4 out_normal_roughness;
@@ -298,7 +329,12 @@ void main() {
 	out_specular = vec4(0.0);
 #endif
 #ifdef T3D_FORWARD_MOTION
-	out_motion = vec2(0.0);
+	vec2 current_clip_xy = current_screen_position.xy / current_screen_position.w - frame_data.motion_jitter.xy;
+	vec2 previous_clip_xy = previous_screen_position.xy / previous_screen_position.w - frame_data.motion_jitter.zw;
+	out_motion = (previous_clip_xy - current_clip_xy) * 0.5;
+	if (frame_data.motion_params.y > 0.5) {
+		out_color.rgb = clamp(vec3(0.5 + out_motion * 8.0, length(out_motion) * 16.0), vec3(0.0), vec3(1.0));
+	}
 #endif
 #endif // T3D_FORWARD_DEPTH
 }

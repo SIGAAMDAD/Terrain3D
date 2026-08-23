@@ -25,9 +25,12 @@ namespace {
 typedef struct alignas( 16 ) t3dRdInstanceFrame_s {
 	float m_szViewProjection[16]{};
 	float m_szView[16]{};
+	float m_szPreviousViewProjection[16]{};
 	float m_szCamera[4]{};
+	float m_szMotionJitter[4]{};
+	float m_szMotionParams[4]{};
 } t3dRdInstanceFrame_t;
-static_assert( sizeof( t3dRdInstanceFrame_t ) == 144u, "Instance frame ABI changed" );
+static_assert( sizeof( t3dRdInstanceFrame_t ) == 240u, "Instance frame ABI changed" );
 
 typedef struct alignas( 16 ) t3dRdInstancePush_s {
 	uint32_t m_nMaterial = UINT16_MAX;
@@ -80,6 +83,18 @@ uint32_t t3dRdNextCapacity( const uint32_t nRequired, const uint32_t nMinimum ) 
 	uint64_t capacity = MAX( ( uint64_t )( nMinimum ), 256ull );
 	while ( capacity < nRequired ) capacity <<= 1u;
 	return capacity > UINT32_MAX ? 0u : ( uint32_t )( capacity );
+}
+
+bool t3dRdMotionCellsMatch( const t3dRdInstanceCell_t &rCurrent, const t3dRdInstanceCell_t &rPrevious ) {
+	const bool current_hlod = ( rCurrent.m_nFlags & T3D_RD_INSTANCE_HLOD ) != 0u;
+	const bool previous_hlod = ( rPrevious.m_nFlags & T3D_RD_INSTANCE_HLOD ) != 0u;
+	if ( current_hlod != previous_hlod || rCurrent.m_nRegionX != rPrevious.m_nRegionX ||
+			rCurrent.m_nRegionZ != rPrevious.m_nRegionZ || rCurrent.m_nCellX != rPrevious.m_nCellX ||
+			rCurrent.m_nCellZ != rPrevious.m_nCellZ || rCurrent.m_nInstanceCount != rPrevious.m_nInstanceCount ) return false;
+	if ( current_hlod ) {
+		return rCurrent.m_nMeshSourceKey == rPrevious.m_nMeshSourceKey && rCurrent.m_nRevision == rPrevious.m_nRevision;
+	}
+	return rCurrent.m_nMeshAssetId == rPrevious.m_nMeshAssetId;
 }
 } // namespace
 
@@ -141,9 +156,10 @@ bool Terrain3DRdInstanceRenderer::selectForwardVariant( const t3dRdForwardPassCo
 			default: return false;
 		}
 	}
-	if ( rContext.m_passKind != T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_nativePassMode != T3D_RD_FORWARD_NATIVE_PASS_COLOR ) return false;
+	if ( ( rContext.m_passKind != T3D_RD_FORWARD_PASS_OPAQUE && rContext.m_passKind != T3D_RD_FORWARD_PASS_MOTION ) ||
+			rContext.m_nativePassMode != T3D_RD_FORWARD_NATIVE_PASS_COLOR ) return false;
 	const bool specular = ( rContext.m_nColorPassFlags & ( 1u << 1u ) ) != 0u;
-	const bool motion = ( rContext.m_nColorPassFlags & ( 1u << 3u ) ) != 0u;
+	const bool motion = rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION || ( rContext.m_nColorPassFlags & ( 1u << 3u ) ) != 0u;
 	rVariant = specular ? ( motion ? T3D_RD_FORWARD_SHADER_COLOR_SPECULAR_MOTION : T3D_RD_FORWARD_SHADER_COLOR_SPECULAR ) :
 			( motion ? T3D_RD_FORWARD_SHADER_COLOR_MOTION : T3D_RD_FORWARD_SHADER_COLOR );
 	return true;
@@ -166,7 +182,7 @@ bool Terrain3DRdInstanceRenderer::ensureForwardPipelines( const t3dRdForwardPass
 	key.m_samples = rd->framebuffer_format_get_texture_samples( rContext.m_nFramebufferFormat, 0u );
 	key.m_nViewCount = rContext.m_nViewCount;
 	key.m_bReverseCull = rContext.m_bReverseCull;
-	key.m_bDepthPrepassActive = rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE && rContext.m_bDepthPrepassActive;
+	key.m_bDepthPrepassActive = ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION ) && rContext.m_bDepthPrepassActive;
 	if ( findForwardPipeline( key ) ) { m_lastForwardPipelineKey = key; m_bLastForwardPipelineKeyValid = true; return true; }
 
 	t3dRdInstanceForwardPipelineEntry_t entry;
@@ -248,11 +264,12 @@ bool Terrain3DRdInstanceRenderer::ensureBuffers( const uint32_t nInstanceBytes,
 		const uint32_t nMaterialBytes,
 		const uint32_t nIndirectBytes ) {
 	const bool replace_instance = !m_hInstanceBuffer.is_valid() || m_nInstanceCapacityBytes < nInstanceBytes;
+	const bool replace_previous_instance = !m_hPreviousInstanceBuffer.is_valid() || m_nPreviousInstanceCapacityBytes < nInstanceBytes;
 	const bool replace_visible = !m_hVisibleIndexBuffer.is_valid() || m_nVisibleCapacityBytes < nVisibleBytes;
 	const bool replace_material = !m_hMaterialBuffer.is_valid() || m_nMaterialCapacityBytes < nMaterialBytes;
 	const bool replace_indirect = !m_hIndirectBuffer.is_valid() || m_nIndirectCapacityBytes < nIndirectBytes;
-	if ( ( replace_instance || replace_visible || replace_material || replace_indirect ) && m_hUniformSet.is_valid() ) m_context.freeResource( m_hUniformSet );
-	if ( ( replace_instance || replace_material ) && m_hShadowUniformSet.is_valid() ) m_context.freeResource( m_hShadowUniformSet );
+	if ( ( replace_instance || replace_previous_instance || replace_visible || replace_material || replace_indirect ) && m_hUniformSet.is_valid() ) m_context.freeResource( m_hUniformSet );
+	if ( ( replace_instance || replace_previous_instance || replace_material ) && m_hShadowUniformSet.is_valid() ) m_context.freeResource( m_hShadowUniformSet );
 	if ( replace_indirect && m_hHlodCullUniformSet.is_valid() ) {
 		m_context.freeResource( m_hHlodCullUniformSet );
 	}
@@ -271,6 +288,12 @@ bool Terrain3DRdInstanceRenderer::ensureBuffers( const uint32_t nInstanceBytes,
 			"T3D.Instance.Records",
 			Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
 			Terrain3DRdContext::MEMORY_INSTANCE ) &&
+			ensureBuffer( m_hPreviousInstanceBuffer,
+					m_nPreviousInstanceCapacityBytes,
+					MAX( nInstanceBytes, ( uint32_t )( sizeof( t3dRdInstanceRecord_t ) ) ),
+					"T3D.Instance.PreviousRecords",
+					Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
+					Terrain3DRdContext::MEMORY_INSTANCE ) &&
 			ensureBuffer( m_hVisibleIndexBuffer,
 					m_nVisibleCapacityBytes,
 					MAX( nVisibleBytes, 4u ),
@@ -303,7 +326,7 @@ bool Terrain3DRdInstanceRenderer::ensureShadowBuffers( const uint32_t nVisibleBy
 
 bool Terrain3DRdInstanceRenderer::ensureUniformSet( void ) {
 	if ( m_hUniformSet.is_valid() ) return true; RenderingDevice *const rd = m_context.getDevice();
-	TypedArray<Ref<RDUniform>> uniforms; uniforms.push_back( t3dRdInstanceBufferUniform( 0, RenderingDevice::UNIFORM_TYPE_UNIFORM_BUFFER, m_hFrameBuffer ) ); uniforms.push_back( t3dRdInstanceBufferUniform( 1, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hInstanceBuffer ) ); uniforms.push_back( t3dRdInstanceBufferUniform( 2, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hVisibleIndexBuffer ) ); uniforms.push_back( t3dRdInstanceBufferUniform( 3, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hMaterialBuffer ) );
+	TypedArray<Ref<RDUniform>> uniforms; uniforms.push_back( t3dRdInstanceBufferUniform( 0, RenderingDevice::UNIFORM_TYPE_UNIFORM_BUFFER, m_hFrameBuffer ) ); uniforms.push_back( t3dRdInstanceBufferUniform( 1, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hInstanceBuffer ) ); uniforms.push_back( t3dRdInstanceBufferUniform( 2, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hVisibleIndexBuffer ) ); uniforms.push_back( t3dRdInstanceBufferUniform( 3, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hMaterialBuffer ) ); uniforms.push_back( t3dRdInstanceBufferUniform( 4, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hPreviousInstanceBuffer ) );
 	m_hUniformSet = rd->uniform_set_create( uniforms, m_hShader, 0u );
 	return m_hUniformSet.is_valid() && m_context.registerResource( m_hUniformSet, "T3D.Instance.UniformSet", Terrain3DRdContext::RESOURCE_UNIFORM_SET, Terrain3DRdContext::MEMORY_NONE, 0u );
 }
@@ -316,6 +339,7 @@ bool Terrain3DRdInstanceRenderer::ensureShadowUniformSet( void ) {
 	uniforms.push_back( t3dRdInstanceBufferUniform( 1, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hInstanceBuffer ) );
 	uniforms.push_back( t3dRdInstanceBufferUniform( 2, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hShadowVisibleIndexBuffer ) );
 	uniforms.push_back( t3dRdInstanceBufferUniform( 3, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hMaterialBuffer ) );
+	uniforms.push_back( t3dRdInstanceBufferUniform( 4, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hPreviousInstanceBuffer ) );
 	m_hShadowUniformSet = rd->uniform_set_create( uniforms, m_hShader, 0u );
 	return m_hShadowUniformSet.is_valid() && m_context.registerResource( m_hShadowUniformSet, "T3D.Instance.ShadowUniformSet",
 			Terrain3DRdContext::RESOURCE_UNIFORM_SET, Terrain3DRdContext::MEMORY_NONE, 0u );
@@ -530,6 +554,69 @@ bool Terrain3DRdInstanceRenderer::uploadScene(
 	return true;
 }
 
+bool Terrain3DRdInstanceRenderer::prepareMotionHistory( const t3dRdInstanceSceneSnapshot_t &rScene,
+		const uint64_t nScenePass,
+		const bool bCameraHistoryValid ) {
+	if ( m_nMotionHistoryScenePass == nScenePass && rScene.m_nGeneration == m_nMotionHistorySceneGeneration ) return true;
+	if ( rScene.m_instances.empty() ) {
+		m_motionHistoryRecords.clear();
+		m_motionHistoryCells.clear();
+		m_nMotionHistorySceneGeneration = rScene.m_nGeneration;
+		m_bMotionHistoryNeedsAdvance = false;
+		m_nMotionHistoryScenePass = nScenePass;
+		return true;
+	}
+
+	bool upload_previous = false;
+	const bool reset_history = !bCameraHistoryValid || m_motionHistoryRecords.empty() || m_motionHistoryCells.empty();
+	const bool scene_changed = rScene.m_nGeneration != m_nMotionHistorySceneGeneration;
+	if ( reset_history ) {
+		m_motionPreviousRecords = rScene.m_instances;
+		upload_previous = true;
+		++m_nMotionHistoryResets;
+		m_bMotionHistoryNeedsAdvance = false;
+	} else if ( scene_changed ) {
+		m_motionPreviousRecords = rScene.m_instances;
+		for ( const t3dRdInstanceCell_t &current_cell : rScene.m_cells ) {
+			const uint64_t current_end = ( uint64_t )( current_cell.m_nFirstInstance ) + current_cell.m_nInstanceCount;
+			if ( current_end > rScene.m_instances.size() ) continue;
+			for ( const t3dRdInstanceCell_t &previous_cell : m_motionHistoryCells ) {
+				if ( !t3dRdMotionCellsMatch( current_cell, previous_cell ) ) continue;
+				const uint64_t previous_end = ( uint64_t )( previous_cell.m_nFirstInstance ) + previous_cell.m_nInstanceCount;
+				if ( previous_end > m_motionHistoryRecords.size() ) break;
+				std::copy_n( m_motionHistoryRecords.begin() + previous_cell.m_nFirstInstance,
+						current_cell.m_nInstanceCount, m_motionPreviousRecords.begin() + current_cell.m_nFirstInstance );
+				m_nMotionHistoryMatches += current_cell.m_nInstanceCount;
+				break;
+			}
+		}
+		upload_previous = true;
+		m_bMotionHistoryNeedsAdvance = true;
+	} else if ( m_bMotionHistoryNeedsAdvance ) {
+		// One frame after a transform publication, advance previous=current so
+		// a stopped object does not keep emitting the same velocity forever.
+		m_motionPreviousRecords = rScene.m_instances;
+		upload_previous = true;
+		m_bMotionHistoryNeedsAdvance = false;
+	}
+
+	if ( upload_previous ) {
+		const uint32_t bytes = ( uint32_t )( m_motionPreviousRecords.size() * sizeof( t3dRdInstanceRecord_t ) );
+		m_previousInstanceBytes.resize( bytes );
+		std::memcpy( m_previousInstanceBytes.ptrw(), m_motionPreviousRecords.data(), bytes );
+		if ( m_context.getDevice()->buffer_update( m_hPreviousInstanceBuffer, 0u, bytes, m_previousInstanceBytes ) != OK ) return false;
+		m_context.recordBufferUpdate( bytes );
+	}
+
+	if ( reset_history || scene_changed ) {
+		m_motionHistoryRecords = rScene.m_instances;
+		m_motionHistoryCells = rScene.m_cells;
+		m_nMotionHistorySceneGeneration = rScene.m_nGeneration;
+	}
+	m_nMotionHistoryScenePass = nScenePass;
+	return true;
+}
+
 bool Terrain3DRdInstanceRenderer::uploadMaterials( void ) {
 	if ( m_nUploadedMeshGeneration == m_meshCache.getSourceGeneration() ) return true;
 	const std::vector<t3dRdInstanceMaterial_t> &materials = m_meshCache.getMaterials(); const uint32_t bytes = ( uint32_t )( materials.size() * sizeof( t3dRdInstanceMaterial_t ) );
@@ -567,7 +654,7 @@ bool Terrain3DRdInstanceRenderer::buildPackets( const t3dRdInstanceSceneSnapshot
 	std::vector<t3dRdPacketBuildGroup_t> groups;
 	groups.reserve( rScene.m_cells.size() );
 	m_visibleIndices.clear();
-	m_shadowVisibleIndices.clear(); m_shadowVisibleIndices.clear(); m_drawPackets.clear(); m_depthPackets.clear(); m_shadowPackets.clear(); m_hlodDescriptors.clear();
+	m_shadowVisibleIndices.clear(); m_drawPackets.clear(); m_depthPackets.clear(); m_shadowPackets.clear(); m_hlodDescriptors.clear();
 
 	for ( const t3dRdInstanceCell_t &cell : rScene.m_cells ) {
 		const bool hlod = ( cell.m_nFlags & T3D_RD_INSTANCE_HLOD ) != 0u;
@@ -957,6 +1044,7 @@ void Terrain3DRdInstanceRenderer::shutdown( void ) {
 	m_context.freeResource( m_hUniformSet );
 	m_context.freeResource( m_hFrameBuffer, sizeof( t3dRdInstanceFrame_t ) );
 	m_context.freeResource( m_hInstanceBuffer, m_nInstanceCapacityBytes );
+	m_context.freeResource( m_hPreviousInstanceBuffer, m_nPreviousInstanceCapacityBytes );
 	m_context.freeResource( m_hVisibleIndexBuffer, m_nVisibleCapacityBytes );
 	m_context.freeResource( m_hShadowVisibleIndexBuffer, m_nShadowVisibleCapacityBytes );
 	m_context.freeResource( m_hShadowUniformSet );
@@ -970,10 +1058,14 @@ void Terrain3DRdInstanceRenderer::shutdown( void ) {
 	for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant ) m_context.freeResource( m_hszForwardShaders[variant] );
 	m_context.freeResource( m_hShader );
 	for ( RID &shader : m_hszForwardShaders ) shader = RID();
-	m_nInstanceCapacityBytes = m_nVisibleCapacityBytes = m_nShadowVisibleCapacityBytes = m_nMaterialCapacityBytes = m_nIndirectCapacityBytes = m_nShadowIndirectCapacityBytes = 0u;
+	m_nInstanceCapacityBytes = m_nPreviousInstanceCapacityBytes = m_nVisibleCapacityBytes = m_nShadowVisibleCapacityBytes = m_nMaterialCapacityBytes = m_nIndirectCapacityBytes = m_nShadowIndirectCapacityBytes = 0u;
 	m_nHlodDescriptorCapacityBytes = 0u;
 	m_nUploadedSceneGeneration = m_nUploadedMeshGeneration = 0u;
 	m_visibleIndices.clear();
+	m_motionHistoryRecords.clear();
+	m_motionHistoryCells.clear();
+	m_motionPreviousRecords.clear();
+	m_previousInstanceBytes.clear();
 	m_drawPackets.clear();
 	m_depthPackets.clear();
 	m_shadowPackets.clear();
@@ -982,6 +1074,9 @@ void Terrain3DRdInstanceRenderer::shutdown( void ) {
 	m_nVisibleInstances = 0u;
 	m_nHlodCullDescriptors = 0u;
 	m_nForwardPreparedScenePass = 0u;
+	m_nMotionHistoryScenePass = UINT64_MAX;
+	m_nMotionHistorySceneGeneration = 0u;
+	m_bMotionHistoryNeedsAdvance = false;
 	m_nForwardPreparedSceneGeneration = 0u;
 	m_bLastForwardPipelineKeyValid = false;
 	m_bForwardPreparedHasDraws = false;
@@ -1048,6 +1143,10 @@ bool Terrain3DRdInstanceRenderer::prepareForwardPass( const t3dRdForwardPassCont
 	t3dRdForwardShaderVariant_t variant;
 	if ( !selectForwardVariant( rContext, variant ) ) return false;
 	if ( pScene->m_instances.empty() || pScene->m_cells.empty() ) {
+		if ( rContext.m_passKind != T3D_RD_FORWARD_PASS_SHADOW &&
+				!prepareMotionHistory( *pScene, rContext.m_nScenePass, rContext.m_bMotionVectorsEnabled ) ) {
+			setError( "Failed to reset Terrain3D instance/HLOD previous-transform history" ); return false;
+		}
 		m_drawPackets.clear(); m_depthPackets.clear(); m_shadowPackets.clear(); m_visibleIndices.clear(); m_hlodDescriptors.clear();
 		m_nVisibleInstances = 0u; m_nStaticInstances = pScene->m_instances.size();
 		m_nForwardPreparedScenePass = rContext.m_nScenePass; m_nForwardPreparedSceneGeneration = pScene->m_nGeneration;
@@ -1059,8 +1158,13 @@ bool Terrain3DRdInstanceRenderer::prepareForwardPass( const t3dRdForwardPassCont
 	if ( !pMeshes || !m_meshCache.upload( pMeshes ) || !uploadMaterials() || !uploadScene( pScene ) ) {
 		setError( "Failed to prepare Terrain3D native Forward+ instance scene" ); return false;
 	}
-
 	const bool shadow_pass = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW;
+	// Shadow passes may arrive before the scene motion pass. They must never advance or
+	// reset temporal history shared by the opaque/motion scene submission.
+	if ( !shadow_pass && !prepareMotionHistory( *pScene, rContext.m_nScenePass, rContext.m_bMotionVectorsEnabled ) ) {
+		setError( "Failed to prepare Terrain3D instance/HLOD previous-transform history" ); return false;
+	}
+
 	const bool rebuild_packets = shadow_pass || m_nForwardPreparedScenePass != rContext.m_nScenePass ||
 			m_nForwardPreparedSceneGeneration != pScene->m_nGeneration || m_forwardPreparedPacketPassKind != rContext.m_passKind ||
 			m_nForwardPreparedVisibilityMask != nVisibilityMask;
@@ -1086,7 +1190,18 @@ bool Terrain3DRdInstanceRenderer::prepareForwardPass( const t3dRdForwardPassCont
 		frame.m_szView[column * 4 + 1] = ( float )( vm.y );
 		frame.m_szView[column * 4 + 2] = ( float )( vm.z );
 		frame.m_szView[column * 4 + 3] = ( float )( vm.w );
+		const Vector4 previous_vp = ( rContext.m_bMotionVectorsEnabled ? rContext.m_szPreviousViewProjection[0] : rContext.m_szViewProjection[0] )[column];
+		frame.m_szPreviousViewProjection[column * 4 + 0] = ( float )( previous_vp.x );
+		frame.m_szPreviousViewProjection[column * 4 + 1] = ( float )( previous_vp.y );
+		frame.m_szPreviousViewProjection[column * 4 + 2] = ( float )( previous_vp.z );
+		frame.m_szPreviousViewProjection[column * 4 + 3] = ( float )( previous_vp.w );
 	}
+	frame.m_szMotionJitter[0] = ( float )( rContext.m_taaJitter.x );
+	frame.m_szMotionJitter[1] = ( float )( rContext.m_taaJitter.y );
+	frame.m_szMotionJitter[2] = ( float )( rContext.m_bMotionVectorsEnabled ? rContext.m_previousTaaJitter.x : rContext.m_taaJitter.x );
+	frame.m_szMotionJitter[3] = ( float )( rContext.m_bMotionVectorsEnabled ? rContext.m_previousTaaJitter.y : rContext.m_taaJitter.y );
+	frame.m_szMotionParams[0] = rContext.m_bMotionVectorsEnabled ? 1.0f : 0.0f;
+	frame.m_szMotionParams[1] = m_bMotionDebug ? 1.0f : 0.0f;
 	const Vector3 eye = rContext.m_cameraTransform.origin;
 	frame.m_szCamera[0] = ( float )( eye.x ); frame.m_szCamera[1] = ( float )( eye.y ); frame.m_szCamera[2] = ( float )( eye.z );
 	m_frameBytes.resize( sizeof( frame ) ); std::memcpy( m_frameBytes.ptrw(), &frame, sizeof( frame ) );
@@ -1094,7 +1209,7 @@ bool Terrain3DRdInstanceRenderer::prepareForwardPass( const t3dRdForwardPassCont
 		setError( "Failed to update Terrain3D native Forward+ instance frame buffer" ); return false;
 	}
 	m_context.recordBufferUpdate( sizeof( frame ) );
-	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE ) {
+	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION ) {
 		if ( !m_forwardLighting.prepare( rContext, nVisibilityMask ) ||
 				!m_forwardLighting.ensureSet( m_hszForwardShaders[variant] ).is_valid() ) {
 			setError( "Failed to prepare Terrain3D Forward+ instance/HLOD native lighting" );
@@ -1115,7 +1230,7 @@ bool Terrain3DRdInstanceRenderer::drawForwardView( const t3dRdForwardPassContext
 			rContext.m_nFramebufferFormat != m_lastForwardPipelineKey.m_nFramebufferFormat ||
 			rContext.m_passKind != m_lastForwardPipelineKey.m_passKind ||
 			rContext.m_bReverseCull != m_lastForwardPipelineKey.m_bReverseCull ||
-			( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE && rContext.m_bDepthPrepassActive ) != m_lastForwardPipelineKey.m_bDepthPrepassActive ) return false;
+			( ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION ) && rContext.m_bDepthPrepassActive ) != m_lastForwardPipelineKey.m_bDepthPrepassActive ) return false;
 	const t3dRdInstanceForwardPipelineEntry_t *const entry = findForwardPipeline( m_lastForwardPipelineKey );
 	if ( !entry ) return false;
 	RenderingDevice *const rd = m_context.getDevice();
@@ -1123,7 +1238,7 @@ bool Terrain3DRdInstanceRenderer::drawForwardView( const t3dRdForwardPassContext
 	const bool shadow_pass = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW;
 	const std::vector<t3dRdInstanceDrawPacket_t> &packets = shadow_pass ? m_shadowPackets : m_drawPackets;
 	rd->draw_list_bind_uniform_set( draw_list, shadow_pass ? m_hShadowUniformSet : m_hUniformSet, 0u );
-	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE ) {
+	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION ) {
 		const RID lighting_set = m_forwardLighting.getSet( m_hszForwardShaders[variant] );
 		if ( !lighting_set.is_valid() ) return false;
 		rd->draw_list_bind_uniform_set( draw_list, lighting_set, 2u );
@@ -1190,6 +1305,10 @@ Dictionary Terrain3DRdInstanceRenderer::getDiagnostics( void ) const {
 	result["instance_dirty_upload_bytes"] = ( int64_t )( m_nDirtyUploadBytes );
 	result["instance_dirty_upload_ranges"] = ( int64_t )( m_nDirtyUploadRanges );
 	result["instance_buffer_capacity_bytes"] = ( int64_t )( m_nInstanceCapacityBytes );
+	result["previous_instance_buffer_capacity_bytes"] = ( int64_t )( m_nPreviousInstanceCapacityBytes );
+	result["motion_history_resets"] = ( int64_t )( m_nMotionHistoryResets );
+	result["motion_history_matches"] = ( int64_t )( m_nMotionHistoryMatches );
+	result["motion_debug_enabled"] = m_bMotionDebug;
 	result["visible_index_capacity_bytes"] = ( int64_t )( m_nVisibleCapacityBytes );
 	result["shadow_visible_index_capacity_bytes"] = ( int64_t )( m_nShadowVisibleCapacityBytes );
 	result["indirect_capacity_bytes"] = ( int64_t )( m_nIndirectCapacityBytes );

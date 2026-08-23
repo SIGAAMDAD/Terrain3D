@@ -19,6 +19,9 @@ layout(location = 1) in uvec2 in_meta;
 layout(set = 0, binding = 0, std140) uniform FrameData {
     mat4 view_projection;
     mat4 view_matrix;
+    mat4 previous_view_projection;
+    vec4 motion_jitter;
+    vec4 motion_params;
     vec4 light_direction_ambient;
     vec4 light_color;
     vec4 terrain_params;
@@ -150,6 +153,10 @@ layout(location = 1) out vec3 world_normal;
 layout(location = 2) flat out uint patch_tier;
 layout(location = 3) flat out int terrain_region_layer;
 layout(location = 4) out vec2 terrain_world_texel;
+#ifdef T3D_FORWARD_MOTION
+layout(location = 5) out vec4 current_screen_position;
+layout(location = 6) out vec4 previous_screen_position;
+#endif
 
 const uint T3D_FEATURE_WORLD_NOISE = 1u << 5u;
 const uint T3D_FEATURE_WORLD_NOISE_CACHE = 1u << 12u;
@@ -436,7 +443,13 @@ void main() {
     ivec2 texel = ivec2(floor(terrain_world_texel));
     terrain_region_layer = region_layer(ivec2(floor_div_i(texel.x, region_size), floor_div_i(texel.y, region_size)));
     patch_tier = patch_data.tier;
-    gl_Position = frame_data.view_projection * vec4(world_position, 1.0);
+    vec4 current_clip = frame_data.view_projection * vec4(world_position, 1.0);
+    gl_Position = current_clip;
+#ifdef T3D_FORWARD_MOTION
+    current_screen_position = current_clip;
+    previous_screen_position = frame_data.motion_params.x > 0.5 ?
+        frame_data.previous_view_projection * vec4(world_position, 1.0) : current_clip;
+#endif
 }
 
 #[fragment]
@@ -452,6 +465,10 @@ layout(location = 1) in vec3 world_normal;
 layout(location = 2) flat in uint patch_tier;
 layout(location = 3) flat in int terrain_region_layer;
 layout(location = 4) in vec2 terrain_world_texel;
+#ifdef T3D_FORWARD_MOTION
+layout(location = 5) in vec4 current_screen_position;
+layout(location = 6) in vec4 previous_screen_position;
+#endif
 #ifdef T3D_FORWARD_DEPTH
 #ifdef T3D_FORWARD_NORMAL_ROUGHNESS
 layout(location = 0) out vec4 out_normal_roughness;
@@ -472,6 +489,9 @@ layout(location = 2) out vec2 out_motion;
 layout(set = 0, binding = 0, std140) uniform FrameData {
     mat4 view_projection;
     mat4 view_matrix;
+    mat4 previous_view_projection;
+    vec4 motion_jitter;
+    vec4 motion_params;
     vec4 light_direction_ambient;
     vec4 light_color;
     vec4 terrain_params;
@@ -1369,8 +1389,12 @@ void main() {
     out_specular = vec4(0.0);
 #endif
 #ifdef T3D_FORWARD_MOTION
-    // F5 replaces the neutral value with previous-frame velocity.
-    out_motion = vec2(0.0);
+    vec2 current_clip_xy = current_screen_position.xy / current_screen_position.w - frame_data.motion_jitter.xy;
+    vec2 previous_clip_xy = previous_screen_position.xy / previous_screen_position.w - frame_data.motion_jitter.zw;
+    out_motion = (previous_clip_xy - current_clip_xy) * 0.5;
+    if (frame_data.motion_params.y > 0.5) {
+        out_color.rgb = clamp(vec3(0.5 + out_motion * 8.0, length(out_motion) * 16.0), vec3(0.0), vec3(1.0));
+    }
 #endif
 #endif // T3D_FORWARD_DEPTH
 }

@@ -594,9 +594,9 @@ def rd_batch_f1_forward_bridge_check() -> bool:
     )
 
     checks += [
-        ("bridge ABI is synchronized on extension side", "s_nBridgeAbiVersion = 4u" in bridge_h and "s_nRdForwardBridgeAbiVersion = 4u" in types),
+        ("bridge ABI is synchronized on extension side", "s_nBridgeAbiVersion = 5u" in bridge_h and "s_nRdForwardBridgeAbiVersion = 5u" in types),
         ("engine singleton name fixed", 's_pszEngineSingletonName = "Terrain3DForwardPlusBridge"' in bridge_h and "class Terrain3DForwardPlusBridge" in patch),
-        ("engine ABI exposes required lifecycle API", all(token in patch for token in engine_methods) and "ABI_VERSION = 4" in patch),
+        ("engine ABI exposes required lifecycle API", all(token in patch for token in engine_methods) and "ABI_VERSION = 5" in patch),
         ("engine callback slot is atomic", "std::atomic<CallbackSlot *> callback_slot" in patch and "callback_slot.load(std::memory_order_acquire)" in patch),
         ("engine callback reclamation is reader-safe", "callback_readers.fetch_add" in patch and "callback_readers.fetch_sub" in patch and "callback_readers.load" in patch),
         ("engine callback invocation is synchronous", "slot->callable.call(p_packet)" in patch and "call_deferred" not in patch),
@@ -680,7 +680,7 @@ def rd_batch_f2_native_depth_opaque_check() -> bool:
         ("bridge parses native pass mode and depth-prepass state", 'StringName( "native_pass_mode" )' in bridge_cpp and 'StringName( "depth_prepass_active" )' in bridge_cpp),
         ("engine prepares before opening native draw list", "PHASE_PREPARE" in patch and patch.find("PHASE_PREPARE") < patch.find("draw_list_begin")),
         ("engine submits while native draw list is open", "PHASE_SUBMIT" in patch and "_terrain3d_forward_plus_submit(draw_list" in patch),
-        ("engine passes combined current and previous VP", "view_projection[view] * view_matrix" in patch and "prev_view_projection[view] * previous_view_matrix" in patch),
+        ("engine passes combined current and previous VP", "(correction * scene_data->view_projection[view]) * view_matrix" in patch and "(previous_correction * scene_data->prev_view_projection[view]) * previous_view_matrix" in patch),
         ("terrain has native prepare and submit APIs", "prepareForwardPass" in clip_h and "renderForwardPass" in clip_h and "drawForwardView" in clip_cpp),
         ("instances/HLOD have native prepare and submit APIs", "prepareForwardPass" in inst_h and "renderForwardPass" in inst_h and "drawForwardView" in inst_cpp),
         ("native submit paths never begin/end draw lists", "draw_list_begin" not in clip_submit and "draw_list_end" not in clip_submit and "draw_list_begin" not in inst_submit and "draw_list_end" not in inst_submit),
@@ -725,7 +725,7 @@ def rd_batch_f3_native_shadow_check() -> bool:
     patch = (REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch").read_text(encoding="utf-8", errors="ignore")
     ledger = (REPO / "docs" / "rd_contract_ledger.tsv").read_text(encoding="utf-8", errors="ignore")
     checks = [
-        ("current ABI retains F3 shadow packet on engine and extension sides", "s_nRdForwardBridgeAbiVersion = 4u" in types and "ABI_VERSION = 4" in patch),
+        ("current ABI retains F3 shadow packet on engine and extension sides", "s_nRdForwardBridgeAbiVersion = 5u" in types and "ABI_VERSION = 5" in patch),
         ("shadow packet carries exact light/cascade identity", all(x in patch for x in ("shadow_light_instance", "shadow_pass_index", "shadow_light_type")) and all(x in bridge for x in ('StringName( "shadow_light_instance" )', 'StringName( "shadow_pass_index" )'))),
         ("shadow packet carries masks/bias/range/atlas metadata", all(x in patch for x in ("shadow_caster_mask", "shadow_light_cull_mask", "shadow_bias", "shadow_normal_bias", "shadow_bias_scale", "shadow_range_begin", "shadow_range", "shadow_atlas_rect", "shadow_atlas_size"))),
         ("shadow VP uses exact light projection and transform", "p_projection * shadow_view" in patch),
@@ -782,7 +782,7 @@ def rd_batch_f4_native_lighting_check() -> bool:
         "cluster_type_size * type_index",
     ))
     checks = [
-        ("ABI 4 is synchronized for F4", "s_nRdForwardBridgeAbiVersion = 4u" in types and "s_nBridgeAbiVersion = 4u" in bridge_h and "ABI_VERSION = 4" in patch),
+        ("current ABI retains F4 native-light packet", "s_nRdForwardBridgeAbiVersion = 5u" in types and "s_nBridgeAbiVersion = 5u" in bridge_h and "ABI_VERSION = 5" in patch),
         ("bridge exposes exact native cluster metadata", all(x in types for x in ("m_nClusterShift", "m_nClusterWidth", "m_nClusterTypeSize", "m_nClusterMaxElementsDiv32")) and all(x in patch for x in ("cluster_shift", "cluster_width", "cluster_type_size", "cluster_max_elements_div_32"))),
         ("bridge exposes directional count and camera depth range", all(x in types for x in ("m_nDirectionalLightCount", "m_bDirectionalLightSoftShadows", "m_fCameraZNear", "m_fCameraZFar")) and all(x in bridge for x in ("directional_light_count", "directional_light_soft_shadows", "camera_z_near", "camera_z_far"))),
         ("native directional/omni/spot/area/cluster buffers are borrowed", all(x in lighting for x in ("m_hDirectionalLightBuffer", "m_hOmniLightBuffer", "m_hSpotLightBuffer", "m_hAreaLightBuffer", "m_hClusterBuffer")) and "registerResource( rContext.m_h" not in lighting),
@@ -814,6 +814,62 @@ def rd_batch_f4_native_lighting_check() -> bool:
         print(f"Batch F4 native lighting contract: {len(checks)-len(failed)}/{len(checks)} passed")
         return False
     print(f"OK Batch F4 native lighting contract: {len(checks)}/{len(checks)} passed")
+    return True
+
+
+
+def rd_batch_f5_motion_check() -> bool:
+    rd = REPO / "src" / "rendering" / "rd"
+    types = (rd / "terrain_3d_rd_types.h").read_text(encoding="utf-8", errors="ignore")
+    bridge_h = (rd / "terrain_3d_rd_forward_plus_bridge.h").read_text(encoding="utf-8", errors="ignore")
+    bridge = (rd / "terrain_3d_rd_forward_plus_bridge.cpp").read_text(encoding="utf-8", errors="ignore")
+    clip = (rd / "terrain_3d_rd_clipmap_renderer.cpp").read_text(encoding="utf-8", errors="ignore")
+    clip_h = (rd / "terrain_3d_rd_clipmap_renderer.h").read_text(encoding="utf-8", errors="ignore")
+    inst = (rd / "terrain_3d_rd_instance_renderer.cpp").read_text(encoding="utf-8", errors="ignore")
+    inst_h = (rd / "terrain_3d_rd_instance_renderer.h").read_text(encoding="utf-8", errors="ignore")
+    coord = (rd / "terrain_3d_render_coordinator.cpp").read_text(encoding="utf-8", errors="ignore")
+    patch = (REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch").read_text(encoding="utf-8", errors="ignore")
+    ledger = (REPO / "docs" / "rd_contract_ledger.tsv").read_text(encoding="utf-8", errors="ignore")
+    shaders = [(REPO / "project" / "addons" / "terrain_3d" / "rd" / f).read_text(encoding="utf-8", errors="ignore") for f in (
+        "terrain_clipmap_near.glsl", "terrain_clipmap_middle.glsl", "terrain_clipmap_far.glsl", "terrain_instances.glsl")]
+    terrain = shaders[:3]
+    instance = shaders[3]
+    exact_motion = all("out_motion = (previous_clip_xy - current_clip_xy) * 0.5" in sh and
+                       "current_screen_position.xy / current_screen_position.w - frame_data.motion_jitter.xy" in sh and
+                       "previous_screen_position.xy / previous_screen_position.w - frame_data.motion_jitter.zw" in sh
+                       for sh in shaders)
+    checks = [
+        ("ABI 5 is synchronized for F5", "s_nRdForwardBridgeAbiVersion = 5u" in types and "s_nBridgeAbiVersion = 5u" in bridge_h and "ABI_VERSION = 5" in patch),
+        ("bridge packet carries TAA jitter and history validity", all(x in types for x in ("m_taaJitter", "m_previousTaaJitter", "m_bMotionVectorsEnabled")) and all(x in bridge for x in ("taa_jitter", "previous_taa_jitter", "motion_vectors_enabled")) and all(x in patch for x in ('packet["taa_jitter"]', 'packet["previous_taa_jitter"]', 'packet["motion_vectors_enabled"]'))),
+        ("engine bridge constructs corrected jittered current and previous VP", "correction.set_depth_correction(scene_data->flip_y)" in patch and "correction.add_jitter_offset(scene_data->taa_jitter)" in patch and "previous_correction.set_depth_correction(true)" in patch and "previous_correction.add_jitter_offset(scene_data->prev_taa_jitter)" in patch),
+        ("motion hook submits on native draw list with depth-prepass state", "PASS_MOTION" in patch and "radiance_texture, nullptr, depth_pre_pass" in patch),
+        ("coordinator accepts and diagnoses native motion callbacks", "T3D_RD_FORWARD_PASS_MOTION" in coord and "m_nMotionPassCallbacks" in coord and 'result["native_motion_vectors_active"]' in coord),
+        ("terrain native motion pass is selectable", "T3D_RD_FORWARD_PASS_MOTION" in clip and "T3D_RD_FORWARD_SHADER_COLOR_MOTION" in clip),
+        ("instance/HLOD native motion pass is selectable", "T3D_RD_FORWARD_PASS_MOTION" in inst and "T3D_RD_FORWARD_SHADER_COLOR_MOTION" in inst),
+        ("terrain frame UBO carries previous VP and jitter", "m_mPreviousViewProjection" in types and "m_szMotionJitter" in types and "m_szMotionParams" in types and "sizeof( t3dRdFrameUniforms_t ) == 368u" in types),
+        ("instance frame UBO carries previous VP and jitter", "m_szPreviousViewProjection" in inst and "m_szMotionJitter" in inst and "sizeof( t3dRdInstanceFrame_t ) == 240u" in inst),
+        ("velocity matches Godot previous-UV minus current-UV convention", exact_motion),
+        ("terrain motion uses stable world position across clipmap snaps", all("frame_data.previous_view_projection * vec4(world_position, 1.0)" in sh for sh in terrain) and all(sh.count("previous_origin_x") == 1 and sh.count("previous_scale") == 1 for sh in terrain)),
+        ("terrain motion history resets to neutral current clip", all("frame_data.motion_params.x > 0.5" in sh and ": current_clip" in sh for sh in terrain)),
+        ("instance shader consumes persistent previous-record stream", "PreviousInstanceRecords" in instance and "previous_records[record_index]" in instance and "instance_world_position" in instance),
+        ("previous instance GPU buffer is persistent and bound", "m_hPreviousInstanceBuffer" in inst_h and "T3D.Instance.PreviousRecords" in inst and "binding = 4" in instance),
+        ("regular-instance history uses stable cell identity without hot hash", "t3dRdMotionCellsMatch" in inst and "m_nRegionX" in inst and "m_nCellX" in inst and "m_nMeshAssetId" in inst and "unordered_map" not in inst),
+        ("HLOD replacement history is revision-safe", "current_hlod" in inst and "m_nMeshSourceKey == rPrevious.m_nMeshSourceKey" in inst and "m_nRevision == rPrevious.m_nRevision" in inst),
+        ("new/camera-reset instance history is neutral", "reset_history = !bCameraHistoryValid" in inst and "m_motionPreviousRecords = rScene.m_instances" in inst),
+        ("stopped instance history advances after one rendered frame", "m_bMotionHistoryNeedsAdvance" in inst and "a stopped object does not keep emitting the same velocity forever" in inst),
+        ("motion path writes native velocity attachment rather than private texture", all("layout(location = 2) out vec2 out_motion" in sh for sh in shaders) and "velocity_texture" not in clip and "velocity_texture" not in inst),
+        ("motion redraw retains native lighting", "PASS_MOTION ) {\n\t\tif ( !m_forwardLighting.prepare" in clip and "PASS_MOTION ) {\n\t\tif ( !m_forwardLighting.prepare" in inst),
+        ("motion pipeline honors prepass EQUAL path", "T3D_RD_FORWARD_PASS_MOTION ) && rContext.m_bDepthPrepassActive" in clip and "T3D_RD_FORWARD_PASS_MOTION ) && rContext.m_bDepthPrepassActive" in inst and "COMPARE_OP_EQUAL" in clip and "COMPARE_OP_EQUAL" in inst),
+        ("deterministic motion visualization is explicit opt-in", "TERRAIN3D_RD_DEBUG_MOTION" in coord and "setMotionDebugEnabled" in clip_h and "setMotionDebugEnabled" in inst_h and all("motion_params.y > 0.5" in sh for sh in shaders)),
+        ("F5 ledger records Section 20 completion", "20\tMotion vectors\tF\tcomplete" in ledger),
+        ("engine patch remains syntactically parseable", run_quiet(["git", "apply", "--stat", str(REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch")], label="batch_f5_patch_parse")),
+    ]
+    failed = [label for label, ok in checks if not ok]
+    if failed:
+        for label in failed: print(f"FAIL Batch F5 motion contract: {label}")
+        print(f"Batch F5 motion contract: {len(checks)-len(failed)}/{len(checks)} passed")
+        return False
+    print(f"OK Batch F5 motion contract: {len(checks)}/{len(checks)} passed")
     return True
 
 def iter_scan_files() -> list[Path]:
@@ -1323,7 +1379,7 @@ def git_fsck() -> bool:
 
 
 def validate_fast(static_only: bool = False) -> int:
-    checks = [branch_check(), reference_check(), diff_check(), build_contract_check(), rd_shader_abi_check(), rd_batch_c_material_check(), rd_batch_d_instance_check(), rd_batch_e_hlod_check(), rd_batch_f1_forward_bridge_check(), rd_batch_f2_native_depth_opaque_check(), rd_batch_f3_native_shadow_check(), rd_batch_f4_native_lighting_check(), audit_symbols(strict_growth=True)]
+    checks = [branch_check(), reference_check(), diff_check(), build_contract_check(), rd_shader_abi_check(), rd_batch_c_material_check(), rd_batch_d_instance_check(), rd_batch_e_hlod_check(), rd_batch_f1_forward_bridge_check(), rd_batch_f2_native_depth_opaque_check(), rd_batch_f3_native_shadow_check(), rd_batch_f4_native_lighting_check(), rd_batch_f5_motion_check(), audit_symbols(strict_growth=True)]
     if not static_only:
         checks.append(build_extension("editor"))
     return 0 if all(checks) else 1
@@ -1343,6 +1399,7 @@ def validate_full() -> int:
         rd_batch_f2_native_depth_opaque_check(),
         rd_batch_f3_native_shadow_check(),
         rd_batch_f4_native_lighting_check(),
+        rd_batch_f5_motion_check(),
         audit_symbols(strict_growth=True),
         build_extension("editor"),
         godot_headless_import(),
@@ -1367,6 +1424,7 @@ def validate_final() -> int:
         rd_batch_f2_native_depth_opaque_check(),
         rd_batch_f3_native_shadow_check(),
         rd_batch_f4_native_lighting_check(),
+        rd_batch_f5_motion_check(),
         audit_symbols(strict_growth=True, final=True),
         build_extension("editor"),
         build_extension("template_release"),

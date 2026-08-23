@@ -267,6 +267,18 @@ bool Terrain3DRdForwardPlusBridgeAdapter::parsePacket(
 	rContext.m_cameraTransform = ( Transform3D )( camera_value );
 	rContext.m_previousCameraTransform = ( Transform3D )( previous_camera_value );
 
+	const Variant taa_jitter_value = rPacket.get( StringName( "taa_jitter" ), Variant() );
+	const Variant previous_taa_jitter_value = rPacket.get( StringName( "previous_taa_jitter" ), Variant() );
+	const Variant motion_vectors_value = rPacket.get( StringName( "motion_vectors_enabled" ), Variant() );
+	if ( taa_jitter_value.get_type() != Variant::VECTOR2 || previous_taa_jitter_value.get_type() != Variant::VECTOR2 ||
+			motion_vectors_value.get_type() != Variant::BOOL ) {
+		rError = "Forward+ bridge packet motion history state is missing or malformed";
+		return false;
+	}
+	rContext.m_taaJitter = ( Vector2 )( taa_jitter_value );
+	rContext.m_previousTaaJitter = ( Vector2 )( previous_taa_jitter_value );
+	rContext.m_bMotionVectorsEnabled = ( bool )( motion_vectors_value );
+
 	const Variant current_views_value = rPacket.get( StringName( "view_projections" ), Variant() );
 	const Variant previous_views_value = rPacket.get( StringName( "previous_view_projections" ), Variant() );
 	const Variant eye_offsets_value = rPacket.get( StringName( "eye_offsets" ), Variant() );
