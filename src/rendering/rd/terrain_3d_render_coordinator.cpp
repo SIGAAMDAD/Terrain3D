@@ -928,8 +928,8 @@ void Terrain3DRenderCoordinator::updateRenderRoute( void ) {
 	const t3dRenderBackend_t backend = m_backend.load( std::memory_order_acquire );
 	const bool bRd = backend != T3D_RENDER_BACKEND_RENDERING_SERVER;
 	const bool bBridgeReady = isForwardBridgeReady();
-	m_bRenderEnabled.store( bRd && bBridgeReady && !m_bFallbackActive, std::memory_order_release );
-	if ( m_effect.is_valid() ) m_effect->set_enabled( bRd && m_bCompositorDebugEnabled && !m_bFallbackActive );
+	m_bRenderEnabled.store( bRd && bBridgeReady && !m_bFailureLatched, std::memory_order_release );
+	if ( m_effect.is_valid() ) m_effect->set_enabled( bRd && m_bCompositorDebugEnabled && !m_bFailureLatched );
 	if ( bRd && !bBridgeReady ) {
 		Terrain3DRdForwardPlusBridgeAdapter *const pBridge = Terrain3DRdForwardPlusBridgeAdapter::getSingleton();
 		const String bridge_error = pBridge ? pBridge->getLastError() :
@@ -1055,7 +1055,7 @@ void Terrain3DRenderCoordinator::initialize( Terrain3D *const pTerrain ) {
 	m_proxyMode.store( m_pTerrain->getRdNativeProxyMode(), std::memory_order_release );
 	m_bRendererFailed.store( false, std::memory_order_release );
 	m_nConsecutiveRenderFailures.store( 0u, std::memory_order_release );
-	m_bFallbackActive = false;
+	m_bFailureLatched = false;
 	{
 		std::lock_guard<std::mutex> lock( m_diagnosticsMutex );
 		m_initializationError = String();
@@ -1101,7 +1101,10 @@ void Terrain3DRenderCoordinator::shutdown( void ) {
 	if ( m_effect.is_valid() ) m_effect->setCoordinator( nullptr );
 	detachEffect();
 	m_effect.unref();
-	if ( m_pTerrain && m_pTerrain->getMesher() ) m_pTerrain->getMesher()->setRdPresentation( true, false );
+	if ( m_pTerrain && m_pTerrain->getMesher() ) {
+		const bool bNativeBackend = m_backend.load( std::memory_order_acquire ) == T3D_RENDER_BACKEND_RENDERING_SERVER;
+		m_pTerrain->getMesher()->setRdPresentation( bNativeBackend, false );
+	}
 	m_worldNoiseCache.clear();
 	m_macroNoiseTexture.clear();
 	m_editorBrushTexture.clear();
@@ -1127,8 +1130,8 @@ void Terrain3DRenderCoordinator::shutdown( void ) {
 void Terrain3DRenderCoordinator::update( void ) {
 	if ( !m_pTerrain ) return;
 	publishSnapshot();
-	if ( m_bRendererFailed.load( std::memory_order_acquire ) && !m_bFallbackActive ) {
-		m_bFallbackActive = true;
+	if ( m_bRendererFailed.load( std::memory_order_acquire ) && !m_bFailureLatched ) {
+		m_bFailureLatched = true;
 		m_bRenderEnabled.store( false, std::memory_order_release );
 		if ( m_effect.is_valid() ) m_effect->set_enabled( false );
 		// A failed RD renderer is intentionally visible. Never resurrect the
@@ -1138,7 +1141,7 @@ void Terrain3DRenderCoordinator::update( void ) {
 	updateRenderRoute();
 	updateNativeProxy();
 	if ( m_backend.load( std::memory_order_acquire ) != T3D_RENDER_BACKEND_RENDERING_SERVER &&
-			m_bCompositorDebugEnabled && !m_bFallbackActive ) {
+			m_bCompositorDebugEnabled && !m_bFailureLatched ) {
 		attachEffectToActiveCamera();
 	} else if ( !m_bCompositorDebugEnabled ) {
 		detachEffect();
@@ -1150,7 +1153,7 @@ void Terrain3DRenderCoordinator::setBackend( const t3dRenderBackend_t backend ) 
 	m_backend.store( backend, std::memory_order_release );
 	if ( backend != T3D_RENDER_BACKEND_RENDERING_SERVER ) {
 		m_bRendererFailed.store( false, std::memory_order_release );
-		m_bFallbackActive = false;
+		m_bFailureLatched = false;
 	}
 	updateRenderRoute();
 	updateNativeProxy();
@@ -1279,7 +1282,25 @@ void Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 	m_nLastForwardScenePass.store( rContext.m_nScenePass, std::memory_order_release );
 	m_nLastForwardDrawList.store( rContext.m_nDrawList, std::memory_order_release );
 	m_nLastForwardPassKind.store( ( uint32_t )( rContext.m_passKind ), std::memory_order_release );
-	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION ) m_nMotionPassCallbacks.fetch_add( 1u, std::memory_order_relaxed );
+	m_nLastForwardViewCount.store( rContext.m_nViewCount, std::memory_order_release );
+	m_nLastForwardSampleCount.store( rContext.m_nSampleCount, std::memory_order_release );
+	m_nLastForwardFramebufferFormat.store( rContext.m_nFramebufferFormat, std::memory_order_release );
+	switch ( rContext.m_passKind ) {
+		case T3D_RD_FORWARD_PASS_DEPTH:
+			m_nDepthPassCallbacks.fetch_add( 1u, std::memory_order_relaxed );
+			break;
+		case T3D_RD_FORWARD_PASS_OPAQUE:
+			m_nOpaquePassCallbacks.fetch_add( 1u, std::memory_order_relaxed );
+			break;
+		case T3D_RD_FORWARD_PASS_SHADOW:
+			m_nShadowPassCallbacks.fetch_add( 1u, std::memory_order_relaxed );
+			break;
+		case T3D_RD_FORWARD_PASS_MOTION:
+			m_nMotionPassCallbacks.fetch_add( 1u, std::memory_order_relaxed );
+			break;
+		default:
+			break;
+	}
 	if ( rContext.m_passKind != T3D_RD_FORWARD_PASS_DEPTH && rContext.m_passKind != T3D_RD_FORWARD_PASS_OPAQUE &&
 			rContext.m_passKind != T3D_RD_FORWARD_PASS_SHADOW && rContext.m_passKind != T3D_RD_FORWARD_PASS_MOTION ) return;
 
@@ -1350,10 +1371,19 @@ Dictionary Terrain3DRenderCoordinator::getDiagnostics( void ) const {
 	result["forward_plus_bridge_attached"] = m_bForwardBridgeAttached;
 	result["forward_plus_bridge_ready"] = isForwardBridgeReady();
 	result["forward_pass_callbacks"] = ( int64_t )( m_nForwardPassCallbacks.load( std::memory_order_acquire ) );
+	result["depth_pass_callbacks"] = ( int64_t )( m_nDepthPassCallbacks.load( std::memory_order_acquire ) );
+	result["opaque_pass_callbacks"] = ( int64_t )( m_nOpaquePassCallbacks.load( std::memory_order_acquire ) );
+	result["shadow_pass_callbacks"] = ( int64_t )( m_nShadowPassCallbacks.load( std::memory_order_acquire ) );
+	result["motion_pass_callbacks"] = ( int64_t )( m_nMotionPassCallbacks.load( std::memory_order_acquire ) );
 	result["last_forward_scene_pass"] = ( int64_t )( m_nLastForwardScenePass.load( std::memory_order_acquire ) );
 	result["last_forward_draw_list"] = m_nLastForwardDrawList.load( std::memory_order_acquire );
 	result["last_forward_pass_kind"] = ( int64_t )( m_nLastForwardPassKind.load( std::memory_order_acquire ) );
-	result["motion_pass_callbacks"] = ( int64_t )( m_nMotionPassCallbacks.load( std::memory_order_acquire ) );
+	result["current_forward_view_count"] = ( int64_t )( m_nLastForwardViewCount.load( std::memory_order_acquire ) );
+	result["current_forward_sample_count"] = ( int64_t )( m_nLastForwardSampleCount.load( std::memory_order_acquire ) );
+	result["current_forward_framebuffer_format"] = m_nLastForwardFramebufferFormat.load( std::memory_order_acquire );
+	result["native_depth_prepass_participation"] = m_nDepthPassCallbacks.load( std::memory_order_acquire ) > 0u;
+	result["native_opaque_participation"] = m_nOpaquePassCallbacks.load( std::memory_order_acquire ) > 0u;
+	result["native_shadow_participation"] = m_nShadowPassCallbacks.load( std::memory_order_acquire ) > 0u;
 	result["native_motion_vectors_active"] = m_nMotionPassCallbacks.load( std::memory_order_acquire ) > 0u;
 	result["forward_viewport_reconfigurations"] = ( int64_t )( m_nForwardViewportReconfigurations );
 	result["forward_viewport_evictions"] = ( int64_t )( m_nForwardViewportEvictions );
@@ -1362,8 +1392,10 @@ Dictionary Terrain3DRenderCoordinator::getDiagnostics( void ) const {
 	result["compositor_debug_lane"] = m_bCompositorDebugEnabled;
 	Terrain3DRdForwardPlusBridgeAdapter *const pForwardBridge = Terrain3DRdForwardPlusBridgeAdapter::getSingleton();
 	result["forward_plus_bridge"] = pForwardBridge ? pForwardBridge->getDiagnostics() : Dictionary();
+	result["forward_plus_bridge_abi"] = pForwardBridge ? ( int64_t )( pForwardBridge->getObservedAbiVersion() ) : 0;
+	result["forward_plus_callback_registered"] = pForwardBridge && pForwardBridge->isCallbackRegistered();
 	result["renderer_initialized"] = m_bRendererInitialized.load( std::memory_order_acquire );
-	result["fallback_active"] = m_bFallbackActive;
+	result["renderer_failure_latched"] = m_bFailureLatched;
 	result["callbacks"] = ( int64_t )( m_nCallbackCount.load( std::memory_order_acquire ) );
 	result["consecutive_render_failures"] = ( int64_t )( m_nConsecutiveRenderFailures.load( std::memory_order_acquire ) );
 	const uint64_t snapshot_token = m_nSnapshotExchangeToken.load( std::memory_order_acquire );
@@ -1417,14 +1449,15 @@ Dictionary Terrain3DRenderCoordinator::getDiagnostics( void ) const {
 		std::lock_guard<std::mutex> lock( m_diagnosticsMutex );
 		result["initialization_error"] = m_initializationError;
 	}
-	result["native_depth_prepass_participation"] = false;
-	result["native_shadow_proxy_available"] = true;
+	result["native_shadow_proxy_available"] = false;
 	result["multiview_supported"] = true;
 	result["single_view_only"] = false;
-	const bool bNativeSurface = backend == T3D_RENDER_BACKEND_RENDERING_SERVER ||
-			backend == T3D_RENDER_BACKEND_RENDERING_DEVICE_HYBRID || proxy_mode == T3D_RD_NATIVE_PROXY_FULL;
+	const bool bNativeSurface = backend == T3D_RENDER_BACKEND_RENDERING_SERVER;
 	result["native_surface_enabled"] = bNativeSurface;
-	result["color_write_enabled"] = backend != T3D_RENDER_BACKEND_RENDERING_SERVER && !bNativeSurface;
-	result["hybrid_depth_only"] = backend == T3D_RENDER_BACKEND_RENDERING_DEVICE_HYBRID;
+	result["color_write_enabled"] = backend != T3D_RENDER_BACKEND_RENDERING_SERVER;
+	result["hybrid_depth_only"] = false;
+	const Dictionary forward_lighting = renderer.get( "forward_lighting", Dictionary() );
+	result["clustered_light_path_active"] = forward_lighting.get( "forward_light_resources_ready", false );
+	result["borrowed_scene_resource_changes"] = forward_lighting.get( "forward_scene_resource_changes", 0 );
 	return result;
 }

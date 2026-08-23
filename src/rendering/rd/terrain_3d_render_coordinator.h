@@ -128,16 +128,22 @@ private:
 	std::atomic_bool m_bRendererInitialized{ false };
 	std::atomic_bool m_bRenderEnabled{ false };
 	std::atomic_bool m_bRendererFailed{ false };
-	bool m_bFallbackActive = false;
+	bool m_bFailureLatched = false;
 	bool m_bForwardBridgeAttached = false;
 	bool m_bCompositorDebugEnabled = false;
 	bool m_bMotionDebugEnabled = false;
 	std::atomic_uint64_t m_nCallbackCount{ 0u };
 	std::atomic_uint64_t m_nForwardPassCallbacks{ 0u };
+	std::atomic_uint64_t m_nDepthPassCallbacks{ 0u };
+	std::atomic_uint64_t m_nOpaquePassCallbacks{ 0u };
+	std::atomic_uint64_t m_nShadowPassCallbacks{ 0u };
 	std::atomic_uint64_t m_nMotionPassCallbacks{ 0u };
 	std::atomic_uint64_t m_nLastForwardScenePass{ 0u };
 	std::atomic_int64_t m_nLastForwardDrawList{ -1 };
 	std::atomic_uint32_t m_nLastForwardPassKind{ T3D_RD_FORWARD_PASS_INVALID };
+	std::atomic_uint32_t m_nLastForwardViewCount{ 0u };
+	std::atomic_uint32_t m_nLastForwardSampleCount{ 0u };
+	std::atomic_int64_t m_nLastForwardFramebufferFormat{ RenderingDevice::INVALID_ID };
 	static constexpr uint32_t s_nForwardViewportSlotCount = 8u;
 	typedef struct t3dRdForwardViewportState_s {
 		uint64_t m_nViewportKey = 0u;

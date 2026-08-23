@@ -1015,6 +1015,105 @@ def rd_batch_f7_multiview_lifecycle_check() -> bool:
     return True
 
 
+
+def rd_batch_f8_consolidation_check() -> bool:
+    rd = REPO / "src" / "rendering" / "rd"
+    coord_h = (rd / "terrain_3d_render_coordinator.h").read_text(encoding="utf-8", errors="ignore")
+    coord = (rd / "terrain_3d_render_coordinator.cpp").read_text(encoding="utf-8", errors="ignore")
+    bridge = (rd / "terrain_3d_rd_forward_plus_bridge.cpp").read_text(encoding="utf-8", errors="ignore")
+    clip = (rd / "terrain_3d_rd_clipmap_renderer.cpp").read_text(encoding="utf-8", errors="ignore")
+    inst = (rd / "terrain_3d_rd_instance_renderer.cpp").read_text(encoding="utf-8", errors="ignore")
+    types = (rd / "terrain_3d_rd_types.h").read_text(encoding="utf-8", errors="ignore")
+    lighting = (rd / "terrain_3d_rd_forward_lighting.cpp").read_text(encoding="utf-8", errors="ignore")
+    lighting_inc = (REPO / "project" / "addons" / "terrain_3d" / "rd" / "terrain_forward_lighting_inc.glsl").read_text(encoding="utf-8", errors="ignore")
+    profiler = (REPO / "project" / "addons" / "terrain_3d" / "src" / "runtime_profiler_window.gd").read_text(encoding="utf-8", errors="ignore")
+    patch_path = REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch"
+    patch = patch_path.read_text(encoding="utf-8", errors="ignore")
+    patch_readme = (REPO / "engine_patch" / "README.md").read_text(encoding="utf-8", errors="ignore")
+    ledger = (REPO / "docs" / "rd_contract_ledger.tsv").read_text(encoding="utf-8", errors="ignore")
+    batches = BATCH_FILE.read_text(encoding="utf-8", errors="ignore")
+    doc_path = REPO / "docs" / "rd_batch_f8_consolidation.md"
+    doc = doc_path.read_text(encoding="utf-8", errors="ignore") if doc_path.is_file() else ""
+
+    def between(source: str, begin: str, end: str) -> str:
+        i = source.find(begin)
+        j = source.find(end, i + 1) if i >= 0 else -1
+        return source[i:j] if i >= 0 and j > i else ""
+
+    clip_forward = between(clip, "bool Terrain3DRdClipmapRenderer::drawForwardView", "bool Terrain3DRdClipmapRenderer::renderForwardPass")
+    inst_forward = between(inst, "bool Terrain3DRdInstanceRenderer::drawForwardView", "bool Terrain3DRdInstanceRenderer::renderForwardPass")
+    coord_shutdown = between(coord, "void Terrain3DRenderCoordinator::shutdown", "void Terrain3DRenderCoordinator::update")
+    coord_proxy = between(coord, "void Terrain3DRenderCoordinator::updateNativeProxy", "void Terrain3DRenderCoordinator::attachEffectToActiveCamera")
+    clip_pipeline = between(clip, "bool Terrain3DRdClipmapRenderer::ensureForwardPipelines", "bool Terrain3DRdClipmapRenderer::ensureSamplers")
+    inst_pipeline = between(inst, "bool Terrain3DRdInstanceRenderer::ensureForwardPipelines", "bool Terrain3DRdInstanceRenderer::ensureHlodCullShader")
+    marker_paths = [rd, REPO / "src" / "lighting", REPO / "engine_patch", REPO / "project" / "addons" / "terrain_3d" / "rd"]
+    marker_re = re.compile(r"\b(?:TODO|FIXME|placeholder)\b", re.IGNORECASE)
+    marker_hits = []
+    for root in marker_paths:
+        if not root.exists():
+            continue
+        for path in root.rglob("*"):
+            if path.is_file() and path.suffix.lower() in TEXT_SUFFIXES:
+                text = path.read_text(encoding="utf-8", errors="ignore")
+                if marker_re.search(text):
+                    marker_hits.append(path)
+
+    section_rows = {}
+    for line in ledger.splitlines():
+        cols = line.split("\t")
+        if cols and cols[0] in {"17", "18", "19", "20", "21", "22"}:
+            section_rows[cols[0]] = cols
+    ledger_complete = all(section_rows.get(str(section), [None, None, None, None])[3] == "complete" for section in range(17, 23))
+
+    prepare_pos = patch.find("PHASE_PREPARE")
+    begin_pos = patch.find("draw_list_begin", prepare_pos)
+    submit_pos = patch.find("PHASE_SUBMIT", begin_pos)
+    end_pos = patch.find("draw_list_end", submit_pos)
+
+    checks = [
+        ("F8 convergence documentation exists and records static+compile scope", bool(doc) and "static audit and C++ compilation" in doc and "Runtime, GPU" in doc),
+        ("Batch F is marked completed in batch ledger", any(line.startswith("F\t13-15\tcompleted\t17-22\t") for line in batches.splitlines())),
+        ("Sections 17-22 remain individually complete", ledger_complete),
+        ("engine patch package targets exact Godot 4.7.1 and ABI 7", "4.7.1-stable" in patch_readme and "ABI_VERSION = 7" in patch and "Terrain3DForwardPlusBridge" in patch),
+        ("engine bridge exposes native depth opaque shadow and motion pass kinds", all(x in patch for x in ("PASS_DEPTH", "PASS_OPAQUE", "PASS_SHADOW", "PASS_MOTION")) and all(x in types for x in ("T3D_RD_FORWARD_PASS_DEPTH", "T3D_RD_FORWARD_PASS_OPAQUE", "T3D_RD_FORWARD_PASS_SHADOW", "T3D_RD_FORWARD_PASS_MOTION"))),
+        ("engine owns draw-list lifetime around synchronous Terrain3D submission", 0 <= prepare_pos < begin_pos < submit_pos < end_pos),
+        ("native terrain and instance submit slices never begin/end a draw list", bool(clip_forward) and bool(inst_forward) and all(x not in clip_forward + inst_forward for x in ("draw_list_begin", "draw_list_end"))),
+        ("native SUBMIT remains free of persistent resource allocation", all(x not in clip_forward + inst_forward for x in ("buffer_update", "uniform_set_create", "render_pipeline_create"))),
+        ("compositor lane remains explicit opt-in debug only", "TERRAIN3D_RD_DEBUG_COMPOSITOR" in coord and "m_bCompositorDebugEnabled" in coord and "bRd && m_bCompositorDebugEnabled" in coord),
+        ("missing bridge disables RD production instead of enabling native geometry", "bRd && bBridgeReady && !m_bFailureLatched" in coord and "production RenderingDevice rendering is disabled" in bridge),
+        ("RD native proxy path forces visual and shadow proxy off", "setRdPresentation( false, false )" in coord_proxy),
+        ("shutdown cannot resurrect native visual terrain for an RD backend", "bNativeBackend" in coord_shutdown and "setRdPresentation( bNativeBackend, false )" in coord_shutdown and "setRdPresentation( true, false )" not in coord_shutdown),
+        ("failure state is a latch and obsolete fallback state is gone", "m_bFailureLatched" in coord_h and "renderer_failure_latched" in coord and "m_bFallbackActive" not in coord_h + coord),
+        ("diagnostics never advertise an RD native shadow proxy", 'result["native_shadow_proxy_active"] = false' in coord and 'result["native_shadow_proxy_available"] = false' in coord),
+        ("diagnostics derive native depth/opaque/shadow/motion participation from callbacks", all(x in coord for x in ("m_nDepthPassCallbacks", "m_nOpaquePassCallbacks", "m_nShadowPassCallbacks", "m_nMotionPassCallbacks", 'result["native_depth_prepass_participation"]', 'result["native_shadow_participation"]', 'result["native_motion_vectors_active"]'))),
+        ("diagnostics expose bridge ABI and callback registration", 'result["forward_plus_bridge_abi"]' in coord and 'result["forward_plus_callback_registered"]' in coord),
+        ("diagnostics expose current native view/sample/framebuffer identity", all(x in coord_h + coord for x in ("m_nLastForwardViewCount", "m_nLastForwardSampleCount", "m_nLastForwardFramebufferFormat", "current_forward_view_count", "current_forward_sample_count", "current_forward_framebuffer_format"))),
+        ("diagnostics expose clustered-light readiness and borrowed-resource generation changes", "forward_light_resources_ready" in lighting and "forward_scene_resource_changes" in lighting and "clustered_light_path_active" in coord and "borrowed_scene_resource_changes" in coord),
+        ("profiler no longer claims native renderer restoration or compositor production submission", "Native renderer restored after RD initialization/render failure" not in profiler and "Compositor RD submission enabled" not in profiler and "renderer_failure_latched" in profiler),
+        ("native terrain depth pipeline uses reversed-Z", "COMPARE_OP_GREATER_OR_EQUAL" in clip_pipeline and "COMPARE_OP_LESS_OR_EQUAL" not in clip_pipeline),
+        ("native instance/HLOD depth pipeline uses reversed-Z", "COMPARE_OP_GREATER_OR_EQUAL" in inst_pipeline and "COMPARE_OP_LESS_OR_EQUAL" not in inst_pipeline),
+        ("terrain production path represents depth opaque shadow and motion", all(x in clip for x in ("T3D_RD_FORWARD_PASS_DEPTH", "T3D_RD_FORWARD_PASS_OPAQUE", "T3D_RD_FORWARD_PASS_SHADOW", "T3D_RD_FORWARD_PASS_MOTION"))),
+        ("regular instance/HLOD production path represents depth opaque shadow and motion", all(x in inst for x in ("T3D_RD_FORWARD_PASS_DEPTH", "T3D_RD_FORWARD_PASS_OPAQUE", "T3D_RD_FORWARD_PASS_SHADOW", "T3D_RD_FORWARD_PASS_MOTION", "T3D_RD_INSTANCE_HLOD"))),
+        ("native clustered-light shader retains omni spot and area resources", all(x in lighting_inc for x in ("T3DOmniLights", "T3DSpotLights", "T3DAreaLights", "T3DClusterBuffer", "t3d_cluster_range"))),
+        ("motion state retains per-view previous transforms and native motion pass", "m_mPreviousViewProjection" in types and "T3D_RD_FORWARD_PASS_MOTION" in coord and "native_motion_vectors_active" in coord),
+        ("multiview remains bounded and shader-visible", "s_nRdForwardMaxViews = 2u" in types and "m_nViewCount" in coord_h and "GL_EXT_multiview" in (REPO / "project" / "addons" / "terrain_3d" / "rd" / "terrain_clipmap_near.glsl").read_text(encoding="utf-8", errors="ignore")),
+        ("pipeline cache keys retain framebuffer/pass/sample/view identity", all(x in (rd / "terrain_3d_rd_clipmap_renderer.h").read_text(encoding="utf-8", errors="ignore") for x in ("m_nFramebufferFormat", "m_passKind", "m_samples", "m_nViewCount")) and all(x in (rd / "terrain_3d_rd_instance_renderer.h").read_text(encoding="utf-8", errors="ignore") for x in ("m_nFramebufferFormat", "m_passKind", "m_samples", "m_nViewCount"))),
+        ("Batch F-owned source contains no TODO/FIXME/placeholder residue", not marker_hits),
+        ("F8 documentation records removal of temporary fallback/proxy residue", "failure latch" in doc and "native visual terrain" in doc and "compositor diagnostic lane" in doc),
+        ("engine patch remains syntactically parseable", run_quiet(["git", "apply", "--stat", str(patch_path)], label="batch_f8_patch_parse")),
+    ]
+    failed = [label for label, ok in checks if not ok]
+    if failed:
+        for label in failed:
+            print(f"FAIL Batch F8 consolidation contract: {label}")
+        if marker_hits:
+            for path in marker_hits[:20]:
+                print(f"  marker={path.relative_to(REPO)}")
+        print(f"Batch F8 consolidation contract: {len(checks)-len(failed)}/{len(checks)} passed")
+        return False
+    print(f"OK Batch F8 consolidation contract: {len(checks)}/{len(checks)} passed")
+    return True
+
 def iter_scan_files() -> list[Path]:
     files: list[Path] = []
     for root in SCAN_ROOTS:
@@ -1522,7 +1621,7 @@ def git_fsck() -> bool:
 
 
 def validate_fast(static_only: bool = False) -> int:
-    checks = [branch_check(), reference_check(), diff_check(), build_contract_check(), rd_shader_abi_check(), rd_batch_c_material_check(), rd_batch_d_instance_check(), rd_batch_e_hlod_check(), rd_batch_f1_forward_bridge_check(), rd_batch_f2_native_depth_opaque_check(), rd_batch_f3_native_shadow_check(), rd_batch_f4_native_lighting_check(), rd_batch_f5_motion_check(), rd_batch_f6_scene_integration_check(), rd_batch_f7_multiview_lifecycle_check(), audit_symbols(strict_growth=True)]
+    checks = [branch_check(), reference_check(), diff_check(), build_contract_check(), rd_shader_abi_check(), rd_batch_c_material_check(), rd_batch_d_instance_check(), rd_batch_e_hlod_check(), rd_batch_f1_forward_bridge_check(), rd_batch_f2_native_depth_opaque_check(), rd_batch_f3_native_shadow_check(), rd_batch_f4_native_lighting_check(), rd_batch_f5_motion_check(), rd_batch_f6_scene_integration_check(), rd_batch_f7_multiview_lifecycle_check(), rd_batch_f8_consolidation_check(), audit_symbols(strict_growth=True)]
     if not static_only:
         checks.append(build_extension("editor"))
     return 0 if all(checks) else 1
@@ -1545,6 +1644,7 @@ def validate_full() -> int:
         rd_batch_f5_motion_check(),
         rd_batch_f6_scene_integration_check(),
         rd_batch_f7_multiview_lifecycle_check(),
+        rd_batch_f8_consolidation_check(),
         audit_symbols(strict_growth=True),
         build_extension("editor"),
         godot_headless_import(),
@@ -1572,6 +1672,7 @@ def validate_final() -> int:
         rd_batch_f5_motion_check(),
         rd_batch_f6_scene_integration_check(),
         rd_batch_f7_multiview_lifecycle_check(),
+        rd_batch_f8_consolidation_check(),
         audit_symbols(strict_growth=True, final=True),
         build_extension("editor"),
         build_extension("template_release"),

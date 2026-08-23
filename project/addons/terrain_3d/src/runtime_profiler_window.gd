@@ -415,13 +415,21 @@ func _update_rd_renderer_product() -> void:
 			proxy_name = "Full native"
 	var rows: Array[Array] = [
 		["Backend", backend_name, "Selected Terrain3D presentation backend"],
-		["Native proxy", proxy_name, "Native RenderingServer participation retained beside the RD pass"],
+		["Native proxy setting", proxy_name, "Legacy API setting; RD production keeps native Terrain3D proxy geometry disabled"],
 		["Native surface", "yes" if bool(diagnostics.get("native_surface_enabled", false)) else "no", "Native terrain color/material surface currently participates"],
-		["RD color writes", "yes" if bool(diagnostics.get("color_write_enabled", false)) else "depth-only", "Hybrid/full-native modes keep RD topology/culling/depth active without double-writing terrain color"],
-		["RD render enabled", "yes" if bool(diagnostics.get("render_enabled", false)) else "no", "Compositor RD submission enabled"],
+		["RD color writes", "yes" if bool(diagnostics.get("color_write_enabled", false)) else "no", "Terrain3D-owned Forward+ color submission active for the RD backend"],
+		["RD render enabled", "yes" if bool(diagnostics.get("render_enabled", false)) else "no", "Native Forward+ Terrain3D submission enabled"],
 		["RD initialized", "yes" if bool(diagnostics.get("renderer_initialized", false)) else "no", "Direct RD resources and pipelines initialized"],
-		["Fallback active", "YES" if bool(diagnostics.get("fallback_active", false)) else "no", "Native renderer restored after RD initialization/render failure"],
-		["Callbacks", str(int(diagnostics.get("callbacks", 0))), "Compositor callbacks received"],
+		["Failure latched", "YES" if bool(diagnostics.get("renderer_failure_latched", false)) else "no", "RD submission halted after repeated failures; native Terrain3D rendering remains disabled"],
+		["Compositor debug callbacks", str(int(diagnostics.get("callbacks", 0))), "Callbacks received only by the explicit compositor debug lane"],
+		["Forward+ bridge", "ready" if bool(diagnostics.get("forward_plus_bridge_ready", false)) else "unavailable", "Patched Godot native submission bridge availability"],
+		["Bridge callback", "registered" if bool(diagnostics.get("forward_plus_callback_registered", false)) else "not registered", "Terrain3D callback registration state"],
+		["Bridge ABI", str(int(diagnostics.get("forward_plus_bridge_abi", 0))), "Observed Terrain3D Forward+ bridge ABI"],
+		["Native depth", "active" if bool(diagnostics.get("native_depth_prepass_participation", false)) else "not observed", "Native Forward+ depth pass participation observed"],
+		["Native shadows", "active" if bool(diagnostics.get("native_shadow_participation", false)) else "not observed", "Native Forward+ shadow pass participation observed"],
+		["Native motion", "active" if bool(diagnostics.get("native_motion_vectors_active", false)) else "not observed", "Native Forward+ motion pass participation observed"],
+		["Clustered lighting", "ready" if bool(diagnostics.get("clustered_light_path_active", false)) else "not ready", "Borrowed native Forward+ clustered-light resources are valid"],
+		["Native view/sample", "%d / %d" % [int(diagnostics.get("current_forward_view_count", 0)), int(diagnostics.get("current_forward_sample_count", 0))], "Most recent native Forward+ view and sample count"],
 		["Frames rendered", str(int(diagnostics.get("frames_rendered", 0))), "Frames successfully submitted by the RD terrain renderer"],
 		["Draws rendered", str(int(diagnostics.get("draws_rendered", 0))), "Indexed RD terrain draws submitted"],
 		["Indirect draws", str(int(diagnostics.get("indirect_draws", 0))), "Indexed indirect draw commands submitted"],
@@ -437,8 +445,8 @@ func _update_rd_renderer_product() -> void:
 		["Consecutive failures", str(int(diagnostics.get("consecutive_render_failures", 0))), "RD failures since the most recent successful render"],
 		["Initialization error", str(diagnostics.get("initialization_error", "")), "Last RD initialization error"],
 		["Last render error", str(diagnostics.get("last_render_error", "")), "Last direct-render failure"],
-		["Multiview", "supported" if bool(diagnostics.get("multiview_supported", false)) else "unsupported", "Per-view compositor framebuffer/pipeline support"],
-		["Native depth prepass", "yes" if bool(diagnostics.get("native_depth_prepass_participation", false)) else "no", "Whether direct RD terrain enters Godot's earlier native depth prepass"],
+		["Multiview", "supported" if bool(diagnostics.get("multiview_supported", false)) else "unsupported", "Per-view native Forward+ framebuffer/pipeline support"],
+		["Native shadow proxy", "ACTIVE" if bool(diagnostics.get("native_shadow_proxy_active", false)) else "off", "Must remain off for RD production"],
 	]
 	for row: Array in rows:
 		var item: TreeItem = _diagnostics_rd_tree.create_item(root)
