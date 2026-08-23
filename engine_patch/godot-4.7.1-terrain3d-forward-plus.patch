@@ -22,7 +22,7 @@ index 0000000000..8ff7f0f001
 +	GDCLASS(Terrain3DForwardPlusBridge, Object);
 +
 +public:
-+	static constexpr int ABI_VERSION = 6;
++	static constexpr int ABI_VERSION = 7;
 +
 +	enum PassKind {
 +		PASS_INVALID = 0,
@@ -293,7 +293,7 @@ diff --git a/servers/rendering/renderer_rd/forward_clustered/render_forward_clus
 index 370d3b66ce..f100000003 100644
 --- a/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp
 +++ b/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp
-@@ -611,11 +611,144 @@ void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_lis
+@@ -611,11 +611,147 @@ void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_lis
  	}
  }
  
@@ -313,6 +313,9 @@ index 370d3b66ce..f100000003 100644
 +	packet["framebuffer_format"] = int64_t(p_params->framebuffer_format);
 +	packet["view_count"] = int64_t(p_shadow_pass != nullptr ? 1 : (p_render_data && p_render_data->scene_data ? p_render_data->scene_data->view_count : p_params->view_count));
 +	packet["scene_pass"] = int64_t(get_scene_pass());
++	packet["render_frame"] = int64_t(RSG::rasterizer->get_frame_number());
++	packet["viewport_key"] = int64_t(p_render_data != nullptr && p_render_data->render_buffers.is_valid() ? p_render_data->render_buffers->get_instance_id() : p_framebuffer.get_id());
++	packet["sample_count"] = int64_t(1u << uint32_t(RD::get_singleton()->framebuffer_format_get_texture_samples(p_params->framebuffer_format, 0)));
 +	packet["color_pass_flags"] = int64_t(p_params->color_pass_flags);
 +	packet["depth_prepass_active"] = p_depth_prepass_active;
 +	packet["reverse_cull"] = p_params->reverse_cull;
@@ -439,7 +442,7 @@ index 370d3b66ce..f100000003 100644
  	RD::get_singleton()->draw_list_end();
  }
  
-@@ -1920,7 +2023,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Col
+@@ -1920,7 +2026,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Col
  		RID rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_OPAQUE, nullptr, RID(), samplers, depth_prepass_uniform_buffer_index);
  		bool finish_depth = using_ssao || using_ssil || using_sdfgi || using_voxelgi || ce_pre_opaque_resolved_depth || ce_post_opaque_resolved_depth;
  		RenderListParameters render_list_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(), render_list[RENDER_LIST_OPAQUE].element_info.ptr(), render_list[RENDER_LIST_OPAQUE].elements.size(), reverse_cull, depth_pass_mode, 0, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, base_specialization);
@@ -448,7 +451,7 @@ index 370d3b66ce..f100000003 100644
  		RD::get_singleton()->draw_command_end_label();
  		if (use_msaa) {
  			RENDER_TIMESTAMP("Resolve Depth Pre-Pass (MSAA)");
-@@ -1993,7 +2096,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Col
+@@ -1993,7 +2099,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Col
  			uint32_t opaque_color_pass_flags = using_motion_pass ? (color_pass_flags & ~uint32_t(COLOR_PASS_FLAG_MOTION_VECTORS)) : color_pass_flags;
  			RID opaque_framebuffer = using_motion_pass ? rb_data->get_color_pass_fb(opaque_color_pass_flags) : color_framebuffer;
  			RenderListParameters render_list_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(), render_list[RENDER_LIST_OPAQUE].element_info.ptr(), render_list[RENDER_LIST_OPAQUE].elements.size(), reverse_cull, PASS_MODE_COLOR, opaque_color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, base_specialization);
@@ -457,7 +460,7 @@ index 370d3b66ce..f100000003 100644
  		}
  		RD::get_singleton()->draw_command_end_label();
  		if (using_motion_pass) {
-@@ -2015,7 +2118,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Col
+@@ -2015,7 +2121,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Col
  
  			rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_MOTION, p_render_data, radiance_texture, samplers, opaque_pass_uniform_buffer_index, true);
  			RenderListParameters render_list_params(render_list[RENDER_LIST_MOTION].elements.ptr(), render_list[RENDER_LIST_MOTION].element_info.ptr(), render_list[RENDER_LIST_MOTION].elements.size(), reverse_cull, PASS_MODE_COLOR, color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, base_specialization);
@@ -466,7 +469,7 @@ index 370d3b66ce..f100000003 100644
  			RD::get_singleton()->draw_command_end_label();
  		}
  	}
-@@ -2558,7 +2661,22 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas,
+@@ -2558,7 +2664,22 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas,
  	} else {
  		//render shadow
  		_render_shadow_append(render_fb, p_instances, light_projection, light_transform, zfar, 0, 0, reverse_cull_face, using_dual_paraboloid, using_dual_paraboloid_flip, use_pancake, p_lod_distance_multiplier, p_screen_mesh_lod_threshold, atlas_rect, flip_y, p_clear_region, p_open_pass, p_close_pass, p_render_info, p_viewport_size, p_main_cam_transform);
@@ -489,7 +492,7 @@ index 370d3b66ce..f100000003 100644
  }
  
  void RenderForwardClustered::_render_shadow_begin() {
-@@ -2574,6 +2677,20 @@ void RenderForwardClustered::_render_shadow_append(RID p_framebuffer, const Paged
+@@ -2574,6 +2680,20 @@ void RenderForwardClustered::_render_shadow_append(RID p_framebuffer, const Paged
  		shadow_pass.clear_depth = p_begin || p_clear_region;
  		shadow_pass.rect = p_rect;
  
@@ -510,7 +513,7 @@ index 370d3b66ce..f100000003 100644
  		shadow_pass.uniform_buffer_index = uniform_buffer_index;
  
  		scene_state.shadow_passes.push_back(shadow_pass);
-@@ -2597,7 +2706,7 @@ void RenderForwardClustered::_render_shadow_end() {
+@@ -2597,7 +2709,7 @@ void RenderForwardClustered::_render_shadow_end() {
  	RD::get_singleton()->draw_command_begin_label("Shadow Render");
  	for (SceneState::ShadowPass &shadow_pass : scene_state.shadow_passes) {
  		RenderListParameters render_list_parameters(render_list[RENDER_LIST_SECONDARY].elements.ptr() + shadow_pass.element_from, render_list[RENDER_LIST_SECONDARY].element_info.ptr() + shadow_pass.element_from, shadow_pass.element_count, shadow_pass.flip_cull, shadow_pass.pass_mode, 0, true, false, shadow_pass.rp_uniform_set, false, Vector2(), shadow_pass.lod_distance_multiplier, shadow_pass.screen_mesh_lod_threshold, 1, shadow_pass.element_from);

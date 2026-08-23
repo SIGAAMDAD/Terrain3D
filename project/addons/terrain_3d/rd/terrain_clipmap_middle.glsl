@@ -10,6 +10,7 @@ depth_normal_roughness_voxel_gi = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWAR
 
 #[vertex]
 #version 450
+#extension GL_EXT_multiview : enable
 #VERSION_DEFINES
 #define T3D_TIER 1
 
@@ -17,9 +18,9 @@ layout(location = 0) in ivec2 in_grid;
 layout(location = 1) in uvec2 in_meta;
 
 layout(set = 0, binding = 0, std140) uniform FrameData {
-    mat4 view_projection;
+    mat4 view_projection[2];
     mat4 view_matrix;
-    mat4 previous_view_projection;
+    mat4 previous_view_projection[2];
     vec4 motion_jitter;
     vec4 motion_params;
     vec4 light_direction_ambient;
@@ -27,11 +28,13 @@ layout(set = 0, binding = 0, std140) uniform FrameData {
     vec4 terrain_params;
     vec4 mesh_params;
     vec4 target_params;
-    vec4 camera_params;
+    vec4 camera_params[2];
     vec4 fog_params;
     vec4 fog_depth_params;
     vec4 displacement_params;
 } frame_data;
+
+uint t3d_view_index() { return min(uint(gl_ViewIndex), 1u); }
 
 layout(set = 0, binding = 1, std430) readonly buffer RegionMapData { int region_map[]; };
 layout(set = 0, binding = 2) uniform sampler2DArray height_maps;
@@ -444,17 +447,18 @@ void main() {
     ivec2 texel = ivec2(floor(terrain_world_texel));
     terrain_region_layer = region_layer(ivec2(floor_div_i(texel.x, region_size), floor_div_i(texel.y, region_size)));
     patch_tier = patch_data.tier;
-    vec4 current_clip = frame_data.view_projection * vec4(world_position, 1.0);
+    vec4 current_clip = frame_data.view_projection[t3d_view_index()] * vec4(world_position, 1.0);
     gl_Position = current_clip;
 #ifdef T3D_FORWARD_MOTION
     current_screen_position = current_clip;
     previous_screen_position = frame_data.motion_params.x > 0.5 ?
-        frame_data.previous_view_projection * vec4(world_position, 1.0) : current_clip;
+        frame_data.previous_view_projection[t3d_view_index()] * vec4(world_position, 1.0) : current_clip;
 #endif
 }
 
 #[fragment]
 #version 450
+#extension GL_EXT_multiview : enable
 #VERSION_DEFINES
 #include "terrain_forward_lighting_inc.glsl"
 #define T3D_TIER 1
@@ -488,9 +492,9 @@ layout(location = 2) out vec2 out_motion;
 #endif
 
 layout(set = 0, binding = 0, std140) uniform FrameData {
-    mat4 view_projection;
+    mat4 view_projection[2];
     mat4 view_matrix;
-    mat4 previous_view_projection;
+    mat4 previous_view_projection[2];
     vec4 motion_jitter;
     vec4 motion_params;
     vec4 light_direction_ambient;
@@ -498,11 +502,13 @@ layout(set = 0, binding = 0, std140) uniform FrameData {
     vec4 terrain_params;
     vec4 mesh_params;
     vec4 target_params;
-    vec4 camera_params;
+    vec4 camera_params[2];
     vec4 fog_params;
     vec4 fog_depth_params;
     vec4 displacement_params;
 } frame_data;
+
+uint t3d_view_index() { return min(uint(gl_ViewIndex), 1u); }
 layout(set = 0, binding = 1, std430) readonly buffer RegionMapData { int region_map[]; };
 layout(set = 0, binding = 2) uniform sampler2DArray height_maps;
 layout(set = 0, binding = 3) uniform sampler2DArray control_maps;
@@ -954,7 +960,7 @@ SampledMaterial sample_material(int logical_id, vec2 world_xz, vec3 terrain_norm
             : texture(albedo_maps, vec3(uv, float(physical)), lod_bias);
     }
     if ((material_config.feature_flags & T3D_FEATURE_DUAL_SCALING) != 0u && uint(id) == material_config.dual_scale_texture) {
-        float distance_to_camera = length(frame_data.camera_params.xyz - world_position);
+        float distance_to_camera = length(frame_data.camera_params[t3d_view_index()].xyz - world_position);
         float far_factor = smoothstep(material_config.dual_scale_near, max(material_config.dual_scale_far, material_config.dual_scale_near + 0.001), distance_to_camera);
         vec2 far_uv = project_material_uv(vec3(world_xz.x, world_position.y, world_xz.y), terrain_normal,
             uv_scale * max(material_config.dual_scale_reduction, 0.001), material_config.projection_mode);
@@ -1050,7 +1056,7 @@ bool use_bilinear_controls(TierMaterialConfig tier_config) {
     if (tier_config.sampling_mode == 1u) return true;
     float footprint = max(length(dFdx(world_position.xz)), length(dFdy(world_position.xz))) / max(frame_data.mesh_params.x, 0.0001);
     bool adaptive = footprint < 16.0;
-    if (tier_config.sampling_mode == 4u) adaptive = adaptive && length(frame_data.camera_params.xyz - world_position) < material_config.bias_distance;
+    if (tier_config.sampling_mode == 4u) adaptive = adaptive && length(frame_data.camera_params[t3d_view_index()].xyz - world_position) < material_config.bias_distance;
     return adaptive;
 }
 SampledMaterial sample_detailed_material(vec2 world_texel, vec3 terrain_normal, TierMaterialConfig tier_config) {
@@ -1126,7 +1132,7 @@ vec3 light_material(vec3 albedo, vec3 normal, float roughness, float metallic, f
     uint shadowmask_mode = region_shadowmask_mode(shadow_region);
     float shadowmask_visibility = shadowmask_mode != 0u ? sample_terrain_shadowmask(terrain_world_texel, terrain_region_layer) : 1.0;
     vec3 direct = t3d_forward_direct_lighting(albedo, world_position, normalize(normal), frame_data.view_matrix,
-        frame_data.camera_params.xyz, roughness, metallic, specular_scale, t3d_forward_light_frame.scene_params.y,
+        frame_data.camera_params[t3d_view_index()].xyz, roughness, metallic, specular_scale, t3d_forward_light_frame.scene_params.y,
         tier_config.lighting_model, true, shadowmask_mode, shadowmask_visibility);
     return ambient + direct;
 #else
@@ -1134,7 +1140,7 @@ vec3 light_material(vec3 albedo, vec3 normal, float roughness, float metallic, f
     float ndotl = max(dot(normal, light_dir), 0.0);
     vec3 diffuse = albedo * frame_data.light_color.rgb * ndotl;
     if (tier_config.lighting_model == 1u) return ambient + diffuse;
-    vec3 view_dir = normalize(frame_data.camera_params.xyz - world_position);
+    vec3 view_dir = normalize(frame_data.camera_params[t3d_view_index()].xyz - world_position);
     vec3 half_dir = normalize(light_dir + view_dir);
     float gloss = max(1.0 - roughness, 0.0);
     float specular_term = pow(max(dot(normal, half_dir), 0.0), mix(4.0, 128.0, gloss * gloss)) * gloss;
@@ -1146,7 +1152,7 @@ vec3 light_material(vec3 albedo, vec3 normal, float roughness, float metallic, f
 vec3 apply_fog(vec3 lit) {
     float fog_density = max(frame_data.fog_params.w, 0.0);
     if (fog_density <= 0.0 && frame_data.fog_depth_params.w <= 0.5) return lit;
-    float distance_to_camera = length(frame_data.camera_params.xyz - world_position);
+    float distance_to_camera = length(frame_data.camera_params[t3d_view_index()].xyz - world_position);
     float fog = 0.0;
     if (frame_data.fog_depth_params.w > 0.5) {
         float fog_range = max(frame_data.fog_depth_params.y - frame_data.fog_depth_params.x, 1e-4);
@@ -1186,7 +1192,7 @@ float fractal_contour_lines(float thickness, float interval, vec3 spatial_coords
 }
 
 float editor_reticle(vec2 world_xz, EditorDecal decal) {
-    float camera_distance = clamp(length(frame_data.camera_params.xyz - world_position), 0.001, 4000.0);
+    float camera_distance = clamp(length(frame_data.camera_params[t3d_view_index()].xyz - world_position), 0.001, 4000.0);
     float sqrt_distance = sqrt(camera_distance);
     float view_scale = 16.0 / sqrt_distance;
     vec2 cross_uv = (world_xz - decal.transform.xy) * view_scale;
@@ -1267,7 +1273,7 @@ vec3 debug_visualization(vec3 color, vec4 color_map, uint control, SampledMateri
         float cell_size = max(editor_overlay.instancer_grid.x, 1.0);
         vec2 cell = abs(fract((world_position.xz + cell_size * 0.5) / cell_size) - 0.5) * cell_size;
         float grid_distance = min(cell.x, cell.y);
-        float line_thickness = 0.01 * sqrt(max(length(frame_data.camera_params.xyz - world_position), 0.001));
+        float line_thickness = 0.01 * sqrt(max(length(frame_data.camera_params[t3d_view_index()].xyz - world_position), 0.001));
         float line = 1.0 - smoothstep(line_thickness - fwidth(grid_distance), line_thickness + fwidth(grid_distance), grid_distance);
         color = mix(color, vec3(0.05), line * material_config.editor_overlay_opacity);
     }
@@ -1277,7 +1283,7 @@ vec3 debug_visualization(vec3 color, vec4 color_map, uint control, SampledMateri
         vec3 base_ddx = dFdx(world_position);
         vec3 base_ddy = dFdy(world_position);
         vec3 geometric_normal = normalize(cross(base_ddy, base_ddx));
-        float contour_line = fractal_contour_lines(thickness, interval, world_position, geometric_normal, base_ddx, base_ddy, frame_data.camera_params.xyz);
+        float contour_line = fractal_contour_lines(thickness, interval, world_position, geometric_normal, base_ddx, base_ddy, frame_data.camera_params[t3d_view_index()].xyz);
         color = mix(color, editor_overlay.contour_color.rgb, (1.0 - contour_line) * editor_overlay.contour_color.a * material_config.editor_overlay_opacity);
     }
     if ((flags & T3D_DEBUG_NAVIGATION) != 0u && ((control >> 1u) & 1u) != 0u) {

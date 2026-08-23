@@ -283,6 +283,14 @@ RID Terrain3DRdForwardLighting::ensureSet( const RID &rShader ) {
 	return set;
 }
 
+void Terrain3DRdForwardLighting::invalidateBorrowedState( void ) {
+	m_context.beginResourceRebuild();
+	freeSets();
+	m_context.endResourceRebuild();
+	m_key = t3dRdForwardLightKey_t{};
+	m_bKeyValid = false;
+}
+
 void Terrain3DRdForwardLighting::shutdown( void ) {
 	freeSets();
 	m_context.freeResource( m_hLinearSampler );

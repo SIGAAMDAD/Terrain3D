@@ -30,6 +30,8 @@ public:
 			uint32_t nLod0IndexCount,
 			uint32_t nOuterIndexCount,
 			t3dRdCpuCullResult_t &rResult );
+	static bool buildMultiview( const t3dRdFrameSnapshot_t &rSnapshot, const Projection *pViewProjections, uint32_t nViewCount,
+			uint32_t nLod0IndexCount, uint32_t nOuterIndexCount, t3dRdCpuCullResult_t &rResult );
 	static bool validate( const t3dRdFrameSnapshot_t &rSnapshot,
 			const Projection &rViewProjection,
 			uint32_t nLod0IndexCount,

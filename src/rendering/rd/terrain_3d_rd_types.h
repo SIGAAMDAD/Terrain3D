@@ -95,7 +95,7 @@ typedef enum t3dRdNativeProxyMode_e {
 	T3D_RD_NATIVE_PROXY_FULL = 2,
 } t3dRdNativeProxyMode_t;
 
-static constexpr uint32_t s_nRdForwardBridgeAbiVersion = 6u;
+static constexpr uint32_t s_nRdForwardBridgeAbiVersion = 7u;
 static constexpr uint32_t s_nRdForwardMaxViews = 2u;
 
 typedef enum t3dRdForwardCallbackPhase_e {
@@ -152,6 +152,9 @@ typedef struct t3dRdForwardPassContext_s {
 	int64_t m_nFramebufferFormat = -1;
 	uint32_t m_nViewCount = 1u;
 	uint64_t m_nScenePass = 0u;
+	uint64_t m_nRenderFrame = 0u;
+	uint64_t m_nViewportKey = 0u;
+	uint32_t m_nSampleCount = 1u;
 	Rect2i m_renderRegion;
 	Vector2i m_renderSize;
 	uint32_t m_nColorPassFlags = 0u;
@@ -166,6 +169,8 @@ typedef struct t3dRdForwardPassContext_s {
 	Vector2 m_taaJitter;
 	Vector2 m_previousTaaJitter;
 	bool m_bMotionVectorsEnabled = false;
+	bool m_bTemporalHistoryValid = false;
+	bool m_bViewportReconfigured = false;
 	uint32_t m_nCameraVisibleLayers = UINT32_MAX;
 	RID m_hShadowLightInstance;
 	uint32_t m_nShadowLightType = UINT32_MAX;
@@ -682,9 +687,9 @@ typedef struct t3dRdFrameSnapshot_s {
 } t3dRdFrameSnapshot_t;
 
 typedef struct alignas( 16 ) t3dRdFrameUniforms_s {
-	float m_mViewProjection[16]{};
+	float m_mViewProjection[s_nRdForwardMaxViews][16]{};
 	float m_mView[16]{};
-	float m_mPreviousViewProjection[16]{};
+	float m_mPreviousViewProjection[s_nRdForwardMaxViews][16]{};
 	float m_szMotionJitter[4]{};
 	float m_szMotionParams[4]{};
 	float m_fLightDirectionX = 0.0f;
@@ -707,10 +712,7 @@ typedef struct alignas( 16 ) t3dRdFrameUniforms_s {
 	float m_fTargetZ = 0.0f;
 	float m_fSubdiv = 1.0f;
 	float m_fTargetPadding = 0.0f;
-	float m_fCameraX = 0.0f;
-	float m_fCameraY = 0.0f;
-	float m_fCameraZ = 0.0f;
-	float m_fCameraPadding = 0.0f;
+	float m_szCamera[s_nRdForwardMaxViews][4]{};
 	float m_fFogR = 0.0f;
 	float m_fFogG = 0.0f;
 	float m_fFogB = 0.0f;
@@ -724,7 +726,7 @@ typedef struct alignas( 16 ) t3dRdFrameUniforms_s {
 	float m_fDisplacementPadding0 = 0.0f;
 	float m_fDisplacementPadding1 = 0.0f;
 } t3dRdFrameUniforms_t;
-static_assert( sizeof( t3dRdFrameUniforms_t ) == 368u, "RD frame UBO must match GLSL std140 layout" );
+static_assert( sizeof( t3dRdFrameUniforms_t ) == 512u, "RD frame UBO must match GLSL std140 layout" );
 
 typedef struct t3dRdIndexedIndirectCommand_s {
 	uint32_t m_nIndexCount = 0u;

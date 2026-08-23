@@ -1025,6 +1025,7 @@ bool Terrain3DRenderCoordinator::initializeRendererOnRenderThread( void ) {
 	if ( !ready ) {
 		m_instanceRenderer.shutdown();
 		m_renderer.shutdown();
+		resetForwardLifecycle();
 		const uint32_t failures = m_nConsecutiveRenderFailures.fetch_add( 1u, std::memory_order_acq_rel ) + 1u;
 		if ( failures >= 8u ) m_bRendererFailed.store( true, std::memory_order_release );
 		std::lock_guard<std::mutex> lock( m_diagnosticsMutex );
@@ -1082,6 +1083,7 @@ void Terrain3DRenderCoordinator::shutdown( void ) {
 	m_bRenderEnabled.store( false, std::memory_order_release );
 	if ( m_effect.is_valid() ) m_effect->set_enabled( false );
 	detachForwardBridge();
+	resetForwardLifecycle();
 	RenderingServer *const server = RenderingServer::get_singleton();
 	if ( m_bRendererInitialized.load( std::memory_order_acquire ) ) {
 		if ( server && server->is_on_render_thread() ) shutdownRendererOnRenderThread();
@@ -1165,6 +1167,7 @@ void Terrain3DRenderCoordinator::setProxyMode( const t3dRdNativeProxyMode_t mode
 void Terrain3DRenderCoordinator::shutdownRendererOnRenderThread( void ) {
 	m_instanceRenderer.shutdown();
 	m_renderer.shutdown();
+	resetForwardLifecycle();
 	m_bRendererInitialized.store( false, std::memory_order_release );
 }
 
@@ -1218,9 +1221,55 @@ void Terrain3DRenderCoordinator::render( RenderData *const pRenderData ) {
 		// immutable CPU publication without reviving the native renderer.
 		m_instanceRenderer.shutdown();
 		m_renderer.shutdown();
+		resetForwardLifecycle();
 		m_bRendererInitialized.store( false, std::memory_order_release );
 		if ( failures >= 8u ) m_bRendererFailed.store( true, std::memory_order_release );
 	}
+}
+
+void Terrain3DRenderCoordinator::resetForwardLifecycle( void ) {
+	for ( t3dRdForwardViewportState_t &state : m_szForwardViewportStates ) state = t3dRdForwardViewportState_t{};
+	m_nForwardPreparedScenePass = 0u;
+	m_nForwardPreparedViewportKey = 0u;
+}
+
+bool Terrain3DRenderCoordinator::prepareForwardLifecycle( t3dRdForwardPassContext_t &rContext ) {
+	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW ) {
+		rContext.m_bTemporalHistoryValid = false;
+		return true;
+	}
+	if ( rContext.m_nViewportKey == 0u || rContext.m_nViewCount == 0u ||
+			rContext.m_nViewCount > s_nRdForwardMaxViews || rContext.m_nSampleCount == 0u ||
+			!rContext.m_hNativeFramebuffer.is_valid() || rContext.m_nFramebufferFormat == RenderingDevice::INVALID_ID ) return false;
+	t3dRdForwardViewportState_t *slot = nullptr;
+	t3dRdForwardViewportState_t *oldest = &m_szForwardViewportStates[0];
+	for ( t3dRdForwardViewportState_t &candidate : m_szForwardViewportStates ) {
+		if ( candidate.m_bValid && candidate.m_nViewportKey == rContext.m_nViewportKey ) { slot = &candidate; break; }
+		if ( !candidate.m_bValid && !slot ) slot = &candidate;
+		if ( candidate.m_nLastRenderFrame < oldest->m_nLastRenderFrame ) oldest = &candidate;
+	}
+	if ( !slot ) { slot = oldest; ++m_nForwardViewportEvictions; }
+	const bool same = slot->m_bValid && slot->m_nViewportKey == rContext.m_nViewportKey &&
+			slot->m_hFramebuffer == rContext.m_hNativeFramebuffer && slot->m_nFramebufferFormat == rContext.m_nFramebufferFormat &&
+			slot->m_renderSize == rContext.m_renderSize && slot->m_renderRegion == rContext.m_renderRegion &&
+			slot->m_nViewCount == rContext.m_nViewCount && slot->m_nSampleCount == rContext.m_nSampleCount;
+	const bool reconfigured_this_frame = slot->m_bValid && slot->m_nReconfiguredRenderFrame == rContext.m_nRenderFrame;
+	rContext.m_bTemporalHistoryValid = same && !reconfigured_this_frame && rContext.m_bMotionVectorsEnabled;
+	rContext.m_bViewportReconfigured = !same;
+	if ( !same ) {
+		++m_nForwardViewportReconfigurations;
+		slot->m_nReconfiguredRenderFrame = rContext.m_nRenderFrame;
+		slot->m_nViewportKey = rContext.m_nViewportKey;
+		slot->m_hFramebuffer = rContext.m_hNativeFramebuffer;
+		slot->m_nFramebufferFormat = rContext.m_nFramebufferFormat;
+		slot->m_renderSize = rContext.m_renderSize;
+		slot->m_renderRegion = rContext.m_renderRegion;
+		slot->m_nViewCount = rContext.m_nViewCount;
+		slot->m_nSampleCount = rContext.m_nSampleCount;
+		slot->m_bValid = true;
+	}
+	slot->m_nLastRenderFrame = rContext.m_nRenderFrame;
+	return true;
 }
 
 void Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContext_t &rContext ) {
@@ -1235,7 +1284,8 @@ void Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 			rContext.m_passKind != T3D_RD_FORWARD_PASS_SHADOW && rContext.m_passKind != T3D_RD_FORWARD_PASS_MOTION ) return;
 
 	if ( rContext.m_phase == T3D_RD_FORWARD_PHASE_PREPARE ) {
-		if ( !initializeRendererOnRenderThread() ) return;
+		t3dRdForwardPassContext_t prepared_context = rContext;
+		if ( !prepareForwardLifecycle( prepared_context ) || !initializeRendererOnRenderThread() ) return;
 		const t3dRdFrameSnapshotSlot_t *const publication = acquireSnapshotOnRenderThread();
 		if ( !publication ) return;
 		const t3dRdFrameSnapshot_t &snapshot = publication->m_snapshot;
@@ -1243,11 +1293,12 @@ void Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 		const uint32_t visibility_mask = shadow_pass ? ( rContext.m_nShadowCasterMask & rContext.m_nShadowLightCullMask ) : rContext.m_nCameraVisibleLayers;
 		const bool has_terrain = snapshot.m_nPatchCount > 0u && !publication->m_regionMapBytes.is_empty() &&
 				( !shadow_pass || ( snapshot.m_bCastShadows && ( snapshot.m_nRenderLayers & visibility_mask ) != 0u ) );
-		m_nForwardPreparedScenePass = rContext.m_nScenePass;
+		m_nForwardPreparedScenePass = prepared_context.m_nScenePass;
+		m_nForwardPreparedViewportKey = prepared_context.m_nViewportKey;
 		m_bForwardPreparedHasTerrain = has_terrain;
-		const bool instances_ok = m_instanceRenderer.prepareForwardPass( rContext, publication->m_instanceMeshes,
+		const bool instances_ok = m_instanceRenderer.prepareForwardPass( prepared_context, publication->m_instanceMeshes,
 				publication->m_instanceScene, visibility_mask );
-		const bool terrain_ok = !has_terrain || ( instances_ok && m_renderer.prepareForwardPass( rContext, snapshot,
+		const bool terrain_ok = !has_terrain || ( instances_ok && m_renderer.prepareForwardPass( prepared_context, snapshot,
 				publication->m_regionMapBytes, snapshot.m_nRegionMapGeneration,
 				publication->m_resources.m_hHeightTextureRd, publication->m_resources.m_hDerivedTextureRd,
 				publication->m_resources.m_hControlTextureRd, publication->m_resources.m_hColorTextureRd,
@@ -1266,13 +1317,14 @@ void Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 		const uint32_t failures = m_nConsecutiveRenderFailures.fetch_add( 1u, std::memory_order_acq_rel ) + 1u;
 		m_instanceRenderer.shutdown();
 		m_renderer.shutdown();
+		resetForwardLifecycle();
 		m_bRendererInitialized.store( false, std::memory_order_release );
 		if ( failures >= 8u ) m_bRendererFailed.store( true, std::memory_order_release );
 		return;
 	}
 
 	if ( rContext.m_phase != T3D_RD_FORWARD_PHASE_SUBMIT || !m_bRendererInitialized.load( std::memory_order_acquire ) ||
-			m_nForwardPreparedScenePass != rContext.m_nScenePass ) return;
+			m_nForwardPreparedScenePass != rContext.m_nScenePass || m_nForwardPreparedViewportKey != rContext.m_nViewportKey ) return;
 	const bool instances_ok = m_instanceRenderer.renderForwardPass( rContext );
 	const bool terrain_ok = !m_bForwardPreparedHasTerrain || m_renderer.renderForwardPass( rContext );
 	if ( instances_ok && terrain_ok ) {
@@ -1303,6 +1355,9 @@ Dictionary Terrain3DRenderCoordinator::getDiagnostics( void ) const {
 	result["last_forward_pass_kind"] = ( int64_t )( m_nLastForwardPassKind.load( std::memory_order_acquire ) );
 	result["motion_pass_callbacks"] = ( int64_t )( m_nMotionPassCallbacks.load( std::memory_order_acquire ) );
 	result["native_motion_vectors_active"] = m_nMotionPassCallbacks.load( std::memory_order_acquire ) > 0u;
+	result["forward_viewport_reconfigurations"] = ( int64_t )( m_nForwardViewportReconfigurations );
+	result["forward_viewport_evictions"] = ( int64_t )( m_nForwardViewportEvictions );
+	result["forward_prepared_viewport_key"] = ( int64_t )( m_nForwardPreparedViewportKey );
 	result["motion_debug_enabled"] = m_bMotionDebugEnabled;
 	result["compositor_debug_lane"] = m_bCompositorDebugEnabled;
 	Terrain3DRdForwardPlusBridgeAdapter *const pForwardBridge = Terrain3DRdForwardPlusBridgeAdapter::getSingleton();

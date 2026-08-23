@@ -138,7 +138,24 @@ private:
 	std::atomic_uint64_t m_nLastForwardScenePass{ 0u };
 	std::atomic_int64_t m_nLastForwardDrawList{ -1 };
 	std::atomic_uint32_t m_nLastForwardPassKind{ T3D_RD_FORWARD_PASS_INVALID };
+	static constexpr uint32_t s_nForwardViewportSlotCount = 8u;
+	typedef struct t3dRdForwardViewportState_s {
+		uint64_t m_nViewportKey = 0u;
+		RID m_hFramebuffer;
+		int64_t m_nFramebufferFormat = RenderingDevice::INVALID_ID;
+		Vector2i m_renderSize;
+		Rect2i m_renderRegion;
+		uint64_t m_nLastRenderFrame = UINT64_MAX;
+		uint64_t m_nReconfiguredRenderFrame = UINT64_MAX;
+		uint32_t m_nViewCount = 0u;
+		uint32_t m_nSampleCount = 0u;
+		bool m_bValid = false;
+	} t3dRdForwardViewportState_t;
+	t3dRdForwardViewportState_t m_szForwardViewportStates[s_nForwardViewportSlotCount]{};
 	uint64_t m_nForwardPreparedScenePass = 0u;
+	uint64_t m_nForwardPreparedViewportKey = 0u;
+	uint64_t m_nForwardViewportReconfigurations = 0u;
+	uint64_t m_nForwardViewportEvictions = 0u;
 	bool m_bForwardPreparedHasTerrain = false;
 	std::atomic_uint32_t m_nConsecutiveRenderFailures{ 0u };
 	mutable std::mutex m_diagnosticsMutex;
@@ -163,6 +180,8 @@ private:
 	void detachForwardBridge( void );
 	bool isForwardBridgeReady( void ) const;
 	void updateRenderRoute( void );
+	bool prepareForwardLifecycle( t3dRdForwardPassContext_t &rContext );
+	void resetForwardLifecycle( void );
 
 public:
 	Terrain3DRenderCoordinator( void ) = default;

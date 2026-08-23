@@ -226,6 +226,13 @@ bool Terrain3DRdForwardPlusBridgeAdapter::parsePacket(
 	rContext.m_nViewCount = ( uint32_t )( value );
 	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "scene_pass" ), value, rError ) || value < 0 ) return false;
 	rContext.m_nScenePass = ( uint64_t )( value );
+	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "render_frame" ), value, rError ) || value < 0 ) return false;
+	rContext.m_nRenderFrame = ( uint64_t )( value );
+	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "viewport_key" ), value, rError ) || value < 0 ) return false;
+	rContext.m_nViewportKey = ( uint64_t )( value );
+	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "sample_count" ), value, rError ) ||
+			( value != 1 && value != 2 && value != 4 && value != 8 ) ) return false;
+	rContext.m_nSampleCount = ( uint32_t )( value );
 	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "color_pass_flags" ), value, rError ) || value < 0 ) return false;
 	rContext.m_nColorPassFlags = ( uint32_t )( value );
 	const Variant depth_prepass_value = rPacket.get( StringName( "depth_prepass_active" ), Variant() );

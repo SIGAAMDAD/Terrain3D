@@ -10,6 +10,7 @@ depth_normal_roughness_voxel_gi = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWAR
 
 #[vertex]
 #version 450
+#extension GL_EXT_multiview : enable
 #VERSION_DEFINES
 
 layout(location = 0) in vec3 in_position;
@@ -20,13 +21,15 @@ layout(location = 4) in vec2 in_uv;
 layout(location = 5) in vec2 in_uv2;
 
 layout(set = 0, binding = 0, std140) uniform InstanceFrame {
-	mat4 view_projection;
+	mat4 view_projection[2];
 	mat4 view_matrix;
-	mat4 previous_view_projection;
-	vec4 camera_position;
+	mat4 previous_view_projection[2];
+	vec4 camera_position[2];
 	vec4 motion_jitter;
 	vec4 motion_params;
 } frame_data;
+
+uint t3d_view_index() { return min(uint(gl_ViewIndex), 1u); }
 
 struct InstanceRecord {
 	vec3 position;
@@ -100,29 +103,32 @@ void main() {
 	instance_color = unpackUnorm4x8(record.color_rgba8);
 	vertex_uv = in_uv;
 	vertex_world_position = world_position;
-	vec4 current_clip = frame_data.view_projection * vec4(world_position, 1.0);
+	vec4 current_clip = frame_data.view_projection[t3d_view_index()] * vec4(world_position, 1.0);
 	gl_Position = current_clip;
 #ifdef T3D_FORWARD_MOTION
 	current_screen_position = current_clip;
 	vec3 previous_world_position = instance_world_position(previous_records[record_index], in_position);
 	previous_screen_position = frame_data.motion_params.x > 0.5 ?
-		frame_data.previous_view_projection * vec4(previous_world_position, 1.0) : current_clip;
+		frame_data.previous_view_projection[t3d_view_index()] * vec4(previous_world_position, 1.0) : current_clip;
 #endif
 }
 
 #[fragment]
 #version 450
+#extension GL_EXT_multiview : enable
 #VERSION_DEFINES
 #include "terrain_forward_lighting_inc.glsl"
 
 layout(set = 0, binding = 0, std140) uniform InstanceFrameFragment {
-	mat4 view_projection;
+	mat4 view_projection[2];
 	mat4 view_matrix;
-	mat4 previous_view_projection;
-	vec4 camera_position;
+	mat4 previous_view_projection[2];
+	vec4 camera_position[2];
 	vec4 motion_jitter;
 	vec4 motion_params;
 } frame_data;
+
+uint t3d_view_index() { return min(uint(gl_ViewIndex), 1u); }
 
 struct InstanceMaterial {
 	vec4 albedo;
@@ -321,7 +327,7 @@ void main() {
 				roughness, metallic, ao, emission);
 		normal = normalize(transpose(mat3(frame_data.view_matrix)) * view_normal);
 		vec3 direct = t3d_forward_direct_lighting(final_color.rgb, vertex_world_position, normalize(normal), frame_data.view_matrix,
-				frame_data.camera_position.xyz, roughness, metallic, 1.0, push_data.visibility_layers, 2u, true, 0u, 1.0);
+				frame_data.camera_position[t3d_view_index()].xyz, roughness, metallic, 1.0, push_data.visibility_layers, 2u, true, 0u, 1.0);
 		lit = final_color.rgb * ambient + direct + emission;
 		vec3 reflection_view_direction = normalize(-view_position);
 		lit += t3d_forward_reflection(view_position, view_normal, reflection_view_direction,

@@ -23,14 +23,14 @@
 
 namespace {
 typedef struct alignas( 16 ) t3dRdInstanceFrame_s {
-	float m_szViewProjection[16]{};
+	float m_szViewProjection[s_nRdForwardMaxViews][16]{};
 	float m_szView[16]{};
-	float m_szPreviousViewProjection[16]{};
-	float m_szCamera[4]{};
+	float m_szPreviousViewProjection[s_nRdForwardMaxViews][16]{};
+	float m_szCamera[s_nRdForwardMaxViews][4]{};
 	float m_szMotionJitter[4]{};
 	float m_szMotionParams[4]{};
 } t3dRdInstanceFrame_t;
-static_assert( sizeof( t3dRdInstanceFrame_t ) == 240u, "Instance frame ABI changed" );
+static_assert( sizeof( t3dRdInstanceFrame_t ) == 384u, "Instance frame ABI changed" );
 
 typedef struct alignas( 16 ) t3dRdInstancePush_s {
 	uint32_t m_nMaterial = UINT16_MAX;
@@ -180,10 +180,15 @@ bool Terrain3DRdInstanceRenderer::ensureForwardPipelines( const t3dRdForwardPass
 	key.m_variant = variant;
 	key.m_passKind = rContext.m_passKind;
 	key.m_samples = rd->framebuffer_format_get_texture_samples( rContext.m_nFramebufferFormat, 0u );
+	if ( ( 1u << ( uint32_t )( key.m_samples ) ) != rContext.m_nSampleCount ) {
+		setError( "Terrain3D Forward+ sample-count metadata does not match native framebuffer format" );
+		return false;
+	}
 	key.m_nViewCount = rContext.m_nViewCount;
 	key.m_bReverseCull = rContext.m_bReverseCull;
 	key.m_bDepthPrepassActive = ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION ) && rContext.m_bDepthPrepassActive;
 	if ( findForwardPipeline( key ) ) { m_lastForwardPipelineKey = key; m_bLastForwardPipelineKeyValid = true; return true; }
+	if ( m_forwardPipelines.size() >= 64u ) freeForwardPipelines();
 
 	t3dRdInstanceForwardPipelineEntry_t entry;
 	entry.m_key = key;
@@ -555,20 +560,19 @@ bool Terrain3DRdInstanceRenderer::uploadScene(
 }
 
 bool Terrain3DRdInstanceRenderer::prepareMotionHistory( const t3dRdInstanceSceneSnapshot_t &rScene,
-		const uint64_t nScenePass,
-		const bool bCameraHistoryValid ) {
-	if ( m_nMotionHistoryScenePass == nScenePass && rScene.m_nGeneration == m_nMotionHistorySceneGeneration ) return true;
+		const uint64_t nRenderFrame ) {
+	if ( m_nMotionHistoryRenderFrame == nRenderFrame && rScene.m_nGeneration == m_nMotionHistorySceneGeneration ) return true;
 	if ( rScene.m_instances.empty() ) {
 		m_motionHistoryRecords.clear();
 		m_motionHistoryCells.clear();
 		m_nMotionHistorySceneGeneration = rScene.m_nGeneration;
 		m_bMotionHistoryNeedsAdvance = false;
-		m_nMotionHistoryScenePass = nScenePass;
+		m_nMotionHistoryRenderFrame = nRenderFrame;
 		return true;
 	}
 
 	bool upload_previous = false;
-	const bool reset_history = !bCameraHistoryValid || m_motionHistoryRecords.empty() || m_motionHistoryCells.empty();
+	const bool reset_history = m_motionHistoryRecords.empty() || m_motionHistoryCells.empty();
 	const bool scene_changed = rScene.m_nGeneration != m_nMotionHistorySceneGeneration;
 	if ( reset_history ) {
 		m_motionPreviousRecords = rScene.m_instances;
@@ -613,7 +617,7 @@ bool Terrain3DRdInstanceRenderer::prepareMotionHistory( const t3dRdInstanceScene
 		m_motionHistoryCells = rScene.m_cells;
 		m_nMotionHistorySceneGeneration = rScene.m_nGeneration;
 	}
-	m_nMotionHistoryScenePass = nScenePass;
+	m_nMotionHistoryRenderFrame = nRenderFrame;
 	return true;
 }
 
@@ -643,7 +647,8 @@ bool Terrain3DRdInstanceRenderer::isCellVisible( const t3dRdInstanceCell_t &rCel
 }
 
 bool Terrain3DRdInstanceRenderer::buildPackets( const t3dRdInstanceSceneSnapshot_t &rScene,
-		const Projection &rViewProjection,
+		const Projection *const pViewProjections,
+		const uint32_t nViewCount,
 		const Vector3 &rCamera,
 		const uint32_t nVisibilityMask,
 		const bool bShadowPass ) {
@@ -651,6 +656,7 @@ bool Terrain3DRdInstanceRenderer::buildPackets( const t3dRdInstanceSceneSnapshot
 		t3dRdInstanceDrawPacket_t m_packet;
 		std::vector<uint32_t> m_indices;
 	} t3dRdPacketBuildGroup_t;
+	if ( !pViewProjections || nViewCount == 0u || nViewCount > s_nRdForwardMaxViews ) return false;
 	std::vector<t3dRdPacketBuildGroup_t> groups;
 	groups.reserve( rScene.m_cells.size() );
 	m_visibleIndices.clear();
@@ -666,9 +672,19 @@ bool Terrain3DRdInstanceRenderer::buildPackets( const t3dRdInstanceSceneSnapshot
 				t3dRdRegularMeshSourceKey( cell.m_nMeshAssetId, cell.m_nLod ) );
 		const t3dRdMeshSourceLod_t *const lod = m_meshCache.resolveMesh( mesh );
 		if ( !lod ) continue;
-		const bool visible = ( !bShadowPass && hlod ) ?
-				( cell.m_nInstanceCount > 0u && ( cell.m_nFlags & T3D_RD_INSTANCE_SHADOWS_ONLY ) == 0u ) :
-				isCellVisible( cell, rViewProjection, rCamera, bShadowPass );
+		bool visible = false;
+		if ( !bShadowPass && hlod && nViewCount == 1u ) {
+			visible = cell.m_nInstanceCount > 0u && ( cell.m_nFlags & T3D_RD_INSTANCE_SHADOWS_ONLY ) == 0u;
+		} else {
+			for ( uint32_t view = 0u; view < nViewCount && !visible; ++view ) {
+				if ( !bShadowPass && hlod ) {
+					visible = ( cell.m_nFlags & T3D_RD_INSTANCE_SHADOWS_ONLY ) == 0u &&
+						isCellVisible( cell, pViewProjections[view], rCamera, true );
+				} else {
+					visible = isCellVisible( cell, pViewProjections[view], rCamera, bShadowPass );
+				}
+			}
+		}
 		if ( !visible ) continue;
 		if ( bShadowPass && ( cell.m_nFlags & T3D_RD_INSTANCE_CAST_SHADOWS ) == 0u ) continue;
 		uint32_t cell_draw_flags = cell.m_nFlags;
@@ -726,9 +742,9 @@ bool Terrain3DRdInstanceRenderer::buildPackets( const t3dRdInstanceSceneSnapshot
 			const bool aa = ( a.m_nFlags & T3D_RD_INSTANCE_ALPHA_BLEND ) != 0u, ab = ( b.m_nFlags & T3D_RD_INSTANCE_ALPHA_BLEND ) != 0u;
 			if ( aa != ab ) return !aa; if ( aa ) return a.m_fSortDistanceSq > b.m_fSortDistanceSq; return false;
 		} );
-		m_hlodDescriptors.reserve( m_drawPackets.size() );
+		if ( nViewCount == 1u ) m_hlodDescriptors.reserve( m_drawPackets.size() );
 		for ( uint32_t command_index = 0u; command_index < ( uint32_t )( m_drawPackets.size() ); ++command_index ) {
-			const t3dRdInstanceDrawPacket_t &packet = m_drawPackets[command_index]; if ( ( packet.m_nFlags & T3D_RD_INSTANCE_HLOD ) == 0u ) continue;
+			const t3dRdInstanceDrawPacket_t &packet = m_drawPackets[command_index]; if ( nViewCount != 1u || ( packet.m_nFlags & T3D_RD_INSTANCE_HLOD ) == 0u ) continue;
 			t3dRdHlodCullDescriptor_t descriptor; const Vector3 center = packet.m_cullBounds.get_center(), extent = packet.m_cullBounds.size * 0.5f;
 			descriptor.m_szBoundsCenter[0]=(float)center.x; descriptor.m_szBoundsCenter[1]=(float)center.y; descriptor.m_szBoundsCenter[2]=(float)center.z;
 			descriptor.m_szBoundsExtent[0]=(float)extent.x; descriptor.m_szBoundsExtent[1]=(float)extent.y; descriptor.m_szBoundsExtent[2]=(float)extent.z;
@@ -951,16 +967,18 @@ bool Terrain3DRdInstanceRenderer::drawView( const uint32_t nView,
 	RenderingDevice *const rd = m_context.getDevice();
 	t3dRdInstanceViewState_t &state = m_szViewStates[nView];
 	t3dRdInstanceFrame_t frame{};
-	for ( int column = 0; column < 4; ++column ) {
-		const Vector4 c = rViewProjection[column];
-		frame.m_szViewProjection[column * 4 + 0] = ( float )( c.x );
-		frame.m_szViewProjection[column * 4 + 1] = ( float )( c.y );
-		frame.m_szViewProjection[column * 4 + 2] = ( float )( c.z );
-		frame.m_szViewProjection[column * 4 + 3] = ( float )( c.w );
+	for ( uint32_t view_index = 0u; view_index < s_nRdForwardMaxViews; ++view_index ) {
+		for ( int column = 0; column < 4; ++column ) {
+			const Vector4 c = rViewProjection[column];
+			frame.m_szViewProjection[view_index][column * 4 + 0] = ( float )( c.x );
+			frame.m_szViewProjection[view_index][column * 4 + 1] = ( float )( c.y );
+			frame.m_szViewProjection[view_index][column * 4 + 2] = ( float )( c.z );
+			frame.m_szViewProjection[view_index][column * 4 + 3] = ( float )( c.w );
+		}
+		frame.m_szCamera[view_index][0] = ( float )( rCamera.x );
+		frame.m_szCamera[view_index][1] = ( float )( rCamera.y );
+		frame.m_szCamera[view_index][2] = ( float )( rCamera.z );
 	}
-	frame.m_szCamera[0] = ( float )( rCamera.x );
-	frame.m_szCamera[1] = ( float )( rCamera.y );
-	frame.m_szCamera[2] = ( float )( rCamera.z );
 	m_frameBytes.resize( sizeof( frame ) );
 	std::memcpy( m_frameBytes.ptrw(), &frame, sizeof( frame ) );
 	if ( rd->buffer_update( m_hFrameBuffer, 0u, sizeof( frame ), m_frameBytes ) != OK ) return false;
@@ -1074,7 +1092,8 @@ void Terrain3DRdInstanceRenderer::shutdown( void ) {
 	m_nVisibleInstances = 0u;
 	m_nHlodCullDescriptors = 0u;
 	m_nForwardPreparedScenePass = 0u;
-	m_nMotionHistoryScenePass = UINT64_MAX;
+	m_nForwardPreparedViewportKey = 0u;
+	m_nMotionHistoryRenderFrame = UINT64_MAX;
 	m_nMotionHistorySceneGeneration = 0u;
 	m_bMotionHistoryNeedsAdvance = false;
 	m_nForwardPreparedSceneGeneration = 0u;
@@ -1123,7 +1142,7 @@ bool Terrain3DRdInstanceRenderer::render( RenderData *const pRenderData,
 		const Projection view_projection = scene_data->get_view_projection( view ) * view_matrix;
 		Vector3 eye = camera_transform.origin;
 		if ( view_count > 1u ) eye += camera_transform.basis.xform( scene_data->get_view_eye_offset( view ) );
-		if ( !buildPackets( *pScene, view_projection, eye, nVisibilityMask, false ) || !uploadVisibility() ) return false;
+		if ( !buildPackets( *pScene, &view_projection, 1u, eye, nVisibilityMask, false ) || !uploadVisibility() ) return false;
 		const RID color = view_count > 1u ? buffers->get_color_layer( view, msaa ) : buffers->get_color_texture( msaa );
 		const RID depth = view_count > 1u ? buffers->get_depth_layer( view, msaa ) : buffers->get_depth_texture( msaa );
 		if ( !ensureViewState( view, color, depth, samples ) || !drawView( view, view_projection, eye, nVisibilityMask ) ) return false;
@@ -1139,17 +1158,17 @@ bool Terrain3DRdInstanceRenderer::prepareForwardPass( const t3dRdForwardPassCont
 		const std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> &pScene,
 		const uint32_t nVisibilityMask ) {
 	if ( rContext.m_phase != T3D_RD_FORWARD_PHASE_PREPARE || !pScene ) return false;
-	if ( rContext.m_nViewCount != 1u ) { setError( "F2 native instance submission supports one Forward+ view; multiview is completed in F7" ); return false; }
+	if ( rContext.m_nViewCount == 0u || rContext.m_nViewCount > s_nRdForwardMaxViews ) { setError( "Terrain3D native instance view count exceeds bridge bounds" ); return false; }
 	t3dRdForwardShaderVariant_t variant;
 	if ( !selectForwardVariant( rContext, variant ) ) return false;
 	if ( pScene->m_instances.empty() || pScene->m_cells.empty() ) {
 		if ( rContext.m_passKind != T3D_RD_FORWARD_PASS_SHADOW &&
-				!prepareMotionHistory( *pScene, rContext.m_nScenePass, rContext.m_bMotionVectorsEnabled ) ) {
+				!prepareMotionHistory( *pScene, rContext.m_nRenderFrame ) ) {
 			setError( "Failed to reset Terrain3D instance/HLOD previous-transform history" ); return false;
 		}
 		m_drawPackets.clear(); m_depthPackets.clear(); m_shadowPackets.clear(); m_visibleIndices.clear(); m_hlodDescriptors.clear();
 		m_nVisibleInstances = 0u; m_nStaticInstances = pScene->m_instances.size();
-		m_nForwardPreparedScenePass = rContext.m_nScenePass; m_nForwardPreparedSceneGeneration = pScene->m_nGeneration;
+		m_nForwardPreparedScenePass = rContext.m_nScenePass; m_nForwardPreparedViewportKey = rContext.m_nViewportKey; m_nForwardPreparedSceneGeneration = pScene->m_nGeneration;
 		m_bForwardPreparedHasDraws = false; m_bLastForwardPipelineKeyValid = false; m_lastError = String(); return true;
 	}
 	if ( pMeshes && pMeshes->m_nGeneration != m_meshCache.getSourceGeneration() && !m_materialBindings.empty() ) {
@@ -1161,55 +1180,67 @@ bool Terrain3DRdInstanceRenderer::prepareForwardPass( const t3dRdForwardPassCont
 	const bool shadow_pass = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW;
 	// Shadow passes may arrive before the scene motion pass. They must never advance or
 	// reset temporal history shared by the opaque/motion scene submission.
-	if ( !shadow_pass && !prepareMotionHistory( *pScene, rContext.m_nScenePass, rContext.m_bMotionVectorsEnabled ) ) {
+	if ( !shadow_pass && !prepareMotionHistory( *pScene, rContext.m_nRenderFrame ) ) {
 		setError( "Failed to prepare Terrain3D instance/HLOD previous-transform history" ); return false;
 	}
 
 	const bool rebuild_packets = shadow_pass || m_nForwardPreparedScenePass != rContext.m_nScenePass ||
-			m_nForwardPreparedSceneGeneration != pScene->m_nGeneration || m_forwardPreparedPacketPassKind != rContext.m_passKind ||
+			m_nForwardPreparedViewportKey != rContext.m_nViewportKey || m_nForwardPreparedSceneGeneration != pScene->m_nGeneration || m_forwardPreparedPacketPassKind != rContext.m_passKind ||
 			m_nForwardPreparedVisibilityMask != nVisibilityMask;
 	if ( rebuild_packets ) {
-		if ( !buildPackets( *pScene, rContext.m_szViewProjection[0], rContext.m_cameraTransform.origin, nVisibilityMask, shadow_pass ) ||
-				( shadow_pass ? !uploadShadowVisibility() : ( !uploadVisibility() || !dispatchHlodCull( nVisibilityMask ) ) ) ) {
+		if ( !buildPackets( *pScene, rContext.m_szViewProjection, rContext.m_nViewCount, rContext.m_cameraTransform.origin, nVisibilityMask, shadow_pass ) ||
+				( shadow_pass ? !uploadShadowVisibility() : ( !uploadVisibility() || ( rContext.m_nViewCount == 1u && !dispatchHlodCull( nVisibilityMask ) ) ) ) ) {
 			setError( "Failed to prepare Terrain3D native Forward+ instance visibility" ); return false;
 		}
-		m_nForwardPreparedScenePass = rContext.m_nScenePass; m_nForwardPreparedSceneGeneration = pScene->m_nGeneration;
+		m_nForwardPreparedScenePass = rContext.m_nScenePass; m_nForwardPreparedViewportKey = rContext.m_nViewportKey;
+		m_nForwardPreparedSceneGeneration = pScene->m_nGeneration;
 		m_forwardPreparedPacketPassKind = rContext.m_passKind; m_nForwardPreparedVisibilityMask = nVisibilityMask;
 	}
 
 	t3dRdInstanceFrame_t frame{};
-	const Projection view = Projection( rContext.m_cameraTransform.affine_inverse() );
+	const Projection view_matrix = Projection( rContext.m_cameraTransform.affine_inverse() );
 	for ( int column = 0; column < 4; ++column ) {
-		const Vector4 vp = rContext.m_szViewProjection[0][column];
-		frame.m_szViewProjection[column * 4 + 0] = ( float )( vp.x );
-		frame.m_szViewProjection[column * 4 + 1] = ( float )( vp.y );
-		frame.m_szViewProjection[column * 4 + 2] = ( float )( vp.z );
-		frame.m_szViewProjection[column * 4 + 3] = ( float )( vp.w );
-		const Vector4 vm = view[column];
+		const Vector4 vm = view_matrix[column];
 		frame.m_szView[column * 4 + 0] = ( float )( vm.x );
 		frame.m_szView[column * 4 + 1] = ( float )( vm.y );
 		frame.m_szView[column * 4 + 2] = ( float )( vm.z );
 		frame.m_szView[column * 4 + 3] = ( float )( vm.w );
-		const Vector4 previous_vp = ( rContext.m_bMotionVectorsEnabled ? rContext.m_szPreviousViewProjection[0] : rContext.m_szViewProjection[0] )[column];
-		frame.m_szPreviousViewProjection[column * 4 + 0] = ( float )( previous_vp.x );
-		frame.m_szPreviousViewProjection[column * 4 + 1] = ( float )( previous_vp.y );
-		frame.m_szPreviousViewProjection[column * 4 + 2] = ( float )( previous_vp.z );
-		frame.m_szPreviousViewProjection[column * 4 + 3] = ( float )( previous_vp.w );
+	}
+	const bool history_valid = rContext.m_bMotionVectorsEnabled && rContext.m_bTemporalHistoryValid;
+	for ( uint32_t view_index = 0u; view_index < s_nRdForwardMaxViews; ++view_index ) {
+		const uint32_t source = MIN( view_index, rContext.m_nViewCount - 1u );
+		for ( int column = 0; column < 4; ++column ) {
+			const Vector4 vp = rContext.m_szViewProjection[source][column];
+			frame.m_szViewProjection[view_index][column * 4 + 0] = ( float )( vp.x );
+			frame.m_szViewProjection[view_index][column * 4 + 1] = ( float )( vp.y );
+			frame.m_szViewProjection[view_index][column * 4 + 2] = ( float )( vp.z );
+			frame.m_szViewProjection[view_index][column * 4 + 3] = ( float )( vp.w );
+			const Vector4 previous_vp = ( history_valid ? rContext.m_szPreviousViewProjection[source] : rContext.m_szViewProjection[source] )[column];
+			frame.m_szPreviousViewProjection[view_index][column * 4 + 0] = ( float )( previous_vp.x );
+			frame.m_szPreviousViewProjection[view_index][column * 4 + 1] = ( float )( previous_vp.y );
+			frame.m_szPreviousViewProjection[view_index][column * 4 + 2] = ( float )( previous_vp.z );
+			frame.m_szPreviousViewProjection[view_index][column * 4 + 3] = ( float )( previous_vp.w );
+		}
+		Vector3 eye = rContext.m_cameraTransform.origin;
+		if ( rContext.m_nViewCount > 1u ) eye += rContext.m_cameraTransform.basis.xform( rContext.m_szEyeOffset[source] );
+		frame.m_szCamera[view_index][0] = ( float )( eye.x );
+		frame.m_szCamera[view_index][1] = ( float )( eye.y );
+		frame.m_szCamera[view_index][2] = ( float )( eye.z );
 	}
 	frame.m_szMotionJitter[0] = ( float )( rContext.m_taaJitter.x );
 	frame.m_szMotionJitter[1] = ( float )( rContext.m_taaJitter.y );
-	frame.m_szMotionJitter[2] = ( float )( rContext.m_bMotionVectorsEnabled ? rContext.m_previousTaaJitter.x : rContext.m_taaJitter.x );
-	frame.m_szMotionJitter[3] = ( float )( rContext.m_bMotionVectorsEnabled ? rContext.m_previousTaaJitter.y : rContext.m_taaJitter.y );
-	frame.m_szMotionParams[0] = rContext.m_bMotionVectorsEnabled ? 1.0f : 0.0f;
+	frame.m_szMotionJitter[2] = ( float )( history_valid ? rContext.m_previousTaaJitter.x : rContext.m_taaJitter.x );
+	frame.m_szMotionJitter[3] = ( float )( history_valid ? rContext.m_previousTaaJitter.y : rContext.m_taaJitter.y );
+	frame.m_szMotionParams[0] = history_valid ? 1.0f : 0.0f;
 	frame.m_szMotionParams[1] = m_bMotionDebug ? 1.0f : 0.0f;
-	const Vector3 eye = rContext.m_cameraTransform.origin;
-	frame.m_szCamera[0] = ( float )( eye.x ); frame.m_szCamera[1] = ( float )( eye.y ); frame.m_szCamera[2] = ( float )( eye.z );
+	frame.m_szMotionParams[2] = ( float )( rContext.m_nViewCount );
 	m_frameBytes.resize( sizeof( frame ) ); std::memcpy( m_frameBytes.ptrw(), &frame, sizeof( frame ) );
 	if ( m_context.getDevice()->buffer_update( m_hFrameBuffer, 0u, sizeof( frame ), m_frameBytes ) != OK ) {
 		setError( "Failed to update Terrain3D native Forward+ instance frame buffer" ); return false;
 	}
 	m_context.recordBufferUpdate( sizeof( frame ) );
 	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION ) {
+		if ( rContext.m_bViewportReconfigured ) m_forwardLighting.invalidateBorrowedState();
 		if ( !m_forwardLighting.prepare( rContext, nVisibilityMask ) ||
 				!m_forwardLighting.ensureSet( m_hszForwardShaders[variant] ).is_valid() ) {
 			setError( "Failed to prepare Terrain3D Forward+ instance/HLOD native lighting" );
@@ -1228,6 +1259,7 @@ bool Terrain3DRdInstanceRenderer::drawForwardView( const t3dRdForwardPassContext
 	t3dRdForwardShaderVariant_t variant;
 	if ( !selectForwardVariant( rContext, variant ) || variant != m_lastForwardPipelineKey.m_variant ||
 			rContext.m_nFramebufferFormat != m_lastForwardPipelineKey.m_nFramebufferFormat ||
+			rContext.m_nViewCount != m_lastForwardPipelineKey.m_nViewCount ||
 			rContext.m_passKind != m_lastForwardPipelineKey.m_passKind ||
 			rContext.m_bReverseCull != m_lastForwardPipelineKey.m_bReverseCull ||
 			( ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION ) && rContext.m_bDepthPrepassActive ) != m_lastForwardPipelineKey.m_bDepthPrepassActive ) return false;
@@ -1286,7 +1318,8 @@ bool Terrain3DRdInstanceRenderer::drawForwardView( const t3dRdForwardPassContext
 }
 
 bool Terrain3DRdInstanceRenderer::renderForwardPass( const t3dRdForwardPassContext_t &rContext ) {
-	if ( rContext.m_phase != T3D_RD_FORWARD_PHASE_SUBMIT || m_nForwardPreparedScenePass != rContext.m_nScenePass ) return false;
+	if ( rContext.m_phase != T3D_RD_FORWARD_PHASE_SUBMIT || m_nForwardPreparedScenePass != rContext.m_nScenePass ||
+			m_nForwardPreparedViewportKey != rContext.m_nViewportKey ) return false;
 	if ( !drawForwardView( rContext ) ) { setError( "Failed to submit Terrain3D instances/HLOD onto native Forward+ draw list" ); return false; }
 	++m_nFrames;
 	m_lastError = String();

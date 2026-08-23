@@ -108,6 +108,9 @@ private:
 	t3dRdPatch_t m_szUploadedPatches[s_nMaxClipmapLevels]{};
 	uint32_t m_nUploadedPatchCount = 0u;
 	uint64_t m_nForwardPreparedScenePass = 0u;
+	uint64_t m_nForwardPreparedViewportKey = 0u;
+	Vector3 m_szForwardEyePositions[s_nRdForwardMaxViews]{};
+	bool m_bForwardHistoryValid = false;
 	uint64_t m_nForwardPreparedSnapshotGeneration = 0u;
 	t3dRdForwardPassKind_t m_forwardPreparedCullPassKind = T3D_RD_FORWARD_PASS_INVALID;
 	t3dRdForwardPipelineKey_t m_lastForwardPipelineKey{};
@@ -185,9 +188,9 @@ private:
 			const RID &rDepth,
 			RenderingDevice::TextureSamples samples,
 			bool bColorWrite );
-	bool updateFrameUniforms( const t3dRdFrameSnapshot_t &rSnapshot, const Projection &rViewProjection, const Projection &rView, const Vector3 &rCamera,
-			const Projection &rPreviousViewProjection = Projection(), const Vector2 &rTaaJitter = Vector2(),
-			const Vector2 &rPreviousTaaJitter = Vector2(), bool bHistoryValid = false );
+	bool updateFrameUniforms( const t3dRdFrameSnapshot_t &rSnapshot, const Projection *pViewProjections, uint32_t nViewCount,
+			const Projection &rView, const Vector3 *pCameras, const Projection *pPreviousViewProjections,
+			const Vector2 &rTaaJitter, const Vector2 &rPreviousTaaJitter, bool bHistoryValid );
 	bool uploadSnapshotBuffers( const t3dRdFrameSnapshot_t &rSnapshot,
 			const PackedByteArray &rRegionMapBytes,
 			uint64_t nRegionMapGeneration );

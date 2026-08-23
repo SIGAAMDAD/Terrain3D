@@ -104,6 +104,7 @@ public:
 	bool prepare( const t3dRdForwardPassContext_t &rContext, uint32_t nDefaultSurfaceMask );
 	RID ensureSet( const RID &rShader );
 	RID getSet( const RID &rShader ) const;
+	void invalidateBorrowedState( void );
 	void shutdown( void );
 	Dictionary getDiagnostics( void ) const;
 };

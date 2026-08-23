@@ -594,9 +594,9 @@ def rd_batch_f1_forward_bridge_check() -> bool:
     )
 
     checks += [
-        ("bridge ABI is synchronized on extension side", "s_nBridgeAbiVersion = 6u" in bridge_h and "s_nRdForwardBridgeAbiVersion = 6u" in types),
+        ("bridge ABI is synchronized on extension side", "s_nBridgeAbiVersion = 7u" in bridge_h and "s_nRdForwardBridgeAbiVersion = 7u" in types),
         ("engine singleton name fixed", 's_pszEngineSingletonName = "Terrain3DForwardPlusBridge"' in bridge_h and "class Terrain3DForwardPlusBridge" in patch),
-        ("engine ABI exposes required lifecycle API", all(token in patch for token in engine_methods) and "ABI_VERSION = 6" in patch),
+        ("engine ABI exposes required lifecycle API", all(token in patch for token in engine_methods) and "ABI_VERSION = 7" in patch),
         ("engine callback slot is atomic", "std::atomic<CallbackSlot *> callback_slot" in patch and "callback_slot.load(std::memory_order_acquire)" in patch),
         ("engine callback reclamation is reader-safe", "callback_readers.fetch_add" in patch and "callback_readers.fetch_sub" in patch and "callback_readers.load" in patch),
         ("engine callback invocation is synchronous", "slot->callable.call(p_packet)" in patch and "call_deferred" not in patch),
@@ -725,7 +725,7 @@ def rd_batch_f3_native_shadow_check() -> bool:
     patch = (REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch").read_text(encoding="utf-8", errors="ignore")
     ledger = (REPO / "docs" / "rd_contract_ledger.tsv").read_text(encoding="utf-8", errors="ignore")
     checks = [
-        ("current ABI retains F3 shadow packet on engine and extension sides", "s_nRdForwardBridgeAbiVersion = 6u" in types and "ABI_VERSION = 6" in patch),
+        ("current ABI retains F3 shadow packet on engine and extension sides", "s_nRdForwardBridgeAbiVersion = 7u" in types and "ABI_VERSION = 7" in patch),
         ("shadow packet carries exact light/cascade identity", all(x in patch for x in ("shadow_light_instance", "shadow_pass_index", "shadow_light_type")) and all(x in bridge for x in ('StringName( "shadow_light_instance" )', 'StringName( "shadow_pass_index" )'))),
         ("shadow packet carries masks/bias/range/atlas metadata", all(x in patch for x in ("shadow_caster_mask", "shadow_light_cull_mask", "shadow_bias", "shadow_normal_bias", "shadow_bias_scale", "shadow_range_begin", "shadow_range", "shadow_atlas_rect", "shadow_atlas_size"))),
         ("shadow VP uses exact light projection and transform", "p_projection * shadow_view" in patch),
@@ -782,7 +782,7 @@ def rd_batch_f4_native_lighting_check() -> bool:
         "cluster_type_size * type_index",
     ))
     checks = [
-        ("current ABI retains F4 native-light packet", "s_nRdForwardBridgeAbiVersion = 6u" in types and "s_nBridgeAbiVersion = 6u" in bridge_h and "ABI_VERSION = 6" in patch),
+        ("current ABI retains F4 native-light packet", "s_nRdForwardBridgeAbiVersion = 7u" in types and "s_nBridgeAbiVersion = 7u" in bridge_h and "ABI_VERSION = 7" in patch),
         ("bridge exposes exact native cluster metadata", all(x in types for x in ("m_nClusterShift", "m_nClusterWidth", "m_nClusterTypeSize", "m_nClusterMaxElementsDiv32")) and all(x in patch for x in ("cluster_shift", "cluster_width", "cluster_type_size", "cluster_max_elements_div_32"))),
         ("bridge exposes directional count and camera depth range", all(x in types for x in ("m_nDirectionalLightCount", "m_bDirectionalLightSoftShadows", "m_fCameraZNear", "m_fCameraZFar")) and all(x in bridge for x in ("directional_light_count", "directional_light_soft_shadows", "camera_z_near", "camera_z_far"))),
         ("native directional/omni/spot/area/cluster buffers are borrowed", all(x in lighting for x in ("m_hDirectionalLightBuffer", "m_hOmniLightBuffer", "m_hSpotLightBuffer", "m_hAreaLightBuffer", "m_hClusterBuffer")) and "registerResource( rContext.m_h" not in lighting),
@@ -839,26 +839,26 @@ def rd_batch_f5_motion_check() -> bool:
                        "previous_screen_position.xy / previous_screen_position.w - frame_data.motion_jitter.zw" in sh
                        for sh in shaders)
     checks = [
-        ("current ABI retains F5 temporal packet", "s_nRdForwardBridgeAbiVersion = 6u" in types and "s_nBridgeAbiVersion = 6u" in bridge_h and "ABI_VERSION = 6" in patch),
+        ("current ABI retains F5 temporal packet", "s_nRdForwardBridgeAbiVersion = 7u" in types and "s_nBridgeAbiVersion = 7u" in bridge_h and "ABI_VERSION = 7" in patch),
         ("bridge packet carries TAA jitter and history validity", all(x in types for x in ("m_taaJitter", "m_previousTaaJitter", "m_bMotionVectorsEnabled")) and all(x in bridge for x in ("taa_jitter", "previous_taa_jitter", "motion_vectors_enabled")) and all(x in patch for x in ('packet["taa_jitter"]', 'packet["previous_taa_jitter"]', 'packet["motion_vectors_enabled"]'))),
         ("engine bridge constructs corrected jittered current and previous VP", "correction.set_depth_correction(scene_data->flip_y)" in patch and "correction.add_jitter_offset(scene_data->taa_jitter)" in patch and "previous_correction.set_depth_correction(true)" in patch and "previous_correction.add_jitter_offset(scene_data->prev_taa_jitter)" in patch),
         ("motion hook submits on native draw list with depth-prepass state", "PASS_MOTION" in patch and "radiance_texture, nullptr, depth_pre_pass" in patch),
         ("coordinator accepts and diagnoses native motion callbacks", "T3D_RD_FORWARD_PASS_MOTION" in coord and "m_nMotionPassCallbacks" in coord and 'result["native_motion_vectors_active"]' in coord),
         ("terrain native motion pass is selectable", "T3D_RD_FORWARD_PASS_MOTION" in clip and "T3D_RD_FORWARD_SHADER_COLOR_MOTION" in clip),
         ("instance/HLOD native motion pass is selectable", "T3D_RD_FORWARD_PASS_MOTION" in inst and "T3D_RD_FORWARD_SHADER_COLOR_MOTION" in inst),
-        ("terrain frame UBO carries previous VP and jitter", "m_mPreviousViewProjection" in types and "m_szMotionJitter" in types and "m_szMotionParams" in types and "sizeof( t3dRdFrameUniforms_t ) == 368u" in types),
-        ("instance frame UBO carries previous VP and jitter", "m_szPreviousViewProjection" in inst and "m_szMotionJitter" in inst and "sizeof( t3dRdInstanceFrame_t ) == 240u" in inst),
+        ("terrain frame UBO carries previous VP and jitter", "m_mPreviousViewProjection" in types and "m_szMotionJitter" in types and "m_szMotionParams" in types and "sizeof( t3dRdFrameUniforms_t ) == 512u" in types),
+        ("instance frame UBO carries previous VP and jitter", "m_szPreviousViewProjection" in inst and "m_szMotionJitter" in inst and "sizeof( t3dRdInstanceFrame_t ) == 384u" in inst),
         ("velocity matches Godot previous-UV minus current-UV convention", exact_motion),
-        ("terrain motion uses stable world position across clipmap snaps", all("frame_data.previous_view_projection * vec4(world_position, 1.0)" in sh for sh in terrain) and all(sh.count("previous_origin_x") == 1 and sh.count("previous_scale") == 1 for sh in terrain)),
+        ("terrain motion uses stable world position across clipmap snaps", all("frame_data.previous_view_projection[t3d_view_index()] * vec4(world_position, 1.0)" in sh for sh in terrain) and all(sh.count("previous_origin_x") == 1 and sh.count("previous_scale") == 1 for sh in terrain)),
         ("terrain motion history resets to neutral current clip", all("frame_data.motion_params.x > 0.5" in sh and ": current_clip" in sh for sh in terrain)),
         ("instance shader consumes persistent previous-record stream", "PreviousInstanceRecords" in instance and "previous_records[record_index]" in instance and "instance_world_position" in instance),
         ("previous instance GPU buffer is persistent and bound", "m_hPreviousInstanceBuffer" in inst_h and "T3D.Instance.PreviousRecords" in inst and "binding = 4" in instance),
         ("regular-instance history uses stable cell identity without hot hash", "t3dRdMotionCellsMatch" in inst and "m_nRegionX" in inst and "m_nCellX" in inst and "m_nMeshAssetId" in inst and "unordered_map" not in inst),
         ("HLOD replacement history is revision-safe", "current_hlod" in inst and "m_nMeshSourceKey == rPrevious.m_nMeshSourceKey" in inst and "m_nRevision == rPrevious.m_nRevision" in inst),
-        ("new/camera-reset instance history is neutral", "reset_history = !bCameraHistoryValid" in inst and "m_motionPreviousRecords = rScene.m_instances" in inst),
+        ("new/replacement instance history is neutral without camera-global resets", "reset_history = m_motionHistoryRecords.empty()" in inst and "m_motionPreviousRecords = rScene.m_instances" in inst and "bCameraHistoryValid" not in inst),
         ("stopped instance history advances after one rendered frame", "m_bMotionHistoryNeedsAdvance" in inst and "a stopped object does not keep emitting the same velocity forever" in inst),
         ("motion path writes native velocity attachment rather than private texture", all("layout(location = 2) out vec2 out_motion" in sh for sh in shaders) and "velocity_texture" not in clip and "velocity_texture" not in inst),
-        ("motion redraw retains native lighting", "PASS_MOTION ) {\n\t\tif ( !m_forwardLighting.prepare" in clip and "PASS_MOTION ) {\n\t\tif ( !m_forwardLighting.prepare" in inst),
+        ("motion redraw retains native lighting", "rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION" in clip and "m_forwardLighting.prepare( rContext" in clip and "rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION" in inst and "m_forwardLighting.prepare( rContext" in inst),
         ("motion pipeline honors prepass EQUAL path", "T3D_RD_FORWARD_PASS_MOTION ) && rContext.m_bDepthPrepassActive" in clip and "T3D_RD_FORWARD_PASS_MOTION ) && rContext.m_bDepthPrepassActive" in inst and "COMPARE_OP_EQUAL" in clip and "COMPARE_OP_EQUAL" in inst),
         ("deterministic motion visualization is explicit opt-in", "TERRAIN3D_RD_DEBUG_MOTION" in coord and "setMotionDebugEnabled" in clip_h and "setMotionDebugEnabled" in inst_h and all("motion_params.y > 0.5" in sh for sh in shaders)),
         ("F5 ledger records Section 20 completion", "20\tMotion vectors\tF\tcomplete" in ledger),
@@ -921,7 +921,7 @@ def rd_batch_f6_scene_integration_check() -> bool:
         submit_slices.append(source[i:j] if i >= 0 and j > i else "")
 
     checks = [
-        ("ABI 6 is synchronized across extension and engine patch", "s_nRdForwardBridgeAbiVersion = 6u" in types and "s_nBridgeAbiVersion = 6u" in bridge_h and "ABI_VERSION = 6" in patch),
+        ("ABI 7 retains the complete F6 scene-integration packet", "s_nRdForwardBridgeAbiVersion = 7u" in types and "s_nBridgeAbiVersion = 7u" in bridge_h and "ABI_VERSION = 7" in patch),
         ("bridge packet carries all F6 borrowed scene resources", all(x in types for x in borrowed_packet) and all(x in bridge for x in ("lightmap_buffer", "reflection_probe_buffer", "reflection_atlas_texture", "radiance_texture", "decal_buffer", "decal_atlas_texture", "decal_atlas_srgb_texture", "reflection_atlas_border_size")) and all(x in patch for x in ("lightmap_buffer", "reflection_probe_buffer", "reflection_atlas_texture", "radiance_texture", "decal_buffer", "decal_atlas_texture", "decal_atlas_srgb_texture", "reflection_atlas_border_size"))),
         ("shader mirrors Godot 4.7.1 reflection data layout", all(x in include for x in native_reflection)),
         ("shader mirrors Godot 4.7.1 decal data layout", all(x in include for x in native_decal)),
@@ -941,7 +941,7 @@ def rd_batch_f6_scene_integration_check() -> bool:
         ("F6 descriptor binds only actually consumed reflection/decal resources", all(f"{n}," in lighting for n in range(9, 15)) and "t3d_lightmaps" not in include and "m_hLightmapBuffer" not in lighting_h and "uniform_set_create" in lighting),
         ("native SUBMIT draw bodies do not allocate/update/create lists", all(body and all(x not in body for x in ("uniform_set_create", "buffer_update", "draw_list_begin", "draw_list_end", "render_pipeline_create")) for body in submit_slices)),
         ("RD scene integrations do not enumerate Decal or ReflectionProbe nodes", "get_nodes_in_group" not in lighting and "get_children" not in lighting and "SceneTree" not in lighting and "Node3D" not in lighting),
-        ("F6 ledger closes lighting while leaving lifecycle work to F7", "18\tLighting\tF\tcomplete" in ledger and "Batches F1-F6 implement Terrain3DForwardPlusBridge ABI 6" in ledger and "F7 still owns multiview/viewport lifecycle convergence" in ledger),
+        ("F6 lighting remains complete after F7 lifecycle closure", "18\tLighting\tF\tcomplete" in ledger and "Terrain3DForwardPlusBridge ABI 7" in ledger and "22\tMultiview and viewport lifecycle\tF\tcomplete" in ledger),
         ("engine patch remains syntactically parseable", run_quiet(["git", "apply", "--stat", str(patch_path)], label="batch_f6_patch_parse")),
     ]
     failed = [label for label, ok in checks if not ok]
@@ -952,6 +952,68 @@ def rd_batch_f6_scene_integration_check() -> bool:
         return False
     print(f"OK Batch F6 scene integration contract: {len(checks)}/{len(checks)} passed")
     return True
+
+def rd_batch_f7_multiview_lifecycle_check() -> bool:
+    rd = REPO / "src" / "rendering" / "rd"
+    types = (rd / "terrain_3d_rd_types.h").read_text(encoding="utf-8", errors="ignore")
+    bridge_h = (rd / "terrain_3d_rd_forward_plus_bridge.h").read_text(encoding="utf-8", errors="ignore")
+    bridge = (rd / "terrain_3d_rd_forward_plus_bridge.cpp").read_text(encoding="utf-8", errors="ignore")
+    clip_h = (rd / "terrain_3d_rd_clipmap_renderer.h").read_text(encoding="utf-8", errors="ignore")
+    clip = (rd / "terrain_3d_rd_clipmap_renderer.cpp").read_text(encoding="utf-8", errors="ignore")
+    cull = (rd / "terrain_3d_rd_culling.cpp").read_text(encoding="utf-8", errors="ignore")
+    inst_h = (rd / "terrain_3d_rd_instance_renderer.h").read_text(encoding="utf-8", errors="ignore")
+    inst = (rd / "terrain_3d_rd_instance_renderer.cpp").read_text(encoding="utf-8", errors="ignore")
+    lighting_h = (rd / "terrain_3d_rd_forward_lighting.h").read_text(encoding="utf-8", errors="ignore")
+    coord_h = (rd / "terrain_3d_render_coordinator.h").read_text(encoding="utf-8", errors="ignore")
+    coord = (rd / "terrain_3d_render_coordinator.cpp").read_text(encoding="utf-8", errors="ignore")
+    patch_path = REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch"
+    patch = patch_path.read_text(encoding="utf-8", errors="ignore")
+    ledger = (REPO / "docs" / "rd_contract_ledger.tsv").read_text(encoding="utf-8", errors="ignore")
+    doc = (REPO / "docs" / "rd_batch_f7_multiview_lifecycle.md").read_text(encoding="utf-8", errors="ignore")
+    shaders = [(REPO / "project" / "addons" / "terrain_3d" / "rd" / name).read_text(encoding="utf-8", errors="ignore") for name in (
+        "terrain_clipmap_near.glsl", "terrain_clipmap_middle.glsl", "terrain_clipmap_far.glsl", "terrain_instances.glsl")]
+    submit_slices = []
+    for source, begin, end in (
+        (clip, "bool Terrain3DRdClipmapRenderer::drawForwardView", "bool Terrain3DRdClipmapRenderer::renderForwardPass"),
+        (inst, "bool Terrain3DRdInstanceRenderer::drawForwardView", "bool Terrain3DRdInstanceRenderer::renderForwardPass"),
+    ):
+        i = source.find(begin); j = source.find(end, i + 1)
+        submit_slices.append(source[i:j] if i >= 0 and j > i else "")
+    checks = [
+        ("ABI 7 synchronized across extension and engine patch", "s_nRdForwardBridgeAbiVersion = 7u" in types and "s_nBridgeAbiVersion = 7u" in bridge_h and "ABI_VERSION = 7" in patch),
+        ("bridge carries stable viewport render-frame and sample identity", all(x in types for x in ("m_nRenderFrame", "m_nViewportKey", "m_nSampleCount")) and all(x in bridge for x in ("render_frame", "viewport_key", "sample_count")) and all(x in patch for x in ('packet["render_frame"]', 'packet["viewport_key"]', 'packet["sample_count"]'))),
+        ("bridge bounds views and accepted MSAA sample counts", "s_nRdForwardMaxViews = 2u" in types and "view count is outside" in bridge and "value != 1 && value != 2 && value != 4 && value != 8" in bridge),
+        ("all native shaders select per-eye state with gl_ViewIndex", all("GL_EXT_multiview" in sh and "t3d_view_index()" in sh and "view_projection[2]" in sh and "previous_view_projection[2]" in sh for sh in shaders)),
+        ("terrain frame ABI carries two current/previous matrices and eye cameras", "m_mViewProjection[s_nRdForwardMaxViews][16]" in types and "m_mPreviousViewProjection[s_nRdForwardMaxViews][16]" in types and "m_szCamera[s_nRdForwardMaxViews][4]" in types and "sizeof( t3dRdFrameUniforms_t ) == 512u" in types),
+        ("instance/HLOD frame ABI carries two current/previous matrices and eye cameras", "m_szViewProjection[s_nRdForwardMaxViews][16]" in inst and "m_szPreviousViewProjection[s_nRdForwardMaxViews][16]" in inst and "m_szCamera[s_nRdForwardMaxViews][4]" in inst and "sizeof( t3dRdInstanceFrame_t ) == 384u" in inst),
+        ("terrain visibility is unioned across native eyes", "Terrain3DRdCpuCuller::buildMultiview" in cull and "rContext.m_szViewProjection, rContext.m_nViewCount" in clip and "rContext.m_nViewCount == 1u && m_bGpuCullingReady" in clip),
+        ("regular instance visibility is unioned across native eyes", "const Projection *const pViewProjections" in inst and "for ( uint32_t view = 0u; view < nViewCount && !visible; ++view )" in inst),
+        ("multiview HLOD avoids single-eye compute culling", "nViewCount != 1u || ( packet.m_nFlags & T3D_RD_INSTANCE_HLOD )" in inst and "rContext.m_nViewCount == 1u && !dispatchHlodCull" in inst),
+        ("instance transform history advances once per engine render frame", "m_nMotionHistoryRenderFrame" in inst_h and "prepareMotionHistory( *pScene, rContext.m_nRenderFrame )" in inst and "bCameraHistoryValid" not in inst),
+        ("fixed-size per-viewport lifecycle table avoids hot map allocation", "s_nForwardViewportSlotCount = 8u" in coord_h and "m_szForwardViewportStates[s_nForwardViewportSlotCount]" in coord_h and "unordered_map" not in coord_h),
+        ("resize render-region view-count sample and framebuffer changes invalidate temporal state", all(x in coord for x in ("m_hFramebuffer == rContext.m_hNativeFramebuffer", "m_nFramebufferFormat == rContext.m_nFramebufferFormat", "m_renderSize == rContext.m_renderSize", "m_renderRegion == rContext.m_renderRegion", "m_nViewCount == rContext.m_nViewCount", "m_nSampleCount == rContext.m_nSampleCount", "m_bTemporalHistoryValid = same"))),
+        ("all passes in a reconfiguration frame keep temporal history neutral", "m_nReconfiguredRenderFrame" in coord_h and "reconfigured_this_frame" in coord and "same && !reconfigured_this_frame && rContext.m_bMotionVectorsEnabled" in coord and "slot->m_nReconfiguredRenderFrame = rContext.m_nRenderFrame" in coord),
+        ("viewport recreation invalidates borrowed descriptor sets outside SUBMIT", "m_bViewportReconfigured" in types and "invalidateBorrowedState" in lighting_h and "rContext.m_bViewportReconfigured" in clip and "rContext.m_bViewportReconfigured" in inst),
+        ("pipeline keys include native format pass sample view and depth/cull state", all(x in clip_h for x in ("m_nFramebufferFormat", "m_passKind", "m_samples", "m_nViewCount", "m_bReverseCull", "m_bDepthPrepassActive")) and all(x in inst_h for x in ("m_nFramebufferFormat", "m_passKind", "m_samples", "m_nViewCount", "m_bReverseCull", "m_bDepthPrepassActive"))),
+        ("packet sample count is cross-checked against framebuffer format", "sample-count metadata does not match native framebuffer format" in clip and "sample-count metadata does not match native framebuffer format" in inst),
+        ("pipeline caches are bounded across resize/MSAA warmups", "m_forwardPipelines.size() >= 64u" in clip and "m_forwardPipelines.size() >= 64u" in inst and "freeForwardPipelines()" in clip and "freeForwardPipelines()" in inst),
+        ("PREPARE/SUBMIT identity rejects stale viewport submissions", "m_nForwardPreparedViewportKey != rContext.m_nViewportKey" in coord and "m_nForwardPreparedViewportKey != rContext.m_nViewportKey" in clip and "m_nForwardPreparedViewportKey != rContext.m_nViewportKey" in inst),
+        ("viewport/MSAA lifecycle does not rebuild static mesh or material state", "prepareForwardLifecycle" in coord and "m_meshCache" not in coord[coord.find("bool Terrain3DRenderCoordinator::prepareForwardLifecycle"):coord.find("void Terrain3DRenderCoordinator::renderForwardPass")] and "m_material" not in coord[coord.find("bool Terrain3DRenderCoordinator::prepareForwardLifecycle"):coord.find("void Terrain3DRenderCoordinator::renderForwardPass")]),
+        ("teardown clears viewport lifecycle state and renderers clear prepared viewport keys", "resetForwardLifecycle();" in coord and "m_nForwardPreparedViewportKey = 0u" in clip and "m_nForwardPreparedViewportKey = 0u" in inst),
+        ("native SUBMIT remains bind/draw only", all(body and all(x not in body for x in ("buffer_update", "uniform_set_create", "render_pipeline_create", "draw_list_begin", "draw_list_end")) for body in submit_slices)),
+        ("F7 ledger closes Forward+ lifecycle sections", "19\tForward+ integration decision\tF\tcomplete" in ledger and "21\tDepth behavior\tF\tcomplete" in ledger and "22\tMultiview and viewport lifecycle\tF\tcomplete" in ledger),
+        ("F7 documentation records stereo lifecycle and no F8 scope", "ABI 7" in doc and "render scale" in doc.lower() and "multiple cameras" in doc.lower() and "F8" in doc),
+        ("engine patch remains syntactically parseable", run_quiet(["git", "apply", "--stat", str(patch_path)], label="batch_f7_patch_parse")),
+    ]
+    failed = [label for label, ok in checks if not ok]
+    if failed:
+        for label in failed:
+            print(f"FAIL Batch F7 multiview/lifecycle contract: {label}")
+        print(f"Batch F7 multiview/lifecycle contract: {len(checks)-len(failed)}/{len(checks)} passed")
+        return False
+    print(f"OK Batch F7 multiview/lifecycle contract: {len(checks)}/{len(checks)} passed")
+    return True
+
 
 def iter_scan_files() -> list[Path]:
     files: list[Path] = []
@@ -1460,7 +1522,7 @@ def git_fsck() -> bool:
 
 
 def validate_fast(static_only: bool = False) -> int:
-    checks = [branch_check(), reference_check(), diff_check(), build_contract_check(), rd_shader_abi_check(), rd_batch_c_material_check(), rd_batch_d_instance_check(), rd_batch_e_hlod_check(), rd_batch_f1_forward_bridge_check(), rd_batch_f2_native_depth_opaque_check(), rd_batch_f3_native_shadow_check(), rd_batch_f4_native_lighting_check(), rd_batch_f5_motion_check(), rd_batch_f6_scene_integration_check(), audit_symbols(strict_growth=True)]
+    checks = [branch_check(), reference_check(), diff_check(), build_contract_check(), rd_shader_abi_check(), rd_batch_c_material_check(), rd_batch_d_instance_check(), rd_batch_e_hlod_check(), rd_batch_f1_forward_bridge_check(), rd_batch_f2_native_depth_opaque_check(), rd_batch_f3_native_shadow_check(), rd_batch_f4_native_lighting_check(), rd_batch_f5_motion_check(), rd_batch_f6_scene_integration_check(), rd_batch_f7_multiview_lifecycle_check(), audit_symbols(strict_growth=True)]
     if not static_only:
         checks.append(build_extension("editor"))
     return 0 if all(checks) else 1
@@ -1482,6 +1544,7 @@ def validate_full() -> int:
         rd_batch_f4_native_lighting_check(),
         rd_batch_f5_motion_check(),
         rd_batch_f6_scene_integration_check(),
+        rd_batch_f7_multiview_lifecycle_check(),
         audit_symbols(strict_growth=True),
         build_extension("editor"),
         godot_headless_import(),
@@ -1508,6 +1571,7 @@ def validate_final() -> int:
         rd_batch_f4_native_lighting_check(),
         rd_batch_f5_motion_check(),
         rd_batch_f6_scene_integration_check(),
+        rd_batch_f7_multiview_lifecycle_check(),
         audit_symbols(strict_growth=True, final=True),
         build_extension("editor"),
         build_extension("template_release"),

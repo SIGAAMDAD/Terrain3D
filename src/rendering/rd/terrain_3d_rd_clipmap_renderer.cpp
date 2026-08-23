@@ -250,6 +250,10 @@ bool Terrain3DRdClipmapRenderer::ensureForwardPipelines( const t3dRdForwardPassC
 	key.m_variant = variant;
 	key.m_passKind = rContext.m_passKind;
 	key.m_samples = rd->framebuffer_format_get_texture_samples( rContext.m_nFramebufferFormat, 0u );
+	if ( ( 1u << ( uint32_t )( key.m_samples ) ) != rContext.m_nSampleCount ) {
+		setError( "Terrain3D Forward+ sample-count metadata does not match native framebuffer format" );
+		return false;
+	}
 	key.m_nViewCount = rContext.m_nViewCount;
 	key.m_bReverseCull = rContext.m_bReverseCull;
 	key.m_bDepthPrepassActive = ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION ) && rContext.m_bDepthPrepassActive;
@@ -258,6 +262,7 @@ bool Terrain3DRdClipmapRenderer::ensureForwardPipelines( const t3dRdForwardPassC
 		m_bLastForwardPipelineKeyValid = true;
 		return true;
 	}
+	if ( m_forwardPipelines.size() >= 64u ) freeForwardPipelines();
 
 	t3dRdForwardPipelineEntry_t entry;
 	entry.m_key = key;
@@ -911,6 +916,8 @@ void Terrain3DRdClipmapRenderer::shutdown( void ) {
 	for ( auto &tier : m_hszForwardShaders ) for ( RID &shader : tier ) shader = RID();
 	m_nVertexFormat = RenderingDevice::INVALID_FORMAT_ID;
 	m_nForwardPreparedScenePass = 0u;
+	m_nForwardPreparedViewportKey = 0u;
+	m_bForwardHistoryValid = false;
 	m_nForwardPreparedSnapshotGeneration = 0u;
 	m_forwardPreparedCullPassKind = T3D_RD_FORWARD_PASS_INVALID;
 	m_bLastForwardPipelineKeyValid = false;
@@ -944,17 +951,26 @@ void Terrain3DRdClipmapRenderer::copyProjection( const Projection &rProjection, 
 }
 
 bool Terrain3DRdClipmapRenderer::updateFrameUniforms( const t3dRdFrameSnapshot_t &rSnapshot,
-		const Projection &rViewProjection,
+		const Projection *const pViewProjections,
+		const uint32_t nViewCount,
 		const Projection &rView,
-		const Vector3 &rCamera,
-		const Projection &rPreviousViewProjection,
+		const Vector3 *const pCameras,
+		const Projection *const pPreviousViewProjections,
 		const Vector2 &rTaaJitter,
 		const Vector2 &rPreviousTaaJitter,
 		const bool bHistoryValid ) {
+	if ( !pViewProjections || !pCameras || nViewCount == 0u || nViewCount > s_nRdForwardMaxViews ) return false;
 	t3dRdFrameUniforms_t frame{};
-	copyProjection( rViewProjection, frame.m_mViewProjection );
+	for ( uint32_t view = 0u; view < s_nRdForwardMaxViews; ++view ) {
+		const uint32_t source = MIN( view, nViewCount - 1u );
+		copyProjection( pViewProjections[source], frame.m_mViewProjection[view] );
+		const Projection &previous = bHistoryValid && pPreviousViewProjections ? pPreviousViewProjections[source] : pViewProjections[source];
+		copyProjection( previous, frame.m_mPreviousViewProjection[view] );
+		frame.m_szCamera[view][0] = ( float )( pCameras[source].x );
+		frame.m_szCamera[view][1] = ( float )( pCameras[source].y );
+		frame.m_szCamera[view][2] = ( float )( pCameras[source].z );
+	}
 	copyProjection( rView, frame.m_mView );
-	copyProjection( bHistoryValid ? rPreviousViewProjection : rViewProjection, frame.m_mPreviousViewProjection );
 	frame.m_szMotionJitter[0] = ( float )( rTaaJitter.x );
 	frame.m_szMotionJitter[1] = ( float )( rTaaJitter.y );
 	frame.m_szMotionJitter[2] = ( float )( bHistoryValid ? rPreviousTaaJitter.x : rTaaJitter.x );
@@ -979,9 +995,6 @@ bool Terrain3DRdClipmapRenderer::updateFrameUniforms( const t3dRdFrameSnapshot_t
 	frame.m_fTargetX = ( float )( rSnapshot.m_targetPosition.x );
 	frame.m_fTargetZ = ( float )( rSnapshot.m_targetPosition.z );
 	frame.m_fSubdiv = MAX( rSnapshot.m_fSubdiv, 1.0f );
-	frame.m_fCameraX = ( float )( rCamera.x );
-	frame.m_fCameraY = ( float )( rCamera.y );
-	frame.m_fCameraZ = ( float )( rCamera.z );
 	frame.m_fFogR = ( float )( rSnapshot.m_fogColor.r );
 	frame.m_fFogG = ( float )( rSnapshot.m_fogColor.g );
 	frame.m_fFogB = ( float )( rSnapshot.m_fogColor.b );
@@ -1336,7 +1349,9 @@ bool Terrain3DRdClipmapRenderer::render( RenderData *const pRenderData,
 		const Projection view_projection = scene_data->get_view_projection( view ) * view_matrix;
 		Vector3 eye_position = camera_transform.origin;
 		if ( view_count > 1u ) eye_position += camera_transform.basis.xform( scene_data->get_view_eye_offset( view ) );
-		if ( !updateFrameUniforms( rSnapshot, view_projection, view_matrix, eye_position ) ) {
+		const Projection direct_views[s_nRdForwardMaxViews] = { view_projection, view_projection };
+		const Vector3 direct_cameras[s_nRdForwardMaxViews] = { eye_position, eye_position };
+		if ( !updateFrameUniforms( rSnapshot, direct_views, 1u, view_matrix, direct_cameras, nullptr, Vector2(), Vector2(), false ) ) {
 			setError( "Failed to update Terrain3D frame uniforms" );
 			return false;
 		}
@@ -1414,8 +1429,8 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassConte
 		const RID &rEditorBrushTextureRd ) {
 	if ( rContext.m_phase != T3D_RD_FORWARD_PHASE_PREPARE ) return false;
 	if ( !isReady() || !m_context.validateDevice() || rSnapshot.m_nPatchCount == 0u || rRegionMapBytes.is_empty() ) return false;
-	if ( rContext.m_nViewCount != 1u ) {
-		setError( "F2 native terrain submission supports one Forward+ view; multiview is completed in F7" );
+	if ( rContext.m_nViewCount == 0u || rContext.m_nViewCount > s_nRdForwardMaxViews ) {
+		setError( "Terrain3D native terrain view count exceeds bridge bounds" );
 		return false;
 	}
 	t3dRdForwardShaderVariant_t variant;
@@ -1460,24 +1475,31 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassConte
 		return false;
 	}
 
-	if ( m_nForwardPreparedScenePass != rContext.m_nScenePass )
+	for ( uint32_t view = 0u; view < s_nRdForwardMaxViews; ++view ) {
+		const uint32_t source = MIN( view, rContext.m_nViewCount - 1u );
+		m_szForwardEyePositions[view] = rContext.m_cameraTransform.origin;
+		if ( rContext.m_nViewCount > 1u ) m_szForwardEyePositions[view] += rContext.m_cameraTransform.basis.xform( rContext.m_szEyeOffset[source] );
+	}
+	m_bForwardHistoryValid = rContext.m_bTemporalHistoryValid;
+	if ( m_nForwardPreparedScenePass != rContext.m_nScenePass || m_nForwardPreparedViewportKey != rContext.m_nViewportKey )
 		m_context.beginFrame( rContext.m_nScenePass, rSnapshot.m_nPublicationGeneration );
 	if ( !uploadSnapshotBuffers( rSnapshot, rRegionMapBytes, nRegionMapGeneration ) ||
 			!ensureUniformSets( height, derived, control, color_map, middle_composite, terrain_shadow_mask, middle_height,
 					middle_height_region_map, far_height, far_color, albedo, far_albedo, normal, surface,
 					displacement, world_noise, macro_noise, editor_brush, rSnapshot.m_materialConfig ) ||
-			!updateFrameUniforms( rSnapshot, rContext.m_szViewProjection[0], Projection( rContext.m_cameraTransform.affine_inverse() ),
-				rContext.m_cameraTransform.origin, rContext.m_szPreviousViewProjection[0], rContext.m_taaJitter,
-				rContext.m_previousTaaJitter, rContext.m_bMotionVectorsEnabled ) ) {
+			!updateFrameUniforms( rSnapshot, rContext.m_szViewProjection, rContext.m_nViewCount,
+				Projection( rContext.m_cameraTransform.affine_inverse() ), m_szForwardEyePositions,
+				rContext.m_szPreviousViewProjection, rContext.m_taaJitter, rContext.m_previousTaaJitter,
+				rContext.m_bMotionVectorsEnabled && m_bForwardHistoryValid ) ) {
 		setError( "Failed to prepare Terrain3D native Forward+ frame state" );
 		return false;
 	}
 
 	const bool shadow_pass = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW;
 	const bool recull = shadow_pass || m_nForwardPreparedScenePass != rContext.m_nScenePass ||
-			m_nForwardPreparedSnapshotGeneration != rSnapshot.m_nPublicationGeneration || m_forwardPreparedCullPassKind != rContext.m_passKind;
+			m_nForwardPreparedViewportKey != rContext.m_nViewportKey || m_nForwardPreparedSnapshotGeneration != rSnapshot.m_nPublicationGeneration || m_forwardPreparedCullPassKind != rContext.m_passKind;
 	if ( recull ) {
-		if ( !Terrain3DRdCpuCuller::build( rSnapshot, rContext.m_szViewProjection[0],
+		if ( !Terrain3DRdCpuCuller::buildMultiview( rSnapshot, rContext.m_szViewProjection, rContext.m_nViewCount,
 				m_szTopology[LOD0_MESH].getIndexCount(), m_szTopology[OUTER_RING_MESH].getIndexCount(), m_cpuCullResult ) ) {
 			++m_nIndirectValidationFailures;
 			setError( "Terrain3D CPU reference culler rejected native Forward+ patch bounds" );
@@ -1486,15 +1508,17 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassConte
 		if ( shadow_pass ) t3dRdApplyShadowCasterPolicy( rSnapshot, m_cpuCullResult );
 		m_nVisiblePatches.store( m_cpuCullResult.m_nVisibleCount, std::memory_order_release );
 		if ( !m_bDirectDrawDebugEnabled.load( std::memory_order_acquire ) ) {
-			if ( !shadow_pass && m_bGpuCullingReady.load( std::memory_order_acquire ) ) {
+			if ( !shadow_pass && rContext.m_nViewCount == 1u && m_bGpuCullingReady.load( std::memory_order_acquire ) ) {
 				if ( !runGpuCulling( rSnapshot ) ) return false;
 			} else if ( !uploadCpuIndirect( m_cpuCullResult ) ) return false;
 		}
 		m_nForwardPreparedScenePass = rContext.m_nScenePass;
+		m_nForwardPreparedViewportKey = rContext.m_nViewportKey;
 		m_nForwardPreparedSnapshotGeneration = rSnapshot.m_nPublicationGeneration;
 		m_forwardPreparedCullPassKind = rContext.m_passKind;
 	}
 	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION ) {
+		if ( rContext.m_bViewportReconfigured ) m_forwardLighting.invalidateBorrowedState();
 		if ( !m_forwardLighting.prepare( rContext, rSnapshot.m_nRenderLayers ) ) {
 			setError( String( "Failed to prepare Terrain3D Forward+ native lighting: " ) +
 					String( m_forwardLighting.getDiagnostics().get( "forward_light_last_error", "unknown" ) ) );
@@ -1567,7 +1591,7 @@ bool Terrain3DRdClipmapRenderer::drawForwardView( const t3dRdForwardPassContext_
 
 bool Terrain3DRdClipmapRenderer::renderForwardPass( const t3dRdForwardPassContext_t &rContext ) {
 	if ( rContext.m_phase != T3D_RD_FORWARD_PHASE_SUBMIT ) return false;
-	if ( m_nForwardPreparedScenePass != rContext.m_nScenePass ) return false;
+	if ( m_nForwardPreparedScenePass != rContext.m_nScenePass || m_nForwardPreparedViewportKey != rContext.m_nViewportKey ) return false;
 	if ( !drawForwardView( rContext ) ) {
 		setError( "Failed to submit Terrain3D terrain onto native Forward+ draw list" );
 		return false;

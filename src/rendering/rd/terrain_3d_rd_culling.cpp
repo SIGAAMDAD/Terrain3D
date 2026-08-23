@@ -113,6 +113,35 @@ bool Terrain3DRdCpuCuller::build( const t3dRdFrameSnapshot_t &rSnapshot,
 			validate( rSnapshot, rViewProjection, nLod0IndexCount, nOuterIndexCount, rResult );
 }
 
+bool Terrain3DRdCpuCuller::buildMultiview( const t3dRdFrameSnapshot_t &rSnapshot,
+		const Projection *const pViewProjections,
+		const uint32_t nViewCount,
+		const uint32_t nLod0IndexCount,
+		const uint32_t nOuterIndexCount,
+		t3dRdCpuCullResult_t &rResult ) {
+	rResult = t3dRdCpuCullResult_t{};
+	if ( !pViewProjections || nViewCount == 0u || nViewCount > s_nRdForwardMaxViews ||
+			rSnapshot.m_nPatchCount > s_nMaxClipmapLevels || nLod0IndexCount == 0u || nOuterIndexCount == 0u ) return false;
+	for ( uint32_t group = 0u; group < s_nRdDrawGroupCount; ++group ) {
+		t3dRdIndexedIndirectCommand_t &command = rResult.m_szCommands[group];
+		command.m_nIndexCount = group == T3D_RD_DRAW_GROUP_LOD0_NEAR ? nLod0IndexCount : nOuterIndexCount;
+		command.m_nFirstInstance = group * s_nMaxClipmapLevels;
+	}
+	for ( uint32_t patch_index = 0u; patch_index < rSnapshot.m_nPatchCount; ++patch_index ) {
+		const t3dRdPatch_t &patch = rSnapshot.m_szPatches[patch_index];
+		if ( !isPatchValid( patch ) ) { ++rResult.m_nInvalidPatchCount; continue; }
+		bool visible = false;
+		for ( uint32_t view = 0u; view < nViewCount && !visible; ++view ) visible = isPatchVisible( patch, pViewProjections[view] );
+		if ( !visible ) continue;
+		const uint32_t group = getDrawGroup( patch );
+		t3dRdIndexedIndirectCommand_t &command = rResult.m_szCommands[group];
+		if ( command.m_nInstanceCount >= s_nMaxClipmapLevels ) return false;
+		rResult.m_szVisibleIndices[group * s_nMaxClipmapLevels + command.m_nInstanceCount++] = patch_index;
+		++rResult.m_nVisibleCount;
+	}
+	return rResult.m_nInvalidPatchCount == 0u;
+}
+
 bool Terrain3DRdCpuCuller::validate( const t3dRdFrameSnapshot_t &rSnapshot,
 		const Projection &rViewProjection,
 		const uint32_t nLod0IndexCount,

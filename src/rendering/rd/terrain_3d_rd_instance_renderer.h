@@ -143,7 +143,8 @@ private:
 	uint64_t m_nHlodCullDispatches = 0u;
 	uint64_t m_nHlodCullDescriptors = 0u;
 	uint64_t m_nForwardPreparedScenePass = 0u;
-	uint64_t m_nMotionHistoryScenePass = UINT64_MAX;
+	uint64_t m_nForwardPreparedViewportKey = 0u;
+	uint64_t m_nMotionHistoryRenderFrame = UINT64_MAX;
 	uint64_t m_nMotionHistorySceneGeneration = 0u;
 	uint64_t m_nMotionHistoryResets = 0u;
 	uint64_t m_nMotionHistoryMatches = 0u;
@@ -175,9 +176,9 @@ private:
 	void freeMaterialBindings( void );
 	RID getMaterialBinding( uint32_t nMaterial, uint32_t nOverlayMaterial ) const;
 	bool uploadScene( const std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> &pScene );
-	bool prepareMotionHistory( const t3dRdInstanceSceneSnapshot_t &rScene, uint64_t nScenePass, bool bCameraHistoryValid );
+	bool prepareMotionHistory( const t3dRdInstanceSceneSnapshot_t &rScene, uint64_t nRenderFrame );
 	bool uploadMaterials( void );
-	bool buildPackets( const t3dRdInstanceSceneSnapshot_t &rScene, const Projection &rViewProjection, const Vector3 &rCamera, uint32_t nVisibilityMask, bool bShadowPass );
+	bool buildPackets( const t3dRdInstanceSceneSnapshot_t &rScene, const Projection *pViewProjections, uint32_t nViewCount, const Vector3 &rCamera, uint32_t nVisibilityMask, bool bShadowPass );
 	bool uploadVisibility( void );
 	bool uploadShadowVisibility( void );
 	bool uploadHlodDescriptors( void );
