@@ -431,7 +431,7 @@ def rd_batch_d_instance_check() -> bool:
         ("instance material filtering/repeat sampler policy", "set_use_anisotropy" in instance_cpp and "SAMPLER_REPEAT_MODE_REPEAT" in instance_cpp and "T3D_RD_INSTANCE_MATERIAL_FILTER_MASK" in instance_cpp),
         ("material alpha-scissor and vertex-color parity", "MATERIAL_ALPHA_SCISSOR" in shader and "MATERIAL_VERTEX_COLOR" in shader and "discard" in shader and "srgb_to_linear" in shader),
         ("alpha blend and depth-prepass material extraction", "TRANSPARENCY_ALPHA" in mesh_cpp and "TRANSPARENCY_ALPHA_DEPTH_PRE_PASS" in mesh_cpp and "T3D_RD_INSTANCE_ALPHA_BLEND" in mesh_cpp and "T3D_RD_INSTANCE_ALPHA_DEPTH_PREPASS" in mesh_cpp),
-        ("transparent cells stay independently sortable", "if ( !alpha_blend && !range_fade )" in instance_cpp and "m_fSortDistanceSq" in instance_h and "std::stable_sort" in instance_cpp),
+        ("transparent cells stay independently sortable", "!alpha_blend && !range_fade" in instance_cpp and "m_fSortDistanceSq" in instance_h and "std::stable_sort" in instance_cpp),
         ("alpha depth prepass is two-pass with color writes disabled", "m_szPipeline[9]" in instance_h and "opacity_mode == 2u" in instance_cpp and "set_write_r( false )" in instance_cpp and "T3D_RD_INSTANCE_DEPTH_PREPASS_PASS" in instance_cpp and "INSTANCE_DEPTH_PREPASS_PASS" in shader),
         ("alpha color pass uses persistent blend variants", "BLEND_FACTOR_SRC_ALPHA" in instance_cpp and "BLEND_FACTOR_ONE_MINUS_SRC_ALPHA" in instance_cpp and "pipeline_index += 3u" in instance_cpp),
         ("material cull modes use persistent pipeline variants", "m_szPipeline[9]" in instance_h and all(token in instance_cpp for token in ("POLYGON_CULL_BACK", "POLYGON_CULL_FRONT", "POLYGON_CULL_DISABLED", "T3D_RD_INSTANCE_CULL_FRONT"))),
@@ -506,8 +506,8 @@ def rd_batch_e_hlod_check() -> bool:
         ("HLOD GPU culling performs 8-corner clip test", "vec4 corners[8]" in shader and shader.count("corners[") >= 9 and "bounds_visible" in shader),
         ("HLOD GPU visibility uses layer mask", "descriptor.visibility_layers & cull_data.visibility_mask" in shader),
         ("HLOD GPU visibility writes indirect instance count", "commands[descriptor.command_index].instance_count" in shader),
-        ("regular cells remain CPU culled while HLOD is GPU culled", "if ( !hlod && ( cell.m_nVisibilityLayers & nVisibilityMask ) == 0u )" in instance_cpp and "const bool visible = hlod ?" in instance_cpp),
-        ("HLOD packets remain independently addressable for GPU cull", "if ( !hlod )" in instance_cpp and "m_hlodDescriptors.reserve" in instance_cpp),
+        ("regular cells remain CPU culled while HLOD is GPU culled", "( bShadowPass || !hlod )" in instance_cpp and "( !bShadowPass && hlod )" in instance_cpp),
+        ("HLOD packets remain independently addressable for GPU cull", "!hlod && !alpha_blend" in instance_cpp and "m_hlodDescriptors.reserve" in instance_cpp),
         ("multi-surface HLOD visibility reserves one visible span per surface", "visible_index_capacity += ( uint64_t )( cell.m_nInstanceCount ) * ( uint64_t )( lod->m_nSurfaceCount )" in instance_cpp),
         ("HLOD descriptor references post-sort indirect command index", "descriptor.m_nCommandIndex = command_index" in instance_cpp and "std::stable_sort( m_drawPackets.begin()" in instance_cpp),
         ("HLOD cull dispatch updates persistent indirect buffer", "m_hIndirectBuffer" in instance_cpp and "dispatchHlodCull" in instance_cpp and "compute_list_dispatch" in instance_cpp),
@@ -515,7 +515,7 @@ def rd_batch_e_hlod_check() -> bool:
         ("HLOD cull inserts compute-to-draw barrier", "compute_list_add_barrier" in instance_cpp and "dispatchHlodCull( nVisibilityMask )" in instance_cpp),
         ("HLOD cull has no CPU readback or sync", "buffer_get_data" not in instance_cpp[instance_cpp.find("bool Terrain3DRdInstanceRenderer::dispatchHlodCull"):instance_cpp.find("void Terrain3DRdInstanceRenderer::freeViewState")] and ".sync(" not in instance_cpp),
         ("HLOD shadow policy is published", "entry.m_nLevel <= m_nMaxShadowLevel" in streamer_cpp and "T3D_RD_INSTANCE_CAST_SHADOWS" in streamer_cpp),
-        ("HLOD participates in shared shadow packets", "m_shadowPackets.push_back" in instance_cpp and "shadow.m_cullBounds = cell.m_bounds" in instance_cpp and "shadow.m_nVisibilityLayers = cell.m_nVisibilityLayers" in instance_cpp),
+        ("HLOD participates in shared shadow packets", "m_shadowPackets.push_back" in instance_cpp and "bShadowPass" in instance_cpp and "created.m_packet.m_cullBounds = cell.m_bounds" in instance_cpp and "created.m_packet.m_nVisibilityLayers = cell.m_nVisibilityLayers" in instance_cpp),
         ("HLOD imported materials use shared mesh material path", "t3dRdAppendMeshSource" in mesh_cpp and "t3dRdAddMaterial" in mesh_cpp and "rebuildMaterialBindings" in instance_cpp),
         ("HLOD deactivation releases package and invalidates publication", "entry.m_ackage.unref()" in streamer_cpp and "if ( wasPublished ) markRdPublicationDirty()" in streamer_cpp),
         ("HLOD renderer exposes cull diagnostics", all(token in instance_cpp for token in ("hlod_gpu_cull_descriptors", "hlod_gpu_cull_dispatches", "hlod_descriptor_capacity_bytes"))),
@@ -594,9 +594,9 @@ def rd_batch_f1_forward_bridge_check() -> bool:
     )
 
     checks += [
-        ("bridge ABI is synchronized on extension side", "s_nBridgeAbiVersion = 2u" in bridge_h and "s_nRdForwardBridgeAbiVersion = 2u" in types),
+        ("bridge ABI is synchronized on extension side", "s_nBridgeAbiVersion = 3u" in bridge_h and "s_nRdForwardBridgeAbiVersion = 3u" in types),
         ("engine singleton name fixed", 's_pszEngineSingletonName = "Terrain3DForwardPlusBridge"' in bridge_h and "class Terrain3DForwardPlusBridge" in patch),
-        ("engine ABI exposes required lifecycle API", all(token in patch for token in engine_methods) and "ABI_VERSION = 2" in patch),
+        ("engine ABI exposes required lifecycle API", all(token in patch for token in engine_methods) and "ABI_VERSION = 3" in patch),
         ("engine callback slot is atomic", "std::atomic<CallbackSlot *> callback_slot" in patch and "callback_slot.load(std::memory_order_acquire)" in patch),
         ("engine callback reclamation is reader-safe", "callback_readers.fetch_add" in patch and "callback_readers.fetch_sub" in patch and "callback_readers.load" in patch),
         ("engine callback invocation is synchronous", "slot->callable.call(p_packet)" in patch and "call_deferred" not in patch),
@@ -617,7 +617,7 @@ def rd_batch_f1_forward_bridge_check() -> bool:
         ("coordinator retains dedicated synchronous Forward+ entry point", "Terrain3DRenderCoordinator::renderForwardPass" in coordinator_cpp and "T3D_RD_FORWARD_PHASE_PREPARE" in coordinator_cpp and "T3D_RD_FORWARD_PHASE_SUBMIT" in coordinator_cpp),
         ("production route requires ready bridge", "isForwardBridgeReady" in coordinator_cpp and "m_bRenderEnabled" in coordinator_cpp),
         ("bridge absence and ABI failures emit a visible engine error", "UtilityFunctions::push_error" in bridge_cpp and "production RenderingDevice rendering is disabled" in bridge_cpp and "ABI mismatch" in bridge_cpp),
-        ("missing bridge disables native presentation rather than proxy fallback", "setRdPresentation( false, false )" in coordinator_cpp and "missing/wrong bridge is a visible production failure" in coordinator_cpp),
+        ("missing bridge disables native presentation rather than proxy fallback", "setRdPresentation( false, false )" in coordinator_cpp and "if ( bRd )" in coordinator_cpp),
         ("compositor lane is explicit debug-only", "TERRAIN3D_RD_DEBUG_COMPOSITOR" in coordinator_cpp and "set_enabled( false )" in compositor_cpp),
         ("adapter lifecycle registered with extension", "Terrain3DRdForwardPlusBridgeAdapter::initializeSingleton" in register_cpp and "Terrain3DRdForwardPlusBridgeAdapter::shutdownSingleton" in register_cpp),
         ("Windows project includes F1 adapter source", "terrain_3d_rd_forward_plus_bridge.cpp" in vcxproj and "terrain_3d_rd_forward_plus_bridge.h" in vcxproj),
@@ -711,6 +711,46 @@ def rd_batch_f2_native_depth_opaque_check() -> bool:
         print(f"Batch F2 native depth/opaque contract: {len(checks)-len(failed)}/{len(checks)} passed")
         return False
     print(f"OK Batch F2 native depth/opaque contract: {len(checks)}/{len(checks)} passed")
+    return True
+
+
+
+def rd_batch_f3_native_shadow_check() -> bool:
+    rd = REPO / "src" / "rendering" / "rd"
+    types = (rd / "terrain_3d_rd_types.h").read_text(encoding="utf-8", errors="ignore")
+    bridge = (rd / "terrain_3d_rd_forward_plus_bridge.cpp").read_text(encoding="utf-8", errors="ignore")
+    clip = (rd / "terrain_3d_rd_clipmap_renderer.cpp").read_text(encoding="utf-8", errors="ignore")
+    inst = (rd / "terrain_3d_rd_instance_renderer.cpp").read_text(encoding="utf-8", errors="ignore")
+    coord = (rd / "terrain_3d_render_coordinator.cpp").read_text(encoding="utf-8", errors="ignore")
+    patch = (REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch").read_text(encoding="utf-8", errors="ignore")
+    ledger = (REPO / "docs" / "rd_contract_ledger.tsv").read_text(encoding="utf-8", errors="ignore")
+    checks = [
+        ("ABI 3 is matched on engine and extension sides", "s_nRdForwardBridgeAbiVersion = 3u" in types and "ABI_VERSION = 3" in patch),
+        ("shadow packet carries exact light/cascade identity", all(x in patch for x in ("shadow_light_instance", "shadow_pass_index", "shadow_light_type")) and all(x in bridge for x in ('StringName( "shadow_light_instance" )', 'StringName( "shadow_pass_index" )'))),
+        ("shadow packet carries masks/bias/range/atlas metadata", all(x in patch for x in ("shadow_caster_mask", "shadow_light_cull_mask", "shadow_bias", "shadow_normal_bias", "shadow_bias_scale", "shadow_range_begin", "shadow_range", "shadow_atlas_rect", "shadow_atlas_size"))),
+        ("shadow VP uses exact light projection and transform", "p_projection * shadow_view" in patch),
+        ("coordinator routes native shadow pass", "T3D_RD_FORWARD_PASS_SHADOW" in coord and "m_nShadowCasterMask & rContext.m_nShadowLightCullMask" in coord),
+        ("terrain shadow uses native depth shader and supplied list", "T3D_RD_FORWARD_PASS_SHADOW" in clip and "T3D_RD_FORWARD_SHADER_DEPTH" in clip and "draw_list_draw_indirect" in clip),
+        ("terrain shadow policy uses near/middle/far caster settings", all(x in clip for x in ("m_bNearShadowEnabled", "m_bMiddleShadowEnabled", "m_bFarShadowEnabled", "m_nNearShadowLodCount", "m_nMiddleShadowLodCount", "m_nFarShadowLodCount"))),
+        ("terrain shadow reculls every native shadow pass", "const bool shadow_pass" in clip and "const bool recull = shadow_pass" in clip),
+        ("terrain shadow pipeline has directional reverse-cull state", "POLYGON_CULL_FRONT" in clip and "POLYGON_CULL_BACK" in clip and "m_passKind" in clip),
+        ("instances have dedicated shadow visibility and indirect buffers", all(x in inst for x in ("m_hShadowVisibleIndexBuffer", "m_hShadowIndirectBuffer", "m_hShadowUniformSet", "uploadShadowVisibility"))),
+        ("instance/HLOD shadow submission is grouped indirect", "m_shadowPackets" in inst and "m_shadowVisibleIndices" in inst and "shadow_pass ? m_hShadowIndirectBuffer" in inst),
+        ("shadow instance path respects caster layers", "packet.m_nVisibilityLayers & rContext.m_nShadowCasterMask" in inst),
+        ("alpha blended non-prepass surfaces are excluded from shadow", "bShadowPass && alpha_blend" in inst and "T3D_RD_INSTANCE_ALPHA_DEPTH_PREPASS" in inst),
+        ("double-sided shadow material behavior is represented", "T3D_RD_INSTANCE_SHADOW_DOUBLE_SIDED" in inst),
+        ("selected instance LOD is not recomputed from light-camera distance", "if ( !bShadowPass )" in inst),
+        ("RD production hard-disables native visual/shadow proxy", "if ( bRd )" in coord and "setRdPresentation( false, false )" in coord and 'result["native_shadow_proxy_active"] = false' in coord),
+        ("shadow native submit paths do not open a draw list", "PASS_SHADOW" in patch and "_render_list_with_draw_list" in patch),
+        ("F3 contract ledger records Section 17 completion", "17\tShadows\tF\tcomplete" in ledger),
+        ("engine patch remains syntactically parseable", run_quiet(["git", "apply", "--stat", str(REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch")], label="batch_f3_patch_parse")),
+    ]
+    failed = [label for label, ok in checks if not ok]
+    if failed:
+        for label in failed: print(f"FAIL Batch F3 native shadow contract: {label}")
+        print(f"Batch F3 native shadow contract: {len(checks)-len(failed)}/{len(checks)} passed")
+        return False
+    print(f"OK Batch F3 native shadow contract: {len(checks)}/{len(checks)} passed")
     return True
 
 
@@ -1221,7 +1261,7 @@ def git_fsck() -> bool:
 
 
 def validate_fast(static_only: bool = False) -> int:
-    checks = [branch_check(), reference_check(), diff_check(), build_contract_check(), rd_shader_abi_check(), rd_batch_c_material_check(), rd_batch_d_instance_check(), rd_batch_e_hlod_check(), rd_batch_f1_forward_bridge_check(), rd_batch_f2_native_depth_opaque_check(), audit_symbols(strict_growth=True)]
+    checks = [branch_check(), reference_check(), diff_check(), build_contract_check(), rd_shader_abi_check(), rd_batch_c_material_check(), rd_batch_d_instance_check(), rd_batch_e_hlod_check(), rd_batch_f1_forward_bridge_check(), rd_batch_f2_native_depth_opaque_check(), rd_batch_f3_native_shadow_check(), audit_symbols(strict_growth=True)]
     if not static_only:
         checks.append(build_extension("editor"))
     return 0 if all(checks) else 1
@@ -1239,6 +1279,7 @@ def validate_full() -> int:
         rd_batch_e_hlod_check(),
         rd_batch_f1_forward_bridge_check(),
         rd_batch_f2_native_depth_opaque_check(),
+        rd_batch_f3_native_shadow_check(),
         audit_symbols(strict_growth=True),
         build_extension("editor"),
         godot_headless_import(),
@@ -1261,6 +1302,7 @@ def validate_final() -> int:
         rd_batch_e_hlod_check(),
         rd_batch_f1_forward_bridge_check(),
         rd_batch_f2_native_depth_opaque_check(),
+        rd_batch_f3_native_shadow_check(),
         audit_symbols(strict_growth=True, final=True),
         build_extension("editor"),
         build_extension("template_release"),

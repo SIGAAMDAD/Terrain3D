@@ -520,6 +520,15 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 		publication_camera = m_pTerrain->get_viewport()->get_camera_3d();
 	}
 	snapshot.m_nCameraCullMask = publication_camera ? publication_camera->get_cull_mask() : UINT32_MAX;
+	snapshot.m_nRenderLayers = m_pTerrain->getRenderLayers();
+	snapshot.m_nShadowLodCount = m_pTerrain->getShadowLodCount();
+	snapshot.m_nNearShadowLodCount = m_pTerrain->getNearShadowLodCount();
+	snapshot.m_nMiddleShadowLodCount = m_pTerrain->getMiddleShadowLodCount();
+	snapshot.m_nFarShadowLodCount = m_pTerrain->getFarShadowLodCount();
+	snapshot.m_bCastShadows = m_pTerrain->getCastShadows() != RenderingServer::SHADOW_CASTING_SETTING_OFF;
+	snapshot.m_bNearShadowEnabled = m_pTerrain->getNearShadowEnabled();
+	snapshot.m_bMiddleShadowEnabled = m_pTerrain->getMiddleShadowEnabled();
+	snapshot.m_bFarShadowEnabled = m_pTerrain->getFarShadowEnabled();
 	snapshot.m_nPatchCount = ( uint32_t )( m_pTerrain->getMesher()->fillRdPatches( snapshot.m_szPatches, s_nMaxClipmapLevels ) );
 	const float displacement_padding = snapshot.m_bDisplacementEnabled ? std::abs( snapshot.m_fDisplacementScale ) : 0.0f;
 	for ( uint32_t i = 0u; i < snapshot.m_nPatchCount; ++i ) {
@@ -892,15 +901,14 @@ void Terrain3DRenderCoordinator::updateNativeProxy( void ) {
 	const t3dRenderBackend_t backend = m_backend.load( std::memory_order_acquire );
 	const t3dRdNativeProxyMode_t proxy_mode = m_proxyMode.load( std::memory_order_acquire );
 	const bool bRd = backend != T3D_RENDER_BACKEND_RENDERING_SERVER;
-	if ( bRd && !isForwardBridgeReady() ) {
-		// A missing/wrong bridge is a visible production failure. Never revive
-		// native Terrain3D geometry or the legacy shadow proxy to hide it.
+	if ( bRd ) {
+		// Batch F3 clean break: RD production owns both visual and shadow geometry.
+		// Public proxy settings remain for API compatibility but cannot resurrect native geometry.
 		m_pTerrain->getMesher()->setRdPresentation( false, false );
 		return;
 	}
-	const bool bFullNative = !bRd || backend == T3D_RENDER_BACKEND_RENDERING_DEVICE_HYBRID || proxy_mode == T3D_RD_NATIVE_PROXY_FULL;
-	const bool bShadowProxy = bRd && !bFullNative && proxy_mode == T3D_RD_NATIVE_PROXY_SHADOWS_ONLY;
-	m_pTerrain->getMesher()->setRdPresentation( bFullNative, bShadowProxy );
+	( void )( proxy_mode );
+	m_pTerrain->getMesher()->setRdPresentation( true, false );
 }
 
 void Terrain3DRenderCoordinator::attachEffectToActiveCamera( void ) {
@@ -1174,18 +1182,22 @@ void Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 	m_nLastForwardScenePass.store( rContext.m_nScenePass, std::memory_order_release );
 	m_nLastForwardDrawList.store( rContext.m_nDrawList, std::memory_order_release );
 	m_nLastForwardPassKind.store( ( uint32_t )( rContext.m_passKind ), std::memory_order_release );
-	if ( rContext.m_passKind != T3D_RD_FORWARD_PASS_DEPTH && rContext.m_passKind != T3D_RD_FORWARD_PASS_OPAQUE ) return;
+	if ( rContext.m_passKind != T3D_RD_FORWARD_PASS_DEPTH && rContext.m_passKind != T3D_RD_FORWARD_PASS_OPAQUE &&
+			rContext.m_passKind != T3D_RD_FORWARD_PASS_SHADOW ) return;
 
 	if ( rContext.m_phase == T3D_RD_FORWARD_PHASE_PREPARE ) {
 		if ( !initializeRendererOnRenderThread() ) return;
 		const t3dRdFrameSnapshotSlot_t *const publication = acquireSnapshotOnRenderThread();
 		if ( !publication ) return;
 		const t3dRdFrameSnapshot_t &snapshot = publication->m_snapshot;
-		const bool has_terrain = snapshot.m_nPatchCount > 0u && !publication->m_regionMapBytes.is_empty();
+		const bool shadow_pass = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW;
+		const uint32_t visibility_mask = shadow_pass ? ( rContext.m_nShadowCasterMask & rContext.m_nShadowLightCullMask ) : rContext.m_nCameraVisibleLayers;
+		const bool has_terrain = snapshot.m_nPatchCount > 0u && !publication->m_regionMapBytes.is_empty() &&
+				( !shadow_pass || ( snapshot.m_bCastShadows && ( snapshot.m_nRenderLayers & visibility_mask ) != 0u ) );
 		m_nForwardPreparedScenePass = rContext.m_nScenePass;
 		m_bForwardPreparedHasTerrain = has_terrain;
 		const bool instances_ok = m_instanceRenderer.prepareForwardPass( rContext, publication->m_instanceMeshes,
-				publication->m_instanceScene, rContext.m_nCameraVisibleLayers );
+				publication->m_instanceScene, visibility_mask );
 		const bool terrain_ok = !has_terrain || ( instances_ok && m_renderer.prepareForwardPass( rContext, snapshot,
 				publication->m_regionMapBytes, snapshot.m_nRegionMapGeneration,
 				publication->m_resources.m_hHeightTextureRd, publication->m_resources.m_hDerivedTextureRd,
@@ -1231,6 +1243,7 @@ Dictionary Terrain3DRenderCoordinator::getDiagnostics( void ) const {
 	const t3dRdNativeProxyMode_t proxy_mode = m_proxyMode.load( std::memory_order_acquire );
 	result["backend"] = ( int )( backend );
 	result["proxy_mode"] = ( int )( proxy_mode );
+	result["native_shadow_proxy_active"] = false;
 	result["render_enabled"] = m_bRenderEnabled.load( std::memory_order_acquire );
 	result["forward_plus_bridge_attached"] = m_bForwardBridgeAttached;
 	result["forward_plus_bridge_ready"] = isForwardBridgeReady();

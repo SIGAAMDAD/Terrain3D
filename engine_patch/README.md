@@ -9,7 +9,7 @@ This directory contains the **minimal engine-side part of Terrain3D Batch F1**. 
 - Commit: `a13da4feb8d8aefc283c3763d33a2f170a18d541`
 - Patched base blobs: `render_forward_clustered.cpp` `370d3b66ce817d9accf17f6339625e7120a6f238`, `render_forward_clustered.h` `be97ee2d96af1e17fc9fb490cf94c91e9e2a4d31`, `register_server_types.cpp` `de403337857720babbb9f805166053b74ff4e42b`
 - Terrain3D bridge singleton: `Terrain3DForwardPlusBridge`
-- Bridge ABI: `2`
+- Bridge ABI: `3`
 
 Do not apply this patch to another Godot revision without auditing the Forward+ call sites and bumping the bridge ABI if packet semantics change.
 
@@ -55,7 +55,7 @@ Use the project-specific build flags required by the local Godot build, but do n
 At Terrain3D scene-module initialization the extension:
 
 1. queries `Engine` for `Terrain3DForwardPlusBridge`;
-2. checks `get_abi_version() == 2`;
+2. checks `get_abi_version() == 3`;
 3. verifies `register_callback`, `unregister_callback`, `has_callback`, and `collect_retired_callbacks`;
 4. registers exactly one extension callback;
 5. converts every accepted `Dictionary` packet into `t3dRdForwardPassContext_t` exactly once at the boundary;
@@ -74,7 +74,7 @@ The patch invokes the bridge only from the selected native `_render_list_with_dr
 
 It does **not** infer bridge pass kinds from `PASS_MODE_SHADOW`; this avoids accidentally treating GPU-particle collision-heightfield rendering as a Terrain3D scene shadow pass.
 
-F1 established these insertion points. F2 upgrades the bridge to ABI 2 with synchronous PREPARE/SUBMIT phases and implements actual terrain/regular-instance/HLOD depth and opaque draw submission. F3 implements native shadows; later chunks consume the reserved scene resources.
+F1 established these insertion points. F2 upgrades the bridge to ABI 2 with synchronous PREPARE/SUBMIT phases and implements depth/opaque submission. F3 upgrades the bridge to ABI 3 and implements native directional-shadow submission for terrain/regular instances/HLOD while removing the RD production shadow proxy; later chunks consume the reserved scene resources.
 
 ## Missing/wrong bridge behavior
 

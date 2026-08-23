@@ -55,13 +55,14 @@ private:
 	typedef struct t3dRdInstanceForwardPipelineKey_s {
 		int64_t m_nFramebufferFormat = RenderingDevice::INVALID_ID;
 		t3dRdForwardShaderVariant_t m_variant = T3D_RD_FORWARD_SHADER_COLOR;
+		t3dRdForwardPassKind_t m_passKind = T3D_RD_FORWARD_PASS_INVALID;
 		RenderingDevice::TextureSamples m_samples = RenderingDevice::TEXTURE_SAMPLES_1;
 		uint32_t m_nViewCount = 1u;
 		bool m_bReverseCull = false;
 		bool m_bDepthPrepassActive = false;
 		bool operator==( const t3dRdInstanceForwardPipelineKey_s &rOther ) const {
 			return m_nFramebufferFormat == rOther.m_nFramebufferFormat && m_variant == rOther.m_variant &&
-					m_samples == rOther.m_samples && m_nViewCount == rOther.m_nViewCount &&
+					m_passKind == rOther.m_passKind && m_samples == rOther.m_samples && m_nViewCount == rOther.m_nViewCount &&
 					m_bReverseCull == rOther.m_bReverseCull && m_bDepthPrepassActive == rOther.m_bDepthPrepassActive;
 		}
 	} t3dRdInstanceForwardPipelineKey_t;
@@ -82,9 +83,12 @@ private:
 	RID m_hFrameBuffer;
 	RID m_hInstanceBuffer;
 	RID m_hVisibleIndexBuffer;
+	RID m_hShadowVisibleIndexBuffer;
 	RID m_hMaterialBuffer;
 	RID m_hIndirectBuffer;
+	RID m_hShadowIndirectBuffer;
 	RID m_hUniformSet;
+	RID m_hShadowUniformSet;
 	RID m_hMaterialSamplers[12];
 	RID m_hFallbackAlbedoTexture;
 	RID m_hFallbackNormalTexture;
@@ -92,14 +96,17 @@ private:
 	uint64_t m_nMaterialBindingGeneration = 0u;
 	uint32_t m_nInstanceCapacityBytes = 0u;
 	uint32_t m_nVisibleCapacityBytes = 0u;
+	uint32_t m_nShadowVisibleCapacityBytes = 0u;
 	uint32_t m_nMaterialCapacityBytes = 0u;
 	uint32_t m_nIndirectCapacityBytes = 0u;
+	uint32_t m_nShadowIndirectCapacityBytes = 0u;
 	uint32_t m_nHlodDescriptorCapacityBytes = 0u;
 	uint64_t m_nUploadedSceneGeneration = 0u;
 	uint64_t m_nUploadedMeshGeneration = 0u;
 	bool m_bDirectDrawDebug = false;
 	String m_lastError;
 	std::vector<uint32_t> m_visibleIndices;
+	std::vector<uint32_t> m_shadowVisibleIndices;
 	std::vector<t3dRdInstanceDrawPacket_t> m_drawPackets;
 	std::vector<t3dRdInstanceDrawPacket_t> m_depthPackets;
 	std::vector<t3dRdInstanceDrawPacket_t> m_shadowPackets;
@@ -110,8 +117,10 @@ private:
 	PackedByteArray m_instanceBytes;
 	PackedByteArray m_dirtyInstanceBytes;
 	PackedByteArray m_visibleBytes;
+	PackedByteArray m_shadowVisibleBytes;
 	PackedByteArray m_materialBytes;
 	PackedByteArray m_indirectBytes;
+	PackedByteArray m_shadowIndirectBytes;
 	PackedByteArray m_pushBytes;
 	PackedByteArray m_hlodDescriptorBytes;
 	PackedByteArray m_hlodCullPushBytes;
@@ -126,6 +135,8 @@ private:
 	uint64_t m_nHlodCullDescriptors = 0u;
 	uint64_t m_nForwardPreparedScenePass = 0u;
 	uint64_t m_nForwardPreparedSceneGeneration = 0u;
+	t3dRdForwardPassKind_t m_forwardPreparedPacketPassKind = T3D_RD_FORWARD_PASS_INVALID;
+	uint32_t m_nForwardPreparedVisibilityMask = UINT32_MAX;
 	t3dRdInstanceForwardPipelineKey_t m_lastForwardPipelineKey{};
 	bool m_bLastForwardPipelineKeyValid = false;
 	bool m_bForwardPreparedHasDraws = false;
@@ -141,7 +152,9 @@ private:
 	bool ensureBuffer( RID &rRid, uint32_t &rCapacity, uint32_t nRequired, const String &rName,
 			Terrain3DRdContext::ResourceType type, Terrain3DRdContext::MemoryCategory memory );
 	bool ensureBuffers( uint32_t nInstanceBytes, uint32_t nVisibleBytes, uint32_t nMaterialBytes, uint32_t nIndirectBytes );
+	bool ensureShadowBuffers( uint32_t nVisibleBytes, uint32_t nIndirectBytes );
 	bool ensureUniformSet( void );
+	bool ensureShadowUniformSet( void );
 	bool ensureMaterialSamplers( void );
 	bool ensureFallbackMaterialTextures( void );
 	bool rebuildMaterialBindings( void );
@@ -149,15 +162,16 @@ private:
 	RID getMaterialBinding( uint32_t nMaterial, uint32_t nOverlayMaterial ) const;
 	bool uploadScene( const std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> &pScene );
 	bool uploadMaterials( void );
-	bool buildPackets( const t3dRdInstanceSceneSnapshot_t &rScene, const Projection &rViewProjection, const Vector3 &rCamera, uint32_t nVisibilityMask );
+	bool buildPackets( const t3dRdInstanceSceneSnapshot_t &rScene, const Projection &rViewProjection, const Vector3 &rCamera, uint32_t nVisibilityMask, bool bShadowPass );
 	bool uploadVisibility( void );
+	bool uploadShadowVisibility( void );
 	bool uploadHlodDescriptors( void );
 	bool dispatchHlodCull( uint32_t nVisibilityMask );
 	bool ensureViewState( uint32_t nView, const RID &rColor, const RID &rDepth, RenderingDevice::TextureSamples samples );
 	void freeViewState( t3dRdInstanceViewState_t &rState );
 	bool drawView( uint32_t nView, const Projection &rViewProjection, const Vector3 &rCamera, uint32_t nVisibilityMask );
 	bool drawForwardView( const t3dRdForwardPassContext_t &rContext );
-	bool isCellVisible( const t3dRdInstanceCell_t &rCell, const Projection &rViewProjection, const Vector3 &rCamera ) const;
+	bool isCellVisible( const t3dRdInstanceCell_t &rCell, const Projection &rViewProjection, const Vector3 &rCamera, bool bShadowPass = false ) const;
 	void setError( const String &rError );
 
 public:

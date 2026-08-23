@@ -22,7 +22,7 @@ index 0000000000..8ff7f0f001
 +	GDCLASS(Terrain3DForwardPlusBridge, Object);
 +
 +public:
-+	static constexpr int ABI_VERSION = 2;
++	static constexpr int ABI_VERSION = 3;
 +
 +	enum PassKind {
 +		PASS_INVALID = 0,
@@ -253,7 +253,7 @@ index be97ee2d96..f100000002 100644
  #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
  #include "servers/rendering/renderer_rd/shaders/forward_clustered/best_fit_normal.glsl.gen.h"
  #include "servers/rendering/renderer_rd/shaders/forward_clustered/integrate_dfg.glsl.gen.h"
-@@ -403,6 +404,12 @@ private:
+@@ -403,6 +404,27 @@ private:
  			bool flip_cull;
  
  			uint32_t uniform_buffer_index;
@@ -263,6 +263,21 @@ index be97ee2d96..f100000002 100644
 +			Projection previous_view_projection;
 +			Vector3 eye_offset;
 +			uint32_t camera_visible_layers = UINT32_MAX;
++			RID shadow_light_instance;
++			uint32_t shadow_light_type = UINT32_MAX;
++			int32_t shadow_pass_index = -1;
++			uint32_t shadow_caster_mask = UINT32_MAX;
++			uint32_t shadow_light_cull_mask = UINT32_MAX;
++			float shadow_bias = 0.0f;
++			float shadow_normal_bias = 0.0f;
++			float shadow_bias_scale = 1.0f;
++			float shadow_range_begin = 0.0f;
++			float shadow_range = 0.0f;
++			Rect2 shadow_atlas_rect;
++			Vector2i shadow_atlas_size;
++			bool shadow_pancake = false;
++			bool shadow_dual_paraboloid = false;
++			bool shadow_dual_paraboloid_flip = false;
  		};
  		LocalVector<ShadowPass> shadow_passes;
  
@@ -278,7 +293,7 @@ diff --git a/servers/rendering/renderer_rd/forward_clustered/render_forward_clus
 index 370d3b66ce..f100000003 100644
 --- a/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp
 +++ b/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp
-@@ -611,11 +611,107 @@ void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_lis
+@@ -611,11 +611,122 @@ void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_lis
  	}
  }
  
@@ -313,6 +328,21 @@ index 370d3b66ce..f100000003 100644
 +		packet["camera_visible_layers"] = int64_t(p_shadow_pass->camera_visible_layers);
 +		packet["camera_transform"] = p_shadow_pass->camera_transform;
 +		packet["previous_camera_transform"] = p_shadow_pass->previous_camera_transform;
++		packet["shadow_light_instance"] = p_shadow_pass->shadow_light_instance;
++		packet["shadow_light_type"] = int64_t(p_shadow_pass->shadow_light_type);
++		packet["shadow_pass_index"] = int64_t(p_shadow_pass->shadow_pass_index);
++		packet["shadow_caster_mask"] = int64_t(p_shadow_pass->shadow_caster_mask);
++		packet["shadow_light_cull_mask"] = int64_t(p_shadow_pass->shadow_light_cull_mask);
++		packet["shadow_bias"] = p_shadow_pass->shadow_bias;
++		packet["shadow_normal_bias"] = p_shadow_pass->shadow_normal_bias;
++		packet["shadow_bias_scale"] = p_shadow_pass->shadow_bias_scale;
++		packet["shadow_range_begin"] = p_shadow_pass->shadow_range_begin;
++		packet["shadow_range"] = p_shadow_pass->shadow_range;
++		packet["shadow_atlas_rect"] = p_shadow_pass->shadow_atlas_rect;
++		packet["shadow_atlas_size"] = p_shadow_pass->shadow_atlas_size;
++		packet["shadow_pancake"] = p_shadow_pass->shadow_pancake;
++		packet["shadow_dual_paraboloid"] = p_shadow_pass->shadow_dual_paraboloid;
++		packet["shadow_dual_paraboloid_flip"] = p_shadow_pass->shadow_dual_paraboloid_flip;
 +		view_projections.push_back(p_shadow_pass->view_projection);
 +		previous_view_projections.push_back(p_shadow_pass->previous_view_projection);
 +		eye_offsets.push_back(p_shadow_pass->eye_offset);
@@ -414,16 +444,47 @@ index 370d3b66ce..f100000003 100644
  			RD::get_singleton()->draw_command_end_label();
  		}
  	}
-@@ -2574,6 +2677,12 @@ void RenderForwardClustered::_render_shadow_append(RID p_framebuffer, const Paged
+@@ -2558,7 +2661,22 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas,
+ 	} else {
+ 		//render shadow
+ 		_render_shadow_append(render_fb, p_instances, light_projection, light_transform, zfar, 0, 0, reverse_cull_face, using_dual_paraboloid, using_dual_paraboloid_flip, use_pancake, p_lod_distance_multiplier, p_screen_mesh_lod_threshold, atlas_rect, flip_y, p_clear_region, p_open_pass, p_close_pass, p_render_info, p_viewport_size, p_main_cam_transform);
+ 	}
++	if (!scene_state.shadow_passes.is_empty()) {
++		SceneState::ShadowPass &terrain3d_shadow_pass = scene_state.shadow_passes[scene_state.shadow_passes.size() - 1];
++		RID terrain3d_base = light_storage->light_instance_get_base_light(p_light);
++		terrain3d_shadow_pass.shadow_light_instance = p_light;
++		terrain3d_shadow_pass.shadow_light_type = uint32_t(light_storage->light_get_type(terrain3d_base));
++		terrain3d_shadow_pass.shadow_pass_index = p_pass;
++		terrain3d_shadow_pass.shadow_caster_mask = light_storage->light_get_shadow_caster_mask(terrain3d_base);
++		terrain3d_shadow_pass.shadow_light_cull_mask = light_storage->light_get_cull_mask(terrain3d_base);
++		terrain3d_shadow_pass.camera_visible_layers = terrain3d_shadow_pass.shadow_caster_mask;
++		terrain3d_shadow_pass.shadow_bias = light_storage->light_get_param(terrain3d_base, RSE::LIGHT_PARAM_SHADOW_BIAS);
++		terrain3d_shadow_pass.shadow_normal_bias = light_storage->light_get_param(terrain3d_base, RSE::LIGHT_PARAM_SHADOW_NORMAL_BIAS);
++		terrain3d_shadow_pass.shadow_bias_scale = light_storage->light_instance_get_shadow_bias_scale(p_light, p_pass);
++		terrain3d_shadow_pass.shadow_range_begin = light_storage->light_instance_get_shadow_range_begin(p_light, p_pass);
++		terrain3d_shadow_pass.shadow_range = light_storage->light_instance_get_shadow_range(p_light, p_pass);
++	}
+ }
+ 
+ void RenderForwardClustered::_render_shadow_begin() {
+@@ -2574,6 +2677,20 @@ void RenderForwardClustered::_render_shadow_append(RID p_framebuffer, const Paged
  		shadow_pass.clear_depth = p_begin || p_clear_region;
  		shadow_pass.rect = p_rect;
  
 +		shadow_pass.camera_transform = p_transform;
 +		shadow_pass.previous_camera_transform = p_transform;
-+		shadow_pass.view_projection = p_projection;
-+		shadow_pass.previous_view_projection = p_projection;
++		const Projection shadow_view = Projection(p_transform.affine_inverse());
++		shadow_pass.view_projection = p_projection * shadow_view;
++		shadow_pass.previous_view_projection = shadow_pass.view_projection;
 +		shadow_pass.eye_offset = Vector3();
-+		shadow_pass.camera_visible_layers = UINT32_MAX;
++		shadow_pass.shadow_range = p_zfar;
++		shadow_pass.shadow_bias = p_bias;
++		shadow_pass.shadow_normal_bias = p_normal_bias;
++		shadow_pass.shadow_pancake = p_use_pancake;
++		shadow_pass.shadow_dual_paraboloid = p_use_dp;
++		shadow_pass.shadow_dual_paraboloid_flip = p_use_dp_flip;
++		shadow_pass.shadow_atlas_rect = p_rect;
++		shadow_pass.shadow_atlas_size = screen_size;
  		shadow_pass.uniform_buffer_index = uniform_buffer_index;
  
  		scene_state.shadow_passes.push_back(shadow_pass);

@@ -95,7 +95,7 @@ typedef enum t3dRdNativeProxyMode_e {
 	T3D_RD_NATIVE_PROXY_FULL = 2,
 } t3dRdNativeProxyMode_t;
 
-static constexpr uint32_t s_nRdForwardBridgeAbiVersion = 2u;
+static constexpr uint32_t s_nRdForwardBridgeAbiVersion = 3u;
 static constexpr uint32_t s_nRdForwardMaxViews = 2u;
 
 typedef enum t3dRdForwardCallbackPhase_e {
@@ -164,6 +164,21 @@ typedef struct t3dRdForwardPassContext_s {
 	Projection m_szPreviousViewProjection[s_nRdForwardMaxViews];
 	Vector3 m_szEyeOffset[s_nRdForwardMaxViews];
 	uint32_t m_nCameraVisibleLayers = UINT32_MAX;
+	RID m_hShadowLightInstance;
+	uint32_t m_nShadowLightType = UINT32_MAX;
+	int32_t m_nShadowPassIndex = -1;
+	uint32_t m_nShadowCasterMask = UINT32_MAX;
+	uint32_t m_nShadowLightCullMask = UINT32_MAX;
+	float m_fShadowBias = 0.0f;
+	float m_fShadowNormalBias = 0.0f;
+	float m_fShadowBiasScale = 1.0f;
+	float m_fShadowRangeBegin = 0.0f;
+	float m_fShadowRange = 0.0f;
+	Rect2 m_shadowAtlasRect;
+	Vector2i m_shadowAtlasSize;
+	bool m_bShadowPancake = false;
+	bool m_bShadowDualParaboloid = false;
+	bool m_bShadowDualParaboloidFlip = false;
 	uint32_t m_nClusterSize = 0u;
 	uint32_t m_nClusterMaxElements = 0u;
 	RID m_hNativeFramebuffer;
@@ -623,6 +638,15 @@ typedef struct t3dRdFrameSnapshot_s {
 	uint32_t m_nMeshSize = 48u;
 	uint32_t m_nMaterialLayerCount = 1u;
 	uint32_t m_nCameraCullMask = UINT32_MAX;
+	uint32_t m_nRenderLayers = UINT32_MAX;
+	int32_t m_nShadowLodCount = 2;
+	int32_t m_nNearShadowLodCount = -1;
+	int32_t m_nMiddleShadowLodCount = -1;
+	int32_t m_nFarShadowLodCount = -1;
+	bool m_bCastShadows = true;
+	bool m_bNearShadowEnabled = true;
+	bool m_bMiddleShadowEnabled = true;
+	bool m_bFarShadowEnabled = true;
 	float m_fVertexSpacing = 1.0f;
 	float m_fHeightMin = s_fRegionHeightMin;
 	float m_fHeightRange = s_fRegionHeightRange;

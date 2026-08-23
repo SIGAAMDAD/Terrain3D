@@ -38,6 +38,7 @@ private:
 	typedef struct t3dRdForwardPipelineKey_s {
 		int64_t m_nFramebufferFormat = RenderingDevice::INVALID_ID;
 		t3dRdForwardShaderVariant_t m_variant = T3D_RD_FORWARD_SHADER_COLOR;
+		t3dRdForwardPassKind_t m_passKind = T3D_RD_FORWARD_PASS_INVALID;
 		RenderingDevice::TextureSamples m_samples = RenderingDevice::TEXTURE_SAMPLES_1;
 		uint32_t m_nViewCount = 1u;
 		bool m_bReverseCull = false;
@@ -45,7 +46,7 @@ private:
 
 		bool operator==( const t3dRdForwardPipelineKey_s &rOther ) const {
 			return m_nFramebufferFormat == rOther.m_nFramebufferFormat && m_variant == rOther.m_variant &&
-					m_samples == rOther.m_samples && m_nViewCount == rOther.m_nViewCount &&
+					m_passKind == rOther.m_passKind && m_samples == rOther.m_samples && m_nViewCount == rOther.m_nViewCount &&
 					m_bReverseCull == rOther.m_bReverseCull && m_bDepthPrepassActive == rOther.m_bDepthPrepassActive;
 		}
 	} t3dRdForwardPipelineKey_t;
@@ -105,6 +106,7 @@ private:
 	uint32_t m_nUploadedPatchCount = 0u;
 	uint64_t m_nForwardPreparedScenePass = 0u;
 	uint64_t m_nForwardPreparedSnapshotGeneration = 0u;
+	t3dRdForwardPassKind_t m_forwardPreparedCullPassKind = T3D_RD_FORWARD_PASS_INVALID;
 	t3dRdForwardPipelineKey_t m_lastForwardPipelineKey{};
 	bool m_bLastForwardPipelineKeyValid = false;
 	bool m_bPatchUploadInitialized = false;

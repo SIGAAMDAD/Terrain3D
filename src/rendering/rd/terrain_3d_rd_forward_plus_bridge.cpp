@@ -32,6 +32,15 @@ static bool t3dRdForwardReadRequiredInt( const Dictionary &rPacket,
 	return true;
 }
 
+
+static bool t3dRdForwardReadRequiredFloat( const Dictionary &rPacket, const StringName &rKey, float &rValue, String &rError ) {
+	if ( !rPacket.has( rKey ) ) { rError = String( "Forward+ bridge packet missing required field: " ) + String( rKey ); return false; }
+	const Variant value = rPacket[rKey];
+	if ( value.get_type() != Variant::FLOAT && value.get_type() != Variant::INT ) { rError = String( "Forward+ bridge packet field is not numeric: " ) + String( rKey ); return false; }
+	rValue = ( float )( ( double )( value ) );
+	return true;
+}
+
 static RID t3dRdForwardReadRid( const Dictionary &rPacket, const StringName &rKey ) {
 	if ( !rPacket.has( rKey ) ) return RID();
 	const Variant value = rPacket[rKey];
@@ -285,6 +294,36 @@ bool Terrain3DRdForwardPlusBridgeAdapter::parsePacket(
 		rContext.m_szViewProjection[i] = ( Projection )( current_views[( int64_t )( i )] );
 		rContext.m_szPreviousViewProjection[i] = ( Projection )( previous_views[( int64_t )( i )] );
 		rContext.m_szEyeOffset[i] = ( Vector3 )( eye_offsets[( int64_t )( i )] );
+	}
+
+	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW ) {
+		rContext.m_hShadowLightInstance = t3dRdForwardReadRid( rPacket, StringName( "shadow_light_instance" ) );
+		if ( !rContext.m_hShadowLightInstance.is_valid() ||
+				!t3dRdForwardReadRequiredInt( rPacket, StringName( "shadow_light_type" ), value, rError ) || value < 0 ) return false;
+		rContext.m_nShadowLightType = ( uint32_t )( value );
+		if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "shadow_pass_index" ), value, rError ) || value < 0 ) return false;
+		rContext.m_nShadowPassIndex = ( int32_t )( value );
+		if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "shadow_caster_mask" ), value, rError ) || value < 0 ) return false;
+		rContext.m_nShadowCasterMask = ( uint32_t )( value );
+		if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "shadow_light_cull_mask" ), value, rError ) || value < 0 ) return false;
+		rContext.m_nShadowLightCullMask = ( uint32_t )( value );
+		if ( !t3dRdForwardReadRequiredFloat( rPacket, StringName( "shadow_bias" ), rContext.m_fShadowBias, rError ) ||
+				!t3dRdForwardReadRequiredFloat( rPacket, StringName( "shadow_normal_bias" ), rContext.m_fShadowNormalBias, rError ) ||
+				!t3dRdForwardReadRequiredFloat( rPacket, StringName( "shadow_bias_scale" ), rContext.m_fShadowBiasScale, rError ) ||
+				!t3dRdForwardReadRequiredFloat( rPacket, StringName( "shadow_range_begin" ), rContext.m_fShadowRangeBegin, rError ) ||
+				!t3dRdForwardReadRequiredFloat( rPacket, StringName( "shadow_range" ), rContext.m_fShadowRange, rError ) ) return false;
+		const Variant rect = rPacket.get( StringName( "shadow_atlas_rect" ), Variant() );
+		const Variant size = rPacket.get( StringName( "shadow_atlas_size" ), Variant() );
+		const Variant pancake = rPacket.get( StringName( "shadow_pancake" ), Variant() );
+		const Variant dp = rPacket.get( StringName( "shadow_dual_paraboloid" ), Variant() );
+		const Variant dp_flip = rPacket.get( StringName( "shadow_dual_paraboloid_flip" ), Variant() );
+		if ( rect.get_type() != Variant::RECT2 || size.get_type() != Variant::VECTOR2I || pancake.get_type() != Variant::BOOL ||
+				dp.get_type() != Variant::BOOL || dp_flip.get_type() != Variant::BOOL ) { rError = "Forward+ shadow packet metadata is malformed"; return false; }
+		rContext.m_shadowAtlasRect = ( Rect2 )( rect );
+		rContext.m_shadowAtlasSize = ( Vector2i )( size );
+		rContext.m_bShadowPancake = ( bool )( pancake );
+		rContext.m_bShadowDualParaboloid = ( bool )( dp );
+		rContext.m_bShadowDualParaboloidFlip = ( bool )( dp_flip );
 	}
 
 	if ( t3dRdForwardReadRequiredInt( rPacket, StringName( "cluster_size" ), value, rError ) && value >= 0 ) {

@@ -191,6 +191,11 @@ void Terrain3DRdClipmapRenderer::freeForwardPipelines( void ) {
 
 bool Terrain3DRdClipmapRenderer::selectForwardVariant( const t3dRdForwardPassContext_t &rContext,
 		t3dRdForwardShaderVariant_t &rVariant ) const {
+	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW ) {
+		if ( rContext.m_nativePassMode != T3D_RD_FORWARD_NATIVE_PASS_SHADOW ) return false;
+		rVariant = T3D_RD_FORWARD_SHADER_DEPTH;
+		return true;
+	}
 	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_DEPTH ) {
 		switch ( rContext.m_nativePassMode ) {
 			case T3D_RD_FORWARD_NATIVE_PASS_DEPTH: rVariant = T3D_RD_FORWARD_SHADER_DEPTH; return true;
@@ -215,6 +220,26 @@ const Terrain3DRdClipmapRenderer::t3dRdForwardPipelineEntry_t *Terrain3DRdClipma
 	return nullptr;
 }
 
+static void t3dRdApplyShadowCasterPolicy( const t3dRdFrameSnapshot_t &rSnapshot, t3dRdCpuCullResult_t &rResult ) {
+	uint32_t visible_count = 0u;
+	for ( uint32_t group = 0u; group < s_nRdDrawGroupCount; ++group ) {
+		t3dRdIndexedIndirectCommand_t &command = rResult.m_szCommands[group]; uint32_t write = 0u;
+		for ( uint32_t read = 0u; read < command.m_nInstanceCount; ++read ) {
+			const uint32_t patch_index = rResult.m_szVisibleIndices[group * s_nMaxClipmapLevels + read];
+			if ( patch_index >= rSnapshot.m_nPatchCount ) continue;
+			const t3dRdPatch_t &patch = rSnapshot.m_szPatches[patch_index];
+			bool enabled = true; int32_t limit = rSnapshot.m_nShadowLodCount;
+			if ( patch.m_nTier == 0u ) { enabled = rSnapshot.m_bNearShadowEnabled; if ( rSnapshot.m_nNearShadowLodCount >= 0 ) limit = rSnapshot.m_nNearShadowLodCount; }
+			else if ( patch.m_nTier == 1u ) { enabled = rSnapshot.m_bMiddleShadowEnabled; if ( rSnapshot.m_nMiddleShadowLodCount >= 0 ) limit = rSnapshot.m_nMiddleShadowLodCount; }
+			else { enabled = rSnapshot.m_bFarShadowEnabled; if ( rSnapshot.m_nFarShadowLodCount >= 0 ) limit = rSnapshot.m_nFarShadowLodCount; }
+			if ( !enabled || limit <= 0 || patch.m_nLod >= ( uint32_t )( limit ) ) continue;
+			rResult.m_szVisibleIndices[group * s_nMaxClipmapLevels + write++] = patch_index; ++visible_count;
+		}
+		command.m_nInstanceCount = write;
+	}
+	rResult.m_nVisibleCount = visible_count;
+}
+
 bool Terrain3DRdClipmapRenderer::ensureForwardPipelines( const t3dRdForwardPassContext_t &rContext,
 		const t3dRdForwardShaderVariant_t variant ) {
 	RenderingDevice *const rd = m_context.getDevice();
@@ -222,6 +247,7 @@ bool Terrain3DRdClipmapRenderer::ensureForwardPipelines( const t3dRdForwardPassC
 	t3dRdForwardPipelineKey_t key;
 	key.m_nFramebufferFormat = rContext.m_nFramebufferFormat;
 	key.m_variant = variant;
+	key.m_passKind = rContext.m_passKind;
 	key.m_samples = rd->framebuffer_format_get_texture_samples( rContext.m_nFramebufferFormat, 0u );
 	key.m_nViewCount = rContext.m_nViewCount;
 	key.m_bReverseCull = rContext.m_bReverseCull;
@@ -236,7 +262,9 @@ bool Terrain3DRdClipmapRenderer::ensureForwardPipelines( const t3dRdForwardPassC
 	entry.m_key = key;
 	Ref<RDPipelineRasterizationState> raster;
 	raster.instantiate();
-	raster->set_cull_mode( RenderingDevice::POLYGON_CULL_DISABLED );
+	raster->set_cull_mode( rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW ?
+			( rContext.m_bReverseCull ? RenderingDevice::POLYGON_CULL_FRONT : RenderingDevice::POLYGON_CULL_BACK ) :
+			RenderingDevice::POLYGON_CULL_DISABLED );
 	raster->set_front_face( RenderingDevice::POLYGON_FRONT_FACE_CLOCKWISE );
 	Ref<RDPipelineMultisampleState> multisample;
 	multisample.instantiate();
@@ -877,6 +905,7 @@ void Terrain3DRdClipmapRenderer::shutdown( void ) {
 	m_nVertexFormat = RenderingDevice::INVALID_FORMAT_ID;
 	m_nForwardPreparedScenePass = 0u;
 	m_nForwardPreparedSnapshotGeneration = 0u;
+	m_forwardPreparedCullPassKind = T3D_RD_FORWARD_PASS_INVALID;
 	m_bLastForwardPipelineKeyValid = false;
 	m_nRegionMapCapacityBytes = 0u;
 	m_nRegionMapGeneration = 0u;
@@ -1417,8 +1446,9 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassConte
 		return false;
 	}
 
-	const bool recull = m_nForwardPreparedScenePass != rContext.m_nScenePass ||
-			m_nForwardPreparedSnapshotGeneration != rSnapshot.m_nPublicationGeneration;
+	const bool shadow_pass = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW;
+	const bool recull = shadow_pass || m_nForwardPreparedScenePass != rContext.m_nScenePass ||
+			m_nForwardPreparedSnapshotGeneration != rSnapshot.m_nPublicationGeneration || m_forwardPreparedCullPassKind != rContext.m_passKind;
 	if ( recull ) {
 		if ( !Terrain3DRdCpuCuller::build( rSnapshot, rContext.m_szViewProjection[0],
 				m_szTopology[LOD0_MESH].getIndexCount(), m_szTopology[OUTER_RING_MESH].getIndexCount(), m_cpuCullResult ) ) {
@@ -1426,14 +1456,16 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassConte
 			setError( "Terrain3D CPU reference culler rejected native Forward+ patch bounds" );
 			return false;
 		}
+		if ( shadow_pass ) t3dRdApplyShadowCasterPolicy( rSnapshot, m_cpuCullResult );
 		m_nVisiblePatches.store( m_cpuCullResult.m_nVisibleCount, std::memory_order_release );
 		if ( !m_bDirectDrawDebugEnabled.load( std::memory_order_acquire ) ) {
-			if ( m_bGpuCullingReady.load( std::memory_order_acquire ) ) {
+			if ( !shadow_pass && m_bGpuCullingReady.load( std::memory_order_acquire ) ) {
 				if ( !runGpuCulling( rSnapshot ) ) return false;
 			} else if ( !uploadCpuIndirect( m_cpuCullResult ) ) return false;
 		}
 		m_nForwardPreparedScenePass = rContext.m_nScenePass;
 		m_nForwardPreparedSnapshotGeneration = rSnapshot.m_nPublicationGeneration;
+		m_forwardPreparedCullPassKind = rContext.m_passKind;
 	}
 	if ( !ensureForwardPipelines( rContext, variant ) ) return false;
 	clearError();
@@ -1446,6 +1478,7 @@ bool Terrain3DRdClipmapRenderer::drawForwardView( const t3dRdForwardPassContext_
 	if ( !selectForwardVariant( rContext, variant ) || variant != m_lastForwardPipelineKey.m_variant ||
 			rContext.m_nFramebufferFormat != m_lastForwardPipelineKey.m_nFramebufferFormat ||
 			rContext.m_nViewCount != m_lastForwardPipelineKey.m_nViewCount ||
+			rContext.m_passKind != m_lastForwardPipelineKey.m_passKind ||
 			rContext.m_bReverseCull != m_lastForwardPipelineKey.m_bReverseCull ||
 			( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE && rContext.m_bDepthPrepassActive ) != m_lastForwardPipelineKey.m_bDepthPrepassActive ) return false;
 	const t3dRdForwardPipelineEntry_t *const entry = findForwardPipeline( m_lastForwardPipelineKey );
