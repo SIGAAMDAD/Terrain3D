@@ -67,6 +67,9 @@ bool Terrain3DRdShaderLibrary::load( void ) {
 	if ( m_instances.is_null() ) return false;
 	m_hlodCull = loadShader( "res://addons/terrain_3d/rd/terrain_hlod_cull.glsl" );
 	if ( m_hlodCull.is_null() ) return false;
+	m_oceanColor = loadShader( "res://addons/terrain_3d/rd/terrain_ocean.glsl", StringName( "color_native" ) );
+	m_oceanShadow = loadShader( "res://addons/terrain_3d/rd/terrain_ocean.glsl", StringName( "shadow" ) );
+	if ( m_oceanColor.is_null() || m_oceanShadow.is_null() ) return false;
 	m_lastError = String();
 	return true;
 }
@@ -78,6 +81,8 @@ void Terrain3DRdShaderLibrary::clear( void ) {
 	m_cull.unref();
 	m_instances.unref();
 	m_hlodCull.unref();
+	m_oceanColor.unref();
+	m_oceanShadow.unref();
 	for ( uint32_t tier = 0u; tier < 3u; ++tier ) {
 		for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant ) m_forward.m_szTerrain[tier][variant].unref();
 	}
@@ -92,6 +97,8 @@ Dictionary Terrain3DRdShaderLibrary::getDiagnostics( void ) const {
 	result["cull_loaded"] = m_cull.is_valid();
 	result["instances_loaded"] = m_instances.is_valid();
 	result["hlod_cull_loaded"] = m_hlodCull.is_valid();
+	result["ocean_color_loaded"] = m_oceanColor.is_valid();
+	result["ocean_shadow_loaded"] = m_oceanShadow.is_valid();
 	result["last_error"] = m_lastError;
 	return result;
 }

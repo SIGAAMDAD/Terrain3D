@@ -15,7 +15,6 @@
 #include <cstdint>
 #include <godot_cpp/classes/material.hpp>
 #include <godot_cpp/classes/mesh.hpp>
-#include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/surface_tool.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/packed_color_array.hpp>
@@ -438,8 +437,16 @@ Terrain3DHLODBuilder::buildInstancerSource( Terrain3D *const pTerrain, Terrain3D
 		return result;
 	}
 	const Ref<Mesh> mesh = asset->getMesh( 0 );
-	if ( mesh.is_null() || mesh->get_surface_count() <= 0 ||
-			RenderingServer::get_singleton()->mesh_get_blend_shape_count( mesh->get_rid() ) > 0 ) {
+	bool has_blend_shapes = false;
+	if ( mesh.is_valid() ) {
+		for ( int surface = 0; surface < mesh->get_surface_count(); ++surface ) {
+			if ( !mesh->surface_get_blend_shape_arrays( surface ).is_empty() ) {
+				has_blend_shapes = true;
+				break;
+			}
+		}
+	}
+	if ( mesh.is_null() || mesh->get_surface_count() <= 0 || has_blend_shapes ) {
 		result["error"] = "mesh asset has no supported static LOD0 geometry";
 		return result;
 	}
@@ -470,10 +477,9 @@ Terrain3DHLODBuilder::buildInstancerSource( Terrain3D *const pTerrain, Terrain3D
 		return result;
 	}
 
-	RenderingServer *const rs = RenderingServer::get_singleton();
 	int64_t source_triangles = 0;
 	for ( int surface = 0; surface < mesh->get_surface_count(); ++surface ) {
-		if ( !rs || ( Mesh::PrimitiveType )mesh->_surface_get_primitive_type( surface ) != Mesh::PRIMITIVE_TRIANGLES ) {
+		if ( ( Mesh::PrimitiveType )mesh->_surface_get_primitive_type( surface ) != Mesh::PRIMITIVE_TRIANGLES ) {
 			continue;
 		}
 		const Array arrays = mesh->surface_get_arrays( surface );
@@ -518,13 +524,12 @@ Dictionary Terrain3DHLODBuilder::simplifyMesh( const Ref<ArrayMesh> &rMesh, cons
 	const real_t ratio = CLAMP( fRatio, 0.05f, 1.0f );
 	Ref<ArrayMesh> output;
 	output.instantiate();
-	RenderingServer *const rs = RenderingServer::get_singleton();
 	real_t max_error = 0.0f;
 	int64_t source_triangles = 0;
 	int64_t proxy_triangles = 0;
 
 	for ( int surface = 0; surface < rMesh->get_surface_count(); ++surface ) {
-		if ( !rs || rMesh->surface_get_primitive_type( surface ) != Mesh::PRIMITIVE_TRIANGLES ) {
+		if ( rMesh->surface_get_primitive_type( surface ) != Mesh::PRIMITIVE_TRIANGLES ) {
 			continue;
 		}
 		Ref<SurfaceTool> source_tool;

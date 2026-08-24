@@ -1,6 +1,6 @@
 # Terrain3D Forward+ bridge for Godot 4.7.1 stable
 
-This directory contains the **minimal engine-side part of Terrain3D Batch F1**. It does not vendor Godot. The patch adds one versioned singleton and four synchronous Forward+ insertion points so the Terrain3D GDExtension can submit its own RenderingDevice commands while Godot owns the active native draw list.
+This directory contains the **minimal engine-side part of Terrain3D Batch F1**. It does not vendor Godot. The patch adds one versioned singleton and five synchronous Forward+ insertion points so the Terrain3D GDExtension can submit its own RenderingDevice commands while Godot owns the active native draw list.
 
 ## Exact upstream target
 
@@ -9,7 +9,7 @@ This directory contains the **minimal engine-side part of Terrain3D Batch F1**. 
 - Commit: `a13da4feb8d8aefc283c3763d33a2f170a18d541`
 - Patched base blobs: `render_forward_clustered.cpp` `370d3b66ce817d9accf17f6339625e7120a6f238`, `render_forward_clustered.h` `be97ee2d96af1e17fc9fb490cf94c91e9e2a4d31`, `register_server_types.cpp` `de403337857720babbb9f805166053b74ff4e42b`
 - Terrain3D bridge singleton: `Terrain3DForwardPlusBridge`
-- Bridge ABI: `7`
+- Bridge ABI: `8`
 
 Do not apply this patch to another Godot revision without auditing the Forward+ call sites and bumping the bridge ABI if packet semantics change.
 
@@ -20,7 +20,7 @@ Do not apply this patch to another Godot revision without auditing the Forward+ 
 - `servers/rendering/renderer_rd/forward_clustered/terrain3d_forward_plus_bridge.h/.cpp`;
 - singleton registration and deterministic teardown in `servers/register_server_types.cpp`;
 - synchronous PREPARE callbacks immediately before selected native draw lists open and SUBMIT callbacks while those same draw lists are open;
-- explicit F1 pass kinds for `depth`, `opaque`, `shadow`, and `motion`;
+- explicit native pass kinds for `depth`, `opaque`, `shadow`, `motion`, and `transparent`;
 - reserved ABI pass kinds for `material`, `SDF`, `GI`, and `reflection` so F6 data can be carried without replacing the F1 ABI;
 - native pass packet fields for draw-list/framebuffer identity, view state, current/previous camera state and jittered view-projection state, current/previous TAA jitter, native motion-history validity, exact cluster addressing parameters, directional-light count, camera depth range, cluster/light/shadow data, lightmap data, reflection data, decal data, and native base/render-pass uniform-set RIDs.
 
@@ -55,13 +55,13 @@ Use the project-specific build flags required by the local Godot build, but do n
 At Terrain3D scene-module initialization the extension:
 
 1. queries `Engine` for `Terrain3DForwardPlusBridge`;
-2. checks `get_abi_version() == 7`;
+2. checks `get_abi_version() == 8`;
 3. verifies `register_callback`, `unregister_callback`, `has_callback`, and `collect_retired_callbacks`;
 4. registers exactly one extension callback;
 5. converts every accepted `Dictionary` packet into `t3dRdForwardPassContext_t` exactly once at the boundary;
 6. fans the typed context out to active `Terrain3DRenderCoordinator` instances without a render-thread mutex.
 
-Unregistration clears the engine's atomic callback pointer first. The extension then calls `RenderingServer::force_sync()` and `collect_retired_callbacks()` before releasing the `Callable`, preventing a renderer-thread callback from outliving the GDExtension library.
+Unregistration clears the engine's atomic callback pointer first. The extension then calls the GDExtension render-thread synchronization gateway and `collect_retired_callbacks()` before releasing the `Callable`, preventing a renderer-thread callback from outliving the GDExtension library.
 
 ## F1 native hook points
 
@@ -70,11 +70,12 @@ The patch invokes the bridge only from the selected native `_render_list_with_dr
 - depth prepass;
 - opaque color pass;
 - queued scene shadow pass;
-- motion/velocity pass.
+- motion/velocity pass;
+- transparent color pass for RD-owned ocean submission.
 
 It does **not** infer bridge pass kinds from `PASS_MODE_SHADOW`; this avoids accidentally treating GPU-particle collision-heightfield rendering as a Terrain3D scene shadow pass.
 
-F1 established these insertion points. F2 upgraded the bridge to ABI 2 with synchronous PREPARE/SUBMIT phases and native depth/opaque submission. F3 upgraded it to ABI 3 for native terrain/regular-instance/HLOD shadow submission and production shadow-proxy removal. F4 upgraded it to ABI 4 with exact Forward+ cluster addressing, native directional-light count/depth metadata, and native clustered directional/omni/spot/area lighting plus shadow receiving. F5 upgraded it to ABI 5 with corrected jittered current/previous view-projection state, current/previous TAA jitter, native motion-history validity, and motion-pass depth-prepass state. F6 upgraded it to ABI 6 and activated native decal/reflection resources while preserving the fork regional terrain-shadowmask bake path. F7 upgrades it to ABI 7 with stable viewport/render-frame identity, sample metadata, bounded two-view multiview state, and explicit resize/render-scale/MSAA lifecycle invalidation.
+F1 established these insertion points. F2 upgraded the bridge to ABI 2 with synchronous PREPARE/SUBMIT phases and native depth/opaque submission. F3 upgraded it to ABI 3 for native terrain/regular-instance/HLOD shadow submission and production shadow-proxy removal. F4 upgraded it to ABI 4 with exact Forward+ cluster addressing, native directional-light count/depth metadata, and native clustered directional/omni/spot/area lighting plus shadow receiving. F5 upgraded it to ABI 5 with corrected jittered current/previous view-projection state, current/previous TAA jitter, native motion-history validity, and motion-pass depth-prepass state. F6 upgraded it to ABI 6 and activated native decal/reflection resources while preserving the fork regional terrain-shadowmask bake path. F7 upgraded it to ABI 7 with stable viewport/render-frame identity, sample metadata, bounded two-view multiview state, and explicit resize/render-scale/MSAA lifecycle invalidation. Batch H upgrades it to ABI 8 by adding the native transparent insertion point required by the clean-break RD ocean renderer.
 
 ## Missing/wrong bridge behavior
 
@@ -112,7 +113,7 @@ The F1 static contract verifies the patch package, ABI, engine hook markers, pac
 For full engine validation, use an exact source checkout and run `git apply --check`, build the patched Godot editor, then start Terrain3D under Forward+ and confirm diagnostics report:
 
 - `forward_plus_bridge_present = true` (inside bridge diagnostics as `bridge_present`);
-- `observed_abi = 7`;
+- `observed_abi = 8`;
 - `callback_registered = true`;
 - native pass packets arriving with non-negative draw-list IDs.
 

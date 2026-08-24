@@ -3,7 +3,7 @@ new file mode 100644
 index 0000000000..8ff7f0f001
 --- /dev/null
 +++ b/servers/rendering/renderer_rd/forward_clustered/terrain3d_forward_plus_bridge.h
-@@ -0,0 +1,78 @@
+@@ -0,0 +1,79 @@
 +/**************************************************************************/
 +/*  terrain3d_forward_plus_bridge.h                                       */
 +/**************************************************************************/
@@ -22,7 +22,7 @@ index 0000000000..8ff7f0f001
 +	GDCLASS(Terrain3DForwardPlusBridge, Object);
 +
 +public:
-+	static constexpr int ABI_VERSION = 7;
++	static constexpr int ABI_VERSION = 8;
 +
 +	enum PassKind {
 +		PASS_INVALID = 0,
@@ -34,6 +34,7 @@ index 0000000000..8ff7f0f001
 +		PASS_SDF = 6,
 +		PASS_GI = 7,
 +		PASS_REFLECTION = 8,
++		PASS_TRANSPARENT = 9,
 +	};
 +
 +	enum CallbackPhase {
@@ -87,7 +88,7 @@ new file mode 100644
 index 0000000000..8ff7f0f002
 --- /dev/null
 +++ b/servers/rendering/renderer_rd/forward_clustered/terrain3d_forward_plus_bridge.cpp
-@@ -0,0 +1,110 @@
+@@ -0,0 +1,111 @@
 +/**************************************************************************/
 +/*  terrain3d_forward_plus_bridge.cpp                                     */
 +/**************************************************************************/
@@ -119,6 +120,7 @@ index 0000000000..8ff7f0f002
 +	BIND_ENUM_CONSTANT(PASS_SDF);
 +	BIND_ENUM_CONSTANT(PASS_GI);
 +	BIND_ENUM_CONSTANT(PASS_REFLECTION);
++	BIND_ENUM_CONSTANT(PASS_TRANSPARENT);
 +	BIND_ENUM_CONSTANT(PHASE_PREPARE);
 +	BIND_ENUM_CONSTANT(PHASE_SUBMIT);
 +}
@@ -469,6 +471,14 @@ index 370d3b66ce..f100000003 100644
  			RD::get_singleton()->draw_command_end_label();
  		}
  	}
+@@ -2424,6 +2530,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Col
+ 		RID alpha_framebuffer = rb_data.is_valid() ? rb_data->get_color_pass_fb(transparent_color_pass_flags) : color_only_framebuffer;
+ 		RenderListParameters render_list_params(render_list[RENDER_LIST_ALPHA].elements.ptr(), render_list[RENDER_LIST_ALPHA].element_info.ptr(), render_list[RENDER_LIST_ALPHA].elements.size(), reverse_cull, PASS_MODE_COLOR, transparent_color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, base_specialization);
+-		_render_list_with_draw_list(&render_list_params, alpha_framebuffer, RD::DRAW_DEFAULT_ALL, Vector<Color>(), 0.0f, 0u, p_render_data->render_region);
++		_render_list_with_draw_list(&render_list_params, alpha_framebuffer, RD::DRAW_DEFAULT_ALL, Vector<Color>(), 0.0f, 0u, p_render_data->render_region, Terrain3DForwardPlusBridge::PASS_TRANSPARENT, p_render_data, radiance_texture, nullptr, depth_pre_pass);
+ 	}
+ 
+ 	RD::get_singleton()->draw_command_end_label();
 @@ -2558,7 +2664,22 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas,
  	} else {
  		//render shadow

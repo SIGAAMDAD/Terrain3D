@@ -868,17 +868,9 @@ public partial class Terrain3DMaterial : Resource
 		/// </summary>
 		public new static readonly StringName Update = "update";
 		/// <summary>
-		/// Cached name for the 'get_material_rid' member.
-		/// </summary>
-		public new static readonly StringName GetMaterialRid = "get_material_rid";
-		/// <summary>
 		/// Cached name for the 'get_shader_rid' member.
 		/// </summary>
 		public new static readonly StringName GetShaderRid = "get_shader_rid";
-		/// <summary>
-		/// Cached name for the 'get_buffer_material_rid' member.
-		/// </summary>
-		public new static readonly StringName GetBufferMaterialRid = "get_buffer_material_rid";
 		/// <summary>
 		/// Cached name for the 'get_buffer_shader_rid' member.
 		/// </summary>

@@ -374,7 +374,7 @@ void Terrain3D::physicsProcess( const double fDelta ) {
 		phase_started_usec = now;
 	}
 	if ( m_nTessellationLevel > 0 ) {
-		if ( m_pTerrainMesher && m_pDBufferVp && m_material.is_valid() ) {
+		if ( m_pTerrainMesher && m_material.is_valid() ) {
 			const Vector2 target_position_2d = t3dVector3ToVector2( clipmap_target_position );
 			const real_t fTessellationDensity = 1.0f / ( real_t )( 1u << ( uint32_t )m_nTessellationLevel );
 			const real_t fBufferVertexSpacing = m_fVertexSpacing * fTessellationDensity;
@@ -382,11 +382,7 @@ void Terrain3D::physicsProcess( const double fDelta ) {
 			if ( MAX( std::abs( m_lastBufferPosition.x - target_position_2d.x ),
 						 std::abs( m_lastBufferPosition.y - target_position_2d.y ) ) >= fUpdateDistance ) {
 				m_lastBufferPosition = target_position_2d;
-				if ( !tryUpdateComputeDisplacement( clipmap_target_position ) ) {
-					RS->material_set_param(
-							m_material->getBufferMaterialRid(), "_target_pos", clipmap_target_position );
-					m_pDBufferVp->set_update_mode( SubViewport::UPDATE_ONCE );
-				}
+				tryUpdateComputeDisplacement( clipmap_target_position );
 				m_pTerrainMesher->snap( clipmap_target_position );
 			}
 		}
@@ -417,6 +413,9 @@ void Terrain3D::physicsProcess( const double fDelta ) {
 			m_pInstancer->updateStreaming( clipmap_target_position );
 		}
 	}
+	if ( m_pInstancer ) {
+		m_pInstancer->servicePendingUpdates();
+	}
 	if ( bProfileFrame ) {
 		const uint64_t now = Time::get_singleton()->get_ticks_usec();
 		profile_sample.m_nInstancerUsec = now - phase_started_usec;
@@ -428,8 +427,11 @@ void Terrain3D::physicsProcess( const double fDelta ) {
 		profile_sample.m_nLightSyncUsec = now - phase_started_usec;
 		phase_started_usec = now;
 	}
-	if ( m_pCollision && m_pCollision->isEnabled() ) {
-		m_pCollision->update();
+	if ( m_pCollision ) {
+		m_pCollision->servicePendingRegionMapUpdate();
+		if ( m_pCollision->isEnabled() ) {
+			m_pCollision->update();
+		}
 	}
 	if ( bMeasureFrame ) {
 		const uint64_t now = Time::get_singleton()->get_ticks_usec();

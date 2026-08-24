@@ -769,10 +769,9 @@ bool Terrain3DInstancer::hasPendingUpdatesForRegion( const Vector2i &rRegion ) c
 }
 
 void Terrain3DInstancer::scheduleUpdateProcessing( void ) {
-	const Callable callback = callable_mp( this, &Terrain3DInstancer::processUpdates );
-	if ( !RS->is_connected( "frame_pre_draw", callback ) ) {
-		RS->connect( "frame_pre_draw", callback );
-	}
+	// Pending work is serviced from Terrain3D::physicsProcess(). The instance
+	// subsystem no longer depends on renderer frame callbacks; this keeps
+	// update ordering explicit and independent from the removed native renderer.
 }
 
 void Terrain3DInstancer::refreshStreamingCache( void ) {
@@ -1478,11 +1477,7 @@ void Terrain3DInstancer::processUpdates( void ) {
 	m_nMultimeshUploadsLastFrame = 0u;
 	m_nNewRenderInstancesLastFrame = 0u;
 	const uint64_t update_started_usec = Time::get_singleton()->get_ticks_usec();
-	const Callable callback = callable_mp( this, &Terrain3DInstancer::processUpdates );
 	if ( !hasPendingUpdates() ) {
-		if ( RS->is_connected( "frame_pre_draw", callback ) ) {
-			RS->disconnect( "frame_pre_draw", callback );
-		}
 		return;
 	}
 	IS_DATA_INIT( VOID );
@@ -1518,7 +1513,7 @@ void Terrain3DInstancer::processUpdates( void ) {
 		m_pTerrain->getAssets()->loadPendingMeshes();
 	}
 
-	if ( !hasPendingUpdates() && RS->is_connected( "frame_pre_draw", callback ) ) {
+	if ( !hasPendingUpdates() ) {
 #ifdef DEBUG_ENABLED
 		// A complete cross-index audit is intentionally opt-in. Running it after
 		// every editor update on a large world would turn debug instrumentation
@@ -1527,10 +1522,15 @@ void Terrain3DInstancer::processUpdates( void ) {
 			validateInternalState();
 		}
 #endif
-		RS->disconnect( "frame_pre_draw", callback );
 	}
 	m_nQueueAfterLastFrame = ( uint32_t )( MAX( getPendingStreamingUpdateCount(), 0 ) );
 	m_nCellUpdateUsecLastFrame = Time::get_singleton()->get_ticks_usec() - update_started_usec;
+}
+
+void Terrain3DInstancer::servicePendingUpdates( void ) {
+	if ( hasPendingUpdates() ) {
+		processUpdates();
+	}
 }
 
 void Terrain3DInstancer::updateMmiByRegion( Terrain3DRegion *const pRegion, const int nMeshId ) {
@@ -1898,12 +1898,12 @@ std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> Terrain3DInstancer::buildRdI
 
 		const ShadowCasting cast = asset->getLodCastShadows( render.m_nLod );
 		if ( cast != s_shadowCastingOff ) cell.m_nFlags |= T3D_RD_INSTANCE_CAST_SHADOWS;
-		if ( cast == RenderingServer::SHADOW_CASTING_SETTING_DOUBLE_SIDED ) cell.m_nFlags |= T3D_RD_INSTANCE_SHADOW_DOUBLE_SIDED;
+		if ( cast == GeometryInstance3D::SHADOW_CASTING_SETTING_DOUBLE_SIDED ) cell.m_nFlags |= T3D_RD_INSTANCE_SHADOW_DOUBLE_SIDED;
 		if ( cast == s_shadowCastingOnly || render.m_nLod == s_nMeshShadowLodId ) cell.m_nFlags |= T3D_RD_INSTANCE_SHADOWS_ONLY;
 		if ( asset->isHighlighted() ) cell.m_nFlags |= T3D_RD_INSTANCE_HIGHLIGHTED;
 
 		if ( m_bSingleLodInstanceBuffers ) {
-			// Single-LOD mode matches the retained RS path: CPU transition selection
+			// Single-LOD mode retains CPU transition selection
 			// owns visibility and the renderer does not add another range cutoff.
 			cell.m_fLodBegin = 0.0f;
 			cell.m_fLodEnd = 0.0f;
@@ -2270,10 +2270,6 @@ void Terrain3DInstancer::initialize( Terrain3D *const pTerrain ) {
 }
 
 void Terrain3DInstancer::resetRuntimeState( const bool bClearLogicalCounts ) {
-	const Callable callback = callable_mp( this, &Terrain3DInstancer::processUpdates );
-	if ( RS && RS->is_connected( "frame_pre_draw", callback ) ) {
-		RS->disconnect( "frame_pre_draw", callback );
-	}
 	if ( !m_pTerrain ) {
 		return;
 	}
@@ -2363,8 +2359,6 @@ void Terrain3DInstancer::setMode( const t3dInstancerMode_t mode ) {
 			case NORMAL:
 				updateMmis( -1, s_v2iMax, true );
 				break;
-			// case PLACEHOLDER:
-			//	break;
 			default:
 				suspendRendering();
 				break;
@@ -3670,7 +3664,6 @@ Dictionary Terrain3DInstancer::getStats( void ) const {
 
 void Terrain3DInstancer::_bind_methods( void ) {
 	BIND_ENUM_CONSTANT( NORMAL );
-	// BIND_ENUM_CONSTANT(PLACEHOLDER);
 	BIND_ENUM_CONSTANT( INSTANCER_DISABLED );
 
 	ClassDB::bind_method( D_METHOD( "clear_by_mesh", "mesh_id" ), &Terrain3DInstancer::clearByMesh );

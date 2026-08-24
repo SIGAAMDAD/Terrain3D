@@ -21,7 +21,6 @@
 #include <godot_cpp/classes/rd_texture_format.hpp>
 #include <godot_cpp/classes/rd_texture_view.hpp>
 #include <godot_cpp/classes/rd_uniform.hpp>
-#include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
 #include <godot_cpp/core/memory.hpp>
 #include <limits>
@@ -128,12 +127,11 @@ bool Terrain3DCompute::ensureDevice( void ) {
 		return false;
 	}
 	m_bDeviceAttempted = true;
-	RenderingServer *const pServer = RenderingServer::get_singleton();
-	if ( !pServer || !pServer->get_rendering_device() ) {
+	if ( !Terrain3DRdContext::getGlobalDevice() ) {
 		setError( "RenderingDevice is unavailable (Compatibility renderer or headless runtime)" );
 		return false;
 	}
-	m_pRd = pServer->create_local_rendering_device();
+	m_pRd = Terrain3DRdContext::createLocalDevice();
 	if ( !m_pRd ) {
 		setError( "Could not create a local RenderingDevice" );
 		return false;
@@ -490,8 +488,7 @@ bool Terrain3DCompute::prepareDisplacementRequest( Terrain3D *const pTerrain,
 				  "filtering, or buffer shader overrides" );
 		return false;
 	}
-	RenderingServer *const pServer = RenderingServer::get_singleton();
-	if ( !pServer || !pServer->get_rendering_device() ) {
+	if ( !Terrain3DRdContext::getGlobalDevice() ) {
 		setError( "Global RenderingDevice is unavailable" );
 		return false;
 	}

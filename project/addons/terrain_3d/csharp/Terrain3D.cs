@@ -1203,7 +1203,7 @@ public partial class Terrain3D : Node3D
 		set => Set(GDExtensionPropertyName.InstancerCellStreamingEnabled, value);
 	}
 
-	/// <summary>Keeps one active LOD MultiMesh buffer per visible cell.</summary>
+	/// <summary>Keeps one active LOD instance buffer per visible cell.</summary>
 	public new bool InstancerSingleLodBuffers
 	{
 		get => Get(GDExtensionPropertyName.InstancerSingleLodBuffers).As<bool>();
@@ -1384,9 +1384,9 @@ public partial class Terrain3D : Node3D
 		set => Set(GDExtensionPropertyName.CullMargin, value);
 	}
 
-	public new RenderingServer.ShadowCastingSetting CastShadows
+	public new GeometryInstance3D.ShadowCastingSetting CastShadows
 	{
-		get => Get(GDExtensionPropertyName.CastShadows).As<RenderingServer.ShadowCastingSetting>();
+		get => Get(GDExtensionPropertyName.CastShadows).As<GeometryInstance3D.ShadowCastingSetting>();
 		set => Set(GDExtensionPropertyName.CastShadows, Variant.From(value));
 	}
 
@@ -1504,9 +1504,9 @@ public partial class Terrain3D : Node3D
 		set => Set(GDExtensionPropertyName.OceanCullMargin, value);
 	}
 
-	public new RenderingServer.ShadowCastingSetting OceanCastShadows
+	public new GeometryInstance3D.ShadowCastingSetting OceanCastShadows
 	{
-		get => Get(GDExtensionPropertyName.OceanCastShadows).As<RenderingServer.ShadowCastingSetting>();
+		get => Get(GDExtensionPropertyName.OceanCastShadows).As<GeometryInstance3D.ShadowCastingSetting>();
 		set => Set(GDExtensionPropertyName.OceanCastShadows, Variant.From(value));
 	}
 

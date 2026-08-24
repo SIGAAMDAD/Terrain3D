@@ -1,0 +1,11 @@
+area	status	evidence	limitation
+Native C++ debug build	passed	81/81 Terrain3D translation units compiled in both debug/tools and release configurations; both Linux extensions linked with --no-undefined	SCons unavailable; direct compiler/linker path used
+Godot host load	passed	Godot 4.7.1 import/editor loads the linked extension and reports no GDScript/GDExtension load errors	Stock engine has no Terrain3D Forward+ bridge
+Native CPU tests	passed	Terrain3D RD CPU tests: 85 passed, 0 failed	CPU/static contract only
+Fixture integrity	passed	354 files / 311464723 bytes verified against SHA-256 manifest	None
+Fixture resource parse	passed	176 Terrain3DRegion resources load as 128x128 with height maps; 176 paired runtime pages and far atlas present	Does not execute patched Forward+ streaming traversal
+Final legacy audit	passed	RenderingServer confined to Terrain3DRdContext; mesh_create/instance_create/instance_set_base/material_set_param/Hybrid/TODO/FIXME all zero	Remaining MultiMesh/placeholder authoring semantics are explicitly allowlisted
+GDScript/editor parse	passed	Stock Godot 4.7.1 cacheless import/editor parse with linked extension	Stock demo contains historical 1024-sample data rejected by this fork's 128-sample contract and is not the H validation fixture
+C# build	environment-limited	Reference C# file parity and static generated API/project metadata validated	dotnet/MSBuild/Mono unavailable
+Patched Forward+ GPU validation	environment-limited	Bridge ABI/patch/source contracts validated	Only stock Godot 4.7.1 binary available; engine patch cannot be executed here
+GPU memory/performance plateau	environment-limited	Resource accounting/steady-state allocation diagnostics implemented and statically audited	Requires patched Forward+ GPU runtime

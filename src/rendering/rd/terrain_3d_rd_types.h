@@ -83,7 +83,7 @@ static_assert( t3dRdFrameSnapshotTokenGeneration( t3dRdMakeFrameSnapshotToken( 2
 static_assert( t3dRdFrameSnapshotTokenIsPublished( t3dRdMakeFrameSnapshotToken( 2u, 17u, true ) ),
 		"RD frame publication token state changed" );
 
-static constexpr uint32_t s_nRdForwardBridgeAbiVersion = 7u;
+static constexpr uint32_t s_nRdForwardBridgeAbiVersion = 8u;
 static constexpr uint32_t s_nRdForwardMaxViews = 2u;
 
 typedef enum t3dRdForwardCallbackPhase_e {
@@ -126,6 +126,7 @@ typedef enum t3dRdForwardPassKind_e {
 	T3D_RD_FORWARD_PASS_SDF = 6,
 	T3D_RD_FORWARD_PASS_GI = 7,
 	T3D_RD_FORWARD_PASS_REFLECTION = 8,
+	T3D_RD_FORWARD_PASS_TRANSPARENT = 9,
 	T3D_RD_FORWARD_PASS_MAX,
 } t3dRdForwardPassKind_t;
 
@@ -629,6 +630,55 @@ static_assert( sizeof( t3dRdInstanceMaterial_t ) == 80u, "RD instance material A
 static_assert( offsetof( t3dRdInstanceMaterial_t, m_fNormalScale ) == 48u, "RD instance normal-scale ABI changed" );
 static_assert( offsetof( t3dRdInstanceMaterial_t, m_nAlbedoTextureIdLow ) == 56u, "RD instance texture ABI changed" );
 
+
+typedef struct alignas( 16 ) t3dRdOceanState_s {
+	uint32_t m_nEnabled = 0u;
+	uint32_t m_nPatchCount = 0u;
+	uint32_t m_nRenderLayers = 1u;
+	uint32_t m_nCastShadows = 0u;
+	uint32_t m_nVertexIterations = 1u;
+	uint32_t m_nFragmentIterations = 3u;
+	uint32_t m_nRefractionMode = 1u;
+	uint32_t m_nFoamMode = 1u;
+	uint32_t m_nScatteringMode = 1u;
+	uint32_t m_nShadingMode = 1u;
+	uint32_t m_nReserved0 = 0u;
+	uint32_t m_nReserved1 = 0u;
+	float m_fTimeSeconds = 0.0f;
+	float m_fMeshSize = 32.0f;
+	float m_fVertexSpacing = 4.0f;
+	float m_fSubdiv = 1.0f;
+	float m_fTargetX = 0.0f;
+	float m_fTargetY = 0.0f;
+	float m_fTargetZ = 0.0f;
+	float m_fSeaLevel = 5.0f;
+	float m_szWaterColor[4] = { 0.1058f, 0.1568f, 0.2117f, 1.0f };
+	float m_fVisibleDepth = 256.0f;
+	float m_fDepthCurve = 0.1f;
+	float m_fShoreBlend = 1.0f;
+	float m_fRefractionStrength = 0.02f;
+	float m_fTimeScale = 8.0f;
+	float m_fHeightScale = 3.0f;
+	float m_fOceanScale = 2.0f;
+	float m_fFresnelScale = 0.5f;
+	float m_fFresnelPower = 1.0f;
+	float m_fSpecular = 1.0f;
+	float m_fFoamHeight = 1.35f;
+	float m_fFoamTopIntensity = 2.0f;
+	float m_fFoamDistance = 3072.0f;
+	float m_fFoamShoreIntensity = 1.3f;
+	float m_fFoamNoiseScale = 1.5f;
+	float m_fHeightScattering = 6.0f;
+	float m_fHeightThreshold = 0.1f;
+	float m_fHeightAngleThreshold = 0.21f;
+	float m_fFresnelScattering = 20.0f;
+	float m_fDirectScattering = 10.0f;
+	float m_fCullMargin = 0.0f;
+	float m_fReserved2 = 0.0f;
+	uint64_t m_nGeneration = 0u;
+	t3dRdPatch_t m_szPatches[s_nMaxClipmapLevels]{};
+} t3dRdOceanState_t;
+
 typedef struct t3dRdFrameSnapshot_s {
 	uint64_t m_nPublicationGeneration = 0u;
 	uint64_t m_nGeneration = 0u;
@@ -672,6 +722,7 @@ typedef struct t3dRdFrameSnapshot_s {
 	t3dRdMaterialLayer_t m_szMaterials[s_nRdMaterialLayerCount]{};
 	t3dRdMaterialConfig_t m_materialConfig{};
 	t3dRdEditorOverlayConfig_t m_editorOverlayConfig{};
+	t3dRdOceanState_t m_ocean{};
 } t3dRdFrameSnapshot_t;
 
 typedef struct alignas( 16 ) t3dRdFrameUniforms_s {

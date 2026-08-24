@@ -152,6 +152,7 @@ public:
 	EA_FORCE_INLINE ~Terrain3DCollision( void ) {
 		destroy();
 	}
+	void servicePendingRegionMapUpdate( void );
 	void initialize( Terrain3D *pTerrain );
 
 	void build( void );

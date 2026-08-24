@@ -159,7 +159,7 @@ func pack_textures_popup() -> void:
 
 	# the dialog disables the parent window "on top" so, restore it after 1 frame to alow the dialog to clear.
 	var set_on_top_fn: Callable = func(_file: String = "") -> void:
-		await RenderingServer.frame_post_draw
+		await plugin.get_tree().process_frame
 		window.always_on_top = true
 	save_file_dialog.file_selected.connect(set_on_top_fn)
 	save_file_dialog.canceled.connect(set_on_top_fn)

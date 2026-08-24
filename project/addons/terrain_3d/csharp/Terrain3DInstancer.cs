@@ -80,7 +80,7 @@ public partial class Terrain3DInstancer : GodotObject
 		public new static readonly StringName CellSize = "cell_size";
 		/// <summary>Cached name for distance-based cell streaming.</summary>
 		public new static readonly StringName CellStreamingEnabled = "cell_streaming_enabled";
-		/// <summary>Cached name for single-LOD MultiMesh buffer residency.</summary>
+		/// <summary>Cached name for single-LOD instance buffer residency.</summary>
 		public new static readonly StringName SingleLodInstanceBuffers = "single_lod_instance_buffers";
 		/// <summary>Cached name for the cell streaming retention margin.</summary>
 		public new static readonly StringName CellStreamingMargin = "cell_streaming_margin";
@@ -103,7 +103,7 @@ public partial class Terrain3DInstancer : GodotObject
 		set => Set(GDExtensionPropertyName.CellSize, value);
 	}
 
-	/// <summary>Enables camera-relative MultiMesh cell residency.</summary>
+	/// <summary>Enables camera-relative instance cell residency.</summary>
 	public new bool CellStreamingEnabled
 	{
 		get => Get(GDExtensionPropertyName.CellStreamingEnabled).As<bool>();

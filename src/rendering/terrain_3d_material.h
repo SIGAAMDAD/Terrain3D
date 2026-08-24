@@ -365,9 +365,6 @@ public: // Constants
 private:
 	Terrain3D *m_pTerrain = nullptr;
 
-	RID m_hMaterial;
-	RID m_hszTierMaterials[SHADER_TIER_COUNT] = {};
-	RID m_hszShadowMaterials[SHADER_TIER_COUNT] = {};
 	Ref<Shader> m_shader; // Active near shader
 	bool m_bNearShaderReady = false;
 	Ref<Shader> m_szTierShaders[SHADER_TIER_COUNT];
@@ -391,13 +388,12 @@ private:
 	eastl::vector<PropertyInfo> m_shaderPropertyCache;
 	Dictionary m_shaderParamDefaults;
 	// Mirrors values pushed to private/runtime uniforms so hot callers never read
-	// RenderingServer material state back to the CPU.
+	// runtime material state back to the CPU.
 	mutable Dictionary m_runtimeMaterialParams;
 	uint64_t m_nShaderParameterListQueryCount = 0u;
 	uint64_t m_nShaderParameterDefaultQueryCount = 0u;
 	mutable uint64_t m_nShaderInspectorRuntimeReadCount = 0u;
 
-	RID m_hBufferMaterial;
 	Ref<Shader> m_bufferShader; // Active buffer shader
 	t3dShaderVariantEntry_t m_szBufferShaderVariantEntries[s_nMaxBufferShaderVariantCacheLimit] = {};
 	int m_nBufferShaderVariantCount = 0;
@@ -632,11 +628,6 @@ private:
 	bool updateRegionMapTexture( const PackedInt32Array &rRegionMap, int nRegionMapSize );
 	bool updateLogicalRegionMapTexture( const PackedInt32Array &rRegionMap, int nRegionMapSize );
 	t3dPageTableBuildResult_t prepareRegionPageTables( void );
-	void bindRegionPageTableUniforms( const RID &rMaterial );
-	void updateFarAtlasUniforms( const RID &rMaterial );
-	void ensureShadowMaterials( void );
-	void updateShadowUniforms( void );
-	void updateUniforms( const RID &rMaterial, const uint32_t nUpdate = UNIFORMS_ONLY );
 	void setShaderParameters( const Dictionary &rDict );
 	EA_FORCE_INLINE Dictionary getShaderParameters( void ) const {
 		return m_shaderParams;
@@ -672,21 +663,6 @@ public:
 	}
 	void updateFarAtlasTextures( void );
 	void updateRuntimeMaterialLayerMap( void );
-	EA_FORCE_INLINE RID getMaterialRid( void ) const {
-		return m_hMaterial;
-	}
-	RID getMaterialRidForTier( const t3dShaderTier_t tier ) const {
-		if ( tier <= SHADER_TIER_NEAR || tier >= SHADER_TIER_COUNT || !m_hszTierMaterials[tier].is_valid() ) {
-			return m_hMaterial;
-		}
-		return m_hszTierMaterials[tier];
-	}
-	RID getShadowMaterialRidForTier( const t3dShaderTier_t tier ) const {
-		if ( tier < SHADER_TIER_NEAR || tier >= SHADER_TIER_COUNT || !m_hszShadowMaterials[tier].is_valid() ) {
-			return getMaterialRidForTier( tier );
-		}
-		return m_hszShadowMaterials[tier];
-	}
 	RID getShaderRidForTier( const t3dShaderTier_t tier ) const {
 		if ( tier <= SHADER_TIER_NEAR || tier >= SHADER_TIER_COUNT || m_szTierShaders[tier].is_null() ) {
 			return getShaderRid();
@@ -697,9 +673,6 @@ public:
 		return m_shader.is_valid() ? m_shader->get_rid() : RID();
 	}
 
-	EA_FORCE_INLINE RID getBufferMaterialRid( void ) const {
-		return m_hBufferMaterial;
-	}
 	EA_FORCE_INLINE RID getBufferShaderRid( void ) const {
 		return m_bufferShader.is_valid() ? m_bufferShader->get_rid() : RID();
 	}

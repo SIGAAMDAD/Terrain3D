@@ -88,7 +88,7 @@ const SETTING_TOOLTIPS: Dictionary = {
 	"fixed_tilt": "Base tilt applied to newly painted mesh instances.",
 	"random_tilt": "Random tilt variation added to Fixed Tilt for each new instance.",
 	"align_to_normal": "Orient newly painted instances to follow the sampled terrain surface normal.",
-	"vertex_color": "Base per-instance color written to newly painted MultiMesh instances.",
+	"vertex_color": "Base per-instance color written to newly painted terrain instances.",
 	"random_hue": "Random hue variation applied to the per-instance color.",
 	"random_darken": "Random brightness reduction applied to the per-instance color.",
 	"on_collision": "Place instances against collision results rather than only Terrain3D height samples.",

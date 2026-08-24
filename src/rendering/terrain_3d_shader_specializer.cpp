@@ -22,6 +22,182 @@ typedef struct t3dConditionalFrame_s {
 	bool m_bBranchTaken = false;
 } t3dConditionalFrame_t;
 
+typedef struct t3dShaderMacro_s {
+	String m_name;
+	PackedStringArray m_parameters;
+	String m_replacement;
+	bool m_bFunctionLike = false;
+} t3dShaderMacro_t;
+
+EA_FORCE_INLINE static bool t3dShaderSpecializerIsIdentifierStart( const char32_t c ) {
+	return ( c >= 'A' && c <= 'Z' ) || ( c >= 'a' && c <= 'z' ) || c == '_';
+}
+
+EA_FORCE_INLINE static bool t3dShaderSpecializerIsIdentifierChar( const char32_t c ) {
+	return t3dShaderSpecializerIsIdentifierStart( c ) || ( c >= '0' && c <= '9' );
+}
+
+static int t3dShaderSpecializerFindMacro( const Vector<t3dShaderMacro_t> &rMacros, const String &rName ) {
+	for ( int index = rMacros.size() - 1; index >= 0; --index ) {
+		if ( rMacros[index].m_name == rName ) {
+			return index;
+		}
+	}
+	return -1;
+}
+
+static String t3dShaderSpecializerReplaceIdentifier( const String &rSource,
+		const String &rIdentifier,
+		const String &rReplacement ) {
+	String result;
+	int index = 0;
+	while ( index < rSource.length() ) {
+		if ( t3dShaderSpecializerIsIdentifierStart( rSource[index] ) ) {
+			const int start = index++;
+			while ( index < rSource.length() && t3dShaderSpecializerIsIdentifierChar( rSource[index] ) ) {
+				++index;
+			}
+			const String token = rSource.substr( start, index - start );
+			result += token == rIdentifier ? rReplacement : token;
+			continue;
+		}
+		result += String::chr( rSource[index++] );
+	}
+	return result;
+}
+
+static bool t3dShaderSpecializerParseMacroArguments( const String &rSource,
+		const int nOpenParen,
+		PackedStringArray &rArguments,
+		int &nEndIndex ) {
+	rArguments.clear();
+	int depth = 1;
+	int argument_start = nOpenParen + 1;
+	for ( int index = nOpenParen + 1; index < rSource.length(); ++index ) {
+		const char32_t c = rSource[index];
+		if ( c == '(' ) {
+			++depth;
+			continue;
+		}
+		if ( c == ')' ) {
+			--depth;
+			if ( depth == 0 ) {
+				const String last = rSource.substr( argument_start, index - argument_start ).strip_edges();
+				if ( !last.is_empty() || !rArguments.is_empty() ) {
+					rArguments.push_back( last );
+				}
+				nEndIndex = index + 1;
+				return true;
+			}
+			continue;
+		}
+		if ( c == ',' && depth == 1 ) {
+			rArguments.push_back( rSource.substr( argument_start, index - argument_start ).strip_edges() );
+			argument_start = index + 1;
+		}
+	}
+	return false;
+}
+
+static String t3dShaderSpecializerExpandMacros( const String &rSource,
+		const Vector<t3dShaderMacro_t> &rMacros,
+		const int nDepth = 0 ) {
+	if ( nDepth >= 16 || rMacros.is_empty() ) {
+		return rSource;
+	}
+
+	String result;
+	int index = 0;
+	while ( index < rSource.length() ) {
+		if ( !t3dShaderSpecializerIsIdentifierStart( rSource[index] ) ) {
+			result += String::chr( rSource[index++] );
+			continue;
+		}
+
+		const int token_start = index++;
+		while ( index < rSource.length() && t3dShaderSpecializerIsIdentifierChar( rSource[index] ) ) {
+			++index;
+		}
+		const String token = rSource.substr( token_start, index - token_start );
+		const int macro_index = t3dShaderSpecializerFindMacro( rMacros, token );
+		if ( macro_index < 0 ) {
+			result += token;
+			continue;
+		}
+
+		const t3dShaderMacro_t &macro = rMacros[macro_index];
+		if ( !macro.m_bFunctionLike ) {
+			result += t3dShaderSpecializerExpandMacros( macro.m_replacement, rMacros, nDepth + 1 );
+			continue;
+		}
+
+		int call_index = index;
+		while ( call_index < rSource.length() &&
+				( rSource[call_index] == ' ' || rSource[call_index] == '\t' || rSource[call_index] == '\r' ) ) {
+			++call_index;
+		}
+		if ( call_index >= rSource.length() || rSource[call_index] != '(' ) {
+			result += token;
+			continue;
+		}
+
+		PackedStringArray arguments;
+		int end_index = call_index;
+		if ( !t3dShaderSpecializerParseMacroArguments( rSource, call_index, arguments, end_index ) ||
+				arguments.size() != macro.m_parameters.size() ) {
+			result += token;
+			continue;
+		}
+
+		String expansion = macro.m_replacement;
+		for ( int parameter_index = 0; parameter_index < macro.m_parameters.size(); ++parameter_index ) {
+			const String argument = t3dShaderSpecializerExpandMacros( arguments[parameter_index], rMacros, nDepth + 1 );
+			expansion = t3dShaderSpecializerReplaceIdentifier(
+					expansion, macro.m_parameters[parameter_index], String( "(" ) + argument + String( ")" ) );
+		}
+		result += t3dShaderSpecializerExpandMacros( expansion, rMacros, nDepth + 1 );
+		index = end_index;
+	}
+	return result;
+}
+
+static bool t3dShaderSpecializerParseDefine( const String &rDirective,
+		t3dShaderMacro_t &rMacro,
+		String &rFailureSummary ) {
+	String body = rDirective.substr( 7 ).strip_edges();
+	if ( body.is_empty() || !t3dShaderSpecializerIsIdentifierStart( body[0] ) ) {
+		rFailureSummary = String( "Malformed Terrain3D shader macro: " ) + rDirective;
+		return false;
+	}
+
+	int index = 1;
+	while ( index < body.length() && t3dShaderSpecializerIsIdentifierChar( body[index] ) ) {
+		++index;
+	}
+	rMacro = t3dShaderMacro_t();
+	rMacro.m_name = body.substr( 0, index );
+
+	if ( index < body.length() && body[index] == '(' ) {
+		rMacro.m_bFunctionLike = true;
+		const int close = body.find( ")", index + 1 );
+		if ( close < 0 ) {
+			rFailureSummary = String( "Unterminated Terrain3D shader macro parameter list: " ) + rDirective;
+			return false;
+		}
+		const String parameters = body.substr( index + 1, close - index - 1 ).strip_edges();
+		if ( !parameters.is_empty() ) {
+			rMacro.m_parameters = parameters.split( ",", false );
+			for ( int parameter_index = 0; parameter_index < rMacro.m_parameters.size(); ++parameter_index ) {
+				rMacro.m_parameters[parameter_index] = rMacro.m_parameters[parameter_index].strip_edges();
+			}
+		}
+		rMacro.m_replacement = body.substr( close + 1 ).strip_edges();
+	} else {
+		rMacro.m_replacement = body.substr( index ).strip_edges();
+	}
+	return true;
+}
+
 class Terrain3DStaticExpressionParser {
 	const String &m_expression;
 	const t3dShaderStaticState_t &m_state;
@@ -368,6 +544,7 @@ bool t3dAssembleShaderSource( const String &rExpandedSource,
 		String &rFailureSummary ) {
 	const PackedStringArray lines = rExpandedSource.split( "\n", true );
 	PackedStringArray output;
+	Vector<t3dShaderMacro_t> macros;
 	t3dConditionalFrame_t stack[s_nShaderMaxConditionalDepth] = {};
 	int depth = 0;
 	bool bEmit = true;
@@ -527,8 +704,22 @@ bool t3dAssembleShaderSource( const String &rExpandedSource,
 			continue;
 		}
 
+		if ( bEmit && directive.begins_with( "#define " ) ) {
+			t3dShaderMacro_t macro;
+			if ( !t3dShaderSpecializerParseDefine( directive, macro, rFailureSummary ) ) {
+				return false;
+			}
+			const int existing = t3dShaderSpecializerFindMacro( macros, macro.m_name );
+			if ( existing >= 0 ) {
+				macros.write[existing] = macro;
+			} else {
+				macros.push_back( macro );
+			}
+			continue;
+		}
+
 		if ( bEmit ) {
-			output.push_back( line );
+			output.push_back( t3dShaderSpecializerExpandMacros( line, macros ) );
 		}
 	}
 

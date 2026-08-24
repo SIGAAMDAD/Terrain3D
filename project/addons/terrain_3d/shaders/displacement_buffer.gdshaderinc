@@ -424,8 +424,8 @@ void fragment() {
 
 	// Vectorised Deocode of all texture IDs, then swizzle to per index mapping.
 	// Passed to accumulate_material to avoid repeated decoding.
-	ivec4 t_id[2] = {ivec4(control >> uvec4(27u) & uvec4(0x1Fu)),
-		ivec4(control >> uvec4(22u) & uvec4(0x1Fu))};
+	ivec4 t_id[2] = ivec4[2](ivec4(control >> uvec4(27u) & uvec4(0x1Fu)),
+		ivec4(control >> uvec4(22u) & uvec4(0x1Fu)));
 	ivec2 texture_ids[4] = ivec2[4](
 		ivec2(t_id[0].x, t_id[1].x),
 		ivec2(t_id[0].y, t_id[1].y),
@@ -462,7 +462,7 @@ void fragment() {
 	// Interpolate only when the four corners truly represent different material
 	// pairs/transforms. The coherent case above needs no ID redistribution.
 	if (!coherent_pair && !uniform_control) {
-		t_weights = {vec2(0), vec2(0), vec2(0), vec2(0)};
+		t_weights = vec2[4](vec2(0), vec2(0), vec2(0), vec2(0));
 		weights_id_0 *= weights;
 		weights_id_1 *= weights;
 		for (int i = 0; i < 4; i++) {

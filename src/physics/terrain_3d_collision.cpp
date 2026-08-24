@@ -525,21 +525,12 @@ void Terrain3DCollision::initialize( Terrain3D *const pTerrain ) {
 }
 
 void Terrain3DCollision::onRegionMapChanged( void ) {
-	if ( m_bRegionMapUpdatePending ) {
-		return;
-	}
+	// The region-map transition is serviced by Terrain3D::physicsProcess().
+	// Collision no longer depends on renderer frame callbacks.
 	m_bRegionMapUpdatePending = true;
-	const Callable callback = callable_mp( this, &Terrain3DCollision::processRegionMapUpdate );
-	if ( !RS->is_connected( "frame_pre_draw", callback ) ) {
-		RS->connect( "frame_pre_draw", callback );
-	}
 }
 
 void Terrain3DCollision::processRegionMapUpdate( void ) {
-	const Callable callback = callable_mp( this, &Terrain3DCollision::processRegionMapUpdate );
-	if ( RS->is_connected( "frame_pre_draw", callback ) ) {
-		RS->disconnect( "frame_pre_draw", callback );
-	}
 	m_bRegionMapUpdatePending = false;
 
 	if ( !m_bInitialized ) {
@@ -861,6 +852,12 @@ void Terrain3DCollision::update( const Vector2i &rRegionLoc, const bool bRebuild
 	m_nUpdateUsecLast = Time::get_singleton()->get_ticks_usec() - start_time;
 }
 
+void Terrain3DCollision::servicePendingRegionMapUpdate( void ) {
+	if ( m_bRegionMapUpdatePending ) {
+		processRegionMapUpdate();
+	}
+}
+
 void Terrain3DCollision::destroy( void ) {
 	m_bInitialized = false;
 	m_lastSnappedPos = s_v2iMax;
@@ -872,11 +869,6 @@ void Terrain3DCollision::destroy( void ) {
 	m_fullHeightScratch.clear();
 	m_collisionSurfaceScratch.clear();
 	clearBakedRegionCache( true );
-	const Callable region_callback = callable_mp( this, &Terrain3DCollision::processRegionMapUpdate );
-	if ( RS->is_connected( "frame_pre_draw", region_callback ) ) {
-		RS->disconnect( "frame_pre_draw", region_callback );
-	}
-
 	for ( t3dCollisionShapeRecord_t &record : m_shapeRecords ) {
 		if ( record.m_pNode ) {
 			LOG( DEBUG, "Freeing CollisionShape3D ", record.m_pNode->get_name() );

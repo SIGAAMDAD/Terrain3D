@@ -496,8 +496,8 @@ func _mesh_surface_primitive(mesh: Mesh, surface: int) -> int:
 	if mesh is ArrayMesh:
 		var array_mesh := mesh as ArrayMesh
 		return array_mesh.surface_get_primitive_type(surface)
-	var surface_data: Dictionary = RenderingServer.mesh_get_surface(mesh.get_rid(), surface)
-	return int(surface_data.get("primitive", Mesh.PRIMITIVE_TRIANGLES))
+	# Generic Mesh exposes its primitive query through the virtual surface API.
+	return int(mesh.call("_surface_get_primitive_type", surface))
 
 
 func _append_part(tools: Dictionary[String, SurfaceTool], materials: Dictionary[String, Material],

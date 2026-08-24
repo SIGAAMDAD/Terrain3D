@@ -232,7 +232,7 @@ def rd_batch_c_material_check() -> bool:
         ("editor brush descriptor", 't3dRdTextureUniform( 24' in renderer),
         ("direct editor brush publication", 'ensureEditorBrushTexture' in coordinator and 'replacement.create( image )' in coordinator and 'm_editorBrushTexture.swap( replacement )' in coordinator and 'm_hEditorBrushTextureRd' in coordinator),
         ("runtime editor state survives native material absence", 'if ( strName.begins_with( "_" ) )' in material_cpp and '&& m_hMaterial.is_valid()' not in material_cpp[material_cpp.find('void Terrain3DMaterial::setShaderParam'):material_cpp.find('Variant Terrain3DMaterial::getShaderParam')]),
-        ("runtime texture object retained for RD publication", 'm_runtimeMaterialParams[strName] = rValue;' in material_cpp and 'const Ref<Texture> texture = rValue;' in material_cpp and 'native_value = texture->get_rid();' in material_cpp),
+        ("runtime texture object retained for RD publication", 'm_runtimeMaterialParams[strName] = rValue;' in material_cpp and 'const Ref<Texture> pTex = value;' in material_cpp and 'setRuntimeMaterialParam( param, pTex.is_valid() ? Variant( pTex ) : Variant() );' in material_cpp and 'setRuntimeMaterialParam( param, pTex->get_rid() )' not in material_cpp),
         ("editor UI publishes through Terrain3DMaterial", '_set_editor_material_param("_editor_brush_texture", editor_brush_texture)' in editor_ui and 'plugin.terrain.material.set_shader_param(p_name, p_value)' in editor_ui),
         ("editor UI avoids direct native editor-param writes", re.search(r'RenderingServer\.material_set_param\(mat_rid,\s*"_(?:editor|region_map)', editor_ui) is None),
         ("tier-specific material samplers", 'm_hszMaterialSamplers[4]' in (REPO / "src" / "rendering" / "rd" / "terrain_3d_rd_clipmap_renderer.h").read_text(encoding="utf-8", errors="ignore") and 'm_nszBoundTierFiltering' in renderer),
@@ -594,9 +594,9 @@ def rd_batch_f1_forward_bridge_check() -> bool:
     )
 
     checks += [
-        ("bridge ABI is synchronized on extension side", "s_nBridgeAbiVersion = 7u" in bridge_h and "s_nRdForwardBridgeAbiVersion = 7u" in types),
+        ("bridge ABI is synchronized on extension side", "s_nBridgeAbiVersion = 8u" in bridge_h and "s_nRdForwardBridgeAbiVersion = 8u" in types),
         ("engine singleton name fixed", 's_pszEngineSingletonName = "Terrain3DForwardPlusBridge"' in bridge_h and "class Terrain3DForwardPlusBridge" in patch),
-        ("engine ABI exposes required lifecycle API", all(token in patch for token in engine_methods) and "ABI_VERSION = 7" in patch),
+        ("engine ABI exposes required lifecycle API", all(token in patch for token in engine_methods) and "ABI_VERSION = 8" in patch),
         ("engine callback slot is atomic", "std::atomic<CallbackSlot *> callback_slot" in patch and "callback_slot.load(std::memory_order_acquire)" in patch),
         ("engine callback reclamation is reader-safe", "callback_readers.fetch_add" in patch and "callback_readers.fetch_sub" in patch and "callback_readers.load" in patch),
         ("engine callback invocation is synchronous", "slot->callable.call(p_packet)" in patch and "call_deferred" not in patch),
@@ -605,7 +605,7 @@ def rd_batch_f1_forward_bridge_check() -> bool:
         ("extension validates all required bridge methods", all(token in bridge_cpp for token in engine_methods)),
         ("extension validates ABI before registration", "abi != s_nBridgeAbiVersion" in bridge_cpp and bridge_cpp.find("abi != s_nBridgeAbiVersion") < bridge_cpp.find('m_pEngineBridge->call( StringName( "register_callback" )')),
         ("extension registration/unregistration exists", "connectEngineBridge" in bridge_cpp and "disconnectEngineBridge" in bridge_cpp and "m_bCallbackRegistered" in bridge_h),
-        ("callback retirement is synchronized before extension release", "force_sync" in bridge_cpp and "collect_retired_callbacks" in bridge_cpp),
+        ("callback retirement is synchronized before extension release", "Terrain3DRdContext::forceSync" in bridge_cpp and "collect_retired_callbacks" in bridge_cpp),
         ("coordinator fanout is fixed and atomic", "std::array<std::atomic<Terrain3DRenderCoordinator *>" in bridge_h and "s_nMaxCoordinators = 64u" in bridge_h),
         ("dynamic packet is parsed once at bridge boundary", "parsePacket( rPacket, context" in bridge_cpp and "renderForwardPass( context )" in bridge_cpp),
         ("typed pass context reserves complete F1 scene ABI", all(token in types for token in packet_fields)),
@@ -617,7 +617,7 @@ def rd_batch_f1_forward_bridge_check() -> bool:
         ("coordinator retains dedicated synchronous Forward+ entry point", "Terrain3DRenderCoordinator::renderForwardPass" in coordinator_cpp and "T3D_RD_FORWARD_PHASE_PREPARE" in coordinator_cpp and "T3D_RD_FORWARD_PHASE_SUBMIT" in coordinator_cpp),
         ("production route requires ready bridge", "isForwardBridgeReady" in coordinator_cpp and "m_bRenderEnabled" in coordinator_cpp),
         ("bridge absence and ABI failures emit a visible engine error", "UtilityFunctions::push_error" in bridge_cpp and "production RenderingDevice rendering is disabled" in bridge_cpp and "ABI mismatch" in bridge_cpp),
-        ("missing bridge disables native presentation rather than proxy fallback", "enforceRdPresentation" in coordinator_cpp and "setRdPresentation( false, false )" in coordinator_cpp and "setRdPresentation( true" not in coordinator_cpp),
+        ("missing bridge disables RD production rather than proxy fallback", "bBridgeReady && !m_bFailureLatched" in coordinator_cpp and "setRdPresentation" not in coordinator_cpp and "enforceRdPresentation" not in coordinator_cpp),
         ("compositor lane is explicit debug-only", "TERRAIN3D_RD_DEBUG_COMPOSITOR" in coordinator_cpp and "set_enabled( false )" in compositor_cpp),
         ("adapter lifecycle registered with extension", "Terrain3DRdForwardPlusBridgeAdapter::initializeSingleton" in register_cpp and "Terrain3DRdForwardPlusBridgeAdapter::shutdownSingleton" in register_cpp),
         ("Windows project includes F1 adapter source", "terrain_3d_rd_forward_plus_bridge.cpp" in vcxproj and "terrain_3d_rd_forward_plus_bridge.h" in vcxproj),
@@ -725,7 +725,7 @@ def rd_batch_f3_native_shadow_check() -> bool:
     patch = (REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch").read_text(encoding="utf-8", errors="ignore")
     ledger = (REPO / "docs" / "rd_contract_ledger.tsv").read_text(encoding="utf-8", errors="ignore")
     checks = [
-        ("current ABI retains F3 shadow packet on engine and extension sides", "s_nRdForwardBridgeAbiVersion = 7u" in types and "ABI_VERSION = 7" in patch),
+        ("current ABI retains F3 shadow packet on engine and extension sides", "s_nRdForwardBridgeAbiVersion = 8u" in types and "ABI_VERSION = 8" in patch),
         ("shadow packet carries exact light/cascade identity", all(x in patch for x in ("shadow_light_instance", "shadow_pass_index", "shadow_light_type")) and all(x in bridge for x in ('StringName( "shadow_light_instance" )', 'StringName( "shadow_pass_index" )'))),
         ("shadow packet carries masks/bias/range/atlas metadata", all(x in patch for x in ("shadow_caster_mask", "shadow_light_cull_mask", "shadow_bias", "shadow_normal_bias", "shadow_bias_scale", "shadow_range_begin", "shadow_range", "shadow_atlas_rect", "shadow_atlas_size"))),
         ("shadow VP uses exact light projection and transform", "p_projection * shadow_view" in patch),
@@ -740,7 +740,7 @@ def rd_batch_f3_native_shadow_check() -> bool:
         ("alpha blended non-prepass surfaces are excluded from shadow", "bShadowPass && alpha_blend" in inst and "T3D_RD_INSTANCE_ALPHA_DEPTH_PREPASS" in inst),
         ("double-sided shadow material behavior is represented", "T3D_RD_INSTANCE_SHADOW_DOUBLE_SIDED" in inst),
         ("selected instance LOD is not recomputed from light-camera distance", "if ( !bShadowPass )" in inst),
-        ("RD production hard-disables native visual/shadow proxy", "enforceRdPresentation" in coord and "setRdPresentation( false, false )" in coord and "setRdPresentation( true" not in coord and 'result["native_shadow_proxy_active"] = false' in coord),
+        ("RD production contains no native visual/shadow proxy path", "setRdPresentation" not in coord and "enforceRdPresentation" not in coord and 'result["native_shadow_proxy_active"] = false' in coord),
         ("shadow native submit paths do not open a draw list", "PASS_SHADOW" in patch and "_render_list_with_draw_list" in patch),
         ("F3 contract ledger records Section 17 completion", "17\tShadows\tF\tcomplete" in ledger),
         ("engine patch remains syntactically parseable", run_quiet(["git", "apply", "--stat", str(REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch")], label="batch_f3_patch_parse")),
@@ -782,7 +782,7 @@ def rd_batch_f4_native_lighting_check() -> bool:
         "cluster_type_size * type_index",
     ))
     checks = [
-        ("current ABI retains F4 native-light packet", "s_nRdForwardBridgeAbiVersion = 7u" in types and "s_nBridgeAbiVersion = 7u" in bridge_h and "ABI_VERSION = 7" in patch),
+        ("current ABI retains F4 native-light packet", "s_nRdForwardBridgeAbiVersion = 8u" in types and "s_nBridgeAbiVersion = 8u" in bridge_h and "ABI_VERSION = 8" in patch),
         ("bridge exposes exact native cluster metadata", all(x in types for x in ("m_nClusterShift", "m_nClusterWidth", "m_nClusterTypeSize", "m_nClusterMaxElementsDiv32")) and all(x in patch for x in ("cluster_shift", "cluster_width", "cluster_type_size", "cluster_max_elements_div_32"))),
         ("bridge exposes directional count and camera depth range", all(x in types for x in ("m_nDirectionalLightCount", "m_bDirectionalLightSoftShadows", "m_fCameraZNear", "m_fCameraZFar")) and all(x in bridge for x in ("directional_light_count", "directional_light_soft_shadows", "camera_z_near", "camera_z_far"))),
         ("native directional/omni/spot/area/cluster buffers are borrowed", all(x in lighting for x in ("m_hDirectionalLightBuffer", "m_hOmniLightBuffer", "m_hSpotLightBuffer", "m_hAreaLightBuffer", "m_hClusterBuffer")) and "registerResource( rContext.m_h" not in lighting),
@@ -839,7 +839,7 @@ def rd_batch_f5_motion_check() -> bool:
                        "previous_screen_position.xy / previous_screen_position.w - frame_data.motion_jitter.zw" in sh
                        for sh in shaders)
     checks = [
-        ("current ABI retains F5 temporal packet", "s_nRdForwardBridgeAbiVersion = 7u" in types and "s_nBridgeAbiVersion = 7u" in bridge_h and "ABI_VERSION = 7" in patch),
+        ("current ABI retains F5 temporal packet", "s_nRdForwardBridgeAbiVersion = 8u" in types and "s_nBridgeAbiVersion = 8u" in bridge_h and "ABI_VERSION = 8" in patch),
         ("bridge packet carries TAA jitter and history validity", all(x in types for x in ("m_taaJitter", "m_previousTaaJitter", "m_bMotionVectorsEnabled")) and all(x in bridge for x in ("taa_jitter", "previous_taa_jitter", "motion_vectors_enabled")) and all(x in patch for x in ('packet["taa_jitter"]', 'packet["previous_taa_jitter"]', 'packet["motion_vectors_enabled"]'))),
         ("engine bridge constructs corrected jittered current and previous VP", "correction.set_depth_correction(scene_data->flip_y)" in patch and "correction.add_jitter_offset(scene_data->taa_jitter)" in patch and "previous_correction.set_depth_correction(true)" in patch and "previous_correction.add_jitter_offset(scene_data->prev_taa_jitter)" in patch),
         ("motion hook submits on native draw list with depth-prepass state", "PASS_MOTION" in patch and "radiance_texture, nullptr, depth_pre_pass" in patch),
@@ -921,7 +921,7 @@ def rd_batch_f6_scene_integration_check() -> bool:
         submit_slices.append(source[i:j] if i >= 0 and j > i else "")
 
     checks = [
-        ("ABI 7 retains the complete F6 scene-integration packet", "s_nRdForwardBridgeAbiVersion = 7u" in types and "s_nBridgeAbiVersion = 7u" in bridge_h and "ABI_VERSION = 7" in patch),
+        ("ABI 8 retains the complete F6 scene-integration packet", "s_nRdForwardBridgeAbiVersion = 8u" in types and "s_nBridgeAbiVersion = 8u" in bridge_h and "ABI_VERSION = 8" in patch),
         ("bridge packet carries all F6 borrowed scene resources", all(x in types for x in borrowed_packet) and all(x in bridge for x in ("lightmap_buffer", "reflection_probe_buffer", "reflection_atlas_texture", "radiance_texture", "decal_buffer", "decal_atlas_texture", "decal_atlas_srgb_texture", "reflection_atlas_border_size")) and all(x in patch for x in ("lightmap_buffer", "reflection_probe_buffer", "reflection_atlas_texture", "radiance_texture", "decal_buffer", "decal_atlas_texture", "decal_atlas_srgb_texture", "reflection_atlas_border_size"))),
         ("shader mirrors Godot 4.7.1 reflection data layout", all(x in include for x in native_reflection)),
         ("shader mirrors Godot 4.7.1 decal data layout", all(x in include for x in native_decal)),
@@ -941,7 +941,7 @@ def rd_batch_f6_scene_integration_check() -> bool:
         ("F6 descriptor binds only actually consumed reflection/decal resources", all(f"{n}," in lighting for n in range(9, 15)) and "t3d_lightmaps" not in include and "m_hLightmapBuffer" not in lighting_h and "uniform_set_create" in lighting),
         ("native SUBMIT draw bodies do not allocate/update/create lists", all(body and all(x not in body for x in ("uniform_set_create", "buffer_update", "draw_list_begin", "draw_list_end", "render_pipeline_create")) for body in submit_slices)),
         ("RD scene integrations do not enumerate Decal or ReflectionProbe nodes", "get_nodes_in_group" not in lighting and "get_children" not in lighting and "SceneTree" not in lighting and "Node3D" not in lighting),
-        ("F6 lighting remains complete after F7 lifecycle closure", "18\tLighting\tF\tcomplete" in ledger and "Terrain3DForwardPlusBridge ABI 7" in ledger and "22\tMultiview and viewport lifecycle\tF\tcomplete" in ledger),
+        ("F6 lighting remains complete after F7 lifecycle closure", "18\tLighting\tF\tcomplete" in ledger and "Forward+ integration is complete at bridge ABI 8" in ledger and "22\tMultiview and viewport lifecycle\tF\tcomplete" in ledger),
         ("engine patch remains syntactically parseable", run_quiet(["git", "apply", "--stat", str(patch_path)], label="batch_f6_patch_parse")),
     ]
     failed = [label for label, ok in checks if not ok]
@@ -980,7 +980,7 @@ def rd_batch_f7_multiview_lifecycle_check() -> bool:
         i = source.find(begin); j = source.find(end, i + 1)
         submit_slices.append(source[i:j] if i >= 0 and j > i else "")
     checks = [
-        ("ABI 7 synchronized across extension and engine patch", "s_nRdForwardBridgeAbiVersion = 7u" in types and "s_nBridgeAbiVersion = 7u" in bridge_h and "ABI_VERSION = 7" in patch),
+        ("ABI 8 synchronized across extension and engine patch", "s_nRdForwardBridgeAbiVersion = 8u" in types and "s_nBridgeAbiVersion = 8u" in bridge_h and "ABI_VERSION = 8" in patch),
         ("bridge carries stable viewport render-frame and sample identity", all(x in types for x in ("m_nRenderFrame", "m_nViewportKey", "m_nSampleCount")) and all(x in bridge for x in ("render_frame", "viewport_key", "sample_count")) and all(x in patch for x in ('packet["render_frame"]', 'packet["viewport_key"]', 'packet["sample_count"]'))),
         ("bridge bounds views and accepted MSAA sample counts", "s_nRdForwardMaxViews = 2u" in types and "view count is outside" in bridge and "value != 1 && value != 2 && value != 4 && value != 8" in bridge),
         ("all native shaders select per-eye state with gl_ViewIndex", all("GL_EXT_multiview" in sh and "t3d_view_index()" in sh and "view_projection[2]" in sh and "previous_view_projection[2]" in sh for sh in shaders)),
@@ -1074,15 +1074,15 @@ def rd_batch_f8_consolidation_check() -> bool:
         ("F8 convergence documentation exists and records static+compile scope", bool(doc) and "static audit and C++ compilation" in doc and "Runtime, GPU" in doc),
         ("Batch F is marked completed in batch ledger", any(line.startswith("F\t13-15\tcompleted\t17-22\t") for line in batches.splitlines())),
         ("Sections 17-22 remain individually complete", ledger_complete),
-        ("engine patch package targets exact Godot 4.7.1 and ABI 7", "4.7.1-stable" in patch_readme and "ABI_VERSION = 7" in patch and "Terrain3DForwardPlusBridge" in patch),
+        ("engine patch package targets exact Godot 4.7.1 and ABI 8", "4.7.1-stable" in patch_readme and "ABI_VERSION = 8" in patch and "Terrain3DForwardPlusBridge" in patch),
         ("engine bridge exposes native depth opaque shadow and motion pass kinds", all(x in patch for x in ("PASS_DEPTH", "PASS_OPAQUE", "PASS_SHADOW", "PASS_MOTION")) and all(x in types for x in ("T3D_RD_FORWARD_PASS_DEPTH", "T3D_RD_FORWARD_PASS_OPAQUE", "T3D_RD_FORWARD_PASS_SHADOW", "T3D_RD_FORWARD_PASS_MOTION"))),
         ("engine owns draw-list lifetime around synchronous Terrain3D submission", 0 <= prepare_pos < begin_pos < submit_pos < end_pos),
         ("native terrain and instance submit slices never begin/end a draw list", bool(clip_forward) and bool(inst_forward) and all(x not in clip_forward + inst_forward for x in ("draw_list_begin", "draw_list_end"))),
         ("native SUBMIT remains free of persistent resource allocation", all(x not in clip_forward + inst_forward for x in ("buffer_update", "uniform_set_create", "render_pipeline_create"))),
         ("compositor lane remains explicit opt-in debug only", "TERRAIN3D_RD_DEBUG_COMPOSITOR" in coord and "m_bCompositorDebugEnabled" in coord and "m_effect->set_enabled( m_bCompositorDebugEnabled && !m_bFailureLatched )" in coord),
         ("missing bridge disables RD production instead of enabling native geometry", "bBridgeReady && !m_bFailureLatched" in coord and "production RenderingDevice rendering is disabled" in bridge and "setRdPresentation( true" not in coord),
-        ("RD native proxy path forces visual and shadow proxy off", "setRdPresentation( false, false )" in coord_proxy),
-        ("shutdown cannot resurrect native visual terrain", "enforceRdPresentation();" in coord_shutdown and "setRdPresentation( true" not in coord_shutdown),
+        ("RD native proxy path is removed", "setRdPresentation" not in coord and "enforceRdPresentation" not in coord),
+        ("shutdown cannot resurrect native visual terrain", "setRdPresentation" not in coord_shutdown and "enforceRdPresentation" not in coord_shutdown and "m_bRenderEnabled.store( false" in coord_shutdown),
         ("failure state is a latch and obsolete fallback state is gone", "m_bFailureLatched" in coord_h and "renderer_failure_latched" in coord and "m_bFallbackActive" not in coord_h + coord),
         ("diagnostics never advertise an RD native shadow proxy", 'result["native_shadow_proxy_active"] = false' in coord and 'result["native_shadow_proxy_available"] = false' in coord),
         ("diagnostics derive native depth/opaque/shadow/motion participation from callbacks", all(x in coord for x in ("m_nDepthPassCallbacks", "m_nOpaquePassCallbacks", "m_nShadowPassCallbacks", "m_nMotionPassCallbacks", 'result["native_depth_prepass_participation"]', 'result["native_shadow_participation"]', 'result["native_motion_vectors_active"]'))),
@@ -1171,7 +1171,7 @@ def rd_batch_g_editor_integration_check() -> bool:
         ("editor overlay state is published through RD frame snapshots", "buildEditorOverlayState" in coord and "ensureEditorBrushTexture" in coord and "t3dRdEditorOverlayConfig_t" in types),
         ("brush and reticle overlays are consumed by the terrain RD shader", "EditorOverlayBuffer" in near and "editor_brush_texture" in near and "apply_editor_decals" in near and "editor_reticle" in near),
         ("region/vertex/instancer/debug/navigation overlays remain in RD shader", all(x in near for x in ("T3D_DEBUG_REGION_GRID", "T3D_DEBUG_VERTEX_GRID", "T3D_DEBUG_INSTANCER_GRID", "T3D_DEBUG_CONTOURS", "T3D_DEBUG_NAVIGATION", "debug_visualization"))),
-        ("RD presentation never enables a native visual or shadow proxy", "enforceRdPresentation" in coord and "setRdPresentation( false, false )" in coord and "setRdPresentation( true" not in production_text),
+        ("RD presentation proxy machinery is absent", "enforceRdPresentation" not in production_text and "setRdPresentation" not in production_text),
         ("stale backend/proxy API symbols are removed from native and scripting surfaces", all(token not in production_text for token in stale_tokens)),
         ("runtime profiler reports the single RD Forward+ production route", "RenderingDevice / Forward+" in profiler and "Rendering backend" not in profiler and "Native proxy mode" not in profiler),
         ("setting metadata and region workbench no longer expose stale backend/proxy properties", all(token not in metadata + region_workbench for token in ("Terrain3D.render_backend", "Terrain3D.rd_native_proxy_mode"))),
@@ -1181,7 +1181,7 @@ def rd_batch_g_editor_integration_check() -> bool:
         ("RD preview reuses the instance mesh/material cache and includes disabled editor assets", "m_meshCache.upload( pMeshes )" in inst and "uploadMaterials()" in inst and "getMeshHandle( nAssetId, 0 )" in inst and "m_nPreviewMeshGeneration, &error, true" in coord),
         ("RD preview supplies camera/projection state and performs image readback", "create_orthogonal_aspect" in inst and "texture_get_data( m_hPreviewColorTexture" in inst and "Image::create_from_data" in inst and "flip_y" in inst),
         ("RD preview resources are deterministically freed", "freePreviewTargets" in inst_h and "freePreviewTargets();" in inst and "m_previewRenderer.shutdown()" in coord),
-        ("preview crosses to render thread only through the permitted synchronization gateway", "call_on_render_thread" in coord and "force_sync" in coord and "renderPreviewOnRenderThread" in coord_h and all(token not in coord[coord.find("Ref<Image> Terrain3DRenderCoordinator::createMeshPreview"):coord.find("void Terrain3DRenderCoordinator::render(")] for token in rs_preview_tokens)),
+        ("preview crosses to render thread only through the permitted synchronization gateway", "Terrain3DRdContext::enqueueOnRenderThread" in coord and "Terrain3DRdContext::forceSync" in coord and "renderPreviewOnRenderThread" in coord_h and all(token not in coord[coord.find("Ref<Image> Terrain3DRenderCoordinator::createMeshPreview"):coord.find("void Terrain3DRenderCoordinator::render(")] for token in rs_preview_tokens)),
         ("Terrain3D internal preview routing is not a stale public backend API", "createRdMeshPreview" in terrain_h and "Terrain3D::createRdMeshPreview" in integration and "createRdMeshPreview" not in bindings),
         ("C# reference file parity is preserved", ref_cs == current_cs and len(current_cs) > 0),
         ("GDScript reference file parity is preserved", ref_gd == current_gd and len(current_gd) > 0),
@@ -1198,6 +1198,87 @@ def rd_batch_g_editor_integration_check() -> bool:
         print(f"Batch G editor/build integration contract: {len(checks)-len(failed)}/{len(checks)} passed")
         return False
     print(f"OK Batch G editor/build integration contract: {len(checks)}/{len(checks)} passed")
+    return True
+
+
+def rd_batch_h_final_check() -> bool:
+    rd = REPO / "src" / "rendering" / "rd"
+    context_h = (rd / "terrain_3d_rd_context.h").read_text(encoding="utf-8", errors="ignore")
+    context = (rd / "terrain_3d_rd_context.cpp").read_text(encoding="utf-8", errors="ignore")
+    coord = (rd / "terrain_3d_render_coordinator.cpp").read_text(encoding="utf-8", errors="ignore")
+    types = (rd / "terrain_3d_rd_types.h").read_text(encoding="utf-8", errors="ignore")
+    ocean_h_path = rd / "terrain_3d_rd_ocean_renderer.h"
+    ocean_cpp_path = rd / "terrain_3d_rd_ocean_renderer.cpp"
+    ocean_shader_path = REPO / "project" / "addons" / "terrain_3d" / "rd" / "terrain_ocean.glsl"
+    ocean_h = ocean_h_path.read_text(encoding="utf-8", errors="ignore") if ocean_h_path.is_file() else ""
+    ocean_cpp = ocean_cpp_path.read_text(encoding="utf-8", errors="ignore") if ocean_cpp_path.is_file() else ""
+    ocean_shader = ocean_shader_path.read_text(encoding="utf-8", errors="ignore") if ocean_shader_path.is_file() else ""
+    mesher = (REPO / "src" / "rendering" / "terrain_3d_mesher.cpp").read_text(encoding="utf-8", errors="ignore")
+    material = (REPO / "src" / "rendering" / "terrain_3d_material.cpp").read_text(encoding="utf-8", errors="ignore")
+    collision = (REPO / "src" / "physics" / "terrain_3d_collision.cpp").read_text(encoding="utf-8", errors="ignore")
+    collision_builder = (REPO / "src" / "physics" / "terrain_3d_collision_surface_builder.cpp").read_text(encoding="utf-8", errors="ignore")
+    data = (REPO / "src" / "data" / "terrain_3d_data.cpp").read_text(encoding="utf-8", errors="ignore")
+    bake = (REPO / "src" / "data" / "terrain_3d_bake_integration.cpp").read_text(encoding="utf-8", errors="ignore")
+    unit = (REPO / "src" / "core" / "unit_testing.cpp").read_text(encoding="utf-8", errors="ignore")
+    bridge_h = (rd / "terrain_3d_rd_forward_plus_bridge.h").read_text(encoding="utf-8", errors="ignore")
+    patch = (REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch").read_text(encoding="utf-8", errors="ignore")
+    ledger = (REPO / "docs" / "rd_contract_ledger.tsv").read_text(encoding="utf-8", errors="ignore")
+    batches = BATCH_FILE.read_text(encoding="utf-8", errors="ignore")
+    h_doc_path = REPO / "docs" / "rd_batch_h_final_validation.md"
+    h_doc = h_doc_path.read_text(encoding="utf-8", errors="ignore") if h_doc_path.is_file() else ""
+    parity_path = WORK_DIR / "final_parity_matrix.tsv"
+    parity_rows = read_tsv(parity_path) if parity_path.is_file() else []
+    evidence_path = WORK_DIR / "final_validation_evidence.tsv"
+    allowlist = read_final_allowlist()
+    scan = scan_symbols()
+
+    required_diag = (
+        "gpu_frame_id", "snapshot_generation", "bytes_uploaded_frame", "buffer_updates_frame",
+        "pipeline_creates", "uniform_set_creates", "terrain_patch_count", "visible_terrain_patches",
+        "static_instance_count", "visible_instances", "hlod_count", "visible_hlods",
+        "indirect_command_count", "compute_dispatch_count", "steady_state_allocation_violations",
+        "last_successful_pass", "failure_state",
+    )
+    h_sections = (25, 26, 31, 32, 33, 34, 35, 39, 40, 41, 42, 43, 44, 45, 46, 47)
+    rs_files = scan["RenderingServer"]["files"]
+    assert isinstance(rs_files, dict)
+    legacy_zero = all(int(scan[name]["count"]) == 0 for name in (
+        "mesh_create", "instance_create", "instance_set_base", "material_set_param", "Hybrid", "TODO", "FIXME",
+    ))
+    checks = [
+        ("Batch H documentation exists", bool(h_doc) and "Final clean-break convergence" in h_doc),
+        ("Batch H is marked completed", any(line.startswith("H\t18-19\tcompleted\t25-26,31-35,39-47\t") for line in batches.splitlines())),
+        ("all Batch H contract sections have completion evidence", all(any(line.startswith(f"{section}\t") and "\tcomplete\t" in line for line in ledger.splitlines()) for section in h_sections)),
+        ("final validation evidence ledger exists", evidence_path.is_file() and len(read_tsv(evidence_path)) >= 9),
+        ("final parity matrix covers every frozen reference row", len(parity_rows) == 155 and all(row.get("rd_status") in {"Implemented", "Preserved"} for row in parity_rows)),
+        ("final symbol allowlist is explicit and reasoned", len(allowlist) >= 10 and all(limit > 0 and bool(reason) for limit, reason in allowlist.values())),
+        ("RenderingServer is confined to the sole RD gateway", set(rs_files) == {"src/rendering/rd/terrain_3d_rd_context.cpp"}),
+        ("runtime legacy RS creation/material/fallback symbols are zero", legacy_zero),
+        ("RD context exposes global/local device and render-thread gateway", all(x in context_h for x in ("getGlobalDevice", "createLocalDevice", "isOnRenderThread", "enqueueOnRenderThread", "forceSync")) and "#include <godot_cpp/classes/rendering_server.hpp>" in context),
+        ("direct RenderingServer include exists only in RD context", capture(["bash", "-lc", "rg -l 'classes/rendering_server.hpp' src || true"]).splitlines() == ["src/rendering/rd/terrain_3d_rd_context.cpp"]),
+        ("ocean has dedicated RD renderer and raw shader", bool(ocean_h) and bool(ocean_cpp) and bool(ocean_shader) and "Terrain3DRdOceanRenderer" in ocean_h and "renderForwardPass" in ocean_cpp),
+        ("Forward+ ABI 8 includes native transparent submission", "s_nBridgeAbiVersion = 8u" in bridge_h and "ABI_VERSION = 8" in patch and "PASS_TRANSPARENT" in patch and "T3D_RD_FORWARD_PASS_TRANSPARENT" in types),
+        ("legacy mesher contains no RS or MultiMesh renderer", "RenderingServer" not in mesher and "MultiMesh" not in mesher and "mesh_create" not in mesher and "instance_create" not in mesher),
+        ("native Terrain3D material publication is removed", "material_create" not in material and "material_set_param" not in material and "m_hMaterial" not in material),
+        ("material defaults use authoring reflection without RS", "Ref<ShaderMaterial> near_defaults" in material and "get_shader_parameter" in material and "RenderingServer" not in material),
+        ("collision remains on the shared collision surface builder", "m_collisionSurfaceBuilder.build" in collision and "Terrain3DCollisionSurfaceBuilder::build" in collision_builder),
+        ("runtime baking reuses collision and navigation data paths", "Terrain3DCollisionSurfaceBuilder collision_builder" in data and "encodeNavigationMask" in data and "getNavigationMaskView" in bake),
+        ("navigation paint/get bindings remain present", "set_control_navigation" in data and "get_control_navigation" in data),
+        ("triple-buffer immutable publication contract remains", "s_nRdFrameSnapshotSlotCount = 3u" in types and "m_nPublishedSnapshotIndex" in coord and "m_nPublishedSnapshotGeneration" in coord),
+        ("CPU reference culling and indirect validation remain", "Terrain3DRdCpuCuller::build" in unit and "Terrain3DRdCpuCuller::validate" in unit and "isCommandRangeValid" in unit),
+        ("RD context failure ownership regression is tested", "FAILURE_UNTRACKED_RESOURCE" in unit and "untracked_free_attempts" in unit and "rejects untracked RIDs" in unit),
+        ("diagnostic schema covers H memory/performance/failure counters", all(f'result["{key}"]' in context for key in required_diag)),
+        ("steady-state allocation instrumentation remains explicit", "markWarmupComplete" in context and "m_nSteadyStateAllocationViolations" in context),
+        ("no production compositor fallback is restored", "TERRAIN3D_RD_DEBUG_COMPOSITOR" in coord and "m_bCompositorDebugEnabled" in coord and "setRdPresentation" not in coord),
+        ("engine patch remains exact 4.7.1 package", "4.7.1-stable" in h_doc and "Terrain3DForwardPlusBridge" in patch),
+    ]
+    failed = [label for label, ok in checks if not ok]
+    if failed:
+        for label in failed:
+            print(f"FAIL Batch H final contract: {label}")
+        print(f"Batch H final contract: {len(checks)-len(failed)}/{len(checks)} passed")
+        return False
+    print(f"OK Batch H final contract: {len(checks)}/{len(checks)} passed")
     return True
 
 def iter_scan_files() -> list[Path]:
@@ -1733,7 +1814,7 @@ def git_fsck() -> bool:
 
 
 def validate_fast(static_only: bool = False) -> int:
-    checks = [branch_check(), reference_check(), diff_check(), build_contract_check(), rd_shader_abi_check(), rd_batch_c_material_check(), rd_batch_d_instance_check(), rd_batch_e_hlod_check(), rd_batch_f1_forward_bridge_check(), rd_batch_f2_native_depth_opaque_check(), rd_batch_f3_native_shadow_check(), rd_batch_f4_native_lighting_check(), rd_batch_f5_motion_check(), rd_batch_f6_scene_integration_check(), rd_batch_f7_multiview_lifecycle_check(), rd_batch_f8_consolidation_check(), rd_batch_g_editor_integration_check(), audit_symbols(strict_growth=True)]
+    checks = [branch_check(), reference_check(), diff_check(), build_contract_check(), rd_shader_abi_check(), rd_batch_c_material_check(), rd_batch_d_instance_check(), rd_batch_e_hlod_check(), rd_batch_f1_forward_bridge_check(), rd_batch_f2_native_depth_opaque_check(), rd_batch_f3_native_shadow_check(), rd_batch_f4_native_lighting_check(), rd_batch_f5_motion_check(), rd_batch_f6_scene_integration_check(), rd_batch_f7_multiview_lifecycle_check(), rd_batch_f8_consolidation_check(), rd_batch_g_editor_integration_check(), rd_batch_h_final_check(), audit_symbols(strict_growth=True)]
     if not static_only:
         checks.append(build_extension("editor"))
     return 0 if all(checks) else 1
@@ -1758,6 +1839,7 @@ def validate_full() -> int:
         rd_batch_f7_multiview_lifecycle_check(),
         rd_batch_f8_consolidation_check(),
         rd_batch_g_editor_integration_check(),
+        rd_batch_h_final_check(),
         audit_symbols(strict_growth=True),
         build_extension("editor"),
         godot_headless_import(),
@@ -1787,6 +1869,7 @@ def validate_final() -> int:
         rd_batch_f7_multiview_lifecycle_check(),
         rd_batch_f8_consolidation_check(),
         rd_batch_g_editor_integration_check(),
+        rd_batch_h_final_check(),
         audit_symbols(strict_growth=True, final=True),
         build_extension("editor"),
         build_extension("template_release"),

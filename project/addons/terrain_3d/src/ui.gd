@@ -66,7 +66,6 @@ var _selected_operation: int = int(Terrain3DEditor.OP_MAX)
 var _touchscreen_invert_active: bool = false
 
 # 3 Editor decals: 0 = cursor, 1 = slope point1, 2 = slope point2
-var mat_rid: RID
 var editor_brush_texture: Texture2D
 var editor_decal_position: Array[Vector2] = [Vector2(), Vector2(), Vector2()]
 var editor_decal_rotation: Array[float] = [0., 0., 0.]
@@ -684,7 +683,6 @@ func update_decal() -> void:
 		return
 
 	# If not a state that should show the decal, hide everything and return
-	mat_rid = plugin.terrain.material.get_material_rid() # Used in hide_decal() and below
 	# After moving camera, wait for mouse cursor to update before revealing.
 	# See https://github.com/godotengine/godot/issues/70098.
 	if (
@@ -872,14 +870,13 @@ func update_decal() -> void:
 			editor_decal_visible[2] = true
 			editor_decal_position[2] = Vector2(point2.x, point2.z)
 
-	if RenderingServer.get_current_rendering_method().contains("gl_compatibility"):
+	if String(ProjectSettings.get_setting("rendering/renderer/rendering_method", "")).contains("gl_compatibility"):
 		for i: int in editor_decal_color.size():
 			editor_decal_color[i].a = maxf(0.1, editor_decal_color[i].a - .25)
 
 	editor_decal_fade = editor_decal_color[0].a
-	# Publish editor state through Terrain3DMaterial. This keeps the authored
-	# Texture2D available to the direct RenderingDevice path while the material
-	# compatibility path still translates textures to native RIDs.
+	# Publish editor state through Terrain3DMaterial so authored Texture2D
+	# resources remain available to the direct RenderingDevice snapshot path.
 	_set_editor_material_param("_editor_brush_texture", editor_brush_texture)
 	_set_editor_material_param("_editor_decal_position", editor_decal_position)
 	_set_editor_material_param("_editor_decal_rotation", editor_decal_rotation)
@@ -903,12 +900,9 @@ func is_shader_valid() -> bool:
 	# if the shader compilation has failed, as this will then return an empty dictionary.
 	if not is_instance_valid(plugin) or not is_instance_valid(plugin.terrain):
 		return false
-	if not is_instance_valid(plugin.terrain.material) or not mat_rid.is_valid():
+	if not is_instance_valid(plugin.terrain.material):
 		return false
-	var shader_rid: RID = plugin.terrain.material.get_shader_rid()
-	if not shader_rid.is_valid():
-		return false
-	return not RenderingServer.get_shader_parameter_list(shader_rid).is_empty()
+	return plugin.terrain.material.is_render_shader_ready()
 
 
 func hide_decal() -> void:

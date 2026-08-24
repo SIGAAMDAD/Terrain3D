@@ -4,9 +4,9 @@
 
 #include "core/logger.h"
 #include "rendering/rd/terrain_3d_render_coordinator.h"
+#include "rendering/rd/terrain_3d_rd_context.h"
 
 #include <godot_cpp/classes/engine.hpp>
-#include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/core/memory.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/rect2i.hpp>
@@ -141,8 +141,7 @@ void Terrain3DRdForwardPlusBridgeAdapter::disconnectEngineBridge( void ) {
 	const Callable callback = m_callback;
 	if ( pBridge && m_bCallbackRegistered.exchange( false, std::memory_order_acq_rel ) && callback.is_valid() ) {
 		pBridge->call( StringName( "unregister_callback" ), callback );
-		RenderingServer *const pServer = RenderingServer::get_singleton();
-		if ( pServer && !pServer->is_on_render_thread() ) pServer->force_sync();
+		Terrain3DRdContext::forceSync();
 		if ( pBridge->has_method( StringName( "collect_retired_callbacks" ) ) ) {
 			pBridge->call( StringName( "collect_retired_callbacks" ) );
 		}
@@ -174,8 +173,7 @@ void Terrain3DRdForwardPlusBridgeAdapter::detachCoordinator( Terrain3DRenderCoor
 	}
 	// A callback that loaded the coordinator pointer before the exchange must
 	// finish before the coordinator can be destroyed.
-	RenderingServer *const pServer = RenderingServer::get_singleton();
-	if ( pServer && !pServer->is_on_render_thread() ) pServer->force_sync();
+	Terrain3DRdContext::forceSync();
 }
 
 bool Terrain3DRdForwardPlusBridgeAdapter::parsePacket(

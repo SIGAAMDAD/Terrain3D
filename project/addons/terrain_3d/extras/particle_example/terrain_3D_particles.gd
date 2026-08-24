@@ -137,7 +137,7 @@ func _physics_process(delta: float) -> void:
 			if last_pos.distance_squared_to(camera.global_position) > 1.0:
 				var pos: Vector3 = camera.global_position.snapped(Vector3.ONE)
 				_position_grid(pos)
-				RenderingServer.material_set_param(process_material.get_rid(), "camera_position", pos )
+				process_material.set_shader_parameter("camera_position", pos)
 				last_pos = camera.global_position
 		_update_process_parameters()
 	else:
@@ -217,24 +217,23 @@ func _position_grid(pos: Vector3) -> void:
 
 func _update_process_parameters() -> void:
 	if process_material:
-		var process_rid: RID = process_material.get_rid()
-		if terrain and process_rid.is_valid():
-			RenderingServer.material_set_param(process_rid, "_background_mode", terrain.material.world_background)
+		if terrain:
+			process_material.set_shader_parameter("_background_mode", terrain.material.world_background)
 			if terrain.material.world_background > 0:
-				RenderingServer.material_set_param(process_rid, "ground_level", terrain.material.get_shader_param("ground_level"))
-				RenderingServer.material_set_param(process_rid, "region_blend", terrain.material.get_shader_param("region_blend"))
-			RenderingServer.material_set_param(process_rid, "_vertex_spacing", terrain.vertex_spacing)
-			RenderingServer.material_set_param(process_rid, "_vertex_density", 1.0 / terrain.vertex_spacing)
-			RenderingServer.material_set_param(process_rid, "_region_size", terrain.region_size)
-			RenderingServer.material_set_param(process_rid, "_region_texel_size", 1.0 / terrain.region_size)
-			RenderingServer.material_set_param(process_rid, "_region_map_size", 32)
-			RenderingServer.material_set_param(process_rid, "_region_map", terrain.data.get_region_map())
-			RenderingServer.material_set_param(process_rid, "_region_locations", terrain.data.get_region_locations())
-			RenderingServer.material_set_param(process_rid, "_height_maps", terrain.data.get_height_maps_rid())
-			RenderingServer.material_set_param(process_rid, "_control_maps", terrain.data.get_control_maps_rid())
-			RenderingServer.material_set_param(process_rid, "_color_maps", terrain.data.get_color_maps_rid())
-			RenderingServer.material_set_param(process_rid, "_control_maps_implicit", terrain.data.are_control_maps_implicit())
-			RenderingServer.material_set_param(process_rid, "_color_maps_implicit", terrain.data.are_color_maps_implicit())
-			RenderingServer.material_set_param(process_rid, "instance_spacing", instance_spacing)
-			RenderingServer.material_set_param(process_rid, "instance_rows", rows)
-			RenderingServer.material_set_param(process_rid, "max_dist", calculated_distance)
+				process_material.set_shader_parameter("ground_level", terrain.material.get_shader_param("ground_level"))
+				process_material.set_shader_parameter("region_blend", terrain.material.get_shader_param("region_blend"))
+			process_material.set_shader_parameter("_vertex_spacing", terrain.vertex_spacing)
+			process_material.set_shader_parameter("_vertex_density", 1.0 / terrain.vertex_spacing)
+			process_material.set_shader_parameter("_region_size", terrain.region_size)
+			process_material.set_shader_parameter("_region_texel_size", 1.0 / terrain.region_size)
+			process_material.set_shader_parameter("_region_map_size", 32)
+			process_material.set_shader_parameter("_region_map", terrain.data.get_region_map())
+			process_material.set_shader_parameter("_region_locations", terrain.data.get_region_locations())
+			process_material.set_shader_parameter("_height_maps", terrain.data.get_height_maps_rid())
+			process_material.set_shader_parameter("_control_maps", terrain.data.get_control_maps_rid())
+			process_material.set_shader_parameter("_color_maps", terrain.data.get_color_maps_rid())
+			process_material.set_shader_parameter("_control_maps_implicit", terrain.data.are_control_maps_implicit())
+			process_material.set_shader_parameter("_color_maps_implicit", terrain.data.are_color_maps_implicit())
+			process_material.set_shader_parameter("instance_spacing", instance_spacing)
+			process_material.set_shader_parameter("instance_rows", rows)
+			process_material.set_shader_parameter("max_dist", calculated_distance)

@@ -14,6 +14,7 @@
 #include "memory/terrain_3d_linear_arena.h"
 #include "memory/terrain_3d_zone_allocator.h"
 #include "rendering/terrain_3d_compute.h"
+#include "rendering/rd/terrain_3d_rd_context.h"
 #include "simd/terrain_3d_parallel.h"
 #include "streaming/terrain_3d_node_streamer.h"
 #include "streaming/terrain_3d_performance_profile.h"
@@ -291,10 +292,7 @@ void Terrain3D::setDataDirectory( const String dir ) {
 		// Terrain3DGeneratedTexture replacement frees old renderer RIDs. Flush teardown
 		// commands first so Direct3D/Vulkan backends cannot execute an old draw or
 		// compute dispatch after the data object starts replacing those RIDs.
-		RenderingServer *const pServer = RenderingServer::get_singleton();
-		if ( pServer && !pServer->is_on_render_thread() ) {
-			pServer->force_sync();
-		}
+		Terrain3DRdContext::forceSync();
 		LOG( INFO, "[data-transition] Runtime consumers quiesced; repository mutation may begin" );
 	}
 

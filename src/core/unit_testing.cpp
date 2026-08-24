@@ -413,16 +413,14 @@ bool t3dRunRdContextDiagnosticTests( t3dRdUnitTestState_t &rState ) {
 			"RD context exposes explicit resource-creation failure state" );
 
 	Terrain3DRdContext untracked_context;
-	auto *const server = RS;
-	RID external_rid = server ? server->texture_2d_placeholder_create() : RID();
+	RID external_rid = UtilityFunctions::rid_from_int64( 0x12345678 );
 	if ( external_rid.is_valid() ) untracked_context.freeResource( external_rid );
 	diagnostics = untracked_context.getDiagnostics();
-	rState.expect( server && external_rid.is_valid() &&
+	rState.expect( external_rid.is_valid() &&
 				untracked_context.getState() == Terrain3DRdContext::STATE_FAILED &&
 				untracked_context.getFailureCode() == Terrain3DRdContext::FAILURE_UNTRACKED_RESOURCE &&
 				( int64_t )( diagnostics.get( "untracked_free_attempts", 0 ) ) == 1,
 			"RD context rejects untracked RIDs without destroying external ownership" );
-	if ( server && external_rid.is_valid() ) server->free_rid( external_rid );
 	return rState.m_nFailed == 0u;
 }
 

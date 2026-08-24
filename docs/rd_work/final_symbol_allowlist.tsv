@@ -1,1 +1,11 @@
 symbol	path	max_count	reason
+RenderingServer	src/rendering/rd/terrain_3d_rd_context.cpp	10	Sole GDExtension gateway for global/local RenderingDevice acquisition, render-thread scheduling, and lifecycle synchronization; no Terrain3D geometry/material/instance ownership occurs here.
+MultiMesh	src/instances/terrain_3d_instancer.cpp	2	Public authoring/import helper decodes an incoming MultiMesh into Terrain3D packed instance storage; the runtime renderer never retains or submits MultiMesh.
+MultiMesh	src/instances/terrain_3d_instancer.h	2	Public authoring/import API and documentation for decoding legacy/imported MultiMesh data into RD instance storage; not runtime rendering ownership.
+MultiMesh	project/addons/terrain_3d/csharp/Terrain3DInstancer.cs	1	Generated C# surface preserves the public authoring helper that imports MultiMesh data into Terrain3D storage.
+MultiMesh	project/addons/terrain_3d/extras/3rd_party/import_sgt.gd	1	Third-party import utility reads SimpleGrassTextured MultiMesh content and converts it into Terrain3D instances.
+MultiMesh	project/addons/terrain_3d/tools/hlod_baker.gd	1	Authoring validator rejects MultiMesh content from HLOD proxy baking and directs it to the Terrain3D instancer path.
+MultiMesh	project/addons/terrain_3d/tools/streaming_converter.gd	6	Editor conversion tool recognizes/imports authored MultiMeshInstance3D data and converts it into Terrain3D instance storage; no production MultiMesh renderer.
+placeholder	src/assets/terrain_3d_assets.cpp	9	Stable asset-slot placeholder resources preserve deterministic IDs when authored mesh/texture slots are empty; these are real resources, not unfinished code.
+placeholder	src/assets/terrain_3d_asset_resource.h	1	Asset-resource placeholder state is an intentional stable-slot semantic used by the asset registry.
+placeholder	project/addons/terrain_3d/tools/region_workbench_scene.gd	4	Workbench placeholder nodes represent intentionally absent scene inputs/preview slots in editor authoring UI, not implementation stubs.

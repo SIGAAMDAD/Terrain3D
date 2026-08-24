@@ -13,11 +13,11 @@
 #include <godot_cpp/classes/array_mesh.hpp>
 #include <godot_cpp/classes/material.hpp>
 #include <godot_cpp/classes/packed_scene.hpp>
-#include <godot_cpp/classes/rendering_server.hpp>
+#include <godot_cpp/classes/geometry_instance3d.hpp>
 #include <godot_cpp/classes/resource.hpp>
 #include <godot_cpp/classes/texture2d.hpp>
 
-using ShadowCasting = RenderingServer::ShadowCastingSetting;
+using ShadowCasting = GeometryInstance3D::ShadowCastingSetting;
 
 /* Mesh assets need different defaults for texture cards and scene meshes.
  * Serialized asset settings override those defaults, while newly created assets
@@ -66,7 +66,7 @@ private:
 	// Working data
 	Ref<Material> m_highlightMat;
 	TypedArray<Mesh> m_meshes;
-	TypedArray<Mesh> m_pendingMeshes; // Queue to avoid warnings from RS on mesh swap
+	TypedArray<Mesh> m_pendingMeshes; // Queue to avoid renderer warnings on mesh swap
 	uint32_t m_nInstanceCount = 0;
 
 	void clearLodRanges( void );

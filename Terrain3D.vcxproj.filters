@@ -333,6 +333,9 @@
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_mesh_cache.h">
       <Filter>src\rendering\rd</Filter>
     </ClInclude>
+    <ClInclude Include="src\rendering\rd\terrain_3d_rd_ocean_renderer.h">
+      <Filter>src\rendering\rd</Filter>
+    </ClInclude>
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_shader_library.h">
       <Filter>src\rendering\rd</Filter>
     </ClInclude>
@@ -596,6 +599,9 @@
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_mesh_cache.cpp">
       <Filter>src\rendering\rd</Filter>
     </ClCompile>
+    <ClCompile Include="src\rendering\rd\terrain_3d_rd_ocean_renderer.cpp">
+      <Filter>src\rendering\rd</Filter>
+    </ClCompile>
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_shader_library.cpp">
       <Filter>src\rendering\rd</Filter>
     </ClCompile>
@@ -722,6 +728,9 @@
       <Filter>docs</Filter>
     </None>
     <None Include="docs\rd_batch_g_editor_integration.md">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="docs\rd_batch_h_final_validation.md">
       <Filter>docs</Filter>
     </None>
     <None Include="docs\rd_codex_handoff.md">

@@ -23,7 +23,7 @@
 #include <godot_cpp/classes/noise_texture2d.hpp>
 #include <godot_cpp/classes/reg_ex.hpp>
 #include <godot_cpp/classes/reg_ex_match.hpp>
-#include <godot_cpp/classes/rendering_server.hpp>
+#include <godot_cpp/classes/shader_material.hpp>
 #include <godot_cpp/classes/resource_saver.hpp>
 #include <godot_cpp/classes/time.hpp>
 #include <utility>
@@ -34,18 +34,7 @@ EA_FORCE_INLINE static void t3dMaterialMixShaderSignature( uint64_t &nSignature,
 }
 
 static String t3dMaterialApplyRendererShaderCompatibility( const String &rShader ) {
-	RenderingServer *pRenderingServer = RenderingServer::get_singleton();
-	if ( pRenderingServer == nullptr ) {
-		return rShader;
-	}
-
-	if ( pRenderingServer->get_current_rendering_method() != "gl_compatibility" ) {
-		return rShader;
-	}
-
-	String shader = rShader.replace( "dFdxCoarse(", "dFdx(" );
-	shader = shader.replace( "dFdyCoarse(", "dFdy(" );
-	return shader;
+	return rShader;
 }
 
 static constexpr uint64_t s_nShaderPackMagic = 0x314b504853443354ull; // T3DSHPK1
@@ -1041,7 +1030,7 @@ t3dShaderValidationResult_t Terrain3DMaterial::validateShaderVariant( const Ref<
 		return result;
 	}
 
-	const Array parameter_list = RS->get_shader_parameter_list( shader_rid );
+	const Array parameter_list = rShader->get_shader_uniform_list( true );
 	++m_nVariantValidationReflectionQueriesTotal;
 	result.m_nReflectedParameterCount = parameter_list.size();
 	if ( parameter_list.is_empty() ) {
@@ -1153,7 +1142,7 @@ Ref<Shader> Terrain3DMaterial::getOrCreateShaderVariant( const String &rCode,
 	if ( m_shaderVariantMode == SHADER_VARIANTS_DISABLED ) {
 		// Even with caching disabled, shader replacement must remain transactional.
 		// Mutating the currently active Shader resource before validation can leave
-		// RenderingServer with a material whose pre-raster stage failed to compile.
+		// the native shader compiler with a pre-raster stage that failed to compile.
 		Ref<Shader> shader;
 		shader.instantiate();
 		++m_nVariantUncachedSubmissionsTotal;
@@ -2303,9 +2292,6 @@ void Terrain3DMaterial::ensureWorldNoiseCache( void ) {
 		m_worldNoiseCache->set_normalize( true );
 		m_worldNoiseCache->set_noise( pNoise );
 	}
-	const RID cache_rid = m_worldNoiseCache->get_rid();
-	RS->material_set_param( m_hMaterial, "_world_noise_cache", cache_rid );
-	RS->material_set_param( m_hBufferMaterial, "_world_noise_cache", cache_rid );
 }
 
 void Terrain3DMaterial::disconnectShaderOverrideSignals( void ) {
@@ -2340,23 +2326,6 @@ void Terrain3DMaterial::connectShaderOverrideSignals( void ) {
 
 void Terrain3DMaterial::setRuntimeMaterialParam( const StringName &strName, const Variant &rValue ) {
 	m_runtimeMaterialParams[strName] = rValue;
-
-	Variant native_value = rValue;
-	if ( rValue.get_type() == Variant::OBJECT ) {
-		const Ref<Texture> texture = rValue;
-		if ( texture.is_valid() ) {
-			native_value = texture->get_rid();
-		}
-	}
-
-	if ( m_hMaterial.is_valid() ) {
-		RS->material_set_param( m_hMaterial, strName, native_value );
-	}
-	for ( int tier = SHADER_TIER_MIDDLE; tier < SHADER_TIER_COUNT; ++tier ) {
-		if ( m_hszTierMaterials[tier].is_valid() ) {
-			RS->material_set_param( m_hszTierMaterials[tier], strName, native_value );
-		}
-	}
 }
 
 void Terrain3DMaterial::updateShader( void ) {
@@ -2379,9 +2348,8 @@ void Terrain3DMaterial::updateShader( void ) {
 			m_bNearShaderReady && previous_near_shader.is_valid() && previous_near_shader->get_rid().is_valid();
 	Ref<Shader> candidate_near_shader;
 
-	// Build and validate a candidate before replacing the shader currently bound
-	// to live terrain materials. A failed compile must never publish a null shader
-	// RID to RenderingServer.
+	// Build and validate a candidate before replacing the authoring shader state.
+	// A failed compile retains the last valid shader resource.
 	if ( m_bShaderOverrideEnabled && m_shaderOverride.is_valid() ) {
 		const bool seeded_from_builtin = m_shaderOverride->get_code().is_empty();
 		if ( seeded_from_builtin ) {
@@ -2425,17 +2393,13 @@ void Terrain3DMaterial::updateShader( void ) {
 	}
 
 	m_szTierShaders[SHADER_TIER_NEAR] = m_shader;
-	m_hszTierMaterials[SHADER_TIER_NEAR] = m_hMaterial;
-	if ( m_bNearShaderReady ) {
-		RS->material_set_shader( m_hMaterial, getShaderRid() );
-	}
 	recordShaderTierValidation( SHADER_TIER_NEAR,
 			code,
 			near_validation,
 			m_bNearShaderReady ? getShaderRid().get_id() : 0u,
 			previous_near_ready && !near_validation.m_bValid,
 			false );
-	LOG( DEBUG, "Material rid: ", m_hMaterial, ", shader rid: ", getShaderRid() );
+	LOG( DEBUG, "Near shader rid: ", getShaderRid() );
 
 	if ( !m_bNearShaderReady ) {
 		// Initialization will stop before terrain meshes are created. Avoid querying
@@ -2453,9 +2417,6 @@ void Terrain3DMaterial::updateShader( void ) {
 	const bool bTieringActive = !m_bShaderOverrideEnabled && m_pTerrain->isRuntimeShaderTieringActive();
 	for ( int tier_value = SHADER_TIER_MIDDLE; tier_value < SHADER_TIER_COUNT; ++tier_value ) {
 		const t3dShaderTier_t tier = ( t3dShaderTier_t )( tier_value );
-		if ( !m_hszTierMaterials[tier].is_valid() ) {
-			m_hszTierMaterials[tier] = RS->material_create();
-		}
 		if ( bTieringActive ) {
 			// Compact tiers intentionally omit the Near shader's editor/debug contract.
 			// Keep them restricted to Runtime Profile/exported runtime so editor authoring
@@ -2505,8 +2466,6 @@ void Terrain3DMaterial::updateShader( void ) {
 			m_szTierShaders[tier] = m_shader;
 			recordShaderTierValidation( tier, code, near_validation, getShaderRid().get_id(), false, false );
 		}
-		RS->material_set_shader(
-				m_hszTierMaterials[tier], m_szTierShaders[tier].is_valid() ? m_szTierShaders[tier]->get_rid() : RID() );
 	}
 
 	// Displacement Buffer
@@ -2524,10 +2483,7 @@ void Terrain3DMaterial::updateShader( void ) {
 			code = generateBufferShaderCode( variant_state );
 			m_bufferShader = getOrCreateShaderVariant( code, SHADER_DOMAIN_BUFFER );
 		}
-		RS->material_set_shader( m_hBufferMaterial, getBufferShaderRid() );
-		LOG( DEBUG, "Buffer Material rid: ", m_hBufferMaterial, ", buffer shader rid: ", getBufferShaderRid() );
-	} else {
-		RS->material_set_shader( m_hBufferMaterial, RID() );
+		LOG( DEBUG, "Buffer shader rid: ", getBufferShaderRid() );
 	}
 
 	connectShaderOverrideSignals();
@@ -2536,26 +2492,21 @@ void Terrain3DMaterial::updateShader( void ) {
 
 	// Rebuild the inspector-facing shader metadata once per shader change. Godot
 	// can ask for property values many times per second while the inspector is
-	// idle; those reads must not query RenderingServer shader metadata again.
+	// idle; those reads must not query renderer shader metadata again.
 	refreshShaderPropertyCache();
 	LOG( EXTREME, "_active_params: ", m_activeParams );
 	Terrain3DUtil::printDict( "_shader_params", m_shaderParams, EXTREME );
 
-	// Fetch saved shader parameters, converting textures to RIDs
+	// Preserve resource objects in runtime authoring state. The RD coordinator
+	// resolves the direct texture resources it owns when publishing snapshots;
+	// native texture RIDs are not a material-publication channel.
 	for ( const StringName param : m_activeParams ) {
 		const Variant value = m_shaderParams[param];
 		if ( value.get_type() == Variant::OBJECT ) {
 			const Ref<Texture> pTex = value;
-			if ( pTex.is_valid() ) {
-				setRuntimeMaterialParam( param, pTex->get_rid() );
-				RS->material_set_param( m_hBufferMaterial, param, pTex->get_rid() );
-			} else {
-				setRuntimeMaterialParam( param, Variant() );
-				RS->material_set_param( m_hBufferMaterial, param, Variant() );
-			}
+			setRuntimeMaterialParam( param, pTex.is_valid() ? Variant( pTex ) : Variant() );
 		} else {
 			setRuntimeMaterialParam( param, value );
-			RS->material_set_param( m_hBufferMaterial, param, value );
 		}
 	}
 
@@ -2569,7 +2520,6 @@ void Terrain3DMaterial::updateShader( void ) {
 		control_rotations.set( i, Vector2( Math::cos( fAngle ), Math::sin( fAngle ) ) );
 	}
 	setRuntimeMaterialParam( "_control_rotation_cs", control_rotations );
-	RS->material_set_param( m_hBufferMaterial, "_control_rotation_cs", control_rotations );
 
 	// Sixteen fixed detiling rotations back the 4/8/16-way modes. Keep this as a
 	// uniform table rather than a local shader array: older/compatibility Godot
@@ -2581,7 +2531,6 @@ void Terrain3DMaterial::updateShader( void ) {
 		detile_rotations.set( i, Vector2( Math::cos( fAngle ), Math::sin( fAngle ) ) );
 	}
 	setRuntimeMaterialParam( "_detile_rotation_cs", detile_rotations );
-	RS->material_set_param( m_hBufferMaterial, "_detile_rotation_cs", detile_rotations );
 
 	// Precompute uniform-only rotations on the CPU. This avoids evaluating sin/cos
 	// for every terrain fragment while preserving the public angle parameter.
@@ -2591,12 +2540,10 @@ void Terrain3DMaterial::updateShader( void ) {
 		const real_t fAngle = angle_value;
 		const Vector2 rotation( Math::cos( fAngle ), Math::sin( fAngle ) );
 		setRuntimeMaterialParam( "_noise1_rotation", rotation );
-		RS->material_set_param( m_hBufferMaterial, "_noise1_rotation", rotation );
 	}
 
 	// Set specific shader parameters
 	setRuntimeMaterialParam( "_background_mode", m_worldBackground );
-	RS->material_set_param( m_hBufferMaterial, "_background_mode", m_worldBackground );
 	if ( m_worldBackground == NOISE &&
 			( m_worldNoiseShaderMode == WORLD_NOISE_DYNAMIC ||
 					m_worldNoiseShaderMode == WORLD_NOISE_CACHED_VERTEX_NORMALS ||
@@ -2790,341 +2737,6 @@ t3dPageTableBuildResult_t Terrain3DMaterial::prepareRegionPageTables( void ) {
 	return PAGE_TABLE_READY;
 }
 
-void Terrain3DMaterial::bindRegionPageTableUniforms( const RID &rMaterial ) {
-	if ( !rMaterial.is_valid() || !m_pTerrain || !m_pTerrain->getData() || !isRegionPageTableValid() ) {
-		return;
-	}
-	Terrain3DData *const pData = m_pTerrain->getData();
-	RS->material_set_param( rMaterial, "_region_map_texture", m_generatedRegionMap.getRid() );
-	RS->material_set_param( rMaterial, "_region_map_size", m_nRegionMapTextureSize );
-	RS->material_set_param( rMaterial, "_logical_region_map_texture", m_generatedLogicalRegionMap.getRid() );
-	const bool bNeedsRegionLocations = ( rMaterial == m_hMaterial && m_bShaderOverrideEnabled ) ||
-			( rMaterial == m_hBufferMaterial && m_bBufferShaderOverrideEnabled );
-	if ( bNeedsRegionLocations ) {
-		RS->material_set_param( rMaterial, "_region_locations", pData->getRenderRegionSlots() );
-	}
-}
-
-void Terrain3DMaterial::updateFarAtlasUniforms( const RID &rMaterial ) {
-	if ( !rMaterial.is_valid() || !m_pTerrain || !m_pTerrain->getData() ) {
-		return;
-	}
-	Terrain3DData *const pData = m_pTerrain->getData();
-	const RID far_height_rid = pData->getFarHeightMapRid();
-	const RID far_color_rid = pData->getFarColorMapRid();
-	RS->material_set_param( rMaterial,
-			"_far_height_map",
-			far_height_rid.is_valid() ? far_height_rid : m_generatedFarHeightDummy.getRid() );
-	RS->material_set_param(
-			rMaterial, "_far_color_map", far_color_rid.is_valid() ? far_color_rid : m_generatedFarColorDummy.getRid() );
-}
-
-void Terrain3DMaterial::ensureShadowMaterials( void ) {
-	if ( m_shadowShader.is_null() ) {
-		if ( !m_shaderTemplates.has( "main_shadow" ) ) {
-			return;
-		}
-		const t3dShaderVariantState_t state = captureVariantState();
-		const String code =
-				prepareShaderSource( m_shaderTemplates["main_shadow"], state, Array(), SHADER_TIER_FAR, false );
-		if ( code.is_empty() ) {
-			return;
-		}
-		m_shadowShader.instantiate();
-		submitShaderSource( m_shadowShader, code );
-	}
-	for ( int tier = SHADER_TIER_NEAR; tier < SHADER_TIER_COUNT; ++tier ) {
-		if ( !m_hszShadowMaterials[tier].is_valid() ) {
-			m_hszShadowMaterials[tier] = RS->material_create();
-		}
-		RS->material_set_shader( m_hszShadowMaterials[tier], m_shadowShader->get_rid() );
-		RS->material_set_param( m_hszShadowMaterials[tier], "_shadow_height_source", tier );
-	}
-}
-
-void Terrain3DMaterial::updateShadowUniforms( void ) {
-	if ( !m_pTerrain || !m_pTerrain->getData() || m_shadowShader.is_null() ) {
-		return;
-	}
-	Terrain3DData *const pData = m_pTerrain->getData();
-	const RID detail_height = pData->getHeightMapsRid();
-	const RID middle_height = pData->getMiddleHeightMapsRid();
-	const RID middle_map = pData->getMiddleHeightRegionMapRid();
-	const RID far_height = pData->getFarHeightMapRid();
-	for ( int tier = SHADER_TIER_NEAR; tier < SHADER_TIER_COUNT; ++tier ) {
-		const RID material = m_hszShadowMaterials[tier];
-		if ( !material.is_valid() ) {
-			continue;
-		}
-		RS->material_set_param( material,
-				"_region_map_texture",
-				isRegionPageTableValid() ? m_generatedRegionMap.getRid() : m_generatedDummy.getRid() );
-		RS->material_set_param( material,
-				"_middle_height_region_map_texture",
-				middle_map.is_valid() ? middle_map : m_generatedDummy.getRid() );
-		RS->material_set_param(
-				material, "_height_maps", detail_height.is_valid() ? detail_height : m_generatedDummy.getRid() );
-		RS->material_set_param(
-				material, "_middle_height_maps", middle_height.is_valid() ? middle_height : m_generatedDummy.getRid() );
-		RS->material_set_param(
-				material, "_far_height_map", far_height.is_valid() ? far_height : m_generatedFarHeightDummy.getRid() );
-		RS->material_set_param( material, "_region_map_size", MAX( 1, m_nRegionMapTextureSize ) );
-		RS->material_set_param( material, "_region_size", ( real_t )( m_pTerrain->getRegionSize() ) );
-		RS->material_set_param( material, "_region_texel_size", 1.0f / ( real_t )( m_pTerrain->getRegionSize() ) );
-		RS->material_set_param( material, "_height_decode", Vector2( s_fRegionHeightMin, s_fRegionHeightRange ) );
-		RS->material_set_param( material, "_vertex_spacing", m_pTerrain->getVertexSpacing() );
-		RS->material_set_param( material, "_vertex_density", 1.0f / m_pTerrain->getVertexSpacing() );
-		RS->material_set_param( material, "_mesh_size", ( real_t )( m_pTerrain->getMeshSize() ) );
-		RS->material_set_param( material, "_subdiv", ( real_t )( 1 << m_pTerrain->getTessellationLevel() ) );
-	}
-}
-
-void Terrain3DMaterial::updateUniforms( const RID &rMaterial, const uint32_t nFlags ) {
-	IS_DATA_INIT( VOID );
-	LOG( EXTREME, "Updating uniforms in shader" );
-
-	Terrain3DData *const pData = m_pTerrain->getData();
-	if ( nFlags & REGION_ARRAYS ) {
-		bindRegionPageTableUniforms( rMaterial );
-		if ( rMaterial == m_hszTierMaterials[SHADER_TIER_MIDDLE] ) {
-			const RID middle_height_map = pData->getMiddleHeightRegionMapRid();
-			const RID middle_height_array = pData->getMiddleHeightMapsRid();
-			if ( middle_height_map.is_valid() && middle_height_array.is_valid() ) {
-				RS->material_set_param( rMaterial, "_middle_height_region_map_texture", middle_height_map );
-				RS->material_set_param( rMaterial, "_middle_height_maps", middle_height_array );
-			}
-		}
-		if ( Terrain3D::s_debugLevel >= EXTREME ) {
-			const PackedInt32Array region_map = pData->getRegionMap();
-			LOG( EXTREME, "Region map" );
-			for ( int i = 0; i < region_map.size(); i++ ) {
-				if ( region_map[i] ) {
-					LOG( EXTREME, "Region id: ", region_map[i], " array index: ", i );
-				}
-			}
-		}
-
-		// Retained only for shader overrides and bundled custom shaders. The
-		// optimized default shaders derive world texel positions directly.
-	}
-
-	const real_t fRegionSize = ( real_t )( m_pTerrain->getRegionSize() );
-	LOG( EXTREME, "Setting region size in material: ", fRegionSize );
-	RS->material_set_param( rMaterial, "_region_size", fRegionSize );
-	RS->material_set_param( rMaterial, "_region_texel_size", 1.0f / fRegionSize );
-	const Terrain3DInstancer *pInstancer = m_pTerrain->getInstancer();
-	RS->material_set_param( rMaterial,
-			"_instancer_cell_size",
-			pInstancer ? ( real_t )( pInstancer->getCellSize() ) : ( real_t )( s_nInstanceDefaultCellSize ) );
-	RS->material_set_param( rMaterial, "_height_decode", Vector2( s_fRegionHeightMin, s_fRegionHeightRange ) );
-
-	if ( nFlags & REGION_ARRAYS ) {
-		if ( pData->getRegionCount() > 0 ) {
-			RS->material_set_param( rMaterial, "_height_maps", pData->getHeightMapsRid() );
-			RS->material_set_param( rMaterial, "_control_maps", pData->getControlMapsRid() );
-			RS->material_set_param( rMaterial, "_color_maps", pData->getColorMapsRid() );
-			RS->material_set_param( rMaterial, "_derived_maps", pData->getDerivedMapsRid() );
-			RS->material_set_param( rMaterial, "_middle_composite_maps", pData->getMiddleCompositeMapsRid() );
-			updateFarAtlasUniforms( rMaterial );
-			LOG( EXTREME, "Height map RID: ", pData->getHeightMapsRid() );
-			LOG( EXTREME, "Control map RID: ", pData->getControlMapsRid() );
-			LOG( EXTREME, "Color map RID: ", pData->getColorMapsRid() );
-		} else {
-			// Send dummy texture array to stop compatibility error spam
-			RS->material_set_param( rMaterial, "_height_maps", m_generatedDummy.getRid() );
-			RS->material_set_param( rMaterial, "_control_maps", m_generatedDummy.getRid() );
-			RS->material_set_param( rMaterial, "_color_maps", m_generatedDummy.getRid() );
-			RS->material_set_param( rMaterial, "_derived_maps", m_generatedDummy.getRid() );
-			RS->material_set_param( rMaterial, "_middle_composite_maps", m_generatedDummy.getRid() );
-			RS->material_set_param( rMaterial, "_far_height_map", m_generatedFarHeightDummy.getRid() );
-			RS->material_set_param( rMaterial, "_far_color_map", m_generatedFarColorDummy.getRid() );
-		}
-	}
-
-	const real_t fSpacing = m_pTerrain->getVertexSpacing();
-	LOG( EXTREME, "Setting vertex spacing in material: ", fSpacing );
-	RS->material_set_param( rMaterial, "_vertex_spacing", fSpacing );
-	RS->material_set_param( rMaterial, "_vertex_density", 1.0f / fSpacing );
-
-	const real_t fMeshSize = ( real_t )( m_pTerrain->getMeshSize() );
-	RS->material_set_param( rMaterial, "_mesh_size", fMeshSize );
-
-	const real_t fTessellationLevel = ( real_t )( m_pTerrain->getTessellationLevel() );
-	const real_t fSubdiv = pow( 2.f, fTessellationLevel );
-	RS->material_set_param( rMaterial, "_subdiv", fSubdiv );
-	RS->material_set_param( rMaterial, "_tessellation_level", fTessellationLevel );
-	RS->material_set_param( rMaterial, "_displacement_scale", m_fDisplacementScale );
-	RS->material_set_param( rMaterial, "_displacement_sharpness", m_fDisplacementSharpness );
-	const t3dTierQualityConfig_t *pTierQuality = nullptr;
-	if ( rMaterial == m_hMaterial ) {
-		pTierQuality = &m_nearQuality;
-	} else if ( rMaterial == m_hszTierMaterials[SHADER_TIER_MIDDLE] ) {
-		pTierQuality = &m_middleQuality;
-	} else if ( rMaterial == m_hszTierMaterials[SHADER_TIER_FAR] ) {
-		pTierQuality = &m_farQuality;
-	}
-	if ( pTierQuality ) {
-		RS->material_set_param( rMaterial, "_tier_material_lod_bias", pTierQuality->m_fMaterialLodBias );
-		RS->material_set_param(
-				rMaterial, "_tier_authored_color_contribution", pTierQuality->m_fAuthoredColorContribution );
-		RS->material_set_param( rMaterial, "_tier_wetness_contribution", pTierQuality->m_fWetnessContribution );
-	}
-
-	Ref<Terrain3DAssets> pAssetList = m_pTerrain->getAssets();
-	LOG( INFO, "Updating texture arrays in shader" );
-	const bool bCompactTier =
-			rMaterial == m_hszTierMaterials[SHADER_TIER_MIDDLE] || rMaterial == m_hszTierMaterials[SHADER_TIER_FAR];
-	const bool bAssetsReady = pAssetList.is_valid() && pAssetList->isInitialized();
-	if ( rMaterial == m_hMaterial ) {
-		int color_side =
-				MAX( 1, m_pTerrain->getRegionSize() / MAX( 1, m_pTerrain->getGpuRegionColorResolutionDivisor() ) );
-		int color_max_lod = 0;
-		while ( color_side > 1 ) {
-			color_side >>= 1;
-			++color_max_lod;
-		}
-		RS->material_set_param( rMaterial, "_region_color_max_lod", ( real_t )( color_max_lod ) );
-	}
-	if ( rMaterial == m_hMaterial || rMaterial == m_hszTierMaterials[SHADER_TIER_MIDDLE] ) {
-		RS->material_set_param( rMaterial,
-				"_material_max_lod",
-				bAssetsReady ? ( real_t )( pAssetList->getAlbedoArrayMaxLod() ) : ( real_t )( 0.0 ) );
-	}
-	if ( bCompactTier ) {
-		const int texture_color_count =
-				bAssetsReady ? MIN( pAssetList->getTextureColors().size(), s_nMaxTextureAssets ) : 0;
-		RS->material_set_param( rMaterial, "_texture_color_count", texture_color_count );
-		RS->material_set_param( rMaterial,
-				"_texture_color_array",
-				t3dMaterialMakeTextureColorUniforms(
-						bAssetsReady ? pAssetList->getTextureColors() : PackedColorArray() ) );
-		if ( rMaterial == m_hszTierMaterials[SHADER_TIER_FAR] ) {
-			RS->material_set_param( rMaterial,
-					"_far_material_max_lod",
-					bAssetsReady ? ( real_t )( pAssetList->getFarAlbedoArrayMaxLod() ) : ( real_t )( 0.0 ) );
-			RS->material_set_param( rMaterial,
-					"_far_albedo_layer_count",
-					bAssetsReady ? MAX( pAssetList->getFarAlbedoArraySize(), 1 ) : 1 );
-			RS->material_set_param( rMaterial,
-					"_far_albedo_array",
-					bAssetsReady && pAssetList->getFarAlbedoArrayRid().is_valid() ? pAssetList->getFarAlbedoArrayRid()
-																				  : m_generatedDummy.getRid() );
-			const int nFarDivisor = m_pTerrain->getGpuFarQualityDivisor();
-			const real_t fFarQualityLodOffset =
-					nFarDivisor >= 8 ? 3.0f : ( nFarDivisor >= 4 ? 2.0f : ( nFarDivisor >= 2 ? 1.0f : 0.0f ) );
-			RS->material_set_param( rMaterial, "_far_quality_lod_offset", fFarQualityLodOffset );
-		}
-	}
-	if ( !bAssetsReady ) {
-		LOG( INFO, "Asset list is not initialized; installing safe compact-tier fallbacks" );
-		if ( nFlags & TEXTURE_ARRAYS ) {
-			const bool bFarTier = rMaterial == m_hszTierMaterials[SHADER_TIER_FAR];
-			if ( bFarTier ) {
-				RS->material_set_param( rMaterial, "_far_albedo_layer_count", 1 );
-				RS->material_set_param( rMaterial, "_far_albedo_array", m_generatedDummy.getRid() );
-			} else {
-				RS->material_set_param( rMaterial, "_texture_array_layer_count", 1 );
-				PackedInt32Array fallback_layer_map;
-				fallback_layer_map.resize( s_nMaxTextureAssets );
-				RS->material_set_param( rMaterial, "_texture_layer_map", fallback_layer_map );
-				RS->material_set_param( rMaterial, "_runtime_material_streaming_active", false );
-				PackedColorArray fallback_averages;
-				fallback_averages.resize( s_nMaxTextureAssets );
-				for ( int index = 0; index < s_nMaxTextureAssets; ++index ) {
-					fallback_averages.set( index, s_colorWhite );
-				}
-				RS->material_set_param( rMaterial, "_runtime_material_average_albedo", fallback_averages );
-				RS->material_set_param( rMaterial, "_texture_array_albedo", m_generatedDummy.getRid() );
-				RS->material_set_param( rMaterial, "_texture_array_surface", m_generatedSurfaceDummy.getRid() );
-				RS->material_set_param( rMaterial, "_texture_array_normal", m_generatedDummy.getRid() );
-				RS->material_set_param(
-						rMaterial, "_texture_array_displacement", m_generatedDisplacementDummy.getRid() );
-			}
-			if ( !m_bDebugViewCheckered ) {
-				setShowCheckered( true );
-			}
-		}
-		return;
-	}
-
-	if ( nFlags & TEXTURE_ARRAYS ) {
-		const bool bSurfacePacked = pAssetList->usesPackedPbr();
-		const bool bFarTier = rMaterial == m_hszTierMaterials[SHADER_TIER_FAR];
-		if ( !bFarTier ) {
-			RS->material_set_param( rMaterial, "_texture_array_layer_count", MAX( pAssetList->getTextureCount(), 1 ) );
-			RS->material_set_param( rMaterial, "_texture_layer_map", pAssetList->getTextureLayerMap() );
-			RS->material_set_param(
-					rMaterial, "_runtime_material_streaming_active", pAssetList->isRuntimeMaterialCacheActive() );
-			RS->material_set_param(
-					rMaterial, "_runtime_material_average_albedo", pAssetList->getRuntimeMaterialAverageAlbedo() );
-		}
-		if ( pAssetList->getGeneratedArraySize() > 0 ) {
-			if ( rMaterial == m_hszTierMaterials[SHADER_TIER_FAR] ) {
-				RS->material_set_param(
-						rMaterial, "_far_albedo_layer_count", MAX( pAssetList->getFarAlbedoArraySize(), 1 ) );
-				RS->material_set_param( rMaterial,
-						"_far_albedo_array",
-						pAssetList->getFarAlbedoArrayRid().is_valid() ? pAssetList->getFarAlbedoArrayRid()
-																	  : m_generatedDummy.getRid() );
-			} else {
-				RS->material_set_param( rMaterial, "_texture_array_albedo", pAssetList->getAlbedoArrayRid() );
-			}
-			if ( rMaterial != m_hszTierMaterials[SHADER_TIER_FAR] && bSurfacePacked ) {
-				RS->material_set_param( rMaterial, "_texture_array_surface", pAssetList->getSurfaceArrayRid() );
-				if ( m_pTerrain->getTessellationLevel() > 0 ) {
-					RS->material_set_param(
-							rMaterial, "_texture_array_displacement", pAssetList->getDisplacementArrayRid() );
-				}
-			} else if ( rMaterial != m_hszTierMaterials[SHADER_TIER_FAR] ) {
-				RS->material_set_param( rMaterial, "_texture_array_normal", pAssetList->getNormalArrayRid() );
-			}
-			setShowCheckered( false );
-			LOG( DEBUG, "Texture count >0: ", pAssetList->getGeneratedArraySize(), ", disabling checkered view" );
-		} else {
-			// Send type-correct dummy texture arrays to stop sampler validation errors.
-			if ( rMaterial == m_hszTierMaterials[SHADER_TIER_FAR] ) {
-				RS->material_set_param( rMaterial, "_far_albedo_layer_count", 1 );
-				RS->material_set_param( rMaterial, "_far_albedo_array", m_generatedDummy.getRid() );
-			} else {
-				RS->material_set_param( rMaterial, "_texture_array_albedo", m_generatedDummy.getRid() );
-			}
-			if ( rMaterial != m_hszTierMaterials[SHADER_TIER_FAR] && bSurfacePacked ) {
-				RS->material_set_param( rMaterial, "_texture_array_surface", m_generatedSurfaceDummy.getRid() );
-				if ( m_pTerrain->getTessellationLevel() > 0 ) {
-					RS->material_set_param(
-							rMaterial, "_texture_array_displacement", m_generatedDisplacementDummy.getRid() );
-				}
-			} else if ( rMaterial != m_hszTierMaterials[SHADER_TIER_FAR] ) {
-				RS->material_set_param( rMaterial, "_texture_array_normal", m_generatedDummy.getRid() );
-			}
-
-			if ( m_bDebugViewCheckered == false ) {
-				setShowCheckered( true );
-				LOG( DEBUG, "No textures, enabling checkered view" );
-			}
-		}
-
-		RS->material_set_param( rMaterial,
-				"_texture_color_array",
-				t3dMaterialMakeTextureColorUniforms( pAssetList->getTextureColors() ) );
-		if ( bCompactTier ) {
-			RS->material_set_param( rMaterial,
-					"_texture_color_count",
-					MIN( pAssetList->getTextureColors().size(), s_nMaxTextureAssets ) );
-		}
-		RS->material_set_param( rMaterial, "_texture_uv_scale_array", pAssetList->getTextureUvScales() );
-		if ( rMaterial != m_hszTierMaterials[SHADER_TIER_FAR] ) {
-			RS->material_set_param( rMaterial, "_texture_normal_depth_array", pAssetList->getTextureNormalDepths() );
-			RS->material_set_param( rMaterial, "_texture_ao_strength_array", pAssetList->getTextureAoStrengths() );
-			RS->material_set_param( rMaterial, "_texture_ao_affect_array", pAssetList->getTextureAoLightAffects() );
-			RS->material_set_param( rMaterial, "_texture_roughness_mod_array", pAssetList->getTextureRoughnessMods() );
-			RS->material_set_param( rMaterial, "_texture_metallic_array", pAssetList->getTextureMetallics() );
-			RS->material_set_param( rMaterial, "_texture_detile_array", pAssetList->getTextureDetiles() );
-			RS->material_set_param( rMaterial, "_texture_displacement_array", pAssetList->getTextureDisplacements() );
-		}
-	}
-}
-
 void Terrain3DMaterial::setShaderParameters( const Dictionary &rDict ) {
 	SET_IF_DIFF( m_shaderParams, rDict );
 	m_bPersistenceDirty = true;
@@ -3160,23 +2772,7 @@ void Terrain3DMaterial::initialize( Terrain3D *pTerrain ) {
 	} else {
 		preloadShaders();
 	}
-	if ( !m_hMaterial.is_valid() ) {
-		m_hMaterial = RS->material_create();
-	}
-	m_hszTierMaterials[SHADER_TIER_NEAR] = m_hMaterial;
-	for ( int tier = SHADER_TIER_MIDDLE; tier < SHADER_TIER_COUNT; ++tier ) {
-		if ( !m_hszTierMaterials[tier].is_valid() ) {
-			m_hszTierMaterials[tier] = RS->material_create();
-		}
-	}
-	for ( int tier = SHADER_TIER_NEAR; tier < SHADER_TIER_COUNT; ++tier ) {
-		if ( !m_hszShadowMaterials[tier].is_valid() ) {
-			m_hszShadowMaterials[tier] = RS->material_create();
-		}
-	}
-	if ( !m_hBufferMaterial.is_valid() ) {
-		m_hBufferMaterial = RS->material_create();
-	}
+
 	if ( m_shader.is_null() ) {
 		m_shader.instantiate();
 	}
@@ -3276,27 +2872,7 @@ void Terrain3DMaterial::destroy( void ) {
 	m_generatedDisplacementDummy.clear();
 	invalidateRegionPageTables();
 	m_worldNoiseCache.unref();
-	for ( int tier = SHADER_TIER_MIDDLE; tier < SHADER_TIER_COUNT; ++tier ) {
-		if ( m_hszTierMaterials[tier].is_valid() ) {
-			RS->free_rid( m_hszTierMaterials[tier] );
-			m_hszTierMaterials[tier] = RID();
-		}
-	}
-	for ( int tier = SHADER_TIER_NEAR; tier < SHADER_TIER_COUNT; ++tier ) {
-		if ( m_hszShadowMaterials[tier].is_valid() ) {
-			RS->free_rid( m_hszShadowMaterials[tier] );
-			m_hszShadowMaterials[tier] = RID();
-		}
-	}
-	if ( m_hMaterial.is_valid() ) {
-		RS->free_rid( m_hMaterial );
-		m_hMaterial = RID();
-	}
-	m_hszTierMaterials[SHADER_TIER_NEAR] = RID();
-	if ( m_hBufferMaterial.is_valid() ) {
-		RS->free_rid( m_hBufferMaterial );
-		m_hBufferMaterial = RID();
-	}
+
 }
 
 void Terrain3DMaterial::update( const uint32_t nFlags ) {
@@ -3312,39 +2888,19 @@ void Terrain3DMaterial::update( const uint32_t nFlags ) {
 	if ( nFlags & REGION_ARRAYS ) {
 		const t3dPageTableBuildResult_t page_table_result = prepareRegionPageTables();
 		if ( page_table_result != PAGE_TABLE_READY ) {
-			switch ( page_table_result ) {
-				case PAGE_TABLE_INVALID_TERRAIN_STATE: {
-					if ( m_pTerrain && m_pTerrain->getData() ) {
-						LOG( ERROR,
-								"Cannot build terrain page tables while data runtime storage is inactive: ",
-								m_pTerrain->getData()->getRuntimeState() );
-					}
-					break;
-				}
-				case PAGE_TABLE_INVALID_DIMENSIONS:
-					LOG( ERROR, "Cannot build terrain page tables: invalid region-map dimensions" );
-					break;
-				case PAGE_TABLE_TEXTURE_ALLOCATION_FAILED:
-					LOG( ERROR, "Cannot build terrain page tables: generated RenderingDevice texture allocation/update failed" );
-					break;
-				default:
-					break;
+			if ( page_table_result == PAGE_TABLE_INVALID_TERRAIN_STATE && m_pTerrain && m_pTerrain->getData() ) {
+				LOG( ERROR, "Cannot build terrain page tables while data runtime storage is inactive: ",
+						m_pTerrain->getData()->getRuntimeState() );
+			} else if ( page_table_result == PAGE_TABLE_INVALID_DIMENSIONS ) {
+				LOG( ERROR, "Cannot build terrain page tables: invalid region-map dimensions" );
+			} else if ( page_table_result == PAGE_TABLE_TEXTURE_ALLOCATION_FAILED ) {
+				LOG( ERROR, "Cannot build terrain page tables: generated RenderingDevice texture allocation/update failed" );
 			}
 			return;
 		}
 	}
-	updateUniforms( m_hMaterial, nFlags );
-	for ( int tier = SHADER_TIER_MIDDLE; tier < SHADER_TIER_COUNT; ++tier ) {
-		if ( m_hszTierMaterials[tier].is_valid() ) {
-			updateUniforms( m_hszTierMaterials[tier], nFlags );
-		}
-	}
-	ensureShadowMaterials();
-	updateShadowUniforms();
 	IS_INIT( VOID );
 	if ( m_pTerrain->getTessellationLevel() > 0 ) {
-		updateUniforms( m_hBufferMaterial, nFlags );
-		// Snap to update buffer
 		m_pTerrain->snap();
 	}
 }
@@ -3369,57 +2925,15 @@ void Terrain3DMaterial::updateRegionPageTable( void ) {
 		} else {
 			LOG( ERROR, "Cannot publish terrain page tables: texture allocation/update failed" );
 		}
-		return;
 	}
-	bindRegionPageTableUniforms( m_hMaterial );
-	for ( int tier = SHADER_TIER_MIDDLE; tier < SHADER_TIER_COUNT; ++tier ) {
-		if ( m_hszTierMaterials[tier].is_valid() ) {
-			bindRegionPageTableUniforms( m_hszTierMaterials[tier] );
-		}
-	}
-	if ( m_pTerrain->getTessellationLevel() > 0 ) {
-		bindRegionPageTableUniforms( m_hBufferMaterial );
-	}
-	updateShadowUniforms();
 }
 
 void Terrain3DMaterial::updateRuntimeMaterialLayerMap( void ) {
-	if ( !m_pTerrain ) {
-		return;
-	}
-	const Ref<Terrain3DAssets> pAssets = m_pTerrain->getAssets();
-	if ( pAssets.is_null() ) {
-		return;
-	}
-	static const StringName s_layerMap( "_texture_layer_map" );
-	const PackedInt32Array layerMap = pAssets->getTextureLayerMap();
-	if ( m_hMaterial.is_valid() ) {
-		RS->material_set_param( m_hMaterial, s_layerMap, layerMap );
-	}
-	for ( int tier = SHADER_TIER_MIDDLE; tier < SHADER_TIER_COUNT; ++tier ) {
-		if ( m_hszTierMaterials[tier].is_valid() ) {
-			RS->material_set_param( m_hszTierMaterials[tier], s_layerMap, layerMap );
-		}
-	}
-	if ( m_pTerrain->getTessellationLevel() > 0 && m_hBufferMaterial.is_valid() ) {
-		RS->material_set_param( m_hBufferMaterial, s_layerMap, layerMap );
-	}
+	// Runtime material-layer state is read directly by Terrain3DRenderCoordinator.
 }
 
 void Terrain3DMaterial::updateFarAtlasTextures( void ) {
-	if ( !m_pTerrain || !m_pTerrain->getData() ) {
-		return;
-	}
-	updateFarAtlasUniforms( m_hMaterial );
-	for ( int tier = SHADER_TIER_MIDDLE; tier < SHADER_TIER_COUNT; ++tier ) {
-		if ( m_hszTierMaterials[tier].is_valid() ) {
-			updateFarAtlasUniforms( m_hszTierMaterials[tier] );
-		}
-	}
-	if ( m_pTerrain->getTessellationLevel() > 0 && m_hBufferMaterial.is_valid() ) {
-		updateFarAtlasUniforms( m_hBufferMaterial );
-	}
-	updateShadowUniforms();
+	// Far-atlas RIDs are read directly from Terrain3DData by the RD coordinator.
 }
 
 void Terrain3DMaterial::setDisplacementScale( const real_t fDisplacementScale ) {
@@ -3518,21 +3032,12 @@ void Terrain3DMaterial::setShaderPerformancePreset( const t3dShaderPerformancePr
 }
 
 void Terrain3DMaterial::updateTierUniforms( const t3dShaderTier_t tier ) {
-	if ( !m_pTerrain ) {
+	if ( !m_pTerrain || tier < SHADER_TIER_NEAR || tier >= SHADER_TIER_COUNT ) {
 		return;
 	}
-	RID material;
-	if ( tier == SHADER_TIER_NEAR ) {
-		material = m_hMaterial;
-	} else if ( tier > SHADER_TIER_NEAR && tier < SHADER_TIER_COUNT ) {
-		material = m_hszTierMaterials[tier];
-	}
-	if ( material.is_valid() ) {
-		updateUniforms( material, UNIFORMS_ONLY );
 #ifdef DEBUG_ENABLED
-		++m_szTierUniformPublicationCount[tier];
+	++m_szTierUniformPublicationCount[tier];
 #endif
-	}
 }
 
 void Terrain3DMaterial::tierQualityChanged( const t3dShaderTier_t tier, const bool bRecompile ) {
@@ -4846,7 +4351,7 @@ void Terrain3DMaterial::refreshShaderPropertyCache( void ) {
 	if ( m_bShaderOverrideEnabled && m_shaderOverride.is_valid() ) {
 		param_list = m_shaderOverride->get_shader_uniform_list( true );
 	} else {
-		param_list = RS->get_shader_parameter_list( getShaderRid() );
+		param_list = m_shader->get_shader_uniform_list( true );
 		++m_nShaderParameterListQueryCount;
 	}
 	const int buffer_param = param_list.size();
@@ -4854,7 +4359,7 @@ void Terrain3DMaterial::refreshShaderPropertyCache( void ) {
 		param_list.append_array( m_bufferShaderOverride->get_shader_uniform_list( true ) );
 	} else {
 		if ( m_pTerrain->getTessellationLevel() > 0 ) {
-			param_list.append_array( RS->get_shader_parameter_list( getBufferShaderRid() ) );
+			param_list.append_array( m_bufferShader->get_shader_uniform_list( true ) );
 			++m_nShaderParameterListQueryCount;
 		}
 	}
@@ -4910,11 +4415,24 @@ void Terrain3DMaterial::refreshShaderPropertyCache( void ) {
 		}
 	}
 	m_activeParams = new_active_params;
+	Ref<ShaderMaterial> near_defaults;
+	if ( m_shader.is_valid() ) {
+		near_defaults.instantiate();
+		near_defaults->set_shader( m_shader );
+	}
+	Ref<ShaderMaterial> buffer_defaults;
+	if ( m_bufferShader.is_valid() ) {
+		buffer_defaults.instantiate();
+		buffer_defaults->set_shader( m_bufferShader );
+	}
 	for ( const StringName name : m_activeParams ) {
-		Variant default_value = RS->shader_get_parameter_default( getShaderRid(), name );
-		++m_nShaderParameterDefaultQueryCount;
-		if ( default_value.get_type() == Variant::NIL && getBufferShaderRid().is_valid() ) {
-			default_value = RS->shader_get_parameter_default( getBufferShaderRid(), name );
+		Variant default_value;
+		if ( near_defaults.is_valid() ) {
+			default_value = near_defaults->get_shader_parameter( name );
+			++m_nShaderParameterDefaultQueryCount;
+		}
+		if ( default_value.get_type() == Variant::NIL && buffer_defaults.is_valid() ) {
+			default_value = buffer_defaults->get_shader_parameter( name );
 			++m_nShaderParameterDefaultQueryCount;
 		}
 		m_shaderParamDefaults[name] = default_value;
@@ -4977,34 +4495,30 @@ bool Terrain3DMaterial::_set( const StringName &strName, const Variant &rPropert
 		return true;
 	}
 
-	// If value is an object, assume a Texture. RS only wants RIDs, but
-	// Inspector wants the object, so set the RID and save the latter for _get
+	// Preserve Resource objects in authoring state; the RD coordinator resolves
+	// texture RIDs when publishing an immutable render snapshot.
 	if ( rProperty.get_type() == Variant::OBJECT ) {
 		const Ref<Texture> pTex = rProperty;
 		if ( pTex.is_valid() ) {
 			m_shaderParams[strName] = pTex;
-			setRuntimeMaterialParam( strName, pTex->get_rid() );
-			RS->material_set_param( m_hBufferMaterial, strName, pTex->get_rid() );
+			setRuntimeMaterialParam( strName, pTex );
 		} else {
 			setRuntimeMaterialParam( strName, Variant() );
-			RS->material_set_param( m_hBufferMaterial, strName, Variant() );
 		}
 	} else {
 		m_shaderParams[strName] = rProperty;
 		setRuntimeMaterialParam( strName, rProperty );
-		RS->material_set_param( m_hBufferMaterial, strName, rProperty );
 		if ( strName == StringName( "noise1_angle" ) ) {
 			const real_t fAngle = rProperty;
 			const Vector2 rotation( Math::cos( fAngle ), Math::sin( fAngle ) );
 			setRuntimeMaterialParam( "_noise1_rotation", rotation );
-			RS->material_set_param( m_hBufferMaterial, "_noise1_rotation", rotation );
 		}
 	}
 	return true;
 }
 
 // This is called continuously while the material is open in the inspector. Keep
-// it local: RenderingServer reflection and material reads belong to shader-change
+// it local: shader reflection belongs to shader-change
 // events, not idle editor frames.
 bool Terrain3DMaterial::_get( const StringName &strName, Variant &rProperty ) const {
 	IS_INIT_COND( !m_activeParams.has( strName ), Resource::_get( strName, rProperty ) );
@@ -5110,9 +4624,7 @@ void Terrain3DMaterial::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "update_editor_overlay" ), &Terrain3DMaterial::updateEditorOverlay );
 	ClassDB::bind_method( D_METHOD( "is_render_shader_ready" ), &Terrain3DMaterial::isRenderShaderReady );
 	ClassDB::bind_method( D_METHOD( "is_region_page_table_valid" ), &Terrain3DMaterial::isRegionPageTableValid );
-	ClassDB::bind_method( D_METHOD( "get_material_rid" ), &Terrain3DMaterial::getMaterialRid );
 	ClassDB::bind_method( D_METHOD( "get_shader_rid" ), &Terrain3DMaterial::getShaderRid );
-	ClassDB::bind_method( D_METHOD( "get_buffer_material_rid" ), &Terrain3DMaterial::getBufferMaterialRid );
 	ClassDB::bind_method( D_METHOD( "get_buffer_shader_rid" ), &Terrain3DMaterial::getBufferShaderRid );
 
 	ClassDB::bind_method( D_METHOD( "set_world_background", "background" ), &Terrain3DMaterial::setWorldBackground );

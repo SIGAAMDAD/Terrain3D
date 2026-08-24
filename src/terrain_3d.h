@@ -28,12 +28,10 @@
 #include <atomic>
 #include <godot_cpp/classes/array_occluder3d.hpp>
 #include <godot_cpp/classes/camera3d.hpp>
-#include <godot_cpp/classes/color_rect.hpp>
 #include <godot_cpp/classes/geometry_instance3d.hpp>
 #include <godot_cpp/classes/mesh.hpp>
 #include <godot_cpp/classes/mesh_instance3d.hpp>
 #include <godot_cpp/classes/object.hpp>
-#include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/resource.hpp>
 #include <godot_cpp/classes/sub_viewport.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
@@ -455,7 +453,7 @@ private:
 	int m_nMeshSize = 48;
 	real_t m_fVertexSpacing = 1.0f;
 	real_t m_fCullMargin = 0.0f;
-	RenderingServer::ShadowCastingSetting m_castShadows = RenderingServer::SHADOW_CASTING_SETTING_ON;
+	GeometryInstance3D::ShadowCastingSetting m_castShadows = GeometryInstance3D::SHADOW_CASTING_SETTING_ON;
 	int m_nShadowLodCount = 2;
 	int m_nNearShadowLodCount = -1;
 	int m_nMiddleShadowLodCount = -1;
@@ -473,8 +471,6 @@ private:
 	uint32_t m_nRenderLayers = 1u | ( 1u << 31u ); // Bit 1 and 32 for the cursor
 
 	// Displacement Buffer
-	SubViewport *m_pDBufferVp = nullptr;
-	ColorRect *m_pDBufferRect = nullptr;
 	Vector2 m_lastBufferPosition = s_v2Max;
 	std::atomic_bool m_bComputeDisplacementEnabled{ false };
 	std::atomic_bool m_bComputeDisplacementActive{ false };
@@ -496,7 +492,7 @@ private:
 	int m_nOceanMeshSize = 32;
 	real_t m_fOceanVertexSpacing = 4.0f;
 	real_t m_fOceanCullMargin = 20.0f;
-	RenderingServer::ShadowCastingSetting m_oceanCastShadows = RenderingServer::SHADOW_CASTING_SETTING_OFF;
+	GeometryInstance3D::ShadowCastingSetting m_oceanCastShadows = GeometryInstance3D::SHADOW_CASTING_SETTING_OFF;
 	GeometryInstance3D::GIMode m_oceanGiMode = GeometryInstance3D::GI_MODE_DISABLED;
 	uint32_t m_nOceanRenderLayers = 1u;
 	Ref<Material> m_oceanMaterial;
@@ -1435,8 +1431,8 @@ public:
 	EA_FORCE_INLINE real_t getCullMargin( void ) const {
 		return m_fCullMargin;
 	}
-	void setCastShadows( const RenderingServer::ShadowCastingSetting castShadows );
-	EA_FORCE_INLINE RenderingServer::ShadowCastingSetting getCastShadows( void ) const {
+	void setCastShadows( const GeometryInstance3D::ShadowCastingSetting castShadows );
+	EA_FORCE_INLINE GeometryInstance3D::ShadowCastingSetting getCastShadows( void ) const {
 		return m_castShadows;
 	}
 	void setShadowLodCount( const int nCount );
@@ -1533,8 +1529,8 @@ public:
 	EA_FORCE_INLINE real_t getOceanCullMargin( void ) const {
 		return m_fOceanCullMargin;
 	}
-	void setOceanCastShadows( const RenderingServer::ShadowCastingSetting castShadows );
-	EA_FORCE_INLINE RenderingServer::ShadowCastingSetting getOceanCastShadows( void ) const {
+	void setOceanCastShadows( const GeometryInstance3D::ShadowCastingSetting castShadows );
+	EA_FORCE_INLINE GeometryInstance3D::ShadowCastingSetting getOceanCastShadows( void ) const {
 		return m_oceanCastShadows;
 	}
 	void setOceanGiMode( const GeometryInstance3D::GIMode giMode );

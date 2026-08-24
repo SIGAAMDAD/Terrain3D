@@ -258,7 +258,7 @@ bool Terrain3DGeneratedTexture::update2d( const Ref<Image> &rImage ) {
 	if ( !m_hRid.is_valid() || m_bDirty || m_bLayered || m_nSize != 1 ) return false;
 	if ( !matchesLayout( rImage ) ) {
 		// A 2D generated texture has complete replacement data in this call, so a
-		// layout change can be reconstructed deterministically without an RS bridge.
+		// layout change can be reconstructed deterministically without a native texture bridge.
 		return create( rImage ).is_valid();
 	}
 	Terrain3DRdTextureManager *const pManager = t3dGeneratedTextureManager();

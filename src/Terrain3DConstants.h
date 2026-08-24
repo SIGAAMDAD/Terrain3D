@@ -18,8 +18,8 @@
 #include <cstdint>
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/image.hpp>
+#include <godot_cpp/classes/geometry_instance3d.hpp>
 #include <godot_cpp/classes/physics_server3d.hpp>
-#include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
@@ -38,7 +38,6 @@ using namespace godot;
 #define OCEAN_MATERIAL_PATH "res://addons/terrain_3d/extras/shaders/M_ocean.tres"
 
 // Engine Shortcuts
-#define RS RenderingServer::get_singleton()
 #define PS PhysicsServer3D::get_singleton()
 #define IS_EDITOR Engine::get_singleton()->is_editor_hint()
 
@@ -126,10 +125,10 @@ static constexpr const char *s_pszShaderStaticMacroNames[] = {
 	"T3D_COLOR_MAPS_IMPLICIT",
 	"T3D_AUTO_SHADER_ENABLED",
 };
-static constexpr RenderingServer::ShadowCastingSetting s_shadowCastingOn = RenderingServer::SHADOW_CASTING_SETTING_ON;
-static constexpr RenderingServer::ShadowCastingSetting s_shadowCastingOff = RenderingServer::SHADOW_CASTING_SETTING_OFF;
-static constexpr RenderingServer::ShadowCastingSetting s_shadowCastingOnly =
-		RenderingServer::SHADOW_CASTING_SETTING_SHADOWS_ONLY;
+static constexpr GeometryInstance3D::ShadowCastingSetting s_shadowCastingOn = GeometryInstance3D::SHADOW_CASTING_SETTING_ON;
+static constexpr GeometryInstance3D::ShadowCastingSetting s_shadowCastingOff = GeometryInstance3D::SHADOW_CASTING_SETTING_OFF;
+static constexpr GeometryInstance3D::ShadowCastingSetting s_shadowCastingOnly =
+		GeometryInstance3D::SHADOW_CASTING_SETTING_SHADOWS_ONLY;
 static constexpr int s_nMaxTextureAssets = 32;
 static constexpr int s_nMaxMeshAssets = 256;
 static constexpr real_t s_fDataCurrentVersion = 0.94f;

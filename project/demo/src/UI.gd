@@ -5,9 +5,6 @@ var player: Node
 var visible_mode: int = 1
 
 
-func _init() -> void:
-	RenderingServer.set_debug_generate_wireframes(true)
-
 
 func _process(_p_delta: float) -> void:
 	$Label.text = "FPS: %d\n" % Engine.get_frames_per_second()

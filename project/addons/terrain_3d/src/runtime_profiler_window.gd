@@ -349,7 +349,7 @@ func _update_cpu_profile_product(p_cpu: Terrain3DRuntimeValueMap) -> void:
 	var rows: Array[Array] = [
 		["GPU page cache service", "gpu_page_cache_service_cpu_usec", "Terrain3D CPU residency/service time"],
 		["GPU page preparation workers", "gpu_page_preparation_worker_cpu_usec", "Worker CPU duration, not GPU execution"],
-		["RenderingServer publication CPU", "rendering_server_publication_cpu_usec", "CPU time spent publishing through RenderingServer"],
+		["RD publication CPU", "rendering_server_publication_cpu_usec", "CPU time spent preparing/publishing RenderingDevice work"],
 		["CPU cache service", "cpu_cache_service_cpu_usec", "Terrain3D CPU cache service"],
 		["Instance cache service", "instance_cache_service_cpu_usec", "Terrain3D instance-page service"],
 		["Instance streaming / LOD", "instance_streaming_cpu_usec", "Instancer CPU work"],
@@ -423,7 +423,7 @@ func _update_rd_renderer_product() -> void:
 		["Index formats", "%d / %d bit" % [int(diagnostics.get("lod0_index_bits", 0)), int(diagnostics.get("outer_index_bits", 0))], "LOD0 / outer-ring index width selected at upload"],
 		["Live RD buffers", _format_bytes(float(diagnostics.get("live_buffer_bytes", 0))), "Terrain3D-owned RenderingDevice buffer memory"],
 		["Peak RD buffers", _format_bytes(float(diagnostics.get("peak_buffer_bytes", 0))), "High-water Terrain3D-owned RD buffer memory"],
-		["Live RD textures", _format_bytes(float(diagnostics.get("live_texture_bytes", 0))), "Terrain3D-owned RD texture memory; borrowed RenderingServer textures excluded"],
+		["Live RD textures", _format_bytes(float(diagnostics.get("live_texture_bytes", 0))), "Terrain3D-owned RD texture memory; borrowed native renderer textures excluded"],
 		["Buffer updates", str(int(diagnostics.get("buffer_updates", 0))), "Explicit RD buffer update calls"],
 		["Bytes uploaded", _format_bytes(float(diagnostics.get("bytes_uploaded", 0))), "Total explicit RD buffer upload traffic"],
 		["Consecutive failures", str(int(diagnostics.get("consecutive_render_failures", 0))), "RD failures since the most recent successful render"],
@@ -882,7 +882,7 @@ func _initialize_metric_rows() -> void:
 		PackedStringArray(["gpu_prepare_materialize_usec", "Image materialization (total)"]),
 		PackedStringArray(["gpu_prepare_worker_usec", "Worker duration (max)"]),
 		PackedStringArray(["gpu_prepare_ready_wait_usec", "Ready queue wait"]),
-		PackedStringArray(["gpu_prepare_publication_usec", "RenderingServer publication CPU"]),
+		PackedStringArray(["gpu_prepare_publication_usec", "RD publication CPU"]),
 		PackedStringArray(["gpu_prepare_end_to_end_usec", "Request to publication"]),
 	]
 	for entry: PackedStringArray in pipeline_entries:
@@ -1020,7 +1020,7 @@ func _update_efficiency(p_snapshot: Terrain3DRuntimeValueMap) -> void:
 	_add_efficiency_row(root, "Instance resident memory",
 		_format_bytes(managed_memory.float_value("instance_region_page_bytes") +
 			fixed_memory.float_value("active_multimesh_bytes") + fixed_memory.float_value("instancer_retained_bytes")),
-		"instance pages + active MultiMesh + retained instancer containers")
+		"instance pages + active RD instance data + retained instancer containers")
 
 
 func _add_efficiency_row(p_root: TreeItem, p_metric: String, p_value: String, p_context: String) -> void:

@@ -7,7 +7,6 @@
 
 #include <godot_cpp/classes/rd_texture_format.hpp>
 #include <godot_cpp/classes/rd_texture_view.hpp>
-#include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/core/memory.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 
@@ -21,10 +20,12 @@ void Terrain3DRdTextureManager::initializeSingleton( void ) {
 void Terrain3DRdTextureManager::shutdownSingleton( void ) {
 	Terrain3DRdTextureManager *const pManager = s_pSingleton;
 	if ( !pManager ) return;
-	RenderingServer *const pServer = RenderingServer::get_singleton();
-	if ( pServer && !pServer->is_on_render_thread() ) {
-		pServer->call_on_render_thread( callable_mp( pManager, &Terrain3DRdTextureManager::renderShutdown ) );
-		pServer->force_sync();
+	if ( !Terrain3DRdContext::isOnRenderThread() ) {
+		if ( Terrain3DRdContext::enqueueOnRenderThread( callable_mp( pManager, &Terrain3DRdTextureManager::renderShutdown ) ) ) {
+			Terrain3DRdContext::forceSync();
+		} else {
+			pManager->renderShutdown();
+		}
 	} else {
 		pManager->renderShutdown();
 	}
@@ -194,8 +195,7 @@ RID Terrain3DRdTextureManager::createTexture( const t3dRdTextureLayout_t &rLayou
 		const String &rName,
 		const int nMemoryCategory ) {
 	if ( !rLayout.valid() || rInitialData.size() != ( int64_t )( rLayout.m_nLayers ) ) return RID();
-	RenderingServer *const pServer = RenderingServer::get_singleton();
-	if ( !pServer ) return RID();
+	if ( !Terrain3DRdContext::getGlobalDevice() ) return RID();
 	Ref<RDTextureFormat> pFormat;
 	pFormat.instantiate();
 	pFormat->set_width( rLayout.m_nWidth );
@@ -213,13 +213,13 @@ RID Terrain3DRdTextureManager::createTexture( const t3dRdTextureLayout_t &rLayou
 		m_hCreateResult = RID();
 		m_bCreateSucceeded = false;
 	}
-	if ( pServer->is_on_render_thread() ) {
+	if ( Terrain3DRdContext::isOnRenderThread() ) {
 		renderCreateTexture( pFormat, rInitialData, rName, rLayout.m_nBytes, nMemoryCategory );
 	} else {
-		pServer->call_on_render_thread( callable_mp( this, &Terrain3DRdTextureManager::renderCreateTexture )
-								 .bind( pFormat, rInitialData, rName, rLayout.m_nBytes, nMemoryCategory ) );
+		if ( !Terrain3DRdContext::enqueueOnRenderThread( callable_mp( this, &Terrain3DRdTextureManager::renderCreateTexture )
+								 .bind( pFormat, rInitialData, rName, rLayout.m_nBytes, nMemoryCategory ) ) ) return RID();
 		// Creation/recreation is a cold path and requires the RID before publication.
-		pServer->force_sync();
+		Terrain3DRdContext::forceSync();
 	}
 	std::lock_guard<std::mutex> resultLock( m_resultMutex );
 	return m_bCreateSucceeded ? m_hCreateResult : RID();
@@ -229,15 +229,12 @@ bool Terrain3DRdTextureManager::updateTexture( const RID hTexture,
 		const uint32_t nLayer,
 		const PackedByteArray &rData ) {
 	if ( !hTexture.is_valid() || rData.is_empty() ) return false;
-	RenderingServer *const pServer = RenderingServer::get_singleton();
-	if ( !pServer ) return false;
-	if ( pServer->is_on_render_thread() ) {
+	if ( Terrain3DRdContext::isOnRenderThread() ) {
 		renderUpdateTexture( hTexture, nLayer, rData );
-	} else {
-		pServer->call_on_render_thread(
-				callable_mp( this, &Terrain3DRdTextureManager::renderUpdateTexture ).bind( hTexture, nLayer, rData ) );
+		return true;
 	}
-	return true;
+	return Terrain3DRdContext::enqueueOnRenderThread(
+			callable_mp( this, &Terrain3DRdTextureManager::renderUpdateTexture ).bind( hTexture, nLayer, rData ) );
 }
 
 bool Terrain3DRdTextureManager::updateTextureRegion( const RID hTexture,
@@ -248,37 +245,30 @@ bool Terrain3DRdTextureManager::updateTextureRegion( const RID hTexture,
 		const uint32_t nHeight,
 		const PackedByteArray &rData ) {
 	if ( !hTexture.is_valid() || !hStaging.is_valid() || nWidth == 0u || nHeight == 0u || rData.is_empty() ) return false;
-	RenderingServer *const pServer = RenderingServer::get_singleton();
-	if ( !pServer ) return false;
-	if ( pServer->is_on_render_thread() ) {
+	if ( Terrain3DRdContext::isOnRenderThread() ) {
 		renderUpdateTextureRegion( hTexture, hStaging, nDestinationX, nDestinationY, nWidth, nHeight, rData );
-	} else {
-		pServer->call_on_render_thread( callable_mp( this, &Terrain3DRdTextureManager::renderUpdateTextureRegion )
-								 .bind( hTexture, hStaging, nDestinationX, nDestinationY, nWidth, nHeight, rData ) );
+		return true;
 	}
-	return true;
+	return Terrain3DRdContext::enqueueOnRenderThread( callable_mp( this, &Terrain3DRdTextureManager::renderUpdateTextureRegion )
+								 .bind( hTexture, hStaging, nDestinationX, nDestinationY, nWidth, nHeight, rData ) );
 }
 
 void Terrain3DRdTextureManager::freeTexture( const RID hTexture, const uint64_t nBytes ) {
 	if ( !hTexture.is_valid() ) return;
-	RenderingServer *const pServer = RenderingServer::get_singleton();
-	if ( !pServer ) return;
-	if ( pServer->is_on_render_thread() ) {
+	if ( Terrain3DRdContext::isOnRenderThread() ) {
 		renderFreeTexture( hTexture, nBytes );
 	} else {
-		pServer->call_on_render_thread(
+		Terrain3DRdContext::enqueueOnRenderThread(
 				callable_mp( this, &Terrain3DRdTextureManager::renderFreeTexture ).bind( hTexture, nBytes ) );
 	}
 }
 
 void Terrain3DRdTextureManager::freeResource( const RID hRid, const uint64_t nBytes ) {
 	if ( !hRid.is_valid() ) return;
-	RenderingServer *const pServer = RenderingServer::get_singleton();
-	if ( !pServer ) return;
-	if ( pServer->is_on_render_thread() ) {
+	if ( Terrain3DRdContext::isOnRenderThread() ) {
 		renderFreeResource( hRid, nBytes );
 	} else {
-		pServer->call_on_render_thread(
+		Terrain3DRdContext::enqueueOnRenderThread(
 				callable_mp( this, &Terrain3DRdTextureManager::renderFreeResource ).bind( hRid, nBytes ) );
 	}
 }

@@ -22,6 +22,8 @@ private:
 	Ref<RDShaderSPIRV> m_cull;
 	Ref<RDShaderSPIRV> m_instances;
 	Ref<RDShaderSPIRV> m_hlodCull;
+	Ref<RDShaderSPIRV> m_oceanColor;
+	Ref<RDShaderSPIRV> m_oceanShadow;
 	t3dRdForwardShaderBundle_t m_forward;
 	String m_lastError;
 
@@ -32,7 +34,7 @@ public:
 	void clear( void );
 
 	EA_FORCE_INLINE bool isReady( void ) const {
-		return m_near.is_valid() && m_middle.is_valid() && m_far.is_valid() && m_cull.is_valid() && m_instances.is_valid() && m_hlodCull.is_valid();
+		return m_near.is_valid() && m_middle.is_valid() && m_far.is_valid() && m_cull.is_valid() && m_instances.is_valid() && m_hlodCull.is_valid() && m_oceanColor.is_valid() && m_oceanShadow.is_valid();
 	}
 	EA_FORCE_INLINE Ref<RDShaderSPIRV> getNear( void ) const { return m_near; }
 	EA_FORCE_INLINE Ref<RDShaderSPIRV> getMiddle( void ) const { return m_middle; }
@@ -40,6 +42,8 @@ public:
 	EA_FORCE_INLINE Ref<RDShaderSPIRV> getCull( void ) const { return m_cull; }
 	EA_FORCE_INLINE Ref<RDShaderSPIRV> getInstances( void ) const { return m_instances; }
 	EA_FORCE_INLINE Ref<RDShaderSPIRV> getHlodCull( void ) const { return m_hlodCull; }
+	EA_FORCE_INLINE Ref<RDShaderSPIRV> getOceanColor( void ) const { return m_oceanColor; }
+	EA_FORCE_INLINE Ref<RDShaderSPIRV> getOceanShadow( void ) const { return m_oceanShadow; }
 	EA_FORCE_INLINE Ref<RDShaderSPIRV> getTerrainForward( const uint32_t nTier, const t3dRdForwardShaderVariant_t variant ) const {
 		return nTier < 3u && variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX ? m_forward.m_szTerrain[nTier][variant] : Ref<RDShaderSPIRV>();
 	}

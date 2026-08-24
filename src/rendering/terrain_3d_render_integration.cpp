@@ -1,4 +1,5 @@
 #include "rendering/rd/terrain_3d_render_coordinator.h"
+#include "rendering/rd/terrain_3d_rd_context.h"
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "Terrain3DConstants.h"
@@ -99,25 +100,14 @@ void Terrain3D::destroyCollision( const bool bFinal ) {
 
 void Terrain3D::setupTerrainMesher( void ) {
 	if ( !m_pTerrainMesher ) {
-		LOG( DEBUG, "Creating mesher" );
+		LOG( DEBUG, "Creating CPU clipmap topology producer" );
 		m_pTerrainMesher = memnew( Terrain3DMesher );
 	}
-	const eastl::array<RID, 3> materials = {
-		m_material->getMaterialRidForTier( SHADER_TIER_NEAR ),
-		m_material->getMaterialRidForTier( SHADER_TIER_MIDDLE ),
-		m_material->getMaterialRidForTier( SHADER_TIER_FAR ),
-	};
-	const eastl::array<RID, 3> shadow_materials = {
-		m_material->getShadowMaterialRidForTier( SHADER_TIER_NEAR ),
-		m_material->getShadowMaterialRidForTier( SHADER_TIER_MIDDLE ),
-		m_material->getShadowMaterialRidForTier( SHADER_TIER_FAR ),
-	};
 	const bool bTieringActive = isRuntimeShaderTieringActive();
 	const int clipmap_levels = CLAMP( m_nMeshLods + m_nTessellationLevel, 1, s_nMaxClipmapLevels );
 	const int near_lods = bTieringActive ? m_nRuntimeNearShaderLods : clipmap_levels;
 	const int middle_lods = bTieringActive ? m_nRuntimeMiddleShaderLods : 0;
 	const int update_budget = bTieringActive ? m_nRuntimeClipmapUpdateBudget : s_nMaxClipmapLevels;
-	const bool bStateMeshBatching = m_material.is_valid() && !m_material->isShaderOverrideEnabled();
 	const eastl::array<bool, 3> tier_shadow_enabled = {
 		m_bNearShadowEnabled, m_bMiddleShadowEnabled, m_bFarShadowEnabled
 	};
@@ -129,18 +119,13 @@ void Terrain3D::setupTerrainMesher( void ) {
 			m_nMeshLods,
 			m_nTessellationLevel,
 			m_fVertexSpacing,
-			materials,
-			shadow_materials,
 			near_lods,
 			middle_lods,
 			update_budget,
-			m_nRenderLayers,
 			m_castShadows,
-			m_giMode,
 			m_nShadowLodCount,
 			tier_shadow_enabled,
 			tier_shadow_lod_counts,
-			bStateMeshBatching,
 			isGpuRegionCookedPagesEnabled() && !isEditorAuthoringModeInternal() );
 	if ( m_pRenderCoordinator && m_bInitialized ) {
 		m_pRenderCoordinator->initialize( this );
@@ -165,45 +150,28 @@ void Terrain3D::destroyTerrainMesher( const bool bFinal ) {
 }
 
 void Terrain3D::setupOceanMesher( void ) {
-	if ( m_bOceanEnabled ) {
-		m_bLightStateValid = false;
-		// settings can be deserialized before the default material is loaded. Build
-		// the requested compile-time variant before the mesher captures its RID.
-		updateOceanShaderVariant();
-		if ( !m_pOceanMesher ) {
-			LOG( DEBUG, "Creating mesher" );
-			m_pOceanMesher = memnew( Terrain3DMesher );
-		}
-		const RID ocean_rid = m_oceanMaterial.is_valid() ? m_oceanMaterial->get_rid() : RID();
-		const eastl::array<RID, 3> ocean_materials = { ocean_rid, ocean_rid, ocean_rid };
-		m_pOceanMesher->initialize( this,
-				m_nOceanMeshSize,
-				m_nOceanMeshLods,
-				m_nOceanTessellationLevel,
-				m_fOceanVertexSpacing,
-				ocean_materials,
-				ocean_materials,
-				m_nOceanMeshLods + m_nOceanTessellationLevel,
-				0,
-				s_nMaxClipmapLevels,
-				m_nOceanRenderLayers,
-				m_oceanCastShadows,
-				m_oceanGiMode,
-				m_nOceanMeshLods + m_nOceanTessellationLevel,
-				{ true, true, true },
-				{ -1, -1, -1 },
-				false );
-		m_pOceanMesher->updateAabbs( m_fOceanCullMargin, s_v2Zero );
-		if ( m_oceanMaterial.is_valid() ) {
-			ShaderMaterial *const pOceanShaderMat = Object::cast_to<ShaderMaterial>( m_oceanMaterial.ptr() );
-			if ( pOceanShaderMat ) {
-				pOceanShaderMat->set_shader_parameter( "_mesh_size", m_nOceanMeshSize );
-				pOceanShaderMat->set_shader_parameter( "_vertex_spacing", m_fOceanVertexSpacing );
-				pOceanShaderMat->set_shader_parameter( "_vertex_density", 1.0f / m_fOceanVertexSpacing );
-				pOceanShaderMat->set_shader_parameter( "_subdiv", pow( 2.f, ( real_t )( m_nOceanTessellationLevel ) ) );
-			}
-		}
+	if ( !m_bOceanEnabled ) return;
+	m_bLightStateValid = false;
+	updateOceanShaderVariant();
+	if ( !m_pOceanMesher ) {
+		LOG( DEBUG, "Creating CPU ocean clipmap topology producer" );
+		m_pOceanMesher = memnew( Terrain3DMesher );
 	}
+	m_pOceanMesher->initialize( this,
+			m_nOceanMeshSize,
+			m_nOceanMeshLods,
+			m_nOceanTessellationLevel,
+			m_fOceanVertexSpacing,
+			m_nOceanMeshLods + m_nOceanTessellationLevel,
+			0,
+			s_nMaxClipmapLevels,
+			m_oceanCastShadows,
+			m_nOceanMeshLods + m_nOceanTessellationLevel,
+			{ true, true, true },
+			{ -1, -1, -1 },
+			false );
+	m_pOceanMesher->updateAabbs( m_fOceanCullMargin, s_v2Zero );
+	if ( m_pRenderCoordinator && m_bInitialized ) m_pRenderCoordinator->initializeOcean();
 }
 
 void Terrain3D::destroyOceanMesher( const bool bFinal ) {
@@ -220,57 +188,27 @@ void Terrain3D::destroyOceanMesher( const bool bFinal ) {
 }
 
 void Terrain3D::setupDisplacementBuffer( void ) {
-	if ( !is_inside_tree() ) {
-		LOG( ERROR, "Not inside the tree, skipping displacement buffer setup" );
-		return;
-	}
 	destroyDisplacementBuffer();
-	LOG( INFO, "Setting up displacement buffer" );
-	m_pDBufferVp = memnew( SubViewport );
-	m_pDBufferVp->set_name( "DBufferViewport" );
-	add_child( m_pDBufferVp, true );
-	m_pDBufferVp->set_size( Vector2i( 2, 2 ) );
-	m_pDBufferVp->set_disable_3d( true );
-	m_pDBufferVp->set_use_hdr_2d( true );
-	m_pDBufferVp->set_update_mode( SubViewport::UPDATE_ONCE );
-	m_pDBufferVp->set_disable_input( true );
-	m_pDBufferVp->set_default_canvas_item_texture_filter( Viewport::DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST );
-
-	m_pDBufferRect = memnew( ColorRect );
-	m_pDBufferRect->set_name( "DBufferRect" );
-	m_pDBufferVp->add_child( m_pDBufferRect, true );
-	m_pDBufferRect->set_anchors_preset( Control::PRESET_FULL_RECT );
+	if ( m_nTessellationLevel > 0 ) {
+		LOG( INFO, "Initializing direct RenderingDevice displacement path" );
+		tryUpdateComputeDisplacement( getClipmapTargetPosition() );
+	}
 }
 
 void Terrain3D::updateDisplacementBuffer( void ) {
-	if ( !m_pDBufferVp ) {
-		return;
-	}
 	if ( m_nTessellationLevel == 0 ) {
 		invalidateComputeDisplacementRequest();
-		m_pDBufferVp->set_size( s_v2iZero );
-		m_pDBufferRect->set_size( s_v2iZero );
-	} else {
-		m_pDBufferVp->set_size( Vector2i( m_nMeshSize * 4 * m_nTessellationLevel, m_nMeshSize * 4 ) );
-		m_pDBufferRect->set_size( Vector2i( m_nMeshSize * 4 * m_nTessellationLevel, m_nMeshSize * 4 ) );
-		LOG( INFO, "Updating displacement buffer to Size: ", m_pDBufferVp->get_size() );
-		if ( m_material.is_valid() && m_material->getMaterialRid().is_valid() ) {
-			// Keep a valid raster fallback bound until the asynchronous render-thread
-			// compute dispatch publishes its renderer-owned storage texture.
-			RS->canvas_item_set_material( m_pDBufferRect->get_canvas_item(), m_material->getBufferMaterialRid() );
-			RS->material_set_param(
-					m_material->getMaterialRid(), "_displacement_buffer", m_pDBufferVp->get_texture()->get_rid() );
-			tryUpdateComputeDisplacement( getClipmapTargetPosition() );
-		}
+		return;
 	}
+	LOG( INFO, "Updating direct RenderingDevice displacement buffer" );
+	tryUpdateComputeDisplacement( getClipmapTargetPosition() );
 }
 
 bool Terrain3D::tryUpdateComputeDisplacement( const Vector3 &rTargetPosition ) {
 	m_bComputeDisplacementActive.store( false, std::memory_order_release );
 	if ( !m_bComputeDisplacementEnabled.load( std::memory_order_acquire ) ||
 			m_bComputeDisplacementFailed.load( std::memory_order_acquire ) ||
-			m_bComputeDisplacementTearingDown.load( std::memory_order_acquire ) || !m_pData || m_material.is_null() ||
-			!m_material->getMaterialRid().is_valid() ) {
+			m_bComputeDisplacementTearingDown.load( std::memory_order_acquire ) || !m_pData || m_material.is_null() ) {
 		return false;
 	}
 	Terrain3DCompute *const pCompute = m_pData->getComputeBackend();
@@ -310,17 +248,12 @@ void Terrain3D::queueComputeDisplacementRender( void ) {
 				 bExpected, true, std::memory_order_acq_rel, std::memory_order_acquire ) ) {
 		return;
 	}
-	RenderingServer *const pServer = RenderingServer::get_singleton();
-	if ( !pServer ) {
+	if ( Terrain3DRdContext::isOnRenderThread() ) {
+		renderUpdateComputeDisplacement();
+	} else if ( !Terrain3DRdContext::enqueueOnRenderThread( callable_mp( this, &Terrain3D::renderUpdateComputeDisplacement ) ) ) {
 		m_bComputeDisplacementDispatchPending.store( false, std::memory_order_release );
 		m_bComputeDisplacementFailed.store( true, std::memory_order_release );
 		m_bComputeDisplacementFallbackRequested.store( true, std::memory_order_release );
-		return;
-	}
-	if ( pServer->is_on_render_thread() ) {
-		renderUpdateComputeDisplacement();
-	} else {
-		pServer->call_on_render_thread( callable_mp( this, &Terrain3D::renderUpdateComputeDisplacement ) );
 	}
 }
 
@@ -421,15 +354,13 @@ void Terrain3D::destroyLabels( void ) {
 void Terrain3D::destroyDisplacementBuffer( void ) {
 	LOG( INFO, "[compute] Draining displacement work and releasing buffer resources" );
 	m_bComputeDisplacementTearingDown.store( true, std::memory_order_release );
-	RenderingServer *const pServer = RenderingServer::get_singleton();
-	if ( pServer && m_pData && m_pData->getComputeBackendIfCreated() ) {
-		if ( pServer->is_on_render_thread() ) {
+	if ( m_pData && m_pData->getComputeBackendIfCreated() ) {
+		if ( Terrain3DRdContext::isOnRenderThread() ) {
 			renderShutdownComputeDisplacement();
-		} else {
-			pServer->call_on_render_thread( callable_mp( this, &Terrain3D::renderShutdownComputeDisplacement ) );
+		} else if ( Terrain3DRdContext::enqueueOnRenderThread( callable_mp( this, &Terrain3D::renderShutdownComputeDisplacement ) ) ) {
 			// Lifecycle-only synchronization: all queued displacement work and its
 			// renderer-owned resources must be gone before the compute backend or node dies.
-			pServer->force_sync();
+			Terrain3DRdContext::forceSync();
 		}
 	}
 	m_bComputeDisplacementDispatchPending.store( false, std::memory_order_release );
@@ -443,16 +374,6 @@ void Terrain3D::destroyDisplacementBuffer( void ) {
 		++m_nComputeDisplacementRequestVersion;
 	}
 	m_bComputeDisplacementTearingDown.store( false, std::memory_order_release );
-	LOG( DEBUG, "Freeing d_buffer_rect" );
-	if ( m_pDBufferRect ) {
-		memdelete( m_pDBufferRect );
-		m_pDBufferRect = nullptr;
-	}
-	LOG( DEBUG, "Freeing d_buffer_vp" );
-	if ( m_pDBufferVp ) {
-		memdelete( m_pDBufferVp );
-		m_pDBufferVp = nullptr;
-	}
 }
 
 void Terrain3D::setupMousePicking( void ) {
@@ -1030,7 +951,7 @@ void Terrain3D::setCullMargin( const real_t fMargin ) {
 	}
 }
 
-void Terrain3D::setCastShadows( const RenderingServer::ShadowCastingSetting castShadows ) {
+void Terrain3D::setCastShadows( const GeometryInstance3D::ShadowCastingSetting castShadows ) {
 	SET_IF_DIFF( m_castShadows, castShadows );
 	if ( m_pTerrainMesher ) {
 		m_pTerrainMesher->setCastShadows( m_castShadows );
@@ -1096,17 +1017,11 @@ void Terrain3D::setFarShadowLodCount( const int nCount ) {
 void Terrain3D::setGiMode( const GeometryInstance3D::GIMode giMode ) {
 	SET_IF_DIFF( m_giMode, giMode );
 	refreshPerformanceProfileConformity();
-	if ( m_pTerrainMesher ) {
-		m_pTerrainMesher->setGiMode( m_giMode );
-	}
 }
 
 void Terrain3D::setRenderLayers( const uint32_t nLayers ) {
 	SET_IF_DIFF( m_nRenderLayers, nLayers );
 	LOG( INFO, "Setting terrain render layers to: ", nLayers );
-	if ( m_pTerrainMesher ) {
-		m_pTerrainMesher->setRenderLayers( m_nRenderLayers );
-	}
 }
 
 void Terrain3D::updateOceanShaderVariant( void ) {
@@ -1289,7 +1204,7 @@ void Terrain3D::setOceanCullMargin( const real_t fMargin ) {
 	}
 }
 
-void Terrain3D::setOceanCastShadows( const RenderingServer::ShadowCastingSetting castShadows ) {
+void Terrain3D::setOceanCastShadows( const GeometryInstance3D::ShadowCastingSetting castShadows ) {
 	SET_IF_DIFF( m_oceanCastShadows, castShadows );
 	if ( m_pOceanMesher ) {
 		m_pOceanMesher->setCastShadows( m_oceanCastShadows );
@@ -1298,17 +1213,11 @@ void Terrain3D::setOceanCastShadows( const RenderingServer::ShadowCastingSetting
 
 void Terrain3D::setOceanGiMode( const GeometryInstance3D::GIMode giMode ) {
 	SET_IF_DIFF( m_oceanGiMode, giMode );
-	if ( m_pOceanMesher ) {
-		m_pOceanMesher->setGiMode( m_oceanGiMode );
-	}
 }
 
 void Terrain3D::setOceanRenderLayers( const uint32_t nLayers ) {
 	SET_IF_DIFF( m_nOceanRenderLayers, nLayers );
 	LOG( INFO, "Setting ocean render layers to: ", nLayers );
-	if ( m_pOceanMesher ) {
-		m_pOceanMesher->setRenderLayers( m_nOceanRenderLayers );
-	}
 }
 
 void Terrain3D::setOceanMaterial( const Ref<Material> &rMaterial ) {

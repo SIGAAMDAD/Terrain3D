@@ -178,6 +178,7 @@
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_forward_shader_bundle.h" />
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_instance_renderer.h" />
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_mesh_cache.h" />
+    <ClInclude Include="src\rendering\rd\terrain_3d_rd_ocean_renderer.h" />
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_shader_library.h" />
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_texture_manager.h" />
     <ClInclude Include="src\rendering\rd\terrain_3d_rd_topology.h" />
@@ -267,6 +268,7 @@
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_forward_plus_bridge.cpp" />
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_instance_renderer.cpp" />
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_mesh_cache.cpp" />
+    <ClCompile Include="src\rendering\rd\terrain_3d_rd_ocean_renderer.cpp" />
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_shader_library.cpp" />
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_texture_manager.cpp" />
     <ClCompile Include="src\rendering\rd\terrain_3d_rd_topology.cpp" />
@@ -311,6 +313,7 @@
     <None Include="docs\rd_batch_f7_multiview_lifecycle.md" />
     <None Include="docs\rd_batch_f8_consolidation.md" />
     <None Include="docs\rd_batch_g_editor_integration.md" />
+    <None Include="docs\rd_batch_h_final_validation.md" />
     <None Include="docs\rd_codex_handoff.md" />
     <None Include="docs\rd_reference\dependency_audit.md" />
     <None Include="docs\rd_reference\public_api_delta_baseline_to_alpha.md" />

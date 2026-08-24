@@ -8,6 +8,7 @@
 #include "assets/generated_texture.h"
 #include "rendering/rd/terrain_3d_rd_clipmap_renderer.h"
 #include "rendering/rd/terrain_3d_rd_instance_renderer.h"
+#include "rendering/rd/terrain_3d_rd_ocean_renderer.h"
 #include "rendering/rd/terrain_3d_rd_compositor_effect.h"
 #include "rendering/rd/terrain_3d_rd_shader_library.h"
 #include "rendering/rd/terrain_3d_rd_types.h"
@@ -63,6 +64,7 @@ private:
 		t3dRdPublishedResources_t m_resources;
 		std::shared_ptr<const t3dRdMeshSourceSnapshot_t> m_instanceMeshes;
 		std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> m_instanceScene;
+		std::shared_ptr<const t3dRdOceanTopologySnapshot_t> m_oceanTopology;
 	} t3dRdFrameSnapshotSlot_t;
 
 	std::array<t3dRdFrameSnapshotSlot_t, s_nRdFrameSnapshotSlotCount> m_snapshotSlots{};
@@ -113,6 +115,7 @@ private:
 	Terrain3DRdShaderLibrary m_shaderLibrary;
 	Terrain3DRdClipmapRenderer m_renderer;
 	Terrain3DRdInstanceRenderer m_instanceRenderer;
+	Terrain3DRdOceanRenderer m_oceanRenderer;
 	Terrain3DRdInstanceRenderer m_previewRenderer;
 	bool m_bPreviewRendererInitialized = false;
 	std::shared_ptr<const t3dRdMeshSourceSnapshot_t> m_cachedPreviewMeshes;
@@ -125,6 +128,8 @@ private:
 	Vector2i m_pendingPreviewSize;
 	Ref<Image> m_pendingPreviewImage;
 	String m_pendingPreviewError;
+	std::shared_ptr<const t3dRdOceanTopologySnapshot_t> m_cachedOceanTopology;
+	uint64_t m_nOceanTopologyGeneration = 0u;
 	std::shared_ptr<const t3dRdMeshSourceSnapshot_t> m_cachedInstanceMeshes;
 	std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> m_cachedRegularInstanceScene;
 	std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> m_cachedHlodInstanceScene;
@@ -148,6 +153,7 @@ private:
 	std::atomic_uint64_t m_nOpaquePassCallbacks{ 0u };
 	std::atomic_uint64_t m_nShadowPassCallbacks{ 0u };
 	std::atomic_uint64_t m_nMotionPassCallbacks{ 0u };
+	std::atomic_uint64_t m_nTransparentPassCallbacks{ 0u };
 	std::atomic_uint64_t m_nLastForwardScenePass{ 0u };
 	std::atomic_int64_t m_nLastForwardDrawList{ -1 };
 	std::atomic_uint32_t m_nLastForwardPassKind{ T3D_RD_FORWARD_PASS_INVALID };
@@ -173,6 +179,7 @@ private:
 	uint64_t m_nForwardViewportReconfigurations = 0u;
 	uint64_t m_nForwardViewportEvictions = 0u;
 	bool m_bForwardPreparedHasTerrain = false;
+	bool m_bForwardPreparedHasOcean = false;
 	std::atomic_uint32_t m_nConsecutiveRenderFailures{ 0u };
 	mutable std::mutex m_diagnosticsMutex;
 	String m_initializationError;
@@ -188,7 +195,6 @@ private:
 	const t3dRdFrameSnapshotSlot_t *acquireSnapshotOnRenderThread( void );
 	void resetSnapshotPublication( void );
 	void recordStaleSnapshot( uint64_t nToken );
-	void enforceRdPresentation( void );
 	void attachEffectToActiveCamera( void );
 	void detachEffect( void );
 	bool initializeRendererOnRenderThread( void );
@@ -204,6 +210,7 @@ public:
 	~Terrain3DRenderCoordinator( void );
 
 	void initialize( Terrain3D *pTerrain );
+	void initializeOcean( void );
 	void shutdown( void );
 	void update( void );
 	void render( RenderData *pRenderData );

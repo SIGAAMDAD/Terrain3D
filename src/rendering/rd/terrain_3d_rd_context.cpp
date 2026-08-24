@@ -55,11 +55,34 @@ static_assert( sizeof( s_state_names ) / sizeof( s_state_names[0] ) == Terrain3D
 static_assert( sizeof( s_failure_names ) / sizeof( s_failure_names[0] ) == Terrain3DRdContext::FAILURE_RENDER_PASS + 1u );
 static_assert( sizeof( s_pass_names ) / sizeof( s_pass_names[0] ) == Terrain3DRdContext::PASS_COUNT );
 
-RenderingDevice *get_global_rendering_device( void ) {
-	RenderingServer *const server = RenderingServer::get_singleton();
-	return server ? server->get_rendering_device() : nullptr;
-}
 } // namespace
+
+RenderingDevice *Terrain3DRdContext::getGlobalDevice( void ) {
+	RenderingServer *const pServer = RenderingServer::get_singleton();
+	return pServer ? pServer->get_rendering_device() : nullptr;
+}
+
+RenderingDevice *Terrain3DRdContext::createLocalDevice( void ) {
+	RenderingServer *const pServer = RenderingServer::get_singleton();
+	return pServer ? pServer->create_local_rendering_device() : nullptr;
+}
+
+bool Terrain3DRdContext::isOnRenderThread( void ) {
+	RenderingServer *const pServer = RenderingServer::get_singleton();
+	return pServer && pServer->is_on_render_thread();
+}
+
+bool Terrain3DRdContext::enqueueOnRenderThread( const Callable &rCallable ) {
+	RenderingServer *const pServer = RenderingServer::get_singleton();
+	if ( !pServer || !rCallable.is_valid() ) return false;
+	pServer->call_on_render_thread( rCallable );
+	return true;
+}
+
+void Terrain3DRdContext::forceSync( void ) {
+	RenderingServer *const pServer = RenderingServer::get_singleton();
+	if ( pServer && !pServer->is_on_render_thread() ) pServer->force_sync();
+}
 
 Terrain3DRdContext &Terrain3DRdContext::getShared( void ) {
 	// Intentionally process-lifetime storage. Godot module shutdown explicitly
@@ -226,7 +249,7 @@ bool Terrain3DRdContext::initialize( void ) {
 	if ( state == STATE_READY ) return m_pRd.load( std::memory_order_acquire ) != nullptr;
 	if ( state != STATE_UNINITIALIZED ) return false;
 
-	RenderingDevice *const rd = get_global_rendering_device();
+	RenderingDevice *const rd = getGlobalDevice();
 	if ( !rd ) {
 		setFailure( FAILURE_DEVICE_UNAVAILABLE, "Global RenderingDevice is unavailable" );
 		return false;
@@ -252,7 +275,7 @@ bool Terrain3DRdContext::initialize( void ) {
 bool Terrain3DRdContext::validateDevice( void ) {
 	if ( m_state.load( std::memory_order_acquire ) != STATE_READY ) return false;
 	RenderingDevice *const owned = m_pRd.load( std::memory_order_acquire );
-	RenderingDevice *const current = get_global_rendering_device();
+	RenderingDevice *const current = getGlobalDevice();
 	if ( owned && owned == current ) return true;
 	invalidateDevice( current ? "Global RenderingDevice identity changed" : "Global RenderingDevice became unavailable" );
 	return false;
@@ -307,7 +330,7 @@ bool Terrain3DRdContext::beginRebuild( void ) {
 	if ( state == STATE_READY || state == STATE_SHUTTING_DOWN ) return false;
 	shutdown();
 
-	RenderingDevice *const rd = get_global_rendering_device();
+	RenderingDevice *const rd = getGlobalDevice();
 	if ( !rd ) {
 		setFailure( FAILURE_REBUILD, "RenderingDevice is unavailable during reconstruction" );
 		return false;

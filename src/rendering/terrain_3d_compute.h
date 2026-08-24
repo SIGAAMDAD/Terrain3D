@@ -108,7 +108,7 @@ public:
 	bool prepareDisplacementRequest( Terrain3D *pTerrain,
 			const Vector3 &rTargetPosition,
 			t3dDisplacementRequest_t &rRequest );
-	// Must execute through RenderingServer.call_on_render_thread().
+	// Must execute through the render-thread gateway.
 	bool dispatchDisplacementRequest( const t3dDisplacementRequest_t &rRequest, RID &rTexture );
 	// Must execute on the render thread before Terrain3DCompute is destroyed.
 	void shutdownDisplacementResources( void );

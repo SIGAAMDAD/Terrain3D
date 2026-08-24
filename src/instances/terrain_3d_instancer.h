@@ -26,7 +26,6 @@ class Terrain3DSampler;
 
 typedef enum t3dInstancerMode_e {
 	INSTANCER_DISABLED,
-	// PLACEHOLDER,
 	NORMAL,
 } t3dInstancerMode_t;
 
@@ -409,6 +408,7 @@ public:
 		destroy();
 	}
 
+	void servicePendingUpdates( void );
 	void initialize( Terrain3D *pTerrain );
 	void destroy( void );
 	void suspendRendering( void );

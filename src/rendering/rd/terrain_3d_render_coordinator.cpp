@@ -19,7 +19,8 @@
 #include <godot_cpp/classes/fast_noise_lite.hpp>
 #include <godot_cpp/classes/texture2d.hpp>
 #include <godot_cpp/classes/os.hpp>
-#include <godot_cpp/classes/rendering_server.hpp>
+#include <godot_cpp/classes/shader_material.hpp>
+#include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/classes/sub_viewport.hpp>
 #include <godot_cpp/classes/world3d.hpp>
 #include <godot_cpp/core/object.hpp>
@@ -67,6 +68,21 @@ static Vector3 t3dRdMaterialVector3Param( const Terrain3DMaterial *const pMateri
 	if ( !pMaterial ) return rDefault;
 	const Variant value = pMaterial->getShaderParam( StringName( pszName ) );
 	return value.get_type() == Variant::VECTOR3 ? ( Vector3 )( value ) : rDefault;
+}
+
+
+static Variant t3dRdOceanParam( const ShaderMaterial *const pMaterial, const char *const pszName ) {
+	return pMaterial ? pMaterial->get_shader_parameter( StringName( pszName ) ) : Variant();
+}
+static float t3dRdOceanFloatParam( const ShaderMaterial *const pMaterial, const char *const pszName, const float fDefault ) {
+	const Variant value = t3dRdOceanParam( pMaterial, pszName );
+	return value.get_type() == Variant::FLOAT || value.get_type() == Variant::INT ? ( float )( value ) : fDefault;
+}
+static Color t3dRdOceanColorParam( const ShaderMaterial *const pMaterial, const char *const pszName, const Color &rDefault ) {
+	const Variant value = t3dRdOceanParam( pMaterial, pszName );
+	if ( value.get_type() == Variant::COLOR ) return ( Color )( value );
+	if ( value.get_type() == Variant::VECTOR3 ) { const Vector3 v = value; return Color( v.x, v.y, v.z, 1.0f ); }
+	return rDefault;
 }
 
 static uint32_t t3dRdSamplingMode( const t3dMaterialSamplingQuality_t quality ) {
@@ -526,7 +542,7 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 	snapshot.m_nNearShadowLodCount = m_pTerrain->getNearShadowLodCount();
 	snapshot.m_nMiddleShadowLodCount = m_pTerrain->getMiddleShadowLodCount();
 	snapshot.m_nFarShadowLodCount = m_pTerrain->getFarShadowLodCount();
-	snapshot.m_bCastShadows = m_pTerrain->getCastShadows() != RenderingServer::SHADOW_CASTING_SETTING_OFF;
+	snapshot.m_bCastShadows = m_pTerrain->getCastShadows() != GeometryInstance3D::SHADOW_CASTING_SETTING_OFF;
 	snapshot.m_bNearShadowEnabled = m_pTerrain->getNearShadowEnabled();
 	snapshot.m_bMiddleShadowEnabled = m_pTerrain->getMiddleShadowEnabled();
 	snapshot.m_bFarShadowEnabled = m_pTerrain->getFarShadowEnabled();
@@ -599,6 +615,38 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 			snapshot.m_nFogMode = ( uint32_t )( environment->get_fog_mode() );
 		}
 	}
+
+	t3dRdOceanState_t &ocean = snapshot.m_ocean;
+	ocean.m_nEnabled = m_pTerrain->isOceanEnabled() && m_pTerrain->getOceanMesher() ? 1u : 0u;
+	if ( ocean.m_nEnabled != 0u ) {
+		ocean.m_nPatchCount = ( uint32_t )( m_pTerrain->getOceanMesher()->fillRdPatches( ocean.m_szPatches, s_nMaxClipmapLevels ) );
+		ocean.m_nRenderLayers = m_pTerrain->getOceanRenderLayers();
+		ocean.m_nCastShadows = m_pTerrain->getOceanCastShadows() != GeometryInstance3D::SHADOW_CASTING_SETTING_OFF ? 1u : 0u;
+		ocean.m_nVertexIterations = ( uint32_t )( MAX( m_pTerrain->getOceanVertexWaveIterations(), 0 ) );
+		ocean.m_nFragmentIterations = ( uint32_t )( MAX( m_pTerrain->getOceanFragmentWaveIterations(), 0 ) );
+		ocean.m_nRefractionMode = ( uint32_t )( m_pTerrain->getOceanRefractionMode() );
+		ocean.m_nFoamMode = ( uint32_t )( m_pTerrain->getOceanFoamMode() );
+		ocean.m_nScatteringMode = ( uint32_t )( m_pTerrain->getOceanScatteringMode() );
+		ocean.m_nShadingMode = ( uint32_t )( m_pTerrain->getOceanShadingMode() );
+		ocean.m_fTimeSeconds = Time::get_singleton() ? ( float )( Time::get_singleton()->get_ticks_msec() * 0.001 ) : 0.0f;
+		ocean.m_fMeshSize = ( float )( m_pTerrain->getOceanMeshSize() );
+		ocean.m_fVertexSpacing = ( float )( m_pTerrain->getOceanVertexSpacing() );
+		ocean.m_fSubdiv = ( float )( 1 << m_pTerrain->getOceanTessellationLevel() );
+		const Vector3 target = m_pTerrain->getClipmapTargetPosition(); ocean.m_fTargetX = ( float )( target.x ); ocean.m_fTargetY = ( float )( target.y ); ocean.m_fTargetZ = ( float )( target.z );
+		ocean.m_fCullMargin = ( float )( m_pTerrain->getOceanCullMargin() );
+		const Ref<Material> ocean_material = m_pTerrain->getOceanMaterial();
+		const ShaderMaterial *const shader_material = Object::cast_to<ShaderMaterial>( ocean_material.ptr() );
+		ocean.m_fSeaLevel = t3dRdOceanFloatParam( shader_material, "sea_level", 5.0f );
+		const Color water = t3dRdOceanColorParam( shader_material, "water_color", Color( 0.1058, 0.1568, 0.2117, 1.0 ) );
+		ocean.m_szWaterColor[0] = ( float )( water.r ); ocean.m_szWaterColor[1] = ( float )( water.g ); ocean.m_szWaterColor[2] = ( float )( water.b ); ocean.m_szWaterColor[3] = ( float )( water.a );
+		ocean.m_fVisibleDepth = t3dRdOceanFloatParam( shader_material, "visible_depth", 256.0f ); ocean.m_fDepthCurve = t3dRdOceanFloatParam( shader_material, "depth_curve", 0.1f ); ocean.m_fShoreBlend = t3dRdOceanFloatParam( shader_material, "shore_blend", 1.0f ); ocean.m_fRefractionStrength = t3dRdOceanFloatParam( shader_material, "refraction_strength", 0.02f );
+		ocean.m_fTimeScale = t3dRdOceanFloatParam( shader_material, "time_scale", 8.0f ); ocean.m_fHeightScale = t3dRdOceanFloatParam( shader_material, "height_scale", 3.0f ); ocean.m_fOceanScale = t3dRdOceanFloatParam( shader_material, "ocean_scale", 2.0f );
+		ocean.m_fFresnelScale = t3dRdOceanFloatParam( shader_material, "fresnel_scale", 0.5f ); ocean.m_fFresnelPower = t3dRdOceanFloatParam( shader_material, "fresnel_power", 1.0f ); ocean.m_fSpecular = t3dRdOceanFloatParam( shader_material, "specular", 1.0f );
+		ocean.m_fFoamHeight = t3dRdOceanFloatParam( shader_material, "foam_height", 1.35f ); ocean.m_fFoamTopIntensity = t3dRdOceanFloatParam( shader_material, "foam_top_intensity", 2.0f ); ocean.m_fFoamDistance = t3dRdOceanFloatParam( shader_material, "foam_distance", 3072.0f ); ocean.m_fFoamShoreIntensity = t3dRdOceanFloatParam( shader_material, "foam_shore_intensity", 1.3f ); ocean.m_fFoamNoiseScale = t3dRdOceanFloatParam( shader_material, "foam_noise_scale", 1.5f );
+		ocean.m_fHeightScattering = t3dRdOceanFloatParam( shader_material, "height_scattering", 6.0f ); ocean.m_fHeightThreshold = t3dRdOceanFloatParam( shader_material, "height_threshold", 0.1f ); ocean.m_fHeightAngleThreshold = t3dRdOceanFloatParam( shader_material, "height_angle_threshold", 0.21f ); ocean.m_fFresnelScattering = t3dRdOceanFloatParam( shader_material, "fersnel_scattering", 20.0f ); ocean.m_fDirectScattering = t3dRdOceanFloatParam( shader_material, "direct_scattering", 10.0f );
+		ocean.m_nGeneration = 0u; ocean.m_nGeneration = hashBytes( &ocean, sizeof( ocean ) );
+	}
+	publication.m_oceanTopology = m_cachedOceanTopology;
 
 	Terrain3DData *const data = m_pTerrain->getData();
 	const Ref<Terrain3DAssets> assets = m_pTerrain->getAssets();
@@ -937,11 +985,6 @@ void Terrain3DRenderCoordinator::updateRenderRoute( void ) {
 	}
 }
 
-void Terrain3DRenderCoordinator::enforceRdPresentation( void ) {
-	if ( m_pTerrain && m_pTerrain->getMesher() ) {
-		m_pTerrain->getMesher()->setRdPresentation( false, false );
-	}
-}
 
 void Terrain3DRenderCoordinator::attachEffectToActiveCamera( void ) {
 	if ( !m_pTerrain || m_effect.is_null() || !m_bCompositorDebugEnabled ) return;
@@ -1007,10 +1050,11 @@ bool Terrain3DRenderCoordinator::initializeRendererOnRenderThread( void ) {
 			m_shaderLibrary.getCull(),
 			m_shaderLibrary.getForwardBundle() ) && m_instanceRenderer.initialize( m_shaderLibrary.getInstances(),
 			m_shaderLibrary.getHlodCull(),
-			m_shaderLibrary.getForwardBundle() );
+			m_shaderLibrary.getForwardBundle() ) && m_oceanRenderer.initialize( m_shaderLibrary.getOceanColor(), m_shaderLibrary.getOceanShadow() );
 	m_bRendererInitialized.store( ready, std::memory_order_release );
 	m_bRendererFailed.store( false, std::memory_order_release );
 	if ( !ready ) {
+		m_oceanRenderer.shutdown();
 		m_instanceRenderer.shutdown();
 		m_renderer.shutdown();
 		resetForwardLifecycle();
@@ -1020,6 +1064,19 @@ bool Terrain3DRenderCoordinator::initializeRendererOnRenderThread( void ) {
 		m_initializationError = m_shaderLibrary.isReady() ? ( !m_instanceRenderer.getLastError().is_empty() ? m_instanceRenderer.getLastError() : m_renderer.getLastError() ) : m_shaderLibrary.getLastError();
 	}
 	return ready;
+}
+
+void Terrain3DRenderCoordinator::initializeOcean( void ) {
+	if ( !m_pTerrain || !m_pTerrain->getOceanMesher() ) {
+		m_cachedOceanTopology.reset();
+		return;
+	}
+	std::shared_ptr<t3dRdOceanTopologySnapshot_t> topology = std::make_shared<t3dRdOceanTopologySnapshot_t>();
+	m_nOceanTopologyGeneration = advanceGeneration( m_nOceanTopologyGeneration );
+	topology->m_nGeneration = m_nOceanTopologyGeneration;
+	topology->m_szGeometry[LOD0_MESH] = m_pTerrain->getOceanMesher()->getClipmapGeometry( LOD0_MESH );
+	topology->m_szGeometry[OUTER_RING_MESH] = m_pTerrain->getOceanMesher()->getClipmapGeometry( OUTER_RING_MESH );
+	m_cachedOceanTopology = topology;
 }
 
 void Terrain3DRenderCoordinator::initialize( Terrain3D *const pTerrain ) {
@@ -1057,9 +1114,9 @@ void Terrain3DRenderCoordinator::initialize( Terrain3D *const pTerrain ) {
 		std::lock_guard<std::mutex> lock( m_diagnosticsMutex );
 		m_initializationError = "Failed to prepare packed RenderingDevice clipmap topology";
 	}
+	initializeOcean();
 	publishSnapshot();
 	updateRenderRoute();
-	enforceRdPresentation();
 	if ( m_bCompositorDebugEnabled ) attachEffectToActiveCamera();
 }
 
@@ -1068,25 +1125,24 @@ void Terrain3DRenderCoordinator::shutdown( void ) {
 	if ( m_effect.is_valid() ) m_effect->set_enabled( false );
 	detachForwardBridge();
 	resetForwardLifecycle();
-	RenderingServer *const server = RenderingServer::get_singleton();
 	if ( m_bRendererInitialized.load( std::memory_order_acquire ) ) {
-		if ( server && server->is_on_render_thread() ) shutdownRendererOnRenderThread();
-		else if ( server && m_effect.is_valid() ) {
-			server->call_on_render_thread( callable_mp( m_effect.ptr(), &Terrain3DRdCompositorEffect::shutdownRendererOnRenderThread ) );
-			server->force_sync();
+		if ( Terrain3DRdContext::isOnRenderThread() ) {
+			shutdownRendererOnRenderThread();
+		} else if ( m_effect.is_valid() && Terrain3DRdContext::enqueueOnRenderThread(
+					callable_mp( m_effect.ptr(), &Terrain3DRdCompositorEffect::shutdownRendererOnRenderThread ) ) ) {
+			Terrain3DRdContext::forceSync();
 		} else {
 			if ( m_bPreviewRendererInitialized ) { m_previewRenderer.shutdown(); m_bPreviewRendererInitialized = false; }
 			m_instanceRenderer.shutdown();
 			m_renderer.shutdown();
 			m_bRendererInitialized.store( false, std::memory_order_release );
 		}
-	} else if ( server && m_effect.is_valid() && !server->is_on_render_thread() ) {
-		server->force_sync();
+	} else if ( m_effect.is_valid() ) {
+		Terrain3DRdContext::forceSync();
 	}
 	if ( m_effect.is_valid() ) m_effect->setCoordinator( nullptr );
 	detachEffect();
 	m_effect.unref();
-	enforceRdPresentation();
 	m_worldNoiseCache.clear();
 	m_macroNoiseTexture.clear();
 	m_editorBrushTexture.clear();
@@ -1127,10 +1183,8 @@ void Terrain3DRenderCoordinator::update( void ) {
 		if ( m_effect.is_valid() ) m_effect->set_enabled( false );
 		// A failed RD renderer is intentionally visible. Never resurrect the
 		// legacy native terrain surface as a hidden failure fallback.
-		if ( m_pTerrain->getMesher() ) m_pTerrain->getMesher()->setRdPresentation( false, false );
 	}
 	updateRenderRoute();
-	enforceRdPresentation();
 	if ( m_bCompositorDebugEnabled && !m_bFailureLatched ) {
 		attachEffectToActiveCamera();
 	} else if ( !m_bCompositorDebugEnabled ) {
@@ -1143,6 +1197,7 @@ void Terrain3DRenderCoordinator::shutdownRendererOnRenderThread( void ) {
 		m_previewRenderer.shutdown();
 		m_bPreviewRendererInitialized = false;
 	}
+	m_oceanRenderer.shutdown();
 	m_instanceRenderer.shutdown();
 	m_renderer.shutdown();
 	resetForwardLifecycle();
@@ -1202,13 +1257,12 @@ Ref<Image> Terrain3DRenderCoordinator::createMeshPreview( const uint16_t nAssetI
 		m_pendingPreviewImage.unref();
 		m_pendingPreviewError = String();
 	}
-	RenderingServer *const server = RenderingServer::get_singleton();
-	if ( !server ) return Ref<Image>();
-	if ( server->is_on_render_thread() ) {
+	if ( Terrain3DRdContext::isOnRenderThread() ) {
 		renderPreviewOnRenderThread();
 	} else {
-		server->call_on_render_thread( callable_mp( m_effect.ptr(), &Terrain3DRdCompositorEffect::renderPreviewOnRenderThread ) );
-		server->force_sync();
+		if ( m_effect.is_null() || !Terrain3DRdContext::enqueueOnRenderThread(
+					callable_mp( m_effect.ptr(), &Terrain3DRdCompositorEffect::renderPreviewOnRenderThread ) ) ) return Ref<Image>();
+		Terrain3DRdContext::forceSync();
 	}
 	std::lock_guard<std::mutex> lock( m_previewStateMutex );
 	if ( m_pendingPreviewImage.is_null() && !m_pendingPreviewError.is_empty() ) {
@@ -1263,6 +1317,7 @@ void Terrain3DRenderCoordinator::render( RenderData *const pRenderData ) {
 		// Resource/render failures are fatal to the current ownership generation.
 		// Tear it down on this render thread; a later callback reconstructs from
 		// immutable CPU publication without reviving the native renderer.
+		m_oceanRenderer.shutdown();
 		m_instanceRenderer.shutdown();
 		m_renderer.shutdown();
 		resetForwardLifecycle();
@@ -1275,6 +1330,8 @@ void Terrain3DRenderCoordinator::resetForwardLifecycle( void ) {
 	for ( t3dRdForwardViewportState_t &state : m_szForwardViewportStates ) state = t3dRdForwardViewportState_t{};
 	m_nForwardPreparedScenePass = 0u;
 	m_nForwardPreparedViewportKey = 0u;
+	m_bForwardPreparedHasTerrain = false;
+	m_bForwardPreparedHasOcean = false;
 }
 
 bool Terrain3DRenderCoordinator::prepareForwardLifecycle( t3dRdForwardPassContext_t &rContext ) {
@@ -1338,11 +1395,15 @@ void Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 		case T3D_RD_FORWARD_PASS_MOTION:
 			m_nMotionPassCallbacks.fetch_add( 1u, std::memory_order_relaxed );
 			break;
+		case T3D_RD_FORWARD_PASS_TRANSPARENT:
+			m_nTransparentPassCallbacks.fetch_add( 1u, std::memory_order_relaxed );
+			break;
 		default:
 			break;
 	}
 	if ( rContext.m_passKind != T3D_RD_FORWARD_PASS_DEPTH && rContext.m_passKind != T3D_RD_FORWARD_PASS_OPAQUE &&
-			rContext.m_passKind != T3D_RD_FORWARD_PASS_SHADOW && rContext.m_passKind != T3D_RD_FORWARD_PASS_MOTION ) return;
+			rContext.m_passKind != T3D_RD_FORWARD_PASS_SHADOW && rContext.m_passKind != T3D_RD_FORWARD_PASS_MOTION &&
+			rContext.m_passKind != T3D_RD_FORWARD_PASS_TRANSPARENT ) return;
 
 	if ( rContext.m_phase == T3D_RD_FORWARD_PHASE_PREPARE ) {
 		t3dRdForwardPassContext_t prepared_context = rContext;
@@ -1351,13 +1412,14 @@ void Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 		if ( !publication ) return;
 		const t3dRdFrameSnapshot_t &snapshot = publication->m_snapshot;
 		const bool shadow_pass = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW;
+		const bool transparent_pass = rContext.m_passKind == T3D_RD_FORWARD_PASS_TRANSPARENT;
 		const uint32_t visibility_mask = shadow_pass ? ( rContext.m_nShadowCasterMask & rContext.m_nShadowLightCullMask ) : rContext.m_nCameraVisibleLayers;
-		const bool has_terrain = snapshot.m_nPatchCount > 0u && !publication->m_regionMapBytes.is_empty() &&
+		const bool has_terrain = !transparent_pass && snapshot.m_nPatchCount > 0u && !publication->m_regionMapBytes.is_empty() &&
 				( !shadow_pass || ( snapshot.m_bCastShadows && ( snapshot.m_nRenderLayers & visibility_mask ) != 0u ) );
 		m_nForwardPreparedScenePass = prepared_context.m_nScenePass;
 		m_nForwardPreparedViewportKey = prepared_context.m_nViewportKey;
 		m_bForwardPreparedHasTerrain = has_terrain;
-		const bool instances_ok = m_instanceRenderer.prepareForwardPass( prepared_context, publication->m_instanceMeshes,
+		const bool instances_ok = transparent_pass ? true : m_instanceRenderer.prepareForwardPass( prepared_context, publication->m_instanceMeshes,
 				publication->m_instanceScene, visibility_mask );
 		const bool terrain_ok = !has_terrain || ( instances_ok && m_renderer.prepareForwardPass( prepared_context, snapshot,
 				publication->m_regionMapBytes, snapshot.m_nRegionMapGeneration,
@@ -1371,11 +1433,15 @@ void Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 				publication->m_resources.m_hSurfaceTextureRd, publication->m_resources.m_hDisplacementTextureRd,
 				publication->m_resources.m_hWorldNoiseTextureRd, publication->m_resources.m_hMacroNoiseTextureRd,
 				publication->m_resources.m_hEditorBrushTextureRd ) );
-		if ( instances_ok && terrain_ok ) {
+		const bool ocean_ok = m_oceanRenderer.prepareForwardPass( prepared_context, snapshot, publication->m_oceanTopology, visibility_mask );
+		m_bForwardPreparedHasOcean = snapshot.m_ocean.m_nEnabled != 0u && snapshot.m_ocean.m_nPatchCount > 0u &&
+				( transparent_pass || ( shadow_pass && snapshot.m_ocean.m_nCastShadows != 0u ) );
+		if ( instances_ok && terrain_ok && ocean_ok ) {
 			m_nConsecutiveRenderFailures.store( 0u, std::memory_order_release );
 			return;
 		}
 		const uint32_t failures = m_nConsecutiveRenderFailures.fetch_add( 1u, std::memory_order_acq_rel ) + 1u;
+		m_oceanRenderer.shutdown();
 		m_instanceRenderer.shutdown();
 		m_renderer.shutdown();
 		resetForwardLifecycle();
@@ -1386,9 +1452,11 @@ void Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 
 	if ( rContext.m_phase != T3D_RD_FORWARD_PHASE_SUBMIT || !m_bRendererInitialized.load( std::memory_order_acquire ) ||
 			m_nForwardPreparedScenePass != rContext.m_nScenePass || m_nForwardPreparedViewportKey != rContext.m_nViewportKey ) return;
-	const bool instances_ok = m_instanceRenderer.renderForwardPass( rContext );
+	const bool transparent_pass = rContext.m_passKind == T3D_RD_FORWARD_PASS_TRANSPARENT;
+	const bool instances_ok = transparent_pass ? true : m_instanceRenderer.renderForwardPass( rContext );
 	const bool terrain_ok = !m_bForwardPreparedHasTerrain || m_renderer.renderForwardPass( rContext );
-	if ( instances_ok && terrain_ok ) {
+	const bool ocean_ok = !m_bForwardPreparedHasOcean || m_oceanRenderer.renderForwardPass( rContext );
+	if ( instances_ok && terrain_ok && ocean_ok ) {
 		m_nConsecutiveRenderFailures.store( 0u, std::memory_order_release );
 		return;
 	}
@@ -1411,6 +1479,7 @@ Dictionary Terrain3DRenderCoordinator::getDiagnostics( void ) const {
 	result["opaque_pass_callbacks"] = ( int64_t )( m_nOpaquePassCallbacks.load( std::memory_order_acquire ) );
 	result["shadow_pass_callbacks"] = ( int64_t )( m_nShadowPassCallbacks.load( std::memory_order_acquire ) );
 	result["motion_pass_callbacks"] = ( int64_t )( m_nMotionPassCallbacks.load( std::memory_order_acquire ) );
+	result["transparent_pass_callbacks"] = ( int64_t )( m_nTransparentPassCallbacks.load( std::memory_order_acquire ) );
 	result["last_forward_scene_pass"] = ( int64_t )( m_nLastForwardScenePass.load( std::memory_order_acquire ) );
 	result["last_forward_draw_list"] = m_nLastForwardDrawList.load( std::memory_order_acquire );
 	result["last_forward_pass_kind"] = ( int64_t )( m_nLastForwardPassKind.load( std::memory_order_acquire ) );
@@ -1421,6 +1490,8 @@ Dictionary Terrain3DRenderCoordinator::getDiagnostics( void ) const {
 	result["native_opaque_participation"] = m_nOpaquePassCallbacks.load( std::memory_order_acquire ) > 0u;
 	result["native_shadow_participation"] = m_nShadowPassCallbacks.load( std::memory_order_acquire ) > 0u;
 	result["native_motion_vectors_active"] = m_nMotionPassCallbacks.load( std::memory_order_acquire ) > 0u;
+	result["native_transparent_participation"] = m_nTransparentPassCallbacks.load( std::memory_order_acquire ) > 0u;
+	result.merge( m_oceanRenderer.getDiagnostics(), true );
 	result["forward_viewport_reconfigurations"] = ( int64_t )( m_nForwardViewportReconfigurations );
 	result["forward_viewport_evictions"] = ( int64_t )( m_nForwardViewportEvictions );
 	result["forward_prepared_viewport_key"] = ( int64_t )( m_nForwardPreparedViewportKey );

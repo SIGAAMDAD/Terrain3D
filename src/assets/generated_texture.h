@@ -51,6 +51,10 @@ public:
 	EA_FORCE_INLINE Ref<Image> getImage( void ) const {
 		return m_image;
 	}
+	EA_FORCE_INLINE Ref<Image> getLayerImage( const int nLayer ) const {
+		if ( !m_bLayered || nLayer < 0 || nLayer >= m_layers.size() ) return Ref<Image>();
+		return m_layers[nLayer];
+	}
 	EA_FORCE_INLINE RID getRid( void ) const {
 		return m_hRid;
 	}

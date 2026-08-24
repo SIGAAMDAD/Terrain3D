@@ -10,6 +10,7 @@
 #include <array>
 #include <atomic>
 #include <godot_cpp/classes/rendering_device.hpp>
+#include <godot_cpp/variant/callable.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/rid.hpp>
 #include <godot_cpp/variant/string.hpp>
@@ -194,6 +195,15 @@ private:
 public:
 	static Terrain3DRdContext &getShared( void );
 	static void shutdownShared( void );
+
+	// The sole engine rendering gateway permitted in the RD branch. Godot's
+	// GDExtension API exposes global/local RenderingDevice acquisition and
+	// render-thread scheduling through this boundary.
+	static RenderingDevice *getGlobalDevice( void );
+	static RenderingDevice *createLocalDevice( void );
+	static bool isOnRenderThread( void );
+	static bool enqueueOnRenderThread( const Callable &rCallable );
+	static void forceSync( void );
 
 	Terrain3DRdContext( void ) = default;
 	~Terrain3DRdContext( void );

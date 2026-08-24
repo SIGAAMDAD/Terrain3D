@@ -16,7 +16,6 @@
 #include <godot_cpp/classes/environment.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/image_texture.hpp>
-#include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/resource_saver.hpp>
 #include <limits>
 #include <vector>
@@ -860,11 +859,11 @@ Dictionary Terrain3DAssets::cookRuntimeMaterialCache( void ) {
 		pFile->store_32( ( uint32_t )logical );
 	}
 	eastl::array<t3dRuntimeMaterialLayerInfo_t, s_nMaxTextureAssets> descriptors{};
-	const RID channel_rids[RUNTIME_MATERIAL_CHANNEL_COUNT] = { m_generatedAlbedoTextures.getRid(),
-		m_generatedNormalTextures.getRid(),
-		m_generatedSurfaceTextures.getRid(),
-		m_generatedDisplacementTextures.getRid(),
-		RID() };
+	const Terrain3DGeneratedTexture *channel_textures[RUNTIME_MATERIAL_CHANNEL_COUNT] = { &m_generatedAlbedoTextures,
+		&m_generatedNormalTextures,
+		&m_generatedSurfaceTextures,
+		&m_generatedDisplacementTextures,
+		&m_generatedAlbedoTextures };
 	bool ok = true;
 	for ( int logical = 0; logical < m_textureList.size() && ok; ++logical ) {
 		t3dRuntimeMaterialLayerInfo_t &layer = descriptors[( size_t )logical];
@@ -882,13 +881,14 @@ Dictionary Terrain3DAssets::cookRuntimeMaterialCache( void ) {
 		}
 		layer.m_iBundleIndex = ( uint32_t )logical;
 		for ( int channel = 0; channel < RUNTIME_MATERIAL_CHANNEL_COUNT; ++channel ) {
-			if ( channel != RUNTIME_MATERIAL_CHANNEL_FAR_ALBEDO && !channel_rids[channel].is_valid() ) {
+			const Terrain3DGeneratedTexture *const pTexture = channel_textures[channel];
+			if ( !pTexture || ( channel != RUNTIME_MATERIAL_CHANNEL_FAR_ALBEDO && !pTexture->getRid().is_valid() ) ) {
 				continue;
 			}
-			Ref<Image> pImage = RS->texture_2d_layer_get( channel == RUNTIME_MATERIAL_CHANNEL_FAR_ALBEDO
-							? channel_rids[RUNTIME_MATERIAL_CHANNEL_ALBEDO]
-							: channel_rids[channel],
-					logical );
+			// Terrain3DGeneratedTexture retains the authoritative CPU layer images used to
+			// create/update its direct RD texture. Runtime material bundles consume that
+			// retained source instead of bridging Terrain3D-owned textures back through a native texture bridge.
+			Ref<Image> pImage = pTexture->getLayerImage( logical );
 			if ( channel == RUNTIME_MATERIAL_CHANNEL_FAR_ALBEDO && pImage.is_valid() ) {
 				pImage = pImage->duplicate();
 				if ( pImage->is_compressed() && pImage->decompress() != OK ) {

@@ -116,7 +116,7 @@ func _refresh() -> void:
 	if not stalls.is_empty():
 		lines.append("[color=orange]Stopped by: %s[/color]" % ", ".join(stalls))
 	if show_pipeline_timings:
-		lines.append("Page pipeline queue %.3f | read %.3f | validate %.3f | materialize %.3f | RenderingServer publication CPU %.3f | E2E %.3f ms" % [
+		lines.append("Page pipeline queue %.3f | read %.3f | validate %.3f | materialize %.3f | RD publication CPU %.3f | E2E %.3f ms" % [
 			gpu.float_value("prepare_queue_wait_usec_last") / 1000.0,
 			gpu.float_value("prepare_file_read_usec_last") / 1000.0,
 			gpu.float_value("prepare_validation_usec_last") / 1000.0,

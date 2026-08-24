@@ -364,9 +364,9 @@ public partial class Terrain3DMeshAsset : Resource
 		set => Set(GDExtensionPropertyName.Density, value);
 	}
 
-	public new RenderingServer.ShadowCastingSetting CastShadows
+	public new GeometryInstance3D.ShadowCastingSetting CastShadows
 	{
-		get => Get(GDExtensionPropertyName.CastShadows).As<RenderingServer.ShadowCastingSetting>();
+		get => Get(GDExtensionPropertyName.CastShadows).As<GeometryInstance3D.ShadowCastingSetting>();
 		set => Set(GDExtensionPropertyName.CastShadows, Variant.From(value));
 	}
 

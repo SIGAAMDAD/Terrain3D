@@ -21,10 +21,9 @@
 #include "res://addons/terrain_3d/shaders/includes/auto_shader.gdshaderinc"
 
 	// Cooked controls use canonical material-pair order for coherent array access.
-	ivec4 material_ids_by_slot[2] = {
+	ivec4 material_ids_by_slot[2] = ivec4[2](
 		ivec4(control >> uvec4(27u) & uvec4(0x1Fu)),
-		ivec4(control >> uvec4(22u) & uvec4(0x1Fu)),
-	};
+		ivec4(control >> uvec4(22u) & uvec4(0x1Fu)));
 	bool all_resident = all(greaterThanEqual(
 		ivec4(index[0].z, index[1].z, index[2].z, index[3].z), ivec4(0)));
 	bool same_base_layer = all(equal(material_ids_by_slot[0], material_ids_by_slot[0].xxxx));
@@ -56,7 +55,7 @@
 		float overlay_weight = dot(overlay_weights, weights);
 		coherent_pair_weights = vec2(1.0 - overlay_weight, overlay_weight);
 	} else if (bilerp && !uniform_control) {
-		corner_material_weights = {vec2(0.0), vec2(0.0), vec2(0.0), vec2(0.0)};
+		corner_material_weights = vec2[4](vec2(0.0), vec2(0.0), vec2(0.0), vec2(0.0));
 		base_weights *= weights;
 		overlay_weights *= weights;
 		for (int i = 0; i < 4; i++) {
