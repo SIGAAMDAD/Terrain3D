@@ -1832,11 +1832,12 @@ PackedFloat32Array Terrain3DInstancer::buildMultimeshBuffer( const TypedArray<Tr
 }
 
 
-std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> Terrain3DInstancer::buildRdInstanceSnapshot( void ) const {
-	std::shared_ptr<t3dRdInstanceSceneSnapshot_t> snapshot = std::make_shared<t3dRdInstanceSceneSnapshot_t>();
-	snapshot->m_nGeneration = m_nRdPublicationGeneration;
+void Terrain3DInstancer::buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &rSnapshot ) const {
+	rSnapshot.m_instances.clear();
+	rSnapshot.m_cells.clear();
+	rSnapshot.m_nGeneration = m_nRdPublicationGeneration;
 	if ( !m_pTerrain || !m_pTerrain->getData() || m_pTerrain->getAssets().is_null() || m_renderCells.empty() ) {
-		return snapshot;
+		return;
 	}
 
 	typedef struct t3dRdCellRange_s {
@@ -1845,7 +1846,7 @@ std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> Terrain3DInstancer::buildRdI
 	} t3dRdCellRange_t;
 	std::unordered_map<t3dCellUpdateKey_t, t3dRdCellRange_t, t3dCellUpdateKeyHash_t> ranges;
 	ranges.reserve( m_renderCells.size() );
-	snapshot->m_cells.reserve( m_renderCells.size() );
+	rSnapshot.m_cells.reserve( m_renderCells.size() );
 
 	Terrain3DData *const data = m_pTerrain->getData();
 	const Ref<Terrain3DAssets> assets = m_pTerrain->getAssets();
@@ -1863,9 +1864,9 @@ std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> Terrain3DInstancer::buildRdI
 		auto found = ranges.find( key );
 		if ( found == ranges.end() ) {
 			t3dRdCellRange_t range;
-			range.m_nFirst = ( uint32_t )( snapshot->m_instances.size() );
+			range.m_nFirst = ( uint32_t )( rSnapshot.m_instances.size() );
 			range.m_nCount = ( uint32_t )( MIN<size_t>( source_cell->m_transforms.size(), UINT32_MAX ) );
-			snapshot->m_instances.reserve( snapshot->m_instances.size() + range.m_nCount );
+			rSnapshot.m_instances.reserve( rSnapshot.m_instances.size() + range.m_nCount );
 			const Vector3 region_offset( ( real_t )( render.m_region.x ) * region_world_size,
 					0.0,
 					( real_t )( render.m_region.y ) * region_world_size );
@@ -1873,7 +1874,7 @@ std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> Terrain3DInstancer::buildRdI
 				Transform3D transform = ( Transform3D )( source_cell->m_transforms[( size_t )( i )] );
 				transform.origin += region_offset;
 				const uint32_t color = source_cell->m_colors.empty() ? s_nInstanceWhiteRgba8 : source_cell->m_colors[( size_t )( i )];
-				snapshot->m_instances.push_back( t3dPackRdInstanceRecord( transform, color ) );
+				rSnapshot.m_instances.push_back( t3dPackRdInstanceRecord( transform, color ) );
 			}
 			found = ranges.emplace( key, range ).first;
 		}
@@ -1924,9 +1925,8 @@ std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> Terrain3DInstancer::buildRdI
 				( real_t )( render.m_region.y ) * region_world_size );
 		cell.m_bounds = source_cell->m_cachedAabb;
 		cell.m_bounds.position += region_offset;
-		snapshot->m_cells.push_back( cell );
+		rSnapshot.m_cells.push_back( cell );
 	}
-	return snapshot;
 }
 
 Vector2i Terrain3DInstancer::getCellForLocalPosition( const Vector3 &rLocalPosition,

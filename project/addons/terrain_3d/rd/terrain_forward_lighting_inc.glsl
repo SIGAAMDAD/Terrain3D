@@ -3,7 +3,7 @@
 
 #if defined(T3D_FORWARD_NATIVE_LIGHTING) && !defined(T3D_FORWARD_DEPTH)
 #extension GL_EXT_samplerless_texture_functions : enable
-// Godot 4.7.1 Forward+ light-buffer ABI. Keep field order synchronized with
+// Godot 4.7.2 Forward+ light-buffer ABI. Keep field order synchronized with
 // servers/rendering/renderer_rd/shaders/light_data_inc.glsl.
 struct T3DNativeLightData {
     vec3 position; float inv_radius;
@@ -52,6 +52,10 @@ layout(set = 2, binding = 0, std140) uniform T3DForwardLightFrame {
     uvec4 scene_params;   // directional count, default mask, shadow flags, directional soft-shadow flag
     vec4 depth_params;    // z near, z far, inverse z far, reserved
     uvec4 render_params;  // width, height, max cluster elements, reserved
+    vec4 ambient_light_color_energy;
+    vec4 environment_params0; // ambient sky mix, emissive exposure, IBL exposure, radiance pixel size
+    vec4 environment_params1; // radiance octahedral border size, reserved
+    mat3 radiance_inverse_xform;
 } t3d_forward_light_frame;
 layout(set = 2, binding = 1, std140) uniform T3DDirectionalLights { T3DNativeDirectionalLightData data[8]; } t3d_directional_lights;
 layout(set = 2, binding = 2, std430) readonly buffer T3DOmniLights { T3DNativeLightData data[]; } t3d_omni_lights;
@@ -62,7 +66,7 @@ layout(set = 2, binding = 6) uniform sampler t3d_shadow_sampler;
 layout(set = 2, binding = 7) uniform texture2D t3d_shadow_atlas;
 layout(set = 2, binding = 8) uniform texture2D t3d_directional_shadow_atlas;
 
-// Godot 4.7.1 scene-integration ABI used by F6. These layouts mirror
+// Godot 4.7.2 scene-integration ABI used by F6. These layouts mirror
 // light_data_inc.glsl/decal_data_inc.glsl and are borrowed, never owned here.
 struct T3DNativeReflectionData {
     vec3 box_extents; float index;
@@ -101,9 +105,17 @@ layout(set = 2, binding = 11, std430) readonly buffer T3DDecals { T3DNativeDecal
 layout(set = 2, binding = 12) uniform texture2D t3d_decal_atlas;
 layout(set = 2, binding = 13) uniform texture2D t3d_decal_atlas_srgb;
 layout(set = 2, binding = 14) uniform sampler t3d_scene_sampler;
+#ifdef T3D_FORWARD_RADIANCE_ARRAY
+layout(set = 2, binding = 15) uniform texture2DArray t3d_radiance_octmap;
+#else
+layout(set = 2, binding = 15) uniform texture2D t3d_radiance_octmap;
+#endif
 
 const uint T3D_SCENE_FEATURE_REFLECTIONS = 1u;
 const uint T3D_SCENE_FEATURE_DECALS = 2u;
+const uint T3D_SCENE_FEATURE_AMBIENT_LIGHT = 4u;
+const uint T3D_SCENE_FEATURE_AMBIENT_CUBEMAP = 8u;
+const uint T3D_SCENE_FEATURE_REFLECTION_CUBEMAP = 16u;
 const uint T3D_CLUSTER_TYPE_DECAL = 3u;
 const uint T3D_CLUSTER_TYPE_REFLECTION = 4u;
 
@@ -399,14 +411,14 @@ vec3 t3d_light_response(vec3 albedo, vec3 normal, vec3 view_direction, vec3 ligh
         float attenuation, float roughness, float metallic, float specular_amount, uint lighting_model) {
     float ndotl = max(dot(normal, light_direction), 0.0);
     if (ndotl <= 0.0 || attenuation <= 0.0) return vec3(0.0);
-    if (lighting_model == 1u) return albedo * radiance * (ndotl * attenuation);
+    if (lighting_model == 1u) return albedo * radiance * ((ndotl * attenuation) / T3D_PI);
     vec3 half_direction = normalize(light_direction + view_direction);
     float gloss = max(1.0 - roughness, 0.0);
     float spec_power = mix(4.0, 128.0, gloss * gloss);
     float specular_term = pow(max(dot(normal, half_direction), 0.0), spec_power) * gloss * max(specular_amount, 0.0);
     vec3 f0 = mix(vec3(0.04), albedo, metallic);
     if (lighting_model == 2u) {
-        return (albedo * ndotl * (1.0 - metallic * 0.6) + f0 * specular_term) * radiance * attenuation;
+        return (albedo * (ndotl / T3D_PI) * (1.0 - metallic * 0.6) + f0 * specular_term) * radiance * attenuation;
     }
     float fresnel = pow(1.0 - max(dot(normal, view_direction), 0.0), 5.0);
     vec3 F = mix(f0, vec3(1.0), fresnel);

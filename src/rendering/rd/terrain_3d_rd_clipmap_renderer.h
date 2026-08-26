@@ -259,7 +259,9 @@ public:
 			const RID &rDisplacementTextureRd,
 			const RID &rWorldNoiseTextureRd,
 			const RID &rMacroNoiseTextureRd,
-			const RID &rEditorBrushTextureRd );
+			const RID &rEditorBrushTextureRd,
+			bool bTemporalHistoryValid,
+			bool bViewportReconfigured );
 	bool renderForwardPass( const t3dRdForwardPassContext_t &rContext );
 	Dictionary getDiagnostics( void ) const;
 	EA_FORCE_INLINE void setCullingComparisonEnabled( const bool bEnabled ) {

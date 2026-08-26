@@ -18,7 +18,6 @@
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
 #include <godot_cpp/variant/vector3.hpp>
-#include <memory>
 #include <vector>
 
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
@@ -261,7 +260,7 @@ public:
 		return m_nRdPublicationGeneration;
 	}
 	void fillRdMeshSources( std::vector<t3dRdExternalMeshSource_t> &rSources ) const;
-	std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> buildRdInstanceSnapshot( void ) const;
+	void buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &rSnapshot ) const;
 	Dictionary getStats( void ) const;
 	Array getDebugEntries( void ) const;
 

@@ -545,7 +545,7 @@ public:
 	PackedFloat32Array buildMultimeshBuffer( const TypedArray<Transform3D> &rXforms,
 			const PackedColorArray &rColors = PackedColorArray() ) const;
 
-	std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> buildRdInstanceSnapshot( void ) const;
+	void buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &rSnapshot ) const;
 	EA_FORCE_INLINE uint64_t getRdPublicationGeneration( void ) const { return m_nRdPublicationGeneration; }
 
 	EA_FORCE_INLINE void resetDensityCounter( void ) {

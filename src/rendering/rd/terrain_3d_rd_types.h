@@ -83,7 +83,7 @@ static_assert( t3dRdFrameSnapshotTokenGeneration( t3dRdMakeFrameSnapshotToken( 2
 static_assert( t3dRdFrameSnapshotTokenIsPublished( t3dRdMakeFrameSnapshotToken( 2u, 17u, true ) ),
 		"RD frame publication token state changed" );
 
-static constexpr uint32_t s_nRdForwardBridgeAbiVersion = 8u;
+static constexpr uint32_t s_nRdForwardBridgeAbiVersion = 10u;
 static constexpr uint32_t s_nRdForwardMaxViews = 2u;
 
 typedef enum t3dRdForwardCallbackPhase_e {
@@ -91,7 +91,7 @@ typedef enum t3dRdForwardCallbackPhase_e {
 	T3D_RD_FORWARD_PHASE_SUBMIT = 1,
 } t3dRdForwardCallbackPhase_t;
 
-// Mirrors RenderForwardClustered::PassMode in Godot 4.7.1. This is part of
+// Mirrors RenderForwardClustered::PassMode in Godot 4.7.2. This is part of
 // the versioned bridge ABI so F2 can build pipelines with the exact native
 // attachment/output contract instead of guessing from pass kind alone.
 typedef enum t3dRdForwardNativePassMode_e {
@@ -110,11 +110,22 @@ typedef enum t3dRdForwardShaderVariant_e {
 	T3D_RD_FORWARD_SHADER_COLOR_SPECULAR,
 	T3D_RD_FORWARD_SHADER_COLOR_MOTION,
 	T3D_RD_FORWARD_SHADER_COLOR_SPECULAR_MOTION,
+	T3D_RD_FORWARD_SHADER_COLOR_RADIANCE_ARRAY,
+	T3D_RD_FORWARD_SHADER_COLOR_SPECULAR_RADIANCE_ARRAY,
+	T3D_RD_FORWARD_SHADER_COLOR_MOTION_RADIANCE_ARRAY,
+	T3D_RD_FORWARD_SHADER_COLOR_SPECULAR_MOTION_RADIANCE_ARRAY,
 	T3D_RD_FORWARD_SHADER_DEPTH,
 	T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS,
 	T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI,
 	T3D_RD_FORWARD_SHADER_VARIANT_MAX,
 } t3dRdForwardShaderVariant_t;
+
+typedef enum t3dRdForwardEnvironmentFlag_e : uint32_t {
+	T3D_RD_FORWARD_ENV_USE_AMBIENT_LIGHT = 1u << 0u,
+	T3D_RD_FORWARD_ENV_USE_AMBIENT_CUBEMAP = 1u << 1u,
+	T3D_RD_FORWARD_ENV_USE_REFLECTION_CUBEMAP = 1u << 2u,
+	T3D_RD_FORWARD_ENV_RADIANCE_OCTMAP_ARRAY = 1u << 3u,
+} t3dRdForwardEnvironmentFlag_t;
 
 typedef enum t3dRdForwardPassKind_e {
 	T3D_RD_FORWARD_PASS_INVALID = 0,
@@ -134,6 +145,9 @@ typedef enum t3dRdForwardPassKind_e {
 // Terrain3D owns none of the native RIDs in this structure.
 typedef struct t3dRdForwardPassContext_s {
 	uint32_t m_nBridgeAbiVersion = s_nRdForwardBridgeAbiVersion;
+	uint64_t m_nFrameGeneration = 0u;
+	uint32_t m_nResourceGeneration = 0u;
+	uint64_t m_nPreparedSerial = 0u;
 	t3dRdForwardCallbackPhase_t m_phase = T3D_RD_FORWARD_PHASE_PREPARE;
 	t3dRdForwardPassKind_t m_passKind = T3D_RD_FORWARD_PASS_INVALID;
 	t3dRdForwardNativePassMode_t m_nativePassMode = T3D_RD_FORWARD_NATIVE_PASS_COLOR;
@@ -147,6 +161,7 @@ typedef struct t3dRdForwardPassContext_s {
 	Rect2i m_renderRegion;
 	Vector2i m_renderSize;
 	uint32_t m_nColorPassFlags = 0u;
+	uint32_t m_nPassFlags = 0u;
 	bool m_bDepthPrepassActive = false;
 	bool m_bReverseCull = false;
 	bool m_bReflectionProbeRender = false;
@@ -187,6 +202,14 @@ typedef struct t3dRdForwardPassContext_s {
 	float m_fCameraZNear = 0.0f;
 	float m_fCameraZFar = 0.0f;
 	float m_fReflectionAtlasBorderSize = 0.0f;
+	uint32_t m_nEnvironmentFlags = 0u;
+	float m_szAmbientLightColorEnergy[4]{};
+	float m_fAmbientColorSkyMix = 0.0f;
+	float m_fEmissiveExposureNormalization = 1.0f;
+	float m_fIblExposureNormalization = 1.0f;
+	float m_fRadiancePixelSize = 0.0f;
+	float m_fRadianceBorderSize = 0.0f;
+	float m_szRadianceInverseXform[12]{};
 	RID m_hNativeFramebuffer;
 	RID m_hDirectionalLightBuffer;
 	RID m_hOmniLightBuffer;

@@ -44,7 +44,7 @@ SpaceBeforeParens: ControlStatements
 SpacesInParens: Custom
 SpacesInParensOptions:
   InConditionalStatements: true
-  InCStyleCasts: true
+  InCStyleCasts: false
   InEmptyParentheses: false
   Other: true
 SpaceAfterCStyleCast: false

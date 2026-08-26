@@ -2,72 +2,154 @@
 
 #include "rendering/rd/terrain_3d_rd_forward_plus_bridge.h"
 
-#include "core/logger.h"
-#include "rendering/rd/terrain_3d_render_coordinator.h"
 #include "rendering/rd/terrain_3d_rd_context.h"
+#include "rendering/rd/terrain_3d_render_coordinator.h"
 
+#include <cmath>
+#include <cstring>
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/core/memory.hpp>
-#include <godot_cpp/variant/array.hpp>
-#include <godot_cpp/variant/rect2i.hpp>
+#include <godot_cpp/variant/basis.hpp>
+#include <godot_cpp/variant/projection.hpp>
 #include <godot_cpp/variant/transform3d.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
+#if defined( _MSC_VER )
+#include <intrin.h>
+#endif
+
 Terrain3DRdForwardPlusBridgeAdapter *Terrain3DRdForwardPlusBridgeAdapter::s_pSingleton = nullptr;
 
-static bool t3dRdForwardReadRequiredInt( const Dictionary &rPacket,
-		const StringName &rKey,
-		int64_t &rValue,
-		String &rError ) {
-	if ( !rPacket.has( rKey ) ) {
-		rError = String( "Forward+ bridge packet missing required field: " ) + String( rKey );
+namespace {
+
+bool t3dRdForwardValidSampleCount( const uint32_t nSamples ) {
+	return nSamples == 1u || nSamples == 2u || nSamples == 4u || nSamples == 8u;
+}
+
+uint32_t t3dRdForwardCtz64( const uint64_t nMask ) {
+#if defined( _MSC_VER )
+	unsigned long index = 0u;
+	_BitScanForward64( &index, nMask );
+	return (uint32_t)( index );
+#else
+	return (uint32_t)( __builtin_ctzll( nMask ) );
+#endif
+}
+
+RID t3dRdForwardDecodeRid( const uint64_t nOpaque ) {
+	RID result;
+	std::memcpy( &result, &nOpaque, sizeof( result ) );
+	return result;
+}
+
+Projection t3dRdForwardDecodeProjection( const float *const pValues ) {
+	Projection result;
+	for ( uint32_t column = 0u; column < 4u; ++column ) {
+		for ( uint32_t row = 0u; row < 4u; ++row ) {
+			result.columns[column][row] = pValues[column * 4u + row];
+		}
+	}
+	return result;
+}
+
+Transform3D t3dRdForwardDecodeTransform( const float *const pValues ) {
+	const Basis basis( pValues[0],
+			pValues[1],
+			pValues[2],
+			pValues[4],
+			pValues[5],
+			pValues[6],
+			pValues[8],
+			pValues[9],
+			pValues[10] );
+	return Transform3D( basis, Vector3( pValues[3], pValues[7], pValues[11] ) );
+}
+
+bool t3dRdForwardFiniteEnvironmentFrame( const t3dRdForwardBridgeFramePacket_t &rFrame ) {
+	if ( rFrame.m_nAbi10ReservedTail != 0u || rFrame.m_nEnvironmentReserved0 != 0u ||
+			rFrame.m_fEnvironmentReserved1 != 0.0f || ( rFrame.m_nEnvironmentFlags & ~uint32_t( 0x0fu ) ) != 0u ||
+			!std::isfinite( rFrame.m_fAmbientColorSkyMix ) || rFrame.m_fAmbientColorSkyMix < 0.0f ||
+			rFrame.m_fAmbientColorSkyMix > 1.0f || !std::isfinite( rFrame.m_fEmissiveExposureNormalization ) ||
+			!std::isfinite( rFrame.m_fIblExposureNormalization ) || !std::isfinite( rFrame.m_fRadiancePixelSize ) ||
+			rFrame.m_fRadiancePixelSize < 0.0f || !std::isfinite( rFrame.m_fRadianceBorderSize ) ||
+			rFrame.m_fRadianceBorderSize < 0.0f ) {
 		return false;
 	}
-	const Variant value = rPacket[rKey];
-	if ( value.get_type() != Variant::INT ) {
-		rError = String( "Forward+ bridge packet field is not an integer: " ) + String( rKey );
-		return false;
+	for ( uint32_t i = 0u; i < 4u; ++i ) {
+		if ( !std::isfinite( rFrame.m_szAmbientLightColorEnergy[i] ) ) {
+			return false;
+		}
 	}
-	rValue = ( int64_t )( value );
+	for ( uint32_t i = 0u; i < 12u; ++i ) {
+		if ( !std::isfinite( rFrame.m_szRadianceInverseXform[i] ) ) {
+			return false;
+		}
+	}
 	return true;
 }
 
-
-static bool t3dRdForwardReadRequiredFloat( const Dictionary &rPacket, const StringName &rKey, float &rValue, String &rError ) {
-	if ( !rPacket.has( rKey ) ) { rError = String( "Forward+ bridge packet missing required field: " ) + String( rKey ); return false; }
-	const Variant value = rPacket[rKey];
-	if ( value.get_type() != Variant::FLOAT && value.get_type() != Variant::INT ) { rError = String( "Forward+ bridge packet field is not numeric: " ) + String( rKey ); return false; }
-	rValue = ( float )( ( double )( value ) );
-	return true;
+bool t3dRdForwardOrdinaryPassKind( const uint32_t nPassKind ) {
+	return nPassKind == T3D_RD_FORWARD_PASS_DEPTH || nPassKind == T3D_RD_FORWARD_PASS_OPAQUE ||
+			nPassKind == T3D_RD_FORWARD_PASS_MOTION || nPassKind == T3D_RD_FORWARD_PASS_TRANSPARENT;
 }
 
-static RID t3dRdForwardReadRid( const Dictionary &rPacket, const StringName &rKey ) {
-	if ( !rPacket.has( rKey ) ) return RID();
-	const Variant value = rPacket[rKey];
-	return value.get_type() == Variant::RID ? ( RID )( value ) : RID();
-}
+} // namespace
 
 Terrain3DRdForwardPlusBridgeAdapter::Terrain3DRdForwardPlusBridgeAdapter( void ) {
 	for ( std::atomic<Terrain3DRenderCoordinator *> &slot : m_szCoordinators ) {
 		slot.store( nullptr, std::memory_order_relaxed );
 	}
+	resetConnectionState();
 }
 
 void Terrain3DRdForwardPlusBridgeAdapter::initializeSingleton( void ) {
-	if ( s_pSingleton ) return;
+	if ( s_pSingleton ) {
+		return;
+	}
 	s_pSingleton = memnew( Terrain3DRdForwardPlusBridgeAdapter );
 	s_pSingleton->connectEngineBridge();
 }
 
 void Terrain3DRdForwardPlusBridgeAdapter::shutdownSingleton( void ) {
-	Terrain3DRdForwardPlusBridgeAdapter *const pAdapter = s_pSingleton;
-	if ( !pAdapter ) return;
-	pAdapter->disconnectEngineBridge();
-	for ( std::atomic<Terrain3DRenderCoordinator *> &slot : pAdapter->m_szCoordinators ) {
+	Terrain3DRdForwardPlusBridgeAdapter *const adapter = s_pSingleton;
+	if ( !adapter ) {
+		return;
+	}
+	adapter->disconnectEngineBridge();
+	adapter->m_nCoordinatorMask.store( 0u, std::memory_order_release );
+	Terrain3DRdContext::forceSync();
+	for ( std::atomic<Terrain3DRenderCoordinator *> &slot : adapter->m_szCoordinators ) {
 		slot.store( nullptr, std::memory_order_release );
 	}
 	s_pSingleton = nullptr;
-	memdelete( pAdapter );
+	memdelete( adapter );
+}
+
+void Terrain3DRdForwardPlusBridgeAdapter::resetConnectionState( void ) {
+	m_bBridgePresent.store( false, std::memory_order_release );
+	m_bBridgeReady.store( false, std::memory_order_release );
+	m_bCallbackRegistered.store( false, std::memory_order_release );
+	m_nObservedAbiVersion.store( 0u, std::memory_order_release );
+	m_nObservedCapabilities.store( 0u, std::memory_order_release );
+	m_pEngineBridge = nullptr;
+	m_nPrepareAddress = reinterpret_cast<uintptr_t>( &Terrain3DRdForwardPlusBridgeAdapter::prepareThunk );
+	m_nShadowPrepareAddress = reinterpret_cast<uintptr_t>( &Terrain3DRdForwardPlusBridgeAdapter::prepareShadowThunk );
+	m_nSubmitAddress = reinterpret_cast<uintptr_t>( &Terrain3DRdForwardPlusBridgeAdapter::submitThunk );
+	m_nUserdataAddress = reinterpret_cast<uintptr_t>( this );
+	m_nCachedFrameGeneration = 0u;
+	m_nCachedResourceGeneration = 0u;
+	m_nCachedPassSerial = 0u;
+	m_mainCallbackContext = t3dRdForwardPassContext_t{};
+	m_shadowCallbackContext = t3dRdForwardPassContext_t{};
+	m_pPreparedContext = nullptr;
+#if defined( TOOLS_ENABLED ) || defined( DEBUG_ENABLED )
+	m_nPacketsReceived = 0u;
+	m_nPacketsAccepted = 0u;
+	m_nPacketsRejected = 0u;
+	m_nLastScenePass = 0u;
+	m_nLastDrawList = -1;
+	m_nLastPassKind = T3D_RD_FORWARD_PASS_INVALID;
+#endif
 }
 
 void Terrain3DRdForwardPlusBridgeAdapter::setError( const String &rError ) {
@@ -81,54 +163,79 @@ String Terrain3DRdForwardPlusBridgeAdapter::getLastError( void ) const {
 }
 
 bool Terrain3DRdForwardPlusBridgeAdapter::connectEngineBridge( void ) {
-	const auto fail_connection = [this]( const String &rError ) {
+	resetConnectionState();
+	const auto failConnection = [this]( const String &rError ) {
 		setError( rError );
 		UtilityFunctions::push_error( "Terrain3D Forward+ bridge: ", rError );
 		return false;
 	};
 
-	m_bBridgePresent.store( false, std::memory_order_release );
-	m_bBridgeReady.store( false, std::memory_order_release );
-	m_bCallbackRegistered.store( false, std::memory_order_release );
-	m_nObservedAbiVersion.store( 0u, std::memory_order_release );
-	m_pEngineBridge = nullptr;
-	m_callback = Callable();
-
-	Engine *const pEngine = Engine::get_singleton();
+	Engine *const engine = Engine::get_singleton();
 	const StringName singleton_name( s_pszEngineSingletonName );
-	if ( !pEngine || !pEngine->has_singleton( singleton_name ) ) {
-		return fail_connection( "Godot 4.7.1 Terrain3DForwardPlusBridge singleton is missing; production RenderingDevice rendering is disabled" );
+	if ( !engine || !engine->has_singleton( singleton_name ) ) {
+		return failConnection( "Godot 4.7.2 Terrain3DForwardPlusBridge singleton is missing; production "
+							   "RenderingDevice rendering is disabled" );
 	}
 	m_bBridgePresent.store( true, std::memory_order_release );
-	m_pEngineBridge = pEngine->get_singleton( singleton_name );
-	if ( !m_pEngineBridge || !m_pEngineBridge->has_method( StringName( "get_abi_version" ) ) ||
-			!m_pEngineBridge->has_method( StringName( "register_callback" ) ) ||
-			!m_pEngineBridge->has_method( StringName( "unregister_callback" ) ) ||
-			!m_pEngineBridge->has_method( StringName( "has_callback" ) ) ||
-			!m_pEngineBridge->has_method( StringName( "collect_retired_callbacks" ) ) ) {
-		return fail_connection( "Terrain3DForwardPlusBridge singleton does not expose the required F1 ABI methods" );
+	m_pEngineBridge = engine->get_singleton( singleton_name );
+	static const char *const required_methods[] = { "get_abi_version",
+		"get_native_capabilities",
+		"register_native_callback",
+		"unregister_native_callback",
+		"has_native_callback",
+		"collect_retired_callbacks" };
+	for ( const char *const method : required_methods ) {
+		if ( !m_pEngineBridge || !m_pEngineBridge->has_method( StringName( method ) ) ) {
+			return failConnection(
+					String( "Terrain3DForwardPlusBridge singleton is missing required ABI 11 method: " ) + method );
+		}
 	}
+
 	const Variant abi_value = m_pEngineBridge->call( StringName( "get_abi_version" ) );
 	if ( abi_value.get_type() != Variant::INT ) {
-		return fail_connection( "Terrain3DForwardPlusBridge returned a non-integer ABI version" );
+		return failConnection( "Terrain3DForwardPlusBridge returned a non-integer ABI version" );
 	}
-	const uint32_t abi = ( uint32_t )( MAX( ( int64_t )( abi_value ), int64_t( 0 ) ) );
+	const int64_t abi_signed = (int64_t)( abi_value );
+	const uint32_t abi = abi_signed >= 0 ? (uint32_t)( abi_signed ) : 0u;
 	m_nObservedAbiVersion.store( abi, std::memory_order_release );
 	if ( abi != s_nBridgeAbiVersion ) {
-		return fail_connection( vformat( "Terrain3DForwardPlusBridge ABI mismatch: expected %d, received %d", s_nBridgeAbiVersion, abi ) );
+		return failConnection( vformat(
+				"Terrain3DForwardPlusBridge ABI mismatch: expected %d, received %d", s_nBridgeAbiVersion, abi ) );
 	}
-	m_callback = callable_mp( this, &Terrain3DRdForwardPlusBridgeAdapter::forwardPassCallback );
-	const Variant registered_value = m_pEngineBridge->call( StringName( "register_callback" ), m_callback );
-	const bool registered = registered_value.get_type() == Variant::BOOL && ( bool )( registered_value );
+
+	const Variant capabilities_value = m_pEngineBridge->call( StringName( "get_native_capabilities" ) );
+	if ( capabilities_value.get_type() != Variant::INT ) {
+		return failConnection( "Terrain3DForwardPlusBridge returned a non-integer capability mask" );
+	}
+	const uint64_t capabilities = (uint64_t)( (int64_t)( capabilities_value ) );
+	m_nObservedCapabilities.store( capabilities, std::memory_order_release );
+	if ( ( capabilities & s_nT3dForwardBridgeRequiredCapabilities ) != s_nT3dForwardBridgeRequiredCapabilities ) {
+		return failConnection(
+				vformat( "Terrain3DForwardPlusBridge capability mismatch: required 0x%llx, received 0x%llx",
+						s_nT3dForwardBridgeRequiredCapabilities,
+						capabilities ) );
+	}
+
+	const Variant registered_value = m_pEngineBridge->call( StringName( "register_native_callback" ),
+			(int64_t)( m_nPrepareAddress ),
+			(int64_t)( m_nShadowPrepareAddress ),
+			(int64_t)( m_nSubmitAddress ),
+			(int64_t)( m_nUserdataAddress ),
+			(int64_t)( sizeof( t3dRdForwardBridgeFramePacket_t ) ),
+			(int64_t)( sizeof( t3dRdForwardBridgeResourcePacket_t ) ),
+			(int64_t)( sizeof( t3dRdForwardBridgePassPacket_t ) ),
+			(int64_t)( sizeof( t3dRdForwardBridgeShadowPacket_t ) ) );
+	const bool registered = registered_value.get_type() == Variant::BOOL && (bool)( registered_value );
 	m_bCallbackRegistered.store( registered, std::memory_order_release );
 	if ( !registered ) {
-		m_callback = Callable();
-		return fail_connection( "Terrain3DForwardPlusBridge rejected the Terrain3D callback registration" );
+		return failConnection( "Terrain3DForwardPlusBridge rejected the ABI 11 native callback registration" );
 	}
-	const Variant has_callback_value = m_pEngineBridge->call( StringName( "has_callback" ) );
-	if ( has_callback_value.get_type() != Variant::BOOL || !( bool )( has_callback_value ) ) {
+
+	const Variant has_callback_value = m_pEngineBridge->call( StringName( "has_native_callback" ) );
+	if ( has_callback_value.get_type() != Variant::BOOL || !(bool)( has_callback_value ) ) {
 		disconnectEngineBridge();
-		return fail_connection( "Terrain3DForwardPlusBridge did not report the registered callback as available" );
+		return failConnection(
+				"Terrain3DForwardPlusBridge did not report the registered native callback as available" );
 	}
 	m_bBridgeReady.store( true, std::memory_order_release );
 	setError( String() );
@@ -137,27 +244,36 @@ bool Terrain3DRdForwardPlusBridgeAdapter::connectEngineBridge( void ) {
 
 void Terrain3DRdForwardPlusBridgeAdapter::disconnectEngineBridge( void ) {
 	m_bBridgeReady.store( false, std::memory_order_release );
-	Object *const pBridge = m_pEngineBridge;
-	const Callable callback = m_callback;
-	if ( pBridge && m_bCallbackRegistered.exchange( false, std::memory_order_acq_rel ) && callback.is_valid() ) {
-		pBridge->call( StringName( "unregister_callback" ), callback );
+	Object *const bridge = m_pEngineBridge;
+	if ( bridge && m_bCallbackRegistered.exchange( false, std::memory_order_acq_rel ) ) {
+		bridge->call( StringName( "unregister_native_callback" ),
+				(int64_t)( m_nPrepareAddress ),
+				(int64_t)( m_nShadowPrepareAddress ),
+				(int64_t)( m_nSubmitAddress ),
+				(int64_t)( m_nUserdataAddress ) );
 		Terrain3DRdContext::forceSync();
-		if ( pBridge->has_method( StringName( "collect_retired_callbacks" ) ) ) {
-			pBridge->call( StringName( "collect_retired_callbacks" ) );
-		}
+		bridge->call( StringName( "collect_retired_callbacks" ) );
 	}
-	m_callback = Callable();
+	m_pPreparedContext = nullptr;
+	m_nCachedPassSerial = 0u;
 	m_pEngineBridge = nullptr;
+	m_bBridgePresent.store( false, std::memory_order_release );
 }
 
 bool Terrain3DRdForwardPlusBridgeAdapter::attachCoordinator( Terrain3DRenderCoordinator *const pCoordinator ) {
-	if ( !pCoordinator ) return false;
-	for ( std::atomic<Terrain3DRenderCoordinator *> &slot : m_szCoordinators ) {
-		if ( slot.load( std::memory_order_acquire ) == pCoordinator ) return true;
+	if ( !pCoordinator ) {
+		return false;
 	}
-	for ( std::atomic<Terrain3DRenderCoordinator *> &slot : m_szCoordinators ) {
-		Terrain3DRenderCoordinator *pExpected = nullptr;
-		if ( slot.compare_exchange_strong( pExpected, pCoordinator, std::memory_order_acq_rel, std::memory_order_acquire ) ) {
+	for ( uint32_t i = 0u; i < s_nMaxCoordinators; ++i ) {
+		if ( m_szCoordinators[i].load( std::memory_order_acquire ) == pCoordinator ) {
+			return true;
+		}
+	}
+	for ( uint32_t i = 0u; i < s_nMaxCoordinators; ++i ) {
+		Terrain3DRenderCoordinator *expected = nullptr;
+		if ( m_szCoordinators[i].compare_exchange_strong(
+					 expected, pCoordinator, std::memory_order_acq_rel, std::memory_order_acquire ) ) {
+			m_nCoordinatorMask.fetch_or( uint64_t( 1u ) << i, std::memory_order_release );
 			return true;
 		}
 	}
@@ -166,271 +282,323 @@ bool Terrain3DRdForwardPlusBridgeAdapter::attachCoordinator( Terrain3DRenderCoor
 }
 
 void Terrain3DRdForwardPlusBridgeAdapter::detachCoordinator( Terrain3DRenderCoordinator *const pCoordinator ) {
-	if ( !pCoordinator ) return;
-	for ( std::atomic<Terrain3DRenderCoordinator *> &slot : m_szCoordinators ) {
-		Terrain3DRenderCoordinator *pExpected = pCoordinator;
-		slot.compare_exchange_strong( pExpected, nullptr, std::memory_order_acq_rel, std::memory_order_acquire );
+	if ( !pCoordinator ) {
+		return;
 	}
-	// A callback that loaded the coordinator pointer before the exchange must
-	// finish before the coordinator can be destroyed.
-	Terrain3DRdContext::forceSync();
-}
-
-bool Terrain3DRdForwardPlusBridgeAdapter::parsePacket(
-		const Dictionary &rPacket, t3dRdForwardPassContext_t &rContext, String &rError ) {
-	rContext = t3dRdForwardPassContext_t{};
-	rError = String();
-	int64_t value = 0;
-	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "bridge_abi" ), value, rError ) ) return false;
-	if ( value != ( int64_t )( s_nBridgeAbiVersion ) ) {
-		rError = vformat( "Forward+ bridge packet ABI mismatch: expected %d, received %d", s_nBridgeAbiVersion, value );
-		return false;
-	}
-	rContext.m_nBridgeAbiVersion = ( uint32_t )( value );
-	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "phase" ), value, rError ) ||
-			value < T3D_RD_FORWARD_PHASE_PREPARE || value > T3D_RD_FORWARD_PHASE_SUBMIT ) {
-		if ( rError.is_empty() ) rError = "Forward+ bridge packet has an invalid callback phase";
-		return false;
-	}
-	rContext.m_phase = ( t3dRdForwardCallbackPhase_t )( value );
-	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "pass_kind" ), value, rError ) ) return false;
-	if ( value <= T3D_RD_FORWARD_PASS_INVALID || value >= T3D_RD_FORWARD_PASS_MAX ) {
-		rError = vformat( "Forward+ bridge packet has unsupported pass kind: %d", value );
-		return false;
-	}
-	rContext.m_passKind = ( t3dRdForwardPassKind_t )( value );
-	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "native_pass_mode" ), value, rError ) ||
-			value < T3D_RD_FORWARD_NATIVE_PASS_COLOR || value > T3D_RD_FORWARD_NATIVE_PASS_SDF ) {
-		if ( rError.is_empty() ) rError = "Forward+ bridge packet has an invalid native pass mode";
-		return false;
-	}
-	rContext.m_nativePassMode = ( t3dRdForwardNativePassMode_t )( value );
-	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "draw_list" ), value, rError ) ||
-			( rContext.m_phase == T3D_RD_FORWARD_PHASE_SUBMIT && value < 0 ) ) {
-		if ( rError.is_empty() ) rError = "Forward+ bridge packet has an invalid native draw-list ID";
-		return false;
-	}
-	rContext.m_nDrawList = value;
-	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "framebuffer_format" ), value, rError ) || value < 0 ) {
-		if ( rError.is_empty() ) rError = "Forward+ bridge packet has an invalid framebuffer format ID";
-		return false;
-	}
-	rContext.m_nFramebufferFormat = value;
-	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "view_count" ), value, rError ) || value < 1 ||
-			value > ( int64_t )( s_nRdForwardMaxViews ) ) {
-		if ( rError.is_empty() ) rError = vformat( "Forward+ bridge packet view count is outside [1, %d]", s_nRdForwardMaxViews );
-		return false;
-	}
-	rContext.m_nViewCount = ( uint32_t )( value );
-	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "scene_pass" ), value, rError ) || value < 0 ) return false;
-	rContext.m_nScenePass = ( uint64_t )( value );
-	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "render_frame" ), value, rError ) || value < 0 ) return false;
-	rContext.m_nRenderFrame = ( uint64_t )( value );
-	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "viewport_key" ), value, rError ) || value < 0 ) return false;
-	rContext.m_nViewportKey = ( uint64_t )( value );
-	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "sample_count" ), value, rError ) ||
-			( value != 1 && value != 2 && value != 4 && value != 8 ) ) return false;
-	rContext.m_nSampleCount = ( uint32_t )( value );
-	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "color_pass_flags" ), value, rError ) || value < 0 ) return false;
-	rContext.m_nColorPassFlags = ( uint32_t )( value );
-	const Variant depth_prepass_value = rPacket.get( StringName( "depth_prepass_active" ), Variant() );
-	if ( depth_prepass_value.get_type() != Variant::BOOL ) {
-		rError = "Forward+ bridge packet depth_prepass_active is missing or malformed";
-		return false;
-	}
-	rContext.m_bDepthPrepassActive = ( bool )( depth_prepass_value );
-	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "camera_visible_layers" ), value, rError ) || value < 0 ) return false;
-	rContext.m_nCameraVisibleLayers = ( uint32_t )( value );
-
-	const Variant region_value = rPacket.get( StringName( "render_region" ), Variant() );
-	if ( region_value.get_type() != Variant::RECT2I ) {
-		rError = "Forward+ bridge packet render_region is missing or malformed";
-		return false;
-	}
-	rContext.m_renderRegion = ( Rect2i )( region_value );
-	const Variant size_value = rPacket.get( StringName( "render_size" ), Variant() );
-	if ( size_value.get_type() != Variant::VECTOR2I ) {
-		rError = "Forward+ bridge packet render_size is missing or malformed";
-		return false;
-	}
-	rContext.m_renderSize = ( Vector2i )( size_value );
-	const Variant reverse_cull_value = rPacket.get( StringName( "reverse_cull" ), Variant() );
-	const Variant reflection_value = rPacket.get( StringName( "reflection_probe_render" ), Variant() );
-	if ( reverse_cull_value.get_type() != Variant::BOOL || reflection_value.get_type() != Variant::BOOL ) {
-		rError = "Forward+ bridge packet pass-state booleans are missing or malformed";
-		return false;
-	}
-	rContext.m_bReverseCull = ( bool )( reverse_cull_value );
-	rContext.m_bReflectionProbeRender = ( bool )( reflection_value );
-
-	const Variant camera_value = rPacket.get( StringName( "camera_transform" ), Variant() );
-	const Variant previous_camera_value = rPacket.get( StringName( "previous_camera_transform" ), Variant() );
-	if ( camera_value.get_type() != Variant::TRANSFORM3D || previous_camera_value.get_type() != Variant::TRANSFORM3D ) {
-		rError = "Forward+ bridge packet camera transforms are missing or malformed";
-		return false;
-	}
-	rContext.m_cameraTransform = ( Transform3D )( camera_value );
-	rContext.m_previousCameraTransform = ( Transform3D )( previous_camera_value );
-
-	const Variant taa_jitter_value = rPacket.get( StringName( "taa_jitter" ), Variant() );
-	const Variant previous_taa_jitter_value = rPacket.get( StringName( "previous_taa_jitter" ), Variant() );
-	const Variant motion_vectors_value = rPacket.get( StringName( "motion_vectors_enabled" ), Variant() );
-	if ( taa_jitter_value.get_type() != Variant::VECTOR2 || previous_taa_jitter_value.get_type() != Variant::VECTOR2 ||
-			motion_vectors_value.get_type() != Variant::BOOL ) {
-		rError = "Forward+ bridge packet motion history state is missing or malformed";
-		return false;
-	}
-	rContext.m_taaJitter = ( Vector2 )( taa_jitter_value );
-	rContext.m_previousTaaJitter = ( Vector2 )( previous_taa_jitter_value );
-	rContext.m_bMotionVectorsEnabled = ( bool )( motion_vectors_value );
-
-	const Variant current_views_value = rPacket.get( StringName( "view_projections" ), Variant() );
-	const Variant previous_views_value = rPacket.get( StringName( "previous_view_projections" ), Variant() );
-	const Variant eye_offsets_value = rPacket.get( StringName( "eye_offsets" ), Variant() );
-	if ( current_views_value.get_type() != Variant::ARRAY || previous_views_value.get_type() != Variant::ARRAY ||
-			eye_offsets_value.get_type() != Variant::ARRAY ) {
-		rError = "Forward+ bridge packet view arrays are missing or malformed";
-		return false;
-	}
-	const Array current_views = current_views_value;
-	const Array previous_views = previous_views_value;
-	const Array eye_offsets = eye_offsets_value;
-	if ( current_views.size() < ( int64_t )( rContext.m_nViewCount ) ||
-			previous_views.size() < ( int64_t )( rContext.m_nViewCount ) ||
-			eye_offsets.size() < ( int64_t )( rContext.m_nViewCount ) ) {
-		rError = "Forward+ bridge packet view arrays are shorter than view_count";
-		return false;
-	}
-	for ( uint32_t i = 0u; i < rContext.m_nViewCount; ++i ) {
-		if ( current_views[( int64_t )( i )].get_type() != Variant::PROJECTION ||
-				previous_views[( int64_t )( i )].get_type() != Variant::PROJECTION ||
-				eye_offsets[( int64_t )( i )].get_type() != Variant::VECTOR3 ) {
-			rError = vformat( "Forward+ bridge packet view %d has malformed projection/stereo state", i );
-			return false;
+	uint64_t removed_mask = 0u;
+	for ( uint32_t i = 0u; i < s_nMaxCoordinators; ++i ) {
+		if ( m_szCoordinators[i].load( std::memory_order_acquire ) == pCoordinator ) {
+			removed_mask |= uint64_t( 1u ) << i;
 		}
-		rContext.m_szViewProjection[i] = ( Projection )( current_views[( int64_t )( i )] );
-		rContext.m_szPreviousViewProjection[i] = ( Projection )( previous_views[( int64_t )( i )] );
-		rContext.m_szEyeOffset[i] = ( Vector3 )( eye_offsets[( int64_t )( i )] );
 	}
-
-	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW ) {
-		rContext.m_hShadowLightInstance = t3dRdForwardReadRid( rPacket, StringName( "shadow_light_instance" ) );
-		if ( !rContext.m_hShadowLightInstance.is_valid() ||
-				!t3dRdForwardReadRequiredInt( rPacket, StringName( "shadow_light_type" ), value, rError ) || value < 0 ) return false;
-		rContext.m_nShadowLightType = ( uint32_t )( value );
-		if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "shadow_pass_index" ), value, rError ) || value < 0 ) return false;
-		rContext.m_nShadowPassIndex = ( int32_t )( value );
-		if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "shadow_caster_mask" ), value, rError ) || value < 0 ) return false;
-		rContext.m_nShadowCasterMask = ( uint32_t )( value );
-		if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "shadow_light_cull_mask" ), value, rError ) || value < 0 ) return false;
-		rContext.m_nShadowLightCullMask = ( uint32_t )( value );
-		if ( !t3dRdForwardReadRequiredFloat( rPacket, StringName( "shadow_bias" ), rContext.m_fShadowBias, rError ) ||
-				!t3dRdForwardReadRequiredFloat( rPacket, StringName( "shadow_normal_bias" ), rContext.m_fShadowNormalBias, rError ) ||
-				!t3dRdForwardReadRequiredFloat( rPacket, StringName( "shadow_bias_scale" ), rContext.m_fShadowBiasScale, rError ) ||
-				!t3dRdForwardReadRequiredFloat( rPacket, StringName( "shadow_range_begin" ), rContext.m_fShadowRangeBegin, rError ) ||
-				!t3dRdForwardReadRequiredFloat( rPacket, StringName( "shadow_range" ), rContext.m_fShadowRange, rError ) ) return false;
-		const Variant rect = rPacket.get( StringName( "shadow_atlas_rect" ), Variant() );
-		const Variant size = rPacket.get( StringName( "shadow_atlas_size" ), Variant() );
-		const Variant pancake = rPacket.get( StringName( "shadow_pancake" ), Variant() );
-		const Variant dp = rPacket.get( StringName( "shadow_dual_paraboloid" ), Variant() );
-		const Variant dp_flip = rPacket.get( StringName( "shadow_dual_paraboloid_flip" ), Variant() );
-		if ( rect.get_type() != Variant::RECT2 || size.get_type() != Variant::VECTOR2I || pancake.get_type() != Variant::BOOL ||
-				dp.get_type() != Variant::BOOL || dp_flip.get_type() != Variant::BOOL ) { rError = "Forward+ shadow packet metadata is malformed"; return false; }
-		rContext.m_shadowAtlasRect = ( Rect2 )( rect );
-		rContext.m_shadowAtlasSize = ( Vector2i )( size );
-		rContext.m_bShadowPancake = ( bool )( pancake );
-		rContext.m_bShadowDualParaboloid = ( bool )( dp );
-		rContext.m_bShadowDualParaboloidFlip = ( bool )( dp_flip );
+	if ( removed_mask == 0u ) {
+		return;
 	}
+	m_nCoordinatorMask.fetch_and( ~removed_mask, std::memory_order_acq_rel );
+	Terrain3DRdContext::forceSync();
+	while ( removed_mask != 0u ) {
+		const uint32_t index = t3dRdForwardCtz64( removed_mask );
+		removed_mask &= removed_mask - 1u;
+		Terrain3DRenderCoordinator *expected = pCoordinator;
+		m_szCoordinators[index].compare_exchange_strong(
+				expected, nullptr, std::memory_order_acq_rel, std::memory_order_acquire );
+	}
+}
 
-	if ( t3dRdForwardReadRequiredInt( rPacket, StringName( "cluster_size" ), value, rError ) && value >= 0 ) {
-		rContext.m_nClusterSize = ( uint32_t )( value );
-	} else {
+bool Terrain3DRdForwardPlusBridgeAdapter::convertFrame( const t3dRdForwardBridgeFramePacket_t &rFrame ) {
+	if ( rFrame.m_nAbi != s_nBridgeAbiVersion || rFrame.m_nStructSize != sizeof( rFrame ) ||
+			rFrame.m_nGeneration == 0u || rFrame.m_nViewCount == 0u ||
+			rFrame.m_nViewCount > s_nT3dForwardBridgeMaxViews ||
+			!t3dRdForwardValidSampleCount( rFrame.m_nSampleCount ) || !t3dRdForwardFiniteEnvironmentFrame( rFrame ) ) {
+		setError( "Terrain3D ABI 11 frame packet validation failed" );
 		return false;
 	}
-	if ( t3dRdForwardReadRequiredInt( rPacket, StringName( "cluster_max_elements" ), value, rError ) && value >= 0 ) {
-		rContext.m_nClusterMaxElements = ( uint32_t )( value );
-	} else {
-		return false;
+	if ( rFrame.m_nGeneration == m_nCachedFrameGeneration ) {
+		return true;
 	}
 
-	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "cluster_shift" ), value, rError ) || value < 0 ) return false;
-	rContext.m_nClusterShift = ( uint32_t )( value );
-	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "cluster_width" ), value, rError ) || value < 0 ) return false;
-	rContext.m_nClusterWidth = ( uint32_t )( value );
-	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "cluster_type_size" ), value, rError ) || value < 0 ) return false;
-	rContext.m_nClusterTypeSize = ( uint32_t )( value );
-	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "cluster_max_elements_div_32" ), value, rError ) || value < 0 ) return false;
-	rContext.m_nClusterMaxElementsDiv32 = ( uint32_t )( value );
-	if ( !t3dRdForwardReadRequiredInt( rPacket, StringName( "directional_light_count" ), value, rError ) || value < 0 ) return false;
-	rContext.m_nDirectionalLightCount = ( uint32_t )( value );
-	const Variant directional_soft_shadow_value = rPacket.get( StringName( "directional_light_soft_shadows" ), Variant() );
-	if ( directional_soft_shadow_value.get_type() != Variant::BOOL ) {
-		rError = "Forward+ bridge packet directional_light_soft_shadows is missing or malformed";
-		return false;
+	t3dRdForwardPassContext_t &context = m_mainCallbackContext;
+	context.m_nBridgeAbiVersion = s_nBridgeAbiVersion;
+	context.m_nFrameGeneration = rFrame.m_nGeneration;
+	context.m_nScenePass = rFrame.m_nScenePass;
+	context.m_nRenderFrame = rFrame.m_nRenderFrame;
+	context.m_nViewportKey = rFrame.m_nViewportKey;
+	context.m_nViewCount = rFrame.m_nViewCount;
+	context.m_nSampleCount = rFrame.m_nSampleCount;
+	context.m_nCameraVisibleLayers = rFrame.m_nCameraVisibleLayers;
+	context.m_renderRegion = Rect2i( rFrame.m_nRenderRegion[0],
+			rFrame.m_nRenderRegion[1],
+			rFrame.m_nRenderRegion[2],
+			rFrame.m_nRenderRegion[3] );
+	context.m_renderSize = Vector2i( rFrame.m_nRenderSize[0], rFrame.m_nRenderSize[1] );
+	context.m_nClusterMaxElements = rFrame.m_nClusterMaxElements;
+	context.m_nClusterShift = rFrame.m_nClusterShift;
+	context.m_nClusterWidth = rFrame.m_nClusterWidth;
+	context.m_nClusterTypeSize = rFrame.m_nClusterTypeSize;
+	context.m_nClusterMaxElementsDiv32 = rFrame.m_nClusterMaxElementsDiv32;
+	context.m_nDirectionalLightCount = rFrame.m_nDirectionalLightCount;
+	context.m_fCameraZNear = rFrame.m_fCameraZNear;
+	context.m_fCameraZFar = rFrame.m_fCameraZFar;
+	context.m_fReflectionAtlasBorderSize = rFrame.m_fReflectionAtlasBorderSize;
+	context.m_cameraTransform = t3dRdForwardDecodeTransform( rFrame.m_mCameraTransform );
+	context.m_previousCameraTransform = context.m_cameraTransform;
+	for ( uint32_t view = 0u; view < rFrame.m_nViewCount; ++view ) {
+		context.m_szViewProjection[view] = t3dRdForwardDecodeProjection( rFrame.m_mViewProjection[view] );
+		context.m_szPreviousViewProjection[view] =
+				t3dRdForwardDecodeProjection( rFrame.m_mPreviousViewProjection[view] );
+		context.m_szEyeOffset[view] =
+				Vector3( rFrame.m_vEyeOffset[view][0], rFrame.m_vEyeOffset[view][1], rFrame.m_vEyeOffset[view][2] );
 	}
-	rContext.m_bDirectionalLightSoftShadows = ( bool )( directional_soft_shadow_value );
-	if ( !t3dRdForwardReadRequiredFloat( rPacket, StringName( "camera_z_near" ), rContext.m_fCameraZNear, rError ) ||
-			!t3dRdForwardReadRequiredFloat( rPacket, StringName( "camera_z_far" ), rContext.m_fCameraZFar, rError ) ||
-			!t3dRdForwardReadRequiredFloat( rPacket, StringName( "reflection_atlas_border_size" ), rContext.m_fReflectionAtlasBorderSize, rError ) ) return false;
-
-	rContext.m_hNativeFramebuffer = t3dRdForwardReadRid( rPacket, StringName( "native_framebuffer" ) );
-	rContext.m_hDirectionalLightBuffer = t3dRdForwardReadRid( rPacket, StringName( "directional_light_buffer" ) );
-	rContext.m_hOmniLightBuffer = t3dRdForwardReadRid( rPacket, StringName( "omni_light_buffer" ) );
-	rContext.m_hSpotLightBuffer = t3dRdForwardReadRid( rPacket, StringName( "spot_light_buffer" ) );
-	rContext.m_hAreaLightBuffer = t3dRdForwardReadRid( rPacket, StringName( "area_light_buffer" ) );
-	rContext.m_hClusterBuffer = t3dRdForwardReadRid( rPacket, StringName( "cluster_buffer" ) );
-	rContext.m_hShadowAtlasTexture = t3dRdForwardReadRid( rPacket, StringName( "shadow_atlas_texture" ) );
-	rContext.m_hDirectionalShadowAtlasTexture = t3dRdForwardReadRid( rPacket, StringName( "directional_shadow_atlas_texture" ) );
-	rContext.m_hNativeShadowSampler = t3dRdForwardReadRid( rPacket, StringName( "shadow_sampler" ) );
-	rContext.m_hLightmapBuffer = t3dRdForwardReadRid( rPacket, StringName( "lightmap_buffer" ) );
-	rContext.m_hLightmapCaptureBuffer = t3dRdForwardReadRid( rPacket, StringName( "lightmap_capture_buffer" ) );
-	rContext.m_hReflectionProbeBuffer = t3dRdForwardReadRid( rPacket, StringName( "reflection_probe_buffer" ) );
-	rContext.m_hReflectionAtlasTexture = t3dRdForwardReadRid( rPacket, StringName( "reflection_atlas_texture" ) );
-	rContext.m_hRadianceTexture = t3dRdForwardReadRid( rPacket, StringName( "radiance_texture" ) );
-	rContext.m_hDecalBuffer = t3dRdForwardReadRid( rPacket, StringName( "decal_buffer" ) );
-	rContext.m_hDecalAtlasTexture = t3dRdForwardReadRid( rPacket, StringName( "decal_atlas_texture" ) );
-	rContext.m_hDecalAtlasSrgbTexture = t3dRdForwardReadRid( rPacket, StringName( "decal_atlas_srgb_texture" ) );
-	rContext.m_hAreaLightAtlasTexture = t3dRdForwardReadRid( rPacket, StringName( "area_light_atlas_texture" ) );
-	rContext.m_hBaseUniformSet = t3dRdForwardReadRid( rPacket, StringName( "base_uniform_set" ) );
-	rContext.m_hRenderPassUniformSet = t3dRdForwardReadRid( rPacket, StringName( "render_pass_uniform_set" ) );
+	context.m_taaJitter = Vector2( rFrame.m_vMotionJitter[0], rFrame.m_vMotionJitter[1] );
+	context.m_previousTaaJitter = Vector2( rFrame.m_vMotionJitter[2], rFrame.m_vMotionJitter[3] );
+	context.m_bMotionVectorsEnabled = ( rFrame.m_nFlags & T3D_RD_FORWARD_FRAME_MOTION_VECTORS ) != 0u;
+	context.m_bDirectionalLightSoftShadows = ( rFrame.m_nFlags & T3D_RD_FORWARD_FRAME_DIRECTIONAL_SOFT_SHADOWS ) != 0u;
+	context.m_nEnvironmentFlags = ( ( rFrame.m_nEnvironmentFlags & T3D_RD_FORWARD_BRIDGE_ENV_USE_AMBIENT_LIGHT )
+												  ? T3D_RD_FORWARD_ENV_USE_AMBIENT_LIGHT
+												  : 0u ) |
+			( ( rFrame.m_nEnvironmentFlags & T3D_RD_FORWARD_BRIDGE_ENV_USE_AMBIENT_CUBEMAP )
+							? T3D_RD_FORWARD_ENV_USE_AMBIENT_CUBEMAP
+							: 0u ) |
+			( ( rFrame.m_nEnvironmentFlags & T3D_RD_FORWARD_BRIDGE_ENV_USE_REFLECTION_CUBEMAP )
+							? T3D_RD_FORWARD_ENV_USE_REFLECTION_CUBEMAP
+							: 0u ) |
+			( ( rFrame.m_nEnvironmentFlags & T3D_RD_FORWARD_BRIDGE_ENV_RADIANCE_OCTMAP_ARRAY )
+							? T3D_RD_FORWARD_ENV_RADIANCE_OCTMAP_ARRAY
+							: 0u );
+	std::memcpy( context.m_szAmbientLightColorEnergy,
+			rFrame.m_szAmbientLightColorEnergy,
+			sizeof( context.m_szAmbientLightColorEnergy ) );
+	context.m_fAmbientColorSkyMix = rFrame.m_fAmbientColorSkyMix;
+	context.m_fEmissiveExposureNormalization = rFrame.m_fEmissiveExposureNormalization;
+	context.m_fIblExposureNormalization = rFrame.m_fIblExposureNormalization;
+	context.m_fRadiancePixelSize = rFrame.m_fRadiancePixelSize;
+	context.m_fRadianceBorderSize = rFrame.m_fRadianceBorderSize;
+	std::memcpy( context.m_szRadianceInverseXform,
+			rFrame.m_szRadianceInverseXform,
+			sizeof( context.m_szRadianceInverseXform ) );
+	m_nCachedFrameGeneration = rFrame.m_nGeneration;
 	return true;
 }
 
-bool Terrain3DRdForwardPlusBridgeAdapter::forwardPassCallback( const Dictionary &rPacket ) {
-	m_nPacketsReceived.fetch_add( 1u, std::memory_order_relaxed );
-	t3dRdForwardPassContext_t context;
-	String error;
-	if ( !parsePacket( rPacket, context, error ) ) {
-		m_nPacketsRejected.fetch_add( 1u, std::memory_order_relaxed );
-		setError( error );
+bool Terrain3DRdForwardPlusBridgeAdapter::convertResources( const t3dRdForwardBridgeResourcePacket_t &rResources ) {
+	if ( rResources.m_nAbi != s_nBridgeAbiVersion || rResources.m_nStructSize != sizeof( rResources ) ||
+			rResources.m_nGeneration == 0u || rResources.m_nReserved0 != 0u ) {
+		setError( "Terrain3D ABI 11 borrowed-resource packet validation failed" );
 		return false;
 	}
-	m_nPacketsAccepted.fetch_add( 1u, std::memory_order_relaxed );
-	m_nLastScenePass.store( context.m_nScenePass, std::memory_order_release );
-	m_nLastDrawList.store( context.m_nDrawList, std::memory_order_release );
-	m_nLastPassKind.store( ( uint32_t )( context.m_passKind ), std::memory_order_release );
-	for ( std::atomic<Terrain3DRenderCoordinator *> &slot : m_szCoordinators ) {
-		Terrain3DRenderCoordinator *const pCoordinator = slot.load( std::memory_order_acquire );
-		if ( pCoordinator ) pCoordinator->renderForwardPass( context );
+	if ( rResources.m_nGeneration == m_nCachedResourceGeneration ) {
+		return true;
 	}
+	t3dRdForwardPassContext_t &context = m_mainCallbackContext;
+	context.m_nResourceGeneration = rResources.m_nGeneration;
+	context.m_hDirectionalLightBuffer = t3dRdForwardDecodeRid( rResources.m_hDirectionalLightBuffer );
+	context.m_hOmniLightBuffer = t3dRdForwardDecodeRid( rResources.m_hOmniLightBuffer );
+	context.m_hSpotLightBuffer = t3dRdForwardDecodeRid( rResources.m_hSpotLightBuffer );
+	context.m_hAreaLightBuffer = t3dRdForwardDecodeRid( rResources.m_hAreaLightBuffer );
+	context.m_hClusterBuffer = t3dRdForwardDecodeRid( rResources.m_hClusterBuffer );
+	context.m_hShadowAtlasTexture = t3dRdForwardDecodeRid( rResources.m_hShadowAtlas );
+	context.m_hDirectionalShadowAtlasTexture = t3dRdForwardDecodeRid( rResources.m_hDirectionalShadowAtlas );
+	context.m_hNativeShadowSampler = t3dRdForwardDecodeRid( rResources.m_hShadowSampler );
+	context.m_hReflectionProbeBuffer = t3dRdForwardDecodeRid( rResources.m_hReflectionBuffer );
+	context.m_hReflectionAtlasTexture = t3dRdForwardDecodeRid( rResources.m_hReflectionAtlas );
+	context.m_hDecalBuffer = t3dRdForwardDecodeRid( rResources.m_hDecalBuffer );
+	context.m_hDecalAtlasTexture = t3dRdForwardDecodeRid( rResources.m_hDecalAtlas );
+	context.m_hDecalAtlasSrgbTexture = t3dRdForwardDecodeRid( rResources.m_hDecalAtlasSrgb );
+	context.m_hRadianceTexture = t3dRdForwardDecodeRid( rResources.m_hRadianceTexture );
+	m_nCachedResourceGeneration = rResources.m_nGeneration;
 	return true;
 }
 
-Dictionary Terrain3DRdForwardPlusBridgeAdapter::getDiagnostics( void ) const {
+bool Terrain3DRdForwardPlusBridgeAdapter::convertPass( const t3dRdForwardBridgePassPacket_t &rPass ) {
+	if ( rPass.m_nAbi != s_nBridgeAbiVersion || rPass.m_nStructSize != sizeof( rPass ) ||
+			!t3dRdForwardOrdinaryPassKind( rPass.m_nPassKind ) ||
+			rPass.m_nNativePassMode > T3D_RD_FORWARD_NATIVE_PASS_SDF || rPass.m_nSerial == 0u ||
+			rPass.m_nFramebufferFormat < 0 || rPass.m_hNativeFramebuffer == 0u ) {
+		setError( "Terrain3D ABI 11 ordinary-pass packet validation failed" );
+		return false;
+	}
+	t3dRdForwardPassContext_t &context = m_mainCallbackContext;
+	context.m_phase = T3D_RD_FORWARD_PHASE_PREPARE;
+	context.m_passKind = (t3dRdForwardPassKind_t)( rPass.m_nPassKind );
+	context.m_nativePassMode = (t3dRdForwardNativePassMode_t)( rPass.m_nNativePassMode );
+	context.m_nColorPassFlags = rPass.m_nColorFlags;
+	context.m_nPassFlags = rPass.m_nFlags;
+	context.m_bDepthPrepassActive = ( rPass.m_nFlags & T3D_RD_FORWARD_PASS_DEPTH_PREPASS_ACTIVE ) != 0u;
+	context.m_bReverseCull = ( rPass.m_nFlags & T3D_RD_FORWARD_PASS_REVERSE_CULL ) != 0u;
+	context.m_nFramebufferFormat = rPass.m_nFramebufferFormat;
+	context.m_nPreparedSerial = rPass.m_nSerial;
+	context.m_hNativeFramebuffer = t3dRdForwardDecodeRid( rPass.m_hNativeFramebuffer );
+	return true;
+}
+
+bool Terrain3DRdForwardPlusBridgeAdapter::convertShadow( const t3dRdForwardBridgeShadowPacket_t &rShadow ) {
+	if ( rShadow.m_nAbi != s_nBridgeAbiVersion || rShadow.m_nStructSize != sizeof( rShadow ) ||
+			rShadow.m_nNativePassMode > T3D_RD_FORWARD_NATIVE_PASS_SDF ||
+			!t3dRdForwardValidSampleCount( rShadow.m_nSampleCount ) || rShadow.m_nReserved0 != 0u ||
+			rShadow.m_nSerial == 0u || rShadow.m_nFramebufferFormat < 0 ) {
+		setError( "Terrain3D ABI 11 shadow packet validation failed" );
+		return false;
+	}
+	m_shadowCallbackContext = t3dRdForwardPassContext_t{};
+	t3dRdForwardPassContext_t &context = m_shadowCallbackContext;
+	context.m_nBridgeAbiVersion = s_nBridgeAbiVersion;
+	context.m_phase = T3D_RD_FORWARD_PHASE_PREPARE;
+	context.m_passKind = T3D_RD_FORWARD_PASS_SHADOW;
+	context.m_nativePassMode = (t3dRdForwardNativePassMode_t)( rShadow.m_nNativePassMode );
+	context.m_nPassFlags = rShadow.m_nFlags;
+	context.m_bReverseCull = ( rShadow.m_nFlags & T3D_RD_FORWARD_PASS_REVERSE_CULL ) != 0u;
+	context.m_nViewCount = 1u;
+	context.m_nSampleCount = rShadow.m_nSampleCount;
+	context.m_nShadowCasterMask = rShadow.m_nShadowCasterMask;
+	context.m_nShadowLightCullMask = rShadow.m_nShadowLightCullMask;
+	context.m_nFramebufferFormat = rShadow.m_nFramebufferFormat;
+	context.m_nPreparedSerial = rShadow.m_nSerial;
+	context.m_nScenePass = rShadow.m_nScenePass;
+	context.m_nRenderFrame = rShadow.m_nRenderFrame;
+	context.m_nViewportKey = rShadow.m_nViewportKey;
+	context.m_cameraTransform = t3dRdForwardDecodeTransform( rShadow.m_mCameraTransform );
+	context.m_previousCameraTransform = context.m_cameraTransform;
+	context.m_szViewProjection[0] = t3dRdForwardDecodeProjection( rShadow.m_mViewProjection );
+	context.m_szPreviousViewProjection[0] = context.m_szViewProjection[0];
+	context.m_szEyeOffset[0] = Vector3( rShadow.m_vEyeOffset[0], rShadow.m_vEyeOffset[1], rShadow.m_vEyeOffset[2] );
+	return true;
+}
+
+bool Terrain3DRdForwardPlusBridgeAdapter::dispatchToCoordinators( const t3dRdForwardPassContext_t &rContext ) {
+	uint64_t mask = m_nCoordinatorMask.load( std::memory_order_acquire );
+	bool dispatched = false;
+	bool accepted = true;
+	while ( mask != 0u ) {
+		const uint32_t index = t3dRdForwardCtz64( mask );
+		mask &= mask - 1u;
+		Terrain3DRenderCoordinator *const coordinator = m_szCoordinators[index].load( std::memory_order_acquire );
+		if ( coordinator ) {
+			dispatched = true;
+			accepted = coordinator->renderForwardPass( rContext ) && accepted;
+		}
+	}
+	return dispatched && accepted;
+}
+
+uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepare( const t3dRdForwardBridgeFramePacket_t *const pFrame,
+		const t3dRdForwardBridgeResourcePacket_t *const pResources,
+		const t3dRdForwardBridgePassPacket_t *const pPass ) noexcept {
+#if defined( TOOLS_ENABLED ) || defined( DEBUG_ENABLED )
+	++m_nPacketsReceived;
+#endif
+	m_pPreparedContext = nullptr;
+	m_nCachedPassSerial = 0u;
+	if ( !m_bBridgeReady.load( std::memory_order_acquire ) || !pPass ||
+			( pFrame ? !convertFrame( *pFrame ) : m_nCachedFrameGeneration == 0u ) ||
+			( pResources ? !convertResources( *pResources ) : m_nCachedResourceGeneration == 0u ) ||
+			!convertPass( *pPass ) || !dispatchToCoordinators( m_mainCallbackContext ) ) {
+#if defined( TOOLS_ENABLED ) || defined( DEBUG_ENABLED )
+		++m_nPacketsRejected;
+#endif
+		return 0u;
+	}
+	m_nCachedPassSerial = pPass->m_nSerial;
+	m_pPreparedContext = &m_mainCallbackContext;
+#if defined( TOOLS_ENABLED ) || defined( DEBUG_ENABLED )
+	++m_nPacketsAccepted;
+	m_nLastScenePass = m_mainCallbackContext.m_nScenePass;
+	m_nLastPassKind = (uint32_t)( m_mainCallbackContext.m_passKind );
+#endif
+	return pPass->m_nSerial;
+}
+
+uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepareShadow(
+		const t3dRdForwardBridgeShadowPacket_t *const pShadow ) noexcept {
+#if defined( TOOLS_ENABLED ) || defined( DEBUG_ENABLED )
+	++m_nPacketsReceived;
+#endif
+	m_pPreparedContext = nullptr;
+	m_nCachedPassSerial = 0u;
+	if ( !m_bBridgeReady.load( std::memory_order_acquire ) || !pShadow || !convertShadow( *pShadow ) ||
+			!dispatchToCoordinators( m_shadowCallbackContext ) ) {
+#if defined( TOOLS_ENABLED ) || defined( DEBUG_ENABLED )
+		++m_nPacketsRejected;
+#endif
+		return 0u;
+	}
+	m_nCachedPassSerial = pShadow->m_nSerial;
+	m_pPreparedContext = &m_shadowCallbackContext;
+#if defined( TOOLS_ENABLED ) || defined( DEBUG_ENABLED )
+	++m_nPacketsAccepted;
+	m_nLastScenePass = m_shadowCallbackContext.m_nScenePass;
+	m_nLastPassKind = T3D_RD_FORWARD_PASS_SHADOW;
+#endif
+	return pShadow->m_nSerial;
+}
+
+uint32_t Terrain3DRdForwardPlusBridgeAdapter::submit( const uint64_t nPreparedSerial,
+		const int64_t nDrawList ) noexcept {
+	if ( nPreparedSerial == 0u || nPreparedSerial != m_nCachedPassSerial || nDrawList < 0 || !m_pPreparedContext ) {
+		return 0u;
+	}
+	m_pPreparedContext->m_phase = T3D_RD_FORWARD_PHASE_SUBMIT;
+	m_pPreparedContext->m_nDrawList = nDrawList;
+	dispatchToCoordinators( *m_pPreparedContext );
+#if defined( TOOLS_ENABLED ) || defined( DEBUG_ENABLED )
+	m_nLastDrawList = nDrawList;
+#endif
+	m_pPreparedContext = nullptr;
+	m_nCachedPassSerial = 0u;
+	return 1u;
+}
+
+uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepareThunk( void *const pUserdata,
+		const t3dRdForwardBridgeFramePacket_t *const pFrame,
+		const t3dRdForwardBridgeResourcePacket_t *const pResources,
+		const t3dRdForwardBridgePassPacket_t *const pPass ) noexcept {
+	Terrain3DRdForwardPlusBridgeAdapter *const adapter =
+			static_cast<Terrain3DRdForwardPlusBridgeAdapter *>( pUserdata );
+	return adapter ? adapter->prepare( pFrame, pResources, pPass ) : 0u;
+}
+
+uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepareShadowThunk( void *const pUserdata,
+		const t3dRdForwardBridgeShadowPacket_t *const pShadow ) noexcept {
+	Terrain3DRdForwardPlusBridgeAdapter *const adapter =
+			static_cast<Terrain3DRdForwardPlusBridgeAdapter *>( pUserdata );
+	return adapter ? adapter->prepareShadow( pShadow ) : 0u;
+}
+
+uint32_t Terrain3DRdForwardPlusBridgeAdapter::submitThunk( void *const pUserdata,
+		const uint64_t nPreparedSerial,
+		const int64_t nDrawList ) noexcept {
+	Terrain3DRdForwardPlusBridgeAdapter *const adapter =
+			static_cast<Terrain3DRdForwardPlusBridgeAdapter *>( pUserdata );
+	return adapter ? adapter->submit( nPreparedSerial, nDrawList ) : 0u;
+}
+
+Dictionary Terrain3DRdForwardPlusBridgeAdapter::getDiagnostics( void ) {
+	Terrain3DRdContext::forceSync();
 	Dictionary result;
 	result["singleton_name"] = s_pszEngineSingletonName;
-	result["required_abi"] = ( int64_t )( s_nBridgeAbiVersion );
-	result["observed_abi"] = ( int64_t )( getObservedAbiVersion() );
+	result["required_abi"] = (int64_t)( s_nBridgeAbiVersion );
+	result["observed_abi"] = (int64_t)( getObservedAbiVersion() );
+	result["required_capabilities"] = (int64_t)( s_nT3dForwardBridgeRequiredCapabilities );
+	result["observed_capabilities"] = (int64_t)( getObservedCapabilities() );
 	result["bridge_present"] = isBridgePresent();
 	result["bridge_ready"] = isBridgeReady();
 	result["callback_registered"] = isCallbackRegistered();
-	result["packets_received"] = ( int64_t )( m_nPacketsReceived.load( std::memory_order_acquire ) );
-	result["packets_accepted"] = ( int64_t )( m_nPacketsAccepted.load( std::memory_order_acquire ) );
-	result["packets_rejected"] = ( int64_t )( m_nPacketsRejected.load( std::memory_order_acquire ) );
-	result["last_scene_pass"] = ( int64_t )( m_nLastScenePass.load( std::memory_order_acquire ) );
-	result["last_draw_list"] = m_nLastDrawList.load( std::memory_order_acquire );
-	result["last_pass_kind"] = ( int64_t )( m_nLastPassKind.load( std::memory_order_acquire ) );
+	result["active_coordinator_mask"] = (int64_t)( m_nCoordinatorMask.load( std::memory_order_acquire ) );
+	result["cached_frame_generation"] = (int64_t)( m_nCachedFrameGeneration );
+	result["cached_resource_generation"] = (int64_t)( m_nCachedResourceGeneration );
+	result["environment_flags"] = (int64_t)( m_mainCallbackContext.m_nEnvironmentFlags );
+	result["environment_radiance_valid"] = m_mainCallbackContext.m_hRadianceTexture.is_valid();
+	result["environment_radiance_array"] =
+			( m_mainCallbackContext.m_nEnvironmentFlags & T3D_RD_FORWARD_ENV_RADIANCE_OCTMAP_ARRAY ) != 0u;
+#if defined( TOOLS_ENABLED ) || defined( DEBUG_ENABLED )
+	result["packets_received"] = (int64_t)( m_nPacketsReceived );
+	result["packets_accepted"] = (int64_t)( m_nPacketsAccepted );
+	result["packets_rejected"] = (int64_t)( m_nPacketsRejected );
+	result["last_scene_pass"] = (int64_t)( m_nLastScenePass );
+	result["last_draw_list"] = m_nLastDrawList;
+	result["last_pass_kind"] = (int64_t)( m_nLastPassKind );
+#else
+	result["diagnostics_compiled"] = false;
+#endif
 	result["last_error"] = getLastError();
 	return result;
 }

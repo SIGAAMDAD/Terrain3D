@@ -83,7 +83,7 @@ bool Terrain3DRdOceanRenderer::ensureUniformSets( void ) {
 	return true;
 }
 
-bool Terrain3DRdOceanRenderer::ensureTopology( const std::shared_ptr<const t3dRdOceanTopologySnapshot_t> &pTopology ) {
+bool Terrain3DRdOceanRenderer::ensureTopology( const t3dRdOceanTopologySnapshot_t *const pTopology ) {
 	if ( !pTopology ) return false;
 	if ( m_nTopologyGeneration == pTopology->m_nGeneration && m_szTopology[0].isGpuReady() && m_szTopology[1].isGpuReady() ) return true;
 	for ( Terrain3DRdTopology &topology : m_szTopology ) topology.releaseGpu( m_context );
@@ -174,7 +174,7 @@ void Terrain3DRdOceanRenderer::shutdown( void ) {
 }
 
 bool Terrain3DRdOceanRenderer::prepareForwardPass( const t3dRdForwardPassContext_t &rContext, const t3dRdFrameSnapshot_t &rSnapshot,
-		const std::shared_ptr<const t3dRdOceanTopologySnapshot_t> &pTopology, const uint32_t nVisibilityMask ) {
+		const t3dRdOceanTopologySnapshot_t *const pTopology, const uint32_t nVisibilityMask ) {
 	if ( rContext.m_phase != T3D_RD_FORWARD_PHASE_PREPARE ) return false;
 	const t3dRdOceanState_t &rState = rSnapshot.m_ocean;
 	m_bPreparedHasDraws = false; m_nPreparedPatchCount = 0u; m_nPreparedScenePass = rContext.m_nScenePass; m_nPreparedViewportKey = rContext.m_nViewportKey; m_preparedPassKind = rContext.m_passKind;

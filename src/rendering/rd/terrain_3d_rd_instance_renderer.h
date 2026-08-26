@@ -12,7 +12,6 @@
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/rd_shader_spirv.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
-#include <memory>
 #include <vector>
 
 namespace godot { class RenderData; }
@@ -43,6 +42,11 @@ typedef struct t3dRdInstanceDrawPacket_s {
 	uint32_t m_nVisibilityLayers = 1u;
 	t3dRdIndexedIndirectCommand_t m_command{};
 } t3dRdInstanceDrawPacket_t;
+
+typedef struct t3dRdPacketBuildGroup_s {
+	t3dRdInstanceDrawPacket_t m_packet;
+	std::vector<uint32_t> m_indices;
+} t3dRdPacketBuildGroup_t;
 
 class Terrain3DRdInstanceRenderer {
 private:
@@ -125,6 +129,7 @@ private:
 	std::vector<t3dRdInstanceDrawPacket_t> m_shadowPackets;
 	std::vector<t3dRdInstanceMaterialPairBinding_t> m_materialBindings;
 	std::vector<t3dRdHlodCullDescriptor_t> m_hlodDescriptors;
+	std::vector<t3dRdPacketBuildGroup_t> m_packetGroupPool;
 	std::vector<t3dRdInstanceForwardPipelineEntry_t> m_forwardPipelines;
 	PackedByteArray m_frameBytes;
 	PackedByteArray m_instanceBytes;
@@ -181,7 +186,7 @@ private:
 	bool rebuildMaterialBindings( void );
 	void freeMaterialBindings( void );
 	RID getMaterialBinding( uint32_t nMaterial, uint32_t nOverlayMaterial ) const;
-	bool uploadScene( const std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> &pScene );
+	bool uploadScene( const t3dRdInstanceSceneSnapshot_t *pScene );
 	bool prepareMotionHistory( const t3dRdInstanceSceneSnapshot_t &rScene, uint64_t nRenderFrame );
 	bool uploadMaterials( void );
 	bool buildPackets( const t3dRdInstanceSceneSnapshot_t &rScene, const Projection *pViewProjections, uint32_t nViewCount, const Vector3 &rCamera, uint32_t nVisibilityMask, bool bShadowPass, bool bSkipFrustum = false );
@@ -206,15 +211,17 @@ public:
 			const t3dRdForwardShaderBundle_t &rForwardShaders );
 	void shutdown( void );
 	bool render( RenderData *pRenderData,
-			const std::shared_ptr<const t3dRdMeshSourceSnapshot_t> &pMeshes,
-			const std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> &pScene,
+			const t3dRdMeshSourceSnapshot_t *pMeshes,
+			const t3dRdInstanceSceneSnapshot_t *pScene,
 			uint32_t nVisibilityMask );
 	bool prepareForwardPass( const t3dRdForwardPassContext_t &rContext,
-			const std::shared_ptr<const t3dRdMeshSourceSnapshot_t> &pMeshes,
-			const std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> &pScene,
-			uint32_t nVisibilityMask );
+			const t3dRdMeshSourceSnapshot_t *pMeshes,
+			const t3dRdInstanceSceneSnapshot_t *pScene,
+			uint32_t nVisibilityMask,
+			bool bTemporalHistoryValid,
+			bool bViewportReconfigured );
 	bool renderForwardPass( const t3dRdForwardPassContext_t &rContext );
-	bool renderPreview( const std::shared_ptr<const t3dRdMeshSourceSnapshot_t> &pMeshes, uint16_t nAssetId, const Vector2i &rSize, Ref<Image> &rImage );
+	bool renderPreview( const t3dRdMeshSourceSnapshot_t *pMeshes, uint16_t nAssetId, const Vector2i &rSize, Ref<Image> &rImage );
 	Dictionary getDiagnostics( void ) const;
 	EA_FORCE_INLINE void setDirectDrawDebugEnabled( bool bEnabled ) { m_bDirectDrawDebug = bEnabled; }
 	EA_FORCE_INLINE void setMotionDebugEnabled( bool bEnabled ) { m_bMotionDebug = bEnabled; }

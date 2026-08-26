@@ -118,8 +118,7 @@ bool Terrain3DRdContext::subtractSaturating( std::atomic_uint64_t &rValue, const
 }
 
 void Terrain3DRdContext::rememberFreedResource( const uint64_t nRid, const uint64_t nDeviceGeneration ) {
-	static constexpr size_t s_nFreedHistoryLimit = 256u;
-	if ( m_freedResources.size() >= s_nFreedHistoryLimit ) m_freedResources.erase( m_freedResources.begin() );
+	if ( m_freedResources.size() >= s_nFreedHistoryCapacity ) m_freedResources.erase( m_freedResources.begin() );
 	m_freedResources.push_back( { nRid, nDeviceGeneration } );
 }
 
@@ -257,10 +256,6 @@ bool Terrain3DRdContext::initialize( void ) {
 
 	{
 		std::lock_guard<std::mutex> lock( m_resourceMutex );
-		m_resources.reserve( 128u );
-		m_resourceHistory.reserve( 128u );
-		m_freedResources.reserve( 256u );
-		m_vertexFormats.reserve( 8u );
 		m_lastFailure = String();
 	}
 	m_pRd.store( rd, std::memory_order_release );
@@ -284,25 +279,25 @@ bool Terrain3DRdContext::validateDevice( void ) {
 void Terrain3DRdContext::shutdown( void ) {
 	m_state.exchange( STATE_SHUTTING_DOWN, std::memory_order_acq_rel );
 	RenderingDevice *const rd = m_pRd.exchange( nullptr, std::memory_order_acq_rel );
-	std::vector<t3dRdResourceRecord_t> resources;
 	{
 		std::lock_guard<std::mutex> lock( m_resourceMutex );
-		resources.swap( m_resources );
-		m_vertexFormats.clear();
-		for ( const t3dRdResourceRecord_t &record : resources ) {
+		for ( auto iterator = m_resources.rbegin(); iterator != m_resources.rend(); ++iterator ) {
+			const t3dRdResourceRecord_t &record = *iterator;
 			accountRelease( record );
 			rememberFreedResource( record.m_hRid.get_id(), record.m_nDeviceGeneration );
+			if ( !record.m_hRid.is_valid() ) continue;
+			if ( rd ) {
+				if ( record.m_type != RESOURCE_UNIFORM_SET || rd->uniform_set_is_valid( record.m_hRid ) ) {
+					rd->free_rid( record.m_hRid );
+				}
+				m_nFreedResources.fetch_add( 1u, std::memory_order_relaxed );
+			} else {
+				m_nAbandonedResources.fetch_add( 1u, std::memory_order_relaxed );
+			}
 		}
+		m_resources.clear();
+		m_vertexFormats.clear();
 		resetLiveAccounting();
-	}
-	for ( auto iterator = resources.rbegin(); iterator != resources.rend(); ++iterator ) {
-		if ( !iterator->m_hRid.is_valid() ) continue;
-		if ( rd ) {
-			rd->free_rid( iterator->m_hRid );
-			m_nFreedResources.fetch_add( 1u, std::memory_order_relaxed );
-		} else {
-			m_nAbandonedResources.fetch_add( 1u, std::memory_order_relaxed );
-		}
 	}
 	m_state.store( STATE_UNINITIALIZED, std::memory_order_release );
 }
@@ -393,6 +388,7 @@ bool Terrain3DRdContext::registerResourceInternal( const RID &rRid,
 	}
 
 	bool duplicate = false;
+	bool capacity_exhausted = false;
 	{
 		std::lock_guard<std::mutex> lock( m_resourceMutex );
 		const uint64_t rid_id = rRid.get_id();
@@ -400,13 +396,18 @@ bool Terrain3DRdContext::registerResourceInternal( const RID &rRid,
 				[rid_id]( const t3dRdResourceRecord_t &rRecord ) { return rRecord.m_hRid.get_id() == rid_id; } );
 		if ( !duplicate ) {
 			const bool rebuild = hasResourceHistory( rName, type );
-			if ( !rebuild ) m_resourceHistory.push_back( { rName, type } );
+			if ( m_resources.size() >= s_nResourceCapacity ||
+					( !rebuild && m_resourceHistory.size() >= s_nResourceHistoryCapacity ) ) {
+				capacity_exhausted = true;
+			} else {
+				if ( !rebuild ) m_resourceHistory.push_back( { rName, type } );
 			m_freedResources.erase( std::remove_if( m_freedResources.begin(), m_freedResources.end(),
 					[rid_id]( const t3dRdFreedResource_t &rFreed ) { return rFreed.m_nRid == rid_id; } ),
 					m_freedResources.end() );
 			const t3dRdResourceRecord_t record{ rRid, rName, type, memoryCategory, nBytes, getDeviceGeneration() };
 			m_resources.push_back( record );
 			accountRegistration( record, rebuild );
+			}
 		}
 	}
 	if ( duplicate ) {
@@ -414,7 +415,17 @@ bool Terrain3DRdContext::registerResourceInternal( const RID &rRid,
 		setFailure( FAILURE_DUPLICATE_RESOURCE, String( "RD resource registered twice: " ) + rName );
 		return false;
 	}
-	rd->set_resource_name( rRid, rName );
+	if ( capacity_exhausted ) {
+		m_nAccountingErrors.fetch_add( 1u, std::memory_order_relaxed );
+		setFailure( FAILURE_ACCOUNTING, "Terrain3D fixed RD resource registry capacity exhausted" );
+		return false;
+	}
+	// Vertex and index arrays are RenderingDevice-side views without a driver
+	// object. Godot's set_resource_name() deliberately does not accept those
+	// RID owners, so keep their names in Terrain3D's resource records only.
+	if ( type != RESOURCE_VERTEX_ARRAY && type != RESOURCE_INDEX_ARRAY ) {
+		rd->set_resource_name( rRid, rName );
+	}
 	return true;
 }
 
@@ -444,6 +455,10 @@ bool Terrain3DRdContext::registerVertexFormat( const int64_t nFormat, const Stri
 	const bool exists = std::any_of( m_vertexFormats.begin(), m_vertexFormats.end(),
 			[nFormat]( const t3dRdVertexFormatRecord_t &rRecord ) { return rRecord.m_nFormat == nFormat; } );
 	if ( exists ) return true;
+	if ( m_vertexFormats.size() >= s_nVertexFormatCapacity ) {
+		m_nAccountingErrors.fetch_add( 1u, std::memory_order_relaxed );
+		return false;
+	}
 	m_vertexFormats.push_back( { nFormat, rName, getDeviceGeneration() } );
 	return true;
 }
@@ -497,7 +512,15 @@ void Terrain3DRdContext::freeResource( RID &rRid, const uint64_t nBufferBytes ) 
 	}
 	RenderingDevice *const rd = m_pRd.load( std::memory_order_acquire );
 	if ( rd ) {
-		rd->free_rid( rRid );
+		// RenderingDevice invalidates uniform sets automatically when a borrowed
+		// shader/buffer/texture dependency is destroyed. Their registry records are
+		// still ours and must be retired for accounting, but calling free_rid() on
+		// an already-invalidated set emits "Attempted to free invalid ID". This is
+		// the only RD resource class with a public validity query and dependency-
+		// driven invalidation semantics.
+		if ( record.m_type != RESOURCE_UNIFORM_SET || rd->uniform_set_is_valid( rRid ) ) {
+			rd->free_rid( rRid );
+		}
 		m_nFreedResources.fetch_add( 1u, std::memory_order_relaxed );
 	} else {
 		m_nAbandonedResources.fetch_add( 1u, std::memory_order_relaxed );

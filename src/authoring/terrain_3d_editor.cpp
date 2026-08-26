@@ -187,7 +187,16 @@ Dictionary Terrain3DEditor::captureEditSnapshot( const Ref<Terrain3DRegion> &rRe
 		return Dictionary();
 	}
 
-	snapshot["map"] = pMap->duplicate();
+	// UndoRedo outlives the live Image and may execute after the region has been
+	// compacted, streamed, or replaced. Store an immutable byte plane instead of
+	// retaining a mutable Ref<Image> graph in the Variant payload. PackedByteArray
+	// is copy-on-write, so the subsequent direct brush write detaches from this
+	// snapshot before modifying any byte.
+	snapshot["map_width"] = pMap->get_width();
+	snapshot["map_height"] = pMap->get_height();
+	snapshot["map_format"] = ( int )( pMap->get_format() );
+	snapshot["map_mipmaps"] = pMap->has_mipmaps();
+	snapshot["map_data"] = pMap->get_data();
 	if ( map_type == TYPE_HEIGHT ) {
 		snapshot["height_range"] = rRegion->getHeightRange();
 	}
@@ -234,15 +243,41 @@ void Terrain3DEditor::applyEditSnapshot( const Dictionary &rSnapshot,
 		}
 		return;
 	}
-	if ( !rSnapshot.has( "map" ) ) {
+	Ref<Image> pRestoredMap;
+	if ( rSnapshot.has( "map_data" ) && rSnapshot.has( "map_width" ) && rSnapshot.has( "map_height" ) &&
+			rSnapshot.has( "map_format" ) ) {
+		const int width = rSnapshot["map_width"];
+		const int height = rSnapshot["map_height"];
+		const int format_value = rSnapshot["map_format"];
+		const bool mipmaps = ( bool )( rSnapshot.get( "map_mipmaps", false ) );
+		const PackedByteArray bytes = rSnapshot["map_data"];
+		Image::Format expected_format = Image::FORMAT_RGBA8;
+		if ( map_type == TYPE_HEIGHT ) expected_format = Image::FORMAT_R16;
+		else if ( map_type == TYPE_CONTROL ) expected_format = Image::FORMAT_RF;
+		size_t expected_bytes = 0u;
+		int mip_width = width;
+		int mip_height = height;
+		const size_t bytes_per_texel = expected_format == Image::FORMAT_R16 ? 2u : 4u;
+		do {
+			expected_bytes += ( size_t )( mip_width ) * ( size_t )( mip_height ) * bytes_per_texel;
+			if ( !mipmaps || ( mip_width == 1 && mip_height == 1 ) ) break;
+			mip_width = MAX( mip_width >> 1, 1 );
+			mip_height = MAX( mip_height >> 1, 1 );
+		} while ( true );
+		if ( width != pRegion->getRegionSize() || height != pRegion->getRegionSize() ||
+				format_value != ( int )( expected_format ) || ( size_t )( bytes.size() ) != expected_bytes ) {
+			LOG( ERROR, "Rejected invalid Terrain3D edit snapshot for region ", location );
+			return;
+		}
+		pRestoredMap = Image::create_from_data( width, height, mipmaps, expected_format, bytes );
+	} else if ( rSnapshot.has( "map" ) ) {
+		// Backward compatibility for actions created before byte-plane snapshots.
+		const Ref<Image> pSnapshotMap = rSnapshot["map"];
+		if ( pSnapshotMap.is_valid() ) pRestoredMap = pSnapshotMap->duplicate();
+	}
+	if ( pRestoredMap.is_null() || pRestoredMap->is_empty() ) {
 		return;
 	}
-	const Ref<Image> pSnapshotMap = rSnapshot["map"];
-	if ( pSnapshotMap.is_null() ) {
-		return;
-	}
-
-	const Ref<Image> pRestoredMap = pSnapshotMap->duplicate();
 	pRegion->setMap( map_type, pRestoredMap );
 	if ( map_type == TYPE_HEIGHT && rSnapshot.has( "height_range" ) ) {
 		pRegion->setHeightRange( rSnapshot["height_range"] );

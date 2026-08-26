@@ -241,16 +241,19 @@ bool Terrain3DRenderCoordinator::ensureMacroNoiseTexture( const Terrain3DMateria
 }
 
 bool Terrain3DRenderCoordinator::ensureEditorBrushTexture( const Terrain3DMaterial *const pMaterial ) {
+	static constexpr int s_nEditorBrushTextureSize = 256;
 	if ( !pMaterial ) return true;
 	const Variant source_value = pMaterial->getShaderParam( StringName( "_editor_brush_texture" ) );
 	if ( source_value.get_type() != Variant::OBJECT ) {
-		if ( m_editorBrushTexture.getRid().is_valid() ) m_editorBrushTexture.clear();
+		// Keep the allocation alive while snapshots and their uniform sets can still
+		// reference it. Overlay state disables sampling when there is no source.
 		m_nEditorBrushSourceId = 0u;
 		return true;
 	}
 	const Ref<Texture2D> source_texture = source_value;
 	if ( source_texture.is_null() ) {
-		if ( m_editorBrushTexture.getRid().is_valid() ) m_editorBrushTexture.clear();
+		// The editor clears this parameter between tools. Releasing the texture here
+		// invalidates immutable frame slots which may still be in flight.
 		m_nEditorBrushSourceId = 0u;
 		return true;
 	}
@@ -258,22 +261,30 @@ bool Terrain3DRenderCoordinator::ensureEditorBrushTexture( const Terrain3DMateri
 	if ( source_id == m_nEditorBrushSourceId && m_editorBrushTexture.getRid().is_valid() ) return true;
 	Ref<Image> image = source_texture->get_image();
 	if ( image.is_null() || image->is_empty() ) {
-		LOG( ERROR, "Unable to read Terrain3D editor brush texture for direct RD publication" );
-		return false;
+		// Imported/streaming Texture2D resources can temporarily have no readable
+		// CPU image. Keep the last good brush and retry on the next publication;
+		// this optional editor overlay must never suppress the terrain snapshot.
+		return true;
 	}
 	image = image->duplicate();
 	if ( image->is_compressed() && image->decompress() != OK ) {
-		LOG( ERROR, "Unable to decompress Terrain3D editor brush texture for direct RD publication" );
-		return false;
+		return true;
 	}
 	if ( image->get_format() != Image::FORMAT_L8 ) image->convert( Image::FORMAT_L8 );
 	if ( image->has_mipmaps() ) image->clear_mipmaps();
-	Terrain3DGeneratedTexture replacement;
-	if ( !replacement.create( image ).is_valid() ) {
+	if ( image->get_width() != s_nEditorBrushTextureSize || image->get_height() != s_nEditorBrushTextureSize ) {
+		image->resize( s_nEditorBrushTextureSize, s_nEditorBrushTextureSize, Image::INTERPOLATE_BILINEAR );
+	}
+	// A fixed layout permits in-place uploads. The RID therefore remains stable
+	// across brush changes and cannot invalidate descriptor sets borrowed by any
+	// of the three atomic frame slots.
+	const bool bUploaded = m_editorBrushTexture.getRid().is_valid()
+			? m_editorBrushTexture.update2d( image )
+			: m_editorBrushTexture.create( image ).is_valid();
+	if ( !bUploaded ) {
 		LOG( ERROR, "Unable to create Terrain3D direct RD editor brush texture" );
 		return false;
 	}
-	m_editorBrushTexture.swap( replacement );
 	m_nEditorBrushSourceId = source_id;
 	return true;
 }
@@ -516,7 +527,15 @@ void Terrain3DRenderCoordinator::buildMaterialState( t3dRdFrameSnapshot_t &rSnap
 
 void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 	if ( !m_pTerrain || !m_pTerrain->getMesher() || !m_pTerrain->getData() ) return;
-	t3dRdFrameSnapshotSlot_t publication{};
+	if ( m_nSnapshotWriteIndex >= s_nRdFrameSnapshotSlotCount ) {
+		m_bRendererFailed.store( true, std::memory_order_release );
+		return;
+	}
+	// The exchange returns only a slot no longer observed by the render thread.
+	// Reuse its retained variable-capacity payloads and reset only frame-local POD.
+	t3dRdFrameSnapshotSlot_t &publication = m_snapshotSlots[m_nSnapshotWriteIndex];
+	publication.m_snapshot = t3dRdFrameSnapshot_t{};
+	publication.m_resources = t3dRdPublishedResources_t{};
 	t3dRdFrameSnapshot_t &snapshot = publication.m_snapshot;
 	snapshot.m_nRegionSize = ( uint32_t )( m_pTerrain->getRegionSize() );
 	snapshot.m_nRegionMapSize = ( uint32_t )( m_pTerrain->getData()->getRegionMapSizeInternal() );
@@ -604,8 +623,6 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 	const Ref<World3D> world = m_pTerrain->get_world_3d();
 	const Ref<Environment> environment = world.is_valid() ? world->get_environment() : Ref<Environment>();
 	if ( environment.is_valid() ) {
-		const Color ambient = environment->get_ambient_light_color();
-		snapshot.m_fAmbient = ( float )( environment->get_ambient_light_energy() * MAX( ambient.get_luminance(), 0.0f ) );
 		if ( environment->is_fog_enabled() ) {
 			snapshot.m_fogColor = environment->get_fog_light_color() * environment->get_fog_light_energy();
 			snapshot.m_fFogDensity = environment->get_fog_density();
@@ -646,7 +663,12 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 		ocean.m_fHeightScattering = t3dRdOceanFloatParam( shader_material, "height_scattering", 6.0f ); ocean.m_fHeightThreshold = t3dRdOceanFloatParam( shader_material, "height_threshold", 0.1f ); ocean.m_fHeightAngleThreshold = t3dRdOceanFloatParam( shader_material, "height_angle_threshold", 0.21f ); ocean.m_fFresnelScattering = t3dRdOceanFloatParam( shader_material, "fersnel_scattering", 20.0f ); ocean.m_fDirectScattering = t3dRdOceanFloatParam( shader_material, "direct_scattering", 10.0f );
 		ocean.m_nGeneration = 0u; ocean.m_nGeneration = hashBytes( &ocean, sizeof( ocean ) );
 	}
-	publication.m_oceanTopology = m_cachedOceanTopology;
+	if ( m_bCachedOceanTopologyValid &&
+			( !publication.m_bOceanTopologyValid ||
+					publication.m_oceanTopology.m_nGeneration != m_cachedOceanTopology.m_nGeneration ) ) {
+		publication.m_oceanTopology = m_cachedOceanTopology;
+		publication.m_bOceanTopologyValid = true;
+	}
 
 	Terrain3DData *const data = m_pTerrain->getData();
 	const Ref<Terrain3DAssets> assets = m_pTerrain->getAssets();
@@ -778,85 +800,90 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 	const Ref<Terrain3DAssets> instance_assets = m_pTerrain->getAssets();
 	Terrain3DHLODStreamer *const hlod_streamer = m_pTerrain->getHlodStreamer();
 	const uint64_t hlod_generation = hlod_streamer ? hlod_streamer->getRdPublicationGeneration() : 0u;
-	const bool hlod_changed = !m_cachedHlodInstanceScene || hlod_generation != m_nHlodSceneGeneration;
+	const bool hlod_changed = !m_bCachedHlodInstanceSceneValid || hlod_generation != m_nHlodSceneGeneration;
 	if ( hlod_changed ) {
 		m_cachedHlodMeshSources.clear();
 		if ( hlod_streamer ) {
 			hlod_streamer->fillRdMeshSources( m_cachedHlodMeshSources );
-			m_cachedHlodInstanceScene = hlod_streamer->buildRdInstanceSnapshot();
+			hlod_streamer->buildRdInstanceSnapshot( m_cachedHlodInstanceScene );
 		} else {
-			m_cachedHlodInstanceScene = std::make_shared<t3dRdInstanceSceneSnapshot_t>();
+			m_cachedHlodInstanceScene = t3dRdInstanceSceneSnapshot_t{};
 		}
+		m_bCachedHlodInstanceSceneValid = true;
 		m_nHlodSceneGeneration = hlod_generation;
 	}
 
 	const uint64_t mesh_fingerprint = Terrain3DRdMeshCache::computeSourceFingerprint(
 			instance_assets, m_cachedHlodMeshSources );
-	if ( !m_cachedInstanceMeshes || mesh_fingerprint != m_nInstanceMeshFingerprint ) {
+	if ( !m_bCachedInstanceMeshesValid || mesh_fingerprint != m_nInstanceMeshFingerprint ) {
 		m_nInstanceMeshGeneration = advanceGeneration( m_nInstanceMeshGeneration );
 		String mesh_error;
-		m_cachedInstanceMeshes = Terrain3DRdMeshCache::buildSourceSnapshot(
+		const bool built = Terrain3DRdMeshCache::buildSourceSnapshot(
 				instance_assets,
 				m_cachedHlodMeshSources,
+				m_cachedInstanceMeshes,
 				mesh_fingerprint,
 				m_nInstanceMeshGeneration,
 				&mesh_error );
-		if ( !m_cachedInstanceMeshes ) {
+		if ( !built ) {
 			std::lock_guard<std::mutex> lock( m_diagnosticsMutex );
 			m_initializationError = "Failed to publish RD instance/HLOD meshes: " + mesh_error;
 			return;
 		}
+		m_bCachedInstanceMeshesValid = true;
 		m_nInstanceMeshFingerprint = mesh_fingerprint;
 	}
 
 	Terrain3DInstancer *const instancer = m_pTerrain->getInstancer();
 	const uint64_t instance_generation = instancer ? instancer->getRdPublicationGeneration() : 0u;
-	const bool regular_changed = !m_cachedRegularInstanceScene || instance_generation != m_nInstanceSceneGeneration;
+	const bool regular_changed = !m_bCachedRegularInstanceSceneValid || instance_generation != m_nInstanceSceneGeneration;
 	if ( regular_changed ) {
-		m_cachedRegularInstanceScene = instancer ? instancer->buildRdInstanceSnapshot()
-				: std::make_shared<t3dRdInstanceSceneSnapshot_t>();
+		if ( instancer ) instancer->buildRdInstanceSnapshot( m_cachedRegularInstanceScene );
+		else m_cachedRegularInstanceScene = t3dRdInstanceSceneSnapshot_t{};
+		m_bCachedRegularInstanceSceneValid = true;
 		m_nInstanceSceneGeneration = instance_generation;
 	}
-	if ( !m_cachedInstanceScene || regular_changed || hlod_changed ) {
-		std::shared_ptr<t3dRdInstanceSceneSnapshot_t> combined = std::make_shared<t3dRdInstanceSceneSnapshot_t>();
+	if ( !m_bCachedInstanceSceneValid || regular_changed || hlod_changed ) {
+		t3dRdInstanceSceneSnapshot_t &combined = m_cachedInstanceScene;
+		combined.m_instances.clear();
+		combined.m_cells.clear();
 		m_nCombinedInstanceSceneGeneration = advanceGeneration( m_nCombinedInstanceSceneGeneration );
-		combined->m_nGeneration = m_nCombinedInstanceSceneGeneration;
-		const size_t regular_instance_count = m_cachedRegularInstanceScene ? m_cachedRegularInstanceScene->m_instances.size() : 0u;
-		const size_t hlod_instance_count = m_cachedHlodInstanceScene ? m_cachedHlodInstanceScene->m_instances.size() : 0u;
-		const size_t regular_cell_count = m_cachedRegularInstanceScene ? m_cachedRegularInstanceScene->m_cells.size() : 0u;
-		const size_t hlod_cell_count = m_cachedHlodInstanceScene ? m_cachedHlodInstanceScene->m_cells.size() : 0u;
-		combined->m_instances.reserve( regular_instance_count + hlod_instance_count );
-		combined->m_cells.reserve( regular_cell_count + hlod_cell_count );
-		if ( m_cachedRegularInstanceScene ) {
-			combined->m_instances.insert( combined->m_instances.end(),
-					m_cachedRegularInstanceScene->m_instances.begin(), m_cachedRegularInstanceScene->m_instances.end() );
-			combined->m_cells.insert( combined->m_cells.end(),
-					m_cachedRegularInstanceScene->m_cells.begin(), m_cachedRegularInstanceScene->m_cells.end() );
-		}
-		if ( m_cachedHlodInstanceScene ) {
-			const uint32_t instance_offset = ( uint32_t )( combined->m_instances.size() );
-			combined->m_instances.insert( combined->m_instances.end(),
-					m_cachedHlodInstanceScene->m_instances.begin(), m_cachedHlodInstanceScene->m_instances.end() );
-			for ( const t3dRdInstanceCell_t &source_cell : m_cachedHlodInstanceScene->m_cells ) {
+		combined.m_nGeneration = m_nCombinedInstanceSceneGeneration;
+		combined.m_instances.reserve( m_cachedRegularInstanceScene.m_instances.size() + m_cachedHlodInstanceScene.m_instances.size() );
+		combined.m_cells.reserve( m_cachedRegularInstanceScene.m_cells.size() + m_cachedHlodInstanceScene.m_cells.size() );
+		combined.m_instances.insert( combined.m_instances.end(),
+				m_cachedRegularInstanceScene.m_instances.begin(), m_cachedRegularInstanceScene.m_instances.end() );
+		combined.m_cells.insert( combined.m_cells.end(),
+				m_cachedRegularInstanceScene.m_cells.begin(), m_cachedRegularInstanceScene.m_cells.end() );
+		{
+			const uint32_t instance_offset = ( uint32_t )( combined.m_instances.size() );
+			combined.m_instances.insert( combined.m_instances.end(),
+					m_cachedHlodInstanceScene.m_instances.begin(), m_cachedHlodInstanceScene.m_instances.end() );
+			for ( const t3dRdInstanceCell_t &source_cell : m_cachedHlodInstanceScene.m_cells ) {
 				t3dRdInstanceCell_t cell = source_cell;
 				cell.m_nFirstInstance += instance_offset;
-				combined->m_cells.push_back( cell );
+				combined.m_cells.push_back( cell );
 			}
 		}
-		m_cachedInstanceScene = combined;
+		m_bCachedInstanceSceneValid = true;
 	}
-	publication.m_instanceMeshes = m_cachedInstanceMeshes;
-	publication.m_instanceScene = m_cachedInstanceScene;
+	if ( m_bCachedInstanceMeshesValid &&
+			( !publication.m_bInstanceMeshesValid ||
+					publication.m_instanceMeshes.m_nGeneration != m_cachedInstanceMeshes.m_nGeneration ) ) {
+		publication.m_instanceMeshes = m_cachedInstanceMeshes;
+		publication.m_bInstanceMeshesValid = true;
+	}
+	if ( m_bCachedInstanceSceneValid &&
+			( !publication.m_bInstanceSceneValid ||
+					publication.m_instanceScene.m_nGeneration != m_cachedInstanceScene.m_nGeneration ) ) {
+		publication.m_instanceScene = m_cachedInstanceScene;
+		publication.m_bInstanceSceneValid = true;
+	}
 
 	uint64_t publication_generation = m_nNextSnapshotGeneration;
 	if ( publication_generation == 0u || publication_generation > s_nRdFrameSnapshotGenerationMax ) publication_generation = 1u;
 	m_nNextSnapshotGeneration = publication_generation == s_nRdFrameSnapshotGenerationMax ? 1u : publication_generation + 1u;
 	snapshot.m_nPublicationGeneration = publication_generation;
-	if ( m_nSnapshotWriteIndex >= s_nRdFrameSnapshotSlotCount ) {
-		m_bRendererFailed.store( true, std::memory_order_release );
-		return;
-	}
-	m_snapshotSlots[m_nSnapshotWriteIndex] = publication;
 	const uint64_t published_token = t3dRdMakeFrameSnapshotToken( m_nSnapshotWriteIndex, publication_generation, true );
 	const uint64_t reclaimed_token = m_nSnapshotExchangeToken.exchange( published_token, std::memory_order_acq_rel );
 	const uint32_t reclaimed_index = t3dRdFrameSnapshotTokenIndex( reclaimed_token );
@@ -1068,15 +1095,17 @@ bool Terrain3DRenderCoordinator::initializeRendererOnRenderThread( void ) {
 
 void Terrain3DRenderCoordinator::initializeOcean( void ) {
 	if ( !m_pTerrain || !m_pTerrain->getOceanMesher() ) {
-		m_cachedOceanTopology.reset();
+		m_cachedOceanTopology = t3dRdOceanTopologySnapshot_t{};
+		m_bCachedOceanTopologyValid = false;
 		return;
 	}
-	std::shared_ptr<t3dRdOceanTopologySnapshot_t> topology = std::make_shared<t3dRdOceanTopologySnapshot_t>();
+	t3dRdOceanTopologySnapshot_t topology;
 	m_nOceanTopologyGeneration = advanceGeneration( m_nOceanTopologyGeneration );
-	topology->m_nGeneration = m_nOceanTopologyGeneration;
-	topology->m_szGeometry[LOD0_MESH] = m_pTerrain->getOceanMesher()->getClipmapGeometry( LOD0_MESH );
-	topology->m_szGeometry[OUTER_RING_MESH] = m_pTerrain->getOceanMesher()->getClipmapGeometry( OUTER_RING_MESH );
+	topology.m_nGeneration = m_nOceanTopologyGeneration;
+	topology.m_szGeometry[LOD0_MESH] = m_pTerrain->getOceanMesher()->getClipmapGeometry( LOD0_MESH );
+	topology.m_szGeometry[OUTER_RING_MESH] = m_pTerrain->getOceanMesher()->getClipmapGeometry( OUTER_RING_MESH );
 	m_cachedOceanTopology = topology;
+	m_bCachedOceanTopologyValid = true;
 }
 
 void Terrain3DRenderCoordinator::initialize( Terrain3D *const pTerrain ) {
@@ -1149,19 +1178,27 @@ void Terrain3DRenderCoordinator::shutdown( void ) {
 	m_nMacroNoiseSourceId = 0u;
 	m_nEditorBrushSourceId = 0u;
 	m_shaderLibrary.clear();
-	m_cachedInstanceMeshes.reset();
-	m_cachedPreviewMeshes.reset();
+	m_cachedInstanceMeshes = t3dRdMeshSourceSnapshot_t{};
+	m_bCachedInstanceMeshesValid = false;
+	m_cachedPreviewMeshes = t3dRdMeshSourceSnapshot_t{};
+	m_bCachedPreviewMeshesValid = false;
 	m_nPreviewMeshFingerprint = 0u;
 	m_nPreviewMeshGeneration = 0u;
 	{
 		std::lock_guard<std::mutex> lock( m_previewStateMutex );
-		m_pendingPreviewMeshes.reset();
+		m_pendingPreviewMeshes = t3dRdMeshSourceSnapshot_t{};
+		m_bPendingPreviewMeshesValid = false;
 		m_pendingPreviewImage.unref();
 		m_pendingPreviewError = String();
 	}
-	m_cachedRegularInstanceScene.reset();
-	m_cachedHlodInstanceScene.reset();
-	m_cachedInstanceScene.reset();
+	m_cachedRegularInstanceScene = t3dRdInstanceSceneSnapshot_t{};
+	m_cachedHlodInstanceScene = t3dRdInstanceSceneSnapshot_t{};
+	m_cachedInstanceScene = t3dRdInstanceSceneSnapshot_t{};
+	m_bCachedRegularInstanceSceneValid = false;
+	m_bCachedHlodInstanceSceneValid = false;
+	m_bCachedInstanceSceneValid = false;
+	m_cachedOceanTopology = t3dRdOceanTopologySnapshot_t{};
+	m_bCachedOceanTopologyValid = false;
 	m_cachedHlodMeshSources.clear();
 	m_nInstanceMeshFingerprint = 0u;
 	m_nInstanceMeshGeneration = 0u;
@@ -1205,19 +1242,10 @@ void Terrain3DRenderCoordinator::shutdownRendererOnRenderThread( void ) {
 }
 
 void Terrain3DRenderCoordinator::renderPreviewOnRenderThread( void ) {
-	std::shared_ptr<const t3dRdMeshSourceSnapshot_t> meshes;
-	uint16_t asset_id = 0u;
-	Vector2i size;
-	{
-		std::lock_guard<std::mutex> lock( m_previewStateMutex );
-		meshes = m_pendingPreviewMeshes;
-		asset_id = m_nPendingPreviewAssetId;
-		size = m_pendingPreviewSize;
-		m_pendingPreviewImage.unref();
-		m_pendingPreviewError = String();
-	}
-	if ( !meshes || !m_shaderLibrary.isReady() ) {
-		std::lock_guard<std::mutex> lock( m_previewStateMutex );
+	std::lock_guard<std::mutex> lock( m_previewStateMutex );
+	m_pendingPreviewImage.unref();
+	m_pendingPreviewError = String();
+	if ( !m_bPendingPreviewMeshesValid || !m_shaderLibrary.isReady() ) {
 		m_pendingPreviewError = "RD editor preview source/shaders are unavailable";
 		return;
 	}
@@ -1226,8 +1254,8 @@ void Terrain3DRenderCoordinator::renderPreviewOnRenderThread( void ) {
 				m_shaderLibrary.getHlodCull(), m_shaderLibrary.getForwardBundle() );
 	}
 	Ref<Image> image;
-	const bool ok = m_bPreviewRendererInitialized && m_previewRenderer.renderPreview( meshes, asset_id, size, image );
-	std::lock_guard<std::mutex> lock( m_previewStateMutex );
+	const bool ok = m_bPreviewRendererInitialized && m_previewRenderer.renderPreview(
+			&m_pendingPreviewMeshes, m_nPendingPreviewAssetId, m_pendingPreviewSize, image );
 	m_pendingPreviewImage = image;
 	if ( !ok ) m_pendingPreviewError = m_previewRenderer.getLastError();
 }
@@ -1238,20 +1266,23 @@ Ref<Image> Terrain3DRenderCoordinator::createMeshPreview( const uint16_t nAssetI
 	const Ref<Terrain3DAssets> assets = m_pTerrain->getAssets();
 	if ( assets.is_null() || nAssetId >= ( uint16_t )( assets->getMeshCount() ) ) return Ref<Image>();
 	const uint64_t fingerprint = Terrain3DRdMeshCache::computeSourceFingerprint( assets );
-	if ( !m_cachedPreviewMeshes || fingerprint != m_nPreviewMeshFingerprint ) {
+	if ( !m_bCachedPreviewMeshesValid || fingerprint != m_nPreviewMeshFingerprint ) {
 		String error;
 		m_nPreviewMeshGeneration = advanceGeneration( m_nPreviewMeshGeneration );
-		m_cachedPreviewMeshes = Terrain3DRdMeshCache::buildSourceSnapshot( assets, fingerprint, m_nPreviewMeshGeneration, &error, true );
-		if ( !m_cachedPreviewMeshes ) {
+		if ( !Terrain3DRdMeshCache::buildSourceSnapshot(
+				assets, m_cachedPreviewMeshes, fingerprint, m_nPreviewMeshGeneration, &error, true ) ) {
+			m_bCachedPreviewMeshesValid = false;
 			std::lock_guard<std::mutex> lock( m_diagnosticsMutex );
 			m_initializationError = error;
 			return Ref<Image>();
 		}
+		m_bCachedPreviewMeshesValid = true;
 		m_nPreviewMeshFingerprint = fingerprint;
 	}
 	{
 		std::lock_guard<std::mutex> lock( m_previewStateMutex );
 		m_pendingPreviewMeshes = m_cachedPreviewMeshes;
+		m_bPendingPreviewMeshesValid = true;
 		m_nPendingPreviewAssetId = nAssetId;
 		m_pendingPreviewSize = rSize;
 		m_pendingPreviewImage.unref();
@@ -1283,8 +1314,8 @@ void Terrain3DRenderCoordinator::render( RenderData *const pRenderData ) {
 	const bool bHasTerrain = snapshot.m_nPatchCount > 0u && !publication->m_regionMapBytes.is_empty();
 	const bool bColorWrite = true;
 	const bool instances_ok = m_instanceRenderer.render( pRenderData,
-			publication->m_instanceMeshes,
-			publication->m_instanceScene,
+			publication->m_bInstanceMeshesValid ? &publication->m_instanceMeshes : nullptr,
+			publication->m_bInstanceSceneValid ? &publication->m_instanceScene : nullptr,
 			snapshot.m_nCameraCullMask );
 	const bool terrain_ok = !bHasTerrain || ( instances_ok && m_renderer.render( pRenderData,
 			 snapshot,
@@ -1334,9 +1365,11 @@ void Terrain3DRenderCoordinator::resetForwardLifecycle( void ) {
 	m_bForwardPreparedHasOcean = false;
 }
 
-bool Terrain3DRenderCoordinator::prepareForwardLifecycle( t3dRdForwardPassContext_t &rContext ) {
+bool Terrain3DRenderCoordinator::prepareForwardLifecycle( const t3dRdForwardPassContext_t &rContext,
+		bool &rHistoryValid, bool &rViewportReconfigured ) {
+	rHistoryValid = false;
+	rViewportReconfigured = false;
 	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW ) {
-		rContext.m_bTemporalHistoryValid = false;
 		return true;
 	}
 	if ( rContext.m_nViewportKey == 0u || rContext.m_nViewCount == 0u ||
@@ -1355,8 +1388,8 @@ bool Terrain3DRenderCoordinator::prepareForwardLifecycle( t3dRdForwardPassContex
 			slot->m_renderSize == rContext.m_renderSize && slot->m_renderRegion == rContext.m_renderRegion &&
 			slot->m_nViewCount == rContext.m_nViewCount && slot->m_nSampleCount == rContext.m_nSampleCount;
 	const bool reconfigured_this_frame = slot->m_bValid && slot->m_nReconfiguredRenderFrame == rContext.m_nRenderFrame;
-	rContext.m_bTemporalHistoryValid = same && !reconfigured_this_frame && rContext.m_bMotionVectorsEnabled;
-	rContext.m_bViewportReconfigured = !same;
+	rHistoryValid = same && !reconfigured_this_frame && rContext.m_bMotionVectorsEnabled;
+	rViewportReconfigured = !same;
 	if ( !same ) {
 		++m_nForwardViewportReconfigurations;
 		slot->m_nReconfiguredRenderFrame = rContext.m_nRenderFrame;
@@ -1373,55 +1406,63 @@ bool Terrain3DRenderCoordinator::prepareForwardLifecycle( t3dRdForwardPassContex
 	return true;
 }
 
-void Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContext_t &rContext ) {
-	if ( !m_bRenderEnabled.load( std::memory_order_acquire ) ) return;
-	m_nForwardPassCallbacks.fetch_add( 1u, std::memory_order_relaxed );
-	m_nLastForwardScenePass.store( rContext.m_nScenePass, std::memory_order_release );
-	m_nLastForwardDrawList.store( rContext.m_nDrawList, std::memory_order_release );
-	m_nLastForwardPassKind.store( ( uint32_t )( rContext.m_passKind ), std::memory_order_release );
-	m_nLastForwardViewCount.store( rContext.m_nViewCount, std::memory_order_release );
-	m_nLastForwardSampleCount.store( rContext.m_nSampleCount, std::memory_order_release );
-	m_nLastForwardFramebufferFormat.store( rContext.m_nFramebufferFormat, std::memory_order_release );
+bool Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContext_t &rContext ) {
+	if ( !m_bRenderEnabled.load( std::memory_order_acquire ) ) return false;
+#if defined( TOOLS_ENABLED ) || defined( DEBUG_ENABLED )
+	++m_nForwardPassCallbacks;
+	m_nLastForwardScenePass = rContext.m_nScenePass;
+	m_nLastForwardDrawList = rContext.m_nDrawList;
+	m_nLastForwardPassKind = ( uint32_t )( rContext.m_passKind );
+	m_nLastForwardViewCount = rContext.m_nViewCount;
+	m_nLastForwardSampleCount = rContext.m_nSampleCount;
+	m_nLastForwardFramebufferFormat = rContext.m_nFramebufferFormat;
 	switch ( rContext.m_passKind ) {
 		case T3D_RD_FORWARD_PASS_DEPTH:
-			m_nDepthPassCallbacks.fetch_add( 1u, std::memory_order_relaxed );
+			++m_nDepthPassCallbacks;
 			break;
 		case T3D_RD_FORWARD_PASS_OPAQUE:
-			m_nOpaquePassCallbacks.fetch_add( 1u, std::memory_order_relaxed );
+			++m_nOpaquePassCallbacks;
 			break;
 		case T3D_RD_FORWARD_PASS_SHADOW:
-			m_nShadowPassCallbacks.fetch_add( 1u, std::memory_order_relaxed );
+			++m_nShadowPassCallbacks;
 			break;
 		case T3D_RD_FORWARD_PASS_MOTION:
-			m_nMotionPassCallbacks.fetch_add( 1u, std::memory_order_relaxed );
+			++m_nMotionPassCallbacks;
 			break;
 		case T3D_RD_FORWARD_PASS_TRANSPARENT:
-			m_nTransparentPassCallbacks.fetch_add( 1u, std::memory_order_relaxed );
+			++m_nTransparentPassCallbacks;
 			break;
 		default:
 			break;
 	}
+#endif
 	if ( rContext.m_passKind != T3D_RD_FORWARD_PASS_DEPTH && rContext.m_passKind != T3D_RD_FORWARD_PASS_OPAQUE &&
 			rContext.m_passKind != T3D_RD_FORWARD_PASS_SHADOW && rContext.m_passKind != T3D_RD_FORWARD_PASS_MOTION &&
-			rContext.m_passKind != T3D_RD_FORWARD_PASS_TRANSPARENT ) return;
+			rContext.m_passKind != T3D_RD_FORWARD_PASS_TRANSPARENT ) return false;
 
 	if ( rContext.m_phase == T3D_RD_FORWARD_PHASE_PREPARE ) {
-		t3dRdForwardPassContext_t prepared_context = rContext;
-		if ( !prepareForwardLifecycle( prepared_context ) || !initializeRendererOnRenderThread() ) return;
+		bool history_valid = false;
+		bool viewport_reconfigured = false;
+		if ( !prepareForwardLifecycle( rContext, history_valid, viewport_reconfigured ) || !initializeRendererOnRenderThread() ) return false;
 		const t3dRdFrameSnapshotSlot_t *const publication = acquireSnapshotOnRenderThread();
-		if ( !publication ) return;
+		if ( !publication ) return false;
 		const t3dRdFrameSnapshot_t &snapshot = publication->m_snapshot;
 		const bool shadow_pass = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW;
 		const bool transparent_pass = rContext.m_passKind == T3D_RD_FORWARD_PASS_TRANSPARENT;
 		const uint32_t visibility_mask = shadow_pass ? ( rContext.m_nShadowCasterMask & rContext.m_nShadowLightCullMask ) : rContext.m_nCameraVisibleLayers;
 		const bool has_terrain = !transparent_pass && snapshot.m_nPatchCount > 0u && !publication->m_regionMapBytes.is_empty() &&
 				( !shadow_pass || ( snapshot.m_bCastShadows && ( snapshot.m_nRenderLayers & visibility_mask ) != 0u ) );
-		m_nForwardPreparedScenePass = prepared_context.m_nScenePass;
-		m_nForwardPreparedViewportKey = prepared_context.m_nViewportKey;
+		m_nForwardPreparedScenePass = rContext.m_nScenePass;
+		m_nForwardPreparedViewportKey = rContext.m_nViewportKey;
 		m_bForwardPreparedHasTerrain = has_terrain;
-		const bool instances_ok = transparent_pass ? true : m_instanceRenderer.prepareForwardPass( prepared_context, publication->m_instanceMeshes,
-				publication->m_instanceScene, visibility_mask );
-		const bool terrain_ok = !has_terrain || ( instances_ok && m_renderer.prepareForwardPass( prepared_context, snapshot,
+		const bool instances_ok = transparent_pass ? true : m_instanceRenderer.prepareForwardPass( rContext,
+				publication->m_bInstanceMeshesValid ? &publication->m_instanceMeshes : nullptr,
+				publication->m_bInstanceSceneValid ? &publication->m_instanceScene : nullptr,
+				visibility_mask, history_valid, viewport_reconfigured );
+		// Terrain and instance/HLOD resources are independent.  Always prepare the
+		// terrain pass even when the companion instance lane reports a failure so a
+		// missing instance asset cannot suppress the terrain surface.
+		const bool terrain_ok = !has_terrain || m_renderer.prepareForwardPass( rContext, snapshot,
 				publication->m_regionMapBytes, snapshot.m_nRegionMapGeneration,
 				publication->m_resources.m_hHeightTextureRd, publication->m_resources.m_hDerivedTextureRd,
 				publication->m_resources.m_hControlTextureRd, publication->m_resources.m_hColorTextureRd,
@@ -1432,13 +1473,14 @@ void Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 				publication->m_resources.m_hFarAlbedoTextureRd, publication->m_resources.m_hNormalTextureRd,
 				publication->m_resources.m_hSurfaceTextureRd, publication->m_resources.m_hDisplacementTextureRd,
 				publication->m_resources.m_hWorldNoiseTextureRd, publication->m_resources.m_hMacroNoiseTextureRd,
-				publication->m_resources.m_hEditorBrushTextureRd ) );
-		const bool ocean_ok = m_oceanRenderer.prepareForwardPass( prepared_context, snapshot, publication->m_oceanTopology, visibility_mask );
+				publication->m_resources.m_hEditorBrushTextureRd, history_valid, viewport_reconfigured );
+		const bool ocean_ok = m_oceanRenderer.prepareForwardPass( rContext, snapshot,
+				publication->m_bOceanTopologyValid ? &publication->m_oceanTopology : nullptr, visibility_mask );
 		m_bForwardPreparedHasOcean = snapshot.m_ocean.m_nEnabled != 0u && snapshot.m_ocean.m_nPatchCount > 0u &&
 				( transparent_pass || ( shadow_pass && snapshot.m_ocean.m_nCastShadows != 0u ) );
 		if ( instances_ok && terrain_ok && ocean_ok ) {
 			m_nConsecutiveRenderFailures.store( 0u, std::memory_order_release );
-			return;
+			return true;
 		}
 		const uint32_t failures = m_nConsecutiveRenderFailures.fetch_add( 1u, std::memory_order_acq_rel ) + 1u;
 		m_oceanRenderer.shutdown();
@@ -1447,26 +1489,28 @@ void Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 		resetForwardLifecycle();
 		m_bRendererInitialized.store( false, std::memory_order_release );
 		if ( failures >= 8u ) m_bRendererFailed.store( true, std::memory_order_release );
-		return;
+		return false;
 	}
 
 	if ( rContext.m_phase != T3D_RD_FORWARD_PHASE_SUBMIT || !m_bRendererInitialized.load( std::memory_order_acquire ) ||
-			m_nForwardPreparedScenePass != rContext.m_nScenePass || m_nForwardPreparedViewportKey != rContext.m_nViewportKey ) return;
+			m_nForwardPreparedScenePass != rContext.m_nScenePass || m_nForwardPreparedViewportKey != rContext.m_nViewportKey ) return false;
 	const bool transparent_pass = rContext.m_passKind == T3D_RD_FORWARD_PASS_TRANSPARENT;
 	const bool instances_ok = transparent_pass ? true : m_instanceRenderer.renderForwardPass( rContext );
 	const bool terrain_ok = !m_bForwardPreparedHasTerrain || m_renderer.renderForwardPass( rContext );
 	const bool ocean_ok = !m_bForwardPreparedHasOcean || m_oceanRenderer.renderForwardPass( rContext );
 	if ( instances_ok && terrain_ok && ocean_ok ) {
 		m_nConsecutiveRenderFailures.store( 0u, std::memory_order_release );
-		return;
+		return true;
 	}
 	// The native draw list is open here. Do not destroy or rebuild RD resources
 	// until a later PREPARE callback, where resource mutation is legal.
 	const uint32_t failures = m_nConsecutiveRenderFailures.fetch_add( 1u, std::memory_order_acq_rel ) + 1u;
 	if ( failures >= 8u ) m_bRendererFailed.store( true, std::memory_order_release );
+	return false;
 }
 
 Dictionary Terrain3DRenderCoordinator::getDiagnostics( void ) const {
+	Terrain3DRdContext::forceSync();
 	Dictionary result;
 	const Dictionary renderer = m_renderer.getDiagnostics();
 	const Dictionary instances = m_instanceRenderer.getDiagnostics();
@@ -1474,23 +1518,23 @@ Dictionary Terrain3DRenderCoordinator::getDiagnostics( void ) const {
 	result["render_enabled"] = m_bRenderEnabled.load( std::memory_order_acquire );
 	result["forward_plus_bridge_attached"] = m_bForwardBridgeAttached;
 	result["forward_plus_bridge_ready"] = isForwardBridgeReady();
-	result["forward_pass_callbacks"] = ( int64_t )( m_nForwardPassCallbacks.load( std::memory_order_acquire ) );
-	result["depth_pass_callbacks"] = ( int64_t )( m_nDepthPassCallbacks.load( std::memory_order_acquire ) );
-	result["opaque_pass_callbacks"] = ( int64_t )( m_nOpaquePassCallbacks.load( std::memory_order_acquire ) );
-	result["shadow_pass_callbacks"] = ( int64_t )( m_nShadowPassCallbacks.load( std::memory_order_acquire ) );
-	result["motion_pass_callbacks"] = ( int64_t )( m_nMotionPassCallbacks.load( std::memory_order_acquire ) );
-	result["transparent_pass_callbacks"] = ( int64_t )( m_nTransparentPassCallbacks.load( std::memory_order_acquire ) );
-	result["last_forward_scene_pass"] = ( int64_t )( m_nLastForwardScenePass.load( std::memory_order_acquire ) );
-	result["last_forward_draw_list"] = m_nLastForwardDrawList.load( std::memory_order_acquire );
-	result["last_forward_pass_kind"] = ( int64_t )( m_nLastForwardPassKind.load( std::memory_order_acquire ) );
-	result["current_forward_view_count"] = ( int64_t )( m_nLastForwardViewCount.load( std::memory_order_acquire ) );
-	result["current_forward_sample_count"] = ( int64_t )( m_nLastForwardSampleCount.load( std::memory_order_acquire ) );
-	result["current_forward_framebuffer_format"] = m_nLastForwardFramebufferFormat.load( std::memory_order_acquire );
-	result["native_depth_prepass_participation"] = m_nDepthPassCallbacks.load( std::memory_order_acquire ) > 0u;
-	result["native_opaque_participation"] = m_nOpaquePassCallbacks.load( std::memory_order_acquire ) > 0u;
-	result["native_shadow_participation"] = m_nShadowPassCallbacks.load( std::memory_order_acquire ) > 0u;
-	result["native_motion_vectors_active"] = m_nMotionPassCallbacks.load( std::memory_order_acquire ) > 0u;
-	result["native_transparent_participation"] = m_nTransparentPassCallbacks.load( std::memory_order_acquire ) > 0u;
+	result["forward_pass_callbacks"] = ( int64_t )( m_nForwardPassCallbacks );
+	result["depth_pass_callbacks"] = ( int64_t )( m_nDepthPassCallbacks );
+	result["opaque_pass_callbacks"] = ( int64_t )( m_nOpaquePassCallbacks );
+	result["shadow_pass_callbacks"] = ( int64_t )( m_nShadowPassCallbacks );
+	result["motion_pass_callbacks"] = ( int64_t )( m_nMotionPassCallbacks );
+	result["transparent_pass_callbacks"] = ( int64_t )( m_nTransparentPassCallbacks );
+	result["last_forward_scene_pass"] = ( int64_t )( m_nLastForwardScenePass );
+	result["last_forward_draw_list"] = m_nLastForwardDrawList;
+	result["last_forward_pass_kind"] = ( int64_t )( m_nLastForwardPassKind );
+	result["current_forward_view_count"] = ( int64_t )( m_nLastForwardViewCount );
+	result["current_forward_sample_count"] = ( int64_t )( m_nLastForwardSampleCount );
+	result["current_forward_framebuffer_format"] = m_nLastForwardFramebufferFormat;
+	result["native_depth_prepass_participation"] = m_nDepthPassCallbacks > 0u;
+	result["native_opaque_participation"] = m_nOpaquePassCallbacks > 0u;
+	result["native_shadow_participation"] = m_nShadowPassCallbacks > 0u;
+	result["native_motion_vectors_active"] = m_nMotionPassCallbacks > 0u;
+	result["native_transparent_participation"] = m_nTransparentPassCallbacks > 0u;
 	result.merge( m_oceanRenderer.getDiagnostics(), true );
 	result["forward_viewport_reconfigurations"] = ( int64_t )( m_nForwardViewportReconfigurations );
 	result["forward_viewport_evictions"] = ( int64_t )( m_nForwardViewportEvictions );

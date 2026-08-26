@@ -10,7 +10,8 @@
 
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
-#include <vector>
+
+#include <cstddef>
 
 using namespace godot;
 
@@ -36,8 +37,15 @@ private:
 		uint32_t m_nRenderHeight = 0u;
 		uint32_t m_nClusterMaxElements = 0u;
 		uint32_t m_nSceneFeatureFlags = 0u;
+		float m_szAmbientLightColorEnergy[4]{};
+		float m_szEnvironmentParams0[4]{};
+		float m_szEnvironmentParams1[4]{};
+		float m_szRadianceInverseXform[12]{};
 	} t3dRdForwardLightFrame_t;
-	static_assert( sizeof( t3dRdForwardLightFrame_t ) == 64u, "Forward lighting UBO ABI changed" );
+	static_assert( sizeof( t3dRdForwardLightFrame_t ) == 160u, "Forward lighting UBO ABI changed" );
+	static_assert( offsetof( t3dRdForwardLightFrame_t, m_szAmbientLightColorEnergy ) == 64u, "Forward ambient UBO offset changed" );
+	static_assert( offsetof( t3dRdForwardLightFrame_t, m_szEnvironmentParams0 ) == 80u, "Forward Environment UBO offset changed" );
+	static_assert( offsetof( t3dRdForwardLightFrame_t, m_szRadianceInverseXform ) == 112u, "Forward radiance matrix UBO offset changed" );
 
 	typedef struct t3dRdForwardLightKey_s {
 		RID m_hDirectional;
@@ -53,6 +61,7 @@ private:
 		RID m_hDecalBuffer;
 		RID m_hDecalAtlas;
 		RID m_hDecalAtlasSrgb;
+		RID m_hRadiance;
 
 		bool operator==( const t3dRdForwardLightKey_s &rOther ) const {
 			return m_hDirectional == rOther.m_hDirectional && m_hOmni == rOther.m_hOmni &&
@@ -61,7 +70,8 @@ private:
 					m_hShadowSampler == rOther.m_hShadowSampler &&
 					m_hReflectionProbeBuffer == rOther.m_hReflectionProbeBuffer && m_hReflectionAtlas == rOther.m_hReflectionAtlas &&
 					m_hDecalBuffer == rOther.m_hDecalBuffer &&
-					m_hDecalAtlas == rOther.m_hDecalAtlas && m_hDecalAtlasSrgb == rOther.m_hDecalAtlasSrgb;
+					m_hDecalAtlas == rOther.m_hDecalAtlas && m_hDecalAtlasSrgb == rOther.m_hDecalAtlasSrgb &&
+					m_hRadiance == rOther.m_hRadiance;
 		}
 	} t3dRdForwardLightKey_t;
 
@@ -77,14 +87,31 @@ private:
 	RID m_hFallbackStorageBuffer;
 	RID m_hFallbackColorTexture;
 	RID m_hFallbackColorArrayTexture;
+	RID m_hFallbackRadianceTexture;
+	RID m_hFallbackRadianceArrayTexture;
 	RID m_hLinearSampler;
 	t3dRdForwardLightKey_t m_key{};
 	bool m_bKeyValid = false;
 	uint64_t m_nDeviceGeneration = 0u;
+	uint32_t m_nBorrowedResourceGeneration = 0u;
+	uint64_t m_nFrameGeneration = 0u;
+	uint32_t m_nFrameSurfaceMask = 0u;
 	uint64_t m_nSetRebuilds = 0u;
 	uint64_t m_nFrameUpdates = 0u;
 	uint64_t m_nSceneResourceChanges = 0u;
-	std::vector<t3dRdForwardLightSet_t> m_sets;
+	uint64_t m_nEnvironmentFrameUpdates = 0u;
+	uint64_t m_nEnvironmentResourceChanges = 0u;
+	uint64_t m_nEnvironmentInvalidResourceCount = 0u;
+	uint64_t m_nLastInvalidEnvironmentFrameGeneration = 0u;
+	uint32_t m_nLastEnvironmentFlags = 0u;
+	float m_szLastAmbientLightColorEnergy[4]{};
+	float m_fLastAmbientColorSkyMix = 0.0f;
+	float m_fLastIblExposureNormalization = 1.0f;
+	float m_fLastEmissiveExposureNormalization = 1.0f;
+	bool m_bLastRadianceValid = false;
+	static constexpr uint32_t s_nMaxSets = 32u;
+	t3dRdForwardLightSet_t m_szSets[s_nMaxSets]{};
+	uint32_t m_nSetCount = 0u;
 	PackedByteArray m_frameBytes;
 	String m_lastError;
 
@@ -96,6 +123,7 @@ private:
 	RID resolveStorageBuffer( const RID &rNative ) const;
 	RID resolveColorTexture( const RID &rNative ) const;
 	RID resolveColorArrayTexture( const RID &rNative ) const;
+	RID resolveRadianceTexture( const RID &rNative, bool bArray ) const;
 
 public:
 	explicit Terrain3DRdForwardLighting( Terrain3DRdContext &rContext );

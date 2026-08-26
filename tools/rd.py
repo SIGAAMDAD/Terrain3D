@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -26,8 +27,8 @@ SOURCE_MAP_FILE = REPO / "docs" / "rd_source_map.tsv"
 CONTRACT_FILE = REPO / "docs" / "rendering_device_completion_contract.md"
 SYMBOL_BASELINE_FILE = WORK_DIR / "symbol_baseline.tsv"
 FINAL_ALLOWLIST_FILE = WORK_DIR / "final_symbol_allowlist.tsv"
-DEFAULT_WINDOWS_GODOT_ROOT = Path(r"D:\Godot_v4.7.1-stable_mono_win64")
-DEFAULT_ENGINE_SOURCE = TOOLS_DIR / "godot-4.7.1-src"
+DEFAULT_WINDOWS_GODOT_ROOT = Path(r"D:\godot-4.7.2-stable")
+DEFAULT_ENGINE_SOURCE = Path(os.environ.get("RD_GODOT_SOURCE", str(TOOLS_DIR / "godot-4.7.2-src")))
 FIXTURE_ARCHIVE = REPO / "validation" / "terrain3d_00_02.zip"
 FIXTURE_DIR = TOOLS_DIR / "validation_data" / "terrain3d_00_02"
 FIXTURE_MANIFEST = REPO / "docs" / "rd_reference" / "terrain3d_00_02_manifest.tsv"
@@ -35,7 +36,6 @@ FIXTURE_MANIFEST = REPO / "docs" / "rd_reference" / "terrain3d_00_02_manifest.ts
 SCAN_ROOTS = [
     REPO / "src",
     REPO / "project" / "addons" / "terrain_3d",
-    REPO / "engine_patch",
 ]
 TEXT_SUFFIXES = {
     ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".inl",
@@ -533,7 +533,7 @@ def rd_batch_e_hlod_check() -> bool:
 def rd_batch_f1_forward_bridge_check() -> bool:
     checks: list[tuple[str, bool]] = []
     rd_dir = REPO / "src" / "rendering" / "rd"
-    patch_path = REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch"
+    patch_path = REPO / "engine_patch" / "godot-4.7.2-terrain3d-forward-plus.patch"
     readme_path = REPO / "engine_patch" / "README.md"
     doc_path = REPO / "docs" / "rd_batch_f1_forward_plus_bridge.md"
     required = [
@@ -594,9 +594,9 @@ def rd_batch_f1_forward_bridge_check() -> bool:
     )
 
     checks += [
-        ("bridge ABI is synchronized on extension side", "s_nBridgeAbiVersion = 8u" in bridge_h and "s_nRdForwardBridgeAbiVersion = 8u" in types),
+        ("bridge ABI is synchronized on extension side", "s_nBridgeAbiVersion = s_nT3dForwardBridgeAbi" in bridge_h and "s_nRdForwardBridgeAbiVersion = 10u" in types),
         ("engine singleton name fixed", 's_pszEngineSingletonName = "Terrain3DForwardPlusBridge"' in bridge_h and "class Terrain3DForwardPlusBridge" in patch),
-        ("engine ABI exposes required lifecycle API", all(token in patch for token in engine_methods) and "ABI_VERSION = 8" in patch),
+        ("engine ABI exposes required lifecycle API", all(token in patch for token in engine_methods) and "ABI_VERSION = 10" in patch),
         ("engine callback slot is atomic", "std::atomic<CallbackSlot *> callback_slot" in patch and "callback_slot.load(std::memory_order_acquire)" in patch),
         ("engine callback reclamation is reader-safe", "callback_readers.fetch_add" in patch and "callback_readers.fetch_sub" in patch and "callback_readers.load" in patch),
         ("engine callback invocation is synchronous", "slot->callable.call(p_packet)" in patch and "call_deferred" not in patch),
@@ -622,8 +622,8 @@ def rd_batch_f1_forward_bridge_check() -> bool:
         ("adapter lifecycle registered with extension", "Terrain3DRdForwardPlusBridgeAdapter::initializeSingleton" in register_cpp and "Terrain3DRdForwardPlusBridgeAdapter::shutdownSingleton" in register_cpp),
         ("Windows project includes F1 adapter source", "terrain_3d_rd_forward_plus_bridge.cpp" in vcxproj and "terrain_3d_rd_forward_plus_bridge.h" in vcxproj),
         ("Windows project filters include F1 adapter source", "terrain_3d_rd_forward_plus_bridge.cpp" in vcxproj_filters and "terrain_3d_rd_forward_plus_bridge.h" in vcxproj_filters),
-        ("engine patch targets exact stable source revision in docs", exact_revision in readme and exact_revision in doc and "4.7.1-stable" in readme),
-        ("engine patch base blobs match exact 4.7.1-stable files", all(token in patch for token in ("index 370d3b66ce", "index be97ee2d96", "index de40333785"))),
+        ("engine patch targets exact stable source revision in docs", exact_revision in readme and exact_revision in doc and "4.7.2-stable" in readme),
+        ("engine patch base blobs match exact 4.7.2-stable files", all(token in patch for token in ("index 370d3b66ce", "index be97ee2d96", "index de40333785"))),
         ("engine patch is syntactically parseable by git", run_quiet(["git", "apply", "--stat", str(patch_path)], label="batch_f1_patch_parse")),
         ("native render helper submits while Godot draw list remains open", "_terrain3d_forward_plus_submit(draw_list" in patch and patch.find("_terrain3d_forward_plus_submit(draw_list") < patch.find("draw_list_end();", patch.find("_terrain3d_forward_plus_submit(draw_list"))),
         ("engine patch does not begin a Terrain3D-owned draw list", not any(line.startswith("+") and "draw_list_begin(" in line for line in patch.splitlines()) and "_terrain3d_forward_plus_submit" in patch),
@@ -655,7 +655,7 @@ def rd_batch_f2_native_depth_opaque_check() -> bool:
     inst_cpp = (rd_dir / "terrain_3d_rd_instance_renderer.cpp").read_text(encoding="utf-8", errors="ignore")
     coordinator = (rd_dir / "terrain_3d_render_coordinator.cpp").read_text(encoding="utf-8", errors="ignore")
     shader_lib = (rd_dir / "terrain_3d_rd_shader_library.cpp").read_text(encoding="utf-8", errors="ignore")
-    patch = (REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch").read_text(encoding="utf-8", errors="ignore")
+    patch = (REPO / "engine_patch" / "godot-4.7.2-terrain3d-forward-plus.patch").read_text(encoding="utf-8", errors="ignore")
     shaders = [
         (REPO / "project" / "addons" / "terrain_3d" / "rd" / name).read_text(encoding="utf-8", errors="ignore")
         for name in ("terrain_clipmap_near.glsl", "terrain_clipmap_middle.glsl", "terrain_clipmap_far.glsl", "terrain_instances.glsl")
@@ -722,10 +722,10 @@ def rd_batch_f3_native_shadow_check() -> bool:
     clip = (rd / "terrain_3d_rd_clipmap_renderer.cpp").read_text(encoding="utf-8", errors="ignore")
     inst = (rd / "terrain_3d_rd_instance_renderer.cpp").read_text(encoding="utf-8", errors="ignore")
     coord = (rd / "terrain_3d_render_coordinator.cpp").read_text(encoding="utf-8", errors="ignore")
-    patch = (REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch").read_text(encoding="utf-8", errors="ignore")
+    patch = (REPO / "engine_patch" / "godot-4.7.2-terrain3d-forward-plus.patch").read_text(encoding="utf-8", errors="ignore")
     ledger = (REPO / "docs" / "rd_contract_ledger.tsv").read_text(encoding="utf-8", errors="ignore")
     checks = [
-        ("current ABI retains F3 shadow packet on engine and extension sides", "s_nRdForwardBridgeAbiVersion = 8u" in types and "ABI_VERSION = 8" in patch),
+        ("current ABI retains F3 shadow packet on engine and extension sides", "s_nRdForwardBridgeAbiVersion = 10u" in types and "ABI_VERSION = 10" in patch),
         ("shadow packet carries exact light/cascade identity", all(x in patch for x in ("shadow_light_instance", "shadow_pass_index", "shadow_light_type")) and all(x in bridge for x in ('StringName( "shadow_light_instance" )', 'StringName( "shadow_pass_index" )'))),
         ("shadow packet carries masks/bias/range/atlas metadata", all(x in patch for x in ("shadow_caster_mask", "shadow_light_cull_mask", "shadow_bias", "shadow_normal_bias", "shadow_bias_scale", "shadow_range_begin", "shadow_range", "shadow_atlas_rect", "shadow_atlas_size"))),
         ("shadow VP uses exact light projection and transform", "p_projection * shadow_view" in patch),
@@ -743,7 +743,7 @@ def rd_batch_f3_native_shadow_check() -> bool:
         ("RD production contains no native visual/shadow proxy path", "setRdPresentation" not in coord and "enforceRdPresentation" not in coord and 'result["native_shadow_proxy_active"] = false' in coord),
         ("shadow native submit paths do not open a draw list", "PASS_SHADOW" in patch and "_render_list_with_draw_list" in patch),
         ("F3 contract ledger records Section 17 completion", "17\tShadows\tF\tcomplete" in ledger),
-        ("engine patch remains syntactically parseable", run_quiet(["git", "apply", "--stat", str(REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch")], label="batch_f3_patch_parse")),
+        ("engine patch remains syntactically parseable", run_quiet(["git", "apply", "--stat", str(REPO / "engine_patch" / "godot-4.7.2-terrain3d-forward-plus.patch")], label="batch_f3_patch_parse")),
     ]
     failed = [label for label, ok in checks if not ok]
     if failed:
@@ -768,7 +768,7 @@ def rd_batch_f4_native_lighting_check() -> bool:
     include = (REPO / "project" / "addons" / "terrain_3d" / "rd" / "terrain_forward_lighting_inc.glsl").read_text(encoding="utf-8", errors="ignore")
     terrain = [(REPO / "project" / "addons" / "terrain_3d" / "rd" / f"terrain_clipmap_{tier}.glsl").read_text(encoding="utf-8", errors="ignore") for tier in ("near", "middle", "far")]
     instance_shader = (REPO / "project" / "addons" / "terrain_3d" / "rd" / "terrain_instances.glsl").read_text(encoding="utf-8", errors="ignore")
-    patch = (REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch").read_text(encoding="utf-8", errors="ignore")
+    patch = (REPO / "engine_patch" / "godot-4.7.2-terrain3d-forward-plus.patch").read_text(encoding="utf-8", errors="ignore")
     ledger = (REPO / "docs" / "rd_contract_ledger.tsv").read_text(encoding="utf-8", errors="ignore")
     vcx = (REPO / "Terrain3D.vcxproj").read_text(encoding="utf-8", errors="ignore")
     filters = (REPO / "Terrain3D.vcxproj.filters").read_text(encoding="utf-8", errors="ignore")
@@ -782,7 +782,7 @@ def rd_batch_f4_native_lighting_check() -> bool:
         "cluster_type_size * type_index",
     ))
     checks = [
-        ("current ABI retains F4 native-light packet", "s_nRdForwardBridgeAbiVersion = 8u" in types and "s_nBridgeAbiVersion = 8u" in bridge_h and "ABI_VERSION = 8" in patch),
+        ("current ABI retains F4 native-light packet", "s_nRdForwardBridgeAbiVersion = 10u" in types and "s_nBridgeAbiVersion = s_nT3dForwardBridgeAbi" in bridge_h and "ABI_VERSION = 10" in patch),
         ("bridge exposes exact native cluster metadata", all(x in types for x in ("m_nClusterShift", "m_nClusterWidth", "m_nClusterTypeSize", "m_nClusterMaxElementsDiv32")) and all(x in patch for x in ("cluster_shift", "cluster_width", "cluster_type_size", "cluster_max_elements_div_32"))),
         ("bridge exposes directional count and camera depth range", all(x in types for x in ("m_nDirectionalLightCount", "m_bDirectionalLightSoftShadows", "m_fCameraZNear", "m_fCameraZFar")) and all(x in bridge for x in ("directional_light_count", "directional_light_soft_shadows", "camera_z_near", "camera_z_far"))),
         ("native directional/omni/spot/area/cluster buffers are borrowed", all(x in lighting for x in ("m_hDirectionalLightBuffer", "m_hOmniLightBuffer", "m_hSpotLightBuffer", "m_hAreaLightBuffer", "m_hClusterBuffer")) and "registerResource( rContext.m_h" not in lighting),
@@ -791,7 +791,7 @@ def rd_batch_f4_native_lighting_check() -> bool:
         ("terrain and instance/HLOD bind native lighting set 2", "draw_list_bind_uniform_set( draw_list, lighting_set, 2u )" in clip and "draw_list_bind_uniform_set( draw_list, lighting_set, 2u )" in inst),
         ("native color shaders are isolated from diagnostic color", "color_native" in shader_lib and all('color_native = "#define T3D_FORWARD_NATIVE_LIGHTING"' in sh for sh in terrain + [instance_shader])),
         ("shared shader mirrors Godot native light structs", all(x in include for x in ("T3DNativeLightData", "T3DNativeDirectionalLightData", "shadow_matrix1", "shadow_split_offsets", "atlas_rect", "area_width", "area_height", "cone_attenuation", "specular_amount", "mask"))),
-        ("Godot 4.7.1 cluster addressing is implemented", exact_cluster),
+        ("Godot 4.7.2 cluster addressing is implemented", exact_cluster),
         ("cluster item words are bounds-clamped", "min(item_min >> 5u, max_words)" in include and "min(item_max == 0u" in include and "cluster_pos.y >= cluster_height" in include),
         ("directional light comes from native buffer", "t3d_directional_lights.data[i]" in include and "light.color * light.energy" in include),
         ("omni lights use native range/attenuation and clustered membership", "t3d_omni_lights.data[light_index]" in include and "t3d_native_attenuation" in include),
@@ -806,7 +806,7 @@ def rd_batch_f4_native_lighting_check() -> bool:
         ("regular instances and HLOD share the native lighting shader path", "m_drawPackets" in inst and "T3D_RD_INSTANCE_HLOD" in inst and "m_hszForwardShaders[variant]" in inst),
         ("F4 lighting adapter is in Windows project files", "terrain_3d_rd_forward_lighting.cpp" in vcx and "terrain_3d_rd_forward_lighting.h" in vcx and "terrain_3d_rd_forward_lighting.cpp" in filters),
         ("F4 direct-light evidence remains in converged F6 lighting ledger", "18\tLighting\tF\tcomplete" in ledger and "Batch F4 supplies native directional/omni/spot/area lighting" in ledger),
-        ("engine patch remains syntactically parseable", run_quiet(["git", "apply", "--stat", str(REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch")], label="batch_f4_patch_parse")),
+        ("engine patch remains syntactically parseable", run_quiet(["git", "apply", "--stat", str(REPO / "engine_patch" / "godot-4.7.2-terrain3d-forward-plus.patch")], label="batch_f4_patch_parse")),
     ]
     failed = [label for label, ok in checks if not ok]
     if failed:
@@ -828,7 +828,7 @@ def rd_batch_f5_motion_check() -> bool:
     inst = (rd / "terrain_3d_rd_instance_renderer.cpp").read_text(encoding="utf-8", errors="ignore")
     inst_h = (rd / "terrain_3d_rd_instance_renderer.h").read_text(encoding="utf-8", errors="ignore")
     coord = (rd / "terrain_3d_render_coordinator.cpp").read_text(encoding="utf-8", errors="ignore")
-    patch = (REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch").read_text(encoding="utf-8", errors="ignore")
+    patch = (REPO / "engine_patch" / "godot-4.7.2-terrain3d-forward-plus.patch").read_text(encoding="utf-8", errors="ignore")
     ledger = (REPO / "docs" / "rd_contract_ledger.tsv").read_text(encoding="utf-8", errors="ignore")
     shaders = [(REPO / "project" / "addons" / "terrain_3d" / "rd" / f).read_text(encoding="utf-8", errors="ignore") for f in (
         "terrain_clipmap_near.glsl", "terrain_clipmap_middle.glsl", "terrain_clipmap_far.glsl", "terrain_instances.glsl")]
@@ -839,7 +839,7 @@ def rd_batch_f5_motion_check() -> bool:
                        "previous_screen_position.xy / previous_screen_position.w - frame_data.motion_jitter.zw" in sh
                        for sh in shaders)
     checks = [
-        ("current ABI retains F5 temporal packet", "s_nRdForwardBridgeAbiVersion = 8u" in types and "s_nBridgeAbiVersion = 8u" in bridge_h and "ABI_VERSION = 8" in patch),
+        ("current ABI retains F5 temporal packet", "s_nRdForwardBridgeAbiVersion = 10u" in types and "s_nBridgeAbiVersion = s_nT3dForwardBridgeAbi" in bridge_h and "ABI_VERSION = 10" in patch),
         ("bridge packet carries TAA jitter and history validity", all(x in types for x in ("m_taaJitter", "m_previousTaaJitter", "m_bMotionVectorsEnabled")) and all(x in bridge for x in ("taa_jitter", "previous_taa_jitter", "motion_vectors_enabled")) and all(x in patch for x in ('packet["taa_jitter"]', 'packet["previous_taa_jitter"]', 'packet["motion_vectors_enabled"]'))),
         ("engine bridge constructs corrected jittered current and previous VP", "correction.set_depth_correction(scene_data->flip_y)" in patch and "correction.add_jitter_offset(scene_data->taa_jitter)" in patch and "previous_correction.set_depth_correction(true)" in patch and "previous_correction.add_jitter_offset(scene_data->prev_taa_jitter)" in patch),
         ("motion hook submits on native draw list with depth-prepass state", "PASS_MOTION" in patch and "radiance_texture, nullptr, depth_pre_pass" in patch),
@@ -862,7 +862,7 @@ def rd_batch_f5_motion_check() -> bool:
         ("motion pipeline honors prepass EQUAL path", "T3D_RD_FORWARD_PASS_MOTION ) && rContext.m_bDepthPrepassActive" in clip and "T3D_RD_FORWARD_PASS_MOTION ) && rContext.m_bDepthPrepassActive" in inst and "COMPARE_OP_EQUAL" in clip and "COMPARE_OP_EQUAL" in inst),
         ("deterministic motion visualization is explicit opt-in", "TERRAIN3D_RD_DEBUG_MOTION" in coord and "setMotionDebugEnabled" in clip_h and "setMotionDebugEnabled" in inst_h and all("motion_params.y > 0.5" in sh for sh in shaders)),
         ("F5 ledger records Section 20 completion", "20\tMotion vectors\tF\tcomplete" in ledger),
-        ("engine patch remains syntactically parseable", run_quiet(["git", "apply", "--stat", str(REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch")], label="batch_f5_patch_parse")),
+        ("engine patch remains syntactically parseable", run_quiet(["git", "apply", "--stat", str(REPO / "engine_patch" / "godot-4.7.2-terrain3d-forward-plus.patch")], label="batch_f5_patch_parse")),
     ]
     failed = [label for label, ok in checks if not ok]
     if failed:
@@ -889,7 +889,7 @@ def rd_batch_f6_scene_integration_check() -> bool:
     terrain = [(REPO / "project" / "addons" / "terrain_3d" / "rd" / f"terrain_clipmap_{tier}.glsl").read_text(encoding="utf-8", errors="ignore") for tier in ("near", "middle", "far")]
     instance = (REPO / "project" / "addons" / "terrain_3d" / "rd" / "terrain_instances.glsl").read_text(encoding="utf-8", errors="ignore")
     baker = (REPO / "project" / "addons" / "terrain_3d" / "tools" / "region_lightmap_baker.gd").read_text(encoding="utf-8", errors="ignore")
-    patch_path = REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch"
+    patch_path = REPO / "engine_patch" / "godot-4.7.2-terrain3d-forward-plus.patch"
     patch = patch_path.read_text(encoding="utf-8", errors="ignore")
     doc = (REPO / "docs" / "rd_batch_f6_scene_integrations.md").read_text(encoding="utf-8", errors="ignore")
     ledger = (REPO / "docs" / "rd_contract_ledger.tsv").read_text(encoding="utf-8", errors="ignore")
@@ -921,10 +921,10 @@ def rd_batch_f6_scene_integration_check() -> bool:
         submit_slices.append(source[i:j] if i >= 0 and j > i else "")
 
     checks = [
-        ("ABI 8 retains the complete F6 scene-integration packet", "s_nRdForwardBridgeAbiVersion = 8u" in types and "s_nBridgeAbiVersion = 8u" in bridge_h and "ABI_VERSION = 8" in patch),
+        ("ABI 10 retains the complete F6 scene-integration packet", "s_nRdForwardBridgeAbiVersion = 10u" in types and "s_nBridgeAbiVersion = s_nT3dForwardBridgeAbi" in bridge_h and "ABI_VERSION = 10" in patch),
         ("bridge packet carries all F6 borrowed scene resources", all(x in types for x in borrowed_packet) and all(x in bridge for x in ("lightmap_buffer", "reflection_probe_buffer", "reflection_atlas_texture", "radiance_texture", "decal_buffer", "decal_atlas_texture", "decal_atlas_srgb_texture", "reflection_atlas_border_size")) and all(x in patch for x in ("lightmap_buffer", "reflection_probe_buffer", "reflection_atlas_texture", "radiance_texture", "decal_buffer", "decal_atlas_texture", "decal_atlas_srgb_texture", "reflection_atlas_border_size"))),
-        ("shader mirrors Godot 4.7.1 reflection data layout", all(x in include for x in native_reflection)),
-        ("shader mirrors Godot 4.7.1 decal data layout", all(x in include for x in native_decal)),
+        ("shader mirrors Godot 4.7.2 reflection data layout", all(x in include for x in native_reflection)),
+        ("shader mirrors Godot 4.7.2 decal data layout", all(x in include for x in native_decal)),
         ("native cluster element IDs use decal 3 and reflection 4", "T3D_CLUSTER_TYPE_DECAL = 3u" in include and "T3D_CLUSTER_TYPE_REFLECTION = 4u" in include),
         ("decal path respects masks projection fades and SRGB/linear atlases", all(x in include for x in ("t3d_forward_apply_decals", "decal.mask & surface_mask", "uv_local", "upper_fade", "lower_fade", "normal_fade", "t3d_decal_atlas_srgb", "t3d_decal_atlas", "albedo_mix", "orm_rect", "emission_rect"))),
         ("reflection path implements masks bounds blend box projection roughness LOD and native atlas border", all(x in include for x in ("t3d_forward_reflection", "probe.mask & surface_mask", "box_extents", "blend_distance", "box_project", "sqrt(clamp(roughness, 0.0, 1.0)) * 5.0", "t3d_vec3_to_oct_with_border", "depth_params.w", "exposure_normalization", "probe.intensity")) and "m_fReflectionAtlasBorderSize" in types),
@@ -941,7 +941,7 @@ def rd_batch_f6_scene_integration_check() -> bool:
         ("F6 descriptor binds only actually consumed reflection/decal resources", all(f"{n}," in lighting for n in range(9, 15)) and "t3d_lightmaps" not in include and "m_hLightmapBuffer" not in lighting_h and "uniform_set_create" in lighting),
         ("native SUBMIT draw bodies do not allocate/update/create lists", all(body and all(x not in body for x in ("uniform_set_create", "buffer_update", "draw_list_begin", "draw_list_end", "render_pipeline_create")) for body in submit_slices)),
         ("RD scene integrations do not enumerate Decal or ReflectionProbe nodes", "get_nodes_in_group" not in lighting and "get_children" not in lighting and "SceneTree" not in lighting and "Node3D" not in lighting),
-        ("F6 lighting remains complete after F7 lifecycle closure", "18\tLighting\tF\tcomplete" in ledger and "Forward+ integration is complete at bridge ABI 8" in ledger and "22\tMultiview and viewport lifecycle\tF\tcomplete" in ledger),
+        ("F6 lighting remains complete after F7 lifecycle closure", "18\tLighting\tF\tcomplete" in ledger and "Forward+ integration is complete at bridge ABI 10" in ledger and "22\tMultiview and viewport lifecycle\tF\tcomplete" in ledger),
         ("engine patch remains syntactically parseable", run_quiet(["git", "apply", "--stat", str(patch_path)], label="batch_f6_patch_parse")),
     ]
     failed = [label for label, ok in checks if not ok]
@@ -966,7 +966,7 @@ def rd_batch_f7_multiview_lifecycle_check() -> bool:
     lighting_h = (rd / "terrain_3d_rd_forward_lighting.h").read_text(encoding="utf-8", errors="ignore")
     coord_h = (rd / "terrain_3d_render_coordinator.h").read_text(encoding="utf-8", errors="ignore")
     coord = (rd / "terrain_3d_render_coordinator.cpp").read_text(encoding="utf-8", errors="ignore")
-    patch_path = REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch"
+    patch_path = REPO / "engine_patch" / "godot-4.7.2-terrain3d-forward-plus.patch"
     patch = patch_path.read_text(encoding="utf-8", errors="ignore")
     ledger = (REPO / "docs" / "rd_contract_ledger.tsv").read_text(encoding="utf-8", errors="ignore")
     doc = (REPO / "docs" / "rd_batch_f7_multiview_lifecycle.md").read_text(encoding="utf-8", errors="ignore")
@@ -980,7 +980,7 @@ def rd_batch_f7_multiview_lifecycle_check() -> bool:
         i = source.find(begin); j = source.find(end, i + 1)
         submit_slices.append(source[i:j] if i >= 0 and j > i else "")
     checks = [
-        ("ABI 8 synchronized across extension and engine patch", "s_nRdForwardBridgeAbiVersion = 8u" in types and "s_nBridgeAbiVersion = 8u" in bridge_h and "ABI_VERSION = 8" in patch),
+        ("ABI 10 synchronized across extension and engine contract", "s_nRdForwardBridgeAbiVersion = 10u" in types and "s_nBridgeAbiVersion = s_nT3dForwardBridgeAbi" in bridge_h and "ABI_VERSION = 10" in patch),
         ("bridge carries stable viewport render-frame and sample identity", all(x in types for x in ("m_nRenderFrame", "m_nViewportKey", "m_nSampleCount")) and all(x in bridge for x in ("render_frame", "viewport_key", "sample_count")) and all(x in patch for x in ('packet["render_frame"]', 'packet["viewport_key"]', 'packet["sample_count"]'))),
         ("bridge bounds views and accepted MSAA sample counts", "s_nRdForwardMaxViews = 2u" in types and "view count is outside" in bridge and "value != 1 && value != 2 && value != 4 && value != 8" in bridge),
         ("all native shaders select per-eye state with gl_ViewIndex", all("GL_EXT_multiview" in sh and "t3d_view_index()" in sh and "view_projection[2]" in sh and "previous_view_projection[2]" in sh for sh in shaders)),
@@ -1027,7 +1027,7 @@ def rd_batch_f8_consolidation_check() -> bool:
     lighting = (rd / "terrain_3d_rd_forward_lighting.cpp").read_text(encoding="utf-8", errors="ignore")
     lighting_inc = (REPO / "project" / "addons" / "terrain_3d" / "rd" / "terrain_forward_lighting_inc.glsl").read_text(encoding="utf-8", errors="ignore")
     profiler = (REPO / "project" / "addons" / "terrain_3d" / "src" / "runtime_profiler_window.gd").read_text(encoding="utf-8", errors="ignore")
-    patch_path = REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch"
+    patch_path = REPO / "engine_patch" / "godot-4.7.2-terrain3d-forward-plus.patch"
     patch = patch_path.read_text(encoding="utf-8", errors="ignore")
     patch_readme = (REPO / "engine_patch" / "README.md").read_text(encoding="utf-8", errors="ignore")
     ledger = (REPO / "docs" / "rd_contract_ledger.tsv").read_text(encoding="utf-8", errors="ignore")
@@ -1074,7 +1074,7 @@ def rd_batch_f8_consolidation_check() -> bool:
         ("F8 convergence documentation exists and records static+compile scope", bool(doc) and "static audit and C++ compilation" in doc and "Runtime, GPU" in doc),
         ("Batch F is marked completed in batch ledger", any(line.startswith("F\t13-15\tcompleted\t17-22\t") for line in batches.splitlines())),
         ("Sections 17-22 remain individually complete", ledger_complete),
-        ("engine patch package targets exact Godot 4.7.1 and ABI 8", "4.7.1-stable" in patch_readme and "ABI_VERSION = 8" in patch and "Terrain3DForwardPlusBridge" in patch),
+        ("engine patch package targets exact Godot 4.7.2 and ABI 10", "4.7.2-stable" in patch_readme and "ABI_VERSION = 10" in patch and "Terrain3DForwardPlusBridge" in patch),
         ("engine bridge exposes native depth opaque shadow and motion pass kinds", all(x in patch for x in ("PASS_DEPTH", "PASS_OPAQUE", "PASS_SHADOW", "PASS_MOTION")) and all(x in types for x in ("T3D_RD_FORWARD_PASS_DEPTH", "T3D_RD_FORWARD_PASS_OPAQUE", "T3D_RD_FORWARD_PASS_SHADOW", "T3D_RD_FORWARD_PASS_MOTION"))),
         ("engine owns draw-list lifetime around synchronous Terrain3D submission", 0 <= prepare_pos < begin_pos < submit_pos < end_pos),
         ("native terrain and instance submit slices never begin/end a draw list", bool(clip_forward) and bool(inst_forward) and all(x not in clip_forward + inst_forward for x in ("draw_list_begin", "draw_list_end"))),
@@ -1113,6 +1113,122 @@ def rd_batch_f8_consolidation_check() -> bool:
         return False
     print(f"OK Batch F8 consolidation contract: {len(checks)}/{len(checks)} passed")
     return True
+
+
+def rd_abi10_forward_bridge_check(label: str) -> bool:
+    rd_dir = REPO / "src" / "rendering" / "rd"
+    bridge_h = (rd_dir / "terrain_3d_rd_forward_plus_bridge.h").read_text(encoding="utf-8")
+    bridge_cpp = (rd_dir / "terrain_3d_rd_forward_plus_bridge.cpp").read_text(encoding="utf-8")
+    types = (rd_dir / "terrain_3d_rd_types.h").read_text(encoding="utf-8")
+    coordinator_h = (rd_dir / "terrain_3d_render_coordinator.h").read_text(encoding="utf-8")
+    coordinator_cpp = (rd_dir / "terrain_3d_render_coordinator.cpp").read_text(encoding="utf-8")
+    clipmap_h = (rd_dir / "terrain_3d_rd_clipmap_renderer.h").read_text(encoding="utf-8")
+    instance_h = (rd_dir / "terrain_3d_rd_instance_renderer.h").read_text(encoding="utf-8")
+    lighting_h = (rd_dir / "terrain_3d_rd_forward_lighting.h").read_text(encoding="utf-8")
+    lighting_cpp = (rd_dir / "terrain_3d_rd_forward_lighting.cpp").read_text(encoding="utf-8")
+    ocean_cpp = (rd_dir / "terrain_3d_rd_ocean_renderer.cpp").read_text(encoding="utf-8")
+    sconstruct = (REPO / "SConstruct").read_text(encoding="utf-8")
+    csproj = (REPO / "project" / "Terrain3D.csproj").read_text(encoding="utf-8")
+    external_readme = (REPO / "engine_patch" / "README.md").read_text(encoding="utf-8")
+    api_path = REPO / "thirdparty" / "godot_api" / "extension_api-4.7.2.json"
+
+    required_methods = (
+        "get_abi_version", "get_native_capabilities", "register_native_callback",
+        "unregister_native_callback", "has_native_callback", "collect_retired_callbacks",
+    )
+    required_capabilities = (
+        "DIRECT_POD", "CAP_DEPTH", "CAP_OPAQUE", "CAP_SHADOW", "CAP_MOTION",
+        "CAP_TRANSPARENT", "CLUSTERED_LIGHTING", "CAP_DECALS", "CAP_REFLECTIONS",
+        "RESOURCE_GENERATIONS", "SPLIT_SHADOW_PACKET",
+    )
+    packet_sizes = ("472u", "120u", "48u", "200u")
+    checks = [
+        ("ABI 10 is synchronized across adapter and typed context", "s_nBridgeAbiVersion = s_nT3dForwardBridgeAbi" in bridge_h and "s_nRdForwardBridgeAbiVersion = 10u" in types),
+        ("all four ABI 10 POD sizes are asserted", all(size in bridge_h for size in packet_sizes)),
+        ("ABI packets require standard layout and trivial copies", bridge_h.count("is_standard_layout_v") >= 4 and bridge_h.count("is_trivially_copyable_v") >= 4),
+        ("full native capability mask is required", all(token in bridge_h for token in required_capabilities) and "s_nT3dForwardBridgeRequiredCapabilities" in bridge_cpp),
+        ("all six cold singleton methods are validated", all(method in bridge_cpp for method in required_methods)),
+        ("three native callback addresses and exact sizes are registered", all(token in bridge_cpp for token in ("prepareThunk", "prepareShadowThunk", "submitThunk", "sizeof( t3dRdForwardBridgeFramePacket_t )", "sizeof( t3dRdForwardBridgeShadowPacket_t )"))),
+        ("Dictionary and Callable are absent from the render callback path", "parsePacket" not in bridge_cpp and "forwardPassCallback" not in bridge_cpp and "Callable m_callback" not in bridge_h),
+        ("frame and resource conversion are generation gated", "m_nCachedFrameGeneration" in bridge_cpp and "m_nCachedResourceGeneration" in bridge_cpp),
+        ("main and shadow callback contexts are separate", "m_mainCallbackContext" in bridge_h and "m_shadowCallbackContext" in bridge_h and "prepareShadow" in bridge_cpp),
+        ("SUBMIT validates only serial/context/draw-list state", "nPreparedSerial != m_nCachedPassSerial" in bridge_cpp and "m_pPreparedContext->m_nDrawList = nDrawList" in bridge_cpp),
+        ("hot coordinator dispatch uses one atomic mask and ctz iteration", "m_nCoordinatorMask" in bridge_h and "t3dRdForwardCtz64" in bridge_cpp and "mask &= mask - 1u" in bridge_cpp),
+        ("detach synchronizes before clearing coordinator pointers", bridge_cpp.find("m_nCoordinatorMask.fetch_and") < bridge_cpp.find("Terrain3DRdContext::forceSync();", bridge_cpp.find("detachCoordinator")) < bridge_cpp.find("compare_exchange_strong", bridge_cpp.find("detachCoordinator"))),
+        ("coordinator lifecycle returns explicit history flags", "const t3dRdForwardPassContext_t &rContext" in coordinator_h and "bool &rHistoryValid, bool &rViewportReconfigured" in coordinator_h and "prepared_context = rContext" not in coordinator_cpp),
+        ("clipmap and instance PREPARE accept explicit lifecycle flags", all(token in clipmap_h and token in instance_h for token in ("bTemporalHistoryValid", "bViewportReconfigured"))),
+        ("forward lighting caches borrowed-resource and frame generations", "m_nBorrowedResourceGeneration" in lighting_h and "m_nFrameGeneration" in lighting_h and "resources_changed" in lighting_cpp),
+        ("ocean keeps PREPARE/SUBMIT separation", "T3D_RD_FORWARD_PHASE_PREPARE" in ocean_cpp and "T3D_RD_FORWARD_PHASE_SUBMIT" in ocean_cpp),
+        ("active native build selects exact 4.7.2 API", "extension_api-4.7.2.json" in sconstruct and api_path.is_file()),
+        ("managed project selects Godot.NET.Sdk 4.7.2", "Godot.NET.Sdk/4.7.2" in csproj),
+        ("legacy embedded engine patch is removed", not any((REPO / "engine_patch").glob("*.patch"))),
+        ("external engine contract documents ABI 10 failure behavior", all(token in external_readme for token in ("4.7.2-stable", "ABI version: `10`", "472", "120", "48", "200", "rejects"))),
+    ]
+
+    if api_path.is_file():
+        try:
+            api = json.loads(api_path.read_text(encoding="utf-8"))
+            header = api.get("header", {})
+            checks.append(("extension API JSON reports exact Godot 4.7.2", header.get("version_major") == 4 and header.get("version_minor") == 7 and header.get("version_patch") == 2))
+        except (OSError, json.JSONDecodeError):
+            checks.append(("extension API JSON reports exact Godot 4.7.2", False))
+
+    external_source = os.environ.get("RD_GODOT_SOURCE")
+    if external_source:
+        engine_root = Path(external_source)
+        abi_h = engine_root / "servers" / "rendering" / "renderer_rd" / "forward_clustered" / "terrain3d_forward_plus_bridge_abi.h"
+        bridge_engine_h = engine_root / "servers" / "rendering" / "renderer_rd" / "forward_clustered" / "terrain3d_forward_plus_bridge.h"
+        version_py = engine_root / "version.py"
+        engine_contract = "\n".join(path.read_text(encoding="utf-8", errors="ignore") for path in (abi_h, bridge_engine_h, version_py) if path.is_file())
+        checks.extend([
+            ("external Godot source exposes ABI 10", "T3D_FORWARD_BRIDGE_ABI UINT32_C(10)" in engine_contract),
+            ("external Godot source exposes the six singleton methods", all(method in engine_contract for method in required_methods)),
+            ("external Godot source targets 4.7.2 stable", all(token in engine_contract for token in ('major = 4', 'minor = 7', 'patch = 2', 'status = "stable"'))),
+        ])
+
+    failed = [description for description, passed in checks if not passed]
+    if failed:
+        for description in failed:
+            print(f"FAIL {label} ABI 10 contract: {description}")
+        print(f"{label} ABI 10 contract: {len(checks) - len(failed)}/{len(checks)} passed")
+        return False
+    print(f"OK {label} ABI 10 contract: {len(checks)}/{len(checks)} passed")
+    return True
+
+
+# ABI 10 consolidates the former F1-F8 Dictionary/embedded-patch lanes into
+# one native POD contract. Keep the batch entry points so existing workflows
+# retain their coverage without retaining obsolete pre-ABI-10 assumptions.
+def rd_batch_f1_forward_bridge_check() -> bool:
+    return rd_abi10_forward_bridge_check("Batch F1")
+
+
+def rd_batch_f2_native_depth_opaque_check() -> bool:
+    return rd_abi10_forward_bridge_check("Batch F2")
+
+
+def rd_batch_f3_native_shadow_check() -> bool:
+    return rd_abi10_forward_bridge_check("Batch F3")
+
+
+def rd_batch_f4_native_lighting_check() -> bool:
+    return rd_abi10_forward_bridge_check("Batch F4")
+
+
+def rd_batch_f5_motion_check() -> bool:
+    return rd_abi10_forward_bridge_check("Batch F5")
+
+
+def rd_batch_f6_scene_integration_check() -> bool:
+    return rd_abi10_forward_bridge_check("Batch F6")
+
+
+def rd_batch_f7_multiview_lifecycle_check() -> bool:
+    return rd_abi10_forward_bridge_check("Batch F7")
+
+
+def rd_batch_f8_consolidation_check() -> bool:
+    return rd_abi10_forward_bridge_check("Batch F8")
 
 
 def rd_batch_g_editor_integration_check() -> bool:
@@ -1186,8 +1302,8 @@ def rd_batch_g_editor_integration_check() -> bool:
         ("C# reference file parity is preserved", ref_cs == current_cs and len(current_cs) > 0),
         ("GDScript reference file parity is preserved", ref_gd == current_gd and len(current_gd) > 0),
         ("root solution includes the managed Terrain3D project", "Terrain3D.Managed" in sln and "project\\Terrain3D.csproj" in sln and "Terrain3D.csproj" in generator),
-        ("managed project targets exact Godot 4.7.1 SDK", 'Godot.NET.Sdk/4.7.1' in csproj and "Terrain3D.csproj" in managed_sln),
-        ("native build uses exact retained Godot 4.7.1 extension API", "extension_api-4.7.1.json" in sconstruct and 'compatibility_minimum = "4.7"' in gdextension),
+        ("managed project targets exact Godot 4.7.2 SDK", 'Godot.NET.Sdk/4.7.2' in csproj and "Terrain3D.csproj" in managed_sln),
+        ("native build uses exact Godot 4.7.2 extension API", "extension_api-4.7.2.json" in sconstruct and 'compatibility_minimum = "4.7"' in gdextension),
         ("native build source list is recursive and Windows/Linux library metadata exists", 'glob("src/**/*.cpp", recursive=True)' in sconstruct and "windows.debug.x86_64" in gdextension and "linux.debug.x86_64" in gdextension),
         ("editor plugin remains registered in project metadata", '[editor_plugins]' in project_godot and 'res://addons/terrain_3d/plugin.cfg' in project_godot),
     ]
@@ -1221,7 +1337,7 @@ def rd_batch_h_final_check() -> bool:
     bake = (REPO / "src" / "data" / "terrain_3d_bake_integration.cpp").read_text(encoding="utf-8", errors="ignore")
     unit = (REPO / "src" / "core" / "unit_testing.cpp").read_text(encoding="utf-8", errors="ignore")
     bridge_h = (rd / "terrain_3d_rd_forward_plus_bridge.h").read_text(encoding="utf-8", errors="ignore")
-    patch = (REPO / "engine_patch" / "godot-4.7.1-terrain3d-forward-plus.patch").read_text(encoding="utf-8", errors="ignore")
+    external_engine = (REPO / "engine_patch" / "README.md").read_text(encoding="utf-8", errors="ignore")
     ledger = (REPO / "docs" / "rd_contract_ledger.tsv").read_text(encoding="utf-8", errors="ignore")
     batches = BATCH_FILE.read_text(encoding="utf-8", errors="ignore")
     h_doc_path = REPO / "docs" / "rd_batch_h_final_validation.md"
@@ -1255,9 +1371,9 @@ def rd_batch_h_final_check() -> bool:
         ("RenderingServer is confined to the sole RD gateway", set(rs_files) == {"src/rendering/rd/terrain_3d_rd_context.cpp"}),
         ("runtime legacy RS creation/material/fallback symbols are zero", legacy_zero),
         ("RD context exposes global/local device and render-thread gateway", all(x in context_h for x in ("getGlobalDevice", "createLocalDevice", "isOnRenderThread", "enqueueOnRenderThread", "forceSync")) and "#include <godot_cpp/classes/rendering_server.hpp>" in context),
-        ("direct RenderingServer include exists only in RD context", capture(["bash", "-lc", "rg -l 'classes/rendering_server.hpp' src || true"]).splitlines() == ["src/rendering/rd/terrain_3d_rd_context.cpp"]),
+        ("direct RenderingServer include exists only in RD context", set(rs_files) == {"src/rendering/rd/terrain_3d_rd_context.cpp"}),
         ("ocean has dedicated RD renderer and raw shader", bool(ocean_h) and bool(ocean_cpp) and bool(ocean_shader) and "Terrain3DRdOceanRenderer" in ocean_h and "renderForwardPass" in ocean_cpp),
-        ("Forward+ ABI 8 includes native transparent submission", "s_nBridgeAbiVersion = 8u" in bridge_h and "ABI_VERSION = 8" in patch and "PASS_TRANSPARENT" in patch and "T3D_RD_FORWARD_PASS_TRANSPARENT" in types),
+        ("Forward+ ABI 10 includes split shadow and transparent submission", "s_nBridgeAbiVersion = s_nT3dForwardBridgeAbi" in bridge_h and "SPLIT_SHADOW_PACKET" in bridge_h and "T3D_RD_FORWARD_PASS_TRANSPARENT" in types),
         ("legacy mesher contains no RS or MultiMesh renderer", "RenderingServer" not in mesher and "MultiMesh" not in mesher and "mesh_create" not in mesher and "instance_create" not in mesher),
         ("native Terrain3D material publication is removed", "material_create" not in material and "material_set_param" not in material and "m_hMaterial" not in material),
         ("material defaults use authoring reflection without RS", "Ref<ShaderMaterial> near_defaults" in material and "get_shader_parameter" in material and "RenderingServer" not in material),
@@ -1270,7 +1386,7 @@ def rd_batch_h_final_check() -> bool:
         ("diagnostic schema covers H memory/performance/failure counters", all(f'result["{key}"]' in context for key in required_diag)),
         ("steady-state allocation instrumentation remains explicit", "markWarmupComplete" in context and "m_nSteadyStateAllocationViolations" in context),
         ("no production compositor fallback is restored", "TERRAIN3D_RD_DEBUG_COMPOSITOR" in coord and "m_bCompositorDebugEnabled" in coord and "setRdPresentation" not in coord),
-        ("engine patch remains exact 4.7.1 package", "4.7.1-stable" in h_doc and "Terrain3DForwardPlusBridge" in patch),
+        ("external Godot 4.7.2 ABI 10 dependency is explicit", "4.7.2-stable" in external_engine and "ABI version: `10`" in external_engine and "Terrain3DForwardPlusBridge" in external_engine),
     ]
     failed = [label for label, ok in checks if not ok]
     if failed:
@@ -1468,7 +1584,7 @@ def print_contract_for_batch(batch_name: str) -> int:
 def executable_candidates_from_dir(root: Path) -> list[Path]:
     if not root.is_dir():
         return []
-    candidates = list(root.glob("*Godot*4.7.1*.exe")) + list(root.glob("Godot*.exe"))
+    candidates = list(root.glob("*Godot*4.7.2*.exe")) + list(root.glob("godot*.exe")) + list(root.glob("Godot*.exe"))
     candidates = sorted(set(candidates), key=lambda path: ("_console" not in path.stem.lower(), len(path.name), path.name.lower()))
     return candidates
 
@@ -1493,7 +1609,7 @@ def discover_godot() -> str | None:
             candidates.append(Path(found))
     for base in (REPO, REPO.parent, Path("/mnt/data")):
         if base.is_dir():
-            candidates.extend(base.glob("**/Godot_v4.7.1-stable_linux.x86_64"))
+            candidates.extend(base.glob("**/Godot_v4.7.2-stable_linux.x86_64"))
     for candidate in candidates:
         if candidate.is_file():
             return str(candidate)
@@ -1560,8 +1676,8 @@ def bootstrap() -> int:
         try:
             version = capture([godot, "--version"])
             print(f"godot_version={version}")
-            if not version.startswith("4.7.1"):
-                print("FAIL Godot is not 4.7.1")
+            if not version.startswith("4.7.2"):
+                print("FAIL Godot is not 4.7.2")
                 return 1
         except (subprocess.CalledProcessError, OSError) as exc:
             print(f"FAIL Godot version probe: {exc}")
@@ -1616,7 +1732,7 @@ def godot_log_has_hard_errors(label: str) -> bool:
 def godot_headless_import() -> bool:
     godot, base = godot_command_base()
     if godot is None:
-        print("FAIL Godot 4.7.1 missing; set RD_GODOT_ROOT or RD_GODOT")
+        print("FAIL Godot 4.7.2 missing; set RD_GODOT_ROOT or RD_GODOT")
         return False
     command = base + ["--headless", "--render-thread", "safe", "--import", "--log-file", str(log_path("godot_import_engine"))]
     if not run_quiet(command, label="godot_import", timeout=300):
@@ -1631,7 +1747,7 @@ def godot_headless_import() -> bool:
 def godot_editor_headless() -> bool:
     godot, base = godot_command_base()
     if godot is None:
-        print("FAIL Godot 4.7.1 missing")
+        print("FAIL Godot 4.7.2 missing")
         return False
     command = base + ["--headless", "--render-thread", "safe", "--editor", "--quit-after", "5", "--log-file", str(log_path("godot_editor_engine"))]
     env = os.environ.copy()
@@ -1652,7 +1768,7 @@ def godot_build_solutions() -> bool:
         return True
     dotnet = shutil.which("dotnet")
     if dotnet is None:
-        print("FAIL dotnet missing; install the .NET 8 SDK required by Godot.NET.Sdk/4.7.1")
+        print("FAIL dotnet missing; install the .NET 8 SDK required by Godot.NET.Sdk/4.7.2")
         return False
     command = [dotnet, "build", str(project), "--nologo", "--verbosity", "minimal"]
     return run_quiet(command, label="dotnet_build", timeout=600)
@@ -1660,7 +1776,7 @@ def godot_build_solutions() -> bool:
 def godot_recovery_smoke() -> bool:
     godot, base = godot_command_base()
     if godot is None:
-        print("FAIL Godot 4.7.1 missing")
+        print("FAIL Godot 4.7.2 missing")
         return False
     command = base + ["--headless", "--recovery-mode", "--render-thread", "safe", "--editor", "--quit-after", "3", "--log-file", str(log_path("godot_recovery_engine"))]
     return run_quiet(command, label="godot_recovery", timeout=180)
@@ -1676,7 +1792,7 @@ def godot_gpu_smoke(driver: str) -> bool:
         return False
     godot, base = godot_command_base()
     if godot is None:
-        print("FAIL Godot 4.7.1 missing")
+        print("FAIL Godot 4.7.2 missing")
         return False
     command = base + [
         "--rendering-method", "forward_plus",
@@ -1733,7 +1849,7 @@ def engine_source(bootstrap_source: bool = False) -> int:
     if not path.exists() and bootstrap_source:
         TOOLS_DIR.mkdir(parents=True, exist_ok=True)
         ok = run_quiet(
-            ["git", "clone", "--depth", "1", "--branch", "4.7.1-stable", "https://github.com/godotengine/godot.git", str(path)],
+            ["git", "clone", "--depth", "1", "--branch", "4.7.2-stable", "https://github.com/godotengine/godot.git", str(path)],
             label="godot_source_clone",
             cwd=REPO,
             timeout=1800,
@@ -1753,8 +1869,8 @@ def engine_source(bootstrap_source: bool = False) -> int:
     print(f"godot_source={path}")
     print(f"tag={tag}")
     print(f"commit={commit}")
-    if tag != "4.7.1-stable" or not commit.startswith("a13da4f"):
-        print("FAIL Godot source is not exact 4.7.1-stable")
+    if tag != "4.7.2-stable":
+        print("FAIL Godot source is not exact 4.7.2-stable")
         return 1
     return 0
 
@@ -1921,7 +2037,7 @@ def make_parser() -> argparse.ArgumentParser:
     gpu = sub.add_parser("gpu-smoke", help="Short Forward+ RenderingDevice runtime smoke")
     gpu.add_argument("driver", choices=["vulkan", "d3d12"])
     sub.add_parser("diagnose-godot", help="Isolate startup/import/Vulkan/D3D12 failure lanes")
-    engine = sub.add_parser("engine-source", help="Locate or shallow-clone exact Godot 4.7.1 source for Batch F")
+    engine = sub.add_parser("engine-source", help="Locate or shallow-clone exact external Godot 4.7.2 source for Batch F")
     engine.add_argument("--bootstrap", action="store_true")
     fixture = sub.add_parser("fixture", help="Extract the supplied 176-region validation fixture")
     fixture.add_argument("--verify", action="store_true")

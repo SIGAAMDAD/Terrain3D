@@ -10,7 +10,6 @@
 
 #include <godot_cpp/classes/rd_shader_spirv.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
-#include <memory>
 #include <vector>
 
 typedef struct t3dRdOceanTopologySnapshot_s {
@@ -85,7 +84,7 @@ private:
 	bool ensureShaders( const Ref<RDShaderSPIRV> &rColor, const Ref<RDShaderSPIRV> &rShadow );
 	bool ensureBuffers( void );
 	bool ensureUniformSets( void );
-	bool ensureTopology( const std::shared_ptr<const t3dRdOceanTopologySnapshot_t> &pTopology );
+	bool ensureTopology( const t3dRdOceanTopologySnapshot_t *pTopology );
 	bool updateFrame( const t3dRdForwardPassContext_t &rContext, const t3dRdFrameSnapshot_t &rSnapshot );
 	bool ensurePipeline( const t3dRdForwardPassContext_t &rContext );
 	const t3dRdOceanPipelineEntry_t *findPipeline( const t3dRdOceanPipelineKey_t &rKey ) const;
@@ -99,7 +98,7 @@ public:
 	void shutdown( void );
 	bool prepareForwardPass( const t3dRdForwardPassContext_t &rContext,
 			const t3dRdFrameSnapshot_t &rSnapshot,
-			const std::shared_ptr<const t3dRdOceanTopologySnapshot_t> &pTopology,
+			const t3dRdOceanTopologySnapshot_t *pTopology,
 			uint32_t nVisibilityMask );
 	bool renderForwardPass( const t3dRdForwardPassContext_t &rContext );
 	Dictionary getDiagnostics( void ) const;

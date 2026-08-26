@@ -7,8 +7,8 @@ This is the compact execution specification. Exact checklist language remains in
 Produce a completed `experiment/rendering-device` branch that preserves the original fork's required public feature set while replacing Terrain3D-owned rendering with explicit RenderingDevice ownership. Final output must be a clean, reproducible Windows-capable repository and independently verified ZIP.
 
 Reference implementation: `rd-alpha-pre-cleanbreak-reference` (`5d9e8b1c264867e147d5b9d1992acb883f82adb5`).
-Target Godot: 4.7.1 stable, exact release commit family `a13da4f`.
-Local Godot root: `D:\Godot_v4.7.1-stable_mono_win64`.
+Target Godot: 4.7.2 stable, Forward+ with the ABI-10 native bridge.
+Local Godot source root: `D:\godot-4.7.2-stable` (or `RD_GODOT_SOURCE`).
 Validation hardware: Core Ultra 7 258V / Arc 140V, Windows x86-64.
 
 ## 2. Existing useful implementation
@@ -24,7 +24,7 @@ Retain and harden rather than restart:
 - compositor/framebuffer scaffolding;
 - partial diagnostics/accounting.
 
-Batches A-E are complete. The remaining clean-break work is the Godot 4.7.1 Forward+ submission bridge and native feature parity, editor/preview and stale API cleanup, then complete cross-system/runtime/performance validation and final packaging.
+Batches A-E are complete. The clean-break integration targets the external Godot 4.7.2 ABI-10 Forward+ bridge, followed by editor/preview cleanup and complete cross-system/runtime/performance validation.
 
 ## 3. Non-negotiable end-state
 
@@ -39,7 +39,7 @@ Batches A-E are complete. The remaining clean-break work is the Godot 4.7.1 Forw
 9. HLOD reuses RD mesh/material data and has RD descriptors, residency, culling, distance/LOD rules, indirect draws and shadows. No native render instance.
 10. Instance/HLOD materials cover the subset actually used by the reference assets: albedo, normals, ORM/PBR, alpha scissor, culling/double-sided, colors, roughness, metallic, AO, emissive if present, filtering/samplers and shadow alpha.
 11. Remove native terrain/instance/HLOD shadow proxies. Terrain, instances and HLOD participate in required directional shadows and receive required lighting.
-12. Restore native-equivalent Forward+ participation required by reference behavior through a minimal Godot 4.7.1 engine-side submission bridge. Terrain3D continues to own its buffers/resources; the bridge only inserts externally owned draw data into the proper renderer lists.
+12. Restore native-equivalent Forward+ participation through the minimal Godot 4.7.2 ABI-10 engine-side submission bridge. Terrain3D continues to own its buffers/resources; the bridge only inserts externally owned draw data into the proper renderer lists.
 13. Correct depth, reversed-Z, MSAA, render scaling, multiview, multiple cameras, viewport recreation and motion vectors/previous state.
 14. Editor painting/brush/region/debug/selection rendering and asset previews work without a hidden native terrain renderer.
 15. Collision, navigation, sampling, editing, save/load, import/export, residency, baking/lightmap workflows and other non-rendering systems retain reference behavior.
@@ -63,7 +63,7 @@ Convert generated height/control/color/region/cache/displacement/edit resources 
 Gate: visible terrain resources have no RS duplicate/bridge and survive streaming replacement/recreation.
 
 ### C — material ABI and terrain shader parity
-Separate authored resource state from GPU publication. Implement fixed material tables and full near/middle/far production behavior using the reference material/shader path as authority. Compile every RD shader variant under Godot 4.7.1.
+Separate authored resource state from GPU publication. Implement fixed material tables and full near/middle/far production behavior using the reference material/shader path as authority. Compile every RD shader variant under Godot 4.7.2.
 
 Gate: material changes update RD tables/resources; visual/reference feature matrix for terrain material path is complete.
 
@@ -78,11 +78,11 @@ Resolve HLOD packages to the shared mesh/material cache. Implement descriptors, 
 Gate: zero Terrain3D native HLOD render instances and no stale handles after residency churn.
 
 ### F — Forward+ bridge and native feature parity
-Only now obtain exact Godot source (`4.7.1-stable`) under `.rd_tools` or `RD_GODOT_SOURCE`. Inspect 4.7.1 render-list construction and add the smallest engine patch that accepts Terrain3D-owned RD buffer/index/format/material/pipeline/transform/AABB/layer/depth/shadow/previous-state/velocity data and inserts it into appropriate Forward+ stages.
+Use exact Godot `4.7.2-stable` source through `RD_GODOT_SOURCE`. Maintain the small ABI-10 native bridge in that source tree; it accepts Terrain3D callbacks and borrowed frame/resource/pass data while Terrain3D inserts its owned RD draw data into the active Forward+ draw lists.
 
-Bridge requirements: depth prepass, clustered/local lights, selected native shadow lists, opaque ordering, velocity/motion vectors, required GI, decals, reflection probes; handle reversed-Z, MSAA, render scaling, multiview, resize and viewport recreation. Commit patch/source files under `engine_patch/`; do not vendor the entire Godot tree.
+Bridge requirements: depth prepass, clustered/local lights, selected native shadow lists, opaque ordering, velocity/motion vectors, required GI, decals, reflection probes; handle reversed-Z, MSAA, render scaling, multiview, resize and viewport recreation. Keep the exact ABI and failure contract documented under `engine_patch/`; do not embed or vendor an engine patch in this repository.
 
-Gate: patched 4.7.1 editor build executes terrain + instance + HLOD scenes with required Forward+ features. Native shadow proxy/fallback renderer is gone.
+Gate: the ABI-10-enabled 4.7.2 editor build executes terrain + instance + HLOD scenes with required Forward+ features. Native shadow proxy/fallback renderer is gone.
 
 ### G — editor, preview and API cleanup
 Port editor overlays/brush/paint/region/debug/selection/visibility feedback and RD preview framebuffer/readback. Remove Direct/Hybrid/native-proxy backend UX and stale native assumptions. Update bindings, GDScript, C#, solution/project metadata and plugin registration.
@@ -94,11 +94,11 @@ Regression-test collision/navigation/sampling/editing/save/load/import/export/re
 
 Gate: every mandatory contract entry is complete or has explicit verified evidence. No mandatory item remains pending/temporary/fallback/TODO.
 
-## 5. Forward+ engine patch boundary
+## 5. Forward+ external engine boundary
 
-The stock installed editor is adequate for Batches A-E/G static and basic GDExtension work. It cannot validate a new internal Forward+ submission hook that does not exist in stock 4.7.1. Batch F therefore must build an exact 4.7.1 source editor with the committed patch.
+Stock Godot does not expose this internal Forward+ submission hook. Batch F therefore builds an exact Godot 4.7.2 source editor containing the separately maintained ABI-10 producer and validates Terrain3D against that binary.
 
-Keep the engine patch narrow:
+Keep the external engine bridge narrow:
 - no Terrain3D resource ownership in engine code;
 - no Terrain3D scene-node implementation in engine code;
 - no second terrain renderer;
@@ -126,4 +126,4 @@ All Godot/SCons output goes to `.rd_logs`; wrappers print only success or the fa
 
 ## 7. Definition of done
 
-Completion requires the contract's end state, not an implementation milestone. Final package must contain the complete Git repository on `experiment/rendering-device`, correct Noah Van Til attribution, clean worktree, required source/project/C#/GDScript/shaders/build files, engine patch, tests and validation evidence. Extract the produced ZIP into a separate directory and verify branch/SHA/history/files/build/Git integrity and archive SHA-256 before handing it off.
+Completion requires the contract's end state, not an implementation milestone. Final package must contain the complete Git repository on `experiment/rendering-device`, correct Noah Van Til attribution, clean worktree, required source/project/C#/GDScript/shaders/build files, ABI-10 external bridge contract, tests and validation evidence. Extract the produced ZIP into a separate directory and verify branch/SHA/history/files/build/Git integrity and archive SHA-256 before handing it off.

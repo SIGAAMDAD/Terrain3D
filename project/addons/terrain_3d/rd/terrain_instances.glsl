@@ -4,6 +4,10 @@ color_native = "#define T3D_FORWARD_NATIVE_LIGHTING";
 color_specular = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR";
 color_motion = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION";
 color_specular_motion = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION";
+color_native_radiance_array = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_RADIANCE_ARRAY";
+color_specular_radiance_array = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_RADIANCE_ARRAY";
+color_motion_radiance_array = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY";
+color_specular_motion_radiance_array = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY";
 depth = "#define T3D_FORWARD_DEPTH";
 depth_normal_roughness = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS";
 depth_normal_roughness_voxel_gi = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_FORWARD_VOXEL_GI";
@@ -319,20 +323,23 @@ void main() {
 	if (unshaded) {
 		lit = final_color.rgb + emission;
 	} else {
-		float ambient = (0.22 + 0.08 * roughness) * ao;
 #ifdef T3D_FORWARD_NATIVE_LIGHTING
-		vec3 view_position = (frame_data.view_matrix * vec4(vertex_world_position, 1.0)).xyz;
+        // Global ambient is intentionally left to Terrain3D's resolved lighting
+        // baseline until environment IBL can share Godot's BRDF/probe weights.
+        float ambient = 0.0;
+        vec3 view_position = (frame_data.view_matrix * vec4(vertex_world_position, 1.0)).xyz;
 		vec3 view_normal = normalize(mat3(frame_data.view_matrix) * normal);
 		t3d_forward_apply_decals(view_position, push_data.visibility_layers, final_color.rgb, view_normal,
 				roughness, metallic, ao, emission);
 		normal = normalize(transpose(mat3(frame_data.view_matrix)) * view_normal);
 		vec3 direct = t3d_forward_direct_lighting(final_color.rgb, vertex_world_position, normalize(normal), frame_data.view_matrix,
 				frame_data.camera_position[t3d_view_index()].xyz, roughness, metallic, 1.0, push_data.visibility_layers, 2u, true, 0u, 1.0);
-		lit = final_color.rgb * ambient + direct + emission;
+        lit = final_color.rgb * ambient + direct + emission;
 		vec3 reflection_view_direction = normalize(-view_position);
-		lit += t3d_forward_reflection(view_position, view_normal, reflection_view_direction,
-				roughness, metallic, final_color.rgb, push_data.visibility_layers);
+        lit += t3d_forward_reflection(view_position, view_normal, reflection_view_direction,
+                roughness, metallic, final_color.rgb, push_data.visibility_layers);
 #else
+		float ambient = (0.22 + 0.08 * roughness) * ao;
 		vec3 debug_light_direction = normalize(vec3(0.34, 0.83, 0.44));
 		float ndotl = max(dot(normalize(normal), debug_light_direction), 0.0);
 		lit = final_color.rgb * (ambient + (1.0 - metallic * 0.65) * ndotl * (1.0 - mix(0.10, 0.30, roughness))) + emission;

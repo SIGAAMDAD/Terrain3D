@@ -4,10 +4,10 @@ from pathlib import Path
 import os
 
 # godot-cpp 10.0.0-rc1 predates Godot 4.7.  Seed its build environment with
-# the retained 4.7.1 API by default so a plain project build cannot silently
+# the exact generated 4.7.2 API so a plain project build cannot silently
 # fall back to the embedded 4.6 API.
 godot_cpp_env = Environment(tools=["default"], PLATFORM="")
-godot_cpp_env["custom_api_file"] = File("thirdparty/godot_api/extension_api-4.7.1.json").abspath
+godot_cpp_env["custom_api_file"] = File("thirdparty/godot_api/extension_api-4.7.2.json").abspath
 env = SConscript("godot-cpp/SConstruct", exports={"env": godot_cpp_env})
 
 # Add source files.

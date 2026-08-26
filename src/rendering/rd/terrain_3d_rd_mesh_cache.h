@@ -11,7 +11,6 @@
 #include <godot_cpp/classes/mesh.hpp>
 #include <godot_cpp/classes/rd_vertex_attribute.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
-#include <memory>
 #include <vector>
 
 class Terrain3DAssets;
@@ -95,7 +94,9 @@ private:
 	std::vector<t3dRdMeshSourceLod_t> m_lods;
 	std::vector<t3dRdInstanceMaterial_t> m_materials;
 	std::vector<t3dRdImportedTextureGpu_t> m_textures;
-	std::shared_ptr<const t3dRdMeshSourceSnapshot_t> m_lastUploadedSnapshot;
+	PackedByteArray m_lastVertexBytes;
+	PackedByteArray m_lastIndex16Bytes;
+	PackedByteArray m_lastIndex32Bytes;
 
 	bool ensureVertexFormat( void );
 	bool ensureArena( RID &rBuffer,
@@ -105,7 +106,7 @@ private:
 			Terrain3DRdContext::ResourceType resourceType,
 			Terrain3DRdContext::MemoryCategory memoryCategory );
 	bool rebuildArrays( void );
-	bool syncTextures( const std::shared_ptr<const t3dRdMeshSourceSnapshot_t> &pSnapshot );
+	bool syncTextures( const t3dRdMeshSourceSnapshot_t *pSnapshot );
 	void discardArrays( void );
 	void discardTextures( void );
 
@@ -117,17 +118,18 @@ public:
 	static uint64_t computeSourceFingerprint( const Ref<Terrain3DAssets> &rAssets );
 	static uint64_t computeSourceFingerprint( const Ref<Terrain3DAssets> &rAssets,
 			const std::vector<t3dRdExternalMeshSource_t> &rExternalMeshes );
-	static std::shared_ptr<const t3dRdMeshSourceSnapshot_t>
-	buildSourceSnapshot( const Ref<Terrain3DAssets> &rAssets, uint64_t nFingerprint, uint64_t nGeneration, String *pError = nullptr, bool bIncludeDisabled = false );
-	static std::shared_ptr<const t3dRdMeshSourceSnapshot_t>
-	buildSourceSnapshot( const Ref<Terrain3DAssets> &rAssets,
+	static bool buildSourceSnapshot( const Ref<Terrain3DAssets> &rAssets,
+			t3dRdMeshSourceSnapshot_t &rResult,
+			uint64_t nFingerprint, uint64_t nGeneration, String *pError = nullptr, bool bIncludeDisabled = false );
+	static bool buildSourceSnapshot( const Ref<Terrain3DAssets> &rAssets,
 			const std::vector<t3dRdExternalMeshSource_t> &rExternalMeshes,
+			t3dRdMeshSourceSnapshot_t &rResult,
 			uint64_t nFingerprint,
 			uint64_t nGeneration,
 			String *pError = nullptr,
 			bool bIncludeDisabled = false );
 
-	bool upload( const std::shared_ptr<const t3dRdMeshSourceSnapshot_t> &pSnapshot );
+	bool upload( const t3dRdMeshSourceSnapshot_t *pSnapshot );
 	void shutdown( void );
 
 	t3dRdMeshHandle_t getMeshHandle( uint16_t nAssetId, int nLod ) const;

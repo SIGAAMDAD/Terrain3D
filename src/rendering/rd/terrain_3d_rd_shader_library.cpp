@@ -16,6 +16,20 @@ Ref<RDShaderSPIRV> Terrain3DRdShaderLibrary::loadShader( const String &rPath, co
 		m_lastError = "Failed to load RD shader file: " + rPath;
 		return Ref<RDShaderSPIRV>();
 	}
+	if ( !rVersion.is_empty() ) {
+		const TypedArray<StringName> versions = shader_file->get_version_list();
+		bool found = false;
+		for ( int64_t i = 0; i < versions.size(); ++i ) {
+			if ( StringName( versions[i] ) == rVersion ) {
+				found = true;
+				break;
+			}
+		}
+		if ( !found ) {
+			m_lastError = "RD shader is missing required version: " + rPath + " version=" + String( rVersion );
+			return Ref<RDShaderSPIRV>();
+		}
+	}
 	Ref<RDShaderSPIRV> spirv = shader_file->get_spirv( rVersion );
 	if ( spirv.is_null() ) {
 		m_lastError = "RD shader has no SPIR-V: " + rPath + ( rVersion.is_empty() ? String() : String( " version=" ) + String( rVersion ) );
@@ -40,6 +54,8 @@ bool Terrain3DRdShaderLibrary::load( void ) {
 	clear();
 	static const char *const version_names[T3D_RD_FORWARD_SHADER_VARIANT_MAX] = {
 		"color_native", "color_specular", "color_motion", "color_specular_motion",
+		"color_native_radiance_array", "color_specular_radiance_array",
+		"color_motion_radiance_array", "color_specular_motion_radiance_array",
 		"depth", "depth_normal_roughness", "depth_normal_roughness_voxel_gi",
 	};
 	static const char *const terrain_paths[3] = {

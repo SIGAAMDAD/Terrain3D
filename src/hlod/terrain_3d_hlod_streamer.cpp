@@ -713,17 +713,18 @@ void Terrain3DHLODStreamer::fillRdMeshSources( std::vector<t3dRdExternalMeshSour
 	}
 }
 
-std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> Terrain3DHLODStreamer::buildRdInstanceSnapshot( void ) const {
-	std::shared_ptr<t3dRdInstanceSceneSnapshot_t> snapshot = std::make_shared<t3dRdInstanceSceneSnapshot_t>();
-	snapshot->m_nGeneration = m_nRdPublicationGeneration;
+void Terrain3DHLODStreamer::buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &rSnapshot ) const {
+	rSnapshot.m_instances.clear();
+	rSnapshot.m_cells.clear();
+	rSnapshot.m_nGeneration = m_nRdPublicationGeneration;
 	if ( !m_pTerrain ) {
-		return snapshot;
+		return;
 	}
 
 	const real_t regionWorld = ( real_t )( m_pTerrain->getRegionSize() ) * m_pTerrain->getVertexSpacing();
 	const Transform3D terrainTransform = m_pTerrain->get_global_transform();
-	snapshot->m_instances.reserve( m_entries.size() );
-	snapshot->m_cells.reserve( m_entries.size() );
+	rSnapshot.m_instances.reserve( m_entries.size() );
+	rSnapshot.m_cells.reserve( m_entries.size() );
 	for ( int i = 0; i < ( int )( m_entries.size() ); ++i ) {
 		const t3dEntry_t &entry = m_entries[( size_t )( i )];
 		if ( !entry.m_bActive || entry.m_ackage.is_null() || entry.m_ackage->getMesh().is_null() ) {
@@ -733,8 +734,8 @@ std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> Terrain3DHLODStreamer::build
 		Transform3D local;
 		local.origin = Vector3( entry.m_regionMin.x * regionWorld, 0.0f, entry.m_regionMin.y * regionWorld );
 		const Transform3D transform = terrainTransform * local;
-		const uint32_t firstInstance = ( uint32_t )( snapshot->m_instances.size() );
-		snapshot->m_instances.push_back( t3dPackHlodInstanceRecord( transform ) );
+		const uint32_t firstInstance = ( uint32_t )( rSnapshot.m_instances.size() );
+		rSnapshot.m_instances.push_back( t3dPackHlodInstanceRecord( transform ) );
 
 		t3dRdInstanceCell_t cell;
 		cell.m_nMeshSourceKey = rdMeshSourceKey( i );
@@ -758,9 +759,8 @@ std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> Terrain3DHLODStreamer::build
 		cell.m_fFadeMargin = 0.0f;
 		const AABB package_bounds = entry.m_ackage.is_valid() ? entry.m_ackage->getLocalBounds() : entry.m_localBounds;
 		cell.m_bounds = t3dTransformHlodBounds( transform, package_bounds );
-		snapshot->m_cells.push_back( cell );
+		rSnapshot.m_cells.push_back( cell );
 	}
-	return snapshot;
 }
 
 Dictionary Terrain3DHLODStreamer::getStats( void ) const {

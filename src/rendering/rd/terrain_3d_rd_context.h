@@ -9,13 +9,14 @@
 
 #include <array>
 #include <atomic>
+#include "eastl_config.h"
+#include <EASTL/fixed_vector.h>
 #include <godot_cpp/classes/rendering_device.hpp>
 #include <godot_cpp/variant/callable.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/rid.hpp>
 #include <godot_cpp/variant/string.hpp>
 #include <mutex>
-#include <vector>
 
 using namespace godot;
 
@@ -121,10 +122,17 @@ private:
 	std::atomic<ContextState> m_state{ STATE_UNINITIALIZED };
 	std::atomic<FailureCode> m_failureCode{ FAILURE_NONE };
 	mutable std::mutex m_resourceMutex;
-	std::vector<t3dRdResourceRecord_t> m_resources;
-	std::vector<t3dRdResourceHistory_t> m_resourceHistory;
-	std::vector<t3dRdFreedResource_t> m_freedResources;
-	std::vector<t3dRdVertexFormatRecord_t> m_vertexFormats;
+	// The RD registry is a render-lifetime control structure, not an unbounded
+	// general-purpose container. Keep it wholly inline so resource churn cannot
+	// invoke the process heap. Capacity failures are explicit and fail closed.
+	static constexpr size_t s_nResourceCapacity = 1024u;
+	static constexpr size_t s_nResourceHistoryCapacity = 1024u;
+	static constexpr size_t s_nFreedHistoryCapacity = 256u;
+	static constexpr size_t s_nVertexFormatCapacity = 64u;
+	eastl::fixed_vector<t3dRdResourceRecord_t, s_nResourceCapacity, false> m_resources;
+	eastl::fixed_vector<t3dRdResourceHistory_t, s_nResourceHistoryCapacity, false> m_resourceHistory;
+	eastl::fixed_vector<t3dRdFreedResource_t, s_nFreedHistoryCapacity, false> m_freedResources;
+	eastl::fixed_vector<t3dRdVertexFormatRecord_t, s_nVertexFormatCapacity, false> m_vertexFormats;
 	String m_lastFailure;
 	std::atomic<SuccessfulPass> m_lastSuccessfulPass{ PASS_NONE };
 

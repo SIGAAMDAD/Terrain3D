@@ -20,7 +20,6 @@
 #include <godot_cpp/classes/compositor.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <mutex>
-#include <memory>
 #include <vector>
 
 class Terrain3D;
@@ -62,9 +61,15 @@ private:
 		t3dRdFrameSnapshot_t m_snapshot;
 		PackedByteArray m_regionMapBytes;
 		t3dRdPublishedResources_t m_resources;
-		std::shared_ptr<const t3dRdMeshSourceSnapshot_t> m_instanceMeshes;
-		std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> m_instanceScene;
-		std::shared_ptr<const t3dRdOceanTopologySnapshot_t> m_oceanTopology;
+		// Variable publication payloads live in the reclaimed atomic frame slot.
+		// The render thread therefore observes stable storage without reference
+		// counting, heap ownership transfers, or cross-frame lifetime ambiguity.
+		t3dRdMeshSourceSnapshot_t m_instanceMeshes;
+		t3dRdInstanceSceneSnapshot_t m_instanceScene;
+		t3dRdOceanTopologySnapshot_t m_oceanTopology;
+		bool m_bInstanceMeshesValid = false;
+		bool m_bInstanceSceneValid = false;
+		bool m_bOceanTopologyValid = false;
 	} t3dRdFrameSnapshotSlot_t;
 
 	std::array<t3dRdFrameSnapshotSlot_t, s_nRdFrameSnapshotSlotCount> m_snapshotSlots{};
@@ -118,22 +123,29 @@ private:
 	Terrain3DRdOceanRenderer m_oceanRenderer;
 	Terrain3DRdInstanceRenderer m_previewRenderer;
 	bool m_bPreviewRendererInitialized = false;
-	std::shared_ptr<const t3dRdMeshSourceSnapshot_t> m_cachedPreviewMeshes;
+	t3dRdMeshSourceSnapshot_t m_cachedPreviewMeshes;
+	bool m_bCachedPreviewMeshesValid = false;
 	uint64_t m_nPreviewMeshFingerprint = 0u;
 	uint64_t m_nPreviewMeshGeneration = 0u;
 	std::mutex m_previewCallMutex;
 	std::mutex m_previewStateMutex;
-	std::shared_ptr<const t3dRdMeshSourceSnapshot_t> m_pendingPreviewMeshes;
+	t3dRdMeshSourceSnapshot_t m_pendingPreviewMeshes;
+	bool m_bPendingPreviewMeshesValid = false;
 	uint16_t m_nPendingPreviewAssetId = 0u;
 	Vector2i m_pendingPreviewSize;
 	Ref<Image> m_pendingPreviewImage;
 	String m_pendingPreviewError;
-	std::shared_ptr<const t3dRdOceanTopologySnapshot_t> m_cachedOceanTopology;
+	t3dRdOceanTopologySnapshot_t m_cachedOceanTopology;
+	bool m_bCachedOceanTopologyValid = false;
 	uint64_t m_nOceanTopologyGeneration = 0u;
-	std::shared_ptr<const t3dRdMeshSourceSnapshot_t> m_cachedInstanceMeshes;
-	std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> m_cachedRegularInstanceScene;
-	std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> m_cachedHlodInstanceScene;
-	std::shared_ptr<const t3dRdInstanceSceneSnapshot_t> m_cachedInstanceScene;
+	t3dRdMeshSourceSnapshot_t m_cachedInstanceMeshes;
+	t3dRdInstanceSceneSnapshot_t m_cachedRegularInstanceScene;
+	t3dRdInstanceSceneSnapshot_t m_cachedHlodInstanceScene;
+	t3dRdInstanceSceneSnapshot_t m_cachedInstanceScene;
+	bool m_bCachedInstanceMeshesValid = false;
+	bool m_bCachedRegularInstanceSceneValid = false;
+	bool m_bCachedHlodInstanceSceneValid = false;
+	bool m_bCachedInstanceSceneValid = false;
 	std::vector<t3dRdExternalMeshSource_t> m_cachedHlodMeshSources;
 	uint64_t m_nInstanceMeshFingerprint = 0u;
 	uint64_t m_nInstanceMeshGeneration = 0u;
@@ -148,18 +160,18 @@ private:
 	bool m_bCompositorDebugEnabled = false;
 	bool m_bMotionDebugEnabled = false;
 	std::atomic_uint64_t m_nCallbackCount{ 0u };
-	std::atomic_uint64_t m_nForwardPassCallbacks{ 0u };
-	std::atomic_uint64_t m_nDepthPassCallbacks{ 0u };
-	std::atomic_uint64_t m_nOpaquePassCallbacks{ 0u };
-	std::atomic_uint64_t m_nShadowPassCallbacks{ 0u };
-	std::atomic_uint64_t m_nMotionPassCallbacks{ 0u };
-	std::atomic_uint64_t m_nTransparentPassCallbacks{ 0u };
-	std::atomic_uint64_t m_nLastForwardScenePass{ 0u };
-	std::atomic_int64_t m_nLastForwardDrawList{ -1 };
-	std::atomic_uint32_t m_nLastForwardPassKind{ T3D_RD_FORWARD_PASS_INVALID };
-	std::atomic_uint32_t m_nLastForwardViewCount{ 0u };
-	std::atomic_uint32_t m_nLastForwardSampleCount{ 0u };
-	std::atomic_int64_t m_nLastForwardFramebufferFormat{ RenderingDevice::INVALID_ID };
+	uint64_t m_nForwardPassCallbacks = 0u;
+	uint64_t m_nDepthPassCallbacks = 0u;
+	uint64_t m_nOpaquePassCallbacks = 0u;
+	uint64_t m_nShadowPassCallbacks = 0u;
+	uint64_t m_nMotionPassCallbacks = 0u;
+	uint64_t m_nTransparentPassCallbacks = 0u;
+	uint64_t m_nLastForwardScenePass = 0u;
+	int64_t m_nLastForwardDrawList = -1;
+	uint32_t m_nLastForwardPassKind = T3D_RD_FORWARD_PASS_INVALID;
+	uint32_t m_nLastForwardViewCount = 0u;
+	uint32_t m_nLastForwardSampleCount = 0u;
+	int64_t m_nLastForwardFramebufferFormat = RenderingDevice::INVALID_ID;
 	static constexpr uint32_t s_nForwardViewportSlotCount = 8u;
 	typedef struct t3dRdForwardViewportState_s {
 		uint64_t m_nViewportKey = 0u;
@@ -202,7 +214,8 @@ private:
 	void detachForwardBridge( void );
 	bool isForwardBridgeReady( void ) const;
 	void updateRenderRoute( void );
-	bool prepareForwardLifecycle( t3dRdForwardPassContext_t &rContext );
+	bool prepareForwardLifecycle( const t3dRdForwardPassContext_t &rContext,
+			bool &rHistoryValid, bool &rViewportReconfigured );
 	void resetForwardLifecycle( void );
 
 public:
@@ -214,7 +227,7 @@ public:
 	void shutdown( void );
 	void update( void );
 	void render( RenderData *pRenderData );
-	void renderForwardPass( const t3dRdForwardPassContext_t &rContext );
+	bool renderForwardPass( const t3dRdForwardPassContext_t &rContext );
 	void shutdownRendererOnRenderThread( void );
 	void renderPreviewOnRenderThread( void );
 	Ref<Image> createMeshPreview( uint16_t nAssetId, const Vector2i &rSize );

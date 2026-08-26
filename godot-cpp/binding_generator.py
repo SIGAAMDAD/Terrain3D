@@ -2258,7 +2258,15 @@ def generate_global_constants(api, output_dir):
 
     if len(api["global_constants"]) > 0:
         for constant in api["global_constants"]:
-            header.append(f"const int64_t {escape_identifier(constant['name'])} = {constant['value']};")
+            constant_name = escape_identifier(constant["name"])
+            # C and C++ standard headers expose several integer-limit names as
+            # macros. Godot 4.7.2 exports those names as global constants, so
+            # temporarily hide a collision while declaring the namespaced value
+            # and restore it immediately for standard headers included later.
+            header.append(f'#pragma push_macro("{constant_name}")')
+            header.append(f"#undef {constant_name}")
+            header.append(f"const int64_t {constant_name} = {constant['value']};")
+            header.append(f'#pragma pop_macro("{constant_name}")')
 
         header.append("")
 

@@ -30,12 +30,12 @@ Required branch: `experiment/rendering-device`.
 Never move `main` or the frozen tag.
 
 ## Windows environment
-- Target: Windows x86-64, Godot 4.7.1 Mono.
-- Default Godot root: `D:\Godot_v4.7.1-stable_mono_win64`.
+- Target: Windows x86-64, Godot 4.7.2 Mono/Forward+.
+- Default Godot source root: `D:\godot-4.7.2-stable` (override with `RD_GODOT_SOURCE`).
 - Hardware validation target: Intel Core Ultra 7 258V / Arc 140V.
 - Prefer the Godot `_console.exe` binary for automation when present.
 - Use the repository SCons cache and incremental builds. Do not clean/rebuild unless dependency state requires it.
-- Batch F may obtain exact Godot source tag `4.7.1-stable` into `.rd_tools`; do not clone engine source before Batch F.
+- Batch F uses an exact Godot `4.7.2-stable` source tree supplied through `RD_GODOT_SOURCE`.
 
 ## Locked architecture
 - Terrain3D production rendering is RenderingDevice-owned.
@@ -47,7 +47,7 @@ Never move `main` or the frozen tag.
 - No steady-state VB/IB/shader/pipeline/uniform-set/mesh allocation after warmup.
 - Regular instances and HLOD share the RD mesh/material cache unless measured lifetime constraints justify separate arenas.
 - Preserve reference functionality and non-rendering behavior. Never delete a feature because its reference implementation is RS-backed.
-- Exact Forward+ parity requires the small Godot 4.7.1 submission bridge specified in Batch F; commit the engine patch under `engine_patch/`.
+- Exact Forward+ parity requires the independently maintained Godot 4.7.2 ABI-10 submission bridge specified in Batch F. This repository owns the matching consumer and external ABI contract, not an embedded engine patch.
 
 ## Token discipline — mandatory
 - Never `cat`/read the full completion contract, public API inventory, file manifests, or historical reports as routine context.
