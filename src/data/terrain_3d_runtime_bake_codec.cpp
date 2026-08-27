@@ -457,6 +457,29 @@ bool Terrain3DRuntimeBakeCodec::decodeCollisionHeight( const PackedByteArray &rB
 	std::memcpy( rHeights.ptrw(), p + 12, ( size_t )count * 4u );
 	return true;
 }
+bool Terrain3DRuntimeBakeCodec::decodeCollisionHeightInto( const PackedByteArray &rBlob,
+		PackedFloat32Array &rHeights,
+		int &nWidth ) {
+	nWidth = 0;
+	if ( rBlob.size() < 12 ) {
+		return false;
+	}
+	const uint8_t *p = rBlob.ptr();
+	if ( t3dRuntimeBakeCodecReadU32( p ) != s_nCollisionHeightMagic ||
+			t3dRuntimeBakeCodecReadU16( p + 4 ) != s_nBlobVersion ) {
+		return false;
+	}
+	nWidth = t3dRuntimeBakeCodecReadU16( p + 6 );
+	const uint32_t count = t3dRuntimeBakeCodecReadU32( p + 8 );
+	if ( nWidth <= 0 || count != ( uint32_t )nWidth * nWidth || rBlob.size() < 12 + ( int64_t )count * 4 ||
+			rHeights.size() != ( int64_t )count ) {
+		nWidth = 0;
+		return false;
+	}
+	std::memcpy( rHeights.ptrw(), p + 12, ( size_t )count * 4u );
+	return true;
+}
+
 bool Terrain3DRuntimeBakeCodec::decodeCollisionBounds( const PackedByteArray &rBlob,
 		float &fMinHeight,
 		float &fMaxHeight,
@@ -558,6 +581,7 @@ bool Terrain3DRuntimeBakeCodec::decodeNodeDescriptors( const PackedByteArray &rB
 		}
 		t3dStreamedNodeRuntimeDescriptor_t node;
 		node.m_nId = ( int64_t )t3dRuntimeBakeCodecReadU64( p + offset );
+		node.m_spawnName = StringName( String( "Spawn_" ) + String::num_int64( node.m_nId ) );
 		offset += 8;
 		const uint16_t scene_id = t3dRuntimeBakeCodecReadU16( p + offset );
 		offset += 2;

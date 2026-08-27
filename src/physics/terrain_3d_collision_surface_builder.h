@@ -19,6 +19,7 @@ class Terrain3DMaterial;
 // runtime-page cooking. Output is already rotated into HeightMapShape3D layout.
 class Terrain3DCollisionSurfaceBuilder {
 public:
+	bool prepareRuntimeScratch( int nAxisSamples );
 	bool build( const Terrain3DData *pData,
 			const Ref<Terrain3DMaterial> &rMaterial,
 			const Vector2i &rPosition,

@@ -978,6 +978,7 @@ void Terrain3DRegion::rebuildStreamedNodeRuntime( void ) {
 		}
 		t3dStreamedNodeRuntimeDescriptor_t descriptor;
 		descriptor.m_nId = ( int64_t )( entry["id"] );
+		descriptor.m_spawnName = StringName( String( "Spawn_" ) + String::num_int64( descriptor.m_nId ) );
 		descriptor.m_scene = entry.has( "scene" ) ? Ref<PackedScene>( entry["scene"] ) : Ref<PackedScene>();
 		descriptor.m_scenePath = entry.has( "scene_path" ) ? String( entry["scene_path"] ) : String();
 		descriptor.m_transform = Transform3D( entry["transform"] );

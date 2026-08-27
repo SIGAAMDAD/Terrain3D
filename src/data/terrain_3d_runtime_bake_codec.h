@@ -98,6 +98,7 @@ public:
 	static PackedByteArray encodeCollisionHeight( const PackedFloat32Array &rHeights, int nWidth );
 	static PackedByteArray encodeCollisionBounds( float fMinHeight, float fMaxHeight, int nWidth );
 	static bool decodeCollisionHeight( const PackedByteArray &rBlob, PackedFloat32Array &rHeights, int &nWidth );
+	static bool decodeCollisionHeightInto( const PackedByteArray &rBlob, PackedFloat32Array &rHeights, int &nWidth );
 	static bool
 	decodeCollisionBounds( const PackedByteArray &rBlob, float &fMinHeight, float &fMaxHeight, int &nWidth );
 	static PackedByteArray encodeNodeDescriptors( const Terrain3DRegion &rRegion, const Terrain3DRuntimeWorldManifest &rManifest );

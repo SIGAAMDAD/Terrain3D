@@ -338,6 +338,11 @@ public:
 	}
 
 	bool ensureCookedNodeDescriptors( const Vector2i &vLocation );
+	int getStreamedNodeCapacityHint( const Vector2i &vLocation ) const;
+	bool getCookedSceneDependencySpan( const Vector2i &vLocation,
+			const uint16_t *&pDependencies,
+			uint16_t &nDependencyCount ) const;
+	const String &getCookedSceneDependencyPath( uint16_t nDependency ) const;
 	PackedStringArray getCookedSceneDependencies( const Vector2i &vLocation ) const;
 	bool takeCookedCollisionTile( const Vector2i &vLocation, PackedByteArray &rHeight, PackedByteArray &rBounds,
 								  PackedByteArray &rHoleMask );

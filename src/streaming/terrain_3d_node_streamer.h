@@ -18,6 +18,7 @@
 #include <godot_cpp/core/object_id.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/string.hpp>
+#include <godot_cpp/variant/string_name.hpp>
 #include <godot_cpp/variant/transform3d.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
 #include <godot_cpp/variant/vector3.hpp>
@@ -53,6 +54,8 @@ typedef struct t3dActiveNode_s {
 typedef struct t3dRegionRuntime_s {
 	Node3D *m_pRoot = nullptr;
 	eastl::vector<t3dActiveNode_t> m_nodes;
+	size_t m_nNodeCapacity = 0u;
+	int m_iRootPoolIndex = -1;
 	int m_nNextSpawn = 0;
 	int m_iActiveListPosition = -1;
 	bool m_bRequestsStarted = false;
@@ -79,7 +82,18 @@ private:
 	uint16_t m_szActiveRegionIndices[s_nMaxRegionSlots] = {};
 	uint16_t m_szDesiredRegionIndices[s_nMaxRegionSlots] = {};
 	uint16_t m_nDesiredRegionCount = 0u;
+	Node3D *m_szRegionRootPool[s_nMaxRegionSlots] = {};
+	uint16_t m_szFreeRootPoolIndices[s_nMaxRegionSlots] = {};
+	StringName m_szRegionRootNames[s_nMaxRegionSlots];
+	int m_nRegionRootPoolCount = 0;
+	int m_nFreeRootPoolCount = 0;
 	eastl::vector<t3dMovableNodeRef_t> m_movableNodes;
+	size_t m_nMovableNodeCapacity = 0u;
+	StringName m_methodActivate;
+	StringName m_methodDeactivate;
+	StringName m_methodLoadState;
+	StringName m_methodSaveState;
+	StringName m_shadowProxyName;
 	bool m_bEnabled = true;
 	int m_nRadiusRegions = 1;
 	int m_nLoadRegionBudget = 2;
@@ -126,6 +140,9 @@ private:
 	void untrackMovableNode( int64_t nSpawnId );
 	void removeMovableNodeAt( int iIndex );
 	void eraseActiveNode( t3dRegionRuntime_t &rRuntime, int iNodeIndex );
+	void rebuildActivationStorage( void );
+	Node3D *acquireRegionRoot( int iIndex, Terrain3DRegion *pRegion );
+	void releaseRegionRoot( t3dRegionRuntime_t &rRuntime );
 	Node3D *ensureRegionRoot( int iIndex, Terrain3DRegion *pRegion );
 	bool migrateActiveNodes( void );
 	void ensureHost( void );
@@ -196,9 +213,7 @@ public:
 		return m_nRuntimeLoadRegionBudgetOverride < 0 ? m_nLoadRegionBudget
 													  : MIN( m_nLoadRegionBudget, m_nRuntimeLoadRegionBudgetOverride );
 	}
-	EA_FORCE_INLINE void setLoadNodeBudget( const int nBudget ) {
-		m_nLoadNodeBudget = CLAMP( nBudget, 0, 4096 );
-	}
+	void setLoadNodeBudget( int nBudget );
 	EA_FORCE_INLINE int getLoadNodeBudget( void ) const {
 		return m_nLoadNodeBudget;
 	}

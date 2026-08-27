@@ -217,7 +217,8 @@ bool Terrain3DCollision::copyBakedTile( const Vector2i &rPosition,
 		return false;
 	}
 	if ( rHeights.size() != sample_count ) {
-		rHeights.resize( sample_count );
+		LOG( ERROR, "Baked collision height capacity mismatch; collision rebuild required" );
+		return false;
 	}
 	real_t *const output = rHeights.ptrw();
 	float min_height = FLT_MAX;
@@ -293,7 +294,9 @@ bool Terrain3DCollision::getShapeData( const Vector2i &rPosition,
 		return false;
 	}
 	if ( rHeights.size() != m_collisionSurfaceScratch.size() ) {
-		rHeights.resize( m_collisionSurfaceScratch.size() );
+		LOG( ERROR, "Collision height staging capacity mismatch; collision rebuild required" );
+		rRecord.m_data.m_bValid = false;
+		return false;
 	}
 	real_t *const output = rHeights.ptrw();
 	const float *const input = m_collisionSurfaceScratch.ptr();
@@ -456,20 +459,23 @@ void Terrain3DCollision::updateFullShape( const int nShapeId, const Vector2i &rR
 		PackedByteArray height_blob;
 		PackedByteArray bounds_blob;
 		PackedByteArray hole_blob;
-		PackedFloat32Array baked_heights;
 		int baked_width = 0;
 		int bounds_width = 0;
 		float min_height = 0.0f;
 		float max_height = 0.0f;
 		if ( m_pTerrain->getData()->loadCookedCollisionTileNow( rRegionLoc, height_blob, bounds_blob, hole_blob ) &&
-				Terrain3DRuntimeBakeCodec::decodeCollisionHeight( height_blob, baked_heights, baked_width ) &&
+				Terrain3DRuntimeBakeCodec::decodeCollisionHeightInto(
+						height_blob, m_fullBakedHeightScratch, baked_width ) &&
 				Terrain3DRuntimeBakeCodec::decodeCollisionBounds( bounds_blob, min_height, max_height, bounds_width ) &&
 				baked_width == region_size + 1 && bounds_width == baked_width ) {
-			m_fullHeightScratch.resize( baked_heights.size() );
+			if ( m_fullHeightScratch.size() != m_fullBakedHeightScratch.size() ) {
+				LOG( ERROR, "Full collision staging capacity mismatch; collision rebuild required" );
+				return;
+			}
 			real_t *const pWrite = m_fullHeightScratch.ptrw();
-			const float *const pRead = baked_heights.ptr();
+			const float *const pRead = m_fullBakedHeightScratch.ptr();
 			bool has_solid_sample = false;
-			for ( int index = 0; index < baked_heights.size(); ++index ) {
+			for ( int index = 0; index < m_fullBakedHeightScratch.size(); ++index ) {
 				pWrite[index] = ( real_t )pRead[index];
 				has_solid_sample = has_solid_sample || !std::isnan( pRead[index] );
 			}
@@ -559,7 +565,7 @@ void Terrain3DCollision::processRegionMapUpdate( void ) {
 		const Vector2i *pSlots = m_pTerrain->getData()->getRegionSlotsInternal();
 		const int slot_count = m_pTerrain->getData()->getRegionSlotCountInternal();
 		const int shape_count = ( int )( m_shapeRecords.size() );
-		if ( shape_count != slot_count || m_fullRegionSlots.size() != slot_count ) {
+		if ( shape_count != slot_count || m_nFullRegionSlotCount != slot_count ) {
 			build();
 			return;
 		}
@@ -569,13 +575,16 @@ void Terrain3DCollision::processRegionMapUpdate( void ) {
 		// one repopulates one shape.
 		for ( int i = 0; i < slot_count; ++i ) {
 			const Vector2i new_location = pSlots[i];
-			const Vector2i old_location = m_fullRegionSlots[i];
+			const Vector2i old_location = m_szFullRegionSlots[( size_t )( i )];
 			if ( new_location != old_location ) {
 				updateFullShape( i, new_location );
 				m_szFullStreamingResident[( size_t )( i )] = regionAllowsCollision( new_location ) ? 1u : 0u;
 			}
 		}
-		m_fullRegionSlots = m_pTerrain->getData()->getRegionSlots();
+		for ( int i = 0; i < slot_count; ++i ) {
+			m_szFullRegionSlots[( size_t )( i )] = pSlots[i];
+		}
+		m_nFullRegionSlotCount = slot_count;
 		m_nUpdateUsecLast = Time::get_singleton()->get_ticks_usec() - started_usec;
 	}
 }
@@ -630,12 +639,25 @@ void Terrain3DCollision::build( void ) {
 	} else {
 		// Full collision mirrors stable texture-array slots, including reusable
 		// empty slots, so ordinary add/remove operations do not resize the pool.
-		shape_count = m_pTerrain->getData()->getRegionSlots().size();
+		shape_count = m_pTerrain->getData()->getRegionSlotCountInternal();
 		hshape_size = m_pTerrain->getRegionSize() + 1;
 	}
 	if ( shape_count < 0 || shape_count > s_nMaxRegionSlots ) {
 		LOG( ERROR, "Collision shape count exceeds fixed scratch capacity: ", shape_count );
 		return;
+	}
+	const int sample_count = hshape_size * hshape_size;
+	if ( sample_count <= 0 || !m_collisionSurfaceBuilder.prepareRuntimeScratch( hshape_size ) ) {
+		LOG( ERROR, "Collision surface scratch capacity is invalid for axis size: ", hshape_size );
+		return;
+	}
+	m_collisionSurfaceScratch.resize( sample_count );
+	if ( usesDynamicShapePool() ) {
+		m_fullHeightScratch.clear();
+		m_fullBakedHeightScratch.clear();
+	} else {
+		m_fullHeightScratch.resize( sample_count );
+		m_fullBakedHeightScratch.resize( sample_count );
 	}
 	m_shapeRecords.resize( ( size_t )shape_count );
 	m_nInactiveShapeCount = 0;
@@ -652,7 +674,7 @@ void Terrain3DCollision::build( void ) {
 		record.m_data.m_nDepth = hshape_size;
 		if ( usesDynamicShapePool() ) {
 			for ( PackedRealArray &height_buffer : record.m_dynamicHeightBuffers ) {
-				height_buffer.resize( hshape_size * hshape_size );
+				height_buffer.resize( sample_count );
 			}
 			record.m_nUploadedHeightBuffer = 0;
 			record.m_nPendingHeightBuffer = 1;
@@ -834,7 +856,8 @@ void Terrain3DCollision::update( const Vector2i &rRegionLoc, const bool bRebuild
 				const Vector2i region = Vector2i( pRegionSlots[i] );
 				const uint8_t desired = regionAllowsCollision( region ) ? 1u : 0u;
 				if ( bRebuild || desired != m_szFullStreamingResident[( size_t )( i )] ||
-						m_fullRegionSlots.size() != region_slot_count || m_fullRegionSlots[i] != region ) {
+						m_nFullRegionSlotCount != region_slot_count ||
+						m_szFullRegionSlots[( size_t )( i )] != region ) {
 					updateFullShape( i, region );
 					m_szFullStreamingResident[( size_t )( i )] = desired;
 				} else {
@@ -842,7 +865,10 @@ void Terrain3DCollision::update( const Vector2i &rRegionLoc, const bool bRebuild
 				}
 			}
 		}
-		m_fullRegionSlots = m_pTerrain->getData()->getRegionSlots();
+		for ( int i = 0; i < region_slot_count; ++i ) {
+			m_szFullRegionSlots[( size_t )( i )] = pRegionSlots[i];
+		}
+		m_nFullRegionSlotCount = region_slot_count;
 		m_nStreamingGenerationLast = streaming_generation;
 	}
 	LOG( EXTREME,
@@ -862,11 +888,13 @@ void Terrain3DCollision::destroy( void ) {
 	m_bInitialized = false;
 	m_lastSnappedPos = s_v2iMax;
 	m_bRegionMapUpdatePending = false;
-	m_fullRegionSlots.clear();
+	m_szFullRegionSlots.fill( s_v2iMax );
+	m_nFullRegionSlotCount = 0;
 	m_nStreamingGenerationLast = 0u;
 	m_szFullStreamingResident.fill( 0u );
 	m_nInactiveShapeCount = 0;
 	m_fullHeightScratch.clear();
+	m_fullBakedHeightScratch.clear();
 	m_collisionSurfaceScratch.clear();
 	clearBakedRegionCache( true );
 	for ( t3dCollisionShapeRecord_t &record : m_shapeRecords ) {
@@ -1013,6 +1041,7 @@ RID Terrain3DCollision::getRid( void ) const {
 size_t Terrain3DCollision::getRetainedBufferBytes( void ) const {
 	size_t bytes = m_shapeRecords.capacity() * sizeof( t3dCollisionShapeRecord_t );
 	bytes += ( size_t )( m_fullHeightScratch.size() ) * sizeof( real_t );
+	bytes += ( size_t )( m_fullBakedHeightScratch.size() ) * sizeof( float );
 	bytes += ( size_t )( m_collisionSurfaceScratch.size() ) * sizeof( float );
 	bytes += m_collisionSurfaceBuilder.getRetainedBufferBytes();
 	bytes += sizeof( m_bakedRegionCache ) + sizeof( m_bakedRegionByMap );
@@ -1079,7 +1108,7 @@ Dictionary Terrain3DCollision::getStats( void ) const {
 	stats["full_regions_updated_last_update"] = m_nFullRegionsUpdatedLastUpdate;
 	stats["update_skipped_unchanged_last"] = m_bUpdateSkippedUnchangedLast;
 	stats["rebuild_requested_last"] = m_bRebuildRequestedLast;
-	stats["full_region_slots"] = m_fullRegionSlots.size();
+	stats["full_region_slots"] = m_nFullRegionSlotCount;
 	stats["physics_layer"] = ( int64_t )( m_nLayer );
 	stats["physics_mask"] = ( int64_t )( m_nMask );
 	stats["priority"] = m_fPriority;

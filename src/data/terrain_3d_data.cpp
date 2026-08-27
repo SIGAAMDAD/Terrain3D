@@ -952,6 +952,39 @@ bool Terrain3DData::ensureCookedNodeDescriptors( const Vector2i& vLocation )
 	return Terrain3DRuntimeBakeCodec::decodeNodeDescriptors( descriptors, m_runtimeWorldManifest, *pRegion );
 }
 
+int Terrain3DData::getStreamedNodeCapacityHint( const Vector2i &vLocation ) const {
+	const t3dRuntimeWorldRegionRecord_t *const pRecord = m_runtimeWorldManifest.findRegion( vLocation );
+	if ( pRecord ) {
+		return ( int )( pRecord->m_nStreamedNodeCount );
+	}
+	Terrain3DRegion *const pRegion = getRegionPtr( vLocation );
+	return pRegion && !pRegion->isDeleted() ? MAX( pRegion->getStreamedNodeCount(), 0 ) : 0;
+}
+
+bool Terrain3DData::getCookedSceneDependencySpan( const Vector2i &vLocation,
+		const uint16_t *&pDependencies,
+		uint16_t &nDependencyCount ) const {
+	pDependencies = nullptr;
+	nDependencyCount = 0u;
+	const t3dRuntimeWorldRegionRecord_t *const pRecord = m_runtimeWorldManifest.findRegion( vLocation );
+	if ( !pRecord || pRecord->m_nSceneDependencyCount == 0u ) {
+		return false;
+	}
+	const eastl::vector<uint16_t> &ids = m_runtimeWorldManifest.getRegionSceneDependencies();
+	const uint32_t first = pRecord->m_nSceneDependencyFirst;
+	const uint32_t count = pRecord->m_nSceneDependencyCount;
+	if ( first > ids.size() || count > ids.size() - first ) {
+		return false;
+	}
+	pDependencies = ids.data() + first;
+	nDependencyCount = ( uint16_t )count;
+	return true;
+}
+
+const String &Terrain3DData::getCookedSceneDependencyPath( const uint16_t nDependency ) const {
+	return m_runtimeWorldManifest.getSceneDependency( nDependency );
+}
+
 PackedStringArray Terrain3DData::getCookedSceneDependencies( const Vector2i& vLocation ) const
 {
 	PackedStringArray dependencies;

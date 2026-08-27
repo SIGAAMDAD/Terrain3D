@@ -17,6 +17,20 @@ size_t Terrain3DCollisionSurfaceBuilder::getRetainedBufferBytes( void ) const {
 	return m_fullHeightRowScratch.capacity() * sizeof( float );
 }
 
+bool Terrain3DCollisionSurfaceBuilder::prepareRuntimeScratch( const int nAxisSamples ) {
+	if ( nAxisSamples <= 0 || nAxisSamples > s_nMaxCollisionAxisSamples ) {
+		return false;
+	}
+	if ( nAxisSamples <= s_nDynamicScratchAxis ) {
+		return true;
+	}
+	const size_t sample_count = ( size_t )( nAxisSamples ) * ( size_t )( nAxisSamples );
+	if ( m_fullHeightRowScratch.size() != sample_count ) {
+		m_fullHeightRowScratch.resize( sample_count );
+	}
+	return true;
+}
+
 void Terrain3DCollisionSurfaceBuilder::refreshRegionBlendCurve( const int nRegionSize, const real_t fRegionBlend ) {
 	if ( nRegionSize <= 0 ) {
 		m_fRegionBlendCurve.fill( 0.0f );
@@ -153,7 +167,8 @@ bool Terrain3DCollisionSurfaceBuilder::build( const Terrain3DData *const pData,
 		pHeightScratch = m_dynamicHeightScratch.data();
 	} else {
 		if ( m_fullHeightRowScratch.size() < ( size_t )sample_count ) {
-			m_fullHeightRowScratch.resize( ( size_t )sample_count );
+			UtilityFunctions::push_error( "Collision surface scratch capacity exceeded; collision rebuild required" );
+			return false;
 		}
 		pHeightScratch = m_fullHeightRowScratch.data();
 	}
@@ -162,7 +177,8 @@ bool Terrain3DCollisionSurfaceBuilder::build( const Terrain3DData *const pData,
 		return false;
 	}
 	if ( rHeights.size() != sample_count ) {
-		rHeights.resize( sample_count );
+		UtilityFunctions::push_error( "Collision output height capacity mismatch; collision rebuild required" );
+		return false;
 	}
 	float *const output = rHeights.ptrw();
 	rMinHeight = FLT_MAX;

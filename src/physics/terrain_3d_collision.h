@@ -85,6 +85,7 @@ private:
 	eastl::array<int32_t, s_nMaxRegionSlots> m_inactiveShapeIds{};
 	int m_nInactiveShapeCount = 0;
 	PackedRealArray m_fullHeightScratch;
+	PackedFloat32Array m_fullBakedHeightScratch;
 	PackedFloat32Array m_collisionSurfaceScratch;
 	Terrain3DCollisionSurfaceBuilder m_collisionSurfaceBuilder;
 
@@ -102,7 +103,8 @@ private:
 	bool m_bInitialized = false;
 	bool m_bRegionMapUpdatePending = false;
 	Vector2i m_lastSnappedPos = s_v2iMax;
-	TypedArray<Vector2i> m_fullRegionSlots;
+	eastl::array<Vector2i, s_nMaxRegionSlots> m_szFullRegionSlots{};
+	int m_nFullRegionSlotCount = 0;
 	uint64_t m_nStreamingGenerationLast = 0u;
 	eastl::array<uint8_t, s_nMaxRegionSlots> m_szFullStreamingResident{};
 	uint64_t m_nUpdateUsecLast = 0u;
@@ -148,6 +150,7 @@ private:
 public:
 	EA_FORCE_INLINE Terrain3DCollision( void ) {
 		m_bakedRegionByMap.fill( ( int16_t )-1 );
+		m_szFullRegionSlots.fill( s_v2iMax );
 	}
 	EA_FORCE_INLINE ~Terrain3DCollision( void ) {
 		destroy();

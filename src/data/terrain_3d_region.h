@@ -56,6 +56,7 @@ typedef enum t3dBakedLightingMode_e : int {
 
 typedef struct t3dStreamedNodeRuntimeDescriptor_s {
 	int64_t m_nId = 0;
+	StringName m_spawnName;
 	Ref<PackedScene> m_scene;
 	String m_scenePath;
 	Transform3D m_transform;
