@@ -272,6 +272,13 @@ private:
 	TypedArray<Image> m_gpuDerivedMaps;
 	TypedArray<Image> m_gpuMiddleCompositeMaps;
 	TypedArray<Image> m_gpuTerrainShadowMasks;
+	uint64_t m_nMiddleCompositeMaterialSignature = UINT64_MAX;
+	PackedColorArray m_middleCompositeMaterialColors;
+	PackedFloat32Array m_middleCompositeMaterialScales;
+	eastl::array<Ref<Image>, s_nMaxTextureAssets> m_middleCompositeMaterialImages;
+	eastl::array<PackedByteArray, s_nGpuCacheMaxLayers> m_middleCompositeScratch;
+	int m_nMiddleCompositeScratchBytes = 0;
+	int m_nMiddleCompositeScratchLayerCount = 0;
 	uint64_t m_nGpuRegionServiceUsecLast = 0u;
 	uint64_t m_nGpuPreparePublicationUsecLast = 0u;
 	uint64_t m_nGpuPrepareEndToEndUsecLast = 0u;
@@ -303,8 +310,11 @@ private:
 	Ref<Image> makeGpuDerivedImage( const Ref<Image> &rImage ) const;
 	Ref<Image> makeTerrainShadowMaskImage( const Terrain3DRegion *pRegion ) const;
 	Ref<Image> makeGpuRenderControlImage( const Vector2i &vLocation ) const;
-	Ref<Image> makeMiddleCompositeImage( const Vector2i &rLocation, const Ref<Image> &rControl,
-										 const Ref<Image> &rColor ) const;
+	bool refreshMiddleCompositeSources( uint64_t nMaterialSignature, int nWidth, int nHeight );
+	Ref<Image> makeMiddleCompositeImage( const Vector2i &rLocation,
+			const Ref<Image> &rControl,
+			const Ref<Image> &rColor,
+			int nScratchSlot );
 	bool serviceRuntimePages( const t3dResidencyFrameState_t &rFrame );
 	static bool isRuntimePageWanted( void *pContext, const Vector2i &rLocation );
 	bool validatePublishedMappings( void ) const;

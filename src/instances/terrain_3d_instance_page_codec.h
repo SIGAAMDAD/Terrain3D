@@ -30,6 +30,12 @@ public:
 			uint32_t *pMeshCounts,
 			uint32_t &nInstanceCount,
 			uint16_t &nMeshCount );
+	static bool decode( const PackedByteArray &rPage,
+			size_t nPageBytes,
+			Terrain3DInstanceStore &rStore,
+			uint32_t *pMeshCounts,
+			uint32_t &nInstanceCount,
+			uint16_t &nMeshCount );
 	static bool
 	inspect( const PackedByteArray &rPage, uint32_t *pMeshCounts, uint32_t &nInstanceCount, uint16_t &nMeshCount );
 };

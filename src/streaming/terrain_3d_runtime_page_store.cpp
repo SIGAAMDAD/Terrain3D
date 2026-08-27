@@ -154,12 +154,11 @@ static bool t3dRuntimePageStoreEncodeHeader( PackedByteArray &rBytes, const t3dR
 	return ( size_t )( pWrite - pBegin ) == s_nRuntimePageHeaderBytes;
 }
 
-static t3dRuntimePageHeader_t t3dRuntimePageStoreDecodeHeader( const PackedByteArray &rBytes ) {
+static t3dRuntimePageHeader_t t3dRuntimePageStoreDecodeHeaderRaw( const uint8_t *pRead, const size_t nBytes ) {
 	t3dRuntimePageHeader_t header;
-	if ( rBytes.size() < s_nRuntimePageHeaderBytes ) {
+	if ( !pRead || nBytes < s_nRuntimePageHeaderBytes ) {
 		return header;
 	}
-	const uint8_t *pRead = rBytes.ptr();
 	header.m_nMagic = t3dRuntimePageStoreReadU32Raw( pRead );
 	header.m_nVersion = t3dRuntimePageStoreReadU32Raw( pRead );
 	header.m_nHeaderBytes = t3dRuntimePageStoreReadU32Raw( pRead );
@@ -197,6 +196,10 @@ static t3dRuntimePageHeader_t t3dRuntimePageStoreDecodeHeader( const PackedByteA
 	header.m_nBoundsMinYBits = t3dRuntimePageStoreReadU32Raw( pRead );
 	header.m_nBoundsMaxYBits = t3dRuntimePageStoreReadU32Raw( pRead );
 	return header;
+}
+
+static t3dRuntimePageHeader_t t3dRuntimePageStoreDecodeHeader( const PackedByteArray &rBytes ) {
+	return t3dRuntimePageStoreDecodeHeaderRaw( rBytes.ptr(), ( size_t )( rBytes.size() ) );
 }
 
 typedef struct t3dStagedPageBuild_s {
@@ -489,6 +492,143 @@ static Ref<Image> t3dRuntimePageStoreReadImage( const Ref<FileAccess> &rFile,
 	return bImageValid ? pImage : Ref<Image>();
 }
 
+
+static bool t3dRuntimePageStoreDecodeRleInto( const uint8_t *const pRead,
+		const uint32_t nReadBytes,
+		uint8_t *const pWrite,
+		const uint32_t nWriteBytes ) {
+	if ( !pRead || !pWrite || nReadBytes == 0u || nWriteBytes == 0u ) {
+		return false;
+	}
+	uint32_t read = 0u;
+	uint32_t write = 0u;
+	while ( read + 1u < nReadBytes ) {
+		const uint32_t run = pRead[read++];
+		const uint8_t value = pRead[read++];
+		if ( run == 0u || run > nWriteBytes - write ) {
+			return false;
+		}
+		std::memset( pWrite + write, value, run );
+		write += run;
+	}
+	return read == nReadBytes && write == nWriteBytes;
+}
+
+static bool t3dRuntimePageStoreReadBlobFixed( const Ref<FileAccess> &rFile,
+		const t3dRuntimePageChannelInfo_t &rInfo,
+		PackedByteArray &rTarget,
+		uint32_t &rLogicalBytes,
+		t3dRuntimePageWorkerScratch_t &rScratch,
+		uint64_t &nReadUsec,
+		uint64_t &nValidationUsec ) {
+	rLogicalBytes = 0u;
+	if ( rFile.is_null() || rInfo.m_nFormat != UINT32_MAX || rInfo.m_nCompressedBytes == 0u ||
+			rInfo.m_nUncompressedBytes == 0u || rInfo.m_nCompressedBytes > ( uint32_t )( rScratch.m_ioBytes.size() ) ||
+			rInfo.m_nUncompressedBytes > ( uint32_t )( rTarget.size() ) ||
+			( rInfo.m_nCompression != TERRAIN3D_RUNTIME_PAGE_COMPRESSION_NONE &&
+					rInfo.m_nCompression != TERRAIN3D_RUNTIME_PAGE_COMPRESSION_RLE ) ) {
+		return false;
+	}
+	Time *const pTime = Time::get_singleton();
+	const uint64_t read_started = pTime ? pTime->get_ticks_usec() : 0u;
+	rFile->seek( rInfo.m_iOffset );
+	uint8_t *const pScratch = rScratch.m_ioBytes.ptrw();
+	const uint64_t read_bytes = rFile->get_buffer( pScratch, rInfo.m_nCompressedBytes );
+	nReadUsec += ( pTime ? pTime->get_ticks_usec() : read_started ) - read_started;
+	if ( read_bytes != rInfo.m_nCompressedBytes ) {
+		return false;
+	}
+	uint8_t *const pTarget = rTarget.ptrw();
+	const bool decoded = rInfo.m_nCompression == TERRAIN3D_RUNTIME_PAGE_COMPRESSION_RLE
+			? t3dRuntimePageStoreDecodeRleInto(
+					pScratch, rInfo.m_nCompressedBytes, pTarget, rInfo.m_nUncompressedBytes )
+			: ( std::memcpy( pTarget, pScratch, rInfo.m_nUncompressedBytes ), true );
+	const uint64_t validation_started = pTime ? pTime->get_ticks_usec() : 0u;
+	const bool valid = decoded &&
+			t3dRuntimePageChecksum( rTarget.ptr(), ( size_t )( rInfo.m_nUncompressedBytes ) ) == rInfo.m_nChecksum;
+	nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
+	if ( valid ) {
+		rLogicalBytes = rInfo.m_nUncompressedBytes;
+	}
+	return valid;
+}
+
+static bool t3dRuntimePageStoreReadImageFixed( const Ref<FileAccess> &rFile,
+		const t3dRuntimePageChannelInfo_t &rInfo,
+		PackedByteArray &rBytes,
+		uint32_t &rLogicalBytes,
+		Ref<Image> &rImage,
+		uint64_t &nReadUsec,
+		uint64_t &nValidationUsec,
+		uint64_t &nMaterializeUsec,
+		const bool bMaterialize ) {
+	rLogicalBytes = 0u;
+	if ( rFile.is_null() || rInfo.m_nCompressedBytes == 0u ||
+			rInfo.m_nCompression != TERRAIN3D_RUNTIME_PAGE_COMPRESSION_NONE ) {
+		return false;
+	}
+	uint64_t expected_bytes = 0u;
+	if ( !t3dRuntimePageStoreExpectedImageBytes( rInfo, expected_bytes ) ||
+			expected_bytes != ( uint64_t )( rInfo.m_nUncompressedBytes ) ||
+			rInfo.m_nCompressedBytes != rInfo.m_nUncompressedBytes ||
+			rBytes.size() != ( int64_t )( rInfo.m_nUncompressedBytes ) ) {
+		return false;
+	}
+	Time *const pTime = Time::get_singleton();
+	const uint64_t read_started = pTime ? pTime->get_ticks_usec() : 0u;
+	rFile->seek( rInfo.m_iOffset );
+	const uint64_t read_bytes = rFile->get_buffer( rBytes.ptrw(), rInfo.m_nCompressedBytes );
+	const uint64_t read_finished = pTime ? pTime->get_ticks_usec() : read_started;
+	nReadUsec += read_finished - read_started;
+	const uint64_t validation_started = read_finished;
+	const bool valid = read_bytes == rInfo.m_nCompressedBytes &&
+			t3dRuntimePageChecksum( rBytes.ptr(), ( size_t )( rBytes.size() ) ) == rInfo.m_nChecksum;
+	const uint64_t validation_finished = pTime ? pTime->get_ticks_usec() : validation_started;
+	nValidationUsec += validation_finished - validation_started;
+	if ( !valid ) {
+		return false;
+	}
+	rLogicalBytes = rInfo.m_nUncompressedBytes;
+	if ( !bMaterialize ) {
+		rImage.unref();
+		return true;
+	}
+	const uint64_t materialize_started = validation_finished;
+	rImage = Image::create_from_data( ( int )( rInfo.m_nWidth ),
+			( int )( rInfo.m_nHeight ),
+			rInfo.m_nMipCount > 1u,
+			Image::Format( rInfo.m_nFormat ),
+			rBytes );
+	const bool image_valid = rImage.is_valid() && !rImage->is_empty() &&
+			rImage->get_data().size() == ( int64_t )( rInfo.m_nUncompressedBytes );
+	nMaterializeUsec += ( pTime ? pTime->get_ticks_usec() : materialize_started ) - materialize_started;
+	return image_valid;
+}
+
+static uint32_t t3dRuntimePageStoreRequiredScratchBytes( const String &rPagePath ) {
+	if ( rPagePath.is_empty() || !FileAccess::file_exists( rPagePath ) ) {
+		return s_nRuntimePageHeaderBytes;
+	}
+	const Ref<FileAccess> pFile = FileAccess::open( rPagePath, FileAccess::READ );
+	if ( pFile.is_null() || pFile->get_length() < s_nRuntimePageHeaderBytes ) {
+		return s_nRuntimePageHeaderBytes;
+	}
+	eastl::array<uint8_t, s_nRuntimePageHeaderBytes> header_bytes;
+	if ( pFile->get_buffer( header_bytes.data(), s_nRuntimePageHeaderBytes ) != s_nRuntimePageHeaderBytes ) {
+		return s_nRuntimePageHeaderBytes;
+	}
+	const t3dRuntimePageHeader_t header =
+			t3dRuntimePageStoreDecodeHeaderRaw( header_bytes.data(), header_bytes.size() );
+	if ( !t3dRuntimePageValidateHeader( header, pFile->get_length() ) ) {
+		return s_nRuntimePageHeaderBytes;
+	}
+	uint32_t scratch_bytes = s_nRuntimePageHeaderBytes;
+	for ( uint32_t channel = 0u; channel < s_nRuntimePageChannelCount; ++channel ) {
+		scratch_bytes = MAX( scratch_bytes, header.m_szChannels[channel].m_nCompressedBytes );
+	}
+	return scratch_bytes;
+}
+
 EA_FORCE_INLINE static bool t3dRuntimePageStoreValidImage( const Ref<Image> &rImage,
 		const int nWidth,
 		const int nHeight,
@@ -496,6 +636,235 @@ EA_FORCE_INLINE static bool t3dRuntimePageStoreValidImage( const Ref<Image> &rIm
 		const bool bMipmaps ) {
 	return rImage.is_valid() && !rImage->is_empty() && rImage->get_width() == nWidth &&
 			rImage->get_height() == nHeight && rImage->get_format() == eFormat && rImage->has_mipmaps() == bMipmaps;
+}
+
+EA_FORCE_INLINE static uint32_t t3dRuntimePageStoreChannelIndex( const t3dRuntimePageChannel_t eChannel ) {
+	const uint32_t channel = ( uint32_t )( eChannel );
+	return channel <= s_nRuntimePageChannelCount ? channel : 0u;
+}
+
+static PackedByteArray *t3dRuntimePageStorePayloadBuffer( t3dRuntimePagePayload_t &rPayload,
+		const t3dRuntimePageChannel_t eChannel ) {
+	switch ( eChannel ) {
+		case TERRAIN3D_RUNTIME_PAGE_HEIGHT:
+			return &rPayload.m_heightBytes;
+		case TERRAIN3D_RUNTIME_PAGE_CONTROL:
+			return &rPayload.m_controlBytes;
+		case TERRAIN3D_RUNTIME_PAGE_COLOR:
+			return &rPayload.m_colorBytes;
+		case TERRAIN3D_RUNTIME_PAGE_DERIVED:
+			return &rPayload.m_derivedBytes;
+		case TERRAIN3D_RUNTIME_PAGE_MIDDLE_HEIGHT:
+			return &rPayload.m_middleHeightBytes;
+		case TERRAIN3D_RUNTIME_PAGE_MIDDLE_COMPOSITE:
+			return &rPayload.m_middleCompositeBytes;
+		case TERRAIN3D_RUNTIME_PAGE_TERRAIN_SHADOW_MASK:
+			return &rPayload.m_terrainShadowMaskBytes;
+		case TERRAIN3D_RUNTIME_PAGE_STATIC_INSTANCES:
+			return &rPayload.m_instancePage;
+		case TERRAIN3D_RUNTIME_PAGE_HOLE_MASK:
+			return &rPayload.m_holeMask;
+		case TERRAIN3D_RUNTIME_PAGE_COLLISION_HEIGHT:
+			return &rPayload.m_collisionHeight;
+		case TERRAIN3D_RUNTIME_PAGE_COLLISION_BOUNDS:
+			return &rPayload.m_collisionBounds;
+		case TERRAIN3D_RUNTIME_PAGE_NAVIGATION:
+			return &rPayload.m_navigation;
+		case TERRAIN3D_RUNTIME_PAGE_MIN_MAX_HEIGHT:
+			return &rPayload.m_minMaxHeight;
+		case TERRAIN3D_RUNTIME_PAGE_NODE_DESCRIPTORS:
+			return &rPayload.m_nodeDescriptors;
+		case TERRAIN3D_RUNTIME_PAGE_INSTANCE_METADATA:
+			return &rPayload.m_instanceMetadata;
+		case TERRAIN3D_RUNTIME_PAGE_LIGHTING_RECEIVERS:
+			return &rPayload.m_lightingReceivers;
+		case TERRAIN3D_RUNTIME_PAGE_MULTIMESH_FAST_START:
+			return &rPayload.m_multimeshFastStart;
+		default:
+			return nullptr;
+	}
+}
+
+static const PackedByteArray *t3dRuntimePageStorePayloadBuffer( const t3dRuntimePagePayload_t &rPayload,
+		const t3dRuntimePageChannel_t eChannel ) {
+	switch ( eChannel ) {
+		case TERRAIN3D_RUNTIME_PAGE_HEIGHT:
+			return &rPayload.m_heightBytes;
+		case TERRAIN3D_RUNTIME_PAGE_CONTROL:
+			return &rPayload.m_controlBytes;
+		case TERRAIN3D_RUNTIME_PAGE_COLOR:
+			return &rPayload.m_colorBytes;
+		case TERRAIN3D_RUNTIME_PAGE_DERIVED:
+			return &rPayload.m_derivedBytes;
+		case TERRAIN3D_RUNTIME_PAGE_MIDDLE_HEIGHT:
+			return &rPayload.m_middleHeightBytes;
+		case TERRAIN3D_RUNTIME_PAGE_MIDDLE_COMPOSITE:
+			return &rPayload.m_middleCompositeBytes;
+		case TERRAIN3D_RUNTIME_PAGE_TERRAIN_SHADOW_MASK:
+			return &rPayload.m_terrainShadowMaskBytes;
+		case TERRAIN3D_RUNTIME_PAGE_STATIC_INSTANCES:
+			return &rPayload.m_instancePage;
+		case TERRAIN3D_RUNTIME_PAGE_HOLE_MASK:
+			return &rPayload.m_holeMask;
+		case TERRAIN3D_RUNTIME_PAGE_COLLISION_HEIGHT:
+			return &rPayload.m_collisionHeight;
+		case TERRAIN3D_RUNTIME_PAGE_COLLISION_BOUNDS:
+			return &rPayload.m_collisionBounds;
+		case TERRAIN3D_RUNTIME_PAGE_NAVIGATION:
+			return &rPayload.m_navigation;
+		case TERRAIN3D_RUNTIME_PAGE_MIN_MAX_HEIGHT:
+			return &rPayload.m_minMaxHeight;
+		case TERRAIN3D_RUNTIME_PAGE_NODE_DESCRIPTORS:
+			return &rPayload.m_nodeDescriptors;
+		case TERRAIN3D_RUNTIME_PAGE_INSTANCE_METADATA:
+			return &rPayload.m_instanceMetadata;
+		case TERRAIN3D_RUNTIME_PAGE_LIGHTING_RECEIVERS:
+			return &rPayload.m_lightingReceivers;
+		case TERRAIN3D_RUNTIME_PAGE_MULTIMESH_FAST_START:
+			return &rPayload.m_multimeshFastStart;
+		default:
+			return nullptr;
+	}
+}
+
+static bool t3dRuntimePageStorePreparePayloadStorage( t3dRuntimePagePayload_t &rPayload,
+		const eastl::array<uint32_t, s_nRuntimePageChannelCount + 1u> &rCapacities ) {
+	std::memset( rPayload.m_szLogicalBytes, 0, sizeof( rPayload.m_szLogicalBytes ) );
+	for ( uint32_t channel = 1u; channel <= s_nRuntimePageChannelCount; ++channel ) {
+		PackedByteArray *const pBuffer =
+				t3dRuntimePageStorePayloadBuffer( rPayload, ( t3dRuntimePageChannel_t )( channel ) );
+		if ( !pBuffer ) {
+			continue;
+		}
+		const uint32_t capacity = rCapacities[channel];
+		if ( pBuffer->size() != ( int64_t )( capacity ) ) {
+			pBuffer->resize( capacity );
+		}
+		if ( pBuffer->size() != ( int64_t )( capacity ) ) {
+			return false;
+		}
+	}
+	return true;
+}
+
+static void t3dRuntimePageStoreResetPayloadRuntime( t3dRuntimePagePayload_t &rPayload ) {
+	std::memset( rPayload.m_szLogicalBytes, 0, sizeof( rPayload.m_szLogicalBytes ) );
+	rPayload.m_height.unref();
+	rPayload.m_control.unref();
+	rPayload.m_color.unref();
+	rPayload.m_derived.unref();
+	rPayload.m_middleHeight.unref();
+	rPayload.m_middleComposite.unref();
+	rPayload.m_terrainShadowMask.unref();
+	rPayload.m_preparedInstanceStore.clearRetainCapacity();
+}
+
+static bool t3dRuntimePageStoreReadHeaderCold( const String &rPagePath, t3dRuntimePageHeader_t &rHeader ) {
+	if ( rPagePath.is_empty() || !FileAccess::file_exists( rPagePath ) ) {
+		return false;
+	}
+	const Ref<FileAccess> pFile = FileAccess::open( rPagePath, FileAccess::READ );
+	if ( pFile.is_null() || pFile->get_length() < s_nRuntimePageHeaderBytes ) {
+		return false;
+	}
+	eastl::array<uint8_t, s_nRuntimePageHeaderBytes> header_bytes;
+	if ( pFile->get_buffer( header_bytes.data(), s_nRuntimePageHeaderBytes ) != s_nRuntimePageHeaderBytes ) {
+		return false;
+	}
+	rHeader = t3dRuntimePageStoreDecodeHeaderRaw( header_bytes.data(), header_bytes.size() );
+	return t3dRuntimePageValidateHeader( rHeader, pFile->get_length() );
+}
+
+static bool t3dRuntimePageStorePreparePayloadForSourceCold( t3dRuntimePagePayload_t &rPayload,
+		t3dRuntimePageWorkerScratch_t &rScratch,
+		const String &rPagePath ) {
+	t3dRuntimePageHeader_t header;
+	if ( !t3dRuntimePageStoreReadHeaderCold( rPagePath, header ) ) {
+		return false;
+	}
+	eastl::array<uint32_t, s_nRuntimePageChannelCount + 1u> capacities{};
+	uint32_t scratch_bytes = s_nRuntimePageHeaderBytes;
+	for ( uint32_t channel = 0u; channel < header.m_nChannelCount; ++channel ) {
+		const t3dRuntimePageChannelInfo_t &info = header.m_szChannels[channel];
+		if ( info.m_nType == 0u || info.m_nType > s_nRuntimePageChannelCount ||
+				!t3dRuntimePageStorePayloadBuffer( rPayload, ( t3dRuntimePageChannel_t )( info.m_nType ) ) ) {
+			continue;
+		}
+		capacities[info.m_nType] = info.m_nUncompressedBytes;
+		scratch_bytes = MAX( scratch_bytes, info.m_nCompressedBytes );
+	}
+	if ( !t3dRuntimePageStorePreparePayloadStorage( rPayload, capacities ) ) {
+		return false;
+	}
+	rScratch.m_ioBytes.resize( scratch_bytes );
+	return rScratch.m_ioBytes.size() == ( int64_t )( scratch_bytes );
+}
+
+static void t3dRuntimePageStoreResetMeta( t3dRuntimePageMeta_t &rMeta ) {
+	rMeta.m_location = s_v2iMax;
+	rMeta.m_iSourceIndex = -1;
+	rMeta.m_iPayloadSlot = -1;
+	rMeta.m_nExpectedChannelFlags = 0u;
+	rMeta.m_nExpectedSourceSignature = 0u;
+	rMeta.m_nRegionSize = 0;
+	rMeta.m_nColorDivisor = 1;
+	rMeta.m_nDerivedDivisor = 1;
+	rMeta.m_nMiddleHeightDivisor = 1;
+	rMeta.m_nMaterialMask = 1u;
+	rMeta.m_nConsumerMask = 0u;
+	rMeta.m_nAttemptedConsumerMask = 0u;
+	rMeta.m_nMaterializedConsumerMask = 0u;
+	rMeta.m_nLoadedConsumerMask = 0u;
+	rMeta.m_nRequestedUsec = 0u;
+	rMeta.m_nWorkerStartedUsec = 0u;
+	rMeta.m_nFileOpenUsec = 0u;
+	rMeta.m_nFileReadUsec = 0u;
+	rMeta.m_nValidationUsec = 0u;
+	rMeta.m_nMaterializeUsec = 0u;
+	rMeta.m_nWorkerFinishedUsec = 0u;
+	rMeta.m_bAttempted = false;
+	rMeta.m_bLoaded = false;
+	rMeta.m_bInstanceAttempted = false;
+	rMeta.m_bInstanceLoaded = false;
+	rMeta.m_bLoadMinMax = false;
+	rMeta.m_bEditorAuthoring = false;
+}
+
+static void t3dRuntimePageStoreResetSource( t3dRuntimePageSource_t &rSource ) {
+	rSource.m_pagePath = String();
+	rSource.m_sourcePath = String();
+	rSource.m_nExpectedChannelFlags = 0u;
+	rSource.m_nExpectedSourceSignature = 0u;
+	rSource.m_bPresent = false;
+}
+
+static void t3dRuntimePageStoreReleasePayload( t3dRuntimePagePayload_t &rPayload ) {
+	std::memset( rPayload.m_szLogicalBytes, 0, sizeof( rPayload.m_szLogicalBytes ) );
+	rPayload.m_heightBytes.clear();
+	rPayload.m_controlBytes.clear();
+	rPayload.m_colorBytes.clear();
+	rPayload.m_derivedBytes.clear();
+	rPayload.m_middleHeightBytes.clear();
+	rPayload.m_middleCompositeBytes.clear();
+	rPayload.m_terrainShadowMaskBytes.clear();
+	rPayload.m_height.unref();
+	rPayload.m_control.unref();
+	rPayload.m_color.unref();
+	rPayload.m_derived.unref();
+	rPayload.m_middleHeight.unref();
+	rPayload.m_middleComposite.unref();
+	rPayload.m_terrainShadowMask.unref();
+	rPayload.m_instancePage.clear();
+	rPayload.m_holeMask.clear();
+	rPayload.m_collisionHeight.clear();
+	rPayload.m_collisionBounds.clear();
+	rPayload.m_navigation.clear();
+	rPayload.m_minMaxHeight.clear();
+	rPayload.m_nodeDescriptors.clear();
+	rPayload.m_instanceMetadata.clear();
+	rPayload.m_lightingReceivers.clear();
+	rPayload.m_multimeshFastStart.clear();
+	rPayload.m_preparedInstanceStore.releaseStorage();
 }
 
 static void t3dRuntimePageStoreUpdateEditorFile( const String &rPath ) {
@@ -514,34 +883,74 @@ Terrain3DRuntimePageStore::Terrain3DRuntimePageStore( Terrain3DRegionRepository 
 	for ( int index = 0; index < s_nMaxRegionSlots; ++index ) {
 		m_preparedByRegion[( size_t )( index )] = ( int16_t )-1;
 		m_workByRegion[( size_t )( index )] = ( int16_t )-1;
+		m_queuedNext[( size_t )( index )] = ( int16_t )-1;
+		m_queuedPrev[( size_t )( index )] = ( int16_t )-1;
+	}
+	for ( int priority = 0; priority < 256; ++priority ) {
+		m_priorityHeads[( size_t )( priority )] = ( int16_t )-1;
+		m_priorityTails[( size_t )( priority )] = ( int16_t )-1;
+	}
+	m_nFreePayloadCount = s_nGpuCacheMaxLayers;
+	for ( int slot = 0; slot < s_nGpuCacheMaxLayers; ++slot ) {
+		m_freePayloadSlots[( size_t )( slot )] = ( int16_t )( s_nGpuCacheMaxLayers - slot - 1 );
 	}
 }
 
 Terrain3DRuntimePageStore::~Terrain3DRuntimePageStore( void ) {
+	poll( true );
+	stopWorkers();
 	reset();
 }
 
 void Terrain3DRuntimePageStore::reset( void ) {
 	poll( true );
 	for ( int index = 0; index < m_nPreparedPageCount; ++index ) {
-		m_preparedPages[( size_t )( index )] = t3dRuntimePreparedPage_t{};
+		const int payload_slot = m_preparedPages[( size_t )( index )].m_iPayloadSlot;
+		if ( payload_slot >= 0 && payload_slot < s_nGpuCacheMaxLayers ) {
+			t3dRuntimePageStoreReleasePayload( m_payloadSlots[( size_t )( payload_slot )] );
+		}
+		t3dRuntimePageStoreResetMeta( m_preparedPages[( size_t )( index )] );
 	}
 	for ( int index = 0; index < m_nPrepareWorkPageCount; ++index ) {
-		m_workPages[( size_t )( index )] = t3dRuntimePreparedPage_t{};
+		const int payload_slot = m_workPages[( size_t )( index )].m_iPayloadSlot;
+		if ( payload_slot >= 0 && payload_slot < s_nGpuCacheMaxLayers ) {
+			t3dRuntimePageStoreReleasePayload( m_payloadSlots[( size_t )( payload_slot )] );
+		}
+		t3dRuntimePageStoreResetMeta( m_workPages[( size_t )( index )] );
 	}
 	m_nPreparedPageCount = 0;
 	m_nPrepareWorkPageCount = 0;
 	m_nQueuedCount = 0;
 	m_nStreamingGenerationLast = 0u;
+	m_nSourceTopologyGeneration = 0u;
+	m_sourceDataDirectory = String();
+	std::memset( m_runtimeChannelCapacities.data(), 0, sizeof( m_runtimeChannelCapacities ) );
 	std::memset( m_queuedConsumers.data(), 0, sizeof( m_queuedConsumers ) );
 	std::memset( m_queuedPriorities.data(), 0, sizeof( m_queuedPriorities ) );
 	for ( int index = 0; index < s_nMaxRegionSlots; ++index ) {
 		m_preparedByRegion[( size_t )( index )] = ( int16_t )-1;
 		m_workByRegion[( size_t )( index )] = ( int16_t )-1;
+		m_queuedNext[( size_t )( index )] = ( int16_t )-1;
+		m_queuedPrev[( size_t )( index )] = ( int16_t )-1;
+		t3dRuntimePageStoreResetSource( m_pageSources[( size_t )( index )] );
 	}
-	m_prepareContext.m_pPages = nullptr;
-	m_prepareContext.m_nPageCount = 0;
-	m_nPrepareGroupId = WorkerThreadPool::INVALID_TASK_ID;
+	for ( int priority = 0; priority < 256; ++priority ) {
+		m_priorityHeads[( size_t )( priority )] = ( int16_t )-1;
+		m_priorityTails[( size_t )( priority )] = ( int16_t )-1;
+	}
+	m_nFreePayloadCount = s_nGpuCacheMaxLayers;
+	for ( int slot = 0; slot < s_nGpuCacheMaxLayers; ++slot ) {
+		m_freePayloadSlots[( size_t )( slot )] = ( int16_t )( s_nGpuCacheMaxLayers - slot - 1 );
+	}
+	{
+		std::lock_guard<std::mutex> lock( m_workerMutex );
+		m_iWorkRead = 0;
+		m_iWorkWrite = 0;
+		m_nWorkRingCount = 0;
+		m_iCompletionRead = 0;
+		m_iCompletionWrite = 0;
+		m_nCompletionRingCount = 0;
+	}
 	m_bPrepareJobActive = false;
 	m_nPrepareJobWorkers = 0;
 	resetFrameStats();
@@ -738,53 +1147,42 @@ bool Terrain3DRuntimePageStore::removePage( const String &rPagePath ) const {
 	return removed;
 }
 
-bool Terrain3DRuntimePageStore::loadSnapshot( t3dRuntimePreparedPage_t &rPage, const bool bPreserveMaterialized ) {
+bool Terrain3DRuntimePageStore::loadSnapshot( t3dRuntimePageMeta_t &rMeta,
+		t3dRuntimePagePayload_t &rPayload,
+		t3dRuntimePageWorkerScratch_t &rScratch,
+		const t3dRuntimePageSource_t &source,
+		const bool bPreserveMaterialized ) const {
 	if ( !bPreserveMaterialized ) {
-		rPage.m_height.unref();
-		rPage.m_heightBytes.clear();
-		rPage.m_control.unref();
-		rPage.m_color.unref();
-		rPage.m_derived.unref();
-		rPage.m_middleHeight.unref();
-		rPage.m_middleComposite.unref();
-		rPage.m_terrainShadowMask.unref();
-		rPage.m_instancePage.clear();
-		rPage.m_holeMask.clear();
-		rPage.m_collisionHeight.clear();
-		rPage.m_collisionBounds.clear();
-		rPage.m_navigation.clear();
-		rPage.m_minMaxHeight.clear();
-		rPage.m_nodeDescriptors.clear();
-		rPage.m_instanceMetadata.clear();
-		rPage.m_lightingReceivers.clear();
-		rPage.m_multimeshFastStart.clear();
-		rPage.m_preparedInstanceStore.clearRetainCapacity();
+		t3dRuntimePageStoreResetPayloadRuntime( rPayload );
 	}
-	rPage.m_nMaterialMask = 1u;
-	rPage.m_nFileOpenUsec = 0u;
-	rPage.m_nFileReadUsec = 0u;
-	rPage.m_nValidationUsec = 0u;
-	rPage.m_nMaterializeUsec = 0u;
+	rMeta.m_nMaterialMask = 1u;
+	rMeta.m_nFileOpenUsec = 0u;
+	rMeta.m_nFileReadUsec = 0u;
+	rMeta.m_nValidationUsec = 0u;
+	rMeta.m_nMaterializeUsec = 0u;
+	if ( !source.m_bPresent ) {
+		return false;
+	}
 	Time *const pTime = Time::get_singleton();
 	uint64_t validation_started = pTime ? pTime->get_ticks_usec() : 0u;
-	if ( rPage.m_pagePath.is_empty() || !FileAccess::file_exists( rPage.m_pagePath ) ) {
-		rPage.m_nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
+	if ( source.m_pagePath.is_empty() || !FileAccess::file_exists( source.m_pagePath ) ) {
+		rMeta.m_nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
 		return false;
 	}
-	const uint64_t page_modified = rPage.m_bEditorAuthoring ? FileAccess::get_modified_time( rPage.m_pagePath ) : 0u;
-	const uint64_t source_modified = rPage.m_bEditorAuthoring && !rPage.m_sourcePath.is_empty()
-			? FileAccess::get_modified_time( rPage.m_sourcePath )
+	const uint64_t page_modified = rMeta.m_bEditorAuthoring ? FileAccess::get_modified_time( source.m_pagePath ) : 0u;
+	const uint64_t source_modified = rMeta.m_bEditorAuthoring && !source.m_sourcePath.is_empty()
+			? FileAccess::get_modified_time( source.m_sourcePath )
 			: 0u;
-	if ( rPage.m_bEditorAuthoring && source_modified > 0u && page_modified > 0u && page_modified < source_modified ) {
-		rPage.m_nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
+	if ( rMeta.m_bEditorAuthoring && source_modified > 0u && page_modified > 0u && page_modified < source_modified ) {
+		rMeta.m_nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
 		return false;
 	}
-	rPage.m_nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
+	rMeta.m_nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
 
 	const uint64_t open_started = pTime ? pTime->get_ticks_usec() : 0u;
-	const Ref<FileAccess> pFile = FileAccess::open( rPage.m_pagePath, FileAccess::READ );
+	const Ref<FileAccess> pFile = FileAccess::open( source.m_pagePath, FileAccess::READ );
 	const uint64_t open_finished = pTime ? pTime->get_ticks_usec() : open_started;
-	rPage.m_nFileOpenUsec += open_finished - open_started;
+	rMeta.m_nFileOpenUsec += open_finished - open_started;
 	if ( pFile.is_null() ) {
 		return false;
 	}
@@ -792,36 +1190,40 @@ bool Terrain3DRuntimePageStore::loadSnapshot( t3dRuntimePreparedPage_t &rPage, c
 	const uint64_t file_length = pFile->get_length();
 	if ( file_length < s_nRuntimePageHeaderBytes || file_length > s_nRuntimePageMaxBytes ||
 			file_length > ( uint64_t )( INT32_MAX ) ) {
-		rPage.m_nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
+		rMeta.m_nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
 		return false;
 	}
-	rPage.m_nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
+	rMeta.m_nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
 
 	const uint64_t header_read_started = pTime ? pTime->get_ticks_usec() : 0u;
-	const PackedByteArray header_bytes = pFile->get_buffer( s_nRuntimePageHeaderBytes );
+	if ( rScratch.m_ioBytes.size() < s_nRuntimePageHeaderBytes ) {
+		return false;
+	}
+	const uint64_t header_bytes = pFile->get_buffer( rScratch.m_ioBytes.ptrw(), s_nRuntimePageHeaderBytes );
 	const uint64_t header_read_finished = pTime ? pTime->get_ticks_usec() : header_read_started;
-	rPage.m_nFileReadUsec += header_read_finished - header_read_started;
-	if ( header_bytes.size() != s_nRuntimePageHeaderBytes ) {
+	rMeta.m_nFileReadUsec += header_read_finished - header_read_started;
+	if ( header_bytes != s_nRuntimePageHeaderBytes ) {
 		return false;
 	}
 	validation_started = pTime ? pTime->get_ticks_usec() : 0u;
-	const t3dRuntimePageHeader_t header = t3dRuntimePageStoreDecodeHeader( header_bytes );
+	const t3dRuntimePageHeader_t header =
+			t3dRuntimePageStoreDecodeHeaderRaw( rScratch.m_ioBytes.ptr(), s_nRuntimePageHeaderBytes );
 	const uint64_t header_source_signature =
 			( uint64_t )header.m_nSourceSignatureLo | ( ( uint64_t )header.m_nSourceSignatureHi << 32u );
 	if ( !t3dRuntimePageValidateHeader( header, file_length ) ||
-			header.m_nRegionSize != ( uint32_t )( rPage.m_nRegionSize ) ||
-			header.m_nColorDivisor != ( uint32_t )( rPage.m_nColorDivisor ) ||
-			header.m_nDerivedDivisor != ( uint32_t )( rPage.m_nDerivedDivisor ) ||
-			header.m_nMiddleHeightDivisor != ( uint32_t )( rPage.m_nMiddleHeightDivisor ) ||
-			header.m_nRegionX != rPage.m_location.x || header.m_nRegionZ != rPage.m_location.y ||
+			header.m_nRegionSize != ( uint32_t )( rMeta.m_nRegionSize ) ||
+			header.m_nColorDivisor != ( uint32_t )( rMeta.m_nColorDivisor ) ||
+			header.m_nDerivedDivisor != ( uint32_t )( rMeta.m_nDerivedDivisor ) ||
+			header.m_nMiddleHeightDivisor != ( uint32_t )( rMeta.m_nMiddleHeightDivisor ) ||
+			header.m_nRegionX != rMeta.m_location.x || header.m_nRegionZ != rMeta.m_location.y ||
 			header.m_nBlendRecipeVersion != s_nRuntimePageBlendRecipeVersion || header_source_signature == 0u ||
-			( rPage.m_nExpectedSourceSignature != 0u &&
-					header_source_signature != rPage.m_nExpectedSourceSignature ) ) {
-		rPage.m_nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
+			( rMeta.m_nExpectedSourceSignature != 0u &&
+					header_source_signature != rMeta.m_nExpectedSourceSignature ) ) {
+		rMeta.m_nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
 		return false;
 	}
 	const uint32_t optional_mask = ( uint32_t )( REGION_CHANNEL_CONTROL | REGION_CHANNEL_COLOR );
-	const uint32_t expected_flags = rPage.m_nExpectedChannelFlags & optional_mask;
+	const uint32_t expected_flags = rMeta.m_nExpectedChannelFlags & optional_mask;
 	if ( ( header.m_nChannelFlags & optional_mask ) != expected_flags ||
 			( header.m_nChannelFlags & ( uint32_t )( REGION_CHANNEL_DERIVED ) ) == 0u ||
 			!t3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_HOLE_MASK ) ||
@@ -829,47 +1231,51 @@ bool Terrain3DRuntimePageStore::loadSnapshot( t3dRuntimePreparedPage_t &rPage, c
 			!t3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_COLLISION_BOUNDS ) ||
 			!t3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_NAVIGATION ) ||
 			!t3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_MIN_MAX_HEIGHT ) ) {
-		rPage.m_nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
+		rMeta.m_nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
 		return false;
 	}
-	rPage.m_nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
+	rMeta.m_nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
 
 	const t3dRuntimePageChannelInfo_t *const pHeightChannel =
 			t3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_HEIGHT );
 	if ( !pHeightChannel ) {
 		return false;
 	}
-	const bool bNeedGpu = ( rPage.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_GPU_DETAIL ) != 0u;
-	const bool bNeedCpu = ( rPage.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_CPU_MAPS ) != 0u;
-	const bool bNeedActiveHeight = ( rPage.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_ACTIVE_HEIGHT ) != 0u;
-	const bool bNeedMiddle = ( rPage.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_MIDDLE_HEIGHT ) != 0u;
-	const bool bNeedTerrainShadow = ( rPage.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_TERRAIN_SHADOW ) != 0u;
+	const bool bNeedGpu = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_GPU_DETAIL ) != 0u;
+	const bool bNeedCpu = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_CPU_MAPS ) != 0u;
+	const bool bNeedActiveHeight = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_ACTIVE_HEIGHT ) != 0u;
+	const bool bNeedMiddle = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_MIDDLE_HEIGHT ) != 0u;
+	const bool bNeedTerrainShadow = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_TERRAIN_SHADOW ) != 0u;
 	const bool bNeedHeight = bNeedGpu || bNeedCpu || bNeedActiveHeight;
 	const bool bMaterializeHeight = bNeedGpu || bNeedCpu;
 	if ( bNeedHeight ) {
-		if ( rPage.m_heightBytes.is_empty() ) {
-			rPage.m_height = t3dRuntimePageStoreReadImage( pFile,
+		if ( !bPreserveMaterialized || rPayload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_HEIGHT] == 0u ) {
+			if ( !t3dRuntimePageStoreReadImageFixed( pFile,
 					*pHeightChannel,
-					rPage.m_nFileReadUsec,
-					rPage.m_nValidationUsec,
-					rPage.m_nMaterializeUsec,
-					&rPage.m_heightBytes,
-					bMaterializeHeight );
-		} else if ( bMaterializeHeight && rPage.m_height.is_null() ) {
+					rPayload.m_heightBytes,
+					rPayload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_HEIGHT],
+					rPayload.m_height,
+					rMeta.m_nFileReadUsec,
+					rMeta.m_nValidationUsec,
+					rMeta.m_nMaterializeUsec,
+					bMaterializeHeight ) ) {
+				return false;
+			}
+		} else if ( bMaterializeHeight && rPayload.m_height.is_null() ) {
 			const uint64_t materialize_started = pTime ? pTime->get_ticks_usec() : 0u;
-			rPage.m_height = Image::create_from_data( ( int )pHeightChannel->m_nWidth,
+			rPayload.m_height = Image::create_from_data( ( int )pHeightChannel->m_nWidth,
 					( int )pHeightChannel->m_nHeight,
 					pHeightChannel->m_nMipCount > 1u,
 					Image::Format( pHeightChannel->m_nFormat ),
-					rPage.m_heightBytes );
+					rPayload.m_heightBytes );
 			const uint64_t materialize_finished = pTime ? pTime->get_ticks_usec() : materialize_started;
-			rPage.m_nMaterializeUsec += materialize_finished - materialize_started;
+			rMeta.m_nMaterializeUsec += materialize_finished - materialize_started;
 		}
-		if ( rPage.m_heightBytes.is_empty() ) {
+		if ( rPayload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_HEIGHT] == 0u ) {
 			return false;
 		}
 	}
-	rPage.m_nMaterialMask = header.m_nMaterialMask;
+	rMeta.m_nMaterialMask = header.m_nMaterialMask;
 
 	if ( bNeedGpu || bNeedCpu ) {
 		const t3dRuntimePageChannelInfo_t *const pDerivedChannel =
@@ -877,9 +1283,17 @@ bool Terrain3DRuntimePageStore::loadSnapshot( t3dRuntimePreparedPage_t &rPage, c
 		if ( !pDerivedChannel ) {
 			return false;
 		}
-		if ( rPage.m_derived.is_null() ) {
-			rPage.m_derived = t3dRuntimePageStoreReadImage(
-					pFile, *pDerivedChannel, rPage.m_nFileReadUsec, rPage.m_nValidationUsec, rPage.m_nMaterializeUsec );
+		if ( ( !bPreserveMaterialized || rPayload.m_derived.is_null() ) &&
+				!t3dRuntimePageStoreReadImageFixed( pFile,
+						*pDerivedChannel,
+						rPayload.m_derivedBytes,
+						rPayload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_DERIVED],
+						rPayload.m_derived,
+						rMeta.m_nFileReadUsec,
+						rMeta.m_nValidationUsec,
+						rMeta.m_nMaterializeUsec,
+						true ) ) {
+			return false;
 		}
 	}
 	if ( bNeedMiddle ) {
@@ -888,12 +1302,17 @@ bool Terrain3DRuntimePageStore::loadSnapshot( t3dRuntimePreparedPage_t &rPage, c
 		if ( !pMiddleHeightChannel ) {
 			return false;
 		}
-		if ( rPage.m_middleHeight.is_null() ) {
-			rPage.m_middleHeight = t3dRuntimePageStoreReadImage( pFile,
-					*pMiddleHeightChannel,
-					rPage.m_nFileReadUsec,
-					rPage.m_nValidationUsec,
-					rPage.m_nMaterializeUsec );
+		if ( ( !bPreserveMaterialized || rPayload.m_middleHeight.is_null() ) &&
+				!t3dRuntimePageStoreReadImageFixed( pFile,
+						*pMiddleHeightChannel,
+						rPayload.m_middleHeightBytes,
+						rPayload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_MIDDLE_HEIGHT],
+						rPayload.m_middleHeight,
+						rMeta.m_nFileReadUsec,
+						rMeta.m_nValidationUsec,
+						rMeta.m_nMaterializeUsec,
+						true ) ) {
+			return false;
 		}
 	}
 	if ( bNeedGpu ) {
@@ -902,12 +1321,17 @@ bool Terrain3DRuntimePageStore::loadSnapshot( t3dRuntimePreparedPage_t &rPage, c
 		if ( !pMiddleCompositeChannel ) {
 			return false;
 		}
-		if ( rPage.m_middleComposite.is_null() ) {
-			rPage.m_middleComposite = t3dRuntimePageStoreReadImage( pFile,
-					*pMiddleCompositeChannel,
-					rPage.m_nFileReadUsec,
-					rPage.m_nValidationUsec,
-					rPage.m_nMaterializeUsec );
+		if ( ( !bPreserveMaterialized || rPayload.m_middleComposite.is_null() ) &&
+				!t3dRuntimePageStoreReadImageFixed( pFile,
+						*pMiddleCompositeChannel,
+						rPayload.m_middleCompositeBytes,
+						rPayload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_MIDDLE_COMPOSITE],
+						rPayload.m_middleComposite,
+						rMeta.m_nFileReadUsec,
+						rMeta.m_nValidationUsec,
+						rMeta.m_nMaterializeUsec,
+						true ) ) {
+			return false;
 		}
 	}
 	if ( bNeedTerrainShadow ) {
@@ -916,9 +1340,17 @@ bool Terrain3DRuntimePageStore::loadSnapshot( t3dRuntimePreparedPage_t &rPage, c
 		if ( !pShadowChannel ) {
 			return false;
 		}
-		if ( rPage.m_terrainShadowMask.is_null() ) {
-			rPage.m_terrainShadowMask = t3dRuntimePageStoreReadImage(
-					pFile, *pShadowChannel, rPage.m_nFileReadUsec, rPage.m_nValidationUsec, rPage.m_nMaterializeUsec );
+		if ( ( !bPreserveMaterialized || rPayload.m_terrainShadowMask.is_null() ) &&
+				!t3dRuntimePageStoreReadImageFixed( pFile,
+						*pShadowChannel,
+						rPayload.m_terrainShadowMaskBytes,
+						rPayload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_TERRAIN_SHADOW_MASK],
+						rPayload.m_terrainShadowMask,
+						rMeta.m_nFileReadUsec,
+						rMeta.m_nValidationUsec,
+						rMeta.m_nMaterializeUsec,
+						true ) ) {
+			return false;
 		}
 	}
 	if ( bNeedGpu || bNeedCpu ) {
@@ -928,12 +1360,17 @@ bool Terrain3DRuntimePageStore::loadSnapshot( t3dRuntimePreparedPage_t &rPage, c
 			if ( !pControlChannel ) {
 				return false;
 			}
-			if ( rPage.m_control.is_null() ) {
-				rPage.m_control = t3dRuntimePageStoreReadImage( pFile,
-						*pControlChannel,
-						rPage.m_nFileReadUsec,
-						rPage.m_nValidationUsec,
-						rPage.m_nMaterializeUsec );
+			if ( ( !bPreserveMaterialized || rPayload.m_control.is_null() ) &&
+					!t3dRuntimePageStoreReadImageFixed( pFile,
+							*pControlChannel,
+							rPayload.m_controlBytes,
+							rPayload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_CONTROL],
+							rPayload.m_control,
+							rMeta.m_nFileReadUsec,
+							rMeta.m_nValidationUsec,
+							rMeta.m_nMaterializeUsec,
+							true ) ) {
+				return false;
 			}
 		}
 		if ( ( expected_flags & ( uint32_t )( REGION_CHANNEL_COLOR ) ) != 0u ) {
@@ -942,94 +1379,107 @@ bool Terrain3DRuntimePageStore::loadSnapshot( t3dRuntimePreparedPage_t &rPage, c
 			if ( !pColorChannel ) {
 				return false;
 			}
-			if ( rPage.m_color.is_null() ) {
-				rPage.m_color = t3dRuntimePageStoreReadImage( pFile,
-						*pColorChannel,
-						rPage.m_nFileReadUsec,
-						rPage.m_nValidationUsec,
-						rPage.m_nMaterializeUsec );
+			if ( ( !bPreserveMaterialized || rPayload.m_color.is_null() ) &&
+					!t3dRuntimePageStoreReadImageFixed( pFile,
+							*pColorChannel,
+							rPayload.m_colorBytes,
+							rPayload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_COLOR],
+							rPayload.m_color,
+							rMeta.m_nFileReadUsec,
+							rMeta.m_nValidationUsec,
+							rMeta.m_nMaterializeUsec,
+							true ) ) {
+				return false;
 			}
 		}
 	}
 
 	auto read_optional_blob =
 			[&]( const t3dRuntimePageChannel_t eChannel, PackedByteArray &rTarget, const bool bRequired ) -> bool {
+		const uint32_t channel_index = t3dRuntimePageStoreChannelIndex( eChannel );
+		if ( channel_index == 0u ) {
+			return false;
+		}
 		const t3dRuntimePageChannelInfo_t *const pChannel = t3dRuntimePageFindChannel( header, eChannel );
 		if ( !pChannel ) {
+			rPayload.m_szLogicalBytes[channel_index] = 0u;
 			return !bRequired;
 		}
-		if ( rTarget.is_empty() ) {
-			rTarget = t3dRuntimePageStoreReadBlob( pFile, *pChannel, rPage.m_nFileReadUsec, rPage.m_nValidationUsec );
-		}
-		return !rTarget.is_empty();
+		return t3dRuntimePageStoreReadBlobFixed( pFile,
+				*pChannel,
+				rTarget,
+				rPayload.m_szLogicalBytes[channel_index],
+				rScratch,
+				rMeta.m_nFileReadUsec,
+				rMeta.m_nValidationUsec );
 	};
-	const bool bNeedInstances = ( rPage.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_INSTANCE_STORE ) != 0u;
-	const bool bNeedNodes = ( rPage.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_NODE_DESCRIPTORS ) != 0u;
-	const bool bNeedCollision = ( rPage.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_COLLISION ) != 0u;
-	const bool bNeedNavigation = ( rPage.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_NAVIGATION ) != 0u;
+	const bool bNeedInstances = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_INSTANCE_STORE ) != 0u;
+	const bool bNeedNodes = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_NODE_DESCRIPTORS ) != 0u;
+	const bool bNeedCollision = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_COLLISION ) != 0u;
+	const bool bNeedNavigation = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_NAVIGATION ) != 0u;
 	if ( bNeedInstances &&
-			!read_optional_blob( TERRAIN3D_RUNTIME_PAGE_STATIC_INSTANCES, rPage.m_instancePage, false ) ) {
+			!read_optional_blob( TERRAIN3D_RUNTIME_PAGE_STATIC_INSTANCES, rPayload.m_instancePage, false ) ) {
 		return false;
 	}
 	if ( bNeedNodes &&
-			!read_optional_blob( TERRAIN3D_RUNTIME_PAGE_NODE_DESCRIPTORS, rPage.m_nodeDescriptors, false ) ) {
+			!read_optional_blob( TERRAIN3D_RUNTIME_PAGE_NODE_DESCRIPTORS, rPayload.m_nodeDescriptors, false ) ) {
 		return false;
 	}
 	if ( bNeedCollision ) {
-		if ( !read_optional_blob( TERRAIN3D_RUNTIME_PAGE_COLLISION_HEIGHT, rPage.m_collisionHeight, true ) ||
-				!read_optional_blob( TERRAIN3D_RUNTIME_PAGE_COLLISION_BOUNDS, rPage.m_collisionBounds, true ) ||
-				!read_optional_blob( TERRAIN3D_RUNTIME_PAGE_HOLE_MASK, rPage.m_holeMask, true ) ) {
+		if ( !read_optional_blob( TERRAIN3D_RUNTIME_PAGE_COLLISION_HEIGHT, rPayload.m_collisionHeight, true ) ||
+				!read_optional_blob( TERRAIN3D_RUNTIME_PAGE_COLLISION_BOUNDS, rPayload.m_collisionBounds, true ) ||
+				!read_optional_blob( TERRAIN3D_RUNTIME_PAGE_HOLE_MASK, rPayload.m_holeMask, true ) ) {
 			return false;
 		}
 	}
-	if ( bNeedNavigation && !read_optional_blob( TERRAIN3D_RUNTIME_PAGE_NAVIGATION, rPage.m_navigation, true ) ) {
+	if ( bNeedNavigation && !read_optional_blob( TERRAIN3D_RUNTIME_PAGE_NAVIGATION, rPayload.m_navigation, true ) ) {
 		return false;
 	}
 	// Auxiliary acceleration blobs are materialized only for consumers that can use them.
-	if ( rPage.m_bLoadMinMax &&
-			!read_optional_blob( TERRAIN3D_RUNTIME_PAGE_MIN_MAX_HEIGHT, rPage.m_minMaxHeight, true ) ) {
+	if ( rMeta.m_bLoadMinMax &&
+			!read_optional_blob( TERRAIN3D_RUNTIME_PAGE_MIN_MAX_HEIGHT, rPayload.m_minMaxHeight, true ) ) {
 		return false;
 	}
 	if ( bNeedInstances ) {
-		read_optional_blob( TERRAIN3D_RUNTIME_PAGE_INSTANCE_METADATA, rPage.m_instanceMetadata, false );
-		read_optional_blob( TERRAIN3D_RUNTIME_PAGE_MULTIMESH_FAST_START, rPage.m_multimeshFastStart, false );
+		read_optional_blob( TERRAIN3D_RUNTIME_PAGE_INSTANCE_METADATA, rPayload.m_instanceMetadata, false );
+		read_optional_blob( TERRAIN3D_RUNTIME_PAGE_MULTIMESH_FAST_START, rPayload.m_multimeshFastStart, false );
 	}
 
 	validation_started = pTime ? pTime->get_ticks_usec() : 0u;
-	const int color_size = MAX( 1, rPage.m_nRegionSize / rPage.m_nColorDivisor );
-	const int derived_size = MAX( 1, rPage.m_nRegionSize / rPage.m_nDerivedDivisor );
+	const int color_size = MAX( 1, rMeta.m_nRegionSize / rMeta.m_nColorDivisor );
+	const int derived_size = MAX( 1, rMeta.m_nRegionSize / rMeta.m_nDerivedDivisor );
 	const int middle_height_size =
-			MAX( 1, ( rPage.m_nRegionSize + rPage.m_nMiddleHeightDivisor - 1 ) / rPage.m_nMiddleHeightDivisor );
+			MAX( 1, ( rMeta.m_nRegionSize + rMeta.m_nMiddleHeightDivisor - 1 ) / rMeta.m_nMiddleHeightDivisor );
 	if ( ( bMaterializeHeight &&
 				 !t3dRuntimePageStoreValidImage(
-						 rPage.m_height, rPage.m_nRegionSize, rPage.m_nRegionSize, Image::FORMAT_R16, false ) ) ||
+						 rPayload.m_height, rMeta.m_nRegionSize, rMeta.m_nRegionSize, Image::FORMAT_R16, false ) ) ||
 			( ( bNeedGpu || bNeedCpu ) &&
 					!t3dRuntimePageStoreValidImage(
-							rPage.m_derived, derived_size, derived_size, Image::FORMAT_RG8, false ) ) ||
+							rPayload.m_derived, derived_size, derived_size, Image::FORMAT_RG8, false ) ) ||
 			( bNeedMiddle &&
-					!t3dRuntimePageStoreValidImage( rPage.m_middleHeight,
+					!t3dRuntimePageStoreValidImage( rPayload.m_middleHeight,
 							middle_height_size,
 							middle_height_size,
 							Image::FORMAT_R16,
 							false ) ) ||
 			( bNeedGpu &&
 					!t3dRuntimePageStoreValidImage(
-							rPage.m_middleComposite, color_size, color_size, Image::FORMAT_RGBA8, true ) ) ||
+							rPayload.m_middleComposite, color_size, color_size, Image::FORMAT_RGBA8, true ) ) ||
 			( bNeedTerrainShadow &&
-					( rPage.m_terrainShadowMask.is_null() || rPage.m_terrainShadowMask->is_empty() ||
-							rPage.m_terrainShadowMask->get_format() != Image::FORMAT_L8 ||
-							!rPage.m_terrainShadowMask->has_mipmaps() ||
-							rPage.m_terrainShadowMask->get_width() != rPage.m_terrainShadowMask->get_height() ) ) ||
-			( rPage.m_control.is_valid() &&
+					( rPayload.m_terrainShadowMask.is_null() || rPayload.m_terrainShadowMask->is_empty() ||
+							rPayload.m_terrainShadowMask->get_format() != Image::FORMAT_L8 ||
+							!rPayload.m_terrainShadowMask->has_mipmaps() ||
+							rPayload.m_terrainShadowMask->get_width() != rPayload.m_terrainShadowMask->get_height() ) ) ||
+			( rPayload.m_control.is_valid() &&
 					!t3dRuntimePageStoreValidImage(
-							rPage.m_control, rPage.m_nRegionSize, rPage.m_nRegionSize, Image::FORMAT_RF, false ) ) ||
-			( rPage.m_color.is_valid() &&
+							rPayload.m_control, rMeta.m_nRegionSize, rMeta.m_nRegionSize, Image::FORMAT_RF, false ) ) ||
+			( rPayload.m_color.is_valid() &&
 					!t3dRuntimePageStoreValidImage(
-							rPage.m_color, color_size, color_size, Image::FORMAT_RGBA8, true ) ) ) {
-		rPage.m_nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
+							rPayload.m_color, color_size, color_size, Image::FORMAT_RGBA8, true ) ) ) {
+		rMeta.m_nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
 		return false;
 	}
-	rPage.m_nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
+	rMeta.m_nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
 	return true;
 }
 
@@ -1038,23 +1488,32 @@ bool Terrain3DRuntimePageStore::validatePageForRegion( const Terrain3DRegion *co
 	if ( !pRegion || !m_pRepository ) {
 		return false;
 	}
-	t3dRuntimePreparedPage_t page;
-	page.m_location = pRegion->getLocation();
-	page.m_pagePath = getPagePath( pRegion, rConfig.m_dataDirectory );
-	page.m_sourcePath = pRegion->get_path();
-	page.m_nExpectedChannelFlags = ( uint32_t )( pRegion->getChannelFlags() );
-	page.m_nExpectedSourceSignature = pRegion->getCookedPageSourceSignatureInternal();
-	page.m_nRegionSize = m_pRepository->getRegionSize();
-	page.m_nColorDivisor = rConfig.m_nColorDivisor;
-	page.m_nDerivedDivisor = rConfig.m_nDerivedDivisor;
-	page.m_nMiddleHeightDivisor = rConfig.m_nMiddleHeightDivisor;
-	page.m_nConsumerMask = RUNTIME_PAGE_CONSUMER_GPU_DETAIL | RUNTIME_PAGE_CONSUMER_MIDDLE_HEIGHT;
+	t3dRuntimePageMeta_t meta;
+	t3dRuntimePagePayload_t payload;
+	t3dRuntimePageSource_t source;
+	t3dRuntimePageWorkerScratch_t scratch;
+	meta.m_location = pRegion->getLocation();
+	meta.m_nExpectedChannelFlags = ( uint32_t )( pRegion->getChannelFlags() );
+	meta.m_nExpectedSourceSignature = pRegion->getCookedPageSourceSignatureInternal();
+	meta.m_nRegionSize = m_pRepository->getRegionSize();
+	meta.m_nColorDivisor = rConfig.m_nColorDivisor;
+	meta.m_nDerivedDivisor = rConfig.m_nDerivedDivisor;
+	meta.m_nMiddleHeightDivisor = rConfig.m_nMiddleHeightDivisor;
+	meta.m_nConsumerMask = RUNTIME_PAGE_CONSUMER_GPU_DETAIL | RUNTIME_PAGE_CONSUMER_MIDDLE_HEIGHT;
 	const Ref<Terrain3DRegionLighting> lighting = pRegion->getLighting();
 	if ( lighting.is_valid() && lighting->hasTerrainShadowMask() ) {
-		page.m_nConsumerMask |= RUNTIME_PAGE_CONSUMER_TERRAIN_SHADOW;
+		meta.m_nConsumerMask |= RUNTIME_PAGE_CONSUMER_TERRAIN_SHADOW;
 	}
-	page.m_bEditorAuthoring = rConfig.m_bEditorAuthoring;
-	return loadSnapshot( page );
+	meta.m_bEditorAuthoring = rConfig.m_bEditorAuthoring;
+	source.m_pagePath = getPagePath( pRegion, rConfig.m_dataDirectory );
+	source.m_sourcePath = pRegion->get_path();
+	source.m_nExpectedChannelFlags = meta.m_nExpectedChannelFlags;
+	source.m_nExpectedSourceSignature = meta.m_nExpectedSourceSignature;
+	source.m_bPresent = true;
+	if ( !t3dRuntimePageStorePreparePayloadForSourceCold( payload, scratch, source.m_pagePath ) ) {
+		return false;
+	}
+	return loadSnapshot( meta, payload, scratch, source );
 }
 
 bool Terrain3DRuntimePageStore::loadCpuMapsNow( const Vector2i &rLocation,
@@ -1074,25 +1533,32 @@ bool Terrain3DRuntimePageStore::loadCpuMapsNow( const Vector2i &rLocation,
 	if ( !pRegion || pRegion->isDeleted() ) {
 		return false;
 	}
-	t3dRuntimePreparedPage_t page;
-	page.m_location = rLocation;
-	page.m_pagePath = getPagePath( pRegion, rConfig.m_dataDirectory );
-	page.m_sourcePath = pRegion->get_path();
-	page.m_nExpectedChannelFlags = ( uint32_t )pRegion->getChannelFlags();
-	page.m_nExpectedSourceSignature = pRegion->getCookedPageSourceSignatureInternal();
-	page.m_nRegionSize = m_pRepository->getRegionSize();
-	page.m_nColorDivisor = rConfig.m_nColorDivisor;
-	page.m_nDerivedDivisor = rConfig.m_nDerivedDivisor;
-	page.m_nMiddleHeightDivisor = rConfig.m_nMiddleHeightDivisor;
-	page.m_nConsumerMask = RUNTIME_PAGE_CONSUMER_CPU_MAPS;
-	page.m_bEditorAuthoring = rConfig.m_bEditorAuthoring;
-	if ( !loadSnapshot( page ) ) {
+	t3dRuntimePageMeta_t meta;
+	t3dRuntimePagePayload_t payload;
+	t3dRuntimePageSource_t source;
+	t3dRuntimePageWorkerScratch_t scratch;
+	meta.m_location = rLocation;
+	meta.m_nExpectedChannelFlags = ( uint32_t )pRegion->getChannelFlags();
+	meta.m_nExpectedSourceSignature = pRegion->getCookedPageSourceSignatureInternal();
+	meta.m_nRegionSize = m_pRepository->getRegionSize();
+	meta.m_nColorDivisor = rConfig.m_nColorDivisor;
+	meta.m_nDerivedDivisor = rConfig.m_nDerivedDivisor;
+	meta.m_nMiddleHeightDivisor = rConfig.m_nMiddleHeightDivisor;
+	meta.m_nConsumerMask = RUNTIME_PAGE_CONSUMER_CPU_MAPS;
+	meta.m_bEditorAuthoring = rConfig.m_bEditorAuthoring;
+	source.m_pagePath = getPagePath( pRegion, rConfig.m_dataDirectory );
+	source.m_sourcePath = pRegion->get_path();
+	source.m_nExpectedChannelFlags = meta.m_nExpectedChannelFlags;
+	source.m_nExpectedSourceSignature = meta.m_nExpectedSourceSignature;
+	source.m_bPresent = true;
+	if ( !t3dRuntimePageStorePreparePayloadForSourceCold( payload, scratch, source.m_pagePath ) ||
+			!loadSnapshot( meta, payload, scratch, source ) ) {
 		return false;
 	}
-	rHeight = page.m_height;
-	rControl = page.m_control;
-	rColor = page.m_color;
-	rDerived = page.m_derived;
+	rHeight = payload.m_height;
+	rControl = payload.m_control;
+	rColor = payload.m_color;
+	rDerived = payload.m_derived;
 	return rHeight.is_valid() && rDerived.is_valid();
 }
 
@@ -1111,24 +1577,31 @@ bool Terrain3DRuntimePageStore::loadCollisionNow( const Vector2i &rLocation,
 	if ( !pRegion || pRegion->isDeleted() ) {
 		return false;
 	}
-	t3dRuntimePreparedPage_t page;
-	page.m_location = rLocation;
-	page.m_pagePath = getPagePath( pRegion, rConfig.m_dataDirectory );
-	page.m_sourcePath = pRegion->get_path();
-	page.m_nExpectedChannelFlags = ( uint32_t )pRegion->getChannelFlags();
-	page.m_nExpectedSourceSignature = pRegion->getCookedPageSourceSignatureInternal();
-	page.m_nRegionSize = m_pRepository->getRegionSize();
-	page.m_nColorDivisor = rConfig.m_nColorDivisor;
-	page.m_nDerivedDivisor = rConfig.m_nDerivedDivisor;
-	page.m_nMiddleHeightDivisor = rConfig.m_nMiddleHeightDivisor;
-	page.m_nConsumerMask = RUNTIME_PAGE_CONSUMER_COLLISION;
-	page.m_bEditorAuthoring = rConfig.m_bEditorAuthoring;
-	if ( !loadSnapshot( page ) ) {
+	t3dRuntimePageMeta_t meta;
+	t3dRuntimePagePayload_t payload;
+	t3dRuntimePageSource_t source;
+	t3dRuntimePageWorkerScratch_t scratch;
+	meta.m_location = rLocation;
+	meta.m_nExpectedChannelFlags = ( uint32_t )pRegion->getChannelFlags();
+	meta.m_nExpectedSourceSignature = pRegion->getCookedPageSourceSignatureInternal();
+	meta.m_nRegionSize = m_pRepository->getRegionSize();
+	meta.m_nColorDivisor = rConfig.m_nColorDivisor;
+	meta.m_nDerivedDivisor = rConfig.m_nDerivedDivisor;
+	meta.m_nMiddleHeightDivisor = rConfig.m_nMiddleHeightDivisor;
+	meta.m_nConsumerMask = RUNTIME_PAGE_CONSUMER_COLLISION;
+	meta.m_bEditorAuthoring = rConfig.m_bEditorAuthoring;
+	source.m_pagePath = getPagePath( pRegion, rConfig.m_dataDirectory );
+	source.m_sourcePath = pRegion->get_path();
+	source.m_nExpectedChannelFlags = meta.m_nExpectedChannelFlags;
+	source.m_nExpectedSourceSignature = meta.m_nExpectedSourceSignature;
+	source.m_bPresent = true;
+	if ( !t3dRuntimePageStorePreparePayloadForSourceCold( payload, scratch, source.m_pagePath ) ||
+			!loadSnapshot( meta, payload, scratch, source ) ) {
 		return false;
 	}
-	rHeight = page.m_collisionHeight;
-	rBounds = page.m_collisionBounds;
-	rHoleMask = page.m_holeMask;
+	rHeight = payload.m_collisionHeight;
+	rBounds = payload.m_collisionBounds;
+	rHoleMask = payload.m_holeMask;
 	return !rHeight.is_empty() && !rBounds.is_empty() && !rHoleMask.is_empty();
 }
 
@@ -1151,29 +1624,36 @@ bool Terrain3DRuntimePageStore::loadNavigationNow( const Vector2i &rLocation,
 	if ( !pRegion || pRegion->isDeleted() ) {
 		return false;
 	}
-	t3dRuntimePreparedPage_t page;
-	page.m_location = rLocation;
-	page.m_pagePath = getPagePath( pRegion, rConfig.m_dataDirectory );
-	page.m_sourcePath = pRegion->get_path();
-	page.m_nExpectedChannelFlags = ( uint32_t )pRegion->getChannelFlags();
-	page.m_nExpectedSourceSignature = pRegion->getCookedPageSourceSignatureInternal();
-	page.m_nRegionSize = m_pRepository->getRegionSize();
-	page.m_nColorDivisor = rConfig.m_nColorDivisor;
-	page.m_nDerivedDivisor = rConfig.m_nDerivedDivisor;
-	page.m_nMiddleHeightDivisor = rConfig.m_nMiddleHeightDivisor;
-	page.m_nConsumerMask =
+	t3dRuntimePageMeta_t meta;
+	t3dRuntimePagePayload_t payload;
+	t3dRuntimePageSource_t source;
+	t3dRuntimePageWorkerScratch_t scratch;
+	meta.m_location = rLocation;
+	meta.m_nExpectedChannelFlags = ( uint32_t )pRegion->getChannelFlags();
+	meta.m_nExpectedSourceSignature = pRegion->getCookedPageSourceSignatureInternal();
+	meta.m_nRegionSize = m_pRepository->getRegionSize();
+	meta.m_nColorDivisor = rConfig.m_nColorDivisor;
+	meta.m_nDerivedDivisor = rConfig.m_nDerivedDivisor;
+	meta.m_nMiddleHeightDivisor = rConfig.m_nMiddleHeightDivisor;
+	meta.m_nConsumerMask =
 			RUNTIME_PAGE_CONSUMER_NAVIGATION | ( pCollisionHeight ? RUNTIME_PAGE_CONSUMER_COLLISION : 0u );
-	page.m_bLoadMinMax = pMinMaxHeight != nullptr;
-	page.m_bEditorAuthoring = rConfig.m_bEditorAuthoring;
-	if ( !loadSnapshot( page ) ) {
+	meta.m_bLoadMinMax = pMinMaxHeight != nullptr;
+	meta.m_bEditorAuthoring = rConfig.m_bEditorAuthoring;
+	source.m_pagePath = getPagePath( pRegion, rConfig.m_dataDirectory );
+	source.m_sourcePath = pRegion->get_path();
+	source.m_nExpectedChannelFlags = meta.m_nExpectedChannelFlags;
+	source.m_nExpectedSourceSignature = meta.m_nExpectedSourceSignature;
+	source.m_bPresent = true;
+	if ( !t3dRuntimePageStorePreparePayloadForSourceCold( payload, scratch, source.m_pagePath ) ||
+			!loadSnapshot( meta, payload, scratch, source ) ) {
 		return false;
 	}
-	rNavigation = page.m_navigation;
+	rNavigation = payload.m_navigation;
 	if ( pCollisionHeight ) {
-		*pCollisionHeight = page.m_collisionHeight;
+		*pCollisionHeight = payload.m_collisionHeight;
 	}
 	if ( pMinMaxHeight ) {
-		*pMinMaxHeight = page.m_minMaxHeight;
+		*pMinMaxHeight = payload.m_minMaxHeight;
 	}
 	return !rNavigation.is_empty() && ( !pCollisionHeight || !pCollisionHeight->is_empty() ) &&
 			( !pMinMaxHeight || !pMinMaxHeight->is_empty() );
@@ -1494,120 +1974,488 @@ bool Terrain3DRuntimePageStore::collectPageSources( const String &rDataDirectory
 	return rErrors.is_empty();
 }
 
-void Terrain3DRuntimePageStore::prepareTask( void *const pContext, const uint32_t iIndex ) {
-	t3dRuntimePrepareJobContext_t *const context = ( t3dRuntimePrepareJobContext_t * )( pContext );
-	if ( !context || !context->m_pPages || iIndex >= ( uint32_t )( context->m_nPageCount ) ) {
+void Terrain3DRuntimePageStore::queueUnlink( const int nMapIndex ) {
+	if ( nMapIndex < 0 || nMapIndex >= s_nMaxRegionSlots ) {
 		return;
 	}
-	t3dRuntimePreparedPage_t &page = context->m_pPages[iIndex];
+	const uint8_t priority = m_queuedPriorities[( size_t )( nMapIndex )];
+	if ( priority == 0u ) {
+		m_queuedNext[( size_t )( nMapIndex )] = ( int16_t )-1;
+		m_queuedPrev[( size_t )( nMapIndex )] = ( int16_t )-1;
+		return;
+	}
+	const int previous = m_queuedPrev[( size_t )( nMapIndex )];
+	const int next = m_queuedNext[( size_t )( nMapIndex )];
+	if ( previous >= 0 ) {
+		m_queuedNext[( size_t )( previous )] = ( int16_t )next;
+	} else if ( m_priorityHeads[( size_t )( priority )] == nMapIndex ) {
+		m_priorityHeads[( size_t )( priority )] = ( int16_t )next;
+	}
+	if ( next >= 0 ) {
+		m_queuedPrev[( size_t )( next )] = ( int16_t )previous;
+	} else if ( m_priorityTails[( size_t )( priority )] == nMapIndex ) {
+		m_priorityTails[( size_t )( priority )] = ( int16_t )previous;
+	}
+	m_queuedNext[( size_t )( nMapIndex )] = ( int16_t )-1;
+	m_queuedPrev[( size_t )( nMapIndex )] = ( int16_t )-1;
+	m_queuedPriorities[( size_t )( nMapIndex )] = 0u;
+}
+
+void Terrain3DRuntimePageStore::queueLink( const int nMapIndex, const uint8_t nPriority ) {
+	if ( nMapIndex < 0 || nMapIndex >= s_nMaxRegionSlots || m_queuedConsumers[( size_t )( nMapIndex )] == 0u ) {
+		return;
+	}
+	if ( m_queuedPriorities[( size_t )( nMapIndex )] != 0u ) {
+		queueUnlink( nMapIndex );
+	}
+	const uint8_t priority = MAX( ( uint8_t )1u, nPriority );
+	const int tail = m_priorityTails[( size_t )( priority )];
+	m_queuedPrev[( size_t )( nMapIndex )] = ( int16_t )tail;
+	m_queuedNext[( size_t )( nMapIndex )] = ( int16_t )-1;
+	if ( tail >= 0 ) {
+		m_queuedNext[( size_t )( tail )] = ( int16_t )nMapIndex;
+	} else {
+		m_priorityHeads[( size_t )( priority )] = ( int16_t )nMapIndex;
+	}
+	m_priorityTails[( size_t )( priority )] = ( int16_t )nMapIndex;
+	m_queuedPriorities[( size_t )( nMapIndex )] = priority;
+}
+
+int Terrain3DRuntimePageStore::popBestQueued( const Vector2i &rPredictedCenter ) {
+	for ( int priority = 1; priority < 256; ++priority ) {
+		int map_index = m_priorityHeads[( size_t )( priority )];
+		if ( map_index < 0 ) {
+			continue;
+		}
+		int best_map_index = -1;
+		int best_distance = INT32_MAX;
+		while ( map_index >= 0 ) {
+			const int next = m_queuedNext[( size_t )( map_index )];
+			if ( m_queuedConsumers[( size_t )( map_index )] != 0u ) {
+				const int map_x = map_index % s_nActiveMaxRegionMapSize;
+				const int map_y = map_index / s_nActiveMaxRegionMapSize;
+				const Vector2i location(
+						map_x - s_nActiveMaxRegionMapSize / 2, map_y - s_nActiveMaxRegionMapSize / 2 );
+				const int distance = MAX( Math::abs( location.x - rPredictedCenter.x ),
+						Math::abs( location.y - rPredictedCenter.y ) );
+				if ( distance < best_distance ||
+						( distance == best_distance && ( best_map_index < 0 || map_index < best_map_index ) ) ) {
+					best_distance = distance;
+					best_map_index = map_index;
+				}
+			}
+			map_index = next;
+		}
+		if ( best_map_index >= 0 ) {
+			queueUnlink( best_map_index );
+			return best_map_index;
+		}
+	}
+	return -1;
+}
+
+int Terrain3DRuntimePageStore::acquirePayloadSlot( void ) {
+	if ( m_nFreePayloadCount <= 0 ) {
+		return -1;
+	}
+	return m_freePayloadSlots[( size_t )( --m_nFreePayloadCount )];
+}
+
+void Terrain3DRuntimePageStore::releasePayloadSlot( const int nPayloadSlot ) {
+	if ( nPayloadSlot < 0 || nPayloadSlot >= m_nRuntimePayloadLimit || m_nFreePayloadCount >= m_nRuntimePayloadLimit ) {
+		return;
+	}
+	m_freePayloadSlots[( size_t )( m_nFreePayloadCount++ )] = ( int16_t )nPayloadSlot;
+}
+
+void Terrain3DRuntimePageStore::startWorkers( const int nWorkerCount ) {
+	const int worker_count = CLAMP( nWorkerCount, 1, s_nRuntimeWorkerLimit );
+	if ( m_nWorkerThreadCount == worker_count ) {
+		return;
+	}
+	stopWorkers();
+	{
+		std::lock_guard<std::mutex> lock( m_workerMutex );
+		m_bWorkersStop = false;
+	}
+	for ( int worker = 0; worker < worker_count; ++worker ) {
+		m_workers[( size_t )( worker )] = std::thread( &Terrain3DRuntimePageStore::workerMain, this, worker );
+	}
+	m_nWorkerThreadCount = worker_count;
+}
+
+void Terrain3DRuntimePageStore::stopWorkers( void ) {
+	if ( m_nWorkerThreadCount <= 0 ) {
+		return;
+	}
+	{
+		std::lock_guard<std::mutex> lock( m_workerMutex );
+		m_bWorkersStop = true;
+	}
+	m_workerWake.notify_all();
+	for ( int worker = 0; worker < m_nWorkerThreadCount; ++worker ) {
+		if ( m_workers[( size_t )( worker )].joinable() ) {
+			m_workers[( size_t )( worker )].join();
+		}
+	}
+	{
+		std::lock_guard<std::mutex> lock( m_workerMutex );
+		m_iWorkRead = 0;
+		m_iWorkWrite = 0;
+		m_nWorkRingCount = 0;
+		m_iCompletionRead = 0;
+		m_iCompletionWrite = 0;
+		m_nCompletionRingCount = 0;
+		m_bWorkersStop = false;
+	}
+	m_nWorkerThreadCount = 0;
+}
+
+void Terrain3DRuntimePageStore::prepareWorkIndex( const int nWorkIndex, const int nWorkerIndex ) {
+	if ( nWorkIndex < 0 || nWorkIndex >= m_nPrepareWorkPageCount || nWorkerIndex < 0 ||
+			nWorkerIndex >= m_nWorkerThreadCount ) {
+		return;
+	}
+	t3dRuntimePageMeta_t &meta = m_workPages[( size_t )( nWorkIndex )];
+	if ( meta.m_iPayloadSlot < 0 || meta.m_iPayloadSlot >= m_nRuntimePayloadLimit || meta.m_iSourceIndex < 0 ||
+			meta.m_iSourceIndex >= s_nMaxRegionSlots ) {
+		return;
+	}
+	t3dRuntimePagePayload_t &payload = m_payloadSlots[( size_t )( meta.m_iPayloadSlot )];
 	Time *const pTime = Time::get_singleton();
-	page.m_nWorkerStartedUsec = pTime ? pTime->get_ticks_usec() : page.m_nRequestedUsec;
-	page.m_bAttempted = true;
-	page.m_bLoaded = loadSnapshot( page );
-	page.m_bInstanceAttempted = !page.m_instancePage.is_empty();
-	if ( page.m_bInstanceAttempted ) {
-		uint32_t mesh_counts[s_nMaxMeshAssets] = {};
+	meta.m_nWorkerStartedUsec = pTime ? pTime->get_ticks_usec() : meta.m_nRequestedUsec;
+	meta.m_bAttempted = true;
+	meta.m_nAttemptedConsumerMask = meta.m_nConsumerMask;
+	meta.m_bLoaded = loadSnapshot( meta,
+			payload,
+			m_workerScratch[( size_t )( nWorkerIndex )],
+			m_pageSources[( size_t )( meta.m_iSourceIndex )] );
+	meta.m_nMaterializedConsumerMask = meta.m_bLoaded ? meta.m_nConsumerMask : 0u;
+	meta.m_nLoadedConsumerMask = meta.m_bLoaded ? meta.m_nConsumerMask : 0u;
+	meta.m_bInstanceAttempted = meta.m_bLoaded &&
+			( meta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_INSTANCE_STORE ) != 0u &&
+			payload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_STATIC_INSTANCES] > 0u;
+	if ( meta.m_bInstanceAttempted ) {
+		uint32_t mesh_counts[s_nMaxMeshAssets];
+		std::memset( mesh_counts, 0, sizeof( mesh_counts ) );
 		uint32_t instance_count = 0u;
 		uint16_t mesh_count = 0u;
-		page.m_bInstanceLoaded = Terrain3DInstancePageCodec::decode(
-				page.m_instancePage, page.m_preparedInstanceStore, mesh_counts, instance_count, mesh_count );
+		meta.m_bInstanceLoaded = Terrain3DInstancePageCodec::decode( payload.m_instancePage,
+				( size_t )( payload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_STATIC_INSTANCES] ),
+				payload.m_preparedInstanceStore,
+				mesh_counts,
+				instance_count,
+				mesh_count );
+		if ( !meta.m_bInstanceLoaded ) {
+			meta.m_nLoadedConsumerMask &= ( uint16_t )( ~RUNTIME_PAGE_CONSUMER_INSTANCE_STORE );
+		}
+	} else if ( ( meta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_INSTANCE_STORE ) != 0u ) {
+		meta.m_bInstanceLoaded = meta.m_bLoaded;
 	}
-	page.m_nWorkerFinishedUsec = pTime ? pTime->get_ticks_usec() : page.m_nWorkerStartedUsec;
+	meta.m_nWorkerFinishedUsec = pTime ? pTime->get_ticks_usec() : meta.m_nWorkerStartedUsec;
+}
+
+void Terrain3DRuntimePageStore::workerMain( const int nWorkerIndex ) {
+	for ( ;; ) {
+		int work_index = -1;
+		{
+			std::unique_lock<std::mutex> lock( m_workerMutex );
+			m_workerWake.wait( lock, [this]() { return m_bWorkersStop || m_nWorkRingCount > 0; } );
+			if ( m_bWorkersStop ) {
+				return;
+			}
+			work_index = m_workRing[( size_t )( m_iWorkRead )];
+			m_iWorkRead = ( m_iWorkRead + 1 ) % s_nGpuCacheMaxLayers;
+			--m_nWorkRingCount;
+		}
+		prepareWorkIndex( work_index, nWorkerIndex );
+		{
+			std::lock_guard<std::mutex> lock( m_workerMutex );
+			if ( m_nCompletionRingCount < s_nGpuCacheMaxLayers ) {
+				m_completionRing[( size_t )( m_iCompletionWrite )] = ( int16_t )work_index;
+				m_iCompletionWrite = ( m_iCompletionWrite + 1 ) % s_nGpuCacheMaxLayers;
+				++m_nCompletionRingCount;
+			}
+		}
+		m_completionWake.notify_one();
+	}
+}
+
+bool Terrain3DRuntimePageStore::rebuildRuntimeSources( const t3dRuntimePageServiceState_t &rState ) {
+	if ( !m_pRepository ) {
+		return false;
+	}
+	const t3dRuntimePageNumericConfig_t numeric = t3dCompileRuntimePageNumericConfig( rState.m_config.m_nColorDivisor,
+			rState.m_config.m_nDerivedDivisor,
+			rState.m_config.m_nMiddleHeightDivisor,
+			rState.m_config.m_nPrepareThreads );
+	const uint64_t topology_generation = m_pRepository->getTopologyGeneration();
+	const bool same_config = topology_generation == m_nSourceTopologyGeneration &&
+			rState.m_config.m_dataDirectory == m_sourceDataDirectory &&
+			numeric.m_nColorDivisor == m_sourceNumericConfig.m_nColorDivisor &&
+			numeric.m_nDerivedDivisor == m_sourceNumericConfig.m_nDerivedDivisor &&
+			numeric.m_nMiddleHeightDivisor == m_sourceNumericConfig.m_nMiddleHeightDivisor &&
+			numeric.m_nPrepareThreads == m_sourceNumericConfig.m_nPrepareThreads &&
+			rState.m_config.m_bEditorAuthoring == m_bSourceEditorAuthoring;
+	if ( same_config && m_nWorkerThreadCount == numeric.m_nPrepareThreads ) {
+		return true;
+	}
+	poll( true );
+	while ( m_nPreparedPageCount > 0 ) {
+		consumePreparedIndex( m_nPreparedPageCount - 1 );
+	}
+	stopWorkers();
+	for ( int index = 0; index < s_nMaxRegionSlots; ++index ) {
+		t3dRuntimePageStoreResetSource( m_pageSources[( size_t )( index )] );
+	}
+	std::memset( m_runtimeChannelCapacities.data(), 0, sizeof( m_runtimeChannelCapacities ) );
+	uint32_t scratch_bytes = s_nRuntimePageHeaderBytes;
+	for ( int slot = 0; slot < m_pRepository->getSlotCount(); ++slot ) {
+		const Vector2i location = m_pRepository->getSlotsData()[slot];
+		if ( location == s_v2iMax ) {
+			continue;
+		}
+		const int map_index = Terrain3DRegionRepository::getRegionMapIndex( location );
+		Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
+		if ( map_index < 0 || !pRegion || pRegion->isDeleted() || !pRegion->runtimeMapsEvictableInternal() ) {
+			continue;
+		}
+		t3dRuntimePageSource_t &source = m_pageSources[( size_t )( map_index )];
+		source.m_pagePath = getPagePath( pRegion, rState.m_config.m_dataDirectory );
+		source.m_sourcePath = pRegion->get_path();
+		source.m_nExpectedChannelFlags = ( uint32_t )pRegion->getChannelFlags();
+		source.m_nExpectedSourceSignature = pRegion->getCookedPageSourceSignatureInternal();
+		source.m_bPresent = !source.m_pagePath.is_empty();
+		if ( source.m_bPresent ) {
+			t3dRuntimePageHeader_t header;
+			if ( !t3dRuntimePageStoreReadHeaderCold( source.m_pagePath, header ) ) {
+				source.m_bPresent = false;
+				continue;
+			}
+			bool fixed_compatible = true;
+			for ( uint32_t channel = 0u; channel < header.m_nChannelCount; ++channel ) {
+				const t3dRuntimePageChannelInfo_t &info = header.m_szChannels[channel];
+				if ( info.m_nType == 0u || info.m_nType > s_nRuntimePageChannelCount ) {
+					continue;
+				}
+				PackedByteArray *const pBuffer = t3dRuntimePageStorePayloadBuffer(
+						m_payloadSlots[0], ( t3dRuntimePageChannel_t )( info.m_nType ) );
+				if ( !pBuffer ) {
+					continue;
+				}
+				uint32_t &capacity = m_runtimeChannelCapacities[info.m_nType];
+				if ( info.m_nFormat != UINT32_MAX && capacity != 0u && capacity != info.m_nUncompressedBytes ) {
+					fixed_compatible = false;
+					break;
+				}
+				capacity = MAX( capacity, info.m_nUncompressedBytes );
+				scratch_bytes = MAX( scratch_bytes, info.m_nCompressedBytes );
+			}
+			source.m_bPresent = fixed_compatible;
+		}
+	}
+	m_nRuntimePayloadLimit = rState.m_config.m_bEditorAuthoring ? s_nGpuCacheEditorMaxLayers : s_nGpuCacheRuntimeMaxLayers;
+	m_nFreePayloadCount = m_nRuntimePayloadLimit;
+	for ( int slot = 0; slot < m_nRuntimePayloadLimit; ++slot ) {
+		m_freePayloadSlots[( size_t )( slot )] = ( int16_t )( m_nRuntimePayloadLimit - slot - 1 );
+		if ( !t3dRuntimePageStorePreparePayloadStorage(
+				 m_payloadSlots[( size_t )( slot )], m_runtimeChannelCapacities ) ) {
+			return false;
+		}
+	}
+	m_nWorkerScratchBytes = scratch_bytes;
+	for ( int worker = 0; worker < numeric.m_nPrepareThreads; ++worker ) {
+		m_workerScratch[( size_t )( worker )].m_ioBytes.resize( scratch_bytes );
+	}
+	m_nSourceTopologyGeneration = topology_generation;
+	m_sourceDataDirectory = rState.m_config.m_dataDirectory;
+	m_sourceNumericConfig = numeric;
+	m_bSourceEditorAuthoring = rState.m_config.m_bEditorAuthoring;
+	startWorkers( numeric.m_nPrepareThreads );
+	return true;
+}
+
+static void t3dRuntimePageStoreCopyPayloadChannel( t3dRuntimePagePayload_t &rDestination,
+		const t3dRuntimePagePayload_t &rSource,
+		const t3dRuntimePageChannel_t eChannel ) {
+	const uint32_t channel = t3dRuntimePageStoreChannelIndex( eChannel );
+	if ( channel == 0u ) {
+		return;
+	}
+	PackedByteArray *const pDestination = t3dRuntimePageStorePayloadBuffer( rDestination, eChannel );
+	const PackedByteArray *const pSource = t3dRuntimePageStorePayloadBuffer( rSource, eChannel );
+	if ( !pDestination || !pSource ) {
+		return;
+	}
+	const uint32_t logical_bytes = rSource.m_szLogicalBytes[channel];
+	if ( logical_bytes > ( uint32_t )( pDestination->size() ) || logical_bytes > ( uint32_t )( pSource->size() ) ) {
+		rDestination.m_szLogicalBytes[channel] = 0u;
+		return;
+	}
+	if ( logical_bytes > 0u ) {
+		std::memcpy( pDestination->ptrw(), pSource->ptr(), logical_bytes );
+	}
+	rDestination.m_szLogicalBytes[channel] = logical_bytes;
+}
+
+void Terrain3DRuntimePageStore::mergePreparedPayload( t3dRuntimePageMeta_t &rDestinationMeta,
+		t3dRuntimePagePayload_t &rDestinationPayload,
+		const t3dRuntimePageMeta_t &rSourceMeta,
+		t3dRuntimePagePayload_t &rSourcePayload ) {
+	const uint16_t consumers = rSourceMeta.m_nConsumerMask;
+	if ( ( consumers & ( RUNTIME_PAGE_CONSUMER_ACTIVE_HEIGHT | RUNTIME_PAGE_CONSUMER_CPU_MAPS |
+					 RUNTIME_PAGE_CONSUMER_GPU_DETAIL ) ) != 0u ) {
+		t3dRuntimePageStoreCopyPayloadChannel(
+				rDestinationPayload, rSourcePayload, TERRAIN3D_RUNTIME_PAGE_HEIGHT );
+		rDestinationPayload.m_height = rSourcePayload.m_height;
+	}
+	if ( ( consumers & ( RUNTIME_PAGE_CONSUMER_CPU_MAPS | RUNTIME_PAGE_CONSUMER_GPU_DETAIL ) ) != 0u ) {
+		t3dRuntimePageStoreCopyPayloadChannel(
+				rDestinationPayload, rSourcePayload, TERRAIN3D_RUNTIME_PAGE_CONTROL );
+		t3dRuntimePageStoreCopyPayloadChannel( rDestinationPayload, rSourcePayload, TERRAIN3D_RUNTIME_PAGE_COLOR );
+		t3dRuntimePageStoreCopyPayloadChannel(
+				rDestinationPayload, rSourcePayload, TERRAIN3D_RUNTIME_PAGE_DERIVED );
+		rDestinationPayload.m_control = rSourcePayload.m_control;
+		rDestinationPayload.m_color = rSourcePayload.m_color;
+		rDestinationPayload.m_derived = rSourcePayload.m_derived;
+	}
+	if ( ( consumers & RUNTIME_PAGE_CONSUMER_MIDDLE_HEIGHT ) != 0u ) {
+		t3dRuntimePageStoreCopyPayloadChannel(
+				rDestinationPayload, rSourcePayload, TERRAIN3D_RUNTIME_PAGE_MIDDLE_HEIGHT );
+		rDestinationPayload.m_middleHeight = rSourcePayload.m_middleHeight;
+	}
+	if ( ( consumers & RUNTIME_PAGE_CONSUMER_GPU_DETAIL ) != 0u ) {
+		t3dRuntimePageStoreCopyPayloadChannel(
+				rDestinationPayload, rSourcePayload, TERRAIN3D_RUNTIME_PAGE_MIDDLE_COMPOSITE );
+		rDestinationPayload.m_middleComposite = rSourcePayload.m_middleComposite;
+		rDestinationMeta.m_nMaterialMask = rSourceMeta.m_nMaterialMask;
+	}
+	if ( ( consumers & RUNTIME_PAGE_CONSUMER_TERRAIN_SHADOW ) != 0u ) {
+		t3dRuntimePageStoreCopyPayloadChannel(
+				rDestinationPayload, rSourcePayload, TERRAIN3D_RUNTIME_PAGE_TERRAIN_SHADOW_MASK );
+		rDestinationPayload.m_terrainShadowMask = rSourcePayload.m_terrainShadowMask;
+	}
+	if ( ( consumers & RUNTIME_PAGE_CONSUMER_INSTANCE_STORE ) != 0u ) {
+		t3dRuntimePageStoreCopyPayloadChannel(
+				rDestinationPayload, rSourcePayload, TERRAIN3D_RUNTIME_PAGE_STATIC_INSTANCES );
+		t3dRuntimePageStoreCopyPayloadChannel(
+				rDestinationPayload, rSourcePayload, TERRAIN3D_RUNTIME_PAGE_INSTANCE_METADATA );
+		t3dRuntimePageStoreCopyPayloadChannel(
+				rDestinationPayload, rSourcePayload, TERRAIN3D_RUNTIME_PAGE_MULTIMESH_FAST_START );
+		rDestinationPayload.m_preparedInstanceStore = eastl::move( rSourcePayload.m_preparedInstanceStore );
+		rDestinationMeta.m_bInstanceAttempted = rSourceMeta.m_bInstanceAttempted;
+		rDestinationMeta.m_bInstanceLoaded = rSourceMeta.m_bInstanceLoaded;
+	}
+	if ( ( consumers & RUNTIME_PAGE_CONSUMER_NODE_DESCRIPTORS ) != 0u ) {
+		t3dRuntimePageStoreCopyPayloadChannel(
+				rDestinationPayload, rSourcePayload, TERRAIN3D_RUNTIME_PAGE_NODE_DESCRIPTORS );
+	}
+	if ( ( consumers & RUNTIME_PAGE_CONSUMER_COLLISION ) != 0u ) {
+		t3dRuntimePageStoreCopyPayloadChannel(
+				rDestinationPayload, rSourcePayload, TERRAIN3D_RUNTIME_PAGE_COLLISION_HEIGHT );
+		t3dRuntimePageStoreCopyPayloadChannel(
+				rDestinationPayload, rSourcePayload, TERRAIN3D_RUNTIME_PAGE_COLLISION_BOUNDS );
+		t3dRuntimePageStoreCopyPayloadChannel( rDestinationPayload, rSourcePayload, TERRAIN3D_RUNTIME_PAGE_HOLE_MASK );
+	}
+	if ( ( consumers & RUNTIME_PAGE_CONSUMER_NAVIGATION ) != 0u ) {
+		t3dRuntimePageStoreCopyPayloadChannel(
+				rDestinationPayload, rSourcePayload, TERRAIN3D_RUNTIME_PAGE_NAVIGATION );
+	}
+	if ( rSourceMeta.m_bLoadMinMax ) {
+		t3dRuntimePageStoreCopyPayloadChannel(
+				rDestinationPayload, rSourcePayload, TERRAIN3D_RUNTIME_PAGE_MIN_MAX_HEIGHT );
+	}
+	rDestinationMeta.m_nConsumerMask |= consumers;
+	rDestinationMeta.m_nAttemptedConsumerMask |= rSourceMeta.m_nAttemptedConsumerMask;
+	rDestinationMeta.m_nMaterializedConsumerMask |= rSourceMeta.m_nMaterializedConsumerMask;
+	rDestinationMeta.m_nLoadedConsumerMask |= rSourceMeta.m_nLoadedConsumerMask;
+	rDestinationMeta.m_bAttempted = rDestinationMeta.m_nAttemptedConsumerMask != 0u;
+	rDestinationMeta.m_bLoaded = rDestinationMeta.m_nLoadedConsumerMask != 0u;
+	rDestinationMeta.m_nRequestedUsec = MIN( rDestinationMeta.m_nRequestedUsec, rSourceMeta.m_nRequestedUsec );
+	rDestinationMeta.m_nWorkerFinishedUsec =
+			MAX( rDestinationMeta.m_nWorkerFinishedUsec, rSourceMeta.m_nWorkerFinishedUsec );
 }
 
 void Terrain3DRuntimePageStore::poll( const bool bWait ) {
 	if ( !m_bPrepareJobActive ) {
 		return;
 	}
-	WorkerThreadPool *const pool = WorkerThreadPool::get_singleton();
-	if ( pool && !bWait && !pool->is_group_task_completed( m_nPrepareGroupId ) ) {
-		return;
-	}
-	if ( pool && m_nPrepareGroupId != WorkerThreadPool::INVALID_TASK_ID ) {
-		pool->wait_for_group_task_completion( m_nPrepareGroupId );
-	}
-	m_nPrepareQueueWaitUsecLast = 0u;
-	m_nPrepareFileOpenUsecLast = 0u;
-	m_nPrepareFileReadUsecLast = 0u;
-	m_nPrepareValidationUsecLast = 0u;
-	m_nPrepareMaterializeUsecLast = 0u;
-	m_nPrepareWorkerUsecLast = 0u;
-	for ( int work_index = 0; work_index < m_nPrepareWorkPageCount; ++work_index ) {
-		t3dRuntimePreparedPage_t &work_page = m_workPages[( size_t )( work_index )];
-		if ( work_page.m_nWorkerStartedUsec >= work_page.m_nRequestedUsec ) {
-			m_nPrepareQueueWaitUsecLast =
-					MAX( m_nPrepareQueueWaitUsecLast, work_page.m_nWorkerStartedUsec - work_page.m_nRequestedUsec );
+	{
+		std::unique_lock<std::mutex> lock( m_workerMutex );
+		if ( bWait ) {
+			m_completionWake.wait( lock, [this]() {
+				return m_nCompletionRingCount >= m_nPrepareWorkPageCount || m_bWorkersStop;
+			} );
+		} else if ( m_nCompletionRingCount < m_nPrepareWorkPageCount ) {
+			return;
 		}
-		if ( work_page.m_nWorkerFinishedUsec >= work_page.m_nWorkerStartedUsec ) {
-			m_nPrepareWorkerUsecLast =
-					MAX( m_nPrepareWorkerUsecLast, work_page.m_nWorkerFinishedUsec - work_page.m_nWorkerStartedUsec );
+		if ( m_nCompletionRingCount < m_nPrepareWorkPageCount ) {
+			return;
 		}
-		m_nPrepareFileOpenUsecLast += work_page.m_nFileOpenUsec;
-		m_nPrepareFileReadUsecLast += work_page.m_nFileReadUsec;
-		m_nPrepareValidationUsecLast += work_page.m_nValidationUsec;
-		m_nPrepareMaterializeUsecLast += work_page.m_nMaterializeUsec;
+		for ( int completed = 0; completed < m_nPrepareWorkPageCount; ++completed ) {
+			m_iCompletionRead = ( m_iCompletionRead + 1 ) % s_nGpuCacheMaxLayers;
+			--m_nCompletionRingCount;
+		}
+	}
 
-		const uint16_t worker_consumer_mask = work_page.m_nConsumerMask;
-		const int map_index = Terrain3DRegionRepository::getRegionMapIndex( work_page.m_location );
-		if ( map_index >= 0 ) {
-			work_page.m_nConsumerMask |= m_queuedConsumers[( size_t )( map_index )];
-			if ( m_queuedConsumers[( size_t )( map_index )] != 0u ) {
+	for ( int work_index = 0; work_index < m_nPrepareWorkPageCount; ++work_index ) {
+		t3dRuntimePageMeta_t &work_meta = m_workPages[( size_t )( work_index )];
+		const int map_index = Terrain3DRegionRepository::getRegionMapIndex( work_meta.m_location );
+		m_nPrepareQueueWaitUsecLast = MAX( m_nPrepareQueueWaitUsecLast,
+				work_meta.m_nWorkerStartedUsec >= work_meta.m_nRequestedUsec
+						? work_meta.m_nWorkerStartedUsec - work_meta.m_nRequestedUsec
+						: 0u );
+		m_nPrepareFileOpenUsecLast = MAX( m_nPrepareFileOpenUsecLast, work_meta.m_nFileOpenUsec );
+		m_nPrepareFileReadUsecLast = MAX( m_nPrepareFileReadUsecLast, work_meta.m_nFileReadUsec );
+		m_nPrepareValidationUsecLast = MAX( m_nPrepareValidationUsecLast, work_meta.m_nValidationUsec );
+		m_nPrepareMaterializeUsecLast = MAX( m_nPrepareMaterializeUsecLast, work_meta.m_nMaterializeUsec );
+		m_nPrepareWorkerUsecLast = MAX( m_nPrepareWorkerUsecLast,
+				work_meta.m_nWorkerFinishedUsec >= work_meta.m_nWorkerStartedUsec
+						? work_meta.m_nWorkerFinishedUsec - work_meta.m_nWorkerStartedUsec
+						: 0u );
+
+		if ( map_index >= 0 && m_queuedConsumers[( size_t )( map_index )] != 0u ) {
+			const uint16_t queued = m_queuedConsumers[( size_t )( map_index )];
+			const uint16_t already_materialized = queued & work_meta.m_nMaterializedConsumerMask;
+			const uint16_t follow_up = queued & ( uint16_t )( ~work_meta.m_nMaterializedConsumerMask );
+			work_meta.m_nConsumerMask |= already_materialized;
+			if ( follow_up == 0u ) {
+				queueUnlink( map_index );
+				m_queuedConsumers[( size_t )( map_index )] = 0u;
 				m_nQueuedCount = MAX( 0, m_nQueuedCount - 1 );
-			}
-			m_queuedConsumers[( size_t )( map_index )] = 0u;
-			m_queuedPriorities[( size_t )( map_index )] = 0u;
-		}
-		int destination = map_index >= 0 ? m_preparedByRegion[( size_t )map_index] : -1;
-		if ( destination >= 0 && destination < m_nPreparedPageCount ) {
-			work_page.m_nConsumerMask |= m_preparedPages[( size_t )destination].m_nConsumerMask;
-		} else {
-			destination = -1;
-		}
-		// A request can gain consumers while the worker is already reading the page.
-		// Re-materialize once with the final mask before publishing the snapshot;
-		// otherwise a late CPU/GPU/metadata consumer could observe a valid page whose
-		// required payload was intentionally skipped by the original worker read.
-		if ( work_page.m_bLoaded && work_page.m_nConsumerMask != worker_consumer_mask ) {
-			work_page.m_bLoaded = loadSnapshot( work_page, true );
-			work_page.m_bInstanceAttempted = false;
-			work_page.m_bInstanceLoaded = false;
-			if ( work_page.m_bLoaded && ( work_page.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_INSTANCE_STORE ) != 0u &&
-					!work_page.m_instancePage.is_empty() ) {
-				work_page.m_bInstanceAttempted = true;
-				uint32_t mesh_counts[s_nMaxMeshAssets] = {};
-				uint32_t instance_count = 0u;
-				uint16_t mesh_count = 0u;
-				work_page.m_bInstanceLoaded = Terrain3DInstancePageCodec::decode( work_page.m_instancePage,
-						work_page.m_preparedInstanceStore,
-						mesh_counts,
-						instance_count,
-						mesh_count );
+			} else {
+				const uint8_t priority = MAX( ( uint8_t )1u, m_queuedPriorities[( size_t )( map_index )] );
+				m_queuedConsumers[( size_t )( map_index )] = follow_up;
+				queueLink( map_index, priority );
 			}
 		}
-		if ( destination < 0 && m_nPreparedPageCount < s_nGpuCacheMaxLayers ) {
-			destination = m_nPreparedPageCount++;
-		}
+
+		int destination = getPreparedIndex( work_meta.m_location );
 		if ( destination >= 0 ) {
-			m_preparedPages[( size_t )destination] = std::move( work_page );
+			t3dRuntimePageMeta_t &destination_meta = m_preparedPages[( size_t )( destination )];
+			t3dRuntimePagePayload_t &destination_payload =
+					m_payloadSlots[( size_t )( destination_meta.m_iPayloadSlot )];
+			t3dRuntimePagePayload_t &source_payload = m_payloadSlots[( size_t )( work_meta.m_iPayloadSlot )];
+			mergePreparedPayload( destination_meta, destination_payload, work_meta, source_payload );
+			releasePayloadSlot( work_meta.m_iPayloadSlot );
+		} else if ( m_nPreparedPageCount < m_nRuntimePayloadLimit ) {
+			destination = m_nPreparedPageCount++;
+			m_preparedPages[( size_t )( destination )] = work_meta;
 			if ( map_index >= 0 ) {
-				m_preparedByRegion[( size_t )map_index] = ( int16_t )destination;
+				m_preparedByRegion[( size_t )( map_index )] = ( int16_t )destination;
 			}
+		} else {
+			releasePayloadSlot( work_meta.m_iPayloadSlot );
 		}
 		if ( map_index >= 0 ) {
-			m_workByRegion[( size_t )map_index] = ( int16_t )-1;
+			m_workByRegion[( size_t )( map_index )] = ( int16_t )-1;
 		}
-		work_page = t3dRuntimePreparedPage_t{};
+		t3dRuntimePageStoreResetMeta( work_meta );
 	}
 	Time *const pTime = Time::get_singleton();
 	const uint64_t finished = pTime ? pTime->get_ticks_usec() : m_nPrepareJobStartedUsec;
 	m_nPrepareLatencyUsecLast = finished >= m_nPrepareJobStartedUsec ? finished - m_nPrepareJobStartedUsec : 0u;
 	m_nPrepareWorkPageCount = 0;
-	for ( int index = 0; index < s_nMaxRegionSlots; ++index ) {
-		m_workByRegion[( size_t )( index )] = ( int16_t )-1;
-	}
-	m_prepareContext.m_pPages = nullptr;
-	m_prepareContext.m_nPageCount = 0;
-	m_nPrepareGroupId = WorkerThreadPool::INVALID_TASK_ID;
 	m_bPrepareJobActive = false;
 	m_nPrepareJobWorkers = 0;
 }
@@ -1617,8 +2465,8 @@ int Terrain3DRuntimePageStore::getPreparedIndex( const Vector2i &rLocation ) con
 	if ( map_index < 0 ) {
 		return -1;
 	}
-	const int index = m_preparedByRegion[( size_t )map_index];
-	return index >= 0 && index < m_nPreparedPageCount && m_preparedPages[( size_t )index].m_location == rLocation
+	const int index = m_preparedByRegion[( size_t )( map_index )];
+	return index >= 0 && index < m_nPreparedPageCount && m_preparedPages[( size_t )( index )].m_location == rLocation
 			? index
 			: -1;
 }
@@ -1628,9 +2476,11 @@ int Terrain3DRuntimePageStore::getWorkIndex( const Vector2i &rLocation ) const {
 	if ( map_index < 0 ) {
 		return -1;
 	}
-	const int index = m_workByRegion[( size_t )map_index];
-	return index >= 0 && index < m_nPrepareWorkPageCount && m_workPages[( size_t )index].m_location == rLocation ? index
-																												 : -1;
+	const int index = m_workByRegion[( size_t )( map_index )];
+	return index >= 0 && index < m_nPrepareWorkPageCount &&
+				m_workPages[( size_t )( index )].m_location == rLocation
+			? index
+			: -1;
 }
 
 bool Terrain3DRuntimePageStore::isPending( const Vector2i &rLocation ) const {
@@ -1649,45 +2499,56 @@ void Terrain3DRuntimePageStore::request( const Vector2i &rLocation,
 			!m_pRepository->getRegionPtr( rLocation ) ) {
 		return;
 	}
+	uint16_t consumers = nConsumers;
 	const int ready_index = getPreparedIndex( rLocation );
 	if ( ready_index >= 0 ) {
-		m_preparedPages[( size_t )ready_index].m_nConsumerMask |= nConsumers;
-		return;
+		t3dRuntimePageMeta_t &ready = m_preparedPages[( size_t )( ready_index )];
+		const uint16_t reusable = consumers & ready.m_nMaterializedConsumerMask;
+		ready.m_nConsumerMask |= reusable;
+		consumers &= ( uint16_t )( ~reusable );
+		if ( consumers == 0u ) {
+			return;
+		}
 	}
 	const int map_index = Terrain3DRegionRepository::getRegionMapIndex( rLocation );
 	if ( map_index < 0 ) {
 		return;
 	}
-	if ( m_queuedConsumers[( size_t )( map_index )] == 0u ) {
+	const bool was_empty = m_queuedConsumers[( size_t )( map_index )] == 0u;
+	const uint8_t current_priority = m_queuedPriorities[( size_t )( map_index )];
+	m_queuedConsumers[( size_t )( map_index )] |= consumers;
+	const uint8_t priority = MAX( ( uint8_t )1u, nPriority );
+	if ( was_empty ) {
 		++m_nQueuedCount;
-	}
-	m_queuedConsumers[( size_t )( map_index )] |= nConsumers;
-	const uint8_t priority = MAX( ( uint8_t )( 1u ), nPriority );
-	if ( m_queuedPriorities[( size_t )( map_index )] == 0u || priority < m_queuedPriorities[( size_t )( map_index )] ) {
-		m_queuedPriorities[( size_t )( map_index )] = priority;
+		queueLink( map_index, priority );
+	} else if ( current_priority == 0u || priority < current_priority ) {
+		queueLink( map_index, priority );
 	}
 }
 
 void Terrain3DRuntimePageStore::service( const t3dRuntimePageServiceState_t &rState ) {
 	poll( false );
-	if ( !rState.m_config.m_bCookedPagesEnabled || !m_pRepository ) {
+	if ( !rState.m_config.m_bCookedPagesEnabled || !m_pRepository || !rebuildRuntimeSources( rState ) ) {
 		return;
 	}
 
 	if ( !rState.m_config.m_bEditorAuthoring && rState.m_nStreamingGeneration != m_nStreamingGenerationLast ) {
-		for ( int map_index = 0; map_index < s_nMaxRegionSlots; ++map_index ) {
-			if ( m_queuedConsumers[( size_t )( map_index )] == 0u ) {
-				continue;
-			}
-			const int map_x = map_index % s_nActiveMaxRegionMapSize;
-			const int map_y = map_index / s_nActiveMaxRegionMapSize;
-			const Vector2i location( map_x - s_nActiveMaxRegionMapSize / 2, map_y - s_nActiveMaxRegionMapSize / 2 );
-			const bool wanted = m_pRepository->getRegionPtr( location ) &&
-					( !rState.m_isWanted || rState.m_isWanted( rState.m_pWantedContext, location ) );
-			if ( !wanted ) {
-				m_queuedConsumers[( size_t )( map_index )] = 0u;
-				m_queuedPriorities[( size_t )( map_index )] = 0u;
-				m_nQueuedCount = MAX( 0, m_nQueuedCount - 1 );
+		for ( int priority = 1; priority < 256; ++priority ) {
+			int map_index = m_priorityHeads[( size_t )( priority )];
+			while ( map_index >= 0 ) {
+				const int next = m_queuedNext[( size_t )( map_index )];
+				const int map_x = map_index % s_nActiveMaxRegionMapSize;
+				const int map_y = map_index / s_nActiveMaxRegionMapSize;
+				const Vector2i location(
+						map_x - s_nActiveMaxRegionMapSize / 2, map_y - s_nActiveMaxRegionMapSize / 2 );
+				const bool wanted = m_pRepository->getRegionPtr( location ) &&
+						( !rState.m_isWanted || rState.m_isWanted( rState.m_pWantedContext, location ) );
+				if ( !wanted ) {
+					queueUnlink( map_index );
+					m_queuedConsumers[( size_t )( map_index )] = 0u;
+					m_nQueuedCount = MAX( 0, m_nQueuedCount - 1 );
+				}
+				map_index = next;
 			}
 		}
 		for ( int ready_index = m_nPreparedPageCount - 1; ready_index >= 0; --ready_index ) {
@@ -1700,131 +2561,93 @@ void Terrain3DRuntimePageStore::service( const t3dRuntimePageServiceState_t &rSt
 		}
 	}
 	m_nStreamingGenerationLast = rState.m_nStreamingGeneration;
-	if ( m_bPrepareJobActive || m_nQueuedCount <= 0 ) {
+	if ( m_bPrepareJobActive || m_nQueuedCount <= 0 || m_nFreePayloadCount <= 0 ) {
 		return;
 	}
 
-	const int free_ready_slots = s_nGpuCacheMaxLayers - m_nPreparedPageCount;
-	if ( free_ready_slots <= 0 ) {
-		return;
-	}
-	const int batch_limit = MIN(
-			free_ready_slots, MIN( s_nGpuCacheMaxLayers, MAX( 2, MAX( 1, rState.m_config.m_nPrepareThreads ) * 2 ) ) );
+	const int batch_limit = MIN( m_nFreePayloadCount,
+			MIN( m_nRuntimePayloadLimit, MAX( 2, m_sourceNumericConfig.m_nPrepareThreads * 2 ) ) );
 	m_nPrepareWorkPageCount = 0;
 	while ( m_nPrepareWorkPageCount < batch_limit && m_nQueuedCount > 0 ) {
-		int best_slot = -1;
-		int best_map_index = -1;
-		uint8_t best_priority = UINT8_MAX;
-		int best_distance = INT32_MAX;
-		for ( int slot = 0; slot < m_pRepository->getSlotCount(); ++slot ) {
-			const Vector2i location = m_pRepository->getSlotsData()[slot];
-			if ( location == s_v2iMax ) {
-				continue;
-			}
-			const int map_index = Terrain3DRegionRepository::getRegionMapIndex( location );
-			if ( map_index < 0 || m_queuedConsumers[( size_t )( map_index )] == 0u || isPending( location ) ) {
-				continue;
-			}
-			Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
-			if ( !pRegion || pRegion->isDeleted() || !pRegion->runtimeMapsEvictableInternal() ) {
-				m_queuedConsumers[( size_t )( map_index )] = 0u;
-				m_queuedPriorities[( size_t )( map_index )] = 0u;
-				m_nQueuedCount = MAX( 0, m_nQueuedCount - 1 );
-				continue;
-			}
-			const uint8_t priority = m_queuedPriorities[( size_t )( map_index )];
-			const int distance = MAX( Math::abs( location.x - rState.m_predictedCenter.x ),
-					Math::abs( location.y - rState.m_predictedCenter.y ) );
-			if ( priority < best_priority || ( priority == best_priority && distance < best_distance ) ||
-					( priority == best_priority && distance == best_distance && map_index < best_map_index ) ) {
-				best_slot = slot;
-				best_map_index = map_index;
-				best_priority = priority;
-				best_distance = distance;
-			}
-		}
-		if ( best_slot < 0 || best_map_index < 0 ) {
+		const int map_index = popBestQueued( rState.m_predictedCenter );
+		if ( map_index < 0 ) {
 			break;
 		}
-
-		const Vector2i location = m_pRepository->getSlotsData()[best_slot];
+		const int map_x = map_index % s_nActiveMaxRegionMapSize;
+		const int map_y = map_index / s_nActiveMaxRegionMapSize;
+		const Vector2i location( map_x - s_nActiveMaxRegionMapSize / 2, map_y - s_nActiveMaxRegionMapSize / 2 );
+		const t3dRuntimePageSource_t &source = m_pageSources[( size_t )( map_index )];
 		Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
+		if ( !source.m_bPresent || !pRegion || pRegion->isDeleted() || !pRegion->runtimeMapsEvictableInternal() ||
+				getWorkIndex( location ) >= 0 ) {
+			m_queuedConsumers[( size_t )( map_index )] = 0u;
+			m_nQueuedCount = MAX( 0, m_nQueuedCount - 1 );
+			continue;
+		}
+		const int payload_slot = acquirePayloadSlot();
+		if ( payload_slot < 0 ) {
+			queueLink( map_index, 1u );
+			break;
+		}
 		const int work_index = m_nPrepareWorkPageCount++;
-		t3dRuntimePreparedPage_t &page = m_workPages[( size_t )work_index];
-		page = t3dRuntimePreparedPage_t{};
-		page.m_location = location;
-		m_workByRegion[( size_t )best_map_index] = ( int16_t )work_index;
-		page.m_pagePath = getPagePath( pRegion, rState.m_config.m_dataDirectory );
-		page.m_sourcePath = pRegion->get_path();
-		page.m_nExpectedChannelFlags = ( uint32_t )( pRegion->getChannelFlags() );
-		page.m_nExpectedSourceSignature = pRegion->getCookedPageSourceSignatureInternal();
-		page.m_nRegionSize = m_pRepository->getRegionSize();
-		page.m_nColorDivisor = MAX( 1, rState.m_config.m_nColorDivisor );
-		page.m_nDerivedDivisor = MAX( 1, rState.m_config.m_nDerivedDivisor );
-		page.m_nMiddleHeightDivisor = MAX( 1, rState.m_config.m_nMiddleHeightDivisor );
-		page.m_nConsumerMask = m_queuedConsumers[( size_t )( best_map_index )];
-		page.m_bEditorAuthoring = rState.m_config.m_bEditorAuthoring;
+		t3dRuntimePageMeta_t &meta = m_workPages[( size_t )( work_index )];
+		t3dRuntimePageStoreResetMeta( meta );
+		meta.m_location = location;
+		meta.m_iSourceIndex = ( int16_t )map_index;
+		meta.m_iPayloadSlot = ( int16_t )payload_slot;
+		meta.m_nExpectedChannelFlags = source.m_nExpectedChannelFlags;
+		meta.m_nExpectedSourceSignature = source.m_nExpectedSourceSignature;
+		meta.m_nRegionSize = m_pRepository->getRegionSize();
+		meta.m_nColorDivisor = m_sourceNumericConfig.m_nColorDivisor;
+		meta.m_nDerivedDivisor = m_sourceNumericConfig.m_nDerivedDivisor;
+		meta.m_nMiddleHeightDivisor = m_sourceNumericConfig.m_nMiddleHeightDivisor;
+		meta.m_nConsumerMask = m_queuedConsumers[( size_t )( map_index )];
+		meta.m_bEditorAuthoring = rState.m_config.m_bEditorAuthoring;
 		Time *const pTime = Time::get_singleton();
-		page.m_nRequestedUsec = pTime ? pTime->get_ticks_usec() : 0u;
-		m_queuedConsumers[( size_t )( best_map_index )] = 0u;
-		m_queuedPriorities[( size_t )( best_map_index )] = 0u;
+		meta.m_nRequestedUsec = pTime ? pTime->get_ticks_usec() : 0u;
+		m_workByRegion[( size_t )( map_index )] = ( int16_t )work_index;
+		m_queuedConsumers[( size_t )( map_index )] = 0u;
 		m_nQueuedCount = MAX( 0, m_nQueuedCount - 1 );
 	}
 	if ( m_nPrepareWorkPageCount <= 0 ) {
 		return;
 	}
 
-	m_nPrepareJobWorkers = MIN( m_nPrepareWorkPageCount, MAX( 1, rState.m_config.m_nPrepareThreads ) );
-	m_prepareContext.m_pPages = m_workPages.data();
-	m_prepareContext.m_nPageCount = m_nPrepareWorkPageCount;
+	m_nPrepareJobWorkers = MIN( m_nPrepareWorkPageCount, m_nWorkerThreadCount );
 	Time *const pTime = Time::get_singleton();
 	m_nPrepareJobStartedUsec = pTime ? pTime->get_ticks_usec() : 0u;
-	WorkerThreadPool *const pool = WorkerThreadPool::get_singleton();
-	if ( !pool ) {
+	{
+		std::lock_guard<std::mutex> lock( m_workerMutex );
 		for ( int index = 0; index < m_nPrepareWorkPageCount; ++index ) {
-			prepareTask( &m_prepareContext, ( uint32_t )( index ) );
+			m_workRing[( size_t )( m_iWorkWrite )] = ( int16_t )index;
+			m_iWorkWrite = ( m_iWorkWrite + 1 ) % s_nGpuCacheMaxLayers;
+			++m_nWorkRingCount;
 		}
-		m_bPrepareJobActive = true;
-		m_nPrepareGroupId = WorkerThreadPool::INVALID_TASK_ID;
-		poll( true );
-		return;
-	}
-	m_nPrepareGroupId = pool->add_native_group_task( &prepareTask,
-			&m_prepareContext,
-			m_nPrepareWorkPageCount,
-			m_nPrepareJobWorkers,
-			false,
-			"Terrain3D cooked page preparation" );
-	if ( m_nPrepareGroupId == WorkerThreadPool::INVALID_TASK_ID ) {
-		for ( int index = 0; index < m_nPrepareWorkPageCount; ++index ) {
-			prepareTask( &m_prepareContext, ( uint32_t )( index ) );
-		}
-		m_bPrepareJobActive = true;
-		poll( true );
-		return;
 	}
 	m_bPrepareJobActive = true;
+	m_workerWake.notify_all();
 }
 
 void Terrain3DRuntimePageStore::consumePreparedIndex( const int nIndex ) {
 	if ( nIndex < 0 || nIndex >= m_nPreparedPageCount ) {
 		return;
 	}
-	const int removed_map_index =
-			Terrain3DRegionRepository::getRegionMapIndex( m_preparedPages[( size_t )nIndex].m_location );
+	t3dRuntimePageMeta_t &removed = m_preparedPages[( size_t )( nIndex )];
+	const int removed_map_index = Terrain3DRegionRepository::getRegionMapIndex( removed.m_location );
 	if ( removed_map_index >= 0 ) {
-		m_preparedByRegion[( size_t )removed_map_index] = ( int16_t )-1;
+		m_preparedByRegion[( size_t )( removed_map_index )] = ( int16_t )-1;
 	}
+	releasePayloadSlot( removed.m_iPayloadSlot );
 	const int last = m_nPreparedPageCount - 1;
 	if ( nIndex != last ) {
-		m_preparedPages[( size_t )nIndex] = std::move( m_preparedPages[( size_t )last] );
+		m_preparedPages[( size_t )( nIndex )] = m_preparedPages[( size_t )( last )];
 		const int moved_map_index =
-				Terrain3DRegionRepository::getRegionMapIndex( m_preparedPages[( size_t )nIndex].m_location );
+				Terrain3DRegionRepository::getRegionMapIndex( m_preparedPages[( size_t )( nIndex )].m_location );
 		if ( moved_map_index >= 0 ) {
-			m_preparedByRegion[( size_t )moved_map_index] = ( int16_t )nIndex;
+			m_preparedByRegion[( size_t )( moved_map_index )] = ( int16_t )nIndex;
 		}
 	}
-	m_preparedPages[( size_t )last] = t3dRuntimePreparedPage_t{};
+	t3dRuntimePageStoreResetMeta( m_preparedPages[( size_t )( last )] );
 	--m_nPreparedPageCount;
 }
 
@@ -1842,21 +2665,23 @@ bool Terrain3DRuntimePageStore::takeHeight( const Vector2i &rLocation,
 	if ( index < 0 ) {
 		return false;
 	}
-	t3dRuntimePreparedPage_t &page = m_preparedPages[( size_t )index];
-	if ( ( page.m_nConsumerMask & nConsumer ) == 0u ) {
+	t3dRuntimePageMeta_t &meta = m_preparedPages[( size_t )( index )];
+	if ( ( meta.m_nConsumerMask & nConsumer ) == 0u || meta.m_iPayloadSlot < 0 ) {
 		return false;
 	}
-	if ( page.m_bLoaded ) {
-		rHeight = bMiddle ? page.m_middleHeight : page.m_height;
+	t3dRuntimePagePayload_t &payload = m_payloadSlots[( size_t )( meta.m_iPayloadSlot )];
+	const bool page_loaded = ( meta.m_nLoadedConsumerMask & nConsumer ) != 0u;
+	if ( page_loaded ) {
+		rHeight = bMiddle ? payload.m_middleHeight : payload.m_height;
 		if ( pNativeHeightBytes && !bMiddle ) {
-			*pNativeHeightBytes = page.m_heightBytes;
+			*pNativeHeightBytes = payload.m_heightBytes;
 		}
 	}
-	page.m_nConsumerMask &= ( uint16_t )( ~nConsumer );
-	const bool loaded = page.m_bLoaded &&
+	meta.m_nConsumerMask &= ( uint16_t )( ~nConsumer );
+	const bool loaded = page_loaded &&
 			( bMiddle ? rHeight.is_valid()
 					  : ( rHeight.is_valid() || ( pNativeHeightBytes && !pNativeHeightBytes->is_empty() ) ) );
-	if ( page.m_nConsumerMask == 0u ) {
+	if ( meta.m_nConsumerMask == 0u ) {
 		consumePreparedIndex( index );
 	}
 	return loaded;
@@ -1871,22 +2696,34 @@ bool Terrain3DRuntimePageStore::takeInstance( const Vector2i &rLocation,
 	if ( index < 0 ) {
 		return false;
 	}
-	t3dRuntimePreparedPage_t &page = m_preparedPages[( size_t )index];
-	if ( ( page.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_INSTANCE_STORE ) == 0u ) {
+	t3dRuntimePageMeta_t &meta = m_preparedPages[( size_t )( index )];
+	if ( ( meta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_INSTANCE_STORE ) == 0u || meta.m_iPayloadSlot < 0 ) {
 		return false;
 	}
-	const bool loaded = page.m_bInstanceAttempted && page.m_bInstanceLoaded;
+	t3dRuntimePagePayload_t &payload = m_payloadSlots[( size_t )( meta.m_iPayloadSlot )];
+	const bool loaded = ( meta.m_nLoadedConsumerMask & RUNTIME_PAGE_CONSUMER_INSTANCE_STORE ) != 0u &&
+			meta.m_bInstanceLoaded;
 	if ( loaded ) {
-		rStore = eastl::move( page.m_preparedInstanceStore );
+		Terrain3DInstanceStore previous = eastl::move( rStore );
+		rStore = eastl::move( payload.m_preparedInstanceStore );
+		payload.m_preparedInstanceStore = eastl::move( previous );
 		if ( pInstanceMetadata ) {
-			*pInstanceMetadata = page.m_instanceMetadata;
+			if ( payload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_INSTANCE_METADATA] > 0u ) {
+				*pInstanceMetadata = payload.m_instanceMetadata;
+			} else {
+				pInstanceMetadata->clear();
+			}
 		}
 		if ( pMultimeshFastStart ) {
-			*pMultimeshFastStart = page.m_multimeshFastStart;
+			if ( payload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_MULTIMESH_FAST_START] > 0u ) {
+				*pMultimeshFastStart = payload.m_multimeshFastStart;
+			} else {
+				pMultimeshFastStart->clear();
+			}
 		}
 	}
-	page.m_nConsumerMask &= ( uint16_t )( ~RUNTIME_PAGE_CONSUMER_INSTANCE_STORE );
-	if ( page.m_nConsumerMask == 0u ) {
+	meta.m_nConsumerMask &= ( uint16_t )( ~RUNTIME_PAGE_CONSUMER_INSTANCE_STORE );
+	if ( meta.m_nConsumerMask == 0u ) {
 		consumePreparedIndex( index );
 	}
 	return loaded;
@@ -1906,19 +2743,21 @@ bool Terrain3DRuntimePageStore::takeCpuMaps( const Vector2i &rLocation,
 	if ( index < 0 ) {
 		return false;
 	}
-	t3dRuntimePreparedPage_t &page = m_preparedPages[( size_t )index];
-	if ( ( page.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_CPU_MAPS ) == 0u ) {
+	t3dRuntimePageMeta_t &meta = m_preparedPages[( size_t )( index )];
+	if ( ( meta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_CPU_MAPS ) == 0u || meta.m_iPayloadSlot < 0 ) {
 		return false;
 	}
-	if ( page.m_bLoaded ) {
-		rHeight = page.m_height;
-		rControl = page.m_control;
-		rColor = page.m_color;
-		rDerived = page.m_derived;
+	t3dRuntimePagePayload_t &payload = m_payloadSlots[( size_t )( meta.m_iPayloadSlot )];
+	const bool page_loaded = ( meta.m_nLoadedConsumerMask & RUNTIME_PAGE_CONSUMER_CPU_MAPS ) != 0u;
+	if ( page_loaded ) {
+		rHeight = payload.m_height;
+		rControl = payload.m_control;
+		rColor = payload.m_color;
+		rDerived = payload.m_derived;
 	}
-	const bool loaded = page.m_bLoaded && rHeight.is_valid() && rDerived.is_valid();
-	page.m_nConsumerMask &= ( uint16_t )( ~RUNTIME_PAGE_CONSUMER_CPU_MAPS );
-	if ( page.m_nConsumerMask == 0u ) {
+	const bool loaded = page_loaded && rHeight.is_valid() && rDerived.is_valid();
+	meta.m_nConsumerMask &= ( uint16_t )( ~RUNTIME_PAGE_CONSUMER_CPU_MAPS );
+	if ( meta.m_nConsumerMask == 0u ) {
 		consumePreparedIndex( index );
 	}
 	return loaded;
@@ -1931,16 +2770,17 @@ bool Terrain3DRuntimePageStore::takeNodeDescriptors( const Vector2i &rLocation, 
 	if ( index < 0 ) {
 		return false;
 	}
-	t3dRuntimePreparedPage_t &page = m_preparedPages[( size_t )index];
-	if ( ( page.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_NODE_DESCRIPTORS ) == 0u ) {
+	t3dRuntimePageMeta_t &meta = m_preparedPages[( size_t )( index )];
+	if ( ( meta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_NODE_DESCRIPTORS ) == 0u || meta.m_iPayloadSlot < 0 ) {
 		return false;
 	}
-	if ( page.m_bLoaded ) {
-		rDescriptors = page.m_nodeDescriptors;
+	t3dRuntimePagePayload_t &payload = m_payloadSlots[( size_t )( meta.m_iPayloadSlot )];
+	const bool loaded = ( meta.m_nLoadedConsumerMask & RUNTIME_PAGE_CONSUMER_NODE_DESCRIPTORS ) != 0u;
+	if ( loaded && payload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_NODE_DESCRIPTORS] > 0u ) {
+		rDescriptors = payload.m_nodeDescriptors;
 	}
-	const bool loaded = page.m_bLoaded && ( !rDescriptors.is_empty() || page.m_nodeDescriptors.is_empty() );
-	page.m_nConsumerMask &= ( uint16_t )( ~RUNTIME_PAGE_CONSUMER_NODE_DESCRIPTORS );
-	if ( page.m_nConsumerMask == 0u ) {
+	meta.m_nConsumerMask &= ( uint16_t )( ~RUNTIME_PAGE_CONSUMER_NODE_DESCRIPTORS );
+	if ( meta.m_nConsumerMask == 0u ) {
 		consumePreparedIndex( index );
 	}
 	return loaded;
@@ -1958,18 +2798,20 @@ bool Terrain3DRuntimePageStore::takeCollision( const Vector2i &rLocation,
 	if ( index < 0 ) {
 		return false;
 	}
-	t3dRuntimePreparedPage_t &page = m_preparedPages[( size_t )index];
-	if ( ( page.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_COLLISION ) == 0u ) {
+	t3dRuntimePageMeta_t &meta = m_preparedPages[( size_t )( index )];
+	if ( ( meta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_COLLISION ) == 0u || meta.m_iPayloadSlot < 0 ) {
 		return false;
 	}
-	if ( page.m_bLoaded ) {
-		rHeight = page.m_collisionHeight;
-		rBounds = page.m_collisionBounds;
-		rHoleMask = page.m_holeMask;
+	t3dRuntimePagePayload_t &payload = m_payloadSlots[( size_t )( meta.m_iPayloadSlot )];
+	const bool page_loaded = ( meta.m_nLoadedConsumerMask & RUNTIME_PAGE_CONSUMER_COLLISION ) != 0u;
+	if ( page_loaded ) {
+		rHeight = payload.m_collisionHeight;
+		rBounds = payload.m_collisionBounds;
+		rHoleMask = payload.m_holeMask;
 	}
-	const bool loaded = page.m_bLoaded && !rHeight.is_empty() && !rBounds.is_empty() && !rHoleMask.is_empty();
-	page.m_nConsumerMask &= ( uint16_t )( ~RUNTIME_PAGE_CONSUMER_COLLISION );
-	if ( page.m_nConsumerMask == 0u ) {
+	const bool loaded = page_loaded && !rHeight.is_empty() && !rBounds.is_empty() && !rHoleMask.is_empty();
+	meta.m_nConsumerMask &= ( uint16_t )( ~RUNTIME_PAGE_CONSUMER_COLLISION );
+	if ( meta.m_nConsumerMask == 0u ) {
 		consumePreparedIndex( index );
 	}
 	return loaded;
@@ -1982,16 +2824,18 @@ bool Terrain3DRuntimePageStore::takeNavigation( const Vector2i &rLocation, Packe
 	if ( index < 0 ) {
 		return false;
 	}
-	t3dRuntimePreparedPage_t &page = m_preparedPages[( size_t )index];
-	if ( ( page.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_NAVIGATION ) == 0u ) {
+	t3dRuntimePageMeta_t &meta = m_preparedPages[( size_t )( index )];
+	if ( ( meta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_NAVIGATION ) == 0u || meta.m_iPayloadSlot < 0 ) {
 		return false;
 	}
-	if ( page.m_bLoaded ) {
-		rNavigation = page.m_navigation;
+	t3dRuntimePagePayload_t &payload = m_payloadSlots[( size_t )( meta.m_iPayloadSlot )];
+	const bool page_loaded = ( meta.m_nLoadedConsumerMask & RUNTIME_PAGE_CONSUMER_NAVIGATION ) != 0u;
+	if ( page_loaded ) {
+		rNavigation = payload.m_navigation;
 	}
-	const bool loaded = page.m_bLoaded && !rNavigation.is_empty();
-	page.m_nConsumerMask &= ( uint16_t )( ~RUNTIME_PAGE_CONSUMER_NAVIGATION );
-	if ( page.m_nConsumerMask == 0u ) {
+	const bool loaded = page_loaded && !rNavigation.is_empty();
+	meta.m_nConsumerMask &= ( uint16_t )( ~RUNTIME_PAGE_CONSUMER_NAVIGATION );
+	if ( meta.m_nConsumerMask == 0u ) {
 		consumePreparedIndex( index );
 	}
 	return loaded;
@@ -2004,16 +2848,18 @@ bool Terrain3DRuntimePageStore::takeTerrainShadowMask( const Vector2i &rLocation
 	if ( index < 0 ) {
 		return false;
 	}
-	t3dRuntimePreparedPage_t &page = m_preparedPages[( size_t )index];
-	if ( ( page.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_TERRAIN_SHADOW ) == 0u ) {
+	t3dRuntimePageMeta_t &meta = m_preparedPages[( size_t )( index )];
+	if ( ( meta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_TERRAIN_SHADOW ) == 0u || meta.m_iPayloadSlot < 0 ) {
 		return false;
 	}
-	if ( page.m_bLoaded ) {
-		rShadowMask = page.m_terrainShadowMask;
+	t3dRuntimePagePayload_t &payload = m_payloadSlots[( size_t )( meta.m_iPayloadSlot )];
+	const bool page_loaded = ( meta.m_nLoadedConsumerMask & RUNTIME_PAGE_CONSUMER_TERRAIN_SHADOW ) != 0u;
+	if ( page_loaded ) {
+		rShadowMask = payload.m_terrainShadowMask;
 	}
-	const bool loaded = page.m_bLoaded && rShadowMask.is_valid() && !rShadowMask->is_empty();
-	page.m_nConsumerMask &= ( uint16_t )( ~RUNTIME_PAGE_CONSUMER_TERRAIN_SHADOW );
-	if ( page.m_nConsumerMask == 0u ) {
+	const bool loaded = page_loaded && rShadowMask.is_valid() && !rShadowMask->is_empty();
+	meta.m_nConsumerMask &= ( uint16_t )( ~RUNTIME_PAGE_CONSUMER_TERRAIN_SHADOW );
+	if ( meta.m_nConsumerMask == 0u ) {
 		consumePreparedIndex( index );
 	}
 	return loaded;
@@ -2038,30 +2884,31 @@ bool Terrain3DRuntimePageStore::takeGpuPage( const Vector2i &rLocation,
 	if ( index < 0 ) {
 		return false;
 	}
-	t3dRuntimePreparedPage_t &page = m_preparedPages[( size_t )index];
-	if ( ( page.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_GPU_DETAIL ) == 0u ) {
+	t3dRuntimePageMeta_t &meta = m_preparedPages[( size_t )( index )];
+	if ( ( meta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_GPU_DETAIL ) == 0u || meta.m_iPayloadSlot < 0 ) {
 		return false;
 	}
-	bAttempted = page.m_bAttempted;
+	t3dRuntimePagePayload_t &payload = m_payloadSlots[( size_t )( meta.m_iPayloadSlot )];
+	bAttempted = ( meta.m_nAttemptedConsumerMask & RUNTIME_PAGE_CONSUMER_GPU_DETAIL ) != 0u;
 	if ( pRequestedUsec ) {
-		*pRequestedUsec = page.m_nRequestedUsec;
+		*pRequestedUsec = meta.m_nRequestedUsec;
 	}
 	Time *const pTime = Time::get_singleton();
-	const uint64_t consumed_usec = pTime ? pTime->get_ticks_usec() : page.m_nWorkerFinishedUsec;
-	if ( page.m_nWorkerFinishedUsec > 0u && consumed_usec >= page.m_nWorkerFinishedUsec ) {
-		m_nPrepareReadyWaitUsecLast = MAX( m_nPrepareReadyWaitUsecLast, consumed_usec - page.m_nWorkerFinishedUsec );
+	const uint64_t consumed_usec = pTime ? pTime->get_ticks_usec() : meta.m_nWorkerFinishedUsec;
+	if ( meta.m_nWorkerFinishedUsec > 0u && consumed_usec >= meta.m_nWorkerFinishedUsec ) {
+		m_nPrepareReadyWaitUsecLast = MAX( m_nPrepareReadyWaitUsecLast, consumed_usec - meta.m_nWorkerFinishedUsec );
 	}
-	if ( page.m_bLoaded ) {
-		rHeight = page.m_height;
-		rControl = page.m_control;
-		rColor = page.m_color;
-		rDerived = page.m_derived;
-		rMiddleComposite = page.m_middleComposite;
-		rMaterialMask = page.m_nMaterialMask;
+	const bool loaded = ( meta.m_nLoadedConsumerMask & RUNTIME_PAGE_CONSUMER_GPU_DETAIL ) != 0u;
+	if ( loaded ) {
+		rHeight = payload.m_height;
+		rControl = payload.m_control;
+		rColor = payload.m_color;
+		rDerived = payload.m_derived;
+		rMiddleComposite = payload.m_middleComposite;
+		rMaterialMask = meta.m_nMaterialMask;
 	}
-	const bool loaded = page.m_bLoaded;
-	page.m_nConsumerMask &= ( uint16_t )( ~RUNTIME_PAGE_CONSUMER_GPU_DETAIL );
-	if ( page.m_nConsumerMask == 0u ) {
+	meta.m_nConsumerMask &= ( uint16_t )( ~RUNTIME_PAGE_CONSUMER_GPU_DETAIL );
+	if ( meta.m_nConsumerMask == 0u ) {
 		consumePreparedIndex( index );
 	}
 	return loaded;

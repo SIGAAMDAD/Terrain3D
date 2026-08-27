@@ -7,13 +7,16 @@
 
 #include "Terrain3DConstants.h"
 #include "eastl_config.h"
+#include "data/terrain_3d_runtime_page_constants.h"
 #include "instances/terrain_3d_instance_store.h"
 
 #include <EASTL/array.h>
 #include <EASTL/vector.h>
 #include <cstddef>
 #include <cstdint>
-#include <godot_cpp/classes/worker_thread_pool.hpp>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
 #include <godot_cpp/variant/packed_string_array.hpp>
 #include <godot_cpp/variant/string.hpp>
 
@@ -115,10 +118,10 @@ typedef struct t3dRuntimePageServiceState_s {
 // requests, worker preparation, and prepared-page lifetime. Residency consumers
 // decide which locations they want; this store performs one physical page read
 // that can satisfy all consumers of that location.
-typedef struct t3dRuntimePreparedPage_s {
+typedef struct t3dRuntimePageMeta_s {
 	Vector2i m_location = s_v2iMax;
-	String m_pagePath;
-	String m_sourcePath;
+	int16_t m_iSourceIndex = -1;
+	int16_t m_iPayloadSlot = -1;
 	uint32_t m_nExpectedChannelFlags = 0u;
 	uint64_t m_nExpectedSourceSignature = 0u;
 	int m_nRegionSize = 0;
@@ -127,7 +130,33 @@ typedef struct t3dRuntimePreparedPage_s {
 	int m_nMiddleHeightDivisor = 1;
 	uint32_t m_nMaterialMask = 1u;
 	uint16_t m_nConsumerMask = 0u;
+	uint16_t m_nAttemptedConsumerMask = 0u;
+	uint16_t m_nMaterializedConsumerMask = 0u;
+	uint16_t m_nLoadedConsumerMask = 0u;
+	uint64_t m_nRequestedUsec = 0u;
+	uint64_t m_nWorkerStartedUsec = 0u;
+	uint64_t m_nFileOpenUsec = 0u;
+	uint64_t m_nFileReadUsec = 0u;
+	uint64_t m_nValidationUsec = 0u;
+	uint64_t m_nMaterializeUsec = 0u;
+	uint64_t m_nWorkerFinishedUsec = 0u;
+	bool m_bAttempted = false;
+	bool m_bLoaded = false;
+	bool m_bInstanceAttempted = false;
+	bool m_bInstanceLoaded = false;
+	bool m_bLoadMinMax = false;
+	bool m_bEditorAuthoring = false;
+} t3dRuntimePageMeta_t;
+
+typedef struct t3dRuntimePagePayload_s {
+	uint32_t m_szLogicalBytes[s_nRuntimePageChannelCount + 1u] = {};
 	PackedByteArray m_heightBytes;
+	PackedByteArray m_controlBytes;
+	PackedByteArray m_colorBytes;
+	PackedByteArray m_derivedBytes;
+	PackedByteArray m_middleHeightBytes;
+	PackedByteArray m_middleCompositeBytes;
+	PackedByteArray m_terrainShadowMaskBytes;
 	Ref<Image> m_height;
 	Ref<Image> m_control;
 	Ref<Image> m_color;
@@ -146,25 +175,19 @@ typedef struct t3dRuntimePreparedPage_s {
 	PackedByteArray m_lightingReceivers;
 	PackedByteArray m_multimeshFastStart;
 	Terrain3DInstanceStore m_preparedInstanceStore;
-	uint64_t m_nRequestedUsec = 0u;
-	uint64_t m_nWorkerStartedUsec = 0u;
-	uint64_t m_nFileOpenUsec = 0u;
-	uint64_t m_nFileReadUsec = 0u;
-	uint64_t m_nValidationUsec = 0u;
-	uint64_t m_nMaterializeUsec = 0u;
-	uint64_t m_nWorkerFinishedUsec = 0u;
-	bool m_bAttempted = false;
-	bool m_bLoaded = false;
-	bool m_bInstanceAttempted = false;
-	bool m_bInstanceLoaded = false;
-	bool m_bLoadMinMax = false;
-	bool m_bEditorAuthoring = false;
-} t3dRuntimePreparedPage_t;
+} t3dRuntimePagePayload_t;
 
-typedef struct t3dRuntimePrepareJobContext_s {
-	t3dRuntimePreparedPage_t *m_pPages = nullptr;
-	int m_nPageCount = 0;
-} t3dRuntimePrepareJobContext_t;
+typedef struct t3dRuntimePageSource_s {
+	String m_pagePath;
+	String m_sourcePath;
+	uint32_t m_nExpectedChannelFlags = 0u;
+	uint64_t m_nExpectedSourceSignature = 0u;
+	bool m_bPresent = false;
+} t3dRuntimePageSource_t;
+
+typedef struct t3dRuntimePageWorkerScratch_s {
+	PackedByteArray m_ioBytes;
+} t3dRuntimePageWorkerScratch_t;
 
 class Terrain3DRuntimePageStore {
 public:
@@ -272,14 +295,18 @@ public:
 private:
 	Terrain3DRegionRepository *m_pRepository = nullptr;
 	const Terrain3DRegionPersistence *m_pPersistence = nullptr;
-	eastl::array<t3dRuntimePreparedPage_t, s_nGpuCacheMaxLayers> m_preparedPages{};
-	eastl::array<t3dRuntimePreparedPage_t, s_nGpuCacheMaxLayers> m_workPages{};
+	eastl::array<t3dRuntimePageMeta_t, s_nGpuCacheMaxLayers> m_preparedPages{};
+	eastl::array<t3dRuntimePageMeta_t, s_nGpuCacheMaxLayers> m_workPages{};
+	eastl::array<t3dRuntimePagePayload_t, s_nGpuCacheMaxLayers> m_payloadSlots{};
+	eastl::array<int16_t, s_nGpuCacheMaxLayers> m_freePayloadSlots{};
+	eastl::array<t3dRuntimePageSource_t, s_nMaxRegionSlots> m_pageSources{};
+	eastl::array<uint32_t, s_nRuntimePageChannelCount + 1u> m_runtimeChannelCapacities{};
 	eastl::array<int16_t, s_nMaxRegionSlots> m_preparedByRegion{};
 	eastl::array<int16_t, s_nMaxRegionSlots> m_workByRegion{};
-	t3dRuntimePrepareJobContext_t m_prepareContext;
 	int m_nPreparedPageCount = 0;
 	int m_nPrepareWorkPageCount = 0;
-	int64_t m_nPrepareGroupId = godot::WorkerThreadPool::INVALID_TASK_ID;
+	int m_nFreePayloadCount = 0;
+	int m_nRuntimePayloadLimit = s_nGpuCacheRuntimeMaxLayers;
 	bool m_bPrepareJobActive = false;
 	uint64_t m_nPrepareJobStartedUsec = 0u;
 	uint64_t m_nPrepareLatencyUsecLast = 0u;
@@ -293,14 +320,57 @@ private:
 	int m_nPrepareJobWorkers = 0;
 	eastl::array<uint16_t, s_nMaxRegionSlots> m_queuedConsumers{};
 	eastl::array<uint8_t, s_nMaxRegionSlots> m_queuedPriorities{};
+	eastl::array<int16_t, s_nMaxRegionSlots> m_queuedNext{};
+	eastl::array<int16_t, s_nMaxRegionSlots> m_queuedPrev{};
+	eastl::array<int16_t, 256> m_priorityHeads{};
+	eastl::array<int16_t, 256> m_priorityTails{};
 	int m_nQueuedCount = 0;
 	uint64_t m_nStreamingGenerationLast = 0u;
+	uint64_t m_nSourceTopologyGeneration = 0u;
+	String m_sourceDataDirectory;
+	t3dRuntimePageNumericConfig_t m_sourceNumericConfig;
+	bool m_bSourceEditorAuthoring = false;
+	uint32_t m_nWorkerScratchBytes = s_nRuntimePageHeaderBytes;
+
+	static constexpr int s_nRuntimeWorkerLimit = 32;
+	eastl::array<std::thread, s_nRuntimeWorkerLimit> m_workers;
+	eastl::array<t3dRuntimePageWorkerScratch_t, s_nRuntimeWorkerLimit> m_workerScratch{};
+	eastl::array<int16_t, s_nGpuCacheMaxLayers> m_workRing{};
+	eastl::array<int16_t, s_nGpuCacheMaxLayers> m_completionRing{};
+	int m_iWorkRead = 0;
+	int m_iWorkWrite = 0;
+	int m_nWorkRingCount = 0;
+	int m_iCompletionRead = 0;
+	int m_iCompletionWrite = 0;
+	int m_nCompletionRingCount = 0;
+	int m_nWorkerThreadCount = 0;
+	bool m_bWorkersStop = false;
+	mutable std::mutex m_workerMutex;
+	std::condition_variable m_workerWake;
+	std::condition_variable m_completionWake;
 
 	int getPreparedIndex( const Vector2i &rLocation ) const;
 	int getWorkIndex( const Vector2i &rLocation ) const;
 	bool loadSourceRegion( const Vector2i &rLocation, Ref<Terrain3DRegion> &rSource ) const;
-	static bool loadSnapshot( t3dRuntimePreparedPage_t &rPage, bool bPreserveMaterialized = false );
-	static void prepareTask( void *pContext, uint32_t iIndex );
+	bool loadSnapshot( t3dRuntimePageMeta_t &rMeta,
+			t3dRuntimePagePayload_t &rPayload,
+			t3dRuntimePageWorkerScratch_t &rScratch,
+			const t3dRuntimePageSource_t &rSource,
+			bool bPreserveMaterialized = false ) const;
+	void prepareWorkIndex( int nWorkIndex, int nWorkerIndex );
+	void workerMain( int nWorkerIndex );
+	void startWorkers( int nWorkerCount );
+	void stopWorkers( void );
+	bool rebuildRuntimeSources( const t3dRuntimePageServiceState_t &rState );
+	void queueLink( int nMapIndex, uint8_t nPriority );
+	void queueUnlink( int nMapIndex );
+	int popBestQueued( const Vector2i &rPredictedCenter );
+	int acquirePayloadSlot( void );
+	void releasePayloadSlot( int nPayloadSlot );
+	void mergePreparedPayload( t3dRuntimePageMeta_t &rDestinationMeta,
+			t3dRuntimePagePayload_t &rDestinationPayload,
+			const t3dRuntimePageMeta_t &rSourceMeta,
+			t3dRuntimePagePayload_t &rSourcePayload );
 	void consumePreparedIndex( int nIndex );
 };
 

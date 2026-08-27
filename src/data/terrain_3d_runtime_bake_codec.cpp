@@ -188,8 +188,9 @@ bool Terrain3DRuntimeBakeCodec::getNavigationMaskView( const PackedByteArray &rB
 	const uint16_t width = t3dRuntimeBakeCodecReadU16( p + 6 );
 	const uint32_t samples = t3dRuntimeBakeCodecReadU32( p + 8 );
 	const uint32_t plane = t3dRuntimeBakeCodecReadU32( p + 12 );
+	const int64_t required_bytes = 16 + ( int64_t )plane * 2;
 	if ( width == 0u || samples != ( uint32_t )width * width || plane != ( samples + 7u ) / 8u ||
-			rBlob.size() != 16 + ( int64_t )plane * 2 ) {
+			rBlob.size() < required_bytes ) {
 		return false;
 	}
 	rView.m_pValidBits = p + 16;
@@ -446,7 +447,7 @@ bool Terrain3DRuntimeBakeCodec::decodeCollisionHeight( const PackedByteArray &rB
 	}
 	nWidth = t3dRuntimeBakeCodecReadU16( p + 6 );
 	const uint32_t count = t3dRuntimeBakeCodecReadU32( p + 8 );
-	if ( nWidth <= 0 || count != ( uint32_t )nWidth * nWidth || rBlob.size() != 12 + ( int64_t )count * 4 ) {
+	if ( nWidth <= 0 || count != ( uint32_t )nWidth * nWidth || rBlob.size() < 12 + ( int64_t )count * 4 ) {
 		nWidth = 0;
 		return false;
 	}
@@ -460,7 +461,7 @@ bool Terrain3DRuntimeBakeCodec::decodeCollisionBounds( const PackedByteArray &rB
 		float &fMinHeight,
 		float &fMaxHeight,
 		int &nWidth ) {
-	if ( rBlob.size() != 16 ) {
+	if ( rBlob.size() < 16 ) {
 		return false;
 	}
 	const uint8_t *p = rBlob.ptr();
@@ -621,9 +622,6 @@ bool Terrain3DRuntimeBakeCodec::decodeNodeDescriptors( const PackedByteArray &rB
 		offset += state_bytes;
 		nodes.push_back( node );
 	}
-	if ( offset != ( size_t )rBlob.size() ) {
-		return false;
-	}
 	rRegion.adoptCookedStreamedNodeRuntimeInternal( eastl::move( nodes ) );
 	return true;
 }
@@ -695,7 +693,7 @@ bool Terrain3DRuntimeBakeCodec::getInstanceMetadataView( const PackedByteArray &
 	const uint16_t mesh_count = t3dRuntimeBakeCodecReadU16( p + 6 );
 	const uint32_t cell_count = t3dRuntimeBakeCodecReadU32( p + 8 );
 	const uint32_t instance_count = t3dRuntimeBakeCodecReadU32( p + 12 );
-	if ( cell_count > 1000000u || ( size_t )rBlob.size() != 16u + ( size_t )cell_count * 44u ) {
+	if ( cell_count > 1000000u || ( size_t )rBlob.size() < 16u + ( size_t )cell_count * 44u ) {
 		return false;
 	}
 	rView.m_pRecords = p + 16;

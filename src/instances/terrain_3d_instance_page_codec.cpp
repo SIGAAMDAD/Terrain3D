@@ -150,6 +150,7 @@ static bool t3dInstancePageCodecMeasurePage( const Terrain3DInstanceStore &rStor
 }
 
 static bool t3dInstancePageCodecReadPageHeaders( const PackedByteArray &arrPage,
+		const size_t nPageBytes,
 		size_t &nOffset,
 		uint32_t *pMeshCounts,
 		uint32_t &nInstanceCount,
@@ -167,9 +168,12 @@ static bool t3dInstancePageCodecReadPageHeaders( const PackedByteArray &arrPage,
 	if ( pOwnerCount ) {
 		*pOwnerCount = 0u;
 	}
-	const size_t page_size = ( size_t )( arrPage.size() );
+	const size_t page_size = nPageBytes;
+	if ( page_size > ( size_t )( arrPage.size() ) ) {
+		return false;
+	}
 	if ( !t3dInstancePageCodecPageHas( 0u, s_nInstancePageHeaderBytes, page_size ) ) {
-		return arrPage.is_empty();
+		return page_size == 0u;
 	}
 	const uint8_t *pBytes = arrPage.ptr();
 	if ( t3dInstancePageCodecReadU32( pBytes ) != s_nInstancePageMagic ) {
@@ -422,7 +426,16 @@ bool Terrain3DInstancePageCodec::decode( const PackedByteArray &arrPage,
 		uint32_t *const pMeshCounts,
 		uint32_t &nInstanceCount,
 		uint16_t &nMeshCount ) {
-	if ( arrPage.is_empty() ) {
+	return decode( arrPage, ( size_t )( arrPage.size() ), rStore, pMeshCounts, nInstanceCount, nMeshCount );
+}
+
+bool Terrain3DInstancePageCodec::decode( const PackedByteArray &arrPage,
+		const size_t nPageBytes,
+		Terrain3DInstanceStore &rStore,
+		uint32_t *const pMeshCounts,
+		uint32_t &nInstanceCount,
+		uint16_t &nMeshCount ) {
+	if ( nPageBytes == 0u ) {
 		rStore.clearRetainCapacity();
 		t3dInstancePageCodecClearMeshCounts( pMeshCounts );
 		nInstanceCount = 0u;
@@ -435,6 +448,7 @@ bool Terrain3DInstancePageCodec::decode( const PackedByteArray &arrPage,
 	size_t color_count = 0u;
 	size_t owner_count = 0u;
 	if ( !t3dInstancePageCodecReadPageHeaders( arrPage,
+				 nPageBytes,
 				 inspect_offset,
 				 nullptr,
 				 inspected_instances,
@@ -456,7 +470,7 @@ bool Terrain3DInstancePageCodec::decode( const PackedByteArray &arrPage,
 	rStore.sealPayloadCapacity();
 	size_t decode_offset = 0u;
 	if ( !t3dInstancePageCodecReadPageHeaders(
-				 arrPage, decode_offset, pMeshCounts, nInstanceCount, nMeshCount, true, &rStore ) ) {
+				 arrPage, nPageBytes, decode_offset, pMeshCounts, nInstanceCount, nMeshCount, true, &rStore ) ) {
 		t3dInstancePageCodecClearMeshCounts( pMeshCounts );
 		nInstanceCount = 0u;
 		nMeshCount = 0u;
@@ -477,7 +491,7 @@ bool Terrain3DInstancePageCodec::inspect( const PackedByteArray &arrPage,
 	}
 	size_t offset = 0u;
 	if ( !t3dInstancePageCodecReadPageHeaders(
-				 arrPage, offset, pMeshCounts, nInstanceCount, nMeshCount, false, nullptr ) ) {
+				 arrPage, ( size_t )( arrPage.size() ), offset, pMeshCounts, nInstanceCount, nMeshCount, false, nullptr ) ) {
 		t3dInstancePageCodecClearMeshCounts( pMeshCounts );
 		nInstanceCount = 0u;
 		nMeshCount = 0u;

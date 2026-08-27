@@ -275,10 +275,67 @@ Ref<Image> Terrain3DGpuRegionCache::makeGpuDerivedImage( const Ref<Image> &rImag
 	return pGpuImage;
 }
 
-Ref<Image> Terrain3DGpuRegionCache::makeMiddleCompositeImage( const Vector2i &rLocation, const Ref<Image> &rControl,
-															  const Ref<Image> &rColor ) const {
+bool Terrain3DGpuRegionCache::refreshMiddleCompositeSources( const uint64_t nMaterialSignature,
+		const int nWidth,
+		const int nHeight ) {
+	if ( nWidth <= 0 || nHeight <= 0 ) {
+		return false;
+	}
+	const int64_t scratch_bytes_64 = ( int64_t )( nWidth ) * nHeight * 4;
+	if ( scratch_bytes_64 <= 0 || scratch_bytes_64 > INT32_MAX ) {
+		return false;
+	}
+	const int scratch_bytes = ( int )( scratch_bytes_64 );
+	const int scratch_layers = CLAMP( MAX( 1, m_nGpuRegionPhysicalLayerCount ), 1, s_nGpuCacheMaxLayers );
+	const bool source_changed = nMaterialSignature != m_nMiddleCompositeMaterialSignature;
+	if ( source_changed ) {
+		m_middleCompositeMaterialColors.clear();
+		m_middleCompositeMaterialScales.clear();
+		for ( Ref<Image> &pImage : m_middleCompositeMaterialImages ) {
+			pImage.unref();
+		}
+		const Ref<Terrain3DAssets> pAssets = m_pTerrain ? m_pTerrain->getAssets() : Ref<Terrain3DAssets>();
+		if ( pAssets.is_valid() ) {
+			m_middleCompositeMaterialColors = pAssets->getTextureColors();
+			m_middleCompositeMaterialScales = pAssets->getTextureUvScales();
+			const int texture_count = MIN( pAssets->getTextureCount(), s_nMaxTextureAssets );
+			for ( int material = 0; material < texture_count; ++material ) {
+				const Ref<Terrain3DTextureAsset> pAsset = pAssets->getTextureAsset( material );
+				const Ref<Texture2D> pTexture = pAsset.is_valid() ? pAsset->getAlbedoTexture() : Ref<Texture2D>();
+				Ref<Image> pMaterialImage = pTexture.is_valid() ? pTexture->get_image() : Ref<Image>();
+				if ( pMaterialImage.is_valid() && pMaterialImage->is_compressed() ) {
+					pMaterialImage = pMaterialImage->duplicate();
+					if ( pMaterialImage->decompress() != OK ) {
+						pMaterialImage.unref();
+					}
+				}
+				if ( pMaterialImage.is_valid() && pMaterialImage->is_empty() ) {
+					pMaterialImage.unref();
+				}
+				m_middleCompositeMaterialImages[( size_t )( material )] = pMaterialImage;
+			}
+		}
+		m_nMiddleCompositeMaterialSignature = nMaterialSignature;
+	}
+	if ( scratch_bytes != m_nMiddleCompositeScratchBytes || scratch_layers != m_nMiddleCompositeScratchLayerCount ) {
+		for ( int layer = 0; layer < scratch_layers; ++layer ) {
+			m_middleCompositeScratch[( size_t )( layer )].resize( scratch_bytes );
+			if ( m_middleCompositeScratch[( size_t )( layer )].size() != scratch_bytes ) {
+				return false;
+			}
+		}
+		m_nMiddleCompositeScratchBytes = scratch_bytes;
+		m_nMiddleCompositeScratchLayerCount = scratch_layers;
+	}
+	return true;
+}
+
+Ref<Image> Terrain3DGpuRegionCache::makeMiddleCompositeImage( const Vector2i &rLocation,
+		const Ref<Image> &rControl,
+		const Ref<Image> &rColor,
+		const int nScratchSlot ) {
 	if ( rControl.is_null() || rColor.is_null() || rControl->get_format() != Image::FORMAT_RF ||
-		 rColor->get_format() != Image::FORMAT_RGBA8 ) {
+			rColor->get_format() != Image::FORMAT_RGBA8 ) {
 		return Ref<Image>();
 	}
 	const int width = rColor->get_width();
@@ -289,40 +346,17 @@ Ref<Image> Terrain3DGpuRegionCache::makeMiddleCompositeImage( const Vector2i &rL
 	const PackedByteArray control_bytes = rControl->get_data();
 	const PackedByteArray color_bytes = rColor->get_data();
 	if ( control_bytes.size() < ( int64_t )( rControl->get_width() ) * rControl->get_height() * 4 ||
-		 color_bytes.size() < ( int64_t )( width )*height * 4 ) {
+			color_bytes.size() < ( int64_t )( width ) * height * 4 ) {
 		return Ref<Image>();
 	}
-	PackedColorArray material_colors;
-	const Ref<Terrain3DAssets> pAssets = m_pTerrain ? m_pTerrain->getAssets() : Ref<Terrain3DAssets>();
-	if ( pAssets.is_valid() ) {
-		material_colors = pAssets->getTextureColors();
+	const int scratch_slot = CLAMP( nScratchSlot, 0, MAX( 0, m_nMiddleCompositeScratchLayerCount - 1 ) );
+	if ( scratch_slot >= m_nMiddleCompositeScratchLayerCount ) {
+		return Ref<Image>();
 	}
-	const PackedFloat32Array material_scales =
-		pAssets.is_valid() ? pAssets->getTextureUvScales() : PackedFloat32Array();
-	eastl::array<Ref<Image>, s_nMaxTextureAssets> material_images;
-	if ( pAssets.is_valid() ) {
-		for ( int material = 0; material < MIN( pAssets->getTextureCount(), s_nMaxTextureAssets ); ++material ) {
-			const Ref<Terrain3DTextureAsset> pAsset = pAssets->getTextureAsset( material );
-			const Ref<Texture2D> pTexture = pAsset.is_valid() ? pAsset->getAlbedoTexture() : Ref<Texture2D>();
-			Ref<Image> pMaterialImage = pTexture.is_valid() ? pTexture->get_image() : Ref<Image>();
-			// Imported DDS/VRAM textures commonly expose compressed Images. get_pixel()
-			// rejects those and logs once per sample, so prepare one private readable
-			// copy per material before entering the composite's texel loops. If the
-			// platform cannot decompress that format, the bake falls back to its tint.
-			if ( pMaterialImage.is_valid() && pMaterialImage->is_compressed() ) {
-				pMaterialImage = pMaterialImage->duplicate();
-				if ( pMaterialImage->decompress() != OK ) {
-					pMaterialImage.unref();
-				}
-			}
-			if ( pMaterialImage.is_valid() && pMaterialImage->is_empty() ) {
-				pMaterialImage.unref();
-			}
-			material_images[( size_t )( material )] = pMaterialImage;
-		}
+	PackedByteArray &output = m_middleCompositeScratch[( size_t )( scratch_slot )];
+	if ( output.size() != ( int64_t )( width ) * height * 4 ) {
+		return Ref<Image>();
 	}
-	PackedByteArray output;
-	output.resize( width * height * 4 );
 	uint8_t *const pWrite = output.ptrw();
 	const uint8_t *const pControl = control_bytes.ptr();
 	const uint8_t *const pColor = color_bytes.ptr();
@@ -331,30 +365,36 @@ Ref<Image> Terrain3DGpuRegionCache::makeMiddleCompositeImage( const Vector2i &rL
 		for ( int x = 0; x < width; ++x ) {
 			const int control_x = MIN( rControl->get_width() - 1, x * rControl->get_width() / width );
 			const uint32_t control = t3dGpuRegionCacheReadU32Unaligned(
-				pControl, ( size_t )( control_y * rControl->get_width() + control_x ) * 4u );
+					pControl, ( size_t )( control_y * rControl->get_width() + control_x ) * 4u );
 			const int base = ( int )( t3dGetBase( control ) );
 			const int overlay = ( int )( t3dGetOverlay( control ) );
-			const Color base_color = base < material_colors.size() ? material_colors[base] : s_colorWhite;
-			const Color overlay_color = overlay < material_colors.size() ? material_colors[overlay] : base_color;
+			const Color base_color = base < m_middleCompositeMaterialColors.size()
+					? m_middleCompositeMaterialColors[base]
+					: s_colorWhite;
+			const Color overlay_color = overlay < m_middleCompositeMaterialColors.size()
+					? m_middleCompositeMaterialColors[overlay]
+					: base_color;
 			const float control_scale = 0.9f - ( float )( ( ( t3dGetUvScale( control ) + 3u ) % 8u ) + 1u ) * 0.1f;
-			const float angle = ( float )( t3dGetUvRotation( control ) )*Math_TAU / 16.0f;
+			const float angle = ( float )( t3dGetUvRotation( control ) ) * Math_TAU / 16.0f;
 			const float cs = Math::cos( angle );
 			const float sn = Math::sin( angle );
 			const float local_x =
-				( ( float )( x ) + 0.5f ) * ( float )( m_regionRepository.getRegionSize() ) / ( float )( width );
+					( ( float )( x ) + 0.5f ) * ( float )( m_regionRepository.getRegionSize() ) / ( float )( width );
 			const float local_y =
-				( ( float )( y ) + 0.5f ) * ( float )( m_regionRepository.getRegionSize() ) / ( float )( height );
+					( ( float )( y ) + 0.5f ) * ( float )( m_regionRepository.getRegionSize() ) / ( float )( height );
 			const float world_x = ( ( float )( rLocation.x * m_regionRepository.getRegionSize() ) + local_x ) *
-								  ( float )( m_regionRepository.getVertexSpacing() );
+					( float )( m_regionRepository.getVertexSpacing() );
 			const float world_y = ( ( float )( rLocation.y * m_regionRepository.getRegionSize() ) + local_y ) *
-								  ( float )( m_regionRepository.getVertexSpacing() );
+					( float )( m_regionRepository.getVertexSpacing() );
 			auto sample_material = [&]( const int material_id, const Color &rTint ) -> Color {
 				if ( material_id < 0 || material_id >= s_nMaxTextureAssets ||
-					 material_images[( size_t )( material_id )].is_null() ) {
+						m_middleCompositeMaterialImages[( size_t )( material_id )].is_null() ) {
 					return rTint;
 				}
-				const Ref<Image> &pImage = material_images[( size_t )( material_id )];
-				const float asset_scale = material_id < material_scales.size() ? material_scales[material_id] : 0.1f;
+				const Ref<Image> &pImage = m_middleCompositeMaterialImages[( size_t )( material_id )];
+				const float asset_scale = material_id < m_middleCompositeMaterialScales.size()
+						? m_middleCompositeMaterialScales[material_id]
+						: 0.1f;
 				const float source_u = ( cs * world_x + sn * world_y ) * control_scale * asset_scale;
 				const float source_v = ( cs * world_y - sn * world_x ) * control_scale * asset_scale;
 				const float wrapped_u = source_u - Math::floor( source_u );
@@ -376,8 +416,7 @@ Ref<Image> Terrain3DGpuRegionCache::makeMiddleCompositeImage( const Vector2i &rL
 			pWrite[offset] = t3dGpuRegionCacheColorToByte( authored_r * material_color.r );
 			pWrite[offset + 1u] = t3dGpuRegionCacheColorToByte( authored_g * material_color.g );
 			pWrite[offset + 2u] = t3dGpuRegionCacheColorToByte( authored_b * material_color.b );
-			pWrite[offset + 3u] =
-				t3dIsHole( control )
+			pWrite[offset + 3u] = t3dIsHole( control )
 					? 0u
 					: ( uint8_t )( 0x80u | ( ( uint32_t )( pColor[offset + 3u] ) * 127u + 127u ) / 255u );
 		}
@@ -932,8 +971,14 @@ bool Terrain3DGpuRegionCache::rebuildTextures( void ) {
 	for ( int layer = 0; layer < color_layers; ++layer ) {
 		m_gpuColorMaps[layer] = pDefaultGpuColor;
 	}
+	const Ref<Terrain3DAssets> pAssets = m_pTerrain ? m_pTerrain->getAssets() : Ref<Terrain3DAssets>();
+	const uint64_t material_signature = pAssets.is_valid() ? pAssets->getRuntimeMaterialSourceSignature() : 0u;
+	if ( !refreshMiddleCompositeSources(
+			 material_signature, pDefaultGpuColor->get_width(), pDefaultGpuColor->get_height() ) ) {
+		return false;
+	}
 	const Ref<Image> pDefaultMiddleComposite =
-		makeMiddleCompositeImage( s_v2iZero, m_defaultControlMap, pDefaultGpuColor );
+			makeMiddleCompositeImage( s_v2iZero, m_defaultControlMap, pDefaultGpuColor, 0 );
 	if ( pDefaultMiddleComposite.is_null() ) {
 		return false;
 	}
@@ -1604,7 +1649,7 @@ bool Terrain3DGpuRegionCache::uploadGpuRegionLayer( const int nLayer, const Vect
 		if ( pCompositeColor.is_null() ) {
 			pCompositeColor = makeGpuColorImage( getRegionMapOrDefault( pRegion, TYPE_COLOR ) );
 		}
-		pMiddleComposite = makeMiddleCompositeImage( vLocation, pCompositeControl, pCompositeColor );
+		pMiddleComposite = makeMiddleCompositeImage( vLocation, pCompositeControl, pCompositeColor, nLayer );
 		if ( pMiddleComposite.is_null() ) {
 			m_szGpuRegionSlotStates[nLayer] = previous_state;
 			return false;
@@ -1794,6 +1839,12 @@ bool Terrain3DGpuRegionCache::isRuntimePageWanted( void *const pContext, const V
 }
 
 bool Terrain3DGpuRegionCache::serviceRuntimePages( const t3dResidencyFrameState_t &rFrame ) {
+	const int color_size = MAX( 1,
+			m_regionRepository.getRegionSize() / MAX( 1, rFrame.m_runtimePageConfig.m_nColorDivisor ) );
+	if ( !refreshMiddleCompositeSources(
+			rFrame.m_runtimePageConfig.m_nMaterialSourceSignature, color_size, color_size ) ) {
+		return false;
+	}
 	t3dRuntimePageServiceState_t state;
 	state.m_config = rFrame.m_runtimePageConfig;
 	state.m_predictedCenter = rFrame.m_predictedCenter;
