@@ -828,42 +828,23 @@ SampledMaterial sample_detailed_material( vec2 world_texel, vec3 terrain_normal,
 		weights /= max( dot( weights, vec4( 1.0 ) ), 0.00001 );
 	}
 	SampledMaterial result = material_zero();
-	uint resolved_controls[4];
-	SampledMaterial resolved_samples[4];
-	int resolved_count = 0;
 	for ( int i = 0; i < 4; ++i ) {
 		if ( weights[i] <= 0.00001 ) {
 			continue;
 		}
 		uint resolved_control = auto_control( read_control( base_texel + offsets[i] ), terrain_normal,
-				world_position.y, terrain_region_layer < 0 );
-		int reuse_index = -1;
-		for ( int previous = 0; previous < resolved_count; ++previous ) {
-			if ( resolved_controls[previous] == resolved_control ) {
-				reuse_index = previous;
-				break;
-			}
-		}
-		SampledMaterial corner;
-		if ( reuse_index >= 0 ) {
-			// The call-local state fixes projected UV/derivatives, projection/detile mode, tier/channel set and normal.
-			// Equal resolved control additionally fixes material IDs, rotation and scale; blend accumulation stays ordered.
-			corner = resolved_samples[reuse_index];
-		} else {
-			corner = sample_resolved_control_pair( resolved_control, world_position.xz, terrain_normal, tier_config );
-			float inv = 1.0 / max( corner.total_weight, 0.00001 );
-			corner.albedo *= inv;
-			corner.tangent_normal *= inv;
-			corner.roughness *= inv;
-			corner.ao *= inv;
-			corner.metallic *= inv;
-			corner.height *= inv;
-			corner.ao_affect *= inv;
-			corner.total_weight = 1.0;
-			resolved_controls[resolved_count] = resolved_control;
-			resolved_samples[resolved_count] = corner;
-			++resolved_count;
-		}
+											 world_position.y, terrain_region_layer < 0 );
+		SampledMaterial corner =
+			sample_resolved_control_pair( resolved_control, world_position.xz, terrain_normal, tier_config );
+		float inv = 1.0 / max( corner.total_weight, 0.00001 );
+		corner.albedo *= inv;
+		corner.tangent_normal *= inv;
+		corner.roughness *= inv;
+		corner.ao *= inv;
+		corner.metallic *= inv;
+		corner.height *= inv;
+		corner.ao_affect *= inv;
+		corner.total_weight = 1.0;
 		accumulate_material( result, corner, weights[i] );
 	}
 	return result;
