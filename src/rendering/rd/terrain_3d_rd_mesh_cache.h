@@ -66,6 +66,9 @@ typedef struct t3dRdMeshSourceSnapshot_s {
 	PackedByteArray m_vertexBytes;
 	PackedByteArray m_index16Bytes;
 	PackedByteArray m_index32Bytes;
+	std::vector<uint64_t> m_vertexChunkHashes;
+	std::vector<uint64_t> m_index16ChunkHashes;
+	std::vector<uint64_t> m_index32ChunkHashes;
 	std::vector<t3dRdMeshSourceSurface_t> m_surfaces;
 	std::vector<t3dRdMeshSourceLod_t> m_lods;
 	std::vector<t3dRdInstanceMaterial_t> m_materials;
@@ -94,9 +97,9 @@ private:
 	std::vector<t3dRdMeshSourceLod_t> m_lods;
 	std::vector<t3dRdInstanceMaterial_t> m_materials;
 	std::vector<t3dRdImportedTextureGpu_t> m_textures;
-	PackedByteArray m_lastVertexBytes;
-	PackedByteArray m_lastIndex16Bytes;
-	PackedByteArray m_lastIndex32Bytes;
+	std::vector<uint64_t> m_vertexChunkHashes;
+	std::vector<uint64_t> m_index16ChunkHashes;
+	std::vector<uint64_t> m_index32ChunkHashes;
 
 	bool ensureVertexFormat( void );
 	bool ensureArena( RID &rBuffer,

@@ -122,6 +122,25 @@ static uint64_t t3dRdHashBytes( uint64_t nHash, const PackedByteArray &rBytes ) 
 	return nHash;
 }
 
+
+static void t3dRdBuildChunkHashes( const PackedByteArray &rBytes, std::vector<uint64_t> &rHashes ) {
+	static constexpr uint32_t chunk_bytes = 65536u;
+	const uint32_t size = ( uint32_t )( rBytes.size() );
+	const uint32_t count = size == 0u ? 0u : ( size + chunk_bytes - 1u ) / chunk_bytes;
+	rHashes.resize( count );
+	const uint8_t *const pBytes = rBytes.ptr();
+	for ( uint32_t chunk = 0u; chunk < count; ++chunk ) {
+		const uint32_t begin = chunk * chunk_bytes;
+		const uint32_t end = MIN( size, begin + chunk_bytes );
+		uint64_t hash = s_nFnvOffset;
+		for ( uint32_t i = begin; i < end; ++i ) {
+			hash ^= pBytes[i];
+			hash *= s_nFnvPrime;
+		}
+		rHashes[chunk] = hash;
+	}
+}
+
 static bool t3dRdAddTextureSource( const Ref<Texture2D> &rTexture, std::vector<t3dRdImportedTextureSource_t> &rTextures ) {
 	if ( rTexture.is_null() ) {
 		return false;
@@ -597,6 +616,9 @@ bool Terrain3DRdMeshCache::buildSourceSnapshot(
 	rResult.m_vertexBytes.clear();
 	rResult.m_index16Bytes.clear();
 	rResult.m_index32Bytes.clear();
+	rResult.m_vertexChunkHashes.clear();
+	rResult.m_index16ChunkHashes.clear();
+	rResult.m_index32ChunkHashes.clear();
 	rResult.m_surfaces.clear();
 	rResult.m_lods.clear();
 	rResult.m_materials.clear();
@@ -657,6 +679,9 @@ bool Terrain3DRdMeshCache::buildSourceSnapshot(
 			return false;
 		}
 	}
+	t3dRdBuildChunkHashes( rResult.m_vertexBytes, rResult.m_vertexChunkHashes );
+	t3dRdBuildChunkHashes( rResult.m_index16Bytes, rResult.m_index16ChunkHashes );
+	t3dRdBuildChunkHashes( rResult.m_index32Bytes, rResult.m_index32ChunkHashes );
 	if ( pError ) {
 		*pError = String();
 	}
@@ -725,17 +750,14 @@ bool Terrain3DRdMeshCache::ensureArena( RID &rBuffer,
 	if ( rBuffer.is_valid() ) {
 		m_context.freeResource( rBuffer, rCapacityBytes );
 	}
-	PackedByteArray empty;
-	empty.resize( capacity );
-	std::memset( empty.ptrw(), 0, capacity );
 	if ( resourceType == Terrain3DRdContext::RESOURCE_VERTEX_BUFFER ) {
-		rBuffer = rd->vertex_buffer_create( capacity, empty );
+		rBuffer = rd->vertex_buffer_create( capacity );
 	} else {
 		const RenderingDevice::IndexBufferFormat format = rName.find( "16" ) >= 0
 				? RenderingDevice::INDEX_BUFFER_FORMAT_UINT16
 				: RenderingDevice::INDEX_BUFFER_FORMAT_UINT32;
 		rBuffer = rd->index_buffer_create(
-				capacity / ( format == RenderingDevice::INDEX_BUFFER_FORMAT_UINT16 ? 2u : 4u ), format, empty );
+				capacity / ( format == RenderingDevice::INDEX_BUFFER_FORMAT_UINT16 ? 2u : 4u ), format );
 	}
 	if ( !rBuffer.is_valid() ||
 			!m_context.registerResource( rBuffer, rName, resourceType, memoryCategory, capacity ) ) {
@@ -922,61 +944,36 @@ bool Terrain3DRdMeshCache::upload( const t3dRdMeshSourceSnapshot_t *const pSnaps
 
 	RenderingDevice *const rd = m_context.getDevice();
 	uint64_t uploaded_bytes = 0u;
-	auto upload_changed_span = [&]( const RID &rBuffer,
-									   const PackedByteArray &rCurrent,
-									   const PackedByteArray *pPrevious,
-									   const bool bForceFull ) -> bool {
-		const uint32_t current_size = (uint32_t)( rCurrent.size() );
-		if ( current_size == 0u ) {
-			return true;
-		}
-		uint32_t first = 0u;
-		uint32_t last = current_size;
-		if ( !bForceFull && pPrevious ) {
-			const uint32_t previous_size = (uint32_t)( pPrevious->size() );
-			const uint32_t common = MIN( current_size, previous_size );
-			const uint8_t *const current = rCurrent.ptr();
-			const uint8_t *const previous = pPrevious->ptr();
-			while ( first + 32u <= common && std::memcmp( current + first, previous + first, 32u ) == 0 ) {
-				first += 32u;
+	auto upload_changed_chunks = [&]( const RID &rBuffer,
+			const PackedByteArray &rCurrent,
+			const std::vector<uint64_t> &rCurrentHashes,
+			const std::vector<uint64_t> &rPreviousHashes,
+			const bool bForceFull ) -> bool {
+		static constexpr uint32_t chunk_bytes = 65536u;
+		const uint32_t current_size = ( uint32_t )( rCurrent.size() );
+		for ( uint32_t chunk = 0u; chunk < ( uint32_t )( rCurrentHashes.size() ); ++chunk ) {
+			if ( !bForceFull && chunk < rPreviousHashes.size() &&
+					rPreviousHashes[chunk] == rCurrentHashes[chunk] ) {
+				continue;
 			}
-			while ( first < common && current[first] == previous[first] ) {
-				++first;
-			}
-			if ( first == current_size ) {
-				return true;
-			}
-			while ( last > first && last <= previous_size && current[last - 1u] == previous[last - 1u] ) {
-				--last;
-			}
+			const uint32_t offset = chunk * chunk_bytes;
+			const uint32_t bytes = MIN( chunk_bytes, current_size - offset );
+			PackedByteArray dirty;
+			dirty.resize( bytes );
+			std::memcpy( dirty.ptrw(), rCurrent.ptr() + offset, bytes );
+			if ( rd->buffer_update( rBuffer, offset, bytes, dirty ) != OK ) return false;
+			uploaded_bytes += bytes;
 		}
-		if ( last <= first ) {
-			return true;
-		}
-		const uint32_t bytes = last - first;
-		PackedByteArray dirty;
-		dirty.resize( bytes );
-		std::memcpy( dirty.ptrw(), rCurrent.ptr() + first, bytes );
-		if ( rd->buffer_update( rBuffer, first, bytes, dirty ) != OK ) {
-			return false;
-		}
-		uploaded_bytes += bytes;
 		return true;
 	};
 
 	const bool has_previous = m_nSourceGeneration != 0u;
-	if ( !upload_changed_span( m_hVertexArena,
-				 pSnapshot->m_vertexBytes,
-				 has_previous ? &m_lastVertexBytes : nullptr,
-				 grow_vertex || !has_previous ) ||
-			!upload_changed_span( m_hIndex16Arena,
-					pSnapshot->m_index16Bytes,
-					has_previous ? &m_lastIndex16Bytes : nullptr,
-					grow_i16 || !has_previous ) ||
-			!upload_changed_span( m_hIndex32Arena,
-					pSnapshot->m_index32Bytes,
-					has_previous ? &m_lastIndex32Bytes : nullptr,
-					grow_i32 || !has_previous ) ) {
+	if ( !upload_changed_chunks( m_hVertexArena, pSnapshot->m_vertexBytes, pSnapshot->m_vertexChunkHashes,
+			m_vertexChunkHashes, grow_vertex || !has_previous ) ||
+			!upload_changed_chunks( m_hIndex16Arena, pSnapshot->m_index16Bytes, pSnapshot->m_index16ChunkHashes,
+				m_index16ChunkHashes, grow_i16 || !has_previous ) ||
+			!upload_changed_chunks( m_hIndex32Arena, pSnapshot->m_index32Bytes, pSnapshot->m_index32ChunkHashes,
+				m_index32ChunkHashes, grow_i32 || !has_previous ) ) {
 		m_context.endResourceRebuild();
 		return false;
 	}
@@ -988,9 +985,9 @@ bool Terrain3DRdMeshCache::upload( const t3dRdMeshSourceSnapshot_t *const pSnaps
 	m_surfaces = pSnapshot->m_surfaces;
 	m_lods = pSnapshot->m_lods;
 	m_materials = pSnapshot->m_materials;
-	m_lastVertexBytes = pSnapshot->m_vertexBytes;
-	m_lastIndex16Bytes = pSnapshot->m_index16Bytes;
-	m_lastIndex32Bytes = pSnapshot->m_index32Bytes;
+	m_vertexChunkHashes = pSnapshot->m_vertexChunkHashes;
+	m_index16ChunkHashes = pSnapshot->m_index16ChunkHashes;
+	m_index32ChunkHashes = pSnapshot->m_index32ChunkHashes;
 	m_nSourceGeneration = pSnapshot->m_nGeneration;
 	if ( ++m_nGeneration == 0u ) {
 		m_nGeneration = 1u;
@@ -1012,9 +1009,9 @@ void Terrain3DRdMeshCache::shutdown( void ) {
 	m_surfaces.clear();
 	m_lods.clear();
 	m_materials.clear();
-	m_lastVertexBytes.clear();
-	m_lastIndex16Bytes.clear();
-	m_lastIndex32Bytes.clear();
+	m_vertexChunkHashes.clear();
+	m_index16ChunkHashes.clear();
+	m_index32ChunkHashes.clear();
 }
 
 t3dRdMeshHandle_t Terrain3DRdMeshCache::getMeshHandle( const uint16_t nAssetId, const int nLod ) const {

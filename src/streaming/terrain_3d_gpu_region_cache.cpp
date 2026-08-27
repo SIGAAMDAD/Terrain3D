@@ -191,6 +191,12 @@ Terrain3DGpuRegionCache::Terrain3DGpuRegionCache( Terrain3DRegionRepository &rRe
 												  Terrain3DCpuRegionCache &rCpuRegionCache ) :
 	m_regionRepository( rRepository ), m_samplingStorage( rSamplingStorage ), m_mapEditService( rMapEditService ),
 	m_runtimePageStore( rRuntimePageStore ), m_cpuRegionCache( rCpuRegionCache ) {
+	m_generatedHeightMaps.setSourceRetentionPolicy( Terrain3DGeneratedTexture::DISCARD_CPU_SOURCE_AFTER_UPLOAD );
+	m_generatedControlMaps.setSourceRetentionPolicy( Terrain3DGeneratedTexture::DISCARD_CPU_SOURCE_AFTER_UPLOAD );
+	m_generatedColorMaps.setSourceRetentionPolicy( Terrain3DGeneratedTexture::DISCARD_CPU_SOURCE_AFTER_UPLOAD );
+	m_generatedDerivedMaps.setSourceRetentionPolicy( Terrain3DGeneratedTexture::DISCARD_CPU_SOURCE_AFTER_UPLOAD );
+	m_generatedMiddleCompositeMaps.setSourceRetentionPolicy( Terrain3DGeneratedTexture::DISCARD_CPU_SOURCE_AFTER_UPLOAD );
+	m_generatedTerrainShadowMasks.setSourceRetentionPolicy( Terrain3DGeneratedTexture::DISCARD_CPU_SOURCE_AFTER_UPLOAD );
 	std::fill_n( m_szGpuRegionLocations, s_nGpuCacheMaxLayers, s_v2iMax );
 	std::fill_n( m_szGpuRegionPriorityLocations, s_nGpuCacheMaxLayers, s_v2iMax );
 }
@@ -696,8 +702,10 @@ size_t Terrain3DGpuRegionCache::estimateLayerBytes( void ) const {
 		m_regionRepository.getRegionSize(), m_bControlMapsImplicit, !isColorChannelEnabled(), isDerivedChannelEnabled(),
 		m_pTerrain ? m_pTerrain->getGpuRegionColorResolutionDivisor() : 1,
 		m_pTerrain ? m_pTerrain->getGpuRegionDerivedResolutionDivisor() : 1 );
+	const size_t middle_composite_bytes = t3dGpuCacheColorBytes( m_regionRepository.getRegionSize(),
+			m_pTerrain ? m_pTerrain->getGpuRegionColorResolutionDivisor() : 1 );
 	const size_t shadow_texels = t3dGpuCacheTexelCount( m_regionRepository.getRegionSize(), 1 );
-	return base + ( shadow_texels * 4u ) / 3u;
+	return base + middle_composite_bytes + ( shadow_texels * 4u ) / 3u;
 }
 
 bool Terrain3DGpuRegionCache::isColorChannelEnabled( void ) const {
@@ -2307,8 +2315,11 @@ size_t Terrain3DGpuRegionCache::getReservedBytes( void ) const {
 		( size_t )( m_pTerrain ? m_pTerrain->getGpuFarSurfaceAtlasSide() : s_nGpuCacheFarHeightSide );
 	const size_t fixed_far_bytes = far_height_side * far_height_side * 2u + far_surface_side * far_surface_side * 4u;
 	const size_t shared_bytes = estimateSharedBytes();
-	return ( shared_bytes > fixed_far_bytes ? shared_bytes - fixed_far_bytes : 0u ) +
-		   estimateLayerBytes() * ( size_t )( MAX( 0, m_nGpuRegionPhysicalLayerCount ) );
+	const size_t physical_texture_bytes = m_generatedHeightMaps.payloadBytes() + m_generatedControlMaps.payloadBytes() +
+			m_generatedColorMaps.payloadBytes() + m_generatedDerivedMaps.payloadBytes() +
+			m_generatedMiddleCompositeMaps.payloadBytes() + m_generatedTerrainShadowMasks.payloadBytes();
+	const size_t managed_shared = shared_bytes > fixed_far_bytes ? shared_bytes - fixed_far_bytes : 0u;
+	return managed_shared + physical_texture_bytes;
 }
 
 size_t Terrain3DGpuRegionCache::getMinimumBytes( void ) const {

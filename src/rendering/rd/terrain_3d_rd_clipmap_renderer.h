@@ -107,6 +107,7 @@ private:
 	uint32_t m_nszBoundTierFiltering[3] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
 	t3dRdViewState_t m_szViewStates[s_nMaxViews]{};
 	std::vector<t3dRdForwardPipelineEntry_t> m_forwardPipelines;
+	uint32_t m_nPipelineEvictCursor = 0u;
 	int64_t m_nVertexFormat = RenderingDevice::INVALID_FORMAT_ID;
 	uint32_t m_nRegionMapCapacityBytes = 0u;
 	uint64_t m_nRegionMapGeneration = 0u;

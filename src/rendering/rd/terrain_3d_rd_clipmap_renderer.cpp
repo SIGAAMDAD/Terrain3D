@@ -208,7 +208,7 @@ bool Terrain3DRdClipmapRenderer::ensureForwardShaders( const t3dRdForwardShaderB
 			m_hszForwardShaders[tier][variant] = shader;
 		}
 	}
-	m_forwardPipelines.reserve( 24u );
+	m_forwardPipelines.reserve( 64u );
 	return true;
 }
 
@@ -220,6 +220,7 @@ void Terrain3DRdClipmapRenderer::freeForwardPipelines( void )
 		}
 	}
 	m_forwardPipelines.clear();
+	m_nPipelineEvictCursor = 0u;
 	m_bLastForwardPipelineKeyValid = false;
 }
 
@@ -347,10 +348,8 @@ bool Terrain3DRdClipmapRenderer::ensureForwardPipelines( const t3dRdForwardPassC
 		m_bLastForwardPipelineKeyValid = true;
 		return true;
 	}
-	if ( m_forwardPipelines.size() >= 64u ) {
-		freeForwardPipelines();
-	}
-
+	const bool replace_pipeline = m_forwardPipelines.size() >= 64u;
+	const uint32_t replace_index = replace_pipeline ? ( m_nPipelineEvictCursor++ % 64u ) : UINT32_MAX;
 	t3dRdForwardPipelineEntry_t entry;
 	entry.m_key = key;
 	Ref<RDPipelineRasterizationState> raster;
@@ -417,7 +416,12 @@ bool Terrain3DRdClipmapRenderer::ensureForwardPipelines( const t3dRdForwardPassC
 		}
 	}
 	m_context.endResourceRebuild();
-	m_forwardPipelines.push_back( entry );
+	if ( replace_pipeline ) {
+		for ( RID &pipeline : m_forwardPipelines[replace_index].m_hszPipelines ) m_context.freeResource( pipeline );
+		m_forwardPipelines[replace_index] = entry;
+	} else {
+		m_forwardPipelines.push_back( entry );
+	}
 	m_lastForwardPipelineKey = key;
 	m_bLastForwardPipelineKeyValid = true;
 	return true;

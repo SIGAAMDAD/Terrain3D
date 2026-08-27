@@ -153,6 +153,8 @@ Terrain3DFarSurfaceAtlasCache::Terrain3DFarSurfaceAtlasCache( Terrain3DRegionRep
 		Terrain3DCpuRegionCache *pCpuRegionCache ) :
 		m_pRepository( pRepository ), m_pSamplingStorage( pSamplingStorage ), m_pCpuRegionCache( pCpuRegionCache )
 {
+	m_generatedHeightMap.setSourceRetentionPolicy( Terrain3DGeneratedTexture::DISCARD_CPU_SOURCE_AFTER_UPLOAD );
+	m_generatedColorMap.setSourceRetentionPolicy( Terrain3DGeneratedTexture::DISCARD_CPU_SOURCE_AFTER_UPLOAD );
 	reset();
 }
 

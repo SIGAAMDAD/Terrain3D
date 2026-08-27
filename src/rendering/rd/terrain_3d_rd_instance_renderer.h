@@ -178,6 +178,7 @@ private:
 	std::vector<uint32_t> m_motionPreviousOrder;
 	std::vector<uint8_t> m_dirtyInstanceChunks;
 	std::vector<t3dRdInstanceForwardPipelineEntry_t> m_forwardPipelines;
+	uint32_t m_nPipelineEvictCursor = 0u;
 	PackedByteArray m_frameBytes;
 	PackedByteArray m_instanceBytes;
 	PackedByteArray m_previousInstanceBytes;
@@ -281,6 +282,7 @@ public:
 	bool renderForwardPass( const t3dRdForwardPassContext_t &rContext );
 	bool renderPreview( const t3dRdMeshSourceSnapshot_t *pMeshes, uint16_t nAssetId, const Vector2i &rSize, Ref<Image> &rImage );
 	Dictionary getDiagnostics( void ) const;
+	size_t getRetainedCpuBytes( void ) const;
 	EA_FORCE_INLINE void setDirectDrawDebugEnabled( bool bEnabled ) { m_bDirectDrawDebug = bEnabled; }
 	EA_FORCE_INLINE void setMotionDebugEnabled( bool bEnabled ) { m_bMotionDebug = bEnabled; }
 	EA_FORCE_INLINE const std::vector<t3dRdInstanceDrawPacket_t> &getDepthPackets( void ) const { return m_depthPackets; }

@@ -127,13 +127,18 @@ bool Terrain3DRdOceanRenderer::updateFrame( const t3dRdForwardPassContext_t &rCo
 }
 
 const Terrain3DRdOceanRenderer::t3dRdOceanPipelineEntry_t *Terrain3DRdOceanRenderer::findPipeline( const t3dRdOceanPipelineKey_t &rKey ) const { for ( const t3dRdOceanPipelineEntry_t &entry : m_pipelines ) if ( entry.m_key == rKey ) return &entry; return nullptr; }
-void Terrain3DRdOceanRenderer::freePipelines( void ) { for ( t3dRdOceanPipelineEntry_t &entry : m_pipelines ) m_context.freeResource( entry.m_hPipeline ); m_pipelines.clear(); }
+void Terrain3DRdOceanRenderer::freePipelines( void ) {
+	for ( t3dRdOceanPipelineEntry_t &entry : m_pipelines ) m_context.freeResource( entry.m_hPipeline );
+	m_pipelines.clear();
+	m_nPipelineEvictCursor = 0u;
+}
 
 bool Terrain3DRdOceanRenderer::ensurePipeline( const t3dRdForwardPassContext_t &rContext ) {
 	RenderingDevice *const rd = m_context.getDevice(); if ( !rd || rContext.m_nFramebufferFormat < 0 ) return false;
 	t3dRdOceanPipelineKey_t key; key.m_nFramebufferFormat = rContext.m_nFramebufferFormat; key.m_passKind = rContext.m_passKind; key.m_samples = rd->framebuffer_format_get_texture_samples( rContext.m_nFramebufferFormat, 0u ); key.m_nViewCount = rContext.m_nViewCount; key.m_bReverseCull = rContext.m_bReverseCull;
 	if ( findPipeline( key ) ) return true;
-	if ( m_pipelines.size() >= 32u ) freePipelines();
+	const bool replace_pipeline = m_pipelines.size() >= 32u;
+	const uint32_t replace_index = replace_pipeline ? ( m_nPipelineEvictCursor++ % 32u ) : UINT32_MAX;
 	Ref<RDPipelineRasterizationState> raster; raster.instantiate(); raster->set_front_face( RenderingDevice::POLYGON_FRONT_FACE_CLOCKWISE ); raster->set_cull_mode( rContext.m_bReverseCull ? RenderingDevice::POLYGON_CULL_FRONT : RenderingDevice::POLYGON_CULL_BACK );
 	Ref<RDPipelineMultisampleState> multisample; multisample.instantiate(); multisample->set_sample_count( key.m_samples );
 	Ref<RDPipelineDepthStencilState> depth; depth.instantiate(); depth->set_enable_depth_test( true ); depth->set_enable_depth_write( true ); depth->set_depth_compare_operator( RenderingDevice::COMPARE_OP_GREATER_OR_EQUAL );
@@ -145,10 +150,17 @@ bool Terrain3DRdOceanRenderer::ensurePipeline( const t3dRdForwardPassContext_t &
 	const RID shader = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW ? m_hShadowShader : m_hColorShader;
 	entry.m_hPipeline = rd->render_pipeline_create( shader, rContext.m_nFramebufferFormat, m_nVertexFormat, RenderingDevice::RENDER_PRIMITIVE_TRIANGLES, raster, multisample, depth, blend );
 	if ( !entry.m_hPipeline.is_valid() || !t3dRdOceanAdopt( m_context, rd, entry.m_hPipeline, "T3D.Ocean.ForwardPipeline", Terrain3DRdContext::RESOURCE_RASTER_PIPELINE ) ) { setError( "Failed to create native Forward+ ocean pipeline" ); return false; }
-	m_pipelines.push_back( entry ); ++m_nPipelineBuilds; return true;
+	if ( replace_pipeline ) {
+		m_context.freeResource( m_pipelines[replace_index].m_hPipeline );
+		m_pipelines[replace_index] = entry;
+	} else {
+		m_pipelines.push_back( entry );
+	}
+	++m_nPipelineBuilds; return true;
 }
 
 bool Terrain3DRdOceanRenderer::initialize( const Ref<RDShaderSPIRV> &rColor, const Ref<RDShaderSPIRV> &rShadow ) {
+	m_pipelines.reserve( 32u );
 	shutdown(); if ( !m_context.isReady() && !m_context.initialize() ) { setError( "RenderingDevice unavailable for ocean renderer" ); return false; }
 	RenderingDevice *const rd = m_context.getDevice();
 	TypedArray<Ref<RDVertexAttribute>> attributes;

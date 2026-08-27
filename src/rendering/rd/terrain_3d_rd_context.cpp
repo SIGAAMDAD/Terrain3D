@@ -394,11 +394,18 @@ bool Terrain3DRdContext::registerResourceInternal( const RID &rRid,
 				[rid_id]( const t3dRdResourceRecord_t &rRecord ) { return rRecord.m_hRid.get_id() == rid_id; } );
 		if ( !duplicate ) {
 			const bool rebuild = hasResourceHistory( rName, type );
-			if ( m_resources.size() >= s_nResourceCapacity ||
-					( !rebuild && m_resourceHistory.size() >= s_nResourceHistoryCapacity ) ) {
+			if ( m_resources.size() >= s_nResourceCapacity ) {
 				capacity_exhausted = true;
 			} else {
-				if ( !rebuild ) m_resourceHistory.push_back( { rName, type } );
+				if ( !rebuild ) {
+					const t3dRdResourceHistory_t history{ rName, type };
+					if ( m_resourceHistory.size() < s_nResourceHistoryCapacity ) {
+						m_resourceHistory.push_back( history );
+					} else {
+						m_resourceHistory[m_nResourceHistoryCursor] = history;
+						m_nResourceHistoryCursor = ( m_nResourceHistoryCursor + 1u ) % s_nResourceHistoryCapacity;
+					}
+				}
 			m_freedResources.erase( std::remove_if( m_freedResources.begin(), m_freedResources.end(),
 					[rid_id]( const t3dRdFreedResource_t &rFreed ) { return rFreed.m_nRid == rid_id; } ),
 					m_freedResources.end() );

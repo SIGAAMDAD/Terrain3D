@@ -131,6 +131,7 @@ private:
 	static constexpr size_t s_nVertexFormatCapacity = 64u;
 	eastl::fixed_vector<t3dRdResourceRecord_t, s_nResourceCapacity, false> m_resources;
 	eastl::fixed_vector<t3dRdResourceHistory_t, s_nResourceHistoryCapacity, false> m_resourceHistory;
+	size_t m_nResourceHistoryCursor = 0u;
 	eastl::fixed_vector<t3dRdFreedResource_t, s_nFreedHistoryCapacity, false> m_freedResources;
 	eastl::fixed_vector<t3dRdVertexFormatRecord_t, s_nVertexFormatCapacity, false> m_vertexFormats;
 	String m_lastFailure;
@@ -256,6 +257,12 @@ public:
 			uint64_t nVisibleHlods );
 	void recordSubmissionCounts( uint64_t nIndirectCommands, uint64_t nComputeDispatches );
 	Dictionary getDiagnostics( void ) const;
+	EA_FORCE_INLINE uint64_t getLiveGpuBufferBytes( void ) const {
+		return m_nLiveBufferBytes.load( std::memory_order_acquire );
+	}
+	EA_FORCE_INLINE uint64_t getLiveGpuTextureBytes( void ) const {
+		return m_nLiveTextureBytes.load( std::memory_order_acquire );
+	}
 
 	EA_FORCE_INLINE RenderingDevice *getDevice( void ) const {
 		const ContextState state = m_state.load( std::memory_order_acquire );

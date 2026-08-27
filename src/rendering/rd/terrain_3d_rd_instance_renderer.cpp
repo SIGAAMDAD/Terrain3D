@@ -334,7 +334,7 @@ bool Terrain3DRdInstanceRenderer::ensureForwardShaders( const t3dRdForwardShader
 		}
 		m_hszForwardShaders[variant] = shader;
 	}
-	m_forwardPipelines.reserve( 24u );
+	m_forwardPipelines.reserve( 64u );
 	return true;
 }
 
@@ -346,6 +346,7 @@ void Terrain3DRdInstanceRenderer::freeForwardPipelines( void )
 		}
 	}
 	m_forwardPipelines.clear();
+	m_nPipelineEvictCursor = 0u;
 	m_bLastForwardPipelineKeyValid = false;
 }
 
@@ -433,10 +434,8 @@ bool Terrain3DRdInstanceRenderer::ensureForwardPipelines( const t3dRdForwardPass
 		m_bLastForwardPipelineKeyValid = true;
 		return true;
 	}
-	if ( m_forwardPipelines.size() >= 64u ) {
-		freeForwardPipelines();
-	}
-
+	const bool replace_pipeline = m_forwardPipelines.size() >= 64u;
+	const uint32_t replace_index = replace_pipeline ? ( m_nPipelineEvictCursor++ % 64u ) : UINT32_MAX;
 	t3dRdInstanceForwardPipelineEntry_t entry;
 	entry.m_key = key;
 	Ref<RDPipelineMultisampleState> multisample;
@@ -505,7 +504,12 @@ bool Terrain3DRdInstanceRenderer::ensureForwardPipelines( const t3dRdForwardPass
 		}
 	}
 	m_context.endResourceRebuild();
-	m_forwardPipelines.push_back( entry );
+	if ( replace_pipeline ) {
+		for ( RID &pipeline : m_forwardPipelines[replace_index].m_hszPipelines ) m_context.freeResource( pipeline );
+		m_forwardPipelines[replace_index] = entry;
+	} else {
+		m_forwardPipelines.push_back( entry );
+	}
 	m_lastForwardPipelineKey = key;
 	m_bLastForwardPipelineKeyValid = true;
 	return true;
@@ -2454,6 +2458,32 @@ bool Terrain3DRdInstanceRenderer::renderForwardPass( const t3dRdForwardPassConte
 	++m_nFrames;
 	m_lastError = String();
 	return true;
+}
+
+size_t Terrain3DRdInstanceRenderer::getRetainedCpuBytes( void ) const
+{
+	size_t bytes = 0u;
+	bytes += m_visibleIndices.capacity() * sizeof( uint32_t );
+	bytes += m_shadowVisibleIndices.capacity() * sizeof( uint32_t );
+	bytes += m_motionHistoryRecords.capacity() * sizeof( t3dRdInstanceRecord_t );
+	bytes += m_motionHistoryCells.capacity() * sizeof( t3dRdInstanceCell_t );
+	bytes += m_motionPreviousRecords.capacity() * sizeof( t3dRdInstanceRecord_t );
+	bytes += m_motionCurrentOrder.capacity() * sizeof( uint32_t );
+	bytes += m_motionPreviousOrder.capacity() * sizeof( uint32_t );
+	bytes += m_dirtyInstanceChunks.capacity() * sizeof( uint8_t );
+	bytes += m_drawPackets.capacity() * sizeof( t3dRdInstanceDrawPacket_t );
+	bytes += m_depthPackets.capacity() * sizeof( t3dRdInstanceDrawPacket_t );
+	bytes += m_shadowPackets.capacity() * sizeof( t3dRdInstanceDrawPacket_t );
+	bytes += m_alphaPackets.capacity() * sizeof( t3dRdInstanceDrawPacket_t );
+	bytes += m_alphaSortScratch.capacity() * sizeof( t3dRdInstanceDrawPacket_t );
+	bytes += m_packetBuildSlots.capacity() * sizeof( t3dRdPacketBuildSlot_t );
+	bytes += m_packetBuildEntries.capacity() * sizeof( t3dRdPacketBuildEntry_t );
+	bytes += m_materialBindings.capacity() * sizeof( t3dRdInstanceMaterialPairBinding_t );
+	bytes += m_hlodDescriptors.capacity() * sizeof( t3dRdHlodCullDescriptor_t );
+	bytes += m_frameBytes.size() + m_instanceBytes.size() + m_previousInstanceBytes.size() + m_dirtyInstanceBytes.size();
+	bytes += m_visibleBytes.size() + m_shadowVisibleBytes.size() + m_materialBytes.size() + m_indirectBytes.size();
+	bytes += m_shadowIndirectBytes.size() + m_pushBytes.size() + m_hlodDescriptorBytes.size() + m_hlodCullPushBytes.size();
+	return bytes;
 }
 
 Dictionary Terrain3DRdInstanceRenderer::getDiagnostics( void ) const

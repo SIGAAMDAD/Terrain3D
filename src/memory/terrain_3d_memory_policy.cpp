@@ -14,6 +14,8 @@
 #include "memory/terrain_3d_linear_arena.h"
 #include "memory/terrain_3d_zone_allocator.h"
 #include "rendering/terrain_3d_compute.h"
+#include "rendering/rd/terrain_3d_rd_context.h"
+#include "rendering/rd/terrain_3d_render_coordinator.h"
 #include "simd/terrain_3d_parallel.h"
 #include "streaming/terrain_3d_node_streamer.h"
 #include "streaming/terrain_3d_performance_profile.h"
@@ -602,11 +604,17 @@ Dictionary Terrain3D::getTrackedCurrentResidency( void ) const {
 	const uint64_t hlod_bytes = m_pHlodStreamer ? ( uint64_t )( m_pHlodStreamer->getResidentEstimatedBytes() ) : 0u;
 	const uint64_t shader_source_bytes =
 			m_material.is_valid() ? ( uint64_t )( m_material->getShaderVariantSourceBytesNative() ) : 0u;
-	const uint64_t managed_bytes = gpu_page_bytes + middle_height_bytes + cpu_page_bytes + instance_page_bytes +
-			lightmap_bytes + hlod_bytes + shader_source_bytes;
+	const uint64_t rd_cpu_bytes = m_pRenderCoordinator ? ( uint64_t )( m_pRenderCoordinator->getRetainedCpuBytes() ) : 0u;
+	const Terrain3DRdContext &rd_context = Terrain3DRdContext::getShared();
+	const uint64_t rd_vram_buffer_bytes = rd_context.getLiveGpuBufferBytes();
+	const uint64_t rd_vram_texture_bytes = rd_context.getLiveGpuTextureBytes();
+	const uint64_t managed_bytes = middle_height_bytes + cpu_page_bytes + instance_page_bytes +
+			lightmap_bytes + hlod_bytes + shader_source_bytes + rd_cpu_bytes;
 	const uint64_t fixed_bytes = calculateFixedMemoryBytes();
 	const uint64_t transient_bytes = calculateTransientMemoryBytes();
-	const uint64_t tracked_bytes = fixed_bytes + managed_bytes + transient_bytes;
+	const uint64_t tracked_cpu_bytes = fixed_bytes + managed_bytes + transient_bytes;
+	const uint64_t tracked_vram_bytes = rd_vram_buffer_bytes + rd_vram_texture_bytes;
+	const uint64_t tracked_bytes = tracked_cpu_bytes + tracked_vram_bytes;
 	m_nTrackedMemoryPeakBytes = MAX( m_nTrackedMemoryPeakBytes, tracked_bytes );
 
 	Dictionary fixed;
@@ -632,7 +640,8 @@ Dictionary Terrain3D::getTrackedCurrentResidency( void ) const {
 	Dictionary managed;
 	managed["bytes"] = ( int64_t )( managed_bytes );
 	managed["accuracy"] = "estimated";
-	managed["gpu_terrain_page_pool_bytes"] = ( int64_t )( gpu_page_bytes );
+	managed["gpu_terrain_page_pool_estimated_bytes"] = ( int64_t )( gpu_page_bytes );
+	managed["rd_coordinator_retained_cpu_bytes"] = ( int64_t )( rd_cpu_bytes );
 	managed["middle_height_page_pool_bytes"] = ( int64_t )( middle_height_bytes );
 	managed["cpu_terrain_page_cache_bytes"] = ( int64_t )( cpu_page_bytes );
 	managed["instance_region_page_bytes"] = ( int64_t )( instance_page_bytes );
@@ -705,6 +714,10 @@ Dictionary Terrain3D::getTrackedCurrentResidency( void ) const {
 	external["note"] = "Unavailable values are excluded from tracked totals rather than estimated as zero.";
 	memory["external_untracked"] = external;
 
+	memory["tracked_cpu_ram_bytes"] = ( int64_t )tracked_cpu_bytes;
+	memory["tracked_gpu_vram_bytes"] = ( int64_t )tracked_vram_bytes;
+	memory["rd_gpu_buffer_bytes"] = ( int64_t )rd_vram_buffer_bytes;
+	memory["rd_gpu_texture_bytes"] = ( int64_t )rd_vram_texture_bytes;
 	memory["tracked_current_residency_bytes"] = ( int64_t )tracked_bytes;
 	memory["tracked_logical_payload_bytes"] = ( int64_t )tracked_bytes;
 	memory["native_runtime_arena_reserved_bytes"] = ( int64_t )m_runtimeMemoryArena.capacity();

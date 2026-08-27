@@ -1594,11 +1594,47 @@ bool Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 	return false;
 }
 
+size_t Terrain3DRenderCoordinator::getRetainedCpuBytes( void ) const {
+	auto mesh_bytes = []( const t3dRdMeshSourceSnapshot_t &rSnapshot ) -> size_t {
+		size_t bytes = rSnapshot.m_vertexBytes.size() + rSnapshot.m_index16Bytes.size() + rSnapshot.m_index32Bytes.size();
+		bytes += rSnapshot.m_vertexChunkHashes.capacity() * sizeof( uint64_t );
+		bytes += rSnapshot.m_index16ChunkHashes.capacity() * sizeof( uint64_t );
+		bytes += rSnapshot.m_index32ChunkHashes.capacity() * sizeof( uint64_t );
+		bytes += rSnapshot.m_surfaces.capacity() * sizeof( t3dRdMeshSourceSurface_t );
+		bytes += rSnapshot.m_lods.capacity() * sizeof( t3dRdMeshSourceLod_t );
+		bytes += rSnapshot.m_materials.capacity() * sizeof( t3dRdInstanceMaterial_t );
+		bytes += rSnapshot.m_textures.capacity() * sizeof( t3dRdImportedTextureSource_t );
+		for ( const t3dRdImportedTextureSource_t &texture : rSnapshot.m_textures ) bytes += texture.m_bytes.size();
+		return bytes;
+	};
+	auto scene_bytes = []( const t3dRdInstanceSceneSnapshot_t &rSnapshot ) -> size_t {
+		return rSnapshot.m_instances.capacity() * sizeof( t3dRdInstanceRecord_t ) +
+			rSnapshot.m_cells.capacity() * sizeof( t3dRdInstanceCell_t );
+	};
+	size_t bytes = sizeof( m_snapshotSlots ) + sizeof( m_szForwardViewportStates );
+	for ( const t3dRdRegionMapBank_t &bank : m_regionMapBanks ) bytes += bank.m_bytes.size();
+	for ( const t3dRdInstanceMeshBank_t &bank : m_instanceMeshBanks ) bytes += mesh_bytes( bank.m_snapshot );
+	for ( const t3dRdInstanceSceneBank_t &bank : m_instanceSceneBanks ) bytes += scene_bytes( bank.m_snapshot );
+	for ( const t3dRdOceanTopologyBank_t &bank : m_oceanTopologyBanks ) {
+		bytes += sizeof( bank.m_snapshot );
+	}
+	bytes += mesh_bytes( m_cachedInstanceMeshes ) + mesh_bytes( m_cachedPreviewMeshes ) +
+			mesh_bytes( m_pendingPreviewMeshes );
+	bytes += scene_bytes( m_cachedRegularInstanceScene ) + scene_bytes( m_cachedHlodInstanceScene ) +
+			scene_bytes( m_cachedInstanceScene );
+	bytes += m_cachedHlodMeshSources.capacity() * sizeof( t3dRdExternalMeshSource_t );
+	bytes += m_instanceRenderer.getRetainedCpuBytes() + m_previewRenderer.getRetainedCpuBytes();
+	return bytes;
+}
+
 Dictionary Terrain3DRenderCoordinator::getDiagnostics( void ) const {
 	Terrain3DRdContext::forceSync();
 	Dictionary result;
 	const Dictionary renderer = m_renderer.getDiagnostics();
 	const Dictionary instances = m_instanceRenderer.getDiagnostics();
+	result["rd_retained_cpu_bytes"] = ( int64_t )( getRetainedCpuBytes() );
+	result["rd_live_gpu_buffer_bytes"] = ( int64_t )( Terrain3DRdContext::getShared().getLiveGpuBufferBytes() );
+	result["rd_live_gpu_texture_bytes"] = ( int64_t )( Terrain3DRdContext::getShared().getLiveGpuTextureBytes() );
 	result["native_shadow_proxy_active"] = false;
 	result["render_enabled"] = m_bRenderEnabled.load( std::memory_order_acquire );
 	result["forward_plus_bridge_attached"] = m_bForwardBridgeAttached;

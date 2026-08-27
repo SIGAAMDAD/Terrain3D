@@ -134,6 +134,15 @@ void Terrain3DGeneratedTexture::swap( Terrain3DGeneratedTexture& rOther )
 	swap( m_nPayloadBytes, rOther.m_nPayloadBytes );
 	swap( m_nRegionStagingBytes, rOther.m_nRegionStagingBytes );
 	swap( m_semantic, rOther.m_semantic );
+	swap( m_sourceRetentionPolicy, rOther.m_sourceRetentionPolicy );
+}
+
+void Terrain3DGeneratedTexture::releaseCpuSources( void )
+{
+	m_image.unref();
+	for ( int layer = 0; layer < m_layers.size(); ++layer ) {
+		m_layers[layer] = Ref<Image>();
+	}
 }
 
 RID Terrain3DGeneratedTexture::create( const TypedArray<Image>& rLayers, const t3dRdTextureSemantic_t semantic )
@@ -205,6 +214,7 @@ RID Terrain3DGeneratedTexture::create( const TypedArray<Image>& rLayers, const t
 	m_nPayloadBytes = payload_bytes;
 	m_nRegionStagingBytes = 0u;
 	m_semantic = semantic;
+	if ( m_sourceRetentionPolicy == DISCARD_CPU_SOURCE_AFTER_UPLOAD ) releaseCpuSources();
 	return m_hRid;
 }
 
@@ -231,7 +241,7 @@ bool Terrain3DGeneratedTexture::update( const Ref<Image>& rImage, const int nLay
 	if ( !pManager || !pManager->updateTexture( m_hRid, (uint32_t)( nLayer ), rImage->get_data() ) ) {
 		return false;
 	}
-	m_layers[nLayer] = rImage;
+	if ( m_sourceRetentionPolicy == RETAIN_CPU_SOURCE ) m_layers[nLayer] = rImage;
 	return true;
 }
 
@@ -284,6 +294,7 @@ RID Terrain3DGeneratedTexture::create( const Ref<Image>& rImage, const t3dRdText
 	m_nPayloadBytes = (size_t)( data.size() );
 	m_nRegionStagingBytes = 0u;
 	m_semantic = semantic;
+	if ( m_sourceRetentionPolicy == DISCARD_CPU_SOURCE_AFTER_UPLOAD ) releaseCpuSources();
 	return m_hRid;
 }
 
@@ -301,7 +312,7 @@ bool Terrain3DGeneratedTexture::update2d( const Ref<Image>& rImage )
 	if ( !pManager || !pManager->updateTexture( m_hRid, 0u, rImage->get_data() ) ) {
 		return false;
 	}
-	m_image = rImage;
+	if ( m_sourceRetentionPolicy == RETAIN_CPU_SOURCE ) m_image = rImage;
 	return true;
 }
 

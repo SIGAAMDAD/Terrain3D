@@ -40,6 +40,8 @@ Terrain3DMiddleHeightRegionCache::Terrain3DMiddleHeightRegionCache( Terrain3DReg
 		Terrain3DSamplingStorage *pSamplingStorage,
 		Terrain3DRuntimePageStore *pRuntimePageStore ) :
 		m_pRepository( pRepository ), m_pSamplingStorage( pSamplingStorage ), m_pRuntimePageStore( pRuntimePageStore ) {
+	m_generatedHeightMaps.setSourceRetentionPolicy( Terrain3DGeneratedTexture::DISCARD_CPU_SOURCE_AFTER_UPLOAD );
+	m_generatedRegionMap.setSourceRetentionPolicy( Terrain3DGeneratedTexture::DISCARD_CPU_SOURCE_AFTER_UPLOAD );
 	reset();
 }
 

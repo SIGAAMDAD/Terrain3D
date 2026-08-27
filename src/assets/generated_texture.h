@@ -17,6 +17,12 @@ class Terrain3DGeneratedTexture
 {
 	CLASS_NAME_STATIC( "Terrain3DGenTex" );
 
+public:
+	enum SourceRetentionPolicy : uint8_t {
+		RETAIN_CPU_SOURCE = 0,
+		DISCARD_CPU_SOURCE_AFTER_UPLOAD,
+	};
+
 private:
 	RID m_hRid = RID();
 	RID m_hRegionStagingRid = RID();
@@ -35,12 +41,17 @@ private:
 	size_t m_nPayloadBytes = 0u;
 	size_t m_nRegionStagingBytes = 0u;
 	t3dRdTextureSemantic_t m_semantic = T3D_RD_TEXTURE_LINEAR_DATA;
+	SourceRetentionPolicy m_sourceRetentionPolicy = RETAIN_CPU_SOURCE;
 
 	bool matchesLayout( const Ref<Image>& rImage ) const;
 	bool ensureRegionStaging( const Ref<Image>& rImage );
 	String getResourceName( const String& rSuffix = String() ) const;
 
 public:
+	EA_FORCE_INLINE void setSourceRetentionPolicy( const SourceRetentionPolicy policy ) {
+		m_sourceRetentionPolicy = policy;
+	}
+	void releaseCpuSources( void );
 	void clear( void );
 	void swap( Terrain3DGeneratedTexture& rOther );
 	EA_FORCE_INLINE bool isDirty( void ) const
@@ -54,7 +65,7 @@ public:
 				matchesLayout( rImage );
 	}
 	EA_FORCE_INLINE void commitLayerImage( const Ref<Image> &rImage, const int nLayer ) {
-		if ( canUpdateLayer( rImage, nLayer ) ) {
+		if ( m_sourceRetentionPolicy == RETAIN_CPU_SOURCE && canUpdateLayer( rImage, nLayer ) ) {
 			m_layers[nLayer] = rImage;
 		}
 	}

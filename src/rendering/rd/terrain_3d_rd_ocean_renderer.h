@@ -63,6 +63,7 @@ private:
 	RID m_hColorUniformSet;
 	RID m_hShadowUniformSet;
 	std::vector<t3dRdOceanPipelineEntry_t> m_pipelines;
+	uint32_t m_nPipelineEvictCursor = 0u;
 	int64_t m_nVertexFormat = RenderingDevice::INVALID_FORMAT_ID;
 	uint64_t m_nTopologyGeneration = 0u;
 	uint64_t m_nStateGeneration = 0u;

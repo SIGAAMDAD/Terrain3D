@@ -243,6 +243,7 @@ public:
 	void renderPreviewOnRenderThread( void );
 	Ref<Image> createMeshPreview( uint16_t nAssetId, const Vector2i& rSize );
 	Dictionary getDiagnostics( void ) const;
+	size_t getRetainedCpuBytes( void ) const;
 };
 
 #endif // TERRAIN3D_RENDER_COORDINATOR_H
