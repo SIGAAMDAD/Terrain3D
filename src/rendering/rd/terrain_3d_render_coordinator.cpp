@@ -178,7 +178,7 @@ bool Terrain3DRenderCoordinator::ensureWorldNoiseCache( const Terrain3DMaterial 
 		return false;
 	}
 	image->generate_mipmaps();
-	if ( !m_worldNoiseCache.create( image ).is_valid() ) {
+	if ( !m_worldNoiseCache.create( image, T3D_RD_TEXTURE_LINEAR_DATA ).is_valid() ) {
 		LOG( ERROR, "Failed to create direct RD world-noise cache texture" );
 		return false;
 	}
@@ -232,7 +232,7 @@ bool Terrain3DRenderCoordinator::ensureMacroNoiseTexture( const Terrain3DMateria
 	}
 	if ( image.is_null() || image->is_empty() ) return false;
 	if ( !image->has_mipmaps() ) image->generate_mipmaps();
-	if ( !m_macroNoiseTexture.create( image ).is_valid() ) {
+	if ( !m_macroNoiseTexture.create( image, T3D_RD_TEXTURE_SOURCE_COLOR ).is_valid() ) {
 		LOG( ERROR, "Failed to create direct RD macro-variation noise texture" );
 		return false;
 	}
@@ -280,7 +280,7 @@ bool Terrain3DRenderCoordinator::ensureEditorBrushTexture( const Terrain3DMateri
 	// of the three atomic frame slots.
 	const bool bUploaded = m_editorBrushTexture.getRid().is_valid()
 			? m_editorBrushTexture.update2d( image )
-			: m_editorBrushTexture.create( image ).is_valid();
+			: m_editorBrushTexture.create( image, T3D_RD_TEXTURE_SOURCE_COLOR ).is_valid();
 	if ( !bUploaded ) {
 		LOG( ERROR, "Unable to create Terrain3D direct RD editor brush texture" );
 		return false;
@@ -763,6 +763,7 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 	resources.m_hFarAlbedoTextureRd = assets.is_valid() ? assets->getFarAlbedoArrayRid() : RID();
 	resources.m_hNormalTextureRd = assets.is_valid() ? assets->getNormalArrayRid() : RID();
 	resources.m_hSurfaceTextureRd = assets.is_valid() ? assets->getSurfaceArrayRid() : RID();
+	resources.m_hMaterialDisplacementTextureRd = assets.is_valid() ? assets->getDisplacementArrayRid() : RID();
 	resources.m_hDisplacementTextureRd =
 			snapshot.m_bDisplacementEnabled ? m_pTerrain->getComputeDisplacementTextureRid() : RID();
 	resources.m_hWorldNoiseTextureRd = m_worldNoiseCache.getRid();
@@ -787,6 +788,7 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 			resources.m_hFarAlbedoTextureRd != m_lastPublishedResources.m_hFarAlbedoTextureRd ||
 			resources.m_hNormalTextureRd != m_lastPublishedResources.m_hNormalTextureRd ||
 			resources.m_hSurfaceTextureRd != m_lastPublishedResources.m_hSurfaceTextureRd ||
+			resources.m_hMaterialDisplacementTextureRd != m_lastPublishedResources.m_hMaterialDisplacementTextureRd ||
 			resources.m_hDisplacementTextureRd != m_lastPublishedResources.m_hDisplacementTextureRd ||
 			resources.m_hWorldNoiseTextureRd != m_lastPublishedResources.m_hWorldNoiseTextureRd ||
 			resources.m_hMacroNoiseTextureRd != m_lastPublishedResources.m_hMacroNoiseTextureRd ||
@@ -1335,6 +1337,7 @@ void Terrain3DRenderCoordinator::render( RenderData *const pRenderData ) {
 			 publication->m_resources.m_hFarAlbedoTextureRd,
 			 publication->m_resources.m_hNormalTextureRd,
 			 publication->m_resources.m_hSurfaceTextureRd,
+			 publication->m_resources.m_hMaterialDisplacementTextureRd,
 			 publication->m_resources.m_hDisplacementTextureRd,
 			 publication->m_resources.m_hWorldNoiseTextureRd,
 			 publication->m_resources.m_hMacroNoiseTextureRd,
@@ -1471,7 +1474,8 @@ bool Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 				publication->m_resources.m_hMiddleHeightRegionMapTextureRd, publication->m_resources.m_hFarHeightTextureRd,
 				publication->m_resources.m_hFarColorTextureRd, publication->m_resources.m_hAlbedoTextureRd,
 				publication->m_resources.m_hFarAlbedoTextureRd, publication->m_resources.m_hNormalTextureRd,
-				publication->m_resources.m_hSurfaceTextureRd, publication->m_resources.m_hDisplacementTextureRd,
+				publication->m_resources.m_hSurfaceTextureRd, publication->m_resources.m_hMaterialDisplacementTextureRd,
+				publication->m_resources.m_hDisplacementTextureRd,
 				publication->m_resources.m_hWorldNoiseTextureRd, publication->m_resources.m_hMacroNoiseTextureRd,
 				publication->m_resources.m_hEditorBrushTextureRd, history_valid, viewport_reconfigured );
 		const bool ocean_ok = m_oceanRenderer.prepareForwardPass( rContext, snapshot,

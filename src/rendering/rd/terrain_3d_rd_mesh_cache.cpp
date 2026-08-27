@@ -142,14 +142,14 @@ static bool t3dRdAddTextureSource( const Ref<Texture2D> &rTexture, std::vector<t
 	PackedByteArray bytes = upload->get_data();
 	t3dRdTextureLayout_t layout;
 	if ( bytes.is_empty() ||
-			!Terrain3DRdTextureManager::buildLayout( upload, 1u, false, (uint64_t)( bytes.size() ), layout ) ) {
+			!Terrain3DRdTextureManager::buildLayout( upload, 1u, false, (uint64_t)( bytes.size() ), T3D_RD_TEXTURE_LINEAR_DATA, layout ) ) {
 		if ( upload->is_compressed() && upload->decompress() != OK ) {
 			return false;
 		}
 		upload->convert( Image::FORMAT_RGBA8 );
 		bytes = upload->get_data();
 		if ( bytes.is_empty() ||
-				!Terrain3DRdTextureManager::buildLayout( upload, 1u, false, (uint64_t)( bytes.size() ), layout ) ) {
+				!Terrain3DRdTextureManager::buildLayout( upload, 1u, false, (uint64_t)( bytes.size() ), T3D_RD_TEXTURE_LINEAR_DATA, layout ) ) {
 			return false;
 		}
 	}

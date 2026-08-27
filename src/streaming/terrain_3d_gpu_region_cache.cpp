@@ -27,7 +27,8 @@
 #include <utility>
 
 template <typename Callback>
-static bool t3dGpuRegionCacheForEachSquareRing( const Vector2i &rCenter, const int nMaxRadius, Callback &&rCallback ) {
+static bool t3dGpuRegionCacheForEachSquareRing( const Vector2i& rCenter, const int nMaxRadius, Callback&& rCallback )
+{
 	for ( int radius = 0; radius < nMaxRadius; ++radius ) {
 		if ( radius == 0 ) {
 			if ( !rCallback( rCenter ) ) {
@@ -49,17 +50,19 @@ static bool t3dGpuRegionCacheForEachSquareRing( const Vector2i &rCenter, const i
 	return true;
 }
 
-typedef struct t3dControlCookSource_s {
+typedef struct t3dControlCookSource_s
+{
 	PackedByteArray m_bytes;
 	bool m_bPresent = false;
 	bool m_bImplicit = true;
 } t3dControlCookSource_t;
 
-static bool t3dGpuRegionCacheReadCookControl( const eastl::array<t3dControlCookSource_t, 9> &rSources,
+static bool t3dGpuRegionCacheReadCookControl( const eastl::array<t3dControlCookSource_t, 9>& rSources,
 		const int nRegionSize,
 		const int iX,
 		const int iZ,
-		uint32_t &nControl ) {
+		uint32_t& nControl )
+{
 	int region_dx = 0;
 	int region_dz = 0;
 	int local_x = iX;
@@ -78,7 +81,7 @@ static bool t3dGpuRegionCacheReadCookControl( const eastl::array<t3dControlCookS
 		region_dz = 1;
 		local_z -= nRegionSize;
 	}
-	const t3dControlCookSource_t &source = rSources[( size_t )( ( region_dz + 1 ) * 3 + ( region_dx + 1 ) )];
+	const t3dControlCookSource_t& source = rSources[(size_t)( ( region_dz + 1 ) * 3 + ( region_dx + 1 ) )];
 	if ( !source.m_bPresent ) {
 		return false;
 	}
@@ -86,12 +89,13 @@ static bool t3dGpuRegionCacheReadCookControl( const eastl::array<t3dControlCookS
 		nControl = s_nRegionDefaultControl;
 		return true;
 	}
-	const size_t offset = ( size_t )( local_z * nRegionSize + local_x ) * sizeof( uint32_t );
+	const size_t offset = (size_t)( local_z * nRegionSize + local_x ) * sizeof( uint32_t );
 	std::memcpy( &nControl, source.m_bytes.ptr() + offset, sizeof( uint32_t ) );
 	return true;
 }
 
-static uint32_t t3dGpuRegionCacheReadU32Unaligned( const uint8_t *pBytes, const size_t nOffset ) {
+static uint32_t t3dGpuRegionCacheReadU32Unaligned( const uint8_t *pBytes, const size_t nOffset )
+{
 	uint32_t value = 0u;
 	if ( pBytes ) {
 		std::memcpy( &value, pBytes + nOffset, sizeof( value ) );
@@ -99,7 +103,8 @@ static uint32_t t3dGpuRegionCacheReadU32Unaligned( const uint8_t *pBytes, const 
 	return value;
 }
 
-static uint32_t t3dGpuRegionCacheMaterialMaskFromControlImage( const Ref<Image> &rControl ) {
+static uint32_t t3dGpuRegionCacheMaterialMaskFromControlImage( const Ref<Image>& rControl )
+{
 	if ( rControl.is_null() || rControl->is_empty() || rControl->get_format() != Image::FORMAT_RF ) {
 		return 1u;
 	}
@@ -109,37 +114,42 @@ static uint32_t t3dGpuRegionCacheMaterialMaskFromControlImage( const Ref<Image> 
 		return 1u;
 	}
 	uint32_t mask = 0u;
-	const size_t texels = ( size_t )( bytes.size() ) / 4u;
+	const size_t texels = (size_t)( bytes.size() ) / 4u;
 	for ( size_t index = 0; index < texels; ++index ) {
 		const uint32_t control = t3dGpuRegionCacheReadU32Unaligned( pRead, index * 4u );
-		mask |= 1u << ( uint32_t )( t3dGetBase( control ) & 31u );
-		mask |= 1u << ( uint32_t )( t3dGetOverlay( control ) & 31u );
+		mask |= 1u << (uint32_t)( t3dGetBase( control ) & 31u );
+		mask |= 1u << (uint32_t)( t3dGetOverlay( control ) & 31u );
 	}
 	return mask != 0u ? mask : 1u;
 }
 
-EA_FORCE_INLINE static uint8_t t3dGpuRegionCacheColorToByte( const float fValue ) {
-	return ( uint8_t )( CLAMP( Math::round( fValue * s_fByteMaxFloat ), 0.0f, s_fByteMaxFloat ) );
+EA_FORCE_INLINE static uint8_t t3dGpuRegionCacheColorToByte( const float fValue )
+{
+	return (uint8_t)( CLAMP( Math::round( fValue * s_fByteMaxFloat ), 0.0f, s_fByteMaxFloat ) );
 }
 
-static int t3dGpuRegionCacheMaterialIntParam( Terrain3DMaterial *pMaterial, const char *pszName, const int nDefault ) {
+static int t3dGpuRegionCacheMaterialIntParam( Terrain3DMaterial *pMaterial, const char *pszName, const int nDefault )
+{
 	if ( !pMaterial ) {
 		return nDefault;
 	}
 	const Variant value = pMaterial->getShaderParam( StringName( pszName ) );
-	return value.get_type() == Variant::NIL ? nDefault : ( int )( value );
+	return value.get_type() == Variant::NIL ? nDefault : (int)( value );
 }
 
-EA_FORCE_INLINE static size_t t3dGpuRegionCacheGpuImageBytes( const Ref<Image> &rImage ) {
-	return rImage.is_valid() ? ( size_t )( rImage->get_data().size() ) : 0u;
+EA_FORCE_INLINE static size_t t3dGpuRegionCacheGpuImageBytes( const Ref<Image>& rImage )
+{
+	return rImage.is_valid() ? (size_t)( rImage->get_data().size() ) : 0u;
 }
 
-class Terrain3DGpuRegionCacheLastScopeTimer {
+class Terrain3DGpuRegionCacheLastScopeTimer
+{
 	uint64_t m_nStartedUsec = 0u;
 	uint64_t *m_pElapsedUsec = nullptr;
 
 public:
-	Terrain3DGpuRegionCacheLastScopeTimer( uint64_t &nElapsedUsec, const bool bEnabled ) {
+	Terrain3DGpuRegionCacheLastScopeTimer( uint64_t& nElapsedUsec, const bool bEnabled )
+	{
 		nElapsedUsec = 0u;
 		if ( !bEnabled ) {
 			return;
@@ -148,7 +158,8 @@ public:
 		Time *time = Time::get_singleton();
 		m_nStartedUsec = time ? time->get_ticks_usec() : 0u;
 	}
-	~Terrain3DGpuRegionCacheLastScopeTimer( void ) {
+	~Terrain3DGpuRegionCacheLastScopeTimer( void )
+	{
 		if ( !m_pElapsedUsec ) {
 			return;
 		}
@@ -158,21 +169,24 @@ public:
 	}
 };
 
-class Terrain3DGpuRegionCacheProfileScopeTimer {
+class Terrain3DGpuRegionCacheProfileScopeTimer
+{
 	uint64_t m_nStartedUsec = 0u;
 	uint64_t *m_pElapsedUsec = nullptr;
 	const uint64_t *m_pRequestUsec = nullptr;
 	uint64_t *m_pEndToEndUsec = nullptr;
 
 public:
-	EA_FORCE_INLINE Terrain3DGpuRegionCacheProfileScopeTimer( uint64_t &nElapsedUsec,
-			const uint64_t &nRequestUsec,
-			uint64_t &nEndToEndUsec ) :
-			m_pElapsedUsec( &nElapsedUsec ), m_pRequestUsec( &nRequestUsec ), m_pEndToEndUsec( &nEndToEndUsec ) {
+	EA_FORCE_INLINE Terrain3DGpuRegionCacheProfileScopeTimer( uint64_t& nElapsedUsec,
+			const uint64_t& nRequestUsec,
+			uint64_t& nEndToEndUsec ) :
+			m_pElapsedUsec( &nElapsedUsec ), m_pRequestUsec( &nRequestUsec ), m_pEndToEndUsec( &nEndToEndUsec )
+	{
 		Time *time = Time::get_singleton();
 		m_nStartedUsec = time ? time->get_ticks_usec() : 0u;
 	}
-	~Terrain3DGpuRegionCacheProfileScopeTimer( void ) {
+	~Terrain3DGpuRegionCacheProfileScopeTimer( void )
+	{
 		Time *time = Time::get_singleton();
 		const uint64_t finished = time ? time->get_ticks_usec() : m_nStartedUsec;
 		if ( m_pElapsedUsec ) {
@@ -184,26 +198,28 @@ public:
 	}
 };
 
-Terrain3DGpuRegionCache::Terrain3DGpuRegionCache( Terrain3DRegionRepository &rRepository,
-		Terrain3DSamplingStorage &rSamplingStorage,
-		Terrain3DMapEditService &rMapEditService,
-		Terrain3DRuntimePageStore &rRuntimePageStore,
-		Terrain3DCpuRegionCache &rCpuRegionCache ) :
+Terrain3DGpuRegionCache::Terrain3DGpuRegionCache( Terrain3DRegionRepository& rRepository,
+		Terrain3DSamplingStorage& rSamplingStorage,
+		Terrain3DMapEditService& rMapEditService,
+		Terrain3DRuntimePageStore& rRuntimePageStore,
+		Terrain3DCpuRegionCache& rCpuRegionCache ) :
 		m_regionRepository( rRepository ),
 		m_samplingStorage( rSamplingStorage ),
 		m_mapEditService( rMapEditService ),
 		m_runtimePageStore( rRuntimePageStore ),
-		m_cpuRegionCache( rCpuRegionCache ) {
+		m_cpuRegionCache( rCpuRegionCache )
+{
 	std::fill_n( m_szGpuRegionLocations, s_nGpuCacheMaxLayers, s_v2iMax );
 	std::fill_n( m_szGpuRegionPriorityLocations, s_nGpuCacheMaxLayers, s_v2iMax );
 }
 
-void Terrain3DGpuRegionCache::setDefaultMaps( const Ref<Image> &rHeight,
-		const Ref<Image> &rControl,
-		const Ref<Image> &rColor,
-		const Ref<Image> &rDerived,
+void Terrain3DGpuRegionCache::setDefaultMaps( const Ref<Image>& rHeight,
+		const Ref<Image>& rControl,
+		const Ref<Image>& rColor,
+		const Ref<Image>& rDerived,
 		const bool bControlImplicit,
-		const bool bColorImplicit ) {
+		const bool bColorImplicit )
+{
 	const bool layoutChanged = bControlImplicit != m_bControlMapsImplicit || bColorImplicit != m_bColorMapsImplicit;
 	m_defaultHeightMap = rHeight;
 	m_defaultControlMap = rControl;
@@ -216,7 +232,9 @@ void Terrain3DGpuRegionCache::setDefaultMaps( const Ref<Image> &rHeight,
 	}
 }
 
-Ref<Image> Terrain3DGpuRegionCache::getRegionMapOrDefault( const Terrain3DRegion *pRegion, const t3dMapType_t eMapType ) const {
+Ref<Image> Terrain3DGpuRegionCache::getRegionMapOrDefault( const Terrain3DRegion *pRegion,
+		const t3dMapType_t eMapType ) const
+{
 	if ( pRegion && !pRegion->isDeleted() ) {
 		Ref<Image> pMap = pRegion->getMap( eMapType );
 		if ( pMap.is_valid() ) {
@@ -235,7 +253,8 @@ Ref<Image> Terrain3DGpuRegionCache::getRegionMapOrDefault( const Terrain3DRegion
 	}
 }
 
-Ref<Image> Terrain3DGpuRegionCache::makeGpuColorImage( const Ref<Image> &rImage ) const {
+Ref<Image> Terrain3DGpuRegionCache::makeGpuColorImage( const Ref<Image>& rImage ) const
+{
 	Ref<Image> pSource = rImage.is_valid() ? rImage : m_defaultColorMap;
 	if ( pSource.is_null() ) {
 		return Ref<Image>();
@@ -264,7 +283,8 @@ Ref<Image> Terrain3DGpuRegionCache::makeGpuColorImage( const Ref<Image> &rImage 
 	return pGpuImage;
 }
 
-Ref<Image> Terrain3DGpuRegionCache::makeGpuDerivedImage( const Ref<Image> &rImage ) const {
+Ref<Image> Terrain3DGpuRegionCache::makeGpuDerivedImage( const Ref<Image>& rImage ) const
+{
 	Ref<Image> pSource = rImage.is_valid() ? rImage : m_defaultDerivedMap;
 	if ( pSource.is_null() ) {
 		return Ref<Image>();
@@ -282,9 +302,10 @@ Ref<Image> Terrain3DGpuRegionCache::makeGpuDerivedImage( const Ref<Image> &rImag
 	return pGpuImage;
 }
 
-Ref<Image> Terrain3DGpuRegionCache::makeMiddleCompositeImage( const Vector2i &rLocation,
-		const Ref<Image> &rControl,
-		const Ref<Image> &rColor ) const {
+Ref<Image> Terrain3DGpuRegionCache::makeMiddleCompositeImage( const Vector2i& rLocation,
+		const Ref<Image>& rControl,
+		const Ref<Image>& rColor ) const
+{
 	if ( rControl.is_null() || rColor.is_null() || rControl->get_format() != Image::FORMAT_RF ||
 			rColor->get_format() != Image::FORMAT_RGBA8 ) {
 		return Ref<Image>();
@@ -296,8 +317,8 @@ Ref<Image> Terrain3DGpuRegionCache::makeMiddleCompositeImage( const Vector2i &rL
 	}
 	const PackedByteArray control_bytes = rControl->get_data();
 	const PackedByteArray color_bytes = rColor->get_data();
-	if ( control_bytes.size() < ( int64_t )( rControl->get_width() ) * rControl->get_height() * 4 ||
-			color_bytes.size() < ( int64_t )( width )*height * 4 ) {
+	if ( control_bytes.size() < (int64_t)( rControl->get_width() ) * rControl->get_height() * 4 ||
+			color_bytes.size() < (int64_t)(width)*height * 4 ) {
 		return Ref<Image>();
 	}
 	PackedColorArray material_colors;
@@ -326,7 +347,7 @@ Ref<Image> Terrain3DGpuRegionCache::makeMiddleCompositeImage( const Vector2i &rL
 			if ( pMaterialImage.is_valid() && pMaterialImage->is_empty() ) {
 				pMaterialImage.unref();
 			}
-			material_images[( size_t )( material )] = pMaterialImage;
+			material_images[(size_t)( material )] = pMaterialImage;
 		}
 	}
 	PackedByteArray output;
@@ -339,54 +360,54 @@ Ref<Image> Terrain3DGpuRegionCache::makeMiddleCompositeImage( const Vector2i &rL
 		for ( int x = 0; x < width; ++x ) {
 			const int control_x = MIN( rControl->get_width() - 1, x * rControl->get_width() / width );
 			const uint32_t control = t3dGpuRegionCacheReadU32Unaligned(
-					pControl, ( size_t )( control_y * rControl->get_width() + control_x ) * 4u );
-			const int base = ( int )( t3dGetBase( control ) );
-			const int overlay = ( int )( t3dGetOverlay( control ) );
+					pControl, (size_t)( control_y * rControl->get_width() + control_x ) * 4u );
+			const int base = (int)( t3dGetBase( control ) );
+			const int overlay = (int)( t3dGetOverlay( control ) );
 			const Color base_color = base < material_colors.size() ? material_colors[base] : s_colorWhite;
 			const Color overlay_color = overlay < material_colors.size() ? material_colors[overlay] : base_color;
-			const float control_scale = 0.9f - ( float )( ( ( t3dGetUvScale( control ) + 3u ) % 8u ) + 1u ) * 0.1f;
-			const float angle = ( float )( t3dGetUvRotation( control ) )*Math_TAU / 16.0f;
+			const float control_scale = 0.9f - (float)( ( ( t3dGetUvScale( control ) + 3u ) % 8u ) + 1u ) * 0.1f;
+			const float angle = (float)(t3dGetUvRotation( control ))*Math_TAU / 16.0f;
 			const float cs = Math::cos( angle );
 			const float sn = Math::sin( angle );
 			const float local_x =
-					( ( float )( x ) + 0.5f ) * ( float )( m_regionRepository.getRegionSize() ) / ( float )( width );
+					( (float)( x ) + 0.5f ) * (float)( m_regionRepository.getRegionSize() ) / (float)( width );
 			const float local_y =
-					( ( float )( y ) + 0.5f ) * ( float )( m_regionRepository.getRegionSize() ) / ( float )( height );
-			const float world_x = ( ( float )( rLocation.x * m_regionRepository.getRegionSize() ) + local_x ) *
-					( float )( m_regionRepository.getVertexSpacing() );
-			const float world_y = ( ( float )( rLocation.y * m_regionRepository.getRegionSize() ) + local_y ) *
-					( float )( m_regionRepository.getVertexSpacing() );
-			auto sample_material = [&]( const int material_id, const Color &rTint ) -> Color {
+					( (float)( y ) + 0.5f ) * (float)( m_regionRepository.getRegionSize() ) / (float)( height );
+			const float world_x = ( (float)( rLocation.x * m_regionRepository.getRegionSize() ) + local_x ) *
+					(float)( m_regionRepository.getVertexSpacing() );
+			const float world_y = ( (float)( rLocation.y * m_regionRepository.getRegionSize() ) + local_y ) *
+					(float)( m_regionRepository.getVertexSpacing() );
+			auto sample_material = [&]( const int material_id, const Color& rTint ) -> Color {
 				if ( material_id < 0 || material_id >= s_nMaxTextureAssets ||
-						material_images[( size_t )( material_id )].is_null() ) {
+						material_images[(size_t)( material_id )].is_null() ) {
 					return rTint;
 				}
-				const Ref<Image> &pImage = material_images[( size_t )( material_id )];
+				const Ref<Image>& pImage = material_images[(size_t)( material_id )];
 				const float asset_scale = material_id < material_scales.size() ? material_scales[material_id] : 0.1f;
 				const float source_u = ( cs * world_x + sn * world_y ) * control_scale * asset_scale;
 				const float source_v = ( cs * world_y - sn * world_x ) * control_scale * asset_scale;
 				const float wrapped_u = source_u - Math::floor( source_u );
 				const float wrapped_v = source_v - Math::floor( source_v );
-				const int source_x = CLAMP( ( int )( wrapped_u * pImage->get_width() ), 0, pImage->get_width() - 1 );
-				const int source_y = CLAMP( ( int )( wrapped_v * pImage->get_height() ), 0, pImage->get_height() - 1 );
+				const int source_x = CLAMP( (int)( wrapped_u * pImage->get_width() ), 0, pImage->get_width() - 1 );
+				const int source_y = CLAMP( (int)( wrapped_v * pImage->get_height() ), 0, pImage->get_height() - 1 );
 				return pImage->get_pixel( source_x, source_y ) * rTint;
 			};
 			const Color base_sample = sample_material( base, base_color );
 			const Color overlay_sample = sample_material( overlay, overlay_color );
-			float blend = ( float )( t3dGetBlend( control ) ) / 255.0f;
+			float blend = (float)( t3dGetBlend( control ) ) / 255.0f;
 			blend = CLAMP( ( blend - 0.12f ) / 0.76f, 0.0f, 1.0f );
 			blend = blend * blend * ( 3.0f - 2.0f * blend );
 			const Color material_color = base_sample.lerp( overlay_sample, blend );
-			const size_t offset = ( size_t )( y * width + x ) * 4u;
-			const float authored_r = ( float )( pColor[offset] ) / 255.0f;
-			const float authored_g = ( float )( pColor[offset + 1u] ) / 255.0f;
-			const float authored_b = ( float )( pColor[offset + 2u] ) / 255.0f;
+			const size_t offset = (size_t)( y * width + x ) * 4u;
+			const float authored_r = (float)( pColor[offset] ) / 255.0f;
+			const float authored_g = (float)( pColor[offset + 1u] ) / 255.0f;
+			const float authored_b = (float)( pColor[offset + 2u] ) / 255.0f;
 			pWrite[offset] = t3dGpuRegionCacheColorToByte( authored_r * material_color.r );
 			pWrite[offset + 1u] = t3dGpuRegionCacheColorToByte( authored_g * material_color.g );
 			pWrite[offset + 2u] = t3dGpuRegionCacheColorToByte( authored_b * material_color.b );
 			pWrite[offset + 3u] = t3dIsHole( control )
 					? 0u
-					: ( uint8_t )( 0x80u | ( ( uint32_t )( pColor[offset + 3u] ) * 127u + 127u ) / 255u );
+					: (uint8_t)( 0x80u | ( (uint32_t)( pColor[offset + 3u] ) * 127u + 127u ) / 255u );
 		}
 	}
 	Ref<Image> pComposite = Image::create_from_data( width, height, false, Image::FORMAT_RGBA8, output );
@@ -396,7 +417,8 @@ Ref<Image> Terrain3DGpuRegionCache::makeMiddleCompositeImage( const Vector2i &rL
 	return pComposite;
 }
 
-Ref<Image> Terrain3DGpuRegionCache::makeTerrainShadowMaskImage( const Terrain3DRegion *const pRegion ) const {
+Ref<Image> Terrain3DGpuRegionCache::makeTerrainShadowMaskImage( const Terrain3DRegion *const pRegion ) const
+{
 	const int region_size = m_regionRepository.getRegionSize();
 	if ( region_size <= 0 ) {
 		return Ref<Image>();
@@ -405,7 +427,8 @@ Ref<Image> Terrain3DGpuRegionCache::makeTerrainShadowMaskImage( const Terrain3DR
 	if ( pRegion && !pRegion->isDeleted() ) {
 		const Ref<Terrain3DRegionLighting> lighting = pRegion->getLighting();
 		if ( lighting.is_valid() && lighting->hasTerrainShadowMask() ) {
-			const Ref<Resource> resource = ResourceLoader::get_singleton()->load( lighting->getTerrainShadowMaskPath() );
+			const Ref<Resource> resource =
+					ResourceLoader::get_singleton()->load( lighting->getTerrainShadowMaskPath() );
 			image = resource;
 		}
 	}
@@ -416,22 +439,29 @@ Ref<Image> Terrain3DGpuRegionCache::makeTerrainShadowMaskImage( const Terrain3DR
 	if ( image->is_compressed() && image->decompress() != OK ) {
 		return Ref<Image>();
 	}
-	if ( image->has_mipmaps() ) image->clear_mipmaps();
-	if ( image->get_format() != Image::FORMAT_L8 ) image->convert( Image::FORMAT_L8 );
+	if ( image->has_mipmaps() ) {
+		image->clear_mipmaps();
+	}
+	if ( image->get_format() != Image::FORMAT_L8 ) {
+		image->convert( Image::FORMAT_L8 );
+	}
 	if ( image->get_width() != region_size || image->get_height() != region_size ) {
 		image->resize( region_size, region_size, Image::INTERPOLATE_BILINEAR );
 	}
-	if ( image->generate_mipmaps() != OK ) return Ref<Image>();
+	if ( image->generate_mipmaps() != OK ) {
+		return Ref<Image>();
+	}
 	return image;
 }
 
-Ref<Image> Terrain3DGpuRegionCache::makeGpuRenderControlImage( const Vector2i &vLocation ) const {
+Ref<Image> Terrain3DGpuRegionCache::makeGpuRenderControlImage( const Vector2i& vLocation ) const
+{
 	eastl::array<t3dControlCookSource_t, 9> sources;
 	for ( int dz = -1; dz <= 1; ++dz ) {
 		for ( int dx = -1; dx <= 1; ++dx ) {
 			const Vector2i location = vLocation + Vector2i( dx, dz );
 			const int source_index = ( dz + 1 ) * 3 + ( dx + 1 );
-			t3dControlCookSource_t &source = sources[( size_t )( source_index )];
+			t3dControlCookSource_t& source = sources[(size_t)( source_index )];
 			const Terrain3DRegion *pRegion = m_regionRepository.getRegionPtr( location );
 			Ref<Terrain3DRegion> pLoadedSource;
 			const bool bNeedsSourceLoad = !pRegion || pRegion->isDeleted() ||
@@ -456,7 +486,7 @@ Ref<Image> Terrain3DGpuRegionCache::makeGpuRenderControlImage( const Vector2i &v
 			source.m_bytes = pControl->get_data();
 			if ( source.m_bytes.size() !=
 					m_regionRepository.getRegionSize() * m_regionRepository.getRegionSize() *
-							( int )( sizeof( uint32_t ) ) ) {
+							(int)( sizeof( uint32_t ) ) ) {
 				return Ref<Image>();
 			}
 			source.m_bImplicit = false;
@@ -465,19 +495,19 @@ Ref<Image> Terrain3DGpuRegionCache::makeGpuRenderControlImage( const Vector2i &v
 
 	PackedByteArray output;
 	output.resize(
-			m_regionRepository.getRegionSize() * m_regionRepository.getRegionSize() * ( int )( sizeof( uint32_t ) ) );
+			m_regionRepository.getRegionSize() * m_regionRepository.getRegionSize() * (int)( sizeof( uint32_t ) ) );
 	uint8_t *const pWrite = output.ptrw();
 	for ( int z = 0; z < m_regionRepository.getRegionSize(); ++z ) {
 		for ( int x = 0; x < m_regionRepository.getRegionSize(); ++x ) {
 			uint32_t center = s_nRegionDefaultControl;
 			if ( !t3dGpuRegionCacheReadCookControl( sources, m_regionRepository.getRegionSize(), x, z, center ) ) {
-				std::memcpy( pWrite + ( size_t )( z * m_regionRepository.getRegionSize() + x ) * sizeof( uint32_t ),
+				std::memcpy( pWrite + (size_t)( z * m_regionRepository.getRegionSize() + x ) * sizeof( uint32_t ),
 						&center,
 						sizeof( uint32_t ) );
 				continue;
 			}
 			if ( t3dIsAuto( center ) || t3dIsHole( center ) ) {
-				std::memcpy( pWrite + ( size_t )( z * m_regionRepository.getRegionSize() + x ) * sizeof( uint32_t ),
+				std::memcpy( pWrite + (size_t)( z * m_regionRepository.getRegionSize() + x ) * sizeof( uint32_t ),
 						&center,
 						sizeof( uint32_t ) );
 				continue;
@@ -493,16 +523,16 @@ Ref<Image> Terrain3DGpuRegionCache::makeGpuRenderControlImage( const Vector2i &v
 						continue;
 					}
 					const uint64_t spatial_weight =
-							( uint64_t )( s_szRenderControlKernel[dx + s_nRenderControlBlendRadius] *
+							(uint64_t)( s_szRenderControlKernel[dx + s_nRenderControlBlendRadius] *
 									s_szRenderControlKernel[dz + s_nRenderControlBlendRadius] );
 					const uint8_t base = t3dGetBase( pControl );
 					const uint8_t overlay = t3dGetOverlay( pControl );
 					const uint8_t blend = t3dGetBlend( pControl );
 					if ( base == overlay ) {
-						material_weights[( size_t )( base )] += spatial_weight * 255u;
+						material_weights[(size_t)( base )] += spatial_weight * 255u;
 					} else {
-						material_weights[( size_t )( base )] += spatial_weight * ( uint64_t )( 255u - blend );
-						material_weights[( size_t )( overlay )] += spatial_weight * ( uint64_t )( blend );
+						material_weights[(size_t)( base )] += spatial_weight * (uint64_t)( 255u - blend );
+						material_weights[(size_t)( overlay )] += spatial_weight * (uint64_t)( blend );
 					}
 				}
 			}
@@ -511,21 +541,21 @@ Ref<Image> Terrain3DGpuRegionCache::makeGpuRenderControlImage( const Vector2i &v
 			int second = -1;
 			for ( int material = 0; material < s_nMaxTextureAssets; ++material ) {
 				if ( strongest < 0 ||
-						material_weights[( size_t )( material )] > material_weights[( size_t )( strongest )] ) {
+						material_weights[(size_t)( material )] > material_weights[(size_t)( strongest )] ) {
 					second = strongest;
 					strongest = material;
 				} else if ( second < 0 ||
-						material_weights[( size_t )( material )] > material_weights[( size_t )( second )] ) {
+						material_weights[(size_t)( material )] > material_weights[(size_t)( second )] ) {
 					second = material;
 				}
 			}
-			if ( strongest < 0 || material_weights[( size_t )( strongest )] == 0u ) {
-				std::memcpy( pWrite + ( size_t )( z * m_regionRepository.getRegionSize() + x ) * sizeof( uint32_t ),
+			if ( strongest < 0 || material_weights[(size_t)( strongest )] == 0u ) {
+				std::memcpy( pWrite + (size_t)( z * m_regionRepository.getRegionSize() + x ) * sizeof( uint32_t ),
 						&center,
 						sizeof( uint32_t ) );
 				continue;
 			}
-			if ( second < 0 || material_weights[( size_t )( second )] == 0u ) {
+			if ( second < 0 || material_weights[(size_t)( second )] == 0u ) {
 				second = strongest;
 			}
 
@@ -539,17 +569,17 @@ Ref<Image> Terrain3DGpuRegionCache::makeGpuRenderControlImage( const Vector2i &v
 			if ( base > overlay ) {
 				std::swap( base, overlay );
 			}
-			const uint64_t base_weight = material_weights[( size_t )( base )];
-			const uint64_t overlay_weight = material_weights[( size_t )( overlay )];
+			const uint64_t base_weight = material_weights[(size_t)( base )];
+			const uint64_t overlay_weight = material_weights[(size_t)( overlay )];
 			const uint64_t pair_weight = base_weight + overlay_weight;
 			uint8_t blend = 0u;
 			if ( base != overlay && pair_weight > 0u ) {
-				blend = ( uint8_t )( CLAMP(
-						( int )( ( overlay_weight * 255u + pair_weight / 2u ) / pair_weight ), 0, 255 ) );
+				blend = (uint8_t)( CLAMP(
+						(int)( ( overlay_weight * 255u + pair_weight / 2u ) / pair_weight ), 0, 255 ) );
 			}
-			const uint32_t cooked = ( center & ~s_nRenderControlMaterialMask ) | t3dEncBase( ( uint8_t )( base ) ) |
-					t3dEncOverlay( ( uint8_t )( overlay ) ) | t3dEncBlend( blend );
-			std::memcpy( pWrite + ( size_t )( z * m_regionRepository.getRegionSize() + x ) * sizeof( uint32_t ),
+			const uint32_t cooked = ( center & ~s_nRenderControlMaterialMask ) | t3dEncBase( (uint8_t)( base ) ) |
+					t3dEncOverlay( (uint8_t)( overlay ) ) | t3dEncBlend( blend );
+			std::memcpy( pWrite + (size_t)( z * m_regionRepository.getRegionSize() + x ) * sizeof( uint32_t ),
 					&cooked,
 					sizeof( uint32_t ) );
 		}
@@ -558,7 +588,8 @@ Ref<Image> Terrain3DGpuRegionCache::makeGpuRenderControlImage( const Vector2i &v
 			m_regionRepository.getRegionSize(), m_regionRepository.getRegionSize(), false, Image::FORMAT_RF, output );
 }
 
-int Terrain3DGpuRegionCache::calculateRequiredCorePagesForLods( const int nDetailLods ) const {
+int Terrain3DGpuRegionCache::calculateRequiredCorePagesForLods( const int nDetailLods ) const
+{
 	if ( !m_pTerrain || m_regionRepository.getRegionSize() <= 0 || m_regionRepository.getRegionMapSize() <= 0 ) {
 		return 0;
 	}
@@ -566,13 +597,14 @@ int Terrain3DGpuRegionCache::calculateRequiredCorePagesForLods( const int nDetai
 	const int detail_lods = nDetailLods <= 0 ? total_lods : CLAMP( nDetailLods, 1, total_lods );
 	const int radius = t3dGpuCacheCalculateFootprintRadiusRegions( m_pTerrain->getMeshSize(),
 			detail_lods,
-			( double )( m_regionRepository.getVertexSpacing() ),
+			(double)( m_regionRepository.getVertexSpacing() ),
 			m_regionRepository.getRegionSize() );
 	const int diameter = radius * 2 + 1;
 	return MIN( diameter * diameter, m_regionRepository.getRegionMapSize() * m_regionRepository.getRegionMapSize() );
 }
 
-int Terrain3DGpuRegionCache::calculateAuthoringGpuRegionBudgetMb( void ) const {
+int Terrain3DGpuRegionCache::calculateAuthoringGpuRegionBudgetMb( void ) const
+{
 	// m_nGpuRegionCacheBudgetMb is already the effective allocation produced by
 	// Terrain3D's aggregate memory-budget coordinator. Authoring may use more
 	// physical layers than runtime, but it must fit those layers inside that same
@@ -580,7 +612,8 @@ int Terrain3DGpuRegionCache::calculateAuthoringGpuRegionBudgetMb( void ) const {
 	return CLAMP( MAX( 1, m_nGpuRegionCacheBudgetMb ), s_nGpuRegionCacheMinBudgetMb, s_nGpuRegionCacheMaxBudgetMb );
 }
 
-int Terrain3DGpuRegionCache::calculateCapacityForLods( const int nDetailLods ) const {
+int Terrain3DGpuRegionCache::calculateCapacityForLods( const int nDetailLods ) const
+{
 	if ( !m_pTerrain || m_regionRepository.getRegionSize() <= 0 || m_regionRepository.getRegionMapSize() <= 0 ) {
 		return 0;
 	}
@@ -607,7 +640,8 @@ int Terrain3DGpuRegionCache::calculateCapacityForLods( const int nDetailLods ) c
 	return MAX( required_core > 0 ? 1 : 0, capacity );
 }
 
-int Terrain3DGpuRegionCache::calculateGpuRegionCacheCapacity( void ) const {
+int Terrain3DGpuRegionCache::calculateGpuRegionCacheCapacity( void ) const
+{
 	if ( m_pTerrain && m_pTerrain->isEditorAuthoringMode() ) {
 		const int page_limit = CLAMP( m_pTerrain->getEditorGpuRegionCachePages(), 16, s_nGpuCacheEditorMaxLayers );
 		return t3dGpuCacheCalculateCapacity( m_regionRepository.getRegionSize(),
@@ -640,7 +674,8 @@ int Terrain3DGpuRegionCache::calculateGpuRegionCacheCapacity( void ) const {
 			m_pTerrain ? m_pTerrain->getGpuFarHeightAtlasSide() : s_nGpuCacheFarHeightSide );
 }
 
-int Terrain3DGpuRegionCache::calculateGpuRegionPhysicalLayers( const int nMappedCapacity ) const {
+int Terrain3DGpuRegionCache::calculateGpuRegionPhysicalLayers( const int nMappedCapacity ) const
+{
 	if ( m_pTerrain && m_pTerrain->isEditorAuthoringMode() ) {
 		return t3dGpuCacheCalculatePhysicalLayers( nMappedCapacity,
 				m_nGpuRegionSparePages,
@@ -649,7 +684,8 @@ int Terrain3DGpuRegionCache::calculateGpuRegionPhysicalLayers( const int nMapped
 	return t3dGpuCacheCalculatePhysicalLayers( nMappedCapacity, m_nGpuRegionSparePages, s_nGpuCacheRuntimeMaxLayers );
 }
 
-int Terrain3DGpuRegionCache::calculateGpuRegionRequiredRadius( void ) const {
+int Terrain3DGpuRegionCache::calculateGpuRegionRequiredRadius( void ) const
+{
 	if ( !m_pTerrain ) {
 		return 0;
 	}
@@ -660,11 +696,12 @@ int Terrain3DGpuRegionCache::calculateGpuRegionRequiredRadius( void ) const {
 	}
 	return t3dGpuCacheCalculateFootprintRadiusRegions( m_pTerrain->getMeshSize(),
 			detail_lods,
-			( double )( m_regionRepository.getVertexSpacing() ),
+			(double)( m_regionRepository.getVertexSpacing() ),
 			m_regionRepository.getRegionSize() );
 }
 
-int Terrain3DGpuRegionCache::calculateGpuRegionRequestedPages( void ) const {
+int Terrain3DGpuRegionCache::calculateGpuRegionRequestedPages( void ) const
+{
 	if ( !m_pTerrain || m_regionRepository.getActiveRegionCount() <= 0 ) {
 		return 0;
 	}
@@ -672,13 +709,14 @@ int Terrain3DGpuRegionCache::calculateGpuRegionRequestedPages( void ) const {
 		return MIN( m_regionRepository.getActiveRegionCount(), m_pTerrain->getEditorGpuRegionCachePages() );
 	}
 	const Dictionary streaming = m_pTerrain->getRegionStreamingStats();
-	const int active = ( int )( streaming["active"] );
-	const int hot = ( int )( streaming["hot"] );
-	const int predicted = ( int )( streaming["predicted_promotions"] );
+	const int active = (int)( streaming["active"] );
+	const int hot = (int)( streaming["hot"] );
+	const int predicted = (int)( streaming["predicted_promotions"] );
 	return MIN( m_regionRepository.getActiveRegionCount(), active + hot + predicted );
 }
 
-size_t Terrain3DGpuRegionCache::estimateLayerBytes( void ) const {
+size_t Terrain3DGpuRegionCache::estimateLayerBytes( void ) const
+{
 	const size_t base = t3dGpuCacheEstimateLayerBytes( m_regionRepository.getRegionSize(),
 			m_bControlMapsImplicit,
 			!isColorChannelEnabled(),
@@ -689,7 +727,8 @@ size_t Terrain3DGpuRegionCache::estimateLayerBytes( void ) const {
 	return base + ( shadow_texels * 4u ) / 3u;
 }
 
-bool Terrain3DGpuRegionCache::isColorChannelEnabled( void ) const {
+bool Terrain3DGpuRegionCache::isColorChannelEnabled( void ) const
+{
 	if ( m_bColorMapsImplicit ) {
 		return false;
 	}
@@ -708,7 +747,8 @@ bool Terrain3DGpuRegionCache::isColorChannelEnabled( void ) const {
 	return near_needed || middle_needed;
 }
 
-bool Terrain3DGpuRegionCache::isDerivedChannelEnabled( void ) const {
+bool Terrain3DGpuRegionCache::isDerivedChannelEnabled( void ) const
+{
 	if ( !m_pTerrain || m_pTerrain->isEditorAuthoringMode() ) {
 		return true;
 	}
@@ -722,7 +762,8 @@ bool Terrain3DGpuRegionCache::isDerivedChannelEnabled( void ) const {
 					pMaterial->getMiddleTerrainNormalQuality() == TERRAIN_NORMAL_QUALITY_DETAILED );
 }
 
-size_t Terrain3DGpuRegionCache::estimateSharedBytes( void ) const {
+size_t Terrain3DGpuRegionCache::estimateSharedBytes( void ) const
+{
 	return t3dGpuCacheEstimateSharedBytes( m_regionRepository.getRegionSize(),
 			m_bControlMapsImplicit,
 			!isColorChannelEnabled(),
@@ -731,29 +772,30 @@ size_t Terrain3DGpuRegionCache::estimateSharedBytes( void ) const {
 			m_pTerrain ? m_pTerrain->getGpuFarHeightAtlasSide() : s_nGpuCacheFarHeightSide );
 }
 
-int Terrain3DGpuRegionCache::estimateGpuRegionUploadCalls( const Terrain3DRegion *pRegion, const int nLayer ) const {
+int Terrain3DGpuRegionCache::estimateGpuRegionUploadCalls( const Terrain3DRegion *pRegion, const int nLayer ) const
+{
 	if ( !pRegion || nLayer < 0 || nLayer >= m_nGpuRegionPhysicalLayerCount ) {
 		return 0;
 	}
-	const uint8_t source_flags = ( uint8_t )( pRegion->getChannelFlags() );
+	const uint8_t source_flags = (uint8_t)( pRegion->getChannelFlags() );
 	const uint8_t layer_flags = m_szGpuRegionLayerChannelFlags[nLayer];
 	int calls = 2; // Height and terrain shadowmask are always published.
 	if ( isDerivedChannelEnabled() ) {
 		++calls;
 	}
 	if ( !m_bControlMapsImplicit &&
-			t3dGpuCacheOptionalChannelNeedsUpdate(
-					source_flags, layer_flags, ( uint8_t )( REGION_CHANNEL_CONTROL ) ) ) {
+			t3dGpuCacheOptionalChannelNeedsUpdate( source_flags, layer_flags, (uint8_t)( REGION_CHANNEL_CONTROL ) ) ) {
 		++calls;
 	}
 	if ( isColorChannelEnabled() &&
-			t3dGpuCacheOptionalChannelNeedsUpdate( source_flags, layer_flags, ( uint8_t )( REGION_CHANNEL_COLOR ) ) ) {
+			t3dGpuCacheOptionalChannelNeedsUpdate( source_flags, layer_flags, (uint8_t)( REGION_CHANNEL_COLOR ) ) ) {
 		++calls;
 	}
 	return calls;
 }
 
-size_t Terrain3DGpuRegionCache::estimateGpuRegionUploadBytes( const Terrain3DRegion *pRegion, const int nLayer ) const {
+size_t Terrain3DGpuRegionCache::estimateGpuRegionUploadBytes( const Terrain3DRegion *pRegion, const int nLayer ) const
+{
 	if ( !pRegion || nLayer < 0 || nLayer >= m_nGpuRegionPhysicalLayerCount ) {
 		return 0u;
 	}
@@ -767,38 +809,40 @@ size_t Terrain3DGpuRegionCache::estimateGpuRegionUploadBytes( const Terrain3DReg
 	if ( isDerivedChannelEnabled() ) {
 		bytes += derived_texels * 2u;
 	}
-	const uint8_t source_flags = ( uint8_t )( pRegion->getChannelFlags() );
+	const uint8_t source_flags = (uint8_t)( pRegion->getChannelFlags() );
 	const uint8_t layer_flags = m_szGpuRegionLayerChannelFlags[nLayer];
 	if ( !m_bControlMapsImplicit &&
-			t3dGpuCacheOptionalChannelNeedsUpdate(
-					source_flags, layer_flags, ( uint8_t )( REGION_CHANNEL_CONTROL ) ) ) {
+			t3dGpuCacheOptionalChannelNeedsUpdate( source_flags, layer_flags, (uint8_t)( REGION_CHANNEL_CONTROL ) ) ) {
 		bytes += full_texels * 4u;
 	}
 	if ( isColorChannelEnabled() &&
-			t3dGpuCacheOptionalChannelNeedsUpdate( source_flags, layer_flags, ( uint8_t )( REGION_CHANNEL_COLOR ) ) ) {
+			t3dGpuCacheOptionalChannelNeedsUpdate( source_flags, layer_flags, (uint8_t)( REGION_CHANNEL_COLOR ) ) ) {
 		bytes += t3dGpuCacheColorBytes(
 				m_regionRepository.getRegionSize(), m_pTerrain ? m_pTerrain->getGpuRegionColorResolutionDivisor() : 1 );
 	}
 	return bytes;
 }
 
-int Terrain3DGpuRegionCache::getGpuRegionTextureUpdateCallsLastTick( void ) const {
+int Terrain3DGpuRegionCache::getGpuRegionTextureUpdateCallsLastTick( void ) const
+{
 	return m_nGpuRegionHeightUpdatesLastTick + m_nGpuRegionControlUpdatesLastTick + m_nGpuRegionColorUpdatesLastTick +
-			m_nGpuRegionDerivedUpdatesLastTick + m_nGpuRegionTerrainShadowUpdatesLastTick + m_nGpuRegionPageTableUpdatesLastTick;
+			m_nGpuRegionDerivedUpdatesLastTick + m_nGpuRegionTerrainShadowUpdatesLastTick +
+			m_nGpuRegionPageTableUpdatesLastTick;
 }
 
-void Terrain3DGpuRegionCache::reset( const bool bClearTextures ) {
-	std::fill_n( m_szGpuRegionMap, s_nMaxRegionSlots, ( uint16_t )( 0 ) );
+void Terrain3DGpuRegionCache::reset( const bool bClearTextures )
+{
+	std::fill_n( m_szGpuRegionMap, s_nMaxRegionSlots, (uint16_t)( 0 ) );
 	std::fill_n( m_szGpuRegionLocations, s_nGpuCacheMaxLayers, s_v2iMax );
-	std::fill_n( m_szGpuRegionLastUseTick, s_nGpuCacheMaxLayers, ( uint64_t )( 0 ) );
-	std::fill_n( m_szGpuRegionLoadedTick, s_nGpuCacheMaxLayers, ( uint64_t )( 0 ) );
-	std::fill_n( m_szGpuRegionRetireAfterFrame, s_nGpuCacheMaxLayers, ( uint64_t )( 0 ) );
-	std::fill_n( m_szGpuRegionSlotStates, s_nGpuCacheMaxLayers, ( uint8_t )( TERRAIN3D_GPU_SLOT_FREE ) );
-	std::fill_n( m_szGpuRegionPrefetchOrigin, s_nGpuCacheMaxLayers, ( uint8_t )( 0 ) );
-	std::fill_n( m_szGpuRegionLayerChannelFlags, s_nGpuCacheMaxLayers, ( uint8_t )( 0 ) );
-	std::fill_n( m_szGpuRegionMaterialMasks, s_nGpuCacheMaxLayers, ( uint32_t )( 0 ) );
+	std::fill_n( m_szGpuRegionLastUseTick, s_nGpuCacheMaxLayers, (uint64_t)( 0 ) );
+	std::fill_n( m_szGpuRegionLoadedTick, s_nGpuCacheMaxLayers, (uint64_t)( 0 ) );
+	std::fill_n( m_szGpuRegionRetireAfterFrame, s_nGpuCacheMaxLayers, (uint64_t)( 0 ) );
+	std::fill_n( m_szGpuRegionSlotStates, s_nGpuCacheMaxLayers, (uint8_t)( TERRAIN3D_GPU_SLOT_FREE ) );
+	std::fill_n( m_szGpuRegionPrefetchOrigin, s_nGpuCacheMaxLayers, (uint8_t)( 0 ) );
+	std::fill_n( m_szGpuRegionLayerChannelFlags, s_nGpuCacheMaxLayers, (uint8_t)( 0 ) );
+	std::fill_n( m_szGpuRegionMaterialMasks, s_nGpuCacheMaxLayers, (uint32_t)( 0 ) );
 	std::fill_n( m_szGpuRegionPriorityLocations, s_nGpuCacheMaxLayers, s_v2iMax );
-	std::fill_n( m_szGpuRegionPriorityClasses, s_nGpuCacheMaxLayers, ( uint8_t )( 0 ) );
+	std::fill_n( m_szGpuRegionPriorityClasses, s_nGpuCacheMaxLayers, (uint8_t)( 0 ) );
 	m_gpuHeightMaps.clear();
 	m_gpuControlMaps.clear();
 	m_gpuColorMaps.clear();
@@ -871,7 +915,8 @@ void Terrain3DGpuRegionCache::reset( const bool bClearTextures ) {
 	}
 }
 
-bool Terrain3DGpuRegionCache::rebuildTextures( void ) {
+bool Terrain3DGpuRegionCache::rebuildTextures( void )
+{
 	const int capacity = calculateGpuRegionCacheCapacity();
 	LOG( INFO,
 			"[gpu-cache] Rebuild requested: mapped_capacity=",
@@ -939,28 +984,31 @@ bool Terrain3DGpuRegionCache::rebuildTextures( void ) {
 		m_gpuTerrainShadowMasks[layer] = pDefaultTerrainShadow;
 	}
 
-	const bool bHeightOk = m_generatedHeightMaps.create( m_gpuHeightMaps ).is_valid();
-	const bool bControlOk = m_generatedControlMaps.create( m_gpuControlMaps ).is_valid();
-	const bool bColorOk = m_generatedColorMaps.create( m_gpuColorMaps ).is_valid();
-	const bool bDerivedOk = m_generatedDerivedMaps.create( m_gpuDerivedMaps ).is_valid();
-	const bool bMiddleCompositeOk = m_generatedMiddleCompositeMaps.create( m_gpuMiddleCompositeMaps ).is_valid();
-	const bool bTerrainShadowOk = m_generatedTerrainShadowMasks.create( m_gpuTerrainShadowMasks ).is_valid();
+	const bool bHeightOk = m_generatedHeightMaps.create( m_gpuHeightMaps, T3D_RD_TEXTURE_LINEAR_DATA ).is_valid();
+	const bool bControlOk = m_generatedControlMaps.create( m_gpuControlMaps, T3D_RD_TEXTURE_LINEAR_DATA ).is_valid();
+	const bool bColorOk = m_generatedColorMaps.create( m_gpuColorMaps, T3D_RD_TEXTURE_SOURCE_COLOR ).is_valid();
+	const bool bDerivedOk = m_generatedDerivedMaps.create( m_gpuDerivedMaps, T3D_RD_TEXTURE_LINEAR_DATA ).is_valid();
+	const bool bMiddleCompositeOk =
+			m_generatedMiddleCompositeMaps.create( m_gpuMiddleCompositeMaps, T3D_RD_TEXTURE_SOURCE_COLOR ).is_valid();
+	const bool bTerrainShadowOk =
+			m_generatedTerrainShadowMasks.create( m_gpuTerrainShadowMasks, T3D_RD_TEXTURE_LINEAR_DATA ).is_valid();
 	m_gpuHeightMaps.clear();
 	m_gpuControlMaps.clear();
 	m_gpuColorMaps.clear();
 	m_gpuDerivedMaps.clear();
 	m_gpuMiddleCompositeMaps.clear();
 	m_gpuTerrainShadowMasks.clear();
-	m_bGpuRegionCacheTexturesReady = bHeightOk && bControlOk && bColorOk && bDerivedOk && bMiddleCompositeOk && bTerrainShadowOk;
+	m_bGpuRegionCacheTexturesReady =
+			bHeightOk && bControlOk && bColorOk && bDerivedOk && bMiddleCompositeOk && bTerrainShadowOk;
 	if ( !m_bGpuRegionCacheTexturesReady ) {
 		LOG( ERROR, "Failed to create bounded GPU region cache with ", capacity, " physical layers" );
 		return false;
 	}
 	m_nGpuRegionLastPublicationTick = m_nGpuRegionTick;
-	const size_t budget_bytes = ( size_t )( m_nGpuRegionCacheBudgetMb )*s_nGpuCacheMib;
+	const size_t budget_bytes = (size_t)(m_nGpuRegionCacheBudgetMb)*s_nGpuCacheMib;
 	const size_t layer_bytes = estimateLayerBytes();
 	const size_t shared_bytes = estimateSharedBytes();
-	const size_t estimated_bytes = shared_bytes + layer_bytes * ( size_t )( m_nGpuRegionPhysicalLayerCount );
+	const size_t estimated_bytes = shared_bytes + layer_bytes * (size_t)( m_nGpuRegionPhysicalLayerCount );
 	if ( estimated_bytes > budget_bytes ) {
 		LOG( WARN,
 				"One terrain region requires approximately ",
@@ -991,12 +1039,13 @@ bool Terrain3DGpuRegionCache::rebuildTextures( void ) {
 	return true;
 }
 
-int Terrain3DGpuRegionCache::findGpuRegionSlot( const Vector2i &vLocation ) const {
+int Terrain3DGpuRegionCache::findGpuRegionSlot( const Vector2i& vLocation ) const
+{
 	const int map_index = Terrain3DRegionRepository::getRegionMapIndex( vLocation );
 	if ( map_index < 0 ) {
 		return -1;
 	}
-	const int layer = ( int )( m_szGpuRegionMap[map_index] ) - 1;
+	const int layer = (int)( m_szGpuRegionMap[map_index] ) - 1;
 	if ( layer < 0 || layer >= m_nGpuRegionPhysicalLayerCount ||
 			m_szGpuRegionSlotStates[layer] != TERRAIN3D_GPU_SLOT_MAPPED ||
 			m_szGpuRegionLocations[layer] != vLocation ) {
@@ -1005,7 +1054,8 @@ int Terrain3DGpuRegionCache::findGpuRegionSlot( const Vector2i &vLocation ) cons
 	return layer;
 }
 
-int Terrain3DGpuRegionCache::findFreeGpuRegionSlot( void ) const {
+int Terrain3DGpuRegionCache::findFreeGpuRegionSlot( void ) const
+{
 	for ( int layer = 0; layer < m_nGpuRegionPhysicalLayerCount; ++layer ) {
 		if ( m_szGpuRegionLocations[layer] == s_v2iMax && m_szGpuRegionSlotStates[layer] == TERRAIN3D_GPU_SLOT_FREE ) {
 			return layer;
@@ -1014,7 +1064,8 @@ int Terrain3DGpuRegionCache::findFreeGpuRegionSlot( void ) const {
 	return -1;
 }
 
-void Terrain3DGpuRegionCache::recordGpuRegionDeparture( const int nLayer, const bool bCountUnusedPrefetch ) {
+void Terrain3DGpuRegionCache::recordGpuRegionDeparture( const int nLayer, const bool bCountUnusedPrefetch )
+{
 	if ( nLayer < 0 || nLayer >= m_nGpuRegionPhysicalLayerCount ) {
 		return;
 	}
@@ -1029,7 +1080,8 @@ void Terrain3DGpuRegionCache::recordGpuRegionDeparture( const int nLayer, const 
 	m_szGpuRegionPrefetchOrigin[nLayer] = 0u;
 }
 
-void Terrain3DGpuRegionCache::retireGpuRegionSlot( const int nLayer ) {
+void Terrain3DGpuRegionCache::retireGpuRegionSlot( const int nLayer )
+{
 	if ( nLayer < 0 || nLayer >= m_nGpuRegionPhysicalLayerCount ||
 			m_szGpuRegionSlotStates[nLayer] != TERRAIN3D_GPU_SLOT_MAPPED ) {
 		return;
@@ -1039,10 +1091,11 @@ void Terrain3DGpuRegionCache::retireGpuRegionSlot( const int nLayer ) {
 	++m_nGpuRegionRetiredCount;
 }
 
-void Terrain3DGpuRegionCache::armPendingRetirements( void ) {
+void Terrain3DGpuRegionCache::armPendingRetirements( void )
+{
 	Engine *const pEngine = Engine::get_singleton();
-	const uint64_t current_frame = pEngine ? ( uint64_t )( pEngine->get_frames_drawn() ) : m_nGpuRegionTick;
-	const uint64_t release_frame = current_frame + ( uint64_t )( MAX( 1, m_nGpuRegionRetireFrames ) );
+	const uint64_t current_frame = pEngine ? (uint64_t)( pEngine->get_frames_drawn() ) : m_nGpuRegionTick;
+	const uint64_t release_frame = current_frame + (uint64_t)( MAX( 1, m_nGpuRegionRetireFrames ) );
 	for ( int layer = 0; layer < m_nGpuRegionPhysicalLayerCount; ++layer ) {
 		if ( m_szGpuRegionSlotStates[layer] == TERRAIN3D_GPU_SLOT_RETIRED &&
 				m_szGpuRegionRetireAfterFrame[layer] == std::numeric_limits<uint64_t>::max() ) {
@@ -1051,9 +1104,10 @@ void Terrain3DGpuRegionCache::armPendingRetirements( void ) {
 	}
 }
 
-void Terrain3DGpuRegionCache::reclaimRetiredGpuRegionSlots( void ) {
+void Terrain3DGpuRegionCache::reclaimRetiredGpuRegionSlots( void )
+{
 	Engine *const pEngine = Engine::get_singleton();
-	const uint64_t current_frame = pEngine ? ( uint64_t )( pEngine->get_frames_drawn() ) : m_nGpuRegionTick;
+	const uint64_t current_frame = pEngine ? (uint64_t)( pEngine->get_frames_drawn() ) : m_nGpuRegionTick;
 	for ( int layer = 0; layer < m_nGpuRegionPhysicalLayerCount; ++layer ) {
 		if ( m_szGpuRegionSlotStates[layer] != TERRAIN3D_GPU_SLOT_RETIRED ||
 				m_szGpuRegionRetireAfterFrame[layer] == std::numeric_limits<uint64_t>::max() ||
@@ -1072,7 +1126,8 @@ void Terrain3DGpuRegionCache::reclaimRetiredGpuRegionSlots( void ) {
 	}
 }
 
-void Terrain3DGpuRegionCache::invalidate( const Vector2i &vLocation ) {
+void Terrain3DGpuRegionCache::invalidate( const Vector2i& vLocation )
+{
 	if ( !m_bGpuRegionCacheEnabled ) {
 		return;
 	}
@@ -1090,7 +1145,8 @@ void Terrain3DGpuRegionCache::invalidate( const Vector2i &vLocation ) {
 	m_bGpuRegionCacheSelectionDirty = true;
 }
 
-void Terrain3DGpuRegionCache::queueRepublish( const Vector2i &vLocation ) {
+void Terrain3DGpuRegionCache::queueRepublish( const Vector2i& vLocation )
+{
 	const int map_index = Terrain3DRegionRepository::getRegionMapIndex( vLocation );
 	if ( map_index < 0 || map_index >= s_nMaxRegionSlots ) {
 		return;
@@ -1104,7 +1160,8 @@ void Terrain3DGpuRegionCache::queueRepublish( const Vector2i &vLocation ) {
 	m_bGpuRegionCacheSelectionDirty = true;
 }
 
-bool Terrain3DGpuRegionCache::republish( const Vector2i &vLocation, Terrain3DCompute *pCompute ) {
+bool Terrain3DGpuRegionCache::republish( const Vector2i& vLocation, Terrain3DCompute *pCompute )
+{
 	m_pCompute = pCompute ? pCompute : m_pCompute;
 	const int old_layer = findGpuRegionSlot( vLocation );
 	if ( old_layer < 0 ) {
@@ -1135,7 +1192,7 @@ bool Terrain3DGpuRegionCache::republish( const Vector2i &vLocation, Terrain3DCom
 	m_szGpuRegionLoadedTick[staging_layer] = m_szGpuRegionLoadedTick[old_layer];
 	m_szGpuRegionPrefetchOrigin[staging_layer] = m_szGpuRegionPrefetchOrigin[old_layer];
 	m_szGpuRegionSlotStates[staging_layer] = TERRAIN3D_GPU_SLOT_MAPPED;
-	m_szGpuRegionMap[map_index] = ( uint16_t )( staging_layer + 1 );
+	m_szGpuRegionMap[map_index] = (uint16_t)( staging_layer + 1 );
 	if ( m_szGpuRegionRepublishPending[map_index] != 0u ) {
 		m_szGpuRegionRepublishPending[map_index] = 0u;
 		m_nGpuRegionRepublishPendingCount = MAX( 0, m_nGpuRegionRepublishPendingCount - 1 );
@@ -1146,7 +1203,8 @@ bool Terrain3DGpuRegionCache::republish( const Vector2i &vLocation, Terrain3DCom
 	return true;
 }
 
-int Terrain3DGpuRegionCache::processPendingGpuRegionRepublishes( const int nLimit ) {
+int Terrain3DGpuRegionCache::processPendingGpuRegionRepublishes( const int nLimit )
+{
 	if ( m_nGpuRegionRepublishPendingCount <= 0 || nLimit <= 0 || m_nGpuRegionPhysicalLayerCount <= 0 ) {
 		return 0;
 	}
@@ -1181,11 +1239,12 @@ int Terrain3DGpuRegionCache::processPendingGpuRegionRepublishes( const int nLimi
 	return published;
 }
 
-int Terrain3DGpuRegionCache::collectDesiredGpuRegions( const t3dResidencyFrameState_t &rFrame,
-		const Vector2i &rCenter,
+int Terrain3DGpuRegionCache::collectDesiredGpuRegions( const t3dResidencyFrameState_t& rFrame,
+		const Vector2i& rCenter,
 		Vector2i *pLocations,
 		const int nCapacity,
-		t3dGpuCacheSelectionStats_t &rStats ) {
+		t3dGpuCacheSelectionStats_t& rStats )
+{
 	rStats = t3dGpuCacheSelectionStats_s();
 	if ( !pLocations || nCapacity <= 0 ) {
 		return 0;
@@ -1193,7 +1252,7 @@ int Terrain3DGpuRegionCache::collectDesiredGpuRegions( const t3dResidencyFrameSt
 	const int capacity = MIN( nCapacity, s_nGpuCacheMaxLayers );
 	int output_count = 0;
 	uint8_t selected_map[s_nMaxRegionSlots] = {};
-	auto append_location = [&]( const Vector2i &location, const t3dRegionStreamingState_t wanted ) {
+	auto append_location = [&]( const Vector2i& location, const t3dRegionStreamingState_t wanted ) {
 		if ( output_count >= capacity ) {
 			return false;
 		}
@@ -1212,7 +1271,7 @@ int Terrain3DGpuRegionCache::collectDesiredGpuRegions( const t3dResidencyFrameSt
 	};
 	auto append_state = [&]( const t3dRegionStreamingState_t wanted ) {
 		t3dGpuRegionCacheForEachSquareRing(
-				rCenter, m_regionRepository.getRegionMapSize(), [&]( const Vector2i &location ) {
+				rCenter, m_regionRepository.getRegionMapSize(), [&]( const Vector2i& location ) {
 					return append_location( location, wanted );
 				} );
 	};
@@ -1239,7 +1298,8 @@ int Terrain3DGpuRegionCache::collectDesiredGpuRegions( const t3dResidencyFrameSt
 	return output_count;
 }
 
-int Terrain3DGpuRegionCache::fillMaterialPriorityIds( uint8_t *const pIds, const int nCapacity ) const {
+int Terrain3DGpuRegionCache::fillMaterialPriorityIds( uint8_t *const pIds, const int nCapacity ) const
+{
 	if ( !pIds || nCapacity <= 0 ) {
 		return 0;
 	}
@@ -1248,18 +1308,18 @@ int Terrain3DGpuRegionCache::fillMaterialPriorityIds( uint8_t *const pIds, const
 	auto append_mask = [&]( uint32_t mask ) {
 		while ( mask != 0u && count < nCapacity ) {
 			int id = 0;
-			while ( id < s_nMaxTextureAssets && ( mask & ( 1u << ( uint32_t )( id ) ) ) == 0u ) {
+			while ( id < s_nMaxTextureAssets && ( mask & ( 1u << (uint32_t)( id ) ) ) == 0u ) {
 				++id;
 			}
 			if ( id >= s_nMaxTextureAssets ) {
 				break;
 			}
-			const uint32_t bit = 1u << ( uint32_t )( id );
+			const uint32_t bit = 1u << (uint32_t)( id );
 			mask &= ~bit;
 			if ( ( emitted_mask & bit ) != 0u ) {
 				continue;
 			}
-			pIds[count++] = ( uint8_t )( id );
+			pIds[count++] = (uint8_t)( id );
 			emitted_mask |= bit;
 		}
 	};
@@ -1281,8 +1341,9 @@ int Terrain3DGpuRegionCache::fillMaterialPriorityIds( uint8_t *const pIds, const
 }
 
 bool Terrain3DGpuRegionCache::uploadGpuRegionLayer( const int nLayer,
-		const Vector2i &vLocation,
-		const t3dMapType_t eMapType ) {
+		const Vector2i& vLocation,
+		const t3dMapType_t eMapType )
+{
 	uint64_t prepared_request_usec = 0u;
 	const Terrain3DGpuRegionCacheProfileScopeTimer publicationTimer(
 			m_nGpuPreparePublicationUsecLast, prepared_request_usec, m_nGpuPrepareEndToEndUsecLast );
@@ -1294,7 +1355,7 @@ bool Terrain3DGpuRegionCache::uploadGpuRegionLayer( const int nLayer,
 	if ( !pRegion || pRegion->isDeleted() ) {
 		return false;
 	}
-	const uint8_t source_channel_flags = ( uint8_t )( pRegion->getChannelFlags() );
+	const uint8_t source_channel_flags = (uint8_t)( pRegion->getChannelFlags() );
 	const uint8_t previous_channel_flags = m_szGpuRegionLayerChannelFlags[nLayer];
 	const bool bUploadHeight = eMapType == TYPE_HEIGHT || eMapType == REGION_TYPE_MAX;
 	// Optional channels are updated only when either the incoming page or the
@@ -1304,10 +1365,10 @@ bool Terrain3DGpuRegionCache::uploadGpuRegionLayer( const int nLayer,
 	const bool bUploadControl = ( eMapType == TYPE_CONTROL || eMapType == REGION_TYPE_MAX ) &&
 			!m_bControlMapsImplicit &&
 			t3dGpuCacheOptionalChannelNeedsUpdate(
-					source_channel_flags, previous_channel_flags, ( uint8_t )( REGION_CHANNEL_CONTROL ) );
+					source_channel_flags, previous_channel_flags, (uint8_t)( REGION_CHANNEL_CONTROL ) );
 	const bool bUploadColor = ( eMapType == TYPE_COLOR || eMapType == REGION_TYPE_MAX ) && isColorChannelEnabled() &&
 			t3dGpuCacheOptionalChannelNeedsUpdate(
-					source_channel_flags, previous_channel_flags, ( uint8_t )( REGION_CHANNEL_COLOR ) );
+					source_channel_flags, previous_channel_flags, (uint8_t)( REGION_CHANNEL_COLOR ) );
 	Ref<Image> pHeight;
 	Ref<Image> pDerived;
 	Ref<Image> pControl;
@@ -1429,8 +1490,11 @@ bool Terrain3DGpuRegionCache::uploadGpuRegionLayer( const int nLayer,
 		if ( pTerrainShadowMask->get_width() != m_regionRepository.getRegionSize() ||
 				pTerrainShadowMask->get_height() != m_regionRepository.getRegionSize() ) {
 			pTerrainShadowMask = pTerrainShadowMask->duplicate();
-			if ( pTerrainShadowMask->has_mipmaps() ) pTerrainShadowMask->clear_mipmaps();
-			pTerrainShadowMask->resize( m_regionRepository.getRegionSize(), m_regionRepository.getRegionSize(),
+			if ( pTerrainShadowMask->has_mipmaps() ) {
+				pTerrainShadowMask->clear_mipmaps();
+			}
+			pTerrainShadowMask->resize( m_regionRepository.getRegionSize(),
+					m_regionRepository.getRegionSize(),
 					Image::INTERPOLATE_BILINEAR );
 			pTerrainShadowMask->convert( Image::FORMAT_L8 );
 			if ( pTerrainShadowMask->generate_mipmaps() != OK ) {
@@ -1514,12 +1578,12 @@ bool Terrain3DGpuRegionCache::uploadGpuRegionLayer( const int nLayer,
 	}
 	uint8_t published_flags = previous_channel_flags;
 	if ( eMapType == TYPE_CONTROL || eMapType == REGION_TYPE_MAX ) {
-		published_flags &= ( uint8_t )( ~REGION_CHANNEL_CONTROL );
-		published_flags |= source_channel_flags & ( uint8_t )( REGION_CHANNEL_CONTROL );
+		published_flags &= (uint8_t)( ~REGION_CHANNEL_CONTROL );
+		published_flags |= source_channel_flags & (uint8_t)( REGION_CHANNEL_CONTROL );
 	}
 	if ( eMapType == TYPE_COLOR || eMapType == REGION_TYPE_MAX ) {
-		published_flags &= ( uint8_t )( ~REGION_CHANNEL_COLOR );
-		published_flags |= source_channel_flags & ( uint8_t )( REGION_CHANNEL_COLOR );
+		published_flags &= (uint8_t)( ~REGION_CHANNEL_COLOR );
+		published_flags |= source_channel_flags & (uint8_t)( REGION_CHANNEL_COLOR );
 	}
 	m_szGpuRegionLayerChannelFlags[nLayer] = published_flags;
 	uint32_t material_mask = bCookedPage
@@ -1532,8 +1596,8 @@ bool Terrain3DGpuRegionCache::uploadGpuRegionLayer( const int nLayer,
 					CLAMP( t3dGpuRegionCacheMaterialIntParam( pMaterial.ptr(), "auto_base_texture", 0 ), 0, 31 );
 			const int auto_overlay =
 					CLAMP( t3dGpuRegionCacheMaterialIntParam( pMaterial.ptr(), "auto_overlay_texture", 1 ), 0, 31 );
-			material_mask |= 1u << ( uint32_t )( auto_base );
-			material_mask |= 1u << ( uint32_t )( auto_overlay );
+			material_mask |= 1u << (uint32_t)( auto_base );
+			material_mask |= 1u << (uint32_t)( auto_overlay );
 		}
 	}
 	m_szGpuRegionMaterialMasks[nLayer] = material_mask;
@@ -1542,14 +1606,16 @@ bool Terrain3DGpuRegionCache::uploadGpuRegionLayer( const int nLayer,
 	return true;
 }
 
-bool Terrain3DGpuRegionCache::isRuntimePageWanted( void *const pContext, const Vector2i &rLocation ) {
+bool Terrain3DGpuRegionCache::isRuntimePageWanted( void *const pContext, const Vector2i& rLocation )
+{
 	const t3dResidencyFrameState_t *const pFrame = static_cast<const t3dResidencyFrameState_t *>( pContext );
 	return pFrame &&
 			( pFrame->streamingState( rLocation ) >= TERRAIN3D_REGION_STREAMING_HOT ||
 					pFrame->isPrefetch( rLocation ) );
 }
 
-bool Terrain3DGpuRegionCache::serviceRuntimePages( const t3dResidencyFrameState_t &rFrame ) {
+bool Terrain3DGpuRegionCache::serviceRuntimePages( const t3dResidencyFrameState_t& rFrame )
+{
 	t3dRuntimePageServiceState_t state;
 	state.m_config = rFrame.m_runtimePageConfig;
 	state.m_predictedCenter = rFrame.m_predictedCenter;
@@ -1565,7 +1631,8 @@ bool Terrain3DGpuRegionCache::configure( const bool bEnabled,
 		const int nUploadLayers,
 		const int nUploadBudgetMb,
 		const int nSparePages,
-		const int nRetireFrames ) {
+		const int nRetireFrames )
+{
 	const bool bOldEnabled = m_bGpuRegionCacheEnabled;
 	const int old_budget = m_nGpuRegionCacheBudgetMb;
 	const int old_upload_layers = m_nGpuRegionUploadBudgetLayers;
@@ -1612,10 +1679,11 @@ bool Terrain3DGpuRegionCache::configure( const bool bEnabled,
 	return bStorageChanged;
 }
 
-t3dGpuRegionCacheUpdateResult_t Terrain3DGpuRegionCache::update( const t3dResidencyFrameState_t &rFrame,
+t3dGpuRegionCacheUpdateResult_t Terrain3DGpuRegionCache::update( const t3dResidencyFrameState_t& rFrame,
 		const bool bForce,
 		const int nEffectiveUploadLayers,
-		Terrain3DCompute *pCompute ) {
+		Terrain3DCompute *pCompute )
+{
 	const Terrain3DGpuRegionCacheLastScopeTimer serviceTimer( m_nGpuRegionServiceUsecLast, rFrame.m_bProfilingEnabled );
 	m_nGpuRegionStallFlagsLastTick = TERRAIN3D_PROFILE_STALL_NONE;
 	m_runtimePageStore.resetFrameStats();
@@ -1670,7 +1738,7 @@ t3dGpuRegionCacheUpdateResult_t Terrain3DGpuRegionCache::update( const t3dReside
 	const int deferred_republish_count = processPendingGpuRegionRepublishes( effective_upload_limit );
 	if ( deferred_republish_count > 0 ) {
 		m_nGpuRegionUploadsLastTick += deferred_republish_count;
-		m_nGpuRegionUploadsSinceReset += ( uint64_t )( deferred_republish_count );
+		m_nGpuRegionUploadsSinceReset += (uint64_t)( deferred_republish_count );
 		m_nGpuRegionLastPublicationTick = m_nGpuRegionTick;
 	}
 	if ( !bForce && center == m_gpuRegionCacheCenter && !m_bGpuRegionCacheSelectionDirty &&
@@ -1704,7 +1772,7 @@ t3dGpuRegionCacheUpdateResult_t Terrain3DGpuRegionCache::update( const t3dReside
 		}
 	}
 
-	const uint64_t hysteresis_ticks = ( uint64_t )( MAX( 0, rFrame.m_nGpuHysteresisTicks ) );
+	const uint64_t hysteresis_ticks = (uint64_t)( MAX( 0, rFrame.m_nGpuHysteresisTicks ) );
 	for ( int layer = 0; layer < m_nGpuRegionPhysicalLayerCount && desired_count < m_nGpuRegionCacheCapacity;
 			++layer ) {
 		const Vector2i location = m_szGpuRegionLocations[layer];
@@ -1762,7 +1830,7 @@ t3dGpuRegionCacheUpdateResult_t Terrain3DGpuRegionCache::update( const t3dReside
 
 	bool bMapChanged = false;
 	bool bAllDesiredResident = true;
-	const size_t byte_budget = ( size_t )( m_nGpuRegionUploadBudgetMb )*s_nGpuCacheMib;
+	const size_t byte_budget = (size_t)(m_nGpuRegionUploadBudgetMb)*s_nGpuCacheMib;
 	const int update_call_budget = MAX( 7, effective_upload_limit * 6 + 1 );
 	for ( int desired_index = 0; desired_index < desired_count; ++desired_index ) {
 		const Vector2i location = desired[desired_index];
@@ -1858,7 +1926,7 @@ t3dGpuRegionCacheUpdateResult_t Terrain3DGpuRegionCache::update( const t3dReside
 		m_szGpuRegionSlotStates[target_layer] = TERRAIN3D_GPU_SLOT_MAPPED;
 		const int new_map_index = Terrain3DRegionRepository::getRegionMapIndex( location );
 		if ( new_map_index >= 0 ) {
-			m_szGpuRegionMap[new_map_index] = ( uint16_t )( target_layer + 1 );
+			m_szGpuRegionMap[new_map_index] = (uint16_t)( target_layer + 1 );
 		}
 		++m_nGpuRegionUploadsLastTick;
 		++m_nGpuRegionUploadsSinceReset;
@@ -1893,7 +1961,8 @@ t3dGpuRegionCacheUpdateResult_t Terrain3DGpuRegionCache::update( const t3dReside
 	return t3dGpuRegionCacheUpdateResult_t{ m_bPageTableChangedThisTick };
 }
 
-bool Terrain3DGpuRegionCache::refreshTerrainShadowMasks( void ) {
+bool Terrain3DGpuRegionCache::refreshTerrainShadowMasks( void )
+{
 	if ( !m_bGpuRegionCacheEnabled || !m_bGpuRegionCacheTexturesReady ) {
 		return true;
 	}
@@ -1916,9 +1985,10 @@ bool Terrain3DGpuRegionCache::refreshTerrainShadowMasks( void ) {
 	return true;
 }
 
-bool Terrain3DGpuRegionCache::updateResidentLocation( const Vector2i &vLocation,
+bool Terrain3DGpuRegionCache::updateResidentLocation( const Vector2i& vLocation,
 		const t3dMapType_t eMapType,
-		Terrain3DCompute *pCompute ) {
+		Terrain3DCompute *pCompute )
+{
 	m_pCompute = pCompute ? pCompute : m_pCompute;
 	const int layer = findGpuRegionSlot( vLocation );
 	if ( layer < 0 ) {
@@ -1939,7 +2009,8 @@ bool Terrain3DGpuRegionCache::updateResidentLocation( const Vector2i &vLocation,
 	return updated;
 }
 
-bool Terrain3DGpuRegionCache::republishAllResidents( Terrain3DCompute *pCompute ) {
+bool Terrain3DGpuRegionCache::republishAllResidents( Terrain3DCompute *pCompute )
+{
 	m_pCompute = pCompute ? pCompute : m_pCompute;
 	Vector2i locations[s_nGpuCacheMaxLayers];
 	int count = 0;
@@ -1959,7 +2030,8 @@ bool Terrain3DGpuRegionCache::republishAllResidents( Terrain3DCompute *pCompute 
 	return changed;
 }
 
-TypedArray<Vector2i> Terrain3DGpuRegionCache::getRenderRegionSlots( void ) const {
+TypedArray<Vector2i> Terrain3DGpuRegionCache::getRenderRegionSlots( void ) const
+{
 	TypedArray<Vector2i> slots;
 	slots.resize( m_nGpuRegionPhysicalLayerCount );
 	for ( int layer = 0; layer < m_nGpuRegionPhysicalLayerCount; ++layer ) {
@@ -1968,21 +2040,24 @@ TypedArray<Vector2i> Terrain3DGpuRegionCache::getRenderRegionSlots( void ) const
 	return slots;
 }
 
-int Terrain3DGpuRegionCache::getSlotStateForLocation( const Vector2i &vLocation ) const {
+int Terrain3DGpuRegionCache::getSlotStateForLocation( const Vector2i& vLocation ) const
+{
 	for ( int layer = 0; layer < m_nGpuRegionPhysicalLayerCount; ++layer ) {
 		if ( m_szGpuRegionLocations[layer] == vLocation ) {
-			return ( int )( m_szGpuRegionSlotStates[layer] );
+			return (int)( m_szGpuRegionSlotStates[layer] );
 		}
 	}
-	return ( int )( TERRAIN3D_GPU_SLOT_FREE );
+	return (int)( TERRAIN3D_GPU_SLOT_FREE );
 }
 
-bool Terrain3DGpuRegionCache::isAuthoringFullResidencyPossible( void ) const {
+bool Terrain3DGpuRegionCache::isAuthoringFullResidencyPossible( void ) const
+{
 	return !m_pTerrain || !m_pTerrain->isEditorAuthoringMode() ||
 			calculateGpuRegionCacheCapacity() >= m_regionRepository.getActiveRegionCount();
 }
 
-bool Terrain3DGpuRegionCache::isAuthoringReadbackSafe( void ) const {
+bool Terrain3DGpuRegionCache::isAuthoringReadbackSafe( void ) const
+{
 	if ( !m_pTerrain || !m_pTerrain->isEditorAuthoringMode() || !m_bGpuRegionCacheEnabled ) {
 		return true;
 	}
@@ -1993,40 +2068,44 @@ bool Terrain3DGpuRegionCache::isAuthoringReadbackSafe( void ) const {
 	return m_nGpuRegionTick >= m_nGpuRegionLastPublicationTick + 2u;
 }
 
-size_t Terrain3DGpuRegionCache::getReservedBytes( void ) const {
+size_t Terrain3DGpuRegionCache::getReservedBytes( void ) const
+{
 	const size_t far_height_side =
-			( size_t )( m_pTerrain ? m_pTerrain->getGpuFarHeightAtlasSide() : s_nGpuCacheFarHeightSide );
+			(size_t)( m_pTerrain ? m_pTerrain->getGpuFarHeightAtlasSide() : s_nGpuCacheFarHeightSide );
 	const size_t far_surface_side =
-			( size_t )( m_pTerrain ? m_pTerrain->getGpuFarSurfaceAtlasSide() : s_nGpuCacheFarHeightSide );
+			(size_t)( m_pTerrain ? m_pTerrain->getGpuFarSurfaceAtlasSide() : s_nGpuCacheFarHeightSide );
 	const size_t fixed_far_bytes = far_height_side * far_height_side * 2u + far_surface_side * far_surface_side * 4u;
 	const size_t shared_bytes = estimateSharedBytes();
 	return ( shared_bytes > fixed_far_bytes ? shared_bytes - fixed_far_bytes : 0u ) +
-			estimateLayerBytes() * ( size_t )( MAX( 0, m_nGpuRegionPhysicalLayerCount ) );
+			estimateLayerBytes() * (size_t)( MAX( 0, m_nGpuRegionPhysicalLayerCount ) );
 }
 
-size_t Terrain3DGpuRegionCache::getMinimumBytes( void ) const {
+size_t Terrain3DGpuRegionCache::getMinimumBytes( void ) const
+{
 	const size_t far_height_side =
-			( size_t )( m_pTerrain ? m_pTerrain->getGpuFarHeightAtlasSide() : s_nGpuCacheFarHeightSide );
+			(size_t)( m_pTerrain ? m_pTerrain->getGpuFarHeightAtlasSide() : s_nGpuCacheFarHeightSide );
 	const size_t far_surface_side =
-			( size_t )( m_pTerrain ? m_pTerrain->getGpuFarSurfaceAtlasSide() : s_nGpuCacheFarHeightSide );
+			(size_t)( m_pTerrain ? m_pTerrain->getGpuFarSurfaceAtlasSide() : s_nGpuCacheFarHeightSide );
 	const size_t fixed_far_bytes = far_height_side * far_height_side * 2u + far_surface_side * far_surface_side * 4u;
 	const size_t shared_bytes = estimateSharedBytes();
 	const size_t managed_shared = shared_bytes > fixed_far_bytes ? shared_bytes - fixed_far_bytes : 0u;
-	return managed_shared + estimateLayerBytes() * ( size_t )( s_nGpuCacheMinSpareLayers + 1 );
+	return managed_shared + estimateLayerBytes() * (size_t)( s_nGpuCacheMinSpareLayers + 1 );
 }
 
-size_t Terrain3DGpuRegionCache::getHardCapBytes( void ) const {
+size_t Terrain3DGpuRegionCache::getHardCapBytes( void ) const
+{
 	const size_t far_height_side =
-			( size_t )( m_pTerrain ? m_pTerrain->getGpuFarHeightAtlasSide() : s_nGpuCacheFarHeightSide );
+			(size_t)( m_pTerrain ? m_pTerrain->getGpuFarHeightAtlasSide() : s_nGpuCacheFarHeightSide );
 	const size_t far_surface_side =
-			( size_t )( m_pTerrain ? m_pTerrain->getGpuFarSurfaceAtlasSide() : s_nGpuCacheFarHeightSide );
+			(size_t)( m_pTerrain ? m_pTerrain->getGpuFarSurfaceAtlasSide() : s_nGpuCacheFarHeightSide );
 	const size_t fixed_far_bytes = far_height_side * far_height_side * 2u + far_surface_side * far_surface_side * 4u;
 	const size_t shared_bytes = estimateSharedBytes();
 	const size_t managed_shared = shared_bytes > fixed_far_bytes ? shared_bytes - fixed_far_bytes : 0u;
-	return managed_shared + estimateLayerBytes() * ( size_t )( s_nGpuCacheMaxLayers );
+	return managed_shared + estimateLayerBytes() * (size_t)( s_nGpuCacheMaxLayers );
 }
 
-t3dGpuRegionCacheStats_t Terrain3DGpuRegionCache::getStats( void ) const {
+t3dGpuRegionCacheStats_t Terrain3DGpuRegionCache::getStats( void ) const
+{
 	t3dGpuRegionCacheStats_t stats;
 	stats.m_bEnabled = m_bGpuRegionCacheEnabled;
 	stats.m_bTexturesReady = m_bGpuRegionCacheTexturesReady;
@@ -2075,7 +2154,8 @@ t3dGpuRegionCacheStats_t Terrain3DGpuRegionCache::getStats( void ) const {
 	return stats;
 }
 
-Dictionary Terrain3DGpuRegionCache::getStatsDictionary( const bool bDetailed ) const {
+Dictionary Terrain3DGpuRegionCache::getStatsDictionary( const bool bDetailed ) const
+{
 	Dictionary stats;
 	const t3dRuntimePageStats_t runtime = m_runtimePageStore.getStats();
 	stats["enabled"] = m_bGpuRegionCacheEnabled;
@@ -2098,12 +2178,12 @@ Dictionary Terrain3DGpuRegionCache::getStatsDictionary( const bool bDetailed ) c
 	stats["prefetch_last_tick"] = m_nGpuRegionPrefetchLastTick;
 	stats["hysteresis_last_tick"] = m_nGpuRegionHysteresisLastTick;
 	stats["missing_required_last_tick"] = m_nGpuRegionMissingRequiredLastTick;
-	stats["stall_flags_last_tick"] = ( int64_t )( m_nGpuRegionStallFlagsLastTick );
+	stats["stall_flags_last_tick"] = (int64_t)( m_nGpuRegionStallFlagsLastTick );
 	stats["upload_layer_budget"] = m_nGpuRegionUploadBudgetLayers;
 	stats["upload_budget_mb"] = m_nGpuRegionUploadBudgetMb;
 	stats["effective_upload_limit_last_tick"] = m_nGpuRegionEffectiveUploadLimitLastTick;
 	stats["uploads_last_tick"] = m_nGpuRegionUploadsLastTick;
-	stats["uploads_since_reset"] = ( int64_t )( m_nGpuRegionUploadsSinceReset );
+	stats["uploads_since_reset"] = (int64_t)( m_nGpuRegionUploadsSinceReset );
 	stats["evictions_last_tick"] = m_nGpuRegionEvictionsLastTick;
 	stats["cooked_hits_last_tick"] = m_nGpuRegionCookedHitsLastTick;
 	stats["cooked_misses_last_tick"] = m_nGpuRegionCookedMissesLastTick;
@@ -2119,13 +2199,13 @@ Dictionary Terrain3DGpuRegionCache::getStatsDictionary( const bool bDetailed ) c
 	stats["prepare_job_active"] = runtime.m_bPrepareJobActive;
 	stats["prepare_job_pending_pages"] = runtime.m_nPendingPages;
 	stats["prepare_ready_pages"] = runtime.m_nPreparedPages;
-	stats["prepare_publication_usec_last"] = ( int64_t )( m_nGpuPreparePublicationUsecLast );
-	stats["prepare_end_to_end_usec_last"] = ( int64_t )( m_nGpuPrepareEndToEndUsecLast );
-	stats["service_cpu_usec_last"] = ( int64_t )( m_nGpuRegionServiceUsecLast );
-	stats["upload_bytes_last_tick"] = ( int64_t )( m_nGpuRegionUploadBytesLastTick );
-	stats["reserved_bytes"] = ( int64_t )( getReservedBytes() );
-	stats["estimated_layer_bytes"] = ( int64_t )( estimateLayerBytes() );
-	stats["estimated_shared_bytes"] = ( int64_t )( estimateSharedBytes() );
+	stats["prepare_publication_usec_last"] = (int64_t)( m_nGpuPreparePublicationUsecLast );
+	stats["prepare_end_to_end_usec_last"] = (int64_t)( m_nGpuPrepareEndToEndUsecLast );
+	stats["service_cpu_usec_last"] = (int64_t)( m_nGpuRegionServiceUsecLast );
+	stats["upload_bytes_last_tick"] = (int64_t)( m_nGpuRegionUploadBytesLastTick );
+	stats["reserved_bytes"] = (int64_t)( getReservedBytes() );
+	stats["estimated_layer_bytes"] = (int64_t)( estimateLayerBytes() );
+	stats["estimated_shared_bytes"] = (int64_t)( estimateSharedBytes() );
 	stats["authoring_bounded_pool_covers_all_regions"] = isAuthoringFullResidencyPossible();
 	stats["authoring_readback_safe"] = isAuthoringReadbackSafe();
 	stats["control_implicit"] = m_bControlMapsImplicit;
@@ -2138,16 +2218,16 @@ Dictionary Terrain3DGpuRegionCache::getStatsDictionary( const bool bDetailed ) c
 		return stats;
 	}
 	stats["prediction_direction"] = m_gpuRegionPredictionDirection;
-	stats["streaming_generation_last"] = ( int64_t )( m_nGpuRegionStreamingGenerationLast );
-	stats["prefetch_used_total"] = ( int64_t )( m_nGpuRegionPrefetchUsedTotal );
-	stats["prefetch_discarded_total"] = ( int64_t )( m_nGpuRegionPrefetchDiscardedTotal );
+	stats["streaming_generation_last"] = (int64_t)( m_nGpuRegionStreamingGenerationLast );
+	stats["prefetch_used_total"] = (int64_t)( m_nGpuRegionPrefetchUsedTotal );
+	stats["prefetch_discarded_total"] = (int64_t)( m_nGpuRegionPrefetchDiscardedTotal );
 	const uint64_t completed_prefetches = m_nGpuRegionPrefetchUsedTotal + m_nGpuRegionPrefetchDiscardedTotal;
 	stats["prefetch_accuracy"] = completed_prefetches > 0u
-			? ( double )( m_nGpuRegionPrefetchUsedTotal ) / ( double )( completed_prefetches )
+			? (double)( m_nGpuRegionPrefetchUsedTotal ) / (double)( completed_prefetches )
 			: -1.0;
-	stats["departed_pages_total"] = ( int64_t )( m_nGpuRegionDepartedPagesTotal );
+	stats["departed_pages_total"] = (int64_t)( m_nGpuRegionDepartedPagesTotal );
 	stats["average_resident_ticks"] = m_nGpuRegionDepartedPagesTotal > 0u
-			? ( double )( m_nGpuRegionResidentTicksTotal ) / ( double )( m_nGpuRegionDepartedPagesTotal )
+			? (double)( m_nGpuRegionResidentTicksTotal ) / (double)( m_nGpuRegionDepartedPagesTotal )
 			: 0.0;
 	return stats;
 }

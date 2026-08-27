@@ -60,7 +60,7 @@ bool Terrain3DGeneratedTexture::ensureRegionStaging( const Ref<Image>& rImage )
 	}
 	const PackedByteArray data = rImage->get_data();
 	t3dRdTextureLayout_t layout;
-	if ( !Terrain3DRdTextureManager::buildLayout( rImage, 1u, false, (uint64_t)( data.size() ), layout ) ) {
+	if ( !Terrain3DRdTextureManager::buildLayout( rImage, 1u, false, (uint64_t)( data.size() ), m_semantic, layout ) ) {
 		return false;
 	}
 	TypedArray<PackedByteArray> initial_data;
@@ -133,9 +133,10 @@ void Terrain3DGeneratedTexture::swap( Terrain3DGeneratedTexture& rOther )
 	swap( m_bLayered, rOther.m_bLayered );
 	swap( m_nPayloadBytes, rOther.m_nPayloadBytes );
 	swap( m_nRegionStagingBytes, rOther.m_nRegionStagingBytes );
+	swap( m_semantic, rOther.m_semantic );
 }
 
-RID Terrain3DGeneratedTexture::create( const TypedArray<Image>& rLayers )
+RID Terrain3DGeneratedTexture::create( const TypedArray<Image>& rLayers, const t3dRdTextureSemantic_t semantic )
 {
 	if ( rLayers.is_empty() ) {
 		clear();
@@ -167,7 +168,7 @@ RID Terrain3DGeneratedTexture::create( const TypedArray<Image>& rLayers )
 
 	t3dRdTextureLayout_t layout;
 	if ( !Terrain3DRdTextureManager::buildLayout(
-				 pFirst, (uint32_t)( rLayers.size() ), true, (uint64_t)( payload_bytes ), layout ) ) {
+				 pFirst, (uint32_t)( rLayers.size() ), true, (uint64_t)( payload_bytes ), semantic, layout ) ) {
 		LOG( ERROR, "Unsupported Terrain3D generated texture-array image format: ", format );
 		return RID();
 	}
@@ -203,6 +204,7 @@ RID Terrain3DGeneratedTexture::create( const TypedArray<Image>& rLayers )
 	m_bLayered = true;
 	m_nPayloadBytes = payload_bytes;
 	m_nRegionStagingBytes = 0u;
+	m_semantic = semantic;
 	return m_hRid;
 }
 
@@ -233,7 +235,7 @@ bool Terrain3DGeneratedTexture::update( const Ref<Image>& rImage, const int nLay
 	return true;
 }
 
-RID Terrain3DGeneratedTexture::create( const Ref<Image>& rImage )
+RID Terrain3DGeneratedTexture::create( const Ref<Image>& rImage, const t3dRdTextureSemantic_t semantic )
 {
 	if ( rImage.is_null() || rImage->is_empty() ) {
 		m_bDirty = true;
@@ -242,7 +244,7 @@ RID Terrain3DGeneratedTexture::create( const Ref<Image>& rImage )
 	}
 	const PackedByteArray data = rImage->get_data();
 	t3dRdTextureLayout_t layout;
-	if ( !Terrain3DRdTextureManager::buildLayout( rImage, 1u, false, (uint64_t)( data.size() ), layout ) ) {
+	if ( !Terrain3DRdTextureManager::buildLayout( rImage, 1u, false, (uint64_t)( data.size() ), semantic, layout ) ) {
 		m_bDirty = true;
 		LOG( ERROR, "Unsupported Terrain3D generated Texture2D image format: ", (int)( rImage->get_format() ) );
 		return RID();
@@ -281,6 +283,7 @@ RID Terrain3DGeneratedTexture::create( const Ref<Image>& rImage )
 	m_bLayered = false;
 	m_nPayloadBytes = (size_t)( data.size() );
 	m_nRegionStagingBytes = 0u;
+	m_semantic = semantic;
 	return m_hRid;
 }
 
@@ -292,7 +295,7 @@ bool Terrain3DGeneratedTexture::update2d( const Ref<Image>& rImage )
 	if ( !matchesLayout( rImage ) ) {
 		// A 2D generated texture has complete replacement data in this call, so a
 		// layout change can be reconstructed deterministically without a native texture bridge.
-		return create( rImage ).is_valid();
+		return create( rImage, m_semantic ).is_valid();
 	}
 	Terrain3DRdTextureManager *const pManager = t3dGeneratedTextureManager();
 	if ( !pManager || !pManager->updateTexture( m_hRid, 0u, rImage->get_data() ) ) {

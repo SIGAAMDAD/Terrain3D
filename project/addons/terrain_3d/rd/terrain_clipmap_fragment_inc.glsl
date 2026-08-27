@@ -87,6 +87,7 @@ struct MaterialLayer {
     uint flags;
 };
 layout(set = 0, binding = 8, std430) readonly buffer MaterialBuffer { MaterialLayer materials[]; };
+layout(set = 0, binding = 11) uniform sampler2DArray displacement_maps;
 
 struct TierMaterialConfig {
     uint sampling_mode;
@@ -418,22 +419,35 @@ vec2 rotate_uv(vec2 uv, float angle) {
     float c = cos(angle);
     return mat2(c, -s, s, c) * uv;
 }
-vec2 project_material_uv(vec3 position, vec3 normal, float scale, uint projection_mode) {
-    if (projection_mode == 0u) return position.xz * scale;
-    vec3 axis = abs(normal);
-    if (axis.y >= axis.x && axis.y >= axis.z) return position.xz * scale;
-    if (axis.x >= axis.z) return position.zy * scale;
-    return position.xy * scale;
+vec2 project_material_uv(vec3 position, vec3 normal, float scale, uint projection_mode,
+    out vec2 ddx_uv, out vec2 ddy_uv, out mat2 normal_alignment) {
+    vec3 scaled_position = position * scale;
+    vec3 scaled_ddx = dFdx(position) * scale;
+    vec3 scaled_ddy = dFdy(position) * scale;
+    normal_alignment = mat2(1.0);
+    if (projection_mode == 0u || normal.y > 0.7071067811865475) {
+        ddx_uv = scaled_ddx.xz;
+        ddy_uv = scaled_ddy.xz;
+        return scaled_position.xz;
+    }
+    normal_alignment = mat2(vec2(normal.z, -normal.x), vec2(normal.x, normal.z));
+    vec2 snapped = round(normalize(-normal.xz) * 1.3065629648763765);
+    snapped *= abs(snapped.x) + abs(snapped.y) > 1.5 ? 0.7071067811865475 : 1.0;
+    snapped = vec2(-snapped.y, snapped.x);
+    ddx_uv = vec2(dot(scaled_ddx.xz, snapped), -scaled_ddx.y);
+    ddy_uv = vec2(dot(scaled_ddy.xz, snapped), -scaled_ddy.y);
+    return vec2(dot(scaled_position.xz, snapped), -scaled_position.y);
 }
-vec2 apply_detiling(vec2 uv, vec2 world_xz, uint mode, MaterialLayer layer) {
+vec2 apply_detiling(vec2 uv, vec2 world_xz, uint mode, MaterialLayer layer, out float rotation_angle) {
+    rotation_angle = 0.0;
     if (mode == 2u) return uv;
     vec2 cell = floor(world_xz * max(layer.pbr0.x, 0.000001) * 0.25);
     float selector = hash21(cell + vec2(float(layer.physical_layer), 19.0));
     float shift = layer.pbr1.w;
     if (mode == 3u) return uv + vec2(selector - 0.5) * shift;
     uint sectors = mode == 4u ? 4u : (mode == 5u ? 16u : 8u);
-    float angle = floor(selector * float(sectors)) * 6.28318530718 / float(sectors) * layer.pbr1.z;
-    return rotate_uv(uv, angle) + vec2(fract(selector * 7.13) - 0.5, fract(selector * 13.71) - 0.5) * shift;
+    rotation_angle = floor(selector * float(sectors)) * 6.28318530718 / float(sectors) * layer.pbr1.z;
+    return rotate_uv(uv, rotation_angle) + vec2(fract(selector * 7.13) - 0.5, fract(selector * 13.71) - 0.5) * shift;
 }
 vec3 decode_surface_normal(vec2 encoded_xy) {
     vec2 normal_xy = fma(encoded_xy, vec2(2.0), vec2(-1.0));
@@ -486,31 +500,66 @@ SampledMaterial sample_material(int logical_id, vec2 world_xz, vec3 terrain_norm
     int texture_layers = max(use_far_array ? textureSize(far_albedo_maps, 0).z : textureSize(albedo_maps, 0).z, 1);
     int physical = clamp(int(layer.physical_layer), 0, texture_layers - 1);
     float uv_scale = max(layer.pbr0.x, 0.000001) * max(control_scale, 0.1);
-    vec2 uv = project_material_uv(vec3(world_xz.x, world_position.y, world_xz.y), terrain_normal, uv_scale, material_config.projection_mode);
+    vec2 ddx_uv;
+    vec2 ddy_uv;
+    mat2 normal_alignment;
+    vec2 uv = project_material_uv(vec3(world_xz.x, world_position.y, world_xz.y), terrain_normal, uv_scale,
+        material_config.projection_mode, ddx_uv, ddy_uv, normal_alignment);
     uv = rotate_uv(uv, control_angle);
-    uv = apply_detiling(uv, world_xz, tier_config.detiling_mode, layer);
+    ddx_uv = rotate_uv(ddx_uv, control_angle);
+    ddy_uv = rotate_uv(ddy_uv, control_angle);
+    float detile_angle;
+    uv = apply_detiling(uv, world_xz, tier_config.detiling_mode, layer, detile_angle);
+    float material_angle = control_angle + detile_angle;
+    ddx_uv = rotate_uv(ddx_uv, detile_angle);
+    ddy_uv = rotate_uv(ddy_uv, detile_angle);
     float lod_bias = tier_config.material_lod_bias + tier_config.quality_lod_offset;
     vec4 albedo_texel = vec4(1.0);
     if (resident) {
-        albedo_texel = use_far_array ? texture(far_albedo_maps, vec3(uv, float(physical)), lod_bias)
-            : texture(albedo_maps, vec3(uv, float(physical)), lod_bias);
+        albedo_texel = use_far_array ? textureGrad(far_albedo_maps, vec3(uv, float(physical)), ddx_uv, ddy_uv)
+            : textureGrad(albedo_maps, vec3(uv, float(physical)), ddx_uv, ddy_uv);
     }
+    float dual_far_factor = 0.0;
+    vec2 dual_far_uv = uv;
+    vec2 dual_far_ddx = ddx_uv;
+    vec2 dual_far_ddy = ddy_uv;
+    mat2 dual_far_normal_alignment = normal_alignment;
+    float dual_far_material_angle = material_angle;
     if ((material_config.feature_flags & T3D_FEATURE_DUAL_SCALING) != 0u && uint(id) == material_config.dual_scale_texture) {
         float distance_to_camera = length(frame_data.camera_params[t3d_view_index()].xyz - world_position);
-        float far_factor = smoothstep(material_config.dual_scale_near, max(material_config.dual_scale_far, material_config.dual_scale_near + 0.001), distance_to_camera);
-        vec2 far_uv = project_material_uv(vec3(world_xz.x, world_position.y, world_xz.y), terrain_normal,
-            uv_scale * max(material_config.dual_scale_reduction, 0.001), material_config.projection_mode);
-        far_uv = rotate_uv(far_uv, control_angle);
+        dual_far_factor = smoothstep(material_config.dual_scale_near,
+            max(material_config.dual_scale_far, material_config.dual_scale_near + 0.001), distance_to_camera);
+        dual_far_uv = project_material_uv(vec3(world_xz.x, world_position.y, world_xz.y), terrain_normal,
+            uv_scale * max(material_config.dual_scale_reduction, 0.001), material_config.projection_mode,
+            dual_far_ddx, dual_far_ddy, dual_far_normal_alignment);
+        dual_far_uv = rotate_uv(dual_far_uv, control_angle);
+        dual_far_ddx = rotate_uv(dual_far_ddx, control_angle);
+        dual_far_ddy = rotate_uv(dual_far_ddy, control_angle);
+        float far_detile_angle;
+        dual_far_uv = apply_detiling(dual_far_uv, world_xz * max(material_config.dual_scale_reduction, 0.001),
+            tier_config.detiling_mode, layer, far_detile_angle);
+        dual_far_ddx = rotate_uv(dual_far_ddx, far_detile_angle);
+        dual_far_ddy = rotate_uv(dual_far_ddy, far_detile_angle);
+        dual_far_material_angle = control_angle + far_detile_angle;
         vec4 far_texel = vec4(1.0);
         if (resident) {
-            far_texel = use_far_array ? texture(far_albedo_maps, vec3(far_uv, float(physical)), lod_bias + 1.0)
-                : texture(albedo_maps, vec3(far_uv, float(physical)), lod_bias + 1.0);
+            far_texel = use_far_array ? textureGrad(far_albedo_maps,
+                vec3(dual_far_uv, float(physical)), dual_far_ddx, dual_far_ddy)
+                : textureGrad(albedo_maps, vec3(dual_far_uv, float(physical)), dual_far_ddx, dual_far_ddy);
         }
-        albedo_texel = mix(albedo_texel, far_texel, far_factor);
+        albedo_texel = mix(albedo_texel, far_texel, dual_far_factor);
     }
     SampledMaterial result = material_zero();
     result.albedo = albedo_texel.rgb * layer.color.rgb;
-    result.height = albedo_texel.a;
+    result.height = packed_surface && resident && !use_far_array && textureSize(displacement_maps, 0).z > physical
+        ? textureGrad(displacement_maps, vec3(uv, float(physical)), ddx_uv, ddy_uv).r
+        : (packed_surface ? 0.5 : albedo_texel.a);
+    if (dual_far_factor > 0.0 && packed_surface && resident && !use_far_array &&
+        textureSize(displacement_maps, 0).z > physical) {
+        float far_height = textureGrad(displacement_maps,
+            vec3(dual_far_uv, float(physical)), dual_far_ddx, dual_far_ddy).r;
+        result.height = mix(result.height, far_height, dual_far_factor);
+    }
     result.tangent_normal = vec3(0.0, 1.0, 0.0);
     result.roughness = clamp(1.0 + layer.pbr0.z, 0.0, 1.0);
     result.ao = 1.0;
@@ -520,18 +569,57 @@ SampledMaterial sample_material(int logical_id, vec2 world_xz, vec3 terrain_norm
     result.logical_id = id;
     if (resident && !use_far_array && tier_config.surface_response != 0u) {
         if (packed_surface && textureSize(surface_maps, 0).z > physical) {
-            vec4 surface = texture(surface_maps, vec3(uv, float(physical)), lod_bias);
+            vec4 surface = textureGrad(surface_maps, vec3(uv, float(physical)), ddx_uv, ddy_uv);
+            if (dual_far_factor > 0.0) {
+                vec4 far_surface = textureGrad(surface_maps,
+                    vec3(dual_far_uv, float(physical)), dual_far_ddx, dual_far_ddy);
+                vec3 near_normal = decode_surface_normal(surface.rg);
+                vec3 far_normal = decode_surface_normal(far_surface.rg);
+                near_normal.xz = rotate_uv(near_normal.xz, material_angle) * normal_alignment;
+                far_normal.xz = rotate_uv(far_normal.xz, dual_far_material_angle) * dual_far_normal_alignment;
+                result.tangent_normal = normalize(mix(near_normal, far_normal, dual_far_factor));
+                surface.ba = mix(surface.ba, far_surface.ba, dual_far_factor);
+            } else {
+                result.tangent_normal = decode_surface_normal(surface.rg);
+                result.tangent_normal.xz = rotate_uv(result.tangent_normal.xz, material_angle) * normal_alignment;
+            }
             result.roughness = clamp(surface.b + layer.pbr0.z, 0.0, 1.0);
             result.ao = mix(1.0, surface.a, clamp(layer.pbr1.x, 0.0, 1.0));
-            result.tangent_normal = decode_surface_normal(surface.rg);
+            if ((material_config.feature_flags & T3D_FEATURE_DISPLACEMENT) != 0u) {
+                result.ao = mix(result.ao, 1.0, result.height * result.height);
+            }
         } else if (textureSize(normal_maps, 0).z > physical) {
-            vec4 legacy = texture(normal_maps, vec3(uv, float(physical)), lod_bias);
+            vec4 legacy = textureGrad(normal_maps, vec3(uv, float(physical)), ddx_uv, ddy_uv);
             result.roughness = clamp(legacy.a + layer.pbr0.z, 0.0, 1.0);
             vec3 decoded = fma(legacy.xzy, vec3(2.0), vec3(-1.0));
             float normal_length = length(decoded);
-            result.ao = mix(1.0, max(normal_length * 2.0 - 1.0, 0.0), clamp(layer.pbr1.x, 0.0, 1.0));
-            if (normal_length > 0.00001) result.tangent_normal = decoded / normal_length;
+            float ao_raw = normal_length * 2.0 - 1.0;
+            float texture_ao = ao_raw * ao_raw * clamp(layer.pbr1.x, 0.0, 1.0) + 1.0 - clamp(layer.pbr1.x, 0.0, 1.0);
+            result.ao = mix(texture_ao, 1.0, result.height * result.height);
+            if (normal_length > 0.00001) {
+                result.tangent_normal = decoded / normal_length;
+                result.tangent_normal.xz = rotate_uv(result.tangent_normal.xz, material_angle) * normal_alignment;
+            }
+            if (dual_far_factor > 0.0) {
+                vec4 far_legacy = textureGrad(normal_maps,
+                    vec3(dual_far_uv, float(physical)), dual_far_ddx, dual_far_ddy);
+                vec3 far_decoded = fma(far_legacy.xzy, vec3(2.0), vec3(-1.0));
+                float far_normal_length = length(far_decoded);
+                float far_ao_raw = far_normal_length * 2.0 - 1.0;
+                float far_ao = far_ao_raw * far_ao_raw * clamp(layer.pbr1.x, 0.0, 1.0) +
+                    1.0 - clamp(layer.pbr1.x, 0.0, 1.0);
+                if (far_normal_length > 0.00001) {
+                    far_decoded /= far_normal_length;
+                    far_decoded.xz = rotate_uv(far_decoded.xz, dual_far_material_angle) * dual_far_normal_alignment;
+                    result.tangent_normal = normalize(mix(result.tangent_normal, far_decoded, dual_far_factor));
+                }
+                result.roughness = mix(result.roughness,
+                    clamp(far_legacy.a + layer.pbr0.z, 0.0, 1.0), dual_far_factor);
+                result.ao = mix(result.ao, mix(far_ao, 1.0, result.height * result.height), dual_far_factor);
+            }
         }
+        vec2 normal_xz = result.tangent_normal.xz * layer.pbr0.y;
+        result.tangent_normal = normalize(vec3(normal_xz.x, result.tangent_normal.y, normal_xz.y));
     }
     return result;
 }
@@ -559,7 +647,7 @@ void decode_control(uint control, out int base_id, out int overlay_id, out float
     uint encoded_scale = (control >> 7u) & 0x7u;
     scale = 0.9 - float(((encoded_scale + 3u) % 8u) + 1u) * 0.1;
 }
-SampledMaterial sample_control_pair(uint raw_control, vec2 world_xz, vec3 terrain_normal, TierMaterialConfig tier_config, float weight) {
+SampledMaterial sample_control_pair(uint raw_control, vec2 world_xz, vec3 terrain_normal, TierMaterialConfig tier_config) {
     uint control = auto_control(raw_control, terrain_normal, world_position.y, terrain_region_layer < 0);
     int base_id;
     int overlay_id;
@@ -570,16 +658,14 @@ SampledMaterial sample_control_pair(uint raw_control, vec2 world_xz, vec3 terrai
     bool use_far_array = T3D_TIER == 2 && (material_config.feature_flags & T3D_FEATURE_FAR_ALBEDO) != 0u;
     SampledMaterial base = sample_material(base_id, world_xz, terrain_normal, scale, angle, tier_config, use_far_array);
     SampledMaterial overlay = overlay_id == base_id ? base : sample_material(overlay_id, world_xz, terrain_normal, scale, angle, tier_config, use_far_array);
-#if T3D_TIER == 0
-    float height_delta = (overlay.height - base.height) * material_config.displacement_sharpness;
-    float height_blend = clamp((blend - 0.5) * (1.0 + material_config.blend_sharpness * 4.0) + 0.5 + height_delta * 0.25, 0.0, 1.0);
-#else
-    float height_blend = smoothstep(0.12, 0.88, blend);
-#endif
+    float sharpness = fma(60.0, material_config.blend_sharpness, 4.0);
+    float base_weight = pow(max((1.0 - blend) + base.height, 0.00000001), sharpness);
+    float overlay_weight = pow(max(blend + overlay.height, 0.00000001), sharpness);
+    float pair_weight_inv = 1.0 / max(base_weight + overlay_weight, 0.00001);
+    float height_blend = overlay_weight * pair_weight_inv;
     SampledMaterial result = material_zero();
     accumulate_material(result, base, 1.0 - height_blend);
     accumulate_material(result, overlay, height_blend);
-    result.total_weight = weight;
     return result;
 }
 
@@ -598,7 +684,7 @@ bool use_bilinear_controls(TierMaterialConfig tier_config) {
 SampledMaterial sample_detailed_material(vec2 world_texel, vec3 terrain_normal, TierMaterialConfig tier_config) {
     ivec2 base_texel = ivec2(floor(world_texel));
     if (!use_bilinear_controls(tier_config)) {
-        return sample_control_pair(read_control(base_texel), world_position.xz, terrain_normal, tier_config, 1.0);
+        return sample_control_pair(read_control(base_texel), world_position.xz, terrain_normal, tier_config);
     }
     ivec2 offsets[4] = ivec2[4](ivec2(0, 0), ivec2(1, 0), ivec2(0, 1), ivec2(1, 1));
     vec4 weights = corner_weights(world_texel);
@@ -615,7 +701,7 @@ SampledMaterial sample_detailed_material(vec2 world_texel, vec3 terrain_normal, 
     SampledMaterial result = material_zero();
     for (int i = 0; i < 4; ++i) {
         if (weights[i] <= 0.00001) continue;
-        SampledMaterial corner = sample_control_pair(read_control(base_texel + offsets[i]), world_position.xz, terrain_normal, tier_config, weights[i]);
+        SampledMaterial corner = sample_control_pair(read_control(base_texel + offsets[i]), world_position.xz, terrain_normal, tier_config);
         float inv = 1.0 / max(corner.total_weight, 0.00001);
         corner.albedo *= inv;
         corner.tangent_normal *= inv;
@@ -659,7 +745,8 @@ float sample_terrain_shadowmask(vec2 world_texel, int layer) {
     return texture(terrain_shadow_masks, vec3(uv, float(layer))).r;
 }
 
-vec3 light_material(vec3 albedo, vec3 normal, float roughness, float metallic, float ao, TierMaterialConfig tier_config) {
+vec3 light_material(vec3 albedo, vec3 normal, float roughness, float metallic, float ao,
+    float ao_affect, TierMaterialConfig tier_config) {
     if (tier_config.lighting_model == 0u) return albedo;
     vec3 ambient = albedo * frame_data.light_direction_ambient.w * ao;
 #ifdef T3D_FORWARD_NATIVE_LIGHTING
@@ -670,19 +757,21 @@ vec3 light_material(vec3 albedo, vec3 normal, float roughness, float metallic, f
     vec3 direct = t3d_forward_direct_lighting(albedo, world_position, normalize(normal), frame_data.view_matrix,
         frame_data.camera_params[t3d_view_index()].xyz, roughness, metallic, specular_scale, t3d_forward_light_frame.scene_params.y,
         tier_config.lighting_model, true, shadowmask_mode, shadowmask_visibility);
-    return ambient + direct;
+    return ambient + direct * mix(1.0, ao, clamp(ao_affect, 0.0, 1.0));
 #else
     vec3 light_dir = normalize(-frame_data.light_direction_ambient.xyz);
     float ndotl = max(dot(normal, light_dir), 0.0);
     vec3 diffuse = albedo * frame_data.light_color.rgb * ndotl;
-    if (tier_config.lighting_model == 1u) return ambient + diffuse;
+    float direct_ao = mix(1.0, ao, clamp(ao_affect, 0.0, 1.0));
+    if (tier_config.lighting_model == 1u) return ambient + diffuse * direct_ao;
     vec3 view_dir = normalize(frame_data.camera_params[t3d_view_index()].xyz - world_position);
     vec3 half_dir = normalize(light_dir + view_dir);
     float gloss = max(1.0 - roughness, 0.0);
     float specular_term = pow(max(dot(normal, half_dir), 0.0), mix(4.0, 128.0, gloss * gloss)) * gloss;
     if ((material_config.output_flags & T3D_OUTPUT_SPECULAR) == 0u) specular_term = 0.0;
     vec3 specular_color = mix(vec3(0.04), albedo, metallic);
-    return ambient + diffuse * (1.0 - metallic * 0.6) + specular_color * specular_term * frame_data.light_color.rgb;
+    return ambient + (diffuse * (1.0 - metallic * 0.6) +
+        specular_color * specular_term * frame_data.light_color.rgb) * direct_ao;
 #endif
 }
 vec3 apply_fog(vec3 lit) {
@@ -946,7 +1035,8 @@ void main() {
         scene_view_normal, material.roughness, material.metallic, material.ao, scene_emission);
     final_normal = normalize(transpose(mat3(frame_data.view_matrix)) * scene_view_normal);
 #endif
-    vec3 lit = light_material(material.albedo, final_normal, material.roughness, material.metallic, material.ao, tier_config) + scene_emission;
+    vec3 lit = light_material(material.albedo, final_normal, material.roughness, material.metallic,
+        material.ao, material.ao_affect, tier_config) + scene_emission;
 #ifdef T3D_FORWARD_NATIVE_LIGHTING
     vec3 reflection_view_position = (frame_data.view_matrix * vec4(world_position, 1.0)).xyz;
     vec3 reflection_view_normal = normalize(mat3(frame_data.view_matrix) * final_normal);
@@ -970,4 +1060,3 @@ void main() {
 #endif
 #endif // T3D_FORWARD_DEPTH
 }
-

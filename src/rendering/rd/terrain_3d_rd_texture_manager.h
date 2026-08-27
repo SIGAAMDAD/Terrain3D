@@ -22,7 +22,13 @@
 
 using namespace godot;
 
-typedef struct t3dRdTextureLayout_s {
+typedef enum t3dRdTextureSemantic_e : uint8_t {
+	T3D_RD_TEXTURE_LINEAR_DATA = 0,
+	T3D_RD_TEXTURE_SOURCE_COLOR = 1,
+} t3dRdTextureSemantic_t;
+
+typedef struct t3dRdTextureLayout_s
+{
 	RenderingDevice::DataFormat m_format = RenderingDevice::DATA_FORMAT_MAX;
 	RenderingDevice::TextureType m_type = RenderingDevice::TEXTURE_TYPE_2D;
 	uint32_t m_nWidth = 0u;
@@ -32,7 +38,8 @@ typedef struct t3dRdTextureLayout_s {
 	uint64_t m_nUsageBits = 0u;
 	uint64_t m_nBytes = 0u;
 
-	EA_FORCE_INLINE bool valid( void ) const {
+	EA_FORCE_INLINE bool valid( void ) const
+	{
 		return m_format != RenderingDevice::DATA_FORMAT_MAX && m_nWidth > 0u && m_nHeight > 0u && m_nLayers > 0u &&
 				m_nMipmaps > 0u && m_nBytes > 0u;
 	}
@@ -41,7 +48,8 @@ typedef struct t3dRdTextureLayout_s {
 // Global-RD texture gateway for Terrain3D-owned generated resources. Creation
 // and destruction are serialized onto Godot's render thread; ordinary dirty
 // layer/subregion uploads are queued without a frame-thread force_sync.
-class Terrain3DRdTextureManager : public Object {
+class Terrain3DRdTextureManager : public Object
+{
 	GDCLASS( Terrain3DRdTextureManager, Object );
 	CLASS_NAME_STATIC( "Terrain3DRdTextureManager" );
 
@@ -56,19 +64,19 @@ private:
 	std::atomic_uint64_t m_nRegionUpdateCount{ 0u };
 	std::atomic_uint64_t m_nUploadedBytes{ 0u };
 
-	void renderCreateTexture( const Ref<RDTextureFormat> &rFormat,
-			const TypedArray<PackedByteArray> &rInitialData,
-			const String &rName,
+	void renderCreateTexture( const Ref<RDTextureFormat>& rFormat,
+			const TypedArray<PackedByteArray>& rInitialData,
+			const String& rName,
 			uint64_t nBytes,
 			int nMemoryCategory );
-	void renderUpdateTexture( RID hTexture, uint32_t nLayer, const PackedByteArray &rData );
+	void renderUpdateTexture( RID hTexture, uint32_t nLayer, const PackedByteArray& rData );
 	void renderUpdateTextureRegion( RID hTexture,
 			RID hStaging,
 			uint32_t nDestinationX,
 			uint32_t nDestinationY,
 			uint32_t nWidth,
 			uint32_t nHeight,
-			const PackedByteArray &rData );
+			const PackedByteArray& rData );
 	void renderFreeTexture( RID hTexture, uint64_t nBytes );
 	void renderFreeResource( RID hRid, uint64_t nBytes );
 	void renderShutdown( void );
@@ -79,28 +87,34 @@ protected:
 public:
 	static void initializeSingleton( void );
 	static void shutdownSingleton( void );
-	static Terrain3DRdTextureManager *getSingleton( void ) { return s_pSingleton; }
+	static Terrain3DRdTextureManager *getSingleton( void )
+	{
+		return s_pSingleton;
+	}
 
-	static bool imageFormatToDataFormat( Image::Format format, RenderingDevice::DataFormat &rFormat );
-	static uint32_t getImageMipmapCount( const Ref<Image> &rImage );
-	static bool buildLayout( const Ref<Image> &rImage,
+	static bool imageFormatToDataFormat( Image::Format format,
+			t3dRdTextureSemantic_t semantic,
+			RenderingDevice::DataFormat& rFormat );
+	static uint32_t getImageMipmapCount( const Ref<Image>& rImage );
+	static bool buildLayout( const Ref<Image>& rImage,
 			uint32_t nLayers,
 			bool bLayered,
 			uint64_t nPayloadBytes,
-			t3dRdTextureLayout_t &rLayout );
+			t3dRdTextureSemantic_t semantic,
+			t3dRdTextureLayout_t& rLayout );
 
-	RID createTexture( const t3dRdTextureLayout_t &rLayout,
-			const TypedArray<PackedByteArray> &rInitialData,
-			const String &rName,
+	RID createTexture( const t3dRdTextureLayout_t& rLayout,
+			const TypedArray<PackedByteArray>& rInitialData,
+			const String& rName,
 			int nMemoryCategory = -1 );
-	bool updateTexture( RID hTexture, uint32_t nLayer, const PackedByteArray &rData );
+	bool updateTexture( RID hTexture, uint32_t nLayer, const PackedByteArray& rData );
 	bool updateTextureRegion( RID hTexture,
 			RID hStaging,
 			uint32_t nDestinationX,
 			uint32_t nDestinationY,
 			uint32_t nWidth,
 			uint32_t nHeight,
-			const PackedByteArray &rData );
+			const PackedByteArray& rData );
 	void freeTexture( RID hTexture, uint64_t nBytes );
 	void freeResource( RID hRid, uint64_t nBytes );
 	Dictionary getStats( void ) const;

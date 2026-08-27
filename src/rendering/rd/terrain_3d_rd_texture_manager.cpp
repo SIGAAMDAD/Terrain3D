@@ -12,16 +12,23 @@
 
 Terrain3DRdTextureManager *Terrain3DRdTextureManager::s_pSingleton = nullptr;
 
-void Terrain3DRdTextureManager::initializeSingleton( void ) {
-	if ( s_pSingleton ) return;
+void Terrain3DRdTextureManager::initializeSingleton( void )
+{
+	if ( s_pSingleton ) {
+		return;
+	}
 	s_pSingleton = memnew( Terrain3DRdTextureManager );
 }
 
-void Terrain3DRdTextureManager::shutdownSingleton( void ) {
+void Terrain3DRdTextureManager::shutdownSingleton( void )
+{
 	Terrain3DRdTextureManager *const pManager = s_pSingleton;
-	if ( !pManager ) return;
+	if ( !pManager ) {
+		return;
+	}
 	if ( !Terrain3DRdContext::isOnRenderThread() ) {
-		if ( Terrain3DRdContext::enqueueOnRenderThread( callable_mp( pManager, &Terrain3DRdTextureManager::renderShutdown ) ) ) {
+		if ( Terrain3DRdContext::enqueueOnRenderThread(
+					 callable_mp( pManager, &Terrain3DRdTextureManager::renderShutdown ) ) ) {
 			Terrain3DRdContext::forceSync();
 		} else {
 			pManager->renderShutdown();
@@ -34,7 +41,49 @@ void Terrain3DRdTextureManager::shutdownSingleton( void ) {
 }
 
 bool Terrain3DRdTextureManager::imageFormatToDataFormat( const Image::Format format,
-		RenderingDevice::DataFormat &rFormat ) {
+		const t3dRdTextureSemantic_t semantic,
+		RenderingDevice::DataFormat& rFormat )
+{
+	if ( semantic == T3D_RD_TEXTURE_SOURCE_COLOR ) {
+		switch ( format ) {
+			case Image::FORMAT_RGB8:
+				rFormat = RenderingDevice::DATA_FORMAT_R8G8B8_SRGB;
+				return true;
+			case Image::FORMAT_RGBA8:
+				rFormat = RenderingDevice::DATA_FORMAT_R8G8B8A8_SRGB;
+				return true;
+			case Image::FORMAT_DXT1:
+				rFormat = RenderingDevice::DATA_FORMAT_BC1_RGB_SRGB_BLOCK;
+				return true;
+			case Image::FORMAT_DXT3:
+				rFormat = RenderingDevice::DATA_FORMAT_BC2_SRGB_BLOCK;
+				return true;
+			case Image::FORMAT_DXT5:
+				rFormat = RenderingDevice::DATA_FORMAT_BC3_SRGB_BLOCK;
+				return true;
+			case Image::FORMAT_BPTC_RGBA:
+				rFormat = RenderingDevice::DATA_FORMAT_BC7_SRGB_BLOCK;
+				return true;
+			case Image::FORMAT_ETC:
+			case Image::FORMAT_ETC2_RGB8:
+				rFormat = RenderingDevice::DATA_FORMAT_ETC2_R8G8B8_SRGB_BLOCK;
+				return true;
+			case Image::FORMAT_ETC2_RGBA8:
+				rFormat = RenderingDevice::DATA_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK;
+				return true;
+			case Image::FORMAT_ETC2_RGB8A1:
+				rFormat = RenderingDevice::DATA_FORMAT_ETC2_R8G8B8A1_SRGB_BLOCK;
+				return true;
+			case Image::FORMAT_ASTC_4x4:
+				rFormat = RenderingDevice::DATA_FORMAT_ASTC_4x4_SRGB_BLOCK;
+				return true;
+			case Image::FORMAT_ASTC_8x8:
+				rFormat = RenderingDevice::DATA_FORMAT_ASTC_8x8_SRGB_BLOCK;
+				return true;
+			default:
+				break;
+		}
+	}
 	switch ( format ) {
 		case Image::FORMAT_L8:
 		case Image::FORMAT_R8:
@@ -162,40 +211,50 @@ bool Terrain3DRdTextureManager::imageFormatToDataFormat( const Image::Format for
 	return false;
 }
 
-uint32_t Terrain3DRdTextureManager::getImageMipmapCount( const Ref<Image> &rImage ) {
-	if ( rImage.is_null() || rImage->is_empty() ) return 0u;
-	return rImage->has_mipmaps() ? ( uint32_t )( rImage->get_mipmap_count() + 1 ) : 1u;
+uint32_t Terrain3DRdTextureManager::getImageMipmapCount( const Ref<Image>& rImage )
+{
+	if ( rImage.is_null() || rImage->is_empty() ) {
+		return 0u;
+	}
+	return rImage->has_mipmaps() ? (uint32_t)( rImage->get_mipmap_count() + 1 ) : 1u;
 }
 
-bool Terrain3DRdTextureManager::buildLayout( const Ref<Image> &rImage,
+bool Terrain3DRdTextureManager::buildLayout( const Ref<Image>& rImage,
 		const uint32_t nLayers,
 		const bool bLayered,
 		const uint64_t nPayloadBytes,
-		t3dRdTextureLayout_t &rLayout ) {
+		const t3dRdTextureSemantic_t semantic,
+		t3dRdTextureLayout_t& rLayout )
+{
 	rLayout = t3dRdTextureLayout_t{};
 	if ( rImage.is_null() || rImage->is_empty() || nLayers == 0u || nPayloadBytes == 0u ||
-			!imageFormatToDataFormat( rImage->get_format(), rLayout.m_format ) ) {
+			!imageFormatToDataFormat( rImage->get_format(), semantic, rLayout.m_format ) ) {
 		return false;
 	}
-	rLayout.m_nWidth = ( uint32_t )( rImage->get_width() );
-	rLayout.m_nHeight = ( uint32_t )( rImage->get_height() );
+	rLayout.m_nWidth = (uint32_t)( rImage->get_width() );
+	rLayout.m_nHeight = (uint32_t)( rImage->get_height() );
 	rLayout.m_nLayers = nLayers;
 	rLayout.m_nMipmaps = getImageMipmapCount( rImage );
 	rLayout.m_type = bLayered ? RenderingDevice::TEXTURE_TYPE_2D_ARRAY : RenderingDevice::TEXTURE_TYPE_2D;
-	rLayout.m_nUsageBits = ( uint64_t )( RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT ) |
-			( uint64_t )( RenderingDevice::TEXTURE_USAGE_CAN_UPDATE_BIT ) |
-			( uint64_t )( RenderingDevice::TEXTURE_USAGE_CAN_COPY_FROM_BIT ) |
-			( uint64_t )( RenderingDevice::TEXTURE_USAGE_CAN_COPY_TO_BIT );
+	rLayout.m_nUsageBits = (uint64_t)( RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT ) |
+			(uint64_t)( RenderingDevice::TEXTURE_USAGE_CAN_UPDATE_BIT ) |
+			(uint64_t)( RenderingDevice::TEXTURE_USAGE_CAN_COPY_FROM_BIT ) |
+			(uint64_t)( RenderingDevice::TEXTURE_USAGE_CAN_COPY_TO_BIT );
 	rLayout.m_nBytes = nPayloadBytes;
 	return rLayout.valid();
 }
 
-RID Terrain3DRdTextureManager::createTexture( const t3dRdTextureLayout_t &rLayout,
-		const TypedArray<PackedByteArray> &rInitialData,
-		const String &rName,
-		const int nMemoryCategory ) {
-	if ( !rLayout.valid() || rInitialData.size() != ( int64_t )( rLayout.m_nLayers ) ) return RID();
-	if ( !Terrain3DRdContext::getGlobalDevice() ) return RID();
+RID Terrain3DRdTextureManager::createTexture( const t3dRdTextureLayout_t& rLayout,
+		const TypedArray<PackedByteArray>& rInitialData,
+		const String& rName,
+		const int nMemoryCategory )
+{
+	if ( !rLayout.valid() || rInitialData.size() != (int64_t)( rLayout.m_nLayers ) ) {
+		return RID();
+	}
+	if ( !Terrain3DRdContext::getGlobalDevice() ) {
+		return RID();
+	}
 	Ref<RDTextureFormat> pFormat;
 	pFormat.instantiate();
 	pFormat->set_width( rLayout.m_nWidth );
@@ -216,8 +275,11 @@ RID Terrain3DRdTextureManager::createTexture( const t3dRdTextureLayout_t &rLayou
 	if ( Terrain3DRdContext::isOnRenderThread() ) {
 		renderCreateTexture( pFormat, rInitialData, rName, rLayout.m_nBytes, nMemoryCategory );
 	} else {
-		if ( !Terrain3DRdContext::enqueueOnRenderThread( callable_mp( this, &Terrain3DRdTextureManager::renderCreateTexture )
-								 .bind( pFormat, rInitialData, rName, rLayout.m_nBytes, nMemoryCategory ) ) ) return RID();
+		if ( !Terrain3DRdContext::enqueueOnRenderThread(
+					 callable_mp( this, &Terrain3DRdTextureManager::renderCreateTexture )
+							 .bind( pFormat, rInitialData, rName, rLayout.m_nBytes, nMemoryCategory ) ) ) {
+			return RID();
+		}
 		// Creation/recreation is a cold path and requires the RID before publication.
 		Terrain3DRdContext::forceSync();
 	}
@@ -225,10 +287,11 @@ RID Terrain3DRdTextureManager::createTexture( const t3dRdTextureLayout_t &rLayou
 	return m_bCreateSucceeded ? m_hCreateResult : RID();
 }
 
-bool Terrain3DRdTextureManager::updateTexture( const RID hTexture,
-		const uint32_t nLayer,
-		const PackedByteArray &rData ) {
-	if ( !hTexture.is_valid() || rData.is_empty() ) return false;
+bool Terrain3DRdTextureManager::updateTexture( const RID hTexture, const uint32_t nLayer, const PackedByteArray& rData )
+{
+	if ( !hTexture.is_valid() || rData.is_empty() ) {
+		return false;
+	}
 	if ( Terrain3DRdContext::isOnRenderThread() ) {
 		renderUpdateTexture( hTexture, nLayer, rData );
 		return true;
@@ -243,18 +306,25 @@ bool Terrain3DRdTextureManager::updateTextureRegion( const RID hTexture,
 		const uint32_t nDestinationY,
 		const uint32_t nWidth,
 		const uint32_t nHeight,
-		const PackedByteArray &rData ) {
-	if ( !hTexture.is_valid() || !hStaging.is_valid() || nWidth == 0u || nHeight == 0u || rData.is_empty() ) return false;
+		const PackedByteArray& rData )
+{
+	if ( !hTexture.is_valid() || !hStaging.is_valid() || nWidth == 0u || nHeight == 0u || rData.is_empty() ) {
+		return false;
+	}
 	if ( Terrain3DRdContext::isOnRenderThread() ) {
 		renderUpdateTextureRegion( hTexture, hStaging, nDestinationX, nDestinationY, nWidth, nHeight, rData );
 		return true;
 	}
-	return Terrain3DRdContext::enqueueOnRenderThread( callable_mp( this, &Terrain3DRdTextureManager::renderUpdateTextureRegion )
-								 .bind( hTexture, hStaging, nDestinationX, nDestinationY, nWidth, nHeight, rData ) );
+	return Terrain3DRdContext::enqueueOnRenderThread(
+			callable_mp( this, &Terrain3DRdTextureManager::renderUpdateTextureRegion )
+					.bind( hTexture, hStaging, nDestinationX, nDestinationY, nWidth, nHeight, rData ) );
 }
 
-void Terrain3DRdTextureManager::freeTexture( const RID hTexture, const uint64_t nBytes ) {
-	if ( !hTexture.is_valid() ) return;
+void Terrain3DRdTextureManager::freeTexture( const RID hTexture, const uint64_t nBytes )
+{
+	if ( !hTexture.is_valid() ) {
+		return;
+	}
 	if ( Terrain3DRdContext::isOnRenderThread() ) {
 		renderFreeTexture( hTexture, nBytes );
 	} else {
@@ -263,8 +333,11 @@ void Terrain3DRdTextureManager::freeTexture( const RID hTexture, const uint64_t 
 	}
 }
 
-void Terrain3DRdTextureManager::freeResource( const RID hRid, const uint64_t nBytes ) {
-	if ( !hRid.is_valid() ) return;
+void Terrain3DRdTextureManager::freeResource( const RID hRid, const uint64_t nBytes )
+{
+	if ( !hRid.is_valid() ) {
+		return;
+	}
 	if ( Terrain3DRdContext::isOnRenderThread() ) {
 		renderFreeResource( hRid, nBytes );
 	} else {
@@ -273,16 +346,20 @@ void Terrain3DRdTextureManager::freeResource( const RID hRid, const uint64_t nBy
 	}
 }
 
-void Terrain3DRdTextureManager::renderCreateTexture( const Ref<RDTextureFormat> &rFormat,
-		const TypedArray<PackedByteArray> &rInitialData,
-		const String &rName,
+void Terrain3DRdTextureManager::renderCreateTexture( const Ref<RDTextureFormat>& rFormat,
+		const TypedArray<PackedByteArray>& rInitialData,
+		const String& rName,
 		const uint64_t nBytes,
-		const int nMemoryCategory ) {
-	Terrain3DRdContext &context = Terrain3DRdContext::getShared();
-	if ( !context.isReady() && !context.initialize() ) return;
+		const int nMemoryCategory )
+{
+	Terrain3DRdContext& context = Terrain3DRdContext::getShared();
+	if ( !context.isReady() && !context.initialize() ) {
+		return;
+	}
 	RenderingDevice *const pRd = context.getDevice();
 	if ( !pRd || !pRd->texture_is_format_supported_for_usage( rFormat->get_format(), rFormat->get_usage_bits() ) ) {
-		context.recordResourceCreationFailure( rName, Terrain3DRdContext::RESOURCE_TEXTURE, "Unsupported generated texture format/usage" );
+		context.recordResourceCreationFailure(
+				rName, Terrain3DRdContext::RESOURCE_TEXTURE, "Unsupported generated texture format/usage" );
 		return;
 	}
 	Ref<RDTextureView> pView;
@@ -292,7 +369,8 @@ void Terrain3DRdTextureManager::renderCreateTexture( const Ref<RDTextureFormat> 
 		context.recordResourceCreationFailure( rName, Terrain3DRdContext::RESOURCE_TEXTURE );
 		return;
 	}
-	const Terrain3DRdContext::MemoryCategory category = nMemoryCategory >= 0 && nMemoryCategory < Terrain3DRdContext::MEMORY_CATEGORY_COUNT
+	const Terrain3DRdContext::MemoryCategory category =
+			nMemoryCategory >= 0 && nMemoryCategory < Terrain3DRdContext::MEMORY_CATEGORY_COUNT
 			? ( Terrain3DRdContext::MemoryCategory )( nMemoryCategory )
 			: Terrain3DRdContext::MEMORY_TERRAIN_TEXTURE;
 	if ( !context.registerResource( texture, rName, Terrain3DRdContext::RESOURCE_TEXTURE, category, nBytes ) ) {
@@ -310,15 +388,17 @@ void Terrain3DRdTextureManager::renderCreateTexture( const Ref<RDTextureFormat> 
 
 void Terrain3DRdTextureManager::renderUpdateTexture( const RID hTexture,
 		const uint32_t nLayer,
-		const PackedByteArray &rData ) {
-	Terrain3DRdContext &context = Terrain3DRdContext::getShared();
+		const PackedByteArray& rData )
+{
+	Terrain3DRdContext& context = Terrain3DRdContext::getShared();
 	RenderingDevice *const pRd = context.getDevice();
 	if ( !pRd || pRd->texture_update( hTexture, nLayer, rData ) != OK ) {
-		context.recordFailure( Terrain3DRdContext::FAILURE_RESOURCE_CREATION, "Failed Terrain3D generated texture update" );
+		context.recordFailure(
+				Terrain3DRdContext::FAILURE_RESOURCE_CREATION, "Failed Terrain3D generated texture update" );
 		return;
 	}
 	m_nUpdateCount.fetch_add( 1u, std::memory_order_relaxed );
-	m_nUploadedBytes.fetch_add( ( uint64_t )( rData.size() ), std::memory_order_relaxed );
+	m_nUploadedBytes.fetch_add( (uint64_t)( rData.size() ), std::memory_order_relaxed );
 }
 
 void Terrain3DRdTextureManager::renderUpdateTextureRegion( const RID hTexture,
@@ -327,47 +407,54 @@ void Terrain3DRdTextureManager::renderUpdateTextureRegion( const RID hTexture,
 		const uint32_t nDestinationY,
 		const uint32_t nWidth,
 		const uint32_t nHeight,
-		const PackedByteArray &rData ) {
-	Terrain3DRdContext &context = Terrain3DRdContext::getShared();
+		const PackedByteArray& rData )
+{
+	Terrain3DRdContext& context = Terrain3DRdContext::getShared();
 	RenderingDevice *const pRd = context.getDevice();
 	if ( !pRd || pRd->texture_update( hStaging, 0u, rData ) != OK ||
 			pRd->texture_copy( hStaging,
 					hTexture,
 					Vector3( 0.0, 0.0, 0.0 ),
-					Vector3( ( real_t )( nDestinationX ), ( real_t )( nDestinationY ), 0.0 ),
-					Vector3( ( real_t )( nWidth ), ( real_t )( nHeight ), 1.0 ),
+					Vector3( (real_t)( nDestinationX ), (real_t)( nDestinationY ), 0.0 ),
+					Vector3( (real_t)( nWidth ), (real_t)( nHeight ), 1.0 ),
 					0u,
 					0u,
 					0u,
 					0u ) != OK ) {
-		context.recordFailure( Terrain3DRdContext::FAILURE_RESOURCE_CREATION, "Failed Terrain3D generated texture subregion update" );
+		context.recordFailure(
+				Terrain3DRdContext::FAILURE_RESOURCE_CREATION, "Failed Terrain3D generated texture subregion update" );
 		return;
 	}
-	pRd->barrier( RenderingDevice::BARRIER_MASK_TRANSFER, RenderingDevice::BARRIER_MASK_RASTER | RenderingDevice::BARRIER_MASK_COMPUTE );
+	pRd->barrier( RenderingDevice::BARRIER_MASK_TRANSFER,
+			RenderingDevice::BARRIER_MASK_RASTER | RenderingDevice::BARRIER_MASK_COMPUTE );
 	m_nRegionUpdateCount.fetch_add( 1u, std::memory_order_relaxed );
-	m_nUploadedBytes.fetch_add( ( uint64_t )( rData.size() ), std::memory_order_relaxed );
+	m_nUploadedBytes.fetch_add( (uint64_t)( rData.size() ), std::memory_order_relaxed );
 }
 
-void Terrain3DRdTextureManager::renderFreeTexture( RID hTexture, const uint64_t nBytes ) {
+void Terrain3DRdTextureManager::renderFreeTexture( RID hTexture, const uint64_t nBytes )
+{
 	Terrain3DRdContext::getShared().freeTextureResource( hTexture, nBytes );
 }
 
-void Terrain3DRdTextureManager::renderFreeResource( RID hRid, const uint64_t nBytes ) {
+void Terrain3DRdTextureManager::renderFreeResource( RID hRid, const uint64_t nBytes )
+{
 	Terrain3DRdContext::getShared().freeResource( hRid, nBytes );
 }
 
-Dictionary Terrain3DRdTextureManager::getStats( void ) const {
+Dictionary Terrain3DRdTextureManager::getStats( void ) const
+{
 	Dictionary result;
 	result["backend"] = "rendering_device";
 	result["available"] = Terrain3DRdContext::getShared().isReady();
-	result["create_count"] = ( int64_t )( m_nCreateCount.load( std::memory_order_relaxed ) );
-	result["update_count"] = ( int64_t )( m_nUpdateCount.load( std::memory_order_relaxed ) );
-	result["region_update_count"] = ( int64_t )( m_nRegionUpdateCount.load( std::memory_order_relaxed ) );
-	result["uploaded_bytes"] = ( int64_t )( m_nUploadedBytes.load( std::memory_order_relaxed ) );
+	result["create_count"] = (int64_t)( m_nCreateCount.load( std::memory_order_relaxed ) );
+	result["update_count"] = (int64_t)( m_nUpdateCount.load( std::memory_order_relaxed ) );
+	result["region_update_count"] = (int64_t)( m_nRegionUpdateCount.load( std::memory_order_relaxed ) );
+	result["uploaded_bytes"] = (int64_t)( m_nUploadedBytes.load( std::memory_order_relaxed ) );
 	return result;
 }
 
-void Terrain3DRdTextureManager::renderShutdown( void ) {
+void Terrain3DRdTextureManager::renderShutdown( void )
+{
 	// The render-thread callback is a queue drain point. Shared RD ownership is
 	// released by module teardown after this manager can no longer enqueue work.
 }

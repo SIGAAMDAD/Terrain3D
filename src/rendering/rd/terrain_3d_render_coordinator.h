@@ -7,16 +7,15 @@
 
 #include "assets/generated_texture.h"
 #include "rendering/rd/terrain_3d_rd_clipmap_renderer.h"
+#include "rendering/rd/terrain_3d_rd_compositor_effect.h"
 #include "rendering/rd/terrain_3d_rd_instance_renderer.h"
 #include "rendering/rd/terrain_3d_rd_ocean_renderer.h"
-#include "rendering/rd/terrain_3d_rd_compositor_effect.h"
 #include "rendering/rd/terrain_3d_rd_shader_library.h"
 #include "rendering/rd/terrain_3d_rd_types.h"
 
 #include <array>
-#include <cstddef>
-
 #include <atomic>
+#include <cstddef>
 #include <godot_cpp/classes/compositor.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <mutex>
@@ -26,7 +25,8 @@ class Terrain3D;
 class Terrain3DMaterial;
 class Terrain3DRdForwardPlusBridgeAdapter;
 
-class Terrain3DRenderCoordinator {
+class Terrain3DRenderCoordinator
+{
 	CLASS_NAME_STATIC( "Terrain3DRenderCoordinator" );
 
 private:
@@ -36,7 +36,8 @@ private:
 	uint64_t m_nAttachedCameraId = 0u;
 	bool m_bCreatedCompositor = false;
 
-	typedef struct t3dRdPublishedResources_s {
+	typedef struct t3dRdPublishedResources_s
+	{
 		RID m_hHeightTextureRd;
 		RID m_hDerivedTextureRd;
 		RID m_hControlTextureRd;
@@ -51,13 +52,15 @@ private:
 		RID m_hFarAlbedoTextureRd;
 		RID m_hNormalTextureRd;
 		RID m_hSurfaceTextureRd;
+		RID m_hMaterialDisplacementTextureRd;
 		RID m_hDisplacementTextureRd;
 		RID m_hWorldNoiseTextureRd;
 		RID m_hMacroNoiseTextureRd;
 		RID m_hEditorBrushTextureRd;
 	} t3dRdPublishedResources_t;
 
-	typedef struct t3dRdFrameSnapshotSlot_s {
+	typedef struct t3dRdFrameSnapshotSlot_s
+	{
 		t3dRdFrameSnapshot_t m_snapshot;
 		PackedByteArray m_regionMapBytes;
 		t3dRdPublishedResources_t m_resources;
@@ -73,9 +76,7 @@ private:
 	} t3dRdFrameSnapshotSlot_t;
 
 	std::array<t3dRdFrameSnapshotSlot_t, s_nRdFrameSnapshotSlotCount> m_snapshotSlots{};
-	std::atomic_uint64_t m_nSnapshotExchangeToken{
-		t3dRdMakeFrameSnapshotToken( 1u, 0u, false )
-	};
+	std::atomic_uint64_t m_nSnapshotExchangeToken{ t3dRdMakeFrameSnapshotToken( 1u, 0u, false ) };
 	uint32_t m_nSnapshotWriteIndex = 2u;
 	uint32_t m_nSnapshotRenderIndex = 0u;
 	uint64_t m_nSnapshotRenderGeneration = 0u;
@@ -173,7 +174,8 @@ private:
 	uint32_t m_nLastForwardSampleCount = 0u;
 	int64_t m_nLastForwardFramebufferFormat = RenderingDevice::INVALID_ID;
 	static constexpr uint32_t s_nForwardViewportSlotCount = 8u;
-	typedef struct t3dRdForwardViewportState_s {
+	typedef struct t3dRdForwardViewportState_s
+	{
 		uint64_t m_nViewportKey = 0u;
 		RID m_hFramebuffer;
 		int64_t m_nFramebufferFormat = RenderingDevice::INVALID_ID;
@@ -198,8 +200,8 @@ private:
 
 	uint64_t hashBytes( const void *pData, size_t nBytes ) const;
 	uint64_t advanceGeneration( uint64_t nGeneration ) const;
-	void buildMaterialState( t3dRdFrameSnapshot_t &rSnapshot ) const;
-	void buildEditorOverlayState( t3dRdFrameSnapshot_t &rSnapshot, const Terrain3DMaterial *pMaterial ) const;
+	void buildMaterialState( t3dRdFrameSnapshot_t& rSnapshot ) const;
+	void buildEditorOverlayState( t3dRdFrameSnapshot_t& rSnapshot, const Terrain3DMaterial *pMaterial ) const;
 	bool ensureWorldNoiseCache( const Terrain3DMaterial *pMaterial );
 	bool ensureMacroNoiseTexture( const Terrain3DMaterial *pMaterial );
 	bool ensureEditorBrushTexture( const Terrain3DMaterial *pMaterial );
@@ -214,8 +216,9 @@ private:
 	void detachForwardBridge( void );
 	bool isForwardBridgeReady( void ) const;
 	void updateRenderRoute( void );
-	bool prepareForwardLifecycle( const t3dRdForwardPassContext_t &rContext,
-			bool &rHistoryValid, bool &rViewportReconfigured );
+	bool prepareForwardLifecycle( const t3dRdForwardPassContext_t& rContext,
+			bool& rHistoryValid,
+			bool& rViewportReconfigured );
 	void resetForwardLifecycle( void );
 
 public:
@@ -227,12 +230,11 @@ public:
 	void shutdown( void );
 	void update( void );
 	void render( RenderData *pRenderData );
-	bool renderForwardPass( const t3dRdForwardPassContext_t &rContext );
+	bool renderForwardPass( const t3dRdForwardPassContext_t& rContext );
 	void shutdownRendererOnRenderThread( void );
 	void renderPreviewOnRenderThread( void );
-	Ref<Image> createMeshPreview( uint16_t nAssetId, const Vector2i &rSize );
+	Ref<Image> createMeshPreview( uint16_t nAssetId, const Vector2i& rSize );
 	Dictionary getDiagnostics( void ) const;
-
 };
 
 #endif // TERRAIN3D_RENDER_COORDINATOR_H

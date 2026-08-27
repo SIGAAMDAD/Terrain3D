@@ -107,7 +107,7 @@ bool Terrain3DMiddleHeightRegionCache::configure( const t3dMiddleHeightRegionCac
 	for ( int layer = 0; layer < m_nPhysicalLayerCount; ++layer ) {
 		layers[layer] = pMiddleDefault;
 	}
-	if ( !m_generatedHeightMaps.create( layers ).is_valid() ) {
+	if ( !m_generatedHeightMaps.create( layers, T3D_RD_TEXTURE_LINEAR_DATA ).is_valid() ) {
 		UtilityFunctions::push_error( "Terrain3D: Failed to allocate the Middle height-only texture array." );
 		reset();
 		return false;
@@ -296,10 +296,10 @@ bool Terrain3DMiddleHeightRegionCache::updatePageTableTexture( void ) {
 		return false;
 	}
 	const bool bExisting = m_generatedRegionMap.getRid().is_valid();
-	bool ok = bExisting ? m_generatedRegionMap.update2d( pImage ) : m_generatedRegionMap.create( pImage ).is_valid();
+	bool ok = bExisting ? m_generatedRegionMap.update2d( pImage ) : m_generatedRegionMap.create( pImage, T3D_RD_TEXTURE_LINEAR_DATA ).is_valid();
 	if ( !ok && bExisting ) {
 		m_generatedRegionMap.clear();
-		ok = m_generatedRegionMap.create( pImage ).is_valid();
+		ok = m_generatedRegionMap.create( pImage, T3D_RD_TEXTURE_LINEAR_DATA ).is_valid();
 	}
 	m_bPageTableDirty = !ok;
 	return ok;

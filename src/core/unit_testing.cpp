@@ -552,22 +552,31 @@ static bool t3dRunRdInstanceAbiTests( t3dRdUnitTestState_t& rState )
 static bool t3dRunRdTextureLayoutTests( t3dRdUnitTestState_t& rState )
 {
 	RenderingDevice::DataFormat format = RenderingDevice::DATA_FORMAT_MAX;
-	rState.expect( Terrain3DRdTextureManager::imageFormatToDataFormat( Image::FORMAT_R16, format ) &&
+	rState.expect( Terrain3DRdTextureManager::imageFormatToDataFormat(
+						   Image::FORMAT_R16, T3D_RD_TEXTURE_LINEAR_DATA, format ) &&
 					format == RenderingDevice::DATA_FORMAT_R16_UNORM,
 			"RD texture layout maps R16 height data explicitly" );
-	rState.expect( Terrain3DRdTextureManager::imageFormatToDataFormat( Image::FORMAT_RGBA8, format ) &&
+	rState.expect( Terrain3DRdTextureManager::imageFormatToDataFormat(
+						   Image::FORMAT_RGBA8, T3D_RD_TEXTURE_LINEAR_DATA, format ) &&
 					format == RenderingDevice::DATA_FORMAT_R8G8B8A8_UNORM,
-			"RD texture layout maps RGBA8 color data explicitly" );
-	rState.expect( Terrain3DRdTextureManager::imageFormatToDataFormat( Image::FORMAT_RF, format ) &&
+			"RD texture layout keeps RGBA8 data textures linear" );
+	rState.expect( Terrain3DRdTextureManager::imageFormatToDataFormat(
+						   Image::FORMAT_RGBA8, T3D_RD_TEXTURE_SOURCE_COLOR, format ) &&
+					format == RenderingDevice::DATA_FORMAT_R8G8B8A8_SRGB,
+			"RD texture layout maps RGBA8 source-color textures to sRGB sampling" );
+	rState.expect( Terrain3DRdTextureManager::imageFormatToDataFormat(
+						   Image::FORMAT_RF, T3D_RD_TEXTURE_LINEAR_DATA, format ) &&
 					format == RenderingDevice::DATA_FORMAT_R32_SFLOAT,
 			"RD texture layout maps RF authoring data explicitly" );
-	rState.expect( !Terrain3DRdTextureManager::imageFormatToDataFormat( Image::FORMAT_R16I, format ) &&
+	rState.expect( !Terrain3DRdTextureManager::imageFormatToDataFormat(
+						   Image::FORMAT_R16I, T3D_RD_TEXTURE_LINEAR_DATA, format ) &&
 					format == RenderingDevice::DATA_FORMAT_MAX,
 			"RD texture layout rejects unsupported integer image formats" );
 
 	const Ref<Image> image = Image::create_empty( 8, 4, false, Image::FORMAT_R16 );
 	t3dRdTextureLayout_t layout;
-	rState.expect( image.is_valid() && Terrain3DRdTextureManager::buildLayout( image, 3u, true, 192u, layout ),
+	rState.expect( image.is_valid() &&
+					Terrain3DRdTextureManager::buildLayout( image, 3u, true, 192u, T3D_RD_TEXTURE_LINEAR_DATA, layout ),
 			"RD texture layout accepts a complete generated array" );
 	rState.expect( layout.m_type == RenderingDevice::TEXTURE_TYPE_2D_ARRAY && layout.m_nWidth == 8u &&
 					layout.m_nHeight == 4u && layout.m_nLayers == 3u && layout.m_nMipmaps == 1u &&
@@ -579,8 +588,9 @@ static bool t3dRunRdTextureLayoutTests( t3dRdUnitTestState_t& rState )
 			(uint64_t)( RenderingDevice::TEXTURE_USAGE_CAN_COPY_TO_BIT );
 	rState.expect( ( layout.m_nUsageBits & required_usage ) == required_usage,
 			"RD generated textures expose sampling, dirty update, and copy usage" );
-	rState.expect( !Terrain3DRdTextureManager::buildLayout( image, 0u, true, 192u, layout ) &&
-					!Terrain3DRdTextureManager::buildLayout( image, 3u, true, 0u, layout ),
+	rState.expect(
+			!Terrain3DRdTextureManager::buildLayout( image, 0u, true, 192u, T3D_RD_TEXTURE_LINEAR_DATA, layout ) &&
+					!Terrain3DRdTextureManager::buildLayout( image, 3u, true, 0u, T3D_RD_TEXTURE_LINEAR_DATA, layout ),
 			"RD texture layout rejects zero-layer and zero-byte resources" );
 	return rState.m_nFailed == 0u;
 }
