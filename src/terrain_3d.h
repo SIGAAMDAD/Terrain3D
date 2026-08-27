@@ -519,6 +519,8 @@ private:
 
 	void initializeInternal( void );
 	bool initializeRuntimeMemory( void );
+	bool beginRuntimeMemoryDrain( void );
+	bool releaseRuntimeMemory( void );
 	void deactivateRuntime( void );
 	bool isEditorAuthoringModeInternal( void ) const;
 	bool effectiveGpuRegionCacheEnabled( void ) const;

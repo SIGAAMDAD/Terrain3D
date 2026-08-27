@@ -3,11 +3,18 @@
 #include "memory/terrain_3d_memory_zone.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <mutex>
 
 constexpr uint32_t Terrain3DMemoryZone::s_szSmallClasses[Terrain3DMemoryZone::s_nSmallClassCount];
+
+Terrain3DMemoryZone::~Terrain3DMemoryZone() {
+	if ( !release() ) {
+		std::abort();
+	}
+}
 
 bool Terrain3DMemoryZone::alignUp( const size_t nValue, const size_t nAlignment, size_t &rValue ) {
 	if ( !isPowerOfTwo( nAlignment ) || nValue > std::numeric_limits<size_t>::max() - ( nAlignment - 1u ) ) {

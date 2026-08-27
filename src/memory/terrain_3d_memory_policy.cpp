@@ -46,6 +46,10 @@
 
 bool Terrain3D::initializeRuntimeMemory( void ) {
 	if ( m_bRuntimeMemoryReady ) {
+		if ( Terrain3DZoneAllocatorRouter::zone() != &m_runtimeMemoryZone ||
+				m_runtimeMemoryZone.state() != T3D_MEMORY_ZONE_ACTIVE ) {
+			return false;
+		}
 		if ( m_pData && m_pData->isActiveStorageOwnerInternal() ) {
 			return true;
 		}
@@ -53,6 +57,9 @@ bool Terrain3D::initializeRuntimeMemory( void ) {
 		return m_pData && active_span.valid() &&
 				m_pData->bindActiveStorageInternal(
 						( int )( m_nRegionSize ), active_span.m_pData, active_span.m_nSize );
+	}
+	if ( !Terrain3DZoneAllocatorRouter::canInstall( &m_runtimeMemoryZone ) ) {
+		return false;
 	}
 	// Worker and container allocations use the runtime zone. Active and resident
 	// page banks retain independent storage and must never route through this allocator.
@@ -70,18 +77,76 @@ bool Terrain3D::initializeRuntimeMemory( void ) {
 	}
 	const t3dMemoryArenaSpan_t active_span = m_runtimeMemoryArena.resolve( m_runtimeActiveHeightSlice );
 	const t3dMemoryArenaSpan_t zone_span = m_runtimeMemoryArena.resolve( m_runtimeZoneSlice );
-	if ( !m_pData || !active_span.valid() ||
-			!m_pData->bindActiveStorageInternal( ( int )( m_nRegionSize ), active_span.m_pData, active_span.m_nSize ) ||
-			!zone_span.valid() || !m_runtimeMemoryZone.initialize( zone_span.m_pData, zone_span.m_nSize ) ||
+	if ( !m_pData || !active_span.valid() || !zone_span.valid() ||
+			!m_runtimeMemoryZone.initialize( zone_span.m_pData, zone_span.m_nSize ) ) {
+		m_runtimeMemoryArena.release();
+		return false;
+	}
+	if ( !Terrain3DZoneAllocatorRouter::reserve( &m_runtimeMemoryZone ) ) {
+		m_runtimeMemoryZone.beginDraining();
+		m_runtimeMemoryZone.release();
+		m_runtimeMemoryArena.release();
+		return false;
+	}
+	if ( !m_pData->bindActiveStorageInternal( ( int )( m_nRegionSize ), active_span.m_pData, active_span.m_nSize ) ||
 			!m_runtimeMemoryArena.seal() ) {
+		m_pData->deactivateRuntimeStorage( this );
+		m_runtimeMemoryZone.beginDraining();
+		m_runtimeMemoryZone.release();
+		Terrain3DZoneAllocatorRouter::uninstall( &m_runtimeMemoryZone );
 		m_runtimeMemoryArena.release();
 		return false;
 	}
 	Terrain3DZoneAllocatorRouter::setOverflowPolicy( Engine::get_singleton()->is_editor_hint()
 					? TERRAIN3D_ALLOCATOR_OVERFLOW_HEAP
 					: TERRAIN3D_ALLOCATOR_OVERFLOW_STRICT );
-	Terrain3DZoneAllocatorRouter::install( &m_runtimeMemoryZone );
+	if ( !Terrain3DZoneAllocatorRouter::startRouting( &m_runtimeMemoryZone ) ) {
+		m_pData->deactivateRuntimeStorage( this );
+		m_runtimeMemoryZone.beginDraining();
+		m_runtimeMemoryZone.release();
+		Terrain3DZoneAllocatorRouter::uninstall( &m_runtimeMemoryZone );
+		m_runtimeMemoryArena.release();
+		return false;
+	}
 	m_bRuntimeMemoryReady = true;
+	return true;
+}
+
+bool Terrain3D::beginRuntimeMemoryDrain( void ) {
+	if ( !m_bRuntimeMemoryReady ) {
+		return true;
+	}
+	Terrain3DMemoryZone *const pOwner = Terrain3DZoneAllocatorRouter::zone();
+	if ( pOwner && pOwner != &m_runtimeMemoryZone ) {
+		return false;
+	}
+	if ( pOwner == &m_runtimeMemoryZone && !Terrain3DZoneAllocatorRouter::stopRouting( &m_runtimeMemoryZone ) ) {
+		return false;
+	}
+	const t3dMemoryZoneState_t state = m_runtimeMemoryZone.state();
+	if ( state == T3D_MEMORY_ZONE_ACTIVE ) {
+		return m_runtimeMemoryZone.beginDraining();
+	}
+	return state == T3D_MEMORY_ZONE_DRAINING || state == T3D_MEMORY_ZONE_DEAD ||
+			state == T3D_MEMORY_ZONE_UNINITIALIZED;
+}
+
+bool Terrain3D::releaseRuntimeMemory( void ) {
+	if ( !m_bRuntimeMemoryReady ) {
+		return true;
+	}
+	if ( !beginRuntimeMemoryDrain() || ( m_pData && m_pData->isActiveStorageOwnerInternal() ) ||
+			m_runtimeMemoryZone.liveAllocations() != 0u || !m_runtimeMemoryZone.release() ) {
+		return false;
+	}
+	if ( Terrain3DZoneAllocatorRouter::zone() == &m_runtimeMemoryZone &&
+			!Terrain3DZoneAllocatorRouter::uninstall( &m_runtimeMemoryZone ) ) {
+		return false;
+	}
+	m_runtimeMemoryArena.release();
+	m_runtimeActiveHeightSlice = {};
+	m_runtimeZoneSlice = {};
+	m_bRuntimeMemoryReady = false;
 	return true;
 }
 

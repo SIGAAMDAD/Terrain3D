@@ -186,6 +186,7 @@ private:
 	void updateCpuRegionResidencyInternal( const t3dResidencyFrameState_t &rFrame, bool bForce );
 	void updateInstanceRegionResidencyInternal( const t3dResidencyFrameState_t &rFrame, bool bForce );
 	void updateGpuRegionResidencyInternal( const t3dResidencyFrameState_t &rFrame, bool bForce );
+	bool releaseRuntimeAllocatorStorageInternal( void );
 
 public:
 	Terrain3DData( void );

@@ -901,6 +901,19 @@ bool Terrain3DRegion::evictInstanceStore( void ) {
 	return true;
 }
 
+bool Terrain3DRegion::releaseRuntimeAllocatorStorageInternal( void ) {
+	if ( m_bInstanceStoreResident && !encodeInstancePage() ) {
+		return false;
+	}
+	m_instanceStore.releaseStorage();
+	m_bInstanceStoreResident = m_nInstanceCount == 0u;
+
+	eastl::vector<t3dStreamedNodeRuntimeDescriptor_t> runtime_nodes(
+			m_streamedNodeRuntime.begin(), m_streamedNodeRuntime.end() );
+	m_streamedNodeRuntime.swap( runtime_nodes );
+	return true;
+}
+
 bool Terrain3DRegion::streamedNodeIdExists( const uint64_t nId ) const {
 	if ( nId == 0u || nId > ( uint64_t )( INT64_MAX ) ) {
 		return false;

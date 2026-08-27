@@ -1679,6 +1679,19 @@ void Terrain3DEditor::backupRegionFull( const Ref<Terrain3DRegion> &rRegion ) {
 	rRegion->setModified( true );
 }
 
+void Terrain3DEditor::releaseRuntimeAllocatorStorage( void ) {
+	eastl::vector<float>().swap( m_fBrushAlphaCache );
+	eastl::vector<t3dAxisSample_t>().swap( m_xAxisScratch );
+	eastl::vector<t3dAxisSample_t>().swap( m_zAxisScratch );
+	eastl::vector<t3dRegionMapCache_t>().swap( m_regionCacheScratch );
+	eastl::vector<t3dBrushElement_t>().swap( m_computeElementScratch );
+	eastl::vector<t3dComputeWrite_t>().swap( m_computeWriteScratch );
+	eastl::vector<Vector2i>().swap( m_modifiedRegionScratch );
+	m_pCachedBrushImage = nullptr;
+	m_cachedBrushImageSize = s_v2iZero;
+	m_fCachedBrushGamma = -1.f;
+}
+
 void Terrain3DEditor::trimBrushScratch( void ) {
 	m_xAxisScratch.clear();
 	m_zAxisScratch.clear();

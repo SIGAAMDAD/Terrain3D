@@ -69,6 +69,12 @@ typedef enum t3dChannel_e : uint32_t {
 	RESIDENT_CHANNEL_DERIVED = 1u << 3u,
 } t3dChannel_t;
 
+typedef enum t3dResidentPoolState_e : uint8_t {
+	T3D_RESIDENT_POOL_INACTIVE = 0u,
+	T3D_RESIDENT_POOL_ACTIVE,
+	T3D_RESIDENT_POOL_DRAINING,
+} t3dResidentPoolState_t;
+
 typedef struct t3dAlignedAllocation_s {
 	void *m_pRaw = nullptr;
 	uint8_t *m_pAligned = nullptr;
@@ -154,9 +160,13 @@ private:
 	t3dAlignedAllocation_t m_mapMemory;
 	t3dSlot_t *m_pSlots = nullptr;
 	bool m_bSlotsOwned = false;
+	std::atomic<uint8_t> m_nLifecycle{ T3D_RESIDENT_POOL_INACTIVE };
+	std::atomic<uint32_t> m_nAcquireGate{ UINT32_C( 0x80000000 ) };
 	std::atomic<int16_t> m_szLocationToSlot[s_nResidentWorldSlotCount] = {};
 	mutable std::mutex m_mutex;
 	int m_iClockHand = 0;
+	static constexpr uint32_t s_nAcquireGateClosed = UINT32_C( 0x80000000 );
+	static constexpr uint32_t s_nAcquireReaderMask = ~s_nAcquireGateClosed;
 
 	static bool alignUp( size_t nValue, size_t nAlignment, size_t &nAligned );
 	static bool buildSlotLayout( int nRegionSize, uint32_t nChannels, t3dSlotLayout_t &rLayout, size_t &nTexelCount );
@@ -169,6 +179,12 @@ private:
 	bool allocateSlotsUnlocked( int nCapacity );
 	bool assignMapBankPointersUnlocked( void );
 	bool hasPinnedSlotsUnlocked( void ) const;
+	bool beginAcquireOperation( void );
+	void endAcquireOperation( void );
+	void beginDrainUnlocked( void );
+	void waitForReadersUnlocked( void ) const;
+	void activateUnlocked( void );
+	void deactivateUnlocked( void );
 	void releaseSlotsUnlocked( void );
 	void clearUnlocked( void );
 	int chooseReplacementSlotUnlocked( void );

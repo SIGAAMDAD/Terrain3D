@@ -64,6 +64,7 @@ public:
 	Terrain3DMapEditService &operator=( const Terrain3DMapEditService & ) = delete;
 
 	void reset( void );
+	void releaseRuntimeAllocatorStorage( void );
 
 	Error setPixel( t3dMapType_t eMapType,
 			const Vector3 &rGlobalPosition,

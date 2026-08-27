@@ -245,6 +245,7 @@ public:
 	PackedByteArray getInstancePage( void ) const;
 	bool ensureInstanceStoreResident( void ) const;
 	bool evictInstanceStore( void );
+	bool releaseRuntimeAllocatorStorageInternal( void );
 	void adoptPreparedInstanceStoreInternal( Terrain3DInstanceStore &&rStore );
 	void adoptCookedInstanceAccelerationInternal( const PackedByteArray &rMetadata, const PackedByteArray &rFastStart );
 	EA_FORCE_INLINE const PackedByteArray &getCookedInstanceMetadataInternal( void ) const {

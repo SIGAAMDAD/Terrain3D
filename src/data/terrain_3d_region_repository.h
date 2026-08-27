@@ -76,6 +76,7 @@ public:
 	static int getRegionMapIndex( const Vector2i &rRegionLoc );
 
 	void clear( void );
+	bool releaseRuntimeAllocatorStorage( void );
 	void configureGeometry( int nRegionSize, real_t fVertexSpacing );
 	void setVertexSpacing( real_t fVertexSpacing );
 

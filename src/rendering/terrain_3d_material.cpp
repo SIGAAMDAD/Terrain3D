@@ -2900,6 +2900,7 @@ void Terrain3DMaterial::uninitialize( Terrain3D *pTerrain )
 	LOG( INFO, "Uninitializing material" );
 	disconnectShaderOverrideSignals();
 	invalidateRegionPageTables();
+	eastl::vector<PropertyInfo>().swap( m_shaderPropertyCache );
 }
 
 void Terrain3DMaterial::destroy( void )
@@ -2944,7 +2945,7 @@ void Terrain3DMaterial::destroy( void )
 	}
 	m_activeParams.clear();
 	m_shaderParams.clear();
-	m_shaderPropertyCache.clear();
+	eastl::vector<PropertyInfo>().swap( m_shaderPropertyCache );
 	m_shaderParamDefaults.clear();
 	m_runtimeMaterialParams.clear();
 	m_generatedDummy.clear();

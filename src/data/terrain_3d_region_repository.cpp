@@ -25,6 +25,16 @@ void Terrain3DRegionRepository::clear( void ) {
 	bumpTopologyGeneration();
 }
 
+bool Terrain3DRegionRepository::releaseRuntimeAllocatorStorage( void ) {
+	bool released = true;
+	for ( Ref<Terrain3DRegion> &region : m_szRegionRefs ) {
+		if ( region.is_valid() && !region->releaseRuntimeAllocatorStorageInternal() ) {
+			released = false;
+		}
+	}
+	return released;
+}
+
 void Terrain3DRegionRepository::configureGeometry( const int nRegionSize, const real_t fVertexSpacing ) {
 	const int regionMapSize = nRegionSize > 0 ? s_nActiveWorldTexels / nRegionSize : 0;
 	const bool bLayoutChanged = m_nRegionSize != nRegionSize || m_nRegionMapSize != regionMapSize;

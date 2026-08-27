@@ -196,6 +196,7 @@ public:
 	void backupRegion( const Ref<Terrain3DRegion> &rRegion, bool bMapWasImplicit = false );
 	void backupRegionFull( const Ref<Terrain3DRegion> &rRegion );
 	void stopOperation( void );
+	void releaseRuntimeAllocatorStorage( void );
 
 protected:
 	static void _bind_methods( void );

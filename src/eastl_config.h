@@ -117,12 +117,15 @@ public:
 			return nullptr;
 		}
 		const size_t total = n + header_size + alignment_slack;
-		Terrain3DMemoryZone *const pZone = Terrain3DZoneAllocatorRouter::zone();
+		Terrain3DMemoryZone *const pZone = Terrain3DZoneAllocatorRouter::beginAllocationRoute();
 		void *pRaw = pZone ? pZone->allocate( total, alignment ) : t3dMemoryAllocate( total );
 		uint8_t origin = pZone ? TERRAIN3D_ALLOCATION_ZONE : TERRAIN3D_ALLOCATION_BOOTSTRAP;
 		if ( !pRaw && pZone && Terrain3DZoneAllocatorRouter::overflowPolicy() == TERRAIN3D_ALLOCATOR_OVERFLOW_HEAP ) {
+			Terrain3DZoneAllocatorRouter::endAllocationRoute();
 			pRaw = t3dMemoryAllocate( total );
 			origin = TERRAIN3D_ALLOCATION_OVERFLOW;
+		} else if ( pZone && !pRaw ) {
+			Terrain3DZoneAllocatorRouter::endAllocationRoute();
 		}
 		if ( !pRaw ) {
 			recordFailure();
@@ -139,6 +142,9 @@ public:
 		header.m_nOrigin = origin;
 		std::memcpy( ( void * )( aligned - header_size ), &header, header_size );
 		recordAllocation( n, origin );
+		if ( origin == TERRAIN3D_ALLOCATION_ZONE ) {
+			Terrain3DZoneAllocatorRouter::endAllocationRoute();
+		}
 		return ( void * )aligned;
 	}
 

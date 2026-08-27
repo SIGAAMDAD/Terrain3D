@@ -150,7 +150,7 @@ void Terrain3D::initializeInternal( void ) {
 					data_error,
 					"; state=",
 					m_pData->getRuntimeState() );
-			set_physics_process( false );
+			deactivateRuntime();
 			return;
 		}
 		// Establish the authoritative residency map before the tier materials take
@@ -172,10 +172,7 @@ void Terrain3D::initializeInternal( void ) {
 			LOG( ERROR,
 					"[lifecycle] Terrain material failed to produce a valid render shader; "
 					"aborting terrain activation before render meshes are created." );
-			m_material->uninitialize( this );
-			m_assets->uninitialize( this );
-			m_pData->deactivateRuntimeStorage( this );
-			set_physics_process( false );
+			deactivateRuntime();
 			return;
 		}
 		m_pCollision->initialize( this );
@@ -236,6 +233,7 @@ void Terrain3D::initializeInternal( void ) {
 
 void Terrain3D::deactivateRuntime( void ) {
 	set_physics_process( false );
+	const bool bMemoryDrainStarted = beginRuntimeMemoryDrain();
 	destroyRenderCoordinator();
 	destroyTerrainMesher();
 	destroyOceanMesher();
@@ -244,6 +242,9 @@ void Terrain3D::deactivateRuntime( void ) {
 	destroyNodeStreamer( true );
 	destroyInstancer();
 	destroyCollision();
+	if ( m_pEditor ) {
+		m_pEditor->releaseRuntimeAllocatorStorage();
+	}
 	disconnectResourceSignals( m_assets, m_material );
 	if ( m_assets.is_valid() ) {
 		m_assets->uninitialize( this );
@@ -253,6 +254,17 @@ void Terrain3D::deactivateRuntime( void ) {
 	}
 	if ( m_pData ) {
 		m_pData->deactivateRuntimeStorage( this );
+	}
+	bool bAllocatorStorageReleased = true;
+	if ( bMemoryDrainStarted && m_pData ) {
+		bAllocatorStorageReleased = m_pData->releaseRuntimeAllocatorStorageInternal();
+	}
+	if ( bMemoryDrainStarted && bAllocatorStorageReleased && !releaseRuntimeMemory() ) {
+		LOG( ERROR,
+				"[lifecycle] Runtime allocator drain completed but backing storage could not be released; live allocations=",
+				m_runtimeMemoryZone.liveAllocations() );
+	} else if ( bMemoryDrainStarted && !bAllocatorStorageReleased ) {
+		LOG( ERROR, "[lifecycle] Runtime allocator-backed owners could not be drained safely" );
 	}
 	m_bInitialized = false;
 }
@@ -629,11 +641,10 @@ Terrain3D::~Terrain3D( void ) {
 		memdelete( m_pRuntimeProfileHistory );
 		m_pRuntimeProfileHistory = nullptr;
 	}
-	if ( Terrain3DZoneAllocatorRouter::zone() == &m_runtimeMemoryZone ) {
-		Terrain3DZoneAllocatorRouter::install( nullptr );
-	}
-	if ( m_runtimeMemoryZone.state() == T3D_MEMORY_ZONE_ACTIVE ) {
-		m_runtimeMemoryZone.beginDraining();
+	if ( m_bRuntimeMemoryReady && !releaseRuntimeMemory() ) {
+		LOG( ERROR,
+				"[lifecycle] Terrain destroyed with live runtime allocator storage; live allocations=",
+				m_runtimeMemoryZone.liveAllocations() );
 	}
 }
 

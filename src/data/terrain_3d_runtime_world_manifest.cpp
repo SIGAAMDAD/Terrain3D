@@ -85,6 +85,16 @@ void Terrain3DRuntimeWorldManifest::reset( void ) {
 	m_topologyBits.fill( 0u );
 }
 
+void Terrain3DRuntimeWorldManifest::releaseRuntimeAllocatorStorage( void ) {
+	eastl::vector<t3dRuntimeWorldRegionRecord_t> regions( m_regions.begin(), m_regions.end() );
+	eastl::vector<String> scene_dependencies( m_sceneDependencies.begin(), m_sceneDependencies.end() );
+	eastl::vector<uint16_t> region_scene_dependencies(
+			m_regionSceneDependencies.begin(), m_regionSceneDependencies.end() );
+	m_regions.swap( regions );
+	m_sceneDependencies.swap( scene_dependencies );
+	m_regionSceneDependencies.swap( region_scene_dependencies );
+}
+
 String Terrain3DRuntimeWorldManifest::getPath( const String &rDataDirectory ) const {
 	return rDataDirectory.is_empty() ? String()
 									 : rDataDirectory.trim_suffix( "/" ).path_join( "terrain3d_world.t3dmanifest" );

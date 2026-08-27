@@ -81,9 +81,7 @@ public:
 	static constexpr uint64_t s_nAllocationMagic = 0x5A4F4E453344544FULL;
 
 	Terrain3DMemoryZone() = default;
-	EA_FORCE_INLINE ~Terrain3DMemoryZone() {
-		release();
-	}
+	~Terrain3DMemoryZone();
 	Terrain3DMemoryZone( const Terrain3DMemoryZone & ) = delete;
 	Terrain3DMemoryZone &operator=( const Terrain3DMemoryZone & ) = delete;
 

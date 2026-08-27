@@ -68,6 +68,7 @@ typedef struct t3dRuntimeWorldRegionRecord_s {
 class Terrain3DRuntimeWorldManifest {
 public:
 	void reset( void );
+	void releaseRuntimeAllocatorStorage( void );
 	bool buildAuthoringIndex( const Terrain3DRegionRepository &rRepository );
 	bool write( const String &rDataDirectory,
 			const Terrain3DRegionRepository &rRepository,

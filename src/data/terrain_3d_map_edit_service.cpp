@@ -105,6 +105,17 @@ void Terrain3DMapEditService::reset( void ) {
 	m_derivedUpdateScratch.clear();
 }
 
+void Terrain3DMapEditService::releaseRuntimeAllocatorStorage( void ) {
+	reset();
+	eastl::vector<t3dDerivedMapTask_t>().swap( m_derivedTaskScratch );
+	eastl::vector<float>().swap( m_fDerivedHaloScratch );
+	eastl::vector<float>().swap( m_fDerivedWorkerHaloScratch );
+	eastl::vector<uint8_t>().swap( m_derivedOutputScratch );
+	eastl::vector<Vector2i>().swap( m_activeLocationScratch );
+	eastl::vector<Vector2i>().swap( m_derivedLocationScratch );
+	eastl::vector<t3dDerivedMapUpdate_t>().swap( m_derivedUpdateScratch );
+}
+
 Rect2i Terrain3DMapEditService::getRegionDirtyRect( const Vector2i &rLocation,
 		const int nRegionSize,
 		const real_t fVertexSpacing,

@@ -1631,6 +1631,9 @@ Terrain3DData::Terrain3DData( void ) :
 
 Terrain3DData::~Terrain3DData( void )
 {
+	if ( !m_regionRepository.releaseRuntimeAllocatorStorage() ) {
+		LOG( ERROR, "Failed releasing region allocator storage during Terrain3DData teardown" );
+	}
 	clear();
 	if ( m_pCompute ) {
 		memdelete( m_pCompute );
@@ -1985,6 +1988,13 @@ void Terrain3DData::deactivateRuntimeStorage( Terrain3D *const pTerrain )
 	resetInstanceRegionCache( false );
 	m_samplingStorage.resetResidentPool();
 	m_samplingStorage.releaseActive();
+}
+
+bool Terrain3DData::releaseRuntimeAllocatorStorageInternal( void ) {
+	m_runtimePageStore.reset();
+	m_mapEditService.releaseRuntimeAllocatorStorage();
+	m_runtimeWorldManifest.releaseRuntimeAllocatorStorage();
+	return m_regionRepository.releaseRuntimeAllocatorStorage();
 }
 
 Dictionary Terrain3DData::getRuntimeState( void ) const
