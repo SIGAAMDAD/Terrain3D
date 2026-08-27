@@ -29,6 +29,16 @@ typedef struct t3dClipmapGeometry_s {
 	AABB m_aabb;
 } t3dClipmapGeometry_t;
 
+typedef struct t3dMesherRuntimeConfig_s {
+	int m_nNearShaderLodCount = s_nMaxClipmapLevels;
+	int m_nMiddleShaderLodCount = 0;
+	int m_nImmediateLodCount = s_nMaxClipmapLevels;
+	int m_nClipmapUpdateBudget = s_nMaxClipmapLevels;
+	int m_nShadowLodCount = 0;
+	int m_szTierShadowLodCounts[3] = { -1, -1, -1 };
+	bool m_szTierShadowEnabled[3] = { true, true, true };
+} t3dMesherRuntimeConfig_t;
+
 // Terrain3DMesher is now a CPU topology/snap-state producer only. RenderingDevice
 // owns every GPU resource and every draw. Keeping the clipmap math here avoids
 // duplicating the mature topology/stitch rules in the renderer.
@@ -56,9 +66,7 @@ private:
 	real_t m_fOffsetC = 0.f;
 	eastl::array<Vector3, s_nPairInstances> m_szEdgePos{};
 
-	int m_nNearShaderLodCount = s_nMaxClipmapLevels;
-	int m_nMiddleShaderLodCount = 0;
-	int m_nClipmapUpdateBudget = s_nMaxClipmapLevels;
+	t3dMesherRuntimeConfig_t m_runtimeConfig;
 	int m_iDeferredLodCursor = 0;
 	bool m_bForceFullSnap = true;
 	bool m_bRequireCookedGeometryPack = false;
@@ -75,9 +83,6 @@ private:
 	real_t m_fClipmapAabbMinY = -0.1f;
 	real_t m_fClipmapAabbSizeY = 0.2f;
 	GeometryInstance3D::ShadowCastingSetting m_castShadows = GeometryInstance3D::SHADOW_CASTING_SETTING_OFF;
-	int m_nShadowLodCount = 0;
-	eastl::array<int, 3> m_nTierShadowLodCounts{ -1, -1, -1 };
-	eastl::array<bool, 3> m_bTierShadowEnabled{ true, true, true };
 
 	void generateMeshTypes( void );
 	bool loadRuntimeGeometryPack( const String &rDataDirectory );
@@ -96,6 +101,11 @@ private:
 	void generateLodCache( void );
 	void clearClipmap( void );
 	void clearMeshTypes( void );
+	void compileTierRuntimeConfig( int nNearShaderLodCount, int nMiddleShaderLodCount, int nClipmapUpdateBudget );
+	void compileShadowRuntimeConfig( int nShadowLodCount,
+			const eastl::array<bool, 3> &bTierShadowEnabled,
+			const eastl::array<int, 3> &nTierShadowLodCounts );
+	void refreshImmediateLodCount( void );
 	int getImmediateLodCount( void ) const;
 	int getLodTier( int nLod ) const;
 	bool lodCastsShadows( int nLod ) const;

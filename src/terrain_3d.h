@@ -236,6 +236,7 @@ typedef struct t3dBakeTaskContext_s {
 class Terrain3D : public Node3D {
 	GDCLASS( Terrain3D, Node3D );
 	CLASS_NAME();
+	friend class Terrain3DData;
 
 public: // Constants
 private:
@@ -283,6 +284,7 @@ private:
 	// Unified logical region-streaming policy. Every subsystem consumes this map;
 	// no renderer/object cache is allowed to invent a separate world footprint.
 	t3dRegionStreamingConfig_t m_regionStreamingConfig{};
+	t3dRuntimeStreamingConfig_t m_runtimeStreamingConfig = t3dStreamingCompileConfig( m_regionStreamingConfig );
 	uint8_t m_szRegionStreamingStates[s_nMaxRegionSlots] = {};
 	uint8_t m_szRegionStreamingPrefetch[s_nMaxRegionSlots] = {};
 	Vector2i m_regionStreamingCenter = s_v2iMax;
@@ -343,6 +345,7 @@ private:
 	int m_nGpuRegionColorResolutionDivisor = 1;
 	int m_nGpuRegionDerivedResolutionDivisor = 1;
 	int m_nGpuMiddleHeightResolutionDivisor = 1;
+	t3dRuntimePageNumericConfig_t m_runtimePageNumericConfig;
 	int m_nEditorGpuRegionCachePages = 96;
 	int m_nGpuFarQualityDivisor = 1;
 	int m_nFarMaterialResolution = 128;
@@ -531,6 +534,7 @@ private:
 	void applyStreamingPolicy( bool bForceResidency = false );
 	void updateRegionStreamingPolicy( const Vector3 &rWorldPosition, double fDelta, bool bForce = false );
 	void invalidateRegionStreamingPolicy( void );
+	void compileRuntimePageNumericConfig( void );
 	void validateRegionStreamingConfiguration( bool bReport = true ) const;
 	void markMemoryBudgetDirty( void );
 	void serviceMemoryBudgetPolicy( bool bForce );
@@ -1024,15 +1028,15 @@ public:
 	}
 	void setGpuRegionColorResolutionDivisor( int nDivisor );
 	EA_FORCE_INLINE int getGpuRegionColorResolutionDivisor( void ) const {
-		return m_nGpuRegionColorResolutionDivisor;
+		return m_runtimePageNumericConfig.m_nColorDivisor;
 	}
 	void setGpuRegionDerivedResolutionDivisor( int nDivisor );
 	EA_FORCE_INLINE int getGpuRegionDerivedResolutionDivisor( void ) const {
-		return m_nGpuRegionDerivedResolutionDivisor;
+		return m_runtimePageNumericConfig.m_nDerivedDivisor;
 	}
 	void setGpuMiddleHeightResolutionDivisor( int nDivisor );
 	EA_FORCE_INLINE int getGpuMiddleHeightResolutionDivisor( void ) const {
-		return m_nGpuMiddleHeightResolutionDivisor;
+		return m_runtimePageNumericConfig.m_nMiddleHeightDivisor;
 	}
 	void setEditorGpuRegionCachePages( int nPages );
 	EA_FORCE_INLINE int getEditorGpuRegionCachePages( void ) const {
@@ -1416,7 +1420,7 @@ public:
 	}
 	void setRuntimePagePrepareThreads( int nCount );
 	EA_FORCE_INLINE int getRuntimePagePrepareThreads( void ) const {
-		return m_nRuntimePagePrepareThreads;
+		return m_runtimePageNumericConfig.m_nPrepareThreads;
 	}
 	void setTessellationLevel( const int nLevel );
 	EA_FORCE_INLINE int getTessellationLevel( void ) const {

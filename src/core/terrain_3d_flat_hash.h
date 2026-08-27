@@ -12,6 +12,7 @@
 #include <EASTL/vector.h>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <utility>
 
 typedef enum t3dFlatHashBucketState_e : uint8_t {
@@ -19,14 +20,17 @@ typedef enum t3dFlatHashBucketState_e : uint8_t {
 	T3D_FLAT_HASH_BUCKET_OCCUPIED = 1u,
 } t3dFlatHashBucketState_t;
 
-// Compact open-addressing storage for bounded Terrain3D runtime tables. The map
-// retains capacity after clear() and performs no node allocations.
+// Compact open-addressing storage for bounded Terrain3D runtime tables. Cold
+// callers may remain growable. Hot callers reserve their configured maximum and
+// seal the map, making an overflow a failure instead of a hidden rehash.
 template <typename Key, typename Value, typename Hash, typename Equal = eastl::equal_to<Key>> class Terrain3DFlatHashMap {
 private:
 	eastl::vector<Key> m_keys;
 	eastl::vector<Value> m_values;
 	eastl::vector<uint8_t> m_states;
 	size_t m_nSize = 0u;
+	size_t m_nEntryLimit = SIZE_MAX;
+	bool m_bSealed = false;
 	Hash m_hash{};
 	Equal m_equal{};
 
@@ -89,7 +93,15 @@ private:
 		return SIZE_MAX;
 	}
 
-	void rehash( const size_t nBucketCount ) {
+	bool rehash( const size_t nBucketCount ) {
+		const size_t nNewCount = nextPowerOfTwo( nBucketCount );
+		if ( nNewCount <= m_states.size() ) {
+			return true;
+		}
+		if ( m_bSealed ) {
+			return false;
+		}
+
 		eastl::vector<Key> oldKeys;
 		eastl::vector<Value> oldValues;
 		eastl::vector<uint8_t> oldStates;
@@ -97,10 +109,10 @@ private:
 		oldValues.swap( m_values );
 		oldStates.swap( m_states );
 
-		const size_t nNewCount = nextPowerOfTwo( nBucketCount );
 		m_keys.resize( nNewCount );
 		m_values.resize( nNewCount );
-		m_states.resize( nNewCount, T3D_FLAT_HASH_BUCKET_EMPTY );
+		m_states.resize( nNewCount );
+		std::memset( m_states.data(), T3D_FLAT_HASH_BUCKET_EMPTY, m_states.size() * sizeof( uint8_t ) );
 		m_nSize = 0u;
 
 		for ( size_t iBucket = 0u; iBucket < oldStates.size(); ++iBucket ) {
@@ -109,6 +121,7 @@ private:
 			}
 			insertOrAssignNoGrow( eastl::move( oldKeys[iBucket] ), eastl::move( oldValues[iBucket] ) );
 		}
+		return true;
 	}
 
 	EA_FORCE_INLINE Value *insertOrAssignNoGrow( Key &&rKey, Value &&rValue ) {
@@ -126,22 +139,59 @@ private:
 		return &m_values[iBucket];
 	}
 
-	EA_FORCE_INLINE void ensureInsertCapacity( void ) {
+	EA_FORCE_INLINE bool ensureInsertCapacity( void ) {
+		if ( m_bSealed && m_nSize >= m_nEntryLimit ) {
+			return false;
+		}
 		if ( m_states.empty() ) {
-			rehash( 8u );
-			return;
+			return rehash( 8u );
 		}
 		if ( ( m_nSize + 1u ) * 10u >= m_states.size() * 7u ) {
-			rehash( m_states.size() * 2u );
+			return rehash( m_states.size() * 2u );
 		}
+		return true;
 	}
 
 public:
-	EA_FORCE_INLINE void reserve( const size_t nEntries ) {
+	EA_FORCE_INLINE bool reserve( const size_t nEntries ) {
 		const size_t nRequired = bucketCountForEntries( nEntries );
-		if ( nRequired > m_states.size() ) {
-			rehash( nRequired );
+		return nRequired <= m_states.size() || rehash( nRequired );
+	}
+
+	EA_FORCE_INLINE bool reserveAndSeal( const size_t nEntries ) {
+		if ( m_bSealed ) {
+			return nEntries <= m_nEntryLimit;
 		}
+		if ( nEntries < m_nSize ) {
+			return false;
+		}
+		if ( !reserve( nEntries ) ) {
+			return false;
+		}
+		m_nEntryLimit = nEntries;
+		m_bSealed = true;
+		return true;
+	}
+
+	EA_FORCE_INLINE void beginColdRebuild( void ) {
+		m_bSealed = false;
+		m_nEntryLimit = SIZE_MAX;
+	}
+
+	EA_FORCE_INLINE void seal( void ) {
+		m_nEntryLimit = entryCapacity();
+		m_bSealed = true;
+	}
+
+	EA_FORCE_INLINE bool sealed( void ) const {
+		return m_bSealed;
+	}
+
+	EA_FORCE_INLINE size_t entryCapacity( void ) const {
+		if ( m_bSealed ) {
+			return m_nEntryLimit;
+		}
+		return m_states.empty() ? 0u : ( m_states.size() * 7u ) / 10u;
 	}
 
 	EA_FORCE_INLINE Value *find( const Key &rKey ) {
@@ -159,14 +209,26 @@ public:
 	}
 
 	EA_FORCE_INLINE Value *insertOrAssign( const Key &rKey, const Value &rValue ) {
-		ensureInsertCapacity();
+		if ( Value *const pValue = find( rKey ) ) {
+			*pValue = rValue;
+			return pValue;
+		}
+		if ( !ensureInsertCapacity() ) {
+			return nullptr;
+		}
 		Key key = rKey;
 		Value value = rValue;
 		return insertOrAssignNoGrow( eastl::move( key ), eastl::move( value ) );
 	}
 
 	EA_FORCE_INLINE Value *insertOrAssign( Key &&rKey, Value &&rValue ) {
-		ensureInsertCapacity();
+		if ( Value *const pValue = find( rKey ) ) {
+			*pValue = eastl::move( rValue );
+			return pValue;
+		}
+		if ( !ensureInsertCapacity() ) {
+			return nullptr;
+		}
 		return insertOrAssignNoGrow( eastl::move( rKey ), eastl::move( rValue ) );
 	}
 
@@ -201,8 +263,8 @@ public:
 	}
 
 	EA_FORCE_INLINE void clear( void ) {
-		for ( uint8_t &nState : m_states ) {
-			nState = T3D_FLAT_HASH_BUCKET_EMPTY;
+		if ( !m_states.empty() ) {
+			std::memset( m_states.data(), T3D_FLAT_HASH_BUCKET_EMPTY, m_states.size() * sizeof( uint8_t ) );
 		}
 		m_nSize = 0u;
 	}
@@ -226,6 +288,8 @@ public:
 		m_values.swap( rOther.m_values );
 		m_states.swap( rOther.m_states );
 		std::swap( m_nSize, rOther.m_nSize );
+		std::swap( m_nEntryLimit, rOther.m_nEntryLimit );
+		std::swap( m_bSealed, rOther.m_bSealed );
 		std::swap( m_hash, rOther.m_hash );
 		std::swap( m_equal, rOther.m_equal );
 	}
@@ -252,15 +316,29 @@ private:
 	Terrain3DFlatHashMap<Key, uint8_t, Hash, Equal> m_map;
 
 public:
-	EA_FORCE_INLINE void reserve( const size_t nEntries ) {
-		m_map.reserve( nEntries );
+	EA_FORCE_INLINE bool reserve( const size_t nEntries ) {
+		return m_map.reserve( nEntries );
+	}
+	EA_FORCE_INLINE bool reserveAndSeal( const size_t nEntries ) {
+		return m_map.reserveAndSeal( nEntries );
+	}
+	EA_FORCE_INLINE void beginColdRebuild( void ) {
+		m_map.beginColdRebuild();
+	}
+	EA_FORCE_INLINE void seal( void ) {
+		m_map.seal();
+	}
+	EA_FORCE_INLINE bool sealed( void ) const {
+		return m_map.sealed();
+	}
+	EA_FORCE_INLINE size_t entryCapacity( void ) const {
+		return m_map.entryCapacity();
 	}
 	EA_FORCE_INLINE bool insert( const Key &rKey ) {
 		if ( m_map.contains( rKey ) ) {
 			return false;
 		}
-		m_map.insertOrAssign( rKey, 1u );
-		return true;
+		return m_map.insertOrAssign( rKey, 1u ) != nullptr;
 	}
 	EA_FORCE_INLINE bool erase( const Key &rKey ) {
 		return m_map.erase( rKey );

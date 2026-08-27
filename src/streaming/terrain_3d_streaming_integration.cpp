@@ -91,7 +91,15 @@ bool Terrain3D::effectiveDynamicNodeStreamingEnabled( void ) const {
 }
 
 void Terrain3D::invalidateRegionStreamingPolicy( void ) {
+	m_runtimeStreamingConfig = t3dStreamingCompileConfig( m_regionStreamingConfig );
 	m_bRegionStreamingDirty = true;
+}
+
+void Terrain3D::compileRuntimePageNumericConfig( void ) {
+	m_runtimePageNumericConfig = t3dCompileRuntimePageNumericConfig( m_nGpuRegionColorResolutionDivisor,
+			m_nGpuRegionDerivedResolutionDivisor,
+			m_nGpuMiddleHeightResolutionDivisor,
+			m_nRuntimePagePrepareThreads );
 }
 
 t3dRegionStreamingState_t Terrain3D::getRegionStreamingStateInternal( const Vector2i &vLocation ) const {
@@ -149,7 +157,7 @@ void Terrain3D::updateRegionStreamingPolicy( const Vector3 &rWorldPosition, cons
 			m_fRegionStreamingVelocityX,
 			m_fRegionStreamingVelocityZ,
 			delta,
-			m_regionStreamingConfig );
+			m_runtimeStreamingConfig );
 	m_fRegionStreamingVelocityX = prediction.m_fVelocityXRegionsPerSecond;
 	m_fRegionStreamingVelocityZ = prediction.m_fVelocityYRegionsPerSecond;
 	m_regionStreamingCenter = center;
@@ -181,8 +189,8 @@ void Terrain3D::updateRegionStreamingPolicy( const Vector3 &rWorldPosition, cons
 	m_regionStreamingPredictedCenter = prefetch_center;
 	m_regionStreamingPreviousWorldPosition = rWorldPosition;
 
-	std::fill_n( m_szRegionStreamingStates, s_nMaxRegionSlots, ( uint8_t )( TERRAIN3D_REGION_STREAMING_UNLOADED ) );
-	std::fill_n( m_szRegionStreamingPrefetch, s_nMaxRegionSlots, ( uint8_t )( 0 ) );
+	std::memset( m_szRegionStreamingStates, 0, sizeof( m_szRegionStreamingStates ) );
+	std::memset( m_szRegionStreamingPrefetch, 0, sizeof( m_szRegionStreamingPrefetch ) );
 	m_nRegionStreamingActiveCount = 0;
 	m_nRegionStreamingHotCount = 0;
 	m_nRegionStreamingColdCount = 0;
@@ -203,7 +211,7 @@ void Terrain3D::updateRegionStreamingPolicy( const Vector3 &rWorldPosition, cons
 		t3dRegionStreamingState_t state = TERRAIN3D_REGION_STREAMING_ACTIVE;
 		if ( !authoring ) {
 			state = t3dStreamingClassify(
-					{ location.x, location.y }, { center.x, center.y }, m_regionStreamingConfig );
+					{ location.x, location.y }, { center.x, center.y }, m_runtimeStreamingConfig );
 		}
 		m_szRegionStreamingStates[map_index] = ( uint8_t )( state );
 		switch ( state ) {
@@ -222,11 +230,11 @@ void Terrain3D::updateRegionStreamingPolicy( const Vector3 &rWorldPosition, cons
 				break;
 		}
 
-		if ( !authoring && m_regionStreamingConfig.m_bPredictionEnabled && m_regionStreamingPredictedCenter != center &&
+		if ( !authoring && m_runtimeStreamingConfig.m_bPredictionEnabled && m_regionStreamingPredictedCenter != center &&
 				state != TERRAIN3D_REGION_STREAMING_ACTIVE ) {
 			const t3dRegionStreamingState_t predicted_state = t3dStreamingClassify( { location.x, location.y },
 					{ m_regionStreamingPredictedCenter.x, m_regionStreamingPredictedCenter.y },
-					m_regionStreamingConfig );
+					m_runtimeStreamingConfig );
 			if ( predicted_state > state ) {
 				m_szRegionStreamingPrefetch[map_index] = 1u;
 				++m_nRegionStreamingPrefetchCount;
@@ -775,6 +783,7 @@ void Terrain3D::setGpuRegionColorResolutionDivisor( const int nDivisor ) {
 		return;
 	}
 	m_nGpuRegionColorResolutionDivisor = divisor;
+	compileRuntimePageNumericConfig();
 	refreshPerformanceProfileConformity();
 	if ( m_pData ) {
 		m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(),
@@ -792,6 +801,7 @@ void Terrain3D::setGpuRegionDerivedResolutionDivisor( const int nDivisor ) {
 		return;
 	}
 	m_nGpuRegionDerivedResolutionDivisor = divisor;
+	compileRuntimePageNumericConfig();
 	refreshPerformanceProfileConformity();
 	if ( m_pData ) {
 		m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(),
@@ -809,6 +819,7 @@ void Terrain3D::setGpuMiddleHeightResolutionDivisor( const int nDivisor ) {
 		return;
 	}
 	m_nGpuMiddleHeightResolutionDivisor = divisor;
+	compileRuntimePageNumericConfig();
 	refreshPerformanceProfileConformity();
 	markMemoryBudgetDirty();
 	if ( m_pData && m_bInitialized ) {
@@ -1036,6 +1047,9 @@ void Terrain3D::setInstanceRegionCacheEnabled( const bool bEnabled ) {
 				m_nEffectiveInstanceRegionCacheBudgetMb,
 				m_nInstanceRegionLoadBudgetPages,
 				m_nInstanceRegionLoadBudgetMb );
+	}
+	if ( m_pInstancer ) {
+		m_pInstancer->rebuildRuntimeStorageCapacities();
 	}
 }
 

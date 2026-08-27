@@ -511,8 +511,10 @@ static void t3dRuntimePageStoreUpdateEditorFile( const String &rPath ) {
 Terrain3DRuntimePageStore::Terrain3DRuntimePageStore( Terrain3DRegionRepository *const pRepository,
 		const Terrain3DRegionPersistence *const pPersistence ) :
 		m_pRepository( pRepository ), m_pPersistence( pPersistence ) {
-	m_preparedByRegion.fill( ( int16_t )-1 );
-	m_workByRegion.fill( ( int16_t )-1 );
+	for ( int index = 0; index < s_nMaxRegionSlots; ++index ) {
+		m_preparedByRegion[( size_t )( index )] = ( int16_t )-1;
+		m_workByRegion[( size_t )( index )] = ( int16_t )-1;
+	}
 }
 
 Terrain3DRuntimePageStore::~Terrain3DRuntimePageStore( void ) {
@@ -531,11 +533,14 @@ void Terrain3DRuntimePageStore::reset( void ) {
 	m_nPrepareWorkPageCount = 0;
 	m_nQueuedCount = 0;
 	m_nStreamingGenerationLast = 0u;
-	m_queuedConsumers.fill( 0u );
-	m_queuedPriorities.fill( 0u );
-	m_preparedByRegion.fill( ( int16_t )-1 );
-	m_workByRegion.fill( ( int16_t )-1 );
-	m_prepareContext = t3dRuntimePrepareJobContext_t{};
+	std::memset( m_queuedConsumers.data(), 0, sizeof( m_queuedConsumers ) );
+	std::memset( m_queuedPriorities.data(), 0, sizeof( m_queuedPriorities ) );
+	for ( int index = 0; index < s_nMaxRegionSlots; ++index ) {
+		m_preparedByRegion[( size_t )( index )] = ( int16_t )-1;
+		m_workByRegion[( size_t )( index )] = ( int16_t )-1;
+	}
+	m_prepareContext.m_pPages = nullptr;
+	m_prepareContext.m_nPageCount = 0;
 	m_nPrepareGroupId = WorkerThreadPool::INVALID_TASK_ID;
 	m_bPrepareJobActive = false;
 	m_nPrepareJobWorkers = 0;
@@ -593,7 +598,7 @@ uint64_t Terrain3DRuntimePageStore::computeSourceSignature( const Terrain3DRegio
 	t3dRuntimePageStoreFnv1a64AppendF32( hash, ( float )( m_pRepository->getVertexSpacing() ) );
 	t3dRuntimePageStoreFnv1a64AppendU32( hash, ( uint32_t )( rConfig.m_nColorDivisor ) );
 	t3dRuntimePageStoreFnv1a64AppendU32( hash, ( uint32_t )( rConfig.m_nDerivedDivisor ) );
-	t3dRuntimePageStoreFnv1a64AppendU32( hash, ( uint32_t )( MAX( 1, rConfig.m_nMiddleHeightDivisor ) ) );
+	t3dRuntimePageStoreFnv1a64AppendU32( hash, ( uint32_t )( rConfig.m_nMiddleHeightDivisor ) );
 	t3dRuntimePageStoreFnv1a64AppendU32( hash, s_nRuntimePageBlendRecipeVersion );
 	t3dRuntimePageStoreFnv1a64AppendU64( hash, rConfig.m_nMaterialSourceSignature );
 	t3dRuntimePageStoreFnv1a64AppendU64( hash, rConfig.m_nCollisionSurfaceSignature );
@@ -1040,9 +1045,9 @@ bool Terrain3DRuntimePageStore::validatePageForRegion( const Terrain3DRegion *co
 	page.m_nExpectedChannelFlags = ( uint32_t )( pRegion->getChannelFlags() );
 	page.m_nExpectedSourceSignature = pRegion->getCookedPageSourceSignatureInternal();
 	page.m_nRegionSize = m_pRepository->getRegionSize();
-	page.m_nColorDivisor = MAX( 1, rConfig.m_nColorDivisor );
-	page.m_nDerivedDivisor = MAX( 1, rConfig.m_nDerivedDivisor );
-	page.m_nMiddleHeightDivisor = MAX( 1, rConfig.m_nMiddleHeightDivisor );
+	page.m_nColorDivisor = rConfig.m_nColorDivisor;
+	page.m_nDerivedDivisor = rConfig.m_nDerivedDivisor;
+	page.m_nMiddleHeightDivisor = rConfig.m_nMiddleHeightDivisor;
 	page.m_nConsumerMask = RUNTIME_PAGE_CONSUMER_GPU_DETAIL | RUNTIME_PAGE_CONSUMER_MIDDLE_HEIGHT;
 	const Ref<Terrain3DRegionLighting> lighting = pRegion->getLighting();
 	if ( lighting.is_valid() && lighting->hasTerrainShadowMask() ) {
@@ -1076,9 +1081,9 @@ bool Terrain3DRuntimePageStore::loadCpuMapsNow( const Vector2i &rLocation,
 	page.m_nExpectedChannelFlags = ( uint32_t )pRegion->getChannelFlags();
 	page.m_nExpectedSourceSignature = pRegion->getCookedPageSourceSignatureInternal();
 	page.m_nRegionSize = m_pRepository->getRegionSize();
-	page.m_nColorDivisor = MAX( 1, rConfig.m_nColorDivisor );
-	page.m_nDerivedDivisor = MAX( 1, rConfig.m_nDerivedDivisor );
-	page.m_nMiddleHeightDivisor = MAX( 1, rConfig.m_nMiddleHeightDivisor );
+	page.m_nColorDivisor = rConfig.m_nColorDivisor;
+	page.m_nDerivedDivisor = rConfig.m_nDerivedDivisor;
+	page.m_nMiddleHeightDivisor = rConfig.m_nMiddleHeightDivisor;
 	page.m_nConsumerMask = RUNTIME_PAGE_CONSUMER_CPU_MAPS;
 	page.m_bEditorAuthoring = rConfig.m_bEditorAuthoring;
 	if ( !loadSnapshot( page ) ) {
@@ -1113,9 +1118,9 @@ bool Terrain3DRuntimePageStore::loadCollisionNow( const Vector2i &rLocation,
 	page.m_nExpectedChannelFlags = ( uint32_t )pRegion->getChannelFlags();
 	page.m_nExpectedSourceSignature = pRegion->getCookedPageSourceSignatureInternal();
 	page.m_nRegionSize = m_pRepository->getRegionSize();
-	page.m_nColorDivisor = MAX( 1, rConfig.m_nColorDivisor );
-	page.m_nDerivedDivisor = MAX( 1, rConfig.m_nDerivedDivisor );
-	page.m_nMiddleHeightDivisor = MAX( 1, rConfig.m_nMiddleHeightDivisor );
+	page.m_nColorDivisor = rConfig.m_nColorDivisor;
+	page.m_nDerivedDivisor = rConfig.m_nDerivedDivisor;
+	page.m_nMiddleHeightDivisor = rConfig.m_nMiddleHeightDivisor;
 	page.m_nConsumerMask = RUNTIME_PAGE_CONSUMER_COLLISION;
 	page.m_bEditorAuthoring = rConfig.m_bEditorAuthoring;
 	if ( !loadSnapshot( page ) ) {
@@ -1153,9 +1158,9 @@ bool Terrain3DRuntimePageStore::loadNavigationNow( const Vector2i &rLocation,
 	page.m_nExpectedChannelFlags = ( uint32_t )pRegion->getChannelFlags();
 	page.m_nExpectedSourceSignature = pRegion->getCookedPageSourceSignatureInternal();
 	page.m_nRegionSize = m_pRepository->getRegionSize();
-	page.m_nColorDivisor = MAX( 1, rConfig.m_nColorDivisor );
-	page.m_nDerivedDivisor = MAX( 1, rConfig.m_nDerivedDivisor );
-	page.m_nMiddleHeightDivisor = MAX( 1, rConfig.m_nMiddleHeightDivisor );
+	page.m_nColorDivisor = rConfig.m_nColorDivisor;
+	page.m_nDerivedDivisor = rConfig.m_nDerivedDivisor;
+	page.m_nMiddleHeightDivisor = rConfig.m_nMiddleHeightDivisor;
 	page.m_nConsumerMask =
 			RUNTIME_PAGE_CONSUMER_NAVIGATION | ( pCollisionHeight ? RUNTIME_PAGE_CONSUMER_COLLISION : 0u );
 	page.m_bLoadMinMax = pMinMaxHeight != nullptr;
@@ -1227,10 +1232,10 @@ bool Terrain3DRuntimePageStore::writePage( Terrain3DRegion *const pRegion,
 		return fail( "region/repository is unavailable" );
 	}
 	const int region_size = m_pRepository->getRegionSize();
-	const int color_size = MAX( 1, region_size / MAX( 1, rConfig.m_nColorDivisor ) );
-	const int derived_size = MAX( 1, region_size / MAX( 1, rConfig.m_nDerivedDivisor ) );
+	const int color_size = MAX( 1, region_size / rConfig.m_nColorDivisor );
+	const int derived_size = MAX( 1, region_size / rConfig.m_nDerivedDivisor );
 	const int middle_height_size = MAX( 1,
-			( region_size + MAX( 1, rConfig.m_nMiddleHeightDivisor ) - 1 ) / MAX( 1, rConfig.m_nMiddleHeightDivisor ) );
+			( region_size + rConfig.m_nMiddleHeightDivisor - 1 ) / rConfig.m_nMiddleHeightDivisor );
 	if ( !t3dRuntimePageStoreValidImage( rPayload.m_height, region_size, region_size, Image::FORMAT_R16, false ) ) {
 		return fail( "height source is missing or has an invalid size/format" );
 	}
@@ -1281,18 +1286,18 @@ bool Terrain3DRuntimePageStore::writePage( Terrain3DRegion *const pRegion,
 
 	t3dRuntimePageHeader_t header;
 	header.m_nRegionSize = ( uint32_t )( region_size );
-	header.m_nColorDivisor = ( uint32_t )( MAX( 1, rConfig.m_nColorDivisor ) );
-	header.m_nDerivedDivisor = ( uint32_t )( MAX( 1, rConfig.m_nDerivedDivisor ) );
+	header.m_nColorDivisor = ( uint32_t )( rConfig.m_nColorDivisor );
+	header.m_nDerivedDivisor = ( uint32_t )( rConfig.m_nDerivedDivisor );
 	header.m_nChannelFlags = ( uint32_t )( pRegion->getChannelFlags() ) | ( uint32_t )( REGION_CHANNEL_DERIVED );
 	header.m_nSourceSignatureLo = ( uint32_t )( source_signature & 0xffffffffu );
 	header.m_nSourceSignatureHi = ( uint32_t )( source_signature >> 32u );
 	header.m_nBlendRecipeVersion = s_nRuntimePageBlendRecipeVersion;
 	header.m_nMaterialMask = rPayload.m_nMaterialMask;
-	header.m_nMiddleHeightDivisor = ( uint32_t )( MAX( 1, rConfig.m_nMiddleHeightDivisor ) );
+	header.m_nMiddleHeightDivisor = ( uint32_t )( rConfig.m_nMiddleHeightDivisor );
 	uint64_t world_signature = 1469598103934665603ull;
 	t3dRuntimePageStoreFnv1a64AppendU32( world_signature, ( uint32_t )( region_size ) );
-	t3dRuntimePageStoreFnv1a64AppendU32( world_signature, ( uint32_t )( MAX( 1, rConfig.m_nColorDivisor ) ) );
-	t3dRuntimePageStoreFnv1a64AppendU32( world_signature, ( uint32_t )( MAX( 1, rConfig.m_nDerivedDivisor ) ) );
+	t3dRuntimePageStoreFnv1a64AppendU32( world_signature, ( uint32_t )( rConfig.m_nColorDivisor ) );
+	t3dRuntimePageStoreFnv1a64AppendU32( world_signature, ( uint32_t )( rConfig.m_nDerivedDivisor ) );
 	t3dRuntimePageStoreFnv1a64AppendU32( world_signature, s_nRuntimePageBlendRecipeVersion );
 	header.m_nWorldSignatureLo = ( uint32_t )( world_signature & 0xffffffffu );
 	header.m_nWorldSignatureHi = ( uint32_t )( world_signature >> 32u );
@@ -1597,8 +1602,11 @@ void Terrain3DRuntimePageStore::poll( const bool bWait ) {
 	const uint64_t finished = pTime ? pTime->get_ticks_usec() : m_nPrepareJobStartedUsec;
 	m_nPrepareLatencyUsecLast = finished >= m_nPrepareJobStartedUsec ? finished - m_nPrepareJobStartedUsec : 0u;
 	m_nPrepareWorkPageCount = 0;
-	m_workByRegion.fill( ( int16_t )-1 );
-	m_prepareContext = t3dRuntimePrepareJobContext_t{};
+	for ( int index = 0; index < s_nMaxRegionSlots; ++index ) {
+		m_workByRegion[( size_t )( index )] = ( int16_t )-1;
+	}
+	m_prepareContext.m_pPages = nullptr;
+	m_prepareContext.m_nPageCount = 0;
 	m_nPrepareGroupId = WorkerThreadPool::INVALID_TASK_ID;
 	m_bPrepareJobActive = false;
 	m_nPrepareJobWorkers = 0;

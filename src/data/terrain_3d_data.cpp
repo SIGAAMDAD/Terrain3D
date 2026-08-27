@@ -430,7 +430,7 @@ t3dMiddleHeightRegionCacheConfig_t Terrain3DData::getMiddleHeightCacheConfig( vo
 	config.m_bAuthoring = m_pTerrain && m_pTerrain->isEditorAuthoringMode();
 	config.m_nHotRadius = m_pTerrain ? m_pTerrain->getStreamingHotRadius() : 0;
 	config.m_nResolutionDivisor =
-			config.m_bAuthoring ? 1 : MAX( 1, m_pTerrain ? m_pTerrain->getGpuMiddleHeightResolutionDivisor() : 1 );
+			config.m_bAuthoring || !m_pTerrain ? 1 : m_pTerrain->m_runtimePageNumericConfig.m_nMiddleHeightDivisor;
 	config.m_nRetireFrames = m_pTerrain ? m_pTerrain->getGpuRegionRetireFrames() : s_nGpuCacheDefaultRetireFrames;
 	return config;
 }
@@ -789,11 +789,12 @@ t3dRuntimePageConfig_t Terrain3DData::getRuntimePageConfig( void ) const
 	if ( !m_pTerrain ) {
 		return config;
 	}
+	const t3dRuntimePageNumericConfig_t &runtime_config = m_pTerrain->m_runtimePageNumericConfig;
 	config.m_dataDirectory = m_pTerrain->getDataDirectory();
-	config.m_nColorDivisor = MAX( 1, m_pTerrain->getGpuRegionColorResolutionDivisor() );
-	config.m_nDerivedDivisor = MAX( 1, m_pTerrain->getGpuRegionDerivedResolutionDivisor() );
-	config.m_nMiddleHeightDivisor = MAX( 1, m_pTerrain->getGpuMiddleHeightResolutionDivisor() );
-	config.m_nPrepareThreads = MAX( 1, m_pTerrain->getRuntimePagePrepareThreads() );
+	config.m_nColorDivisor = runtime_config.m_nColorDivisor;
+	config.m_nDerivedDivisor = runtime_config.m_nDerivedDivisor;
+	config.m_nMiddleHeightDivisor = runtime_config.m_nMiddleHeightDivisor;
+	config.m_nPrepareThreads = runtime_config.m_nPrepareThreads;
 	config.m_bCookedPagesEnabled = m_pTerrain->isGpuRegionCookedPagesEnabled();
 	config.m_bEditorAuthoring = m_pTerrain->isEditorAuthoringMode();
 	const Ref<Terrain3DAssets> pAssets = m_pTerrain->getAssets();

@@ -195,7 +195,6 @@ static bool t3dInstancePageCodecReadPageHeaders( const PackedByteArray &arrPage,
 	}
 	nOffset = s_nInstancePageHeaderBytes;
 	if ( bDecode && pStore ) {
-		pStore->clearRetainCapacity();
 		pStore->setLayout( layout );
 	}
 	uint32_t decoded_total = 0u;
@@ -449,8 +448,12 @@ bool Terrain3DInstancePageCodec::decode( const PackedByteArray &arrPage,
 		nMeshCount = 0u;
 		return false;
 	}
+	rStore.clearRetainCapacity();
 	rStore.reserveMeshCapacity( ( size_t )inspected_meshes );
-	rStore.reservePayloadCapacity( ( size_t )inspected_instances, color_count, owner_count );
+	if ( !rStore.reservePayloadCapacity( ( size_t )inspected_instances, color_count, owner_count ) ) {
+		return false;
+	}
+	rStore.sealPayloadCapacity();
 	size_t decode_offset = 0u;
 	if ( !t3dInstancePageCodecReadPageHeaders(
 				 arrPage, decode_offset, pMeshCounts, nInstanceCount, nMeshCount, true, &rStore ) ) {

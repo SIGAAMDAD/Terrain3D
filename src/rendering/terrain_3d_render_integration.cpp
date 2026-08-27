@@ -841,6 +841,7 @@ void Terrain3D::setRuntimePagePrepareThreads( const int nCount ) {
 		return;
 	}
 	m_nRuntimePagePrepareThreads = count;
+	compileRuntimePageNumericConfig();
 	refreshPerformanceProfileConformity();
 }
 

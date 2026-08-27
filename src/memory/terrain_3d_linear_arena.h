@@ -155,20 +155,6 @@ public:
 				T * )( allocate( nCount * sizeof( T ), std::max<size_t>( alignof( T ), s_nArenaCachelineAlignment ) ) );
 	}
 
-	EA_FORCE_INLINE size_t usedBytes( void ) const {
-		return m_iOffset;
-	}
-	EA_FORCE_INLINE size_t mark( void ) const {
-		return m_iOffset;
-	}
-
-	bool rewind( const size_t nMark ) {
-		if ( nMark > m_iOffset ) {
-			return false;
-		}
-		m_iOffset = nMark;
-		return true;
-	}
 
 	EA_FORCE_INLINE size_t capacity( void ) const {
 		return m_nCapacity;
@@ -224,8 +210,8 @@ public:
 		if ( !allocateUninitialized( rArena, nCount ) ) {
 			return false;
 		}
-		if ( m_nSize > 0u ) {
-			std::fill_n( m_pData, m_nSize, rValue );
+		for ( size_t index = 0u; index < m_nSize; ++index ) {
+			m_pData[index] = rValue;
 		}
 		return true;
 	}

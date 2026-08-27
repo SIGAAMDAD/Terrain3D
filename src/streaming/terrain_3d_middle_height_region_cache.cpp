@@ -46,11 +46,13 @@ Terrain3DMiddleHeightRegionCache::Terrain3DMiddleHeightRegionCache( Terrain3DReg
 void Terrain3DMiddleHeightRegionCache::reset( void ) {
 	m_generatedHeightMaps.clear();
 	m_generatedRegionMap.clear();
-	std::fill_n( m_szRegionMap, s_nMaxRegionSlots, ( uint16_t )( 0 ) );
-	std::fill_n( m_szLocations, s_nGpuHeightCacheMaxLayers, s_v2iMax );
-	std::fill_n( m_szLastUseTick, s_nGpuHeightCacheMaxLayers, ( uint64_t )( 0 ) );
-	std::fill_n( m_szRetireAfterFrame, s_nGpuHeightCacheMaxLayers, ( uint64_t )( 0 ) );
-	std::fill_n( m_szSlotStates, s_nGpuHeightCacheMaxLayers, ( uint8_t )( TERRAIN3D_GPU_SLOT_FREE ) );
+	std::memset( m_szRegionMap, 0, sizeof( m_szRegionMap ) );
+	for ( Vector2i &location : m_szLocations ) {
+		location = s_v2iMax;
+	}
+	std::memset( m_szLastUseTick, 0, sizeof( m_szLastUseTick ) );
+	std::memset( m_szRetireAfterFrame, 0, sizeof( m_szRetireAfterFrame ) );
+	std::memset( m_szSlotStates, 0, sizeof( m_szSlotStates ) );
 	m_nPhysicalLayerCount = 0;
 	m_nMappedCapacity = 0;
 	m_nResidentCount = 0;
@@ -73,7 +75,7 @@ bool Terrain3DMiddleHeightRegionCache::configure( const t3dMiddleHeightRegionCac
 		return false;
 	}
 
-	const int hot_radius = rConfig.m_bAuthoring ? m_pRepository->getRegionMapSize() : MAX( 0, rConfig.m_nHotRadius );
+	const int hot_radius = rConfig.m_bAuthoring ? m_pRepository->getRegionMapSize() : rConfig.m_nHotRadius;
 	const int diameter = hot_radius * 2 + 1;
 	const int required_ceiling = rConfig.m_bAuthoring
 			? m_pRepository->getActiveRegionCount()
@@ -88,7 +90,7 @@ bool Terrain3DMiddleHeightRegionCache::configure( const t3dMiddleHeightRegionCac
 		return false;
 	}
 
-	const int divisor = rConfig.m_bAuthoring ? 1 : MAX( 1, rConfig.m_nResolutionDivisor );
+	const int divisor = rConfig.m_bAuthoring ? 1 : rConfig.m_nResolutionDivisor;
 	const int height_side = MAX( 1, ( m_pRepository->getRegionSize() + divisor - 1 ) / divisor );
 	PackedByteArray default_height_bytes;
 	default_height_bytes.resize( ( int64_t )( height_side ) * ( int64_t )( height_side ) * 2 );
@@ -112,9 +114,11 @@ bool Terrain3DMiddleHeightRegionCache::configure( const t3dMiddleHeightRegionCac
 		reset();
 		return false;
 	}
-	std::fill_n( m_szRegionMap, s_nMaxRegionSlots, ( uint16_t )( 0 ) );
-	std::fill_n( m_szLocations, s_nGpuHeightCacheMaxLayers, s_v2iMax );
-	std::fill_n( m_szSlotStates, s_nGpuHeightCacheMaxLayers, ( uint8_t )( TERRAIN3D_GPU_SLOT_FREE ) );
+	std::memset( m_szRegionMap, 0, sizeof( m_szRegionMap ) );
+	for ( Vector2i &location : m_szLocations ) {
+		location = s_v2iMax;
+	}
+	std::memset( m_szSlotStates, 0, sizeof( m_szSlotStates ) );
 	m_bTexturesReady = true;
 	m_bPageTableDirty = true;
 	return updatePageTableTexture();
@@ -163,7 +167,7 @@ Ref<Image> Terrain3DMiddleHeightRegionCache::makeHeightImage( const Vector2i &vL
 		}
 		pSourceBytes = source_bytes.ptr();
 	}
-	const int divisor = ( bRuntimeResolution || !m_config.m_bAuthoring ) ? MAX( 1, m_config.m_nResolutionDivisor ) : 1;
+	const int divisor = ( bRuntimeResolution || !m_config.m_bAuthoring ) ? m_config.m_nResolutionDivisor : 1;
 	const int side = MAX( 1, ( m_pRepository->getRegionSize() + divisor - 1 ) / divisor );
 	const size_t byte_count = ( size_t )( side ) * ( size_t )( side ) * sizeof( uint16_t );
 	PackedByteArray bytes;
@@ -224,7 +228,8 @@ int Terrain3DMiddleHeightRegionCache::collectDesired( const t3dResidencyFrameSta
 	}
 	const int capacity = MIN( nCapacity, s_nGpuHeightCacheMaxLayers );
 	int output_count = 0;
-	uint8_t selected_map[s_nMaxRegionSlots] = {};
+	uint8_t selected_map[s_nMaxRegionSlots];
+	std::memset( selected_map, 0, sizeof( selected_map ) );
 	for ( int state_value = ( int )( TERRAIN3D_REGION_STREAMING_ACTIVE );
 			state_value >= ( int )( TERRAIN3D_REGION_STREAMING_HOT ) && output_count < capacity;
 			--state_value ) {
@@ -353,10 +358,12 @@ void Terrain3DMiddleHeightRegionCache::update( const t3dResidencyFrameState_t &r
 			return;
 		}
 	} else if ( large_jump ) {
-		std::fill_n( m_szRegionMap, s_nMaxRegionSlots, ( uint16_t )( 0 ) );
-		std::fill_n( m_szLocations, s_nGpuHeightCacheMaxLayers, s_v2iMax );
-		std::fill_n( m_szSlotStates, s_nGpuHeightCacheMaxLayers, ( uint8_t )( TERRAIN3D_GPU_SLOT_FREE ) );
-		std::fill_n( m_szRetireAfterFrame, s_nGpuHeightCacheMaxLayers, 0u );
+		std::memset( m_szRegionMap, 0, sizeof( m_szRegionMap ) );
+		for ( Vector2i &location : m_szLocations ) {
+			location = s_v2iMax;
+		}
+		std::memset( m_szSlotStates, 0, sizeof( m_szSlotStates ) );
+		std::memset( m_szRetireAfterFrame, 0, sizeof( m_szRetireAfterFrame ) );
 		m_nResidentCount = 0;
 		m_bPageTableDirty = true;
 	}
@@ -382,7 +389,8 @@ void Terrain3DMiddleHeightRegionCache::update( const t3dResidencyFrameState_t &r
 	int required_count = 0;
 	const int desired_count = collectDesired( rFrame, rCenter, desired, m_nMappedCapacity, required_count );
 	m_nDesiredLastTick = desired_count;
-	uint8_t desired_map[s_nMaxRegionSlots] = {};
+	uint8_t desired_map[s_nMaxRegionSlots];
+	std::memset( desired_map, 0, sizeof( desired_map ) );
 	for ( int index = 0; index < desired_count; ++index ) {
 		const int map_index = Terrain3DRegionRepository::getRegionMapIndex( desired[index] );
 		if ( map_index >= 0 ) {
@@ -403,7 +411,7 @@ void Terrain3DMiddleHeightRegionCache::update( const t3dResidencyFrameState_t &r
 			m_szRegionMap[map_index] = 0u;
 		}
 		m_szSlotStates[layer] = TERRAIN3D_GPU_SLOT_RETIRED;
-		m_szRetireAfterFrame[layer] = frame + ( uint64_t )( MAX( 1, rConfig.m_nRetireFrames ) );
+		m_szRetireAfterFrame[layer] = frame + ( uint64_t )( rConfig.m_nRetireFrames );
 		m_nResidentCount = MAX( 0, m_nResidentCount - 1 );
 		++m_nEvictionsLastTick;
 		m_bPageTableDirty = true;
@@ -487,7 +495,7 @@ size_t Terrain3DMiddleHeightRegionCache::getReservedBytes( void ) const {
 	if ( !m_pRepository || m_nPhysicalLayerCount <= 0 || m_pRepository->getRegionSize() <= 0 ) {
 		return 0u;
 	}
-	const int divisor = m_config.m_bAuthoring ? 1 : MAX( 1, m_config.m_nResolutionDivisor );
+	const int divisor = m_config.m_bAuthoring ? 1 : m_config.m_nResolutionDivisor;
 	const size_t side = ( size_t )( MAX( 1, ( m_pRepository->getRegionSize() + divisor - 1 ) / divisor ) );
 	const size_t page_table = ( size_t )( MAX( 0, m_pRepository->getRegionMapSize() ) ) *
 			( size_t )( MAX( 0, m_pRepository->getRegionMapSize() ) ) * sizeof( uint16_t );
@@ -503,7 +511,7 @@ t3dMiddleHeightRegionCacheStats_t Terrain3DMiddleHeightRegionCache::getStats( vo
 	stats.m_nMissingRequiredLastTick = m_nMissingRequiredLastTick;
 	stats.m_nUploadsLastTick = m_nUploadsLastTick;
 	stats.m_nEvictionsLastTick = m_nEvictionsLastTick;
-	stats.m_nResolutionDivisor = m_config.m_bAuthoring ? 1 : MAX( 1, m_config.m_nResolutionDivisor );
+	stats.m_nResolutionDivisor = m_config.m_bAuthoring ? 1 : m_config.m_nResolutionDivisor;
 	stats.m_nReservedBytes = getReservedBytes();
 	stats.m_bPageTableValid = m_generatedRegionMap.getRid().is_valid();
 	stats.m_bHeightArrayValid = m_generatedHeightMaps.getRid().is_valid();

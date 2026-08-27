@@ -16,7 +16,6 @@ typedef struct t3dMemoryArenaSlice_s {
 	size_t m_iOffset = 0u;
 	size_t m_nSize = 0u;
 	size_t m_nAlignment = 1u;
-	bool m_bHigh = false;
 	bool m_bReserved = false;
 
 	EA_FORCE_INLINE bool valid( void ) const {
@@ -48,11 +47,8 @@ public:
 	EA_FORCE_INLINE size_t lowUsed( void ) const {
 		return m_nLowCursor;
 	}
-	EA_FORCE_INLINE size_t highUsed( void ) const {
-		return m_nCapacity - m_nHighCursor;
-	}
 	EA_FORCE_INLINE size_t remaining( void ) const {
-		return m_nHighCursor >= m_nLowCursor ? m_nHighCursor - m_nLowCursor : 0u;
+		return m_nCapacity >= m_nLowCursor ? m_nCapacity - m_nLowCursor : 0u;
 	}
 	EA_FORCE_INLINE size_t maxAlignment( void ) const {
 		return m_nMaxAlignment;
@@ -67,15 +63,12 @@ public:
 private:
 	size_t m_nCapacity = 0u;
 	size_t m_nLowCursor = 0u;
-	size_t m_nHighCursor = 0u;
 	size_t m_nMaxAlignment = s_nArenaDefaultBaseAlignment;
 	bool m_bValid = true;
 	bool m_bSealed = false;
 
 	static bool isPowerOfTwo( size_t nValue );
 	static bool alignUp( size_t nValue, size_t nAlignment, size_t &rAligned );
-	static size_t alignDown( size_t nValue, size_t nAlignment );
-	bool reserve( bool bHigh, size_t nBytes, size_t nAlignment, t3dMemoryArenaSlice_t &rSlice );
 };
 
 class Terrain3DMemoryArena {

@@ -10,6 +10,7 @@
 #include <EASTL/vector.h>
 #include <algorithm>
 #include <climits>
+#include <cstring>
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/core/version.hpp>
@@ -476,17 +477,19 @@ size_t Terrain3DMesher::getStreamingBufferBytes( void ) const {
 }
 
 int Terrain3DMesher::getLodTier( const int nLod ) const {
-	if ( nLod < m_nNearShaderLodCount ) return 0;
-	if ( nLod < m_nNearShaderLodCount + m_nMiddleShaderLodCount ) return 1;
+	if ( nLod < m_runtimeConfig.m_nNearShaderLodCount ) return 0;
+	if ( nLod < m_runtimeConfig.m_nNearShaderLodCount + m_runtimeConfig.m_nMiddleShaderLodCount ) return 1;
 	return 2;
 }
 
 bool Terrain3DMesher::lodCastsShadows( const int nLod ) const {
 	if ( m_castShadows == GeometryInstance3D::SHADOW_CASTING_SETTING_OFF ) return false;
 	const int tier = getLodTier( nLod );
-	if ( tier < 0 || tier >= 3 || !m_bTierShadowEnabled[( size_t )( tier )] ) return false;
-	int limit = m_nShadowLodCount;
-	if ( m_nTierShadowLodCounts[( size_t )( tier )] >= 0 ) limit = m_nTierShadowLodCounts[( size_t )( tier )];
+	if ( tier < 0 || tier >= 3 || !m_runtimeConfig.m_szTierShadowEnabled[( size_t )( tier )] ) return false;
+	int limit = m_runtimeConfig.m_nShadowLodCount;
+	if ( m_runtimeConfig.m_szTierShadowLodCounts[( size_t )( tier )] >= 0 ) {
+		limit = m_runtimeConfig.m_szTierShadowLodCounts[( size_t )( tier )];
+	}
 	return limit > 0 && nLod < limit;
 }
 
@@ -573,9 +576,12 @@ void Terrain3DMesher::generateOffsetData( void ) {
 
 void Terrain3DMesher::generateLodCache( void ) {
 	m_nClipmapLevelCount = CLAMP( m_nLods + m_nTessellationLevel, 0, s_nMaxClipmapLevels );
-	m_szLastLodPositions.fill( s_v2Max );
-	m_szLastLodTestX.fill( -1 );
-	m_szLastLodTestZ.fill( -1 );
+	refreshImmediateLodCount();
+	for ( int lod = 0; lod < s_nMaxClipmapLevels; ++lod ) {
+		m_szLastLodPositions[( size_t )( lod )] = s_v2Max;
+		m_szLastLodTestX[( size_t )( lod )] = -1;
+		m_szLastLodTestZ[( size_t )( lod )] = -1;
+	}
 	const real_t fDensity = ( real_t )( 1.0 ) / ( real_t )( ( uint64_t )( 1 ) << CLAMP( m_nTessellationLevel, 0, 30 ) );
 	const real_t fBaseSpacing = m_fVertexSpacing * fDensity;
 	for ( int lod = 0; lod < m_nClipmapLevelCount; ++lod ) {
@@ -587,11 +593,41 @@ void Terrain3DMesher::generateLodCache( void ) {
 }
 
 
-void Terrain3DMesher::clearClipmap( void ) { m_nClipmapLevelCount = 0; }
+void Terrain3DMesher::clearClipmap( void ) {
+	m_nClipmapLevelCount = 0;
+	refreshImmediateLodCount();
+}
 
 int Terrain3DMesher::getImmediateLodCount( void ) const {
-	const int continuity_ring = m_nMiddleShaderLodCount > 0 ? 1 : 0;
-	return CLAMP( m_nNearShaderLodCount + continuity_ring, 0, m_nClipmapLevelCount );
+	return m_runtimeConfig.m_nImmediateLodCount;
+}
+
+void Terrain3DMesher::refreshImmediateLodCount( void ) {
+	const int continuity_ring = m_runtimeConfig.m_nMiddleShaderLodCount > 0 ? 1 : 0;
+	m_runtimeConfig.m_nImmediateLodCount =
+			CLAMP( m_runtimeConfig.m_nNearShaderLodCount + continuity_ring, 0, m_nClipmapLevelCount );
+}
+
+void Terrain3DMesher::compileTierRuntimeConfig( const int nNearShaderLodCount,
+		const int nMiddleShaderLodCount,
+		const int nClipmapUpdateBudget ) {
+	const int total_levels = MAX( 0, m_nLods + m_nTessellationLevel );
+	m_runtimeConfig.m_nNearShaderLodCount = CLAMP( nNearShaderLodCount, 0, total_levels );
+	m_runtimeConfig.m_nMiddleShaderLodCount =
+			CLAMP( nMiddleShaderLodCount, 0, total_levels - m_runtimeConfig.m_nNearShaderLodCount );
+	m_runtimeConfig.m_nClipmapUpdateBudget = CLAMP( nClipmapUpdateBudget, 1, s_nMaxClipmapLevels );
+	refreshImmediateLodCount();
+}
+
+void Terrain3DMesher::compileShadowRuntimeConfig( const int nShadowLodCount,
+		const eastl::array<bool, 3> &bTierShadowEnabled,
+		const eastl::array<int, 3> &nTierShadowLodCounts ) {
+	m_runtimeConfig.m_nShadowLodCount = CLAMP( nShadowLodCount, 0, s_nMaxClipmapLevels );
+	for ( int tier = 0; tier < 3; ++tier ) {
+		m_runtimeConfig.m_szTierShadowEnabled[tier] = bTierShadowEnabled[( size_t )( tier )];
+		m_runtimeConfig.m_szTierShadowLodCounts[tier] =
+				CLAMP( nTierShadowLodCounts[( size_t )( tier )], -1, s_nMaxClipmapLevels );
+	}
 }
 
 void Terrain3DMesher::clearMeshTypes( void ) {
@@ -614,17 +650,13 @@ void Terrain3DMesher::initialize( Terrain3D *const pTerrain,
 	if ( !pTerrain ) return;
 	m_pTerrain = pTerrain;
 	m_bRequireCookedGeometryPack = bRequireCookedGeometryPack;
-	m_nNearShaderLodCount = CLAMP( nNearShaderLodCount, 0, nLods + nTessellationLevel );
-	m_nMiddleShaderLodCount = CLAMP( nMiddleShaderLodCount, 0, nLods + nTessellationLevel - m_nNearShaderLodCount );
-	m_nClipmapUpdateBudget = CLAMP( nClipmapUpdateBudget, 1, s_nMaxClipmapLevels );
 	m_nLods = nLods;
 	m_nTessellationLevel = nTessellationLevel;
 	m_nMeshSize = nMeshSize;
 	m_fVertexSpacing = fVertexSpacing;
 	m_castShadows = castShadows;
-	m_nShadowLodCount = CLAMP( nShadowLodCount, 0, s_nMaxClipmapLevels );
-	m_bTierShadowEnabled = bTierShadowEnabled;
-	m_nTierShadowLodCounts = nTierShadowLodCounts;
+	compileTierRuntimeConfig( nNearShaderLodCount, nMiddleShaderLodCount, nClipmapUpdateBudget );
+	compileShadowRuntimeConfig( nShadowLodCount, bTierShadowEnabled, nTierShadowLodCounts );
 	generateClipmap();
 	generateLodCache();
 	m_iDeferredLodCursor = getImmediateLodCount();
@@ -637,12 +669,14 @@ void Terrain3DMesher::destroy( void ) {
 	clearClipmap();
 	clearMeshTypes();
 	m_pTerrain = nullptr;
-	m_szLastLodPositions.fill( s_v2Max );
-	m_szLastLodTestX.fill( -1 );
-	m_szLastLodTestZ.fill( -1 );
-	m_fLodScales.fill( 0.0f );
-	m_fLodSnapSteps.fill( 0.0f );
-	m_fLodNextSnapSteps.fill( 0.0f );
+	for ( int lod = 0; lod < s_nMaxClipmapLevels; ++lod ) {
+		m_szLastLodPositions[( size_t )( lod )] = s_v2Max;
+		m_szLastLodTestX[( size_t )( lod )] = -1;
+		m_szLastLodTestZ[( size_t )( lod )] = -1;
+	}
+	std::memset( m_fLodScales.data(), 0, sizeof( m_fLodScales ) );
+	std::memset( m_fLodSnapSteps.data(), 0, sizeof( m_fLodSnapSteps ) );
+	std::memset( m_fLodNextSnapSteps.data(), 0, sizeof( m_fLodNextSnapSteps ) );
 }
 
 void Terrain3DMesher::setTierLayout( const int nNearShaderLodCount,
@@ -654,28 +688,37 @@ void Terrain3DMesher::setTierLayout( const int nNearShaderLodCount,
 	const int middle_count = CLAMP( nMiddleShaderLodCount, 0, total_levels - near_count );
 	const int update_budget = CLAMP( nClipmapUpdateBudget, 1, s_nMaxClipmapLevels );
 	const int old_immediate_count = getImmediateLodCount();
-	const bool layout_changed = m_nNearShaderLodCount != near_count || m_nMiddleShaderLodCount != middle_count;
-	const bool budget_changed = m_nClipmapUpdateBudget != update_budget;
+	const bool layout_changed = m_runtimeConfig.m_nNearShaderLodCount != near_count ||
+			m_runtimeConfig.m_nMiddleShaderLodCount != middle_count;
+	const bool budget_changed = m_runtimeConfig.m_nClipmapUpdateBudget != update_budget;
 	if ( !layout_changed && !budget_changed ) return;
-	m_nNearShaderLodCount = near_count;
-	m_nMiddleShaderLodCount = middle_count;
-	m_nClipmapUpdateBudget = update_budget;
+	compileTierRuntimeConfig( near_count, middle_count, update_budget );
 	m_iDeferredLodCursor = getImmediateLodCount();
 	m_bForceFullSnap = bForceFullSnap || old_immediate_count != m_iDeferredLodCursor;
 	if ( layout_changed ) { resetTargetPosition(); snap(); }
 }
 
 void Terrain3DMesher::setCastShadows( const GeometryInstance3D::ShadowCastingSetting castShadows ) { m_castShadows = castShadows; }
-void Terrain3DMesher::setShadowLodCount( const int nCount ) { m_nShadowLodCount = CLAMP( nCount, 0, s_nMaxClipmapLevels ); }
-void Terrain3DMesher::setTierShadowEnabled( const eastl::array<bool, 3> &bEnabled ) { m_bTierShadowEnabled = bEnabled; }
+void Terrain3DMesher::setShadowLodCount( const int nCount ) {
+	m_runtimeConfig.m_nShadowLodCount = CLAMP( nCount, 0, s_nMaxClipmapLevels );
+}
+void Terrain3DMesher::setTierShadowEnabled( const eastl::array<bool, 3> &bEnabled ) {
+	for ( int tier = 0; tier < 3; ++tier ) {
+		m_runtimeConfig.m_szTierShadowEnabled[tier] = bEnabled[( size_t )( tier )];
+	}
+}
 void Terrain3DMesher::setTierShadowLodCounts( const eastl::array<int, 3> &nCounts ) {
-	for ( int tier = 0; tier < 3; ++tier ) m_nTierShadowLodCounts[( size_t )( tier )] = CLAMP( nCounts[( size_t )( tier )], -1, s_nMaxClipmapLevels );
+	for ( int tier = 0; tier < 3; ++tier ) {
+		m_runtimeConfig.m_szTierShadowLodCounts[tier] = CLAMP( nCounts[( size_t )( tier )], -1, s_nMaxClipmapLevels );
+	}
 }
 
 void Terrain3DMesher::resetTargetPosition( void ) {
-	m_szLastLodPositions.fill( s_v2Max );
-	m_szLastLodTestX.fill( -1 );
-	m_szLastLodTestZ.fill( -1 );
+	for ( int lod = 0; lod < s_nMaxClipmapLevels; ++lod ) {
+		m_szLastLodPositions[( size_t )( lod )] = s_v2Max;
+		m_szLastLodTestX[( size_t )( lod )] = -1;
+		m_szLastLodTestZ[( size_t )( lod )] = -1;
+	}
 	m_bForceFullSnap = true;
 	m_iDeferredLodCursor = getImmediateLodCount();
 }
@@ -729,7 +772,7 @@ void Terrain3DMesher::snap( const Vector3 &rTargetPos ) {
 	int updated = 0;
 	int scanned = 0;
 	int lod = CLAMP( m_iDeferredLodCursor, immediate_count, m_nClipmapLevelCount - 1 );
-	while ( scanned < deferred_count && updated < m_nClipmapUpdateBudget ) {
+	while ( scanned < deferred_count && updated < m_runtimeConfig.m_nClipmapUpdateBudget ) {
 		if ( snapLevel( lod, snapped_target ) ) ++updated;
 		++scanned;
 		if ( ++lod >= m_nClipmapLevelCount ) lod = immediate_count;

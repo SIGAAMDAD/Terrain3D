@@ -222,11 +222,14 @@ public:
 			m_meshes.reserve( nMeshes );
 		}
 	}
-	EA_FORCE_INLINE void
+	EA_FORCE_INLINE bool
 	reservePayloadCapacity( const size_t nTransforms, const size_t nColors, const size_t nOwners ) {
-		m_transformSlab.reserve( nTransforms );
-		m_colorSlab.reserve( nColors );
-		m_ownerSlab.reserve( nOwners );
+		return m_transformSlab.reserve( nTransforms ) && m_colorSlab.reserve( nColors ) && m_ownerSlab.reserve( nOwners );
+	}
+	EA_FORCE_INLINE void sealPayloadCapacity( void ) {
+		m_transformSlab.seal();
+		m_colorSlab.seal();
+		m_ownerSlab.seal();
 	}
 
 	EA_FORCE_INLINE void setLayout( const t3dInstanceLayout_t &rLayout ) {

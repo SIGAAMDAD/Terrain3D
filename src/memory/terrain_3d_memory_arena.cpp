@@ -28,26 +28,16 @@ bool Terrain3DMemoryArenaLayout::alignUp( const size_t nValue, const size_t nAli
 	return true;
 }
 
-size_t Terrain3DMemoryArenaLayout::alignDown( const size_t nValue, const size_t nAlignment ) {
-	return nValue & ~( nAlignment - 1u );
-}
-
 bool Terrain3DMemoryArenaLayout::configure( const size_t nCapacityBytes ) {
 	m_nCapacity = nCapacityBytes;
 	m_nLowCursor = 0u;
-	m_nHighCursor = nCapacityBytes;
 	m_nMaxAlignment = s_nArenaDefaultBaseAlignment;
 	m_bValid = true;
 	m_bSealed = false;
 	return true;
 }
 
-bool Terrain3DMemoryArenaLayout::reserveLow( const size_t nBytes, const size_t nAlignment, t3dMemoryArenaSlice_t &rSlice ) {
-	return reserve( false, nBytes, nAlignment, rSlice );
-}
-
-bool Terrain3DMemoryArenaLayout::reserve( const bool bHigh,
-		const size_t nBytes,
+bool Terrain3DMemoryArenaLayout::reserveLow( const size_t nBytes,
 		const size_t nAlignment,
 		t3dMemoryArenaSlice_t &rSlice ) {
 	if ( m_bSealed || !m_bValid ) {
@@ -59,31 +49,14 @@ bool Terrain3DMemoryArenaLayout::reserve( const bool bHigh,
 	}
 	m_nMaxAlignment = std::max( m_nMaxAlignment, nAlignment );
 
-	if ( !bHigh ) {
-		size_t aligned = 0u;
-		if ( !alignUp( m_nLowCursor, nAlignment, aligned ) || aligned > m_nHighCursor ||
-				nBytes > m_nHighCursor - aligned ) {
-			m_bValid = false;
-			return false;
-		}
-		const t3dMemoryArenaSlice_t slice = { aligned, nBytes, nAlignment, false, true };
-		rSlice = slice;
-		m_nLowCursor = aligned + nBytes;
-		return true;
-	}
-
-	if ( nBytes > m_nHighCursor ) {
+	size_t aligned = 0u;
+	if ( !alignUp( m_nLowCursor, nAlignment, aligned ) || aligned > m_nCapacity ||
+		nBytes > m_nCapacity - aligned ) {
 		m_bValid = false;
 		return false;
 	}
-	const size_t candidate = alignDown( m_nHighCursor - nBytes, nAlignment );
-	if ( candidate < m_nLowCursor || nBytes > m_nHighCursor - candidate ) {
-		m_bValid = false;
-		return false;
-	}
-	const t3dMemoryArenaSlice_t slice = { candidate, nBytes, nAlignment, true, true };
-	rSlice = slice;
-	m_nHighCursor = candidate;
+	rSlice = { aligned, nBytes, nAlignment, true };
+	m_nLowCursor = aligned + nBytes;
 	return true;
 }
 

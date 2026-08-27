@@ -156,9 +156,9 @@ void Terrain3DInstanceStore::rebuildMeshLookup( void ) const {
 
 void Terrain3DInstanceStore::clearRetainCapacity( void ) {
 	m_meshes.clear();
-	m_transformSlab.reset();
-	m_colorSlab.reset();
-	m_ownerSlab.reset();
+	m_transformSlab.beginColdRebuild();
+	m_colorSlab.beginColdRebuild();
+	m_ownerSlab.beginColdRebuild();
 	invalidateMeshLookup();
 }
 

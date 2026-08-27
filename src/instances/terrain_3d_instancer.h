@@ -251,9 +251,17 @@ private:
 	Terrain3DRegion *m_pszTouchedRegions[s_nMaxRegionSlots] = {};
 	uint16_t m_nTouchedRegionCount = 0u;
 	uint64_t m_nRdPublicationGeneration = 1u;
+	size_t m_nRenderCellCapacity = 0u;
+	size_t m_nLogicalCellCapacity = 0u;
+	size_t m_nTransitionBucketCapacity = 0u;
+	size_t m_nCellUpdateQueueCapacity = 0u;
 
 	static t3dRenderCellKey_t makeRenderKey( const t3dRenderCell_t &rCell );
 	void markRdPublicationDirty( void );
+	bool rebuildRuntimeStorageCapacities( void );
+	bool appendBuildingCellUpdate( const t3dCellUpdateKey_t &rKey );
+	bool insertStreamingUpdate( const t3dCellUpdateKey_t &rKey );
+	bool reportRuntimeCapacityExceeded( const char *pszStorage, size_t nRequired, size_t nCapacity ) const;
 	static int getRegionTableIndex( const Vector2i &vRegion );
 	uint32_t allocateRenderRegionNode( size_t iRenderCell, uint16_t nRegionIndex );
 	void releaseRenderRegionNode( uint32_t nNode, uint16_t nRegionIndex );
@@ -513,9 +521,7 @@ public:
 	EA_FORCE_INLINE real_t getCellStreamingStep( void ) const {
 		return m_fCellStreamingStep;
 	}
-	EA_FORCE_INLINE void setUpdateCellBudget( const int nBudget ) {
-		m_nUpdateCellBudget = ( uint32_t )( CLAMP( nBudget, 0, 65536 ) );
-	}
+	void setUpdateCellBudget( int nBudget );
 	EA_FORCE_INLINE uint32_t getUpdateCellBudget( void ) const {
 		return m_nUpdateCellBudget;
 	}

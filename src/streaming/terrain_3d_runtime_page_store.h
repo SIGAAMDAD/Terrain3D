@@ -33,6 +33,25 @@ typedef enum t3dRuntimePageConsumer_e : uint16_t {
 	RUNTIME_PAGE_CONSUMER_TERRAIN_SHADOW = 1u << 8,
 } t3dRuntimePageConsumer_t;
 
+typedef struct t3dRuntimePageNumericConfig_s {
+	int m_nColorDivisor = 1;
+	int m_nDerivedDivisor = 1;
+	int m_nMiddleHeightDivisor = 1;
+	int m_nPrepareThreads = 2;
+} t3dRuntimePageNumericConfig_t;
+
+EA_FORCE_INLINE t3dRuntimePageNumericConfig_t t3dCompileRuntimePageNumericConfig( const int nColorDivisor,
+		const int nDerivedDivisor,
+		const int nMiddleHeightDivisor,
+		const int nPrepareThreads ) {
+	t3dRuntimePageNumericConfig_t config;
+	config.m_nColorDivisor = nColorDivisor > 0 ? nColorDivisor : 1;
+	config.m_nDerivedDivisor = nDerivedDivisor > 0 ? nDerivedDivisor : 1;
+	config.m_nMiddleHeightDivisor = nMiddleHeightDivisor > 0 ? nMiddleHeightDivisor : 1;
+	config.m_nPrepareThreads = nPrepareThreads < 1 ? 1 : ( nPrepareThreads > 32 ? 32 : nPrepareThreads );
+	return config;
+}
+
 typedef struct t3dRuntimePageConfig_s {
 	String m_dataDirectory;
 	uint64_t m_nMaterialSourceSignature = 0u;

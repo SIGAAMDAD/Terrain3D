@@ -42,6 +42,17 @@ typedef struct t3dRegionStreamingConfig_s {
 	int m_nPredictionMaximumRegions = 4;
 } t3dRegionStreamingConfig_t;
 
+typedef struct t3dRuntimeStreamingConfig_s {
+	int m_nActiveRadius = 1;
+	int m_nHotRadius = 8;
+	int m_nColdRadius = 12;
+	int m_nUnloadRadius = 14;
+	int m_nUnloadGuard = 2;
+	int m_nPredictionMaximumRegions = 4;
+	double m_fPredictionLookaheadSeconds = 0.75;
+	bool m_bPredictionEnabled = true;
+} t3dRuntimeStreamingConfig_t;
+
 typedef struct t3dRegionStreamingPrediction_s {
 	double m_fVelocityXRegionsPerSecond = 0.0;
 	double m_fVelocityYRegionsPerSecond = 0.0;
@@ -77,17 +88,23 @@ EA_FORCE_INLINE constexpr int t3dStreamingChebyshevDistance( const t3dStreamingC
 	return dx > dy ? dx : dy;
 }
 
-constexpr t3dRegionStreamingConfig_t t3dStreamingSanitizeConfig( const t3dRegionStreamingConfig_t config ) noexcept {
-	t3dRegionStreamingConfig_t result = config;
-	result.m_nActiveRadius = result.m_nActiveRadius < 0 ? 0 : result.m_nActiveRadius;
-	result.m_nHotRadius = result.m_nHotRadius < result.m_nActiveRadius ? result.m_nActiveRadius : result.m_nHotRadius;
-	result.m_nColdRadius = result.m_nColdRadius < result.m_nHotRadius ? result.m_nHotRadius : result.m_nColdRadius;
-	result.m_nUnloadGuard = result.m_nUnloadGuard < 0 ? 0 : ( result.m_nUnloadGuard > 4 ? 4 : result.m_nUnloadGuard );
-	result.m_fPredictionLookaheadSeconds =
-			result.m_fPredictionLookaheadSeconds < 0.0 ? 0.0 : result.m_fPredictionLookaheadSeconds;
-	result.m_nPredictionMaximumRegions =
-			result.m_nPredictionMaximumRegions < 0 ? 0 : result.m_nPredictionMaximumRegions;
-	return result;
+EA_FORCE_INLINE constexpr t3dRuntimeStreamingConfig_t t3dStreamingCompileConfig(
+		const t3dRegionStreamingConfig_t rawConfig ) noexcept {
+	t3dRuntimeStreamingConfig_t config;
+	config.m_nActiveRadius = rawConfig.m_nActiveRadius < 0 ? 0 : rawConfig.m_nActiveRadius;
+	config.m_nHotRadius =
+			rawConfig.m_nHotRadius < config.m_nActiveRadius ? config.m_nActiveRadius : rawConfig.m_nHotRadius;
+	config.m_nColdRadius = rawConfig.m_nColdRadius < config.m_nHotRadius ? config.m_nHotRadius : rawConfig.m_nColdRadius;
+	config.m_nUnloadGuard =
+			rawConfig.m_nUnloadGuard < 0 ? 0 : ( rawConfig.m_nUnloadGuard > 4 ? 4 : rawConfig.m_nUnloadGuard );
+	config.m_nUnloadRadius = config.m_nColdRadius + config.m_nUnloadGuard;
+	config.m_nPredictionMaximumRegions =
+			rawConfig.m_nPredictionMaximumRegions < 0 ? 0 : rawConfig.m_nPredictionMaximumRegions;
+	config.m_fPredictionLookaheadSeconds =
+			rawConfig.m_fPredictionLookaheadSeconds < 0.0 ? 0.0 : rawConfig.m_fPredictionLookaheadSeconds;
+	config.m_bPredictionEnabled = rawConfig.m_bPredictionEnabled && config.m_nPredictionMaximumRegions > 0 &&
+			config.m_fPredictionLookaheadSeconds > 0.0;
+	return config;
 }
 
 EA_FORCE_INLINE constexpr bool t3dStreamingConfigIsValid( const t3dRegionStreamingConfig_t config ) noexcept {
@@ -96,24 +113,21 @@ EA_FORCE_INLINE constexpr bool t3dStreamingConfigIsValid( const t3dRegionStreami
 			config.m_fPredictionLookaheadSeconds >= 0.0 && config.m_nPredictionMaximumRegions >= 0;
 }
 
-constexpr t3dRegionStreamingState_t t3dStreamingClassify( const t3dStreamingCoord_t location,
+EA_FORCE_INLINE constexpr t3dRegionStreamingState_t t3dStreamingClassify( const t3dStreamingCoord_t location,
 		const t3dStreamingCoord_t center,
-		const t3dRegionStreamingConfig_t rawConfig ) noexcept {
-	const t3dRegionStreamingConfig_t config = t3dStreamingSanitizeConfig( rawConfig );
+		const t3dRuntimeStreamingConfig_t &rConfig ) noexcept {
 	const int distance = t3dStreamingChebyshevDistance( location, center );
-	return distance <= config.m_nActiveRadius
+	return distance <= rConfig.m_nActiveRadius
 			? TERRAIN3D_REGION_STREAMING_ACTIVE
-			: ( distance <= config.m_nHotRadius ? TERRAIN3D_REGION_STREAMING_HOT
-												: ( distance <= config.m_nColdRadius + config.m_nUnloadGuard
-																  ? TERRAIN3D_REGION_STREAMING_COLD
-																  : TERRAIN3D_REGION_STREAMING_UNLOADED ) );
+			: ( distance <= rConfig.m_nHotRadius ? TERRAIN3D_REGION_STREAMING_HOT
+											: ( distance <= rConfig.m_nUnloadRadius ? TERRAIN3D_REGION_STREAMING_COLD
+																			  : TERRAIN3D_REGION_STREAMING_UNLOADED ) );
 }
 
 EA_FORCE_INLINE constexpr bool t3dStreamingInsideUnloadGuard( const t3dStreamingCoord_t location,
 		const t3dStreamingCoord_t center,
-		const t3dRegionStreamingConfig_t rawConfig ) noexcept {
-	const t3dRegionStreamingConfig_t config = t3dStreamingSanitizeConfig( rawConfig );
-	return t3dStreamingChebyshevDistance( location, center ) <= config.m_nColdRadius + config.m_nUnloadGuard;
+		const t3dRuntimeStreamingConfig_t &rConfig ) noexcept {
+	return t3dStreamingChebyshevDistance( location, center ) <= rConfig.m_nUnloadRadius;
 }
 
 inline t3dStreamingCoord_t t3dStreamingClampCenter( const t3dStreamingCoord_t center, const int nMapSize ) noexcept {
@@ -135,8 +149,7 @@ inline t3dRegionStreamingPrediction_t t3dStreamingPredict( const t3dStreamingCoo
 		const double fPreviousVelocityXRegionsPerSecond,
 		const double fPreviousVelocityYRegionsPerSecond,
 		const double fDeltaSeconds,
-		const t3dRegionStreamingConfig_t rawConfig ) noexcept {
-	const t3dRegionStreamingConfig_t config = t3dStreamingSanitizeConfig( rawConfig );
+		const t3dRuntimeStreamingConfig_t &rConfig ) noexcept {
 	t3dRegionStreamingPrediction_t result;
 	const double delta = std::max( 0.0, fDeltaSeconds );
 	// Eight-per-second response is deliberate: prediction follows sustained motion
@@ -153,15 +166,14 @@ inline t3dRegionStreamingPrediction_t t3dStreamingPredict( const t3dStreamingCoo
 		result.m_fVelocityYRegionsPerSecond *= std::max( 0.0, 1.0 - delta * 10.0 );
 	}
 	result.m_predictedCenter = t3dStreamingClampCenter( currentCenter, nMapSize );
-	if ( !config.m_bPredictionEnabled || config.m_nPredictionMaximumRegions <= 0 ||
-			config.m_fPredictionLookaheadSeconds <= 0.0 ) {
+	if ( !rConfig.m_bPredictionEnabled ) {
 		return result;
 	}
-	const double predictedX = result.m_fVelocityXRegionsPerSecond * config.m_fPredictionLookaheadSeconds;
-	const double predictedY = result.m_fVelocityYRegionsPerSecond * config.m_fPredictionLookaheadSeconds;
+	const double predictedX = result.m_fVelocityXRegionsPerSecond * rConfig.m_fPredictionLookaheadSeconds;
+	const double predictedY = result.m_fVelocityYRegionsPerSecond * rConfig.m_fPredictionLookaheadSeconds;
 	const double dominant = std::max( std::abs( predictedX ), std::abs( predictedY ) );
-	const double scale = dominant > ( double )( config.m_nPredictionMaximumRegions ) && dominant > 0.0
-			? ( double )( config.m_nPredictionMaximumRegions ) / dominant
+	const double scale = dominant > ( double )( rConfig.m_nPredictionMaximumRegions ) && dominant > 0.0
+			? ( double )( rConfig.m_nPredictionMaximumRegions ) / dominant
 			: 1.0;
 	const t3dStreamingCoord_t predicted = {
 		currentCenter.m_nX + ( int )( std::lround( predictedX * scale ) ),

@@ -11,7 +11,9 @@
 #include <EASTL/vector.h>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <limits>
+#include <type_traits>
 #include <utility>
 
 // High-water contiguous storage shared by many small logical arrays. Individual
@@ -19,9 +21,12 @@
 // bump cursor while retaining the backing allocation, so cache-slot reuse does
 // not recreate hundreds of tiny vector allocations.
 template <typename T> class Terrain3DHighWaterSlab {
+	static_assert( std::is_trivially_copyable_v<T>, "Runtime slab storage requires trivially copyable values." );
+
 	eastl::vector<T> m_storage;
 	size_t m_nUsed = 0u;
 	size_t m_nGrowCount = 0u;
+	bool m_bSealed = false;
 
 public:
 	Terrain3DHighWaterSlab( void ) = default;
@@ -30,10 +35,30 @@ public:
 	Terrain3DHighWaterSlab( Terrain3DHighWaterSlab && ) noexcept = default;
 	Terrain3DHighWaterSlab &operator=( Terrain3DHighWaterSlab && ) noexcept = default;
 
-	EA_FORCE_INLINE void reserve( const size_t nCount ) {
-		if ( nCount > m_storage.capacity() ) {
-			m_storage.reserve( nCount );
+	EA_FORCE_INLINE bool reserve( const size_t nCount ) {
+		if ( nCount <= m_storage.size() ) {
+			return true;
 		}
+		if ( m_bSealed ) {
+			return false;
+		}
+		m_storage.resize( nCount );
+		++m_nGrowCount;
+		return true;
+	}
+
+	EA_FORCE_INLINE bool seal( void ) {
+		m_bSealed = true;
+		return true;
+	}
+
+	EA_FORCE_INLINE void beginColdRebuild( void ) {
+		m_bSealed = false;
+		m_nUsed = 0u;
+	}
+
+	EA_FORCE_INLINE bool sealed( void ) const {
+		return m_bSealed;
 	}
 
 	EA_FORCE_INLINE size_t allocate( const size_t nCount ) {
@@ -43,6 +68,9 @@ public:
 		const size_t offset = m_nUsed;
 		const size_t required = offset + nCount;
 		if ( required > m_storage.size() ) {
+			if ( m_bSealed ) {
+				return SIZE_MAX;
+			}
 			m_storage.resize( required );
 			++m_nGrowCount;
 		}
@@ -57,12 +85,17 @@ public:
 		eastl::vector<T>().swap( m_storage );
 		m_nUsed = 0u;
 		m_nGrowCount = 0u;
+		m_bSealed = false;
 	}
-	EA_FORCE_INLINE void compactBacking( void ) {
+	EA_FORCE_INLINE bool compactBacking( void ) {
+		if ( m_bSealed ) {
+			return false;
+		}
 		if ( m_storage.size() != m_nUsed ) {
 			m_storage.resize( m_nUsed );
 		}
 		m_storage.shrink_to_fit();
+		return true;
 	}
 	EA_FORCE_INLINE T *data( void ) {
 		return m_storage.data();
@@ -89,6 +122,7 @@ public:
 		m_storage.swap( rOther.m_storage );
 		std::swap( m_nUsed, rOther.m_nUsed );
 		std::swap( m_nGrowCount, rOther.m_nGrowCount );
+		std::swap( m_bSealed, rOther.m_bSealed );
 	}
 };
 
@@ -151,85 +185,95 @@ public:
 		return m_pSlab != nullptr;
 	}
 
-	void reserve( const size_t nCount ) {
-		if ( nCount <= m_nCapacity || !m_pSlab ) {
-			return;
+	bool reserve( const size_t nCount ) {
+		if ( nCount <= m_nCapacity ) {
+			return true;
+		}
+		if ( !m_pSlab ) {
+			return false;
 		}
 		const size_t new_capacity = growthCapacity( nCount );
 		const size_t old_offset = m_iOffset;
 		const size_t old_count = m_nCount;
 		const size_t new_offset = m_pSlab->allocate( new_capacity );
 		if ( new_offset == SIZE_MAX ) {
-			return;
+			return false;
 		}
 		T *const pData = m_pSlab->data();
 		if ( old_count > 0u ) {
-			eastl::copy_n( pData + old_offset, old_count, pData + new_offset );
+			std::memmove( pData + new_offset, pData + old_offset, old_count * sizeof( T ) );
 		}
 		m_iOffset = new_offset;
 		m_nCapacity = new_capacity;
+		return true;
 	}
 
-	void reserveExact( const size_t nCount ) {
-		if ( nCount <= m_nCapacity || !m_pSlab ) {
-			return;
+	bool reserveExact( const size_t nCount ) {
+		if ( nCount <= m_nCapacity ) {
+			return true;
+		}
+		if ( !m_pSlab ) {
+			return false;
 		}
 		const size_t old_offset = m_iOffset;
 		const size_t old_count = m_nCount;
 		const size_t new_offset = m_pSlab->allocate( nCount );
 		if ( new_offset == SIZE_MAX ) {
-			return;
+			return false;
 		}
 		T *const pData = m_pSlab->data();
 		if ( old_count > 0u ) {
-			eastl::copy_n( pData + old_offset, old_count, pData + new_offset );
+			std::memmove( pData + new_offset, pData + old_offset, old_count * sizeof( T ) );
 		}
 		m_iOffset = new_offset;
 		m_nCapacity = nCount;
+		return true;
 	}
 
-	void resize( const size_t nCount ) {
+	bool resize( const size_t nCount ) {
 		const size_t old_count = m_nCount;
-		reserve( nCount );
-		if ( nCount > m_nCapacity ) {
-			return;
+		if ( !reserve( nCount ) ) {
+			return false;
 		}
 		if ( nCount > old_count ) {
-			eastl::fill( data() + old_count, data() + nCount, T{} );
+			std::memset( data() + old_count, 0, ( nCount - old_count ) * sizeof( T ) );
 		}
 		m_nCount = nCount;
+		return true;
 	}
 
-	void resize( const size_t nCount, const T &rValue ) {
+	bool resize( const size_t nCount, const T &rValue ) {
 		const size_t old_count = m_nCount;
-		reserve( nCount );
-		if ( nCount > m_nCapacity ) {
-			return;
+		if ( !reserve( nCount ) ) {
+			return false;
 		}
-		if ( nCount > old_count ) {
-			eastl::fill( data() + old_count, data() + nCount, rValue );
+		for ( size_t index = old_count; index < nCount; ++index ) {
+			data()[index] = rValue;
 		}
 		m_nCount = nCount;
+		return true;
 	}
 
 	EA_FORCE_INLINE void clear( void ) {
 		m_nCount = 0u;
 	}
-	EA_FORCE_INLINE void pushBack( const T &rValue ) {
+	EA_FORCE_INLINE bool pushBack( const T &rValue ) {
 		const size_t index = m_nCount;
-		reserve( index + 1u );
-		if ( index < m_nCapacity ) {
-			data()[index] = rValue;
-			m_nCount = index + 1u;
+		if ( !reserve( index + 1u ) ) {
+			return false;
 		}
+		data()[index] = rValue;
+		m_nCount = index + 1u;
+		return true;
 	}
-	EA_FORCE_INLINE void pushBack( T &&rValue ) {
+	EA_FORCE_INLINE bool pushBack( T &&rValue ) {
 		const size_t index = m_nCount;
-		reserve( index + 1u );
-		if ( index < m_nCapacity ) {
-			data()[index] = eastl::move( rValue );
-			m_nCount = index + 1u;
+		if ( !reserve( index + 1u ) ) {
+			return false;
 		}
+		data()[index] = eastl::move( rValue );
+		m_nCount = index + 1u;
+		return true;
 	}
 	EA_FORCE_INLINE size_t size( void ) const {
 		return m_nCount;
@@ -268,26 +312,27 @@ public:
 		return m_iOffset;
 	}
 
-	void relocateExact( Terrain3DHighWaterSlab<T> *const pDestination ) {
+	bool relocateExact( Terrain3DHighWaterSlab<T> *const pDestination ) {
 		if ( !pDestination ) {
-			return;
+			return false;
 		}
 		if ( m_nCount == 0u ) {
 			bind( pDestination );
-			return;
+			return true;
 		}
 		const T *const pSource = data();
 		const size_t count = m_nCount;
 		const size_t offset = pDestination->allocate( count );
 		if ( offset == SIZE_MAX ) {
-			return;
+			return false;
 		}
 		T *const pDestinationData = pDestination->data();
-		eastl::copy_n( pSource, count, pDestinationData + offset );
+		std::memcpy( pDestinationData + offset, pSource, count * sizeof( T ) );
 		m_pSlab = pDestination;
 		m_iOffset = offset;
 		m_nCount = count;
 		m_nCapacity = count;
+		return true;
 	}
 };
 
