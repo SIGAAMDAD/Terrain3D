@@ -12,6 +12,7 @@ depth = "#define T3D_FORWARD_DEPTH";
 depth_normal_roughness = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS";
 depth_normal_roughness_voxel_gi = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_FORWARD_VOXEL_GI";
 
+// Shared clipmap source revision 1: bump when either clipmap include changes.
 
 #[vertex]
 #version 450
