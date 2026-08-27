@@ -22,7 +22,6 @@
 #include <godot_cpp/classes/world3d.hpp>
 #include <limits>
 #include <utility>
-#include <unordered_map>
 
 static_assert( s_nInstanceRegionTableCapacity == ( size_t )( s_nMaxRegionSlots ),
 		"Instancer region tables must cover every Terrain3DData region slot" );
@@ -195,11 +194,13 @@ bool Terrain3DInstancer::rebuildRuntimeStorageCapacities( void ) {
 	m_singleLodTransitionBuckets.beginColdRebuild();
 	m_streamingUpdates.beginColdRebuild();
 	m_activeStreamingUpdates.beginColdRebuild();
+	m_rdSnapshotRanges.beginColdRebuild();
 	if ( !m_iRenderCellIndex.reserveAndSeal( render_capacity ) ||
 			!m_logicalCellCounts.reserveAndSeal( logical_capacity ) ||
 			!m_singleLodTransitionBuckets.reserveAndSeal( logical_capacity ) ||
 			!m_streamingUpdates.reserveAndSeal( logical_capacity ) ||
-			!m_activeStreamingUpdates.reserveAndSeal( logical_capacity ) ) {
+			!m_activeStreamingUpdates.reserveAndSeal( logical_capacity ) ||
+			!m_rdSnapshotRanges.reserveAndSeal( logical_capacity ) ) {
 		LOG( ERROR, "Could not seal fixed instancer hash storage" );
 		return false;
 	}
@@ -2013,21 +2014,19 @@ PackedFloat32Array Terrain3DInstancer::buildMultimeshBuffer( const TypedArray<Tr
 }
 
 
-void Terrain3DInstancer::buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &rSnapshot ) const {
+bool Terrain3DInstancer::buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &rSnapshot ) const {
 	rSnapshot.m_instances.clear();
 	rSnapshot.m_cells.clear();
 	rSnapshot.m_nGeneration = m_nRdPublicationGeneration;
 	if ( !m_pTerrain || !m_pTerrain->getData() || m_pTerrain->getAssets().is_null() || m_renderCells.empty() ) {
-		return;
+		return true;
 	}
-
-	typedef struct t3dRdCellRange_s {
-		uint32_t m_nFirst = 0u;
-		uint32_t m_nCount = 0u;
-	} t3dRdCellRange_t;
-	std::unordered_map<t3dCellUpdateKey_t, t3dRdCellRange_t, t3dCellUpdateKeyHash_t> ranges;
-	ranges.reserve( m_renderCells.size() );
-	rSnapshot.m_cells.reserve( m_renderCells.size() );
+	if ( rSnapshot.m_instances.capacity() < m_nLogicalCellCapacity ||
+			rSnapshot.m_cells.capacity() < m_nRenderCellCapacity ) {
+		LOG( ERROR, "RD instance snapshot publication storage was not cold-preallocated" );
+		return false;
+	}
+	m_rdSnapshotRanges.clear();
 
 	Terrain3DData *const data = m_pTerrain->getData();
 	const Ref<Terrain3DAssets> assets = m_pTerrain->getAssets();
@@ -2042,12 +2041,15 @@ void Terrain3DInstancer::buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &
 		if ( asset.is_null() || !asset->isEnabled() ) continue;
 
 		const t3dCellUpdateKey_t key{ render.m_region, render.m_cell, render.m_nMeshId };
-		auto found = ranges.find( key );
-		if ( found == ranges.end() ) {
+		t3dRdCellRange_t *pRange = m_rdSnapshotRanges.find( key );
+		if ( !pRange ) {
 			t3dRdCellRange_t range;
 			range.m_nFirst = ( uint32_t )( rSnapshot.m_instances.size() );
 			range.m_nCount = ( uint32_t )( MIN<size_t>( source_cell->m_transforms.size(), UINT32_MAX ) );
-			rSnapshot.m_instances.reserve( rSnapshot.m_instances.size() + range.m_nCount );
+			if ( rSnapshot.m_instances.size() + range.m_nCount > rSnapshot.m_instances.capacity() ) {
+				LOG( ERROR, "RD instance snapshot record capacity exceeded during publication" );
+				return false;
+			}
 			const Vector3 region_offset( ( real_t )( render.m_region.x ) * region_world_size,
 					0.0,
 					( real_t )( render.m_region.y ) * region_world_size );
@@ -2057,7 +2059,11 @@ void Terrain3DInstancer::buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &
 				const uint32_t color = source_cell->m_colors.empty() ? s_nInstanceWhiteRgba8 : source_cell->m_colors[( size_t )( i )];
 				rSnapshot.m_instances.push_back( t3dPackRdInstanceRecord( transform, color ) );
 			}
-			found = ranges.emplace( key, range ).first;
+			pRange = m_rdSnapshotRanges.insertOrAssign( key, range );
+			if ( !pRange ) {
+				LOG( ERROR, "RD instance snapshot range table capacity exceeded during publication" );
+				return false;
+			}
 		}
 
 		const int source_lod = render.m_nLod == s_nMeshShadowLodId ? asset->getShadowImpostor() : render.m_nLod;
@@ -2071,8 +2077,8 @@ void Terrain3DInstancer::buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &
 		cell.m_nMeshAssetId = ( uint16_t )( render.m_nMeshId );
 		cell.m_nLod = ( int16_t )( source_lod );
 		cell.m_nMeshSourceKey = t3dRdRegularMeshSourceKey( cell.m_nMeshAssetId, cell.m_nLod );
-		cell.m_nFirstInstance = found->second.m_nFirst;
-		cell.m_nInstanceCount = found->second.m_nCount;
+		cell.m_nFirstInstance = pRange->m_nFirst;
+		cell.m_nInstanceCount = pRange->m_nCount;
 		cell.m_nRevision = render.m_nUploadedRevision;
 		cell.m_nSettingsRevision = render.m_nSettingsRevision;
 		cell.m_nVisibilityLayers = asset->getVisibilityLayers();
@@ -2106,8 +2112,13 @@ void Terrain3DInstancer::buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &
 				( real_t )( render.m_region.y ) * region_world_size );
 		cell.m_bounds = source_cell->m_cachedAabb;
 		cell.m_bounds.position += region_offset;
+		if ( rSnapshot.m_cells.size() >= rSnapshot.m_cells.capacity() ) {
+			LOG( ERROR, "RD instance snapshot cell capacity exceeded during publication" );
+			return false;
+		}
 		rSnapshot.m_cells.push_back( cell );
 	}
+	return true;
 }
 
 Vector2i Terrain3DInstancer::getCellForLocalPosition( const Vector3 &rLocalPosition,
@@ -3660,6 +3671,7 @@ size_t Terrain3DInstancer::getRetainedContainerBytes( void ) const {
 	bytes += m_singleLodTransitionBuckets.reservedBytes();
 	bytes += m_streamingUpdates.reservedBytes();
 	bytes += m_activeStreamingUpdates.reservedBytes();
+	bytes += m_rdSnapshotRanges.reservedBytes();
 	bytes += m_renderRegionNodes.capacity() * sizeof( t3dRenderRegionNode_t );
 	bytes += m_logicalRegionNodes.capacity() * sizeof( t3dLogicalRegionNode_t );
 	bytes += m_transitionCellNodes.capacity() * sizeof( t3dTransitionCellNode_t );

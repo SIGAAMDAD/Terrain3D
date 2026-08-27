@@ -698,9 +698,11 @@ uint8_t Terrain3DHLODStreamer::getNodeMinimumLevel( const Vector2i &rRegion, con
 	}
 	return 0;
 }
-void Terrain3DHLODStreamer::fillRdMeshSources( std::vector<t3dRdExternalMeshSource_t> &rSources ) const {
+bool Terrain3DHLODStreamer::fillRdMeshSources( std::vector<t3dRdExternalMeshSource_t> &rSources ) const {
 	rSources.clear();
-	rSources.reserve( m_entries.size() );
+	if ( rSources.capacity() < m_entries.size() ) {
+		return false;
+	}
 	for ( int i = 0; i < ( int )( m_entries.size() ); ++i ) {
 		const t3dEntry_t &entry = m_entries[( size_t )( i )];
 		if ( !entry.m_bActive || entry.m_ackage.is_null() || entry.m_ackage->getMesh().is_null() ) {
@@ -711,20 +713,22 @@ void Terrain3DHLODStreamer::fillRdMeshSources( std::vector<t3dRdExternalMeshSour
 		source.m_mesh = entry.m_ackage->getMesh();
 		rSources.push_back( source );
 	}
+	return true;
 }
 
-void Terrain3DHLODStreamer::buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &rSnapshot ) const {
+bool Terrain3DHLODStreamer::buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &rSnapshot ) const {
 	rSnapshot.m_instances.clear();
 	rSnapshot.m_cells.clear();
 	rSnapshot.m_nGeneration = m_nRdPublicationGeneration;
 	if ( !m_pTerrain ) {
-		return;
+		return true;
+	}
+	if ( rSnapshot.m_instances.capacity() < m_entries.size() || rSnapshot.m_cells.capacity() < m_entries.size() ) {
+		return false;
 	}
 
 	const real_t regionWorld = ( real_t )( m_pTerrain->getRegionSize() ) * m_pTerrain->getVertexSpacing();
 	const Transform3D terrainTransform = m_pTerrain->get_global_transform();
-	rSnapshot.m_instances.reserve( m_entries.size() );
-	rSnapshot.m_cells.reserve( m_entries.size() );
 	for ( int i = 0; i < ( int )( m_entries.size() ); ++i ) {
 		const t3dEntry_t &entry = m_entries[( size_t )( i )];
 		if ( !entry.m_bActive || entry.m_ackage.is_null() || entry.m_ackage->getMesh().is_null() ) {
@@ -761,6 +765,7 @@ void Terrain3DHLODStreamer::buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_
 		cell.m_bounds = t3dTransformHlodBounds( transform, package_bounds );
 		rSnapshot.m_cells.push_back( cell );
 	}
+	return true;
 }
 
 Dictionary Terrain3DHLODStreamer::getStats( void ) const {

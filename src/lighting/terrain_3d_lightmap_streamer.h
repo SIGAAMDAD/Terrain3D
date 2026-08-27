@@ -45,7 +45,9 @@ class Terrain3DLightmapStreamer : public Object {
 
 	Terrain3D *m_pTerrain = nullptr;
 	t3dActivePackage_t m_szActive[s_nLightmapActiveInstanceLimit];
+	LightmapGI *m_szFreeNodes[s_nLightmapActiveInstanceLimit]{};
 	uint8_t m_nActiveCount = 0u;
+	uint8_t m_nFreeNodeCount = 0u;
 	bool m_bEnabled = true;
 	int m_nRadiusRegions = 1;
 	int m_nLoadBudget = 2;
@@ -90,6 +92,8 @@ class Terrain3DLightmapStreamer : public Object {
 			uint64_t nSignature,
 			int nReceiverCount );
 	bool isPackageCompatibleWithActive( const Ref<Terrain3DRegionLighting> &rPackage ) const;
+	LightmapGI *acquireNode( void );
+	void releaseNode( LightmapGI *pNode );
 	void deactivate( size_t iIndex );
 	void markDesired( const Vector2i &rCenter );
 	int getEffectiveResidencyBudgetMb( void ) const;

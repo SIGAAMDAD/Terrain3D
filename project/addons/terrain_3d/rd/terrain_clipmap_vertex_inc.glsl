@@ -53,7 +53,7 @@ struct MaterialConfig {
     uint projection_mode;
     uint tessellation_material_mode;
     uint world_noise_mode;
-    uint reserved_0;
+    uint texture_layer_counts;
     float displacement_sharpness;
     float blend_sharpness;
     float distant_normal_scale;
@@ -67,7 +67,7 @@ struct MaterialConfig {
     uint auto_base_texture;
     uint auto_overlay_texture;
     uint dual_scale_texture;
-    uint reserved_1;
+    uint far_albedo_layer_count;
     float dual_scale_reduction;
     float tri_scale_reduction;
     float dual_scale_far;
@@ -97,7 +97,7 @@ struct MaterialConfig {
     float world_noise_offset_x;
     float world_noise_offset_y;
     float world_noise_offset_z;
-    float world_noise_padding;
+    float world_noise_cache_max_lod;
     float silhouette_r;
     float silhouette_g;
     float silhouette_b;
@@ -236,8 +236,7 @@ float procedural_world_noise(vec2 world_texel) {
     bool cache_mode = material_config.world_noise_mode == 1u || material_config.world_noise_mode == 2u ||
         (material_config.world_noise_mode == 0u && material_config.world_noise_cache_enabled != 0u);
     if (cache_mode && (material_config.feature_flags & T3D_FEATURE_WORLD_NOISE_CACHE) != 0u) {
-        float max_lod = max(log2(float(textureSize(world_noise_cache, 0).x)), 0.0);
-        float cache_lod = clamp(float(max_octaves - octaves), 0.0, max_lod);
+        float cache_lod = clamp(float(max_octaves - octaves), 0.0, material_config.world_noise_cache_max_lod);
         vec2 cache_uv = p / max(material_config.world_noise_cache_period, 0.001);
         return textureLod(world_noise_cache, cache_uv, cache_lod).r * 2.0 - 1.0;
     }
@@ -416,6 +415,7 @@ void main() {
     vec2 world_xz = mix(start_world_xz, end_world_xz, morph.z);
     float height = patch_data.scale < frame_data.mesh_params.x ? sample_height_interpolated(world_xz)
         : mix(sample_height_nearest(start_world_xz), sample_height_nearest(end_world_xz), morph.z);
+#if !defined(T3D_FORWARD_DEPTH) || defined(T3D_FORWARD_NORMAL_ROUGHNESS)
     float normal_step = max(frame_data.mesh_params.x, patch_data.scale);
     float h_l = sample_normal_height_nearest(world_xz - vec2(normal_step, 0.0));
     float h_r = sample_normal_height_nearest(world_xz + vec2(normal_step, 0.0));
@@ -423,6 +423,9 @@ void main() {
     float h_u = sample_normal_height_nearest(world_xz + vec2(0.0, normal_step));
     vec3 geometry_normal = normalize(vec3(h_l - h_r, 2.0 * normal_step, h_d - h_u));
     world_normal = sample_derived_normal(world_xz, geometry_normal);
+#else
+    world_normal = vec3(0.0, 1.0, 0.0);
+#endif
     vec3 displacement_start = sample_clipmap_displacement(start_world_xz, patch_data.scale);
     vec3 displacement_end = sample_clipmap_displacement(end_world_xz, patch_data.scale * 2.0);
     vec3 displacement = mix(displacement_start, displacement_end, morph.z);

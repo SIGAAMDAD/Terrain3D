@@ -111,6 +111,9 @@ void Terrain3DLightmapStreamer::initialize( Terrain3D *const pTerrain ) {
 	}
 	destroy();
 	m_pTerrain = pTerrain;
+	for ( int i = 0; i < s_nLightmapActiveInstanceLimit; ++i ) {
+		m_szFreeNodes[m_nFreeNodeCount++] = memnew( LightmapGI );
+	}
 	m_center = s_v2iMax;
 	m_nNodeRuntimeGeneration = 0u;
 }
@@ -119,10 +122,39 @@ void Terrain3DLightmapStreamer::destroy( void ) {
 	while ( m_nActiveCount > 0u ) {
 		deactivate( ( size_t )m_nActiveCount - 1u );
 	}
+	while ( m_nFreeNodeCount > 0u ) {
+		LightmapGI *const pNode = m_szFreeNodes[--m_nFreeNodeCount];
+		m_szFreeNodes[m_nFreeNodeCount] = nullptr;
+		memdelete( pNode );
+	}
 	m_pTerrain = nullptr;
 	m_center = s_v2iMax;
 	m_nNodeRuntimeGeneration = 0u;
 	m_bHasPendingActivation = false;
+}
+
+LightmapGI *Terrain3DLightmapStreamer::acquireNode( void ) {
+	if ( m_nFreeNodeCount == 0u ) {
+		return nullptr;
+	}
+	LightmapGI *const pNode = m_szFreeNodes[--m_nFreeNodeCount];
+	m_szFreeNodes[m_nFreeNodeCount] = nullptr;
+	return pNode;
+}
+
+void Terrain3DLightmapStreamer::releaseNode( LightmapGI *const pNode ) {
+	if ( pNode == nullptr ) {
+		return;
+	}
+	if ( pNode->get_parent() != nullptr ) {
+		pNode->get_parent()->remove_child( pNode );
+	}
+	pNode->set_light_data( Ref<LightmapGIData>() );
+	if ( m_nFreeNodeCount < s_nLightmapActiveInstanceLimit ) {
+		m_szFreeNodes[m_nFreeNodeCount++] = pNode;
+		return;
+	}
+	ERR_PRINT_ONCE( "Terrain3D lightmap node pool overflowed during release" );
 }
 
 void Terrain3DLightmapStreamer::suspend( void ) {
@@ -336,12 +368,16 @@ bool Terrain3DLightmapStreamer::activate( const Ref<Terrain3DRegionLighting> &rP
 		return false;
 	}
 
-	LightmapGI *const pLightmap = memnew( LightmapGI );
+	LightmapGI *const pLightmap = acquireNode();
+	if ( pLightmap == nullptr ) {
+		return false;
+	}
 	const Vector2i cluster = rPackage->getClusterLocation();
 	pLightmap->set_name(
 			String( "Terrain3DLightmapGI_" ) + String::num_int64( cluster.x ) + String( "_" ) + String::num_int64( cluster.y ) );
 	pLightmap->set_light_data( rRuntimeData );
 	pLightmap->set_shadowmask_mode( ( LightmapGIData::ShadowmaskMode )( rPackage->getShadowmaskMode() ) );
+	pLightmap->request_ready();
 	m_pTerrain->add_child( pLightmap, false, Node::INTERNAL_MODE_BACK );
 
 	t3dActivePackage_t active;
@@ -371,19 +407,18 @@ bool Terrain3DLightmapStreamer::refreshActive( t3dActivePackage_t &rActive,
 			rActive.m_pNode != nullptr ) {
 		return true;
 	}
-	if ( rActive.m_pNode != nullptr ) {
-		if ( rActive.m_pNode->get_parent() != nullptr ) {
-			rActive.m_pNode->get_parent()->remove_child( rActive.m_pNode );
-		}
-		memdelete( rActive.m_pNode );
-		rActive.m_pNode = nullptr;
+	releaseNode( rActive.m_pNode );
+	rActive.m_pNode = nullptr;
+	LightmapGI *const pLightmap = acquireNode();
+	if ( pLightmap == nullptr ) {
+		return false;
 	}
-	LightmapGI *const pLightmap = memnew( LightmapGI );
 	const Vector2i cluster = rActive.m_ackage->getClusterLocation();
 	pLightmap->set_name(
 			String( "Terrain3DLightmapGI_" ) + String::num_int64( cluster.x ) + String( "_" ) + String::num_int64( cluster.y ) );
 	pLightmap->set_light_data( rRuntimeData );
 	pLightmap->set_shadowmask_mode( ( LightmapGIData::ShadowmaskMode )( rActive.m_ackage->getShadowmaskMode() ) );
+	pLightmap->request_ready();
 	m_pTerrain->add_child( pLightmap, false, Node::INTERNAL_MODE_BACK );
 	rActive.m_runtimeData = rRuntimeData;
 	rActive.m_pNode = pLightmap;
@@ -400,10 +435,7 @@ void Terrain3DLightmapStreamer::deactivate( const size_t iIndex ) {
 	}
 	t3dActivePackage_t &active = m_szActive[iIndex];
 	if ( active.m_pNode != nullptr ) {
-		if ( active.m_pNode->get_parent() != nullptr ) {
-			active.m_pNode->get_parent()->remove_child( active.m_pNode );
-		}
-		memdelete( active.m_pNode );
+		releaseNode( active.m_pNode );
 		active.m_pNode = nullptr;
 	}
 	const size_t removed_bytes =

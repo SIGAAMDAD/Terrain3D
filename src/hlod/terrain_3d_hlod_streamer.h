@@ -259,8 +259,9 @@ public:
 	EA_FORCE_INLINE uint64_t getRdPublicationGeneration( void ) const {
 		return m_nRdPublicationGeneration;
 	}
-	void fillRdMeshSources( std::vector<t3dRdExternalMeshSource_t> &rSources ) const;
-	void buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &rSnapshot ) const;
+	bool fillRdMeshSources( std::vector<t3dRdExternalMeshSource_t> &rSources ) const;
+	bool buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &rSnapshot ) const;
+	EA_FORCE_INLINE size_t getRdPublicationCapacity( void ) const { return m_entries.size(); }
 	Dictionary getStats( void ) const;
 	Array getDebugEntries( void ) const;
 

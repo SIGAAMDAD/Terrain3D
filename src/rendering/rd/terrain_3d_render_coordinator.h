@@ -213,6 +213,8 @@ private:
 	bool ensureMacroNoiseTexture( const Terrain3DMaterial *pMaterial );
 	bool ensureEditorBrushTexture( const Terrain3DMaterial *pMaterial );
 	uint32_t selectWritablePublicationBank( uint32_t nReaderBank, uint32_t nPendingBank ) const;
+	void ensureInstancePublicationStorage( void );
+	void ensureInstanceMeshBankStorage( void );
 	void publishSnapshot( void );
 	const t3dRdFrameSnapshotSlot_t *acquireSnapshotOnRenderThread( void );
 	void resetSnapshotPublication( void );

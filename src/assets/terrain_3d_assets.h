@@ -212,11 +212,20 @@ public:
 	EA_FORCE_INLINE RID getNormalArrayRid( void ) const {
 		return m_generatedNormalTextures.getRid();
 	}
+	EA_FORCE_INLINE int getNormalArraySize( void ) const {
+		return m_generatedNormalTextures.size();
+	}
 	EA_FORCE_INLINE RID getSurfaceArrayRid( void ) const {
 		return m_generatedSurfaceTextures.getRid();
 	}
+	EA_FORCE_INLINE int getSurfaceArraySize( void ) const {
+		return m_generatedSurfaceTextures.size();
+	}
 	EA_FORCE_INLINE RID getDisplacementArrayRid( void ) const {
 		return m_generatedDisplacementTextures.getRid();
+	}
+	EA_FORCE_INLINE int getDisplacementArraySize( void ) const {
+		return m_generatedDisplacementTextures.size();
 	}
 	EA_FORCE_INLINE size_t getGeneratedTexturePayloadBytes( void ) const {
 		return m_generatedAlbedoTextures.payloadBytes() + m_generatedNormalTextures.payloadBytes() +

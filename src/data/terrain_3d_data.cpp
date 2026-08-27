@@ -1916,6 +1916,11 @@ size_t Terrain3DData::getMemoryFixedRepositoryBytes( void ) const
 	return sizeof( *this ) + m_samplingStorage.getActiveReservedBytes() + m_samplingStorage.getResidentReservedBytes();
 }
 
+uint64_t Terrain3DData::getMemoryComputeLocalGpuBytes( void ) const
+{
+	return m_pCompute ? m_pCompute->getRetainedLocalGpuBufferBytes() : 0u;
+}
+
 Error Terrain3DData::initialize( Terrain3D *const pTerrain )
 {
 	if ( !pTerrain ) {

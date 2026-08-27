@@ -7,6 +7,7 @@
 #include "instances/terrain_3d_instancer.h"
 #include "hlod/terrain_3d_hlod_streamer.h"
 #include "lighting/terrain_3d_region_lighting.h"
+#include "memory/terrain_3d_memory.h"
 #include "rendering/terrain_3d_material.h"
 #include "rendering/rd/terrain_3d_rd_forward_plus_bridge.h"
 #include "terrain_3d.h"
@@ -402,6 +403,15 @@ void Terrain3DRenderCoordinator::buildMaterialState( t3dRdFrameSnapshot_t &rSnap
 		config.m_nProjectionMode = ( uint32_t )( pMaterial->getProjectionMode() );
 		config.m_nTessellationMaterialMode = ( uint32_t )( pMaterial->getTessellationMaterialMode() );
 		config.m_nWorldNoiseMode = ( uint32_t )( pMaterial->getWorldNoiseShaderMode() );
+		const uint32_t albedo_layers = assets.is_valid() ? ( uint32_t )CLAMP( assets->getGeneratedArraySize(), 0, 255 ) : 0u;
+		const uint32_t normal_layers = assets.is_valid() ? ( uint32_t )CLAMP( assets->getNormalArraySize(), 0, 255 ) : 0u;
+		const uint32_t surface_layers = assets.is_valid() ? ( uint32_t )CLAMP( assets->getSurfaceArraySize(), 0, 255 ) : 0u;
+		const uint32_t displacement_layers =
+				assets.is_valid() ? ( uint32_t )CLAMP( assets->getDisplacementArraySize(), 0, 255 ) : 0u;
+		config.m_nTextureLayerCounts = albedo_layers | ( normal_layers << 8u ) | ( surface_layers << 16u ) |
+				( displacement_layers << 24u );
+		config.m_nFarAlbedoLayerCount =
+				assets.is_valid() ? ( uint32_t )CLAMP( assets->getFarAlbedoArraySize(), 0, 255 ) : 0u;
 		config.m_fDisplacementSharpness = ( float )( pMaterial->getDisplacementSharpness() );
 		config.m_fBlendSharpness = t3dRdMaterialFloatParam( pMaterial, "blend_sharpness", 0.5f );
 		config.m_fDistantNormalScale = t3dRdMaterialFloatParam( pMaterial, "distant_normal_scale", 2.0f );
@@ -448,6 +458,9 @@ void Terrain3DRenderCoordinator::buildMaterialState( t3dRdFrameSnapshot_t &rSnap
 		config.m_fWorldNoiseOffsetX = ( float )( world_noise_offset.x );
 		config.m_fWorldNoiseOffsetY = ( float )( world_noise_offset.y );
 		config.m_fWorldNoiseOffsetZ = ( float )( world_noise_offset.z );
+		config.m_fWorldNoiseCacheMaxLod = m_worldNoiseCache.getRid().is_valid()
+				? ( float )MAX( m_worldNoiseCache.maxMipmapLevel(), 0 )
+				: 0.0f;
 		const Color silhouette = t3dRdMaterialColorParam( pMaterial, "silhouette_color", Color( 0.04, 0.04, 0.04, 1.0 ) );
 		config.m_fSilhouetteR = ( float )( silhouette.r );
 		config.m_fSilhouetteG = ( float )( silhouette.g );
@@ -536,12 +549,98 @@ uint32_t Terrain3DRenderCoordinator::selectWritablePublicationBank(
 	return s_nRdInvalidFrameSnapshotIndex;
 }
 
+void Terrain3DRenderCoordinator::ensureInstancePublicationStorage( void ) {
+	Terrain3DInstancer *const instancer = m_pTerrain ? m_pTerrain->getInstancer() : nullptr;
+	Terrain3DHLODStreamer *const hlod_streamer = m_pTerrain ? m_pTerrain->getHlodStreamer() : nullptr;
+	const size_t regular_instances = instancer ? instancer->getRdSnapshotInstanceCapacity() : 0u;
+	const size_t regular_cells = instancer ? instancer->getRdSnapshotCellCapacity() : 0u;
+	const size_t hlod_entries = hlod_streamer ? hlod_streamer->getRdPublicationCapacity() : 0u;
+	const size_t combined_instances = regular_instances + hlod_entries;
+	const size_t combined_cells = regular_cells + hlod_entries;
+
+	const bool needs_rebuild = m_cachedRegularInstanceScene.m_instances.capacity() < regular_instances ||
+			m_cachedRegularInstanceScene.m_cells.capacity() < regular_cells ||
+			m_cachedHlodInstanceScene.m_instances.capacity() < hlod_entries ||
+			m_cachedHlodInstanceScene.m_cells.capacity() < hlod_entries ||
+			m_cachedInstanceScene.m_instances.capacity() < combined_instances ||
+			m_cachedInstanceScene.m_cells.capacity() < combined_cells ||
+			m_cachedHlodMeshSources.capacity() < hlod_entries;
+	bool bank_needs_rebuild = false;
+	for ( const t3dRdInstanceSceneBank_t &bank : m_instanceSceneBanks ) {
+		bank_needs_rebuild = bank_needs_rebuild || bank.m_snapshot.m_instances.capacity() < combined_instances ||
+				bank.m_snapshot.m_cells.capacity() < combined_cells;
+	}
+	if ( !needs_rebuild && !bank_needs_rebuild ) {
+		return;
+	}
+
+	Terrain3DAllocationPhaseScope allocation_phase( TERRAIN3D_ALLOCATION_PHASE_COLD_REBUILD );
+	if ( m_cachedRegularInstanceScene.m_instances.capacity() < regular_instances ) {
+		m_cachedRegularInstanceScene.m_instances.reserve( regular_instances );
+	}
+	if ( m_cachedRegularInstanceScene.m_cells.capacity() < regular_cells ) {
+		m_cachedRegularInstanceScene.m_cells.reserve( regular_cells );
+	}
+	if ( m_cachedHlodInstanceScene.m_instances.capacity() < hlod_entries ) {
+		m_cachedHlodInstanceScene.m_instances.reserve( hlod_entries );
+	}
+	if ( m_cachedHlodInstanceScene.m_cells.capacity() < hlod_entries ) {
+		m_cachedHlodInstanceScene.m_cells.reserve( hlod_entries );
+	}
+	if ( m_cachedInstanceScene.m_instances.capacity() < combined_instances ) {
+		m_cachedInstanceScene.m_instances.reserve( combined_instances );
+	}
+	if ( m_cachedInstanceScene.m_cells.capacity() < combined_cells ) {
+		m_cachedInstanceScene.m_cells.reserve( combined_cells );
+	}
+	if ( m_cachedHlodMeshSources.capacity() < hlod_entries ) {
+		m_cachedHlodMeshSources.reserve( hlod_entries );
+	}
+	for ( t3dRdInstanceSceneBank_t &bank : m_instanceSceneBanks ) {
+		if ( bank.m_snapshot.m_instances.capacity() < combined_instances ) {
+			bank.m_snapshot.m_instances.reserve( combined_instances );
+		}
+		if ( bank.m_snapshot.m_cells.capacity() < combined_cells ) {
+			bank.m_snapshot.m_cells.reserve( combined_cells );
+		}
+	}
+}
+
+void Terrain3DRenderCoordinator::ensureInstanceMeshBankStorage( void ) {
+	Terrain3DAllocationPhaseScope allocation_phase( TERRAIN3D_ALLOCATION_PHASE_COLD_REBUILD );
+	for ( t3dRdInstanceMeshBank_t &bank : m_instanceMeshBanks ) {
+		t3dRdMeshSourceSnapshot_t &snapshot = bank.m_snapshot;
+		if ( snapshot.m_vertexChunkHashes.capacity() < m_cachedInstanceMeshes.m_vertexChunkHashes.size() ) {
+			snapshot.m_vertexChunkHashes.reserve( m_cachedInstanceMeshes.m_vertexChunkHashes.size() );
+		}
+		if ( snapshot.m_index16ChunkHashes.capacity() < m_cachedInstanceMeshes.m_index16ChunkHashes.size() ) {
+			snapshot.m_index16ChunkHashes.reserve( m_cachedInstanceMeshes.m_index16ChunkHashes.size() );
+		}
+		if ( snapshot.m_index32ChunkHashes.capacity() < m_cachedInstanceMeshes.m_index32ChunkHashes.size() ) {
+			snapshot.m_index32ChunkHashes.reserve( m_cachedInstanceMeshes.m_index32ChunkHashes.size() );
+		}
+		if ( snapshot.m_surfaces.capacity() < m_cachedInstanceMeshes.m_surfaces.size() ) {
+			snapshot.m_surfaces.reserve( m_cachedInstanceMeshes.m_surfaces.size() );
+		}
+		if ( snapshot.m_lods.capacity() < m_cachedInstanceMeshes.m_lods.size() ) {
+			snapshot.m_lods.reserve( m_cachedInstanceMeshes.m_lods.size() );
+		}
+		if ( snapshot.m_materials.capacity() < m_cachedInstanceMeshes.m_materials.size() ) {
+			snapshot.m_materials.reserve( m_cachedInstanceMeshes.m_materials.size() );
+		}
+		if ( snapshot.m_textures.capacity() < m_cachedInstanceMeshes.m_textures.size() ) {
+			snapshot.m_textures.reserve( m_cachedInstanceMeshes.m_textures.size() );
+		}
+	}
+}
+
 void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 	if ( !m_pTerrain || !m_pTerrain->getMesher() || !m_pTerrain->getData() ) return;
 	if ( m_nSnapshotWriteIndex >= s_nRdFrameSnapshotSlotCount ) {
 		m_bRendererFailed.store( true, std::memory_order_release );
 		return;
 	}
+	ensureInstancePublicationStorage();
 	// The exchange still owns frame slots exactly as before. Large immutable
 	// payloads are addressed through fixed generation banks instead of cloned
 	// into every reclaimed frame slot.
@@ -750,12 +849,9 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 			return;
 		}
 		const int64_t required_bytes = region_map_count * (int64_t)( sizeof( uint32_t ) );
-		if ( !m_bRegionMapInitialized ) {
-			for ( t3dRdRegionMapBank_t &region_bank : m_regionMapBanks ) {
-				region_bank.m_bytes.resize( required_bytes );
-			}
-		} else if ( m_regionMapBanks[bank].m_bytes.size() != required_bytes ) {
-			m_regionMapBanks[bank].m_bytes.resize( required_bytes );
+		if ( required_bytes > m_regionMapBanks[bank].m_bytes.size() ) {
+			LOG( ERROR, "RD region-map publication exceeded fixed bank capacity" );
+			return;
 		}
 		uint8_t *const pPackedRegionMap = m_regionMapBanks[bank].m_bytes.ptrw();
 		for ( int64_t i = 0; i < region_map_count; ++i ) {
@@ -861,10 +957,16 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 	if ( hlod_changed ) {
 		m_cachedHlodMeshSources.clear();
 		if ( hlod_streamer ) {
-			hlod_streamer->fillRdMeshSources( m_cachedHlodMeshSources );
-			hlod_streamer->buildRdInstanceSnapshot( m_cachedHlodInstanceScene );
+			if ( !hlod_streamer->fillRdMeshSources( m_cachedHlodMeshSources ) ||
+					!hlod_streamer->buildRdInstanceSnapshot( m_cachedHlodInstanceScene ) ) {
+				std::lock_guard<std::mutex> lock( m_diagnosticsMutex );
+				m_initializationError = "Fixed RD HLOD publication capacity was exceeded";
+				return;
+			}
 		} else {
-			m_cachedHlodInstanceScene = t3dRdInstanceSceneSnapshot_t{};
+			m_cachedHlodInstanceScene.m_instances.clear();
+			m_cachedHlodInstanceScene.m_cells.clear();
+			m_cachedHlodInstanceScene.m_nGeneration = 0u;
 		}
 		m_bCachedHlodInstanceSceneValid = true;
 		m_nHlodSceneGeneration = hlod_generation;
@@ -873,6 +975,7 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 	const uint64_t mesh_fingerprint = Terrain3DRdMeshCache::computeSourceFingerprint(
 			instance_assets, m_cachedHlodMeshSources );
 	if ( !m_bCachedInstanceMeshesValid || mesh_fingerprint != m_nInstanceMeshFingerprint ) {
+		Terrain3DAllocationPhaseScope allocation_phase( TERRAIN3D_ALLOCATION_PHASE_COLD_REBUILD );
 		m_nInstanceMeshGeneration = advanceGeneration( m_nInstanceMeshGeneration );
 		String mesh_error;
 		const bool built = Terrain3DRdMeshCache::buildSourceSnapshot(
@@ -887,6 +990,7 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 			m_initializationError = "Failed to publish RD instance/HLOD meshes: " + mesh_error;
 			return;
 		}
+		ensureInstanceMeshBankStorage();
 		m_bCachedInstanceMeshesValid = true;
 		m_nInstanceMeshFingerprint = mesh_fingerprint;
 	}
@@ -895,8 +999,17 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 	const uint64_t instance_generation = instancer ? instancer->getRdPublicationGeneration() : 0u;
 	const bool regular_changed = !m_bCachedRegularInstanceSceneValid || instance_generation != m_nInstanceSceneGeneration;
 	if ( regular_changed ) {
-		if ( instancer ) instancer->buildRdInstanceSnapshot( m_cachedRegularInstanceScene );
-		else m_cachedRegularInstanceScene = t3dRdInstanceSceneSnapshot_t{};
+		if ( instancer ) {
+			if ( !instancer->buildRdInstanceSnapshot( m_cachedRegularInstanceScene ) ) {
+				std::lock_guard<std::mutex> lock( m_diagnosticsMutex );
+				m_initializationError = "Fixed RD instance publication capacity was exceeded";
+				return;
+			}
+		} else {
+			m_cachedRegularInstanceScene.m_instances.clear();
+			m_cachedRegularInstanceScene.m_cells.clear();
+			m_cachedRegularInstanceScene.m_nGeneration = 0u;
+		}
 		m_bCachedRegularInstanceSceneValid = true;
 		m_nInstanceSceneGeneration = instance_generation;
 	}
@@ -906,8 +1019,16 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 		combined.m_cells.clear();
 		m_nCombinedInstanceSceneGeneration = advanceGeneration( m_nCombinedInstanceSceneGeneration );
 		combined.m_nGeneration = m_nCombinedInstanceSceneGeneration;
-		combined.m_instances.reserve( m_cachedRegularInstanceScene.m_instances.size() + m_cachedHlodInstanceScene.m_instances.size() );
-		combined.m_cells.reserve( m_cachedRegularInstanceScene.m_cells.size() + m_cachedHlodInstanceScene.m_cells.size() );
+		const size_t combined_instance_count =
+				m_cachedRegularInstanceScene.m_instances.size() + m_cachedHlodInstanceScene.m_instances.size();
+		const size_t combined_cell_count =
+				m_cachedRegularInstanceScene.m_cells.size() + m_cachedHlodInstanceScene.m_cells.size();
+		if ( combined_instance_count > combined.m_instances.capacity() ||
+				combined_cell_count > combined.m_cells.capacity() ) {
+			std::lock_guard<std::mutex> lock( m_diagnosticsMutex );
+			m_initializationError = "Fixed RD combined instance publication capacity was exceeded";
+			return;
+		}
 		combined.m_instances.insert( combined.m_instances.end(),
 				m_cachedRegularInstanceScene.m_instances.begin(), m_cachedRegularInstanceScene.m_instances.end() );
 		combined.m_cells.insert( combined.m_cells.end(),
@@ -1061,7 +1182,6 @@ void Terrain3DRenderCoordinator::resetSnapshotPublication( void ) {
 	m_nRegionCacheGeneration = 0u;
 	m_nLastPatchFingerprint = 0u;
 	m_nPatchGeneration = 0u;
-	m_previousPatches.fill( t3dRdPatch_t{} );
 	m_nPreviousPatchCount = 0u;
 	m_nLastMaterialFingerprint = 0u;
 	m_nMaterialGeneration = 0u;
@@ -1205,6 +1325,13 @@ void Terrain3DRenderCoordinator::initialize( Terrain3D *const pTerrain ) {
 	shutdown();
 	m_pTerrain = pTerrain;
 	if ( !m_pTerrain ) return;
+	{
+		Terrain3DAllocationPhaseScope allocation_phase( TERRAIN3D_ALLOCATION_PHASE_COLD_REBUILD );
+		const int64_t region_map_bank_bytes = ( int64_t )( s_nMaxRegionSlots * sizeof( uint32_t ) );
+		for ( t3dRdRegionMapBank_t &bank : m_regionMapBanks ) {
+			bank.m_bytes.resize( region_map_bank_bytes );
+		}
+	}
 	OS *const os = OS::get_singleton();
 	const bool bCompareCulling = os && os->get_environment( "TERRAIN3D_RD_COMPARE_CULL" ) == "1";
 	const bool bDirectDebug = os && os->get_environment( "TERRAIN3D_RD_DIRECT_DRAW" ) == "1";
@@ -1410,6 +1537,7 @@ void Terrain3DRenderCoordinator::render( RenderData *const pRenderData ) {
 	const t3dRdInstanceSceneBank_t *const pScene = publication->m_nInstanceSceneBank < s_nRdFrameSnapshotSlotCount
 			? &m_instanceSceneBanks[publication->m_nInstanceSceneBank] : nullptr;
 	const bool bHasTerrain = snapshot.m_nPatchCount > 0u && pRegionMap && !pRegionMap->m_bytes.is_empty();
+	Terrain3DAllocationPhaseScope allocation_phase( TERRAIN3D_ALLOCATION_PHASE_HOT_RENDER );
 	const bool instances_ok = m_instanceRenderer.render( pRenderData,
 			pMeshes ? &pMeshes->m_snapshot : nullptr,
 			pScene ? &pScene->m_snapshot : nullptr,
@@ -1546,6 +1674,7 @@ bool Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 		m_nForwardPreparedScenePass = rContext.m_nScenePass;
 		m_nForwardPreparedViewportKey = rContext.m_nViewportKey;
 		m_bForwardPreparedHasTerrain = has_terrain;
+		Terrain3DAllocationPhaseScope allocation_phase( TERRAIN3D_ALLOCATION_PHASE_HOT_RENDER );
 		const bool instances_ok = transparent_pass ? true : m_instanceRenderer.prepareForwardPass( rContext,
 				pMeshes ? &pMeshes->m_snapshot : nullptr,
 				pScene ? &pScene->m_snapshot : nullptr,
@@ -1580,6 +1709,7 @@ bool Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 	if ( rContext.m_phase != T3D_RD_FORWARD_PHASE_SUBMIT || !m_bRendererInitialized.load( std::memory_order_acquire ) ||
 			m_nForwardPreparedScenePass != rContext.m_nScenePass || m_nForwardPreparedViewportKey != rContext.m_nViewportKey ) return false;
 	const bool transparent_pass = rContext.m_passKind == T3D_RD_FORWARD_PASS_TRANSPARENT;
+	Terrain3DAllocationPhaseScope allocation_phase( TERRAIN3D_ALLOCATION_PHASE_HOT_RENDER );
 	const bool instances_ok = transparent_pass ? true : m_instanceRenderer.renderForwardPass( rContext );
 	const bool terrain_ok = !m_bForwardPreparedHasTerrain || m_renderer.renderForwardPass( rContext );
 	const bool ocean_ok = !m_bForwardPreparedHasOcean || m_oceanRenderer.renderForwardPass( rContext );

@@ -75,6 +75,17 @@ typedef struct t3dBrushParams_s {
 	uint32_t m_nFeatureFlags = 0u;
 } t3dBrushParams_t;
 
+typedef struct t3dDerivedMapComputeJob_s {
+	const float *m_pHeightHalo = nullptr;
+	uint8_t *m_pRgbaOutput = nullptr;
+	uint32_t m_nHaloElements = 0u;
+	uint32_t m_nOutputBytes = 0u;
+	uint32_t m_nWidth = 0u;
+	uint32_t m_nHeight = 0u;
+	float m_fVertexSpacing = 1.0f;
+	bool m_bSuccess = false;
+} t3dDerivedMapComputeJob_t;
+
 typedef struct t3dPipeline_s {
 	RID m_hShader;
 	RID m_hPipeline;
@@ -97,11 +108,7 @@ public:
 
 	bool processBrush( eastl::vector<t3dBrushElement_t> &rElements, const t3dBrushParams_t &rParams );
 	static void processBrushCpu( eastl::vector<t3dBrushElement_t> &rElements, const t3dBrushParams_t &rParams );
-	bool generateDerivedMap( const eastl::vector<float> &fHeightHalo,
-			int nWidth,
-			int nHeight,
-			float fVertexSpacing,
-			PackedByteArray &rRgba8 );
+	bool generateDerivedMaps( t3dDerivedMapComputeJob_t *pJobs, uint32_t nJobCount );
 	// Builds a render-thread-safe snapshot without touching the global RenderingDevice.
 	// The raw GLSL path is intentionally restricted to non-projected, non-detiled
 	// packed-PBR/R8 materials; all other variants retain the raster fallback.
@@ -112,6 +119,14 @@ public:
 	bool dispatchDisplacementRequest( const t3dDisplacementRequest_t &rRequest, RID &rTexture );
 	// Must execute on the render thread before Terrain3DCompute is destroyed.
 	void shutdownDisplacementResources( void );
+	EA_FORCE_INLINE uint64_t getRetainedLocalGpuBufferBytes( void ) const {
+		uint64_t bytes = m_hBrushBuffer.is_valid() ? m_nBrushCapacity : 0u;
+		for ( uint32_t slot = 0u; slot < s_nDerivedReadbackSlotCount; ++slot ) {
+			if ( m_szDerivedInputBuffer[slot].is_valid() ) bytes += m_nszDerivedInputCapacity[slot];
+			if ( m_szDerivedOutputBuffer[slot].is_valid() ) bytes += m_nszDerivedOutputCapacity[slot];
+		}
+		return bytes;
+	}
 
 private:
 	RenderingDevice *m_pRd = nullptr; // Owned local device for readback workloads.
@@ -121,10 +136,11 @@ private:
 	t3dPipeline_t m_displacementPipeline;
 	Ref<RDShaderSPIRV> m_displacementSpirv;
 	RID m_hBrushBuffer;
-	RID m_hDerivedInputBuffer;
-	RID m_hDerivedOutputBuffer;
+	static constexpr uint32_t s_nDerivedReadbackSlotCount = 3u;
+	RID m_szDerivedInputBuffer[s_nDerivedReadbackSlotCount];
+	RID m_szDerivedOutputBuffer[s_nDerivedReadbackSlotCount];
 	RID m_hBrushUniformSet;
-	RID m_hDerivedUniformSet;
+	RID m_szDerivedUniformSet[s_nDerivedReadbackSlotCount];
 	RID m_hDisplacementUniformSet;
 	RID m_hDisplacementRegionBuffer;
 	RID m_hDisplacementMaterialBuffer;
@@ -141,8 +157,8 @@ private:
 	uint32_t m_nDisplacementWidth = 0u;
 	uint32_t m_nDisplacementHeight = 0u;
 	uint32_t m_nBrushCapacity = 0u;
-	uint32_t m_nDerivedInputCapacity = 0u;
-	uint32_t m_nDerivedOutputCapacity = 0u;
+	uint32_t m_nszDerivedInputCapacity[s_nDerivedReadbackSlotCount]{};
+	uint32_t m_nszDerivedOutputCapacity[s_nDerivedReadbackSlotCount]{};
 	mutable std::mutex m_errorMutex;
 	String m_lastError;
 	bool m_bDeviceAttempted = false;
@@ -153,7 +169,7 @@ private:
 	bool ensurePipeline( t3dPipeline_t &rPipeline, const String &rPath, const String &rName );
 	bool ensureRenderPipeline( t3dPipeline_t &rPipeline, const Ref<RDShaderSPIRV> &rSpirv, const String &rName );
 	bool ensureBrushCapacity( uint32_t nBytes );
-	bool ensureDerivedCapacity( uint32_t nInputBytes, uint32_t nOutputBytes );
+	bool ensureDerivedCapacity( uint32_t nSlot, uint32_t nInputBytes, uint32_t nOutputBytes );
 	bool ensureDisplacementResources( uint32_t nWidth, uint32_t nHeight, const Ref<RDShaderSPIRV> &rSpirv );
 	void freeUniformSet( RID &rUniformSet );
 	void freeBuffer( RID &rBuffer );

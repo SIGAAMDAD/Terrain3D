@@ -2,6 +2,8 @@
 
 #include "memory/terrain_3d_memory_zone.h"
 
+#include "memory/terrain_3d_memory.h"
+
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
@@ -9,6 +11,18 @@
 #include <mutex>
 
 constexpr uint32_t Terrain3DMemoryZone::s_szSmallClasses[Terrain3DMemoryZone::s_nSmallClassCount];
+
+EA_FORCE_INLINE static void t3dMemoryZoneResetSmallPage( t3dMemoryZoneSmallPage_t &rPage ) {
+	std::memset( &rPage, 0, sizeof( rPage ) );
+	rPage.m_iFirstFree = UINT32_MAX;
+	rPage.m_iClass = UINT16_MAX;
+}
+
+EA_FORCE_INLINE static void t3dMemoryZoneResetAllocationHeader( t3dMemoryZoneAllocationHeader_t &rHeader ) {
+	std::memset( &rHeader, 0, sizeof( rHeader ) );
+	rHeader.m_iPage = UINT16_MAX;
+	rHeader.m_iClass = UINT16_MAX;
+}
 
 Terrain3DMemoryZone::~Terrain3DMemoryZone() {
 	if ( !release() ) {
@@ -35,7 +49,7 @@ bool Terrain3DMemoryZone::initialize( void *const pBacking, const size_t nBytes 
 	m_nFreeExtentCount = 1u;
 	m_szFreeExtents[0] = { 0u, nBytes };
 	for ( t3dMemoryZoneSmallPage_t &page : m_szSmallPages ) {
-		page = {};
+		t3dMemoryZoneResetSmallPage( page );
 	}
 	m_nLiveAllocations = 0u;
 	m_nLiveBytes = 0u;
@@ -176,7 +190,7 @@ void *Terrain3DMemoryZone::allocateSmallUnlocked( const int nClassIndex, const s
 			return nullptr;
 		}
 		t3dMemoryZoneSmallPage_t &page = m_szSmallPages[page_index];
-		page = {};
+		t3dMemoryZoneResetSmallPage( page );
 		page.m_bActive = true;
 		page.m_iOffset = page_offset;
 		page.m_nBytes = s_nSmallPageBytes;
@@ -201,7 +215,7 @@ void *Terrain3DMemoryZone::allocateSmallUnlocked( const int nClassIndex, const s
 	page.m_iFirstFree = *reinterpret_cast<uint32_t *>( payload );
 	++page.m_nLiveBlocks;
 	t3dMemoryZoneAllocationHeader_t *const header = reinterpret_cast<t3dMemoryZoneAllocationHeader_t *>( block_start );
-	*header = {};
+	t3dMemoryZoneResetAllocationHeader( *header );
 	header->m_nMagic = s_nAllocationMagic;
 	header->m_iExtentOffset = page.m_iOffset + ( size_t )block * page.m_nBlockStride;
 	header->m_nExtentBytes = page.m_nBlockStride;
@@ -233,7 +247,7 @@ void *Terrain3DMemoryZone::allocateLargeUnlocked( const size_t nBytes, const siz
 	const size_t used = user_offset + nBytes - extent_offset;
 	t3dMemoryZoneAllocationHeader_t *const header = reinterpret_cast<t3dMemoryZoneAllocationHeader_t *>(
 			m_pBase + user_offset - sizeof( t3dMemoryZoneAllocationHeader_t ) );
-	*header = {};
+	t3dMemoryZoneResetAllocationHeader( *header );
 	header->m_nMagic = s_nAllocationMagic;
 	header->m_iExtentOffset = extent_offset;
 	header->m_nExtentBytes = used;
@@ -257,6 +271,9 @@ void *Terrain3DMemoryZone::allocateUnlocked( const size_t nBytes, const size_t n
 }
 
 void *Terrain3DMemoryZone::allocate( const size_t nBytes, const size_t nAlignment ) {
+	if ( nBytes == 0u || !t3dValidateRuntimeAllocationRequest() ) {
+		return nullptr;
+	}
 	std::lock_guard<std::mutex> lock( m_mutex );
 	void *const pMemory = allocateUnlocked( nBytes, std::max( nAlignment, ( size_t )alignof( void * ) ) );
 	if ( !pMemory ) {
@@ -301,7 +318,7 @@ void Terrain3DMemoryZone::freeUnlocked( void *const pMemory ) {
 				page.m_nBlockStride - sizeof( t3dMemoryZoneAllocationHeader_t ) - s_szSmallClasses[class_index];
 		if ( page.m_nLiveBlocks == 0u ) {
 			insertFreeExtentUnlocked( page.m_iOffset, page.m_nBytes );
-			page = {};
+			t3dMemoryZoneResetSmallPage( page );
 			if ( m_nActiveSmallPages > 0u ) {
 				--m_nActiveSmallPages;
 			}

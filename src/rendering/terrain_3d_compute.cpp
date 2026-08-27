@@ -304,27 +304,33 @@ bool Terrain3DCompute::ensureBrushCapacity( const uint32_t nBytes ) {
 	return true;
 }
 
-bool Terrain3DCompute::ensureDerivedCapacity( const uint32_t nInputBytes, const uint32_t nOutputBytes ) {
-	if ( nInputBytes <= m_nDerivedInputCapacity && nOutputBytes <= m_nDerivedOutputCapacity &&
-			m_hDerivedInputBuffer.is_valid() && m_hDerivedOutputBuffer.is_valid() && m_hDerivedUniformSet.is_valid() ) {
+bool Terrain3DCompute::ensureDerivedCapacity( const uint32_t nSlot,
+		const uint32_t nInputBytes,
+		const uint32_t nOutputBytes ) {
+	if ( nSlot >= s_nDerivedReadbackSlotCount ) {
+		return false;
+	}
+	if ( nInputBytes <= m_nszDerivedInputCapacity[nSlot] && nOutputBytes <= m_nszDerivedOutputCapacity[nSlot] &&
+			m_szDerivedInputBuffer[nSlot].is_valid() && m_szDerivedOutputBuffer[nSlot].is_valid() &&
+			m_szDerivedUniformSet[nSlot].is_valid() ) {
 		return true;
 	}
-	freeUniformSet( m_hDerivedUniformSet );
-	freeBuffer( m_hDerivedInputBuffer );
-	freeBuffer( m_hDerivedOutputBuffer );
-	m_nDerivedInputCapacity = growthCapacity( nInputBytes );
-	m_nDerivedOutputCapacity = growthCapacity( nOutputBytes );
-	m_hDerivedInputBuffer = m_pRd->storage_buffer_create( m_nDerivedInputCapacity );
-	m_hDerivedOutputBuffer = m_pRd->storage_buffer_create( m_nDerivedOutputCapacity );
-	if ( !m_hDerivedInputBuffer.is_valid() || !m_hDerivedOutputBuffer.is_valid() ) {
+	freeUniformSet( m_szDerivedUniformSet[nSlot] );
+	freeBuffer( m_szDerivedInputBuffer[nSlot] );
+	freeBuffer( m_szDerivedOutputBuffer[nSlot] );
+	m_nszDerivedInputCapacity[nSlot] = growthCapacity( nInputBytes );
+	m_nszDerivedOutputCapacity[nSlot] = growthCapacity( nOutputBytes );
+	m_szDerivedInputBuffer[nSlot] = m_pRd->storage_buffer_create( m_nszDerivedInputCapacity[nSlot] );
+	m_szDerivedOutputBuffer[nSlot] = m_pRd->storage_buffer_create( m_nszDerivedOutputCapacity[nSlot] );
+	if ( !m_szDerivedInputBuffer[nSlot].is_valid() || !m_szDerivedOutputBuffer[nSlot].is_valid() ) {
 		setError( "Failed to allocate derived-map compute buffers" );
 		return false;
 	}
 	TypedArray<Ref<RDUniform>> pUniforms;
-	pUniforms.push_back( t3dComputeMakeStorageUniform( 0, m_hDerivedInputBuffer ) );
-	pUniforms.push_back( t3dComputeMakeStorageUniform( 1, m_hDerivedOutputBuffer ) );
-	m_hDerivedUniformSet = m_pRd->uniform_set_create( pUniforms, m_derivedPipeline.m_hShader, 0u );
-	if ( !m_hDerivedUniformSet.is_valid() ) {
+	pUniforms.push_back( t3dComputeMakeStorageUniform( 0, m_szDerivedInputBuffer[nSlot] ) );
+	pUniforms.push_back( t3dComputeMakeStorageUniform( 1, m_szDerivedOutputBuffer[nSlot] ) );
+	m_szDerivedUniformSet[nSlot] = m_pRd->uniform_set_create( pUniforms, m_derivedPipeline.m_hShader, 0u );
+	if ( !m_szDerivedUniformSet[nSlot].is_valid() ) {
 		setError( "Failed to create derived-map compute uniform set" );
 		return false;
 	}
@@ -882,40 +888,14 @@ bool Terrain3DCompute::processBrush( eastl::vector<t3dBrushElement_t> &rElements
 	return true;
 }
 
-bool Terrain3DCompute::generateDerivedMap( const eastl::vector<float> &fHeightHalo,
-		const int nWidth,
-		const int nHeight,
-		const float fVertexSpacing,
-		PackedByteArray &rRgba8 ) {
-	if ( nWidth <= 0 || nHeight <= 0 || fVertexSpacing <= 0.0f ) {
-		setError( "Invalid derived-map dimensions or vertex spacing" );
-		return false;
-	}
-	const size_t halo_size = ( size_t )( nWidth + 2 ) * ( size_t )( nHeight + 2 );
-	if ( fHeightHalo.size() != halo_size ) {
-		setError( "Derived-map halo does not match tile dimensions" );
+bool Terrain3DCompute::generateDerivedMaps( t3dDerivedMapComputeJob_t *const pJobs, const uint32_t nJobCount ) {
+	if ( !pJobs || nJobCount == 0u || nJobCount > s_nDerivedReadbackSlotCount ) {
+		setError( "Derived-map compute batch must contain one to three jobs" );
 		return false;
 	}
 	if ( !ensurePipeline( m_derivedPipeline,
 				 "res://addons/terrain_3d/compute/terrain_derived.glsl",
 				 "Terrain3D derived map compute" ) ) {
-		return false;
-	}
-	const uint64_t input_bytes_64 = ( uint64_t )( fHeightHalo.size() ) * sizeof( float );
-	const uint64_t output_bytes_64 = ( uint64_t )( nWidth ) * ( uint64_t )( nHeight ) * sizeof( uint32_t );
-	if ( input_bytes_64 > std::numeric_limits<uint32_t>::max() ||
-			output_bytes_64 > std::numeric_limits<uint32_t>::max() ) {
-		setError( "Derived-map buffer exceeds 4 GiB" );
-		return false;
-	}
-	const uint32_t input_bytes = ( uint32_t )( input_bytes_64 );
-	const uint32_t output_bytes = ( uint32_t )( output_bytes_64 );
-	if ( !ensureDerivedCapacity( input_bytes, output_bytes ) ) {
-		return false;
-	}
-	const PackedByteArray input = copyToBytes( fHeightHalo.data(), input_bytes );
-	if ( m_pRd->buffer_update( m_hDerivedInputBuffer, 0u, input_bytes, input ) != OK ) {
-		setError( "Failed to upload derived-map height halo" );
 		return false;
 	}
 	typedef struct t3dDerivedParams_s {
@@ -924,24 +904,57 @@ bool Terrain3DCompute::generateDerivedMap( const eastl::vector<float> &fHeightHa
 		uint32_t m_nHaloStride;
 		float m_fVertexSpacing;
 	} t3dDerivedParams_t;
-	t3dDerivedParams_t params{
-		( uint32_t )( nWidth ), ( uint32_t )( nHeight ), ( uint32_t )( nWidth + 2 ), fVertexSpacing
-	};
-	const PackedByteArray push = copyToBytes( &params, sizeof( params ) );
-	const uint32_t count = ( uint32_t )( nWidth * nHeight );
+
+	for ( uint32_t slot = 0u; slot < nJobCount; ++slot ) {
+		t3dDerivedMapComputeJob_t &job = pJobs[slot];
+		job.m_bSuccess = false;
+		if ( !job.m_pHeightHalo || !job.m_pRgbaOutput || job.m_nWidth == 0u || job.m_nHeight == 0u ||
+				job.m_fVertexSpacing <= 0.0f || job.m_nHaloElements != ( job.m_nWidth + 2u ) * ( job.m_nHeight + 2u ) ||
+				job.m_nOutputBytes != job.m_nWidth * job.m_nHeight * sizeof( uint32_t ) ) {
+			setError( "Invalid derived-map batch job" );
+			return false;
+		}
+		const uint64_t input_bytes_64 = ( uint64_t )job.m_nHaloElements * sizeof( float );
+		if ( input_bytes_64 > std::numeric_limits<uint32_t>::max() ) {
+			setError( "Derived-map input exceeds 4 GiB" );
+			return false;
+		}
+		const uint32_t input_bytes = ( uint32_t )input_bytes_64;
+		if ( !ensureDerivedCapacity( slot, input_bytes, job.m_nOutputBytes ) ) {
+			return false;
+		}
+		const PackedByteArray input = copyToBytes( job.m_pHeightHalo, input_bytes );
+		if ( m_pRd->buffer_update( m_szDerivedInputBuffer[slot], 0u, input_bytes, input ) != OK ) {
+			setError( "Failed to upload derived-map height halo" );
+			return false;
+		}
+	}
+
 	const int64_t list = m_pRd->compute_list_begin();
 	m_pRd->compute_list_bind_compute_pipeline( list, m_derivedPipeline.m_hPipeline );
-	m_pRd->compute_list_bind_uniform_set( list, m_hDerivedUniformSet, 0u );
-	m_pRd->compute_list_set_push_constant( list, push, ( uint32_t )( sizeof( params ) ) );
-	m_pRd->compute_list_dispatch( list, ( count + s_nComputeWorkgroupSize - 1u ) / s_nComputeWorkgroupSize, 1u, 1u );
+	for ( uint32_t slot = 0u; slot < nJobCount; ++slot ) {
+		const t3dDerivedMapComputeJob_t &job = pJobs[slot];
+		const t3dDerivedParams_t params{ job.m_nWidth, job.m_nHeight, job.m_nWidth + 2u, job.m_fVertexSpacing };
+		const PackedByteArray push = copyToBytes( &params, sizeof( params ) );
+		const uint32_t count = job.m_nWidth * job.m_nHeight;
+		m_pRd->compute_list_bind_uniform_set( list, m_szDerivedUniformSet[slot], 0u );
+		m_pRd->compute_list_set_push_constant( list, push, ( uint32_t )( sizeof( params ) ) );
+		m_pRd->compute_list_dispatch( list, ( count + s_nComputeWorkgroupSize - 1u ) / s_nComputeWorkgroupSize, 1u, 1u );
+	}
 	m_pRd->compute_list_end();
 	m_pRd->submit();
+	// All outputs are consumed immediately by the edit transaction. This is the
+	// single dependency point for the whole batch, rather than one sync per job.
 	m_pRd->sync();
-	rRgba8 = m_pRd->buffer_get_data( m_hDerivedOutputBuffer, 0u, output_bytes );
-	if ( rRgba8.size() != output_bytes ) {
-		setError( "Derived-map compute readback returned an unexpected byte count" );
-		rRgba8.clear();
-		return false;
+	for ( uint32_t slot = 0u; slot < nJobCount; ++slot ) {
+		t3dDerivedMapComputeJob_t &job = pJobs[slot];
+		const PackedByteArray output = m_pRd->buffer_get_data( m_szDerivedOutputBuffer[slot], 0u, job.m_nOutputBytes );
+		if ( output.size() != job.m_nOutputBytes ) {
+			setError( "Derived-map compute readback returned an unexpected byte count" );
+			continue;
+		}
+		std::memcpy( job.m_pRgbaOutput, output.ptr(), job.m_nOutputBytes );
+		job.m_bSuccess = true;
 	}
 	return true;
 }
@@ -951,10 +964,15 @@ void Terrain3DCompute::shutdown( void ) {
 		return;
 	}
 	freeUniformSet( m_hBrushUniformSet );
-	freeUniformSet( m_hDerivedUniformSet );
 	freeBuffer( m_hBrushBuffer );
-	freeBuffer( m_hDerivedInputBuffer );
-	freeBuffer( m_hDerivedOutputBuffer );
+	for ( uint32_t slot = 0u; slot < s_nDerivedReadbackSlotCount; ++slot ) {
+		freeUniformSet( m_szDerivedUniformSet[slot] );
+		freeBuffer( m_szDerivedInputBuffer[slot] );
+		freeBuffer( m_szDerivedOutputBuffer[slot] );
+		m_nszDerivedInputCapacity[slot] = 0u;
+		m_nszDerivedOutputCapacity[slot] = 0u;
+	}
+	m_nBrushCapacity = 0u;
 	freePipeline( m_brushPipeline );
 	freePipeline( m_derivedPipeline );
 	memdelete( m_pRd );

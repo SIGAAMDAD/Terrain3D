@@ -127,6 +127,9 @@ public:
 	}
 
 	void *allocate( const size_t nBytes, const size_t nAlignment ) {
+		if ( nBytes > 0u && !t3dValidateRuntimeAllocationRequest() ) {
+			return nullptr;
+		}
 		if ( nBytes == 0u ) {
 			return nullptr;
 		}

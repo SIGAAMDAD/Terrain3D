@@ -100,6 +100,10 @@ public:
 		return allocate( n, alignof( std::max_align_t ), 0, 0 );
 	}
 	void *allocate( const size_t n, size_t alignment, const size_t alignment_offset, int = 0 ) {
+		if ( n > 0u && !t3dValidateRuntimeAllocationRequest() ) {
+			recordFailure();
+			return nullptr;
+		}
 		if ( alignment < alignof( void * ) ) {
 			alignment = alignof( void * );
 		}

@@ -120,7 +120,7 @@ struct MaterialConfig {
 	uint projection_mode;
 	uint tessellation_material_mode;
 	uint world_noise_mode;
-	uint reserved_0;
+	uint texture_layer_counts;
 	float displacement_sharpness;
 	float blend_sharpness;
 	float distant_normal_scale;
@@ -134,7 +134,7 @@ struct MaterialConfig {
 	uint auto_base_texture;
 	uint auto_overlay_texture;
 	uint dual_scale_texture;
-	uint reserved_1;
+	uint far_albedo_layer_count;
 	float dual_scale_reduction;
 	float tri_scale_reduction;
 	float dual_scale_far;
@@ -164,7 +164,7 @@ struct MaterialConfig {
 	float world_noise_offset_x;
 	float world_noise_offset_y;
 	float world_noise_offset_z;
-	float world_noise_padding;
+	float world_noise_cache_max_lod;
 	float silhouette_r;
 	float silhouette_g;
 	float silhouette_b;
@@ -288,10 +288,11 @@ vec3 fragment_world_noise_2d( vec2 x ) {
 	float k3 = d - ( b + k2 );
 	return vec3( fma( k2, u.y, fma( u.x, fma( k3, u.y, k1 ), a ) ), du * fma( vec2( k3 ), u.yx, vec2( k1, k2 ) ) );
 }
-float fragment_world_noise_value( vec2 world_texel ) {
+vec3 fragment_world_noise_sample( vec2 world_texel ) {
+	float base_scale = material_config.world_noise_scale * ( 0.1 / 1024.0 );
 	vec2 p =
 		( world_texel + vec2( material_config.world_noise_offset_x, material_config.world_noise_offset_z ) * 1024.0 ) *
-		material_config.world_noise_scale * ( 0.1 / 1024.0 );
+		base_scale;
 	float distance_to_target = length( world_texel * frame_data.mesh_params.x - frame_data.target_params.xy );
 	int max_octaves = int( clamp( material_config.world_noise_max_octaves, 0u, 15u ) );
 	int min_octaves = min( int( material_config.world_noise_min_octaves ), max_octaves );
@@ -301,35 +302,48 @@ float fragment_world_noise_value( vec2 world_texel ) {
 	bool cache_mode = material_config.world_noise_mode == 1u || material_config.world_noise_mode == 2u ||
 					  ( material_config.world_noise_mode == 0u && material_config.world_noise_cache_enabled != 0u );
 	if ( cache_mode && ( material_config.feature_flags & T3D_FEATURE_WORLD_NOISE_CACHE ) != 0u ) {
-		float max_lod = max( log2( float( textureSize( world_noise_cache, 0 ).x ) ), 0.0 );
-		float cache_lod = clamp( float( max_octaves - octaves ), 0.0, max_lod );
-		vec2 cache_uv = p / max( material_config.world_noise_cache_period, 0.001 );
-		return textureLod( world_noise_cache, cache_uv, cache_lod ).r * 2.0 - 1.0;
+		float cache_lod =
+			clamp( float( max_octaves - octaves ), 0.0, material_config.world_noise_cache_max_lod );
+		float cache_period = max( material_config.world_noise_cache_period, 0.001 );
+		vec2 cache_uv = p / cache_period;
+		vec2 cache_step = vec2( base_scale / cache_period );
+		float center = textureLod( world_noise_cache, cache_uv, cache_lod ).r * 2.0 - 1.0;
+		float sample_x = textureLod( world_noise_cache, cache_uv + vec2( cache_step.x, 0.0 ), cache_lod ).r * 2.0 - 1.0;
+		float sample_z = textureLod( world_noise_cache, cache_uv + vec2( 0.0, cache_step.y ), cache_lod ).r * 2.0 - 1.0;
+		return vec3( center, sample_x - center, sample_z - center );
 	}
 	float value = 0.0;
 	float amplitude = 1.0;
-	vec2 derivative = vec2( 0.0 );
+	vec2 erosion_derivative = vec2( 0.0 );
+	vec2 value_gradient = vec2( 0.0 );
+	mat2 octave_basis = mat2( 1.0 );
+	const mat2 octave_rotation = mat2( vec2( 0.8, -0.6 ), vec2( 0.6, 0.8 ) );
 	for ( int octave = 0; octave < 15; ++octave ) {
 		if ( octave >= octaves ) {
 			break;
 		}
 		vec3 n = fragment_world_noise_2d( p );
-		derivative += n.yz;
-		value += amplitude * n.x / ( 1.0 + dot( derivative, derivative ) );
+		erosion_derivative += n.yz;
+		float attenuation = 1.0 / ( 1.0 + dot( erosion_derivative, erosion_derivative ) );
+		value += amplitude * n.x * attenuation;
+		value_gradient += amplitude * ( transpose( octave_basis ) * n.yz ) * attenuation;
 		amplitude *= 0.5;
-		p = mat2( vec2( 0.8, -0.6 ), vec2( 0.6, 0.8 ) ) * p * 2.0;
+		p = octave_rotation * p * 2.0;
+		octave_basis = octave_rotation * octave_basis * 2.0;
 	}
-	return value;
+	return vec3( value, value_gradient * base_scale );
 }
-float fragment_world_noise_height_with_weight( vec2 world_texel, float weight ) {
+vec3 fragment_world_noise_height_sample( vec2 world_texel, float weight ) {
 	if ( weight <= 0.5 ) {
-		return material_config.ground_level;
+		return vec3( material_config.ground_level, 0.0, 0.0 );
 	}
-	float noise_value = fragment_world_noise_value( world_texel );
-	float noise_height =
-		noise_value * material_config.world_noise_height * 10.0 + material_config.world_noise_offset_y * 100.0;
-	return material_config.ground_level + noise_height * smoothstep( 0.5, 1.0, weight );
+	vec3 noise = fragment_world_noise_sample( world_texel );
+	float height_scale = material_config.world_noise_height * 10.0;
+	float blend = smoothstep( 0.5, 1.0, weight );
+	float noise_height = noise.x * height_scale + material_config.world_noise_offset_y * 100.0;
+	return vec3( material_config.ground_level + noise_height * blend, noise.yz * height_scale * blend );
 }
+
 bool fragment_world_noise_normals_enabled() {
 	if ( material_config.background_mode != 2u || ( material_config.feature_flags & T3D_FEATURE_WORLD_NOISE ) == 0u ) {
 		return false;
@@ -353,13 +367,11 @@ vec3 apply_fragment_world_noise_normal( vec3 base_normal, vec2 world_texel ) {
 	if ( weight <= 0.5 ) {
 		return base_normal;
 	}
-	float h = fragment_world_noise_height_with_weight( world_texel, weight );
-	float hx = fragment_world_noise_height_with_weight( world_texel + vec2( 1.0, 0.0 ), weight );
-	float hz = fragment_world_noise_height_with_weight( world_texel + vec2( 0.0, 1.0 ), weight );
+	vec3 height_sample = fragment_world_noise_height_sample( world_texel, weight );
 	float world_step = max( frame_data.mesh_params.x, 0.0001 );
 	float base_y = max( base_normal.y, 0.0001 );
 	vec2 base_delta = base_normal.xz * ( world_step / base_y );
-	return normalize( vec3( base_delta.x + h - hx, world_step, base_delta.y + h - hz ) );
+	return normalize( vec3( base_delta.x - height_sample.y, world_step, base_delta.y - height_sample.z ) );
 }
 #else
 vec3 apply_fragment_world_noise_normal( vec3 base_normal, vec2 world_texel ) {
@@ -573,6 +585,9 @@ void accumulate_material( inout SampledMaterial dst, SampledMaterial src, float 
 		dst.logical_id = src.logical_id;
 	}
 }
+int material_texture_layer_count( uint shift ) {
+	return max( int( ( material_config.texture_layer_counts >> shift ) & 0xFFu ), 1 );
+}
 SampledMaterial sample_material( int logical_id, vec2 world_xz, vec3 terrain_normal, float control_scale,
 								 float control_angle, TierMaterialConfig tier_config, bool use_far_array ) {
 	int count = max( int( frame_data.mesh_params.w + 0.5 ), 1 );
@@ -580,8 +595,8 @@ SampledMaterial sample_material( int logical_id, vec2 world_xz, vec3 terrain_nor
 	MaterialLayer layer = materials[id];
 	bool resident = ( layer.flags & T3D_LAYER_RESIDENT ) != 0u;
 	bool packed_surface = ( layer.flags & T3D_LAYER_PACKED_SURFACE ) != 0u;
-	int texture_layers =
-		max( use_far_array ? textureSize( far_albedo_maps, 0 ).z : textureSize( albedo_maps, 0 ).z, 1 );
+	int texture_layers = use_far_array ? max( int( material_config.far_albedo_layer_count ), 1 )
+										 : material_texture_layer_count( 0u );
 	int physical = clamp( int( layer.physical_layer ), 0, texture_layers - 1 );
 	float uv_scale = max( layer.pbr0.x, 0.000001 ) * max( control_scale, 0.1 );
 	vec2 ddx_uv;
@@ -639,11 +654,11 @@ SampledMaterial sample_material( int logical_id, vec2 world_xz, vec3 terrain_nor
 	}
 	SampledMaterial result = material_zero();
 	result.albedo = albedo_texel.rgb * layer.color.rgb;
-	result.height = packed_surface && resident && !use_far_array && textureSize( displacement_maps, 0 ).z > physical
+	result.height = packed_surface && resident && !use_far_array && material_texture_layer_count( 24u ) > physical
 						? textureGrad( displacement_maps, vec3( uv, float( physical ) ), ddx_uv, ddy_uv ).r
 						: ( packed_surface ? 0.5 : albedo_texel.a );
 	if ( dual_far_factor > 0.0 && packed_surface && resident && !use_far_array &&
-		 textureSize( displacement_maps, 0 ).z > physical ) {
+		 material_texture_layer_count( 24u ) > physical ) {
 		float far_height =
 			textureGrad( displacement_maps, vec3( dual_far_uv, float( physical ) ), dual_far_ddx, dual_far_ddy ).r;
 		result.height = mix( result.height, far_height, dual_far_factor );
@@ -656,7 +671,7 @@ SampledMaterial sample_material( int logical_id, vec2 world_xz, vec3 terrain_nor
 	result.total_weight = 1.0;
 	result.logical_id = id;
 	if ( resident && !use_far_array && tier_config.surface_response != 0u ) {
-		if ( packed_surface && textureSize( surface_maps, 0 ).z > physical ) {
+		if ( packed_surface && material_texture_layer_count( 16u ) > physical ) {
 			vec4 surface = textureGrad( surface_maps, vec3( uv, float( physical ) ), ddx_uv, ddy_uv );
 			if ( dual_far_factor > 0.0 ) {
 				vec4 far_surface =
@@ -676,7 +691,7 @@ SampledMaterial sample_material( int logical_id, vec2 world_xz, vec3 terrain_nor
 			if ( ( material_config.feature_flags & T3D_FEATURE_DISPLACEMENT ) != 0u ) {
 				result.ao = mix( result.ao, 1.0, result.height * result.height );
 			}
-		} else if ( textureSize( normal_maps, 0 ).z > physical ) {
+		} else if ( material_texture_layer_count( 8u ) > physical ) {
 			vec4 legacy = textureGrad( normal_maps, vec3( uv, float( physical ) ), ddx_uv, ddy_uv );
 			result.roughness = clamp( legacy.a + layer.pbr0.z, 0.0, 1.0 );
 			vec3 decoded = fma( legacy.xzy, vec3( 2.0 ), vec3( -1.0 ) );
@@ -740,9 +755,8 @@ void decode_control( uint control, out int base_id, out int overlay_id, out floa
 	uint encoded_scale = ( control >> 7u ) & 0x7u;
 	scale = 0.9 - float( ( ( encoded_scale + 3u ) % 8u ) + 1u ) * 0.1;
 }
-SampledMaterial sample_control_pair( uint raw_control, vec2 world_xz, vec3 terrain_normal,
-									 TierMaterialConfig tier_config ) {
-	uint control = auto_control( raw_control, terrain_normal, world_position.y, terrain_region_layer < 0 );
+SampledMaterial sample_resolved_control_pair( uint control, vec2 world_xz, vec3 terrain_normal,
+										  TierMaterialConfig tier_config ) {
 	int base_id;
 	int overlay_id;
 	float blend;
@@ -764,6 +778,12 @@ SampledMaterial sample_control_pair( uint raw_control, vec2 world_xz, vec3 terra
 	accumulate_material( result, base, 1.0 - height_blend );
 	accumulate_material( result, overlay, height_blend );
 	return result;
+}
+
+SampledMaterial sample_control_pair( uint raw_control, vec2 world_xz, vec3 terrain_normal,
+									 TierMaterialConfig tier_config ) {
+	uint control = auto_control( raw_control, terrain_normal, world_position.y, terrain_region_layer < 0 );
+	return sample_resolved_control_pair( control, world_xz, terrain_normal, tier_config );
 }
 
 vec4 corner_weights( vec2 world_texel ) {
@@ -812,21 +832,42 @@ SampledMaterial sample_detailed_material( vec2 world_texel, vec3 terrain_normal,
 		weights /= max( dot( weights, vec4( 1.0 ) ), 0.00001 );
 	}
 	SampledMaterial result = material_zero();
+	uint resolved_controls[4];
+	SampledMaterial resolved_samples[4];
+	int resolved_count = 0;
 	for ( int i = 0; i < 4; ++i ) {
 		if ( weights[i] <= 0.00001 ) {
 			continue;
 		}
-		SampledMaterial corner = sample_control_pair( read_control( base_texel + offsets[i] ), world_position.xz,
-													  terrain_normal, tier_config );
-		float inv = 1.0 / max( corner.total_weight, 0.00001 );
-		corner.albedo *= inv;
-		corner.tangent_normal *= inv;
-		corner.roughness *= inv;
-		corner.ao *= inv;
-		corner.metallic *= inv;
-		corner.height *= inv;
-		corner.ao_affect *= inv;
-		corner.total_weight = 1.0;
+		uint resolved_control = auto_control( read_control( base_texel + offsets[i] ), terrain_normal,
+				world_position.y, terrain_region_layer < 0 );
+		int reuse_index = -1;
+		for ( int previous = 0; previous < resolved_count; ++previous ) {
+			if ( resolved_controls[previous] == resolved_control ) {
+				reuse_index = previous;
+				break;
+			}
+		}
+		SampledMaterial corner;
+		if ( reuse_index >= 0 ) {
+			// The call-local state fixes projected UV/derivatives, projection/detile mode, tier/channel set and normal.
+			// Equal resolved control additionally fixes material IDs, rotation and scale; blend accumulation stays ordered.
+			corner = resolved_samples[reuse_index];
+		} else {
+			corner = sample_resolved_control_pair( resolved_control, world_position.xz, terrain_normal, tier_config );
+			float inv = 1.0 / max( corner.total_weight, 0.00001 );
+			corner.albedo *= inv;
+			corner.tangent_normal *= inv;
+			corner.roughness *= inv;
+			corner.ao *= inv;
+			corner.metallic *= inv;
+			corner.height *= inv;
+			corner.ao_affect *= inv;
+			corner.total_weight = 1.0;
+			resolved_controls[resolved_count] = resolved_control;
+			resolved_samples[resolved_count] = corner;
+			++resolved_count;
+		}
 		accumulate_material( result, corner, weights[i] );
 	}
 	return result;
@@ -1132,8 +1173,6 @@ void main() {
 	}
 
 	uint nearest_control = read_control( ivec2( floor( world_texel ) ) );
-	bool used_auto = ( material_config.feature_flags & T3D_FEATURE_AUTO_SHADER ) != 0u &&
-					 ( outside_region || ( nearest_control & 1u ) != 0u );
 	if ( !outside_region && ( ( nearest_control >> 2u ) & 1u ) != 0u ) {
 		discard;
 	}
@@ -1151,6 +1190,8 @@ void main() {
 #endif
 #else
 
+	bool used_auto = ( material_config.feature_flags & T3D_FEATURE_AUTO_SHADER ) != 0u &&
+					 ( outside_region || ( nearest_control & 1u ) != 0u );
 	vec4 color_map = sample_color_map( world_texel, tier_config );
 	SampledMaterial material = material_zero();
 

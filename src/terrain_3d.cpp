@@ -14,6 +14,7 @@
 #include "lighting/terrain_3d_lighting_policy.h"
 #include "lighting/terrain_3d_lightmap_streamer.h"
 #include "memory/terrain_3d_linear_arena.h"
+#include "memory/terrain_3d_memory.h"
 #include "memory/terrain_3d_zone_allocator.h"
 #include "rendering/terrain_3d_compute.h"
 #include "rendering/rd/terrain_3d_render_coordinator.h"
@@ -54,6 +55,7 @@ t3dDebugLevel_t Terrain3D::s_debugLevel{ ERROR };
 // Private functions
 
 void Terrain3D::initializeInternal( void ) {
+	Terrain3DAllocationPhaseScope allocation_phase( TERRAIN3D_ALLOCATION_PHASE_INITIALIZATION );
 	LOG( INFO,
 			"[lifecycle] Initialize request: initialized=",
 			m_bInitialized,
@@ -232,6 +234,7 @@ void Terrain3D::initializeInternal( void ) {
 }
 
 void Terrain3D::deactivateRuntime( void ) {
+	Terrain3DAllocationPhaseScope allocation_phase( TERRAIN3D_ALLOCATION_PHASE_SHUTDOWN );
 	set_physics_process( false );
 	const bool bMemoryDrainStarted = beginRuntimeMemoryDrain();
 	destroyRenderCoordinator();
@@ -278,6 +281,7 @@ void Terrain3D::physicsProcess( const double fDelta ) {
 		return;
 	}
 	serviceMemoryBudgetPolicy( false );
+	Terrain3DAllocationPhaseScope allocation_phase( TERRAIN3D_ALLOCATION_PHASE_HOT_FRAME );
 	if ( m_bComputeDisplacementFallbackRequested.exchange( false, std::memory_order_acq_rel ) ) {
 		m_lastBufferPosition = s_v2Max;
 	}
@@ -340,7 +344,8 @@ void Terrain3D::physicsProcess( const double fDelta ) {
 		updateRegionStreamingPolicy( clipmap_target_position, fDelta, false );
 		m_pData->updateRegionResidency( clipmap_target_position, false );
 		if ( m_assets.is_valid() && m_assets->isRuntimeMaterialCacheActive() ) {
-			uint8_t material_ids[s_nMaxTextureAssets] = {};
+			uint8_t material_ids[s_nMaxTextureAssets];
+			std::memset( material_ids, 0, sizeof( material_ids ) );
 			const int material_count = m_pData->fillGpuMaterialPriorityIds( material_ids, s_nMaxTextureAssets );
 			m_assets->updateRuntimeMaterialResidency( material_ids, material_count );
 		}
@@ -637,6 +642,7 @@ Terrain3D::Terrain3D( void ) {
 }
 
 Terrain3D::~Terrain3D( void ) {
+	Terrain3DAllocationPhaseScope allocation_phase( TERRAIN3D_ALLOCATION_PHASE_SHUTDOWN );
 	if ( m_pRuntimeProfileHistory ) {
 		memdelete( m_pRuntimeProfileHistory );
 		m_pRuntimeProfileHistory = nullptr;

@@ -11,6 +11,7 @@
 #include "eastl_config.h"
 #include "instances/terrain_3d_instance_page_codec.h"
 #include "lighting/terrain_3d_region_lighting.h"
+#include "memory/terrain_3d_memory.h"
 
 #include <EASTL/bitset.h>
 #include <algorithm>
@@ -2168,7 +2169,10 @@ void Terrain3DRuntimePageStore::workerMain( const int nWorkerIndex ) {
 			m_iWorkRead = ( m_iWorkRead + 1 ) % s_nGpuCacheMaxLayers;
 			--m_nWorkRingCount;
 		}
-		prepareWorkIndex( work_index, nWorkerIndex );
+		{
+			Terrain3DAllocationPhaseScope allocation_phase( TERRAIN3D_ALLOCATION_PHASE_STREAMING_WORKER );
+			prepareWorkIndex( work_index, nWorkerIndex );
+		}
 		{
 			std::lock_guard<std::mutex> lock( m_workerMutex );
 			if ( m_nCompletionRingCount < s_nGpuCacheMaxLayers ) {

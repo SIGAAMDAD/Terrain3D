@@ -99,6 +99,7 @@ void Terrain3DMapEditService::reset( void ) {
 	m_derivedTaskScratch.clear();
 	m_fDerivedHaloScratch.clear();
 	m_fDerivedWorkerHaloScratch.clear();
+	m_derivedComputeScratch.clear();
 	m_derivedOutputScratch.clear();
 	m_activeLocationScratch.clear();
 	m_derivedLocationScratch.clear();
@@ -110,6 +111,7 @@ void Terrain3DMapEditService::releaseRuntimeAllocatorStorage( void ) {
 	eastl::vector<t3dDerivedMapTask_t>().swap( m_derivedTaskScratch );
 	eastl::vector<float>().swap( m_fDerivedHaloScratch );
 	eastl::vector<float>().swap( m_fDerivedWorkerHaloScratch );
+	eastl::vector<uint8_t>().swap( m_derivedComputeScratch );
 	eastl::vector<uint8_t>().swap( m_derivedOutputScratch );
 	eastl::vector<Vector2i>().swap( m_activeLocationScratch );
 	eastl::vector<Vector2i>().swap( m_derivedLocationScratch );
@@ -182,6 +184,7 @@ const eastl::vector<t3dDerivedMapUpdate_t> &Terrain3DMapEditService::regenerateD
 		const eastl::vector<Vector2i> &rRegionLocations,
 		const AABB &rEditedArea,
 		Terrain3DCompute *const pCompute ) {
+	Terrain3DAllocationPhaseScope allocation_phase( TERRAIN3D_ALLOCATION_PHASE_COLD_REBUILD );
 	m_derivedUpdateScratch.clear();
 	if ( !m_pRepository || !m_pSamplingStorage || rRegionLocations.empty() || m_pRepository->getRegionSize() <= 0 ||
 			m_pRepository->getVertexSpacing() <= 0.0f ) {
@@ -220,11 +223,8 @@ const eastl::vector<t3dDerivedMapUpdate_t> &Terrain3DMapEditService::regenerateD
 	}
 
 	size_t eligibleTaskCount = 0u;
-	size_t eligibleTaskIndex = 0u;
-	for ( size_t taskIndex = 0u; taskIndex < tasks.size(); ++taskIndex ) {
-		const t3dDerivedMapTask_t &task = tasks[taskIndex];
+	for ( const t3dDerivedMapTask_t &task : tasks ) {
 		if ( task.m_bAvailable && task.m_dirtyRect.size.x > 0 && task.m_dirtyRect.size.y > 0 ) {
-			eligibleTaskIndex = taskIndex;
 			++eligibleTaskCount;
 		}
 	}
@@ -233,6 +233,7 @@ const eastl::vector<t3dDerivedMapUpdate_t> &Terrain3DMapEditService::regenerateD
 	const int32_t workerCount = ( int32_t )MIN<size_t>( ( size_t )hardwareThreads, MAX<size_t>( 1u, tasks.size() ) );
 	size_t totalOutputBytes = 0u;
 	size_t maxHaloElements = 0u;
+	size_t maxComputeOutputBytes = 0u;
 	for ( t3dDerivedMapTask_t &task : tasks ) {
 		if ( !task.m_bAvailable || task.m_dirtyRect.size.x <= 0 || task.m_dirtyRect.size.y <= 0 ) {
 			continue;
@@ -242,55 +243,84 @@ const eastl::vector<t3dDerivedMapUpdate_t> &Terrain3DMapEditService::regenerateD
 		totalOutputBytes += task.m_nOutputBytes;
 		maxHaloElements = MAX( maxHaloElements,
 				( size_t )( task.m_dirtyRect.size.x + 2 ) * ( size_t )( task.m_dirtyRect.size.y + 2 ) );
+		maxComputeOutputBytes = MAX( maxComputeOutputBytes,
+				( size_t )task.m_dirtyRect.size.x * ( size_t )task.m_dirtyRect.size.y * sizeof( uint32_t ) );
 	}
 	m_derivedOutputScratch.resize( totalOutputBytes );
 	m_fDerivedWorkerHaloScratch.resize( maxHaloElements * ( size_t )workerCount );
 
 	const t3dSamplingSource_t samplingSource{ m_pRepository, m_pSamplingStorage };
-	if ( pCompute && eligibleTaskCount == 1u ) {
-		t3dDerivedMapTask_t &task = tasks[eligibleTaskIndex];
-		const int width = task.m_dirtyRect.size.x;
-		const int height = task.m_dirtyRect.size.y;
-		const int haloStride = width + 2;
-		m_fDerivedHaloScratch.resize( ( size_t )( haloStride ) * ( size_t )( height + 2 ) );
+	if ( pCompute && eligibleTaskCount > 0u && maxHaloElements > 0u && maxComputeOutputBytes > 0u &&
+			maxHaloElements <= UINT32_MAX && maxComputeOutputBytes <= UINT32_MAX ) {
+		static constexpr size_t s_nComputeBatchSize = 3u;
+		m_fDerivedHaloScratch.resize( maxHaloElements * s_nComputeBatchSize );
+		m_derivedComputeScratch.resize( maxComputeOutputBytes * s_nComputeBatchSize );
 		Terrain3DSampler sampler( samplingSource );
-		const int64_t regionBaseX = ( int64_t )( task.m_location.x ) * m_pRepository->getRegionSize();
-		const int64_t regionBaseZ = ( int64_t )( task.m_location.y ) * m_pRepository->getRegionSize();
-		const int64_t haloGridX = regionBaseX + task.m_dirtyRect.position.x - 1;
-		const int64_t haloGridZ = regionBaseZ + task.m_dirtyRect.position.y - 1;
-		sampler.copyHeightRect(
-				haloGridX, haloGridZ, width + 2, height + 2, m_fDerivedHaloScratch.data(), haloStride, false );
-		for ( int y = -1; y <= height; ++y ) {
-			for ( int x = -1; x <= width; ++x ) {
-				float &sample =
-						m_fDerivedHaloScratch[( size_t )( y + 1 ) * ( size_t )( haloStride ) + ( size_t )( x + 1 )];
-				if ( std::isfinite( sample ) ) {
+		size_t taskCursor = 0u;
+		while ( taskCursor < tasks.size() ) {
+			t3dDerivedMapComputeJob_t jobs[s_nComputeBatchSize];
+			size_t taskIndices[s_nComputeBatchSize]{};
+			uint32_t jobCount = 0u;
+			while ( taskCursor < tasks.size() && jobCount < s_nComputeBatchSize ) {
+				t3dDerivedMapTask_t &task = tasks[taskCursor];
+				const size_t currentTask = taskCursor++;
+				const int width = task.m_dirtyRect.size.x;
+				const int height = task.m_dirtyRect.size.y;
+				if ( !task.m_bAvailable || width <= 0 || height <= 0 ) {
 					continue;
 				}
-				const int localX = task.m_dirtyRect.position.x + x;
-				const int localY = task.m_dirtyRect.position.y + y;
-				const int clampedX = CLAMP( localX, 0, m_pRepository->getRegionSize() - 1 );
-				const int clampedY = CLAMP( localY, 0, m_pRepository->getRegionSize() - 1 );
-				sample = sampler.sampleHeightGrid( regionBaseX + clampedX, regionBaseZ + clampedY, false );
-				sample = std::isfinite( sample ) ? sample : 0.0f;
+				const int haloStride = width + 2;
+				const size_t haloElements = ( size_t )haloStride * ( size_t )( height + 2 );
+				const size_t rgbaBytes = ( size_t )width * ( size_t )height * sizeof( uint32_t );
+				float *const pHalo = m_fDerivedHaloScratch.data() + ( size_t )jobCount * maxHaloElements;
+				const int64_t regionBaseX = ( int64_t )( task.m_location.x ) * m_pRepository->getRegionSize();
+				const int64_t regionBaseZ = ( int64_t )( task.m_location.y ) * m_pRepository->getRegionSize();
+				const int64_t haloGridX = regionBaseX + task.m_dirtyRect.position.x - 1;
+				const int64_t haloGridZ = regionBaseZ + task.m_dirtyRect.position.y - 1;
+				sampler.copyHeightRect( haloGridX, haloGridZ, width + 2, height + 2, pHalo, haloStride, false );
+				for ( int y = -1; y <= height; ++y ) {
+					for ( int x = -1; x <= width; ++x ) {
+						float &sample = pHalo[( size_t )( y + 1 ) * ( size_t )haloStride + ( size_t )( x + 1 )];
+						if ( std::isfinite( sample ) ) {
+							continue;
+						}
+						const int localX = task.m_dirtyRect.position.x + x;
+						const int localY = task.m_dirtyRect.position.y + y;
+						const int clampedX = CLAMP( localX, 0, m_pRepository->getRegionSize() - 1 );
+						const int clampedY = CLAMP( localY, 0, m_pRepository->getRegionSize() - 1 );
+						sample = sampler.sampleHeightGrid( regionBaseX + clampedX, regionBaseZ + clampedY, false );
+						sample = std::isfinite( sample ) ? sample : 0.0f;
+					}
+				}
+				t3dDerivedMapComputeJob_t &job = jobs[jobCount];
+				job.m_pHeightHalo = pHalo;
+				job.m_pRgbaOutput = m_derivedComputeScratch.data() + ( size_t )jobCount * maxComputeOutputBytes;
+				job.m_nHaloElements = ( uint32_t )haloElements;
+				job.m_nOutputBytes = ( uint32_t )rgbaBytes;
+				job.m_nWidth = ( uint32_t )width;
+				job.m_nHeight = ( uint32_t )height;
+				job.m_fVertexSpacing = ( float )( m_pRepository->getVertexSpacing() );
+				taskIndices[jobCount] = currentTask;
+				++jobCount;
 			}
-		}
-
-		PackedByteArray rgbaOutput;
-		if ( pCompute->generateDerivedMap( m_fDerivedHaloScratch,
-					 width,
-					 height,
-					 ( float )( m_pRepository->getVertexSpacing() ),
-					 rgbaOutput ) &&
-				rgbaOutput.size() >= ( int64_t )( width ) * ( int64_t )( height ) * 4 ) {
-			const uint8_t *const pRgba = rgbaOutput.ptr();
-			const size_t texelCount = ( size_t )width * ( size_t )height;
-			uint8_t *const pOutput = m_derivedOutputScratch.data() + task.m_iOutputOffset;
-			for ( size_t texel = 0u; texel < texelCount; ++texel ) {
-				pOutput[texel * 2u] = pRgba[texel * 4u];
-				pOutput[texel * 2u + 1u] = pRgba[texel * 4u + 2u];
+			if ( jobCount == 0u ) {
+				continue;
 			}
-			task.m_bSuccess = true;
+			pCompute->generateDerivedMaps( jobs, jobCount );
+			for ( uint32_t slot = 0u; slot < jobCount; ++slot ) {
+				if ( !jobs[slot].m_bSuccess ) {
+					continue;
+				}
+				t3dDerivedMapTask_t &task = tasks[taskIndices[slot]];
+				const size_t texelCount = ( size_t )task.m_dirtyRect.size.x * ( size_t )task.m_dirtyRect.size.y;
+				const uint8_t *const pRgba = jobs[slot].m_pRgbaOutput;
+				uint8_t *const pOutput = m_derivedOutputScratch.data() + task.m_iOutputOffset;
+				for ( size_t texel = 0u; texel < texelCount; ++texel ) {
+					pOutput[texel * 2u] = pRgba[texel * 4u];
+					pOutput[texel * 2u + 1u] = pRgba[texel * 4u + 2u];
+				}
+				task.m_bSuccess = true;
+			}
 		}
 	}
 

@@ -397,7 +397,7 @@ typedef struct alignas( 16 ) t3dRdMaterialConfig_s {
 	uint32_t m_nProjectionMode = 0u;
 	uint32_t m_nTessellationMaterialMode = 0u;
 	uint32_t m_nWorldNoiseMode = 0u;
-	uint32_t m_nReserved0 = 0u;
+	uint32_t m_nTextureLayerCounts = 0u; // 8 bits each: albedo, normal, surface, displacement.
 	float m_fDisplacementSharpness = 0.5f;
 	float m_fBlendSharpness = 0.5f;
 	float m_fDistantNormalScale = 2.0f;
@@ -411,7 +411,7 @@ typedef struct alignas( 16 ) t3dRdMaterialConfig_s {
 	uint32_t m_nAutoBaseTexture = 0u;
 	uint32_t m_nAutoOverlayTexture = 1u;
 	uint32_t m_nDualScaleTexture = 0u;
-	uint32_t m_nReserved1 = 0u;
+	uint32_t m_nFarAlbedoLayerCount = 0u;
 	float m_fDualScaleReduction = 0.3f;
 	float m_fTriScaleReduction = 0.3f;
 	float m_fDualScaleFar = 170.0f;
@@ -441,7 +441,7 @@ typedef struct alignas( 16 ) t3dRdMaterialConfig_s {
 	float m_fWorldNoiseOffsetX = 0.0f;
 	float m_fWorldNoiseOffsetY = 0.0f;
 	float m_fWorldNoiseOffsetZ = 0.0f;
-	float m_fWorldNoisePadding = 0.0f;
+	float m_fWorldNoiseCacheMaxLod = 0.0f;
 	float m_fSilhouetteR = 0.04f;
 	float m_fSilhouetteG = 0.04f;
 	float m_fSilhouetteB = 0.04f;

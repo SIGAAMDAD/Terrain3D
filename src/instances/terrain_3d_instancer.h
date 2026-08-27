@@ -128,6 +128,11 @@ typedef struct t3dLogicalCellState_s {
 	uint32_t m_nRegionListNode = UINT32_MAX;
 } t3dLogicalCellState_t;
 
+typedef struct t3dRdCellRange_s {
+	uint32_t m_nFirst = 0u;
+	uint32_t m_nCount = 0u;
+} t3dRdCellRange_t;
+
 
 typedef struct t3dRegionList_s {
 	uint32_t m_nHead = UINT32_MAX;
@@ -173,6 +178,7 @@ private:
 	using TransitionBucketMap =
 			Terrain3DFlatHashMap<t3dTransitionBucketKey_t, t3dTransitionBucketState_t, t3dTransitionBucketKeyHash_t>;
 	using StreamingUpdateSet = Terrain3DFlatHashSet<t3dCellUpdateKey_t, t3dCellUpdateKeyHash_t>;
+	using RdSnapshotRangeMap = Terrain3DFlatHashMap<t3dCellUpdateKey_t, t3dRdCellRange_t, t3dCellUpdateKeyHash_t>;
 
 	eastl::vector<t3dRenderCell_t> m_renderCells;
 	RenderCellIndex m_iRenderCellIndex;
@@ -251,6 +257,7 @@ private:
 	Terrain3DRegion *m_pszTouchedRegions[s_nMaxRegionSlots] = {};
 	uint16_t m_nTouchedRegionCount = 0u;
 	uint64_t m_nRdPublicationGeneration = 1u;
+	mutable RdSnapshotRangeMap m_rdSnapshotRanges;
 	size_t m_nRenderCellCapacity = 0u;
 	size_t m_nLogicalCellCapacity = 0u;
 	size_t m_nTransitionBucketCapacity = 0u;
@@ -551,8 +558,10 @@ public:
 	PackedFloat32Array buildMultimeshBuffer( const TypedArray<Transform3D> &rXforms,
 			const PackedColorArray &rColors = PackedColorArray() ) const;
 
-	void buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &rSnapshot ) const;
+	bool buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &rSnapshot ) const;
 	EA_FORCE_INLINE uint64_t getRdPublicationGeneration( void ) const { return m_nRdPublicationGeneration; }
+	EA_FORCE_INLINE size_t getRdSnapshotInstanceCapacity( void ) const { return m_nLogicalCellCapacity; }
+	EA_FORCE_INLINE size_t getRdSnapshotCellCapacity( void ) const { return m_nRenderCellCapacity; }
 
 	EA_FORCE_INLINE void resetDensityCounter( void ) {
 		m_nDensityCounter = 0;

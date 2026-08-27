@@ -608,12 +608,15 @@ Dictionary Terrain3D::getTrackedCurrentResidency( void ) const {
 	const Terrain3DRdContext &rd_context = Terrain3DRdContext::getShared();
 	const uint64_t rd_vram_buffer_bytes = rd_context.getLiveGpuBufferBytes();
 	const uint64_t rd_vram_texture_bytes = rd_context.getLiveGpuTextureBytes();
+	const uint64_t compute_local_vram_buffer_bytes =
+			m_pData ? m_pData->getMemoryComputeLocalGpuBytes() : 0u;
 	const uint64_t managed_bytes = middle_height_bytes + cpu_page_bytes + instance_page_bytes +
 			lightmap_bytes + hlod_bytes + shader_source_bytes + rd_cpu_bytes;
 	const uint64_t fixed_bytes = calculateFixedMemoryBytes();
 	const uint64_t transient_bytes = calculateTransientMemoryBytes();
 	const uint64_t tracked_cpu_bytes = fixed_bytes + managed_bytes + transient_bytes;
-	const uint64_t tracked_vram_bytes = rd_vram_buffer_bytes + rd_vram_texture_bytes;
+	const uint64_t tracked_vram_bytes =
+			rd_vram_buffer_bytes + rd_vram_texture_bytes + compute_local_vram_buffer_bytes;
 	const uint64_t tracked_bytes = tracked_cpu_bytes + tracked_vram_bytes;
 	m_nTrackedMemoryPeakBytes = MAX( m_nTrackedMemoryPeakBytes, tracked_bytes );
 
@@ -718,6 +721,7 @@ Dictionary Terrain3D::getTrackedCurrentResidency( void ) const {
 	memory["tracked_gpu_vram_bytes"] = ( int64_t )tracked_vram_bytes;
 	memory["rd_gpu_buffer_bytes"] = ( int64_t )rd_vram_buffer_bytes;
 	memory["rd_gpu_texture_bytes"] = ( int64_t )rd_vram_texture_bytes;
+	memory["compute_local_gpu_buffer_bytes"] = ( int64_t )compute_local_vram_buffer_bytes;
 	memory["tracked_current_residency_bytes"] = ( int64_t )tracked_bytes;
 	memory["tracked_logical_payload_bytes"] = ( int64_t )tracked_bytes;
 	memory["native_runtime_arena_reserved_bytes"] = ( int64_t )m_runtimeMemoryArena.capacity();

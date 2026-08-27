@@ -3,6 +3,7 @@
 #include "rendering/rd/terrain_3d_rd_instance_renderer.h"
 
 #include "data/terrain_3d_half_buffer.h"
+#include "memory/terrain_3d_memory.h"
 
 #include <algorithm>
 #include <cmath>
@@ -219,7 +220,9 @@ static void t3dRdStableSortAlphaPackets( std::vector<t3dRdInstanceDrawPacket_t> 
 	if ( count < 2u ) {
 		return;
 	}
-	rScratch.resize( count );
+	if ( rScratch.size() < count ) {
+		return;
+	}
 	for ( size_t width = 1u; width < count; width *= 2u ) {
 		for ( size_t first = 0u; first < count; first += width * 2u ) {
 			const size_t middle = MIN( first + width, count );
@@ -962,8 +965,12 @@ bool Terrain3DRdInstanceRenderer::uploadScene( const t3dRdInstanceSceneSnapshot_
 
 	// Scene publication is the only capacity-rebuild boundary for frame-side
 	// instance storage. All render callbacks only change logical sizes.
-	m_visibleIndices.reserve( m_nVisibleIndexCapacity );
-	m_shadowVisibleIndices.reserve( m_nVisibleIndexCapacity );
+	if ( m_visibleIndices.size() < m_nVisibleIndexCapacity ) {
+		m_visibleIndices.resize( m_nVisibleIndexCapacity );
+	}
+	if ( m_shadowVisibleIndices.size() < m_nVisibleIndexCapacity ) {
+		m_shadowVisibleIndices.resize( m_nVisibleIndexCapacity );
+	}
 	m_drawPackets.reserve( m_nPacketCapacity );
 	m_depthPackets.reserve( m_nPacketCapacity );
 	m_shadowPackets.reserve( m_nPacketCapacity );
@@ -971,12 +978,24 @@ bool Terrain3DRdInstanceRenderer::uploadScene( const t3dRdInstanceSceneSnapshot_
 	m_packetBuildSlots.reserve( m_nPacketCapacity );
 	m_packetBuildEntries.reserve( m_nPacketCapacity );
 	m_alphaPackets.reserve( m_nPacketCapacity );
-	m_alphaSortScratch.reserve( m_nPacketCapacity );
-	m_motionHistoryRecords.reserve( pScene->m_instances.size() );
-	m_motionPreviousRecords.reserve( pScene->m_instances.size() );
-	m_motionHistoryCells.reserve( pScene->m_cells.size() );
-	m_motionCurrentOrder.reserve( pScene->m_cells.size() );
-	m_motionPreviousOrder.reserve( pScene->m_cells.size() );
+	if ( m_alphaSortScratch.size() < m_nPacketCapacity ) {
+		m_alphaSortScratch.resize( m_nPacketCapacity );
+	}
+	if ( m_motionHistoryRecords.size() < pScene->m_instances.size() ) {
+		m_motionHistoryRecords.resize( pScene->m_instances.size() );
+	}
+	if ( m_motionPreviousRecords.size() < pScene->m_instances.size() ) {
+		m_motionPreviousRecords.resize( pScene->m_instances.size() );
+	}
+	if ( m_motionHistoryCells.size() < pScene->m_cells.size() ) {
+		m_motionHistoryCells.resize( pScene->m_cells.size() );
+	}
+	if ( m_motionCurrentOrder.size() < pScene->m_cells.size() ) {
+		m_motionCurrentOrder.resize( pScene->m_cells.size() );
+	}
+	if ( m_motionPreviousOrder.size() < pScene->m_cells.size() ) {
+		m_motionPreviousOrder.resize( pScene->m_cells.size() );
+	}
 	m_packetIndex.beginColdRebuild();
 	if ( !m_packetIndex.reserveAndSeal( m_nPacketCapacity ) ) {
 		setError( "RD instance packet hash capacity could not be sealed" );
@@ -1097,10 +1116,11 @@ bool Terrain3DRdInstanceRenderer::prepareMotionHistory( const t3dRdInstanceScene
 		return true;
 	}
 	if ( rScene.m_instances.empty() ) {
-		m_motionHistoryRecords.clear();
-		m_motionHistoryCells.clear();
-		m_motionCurrentOrder.clear();
-		m_motionPreviousOrder.clear();
+		m_nMotionHistoryRecordCount = 0u;
+		m_nMotionHistoryCellCount = 0u;
+		m_nMotionPreviousRecordCount = 0u;
+		m_nMotionCurrentOrderCount = 0u;
+		m_nMotionPreviousOrderCount = 0u;
 		m_nMotionHistorySceneGeneration = rScene.m_nGeneration;
 		m_bMotionHistoryNeedsAdvance = false;
 		m_nMotionHistoryRenderFrame = nRenderFrame;
@@ -1108,9 +1128,13 @@ bool Terrain3DRdInstanceRenderer::prepareMotionHistory( const t3dRdInstanceScene
 	}
 
 	bool upload_previous = false;
-	const bool reset_history = m_motionHistoryRecords.empty() || m_motionHistoryCells.empty();
+	const bool reset_history = m_nMotionHistoryRecordCount == 0u || m_nMotionHistoryCellCount == 0u;
 	const bool scene_changed = rScene.m_nGeneration != m_nMotionHistorySceneGeneration;
-	m_motionPreviousRecords.resize( rScene.m_instances.size() );
+	if ( rScene.m_instances.size() > m_motionPreviousRecords.size() ) {
+		setError( "RD motion previous-record output exceeded publication-time capacity" );
+		return false;
+	}
+	m_nMotionPreviousRecordCount = (uint32_t)( rScene.m_instances.size() );
 	std::memcpy( m_motionPreviousRecords.data(),
 			rScene.m_instances.data(),
 			rScene.m_instances.size() * sizeof( t3dRdInstanceRecord_t ) );
@@ -1119,28 +1143,33 @@ bool Terrain3DRdInstanceRenderer::prepareMotionHistory( const t3dRdInstanceScene
 		++m_nMotionHistoryResets;
 		m_bMotionHistoryNeedsAdvance = false;
 	} else if ( scene_changed ) {
-		m_motionCurrentOrder.resize( rScene.m_cells.size() );
-		m_motionPreviousOrder.resize( m_motionHistoryCells.size() );
-		for ( uint32_t i = 0u; i < (uint32_t)( m_motionCurrentOrder.size() ); ++i ) {
+		if ( rScene.m_cells.size() > m_motionCurrentOrder.size() ||
+				m_nMotionHistoryCellCount > m_motionPreviousOrder.size() ) {
+			setError( "RD motion cell-order output exceeded publication-time capacity" );
+			return false;
+		}
+		m_nMotionCurrentOrderCount = (uint32_t)( rScene.m_cells.size() );
+		m_nMotionPreviousOrderCount = m_nMotionHistoryCellCount;
+		for ( uint32_t i = 0u; i < m_nMotionCurrentOrderCount; ++i ) {
 			m_motionCurrentOrder[i] = i;
 		}
-		for ( uint32_t i = 0u; i < (uint32_t)( m_motionPreviousOrder.size() ); ++i ) {
+		for ( uint32_t i = 0u; i < m_nMotionPreviousOrderCount; ++i ) {
 			m_motionPreviousOrder[i] = i;
 		}
 		std::sort( m_motionCurrentOrder.begin(),
-				m_motionCurrentOrder.end(),
+				m_motionCurrentOrder.begin() + m_nMotionCurrentOrderCount,
 				[&rScene]( const uint32_t a, const uint32_t b ) {
 					return t3dRdMotionCellCompare( rScene.m_cells[a], rScene.m_cells[b] ) < 0;
 				} );
 		std::sort( m_motionPreviousOrder.begin(),
-				m_motionPreviousOrder.end(),
+				m_motionPreviousOrder.begin() + m_nMotionPreviousOrderCount,
 				[this]( const uint32_t a, const uint32_t b ) {
 					return t3dRdMotionCellCompare( m_motionHistoryCells[a], m_motionHistoryCells[b] ) < 0;
 				} );
 
 		size_t current = 0u;
 		size_t previous = 0u;
-		while ( current < m_motionCurrentOrder.size() && previous < m_motionPreviousOrder.size() ) {
+		while ( current < m_nMotionCurrentOrderCount && previous < m_nMotionPreviousOrderCount ) {
 			const t3dRdInstanceCell_t &current_cell = rScene.m_cells[m_motionCurrentOrder[current]];
 			const t3dRdInstanceCell_t &previous_cell = m_motionHistoryCells[m_motionPreviousOrder[previous]];
 			const int compare = t3dRdMotionCellCompare( current_cell, previous_cell );
@@ -1156,7 +1185,7 @@ bool Terrain3DRdInstanceRenderer::prepareMotionHistory( const t3dRdInstanceScene
 					(uint64_t)( current_cell.m_nFirstInstance ) + current_cell.m_nInstanceCount;
 			const uint64_t previous_end =
 					(uint64_t)( previous_cell.m_nFirstInstance ) + previous_cell.m_nInstanceCount;
-			if ( current_end <= rScene.m_instances.size() && previous_end <= m_motionHistoryRecords.size() &&
+			if ( current_end <= rScene.m_instances.size() && previous_end <= m_nMotionHistoryRecordCount &&
 					t3dRdMotionCellsMatch( current_cell, previous_cell ) ) {
 				std::memcpy( m_motionPreviousRecords.data() + current_cell.m_nFirstInstance,
 						m_motionHistoryRecords.data() + previous_cell.m_nFirstInstance,
@@ -1174,8 +1203,7 @@ bool Terrain3DRdInstanceRenderer::prepareMotionHistory( const t3dRdInstanceScene
 	}
 
 	if ( upload_previous ) {
-		const uint32_t bytes =
-				(uint32_t)( m_motionPreviousRecords.size() * sizeof( t3dRdInstanceRecord_t ) );
+		const uint32_t bytes = m_nMotionPreviousRecordCount * sizeof( t3dRdInstanceRecord_t );
 		if ( bytes > m_nPreviousInstanceCapacityBytes || m_previousInstanceBytes.size() < bytes ) {
 			setError( "RD motion history exceeded publication-time capacity" );
 			return false;
@@ -1189,11 +1217,16 @@ bool Terrain3DRdInstanceRenderer::prepareMotionHistory( const t3dRdInstanceScene
 	}
 
 	if ( reset_history || scene_changed ) {
-		m_motionHistoryRecords.resize( rScene.m_instances.size() );
+		if ( rScene.m_instances.size() > m_motionHistoryRecords.size() ||
+				rScene.m_cells.size() > m_motionHistoryCells.size() ) {
+			setError( "RD motion history exceeded publication-time backing" );
+			return false;
+		}
+		m_nMotionHistoryRecordCount = (uint32_t)( rScene.m_instances.size() );
 		std::memcpy( m_motionHistoryRecords.data(),
 				rScene.m_instances.data(),
 				rScene.m_instances.size() * sizeof( t3dRdInstanceRecord_t ) );
-		m_motionHistoryCells.resize( rScene.m_cells.size() );
+		m_nMotionHistoryCellCount = (uint32_t)( rScene.m_cells.size() );
 		if ( !rScene.m_cells.empty() ) {
 			std::memcpy( m_motionHistoryCells.data(),
 					rScene.m_cells.data(),
@@ -1255,10 +1288,10 @@ template <bool t_bShadowPass> bool Terrain3DRdInstanceRenderer::buildPacketsForP
 	m_packetBuildEntries.clear();
 	m_alphaPackets.clear();
 	if constexpr ( t_bShadowPass ) {
-		m_shadowVisibleIndices.clear();
+		m_nShadowVisibleIndexCount = 0u;
 		m_shadowPackets.clear();
 	} else {
-		m_visibleIndices.clear();
+		m_nVisibleIndexCount = 0u;
 		m_drawPackets.clear();
 		m_depthPackets.clear();
 		m_hlodDescriptors.clear();
@@ -1417,7 +1450,15 @@ template <bool t_bShadowPass> bool Terrain3DRdInstanceRenderer::buildPacketsForP
 		return false;
 	}
 	std::vector<uint32_t> &visible_indices = t_bShadowPass ? m_shadowVisibleIndices : m_visibleIndices;
-	visible_indices.resize( (size_t)( total_visible64 ) );
+	if ( total_visible64 > visible_indices.size() ) {
+		setError( "RD instance visible-index backing exceeded publication-time capacity" );
+		return false;
+	}
+	if constexpr ( t_bShadowPass ) {
+		m_nShadowVisibleIndexCount = (uint32_t)( total_visible64 );
+	} else {
+		m_nVisibleIndexCount = (uint32_t)( total_visible64 );
+	}
 	for ( const t3dRdPacketBuildEntry_t &entry : m_packetBuildEntries ) {
 		t3dRdPacketBuildSlot_t &slot = m_packetBuildSlots[entry.m_nPacketIndex];
 		uint32_t write = slot.m_nWriteOffset;
@@ -1481,7 +1522,7 @@ template <bool t_bShadowPass> bool Terrain3DRdInstanceRenderer::buildPacketsForP
 		}
 	}
 	m_nHlodCullDescriptors = m_hlodDescriptors.size();
-	m_nVisibleInstances = visible_indices.size();
+	m_nVisibleInstances = t_bShadowPass ? m_nShadowVisibleIndexCount : m_nVisibleIndexCount;
 	return true;
 }
 
@@ -1504,7 +1545,7 @@ bool Terrain3DRdInstanceRenderer::buildPackets( const t3dRdInstanceSceneSnapshot
 
 bool Terrain3DRdInstanceRenderer::uploadVisibility( void )
 {
-	const uint64_t visible_bytes64 = m_visibleIndices.size() * sizeof( uint32_t );
+	const uint64_t visible_bytes64 = (uint64_t)( m_nVisibleIndexCount ) * sizeof( uint32_t );
 	const uint64_t indirect_bytes64 = m_drawPackets.size() * sizeof( t3dRdIndexedIndirectCommand_t );
 	if ( visible_bytes64 > m_nVisibleCapacityBytes || indirect_bytes64 > m_nIndirectCapacityBytes ) {
 		setError( "RD instance visibility output exceeded publication-time capacity" );
@@ -1538,7 +1579,7 @@ bool Terrain3DRdInstanceRenderer::uploadVisibility( void )
 
 bool Terrain3DRdInstanceRenderer::uploadShadowVisibility( void )
 {
-	const uint64_t visible_bytes64 = m_shadowVisibleIndices.size() * sizeof( uint32_t );
+	const uint64_t visible_bytes64 = (uint64_t)( m_nShadowVisibleIndexCount ) * sizeof( uint32_t );
 	const uint64_t indirect_bytes64 = m_shadowPackets.size() * sizeof( t3dRdIndexedIndirectCommand_t );
 	if ( visible_bytes64 > m_nShadowVisibleCapacityBytes || indirect_bytes64 > m_nShadowIndirectCapacityBytes ||
 			!ensureShadowUniformSet() ) {
@@ -2006,6 +2047,13 @@ void Terrain3DRdInstanceRenderer::shutdown( void )
 	m_nHlodDescriptorCapacityBytes = 0u;
 	m_nUploadedSceneGeneration = m_nUploadedMeshGeneration = 0u;
 	m_nSceneCapacityMeshGeneration = 0u;
+	m_nVisibleIndexCount = 0u;
+	m_nShadowVisibleIndexCount = 0u;
+	m_nMotionHistoryRecordCount = 0u;
+	m_nMotionHistoryCellCount = 0u;
+	m_nMotionPreviousRecordCount = 0u;
+	m_nMotionCurrentOrderCount = 0u;
+	m_nMotionPreviousOrderCount = 0u;
 	m_visibleIndices.clear();
 	m_motionHistoryRecords.clear();
 	m_motionHistoryCells.clear();
@@ -2042,7 +2090,8 @@ bool Terrain3DRdInstanceRenderer::render( RenderData *const pRenderData,
 	if ( pScene->m_instances.empty() || pScene->m_cells.empty() ) {
 		m_nStaticInstances = pScene->m_instances.size();
 		m_nVisibleInstances = 0u;
-		m_visibleIndices.clear();
+		m_nVisibleIndexCount = 0u;
+		m_nShadowVisibleIndexCount = 0u;
 		m_drawPackets.clear();
 		m_depthPackets.clear();
 		m_shadowPackets.clear();
@@ -2050,14 +2099,17 @@ bool Terrain3DRdInstanceRenderer::render( RenderData *const pRenderData,
 		m_nHlodCullDescriptors = 0u;
 		return true;
 	}
-	if ( pMeshes && pMeshes->m_nGeneration != m_meshCache.getSourceGeneration() && !m_materialBindings.empty() ) {
-		m_context.beginResourceRebuild();
-		freeMaterialBindings();
-		m_context.endResourceRebuild();
-	}
-	if ( !pMeshes || !m_meshCache.upload( pMeshes ) || !uploadMaterials() || !uploadScene( pScene ) ) {
-		setError( "Failed to upload Terrain3D RD instance scene" );
-		return false;
+	{
+		Terrain3DAllocationPhaseScope allocation_phase( TERRAIN3D_ALLOCATION_PHASE_COLD_REBUILD );
+		if ( pMeshes && pMeshes->m_nGeneration != m_meshCache.getSourceGeneration() && !m_materialBindings.empty() ) {
+			m_context.beginResourceRebuild();
+			freeMaterialBindings();
+			m_context.endResourceRebuild();
+		}
+		if ( !pMeshes || !m_meshCache.upload( pMeshes ) || !uploadMaterials() || !uploadScene( pScene ) ) {
+			setError( "Failed to upload Terrain3D RD instance scene" );
+			return false;
+		}
 	}
 	Ref<RenderSceneBuffers> scene_buffers = pRenderData->get_render_scene_buffers();
 	Ref<RenderSceneBuffersRD> buffers = scene_buffers;
@@ -2223,7 +2275,8 @@ bool Terrain3DRdInstanceRenderer::prepareForwardPass( const t3dRdForwardPassCont
 		m_drawPackets.clear();
 		m_depthPackets.clear();
 		m_shadowPackets.clear();
-		m_visibleIndices.clear();
+		m_nVisibleIndexCount = 0u;
+		m_nShadowVisibleIndexCount = 0u;
 		m_hlodDescriptors.clear();
 		m_nVisibleInstances = 0u;
 		m_nStaticInstances = pScene->m_instances.size();
@@ -2235,14 +2288,17 @@ bool Terrain3DRdInstanceRenderer::prepareForwardPass( const t3dRdForwardPassCont
 		m_lastError = String();
 		return true;
 	}
-	if ( pMeshes && pMeshes->m_nGeneration != m_meshCache.getSourceGeneration() && !m_materialBindings.empty() ) {
-		m_context.beginResourceRebuild();
-		freeMaterialBindings();
-		m_context.endResourceRebuild();
-	}
-	if ( !pMeshes || !m_meshCache.upload( pMeshes ) || !uploadMaterials() || !uploadScene( pScene ) ) {
-		setError( "Failed to prepare Terrain3D native Forward+ instance scene" );
-		return false;
+	{
+		Terrain3DAllocationPhaseScope allocation_phase( TERRAIN3D_ALLOCATION_PHASE_COLD_REBUILD );
+		if ( pMeshes && pMeshes->m_nGeneration != m_meshCache.getSourceGeneration() && !m_materialBindings.empty() ) {
+			m_context.beginResourceRebuild();
+			freeMaterialBindings();
+			m_context.endResourceRebuild();
+		}
+		if ( !pMeshes || !m_meshCache.upload( pMeshes ) || !uploadMaterials() || !uploadScene( pScene ) ) {
+			setError( "Failed to prepare Terrain3D native Forward+ instance scene" );
+			return false;
+		}
 	}
 	const bool shadow_pass = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW;
 	// Shadow passes may arrive before the scene motion pass. They must never advance or

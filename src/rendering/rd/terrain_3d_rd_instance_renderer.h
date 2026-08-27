@@ -152,6 +152,13 @@ private:
 	uint32_t m_nInstanceUsedBytes = 0u;
 	uint32_t m_nPacketCapacity = 0u;
 	uint32_t m_nVisibleIndexCapacity = 0u;
+	uint32_t m_nVisibleIndexCount = 0u;
+	uint32_t m_nShadowVisibleIndexCount = 0u;
+	uint32_t m_nMotionHistoryRecordCount = 0u;
+	uint32_t m_nMotionHistoryCellCount = 0u;
+	uint32_t m_nMotionPreviousRecordCount = 0u;
+	uint32_t m_nMotionCurrentOrderCount = 0u;
+	uint32_t m_nMotionPreviousOrderCount = 0u;
 	RID m_hPreviewColorTexture;
 	RID m_hPreviewDepthTexture;
 	Vector2i m_previewSize;
