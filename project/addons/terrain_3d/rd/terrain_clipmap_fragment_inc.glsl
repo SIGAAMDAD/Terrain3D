@@ -1203,7 +1203,7 @@ void main() {
 		color_map = far_surface;
 		color_map.a = far_surface_alpha( far_bits );
 	} else {
-		material = sample_control_pair( nearest_control, world_position.xz, terrain_normal, tier_config, 1.0 );
+		material = sample_control_pair( nearest_control, world_position.xz, terrain_normal, tier_config );
 	}
 #elif T3D_TIER == 1
 	vec4 composite = sample_middle_composite( world_texel );
