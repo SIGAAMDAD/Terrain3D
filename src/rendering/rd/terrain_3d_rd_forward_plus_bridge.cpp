@@ -20,13 +20,13 @@
 
 Terrain3DRdForwardPlusBridgeAdapter *Terrain3DRdForwardPlusBridgeAdapter::s_pSingleton = nullptr;
 
-namespace {
-
-bool t3dRdForwardValidSampleCount( const uint32_t nSamples ) {
+static bool t3dRdForwardValidSampleCount( const uint32_t nSamples )
+{
 	return nSamples == 1u || nSamples == 2u || nSamples == 4u || nSamples == 8u;
 }
 
-uint32_t t3dRdForwardCtz64( const uint64_t nMask ) {
+static uint32_t t3dRdForwardCtz64( const uint64_t nMask )
+{
 #if defined( _MSC_VER )
 	unsigned long index = 0u;
 	_BitScanForward64( &index, nMask );
@@ -36,13 +36,15 @@ uint32_t t3dRdForwardCtz64( const uint64_t nMask ) {
 #endif
 }
 
-RID t3dRdForwardDecodeRid( const uint64_t nOpaque ) {
+static RID t3dRdForwardDecodeRid( const uint64_t nOpaque )
+{
 	RID result;
 	std::memcpy( &result, &nOpaque, sizeof( result ) );
 	return result;
 }
 
-Projection t3dRdForwardDecodeProjection( const float *const pValues ) {
+static Projection t3dRdForwardDecodeProjection( const float *const pValues )
+{
 	Projection result;
 	for ( uint32_t column = 0u; column < 4u; ++column ) {
 		for ( uint32_t row = 0u; row < 4u; ++row ) {
@@ -52,7 +54,8 @@ Projection t3dRdForwardDecodeProjection( const float *const pValues ) {
 	return result;
 }
 
-Transform3D t3dRdForwardDecodeTransform( const float *const pValues ) {
+static Transform3D t3dRdForwardDecodeTransform( const float *const pValues )
+{
 	const Basis basis( pValues[0],
 			pValues[1],
 			pValues[2],
@@ -65,7 +68,8 @@ Transform3D t3dRdForwardDecodeTransform( const float *const pValues ) {
 	return Transform3D( basis, Vector3( pValues[3], pValues[7], pValues[11] ) );
 }
 
-bool t3dRdForwardFiniteEnvironmentFrame( const t3dRdForwardBridgeFramePacket_t &rFrame ) {
+static bool t3dRdForwardFiniteEnvironmentFrame( const t3dRdForwardBridgeFramePacket_t& rFrame )
+{
 	if ( rFrame.m_nAbi10ReservedTail != 0u || rFrame.m_nEnvironmentReserved0 != 0u ||
 			rFrame.m_fEnvironmentReserved1 != 0.0f || ( rFrame.m_nEnvironmentFlags & ~uint32_t( 0x0fu ) ) != 0u ||
 			!std::isfinite( rFrame.m_fAmbientColorSkyMix ) || rFrame.m_fAmbientColorSkyMix < 0.0f ||
@@ -88,21 +92,22 @@ bool t3dRdForwardFiniteEnvironmentFrame( const t3dRdForwardBridgeFramePacket_t &
 	return true;
 }
 
-bool t3dRdForwardOrdinaryPassKind( const uint32_t nPassKind ) {
+static bool t3dRdForwardOrdinaryPassKind( const uint32_t nPassKind )
+{
 	return nPassKind == T3D_RD_FORWARD_PASS_DEPTH || nPassKind == T3D_RD_FORWARD_PASS_OPAQUE ||
 			nPassKind == T3D_RD_FORWARD_PASS_MOTION || nPassKind == T3D_RD_FORWARD_PASS_TRANSPARENT;
 }
 
-} // namespace
-
-Terrain3DRdForwardPlusBridgeAdapter::Terrain3DRdForwardPlusBridgeAdapter( void ) {
-	for ( std::atomic<Terrain3DRenderCoordinator *> &slot : m_szCoordinators ) {
+Terrain3DRdForwardPlusBridgeAdapter::Terrain3DRdForwardPlusBridgeAdapter( void )
+{
+	for ( std::atomic<Terrain3DRenderCoordinator *>& slot : m_szCoordinators ) {
 		slot.store( nullptr, std::memory_order_relaxed );
 	}
 	resetConnectionState();
 }
 
-void Terrain3DRdForwardPlusBridgeAdapter::initializeSingleton( void ) {
+void Terrain3DRdForwardPlusBridgeAdapter::initializeSingleton( void )
+{
 	if ( s_pSingleton ) {
 		return;
 	}
@@ -110,7 +115,8 @@ void Terrain3DRdForwardPlusBridgeAdapter::initializeSingleton( void ) {
 	s_pSingleton->connectEngineBridge();
 }
 
-void Terrain3DRdForwardPlusBridgeAdapter::shutdownSingleton( void ) {
+void Terrain3DRdForwardPlusBridgeAdapter::shutdownSingleton( void )
+{
 	Terrain3DRdForwardPlusBridgeAdapter *const adapter = s_pSingleton;
 	if ( !adapter ) {
 		return;
@@ -118,14 +124,15 @@ void Terrain3DRdForwardPlusBridgeAdapter::shutdownSingleton( void ) {
 	adapter->disconnectEngineBridge();
 	adapter->m_nCoordinatorMask.store( 0u, std::memory_order_release );
 	Terrain3DRdContext::forceSync();
-	for ( std::atomic<Terrain3DRenderCoordinator *> &slot : adapter->m_szCoordinators ) {
+	for ( std::atomic<Terrain3DRenderCoordinator *>& slot : adapter->m_szCoordinators ) {
 		slot.store( nullptr, std::memory_order_release );
 	}
 	s_pSingleton = nullptr;
 	memdelete( adapter );
 }
 
-void Terrain3DRdForwardPlusBridgeAdapter::resetConnectionState( void ) {
+void Terrain3DRdForwardPlusBridgeAdapter::resetConnectionState( void )
+{
 	m_bBridgePresent.store( false, std::memory_order_release );
 	m_bBridgeReady.store( false, std::memory_order_release );
 	m_bCallbackRegistered.store( false, std::memory_order_release );
@@ -152,19 +159,22 @@ void Terrain3DRdForwardPlusBridgeAdapter::resetConnectionState( void ) {
 #endif
 }
 
-void Terrain3DRdForwardPlusBridgeAdapter::setError( const String &rError ) {
+void Terrain3DRdForwardPlusBridgeAdapter::setError( const String& rError )
+{
 	std::lock_guard<std::mutex> lock( m_errorMutex );
 	m_lastError = rError;
 }
 
-String Terrain3DRdForwardPlusBridgeAdapter::getLastError( void ) const {
+String Terrain3DRdForwardPlusBridgeAdapter::getLastError( void ) const
+{
 	std::lock_guard<std::mutex> lock( m_errorMutex );
 	return m_lastError;
 }
 
-bool Terrain3DRdForwardPlusBridgeAdapter::connectEngineBridge( void ) {
+bool Terrain3DRdForwardPlusBridgeAdapter::connectEngineBridge( void )
+{
 	resetConnectionState();
-	const auto failConnection = [this]( const String &rError ) {
+	const auto failConnection = [this]( const String& rError ) {
 		setError( rError );
 		UtilityFunctions::push_error( "Terrain3D Forward+ bridge: ", rError );
 		return false;
@@ -242,7 +252,8 @@ bool Terrain3DRdForwardPlusBridgeAdapter::connectEngineBridge( void ) {
 	return true;
 }
 
-void Terrain3DRdForwardPlusBridgeAdapter::disconnectEngineBridge( void ) {
+void Terrain3DRdForwardPlusBridgeAdapter::disconnectEngineBridge( void )
+{
 	m_bBridgeReady.store( false, std::memory_order_release );
 	Object *const bridge = m_pEngineBridge;
 	if ( bridge && m_bCallbackRegistered.exchange( false, std::memory_order_acq_rel ) ) {
@@ -260,7 +271,8 @@ void Terrain3DRdForwardPlusBridgeAdapter::disconnectEngineBridge( void ) {
 	m_bBridgePresent.store( false, std::memory_order_release );
 }
 
-bool Terrain3DRdForwardPlusBridgeAdapter::attachCoordinator( Terrain3DRenderCoordinator *const pCoordinator ) {
+bool Terrain3DRdForwardPlusBridgeAdapter::attachCoordinator( Terrain3DRenderCoordinator *const pCoordinator )
+{
 	if ( !pCoordinator ) {
 		return false;
 	}
@@ -281,7 +293,8 @@ bool Terrain3DRdForwardPlusBridgeAdapter::attachCoordinator( Terrain3DRenderCoor
 	return false;
 }
 
-void Terrain3DRdForwardPlusBridgeAdapter::detachCoordinator( Terrain3DRenderCoordinator *const pCoordinator ) {
+void Terrain3DRdForwardPlusBridgeAdapter::detachCoordinator( Terrain3DRenderCoordinator *const pCoordinator )
+{
 	if ( !pCoordinator ) {
 		return;
 	}
@@ -305,7 +318,8 @@ void Terrain3DRdForwardPlusBridgeAdapter::detachCoordinator( Terrain3DRenderCoor
 	}
 }
 
-bool Terrain3DRdForwardPlusBridgeAdapter::convertFrame( const t3dRdForwardBridgeFramePacket_t &rFrame ) {
+bool Terrain3DRdForwardPlusBridgeAdapter::convertFrame( const t3dRdForwardBridgeFramePacket_t& rFrame )
+{
 	if ( rFrame.m_nAbi != s_nBridgeAbiVersion || rFrame.m_nStructSize != sizeof( rFrame ) ||
 			rFrame.m_nGeneration == 0u || rFrame.m_nViewCount == 0u ||
 			rFrame.m_nViewCount > s_nT3dForwardBridgeMaxViews ||
@@ -317,7 +331,7 @@ bool Terrain3DRdForwardPlusBridgeAdapter::convertFrame( const t3dRdForwardBridge
 		return true;
 	}
 
-	t3dRdForwardPassContext_t &context = m_mainCallbackContext;
+	t3dRdForwardPassContext_t& context = m_mainCallbackContext;
 	context.m_nBridgeAbiVersion = s_nBridgeAbiVersion;
 	context.m_nFrameGeneration = rFrame.m_nGeneration;
 	context.m_nScenePass = rFrame.m_nScenePass;
@@ -380,7 +394,8 @@ bool Terrain3DRdForwardPlusBridgeAdapter::convertFrame( const t3dRdForwardBridge
 	return true;
 }
 
-bool Terrain3DRdForwardPlusBridgeAdapter::convertResources( const t3dRdForwardBridgeResourcePacket_t &rResources ) {
+bool Terrain3DRdForwardPlusBridgeAdapter::convertResources( const t3dRdForwardBridgeResourcePacket_t& rResources )
+{
 	if ( rResources.m_nAbi != s_nBridgeAbiVersion || rResources.m_nStructSize != sizeof( rResources ) ||
 			rResources.m_nGeneration == 0u || rResources.m_nReserved0 != 0u ) {
 		setError( "Terrain3D ABI 11 borrowed-resource packet validation failed" );
@@ -389,7 +404,7 @@ bool Terrain3DRdForwardPlusBridgeAdapter::convertResources( const t3dRdForwardBr
 	if ( rResources.m_nGeneration == m_nCachedResourceGeneration ) {
 		return true;
 	}
-	t3dRdForwardPassContext_t &context = m_mainCallbackContext;
+	t3dRdForwardPassContext_t& context = m_mainCallbackContext;
 	context.m_nResourceGeneration = rResources.m_nGeneration;
 	context.m_hDirectionalLightBuffer = t3dRdForwardDecodeRid( rResources.m_hDirectionalLightBuffer );
 	context.m_hOmniLightBuffer = t3dRdForwardDecodeRid( rResources.m_hOmniLightBuffer );
@@ -409,7 +424,8 @@ bool Terrain3DRdForwardPlusBridgeAdapter::convertResources( const t3dRdForwardBr
 	return true;
 }
 
-bool Terrain3DRdForwardPlusBridgeAdapter::convertPass( const t3dRdForwardBridgePassPacket_t &rPass ) {
+bool Terrain3DRdForwardPlusBridgeAdapter::convertPass( const t3dRdForwardBridgePassPacket_t& rPass )
+{
 	if ( rPass.m_nAbi != s_nBridgeAbiVersion || rPass.m_nStructSize != sizeof( rPass ) ||
 			!t3dRdForwardOrdinaryPassKind( rPass.m_nPassKind ) ||
 			rPass.m_nNativePassMode > T3D_RD_FORWARD_NATIVE_PASS_SDF || rPass.m_nSerial == 0u ||
@@ -417,7 +433,7 @@ bool Terrain3DRdForwardPlusBridgeAdapter::convertPass( const t3dRdForwardBridgeP
 		setError( "Terrain3D ABI 11 ordinary-pass packet validation failed" );
 		return false;
 	}
-	t3dRdForwardPassContext_t &context = m_mainCallbackContext;
+	t3dRdForwardPassContext_t& context = m_mainCallbackContext;
 	context.m_phase = T3D_RD_FORWARD_PHASE_PREPARE;
 	context.m_passKind = (t3dRdForwardPassKind_t)( rPass.m_nPassKind );
 	context.m_nativePassMode = (t3dRdForwardNativePassMode_t)( rPass.m_nNativePassMode );
@@ -431,7 +447,8 @@ bool Terrain3DRdForwardPlusBridgeAdapter::convertPass( const t3dRdForwardBridgeP
 	return true;
 }
 
-bool Terrain3DRdForwardPlusBridgeAdapter::convertShadow( const t3dRdForwardBridgeShadowPacket_t &rShadow ) {
+bool Terrain3DRdForwardPlusBridgeAdapter::convertShadow( const t3dRdForwardBridgeShadowPacket_t& rShadow )
+{
 	if ( rShadow.m_nAbi != s_nBridgeAbiVersion || rShadow.m_nStructSize != sizeof( rShadow ) ||
 			rShadow.m_nNativePassMode > T3D_RD_FORWARD_NATIVE_PASS_SDF ||
 			!t3dRdForwardValidSampleCount( rShadow.m_nSampleCount ) || rShadow.m_nReserved0 != 0u ||
@@ -440,7 +457,7 @@ bool Terrain3DRdForwardPlusBridgeAdapter::convertShadow( const t3dRdForwardBridg
 		return false;
 	}
 	m_shadowCallbackContext = t3dRdForwardPassContext_t{};
-	t3dRdForwardPassContext_t &context = m_shadowCallbackContext;
+	t3dRdForwardPassContext_t& context = m_shadowCallbackContext;
 	context.m_nBridgeAbiVersion = s_nBridgeAbiVersion;
 	context.m_phase = T3D_RD_FORWARD_PHASE_PREPARE;
 	context.m_passKind = T3D_RD_FORWARD_PASS_SHADOW;
@@ -464,7 +481,8 @@ bool Terrain3DRdForwardPlusBridgeAdapter::convertShadow( const t3dRdForwardBridg
 	return true;
 }
 
-bool Terrain3DRdForwardPlusBridgeAdapter::dispatchToCoordinators( const t3dRdForwardPassContext_t &rContext ) {
+bool Terrain3DRdForwardPlusBridgeAdapter::dispatchToCoordinators( const t3dRdForwardPassContext_t& rContext )
+{
 	uint64_t mask = m_nCoordinatorMask.load( std::memory_order_acquire );
 	bool dispatched = false;
 	bool accepted = true;
@@ -482,7 +500,8 @@ bool Terrain3DRdForwardPlusBridgeAdapter::dispatchToCoordinators( const t3dRdFor
 
 uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepare( const t3dRdForwardBridgeFramePacket_t *const pFrame,
 		const t3dRdForwardBridgeResourcePacket_t *const pResources,
-		const t3dRdForwardBridgePassPacket_t *const pPass ) noexcept {
+		const t3dRdForwardBridgePassPacket_t *const pPass ) noexcept
+{
 #if defined( TOOLS_ENABLED ) || defined( DEBUG_ENABLED )
 	++m_nPacketsReceived;
 #endif
@@ -508,7 +527,8 @@ uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepare( const t3dRdForwardBridgeF
 }
 
 uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepareShadow(
-		const t3dRdForwardBridgeShadowPacket_t *const pShadow ) noexcept {
+		const t3dRdForwardBridgeShadowPacket_t *const pShadow ) noexcept
+{
 #if defined( TOOLS_ENABLED ) || defined( DEBUG_ENABLED )
 	++m_nPacketsReceived;
 #endif
@@ -531,8 +551,8 @@ uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepareShadow(
 	return pShadow->m_nSerial;
 }
 
-uint32_t Terrain3DRdForwardPlusBridgeAdapter::submit( const uint64_t nPreparedSerial,
-		const int64_t nDrawList ) noexcept {
+uint32_t Terrain3DRdForwardPlusBridgeAdapter::submit( const uint64_t nPreparedSerial, const int64_t nDrawList ) noexcept
+{
 	if ( nPreparedSerial == 0u || nPreparedSerial != m_nCachedPassSerial || nDrawList < 0 || !m_pPreparedContext ) {
 		return 0u;
 	}
@@ -550,14 +570,16 @@ uint32_t Terrain3DRdForwardPlusBridgeAdapter::submit( const uint64_t nPreparedSe
 uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepareThunk( void *const pUserdata,
 		const t3dRdForwardBridgeFramePacket_t *const pFrame,
 		const t3dRdForwardBridgeResourcePacket_t *const pResources,
-		const t3dRdForwardBridgePassPacket_t *const pPass ) noexcept {
+		const t3dRdForwardBridgePassPacket_t *const pPass ) noexcept
+{
 	Terrain3DRdForwardPlusBridgeAdapter *const adapter =
 			static_cast<Terrain3DRdForwardPlusBridgeAdapter *>( pUserdata );
 	return adapter ? adapter->prepare( pFrame, pResources, pPass ) : 0u;
 }
 
 uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepareShadowThunk( void *const pUserdata,
-		const t3dRdForwardBridgeShadowPacket_t *const pShadow ) noexcept {
+		const t3dRdForwardBridgeShadowPacket_t *const pShadow ) noexcept
+{
 	Terrain3DRdForwardPlusBridgeAdapter *const adapter =
 			static_cast<Terrain3DRdForwardPlusBridgeAdapter *>( pUserdata );
 	return adapter ? adapter->prepareShadow( pShadow ) : 0u;
@@ -565,13 +587,15 @@ uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepareShadowThunk( void *const pU
 
 uint32_t Terrain3DRdForwardPlusBridgeAdapter::submitThunk( void *const pUserdata,
 		const uint64_t nPreparedSerial,
-		const int64_t nDrawList ) noexcept {
+		const int64_t nDrawList ) noexcept
+{
 	Terrain3DRdForwardPlusBridgeAdapter *const adapter =
 			static_cast<Terrain3DRdForwardPlusBridgeAdapter *>( pUserdata );
 	return adapter ? adapter->submit( nPreparedSerial, nDrawList ) : 0u;
 }
 
-Dictionary Terrain3DRdForwardPlusBridgeAdapter::getDiagnostics( void ) {
+Dictionary Terrain3DRdForwardPlusBridgeAdapter::getDiagnostics( void )
+{
 	Terrain3DRdContext::forceSync();
 	Dictionary result;
 	result["singleton_name"] = s_pszEngineSingletonName;

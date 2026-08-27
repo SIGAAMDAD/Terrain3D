@@ -9,8 +9,7 @@
 #include <godot_cpp/classes/rd_uniform.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
 
-namespace {
-Ref<RDUniform>
+static Ref<RDUniform>
 t3dRdForwardLightUniform( const int nBinding, const RenderingDevice::UniformType type, const RID &rRid ) {
 	Ref<RDUniform> uniform;
 	uniform.instantiate();
@@ -20,7 +19,7 @@ t3dRdForwardLightUniform( const int nBinding, const RenderingDevice::UniformType
 	return uniform;
 }
 
-bool t3dRdForwardLightAdopt( Terrain3DRdContext &rContext,
+static bool t3dRdForwardLightAdopt( Terrain3DRdContext &rContext,
 		RenderingDevice *const pRd,
 		RID &rRid,
 		const String &rName,
@@ -36,7 +35,6 @@ bool t3dRdForwardLightAdopt( Terrain3DRdContext &rContext,
 	rRid = RID();
 	return false;
 }
-} // namespace
 
 Terrain3DRdForwardLighting::Terrain3DRdForwardLighting( Terrain3DRdContext &rContext ) : m_context( rContext ) {
 	m_frameBytes.resize( sizeof( t3dRdForwardLightFrame_t ) );

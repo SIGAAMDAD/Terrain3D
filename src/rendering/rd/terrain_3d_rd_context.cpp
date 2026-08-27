@@ -5,8 +5,7 @@
 #include <algorithm>
 #include <godot_cpp/classes/rendering_server.hpp>
 
-namespace {
-const char *const s_memory_keys[Terrain3DRdContext::MEMORY_CATEGORY_COUNT] = {
+static const char *const s_memory_keys[Terrain3DRdContext::MEMORY_CATEGORY_COUNT] = {
 	"none",
 	"topology_vb",
 	"topology_ib",
@@ -24,7 +23,7 @@ const char *const s_memory_keys[Terrain3DRdContext::MEMORY_CATEGORY_COUNT] = {
 	"shadow",
 };
 
-const char *const s_state_names[] = {
+static const char *const s_state_names[] = {
 	"uninitialized",
 	"ready",
 	"failed",
@@ -33,7 +32,7 @@ const char *const s_state_names[] = {
 	"shutting_down",
 };
 
-const char *const s_failure_names[] = {
+static const char *const s_failure_names[] = {
 	"none",
 	"device_unavailable",
 	"resource_creation",
@@ -45,7 +44,7 @@ const char *const s_failure_names[] = {
 	"render_pass",
 };
 
-const char *const s_pass_names[] = {
+static const char *const s_pass_names[] = {
 	"none",
 	"terrain_clipmap",
 };
@@ -55,7 +54,6 @@ static_assert( sizeof( s_state_names ) / sizeof( s_state_names[0] ) == Terrain3D
 static_assert( sizeof( s_failure_names ) / sizeof( s_failure_names[0] ) == Terrain3DRdContext::FAILURE_RENDER_PASS + 1u );
 static_assert( sizeof( s_pass_names ) / sizeof( s_pass_names[0] ) == Terrain3DRdContext::PASS_COUNT );
 
-} // namespace
 
 RenderingDevice *Terrain3DRdContext::getGlobalDevice( void ) {
 	RenderingServer *const pServer = RenderingServer::get_singleton();

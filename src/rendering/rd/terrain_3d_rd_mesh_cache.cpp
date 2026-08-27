@@ -23,13 +23,12 @@
 #include <godot_cpp/variant/utility_functions.hpp>
 #include <limits>
 
-namespace {
-constexpr uint64_t s_nFnvOffset = 14695981039346656037ull;
-constexpr uint64_t s_nFnvPrime = 1099511628211ull;
-constexpr uint32_t s_nMinVertexArenaBytes = 4u * 1024u * 1024u;
-constexpr uint32_t s_nMinIndexArenaBytes = 2u * 1024u * 1024u;
+static constexpr uint64_t s_nFnvOffset = 14695981039346656037ull;
+static constexpr uint64_t s_nFnvPrime = 1099511628211ull;
+static constexpr uint32_t s_nMinVertexArenaBytes = 4u * 1024u * 1024u;
+static constexpr uint32_t s_nMinIndexArenaBytes = 2u * 1024u * 1024u;
 
-uint64_t t3dRdHashU64( uint64_t nHash, const uint64_t nValue ) {
+static uint64_t t3dRdHashU64( uint64_t nHash, const uint64_t nValue ) {
 	for ( uint32_t i = 0u; i < 8u; ++i ) {
 		nHash ^= ( nValue >> ( i * 8u ) ) & 0xffu;
 		nHash *= s_nFnvPrime;
@@ -37,31 +36,31 @@ uint64_t t3dRdHashU64( uint64_t nHash, const uint64_t nValue ) {
 	return nHash;
 }
 
-uint64_t t3dRdObjectId( const Object *const pObject ) {
+static uint64_t t3dRdObjectId( const Object *const pObject ) {
 	return pObject ? (uint64_t)( pObject->get_instance_id() ) : 0u;
 }
 
-uint64_t t3dRdHashF32( uint64_t nHash, const float fValue ) {
+static uint64_t t3dRdHashF32( uint64_t nHash, const float fValue ) {
 	uint32_t bits = 0u;
 	static_assert( sizeof( bits ) == sizeof( fValue ), "float hash ABI changed" );
 	std::memcpy( &bits, &fValue, sizeof( bits ) );
 	return t3dRdHashU64( nHash, bits );
 }
 
-uint64_t t3dRdHashVector3( uint64_t nHash, const Vector3 &rValue ) {
+static uint64_t t3dRdHashVector3( uint64_t nHash, const Vector3 &rValue ) {
 	nHash = t3dRdHashF32( nHash, (float)( rValue.x ) );
 	nHash = t3dRdHashF32( nHash, (float)( rValue.y ) );
 	return t3dRdHashF32( nHash, (float)( rValue.z ) );
 }
 
-uint64_t t3dRdHashColor( uint64_t nHash, const Color &rValue ) {
+static uint64_t t3dRdHashColor( uint64_t nHash, const Color &rValue ) {
 	nHash = t3dRdHashF32( nHash, (float)( rValue.r ) );
 	nHash = t3dRdHashF32( nHash, (float)( rValue.g ) );
 	nHash = t3dRdHashF32( nHash, (float)( rValue.b ) );
 	return t3dRdHashF32( nHash, (float)( rValue.a ) );
 }
 
-uint64_t t3dRdHashTexture( uint64_t nHash, const Ref<Texture2D> &rTexture ) {
+static uint64_t t3dRdHashTexture( uint64_t nHash, const Ref<Texture2D> &rTexture ) {
 	nHash = t3dRdHashU64( nHash, t3dRdObjectId( rTexture.ptr() ) );
 	if ( rTexture.is_null() ) {
 		return nHash;
@@ -72,7 +71,7 @@ uint64_t t3dRdHashTexture( uint64_t nHash, const Ref<Texture2D> &rTexture ) {
 	return t3dRdHashU64( nHash, (uint64_t)( rTexture->get_height() ) );
 }
 
-uint64_t t3dRdHashMaterial( uint64_t nHash, const Ref<Material> &rMaterial ) {
+static uint64_t t3dRdHashMaterial( uint64_t nHash, const Ref<Material> &rMaterial ) {
 	nHash = t3dRdHashU64( nHash, t3dRdObjectId( rMaterial.ptr() ) );
 	BaseMaterial3D *const pBase = rMaterial.is_valid() ? Object::cast_to<BaseMaterial3D>( rMaterial.ptr() ) : nullptr;
 	if ( !pBase ) {
@@ -110,11 +109,11 @@ uint64_t t3dRdHashMaterial( uint64_t nHash, const Ref<Material> &rMaterial ) {
 	return nHash;
 }
 
-int16_t t3dRdPackSnorm16( const float fValue ) {
+static int16_t t3dRdPackSnorm16( const float fValue ) {
 	return (int16_t)( std::lround( CLAMP( fValue, -1.0f, 1.0f ) * 32767.0f ) );
 }
 
-uint64_t t3dRdHashBytes( uint64_t nHash, const PackedByteArray &rBytes ) {
+static uint64_t t3dRdHashBytes( uint64_t nHash, const PackedByteArray &rBytes ) {
 	const uint8_t *const pBytes = rBytes.ptr();
 	for ( int64_t i = 0; i < rBytes.size(); ++i ) {
 		nHash ^= pBytes[i];
@@ -123,7 +122,7 @@ uint64_t t3dRdHashBytes( uint64_t nHash, const PackedByteArray &rBytes ) {
 	return nHash;
 }
 
-bool t3dRdAddTextureSource( const Ref<Texture2D> &rTexture, std::vector<t3dRdImportedTextureSource_t> &rTextures ) {
+static bool t3dRdAddTextureSource( const Ref<Texture2D> &rTexture, std::vector<t3dRdImportedTextureSource_t> &rTextures ) {
 	if ( rTexture.is_null() ) {
 		return false;
 	}
@@ -168,7 +167,7 @@ bool t3dRdAddTextureSource( const Ref<Texture2D> &rTexture, std::vector<t3dRdImp
 	return true;
 }
 
-uint16_t t3dRdAddMaterial( const Ref<Material> &rMaterial,
+static uint16_t t3dRdAddMaterial( const Ref<Material> &rMaterial,
 		std::vector<t3dRdInstanceMaterial_t> &rMaterials,
 		std::vector<t3dRdImportedTextureSource_t> &rTextures ) {
 	if ( rMaterial.is_null() ) {
@@ -288,7 +287,7 @@ uint16_t t3dRdAddMaterial( const Ref<Material> &rMaterial,
 	return (uint16_t)( rMaterials.size() - 1u );
 }
 
-bool t3dRdAppendBytes( PackedByteArray &rDestination, const void *const pSource, const uint32_t nBytes ) {
+static bool t3dRdAppendBytes( PackedByteArray &rDestination, const void *const pSource, const uint32_t nBytes ) {
 	if ( nBytes == 0u ) {
 		return true;
 	}
@@ -304,13 +303,13 @@ bool t3dRdAppendBytes( PackedByteArray &rDestination, const void *const pSource,
 	return true;
 }
 
-void t3dRdSetError( String *const pError, const String &rError ) {
+static void t3dRdSetError( String *const pError, const String &rError ) {
 	if ( pError ) {
 		*pError = rError;
 	}
 }
 
-bool t3dRdAppendMeshSource( const Ref<Mesh> &rMesh,
+static bool t3dRdAppendMeshSource( const Ref<Mesh> &rMesh,
 		const uint64_t nSourceKey,
 		const uint16_t nAssetId,
 		const int16_t nLod,
@@ -489,7 +488,6 @@ bool t3dRdAppendMeshSource( const Ref<Mesh> &rMesh,
 	}
 	return true;
 }
-} // namespace
 
 Terrain3DRdMeshCache::Terrain3DRdMeshCache( void ) : m_context( Terrain3DRdContext::getShared() ) {}
 
