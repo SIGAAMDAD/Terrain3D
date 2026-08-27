@@ -780,12 +780,6 @@ SampledMaterial sample_resolved_control_pair( uint control, vec2 world_xz, vec3 
 	return result;
 }
 
-SampledMaterial sample_control_pair( uint raw_control, vec2 world_xz, vec3 terrain_normal,
-									 TierMaterialConfig tier_config ) {
-	uint control = auto_control( raw_control, terrain_normal, world_position.y, terrain_region_layer < 0 );
-	return sample_resolved_control_pair( control, world_xz, terrain_normal, tier_config );
-}
-
 vec4 corner_weights( vec2 world_texel ) {
 	vec2 f = fract( world_texel );
 	return vec4( ( 1.0 - f.x ) * ( 1.0 - f.y ), f.x * ( 1.0 - f.y ), ( 1.0 - f.x ) * f.y, f.x * f.y );
@@ -809,7 +803,9 @@ bool use_bilinear_controls( TierMaterialConfig tier_config ) {
 SampledMaterial sample_detailed_material( vec2 world_texel, vec3 terrain_normal, TierMaterialConfig tier_config ) {
 	ivec2 base_texel = ivec2( floor( world_texel ) );
 	if ( !use_bilinear_controls( tier_config ) ) {
-		return sample_control_pair( read_control( base_texel ), world_position.xz, terrain_normal, tier_config );
+		uint resolved_control =
+			auto_control( read_control( base_texel ), terrain_normal, world_position.y, terrain_region_layer < 0 );
+		return sample_resolved_control_pair( resolved_control, world_position.xz, terrain_normal, tier_config );
 	}
 	ivec2 offsets[4] = ivec2[4]( ivec2( 0, 0 ), ivec2( 1, 0 ), ivec2( 0, 1 ), ivec2( 1, 1 ) );
 	vec4 weights = corner_weights( world_texel );
@@ -1203,7 +1199,9 @@ void main() {
 		color_map = far_surface;
 		color_map.a = far_surface_alpha( far_bits );
 	} else {
-		material = sample_control_pair( nearest_control, world_position.xz, terrain_normal, tier_config );
+		uint resolved_control =
+			auto_control( nearest_control, terrain_normal, world_position.y, terrain_region_layer < 0 );
+		material = sample_resolved_control_pair( resolved_control, world_position.xz, terrain_normal, tier_config );
 	}
 #elif T3D_TIER == 1
 	vec4 composite = sample_middle_composite( world_texel );
