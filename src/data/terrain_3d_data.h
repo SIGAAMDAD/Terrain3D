@@ -234,6 +234,13 @@ public:
 	EA_FORCE_INLINE uint64_t getPhysicalRegionMapGenerationInternal( void ) const {
 		return m_gpuRegionCache.getPhysicalPageTableGeneration();
 	}
+	EA_FORCE_INLINE const uint16_t *getPhysicalRegionMapDataInternal( void ) const {
+		return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getRegionMapData()
+										 : m_regionRepository.getLogicalRegionMapData();
+	}
+	EA_FORCE_INLINE const uint16_t *getLogicalRegionMapDataInternal( void ) const {
+		return m_regionRepository.getLogicalRegionMapData();
+	}
 	EA_FORCE_INLINE void setVertexSpacingInternal( const real_t fVertexSpacing ) {
 		m_regionRepository.setVertexSpacing( fVertexSpacing );
 	}

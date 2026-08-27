@@ -36,46 +36,53 @@ private:
 	uint64_t m_nAttachedCameraId = 0u;
 	bool m_bCreatedCompositor = false;
 
-	typedef struct t3dRdPublishedResources_s
-	{
-		RID m_hHeightTextureRd;
-		RID m_hDerivedTextureRd;
-		RID m_hControlTextureRd;
-		RID m_hColorTextureRd;
-		RID m_hMiddleCompositeTextureRd;
-		RID m_hTerrainShadowMaskTextureRd;
-		RID m_hMiddleHeightTextureRd;
-		RID m_hMiddleHeightRegionMapTextureRd;
-		RID m_hFarHeightTextureRd;
-		RID m_hFarColorTextureRd;
-		RID m_hAlbedoTextureRd;
-		RID m_hFarAlbedoTextureRd;
-		RID m_hNormalTextureRd;
-		RID m_hSurfaceTextureRd;
-		RID m_hMaterialDisplacementTextureRd;
-		RID m_hDisplacementTextureRd;
-		RID m_hWorldNoiseTextureRd;
-		RID m_hMacroNoiseTextureRd;
-		RID m_hEditorBrushTextureRd;
-	} t3dRdPublishedResources_t;
-
 	typedef struct t3dRdFrameSnapshotSlot_s
 	{
 		t3dRdFrameSnapshot_t m_snapshot;
-		PackedByteArray m_regionMapBytes;
-		t3dRdPublishedResources_t m_resources;
-		// Variable publication payloads live in the reclaimed atomic frame slot.
-		// The render thread therefore observes stable storage without reference
-		// counting, heap ownership transfers, or cross-frame lifetime ambiguity.
-		t3dRdMeshSourceSnapshot_t m_instanceMeshes;
-		t3dRdInstanceSceneSnapshot_t m_instanceScene;
-		t3dRdOceanTopologySnapshot_t m_oceanTopology;
-		bool m_bInstanceMeshesValid = false;
-		bool m_bInstanceSceneValid = false;
-		bool m_bOceanTopologyValid = false;
+		t3dRdTerrainBindings_t m_bindings;
+		uint32_t m_nRegionMapBank = s_nRdInvalidFrameSnapshotIndex;
+		uint32_t m_nInstanceMeshBank = s_nRdInvalidFrameSnapshotIndex;
+		uint32_t m_nInstanceSceneBank = s_nRdInvalidFrameSnapshotIndex;
+		uint32_t m_nOceanTopologyBank = s_nRdInvalidFrameSnapshotIndex;
 	} t3dRdFrameSnapshotSlot_t;
 
+	typedef struct t3dRdRegionMapBank_s
+	{
+		uint64_t m_nGeneration = 0u;
+		PackedByteArray m_bytes;
+	} t3dRdRegionMapBank_t;
+
+	typedef struct t3dRdInstanceMeshBank_s
+	{
+		uint64_t m_nGeneration = 0u;
+		t3dRdMeshSourceSnapshot_t m_snapshot;
+	} t3dRdInstanceMeshBank_t;
+
+	typedef struct t3dRdInstanceSceneBank_s
+	{
+		uint64_t m_nGeneration = 0u;
+		t3dRdInstanceSceneSnapshot_t m_snapshot;
+	} t3dRdInstanceSceneBank_t;
+
+	typedef struct t3dRdOceanTopologyBank_s
+	{
+		uint64_t m_nGeneration = 0u;
+		t3dRdOceanTopologySnapshot_t m_snapshot;
+	} t3dRdOceanTopologyBank_t;
+
 	std::array<t3dRdFrameSnapshotSlot_t, s_nRdFrameSnapshotSlotCount> m_snapshotSlots{};
+	std::array<t3dRdRegionMapBank_t, s_nRdFrameSnapshotSlotCount> m_regionMapBanks{};
+	std::array<t3dRdInstanceMeshBank_t, s_nRdFrameSnapshotSlotCount> m_instanceMeshBanks{};
+	std::array<t3dRdInstanceSceneBank_t, s_nRdFrameSnapshotSlotCount> m_instanceSceneBanks{};
+	std::array<t3dRdOceanTopologyBank_t, s_nRdFrameSnapshotSlotCount> m_oceanTopologyBanks{};
+	std::atomic_uint32_t m_nRegionMapReaderBank{ s_nRdInvalidFrameSnapshotIndex };
+	std::atomic_uint32_t m_nInstanceMeshReaderBank{ s_nRdInvalidFrameSnapshotIndex };
+	std::atomic_uint32_t m_nInstanceSceneReaderBank{ s_nRdInvalidFrameSnapshotIndex };
+	std::atomic_uint32_t m_nOceanTopologyReaderBank{ s_nRdInvalidFrameSnapshotIndex };
+	uint32_t m_nCurrentRegionMapBank = s_nRdInvalidFrameSnapshotIndex;
+	uint32_t m_nCurrentInstanceMeshBank = s_nRdInvalidFrameSnapshotIndex;
+	uint32_t m_nCurrentInstanceSceneBank = s_nRdInvalidFrameSnapshotIndex;
+	uint32_t m_nCurrentOceanTopologyBank = s_nRdInvalidFrameSnapshotIndex;
 	std::atomic_uint64_t m_nSnapshotExchangeToken{ t3dRdMakeFrameSnapshotToken( 1u, 0u, false ) };
 	uint32_t m_nSnapshotWriteIndex = 2u;
 	uint32_t m_nSnapshotRenderIndex = 0u;
@@ -92,7 +99,6 @@ private:
 	std::atomic_uint64_t m_nStaleSnapshots{ 0u };
 	std::atomic_uint64_t m_nLastStaleSnapshotToken{ 0u };
 
-	PackedByteArray m_regionMapBytes;
 	uint64_t m_nRegionTopologyGeneration = 0u;
 	uint64_t m_nRegionLightingSignature = 0u;
 	uint64_t m_nRegionMapGeneration = 0u;
@@ -107,7 +113,7 @@ private:
 	uint64_t m_nMaterialGeneration = 0u;
 	uint64_t m_nTerrainTextureGeneration = 0u;
 	uint64_t m_nMaterialTextureGeneration = 0u;
-	t3dRdPublishedResources_t m_lastPublishedResources;
+	t3dRdTerrainBindings_t m_lastPublishedResources;
 	bool m_bRegionMapInitialized = false;
 	bool m_bRegionCacheInitialized = false;
 	bool m_bPatchStateInitialized = false;
@@ -206,6 +212,7 @@ private:
 	bool ensureWorldNoiseCache( const Terrain3DMaterial *pMaterial );
 	bool ensureMacroNoiseTexture( const Terrain3DMaterial *pMaterial );
 	bool ensureEditorBrushTexture( const Terrain3DMaterial *pMaterial );
+	uint32_t selectWritablePublicationBank( uint32_t nReaderBank, uint32_t nPendingBank ) const;
 	void publishSnapshot( void );
 	const t3dRdFrameSnapshotSlot_t *acquireSnapshotOnRenderThread( void );
 	void resetSnapshotPublication( void );

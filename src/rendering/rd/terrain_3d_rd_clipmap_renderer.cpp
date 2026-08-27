@@ -785,27 +785,28 @@ void Terrain3DRdClipmapRenderer::freeUniformSets( void )
 	}
 }
 
-bool Terrain3DRdClipmapRenderer::ensureUniformSets( const RID& rHeight,
-		const RID& rDerived,
-		const RID& rControl,
-		const RID& rColor,
-		const RID& rMiddleComposite,
-		const RID& rTerrainShadowMask,
-		const RID& rMiddleHeight,
-		const RID& rMiddleHeightRegionMap,
-		const RID& rFarHeight,
-		const RID& rFarColor,
-		const RID& rAlbedo,
-		const RID& rFarAlbedo,
-		const RID& rNormal,
-		const RID& rSurface,
-		const RID& rMaterialDisplacement,
-		const RID& rDisplacement,
-		const RID& rWorldNoise,
-		const RID& rMacroNoise,
-		const RID& rEditorBrush,
-		const t3dRdMaterialConfig_t& rMaterialConfig )
+bool Terrain3DRdClipmapRenderer::ensureUniformSets( const t3dRdTerrainBindings_t &rBindings,
+		const t3dRdMaterialConfig_t &rMaterialConfig )
 {
+	const RID &rHeight = rBindings.m_hHeightTextureRd;
+	const RID &rDerived = rBindings.m_hDerivedTextureRd;
+	const RID &rControl = rBindings.m_hControlTextureRd;
+	const RID &rColor = rBindings.m_hColorTextureRd;
+	const RID &rMiddleComposite = rBindings.m_hMiddleCompositeTextureRd;
+	const RID &rTerrainShadowMask = rBindings.m_hTerrainShadowMaskTextureRd;
+	const RID &rMiddleHeight = rBindings.m_hMiddleHeightTextureRd;
+	const RID &rMiddleHeightRegionMap = rBindings.m_hMiddleHeightRegionMapTextureRd;
+	const RID &rFarHeight = rBindings.m_hFarHeightTextureRd;
+	const RID &rFarColor = rBindings.m_hFarColorTextureRd;
+	const RID &rAlbedo = rBindings.m_hAlbedoTextureRd;
+	const RID &rFarAlbedo = rBindings.m_hFarAlbedoTextureRd;
+	const RID &rNormal = rBindings.m_hNormalTextureRd;
+	const RID &rSurface = rBindings.m_hSurfaceTextureRd;
+	const RID &rMaterialDisplacement = rBindings.m_hMaterialDisplacementTextureRd;
+	const RID &rDisplacement = rBindings.m_hDisplacementTextureRd;
+	const RID &rWorldNoise = rBindings.m_hWorldNoiseTextureRd;
+	const RID &rMacroNoise = rBindings.m_hMacroNoiseTextureRd;
+	const RID &rEditorBrush = rBindings.m_hEditorBrushTextureRd;
 	if ( m_hszRasterUniformSets[0].is_valid() && m_hszRasterUniformSets[1].is_valid() &&
 			m_hszRasterUniformSets[2].is_valid() &&
 			( !m_bGpuCullingReady.load( std::memory_order_acquire ) || m_hCullUniformSet.is_valid() ) &&
@@ -1514,30 +1515,31 @@ bool Terrain3DRdClipmapRenderer::drawViewDirect( const uint32_t nView, const t3d
 }
 
 bool Terrain3DRdClipmapRenderer::render( RenderData *const pRenderData,
-		const t3dRdFrameSnapshot_t& rSnapshot,
-		const PackedByteArray& rRegionMapBytes,
+		const t3dRdFrameSnapshot_t &rSnapshot,
+		const PackedByteArray &rRegionMapBytes,
 		const uint64_t nRegionMapGeneration,
-		const RID& rHeightTextureRd,
-		const RID& rDerivedTextureRd,
-		const RID& rControlTextureRd,
-		const RID& rColorTextureRd,
-		const RID& rMiddleCompositeTextureRd,
-		const RID& rTerrainShadowMaskTextureRd,
-		const RID& rMiddleHeightTextureRd,
-		const RID& rMiddleHeightRegionMapTextureRd,
-		const RID& rFarHeightTextureRd,
-		const RID& rFarColorTextureRd,
-		const RID& rAlbedoTextureRd,
-		const RID& rFarAlbedoTextureRd,
-		const RID& rNormalTextureRd,
-		const RID& rSurfaceTextureRd,
-		const RID& rMaterialDisplacementTextureRd,
-		const RID& rDisplacementTextureRd,
-		const RID& rWorldNoiseTextureRd,
-		const RID& rMacroNoiseTextureRd,
-		const RID& rEditorBrushTextureRd,
+		const t3dRdTerrainBindings_t &rBindings,
 		const bool bColorWrite )
 {
+	const RID &rHeightTextureRd = rBindings.m_hHeightTextureRd;
+	const RID &rDerivedTextureRd = rBindings.m_hDerivedTextureRd;
+	const RID &rControlTextureRd = rBindings.m_hControlTextureRd;
+	const RID &rColorTextureRd = rBindings.m_hColorTextureRd;
+	const RID &rMiddleCompositeTextureRd = rBindings.m_hMiddleCompositeTextureRd;
+	const RID &rTerrainShadowMaskTextureRd = rBindings.m_hTerrainShadowMaskTextureRd;
+	const RID &rMiddleHeightTextureRd = rBindings.m_hMiddleHeightTextureRd;
+	const RID &rMiddleHeightRegionMapTextureRd = rBindings.m_hMiddleHeightRegionMapTextureRd;
+	const RID &rFarHeightTextureRd = rBindings.m_hFarHeightTextureRd;
+	const RID &rFarColorTextureRd = rBindings.m_hFarColorTextureRd;
+	const RID &rAlbedoTextureRd = rBindings.m_hAlbedoTextureRd;
+	const RID &rFarAlbedoTextureRd = rBindings.m_hFarAlbedoTextureRd;
+	const RID &rNormalTextureRd = rBindings.m_hNormalTextureRd;
+	const RID &rSurfaceTextureRd = rBindings.m_hSurfaceTextureRd;
+	const RID &rMaterialDisplacementTextureRd = rBindings.m_hMaterialDisplacementTextureRd;
+	const RID &rDisplacementTextureRd = rBindings.m_hDisplacementTextureRd;
+	const RID &rWorldNoiseTextureRd = rBindings.m_hWorldNoiseTextureRd;
+	const RID &rMacroNoiseTextureRd = rBindings.m_hMacroNoiseTextureRd;
+	const RID &rEditorBrushTextureRd = rBindings.m_hEditorBrushTextureRd;
 	if ( !pRenderData || !isReady() || rSnapshot.m_nPatchCount == 0u || rRegionMapBytes.is_empty() ) {
 		return false;
 	}
@@ -1635,26 +1637,27 @@ bool Terrain3DRdClipmapRenderer::render( RenderData *const pRenderData,
 		setError( "Failed to upload Terrain3D RD frame data" );
 		return false;
 	}
-	if ( !ensureUniformSets( height,
-				 derived,
-				 control,
-				 color_map,
-				 middle_composite,
-				 terrain_shadow_mask,
-				 middle_height,
-				 middle_height_region_map,
-				 far_height,
-				 far_color,
-				 albedo,
-				 far_albedo,
-				 normal,
-				 surface,
-				 material_displacement,
-				 displacement,
-				 world_noise,
-				 macro_noise,
-				 editor_brush,
-				 rSnapshot.m_materialConfig ) ) {
+	t3dRdTerrainBindings_t resolved_bindings = rBindings;
+	resolved_bindings.m_hHeightTextureRd = height;
+	resolved_bindings.m_hDerivedTextureRd = derived;
+	resolved_bindings.m_hControlTextureRd = control;
+	resolved_bindings.m_hColorTextureRd = color_map;
+	resolved_bindings.m_hMiddleCompositeTextureRd = middle_composite;
+	resolved_bindings.m_hTerrainShadowMaskTextureRd = terrain_shadow_mask;
+	resolved_bindings.m_hMiddleHeightTextureRd = middle_height;
+	resolved_bindings.m_hMiddleHeightRegionMapTextureRd = middle_height_region_map;
+	resolved_bindings.m_hFarHeightTextureRd = far_height;
+	resolved_bindings.m_hFarColorTextureRd = far_color;
+	resolved_bindings.m_hAlbedoTextureRd = albedo;
+	resolved_bindings.m_hFarAlbedoTextureRd = far_albedo;
+	resolved_bindings.m_hNormalTextureRd = normal;
+	resolved_bindings.m_hSurfaceTextureRd = surface;
+	resolved_bindings.m_hMaterialDisplacementTextureRd = material_displacement;
+	resolved_bindings.m_hDisplacementTextureRd = displacement;
+	resolved_bindings.m_hWorldNoiseTextureRd = world_noise;
+	resolved_bindings.m_hMacroNoiseTextureRd = macro_noise;
+	resolved_bindings.m_hEditorBrushTextureRd = editor_brush;
+	if ( !ensureUniformSets( resolved_bindings, rSnapshot.m_materialConfig ) ) {
 		return false;
 	}
 	const RenderingDevice::TextureSamples samples = buffers->get_texture_samples();
@@ -1738,32 +1741,33 @@ bool Terrain3DRdClipmapRenderer::render( RenderData *const pRenderData,
 	return true;
 }
 
-bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassContext_t& rContext,
-		const t3dRdFrameSnapshot_t& rSnapshot,
-		const PackedByteArray& rRegionMapBytes,
+bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassContext_t &rContext,
+		const t3dRdFrameSnapshot_t &rSnapshot,
+		const PackedByteArray &rRegionMapBytes,
 		const uint64_t nRegionMapGeneration,
-		const RID& rHeightTextureRd,
-		const RID& rDerivedTextureRd,
-		const RID& rControlTextureRd,
-		const RID& rColorTextureRd,
-		const RID& rMiddleCompositeTextureRd,
-		const RID& rTerrainShadowMaskTextureRd,
-		const RID& rMiddleHeightTextureRd,
-		const RID& rMiddleHeightRegionMapTextureRd,
-		const RID& rFarHeightTextureRd,
-		const RID& rFarColorTextureRd,
-		const RID& rAlbedoTextureRd,
-		const RID& rFarAlbedoTextureRd,
-		const RID& rNormalTextureRd,
-		const RID& rSurfaceTextureRd,
-		const RID& rMaterialDisplacementTextureRd,
-		const RID& rDisplacementTextureRd,
-		const RID& rWorldNoiseTextureRd,
-		const RID& rMacroNoiseTextureRd,
-		const RID& rEditorBrushTextureRd,
+		const t3dRdTerrainBindings_t &rBindings,
 		const bool bTemporalHistoryValid,
 		const bool bViewportReconfigured )
 {
+	const RID &rHeightTextureRd = rBindings.m_hHeightTextureRd;
+	const RID &rDerivedTextureRd = rBindings.m_hDerivedTextureRd;
+	const RID &rControlTextureRd = rBindings.m_hControlTextureRd;
+	const RID &rColorTextureRd = rBindings.m_hColorTextureRd;
+	const RID &rMiddleCompositeTextureRd = rBindings.m_hMiddleCompositeTextureRd;
+	const RID &rTerrainShadowMaskTextureRd = rBindings.m_hTerrainShadowMaskTextureRd;
+	const RID &rMiddleHeightTextureRd = rBindings.m_hMiddleHeightTextureRd;
+	const RID &rMiddleHeightRegionMapTextureRd = rBindings.m_hMiddleHeightRegionMapTextureRd;
+	const RID &rFarHeightTextureRd = rBindings.m_hFarHeightTextureRd;
+	const RID &rFarColorTextureRd = rBindings.m_hFarColorTextureRd;
+	const RID &rAlbedoTextureRd = rBindings.m_hAlbedoTextureRd;
+	const RID &rFarAlbedoTextureRd = rBindings.m_hFarAlbedoTextureRd;
+	const RID &rNormalTextureRd = rBindings.m_hNormalTextureRd;
+	const RID &rSurfaceTextureRd = rBindings.m_hSurfaceTextureRd;
+	const RID &rMaterialDisplacementTextureRd = rBindings.m_hMaterialDisplacementTextureRd;
+	const RID &rDisplacementTextureRd = rBindings.m_hDisplacementTextureRd;
+	const RID &rWorldNoiseTextureRd = rBindings.m_hWorldNoiseTextureRd;
+	const RID &rMacroNoiseTextureRd = rBindings.m_hMacroNoiseTextureRd;
+	const RID &rEditorBrushTextureRd = rBindings.m_hEditorBrushTextureRd;
 	if ( rContext.m_phase != T3D_RD_FORWARD_PHASE_PREPARE ) {
 		return false;
 	}
@@ -1864,27 +1868,28 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassConte
 			m_nForwardPreparedViewportKey != rContext.m_nViewportKey ) {
 		m_context.beginFrame( rContext.m_nScenePass, rSnapshot.m_nPublicationGeneration );
 	}
+	t3dRdTerrainBindings_t resolved_bindings = rBindings;
+	resolved_bindings.m_hHeightTextureRd = height;
+	resolved_bindings.m_hDerivedTextureRd = derived;
+	resolved_bindings.m_hControlTextureRd = control;
+	resolved_bindings.m_hColorTextureRd = color_map;
+	resolved_bindings.m_hMiddleCompositeTextureRd = middle_composite;
+	resolved_bindings.m_hTerrainShadowMaskTextureRd = terrain_shadow_mask;
+	resolved_bindings.m_hMiddleHeightTextureRd = middle_height;
+	resolved_bindings.m_hMiddleHeightRegionMapTextureRd = middle_height_region_map;
+	resolved_bindings.m_hFarHeightTextureRd = far_height;
+	resolved_bindings.m_hFarColorTextureRd = far_color;
+	resolved_bindings.m_hAlbedoTextureRd = albedo;
+	resolved_bindings.m_hFarAlbedoTextureRd = far_albedo;
+	resolved_bindings.m_hNormalTextureRd = normal;
+	resolved_bindings.m_hSurfaceTextureRd = surface;
+	resolved_bindings.m_hMaterialDisplacementTextureRd = material_displacement;
+	resolved_bindings.m_hDisplacementTextureRd = displacement;
+	resolved_bindings.m_hWorldNoiseTextureRd = world_noise;
+	resolved_bindings.m_hMacroNoiseTextureRd = macro_noise;
+	resolved_bindings.m_hEditorBrushTextureRd = editor_brush;
 	if ( !uploadSnapshotBuffers( rSnapshot, rRegionMapBytes, nRegionMapGeneration ) ||
-			!ensureUniformSets( height,
-					derived,
-					control,
-					color_map,
-					middle_composite,
-					terrain_shadow_mask,
-					middle_height,
-					middle_height_region_map,
-					far_height,
-					far_color,
-					albedo,
-					far_albedo,
-					normal,
-					surface,
-					material_displacement,
-					displacement,
-					world_noise,
-					macro_noise,
-					editor_brush,
-					rSnapshot.m_materialConfig ) ||
+			!ensureUniformSets( resolved_bindings, rSnapshot.m_materialConfig ) ||
 			!updateFrameUniforms( rSnapshot,
 					rContext.m_szViewProjection,
 					rContext.m_nViewCount,

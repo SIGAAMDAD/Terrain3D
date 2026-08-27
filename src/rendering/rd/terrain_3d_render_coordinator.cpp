@@ -525,18 +525,36 @@ void Terrain3DRenderCoordinator::buildMaterialState( t3dRdFrameSnapshot_t &rSnap
 	rSnapshot.m_nMaterialGeneration = material_hash;
 }
 
+uint32_t Terrain3DRenderCoordinator::selectWritablePublicationBank(
+		const uint32_t nReaderBank, const uint32_t nPendingBank ) const
+{
+	for ( uint32_t bank = 0u; bank < s_nRdFrameSnapshotSlotCount; ++bank ) {
+		if ( bank != nReaderBank && bank != nPendingBank ) {
+			return bank;
+		}
+	}
+	return s_nRdInvalidFrameSnapshotIndex;
+}
+
 void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 	if ( !m_pTerrain || !m_pTerrain->getMesher() || !m_pTerrain->getData() ) return;
 	if ( m_nSnapshotWriteIndex >= s_nRdFrameSnapshotSlotCount ) {
 		m_bRendererFailed.store( true, std::memory_order_release );
 		return;
 	}
-	// The exchange returns only a slot no longer observed by the render thread.
-	// Reuse its retained variable-capacity payloads and reset only frame-local POD.
+	// The exchange still owns frame slots exactly as before. Large immutable
+	// payloads are addressed through fixed generation banks instead of cloned
+	// into every reclaimed frame slot.
 	t3dRdFrameSnapshotSlot_t &publication = m_snapshotSlots[m_nSnapshotWriteIndex];
-	publication.m_snapshot = t3dRdFrameSnapshot_t{};
-	publication.m_resources = t3dRdPublishedResources_t{};
+	publication = t3dRdFrameSnapshotSlot_t{};
 	t3dRdFrameSnapshot_t &snapshot = publication.m_snapshot;
+	const uint64_t exchange_token = m_nSnapshotExchangeToken.load( std::memory_order_acquire );
+	const uint32_t pending_slot = t3dRdFrameSnapshotTokenIsPublished( exchange_token )
+			? t3dRdFrameSnapshotTokenIndex( exchange_token )
+			: s_nRdInvalidFrameSnapshotIndex;
+	const t3dRdFrameSnapshotSlot_t *const pPending = pending_slot < s_nRdFrameSnapshotSlotCount
+			? &m_snapshotSlots[pending_slot]
+			: nullptr;
 	snapshot.m_nRegionSize = ( uint32_t )( m_pTerrain->getRegionSize() );
 	snapshot.m_nRegionMapSize = ( uint32_t )( m_pTerrain->getData()->getRegionMapSizeInternal() );
 	snapshot.m_nMeshSize = ( uint32_t )( m_pTerrain->getMeshSize() );
@@ -663,28 +681,42 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 		ocean.m_fHeightScattering = t3dRdOceanFloatParam( shader_material, "height_scattering", 6.0f ); ocean.m_fHeightThreshold = t3dRdOceanFloatParam( shader_material, "height_threshold", 0.1f ); ocean.m_fHeightAngleThreshold = t3dRdOceanFloatParam( shader_material, "height_angle_threshold", 0.21f ); ocean.m_fFresnelScattering = t3dRdOceanFloatParam( shader_material, "fersnel_scattering", 20.0f ); ocean.m_fDirectScattering = t3dRdOceanFloatParam( shader_material, "direct_scattering", 10.0f );
 		ocean.m_nGeneration = 0u; ocean.m_nGeneration = hashBytes( &ocean, sizeof( ocean ) );
 	}
-	if ( m_bCachedOceanTopologyValid &&
-			( !publication.m_bOceanTopologyValid ||
-					publication.m_oceanTopology.m_nGeneration != m_cachedOceanTopology.m_nGeneration ) ) {
-		publication.m_oceanTopology = m_cachedOceanTopology;
-		publication.m_bOceanTopologyValid = true;
+	if ( m_bCachedOceanTopologyValid ) {
+		if ( m_nCurrentOceanTopologyBank >= s_nRdFrameSnapshotSlotCount ||
+				m_oceanTopologyBanks[m_nCurrentOceanTopologyBank].m_nGeneration !=
+						m_cachedOceanTopology.m_nGeneration ) {
+			const uint32_t pending_bank = pPending ? pPending->m_nOceanTopologyBank : s_nRdInvalidFrameSnapshotIndex;
+			const uint32_t bank = selectWritablePublicationBank(
+					m_nOceanTopologyReaderBank.load( std::memory_order_acquire ), pending_bank );
+			if ( bank >= s_nRdFrameSnapshotSlotCount ) {
+				LOG( ERROR, "No writable RD ocean topology publication bank" );
+				return;
+			}
+			m_oceanTopologyBanks[bank].m_snapshot = m_cachedOceanTopology;
+			m_oceanTopologyBanks[bank].m_nGeneration = m_cachedOceanTopology.m_nGeneration;
+			m_nCurrentOceanTopologyBank = bank;
+		}
+		publication.m_nOceanTopologyBank = m_nCurrentOceanTopologyBank;
 	}
 
 	Terrain3DData *const data = m_pTerrain->getData();
 	const Ref<Terrain3DAssets> assets = m_pTerrain->getAssets();
 	const uint64_t region_topology_generation = data->getRegionTopologyGenerationInternal();
 	const uint64_t physical_region_map_generation = data->getPhysicalRegionMapGenerationInternal();
-	const PackedInt32Array region_map = data->getRegionMap();
-	const PackedInt32Array logical_region_map = data->getLogicalRegionMap();
-	if ( region_map.size() != logical_region_map.size() ) {
-		LOG( ERROR, "Physical/logical region map sizes diverged" );
+	const int region_map_size = data->getRegionMapSizeInternal();
+	const int64_t region_map_count = (int64_t)( region_map_size ) * region_map_size;
+	const uint16_t *const pPhysicalRegionMap = data->getPhysicalRegionMapDataInternal();
+	const uint16_t *const pLogicalRegionMap = data->getLogicalRegionMapDataInternal();
+	if ( region_map_size <= 0 || !pPhysicalRegionMap || !pLogicalRegionMap ) {
+		LOG( ERROR, "Physical/logical region map storage unavailable" );
 		return;
 	}
-	const int region_map_size = data->getRegionMapSizeInternal();
 	const int region_map_half = region_map_size / 2;
 	uint64_t region_lighting_signature = 1469598103934665603ull;
-	for ( int64_t i = 0; i < logical_region_map.size(); ++i ) {
-		if ( logical_region_map[i] == 0 ) continue;
+	for ( int64_t i = 0; i < region_map_count; ++i ) {
+		const int source_index = Terrain3DData::getRegionMapIndex( Vector2i(
+				(int)( i % region_map_size ) - region_map_half, (int)( i / region_map_size ) - region_map_half ) );
+		if ( source_index < 0 || pLogicalRegionMap[source_index] == 0u ) continue;
 		const Vector2i location( ( int )( i % region_map_size ) - region_map_half,
 				( int )( i / region_map_size ) - region_map_half );
 		Terrain3DRegion *const pRegion = data->getRegionPtr( location );
@@ -706,37 +738,57 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 		LOG( ERROR, "Unable to refresh Terrain3D regional shadowmask residency after lighting change" );
 		return;
 	}
-	PackedByteArray region_bytes;
-	if ( !m_bRegionMapInitialized || physical_region_map_generation != m_nPhysicalRegionMapGeneration ||
-			region_topology_generation != m_nRegionTopologyGeneration || bRegionLightingChanged ) {
-		region_bytes.resize( region_map.size() * ( int64_t )( sizeof( uint32_t ) ) );
-		uint8_t *const pPackedRegionMap = region_bytes.ptrw();
-		for ( int64_t i = 0; i < region_map.size(); ++i ) {
-			const uint32_t nPhysicalLayer = ( uint32_t )( CLAMP( region_map[i], 0, 0xFFFF ) );
-			const uint32_t nLogicalPresent = logical_region_map[i] != 0 ? 0x80000000u : 0u;
+	const bool region_map_changed = !m_bRegionMapInitialized ||
+			physical_region_map_generation != m_nPhysicalRegionMapGeneration ||
+			region_topology_generation != m_nRegionTopologyGeneration || bRegionLightingChanged;
+	if ( region_map_changed ) {
+		const uint32_t pending_bank = pPending ? pPending->m_nRegionMapBank : s_nRdInvalidFrameSnapshotIndex;
+		const uint32_t bank = selectWritablePublicationBank(
+				m_nRegionMapReaderBank.load( std::memory_order_acquire ), pending_bank );
+		if ( bank >= s_nRdFrameSnapshotSlotCount ) {
+			LOG( ERROR, "No writable RD region-map publication bank" );
+			return;
+		}
+		const int64_t required_bytes = region_map_count * (int64_t)( sizeof( uint32_t ) );
+		if ( !m_bRegionMapInitialized ) {
+			for ( t3dRdRegionMapBank_t &region_bank : m_regionMapBanks ) {
+				region_bank.m_bytes.resize( required_bytes );
+			}
+		} else if ( m_regionMapBanks[bank].m_bytes.size() != required_bytes ) {
+			m_regionMapBanks[bank].m_bytes.resize( required_bytes );
+		}
+		uint8_t *const pPackedRegionMap = m_regionMapBanks[bank].m_bytes.ptrw();
+		for ( int64_t i = 0; i < region_map_count; ++i ) {
+			const Vector2i map_location( (int)( i % region_map_size ) - region_map_half,
+					(int)( i / region_map_size ) - region_map_half );
+			const int source_index = Terrain3DData::getRegionMapIndex( map_location );
+			const uint32_t nPhysicalLayer = source_index >= 0 ? pPhysicalRegionMap[source_index] : 0u;
+			const uint32_t nLogicalPresent =
+					source_index >= 0 && pLogicalRegionMap[source_index] != 0u ? 0x80000000u : 0u;
 			uint32_t nShadowmaskMode = 0u;
 			if ( nLogicalPresent != 0u ) {
-				const Vector2i location( ( int )( i % region_map_size ) - region_map_half,
-						( int )( i / region_map_size ) - region_map_half );
+				const Vector2i location( (int)( i % region_map_size ) - region_map_half,
+						(int)( i / region_map_size ) - region_map_half );
 				Terrain3DRegion *const pRegion = data->getRegionPtr( location );
 				if ( pRegion && !pRegion->isDeleted() ) {
 					const Ref<Terrain3DRegionLighting> lighting = pRegion->getLighting();
 					if ( lighting.is_valid() && lighting->hasTerrainShadowMask() ) {
-						nShadowmaskMode = ( uint32_t )( CLAMP( lighting->getShadowmaskMode(), 0, 2 ) );
+						nShadowmaskMode = (uint32_t)( CLAMP( lighting->getShadowmaskMode(), 0, 2 ) );
 					}
 				}
 			}
 			const uint32_t nPacked = nPhysicalLayer | ( nShadowmaskMode << 16u ) | nLogicalPresent;
-			std::memcpy( pPackedRegionMap + i * ( int64_t )( sizeof( uint32_t ) ), &nPacked, sizeof( nPacked ) );
+			std::memcpy( pPackedRegionMap + i * (int64_t)( sizeof( uint32_t ) ), &nPacked, sizeof( nPacked ) );
 		}
-		m_regionMapBytes = region_bytes;
 		m_nRegionTopologyGeneration = region_topology_generation;
 		m_nPhysicalRegionMapGeneration = physical_region_map_generation;
 		m_nRegionLightingSignature = region_lighting_signature;
 		m_nRegionMapGeneration = advanceGeneration( m_nRegionMapGeneration );
+		m_regionMapBanks[bank].m_nGeneration = m_nRegionMapGeneration;
+		m_nCurrentRegionMapBank = bank;
 		m_bRegionMapInitialized = true;
 	}
-	publication.m_regionMapBytes = m_regionMapBytes;
+	publication.m_nRegionMapBank = m_nCurrentRegionMapBank;
 	snapshot.m_nRegionMapGeneration = m_nRegionMapGeneration;
 	const uint64_t region_cache_sources[2] = {
 		( uint64_t )( data->getActiveStorageGeneration() ), m_pTerrain->getRegionStreamingGeneration()
@@ -751,7 +803,7 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 	}
 	snapshot.m_nRegionCacheGeneration = m_nRegionCacheGeneration;
 
-	t3dRdPublishedResources_t &resources = publication.m_resources;
+	t3dRdTerrainBindings_t &resources = publication.m_bindings;
 	resources.m_hHeightTextureRd = data->getHeightMapsRid();
 	resources.m_hDerivedTextureRd = data->getDerivedMapsRid();
 	resources.m_hControlTextureRd = data->getControlMapsRid();
@@ -872,17 +924,37 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 		}
 		m_bCachedInstanceSceneValid = true;
 	}
-	if ( m_bCachedInstanceMeshesValid &&
-			( !publication.m_bInstanceMeshesValid ||
-					publication.m_instanceMeshes.m_nGeneration != m_cachedInstanceMeshes.m_nGeneration ) ) {
-		publication.m_instanceMeshes = m_cachedInstanceMeshes;
-		publication.m_bInstanceMeshesValid = true;
+	if ( m_bCachedInstanceMeshesValid ) {
+		if ( m_nCurrentInstanceMeshBank >= s_nRdFrameSnapshotSlotCount ||
+				m_instanceMeshBanks[m_nCurrentInstanceMeshBank].m_nGeneration != m_cachedInstanceMeshes.m_nGeneration ) {
+			const uint32_t pending_bank = pPending ? pPending->m_nInstanceMeshBank : s_nRdInvalidFrameSnapshotIndex;
+			const uint32_t bank = selectWritablePublicationBank(
+					m_nInstanceMeshReaderBank.load( std::memory_order_acquire ), pending_bank );
+			if ( bank >= s_nRdFrameSnapshotSlotCount ) {
+				LOG( ERROR, "No writable RD instance-mesh publication bank" );
+				return;
+			}
+			m_instanceMeshBanks[bank].m_snapshot = m_cachedInstanceMeshes;
+			m_instanceMeshBanks[bank].m_nGeneration = m_cachedInstanceMeshes.m_nGeneration;
+			m_nCurrentInstanceMeshBank = bank;
+		}
+		publication.m_nInstanceMeshBank = m_nCurrentInstanceMeshBank;
 	}
-	if ( m_bCachedInstanceSceneValid &&
-			( !publication.m_bInstanceSceneValid ||
-					publication.m_instanceScene.m_nGeneration != m_cachedInstanceScene.m_nGeneration ) ) {
-		publication.m_instanceScene = m_cachedInstanceScene;
-		publication.m_bInstanceSceneValid = true;
+	if ( m_bCachedInstanceSceneValid ) {
+		if ( m_nCurrentInstanceSceneBank >= s_nRdFrameSnapshotSlotCount ||
+				m_instanceSceneBanks[m_nCurrentInstanceSceneBank].m_nGeneration != m_cachedInstanceScene.m_nGeneration ) {
+			const uint32_t pending_bank = pPending ? pPending->m_nInstanceSceneBank : s_nRdInvalidFrameSnapshotIndex;
+			const uint32_t bank = selectWritablePublicationBank(
+					m_nInstanceSceneReaderBank.load( std::memory_order_acquire ), pending_bank );
+			if ( bank >= s_nRdFrameSnapshotSlotCount ) {
+				LOG( ERROR, "No writable RD instance-scene publication bank" );
+				return;
+			}
+			m_instanceSceneBanks[bank].m_snapshot = m_cachedInstanceScene;
+			m_instanceSceneBanks[bank].m_nGeneration = m_cachedInstanceScene.m_nGeneration;
+			m_nCurrentInstanceSceneBank = bank;
+		}
+		publication.m_nInstanceSceneBank = m_nCurrentInstanceSceneBank;
 	}
 
 	uint64_t publication_generation = m_nNextSnapshotGeneration;
@@ -943,6 +1015,10 @@ Terrain3DRenderCoordinator::acquireSnapshotOnRenderThread( void ) {
 			recordStaleSnapshot( token );
 			return nullptr;
 		}
+		m_nRegionMapReaderBank.store( acquired.m_nRegionMapBank, std::memory_order_release );
+		m_nInstanceMeshReaderBank.store( acquired.m_nInstanceMeshBank, std::memory_order_release );
+		m_nInstanceSceneReaderBank.store( acquired.m_nInstanceSceneBank, std::memory_order_release );
+		m_nOceanTopologyReaderBank.store( acquired.m_nOceanTopologyBank, std::memory_order_release );
 		m_bSnapshotRenderValid = true;
 		return &acquired;
 	}
@@ -965,7 +1041,18 @@ void Terrain3DRenderCoordinator::resetSnapshotPublication( void ) {
 	m_nConsumedSnapshotGeneration.store( 0u, std::memory_order_release );
 	m_nLastStaleSnapshotToken.store( 0u, std::memory_order_release );
 	for ( t3dRdFrameSnapshotSlot_t &slot : m_snapshotSlots ) slot = t3dRdFrameSnapshotSlot_t{};
-	m_regionMapBytes.clear();
+	for ( t3dRdRegionMapBank_t &bank : m_regionMapBanks ) bank = t3dRdRegionMapBank_t{};
+	for ( t3dRdInstanceMeshBank_t &bank : m_instanceMeshBanks ) bank = t3dRdInstanceMeshBank_t{};
+	for ( t3dRdInstanceSceneBank_t &bank : m_instanceSceneBanks ) bank = t3dRdInstanceSceneBank_t{};
+	for ( t3dRdOceanTopologyBank_t &bank : m_oceanTopologyBanks ) bank = t3dRdOceanTopologyBank_t{};
+	m_nRegionMapReaderBank.store( s_nRdInvalidFrameSnapshotIndex, std::memory_order_release );
+	m_nInstanceMeshReaderBank.store( s_nRdInvalidFrameSnapshotIndex, std::memory_order_release );
+	m_nInstanceSceneReaderBank.store( s_nRdInvalidFrameSnapshotIndex, std::memory_order_release );
+	m_nOceanTopologyReaderBank.store( s_nRdInvalidFrameSnapshotIndex, std::memory_order_release );
+	m_nCurrentRegionMapBank = s_nRdInvalidFrameSnapshotIndex;
+	m_nCurrentInstanceMeshBank = s_nRdInvalidFrameSnapshotIndex;
+	m_nCurrentInstanceSceneBank = s_nRdInvalidFrameSnapshotIndex;
+	m_nCurrentOceanTopologyBank = s_nRdInvalidFrameSnapshotIndex;
 	m_nRegionTopologyGeneration = 0u;
 	m_nPhysicalRegionMapGeneration = 0u;
 	m_nRegionLightingSignature = 0u;
@@ -980,7 +1067,7 @@ void Terrain3DRenderCoordinator::resetSnapshotPublication( void ) {
 	m_nMaterialGeneration = 0u;
 	m_nTerrainTextureGeneration = 0u;
 	m_nMaterialTextureGeneration = 0u;
-	m_lastPublishedResources = t3dRdPublishedResources_t{};
+	m_lastPublishedResources = t3dRdTerrainBindings_t{};
 	m_bRegionMapInitialized = false;
 	m_bRegionCacheInitialized = false;
 	m_bPatchStateInitialized = false;
@@ -1310,43 +1397,25 @@ Ref<Image> Terrain3DRenderCoordinator::createMeshPreview( const uint16_t nAssetI
 }
 
 void Terrain3DRenderCoordinator::render( RenderData *const pRenderData ) {
-	if ( !m_bCompositorDebugEnabled ||
-			!pRenderData ) return;
+	if ( !m_bCompositorDebugEnabled || !pRenderData ) return;
 	++m_nCallbackCount;
 	if ( !initializeRendererOnRenderThread() ) return;
 	const t3dRdFrameSnapshotSlot_t *const publication = acquireSnapshotOnRenderThread();
 	if ( !publication ) return;
 	const t3dRdFrameSnapshot_t &snapshot = publication->m_snapshot;
-	const bool bHasTerrain = snapshot.m_nPatchCount > 0u && !publication->m_regionMapBytes.is_empty();
-	const bool bColorWrite = true;
+	const t3dRdRegionMapBank_t *const pRegionMap = publication->m_nRegionMapBank < s_nRdFrameSnapshotSlotCount
+			? &m_regionMapBanks[publication->m_nRegionMapBank] : nullptr;
+	const t3dRdInstanceMeshBank_t *const pMeshes = publication->m_nInstanceMeshBank < s_nRdFrameSnapshotSlotCount
+			? &m_instanceMeshBanks[publication->m_nInstanceMeshBank] : nullptr;
+	const t3dRdInstanceSceneBank_t *const pScene = publication->m_nInstanceSceneBank < s_nRdFrameSnapshotSlotCount
+			? &m_instanceSceneBanks[publication->m_nInstanceSceneBank] : nullptr;
+	const bool bHasTerrain = snapshot.m_nPatchCount > 0u && pRegionMap && !pRegionMap->m_bytes.is_empty();
 	const bool instances_ok = m_instanceRenderer.render( pRenderData,
-			publication->m_bInstanceMeshesValid ? &publication->m_instanceMeshes : nullptr,
-			publication->m_bInstanceSceneValid ? &publication->m_instanceScene : nullptr,
+			pMeshes ? &pMeshes->m_snapshot : nullptr,
+			pScene ? &pScene->m_snapshot : nullptr,
 			snapshot.m_nCameraCullMask );
 	const bool terrain_ok = !bHasTerrain || ( instances_ok && m_renderer.render( pRenderData,
-			 snapshot,
-			 publication->m_regionMapBytes,
-			 snapshot.m_nRegionMapGeneration,
-			 publication->m_resources.m_hHeightTextureRd,
-			 publication->m_resources.m_hDerivedTextureRd,
-			 publication->m_resources.m_hControlTextureRd,
-			 publication->m_resources.m_hColorTextureRd,
-			 publication->m_resources.m_hMiddleCompositeTextureRd,
-			 publication->m_resources.m_hTerrainShadowMaskTextureRd,
-			 publication->m_resources.m_hMiddleHeightTextureRd,
-			 publication->m_resources.m_hMiddleHeightRegionMapTextureRd,
-			 publication->m_resources.m_hFarHeightTextureRd,
-			 publication->m_resources.m_hFarColorTextureRd,
-			 publication->m_resources.m_hAlbedoTextureRd,
-			 publication->m_resources.m_hFarAlbedoTextureRd,
-			 publication->m_resources.m_hNormalTextureRd,
-			 publication->m_resources.m_hSurfaceTextureRd,
-			 publication->m_resources.m_hMaterialDisplacementTextureRd,
-			 publication->m_resources.m_hDisplacementTextureRd,
-			 publication->m_resources.m_hWorldNoiseTextureRd,
-			 publication->m_resources.m_hMacroNoiseTextureRd,
-			 publication->m_resources.m_hEditorBrushTextureRd,
-			 bColorWrite ) );
+			snapshot, pRegionMap->m_bytes, snapshot.m_nRegionMapGeneration, publication->m_bindings, true ) );
 	const bool render_ok = instances_ok && terrain_ok;
 	if ( render_ok ) {
 		m_nConsecutiveRenderFailures.store( 0u, std::memory_order_release );
@@ -1454,36 +1523,44 @@ bool Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 		const t3dRdFrameSnapshotSlot_t *const publication = acquireSnapshotOnRenderThread();
 		if ( !publication ) return false;
 		const t3dRdFrameSnapshot_t &snapshot = publication->m_snapshot;
+		const t3dRdRegionMapBank_t *const pRegionMap =
+				publication->m_nRegionMapBank < s_nRdFrameSnapshotSlotCount
+				? &m_regionMapBanks[publication->m_nRegionMapBank] : nullptr;
+		const t3dRdInstanceMeshBank_t *const pMeshes =
+				publication->m_nInstanceMeshBank < s_nRdFrameSnapshotSlotCount
+				? &m_instanceMeshBanks[publication->m_nInstanceMeshBank] : nullptr;
+		const t3dRdInstanceSceneBank_t *const pScene =
+				publication->m_nInstanceSceneBank < s_nRdFrameSnapshotSlotCount
+				? &m_instanceSceneBanks[publication->m_nInstanceSceneBank] : nullptr;
+		const t3dRdOceanTopologyBank_t *const pOcean =
+				publication->m_nOceanTopologyBank < s_nRdFrameSnapshotSlotCount
+				? &m_oceanTopologyBanks[publication->m_nOceanTopologyBank] : nullptr;
 		const bool shadow_pass = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW;
 		const bool transparent_pass = rContext.m_passKind == T3D_RD_FORWARD_PASS_TRANSPARENT;
-		const uint32_t visibility_mask = shadow_pass ? ( rContext.m_nShadowCasterMask & rContext.m_nShadowLightCullMask ) : rContext.m_nCameraVisibleLayers;
-		const bool has_terrain = !transparent_pass && snapshot.m_nPatchCount > 0u && !publication->m_regionMapBytes.is_empty() &&
+		const uint32_t visibility_mask = shadow_pass
+				? ( rContext.m_nShadowCasterMask & rContext.m_nShadowLightCullMask )
+				: rContext.m_nCameraVisibleLayers;
+		const bool has_terrain = !transparent_pass && snapshot.m_nPatchCount > 0u && pRegionMap &&
+				!pRegionMap->m_bytes.is_empty() &&
 				( !shadow_pass || ( snapshot.m_bCastShadows && ( snapshot.m_nRenderLayers & visibility_mask ) != 0u ) );
 		m_nForwardPreparedScenePass = rContext.m_nScenePass;
 		m_nForwardPreparedViewportKey = rContext.m_nViewportKey;
 		m_bForwardPreparedHasTerrain = has_terrain;
 		const bool instances_ok = transparent_pass ? true : m_instanceRenderer.prepareForwardPass( rContext,
-				publication->m_bInstanceMeshesValid ? &publication->m_instanceMeshes : nullptr,
-				publication->m_bInstanceSceneValid ? &publication->m_instanceScene : nullptr,
+				pMeshes ? &pMeshes->m_snapshot : nullptr,
+				pScene ? &pScene->m_snapshot : nullptr,
 				visibility_mask, history_valid, viewport_reconfigured );
-		// Terrain and instance/HLOD resources are independent.  Always prepare the
-		// terrain pass even when the companion instance lane reports a failure so a
-		// missing instance asset cannot suppress the terrain surface.
-		const bool terrain_ok = !has_terrain || m_renderer.prepareForwardPass( rContext, snapshot,
-				publication->m_regionMapBytes, snapshot.m_nRegionMapGeneration,
-				publication->m_resources.m_hHeightTextureRd, publication->m_resources.m_hDerivedTextureRd,
-				publication->m_resources.m_hControlTextureRd, publication->m_resources.m_hColorTextureRd,
-				publication->m_resources.m_hMiddleCompositeTextureRd, publication->m_resources.m_hTerrainShadowMaskTextureRd,
-				publication->m_resources.m_hMiddleHeightTextureRd,
-				publication->m_resources.m_hMiddleHeightRegionMapTextureRd, publication->m_resources.m_hFarHeightTextureRd,
-				publication->m_resources.m_hFarColorTextureRd, publication->m_resources.m_hAlbedoTextureRd,
-				publication->m_resources.m_hFarAlbedoTextureRd, publication->m_resources.m_hNormalTextureRd,
-				publication->m_resources.m_hSurfaceTextureRd, publication->m_resources.m_hMaterialDisplacementTextureRd,
-				publication->m_resources.m_hDisplacementTextureRd,
-				publication->m_resources.m_hWorldNoiseTextureRd, publication->m_resources.m_hMacroNoiseTextureRd,
-				publication->m_resources.m_hEditorBrushTextureRd, history_valid, viewport_reconfigured );
-		const bool ocean_ok = m_oceanRenderer.prepareForwardPass( rContext, snapshot,
-				publication->m_bOceanTopologyValid ? &publication->m_oceanTopology : nullptr, visibility_mask );
+		// Terrain and instance/HLOD resources are independent. Always prepare the
+		// terrain pass even when the companion instance lane reports a failure.
+		const bool terrain_ok = !has_terrain || m_renderer.prepareForwardPass( rContext,
+				snapshot,
+				pRegionMap->m_bytes,
+				snapshot.m_nRegionMapGeneration,
+				publication->m_bindings,
+				history_valid,
+				viewport_reconfigured );
+		const bool ocean_ok = m_oceanRenderer.prepareForwardPass(
+				rContext, snapshot, pOcean ? &pOcean->m_snapshot : nullptr, visibility_mask );
 		m_bForwardPreparedHasOcean = snapshot.m_ocean.m_nEnabled != 0u && snapshot.m_ocean.m_nPatchCount > 0u &&
 				( transparent_pass || ( shadow_pass && snapshot.m_ocean.m_nCastShadows != 0u ) );
 		if ( instances_ok && terrain_ok && ocean_ok ) {

@@ -83,13 +83,50 @@ static uint64_t t3dRdInstanceTextureId( const uint32_t nLow, const uint32_t nHig
 	return (uint64_t)( nLow ) | ( (uint64_t)( nHigh ) << 32u );
 }
 
-static Vector4 t3dRdInstanceTransformPoint( const Projection& rProjection, const float x, const float y, const float z )
-{
-	const Vector4 c0 = rProjection[0], c1 = rProjection[1], c2 = rProjection[2], c3 = rProjection[3];
-	return Vector4( c0.x * x + c1.x * y + c2.x * z + c3.x,
-			c0.y * x + c1.y * y + c2.y * z + c3.y,
-			c0.z * x + c1.z * y + c2.z * z + c3.z,
-			c0.w * x + c1.w * y + c2.w * z + c3.w );
+typedef struct t3dRdInstanceFrustum_s {
+	Vector4 m_szPlanes[6];
+} t3dRdInstanceFrustum_t;
+
+static Vector4 t3dRdInstanceNormalizePlane( const Vector4 &rPlane ) {
+	const double length_sq = rPlane.x * rPlane.x + rPlane.y * rPlane.y + rPlane.z * rPlane.z;
+	if ( length_sq <= 1e-20 ) {
+		return rPlane;
+	}
+	const double inverse_length = 1.0 / std::sqrt( length_sq );
+	return rPlane * inverse_length;
+}
+
+static t3dRdInstanceFrustum_t t3dRdInstanceExtractFrustum( const Projection &rProjection ) {
+	const Vector4 c0 = rProjection[0];
+	const Vector4 c1 = rProjection[1];
+	const Vector4 c2 = rProjection[2];
+	const Vector4 c3 = rProjection[3];
+	const Vector4 row0( c0.x, c1.x, c2.x, c3.x );
+	const Vector4 row1( c0.y, c1.y, c2.y, c3.y );
+	const Vector4 row2( c0.z, c1.z, c2.z, c3.z );
+	const Vector4 row3( c0.w, c1.w, c2.w, c3.w );
+	t3dRdInstanceFrustum_t result;
+	result.m_szPlanes[0] = t3dRdInstanceNormalizePlane( row3 + row0 );
+	result.m_szPlanes[1] = t3dRdInstanceNormalizePlane( row3 - row0 );
+	result.m_szPlanes[2] = t3dRdInstanceNormalizePlane( row3 + row1 );
+	result.m_szPlanes[3] = t3dRdInstanceNormalizePlane( row3 - row1 );
+	result.m_szPlanes[4] = t3dRdInstanceNormalizePlane( row3 - row2 );
+	result.m_szPlanes[5] = t3dRdInstanceNormalizePlane( row2 );
+	return result;
+}
+
+static bool t3dRdInstanceAabbVisible( const AABB &rBounds, const t3dRdInstanceFrustum_t &rFrustum ) {
+	const Vector3 center = rBounds.position + rBounds.size * 0.5f;
+	const Vector3 extent = rBounds.size * 0.5f;
+	for ( const Vector4 &plane : rFrustum.m_szPlanes ) {
+		const double distance = plane.x * center.x + plane.y * center.y + plane.z * center.z + plane.w;
+		const double radius = std::abs( plane.x ) * extent.x + std::abs( plane.y ) * extent.y +
+				std::abs( plane.z ) * extent.z;
+		if ( distance + radius < 0.0 ) {
+			return false;
+		}
+	}
+	return true;
 }
 
 static uint32_t t3dRdNextCapacity( const uint32_t nRequired, const uint32_t nMinimum )
@@ -117,6 +154,92 @@ static bool t3dRdMotionCellsMatch( const t3dRdInstanceCell_t& rCurrent, const t3
 		return rCurrent.m_nMeshSourceKey == rPrevious.m_nMeshSourceKey && rCurrent.m_nRevision == rPrevious.m_nRevision;
 	}
 	return rCurrent.m_nMeshAssetId == rPrevious.m_nMeshAssetId;
+}
+
+static int t3dRdMotionCellCompare( const t3dRdInstanceCell_t &rA, const t3dRdInstanceCell_t &rB )
+{
+	const uint32_t a_hlod = ( rA.m_nFlags & T3D_RD_INSTANCE_HLOD ) != 0u ? 1u : 0u;
+	const uint32_t b_hlod = ( rB.m_nFlags & T3D_RD_INSTANCE_HLOD ) != 0u ? 1u : 0u;
+	if ( a_hlod != b_hlod ) {
+		return a_hlod < b_hlod ? -1 : 1;
+	}
+	if ( rA.m_nRegionX != rB.m_nRegionX ) {
+		return rA.m_nRegionX < rB.m_nRegionX ? -1 : 1;
+	}
+	if ( rA.m_nRegionZ != rB.m_nRegionZ ) {
+		return rA.m_nRegionZ < rB.m_nRegionZ ? -1 : 1;
+	}
+	if ( rA.m_nCellX != rB.m_nCellX ) {
+		return rA.m_nCellX < rB.m_nCellX ? -1 : 1;
+	}
+	if ( rA.m_nCellZ != rB.m_nCellZ ) {
+		return rA.m_nCellZ < rB.m_nCellZ ? -1 : 1;
+	}
+	if ( a_hlod != 0u ) {
+		if ( rA.m_nMeshSourceKey != rB.m_nMeshSourceKey ) {
+			return rA.m_nMeshSourceKey < rB.m_nMeshSourceKey ? -1 : 1;
+		}
+		if ( rA.m_nRevision != rB.m_nRevision ) {
+			return rA.m_nRevision < rB.m_nRevision ? -1 : 1;
+		}
+	} else if ( rA.m_nMeshAssetId != rB.m_nMeshAssetId ) {
+		return rA.m_nMeshAssetId < rB.m_nMeshAssetId ? -1 : 1;
+	}
+	if ( rA.m_nInstanceCount != rB.m_nInstanceCount ) {
+		return rA.m_nInstanceCount < rB.m_nInstanceCount ? -1 : 1;
+	}
+	return 0;
+}
+
+static bool t3dRdInstanceCellVisible( const t3dRdInstanceCell_t &rCell,
+		const t3dRdInstanceFrustum_t &rFrustum,
+		const Vector3 &rCamera,
+		const bool bShadowPass )
+{
+	if ( rCell.m_nInstanceCount == 0u ||
+			( !bShadowPass && ( rCell.m_nFlags & T3D_RD_INSTANCE_SHADOWS_ONLY ) != 0u ) ) {
+		return false;
+	}
+	if ( !bShadowPass ) {
+		const float distance_sq = (float)( rCell.m_bounds.get_center().distance_squared_to( rCamera ) );
+		if ( rCell.m_fLodBegin > 0.001f && distance_sq < rCell.m_fLodBegin * rCell.m_fLodBegin ) {
+			return false;
+		}
+		if ( rCell.m_fLodEnd > 0.001f && distance_sq >= rCell.m_fLodEnd * rCell.m_fLodEnd ) {
+			return false;
+		}
+	}
+	return t3dRdInstanceAabbVisible( rCell.m_bounds, rFrustum );
+}
+
+static void t3dRdStableSortAlphaPackets( std::vector<t3dRdInstanceDrawPacket_t> &rPackets,
+		std::vector<t3dRdInstanceDrawPacket_t> &rScratch )
+{
+	const size_t count = rPackets.size();
+	if ( count < 2u ) {
+		return;
+	}
+	rScratch.resize( count );
+	for ( size_t width = 1u; width < count; width *= 2u ) {
+		for ( size_t first = 0u; first < count; first += width * 2u ) {
+			const size_t middle = MIN( first + width, count );
+			const size_t last = MIN( first + width * 2u, count );
+			size_t left = first;
+			size_t right = middle;
+			for ( size_t out = first; out < last; ++out ) {
+				const bool take_left = right >= last ||
+						( left < middle &&
+								rPackets[left].m_fSortDistanceSq >= rPackets[right].m_fSortDistanceSq );
+				rScratch[out] = take_left ? rPackets[left++] : rPackets[right++];
+			}
+		}
+		for ( size_t i = 0u; i < count; ++i ) {
+			rPackets[i] = rScratch[i];
+		}
+		if ( width > count / 2u ) {
+			break;
+		}
+	}
 }
 
 static uint32_t t3dRdPreviewPackSnormPair( const float x, const float y )
@@ -790,113 +913,180 @@ bool Terrain3DRdInstanceRenderer::uploadScene( const t3dRdInstanceSceneSnapshot_
 	if ( !pScene ) {
 		return false;
 	}
-	if ( pScene->m_nGeneration == m_nUploadedSceneGeneration ) {
+	if ( pScene->m_nGeneration == m_nUploadedSceneGeneration &&
+			m_nSceneCapacityMeshGeneration == m_meshCache.getSourceGeneration() ) {
 		return true;
 	}
 	if ( pScene->m_instances.size() > UINT32_MAX / sizeof( t3dRdInstanceRecord_t ) ) {
 		setError( "RD instance publication exceeds 32-bit buffer limits" );
 		return false;
 	}
-	uint64_t packet_capacity = 0u;
-	uint64_t visible_index_capacity = 0u;
-	for ( const t3dRdInstanceCell_t& cell : pScene->m_cells ) {
+
+	uint64_t packet_capacity64 = 0u;
+	uint64_t visible_index_capacity64 = 0u;
+	for ( const t3dRdInstanceCell_t &cell : pScene->m_cells ) {
 		const t3dRdMeshHandle_t mesh = m_meshCache.getMeshHandleBySourceKey( cell.m_nMeshSourceKey != 0u
 						? cell.m_nMeshSourceKey
 						: t3dRdRegularMeshSourceKey( cell.m_nMeshAssetId, cell.m_nLod ) );
-		const t3dRdMeshSourceLod_t *const lod = m_meshCache.resolveMesh( mesh );
-		if ( lod ) {
-			packet_capacity += lod->m_nSurfaceCount;
-			visible_index_capacity += (uint64_t)( cell.m_nInstanceCount ) * (uint64_t)( lod->m_nSurfaceCount );
+		const t3dRdMeshSourceLod_t *const pLod = m_meshCache.resolveMesh( mesh );
+		if ( pLod ) {
+			packet_capacity64 += pLod->m_nSurfaceCount;
+			visible_index_capacity64 +=
+					(uint64_t)( cell.m_nInstanceCount ) * (uint64_t)( pLod->m_nSurfaceCount );
 		}
-		if ( packet_capacity > UINT32_MAX / sizeof( t3dRdIndexedIndirectCommand_t ) ) {
+		if ( packet_capacity64 > UINT32_MAX / sizeof( t3dRdIndexedIndirectCommand_t ) ) {
 			setError( "RD instance indirect packet capacity exceeds 32-bit buffer limits" );
 			return false;
 		}
-		if ( visible_index_capacity > UINT32_MAX / sizeof( uint32_t ) ) {
+		if ( visible_index_capacity64 > UINT32_MAX / sizeof( uint32_t ) ) {
 			setError( "RD instance visible-index capacity exceeds 32-bit buffer limits" );
 			return false;
 		}
 	}
+
+	m_nPacketCapacity = (uint32_t)( packet_capacity64 );
+	m_nVisibleIndexCapacity = (uint32_t)( visible_index_capacity64 );
 	const uint32_t instance_bytes = (uint32_t)( pScene->m_instances.size() * sizeof( t3dRdInstanceRecord_t ) );
-	const uint32_t visible_bytes = (uint32_t)( visible_index_capacity * sizeof( uint32_t ) );
-	const uint32_t material_bytes = (uint32_t)( m_meshCache.getMaterials().size() * sizeof( t3dRdInstanceMaterial_t ) );
-	const uint32_t indirect_bytes = (uint32_t)( packet_capacity * sizeof( t3dRdIndexedIndirectCommand_t ) );
-	// Publication is the allocation boundary. Render callbacks only clear and
-	// refill retained storage up to these source-derived maxima.
-	m_visibleIndices.reserve( (size_t)( visible_index_capacity ) );
-	m_shadowVisibleIndices.reserve( (size_t)( visible_index_capacity ) );
-	m_drawPackets.reserve( (size_t)( packet_capacity ) );
-	m_depthPackets.reserve( (size_t)( packet_capacity ) );
-	m_shadowPackets.reserve( (size_t)( packet_capacity ) );
-	m_hlodDescriptors.reserve( (size_t)( packet_capacity ) );
-	m_packetGroupPool.reserve( (size_t)( packet_capacity ) );
-	const uint32_t required_instance_capacity = MAX( instance_bytes, (uint32_t)( sizeof( t3dRdInstanceRecord_t ) ) );
+	const uint32_t visible_bytes = m_nVisibleIndexCapacity * sizeof( uint32_t );
+	const uint32_t material_bytes =
+			(uint32_t)( m_meshCache.getMaterials().size() * sizeof( t3dRdInstanceMaterial_t ) );
+	const uint32_t indirect_bytes = m_nPacketCapacity * sizeof( t3dRdIndexedIndirectCommand_t );
+	const uint32_t required_instance_capacity =
+			MAX( instance_bytes, (uint32_t)( sizeof( t3dRdInstanceRecord_t ) ) );
 	const bool full_instance_upload = !m_hInstanceBuffer.is_valid() ||
-			m_nInstanceCapacityBytes < required_instance_capacity || m_instanceBytes.size() != instance_bytes;
+			m_nInstanceCapacityBytes < required_instance_capacity || m_nInstanceUsedBytes != instance_bytes;
+
+	// Scene publication is the only capacity-rebuild boundary for frame-side
+	// instance storage. All render callbacks only change logical sizes.
+	m_visibleIndices.reserve( m_nVisibleIndexCapacity );
+	m_shadowVisibleIndices.reserve( m_nVisibleIndexCapacity );
+	m_drawPackets.reserve( m_nPacketCapacity );
+	m_depthPackets.reserve( m_nPacketCapacity );
+	m_shadowPackets.reserve( m_nPacketCapacity );
+	m_hlodDescriptors.reserve( m_nPacketCapacity );
+	m_packetBuildSlots.reserve( m_nPacketCapacity );
+	m_packetBuildEntries.reserve( m_nPacketCapacity );
+	m_alphaPackets.reserve( m_nPacketCapacity );
+	m_alphaSortScratch.reserve( m_nPacketCapacity );
+	m_motionHistoryRecords.reserve( pScene->m_instances.size() );
+	m_motionPreviousRecords.reserve( pScene->m_instances.size() );
+	m_motionHistoryCells.reserve( pScene->m_cells.size() );
+	m_motionCurrentOrder.reserve( pScene->m_cells.size() );
+	m_motionPreviousOrder.reserve( pScene->m_cells.size() );
+	m_packetIndex.beginColdRebuild();
+	if ( !m_packetIndex.reserveAndSeal( m_nPacketCapacity ) ) {
+		setError( "RD instance packet hash capacity could not be sealed" );
+		return false;
+	}
+
+	const uint32_t hlod_descriptor_bytes =
+			MAX( m_nPacketCapacity * (uint32_t)( sizeof( t3dRdHlodCullDescriptor_t ) ),
+					(uint32_t)( sizeof( t3dRdHlodCullDescriptor_t ) ) );
+	if ( ( !m_hHlodCullDescriptorBuffer.is_valid() || m_nHlodDescriptorCapacityBytes < hlod_descriptor_bytes ) &&
+			m_hHlodCullUniformSet.is_valid() ) {
+		m_context.freeResource( m_hHlodCullUniformSet );
+	}
 	m_context.beginResourceRebuild();
 	const bool buffers_ok = ensureBuffers( instance_bytes,
-									MAX( visible_bytes, 4u ),
-									MAX( material_bytes, (uint32_t)( sizeof( t3dRdInstanceMaterial_t ) ) ),
-									MAX( indirect_bytes, (uint32_t)( sizeof( t3dRdIndexedIndirectCommand_t ) ) ) ) &&
+			MAX( visible_bytes, 4u ),
+			MAX( material_bytes, (uint32_t)( sizeof( t3dRdInstanceMaterial_t ) ) ),
+			MAX( indirect_bytes, (uint32_t)( sizeof( t3dRdIndexedIndirectCommand_t ) ) ) ) &&
 			ensureShadowBuffers( MAX( visible_bytes, 4u ),
 					MAX( indirect_bytes, (uint32_t)( sizeof( t3dRdIndexedIndirectCommand_t ) ) ) ) &&
+			ensureBuffer( m_hHlodCullDescriptorBuffer,
+					m_nHlodDescriptorCapacityBytes,
+					hlod_descriptor_bytes,
+					"T3D.HLOD.CullDescriptors",
+					Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
+					Terrain3DRdContext::MEMORY_INSTANCE ) &&
 			ensureUniformSet() && ensureShadowUniformSet();
 	m_context.endResourceRebuild();
 	if ( !buffers_ok ) {
 		return false;
 	}
+
+	if ( m_instanceBytes.size() < (int64_t)( m_nInstanceCapacityBytes ) ) {
+		m_instanceBytes.resize( m_nInstanceCapacityBytes );
+	}
+	if ( m_previousInstanceBytes.size() < (int64_t)( m_nPreviousInstanceCapacityBytes ) ) {
+		m_previousInstanceBytes.resize( m_nPreviousInstanceCapacityBytes );
+	}
+	if ( m_visibleBytes.size() < (int64_t)( m_nVisibleCapacityBytes ) ) {
+		m_visibleBytes.resize( m_nVisibleCapacityBytes );
+	}
+	if ( m_shadowVisibleBytes.size() < (int64_t)( m_nShadowVisibleCapacityBytes ) ) {
+		m_shadowVisibleBytes.resize( m_nShadowVisibleCapacityBytes );
+	}
+	if ( m_indirectBytes.size() < (int64_t)( m_nIndirectCapacityBytes ) ) {
+		m_indirectBytes.resize( m_nIndirectCapacityBytes );
+	}
+	if ( m_shadowIndirectBytes.size() < (int64_t)( m_nShadowIndirectCapacityBytes ) ) {
+		m_shadowIndirectBytes.resize( m_nShadowIndirectCapacityBytes );
+	}
+	if ( m_hlodDescriptorBytes.size() < (int64_t)( m_nHlodDescriptorCapacityBytes ) ) {
+		m_hlodDescriptorBytes.resize( m_nHlodDescriptorCapacityBytes );
+	}
+	constexpr uint32_t s_nDirtyChunkRecords = 64u;
+	const uint32_t dirty_chunk_bytes = s_nDirtyChunkRecords * sizeof( t3dRdInstanceRecord_t );
+	if ( m_dirtyInstanceBytes.size() < (int64_t)( dirty_chunk_bytes ) ) {
+		m_dirtyInstanceBytes.resize( dirty_chunk_bytes );
+	}
+	const uint32_t dirty_chunk_count =
+			( (uint32_t)( pScene->m_instances.size() ) + s_nDirtyChunkRecords - 1u ) / s_nDirtyChunkRecords;
+	m_dirtyInstanceChunks.resize( dirty_chunk_count );
+
 	uint32_t uploaded_bytes = 0u;
 	if ( instance_bytes > 0u ) {
-		const uint8_t *const source = reinterpret_cast<const uint8_t *>( pScene->m_instances.data() );
+		const uint8_t *const pSource = reinterpret_cast<const uint8_t *>( pScene->m_instances.data() );
+		RenderingDevice *const pRd = m_context.getDevice();
 		if ( full_instance_upload ) {
-			m_instanceBytes.resize( instance_bytes );
-			std::memcpy( m_instanceBytes.ptrw(), source, instance_bytes );
-			if ( m_context.getDevice()->buffer_update( m_hInstanceBuffer, 0u, instance_bytes, m_instanceBytes ) !=
-					OK ) {
+			std::memcpy( m_instanceBytes.ptrw(), pSource, instance_bytes );
+			if ( pRd->buffer_update( m_hInstanceBuffer, 0u, instance_bytes, m_instanceBytes ) != OK ) {
 				return false;
 			}
 			uploaded_bytes = instance_bytes;
 			++m_nDirtyUploadRanges;
 		} else {
-			const uint8_t *const previous = m_instanceBytes.ptr();
+			std::memset( m_dirtyInstanceChunks.data(), 0, m_dirtyInstanceChunks.size() * sizeof( uint8_t ) );
+			const uint8_t *const pPrevious = m_instanceBytes.ptr();
 			const uint32_t record_count = (uint32_t)( pScene->m_instances.size() );
-			uint32_t first_changed = record_count;
-			uint32_t last_changed = 0u;
 			for ( uint32_t i = 0u; i < record_count; ++i ) {
 				const uint32_t offset = i * sizeof( t3dRdInstanceRecord_t );
-				if ( std::memcmp( previous + offset, source + offset, sizeof( t3dRdInstanceRecord_t ) ) == 0 ) {
+				if ( std::memcmp( pPrevious + offset, pSource + offset, sizeof( t3dRdInstanceRecord_t ) ) != 0 ) {
+					m_dirtyInstanceChunks[i / s_nDirtyChunkRecords] = 1u;
+				}
+			}
+			for ( uint32_t chunk = 0u; chunk < dirty_chunk_count; ++chunk ) {
+				if ( m_dirtyInstanceChunks[chunk] == 0u ) {
 					continue;
 				}
-				if ( first_changed == record_count ) {
-					first_changed = i;
-				}
-				last_changed = i;
-			}
-			if ( first_changed != record_count ) {
-				const uint32_t first_byte = first_changed * sizeof( t3dRdInstanceRecord_t );
-				uploaded_bytes = ( last_changed - first_changed + 1u ) * sizeof( t3dRdInstanceRecord_t );
-				m_dirtyInstanceBytes.resize( uploaded_bytes );
-				std::memcpy( m_dirtyInstanceBytes.ptrw(), source + first_byte, uploaded_bytes );
-				if ( m_context.getDevice()->buffer_update(
-							 m_hInstanceBuffer, first_byte, uploaded_bytes, m_dirtyInstanceBytes ) != OK ) {
+				const uint32_t first_record = chunk * s_nDirtyChunkRecords;
+				const uint32_t record_count_in_chunk = MIN( s_nDirtyChunkRecords, record_count - first_record );
+				const uint32_t first_byte = first_record * sizeof( t3dRdInstanceRecord_t );
+				const uint32_t chunk_bytes = record_count_in_chunk * sizeof( t3dRdInstanceRecord_t );
+				std::memcpy( m_dirtyInstanceBytes.ptrw(), pSource + first_byte, chunk_bytes );
+				if ( pRd->buffer_update( m_hInstanceBuffer, first_byte, chunk_bytes, m_dirtyInstanceBytes ) != OK ) {
 					return false;
 				}
+				uploaded_bytes += chunk_bytes;
 				++m_nDirtyUploadRanges;
 			}
-			std::memcpy( m_instanceBytes.ptrw(), source, instance_bytes );
+			std::memcpy( m_instanceBytes.ptrw(), pSource, instance_bytes );
 		}
 	}
 	if ( uploaded_bytes > 0u ) {
 		m_context.recordBufferUpdate( uploaded_bytes );
 	}
+	m_nInstanceUsedBytes = instance_bytes;
 	m_nDirtyUploadBytes += uploaded_bytes;
 	++m_nSceneUploads;
 	m_nUploadedSceneGeneration = pScene->m_nGeneration;
+	m_nSceneCapacityMeshGeneration = m_meshCache.getSourceGeneration();
 	m_nStaticInstances = pScene->m_instances.size();
 	return true;
 }
 
-bool Terrain3DRdInstanceRenderer::prepareMotionHistory( const t3dRdInstanceSceneSnapshot_t& rScene,
+bool Terrain3DRdInstanceRenderer::prepareMotionHistory( const t3dRdInstanceSceneSnapshot_t &rScene,
 		const uint64_t nRenderFrame )
 {
 	if ( m_nMotionHistoryRenderFrame == nRenderFrame && rScene.m_nGeneration == m_nMotionHistorySceneGeneration ) {
@@ -905,6 +1095,8 @@ bool Terrain3DRdInstanceRenderer::prepareMotionHistory( const t3dRdInstanceScene
 	if ( rScene.m_instances.empty() ) {
 		m_motionHistoryRecords.clear();
 		m_motionHistoryCells.clear();
+		m_motionCurrentOrder.clear();
+		m_motionPreviousOrder.clear();
 		m_nMotionHistorySceneGeneration = rScene.m_nGeneration;
 		m_bMotionHistoryNeedsAdvance = false;
 		m_nMotionHistoryRenderFrame = nRenderFrame;
@@ -914,58 +1106,95 @@ bool Terrain3DRdInstanceRenderer::prepareMotionHistory( const t3dRdInstanceScene
 	bool upload_previous = false;
 	const bool reset_history = m_motionHistoryRecords.empty() || m_motionHistoryCells.empty();
 	const bool scene_changed = rScene.m_nGeneration != m_nMotionHistorySceneGeneration;
+	m_motionPreviousRecords.resize( rScene.m_instances.size() );
+	std::memcpy( m_motionPreviousRecords.data(),
+			rScene.m_instances.data(),
+			rScene.m_instances.size() * sizeof( t3dRdInstanceRecord_t ) );
 	if ( reset_history ) {
-		m_motionPreviousRecords = rScene.m_instances;
 		upload_previous = true;
 		++m_nMotionHistoryResets;
 		m_bMotionHistoryNeedsAdvance = false;
 	} else if ( scene_changed ) {
-		m_motionPreviousRecords = rScene.m_instances;
-		for ( const t3dRdInstanceCell_t& current_cell : rScene.m_cells ) {
-			const uint64_t current_end = (uint64_t)( current_cell.m_nFirstInstance ) + current_cell.m_nInstanceCount;
-			if ( current_end > rScene.m_instances.size() ) {
+		m_motionCurrentOrder.resize( rScene.m_cells.size() );
+		m_motionPreviousOrder.resize( m_motionHistoryCells.size() );
+		for ( uint32_t i = 0u; i < (uint32_t)( m_motionCurrentOrder.size() ); ++i ) {
+			m_motionCurrentOrder[i] = i;
+		}
+		for ( uint32_t i = 0u; i < (uint32_t)( m_motionPreviousOrder.size() ); ++i ) {
+			m_motionPreviousOrder[i] = i;
+		}
+		std::sort( m_motionCurrentOrder.begin(),
+				m_motionCurrentOrder.end(),
+				[&rScene]( const uint32_t a, const uint32_t b ) {
+					return t3dRdMotionCellCompare( rScene.m_cells[a], rScene.m_cells[b] ) < 0;
+				} );
+		std::sort( m_motionPreviousOrder.begin(),
+				m_motionPreviousOrder.end(),
+				[this]( const uint32_t a, const uint32_t b ) {
+					return t3dRdMotionCellCompare( m_motionHistoryCells[a], m_motionHistoryCells[b] ) < 0;
+				} );
+
+		size_t current = 0u;
+		size_t previous = 0u;
+		while ( current < m_motionCurrentOrder.size() && previous < m_motionPreviousOrder.size() ) {
+			const t3dRdInstanceCell_t &current_cell = rScene.m_cells[m_motionCurrentOrder[current]];
+			const t3dRdInstanceCell_t &previous_cell = m_motionHistoryCells[m_motionPreviousOrder[previous]];
+			const int compare = t3dRdMotionCellCompare( current_cell, previous_cell );
+			if ( compare < 0 ) {
+				++current;
 				continue;
 			}
-			for ( const t3dRdInstanceCell_t& previous_cell : m_motionHistoryCells ) {
-				if ( !t3dRdMotionCellsMatch( current_cell, previous_cell ) ) {
-					continue;
-				}
-				const uint64_t previous_end =
-						(uint64_t)( previous_cell.m_nFirstInstance ) + previous_cell.m_nInstanceCount;
-				if ( previous_end > m_motionHistoryRecords.size() ) {
-					break;
-				}
-				std::copy_n( m_motionHistoryRecords.begin() + previous_cell.m_nFirstInstance,
-						current_cell.m_nInstanceCount,
-						m_motionPreviousRecords.begin() + current_cell.m_nFirstInstance );
-				m_nMotionHistoryMatches += current_cell.m_nInstanceCount;
-				break;
+			if ( compare > 0 ) {
+				++previous;
+				continue;
 			}
+			const uint64_t current_end =
+					(uint64_t)( current_cell.m_nFirstInstance ) + current_cell.m_nInstanceCount;
+			const uint64_t previous_end =
+					(uint64_t)( previous_cell.m_nFirstInstance ) + previous_cell.m_nInstanceCount;
+			if ( current_end <= rScene.m_instances.size() && previous_end <= m_motionHistoryRecords.size() &&
+					t3dRdMotionCellsMatch( current_cell, previous_cell ) ) {
+				std::memcpy( m_motionPreviousRecords.data() + current_cell.m_nFirstInstance,
+						m_motionHistoryRecords.data() + previous_cell.m_nFirstInstance,
+						current_cell.m_nInstanceCount * sizeof( t3dRdInstanceRecord_t ) );
+				m_nMotionHistoryMatches += current_cell.m_nInstanceCount;
+			}
+			++current;
+			++previous;
 		}
 		upload_previous = true;
 		m_bMotionHistoryNeedsAdvance = true;
 	} else if ( m_bMotionHistoryNeedsAdvance ) {
-		// One frame after a transform publication, advance previous=current so
-		// a stopped object does not keep emitting the same velocity forever.
-		m_motionPreviousRecords = rScene.m_instances;
 		upload_previous = true;
 		m_bMotionHistoryNeedsAdvance = false;
 	}
 
 	if ( upload_previous ) {
-		const uint32_t bytes = (uint32_t)( m_motionPreviousRecords.size() * sizeof( t3dRdInstanceRecord_t ) );
-		m_previousInstanceBytes.resize( bytes );
+		const uint32_t bytes =
+				(uint32_t)( m_motionPreviousRecords.size() * sizeof( t3dRdInstanceRecord_t ) );
+		if ( bytes > m_nPreviousInstanceCapacityBytes || m_previousInstanceBytes.size() < bytes ) {
+			setError( "RD motion history exceeded publication-time capacity" );
+			return false;
+		}
 		std::memcpy( m_previousInstanceBytes.ptrw(), m_motionPreviousRecords.data(), bytes );
-		if ( m_context.getDevice()->buffer_update( m_hPreviousInstanceBuffer, 0u, bytes, m_previousInstanceBytes ) !=
-				OK ) {
+		if ( m_context.getDevice()->buffer_update(
+				m_hPreviousInstanceBuffer, 0u, bytes, m_previousInstanceBytes ) != OK ) {
 			return false;
 		}
 		m_context.recordBufferUpdate( bytes );
 	}
 
 	if ( reset_history || scene_changed ) {
-		m_motionHistoryRecords = rScene.m_instances;
-		m_motionHistoryCells = rScene.m_cells;
+		m_motionHistoryRecords.resize( rScene.m_instances.size() );
+		std::memcpy( m_motionHistoryRecords.data(),
+				rScene.m_instances.data(),
+				rScene.m_instances.size() * sizeof( t3dRdInstanceRecord_t ) );
+		m_motionHistoryCells.resize( rScene.m_cells.size() );
+		if ( !rScene.m_cells.empty() ) {
+			std::memcpy( m_motionHistoryCells.data(),
+					rScene.m_cells.data(),
+					rScene.m_cells.size() * sizeof( t3dRdInstanceCell_t ) );
+		}
 		m_nMotionHistorySceneGeneration = rScene.m_nGeneration;
 	}
 	m_nMotionHistoryRenderFrame = nRenderFrame;
@@ -990,7 +1219,9 @@ bool Terrain3DRdInstanceRenderer::uploadMaterials( void )
 		return false;
 	}
 	if ( bytes > 0u ) {
-		m_materialBytes.resize( bytes );
+		if ( m_materialBytes.size() < (int64_t)( m_nMaterialCapacityBytes ) ) {
+			m_materialBytes.resize( m_nMaterialCapacityBytes );
+		}
 		std::memcpy( m_materialBytes.ptrw(), materials.data(), bytes );
 		if ( m_context.getDevice()->buffer_update( m_hMaterialBuffer, 0u, bytes, m_materialBytes ) != OK ) {
 			return false;
@@ -1002,229 +1233,243 @@ bool Terrain3DRdInstanceRenderer::uploadMaterials( void )
 	return rebuildMaterialBindings();
 }
 
-bool Terrain3DRdInstanceRenderer::isCellVisible( const t3dRdInstanceCell_t& rCell,
-		const Projection& rViewProjection,
-		const Vector3& rCamera,
-		const bool bShadowPass ) const
-{
-	if ( rCell.m_nInstanceCount == 0u || ( !bShadowPass && ( rCell.m_nFlags & T3D_RD_INSTANCE_SHADOWS_ONLY ) != 0u ) ) {
-		return false;
-	}
-	const Vector3 center = rCell.m_bounds.get_center();
-	const float distance = (float)( center.distance_to( rCamera ) );
-	if ( !bShadowPass ) {
-		if ( rCell.m_fLodBegin > 0.001f && distance < rCell.m_fLodBegin ) {
-			return false;
-		}
-		if ( rCell.m_fLodEnd > 0.001f && distance >= rCell.m_fLodEnd ) {
-			return false;
-		}
-	}
-	const Vector3 p = rCell.m_bounds.position, e = rCell.m_bounds.position + rCell.m_bounds.size;
-	const Vector4 corners[8] = { t3dRdInstanceTransformPoint( rViewProjection, p.x, p.y, p.z ),
-		t3dRdInstanceTransformPoint( rViewProjection, e.x, p.y, p.z ),
-		t3dRdInstanceTransformPoint( rViewProjection, p.x, e.y, p.z ),
-		t3dRdInstanceTransformPoint( rViewProjection, e.x, e.y, p.z ),
-		t3dRdInstanceTransformPoint( rViewProjection, p.x, p.y, e.z ),
-		t3dRdInstanceTransformPoint( rViewProjection, e.x, p.y, e.z ),
-		t3dRdInstanceTransformPoint( rViewProjection, p.x, e.y, e.z ),
-		t3dRdInstanceTransformPoint( rViewProjection, e.x, e.y, e.z ) };
-	bool left = true, right = true, bottom = true, top = true, near = true, far = true;
-	for ( const Vector4& c : corners ) {
-		left &= c.x < -c.w;
-		right &= c.x > c.w;
-		bottom &= c.y < -c.w;
-		top &= c.y > c.w;
-		near &= c.z > c.w;
-		far &= c.z < 0.0f;
-	}
-	return !( left || right || bottom || top || near || far );
-}
-
-bool Terrain3DRdInstanceRenderer::buildPackets( const t3dRdInstanceSceneSnapshot_t& rScene,
+template <bool t_bShadowPass> bool Terrain3DRdInstanceRenderer::buildPacketsForPass(
+		const t3dRdInstanceSceneSnapshot_t &rScene,
 		const Projection *const pViewProjections,
 		const uint32_t nViewCount,
-		const Vector3& rCamera,
+		const Vector3 &rCamera,
 		const uint32_t nVisibilityMask,
-		const bool bShadowPass,
 		const bool bSkipFrustum )
 {
-	if ( !pViewProjections || nViewCount == 0u || nViewCount > s_nRdForwardMaxViews ) {
-		return false;
+	t3dRdInstanceFrustum_t frustums[s_nRdForwardMaxViews];
+	for ( uint32_t view = 0u; view < nViewCount; ++view ) {
+		frustums[view] = t3dRdInstanceExtractFrustum( pViewProjections[view] );
 	}
-	std::vector<t3dRdPacketBuildGroup_t>& groups = m_packetGroupPool;
-	size_t group_count = 0u;
-	m_visibleIndices.clear();
-	m_shadowVisibleIndices.clear();
-	m_drawPackets.clear();
-	m_depthPackets.clear();
-	m_shadowPackets.clear();
-	m_hlodDescriptors.clear();
 
-	for ( const t3dRdInstanceCell_t& cell : rScene.m_cells ) {
+	m_packetIndex.clear();
+	m_packetBuildSlots.clear();
+	m_packetBuildEntries.clear();
+	m_alphaPackets.clear();
+	if constexpr ( t_bShadowPass ) {
+		m_shadowVisibleIndices.clear();
+		m_shadowPackets.clear();
+	} else {
+		m_visibleIndices.clear();
+		m_drawPackets.clear();
+		m_depthPackets.clear();
+		m_hlodDescriptors.clear();
+	}
+	uint32_t unique_key = 1u;
+
+	for ( const t3dRdInstanceCell_t &cell : rScene.m_cells ) {
 		const bool hlod = ( cell.m_nFlags & T3D_RD_INSTANCE_HLOD ) != 0u;
-		if ( ( bShadowPass || !hlod ) && ( cell.m_nVisibilityLayers & nVisibilityMask ) == 0u ) {
+		if constexpr ( t_bShadowPass ) {
+			if ( ( cell.m_nVisibilityLayers & nVisibilityMask ) == 0u ||
+					( cell.m_nFlags & T3D_RD_INSTANCE_CAST_SHADOWS ) == 0u ) {
+				continue;
+			}
+		} else if ( !hlod && ( cell.m_nVisibilityLayers & nVisibilityMask ) == 0u ) {
 			continue;
 		}
-		if ( (uint64_t)( cell.m_nFirstInstance ) + (uint64_t)( cell.m_nInstanceCount ) > rScene.m_instances.size() ) {
+		if ( (uint64_t)( cell.m_nFirstInstance ) + cell.m_nInstanceCount > rScene.m_instances.size() ) {
 			setError( "RD instance cell range exceeds published instance table" );
 			return false;
 		}
+
 		const t3dRdMeshHandle_t mesh = m_meshCache.getMeshHandleBySourceKey( cell.m_nMeshSourceKey != 0u
 						? cell.m_nMeshSourceKey
 						: t3dRdRegularMeshSourceKey( cell.m_nMeshAssetId, cell.m_nLod ) );
-		const t3dRdMeshSourceLod_t *const lod = m_meshCache.resolveMesh( mesh );
-		if ( !lod ) {
+		const t3dRdMeshSourceLod_t *const pLod = m_meshCache.resolveMesh( mesh );
+		if ( !pLod ) {
 			continue;
 		}
-		bool visible = bSkipFrustum && cell.m_nInstanceCount > 0u &&
-				( !bShadowPass || ( cell.m_nFlags & T3D_RD_INSTANCE_CAST_SHADOWS ) != 0u );
-		if ( !visible && !bShadowPass && hlod && nViewCount == 1u ) {
-			visible = cell.m_nInstanceCount > 0u && ( cell.m_nFlags & T3D_RD_INSTANCE_SHADOWS_ONLY ) == 0u;
+
+		bool visible = false;
+		if ( bSkipFrustum ) {
+			visible = cell.m_nInstanceCount > 0u;
+			if constexpr ( !t_bShadowPass ) {
+				visible = visible && ( cell.m_nFlags & T3D_RD_INSTANCE_SHADOWS_ONLY ) == 0u;
+			}
+		} else if constexpr ( !t_bShadowPass ) {
+			if ( hlod && nViewCount == 1u ) {
+				visible = cell.m_nInstanceCount > 0u &&
+						( cell.m_nFlags & T3D_RD_INSTANCE_SHADOWS_ONLY ) == 0u;
+			} else {
+				for ( uint32_t view = 0u; view < nViewCount && !visible; ++view ) {
+					visible = hlod
+							? ( cell.m_nFlags & T3D_RD_INSTANCE_SHADOWS_ONLY ) == 0u &&
+									t3dRdInstanceCellVisible( cell, frustums[view], rCamera, true )
+							: t3dRdInstanceCellVisible( cell, frustums[view], rCamera, false );
+				}
+			}
 		} else {
 			for ( uint32_t view = 0u; view < nViewCount && !visible; ++view ) {
-				if ( !bShadowPass && hlod ) {
-					visible = ( cell.m_nFlags & T3D_RD_INSTANCE_SHADOWS_ONLY ) == 0u &&
-							isCellVisible( cell, pViewProjections[view], rCamera, true );
-				} else {
-					visible = isCellVisible( cell, pViewProjections[view], rCamera, bShadowPass );
-				}
+				visible = t3dRdInstanceCellVisible( cell, frustums[view], rCamera, true );
 			}
 		}
 		if ( !visible ) {
 			continue;
 		}
-		if ( bShadowPass && ( cell.m_nFlags & T3D_RD_INSTANCE_CAST_SHADOWS ) == 0u ) {
-			continue;
-		}
+
 		uint32_t cell_draw_flags = cell.m_nFlags;
-		if ( !bShadowPass && cell.m_fFadeMargin > 0.0f ) {
-			const float distance = (float)( cell.m_bounds.get_center().distance_to( rCamera ) );
-			float fade = 1.0f;
-			if ( cell.m_fLodBegin > 0.001f && distance < cell.m_fLodBegin + cell.m_fFadeMargin ) {
-				fade = MIN( fade, ( distance - cell.m_fLodBegin ) / cell.m_fFadeMargin );
-			}
-			if ( cell.m_fLodEnd > 0.001f && distance > cell.m_fLodEnd - cell.m_fFadeMargin ) {
-				fade = MIN( fade, ( cell.m_fLodEnd - distance ) / cell.m_fFadeMargin );
-			}
-			const uint32_t fade_unorm = (uint32_t)( std::lround( CLAMP( fade, 0.0f, 1.0f ) * 65535.0f ) );
-			cell_draw_flags |= T3D_RD_INSTANCE_FADE_ACTIVE |
-					( fade_unorm << T3D_RD_INSTANCE_FADE_SHIFT ) & T3D_RD_INSTANCE_FADE_MASK;
-		}
-		for ( uint32_t surface_index = 0u; surface_index < lod->m_nSurfaceCount; ++surface_index ) {
-			const t3dRdSurfaceHandle_t handle = m_meshCache.getSurfaceHandle( mesh, surface_index );
-			const t3dRdMeshSourceSurface_t *const surface = m_meshCache.resolveSurface( handle );
-			if ( !surface || surface->m_nIndexCount == 0u ) {
-				continue;
-			}
-			const uint32_t draw_flags = cell_draw_flags | surface->m_nFlags;
-			const bool alpha_blend = ( draw_flags & T3D_RD_INSTANCE_ALPHA_BLEND ) != 0u;
-			if ( bShadowPass && alpha_blend && ( draw_flags & T3D_RD_INSTANCE_ALPHA_DEPTH_PREPASS ) == 0u ) {
-				continue;
-			}
-			t3dRdPacketBuildGroup_t *group = nullptr;
-			const bool range_fade = ( draw_flags & T3D_RD_INSTANCE_FADE_ACTIVE ) != 0u;
-			if ( bShadowPass || ( !hlod && !alpha_blend && !range_fade ) ) {
-				for ( size_t candidate_index = 0u; candidate_index < group_count; ++candidate_index ) {
-					t3dRdPacketBuildGroup_t& candidate = groups[candidate_index];
-					if ( candidate.m_packet.m_nSurfaceSlot == handle.m_nSlot &&
-							candidate.m_packet.m_nFlags == draw_flags &&
-							candidate.m_packet.m_nMaterial == surface->m_nMaterial &&
-							candidate.m_packet.m_nOverlayMaterial == surface->m_nOverlayMaterial &&
-							candidate.m_packet.m_nVisibilityLayers == cell.m_nVisibilityLayers ) {
-						group = &candidate;
-						break;
+		if constexpr ( !t_bShadowPass ) {
+			if ( cell.m_fFadeMargin > 0.0f ) {
+				const float distance_sq = (float)( cell.m_bounds.get_center().distance_squared_to( rCamera ) );
+				const float begin_fade_end = cell.m_fLodBegin + cell.m_fFadeMargin;
+				const float end_fade_begin = MAX( 0.0f, cell.m_fLodEnd - cell.m_fFadeMargin );
+				const bool near_begin = cell.m_fLodBegin > 0.001f && distance_sq < begin_fade_end * begin_fade_end;
+				const bool near_end = cell.m_fLodEnd > 0.001f && distance_sq > end_fade_begin * end_fade_begin;
+				if ( near_begin || near_end ) {
+					const float distance = std::sqrt( distance_sq );
+					float fade = 1.0f;
+					if ( near_begin ) {
+						fade = MIN( fade, ( distance - cell.m_fLodBegin ) / cell.m_fFadeMargin );
 					}
+					if ( near_end ) {
+						fade = MIN( fade, ( cell.m_fLodEnd - distance ) / cell.m_fFadeMargin );
+					}
+					const uint32_t fade_unorm =
+							(uint32_t)( std::lround( CLAMP( fade, 0.0f, 1.0f ) * 65535.0f ) );
+					cell_draw_flags |= T3D_RD_INSTANCE_FADE_ACTIVE |
+							( fade_unorm << T3D_RD_INSTANCE_FADE_SHIFT ) & T3D_RD_INSTANCE_FADE_MASK;
 				}
 			}
-			if ( !group ) {
-				if ( group_count == groups.size() ) {
-					groups.emplace_back();
+		}
+
+		for ( uint32_t surface_index = 0u; surface_index < pLod->m_nSurfaceCount; ++surface_index ) {
+			const t3dRdSurfaceHandle_t handle = m_meshCache.getSurfaceHandle( mesh, surface_index );
+			const t3dRdMeshSourceSurface_t *const pSurface = m_meshCache.resolveSurface( handle );
+			if ( !pSurface || pSurface->m_nIndexCount == 0u ) {
+				continue;
+			}
+			const uint32_t draw_flags = cell_draw_flags | pSurface->m_nFlags;
+			const bool alpha_blend = ( draw_flags & T3D_RD_INSTANCE_ALPHA_BLEND ) != 0u;
+			if constexpr ( t_bShadowPass ) {
+				if ( alpha_blend && ( draw_flags & T3D_RD_INSTANCE_ALPHA_DEPTH_PREPASS ) == 0u ) {
+					continue;
 				}
-				group = &groups[group_count++];
-				group->m_packet = t3dRdInstanceDrawPacket_t{};
-				group->m_indices.clear();
-				group->m_packet.m_nSurfaceSlot = handle.m_nSlot;
-				group->m_packet.m_nMaterial = surface->m_nMaterial;
-				group->m_packet.m_nOverlayMaterial = surface->m_nOverlayMaterial;
-				group->m_packet.m_nFlags = draw_flags;
-				group->m_packet.m_fSortDistanceSq =
+			}
+
+			const bool range_fade = ( draw_flags & T3D_RD_INSTANCE_FADE_ACTIVE ) != 0u;
+			const bool can_group = t_bShadowPass || ( !hlod && !alpha_blend && !range_fade );
+			t3dRdPacketKey_t key;
+			key.m_nSurfaceSlot = handle.m_nSlot;
+			key.m_nFlags = draw_flags;
+			key.m_nMaterial = pSurface->m_nMaterial;
+			key.m_nOverlayMaterial = pSurface->m_nOverlayMaterial;
+			key.m_nVisibilityLayers = cell.m_nVisibilityLayers;
+			key.m_nUnique = can_group ? 0u : unique_key++;
+
+			uint32_t packet_index = UINT32_MAX;
+			if ( const uint32_t *const pExisting = m_packetIndex.find( key ) ) {
+				packet_index = *pExisting;
+			} else {
+				if ( m_packetBuildSlots.size() >= m_nPacketCapacity ) {
+					setError( "RD instance packet count exceeded publication-time capacity" );
+					return false;
+				}
+				packet_index = (uint32_t)( m_packetBuildSlots.size() );
+				if ( !m_packetIndex.insertOrAssign( key, packet_index ) ) {
+					setError( "RD instance packet hash overflowed sealed capacity" );
+					return false;
+				}
+				t3dRdPacketBuildSlot_t slot;
+				slot.m_packet.m_nSurfaceSlot = handle.m_nSlot;
+				slot.m_packet.m_nMaterial = pSurface->m_nMaterial;
+				slot.m_packet.m_nOverlayMaterial = pSurface->m_nOverlayMaterial;
+				slot.m_packet.m_nFlags = draw_flags;
+				slot.m_packet.m_fSortDistanceSq =
 						(float)( cell.m_bounds.get_center().distance_squared_to( rCamera ) );
-				group->m_packet.m_indexFormat = ( RenderingDevice::IndexBufferFormat )( surface->m_nIndexFormat );
-				group->m_packet.m_cullBounds = cell.m_bounds;
-				group->m_packet.m_nVisibilityLayers = cell.m_nVisibilityLayers;
+				slot.m_packet.m_indexFormat =
+						(RenderingDevice::IndexBufferFormat)( pSurface->m_nIndexFormat );
+				slot.m_packet.m_cullBounds = cell.m_bounds;
+				slot.m_packet.m_nVisibilityLayers = cell.m_nVisibilityLayers;
+				m_packetBuildSlots.push_back( slot );
 			}
-			group->m_indices.reserve( group->m_indices.size() + cell.m_nInstanceCount );
-			for ( uint32_t instance = 0u; instance < cell.m_nInstanceCount; ++instance ) {
-				group->m_indices.push_back( cell.m_nFirstInstance + instance );
+			if ( m_packetBuildEntries.size() >= m_nPacketCapacity ) {
+				setError( "RD instance packet entry count exceeded publication-time capacity" );
+				return false;
+			}
+			t3dRdPacketBuildSlot_t &slot = m_packetBuildSlots[packet_index];
+			if ( UINT32_MAX - slot.m_nVisibleCount < cell.m_nInstanceCount ) {
+				setError( "RD instance packet visible count overflow" );
+				return false;
+			}
+			slot.m_nVisibleCount += cell.m_nInstanceCount;
+			m_packetBuildEntries.push_back(
+					t3dRdPacketBuildEntry_t{ packet_index, cell.m_nFirstInstance, cell.m_nInstanceCount } );
+		}
+	}
+
+	uint64_t total_visible64 = 0u;
+	for ( t3dRdPacketBuildSlot_t &slot : m_packetBuildSlots ) {
+		slot.m_packet.m_nFirstVisible = (uint32_t)( total_visible64 );
+		slot.m_packet.m_nVisibleCount = slot.m_nVisibleCount;
+		slot.m_nWriteOffset = slot.m_packet.m_nFirstVisible;
+		total_visible64 += slot.m_nVisibleCount;
+	}
+	if ( total_visible64 > m_nVisibleIndexCapacity ) {
+		setError( "RD instance visible-index output exceeded publication-time capacity" );
+		return false;
+	}
+	std::vector<uint32_t> &visible_indices = t_bShadowPass ? m_shadowVisibleIndices : m_visibleIndices;
+	visible_indices.resize( (size_t)( total_visible64 ) );
+	for ( const t3dRdPacketBuildEntry_t &entry : m_packetBuildEntries ) {
+		t3dRdPacketBuildSlot_t &slot = m_packetBuildSlots[entry.m_nPacketIndex];
+		uint32_t write = slot.m_nWriteOffset;
+		for ( uint32_t instance = 0u; instance < entry.m_nInstanceCount; ++instance ) {
+			visible_indices[write++] = entry.m_nFirstInstance + instance;
+		}
+		slot.m_nWriteOffset = write;
+	}
+
+	for ( t3dRdPacketBuildSlot_t &slot : m_packetBuildSlots ) {
+		const t3dRdMeshSourceSurface_t *const pSurface = m_meshCache.resolveSurface(
+				t3dRdSurfaceHandle_t{ slot.m_packet.m_nSurfaceSlot, m_meshCache.getGeneration() } );
+		if ( !pSurface ) {
+			return false;
+		}
+		slot.m_packet.m_command.m_nIndexCount = pSurface->m_nIndexCount;
+		slot.m_packet.m_command.m_nInstanceCount = slot.m_packet.m_nVisibleCount;
+		slot.m_packet.m_command.m_nFirstIndex = pSurface->m_nIndexOffset;
+		slot.m_packet.m_command.m_nVertexOffset = (int32_t)( pSurface->m_nVertexOffset );
+		slot.m_packet.m_command.m_nFirstInstance = slot.m_packet.m_nFirstVisible;
+		if constexpr ( t_bShadowPass ) {
+			m_shadowPackets.push_back( slot.m_packet );
+		} else {
+			const bool alpha = ( slot.m_packet.m_nFlags & T3D_RD_INSTANCE_ALPHA_BLEND ) != 0u;
+			if ( alpha ) {
+				m_alphaPackets.push_back( slot.m_packet );
+			} else {
+				m_drawPackets.push_back( slot.m_packet );
+			}
+			if ( !alpha || ( slot.m_packet.m_nFlags & T3D_RD_INSTANCE_ALPHA_DEPTH_PREPASS ) != 0u ) {
+				m_depthPackets.push_back( slot.m_packet );
 			}
 		}
 	}
 
-	for ( size_t group_index = 0u; group_index < group_count; ++group_index ) {
-		t3dRdPacketBuildGroup_t& group = groups[group_index];
-		if ( group.m_indices.empty() ) {
-			continue;
-		}
-		const t3dRdMeshSourceSurface_t *const surface = m_meshCache.resolveSurface(
-				t3dRdSurfaceHandle_t{ group.m_packet.m_nSurfaceSlot, m_meshCache.getGeneration() } );
-		if ( !surface ) {
+	if constexpr ( !t_bShadowPass ) {
+		t3dRdStableSortAlphaPackets( m_alphaPackets, m_alphaSortScratch );
+		if ( m_drawPackets.size() + m_alphaPackets.size() > m_nPacketCapacity ) {
+			setError( "RD instance draw packet output exceeded publication-time capacity" );
 			return false;
 		}
-		group.m_packet.m_nFirstVisible =
-				bShadowPass ? (uint32_t)( m_shadowVisibleIndices.size() ) : (uint32_t)( m_visibleIndices.size() );
-		group.m_packet.m_nVisibleCount = (uint32_t)( group.m_indices.size() );
-		if ( bShadowPass ) {
-			m_shadowVisibleIndices.insert(
-					m_shadowVisibleIndices.end(), group.m_indices.begin(), group.m_indices.end() );
-		} else {
-			m_visibleIndices.insert( m_visibleIndices.end(), group.m_indices.begin(), group.m_indices.end() );
-		}
-		group.m_packet.m_command.m_nIndexCount = surface->m_nIndexCount;
-		group.m_packet.m_command.m_nInstanceCount = group.m_packet.m_nVisibleCount;
-		group.m_packet.m_command.m_nFirstIndex = surface->m_nIndexOffset;
-		group.m_packet.m_command.m_nVertexOffset = (int32_t)( surface->m_nVertexOffset );
-		group.m_packet.m_command.m_nFirstInstance = group.m_packet.m_nFirstVisible;
-		if ( bShadowPass ) {
-			m_shadowPackets.push_back( group.m_packet );
-		} else {
-			m_drawPackets.push_back( group.m_packet );
-			if ( ( group.m_packet.m_nFlags & T3D_RD_INSTANCE_ALPHA_BLEND ) == 0u ||
-					( group.m_packet.m_nFlags & T3D_RD_INSTANCE_ALPHA_DEPTH_PREPASS ) != 0u ) {
-				m_depthPackets.push_back( group.m_packet );
-			}
-		}
-	}
-	if ( !bShadowPass ) {
-		std::stable_sort( m_drawPackets.begin(),
-				m_drawPackets.end(),
-				[]( const t3dRdInstanceDrawPacket_t& a, const t3dRdInstanceDrawPacket_t& b ) {
-					const bool aa = ( a.m_nFlags & T3D_RD_INSTANCE_ALPHA_BLEND ) != 0u,
-							   ab = ( b.m_nFlags & T3D_RD_INSTANCE_ALPHA_BLEND ) != 0u;
-					if ( aa != ab ) {
-						return !aa;
-					}
-					if ( aa ) {
-						return a.m_fSortDistanceSq > b.m_fSortDistanceSq;
-					}
-					return false;
-				} );
-		if ( nViewCount == 1u ) {
-			m_hlodDescriptors.reserve( m_drawPackets.size() );
-		}
+		m_drawPackets.insert( m_drawPackets.end(), m_alphaPackets.begin(), m_alphaPackets.end() );
 		for ( uint32_t command_index = 0u; command_index < (uint32_t)( m_drawPackets.size() ); ++command_index ) {
-			const t3dRdInstanceDrawPacket_t& packet = m_drawPackets[command_index];
+			const t3dRdInstanceDrawPacket_t &packet = m_drawPackets[command_index];
 			if ( nViewCount != 1u || ( packet.m_nFlags & T3D_RD_INSTANCE_HLOD ) == 0u ) {
 				continue;
 			}
 			t3dRdHlodCullDescriptor_t descriptor;
-			const Vector3 center = packet.m_cullBounds.get_center(), extent = packet.m_cullBounds.size * 0.5f;
-			descriptor.m_szBoundsCenter[0] = (float)center.x;
-			descriptor.m_szBoundsCenter[1] = (float)center.y;
-			descriptor.m_szBoundsCenter[2] = (float)center.z;
-			descriptor.m_szBoundsExtent[0] = (float)extent.x;
-			descriptor.m_szBoundsExtent[1] = (float)extent.y;
-			descriptor.m_szBoundsExtent[2] = (float)extent.z;
+			const Vector3 center = packet.m_cullBounds.get_center();
+			const Vector3 extent = packet.m_cullBounds.size * 0.5f;
+			descriptor.m_szBoundsCenter[0] = (float)( center.x );
+			descriptor.m_szBoundsCenter[1] = (float)( center.y );
+			descriptor.m_szBoundsCenter[2] = (float)( center.z );
+			descriptor.m_szBoundsExtent[0] = (float)( extent.x );
+			descriptor.m_szBoundsExtent[1] = (float)( extent.y );
+			descriptor.m_szBoundsExtent[2] = (float)( extent.z );
 			descriptor.m_nVisibilityLayers = packet.m_nVisibilityLayers;
 			descriptor.m_nCommandIndex = command_index;
 			descriptor.m_nFirstVisible = packet.m_nFirstVisible;
@@ -1232,8 +1477,25 @@ bool Terrain3DRdInstanceRenderer::buildPackets( const t3dRdInstanceSceneSnapshot
 		}
 	}
 	m_nHlodCullDescriptors = m_hlodDescriptors.size();
-	m_nVisibleInstances = bShadowPass ? m_shadowVisibleIndices.size() : m_visibleIndices.size();
+	m_nVisibleInstances = visible_indices.size();
 	return true;
+}
+
+bool Terrain3DRdInstanceRenderer::buildPackets( const t3dRdInstanceSceneSnapshot_t &rScene,
+		const Projection *const pViewProjections,
+		const uint32_t nViewCount,
+		const Vector3 &rCamera,
+		const uint32_t nVisibilityMask,
+		const bool bShadowPass,
+		const bool bSkipFrustum )
+{
+	if ( !pViewProjections || nViewCount == 0u || nViewCount > s_nRdForwardMaxViews ) {
+		return false;
+	}
+	return bShadowPass ? buildPacketsForPass<true>(
+			rScene, pViewProjections, nViewCount, rCamera, nVisibilityMask, bSkipFrustum )
+						 : buildPacketsForPass<false>(
+								rScene, pViewProjections, nViewCount, rCamera, nVisibilityMask, bSkipFrustum );
 }
 
 bool Terrain3DRdInstanceRenderer::uploadVisibility( void )
@@ -1251,14 +1513,12 @@ bool Terrain3DRdInstanceRenderer::uploadVisibility( void )
 	const uint32_t indirect_bytes = (uint32_t)( indirect_bytes64 );
 	RenderingDevice *const rd = m_context.getDevice();
 	if ( visible_bytes > 0u ) {
-		m_visibleBytes.resize( visible_bytes );
 		std::memcpy( m_visibleBytes.ptrw(), m_visibleIndices.data(), visible_bytes );
 		if ( rd->buffer_update( m_hVisibleIndexBuffer, 0u, visible_bytes, m_visibleBytes ) != OK ) {
 			return false;
 		}
 	}
 	if ( indirect_bytes > 0u ) {
-		m_indirectBytes.resize( indirect_bytes );
 		for ( uint32_t i = 0u; i < (uint32_t)( m_drawPackets.size() ); ++i ) {
 			std::memcpy( m_indirectBytes.ptrw() + i * sizeof( t3dRdIndexedIndirectCommand_t ),
 					&m_drawPackets[i].m_command,
@@ -1283,14 +1543,12 @@ bool Terrain3DRdInstanceRenderer::uploadShadowVisibility( void )
 	const uint32_t visible_bytes = (uint32_t)( visible_bytes64 ), indirect_bytes = (uint32_t)( indirect_bytes64 );
 	RenderingDevice *const rd = m_context.getDevice();
 	if ( visible_bytes > 0u ) {
-		m_shadowVisibleBytes.resize( visible_bytes );
 		std::memcpy( m_shadowVisibleBytes.ptrw(), m_shadowVisibleIndices.data(), visible_bytes );
 		if ( rd->buffer_update( m_hShadowVisibleIndexBuffer, 0u, visible_bytes, m_shadowVisibleBytes ) != OK ) {
 			return false;
 		}
 	}
 	if ( indirect_bytes > 0u ) {
-		m_shadowIndirectBytes.resize( indirect_bytes );
 		for ( uint32_t i = 0u; i < (uint32_t)m_shadowPackets.size(); ++i ) {
 			std::memcpy( m_shadowIndirectBytes.ptrw() + i * sizeof( t3dRdIndexedIndirectCommand_t ),
 					&m_shadowPackets[i].m_command,
@@ -1310,27 +1568,12 @@ bool Terrain3DRdInstanceRenderer::uploadHlodDescriptors( void )
 		return true;
 	}
 	const uint64_t bytes64 = m_hlodDescriptors.size() * sizeof( t3dRdHlodCullDescriptor_t );
-	if ( bytes64 > UINT32_MAX ) {
-		setError( "RD HLOD descriptor publication exceeds 32-bit buffer limits" );
+	if ( bytes64 > m_nHlodDescriptorCapacityBytes || !m_hHlodCullDescriptorBuffer.is_valid() ||
+			m_hlodDescriptorBytes.size() < (int64_t)( bytes64 ) ) {
+		setError( "RD HLOD descriptor output exceeded publication-time capacity" );
 		return false;
 	}
 	const uint32_t bytes = (uint32_t)( bytes64 );
-	const bool replace = !m_hHlodCullDescriptorBuffer.is_valid() || m_nHlodDescriptorCapacityBytes < bytes;
-	if ( replace && m_hHlodCullUniformSet.is_valid() ) {
-		m_context.freeResource( m_hHlodCullUniformSet );
-	}
-	m_context.beginResourceRebuild();
-	const bool buffer_ok = ensureBuffer( m_hHlodCullDescriptorBuffer,
-			m_nHlodDescriptorCapacityBytes,
-			MAX( bytes, (uint32_t)( sizeof( t3dRdHlodCullDescriptor_t ) ) ),
-			"T3D.HLOD.CullDescriptors",
-			Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
-			Terrain3DRdContext::MEMORY_INSTANCE );
-	m_context.endResourceRebuild();
-	if ( !buffer_ok ) {
-		return false;
-	}
-	m_hlodDescriptorBytes.resize( bytes );
 	std::memcpy( m_hlodDescriptorBytes.ptrw(), m_hlodDescriptors.data(), bytes );
 	if ( m_context.getDevice()->buffer_update( m_hHlodCullDescriptorBuffer, 0u, bytes, m_hlodDescriptorBytes ) != OK ) {
 		return false;
@@ -1371,7 +1614,6 @@ bool Terrain3DRdInstanceRenderer::dispatchHlodCull( const uint32_t nVisibilityMa
 	push.m_nDescriptorCount = (uint32_t)( m_hlodDescriptors.size() );
 	push.m_nVisibilityMask = nVisibilityMask;
 	push.m_nCommandCount = (uint32_t)( m_drawPackets.size() );
-	m_hlodCullPushBytes.resize( sizeof( push ) );
 	std::memcpy( m_hlodCullPushBytes.ptrw(), &push, sizeof( push ) );
 	const int64_t list = rd->compute_list_begin();
 	if ( list == RenderingDevice::INVALID_ID ) {
@@ -1532,7 +1774,6 @@ bool Terrain3DRdInstanceRenderer::drawView( const uint32_t nView,
 		frame.m_szCamera[view_index][1] = (float)( rCamera.y );
 		frame.m_szCamera[view_index][2] = (float)( rCamera.z );
 	}
-	m_frameBytes.resize( sizeof( frame ) );
 	std::memcpy( m_frameBytes.ptrw(), &frame, sizeof( frame ) );
 	if ( rd->buffer_update( m_hFrameBuffer, 0u, sizeof( frame ), m_frameBytes ) != OK ) {
 		return false;
@@ -1591,7 +1832,6 @@ bool Terrain3DRdInstanceRenderer::drawView( const uint32_t nView,
 			0u,
 			0u,
 			0u };
-		m_pushBytes.resize( sizeof( push ) );
 		std::memcpy( m_pushBytes.ptrw(), &push, sizeof( push ) );
 		rd->draw_list_set_push_constant( list, m_pushBytes, sizeof( push ) );
 		if ( m_bDirectDrawDebug ) {
@@ -1761,6 +2001,7 @@ void Terrain3DRdInstanceRenderer::shutdown( void )
 					m_nShadowIndirectCapacityBytes = 0u;
 	m_nHlodDescriptorCapacityBytes = 0u;
 	m_nUploadedSceneGeneration = m_nUploadedMeshGeneration = 0u;
+	m_nSceneCapacityMeshGeneration = 0u;
 	m_visibleIndices.clear();
 	m_motionHistoryRecords.clear();
 	m_motionHistoryCells.clear();
@@ -2072,7 +2313,6 @@ bool Terrain3DRdInstanceRenderer::prepareForwardPass( const t3dRdForwardPassCont
 	frame.m_szMotionParams[0] = history_valid ? 1.0f : 0.0f;
 	frame.m_szMotionParams[1] = m_bMotionDebug ? 1.0f : 0.0f;
 	frame.m_szMotionParams[2] = (float)( rContext.m_nViewCount );
-	m_frameBytes.resize( sizeof( frame ) );
 	std::memcpy( m_frameBytes.ptrw(), &frame, sizeof( frame ) );
 	if ( m_context.getDevice()->buffer_update( m_hFrameBuffer, 0u, sizeof( frame ), m_frameBytes ) != OK ) {
 		setError( "Failed to update Terrain3D native Forward+ instance frame buffer" );
@@ -2184,7 +2424,6 @@ bool Terrain3DRdInstanceRenderer::drawForwardView( const t3dRdForwardPassContext
 			0u,
 			0u,
 			0u };
-		m_pushBytes.resize( sizeof( push ) );
 		std::memcpy( m_pushBytes.ptrw(), &push, sizeof( push ) );
 		rd->draw_list_set_push_constant( draw_list, m_pushBytes, sizeof( push ) );
 		if ( m_bDirectDrawDebug ) {

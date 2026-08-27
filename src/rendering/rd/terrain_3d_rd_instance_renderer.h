@@ -4,6 +4,7 @@
 #ifndef TERRAIN3D_RD_INSTANCE_RENDERER_H
 #define TERRAIN3D_RD_INSTANCE_RENDERER_H
 
+#include "core/terrain_3d_flat_hash.h"
 #include "rendering/rd/terrain_3d_rd_mesh_cache.h"
 #include "rendering/rd/terrain_3d_rd_forward_shader_bundle.h"
 #include "rendering/rd/terrain_3d_rd_forward_lighting.h"
@@ -43,10 +44,45 @@ typedef struct t3dRdInstanceDrawPacket_s {
 	t3dRdIndexedIndirectCommand_t m_command{};
 } t3dRdInstanceDrawPacket_t;
 
-typedef struct t3dRdPacketBuildGroup_s {
+typedef struct t3dRdPacketKey_s {
+	uint32_t m_nSurfaceSlot = UINT32_MAX;
+	uint32_t m_nFlags = 0u;
+	uint32_t m_nMaterial = UINT16_MAX;
+	uint32_t m_nOverlayMaterial = UINT16_MAX;
+	uint32_t m_nVisibilityLayers = 1u;
+	uint32_t m_nUnique = 0u;
+
+	EA_FORCE_INLINE bool operator==( const t3dRdPacketKey_s &rOther ) const {
+		return m_nSurfaceSlot == rOther.m_nSurfaceSlot && m_nFlags == rOther.m_nFlags &&
+				m_nMaterial == rOther.m_nMaterial && m_nOverlayMaterial == rOther.m_nOverlayMaterial &&
+				m_nVisibilityLayers == rOther.m_nVisibilityLayers && m_nUnique == rOther.m_nUnique;
+	}
+} t3dRdPacketKey_t;
+
+typedef struct t3dRdPacketKeyHash_s {
+	EA_FORCE_INLINE size_t operator()( const t3dRdPacketKey_t &rKey ) const {
+		uint64_t hash = 1469598103934665603ull;
+		const uint32_t values[6] = { rKey.m_nSurfaceSlot, rKey.m_nFlags, rKey.m_nMaterial,
+			rKey.m_nOverlayMaterial, rKey.m_nVisibilityLayers, rKey.m_nUnique };
+		for ( const uint32_t value : values ) {
+			hash ^= value;
+			hash *= 1099511628211ull;
+		}
+		return (size_t)( hash );
+	}
+} t3dRdPacketKeyHash_t;
+
+typedef struct t3dRdPacketBuildSlot_s {
 	t3dRdInstanceDrawPacket_t m_packet;
-	std::vector<uint32_t> m_indices;
-} t3dRdPacketBuildGroup_t;
+	uint32_t m_nVisibleCount = 0u;
+	uint32_t m_nWriteOffset = 0u;
+} t3dRdPacketBuildSlot_t;
+
+typedef struct t3dRdPacketBuildEntry_s {
+	uint32_t m_nPacketIndex = 0u;
+	uint32_t m_nFirstInstance = 0u;
+	uint32_t m_nInstanceCount = 0u;
+} t3dRdPacketBuildEntry_t;
 
 class Terrain3DRdInstanceRenderer {
 private:
@@ -112,6 +148,10 @@ private:
 	uint32_t m_nHlodDescriptorCapacityBytes = 0u;
 	uint64_t m_nUploadedSceneGeneration = 0u;
 	uint64_t m_nUploadedMeshGeneration = 0u;
+	uint64_t m_nSceneCapacityMeshGeneration = 0u;
+	uint32_t m_nInstanceUsedBytes = 0u;
+	uint32_t m_nPacketCapacity = 0u;
+	uint32_t m_nVisibleIndexCapacity = 0u;
 	RID m_hPreviewColorTexture;
 	RID m_hPreviewDepthTexture;
 	Vector2i m_previewSize;
@@ -129,7 +169,14 @@ private:
 	std::vector<t3dRdInstanceDrawPacket_t> m_shadowPackets;
 	std::vector<t3dRdInstanceMaterialPairBinding_t> m_materialBindings;
 	std::vector<t3dRdHlodCullDescriptor_t> m_hlodDescriptors;
-	std::vector<t3dRdPacketBuildGroup_t> m_packetGroupPool;
+	std::vector<t3dRdPacketBuildSlot_t> m_packetBuildSlots;
+	std::vector<t3dRdPacketBuildEntry_t> m_packetBuildEntries;
+	std::vector<t3dRdInstanceDrawPacket_t> m_alphaPackets;
+	std::vector<t3dRdInstanceDrawPacket_t> m_alphaSortScratch;
+	Terrain3DFlatHashMap<t3dRdPacketKey_t, uint32_t, t3dRdPacketKeyHash_t> m_packetIndex;
+	std::vector<uint32_t> m_motionCurrentOrder;
+	std::vector<uint32_t> m_motionPreviousOrder;
+	std::vector<uint8_t> m_dirtyInstanceChunks;
 	std::vector<t3dRdInstanceForwardPipelineEntry_t> m_forwardPipelines;
 	PackedByteArray m_frameBytes;
 	PackedByteArray m_instanceBytes;
@@ -189,7 +236,19 @@ private:
 	bool uploadScene( const t3dRdInstanceSceneSnapshot_t *pScene );
 	bool prepareMotionHistory( const t3dRdInstanceSceneSnapshot_t &rScene, uint64_t nRenderFrame );
 	bool uploadMaterials( void );
-	bool buildPackets( const t3dRdInstanceSceneSnapshot_t &rScene, const Projection *pViewProjections, uint32_t nViewCount, const Vector3 &rCamera, uint32_t nVisibilityMask, bool bShadowPass, bool bSkipFrustum = false );
+	template <bool t_bShadowPass> bool buildPacketsForPass( const t3dRdInstanceSceneSnapshot_t &rScene,
+			const Projection *pViewProjections,
+			uint32_t nViewCount,
+			const Vector3 &rCamera,
+			uint32_t nVisibilityMask,
+			bool bSkipFrustum );
+	bool buildPackets( const t3dRdInstanceSceneSnapshot_t &rScene,
+			const Projection *pViewProjections,
+			uint32_t nViewCount,
+			const Vector3 &rCamera,
+			uint32_t nVisibilityMask,
+			bool bShadowPass,
+			bool bSkipFrustum = false );
 	bool uploadVisibility( void );
 	bool uploadShadowVisibility( void );
 	bool uploadHlodDescriptors( void );
@@ -200,7 +259,6 @@ private:
 	void freeViewState( t3dRdInstanceViewState_t &rState );
 	bool drawView( uint32_t nView, const Projection &rViewProjection, const Vector3 &rCamera, uint32_t nVisibilityMask );
 	bool drawForwardView( const t3dRdForwardPassContext_t &rContext );
-	bool isCellVisible( const t3dRdInstanceCell_t &rCell, const Projection &rViewProjection, const Vector3 &rCamera, bool bShadowPass = false ) const;
 	void setError( const String &rError );
 
 public:

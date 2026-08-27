@@ -83,6 +83,28 @@ static_assert( t3dRdFrameSnapshotTokenGeneration( t3dRdMakeFrameSnapshotToken( 2
 static_assert( t3dRdFrameSnapshotTokenIsPublished( t3dRdMakeFrameSnapshotToken( 2u, 17u, true ) ),
 		"RD frame publication token state changed" );
 
+typedef struct t3dRdTerrainBindings_s {
+	RID m_hHeightTextureRd;
+	RID m_hDerivedTextureRd;
+	RID m_hControlTextureRd;
+	RID m_hColorTextureRd;
+	RID m_hMiddleCompositeTextureRd;
+	RID m_hTerrainShadowMaskTextureRd;
+	RID m_hMiddleHeightTextureRd;
+	RID m_hMiddleHeightRegionMapTextureRd;
+	RID m_hFarHeightTextureRd;
+	RID m_hFarColorTextureRd;
+	RID m_hAlbedoTextureRd;
+	RID m_hFarAlbedoTextureRd;
+	RID m_hNormalTextureRd;
+	RID m_hSurfaceTextureRd;
+	RID m_hMaterialDisplacementTextureRd;
+	RID m_hDisplacementTextureRd;
+	RID m_hWorldNoiseTextureRd;
+	RID m_hMacroNoiseTextureRd;
+	RID m_hEditorBrushTextureRd;
+} t3dRdTerrainBindings_t;
+
 static constexpr uint32_t s_nRdForwardBridgeAbiVersion = 10u;
 static constexpr uint32_t s_nRdForwardMaxViews = 2u;
 
