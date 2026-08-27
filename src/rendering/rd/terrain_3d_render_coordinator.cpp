@@ -673,6 +673,7 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 	Terrain3DData *const data = m_pTerrain->getData();
 	const Ref<Terrain3DAssets> assets = m_pTerrain->getAssets();
 	const uint64_t region_topology_generation = data->getRegionTopologyGenerationInternal();
+	const uint64_t physical_region_map_generation = data->getPhysicalRegionMapGenerationInternal();
 	const PackedInt32Array region_map = data->getRegionMap();
 	const PackedInt32Array logical_region_map = data->getLogicalRegionMap();
 	if ( region_map.size() != logical_region_map.size() ) {
@@ -706,7 +707,8 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 		return;
 	}
 	PackedByteArray region_bytes;
-	if ( !m_bRegionMapInitialized || region_topology_generation != m_nRegionTopologyGeneration || bRegionLightingChanged ) {
+	if ( !m_bRegionMapInitialized || physical_region_map_generation != m_nPhysicalRegionMapGeneration ||
+			region_topology_generation != m_nRegionTopologyGeneration || bRegionLightingChanged ) {
 		region_bytes.resize( region_map.size() * ( int64_t )( sizeof( uint32_t ) ) );
 		uint8_t *const pPackedRegionMap = region_bytes.ptrw();
 		for ( int64_t i = 0; i < region_map.size(); ++i ) {
@@ -729,6 +731,7 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 		}
 		m_regionMapBytes = region_bytes;
 		m_nRegionTopologyGeneration = region_topology_generation;
+		m_nPhysicalRegionMapGeneration = physical_region_map_generation;
 		m_nRegionLightingSignature = region_lighting_signature;
 		m_nRegionMapGeneration = advanceGeneration( m_nRegionMapGeneration );
 		m_bRegionMapInitialized = true;
@@ -964,6 +967,7 @@ void Terrain3DRenderCoordinator::resetSnapshotPublication( void ) {
 	for ( t3dRdFrameSnapshotSlot_t &slot : m_snapshotSlots ) slot = t3dRdFrameSnapshotSlot_t{};
 	m_regionMapBytes.clear();
 	m_nRegionTopologyGeneration = 0u;
+	m_nPhysicalRegionMapGeneration = 0u;
 	m_nRegionLightingSignature = 0u;
 	m_nRegionMapGeneration = 0u;
 	m_nLastRegionCacheSourceGeneration = 0u;

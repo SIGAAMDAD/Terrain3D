@@ -49,6 +49,15 @@ public:
 	}
 	RID create( const TypedArray<Image>& rLayers, t3dRdTextureSemantic_t semantic );
 	bool update( const Ref<Image>& rImage, int nLayer );
+	EA_FORCE_INLINE bool canUpdateLayer( const Ref<Image> &rImage, const int nLayer ) const {
+		return m_hRid.is_valid() && !m_bDirty && m_bLayered && nLayer >= 0 && nLayer < m_nSize &&
+				matchesLayout( rImage );
+	}
+	EA_FORCE_INLINE void commitLayerImage( const Ref<Image> &rImage, const int nLayer ) {
+		if ( canUpdateLayer( rImage, nLayer ) ) {
+			m_layers[nLayer] = rImage;
+		}
+	}
 	RID create( const Ref<Image>& rImage, t3dRdTextureSemantic_t semantic );
 	bool update2d( const Ref<Image>& rImage );
 	bool updateRegion2d( const Ref<Image>& rImage, const Rect2i& rDestination );

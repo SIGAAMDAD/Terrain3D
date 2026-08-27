@@ -96,6 +96,7 @@ private:
 	uint64_t m_nRegionTopologyGeneration = 0u;
 	uint64_t m_nRegionLightingSignature = 0u;
 	uint64_t m_nRegionMapGeneration = 0u;
+	uint64_t m_nPhysicalRegionMapGeneration = 0u;
 	uint64_t m_nLastRegionCacheSourceGeneration = 0u;
 	uint64_t m_nRegionCacheGeneration = 0u;
 	uint64_t m_nLastPatchFingerprint = 0u;
