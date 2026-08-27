@@ -1374,20 +1374,20 @@ void Terrain3DRenderCoordinator::shutdown( void ) {
 	if ( m_effect.is_valid() ) m_effect->set_enabled( false );
 	detachForwardBridge();
 	resetForwardLifecycle();
-	if ( m_bRendererInitialized.load( std::memory_order_acquire ) ) {
-		if ( Terrain3DRdContext::isOnRenderThread() ) {
-			shutdownRendererOnRenderThread();
-		} else if ( m_effect.is_valid() && Terrain3DRdContext::enqueueOnRenderThread(
-					callable_mp( m_effect.ptr(), &Terrain3DRdCompositorEffect::shutdownRendererOnRenderThread ) ) ) {
-			Terrain3DRdContext::forceSync();
-		} else {
-			if ( m_bPreviewRendererInitialized ) { m_previewRenderer.shutdown(); m_bPreviewRendererInitialized = false; }
-			m_instanceRenderer.shutdown();
-			m_renderer.shutdown();
-			m_bRendererInitialized.store( false, std::memory_order_release );
-		}
-	} else if ( m_effect.is_valid() ) {
+	// A renderer can own partially-created topology resources before the final
+	// initialized flag is published. Always tear it down on the render thread;
+	// otherwise a cold mesh rebuild can replace the CPU topology while upload()
+	// continues accepting the old GPU-ready vertex/index buffers.
+	if ( Terrain3DRdContext::isOnRenderThread() ) {
+		shutdownRendererOnRenderThread();
+	} else if ( m_effect.is_valid() && Terrain3DRdContext::enqueueOnRenderThread(
+				callable_mp( m_effect.ptr(), &Terrain3DRdCompositorEffect::shutdownRendererOnRenderThread ) ) ) {
 		Terrain3DRdContext::forceSync();
+	} else {
+		if ( m_bPreviewRendererInitialized ) { m_previewRenderer.shutdown(); m_bPreviewRendererInitialized = false; }
+		m_instanceRenderer.shutdown();
+		m_renderer.shutdown();
+		m_bRendererInitialized.store( false, std::memory_order_release );
 	}
 	if ( m_effect.is_valid() ) m_effect->setCoordinator( nullptr );
 	detachEffect();
