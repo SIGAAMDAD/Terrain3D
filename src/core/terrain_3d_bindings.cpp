@@ -293,6 +293,8 @@ void Terrain3D::_bind_methods( void ) {
 	ClassDB::bind_method(
 			D_METHOD( "is_dynamic_node_streaming_effective" ), &Terrain3D::isDynamicNodeStreamingEffective );
 	ClassDB::bind_method( D_METHOD( "set_performance_target", "target" ), &Terrain3D::setPerformanceTarget );
+	ClassDB::bind_method( D_METHOD( "_set_performance_target_storage", "target" ),
+			&Terrain3D::setPerformanceTargetStorage );
 	ClassDB::bind_method( D_METHOD( "get_performance_target" ), &Terrain3D::getPerformanceTarget );
 	ClassDB::bind_method( D_METHOD( "get_performance_profile_status" ), &Terrain3D::getPerformanceProfileStatus );
 	ClassDB::bind_method(
@@ -856,11 +858,11 @@ void Terrain3D::_bind_methods( void ) {
 	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "save_16_bit", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
 			"set_save_16_bit",
 			"get_save_16_bit" );
-	// Storage backing is deliberately ordered before Resources so scene loading restores
-	// the selected base profile before a serialized material resource and its overrides.
+	// Storage backing restores only profile identity. Serialized terrain/resource fields
+	// retain their exact values; the public setter remains the explicit apply/reset path.
 	ADD_PROPERTY(
 			PropertyInfo( Variant::INT, "_performance_target_storage", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-			"set_performance_target",
+			"_set_performance_target_storage",
 			"get_performance_target" );
 
 	ADD_SUBGROUP( "Regional Lightmap Baking", "region_lightmap_" );

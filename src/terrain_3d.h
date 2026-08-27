@@ -559,6 +559,7 @@ private:
 	void refreshPerformanceProfileConformity( void );
 	void onProfileOwnedResourceChanged( void );
 	void applyPerformanceProfileToTerrain( void );
+	void setPerformanceTargetStorage( const t3dPerformanceTarget_t target );
 	void normalizeRuntimeTierLayout( bool bSyncDetailLods );
 	void applyRuntimeTierLayout( bool bForceFullSnap = true );
 	int getTotalClipmapLevels( void ) const;

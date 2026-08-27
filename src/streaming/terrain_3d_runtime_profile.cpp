@@ -1064,6 +1064,17 @@ Dictionary Terrain3D::getRuntimeAdaptiveBudgetStats( void ) const {
 	return stats;
 }
 
+void Terrain3D::setPerformanceTargetStorage( const t3dPerformanceTarget_t target ) {
+	if ( target < PERFORMANCE_TARGET_CUSTOM || target > PERFORMANCE_TARGET_XBOX360_EXPERIMENTAL ) {
+		return;
+	}
+	m_performanceTarget = target;
+	if ( m_bInitialized ) {
+		refreshPerformanceProfileConformity();
+		notify_property_list_changed();
+	}
+}
+
 void Terrain3D::setPerformanceTarget( const t3dPerformanceTarget_t target ) {
 	if ( target < PERFORMANCE_TARGET_CUSTOM || target > PERFORMANCE_TARGET_XBOX360_EXPERIMENTAL ) {
 		return;
