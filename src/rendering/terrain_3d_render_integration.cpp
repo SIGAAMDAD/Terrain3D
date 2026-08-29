@@ -1,4 +1,5 @@
 #include "rendering/rd/terrain_3d_render_coordinator.h"
+#include "core/terrain_3d_sync.h"
 #include "rendering/rd/terrain_3d_rd_context.h"
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
@@ -22,10 +23,8 @@
 #include "streaming/terrain_3d_streaming_policy.h"
 #include "terrain_3d.h"
 
-#include <algorithm>
-#include <atomic>
-#include <cmath>
-#include <cstring>
+#include <math.h>
+#include <string.h>
 #include <godot_cpp/classes/compositor.hpp>
 #include <godot_cpp/classes/directional_light3d.hpp>
 #include <godot_cpp/classes/editor_interface.hpp>
@@ -43,14 +42,9 @@
 #include <godot_cpp/classes/viewport_texture.hpp>
 #include <godot_cpp/classes/world3d.hpp>
 #include <godot_cpp/core/memory.hpp>
-#include <limits>
-#include <mutex>
-#include <numeric>
-#include <utility>
 
 void Terrain3D::syncLightShaderParameters( void ) {
-	DirectionalLight3D *const pLight =
-			m_lightTarget.isValid() ? cast_to<DirectionalLight3D>( m_lightTarget.ptr() ) : nullptr;
+	DirectionalLight3D *const pLight = m_lightTarget.isValid() ? cast_to<DirectionalLight3D>( m_lightTarget.ptr() ) : NULL;
 	if ( !pLight ) {
 		m_bLightStateValid = false;
 		return;
@@ -94,11 +88,15 @@ void Terrain3D::destroyCollision( const bool bFinal ) {
 	}
 	if ( bFinal && m_pCollision ) {
 		memdelete( m_pCollision );
-		m_pCollision = nullptr;
+		m_pCollision = NULL;
 	}
 }
 
 void Terrain3D::setupTerrainMesher( void ) {
+	setupTerrainMesher( getClipmapTargetPosition() );
+}
+
+void Terrain3D::setupTerrainMesher( const Vector3 &rInitialTarget ) {
 	if ( !m_pTerrainMesher ) {
 		LOG( DEBUG, "Creating CPU clipmap topology producer" );
 		m_pTerrainMesher = memnew( Terrain3DMesher );
@@ -108,25 +106,22 @@ void Terrain3D::setupTerrainMesher( void ) {
 	const int near_lods = bTieringActive ? m_nRuntimeNearShaderLods : clipmap_levels;
 	const int middle_lods = bTieringActive ? m_nRuntimeMiddleShaderLods : 0;
 	const int update_budget = bTieringActive ? m_nRuntimeClipmapUpdateBudget : s_nMaxClipmapLevels;
-	const eastl::array<bool, 3> tier_shadow_enabled = {
-		m_bNearShadowEnabled, m_bMiddleShadowEnabled, m_bFarShadowEnabled
-	};
-	const eastl::array<int, 3> tier_shadow_lod_counts = {
-		m_nNearShadowLodCount, m_nMiddleShadowLodCount, m_nFarShadowLodCount
-	};
+	const eastl::array<bool, 3> tier_shadow_enabled = { m_bNearShadowEnabled, m_bMiddleShadowEnabled, m_bFarShadowEnabled };
+	const eastl::array<int, 3> tier_shadow_lod_counts = { m_nNearShadowLodCount, m_nMiddleShadowLodCount, m_nFarShadowLodCount };
 	m_pTerrainMesher->initialize( this,
-			m_nMeshSize,
-			m_nMeshLods,
-			m_nTessellationLevel,
-			m_fVertexSpacing,
-			near_lods,
-			middle_lods,
-			update_budget,
-			m_castShadows,
-			m_nShadowLodCount,
-			tier_shadow_enabled,
-			tier_shadow_lod_counts,
-			isGpuRegionCookedPagesEnabled() && !isEditorAuthoringModeInternal() );
+	        m_nMeshSize,
+	        m_nMeshLods,
+	        m_nTessellationLevel,
+	        m_fVertexSpacing,
+	        near_lods,
+	        middle_lods,
+	        update_budget,
+	        m_castShadows,
+	        m_nShadowLodCount,
+	        tier_shadow_enabled,
+	        tier_shadow_lod_counts,
+	        isGpuRegionCookedPagesEnabled() && !isEditorAuthoringModeInternal(),
+	        rInitialTarget );
 	if ( m_pRenderCoordinator && m_bInitialized ) {
 		m_pRenderCoordinator->initialize( this );
 	}
@@ -143,14 +138,20 @@ void Terrain3D::destroyTerrainMesher( const bool bFinal ) {
 	}
 	if ( bFinal ) {
 		memdelete( m_pTerrainMesher );
-		m_pTerrainMesher = nullptr;
+		m_pTerrainMesher = NULL;
 	} else {
 		m_pTerrainMesher->destroy();
 	}
 }
 
 void Terrain3D::setupOceanMesher( void ) {
-	if ( !m_bOceanEnabled ) return;
+	setupOceanMesher( getClipmapTargetPosition() );
+}
+
+void Terrain3D::setupOceanMesher( const Vector3 &rInitialTarget ) {
+	if ( !m_bOceanEnabled ) {
+		return;
+	}
 	m_bLightStateValid = false;
 	updateOceanShaderVariant();
 	if ( !m_pOceanMesher ) {
@@ -158,20 +159,23 @@ void Terrain3D::setupOceanMesher( void ) {
 		m_pOceanMesher = memnew( Terrain3DMesher );
 	}
 	m_pOceanMesher->initialize( this,
-			m_nOceanMeshSize,
-			m_nOceanMeshLods,
-			m_nOceanTessellationLevel,
-			m_fOceanVertexSpacing,
-			m_nOceanMeshLods + m_nOceanTessellationLevel,
-			0,
-			s_nMaxClipmapLevels,
-			m_oceanCastShadows,
-			m_nOceanMeshLods + m_nOceanTessellationLevel,
-			{ true, true, true },
-			{ -1, -1, -1 },
-			false );
+	        m_nOceanMeshSize,
+	        m_nOceanMeshLods,
+	        m_nOceanTessellationLevel,
+	        m_fOceanVertexSpacing,
+	        m_nOceanMeshLods + m_nOceanTessellationLevel,
+	        0,
+	        s_nMaxClipmapLevels,
+	        m_oceanCastShadows,
+	        m_nOceanMeshLods + m_nOceanTessellationLevel,
+	        { true, true, true },
+	        { -1, -1, -1 },
+	        false,
+	        rInitialTarget );
 	m_pOceanMesher->updateAabbs( m_fOceanCullMargin, s_v2Zero );
-	if ( m_pRenderCoordinator && m_bInitialized ) m_pRenderCoordinator->initializeOcean();
+	if ( m_pRenderCoordinator && m_bInitialized ) {
+		m_pRenderCoordinator->initializeOcean();
+	}
 }
 
 void Terrain3D::destroyOceanMesher( const bool bFinal ) {
@@ -181,7 +185,7 @@ void Terrain3D::destroyOceanMesher( const bool bFinal ) {
 	}
 	if ( bFinal ) {
 		memdelete( m_pOceanMesher );
-		m_pOceanMesher = nullptr;
+		m_pOceanMesher = NULL;
 	} else {
 		m_pOceanMesher->destroy();
 	}
@@ -189,26 +193,38 @@ void Terrain3D::destroyOceanMesher( const bool bFinal ) {
 
 void Terrain3D::setupDisplacementBuffer( void ) {
 	destroyDisplacementBuffer();
+	m_nComputeDisplacementPageTableGeneration = UINT64_MAX;
+	m_bComputeDisplacementDirty.store( m_nTessellationLevel > 0, T3D_MEMORY_ORDER_RELEASE );
 	if ( m_nTessellationLevel > 0 ) {
 		LOG( INFO, "Initializing direct RenderingDevice displacement path" );
-		tryUpdateComputeDisplacement( getClipmapTargetPosition() );
+		const uint64_t nPageTableGeneration = m_pData ? m_pData->getPhysicalRegionMapGenerationInternal() : 0u;
+		if ( tryUpdateComputeDisplacement( getClipmapTargetPosition() ) ) {
+			m_nComputeDisplacementPageTableGeneration = nPageTableGeneration;
+			m_bComputeDisplacementDirty.store( false, T3D_MEMORY_ORDER_RELEASE );
+		}
 	}
 }
 
 void Terrain3D::updateDisplacementBuffer( void ) {
 	if ( m_nTessellationLevel == 0 ) {
+		m_bComputeDisplacementDirty.store( false, T3D_MEMORY_ORDER_RELEASE );
+		m_nComputeDisplacementPageTableGeneration = UINT64_MAX;
 		invalidateComputeDisplacementRequest();
 		return;
 	}
+	m_bComputeDisplacementDirty.store( true, T3D_MEMORY_ORDER_RELEASE );
 	LOG( INFO, "Updating direct RenderingDevice displacement buffer" );
-	tryUpdateComputeDisplacement( getClipmapTargetPosition() );
+	const uint64_t nPageTableGeneration = m_pData ? m_pData->getPhysicalRegionMapGenerationInternal() : 0u;
+	if ( tryUpdateComputeDisplacement( getClipmapTargetPosition() ) ) {
+		m_nComputeDisplacementPageTableGeneration = nPageTableGeneration;
+		m_bComputeDisplacementDirty.store( false, T3D_MEMORY_ORDER_RELEASE );
+	}
 }
 
 bool Terrain3D::tryUpdateComputeDisplacement( const Vector3 &rTargetPosition ) {
-	m_bComputeDisplacementActive.store( false, std::memory_order_release );
-	if ( !m_bComputeDisplacementEnabled.load( std::memory_order_acquire ) ||
-			m_bComputeDisplacementFailed.load( std::memory_order_acquire ) ||
-			m_bComputeDisplacementTearingDown.load( std::memory_order_acquire ) || !m_pData || m_material.is_null() ) {
+	m_bComputeDisplacementActive.store( false, T3D_MEMORY_ORDER_RELEASE );
+	if ( !m_bComputeDisplacementEnabled.load( T3D_MEMORY_ORDER_ACQUIRE ) || m_bComputeDisplacementFailed.load( T3D_MEMORY_ORDER_ACQUIRE )
+	        || m_bComputeDisplacementTearingDown.load( T3D_MEMORY_ORDER_ACQUIRE ) || !m_pData || m_material.is_null() ) {
 		return false;
 	}
 	Terrain3DCompute *const pCompute = m_pData->getComputeBackend();
@@ -218,8 +234,8 @@ bool Terrain3D::tryUpdateComputeDisplacement( const Vector3 &rTargetPosition ) {
 		return false;
 	}
 	{
-		std::lock_guard<std::mutex> lock( m_computeDisplacementMutex );
-		m_computeDisplacementRequest = std::move( request );
+		t3dScopedLock_t lock( m_computeDisplacementMutex );
+		m_computeDisplacementRequest = eastl::move( request );
 		++m_nComputeDisplacementRequestVersion;
 	}
 	queueComputeDisplacementRender();
@@ -227,33 +243,33 @@ bool Terrain3D::tryUpdateComputeDisplacement( const Vector3 &rTargetPosition ) {
 }
 
 void Terrain3D::invalidateComputeDisplacementRequest( void ) {
-	m_bComputeDisplacementActive.store( false, std::memory_order_release );
-	std::lock_guard<std::mutex> lock( m_computeDisplacementMutex );
+	m_bComputeDisplacementActive.store( false, T3D_MEMORY_ORDER_RELEASE );
+	t3dScopedLock_t lock( m_computeDisplacementMutex );
 	m_computeDisplacementRequest = t3dDisplacementRequest_t{};
 	m_hComputeDisplacementTextureRd = RID();
 	++m_nComputeDisplacementRequestVersion;
 }
 
 RID Terrain3D::getComputeDisplacementTextureRid( void ) const {
-	std::lock_guard<std::mutex> lock( m_computeDisplacementMutex );
+	t3dScopedLock_t lock( m_computeDisplacementMutex );
 	return m_hComputeDisplacementTextureRd;
 }
 
 void Terrain3D::queueComputeDisplacementRender( void ) {
-	if ( m_bComputeDisplacementTearingDown.load( std::memory_order_acquire ) ) {
+	if ( m_bComputeDisplacementTearingDown.load( T3D_MEMORY_ORDER_ACQUIRE ) ) {
 		return;
 	}
 	bool bExpected = false;
 	if ( !m_bComputeDisplacementDispatchPending.compare_exchange_strong(
-				 bExpected, true, std::memory_order_acq_rel, std::memory_order_acquire ) ) {
+	             bExpected, true, T3D_MEMORY_ORDER_ACQ_REL, T3D_MEMORY_ORDER_ACQUIRE ) ) {
 		return;
 	}
 	if ( Terrain3DRdContext::isOnRenderThread() ) {
 		renderUpdateComputeDisplacement();
 	} else if ( !Terrain3DRdContext::enqueueOnRenderThread( callable_mp( this, &Terrain3D::renderUpdateComputeDisplacement ) ) ) {
-		m_bComputeDisplacementDispatchPending.store( false, std::memory_order_release );
-		m_bComputeDisplacementFailed.store( true, std::memory_order_release );
-		m_bComputeDisplacementFallbackRequested.store( true, std::memory_order_release );
+		m_bComputeDisplacementDispatchPending.store( false, T3D_MEMORY_ORDER_RELEASE );
+		m_bComputeDisplacementFailed.store( true, T3D_MEMORY_ORDER_RELEASE );
+		m_bComputeDisplacementFallbackRequested.store( true, T3D_MEMORY_ORDER_RELEASE );
 	}
 }
 
@@ -261,71 +277,71 @@ void Terrain3D::renderUpdateComputeDisplacement( void ) {
 	t3dDisplacementRequest_t request;
 	uint64_t request_version = 0u;
 	{
-		std::lock_guard<std::mutex> lock( m_computeDisplacementMutex );
+		t3dScopedLock_t lock( m_computeDisplacementMutex );
 		request = m_computeDisplacementRequest;
 		request_version = m_nComputeDisplacementRequestVersion;
 	}
 
 	bool bSuccess = false;
 	RID texture;
-	Terrain3DCompute *const pCompute = m_pData ? m_pData->getComputeBackendIfCreated() : nullptr;
-	if ( !m_bComputeDisplacementTearingDown.load( std::memory_order_acquire ) && pCompute ) {
+	Terrain3DCompute *const pCompute = m_pData ? m_pData->getComputeBackendIfCreated() : NULL;
+	if ( !m_bComputeDisplacementTearingDown.load( T3D_MEMORY_ORDER_ACQUIRE ) && pCompute ) {
 		bSuccess = pCompute->dispatchDisplacementRequest( request, texture ) && texture.is_valid();
 	}
 	bool bRequestCurrent = false;
 	{
-		std::lock_guard<std::mutex> lock( m_computeDisplacementMutex );
+		t3dScopedLock_t lock( m_computeDisplacementMutex );
 		bRequestCurrent = m_nComputeDisplacementRequestVersion == request_version;
-		if ( bSuccess && bRequestCurrent && m_bComputeDisplacementEnabled.load( std::memory_order_acquire ) &&
-				!m_bComputeDisplacementTearingDown.load( std::memory_order_acquire ) ) {
+		if ( bSuccess && bRequestCurrent && m_bComputeDisplacementEnabled.load( T3D_MEMORY_ORDER_ACQUIRE )
+		        && !m_bComputeDisplacementTearingDown.load( T3D_MEMORY_ORDER_ACQUIRE ) ) {
 			m_hComputeDisplacementTextureRd = texture;
 		} else if ( bRequestCurrent ) {
 			m_hComputeDisplacementTextureRd = RID();
 		}
 	}
-	if ( bSuccess && bRequestCurrent && m_bComputeDisplacementEnabled.load( std::memory_order_acquire ) &&
-			!m_bComputeDisplacementTearingDown.load( std::memory_order_acquire ) ) {
-		m_bComputeDisplacementActive.store( true, std::memory_order_release );
-	} else if ( !bSuccess && !m_bComputeDisplacementTearingDown.load( std::memory_order_acquire ) ) {
-		m_bComputeDisplacementActive.store( false, std::memory_order_release );
-		m_bComputeDisplacementFailed.store( true, std::memory_order_release );
-		m_bComputeDisplacementFallbackRequested.store( true, std::memory_order_release );
+	if ( bSuccess && bRequestCurrent && m_bComputeDisplacementEnabled.load( T3D_MEMORY_ORDER_ACQUIRE )
+	        && !m_bComputeDisplacementTearingDown.load( T3D_MEMORY_ORDER_ACQUIRE ) ) {
+		m_bComputeDisplacementActive.store( true, T3D_MEMORY_ORDER_RELEASE );
+	} else if ( !bSuccess && !m_bComputeDisplacementTearingDown.load( T3D_MEMORY_ORDER_ACQUIRE ) ) {
+		m_bComputeDisplacementActive.store( false, T3D_MEMORY_ORDER_RELEASE );
+		m_bComputeDisplacementFailed.store( true, T3D_MEMORY_ORDER_RELEASE );
+		m_bComputeDisplacementFallbackRequested.store( true, T3D_MEMORY_ORDER_RELEASE );
 	}
 
-	m_bComputeDisplacementDispatchPending.store( false, std::memory_order_release );
+	m_bComputeDisplacementDispatchPending.store( false, T3D_MEMORY_ORDER_RELEASE );
 	bool bNewerRequest = false;
 	bool bNewerRequestValid = false;
 	{
-		std::lock_guard<std::mutex> lock( m_computeDisplacementMutex );
+		t3dScopedLock_t lock( m_computeDisplacementMutex );
 		bNewerRequest = m_nComputeDisplacementRequestVersion != request_version;
 		bNewerRequestValid = m_computeDisplacementRequest.valid();
 	}
-	if ( bNewerRequest && bNewerRequestValid && m_bComputeDisplacementEnabled.load( std::memory_order_acquire ) &&
-			!m_bComputeDisplacementFailed.load( std::memory_order_acquire ) &&
-			!m_bComputeDisplacementTearingDown.load( std::memory_order_acquire ) ) {
+	if ( bNewerRequest && bNewerRequestValid && m_bComputeDisplacementEnabled.load( T3D_MEMORY_ORDER_ACQUIRE )
+	        && !m_bComputeDisplacementFailed.load( T3D_MEMORY_ORDER_ACQUIRE )
+	        && !m_bComputeDisplacementTearingDown.load( T3D_MEMORY_ORDER_ACQUIRE ) ) {
 		queueComputeDisplacementRender();
 	}
 }
 
 void Terrain3D::renderShutdownComputeDisplacement( void ) {
 	{
-		std::lock_guard<std::mutex> lock( m_computeDisplacementMutex );
+		t3dScopedLock_t lock( m_computeDisplacementMutex );
 		m_hComputeDisplacementTextureRd = RID();
 	}
-	Terrain3DCompute *const pCompute = m_pData ? m_pData->getComputeBackendIfCreated() : nullptr;
+	Terrain3DCompute *const pCompute = m_pData ? m_pData->getComputeBackendIfCreated() : NULL;
 	if ( pCompute ) {
 		pCompute->shutdownDisplacementResources();
 	}
 }
 
 void Terrain3D::setComputeDisplacementEnabled( const bool bEnabled ) {
-	const bool bOldEnabled = m_bComputeDisplacementEnabled.exchange( bEnabled, std::memory_order_acq_rel );
+	const bool bOldEnabled = m_bComputeDisplacementEnabled.exchange( bEnabled, T3D_MEMORY_ORDER_ACQ_REL );
 	if ( bOldEnabled == bEnabled ) {
 		return;
 	}
 	invalidateComputeDisplacementRequest();
-	m_bComputeDisplacementFailed.store( false, std::memory_order_release );
-	m_bComputeDisplacementFallbackRequested.store( false, std::memory_order_release );
+	m_bComputeDisplacementFailed.store( false, T3D_MEMORY_ORDER_RELEASE );
+	m_bComputeDisplacementFallbackRequested.store( false, T3D_MEMORY_ORDER_RELEASE );
 	m_lastBufferPosition = s_v2Max;
 	if ( m_bInitialized ) {
 		updateDisplacementBuffer();
@@ -343,7 +359,8 @@ void Terrain3D::destroyLabels( void ) {
 	}
 	const Array labels = m_pLabelParent->get_children();
 	LOG( DEBUG, "Destroying ", labels.size(), " region labels" );
-	for ( const Variant &var : labels ) {
+	for ( size_t iLabel = 0u; iLabel < ( size_t )( ( labels ).size() ); iLabel++ ) {
+		const Variant &var = ( labels )[iLabel];
 		Node *const pLabel = cast_to<Node>( var );
 		if ( pLabel ) {
 			memdelete( pLabel );
@@ -353,7 +370,7 @@ void Terrain3D::destroyLabels( void ) {
 
 void Terrain3D::destroyDisplacementBuffer( void ) {
 	LOG( INFO, "[compute] Draining displacement work and releasing buffer resources" );
-	m_bComputeDisplacementTearingDown.store( true, std::memory_order_release );
+	m_bComputeDisplacementTearingDown.store( true, T3D_MEMORY_ORDER_RELEASE );
 	if ( m_pData && m_pData->getComputeBackendIfCreated() ) {
 		if ( Terrain3DRdContext::isOnRenderThread() ) {
 			renderShutdownComputeDisplacement();
@@ -363,17 +380,17 @@ void Terrain3D::destroyDisplacementBuffer( void ) {
 			Terrain3DRdContext::forceSync();
 		}
 	}
-	m_bComputeDisplacementDispatchPending.store( false, std::memory_order_release );
-	m_bComputeDisplacementActive.store( false, std::memory_order_release );
-	m_bComputeDisplacementFailed.store( false, std::memory_order_release );
-	m_bComputeDisplacementFallbackRequested.store( false, std::memory_order_release );
+	m_bComputeDisplacementDispatchPending.store( false, T3D_MEMORY_ORDER_RELEASE );
+	m_bComputeDisplacementActive.store( false, T3D_MEMORY_ORDER_RELEASE );
+	m_bComputeDisplacementFailed.store( false, T3D_MEMORY_ORDER_RELEASE );
+	m_bComputeDisplacementFallbackRequested.store( false, T3D_MEMORY_ORDER_RELEASE );
 	{
-		std::lock_guard<std::mutex> lock( m_computeDisplacementMutex );
+		t3dScopedLock_t lock( m_computeDisplacementMutex );
 		m_computeDisplacementRequest = t3dDisplacementRequest_t{};
 		m_hComputeDisplacementTextureRd = RID();
 		++m_nComputeDisplacementRequestVersion;
 	}
-	m_bComputeDisplacementTearingDown.store( false, std::memory_order_release );
+	m_bComputeDisplacementTearingDown.store( false, T3D_MEMORY_ORDER_RELEASE );
 }
 
 void Terrain3D::setupMousePicking( void ) {
@@ -422,6 +439,8 @@ void Terrain3D::setupMousePicking( void ) {
 	m_pMouseQuad->set_mesh( pQuad );
 	const String shader_code = String(
 #include "shaders/gpu_depth.glsl"
+#include <EASTL/algorithm.h>
+#include <EASTL/utility.h>
 	);
 	Ref<Shader> pShader;
 	pShader.instantiate();
@@ -442,17 +461,17 @@ void Terrain3D::destroyMousePicking( void ) {
 	LOG( DEBUG, "Freeing mouse_quad" );
 	if ( m_pMouseQuad ) {
 		memdelete( m_pMouseQuad );
-		m_pMouseQuad = nullptr;
+		m_pMouseQuad = NULL;
 	}
 	LOG( DEBUG, "Freeing mouse_cam" );
 	if ( m_pMouseCam ) {
 		memdelete( m_pMouseCam );
-		m_pMouseCam = nullptr;
+		m_pMouseCam = NULL;
 	}
 	LOG( DEBUG, "Freeing mouse_vp" );
 	if ( m_pMouseVp ) {
 		memdelete( m_pMouseVp );
-		m_pMouseVp = nullptr;
+		m_pMouseVp = NULL;
 	}
 }
 
@@ -460,7 +479,7 @@ void Terrain3D::destroyInstancer( void ) {
 	LOG( INFO, "Destroying Instancer" );
 	if ( m_pInstancer ) {
 		memdelete( m_pInstancer );
-		m_pInstancer = nullptr;
+		m_pInstancer = NULL;
 	}
 }
 
@@ -468,7 +487,7 @@ void Terrain3D::destroyNodeStreamer( const bool bCaptureState ) {
 	if ( m_pNodeStreamer ) {
 		m_pNodeStreamer->destroy( bCaptureState );
 		memdelete( m_pNodeStreamer );
-		m_pNodeStreamer = nullptr;
+		m_pNodeStreamer = NULL;
 	}
 }
 
@@ -476,7 +495,7 @@ void Terrain3D::destroyLightmapStreamer( void ) {
 	if ( m_pLightmapStreamer ) {
 		m_pLightmapStreamer->destroy();
 		memdelete( m_pLightmapStreamer );
-		m_pLightmapStreamer = nullptr;
+		m_pLightmapStreamer = NULL;
 	}
 }
 
@@ -484,7 +503,7 @@ void Terrain3D::destroyHlodStreamer( void ) {
 	if ( m_pHlodStreamer ) {
 		m_pHlodStreamer->destroy();
 		memdelete( m_pHlodStreamer );
-		m_pHlodStreamer = nullptr;
+		m_pHlodStreamer = NULL;
 	}
 }
 
@@ -505,7 +524,8 @@ void Terrain3D::updateRegionLabels( void ) {
 	if ( m_pLabelParent && m_fLabelDistance > 0.f && m_pData ) {
 		const TypedArray<Vector2i> region_locations = m_pData->getRegionLocations();
 		LOG( DEBUG, "Creating ", region_locations.size(), " region labels" );
-		for ( const Vector2i region_loc : region_locations ) {
+		for ( size_t iRegion = 0u; iRegion < ( size_t )( ( region_locations ).size() ); iRegion++ ) {
+			const Vector2i region_loc = ( region_locations )[iRegion];
 			Label3D *const pLabel = memnew( Label3D );
 			const String text = region_loc;
 			pLabel->set_name( String( "Label3D" ) + text.replace( " ", "" ) );
@@ -525,10 +545,10 @@ void Terrain3D::updateRegionLabels( void ) {
 			pLabel->set_visibility_range_end_margin( m_fLabelDistance / 10.f );
 			pLabel->set_visibility_range_fade_mode( GeometryInstance3D::VISIBILITY_RANGE_FADE_SELF );
 			m_pLabelParent->add_child( pLabel, true );
-			Vector3 pos = Vector3( ( real_t )( region_loc.x ) + .5f, 0.f, ( real_t )( region_loc.y ) + .5f ) *
-					m_nRegionSize * m_fVertexSpacing;
+			Vector3 pos =
+			        Vector3( ( real_t )( region_loc.x ) + .5f, 0.f, ( real_t )( region_loc.y ) + .5f ) * m_nRegionSize * m_fVertexSpacing;
 			const real_t fHeight = m_pData->getHeight( pos );
-			pos.y = ( std::isnan( fHeight ) ) ? 0.f : fHeight;
+			pos.y = ( isnan( fHeight ) ) ? 0.f : fHeight;
 			pLabel->set_position( pos );
 		}
 	}
@@ -538,8 +558,18 @@ void Terrain3D::setCamera( Camera3D *const pCamera ) {
 	if ( m_hCamera.ptr() != pCamera ) {
 		LOG( EXTREME, "Setting camera: ", pCamera );
 		m_hCamera.setTarget( pCamera );
-		if ( m_clipmapTarget.isValid() ) {
+		// Editor authoring uses the camera itself as the clipmap target. Re-enable
+		// servicing when a valid camera arrives even when no explicit target exists.
+		if ( m_hCamera.isValid() || m_clipmapTarget.isValid() ) {
 			set_physics_process( true );
+		}
+		// Camera handoff is a topology-position event, not a normal movement event.
+		// Publish the new patch origins immediately instead of waiting for a physics
+		// tick. This is required in the editor because the first camera reference is
+		// commonly supplied by _forward_3d_gui_input() after the terrain has already
+		// published its startup snapshot.
+		if ( m_bInitialized && ( m_hCamera.isValid() || m_clipmapTarget.isValid() ) ) {
+			synchronizeClipmapNow( getClipmapTargetPosition() );
 		}
 	}
 }
@@ -550,6 +580,9 @@ void Terrain3D::setClipmapTarget( Node3D *const pNode ) {
 		m_clipmapTarget.setTarget( pNode );
 		if ( m_clipmapTarget.isValid() ) {
 			set_physics_process( true );
+		}
+		if ( m_bInitialized && ( m_clipmapTarget.isValid() || m_hCamera.isValid() ) ) {
+			synchronizeClipmapNow( getClipmapTargetPosition() );
 		}
 	}
 }
@@ -633,7 +666,7 @@ void Terrain3D::setSemanticShadowPolicyEnabled( const bool bEnabled ) {
 
 void Terrain3D::setEnvironmentShadowQuality( const t3dEnvironmentShadowQuality_t eQuality ) {
 	const t3dEnvironmentShadowQuality_t quality = ( t3dEnvironmentShadowQuality_t )( CLAMP(
-			( int )( eQuality ), ( int )( ENVIRONMENT_SHADOW_LOW ), ( int )( ENVIRONMENT_SHADOW_ULTRA ) ) );
+	        ( int )( eQuality ), ( int )( ENVIRONMENT_SHADOW_LOW ), ( int )( ENVIRONMENT_SHADOW_ULTRA ) ) );
 	if ( m_environmentShadowQuality == quality ) {
 		return;
 	}
@@ -709,6 +742,26 @@ void Terrain3D::setLightTarget( Node3D *const pNode ) {
 	}
 }
 
+void Terrain3D::synchronizeClipmapNow( const Vector3 &rTargetPosition ) {
+	if ( m_pTerrainMesher ) {
+		m_pTerrainMesher->resetTargetPosition();
+		m_pTerrainMesher->snap( rTargetPosition );
+	}
+	if ( m_bOceanEnabled && m_pOceanMesher ) {
+		m_pOceanMesher->resetTargetPosition();
+		m_pOceanMesher->snap( rTargetPosition );
+	}
+	if ( m_pCollision ) {
+		m_pCollision->resetTargetPosition();
+	}
+	if ( m_nTessellationLevel > 0 ) {
+		m_lastBufferPosition = s_v2Max;
+	}
+	if ( m_bInitialized && m_pRenderCoordinator ) {
+		m_pRenderCoordinator->update();
+	}
+}
+
 void Terrain3D::snap( void ) {
 	if ( m_pTerrainMesher ) {
 		m_pTerrainMesher->resetTargetPosition();
@@ -766,8 +819,8 @@ void Terrain3D::setRuntimeShaderTieringEnabled( const bool bEnabled ) {
 	LOG( INFO, "Setting runtime shader tiering: ", bEnabled );
 	if ( bEnabled && m_pData && m_bInitialized && !m_pData->ensureFarAtlases() ) {
 		LOG( WARN,
-				"Runtime far shader tier could not prepare coarse terrain atlases; far-tier rendering may use fallback "
-				"textures until terrain data is ready." );
+		        "Runtime far shader tier could not prepare coarse terrain atlases; far-tier rendering may use fallback "
+		        "textures until terrain data is ready." );
 	}
 	if ( m_material.is_valid() && m_material->isInitialized() ) {
 		m_material->update( FULL_REBUILD );
@@ -856,11 +909,11 @@ void Terrain3D::setMeshLods( const int nCount ) {
 	}
 	if ( m_pData && effectiveGpuRegionCacheEnabled() && !m_bDeferGpuRegionCacheReconfigure ) {
 		m_pData->configureGpuRegionCache( true,
-				m_nEffectiveGpuRegionCacheBudgetMb,
-				m_nGpuRegionUploadBudgetLayers,
-				m_nGpuRegionUploadBudgetMb,
-				m_nGpuRegionSparePages,
-				m_nGpuRegionRetireFrames );
+		        m_nEffectiveGpuRegionCacheBudgetMb,
+		        m_nGpuRegionUploadBudgetLayers,
+		        m_nGpuRegionUploadBudgetMb,
+		        m_nGpuRegionSparePages,
+		        m_nGpuRegionRetireFrames );
 	}
 }
 
@@ -872,8 +925,8 @@ void Terrain3D::setTessellationLevel( const int nLevel ) {
 	LOG( INFO, "Setting tessellation level: ", nLevel );
 	// The optimized R8 displacement array exists only while tessellation is
 	// active. Crossing zero creates or frees it before rebuilding shaders.
-	if ( ( old_level == 0 ) != ( m_nTessellationLevel == 0 ) && m_assets.is_valid() && m_assets->isInitialized() &&
-			m_assets->usesPackedPbr() ) {
+	if ( ( old_level == 0 ) != ( m_nTessellationLevel == 0 ) && m_assets.is_valid() && m_assets->isInitialized()
+	        && m_assets->usesPackedPbr() ) {
 		m_assets->updateTextureList();
 	}
 	if ( m_pTerrainMesher && m_material.is_valid() ) {
@@ -883,11 +936,11 @@ void Terrain3D::setTessellationLevel( const int nLevel ) {
 	}
 	if ( m_pData && effectiveGpuRegionCacheEnabled() && !m_bDeferGpuRegionCacheReconfigure ) {
 		m_pData->configureGpuRegionCache( true,
-				m_nEffectiveGpuRegionCacheBudgetMb,
-				m_nGpuRegionUploadBudgetLayers,
-				m_nGpuRegionUploadBudgetMb,
-				m_nGpuRegionSparePages,
-				m_nGpuRegionRetireFrames );
+		        m_nEffectiveGpuRegionCacheBudgetMb,
+		        m_nGpuRegionUploadBudgetLayers,
+		        m_nGpuRegionUploadBudgetMb,
+		        m_nGpuRegionSparePages,
+		        m_nGpuRegionRetireFrames );
 	}
 	notify_property_list_changed();
 }
@@ -904,19 +957,19 @@ void Terrain3D::setMeshSize( const int nSize ) {
 	}
 	if ( m_pData && effectiveGpuRegionCacheEnabled() && !m_bDeferGpuRegionCacheReconfigure ) {
 		m_pData->configureGpuRegionCache( true,
-				m_nEffectiveGpuRegionCacheBudgetMb,
-				m_nGpuRegionUploadBudgetLayers,
-				m_nGpuRegionUploadBudgetMb,
-				m_nGpuRegionSparePages,
-				m_nGpuRegionRetireFrames );
+		        m_nEffectiveGpuRegionCacheBudgetMb,
+		        m_nGpuRegionUploadBudgetLayers,
+		        m_nGpuRegionUploadBudgetMb,
+		        m_nGpuRegionSparePages,
+		        m_nGpuRegionRetireFrames );
 	}
 }
 
 void Terrain3D::setVertexSpacing( const real_t fSpacing ) {
 	if ( !Math::is_equal_approx( fSpacing, ( real_t )( 1.0f ) ) ) {
 		LOG( ERROR,
-				"This Terrain3D fork requires 1 metre vertex spacing so every 128-sample region is exactly 128 metres "
-				"wide" );
+		        "This Terrain3D fork requires 1 metre vertex spacing so every 128-sample region is exactly 128 metres "
+		        "wide" );
 		return;
 	}
 	if ( Math::is_equal_approx( m_fVertexSpacing, ( real_t )( 1.0f ) ) ) {
@@ -935,11 +988,11 @@ void Terrain3D::setVertexSpacing( const real_t fSpacing ) {
 		updateDisplacementBuffer();
 		if ( effectiveGpuRegionCacheEnabled() ) {
 			m_pData->configureGpuRegionCache( true,
-					m_nEffectiveGpuRegionCacheBudgetMb,
-					m_nGpuRegionUploadBudgetLayers,
-					m_nGpuRegionUploadBudgetMb,
-					m_nGpuRegionSparePages,
-					m_nGpuRegionRetireFrames );
+			        m_nEffectiveGpuRegionCacheBudgetMb,
+			        m_nGpuRegionUploadBudgetLayers,
+			        m_nGpuRegionUploadBudgetMb,
+			        m_nGpuRegionSparePages,
+			        m_nGpuRegionRetireFrames );
 		}
 	}
 }
@@ -994,24 +1047,21 @@ void Terrain3D::setFarShadowEnabled( const bool bEnabled ) {
 void Terrain3D::setNearShadowLodCount( const int nCount ) {
 	SET_IF_DIFF( m_nNearShadowLodCount, CLAMP( nCount, -1, s_nMaxClipmapLevels ) );
 	if ( m_pTerrainMesher ) {
-		m_pTerrainMesher->setTierShadowLodCounts(
-				{ m_nNearShadowLodCount, m_nMiddleShadowLodCount, m_nFarShadowLodCount } );
+		m_pTerrainMesher->setTierShadowLodCounts( { m_nNearShadowLodCount, m_nMiddleShadowLodCount, m_nFarShadowLodCount } );
 	}
 }
 
 void Terrain3D::setMiddleShadowLodCount( const int nCount ) {
 	SET_IF_DIFF( m_nMiddleShadowLodCount, CLAMP( nCount, -1, s_nMaxClipmapLevels ) );
 	if ( m_pTerrainMesher ) {
-		m_pTerrainMesher->setTierShadowLodCounts(
-				{ m_nNearShadowLodCount, m_nMiddleShadowLodCount, m_nFarShadowLodCount } );
+		m_pTerrainMesher->setTierShadowLodCounts( { m_nNearShadowLodCount, m_nMiddleShadowLodCount, m_nFarShadowLodCount } );
 	}
 }
 
 void Terrain3D::setFarShadowLodCount( const int nCount ) {
 	SET_IF_DIFF( m_nFarShadowLodCount, CLAMP( nCount, -1, s_nMaxClipmapLevels ) );
 	if ( m_pTerrainMesher ) {
-		m_pTerrainMesher->setTierShadowLodCounts(
-				{ m_nNearShadowLodCount, m_nMiddleShadowLodCount, m_nFarShadowLodCount } );
+		m_pTerrainMesher->setTierShadowLodCounts( { m_nNearShadowLodCount, m_nMiddleShadowLodCount, m_nFarShadowLodCount } );
 	}
 }
 
@@ -1039,43 +1089,41 @@ void Terrain3D::updateOceanShaderVariant( void ) {
 	}
 	String code = m_oceanVariantSource;
 	code = code.replace( "#define T3D_OCEAN_VERTEX_ITERATIONS 1",
-			String( "#define T3D_OCEAN_VERTEX_ITERATIONS " ) + String::num_int64( m_nOceanVertexWaveIterations ) );
+	        String( "#define T3D_OCEAN_VERTEX_ITERATIONS " ) + String::num_int64( m_nOceanVertexWaveIterations ) );
 	code = code.replace( "#define T3D_OCEAN_FRAGMENT_ITERATIONS 3",
-			String( "#define T3D_OCEAN_FRAGMENT_ITERATIONS " ) + String::num_int64( m_nOceanFragmentWaveIterations ) );
+	        String( "#define T3D_OCEAN_FRAGMENT_ITERATIONS " ) + String::num_int64( m_nOceanFragmentWaveIterations ) );
 	code = code.replace( "#define T3D_OCEAN_REFRACTION_MODE 2",
-			String( "#define T3D_OCEAN_REFRACTION_MODE " ) + String::num_int64( m_oceanRefractionMode ) );
-	code = code.replace(
-			"#define T3D_OCEAN_FOAM_MODE 2", String( "#define T3D_OCEAN_FOAM_MODE " ) + String::num_int64( m_oceanFoamMode ) );
+	        String( "#define T3D_OCEAN_REFRACTION_MODE " ) + String::num_int64( m_oceanRefractionMode ) );
+	code = code.replace( "#define T3D_OCEAN_FOAM_MODE 2", String( "#define T3D_OCEAN_FOAM_MODE " ) + String::num_int64( m_oceanFoamMode ) );
 	code = code.replace( "#define T3D_OCEAN_SCATTERING_MODE 2",
-			String( "#define T3D_OCEAN_SCATTERING_MODE " ) + String::num_int64( m_oceanScatteringMode ) );
-	code = code.replace( "#define T3D_OCEAN_SHADING_MODE 2",
-			String( "#define T3D_OCEAN_SHADING_MODE " ) + String::num_int64( m_oceanShadingMode ) );
+	        String( "#define T3D_OCEAN_SCATTERING_MODE " ) + String::num_int64( m_oceanScatteringMode ) );
+	code = code.replace(
+	        "#define T3D_OCEAN_SHADING_MODE 2", String( "#define T3D_OCEAN_SHADING_MODE " ) + String::num_int64( m_oceanShadingMode ) );
 	String render_mode = "render_mode cull_back, depth_draw_always, diffuse_burley, specular_schlick_ggx, "
-						 "shadows_disabled, skip_vertex_transform;";
+	                     "shadows_disabled, skip_vertex_transform;";
 	switch ( m_oceanShadingMode ) {
 		case OCEAN_SHADING_LAMBERT_DIFFUSE:
 			render_mode = "render_mode cull_back, depth_draw_always, diffuse_lambert, specular_disabled, "
-						  "shadows_disabled, skip_vertex_transform;";
+			              "shadows_disabled, skip_vertex_transform;";
 			break;
 		case OCEAN_SHADING_LAMBERT_GGX:
 			render_mode = "render_mode cull_back, depth_draw_always, diffuse_lambert, specular_schlick_ggx, "
-						  "shadows_disabled, skip_vertex_transform;";
+			              "shadows_disabled, skip_vertex_transform;";
 			break;
 		case OCEAN_SHADING_UNSHADED:
-			render_mode =
-					"render_mode cull_back, depth_draw_always, unshaded, shadows_disabled, skip_vertex_transform;";
+			render_mode = "render_mode cull_back, depth_draw_always, unshaded, shadows_disabled, skip_vertex_transform;";
 			break;
 		case OCEAN_SHADING_LAMBERT_VERTEX:
 			render_mode = "render_mode cull_back, depth_draw_always, diffuse_lambert, specular_disabled, "
-						  "vertex_lighting, shadows_disabled, skip_vertex_transform;";
+			              "vertex_lighting, shadows_disabled, skip_vertex_transform;";
 			break;
 		case OCEAN_SHADING_BURLEY_GGX:
 		default:
 			break;
 	}
 	code = code.replace( "render_mode cull_back, depth_draw_always, diffuse_burley, specular_schlick_ggx, "
-						 "shadows_disabled, skip_vertex_transform;",
-			render_mode );
+	                     "shadows_disabled, skip_vertex_transform;",
+	        render_mode );
 	if ( m_oceanVariantShader.is_null() ) {
 		m_oceanVariantShader.instantiate();
 	}
@@ -1235,12 +1283,7 @@ void Terrain3D::setOceanMaterial( const Ref<Material> &rMaterial ) {
 void Terrain3D::setMouseLayer( const uint32_t nLayer ) {
 	SET_IF_DIFF( m_nMouseLayer, CLAMP( nLayer, 21u, 32u ) );
 	const uint32_t mouse_mask = 1 << ( m_nMouseLayer - 1 );
-	LOG( INFO,
-			"Setting mouse layer: ",
-			m_nMouseLayer,
-			" (",
-			mouse_mask,
-			") on terrain mesh, material, mouse camera, mouse quad" );
+	LOG( INFO, "Setting mouse layer: ", m_nMouseLayer, " (", mouse_mask, ") on terrain mesh, material, mouse camera, mouse quad" );
 
 	// Set terrain meshes to mouse layer
 	// Mask off editor render layers by ORing user layers 1-20 and current mouse layer
@@ -1366,7 +1409,7 @@ void Terrain3D::destroyRenderCoordinator( const bool bFinal ) {
 	m_pRenderCoordinator->shutdown();
 	if ( bFinal ) {
 		memdelete( m_pRenderCoordinator );
-		m_pRenderCoordinator = nullptr;
+		m_pRenderCoordinator = NULL;
 	}
 }
 

@@ -1,16 +1,16 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
-#pragma once
-
 #ifndef TERRAIN3D_RD_OCEAN_RENDERER_H
 #define TERRAIN3D_RD_OCEAN_RENDERER_H
 
+#include "Terrain3DConstants.h"
 #include "rendering/rd/terrain_3d_rd_context.h"
 #include "rendering/rd/terrain_3d_rd_topology.h"
 #include "rendering/rd/terrain_3d_rd_types.h"
 
+#include "eastl_config.h"
+#include <EASTL/vector.h>
 #include <godot_cpp/classes/rd_shader_spirv.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
-#include <vector>
 
 typedef struct t3dRdOceanTopologySnapshot_s {
 	uint64_t m_nGeneration = 0u;
@@ -20,21 +20,21 @@ typedef struct t3dRdOceanTopologySnapshot_s {
 class Terrain3DRdOceanRenderer {
 private:
 	typedef struct alignas( 16 ) t3dRdOceanFrame_s {
-		float m_mViewProjection[s_nRdForwardMaxViews][16]{};
-		float m_mView[16]{};
-		float m_szCameraTime[4]{};
-		float m_szLightDirection[4]{};
-		float m_szLightColor[4]{};
-		float m_szMeshParams[4]{};
-		float m_szTargetTime[4]{};
-		float m_szWaterColor[4]{};
-		float m_szDepthParams[4]{};
-		float m_szWaveParams[4]{};
-		float m_szSurfaceParams[4]{};
-		float m_szFoamParams0[4]{};
-		float m_szFoamParams1[4]{};
-		float m_szScatterParams[4]{};
-		float m_szModeParams[4]{};
+		float m_mViewProjection[s_nRdForwardMaxViews][16];
+		float m_mView[16];
+		float m_szCameraTime[4];
+		float m_szLightDirection[4];
+		float m_szLightColor[4];
+		float m_szMeshParams[4];
+		float m_szTargetTime[4];
+		float m_szWaterColor[4];
+		float m_szDepthParams[4];
+		float m_szWaveParams[4];
+		float m_szSurfaceParams[4];
+		float m_szFoamParams0[4];
+		float m_szFoamParams1[4];
+		float m_szScatterParams[4];
+		float m_szModeParams[4];
 	} t3dRdOceanFrame_t;
 
 	typedef struct t3dRdOceanPipelineKey_s {
@@ -44,8 +44,8 @@ private:
 		uint32_t m_nViewCount = 1u;
 		bool m_bReverseCull = false;
 		bool operator==( const t3dRdOceanPipelineKey_s &rOther ) const {
-			return m_nFramebufferFormat == rOther.m_nFramebufferFormat && m_passKind == rOther.m_passKind &&
-					m_samples == rOther.m_samples && m_nViewCount == rOther.m_nViewCount && m_bReverseCull == rOther.m_bReverseCull;
+			return m_nFramebufferFormat == rOther.m_nFramebufferFormat && m_passKind == rOther.m_passKind && m_samples == rOther.m_samples
+			        && m_nViewCount == rOther.m_nViewCount && m_bReverseCull == rOther.m_bReverseCull;
 		}
 	} t3dRdOceanPipelineKey_t;
 
@@ -62,7 +62,9 @@ private:
 	RID m_hPatchBuffer;
 	RID m_hColorUniformSet;
 	RID m_hShadowUniformSet;
-	std::vector<t3dRdOceanPipelineEntry_t> m_pipelines;
+
+	t3dRdOceanPipelineEntry_t m_szPipelines[s_nPipelineCapacity]{};
+	uint32_t m_nPipelineCount = 0u;
 	uint32_t m_nPipelineEvictCursor = 0u;
 	int64_t m_nVertexFormat = RenderingDevice::INVALID_FORMAT_ID;
 	uint64_t m_nTopologyGeneration = 0u;
@@ -98,12 +100,14 @@ public:
 	bool initialize( const Ref<RDShaderSPIRV> &rColor, const Ref<RDShaderSPIRV> &rShadow );
 	void shutdown( void );
 	bool prepareForwardPass( const t3dRdForwardPassContext_t &rContext,
-			const t3dRdFrameSnapshot_t &rSnapshot,
-			const t3dRdOceanTopologySnapshot_t *pTopology,
-			uint32_t nVisibilityMask );
+	        const t3dRdFrameSnapshot_t &rSnapshot,
+	        const t3dRdOceanTopologySnapshot_t *pTopology,
+	        uint32_t nVisibilityMask );
 	bool renderForwardPass( const t3dRdForwardPassContext_t &rContext );
 	Dictionary getDiagnostics( void ) const;
-	String getLastError( void ) const { return m_lastError; }
+	String getLastError( void ) const {
+		return m_lastError;
+	}
 };
 
 #endif // TERRAIN3D_RD_OCEAN_RENDERER_H

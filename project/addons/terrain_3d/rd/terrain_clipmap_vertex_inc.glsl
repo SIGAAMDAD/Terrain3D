@@ -17,11 +17,16 @@ layout(set = 0, binding = 0, std140) uniform FrameData {
     vec4 fog_params;
     vec4 fog_depth_params;
     vec4 displacement_params;
-} frame_data;
+}
+frame_data;
 
-uint t3d_view_index() { return min(uint(gl_ViewIndex), 1u); }
+uint t3d_view_index() {
+    return min(uint(gl_ViewIndex), 1u);
+}
 
-layout(set = 0, binding = 1, std430) readonly buffer RegionMapData { int region_map[]; };
+layout(set = 0, binding = 1, std430) readonly buffer RegionMapData {
+    int region_map[];
+};
 layout(set = 0, binding = 2) uniform sampler2DArray height_maps;
 layout(set = 0, binding = 12) uniform sampler2D displacement_buffer;
 layout(set = 0, binding = 14) uniform sampler2DArray derived_maps;
@@ -108,7 +113,9 @@ struct MaterialConfig {
     float reserved_3;
     TierMaterialConfig tier[3];
 };
-layout(set = 0, binding = 13, std430) readonly buffer MaterialConfigBuffer { MaterialConfig material_config; };
+layout(set = 0, binding = 13, std430) readonly buffer MaterialConfigBuffer {
+    MaterialConfig material_config;
+};
 
 struct PatchData {
     vec2 origin;
@@ -127,14 +134,19 @@ struct PatchData {
     float padding_0;
     float padding_1;
 };
-layout(set = 0, binding = 9, std430) readonly buffer PatchBuffer { PatchData patches[]; };
-layout(set = 0, binding = 10, std430) readonly buffer VisibleBuffer { uint visible_indices[]; };
+layout(set = 0, binding = 9, std430) readonly buffer PatchBuffer {
+    PatchData patches[];
+};
+layout(set = 0, binding = 10, std430) readonly buffer VisibleBuffer {
+    uint visible_indices[];
+};
 layout(push_constant, std430) uniform DrawData {
     uint direct_patch_index;
     uint direct_mode;
     uint padding_0;
     uint padding_1;
-} draw_data;
+}
+draw_data;
 
 layout(location = 0) out vec3 world_position;
 layout(location = 1) out vec3 world_normal;
@@ -159,17 +171,26 @@ int floor_div_i(int value, int divisor) {
     int r = value - q * divisor;
     return (r != 0 && ((r < 0) != (divisor < 0))) ? q - 1 : q;
 }
-int floor_mod_i(int value, int divisor) { return value - floor_div_i(value, divisor) * divisor; }
+int floor_mod_i(int value, int divisor) {
+    return value - floor_div_i(value, divisor) * divisor;
+}
 
 uint packed_region_cell(ivec2 region_cell) {
     int map_size = int(frame_data.terrain_params.y + 0.5);
     ivec2 map_pos = region_cell + ivec2(map_size / 2);
-    if (map_pos.x < 0 || map_pos.y < 0 || map_pos.x >= map_size || map_pos.y >= map_size) return 0u;
+    if (map_pos.x < 0 || map_pos.y < 0 || map_pos.x >= map_size || map_pos.y >= map_size)
+        return 0u;
     return uint(region_map[map_pos.y * map_size + map_pos.x]);
 }
-int region_layer(ivec2 region_cell) { return int(packed_region_cell(region_cell) & 0xFFFFu) - 1; }
-uint region_shadowmask_mode(ivec2 region_cell) { return (packed_region_cell(region_cell) >> 16u) & 0x3u; }
-bool logical_region_present(ivec2 region_cell) { return (packed_region_cell(region_cell) & 0x80000000u) != 0u; }
+int region_layer(ivec2 region_cell) {
+    return int(packed_region_cell(region_cell) & 0xFFFFu) - 1;
+}
+uint region_shadowmask_mode(ivec2 region_cell) {
+    return (packed_region_cell(region_cell) >> 16u) & 0x3u;
+}
+bool logical_region_present(ivec2 region_cell) {
+    return (packed_region_cell(region_cell) & 0x80000000u) != 0u;
+}
 float region_presence(ivec2 base_cell, vec2 weights) {
     float a = logical_region_present(base_cell) ? 1.0 : 0.0;
     float b = logical_region_present(base_cell + ivec2(1, 0)) ? 1.0 : 0.0;
@@ -188,7 +209,9 @@ float region_background_blend(vec2 world_texel) {
     return clamp((1.0 - region_presence(base_cell, weights)) * 2.0, 0.0, 1.0);
 }
 
-float decode_height(float encoded) { return fma(encoded, frame_data.terrain_params.w, frame_data.terrain_params.z); }
+float decode_height(float encoded) {
+    return fma(encoded, frame_data.terrain_params.w, frame_data.terrain_params.z);
+}
 bool far_atlas_contains(vec2 world_texel) {
     float half_world_size = frame_data.terrain_params.x * frame_data.terrain_params.y * 0.5;
     return all(greaterThanEqual(world_texel, vec2(-half_world_size))) && all(lessThan(world_texel, vec2(half_world_size)));
@@ -200,7 +223,8 @@ vec2 far_height_uv(vec2 world_texel) {
     return clamp((world_texel + vec2(world_size * 0.5)) / world_size + half_texel, half_texel, vec2(1.0) - half_texel);
 }
 float sample_far_height(vec2 world_texel) {
-    if ((material_config.feature_flags & T3D_FEATURE_FAR_ATLAS) == 0u || !far_atlas_contains(world_texel)) return material_config.ground_level;
+    if ((material_config.feature_flags & T3D_FEATURE_FAR_ATLAS) == 0u || !far_atlas_contains(world_texel))
+        return material_config.ground_level;
     return decode_height(textureLod(far_height_map, far_height_uv(world_texel), 0.0).r);
 }
 
@@ -226,15 +250,16 @@ vec3 world_noise_2d(vec2 x) {
     return vec3(fma(k2, u.y, fma(u.x, fma(k3, u.y, k1), k0)), du * fma(vec2(k3), u.yx, vec2(k1, k2)));
 }
 float procedural_world_noise(vec2 world_texel) {
-    vec2 p = (world_texel + vec2(material_config.world_noise_offset_x, material_config.world_noise_offset_z) * 1024.0) *
-        material_config.world_noise_scale * (0.1 / 1024.0);
+    vec2 p = (world_texel + vec2(material_config.world_noise_offset_x, material_config.world_noise_offset_z) * 1024.0)
+        * material_config.world_noise_scale * (0.1 / 1024.0);
     float distance_to_target = length(world_texel * frame_data.mesh_params.x - frame_data.target_params.xy);
     int max_octaves = int(clamp(material_config.world_noise_max_octaves, 0u, 15u));
     int min_octaves = min(int(material_config.world_noise_min_octaves), max_octaves);
     int octaves = int(clamp(float(max_octaves) - floor(distance_to_target / max(material_config.world_noise_lod_distance, 1.0)),
-        float(min_octaves), float(max_octaves)));
-    bool cache_mode = material_config.world_noise_mode == 1u || material_config.world_noise_mode == 2u ||
-        (material_config.world_noise_mode == 0u && material_config.world_noise_cache_enabled != 0u);
+        float(min_octaves),
+        float(max_octaves)));
+    bool cache_mode = material_config.world_noise_mode == 1u || material_config.world_noise_mode == 2u
+        || (material_config.world_noise_mode == 0u && material_config.world_noise_cache_enabled != 0u);
     if (cache_mode && (material_config.feature_flags & T3D_FEATURE_WORLD_NOISE_CACHE) != 0u) {
         float cache_lod = clamp(float(max_octaves - octaves), 0.0, material_config.world_noise_cache_max_lod);
         vec2 cache_uv = p / max(material_config.world_noise_cache_period, 0.001);
@@ -244,7 +269,8 @@ float procedural_world_noise(vec2 world_texel) {
     float amplitude = 1.0;
     vec2 derivative = vec2(0.0);
     for (int octave = 0; octave < 15; ++octave) {
-        if (octave >= octaves) break;
+        if (octave >= octaves)
+            break;
         vec3 n = world_noise_2d(p);
         derivative += n.yz;
         value += amplitude * n.x / (1.0 + dot(derivative, derivative));
@@ -255,7 +281,8 @@ float procedural_world_noise(vec2 world_texel) {
 }
 float world_noise_height(vec2 world_texel) {
     float weight = region_background_blend(world_texel);
-    if (weight <= 0.5) return material_config.ground_level;
+    if (weight <= 0.5)
+        return material_config.ground_level;
     float noise_value = procedural_world_noise(world_texel);
     float noise_height = noise_value * material_config.world_noise_height * 10.0 + material_config.world_noise_offset_y * 100.0;
     return material_config.ground_level + noise_height * smoothstep(0.5, 1.0, weight);
@@ -264,13 +291,16 @@ bool world_noise_uses_fragment_normals() {
 #if T3D_TIER != 0
     return false;
 #else
-    if (material_config.background_mode != 2u || (material_config.feature_flags & T3D_FEATURE_WORLD_NOISE) == 0u) return false;
-    if (material_config.world_noise_mode == 2u || material_config.world_noise_mode == 4u) return true;
+    if (material_config.background_mode != 2u || (material_config.feature_flags & T3D_FEATURE_WORLD_NOISE) == 0u)
+        return false;
+    if (material_config.world_noise_mode == 2u || material_config.world_noise_mode == 4u)
+        return true;
     return material_config.world_noise_mode == 0u && material_config.world_noise_fragment_normals != 0u;
 #endif
 }
 float sample_background_height(vec2 world_texel) {
-    if (material_config.background_mode == 2u && (material_config.feature_flags & T3D_FEATURE_WORLD_NOISE) != 0u) return world_noise_height(world_texel);
+    if (material_config.background_mode == 2u && (material_config.feature_flags & T3D_FEATURE_WORLD_NOISE) != 0u)
+        return world_noise_height(world_texel);
     return material_config.ground_level;
 }
 float sample_background_normal_height(vec2 world_texel) {
@@ -281,25 +311,33 @@ float sample_primary_height_texel_mode(ivec2 texel, bool normal_sample) {
     int region_size = int(frame_data.terrain_params.x + 0.5);
     ivec2 region_cell = ivec2(floor_div_i(texel.x, region_size), floor_div_i(texel.y, region_size));
     int layer = region_layer(region_cell);
-    if (layer < 0) return (material_config.feature_flags & T3D_FEATURE_FAR_ATLAS) != 0u && far_atlas_contains(vec2(texel)) ? sample_far_height(vec2(texel)) : (normal_sample ? sample_background_normal_height(vec2(texel)) : sample_background_height(vec2(texel)));
+    if (layer < 0)
+        return (material_config.feature_flags & T3D_FEATURE_FAR_ATLAS) != 0u && far_atlas_contains(vec2(texel))
+            ? sample_far_height(vec2(texel))
+            : (normal_sample ? sample_background_normal_height(vec2(texel)) : sample_background_height(vec2(texel)));
     ivec2 local = ivec2(floor_mod_i(texel.x, region_size), floor_mod_i(texel.y, region_size));
     ivec3 size3 = textureSize(height_maps, 0);
     local = clamp(local, ivec2(0), size3.xy - ivec2(1));
     return decode_height(texelFetch(height_maps, ivec3(local, layer), 0).r);
 }
 int middle_height_layer(ivec2 region_cell) {
-    if ((material_config.feature_flags & T3D_FEATURE_MIDDLE_HEIGHT) == 0u) return -1;
+    if ((material_config.feature_flags & T3D_FEATURE_MIDDLE_HEIGHT) == 0u)
+        return -1;
     int map_size = int(frame_data.terrain_params.y + 0.5);
     ivec2 map_pos = region_cell + ivec2(map_size / 2);
     ivec2 texture_size = textureSize(middle_height_region_map, 0);
-    if (map_pos.x < 0 || map_pos.y < 0 || map_pos.x >= min(map_size, texture_size.x) || map_pos.y >= min(map_size, texture_size.y)) return -1;
+    if (map_pos.x < 0 || map_pos.y < 0 || map_pos.x >= min(map_size, texture_size.x) || map_pos.y >= min(map_size, texture_size.y))
+        return -1;
     return int(round(texelFetch(middle_height_region_map, map_pos, 0).r * 65535.0)) - 1;
 }
 float sample_middle_height_texel_mode(ivec2 texel, bool normal_sample) {
     int region_size = int(frame_data.terrain_params.x + 0.5);
     ivec2 region_cell = ivec2(floor_div_i(texel.x, region_size), floor_div_i(texel.y, region_size));
     int layer = middle_height_layer(region_cell);
-    if (layer < 0) return (material_config.feature_flags & T3D_FEATURE_FAR_ATLAS) != 0u && far_atlas_contains(vec2(texel)) ? sample_far_height(vec2(texel)) : (normal_sample ? sample_background_normal_height(vec2(texel)) : sample_background_height(vec2(texel)));
+    if (layer < 0)
+        return (material_config.feature_flags & T3D_FEATURE_FAR_ATLAS) != 0u && far_atlas_contains(vec2(texel))
+            ? sample_far_height(vec2(texel))
+            : (normal_sample ? sample_background_normal_height(vec2(texel)) : sample_background_height(vec2(texel)));
     ivec2 local = ivec2(floor_mod_i(texel.x, region_size), floor_mod_i(texel.y, region_size));
     ivec3 size3 = textureSize(middle_height_maps, 0);
     if (size3.x == region_size && size3.y == region_size) {
@@ -314,11 +352,14 @@ float sample_height_texel_mode(ivec2 texel, bool normal_sample) {
 #elif T3D_TIER == 1
     return sample_middle_height_texel_mode(texel, normal_sample);
 #else
-    if ((material_config.feature_flags & T3D_FEATURE_FAR_ATLAS) != 0u && far_atlas_contains(vec2(texel))) return sample_far_height(vec2(texel));
+    if ((material_config.feature_flags & T3D_FEATURE_FAR_ATLAS) != 0u && far_atlas_contains(vec2(texel)))
+        return sample_far_height(vec2(texel));
     return normal_sample ? sample_background_normal_height(vec2(texel)) : sample_background_height(vec2(texel));
 #endif
 }
-float sample_height_texel(ivec2 texel) { return sample_height_texel_mode(texel, false); }
+float sample_height_texel(ivec2 texel) {
+    return sample_height_texel_mode(texel, false);
+}
 float sample_height_nearest(vec2 world_xz) {
     return sample_height_texel_mode(ivec2(round(world_xz / frame_data.mesh_params.x)), false);
 }
@@ -338,13 +379,15 @@ float sample_height_interpolated(vec2 world_xz) {
 
 vec3 sample_derived_normal(vec2 world_xz, vec3 fallback_normal) {
 #if T3D_TIER == 0
-    if ((material_config.feature_flags & T3D_FEATURE_DERIVED_MAPS) == 0u || material_config.tier[0].normal_mode != 3u) return fallback_normal;
+    if ((material_config.feature_flags & T3D_FEATURE_DERIVED_MAPS) == 0u || material_config.tier[0].normal_mode != 3u)
+        return fallback_normal;
     vec2 world_texel = world_xz / frame_data.mesh_params.x;
     int region_size = int(frame_data.terrain_params.x + 0.5);
     ivec2 texel = ivec2(floor(world_texel));
     ivec2 region_cell = ivec2(floor_div_i(texel.x, region_size), floor_div_i(texel.y, region_size));
     int layer = region_layer(region_cell);
-    if (layer < 0) return fallback_normal;
+    if (layer < 0)
+        return fallback_normal;
     ivec2 local = ivec2(floor_mod_i(texel.x, region_size), floor_mod_i(texel.y, region_size));
     ivec3 size3 = textureSize(derived_maps, 0);
     vec2 uv = (vec2(local) + vec2(0.5)) / vec2(region_size);
@@ -359,18 +402,24 @@ vec3 sample_derived_normal(vec2 world_xz, vec3 fallback_normal) {
 
 float edge_axis_offset(int edge_index, int test_axis) {
     float mesh_size = frame_data.mesh_params.y;
-    if (edge_index == 0) return test_axis == 2 ? -(4.0 * mesh_size + 6.0) : 0.0;
-    if (test_axis == 0) return 4.0 * mesh_size + 8.0;
+    if (edge_index == 0)
+        return test_axis == 2 ? -(4.0 * mesh_size + 6.0) : 0.0;
+    if (test_axis == 0)
+        return 4.0 * mesh_size + 8.0;
     return test_axis == 2 ? -2.0 : 0.0;
 }
 vec2 edge_offset(uint part_code, PatchData patch_data) {
     int part = int(part_code);
     int sx = clamp(int(patch_data.stitch_x), 0, 2);
     int sz = clamp(int(patch_data.stitch_z), 0, 2);
-    if (part == 1) return vec2(edge_axis_offset(0, sx), -2.0 * float(sz - 1));
-    if (part == 2) return vec2(edge_axis_offset(1, sx), -2.0 * float(sz - 1));
-    if (part == 3) return vec2(0.0, edge_axis_offset(0, sz));
-    if (part == 4) return vec2(0.0, edge_axis_offset(1, sz));
+    if (part == 1)
+        return vec2(edge_axis_offset(0, sx), -2.0 * float(sz - 1));
+    if (part == 2)
+        return vec2(edge_axis_offset(1, sx), -2.0 * float(sz - 1));
+    if (part == 3)
+        return vec2(0.0, edge_axis_offset(0, sz));
+    if (part == 4)
+        return vec2(0.0, edge_axis_offset(1, sz));
     return vec2(0.0);
 }
 vec3 clipmap_morph(vec2 world_xz, vec2 grid_xz, float scale) {
@@ -391,17 +440,21 @@ vec3 clipmap_morph(vec2 world_xz, vec2 grid_xz, float scale) {
     return vec3(shift, morph);
 }
 vec3 sample_clipmap_displacement(vec2 world_xz, float clipmap_scale) {
-    if ((material_config.feature_flags & T3D_FEATURE_DISPLACEMENT) == 0u || frame_data.displacement_params.y < 0.5 || frame_data.target_params.z <= 1.0) return vec3(0.0);
+    if ((material_config.feature_flags & T3D_FEATURE_DISPLACEMENT) == 0u || frame_data.displacement_params.y < 0.5
+        || frame_data.target_params.z <= 1.0)
+        return vec3(0.0);
     float vertex_density = 1.0 / max(frame_data.mesh_params.x, 1e-6);
     float lod_scale = floor(log2(1.0 / max(clipmap_scale * vertex_density, 1e-6)));
     float sample_scale = exp2(lod_scale) * 0.5;
     float subdivision_levels = max(log2(frame_data.target_params.z), 1.0);
     vec2 position_texel = world_xz * vertex_density;
     vec2 displacement_uv = (sample_scale * position_texel - round(frame_data.target_params.xy * vertex_density * sample_scale))
-        / max(frame_data.mesh_params.y * 2.0, 1.0) + vec2(0.5);
+            / max(frame_data.mesh_params.y * 2.0, 1.0)
+        + vec2(0.5);
     displacement_uv.x += lod_scale - 1.0;
     displacement_uv.x /= subdivision_levels;
-    if (any(lessThan(displacement_uv, vec2(0.0))) || any(greaterThan(displacement_uv, vec2(1.0)))) return vec3(0.0);
+    if (any(lessThan(displacement_uv, vec2(0.0))) || any(greaterThan(displacement_uv, vec2(1.0))))
+        return vec3(0.0);
     return (textureLod(displacement_buffer, displacement_uv, 0.0).rgb * 2.0 - 1.0) * frame_data.displacement_params.x;
 }
 
@@ -413,7 +466,8 @@ void main() {
     vec3 morph = clipmap_morph(start_world_xz, grid, patch_data.scale);
     vec2 end_world_xz = start_world_xz - morph.xy * patch_data.scale;
     vec2 world_xz = mix(start_world_xz, end_world_xz, morph.z);
-    float height = patch_data.scale < frame_data.mesh_params.x ? sample_height_interpolated(world_xz)
+    float height = patch_data.scale < frame_data.mesh_params.x
+        ? sample_height_interpolated(world_xz)
         : mix(sample_height_nearest(start_world_xz), sample_height_nearest(end_world_xz), morph.z);
 #if !defined(T3D_FORWARD_DEPTH) || defined(T3D_FORWARD_NORMAL_ROUGHNESS)
     float normal_step = max(frame_data.mesh_params.x, patch_data.scale);
@@ -439,9 +493,7 @@ void main() {
     gl_Position = current_clip;
 #ifdef T3D_FORWARD_MOTION
     current_screen_position = current_clip;
-    previous_screen_position = frame_data.motion_params.x > 0.5 ?
-        frame_data.previous_view_projection[t3d_view_index()] * vec4(world_position, 1.0) : current_clip;
+    previous_screen_position =
+        frame_data.motion_params.x > 0.5 ? frame_data.previous_view_projection[t3d_view_index()] * vec4(world_position, 1.0) : current_clip;
 #endif
 }
-
-

@@ -1,10 +1,13 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "Terrain3DConstants.h"
+#include "core/terrain_3d_sync.h"
 #include "rendering/rd/terrain_3d_rd_clipmap_renderer.h"
 
 #include "core/logger.h"
+#include "rendering/rd/terrain_3d_rd_persistent.h"
 
-#include <cstring>
+#include <string.h>
 #include <godot_cpp/classes/rd_pipeline_color_blend_state.hpp>
 #include <godot_cpp/classes/rd_pipeline_color_blend_state_attachment.hpp>
 #include <godot_cpp/classes/rd_pipeline_depth_stencil_state.hpp>
@@ -19,11 +22,11 @@
 #include <godot_cpp/classes/render_scene_buffers.hpp>
 #include <godot_cpp/classes/render_scene_buffers_rd.hpp>
 #include <godot_cpp/classes/render_scene_data.hpp>
+#include <godot_cpp/variant/packed_int64_array.hpp>
 
 CLASS_NAME_STATIC( "Terrain3DRdClipmapRenderer" );
 
-static Ref<RDUniform> t3dRdBufferUniform( const int nBinding, const RenderingDevice::UniformType type, const RID& rRid )
-{
+static Ref<RDUniform> t3dRdBufferUniform( const int nBinding, const RenderingDevice::UniformType type, const RID &rRid ) {
 	Ref<RDUniform> uniform;
 	uniform.instantiate();
 	uniform->set_uniform_type( type );
@@ -32,8 +35,7 @@ static Ref<RDUniform> t3dRdBufferUniform( const int nBinding, const RenderingDev
 	return uniform;
 }
 
-static Ref<RDUniform> t3dRdTextureUniform( const int nBinding, const RID& rSampler, const RID& rTexture )
-{
+static Ref<RDUniform> t3dRdTextureUniform( const int nBinding, const RID &rSampler, const RID &rTexture ) {
 	Ref<RDUniform> uniform;
 	uniform.instantiate();
 	uniform->set_uniform_type( RenderingDevice::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE );
@@ -43,15 +45,24 @@ static Ref<RDUniform> t3dRdTextureUniform( const int nBinding, const RID& rSampl
 	return uniform;
 }
 
-static bool t3dRdAdoptResource( Terrain3DRdContext& rContext,
-		RenderingDevice *const pRd,
-		RID& rRid,
-		const String& rName,
-		const Terrain3DRdContext::ResourceType type,
-		const Terrain3DRdContext::MemoryCategory memoryCategory = Terrain3DRdContext::MEMORY_NONE,
-		const uint64_t nBytes = 0u )
-{
-	if ( rContext.registerResource( rRid, rName, type, memoryCategory, nBytes ) ) {
+static bool t3dRdSupportsDynamicBufferMetadata( const Ref<RDShaderSPIRV> &rShader ) {
+	return rShader.is_valid() && rShader->has_method( StringName( "set_dynamic_buffers" ) );
+}
+
+static void t3dRdMarkDynamicBuffers( const Ref<RDShaderSPIRV> &rShader, const PackedInt64Array &rDynamicBuffers ) {
+	if ( rShader.is_valid() ) {
+		rShader->call( StringName( "set_dynamic_buffers" ), rDynamicBuffers );
+	}
+}
+
+static bool t3dRdAdoptResource( Terrain3DRdContext &rContext,
+        RenderingDevice *const pRd,
+        RID &rRid,
+        const String &rName,
+        const Terrain3DRdContext::ResourceType type,
+        const Terrain3DRdContext::MemoryCategory memoryCategory = Terrain3DRdContext::MEMORY_NONE,
+        const uint64_t nBytes = 0u ) {
+	if ( rContext.registerResource( rRid, rName, type, memoryCategory, nBytes, Terrain3DRdContext::OWNER_TERRAIN ) ) {
 		return true;
 	}
 	if ( pRd && rRid.is_valid() ) {
@@ -62,52 +73,43 @@ static bool t3dRdAdoptResource( Terrain3DRdContext& rContext,
 }
 
 Terrain3DRdClipmapRenderer::Terrain3DRdClipmapRenderer( void ) :
-		m_context( Terrain3DRdContext::getShared() ), m_forwardLighting( m_context )
-{
+        m_context( Terrain3DRdContext::getShared() ), m_forwardLighting( m_context ) {
 }
 
-Terrain3DRdClipmapRenderer::~Terrain3DRdClipmapRenderer( void )
-{
+Terrain3DRdClipmapRenderer::~Terrain3DRdClipmapRenderer( void ) {
 	shutdown();
 }
 
-void Terrain3DRdClipmapRenderer::setError( const String& rError )
-{
+void Terrain3DRdClipmapRenderer::setError( const String &rError ) {
 	{
-		std::lock_guard<std::mutex> lock( m_diagnosticsMutex );
+		t3dScopedLock_t lock( m_diagnosticsMutex );
 		m_lastError = rError;
 	}
-	m_bHasError.store( true, std::memory_order_release );
+	m_bHasError.store( true, T3D_MEMORY_ORDER_RELEASE );
 	if ( !m_context.hasFailure() ) {
 		m_context.recordFailure( Terrain3DRdContext::FAILURE_RENDER_PASS, rError );
 	}
 	LOG( ERROR, "[RD alpha] ", rError );
 }
 
-void Terrain3DRdClipmapRenderer::clearError( void )
-{
-	m_bHasError.store( false, std::memory_order_release );
+void Terrain3DRdClipmapRenderer::clearError( void ) {
+	m_bHasError.store( false, T3D_MEMORY_ORDER_RELEASE );
 }
 
-String Terrain3DRdClipmapRenderer::getLastError( void ) const
-{
-	if ( !m_bHasError.load( std::memory_order_acquire ) ) {
+String Terrain3DRdClipmapRenderer::getLastError( void ) const {
+	if ( !m_bHasError.load( T3D_MEMORY_ORDER_ACQUIRE ) ) {
 		return String();
 	}
-	std::lock_guard<std::mutex> lock( m_diagnosticsMutex );
+	t3dScopedLock_t lock( m_diagnosticsMutex );
 	return m_lastError;
 }
 
-bool Terrain3DRdClipmapRenderer::prepareTopologies( const t3dClipmapGeometry_t& rLod0,
-		const t3dClipmapGeometry_t& rOuter )
-{
-	std::lock_guard<std::mutex> state_lock( m_resourceStateMutex );
-	return m_szTopology[LOD0_MESH].buildCpu( rLod0, "Lod0" ) &&
-			m_szTopology[OUTER_RING_MESH].buildCpu( rOuter, "Outer" );
+bool Terrain3DRdClipmapRenderer::prepareTopologies( const t3dClipmapGeometry_t &rLod0, const t3dClipmapGeometry_t &rOuter ) {
+	t3dScopedLock_t state_lock( m_resourceStateMutex );
+	return m_szTopology[LOD0_MESH].buildCpu( rLod0, "Lod0" ) && m_szTopology[OUTER_RING_MESH].buildCpu( rOuter, "Outer" );
 }
 
-bool Terrain3DRdClipmapRenderer::ensureDevice( void )
-{
+bool Terrain3DRdClipmapRenderer::ensureDevice( void ) {
 	if ( m_context.isReady() ) {
 		return true;
 	}
@@ -118,11 +120,10 @@ bool Terrain3DRdClipmapRenderer::ensureDevice( void )
 	return true;
 }
 
-bool Terrain3DRdClipmapRenderer::ensureShaders( const Ref<RDShaderSPIRV>& rNear,
-		const Ref<RDShaderSPIRV>& rMiddle,
-		const Ref<RDShaderSPIRV>& rFar,
-		const Ref<RDShaderSPIRV>& rCull )
-{
+bool Terrain3DRdClipmapRenderer::ensureShaders( const Ref<RDShaderSPIRV> &rNear,
+        const Ref<RDShaderSPIRV> &rMiddle,
+        const Ref<RDShaderSPIRV> &rFar,
+        const Ref<RDShaderSPIRV> &rCull ) {
 	RenderingDevice *const rd = m_context.getDevice();
 	if ( !rd ) {
 		return false;
@@ -151,29 +152,22 @@ bool Terrain3DRdClipmapRenderer::ensureShaders( const Ref<RDShaderSPIRV>& rNear,
 	if ( !m_hCullShader.is_valid() && rCull.is_valid() ) {
 		m_hCullShader = rd->shader_create_from_spirv( rCull );
 		if ( !m_hCullShader.is_valid() ) {
-			m_context.recordResourceCreationFailure( "T3D.Shader.Cull",
-					Terrain3DRdContext::RESOURCE_SHADER,
-					"Failed to create Terrain3D culling shader" );
+			m_context.recordResourceCreationFailure(
+			        "T3D.Shader.Cull", Terrain3DRdContext::RESOURCE_SHADER, "Failed to create Terrain3D culling shader" );
 			setError( "Failed to create Terrain3D culling shader" );
 			return false;
 		}
-		if ( !t3dRdAdoptResource(
-					 m_context, rd, m_hCullShader, "T3D.Shader.Cull", Terrain3DRdContext::RESOURCE_SHADER ) ) {
+		if ( !t3dRdAdoptResource( m_context, rd, m_hCullShader, "T3D.Shader.Cull", Terrain3DRdContext::RESOURCE_SHADER ) ) {
 			return false;
 		}
 		m_hCullPipeline = rd->compute_pipeline_create( m_hCullShader );
 		if ( !m_hCullPipeline.is_valid() ) {
-			m_context.recordResourceCreationFailure( "T3D.Pipeline.Cull",
-					Terrain3DRdContext::RESOURCE_COMPUTE_PIPELINE,
-					"Failed to create Terrain3D culling pipeline" );
+			m_context.recordResourceCreationFailure(
+			        "T3D.Pipeline.Cull", Terrain3DRdContext::RESOURCE_COMPUTE_PIPELINE, "Failed to create Terrain3D culling pipeline" );
 			setError( "Failed to create Terrain3D culling pipeline" );
 			return false;
 		}
-		if ( !t3dRdAdoptResource( m_context,
-					 rd,
-					 m_hCullPipeline,
-					 "T3D.Pipeline.Cull",
-					 Terrain3DRdContext::RESOURCE_COMPUTE_PIPELINE ) ) {
+		if ( !t3dRdAdoptResource( m_context, rd, m_hCullPipeline, "T3D.Pipeline.Cull", Terrain3DRdContext::RESOURCE_COMPUTE_PIPELINE ) ) {
 			return false;
 		}
 	}
@@ -181,8 +175,7 @@ bool Terrain3DRdClipmapRenderer::ensureShaders( const Ref<RDShaderSPIRV>& rNear,
 	return true;
 }
 
-bool Terrain3DRdClipmapRenderer::ensureForwardShaders( const t3dRdForwardShaderBundle_t& rShaders )
-{
+bool Terrain3DRdClipmapRenderer::ensureForwardShaders( const t3dRdForwardShaderBundle_t &rShaders ) {
 	RenderingDevice *const rd = m_context.getDevice();
 	if ( !rd ) {
 		return false;
@@ -198,35 +191,32 @@ bool Terrain3DRdClipmapRenderer::ensureForwardShaders( const t3dRdForwardShaderB
 				return false;
 			}
 			RID shader = rd->shader_create_from_spirv( spirv );
-			const String name = String( "T3D.Forward.Shader.Terrain." ) + String::num_int64( tier ) + "." +
-					String::num_int64( variant );
-			if ( !shader.is_valid() ||
-					!t3dRdAdoptResource( m_context, rd, shader, name, Terrain3DRdContext::RESOURCE_SHADER ) ) {
+			const String name = String( "T3D.Forward.Shader.Terrain." ) + String::num_int64( tier ) + "." + String::num_int64( variant );
+			if ( !shader.is_valid() || !t3dRdAdoptResource( m_context, rd, shader, name, Terrain3DRdContext::RESOURCE_SHADER ) ) {
 				setError( "Failed to create Terrain3D Forward+ terrain shader variant" );
 				return false;
 			}
 			m_hszForwardShaders[tier][variant] = shader;
 		}
 	}
-	m_forwardPipelines.reserve( 64u );
 	return true;
 }
 
-void Terrain3DRdClipmapRenderer::freeForwardPipelines( void )
-{
-	for ( t3dRdForwardPipelineEntry_t& entry : m_forwardPipelines ) {
-		for ( RID& pipeline : entry.m_hszPipelines ) {
+void Terrain3DRdClipmapRenderer::freeForwardPipelines( void ) {
+	for ( uint32_t i = 0u; i < m_nForwardPipelineCount; ++i ) {
+		for ( size_t iPipeline = 0u; iPipeline < T3D_ARRAY_COUNT( m_szForwardPipelines[i].m_hszPipelines ); iPipeline++ ) {
+			RID &pipeline = ( m_szForwardPipelines[i].m_hszPipelines )[iPipeline];
 			m_context.freeResource( pipeline );
 		}
+		m_szForwardPipelines[i] = t3dRdForwardPipelineEntry_t{};
 	}
-	m_forwardPipelines.clear();
+	m_nForwardPipelineCount = 0u;
 	m_nPipelineEvictCursor = 0u;
 	m_bLastForwardPipelineKeyValid = false;
 }
 
-bool Terrain3DRdClipmapRenderer::selectForwardVariant( const t3dRdForwardPassContext_t& rContext,
-		t3dRdForwardShaderVariant_t& rVariant ) const
-{
+bool Terrain3DRdClipmapRenderer::selectForwardVariant(
+        const t3dRdForwardPassContext_t &rContext, t3dRdForwardShaderVariant_t &rVariant ) const {
 	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW ) {
 		if ( rContext.m_nativePassMode != T3D_RD_FORWARD_NATIVE_PASS_SHADOW ) {
 			return false;
@@ -249,50 +239,45 @@ bool Terrain3DRdClipmapRenderer::selectForwardVariant( const t3dRdForwardPassCon
 				return false;
 		}
 	}
-	if ( ( rContext.m_passKind != T3D_RD_FORWARD_PASS_OPAQUE && rContext.m_passKind != T3D_RD_FORWARD_PASS_MOTION ) ||
-			rContext.m_nativePassMode != T3D_RD_FORWARD_NATIVE_PASS_COLOR ) {
+	if ( ( rContext.m_passKind != T3D_RD_FORWARD_PASS_OPAQUE && rContext.m_passKind != T3D_RD_FORWARD_PASS_MOTION )
+	        || rContext.m_nativePassMode != T3D_RD_FORWARD_NATIVE_PASS_COLOR ) {
 		return false;
 	}
 	const bool specular = ( rContext.m_nColorPassFlags & ( 1u << 1u ) ) != 0u;
-	const bool motion =
-			rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION || ( rContext.m_nColorPassFlags & ( 1u << 3u ) ) != 0u;
+	const bool motion = rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION || ( rContext.m_nColorPassFlags & ( 1u << 3u ) ) != 0u;
 	const bool radiance_array = ( rContext.m_nEnvironmentFlags & T3D_RD_FORWARD_ENV_RADIANCE_OCTMAP_ARRAY ) != 0u;
 	if ( radiance_array ) {
 		rVariant = specular ? ( motion ? T3D_RD_FORWARD_SHADER_COLOR_SPECULAR_MOTION_RADIANCE_ARRAY
-									   : T3D_RD_FORWARD_SHADER_COLOR_SPECULAR_RADIANCE_ARRAY )
-							: ( motion ? T3D_RD_FORWARD_SHADER_COLOR_MOTION_RADIANCE_ARRAY
-									   : T3D_RD_FORWARD_SHADER_COLOR_RADIANCE_ARRAY );
+		                               : T3D_RD_FORWARD_SHADER_COLOR_SPECULAR_RADIANCE_ARRAY )
+		                    : ( motion ? T3D_RD_FORWARD_SHADER_COLOR_MOTION_RADIANCE_ARRAY : T3D_RD_FORWARD_SHADER_COLOR_RADIANCE_ARRAY );
 	} else {
-		rVariant = specular
-				? ( motion ? T3D_RD_FORWARD_SHADER_COLOR_SPECULAR_MOTION : T3D_RD_FORWARD_SHADER_COLOR_SPECULAR )
-				: ( motion ? T3D_RD_FORWARD_SHADER_COLOR_MOTION : T3D_RD_FORWARD_SHADER_COLOR );
+		rVariant = specular ? ( motion ? T3D_RD_FORWARD_SHADER_COLOR_SPECULAR_MOTION : T3D_RD_FORWARD_SHADER_COLOR_SPECULAR )
+		                    : ( motion ? T3D_RD_FORWARD_SHADER_COLOR_MOTION : T3D_RD_FORWARD_SHADER_COLOR );
 	}
 	return true;
 }
 
 const Terrain3DRdClipmapRenderer::t3dRdForwardPipelineEntry_t *Terrain3DRdClipmapRenderer::findForwardPipeline(
-		const t3dRdForwardPipelineKey_t& rKey ) const
-{
-	for ( const t3dRdForwardPipelineEntry_t& entry : m_forwardPipelines ) {
-		if ( entry.m_key == rKey ) {
-			return &entry;
+        const t3dRdForwardPipelineKey_t &rKey ) const {
+	for ( uint32_t i = 0u; i < m_nForwardPipelineCount; ++i ) {
+		if ( m_szForwardPipelines[i].m_key == rKey ) {
+			return &m_szForwardPipelines[i];
 		}
 	}
-	return nullptr;
+	return NULL;
 }
 
-static void t3dRdApplyShadowCasterPolicy( const t3dRdFrameSnapshot_t& rSnapshot, t3dRdCpuCullResult_t& rResult )
-{
+static void t3dRdApplyShadowCasterPolicy( const t3dRdFrameSnapshot_t &rSnapshot, t3dRdCpuCullResult_t &rResult ) {
 	uint32_t visible_count = 0u;
 	for ( uint32_t group = 0u; group < s_nRdDrawGroupCount; ++group ) {
-		t3dRdIndexedIndirectCommand_t& command = rResult.m_szCommands[group];
+		t3dRdIndexedIndirectCommand_t &command = rResult.m_szCommands[group];
 		uint32_t write = 0u;
 		for ( uint32_t read = 0u; read < command.m_nInstanceCount; ++read ) {
 			const uint32_t patch_index = rResult.m_szVisibleIndices[group * s_nMaxClipmapLevels + read];
 			if ( patch_index >= rSnapshot.m_nPatchCount ) {
 				continue;
 			}
-			const t3dRdPatch_t& patch = rSnapshot.m_szPatches[patch_index];
+			const t3dRdPatch_t &patch = rSnapshot.m_szPatches[patch_index];
 			bool enabled = true;
 			int32_t limit = rSnapshot.m_nShadowLodCount;
 			if ( patch.m_nTier == 0u ) {
@@ -311,7 +296,7 @@ static void t3dRdApplyShadowCasterPolicy( const t3dRdFrameSnapshot_t& rSnapshot,
 					limit = rSnapshot.m_nFarShadowLodCount;
 				}
 			}
-			if ( !enabled || limit <= 0 || patch.m_nLod >= (uint32_t)( limit ) ) {
+			if ( !enabled || limit <= 0 || patch.m_nLod >= ( uint32_t )( limit ) ) {
 				continue;
 			}
 			rResult.m_szVisibleIndices[group * s_nMaxClipmapLevels + write++] = patch_index;
@@ -322,9 +307,8 @@ static void t3dRdApplyShadowCasterPolicy( const t3dRdFrameSnapshot_t& rSnapshot,
 	rResult.m_nVisibleCount = visible_count;
 }
 
-bool Terrain3DRdClipmapRenderer::ensureForwardPipelines( const t3dRdForwardPassContext_t& rContext,
-		const t3dRdForwardShaderVariant_t variant )
-{
+bool Terrain3DRdClipmapRenderer::ensureForwardPipelines(
+        const t3dRdForwardPassContext_t &rContext, const t3dRdForwardShaderVariant_t variant ) {
 	RenderingDevice *const rd = m_context.getDevice();
 	if ( !rd || rContext.m_nFramebufferFormat < 0 ) {
 		return false;
@@ -334,30 +318,28 @@ bool Terrain3DRdClipmapRenderer::ensureForwardPipelines( const t3dRdForwardPassC
 	key.m_variant = variant;
 	key.m_passKind = rContext.m_passKind;
 	key.m_samples = rd->framebuffer_format_get_texture_samples( rContext.m_nFramebufferFormat, 0u );
-	if ( ( 1u << (uint32_t)( key.m_samples ) ) != rContext.m_nSampleCount ) {
+	if ( ( 1u << ( uint32_t )( key.m_samples ) ) != rContext.m_nSampleCount ) {
 		setError( "Terrain3D Forward+ sample-count metadata does not match native framebuffer format" );
 		return false;
 	}
 	key.m_nViewCount = rContext.m_nViewCount;
 	key.m_bReverseCull = rContext.m_bReverseCull;
-	key.m_bDepthPrepassActive = ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE ||
-										rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION ) &&
-			rContext.m_bDepthPrepassActive;
+	key.m_bDepthPrepassActive = ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION )
+	        && rContext.m_bDepthPrepassActive;
 	if ( findForwardPipeline( key ) ) {
 		m_lastForwardPipelineKey = key;
 		m_bLastForwardPipelineKeyValid = true;
 		return true;
 	}
-	const bool replace_pipeline = m_forwardPipelines.size() >= 64u;
-	const uint32_t replace_index = replace_pipeline ? ( m_nPipelineEvictCursor++ % 64u ) : UINT32_MAX;
+	const bool replace_pipeline = m_nForwardPipelineCount >= s_nForwardPipelineCapacity;
+	const uint32_t replace_index = replace_pipeline ? ( m_nPipelineEvictCursor++ % s_nForwardPipelineCapacity ) : UINT32_MAX;
 	t3dRdForwardPipelineEntry_t entry;
 	entry.m_key = key;
 	Ref<RDPipelineRasterizationState> raster;
 	raster.instantiate();
 	raster->set_cull_mode( rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW
-					? ( rContext.m_bReverseCull ? RenderingDevice::POLYGON_CULL_FRONT
-												: RenderingDevice::POLYGON_CULL_BACK )
-					: RenderingDevice::POLYGON_CULL_DISABLED );
+	                ? ( rContext.m_bReverseCull ? RenderingDevice::POLYGON_CULL_FRONT : RenderingDevice::POLYGON_CULL_BACK )
+	                : RenderingDevice::POLYGON_CULL_DISABLED );
 	raster->set_front_face( RenderingDevice::POLYGON_FRONT_FACE_CLOCKWISE );
 	Ref<RDPipelineMultisampleState> multisample;
 	multisample.instantiate();
@@ -366,8 +348,8 @@ bool Terrain3DRdClipmapRenderer::ensureForwardPipelines( const t3dRdForwardPassC
 	depth.instantiate();
 	depth->set_enable_depth_test( true );
 	depth->set_enable_depth_write( !key.m_bDepthPrepassActive );
-	depth->set_depth_compare_operator( key.m_bDepthPrepassActive ? RenderingDevice::COMPARE_OP_EQUAL
-																 : RenderingDevice::COMPARE_OP_GREATER_OR_EQUAL );
+	depth->set_depth_compare_operator(
+	        key.m_bDepthPrepassActive ? RenderingDevice::COMPARE_OP_EQUAL : RenderingDevice::COMPARE_OP_GREATER_OR_EQUAL );
 	Ref<RDPipelineColorBlendState> blend;
 	blend.instantiate();
 	uint32_t blend_count = 0u;
@@ -392,22 +374,18 @@ bool Terrain3DRdClipmapRenderer::ensureForwardPipelines( const t3dRdForwardPassC
 	m_context.beginResourceRebuild();
 	for ( uint32_t tier = 0u; tier < 3u; ++tier ) {
 		entry.m_hszPipelines[tier] = rd->render_pipeline_create( m_hszForwardShaders[tier][variant],
-				rContext.m_nFramebufferFormat,
-				m_nVertexFormat,
-				RenderingDevice::RENDER_PRIMITIVE_TRIANGLES,
-				raster,
-				multisample,
-				depth,
-				blend );
-		const String name = String( "T3D.Forward.Pipeline.Terrain." ) + String::num_int64( variant ) + "." +
-				String::num_int64( tier );
-		if ( !entry.m_hszPipelines[tier].is_valid() ||
-				!t3dRdAdoptResource( m_context,
-						rd,
-						entry.m_hszPipelines[tier],
-						name,
-						Terrain3DRdContext::RESOURCE_RASTER_PIPELINE ) ) {
-			for ( RID& pipeline : entry.m_hszPipelines ) {
+		        rContext.m_nFramebufferFormat,
+		        m_nVertexFormat,
+		        RenderingDevice::RENDER_PRIMITIVE_TRIANGLES,
+		        raster,
+		        multisample,
+		        depth,
+		        blend );
+		const String name = String( "T3D.Forward.Pipeline.Terrain." ) + String::num_int64( variant ) + "." + String::num_int64( tier );
+		if ( !entry.m_hszPipelines[tier].is_valid()
+		        || !t3dRdAdoptResource( m_context, rd, entry.m_hszPipelines[tier], name, Terrain3DRdContext::RESOURCE_RASTER_PIPELINE ) ) {
+			for ( size_t iPipeline = 0u; iPipeline < T3D_ARRAY_COUNT( entry.m_hszPipelines ); iPipeline++ ) {
+				RID &pipeline = ( entry.m_hszPipelines )[iPipeline];
 				m_context.freeResource( pipeline );
 			}
 			m_context.endResourceRebuild();
@@ -417,18 +395,20 @@ bool Terrain3DRdClipmapRenderer::ensureForwardPipelines( const t3dRdForwardPassC
 	}
 	m_context.endResourceRebuild();
 	if ( replace_pipeline ) {
-		for ( RID &pipeline : m_forwardPipelines[replace_index].m_hszPipelines ) m_context.freeResource( pipeline );
-		m_forwardPipelines[replace_index] = entry;
+		for ( size_t iPipeline = 0u; iPipeline < T3D_ARRAY_COUNT( m_szForwardPipelines[replace_index].m_hszPipelines ); iPipeline++ ) {
+			RID &pipeline = ( m_szForwardPipelines[replace_index].m_hszPipelines )[iPipeline];
+			m_context.freeResource( pipeline );
+		}
+		m_szForwardPipelines[replace_index] = entry;
 	} else {
-		m_forwardPipelines.push_back( entry );
+		m_szForwardPipelines[m_nForwardPipelineCount++] = entry;
 	}
 	m_lastForwardPipelineKey = key;
 	m_bLastForwardPipelineKeyValid = true;
 	return true;
 }
 
-bool Terrain3DRdClipmapRenderer::ensureSamplers( void )
-{
+bool Terrain3DRdClipmapRenderer::ensureSamplers( void ) {
 	RenderingDevice *const rd = m_context.getDevice();
 	if ( !rd ) {
 		return false;
@@ -448,8 +428,7 @@ bool Terrain3DRdClipmapRenderer::ensureSamplers( void )
 			setError( "Failed to create terrain data sampler" );
 			return false;
 		}
-		if ( !t3dRdAdoptResource(
-					 m_context, rd, m_hTerrainSampler, "T3D.Sampler.Terrain", Terrain3DRdContext::RESOURCE_SAMPLER ) ) {
+		if ( !t3dRdAdoptResource( m_context, rd, m_hTerrainSampler, "T3D.Sampler.Terrain", Terrain3DRdContext::RESOURCE_SAMPLER ) ) {
 			return false;
 		}
 	}
@@ -459,12 +438,9 @@ bool Terrain3DRdClipmapRenderer::ensureSamplers( void )
 		if ( !m_hszMaterialSamplers[i].is_valid() ) {
 			Ref<RDSamplerState> state;
 			state.instantiate();
-			state->set_mag_filter(
-					bNearest ? RenderingDevice::SAMPLER_FILTER_NEAREST : RenderingDevice::SAMPLER_FILTER_LINEAR );
-			state->set_min_filter(
-					bNearest ? RenderingDevice::SAMPLER_FILTER_NEAREST : RenderingDevice::SAMPLER_FILTER_LINEAR );
-			state->set_mip_filter(
-					bNearest ? RenderingDevice::SAMPLER_FILTER_NEAREST : RenderingDevice::SAMPLER_FILTER_LINEAR );
+			state->set_mag_filter( bNearest ? RenderingDevice::SAMPLER_FILTER_NEAREST : RenderingDevice::SAMPLER_FILTER_LINEAR );
+			state->set_min_filter( bNearest ? RenderingDevice::SAMPLER_FILTER_NEAREST : RenderingDevice::SAMPLER_FILTER_LINEAR );
+			state->set_mip_filter( bNearest ? RenderingDevice::SAMPLER_FILTER_NEAREST : RenderingDevice::SAMPLER_FILTER_LINEAR );
 			state->set_use_anisotropy( bAnisotropic );
 			state->set_anisotropy_max( bAnisotropic ? 16.0f : 1.0f );
 			state->set_repeat_u( RenderingDevice::SAMPLER_REPEAT_MODE_REPEAT );
@@ -477,20 +453,16 @@ bool Terrain3DRdClipmapRenderer::ensureSamplers( void )
 				setError( "Failed to create material sampler" );
 				return false;
 			}
-			if ( !t3dRdAdoptResource(
-						 m_context, rd, m_hszMaterialSamplers[i], name, Terrain3DRdContext::RESOURCE_SAMPLER ) ) {
+			if ( !t3dRdAdoptResource( m_context, rd, m_hszMaterialSamplers[i], name, Terrain3DRdContext::RESOURCE_SAMPLER ) ) {
 				return false;
 			}
 		}
 		if ( !m_hszMapSamplers[i].is_valid() ) {
 			Ref<RDSamplerState> map_state;
 			map_state.instantiate();
-			map_state->set_mag_filter(
-					bNearest ? RenderingDevice::SAMPLER_FILTER_NEAREST : RenderingDevice::SAMPLER_FILTER_LINEAR );
-			map_state->set_min_filter(
-					bNearest ? RenderingDevice::SAMPLER_FILTER_NEAREST : RenderingDevice::SAMPLER_FILTER_LINEAR );
-			map_state->set_mip_filter(
-					bNearest ? RenderingDevice::SAMPLER_FILTER_NEAREST : RenderingDevice::SAMPLER_FILTER_LINEAR );
+			map_state->set_mag_filter( bNearest ? RenderingDevice::SAMPLER_FILTER_NEAREST : RenderingDevice::SAMPLER_FILTER_LINEAR );
+			map_state->set_min_filter( bNearest ? RenderingDevice::SAMPLER_FILTER_NEAREST : RenderingDevice::SAMPLER_FILTER_LINEAR );
+			map_state->set_mip_filter( bNearest ? RenderingDevice::SAMPLER_FILTER_NEAREST : RenderingDevice::SAMPLER_FILTER_LINEAR );
 			map_state->set_use_anisotropy( bAnisotropic );
 			map_state->set_anisotropy_max( bAnisotropic ? 16.0f : 1.0f );
 			map_state->set_repeat_u( RenderingDevice::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE );
@@ -503,8 +475,7 @@ bool Terrain3DRdClipmapRenderer::ensureSamplers( void )
 				setError( "Failed to create terrain map sampler" );
 				return false;
 			}
-			if ( !t3dRdAdoptResource(
-						 m_context, rd, m_hszMapSamplers[i], map_name, Terrain3DRdContext::RESOURCE_SAMPLER ) ) {
+			if ( !t3dRdAdoptResource( m_context, rd, m_hszMapSamplers[i], map_name, Terrain3DRdContext::RESOURCE_SAMPLER ) ) {
 				return false;
 			}
 		}
@@ -512,8 +483,7 @@ bool Terrain3DRdClipmapRenderer::ensureSamplers( void )
 	return true;
 }
 
-bool Terrain3DRdClipmapRenderer::ensureFallbackTextures( void )
-{
+bool Terrain3DRdClipmapRenderer::ensureFallbackTextures( void ) {
 	if ( m_hFallbackDisplacementTexture.is_valid() && m_hFallbackArrayTexture.is_valid() ) {
 		return true;
 	}
@@ -536,23 +506,22 @@ bool Terrain3DRdClipmapRenderer::ensureFallbackTextures( void )
 	PackedByteArray texel;
 	texel.resize( 4 * sizeof( float ) );
 	const float neutral[4] = { 0.5f, 0.5f, 0.5f, 1.0f };
-	std::memcpy( texel.ptrw(), neutral, sizeof( neutral ) );
+	memcpy( texel.ptrw(), neutral, sizeof( neutral ) );
 	TypedArray<PackedByteArray> initial_data;
 	initial_data.push_back( texel );
 	m_hFallbackDisplacementTexture = rd->texture_create( format2d, view, initial_data );
 	if ( !m_hFallbackDisplacementTexture.is_valid() ) {
-		m_context.recordResourceCreationFailure(
-				"T3D.Texture.DisplacementFallback", Terrain3DRdContext::RESOURCE_TEXTURE );
+		m_context.recordResourceCreationFailure( "T3D.Texture.DisplacementFallback", Terrain3DRdContext::RESOURCE_TEXTURE );
 		setError( "Failed to create neutral Terrain3D displacement texture" );
 		return false;
 	}
 	if ( !t3dRdAdoptResource( m_context,
-				 rd,
-				 m_hFallbackDisplacementTexture,
-				 "T3D.Texture.DisplacementFallback",
-				 Terrain3DRdContext::RESOURCE_TEXTURE,
-				 Terrain3DRdContext::MEMORY_TERRAIN_TEXTURE,
-				 sizeof( neutral ) ) ) {
+	             rd,
+	             m_hFallbackDisplacementTexture,
+	             "T3D.Texture.DisplacementFallback",
+	             Terrain3DRdContext::RESOURCE_TEXTURE,
+	             Terrain3DRdContext::MEMORY_TERRAIN_TEXTURE,
+	             sizeof( neutral ) ) ) {
 		return false;
 	}
 	Ref<RDTextureFormat> format_array;
@@ -572,144 +541,156 @@ bool Terrain3DRdClipmapRenderer::ensureFallbackTextures( void )
 		return false;
 	}
 	if ( !t3dRdAdoptResource( m_context,
-				 rd,
-				 m_hFallbackArrayTexture,
-				 "T3D.Texture.ArrayFallback",
-				 Terrain3DRdContext::RESOURCE_TEXTURE,
-				 Terrain3DRdContext::MEMORY_TERRAIN_TEXTURE,
-				 sizeof( neutral ) ) ) {
+	             rd,
+	             m_hFallbackArrayTexture,
+	             "T3D.Texture.ArrayFallback",
+	             Terrain3DRdContext::RESOURCE_TEXTURE,
+	             Terrain3DRdContext::MEMORY_TERRAIN_TEXTURE,
+	             sizeof( neutral ) ) ) {
 		return false;
 	}
 	return true;
 }
 
-bool Terrain3DRdClipmapRenderer::ensureBuffers( void )
-{
+bool Terrain3DRdClipmapRenderer::ensureBuffers( void ) {
 	RenderingDevice *const rd = m_context.getDevice();
 	if ( !rd ) {
 		return false;
 	}
-	const uint32_t frame_bytes = (uint32_t)( sizeof( t3dRdFrameUniforms_t ) );
-	const uint32_t material_bytes = (uint32_t)( sizeof( t3dRdMaterialLayer_t ) * s_nRdMaterialLayerCount );
-	const uint32_t material_config_bytes = (uint32_t)( sizeof( t3dRdMaterialConfig_t ) );
-	const uint32_t editor_overlay_bytes = (uint32_t)( sizeof( t3dRdEditorOverlayConfig_t ) );
-	const uint32_t patch_bytes = (uint32_t)( sizeof( t3dRdPatch_t ) * s_nMaxClipmapLevels );
-	const uint32_t visible_bytes = (uint32_t)( sizeof( uint32_t ) * s_nRdDrawGroupCount * s_nMaxClipmapLevels );
-	const uint32_t indirect_bytes = (uint32_t)( sizeof( t3dRdIndexedIndirectCommand_t ) * s_nRdDrawGroupCount );
+	const uint32_t frame_bytes = ( uint32_t )( sizeof( t3dRdFrameUniforms_t ) );
+	const uint32_t material_bytes = ( uint32_t )( sizeof( t3dRdMaterialLayer_t ) * s_nRdMaterialLayerCount );
+	const uint32_t material_config_bytes = ( uint32_t )( sizeof( t3dRdMaterialConfig_t ) );
+	const uint32_t editor_overlay_bytes = ( uint32_t )( sizeof( t3dRdEditorOverlayConfig_t ) );
+	const uint32_t patch_bytes = ( uint32_t )( sizeof( t3dRdPatch_t ) * s_nMaxClipmapLevels );
+	const uint32_t visible_bytes = ( uint32_t )( sizeof( uint32_t ) * s_nRdDrawGroupCount * s_nMaxClipmapLevels );
+	const uint32_t indirect_bytes = ( uint32_t )( sizeof( t3dRdIndexedIndirectCommand_t ) * s_nRdDrawGroupCount );
 	if ( !m_hFrameUniformBuffer.is_valid() ) {
-		m_hFrameUniformBuffer = rd->uniform_buffer_create( frame_bytes );
+		const BitField<RenderingDevice::BufferCreationBits> creation_bits =
+		        m_bPersistentCpuBuffers ? t3dRdPersistentCreationBits() : BitField<RenderingDevice::BufferCreationBits>( 0 );
+		m_hFrameUniformBuffer = rd->uniform_buffer_create( frame_bytes, PackedByteArray(), creation_bits );
 		if ( !m_hFrameUniformBuffer.is_valid() ) {
 			m_context.recordResourceCreationFailure( "T3D.Frame.UBO", Terrain3DRdContext::RESOURCE_UNIFORM_BUFFER );
 			return false;
 		}
 		if ( !t3dRdAdoptResource( m_context,
-					 rd,
-					 m_hFrameUniformBuffer,
-					 "T3D.Frame.UBO",
-					 Terrain3DRdContext::RESOURCE_UNIFORM_BUFFER,
-					 Terrain3DRdContext::MEMORY_UNIFORM,
-					 frame_bytes ) ) {
+		             rd,
+		             m_hFrameUniformBuffer,
+		             "T3D.Frame.UBO",
+		             Terrain3DRdContext::RESOURCE_UNIFORM_BUFFER,
+		             Terrain3DRdContext::MEMORY_UNIFORM,
+		             frame_bytes ) ) {
 			return false;
 		}
 	}
 	if ( !m_hMaterialBuffer.is_valid() ) {
-		m_hMaterialBuffer = rd->storage_buffer_create( material_bytes );
+		m_bMaterialUploadInitialized = false;
+		m_hMaterialBuffer = rd->storage_buffer_create( material_bytes,
+		        PackedByteArray(),
+		        BitField<RenderingDevice::StorageBufferUsage>( 0 ),
+		        m_bPersistentCpuBuffers ? t3dRdPersistentCreationBits() : BitField<RenderingDevice::BufferCreationBits>( 0 ) );
 		if ( !m_hMaterialBuffer.is_valid() ) {
 			m_context.recordResourceCreationFailure( "T3D.Materials", Terrain3DRdContext::RESOURCE_STORAGE_BUFFER );
 			return false;
 		}
 		if ( !t3dRdAdoptResource( m_context,
-					 rd,
-					 m_hMaterialBuffer,
-					 "T3D.Materials",
-					 Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
-					 Terrain3DRdContext::MEMORY_MATERIAL_TABLE,
-					 material_bytes ) ) {
+		             rd,
+		             m_hMaterialBuffer,
+		             "T3D.Materials",
+		             Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
+		             Terrain3DRdContext::MEMORY_MATERIAL_TABLE,
+		             material_bytes ) ) {
 			return false;
 		}
 	}
 	if ( !m_hMaterialConfigBuffer.is_valid() ) {
-		m_hMaterialConfigBuffer = rd->storage_buffer_create( material_config_bytes );
+		m_bMaterialUploadInitialized = false;
+		m_hMaterialConfigBuffer = rd->storage_buffer_create( material_config_bytes,
+		        PackedByteArray(),
+		        BitField<RenderingDevice::StorageBufferUsage>( 0 ),
+		        m_bPersistentCpuBuffers ? t3dRdPersistentCreationBits() : BitField<RenderingDevice::BufferCreationBits>( 0 ) );
 		if ( !m_hMaterialConfigBuffer.is_valid() ) {
-			m_context.recordResourceCreationFailure(
-					"T3D.MaterialConfig", Terrain3DRdContext::RESOURCE_STORAGE_BUFFER );
+			m_context.recordResourceCreationFailure( "T3D.MaterialConfig", Terrain3DRdContext::RESOURCE_STORAGE_BUFFER );
 			return false;
 		}
 		if ( !t3dRdAdoptResource( m_context,
-					 rd,
-					 m_hMaterialConfigBuffer,
-					 "T3D.MaterialConfig",
-					 Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
-					 Terrain3DRdContext::MEMORY_MATERIAL_TABLE,
-					 material_config_bytes ) ) {
+		             rd,
+		             m_hMaterialConfigBuffer,
+		             "T3D.MaterialConfig",
+		             Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
+		             Terrain3DRdContext::MEMORY_MATERIAL_TABLE,
+		             material_config_bytes ) ) {
 			return false;
 		}
 	}
 	if ( !m_hEditorOverlayBuffer.is_valid() ) {
-		m_hEditorOverlayBuffer = rd->storage_buffer_create( editor_overlay_bytes );
+		m_hEditorOverlayBuffer = rd->storage_buffer_create( editor_overlay_bytes,
+		        PackedByteArray(),
+		        BitField<RenderingDevice::StorageBufferUsage>( 0 ),
+		        m_bPersistentCpuBuffers ? t3dRdPersistentCreationBits() : BitField<RenderingDevice::BufferCreationBits>( 0 ) );
 		if ( !m_hEditorOverlayBuffer.is_valid() ) {
 			m_context.recordResourceCreationFailure( "T3D.EditorOverlay", Terrain3DRdContext::RESOURCE_STORAGE_BUFFER );
 			return false;
 		}
 		if ( !t3dRdAdoptResource( m_context,
-					 rd,
-					 m_hEditorOverlayBuffer,
-					 "T3D.EditorOverlay",
-					 Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
-					 Terrain3DRdContext::MEMORY_MATERIAL_TABLE,
-					 editor_overlay_bytes ) ) {
+		             rd,
+		             m_hEditorOverlayBuffer,
+		             "T3D.EditorOverlay",
+		             Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
+		             Terrain3DRdContext::MEMORY_MATERIAL_TABLE,
+		             editor_overlay_bytes ) ) {
 			return false;
 		}
 	}
 	if ( !m_hPatchBuffer.is_valid() ) {
-		m_hPatchBuffer = rd->storage_buffer_create( patch_bytes );
+		m_bPatchUploadInitialized = false;
+		m_hPatchBuffer = rd->storage_buffer_create( patch_bytes,
+		        PackedByteArray(),
+		        BitField<RenderingDevice::StorageBufferUsage>( 0 ),
+		        m_bPersistentCpuBuffers ? t3dRdPersistentCreationBits() : BitField<RenderingDevice::BufferCreationBits>( 0 ) );
 		if ( !m_hPatchBuffer.is_valid() ) {
-			m_context.recordResourceCreationFailure(
-					"T3D.Clipmap.Patches", Terrain3DRdContext::RESOURCE_STORAGE_BUFFER );
+			m_context.recordResourceCreationFailure( "T3D.Clipmap.Patches", Terrain3DRdContext::RESOURCE_STORAGE_BUFFER );
 			return false;
 		}
 		if ( !t3dRdAdoptResource( m_context,
-					 rd,
-					 m_hPatchBuffer,
-					 "T3D.Clipmap.Patches",
-					 Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
-					 Terrain3DRdContext::MEMORY_PATCH,
-					 patch_bytes ) ) {
+		             rd,
+		             m_hPatchBuffer,
+		             "T3D.Clipmap.Patches",
+		             Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
+		             Terrain3DRdContext::MEMORY_PATCH,
+		             patch_bytes ) ) {
 			return false;
 		}
 	}
 	if ( !m_hVisibleBuffer.is_valid() ) {
 		m_hVisibleBuffer = rd->storage_buffer_create( visible_bytes );
 		if ( !m_hVisibleBuffer.is_valid() ) {
-			m_context.recordResourceCreationFailure(
-					"T3D.Clipmap.Visible", Terrain3DRdContext::RESOURCE_CULLING_BUFFER );
+			m_context.recordResourceCreationFailure( "T3D.Clipmap.Visible", Terrain3DRdContext::RESOURCE_CULLING_BUFFER );
 			return false;
 		}
 		if ( !t3dRdAdoptResource( m_context,
-					 rd,
-					 m_hVisibleBuffer,
-					 "T3D.Clipmap.Visible",
-					 Terrain3DRdContext::RESOURCE_CULLING_BUFFER,
-					 Terrain3DRdContext::MEMORY_SCRATCH,
-					 visible_bytes ) ) {
+		             rd,
+		             m_hVisibleBuffer,
+		             "T3D.Clipmap.Visible",
+		             Terrain3DRdContext::RESOURCE_CULLING_BUFFER,
+		             Terrain3DRdContext::MEMORY_SCRATCH,
+		             visible_bytes ) ) {
 			return false;
 		}
 	}
 	if ( !m_hIndirectBuffer.is_valid() ) {
-		m_hIndirectBuffer = rd->storage_buffer_create(
-				indirect_bytes, PackedByteArray(), RenderingDevice::STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT );
+		m_hIndirectBuffer =
+		        rd->storage_buffer_create( indirect_bytes, PackedByteArray(), RenderingDevice::STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT );
 		if ( !m_hIndirectBuffer.is_valid() ) {
-			m_context.recordResourceCreationFailure(
-					"T3D.Clipmap.Indirect", Terrain3DRdContext::RESOURCE_INDIRECT_BUFFER );
+			m_context.recordResourceCreationFailure( "T3D.Clipmap.Indirect", Terrain3DRdContext::RESOURCE_INDIRECT_BUFFER );
 			return false;
 		}
 		if ( !t3dRdAdoptResource( m_context,
-					 rd,
-					 m_hIndirectBuffer,
-					 "T3D.Clipmap.Indirect",
-					 Terrain3DRdContext::RESOURCE_INDIRECT_BUFFER,
-					 Terrain3DRdContext::MEMORY_INDIRECT,
-					 indirect_bytes ) ) {
+		             rd,
+		             m_hIndirectBuffer,
+		             "T3D.Clipmap.Indirect",
+		             Terrain3DRdContext::RESOURCE_INDIRECT_BUFFER,
+		             Terrain3DRdContext::MEMORY_INDIRECT,
+		             indirect_bytes ) ) {
 			return false;
 		}
 	}
@@ -725,8 +706,7 @@ bool Terrain3DRdClipmapRenderer::ensureBuffers( void )
 	return true;
 }
 
-bool Terrain3DRdClipmapRenderer::ensureRegionMapBuffer( const uint32_t nRequiredBytes )
-{
+bool Terrain3DRdClipmapRenderer::ensureRegionMapBuffer( const uint32_t nRequiredBytes ) {
 	if ( nRequiredBytes == 0u ) {
 		return false;
 	}
@@ -736,7 +716,10 @@ bool Terrain3DRdClipmapRenderer::ensureRegionMapBuffer( const uint32_t nRequired
 	freeUniformSets();
 	m_context.freeResource( m_hRegionMapBuffer, m_nRegionMapCapacityBytes );
 	m_nRegionMapCapacityBytes = nRequiredBytes;
-	m_hRegionMapBuffer = m_context.getDevice()->storage_buffer_create( m_nRegionMapCapacityBytes );
+	m_hRegionMapBuffer = m_context.getDevice()->storage_buffer_create( m_nRegionMapCapacityBytes,
+	        PackedByteArray(),
+	        BitField<RenderingDevice::StorageBufferUsage>( 0 ),
+	        m_bPersistentCpuBuffers ? t3dRdPersistentCreationBits() : BitField<RenderingDevice::BufferCreationBits>( 0 ) );
 	if ( !m_hRegionMapBuffer.is_valid() ) {
 		m_nRegionMapCapacityBytes = 0u;
 		m_context.recordResourceCreationFailure( "T3D.RegionMap", Terrain3DRdContext::RESOURCE_STORAGE_BUFFER );
@@ -744,22 +727,23 @@ bool Terrain3DRdClipmapRenderer::ensureRegionMapBuffer( const uint32_t nRequired
 		return false;
 	}
 	if ( !t3dRdAdoptResource( m_context,
-				 m_context.getDevice(),
-				 m_hRegionMapBuffer,
-				 "T3D.RegionMap",
-				 Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
-				 Terrain3DRdContext::MEMORY_STORAGE,
-				 m_nRegionMapCapacityBytes ) ) {
+	             m_context.getDevice(),
+	             m_hRegionMapBuffer,
+	             "T3D.RegionMap",
+	             Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
+	             Terrain3DRdContext::MEMORY_STORAGE,
+	             m_nRegionMapCapacityBytes ) ) {
 		m_nRegionMapCapacityBytes = 0u;
 		return false;
 	}
 	m_nRegionMapGeneration = 0u;
+	m_bRegionMapUploadInitialized = false;
 	return true;
 }
 
-void Terrain3DRdClipmapRenderer::freeUniformSets( void )
-{
-	for ( RID& rid : m_hszRasterUniformSets ) {
+void Terrain3DRdClipmapRenderer::freeUniformSets( void ) {
+	for ( size_t iSet = 0u; iSet < T3D_ARRAY_COUNT( m_hszRasterUniformSets ); iSet++ ) {
+		RID &rid = ( m_hszRasterUniformSets )[iSet];
 		m_context.freeResource( rid );
 		rid = RID();
 	}
@@ -789,9 +773,8 @@ void Terrain3DRdClipmapRenderer::freeUniformSets( void )
 	}
 }
 
-bool Terrain3DRdClipmapRenderer::ensureUniformSets( const t3dRdTerrainBindings_t &rBindings,
-		const t3dRdMaterialConfig_t &rMaterialConfig )
-{
+bool Terrain3DRdClipmapRenderer::ensureUniformSets(
+        const t3dRdTerrainBindings_t &rBindings, const t3dRdMaterialConfig_t &rMaterialConfig ) {
 	const RID &rHeight = rBindings.m_hHeightTextureRd;
 	const RID &rDerived = rBindings.m_hDerivedTextureRd;
 	const RID &rControl = rBindings.m_hControlTextureRd;
@@ -811,22 +794,18 @@ bool Terrain3DRdClipmapRenderer::ensureUniformSets( const t3dRdTerrainBindings_t
 	const RID &rWorldNoise = rBindings.m_hWorldNoiseTextureRd;
 	const RID &rMacroNoise = rBindings.m_hMacroNoiseTextureRd;
 	const RID &rEditorBrush = rBindings.m_hEditorBrushTextureRd;
-	if ( m_hszRasterUniformSets[0].is_valid() && m_hszRasterUniformSets[1].is_valid() &&
-			m_hszRasterUniformSets[2].is_valid() &&
-			( !m_bGpuCullingReady.load( std::memory_order_acquire ) || m_hCullUniformSet.is_valid() ) &&
-			m_hBoundHeightTexture == rHeight && m_hBoundDerivedTexture == rDerived &&
-			m_hBoundControlTexture == rControl && m_hBoundColorTexture == rColor &&
-			m_hBoundMiddleCompositeTexture == rMiddleComposite &&
-			m_hBoundTerrainShadowMaskTexture == rTerrainShadowMask && m_hBoundMiddleHeightTexture == rMiddleHeight &&
-			m_hBoundMiddleHeightRegionMapTexture == rMiddleHeightRegionMap && m_hBoundFarHeightTexture == rFarHeight &&
-			m_hBoundFarColorTexture == rFarColor && m_hBoundAlbedoTexture == rAlbedo &&
-			m_hBoundFarAlbedoTexture == rFarAlbedo && m_hBoundNormalTexture == rNormal &&
-			m_hBoundSurfaceTexture == rSurface && m_hBoundMaterialDisplacementTexture == rMaterialDisplacement &&
-			m_hBoundDisplacementTexture == rDisplacement && m_hBoundWorldNoiseTexture == rWorldNoise &&
-			m_hBoundMacroNoiseTexture == rMacroNoise && m_hBoundEditorBrushTexture == rEditorBrush &&
-			m_nszBoundTierFiltering[0] == rMaterialConfig.m_szTier[0].m_nFiltering &&
-			m_nszBoundTierFiltering[1] == rMaterialConfig.m_szTier[1].m_nFiltering &&
-			m_nszBoundTierFiltering[2] == rMaterialConfig.m_szTier[2].m_nFiltering ) {
+	if ( m_hszRasterUniformSets[0].is_valid() && m_hszRasterUniformSets[1].is_valid() && m_hszRasterUniformSets[2].is_valid()
+	        && ( !m_bGpuCullingReady.load( T3D_MEMORY_ORDER_ACQUIRE ) || m_hCullUniformSet.is_valid() ) && m_hBoundHeightTexture == rHeight
+	        && m_hBoundDerivedTexture == rDerived && m_hBoundControlTexture == rControl && m_hBoundColorTexture == rColor
+	        && m_hBoundMiddleCompositeTexture == rMiddleComposite && m_hBoundTerrainShadowMaskTexture == rTerrainShadowMask
+	        && m_hBoundMiddleHeightTexture == rMiddleHeight && m_hBoundMiddleHeightRegionMapTexture == rMiddleHeightRegionMap
+	        && m_hBoundFarHeightTexture == rFarHeight && m_hBoundFarColorTexture == rFarColor && m_hBoundAlbedoTexture == rAlbedo
+	        && m_hBoundFarAlbedoTexture == rFarAlbedo && m_hBoundNormalTexture == rNormal && m_hBoundSurfaceTexture == rSurface
+	        && m_hBoundMaterialDisplacementTexture == rMaterialDisplacement && m_hBoundDisplacementTexture == rDisplacement
+	        && m_hBoundWorldNoiseTexture == rWorldNoise && m_hBoundMacroNoiseTexture == rMacroNoise
+	        && m_hBoundEditorBrushTexture == rEditorBrush && m_nszBoundTierFiltering[0] == rMaterialConfig.m_szTier[0].m_nFiltering
+	        && m_nszBoundTierFiltering[1] == rMaterialConfig.m_szTier[1].m_nFiltering
+	        && m_nszBoundTierFiltering[2] == rMaterialConfig.m_szTier[2].m_nFiltering ) {
 		return true;
 	}
 	freeUniformSets();
@@ -834,25 +813,28 @@ bool Terrain3DRdClipmapRenderer::ensureUniformSets( const t3dRdTerrainBindings_t
 	if ( !rd || !m_hRegionMapBuffer.is_valid() ) {
 		return false;
 	}
+	const RenderingDevice::UniformType frame_uniform_type = m_bPersistentFrameUniformBuffer
+	        ? RenderingDevice::UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC
+	        : RenderingDevice::UNIFORM_TYPE_UNIFORM_BUFFER;
+	const RenderingDevice::UniformType cpu_storage_type =
+	        m_bPersistentCpuBuffers ? RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC : RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER;
 	for ( int i = 0; i < 3; ++i ) {
 		const uint32_t nFiltering = MIN( rMaterialConfig.m_szTier[i].m_nFiltering, 3u );
 		TypedArray<Ref<RDUniform>> uniforms;
-		uniforms.push_back(
-				t3dRdBufferUniform( 0, RenderingDevice::UNIFORM_TYPE_UNIFORM_BUFFER, m_hFrameUniformBuffer ) );
-		uniforms.push_back( t3dRdBufferUniform( 1, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hRegionMapBuffer ) );
+		uniforms.push_back( t3dRdBufferUniform( 0, frame_uniform_type, m_hFrameUniformBuffer ) );
+		uniforms.push_back( t3dRdBufferUniform( 1, cpu_storage_type, m_hRegionMapBuffer ) );
 		uniforms.push_back( t3dRdTextureUniform( 2, m_hTerrainSampler, rHeight ) );
 		uniforms.push_back( t3dRdTextureUniform( 3, m_hTerrainSampler, rControl ) );
 		uniforms.push_back( t3dRdTextureUniform( 4, m_hszMapSamplers[nFiltering], rColor ) );
 		uniforms.push_back( t3dRdTextureUniform( 5, m_hszMaterialSamplers[nFiltering], rAlbedo ) );
 		uniforms.push_back( t3dRdTextureUniform( 6, m_hszMaterialSamplers[nFiltering], rNormal ) );
 		uniforms.push_back( t3dRdTextureUniform( 7, m_hszMaterialSamplers[nFiltering], rSurface ) );
-		uniforms.push_back( t3dRdBufferUniform( 8, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hMaterialBuffer ) );
-		uniforms.push_back( t3dRdBufferUniform( 9, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hPatchBuffer ) );
+		uniforms.push_back( t3dRdBufferUniform( 8, cpu_storage_type, m_hMaterialBuffer ) );
+		uniforms.push_back( t3dRdBufferUniform( 9, cpu_storage_type, m_hPatchBuffer ) );
 		uniforms.push_back( t3dRdBufferUniform( 10, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hVisibleBuffer ) );
 		uniforms.push_back( t3dRdTextureUniform( 11, m_hszMaterialSamplers[nFiltering], rMaterialDisplacement ) );
 		uniforms.push_back( t3dRdTextureUniform( 12, m_hTerrainSampler, rDisplacement ) );
-		uniforms.push_back(
-				t3dRdBufferUniform( 13, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hMaterialConfigBuffer ) );
+		uniforms.push_back( t3dRdBufferUniform( 13, cpu_storage_type, m_hMaterialConfigBuffer ) );
 		uniforms.push_back( t3dRdTextureUniform( 14, m_hszMapSamplers[nFiltering], rDerived ) );
 		uniforms.push_back( t3dRdTextureUniform( 15, m_hszMapSamplers[3], rMiddleComposite ) );
 		uniforms.push_back( t3dRdTextureUniform( 16, m_hTerrainSampler, rMiddleHeight ) );
@@ -862,8 +844,7 @@ bool Terrain3DRdClipmapRenderer::ensureUniformSets( const t3dRdTerrainBindings_t
 		uniforms.push_back( t3dRdTextureUniform( 20, m_hszMaterialSamplers[nFiltering], rFarAlbedo ) );
 		uniforms.push_back( t3dRdTextureUniform( 21, m_hszMaterialSamplers[1], rWorldNoise ) );
 		uniforms.push_back( t3dRdTextureUniform( 22, m_hszMaterialSamplers[nFiltering], rMacroNoise ) );
-		uniforms.push_back(
-				t3dRdBufferUniform( 23, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hEditorOverlayBuffer ) );
+		uniforms.push_back( t3dRdBufferUniform( 23, cpu_storage_type, m_hEditorOverlayBuffer ) );
 		uniforms.push_back( t3dRdTextureUniform( 24, m_hszMapSamplers[1], rEditorBrush ) );
 		uniforms.push_back( t3dRdTextureUniform( 25, m_hszMapSamplers[1], rTerrainShadowMask ) );
 		m_hszRasterUniformSets[i] = rd->uniform_set_create( uniforms, m_hszShaders[i], 0u );
@@ -873,33 +854,24 @@ bool Terrain3DRdClipmapRenderer::ensureUniformSets( const t3dRdTerrainBindings_t
 			setError( "Failed to create Terrain3D raster uniform set" );
 			return false;
 		}
-		if ( !t3dRdAdoptResource(
-					 m_context, rd, m_hszRasterUniformSets[i], name, Terrain3DRdContext::RESOURCE_UNIFORM_SET ) ) {
+		if ( !t3dRdAdoptResource( m_context, rd, m_hszRasterUniformSets[i], name, Terrain3DRdContext::RESOURCE_UNIFORM_SET ) ) {
 			return false;
 		}
 		m_nszBoundTierFiltering[i] = rMaterialConfig.m_szTier[i].m_nFiltering;
 	}
-	if ( m_bGpuCullingReady.load( std::memory_order_acquire ) ) {
+	if ( m_bGpuCullingReady.load( T3D_MEMORY_ORDER_ACQUIRE ) ) {
 		TypedArray<Ref<RDUniform>> cull_uniforms;
-		cull_uniforms.push_back(
-				t3dRdBufferUniform( 0, RenderingDevice::UNIFORM_TYPE_UNIFORM_BUFFER, m_hFrameUniformBuffer ) );
-		cull_uniforms.push_back(
-				t3dRdBufferUniform( 9, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hPatchBuffer ) );
-		cull_uniforms.push_back(
-				t3dRdBufferUniform( 10, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hVisibleBuffer ) );
-		cull_uniforms.push_back(
-				t3dRdBufferUniform( 11, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hIndirectBuffer ) );
+		cull_uniforms.push_back( t3dRdBufferUniform( 0, frame_uniform_type, m_hFrameUniformBuffer ) );
+		cull_uniforms.push_back( t3dRdBufferUniform( 9, cpu_storage_type, m_hPatchBuffer ) );
+		cull_uniforms.push_back( t3dRdBufferUniform( 10, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hVisibleBuffer ) );
+		cull_uniforms.push_back( t3dRdBufferUniform( 11, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hIndirectBuffer ) );
 		m_hCullUniformSet = rd->uniform_set_create( cull_uniforms, m_hCullShader, 0u );
 		if ( !m_hCullUniformSet.is_valid() ) {
 			m_context.recordResourceCreationFailure( "T3D.UniformSet.Cull", Terrain3DRdContext::RESOURCE_UNIFORM_SET );
 			setError( "Failed to create Terrain3D culling uniform set" );
 			return false;
 		}
-		if ( !t3dRdAdoptResource( m_context,
-					 rd,
-					 m_hCullUniformSet,
-					 "T3D.UniformSet.Cull",
-					 Terrain3DRdContext::RESOURCE_UNIFORM_SET ) ) {
+		if ( !t3dRdAdoptResource( m_context, rd, m_hCullUniformSet, "T3D.UniformSet.Cull", Terrain3DRdContext::RESOURCE_UNIFORM_SET ) ) {
 			return false;
 		}
 	}
@@ -925,9 +897,9 @@ bool Terrain3DRdClipmapRenderer::ensureUniformSets( const t3dRdTerrainBindings_t
 	return true;
 }
 
-void Terrain3DRdClipmapRenderer::freeViewState( t3dRdViewState_t& rState )
-{
-	for ( RID& pipeline : rState.m_hszPipelines ) {
+void Terrain3DRdClipmapRenderer::freeViewState( t3dRdViewState_t &rState ) {
+	for ( size_t iPipeline = 0u; iPipeline < T3D_ARRAY_COUNT( rState.m_hszPipelines ); iPipeline++ ) {
+		RID &pipeline = ( rState.m_hszPipelines )[iPipeline];
 		m_context.freeResource( pipeline );
 	}
 	m_context.freeResource( rState.m_hFramebuffer );
@@ -935,17 +907,16 @@ void Terrain3DRdClipmapRenderer::freeViewState( t3dRdViewState_t& rState )
 }
 
 bool Terrain3DRdClipmapRenderer::ensureViewState( const uint32_t nView,
-		const RID& rColor,
-		const RID& rDepth,
-		const RenderingDevice::TextureSamples samples,
-		const bool bColorWrite )
-{
+        const RID &rColor,
+        const RID &rDepth,
+        const RenderingDevice::TextureSamples samples,
+        const bool bColorWrite ) {
 	if ( nView >= s_nMaxViews ) {
 		return false;
 	}
-	t3dRdViewState_t& state = m_szViewStates[nView];
-	if ( state.m_hFramebuffer.is_valid() && state.m_hColor == rColor && state.m_hDepth == rDepth &&
-			state.m_samples == samples && state.m_bColorWrite == bColorWrite ) {
+	t3dRdViewState_t &state = m_szViewStates[nView];
+	if ( state.m_hFramebuffer.is_valid() && state.m_hColor == rColor && state.m_hDepth == rDepth && state.m_samples == samples
+	        && state.m_bColorWrite == bColorWrite ) {
 		return true;
 	}
 	freeViewState( state );
@@ -963,8 +934,7 @@ bool Terrain3DRdClipmapRenderer::ensureViewState( const uint32_t nView,
 		setError( "Failed to create Terrain3D per-view framebuffer" );
 		return false;
 	}
-	if ( !t3dRdAdoptResource(
-				 m_context, rd, state.m_hFramebuffer, framebuffer_name, Terrain3DRdContext::RESOURCE_FRAMEBUFFER ) ) {
+	if ( !t3dRdAdoptResource( m_context, rd, state.m_hFramebuffer, framebuffer_name, Terrain3DRdContext::RESOURCE_FRAMEBUFFER ) ) {
 		return false;
 	}
 	Ref<RDPipelineRasterizationState> raster;
@@ -994,26 +964,21 @@ bool Terrain3DRdClipmapRenderer::ensureViewState( const uint32_t nView,
 	const int64_t framebuffer_format = rd->framebuffer_get_format( state.m_hFramebuffer );
 	for ( int i = 0; i < 3; ++i ) {
 		state.m_hszPipelines[i] = rd->render_pipeline_create( m_hszShaders[i],
-				framebuffer_format,
-				m_nVertexFormat,
-				RenderingDevice::RENDER_PRIMITIVE_TRIANGLES,
-				raster,
-				multisample,
-				depth,
-				blend );
-		const String pipeline_name =
-				String( "T3D.Pipeline.View" ) + String::num_int64( nView ) + "." + String::num_int64( i );
+		        framebuffer_format,
+		        m_nVertexFormat,
+		        RenderingDevice::RENDER_PRIMITIVE_TRIANGLES,
+		        raster,
+		        multisample,
+		        depth,
+		        blend );
+		const String pipeline_name = String( "T3D.Pipeline.View" ) + String::num_int64( nView ) + "." + String::num_int64( i );
 		if ( !state.m_hszPipelines[i].is_valid() ) {
 			m_context.recordResourceCreationFailure( pipeline_name, Terrain3DRdContext::RESOURCE_RASTER_PIPELINE );
 			setError( "Failed to create Terrain3D raster pipeline" );
 			freeViewState( state );
 			return false;
 		}
-		if ( !t3dRdAdoptResource( m_context,
-					 rd,
-					 state.m_hszPipelines[i],
-					 pipeline_name,
-					 Terrain3DRdContext::RESOURCE_RASTER_PIPELINE ) ) {
+		if ( !t3dRdAdoptResource( m_context, rd, state.m_hszPipelines[i], pipeline_name, Terrain3DRdContext::RESOURCE_RASTER_PIPELINE ) ) {
 			freeViewState( state );
 			return false;
 		}
@@ -1025,18 +990,67 @@ bool Terrain3DRdClipmapRenderer::ensureViewState( const uint32_t nView,
 	return true;
 }
 
-bool Terrain3DRdClipmapRenderer::initialize( const Ref<RDShaderSPIRV>& rNear,
-		const Ref<RDShaderSPIRV>& rMiddle,
-		const Ref<RDShaderSPIRV>& rFar,
-		const Ref<RDShaderSPIRV>& rCull,
-		const t3dRdForwardShaderBundle_t& rForwardShaders )
-{
-	std::lock_guard<std::mutex> state_lock( m_resourceStateMutex );
+bool Terrain3DRdClipmapRenderer::initialize( const Ref<RDShaderSPIRV> &rNear,
+        const Ref<RDShaderSPIRV> &rMiddle,
+        const Ref<RDShaderSPIRV> &rFar,
+        const Ref<RDShaderSPIRV> &rCull,
+        const t3dRdForwardShaderBundle_t &rForwardShaders ) {
+	t3dScopedLock_t state_lock( m_resourceStateMutex );
 	if ( isReady() ) {
 		return true;
 	}
-	if ( !ensureDevice() || !ensureShaders( rNear, rMiddle, rFar, rCull ) || !ensureForwardShaders( rForwardShaders ) ||
-			!ensureSamplers() || !ensureFallbackTextures() || !ensureBuffers() ) {
+
+	// Persistent mappings are only enabled when both sides of the contract exist:
+	// the RenderingDevice raw-map/flush methods and dynamic-buffer shader metadata.
+	// This keeps stock Godot builds on the staging path rather than attempting an
+	// unsafe partial implementation.
+	if ( !ensureDevice() ) {
+		return false;
+	}
+	RenderingDevice *const persistent_rd = m_context.getDevice();
+	m_bPersistentCpuBuffers = t3dRdPersistentMappingAvailable( persistent_rd ) && t3dRdSupportsDynamicBufferMetadata( rNear )
+	        && t3dRdSupportsDynamicBufferMetadata( rMiddle ) && t3dRdSupportsDynamicBufferMetadata( rFar )
+	        && ( rCull.is_null() || t3dRdSupportsDynamicBufferMetadata( rCull ) );
+	if ( m_bPersistentCpuBuffers ) {
+		for ( uint32_t tier = 0u; tier < 3u && m_bPersistentCpuBuffers; ++tier ) {
+			for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant ) {
+				if ( !t3dRdSupportsDynamicBufferMetadata( rForwardShaders.m_szTerrain[tier][variant] ) ) {
+					m_bPersistentCpuBuffers = false;
+					break;
+				}
+			}
+		}
+	}
+	m_bPersistentFrameUniformBuffer = m_bPersistentCpuBuffers;
+	m_forwardLighting.setPersistentFrameBufferEnabled( m_bPersistentCpuBuffers );
+	if ( m_bPersistentCpuBuffers ) {
+		PackedInt64Array raster_dynamic_buffers;
+		raster_dynamic_buffers.push_back( 0 );                          // set 0, binding 0: frame UBO
+		raster_dynamic_buffers.push_back( 1 );                          // set 0, binding 1: region page table
+		raster_dynamic_buffers.push_back( 8 );                          // set 0, binding 8: material table
+		raster_dynamic_buffers.push_back( 9 );                          // set 0, binding 9: clipmap patches
+		raster_dynamic_buffers.push_back( 13 );                         // set 0, binding 13: material config
+		raster_dynamic_buffers.push_back( 23 );                         // set 0, binding 23: editor overlay
+		raster_dynamic_buffers.push_back( ( int64_t )( 2ULL << 32u ) ); // set 2, binding 0: Forward+ frame UBO
+		t3dRdMarkDynamicBuffers( rNear, raster_dynamic_buffers );
+		t3dRdMarkDynamicBuffers( rMiddle, raster_dynamic_buffers );
+		t3dRdMarkDynamicBuffers( rFar, raster_dynamic_buffers );
+
+		if ( rCull.is_valid() ) {
+			PackedInt64Array cull_dynamic_buffers;
+			cull_dynamic_buffers.push_back( 0 );
+			cull_dynamic_buffers.push_back( 9 );
+			t3dRdMarkDynamicBuffers( rCull, cull_dynamic_buffers );
+		}
+		for ( uint32_t tier = 0u; tier < 3u; ++tier ) {
+			for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant ) {
+				t3dRdMarkDynamicBuffers( rForwardShaders.m_szTerrain[tier][variant], raster_dynamic_buffers );
+			}
+		}
+	}
+
+	if ( !ensureShaders( rNear, rMiddle, rFar, rCull ) || !ensureForwardShaders( rForwardShaders ) || !ensureSamplers()
+	        || !ensureFallbackTextures() || !ensureBuffers() ) {
 		return false;
 	}
 	RenderingDevice *const rd = m_context.getDevice();
@@ -1061,8 +1075,7 @@ bool Terrain3DRdClipmapRenderer::initialize( const Ref<RDShaderSPIRV>& rNear,
 	attributes.push_back( meta );
 	m_nVertexFormat = rd->vertex_format_create( attributes );
 	if ( m_nVertexFormat == RenderingDevice::INVALID_FORMAT_ID ) {
-		m_context.recordResourceCreationFailure(
-				"T3D.VertexFormat.ClipmapPacked8", Terrain3DRdContext::RESOURCE_VERTEX_ARRAY );
+		m_context.recordResourceCreationFailure( "T3D.VertexFormat.ClipmapPacked8", Terrain3DRdContext::RESOURCE_VERTEX_ARRAY );
 		setError( "Failed to create packed Terrain3D vertex format" );
 		return false;
 	}
@@ -1071,18 +1084,18 @@ bool Terrain3DRdClipmapRenderer::initialize( const Ref<RDShaderSPIRV>& rNear,
 		setError( "Failed to register packed Terrain3D vertex format ownership" );
 		return false;
 	}
-	if ( !m_szTopology[LOD0_MESH].upload( m_context, m_nVertexFormat ) ||
-			!m_szTopology[OUTER_RING_MESH].upload( m_context, m_nVertexFormat ) ) {
+	if ( !m_szTopology[LOD0_MESH].upload( m_context, m_nVertexFormat )
+	        || !m_szTopology[OUTER_RING_MESH].upload( m_context, m_nVertexFormat ) ) {
 		setError( "Failed to upload packed Terrain3D topology" );
 		return false;
 	}
 	return true;
 }
 
-void Terrain3DRdClipmapRenderer::shutdown( void )
-{
-	std::lock_guard<std::mutex> state_lock( m_resourceStateMutex );
-	for ( t3dRdViewState_t& state : m_szViewStates ) {
+void Terrain3DRdClipmapRenderer::shutdown( void ) {
+	t3dScopedLock_t state_lock( m_resourceStateMutex );
+	for ( size_t iView = 0u; iView < T3D_ARRAY_COUNT( m_szViewStates ); iView++ ) {
+		t3dRdViewState_t &state = ( m_szViewStates )[iView];
 		freeViewState( state );
 	}
 	m_forwardLighting.shutdown();
@@ -1112,7 +1125,8 @@ void Terrain3DRdClipmapRenderer::shutdown( void )
 			m_context.freeResource( m_hszForwardShaders[tier][variant] );
 		}
 	}
-	for ( RID& shader : m_hszShaders ) {
+	for ( size_t iShader = 0u; iShader < T3D_ARRAY_COUNT( m_hszShaders ); iShader++ ) {
+		RID &shader = ( m_hszShaders )[iShader];
 		m_context.freeResource( shader );
 	}
 	m_context.releaseVertexFormat( m_nVertexFormat );
@@ -1133,11 +1147,14 @@ void Terrain3DRdClipmapRenderer::shutdown( void )
 	m_hTerrainSampler = RID();
 	m_hCullPipeline = RID();
 	m_hCullShader = RID();
-	for ( RID& shader : m_hszShaders ) {
+	for ( size_t iShader = 0u; iShader < T3D_ARRAY_COUNT( m_hszShaders ); iShader++ ) {
+		RID &shader = ( m_hszShaders )[iShader];
 		shader = RID();
 	}
-	for ( auto& tier : m_hszForwardShaders ) {
-		for ( RID& shader : tier ) {
+	for ( size_t iShader = 0u; iShader < T3D_ARRAY_COUNT( m_hszForwardShaders ); iShader++ ) {
+		RID( &tier )[T3D_RD_FORWARD_SHADER_VARIANT_MAX] = ( m_hszForwardShaders )[iShader];
+		for ( size_t iTier = 0u; iTier < T3D_ARRAY_COUNT( tier ); iTier++ ) {
+			RID &shader = ( tier )[iTier];
 			shader = RID();
 		}
 	}
@@ -1152,9 +1169,16 @@ void Terrain3DRdClipmapRenderer::shutdown( void )
 	m_nRegionMapGeneration = 0u;
 	m_nMaterialGeneration = 0u;
 	m_nPatchGeneration = 0u;
+	m_bRegionMapUploadInitialized = false;
+	m_bMaterialUploadInitialized = false;
 	m_nUploadedPatchCount = 0u;
 	m_bPatchUploadInitialized = false;
-	std::memset( m_szUploadedPatches, 0, sizeof( m_szUploadedPatches ) );
+	m_bPersistentFrameUniformBuffer = false;
+	m_bPersistentCpuBuffers = false;
+	m_forwardLighting.setPersistentFrameBufferEnabled( false );
+	m_bEditorOverlayUploadInitialized = false;
+	m_uploadedEditorOverlay = t3dRdEditorOverlayConfig_t{};
+	memset( m_szUploadedPatches, 0, sizeof( m_szUploadedPatches ) );
 	m_bGpuCullingReady = false;
 	m_frameUploadBytes.clear();
 	m_materialUploadBytes.clear();
@@ -1167,162 +1191,190 @@ void Terrain3DRdClipmapRenderer::shutdown( void )
 	m_drawPushBytes.clear();
 }
 
-void Terrain3DRdClipmapRenderer::copyProjection( const Projection& rProjection, float *const pDestination ) const
-{
+void Terrain3DRdClipmapRenderer::copyProjection( const Projection &rProjection, float *const pDestination ) const {
 	for ( int column = 0; column < 4; ++column ) {
 		const Vector4 value = rProjection[column];
-		pDestination[column * 4 + 0] = (float)( value.x );
-		pDestination[column * 4 + 1] = (float)( value.y );
-		pDestination[column * 4 + 2] = (float)( value.z );
-		pDestination[column * 4 + 3] = (float)( value.w );
+		pDestination[column * 4 + 0] = ( float )( value.x );
+		pDestination[column * 4 + 1] = ( float )( value.y );
+		pDestination[column * 4 + 2] = ( float )( value.z );
+		pDestination[column * 4 + 3] = ( float )( value.w );
 	}
 }
 
-bool Terrain3DRdClipmapRenderer::updateFrameUniforms( const t3dRdFrameSnapshot_t& rSnapshot,
-		const Projection *const pViewProjections,
-		const uint32_t nViewCount,
-		const Projection& rView,
-		const Vector3 *const pCameras,
-		const Projection *const pPreviousViewProjections,
-		const Vector2& rTaaJitter,
-		const Vector2& rPreviousTaaJitter,
-		const bool bHistoryValid )
-{
+bool Terrain3DRdClipmapRenderer::updateFrameUniforms( const t3dRdFrameSnapshot_t &rSnapshot,
+        const Projection *const pViewProjections,
+        const uint32_t nViewCount,
+        const Projection &rView,
+        const Vector3 *const pCameras,
+        const Projection *const pPreviousViewProjections,
+        const Vector2 &rTaaJitter,
+        const Vector2 &rPreviousTaaJitter,
+        const bool bHistoryValid ) {
 	if ( !pViewProjections || !pCameras || nViewCount == 0u || nViewCount > s_nRdForwardMaxViews ) {
 		return false;
 	}
-	t3dRdFrameUniforms_t frame{};
+	t3dRdFrameUniforms_t frame;
+	t3dRdFrameUniformsInit( &frame );
 	for ( uint32_t view = 0u; view < s_nRdForwardMaxViews; ++view ) {
 		const uint32_t source = MIN( view, nViewCount - 1u );
 		copyProjection( pViewProjections[source], frame.m_mViewProjection[view] );
-		const Projection& previous =
-				bHistoryValid && pPreviousViewProjections ? pPreviousViewProjections[source] : pViewProjections[source];
+		const Projection &previous =
+		        bHistoryValid && pPreviousViewProjections ? pPreviousViewProjections[source] : pViewProjections[source];
 		copyProjection( previous, frame.m_mPreviousViewProjection[view] );
-		frame.m_szCamera[view][0] = (float)( pCameras[source].x );
-		frame.m_szCamera[view][1] = (float)( pCameras[source].y );
-		frame.m_szCamera[view][2] = (float)( pCameras[source].z );
+		frame.m_szCamera[view][0] = ( float )( pCameras[source].x );
+		frame.m_szCamera[view][1] = ( float )( pCameras[source].y );
+		frame.m_szCamera[view][2] = ( float )( pCameras[source].z );
 	}
 	copyProjection( rView, frame.m_mView );
-	frame.m_szMotionJitter[0] = (float)( rTaaJitter.x );
-	frame.m_szMotionJitter[1] = (float)( rTaaJitter.y );
-	frame.m_szMotionJitter[2] = (float)( bHistoryValid ? rPreviousTaaJitter.x : rTaaJitter.x );
-	frame.m_szMotionJitter[3] = (float)( bHistoryValid ? rPreviousTaaJitter.y : rTaaJitter.y );
+	frame.m_szMotionJitter[0] = ( float )( rTaaJitter.x );
+	frame.m_szMotionJitter[1] = ( float )( rTaaJitter.y );
+	frame.m_szMotionJitter[2] = ( float )( bHistoryValid ? rPreviousTaaJitter.x : rTaaJitter.x );
+	frame.m_szMotionJitter[3] = ( float )( bHistoryValid ? rPreviousTaaJitter.y : rTaaJitter.y );
 	frame.m_szMotionParams[0] = bHistoryValid ? 1.0f : 0.0f;
-	frame.m_szMotionParams[1] = m_bMotionDebugEnabled.load( std::memory_order_acquire ) ? 1.0f : 0.0f;
-	frame.m_fLightDirectionX = (float)( rSnapshot.m_lightDirection.x );
-	frame.m_fLightDirectionY = (float)( rSnapshot.m_lightDirection.y );
-	frame.m_fLightDirectionZ = (float)( rSnapshot.m_lightDirection.z );
+	frame.m_szMotionParams[1] = m_bMotionDebugEnabled.load( T3D_MEMORY_ORDER_ACQUIRE ) ? 1.0f : 0.0f;
+	frame.m_fLightDirectionX = ( float )( rSnapshot.m_lightDirection.x );
+	frame.m_fLightDirectionY = ( float )( rSnapshot.m_lightDirection.y );
+	frame.m_fLightDirectionZ = ( float )( rSnapshot.m_lightDirection.z );
 	frame.m_fAmbient = rSnapshot.m_fAmbient;
-	frame.m_fLightColorR = (float)( rSnapshot.m_lightColor.r );
-	frame.m_fLightColorG = (float)( rSnapshot.m_lightColor.g );
-	frame.m_fLightColorB = (float)( rSnapshot.m_lightColor.b );
-	frame.m_fLightColorA = (float)( rSnapshot.m_lightColor.a );
-	frame.m_fRegionSize = (float)( rSnapshot.m_nRegionSize );
-	frame.m_fRegionMapSize = (float)( rSnapshot.m_nRegionMapSize );
+	frame.m_fLightColorR = ( float )( rSnapshot.m_lightColor.r );
+	frame.m_fLightColorG = ( float )( rSnapshot.m_lightColor.g );
+	frame.m_fLightColorB = ( float )( rSnapshot.m_lightColor.b );
+	frame.m_fLightColorA = ( float )( rSnapshot.m_lightColor.a );
+	frame.m_fRegionSize = ( float )( rSnapshot.m_nRegionSize );
+	frame.m_fRegionMapSize = ( float )( rSnapshot.m_nRegionMapSize );
 	frame.m_fHeightMin = rSnapshot.m_fHeightMin;
 	frame.m_fHeightRange = rSnapshot.m_fHeightRange;
 	frame.m_fVertexSpacing = rSnapshot.m_fVertexSpacing;
-	frame.m_fMeshSize = (float)( rSnapshot.m_nMeshSize );
-	frame.m_fMaterialLayerCount = (float)( MAX( rSnapshot.m_nMaterialLayerCount, 1u ) );
-	frame.m_fTargetX = (float)( rSnapshot.m_targetPosition.x );
-	frame.m_fTargetZ = (float)( rSnapshot.m_targetPosition.z );
+	frame.m_fMeshSize = ( float )( rSnapshot.m_nMeshSize );
+	frame.m_fMaterialLayerCount = ( float )( MAX( rSnapshot.m_nMaterialLayerCount, 1u ) );
+	frame.m_fTargetX = ( float )( rSnapshot.m_targetPosition.x );
+	frame.m_fTargetZ = ( float )( rSnapshot.m_targetPosition.z );
 	frame.m_fSubdiv = MAX( rSnapshot.m_fSubdiv, 1.0f );
-	frame.m_fFogR = (float)( rSnapshot.m_fogColor.r );
-	frame.m_fFogG = (float)( rSnapshot.m_fogColor.g );
-	frame.m_fFogB = (float)( rSnapshot.m_fogColor.b );
+	frame.m_fFogR = ( float )( rSnapshot.m_fogColor.r );
+	frame.m_fFogG = ( float )( rSnapshot.m_fogColor.g );
+	frame.m_fFogB = ( float )( rSnapshot.m_fogColor.b );
 	frame.m_fFogDensity = rSnapshot.m_fFogDensity;
 	frame.m_fFogStart = rSnapshot.m_fFogStart;
 	frame.m_fFogEnd = rSnapshot.m_fFogEnd;
 	frame.m_fFogCurve = rSnapshot.m_fFogCurve;
-	frame.m_fFogMode = (float)( rSnapshot.m_nFogMode );
+	frame.m_fFogMode = ( float )( rSnapshot.m_nFogMode );
 	frame.m_fDisplacementScale = rSnapshot.m_fDisplacementScale;
 	frame.m_fDisplacementEnabled = rSnapshot.m_bDisplacementEnabled ? 1.0f : 0.0f;
-	std::memcpy( m_frameUploadBytes.ptrw(), &frame, sizeof( frame ) );
-	if ( m_context.getDevice()->buffer_update( m_hFrameUniformBuffer, 0u, sizeof( frame ), m_frameUploadBytes ) !=
-			OK ) {
-		return false;
+	if ( m_bPersistentCpuBuffers ) {
+		if ( !t3dRdPersistentWrite( m_context.getDevice(), m_hFrameUniformBuffer, &frame, sizeof( frame ) ) ) {
+			return false;
+		}
+	} else {
+		memcpy( m_frameUploadBytes.ptrw(), &frame, sizeof( frame ) );
+		if ( m_context.getDevice()->buffer_update( m_hFrameUniformBuffer, 0u, sizeof( frame ), m_frameUploadBytes ) != OK ) {
+			return false;
+		}
 	}
 	m_context.recordBufferUpdate( sizeof( frame ) );
 	return true;
 }
 
-bool Terrain3DRdClipmapRenderer::uploadSnapshotBuffers( const t3dRdFrameSnapshot_t& rSnapshot,
-		const PackedByteArray& rRegionMapBytes,
-		const uint64_t nRegionMapGeneration )
-{
+bool Terrain3DRdClipmapRenderer::uploadSnapshotBuffers(
+        const t3dRdFrameSnapshot_t &rSnapshot, const PackedByteArray &rRegionMapBytes, const uint64_t nRegionMapGeneration ) {
 	RenderingDevice *const rd = m_context.getDevice();
-	if ( !ensureRegionMapBuffer( (uint32_t)( rRegionMapBytes.size() ) ) ) {
+	if ( !ensureRegionMapBuffer( ( uint32_t )( rRegionMapBytes.size() ) ) ) {
 		return false;
 	}
-	if ( nRegionMapGeneration != m_nRegionMapGeneration ) {
-		if ( rd->buffer_update( m_hRegionMapBuffer, 0u, (uint32_t)( rRegionMapBytes.size() ), rRegionMapBytes ) !=
-				OK ) {
+	if ( !m_bRegionMapUploadInitialized || nRegionMapGeneration != m_nRegionMapGeneration ) {
+		const bool bUploaded = m_bPersistentCpuBuffers
+		        ? t3dRdPersistentWrite( rd, m_hRegionMapBuffer, rRegionMapBytes.ptr(), ( uint32_t )( rRegionMapBytes.size() ) )
+		        : rd->buffer_update( m_hRegionMapBuffer, 0u, ( uint32_t )( rRegionMapBytes.size() ), rRegionMapBytes ) == OK;
+		if ( !bUploaded ) {
 			return false;
 		}
-		m_context.recordBufferUpdate( (uint64_t)( rRegionMapBytes.size() ) );
+		m_context.recordBufferUpdate( ( uint64_t )( rRegionMapBytes.size() ) );
 		m_nRegionMapGeneration = nRegionMapGeneration;
+		m_bRegionMapUploadInitialized = true;
 	}
-	if ( rSnapshot.m_nMaterialGeneration != m_nMaterialGeneration ) {
-		std::memcpy( m_materialUploadBytes.ptrw(), rSnapshot.m_szMaterials, sizeof( rSnapshot.m_szMaterials ) );
-		if ( rd->buffer_update( m_hMaterialBuffer, 0u, sizeof( rSnapshot.m_szMaterials ), m_materialUploadBytes ) !=
-				OK ) {
-			return false;
-		}
-		std::memcpy(
-				m_materialConfigUploadBytes.ptrw(), &rSnapshot.m_materialConfig, sizeof( rSnapshot.m_materialConfig ) );
-		if ( rd->buffer_update(
-					 m_hMaterialConfigBuffer, 0u, sizeof( rSnapshot.m_materialConfig ), m_materialConfigUploadBytes ) !=
-				OK ) {
-			return false;
+	if ( !m_bMaterialUploadInitialized || rSnapshot.m_nMaterialGeneration != m_nMaterialGeneration ) {
+		if ( m_bPersistentCpuBuffers ) {
+			if ( !t3dRdPersistentWrite( rd, m_hMaterialBuffer, rSnapshot.m_szMaterials, sizeof( rSnapshot.m_szMaterials ) )
+			        || !t3dRdPersistentWrite(
+			                rd, m_hMaterialConfigBuffer, &rSnapshot.m_materialConfig, sizeof( rSnapshot.m_materialConfig ) ) ) {
+				return false;
+			}
+		} else {
+			memcpy( m_materialUploadBytes.ptrw(), rSnapshot.m_szMaterials, sizeof( rSnapshot.m_szMaterials ) );
+			if ( rd->buffer_update( m_hMaterialBuffer, 0u, sizeof( rSnapshot.m_szMaterials ), m_materialUploadBytes ) != OK ) {
+				return false;
+			}
+			memcpy( m_materialConfigUploadBytes.ptrw(), &rSnapshot.m_materialConfig, sizeof( rSnapshot.m_materialConfig ) );
+			if ( rd->buffer_update( m_hMaterialConfigBuffer, 0u, sizeof( rSnapshot.m_materialConfig ), m_materialConfigUploadBytes )
+			        != OK ) {
+				return false;
+			}
 		}
 		m_context.recordBufferUpdate( sizeof( rSnapshot.m_szMaterials ) + sizeof( rSnapshot.m_materialConfig ) );
 		m_nMaterialGeneration = rSnapshot.m_nMaterialGeneration;
+		m_bMaterialUploadInitialized = true;
 	}
-	std::memcpy( m_editorOverlayUploadBytes.ptrw(),
-			&rSnapshot.m_editorOverlayConfig,
-			sizeof( rSnapshot.m_editorOverlayConfig ) );
-	if ( rd->buffer_update(
-				 m_hEditorOverlayBuffer, 0u, sizeof( rSnapshot.m_editorOverlayConfig ), m_editorOverlayUploadBytes ) !=
-			OK ) {
-		return false;
+	if ( !m_bEditorOverlayUploadInitialized
+	        || memcmp( &m_uploadedEditorOverlay, &rSnapshot.m_editorOverlayConfig, sizeof( rSnapshot.m_editorOverlayConfig ) ) != 0 ) {
+		bool bUploaded = false;
+		if ( m_bPersistentCpuBuffers ) {
+			bUploaded = t3dRdPersistentWrite(
+			        rd, m_hEditorOverlayBuffer, &rSnapshot.m_editorOverlayConfig, sizeof( rSnapshot.m_editorOverlayConfig ) );
+		} else {
+			memcpy( m_editorOverlayUploadBytes.ptrw(), &rSnapshot.m_editorOverlayConfig, sizeof( rSnapshot.m_editorOverlayConfig ) );
+			bUploaded =
+			        rd->buffer_update( m_hEditorOverlayBuffer, 0u, sizeof( rSnapshot.m_editorOverlayConfig ), m_editorOverlayUploadBytes )
+			        == OK;
+		}
+		if ( !bUploaded ) {
+			return false;
+		}
+		m_context.recordBufferUpdate( sizeof( rSnapshot.m_editorOverlayConfig ) );
+		++m_nEditorOverlayUploads;
+		m_uploadedEditorOverlay = rSnapshot.m_editorOverlayConfig;
+		m_bEditorOverlayUploadInitialized = true;
 	}
-	m_context.recordBufferUpdate( sizeof( rSnapshot.m_editorOverlayConfig ) );
-	if ( rSnapshot.m_nGeneration != m_nPatchGeneration ) {
+	if ( !m_bPatchUploadInitialized || rSnapshot.m_nGeneration != m_nPatchGeneration || rSnapshot.m_nPatchCount != m_nUploadedPatchCount ) {
 		if ( rSnapshot.m_nPatchCount > s_nMaxClipmapLevels ) {
 			return false;
 		}
-		uint32_t first_dirty = 0u;
-		while ( first_dirty < rSnapshot.m_nPatchCount ) {
-			while ( first_dirty < rSnapshot.m_nPatchCount && m_bPatchUploadInitialized &&
-					first_dirty < m_nUploadedPatchCount &&
-					std::memcmp( &m_szUploadedPatches[first_dirty],
-							&rSnapshot.m_szPatches[first_dirty],
-							sizeof( t3dRdPatch_t ) ) == 0 ) {
-				++first_dirty;
-			}
-			if ( first_dirty >= rSnapshot.m_nPatchCount ) {
-				break;
-			}
-			uint32_t end_dirty = first_dirty + 1u;
-			while ( end_dirty < rSnapshot.m_nPatchCount &&
-					( !m_bPatchUploadInitialized || end_dirty >= m_nUploadedPatchCount ||
-							std::memcmp( &m_szUploadedPatches[end_dirty],
-									&rSnapshot.m_szPatches[end_dirty],
-									sizeof( t3dRdPatch_t ) ) != 0 ) ) {
-				++end_dirty;
-			}
-			const uint32_t dirty_count = end_dirty - first_dirty;
-			const uint32_t dirty_bytes = dirty_count * sizeof( t3dRdPatch_t );
-			std::memcpy( m_patchUploadBytes.ptrw(), &rSnapshot.m_szPatches[first_dirty], dirty_bytes );
-			if ( rd->buffer_update(
-						 m_hPatchBuffer, first_dirty * sizeof( t3dRdPatch_t ), dirty_bytes, m_patchUploadBytes ) !=
-					OK ) {
+		if ( m_bPersistentCpuBuffers ) {
+			const uint32_t nPatchBytes = rSnapshot.m_nPatchCount * sizeof( t3dRdPatch_t );
+			if ( nPatchBytes > 0u && !t3dRdPersistentWrite( rd, m_hPatchBuffer, rSnapshot.m_szPatches, nPatchBytes ) ) {
 				return false;
 			}
-			std::memcpy( &m_szUploadedPatches[first_dirty], &rSnapshot.m_szPatches[first_dirty], dirty_bytes );
-			m_context.recordBufferUpdate( dirty_bytes );
-			++m_nPatchDirtyRanges;
-			first_dirty = end_dirty;
+			if ( nPatchBytes > 0u ) {
+				memcpy( m_szUploadedPatches, rSnapshot.m_szPatches, nPatchBytes );
+				m_context.recordBufferUpdate( nPatchBytes );
+				++m_nPatchDirtyRanges;
+			}
+		} else {
+			uint32_t first_dirty = 0u;
+			while ( first_dirty < rSnapshot.m_nPatchCount ) {
+				while ( first_dirty < rSnapshot.m_nPatchCount && m_bPatchUploadInitialized && first_dirty < m_nUploadedPatchCount
+				        && memcmp( &m_szUploadedPatches[first_dirty], &rSnapshot.m_szPatches[first_dirty], sizeof( t3dRdPatch_t ) ) == 0 ) {
+					++first_dirty;
+				}
+				if ( first_dirty >= rSnapshot.m_nPatchCount ) {
+					break;
+				}
+				uint32_t end_dirty = first_dirty + 1u;
+				while ( end_dirty < rSnapshot.m_nPatchCount
+				        && ( !m_bPatchUploadInitialized || end_dirty >= m_nUploadedPatchCount
+				                || memcmp( &m_szUploadedPatches[end_dirty], &rSnapshot.m_szPatches[end_dirty], sizeof( t3dRdPatch_t ) )
+				                        != 0 ) ) {
+					++end_dirty;
+				}
+				const uint32_t dirty_count = end_dirty - first_dirty;
+				const uint32_t dirty_bytes = dirty_count * sizeof( t3dRdPatch_t );
+				memcpy( m_patchUploadBytes.ptrw(), &rSnapshot.m_szPatches[first_dirty], dirty_bytes );
+				if ( rd->buffer_update( m_hPatchBuffer, first_dirty * sizeof( t3dRdPatch_t ), dirty_bytes, m_patchUploadBytes ) != OK ) {
+					return false;
+				}
+				memcpy( &m_szUploadedPatches[first_dirty], &rSnapshot.m_szPatches[first_dirty], dirty_bytes );
+				m_context.recordBufferUpdate( dirty_bytes );
+				++m_nPatchDirtyRanges;
+				first_dirty = end_dirty;
+			}
 		}
 		m_nUploadedPatchCount = rSnapshot.m_nPatchCount;
 		m_bPatchUploadInitialized = true;
@@ -1332,31 +1384,29 @@ bool Terrain3DRdClipmapRenderer::uploadSnapshotBuffers( const t3dRdFrameSnapshot
 	return true;
 }
 
-bool Terrain3DRdClipmapRenderer::runGpuCulling( const t3dRdFrameSnapshot_t& rSnapshot )
-{
-	if ( !m_bGpuCullingReady.load( std::memory_order_acquire ) || !m_hCullUniformSet.is_valid() ) {
+bool Terrain3DRdClipmapRenderer::runGpuCulling( const t3dRdFrameSnapshot_t &rSnapshot ) {
+	if ( !m_bGpuCullingReady.load( T3D_MEMORY_ORDER_ACQUIRE ) || !m_hCullUniformSet.is_valid() ) {
 		return false;
 	}
-	t3dRdIndexedIndirectCommand_t *const commands = (t3dRdIndexedIndirectCommand_t *)( m_cpuIndirectBytes.ptrw() );
-	std::memset( commands, 0, (size_t)( m_cpuIndirectBytes.size() ) );
+	t3dRdIndexedIndirectCommand_t *const commands = ( t3dRdIndexedIndirectCommand_t * )( m_cpuIndirectBytes.ptrw() );
+	memset( commands, 0, ( size_t )( m_cpuIndirectBytes.size() ) );
 	for ( uint32_t group = 0u; group < s_nRdDrawGroupCount; ++group ) {
-		commands[group].m_nIndexCount = group == T3D_RD_DRAW_GROUP_LOD0_NEAR
-				? m_szTopology[LOD0_MESH].getIndexCount()
-				: m_szTopology[OUTER_RING_MESH].getIndexCount();
+		commands[group].m_nIndexCount = group == T3D_RD_DRAW_GROUP_LOD0_NEAR ? m_szTopology[LOD0_MESH].getIndexCount()
+		                                                                     : m_szTopology[OUTER_RING_MESH].getIndexCount();
 		commands[group].m_nFirstInstance = group * s_nMaxClipmapLevels;
 	}
-	t3dRdCullPushConstants_t constants{};
-	constants.m_nPatchCount = MIN( rSnapshot.m_nPatchCount, (uint32_t)( s_nMaxClipmapLevels ) );
+	t3dRdCullPushConstants_t constants;
+	t3dRdCullPushConstantsInit( &constants );
+	constants.m_nPatchCount = MIN( rSnapshot.m_nPatchCount, ( uint32_t )( s_nMaxClipmapLevels ) );
 	constants.m_nLod0IndexCount = m_szTopology[LOD0_MESH].getIndexCount();
 	constants.m_nOuterIndexCount = m_szTopology[OUTER_RING_MESH].getIndexCount();
 	constants.m_nMaxPatches = s_nMaxClipmapLevels;
-	std::memcpy( m_cullPushBytes.ptrw(), &constants, sizeof( constants ) );
+	memcpy( m_cullPushBytes.ptrw(), &constants, sizeof( constants ) );
 	RenderingDevice *const rd = m_context.getDevice();
-	if ( rd->buffer_update( m_hIndirectBuffer, 0u, (uint32_t)( m_cpuIndirectBytes.size() ), m_cpuIndirectBytes ) !=
-			OK ) {
+	if ( rd->buffer_update( m_hIndirectBuffer, 0u, ( uint32_t )( m_cpuIndirectBytes.size() ), m_cpuIndirectBytes ) != OK ) {
 		return false;
 	}
-	m_context.recordBufferUpdate( (uint64_t)( m_cpuIndirectBytes.size() ) );
+	m_context.recordBufferUpdate( ( uint64_t )( m_cpuIndirectBytes.size() ) );
 	const int64_t compute_list = rd->compute_list_begin();
 	if ( compute_list == RenderingDevice::INVALID_ID ) {
 		return false;
@@ -1372,48 +1422,44 @@ bool Terrain3DRdClipmapRenderer::runGpuCulling( const t3dRdFrameSnapshot_t& rSna
 	return true;
 }
 
-bool Terrain3DRdClipmapRenderer::uploadCpuIndirect( const t3dRdCpuCullResult_t& rResult )
-{
-	std::memcpy( m_cpuVisibleBytes.ptrw(), rResult.m_szVisibleIndices, sizeof( rResult.m_szVisibleIndices ) );
-	std::memcpy( m_cpuIndirectBytes.ptrw(), rResult.m_szCommands, sizeof( rResult.m_szCommands ) );
+bool Terrain3DRdClipmapRenderer::uploadCpuIndirect( const t3dRdCpuCullResult_t &rResult ) {
+	memcpy( m_cpuVisibleBytes.ptrw(), rResult.m_szVisibleIndices, sizeof( rResult.m_szVisibleIndices ) );
+	memcpy( m_cpuIndirectBytes.ptrw(), rResult.m_szCommands, sizeof( rResult.m_szCommands ) );
 	RenderingDevice *const rd = m_context.getDevice();
-	if ( rd->buffer_update( m_hVisibleBuffer, 0u, (uint32_t)( m_cpuVisibleBytes.size() ), m_cpuVisibleBytes ) != OK ) {
+	if ( rd->buffer_update( m_hVisibleBuffer, 0u, ( uint32_t )( m_cpuVisibleBytes.size() ), m_cpuVisibleBytes ) != OK ) {
 		return false;
 	}
-	if ( rd->buffer_update( m_hIndirectBuffer, 0u, (uint32_t)( m_cpuIndirectBytes.size() ), m_cpuIndirectBytes ) !=
-			OK ) {
+	if ( rd->buffer_update( m_hIndirectBuffer, 0u, ( uint32_t )( m_cpuIndirectBytes.size() ), m_cpuIndirectBytes ) != OK ) {
 		return false;
 	}
-	m_context.recordBufferUpdate( (uint64_t)( m_cpuVisibleBytes.size() + m_cpuIndirectBytes.size() ) );
+	m_context.recordBufferUpdate( ( uint64_t )( m_cpuVisibleBytes.size() + m_cpuIndirectBytes.size() ) );
 	return true;
 }
 
-bool Terrain3DRdClipmapRenderer::compareGpuCpuCulling( const t3dRdFrameSnapshot_t& rSnapshot,
-		const Projection& rViewProjection,
-		const t3dRdCpuCullResult_t& rExpected )
-{
-	const uint64_t comparison_index = m_nCullComparisons.fetch_add( 1u, std::memory_order_acq_rel );
+bool Terrain3DRdClipmapRenderer::compareGpuCpuCulling(
+        const t3dRdFrameSnapshot_t &rSnapshot, const Projection &rViewProjection, const t3dRdCpuCullResult_t &rExpected ) {
+	const uint64_t comparison_index = m_nCullComparisons.fetch_add( 1u, T3D_MEMORY_ORDER_ACQ_REL );
 	RenderingDevice *const rd = m_context.getDevice();
-	const PackedByteArray gpu_visible =
-			rd->buffer_get_data( m_hVisibleBuffer, 0u, (uint32_t)( sizeof( rExpected.m_szVisibleIndices ) ) );
-	const PackedByteArray gpu_indirect =
-			rd->buffer_get_data( m_hIndirectBuffer, 0u, (uint32_t)( sizeof( rExpected.m_szCommands ) ) );
-	if ( gpu_visible.size() != (int64_t)( sizeof( rExpected.m_szVisibleIndices ) ) ||
-			gpu_indirect.size() != (int64_t)( sizeof( rExpected.m_szCommands ) ) ) {
+	const PackedByteArray gpu_visible = rd->buffer_get_data( m_hVisibleBuffer, 0u, ( uint32_t )( sizeof( rExpected.m_szVisibleIndices ) ) );
+	const PackedByteArray gpu_indirect = rd->buffer_get_data( m_hIndirectBuffer, 0u, ( uint32_t )( sizeof( rExpected.m_szCommands ) ) );
+	if ( gpu_visible.size() != ( int64_t )( sizeof( rExpected.m_szVisibleIndices ) )
+	        || gpu_indirect.size() != ( int64_t )( sizeof( rExpected.m_szCommands ) ) ) {
 		++m_nCullMismatches;
 		return false;
 	}
-	t3dRdCpuCullResult_t actual{};
-	std::memcpy( actual.m_szVisibleIndices, gpu_visible.ptr(), sizeof( actual.m_szVisibleIndices ) );
-	std::memcpy( actual.m_szCommands, gpu_indirect.ptr(), sizeof( actual.m_szCommands ) );
-	for ( const t3dRdIndexedIndirectCommand_t& command : actual.m_szCommands ) {
+	t3dRdCpuCullResult_t actual;
+	t3dRdCpuCullResultReset( &actual );
+	memcpy( actual.m_szVisibleIndices, gpu_visible.ptr(), sizeof( actual.m_szVisibleIndices ) );
+	memcpy( actual.m_szCommands, gpu_indirect.ptr(), sizeof( actual.m_szCommands ) );
+	for ( size_t iCommand = 0u; iCommand < T3D_ARRAY_COUNT( actual.m_szCommands ); iCommand++ ) {
+		const t3dRdIndexedIndirectCommand_t &command = ( actual.m_szCommands )[iCommand];
 		actual.m_nVisibleCount += command.m_nInstanceCount;
 	}
 	if ( !Terrain3DRdCpuCuller::validate( rSnapshot,
-				 rViewProjection,
-				 m_szTopology[LOD0_MESH].getIndexCount(),
-				 m_szTopology[OUTER_RING_MESH].getIndexCount(),
-				 actual ) ) {
+	             rViewProjection,
+	             m_szTopology[LOD0_MESH].getIndexCount(),
+	             m_szTopology[OUTER_RING_MESH].getIndexCount(),
+	             actual ) ) {
 		++m_nCullMismatches;
 		return false;
 	}
@@ -1424,8 +1470,10 @@ bool Terrain3DRdClipmapRenderer::compareGpuCpuCulling( const t3dRdFrameSnapshot_
 			++m_nCullMismatches;
 			return false;
 		}
-		bool expected_set[s_nMaxClipmapLevels]{};
-		bool actual_set[s_nMaxClipmapLevels]{};
+		bool expected_set[s_nMaxClipmapLevels];
+		memset( expected_set, 0, sizeof( expected_set ) );
+		bool actual_set[s_nMaxClipmapLevels];
+		memset( actual_set, 0, sizeof( actual_set ) );
 		for ( uint32_t slot = 0u; slot < expected_count; ++slot ) {
 			expected_set[rExpected.m_szVisibleIndices[group * s_nMaxClipmapLevels + slot]] = true;
 			actual_set[actual.m_szVisibleIndices[group * s_nMaxClipmapLevels + slot]] = true;
@@ -1443,39 +1491,38 @@ bool Terrain3DRdClipmapRenderer::compareGpuCpuCulling( const t3dRdFrameSnapshot_
 	return true;
 }
 
-bool Terrain3DRdClipmapRenderer::drawView( const uint32_t nView )
-{
+bool Terrain3DRdClipmapRenderer::drawView( const uint32_t nView ) {
 	if ( nView >= s_nMaxViews ) {
 		return false;
 	}
 	RenderingDevice *const rd = m_context.getDevice();
-	t3dRdViewState_t& state = m_szViewStates[nView];
+	t3dRdViewState_t &state = m_szViewStates[nView];
 	const int64_t draw_list = rd->draw_list_begin( state.m_hFramebuffer, RenderingDevice::DRAW_DEFAULT_ALL );
 	if ( draw_list == RenderingDevice::INVALID_ID ) {
 		return false;
 	}
-	const t3dRdDrawPushConstants_t indirect_constants{};
-	std::memcpy( m_drawPushBytes.ptrw(), &indirect_constants, sizeof( indirect_constants ) );
+	t3dRdDrawPushConstants_t indirect_constants;
+	t3dRdDrawPushConstantsInit( &indirect_constants );
+	memcpy( m_drawPushBytes.ptrw(), &indirect_constants, sizeof( indirect_constants ) );
 	for ( uint32_t group = 0u; group < s_nRdDrawGroupCount; ++group ) {
-		constexpr uint32_t indirect_buffer_bytes = sizeof( t3dRdIndexedIndirectCommand_t ) * s_nRdDrawGroupCount;
-		if ( !Terrain3DRdCpuCuller::isCommandRangeValid( group, indirect_buffer_bytes ) ) {
+		if ( !Terrain3DRdCpuCuller::isCommandRangeValid( group, T3D_TERRAIN_3D_RD_CLIPMAP_RENDERER_INDIRECT_BUFFER_BYTES ) ) {
 			++m_nIndirectValidationFailures;
 			rd->draw_list_end();
 			return false;
 		}
 		const int tier = group <= 1u ? 0 : ( group == 2u ? 1 : 2 );
-		const Terrain3DRdTopology& topology = group == 0u ? m_szTopology[LOD0_MESH] : m_szTopology[OUTER_RING_MESH];
+		const Terrain3DRdTopology &topology = group == 0u ? m_szTopology[LOD0_MESH] : m_szTopology[OUTER_RING_MESH];
 		rd->draw_list_bind_render_pipeline( draw_list, state.m_hszPipelines[tier] );
 		rd->draw_list_set_push_constant( draw_list, m_drawPushBytes, sizeof( indirect_constants ) );
 		rd->draw_list_bind_uniform_set( draw_list, m_hszRasterUniformSets[tier], 0u );
 		rd->draw_list_bind_vertex_array( draw_list, topology.getVertexArray() );
 		rd->draw_list_bind_index_array( draw_list, topology.getIndexArray() );
 		rd->draw_list_draw_indirect( draw_list,
-				true,
-				m_hIndirectBuffer,
-				group * sizeof( t3dRdIndexedIndirectCommand_t ),
-				1u,
-				sizeof( t3dRdIndexedIndirectCommand_t ) );
+		        true,
+		        m_hIndirectBuffer,
+		        group * sizeof( t3dRdIndexedIndirectCommand_t ),
+		        1u,
+		        sizeof( t3dRdIndexedIndirectCommand_t ) );
 		++m_nIndirectDraws;
 	}
 	rd->draw_list_end();
@@ -1483,31 +1530,31 @@ bool Terrain3DRdClipmapRenderer::drawView( const uint32_t nView )
 	return true;
 }
 
-bool Terrain3DRdClipmapRenderer::drawViewDirect( const uint32_t nView, const t3dRdCpuCullResult_t& rCullResult )
-{
+bool Terrain3DRdClipmapRenderer::drawViewDirect( const uint32_t nView, const t3dRdCpuCullResult_t &rCullResult ) {
 	if ( nView >= s_nMaxViews ) {
 		return false;
 	}
 	RenderingDevice *const rd = m_context.getDevice();
-	t3dRdViewState_t& state = m_szViewStates[nView];
+	t3dRdViewState_t &state = m_szViewStates[nView];
 	const int64_t draw_list = rd->draw_list_begin( state.m_hFramebuffer, RenderingDevice::DRAW_DEFAULT_ALL );
 	if ( draw_list == RenderingDevice::INVALID_ID ) {
 		return false;
 	}
 	for ( uint32_t group = 0u; group < s_nRdDrawGroupCount; ++group ) {
 		const int tier = group <= 1u ? 0 : ( group == 2u ? 1 : 2 );
-		const Terrain3DRdTopology& topology =
-				group == T3D_RD_DRAW_GROUP_LOD0_NEAR ? m_szTopology[LOD0_MESH] : m_szTopology[OUTER_RING_MESH];
+		const Terrain3DRdTopology &topology =
+		        group == T3D_RD_DRAW_GROUP_LOD0_NEAR ? m_szTopology[LOD0_MESH] : m_szTopology[OUTER_RING_MESH];
 		rd->draw_list_bind_render_pipeline( draw_list, state.m_hszPipelines[tier] );
 		rd->draw_list_bind_uniform_set( draw_list, m_hszRasterUniformSets[tier], 0u );
 		rd->draw_list_bind_vertex_array( draw_list, topology.getVertexArray() );
 		rd->draw_list_bind_index_array( draw_list, topology.getIndexArray() );
 		const uint32_t count = rCullResult.m_szCommands[group].m_nInstanceCount;
 		for ( uint32_t slot = 0u; slot < count; ++slot ) {
-			t3dRdDrawPushConstants_t constants{};
+			t3dRdDrawPushConstants_t constants;
+			t3dRdDrawPushConstantsInit( &constants );
 			constants.m_nDirectPatchIndex = rCullResult.m_szVisibleIndices[group * s_nMaxClipmapLevels + slot];
 			constants.m_nDirectMode = 1u;
-			std::memcpy( m_drawPushBytes.ptrw(), &constants, sizeof( constants ) );
+			memcpy( m_drawPushBytes.ptrw(), &constants, sizeof( constants ) );
 			rd->draw_list_set_push_constant( draw_list, m_drawPushBytes, sizeof( constants ) );
 			rd->draw_list_draw( draw_list, true, 1u, 0u );
 			++m_nDirectDebugDraws;
@@ -1519,12 +1566,11 @@ bool Terrain3DRdClipmapRenderer::drawViewDirect( const uint32_t nView, const t3d
 }
 
 bool Terrain3DRdClipmapRenderer::render( RenderData *const pRenderData,
-		const t3dRdFrameSnapshot_t &rSnapshot,
-		const PackedByteArray &rRegionMapBytes,
-		const uint64_t nRegionMapGeneration,
-		const t3dRdTerrainBindings_t &rBindings,
-		const bool bColorWrite )
-{
+        const t3dRdFrameSnapshot_t &rSnapshot,
+        const PackedByteArray &rRegionMapBytes,
+        const uint64_t nRegionMapGeneration,
+        const t3dRdTerrainBindings_t &rBindings,
+        const bool bColorWrite ) {
 	const RID &rHeightTextureRd = rBindings.m_hHeightTextureRd;
 	const RID &rDerivedTextureRd = rBindings.m_hDerivedTextureRd;
 	const RID &rControlTextureRd = rBindings.m_hControlTextureRd;
@@ -1630,12 +1676,12 @@ bool Terrain3DRdClipmapRenderer::render( RenderData *const pRenderData,
 	if ( !editor_brush.is_valid() ) {
 		editor_brush = m_hFallbackDisplacementTexture;
 	}
-	if ( !height.is_valid() || !control.is_valid() || !color_map.is_valid() || !albedo.is_valid() ||
-			!normal.is_valid() || !surface.is_valid() || !displacement.is_valid() ) {
+	if ( !height.is_valid() || !control.is_valid() || !color_map.is_valid() || !albedo.is_valid() || !normal.is_valid()
+	        || !surface.is_valid() || !displacement.is_valid() ) {
 		setError( "Terrain3D direct RenderingDevice textures are incomplete" );
 		return false;
 	}
-	const uint64_t gpu_frame_id = m_nFramesRendered.load( std::memory_order_acquire ) + 1u;
+	const uint64_t gpu_frame_id = m_nFramesRendered.load( T3D_MEMORY_ORDER_ACQUIRE ) + 1u;
 	m_context.beginFrame( gpu_frame_id, rSnapshot.m_nPublicationGeneration );
 	if ( !uploadSnapshotBuffers( rSnapshot, rRegionMapBytes, nRegionMapGeneration ) ) {
 		setError( "Failed to upload Terrain3D RD frame data" );
@@ -1666,17 +1712,15 @@ bool Terrain3DRdClipmapRenderer::render( RenderData *const pRenderData,
 	}
 	const RenderingDevice::TextureSamples samples = buffers->get_texture_samples();
 	const bool bMsaa = samples != RenderingDevice::TEXTURE_SAMPLES_1;
-	const bool bDirectDebug = m_bDirectDrawDebugEnabled.load( std::memory_order_acquire );
-	const bool bGpuCulling = m_bGpuCullingReady.load( std::memory_order_acquire );
-	const bool bCompareCulling = m_bCullingComparisonEnabled.load( std::memory_order_acquire );
+	const bool bDirectDebug = m_bDirectDrawDebugEnabled.load( T3D_MEMORY_ORDER_ACQUIRE );
+	const bool bGpuCulling = m_bGpuCullingReady.load( T3D_MEMORY_ORDER_ACQUIRE );
+	const bool bCompareCulling = m_bCullingComparisonEnabled.load( T3D_MEMORY_ORDER_ACQUIRE );
 	const Transform3D camera_transform = scene_data->get_cam_transform();
 	for ( uint32_t view = 0u; view < view_count; ++view ) {
-		RID target_color =
-				view_count > 1u ? buffers->get_color_layer( view, bMsaa ) : buffers->get_color_texture( bMsaa );
-		RID target_depth =
-				view_count > 1u ? buffers->get_depth_layer( view, bMsaa ) : buffers->get_depth_texture( bMsaa );
-		if ( !target_color.is_valid() || !target_depth.is_valid() ||
-				!ensureViewState( view, target_color, target_depth, samples, bColorWrite ) ) {
+		RID target_color = view_count > 1u ? buffers->get_color_layer( view, bMsaa ) : buffers->get_color_texture( bMsaa );
+		RID target_depth = view_count > 1u ? buffers->get_depth_layer( view, bMsaa ) : buffers->get_depth_texture( bMsaa );
+		if ( !target_color.is_valid() || !target_depth.is_valid()
+		        || !ensureViewState( view, target_color, target_depth, samples, bColorWrite ) ) {
 			setError( "Failed to prepare Terrain3D framebuffer-dependent resources" );
 			return false;
 		}
@@ -1688,28 +1732,20 @@ bool Terrain3DRdClipmapRenderer::render( RenderData *const pRenderData,
 		}
 		const Projection direct_views[s_nRdForwardMaxViews] = { view_projection, view_projection };
 		const Vector3 direct_cameras[s_nRdForwardMaxViews] = { eye_position, eye_position };
-		if ( !updateFrameUniforms( rSnapshot,
-					 direct_views,
-					 1u,
-					 view_matrix,
-					 direct_cameras,
-					 nullptr,
-					 Vector2(),
-					 Vector2(),
-					 false ) ) {
+		if ( !updateFrameUniforms( rSnapshot, direct_views, 1u, view_matrix, direct_cameras, NULL, Vector2(), Vector2(), false ) ) {
 			setError( "Failed to update Terrain3D frame uniforms" );
 			return false;
 		}
 		if ( !Terrain3DRdCpuCuller::build( rSnapshot,
-					 view_projection,
-					 m_szTopology[LOD0_MESH].getIndexCount(),
-					 m_szTopology[OUTER_RING_MESH].getIndexCount(),
-					 m_cpuCullResult ) ) {
+		             view_projection,
+		             m_szTopology[LOD0_MESH].getIndexCount(),
+		             m_szTopology[OUTER_RING_MESH].getIndexCount(),
+		             m_cpuCullResult ) ) {
 			++m_nIndirectValidationFailures;
 			setError( "Terrain3D CPU reference culler rejected patch or indirect bounds" );
 			return false;
 		}
-		m_nVisiblePatches.store( m_cpuCullResult.m_nVisibleCount, std::memory_order_release );
+		m_nVisiblePatches.store( m_cpuCullResult.m_nVisibleCount, T3D_MEMORY_ORDER_RELEASE );
 		m_context.recordSceneCounts( rSnapshot.m_nPatchCount, m_cpuCullResult.m_nVisibleCount, 0u, 0u, 0u, 0u );
 		if ( bDirectDebug ) {
 			if ( !drawViewDirect( view, m_cpuCullResult ) ) {
@@ -1738,7 +1774,7 @@ bool Terrain3DRdClipmapRenderer::render( RenderData *const pRenderData,
 	}
 	++m_nFramesRendered;
 	m_context.recordSubmissionCounts(
-			bDirectDebug ? 0u : view_count * s_nRdDrawGroupCount, bDirectDebug || !bGpuCulling ? 0u : view_count );
+	        bDirectDebug ? 0u : view_count * s_nRdDrawGroupCount, bDirectDebug || !bGpuCulling ? 0u : view_count );
 	m_context.recordSuccessfulPass( Terrain3DRdContext::PASS_TERRAIN_CLIPMAP, gpu_frame_id );
 	m_context.markWarmupComplete();
 	clearError();
@@ -1746,13 +1782,12 @@ bool Terrain3DRdClipmapRenderer::render( RenderData *const pRenderData,
 }
 
 bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassContext_t &rContext,
-		const t3dRdFrameSnapshot_t &rSnapshot,
-		const PackedByteArray &rRegionMapBytes,
-		const uint64_t nRegionMapGeneration,
-		const t3dRdTerrainBindings_t &rBindings,
-		const bool bTemporalHistoryValid,
-		const bool bViewportReconfigured )
-{
+        const t3dRdFrameSnapshot_t &rSnapshot,
+        const PackedByteArray &rRegionMapBytes,
+        const uint64_t nRegionMapGeneration,
+        const t3dRdTerrainBindings_t &rBindings,
+        const bool bTemporalHistoryValid,
+        const bool bViewportReconfigured ) {
 	const RID &rHeightTextureRd = rBindings.m_hHeightTextureRd;
 	const RID &rDerivedTextureRd = rBindings.m_hDerivedTextureRd;
 	const RID &rControlTextureRd = rBindings.m_hControlTextureRd;
@@ -1854,8 +1889,8 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassConte
 	if ( !editor_brush.is_valid() ) {
 		editor_brush = m_hFallbackDisplacementTexture;
 	}
-	if ( !height.is_valid() || !control.is_valid() || !color_map.is_valid() || !albedo.is_valid() ||
-			!normal.is_valid() || !surface.is_valid() || !displacement.is_valid() ) {
+	if ( !height.is_valid() || !control.is_valid() || !color_map.is_valid() || !albedo.is_valid() || !normal.is_valid()
+	        || !surface.is_valid() || !displacement.is_valid() ) {
 		setError( "Terrain3D direct RenderingDevice textures are incomplete" );
 		return false;
 	}
@@ -1868,8 +1903,7 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassConte
 		}
 	}
 	m_bForwardHistoryValid = bTemporalHistoryValid;
-	if ( m_nForwardPreparedScenePass != rContext.m_nScenePass ||
-			m_nForwardPreparedViewportKey != rContext.m_nViewportKey ) {
+	if ( m_nForwardPreparedScenePass != rContext.m_nScenePass || m_nForwardPreparedViewportKey != rContext.m_nViewportKey ) {
 		m_context.beginFrame( rContext.m_nScenePass, rSnapshot.m_nPublicationGeneration );
 	}
 	t3dRdTerrainBindings_t resolved_bindings = rBindings;
@@ -1892,33 +1926,33 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassConte
 	resolved_bindings.m_hWorldNoiseTextureRd = world_noise;
 	resolved_bindings.m_hMacroNoiseTextureRd = macro_noise;
 	resolved_bindings.m_hEditorBrushTextureRd = editor_brush;
-	if ( !uploadSnapshotBuffers( rSnapshot, rRegionMapBytes, nRegionMapGeneration ) ||
-			!ensureUniformSets( resolved_bindings, rSnapshot.m_materialConfig ) ||
-			!updateFrameUniforms( rSnapshot,
-					rContext.m_szViewProjection,
-					rContext.m_nViewCount,
-					Projection( rContext.m_cameraTransform.affine_inverse() ),
-					m_szForwardEyePositions,
-					rContext.m_szPreviousViewProjection,
-					rContext.m_taaJitter,
-					rContext.m_previousTaaJitter,
-					rContext.m_bMotionVectorsEnabled && m_bForwardHistoryValid ) ) {
+	if ( !uploadSnapshotBuffers( rSnapshot, rRegionMapBytes, nRegionMapGeneration )
+	        || !ensureUniformSets( resolved_bindings, rSnapshot.m_materialConfig )
+	        || !updateFrameUniforms( rSnapshot,
+	                rContext.m_szViewProjection,
+	                rContext.m_nViewCount,
+	                Projection( rContext.m_cameraTransform.affine_inverse() ),
+	                m_szForwardEyePositions,
+	                rContext.m_szPreviousViewProjection,
+	                rContext.m_taaJitter,
+	                rContext.m_previousTaaJitter,
+	                rContext.m_bMotionVectorsEnabled && m_bForwardHistoryValid ) ) {
 		setError( "Failed to prepare Terrain3D native Forward+ frame state" );
 		return false;
 	}
 
 	const bool shadow_pass = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW;
-	const bool recull = shadow_pass || m_nForwardPreparedScenePass != rContext.m_nScenePass ||
-			m_nForwardPreparedViewportKey != rContext.m_nViewportKey ||
-			m_nForwardPreparedSnapshotGeneration != rSnapshot.m_nPublicationGeneration ||
-			m_forwardPreparedCullPassKind != rContext.m_passKind;
+	const bool recull = shadow_pass || m_nForwardPreparedScenePass != rContext.m_nScenePass
+	        || m_nForwardPreparedViewportKey != rContext.m_nViewportKey
+	        || m_nForwardPreparedSnapshotGeneration != rSnapshot.m_nPublicationGeneration
+	        || m_forwardPreparedCullPassKind != rContext.m_passKind;
 	if ( recull ) {
 		if ( !Terrain3DRdCpuCuller::buildMultiview( rSnapshot,
-					 rContext.m_szViewProjection,
-					 rContext.m_nViewCount,
-					 m_szTopology[LOD0_MESH].getIndexCount(),
-					 m_szTopology[OUTER_RING_MESH].getIndexCount(),
-					 m_cpuCullResult ) ) {
+		             rContext.m_szViewProjection,
+		             rContext.m_nViewCount,
+		             m_szTopology[LOD0_MESH].getIndexCount(),
+		             m_szTopology[OUTER_RING_MESH].getIndexCount(),
+		             m_cpuCullResult ) ) {
 			++m_nIndirectValidationFailures;
 			setError( "Terrain3D CPU reference culler rejected native Forward+ patch bounds" );
 			return false;
@@ -1926,9 +1960,9 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassConte
 		if ( shadow_pass ) {
 			t3dRdApplyShadowCasterPolicy( rSnapshot, m_cpuCullResult );
 		}
-		m_nVisiblePatches.store( m_cpuCullResult.m_nVisibleCount, std::memory_order_release );
-		if ( !m_bDirectDrawDebugEnabled.load( std::memory_order_acquire ) ) {
-			if ( !shadow_pass && rContext.m_nViewCount == 1u && m_bGpuCullingReady.load( std::memory_order_acquire ) ) {
+		m_nVisiblePatches.store( m_cpuCullResult.m_nVisibleCount, T3D_MEMORY_ORDER_RELEASE );
+		if ( !m_bDirectDrawDebugEnabled.load( T3D_MEMORY_ORDER_ACQUIRE ) ) {
+			if ( !shadow_pass && rContext.m_nViewCount == 1u && m_bGpuCullingReady.load( T3D_MEMORY_ORDER_ACQUIRE ) ) {
 				if ( !runGpuCulling( rSnapshot ) ) {
 					return false;
 				}
@@ -1946,8 +1980,8 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassConte
 			m_forwardLighting.invalidateBorrowedState();
 		}
 		if ( !m_forwardLighting.prepare( rContext, rSnapshot.m_nRenderLayers ) ) {
-			setError( String( "Failed to prepare Terrain3D Forward+ native lighting: " ) +
-					String( m_forwardLighting.getDiagnostics().get( "forward_light_last_error", "unknown" ) ) );
+			setError( String( "Failed to prepare Terrain3D Forward+ native lighting: " )
+			        + String( m_forwardLighting.getDiagnostics().get( "forward_light_last_error", "unknown" ) ) );
 			return false;
 		}
 		for ( uint32_t tier = 0u; tier < 3u; ++tier ) {
@@ -1964,20 +1998,18 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassConte
 	return true;
 }
 
-bool Terrain3DRdClipmapRenderer::drawForwardView( const t3dRdForwardPassContext_t& rContext )
-{
+bool Terrain3DRdClipmapRenderer::drawForwardView( const t3dRdForwardPassContext_t &rContext ) {
 	if ( rContext.m_nDrawList < 0 || !m_bLastForwardPipelineKeyValid ) {
 		return false;
 	}
 	t3dRdForwardShaderVariant_t variant;
-	if ( !selectForwardVariant( rContext, variant ) || variant != m_lastForwardPipelineKey.m_variant ||
-			rContext.m_nFramebufferFormat != m_lastForwardPipelineKey.m_nFramebufferFormat ||
-			rContext.m_nViewCount != m_lastForwardPipelineKey.m_nViewCount ||
-			rContext.m_passKind != m_lastForwardPipelineKey.m_passKind ||
-			rContext.m_bReverseCull != m_lastForwardPipelineKey.m_bReverseCull ||
-			( ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE ||
-					  rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION ) &&
-					rContext.m_bDepthPrepassActive ) != m_lastForwardPipelineKey.m_bDepthPrepassActive ) {
+	if ( !selectForwardVariant( rContext, variant ) || variant != m_lastForwardPipelineKey.m_variant
+	        || rContext.m_nFramebufferFormat != m_lastForwardPipelineKey.m_nFramebufferFormat
+	        || rContext.m_nViewCount != m_lastForwardPipelineKey.m_nViewCount || rContext.m_passKind != m_lastForwardPipelineKey.m_passKind
+	        || rContext.m_bReverseCull != m_lastForwardPipelineKey.m_bReverseCull
+	        || ( ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION )
+	                   && rContext.m_bDepthPrepassActive )
+	                != m_lastForwardPipelineKey.m_bDepthPrepassActive ) {
 		return false;
 	}
 	const t3dRdForwardPipelineEntry_t *const entry = findForwardPipeline( m_lastForwardPipelineKey );
@@ -1986,11 +2018,11 @@ bool Terrain3DRdClipmapRenderer::drawForwardView( const t3dRdForwardPassContext_
 	}
 	RenderingDevice *const rd = m_context.getDevice();
 	const int64_t draw_list = rContext.m_nDrawList;
-	const bool direct = m_bDirectDrawDebugEnabled.load( std::memory_order_acquire );
+	const bool direct = m_bDirectDrawDebugEnabled.load( T3D_MEMORY_ORDER_ACQUIRE );
 	for ( uint32_t group = 0u; group < s_nRdDrawGroupCount; ++group ) {
 		const uint32_t tier = group <= 1u ? 0u : ( group == 2u ? 1u : 2u );
-		const Terrain3DRdTopology& topology =
-				group == T3D_RD_DRAW_GROUP_LOD0_NEAR ? m_szTopology[LOD0_MESH] : m_szTopology[OUTER_RING_MESH];
+		const Terrain3DRdTopology &topology =
+		        group == T3D_RD_DRAW_GROUP_LOD0_NEAR ? m_szTopology[LOD0_MESH] : m_szTopology[OUTER_RING_MESH];
 		rd->draw_list_bind_render_pipeline( draw_list, entry->m_hszPipelines[tier] );
 		rd->draw_list_bind_uniform_set( draw_list, m_hszRasterUniformSets[tier], 0u );
 		if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION ) {
@@ -2005,29 +2037,30 @@ bool Terrain3DRdClipmapRenderer::drawForwardView( const t3dRdForwardPassContext_
 		if ( direct ) {
 			const uint32_t count = m_cpuCullResult.m_szCommands[group].m_nInstanceCount;
 			for ( uint32_t slot = 0u; slot < count; ++slot ) {
-				t3dRdDrawPushConstants_t constants{};
+				t3dRdDrawPushConstants_t constants;
+				t3dRdDrawPushConstantsInit( &constants );
 				constants.m_nDirectPatchIndex = m_cpuCullResult.m_szVisibleIndices[group * s_nMaxClipmapLevels + slot];
 				constants.m_nDirectMode = 1u;
-				std::memcpy( m_drawPushBytes.ptrw(), &constants, sizeof( constants ) );
+				memcpy( m_drawPushBytes.ptrw(), &constants, sizeof( constants ) );
 				rd->draw_list_set_push_constant( draw_list, m_drawPushBytes, sizeof( constants ) );
 				rd->draw_list_draw( draw_list, true, 1u, 0u );
 				++m_nDirectDebugDraws;
 			}
 			m_nDrawsRendered += count;
 		} else {
-			constexpr uint32_t indirect_buffer_bytes = sizeof( t3dRdIndexedIndirectCommand_t ) * s_nRdDrawGroupCount;
-			if ( !Terrain3DRdCpuCuller::isCommandRangeValid( group, indirect_buffer_bytes ) ) {
+			if ( !Terrain3DRdCpuCuller::isCommandRangeValid( group, T3D_TERRAIN_3D_RD_CLIPMAP_RENDERER_INDIRECT_BUFFER_BYTES ) ) {
 				return false;
 			}
-			const t3dRdDrawPushConstants_t constants{};
-			std::memcpy( m_drawPushBytes.ptrw(), &constants, sizeof( constants ) );
+			t3dRdDrawPushConstants_t constants;
+			t3dRdDrawPushConstantsInit( &constants );
+			memcpy( m_drawPushBytes.ptrw(), &constants, sizeof( constants ) );
 			rd->draw_list_set_push_constant( draw_list, m_drawPushBytes, sizeof( constants ) );
 			rd->draw_list_draw_indirect( draw_list,
-					true,
-					m_hIndirectBuffer,
-					group * sizeof( t3dRdIndexedIndirectCommand_t ),
-					1u,
-					sizeof( t3dRdIndexedIndirectCommand_t ) );
+			        true,
+			        m_hIndirectBuffer,
+			        group * sizeof( t3dRdIndexedIndirectCommand_t ),
+			        1u,
+			        sizeof( t3dRdIndexedIndirectCommand_t ) );
 			++m_nIndirectDraws;
 			++m_nDrawsRendered;
 		}
@@ -2035,13 +2068,11 @@ bool Terrain3DRdClipmapRenderer::drawForwardView( const t3dRdForwardPassContext_
 	return true;
 }
 
-bool Terrain3DRdClipmapRenderer::renderForwardPass( const t3dRdForwardPassContext_t& rContext )
-{
+bool Terrain3DRdClipmapRenderer::renderForwardPass( const t3dRdForwardPassContext_t &rContext ) {
 	if ( rContext.m_phase != T3D_RD_FORWARD_PHASE_SUBMIT ) {
 		return false;
 	}
-	if ( m_nForwardPreparedScenePass != rContext.m_nScenePass ||
-			m_nForwardPreparedViewportKey != rContext.m_nViewportKey ) {
+	if ( m_nForwardPreparedScenePass != rContext.m_nScenePass || m_nForwardPreparedViewportKey != rContext.m_nViewportKey ) {
 		return false;
 	}
 	if ( !drawForwardView( rContext ) ) {
@@ -2049,57 +2080,51 @@ bool Terrain3DRdClipmapRenderer::renderForwardPass( const t3dRdForwardPassContex
 		return false;
 	}
 	++m_nFramesRendered;
-	m_context.recordSubmissionCounts(
-			m_bDirectDrawDebugEnabled.load( std::memory_order_acquire ) ? 0u : s_nRdDrawGroupCount, 0u );
+	m_context.recordSubmissionCounts( m_bDirectDrawDebugEnabled.load( T3D_MEMORY_ORDER_ACQUIRE ) ? 0u : s_nRdDrawGroupCount, 0u );
 	m_context.markWarmupComplete();
 	clearError();
 	return true;
 }
 
-Dictionary Terrain3DRdClipmapRenderer::getDiagnostics( void ) const
-{
-	std::lock_guard<std::mutex> state_lock( m_resourceStateMutex );
+Dictionary Terrain3DRdClipmapRenderer::getDiagnostics( void ) const {
+	t3dScopedLock_t state_lock( m_resourceStateMutex );
 	Dictionary result = m_context.getDiagnostics();
-	result["frames_rendered"] = (int64_t)( m_nFramesRendered.load( std::memory_order_acquire ) );
-	result["draws_rendered"] = (int64_t)( m_nDrawsRendered.load( std::memory_order_acquire ) );
-	result["indirect_draws"] = (int64_t)( m_nIndirectDraws.load( std::memory_order_acquire ) );
-	result["cull_dispatches"] = (int64_t)( m_nCullDispatches.load( std::memory_order_acquire ) );
-	result["patch_uploads"] = (int64_t)( m_nPatchUploads.load( std::memory_order_acquire ) );
-	result["patch_dirty_ranges"] = (int64_t)( m_nPatchDirtyRanges.load( std::memory_order_acquire ) );
-	result["visible_terrain_patches"] = (int64_t)( m_nVisiblePatches.load( std::memory_order_acquire ) );
-	result["cull_comparison_enabled"] = m_bCullingComparisonEnabled.load( std::memory_order_acquire );
-	result["cull_comparisons"] = (int64_t)( m_nCullComparisons.load( std::memory_order_acquire ) );
-	result["cull_mismatches"] = (int64_t)( m_nCullMismatches.load( std::memory_order_acquire ) );
-	result["indirect_validation_failures"] =
-			(int64_t)( m_nIndirectValidationFailures.load( std::memory_order_acquire ) );
-	result["direct_draw_debug_enabled"] = m_bDirectDrawDebugEnabled.load( std::memory_order_acquire );
-	result["direct_debug_draws"] = (int64_t)( m_nDirectDebugDraws.load( std::memory_order_acquire ) );
-	result["topology_bytes"] = (int64_t)( getTopologyBytes() );
-	result["lod0_index_bits"] =
-			m_szTopology[LOD0_MESH].getIndexFormat() == RenderingDevice::INDEX_BUFFER_FORMAT_UINT16 ? 16 : 32;
-	result["outer_index_bits"] =
-			m_szTopology[OUTER_RING_MESH].getIndexFormat() == RenderingDevice::INDEX_BUFFER_FORMAT_UINT16 ? 16 : 32;
-	result["lod0_topology_uploads"] = (int64_t)( m_szTopology[LOD0_MESH].getUploadCount() );
-	result["outer_topology_uploads"] = (int64_t)( m_szTopology[OUTER_RING_MESH].getUploadCount() );
+	result["frames_rendered"] = ( int64_t )( m_nFramesRendered.load( T3D_MEMORY_ORDER_ACQUIRE ) );
+	result["draws_rendered"] = ( int64_t )( m_nDrawsRendered.load( T3D_MEMORY_ORDER_ACQUIRE ) );
+	result["indirect_draws"] = ( int64_t )( m_nIndirectDraws.load( T3D_MEMORY_ORDER_ACQUIRE ) );
+	result["cull_dispatches"] = ( int64_t )( m_nCullDispatches.load( T3D_MEMORY_ORDER_ACQUIRE ) );
+	result["patch_uploads"] = ( int64_t )( m_nPatchUploads.load( T3D_MEMORY_ORDER_ACQUIRE ) );
+	result["patch_dirty_ranges"] = ( int64_t )( m_nPatchDirtyRanges.load( T3D_MEMORY_ORDER_ACQUIRE ) );
+	result["editor_overlay_uploads"] = ( int64_t )( m_nEditorOverlayUploads.load( T3D_MEMORY_ORDER_ACQUIRE ) );
+	result["persistent_frame_uniform_buffer"] = m_bPersistentFrameUniformBuffer;
+	result["persistent_cpu_buffers"] = m_bPersistentCpuBuffers;
+	result["visible_terrain_patches"] = ( int64_t )( m_nVisiblePatches.load( T3D_MEMORY_ORDER_ACQUIRE ) );
+	result["cull_comparison_enabled"] = m_bCullingComparisonEnabled.load( T3D_MEMORY_ORDER_ACQUIRE );
+	result["cull_comparisons"] = ( int64_t )( m_nCullComparisons.load( T3D_MEMORY_ORDER_ACQUIRE ) );
+	result["cull_mismatches"] = ( int64_t )( m_nCullMismatches.load( T3D_MEMORY_ORDER_ACQUIRE ) );
+	result["indirect_validation_failures"] = ( int64_t )( m_nIndirectValidationFailures.load( T3D_MEMORY_ORDER_ACQUIRE ) );
+	result["direct_draw_debug_enabled"] = m_bDirectDrawDebugEnabled.load( T3D_MEMORY_ORDER_ACQUIRE );
+	result["direct_debug_draws"] = ( int64_t )( m_nDirectDebugDraws.load( T3D_MEMORY_ORDER_ACQUIRE ) );
+	result["topology_bytes"] = ( int64_t )( getTopologyBytes() );
+	result["lod0_index_bits"] = m_szTopology[LOD0_MESH].getIndexFormat() == RenderingDevice::INDEX_BUFFER_FORMAT_UINT16 ? 16 : 32;
+	result["outer_index_bits"] = m_szTopology[OUTER_RING_MESH].getIndexFormat() == RenderingDevice::INDEX_BUFFER_FORMAT_UINT16 ? 16 : 32;
+	result["lod0_topology_uploads"] = ( int64_t )( m_szTopology[LOD0_MESH].getUploadCount() );
+	result["outer_topology_uploads"] = ( int64_t )( m_szTopology[OUTER_RING_MESH].getUploadCount() );
 	result["lod0_vertex_checksum"] = String::num_uint64( m_szTopology[LOD0_MESH].getVertexChecksum(), 16, true );
-	result["lod0_uploaded_vertex_checksum"] =
-			String::num_uint64( m_szTopology[LOD0_MESH].getUploadedVertexChecksum(), 16, true );
+	result["lod0_uploaded_vertex_checksum"] = String::num_uint64( m_szTopology[LOD0_MESH].getUploadedVertexChecksum(), 16, true );
 	result["lod0_index_checksum"] = String::num_uint64( m_szTopology[LOD0_MESH].getIndexChecksum(), 16, true );
-	result["lod0_uploaded_index_checksum"] =
-			String::num_uint64( m_szTopology[LOD0_MESH].getUploadedIndexChecksum(), 16, true );
+	result["lod0_uploaded_index_checksum"] = String::num_uint64( m_szTopology[LOD0_MESH].getUploadedIndexChecksum(), 16, true );
 	result["outer_vertex_checksum"] = String::num_uint64( m_szTopology[OUTER_RING_MESH].getVertexChecksum(), 16, true );
-	result["outer_uploaded_vertex_checksum"] =
-			String::num_uint64( m_szTopology[OUTER_RING_MESH].getUploadedVertexChecksum(), 16, true );
+	result["outer_uploaded_vertex_checksum"] = String::num_uint64( m_szTopology[OUTER_RING_MESH].getUploadedVertexChecksum(), 16, true );
 	result["outer_index_checksum"] = String::num_uint64( m_szTopology[OUTER_RING_MESH].getIndexChecksum(), 16, true );
-	result["outer_uploaded_index_checksum"] =
-			String::num_uint64( m_szTopology[OUTER_RING_MESH].getUploadedIndexChecksum(), 16, true );
+	result["outer_uploaded_index_checksum"] = String::num_uint64( m_szTopology[OUTER_RING_MESH].getUploadedIndexChecksum(), 16, true );
 	result["lod0_grid_min"] = m_szTopology[LOD0_MESH].getGridMinimum();
 	result["lod0_grid_max"] = m_szTopology[LOD0_MESH].getGridMaximum();
 	result["outer_grid_min"] = m_szTopology[OUTER_RING_MESH].getGridMinimum();
 	result["outer_grid_max"] = m_szTopology[OUTER_RING_MESH].getGridMaximum();
-	result["gpu_culling"] = m_bGpuCullingReady.load( std::memory_order_acquire );
+	result["gpu_culling"] = m_bGpuCullingReady.load( T3D_MEMORY_ORDER_ACQUIRE );
 	result["fallback_displacement_texture"] = m_hFallbackDisplacementTexture.is_valid();
-	result["max_views"] = (int64_t)( s_nMaxViews );
+	result["max_views"] = ( int64_t )( s_nMaxViews );
 	result["forward_lighting"] = m_forwardLighting.getDiagnostics();
 	result["last_error"] = getLastError();
 	return result;

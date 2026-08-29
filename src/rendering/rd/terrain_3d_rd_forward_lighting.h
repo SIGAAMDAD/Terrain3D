@@ -1,17 +1,16 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_RD_FORWARD_LIGHTING_H
 #define TERRAIN3D_RD_FORWARD_LIGHTING_H
 
+#include "Terrain3DConstants.h"
 #include "rendering/rd/terrain_3d_rd_context.h"
 #include "rendering/rd/terrain_3d_rd_types.h"
 
+#include <stddef.h>
+#include <string.h>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
-
-#include <cstddef>
 
 using namespace godot;
 
@@ -37,15 +36,19 @@ private:
 		uint32_t m_nRenderHeight = 0u;
 		uint32_t m_nClusterMaxElements = 0u;
 		uint32_t m_nSceneFeatureFlags = 0u;
-		float m_szAmbientLightColorEnergy[4]{};
-		float m_szEnvironmentParams0[4]{};
-		float m_szEnvironmentParams1[4]{};
-		float m_szRadianceInverseXform[12]{};
+		float m_szAmbientLightColorEnergy[4];
+		float m_szEnvironmentParams0[4];
+		float m_szEnvironmentParams1[4];
+		float m_szRadianceInverseXform[12];
 	} t3dRdForwardLightFrame_t;
 	static_assert( sizeof( t3dRdForwardLightFrame_t ) == 160u, "Forward lighting UBO ABI changed" );
 	static_assert( offsetof( t3dRdForwardLightFrame_t, m_szAmbientLightColorEnergy ) == 64u, "Forward ambient UBO offset changed" );
 	static_assert( offsetof( t3dRdForwardLightFrame_t, m_szEnvironmentParams0 ) == 80u, "Forward Environment UBO offset changed" );
 	static_assert( offsetof( t3dRdForwardLightFrame_t, m_szRadianceInverseXform ) == 112u, "Forward radiance matrix UBO offset changed" );
+	EA_FORCE_INLINE static void initFrame( t3dRdForwardLightFrame_t *pFrame ) {
+		memset( pFrame, 0, sizeof( *pFrame ) );
+		pFrame->m_nDefaultSurfaceMask = UINT32_MAX;
+	}
 
 	typedef struct t3dRdForwardLightKey_s {
 		RID m_hDirectional;
@@ -64,14 +67,12 @@ private:
 		RID m_hRadiance;
 
 		bool operator==( const t3dRdForwardLightKey_s &rOther ) const {
-			return m_hDirectional == rOther.m_hDirectional && m_hOmni == rOther.m_hOmni &&
-					m_hSpot == rOther.m_hSpot && m_hArea == rOther.m_hArea && m_hCluster == rOther.m_hCluster &&
-					m_hShadowAtlas == rOther.m_hShadowAtlas && m_hDirectionalShadowAtlas == rOther.m_hDirectionalShadowAtlas &&
-					m_hShadowSampler == rOther.m_hShadowSampler &&
-					m_hReflectionProbeBuffer == rOther.m_hReflectionProbeBuffer && m_hReflectionAtlas == rOther.m_hReflectionAtlas &&
-					m_hDecalBuffer == rOther.m_hDecalBuffer &&
-					m_hDecalAtlas == rOther.m_hDecalAtlas && m_hDecalAtlasSrgb == rOther.m_hDecalAtlasSrgb &&
-					m_hRadiance == rOther.m_hRadiance;
+			return m_hDirectional == rOther.m_hDirectional && m_hOmni == rOther.m_hOmni && m_hSpot == rOther.m_hSpot
+			        && m_hArea == rOther.m_hArea && m_hCluster == rOther.m_hCluster && m_hShadowAtlas == rOther.m_hShadowAtlas
+			        && m_hDirectionalShadowAtlas == rOther.m_hDirectionalShadowAtlas && m_hShadowSampler == rOther.m_hShadowSampler
+			        && m_hReflectionProbeBuffer == rOther.m_hReflectionProbeBuffer && m_hReflectionAtlas == rOther.m_hReflectionAtlas
+			        && m_hDecalBuffer == rOther.m_hDecalBuffer && m_hDecalAtlas == rOther.m_hDecalAtlas
+			        && m_hDecalAtlasSrgb == rOther.m_hDecalAtlasSrgb && m_hRadiance == rOther.m_hRadiance;
 		}
 	} t3dRdForwardLightKey_t;
 
@@ -109,7 +110,8 @@ private:
 	float m_fLastIblExposureNormalization = 1.0f;
 	float m_fLastEmissiveExposureNormalization = 1.0f;
 	bool m_bLastRadianceValid = false;
-	static constexpr uint32_t s_nMaxSets = 32u;
+	bool m_bPersistentFrameBuffer = false;
+
 	t3dRdForwardLightSet_t m_szSets[s_nMaxSets]{};
 	uint32_t m_nSetCount = 0u;
 	PackedByteArray m_frameBytes;
@@ -129,6 +131,9 @@ public:
 	explicit Terrain3DRdForwardLighting( Terrain3DRdContext &rContext );
 	~Terrain3DRdForwardLighting( void );
 
+	EA_FORCE_INLINE void setPersistentFrameBufferEnabled( const bool bEnabled ) {
+		m_bPersistentFrameBuffer = bEnabled;
+	}
 	bool prepare( const t3dRdForwardPassContext_t &rContext, uint32_t nDefaultSurfaceMask );
 	RID ensureSet( const RID &rShader );
 	RID getSet( const RID &rShader ) const;

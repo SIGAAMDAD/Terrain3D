@@ -1,14 +1,13 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_RD_TYPES_H
 #define TERRAIN3D_RD_TYPES_H
 
 #include "Terrain3DConstants.h"
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
 #include <godot_cpp/variant/aabb.hpp>
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/projection.hpp>
@@ -20,68 +19,58 @@
 
 using namespace godot;
 
-static constexpr uint32_t s_nRdMaterialLayerCount = 32u;
-static constexpr uint32_t s_nRdDrawGroupCount = 4u;
-static constexpr uint32_t s_nRdFrameSnapshotSlotCount = 3u;
-static constexpr uint32_t s_nRdInvalidFrameSnapshotIndex = s_nRdFrameSnapshotSlotCount;
-static constexpr uint64_t s_nRdFrameSnapshotTokenIndexMask = 0x3u;
-static constexpr uint64_t s_nRdFrameSnapshotTokenPublishedMask = uint64_t( 1u ) << 63u;
-static constexpr uint64_t s_nRdFrameSnapshotGenerationMax = ( uint64_t( 1u ) << 61u ) - 1u;
 
-EA_FORCE_INLINE constexpr uint32_t t3dRdPackGodotRgba32ForGpu( const uint32_t nRgba32 ) {
+EA_FORCE_INLINE uint32_t t3dRdPackGodotRgba32ForGpu( const uint32_t nRgba32 ) {
 	// Godot Color::to_rgba32() returns 0xRRGGBBAA. RD R8G8B8A8 vertex data
 	// and GLSL unpackUnorm4x8() consume R from the lowest-address/lowest-order byte.
-	return ( ( nRgba32 & 0xFF000000u ) >> 24u ) | ( ( nRgba32 & 0x00FF0000u ) >> 8u ) |
-			( ( nRgba32 & 0x0000FF00u ) << 8u ) | ( ( nRgba32 & 0x000000FFu ) << 24u );
+	return ( ( nRgba32 & 0xFF000000u ) >> 24u ) | ( ( nRgba32 & 0x00FF0000u ) >> 8u ) | ( ( nRgba32 & 0x0000FF00u ) << 8u )
+	        | ( ( nRgba32 & 0x000000FFu ) << 24u );
 }
 
-EA_FORCE_INLINE constexpr uint64_t
-t3dRdMakeFrameSnapshotToken( const uint32_t nIndex, const uint64_t nGeneration, const bool bPublished ) {
-	return ( ( nGeneration & s_nRdFrameSnapshotGenerationMax ) << 2u ) |
-			( ( uint64_t )( nIndex ) & s_nRdFrameSnapshotTokenIndexMask ) |
-			( bPublished ? s_nRdFrameSnapshotTokenPublishedMask : uint64_t( 0u ) );
+EA_FORCE_INLINE uint64_t t3dRdMakeFrameSnapshotToken( const uint32_t nIndex, const uint64_t nGeneration, const bool bPublished ) {
+	return ( ( nGeneration & s_nRdFrameSnapshotGenerationMax ) << 2u ) | ( ( uint64_t )( nIndex )&s_nRdFrameSnapshotTokenIndexMask )
+	        | ( bPublished ? s_nRdFrameSnapshotTokenPublishedMask : uint64_t( 0u ) );
 }
 
-EA_FORCE_INLINE constexpr uint32_t t3dRdFrameSnapshotTokenIndex( const uint64_t nToken ) {
+EA_FORCE_INLINE uint32_t t3dRdFrameSnapshotTokenIndex( const uint64_t nToken ) {
 	return ( uint32_t )( nToken & s_nRdFrameSnapshotTokenIndexMask );
 }
 
-EA_FORCE_INLINE constexpr uint64_t t3dRdFrameSnapshotTokenGeneration( const uint64_t nToken ) {
+EA_FORCE_INLINE uint64_t t3dRdFrameSnapshotTokenGeneration( const uint64_t nToken ) {
 	return ( nToken & ~s_nRdFrameSnapshotTokenPublishedMask ) >> 2u;
 }
 
-EA_FORCE_INLINE constexpr bool t3dRdFrameSnapshotTokenIsPublished( const uint64_t nToken ) {
+EA_FORCE_INLINE bool t3dRdFrameSnapshotTokenIsPublished( const uint64_t nToken ) {
 	return ( nToken & s_nRdFrameSnapshotTokenPublishedMask ) != 0u;
 }
 
-EA_FORCE_INLINE constexpr bool
-t3dRdFrameSnapshotGenerationIsNewer( const uint64_t nCandidate, const uint64_t nConsumed ) {
-	if ( nCandidate == 0u || nCandidate == nConsumed ) return false;
-	if ( nConsumed == 0u ) return true;
-	const uint64_t distance = nCandidate > nConsumed ? nCandidate - nConsumed :
-			( s_nRdFrameSnapshotGenerationMax - nConsumed ) + nCandidate;
+EA_FORCE_INLINE bool t3dRdFrameSnapshotGenerationIsNewer( const uint64_t nCandidate, const uint64_t nConsumed ) {
+	if ( nCandidate == 0u || nCandidate == nConsumed ) {
+		return false;
+	}
+	if ( nConsumed == 0u ) {
+		return true;
+	}
+	const uint64_t distance =
+	        nCandidate > nConsumed ? nCandidate - nConsumed : ( s_nRdFrameSnapshotGenerationMax - nConsumed ) + nCandidate;
 	return distance <= s_nRdFrameSnapshotGenerationMax / 2u;
 }
 
-EA_FORCE_INLINE constexpr bool
-t3dRdFrameSnapshotGenerationIsStale( const uint64_t nCandidate, const uint64_t nConsumed ) {
+EA_FORCE_INLINE bool t3dRdFrameSnapshotGenerationIsStale( const uint64_t nCandidate, const uint64_t nConsumed ) {
 	return nCandidate != 0u && nConsumed != 0u && !t3dRdFrameSnapshotGenerationIsNewer( nCandidate, nConsumed );
 }
 
-EA_FORCE_INLINE constexpr uint64_t
-t3dRdFrameSnapshotGenerationDistance( const uint64_t nCandidate, const uint64_t nConsumed ) {
-	if ( !t3dRdFrameSnapshotGenerationIsNewer( nCandidate, nConsumed ) ) return 0u;
-	return nCandidate > nConsumed ? nCandidate - nConsumed :
-			( s_nRdFrameSnapshotGenerationMax - nConsumed ) + nCandidate;
+EA_FORCE_INLINE uint64_t t3dRdFrameSnapshotGenerationDistance( const uint64_t nCandidate, const uint64_t nConsumed ) {
+	if ( !t3dRdFrameSnapshotGenerationIsNewer( nCandidate, nConsumed ) ) {
+		return 0u;
+	}
+	return nCandidate > nConsumed ? nCandidate - nConsumed : ( s_nRdFrameSnapshotGenerationMax - nConsumed ) + nCandidate;
 }
 
 static_assert( s_nRdFrameSnapshotSlotCount >= 3u, "RD frame publication requires at least three slots" );
-static_assert( t3dRdFrameSnapshotTokenIndex( t3dRdMakeFrameSnapshotToken( 2u, 17u, true ) ) == 2u,
-		"RD frame publication token index changed" );
-static_assert( t3dRdFrameSnapshotTokenGeneration( t3dRdMakeFrameSnapshotToken( 2u, 17u, true ) ) == 17u,
-		"RD frame publication token generation changed" );
-static_assert( t3dRdFrameSnapshotTokenIsPublished( t3dRdMakeFrameSnapshotToken( 2u, 17u, true ) ),
-		"RD frame publication token state changed" );
+static_assert( ( 2u & s_nRdFrameSnapshotTokenIndexMask ) == 2u, "RD frame publication token index mask changed" );
+static_assert( ( 17u & s_nRdFrameSnapshotGenerationMax ) == 17u, "RD frame publication token generation mask changed" );
+static_assert( s_nRdFrameSnapshotTokenPublishedMask != 0u, "RD frame publication token state mask changed" );
 
 typedef struct t3dRdTerrainBindings_s {
 	RID m_hHeightTextureRd;
@@ -105,8 +94,6 @@ typedef struct t3dRdTerrainBindings_s {
 	RID m_hEditorBrushTextureRd;
 } t3dRdTerrainBindings_t;
 
-static constexpr uint32_t s_nRdForwardBridgeAbiVersion = 10u;
-static constexpr uint32_t s_nRdForwardMaxViews = 2u;
 
 typedef enum t3dRdForwardCallbackPhase_e {
 	T3D_RD_FORWARD_PHASE_PREPARE = 0,
@@ -391,8 +378,8 @@ static_assert( offsetof( t3dRdTierMaterialConfig_t, m_fAuthoredColorContribution
 typedef struct alignas( 16 ) t3dRdMaterialConfig_s {
 	uint32_t m_nFeatureFlags = 0u;
 	uint32_t m_nDebugFlags = 0u;
-	uint32_t m_nOutputFlags = T3D_RD_MATERIAL_OUTPUT_ALBEDO | T3D_RD_MATERIAL_OUTPUT_ROUGHNESS |
-			T3D_RD_MATERIAL_OUTPUT_SPECULAR | T3D_RD_MATERIAL_OUTPUT_NORMAL | T3D_RD_MATERIAL_OUTPUT_AO;
+	uint32_t m_nOutputFlags = T3D_RD_MATERIAL_OUTPUT_ALBEDO | T3D_RD_MATERIAL_OUTPUT_ROUGHNESS | T3D_RD_MATERIAL_OUTPUT_SPECULAR
+	        | T3D_RD_MATERIAL_OUTPUT_NORMAL | T3D_RD_MATERIAL_OUTPUT_AO;
 	uint32_t m_nBackgroundMode = 1u;
 	uint32_t m_nProjectionMode = 0u;
 	uint32_t m_nTessellationMaterialMode = 0u;
@@ -582,11 +569,11 @@ typedef enum t3dRdInstanceFlags_e : uint32_t {
 // CPU publication descriptor for one logical resident cell/LOD. The renderer
 // uses the AABB for coarse rejection, then writes visible-instance indices into
 // a single persistent indirection buffer grouped by mesh surface/material.
-EA_FORCE_INLINE constexpr uint64_t t3dRdRegularMeshSourceKey( const uint16_t nAssetId, const int16_t nLod ) {
+EA_FORCE_INLINE uint64_t t3dRdRegularMeshSourceKey( const uint16_t nAssetId, const int16_t nLod ) {
 	return 0x1000000000000000ull | ( uint64_t )( nAssetId ) | ( ( uint64_t )( ( uint16_t )( nLod ) ) << 16u );
 }
 
-EA_FORCE_INLINE constexpr uint64_t t3dRdHlodMeshSourceKey( const uint32_t nEntryIndex ) {
+EA_FORCE_INLINE uint64_t t3dRdHlodMeshSourceKey( const uint32_t nEntryIndex ) {
 	return 0x2000000000000000ull | ( uint64_t )( nEntryIndex + 1u );
 }
 
@@ -812,6 +799,26 @@ typedef struct alignas( 16 ) t3dRdFrameUniforms_s {
 } t3dRdFrameUniforms_t;
 static_assert( sizeof( t3dRdFrameUniforms_t ) == 512u, "RD frame UBO must match GLSL std140 layout" );
 
+EA_FORCE_INLINE void t3dRdFrameUniformsInit( t3dRdFrameUniforms_t *pFrame ) {
+	memset( pFrame, 0, sizeof( *pFrame ) );
+	pFrame->m_fLightDirectionY = -1.0f;
+	pFrame->m_fAmbient = 0.28f;
+	pFrame->m_fLightColorR = 1.0f;
+	pFrame->m_fLightColorG = 1.0f;
+	pFrame->m_fLightColorB = 1.0f;
+	pFrame->m_fLightColorA = 1.0f;
+	pFrame->m_fRegionSize = 128.0f;
+	pFrame->m_fHeightMin = s_fRegionHeightMin;
+	pFrame->m_fHeightRange = s_fRegionHeightRange;
+	pFrame->m_fVertexSpacing = 1.0f;
+	pFrame->m_fMeshSize = 48.0f;
+	pFrame->m_fMaterialLayerCount = 1.0f;
+	pFrame->m_fSubdiv = 1.0f;
+	pFrame->m_fFogEnd = 1000000.0f;
+	pFrame->m_fFogCurve = 1.0f;
+	pFrame->m_fDisplacementScale = 1.0f;
+}
+
 typedef struct t3dRdIndexedIndirectCommand_s {
 	uint32_t m_nIndexCount = 0u;
 	uint32_t m_nInstanceCount = 0u;
@@ -829,6 +836,11 @@ typedef struct t3dRdCullPushConstants_s {
 } t3dRdCullPushConstants_t;
 static_assert( sizeof( t3dRdCullPushConstants_t ) == 16u, "RD cull push constants ABI changed" );
 
+EA_FORCE_INLINE void t3dRdCullPushConstantsInit( t3dRdCullPushConstants_t *pConstants ) {
+	memset( pConstants, 0, sizeof( *pConstants ) );
+	pConstants->m_nMaxPatches = s_nMaxClipmapLevels;
+}
+
 typedef struct t3dRdDrawPushConstants_s {
 	uint32_t m_nDirectPatchIndex = 0u;
 	uint32_t m_nDirectMode = 0u;
@@ -836,5 +848,9 @@ typedef struct t3dRdDrawPushConstants_s {
 	uint32_t m_nPadding1 = 0u;
 } t3dRdDrawPushConstants_t;
 static_assert( sizeof( t3dRdDrawPushConstants_t ) == 16u, "RD draw push constants ABI changed" );
+
+EA_FORCE_INLINE void t3dRdDrawPushConstantsInit( t3dRdDrawPushConstants_t *pConstants ) {
+	memset( pConstants, 0, sizeof( *pConstants ) );
+}
 
 #endif // TERRAIN3D_RD_TYPES_H

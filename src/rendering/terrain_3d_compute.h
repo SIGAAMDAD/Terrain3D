@@ -1,22 +1,21 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_COMPUTE_H
 #define TERRAIN3D_COMPUTE_H
 
+#include "Terrain3DConstants.h"
+#include "core/terrain_3d_sync.h"
+#include "core/terrain_3d_eastl_helpers.h"
 #include "eastl_config.h"
 
 #include <EASTL/vector.h>
-#include <cstdint>
+#include <stdint.h>
 #include <godot_cpp/classes/rd_shader_spirv.hpp>
 #include <godot_cpp/classes/rendering_device.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/packed_int32_array.hpp>
 #include <godot_cpp/variant/rid.hpp>
 #include <godot_cpp/variant/vector3.hpp>
-#include <mutex>
-
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
 using namespace godot;
 #endif
@@ -29,10 +28,10 @@ using namespace godot;
 class Terrain3D;
 
 typedef struct t3dBrushElement_s {
-	uint32_t m_nValue = 0u; // Height float bits, packed pControl, or RGBA8.
-	uint32_t m_nAlpha = 0u; // Float bits.
+	uint32_t m_nValue = 0u;  // Height float bits, packed pControl, or RGBA8.
+	uint32_t m_nAlpha = 0u;  // Float bits.
 	uint32_t m_nTarget = 0u; // Gradient/height m_nTarget float bits.
-	uint32_t m_nFlags = 0u; // Bit 0: eligible.
+	uint32_t m_nFlags = 0u;  // Bit 0: eligible.
 } t3dBrushElement_t;
 
 typedef struct t3dDisplacementRequest_s {
@@ -51,11 +50,10 @@ typedef struct t3dDisplacementRequest_s {
 	uint32_t m_nRegionMapSize = 0u;
 
 	bool valid( void ) const {
-		return m_shaderSpirv.is_valid() && m_hHeightTexture.is_valid() && m_hControlTexture.is_valid() &&
-				m_hDisplacementTexture.is_valid() && m_nWidth > 0u && m_nHeight > 0u &&
-				m_nRegionMapSize > 0u && m_nRegionMapSize <= 64u &&
-				m_regionMap.size() == ( int64_t )( m_nRegionMapSize ) * ( int64_t )( m_nRegionMapSize ) &&
-				!m_materialData.is_empty() && !m_pushConstants.is_empty();
+		return m_shaderSpirv.is_valid() && m_hHeightTexture.is_valid() && m_hControlTexture.is_valid() && m_hDisplacementTexture.is_valid()
+		        && m_nWidth > 0u && m_nHeight > 0u && m_nRegionMapSize > 0u && m_nRegionMapSize <= 64u
+		        && m_regionMap.size() == ( int64_t )( m_nRegionMapSize ) * ( int64_t )( m_nRegionMapSize ) && !m_materialData.is_empty()
+		        && !m_pushConstants.is_empty();
 	}
 } t3dDisplacementRequest_t;
 
@@ -76,8 +74,8 @@ typedef struct t3dBrushParams_s {
 } t3dBrushParams_t;
 
 typedef struct t3dDerivedMapComputeJob_s {
-	const float *m_pHeightHalo = nullptr;
-	uint8_t *m_pRgbaOutput = nullptr;
+	const float *m_pHeightHalo = NULL;
+	uint8_t *m_pRgbaOutput = NULL;
 	uint32_t m_nHaloElements = 0u;
 	uint32_t m_nOutputBytes = 0u;
 	uint32_t m_nWidth = 0u;
@@ -102,19 +100,17 @@ public:
 
 	bool isAvailable( void );
 	EA_FORCE_INLINE String getLastError( void ) const {
-		std::lock_guard<std::mutex> lock( m_errorMutex );
+		t3dScopedLock_t lock( m_errorMutex );
 		return m_lastError;
 	}
 
-	bool processBrush( eastl::vector<t3dBrushElement_t> &rElements, const t3dBrushParams_t &rParams );
-	static void processBrushCpu( eastl::vector<t3dBrushElement_t> &rElements, const t3dBrushParams_t &rParams );
+	bool processBrush( eastl::vector<t3dBrushElement_t, Terrain3DEastlAllocator> &rElements, const t3dBrushParams_t &rParams );
+	static void processBrushCpu( eastl::vector<t3dBrushElement_t, Terrain3DEastlAllocator> &rElements, const t3dBrushParams_t &rParams );
 	bool generateDerivedMaps( t3dDerivedMapComputeJob_t *pJobs, uint32_t nJobCount );
 	// Builds a render-thread-safe snapshot without touching the global RenderingDevice.
 	// The raw GLSL path is intentionally restricted to non-projected, non-detiled
 	// packed-PBR/R8 materials; all other variants retain the raster fallback.
-	bool prepareDisplacementRequest( Terrain3D *pTerrain,
-			const Vector3 &rTargetPosition,
-			t3dDisplacementRequest_t &rRequest );
+	bool prepareDisplacementRequest( Terrain3D *pTerrain, const Vector3 &rTargetPosition, t3dDisplacementRequest_t &rRequest );
 	// Must execute through the render-thread gateway.
 	bool dispatchDisplacementRequest( const t3dDisplacementRequest_t &rRequest, RID &rTexture );
 	// Must execute on the render thread before Terrain3DCompute is destroyed.
@@ -122,21 +118,25 @@ public:
 	EA_FORCE_INLINE uint64_t getRetainedLocalGpuBufferBytes( void ) const {
 		uint64_t bytes = m_hBrushBuffer.is_valid() ? m_nBrushCapacity : 0u;
 		for ( uint32_t slot = 0u; slot < s_nDerivedReadbackSlotCount; ++slot ) {
-			if ( m_szDerivedInputBuffer[slot].is_valid() ) bytes += m_nszDerivedInputCapacity[slot];
-			if ( m_szDerivedOutputBuffer[slot].is_valid() ) bytes += m_nszDerivedOutputCapacity[slot];
+			if ( m_szDerivedInputBuffer[slot].is_valid() ) {
+				bytes += m_nszDerivedInputCapacity[slot];
+			}
+			if ( m_szDerivedOutputBuffer[slot].is_valid() ) {
+				bytes += m_nszDerivedOutputCapacity[slot];
+			}
 		}
 		return bytes;
 	}
 
 private:
-	RenderingDevice *m_pRd = nullptr; // Owned local device for readback workloads.
-	RenderingDevice *m_pRenderRd = nullptr; // Non-owning global renderer device.
+	RenderingDevice *m_pRd = NULL;       // Owned local device for readback workloads.
+	RenderingDevice *m_pRenderRd = NULL; // Non-owning global renderer device.
 	t3dPipeline_t m_brushPipeline;
 	t3dPipeline_t m_derivedPipeline;
 	t3dPipeline_t m_displacementPipeline;
 	Ref<RDShaderSPIRV> m_displacementSpirv;
 	RID m_hBrushBuffer;
-	static constexpr uint32_t s_nDerivedReadbackSlotCount = 3u;
+
 	RID m_szDerivedInputBuffer[s_nDerivedReadbackSlotCount];
 	RID m_szDerivedOutputBuffer[s_nDerivedReadbackSlotCount];
 	RID m_hBrushUniformSet;
@@ -154,12 +154,13 @@ private:
 	uint64_t m_nDisplacementMaterialHash = 0u;
 	bool m_bDisplacementRegionUploaded = false;
 	bool m_bDisplacementMaterialUploaded = false;
+	bool m_bPersistentDisplacementBuffers = false;
 	uint32_t m_nDisplacementWidth = 0u;
 	uint32_t m_nDisplacementHeight = 0u;
 	uint32_t m_nBrushCapacity = 0u;
 	uint32_t m_nszDerivedInputCapacity[s_nDerivedReadbackSlotCount]{};
 	uint32_t m_nszDerivedOutputCapacity[s_nDerivedReadbackSlotCount]{};
-	mutable std::mutex m_errorMutex;
+	mutable t3dMutex_t m_errorMutex;
 	String m_lastError;
 	bool m_bDeviceAttempted = false;
 	bool m_bRenderDeviceAttempted = false;
@@ -180,7 +181,7 @@ private:
 	void freeDisplacementTexture( void );
 	void shutdown( void );
 	EA_FORCE_INLINE void setError( const String &rError ) {
-		std::lock_guard<std::mutex> lock( m_errorMutex );
+		t3dScopedLock_t lock( m_errorMutex );
 		m_lastError = rError;
 	}
 	static uint32_t growthCapacity( uint32_t nRequired );

@@ -1,0 +1,116 @@
+#ifndef TERRAIN3D_RENDER_WORLD_COMMON_INC_GLSL
+#define TERRAIN3D_RENDER_WORLD_COMMON_INC_GLSL
+
+// RenderWorld fixed GPU ABI. These layouts mirror the C++ records in
+// src/rendering/rd/render_world/terrain_3d_render_world_contract.h.
+// Keep this file declarative: no resource bindings and no stage-specific code.
+struct Frame {
+    mat4 viewProjection;
+    mat4 previousViewProjection;
+    mat4 viewMatrix;
+    vec4 frustumPlanes[6];
+    vec4 cameraAndMaxDistance;
+    vec4 viewportAndMotion;
+    vec4 motionJitter;
+    uvec4 counts0;
+    uvec4 counts1;
+    uvec4 capacities0;
+    uvec4 capacities1;
+};
+
+struct Cell {
+    vec4 sphere;
+    uvec4 span;
+};
+
+struct Instance {
+    vec4 row0;
+    vec4 row1;
+    vec4 row2;
+    uvec4 ids;
+};
+
+struct Mesh {
+    uvec4 a;
+    uvec4 b;
+};
+
+struct Lod {
+    uint clusterOffset;
+    uint clusterCount;
+    float minDistance;
+    float maxDistance;
+    float screenError;
+    uint flags;
+    uint reserved0;
+    uint reserved1;
+};
+
+struct Cluster {
+    vec4 sphere;
+    vec4 cone;
+    uint vertexIndexOffset;
+    uint triangleOffset;
+    uint packedCounts;
+    uint packedLodTier;
+    uint materialId;
+    uint packedUvMin;
+    uint packedUvMax;
+    uint texelDensity;
+};
+
+struct VisibleCluster {
+    uint clusterId;
+    uint instanceId;
+};
+
+struct Counters {
+    uint visibleCellCount;
+    uint visibleInstanceCount;
+    uint visibleClusterCount[3];
+    uint candidateClusterCount;
+    uint cellRejectCount;
+    uint instanceRejectCount;
+    uint clusterFrustumRejectCount;
+    uint clusterConeRejectCount;
+    uint clusterHiZRejectCount;
+    uint overflowBits;
+    uint fallbackCount;
+    uint reserved0;
+    uint reserved1;
+    uint reserved2;
+};
+
+struct DrawArgs {
+    uint vertexCount;
+    uint instanceCount;
+    uint firstVertex;
+    uint firstInstance;
+};
+
+struct Material {
+    uvec4 vt;
+    vec4 baseColor;
+    vec4 uvScaleBias;
+    uvec4 meta;
+};
+
+struct Allocation {
+    uint basePage;
+    uint pageCount;
+    uint mip0Width;
+    uint mip0Height;
+    uint packedMipChannel;
+    uint packedFlags;
+    uint rootPage;
+    uint reserved;
+};
+
+struct PageEntry {
+    uint physicalSlot;
+    uint parentPage;
+    uint generation;
+    uint packedMipFlags;
+};
+
+#endif // TERRAIN3D_RENDER_WORLD_COMMON_INC_GLSL

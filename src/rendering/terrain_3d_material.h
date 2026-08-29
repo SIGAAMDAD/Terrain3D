@@ -1,16 +1,15 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_MATERIAL_CLASS_H
 #define TERRAIN3D_MATERIAL_CLASS_H
 
+#include "core/terrain_3d_eastl_helpers.h"
 #include "Terrain3DConstants.h"
 #include "assets/generated_texture.h"
 #include "eastl_config.h"
 
 #include <EASTL/vector.h>
-#include <cstdint>
+#include <stdint.h>
 #include <godot_cpp/classes/noise_texture2d.hpp>
 #include <godot_cpp/classes/shader.hpp>
 #include <godot_cpp/templates/vector.hpp>
@@ -271,8 +270,8 @@ typedef struct t3dShaderVariantKey_s {
 	uint32_t m_nSourceLength = 0;
 
 	bool operator==( const t3dShaderVariantKey_s &rOther ) const {
-		return m_nPrimaryHash == rOther.m_nPrimaryHash && m_nFingerprint == rOther.m_nFingerprint &&
-				m_nSourceLength == rOther.m_nSourceLength;
+		return m_nPrimaryHash == rOther.m_nPrimaryHash && m_nFingerprint == rOther.m_nFingerprint
+		        && m_nSourceLength == rOther.m_nSourceLength;
 	}
 } t3dShaderVariantKey_t;
 
@@ -318,52 +317,38 @@ class Terrain3DMaterial : public Resource {
 public: // Constants
 	// Controls the compile-time shader permutation cache. Feature modules
 	// are gated by preprocessor defines and resolved through standard shader includes.
-
 	// High-level profiles exposed by the Terrain3D editor sidebar. CUSTOM keeps
 	// every individual hotpath control available. The other profiles assign a
 	// bounded group of compile-time modes and then compile/cache that exact path.
-
 	// Independently compiled clipmap shader tiers. These are internal runtime
 	// materials, not user-facing material resources. Near preserves the selected
 	// surface model, middle resolves only control/color/derived-normal data, and
 	// far uses the coarse world atlases.
-
 	// Controls terrain control-map and normal interpolation. Static modes remove
 	// the distance-dependent bilinear branch from the generated fragment shader.
-
 	// Controls the final terrain geometric normal source. Static modes remove the
 	// public flat_terrain_normals uniform branch.
-
 	// Controls regional color/wetness filtering. AUTO uses one hardware-filtered
 	// sample inside a region and exact four-corner sampling only at layer edges.
-
 	// Controls steep-surface UV projection. SHARED uses the final fragment terrain
 	// normal for all material corners; EXACT evaluates each corner independently.
-
 	// Controls whether tessellation displacement is sampled again in the fragment
 	// material path for height blending/AO suppression.
-
 	// Controls whether the material surface array is fetched. AUTO retains the
 	// fetch only when an enabled PBR output consumes normal/roughness/AO data.
-
 	// Controls whether terrain texture arrays participate in the surface pass.
 	// SILHOUETTE preserves all authored texture/control data while compiling the
 	// material texture sampling path out of the terrain shaders.
-
 	// Selects compile-time Godot spatial render modes and lighting frequency.
-
 	// Near, middle, and far rendering share one semantic quality schema.
 	// Each tier maps these choices onto a tier-appropriate implementation rather
 	// than exposing the legacy Near shader internals directly.
-
 	// Detiling quality/cost. DISCRETE_8 replaces the sine hash plus per-material
 	// sin/cos pair with an integer hash and an eight-entry rotation table.
-
 	// Dynamic preserves the public uniforms. The static modes remove both world
 	// noise source branches from the compiled shader.
-
 private:
-	Terrain3D *m_pTerrain = nullptr;
+	Terrain3D *m_pTerrain = NULL;
 
 	Ref<Shader> m_shader; // Active near shader
 	bool m_bNearShaderReady = false;
@@ -374,18 +359,16 @@ private:
 	uint64_t m_nRuntimeShaderPackStateSignature = 0u;
 	String m_szRuntimeShaderPackTierSource[SHADER_TIER_COUNT];
 	String m_runtimeShaderPackBufferSource;
-	t3dShaderVariantEntry_t m_szRuntimeShaderVariantEntries[s_nMaxShaderVariantCacheLimit] = {};
-	t3dShaderVariantEntry_t m_szEditorShaderVariantEntries[s_nMaxEditorShaderVariantCacheLimit] = {};
-	int m_nRuntimeShaderVariantCount = 0;
-	int m_nEditorShaderVariantCount = 0;
+	eastl::fixed_vector<t3dShaderVariantEntry_t, s_nMaxShaderVariantCacheLimit, false> m_runtimeShaderVariantEntries;
+	eastl::fixed_vector<t3dShaderVariantEntry_t, s_nMaxEditorShaderVariantCacheLimit, false> m_editorShaderVariantEntries;
 	uint64_t m_nRuntimeShaderVariantSourceBytes = 0;
 	uint64_t m_nEditorShaderVariantSourceBytes = 0;
 	bool m_bShaderOverrideEnabled = false;
 	Ref<Shader> m_shaderOverride; // User's shader we copy code from
 	Ref<Shader> m_connectedShaderOverride;
 	mutable TypedArray<StringName> m_activeParams; // All public shader params in the current shader
-	mutable Dictionary m_shaderParams; // Public shader params saved to disk
-	eastl::vector<PropertyInfo> m_shaderPropertyCache;
+	mutable Dictionary m_shaderParams;             // Public shader params saved to disk
+	eastl::vector<PropertyInfo, Terrain3DEastlAllocator> m_shaderPropertyCache;
 	Dictionary m_shaderParamDefaults;
 	// Mirrors values pushed to private/runtime uniforms so hot callers never read
 	// runtime material state back to the CPU.
@@ -395,8 +378,7 @@ private:
 	mutable uint64_t m_nShaderInspectorRuntimeReadCount = 0u;
 
 	Ref<Shader> m_bufferShader; // Active buffer shader
-	t3dShaderVariantEntry_t m_szBufferShaderVariantEntries[s_nMaxBufferShaderVariantCacheLimit] = {};
-	int m_nBufferShaderVariantCount = 0;
+	eastl::fixed_vector<t3dShaderVariantEntry_t, s_nMaxBufferShaderVariantCacheLimit, false> m_bufferShaderVariantEntries;
 	uint64_t m_nBufferShaderVariantSourceBytes = 0;
 	bool m_bBufferShaderOverrideEnabled = false;
 	Ref<Shader> m_bufferShaderOverride; // User's shader we copy code from
@@ -537,22 +519,20 @@ private:
 	// Functions
 	void preloadShaders( void );
 	String prepareShaderSource( const String &rShader,
-			const t3dShaderVariantState_t &rState,
-			const Array &rExcludes = Array(),
-			const t3dShaderTier_t tier = SHADER_TIER_NEAR,
-			const bool bIncludeEditorFeatures = false ) const;
+	        const t3dShaderVariantState_t &rState,
+	        const Array &rExcludes = Array(),
+	        const t3dShaderTier_t tier = SHADER_TIER_NEAR,
+	        const bool bIncludeEditorFeatures = false ) const;
 	PackedStringArray getEditorShaderFeatures( void ) const;
 	t3dShaderVariantState_t captureVariantState( void ) const;
 	bool samplesSurfaceData( const t3dShaderVariantState_t &rState ) const;
-	void applyPerformancePresetToState( t3dShaderVariantState_t &rState,
-			const t3dShaderPerformancePreset_t preset ) const;
+	void applyPerformancePresetToState( t3dShaderVariantState_t &rState, const t3dShaderPerformancePreset_t preset ) const;
 	void applyXboxProfileManifestToState( t3dShaderVariantState_t &rState ) const;
 	void applyXboxProfileManifestToTiers( void );
 	void applyVariantState( const t3dShaderVariantState_t &rState );
 	t3dShaderVariantKey_t makeVariantCacheKey( const String &rCode ) const;
 	t3dShaderVariantEntry_t *getShaderVariantEntries( const t3dShaderVariantDomain_t domain );
 	const t3dShaderVariantEntry_t *getShaderVariantEntries( const t3dShaderVariantDomain_t domain ) const;
-	int &getShaderVariantCountForDomain( const t3dShaderVariantDomain_t domain );
 	int getShaderVariantCountForDomain( const t3dShaderVariantDomain_t domain ) const;
 	uint64_t &getShaderVariantDomainSourceBytes( const t3dShaderVariantDomain_t domain );
 	uint64_t getShaderVariantDomainSourceBytes( const t3dShaderVariantDomain_t domain ) const;
@@ -564,46 +544,40 @@ private:
 	void eraseShaderVariant( const t3dShaderVariantDomain_t domain, const int iIndex );
 	void touchShaderVariant( const t3dShaderVariantDomain_t domain, const int iIndex, const bool bActualUse );
 	bool evictLruShaderVariant( const t3dShaderVariantDomain_t domain, const bool bSpeculativeOnly = false );
-	bool evictBudgetLruShaderVariant( const t3dShaderVariantDomain_t requestDomain,
-			const bool bSpeculativeOnly = false );
+	bool evictBudgetLruShaderVariant( const t3dShaderVariantDomain_t requestDomain, const bool bSpeculativeOnly = false );
 	void trimShaderVariantCaches( void );
 	void submitShaderSource( const Ref<Shader> &rShader, const String &rCode );
 	t3dShaderValidationResult_t validateShaderVariant( const Ref<Shader> &rShader, const t3dShaderTier_t tier );
 	void recordShaderTierValidation( const t3dShaderTier_t tier,
-			const String &rCode,
-			const t3dShaderValidationResult_t &rValidation,
-			const uint64_t nActiveShaderRidId,
-			const bool bFallbackToNear,
-			const bool bCompactTierActive );
+	        const String &rCode,
+	        const t3dShaderValidationResult_t &rValidation,
+	        const uint64_t nActiveShaderRidId,
+	        const bool bFallbackToNear,
+	        const bool bCompactTierActive );
 	Ref<Shader> getOrCreateShaderVariant( const String &rCode,
-			const t3dShaderVariantDomain_t domain,
-			const bool bPrewarm = false,
-			const t3dShaderTier_t tier = SHADER_TIER_NEAR,
-			t3dShaderValidationResult_t *pValidation = nullptr );
-	uint64_t getChangedVariantDimensions( const t3dShaderVariantState_t &rPrevious,
-			const t3dShaderVariantState_t &rCurrent ) const;
+	        const t3dShaderVariantDomain_t domain,
+	        const bool bPrewarm = false,
+	        const t3dShaderTier_t tier = SHADER_TIER_NEAR,
+	        t3dShaderValidationResult_t *pValidation = NULL );
+	uint64_t getChangedVariantDimensions( const t3dShaderVariantState_t &rPrevious, const t3dShaderVariantState_t &rCurrent ) const;
 	uint64_t getInferredPotentialDimensions( const t3dShaderVariantState_t &rState ) const;
 	void recordVariantTransition( const t3dShaderVariantState_t &rState );
-	bool
-	appendVariantState( t3dShaderVariantState_t *pStates, int &nCount, const t3dShaderVariantState_t &rState ) const;
-	void appendDimensionStates( t3dShaderVariantState_t *pStates,
-			int &nCount,
-			const t3dShaderVariantState_t &rBase,
-			const t3dShaderVariantDimension_t dimension ) const;
-	void appendPotentialBranchStates( t3dShaderVariantState_t *pStates,
-			int &nCount,
-			const t3dShaderVariantState_t &rBase ) const;
+	bool appendVariantState( eastl::fixed_vector<t3dShaderVariantState_t, s_nMaxShaderVariantPrewarmLimit, false> &rStates,
+	        const t3dShaderVariantState_t &rState ) const;
+	void appendDimensionStates( eastl::fixed_vector<t3dShaderVariantState_t, s_nMaxShaderVariantPrewarmLimit, false> &rStates,
+	        const t3dShaderVariantState_t &rBase,
+	        const t3dShaderVariantDimension_t dimension ) const;
+	void appendPotentialBranchStates( eastl::fixed_vector<t3dShaderVariantState_t, s_nMaxShaderVariantPrewarmLimit, false> &rStates,
+	        const t3dShaderVariantState_t &rBase ) const;
 	void prewarmShaderVariantsInternal( const bool bForce = false );
 	uint64_t getVariantStateSignature( const t3dShaderVariantState_t &rState ) const;
 	uint64_t getPrewarmSignature( void ) const;
 	String generateShaderCode( void ) const;
 	String generateShaderCode( const t3dShaderVariantState_t &rState ) const;
-	String generateShaderCode( const t3dShaderVariantState_t &rState,
-			const t3dShaderTier_t tier,
-			const bool bIncludeEditorFeatures = false ) const;
-	void applyTierQualityToState( t3dShaderVariantState_t &rState,
-			const t3dTierQualityConfig_t &rQuality,
-			const t3dShaderTier_t tier ) const;
+	String generateShaderCode(
+	        const t3dShaderVariantState_t &rState, const t3dShaderTier_t tier, const bool bIncludeEditorFeatures = false ) const;
+	void applyTierQualityToState(
+	        t3dShaderVariantState_t &rState, const t3dTierQualityConfig_t &rQuality, const t3dShaderTier_t tier ) const;
 	void applyPerformancePresetToTiers( const t3dShaderPerformancePreset_t preset );
 	void tierQualityChanged( const t3dShaderTier_t tier, const bool bRecompile = true );
 	void refreshGpuRegionChannelPolicy( void );
@@ -634,13 +608,14 @@ private:
 	}
 
 public:
-	EA_FORCE_INLINE Terrain3DMaterial( void ) {}
+	EA_FORCE_INLINE Terrain3DMaterial( void ) {
+	}
 	EA_FORCE_INLINE ~Terrain3DMaterial( void ) {
 		destroy();
 	}
 	void initialize( Terrain3D *pTerrain );
 	EA_FORCE_INLINE bool isInitialized( void ) const {
-		return m_pTerrain != nullptr;
+		return m_pTerrain != NULL;
 	}
 	EA_FORCE_INLINE bool isInitializedFor( const Terrain3D *pTerrain ) const {
 		return m_pTerrain == pTerrain;
@@ -658,8 +633,8 @@ public:
 	}
 	void updateRegionPageTable( void );
 	EA_FORCE_INLINE bool isRegionPageTableValid( void ) const {
-		return m_generatedRegionMap.getRid().is_valid() && m_generatedLogicalRegionMap.getRid().is_valid() &&
-				m_nRegionMapTextureSize > 0 && m_nLogicalRegionMapTextureSize == m_nRegionMapTextureSize;
+		return m_generatedRegionMap.getRid().is_valid() && m_generatedLogicalRegionMap.getRid().is_valid() && m_nRegionMapTextureSize > 0
+		        && m_nLogicalRegionMapTextureSize == m_nRegionMapTextureSize;
 	}
 	void updateFarAtlasTextures( void );
 	void updateRuntimeMaterialLayerMap( void );
@@ -741,12 +716,11 @@ public:
 		return m_middleQuality.m_materialSamplingQuality;
 	}
 	EA_FORCE_INLINE void setMiddleSurfaceSource( t3dMiddleSurfaceSource_t eSource ) {
-		setMiddleMaterialSamplingQuality(
-				eSource == MIDDLE_SURFACE_BAKED_COMPOSITE ? MATERIAL_SAMPLING_FAST : MATERIAL_SAMPLING_FULL );
+		setMiddleMaterialSamplingQuality( eSource == MIDDLE_SURFACE_BAKED_COMPOSITE ? MATERIAL_SAMPLING_FAST : MATERIAL_SAMPLING_FULL );
 	}
 	EA_FORCE_INLINE t3dMiddleSurfaceSource_t getMiddleSurfaceSource( void ) const {
 		return m_middleQuality.m_materialSamplingQuality == MATERIAL_SAMPLING_FAST ? MIDDLE_SURFACE_BAKED_COMPOSITE
-																				   : MIDDLE_SURFACE_RUNTIME_MATERIAL;
+		                                                                           : MIDDLE_SURFACE_RUNTIME_MATERIAL;
 	}
 	void setMiddleTerrainNormalQuality( t3dTerrainNormalQuality_t eQuality );
 	EA_FORCE_INLINE t3dTerrainNormalQuality_t getMiddleTerrainNormalQuality( void ) const {
@@ -940,18 +914,17 @@ public:
 	void setTerrainSamplingMode( const t3dTerrainSamplingMode_t mode );
 	EA_FORCE_INLINE t3dTerrainSamplingMode_t getTerrainSamplingMode( void ) const {
 		return m_nearQuality.m_materialSamplingQuality == MATERIAL_SAMPLING_FAST ? TERRAIN_SAMPLING_SINGLE_SAMPLE
-																				 : TERRAIN_SAMPLING_ADAPTIVE_WEIGHTED;
+		                                                                         : TERRAIN_SAMPLING_ADAPTIVE_WEIGHTED;
 	}
 	void setTerrainNormalMode( const t3dTerrainNormalMode_t mode );
 	EA_FORCE_INLINE t3dTerrainNormalMode_t getTerrainNormalMode( void ) const {
-		return m_nearQuality.m_terrainNormalQuality == TERRAIN_NORMAL_QUALITY_GEOMETRY
-				? TERRAIN_NORMAL_GEOMETRY_DERIVATIVE
-				: TERRAIN_NORMAL_DERIVED_TEXTURE;
+		return m_nearQuality.m_terrainNormalQuality == TERRAIN_NORMAL_QUALITY_GEOMETRY ? TERRAIN_NORMAL_GEOMETRY_DERIVATIVE
+		                                                                               : TERRAIN_NORMAL_DERIVED_TEXTURE;
 	}
 	void setColorSamplingMode( const t3dColorSamplingMode_t mode );
 	EA_FORCE_INLINE t3dColorSamplingMode_t getColorSamplingMode( void ) const {
 		return m_nearQuality.m_terrainColorQuality == TERRAIN_COLOR_QUALITY_FAST ? COLOR_SAMPLING_HARDWARE_FILTERED
-																				 : COLOR_SAMPLING_EXACT_4_TAP;
+		                                                                         : COLOR_SAMPLING_EXACT_4_TAP;
 	}
 	void setProjectionMode( const t3dProjectionMode_t mode );
 	EA_FORCE_INLINE t3dProjectionMode_t getProjectionMode( void ) const {
@@ -963,8 +936,7 @@ public:
 	}
 	void setSurfaceDataMode( const t3dSurfaceDataMode_t mode );
 	EA_FORCE_INLINE t3dSurfaceDataMode_t getSurfaceDataMode( void ) const {
-		return m_nearQuality.m_surfaceResponseQuality == SURFACE_RESPONSE_SIMPLE ? SURFACE_DATA_ALBEDO_ONLY
-																				 : SURFACE_DATA_FULL;
+		return m_nearQuality.m_surfaceResponseQuality == SURFACE_RESPONSE_SIMPLE ? SURFACE_DATA_ALBEDO_ONLY : SURFACE_DATA_FULL;
 	}
 	void setTextureSurfaceMode( const t3dTextureSurfaceMode_t mode );
 	EA_FORCE_INLINE t3dTextureSurfaceMode_t getTextureSurfaceMode( void ) const {
@@ -973,12 +945,11 @@ public:
 	void setTerrainShadingMode( const t3dTerrainShadingMode_t mode );
 	t3dTerrainShadingMode_t getTerrainShadingMode( void ) const {
 		return m_nearQuality.m_lightingModel == TIER_LIGHTING_UNSHADED
-				? SHADING_UNSHADED
-				: ( m_nearQuality.m_lightingModel == TIER_LIGHTING_BLINN_PHONG
-								  ? SHADING_XBOX_360_BLINN_PHONG
-								  : ( m_nearQuality.m_lightingModel == TIER_LIGHTING_PBR
-													? SHADING_BURLEY_GGX
-													: SHADING_LAMBERT_DIFFUSE_ONLY ) );
+		        ? SHADING_UNSHADED
+		        : ( m_nearQuality.m_lightingModel == TIER_LIGHTING_BLINN_PHONG
+		                          ? SHADING_XBOX_360_BLINN_PHONG
+		                          : ( m_nearQuality.m_lightingModel == TIER_LIGHTING_PBR ? SHADING_BURLEY_GGX
+		                                                                                 : SHADING_LAMBERT_DIFFUSE_ONLY ) );
 	}
 	void setDetilingMode( const t3dDetilingMode_t mode );
 	EA_FORCE_INLINE t3dDetilingMode_t getDetilingMode( void ) const {
@@ -996,16 +967,16 @@ public:
 	}
 	void clearShaderVariantCache( void );
 	EA_FORCE_INLINE int getShaderVariantCount( void ) const {
-		return m_nRuntimeShaderVariantCount + m_nEditorShaderVariantCount;
+		return ( int )( m_runtimeShaderVariantEntries.size() + m_editorShaderVariantEntries.size() );
 	}
 	EA_FORCE_INLINE int getRuntimeShaderVariantCount( void ) const {
-		return m_nRuntimeShaderVariantCount;
+		return ( int )( m_runtimeShaderVariantEntries.size() );
 	}
 	EA_FORCE_INLINE int getEditorShaderVariantCount( void ) const {
-		return m_nEditorShaderVariantCount;
+		return ( int )( m_editorShaderVariantEntries.size() );
 	}
 	EA_FORCE_INLINE int getBufferShaderVariantCount( void ) const {
-		return m_nBufferShaderVariantCount;
+		return ( int )( m_bufferShaderVariantEntries.size() );
 	}
 	int getSpeculativeShaderVariantCount( void ) const;
 	EA_FORCE_INLINE int64_t getShaderVariantSourceBytes( void ) const {
@@ -1023,10 +994,8 @@ public:
 	Dictionary getShaderVariantDiagnostics( void ) const;
 	Dictionary getShaderTierDiagnostics( const int nTier ) const;
 	void resetShaderVariantDiagnostics( void );
-	String getShaderRegressionSource( const int nTier,
-			const int nAssemblyPath,
-			const bool bControlMapsImplicit,
-			const bool bColorMapsImplicit );
+	String getShaderRegressionSource(
+	        const int nTier, const int nAssemblyPath, const bool bControlMapsImplicit, const bool bColorMapsImplicit );
 #ifdef DEBUG_ENABLED
 	void setShaderRegressionInvalidTier( const int nTier );
 	Variant getTierRegressionMaterialParam( const int nTier, const StringName &rName ) const;

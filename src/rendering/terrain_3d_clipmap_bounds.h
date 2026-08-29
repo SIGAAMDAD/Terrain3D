@@ -1,7 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_CLIPMAP_BOUNDS_H
 #define TERRAIN3D_CLIPMAP_BOUNDS_H
 
@@ -10,8 +8,7 @@ typedef struct t3dClipmapVerticalBounds_s {
 	double m_fSizeY = 0.2;
 } t3dClipmapVerticalBounds_t;
 
-inline t3dClipmapVerticalBounds_t
-t3dClipmapVerticalBounds( const double fHeightA, const double fHeightB, const double fCullMargin ) {
+inline t3dClipmapVerticalBounds_t t3dClipmapVerticalBounds( const double fHeightA, const double fHeightB, const double fCullMargin ) {
 	const double fMinHeight = fHeightA < fHeightB ? fHeightA : fHeightB;
 	const double fMaxHeight = fHeightA < fHeightB ? fHeightB : fHeightA;
 	const double fMargin = fCullMargin > 0.0 ? fCullMargin : 0.0;

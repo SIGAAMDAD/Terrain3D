@@ -30,6 +30,12 @@ void Terrain3DRdCompositorEffect::renderPreviewOnRenderThread( void ) {
 	}
 }
 
+void Terrain3DRdCompositorEffect::serviceRenderWorldPublicationOnRenderThread( void ) {
+	if ( m_pCoordinator ) {
+		m_pCoordinator->serviceRenderWorldPublicationOnRenderThread();
+	}
+}
+
 void Terrain3DRdCompositorEffect::_render_callback( const int32_t nEffectCallbackType, RenderData *const pRenderData ) {
 	if ( nEffectCallbackType != CompositorEffect::EFFECT_CALLBACK_TYPE_PRE_OPAQUE || !m_pCoordinator ) {
 		return;

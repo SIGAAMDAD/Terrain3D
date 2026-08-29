@@ -1,43 +1,38 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_RENDER_COORDINATOR_H
 #define TERRAIN3D_RENDER_COORDINATOR_H
 
+#include "Terrain3DConstants.h"
+#include "core/terrain_3d_sync.h"
 #include "assets/generated_texture.h"
 #include "rendering/rd/terrain_3d_rd_clipmap_renderer.h"
 #include "rendering/rd/terrain_3d_rd_compositor_effect.h"
 #include "rendering/rd/terrain_3d_rd_instance_renderer.h"
 #include "rendering/rd/terrain_3d_rd_ocean_renderer.h"
+#include "rendering/rd/render_world/terrain_3d_render_world_runtime.h"
 #include "rendering/rd/terrain_3d_rd_shader_library.h"
 #include "rendering/rd/terrain_3d_rd_types.h"
 
-#include <array>
-#include <atomic>
-#include <cstddef>
+#include "eastl_config.h"
+#include <stddef.h>
 #include <godot_cpp/classes/compositor.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
-#include <mutex>
-#include <vector>
-
 class Terrain3D;
 class Terrain3DMaterial;
 class Terrain3DRdForwardPlusBridgeAdapter;
 
-class Terrain3DRenderCoordinator
-{
+class Terrain3DRenderCoordinator {
 	CLASS_NAME_STATIC( "Terrain3DRenderCoordinator" );
 
 private:
-	Terrain3D *m_pTerrain = nullptr;
+	Terrain3D *m_pTerrain = NULL;
 	Ref<Terrain3DRdCompositorEffect> m_effect;
 	Ref<Compositor> m_attachedCompositor;
 	uint64_t m_nAttachedCameraId = 0u;
 	bool m_bCreatedCompositor = false;
 
-	typedef struct t3dRdFrameSnapshotSlot_s
-	{
+	typedef struct t3dRdFrameSnapshotSlot_s {
 		t3dRdFrameSnapshot_t m_snapshot;
 		t3dRdTerrainBindings_t m_bindings;
 		uint32_t m_nRegionMapBank = s_nRdInvalidFrameSnapshotIndex;
@@ -46,58 +41,54 @@ private:
 		uint32_t m_nOceanTopologyBank = s_nRdInvalidFrameSnapshotIndex;
 	} t3dRdFrameSnapshotSlot_t;
 
-	typedef struct t3dRdRegionMapBank_s
-	{
+	typedef struct t3dRdRegionMapBank_s {
 		uint64_t m_nGeneration = 0u;
 		PackedByteArray m_bytes;
 	} t3dRdRegionMapBank_t;
 
-	typedef struct t3dRdInstanceMeshBank_s
-	{
+	typedef struct t3dRdInstanceMeshBank_s {
 		uint64_t m_nGeneration = 0u;
 		t3dRdMeshSourceSnapshot_t m_snapshot;
 	} t3dRdInstanceMeshBank_t;
 
-	typedef struct t3dRdInstanceSceneBank_s
-	{
+	typedef struct t3dRdInstanceSceneBank_s {
 		uint64_t m_nGeneration = 0u;
 		t3dRdInstanceSceneSnapshot_t m_snapshot;
 	} t3dRdInstanceSceneBank_t;
 
-	typedef struct t3dRdOceanTopologyBank_s
-	{
+	typedef struct t3dRdOceanTopologyBank_s {
 		uint64_t m_nGeneration = 0u;
 		t3dRdOceanTopologySnapshot_t m_snapshot;
 	} t3dRdOceanTopologyBank_t;
 
-	std::array<t3dRdFrameSnapshotSlot_t, s_nRdFrameSnapshotSlotCount> m_snapshotSlots{};
-	std::array<t3dRdRegionMapBank_t, s_nRdFrameSnapshotSlotCount> m_regionMapBanks{};
-	std::array<t3dRdInstanceMeshBank_t, s_nRdFrameSnapshotSlotCount> m_instanceMeshBanks{};
-	std::array<t3dRdInstanceSceneBank_t, s_nRdFrameSnapshotSlotCount> m_instanceSceneBanks{};
-	std::array<t3dRdOceanTopologyBank_t, s_nRdFrameSnapshotSlotCount> m_oceanTopologyBanks{};
-	std::atomic_uint32_t m_nRegionMapReaderBank{ s_nRdInvalidFrameSnapshotIndex };
-	std::atomic_uint32_t m_nInstanceMeshReaderBank{ s_nRdInvalidFrameSnapshotIndex };
-	std::atomic_uint32_t m_nInstanceSceneReaderBank{ s_nRdInvalidFrameSnapshotIndex };
-	std::atomic_uint32_t m_nOceanTopologyReaderBank{ s_nRdInvalidFrameSnapshotIndex };
+	t3dRdFrameSnapshotSlot_t m_snapshotSlots[s_nRdFrameSnapshotSlotCount]{};
+	t3dRdRegionMapBank_t m_regionMapBanks[s_nRdFrameSnapshotSlotCount]{};
+	t3dRdInstanceMeshBank_t m_instanceMeshBanks[s_nRdFrameSnapshotSlotCount]{};
+	t3dRdInstanceSceneBank_t m_instanceSceneBanks[s_nRdFrameSnapshotSlotCount]{};
+	t3dRdOceanTopologyBank_t m_oceanTopologyBanks[s_nRdFrameSnapshotSlotCount]{};
+	t3dAtomicU32_t m_nRegionMapReaderBank{ s_nRdInvalidFrameSnapshotIndex };
+	t3dAtomicU32_t m_nInstanceMeshReaderBank{ s_nRdInvalidFrameSnapshotIndex };
+	t3dAtomicU32_t m_nInstanceSceneReaderBank{ s_nRdInvalidFrameSnapshotIndex };
+	t3dAtomicU32_t m_nOceanTopologyReaderBank{ s_nRdInvalidFrameSnapshotIndex };
 	uint32_t m_nCurrentRegionMapBank = s_nRdInvalidFrameSnapshotIndex;
 	uint32_t m_nCurrentInstanceMeshBank = s_nRdInvalidFrameSnapshotIndex;
 	uint32_t m_nCurrentInstanceSceneBank = s_nRdInvalidFrameSnapshotIndex;
 	uint32_t m_nCurrentOceanTopologyBank = s_nRdInvalidFrameSnapshotIndex;
-	std::atomic_uint64_t m_nSnapshotExchangeToken{ t3dRdMakeFrameSnapshotToken( 1u, 0u, false ) };
+	t3dAtomicU64_t m_nSnapshotExchangeToken{ t3dRdMakeFrameSnapshotToken( 1u, 0u, false ) };
 	uint32_t m_nSnapshotWriteIndex = 2u;
 	uint32_t m_nSnapshotRenderIndex = 0u;
 	uint64_t m_nSnapshotRenderGeneration = 0u;
 	bool m_bSnapshotRenderValid = false;
 	uint64_t m_nNextSnapshotGeneration = 1u;
-	std::atomic_uint32_t m_nPublishedSnapshotIndex{ s_nRdInvalidFrameSnapshotIndex };
-	std::atomic_uint64_t m_nPublishedSnapshotGeneration{ 0u };
-	std::atomic_uint64_t m_nConsumedSnapshotGeneration{ 0u };
-	std::atomic_uint64_t m_nSnapshotPublications{ 0u };
-	std::atomic_uint64_t m_nSnapshotConsumes{ 0u };
-	std::atomic_uint64_t m_nSnapshotReuses{ 0u };
-	std::atomic_uint64_t m_nSkippedSnapshotGenerations{ 0u };
-	std::atomic_uint64_t m_nStaleSnapshots{ 0u };
-	std::atomic_uint64_t m_nLastStaleSnapshotToken{ 0u };
+	t3dAtomicU32_t m_nPublishedSnapshotIndex{ s_nRdInvalidFrameSnapshotIndex };
+	t3dAtomicU64_t m_nPublishedSnapshotGeneration{ 0u };
+	t3dAtomicU64_t m_nConsumedSnapshotGeneration{ 0u };
+	t3dAtomicU64_t m_nSnapshotPublications{ 0u };
+	t3dAtomicU64_t m_nSnapshotConsumes{ 0u };
+	t3dAtomicU64_t m_nSnapshotReuses{ 0u };
+	t3dAtomicU64_t m_nSkippedSnapshotGenerations{ 0u };
+	t3dAtomicU64_t m_nStaleSnapshots{ 0u };
+	t3dAtomicU64_t m_nLastStaleSnapshotToken{ 0u };
 
 	uint64_t m_nRegionTopologyGeneration = 0u;
 	uint64_t m_nRegionLightingSignature = 0u;
@@ -107,7 +98,7 @@ private:
 	uint64_t m_nRegionCacheGeneration = 0u;
 	uint64_t m_nLastPatchFingerprint = 0u;
 	uint64_t m_nPatchGeneration = 0u;
-	std::array<t3dRdPatch_t, s_nMaxClipmapLevels> m_previousPatches{};
+	t3dRdPatch_t m_previousPatches[s_nMaxClipmapLevels]{};
 	uint32_t m_nPreviousPatchCount = 0u;
 	uint64_t m_nLastMaterialFingerprint = 0u;
 	uint64_t m_nMaterialGeneration = 0u;
@@ -129,14 +120,15 @@ private:
 	Terrain3DRdClipmapRenderer m_renderer;
 	Terrain3DRdInstanceRenderer m_instanceRenderer;
 	Terrain3DRdOceanRenderer m_oceanRenderer;
+	Terrain3DRenderWorldRuntime m_renderWorldRuntime;
 	Terrain3DRdInstanceRenderer m_previewRenderer;
 	bool m_bPreviewRendererInitialized = false;
 	t3dRdMeshSourceSnapshot_t m_cachedPreviewMeshes;
 	bool m_bCachedPreviewMeshesValid = false;
 	uint64_t m_nPreviewMeshFingerprint = 0u;
 	uint64_t m_nPreviewMeshGeneration = 0u;
-	std::mutex m_previewCallMutex;
-	std::mutex m_previewStateMutex;
+	t3dMutex_t m_previewCallMutex;
+	t3dMutex_t m_previewStateMutex;
 	t3dRdMeshSourceSnapshot_t m_pendingPreviewMeshes;
 	bool m_bPendingPreviewMeshesValid = false;
 	uint16_t m_nPendingPreviewAssetId = 0u;
@@ -154,20 +146,20 @@ private:
 	bool m_bCachedRegularInstanceSceneValid = false;
 	bool m_bCachedHlodInstanceSceneValid = false;
 	bool m_bCachedInstanceSceneValid = false;
-	std::vector<t3dRdExternalMeshSource_t> m_cachedHlodMeshSources;
+	eastl::vector<t3dRdExternalMeshSource_t, Terrain3DEastlAllocator> m_cachedHlodMeshSources;
 	uint64_t m_nInstanceMeshFingerprint = 0u;
 	uint64_t m_nInstanceMeshGeneration = 0u;
 	uint64_t m_nInstanceSceneGeneration = 0u;
 	uint64_t m_nHlodSceneGeneration = 0u;
 	uint64_t m_nCombinedInstanceSceneGeneration = 0u;
-	std::atomic_bool m_bRendererInitialized{ false };
-	std::atomic_bool m_bRenderEnabled{ false };
-	std::atomic_bool m_bRendererFailed{ false };
+	t3dAtomicBool_t m_bRendererInitialized{ false };
+	t3dAtomicBool_t m_bRenderEnabled{ false };
+	t3dAtomicBool_t m_bRendererFailed{ false };
 	bool m_bFailureLatched = false;
 	bool m_bForwardBridgeAttached = false;
 	bool m_bCompositorDebugEnabled = false;
 	bool m_bMotionDebugEnabled = false;
-	std::atomic_uint64_t m_nCallbackCount{ 0u };
+	t3dAtomicU64_t m_nCallbackCount{ 0u };
 	uint64_t m_nForwardPassCallbacks = 0u;
 	uint64_t m_nDepthPassCallbacks = 0u;
 	uint64_t m_nOpaquePassCallbacks = 0u;
@@ -180,9 +172,8 @@ private:
 	uint32_t m_nLastForwardViewCount = 0u;
 	uint32_t m_nLastForwardSampleCount = 0u;
 	int64_t m_nLastForwardFramebufferFormat = RenderingDevice::INVALID_ID;
-	static constexpr uint32_t s_nForwardViewportSlotCount = 8u;
-	typedef struct t3dRdForwardViewportState_s
-	{
+
+	typedef struct t3dRdForwardViewportState_s {
 		uint64_t m_nViewportKey = 0u;
 		RID m_hFramebuffer;
 		int64_t m_nFramebufferFormat = RenderingDevice::INVALID_ID;
@@ -201,20 +192,35 @@ private:
 	uint64_t m_nForwardViewportEvictions = 0u;
 	bool m_bForwardPreparedHasTerrain = false;
 	bool m_bForwardPreparedHasOcean = false;
-	std::atomic_uint32_t m_nConsecutiveRenderFailures{ 0u };
-	mutable std::mutex m_diagnosticsMutex;
+	bool m_bForwardPreparedHasRenderWorld = false;
+	typedef struct t3dRenderWorldPendingPublication_s {
+		const T3DGeometryDatabase *pGeometry = NULL;
+		const T3DSceneCell *pCells = NULL;
+		const T3DInstanceRecord *pInstances = NULL;
+		const T3DMaterialRecord *pMaterials = NULL;
+		uint32_t nCellCount = 0u;
+		uint32_t nInstanceCount = 0u;
+		uint32_t nMaterialCount = 0u;
+		bool bRelease = false;
+		bool bPending = false;
+		bool bResult = false;
+	} t3dRenderWorldPendingPublication_t;
+	t3dMutex_t m_renderWorldPublicationMutex;
+	t3dRenderWorldPendingPublication_t m_renderWorldPendingPublication{};
+	t3dAtomicU32_t m_nConsecutiveRenderFailures{ 0u };
+	mutable t3dMutex_t m_diagnosticsMutex;
 	String m_initializationError;
 
 	uint64_t hashBytes( const void *pData, size_t nBytes ) const;
 	uint64_t advanceGeneration( uint64_t nGeneration ) const;
-	void buildMaterialState( t3dRdFrameSnapshot_t& rSnapshot ) const;
-	void buildEditorOverlayState( t3dRdFrameSnapshot_t& rSnapshot, const Terrain3DMaterial *pMaterial ) const;
+	void buildMaterialState( t3dRdFrameSnapshot_t &rSnapshot ) const;
+	void buildEditorOverlayState( t3dRdFrameSnapshot_t &rSnapshot, const Terrain3DMaterial *pMaterial ) const;
 	bool ensureWorldNoiseCache( const Terrain3DMaterial *pMaterial );
 	bool ensureMacroNoiseTexture( const Terrain3DMaterial *pMaterial );
 	bool ensureEditorBrushTexture( const Terrain3DMaterial *pMaterial );
 	uint32_t selectWritablePublicationBank( uint32_t nReaderBank, uint32_t nPendingBank ) const;
-	void ensureInstancePublicationStorage( void );
-	void ensureInstanceMeshBankStorage( void );
+	bool ensureInstancePublicationStorage( void );
+	bool ensureInstanceMeshBankStorage( void );
 	void publishSnapshot( void );
 	const t3dRdFrameSnapshotSlot_t *acquireSnapshotOnRenderThread( void );
 	void resetSnapshotPublication( void );
@@ -226,12 +232,11 @@ private:
 	void detachForwardBridge( void );
 	bool isForwardBridgeReady( void ) const;
 	void updateRenderRoute( void );
-	bool prepareForwardLifecycle( const t3dRdForwardPassContext_t& rContext,
-			bool& rHistoryValid,
-			bool& rViewportReconfigured );
+	bool prepareForwardLifecycle( const t3dRdForwardPassContext_t &rContext, bool &rHistoryValid, bool &rViewportReconfigured );
 	void resetForwardLifecycle( void );
 
 public:
+	void serviceColdCapacity( void );
 	Terrain3DRenderCoordinator( void ) = default;
 	~Terrain3DRenderCoordinator( void );
 
@@ -240,10 +245,19 @@ public:
 	void shutdown( void );
 	void update( void );
 	void render( RenderData *pRenderData );
-	bool renderForwardPass( const t3dRdForwardPassContext_t& rContext );
+	bool renderForwardPass( const t3dRdForwardPassContext_t &rContext );
 	void shutdownRendererOnRenderThread( void );
 	void renderPreviewOnRenderThread( void );
-	Ref<Image> createMeshPreview( uint16_t nAssetId, const Vector2i& rSize );
+	void serviceRenderWorldPublicationOnRenderThread( void );
+	bool publishRenderWorldDatabaseCold( const T3DGeometryDatabase &rGeometry,
+	        const T3DSceneCell *pCells,
+	        uint32_t nCellCount,
+	        const T3DInstanceRecord *pInstances,
+	        uint32_t nInstanceCount,
+	        const T3DMaterialRecord *pMaterials,
+	        uint32_t nMaterialCount );
+	void releaseRenderWorldDatabaseCold( void );
+	Ref<Image> createMeshPreview( uint16_t nAssetId, const Vector2i &rSize );
 	Dictionary getDiagnostics( void ) const;
 	size_t getRetainedCpuBytes( void ) const;
 };

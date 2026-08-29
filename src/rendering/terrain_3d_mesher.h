@@ -1,7 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_MESHER_CLASS_H
 #define TERRAIN3D_MESHER_CLASS_H
 
@@ -10,8 +8,9 @@
 #include "rendering/rd/terrain_3d_rd_types.h"
 
 #include <EASTL/array.h>
-#include <cstddef>
-#include <cstdint>
+
+#include <stddef.h>
+#include <stdint.h>
 #include <godot_cpp/classes/geometry_instance3d.hpp>
 
 class Terrain3D;
@@ -46,25 +45,25 @@ class Terrain3DMesher {
 	CLASS_NAME_STATIC( "Terrain3DMesher" );
 
 private:
-	Terrain3D *m_pTerrain = nullptr;
-	eastl::array<Vector2, s_nMaxClipmapLevels> m_szLastLodPositions{};
-	eastl::array<int, s_nMaxClipmapLevels> m_szLastLodTestX{};
-	eastl::array<int, s_nMaxClipmapLevels> m_szLastLodTestZ{};
-	eastl::array<real_t, s_nMaxClipmapLevels> m_fLodScales{};
-	eastl::array<real_t, s_nMaxClipmapLevels> m_fLodSnapSteps{};
-	eastl::array<real_t, s_nMaxClipmapLevels> m_fLodNextSnapSteps{};
-	eastl::array<t3dClipmapGeometry_t, MESH_TYPE_COUNT> m_szMeshGeometry{};
+	Terrain3D *m_pTerrain = NULL;
+	Vector2 m_szLastLodPositions[s_nMaxClipmapLevels];
+	int m_szLastLodTestX[s_nMaxClipmapLevels];
+	int m_szLastLodTestZ[s_nMaxClipmapLevels];
+	real_t m_fLodScales[s_nMaxClipmapLevels];
+	real_t m_fLodSnapSteps[s_nMaxClipmapLevels];
+	real_t m_fLodNextSnapSteps[s_nMaxClipmapLevels];
+	t3dClipmapGeometry_t m_szMeshGeometry[MESH_TYPE_COUNT]{};
 
-	eastl::array<Vector3, s_nPairInstances> m_szTrimAPos{};
-	eastl::array<Vector3, s_nPairInstances> m_szTrimBPos{};
-	eastl::array<Vector3, s_nMaxTileInstances> m_szTilePosLod0{};
-	eastl::array<Vector3, s_nPairInstances> m_szFillAPos{};
-	eastl::array<Vector3, s_nPairInstances> m_szFillBPos{};
-	eastl::array<Vector3, s_nRingTileInstances> m_szTilePos{};
+	Vector3 m_szTrimAPos[s_nPairInstances];
+	Vector3 m_szTrimBPos[s_nPairInstances];
+	Vector3 m_szTilePosLod0[s_nMaxTileInstances];
+	Vector3 m_szFillAPos[s_nPairInstances];
+	Vector3 m_szFillBPos[s_nPairInstances];
+	Vector3 m_szTilePos[s_nRingTileInstances];
 	real_t m_fOffsetA = 0.f;
 	real_t m_fOffsetB = 0.f;
 	real_t m_fOffsetC = 0.f;
-	eastl::array<Vector3, s_nPairInstances> m_szEdgePos{};
+	Vector3 m_szEdgePos[s_nPairInstances];
 
 	t3dMesherRuntimeConfig_t m_runtimeConfig;
 	int m_iDeferredLodCursor = 0;
@@ -88,23 +87,22 @@ private:
 	bool loadRuntimeGeometryPack( const String &rDataDirectory );
 	t3dClipmapGeometry_t generateCombinedGeometry( bool bLod0 );
 	void appendGrid( PackedVector3Array &rVertices,
-			PackedVector2Array &rMetadata,
-			PackedInt32Array &rIndices,
-			int &nVertexWrite,
-			int &nIndexWrite,
-			const Vector2i &vSize,
-			const Vector3 &rOrigin,
-			float fPartId,
-			bool bStandardGrid );
+	        PackedVector2Array &rMetadata,
+	        PackedInt32Array &rIndices,
+	        int &nVertexWrite,
+	        int &nIndexWrite,
+	        const Vector2i &vSize,
+	        const Vector3 &rOrigin,
+	        float fPartId,
+	        bool bStandardGrid );
 	void generateClipmap( void );
 	void generateOffsetData( void );
 	void generateLodCache( void );
 	void clearClipmap( void );
 	void clearMeshTypes( void );
 	void compileTierRuntimeConfig( int nNearShaderLodCount, int nMiddleShaderLodCount, int nClipmapUpdateBudget );
-	void compileShadowRuntimeConfig( int nShadowLodCount,
-			const eastl::array<bool, 3> &bTierShadowEnabled,
-			const eastl::array<int, 3> &nTierShadowLodCounts );
+	void compileShadowRuntimeConfig(
+	        int nShadowLodCount, const eastl::array<bool, 3> &bTierShadowEnabled, const eastl::array<int, 3> &nTierShadowLodCounts );
 	void refreshImmediateLodCount( void );
 	int getImmediateLodCount( void ) const;
 	int getLodTier( int nLod ) const;
@@ -113,55 +111,90 @@ private:
 	size_t estimateGeometryPayloadBytes( int nFirstLod, int nLastLod ) const;
 
 public:
-	EA_FORCE_INLINE Terrain3DMesher( void ) {}
-	EA_FORCE_INLINE ~Terrain3DMesher( void ) { destroy(); }
+	EA_FORCE_INLINE Terrain3DMesher( void ) {
+	}
+	EA_FORCE_INLINE ~Terrain3DMesher( void ) {
+		destroy();
+	}
 
 	void initialize( Terrain3D *pTerrain,
-			int nMeshSize,
-			int nLods,
-			int nTessellationLevel,
-			real_t fVertexSpacing,
-			int nNearShaderLodCount,
-			int nMiddleShaderLodCount,
-			int nClipmapUpdateBudget,
-			GeometryInstance3D::ShadowCastingSetting castShadows,
-			int nShadowLodCount,
-			const eastl::array<bool, 3> &bTierShadowEnabled,
-			const eastl::array<int, 3> &nTierShadowLodCounts,
-			bool bRequireCookedGeometryPack = false );
+	        int nMeshSize,
+	        int nLods,
+	        int nTessellationLevel,
+	        real_t fVertexSpacing,
+	        int nNearShaderLodCount,
+	        int nMiddleShaderLodCount,
+	        int nClipmapUpdateBudget,
+	        GeometryInstance3D::ShadowCastingSetting castShadows,
+	        int nShadowLodCount,
+	        const eastl::array<bool, 3> &bTierShadowEnabled,
+	        const eastl::array<int, 3> &nTierShadowLodCounts,
+	        bool bRequireCookedGeometryPack,
+	        const Vector3 &rInitialTarget );
 	void destroy( void );
 	bool writeRuntimeGeometryPack( const String &rDataDirectory ) const;
 
 	void snap( void );
 	void snap( const Vector3 &rTargetPosition );
 	void resetTargetPosition( void );
-	void update( void ) {}
+	void update( void ) {
+	}
 	void updateAabbs( real_t fCullMargin = -1.f, const Vector2 &rHeightRange = s_v2Max );
 	void setTierLayout( int nNearShaderLodCount, int nMiddleShaderLodCount, int nClipmapUpdateBudget, bool bForceFullSnap = true );
 
-	EA_FORCE_INLINE uint32_t getNearUpdatesLastSnap( void ) const { return m_nNearUpdatesLastSnap; }
-	EA_FORCE_INLINE uint32_t getMiddleUpdatesLastSnap( void ) const { return m_nMiddleUpdatesLastSnap; }
-	EA_FORCE_INLINE uint32_t getFarUpdatesLastSnap( void ) const { return m_nFarUpdatesLastSnap; }
-	EA_FORCE_INLINE uint32_t getTeleportsLastSnap( void ) const { return m_nTeleportsLastSnap; }
-	EA_FORCE_INLINE uint32_t getBufferUploadsLastSnap( void ) const { return m_nBufferUploadsLastSnap; }
+	EA_FORCE_INLINE uint32_t getNearUpdatesLastSnap( void ) const {
+		return m_nNearUpdatesLastSnap;
+	}
+	EA_FORCE_INLINE uint32_t getMiddleUpdatesLastSnap( void ) const {
+		return m_nMiddleUpdatesLastSnap;
+	}
+	EA_FORCE_INLINE uint32_t getFarUpdatesLastSnap( void ) const {
+		return m_nFarUpdatesLastSnap;
+	}
+	EA_FORCE_INLINE uint32_t getTeleportsLastSnap( void ) const {
+		return m_nTeleportsLastSnap;
+	}
+	EA_FORCE_INLINE uint32_t getBufferUploadsLastSnap( void ) const {
+		return m_nBufferUploadsLastSnap;
+	}
 
 	int getRenderBatchCount( void ) const;
 	int getRenderBatchCountForTier( int nTier ) const;
 	int getShadowBatchCountForTier( int nTier ) const;
 	int getShadowBatchCount( void ) const;
-	EA_FORCE_INLINE int getBaseMeshCount( void ) const { return MESH_TYPE_COUNT; }
+	EA_FORCE_INLINE int getBaseMeshCount( void ) const {
+		return MESH_TYPE_COUNT;
+	}
 	size_t getVisibleGeometryPayloadBytes( void ) const;
-	EA_FORCE_INLINE size_t getShadowGeometryPayloadBytes( void ) const { return 0u; }
+	EA_FORCE_INLINE size_t getShadowGeometryPayloadBytes( void ) const {
+		return 0u;
+	}
 	size_t getStreamingBufferBytes( void ) const;
 
-	EA_FORCE_INLINE void setLods( const int nLods ) { m_nLods = nLods; }
-	EA_FORCE_INLINE int getLods( void ) const { return m_nLods; }
-	EA_FORCE_INLINE void setTessellationLevel( const int nLevel ) { m_nTessellationLevel = nLevel; }
-	EA_FORCE_INLINE int getTessellationLevel( void ) const { return m_nTessellationLevel; }
-	EA_FORCE_INLINE void setMeshSize( const int nSize ) { m_nMeshSize = nSize; }
-	EA_FORCE_INLINE int getMeshSize( void ) const { return m_nMeshSize; }
-	EA_FORCE_INLINE void setVertexSpacing( const real_t fSpacing ) { m_fVertexSpacing = fSpacing; }
-	EA_FORCE_INLINE real_t getVertexSpacing( void ) const { return m_fVertexSpacing; }
+	EA_FORCE_INLINE void setLods( const int nLods ) {
+		m_nLods = nLods;
+	}
+	EA_FORCE_INLINE int getLods( void ) const {
+		return m_nLods;
+	}
+	EA_FORCE_INLINE void setTessellationLevel( const int nLevel ) {
+		m_nTessellationLevel = nLevel;
+	}
+	EA_FORCE_INLINE int getTessellationLevel( void ) const {
+		return m_nTessellationLevel;
+	}
+	EA_FORCE_INLINE void setMeshSize( const int nSize ) {
+		m_nMeshSize = nSize;
+	}
+	EA_FORCE_INLINE int getMeshSize( void ) const {
+		return m_nMeshSize;
+	}
+	EA_FORCE_INLINE void setVertexSpacing( const real_t fSpacing ) {
+		m_fVertexSpacing = fSpacing;
+	}
+	EA_FORCE_INLINE real_t getVertexSpacing( void ) const {
+		return m_fVertexSpacing;
+	}
 
 	void setCastShadows( GeometryInstance3D::ShadowCastingSetting castShadows );
 	EA_FORCE_INLINE const t3dClipmapGeometry_t &getClipmapGeometry( const t3dMeshType_t type ) const {

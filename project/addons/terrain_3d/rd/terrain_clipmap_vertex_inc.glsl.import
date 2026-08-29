@@ -1,0 +1,12 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+path="res://.godot/imported/terrain_clipmap_vertex_inc.glsl-cf7287ccb745791f4e713677a92dd722.res"
+
+[deps]
+
+source_file="res://addons/terrain_3d/rd/terrain_clipmap_vertex_inc.glsl"
+dest_files=["res://.godot/imported/terrain_clipmap_vertex_inc.glsl-cf7287ccb745791f4e713677a92dd722.res"]
+
+[params]

@@ -1,23 +1,18 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_RD_CONTEXT_H
 #define TERRAIN3D_RD_CONTEXT_H
 
+#include "Terrain3DConstants.h"
+#include "core/terrain_3d_sync.h"
 #include "core/terrain_3d_compiler.h"
+#include "core/terrain_3d_eastl_helpers.h"
 
-#include <array>
-#include <atomic>
-#include "eastl_config.h"
-#include <EASTL/fixed_vector.h>
 #include <godot_cpp/classes/rendering_device.hpp>
 #include <godot_cpp/variant/callable.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/rid.hpp>
 #include <godot_cpp/variant/string.hpp>
-#include <mutex>
-
 using namespace godot;
 
 // Terrain3D's sole owner/coordinator for RenderingDevice objects. Resource
@@ -65,6 +60,30 @@ public:
 		MEMORY_CATEGORY_COUNT,
 	};
 
+	enum ResourceOwner : uint8_t {
+		OWNER_UNSPECIFIED = 0,
+		OWNER_TERRAIN,
+		OWNER_INSTANCES,
+		OWNER_HLOD,
+		OWNER_OCEAN,
+		OWNER_FORWARD_LIGHTING,
+		OWNER_RENDER_WORLD,
+		OWNER_RENDER_WORLD_VISIBILITY,
+		OWNER_RENDER_WORLD_VT,
+		OWNER_RENDER_WORLD_HIZ,
+		OWNER_RENDER_WORLD_RASTER,
+		OWNER_RENDER_WORLD_AUX_RASTER,
+		OWNER_COUNT,
+	};
+
+	typedef struct ResourceEpoch_s {
+		uint64_t nCreates = 0u;
+		uint64_t nFrees = 0u;
+		uint64_t nLive = 0u;
+		uint64_t nLiveBytes = 0u;
+		uint64_t nSteadyStateViolations = 0u;
+	} ResourceEpoch;
+
 	enum ContextState : uint8_t {
 		STATE_UNINITIALIZED = 0,
 		STATE_READY,
@@ -89,6 +108,7 @@ public:
 	enum SuccessfulPass : uint8_t {
 		PASS_NONE = 0,
 		PASS_TERRAIN_CLIPMAP,
+		PASS_RENDER_WORLD,
 		PASS_COUNT,
 	};
 
@@ -98,9 +118,12 @@ private:
 		String m_name;
 		ResourceType m_type = RESOURCE_UNKNOWN;
 		MemoryCategory m_memoryCategory = MEMORY_NONE;
+		ResourceOwner m_owner = OWNER_UNSPECIFIED;
 		uint64_t m_nBytes = 0u;
 		uint64_t m_nDeviceGeneration = 0u;
 	} t3dRdResourceRecord_t;
+
+	typedef eastl::fixed_vector<t3dRdResourceRecord_t, s_nResourceCapacity, false> t3dRdResourceList_t;
 
 	typedef struct t3dRdResourceHistory_s {
 		String m_name;
@@ -118,75 +141,79 @@ private:
 		uint64_t m_nDeviceGeneration = 0u;
 	} t3dRdVertexFormatRecord_t;
 
-	std::atomic<RenderingDevice *> m_pRd{ nullptr };
-	std::atomic<ContextState> m_state{ STATE_UNINITIALIZED };
-	std::atomic<FailureCode> m_failureCode{ FAILURE_NONE };
-	mutable std::mutex m_resourceMutex;
+	t3dAtomic_t<RenderingDevice *> m_pRd{ NULL };
+	t3dAtomic_t<ContextState> m_state{ STATE_UNINITIALIZED };
+	t3dAtomic_t<FailureCode> m_failureCode{ FAILURE_NONE };
+	mutable t3dMutex_t m_resourceMutex;
 	// The RD registry is a render-lifetime control structure, not an unbounded
 	// general-purpose container. Keep it wholly inline so resource churn cannot
 	// invoke the process heap. Capacity failures are explicit and fail closed.
-	static constexpr size_t s_nResourceCapacity = 1024u;
-	static constexpr size_t s_nResourceHistoryCapacity = 1024u;
-	static constexpr size_t s_nFreedHistoryCapacity = 256u;
-	static constexpr size_t s_nVertexFormatCapacity = 64u;
-	eastl::fixed_vector<t3dRdResourceRecord_t, s_nResourceCapacity, false> m_resources;
+
+
+	t3dRdResourceList_t m_resources;
 	eastl::fixed_vector<t3dRdResourceHistory_t, s_nResourceHistoryCapacity, false> m_resourceHistory;
 	size_t m_nResourceHistoryCursor = 0u;
 	eastl::fixed_vector<t3dRdFreedResource_t, s_nFreedHistoryCapacity, false> m_freedResources;
 	eastl::fixed_vector<t3dRdVertexFormatRecord_t, s_nVertexFormatCapacity, false> m_vertexFormats;
 	String m_lastFailure;
-	std::atomic<SuccessfulPass> m_lastSuccessfulPass{ PASS_NONE };
+	t3dAtomic_t<SuccessfulPass> m_lastSuccessfulPass{ PASS_NONE };
 
-	std::atomic_uint64_t m_nDeviceGeneration{ 0u };
-	std::atomic_uint64_t m_nDeviceInitializations{ 0u };
-	std::atomic_uint64_t m_nDeviceRebuilds{ 0u };
-	std::atomic_uint64_t m_nDeviceInvalidations{ 0u };
-	std::atomic_uint64_t m_nCreatedResources{ 0u };
-	std::atomic_uint64_t m_nFreedResources{ 0u };
-	std::atomic_uint64_t m_nAbandonedResources{ 0u };
-	std::atomic_uint64_t m_nFailedResourceCreates{ 0u };
-	std::atomic_uint64_t m_nDoubleFreeAttempts{ 0u };
-	std::atomic_uint64_t m_nUntrackedFreeAttempts{ 0u };
-	std::atomic_uint64_t m_nAccountingErrors{ 0u };
-	std::atomic_uint64_t m_nLiveBufferBytes{ 0u };
-	std::atomic_uint64_t m_nPeakBufferBytes{ 0u };
-	std::atomic_uint64_t m_nLiveTextureBytes{ 0u };
-	std::atomic_uint64_t m_nPeakTextureBytes{ 0u };
-	std::array<std::atomic_uint64_t, RESOURCE_TYPE_COUNT> m_szTypeCreates{};
-	std::array<std::atomic_uint64_t, RESOURCE_TYPE_COUNT> m_szTypeFrees{};
-	std::array<std::atomic_uint64_t, RESOURCE_TYPE_COUNT> m_szTypeLive{};
-	std::array<std::atomic_uint64_t, MEMORY_CATEGORY_COUNT> m_szLiveMemory{};
-	std::array<std::atomic_uint64_t, MEMORY_CATEGORY_COUNT> m_szPeakMemory{};
-	std::atomic_uint64_t m_nPipelineCreates{ 0u };
-	std::atomic_uint64_t m_nPipelineRebuilds{ 0u };
-	std::atomic_uint64_t m_nUniformSetCreates{ 0u };
-	std::atomic_uint64_t m_nUniformSetRebuilds{ 0u };
-	std::atomic_bool m_bWarmupComplete{ false };
-	std::atomic_uint32_t m_nExplicitRebuildDepth{ 0u };
-	std::atomic_uint64_t m_nSteadyStateAllocationViolations{ 0u };
+	t3dAtomicU64_t m_nDeviceGeneration{ 0u };
+	t3dAtomicU64_t m_nDeviceInitializations{ 0u };
+	t3dAtomicU64_t m_nDeviceRebuilds{ 0u };
+	t3dAtomicU64_t m_nDeviceInvalidations{ 0u };
+	t3dAtomicU64_t m_nCreatedResources{ 0u };
+	t3dAtomicU64_t m_nFreedResources{ 0u };
+	t3dAtomicU64_t m_nAbandonedResources{ 0u };
+	t3dAtomicU64_t m_nFailedResourceCreates{ 0u };
+	t3dAtomicU64_t m_nDoubleFreeAttempts{ 0u };
+	t3dAtomicU64_t m_nUntrackedFreeAttempts{ 0u };
+	t3dAtomicU64_t m_nAccountingErrors{ 0u };
+	t3dAtomicU64_t m_nLiveBufferBytes{ 0u };
+	t3dAtomicU64_t m_nPeakBufferBytes{ 0u };
+	t3dAtomicU64_t m_nLiveTextureBytes{ 0u };
+	t3dAtomicU64_t m_nPeakTextureBytes{ 0u };
+	t3dAtomicU64_t m_szTypeCreates[RESOURCE_TYPE_COUNT]{};
+	t3dAtomicU64_t m_szTypeFrees[RESOURCE_TYPE_COUNT]{};
+	t3dAtomicU64_t m_szTypeLive[RESOURCE_TYPE_COUNT]{};
+	t3dAtomicU64_t m_szLiveMemory[MEMORY_CATEGORY_COUNT]{};
+	t3dAtomicU64_t m_szPeakMemory[MEMORY_CATEGORY_COUNT]{};
+	t3dAtomicU64_t m_szOwnerCreates[OWNER_COUNT]{};
+	t3dAtomicU64_t m_szOwnerFrees[OWNER_COUNT]{};
+	t3dAtomicU64_t m_szOwnerLive[OWNER_COUNT]{};
+	t3dAtomicU64_t m_szOwnerLiveBytes[OWNER_COUNT]{};
+	t3dAtomicU64_t m_szOwnerSteadyStateViolations[OWNER_COUNT]{};
+	t3dAtomicU64_t m_nPipelineCreates{ 0u };
+	t3dAtomicU64_t m_nPipelineRebuilds{ 0u };
+	t3dAtomicU64_t m_nUniformSetCreates{ 0u };
+	t3dAtomicU64_t m_nUniformSetRebuilds{ 0u };
+	t3dAtomicBool_t m_bWarmupComplete{ false };
+	t3dAtomicU32_t m_nExplicitRebuildDepth{ 0u };
+	t3dAtomicU64_t m_nSteadyStateAllocationViolations{ 0u };
 
-	std::atomic_uint64_t m_nGpuFrameId{ 0u };
-	std::atomic_uint64_t m_nSnapshotGeneration{ 0u };
-	std::atomic_uint64_t m_nLastSuccessfulGpuFrame{ 0u };
-	std::atomic_uint64_t m_nBufferUpdates{ 0u };
-	std::atomic_uint64_t m_nBytesUploaded{ 0u };
-	std::atomic_uint64_t m_nFrameBufferUpdates{ 0u };
-	std::atomic_uint64_t m_nFrameBytesUploaded{ 0u };
-	std::atomic_uint64_t m_nTerrainPatchCount{ 0u };
-	std::atomic_uint64_t m_nVisibleTerrainPatches{ 0u };
-	std::atomic_uint64_t m_nStaticInstanceCount{ 0u };
-	std::atomic_uint64_t m_nVisibleInstances{ 0u };
-	std::atomic_uint64_t m_nHlodCount{ 0u };
-	std::atomic_uint64_t m_nVisibleHlods{ 0u };
-	std::atomic_uint64_t m_nIndirectCommandCount{ 0u };
-	std::atomic_uint64_t m_nComputeDispatchCount{ 0u };
+	t3dAtomicU64_t m_nGpuFrameId{ 0u };
+	t3dAtomicU64_t m_nSnapshotGeneration{ 0u };
+	t3dAtomicU64_t m_nLastSuccessfulGpuFrame{ 0u };
+	t3dAtomicU64_t m_nBufferUpdates{ 0u };
+	t3dAtomicU64_t m_nBytesUploaded{ 0u };
+	t3dAtomicU64_t m_nFrameBufferUpdates{ 0u };
+	t3dAtomicU64_t m_nFrameBytesUploaded{ 0u };
+	t3dAtomicU64_t m_nTerrainPatchCount{ 0u };
+	t3dAtomicU64_t m_nVisibleTerrainPatches{ 0u };
+	t3dAtomicU64_t m_nStaticInstanceCount{ 0u };
+	t3dAtomicU64_t m_nVisibleInstances{ 0u };
+	t3dAtomicU64_t m_nHlodCount{ 0u };
+	t3dAtomicU64_t m_nVisibleHlods{ 0u };
+	t3dAtomicU64_t m_nIndirectCommandCount{ 0u };
+	t3dAtomicU64_t m_nComputeDispatchCount{ 0u };
 
 	static ResourceType inferResourceType( const String &rName );
 	static MemoryCategory inferMemoryCategory( const String &rName, ResourceType type, uint64_t nBytes );
+	static ResourceOwner inferResourceOwner( const String &rName );
 	static bool isPipeline( ResourceType type );
 	static bool isSteadyStateAllocation( ResourceType type );
-	static void updatePeak( std::atomic_uint64_t &rPeak, uint64_t nLiveBytes );
-	static bool subtractSaturating( std::atomic_uint64_t &rValue, uint64_t nAmount );
+	static void updatePeak( t3dAtomicU64_t &rPeak, uint64_t nLiveBytes );
+	static bool subtractSaturating( t3dAtomicU64_t &rValue, uint64_t nAmount );
 	void rememberFreedResource( uint64_t nRid, uint64_t nDeviceGeneration );
 	void updateBufferPeak( uint64_t nLiveBytes );
 	void updateTexturePeak( uint64_t nLiveBytes );
@@ -195,11 +222,8 @@ private:
 	void resetLiveAccounting( void );
 	void setFailure( FailureCode code, const String &rFailure );
 	bool hasResourceHistory( const String &rName, ResourceType type ) const;
-	bool registerResourceInternal( const RID &rRid,
-			const String &rName,
-			ResourceType type,
-			MemoryCategory memoryCategory,
-			uint64_t nBytes );
+	bool registerResourceInternal(
+	        const RID &rRid, const String &rName, ResourceType type, MemoryCategory memoryCategory, uint64_t nBytes, ResourceOwner owner );
 
 public:
 	static Terrain3DRdContext &getShared( void );
@@ -232,16 +256,15 @@ public:
 	// Compatibility entry point. New owners should use the typed overload so
 	// accounting never depends on a debug-name convention.
 	void registerResource( const RID &rRid, const String &rName, uint64_t nBufferBytes = 0u );
-	bool registerResource( const RID &rRid,
-			const String &rName,
-			ResourceType type,
-			MemoryCategory memoryCategory,
-			uint64_t nBytes = 0u );
+	bool registerResource(
+	        const RID &rRid, const String &rName, ResourceType type, MemoryCategory memoryCategory, uint64_t nBytes, ResourceOwner owner );
 	void registerTextureResource( const RID &rRid, const String &rName, uint64_t nTextureBytes );
 	bool registerVertexFormat( int64_t nFormat, const String &rName );
 	void releaseVertexFormat( int64_t &rFormat );
 	void freeResource( RID &rRid, uint64_t nBufferBytes = 0u );
 	void freeTextureResource( RID &rRid, uint64_t nTextureBytes );
+	bool ownsResource( const RID &rRid ) const;
+	ResourceEpoch getResourceEpoch( ResourceOwner owner ) const;
 
 	void markWarmupComplete( bool bComplete = true );
 	void beginResourceRebuild( void );
@@ -250,41 +273,44 @@ public:
 	void recordBufferUpdate( uint64_t nBytes );
 	void recordSuccessfulPass( SuccessfulPass pass, uint64_t nGpuFrameId );
 	void recordSceneCounts( uint64_t nTerrainPatches,
-			uint64_t nVisibleTerrainPatches,
-			uint64_t nStaticInstances,
-			uint64_t nVisibleInstances,
-			uint64_t nHlods,
-			uint64_t nVisibleHlods );
+	        uint64_t nVisibleTerrainPatches,
+	        uint64_t nStaticInstances,
+	        uint64_t nVisibleInstances,
+	        uint64_t nHlods,
+	        uint64_t nVisibleHlods );
 	void recordSubmissionCounts( uint64_t nIndirectCommands, uint64_t nComputeDispatches );
 	Dictionary getDiagnostics( void ) const;
 	EA_FORCE_INLINE uint64_t getLiveGpuBufferBytes( void ) const {
-		return m_nLiveBufferBytes.load( std::memory_order_acquire );
+		return m_nLiveBufferBytes.load( T3D_MEMORY_ORDER_ACQUIRE );
 	}
 	EA_FORCE_INLINE uint64_t getLiveGpuTextureBytes( void ) const {
-		return m_nLiveTextureBytes.load( std::memory_order_acquire );
+		return m_nLiveTextureBytes.load( T3D_MEMORY_ORDER_ACQUIRE );
 	}
 
 	EA_FORCE_INLINE RenderingDevice *getDevice( void ) const {
-		const ContextState state = m_state.load( std::memory_order_acquire );
-		return ( state == STATE_READY || state == STATE_REBUILDING ) ? m_pRd.load( std::memory_order_acquire ) : nullptr;
+		const ContextState state = m_state.load( T3D_MEMORY_ORDER_ACQUIRE );
+		return ( state == STATE_READY || state == STATE_REBUILDING ) ? m_pRd.load( T3D_MEMORY_ORDER_ACQUIRE ) : NULL;
 	}
 	EA_FORCE_INLINE bool isReady( void ) const {
-		return m_state.load( std::memory_order_acquire ) == STATE_READY &&
-				m_pRd.load( std::memory_order_acquire ) != nullptr;
+		return m_state.load( T3D_MEMORY_ORDER_ACQUIRE ) == STATE_READY && m_pRd.load( T3D_MEMORY_ORDER_ACQUIRE ) != NULL;
 	}
 	EA_FORCE_INLINE bool hasFailure( void ) const {
-		return m_failureCode.load( std::memory_order_acquire ) != FAILURE_NONE;
+		return m_failureCode.load( T3D_MEMORY_ORDER_ACQUIRE ) != FAILURE_NONE;
 	}
-	EA_FORCE_INLINE ContextState getState( void ) const { return m_state.load( std::memory_order_acquire ); }
-	EA_FORCE_INLINE FailureCode getFailureCode( void ) const { return m_failureCode.load( std::memory_order_acquire ); }
+	EA_FORCE_INLINE ContextState getState( void ) const {
+		return m_state.load( T3D_MEMORY_ORDER_ACQUIRE );
+	}
+	EA_FORCE_INLINE FailureCode getFailureCode( void ) const {
+		return m_failureCode.load( T3D_MEMORY_ORDER_ACQUIRE );
+	}
 	EA_FORCE_INLINE uint64_t getDeviceGeneration( void ) const {
-		return m_nDeviceGeneration.load( std::memory_order_acquire );
+		return m_nDeviceGeneration.load( T3D_MEMORY_ORDER_ACQUIRE );
 	}
 	EA_FORCE_INLINE uint64_t getLiveBufferBytes( void ) const {
-		return m_nLiveBufferBytes.load( std::memory_order_acquire );
+		return m_nLiveBufferBytes.load( T3D_MEMORY_ORDER_ACQUIRE );
 	}
 	EA_FORCE_INLINE uint64_t getLiveBytes( const MemoryCategory category ) const {
-		return category < MEMORY_CATEGORY_COUNT ? m_szLiveMemory[category].load( std::memory_order_acquire ) : 0u;
+		return category < MEMORY_CATEGORY_COUNT ? m_szLiveMemory[category].load( T3D_MEMORY_ORDER_ACQUIRE ) : 0u;
 	}
 };
 

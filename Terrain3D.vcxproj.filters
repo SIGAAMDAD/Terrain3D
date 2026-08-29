@@ -13,18 +13,6 @@
     <Filter Include="project">
       <UniqueIdentifier>{DE839D58-5190-537A-AF53-9C98436340C7}</UniqueIdentifier>
     </Filter>
-    <Filter Include="project\addons\terrain_3d">
-      <UniqueIdentifier>{AC7FD36D-F3ED-5578-8A3C-F9A750CE2D2C}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="project\addons\terrain_3d\compute">
-      <UniqueIdentifier>{EC495569-40FD-5316-BE56-CD205B1AA371}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="project\addons\terrain_3d\csharp">
-      <UniqueIdentifier>{3D10FBF2-1404-51CA-9C32-CD95B62A4891}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="project\addons\terrain_3d\shaders">
-      <UniqueIdentifier>{B6881556-888C-51B7-B0E5-4D7C313705C1}</UniqueIdentifier>
-    </Filter>
     <Filter Include="project\addons\terrain_3d\shaders\includes">
       <UniqueIdentifier>{90961FD7-D5C4-50C5-9917-9B84DC4B54D0}</UniqueIdentifier>
     </Filter>
@@ -93,6 +81,9 @@
     </Filter>
     <Filter Include="tools">
       <UniqueIdentifier>{F51B1ED6-B954-53DB-9687-1C480BBCA4E3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\rendering\rd\render_world">
+      <UniqueIdentifier>{98bb0a49-62b3-4da2-8db7-602539dcf2b0}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -435,6 +426,93 @@
     <ClInclude Include="src\terrain_3d.h">
       <Filter>src</Filter>
     </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_aux.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_aux_shaders.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_contract.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_forward_bindings.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_geometry.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_geometry_internal.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_gpu_visibility.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_gpu_visibility_shaders.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_hiz.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_hiz_gpu.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_hiz_shaders.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_manifest.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_plateau.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_raster.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_raster_shaders.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_rd_owner.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_resource_plan.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_resources.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_runtime.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_streaming.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_submission.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_terrain_integration.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_terrain_integration_gpu.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_visibility.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_vt.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_vt_gpu.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_vt_gpu_shaders.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
+    <ClInclude Include="src\rendering\rd\render_world\terrain_3d_render_world_vt_shaders.h">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\assets\generated_texture.cpp">
@@ -680,6 +758,72 @@
     <ClCompile Include="src\terrain_3d.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="src\rendering\rd\render_world\terrain_3d_render_world.cpp">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\render_world\terrain_3d_render_world_aux.cpp">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\render_world\terrain_3d_render_world_contract.cpp">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\render_world\terrain_3d_render_world_forward_bindings.cpp">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\render_world\terrain_3d_render_world_geometry.cpp">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\render_world\terrain_3d_render_world_geometry_validation.cpp">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\render_world\terrain_3d_render_world_gpu_visibility.cpp">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\render_world\terrain_3d_render_world_hiz.cpp">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\render_world\terrain_3d_render_world_hiz_gpu.cpp">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\render_world\terrain_3d_render_world_manifest.cpp">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\render_world\terrain_3d_render_world_plateau.cpp">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\render_world\terrain_3d_render_world_raster.cpp">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\render_world\terrain_3d_render_world_resource_plan.cpp">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\render_world\terrain_3d_render_world_resources.cpp">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\render_world\terrain_3d_render_world_runtime.cpp">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\render_world\terrain_3d_render_world_streaming.cpp">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\render_world\terrain_3d_render_world_submission.cpp">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\render_world\terrain_3d_render_world_terrain_integration.cpp">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\render_world\terrain_3d_render_world_terrain_integration_gpu.cpp">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\render_world\terrain_3d_render_world_visibility.cpp">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\render_world\terrain_3d_render_world_vt.cpp">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\rendering\rd\render_world\terrain_3d_render_world_vt_gpu.cpp">
+      <Filter>src\rendering\rd\render_world</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include=".clang-format">
@@ -774,66 +918,6 @@
     </None>
     <None Include="project\Terrain3D.sln">
       <Filter>project</Filter>
-    </None>
-    <None Include="project\addons\terrain_3d\compute\terrain_brush.glsl">
-      <Filter>project\addons\terrain_3d\compute</Filter>
-    </None>
-    <None Include="project\addons\terrain_3d\compute\terrain_derived.glsl">
-      <Filter>project\addons\terrain_3d\compute</Filter>
-    </None>
-    <None Include="project\addons\terrain_3d\compute\terrain_displacement.glsl">
-      <Filter>project\addons\terrain_3d\compute</Filter>
-    </None>
-    <None Include="project\addons\terrain_3d\csharp\Terrain3D.cs">
-      <Filter>project\addons\terrain_3d\csharp</Filter>
-    </None>
-    <None Include="project\addons\terrain_3d\csharp\Terrain3DAssets.cs">
-      <Filter>project\addons\terrain_3d\csharp</Filter>
-    </None>
-    <None Include="project\addons\terrain_3d\csharp\Terrain3DCollision.cs">
-      <Filter>project\addons\terrain_3d\csharp</Filter>
-    </None>
-    <None Include="project\addons\terrain_3d\csharp\Terrain3DData.cs">
-      <Filter>project\addons\terrain_3d\csharp</Filter>
-    </None>
-    <None Include="project\addons\terrain_3d\csharp\Terrain3DEditor.cs">
-      <Filter>project\addons\terrain_3d\csharp</Filter>
-    </None>
-    <None Include="project\addons\terrain_3d\csharp\Terrain3DErosionJob.cs">
-      <Filter>project\addons\terrain_3d\csharp</Filter>
-    </None>
-    <None Include="project\addons\terrain_3d\csharp\Terrain3DErosionSettings.cs">
-      <Filter>project\addons\terrain_3d\csharp</Filter>
-    </None>
-    <None Include="project\addons\terrain_3d\csharp\Terrain3DInstancer.cs">
-      <Filter>project\addons\terrain_3d\csharp</Filter>
-    </None>
-    <None Include="project\addons\terrain_3d\csharp\Terrain3DMaterial.cs">
-      <Filter>project\addons\terrain_3d\csharp</Filter>
-    </None>
-    <None Include="project\addons\terrain_3d\csharp\Terrain3DMeshAsset.cs">
-      <Filter>project\addons\terrain_3d\csharp</Filter>
-    </None>
-    <None Include="project\addons\terrain_3d\csharp\Terrain3DPackedPBRTexture.cs">
-      <Filter>project\addons\terrain_3d\csharp</Filter>
-    </None>
-    <None Include="project\addons\terrain_3d\csharp\Terrain3DRegion.cs">
-      <Filter>project\addons\terrain_3d\csharp</Filter>
-    </None>
-    <None Include="project\addons\terrain_3d\csharp\Terrain3DTextureAsset.cs">
-      <Filter>project\addons\terrain_3d\csharp</Filter>
-    </None>
-    <None Include="project\addons\terrain_3d\csharp\Terrain3DUtil.cs">
-      <Filter>project\addons\terrain_3d\csharp</Filter>
-    </None>
-    <None Include="project\addons\terrain_3d\plugin.cfg">
-      <Filter>project\addons\terrain_3d</Filter>
-    </None>
-    <None Include="project\addons\terrain_3d\setting_metadata.json">
-      <Filter>project\addons\terrain_3d</Filter>
-    </None>
-    <None Include="project\addons\terrain_3d\shaders\displacement_buffer.gdshaderinc">
-      <Filter>project\addons\terrain_3d\shaders</Filter>
     </None>
     <None Include="project\addons\terrain_3d\shaders\includes\auto_shader.gdshaderinc">
       <Filter>project\addons\terrain_3d\shaders\includes</Filter>
@@ -1246,21 +1330,6 @@
     <None Include="project\addons\terrain_3d\shaders\includes\wrapped_diffuse_light.gdshaderinc">
       <Filter>project\addons\terrain_3d\shaders\includes</Filter>
     </None>
-    <None Include="project\addons\terrain_3d\shaders\main.gdshaderinc">
-      <Filter>project\addons\terrain_3d\shaders</Filter>
-    </None>
-    <None Include="project\addons\terrain_3d\shaders\main_far.gdshaderinc">
-      <Filter>project\addons\terrain_3d\shaders</Filter>
-    </None>
-    <None Include="project\addons\terrain_3d\shaders\main_middle.gdshaderinc">
-      <Filter>project\addons\terrain_3d\shaders</Filter>
-    </None>
-    <None Include="project\addons\terrain_3d\shaders\main_shadow.gdshaderinc">
-      <Filter>project\addons\terrain_3d\shaders</Filter>
-    </None>
-    <None Include="project\addons\terrain_3d\terrain.gdextension">
-      <Filter>project\addons\terrain_3d</Filter>
-    </None>
     <None Include="project\project.godot">
       <Filter>project</Filter>
     </None>
@@ -1276,5 +1345,30 @@
     <None Include="tools\rd.py">
       <Filter>tools</Filter>
     </None>
+    <None Include="project\addons\terrain_3d\plugin.cfg" />
+    <None Include="project\addons\terrain_3d\setting_metadata.json" />
+    <None Include="project\addons\terrain_3d\terrain.gdextension" />
+    <None Include="project\addons\terrain_3d\compute\terrain_brush.glsl" />
+    <None Include="project\addons\terrain_3d\compute\terrain_derived.glsl" />
+    <None Include="project\addons\terrain_3d\compute\terrain_displacement.glsl" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3D.cs" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3DAssets.cs" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3DCollision.cs" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3DData.cs" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3DEditor.cs" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3DErosionJob.cs" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3DErosionSettings.cs" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3DInstancer.cs" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3DMaterial.cs" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3DMeshAsset.cs" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3DPackedPBRTexture.cs" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3DRegion.cs" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3DTextureAsset.cs" />
+    <None Include="project\addons\terrain_3d\csharp\Terrain3DUtil.cs" />
+    <None Include="project\addons\terrain_3d\shaders\displacement_buffer.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\main.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\main_far.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\main_middle.gdshaderinc" />
+    <None Include="project\addons\terrain_3d\shaders\main_shadow.gdshaderinc" />
   </ItemGroup>
 </Project>

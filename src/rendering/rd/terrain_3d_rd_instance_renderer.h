@@ -1,26 +1,49 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
-#pragma once
-
 #ifndef TERRAIN3D_RD_INSTANCE_RENDERER_H
 #define TERRAIN3D_RD_INSTANCE_RENDERER_H
 
-#include "core/terrain_3d_flat_hash.h"
+#include "Terrain3DConstants.h"
+#include "core/terrain_3d_fixed_buffer.h"
 #include "rendering/rd/terrain_3d_rd_mesh_cache.h"
 #include "rendering/rd/terrain_3d_rd_forward_shader_bundle.h"
 #include "rendering/rd/terrain_3d_rd_forward_lighting.h"
 #include "rendering/rd/terrain_3d_rd_types.h"
 
+#include "eastl_config.h"
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/rd_shader_spirv.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
-#include <vector>
 
-namespace godot { class RenderData; }
+namespace godot {
+class RenderData;
+}
 
 typedef struct t3dRdInstanceSceneSnapshot_s {
 	uint64_t m_nGeneration = 0u;
-	std::vector<t3dRdInstanceRecord_t> m_instances;
-	std::vector<t3dRdInstanceCell_t> m_cells;
+	Terrain3DFixedBuffer<t3dRdInstanceRecord_t> m_instances;
+	Terrain3DFixedBuffer<t3dRdInstanceCell_t> m_cells;
+
+	EA_FORCE_INLINE bool reserveCold( const size_t nInstanceCapacity, const size_t nCellCapacity ) {
+		return m_instances.reserveCold( nInstanceCapacity ) && m_cells.reserveCold( nCellCapacity );
+	}
+	EA_FORCE_INLINE void reset( void ) {
+		m_nGeneration = 0u;
+		m_instances.reset();
+		m_cells.reset();
+	}
+	EA_FORCE_INLINE void shutdown( void ) {
+		m_nGeneration = 0u;
+		m_instances.shutdown();
+		m_cells.shutdown();
+	}
+	bool copyFrom( const t3dRdInstanceSceneSnapshot_s &rOther ) {
+		if ( !m_instances.copyFrom( rOther.m_instances.data(), rOther.m_instances.size() )
+		        || !m_cells.copyFrom( rOther.m_cells.data(), rOther.m_cells.size() ) ) {
+			return false;
+		}
+		m_nGeneration = rOther.m_nGeneration;
+		return true;
+	}
 } t3dRdInstanceSceneSnapshot_t;
 
 
@@ -53,24 +76,47 @@ typedef struct t3dRdPacketKey_s {
 	uint32_t m_nUnique = 0u;
 
 	EA_FORCE_INLINE bool operator==( const t3dRdPacketKey_s &rOther ) const {
-		return m_nSurfaceSlot == rOther.m_nSurfaceSlot && m_nFlags == rOther.m_nFlags &&
-				m_nMaterial == rOther.m_nMaterial && m_nOverlayMaterial == rOther.m_nOverlayMaterial &&
-				m_nVisibilityLayers == rOther.m_nVisibilityLayers && m_nUnique == rOther.m_nUnique;
+		return m_nSurfaceSlot == rOther.m_nSurfaceSlot && m_nFlags == rOther.m_nFlags && m_nMaterial == rOther.m_nMaterial
+		        && m_nOverlayMaterial == rOther.m_nOverlayMaterial && m_nVisibilityLayers == rOther.m_nVisibilityLayers
+		        && m_nUnique == rOther.m_nUnique;
 	}
 } t3dRdPacketKey_t;
 
 typedef struct t3dRdPacketKeyHash_s {
 	EA_FORCE_INLINE size_t operator()( const t3dRdPacketKey_t &rKey ) const {
 		uint64_t hash = 1469598103934665603ull;
-		const uint32_t values[6] = { rKey.m_nSurfaceSlot, rKey.m_nFlags, rKey.m_nMaterial,
-			rKey.m_nOverlayMaterial, rKey.m_nVisibilityLayers, rKey.m_nUnique };
-		for ( const uint32_t value : values ) {
+		const uint32_t values[6] = {
+			rKey.m_nSurfaceSlot, rKey.m_nFlags, rKey.m_nMaterial, rKey.m_nOverlayMaterial, rKey.m_nVisibilityLayers, rKey.m_nUnique
+		};
+		for ( size_t iValue = 0u; iValue < T3D_ARRAY_COUNT( values ); iValue++ ) {
+			const uint32_t value = ( values )[iValue];
 			hash ^= value;
 			hash *= 1099511628211ull;
 		}
-		return (size_t)( hash );
+		return ( size_t )( hash );
 	}
 } t3dRdPacketKeyHash_t;
+
+typedef struct t3dRdPacketKeyLess_s {
+	EA_FORCE_INLINE bool operator()( const t3dRdPacketKey_t &a, const t3dRdPacketKey_t &b ) const {
+		if ( a.m_nSurfaceSlot != b.m_nSurfaceSlot ) {
+			return a.m_nSurfaceSlot < b.m_nSurfaceSlot;
+		}
+		if ( a.m_nFlags != b.m_nFlags ) {
+			return a.m_nFlags < b.m_nFlags;
+		}
+		if ( a.m_nMaterial != b.m_nMaterial ) {
+			return a.m_nMaterial < b.m_nMaterial;
+		}
+		if ( a.m_nOverlayMaterial != b.m_nOverlayMaterial ) {
+			return a.m_nOverlayMaterial < b.m_nOverlayMaterial;
+		}
+		if ( a.m_nVisibilityLayers != b.m_nVisibilityLayers ) {
+			return a.m_nVisibilityLayers < b.m_nVisibilityLayers;
+		}
+		return a.m_nUnique < b.m_nUnique;
+	}
+} t3dRdPacketKeyLess_t;
 
 typedef struct t3dRdPacketBuildSlot_s {
 	t3dRdInstanceDrawPacket_t m_packet;
@@ -86,7 +132,6 @@ typedef struct t3dRdPacketBuildEntry_s {
 
 class Terrain3DRdInstanceRenderer {
 private:
-	static constexpr uint32_t s_nMaxViews = 4u;
 	typedef struct t3dRdInstanceViewState_s {
 		RID m_hFramebuffer;
 		RID m_szPipeline[9];
@@ -103,9 +148,9 @@ private:
 		bool m_bReverseCull = false;
 		bool m_bDepthPrepassActive = false;
 		bool operator==( const t3dRdInstanceForwardPipelineKey_s &rOther ) const {
-			return m_nFramebufferFormat == rOther.m_nFramebufferFormat && m_variant == rOther.m_variant &&
-					m_passKind == rOther.m_passKind && m_samples == rOther.m_samples && m_nViewCount == rOther.m_nViewCount &&
-					m_bReverseCull == rOther.m_bReverseCull && m_bDepthPrepassActive == rOther.m_bDepthPrepassActive;
+			return m_nFramebufferFormat == rOther.m_nFramebufferFormat && m_variant == rOther.m_variant && m_passKind == rOther.m_passKind
+			        && m_samples == rOther.m_samples && m_nViewCount == rOther.m_nViewCount && m_bReverseCull == rOther.m_bReverseCull
+			        && m_bDepthPrepassActive == rOther.m_bDepthPrepassActive;
 		}
 	} t3dRdInstanceForwardPipelineKey_t;
 	typedef struct t3dRdInstanceForwardPipelineEntry_s {
@@ -166,25 +211,27 @@ private:
 	bool m_bDirectDrawDebug = false;
 	bool m_bMotionDebug = false;
 	String m_lastError;
-	std::vector<uint32_t> m_visibleIndices;
-	std::vector<t3dRdInstanceRecord_t> m_motionHistoryRecords;
-	std::vector<t3dRdInstanceCell_t> m_motionHistoryCells;
-	std::vector<t3dRdInstanceRecord_t> m_motionPreviousRecords;
-	std::vector<uint32_t> m_shadowVisibleIndices;
-	std::vector<t3dRdInstanceDrawPacket_t> m_drawPackets;
-	std::vector<t3dRdInstanceDrawPacket_t> m_depthPackets;
-	std::vector<t3dRdInstanceDrawPacket_t> m_shadowPackets;
-	std::vector<t3dRdInstanceMaterialPairBinding_t> m_materialBindings;
-	std::vector<t3dRdHlodCullDescriptor_t> m_hlodDescriptors;
-	std::vector<t3dRdPacketBuildSlot_t> m_packetBuildSlots;
-	std::vector<t3dRdPacketBuildEntry_t> m_packetBuildEntries;
-	std::vector<t3dRdInstanceDrawPacket_t> m_alphaPackets;
-	std::vector<t3dRdInstanceDrawPacket_t> m_alphaSortScratch;
-	Terrain3DFlatHashMap<t3dRdPacketKey_t, uint32_t, t3dRdPacketKeyHash_t> m_packetIndex;
-	std::vector<uint32_t> m_motionCurrentOrder;
-	std::vector<uint32_t> m_motionPreviousOrder;
-	std::vector<uint8_t> m_dirtyInstanceChunks;
-	std::vector<t3dRdInstanceForwardPipelineEntry_t> m_forwardPipelines;
+	eastl::vector<uint32_t, Terrain3DEastlAllocator> m_visibleIndices;
+	eastl::vector<t3dRdInstanceRecord_t, Terrain3DEastlAllocator> m_motionHistoryRecords;
+	eastl::vector<t3dRdInstanceCell_t, Terrain3DEastlAllocator> m_motionHistoryCells;
+	eastl::vector<t3dRdInstanceRecord_t, Terrain3DEastlAllocator> m_motionPreviousRecords;
+	eastl::vector<uint32_t, Terrain3DEastlAllocator> m_shadowVisibleIndices;
+	eastl::vector<t3dRdInstanceDrawPacket_t, Terrain3DEastlAllocator> m_drawPackets;
+	eastl::vector<t3dRdInstanceDrawPacket_t, Terrain3DEastlAllocator> m_depthPackets;
+	eastl::vector<t3dRdInstanceDrawPacket_t, Terrain3DEastlAllocator> m_shadowPackets;
+	eastl::vector<t3dRdInstanceMaterialPairBinding_t, Terrain3DEastlAllocator> m_materialBindings;
+	eastl::vector<t3dRdHlodCullDescriptor_t, Terrain3DEastlAllocator> m_hlodDescriptors;
+	eastl::vector<t3dRdPacketBuildSlot_t, Terrain3DEastlAllocator> m_packetBuildSlots;
+	eastl::vector<t3dRdPacketBuildEntry_t, Terrain3DEastlAllocator> m_packetBuildEntries;
+	eastl::vector<t3dRdInstanceDrawPacket_t, Terrain3DEastlAllocator> m_alphaPackets;
+	eastl::vector<t3dRdInstanceDrawPacket_t, Terrain3DEastlAllocator> m_alphaSortScratch;
+	eastl::vector_map<t3dRdPacketKey_t, uint32_t, t3dRdPacketKeyLess_t, Terrain3DEastlAllocator> m_packetIndex;
+	eastl::vector<uint32_t, Terrain3DEastlAllocator> m_motionCurrentOrder;
+	eastl::vector<uint32_t, Terrain3DEastlAllocator> m_motionPreviousOrder;
+	eastl::vector<uint8_t, Terrain3DEastlAllocator> m_dirtyInstanceChunks;
+
+	t3dRdInstanceForwardPipelineEntry_t m_szForwardPipelines[s_nForwardPipelineCapacity]{};
+	uint32_t m_nForwardPipelineCount = 0u;
 	uint32_t m_nPipelineEvictCursor = 0u;
 	PackedByteArray m_frameBytes;
 	PackedByteArray m_instanceBytes;
@@ -230,13 +277,23 @@ private:
 	bool ensureForwardPipelines( const t3dRdForwardPassContext_t &rContext, t3dRdForwardShaderVariant_t variant );
 	const t3dRdInstanceForwardPipelineEntry_t *findForwardPipeline( const t3dRdInstanceForwardPipelineKey_t &rKey ) const;
 	bool ensureHlodCullShader( const Ref<RDShaderSPIRV> &rShader );
-	bool ensureBuffer( RID &rRid, uint32_t &rCapacity, uint32_t nRequired, const String &rName,
-			Terrain3DRdContext::ResourceType type, Terrain3DRdContext::MemoryCategory memory );
+	bool ensureBuffer( RID &rRid,
+	        uint32_t &rCapacity,
+	        uint32_t nRequired,
+	        const String &rName,
+	        Terrain3DRdContext::ResourceType type,
+	        Terrain3DRdContext::MemoryCategory memory,
+	        Terrain3DRdContext::ResourceOwner owner = Terrain3DRdContext::OWNER_INSTANCES );
 	bool ensureBuffers( uint32_t nInstanceBytes, uint32_t nVisibleBytes, uint32_t nMaterialBytes, uint32_t nIndirectBytes );
 	bool ensureShadowBuffers( uint32_t nVisibleBytes, uint32_t nIndirectBytes );
 	bool ensureUniformSet( void );
 	bool ensureShadowUniformSet( void );
 	bool ensureMaterialSamplers( void );
+	bool createFallbackMaterialTexture( RID &rTexture, uint32_t nRgba, const String &rName );
+	const t3dRdInstanceMaterial_t *getMaterialPtr( uint32_t nIndex ) const;
+	RID getMaterialTexture( const t3dRdInstanceMaterial_t *pMaterial, uint32_t nSlot, const RID &rFallback ) const;
+	RID getMaterialSampler( const t3dRdInstanceMaterial_t *pMaterial ) const;
+	bool addMaterialBinding( uint32_t nMaterial, uint32_t nOverlay );
 	bool ensureFallbackMaterialTextures( void );
 	bool rebuildMaterialBindings( void );
 	void freeMaterialBindings( void );
@@ -244,19 +301,20 @@ private:
 	bool uploadScene( const t3dRdInstanceSceneSnapshot_t *pScene );
 	bool prepareMotionHistory( const t3dRdInstanceSceneSnapshot_t &rScene, uint64_t nRenderFrame );
 	bool uploadMaterials( void );
-	template <bool t_bShadowPass> bool buildPacketsForPass( const t3dRdInstanceSceneSnapshot_t &rScene,
-			const Projection *pViewProjections,
-			uint32_t nViewCount,
-			const Vector3 &rCamera,
-			uint32_t nVisibilityMask,
-			bool bSkipFrustum );
+	template <bool t_bShadowPass>
+	bool buildPacketsForPass( const t3dRdInstanceSceneSnapshot_t &rScene,
+	        const Projection *pViewProjections,
+	        uint32_t nViewCount,
+	        const Vector3 &rCamera,
+	        uint32_t nVisibilityMask,
+	        bool bSkipFrustum );
 	bool buildPackets( const t3dRdInstanceSceneSnapshot_t &rScene,
-			const Projection *pViewProjections,
-			uint32_t nViewCount,
-			const Vector3 &rCamera,
-			uint32_t nVisibilityMask,
-			bool bShadowPass,
-			bool bSkipFrustum = false );
+	        const Projection *pViewProjections,
+	        uint32_t nViewCount,
+	        const Vector3 &rCamera,
+	        uint32_t nVisibilityMask,
+	        bool bShadowPass,
+	        bool bSkipFrustum = false );
 	bool uploadVisibility( void );
 	bool uploadShadowVisibility( void );
 	bool uploadHlodDescriptors( void );
@@ -265,6 +323,7 @@ private:
 	bool ensurePreviewTargets( const Vector2i &rSize );
 	void freePreviewTargets( void );
 	void freeViewState( t3dRdInstanceViewState_t &rState );
+	bool drawPacket( int64_t nDrawList, t3dRdInstanceViewState_t &rState, uint32_t &nBoundPipeline, uint32_t nPacket, bool bDepthPrepass );
 	bool drawView( uint32_t nView, const Projection &rViewProjection, const Vector3 &rCamera, uint32_t nVisibilityMask );
 	bool drawForwardView( const t3dRdForwardPassContext_t &rContext );
 	void setError( const String &rError );
@@ -273,28 +332,39 @@ public:
 	Terrain3DRdInstanceRenderer( void );
 	~Terrain3DRdInstanceRenderer( void );
 
-	bool initialize( const Ref<RDShaderSPIRV> &rShader, const Ref<RDShaderSPIRV> &rHlodCullShader,
-			const t3dRdForwardShaderBundle_t &rForwardShaders );
+	bool initialize( const Ref<RDShaderSPIRV> &rShader,
+	        const Ref<RDShaderSPIRV> &rHlodCullShader,
+	        const t3dRdForwardShaderBundle_t &rForwardShaders );
 	void shutdown( void );
 	bool render( RenderData *pRenderData,
-			const t3dRdMeshSourceSnapshot_t *pMeshes,
-			const t3dRdInstanceSceneSnapshot_t *pScene,
-			uint32_t nVisibilityMask );
+	        const t3dRdMeshSourceSnapshot_t *pMeshes,
+	        const t3dRdInstanceSceneSnapshot_t *pScene,
+	        uint32_t nVisibilityMask );
 	bool prepareForwardPass( const t3dRdForwardPassContext_t &rContext,
-			const t3dRdMeshSourceSnapshot_t *pMeshes,
-			const t3dRdInstanceSceneSnapshot_t *pScene,
-			uint32_t nVisibilityMask,
-			bool bTemporalHistoryValid,
-			bool bViewportReconfigured );
+	        const t3dRdMeshSourceSnapshot_t *pMeshes,
+	        const t3dRdInstanceSceneSnapshot_t *pScene,
+	        uint32_t nVisibilityMask,
+	        bool bTemporalHistoryValid,
+	        bool bViewportReconfigured );
 	bool renderForwardPass( const t3dRdForwardPassContext_t &rContext );
 	bool renderPreview( const t3dRdMeshSourceSnapshot_t *pMeshes, uint16_t nAssetId, const Vector2i &rSize, Ref<Image> &rImage );
 	Dictionary getDiagnostics( void ) const;
 	size_t getRetainedCpuBytes( void ) const;
-	EA_FORCE_INLINE void setDirectDrawDebugEnabled( bool bEnabled ) { m_bDirectDrawDebug = bEnabled; }
-	EA_FORCE_INLINE void setMotionDebugEnabled( bool bEnabled ) { m_bMotionDebug = bEnabled; }
-	EA_FORCE_INLINE const std::vector<t3dRdInstanceDrawPacket_t> &getDepthPackets( void ) const { return m_depthPackets; }
-	EA_FORCE_INLINE const std::vector<t3dRdInstanceDrawPacket_t> &getShadowPackets( void ) const { return m_shadowPackets; }
-	EA_FORCE_INLINE String getLastError( void ) const { return m_lastError; }
+	EA_FORCE_INLINE void setDirectDrawDebugEnabled( bool bEnabled ) {
+		m_bDirectDrawDebug = bEnabled;
+	}
+	EA_FORCE_INLINE void setMotionDebugEnabled( bool bEnabled ) {
+		m_bMotionDebug = bEnabled;
+	}
+	EA_FORCE_INLINE const eastl::vector<t3dRdInstanceDrawPacket_t, Terrain3DEastlAllocator> &getDepthPackets( void ) const {
+		return m_depthPackets;
+	}
+	EA_FORCE_INLINE const eastl::vector<t3dRdInstanceDrawPacket_t, Terrain3DEastlAllocator> &getShadowPackets( void ) const {
+		return m_shadowPackets;
+	}
+	EA_FORCE_INLINE String getLastError( void ) const {
+		return m_lastError;
+	}
 };
 
 #endif // TERRAIN3D_RD_INSTANCE_RENDERER_H

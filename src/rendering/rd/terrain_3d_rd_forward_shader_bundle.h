@@ -1,6 +1,4 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
-#pragma once
-
 #ifndef TERRAIN3D_RD_FORWARD_SHADER_BUNDLE_H
 #define TERRAIN3D_RD_FORWARD_SHADER_BUNDLE_H
 

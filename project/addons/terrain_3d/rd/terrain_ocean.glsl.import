@@ -1,0 +1,12 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+path="res://.godot/imported/terrain_ocean.glsl-ebcf4f890d886c6f1e61c8cc7960d729.res"
+
+[deps]
+
+source_file="res://addons/terrain_3d/rd/terrain_ocean.glsl"
+dest_files=["res://.godot/imported/terrain_ocean.glsl-ebcf4f890d886c6f1e61c8cc7960d729.res"]
+
+[params]

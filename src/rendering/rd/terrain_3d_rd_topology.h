@@ -1,7 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_RD_TOPOLOGY_H
 #define TERRAIN3D_RD_TOPOLOGY_H
 
@@ -55,20 +53,48 @@ public:
 	EA_FORCE_INLINE bool isGpuReady( void ) const {
 		return m_hVertexArray.is_valid() && m_hIndexArray.is_valid();
 	}
-	EA_FORCE_INLINE const RID &getVertexArray( void ) const { return m_hVertexArray; }
-	EA_FORCE_INLINE const RID &getIndexArray( void ) const { return m_hIndexArray; }
-	EA_FORCE_INLINE uint32_t getVertexCount( void ) const { return m_nVertexCount; }
-	EA_FORCE_INLINE uint32_t getIndexCount( void ) const { return m_nIndexCount; }
-	EA_FORCE_INLINE uint32_t getUploadCount( void ) const { return m_nUploadCount; }
-	EA_FORCE_INLINE uint64_t getDeviceGeneration( void ) const { return m_nDeviceGeneration; }
-	EA_FORCE_INLINE uint64_t getGpuBytes( void ) const { return m_nGpuBytes; }
-	EA_FORCE_INLINE uint64_t getVertexChecksum( void ) const { return m_nVertexChecksum; }
-	EA_FORCE_INLINE uint64_t getIndexChecksum( void ) const { return m_nIndexChecksum; }
-	EA_FORCE_INLINE uint64_t getUploadedVertexChecksum( void ) const { return m_nUploadedVertexChecksum; }
-	EA_FORCE_INLINE uint64_t getUploadedIndexChecksum( void ) const { return m_nUploadedIndexChecksum; }
-	EA_FORCE_INLINE const Vector2i &getGridMinimum( void ) const { return m_gridMinimum; }
-	EA_FORCE_INLINE const Vector2i &getGridMaximum( void ) const { return m_gridMaximum; }
-	EA_FORCE_INLINE RenderingDevice::IndexBufferFormat getIndexFormat( void ) const { return m_indexFormat; }
+	EA_FORCE_INLINE const RID &getVertexArray( void ) const {
+		return m_hVertexArray;
+	}
+	EA_FORCE_INLINE const RID &getIndexArray( void ) const {
+		return m_hIndexArray;
+	}
+	EA_FORCE_INLINE uint32_t getVertexCount( void ) const {
+		return m_nVertexCount;
+	}
+	EA_FORCE_INLINE uint32_t getIndexCount( void ) const {
+		return m_nIndexCount;
+	}
+	EA_FORCE_INLINE uint32_t getUploadCount( void ) const {
+		return m_nUploadCount;
+	}
+	EA_FORCE_INLINE uint64_t getDeviceGeneration( void ) const {
+		return m_nDeviceGeneration;
+	}
+	EA_FORCE_INLINE uint64_t getGpuBytes( void ) const {
+		return m_nGpuBytes;
+	}
+	EA_FORCE_INLINE uint64_t getVertexChecksum( void ) const {
+		return m_nVertexChecksum;
+	}
+	EA_FORCE_INLINE uint64_t getIndexChecksum( void ) const {
+		return m_nIndexChecksum;
+	}
+	EA_FORCE_INLINE uint64_t getUploadedVertexChecksum( void ) const {
+		return m_nUploadedVertexChecksum;
+	}
+	EA_FORCE_INLINE uint64_t getUploadedIndexChecksum( void ) const {
+		return m_nUploadedIndexChecksum;
+	}
+	EA_FORCE_INLINE const Vector2i &getGridMinimum( void ) const {
+		return m_gridMinimum;
+	}
+	EA_FORCE_INLINE const Vector2i &getGridMaximum( void ) const {
+		return m_gridMaximum;
+	}
+	EA_FORCE_INLINE RenderingDevice::IndexBufferFormat getIndexFormat( void ) const {
+		return m_indexFormat;
+	}
 	bool getPackedVertex( uint32_t nVertex, t3dRdClipmapVertex_t &rVertex ) const;
 	bool getIndex( uint32_t nIndex, uint32_t &rIndex ) const;
 };

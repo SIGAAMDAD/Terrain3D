@@ -1,12 +1,13 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "rendering/rd/terrain_3d_rd_forward_plus_bridge.h"
+#include "core/terrain_3d_sync.h"
 
 #include "rendering/rd/terrain_3d_rd_context.h"
 #include "rendering/rd/terrain_3d_render_coordinator.h"
 
-#include <cmath>
-#include <cstring>
+#include <math.h>
+#include <string.h>
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/core/memory.hpp>
 #include <godot_cpp/variant/basis.hpp>
@@ -18,33 +19,29 @@
 #include <intrin.h>
 #endif
 
-Terrain3DRdForwardPlusBridgeAdapter *Terrain3DRdForwardPlusBridgeAdapter::s_pSingleton = nullptr;
+Terrain3DRdForwardPlusBridgeAdapter *Terrain3DRdForwardPlusBridgeAdapter::s_pSingleton = NULL;
 
-static bool t3dRdForwardValidSampleCount( const uint32_t nSamples )
-{
+static bool t3dRdForwardValidSampleCount( const uint32_t nSamples ) {
 	return nSamples == 1u || nSamples == 2u || nSamples == 4u || nSamples == 8u;
 }
 
-static uint32_t t3dRdForwardCtz64( const uint64_t nMask )
-{
+static uint32_t t3dRdForwardCtz64( const uint64_t nMask ) {
 #if defined( _MSC_VER )
 	unsigned long index = 0u;
 	_BitScanForward64( &index, nMask );
-	return (uint32_t)( index );
+	return ( uint32_t )( index );
 #else
-	return (uint32_t)( __builtin_ctzll( nMask ) );
+	return ( uint32_t )( __builtin_ctzll( nMask ) );
 #endif
 }
 
-static RID t3dRdForwardDecodeRid( const uint64_t nOpaque )
-{
+static RID t3dRdForwardDecodeRid( const uint64_t nOpaque ) {
 	RID result;
-	std::memcpy( &result, &nOpaque, sizeof( result ) );
+	memcpy( &result, &nOpaque, sizeof( result ) );
 	return result;
 }
 
-static Projection t3dRdForwardDecodeProjection( const float *const pValues )
-{
+static Projection t3dRdForwardDecodeProjection( const float *const pValues ) {
 	Projection result;
 	for ( uint32_t column = 0u; column < 4u; ++column ) {
 		for ( uint32_t row = 0u; row < 4u; ++row ) {
@@ -54,60 +51,47 @@ static Projection t3dRdForwardDecodeProjection( const float *const pValues )
 	return result;
 }
 
-static Transform3D t3dRdForwardDecodeTransform( const float *const pValues )
-{
-	const Basis basis( pValues[0],
-			pValues[1],
-			pValues[2],
-			pValues[4],
-			pValues[5],
-			pValues[6],
-			pValues[8],
-			pValues[9],
-			pValues[10] );
+static Transform3D t3dRdForwardDecodeTransform( const float *const pValues ) {
+	const Basis basis( pValues[0], pValues[1], pValues[2], pValues[4], pValues[5], pValues[6], pValues[8], pValues[9], pValues[10] );
 	return Transform3D( basis, Vector3( pValues[3], pValues[7], pValues[11] ) );
 }
 
-static bool t3dRdForwardFiniteEnvironmentFrame( const t3dRdForwardBridgeFramePacket_t& rFrame )
-{
-	if ( rFrame.m_nAbi10ReservedTail != 0u || rFrame.m_nEnvironmentReserved0 != 0u ||
-			rFrame.m_fEnvironmentReserved1 != 0.0f || ( rFrame.m_nEnvironmentFlags & ~uint32_t( 0x0fu ) ) != 0u ||
-			!std::isfinite( rFrame.m_fAmbientColorSkyMix ) || rFrame.m_fAmbientColorSkyMix < 0.0f ||
-			rFrame.m_fAmbientColorSkyMix > 1.0f || !std::isfinite( rFrame.m_fEmissiveExposureNormalization ) ||
-			!std::isfinite( rFrame.m_fIblExposureNormalization ) || !std::isfinite( rFrame.m_fRadiancePixelSize ) ||
-			rFrame.m_fRadiancePixelSize < 0.0f || !std::isfinite( rFrame.m_fRadianceBorderSize ) ||
-			rFrame.m_fRadianceBorderSize < 0.0f ) {
+static bool t3dRdForwardFiniteEnvironmentFrame( const t3dRdForwardBridgeFramePacket_t &rFrame ) {
+	if ( rFrame.m_nAbi10ReservedTail != 0u || rFrame.m_nEnvironmentReserved0 != 0u || rFrame.m_fEnvironmentReserved1 != 0.0f
+	        || ( rFrame.m_nEnvironmentFlags & ~uint32_t( 0x0fu ) ) != 0u || !isfinite( rFrame.m_fAmbientColorSkyMix )
+	        || rFrame.m_fAmbientColorSkyMix < 0.0f || rFrame.m_fAmbientColorSkyMix > 1.0f
+	        || !isfinite( rFrame.m_fEmissiveExposureNormalization ) || !isfinite( rFrame.m_fIblExposureNormalization )
+	        || !isfinite( rFrame.m_fRadiancePixelSize ) || rFrame.m_fRadiancePixelSize < 0.0f || !isfinite( rFrame.m_fRadianceBorderSize )
+	        || rFrame.m_fRadianceBorderSize < 0.0f ) {
 		return false;
 	}
 	for ( uint32_t i = 0u; i < 4u; ++i ) {
-		if ( !std::isfinite( rFrame.m_szAmbientLightColorEnergy[i] ) ) {
+		if ( !isfinite( rFrame.m_szAmbientLightColorEnergy[i] ) ) {
 			return false;
 		}
 	}
 	for ( uint32_t i = 0u; i < 12u; ++i ) {
-		if ( !std::isfinite( rFrame.m_szRadianceInverseXform[i] ) ) {
+		if ( !isfinite( rFrame.m_szRadianceInverseXform[i] ) ) {
 			return false;
 		}
 	}
 	return true;
 }
 
-static bool t3dRdForwardOrdinaryPassKind( const uint32_t nPassKind )
-{
-	return nPassKind == T3D_RD_FORWARD_PASS_DEPTH || nPassKind == T3D_RD_FORWARD_PASS_OPAQUE ||
-			nPassKind == T3D_RD_FORWARD_PASS_MOTION || nPassKind == T3D_RD_FORWARD_PASS_TRANSPARENT;
+static bool t3dRdForwardOrdinaryPassKind( const uint32_t nPassKind ) {
+	return nPassKind == T3D_RD_FORWARD_PASS_DEPTH || nPassKind == T3D_RD_FORWARD_PASS_OPAQUE || nPassKind == T3D_RD_FORWARD_PASS_MOTION
+	        || nPassKind == T3D_RD_FORWARD_PASS_TRANSPARENT;
 }
 
-Terrain3DRdForwardPlusBridgeAdapter::Terrain3DRdForwardPlusBridgeAdapter( void )
-{
-	for ( std::atomic<Terrain3DRenderCoordinator *>& slot : m_szCoordinators ) {
-		slot.store( nullptr, std::memory_order_relaxed );
+Terrain3DRdForwardPlusBridgeAdapter::Terrain3DRdForwardPlusBridgeAdapter( void ) {
+	for ( size_t iCoordinator = 0u; iCoordinator < T3D_ARRAY_COUNT( m_szCoordinators ); iCoordinator++ ) {
+		t3dAtomic_t<Terrain3DRenderCoordinator *> &slot = ( m_szCoordinators )[iCoordinator];
+		slot.store( NULL, T3D_MEMORY_ORDER_RELAXED );
 	}
 	resetConnectionState();
 }
 
-void Terrain3DRdForwardPlusBridgeAdapter::initializeSingleton( void )
-{
+void Terrain3DRdForwardPlusBridgeAdapter::initializeSingleton( void ) {
 	if ( s_pSingleton ) {
 		return;
 	}
@@ -115,40 +99,39 @@ void Terrain3DRdForwardPlusBridgeAdapter::initializeSingleton( void )
 	s_pSingleton->connectEngineBridge();
 }
 
-void Terrain3DRdForwardPlusBridgeAdapter::shutdownSingleton( void )
-{
+void Terrain3DRdForwardPlusBridgeAdapter::shutdownSingleton( void ) {
 	Terrain3DRdForwardPlusBridgeAdapter *const adapter = s_pSingleton;
 	if ( !adapter ) {
 		return;
 	}
 	adapter->disconnectEngineBridge();
-	adapter->m_nCoordinatorMask.store( 0u, std::memory_order_release );
+	adapter->m_nCoordinatorMask.store( 0u, T3D_MEMORY_ORDER_RELEASE );
 	Terrain3DRdContext::forceSync();
-	for ( std::atomic<Terrain3DRenderCoordinator *>& slot : adapter->m_szCoordinators ) {
-		slot.store( nullptr, std::memory_order_release );
+	for ( size_t iCoordinator = 0u; iCoordinator < T3D_ARRAY_COUNT( adapter->m_szCoordinators ); iCoordinator++ ) {
+		t3dAtomic_t<Terrain3DRenderCoordinator *> &slot = ( adapter->m_szCoordinators )[iCoordinator];
+		slot.store( NULL, T3D_MEMORY_ORDER_RELEASE );
 	}
-	s_pSingleton = nullptr;
+	s_pSingleton = NULL;
 	memdelete( adapter );
 }
 
-void Terrain3DRdForwardPlusBridgeAdapter::resetConnectionState( void )
-{
-	m_bBridgePresent.store( false, std::memory_order_release );
-	m_bBridgeReady.store( false, std::memory_order_release );
-	m_bCallbackRegistered.store( false, std::memory_order_release );
-	m_nObservedAbiVersion.store( 0u, std::memory_order_release );
-	m_nObservedCapabilities.store( 0u, std::memory_order_release );
-	m_pEngineBridge = nullptr;
-	m_nPrepareAddress = reinterpret_cast<uintptr_t>( &Terrain3DRdForwardPlusBridgeAdapter::prepareThunk );
-	m_nShadowPrepareAddress = reinterpret_cast<uintptr_t>( &Terrain3DRdForwardPlusBridgeAdapter::prepareShadowThunk );
-	m_nSubmitAddress = reinterpret_cast<uintptr_t>( &Terrain3DRdForwardPlusBridgeAdapter::submitThunk );
-	m_nUserdataAddress = reinterpret_cast<uintptr_t>( this );
+void Terrain3DRdForwardPlusBridgeAdapter::resetConnectionState( void ) {
+	m_bBridgePresent.store( false, T3D_MEMORY_ORDER_RELEASE );
+	m_bBridgeReady.store( false, T3D_MEMORY_ORDER_RELEASE );
+	m_bCallbackRegistered.store( false, T3D_MEMORY_ORDER_RELEASE );
+	m_nObservedAbiVersion.store( 0u, T3D_MEMORY_ORDER_RELEASE );
+	m_nObservedCapabilities.store( 0u, T3D_MEMORY_ORDER_RELEASE );
+	m_pEngineBridge = NULL;
+	m_nPrepareAddress = ( uintptr_t )( &Terrain3DRdForwardPlusBridgeAdapter::prepareThunk );
+	m_nShadowPrepareAddress = ( uintptr_t )( &Terrain3DRdForwardPlusBridgeAdapter::prepareShadowThunk );
+	m_nSubmitAddress = ( uintptr_t )( &Terrain3DRdForwardPlusBridgeAdapter::submitThunk );
+	m_nUserdataAddress = ( uintptr_t )( this );
 	m_nCachedFrameGeneration = 0u;
 	m_nCachedResourceGeneration = 0u;
 	m_nCachedPassSerial = 0u;
 	m_mainCallbackContext = t3dRdForwardPassContext_t{};
 	m_shadowCallbackContext = t3dRdForwardPassContext_t{};
-	m_pPreparedContext = nullptr;
+	m_pPreparedContext = NULL;
 #if defined( TOOLS_ENABLED ) || defined( DEBUG_ENABLED )
 	m_nPacketsReceived = 0u;
 	m_nPacketsAccepted = 0u;
@@ -159,34 +142,31 @@ void Terrain3DRdForwardPlusBridgeAdapter::resetConnectionState( void )
 #endif
 }
 
-void Terrain3DRdForwardPlusBridgeAdapter::setError( const String& rError )
-{
-	std::lock_guard<std::mutex> lock( m_errorMutex );
+void Terrain3DRdForwardPlusBridgeAdapter::setError( const String &rError ) {
+	t3dScopedLock_t lock( m_errorMutex );
 	m_lastError = rError;
 }
 
-String Terrain3DRdForwardPlusBridgeAdapter::getLastError( void ) const
-{
-	std::lock_guard<std::mutex> lock( m_errorMutex );
+bool Terrain3DRdForwardPlusBridgeAdapter::failConnection( const String &rError ) {
+	setError( rError );
+	UtilityFunctions::push_error( "Terrain3D Forward+ bridge: ", rError );
+	return false;
+}
+
+String Terrain3DRdForwardPlusBridgeAdapter::getLastError( void ) const {
+	t3dScopedLock_t lock( m_errorMutex );
 	return m_lastError;
 }
 
-bool Terrain3DRdForwardPlusBridgeAdapter::connectEngineBridge( void )
-{
+bool Terrain3DRdForwardPlusBridgeAdapter::connectEngineBridge( void ) {
 	resetConnectionState();
-	const auto failConnection = [this]( const String& rError ) {
-		setError( rError );
-		UtilityFunctions::push_error( "Terrain3D Forward+ bridge: ", rError );
-		return false;
-	};
-
 	Engine *const engine = Engine::get_singleton();
 	const StringName singleton_name( s_pszEngineSingletonName );
 	if ( !engine || !engine->has_singleton( singleton_name ) ) {
 		return failConnection( "Godot 4.7.2 Terrain3DForwardPlusBridge singleton is missing; production "
-							   "RenderingDevice rendering is disabled" );
+		                       "RenderingDevice rendering is disabled" );
 	}
-	m_bBridgePresent.store( true, std::memory_order_release );
+	m_bBridgePresent.store( true, T3D_MEMORY_ORDER_RELEASE );
 	m_pEngineBridge = engine->get_singleton( singleton_name );
 	static const char *const required_methods[] = { "get_abi_version",
 		"get_native_capabilities",
@@ -194,10 +174,10 @@ bool Terrain3DRdForwardPlusBridgeAdapter::connectEngineBridge( void )
 		"unregister_native_callback",
 		"has_native_callback",
 		"collect_retired_callbacks" };
-	for ( const char *const method : required_methods ) {
+	for ( size_t iMethod = 0u; iMethod < T3D_ARRAY_COUNT( required_methods ); iMethod++ ) {
+		const char *const method = ( required_methods )[iMethod];
 		if ( !m_pEngineBridge || !m_pEngineBridge->has_method( StringName( method ) ) ) {
-			return failConnection(
-					String( "Terrain3DForwardPlusBridge singleton is missing required ABI 11 method: " ) + method );
+			return failConnection( String( "Terrain3DForwardPlusBridge singleton is missing required ABI 11 method: " ) + method );
 		}
 	}
 
@@ -205,87 +185,81 @@ bool Terrain3DRdForwardPlusBridgeAdapter::connectEngineBridge( void )
 	if ( abi_value.get_type() != Variant::INT ) {
 		return failConnection( "Terrain3DForwardPlusBridge returned a non-integer ABI version" );
 	}
-	const int64_t abi_signed = (int64_t)( abi_value );
-	const uint32_t abi = abi_signed >= 0 ? (uint32_t)( abi_signed ) : 0u;
-	m_nObservedAbiVersion.store( abi, std::memory_order_release );
+	const int64_t abi_signed = ( int64_t )( abi_value );
+	const uint32_t abi = abi_signed >= 0 ? ( uint32_t )( abi_signed ) : 0u;
+	m_nObservedAbiVersion.store( abi, T3D_MEMORY_ORDER_RELEASE );
 	if ( abi != s_nBridgeAbiVersion ) {
-		return failConnection( vformat(
-				"Terrain3DForwardPlusBridge ABI mismatch: expected %d, received %d", s_nBridgeAbiVersion, abi ) );
+		return failConnection( vformat( "Terrain3DForwardPlusBridge ABI mismatch: expected %d, received %d", s_nBridgeAbiVersion, abi ) );
 	}
 
 	const Variant capabilities_value = m_pEngineBridge->call( StringName( "get_native_capabilities" ) );
 	if ( capabilities_value.get_type() != Variant::INT ) {
 		return failConnection( "Terrain3DForwardPlusBridge returned a non-integer capability mask" );
 	}
-	const uint64_t capabilities = (uint64_t)( (int64_t)( capabilities_value ) );
-	m_nObservedCapabilities.store( capabilities, std::memory_order_release );
+	const uint64_t capabilities = ( uint64_t )( ( int64_t )( capabilities_value ) );
+	m_nObservedCapabilities.store( capabilities, T3D_MEMORY_ORDER_RELEASE );
 	if ( ( capabilities & s_nT3dForwardBridgeRequiredCapabilities ) != s_nT3dForwardBridgeRequiredCapabilities ) {
-		return failConnection(
-				vformat( "Terrain3DForwardPlusBridge capability mismatch: required 0x%llx, received 0x%llx",
-						s_nT3dForwardBridgeRequiredCapabilities,
-						capabilities ) );
+		return failConnection( vformat( "Terrain3DForwardPlusBridge capability mismatch: required 0x%llx, received 0x%llx",
+		        s_nT3dForwardBridgeRequiredCapabilities,
+		        capabilities ) );
 	}
 
 	const Variant registered_value = m_pEngineBridge->call( StringName( "register_native_callback" ),
-			(int64_t)( m_nPrepareAddress ),
-			(int64_t)( m_nShadowPrepareAddress ),
-			(int64_t)( m_nSubmitAddress ),
-			(int64_t)( m_nUserdataAddress ),
-			(int64_t)( sizeof( t3dRdForwardBridgeFramePacket_t ) ),
-			(int64_t)( sizeof( t3dRdForwardBridgeResourcePacket_t ) ),
-			(int64_t)( sizeof( t3dRdForwardBridgePassPacket_t ) ),
-			(int64_t)( sizeof( t3dRdForwardBridgeShadowPacket_t ) ) );
-	const bool registered = registered_value.get_type() == Variant::BOOL && (bool)( registered_value );
-	m_bCallbackRegistered.store( registered, std::memory_order_release );
+	        ( int64_t )( m_nPrepareAddress ),
+	        ( int64_t )( m_nShadowPrepareAddress ),
+	        ( int64_t )( m_nSubmitAddress ),
+	        ( int64_t )( m_nUserdataAddress ),
+	        ( int64_t )( sizeof( t3dRdForwardBridgeFramePacket_t ) ),
+	        ( int64_t )( sizeof( t3dRdForwardBridgeResourcePacket_t ) ),
+	        ( int64_t )( sizeof( t3dRdForwardBridgePassPacket_t ) ),
+	        ( int64_t )( sizeof( t3dRdForwardBridgeShadowPacket_t ) ) );
+	const bool registered = registered_value.get_type() == Variant::BOOL && ( bool )( registered_value );
+	m_bCallbackRegistered.store( registered, T3D_MEMORY_ORDER_RELEASE );
 	if ( !registered ) {
 		return failConnection( "Terrain3DForwardPlusBridge rejected the ABI 11 native callback registration" );
 	}
 
 	const Variant has_callback_value = m_pEngineBridge->call( StringName( "has_native_callback" ) );
-	if ( has_callback_value.get_type() != Variant::BOOL || !(bool)( has_callback_value ) ) {
+	if ( has_callback_value.get_type() != Variant::BOOL || !( bool )( has_callback_value ) ) {
 		disconnectEngineBridge();
-		return failConnection(
-				"Terrain3DForwardPlusBridge did not report the registered native callback as available" );
+		return failConnection( "Terrain3DForwardPlusBridge did not report the registered native callback as available" );
 	}
-	m_bBridgeReady.store( true, std::memory_order_release );
+	m_bBridgeReady.store( true, T3D_MEMORY_ORDER_RELEASE );
 	setError( String() );
 	return true;
 }
 
-void Terrain3DRdForwardPlusBridgeAdapter::disconnectEngineBridge( void )
-{
-	m_bBridgeReady.store( false, std::memory_order_release );
+void Terrain3DRdForwardPlusBridgeAdapter::disconnectEngineBridge( void ) {
+	m_bBridgeReady.store( false, T3D_MEMORY_ORDER_RELEASE );
 	Object *const bridge = m_pEngineBridge;
-	if ( bridge && m_bCallbackRegistered.exchange( false, std::memory_order_acq_rel ) ) {
+	if ( bridge && m_bCallbackRegistered.exchange( false, T3D_MEMORY_ORDER_ACQ_REL ) ) {
 		bridge->call( StringName( "unregister_native_callback" ),
-				(int64_t)( m_nPrepareAddress ),
-				(int64_t)( m_nShadowPrepareAddress ),
-				(int64_t)( m_nSubmitAddress ),
-				(int64_t)( m_nUserdataAddress ) );
+		        ( int64_t )( m_nPrepareAddress ),
+		        ( int64_t )( m_nShadowPrepareAddress ),
+		        ( int64_t )( m_nSubmitAddress ),
+		        ( int64_t )( m_nUserdataAddress ) );
 		Terrain3DRdContext::forceSync();
 		bridge->call( StringName( "collect_retired_callbacks" ) );
 	}
-	m_pPreparedContext = nullptr;
+	m_pPreparedContext = NULL;
 	m_nCachedPassSerial = 0u;
-	m_pEngineBridge = nullptr;
-	m_bBridgePresent.store( false, std::memory_order_release );
+	m_pEngineBridge = NULL;
+	m_bBridgePresent.store( false, T3D_MEMORY_ORDER_RELEASE );
 }
 
-bool Terrain3DRdForwardPlusBridgeAdapter::attachCoordinator( Terrain3DRenderCoordinator *const pCoordinator )
-{
+bool Terrain3DRdForwardPlusBridgeAdapter::attachCoordinator( Terrain3DRenderCoordinator *const pCoordinator ) {
 	if ( !pCoordinator ) {
 		return false;
 	}
 	for ( uint32_t i = 0u; i < s_nMaxCoordinators; ++i ) {
-		if ( m_szCoordinators[i].load( std::memory_order_acquire ) == pCoordinator ) {
+		if ( m_szCoordinators[i].load( T3D_MEMORY_ORDER_ACQUIRE ) == pCoordinator ) {
 			return true;
 		}
 	}
 	for ( uint32_t i = 0u; i < s_nMaxCoordinators; ++i ) {
-		Terrain3DRenderCoordinator *expected = nullptr;
-		if ( m_szCoordinators[i].compare_exchange_strong(
-					 expected, pCoordinator, std::memory_order_acq_rel, std::memory_order_acquire ) ) {
-			m_nCoordinatorMask.fetch_or( uint64_t( 1u ) << i, std::memory_order_release );
+		Terrain3DRenderCoordinator *expected = NULL;
+		if ( m_szCoordinators[i].compare_exchange_strong( expected, pCoordinator, T3D_MEMORY_ORDER_ACQ_REL, T3D_MEMORY_ORDER_ACQUIRE ) ) {
+			m_nCoordinatorMask.fetch_or( uint64_t( 1u ) << i, T3D_MEMORY_ORDER_RELEASE );
 			return true;
 		}
 	}
@@ -293,37 +267,33 @@ bool Terrain3DRdForwardPlusBridgeAdapter::attachCoordinator( Terrain3DRenderCoor
 	return false;
 }
 
-void Terrain3DRdForwardPlusBridgeAdapter::detachCoordinator( Terrain3DRenderCoordinator *const pCoordinator )
-{
+void Terrain3DRdForwardPlusBridgeAdapter::detachCoordinator( Terrain3DRenderCoordinator *const pCoordinator ) {
 	if ( !pCoordinator ) {
 		return;
 	}
 	uint64_t removed_mask = 0u;
 	for ( uint32_t i = 0u; i < s_nMaxCoordinators; ++i ) {
-		if ( m_szCoordinators[i].load( std::memory_order_acquire ) == pCoordinator ) {
+		if ( m_szCoordinators[i].load( T3D_MEMORY_ORDER_ACQUIRE ) == pCoordinator ) {
 			removed_mask |= uint64_t( 1u ) << i;
 		}
 	}
 	if ( removed_mask == 0u ) {
 		return;
 	}
-	m_nCoordinatorMask.fetch_and( ~removed_mask, std::memory_order_acq_rel );
+	m_nCoordinatorMask.fetch_and( ~removed_mask, T3D_MEMORY_ORDER_ACQ_REL );
 	Terrain3DRdContext::forceSync();
 	while ( removed_mask != 0u ) {
 		const uint32_t index = t3dRdForwardCtz64( removed_mask );
 		removed_mask &= removed_mask - 1u;
 		Terrain3DRenderCoordinator *expected = pCoordinator;
-		m_szCoordinators[index].compare_exchange_strong(
-				expected, nullptr, std::memory_order_acq_rel, std::memory_order_acquire );
+		m_szCoordinators[index].compare_exchange_strong( expected, NULL, T3D_MEMORY_ORDER_ACQ_REL, T3D_MEMORY_ORDER_ACQUIRE );
 	}
 }
 
-bool Terrain3DRdForwardPlusBridgeAdapter::convertFrame( const t3dRdForwardBridgeFramePacket_t& rFrame )
-{
-	if ( rFrame.m_nAbi != s_nBridgeAbiVersion || rFrame.m_nStructSize != sizeof( rFrame ) ||
-			rFrame.m_nGeneration == 0u || rFrame.m_nViewCount == 0u ||
-			rFrame.m_nViewCount > s_nT3dForwardBridgeMaxViews ||
-			!t3dRdForwardValidSampleCount( rFrame.m_nSampleCount ) || !t3dRdForwardFiniteEnvironmentFrame( rFrame ) ) {
+bool Terrain3DRdForwardPlusBridgeAdapter::convertFrame( const t3dRdForwardBridgeFramePacket_t &rFrame ) {
+	if ( rFrame.m_nAbi != s_nBridgeAbiVersion || rFrame.m_nStructSize != sizeof( rFrame ) || rFrame.m_nGeneration == 0u
+	        || rFrame.m_nViewCount == 0u || rFrame.m_nViewCount > s_nT3dForwardBridgeMaxViews
+	        || !t3dRdForwardValidSampleCount( rFrame.m_nSampleCount ) || !t3dRdForwardFiniteEnvironmentFrame( rFrame ) ) {
 		setError( "Terrain3D ABI 11 frame packet validation failed" );
 		return false;
 	}
@@ -331,7 +301,7 @@ bool Terrain3DRdForwardPlusBridgeAdapter::convertFrame( const t3dRdForwardBridge
 		return true;
 	}
 
-	t3dRdForwardPassContext_t& context = m_mainCallbackContext;
+	t3dRdForwardPassContext_t &context = m_mainCallbackContext;
 	context.m_nBridgeAbiVersion = s_nBridgeAbiVersion;
 	context.m_nFrameGeneration = rFrame.m_nGeneration;
 	context.m_nScenePass = rFrame.m_nScenePass;
@@ -340,10 +310,8 @@ bool Terrain3DRdForwardPlusBridgeAdapter::convertFrame( const t3dRdForwardBridge
 	context.m_nViewCount = rFrame.m_nViewCount;
 	context.m_nSampleCount = rFrame.m_nSampleCount;
 	context.m_nCameraVisibleLayers = rFrame.m_nCameraVisibleLayers;
-	context.m_renderRegion = Rect2i( rFrame.m_nRenderRegion[0],
-			rFrame.m_nRenderRegion[1],
-			rFrame.m_nRenderRegion[2],
-			rFrame.m_nRenderRegion[3] );
+	context.m_renderRegion =
+	        Rect2i( rFrame.m_nRenderRegion[0], rFrame.m_nRenderRegion[1], rFrame.m_nRenderRegion[2], rFrame.m_nRenderRegion[3] );
 	context.m_renderSize = Vector2i( rFrame.m_nRenderSize[0], rFrame.m_nRenderSize[1] );
 	context.m_nClusterMaxElements = rFrame.m_nClusterMaxElements;
 	context.m_nClusterShift = rFrame.m_nClusterShift;
@@ -358,53 +326,43 @@ bool Terrain3DRdForwardPlusBridgeAdapter::convertFrame( const t3dRdForwardBridge
 	context.m_previousCameraTransform = context.m_cameraTransform;
 	for ( uint32_t view = 0u; view < rFrame.m_nViewCount; ++view ) {
 		context.m_szViewProjection[view] = t3dRdForwardDecodeProjection( rFrame.m_mViewProjection[view] );
-		context.m_szPreviousViewProjection[view] =
-				t3dRdForwardDecodeProjection( rFrame.m_mPreviousViewProjection[view] );
-		context.m_szEyeOffset[view] =
-				Vector3( rFrame.m_vEyeOffset[view][0], rFrame.m_vEyeOffset[view][1], rFrame.m_vEyeOffset[view][2] );
+		context.m_szPreviousViewProjection[view] = t3dRdForwardDecodeProjection( rFrame.m_mPreviousViewProjection[view] );
+		context.m_szEyeOffset[view] = Vector3( rFrame.m_vEyeOffset[view][0], rFrame.m_vEyeOffset[view][1], rFrame.m_vEyeOffset[view][2] );
 	}
 	context.m_taaJitter = Vector2( rFrame.m_vMotionJitter[0], rFrame.m_vMotionJitter[1] );
 	context.m_previousTaaJitter = Vector2( rFrame.m_vMotionJitter[2], rFrame.m_vMotionJitter[3] );
 	context.m_bMotionVectorsEnabled = ( rFrame.m_nFlags & T3D_RD_FORWARD_FRAME_MOTION_VECTORS ) != 0u;
 	context.m_bDirectionalLightSoftShadows = ( rFrame.m_nFlags & T3D_RD_FORWARD_FRAME_DIRECTIONAL_SOFT_SHADOWS ) != 0u;
-	context.m_nEnvironmentFlags = ( ( rFrame.m_nEnvironmentFlags & T3D_RD_FORWARD_BRIDGE_ENV_USE_AMBIENT_LIGHT )
-												  ? T3D_RD_FORWARD_ENV_USE_AMBIENT_LIGHT
-												  : 0u ) |
-			( ( rFrame.m_nEnvironmentFlags & T3D_RD_FORWARD_BRIDGE_ENV_USE_AMBIENT_CUBEMAP )
-							? T3D_RD_FORWARD_ENV_USE_AMBIENT_CUBEMAP
-							: 0u ) |
-			( ( rFrame.m_nEnvironmentFlags & T3D_RD_FORWARD_BRIDGE_ENV_USE_REFLECTION_CUBEMAP )
-							? T3D_RD_FORWARD_ENV_USE_REFLECTION_CUBEMAP
-							: 0u ) |
-			( ( rFrame.m_nEnvironmentFlags & T3D_RD_FORWARD_BRIDGE_ENV_RADIANCE_OCTMAP_ARRAY )
-							? T3D_RD_FORWARD_ENV_RADIANCE_OCTMAP_ARRAY
-							: 0u );
-	std::memcpy( context.m_szAmbientLightColorEnergy,
-			rFrame.m_szAmbientLightColorEnergy,
-			sizeof( context.m_szAmbientLightColorEnergy ) );
+	context.m_nEnvironmentFlags =
+	        ( ( rFrame.m_nEnvironmentFlags & T3D_RD_FORWARD_BRIDGE_ENV_USE_AMBIENT_LIGHT ) ? T3D_RD_FORWARD_ENV_USE_AMBIENT_LIGHT : 0u )
+	        | ( ( rFrame.m_nEnvironmentFlags & T3D_RD_FORWARD_BRIDGE_ENV_USE_AMBIENT_CUBEMAP ) ? T3D_RD_FORWARD_ENV_USE_AMBIENT_CUBEMAP
+	                                                                                           : 0u )
+	        | ( ( rFrame.m_nEnvironmentFlags & T3D_RD_FORWARD_BRIDGE_ENV_USE_REFLECTION_CUBEMAP )
+	                        ? T3D_RD_FORWARD_ENV_USE_REFLECTION_CUBEMAP
+	                        : 0u )
+	        | ( ( rFrame.m_nEnvironmentFlags & T3D_RD_FORWARD_BRIDGE_ENV_RADIANCE_OCTMAP_ARRAY ) ? T3D_RD_FORWARD_ENV_RADIANCE_OCTMAP_ARRAY
+	                                                                                             : 0u );
+	memcpy( context.m_szAmbientLightColorEnergy, rFrame.m_szAmbientLightColorEnergy, sizeof( context.m_szAmbientLightColorEnergy ) );
 	context.m_fAmbientColorSkyMix = rFrame.m_fAmbientColorSkyMix;
 	context.m_fEmissiveExposureNormalization = rFrame.m_fEmissiveExposureNormalization;
 	context.m_fIblExposureNormalization = rFrame.m_fIblExposureNormalization;
 	context.m_fRadiancePixelSize = rFrame.m_fRadiancePixelSize;
 	context.m_fRadianceBorderSize = rFrame.m_fRadianceBorderSize;
-	std::memcpy( context.m_szRadianceInverseXform,
-			rFrame.m_szRadianceInverseXform,
-			sizeof( context.m_szRadianceInverseXform ) );
+	memcpy( context.m_szRadianceInverseXform, rFrame.m_szRadianceInverseXform, sizeof( context.m_szRadianceInverseXform ) );
 	m_nCachedFrameGeneration = rFrame.m_nGeneration;
 	return true;
 }
 
-bool Terrain3DRdForwardPlusBridgeAdapter::convertResources( const t3dRdForwardBridgeResourcePacket_t& rResources )
-{
-	if ( rResources.m_nAbi != s_nBridgeAbiVersion || rResources.m_nStructSize != sizeof( rResources ) ||
-			rResources.m_nGeneration == 0u || rResources.m_nReserved0 != 0u ) {
+bool Terrain3DRdForwardPlusBridgeAdapter::convertResources( const t3dRdForwardBridgeResourcePacket_t &rResources ) {
+	if ( rResources.m_nAbi != s_nBridgeAbiVersion || rResources.m_nStructSize != sizeof( rResources ) || rResources.m_nGeneration == 0u
+	        || rResources.m_nReserved0 != 0u ) {
 		setError( "Terrain3D ABI 11 borrowed-resource packet validation failed" );
 		return false;
 	}
 	if ( rResources.m_nGeneration == m_nCachedResourceGeneration ) {
 		return true;
 	}
-	t3dRdForwardPassContext_t& context = m_mainCallbackContext;
+	t3dRdForwardPassContext_t &context = m_mainCallbackContext;
 	context.m_nResourceGeneration = rResources.m_nGeneration;
 	context.m_hDirectionalLightBuffer = t3dRdForwardDecodeRid( rResources.m_hDirectionalLightBuffer );
 	context.m_hOmniLightBuffer = t3dRdForwardDecodeRid( rResources.m_hOmniLightBuffer );
@@ -424,19 +382,17 @@ bool Terrain3DRdForwardPlusBridgeAdapter::convertResources( const t3dRdForwardBr
 	return true;
 }
 
-bool Terrain3DRdForwardPlusBridgeAdapter::convertPass( const t3dRdForwardBridgePassPacket_t& rPass )
-{
-	if ( rPass.m_nAbi != s_nBridgeAbiVersion || rPass.m_nStructSize != sizeof( rPass ) ||
-			!t3dRdForwardOrdinaryPassKind( rPass.m_nPassKind ) ||
-			rPass.m_nNativePassMode > T3D_RD_FORWARD_NATIVE_PASS_SDF || rPass.m_nSerial == 0u ||
-			rPass.m_nFramebufferFormat < 0 || rPass.m_hNativeFramebuffer == 0u ) {
+bool Terrain3DRdForwardPlusBridgeAdapter::convertPass( const t3dRdForwardBridgePassPacket_t &rPass ) {
+	if ( rPass.m_nAbi != s_nBridgeAbiVersion || rPass.m_nStructSize != sizeof( rPass ) || !t3dRdForwardOrdinaryPassKind( rPass.m_nPassKind )
+	        || rPass.m_nNativePassMode > T3D_RD_FORWARD_NATIVE_PASS_SDF || rPass.m_nSerial == 0u || rPass.m_nFramebufferFormat < 0
+	        || rPass.m_hNativeFramebuffer == 0u ) {
 		setError( "Terrain3D ABI 11 ordinary-pass packet validation failed" );
 		return false;
 	}
-	t3dRdForwardPassContext_t& context = m_mainCallbackContext;
+	t3dRdForwardPassContext_t &context = m_mainCallbackContext;
 	context.m_phase = T3D_RD_FORWARD_PHASE_PREPARE;
-	context.m_passKind = (t3dRdForwardPassKind_t)( rPass.m_nPassKind );
-	context.m_nativePassMode = (t3dRdForwardNativePassMode_t)( rPass.m_nNativePassMode );
+	context.m_passKind = ( t3dRdForwardPassKind_t )( rPass.m_nPassKind );
+	context.m_nativePassMode = ( t3dRdForwardNativePassMode_t )( rPass.m_nNativePassMode );
 	context.m_nColorPassFlags = rPass.m_nColorFlags;
 	context.m_nPassFlags = rPass.m_nFlags;
 	context.m_bDepthPrepassActive = ( rPass.m_nFlags & T3D_RD_FORWARD_PASS_DEPTH_PREPASS_ACTIVE ) != 0u;
@@ -447,21 +403,19 @@ bool Terrain3DRdForwardPlusBridgeAdapter::convertPass( const t3dRdForwardBridgeP
 	return true;
 }
 
-bool Terrain3DRdForwardPlusBridgeAdapter::convertShadow( const t3dRdForwardBridgeShadowPacket_t& rShadow )
-{
-	if ( rShadow.m_nAbi != s_nBridgeAbiVersion || rShadow.m_nStructSize != sizeof( rShadow ) ||
-			rShadow.m_nNativePassMode > T3D_RD_FORWARD_NATIVE_PASS_SDF ||
-			!t3dRdForwardValidSampleCount( rShadow.m_nSampleCount ) || rShadow.m_nReserved0 != 0u ||
-			rShadow.m_nSerial == 0u || rShadow.m_nFramebufferFormat < 0 ) {
+bool Terrain3DRdForwardPlusBridgeAdapter::convertShadow( const t3dRdForwardBridgeShadowPacket_t &rShadow ) {
+	if ( rShadow.m_nAbi != s_nBridgeAbiVersion || rShadow.m_nStructSize != sizeof( rShadow )
+	        || rShadow.m_nNativePassMode > T3D_RD_FORWARD_NATIVE_PASS_SDF || !t3dRdForwardValidSampleCount( rShadow.m_nSampleCount )
+	        || rShadow.m_nReserved0 != 0u || rShadow.m_nSerial == 0u || rShadow.m_nFramebufferFormat < 0 ) {
 		setError( "Terrain3D ABI 11 shadow packet validation failed" );
 		return false;
 	}
 	m_shadowCallbackContext = t3dRdForwardPassContext_t{};
-	t3dRdForwardPassContext_t& context = m_shadowCallbackContext;
+	t3dRdForwardPassContext_t &context = m_shadowCallbackContext;
 	context.m_nBridgeAbiVersion = s_nBridgeAbiVersion;
 	context.m_phase = T3D_RD_FORWARD_PHASE_PREPARE;
 	context.m_passKind = T3D_RD_FORWARD_PASS_SHADOW;
-	context.m_nativePassMode = (t3dRdForwardNativePassMode_t)( rShadow.m_nNativePassMode );
+	context.m_nativePassMode = ( t3dRdForwardNativePassMode_t )( rShadow.m_nNativePassMode );
 	context.m_nPassFlags = rShadow.m_nFlags;
 	context.m_bReverseCull = ( rShadow.m_nFlags & T3D_RD_FORWARD_PASS_REVERSE_CULL ) != 0u;
 	context.m_nViewCount = 1u;
@@ -481,15 +435,14 @@ bool Terrain3DRdForwardPlusBridgeAdapter::convertShadow( const t3dRdForwardBridg
 	return true;
 }
 
-bool Terrain3DRdForwardPlusBridgeAdapter::dispatchToCoordinators( const t3dRdForwardPassContext_t& rContext )
-{
-	uint64_t mask = m_nCoordinatorMask.load( std::memory_order_acquire );
+bool Terrain3DRdForwardPlusBridgeAdapter::dispatchToCoordinators( const t3dRdForwardPassContext_t &rContext ) {
+	uint64_t mask = m_nCoordinatorMask.load( T3D_MEMORY_ORDER_ACQUIRE );
 	bool dispatched = false;
 	bool accepted = true;
 	while ( mask != 0u ) {
 		const uint32_t index = t3dRdForwardCtz64( mask );
 		mask &= mask - 1u;
-		Terrain3DRenderCoordinator *const coordinator = m_szCoordinators[index].load( std::memory_order_acquire );
+		Terrain3DRenderCoordinator *const coordinator = m_szCoordinators[index].load( T3D_MEMORY_ORDER_ACQUIRE );
 		if ( coordinator ) {
 			dispatched = true;
 			accepted = coordinator->renderForwardPass( rContext ) && accepted;
@@ -499,18 +452,17 @@ bool Terrain3DRdForwardPlusBridgeAdapter::dispatchToCoordinators( const t3dRdFor
 }
 
 uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepare( const t3dRdForwardBridgeFramePacket_t *const pFrame,
-		const t3dRdForwardBridgeResourcePacket_t *const pResources,
-		const t3dRdForwardBridgePassPacket_t *const pPass ) noexcept
-{
+        const t3dRdForwardBridgeResourcePacket_t *const pResources,
+        const t3dRdForwardBridgePassPacket_t *const pPass ) noexcept {
 #if defined( TOOLS_ENABLED ) || defined( DEBUG_ENABLED )
 	++m_nPacketsReceived;
 #endif
-	m_pPreparedContext = nullptr;
+	m_pPreparedContext = NULL;
 	m_nCachedPassSerial = 0u;
-	if ( !m_bBridgeReady.load( std::memory_order_acquire ) || !pPass ||
-			( pFrame ? !convertFrame( *pFrame ) : m_nCachedFrameGeneration == 0u ) ||
-			( pResources ? !convertResources( *pResources ) : m_nCachedResourceGeneration == 0u ) ||
-			!convertPass( *pPass ) || !dispatchToCoordinators( m_mainCallbackContext ) ) {
+	if ( !m_bBridgeReady.load( T3D_MEMORY_ORDER_ACQUIRE ) || !pPass
+	        || ( pFrame ? !convertFrame( *pFrame ) : m_nCachedFrameGeneration == 0u )
+	        || ( pResources ? !convertResources( *pResources ) : m_nCachedResourceGeneration == 0u ) || !convertPass( *pPass )
+	        || !dispatchToCoordinators( m_mainCallbackContext ) ) {
 #if defined( TOOLS_ENABLED ) || defined( DEBUG_ENABLED )
 		++m_nPacketsRejected;
 #endif
@@ -521,21 +473,19 @@ uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepare( const t3dRdForwardBridgeF
 #if defined( TOOLS_ENABLED ) || defined( DEBUG_ENABLED )
 	++m_nPacketsAccepted;
 	m_nLastScenePass = m_mainCallbackContext.m_nScenePass;
-	m_nLastPassKind = (uint32_t)( m_mainCallbackContext.m_passKind );
+	m_nLastPassKind = ( uint32_t )( m_mainCallbackContext.m_passKind );
 #endif
 	return pPass->m_nSerial;
 }
 
-uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepareShadow(
-		const t3dRdForwardBridgeShadowPacket_t *const pShadow ) noexcept
-{
+uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepareShadow( const t3dRdForwardBridgeShadowPacket_t *const pShadow ) noexcept {
 #if defined( TOOLS_ENABLED ) || defined( DEBUG_ENABLED )
 	++m_nPacketsReceived;
 #endif
-	m_pPreparedContext = nullptr;
+	m_pPreparedContext = NULL;
 	m_nCachedPassSerial = 0u;
-	if ( !m_bBridgeReady.load( std::memory_order_acquire ) || !pShadow || !convertShadow( *pShadow ) ||
-			!dispatchToCoordinators( m_shadowCallbackContext ) ) {
+	if ( !m_bBridgeReady.load( T3D_MEMORY_ORDER_ACQUIRE ) || !pShadow || !convertShadow( *pShadow )
+	        || !dispatchToCoordinators( m_shadowCallbackContext ) ) {
 #if defined( TOOLS_ENABLED ) || defined( DEBUG_ENABLED )
 		++m_nPacketsRejected;
 #endif
@@ -551,8 +501,7 @@ uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepareShadow(
 	return pShadow->m_nSerial;
 }
 
-uint32_t Terrain3DRdForwardPlusBridgeAdapter::submit( const uint64_t nPreparedSerial, const int64_t nDrawList ) noexcept
-{
+uint32_t Terrain3DRdForwardPlusBridgeAdapter::submit( const uint64_t nPreparedSerial, const int64_t nDrawList ) noexcept {
 	if ( nPreparedSerial == 0u || nPreparedSerial != m_nCachedPassSerial || nDrawList < 0 || !m_pPreparedContext ) {
 		return 0u;
 	}
@@ -562,64 +511,55 @@ uint32_t Terrain3DRdForwardPlusBridgeAdapter::submit( const uint64_t nPreparedSe
 #if defined( TOOLS_ENABLED ) || defined( DEBUG_ENABLED )
 	m_nLastDrawList = nDrawList;
 #endif
-	m_pPreparedContext = nullptr;
+	m_pPreparedContext = NULL;
 	m_nCachedPassSerial = 0u;
 	return 1u;
 }
 
 uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepareThunk( void *const pUserdata,
-		const t3dRdForwardBridgeFramePacket_t *const pFrame,
-		const t3dRdForwardBridgeResourcePacket_t *const pResources,
-		const t3dRdForwardBridgePassPacket_t *const pPass ) noexcept
-{
-	Terrain3DRdForwardPlusBridgeAdapter *const adapter =
-			static_cast<Terrain3DRdForwardPlusBridgeAdapter *>( pUserdata );
+        const t3dRdForwardBridgeFramePacket_t *const pFrame,
+        const t3dRdForwardBridgeResourcePacket_t *const pResources,
+        const t3dRdForwardBridgePassPacket_t *const pPass ) noexcept {
+	Terrain3DRdForwardPlusBridgeAdapter *const adapter = ( Terrain3DRdForwardPlusBridgeAdapter * )( pUserdata );
 	return adapter ? adapter->prepare( pFrame, pResources, pPass ) : 0u;
 }
 
-uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepareShadowThunk( void *const pUserdata,
-		const t3dRdForwardBridgeShadowPacket_t *const pShadow ) noexcept
-{
-	Terrain3DRdForwardPlusBridgeAdapter *const adapter =
-			static_cast<Terrain3DRdForwardPlusBridgeAdapter *>( pUserdata );
+uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepareShadowThunk(
+        void *const pUserdata, const t3dRdForwardBridgeShadowPacket_t *const pShadow ) noexcept {
+	Terrain3DRdForwardPlusBridgeAdapter *const adapter = ( Terrain3DRdForwardPlusBridgeAdapter * )( pUserdata );
 	return adapter ? adapter->prepareShadow( pShadow ) : 0u;
 }
 
-uint32_t Terrain3DRdForwardPlusBridgeAdapter::submitThunk( void *const pUserdata,
-		const uint64_t nPreparedSerial,
-		const int64_t nDrawList ) noexcept
-{
-	Terrain3DRdForwardPlusBridgeAdapter *const adapter =
-			static_cast<Terrain3DRdForwardPlusBridgeAdapter *>( pUserdata );
+uint32_t Terrain3DRdForwardPlusBridgeAdapter::submitThunk(
+        void *const pUserdata, const uint64_t nPreparedSerial, const int64_t nDrawList ) noexcept {
+	Terrain3DRdForwardPlusBridgeAdapter *const adapter = ( Terrain3DRdForwardPlusBridgeAdapter * )( pUserdata );
 	return adapter ? adapter->submit( nPreparedSerial, nDrawList ) : 0u;
 }
 
-Dictionary Terrain3DRdForwardPlusBridgeAdapter::getDiagnostics( void )
-{
+Dictionary Terrain3DRdForwardPlusBridgeAdapter::getDiagnostics( void ) {
 	Terrain3DRdContext::forceSync();
 	Dictionary result;
 	result["singleton_name"] = s_pszEngineSingletonName;
-	result["required_abi"] = (int64_t)( s_nBridgeAbiVersion );
-	result["observed_abi"] = (int64_t)( getObservedAbiVersion() );
-	result["required_capabilities"] = (int64_t)( s_nT3dForwardBridgeRequiredCapabilities );
-	result["observed_capabilities"] = (int64_t)( getObservedCapabilities() );
+	result["required_abi"] = ( int64_t )( s_nBridgeAbiVersion );
+	result["observed_abi"] = ( int64_t )( getObservedAbiVersion() );
+	result["required_capabilities"] = ( int64_t )( s_nT3dForwardBridgeRequiredCapabilities );
+	result["observed_capabilities"] = ( int64_t )( getObservedCapabilities() );
 	result["bridge_present"] = isBridgePresent();
 	result["bridge_ready"] = isBridgeReady();
 	result["callback_registered"] = isCallbackRegistered();
-	result["active_coordinator_mask"] = (int64_t)( m_nCoordinatorMask.load( std::memory_order_acquire ) );
-	result["cached_frame_generation"] = (int64_t)( m_nCachedFrameGeneration );
-	result["cached_resource_generation"] = (int64_t)( m_nCachedResourceGeneration );
-	result["environment_flags"] = (int64_t)( m_mainCallbackContext.m_nEnvironmentFlags );
+	result["active_coordinator_mask"] = ( int64_t )( m_nCoordinatorMask.load( T3D_MEMORY_ORDER_ACQUIRE ) );
+	result["cached_frame_generation"] = ( int64_t )( m_nCachedFrameGeneration );
+	result["cached_resource_generation"] = ( int64_t )( m_nCachedResourceGeneration );
+	result["environment_flags"] = ( int64_t )( m_mainCallbackContext.m_nEnvironmentFlags );
 	result["environment_radiance_valid"] = m_mainCallbackContext.m_hRadianceTexture.is_valid();
-	result["environment_radiance_array"] =
-			( m_mainCallbackContext.m_nEnvironmentFlags & T3D_RD_FORWARD_ENV_RADIANCE_OCTMAP_ARRAY ) != 0u;
+	result["environment_radiance_array"] = ( m_mainCallbackContext.m_nEnvironmentFlags & T3D_RD_FORWARD_ENV_RADIANCE_OCTMAP_ARRAY ) != 0u;
 #if defined( TOOLS_ENABLED ) || defined( DEBUG_ENABLED )
-	result["packets_received"] = (int64_t)( m_nPacketsReceived );
-	result["packets_accepted"] = (int64_t)( m_nPacketsAccepted );
-	result["packets_rejected"] = (int64_t)( m_nPacketsRejected );
-	result["last_scene_pass"] = (int64_t)( m_nLastScenePass );
+	result["packets_received"] = ( int64_t )( m_nPacketsReceived );
+	result["packets_accepted"] = ( int64_t )( m_nPacketsAccepted );
+	result["packets_rejected"] = ( int64_t )( m_nPacketsRejected );
+	result["last_scene_pass"] = ( int64_t )( m_nLastScenePass );
 	result["last_draw_list"] = m_nLastDrawList;
-	result["last_pass_kind"] = (int64_t)( m_nLastPassKind );
+	result["last_pass_kind"] = ( int64_t )( m_nLastPassKind );
 #else
 	result["diagnostics_compiled"] = false;
 #endif

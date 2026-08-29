@@ -5,6 +5,10 @@
 #endif
 
 #include "assets/terrain_3d_packed_pbr_texture.h"
+#include "assets/terrain_3d_render_world_import_profile.h"
+#include "assets/terrain_3d_render_world_material_resource.h"
+#include "authoring/render_world/terrain_3d_render_world_controller.h"
+#include "instances/terrain_3d_render_world_instance_3d.h"
 #include "authoring/terrain_3d_autoshader_baker.h"
 #include "authoring/terrain_3d_editor.h"
 #include "authoring/terrain_3d_erosion_job.h"
@@ -29,13 +33,17 @@
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/classes/os.hpp>
 
-#include <cstdlib>
+#include <stdlib.h>
 
 void t3dInitializeTerrain3DModule( ModuleInitializationLevel level ) {
 	if ( level != MODULE_INITIALIZATION_LEVEL_SCENE ) {
 		return;
 	}
 	ClassDB::register_class<Terrain3D>();
+	ClassDB::register_class<Terrain3DRenderWorldMaterial>();
+	ClassDB::register_class<Terrain3DRenderWorldImportProfile>();
+	ClassDB::register_class<Terrain3DRenderWorldInstance3D>();
+	ClassDB::register_class<Terrain3DRenderWorldController>();
 	ClassDB::register_class<Terrain3DRdCompositorEffect>();
 	ClassDB::register_internal_class<Terrain3DRdTextureManager>();
 	Terrain3DRdTextureManager::initializeSingleton();
@@ -69,7 +77,7 @@ void t3dInitializeTerrain3DModule( ModuleInitializationLevel level ) {
 	ClassDB::register_class<Terrain3DUtil>();
 	OS *const os = OS::get_singleton();
 	if ( os && os->get_environment( "TERRAIN3D_RUN_RD_CPU_TESTS" ) == "1" && !t3dRunRdCpuTests() ) {
-		std::exit( EXIT_FAILURE );
+		exit( EXIT_FAILURE );
 	}
 }
 
@@ -86,8 +94,8 @@ void t3dUninitializeTerrain3DModule( ModuleInitializationLevel level ) {
 extern "C" {
 // Initialization.
 GDExtensionBool GDE_EXPORT t3dInit( GDExtensionInterfaceGetProcAddress getProcAddress,
-		GDExtensionClassLibraryPtr library,
-		GDExtensionInitialization *pInitialization ) {
+        GDExtensionClassLibraryPtr library,
+        GDExtensionInitialization *pInitialization ) {
 	GDExtensionBinding::InitObject initObj( getProcAddress, library, pInitialization );
 
 	initObj.register_initializer( t3dInitializeTerrain3DModule );

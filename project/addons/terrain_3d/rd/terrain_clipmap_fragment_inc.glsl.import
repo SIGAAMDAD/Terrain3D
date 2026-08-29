@@ -1,0 +1,12 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+path="res://.godot/imported/terrain_clipmap_fragment_inc.glsl-e0091f4a49d269339d8cf3879facaa0d.res"
+
+[deps]
+
+source_file="res://addons/terrain_3d/rd/terrain_clipmap_fragment_inc.glsl"
+dest_files=["res://.godot/imported/terrain_clipmap_fragment_inc.glsl-e0091f4a49d269339d8cf3879facaa0d.res"]
+
+[params]

@@ -1,10 +1,10 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_CLASS_H
 #define TERRAIN3D_CLASS_H
 
+#include "core/terrain_3d_eastl_helpers.h"
+#include "core/terrain_3d_sync.h"
 #include "Terrain3DConstants.h"
 #include "assets/terrain_3d_assets.h"
 #include "core/target_node_3d.h"
@@ -25,7 +25,6 @@
 
 #include <EASTL/array.h>
 #include <EASTL/vector.h>
-#include <atomic>
 #include <godot_cpp/classes/array_occluder3d.hpp>
 #include <godot_cpp/classes/camera3d.hpp>
 #include <godot_cpp/classes/geometry_instance3d.hpp>
@@ -35,8 +34,6 @@
 #include <godot_cpp/classes/resource.hpp>
 #include <godot_cpp/classes/sub_viewport.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
-#include <mutex>
-
 class Terrain3DEditor;
 class Terrain3DNodeStreamer;
 class Terrain3DLightmapStreamer;
@@ -50,13 +47,23 @@ EA_FORCE_INLINE String t3dDefaultRegionLightmapOutputDirectory( const String &rD
 }
 
 typedef enum t3dDebugLevel_e {
-	MESG = -2, // Always print except in release builds
-	WARN = -1, // Always print except in release builds
-	ERROR = 0, // Always print except in release builds
-	INFO = 1, // Print every function call and important entries
-	DEBUG = 2, // Print details within functions
+	MESG = -2,   // Always print except in release builds
+	WARN = -1,   // Always print except in release builds
+	ERROR = 0,   // Always print except in release builds
+	INFO = 1,    // Print every function call and important entries
+	DEBUG = 2,   // Print details within functions
 	EXTREME = 3, // Continuous operations like snapping
 } t3dDebugLevel_t;
+
+typedef enum t3dRuntimeLifecycleState_e : uint8_t {
+	TERRAIN3D_RUNTIME_COLD = 0u,
+	TERRAIN3D_RUNTIME_INITIALIZING,
+	TERRAIN3D_RUNTIME_ACTIVE,
+	TERRAIN3D_RUNTIME_DEACTIVATING,
+	TERRAIN3D_RUNTIME_DETACHED,
+	TERRAIN3D_RUNTIME_SHUTTING_DOWN,
+	TERRAIN3D_RUNTIME_DRAIN_FAILED,
+} t3dRuntimeLifecycleState_t;
 
 typedef enum t3dPerformanceTarget_e {
 	PERFORMANCE_TARGET_CUSTOM,
@@ -77,12 +84,7 @@ typedef enum t3dEnvironmentShadowQuality_e {
 } t3dEnvironmentShadowQuality_t;
 
 typedef enum t3dRegionSize_e {
-	SIZE_64 = 64,
 	SIZE_128 = 128,
-	SIZE_256 = 256,
-	SIZE_512 = 512,
-	SIZE_1024 = 1024,
-	SIZE_2048 = 2048,
 } t3dRegionSize_t;
 
 typedef enum t3dOceanPerformancePreset_e {
@@ -120,10 +122,10 @@ typedef enum t3dOceanShadingMode_e {
 } t3dOceanShadingMode_t;
 
 typedef struct t3dTriangleBuffer_s {
-	eastl::vector<Vector3> m_ownedVertices;
-	eastl::vector<Vector2> m_ownedUvs;
-	Vector3 *m_pExternalVertices = nullptr;
-	Vector2 *m_pExternalUvs = nullptr;
+	eastl::vector<Vector3, Terrain3DEastlAllocator> m_ownedVertices;
+	eastl::vector<Vector2, Terrain3DEastlAllocator> m_ownedUvs;
+	Vector3 *m_pExternalVertices = NULL;
+	Vector2 *m_pExternalUvs = NULL;
 	size_t m_nExternalCapacity = 0u;
 	size_t m_nExternalSize = 0u;
 	bool m_bOverflowed = false;
@@ -201,31 +203,28 @@ typedef struct t3dBakeRegionSnapshot_s {
 	Vector2i m_location;
 	PackedByteArray m_heightData;
 	PackedByteArray m_controlData;
-	const uint8_t *m_pHeightBytes = nullptr;
-	const uint8_t *m_pControlBytes = nullptr;
+	const uint8_t *m_pHeightBytes = NULL;
+	const uint8_t *m_pControlBytes = NULL;
 } t3dBakeRegionSnapshot_t;
 
 typedef struct t3dBakeSnapshot_s {
 	int32_t m_nRegionSize = 0;
 	real_t m_fVertexSpacing = 1.f;
 	int32_t m_szRegionLookup[s_nActiveMaxRegionMapSize * s_nActiveMaxRegionMapSize] = {};
-	eastl::vector<t3dBakeRegionSnapshot_t> m_regions;
+	eastl::vector<t3dBakeRegionSnapshot_t, Terrain3DEastlAllocator> m_regions;
 
 	const t3dBakeRegionSnapshot_t *getRegion( const int32_t iX, const int32_t iZ ) const;
 	void getSample( const int32_t iX, const int32_t iZ, uint32_t &nControl, real_t &fHeight ) const;
 	bool getMinimumRect( int32_t iX, int32_t iZ, int32_t nWidth, int32_t nHeight, real_t &fHeight ) const;
-	Vector3 getMeshVertex( const int32_t nLod,
-			const t3dHeightFilter_t filter,
-			const int32_t iX,
-			const int32_t iZ,
-			uint32_t &nControl ) const;
+	Vector3 getMeshVertex(
+	        const int32_t nLod, const t3dHeightFilter_t filter, const int32_t iX, const int32_t iZ, uint32_t &nControl ) const;
 } t3dBakeSnapshot_t;
 
 typedef struct t3dBakeTaskContext_s {
-	const Terrain3D *m_pTerrain = nullptr;
-	const t3dBakeSnapshot_t *m_pSnapshot = nullptr;
-	const eastl::vector<t3dBakeRowTask_t> *m_pTasks = nullptr;
-	eastl::vector<t3dTriangleBuffer_t> *m_pBuffers = nullptr;
+	const Terrain3D *m_pTerrain = NULL;
+	const t3dBakeSnapshot_t *m_pSnapshot = NULL;
+	const eastl::vector<t3dBakeRowTask_t, Terrain3DEastlAllocator> *m_pTasks = NULL;
+	eastl::vector<t3dTriangleBuffer_t, Terrain3DEastlAllocator> *m_pBuffers = NULL;
 	int32_t m_nStep = 1;
 	int32_t m_nLod = 0;
 	t3dHeightFilter_t m_filter = HEIGHT_FILTER_NEAREST;
@@ -244,6 +243,7 @@ private:
 	String m_dataDirectory;
 	bool m_bIsInsideWorld = false;
 	bool m_bInitialized = false;
+	t3dRuntimeLifecycleState_t m_runtimeLifecycleState = TERRAIN3D_RUNTIME_COLD;
 	uint8_t m_nWarnings = 0u;
 	// Runtime memory ownership. Declaration order is intentional: allocator-backed
 	// containers are destroyed before the zone and its arena backing store.
@@ -254,16 +254,16 @@ private:
 	bool m_bRuntimeMemoryReady = false;
 
 	// Object references
-	Terrain3DData *m_pData = nullptr;
+	Terrain3DData *m_pData = NULL;
 	Ref<Terrain3DAssets> m_assets;
 	Ref<Resource> m_autoShaderProfile;
-	Terrain3DCollision *m_pCollision = nullptr;
-	Terrain3DInstancer *m_pInstancer = nullptr;
-	Terrain3DNodeStreamer *m_pNodeStreamer = nullptr;
-	Terrain3DLightmapStreamer *m_pLightmapStreamer = nullptr;
-	Terrain3DHLODStreamer *m_pHlodStreamer = nullptr;
-	Terrain3DEditor *m_pEditor = nullptr;
-	Object *m_pEditorPlugin = nullptr;
+	Terrain3DCollision *m_pCollision = NULL;
+	Terrain3DInstancer *m_pInstancer = NULL;
+	Terrain3DNodeStreamer *m_pNodeStreamer = NULL;
+	Terrain3DLightmapStreamer *m_pLightmapStreamer = NULL;
+	Terrain3DHLODStreamer *m_pHlodStreamer = NULL;
+	Terrain3DEditor *m_pEditor = NULL;
+	Object *m_pEditorPlugin = NULL;
 
 	// Regions
 	t3dRegionSize_t m_nRegionSize = SIZE_128;
@@ -300,7 +300,7 @@ private:
 	uint64_t m_nRegionStreamingGeneration = 0u;
 	bool m_bRegionStreamingDirty = true;
 	t3dRuntimeProfileAccumulator_t m_runtimeProfileAccumulator;
-	t3dRuntimeProfileHistory_t *m_pRuntimeProfileHistory = nullptr;
+	t3dRuntimeProfileHistory_t *m_pRuntimeProfileHistory = NULL;
 	t3dRuntimeProfileSample_t m_runtimeProfileLastSample;
 	uint64_t m_nRuntimeProfileSampleCount = 0u;
 	uint64_t m_nRuntimeProfileShaderUpdatesSeen = 0u;
@@ -449,7 +449,7 @@ private:
 	bool m_bLightCullMaskCaptured = false;
 
 	// Terrain Mesh
-	Terrain3DMesher *m_pTerrainMesher = nullptr;
+	Terrain3DMesher *m_pTerrainMesher = NULL;
 	Ref<Terrain3DMaterial> m_material;
 	int m_nMeshLods = 7;
 	int m_nTessellationLevel = 0;
@@ -475,20 +475,22 @@ private:
 
 	// Displacement Buffer
 	Vector2 m_lastBufferPosition = s_v2Max;
-	std::atomic_bool m_bComputeDisplacementEnabled{ false };
-	std::atomic_bool m_bComputeDisplacementActive{ false };
-	std::atomic_bool m_bComputeDisplacementDispatchPending{ false };
-	std::atomic_bool m_bComputeDisplacementFailed{ false };
-	std::atomic_bool m_bComputeDisplacementFallbackRequested{ false };
-	std::atomic_bool m_bComputeDisplacementTearingDown{ false };
+	t3dAtomicBool_t m_bComputeDisplacementEnabled{ false };
+	t3dAtomicBool_t m_bComputeDisplacementActive{ false };
+	t3dAtomicBool_t m_bComputeDisplacementDispatchPending{ false };
+	t3dAtomicBool_t m_bComputeDisplacementFailed{ false };
+	t3dAtomicBool_t m_bComputeDisplacementFallbackRequested{ false };
+	t3dAtomicBool_t m_bComputeDisplacementTearingDown{ false };
+	t3dAtomicBool_t m_bComputeDisplacementDirty{ true };
+	uint64_t m_nComputeDisplacementPageTableGeneration = UINT64_MAX;
 	real_t m_fDisplacementUpdateDistance = 0.25f;
-	mutable std::mutex m_computeDisplacementMutex;
+	mutable t3dMutex_t m_computeDisplacementMutex;
 	t3dDisplacementRequest_t m_computeDisplacementRequest;
 	RID m_hComputeDisplacementTextureRd;
 	uint64_t m_nComputeDisplacementRequestVersion = 0u;
 
 	// Ocean Mesh
-	Terrain3DMesher *m_pOceanMesher = nullptr;
+	Terrain3DMesher *m_pOceanMesher = NULL;
 	bool m_bOceanEnabled = false;
 	int m_nOceanMeshLods = 7;
 	int m_nOceanTessellationLevel = 0;
@@ -510,20 +512,21 @@ private:
 	t3dOceanShadingMode_t m_oceanShadingMode = OCEAN_SHADING_LAMBERT_GGX;
 
 	// Rendering
-	Terrain3DRenderCoordinator *m_pRenderCoordinator = nullptr;
+	Terrain3DRenderCoordinator *m_pRenderCoordinator = NULL;
 	bool m_bFreeEditorTextures = true;
 	// Mouse cursor
-	SubViewport *m_pMouseVp = nullptr;
-	Camera3D *m_pMouseCam = nullptr;
-	MeshInstance3D *m_pMouseQuad = nullptr;
+	SubViewport *m_pMouseVp = NULL;
+	Camera3D *m_pMouseCam = NULL;
+	MeshInstance3D *m_pMouseQuad = NULL;
 	uint32_t m_nMouseLayer = 32u;
 	// Parent containers for child nodes
-	Node3D *m_pLabelParent = nullptr;
+	Node3D *m_pLabelParent = NULL;
 
 	void initializeInternal( void );
 	bool initializeRuntimeMemory( void );
 	bool beginRuntimeMemoryDrain( void );
 	bool releaseRuntimeMemory( void );
+	bool shutdownRuntimeMemoryImage( void );
 	void deactivateRuntime( void );
 	bool isEditorAuthoringModeInternal( void ) const;
 	bool effectiveGpuRegionCacheEnabled( void ) const;
@@ -582,11 +585,13 @@ private:
 	void onAssetsTexturesChanged( void );
 	void physicsProcess( const double fDelta );
 	void grabCamera( void );
+	void synchronizeClipmapNow( const Vector3 &rTargetPosition );
 	void syncLightShaderParameters( void );
 
 	void destroyCollision( const bool bFinal = false );
 
 	void setupTerrainMesher( void );
+	void setupTerrainMesher( const Vector3 &rInitialTarget );
 	void setupRenderCoordinator( void );
 	void destroyRenderCoordinator( bool bFinal = false );
 	EA_FORCE_INLINE void updateMesherAabbs( void ) {
@@ -594,6 +599,7 @@ private:
 	}
 	void destroyTerrainMesher( const bool bFinal = false );
 	void setupOceanMesher( void );
+	void setupOceanMesher( const Vector3 &rInitialTarget );
 	void updateOceanShaderVariant( void );
 	EA_FORCE_INLINE void updateOceanAabbs( void ) {
 		m_pOceanMesher ? m_pOceanMesher->updateAabbs() : ( void )0;
@@ -625,32 +631,30 @@ private:
 	static bool bakeRegionSnapshotLess( const t3dBakeRegionSnapshot_t &rA, const t3dBakeRegionSnapshot_t &rB );
 	static void runBakeTaskRange( void *pContext, size_t nBegin, size_t nEnd );
 	Vector3 getTriangleVertex( const t3dBakeSnapshot_t *pSnapshot,
-			int32_t nLod,
-			t3dHeightFilter_t filter,
-			int32_t iX,
-			int32_t iZ,
-			const Vector3 &rPosition,
-			uint32_t &nControl ) const;
+	        int32_t nLod,
+	        t3dHeightFilter_t filter,
+	        int32_t iX,
+	        int32_t iZ,
+	        const Vector3 &rPosition,
+	        uint32_t &nControl ) const;
 
 	t3dBakeSnapshot_t createBakeSnapshot( void ) const;
 	void generateTriangles( PackedVector3Array &arrVertices,
-			PackedVector2Array *pUvs,
-			const int32_t nLod,
-			const t3dHeightFilter_t filter,
-			const bool require_nav,
-			const AABB &rGlobalAabb ) const;
+	        PackedVector2Array *pUvs,
+	        const int32_t nLod,
+	        const t3dHeightFilter_t filter,
+	        const bool require_nav,
+	        const AABB &rGlobalAabb ) const;
 	void generateTrianglePair( t3dTriangleBuffer_t &rBuffer,
-			const bool bGenerateUvs,
-			const int32_t nLod,
-			const t3dHeightFilter_t filter,
-			const bool require_nav,
-			const int32_t x,
-			const int32_t z,
-			const t3dBakeSnapshot_t *pSnapshot = nullptr ) const;
+	        const bool bGenerateUvs,
+	        const int32_t nLod,
+	        const t3dHeightFilter_t filter,
+	        const bool require_nav,
+	        const int32_t x,
+	        const int32_t z,
+	        const t3dBakeSnapshot_t *pSnapshot = NULL ) const;
 
 public:
-	static constexpr int64_t s_nNativeApiRevision = 2026082203LL;
-	static constexpr const char *s_pszNativeBuildId = "a2.9.2-shader-preprocessor-repair";
 	static t3dDebugLevel_t s_debugLevel; // Initialized in terrain_3d.cpp
 
 	Terrain3D( void );
@@ -709,6 +713,10 @@ public:
 	EA_FORCE_INLINE Terrain3DHLODStreamer *getHlodStreamer( void ) const {
 		return m_pHlodStreamer;
 	}
+	// Native integration boundary for editor/runtime companion nodes. Not bound to scripting.
+	EA_FORCE_INLINE Terrain3DRenderCoordinator *getRenderCoordinatorInternal( void ) const {
+		return m_pRenderCoordinator;
+	}
 	void setEditor( Terrain3DEditor *pEditor );
 	EA_FORCE_INLINE Terrain3DEditor *getEditor( void ) const {
 		return m_pEditor;
@@ -721,7 +729,7 @@ public:
 	// Regions
 	void setRegionSize( const t3dRegionSize_t size );
 	EA_FORCE_INLINE t3dRegionSize_t getRegionSize( void ) const {
-		return m_nRegionSize;
+		return SIZE_128;
 	}
 	void changeRegionSize( const t3dRegionSize_t size ) {
 		if ( m_pData && m_pData->isInitializedFor( this ) ) {
@@ -1070,6 +1078,9 @@ public:
 	EA_FORCE_INLINE int getFarControlResolution( void ) const {
 		return m_nFarControlResolution;
 	}
+	// Live region-map side used to tile both far atlases. Falls back to the maximum
+	// addressable map only before Terrain3DData exists.
+	int getFarAtlasRegionMapSide( void ) const;
 	int getGpuFarHeightAtlasSide( void ) const;
 	int getGpuFarSurfaceAtlasSide( void ) const;
 	EA_FORCE_INLINE int getGpuFarAtlasSide( void ) const {
@@ -1268,15 +1279,15 @@ public:
 	void onHlodRegionRepresentationChanged( const Vector2i &rRegion );
 	bool isHlodDetailReady( const Vector2i &rRegionMin, const Vector2i &rRegionMax ) const;
 	int64_t addStreamedScene( const Ref<PackedScene> &rScene,
-			const Transform3D &rGlobalTransform,
-			const Dictionary &rState = Dictionary(),
-			int nFlags = 0,
-			int nHlodMinLevel = 1 );
+	        const Transform3D &rGlobalTransform,
+	        const Dictionary &rState = Dictionary(),
+	        int nFlags = 0,
+	        int nHlodMinLevel = 1 );
 	int64_t addStreamedScenePath( const String &rScenePath,
-			const Transform3D &rGlobalTransform,
-			const Dictionary &rState = Dictionary(),
-			int nFlags = 0,
-			int nHlodMinLevel = 1 );
+	        const Transform3D &rGlobalTransform,
+	        const Dictionary &rState = Dictionary(),
+	        int nFlags = 0,
+	        int nHlodMinLevel = 1 );
 	bool removeStreamedScene( int64_t nSpawnId );
 	int allocateStreamOwnerId( void );
 	void setNextStreamOwnerId( int nOwnerId );
@@ -1602,19 +1613,17 @@ public:
 	// Utility
 	Vector3 getIntersection( const Vector3 &rSrcPos, const Vector3 &rDirection, const bool bGpuMode = false );
 	Dictionary getRaycastResult( const Vector3 &rSrcPos,
-			const Vector3 &rDirection,
-			const uint32_t nColMask = 0xFFFFFFFF,
-			const bool bExcludeSelf = false ) const;
+	        const Vector3 &rDirection,
+	        const uint32_t nColMask = 0xFFFFFFFF,
+	        const bool bExcludeSelf = false ) const;
 	Ref<Mesh> bakeMesh( const int nLod, const t3dHeightFilter_t filter = HEIGHT_FILTER_NEAREST ) const;
-	Ref<Mesh> bakeRegionLightmapMesh( const Vector2i &rRegionLocation,
-			int nLod = 2,
-			int nContextRadiusRegions = 1,
-			real_t fTexelSize = 1.0f ) const;
+	Ref<Mesh> bakeRegionLightmapMesh(
+	        const Vector2i &rRegionLocation, int nLod = 2, int nContextRadiusRegions = 1, real_t fTexelSize = 1.0f ) const;
 	Ref<Mesh> bakeLightmapClusterMesh( const Vector2i &rRegionMin,
-			const Vector2i &rRegionMax,
-			int nLod = 2,
-			int nContextRadiusRegions = 1,
-			real_t fTexelSize = 1.0f ) const;
+	        const Vector2i &rRegionMax,
+	        int nLod = 2,
+	        int nContextRadiusRegions = 1,
+	        real_t fTexelSize = 1.0f ) const;
 	Ref<ArrayOccluder3D> bakeOccluder( const int nLod ) const;
 	PackedVector3Array generateNavMeshSourceGeometry( const AABB &rGlobalAabb, const bool bRequireNav = true ) const;
 
@@ -1659,14 +1668,14 @@ public:
 
 	void setComputeDisplacementEnabled( bool bEnabled );
 	EA_FORCE_INLINE bool getComputeDisplacementEnabled( void ) const {
-		return m_bComputeDisplacementEnabled.load( std::memory_order_acquire );
+		return m_bComputeDisplacementEnabled.load( T3D_MEMORY_ORDER_ACQUIRE );
 	}
 	void setDisplacementUpdateDistance( const real_t fDistance );
 	EA_FORCE_INLINE real_t getDisplacementUpdateDistance( void ) const {
 		return m_fDisplacementUpdateDistance;
 	}
 	EA_FORCE_INLINE bool isComputeDisplacementActive( void ) const {
-		return m_bComputeDisplacementActive.load( std::memory_order_acquire );
+		return m_bComputeDisplacementActive.load( T3D_MEMORY_ORDER_ACQUIRE );
 	}
 	RID getComputeDisplacementTextureRid( void ) const;
 

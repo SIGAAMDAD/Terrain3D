@@ -244793,6 +244793,10 @@
 							"value": 2
 						},
 						{
+							"name": "BUFFER_CREATION_DYNAMIC_PERSISTENT_BIT",
+							"value": 4
+						},
+						{
 							"name": "BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT",
 							"value": 8
 						}
@@ -247151,6 +247155,38 @@
 						{
 							"name": "data",
 							"type": "PackedByteArray"
+						}
+					]
+				},
+				{
+					"name": "buffer_persistent_map_advance",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2198884583,
+					"return_value": {
+						"type": "int",
+						"meta": "uint64"
+					},
+					"arguments": [
+						{
+							"name": "buffer",
+							"type": "RID"
+						}
+					]
+				},
+				{
+					"name": "buffer_flush",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2722037293,
+					"arguments": [
+						{
+							"name": "buffer",
+							"type": "RID"
 						}
 					]
 				},
