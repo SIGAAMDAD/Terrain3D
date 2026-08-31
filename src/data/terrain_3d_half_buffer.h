@@ -1,20 +1,20 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 // Compact IEEE-754 binary16 storage for immutable per-cell coefficients.
-#pragma once
-
 #ifndef TERRAIN3D_HALF_BUFFER_H
 #define TERRAIN3D_HALF_BUFFER_H
 
 #include "core/terrain_3d_compiler.h"
 #include "memory/terrain_3d_linear_arena.h"
 
-#include <cstddef>
-#include <cstdint>
-#include <cstring>
+#include <EASTL/algorithm.h>
+
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
 
 inline uint16_t t3dHalfEncode( const float fValue ) {
 	uint32_t bits = 0u;
-	std::memcpy( &bits, &fValue, sizeof( bits ) );
+	memcpy( &bits, &fValue, sizeof( bits ) );
 	const uint16_t sign = ( uint16_t )( ( bits >> 16u ) & 0x8000u );
 	uint32_t mantissa = bits & 0x007fffffu;
 	const uint32_t source_exponent = ( bits >> 23u ) & 0xffu;
@@ -78,17 +78,18 @@ inline float t3dHalfDecode( const uint16_t nValue ) {
 	}
 
 	float fResult = 0.0f;
-	std::memcpy( &fResult, &bits, sizeof( fResult ) );
+	memcpy( &fResult, &bits, sizeof( fResult ) );
 	return fResult;
 }
 
 class Terrain3DHalfBuffer {
 public:
-	using value_type = uint16_t;
+	typedef uint16_t value_type;
 
 	class Terrain3DReference {
 	public:
-		EA_FORCE_INLINE explicit Terrain3DReference( uint16_t *const pStorage ) : m_pStorage( pStorage ) {}
+		EA_FORCE_INLINE explicit Terrain3DReference( uint16_t *const pStorage ) : m_pStorage( pStorage ) {
+		}
 
 		Terrain3DReference &operator=( const float fValue ) {
 			*m_pStorage = t3dHalfEncode( fValue );
@@ -104,7 +105,7 @@ public:
 		}
 
 	private:
-		uint16_t *m_pStorage = nullptr;
+		uint16_t *m_pStorage = NULL;
 	};
 
 	bool assign( Terrain3DLinearArena &rArena, const size_t nCount, const float fValue ) {
@@ -118,12 +119,12 @@ public:
 		}
 		m_nSize = nCount;
 		const uint16_t encoded = t3dHalfEncode( fValue );
-		std::fill_n( m_pData, m_nSize, encoded );
+		eastl::fill_n( m_pData, m_nSize, encoded );
 		return true;
 	}
 
 	EA_FORCE_INLINE void clear( void ) {
-		m_pData = nullptr;
+		m_pData = NULL;
 		m_nSize = 0u;
 	}
 
@@ -152,7 +153,7 @@ public:
 	}
 
 private:
-	uint16_t *m_pData = nullptr;
+	uint16_t *m_pData = NULL;
 	size_t m_nSize = 0u;
 };
 

@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://cr5nt80u64vtj"
+path="res://.godot/imported/terrain_derived.glsl-d00107c9a2325b9ae757950f14a1a9eb.res"
+
+[deps]
+
+source_file="res://addons/terrain_3d/compute/terrain_derived.glsl"
+dest_files=["res://.godot/imported/terrain_derived.glsl-d00107c9a2325b9ae757950f14a1a9eb.res"]
+
+[params]
+

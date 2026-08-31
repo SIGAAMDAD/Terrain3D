@@ -1,7 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_ASSETS_CLASS_H
 #define TERRAIN3D_ASSETS_CLASS_H
 
@@ -11,7 +9,6 @@
 #include "assets/terrain_3d_texture_asset.h"
 #include "eastl_config.h"
 
-#include <EASTL/array.h>
 
 class Terrain3D;
 class Terrain3DInstancer;
@@ -31,15 +28,15 @@ typedef enum t3dTexturePackingMode_e {
 } t3dTexturePackingMode_t;
 
 typedef struct t3dTextureSettingsBlock_s {
-	eastl::array<Color, s_nMaxTextureAssets> m_szColors{};
-	eastl::array<float, s_nMaxTextureAssets> m_szNormalDepths{};
-	eastl::array<float, s_nMaxTextureAssets> m_szAoStrengths{};
-	eastl::array<float, s_nMaxTextureAssets> m_szAoLightAffects{};
-	eastl::array<float, s_nMaxTextureAssets> m_szRoughnessMods{};
-	eastl::array<float, s_nMaxTextureAssets> m_szMetallics{};
-	eastl::array<float, s_nMaxTextureAssets> m_szUvScales{};
-	eastl::array<Vector2, s_nMaxTextureAssets> m_szDetiles{};
-	eastl::array<Vector2, s_nMaxTextureAssets> m_szDisplacements{};
+	Color m_szColors[s_nMaxTextureAssets]{};
+	float m_szNormalDepths[s_nMaxTextureAssets]{};
+	float m_szAoStrengths[s_nMaxTextureAssets]{};
+	float m_szAoLightAffects[s_nMaxTextureAssets]{};
+	float m_szRoughnessMods[s_nMaxTextureAssets]{};
+	float m_szMetallics[s_nMaxTextureAssets]{};
+	float m_szUvScales[s_nMaxTextureAssets]{};
+	Vector2 m_szDetiles[s_nMaxTextureAssets]{};
+	Vector2 m_szDisplacements[s_nMaxTextureAssets]{};
 	int m_nCount = 0;
 } t3dTextureSettingsBlock_t;
 
@@ -63,7 +60,7 @@ typedef struct t3dRuntimeMaterialImageInfo_s {
 } t3dRuntimeMaterialImageInfo_t;
 
 typedef struct t3dRuntimeMaterialLayerInfo_s {
-	eastl::array<t3dRuntimeMaterialImageInfo_t, RUNTIME_MATERIAL_CHANNEL_COUNT> m_szChannels{};
+	t3dRuntimeMaterialImageInfo_t m_szChannels[RUNTIME_MATERIAL_CHANNEL_COUNT]{};
 	Color m_averageAlbedo = s_colorWhite;
 	Color m_albedoColor = s_colorWhite;
 	float m_fNormalDepth = 1.0f;
@@ -89,11 +86,8 @@ class Terrain3DAssets : public Resource {
 	CLASS_NAME();
 
 public: // Constants
-	static constexpr int MAX_TEXTURE_ASSETS = s_nMaxTextureAssets;
-	static constexpr int MAX_MESH_ASSETS = s_nMaxMeshAssets;
-
 private:
-	Terrain3D *m_pTerrain = nullptr;
+	Terrain3D *m_pTerrain = NULL;
 	bool m_bSuppressTextureChanged = false;
 	bool m_bPersistenceDirty = false;
 
@@ -118,11 +112,11 @@ private:
 	PackedVector2Array m_textureDetiles;
 	PackedVector2Array m_textureDisplacements;
 
-	eastl::array<t3dRuntimeMaterialLayerInfo_t, s_nMaxTextureAssets> m_runtimeMaterialCookedLayers{};
-	eastl::array<int, s_nMaxTextureAssets> m_runtimeMaterialLogicalToPhysical{};
-	eastl::array<int, s_nMaxTextureAssets> m_runtimeMaterialPhysicalToLogical{};
-	eastl::array<uint64_t, s_nMaxTextureAssets> m_runtimeMaterialLastUseTick{};
-	eastl::array<uint64_t, s_nMaxTextureAssets> m_runtimeMaterialRetireAfterTick{};
+	t3dRuntimeMaterialLayerInfo_t m_runtimeMaterialCookedLayers[s_nMaxTextureAssets]{};
+	int m_runtimeMaterialLogicalToPhysical[s_nMaxTextureAssets]{};
+	int m_runtimeMaterialPhysicalToLogical[s_nMaxTextureAssets]{};
+	uint64_t m_runtimeMaterialLastUseTick[s_nMaxTextureAssets]{};
+	uint64_t m_runtimeMaterialRetireAfterTick[s_nMaxTextureAssets]{};
 	String m_runtimeMaterialCachePath;
 	uint64_t m_nRuntimeMaterialCookedSignature = 0u;
 	uint64_t m_nRuntimeMaterialTick = 0u;
@@ -142,11 +136,11 @@ private:
 	void setAsset( const t3dAssetType_t type, const int nId, const Ref<Terrain3DAssetResource> &rAsset );
 
 	void validateArrayMember( const Ref<Texture2D> &rTexture,
-			const Ref<Terrain3DTextureAsset> &rAsset,
-			const String &rLabel,
-			t3dTextureArrayLayout_t &rLayout,
-			Image::Format eRequiredFormat = Image::FORMAT_MAX,
-			bool bAllowCompressedSurface = false );
+	        const Ref<Terrain3DTextureAsset> &rAsset,
+	        const String &rLabel,
+	        t3dTextureArrayLayout_t &rLayout,
+	        Image::Format eRequiredFormat = Image::FORMAT_MAX,
+	        bool bAllowCompressedSurface = false );
 	void updateTextureFiles( void );
 	void updateTextureSettingsInternal( bool bPersistentChange );
 	void updateTextureSettings( void );
@@ -159,6 +153,9 @@ private:
 	bool loadRuntimeMaterialCookedIndex( void );
 	void publishRuntimeMaterialCookedSettings( void );
 	Ref<Image> loadRuntimeMaterialCookedImage( int nLogicalId, int nChannel ) const;
+	bool createRuntimeMaterialChannelArray(
+	        Terrain3DGeneratedTexture &rGenerated, int nChannel, int nPhysicalLayers, bool bFullyResident ) const;
+	void refreshRuntimeMaterialBindings( void );
 	bool initializeRuntimeMaterialPhysicalArrays( int nLayerLimit = -1 );
 	bool initializeFarMaterialArray( void );
 	bool publishRuntimeMaterialLayer( int nLogicalId, int nPhysicalLayer );
@@ -167,13 +164,14 @@ private:
 	void resetRuntimeMaterialCacheState( bool bClearGeneratedArrays );
 
 public:
-	EA_FORCE_INLINE Terrain3DAssets( void ) {}
+	EA_FORCE_INLINE Terrain3DAssets( void ) {
+	}
 	EA_FORCE_INLINE ~Terrain3DAssets( void ) {
 		destroy();
 	}
 	void initialize( Terrain3D *pTerrain );
 	EA_FORCE_INLINE bool isInitialized( void ) const {
-		return m_pTerrain != nullptr;
+		return m_pTerrain != NULL;
 	}
 	EA_FORCE_INLINE bool isInitializedFor( const Terrain3D *pTerrain ) const {
 		return m_pTerrain == pTerrain;
@@ -228,9 +226,9 @@ public:
 		return m_generatedDisplacementTextures.size();
 	}
 	EA_FORCE_INLINE size_t getGeneratedTexturePayloadBytes( void ) const {
-		return m_generatedAlbedoTextures.payloadBytes() + m_generatedNormalTextures.payloadBytes() +
-				m_generatedSurfaceTextures.payloadBytes() + m_generatedDisplacementTextures.payloadBytes() +
-				m_generatedFarAlbedoTextures.payloadBytes();
+		return m_generatedAlbedoTextures.payloadBytes() + m_generatedNormalTextures.payloadBytes()
+		        + m_generatedSurfaceTextures.payloadBytes() + m_generatedDisplacementTextures.payloadBytes()
+		        + m_generatedFarAlbedoTextures.payloadBytes();
 	}
 	// Deprecated compatibility alias.
 	EA_FORCE_INLINE RID getPbrArrayRid( void ) const {

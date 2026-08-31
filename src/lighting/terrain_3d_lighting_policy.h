@@ -1,13 +1,11 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
-#pragma once
-
 #ifndef TERRAIN3D_LIGHTING_POLICY_H
 #define TERRAIN3D_LIGHTING_POLICY_H
 
 #include "Terrain3DConstants.h"
 #include "data/terrain_3d_region.h"
 
-#include <cstdint>
+#include <stdint.h>
 
 // Godot exposes 20 VisualInstance3D render layers. Terrain3D reserves the
 // highest five for environment-lighting policy. Four encode dynamic-shadow

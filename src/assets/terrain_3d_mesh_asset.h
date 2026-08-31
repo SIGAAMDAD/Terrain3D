@@ -1,7 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_MESH_ASSET_CLASS_H
 #define TERRAIN3D_MESH_ASSET_CLASS_H
 
@@ -9,7 +7,6 @@
 #include "assets/terrain_3d_asset_resource.h"
 #include "eastl_config.h"
 
-#include <EASTL/array.h>
 #include <godot_cpp/classes/array_mesh.hpp>
 #include <godot_cpp/classes/material.hpp>
 #include <godot_cpp/classes/packed_scene.hpp>
@@ -17,7 +14,7 @@
 #include <godot_cpp/classes/resource.hpp>
 #include <godot_cpp/classes/texture2d.hpp>
 
-using ShadowCasting = GeometryInstance3D::ShadowCastingSetting;
+typedef GeometryInstance3D::ShadowCastingSetting ShadowCasting;
 
 /* Mesh assets need different defaults for texture cards and scene meshes.
  * Serialized asset settings override those defaults, while newly created assets
@@ -60,7 +57,7 @@ private:
 	int m_iLastLod = s_nMeshMaxLodCount - 1;
 	int m_iLastShadowLod = s_nMeshMaxLodCount - 1;
 	int m_nShadowImpostor = 0;
-	eastl::array<float, s_nMeshMaxLodCount> m_fLodRanges{};
+	float m_fLodRanges[s_nMeshMaxLodCount]{};
 	real_t m_fFadeMargin = 0.f;
 
 	// Working data
@@ -83,7 +80,8 @@ public:
 	EA_FORCE_INLINE Terrain3DMeshAsset( void ) {
 		clear();
 	}
-	EA_FORCE_INLINE ~Terrain3DMeshAsset( void ) {}
+	EA_FORCE_INLINE ~Terrain3DMeshAsset( void ) {
+	}
 	void initialize( void ) override;
 	void clear( void ) override;
 

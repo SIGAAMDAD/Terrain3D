@@ -1,7 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_REGION_CLASS_H
 #define TERRAIN3D_REGION_CLASS_H
 
@@ -14,7 +12,7 @@
 #include "lighting/terrain_3d_region_lighting.h"
 
 #include <EASTL/vector.h>
-#include <cstdint>
+#include <stdint.h>
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/packed_scene.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
@@ -148,8 +146,8 @@ private:
 	real_t m_fVertexSpacing = 1.f; // Spacing that instancer transforms are currently scaled by.
 
 	// Working data not saved to disk
-	bool m_bDeleted = false; // Marked for deletion on save
-	bool m_bEdited = false; // Marked for undo/redo storage
+	bool m_bDeleted = false;  // Marked for deletion on save
+	bool m_bEdited = false;   // Marked for undo/redo storage
 	bool m_bModified = false; // Marked for saving
 	Vector2i m_location = s_v2iMax;
 
@@ -262,14 +260,11 @@ public:
 		return m_nCookedPageSourceSignature;
 	}
 	void setCookedInstanceMetadataInternal( const uint32_t *pMeshCounts, uint32_t nInstanceCount, uint16_t nMeshCount );
-	void setCookedStreamedNodeMetadataInternal( uint16_t nCount,
-			const Vector2i &rCoverageMin,
-			const Vector2i &rCoverageMax );
+	void setCookedStreamedNodeMetadataInternal( uint16_t nCount, const Vector2i &rCoverageMin, const Vector2i &rCoverageMax );
 	void adoptCookedStreamedNodeRuntimeInternal( eastl::vector<t3dStreamedNodeRuntimeDescriptor_t> &&rNodes );
-	void adoptCookedRuntimeMapsInternal( const Ref<Image> &rHeight,
-			const Ref<Image> &rControl,
-			const Ref<Image> &rColor,
-			const Ref<Image> &rDerived );
+	bool reserveStreamedNodeRuntimeCapacityInternal( size_t nCapacity );
+	void adoptCookedRuntimeMapsInternal(
+	        const Ref<Image> &rHeight, const Ref<Image> &rControl, const Ref<Image> &rColor, const Ref<Image> &rDerived );
 	EA_FORCE_INLINE void importRuntimeMapsUnmodifiedInternal( const Terrain3DRegion *pSource ) {
 		importRuntimeMapsUnmodified( pSource );
 	}
@@ -289,9 +284,9 @@ public:
 		return m_bInstanceStoreResident;
 	}
 	EA_FORCE_INLINE size_t getInstanceResidentBytes( void ) const {
-		return m_bInstanceStoreResident ? m_instanceStore.residentBytes() + ( size_t )m_cookedInstanceMetadata.size() +
-						( size_t )m_cookedMultimeshFastStart.size()
-										: 0u;
+		return m_bInstanceStoreResident
+		        ? m_instanceStore.residentBytes() + ( size_t )m_cookedInstanceMetadata.size() + ( size_t )m_cookedMultimeshFastStart.size()
+		        : 0u;
 	}
 	EA_FORCE_INLINE size_t getInstancePageBytes( void ) const {
 		return ( size_t )( m_instancePage.size() );
@@ -305,8 +300,7 @@ public:
 	}
 	uint16_t getInstanceMeshCount( void ) const {
 		if ( m_bInstanceStoreResident ) {
-			return m_instanceStore.meshCount() > ( size_t )( UINT16_MAX ) ? UINT16_MAX
-																		  : ( uint16_t )( m_instanceStore.meshCount() );
+			return m_instanceStore.meshCount() > ( size_t )( UINT16_MAX ) ? UINT16_MAX : ( uint16_t )( m_instanceStore.meshCount() );
 		}
 		return m_nInstanceMeshCount;
 	}
@@ -337,45 +331,38 @@ public:
 	EA_FORCE_INLINE const Array &getStreamedNodesInternal( void ) const {
 		return m_streamedNodes;
 	}
-	EA_FORCE_INLINE const eastl::vector<t3dStreamedNodeRuntimeDescriptor_t> &getStreamedNodesRuntimeInternal(
-			void ) const {
+	EA_FORCE_INLINE const eastl::vector<t3dStreamedNodeRuntimeDescriptor_t> &getStreamedNodesRuntimeInternal( void ) const {
 		return m_streamedNodeRuntime;
 	}
 	const t3dStreamedNodeRuntimeDescriptor_t *findStreamedNodeRuntimeInternal( const int64_t nId ) const;
 	int64_t addStreamedNode( const Ref<PackedScene> &rScene,
-			const Transform3D &rLocalTransform,
-			const Dictionary &rState = Dictionary(),
-			const int nFlags = 0,
-			const int64_t nId = 0,
-			const int nBoundaryPolicy = STREAMED_NODE_BOUNDARY_ANCHOR,
-			const Vector2i &rCoverageMin = s_v2iZero,
-			const Vector2i &rCoverageMax = s_v2iZero,
-			const int nHlodMinLevel = 1 );
+	        const Transform3D &rLocalTransform,
+	        const Dictionary &rState = Dictionary(),
+	        const int nFlags = 0,
+	        const int64_t nId = 0,
+	        const int nBoundaryPolicy = STREAMED_NODE_BOUNDARY_ANCHOR,
+	        const Vector2i &rCoverageMin = s_v2iZero,
+	        const Vector2i &rCoverageMax = s_v2iZero,
+	        const int nHlodMinLevel = 1 );
 	int64_t addStreamedNodePath( const String &rScenePath,
-			const Transform3D &rLocalTransform,
-			const Dictionary &rState = Dictionary(),
-			const int nFlags = 0,
-			const int64_t nId = 0,
-			const int nBoundaryPolicy = STREAMED_NODE_BOUNDARY_ANCHOR,
-			const Vector2i &rCoverageMin = s_v2iZero,
-			const Vector2i &rCoverageMax = s_v2iZero,
-			const int nHlodMinLevel = 1 );
+	        const Transform3D &rLocalTransform,
+	        const Dictionary &rState = Dictionary(),
+	        const int nFlags = 0,
+	        const int64_t nId = 0,
+	        const int nBoundaryPolicy = STREAMED_NODE_BOUNDARY_ANCHOR,
+	        const Vector2i &rCoverageMin = s_v2iZero,
+	        const Vector2i &rCoverageMax = s_v2iZero,
+	        const int nHlodMinLevel = 1 );
 	bool removeStreamedNode( const int64_t nId );
-	bool updateStreamedNodeState( const int64_t nId,
-			const Transform3D &rLocalTransform,
-			const Dictionary &rState,
-			const int nFlags );
+	bool updateStreamedNodeState( const int64_t nId, const Transform3D &rLocalTransform, const Dictionary &rState, const int nFlags );
 	EA_FORCE_INLINE int getStreamedNodeCount( void ) const {
-		return m_streamedNodeRuntime.empty() ? ( int )( m_nCookedStreamedNodeCount )
-											 : ( int )( m_streamedNodeRuntime.size() );
+		return m_streamedNodeRuntime.empty() ? ( int )( m_nCookedStreamedNodeCount ) : ( int )( m_streamedNodeRuntime.size() );
 	}
-	bool streamedNodeCoverageIntersects( const Vector2i &rOwnerLocation,
-			const Vector2i &rTargetMin,
-			const Vector2i &rTargetMax ) const;
+	bool streamedNodeCoverageIntersects( const Vector2i &rOwnerLocation, const Vector2i &rTargetMin, const Vector2i &rTargetMax ) const;
 	EA_FORCE_INLINE bool hasExtendedStreamedNodeCoverage( void ) const {
-		return m_bStreamedNodeHasExtendedCoverage ||
-				m_nCookedStreamedNodeCount > 0u &&
-				( m_cookedStreamedNodeCoverageMin != s_v2iZero || m_cookedStreamedNodeCoverageMax != s_v2iZero );
+		return m_bStreamedNodeHasExtendedCoverage
+		        || m_nCookedStreamedNodeCount > 0u
+		        && ( m_cookedStreamedNodeCoverageMin != s_v2iZero || m_cookedStreamedNodeCoverageMax != s_v2iZero );
 	}
 
 	void setLighting( const Ref<Terrain3DRegionLighting> &rLighting );

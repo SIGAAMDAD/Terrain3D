@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "Terrain3DConstants.h"
 #include "authoring/terrain_3d_cook_database.h"
 
 #include "data/terrain_3d_region_repository.h"
@@ -8,13 +9,10 @@
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 
-static constexpr uint64_t s_nCookDatabaseMagic = 0x3142444b43443354ull; // T3DCKDB1
-static constexpr uint32_t s_nCookDatabaseVersion = 1u;
-static constexpr uint32_t s_nCookDatabaseHeaderBytes = 40u;
 
 void Terrain3DCookDatabase::reset( void ) {
 	m_bLoaded = false;
-	m_regionSignatures.fill( 0u );
+	memset( m_regionSignatures, 0, sizeof( m_regionSignatures ) );
 }
 
 String Terrain3DCookDatabase::getPath( const String &rDataDirectory ) const {
@@ -29,9 +27,9 @@ bool Terrain3DCookDatabase::load( const String &rDataDirectory, const int nRegio
 		return false;
 	}
 	const uint64_t expected_bytes = s_nCookDatabaseHeaderBytes + ( uint64_t )s_nMaxRegionSlots * sizeof( uint64_t );
-	if ( ( uint64_t )file->get_length() != expected_bytes || file->get_64() != s_nCookDatabaseMagic ||
-			file->get_32() != s_nCookDatabaseVersion || file->get_32() != s_nRuntimePageVersion ||
-			( int )file->get_32() != nRegionSize ) {
+	if ( ( uint64_t )file->get_length() != expected_bytes || file->get_64() != s_nCookDatabaseMagic
+	        || file->get_32() != s_nCookDatabaseVersion || file->get_32() != s_nRuntimePageVersion
+	        || ( int )file->get_32() != nRegionSize ) {
 		return false;
 	}
 	file->get_32(); // reserved
@@ -39,7 +37,8 @@ bool Terrain3DCookDatabase::load( const String &rDataDirectory, const int nRegio
 		return false;
 	}
 	file->get_64(); // reserved for future world/artifact signature
-	for ( uint64_t &signature : m_regionSignatures ) {
+	for ( size_t iRegion = 0u; iRegion < T3D_ARRAY_COUNT( m_regionSignatures ); iRegion++ ) {
+		uint64_t &signature = ( m_regionSignatures )[iRegion];
 		signature = file->get_64();
 	}
 	if ( file->get_error() != OK ) {
@@ -50,9 +49,7 @@ bool Terrain3DCookDatabase::load( const String &rDataDirectory, const int nRegio
 	return true;
 }
 
-bool Terrain3DCookDatabase::write( const String &rDataDirectory,
-		const int nRegionSize,
-		const uint64_t nMaterialSignature ) const {
+bool Terrain3DCookDatabase::write( const String &rDataDirectory, const int nRegionSize, const uint64_t nMaterialSignature ) const {
 	if ( rDataDirectory.is_empty() || nRegionSize <= 0 ) {
 		return false;
 	}
@@ -69,7 +66,8 @@ bool Terrain3DCookDatabase::write( const String &rDataDirectory,
 	file->store_32( 0u );
 	file->store_64( nMaterialSignature );
 	file->store_64( 0u );
-	for ( const uint64_t signature : m_regionSignatures ) {
+	for ( size_t iRegion = 0u; iRegion < T3D_ARRAY_COUNT( m_regionSignatures ); iRegion++ ) {
+		const uint64_t signature = ( m_regionSignatures )[iRegion];
 		file->store_64( signature );
 	}
 	const Error error = file->get_error();

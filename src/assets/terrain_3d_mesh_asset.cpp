@@ -267,11 +267,7 @@ void Terrain3DMeshAsset::setSceneFile( const Ref<PackedScene> &rSceneFile ) {
 		// First look for XXXXLOD# meshes, sorted by last digit
 		mesh_instances = pNode->find_children( "*LOD?", "MeshInstance3D" );
 		if ( mesh_instances.size() > 0 ) {
-			LOG( INFO,
-					"Found ",
-					mesh_instances.size(),
-					" meshes using LOD# naming convention, using the first ",
-					s_nMeshMaxLodCount );
+			LOG( INFO, "Found ", mesh_instances.size(), " meshes using LOD# naming convention, using the first ", s_nMeshMaxLodCount );
 			mesh_instances.sort_custom( callable_mp_static( &Terrain3DMeshAsset::sortLodNodes ) );
 		}
 
@@ -279,10 +275,7 @@ void Terrain3DMeshAsset::setSceneFile( const Ref<PackedScene> &rSceneFile ) {
 		if ( mesh_instances.size() == 0 ) {
 			mesh_instances = pNode->find_children( "*", "MeshInstance3D" );
 			if ( mesh_instances.size() > 0 ) {
-				LOG( INFO,
-						"No meshes with LOD# suffixes found, using the first ",
-						s_nMeshMaxLodCount,
-						" meshes as LOD0-LOD3" );
+				LOG( INFO, "No meshes with LOD# suffixes found, using the first ", s_nMeshMaxLodCount, " meshes as LOD0-LOD3" );
 			}
 		}
 
@@ -358,8 +351,7 @@ void Terrain3DMeshAsset::commitMeshes( void ) {
 
 void Terrain3DMeshAsset::setGeneratedType( const t3dGenType_t type ) {
 	const bool bEnteringGeneratedMode = m_generatedType == TYPE_NONE;
-	SET_IF_DIFF(
-			m_generatedType, CLAMP( type, ( t3dGenType_t )( TYPE_NONE + 1 ), ( t3dGenType_t )( MESH_TYPE_MAX - 1 ) ) );
+	SET_IF_DIFF( m_generatedType, CLAMP( type, ( t3dGenType_t )( TYPE_NONE + 1 ), ( t3dGenType_t )( MESH_TYPE_MAX - 1 ) ) );
 	if ( bEnteringGeneratedMode ) {
 		m_castShadows = s_shadowCastingOff;
 		m_iLastShadowLod = 0;
@@ -570,9 +562,8 @@ void Terrain3DMeshAsset::_validate_property( PropertyInfo &rProperty ) const {
 }
 
 bool Terrain3DMeshAsset::_property_can_revert( const StringName &rName ) const {
-	return ( rName.match( "last_lod" ) || rName.match( "last_shadow_lod" ) || rName.match( "density" ) ||
-			rName.match( "generated_type" ) ||
-			( m_generatedType > TYPE_NONE && ( rName.match( "height_offset" ) || rName.match( "lod0_range" ) ) ) );
+	return ( rName.match( "last_lod" ) || rName.match( "last_shadow_lod" ) || rName.match( "density" ) || rName.match( "generated_type" )
+	        || ( m_generatedType > TYPE_NONE && ( rName.match( "height_offset" ) || rName.match( "lod0_range" ) ) ) );
 }
 
 bool Terrain3DMeshAsset::_property_get_revert( const StringName &rName, Variant &rProperty ) const {
@@ -601,8 +592,7 @@ bool Terrain3DMeshAsset::_property_get_revert( const StringName &rName, Variant 
 }
 
 void Terrain3DMeshAsset::setHlodContribution( const t3dHlodContribution_t mode ) {
-	const t3dHlodContribution_t value =
-			( t3dHlodContribution_t )CLAMP( ( int )mode, ( int )HLOD_AUTO, ( int )HLOD_EXCLUDE );
+	const t3dHlodContribution_t value = ( t3dHlodContribution_t )CLAMP( ( int )mode, ( int )HLOD_AUTO, ( int )HLOD_EXCLUDE );
 	if ( m_hlodContribution == value ) {
 		return;
 	}
@@ -713,11 +703,10 @@ void Terrain3DMeshAsset::_bind_methods( void ) {
 
 	ADD_GROUP( "HLOD", "hlod_" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "hlod_contribution", PROPERTY_HINT_ENUM, "Auto,Include,Exclude" ),
-			"set_hlod_contribution",
-			"get_hlod_contribution" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "hlod_min_level", PROPERTY_HINT_RANGE, "1,6,1" ),
-			"set_hlod_min_level",
-			"get_hlod_min_level" );
+	        "set_hlod_contribution",
+	        "get_hlod_contribution" );
+	ADD_PROPERTY(
+	        PropertyInfo( Variant::INT, "hlod_min_level", PROPERTY_HINT_RANGE, "1,6,1" ), "set_hlod_min_level", "get_hlod_min_level" );
 
 	ADD_GROUP( "General", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::STRING, "name", PROPERTY_HINT_NONE ), "set_name", "get_name" );
@@ -725,102 +714,78 @@ void Terrain3DMeshAsset::_bind_methods( void ) {
 	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "enabled", PROPERTY_HINT_NONE ), "set_enabled", "is_enabled" );
 
 	ADD_GROUP( "Source / Placement", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "scene_file", PROPERTY_HINT_RESOURCE_TYPE, "PackedScene" ),
-			"set_scene_file",
-			"get_scene_file" );
 	ADD_PROPERTY(
-			PropertyInfo(
-					Variant::INT, "generated_type", PROPERTY_HINT_ENUM, "None,Texture Card", PROPERTY_USAGE_STORAGE ),
-			"set_generated_type",
-			"get_generated_type" );
+	        PropertyInfo( Variant::OBJECT, "scene_file", PROPERTY_HINT_RESOURCE_TYPE, "PackedScene" ), "set_scene_file", "get_scene_file" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "generated_type", PROPERTY_HINT_ENUM, "None,Texture Card", PROPERTY_USAGE_STORAGE ),
+	        "set_generated_type",
+	        "get_generated_type" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "height_offset", PROPERTY_HINT_RANGE, "-20.0,20.0,.005" ),
-			"set_height_offset",
-			"get_height_offset" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "density", PROPERTY_HINT_RANGE, ".01,10.0,.005" ),
-			"set_density",
-			"get_density" );
+	        "set_height_offset",
+	        "get_height_offset" );
+	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "density", PROPERTY_HINT_RANGE, ".01,10.0,.005" ), "set_density", "get_density" );
 
 	ADD_GROUP( "Rendering", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "cast_shadows", PROPERTY_HINT_ENUM, "Off,On,Double-Sided,Shadows Only" ),
-			"set_cast_shadows",
-			"get_cast_shadows" );
+	        "set_cast_shadows",
+	        "get_cast_shadows" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "visibility_layers", PROPERTY_HINT_LAYERS_3D_RENDER ),
-			"set_visibility_layers",
-			"get_visibility_layers" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT,
-						  "material_override",
-						  PROPERTY_HINT_RESOURCE_TYPE,
-						  "BaseMaterial3D,ShaderMaterial" ),
-			"set_material_override",
-			"get_material_override" );
-	ADD_PROPERTY(
-			PropertyInfo(
-					Variant::OBJECT, "material_overlay", PROPERTY_HINT_RESOURCE_TYPE, "BaseMaterial3D,ShaderMaterial" ),
-			"set_material_overlay",
-			"get_material_overlay" );
+	        "set_visibility_layers",
+	        "get_visibility_layers" );
+	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "material_override", PROPERTY_HINT_RESOURCE_TYPE, "BaseMaterial3D,ShaderMaterial" ),
+	        "set_material_override",
+	        "get_material_override" );
+	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "material_overlay", PROPERTY_HINT_RESOURCE_TYPE, "BaseMaterial3D,ShaderMaterial" ),
+	        "set_material_overlay",
+	        "get_material_overlay" );
 
 	ADD_GROUP( "Generated Mesh", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT,
-						  "generated_faces",
-						  PROPERTY_HINT_NONE,
-						  "",
-						  PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_READ_ONLY ),
-			"set_generated_faces",
-			"get_generated_faces" );
-	ADD_PROPERTY( PropertyInfo( Variant::VECTOR2,
-						  "generated_size",
-						  PROPERTY_HINT_NONE,
-						  "",
-						  PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_READ_ONLY ),
-			"set_generated_size",
-			"get_generated_size" );
+	ADD_PROPERTY(
+	        PropertyInfo( Variant::INT, "generated_faces", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_READ_ONLY ),
+	        "set_generated_faces",
+	        "get_generated_faces" );
+	ADD_PROPERTY(
+	        PropertyInfo( Variant::VECTOR2, "generated_size", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_READ_ONLY ),
+	        "set_generated_size",
+	        "get_generated_size" );
 
 	ADD_GROUP( "LODs", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT,
-						  "lod_count",
-						  PROPERTY_HINT_NONE,
-						  "",
-						  PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-			"",
-			"get_lod_count" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "lod_count", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+	        "",
+	        "get_lod_count" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "last_lod", PROPERTY_HINT_NONE ), "set_last_lod", "get_last_lod" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "last_shadow_lod", PROPERTY_HINT_NONE ),
-			"set_last_shadow_lod",
-			"get_last_shadow_lod" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "shadow_impostor", PROPERTY_HINT_NONE ),
-			"set_shadow_impostor",
-			"get_shadow_impostor" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "last_shadow_lod", PROPERTY_HINT_NONE ), "set_last_shadow_lod", "get_last_shadow_lod" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "shadow_impostor", PROPERTY_HINT_NONE ), "set_shadow_impostor", "get_shadow_impostor" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod0_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-			"set_lod0_range",
-			"get_lod0_range" );
+	        "set_lod0_range",
+	        "get_lod0_range" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod1_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-			"set_lod1_range",
-			"get_lod1_range" );
+	        "set_lod1_range",
+	        "get_lod1_range" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod2_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-			"set_lod2_range",
-			"get_lod2_range" );
+	        "set_lod2_range",
+	        "get_lod2_range" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod3_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-			"set_lod3_range",
-			"get_lod3_range" );
+	        "set_lod3_range",
+	        "get_lod3_range" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod4_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-			"set_lod4_range",
-			"get_lod4_range" );
+	        "set_lod4_range",
+	        "get_lod4_range" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod5_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-			"set_lod5_range",
-			"get_lod5_range" );
+	        "set_lod5_range",
+	        "get_lod5_range" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod6_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-			"set_lod6_range",
-			"get_lod6_range" );
+	        "set_lod6_range",
+	        "get_lod6_range" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod7_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-			"set_lod7_range",
-			"get_lod7_range" );
+	        "set_lod7_range",
+	        "get_lod7_range" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod8_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-			"set_lod8_range",
-			"get_lod8_range" );
+	        "set_lod8_range",
+	        "get_lod8_range" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod9_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-			"set_lod9_range",
-			"get_lod9_range" );
+	        "set_lod9_range",
+	        "get_lod9_range" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "fade_margin", PROPERTY_HINT_RANGE, "0.,64.0,.05,or_greater" ),
-			"set_fade_margin",
-			"get_fade_margin" );
+	        "set_fade_margin",
+	        "get_fade_margin" );
 }

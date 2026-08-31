@@ -1,7 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_SAMPLER_H
 #define TERRAIN3D_SAMPLER_H
 
@@ -9,8 +7,7 @@
 #include "data/terrain_3d_sampling_storage.h"
 #include "eastl_config.h"
 
-#include <EASTL/array.h>
-#include <cstdint>
+#include <stdint.h>
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/vector2.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
@@ -35,9 +32,9 @@ typedef struct alignas( 64 ) t3dRegionView_s {
 	bool m_bLoaded = false;
 	bool m_bValid = false;
 	bool m_bControlResolved = false;
-	const uint8_t *m_pHeightBytes = nullptr;
-	const uint8_t *m_pControlBytes = nullptr;
-	const uint8_t *m_pDerivedBytes = nullptr;
+	const uint8_t *m_pHeightBytes = NULL;
+	const uint8_t *m_pControlBytes = NULL;
+	const uint8_t *m_pDerivedBytes = NULL;
 } t3dRegionView_t;
 
 typedef struct t3dRegionCold_s {
@@ -69,27 +66,22 @@ public:
 	// Copies a grid-aligned rectangle in row-major order. Region metadata is
 	// resolved once per contiguous row span rather than once per texel.
 	bool copyHeightRect( int64_t iGridX,
-			int64_t iGridZ,
-			int nWidth,
-			int nHeight,
-			float *pDestination,
-			int nDestinationStride,
-			bool bRespectHoles = false );
-	bool minimumHeightRect( int64_t iGridX,
-			int64_t iGridZ,
-			int nWidth,
-			int nHeight,
-			float &fHeight,
-			bool bRespectHoles = true );
+	        int64_t iGridZ,
+	        int nWidth,
+	        int nHeight,
+	        float *pDestination,
+	        int nDestinationStride,
+	        bool bRespectHoles = false );
+	bool minimumHeightRect( int64_t iGridX, int64_t iGridZ, int nWidth, int nHeight, float &fHeight, bool bRespectHoles = true );
 
 private:
 	// Cache probes and successful samples touch only this cacheline-aligned hot
 	// descriptor. Ownership and fallback containers live in the parallel cold bank.
 
 	t3dSamplingSource_t m_source;
-	eastl::array<t3dRegionView_t, s_nSamplerCacheSize> m_szCache{};
-	eastl::array<t3dRegionCold_t, s_nSamplerCacheSize> m_szCacheCold{};
-	t3dRegionView_t *m_pLastView = nullptr;
+	t3dRegionView_t m_szCache[s_nSamplerCacheSize]{};
+	t3dRegionCold_t m_szCacheCold[s_nSamplerCacheSize]{};
+	t3dRegionView_t *m_pLastView = NULL;
 	uint32_t m_nStamp = 1;
 	uint32_t m_nOperation = 1u;
 	uint64_t m_nSamplingGeneration = 0u;
@@ -106,7 +98,7 @@ private:
 	float sampleHeightGridUnchecked( int64_t iGridX, int64_t iGridZ, bool bRespectHoles );
 	uint32_t sampleControlGridUnchecked( int64_t iGridX, int64_t iGridZ );
 	float sampleHeightUnchecked( const Vector3 &rGlobalPosition );
-	Vector3 sampleNormalUnchecked( const Vector3 &rGlobalPosition, float *pHeight = nullptr );
+	Vector3 sampleNormalUnchecked( const Vector3 &rGlobalPosition, float *pHeight = NULL );
 	Vector3 sampleSlopeNormalUnchecked( const Vector3 &rGlobalPosition );
 	void resetCache( uint64_t nGeneration );
 	void resetView( t3dRegionView_t *pView );

@@ -1,13 +1,10 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
-#pragma once
 #ifndef TERRAIN3D_HLOD_RUNTIME_CODEC_H
 #define TERRAIN3D_HLOD_RUNTIME_CODEC_H
 
 #include "Terrain3DConstants.h"
+#include "core/terrain_3d_eastl_helpers.h"
 #include "eastl_config.h"
-
-#include <EASTL/array.h>
-#include <EASTL/vector.h>
 #include <godot_cpp/variant/aabb.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
@@ -41,20 +38,20 @@ typedef struct t3dHlodRuntimeNodePolicyRecord_s {
 } t3dHlodRuntimeNodePolicyRecord_t;
 
 typedef struct t3dHlodRuntimeData_s {
-	eastl::vector<t3dHlodRuntimeEntryRecord_t> m_entries;
-	eastl::vector<int> m_roots;
-	eastl::vector<uint8_t> m_instancerMinLevels;
-	eastl::vector<t3dHlodRuntimeNodePolicyRecord_t> m_nodePolicies;
-	eastl::array<uint32_t, s_nMaxRegionSlots + 1> m_szNodePolicyOffsets{};
+	eastl::vector<t3dHlodRuntimeEntryRecord_t, Terrain3DEastlAllocator> m_entries;
+	eastl::vector<int, Terrain3DEastlAllocator> m_roots;
+	eastl::vector<uint8_t, Terrain3DEastlAllocator> m_instancerMinLevels;
+	eastl::vector<t3dHlodRuntimeNodePolicyRecord_t, Terrain3DEastlAllocator> m_nodePolicies;
+	uint32_t m_szNodePolicyOffsets[s_nMaxRegionSlots + 1]{};
 } t3dHlodRuntimeData_t;
 
 class Terrain3DHLODRuntimeCodec {
 public:
 	static PackedByteArray encode( const Array &rEntries,
-			const PackedByteArray &rInstancerMinLevels,
-			const PackedInt32Array &rNodeRegionIndices,
-			const PackedInt64Array &rNodeSpawnIds,
-			const PackedByteArray &rNodeMinLevels );
+	        const PackedByteArray &rInstancerMinLevels,
+	        const PackedInt32Array &rNodeRegionIndices,
+	        const PackedInt64Array &rNodeSpawnIds,
+	        const PackedByteArray &rNodeMinLevels );
 	static bool decode( const PackedByteArray &rBlob, t3dHlodRuntimeData_t &rData );
 };
 

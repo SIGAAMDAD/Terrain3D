@@ -1,7 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 // Editor-time procedural material classification baked into Terrain3D control maps.
-#pragma once
-
 #ifndef TERRAIN3D_AUTOSHADER_BAKER_H
 #define TERRAIN3D_AUTOSHADER_BAKER_H
 
@@ -26,13 +24,8 @@ protected:
 	static void _bind_methods( void );
 
 public:
-	Dictionary
-	bakeRegions( Terrain3D *pTerrain, const Dictionary &rProfile, const TypedArray<Vector2i> &rRegionLocations );
-	Dictionary computeRegionSignatures( Terrain3D *pTerrain,
-			const Dictionary &rProfile,
-			const TypedArray<Vector2i> &rRegionLocations );
-	Dictionary clearBakedRegions( Terrain3D *pTerrain,
-			const TypedArray<Vector2i> &rRegionLocations,
-			bool bPreserveAutoMask = true );
+	Dictionary bakeRegions( Terrain3D *pTerrain, const Dictionary &rProfile, const TypedArray<Vector2i> &rRegionLocations );
+	Dictionary computeRegionSignatures( Terrain3D *pTerrain, const Dictionary &rProfile, const TypedArray<Vector2i> &rRegionLocations );
+	Dictionary clearBakedRegions( Terrain3D *pTerrain, const TypedArray<Vector2i> &rRegionLocations, bool bPreserveAutoMask = true );
 };
 #endif // TERRAIN3D_AUTOSHADER_BAKER_H

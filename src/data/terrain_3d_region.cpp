@@ -8,12 +8,14 @@
 #include "data/terrain_3d_data.h"
 #include "instances/terrain_3d_instance_page_codec.h"
 
-#include <cstring>
+#include <string.h>
 #include <godot_cpp/classes/resource_saver.hpp>
+#include <EASTL/algorithm.h>
+#include <EASTL/utility.h>
 
 static bool t3dRegionImageIsDefaultControl( const Ref<Image> &rMap, const int nRegionSize ) {
-	if ( rMap.is_null() || rMap->get_format() != Image::FORMAT_RF || rMap->get_width() != nRegionSize ||
-			rMap->get_height() != nRegionSize ) {
+	if ( rMap.is_null() || rMap->get_format() != Image::FORMAT_RF || rMap->get_width() != nRegionSize
+	        || rMap->get_height() != nRegionSize ) {
 		return false;
 	}
 	const PackedByteArray data = rMap->get_data();
@@ -24,7 +26,7 @@ static bool t3dRegionImageIsDefaultControl( const Ref<Image> &rMap, const int nR
 	const uint8_t *pBytes = data.ptr();
 	for ( size_t index = 0; index < texel_count; ++index ) {
 		uint32_t value = 0u;
-		std::memcpy( &value, pBytes + index * sizeof( uint32_t ), sizeof( uint32_t ) );
+		memcpy( &value, pBytes + index * sizeof( uint32_t ), sizeof( uint32_t ) );
 		if ( value != s_nRegionDefaultControl ) {
 			return false;
 		}
@@ -33,8 +35,8 @@ static bool t3dRegionImageIsDefaultControl( const Ref<Image> &rMap, const int nR
 }
 
 static bool t3dRegionImageIsDefaultColor( const Ref<Image> &rMap, const int nRegionSize ) {
-	if ( rMap.is_null() || rMap->get_format() != Image::FORMAT_RGBA8 || rMap->get_width() != nRegionSize ||
-			rMap->get_height() != nRegionSize ) {
+	if ( rMap.is_null() || rMap->get_format() != Image::FORMAT_RGBA8 || rMap->get_width() != nRegionSize
+	        || rMap->get_height() != nRegionSize ) {
 		return false;
 	}
 	const PackedByteArray data = rMap->get_data();
@@ -43,14 +45,11 @@ static bool t3dRegionImageIsDefaultColor( const Ref<Image> &rMap, const int nReg
 		return false;
 	}
 	const uint32_t rgba = COLOR_ROUGHNESS.to_rgba32();
-	const uint8_t expected[4] = {
-		( uint8_t )( rgba >> 24u ), ( uint8_t )( rgba >> 16u ), ( uint8_t )( rgba >> 8u ), ( uint8_t )( rgba )
-	};
+	const uint8_t expected[4] = { ( uint8_t )( rgba >> 24u ), ( uint8_t )( rgba >> 16u ), ( uint8_t )( rgba >> 8u ), ( uint8_t )( rgba ) };
 	const uint8_t *pBytes = data.ptr();
 	for ( size_t index = 0; index < texel_count; ++index ) {
 		const uint8_t *pixel = pBytes + index * 4u;
-		if ( pixel[0] != expected[0] || pixel[1] != expected[1] || pixel[2] != expected[2] ||
-				pixel[3] != expected[3] ) {
+		if ( pixel[0] != expected[0] || pixel[1] != expected[1] || pixel[2] != expected[2] || pixel[3] != expected[3] ) {
 			return false;
 		}
 	}
@@ -61,11 +60,8 @@ EA_FORCE_INLINE static int t3dRegionNormalizeStreamedNodeBoundaryPolicy( const i
 	return nPolicy == STREAMED_NODE_BOUNDARY_COVERAGE ? STREAMED_NODE_BOUNDARY_COVERAGE : STREAMED_NODE_BOUNDARY_ANCHOR;
 }
 
-static void t3dRegionNormalizeStreamedNodeCoverage( const int nPolicy,
-		const Vector2i &rInputMin,
-		const Vector2i &rInputMax,
-		Vector2i &rOutputMin,
-		Vector2i &rOutputMax ) {
+static void t3dRegionNormalizeStreamedNodeCoverage(
+        const int nPolicy, const Vector2i &rInputMin, const Vector2i &rInputMax, Vector2i &rOutputMin, Vector2i &rOutputMax ) {
 	if ( nPolicy != STREAMED_NODE_BOUNDARY_COVERAGE ) {
 		rOutputMin = s_v2iZero;
 		rOutputMax = s_v2iZero;
@@ -86,31 +82,24 @@ EA_FORCE_INLINE static int t3dRegionNormalizeBakedLightingMode( const int nMode 
 }
 
 static void t3dRegionStoreStreamedNodeLighting( Dictionary &rEntry, const Dictionary &dictSource ) {
-	rEntry["lighting_class"] = t3dRegionNormalizeLightingClass( dictSource.has( "lighting_class" )
-					? ( int )( dictSource["lighting_class"] )
-					: ( int )( LIGHTING_CLASS_MEDIUM_OBSTACLE ) );
-	rEntry["baked_lighting_mode"] = t3dRegionNormalizeBakedLightingMode( dictSource.has( "baked_lighting_mode" )
-					? ( int )( dictSource["baked_lighting_mode"] )
-					: ( int )( BAKED_LIGHTING_LIGHTMAP ) );
-	rEntry["contribute_baked_gi"] =
-			dictSource.has( "contribute_baked_gi" ) ? ( bool )( dictSource["contribute_baked_gi"] ) : true;
-	rEntry["receive_dynamic_directional"] = dictSource.has( "receive_dynamic_directional" )
-			? ( bool )( dictSource["receive_dynamic_directional"] )
-			: true;
+	rEntry["lighting_class"] = t3dRegionNormalizeLightingClass(
+	        dictSource.has( "lighting_class" ) ? ( int )( dictSource["lighting_class"] ) : ( int )( LIGHTING_CLASS_MEDIUM_OBSTACLE ) );
+	rEntry["baked_lighting_mode"] = t3dRegionNormalizeBakedLightingMode(
+	        dictSource.has( "baked_lighting_mode" ) ? ( int )( dictSource["baked_lighting_mode"] ) : ( int )( BAKED_LIGHTING_LIGHTMAP ) );
+	rEntry["contribute_baked_gi"] = dictSource.has( "contribute_baked_gi" ) ? ( bool )( dictSource["contribute_baked_gi"] ) : true;
+	rEntry["receive_dynamic_directional"] =
+	        dictSource.has( "receive_dynamic_directional" ) ? ( bool )( dictSource["receive_dynamic_directional"] ) : true;
 	rEntry["dynamic_shadow_eligible"] =
-			dictSource.has( "dynamic_shadow_eligible" ) ? ( bool )( dictSource["dynamic_shadow_eligible"] ) : true;
+	        dictSource.has( "dynamic_shadow_eligible" ) ? ( bool )( dictSource["dynamic_shadow_eligible"] ) : true;
 	if ( dictSource.has( "shadow_proxy_scene_path" ) && !String( dictSource["shadow_proxy_scene_path"] ).is_empty() ) {
 		rEntry["shadow_proxy_scene_path"] = String( dictSource["shadow_proxy_scene_path"] );
-	} else if ( dictSource.has( "shadow_proxy_scene" ) &&
-			Variant( dictSource["shadow_proxy_scene"] ).get_type() == Variant::OBJECT ) {
+	} else if ( dictSource.has( "shadow_proxy_scene" ) && Variant( dictSource["shadow_proxy_scene"] ).get_type() == Variant::OBJECT ) {
 		rEntry["shadow_proxy_scene"] = dictSource["shadow_proxy_scene"];
 	}
 }
 
-static void t3dRegionStoreStreamedNodeBoundary( Dictionary &rEntry,
-		const int nPolicy,
-		const Vector2i &rCoverageMin,
-		const Vector2i &rCoverageMax ) {
+static void t3dRegionStoreStreamedNodeBoundary(
+        Dictionary &rEntry, const int nPolicy, const Vector2i &rCoverageMin, const Vector2i &rCoverageMax ) {
 	const int policy = t3dRegionNormalizeStreamedNodeBoundaryPolicy( nPolicy );
 	Vector2i coverage_min;
 	Vector2i coverage_max;
@@ -123,9 +112,11 @@ static void t3dRegionStoreStreamedNodeBoundary( Dictionary &rEntry,
 // -----------------------------------------------------------------------------
 // Public functions
 
-Terrain3DRegion::Terrain3DRegion( void ) {}
+Terrain3DRegion::Terrain3DRegion( void ) : m_streamedNodeRuntime( Terrain3DEastlAllocator::bootstrapAllocator() ) {
+}
 
-Terrain3DRegion::~Terrain3DRegion( void ) {}
+Terrain3DRegion::~Terrain3DRegion( void ) {
+}
 
 void Terrain3DRegion::clear( void ) {
 	m_fVersion = 0.8f;
@@ -171,13 +162,13 @@ void Terrain3DRegion::setVersion( const real_t fVersion ) {
 	LOG( DEBUG, vformat( "%.3f", m_fVersion ) );
 	if ( m_fVersion < s_fDataCurrentVersion ) {
 		LOG( WARN,
-				"Region Data ",
-				get_path(),
-				" version ",
-				vformat( "%.3f", m_fVersion ),
-				" will be updated to ",
-				vformat( "%.3f", s_fDataCurrentVersion ),
-				" upon save" );
+		        "Region Data ",
+		        get_path(),
+		        " version ",
+		        vformat( "%.3f", m_fVersion ),
+		        " will be updated to ",
+		        vformat( "%.3f", s_fDataCurrentVersion ),
+		        " upon save" );
 	}
 }
 
@@ -192,8 +183,7 @@ void Terrain3DRegion::setRegionSize( const int nRegionSize ) {
 	}
 	SET_IF_DIFF( m_nRegionSize, nRegionSize );
 	t3dInstanceLayout_t default_layout;
-	if ( m_instanceStore.empty() &&
-			t3dInstanceLayoutForRegion( nRegionSize, s_nInstanceDefaultCellSize, default_layout ) ) {
+	if ( m_instanceStore.empty() && t3dInstanceLayoutForRegion( nRegionSize, s_nInstanceDefaultCellSize, default_layout ) ) {
 		m_instanceStore.setLayout( default_layout );
 	}
 	LOG( DEBUG, "Setting region ", m_location, " size: ", nRegionSize );
@@ -233,14 +223,14 @@ Ref<Image> Terrain3DRegion::getMap( const t3dMapType_t mapType ) const {
 Image *Terrain3DRegion::getMapPtr( const t3dMapType_t mapType ) const {
 	switch ( mapType ) {
 		case TYPE_HEIGHT:
-			return m_heightMap.is_valid() ? *m_heightMap : nullptr;
+			return m_heightMap.is_valid() ? *m_heightMap : NULL;
 		case TYPE_CONTROL:
-			return m_controlMap.is_valid() ? *m_controlMap : nullptr;
+			return m_controlMap.is_valid() ? *m_controlMap : NULL;
 		case TYPE_COLOR:
-			return m_colorMap.is_valid() ? *m_colorMap : nullptr;
+			return m_colorMap.is_valid() ? *m_colorMap : NULL;
 		default:
 			LOG( ERROR, "Requested map type ", mapType, ", is invalid" );
-			return nullptr;
+			return NULL;
 	}
 }
 
@@ -254,8 +244,7 @@ Ref<Image> Terrain3DRegion::materializeMap( const t3dMapType_t mapType ) {
 		return Ref<Image>();
 	}
 	if ( mapType == TYPE_HEIGHT ) {
-		pMap = Terrain3DUtil::getFilledImage(
-				V2I( m_nRegionSize ), t3dRegionCodecDefaultHeightColor(), false, Image::FORMAT_R16 );
+		pMap = Terrain3DUtil::getFilledImage( V2I( m_nRegionSize ), t3dRegionCodecDefaultHeightColor(), false, Image::FORMAT_R16 );
 	} else if ( mapType == TYPE_CONTROL ) {
 		pMap = Terrain3DUtil::getFilledImage( V2I( m_nRegionSize ), COLOR_CONTROL, false, Image::FORMAT_RF );
 	} else if ( mapType == TYPE_COLOR ) {
@@ -287,7 +276,7 @@ Ref<Image> Terrain3DRegion::materializeMap( const t3dMapType_t mapType ) {
 
 Image *Terrain3DRegion::getMapPtrForWrite( const t3dMapType_t mapType ) {
 	Ref<Image> pMap = materializeMap( mapType );
-	return pMap.is_valid() ? *pMap : nullptr;
+	return pMap.is_valid() ? *pMap : NULL;
 }
 
 void Terrain3DRegion::setMaps( const TypedArray<Image> &rMaps ) {
@@ -311,9 +300,7 @@ TypedArray<Image> Terrain3DRegion::getMaps( void ) const {
 }
 
 void Terrain3DRegion::setHeightMap( const Ref<Image> &rMap ) {
-	LOG( DEBUG,
-			"Setting height map for region: ",
-			( m_location.x != INT32_MAX ) ? String( m_location ) : "(new)" );
+	LOG( DEBUG, "Setting height map for region: ", ( m_location.x != INT32_MAX ) ? String( m_location ) : "(new)" );
 	if ( m_nRegionSize == 0 && rMap.is_valid() ) {
 		setRegionSize( rMap->get_width() );
 	}
@@ -334,9 +321,7 @@ void Terrain3DRegion::setHeightMap( const Ref<Image> &rMap ) {
 }
 
 void Terrain3DRegion::setControlMap( const Ref<Image> &rMap ) {
-	LOG( DEBUG,
-			"Setting control map for region: ",
-			( m_location.x != INT32_MAX ) ? String( m_location ) : "(new)" );
+	LOG( DEBUG, "Setting control map for region: ", ( m_location.x != INT32_MAX ) ? String( m_location ) : "(new)" );
 	if ( m_nRegionSize == 0 && rMap.is_valid() ) {
 		setRegionSize( rMap->get_width() );
 	}
@@ -398,8 +383,8 @@ void Terrain3DRegion::setChannelFlags( const int nFlags ) {
 }
 
 void Terrain3DRegion::setDerivedNormalSlopeMapInternal( const Ref<Image> &rMap ) {
-	if ( rMap.is_null() || rMap->get_width() != m_nRegionSize || rMap->get_height() != m_nRegionSize ||
-			rMap->get_format() != Image::FORMAT_RG8 ) {
+	if ( rMap.is_null() || rMap->get_width() != m_nRegionSize || rMap->get_height() != m_nRegionSize
+	        || rMap->get_format() != Image::FORMAT_RG8 ) {
 		m_derivedNormalSlopeMap.unref();
 		m_bDerivedNormalSlopeValid = false;
 		return;
@@ -453,7 +438,7 @@ bool Terrain3DRegion::isMapDefault( const t3dMapType_t mapType ) const {
 }
 
 bool Terrain3DRegion::compactMapIfDefault( const t3dMapType_t mapType, const bool bMarkModified ) {
-	Ref<Image> *pMap = nullptr;
+	Ref<Image> *pMap = NULL;
 	switch ( mapType ) {
 		case TYPE_CONTROL:
 			pMap = &m_controlMap;
@@ -504,10 +489,7 @@ void Terrain3DRegion::markMapEdited( const t3dMapType_t mapType, const bool bRec
 Ref<Image> Terrain3DRegion::sanitizeMap( const t3dMapType_t mapType, const Ref<Image> &rMap ) const {
 	LOG( DEBUG, "Sanitizing map type: ", mapType, ", map: ", rMap );
 	if ( !t3dIsValidRegionSize( m_nRegionSize ) ) {
-		LOG( ERROR,
-				"Invalid region size: ",
-				m_nRegionSize,
-				". Set it or set a map first. Must be power of 2, 64-2048" );
+		LOG( ERROR, "Invalid region size: ", m_nRegionSize, ". Set it or set a map first. Must be power of 2, 64-2048" );
 		return Ref<Image>();
 	}
 	if ( mapType != TYPE_HEIGHT && rMap.is_null() ) {
@@ -515,39 +497,37 @@ Ref<Image> Terrain3DRegion::sanitizeMap( const t3dMapType_t mapType, const Ref<I
 		return Ref<Image>();
 	}
 	if ( mapType == TYPE_HEIGHT ) {
-		if ( rMap.is_valid() && rMap->get_format() == Image::FORMAT_R16 &&
-				!t3dRegionCodecHasValidHeightPayload( rMap, m_nRegionSize ) ) {
+		if ( rMap.is_valid() && rMap->get_format() == Image::FORMAT_R16 && !t3dRegionCodecHasValidHeightPayload( rMap, m_nRegionSize ) ) {
 			LOG( ERROR,
-					"Rejected malformed R16 height payload for region ",
-					m_location,
-					": expected ",
-					t3dRegionCodecExpectedHeightByteCount( m_nRegionSize, Image::FORMAT_R16 ),
-					" bytes, received ",
-					rMap->get_data().size() );
+			        "Rejected malformed R16 height payload for region ",
+			        m_location,
+			        ": expected ",
+			        t3dRegionCodecExpectedHeightByteCount( m_nRegionSize, Image::FORMAT_R16 ),
+			        " bytes, received ",
+			        rMap->get_data().size() );
 			return Ref<Image>();
 		}
 
 		uint32_t clamped_count = 0u;
 		uint32_t non_finite_count = 0u;
-		Ref<Image> pConverted =
-				t3dRegionCodecConvertHeightToR16( rMap, m_nRegionSize, clamped_count, non_finite_count );
+		Ref<Image> pConverted = t3dRegionCodecConvertHeightToR16( rMap, m_nRegionSize, clamped_count, non_finite_count );
 		if ( rMap.is_valid() && rMap->get_format() == Image::FORMAT_RF && pConverted.is_valid() ) {
 			LOG( INFO,
-					"Converted internal RF32 height storage to R16 for region ",
-					m_location,
-					" (",
-					m_nRegionSize * m_nRegionSize,
-					" samples)" );
+			        "Converted internal RF32 height storage to R16 for region ",
+			        m_location,
+			        " (",
+			        m_nRegionSize * m_nRegionSize,
+			        " samples)" );
 		}
 		if ( clamped_count > 0u || non_finite_count > 0u ) {
 			LOG( WARN,
-					"R16 height conversion for region ",
-					m_location,
-					" clamped ",
-					clamped_count,
-					" samples and replaced ",
-					non_finite_count,
-					" non-finite samples" );
+			        "R16 height conversion for region ",
+			        m_location,
+			        " clamped ",
+			        clamped_count,
+			        " samples and replaced ",
+			        non_finite_count,
+			        " non-finite samples" );
 		}
 		return pConverted;
 	}
@@ -562,13 +542,7 @@ Ref<Image> Terrain3DRegion::sanitizeMap( const t3dMapType_t mapType, const Ref<I
 				LOG( DEBUG, "Map type ", type_str, " correct format, size. Mipmaps: ", rMap->has_mipmaps() );
 				pMap = rMap;
 			} else {
-				LOG( DEBUG,
-						"Provided ",
-						type_str,
-						" map wrong format: ",
-						rMap->get_format(),
-						". Converting copy to: ",
-						format );
+				LOG( DEBUG, "Provided ", type_str, " map wrong format: ", rMap->get_format(), ". Converting copy to: ", format );
 				pMap.instantiate();
 				pMap->copy_from( rMap );
 				pMap->convert( format );
@@ -654,18 +628,16 @@ void Terrain3DRegion::calcHeightRange( void ) {
 		m_heightRange = range;
 		m_bModified = true;
 		LOG( DEBUG,
-				"Recalculated new height range: ",
-				m_heightRange,
-				" for region: ",
-				( m_location.x != INT32_MAX ) ? String( m_location ) : "(new)",
-				". Marking modified" );
+		        "Recalculated new height range: ",
+		        m_heightRange,
+		        " for region: ",
+		        ( m_location.x != INT32_MAX ) ? String( m_location ) : "(new)",
+		        ". Marking modified" );
 	}
 }
 
-void Terrain3DRegion::adoptCookedRuntimeMapsInternal( const Ref<Image> &rHeight,
-		const Ref<Image> &rControl,
-		const Ref<Image> &rColor,
-		const Ref<Image> &rDerived ) {
+void Terrain3DRegion::adoptCookedRuntimeMapsInternal(
+        const Ref<Image> &rHeight, const Ref<Image> &rControl, const Ref<Image> &rColor, const Ref<Image> &rDerived ) {
 	if ( rHeight.is_null() || rHeight->get_width() != m_nRegionSize || rHeight->get_height() != m_nRegionSize ) {
 		return;
 	}
@@ -729,7 +701,7 @@ bool Terrain3DRegion::runtimeMapsEvictable( void ) const {
 }
 
 void Terrain3DRegion::clearInstanceMetadata( void ) const {
-	std::memset( m_szInstanceMeshCounts, 0, sizeof( m_szInstanceMeshCounts ) );
+	memset( m_szInstanceMeshCounts, 0, sizeof( m_szInstanceMeshCounts ) );
 	m_nInstanceCount = 0u;
 	m_nInstanceMeshCount = 0u;
 }
@@ -750,7 +722,7 @@ bool Terrain3DRegion::encodeInstancePage( void ) const {
 		return false;
 	}
 	m_instancePage = page;
-	std::memcpy( m_szInstanceMeshCounts, mesh_counts, sizeof( m_szInstanceMeshCounts ) );
+	memcpy( m_szInstanceMeshCounts, mesh_counts, sizeof( m_szInstanceMeshCounts ) );
 	m_nInstanceCount = instance_count;
 	m_nInstanceMeshCount = mesh_count;
 	m_bInstanceStoreModified = false;
@@ -808,7 +780,7 @@ void Terrain3DRegion::setInstancePage( const PackedByteArray &rPage ) {
 	m_instanceStore.clear();
 	m_bInstanceStoreResident = rPage.is_empty();
 	m_bInstanceStoreModified = false;
-	std::memcpy( m_szInstanceMeshCounts, mesh_counts, sizeof( m_szInstanceMeshCounts ) );
+	memcpy( m_szInstanceMeshCounts, mesh_counts, sizeof( m_szInstanceMeshCounts ) );
 	m_nInstanceCount = instance_count;
 	m_nInstanceMeshCount = mesh_count;
 }
@@ -835,7 +807,7 @@ bool Terrain3DRegion::ensureInstanceStoreResident( void ) const {
 	m_instanceStore = eastl::move( decoded );
 	m_bInstanceStoreResident = true;
 	m_bInstanceStoreModified = false;
-	std::memcpy( m_szInstanceMeshCounts, mesh_counts, sizeof( m_szInstanceMeshCounts ) );
+	memcpy( m_szInstanceMeshCounts, mesh_counts, sizeof( m_szInstanceMeshCounts ) );
 	m_nInstanceCount = instance_count;
 	m_nInstanceMeshCount = mesh_count;
 	return true;
@@ -847,19 +819,17 @@ void Terrain3DRegion::adoptPreparedInstanceStoreInternal( Terrain3DInstanceStore
 	m_bInstanceStoreModified = false;
 }
 
-void Terrain3DRegion::adoptCookedInstanceAccelerationInternal( const PackedByteArray &rMetadata,
-		const PackedByteArray &rFastStart ) {
+void Terrain3DRegion::adoptCookedInstanceAccelerationInternal( const PackedByteArray &rMetadata, const PackedByteArray &rFastStart ) {
 	m_cookedInstanceMetadata = rMetadata;
 	m_cookedMultimeshFastStart = rFastStart;
 }
 
-void Terrain3DRegion::setCookedInstanceMetadataInternal( const uint32_t *const pMeshCounts,
-		const uint32_t nInstanceCount,
-		const uint16_t nMeshCount ) {
+void Terrain3DRegion::setCookedInstanceMetadataInternal(
+        const uint32_t *const pMeshCounts, const uint32_t nInstanceCount, const uint16_t nMeshCount ) {
 	if ( pMeshCounts ) {
-		std::memcpy( m_szInstanceMeshCounts, pMeshCounts, sizeof( m_szInstanceMeshCounts ) );
+		memcpy( m_szInstanceMeshCounts, pMeshCounts, sizeof( m_szInstanceMeshCounts ) );
 	} else {
-		std::memset( m_szInstanceMeshCounts, 0, sizeof( m_szInstanceMeshCounts ) );
+		memset( m_szInstanceMeshCounts, 0, sizeof( m_szInstanceMeshCounts ) );
 	}
 	m_nInstanceCount = nInstanceCount;
 	m_nInstanceMeshCount = nMeshCount;
@@ -871,12 +841,15 @@ void Terrain3DRegion::setCookedInstanceMetadataInternal( const uint32_t *const p
 	m_bInstanceStoreModified = false;
 }
 
-void Terrain3DRegion::setCookedStreamedNodeMetadataInternal( const uint16_t nCount,
-		const Vector2i &rCoverageMin,
-		const Vector2i &rCoverageMax ) {
+void Terrain3DRegion::setCookedStreamedNodeMetadataInternal(
+        const uint16_t nCount, const Vector2i &rCoverageMin, const Vector2i &rCoverageMax ) {
 	m_nCookedStreamedNodeCount = nCount;
 	m_cookedStreamedNodeCoverageMin = rCoverageMin;
 	m_cookedStreamedNodeCoverageMax = rCoverageMax;
+}
+
+bool Terrain3DRegion::reserveStreamedNodeRuntimeCapacityInternal( const size_t nCapacity ) {
+	return t3dContainerReserveCold( m_streamedNodeRuntime, nCapacity );
 }
 
 void Terrain3DRegion::adoptCookedStreamedNodeRuntimeInternal( eastl::vector<t3dStreamedNodeRuntimeDescriptor_t> &&rNodes ) {
@@ -908,9 +881,6 @@ bool Terrain3DRegion::releaseRuntimeAllocatorStorageInternal( void ) {
 	m_instanceStore.releaseStorage();
 	m_bInstanceStoreResident = m_nInstanceCount == 0u;
 
-	eastl::vector<t3dStreamedNodeRuntimeDescriptor_t> runtime_nodes(
-			m_streamedNodeRuntime.begin(), m_streamedNodeRuntime.end() );
-	m_streamedNodeRuntime.swap( runtime_nodes );
 	return true;
 }
 
@@ -920,8 +890,7 @@ bool Terrain3DRegion::streamedNodeIdExists( const uint64_t nId ) const {
 	}
 	for ( int index = 0; index < m_streamedNodes.size(); ++index ) {
 		const Dictionary entry = m_streamedNodes[index];
-		if ( entry.has( "id" ) && ( int64_t )( entry["id"] ) > 0 &&
-				( uint64_t )( ( int64_t )( entry["id"] ) ) == nId ) {
+		if ( entry.has( "id" ) && ( int64_t )( entry["id"] ) > 0 && ( uint64_t )( ( int64_t )( entry["id"] ) ) == nId ) {
 			return true;
 		}
 	}
@@ -983,37 +952,31 @@ void Terrain3DRegion::rebuildStreamedNodeRuntime( void ) {
 		descriptor.m_scenePath = entry.has( "scene_path" ) ? String( entry["scene_path"] ) : String();
 		descriptor.m_transform = Transform3D( entry["transform"] );
 		descriptor.m_state = entry.has( "state" ) && Variant( entry["state"] ).get_type() == Variant::DICTIONARY
-				? Dictionary( entry["state"] )
-				: Dictionary();
+		        ? Dictionary( entry["state"] )
+		        : Dictionary();
 		descriptor.m_nFlags = entry.has( "flags" ) ? ( int )( entry["flags"] ) : 0;
 		descriptor.m_nHlodMinLevel = CLAMP( entry.has( "hlod_min_level" ) ? ( int )entry["hlod_min_level"] : 1, 1, 6 );
 		descriptor.m_nBoundaryPolicy = entry.has( "boundary_policy" )
-				? t3dRegionNormalizeStreamedNodeBoundaryPolicy( ( int )( entry["boundary_policy"] ) )
-				: STREAMED_NODE_BOUNDARY_ANCHOR;
+		        ? t3dRegionNormalizeStreamedNodeBoundaryPolicy( ( int )( entry["boundary_policy"] ) )
+		        : STREAMED_NODE_BOUNDARY_ANCHOR;
 		descriptor.m_coverageMin = entry.has( "coverage_min" ) ? Vector2i( entry["coverage_min"] ) : s_v2iZero;
 		descriptor.m_coverageMax = entry.has( "coverage_max" ) ? Vector2i( entry["coverage_max"] ) : s_v2iZero;
 		t3dRegionNormalizeStreamedNodeCoverage( descriptor.m_nBoundaryPolicy,
-				descriptor.m_coverageMin,
-				descriptor.m_coverageMax,
-				descriptor.m_coverageMin,
-				descriptor.m_coverageMax );
-		descriptor.m_nLightingClass = t3dRegionNormalizeLightingClass( entry.has( "lighting_class" )
-						? ( int )( entry["lighting_class"] )
-						: ( int )( LIGHTING_CLASS_MEDIUM_OBSTACLE ) );
-		descriptor.m_nBakedLightingMode = t3dRegionNormalizeBakedLightingMode( entry.has( "baked_lighting_mode" )
-						? ( int )( entry["baked_lighting_mode"] )
-						: ( int )( BAKED_LIGHTING_LIGHTMAP ) );
-		descriptor.m_bContributeBakedGi =
-				entry.has( "contribute_baked_gi" ) ? ( bool )( entry["contribute_baked_gi"] ) : true;
+		        descriptor.m_coverageMin,
+		        descriptor.m_coverageMax,
+		        descriptor.m_coverageMin,
+		        descriptor.m_coverageMax );
+		descriptor.m_nLightingClass = t3dRegionNormalizeLightingClass(
+		        entry.has( "lighting_class" ) ? ( int )( entry["lighting_class"] ) : ( int )( LIGHTING_CLASS_MEDIUM_OBSTACLE ) );
+		descriptor.m_nBakedLightingMode = t3dRegionNormalizeBakedLightingMode(
+		        entry.has( "baked_lighting_mode" ) ? ( int )( entry["baked_lighting_mode"] ) : ( int )( BAKED_LIGHTING_LIGHTMAP ) );
+		descriptor.m_bContributeBakedGi = entry.has( "contribute_baked_gi" ) ? ( bool )( entry["contribute_baked_gi"] ) : true;
 		descriptor.m_bReceiveDynamicDirectional =
-				entry.has( "receive_dynamic_directional" ) ? ( bool )( entry["receive_dynamic_directional"] ) : true;
-		descriptor.m_bDynamicShadowEligible =
-				entry.has( "dynamic_shadow_eligible" ) ? ( bool )( entry["dynamic_shadow_eligible"] ) : true;
-		descriptor.m_shadowProxyScenePath =
-				entry.has( "shadow_proxy_scene_path" ) ? String( entry["shadow_proxy_scene_path"] ) : String();
-		descriptor.m_shadowProxyScene = entry.has( "shadow_proxy_scene" )
-				? Ref<PackedScene>( entry["shadow_proxy_scene"] )
-				: Ref<PackedScene>();
+		        entry.has( "receive_dynamic_directional" ) ? ( bool )( entry["receive_dynamic_directional"] ) : true;
+		descriptor.m_bDynamicShadowEligible = entry.has( "dynamic_shadow_eligible" ) ? ( bool )( entry["dynamic_shadow_eligible"] ) : true;
+		descriptor.m_shadowProxyScenePath = entry.has( "shadow_proxy_scene_path" ) ? String( entry["shadow_proxy_scene_path"] ) : String();
+		descriptor.m_shadowProxyScene =
+		        entry.has( "shadow_proxy_scene" ) ? Ref<PackedScene>( entry["shadow_proxy_scene"] ) : Ref<PackedScene>();
 		m_streamedNodeRuntime.push_back( eastl::move( descriptor ) );
 	}
 }
@@ -1022,7 +985,8 @@ void Terrain3DRegion::refreshStreamedNodeCoverage( void ) {
 	m_streamedNodeCoverageMin = s_v2iZero;
 	m_streamedNodeCoverageMax = s_v2iZero;
 	m_bStreamedNodeHasExtendedCoverage = false;
-	for ( const t3dStreamedNodeRuntimeDescriptor_t &descriptor : m_streamedNodeRuntime ) {
+	for ( size_t iNode = 0u; iNode < ( size_t )( ( m_streamedNodeRuntime ).size() ); iNode++ ) {
+		const t3dStreamedNodeRuntimeDescriptor_t &descriptor = ( m_streamedNodeRuntime )[iNode];
 		if ( descriptor.m_nBoundaryPolicy != STREAMED_NODE_BOUNDARY_COVERAGE ) {
 			continue;
 		}
@@ -1038,22 +1002,21 @@ void Terrain3DRegion::refreshStreamedNodeCoverage( void ) {
 	}
 }
 
-bool Terrain3DRegion::streamedNodeCoverageIntersects( const Vector2i &rOwnerLocation,
-		const Vector2i &rTargetMin,
-		const Vector2i &vTargetMax ) const {
+bool Terrain3DRegion::streamedNodeCoverageIntersects(
+        const Vector2i &rOwnerLocation, const Vector2i &rTargetMin, const Vector2i &vTargetMax ) const {
 	if ( m_streamedNodeRuntime.empty() ) {
 		if ( m_nCookedStreamedNodeCount == 0u ) {
 			return false;
 		}
 		const Vector2i cooked_min = rOwnerLocation + m_cookedStreamedNodeCoverageMin;
 		const Vector2i cooked_max = rOwnerLocation + m_cookedStreamedNodeCoverageMax;
-		return rOwnerLocation.x >= rTargetMin.x && rOwnerLocation.x <= vTargetMax.x &&
-				rOwnerLocation.y >= rTargetMin.y && rOwnerLocation.y <= vTargetMax.y ||
-				( cooked_min.x <= vTargetMax.x && cooked_max.x >= rTargetMin.x && cooked_min.y <= vTargetMax.y &&
-						cooked_max.y >= rTargetMin.y );
+		return rOwnerLocation.x >= rTargetMin.x && rOwnerLocation.x <= vTargetMax.x && rOwnerLocation.y >= rTargetMin.y
+		        && rOwnerLocation.y <= vTargetMax.y
+		        || ( cooked_min.x <= vTargetMax.x && cooked_max.x >= rTargetMin.x && cooked_min.y <= vTargetMax.y
+		                && cooked_max.y >= rTargetMin.y );
 	}
-	if ( rOwnerLocation.x >= rTargetMin.x && rOwnerLocation.x <= vTargetMax.x && rOwnerLocation.y >= rTargetMin.y &&
-			rOwnerLocation.y <= vTargetMax.y ) {
+	if ( rOwnerLocation.x >= rTargetMin.x && rOwnerLocation.x <= vTargetMax.x && rOwnerLocation.y >= rTargetMin.y
+	        && rOwnerLocation.y <= vTargetMax.y ) {
 		return true;
 	}
 	if ( !m_bStreamedNodeHasExtendedCoverage ) {
@@ -1061,18 +1024,19 @@ bool Terrain3DRegion::streamedNodeCoverageIntersects( const Vector2i &rOwnerLoca
 	}
 	const Vector2i aggregate_min = rOwnerLocation + m_streamedNodeCoverageMin;
 	const Vector2i aggregate_max = rOwnerLocation + m_streamedNodeCoverageMax;
-	if ( aggregate_min.x > vTargetMax.x || aggregate_max.x < rTargetMin.x || aggregate_min.y > vTargetMax.y ||
-			aggregate_max.y < rTargetMin.y ) {
+	if ( aggregate_min.x > vTargetMax.x || aggregate_max.x < rTargetMin.x || aggregate_min.y > vTargetMax.y
+	        || aggregate_max.y < rTargetMin.y ) {
 		return false;
 	}
-	for ( const t3dStreamedNodeRuntimeDescriptor_t &descriptor : m_streamedNodeRuntime ) {
+	for ( size_t iNode = 0u; iNode < ( size_t )( ( m_streamedNodeRuntime ).size() ); iNode++ ) {
+		const t3dStreamedNodeRuntimeDescriptor_t &descriptor = ( m_streamedNodeRuntime )[iNode];
 		if ( descriptor.m_nBoundaryPolicy != STREAMED_NODE_BOUNDARY_COVERAGE ) {
 			continue;
 		}
 		const Vector2i coverage_min = rOwnerLocation + descriptor.m_coverageMin;
 		const Vector2i coverage_max = rOwnerLocation + descriptor.m_coverageMax;
-		if ( coverage_min.x <= vTargetMax.x && coverage_max.x >= rTargetMin.x && coverage_min.y <= vTargetMax.y &&
-				coverage_max.y >= rTargetMin.y ) {
+		if ( coverage_min.x <= vTargetMax.x && coverage_max.x >= rTargetMin.x && coverage_min.y <= vTargetMax.y
+		        && coverage_max.y >= rTargetMin.y ) {
 			return true;
 		}
 	}
@@ -1080,12 +1044,13 @@ bool Terrain3DRegion::streamedNodeCoverageIntersects( const Vector2i &rOwnerLoca
 }
 
 const t3dStreamedNodeRuntimeDescriptor_t *Terrain3DRegion::findStreamedNodeRuntimeInternal( const int64_t nId ) const {
-	for ( const t3dStreamedNodeRuntimeDescriptor_t &descriptor : m_streamedNodeRuntime ) {
+	for ( size_t iNode = 0u; iNode < ( size_t )( ( m_streamedNodeRuntime ).size() ); iNode++ ) {
+		const t3dStreamedNodeRuntimeDescriptor_t &descriptor = ( m_streamedNodeRuntime )[iNode];
 		if ( descriptor.m_nId == nId ) {
 			return &descriptor;
 		}
 	}
-	return nullptr;
+	return NULL;
 }
 
 void Terrain3DRegion::setStreamedNodes( const Array &rNodes ) {
@@ -1101,8 +1066,7 @@ void Terrain3DRegion::setStreamedNodes( const Array &rNodes ) {
 			continue;
 		}
 		const String scene_path = source.has( "scene_path" ) ? String( source["scene_path"] ) : String();
-		const Ref<PackedScene> pScene =
-				source.has( "scene" ) ? Ref<PackedScene>( source["scene"] ) : Ref<PackedScene>();
+		const Ref<PackedScene> pScene = source.has( "scene" ) ? Ref<PackedScene>( source["scene"] ) : Ref<PackedScene>();
 		if ( scene_path.is_empty() && pScene.is_null() ) {
 			continue;
 		}
@@ -1121,14 +1085,14 @@ void Terrain3DRegion::setStreamedNodes( const Array &rNodes ) {
 		}
 		entry["transform"] = Transform3D( source["transform"] );
 		entry["state"] = source.has( "state" ) && Variant( source["state"] ).get_type() == Variant::DICTIONARY
-				? Dictionary( source["state"] ).duplicate( true )
-				: Dictionary();
+		        ? Dictionary( source["state"] ).duplicate( true )
+		        : Dictionary();
 		entry["flags"] = source.has( "flags" ) ? ( int )( source["flags"] ) : 0;
 		entry["hlod_min_level"] = CLAMP( source.has( "hlod_min_level" ) ? ( int )source["hlod_min_level"] : 1, 1, 6 );
 		t3dRegionStoreStreamedNodeBoundary( entry,
-				source.has( "boundary_policy" ) ? ( int )( source["boundary_policy"] ) : STREAMED_NODE_BOUNDARY_ANCHOR,
-				source.has( "coverage_min" ) ? Vector2i( source["coverage_min"] ) : s_v2iZero,
-				source.has( "coverage_max" ) ? Vector2i( source["coverage_max"] ) : s_v2iZero );
+		        source.has( "boundary_policy" ) ? ( int )( source["boundary_policy"] ) : STREAMED_NODE_BOUNDARY_ANCHOR,
+		        source.has( "coverage_min" ) ? Vector2i( source["coverage_min"] ) : s_v2iZero,
+		        source.has( "coverage_max" ) ? Vector2i( source["coverage_max"] ) : s_v2iZero );
 		t3dRegionStoreStreamedNodeLighting( entry, source );
 		m_streamedNodes.push_back( entry );
 	}
@@ -1139,14 +1103,14 @@ void Terrain3DRegion::setStreamedNodes( const Array &rNodes ) {
 }
 
 int64_t Terrain3DRegion::addStreamedNode( const Ref<PackedScene> &rScene,
-		const Transform3D &rLocalTransform,
-		const Dictionary &rState,
-		const int nFlags,
-		const int64_t nId,
-		const int nBoundaryPolicy,
-		const Vector2i &rCoverageMin,
-		const Vector2i &rCoverageMax,
-		const int nHlodMinLevel ) {
+        const Transform3D &rLocalTransform,
+        const Dictionary &rState,
+        const int nFlags,
+        const int64_t nId,
+        const int nBoundaryPolicy,
+        const Vector2i &rCoverageMin,
+        const Vector2i &rCoverageMax,
+        const int nHlodMinLevel ) {
 	if ( rScene.is_null() ) {
 		return 0;
 	}
@@ -1171,14 +1135,14 @@ int64_t Terrain3DRegion::addStreamedNode( const Ref<PackedScene> &rScene,
 }
 
 int64_t Terrain3DRegion::addStreamedNodePath( const String &rScenePath,
-		const Transform3D &rLocalTransform,
-		const Dictionary &rState,
-		const int nFlags,
-		const int64_t nId,
-		const int nBoundaryPolicy,
-		const Vector2i &rCoverageMin,
-		const Vector2i &rCoverageMax,
-		const int nHlodMinLevel ) {
+        const Transform3D &rLocalTransform,
+        const Dictionary &rState,
+        const int nFlags,
+        const int64_t nId,
+        const int nBoundaryPolicy,
+        const Vector2i &rCoverageMin,
+        const Vector2i &rCoverageMax,
+        const int nHlodMinLevel ) {
 	if ( rScenePath.is_empty() ) {
 		return 0;
 	}
@@ -1216,10 +1180,8 @@ bool Terrain3DRegion::removeStreamedNode( const int64_t nId ) {
 	return false;
 }
 
-bool Terrain3DRegion::updateStreamedNodeState( const int64_t nId,
-		const Transform3D &rLocalTransform,
-		const Dictionary &rState,
-		const int nFlags ) {
+bool Terrain3DRegion::updateStreamedNodeState(
+        const int64_t nId, const Transform3D &rLocalTransform, const Dictionary &rState, const int nFlags ) {
 	for ( int index = 0; index < m_streamedNodes.size(); ++index ) {
 		Dictionary entry = m_streamedNodes[index];
 		if ( !entry.has( "id" ) || ( int64_t )( entry["id"] ) != nId ) {
@@ -1254,12 +1216,12 @@ void Terrain3DRegion::setLocation( const Vector2i &rLocation ) {
 	// Locations are bounded by the fixed logical region map.
 	if ( Terrain3DData::getRegionMapIndex( rLocation ) < 0 ) {
 		LOG( ERROR,
-				"Location ",
-				rLocation,
-				" out of bounds. Max: ",
-				-s_nActiveMaxRegionMapSize / 2,
-				" to ",
-				s_nActiveMaxRegionMapSize / 2 - 1 );
+		        "Location ",
+		        rLocation,
+		        " out of bounds. Max: ",
+		        -s_nActiveMaxRegionMapSize / 2,
+		        " to ",
+		        s_nActiveMaxRegionMapSize / 2 - 1 );
 		return;
 	}
 	// Marked modified if setting after initialized
@@ -1288,9 +1250,9 @@ Error Terrain3DRegion::save( const String &rPath, const bool b16Bit ) {
 	}
 	if ( m_heightMap.is_null() ) {
 		LOG( ERROR,
-				"Cannot save mapless region ",
-				m_location,
-				". Page it through Terrain3DData::ensureCpuRegionResident() before direct region save." );
+		        "Cannot save mapless region ",
+		        m_location,
+		        ". Page it through Terrain3DData::ensureCpuRegionResident() before direct region save." );
 		return ERR_UNAVAILABLE;
 	}
 	if ( rPath.is_empty() && get_path().is_empty() ) {
@@ -1313,11 +1275,11 @@ Error Terrain3DRegion::save( const String &rPath, const bool b16Bit ) {
 		LOG( INFO, "File saved successfully" );
 	} else {
 		LOG( ERROR,
-				"Cannot save region file: ",
-				get_path(),
-				". Error code: ",
-				ERROR,
-				". Look up @GlobalScope Error enum in the Godot docs" );
+		        "Cannot save region file: ",
+		        get_path(),
+		        ". Error code: ",
+		        ERROR,
+		        ". Look up @GlobalScope Error enum in the Godot docs" );
 	}
 	return err;
 }
@@ -1407,7 +1369,7 @@ Ref<Terrain3DRegion> Terrain3DRegion::duplicate( const bool bDeep ) {
 	pRegion->m_instancePage = getInstancePage();
 	pRegion->m_bInstanceStoreResident = m_bInstanceStoreResident;
 	pRegion->m_bInstanceStoreModified = m_bInstanceStoreModified;
-	std::memcpy( pRegion->m_szInstanceMeshCounts, m_szInstanceMeshCounts, sizeof( m_szInstanceMeshCounts ) );
+	memcpy( pRegion->m_szInstanceMeshCounts, m_szInstanceMeshCounts, sizeof( m_szInstanceMeshCounts ) );
 	pRegion->m_nInstanceCount = m_nInstanceCount;
 	pRegion->m_nInstanceMeshCount = m_nInstanceMeshCount;
 	pRegion->m_streamedNodes = m_streamedNodes.duplicate( true );
@@ -1432,47 +1394,49 @@ Ref<Terrain3DRegion> Terrain3DRegion::duplicate( const bool bDeep ) {
 
 void Terrain3DRegion::dump( const bool bVerbose ) const {
 	LOG( MESG,
-			"Region: ",
-			m_location,
-			", version: ",
-			vformat( "%.2f", m_fVersion ),
-			", size: ",
-			m_nRegionSize,
-			", spacing: ",
-			vformat( "%.1f", m_fVertexSpacing ),
-			", range: ",
-			vformat( "%.2v", m_heightRange ),
-			", flags (",
-			m_bEdited ? "ed," : "",
-			m_bModified ? "mod," : "",
-			m_bDeleted ? "del" : "",
-			")" );
+	        "Region: ",
+	        m_location,
+	        ", version: ",
+	        vformat( "%.2f", m_fVersion ),
+	        ", size: ",
+	        m_nRegionSize,
+	        ", spacing: ",
+	        vformat( "%.1f", m_fVertexSpacing ),
+	        ", range: ",
+	        vformat( "%.2v", m_heightRange ),
+	        ", flags (",
+	        m_bEdited ? "ed," : "",
+	        m_bModified ? "mod," : "",
+	        m_bDeleted ? "del" : "",
+	        ")" );
 	LOG( MESG,
-			"Instances: mesh groups: ",
-			( int )( m_nInstanceMeshCount ),
-			", total: ",
-			( int )( m_nInstanceCount ),
-			m_bInstanceStoreResident ? ", resident" : ", paged",
-			", page bytes: ",
-			m_instancePage.size() );
+	        "Instances: mesh groups: ",
+	        ( int )( m_nInstanceMeshCount ),
+	        ", total: ",
+	        ( int )( m_nInstanceCount ),
+	        m_bInstanceStoreResident ? ", resident" : ", paged",
+	        ", page bytes: ",
+	        m_instancePage.size() );
 	if ( !m_bInstanceStoreResident ) {
 		LOG( MESG, "Streamed dynamic nodes: ", m_streamedNodes.size() );
 		return;
 	}
-	for ( const t3dInstanceMesh_t &mesh : m_instanceStore.meshes() ) {
+	for ( size_t iMesh = 0u; iMesh < ( size_t )( ( m_instanceStore.meshes() ).size() ); iMesh++ ) {
+		const t3dInstanceMesh_t &mesh = ( m_instanceStore.meshes() )[iMesh];
 		size_t count = 0;
-		for ( const t3dInstanceCell_t &cell : mesh.m_cells ) {
+		for ( size_t iCell = 0u; iCell < ( size_t )( ( mesh.m_cells ).size() ); iCell++ ) {
+			const t3dInstanceCell_t &cell = ( mesh.m_cells )[iCell];
 			count += cell.m_transforms.size();
 			if ( bVerbose ) {
 				LOG( MESG,
-						"Mesh ID: ",
-						mesh.m_nId,
-						" cell: ",
-						cell.m_location,
-						" xforms: ",
-						( int )( cell.m_transforms.size() ),
-						cell.usesColors() ? ", colored" : ", uncolored",
-						cell.m_bModified ? ", modified" : "" );
+				        "Mesh ID: ",
+				        mesh.m_nId,
+				        " cell: ",
+				        cell.m_location,
+				        " xforms: ",
+				        ( int )( cell.m_transforms.size() ),
+				        cell.usesColors() ? ", colored" : ", uncolored",
+				        cell.m_bModified ? ", modified" : "" );
 			}
 		}
 		LOG( MESG, "Mesh ID: ", mesh.m_nId, ", instance count: ", ( int )( count ) );
@@ -1526,13 +1490,11 @@ void Terrain3DRegion::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "has_channel", "map_type" ), &Terrain3DRegion::hasChannel );
 	ClassDB::bind_method( D_METHOD( "sanitize_maps" ), &Terrain3DRegion::sanitizeMaps );
 	ClassDB::bind_method( D_METHOD( "is_map_default", "map_type" ), &Terrain3DRegion::isMapDefault );
-	ClassDB::bind_method( D_METHOD( "compact_map_if_default", "map_type", "mark_modified" ),
-			&Terrain3DRegion::compactMapIfDefault,
-			DEFVAL( true ) );
+	ClassDB::bind_method(
+	        D_METHOD( "compact_map_if_default", "map_type", "mark_modified" ), &Terrain3DRegion::compactMapIfDefault, DEFVAL( true ) );
 	ClassDB::bind_method( D_METHOD( "compact_default_maps" ), &Terrain3DRegion::compactDefaultMaps );
-	ClassDB::bind_method( D_METHOD( "mark_map_edited", "map_type", "recalculate_height_range" ),
-			&Terrain3DRegion::markMapEdited,
-			DEFVAL( true ) );
+	ClassDB::bind_method(
+	        D_METHOD( "mark_map_edited", "map_type", "recalculate_height_range" ), &Terrain3DRegion::markMapEdited, DEFVAL( true ) );
 	ClassDB::bind_method( D_METHOD( "sanitize_map", "map_type", "map" ), &Terrain3DRegion::sanitizeMap );
 	ClassDB::bind_method( D_METHOD( "validate_map_size", "map" ), &Terrain3DRegion::validateMapSize );
 
@@ -1555,50 +1517,49 @@ void Terrain3DRegion::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "set_streamed_nodes", "nodes" ), &Terrain3DRegion::setStreamedNodes );
 	ClassDB::bind_method( D_METHOD( "get_streamed_nodes" ), &Terrain3DRegion::getStreamedNodes );
 	ClassDB::bind_method( D_METHOD( "add_streamed_node",
-								  "scene",
-								  "local_transform",
-								  "state",
-								  "flags",
-								  "id",
-								  "boundary_policy",
-								  "coverage_min",
-								  "coverage_max",
-								  "hlod_min_level" ),
-			&Terrain3DRegion::addStreamedNode,
-			DEFVAL( Dictionary() ),
-			DEFVAL( 0 ),
-			DEFVAL( 0 ),
-			DEFVAL( STREAMED_NODE_BOUNDARY_ANCHOR ),
-			DEFVAL( s_v2iZero ),
-			DEFVAL( s_v2iZero ),
-			DEFVAL( 1 ) );
+	                              "scene",
+	                              "local_transform",
+	                              "state",
+	                              "flags",
+	                              "id",
+	                              "boundary_policy",
+	                              "coverage_min",
+	                              "coverage_max",
+	                              "hlod_min_level" ),
+	        &Terrain3DRegion::addStreamedNode,
+	        DEFVAL( Dictionary() ),
+	        DEFVAL( 0 ),
+	        DEFVAL( 0 ),
+	        DEFVAL( STREAMED_NODE_BOUNDARY_ANCHOR ),
+	        DEFVAL( s_v2iZero ),
+	        DEFVAL( s_v2iZero ),
+	        DEFVAL( 1 ) );
 	ClassDB::bind_method( D_METHOD( "add_streamed_node_path",
-								  "scene_path",
-								  "local_transform",
-								  "state",
-								  "flags",
-								  "id",
-								  "boundary_policy",
-								  "coverage_min",
-								  "coverage_max",
-								  "hlod_min_level" ),
-			&Terrain3DRegion::addStreamedNodePath,
-			DEFVAL( Dictionary() ),
-			DEFVAL( 0 ),
-			DEFVAL( 0 ),
-			DEFVAL( STREAMED_NODE_BOUNDARY_ANCHOR ),
-			DEFVAL( s_v2iZero ),
-			DEFVAL( s_v2iZero ),
-			DEFVAL( 1 ) );
+	                              "scene_path",
+	                              "local_transform",
+	                              "state",
+	                              "flags",
+	                              "id",
+	                              "boundary_policy",
+	                              "coverage_min",
+	                              "coverage_max",
+	                              "hlod_min_level" ),
+	        &Terrain3DRegion::addStreamedNodePath,
+	        DEFVAL( Dictionary() ),
+	        DEFVAL( 0 ),
+	        DEFVAL( 0 ),
+	        DEFVAL( STREAMED_NODE_BOUNDARY_ANCHOR ),
+	        DEFVAL( s_v2iZero ),
+	        DEFVAL( s_v2iZero ),
+	        DEFVAL( 1 ) );
 	ClassDB::bind_method( D_METHOD( "remove_streamed_node", "id" ), &Terrain3DRegion::removeStreamedNode );
 	ClassDB::bind_method( D_METHOD( "get_streamed_node_count" ), &Terrain3DRegion::getStreamedNodeCount );
 	ClassDB::bind_method( D_METHOD( "set_lighting", "lighting" ), &Terrain3DRegion::setLighting );
 	ClassDB::bind_method( D_METHOD( "get_lighting" ), &Terrain3DRegion::getLighting );
 	ClassDB::bind_method( D_METHOD( "has_lighting" ), &Terrain3DRegion::hasLighting );
 	ClassDB::bind_method( D_METHOD( "streamed_node_coverage_intersects", "owner_location", "target_min", "target_max" ),
-			&Terrain3DRegion::streamedNodeCoverageIntersects );
-	ClassDB::bind_method(
-			D_METHOD( "has_extended_streamed_node_coverage" ), &Terrain3DRegion::hasExtendedStreamedNodeCoverage );
+	        &Terrain3DRegion::streamedNodeCoverageIntersects );
+	ClassDB::bind_method( D_METHOD( "has_extended_streamed_node_coverage" ), &Terrain3DRegion::hasExtendedStreamedNodeCoverage );
 
 	ClassDB::bind_method( D_METHOD( "save", "path", "save_16_bit" ), &Terrain3DRegion::save, DEFVAL( "" ), DEFVAL( false ) );
 
@@ -1617,76 +1578,57 @@ void Terrain3DRegion::_bind_methods( void ) {
 
 	const int ro_flags = PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY;
 	ADD_GROUP( "Identity / Format", "" );
-	ADD_PROPERTY(
-			PropertyInfo( Variant::FLOAT, "version", PROPERTY_HINT_NONE, "", ro_flags ), "set_version", "get_version" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "region_size", PROPERTY_HINT_NONE, "", ro_flags ),
-			"set_region_size",
-			"get_region_size" );
+	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "version", PROPERTY_HINT_NONE, "", ro_flags ), "set_version", "get_version" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "region_size", PROPERTY_HINT_NONE, "", ro_flags ), "set_region_size", "get_region_size" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "vertex_spacing", PROPERTY_HINT_NONE, "", ro_flags ),
-			"set_vertex_spacing",
-			"get_vertex_spacing" );
-	ADD_PROPERTY( PropertyInfo( Variant::VECTOR2, "height_range", PROPERTY_HINT_NONE, "", ro_flags ),
-			"set_height_range",
-			"get_height_range" );
+	        "set_vertex_spacing",
+	        "get_vertex_spacing" );
+	ADD_PROPERTY(
+	        PropertyInfo( Variant::VECTOR2, "height_range", PROPERTY_HINT_NONE, "", ro_flags ), "set_height_range", "get_height_range" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "channel_flags", PROPERTY_HINT_FLAGS, "Control,Color,Derived", ro_flags ),
-			"set_channel_flags",
-			"get_channel_flags" );
-	ADD_PROPERTY( PropertyInfo( Variant::VECTOR2I,
-						  "location",
-						  PROPERTY_HINT_NONE,
-						  "",
-						  PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-			"set_location",
-			"get_location" );
+	        "set_channel_flags",
+	        "get_channel_flags" );
+	ADD_PROPERTY( PropertyInfo( Variant::VECTOR2I, "location", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+	        "set_location",
+	        "get_location" );
 
 	ADD_GROUP( "Maps", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "height_map", PROPERTY_HINT_RESOURCE_TYPE, "Image", ro_flags ),
-			"set_height_map",
-			"get_height_map" );
+	        "set_height_map",
+	        "get_height_map" );
 	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "control_map", PROPERTY_HINT_RESOURCE_TYPE, "Image", ro_flags ),
-			"set_control_map",
-			"get_control_map" );
+	        "set_control_map",
+	        "get_control_map" );
 	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "color_map", PROPERTY_HINT_RESOURCE_TYPE, "Image", ro_flags ),
-			"set_color_map",
-			"get_color_map" );
+	        "set_color_map",
+	        "get_color_map" );
 
 	ADD_GROUP( "Instances", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::DICTIONARY, "instances", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-			"set_instances",
-			"_get_instances_legacy_storage" );
+	        "set_instances",
+	        "_get_instances_legacy_storage" );
 	ADD_PROPERTY( PropertyInfo( Variant::PACKED_BYTE_ARRAY, "instance_page", PROPERTY_HINT_NONE, "", ro_flags ),
-			"set_instance_page",
-			"get_instance_page" );
+	        "set_instance_page",
+	        "get_instance_page" );
 
 	ADD_GROUP( "Streamed Nodes", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::ARRAY, "streamed_nodes", PROPERTY_HINT_NONE, "", ro_flags ),
-			"set_streamed_nodes",
-			"get_streamed_nodes" );
+	        "set_streamed_nodes",
+	        "get_streamed_nodes" );
 
 	ADD_GROUP( "Baked Lighting", "" );
-	ADD_PROPERTY(
-			PropertyInfo( Variant::OBJECT, "lighting", PROPERTY_HINT_RESOURCE_TYPE, "Terrain3DRegionLighting", ro_flags ),
-			"set_lighting",
-			"get_lighting" );
+	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "lighting", PROPERTY_HINT_RESOURCE_TYPE, "Terrain3DRegionLighting", ro_flags ),
+	        "set_lighting",
+	        "get_lighting" );
 
 	ADD_GROUP( "Runtime / Edit State", "" );
-	ADD_PROPERTY(
-			PropertyInfo(
-					Variant::BOOL, "edited", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-			"set_edited",
-			"is_edited" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL,
-						  "deleted",
-						  PROPERTY_HINT_NONE,
-						  "",
-						  PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-			"set_deleted",
-			"is_deleted" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL,
-						  "modified",
-						  PROPERTY_HINT_NONE,
-						  "",
-						  PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-			"set_modified",
-			"is_modified" );
+	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "edited", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+	        "set_edited",
+	        "is_edited" );
+	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "deleted", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+	        "set_deleted",
+	        "is_deleted" );
+	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "modified", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+	        "set_modified",
+	        "is_modified" );
 }

@@ -1,6 +1,8 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "Terrain3DConstants.h"
 #include "data/terrain_3d_map_edit_service.h"
+#include "core/terrain_3d_eastl_helpers.h"
 
 #include "core/terrain_3d_util.h"
 #include "data/terrain_3d_region_codec.h"
@@ -12,29 +14,26 @@
 #include "simd/terrain_3d_parallel.h"
 #include "simd/terrain_3d_simd.h"
 
+#include <EASTL/numeric_limits.h>
 #include <EASTL/array.h>
 #include <EASTL/bitset.h>
-#include <algorithm>
-#include <cmath>
-#include <cstring>
+#include <math.h>
+#include <string.h>
 #include <godot_cpp/classes/os.hpp>
-#include <limits>
-#include <utility>
+#include <EASTL/algorithm.h>
+#include <EASTL/utility.h>
 
 typedef struct t3dDerivedMapBuildContext_s {
 	t3dSamplingSource_t m_samplingSource;
-	eastl::vector<t3dDerivedMapTask_t> *m_pTasks = nullptr;
-	float *m_pWorkerHaloScratch = nullptr;
-	uint8_t *m_pOutputScratch = nullptr;
+	eastl::vector<t3dDerivedMapTask_t, Terrain3DEastlAllocator> *m_pTasks = NULL;
+	float *m_pWorkerHaloScratch = NULL;
+	uint8_t *m_pOutputScratch = NULL;
 	size_t m_nWorkerHaloElements = 0u;
 	int m_nRegionSize = 0;
 	float m_fVertexSpacing = 1.0f;
 } t3dDerivedMapBuildContext_t;
 
-static void t3dMapEditServiceBuildDerivedMapRange( void *pContext,
-		const size_t nBegin,
-		const size_t nEnd,
-		const int32_t nWorkerIndex ) {
+static void t3dMapEditServiceBuildDerivedMapRange( void *pContext, const size_t nBegin, const size_t nEnd, const int32_t nWorkerIndex ) {
 	t3dDerivedMapBuildContext_t *const pBuildContext = ( t3dDerivedMapBuildContext_t * )( pContext );
 	Terrain3DSampler sampler( pBuildContext->m_samplingSource );
 	for ( size_t taskIndex = nBegin; taskIndex < nEnd; ++taskIndex ) {
@@ -50,12 +49,11 @@ static void t3dMapEditServiceBuildDerivedMapRange( void *pContext,
 
 		const int haloStride = width + 2;
 		const size_t halo_elements = ( size_t )haloStride * ( size_t )( height + 2 );
-		if ( pBuildContext->m_pWorkerHaloScratch == nullptr || pBuildContext->m_pOutputScratch == nullptr ||
-				halo_elements > pBuildContext->m_nWorkerHaloElements ) {
+		if ( pBuildContext->m_pWorkerHaloScratch == NULL || pBuildContext->m_pOutputScratch == NULL
+		        || halo_elements > pBuildContext->m_nWorkerHaloElements ) {
 			continue;
 		}
-		float *const pHalo = pBuildContext->m_pWorkerHaloScratch +
-				( size_t )MAX( 0, nWorkerIndex ) * pBuildContext->m_nWorkerHaloElements;
+		float *const pHalo = pBuildContext->m_pWorkerHaloScratch + ( size_t )MAX( 0, nWorkerIndex ) * pBuildContext->m_nWorkerHaloElements;
 		const int64_t regionBaseX = ( int64_t )( task.m_location.x ) * pBuildContext->m_nRegionSize;
 		const int64_t regionBaseZ = ( int64_t )( task.m_location.y ) * pBuildContext->m_nRegionSize;
 		const int64_t haloGridX = regionBaseX + task.m_dirtyRect.position.x - 1;
@@ -64,7 +62,7 @@ static void t3dMapEditServiceBuildDerivedMapRange( void *pContext,
 		for ( int y = -1; y <= height; ++y ) {
 			for ( int x = -1; x <= width; ++x ) {
 				float &sample = pHalo[( size_t )( y + 1 ) * ( size_t )haloStride + ( size_t )( x + 1 )];
-				if ( std::isfinite( sample ) ) {
+				if ( isfinite( sample ) ) {
 					continue;
 				}
 				const int localX = task.m_dirtyRect.position.x + x;
@@ -72,26 +70,23 @@ static void t3dMapEditServiceBuildDerivedMapRange( void *pContext,
 				const int clampedX = CLAMP( localX, 0, pBuildContext->m_nRegionSize - 1 );
 				const int clampedY = CLAMP( localY, 0, pBuildContext->m_nRegionSize - 1 );
 				sample = sampler.sampleHeightGrid( regionBaseX + clampedX, regionBaseZ + clampedY, false );
-				sample = std::isfinite( sample ) ? sample : 0.0f;
+				sample = isfinite( sample ) ? sample : 0.0f;
 			}
 		}
 
 		if ( task.m_nOutputBytes != ( size_t )width * ( size_t )height * 2u ) {
 			continue;
 		}
-		t3dSimdDerivedNormalsRg8( pHalo,
-				width,
-				height,
-				haloStride,
-				pBuildContext->m_fVertexSpacing,
-				pBuildContext->m_pOutputScratch + task.m_iOutputOffset );
+		t3dSimdDerivedNormalsRg8(
+		        pHalo, width, height, haloStride, pBuildContext->m_fVertexSpacing, pBuildContext->m_pOutputScratch + task.m_iOutputOffset );
 		task.m_bSuccess = true;
 	}
 }
 
-Terrain3DMapEditService::Terrain3DMapEditService( Terrain3DRegionRepository *const pRepository,
-		Terrain3DSamplingStorage *const pSamplingStorage ) :
-		m_pRepository( pRepository ), m_pSamplingStorage( pSamplingStorage ) {}
+Terrain3DMapEditService::Terrain3DMapEditService(
+        Terrain3DRegionRepository *const pRepository, Terrain3DSamplingStorage *const pSamplingStorage ) :
+        m_pRepository( pRepository ), m_pSamplingStorage( pSamplingStorage ) {
+}
 
 void Terrain3DMapEditService::reset( void ) {
 	m_editedArea = AABB();
@@ -108,31 +103,26 @@ void Terrain3DMapEditService::reset( void ) {
 
 void Terrain3DMapEditService::releaseRuntimeAllocatorStorage( void ) {
 	reset();
-	eastl::vector<t3dDerivedMapTask_t>().swap( m_derivedTaskScratch );
-	eastl::vector<float>().swap( m_fDerivedHaloScratch );
-	eastl::vector<float>().swap( m_fDerivedWorkerHaloScratch );
-	eastl::vector<uint8_t>().swap( m_derivedComputeScratch );
-	eastl::vector<uint8_t>().swap( m_derivedOutputScratch );
-	eastl::vector<Vector2i>().swap( m_activeLocationScratch );
-	eastl::vector<Vector2i>().swap( m_derivedLocationScratch );
-	eastl::vector<t3dDerivedMapUpdate_t>().swap( m_derivedUpdateScratch );
+	t3dVectorRelease( m_derivedTaskScratch );
+	t3dVectorRelease( m_fDerivedHaloScratch );
+	t3dVectorRelease( m_fDerivedWorkerHaloScratch );
+	t3dVectorRelease( m_derivedComputeScratch );
+	t3dVectorRelease( m_derivedOutputScratch );
+	t3dVectorRelease( m_activeLocationScratch );
+	t3dVectorRelease( m_derivedLocationScratch );
+	t3dVectorRelease( m_derivedUpdateScratch );
 }
 
-Rect2i Terrain3DMapEditService::getRegionDirtyRect( const Vector2i &rLocation,
-		const int nRegionSize,
-		const real_t fVertexSpacing,
-		const AABB &rEditedArea,
-		const int nMargin ) {
+Rect2i Terrain3DMapEditService::getRegionDirtyRect(
+        const Vector2i &rLocation, const int nRegionSize, const real_t fVertexSpacing, const AABB &rEditedArea, const int nMargin ) {
 	const Rect2i bounds( s_v2iZero, V2I( nRegionSize ) );
 	if ( nRegionSize <= 0 || fVertexSpacing <= 0.0f || rEditedArea.size.x <= 0.0f || rEditedArea.size.z <= 0.0f ) {
 		return bounds;
 	}
 
 	const Vector3 worldEnd = rEditedArea.get_end();
-	const int64_t globalBeginX =
-			( int64_t )( Math::floor( ( double )( rEditedArea.position.x / fVertexSpacing ) ) ) - nMargin;
-	const int64_t globalBeginZ =
-			( int64_t )( Math::floor( ( double )( rEditedArea.position.z / fVertexSpacing ) ) ) - nMargin;
+	const int64_t globalBeginX = ( int64_t )( Math::floor( ( double )( rEditedArea.position.x / fVertexSpacing ) ) ) - nMargin;
+	const int64_t globalBeginZ = ( int64_t )( Math::floor( ( double )( rEditedArea.position.z / fVertexSpacing ) ) ) - nMargin;
 	const int64_t globalEndX = ( int64_t )( Math::ceil( ( double )( worldEnd.x / fVertexSpacing ) ) ) + nMargin + 1;
 	const int64_t globalEndZ = ( int64_t )( Math::ceil( ( double )( worldEnd.z / fVertexSpacing ) ) ) + nMargin + 1;
 	const int64_t regionOriginX = ( int64_t )( rLocation.x ) * nRegionSize;
@@ -145,11 +135,8 @@ Rect2i Terrain3DMapEditService::getRegionDirtyRect( const Vector2i &rLocation,
 	return rect.size.x > 0 && rect.size.y > 0 ? rect : bounds;
 }
 
-Error Terrain3DMapEditService::setPixel( const t3dMapType_t eMapType,
-		const Vector3 &rGlobalPosition,
-		const Color &rPixel,
-		Vector2i &rRegionLocation,
-		Rect2i &rDirtyRect ) {
+Error Terrain3DMapEditService::setPixel(
+        const t3dMapType_t eMapType, const Vector3 &rGlobalPosition, const Color &rPixel, Vector2i &rRegionLocation, Rect2i &rDirtyRect ) {
 	rRegionLocation = s_v2iMax;
 	rDirtyRect = Rect2i();
 	if ( !m_pRepository || eMapType < TYPE_HEIGHT || eMapType >= REGION_TYPE_MAX ) {
@@ -180,35 +167,35 @@ Error Terrain3DMapEditService::setPixel( const t3dMapType_t eMapType,
 	return OK;
 }
 
-const eastl::vector<t3dDerivedMapUpdate_t> &Terrain3DMapEditService::regenerateDerivedMaps(
-		const eastl::vector<Vector2i> &rRegionLocations,
-		const AABB &rEditedArea,
-		Terrain3DCompute *const pCompute ) {
-	Terrain3DAllocationPhaseScope allocation_phase( TERRAIN3D_ALLOCATION_PHASE_COLD_REBUILD );
+const eastl::vector<t3dDerivedMapUpdate_t, Terrain3DEastlAllocator> &Terrain3DMapEditService::regenerateDerivedMaps(
+        const eastl::vector<Vector2i, Terrain3DEastlAllocator> &rRegionLocations,
+        const AABB &rEditedArea,
+        Terrain3DCompute *const pCompute ) {
+	Terrain3DColdAllocationScope allocation_scope;
 	m_derivedUpdateScratch.clear();
-	if ( !m_pRepository || !m_pSamplingStorage || rRegionLocations.empty() || m_pRepository->getRegionSize() <= 0 ||
-			m_pRepository->getVertexSpacing() <= 0.0f ) {
+	if ( !m_pRepository || !m_pSamplingStorage || rRegionLocations.empty() || m_pRepository->getRegionSize() <= 0
+	        || m_pRepository->getVertexSpacing() <= 0.0f ) {
 		return m_derivedUpdateScratch;
 	}
 
 	m_derivedTaskScratch.clear();
 	m_derivedTaskScratch.reserve( rRegionLocations.size() );
-	eastl::vector<t3dDerivedMapTask_t> &tasks = m_derivedTaskScratch;
-	for ( const Vector2i &location : rRegionLocations ) {
+	eastl::vector<t3dDerivedMapTask_t, Terrain3DEastlAllocator> &tasks = m_derivedTaskScratch;
+	for ( size_t iRegion = 0u; iRegion < ( size_t )( ( rRegionLocations ).size() ); iRegion++ ) {
+		const Vector2i &location = ( rRegionLocations )[iRegion];
 		t3dDerivedMapTask_t task;
 		task.m_location = location;
 		Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() ) {
-			tasks.push_back( std::move( task ) );
+			tasks.push_back( eastl::move( task ) );
 			continue;
 		}
 
 		task.m_bAvailable = true;
 		task.m_dirtyRect = Rect2i( s_v2iZero, V2I( m_pRepository->getRegionSize() ) );
-		if ( pRegion->getDerivedNormalSlopeMap().is_valid() && rEditedArea.size.x > 0.0f &&
-				rEditedArea.size.z > 0.0f ) {
-			const Vector2 regionWorldOrigin = Vector2( location ) * ( real_t )( m_pRepository->getRegionSize() ) *
-					m_pRepository->getVertexSpacing();
+		if ( pRegion->getDerivedNormalSlopeMap().is_valid() && rEditedArea.size.x > 0.0f && rEditedArea.size.z > 0.0f ) {
+			const Vector2 regionWorldOrigin =
+			        Vector2( location ) * ( real_t )( m_pRepository->getRegionSize() ) * m_pRepository->getVertexSpacing();
 			const Vector2 editBegin( rEditedArea.position.x, rEditedArea.position.z );
 			const Vector3 editEnd3d = rEditedArea.get_end();
 			const Vector2 editEnd( editEnd3d.x, editEnd3d.z );
@@ -216,14 +203,15 @@ const eastl::vector<t3dDerivedMapUpdate_t> &Terrain3DMapEditService::regenerateD
 			const Vector2 localEnd = ( editEnd - regionWorldOrigin ) / m_pRepository->getVertexSpacing();
 			const Vector2i pixelBegin = Vector2i( Math::floor( localBegin.x ), Math::floor( localBegin.y ) ) - V2I( 1 );
 			const Vector2i pixelEnd = Vector2i( Math::ceil( localEnd.x ), Math::ceil( localEnd.y ) ) + V2I( 1 );
-			task.m_dirtyRect = Rect2i( pixelBegin, pixelEnd - pixelBegin )
-									   .intersection( Rect2i( s_v2iZero, V2I( m_pRepository->getRegionSize() ) ) );
+			task.m_dirtyRect =
+			        Rect2i( pixelBegin, pixelEnd - pixelBegin ).intersection( Rect2i( s_v2iZero, V2I( m_pRepository->getRegionSize() ) ) );
 		}
-		tasks.push_back( std::move( task ) );
+		tasks.push_back( eastl::move( task ) );
 	}
 
 	size_t eligibleTaskCount = 0u;
-	for ( const t3dDerivedMapTask_t &task : tasks ) {
+	for ( size_t iTask = 0u; iTask < ( size_t )( ( tasks ).size() ); iTask++ ) {
+		const t3dDerivedMapTask_t &task = ( tasks )[iTask];
 		if ( task.m_bAvailable && task.m_dirtyRect.size.x > 0 && task.m_dirtyRect.size.y > 0 ) {
 			++eligibleTaskCount;
 		}
@@ -234,34 +222,32 @@ const eastl::vector<t3dDerivedMapUpdate_t> &Terrain3DMapEditService::regenerateD
 	size_t totalOutputBytes = 0u;
 	size_t maxHaloElements = 0u;
 	size_t maxComputeOutputBytes = 0u;
-	for ( t3dDerivedMapTask_t &task : tasks ) {
+	for ( size_t iTask = 0u; iTask < ( size_t )( ( tasks ).size() ); iTask++ ) {
+		t3dDerivedMapTask_t &task = ( tasks )[iTask];
 		if ( !task.m_bAvailable || task.m_dirtyRect.size.x <= 0 || task.m_dirtyRect.size.y <= 0 ) {
 			continue;
 		}
 		task.m_iOutputOffset = totalOutputBytes;
 		task.m_nOutputBytes = ( size_t )task.m_dirtyRect.size.x * ( size_t )task.m_dirtyRect.size.y * 2u;
 		totalOutputBytes += task.m_nOutputBytes;
-		maxHaloElements = MAX( maxHaloElements,
-				( size_t )( task.m_dirtyRect.size.x + 2 ) * ( size_t )( task.m_dirtyRect.size.y + 2 ) );
-		maxComputeOutputBytes = MAX( maxComputeOutputBytes,
-				( size_t )task.m_dirtyRect.size.x * ( size_t )task.m_dirtyRect.size.y * sizeof( uint32_t ) );
+		maxHaloElements = MAX( maxHaloElements, ( size_t )( task.m_dirtyRect.size.x + 2 ) * ( size_t )( task.m_dirtyRect.size.y + 2 ) );
+		maxComputeOutputBytes =
+		        MAX( maxComputeOutputBytes, ( size_t )task.m_dirtyRect.size.x * ( size_t )task.m_dirtyRect.size.y * sizeof( uint32_t ) );
 	}
 	m_derivedOutputScratch.resize( totalOutputBytes );
 	m_fDerivedWorkerHaloScratch.resize( maxHaloElements * ( size_t )workerCount );
 
 	const t3dSamplingSource_t samplingSource{ m_pRepository, m_pSamplingStorage };
-	if ( pCompute && eligibleTaskCount > 0u && maxHaloElements > 0u && maxComputeOutputBytes > 0u &&
-			maxHaloElements <= UINT32_MAX && maxComputeOutputBytes <= UINT32_MAX ) {
-		static constexpr size_t s_nComputeBatchSize = 3u;
+	if ( pCompute && eligibleTaskCount > 0u && maxHaloElements > 0u && maxComputeOutputBytes > 0u && maxHaloElements <= UINT32_MAX
+	        && maxComputeOutputBytes <= UINT32_MAX ) {
 		m_fDerivedHaloScratch.resize( maxHaloElements * s_nComputeBatchSize );
 		m_derivedComputeScratch.resize( maxComputeOutputBytes * s_nComputeBatchSize );
 		Terrain3DSampler sampler( samplingSource );
 		size_t taskCursor = 0u;
 		while ( taskCursor < tasks.size() ) {
-			t3dDerivedMapComputeJob_t jobs[s_nComputeBatchSize];
-			size_t taskIndices[s_nComputeBatchSize]{};
-			uint32_t jobCount = 0u;
-			while ( taskCursor < tasks.size() && jobCount < s_nComputeBatchSize ) {
+			eastl::fixed_vector<t3dDerivedMapComputeJob_t, s_nComputeBatchSize, false> jobs;
+			eastl::fixed_vector<size_t, s_nComputeBatchSize, false> task_indices;
+			while ( taskCursor < tasks.size() && jobs.size() < s_nComputeBatchSize ) {
 				t3dDerivedMapTask_t &task = tasks[taskCursor];
 				const size_t currentTask = taskCursor++;
 				const int width = task.m_dirtyRect.size.x;
@@ -269,10 +255,11 @@ const eastl::vector<t3dDerivedMapUpdate_t> &Terrain3DMapEditService::regenerateD
 				if ( !task.m_bAvailable || width <= 0 || height <= 0 ) {
 					continue;
 				}
+				const size_t job_index = jobs.size();
 				const int haloStride = width + 2;
 				const size_t haloElements = ( size_t )haloStride * ( size_t )( height + 2 );
 				const size_t rgbaBytes = ( size_t )width * ( size_t )height * sizeof( uint32_t );
-				float *const pHalo = m_fDerivedHaloScratch.data() + ( size_t )jobCount * maxHaloElements;
+				float *const pHalo = m_fDerivedHaloScratch.data() + job_index * maxHaloElements;
 				const int64_t regionBaseX = ( int64_t )( task.m_location.x ) * m_pRepository->getRegionSize();
 				const int64_t regionBaseZ = ( int64_t )( task.m_location.y ) * m_pRepository->getRegionSize();
 				const int64_t haloGridX = regionBaseX + task.m_dirtyRect.position.x - 1;
@@ -281,7 +268,7 @@ const eastl::vector<t3dDerivedMapUpdate_t> &Terrain3DMapEditService::regenerateD
 				for ( int y = -1; y <= height; ++y ) {
 					for ( int x = -1; x <= width; ++x ) {
 						float &sample = pHalo[( size_t )( y + 1 ) * ( size_t )haloStride + ( size_t )( x + 1 )];
-						if ( std::isfinite( sample ) ) {
+						if ( isfinite( sample ) ) {
 							continue;
 						}
 						const int localX = task.m_dirtyRect.position.x + x;
@@ -289,29 +276,29 @@ const eastl::vector<t3dDerivedMapUpdate_t> &Terrain3DMapEditService::regenerateD
 						const int clampedX = CLAMP( localX, 0, m_pRepository->getRegionSize() - 1 );
 						const int clampedY = CLAMP( localY, 0, m_pRepository->getRegionSize() - 1 );
 						sample = sampler.sampleHeightGrid( regionBaseX + clampedX, regionBaseZ + clampedY, false );
-						sample = std::isfinite( sample ) ? sample : 0.0f;
+						sample = isfinite( sample ) ? sample : 0.0f;
 					}
 				}
-				t3dDerivedMapComputeJob_t &job = jobs[jobCount];
+				jobs.push_back( t3dDerivedMapComputeJob_t{} );
+				t3dDerivedMapComputeJob_t &job = jobs.back();
 				job.m_pHeightHalo = pHalo;
-				job.m_pRgbaOutput = m_derivedComputeScratch.data() + ( size_t )jobCount * maxComputeOutputBytes;
+				job.m_pRgbaOutput = m_derivedComputeScratch.data() + job_index * maxComputeOutputBytes;
 				job.m_nHaloElements = ( uint32_t )haloElements;
 				job.m_nOutputBytes = ( uint32_t )rgbaBytes;
 				job.m_nWidth = ( uint32_t )width;
 				job.m_nHeight = ( uint32_t )height;
 				job.m_fVertexSpacing = ( float )( m_pRepository->getVertexSpacing() );
-				taskIndices[jobCount] = currentTask;
-				++jobCount;
+				task_indices.push_back( currentTask );
 			}
-			if ( jobCount == 0u ) {
+			if ( jobs.empty() ) {
 				continue;
 			}
-			pCompute->generateDerivedMaps( jobs, jobCount );
-			for ( uint32_t slot = 0u; slot < jobCount; ++slot ) {
+			pCompute->generateDerivedMaps( jobs.data(), ( uint32_t )( jobs.size() ) );
+			for ( size_t slot = 0u; slot < jobs.size(); ++slot ) {
 				if ( !jobs[slot].m_bSuccess ) {
 					continue;
 				}
-				t3dDerivedMapTask_t &task = tasks[taskIndices[slot]];
+				t3dDerivedMapTask_t &task = tasks[task_indices[slot]];
 				const size_t texelCount = ( size_t )task.m_dirtyRect.size.x * ( size_t )task.m_dirtyRect.size.y;
 				const uint8_t *const pRgba = jobs[slot].m_pRgbaOutput;
 				uint8_t *const pOutput = m_derivedOutputScratch.data() + task.m_iOutputOffset;
@@ -336,7 +323,8 @@ const eastl::vector<t3dDerivedMapUpdate_t> &Terrain3DMapEditService::regenerateD
 	executor.runStatic( tasks.size(), 1u, t3dMapEditServiceBuildDerivedMapRange, &buildContext );
 
 	m_derivedUpdateScratch.reserve( tasks.size() );
-	for ( t3dDerivedMapTask_t &task : tasks ) {
+	for ( size_t iTask = 0u; iTask < ( size_t )( ( tasks ).size() ); iTask++ ) {
+		t3dDerivedMapTask_t &task = ( tasks )[iTask];
 		if ( !task.m_bAvailable || task.m_dirtyRect.size.x <= 0 || task.m_dirtyRect.size.y <= 0 ) {
 			continue;
 		}
@@ -355,7 +343,7 @@ const eastl::vector<t3dDerivedMapUpdate_t> &Terrain3DMapEditService::regenerateD
 		PackedByteArray output;
 		output.resize( ( int64_t )task.m_nOutputBytes );
 		if ( task.m_nOutputBytes > 0u ) {
-			std::memcpy( output.ptrw(), m_derivedOutputScratch.data() + task.m_iOutputOffset, task.m_nOutputBytes );
+			memcpy( output.ptrw(), m_derivedOutputScratch.data() + task.m_iOutputOffset, task.m_nOutputBytes );
 		}
 		const int width = task.m_dirtyRect.size.x;
 		const int height = task.m_dirtyRect.size.y;
@@ -366,13 +354,12 @@ const eastl::vector<t3dDerivedMapUpdate_t> &Terrain3DMapEditService::regenerateD
 			continue;
 		}
 
-		if ( task.m_dirtyRect.position == s_v2iZero &&
-				task.m_dirtyRect.size == V2I( m_pRepository->getRegionSize() ) ) {
+		if ( task.m_dirtyRect.position == s_v2iZero && task.m_dirtyRect.size == V2I( m_pRepository->getRegionSize() ) ) {
 			pRegion->setDerivedNormalSlopeMapInternal( pTile );
 		} else {
 			Ref<Image> pDerived = pRegion->getDerivedNormalSlopeMap();
-			if ( pDerived.is_null() || pDerived->get_width() != m_pRepository->getRegionSize() ||
-					pDerived->get_height() != m_pRepository->getRegionSize() ) {
+			if ( pDerived.is_null() || pDerived->get_width() != m_pRepository->getRegionSize()
+			        || pDerived->get_height() != m_pRepository->getRegionSize() ) {
 				pRegion->invalidateDerivedNormalSlopeMap();
 				m_derivedUpdateScratch.push_back( update );
 				continue;
@@ -392,24 +379,24 @@ const eastl::vector<t3dDerivedMapUpdate_t> &Terrain3DMapEditService::regenerateD
 }
 
 t3dMapMutation_t Terrain3DMapEditService::commitMapEdits( const t3dMapType_t eMapType,
-		const eastl::vector<Vector2i> &rRegionLocations,
-		const AABB &rEditedArea,
-		Terrain3DCompute *const pCompute ) {
+        const eastl::vector<Vector2i, Terrain3DEastlAllocator> &rRegionLocations,
+        const AABB &rEditedArea,
+        Terrain3DCompute *const pCompute ) {
 	m_activeLocationScratch.clear();
 	m_derivedLocationScratch.clear();
 	m_derivedUpdateScratch.clear();
-	if ( !m_pRepository || !m_pSamplingStorage || eMapType < TYPE_HEIGHT || eMapType >= REGION_TYPE_MAX ||
-			rRegionLocations.empty() ) {
+	if ( !m_pRepository || !m_pSamplingStorage || eMapType < TYPE_HEIGHT || eMapType >= REGION_TYPE_MAX || rRegionLocations.empty() ) {
 		return {};
 	}
 
-	m_activeLocationScratch.reserve( MIN<size_t>( rRegionLocations.size(),
-			( size_t )( m_pRepository->getRegionMapSize() ) * ( size_t )( m_pRepository->getRegionMapSize() ) ) );
+	m_activeLocationScratch.reserve( MIN<size_t>(
+	        rRegionLocations.size(), ( size_t )( m_pRepository->getRegionMapSize() ) * ( size_t )( m_pRepository->getRegionMapSize() ) ) );
 	AABB editedArea = rEditedArea;
-	real_t editedMinHeight = std::numeric_limits<real_t>::infinity();
-	real_t editedMaxHeight = -std::numeric_limits<real_t>::infinity();
+	real_t editedMinHeight = eastl::numeric_limits<real_t>::infinity();
+	real_t editedMaxHeight = -eastl::numeric_limits<real_t>::infinity();
 
-	for ( const Vector2i &location : rRegionLocations ) {
+	for ( size_t iRegion = 0u; iRegion < ( size_t )( ( rRegionLocations ).size() ); iRegion++ ) {
+		const Vector2i &location = ( rRegionLocations )[iRegion];
 		Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() || m_pRepository->getRegionId( location ) < 0 ) {
 			continue;
@@ -418,10 +405,9 @@ t3dMapMutation_t Terrain3DMapEditService::commitMapEdits( const t3dMapType_t eMa
 		if ( eMapType == TYPE_CONTROL || eMapType == TYPE_COLOR ) {
 			pRegion->compactMapIfDefault( eMapType );
 		}
-		const Rect2i dirtyRect = getRegionDirtyRect(
-				location, m_pRepository->getRegionSize(), m_pRepository->getVertexSpacing(), editedArea );
-		if ( m_pSamplingStorage->isActiveOwner() &&
-				!m_pSamplingStorage->syncActiveMap( location, pRegion, eMapType, dirtyRect ) ) {
+		const Rect2i dirtyRect =
+		        getRegionDirtyRect( location, m_pRepository->getRegionSize(), m_pRepository->getVertexSpacing(), editedArea );
+		if ( m_pSamplingStorage->isActiveOwner() && !m_pSamplingStorage->syncActiveMap( location, pRegion, eMapType, dirtyRect ) ) {
 			continue;
 		}
 		m_pSamplingStorage->syncResidentMap( location, pRegion, eMapType, dirtyRect );
@@ -433,29 +419,29 @@ t3dMapMutation_t Terrain3DMapEditService::commitMapEdits( const t3dMapType_t eMa
 
 	if ( eMapType == TYPE_HEIGHT ) {
 		m_derivedLocationScratch.reserve( MIN<size_t>( m_activeLocationScratch.size() * 3u,
-				( size_t )( m_pRepository->getRegionMapSize() ) * ( size_t )( m_pRepository->getRegionMapSize() ) ) );
+		        ( size_t )( m_pRepository->getRegionMapSize() ) * ( size_t )( m_pRepository->getRegionMapSize() ) ) );
 		eastl::bitset<s_nMaxRegionSlots> derivedLocationSeen;
 		eastl::bitset<s_nMaxRegionSlots> activeLocationSeen;
-		for ( const Vector2i &location : m_activeLocationScratch ) {
+		for ( size_t iLocation = 0u; iLocation < ( size_t )( ( m_activeLocationScratch ).size() ); iLocation++ ) {
+			const Vector2i &location = ( m_activeLocationScratch )[iLocation];
 			const int mapIndex = Terrain3DRegionRepository::getRegionMapIndex( location );
 			if ( mapIndex >= 0 ) {
 				activeLocationSeen.set( ( size_t )( mapIndex ) );
 			}
 
-			eastl::array<Vector2i, 3> candidates;
-			int candidateCount = 1;
-			candidates[0] = location;
-			const Rect2i dirtyRect = getRegionDirtyRect(
-					location, m_pRepository->getRegionSize(), m_pRepository->getVertexSpacing(), editedArea );
+			eastl::fixed_vector<Vector2i, 3, false> candidates;
+			candidates.push_back( location );
+			const Rect2i dirtyRect =
+			        getRegionDirtyRect( location, m_pRepository->getRegionSize(), m_pRepository->getVertexSpacing(), editedArea );
 			if ( dirtyRect.position.x == 0 ) {
-				candidates[( size_t )( candidateCount++ )] = location + Vector2i( -1, 0 );
+				candidates.push_back( location + Vector2i( -1, 0 ) );
 			}
 			if ( dirtyRect.position.y == 0 ) {
-				candidates[( size_t )( candidateCount++ )] = location + Vector2i( 0, -1 );
+				candidates.push_back( location + Vector2i( 0, -1 ) );
 			}
 
-			for ( int candidateIndex = 0; candidateIndex < candidateCount; ++candidateIndex ) {
-				const Vector2i &candidate = candidates[( size_t )( candidateIndex )];
+			for ( size_t iCandidate = 0u; iCandidate < ( size_t )( ( candidates ).size() ); iCandidate++ ) {
+				const Vector2i &candidate = ( candidates )[iCandidate];
 				const int candidateMapIndex = Terrain3DRegionRepository::getRegionMapIndex( candidate );
 				if ( candidateMapIndex < 0 || derivedLocationSeen.test( ( size_t )( candidateMapIndex ) ) ) {
 					continue;
@@ -470,14 +456,16 @@ t3dMapMutation_t Terrain3DMapEditService::commitMapEdits( const t3dMapType_t eMa
 		}
 
 		regenerateDerivedMaps( m_derivedLocationScratch, editedArea, pCompute );
-		for ( const Vector2i &location : m_derivedLocationScratch ) {
+		for ( size_t iLocation = 0u; iLocation < ( size_t )( ( m_derivedLocationScratch ).size() ); iLocation++ ) {
+			const Vector2i &location = ( m_derivedLocationScratch )[iLocation];
 			const int mapIndex = Terrain3DRegionRepository::getRegionMapIndex( location );
 			if ( mapIndex >= 0 && !activeLocationSeen.test( ( size_t )( mapIndex ) ) ) {
 				m_pSamplingStorage->publishRegionGeneration( location );
 			}
 		}
 
-		for ( const Vector2i &location : m_activeLocationScratch ) {
+		for ( size_t iLocation = 0u; iLocation < ( size_t )( ( m_activeLocationScratch ).size() ); iLocation++ ) {
+			const Vector2i &location = ( m_activeLocationScratch )[iLocation];
 			if ( const Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location ) ) {
 				const Vector2 range = pRegion->getHeightRange();
 				editedMinHeight = MIN( editedMinHeight, range.x );
@@ -488,7 +476,8 @@ t3dMapMutation_t Terrain3DMapEditService::commitMapEdits( const t3dMapType_t eMa
 
 	if ( editedArea.size.x <= 0.0f || editedArea.size.z <= 0.0f ) {
 		bool bFirstRegion = true;
-		for ( const Vector2i &location : m_activeLocationScratch ) {
+		for ( size_t iLocation = 0u; iLocation < ( size_t )( ( m_activeLocationScratch ).size() ); iLocation++ ) {
+			const Vector2i &location = ( m_activeLocationScratch )[iLocation];
 			const Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
 			if ( !pRegion ) {
 				continue;
@@ -496,7 +485,7 @@ t3dMapMutation_t Terrain3DMapEditService::commitMapEdits( const t3dMapType_t eMa
 			const Vector2 range = pRegion->getHeightRange();
 			const real_t worldSize = pRegion->getRegionSize() * m_pRepository->getVertexSpacing();
 			const AABB regionArea( Vector3( location.x * worldSize, range.x, location.y * worldSize ),
-					Vector3( worldSize, MAX( range.y - range.x, m_pRepository->getVertexSpacing() ), worldSize ) );
+			        Vector3( worldSize, MAX( range.y - range.x, m_pRepository->getVertexSpacing() ), worldSize ) );
 			if ( bFirstRegion ) {
 				editedArea = regionArea;
 				bFirstRegion = false;
@@ -509,14 +498,15 @@ t3dMapMutation_t Terrain3DMapEditService::commitMapEdits( const t3dMapType_t eMa
 	Vector2 editedHeightRange = s_v2Zero;
 	if ( eMapType == TYPE_HEIGHT ) {
 		calculateHeightRange( false );
-		if ( std::isfinite( editedMinHeight ) && std::isfinite( editedMaxHeight ) ) {
+		if ( isfinite( editedMinHeight ) && isfinite( editedMaxHeight ) ) {
 			editedHeightRange = Vector2( editedMinHeight, editedMaxHeight );
 			editedArea.position.y = editedMinHeight;
 			editedArea.size.y = MAX( editedMaxHeight - editedMinHeight, m_pRepository->getVertexSpacing() );
 		}
 	}
 
-	for ( const Vector2i &location : m_activeLocationScratch ) {
+	for ( size_t iLocation = 0u; iLocation < ( size_t )( ( m_activeLocationScratch ).size() ); iLocation++ ) {
+		const Vector2i &location = ( m_activeLocationScratch )[iLocation];
 		m_pSamplingStorage->publishRegionGeneration( location );
 	}
 
@@ -525,7 +515,8 @@ t3dMapMutation_t Terrain3DMapEditService::commitMapEdits( const t3dMapType_t eMa
 
 void Terrain3DMapEditService::finalizeMapEdits( const t3dMapMutation_t &rMutation, const bool bKeepEdited ) {
 	if ( !bKeepEdited && m_pRepository ) {
-		for ( const Vector2i &location : rMutation.m_changedLocations ) {
+		for ( size_t iLocation = 0u; iLocation < ( size_t )( ( rMutation.m_changedLocations ).size() ); iLocation++ ) {
+			const Vector2i &location = ( rMutation.m_changedLocations )[iLocation];
 			if ( Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location ) ) {
 				pRegion->setEdited( false );
 			}
@@ -551,9 +542,7 @@ void Terrain3DMapEditService::recycleMutation( t3dMapMutation_t &&rMutation ) {
 	m_derivedUpdateScratch.clear();
 }
 
-bool Terrain3DMapEditService::buildRegionEditArea( const Vector2i &rRegionLocation,
-		const Rect2i &rDirtyRect,
-		AABB &rEditedArea ) const {
+bool Terrain3DMapEditService::buildRegionEditArea( const Vector2i &rRegionLocation, const Rect2i &rDirtyRect, AABB &rEditedArea ) const {
 	rEditedArea = AABB();
 	if ( !m_pRepository ) {
 		return false;
@@ -578,9 +567,9 @@ bool Terrain3DMapEditService::buildRegionEditArea( const Vector2i &rRegionLocati
 	const Vector2i pixelOrigin = rRegionLocation * regionSize + dirtyRect.position;
 	const Vector2 heightRange = pRegion->getHeightRange();
 	rEditedArea = AABB( Vector3( pixelOrigin.x * spacing, heightRange.x, pixelOrigin.y * spacing ),
-			Vector3( MAX( dirtyRect.size.x * spacing, spacing ),
-					MAX( heightRange.y - heightRange.x, spacing ),
-					MAX( dirtyRect.size.y * spacing, spacing ) ) );
+	        Vector3( MAX( dirtyRect.size.x * spacing, spacing ),
+	                MAX( heightRange.y - heightRange.x, spacing ),
+	                MAX( dirtyRect.size.y * spacing, spacing ) ) );
 	return true;
 }
 
@@ -609,9 +598,8 @@ void Terrain3DMapEditService::updateMasterHeights( const Vector2 &rLowHigh ) {
 	}
 }
 
-void Terrain3DMapEditService::calculateHeightRange( const bool bRecursive,
-		const EnsureRegionResidentFn pEnsureResident,
-		void *const pResidentContext ) {
+void Terrain3DMapEditService::calculateHeightRange(
+        const bool bRecursive, const EnsureRegionResidentFn pEnsureResident, void *const pResidentContext ) {
 	m_masterHeightRange = s_v2Zero;
 	if ( !m_pRepository ) {
 		return;
@@ -637,9 +625,9 @@ void Terrain3DMapEditService::calculateHeightRange( const bool bRecursive,
 }
 
 void Terrain3DMapEditService::copyRegionMaps( const Terrain3DRegion *const pSourceRegion,
-		const Rect2i &rSourceRect,
-		const Rect2i &rDestinationRect,
-		Terrain3DRegion *const pDestinationRegion ) const {
+        const Rect2i &rSourceRect,
+        const Rect2i &rDestinationRect,
+        Terrain3DRegion *const pDestinationRegion ) const {
 	if ( !pSourceRegion || !pDestinationRegion ) {
 		return;
 	}
@@ -659,12 +647,12 @@ void Terrain3DMapEditService::copyRegionMaps( const Terrain3DRegion *const pSour
 }
 
 Error Terrain3DMapEditService::importImages( const TypedArray<Image> &rImages,
-		const Vector3 &rGlobalPosition,
-		const real_t fOffset,
-		const real_t fScale,
-		const AcquireEditableRegionFn pAcquireRegion,
-		void *const pAcquireContext,
-		bool &rGenerateMipmaps ) {
+        const Vector3 &rGlobalPosition,
+        const real_t fOffset,
+        const real_t fScale,
+        const AcquireEditableRegionFn pAcquireRegion,
+        void *const pAcquireContext,
+        bool &rGenerateMipmaps ) {
 	rGenerateMipmaps = false;
 	if ( !m_pRepository || !pAcquireRegion || rImages.size() != REGION_TYPE_MAX ) {
 		return ERR_INVALID_PARAMETER;
@@ -688,8 +676,8 @@ Error Terrain3DMapEditService::importImages( const TypedArray<Image> &rImages,
 
 	const Vector3 descaledPosition = rGlobalPosition / m_pRepository->getVertexSpacing();
 	const int maxDimension = m_pRepository->getRegionSize() * m_pRepository->getRegionMapSize() / 2;
-	if ( std::abs( descaledPosition.x ) > maxDimension || std::abs( descaledPosition.z ) > maxDimension ||
-			descaledPosition.x + imageSize.x > maxDimension || descaledPosition.z + imageSize.y > maxDimension ) {
+	if ( abs( descaledPosition.x ) > maxDimension || abs( descaledPosition.z ) > maxDimension
+	        || descaledPosition.x + imageSize.x > maxDimension || descaledPosition.z + imageSize.y > maxDimension ) {
 		return ERR_INVALID_PARAMETER;
 	}
 
@@ -714,12 +702,11 @@ Error Terrain3DMapEditService::importImages( const TypedArray<Image> &rImages,
 		if ( mapIndex != TYPE_HEIGHT ) {
 			continue;
 		}
-		Ref<Image> pAdjusted =
-				Image::create_empty( pReadable->get_width(), pReadable->get_height(), false, Image::FORMAT_RF );
+		Ref<Image> pAdjusted = Image::create_empty( pReadable->get_width(), pReadable->get_height(), false, Image::FORMAT_RF );
 		for ( int y = 0; y < pReadable->get_height(); ++y ) {
 			for ( int x = 0; x < pReadable->get_width(); ++x ) {
 				const float sourceHeight = pReadable->get_pixel( x, y ).r;
-				const float height = std::isfinite( sourceHeight ) ? sourceHeight * fScale + fOffset : fOffset;
+				const float height = isfinite( sourceHeight ) ? sourceHeight * fScale + fOffset : fOffset;
 				pAdjusted->set_pixel( x, y, Color( height, 0.0f, 0.0f, 1.0f ) );
 			}
 		}
@@ -730,10 +717,8 @@ Error Terrain3DMapEditService::importImages( const TypedArray<Image> &rImages,
 	const int imageStartZ = ( int )( Math::floor( descaledPosition.z ) );
 	const int imageEndX = imageStartX + imageSize.x - 1;
 	const int imageEndZ = imageStartZ + imageSize.y - 1;
-	int startRegionX =
-			( int )( Math::floor( ( real_t )( imageStartX ) / ( real_t )( m_pRepository->getRegionSize() ) ) );
-	int startRegionZ =
-			( int )( Math::floor( ( real_t )( imageStartZ ) / ( real_t )( m_pRepository->getRegionSize() ) ) );
+	int startRegionX = ( int )( Math::floor( ( real_t )( imageStartX ) / ( real_t )( m_pRepository->getRegionSize() ) ) );
+	int startRegionZ = ( int )( Math::floor( ( real_t )( imageStartZ ) / ( real_t )( m_pRepository->getRegionSize() ) ) );
 	int endRegionX = ( int )( Math::floor( ( real_t )( imageEndX ) / ( real_t )( m_pRepository->getRegionSize() ) ) );
 	int endRegionZ = ( int )( Math::floor( ( real_t )( imageEndZ ) / ( real_t )( m_pRepository->getRegionSize() ) ) );
 
@@ -781,8 +766,8 @@ Error Terrain3DMapEditService::importImages( const TypedArray<Image> &rImages,
 				const t3dMapType_t mapType = ( t3dMapType_t )( mapIndex );
 				const Ref<Image> pExistingMap = pRegion->getMap( mapType );
 				if ( mapType == TYPE_HEIGHT ) {
-					pRegionMap = Image::create_empty(
-							m_pRepository->getRegionSize(), m_pRepository->getRegionSize(), false, Image::FORMAT_RF );
+					pRegionMap =
+					        Image::create_empty( m_pRepository->getRegionSize(), m_pRepository->getRegionSize(), false, Image::FORMAT_RF );
 					if ( pExistingMap.is_valid() && !pExistingMap->is_empty() ) {
 						for ( int y = 0; y < m_pRepository->getRegionSize(); ++y ) {
 							for ( int x = 0; x < m_pRepository->getRegionSize(); ++x ) {
@@ -800,15 +785,11 @@ Error Terrain3DMapEditService::importImages( const TypedArray<Image> &rImages,
 						pRegionMap->convert( pImage->get_format() );
 					}
 				} else {
-					pRegionMap = Terrain3DUtil::getFilledImage( m_pRepository->getRegionSizeVector(),
-							s_szRegionMapDefaultColors[mapIndex],
-							false,
-							pImage->get_format() );
+					pRegionMap = Terrain3DUtil::getFilledImage(
+					        m_pRepository->getRegionSizeVector(), s_szRegionMapDefaultColors[mapIndex], false, pImage->get_format() );
 				}
 
-				pRegionMap->blit_rect( pImage,
-						Rect2i( sourceX, sourceZ, copyWidth, copyHeight ),
-						Vector2i( destinationX, destinationZ ) );
+				pRegionMap->blit_rect( pImage, Rect2i( sourceX, sourceZ, copyWidth, copyHeight ), Vector2i( destinationX, destinationZ ) );
 				pRegion->setMap( mapType, pRegionMap );
 				if ( mapType == TYPE_COLOR ) {
 					rGenerateMipmaps = true;
@@ -821,9 +802,8 @@ Error Terrain3DMapEditService::importImages( const TypedArray<Image> &rImages,
 	return OK;
 }
 
-Ref<Image> Terrain3DMapEditService::layeredToImage( const t3dMapType_t eMapType,
-		const EnsureRegionResidentFn pEnsureResident,
-		void *const pResidentContext ) const {
+Ref<Image> Terrain3DMapEditService::layeredToImage(
+        const t3dMapType_t eMapType, const EnsureRegionResidentFn pEnsureResident, void *const pResidentContext ) const {
 	if ( !m_pRepository || m_pRepository->getRegionSize() <= 0 ) {
 		return Ref<Image>();
 	}
@@ -834,7 +814,7 @@ Ref<Image> Terrain3DMapEditService::layeredToImage( const t3dMapType_t eMapType,
 	Vector2i bottomRight = s_v2iZero;
 	for ( int slot = 0; slot < m_pRepository->getSlotCount(); ++slot ) {
 		const Vector2i location = m_pRepository->getSlotsData()[slot];
-		const Terrain3DRegion *const pRegion = location == s_v2iMax ? nullptr : m_pRepository->getRegionPtr( location );
+		const Terrain3DRegion *const pRegion = location == s_v2iMax ? NULL : m_pRepository->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() ) {
 			continue;
 		}
@@ -852,17 +832,16 @@ Ref<Image> Terrain3DMapEditService::layeredToImage( const t3dMapType_t eMapType,
 
 	if ( !bFoundRegion ) {
 		return Terrain3DUtil::getFilledImage( m_pRepository->getRegionSizeVector(),
-				s_szRegionMapDefaultColors[mapType],
-				false,
-				mapType == TYPE_HEIGHT ? Image::FORMAT_RF : s_szRegionMapFormats[mapType] );
+		        s_szRegionMapDefaultColors[mapType],
+		        false,
+		        mapType == TYPE_HEIGHT ? Image::FORMAT_RF : s_szRegionMapFormats[mapType] );
 	}
 
-	const Vector2i imageSize =
-			Vector2i( 1 + bottomRight.x - topLeft.x, 1 + bottomRight.y - topLeft.y ) * m_pRepository->getRegionSize();
+	const Vector2i imageSize = Vector2i( 1 + bottomRight.x - topLeft.x, 1 + bottomRight.y - topLeft.y ) * m_pRepository->getRegionSize();
 	Ref<Image> pImage = Terrain3DUtil::getFilledImage( imageSize,
-			s_szRegionMapDefaultColors[mapType],
-			false,
-			mapType == TYPE_HEIGHT ? Image::FORMAT_RF : s_szRegionMapFormats[mapType] );
+	        s_szRegionMapDefaultColors[mapType],
+	        false,
+	        mapType == TYPE_HEIGHT ? Image::FORMAT_RF : s_szRegionMapFormats[mapType] );
 
 	for ( int slot = 0; slot < m_pRepository->getSlotCount(); ++slot ) {
 		const Vector2i location = m_pRepository->getSlotsData()[slot];
@@ -887,8 +866,8 @@ Ref<Image> Terrain3DMapEditService::layeredToImage( const t3dMapType_t eMapType,
 			for ( int y = 0; y < m_pRepository->getRegionSize(); ++y ) {
 				for ( int x = 0; x < m_pRepository->getRegionSize(); ++x ) {
 					pImage->set_pixel( imageLocation.x + x,
-							imageLocation.y + y,
-							Color( t3dRegionCodecReadHeightPixel( *pSource, Vector2i( x, y ) ), 0.0f, 0.0f, 1.0f ) );
+					        imageLocation.y + y,
+					        Color( t3dRegionCodecReadHeightPixel( *pSource, Vector2i( x, y ) ), 0.0f, 0.0f, 1.0f ) );
 				}
 			}
 		} else if ( pSource.is_valid() ) {
@@ -899,18 +878,14 @@ Ref<Image> Terrain3DMapEditService::layeredToImage( const t3dMapType_t eMapType,
 }
 
 size_t Terrain3DMapEditService::getTransientScratchBytes( void ) const {
-	return m_derivedTaskScratch.capacity() * sizeof( t3dDerivedMapTask_t ) +
-			m_fDerivedHaloScratch.capacity() * sizeof( float ) +
-			m_fDerivedWorkerHaloScratch.capacity() * sizeof( float ) +
-			m_derivedOutputScratch.capacity() * sizeof( uint8_t ) +
-			m_activeLocationScratch.capacity() * sizeof( Vector2i ) +
-			m_derivedLocationScratch.capacity() * sizeof( Vector2i ) +
-			m_derivedUpdateScratch.capacity() * sizeof( t3dDerivedMapUpdate_t );
+	return m_derivedTaskScratch.capacity() * sizeof( t3dDerivedMapTask_t ) + m_fDerivedHaloScratch.capacity() * sizeof( float )
+	        + m_fDerivedWorkerHaloScratch.capacity() * sizeof( float ) + m_derivedOutputScratch.capacity() * sizeof( uint8_t )
+	        + m_activeLocationScratch.capacity() * sizeof( Vector2i ) + m_derivedLocationScratch.capacity() * sizeof( Vector2i )
+	        + m_derivedUpdateScratch.capacity() * sizeof( t3dDerivedMapUpdate_t );
 }
 
-t3dMapMutation_t Terrain3DMapEditService::makeMutationResult( const t3dMapType_t eMapType,
-		const AABB &rEditedArea,
-		const Vector2 &rEditedHeightRange ) {
+t3dMapMutation_t Terrain3DMapEditService::makeMutationResult(
+        const t3dMapType_t eMapType, const AABB &rEditedArea, const Vector2 &rEditedHeightRange ) {
 	t3dMapMutation_t result;
 	result.m_mapType = eMapType;
 	result.m_editedArea = rEditedArea;

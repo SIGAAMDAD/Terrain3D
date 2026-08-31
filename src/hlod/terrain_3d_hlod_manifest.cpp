@@ -5,8 +5,8 @@
 #include <godot_cpp/core/class_db.hpp>
 
 bool Terrain3DHLODManifest::compileRuntimeBlob( void ) {
-	PackedByteArray compiled = Terrain3DHLODRuntimeCodec::encode(
-			m_entries, m_instancerMinLevels, m_nodeRegionIndices, m_nodeSpawnIds, m_nodeMinLevels );
+	PackedByteArray compiled =
+	        Terrain3DHLODRuntimeCodec::encode( m_entries, m_instancerMinLevels, m_nodeRegionIndices, m_nodeSpawnIds, m_nodeMinLevels );
 	if ( compiled.is_empty() ) {
 		return false;
 	}
@@ -16,8 +16,8 @@ bool Terrain3DHLODManifest::compileRuntimeBlob( void ) {
 }
 
 void Terrain3DHLODManifest::_bind_methods( void ) {
-#define BIND_RW( name, setter, getter ) \
-	ClassDB::bind_method( D_METHOD( setter, "value" ), &Terrain3DHLODManifest::name ); \
+#define BIND_RW( name, setter, getter )                                                                                                    \
+	ClassDB::bind_method( D_METHOD( setter, "value" ), &Terrain3DHLODManifest::name );                                                     \
 	ClassDB::bind_method( D_METHOD( getter ), &Terrain3DHLODManifest::get##name )
 	ClassDB::bind_method( D_METHOD( "set_format", "value" ), &Terrain3DHLODManifest::setFormat );
 	ClassDB::bind_method( D_METHOD( "get_format" ), &Terrain3DHLODManifest::getFormat );
@@ -55,19 +55,13 @@ void Terrain3DHLODManifest::_bind_methods( void ) {
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "build_signature" ), "set_build_signature", "get_build_signature" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "built_unix" ), "set_built_unix", "get_built_unix" );
 	ADD_PROPERTY( PropertyInfo( Variant::ARRAY, "entries" ), "set_entries", "get_entries" );
-	ADD_PROPERTY( PropertyInfo( Variant::PACKED_BYTE_ARRAY, "instancer_min_levels" ),
-			"set_instancer_min_levels",
-			"get_instancer_min_levels" );
-	ADD_PROPERTY( PropertyInfo( Variant::PACKED_INT32_ARRAY, "node_region_indices" ),
-			"set_node_region_indices",
-			"get_node_region_indices" );
 	ADD_PROPERTY(
-			PropertyInfo( Variant::PACKED_INT64_ARRAY, "node_spawn_ids" ), "set_node_spawn_ids", "get_node_spawn_ids" );
-	ADD_PROPERTY( PropertyInfo( Variant::PACKED_BYTE_ARRAY, "node_min_levels" ),
-			"set_node_min_levels",
-			"get_node_min_levels" );
+	        PropertyInfo( Variant::PACKED_BYTE_ARRAY, "instancer_min_levels" ), "set_instancer_min_levels", "get_instancer_min_levels" );
 	ADD_PROPERTY(
-			PropertyInfo( Variant::PACKED_BYTE_ARRAY, "runtime_blob", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-			"set_runtime_blob",
-			"get_runtime_blob" );
+	        PropertyInfo( Variant::PACKED_INT32_ARRAY, "node_region_indices" ), "set_node_region_indices", "get_node_region_indices" );
+	ADD_PROPERTY( PropertyInfo( Variant::PACKED_INT64_ARRAY, "node_spawn_ids" ), "set_node_spawn_ids", "get_node_spawn_ids" );
+	ADD_PROPERTY( PropertyInfo( Variant::PACKED_BYTE_ARRAY, "node_min_levels" ), "set_node_min_levels", "get_node_min_levels" );
+	ADD_PROPERTY( PropertyInfo( Variant::PACKED_BYTE_ARRAY, "runtime_blob", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
+	        "set_runtime_blob",
+	        "get_runtime_blob" );
 }

@@ -387,6 +387,10 @@ public partial class Terrain3DData : GodotObject
 		public new static readonly StringName SaveRegion = "save_region";
 		/// <summary>Cached name for inspecting runtime GPU page coverage.</summary>
 		public new static readonly StringName InspectGpuRegionPages = "inspect_gpu_region_pages";
+		/// <summary>Cached name for inspecting runtime page format migration.</summary>
+		public new static readonly StringName InspectGpuRegionPageMigration = "inspect_gpu_region_page_migration";
+		/// <summary>Cached name for migrating runtime pages to the current format.</summary>
+		public new static readonly StringName MigrateGpuRegionPages = "migrate_gpu_region_pages";
 		/// <summary>
 		/// Cached name for the 'cook_gpu_region_pages' member.
 		/// </summary>
@@ -649,6 +653,12 @@ public partial class Terrain3DData : GodotObject
 
 	public new Godot.Collections.Dictionary InspectGpuRegionPages() =>
 		Call(GDExtensionMethodName.InspectGpuRegionPages).As<Godot.Collections.Dictionary>();
+
+	public new Godot.Collections.Dictionary InspectGpuRegionPageMigration() =>
+		Call(GDExtensionMethodName.InspectGpuRegionPageMigration).As<Godot.Collections.Dictionary>();
+
+	public new Godot.Collections.Dictionary MigrateGpuRegionPages(bool repair = false) =>
+		Call(GDExtensionMethodName.MigrateGpuRegionPages, [repair]).As<Godot.Collections.Dictionary>();
 
 	public new Godot.Collections.Dictionary CookGpuRegionPages() =>
 		Call(GDExtensionMethodName.CookGpuRegionPages).As<Godot.Collections.Dictionary>();

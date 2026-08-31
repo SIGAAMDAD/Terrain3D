@@ -1,7 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_TEXTURE_CLASS_H
 #define TERRAIN3D_TEXTURE_CLASS_H
 
@@ -78,7 +76,8 @@ public:
 	EA_FORCE_INLINE Terrain3DTextureAsset( void ) {
 		clear();
 	}
-	EA_FORCE_INLINE ~Terrain3DTextureAsset( void ) {}
+	EA_FORCE_INLINE ~Terrain3DTextureAsset( void ) {
+	}
 	void initialize( void ) override;
 	void clear( void ) override;
 

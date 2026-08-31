@@ -1,7 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 // Editor-time semantic landform authoring and procedural cliff generation.
-#pragma once
-
 #ifndef TERRAIN3D_LANDFORM_BAKER_H
 #define TERRAIN3D_LANDFORM_BAKER_H
 
@@ -65,12 +63,9 @@ class Terrain3DLandformBaker : public RefCounted {
 public:
 	Dictionary apply( Terrain3D *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings );
 	void restore( Terrain3D *pTerrain, const Array &rSnapshots, const AABB &rEditedArea );
-	Ref<ArrayMesh>
-	buildCliffMesh( Terrain3D *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings ) const;
-	Dictionary
-	buildCliffModules( Terrain3D *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings ) const;
-	Ref<ArrayMesh>
-	buildCliffCollisionMesh( Terrain3D *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings ) const;
+	Ref<ArrayMesh> buildCliffMesh( Terrain3D *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings ) const;
+	Dictionary buildCliffModules( Terrain3D *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings ) const;
+	Ref<ArrayMesh> buildCliffCollisionMesh( Terrain3D *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings ) const;
 
 protected:
 	static void _bind_methods( void );

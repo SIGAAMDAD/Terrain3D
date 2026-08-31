@@ -2,24 +2,27 @@
 
 #include "data/terrain_3d_region_repository.h"
 
-#include <algorithm>
-#include <cstring>
+#include <string.h>
 
 Terrain3DRegionRepository::Terrain3DRegionRepository( void ) {
-	std::fill_n( m_szRegionLocations, s_nMaxRegionSlots, s_v2iMax );
+	for ( int i = 0; i < s_nMaxRegionSlots; ++i ) {
+		m_szRegionLocations[i] = s_v2iMax;
+	}
 }
 
 void Terrain3DRegionRepository::clear( void ) {
-	for ( Ref<Terrain3DRegion> &region : m_szRegionRefs ) {
+	for ( size_t iRegion = 0u; iRegion < T3D_ARRAY_COUNT( m_szRegionRefs ); iRegion++ ) {
+		Ref<Terrain3DRegion> &region = ( m_szRegionRefs )[iRegion];
 		region.unref();
 	}
 	m_nRegionResourceCount = 0;
-	std::fill_n( m_pszRegionPtrMap, s_nMaxRegionSlots, nullptr );
-	std::fill_n( m_szRegionLocations, s_nMaxRegionSlots, s_v2iMax );
-	std::fill_n( m_szFreeRegionSlots, s_nMaxRegionSlots, ( uint16_t )( 0 ) );
-	std::fill_n( m_szRegionMap, s_nMaxRegionSlots, ( uint16_t )( 0 ) );
+	memset( m_pszRegionPtrMap, 0, sizeof( m_pszRegionPtrMap[0] ) * s_nMaxRegionSlots );
+	for ( int i = 0; i < s_nMaxRegionSlots; ++i ) {
+		m_szRegionLocations[i] = s_v2iMax;
+	}
+	memset( m_szRegionMap, ( uint16_t )( 0 ), sizeof( *m_szRegionMap ) * s_nMaxRegionSlots );
 	m_nRegionLocationCount = 0;
-	m_nFreeRegionSlotCount = 0;
+	m_freeRegionSlots.clear();
 	m_nActiveRegionCount = 0;
 	m_bRegionMapDirty = true;
 	bumpTopologyGeneration();
@@ -27,7 +30,8 @@ void Terrain3DRegionRepository::clear( void ) {
 
 bool Terrain3DRegionRepository::releaseRuntimeAllocatorStorage( void ) {
 	bool released = true;
-	for ( Ref<Terrain3DRegion> &region : m_szRegionRefs ) {
+	for ( size_t iRegion = 0u; iRegion < T3D_ARRAY_COUNT( m_szRegionRefs ); iRegion++ ) {
+		Ref<Terrain3DRegion> &region = ( m_szRegionRefs )[iRegion];
 		if ( region.is_valid() && !region->releaseRuntimeAllocatorStorageInternal() ) {
 			released = false;
 		}
@@ -61,8 +65,8 @@ void Terrain3DRegionRepository::setVertexSpacing( const real_t fVertexSpacing ) 
 
 int Terrain3DRegionRepository::getRegionMapIndex( const Vector2i &rRegionLoc ) {
 	const Vector2i loc = rRegionLoc + ( s_regionMapVSize / 2 );
-	if ( ( uint32_t )( loc.x ) >= ( uint32_t )( s_nActiveMaxRegionMapSize ) ||
-			( uint32_t )( loc.y ) >= ( uint32_t )( s_nActiveMaxRegionMapSize ) ) {
+	if ( ( uint32_t )( loc.x ) >= ( uint32_t )( s_nActiveMaxRegionMapSize )
+	        || ( uint32_t )( loc.y ) >= ( uint32_t )( s_nActiveMaxRegionMapSize ) ) {
 		return -1;
 	}
 	return loc.y * s_nActiveMaxRegionMapSize + loc.x;
@@ -117,10 +121,10 @@ int Terrain3DRegionRepository::findSlot( const Vector2i &rRegionLoc ) const {
 
 Terrain3DRegion *Terrain3DRegionRepository::getRegionPtr( const Vector2i &rRegionLoc ) const {
 	if ( !isLocationValid( rRegionLoc ) ) {
-		return nullptr;
+		return NULL;
 	}
 	const int mapIndex = getRegionMapIndex( rRegionLoc );
-	return mapIndex >= 0 ? m_pszRegionPtrMap[mapIndex] : nullptr;
+	return mapIndex >= 0 ? m_pszRegionPtrMap[mapIndex] : NULL;
 }
 
 Ref<Terrain3DRegion> Terrain3DRegionRepository::getRegion( const Vector2i &rRegionLoc ) const {
@@ -139,8 +143,7 @@ Dictionary Terrain3DRegionRepository::getRegions( void ) const {
 		}
 		const int x = mapIndex % s_nActiveMaxRegionMapSize;
 		const int y = mapIndex / s_nActiveMaxRegionMapSize;
-		regions[Vector2i( x - s_nActiveMaxRegionMapSize / 2, y - s_nActiveMaxRegionMapSize / 2 )] =
-				m_szRegionRefs[mapIndex];
+		regions[Vector2i( x - s_nActiveMaxRegionMapSize / 2, y - s_nActiveMaxRegionMapSize / 2 )] = m_szRegionRefs[mapIndex];
 	}
 	return regions;
 }
@@ -247,16 +250,15 @@ void Terrain3DRegionRepository::eraseRegionResource( const Vector2i &rLocation )
 		m_szRegionRefs[mapIndex].unref();
 		m_nRegionResourceCount = MAX( 0, m_nRegionResourceCount - 1 );
 	}
-	m_pszRegionPtrMap[mapIndex] = nullptr;
+	m_pszRegionPtrMap[mapIndex] = NULL;
 }
 
 int Terrain3DRegionRepository::activateLocation( const Vector2i &rLocation, const bool bPublishRegionMap ) {
 	return activateLocationInternal( rLocation, bPublishRegionMap, true );
 }
 
-int Terrain3DRegionRepository::activateLocationInternal( const Vector2i &rLocation,
-		const bool bPublishRegionMap,
-		const bool bBumpGeneration ) {
+int Terrain3DRegionRepository::activateLocationInternal(
+        const Vector2i &rLocation, const bool bPublishRegionMap, const bool bBumpGeneration ) {
 	if ( !isLocationValid( rLocation ) ) {
 		return -1;
 	}
@@ -266,16 +268,16 @@ int Terrain3DRegionRepository::activateLocationInternal( const Vector2i &rLocati
 	}
 
 	int slot = -1;
-	while ( m_nFreeRegionSlotCount > 0 ) {
-		const int candidate = m_szFreeRegionSlots[--m_nFreeRegionSlotCount];
+	while ( !m_freeRegionSlots.empty() ) {
+		const int candidate = m_freeRegionSlots.back();
+		m_freeRegionSlots.pop_back();
 		if ( candidate >= 0 && candidate < m_nRegionLocationCount && m_szRegionLocations[candidate] == s_v2iMax ) {
 			slot = candidate;
 			break;
 		}
 	}
 	if ( slot < 0 ) {
-		if ( m_nRegionLocationCount >= s_nMaxRegionSlots ||
-				m_nRegionLocationCount >= m_nRegionMapSize * m_nRegionMapSize ) {
+		if ( m_nRegionLocationCount >= s_nMaxRegionSlots || m_nRegionLocationCount >= m_nRegionMapSize * m_nRegionMapSize ) {
 			return -1;
 		}
 		slot = m_nRegionLocationCount++;
@@ -284,7 +286,7 @@ int Terrain3DRegionRepository::activateLocationInternal( const Vector2i &rLocati
 	m_szRegionLocations[slot] = rLocation;
 	++m_nActiveRegionCount;
 	const int mapIndex = getRegionMapIndex( rLocation );
-	if ( bPublishRegionMap && mapIndex >= 0 && getRegionPtr( rLocation ) != nullptr ) {
+	if ( bPublishRegionMap && mapIndex >= 0 && getRegionPtr( rLocation ) != NULL ) {
 		m_szRegionMap[mapIndex] = ( uint16_t )( slot + 1 );
 	} else {
 		m_bRegionMapDirty = true;
@@ -302,8 +304,8 @@ int Terrain3DRegionRepository::deactivateLocation( const Vector2i &rLocation ) {
 	}
 
 	m_szRegionLocations[slot] = s_v2iMax;
-	if ( m_nFreeRegionSlotCount < s_nMaxRegionSlots ) {
-		m_szFreeRegionSlots[m_nFreeRegionSlotCount++] = ( uint16_t )( slot );
+	if ( !m_freeRegionSlots.full() ) {
+		m_freeRegionSlots.push_back( ( uint16_t )( slot ) );
 	}
 	m_nActiveRegionCount = MAX( 0, m_nActiveRegionCount - 1 );
 	const int mapIndex = getRegionMapIndex( rLocation );
@@ -319,13 +321,11 @@ int Terrain3DRegionRepository::deactivateLocation( const Vector2i &rLocation ) {
 t3dRegionLocationReconcileResult_t Terrain3DRegionRepository::reconcileLocations( const TypedArray<Vector2i> &rLocations ) {
 	t3dRegionLocationReconcileResult_t result;
 	result.m_nOldSlotCount = m_nRegionLocationCount;
-	result.m_removedLocations.reserve( ( size_t )( m_nActiveRegionCount ) );
-	result.m_addedSlots.reserve( ( size_t )( rLocations.size() ) );
 
 	eastl::bitset<s_nMaxRegionSlots> desiredLocations;
-	Vector2i uniqueLocations[s_nMaxRegionSlots];
-	int uniqueLocationCount = 0;
-	for ( const Vector2i location : rLocations ) {
+	eastl::fixed_vector<Vector2i, s_nMaxRegionSlots, false> uniqueLocations;
+	for ( size_t iLocation = 0u; iLocation < ( size_t )( ( rLocations ).size() ); iLocation++ ) {
+		const Vector2i location = ( rLocations )[iLocation];
 		if ( location == s_v2iMax || !isLocationValid( location ) ) {
 			continue;
 		}
@@ -334,9 +334,7 @@ t3dRegionLocationReconcileResult_t Terrain3DRegionRepository::reconcileLocations
 			continue;
 		}
 		desiredLocations.set( ( size_t )mapIndex );
-		if ( uniqueLocationCount < s_nMaxRegionSlots ) {
-			uniqueLocations[uniqueLocationCount++] = location;
-		}
+		uniqueLocations.push_back( location );
 	}
 
 	eastl::bitset<s_nMaxRegionSlots> existingLocations;
@@ -359,8 +357,8 @@ t3dRegionLocationReconcileResult_t Terrain3DRegionRepository::reconcileLocations
 
 	m_nActiveRegionCount = retainedCount;
 	rebuildFreeSlots();
-	for ( int uniqueIndex = 0; uniqueIndex < uniqueLocationCount; ++uniqueIndex ) {
-		const Vector2i location = uniqueLocations[uniqueIndex];
+	for ( size_t iLocation = 0u; iLocation < ( size_t )( ( uniqueLocations ).size() ); iLocation++ ) {
+		const Vector2i location = ( uniqueLocations )[iLocation];
 		const int mapIndex = getRegionMapIndex( location );
 		if ( mapIndex >= 0 && existingLocations.test( ( size_t )( mapIndex ) ) ) {
 			continue;
@@ -382,10 +380,10 @@ t3dRegionLocationReconcileResult_t Terrain3DRegionRepository::reconcileLocations
 }
 
 void Terrain3DRegionRepository::rebuildFreeSlots( void ) {
-	m_nFreeRegionSlotCount = 0;
+	m_freeRegionSlots.clear();
 	for ( int slot = m_nRegionLocationCount - 1; slot >= 0; --slot ) {
 		if ( m_szRegionLocations[slot] == s_v2iMax ) {
-			m_szFreeRegionSlots[m_nFreeRegionSlotCount++] = ( uint16_t )( slot );
+			m_freeRegionSlots.push_back( ( uint16_t )( slot ) );
 		}
 	}
 }
@@ -412,32 +410,32 @@ bool Terrain3DRegionRepository::ensureSlotReserve( const int nDesiredFreeSlots )
 	for ( int i = 0; i < slotsToAdd && m_nRegionLocationCount < maximumSlots; ++i ) {
 		const int slot = m_nRegionLocationCount++;
 		m_szRegionLocations[slot] = s_v2iMax;
-		m_szFreeRegionSlots[m_nFreeRegionSlotCount++] = ( uint16_t )( slot );
+		m_freeRegionSlots.push_back( ( uint16_t )( slot ) );
 	}
 	bumpTopologyGeneration();
 	return true;
 }
 
 void Terrain3DRegionRepository::rebuildRegionMapFromSlots( void ) {
-	std::fill_n( m_szRegionMap, s_nMaxRegionSlots, ( uint16_t )( 0 ) );
+	memset( m_szRegionMap, ( uint16_t )0, sizeof( *m_szRegionMap ) * s_nMaxRegionSlots );
 	m_nActiveRegionCount = 0;
-	m_nFreeRegionSlotCount = 0;
+	m_freeRegionSlots.clear();
 	bool bSanitized = false;
 	eastl::bitset<s_nMaxRegionSlots> publishedLocations;
 
 	for ( int slot = 0; slot < m_nRegionLocationCount; ++slot ) {
 		const Vector2i location = m_szRegionLocations[slot];
 		if ( location == s_v2iMax ) {
-			m_szFreeRegionSlots[m_nFreeRegionSlotCount++] = ( uint16_t )( slot );
+			m_freeRegionSlots.push_back( ( uint16_t )( slot ) );
 			continue;
 		}
 
 		Terrain3DRegion *const pRegion = getRegionPtr( location );
 		const int mapIndex = getRegionMapIndex( location );
-		if ( !pRegion || pRegion->isDeleted() || mapIndex < 0 || !isLocationValid( location ) ||
-				publishedLocations.test( ( size_t )( mapIndex ) ) ) {
+		if ( !pRegion || pRegion->isDeleted() || mapIndex < 0 || !isLocationValid( location )
+		        || publishedLocations.test( ( size_t )( mapIndex ) ) ) {
 			m_szRegionLocations[slot] = s_v2iMax;
-			m_szFreeRegionSlots[m_nFreeRegionSlotCount++] = ( uint16_t )( slot );
+			m_freeRegionSlots.push_back( ( uint16_t )( slot ) );
 			bSanitized = true;
 			continue;
 		}
@@ -453,17 +451,19 @@ void Terrain3DRegionRepository::rebuildRegionMapFromSlots( void ) {
 }
 
 void Terrain3DRegionRepository::replaceAll( const Dictionary &rRegions,
-		Terrain3DRegion *const *ppRegionMap,
-		const Vector2i *pLocations,
-		const int nLocationCount,
-		const uint16_t *pLogicalRegionMap ) {
-	for ( Ref<Terrain3DRegion> &region : m_szRegionRefs ) {
+        Terrain3DRegion *const *ppRegionMap,
+        const Vector2i *pLocations,
+        const int nLocationCount,
+        const uint16_t *pLogicalRegionMap ) {
+	for ( size_t iRegion = 0u; iRegion < T3D_ARRAY_COUNT( m_szRegionRefs ); iRegion++ ) {
+		Ref<Terrain3DRegion> &region = ( m_szRegionRefs )[iRegion];
 		region.unref();
 	}
 	m_nRegionResourceCount = 0;
-	std::fill_n( m_pszRegionPtrMap, s_nMaxRegionSlots, nullptr );
+	memset( m_pszRegionPtrMap, 0, sizeof( m_pszRegionPtrMap[0] ) * s_nMaxRegionSlots );
 	const Array keys = rRegions.keys();
-	for ( const Vector2i location : keys ) {
+	for ( size_t iKey = 0u; iKey < ( size_t )( ( keys ).size() ); iKey++ ) {
+		const Vector2i location = ( keys )[iKey];
 		const int mapIndex = getRegionMapIndex( location );
 		if ( mapIndex < 0 ) {
 			continue;
@@ -477,12 +477,14 @@ void Terrain3DRegionRepository::replaceAll( const Dictionary &rRegions,
 		++m_nRegionResourceCount;
 	}
 	( void )ppRegionMap;
-	std::fill_n( m_szRegionLocations, s_nMaxRegionSlots, s_v2iMax );
+	for ( int i = 0; i < s_nMaxRegionSlots; ++i ) {
+		m_szRegionLocations[i] = s_v2iMax;
+	}
 	m_nRegionLocationCount = CLAMP( nLocationCount, 0, s_nMaxRegionSlots );
 	if ( m_nRegionLocationCount > 0 ) {
-		std::memcpy( m_szRegionLocations, pLocations, ( size_t )( m_nRegionLocationCount ) * sizeof( Vector2i ) );
+		memcpy( m_szRegionLocations, pLocations, ( size_t )( m_nRegionLocationCount ) * sizeof( Vector2i ) );
 	}
-	std::memcpy( m_szRegionMap, pLogicalRegionMap, sizeof( m_szRegionMap ) );
+	memcpy( m_szRegionMap, pLogicalRegionMap, sizeof( m_szRegionMap ) );
 	m_bRegionMapDirty = false;
 	m_nActiveRegionCount = 0;
 	for ( int slot = 0; slot < m_nRegionLocationCount; ++slot ) {
@@ -495,9 +497,9 @@ void Terrain3DRegionRepository::replaceAll( const Dictionary &rRegions,
 }
 
 bool Terrain3DRegionRepository::validateInvariants( void ) const {
-	if ( m_nRegionLocationCount < 0 || m_nRegionLocationCount > s_nMaxRegionSlots || m_nFreeRegionSlotCount < 0 ||
-			m_nFreeRegionSlotCount > m_nRegionLocationCount || m_nActiveRegionCount < 0 ||
-			m_nActiveRegionCount > m_nRegionLocationCount ) {
+	if ( m_nRegionLocationCount < 0 || m_nRegionLocationCount > s_nMaxRegionSlots
+	        || m_freeRegionSlots.size() > ( size_t )( m_nRegionLocationCount ) || m_nActiveRegionCount < 0
+	        || m_nActiveRegionCount > m_nRegionLocationCount ) {
 		return false;
 	}
 
@@ -515,21 +517,24 @@ bool Terrain3DRegionRepository::validateInvariants( void ) const {
 		return false;
 	}
 
-	bool freeSeen[s_nMaxRegionSlots] = {};
-	for ( int i = 0; i < m_nFreeRegionSlotCount; ++i ) {
-		const int slot = m_szFreeRegionSlots[i];
-		if ( slot < 0 || slot >= m_nRegionLocationCount || freeSeen[slot] || m_szRegionLocations[slot] != s_v2iMax ) {
+	bool szFreeSeen[s_nMaxRegionSlots];
+	memset( szFreeSeen, 0, sizeof( szFreeSeen ) );
+	for ( size_t iRegion = 0u; iRegion < ( size_t )( ( m_freeRegionSlots ).size() ); iRegion++ ) {
+		const uint16_t free_slot = ( m_freeRegionSlots )[iRegion];
+		const int slot = ( int )( free_slot );
+		if ( slot < 0 || slot >= m_nRegionLocationCount || szFreeSeen[( size_t )( slot )] || m_szRegionLocations[slot] != s_v2iMax ) {
 			return false;
 		}
-		freeSeen[slot] = true;
+		szFreeSeen[( size_t )( slot )] = true;
 	}
 
-	bool locationSeen[s_nMaxRegionSlots] = {};
+	bool szLocationSeen[s_nMaxRegionSlots];
+	memset( szLocationSeen, 0, sizeof( szLocationSeen ) );
 	int activeCount = 0;
 	for ( int slot = 0; slot < m_nRegionLocationCount; ++slot ) {
 		const Vector2i location = m_szRegionLocations[slot];
 		if ( location == s_v2iMax ) {
-			if ( !freeSeen[slot] ) {
+			if ( !szFreeSeen[( size_t )( slot )] ) {
 				return false;
 			}
 			continue;
@@ -539,12 +544,11 @@ bool Terrain3DRegionRepository::validateInvariants( void ) const {
 			return false;
 		}
 		const int mapIndex = getRegionMapIndex( location );
-		if ( mapIndex < 0 || locationSeen[mapIndex] ) {
+		if ( mapIndex < 0 || szLocationSeen[( size_t )( mapIndex )] ) {
 			return false;
 		}
-		locationSeen[mapIndex] = true;
-		if ( !m_bRegionMapDirty &&
-				( m_szRegionMap[mapIndex] != ( uint16_t )( slot + 1 ) || m_pszRegionPtrMap[mapIndex] == nullptr ) ) {
+		szLocationSeen[( size_t )( mapIndex )] = true;
+		if ( !m_bRegionMapDirty && ( m_szRegionMap[mapIndex] != ( uint16_t )( slot + 1 ) || m_pszRegionPtrMap[mapIndex] == NULL ) ) {
 			return false;
 		}
 	}

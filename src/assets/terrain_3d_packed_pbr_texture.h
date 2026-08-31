@@ -1,7 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_PACKED_PBR_TEXTURE_H
 #define TERRAIN3D_PACKED_PBR_TEXTURE_H
 

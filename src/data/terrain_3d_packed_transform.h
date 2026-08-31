@@ -1,7 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 // Compact persistent instance transforms: float32 origins and binary16 bases.
-#pragma once
-
 #ifndef TERRAIN3D_PACKED_TRANSFORM_H
 #define TERRAIN3D_PACKED_TRANSFORM_H
 
@@ -9,8 +7,8 @@
 #include "data/terrain_3d_half_buffer.h"
 #include "eastl_config.h"
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 #include <godot_cpp/variant/transform3d.hpp>
 
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
@@ -48,8 +46,8 @@ typedef struct alignas( 32 ) t3dPackedTransform_s {
 		Basis unpacked_basis;
 		for ( int row = 0; row < 3; ++row ) {
 			unpacked_basis[row] = Vector3( t3dHalfDecode( m_szBasis[row * 3 + 0] ),
-					t3dHalfDecode( m_szBasis[row * 3 + 1] ),
-					t3dHalfDecode( m_szBasis[row * 3 + 2] ) );
+			        t3dHalfDecode( m_szBasis[row * 3 + 1] ),
+			        t3dHalfDecode( m_szBasis[row * 3 + 2] ) );
 		}
 		return Transform3D( unpacked_basis, Vector3( m_szOrigin[0], m_szOrigin[1], m_szOrigin[2] ) );
 	}
@@ -68,7 +66,8 @@ public:
 
 	class Terrain3DReference {
 	public:
-		EA_FORCE_INLINE explicit Terrain3DReference( t3dPackedTransform_t *const pTransform ) : m_pTransform( pTransform ) {}
+		EA_FORCE_INLINE explicit Terrain3DReference( t3dPackedTransform_t *const pTransform ) : m_pTransform( pTransform ) {
+		}
 
 		Terrain3DReference &operator=( const Transform3D &rTransform ) {
 			m_pTransform->set( rTransform );
@@ -84,7 +83,7 @@ public:
 		}
 
 	private:
-		t3dPackedTransform_t *m_pTransform = nullptr;
+		t3dPackedTransform_t *m_pTransform = NULL;
 	};
 
 	EA_FORCE_INLINE void bind( Terrain3DHighWaterSlab<t3dPackedTransform_t> *const pSlab ) {
@@ -95,30 +94,31 @@ public:
 		m_storage.rebind( pSlab );
 	}
 
-	EA_FORCE_INLINE void relocateExact( Terrain3DHighWaterSlab<t3dPackedTransform_t> *const pSlab ) {
-		m_storage.relocateExact( pSlab );
+	EA_FORCE_INLINE bool relocateExact( Terrain3DHighWaterSlab<t3dPackedTransform_t> *const pSlab ) {
+		return m_storage.relocateExact( pSlab );
 	}
 
-	EA_FORCE_INLINE void reserve( const size_t nCount ) {
-		m_storage.reserve( nCount );
+	EA_FORCE_INLINE bool reserve( const size_t nCount ) {
+		return m_storage.reserve( nCount );
 	}
 
-	EA_FORCE_INLINE void reserveExact( const size_t nCount ) {
-		m_storage.reserveExact( nCount );
+	EA_FORCE_INLINE bool reserveExact( const size_t nCount ) {
+		return m_storage.reserveExact( nCount );
 	}
 
-	EA_FORCE_INLINE void resize( const size_t nCount ) {
-		m_storage.resize( nCount );
+	EA_FORCE_INLINE bool resize( const size_t nCount ) {
+		return m_storage.resizeUninitialized( nCount );
 	}
 
 	EA_FORCE_INLINE void clear( void ) {
 		m_storage.clear();
 	}
 
-	EA_FORCE_INLINE void shrinkToFit( void ) {}
+	EA_FORCE_INLINE void shrinkToFit( void ) {
+	}
 
-	EA_FORCE_INLINE void pushBack( const Transform3D &rTransform ) {
-		m_storage.pushBack( t3dPackedTransform_t( rTransform ) );
+	EA_FORCE_INLINE bool pushBack( const Transform3D &rTransform ) {
+		return m_storage.pushBack( t3dPackedTransform_t( rTransform ) );
 	}
 
 	EA_FORCE_INLINE size_t size( void ) const {
@@ -156,9 +156,7 @@ public:
 
 	EA_FORCE_INLINE Vector3 getUpAxis( const size_t iIndex ) const {
 		const t3dPackedTransform_t &packed = m_storage[iIndex];
-		return Vector3( t3dHalfDecode( packed.m_szBasis[1] ),
-				t3dHalfDecode( packed.m_szBasis[4] ),
-				t3dHalfDecode( packed.m_szBasis[7] ) );
+		return Vector3( t3dHalfDecode( packed.m_szBasis[1] ), t3dHalfDecode( packed.m_szBasis[4] ), t3dHalfDecode( packed.m_szBasis[7] ) );
 	}
 
 	EA_FORCE_INLINE void setOriginY( const size_t iIndex, const real_t fY ) {

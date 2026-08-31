@@ -1,24 +1,21 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
-#pragma once
 #ifndef TERRAIN3D_HLOD_STREAMER_H
 #define TERRAIN3D_HLOD_STREAMER_H
 
 #include "Terrain3DConstants.h"
+#include "core/terrain_3d_eastl_helpers.h"
 #include "eastl_config.h"
 #include "hlod/terrain_3d_hlod_manifest.h"
 #include "hlod/terrain_3d_hlod_package.h"
 #include "hlod/terrain_3d_hlod_runtime_codec.h"
 #include "rendering/rd/terrain_3d_rd_instance_renderer.h"
 
-#include <EASTL/bitset.h>
-#include <EASTL/vector.h>
 #include <godot_cpp/classes/object.hpp>
 #include <godot_cpp/variant/aabb.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
 #include <godot_cpp/variant/vector3.hpp>
-#include <vector>
 
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
 using namespace godot;
@@ -56,13 +53,13 @@ class Terrain3DHLODStreamer : public Object {
 	GDCLASS( Terrain3DHLODStreamer, Object );
 	CLASS_NAME();
 
-	Terrain3D *m_pTerrain = nullptr;
+	Terrain3D *m_pTerrain = NULL;
 	Ref<Terrain3DHLODManifest> m_manifest;
-	eastl::vector<t3dEntry_t> m_entries;
-	eastl::vector<int> m_roots;
-	eastl::vector<uint8_t> m_instancerMinLevels;
-	eastl::vector<t3dNodePolicy_t> m_nodePolicies;
-	eastl::array<uint32_t, s_nMaxRegionSlots + 1> m_nodePolicyOffsets{};
+	eastl::vector<t3dEntry_t, Terrain3DEastlAllocator> m_entries;
+	eastl::vector<int, Terrain3DEastlAllocator> m_roots;
+	eastl::vector<uint8_t, Terrain3DEastlAllocator> m_instancerMinLevels;
+	eastl::vector<t3dNodePolicy_t, Terrain3DEastlAllocator> m_nodePolicies;
+	uint32_t m_nodePolicyOffsets[s_nMaxRegionSlots + 1]{};
 	uint8_t m_szRegionRepresentationLevel[s_nMaxRegionSlots] = {};
 	eastl::bitset<s_nMaxRegionSlots> m_managedRegions;
 	eastl::bitset<s_nMaxRegionSlots> m_detailRequiredRegions;
@@ -98,8 +95,8 @@ class Terrain3DHLODStreamer : public Object {
 	void clearRuntime( bool bNotify, bool bReleaseStorage = false );
 	bool compileManifest( const Ref<Terrain3DHLODManifest> &rManifest );
 	bool compilePackedManifest( const Ref<Terrain3DHLODManifest> &rManifest );
-	void compileLegacyNodePolicies( const Ref<Terrain3DHLODManifest> &rManifest );
-	void buildHierarchy( void );
+	bool compileLegacyNodePolicies( const Ref<Terrain3DHLODManifest> &rManifest );
+	bool buildHierarchy( void );
 	bool packageAcceptable( const t3dEntry_t &rEntry, const Vector3 &rLocalTarget ) const;
 	void selectRecursive( int index, const Vector3 &rLocalTarget );
 	void selectFallbackChildren( int index, const Vector3 &rLocalTarget );
@@ -231,8 +228,7 @@ public:
 	}
 	EA_FORCE_INLINE bool isRegionDetailRequired( const Vector2i &rRegion ) const {
 		const int index = regionIndex( rRegion );
-		return index < 0 || !m_managedRegions.test( ( size_t )index ) ||
-				m_detailRequiredRegions.test( ( size_t )index );
+		return index < 0 || !m_managedRegions.test( ( size_t )index ) || m_detailRequiredRegions.test( ( size_t )index );
 	}
 	EA_FORCE_INLINE bool isRegionSuppressed( const Vector2i &rRegion, int nMinimumLevel = 1 ) const {
 		return getRegionRepresentationLevel( rRegion ) >= CLAMP( nMinimumLevel, 1, 6 );
@@ -259,13 +255,15 @@ public:
 	EA_FORCE_INLINE uint64_t getRdPublicationGeneration( void ) const {
 		return m_nRdPublicationGeneration;
 	}
-	bool fillRdMeshSources( std::vector<t3dRdExternalMeshSource_t> &rSources ) const;
+	bool fillRdMeshSources( eastl::vector<t3dRdExternalMeshSource_t, Terrain3DEastlAllocator> &rSources ) const;
 	bool buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &rSnapshot ) const;
-	EA_FORCE_INLINE size_t getRdPublicationCapacity( void ) const { return m_entries.size(); }
+	EA_FORCE_INLINE size_t getRdPublicationCapacity( void ) const {
+		return m_entries.size();
+	}
 	Dictionary getStats( void ) const;
 	Array getDebugEntries( void ) const;
 
 protected:
 	static void _bind_methods( void );
 };
-#endif
+#endif // TERRAIN3D_HLOD_STREAMER_H

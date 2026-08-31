@@ -1,7 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_ASSET_RESOURCE_CLASS_H
 #define TERRAIN3D_ASSET_RESOURCE_CLASS_H
 
@@ -18,8 +16,10 @@ class Terrain3DAssetResource : public Resource {
 	friend class Terrain3DAssets;
 
 public:
-	EA_FORCE_INLINE Terrain3DAssetResource( void ) {}
-	EA_FORCE_INLINE ~Terrain3DAssetResource( void ) {}
+	EA_FORCE_INLINE Terrain3DAssetResource( void ) {
+	}
+	EA_FORCE_INLINE ~Terrain3DAssetResource( void ) {
+	}
 
 	virtual void initialize( void ) = 0;
 	virtual void clear( void ) = 0;

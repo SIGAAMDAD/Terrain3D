@@ -1,5 +1,4 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
-#pragma once
 #ifndef TERRAIN3D_HLOD_MANIFEST_H
 #define TERRAIN3D_HLOD_MANIFEST_H
 
@@ -170,4 +169,4 @@ public:
 protected:
 	static void _bind_methods( void );
 };
-#endif
+#endif // TERRAIN3D_HLOD_MANIFEST_H

@@ -1,6 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "authoring/terrain_3d_editor.h"
+#include "core/terrain_3d_eastl_helpers.h"
 
 #include "Terrain3DConstants.h"
 #include "core/logger.h"
@@ -12,29 +13,26 @@
 #include "rendering/terrain_3d_compute.h"
 #include "terrain_3d.h"
 
-#include <EASTL/array.h>
-#include <algorithm>
-#include <cmath>
-#include <cstring>
+#include <math.h>
+#include <string.h>
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/variant/callable.hpp>
+#include <EASTL/algorithm.h>
+#include <EASTL/utility.h>
 
 typedef enum t3dEditSnapshotKind_e {
 	EDIT_SNAPSHOT_MAP = 0,
 	EDIT_SNAPSHOT_INSTANCES = 1,
 } t3dEditSnapshotKind_t;
 
-#define TERRAIN3DEDITORQUANTIZERGBA8( value ) \
-	( uint32_t )( CLAMP( Math::round( ( value ) * s_fByteMaxFloat ), 0.0f, s_fByteMaxFloat ) )
+#define TERRAIN3DEDITORQUANTIZERGBA8( value ) ( uint32_t )( CLAMP( Math::round( ( value ) * s_fByteMaxFloat ), 0.0f, s_fByteMaxFloat ) )
 
 // -----------------------------------------------------------------------------
 // Private functions
 
-bool Terrain3DEditor::isBrushSlopeAllowed( Terrain3DSampler &rSampler,
-		const bool bUnrestricted,
-		const Vector2 &vSlopeRange,
-		const Vector3 &rPosition ) {
+bool Terrain3DEditor::isBrushSlopeAllowed(
+        Terrain3DSampler &rSampler, const bool bUnrestricted, const Vector2 &vSlopeRange, const Vector3 &rPosition ) {
 	if ( bUnrestricted ) {
 		return true;
 	}
@@ -48,38 +46,34 @@ bool Terrain3DEditor::isBrushSlopeAllowed( Terrain3DSampler &rSampler,
 }
 
 uint32_t Terrain3DEditor::packColorRgba8( const Color &rColor ) {
-	return TERRAIN3DEDITORQUANTIZERGBA8( rColor.r ) | ( TERRAIN3DEDITORQUANTIZERGBA8( rColor.g ) << 8u ) |
-			( TERRAIN3DEDITORQUANTIZERGBA8( rColor.b ) << 16u ) | ( TERRAIN3DEDITORQUANTIZERGBA8( rColor.a ) << 24u );
+	return TERRAIN3DEDITORQUANTIZERGBA8( rColor.r ) | ( TERRAIN3DEDITORQUANTIZERGBA8( rColor.g ) << 8u )
+	        | ( TERRAIN3DEDITORQUANTIZERGBA8( rColor.b ) << 16u ) | ( TERRAIN3DEDITORQUANTIZERGBA8( rColor.a ) << 24u );
 }
 
 Color Terrain3DEditor::unpackColorRgba8( const uint32_t nValue ) {
 	return Color( ( real_t )( nValue & 0xffu ) / s_fByteMaxFloat,
-			( real_t )( ( nValue >> 8u ) & 0xffu ) / s_fByteMaxFloat,
-			( real_t )( ( nValue >> 16u ) & 0xffu ) / s_fByteMaxFloat,
-			( real_t )( ( nValue >> 24u ) & 0xffu ) / s_fByteMaxFloat );
+	        ( real_t )( ( nValue >> 8u ) & 0xffu ) / s_fByteMaxFloat,
+	        ( real_t )( ( nValue >> 16u ) & 0xffu ) / s_fByteMaxFloat,
+	        ( real_t )( ( nValue >> 24u ) & 0xffu ) / s_fByteMaxFloat );
 }
 
 uint32_t Terrain3DEditor::readU32( const uint8_t *pBytes, const size_t iIndex ) {
 	uint32_t value = s_nRegionDefaultControl;
 	if ( pBytes ) {
-		std::memcpy( &value, pBytes + iIndex * sizeof( uint32_t ), sizeof( uint32_t ) );
+		memcpy( &value, pBytes + iIndex * sizeof( uint32_t ), sizeof( uint32_t ) );
 	}
 	return value;
 }
 
-Color Terrain3DEditor::readMapPixel( const t3dRegionMapCache_t &rEntry,
-		const size_t iIndex,
-		const Vector2i &rPixel,
-		const t3dMapType_t mapType ) {
+Color Terrain3DEditor::readMapPixel(
+        const t3dRegionMapCache_t &rEntry, const size_t iIndex, const Vector2i &rPixel, const t3dMapType_t mapType ) {
 	if ( !rEntry.m_bDirectAccess || !rEntry.m_pMapBytes ) {
 		const Color raw = rEntry.m_pMap->get_pixelv( rPixel );
-		return mapType == TYPE_HEIGHT
-				? Color( t3dRegionCodecReadHeightPixel( rEntry.m_pMap, rPixel ), 0.0f, 0.0f, 1.0f )
-				: raw;
+		return mapType == TYPE_HEIGHT ? Color( t3dRegionCodecReadHeightPixel( rEntry.m_pMap, rPixel ), 0.0f, 0.0f, 1.0f ) : raw;
 	}
 	if ( mapType == TYPE_HEIGHT ) {
 		uint16_t encoded = 0u;
-		std::memcpy( &encoded, rEntry.m_pMapBytes + iIndex * sizeof( uint16_t ), sizeof( uint16_t ) );
+		memcpy( &encoded, rEntry.m_pMapBytes + iIndex * sizeof( uint16_t ), sizeof( uint16_t ) );
 		return Color( t3dRegionCodecDecodeHeightU16( encoded ), 0.0f, 0.0f, 1.0f );
 	}
 	if ( mapType == TYPE_CONTROL ) {
@@ -87,9 +81,9 @@ Color Terrain3DEditor::readMapPixel( const t3dRegionMapCache_t &rEntry,
 	}
 	const uint8_t *pRgba = rEntry.m_pMapBytes + iIndex * 4u;
 	return Color( ( real_t )( pRgba[0] ) / s_fByteMaxFloat,
-			( real_t )( pRgba[1] ) / s_fByteMaxFloat,
-			( real_t )( pRgba[2] ) / s_fByteMaxFloat,
-			( real_t )( pRgba[3] ) / s_fByteMaxFloat );
+	        ( real_t )( pRgba[1] ) / s_fByteMaxFloat,
+	        ( real_t )( pRgba[2] ) / s_fByteMaxFloat,
+	        ( real_t )( pRgba[3] ) / s_fByteMaxFloat );
 }
 
 uint32_t Terrain3DEditor::readControlBits( const t3dRegionMapCache_t &rEntry, const size_t iIndex, const Vector2i &rPixel ) {
@@ -99,11 +93,8 @@ uint32_t Terrain3DEditor::readControlBits( const t3dRegionMapCache_t &rEntry, co
 	return rEntry.m_pControlMap ? t3dAsUint( rEntry.m_pControlMap->get_pixelv( rPixel ).r ) : s_nRegionDefaultControl;
 }
 
-void Terrain3DEditor::writeMapPixel( t3dRegionMapCache_t &rEntry,
-		const size_t iIndex,
-		const Vector2i &rPixel,
-		const Color &clrValue,
-		const t3dMapType_t mapType ) {
+void Terrain3DEditor::writeMapPixel(
+        t3dRegionMapCache_t &rEntry, const size_t iIndex, const Vector2i &rPixel, const Color &clrValue, const t3dMapType_t mapType ) {
 	if ( !rEntry.m_bDirectAccess || !rEntry.m_pMapBytes ) {
 		if ( mapType == TYPE_HEIGHT ) {
 			t3dRegionCodecWriteHeightPixel( rEntry.m_pMap, rPixel, clrValue.r );
@@ -114,12 +105,12 @@ void Terrain3DEditor::writeMapPixel( t3dRegionMapCache_t &rEntry,
 	}
 	if ( mapType == TYPE_HEIGHT ) {
 		const uint16_t encoded = t3dRegionCodecEncodeHeightU16( clrValue.r );
-		std::memcpy( rEntry.m_pMapBytes + iIndex * sizeof( uint16_t ), &encoded, sizeof( uint16_t ) );
+		memcpy( rEntry.m_pMapBytes + iIndex * sizeof( uint16_t ), &encoded, sizeof( uint16_t ) );
 		return;
 	}
 	if ( mapType == TYPE_CONTROL ) {
 		const uint32_t bits = t3dAsUint( clrValue.r );
-		std::memcpy( rEntry.m_pMapBytes + iIndex * sizeof( uint32_t ), &bits, sizeof( uint32_t ) );
+		memcpy( rEntry.m_pMapBytes + iIndex * sizeof( uint32_t ), &bits, sizeof( uint32_t ) );
 		return;
 	}
 	uint8_t *pRgba = rEntry.m_pMapBytes + iIndex * 4u;
@@ -134,9 +125,8 @@ bool Terrain3DEditor::locationLess( const Vector2i &vA, const Vector2i &rB ) {
 }
 
 void Terrain3DEditor::updateBrushAlphaCache( Image *const pBrushImage, const Vector2i &vImageSize, const real_t fGamma ) {
-	if ( m_pCachedBrushImage == pBrushImage && m_cachedBrushImageSize == vImageSize &&
-			Math::is_equal_approx( m_fCachedBrushGamma, fGamma ) &&
-			m_fBrushAlphaCache.size() == ( size_t )( vImageSize.x * vImageSize.y ) ) {
+	if ( m_pCachedBrushImage == pBrushImage && m_cachedBrushImageSize == vImageSize && Math::is_equal_approx( m_fCachedBrushGamma, fGamma )
+	        && m_fBrushAlphaCache.size() == ( size_t )( vImageSize.x * vImageSize.y ) ) {
 		return;
 	}
 
@@ -149,21 +139,20 @@ void Terrain3DEditor::updateBrushAlphaCache( Image *const pBrushImage, const Vec
 		for ( int32_t x = 0; x < vImageSize.x; ++x ) {
 			real_t fAlpha = pBrushImage->get_pixel( x, y ).r;
 			fAlpha = ( real_t )( Math::pow( ( double )( fAlpha ), ( double )( fGamma ) ) );
-			m_fBrushAlphaCache[( size_t )( y * vImageSize.x + x )] = std::isnan( fAlpha ) ? 0.f : ( float )( fAlpha );
+			m_fBrushAlphaCache[( size_t )( y * vImageSize.x + x )] = isnan( fAlpha ) ? 0.f : ( float )( fAlpha );
 		}
 	}
 }
 
-Dictionary Terrain3DEditor::captureEditSnapshot( const Ref<Terrain3DRegion> &rRegion,
-		const Dictionary &rTemplate,
-		const bool bMapWasImplicit ) const {
+Dictionary Terrain3DEditor::captureEditSnapshot(
+        const Ref<Terrain3DRegion> &rRegion, const Dictionary &rTemplate, const bool bMapWasImplicit ) const {
 	Dictionary snapshot;
 	if ( rRegion.is_null() ) {
 		return snapshot;
 	}
 
-	const int kind = rTemplate.has( "kind" ) ? ( int )( rTemplate["kind"] )
-											 : ( m_tool == INSTANCER ? EDIT_SNAPSHOT_INSTANCES : EDIT_SNAPSHOT_MAP );
+	const int kind =
+	        rTemplate.has( "kind" ) ? ( int )( rTemplate["kind"] ) : ( m_tool == INSTANCER ? EDIT_SNAPSHOT_INSTANCES : EDIT_SNAPSHOT_MAP );
 	snapshot["kind"] = kind;
 	snapshot["location"] = rRegion->getLocation();
 
@@ -172,8 +161,7 @@ Dictionary Terrain3DEditor::captureEditSnapshot( const Ref<Terrain3DRegion> &rRe
 		return snapshot;
 	}
 
-	const t3dMapType_t map_type =
-			rTemplate.has( "map_type" ) ? ( t3dMapType_t )( ( int )( rTemplate["map_type"] ) ) : getMapType();
+	const t3dMapType_t map_type = rTemplate.has( "map_type" ) ? ( t3dMapType_t )( ( int )( rTemplate["map_type"] ) ) : getMapType();
 	if ( map_type < TYPE_HEIGHT || map_type >= REGION_TYPE_MAX ) {
 		return Dictionary();
 	}
@@ -203,9 +191,8 @@ Dictionary Terrain3DEditor::captureEditSnapshot( const Ref<Terrain3DRegion> &rRe
 	return snapshot;
 }
 
-void Terrain3DEditor::applyEditSnapshot( const Dictionary &rSnapshot,
-		eastl::array<eastl::vector<Vector2i>, REGION_TYPE_MAX> &rMapUpdates,
-		bool &bInstancesChanged ) {
+void Terrain3DEditor::applyEditSnapshot(
+        const Dictionary &rSnapshot, eastl::vector<Vector2i> ( &rMapUpdates )[REGION_TYPE_MAX], bool &bInstancesChanged ) {
 	if ( !rSnapshot.has( "kind" ) || !rSnapshot.has( "location" ) ) {
 		return;
 	}
@@ -244,28 +231,32 @@ void Terrain3DEditor::applyEditSnapshot( const Dictionary &rSnapshot,
 		return;
 	}
 	Ref<Image> pRestoredMap;
-	if ( rSnapshot.has( "map_data" ) && rSnapshot.has( "map_width" ) && rSnapshot.has( "map_height" ) &&
-			rSnapshot.has( "map_format" ) ) {
+	if ( rSnapshot.has( "map_data" ) && rSnapshot.has( "map_width" ) && rSnapshot.has( "map_height" ) && rSnapshot.has( "map_format" ) ) {
 		const int width = rSnapshot["map_width"];
 		const int height = rSnapshot["map_height"];
 		const int format_value = rSnapshot["map_format"];
 		const bool mipmaps = ( bool )( rSnapshot.get( "map_mipmaps", false ) );
 		const PackedByteArray bytes = rSnapshot["map_data"];
 		Image::Format expected_format = Image::FORMAT_RGBA8;
-		if ( map_type == TYPE_HEIGHT ) expected_format = Image::FORMAT_R16;
-		else if ( map_type == TYPE_CONTROL ) expected_format = Image::FORMAT_RF;
+		if ( map_type == TYPE_HEIGHT ) {
+			expected_format = Image::FORMAT_R16;
+		} else if ( map_type == TYPE_CONTROL ) {
+			expected_format = Image::FORMAT_RF;
+		}
 		size_t expected_bytes = 0u;
 		int mip_width = width;
 		int mip_height = height;
 		const size_t bytes_per_texel = expected_format == Image::FORMAT_R16 ? 2u : 4u;
 		do {
-			expected_bytes += ( size_t )( mip_width ) * ( size_t )( mip_height ) * bytes_per_texel;
-			if ( !mipmaps || ( mip_width == 1 && mip_height == 1 ) ) break;
+			expected_bytes += ( size_t )( mip_width ) * ( size_t )( mip_height )*bytes_per_texel;
+			if ( !mipmaps || ( mip_width == 1 && mip_height == 1 ) ) {
+				break;
+			}
 			mip_width = MAX( mip_width >> 1, 1 );
 			mip_height = MAX( mip_height >> 1, 1 );
 		} while ( true );
-		if ( width != pRegion->getRegionSize() || height != pRegion->getRegionSize() ||
-				format_value != ( int )( expected_format ) || ( size_t )( bytes.size() ) != expected_bytes ) {
+		if ( width != pRegion->getRegionSize() || height != pRegion->getRegionSize() || format_value != ( int )( expected_format )
+		        || ( size_t )( bytes.size() ) != expected_bytes ) {
 			LOG( ERROR, "Rejected invalid Terrain3D edit snapshot for region ", location );
 			return;
 		}
@@ -273,7 +264,9 @@ void Terrain3DEditor::applyEditSnapshot( const Dictionary &rSnapshot,
 	} else if ( rSnapshot.has( "map" ) ) {
 		// Backward compatibility for actions created before byte-plane snapshots.
 		const Ref<Image> pSnapshotMap = rSnapshot["map"];
-		if ( pSnapshotMap.is_valid() ) pRestoredMap = pSnapshotMap->duplicate();
+		if ( pSnapshotMap.is_valid() ) {
+			pRestoredMap = pSnapshotMap->duplicate();
+		}
 	}
 	if ( pRestoredMap.is_null() || pRestoredMap->is_empty() ) {
 		return;
@@ -312,12 +305,12 @@ Ref<Terrain3DRegion> Terrain3DEditor::operateRegion( const Vector2i &rRegionLoc 
 	if ( !pData->isRegionLocationValidInternal( rRegionLoc ) ) {
 		if ( bCanPrint ) {
 			LOG( INFO,
-					"Location ",
-					rRegionLoc,
-					" out of bounds. Max: ",
-					-pData->getRegionMapSizeInternal() / 2,
-					" to ",
-					pData->getRegionMapSizeInternal() / 2 - 1 );
+			        "Location ",
+			        rRegionLoc,
+			        " out of bounds. Max: ",
+			        -pData->getRegionMapSizeInternal() / 2,
+			        " to ",
+			        pData->getRegionMapSizeInternal() / 2 - 1 );
 		}
 		return Ref<Terrain3DRegion>();
 	}
@@ -329,22 +322,13 @@ Ref<Terrain3DRegion> Terrain3DEditor::operateRegion( const Vector2i &rRegionLoc 
 		return Ref<Terrain3DRegion>();
 	}
 	if ( bCanPrint ) {
-		LOG( DEBUG,
-				"Tool: ",
-				m_tool,
-				" Op: ",
-				m_nOperation,
-				" processing region ",
-				rRegionLoc,
-				": ",
-				t3dPtrToStr( *pRegion ) );
+		LOG( DEBUG, "Tool: ", m_tool, " Op: ", m_nOperation, " processing region ", rRegionLoc, ": ", t3dPtrToStr( *pRegion ) );
 	}
 
 	// Create new region if location is null or deleted
 	if ( pRegion.is_null() || ( pRegion.is_valid() && pRegion->isDeleted() ) ) {
 		// And tool is Add Region, or Height + auto_regions
-		if ( ( m_tool == REGION && m_nOperation == ADD ) ||
-				( ( m_tool == SCULPT || m_tool == HEIGHT ) && m_brushData["auto_regions"] ) ) {
+		if ( ( m_tool == REGION && m_nOperation == ADD ) || ( ( m_tool == SCULPT || m_tool == HEIGHT ) && m_brushData["auto_regions"] ) ) {
 			if ( !m_undoData.has( "region_locations" ) ) {
 				m_undoData["region_locations"] = pData->getRegionLocations().duplicate();
 			}
@@ -393,8 +377,7 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 
 	// If no region and can't add one, skip whole function. Checked again later
 	Terrain3DData *const pData = m_pTerrain->getData();
-	if ( !pData->hasRegionp( rGlobalPosition ) &&
-			( !m_brushData["auto_regions"] || ( m_tool != SCULPT && m_tool != HEIGHT ) ) ) {
+	if ( !pData->hasRegionp( rGlobalPosition ) && ( !m_brushData["auto_regions"] || ( m_tool != SCULPT && m_tool != HEIGHT ) ) ) {
 		return;
 	}
 
@@ -437,8 +420,8 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 	if ( m_tool == TEXTURE && ( pAssets.is_null() || pAssets->getTextureAsset( asset_id ).is_null() ) ) {
 		return;
 	}
-	if ( ( m_tool == COLOR || m_tool == ROUGHNESS ) && bTextureFilter &&
-			( pAssets.is_null() || pAssets->getTextureAsset( asset_id ).is_null() ) ) {
+	if ( ( m_tool == COLOR || m_tool == ROUGHNESS ) && bTextureFilter
+	        && ( pAssets.is_null() || pAssets->getTextureAsset( asset_id ).is_null() ) ) {
 		return;
 	}
 	if ( m_tool == INSTANCER && ( pAssets.is_null() || pAssets->getMeshAsset( asset_id ).is_null() ) ) {
@@ -489,7 +472,7 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 	const int32_t sample_count = MAX( 1, ( int32_t )Math::ceil( fBrushSize / fVertexSpacing ) );
 	const int64_t total_samples = ( int64_t )( sample_count ) * ( int64_t )( sample_count );
 	const int64_t brush_pixel_count = ( int64_t )( img_size.x ) * ( int64_t )( img_size.y );
-	const bool bUseAlphaCache = total_samples >= std::max<int64_t>( 4096, brush_pixel_count / 4 );
+	const bool bUseAlphaCache = total_samples >= MAX( 4096, brush_pixel_count / 4 );
 	if ( bUseAlphaCache ) {
 		updateBrushAlphaCache( pBrushImage, img_size, fGamma );
 	}
@@ -497,17 +480,15 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 	const Vector2 clamped_slope_range = CLAMP( slope_range, s_v2Zero, V2( 90.f ) );
 	const bool bUnrestrictedSlope = clamped_slope_range.y - clamped_slope_range.x > 89.99f;
 
-	const bool bComputeSupported = m_nOperation != AVERAGE &&
-			( ( map_type == TYPE_HEIGHT &&
-					  ( m_nOperation == ADD || m_nOperation == SUBTRACT || m_nOperation == GRADIENT ) ) ||
-					( map_type == TYPE_CONTROL &&
-							( m_tool == TEXTURE || m_tool == AUTOSHADER || m_tool == HOLES || m_tool == NAVIGATION ) &&
-							( m_nOperation == ADD || m_nOperation == SUBTRACT || m_nOperation == REPLACE ) ) ||
-					( map_type == TYPE_COLOR && ( m_tool == COLOR || m_tool == ROUGHNESS ) &&
-							( m_nOperation == ADD || m_nOperation == SUBTRACT ) ) );
+	const bool bComputeSupported = m_nOperation != AVERAGE
+	        && ( ( map_type == TYPE_HEIGHT && ( m_nOperation == ADD || m_nOperation == SUBTRACT || m_nOperation == GRADIENT ) )
+	                || ( map_type == TYPE_CONTROL
+	                        && ( m_tool == TEXTURE || m_tool == AUTOSHADER || m_tool == HOLES || m_tool == NAVIGATION )
+	                        && ( m_nOperation == ADD || m_nOperation == SUBTRACT || m_nOperation == REPLACE ) )
+	                || ( map_type == TYPE_COLOR && ( m_tool == COLOR || m_tool == ROUGHNESS )
+	                        && ( m_nOperation == ADD || m_nOperation == SUBTRACT ) ) );
 	Terrain3DCompute *const pComputeBackend = pData->getComputeBackend();
-	const bool bUseCompute =
-			bComputeSupported && total_samples >= 4096 && pComputeBackend && pComputeBackend->isAvailable();
+	const bool bUseCompute = bComputeSupported && total_samples >= 4096 && pComputeBackend && pComputeBackend->isAvailable();
 	// Average operations intentionally observe earlier writes in the same stamp.
 	// Other tools can edit detached byte planes and publish each region once,
 	// eliminating thousands of Image::get_pixelv/set_pixelv calls.
@@ -527,21 +508,17 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 		const real_t fDescaledZ = fGlobalZ / fVertexSpacing;
 		const int32_t region_x = ( int32_t )Math::floor( fDescaledX / ( real_t )( region_size ) );
 		const int32_t region_z = ( int32_t )Math::floor( fDescaledZ / ( real_t )( region_size ) );
-		x_samples[i] = { offset,
-			fGlobalX,
-			region_x,
-			( int32_t )( fDescaledX - ( real_t )( region_x * region_size ) ),
-			offset / fBrushSize };
-		z_samples[i] = { offset,
-			fGlobalZ,
-			region_z,
-			( int32_t )( fDescaledZ - ( real_t )( region_z * region_size ) ),
-			offset / fBrushSize };
+		x_samples[i] = {
+			offset, fGlobalX, region_x, ( int32_t )( fDescaledX - ( real_t )( region_x * region_size ) ), offset / fBrushSize
+		};
+		z_samples[i] = {
+			offset, fGlobalZ, region_z, ( int32_t )( fDescaledZ - ( real_t )( region_z * region_size ) ), offset / fBrushSize
+		};
 	}
 
 	const real_t fRotCos = Math::cos( fRot );
 	const real_t fRotSin = Math::sin( fRot );
-	const eastl::array<uint32_t, 8> scale_align = { 5, 6, 7, 0, 1, 2, 3, 4 };
+	const uint32_t scale_align[8] = { 5, 6, 7, 0, 1, 2, 3, 4 };
 
 	// Resolve each covered region and map once. At maximum brush size, repeatedly resolving regions
 	// per column still costs tens of thousands of dictionary lookups despite touching very few regions.
@@ -559,26 +536,25 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 	// to an adjacent cache entry instead of jumping by region_cache_height.
 	for ( int32_t region_z = min_region_z; region_z <= max_region_z; ++region_z ) {
 		for ( int32_t region_x = min_region_x; region_x <= max_region_x; ++region_x ) {
-			t3dRegionMapCache_t &entry =
-					region_cache[( size_t )( region_z - min_region_z ) * ( size_t )( region_cache_width ) +
-							( size_t )( region_x - min_region_x )];
+			t3dRegionMapCache_t &entry = region_cache[( size_t )( region_z - min_region_z ) * ( size_t )( region_cache_width )
+			        + ( size_t )( region_x - min_region_x )];
 			entry.m_location = Vector2i( region_x, region_z );
 			entry.m_region = operateRegion( entry.m_location );
-			entry.m_bMapWasImplicit = entry.m_region.is_valid() && entry.m_region->getMapPtr( map_type ) == nullptr;
-			entry.m_pMap = entry.m_region.is_valid() ? entry.m_region->getMapPtrForWrite( map_type ) : nullptr;
-			entry.m_pControlMap = entry.m_region.is_valid() ? entry.m_region->getMapPtr( TYPE_CONTROL ) : nullptr;
+			entry.m_bMapWasImplicit = entry.m_region.is_valid() && entry.m_region->getMapPtr( map_type ) == NULL;
+			entry.m_pMap = entry.m_region.is_valid() ? entry.m_region->getMapPtrForWrite( map_type ) : NULL;
+			entry.m_pControlMap = entry.m_region.is_valid() ? entry.m_region->getMapPtr( TYPE_CONTROL ) : NULL;
 			if ( !entry.m_pMap || !bUseDirectMapAccess ) {
 				continue;
 			}
 			entry.m_mapFormat = entry.m_pMap->get_format();
 			entry.m_bMapHasMipmaps = entry.m_pMap->has_mipmaps();
 			const Image::Format expected_format = map_type == TYPE_HEIGHT ? Image::FORMAT_R16
-					: map_type == TYPE_CONTROL							  ? Image::FORMAT_RF
-																		  : Image::FORMAT_RGBA8;
+			        : map_type == TYPE_CONTROL                            ? Image::FORMAT_RF
+			                                                              : Image::FORMAT_RGBA8;
 			const size_t bytes_per_texel = map_type == TYPE_HEIGHT ? sizeof( uint16_t ) : sizeof( uint32_t );
 			const size_t expected_bytes = ( size_t )( region_size ) * ( size_t )( region_size )*bytes_per_texel;
-			if ( entry.m_mapFormat != expected_format || entry.m_pMap->get_width() != region_size ||
-					entry.m_pMap->get_height() != region_size ) {
+			if ( entry.m_mapFormat != expected_format || entry.m_pMap->get_width() != region_size
+			        || entry.m_pMap->get_height() != region_size ) {
 				continue;
 			}
 			entry.m_mapData = entry.m_pMap->get_data();
@@ -587,18 +563,17 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 				continue;
 			}
 			entry.m_pMapBytes = entry.m_mapData.ptrw();
-			entry.m_bDirectAccess = entry.m_pMapBytes != nullptr;
+			entry.m_bDirectAccess = entry.m_pMapBytes != NULL;
 			if ( !entry.m_bDirectAccess ) {
 				continue;
 			}
 			if ( map_type == TYPE_CONTROL ) {
 				entry.m_pControlBytes = entry.m_pMapBytes;
-			} else if ( entry.m_pControlMap && entry.m_pControlMap->get_format() == Image::FORMAT_RF &&
-					entry.m_pControlMap->get_width() == region_size &&
-					entry.m_pControlMap->get_height() == region_size ) {
+			} else if ( entry.m_pControlMap && entry.m_pControlMap->get_format() == Image::FORMAT_RF
+			        && entry.m_pControlMap->get_width() == region_size && entry.m_pControlMap->get_height() == region_size ) {
 				entry.m_controlData = entry.m_pControlMap->get_data();
-				if ( ( size_t )( entry.m_controlData.size() ) >=
-						( size_t )( region_size ) * ( size_t )( region_size ) * sizeof( uint32_t ) ) {
+				if ( ( size_t )( entry.m_controlData.size() )
+				        >= ( size_t )( region_size ) * ( size_t )( region_size ) * sizeof( uint32_t ) ) {
 					entry.m_pControlBytes = entry.m_controlData.ptr();
 				}
 			}
@@ -620,8 +595,7 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 		fComputeAngle = ( real_t )( Math::fmod( Math::rad_to_deg( fComputeAngle ) + 450.f, ( real_t )( 360.f ) ) );
 	}
 	const uint32_t compute_uv_rotation = ( uint32_t )( CLAMP( Math::round( fComputeAngle / 22.5f ), 0.f, 15.f ) );
-	const uint32_t compute_uv_scale =
-			scale_align[( uint8_t )( CLAMP( Math::round( ( fScale + 60.f ) / 20.f ), 0.f, 7.f ) )];
+	const uint32_t compute_uv_scale = scale_align[( uint8_t )( CLAMP( Math::round( ( fScale + 60.f ) / 20.f ), 0.f, 7.f ) )];
 
 	// Terrain image rows are X-contiguous. Keep X in the inner loop so ordinary
 	// stamps stream through map cachelines rather than revisiting one cacheline per
@@ -629,10 +603,12 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 	const real_t fCenteredUvStep = fVertexSpacing / fBrushSize;
 	const real_t fRotatedUStep = fCenteredUvStep * fRotCos;
 	const real_t fRotatedVStep = fCenteredUvStep * fRotSin;
-	for ( const t3dAxisSample_t &z_sample : z_samples ) {
+	for ( size_t iSampleZ = 0u; iSampleZ < ( size_t )( ( z_samples ).size() ); iSampleZ++ ) {
+		const t3dAxisSample_t &z_sample = ( z_samples )[iSampleZ];
 		real_t fRowU = x_samples.front().m_fCenteredUv * fRotCos - z_sample.m_fCenteredUv * fRotSin + .5f;
 		real_t fRowV = x_samples.front().m_fCenteredUv * fRotSin + z_sample.m_fCenteredUv * fRotCos + .5f;
-		for ( const t3dAxisSample_t &x_sample : x_samples ) {
+		for ( size_t iSampleX = 0u; iSampleX < ( size_t )( ( x_samples ).size() ); iSampleX++ ) {
+			const t3dAxisSample_t &x_sample = ( x_samples )[iSampleX];
 			const real_t fRotatedU = CLAMP( fRowU, 0.f, 1.f );
 			const real_t fRotatedV = CLAMP( fRowV, 0.f, 1.f );
 			fRowU += fRotatedUStep;
@@ -644,20 +620,18 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 
 			real_t fBrushAlpha;
 			if ( bUseAlphaCache ) {
-				fBrushAlpha =
-						m_fBrushAlphaCache[( size_t )( brush_pixel_position.y * img_size.x + brush_pixel_position.x )];
+				fBrushAlpha = m_fBrushAlphaCache[( size_t )( brush_pixel_position.y * img_size.x + brush_pixel_position.x )];
 			} else {
 				fBrushAlpha = pBrushImage->get_pixelv( brush_pixel_position ).r;
 				fBrushAlpha = ( real_t )( Math::pow( ( double )( fBrushAlpha ), ( double )( fGamma ) ) );
-				fBrushAlpha = std::isnan( fBrushAlpha ) ? 0.f : fBrushAlpha;
+				fBrushAlpha = isnan( fBrushAlpha ) ? 0.f : fBrushAlpha;
 			}
 			if ( fBrushAlpha <= CMP_EPSILON ) {
 				continue;
 			}
 
-			const size_t region_cache_index =
-					( size_t )( z_sample.m_nRegionLocation - min_region_z ) * ( size_t )( region_cache_width ) +
-					( size_t )( x_sample.m_nRegionLocation - min_region_x );
+			const size_t region_cache_index = ( size_t )( z_sample.m_nRegionLocation - min_region_z ) * ( size_t )( region_cache_width )
+			        + ( size_t )( x_sample.m_nRegionLocation - min_region_x );
 			t3dRegionMapCache_t &region_entry = region_cache[region_cache_index];
 			if ( !region_entry.m_pMap ) {
 				continue;
@@ -670,16 +644,14 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 			}
 
 			const Vector2 brushOffset( x_sample.m_fOffset, z_sample.m_fOffset );
-			const Vector3 brushGlobalPosition(
-					x_sample.m_fGlobalPosition, rGlobalPosition.y, z_sample.m_fGlobalPosition );
+			const Vector3 brushGlobalPosition( x_sample.m_fGlobalPosition, rGlobalPosition.y, z_sample.m_fGlobalPosition );
 			Vector3 edited_position = brushGlobalPosition;
 			if ( map_type != TYPE_HEIGHT ) {
 				edited_position.y = brushSampler.sampleHeight( edited_position );
 				edited_area = edited_area.expand( edited_position );
 			}
 
-			const size_t map_index =
-					( size_t )( mapPixelPosition.y ) * ( size_t )( region_size ) + ( size_t )( mapPixelPosition.x );
+			const size_t map_index = ( size_t )( mapPixelPosition.y ) * ( size_t )( region_size ) + ( size_t )( mapPixelPosition.x );
 			const Color src = readMapPixel( region_entry, map_index, mapPixelPosition, map_type );
 			Color dest = src;
 			if ( bUseCompute ) {
@@ -687,7 +659,7 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 				uint32_t source_value = 0u;
 				uint32_t target_value = 0u;
 				if ( map_type == TYPE_HEIGHT ) {
-					const float fSourceHeight = std::isfinite( src.r ) ? src.r : 0.0f;
+					const float fSourceHeight = isfinite( src.r ) ? src.r : 0.0f;
 					source_value = t3dAsUint( fSourceHeight );
 					edited_position.y = fSourceHeight;
 					edited_area = edited_area.expand( edited_position );
@@ -704,15 +676,12 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 							} else {
 								Vector2 brushXz( brushGlobalPosition.x, brushGlobalPosition.z );
 								if ( m_operationMovement.length_squared() > 0.f ) {
-									const Vector2 movement_xz =
-											Vector2( m_operationMovement.x, m_operationMovement.z ).normalized();
+									const Vector2 movement_xz = Vector2( m_operationMovement.x, m_operationMovement.z ).normalized();
 									const Vector2 offset = movement_xz * brushOffset.dot( movement_xz );
 									brushXz = Vector2( rGlobalPosition.x + offset.x, rGlobalPosition.z + offset.y );
 								}
 								const real_t fWeight =
-										CLAMP( direction.normalized().dot( brushXz - point1Xz ) / direction.length(),
-												0.0f,
-												1.0f );
+								        CLAMP( direction.normalized().dot( brushXz - point1Xz ) / direction.length(), 0.0f, 1.0f );
 								target_value = t3dAsUint( ( float )( Math::lerp( point_1.y, point_2.y, fWeight ) ) );
 							}
 						}
@@ -720,21 +689,18 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 				} else if ( map_type == TYPE_CONTROL ) {
 					source_value = t3dAsUint( src.r );
 					if ( m_tool == TEXTURE ) {
-						bEligible = isBrushSlopeAllowed(
-								brushSampler, bUnrestrictedSlope, clamped_slope_range, brushGlobalPosition );
+						bEligible = isBrushSlopeAllowed( brushSampler, bUnrestrictedSlope, clamped_slope_range, brushGlobalPosition );
 					}
 				} else {
 					source_value = packColorRgba8( src );
 					if ( bTextureFilter ) {
-						const float fControl =
-								t3dAsFloat( readControlBits( region_entry, map_index, mapPixelPosition ) );
-						const int texture_id = ( t3dGetBlend( fControl ) > 110 - margin ) ? t3dGetOverlay( fControl )
-																						  : t3dGetBase( fControl );
+						const float fControl = t3dAsFloat( readControlBits( region_entry, map_index, mapPixelPosition ) );
+						const int texture_id =
+						        ( t3dGetBlend( fControl ) > 110 - margin ) ? t3dGetOverlay( fControl ) : t3dGetBase( fControl );
 						bEligible = texture_id == asset_id;
 					}
 					if ( bEligible ) {
-						bEligible = isBrushSlopeAllowed(
-								brushSampler, bUnrestrictedSlope, clamped_slope_range, brushGlobalPosition );
+						bEligible = isBrushSlopeAllowed( brushSampler, bUnrestrictedSlope, clamped_slope_range, brushGlobalPosition );
 					}
 				}
 				if ( bEligible ) {
@@ -751,7 +717,7 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 			if ( map_type == TYPE_HEIGHT ) {
 				real_t fSrcf = src.r;
 				// In case data in existing map has nan or inf saved, check, and reset to real number if required.
-				fSrcf = std::isnan( fSrcf ) ? 0.f : fSrcf;
+				fSrcf = isnan( fSrcf ) ? 0.f : fSrcf;
 				edited_position.y = fSrcf;
 				edited_area = edited_area.expand( edited_position );
 				real_t fDestf = fSrcf;
@@ -761,7 +727,7 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 						if ( m_tool == HEIGHT ) {
 							// Height
 							fDestf = Math::lerp( fSrcf, fHeight, CLAMP( fBrushAlpha * strength, 0.f, 1.f ) );
-						} else if ( bModifierAlt && !std::isnan( rGlobalPosition.y ) ) {
+						} else if ( bModifierAlt && !isnan( rGlobalPosition.y ) ) {
 							// Lift troughs
 							const real_t fBrushCenterY = rGlobalPosition.y + fBrushAlpha * strength;
 							fDestf = Math::clamp( fBrushCenterY, fSrcf, fSrcf + fBrushAlpha * strength );
@@ -775,7 +741,7 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 						if ( m_tool == HEIGHT ) {
 							// Height, but GDScript has already picked height at cursor
 							fDestf = Math::lerp( fSrcf, fHeight, CLAMP( fBrushAlpha * strength, 0.f, 1.f ) );
-						} else if ( bModifierAlt && !std::isnan( rGlobalPosition.y ) ) {
+						} else if ( bModifierAlt && !isnan( rGlobalPosition.y ) ) {
 							// Flatten peaks
 							const real_t fBrushCenterY = rGlobalPosition.y - fBrushAlpha * strength;
 							fDestf = Math::clamp( fBrushCenterY, fSrcf - fBrushAlpha * strength, fSrcf );
@@ -806,8 +772,7 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 							if ( m_operationMovement.length_squared() > 0.f ) {
 								// Ramp up/down only in the direction of movement, to avoid giving winding
 								// paths one edge higher than the other.
-								const Vector2 movement_xz =
-										Vector2( m_operationMovement.x, m_operationMovement.z ).normalized();
+								const Vector2 movement_xz = Vector2( m_operationMovement.x, m_operationMovement.z ).normalized();
 								const Vector2 offset = movement_xz * Vector2( brushOffset ).dot( movement_xz );
 								brushXz = Vector2( rGlobalPosition.x + offset.x, rGlobalPosition.z + offset.y );
 							}
@@ -840,8 +805,7 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 				bool bAutoshader = t3dIsAuto( src.r );
 				switch ( m_tool ) {
 					case TEXTURE: {
-						if ( !isBrushSlopeAllowed(
-									 brushSampler, bUnrestrictedSlope, clamped_slope_range, brushGlobalPosition ) ) {
+						if ( !isBrushSlopeAllowed( brushSampler, bUnrestrictedSlope, clamped_slope_range, brushGlobalPosition ) ) {
 							continue;
 						}
 						switch ( m_nOperation ) {
@@ -862,8 +826,7 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 											// Angle from mouse movement.
 											angle = Vector2( -m_operationMovement.x, m_operationMovement.z ).angle();
 											// Avoid negative, align texture "up" with mouse direction.
-											angle = ( real_t )( Math::fmod(
-													Math::rad_to_deg( angle ) + 450.f, ( real_t )( 360.f ) ) );
+											angle = ( real_t )( Math::fmod( Math::rad_to_deg( angle ) + 450.f, ( real_t )( 360.f ) ) );
 										}
 										// Convert from degrees to 0 - 15 value range
 										uvrotation = ( uint32_t )( CLAMP( Math::round( angle / 22.5f ), 0.f, 15.f ) );
@@ -871,8 +834,7 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 									if ( base_id == asset_id_bits && bEnableScale && !bAutoshader ) {
 										// Offset negative and convert from percentage to 0 - 7 bit value range
 										// Maintain 0 = 0, remap negatives to end.
-										uvscale = scale_align[( uint8_t )( CLAMP(
-												Math::round( ( fScale + 60.f ) / 20.f ), 0.f, 7.f ) )];
+										uvscale = scale_align[( uint8_t )( CLAMP( Math::round( ( fScale + 60.f ) / 20.f ), 0.f, 7.f ) )];
 									}
 								}
 								break;
@@ -924,16 +886,14 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 									}
 								}
 
-								if ( ( base_id == asset_id_bits && fBlend < 0.5f ) ||
-										( overlay_id == asset_id_bits && fBlend >= 0.5f ) ) {
+								if ( ( base_id == asset_id_bits && fBlend < 0.5f ) || ( overlay_id == asset_id_bits && fBlend >= 0.5f ) ) {
 									// Set angle & scale
 									if ( bEnableAngle && !bAutoshader && fBrushAlpha > 0.5f ) {
 										if ( bDynamicAngle ) {
 											// Angle from mouse movement.
 											angle = Vector2( -m_operationMovement.x, m_operationMovement.z ).angle();
 											// Avoid negative, align texture "up" with mouse direction.
-											angle = ( real_t )( Math::fmod(
-													Math::rad_to_deg( angle ) + 450.f, ( real_t )( 360.f ) ) );
+											angle = ( real_t )( Math::fmod( Math::rad_to_deg( angle ) + 450.f, ( real_t )( 360.f ) ) );
 										}
 										// Convert from degrees to 0 - 15 value range
 										uvrotation = ( uint32_t )( CLAMP( Math::round( angle / 22.5f ), 0.f, 15.f ) );
@@ -941,8 +901,7 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 									if ( bEnableScale && !bAutoshader && fBrushAlpha > 0.5f ) {
 										// Offset negative and convert from percentage to 0 - 7 bit value range
 										// Maintain 0 = 0, remap negatives to end.
-										uvscale = scale_align[( uint8_t )( CLAMP(
-												Math::round( ( fScale + 60.f ) / 20.f ), 0.f, 7.f ) )];
+										uvscale = scale_align[( uint8_t )( CLAMP( Math::round( ( fScale + 60.f ) / 20.f ), 0.f, 7.f ) )];
 									}
 								}
 								break;
@@ -962,8 +921,7 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 							}
 
 							case AVERAGE: {
-								const real_t fAvg =
-										average( AVG_BLEND, brushGlobalPosition, src.r, 0.f, bModifierAlt ) / 255.f;
+								const real_t fAvg = average( AVG_BLEND, brushGlobalPosition, src.r, 0.f, bModifierAlt ) / 255.f;
 								fBlend = Math::lerp( fBlend, fAvg, CLAMP( fBrushAlpha * strength * 2.f, 0.f, 1.f ) );
 								break;
 							}
@@ -1001,9 +959,9 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 
 				// Convert back to bitfield
 				const uint32_t blend_int = ( uint32_t )( CLAMP( Math::round( fBlend * 255.f ), 0.f, 255.f ) );
-				const uint32_t bits = t3dEncBase( base_id ) | t3dEncOverlay( overlay_id ) | t3dEncBlend( blend_int ) |
-						t3dEncUvRotation( uvrotation ) | t3dEncUvScale( uvscale ) | t3dEncHole( bHole ) |
-						t3dEncNav( bNavigation ) | t3dEncAuto( bAutoshader );
+				const uint32_t bits = t3dEncBase( base_id ) | t3dEncOverlay( overlay_id ) | t3dEncBlend( blend_int )
+				        | t3dEncUvRotation( uvrotation ) | t3dEncUvScale( uvscale ) | t3dEncHole( bHole ) | t3dEncNav( bNavigation )
+				        | t3dEncAuto( bAutoshader );
 
 				// Write back to pixel in FORMAT_RF. Must be a 32-bit float
 				dest = Color( t3dAsFloat( bits ), 0.f, 0.f, 1.f );
@@ -1012,14 +970,12 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 				// Filter by visible texture
 				if ( bTextureFilter ) {
 					const float fSrcCtrl = t3dAsFloat( readControlBits( region_entry, map_index, mapPixelPosition ) );
-					const int tex_id = ( t3dGetBlend( fSrcCtrl ) > 110 - margin ) ? t3dGetOverlay( fSrcCtrl )
-																				  : t3dGetBase( fSrcCtrl );
+					const int tex_id = ( t3dGetBlend( fSrcCtrl ) > 110 - margin ) ? t3dGetOverlay( fSrcCtrl ) : t3dGetBase( fSrcCtrl );
 					if ( tex_id != asset_id ) {
 						continue;
 					}
 				}
-				if ( !isBrushSlopeAllowed(
-							 brushSampler, bUnrestrictedSlope, clamped_slope_range, brushGlobalPosition ) ) {
+				if ( !isBrushSlopeAllowed( brushSampler, bUnrestrictedSlope, clamped_slope_range, brushGlobalPosition ) ) {
 					continue;
 				}
 				switch ( m_tool ) {
@@ -1055,23 +1011,19 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 						switch ( m_nOperation ) {
 							case ADD: {
 								const real_t fTarget = .5f + .5f * roughness;
-								dest.a = Math::lerp(
-										( real_t )( src.a ), fTarget, CLAMP( fBrushAlpha * strength, 0.f, 1.f ) );
-								dest.a = ( float )( ( int )( dest.a * 255.f ) ) /
-										255.f; // Quantize explicitly so picked values match painted values
+								dest.a = Math::lerp( ( real_t )( src.a ), fTarget, CLAMP( fBrushAlpha * strength, 0.f, 1.f ) );
+								dest.a = ( float )( ( int )( dest.a * 255.f ) )
+								        / 255.f; // Quantize explicitly so picked values match painted values
 								break;
 							}
 							case SUBTRACT: {
-								dest.a = Math::lerp( ( real_t )( src.a ),
-										( real_t )( .5f ),
-										CLAMP( fBrushAlpha * strength, 0.f, 1.f ) );
+								dest.a = Math::lerp( ( real_t )( src.a ), ( real_t )( .5f ), CLAMP( fBrushAlpha * strength, 0.f, 1.f ) );
 								dest.a = ( float )( ( int )( dest.a * 255.f ) ) / 255.f;
 								break;
 							}
 							case AVERAGE: {
 								const real_t fAvg = average( AVG_ROUGHNESS, brushGlobalPosition, src.a, 0.5f );
-								dest.a = Math::lerp(
-										( real_t )( dest.a ), fAvg, CLAMP( fBrushAlpha * strength * 2.f, .0f, 1.f ) );
+								dest.a = Math::lerp( ( real_t )( dest.a ), fAvg, CLAMP( fBrushAlpha * strength * 2.f, .0f, 1.f ) );
 								dest.a = ( float )( ( int )( dest.a * 255.f ) ) / 255.f;
 								break;
 							}
@@ -1105,12 +1057,10 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 		params.m_nAssetId = asset_id_bits;
 		params.m_nUvRotation = compute_uv_rotation;
 		params.m_nUvScale = compute_uv_scale;
-		params.m_nFeatureFlags = ( bModifierAlt ? 1u : 0u ) | ( std::isfinite( rGlobalPosition.y ) ? 2u : 0u ) |
-				( bEnableTexture ? 4u : 0u ) | ( bEnableAngle ? 8u : 0u ) | ( bEnableScale ? 16u : 0u );
+		params.m_nFeatureFlags = ( bModifierAlt ? 1u : 0u ) | ( isfinite( rGlobalPosition.y ) ? 2u : 0u ) | ( bEnableTexture ? 4u : 0u )
+		        | ( bEnableAngle ? 8u : 0u ) | ( bEnableScale ? 16u : 0u );
 		if ( !pComputeBackend->processBrush( compute_elements, params ) ) {
-			LOG( WARN,
-					"Compute brush failed; using buffer-equivalent CPU fallback: ",
-					pComputeBackend->getLastError() );
+			LOG( WARN, "Compute brush failed; using buffer-equivalent CPU fallback: ", pComputeBackend->getLastError() );
 			Terrain3DCompute::processBrushCpu( compute_elements, params );
 		}
 		for ( size_t i = 0; i < compute_elements.size(); ++i ) {
@@ -1124,8 +1074,7 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 				continue;
 			}
 			backupRegion( entry.m_region, entry.m_bMapWasImplicit );
-			const size_t map_index =
-					( size_t )( write.m_mapPixel.y ) * ( size_t )( region_size ) + ( size_t )( write.m_mapPixel.x );
+			const size_t map_index = ( size_t )( write.m_mapPixel.y ) * ( size_t )( region_size ) + ( size_t )( write.m_mapPixel.x );
 			if ( map_type == TYPE_HEIGHT ) {
 				const float fResult = t3dAsFloat( element.m_nValue );
 				writeMapPixel( entry, map_index, write.m_mapPixel, Color( fResult, 0.f, 0.f, 1.f ), map_type );
@@ -1135,11 +1084,7 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 				result_position.y = fResult;
 				edited_area = edited_area.expand( result_position );
 			} else if ( map_type == TYPE_CONTROL ) {
-				writeMapPixel( entry,
-						map_index,
-						write.m_mapPixel,
-						Color( t3dAsFloat( element.m_nValue ), 0.f, 0.f, 1.f ),
-						map_type );
+				writeMapPixel( entry, map_index, write.m_mapPixel, Color( t3dAsFloat( element.m_nValue ), 0.f, 0.f, 1.f ), map_type );
 			} else {
 				writeMapPixel( entry, map_index, write.m_mapPixel, unpackColorRgba8( element.m_nValue ), map_type );
 			}
@@ -1150,13 +1095,13 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 	// Publish detached row-major byte planes once per modified region. This keeps
 	// the hot brush loop on raw contiguous storage while preserving Image resource
 	// identity for the renderer, undo snapshots and external references.
-	for ( t3dRegionMapCache_t &entry : region_cache ) {
+	for ( size_t iRegion = 0u; iRegion < ( size_t )( ( region_cache ).size() ); iRegion++ ) {
+		t3dRegionMapCache_t &entry = ( region_cache )[iRegion];
 		if ( entry.m_bModified && entry.m_bDirectAccess && entry.m_pMap && !entry.m_mapData.is_empty() ) {
-			entry.m_pMap->set_data(
-					region_size, region_size, entry.m_bMapHasMipmaps, entry.m_mapFormat, entry.m_mapData );
+			entry.m_pMap->set_data( region_size, region_size, entry.m_bMapHasMipmaps, entry.m_mapFormat, entry.m_mapData );
 		}
-		if ( entry.m_bMapWasImplicit && !entry.m_bModified && entry.m_region.is_valid() &&
-				( map_type == TYPE_CONTROL || map_type == TYPE_COLOR ) ) {
+		if ( entry.m_bMapWasImplicit && !entry.m_bModified && entry.m_region.is_valid()
+		        && ( map_type == TYPE_CONTROL || map_type == TYPE_COLOR ) ) {
 			// Region coverage is resolved before slope/texture filters are evaluated.
 			// Drop transient default maps for covered regions that received no write.
 			entry.m_region->compactMapIfDefault( map_type, false );
@@ -1166,7 +1111,8 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 	m_modifiedRegionScratch.clear();
 	m_modifiedRegionScratch.reserve( region_cache.size() );
 	eastl::vector<Vector2i> &modified_region_locations = m_modifiedRegionScratch;
-	for ( t3dRegionMapCache_t &entry : region_cache ) {
+	for ( size_t iRegion = 0u; iRegion < ( size_t )( ( region_cache ).size() ); iRegion++ ) {
+		t3dRegionMapCache_t &entry = ( region_cache )[iRegion];
 		if ( !entry.m_bModified || entry.m_region.is_null() ) {
 			continue;
 		}
@@ -1219,22 +1165,20 @@ void Terrain3DEditor::storeUndo( void ) {
 
 	if ( Terrain3D::s_debugLevel >= DEBUG ) {
 		LOG( DEBUG, "Storing Original Regions:" );
-		for ( const Ref<Terrain3DRegion> pRegion : m_originalRegions ) {
+		for ( size_t iRegion = 0u; iRegion < ( size_t )( ( m_originalRegions ).size() ); iRegion++ ) {
+			const Ref<Terrain3DRegion> pRegion = ( m_originalRegions )[iRegion];
 			if ( pRegion.is_valid() ) {
 				pRegion->dump();
 			}
 		}
 		LOG( DEBUG, "Storing Edited Regions:" );
-		for ( const Ref<Terrain3DRegion> pRegion : m_editedRegions ) {
+		for ( size_t iRegion = 0u; iRegion < ( size_t )( ( m_editedRegions ).size() ); iRegion++ ) {
+			const Ref<Terrain3DRegion> pRegion = ( m_editedRegions )[iRegion];
 			if ( pRegion.is_valid() ) {
 				pRegion->dump();
 			}
 		}
-		LOG( DEBUG,
-				"Targeted edit snapshots: undo=",
-				m_originalEditSnapshots.size(),
-				", redo=",
-				m_editedEditSnapshots.size() );
+		LOG( DEBUG, "Targeted edit snapshots: undo=", m_originalEditSnapshots.size(), ", redo=", m_editedEditSnapshots.size() );
 	}
 
 	// Store regions that were removed or added
@@ -1261,16 +1205,14 @@ void Terrain3DEditor::storeUndo( void ) {
 		LOG( INFO, "Storing undo snapshot" );
 		String action_name = "Terrain3D Edit";
 		if ( bHasValidTool && m_nOperation >= 0 && m_nOperation < OP_MAX ) {
-			action_name = String( "Terrain3D " ) + s_pszEditorOperationNames[m_nOperation] + String( " " ) +
-					s_pszEditorToolNames[m_tool];
+			action_name = String( "Terrain3D " ) + s_pszEditorOperationNames[m_nOperation] + String( " " ) + s_pszEditorToolNames[m_tool];
 		}
 		LOG( DEBUG, "Creating undo action: '", action_name, "'" );
 		m_pTerrain->getPlugin()->call( "create_undo_action", action_name );
 
 		LOG( DEBUG, "Storing undo snapshot: " );
 		Terrain3DUtil::printDict( "_undo_data snapshot", m_undoData, DEBUG );
-		m_pTerrain->getPlugin()->call(
-				"add_undo_method", Callable( this, "apply_undo" ).bind( m_undoData.duplicate() ) );
+		m_pTerrain->getPlugin()->call( "add_undo_method", Callable( this, "apply_undo" ).bind( m_undoData.duplicate() ) );
 
 		LOG( DEBUG, "Storing redo snapshot: " );
 		Terrain3DUtil::printDict( "redo_data snapshot", redo_data, DEBUG );
@@ -1287,7 +1229,7 @@ void Terrain3DEditor::applyUndo( const Dictionary &rData ) {
 
 	Terrain3DData *const pData = m_pTerrain->getData();
 	eastl::vector<Vector2i> restored_region_locations;
-	eastl::array<eastl::vector<Vector2i>, REGION_TYPE_MAX> restored_map_locations;
+	eastl::vector<Vector2i> restored_map_locations[REGION_TYPE_MAX];
 	bool bInstancesChanged = false;
 
 	if ( rData.has( "edit_snapshots" ) ) {
@@ -1302,7 +1244,8 @@ void Terrain3DEditor::applyUndo( const Dictionary &rData ) {
 		Terrain3DUtil::printArr( "Edited regions", rData["edited_regions"] );
 		const TypedArray<Terrain3DRegion> undo_regions = rData["edited_regions"];
 		LOG( DEBUG, "Backup has ", undo_regions.size(), " edited regions" );
-		for ( Ref<Terrain3DRegion> pRegion : undo_regions ) {
+		for ( size_t iRegion = 0u; iRegion < ( size_t )( ( undo_regions ).size() ); iRegion++ ) {
+			Ref<Terrain3DRegion> pRegion = ( undo_regions )[iRegion];
 			if ( pRegion.is_null() ) {
 				LOG( ERROR, "Null region saved in undo data. Please report this error." );
 				continue;
@@ -1316,7 +1259,7 @@ void Terrain3DEditor::applyUndo( const Dictionary &rData ) {
 				continue;
 			}
 			pRegion->setModified( true ); // Marks the region for per-layer map updates.
-			pRegion->setEdited( true ); // Includes the region in the next map update.
+			pRegion->setEdited( true );   // Includes the region in the next map update.
 			pRegion->setDeleted( false ); // Ensure region not marked for deletion
 			restored_region_locations.push_back( pRegion->getLocation() );
 			if ( Terrain3D::s_debugLevel >= DEBUG ) {
@@ -1334,7 +1277,8 @@ void Terrain3DEditor::applyUndo( const Dictionary &rData ) {
 	if ( rData.has( "added_regions" ) ) {
 		LOG( DEBUG, "Added regions: ", rData["added_regions"] );
 		const TypedArray<Vector2i> region_locs = rData["added_regions"];
-		for ( const Vector2i region_loc : region_locs ) {
+		for ( size_t iRegion = 0u; iRegion < ( size_t )( ( region_locs ).size() ); iRegion++ ) {
+			const Vector2i region_loc = ( region_locs )[iRegion];
 			Ref<Terrain3DRegion> pRegion = pData->getRegion( region_loc );
 			if ( pRegion.is_valid() ) {
 				LOG( DEBUG, "Marking region: ", region_loc, " +deleted, +modified, ", t3dPtrToStr( *pRegion ) );
@@ -1346,7 +1290,8 @@ void Terrain3DEditor::applyUndo( const Dictionary &rData ) {
 	if ( rData.has( "removed_regions" ) ) {
 		LOG( DEBUG, "Removed regions: ", rData["removed_regions"] );
 		const TypedArray<Vector2i> region_locs = rData["removed_regions"];
-		for ( const Vector2i region_loc : region_locs ) {
+		for ( size_t iRegion = 0u; iRegion < ( size_t )( ( region_locs ).size() ); iRegion++ ) {
+			const Vector2i region_loc = ( region_locs )[iRegion];
 			Ref<Terrain3DRegion> pRegion = pData->getRegion( region_loc );
 			if ( pRegion.is_valid() ) {
 				LOG( DEBUG, "Marking region: ", region_loc, " -deleted, +modified, ", t3dPtrToStr( *pRegion ) );
@@ -1376,11 +1321,9 @@ void Terrain3DEditor::applyUndo( const Dictionary &rData ) {
 	const AABB restored_area = rData.has( "edited_area" ) ? AABB( rData["edited_area"] ) : AABB();
 	for ( int map_type = TYPE_HEIGHT; map_type < REGION_TYPE_MAX; ++map_type ) {
 		eastl::vector<Vector2i> commit_locations = restored_map_locations[( size_t )( map_type )];
-		commit_locations.insert(
-				commit_locations.end(), restored_region_locations.begin(), restored_region_locations.end() );
-		std::sort( commit_locations.begin(), commit_locations.end(), locationLess );
-		commit_locations.erase(
-				std::unique( commit_locations.begin(), commit_locations.end() ), commit_locations.end() );
+		commit_locations.insert( commit_locations.end(), restored_region_locations.begin(), restored_region_locations.end() );
+		eastl::sort( commit_locations.begin(), commit_locations.end(), locationLess );
+		commit_locations.erase( eastl::unique( commit_locations.begin(), commit_locations.end() ), commit_locations.end() );
 		if ( commit_locations.empty() ) {
 			continue;
 		}
@@ -1393,24 +1336,21 @@ void Terrain3DEditor::applyUndo( const Dictionary &rData ) {
 	// After TextureArray updates clear edited regions flag.
 	if ( rData.has( "edited_regions" ) ) {
 		const TypedArray<Terrain3DRegion> undo_regions = rData["edited_regions"];
-		for ( Ref<Terrain3DRegion> pRegion : undo_regions ) {
+		for ( size_t iRegion = 0u; iRegion < ( size_t )( ( undo_regions ).size() ); iRegion++ ) {
+			Ref<Terrain3DRegion> pRegion = ( undo_regions )[iRegion];
 			if ( pRegion.is_valid() ) {
 				pRegion->setEdited( false );
 			}
 		}
 	}
-	if ( bInstancesChanged || rData.has( "edited_regions" ) || rData.has( "added_regions" ) ||
-			rData.has( "removed_regions" ) ) {
+	if ( bInstancesChanged || rData.has( "edited_regions" ) || rData.has( "added_regions" ) || rData.has( "removed_regions" ) ) {
 		m_pTerrain->getInstancer()->updateMmis( -1, s_v2iMax, true );
 	}
 }
 
 // Returns average of height, blend (as real_t(0-255)), or roughness. Overloaded version handles average color
-float Terrain3DEditor::average( const t3dAverageMode_t mode,
-		const Vector3 &rGlobalPosition,
-		const float fBase,
-		const float fNanVal,
-		const bool bAlt ) const {
+float Terrain3DEditor::average(
+        const t3dAverageMode_t mode, const Vector3 &rGlobalPosition, const float fBase, const float fNanVal, const bool bAlt ) const {
 	IS_DATA_INIT( NAN );
 	Terrain3DData *const pData = m_pTerrain->getData();
 	const real_t fVertexSpacing = m_pTerrain->getVertexSpacing();
@@ -1441,19 +1381,17 @@ float Terrain3DEditor::average( const t3dAverageMode_t mode,
 	Color pixel;
 	float fLeft, right, up, down;
 	pixel = pData->getPixel( map_type, left_position );
-	fLeft = std::isnan( pixel.r ) ? fNanVal : pixel[index];
+	fLeft = isnan( pixel.r ) ? fNanVal : pixel[index];
 	pixel = pData->getPixel( map_type, right_position );
-	right = std::isnan( pixel.r ) ? fNanVal : pixel[index];
+	right = isnan( pixel.r ) ? fNanVal : pixel[index];
 	pixel = pData->getPixel( map_type, up_position );
-	up = std::isnan( pixel.r ) ? fNanVal : pixel[index];
+	up = isnan( pixel.r ) ? fNanVal : pixel[index];
 	pixel = pData->getPixel( map_type, down_position );
-	down = std::isnan( pixel.r ) ? fNanVal : pixel[index];
+	down = isnan( pixel.r ) ? fNanVal : pixel[index];
 
 	if ( mode == AVG_BLEND ) {
 		if ( bAlt ) {
-			return ( t3dGetBlend( fBase ) + t3dGetBlend( fLeft ) + t3dGetBlend( right ) + t3dGetBlend( up ) +
-						   t3dGetBlend( down ) ) *
-					0.2f;
+			return ( t3dGetBlend( fBase ) + t3dGetBlend( fLeft ) + t3dGetBlend( right ) + t3dGetBlend( up ) + t3dGetBlend( down ) ) * 0.2f;
 		} else {
 			return Math::lerp( ( float )( t3dGetBlend( fBase ) ), 128.f, .1f );
 		}
@@ -1472,27 +1410,27 @@ Color Terrain3DEditor::average( const Vector3 &rGlobalPosition, const Color &clr
 	const Vector3 up_position = rGlobalPosition + Vector3( 0.f, 0.f, fVertexSpacing );
 
 	Color left = pData->getPixel( TYPE_COLOR, left_position ).srgb_to_linear();
-	if ( std::isnan( left.r ) ) {
+	if ( isnan( left.r ) ) {
 		left = s_colorWhite;
 	}
 	Color right = pData->getPixel( TYPE_COLOR, right_position ).srgb_to_linear();
-	if ( std::isnan( right.r ) ) {
+	if ( isnan( right.r ) ) {
 		right = s_colorWhite;
 	}
 	Color up = pData->getPixel( TYPE_COLOR, up_position ).srgb_to_linear();
-	if ( std::isnan( up.r ) ) {
+	if ( isnan( up.r ) ) {
 		up = s_colorWhite;
 	}
 	Color down = pData->getPixel( TYPE_COLOR, down_position ).srgb_to_linear();
-	if ( std::isnan( down.r ) ) {
+	if ( isnan( down.r ) ) {
 		down = s_colorWhite;
 	}
 	Color base = clrBase.srgb_to_linear();
 	return Color( ( base.r + left.r + right.r + up.r + down.r ) * 0.2f,
-			( base.g + left.g + right.g + up.g + down.g ) * 0.2f,
-			( base.b + left.b + right.b + up.b + down.b ) * 0.2f,
-			1.f )
-			.linear_to_srgb();
+	        ( base.g + left.g + right.g + up.g + down.g ) * 0.2f,
+	        ( base.b + left.b + right.b + up.b + down.b ) * 0.2f,
+	        1.f )
+	        .linear_to_srgb();
 }
 
 // -----------------------------------------------------------------------------
@@ -1502,7 +1440,7 @@ Color Terrain3DEditor::average( const Vector3 &rGlobalPosition, const Color &clr
 // Only editor-owned fields are sanitized here; instancer-specific fields remain untouched.
 void Terrain3DEditor::setBrushData( const Dictionary &rData ) {
 	m_brushData = rData; // Same instance. Anything could be inserted after this, eg mouse_pressure
-	m_pCachedBrushImage = nullptr;
+	m_pCachedBrushImage = NULL;
 	m_cachedBrushImageSize = s_v2iZero;
 	m_fCachedBrushGamma = -1.f;
 	m_fBrushAlphaCache.clear();
@@ -1529,14 +1467,13 @@ void Terrain3DEditor::setBrushData( const Dictionary &rData ) {
 
 	// Sanitize scalar brush settings.
 	// Size is also constrained by operateMap() and Terrain3DInstancer::addTransforms().
-	m_brushData["size"] = CLAMP( ( real_t )( rData.get( "size", 10.f ) ), 0.1f, 4096.f ); // Diameter in meters
-	m_brushData["strength"] = CLAMP(
-			( real_t )( rData.get( "strength", .1f ) ) * .01f, .01f, 1000.f ); // 1-100k% (max of 1000m per click)
+	m_brushData["size"] = CLAMP( ( real_t )( rData.get( "size", 10.f ) ), 0.1f, 4096.f );               // Diameter in meters
+	m_brushData["strength"] = CLAMP( ( real_t )( rData.get( "strength", .1f ) ) * .01f, .01f, 1000.f ); // 1-100k% (max of 1000m per click)
 	// mouse_pressure is injected by editor.gd and sanitized by operateMap().
 	Vector2 slope = rData.get( "slope", Vector2( 0.f, 90.f ) );
 	slope.x = CLAMP( slope.x, 0.f, 90.f );
 	slope.y = CLAMP( slope.y, 0.f, 90.f );
-	m_brushData["slope"] = slope; // 0-90 (degrees)
+	m_brushData["slope"] = slope;                                                                 // 0-90 (degrees)
 	m_brushData["height"] = CLAMP( ( real_t )( rData.get( "height", 0.f ) ), -65536.f, 65536.f ); // Meters
 	Color col = rData.get( "color", COLOR_ROUGHNESS );
 	col.r = CLAMP( col.r, 0.f, 5.f );
@@ -1576,9 +1513,9 @@ void Terrain3DEditor::setTool( const t3dTool_t tool ) {
 	}
 	const t3dTool_t old_tool = m_tool;
 	m_tool = new_tool;
-	if ( m_pTerrain &&
-			( m_tool == t3dTool_t::NAVIGATION || old_tool == t3dTool_t::NAVIGATION || m_tool == t3dTool_t::REGION ||
-					old_tool == t3dTool_t::REGION ) ) {
+	if ( m_pTerrain
+	        && ( m_tool == t3dTool_t::NAVIGATION || old_tool == t3dTool_t::NAVIGATION || m_tool == t3dTool_t::REGION
+	                || old_tool == t3dTool_t::REGION ) ) {
 		m_pTerrain->getMaterial()->update( FULL_REBUILD );
 	}
 }
@@ -1680,14 +1617,14 @@ void Terrain3DEditor::backupRegionFull( const Ref<Terrain3DRegion> &rRegion ) {
 }
 
 void Terrain3DEditor::releaseRuntimeAllocatorStorage( void ) {
-	eastl::vector<float>().swap( m_fBrushAlphaCache );
-	eastl::vector<t3dAxisSample_t>().swap( m_xAxisScratch );
-	eastl::vector<t3dAxisSample_t>().swap( m_zAxisScratch );
-	eastl::vector<t3dRegionMapCache_t>().swap( m_regionCacheScratch );
-	eastl::vector<t3dBrushElement_t>().swap( m_computeElementScratch );
-	eastl::vector<t3dComputeWrite_t>().swap( m_computeWriteScratch );
-	eastl::vector<Vector2i>().swap( m_modifiedRegionScratch );
-	m_pCachedBrushImage = nullptr;
+	t3dVectorRelease( m_fBrushAlphaCache );
+	t3dVectorRelease( m_xAxisScratch );
+	t3dVectorRelease( m_zAxisScratch );
+	t3dVectorRelease( m_regionCacheScratch );
+	t3dVectorRelease( m_computeElementScratch );
+	t3dVectorRelease( m_computeWriteScratch );
+	t3dVectorRelease( m_modifiedRegionScratch );
+	m_pCachedBrushImage = NULL;
 	m_cachedBrushImageSize = s_v2iZero;
 	m_fCachedBrushGamma = -1.f;
 }
@@ -1700,11 +1637,11 @@ void Terrain3DEditor::trimBrushScratch( void ) {
 	m_computeWriteScratch.clear();
 	m_modifiedRegionScratch.clear();
 
-	const size_t compute_bytes = m_computeElementScratch.capacity() * sizeof( t3dBrushElement_t ) +
-			m_computeWriteScratch.capacity() * sizeof( t3dComputeWrite_t );
+	const size_t compute_bytes = m_computeElementScratch.capacity() * sizeof( t3dBrushElement_t )
+	        + m_computeWriteScratch.capacity() * sizeof( t3dComputeWrite_t );
 	if ( compute_bytes > s_nComputeScratchRetainLimit ) {
-		eastl::vector<t3dBrushElement_t>().swap( m_computeElementScratch );
-		eastl::vector<t3dComputeWrite_t>().swap( m_computeWriteScratch );
+		t3dVectorRelease( m_computeElementScratch );
+		t3dVectorRelease( m_computeWriteScratch );
 	}
 
 	// Retain no more region-cache entries than the active logical terrain can use.
@@ -1714,7 +1651,7 @@ void Terrain3DEditor::trimBrushScratch( void ) {
 	}
 	const size_t region_cache_limit = ( size_t )( region_map_size ) * ( size_t )( region_map_size );
 	if ( m_regionCacheScratch.capacity() > region_cache_limit ) {
-		eastl::vector<t3dRegionMapCache_t>().swap( m_regionCacheScratch );
+		t3dVectorRelease( m_regionCacheScratch );
 	}
 }
 
@@ -1723,17 +1660,15 @@ void Terrain3DEditor::stopOperation( void ) {
 	IS_DATA_INIT_MESG( "Terrain isn't initialized", VOID );
 	// If undo was created and terrain actually modified, store it
 	LOG( DEBUG,
-			"Backed up regions: ",
-			m_originalRegions.size(),
-			", Edited regions: ",
-			m_editedRegions.size(),
-			", Targeted snapshots: ",
-			m_originalEditSnapshots.size(),
-			", Added/Removed regions: ",
-			m_addedRemovedLocations.size() );
-	if ( m_bIsOperating &&
-			( !m_addedRemovedLocations.is_empty() || !m_editedRegions.is_empty() ||
-					!m_originalEditSnapshots.is_empty() ) ) {
+	        "Backed up regions: ",
+	        m_originalRegions.size(),
+	        ", Edited regions: ",
+	        m_editedRegions.size(),
+	        ", Targeted snapshots: ",
+	        m_originalEditSnapshots.size(),
+	        ", Added/Removed regions: ",
+	        m_addedRemovedLocations.size() );
+	if ( m_bIsOperating && ( !m_addedRemovedLocations.is_empty() || !m_editedRegions.is_empty() || !m_originalEditSnapshots.is_empty() ) ) {
 		for ( int i = 0; i < m_editedRegions.size(); i++ ) {
 			Ref<Terrain3DRegion> pRegion = m_editedRegions[i];
 			pRegion->setEdited( false );
@@ -1812,8 +1747,7 @@ void Terrain3DEditor::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "start_operation", "position" ), &Terrain3DEditor::startOperation );
 	ClassDB::bind_method( D_METHOD( "is_operating" ), &Terrain3DEditor::isOperating );
 	ClassDB::bind_method( D_METHOD( "operate", "position", "camera_direction" ), &Terrain3DEditor::operate );
-	ClassDB::bind_method(
-			D_METHOD( "backup_region", "region", "map_was_implicit" ), &Terrain3DEditor::backupRegion, DEFVAL( false ) );
+	ClassDB::bind_method( D_METHOD( "backup_region", "region", "map_was_implicit" ), &Terrain3DEditor::backupRegion, DEFVAL( false ) );
 	ClassDB::bind_method( D_METHOD( "backup_region_full", "region" ), &Terrain3DEditor::backupRegionFull );
 	ClassDB::bind_method( D_METHOD( "stop_operation" ), &Terrain3DEditor::stopOperation );
 

@@ -1,7 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_EROSION_SETTINGS_CLASS_H
 #define TERRAIN3D_EROSION_SETTINGS_CLASS_H
 

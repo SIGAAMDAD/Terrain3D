@@ -74,15 +74,14 @@ var editor_decal_color: Array[Color] = [Color(), Color(), Color()]
 var editor_decal_visible: Array[bool] = [false, false, false]
 var editor_decal_part: Array[bool] = [true, true] # Decal[0] cursor components: brush, reticle
 var editor_decal_timer: Timer
+var _editor_material_param_cache: Dictionary = {}
+var _editor_material_param_owner_id: int = 0
 var editor_decal_fade: float :
 	set(value):
 		editor_decal_fade = value
 		if editor_decal_color.size() > 0:
 			editor_decal_color[0].a = value
 			_set_editor_material_param("_editor_decal_color", editor_decal_color)
-			if value < 0.001 and is_instance_valid(plugin) and is_instance_valid(plugin.terrain):
-				var r_map: PackedInt32Array = plugin.terrain.data.get_region_map()
-				_set_editor_material_param("_region_map", r_map)
 
 
 func _enter_tree() -> void:
@@ -707,8 +706,10 @@ func update_decal() -> void:
 	editor_decal_timer.start()
 
 	## Region Operations
-	var r_map: PackedInt32Array = plugin.terrain.data.get_region_map()
 	if plugin.editor.get_tool() == Terrain3DEditor.REGION:
+		# The physical page table is only needed to evaluate add/subtract region
+		# feedback. Avoid copying it into GDScript on every non-region mouse move.
+		var r_map: PackedInt32Array = plugin.terrain.data.get_region_map()
 		var r_size: float = float(plugin.terrain.get_region_size()) * plugin.terrain.get_vertex_spacing()
 		var map_size: int = plugin.terrain.data.get_region_map_size()
 		var half_r_size: float = r_size * 0.5
@@ -884,7 +885,6 @@ func update_decal() -> void:
 	_set_editor_material_param("_editor_decal_color", editor_decal_color)
 	_set_editor_material_param("_editor_decal_visible", editor_decal_visible)
 	_set_editor_material_param("_editor_decal_part", editor_decal_part)
-	_set_editor_material_param("_region_map", r_map)
 
 
 func _set_editor_material_param(p_name: StringName, p_value: Variant) -> void:
@@ -892,7 +892,23 @@ func _set_editor_material_param(p_name: StringName, p_value: Variant) -> void:
 		return
 	if not is_instance_valid(plugin.terrain.material):
 		return
-	plugin.terrain.material.set_shader_param(p_name, p_value)
+
+	var material := plugin.terrain.material
+	var owner_id: int = material.get_instance_id()
+	if owner_id != _editor_material_param_owner_id:
+		_editor_material_param_cache.clear()
+		_editor_material_param_owner_id = owner_id
+
+	# Mouse motion rebuilds the decal state frequently. Only cross the native
+	# material boundary when a value actually changed. Arrays are duplicated in
+	# the cache because the live decal arrays are mutated in place.
+	if _editor_material_param_cache.has(p_name) and _editor_material_param_cache[p_name] == p_value:
+		return
+	if p_value is Array:
+		_editor_material_param_cache[p_name] = p_value.duplicate(true)
+	else:
+		_editor_material_param_cache[p_name] = p_value
+	material.set_shader_param(p_name, p_value)
 
 
 func is_shader_valid() -> bool:
@@ -908,9 +924,6 @@ func is_shader_valid() -> bool:
 func hide_decal() -> void:
 	editor_decal_visible = [false, false, false]
 	_set_editor_material_param("_editor_decal_visible", editor_decal_visible)
-	if is_instance_valid(plugin) and is_instance_valid(plugin.terrain):
-		var r_map: PackedInt32Array = plugin.terrain.data.get_region_map()
-		_set_editor_material_param("_region_map", r_map)
 
 
 # These array sizes are reset to 0 when closing scenes for some unknown reason, so check and reset

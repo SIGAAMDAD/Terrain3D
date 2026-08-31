@@ -21,6 +21,7 @@ var directory_setup: DirectoryWizard = DirectoryWizard.new()
 var packer: ChannelPacker = ChannelPacker.new()
 var baker: LodBaker = LodBaker.new()
 var _runtime_page_cook_confirm: ConfirmationDialog
+var _runtime_page_migrate_confirm: ConfirmationDialog
 var _runtime_page_cook_result: AcceptDialog
 
 # These are IDs and order must remain consistent with add_item and set_disabled calls.
@@ -29,6 +30,7 @@ enum {
 	MENU_REGION_LIGHTMAP,
 	MENU_HLOD,
 	MENU_COOK_RUNTIME_DATASET,
+	MENU_MIGRATE_RUNTIME_PAGES,
 	MENU_PACK_TEXTURES,
 	MENU_SEPARATOR,
 	MENU_BAKE_ARRAY_MESH,
@@ -72,6 +74,7 @@ func _enter_tree() -> void:
 	popup.add_item("Bake Region Lightmaps…", MENU_REGION_LIGHTMAP)
 	popup.add_item("Hierarchical LOD…", MENU_HLOD)
 	popup.add_item("Cook Runtime Dataset…", MENU_COOK_RUNTIME_DATASET)
+	popup.add_item("Migrate Runtime Pages…", MENU_MIGRATE_RUNTIME_PAGES)
 	popup.add_item("Channel Packer…", MENU_PACK_TEXTURES)
 	popup.add_separator("", MENU_SEPARATOR)
 	popup.add_item("Bake Terrain Mesh…", MENU_BAKE_ARRAY_MESH)
@@ -89,6 +92,7 @@ func _enter_tree() -> void:
 	_set_item_tooltip(popup, MENU_REGION_LIGHTMAP, "Bake independent lightmaps for every authored Terrain3D region in the active data directory.")
 	_set_item_tooltip(popup, MENU_HLOD, "Analyze, bake, validate, and preview Terrain3D hierarchical LOD proxies.")
 	_set_item_tooltip(popup, MENU_COOK_RUNTIME_DATASET, "Compile and reload-validate every authored terrain region as a .t3dpage runtime page, then rebuild the far atlas.")
+	_set_item_tooltip(popup, MENU_MIGRATE_RUNTIME_PAGES, "Scan only runtime-page headers and regenerate legacy .t3dpage files from authoritative region resources. Current pages are left untouched.")
 	_set_item_tooltip(popup, MENU_PACK_TEXTURES, "Pack albedo/height and normal/roughness textures.")
 	_set_item_tooltip(popup, MENU_BAKE_ARRAY_MESH, "Create a MeshInstance3D from terrain geometry.")
 	_set_item_tooltip(popup, MENU_BAKE_OCCLUDER, "Create a coarse OccluderInstance3D from terrain geometry.")
@@ -125,6 +129,8 @@ func _on_menu_pressed(p_id: int) -> void:
 			plugin.open_hlod_panel()
 		MENU_COOK_RUNTIME_DATASET:
 			_open_runtime_page_cook_confirmation()
+		MENU_MIGRATE_RUNTIME_PAGES:
+			_open_runtime_page_migrate_confirmation()
 		MENU_PACK_TEXTURES:
 			packer.pack_textures_popup()
 		MENU_BAKE_ARRAY_MESH:
@@ -145,6 +151,92 @@ func _on_menu_pressed(p_id: int) -> void:
 			OS.shell_show_in_file_manager(
 				ProjectSettings.globalize_path("res://addons/terrain_3d/brushes")
 			)
+
+
+func _open_runtime_page_migrate_confirmation() -> void:
+	if not is_instance_valid(plugin) or not is_instance_valid(plugin.terrain) or plugin.terrain.data == null:
+		push_error("Select a Terrain3D node with loaded terrain data before migrating runtime pages")
+		return
+	var inspection: Dictionary = plugin.terrain.data.inspect_gpu_region_page_migration()
+	if bool(inspection.get("preflight_failed", false)):
+		var preflight_lines: PackedStringArray = PackedStringArray([
+			"Terrain3D could not build a safe runtime-page migration set.",
+			"",
+		])
+		var preflight_errors: PackedStringArray = inspection.get("errors", PackedStringArray())
+		for error_text: String in preflight_errors:
+			preflight_lines.append("• %s" % error_text)
+		_show_runtime_page_result("Runtime Page Migration Needs Attention", "\n".join(preflight_lines))
+		return
+	var legacy: int = int(inspection.get("legacy", 0))
+	var future: int = int(inspection.get("future", 0))
+	var invalid: int = int(inspection.get("invalid", 0))
+	if legacy == 0:
+		_show_runtime_page_result("Runtime Page Migration", "\n".join(PackedStringArray([
+			"Current page format: v%d" % int(inspection.get("current_version", 0)),
+			"Current pages: %d" % int(inspection.get("current", 0)),
+			"Legacy pages: 0",
+			"Missing pages: %d" % int(inspection.get("missing", 0)),
+			"Invalid pages: %d" % invalid,
+			"Future-version pages: %d" % future,
+			"",
+			"No format migration is required.",
+		])))
+		return
+	if future > 0:
+		_show_runtime_page_result("Runtime Page Migration Blocked", "\n".join(PackedStringArray([
+			"Legacy pages ready to migrate: %d" % legacy,
+			"Future-version pages: %d" % future,
+			"",
+			"A newer page format is present. This build will not write any pages into that dataset.",
+		])))
+		return
+	if not is_instance_valid(_runtime_page_migrate_confirm):
+		_runtime_page_migrate_confirm = ConfirmationDialog.new()
+		_runtime_page_migrate_confirm.title = "Migrate Terrain Runtime Pages"
+		_runtime_page_migrate_confirm.cancel_button_text = "Cancel"
+		_runtime_page_migrate_confirm.min_size = Vector2i(600, 250)
+		_runtime_page_migrate_confirm.confirmed.connect(_migrate_runtime_pages)
+		add_child(_runtime_page_migrate_confirm)
+	_runtime_page_migrate_confirm.ok_button_text = "Migrate %d Page%s" % [legacy, "" if legacy == 1 else "s"]
+	_runtime_page_migrate_confirm.dialog_text = "\n".join(PackedStringArray([
+		"Target format: v%d" % int(inspection.get("current_version", 0)),
+		"Current pages left untouched: %d" % int(inspection.get("current", 0)),
+		"Legacy pages to regenerate: %d" % legacy,
+		"Missing pages left untouched: %d" % int(inspection.get("missing", 0)),
+		"Invalid pages left untouched: %d" % invalid,
+		"",
+		"Migration regenerates only legacy .t3dpage files from the authoritative terrain3d*.res sources. Each page is published atomically and reload-validated before the old page is discarded.",
+	]))
+	_runtime_page_migrate_confirm.popup_centered()
+
+
+func _migrate_runtime_pages() -> void:
+	if not is_instance_valid(plugin) or not is_instance_valid(plugin.terrain) or plugin.terrain.data == null:
+		push_error("Terrain3D data became unavailable before runtime-page migration started")
+		return
+	var result: Dictionary = plugin.terrain.data.migrate_gpu_region_pages(false)
+	var lines: PackedStringArray = PackedStringArray([
+		"Migration status: %s" % ("COMPLETE" if bool(result.get("migration_complete", false)) else "INCOMPLETE"),
+		"Dataset complete: %s" % ("YES" if bool(result.get("complete", false)) else "NO"),
+		"Target page format: v%d" % int(result.get("current_version", 0)),
+		"Migrated: %d / %d" % [int(result.get("migrated", 0)), int(result.get("legacy_candidates", 0))],
+		"Current / unchanged: %d" % int(result.get("unchanged", 0)),
+		"Skipped: %d  (missing %d · invalid %d)" % [
+			int(result.get("skipped", 0)),
+			int(result.get("missing_skipped", 0)),
+			int(result.get("invalid_skipped", 0)),
+		],
+		"Failures: %d" % int(result.get("failed", 0)),
+		"World manifest republished: %s" % ("YES" if bool(result.get("manifest_published", false)) else "NO"),
+	])
+	var errors: PackedStringArray = result.get("errors", PackedStringArray())
+	if not errors.is_empty():
+		lines.append("")
+		lines.append("Errors:")
+		for error_text: String in errors:
+			lines.append("• %s" % error_text)
+	_show_runtime_page_result("Terrain Runtime Page Migration", "\n".join(lines))
 
 
 func _open_runtime_page_cook_confirmation() -> void:
@@ -234,6 +326,7 @@ func _on_menu_about_to_popup() -> void:
 	popup.set_item_disabled(MENU_REGION_LIGHTMAP, not has_terrain)
 	popup.set_item_disabled(MENU_HLOD, not has_terrain)
 	popup.set_item_disabled(MENU_COOK_RUNTIME_DATASET, not has_terrain)
+	popup.set_item_disabled(MENU_MIGRATE_RUNTIME_PAGES, not has_terrain)
 	popup.set_item_disabled(MENU_PACK_TEXTURES, not has_terrain)
 	popup.set_item_disabled(MENU_BAKE_ARRAY_MESH, not has_terrain)
 	popup.set_item_disabled(MENU_BAKE_OCCLUDER, not has_terrain)

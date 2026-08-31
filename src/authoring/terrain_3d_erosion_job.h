@@ -1,26 +1,20 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_EROSION_JOB_CLASS_H
 #define TERRAIN3D_EROSION_JOB_CLASS_H
 
 #include "Terrain3DConstants.h"
+#include "core/terrain_3d_sync.h"
 #include "authoring/terrain_3d_erosion_settings.h"
 #include "data/terrain_3d_half_buffer.h"
 #include "eastl_config.h"
 #include "memory/terrain_3d_linear_arena.h"
 
-#include <EASTL/array.h>
 #include <EASTL/vector.h>
-#include <atomic>
-#include <condition_variable>
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/ref_counted.hpp>
-#include <mutex>
-
 class Terrain3DData;
 typedef struct t3dErosionKernels_s t3dErosionKernels_t;
 
@@ -102,8 +96,8 @@ typedef struct t3dImageSnapshot_s {
 	PackedByteArray m_rfData;
 
 	EA_FORCE_INLINE bool isValid( void ) const {
-		return m_size.x > 0 && m_size.y > 0 &&
-				m_rfData.size() >= ( int64_t )( m_size.x ) * ( int64_t )( m_size.y ) * ( int64_t )( sizeof( float ) );
+		return m_size.x > 0 && m_size.y > 0
+		        && m_rfData.size() >= ( int64_t )( m_size.x ) * ( int64_t )( m_size.y ) * ( int64_t )( sizeof( float ) );
 	}
 	EA_FORCE_INLINE void clear( void ) {
 		m_size = Vector2i();
@@ -307,7 +301,7 @@ typedef struct t3dConfig_s {
 	int32_t m_nAutoOverlayTexture = 1;
 	float m_fAutoSlope = 1.0f;
 	float m_fAutoHeightReduction = 0.0f;
-	eastl::array<t3dTextureErosionProfile_t, s_nErosionTextureProfileCount> m_textureProfiles;
+	t3dTextureErosionProfile_t m_textureProfiles[s_nErosionTextureProfileCount];
 	bool m_bOxidationColorEnabled = false;
 	Color m_oxidationTint = Color( 0.45f, 0.19f, 0.07f, 1.0f );
 	float m_fOxidationTintStrength = 0.45f;
@@ -324,14 +318,17 @@ class Terrain3DErosionJob : public RefCounted {
 
 public:
 private:
-	using FloatBuffer = Terrain3DArenaBuffer<float>;
-	using HalfBuffer = Terrain3DHalfBuffer;
-	using ByteBuffer = Terrain3DArenaBuffer<uint8_t>;
-	using IndexBuffer = Terrain3DArenaBuffer<int64_t>;
+	typedef Terrain3DArenaBuffer<float> FloatBuffer;
+	typedef Terrain3DHalfBuffer HalfBuffer;
+	typedef Terrain3DArenaBuffer<uint8_t> ByteBuffer;
+	typedef Terrain3DArenaBuffer<int64_t> IndexBuffer;
+	struct RegionNeighbors {
+		int32_t m_ids[4]{};
+	};
 
 	t3dConfig_t m_config;
 	eastl::vector<t3dRegionSnapshot_t> m_regions;
-	eastl::vector<eastl::array<int32_t, 4>> m_szRegionNeighbors;
+	eastl::vector<RegionNeighbors> m_szRegionNeighbors;
 	int32_t m_szRegionLookup[s_nErosionRegionLookupCapacity] = {};
 	int32_t m_nSourceRegionSize = 0;
 	int32_t m_nSimulationRegionSize = 0;
@@ -417,7 +414,7 @@ private:
 	// Solver scratch is allocated with the persistent channels in one guarded
 	// phase. run() and snapshot construction do not issue additional large heap
 	// allocations, and next_a is reused for traffic-mask dilation.
-	eastl::array<FloatBuffer, 4> m_szFlux;
+	FloatBuffer m_szFlux[4];
 	FloatBuffer m_nextA;
 	FloatBuffer m_nextB;
 	FloatBuffer m_nextCoarse;
@@ -431,28 +428,28 @@ private:
 	FloatBuffer m_stepHeightStart;
 	FloatBuffer m_previewHeight;
 
-	mutable std::mutex m_previewMutex;
-	std::condition_variable m_previewCondition;
-	std::atomic<int32_t> m_previewRevision{ 0 };
-	std::atomic<int32_t> m_previewStep{ 0 };
-	std::atomic<bool> m_bPreviewPaused{ false };
-	std::atomic<bool> m_bPreviewWaiting{ false };
-	std::atomic<int32_t> m_previewStepRequests{ 0 };
+	mutable t3dMutex_t m_previewMutex;
+	t3dCondition_t m_previewCondition;
+	t3dAtomic_t<int32_t> m_previewRevision{ 0 };
+	t3dAtomic_t<int32_t> m_previewStep{ 0 };
+	t3dAtomic_t<bool> m_bPreviewPaused{ false };
+	t3dAtomic_t<bool> m_bPreviewWaiting{ false };
+	t3dAtomic_t<int32_t> m_previewStepRequests{ 0 };
 
 	uint64_t m_nAssetProfileHash = 0;
 
-	std::atomic<int32_t> m_state{ STATE_NEW };
-	std::atomic<int32_t> m_stage{ STAGE_IDLE };
-	std::atomic<float> m_fProgress{ 0.0f };
-	std::atomic<bool> m_bCancelRequested{ false };
-	mutable std::mutex m_statusMutex;
-	std::mutex m_applyMutex;
+	t3dAtomic_t<int32_t> m_state{ STATE_NEW };
+	t3dAtomic_t<int32_t> m_stage{ STAGE_IDLE };
+	t3dAtomic_t<float> m_fProgress{ 0.0f };
+	t3dAtomic_t<bool> m_bCancelRequested{ false };
+	mutable t3dMutex_t m_statusMutex;
+	t3dMutex_t m_applyMutex;
 	String m_errorMessage;
 	double m_fTotalEroded = 0.0;
 	double m_fTotalDeposited = 0.0;
 	float m_fMaximumLowering = 0.0f;
 	float m_fMaximumRaising = 0.0f;
-	std::atomic<int32_t> m_nCompletedSteps{ 0 };
+	t3dAtomic_t<int32_t> m_nCompletedSteps{ 0 };
 
 	Error setup( Terrain3DData *pData, const Ref<Terrain3DErosionSettings> &rSettings );
 	void copyConfig( const Ref<Terrain3DErosionSettings> &rSettings );
@@ -464,8 +461,7 @@ private:
 	bool compactCompletedResults( void );
 	bool captureSourceRegions( Terrain3DData *pData );
 	static bool regionSnapshotLess( const t3dRegionSnapshot_t &rA, const t3dRegionSnapshot_t &rB );
-	static float
-	sampleImageSnapshot( const t3dImageSnapshot_t &rImage, const Rect2 &rWorldRect, const Vector2 &rWorldPosition );
+	static float sampleImageSnapshot( const t3dImageSnapshot_t &rImage, const Rect2 &rWorldRect, const Vector2 &rWorldPosition );
 	bool captureImageSnapshot( const Ref<Image> &rImage, t3dImageSnapshot_t &rSnapshot, const char *pszLabel );
 	bool buildSimulationSnapshot( void );
 	void releaseSourceSnapshots( void );
@@ -474,12 +470,7 @@ private:
 	int64_t neighborIndex( size_t iIndex, int32_t nDx, int32_t nDy ) const;
 	uint64_t stochasticIndex( size_t iIndex ) const;
 	float getSlope( size_t iIndex ) const;
-	float sampleOutputCell( const FloatBuffer &rMap,
-			int32_t nRegionId,
-			int32_t iBaseX,
-			int32_t iBaseY,
-			int32_t iX,
-			int32_t iY ) const;
+	float sampleOutputCell( const FloatBuffer &rMap, int32_t nRegionId, int32_t iBaseX, int32_t iBaseY, int32_t iX, int32_t iY ) const;
 	float sampleOutput( const FloatBuffer &rMap, int32_t nRegionId, float fSourceX, float fSourceY ) const;
 	bool snapshotTextureProfiles( Terrain3DData *pData );
 	uint64_t hashTextureProfiles( Terrain3DData *pData ) const;
@@ -554,8 +545,7 @@ public:
 	TypedArray<Vector2i> getRegionLocations( void ) const;
 	Ref<Image> getInitialRegionHeightMap( const Vector2i &rRegionLocation, bool bFullResolution = false ) const;
 	Ref<Image> getPreviewRegionHeightMap( const Vector2i &rRegionLocation, bool bFullResolution = false ) const;
-	Ref<Image>
-	getRegionOutputMap( const Vector2i &rRegionLocation, t3dOutputMap_t output, bool bFullResolution = false ) const;
+	Ref<Image> getRegionOutputMap( const Vector2i &rRegionLocation, t3dOutputMap_t output, bool bFullResolution = false ) const;
 
 protected:
 	static void _bind_methods( void );

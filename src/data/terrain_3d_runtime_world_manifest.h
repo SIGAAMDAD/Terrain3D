@@ -1,15 +1,12 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
-#pragma once
-
 #ifndef TERRAIN3D_RUNTIME_WORLD_MANIFEST_H
 #define TERRAIN3D_RUNTIME_WORLD_MANIFEST_H
 
 #include "Terrain3DConstants.h"
 #include "eastl_config.h"
 
-#include <EASTL/array.h>
 #include <EASTL/vector.h>
-#include <cstdint>
+#include <stdint.h>
 #include <godot_cpp/variant/packed_string_array.hpp>
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/vector2.hpp>
@@ -21,16 +18,6 @@ class Terrain3DRuntimePageStore;
 typedef struct t3dRuntimePageConfig_s t3dRuntimePageConfig_t;
 typedef struct t3dStagedRepository_s t3dStagedRepository_t;
 
-static constexpr uint64_t s_nRuntimeWorldManifestMagic = 0x31464e4d57334454ull; // T3DWMNF1
-static constexpr uint32_t s_nRuntimeWorldManifestVersion = 3u;
-static constexpr uint16_t s_nRuntimeWorldAdjN = 1u << 0u;
-static constexpr uint16_t s_nRuntimeWorldAdjNe = 1u << 1u;
-static constexpr uint16_t s_nRuntimeWorldAdjE = 1u << 2u;
-static constexpr uint16_t s_nRuntimeWorldAdjSe = 1u << 3u;
-static constexpr uint16_t s_nRuntimeWorldAdjS = 1u << 4u;
-static constexpr uint16_t s_nRuntimeWorldAdjSw = 1u << 5u;
-static constexpr uint16_t s_nRuntimeWorldAdjW = 1u << 6u;
-static constexpr uint16_t s_nRuntimeWorldAdjNw = 1u << 7u;
 
 typedef struct t3dRuntimeWorldRegionRecord_s {
 	Vector2i m_location = s_v2iMax;
@@ -60,22 +47,23 @@ typedef struct t3dRuntimeWorldRegionRecord_s {
 	uint16_t m_nLightmapContextRadiusRegions = 1u;
 	uint16_t m_nLightmapTerrainProxyLod = 2u;
 	uint16_t m_nReserved = 0u;
-	eastl::array<uint32_t, s_nMaxMeshAssets> m_szInstanceMeshCounts{};
+	uint32_t m_szInstanceMeshCounts[s_nMaxMeshAssets]{};
 } t3dRuntimeWorldRegionRecord_t;
 
 // Immutable cooked-world topology/dependency index. Runtime residency keeps
 // mutable slot state elsewhere; this object only owns cook-time facts.
 class Terrain3DRuntimeWorldManifest {
 public:
+	Terrain3DRuntimeWorldManifest( void );
 	void reset( void );
 	void releaseRuntimeAllocatorStorage( void );
 	bool buildAuthoringIndex( const Terrain3DRegionRepository &rRepository );
 	bool write( const String &rDataDirectory,
-			const Terrain3DRegionRepository &rRepository,
-			const Terrain3DRuntimePageStore &rPageStore,
-			const t3dRuntimePageConfig_t &rConfig,
-			PackedStringArray *pErrors = nullptr );
-	bool load( const String &rDataDirectory, PackedStringArray *pErrors = nullptr );
+	        const Terrain3DRegionRepository &rRepository,
+	        const Terrain3DRuntimePageStore &rPageStore,
+	        const t3dRuntimePageConfig_t &rConfig,
+	        PackedStringArray *pErrors = NULL );
+	bool load( const String &rDataDirectory, PackedStringArray *pErrors = NULL );
 	bool stageRepository( const String &rDataDirectory, t3dStagedRepository_t &rStaged ) const;
 
 	String getPath( const String &rDataDirectory ) const;
@@ -134,8 +122,8 @@ private:
 	eastl::vector<t3dRuntimeWorldRegionRecord_t> m_regions;
 	eastl::vector<String> m_sceneDependencies;
 	eastl::vector<uint16_t> m_regionSceneDependencies;
-	eastl::array<int16_t, s_nMaxRegionSlots> m_regionLookup{};
-	eastl::array<uint64_t, s_nMaxRegionSlots / 64> m_topologyBits{};
+	int16_t m_regionLookup[s_nMaxRegionSlots]{};
+	uint64_t m_topologyBits[s_nMaxRegionSlots / 64]{};
 
 	void rebuildLookup( void );
 };

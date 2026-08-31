@@ -1,7 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_REGION_CODEC_H
 #define TERRAIN3D_REGION_CODEC_H
 
@@ -9,11 +7,11 @@
 #include "core/terrain_3d_compiler.h"
 #include "core/terrain_3d_util.h"
 
-#include <cmath>
-#include <cstdint>
-#include <cstring>
+#include <float.h>
+#include <math.h>
+#include <stdint.h>
+#include <string.h>
 #include <godot_cpp/classes/image.hpp>
-#include <limits>
 
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
 using namespace godot;
@@ -33,10 +31,8 @@ EA_FORCE_INLINE float t3dRegionCodecDecodeHeightNormalized( const float fNormali
 }
 
 EA_FORCE_INLINE uint16_t t3dRegionCodecEncodeHeightU16( const float fHeight ) {
-	return (
-			uint16_t )( CLAMP( Math::round( t3dRegionCodecEncodeHeightNormalized( fHeight ) * s_fRegionHeightU16Scale ),
-			0.0f,
-			s_fRegionHeightU16Scale ) );
+	return ( uint16_t )( CLAMP(
+	        Math::round( t3dRegionCodecEncodeHeightNormalized( fHeight ) * s_fRegionHeightU16Scale ), 0.0f, s_fRegionHeightU16Scale ) );
 }
 
 EA_FORCE_INLINE float t3dRegionCodecDecodeHeightU16( const uint16_t nValue ) {
@@ -55,8 +51,7 @@ inline void t3dRegionCodecWriteHeightPixel( Image *pImage, const Vector2i &rPosi
 	if ( !pImage ) {
 		return;
 	}
-	const float fValue =
-			pImage->get_format() == Image::FORMAT_R16 ? t3dRegionCodecEncodeHeightNormalized( fHeight ) : fHeight;
+	const float fValue = pImage->get_format() == Image::FORMAT_R16 ? t3dRegionCodecEncodeHeightNormalized( fHeight ) : fHeight;
 	pImage->set_pixelv( rPosition, Color( fValue, 0.0f, 0.0f, 1.0f ) );
 }
 
@@ -66,11 +61,11 @@ inline float t3dRegionCodecReadHeightBytes( const uint8_t *pBytes, const int iIn
 	}
 	if ( format == Image::FORMAT_R16 ) {
 		uint16_t fValue = 0u;
-		std::memcpy( &fValue, pBytes + ( size_t )( iIndex ) * sizeof( uint16_t ), sizeof( uint16_t ) );
+		memcpy( &fValue, pBytes + ( size_t )( iIndex ) * sizeof( uint16_t ), sizeof( uint16_t ) );
 		return t3dRegionCodecDecodeHeightU16( fValue );
 	}
 	float fValue = NAN;
-	std::memcpy( &fValue, pBytes + ( size_t )( iIndex ) * sizeof( float ), sizeof( float ) );
+	memcpy( &fValue, pBytes + ( size_t )( iIndex ) * sizeof( float ), sizeof( float ) );
 	return fValue;
 }
 
@@ -100,17 +95,15 @@ inline bool t3dRegionCodecHasValidHeightPayload( const Ref<Image> &rImage, const
 // Converts legacy RF32 height storage directly from its byte plane into the
 // authoritative R16_UNORM representation. The function never reads beyond the
 // source payload and reports values that could not be represented exactly.
-inline Ref<Image> t3dRegionCodecConvertHeightToR16( const Ref<Image> &rSource,
-		const int nSize,
-		uint32_t &nClampedCount,
-		uint32_t &nNonFiniteCount ) {
+inline Ref<Image> t3dRegionCodecConvertHeightToR16(
+        const Ref<Image> &rSource, const int nSize, uint32_t &nClampedCount, uint32_t &nNonFiniteCount ) {
 	nClampedCount = 0u;
 	nNonFiniteCount = 0u;
 	if ( nSize <= 0 ) {
 		return Ref<Image>();
 	}
-	if ( rSource.is_valid() && rSource->get_width() == nSize && rSource->get_height() == nSize &&
-			rSource->get_format() == Image::FORMAT_R16 ) {
+	if ( rSource.is_valid() && rSource->get_width() == nSize && rSource->get_height() == nSize
+	        && rSource->get_format() == Image::FORMAT_R16 ) {
 		return t3dRegionCodecHasValidHeightPayload( rSource, nSize ) ? rSource : Ref<Image>();
 	}
 	Ref<Image> pReadableSource = rSource;
@@ -126,11 +119,10 @@ inline Ref<Image> t3dRegionCodecConvertHeightToR16( const Ref<Image> &rSource,
 	output.resize( ( int64_t )( texel_count * sizeof( uint16_t ) ) );
 	uint8_t *pWrite = output.ptrw();
 
-	const bool bDirectRf32 = pReadableSource.is_valid() && pReadableSource->get_width() == nSize &&
-			pReadableSource->get_height() == nSize && pReadableSource->get_format() == Image::FORMAT_RF &&
-			t3dRegionCodecHasValidHeightPayload( pReadableSource, nSize );
+	const bool bDirectRf32 = pReadableSource.is_valid() && pReadableSource->get_width() == nSize && pReadableSource->get_height() == nSize
+	        && pReadableSource->get_format() == Image::FORMAT_RF && t3dRegionCodecHasValidHeightPayload( pReadableSource, nSize );
 	PackedByteArray source_bytes;
-	const uint8_t *pRead = nullptr;
+	const uint8_t *pRead = NULL;
 	if ( bDirectRf32 ) {
 		source_bytes = pReadableSource->get_data();
 		pRead = source_bytes.ptr();
@@ -139,7 +131,7 @@ inline Ref<Image> t3dRegionCodecConvertHeightToR16( const Ref<Image> &rSource,
 	for ( size_t index = 0; index < texel_count; ++index ) {
 		float fHeight = 0.0f;
 		if ( bDirectRf32 ) {
-			std::memcpy( &fHeight, pRead + index * sizeof( float ), sizeof( float ) );
+			memcpy( &fHeight, pRead + index * sizeof( float ), sizeof( float ) );
 		} else if ( pReadableSource.is_valid() ) {
 			const int x = ( int )( index % ( size_t )( nSize ) );
 			const int y = ( int )( index / ( size_t )( nSize ) );
@@ -148,7 +140,7 @@ inline Ref<Image> t3dRegionCodecConvertHeightToR16( const Ref<Image> &rSource,
 			}
 		}
 
-		if ( !std::isfinite( fHeight ) ) {
+		if ( !isfinite( fHeight ) ) {
 			fHeight = 0.0f;
 			++nNonFiniteCount;
 		} else if ( fHeight < s_fRegionHeightMin || fHeight > s_fRegionHeightMax ) {
@@ -157,7 +149,7 @@ inline Ref<Image> t3dRegionCodecConvertHeightToR16( const Ref<Image> &rSource,
 		}
 
 		const uint16_t encoded = t3dRegionCodecEncodeHeightU16( fHeight );
-		std::memcpy( pWrite + index * sizeof( uint16_t ), &encoded, sizeof( uint16_t ) );
+		memcpy( pWrite + index * sizeof( uint16_t ), &encoded, sizeof( uint16_t ) );
 	}
 	return Image::create_from_data( nSize, nSize, false, Image::FORMAT_R16, output );
 }
@@ -172,20 +164,20 @@ inline Vector2 t3dRegionCodecGetHeightMinMax( const Ref<Image> &rImage ) {
 	if ( rImage.is_null() || rImage->is_empty() ) {
 		return s_v2Zero;
 	}
-	float fMinimum = std::numeric_limits<float>::infinity();
-	float fMaximum = -std::numeric_limits<float>::infinity();
+	float fMinimum = FLT_MAX;
+	float fMaximum = -FLT_MAX;
 	const int width = rImage->get_width();
 	const int height = rImage->get_height();
 	for ( int y = 0; y < height; ++y ) {
 		for ( int x = 0; x < width; ++x ) {
 			const float fValue = t3dRegionCodecReadHeightPixel( *rImage, Vector2i( x, y ) );
-			if ( std::isfinite( fValue ) ) {
+			if ( isfinite( fValue ) ) {
 				fMinimum = MIN( fMinimum, fValue );
 				fMaximum = MAX( fMaximum, fValue );
 			}
 		}
 	}
-	return std::isfinite( fMinimum ) && std::isfinite( fMaximum ) ? Vector2( fMinimum, fMaximum ) : s_v2Zero;
+	return isfinite( fMinimum ) && isfinite( fMaximum ) ? Vector2( fMinimum, fMaximum ) : s_v2Zero;
 }
 
 EA_FORCE_INLINE Color t3dRegionCodecDefaultHeightColor( void ) {

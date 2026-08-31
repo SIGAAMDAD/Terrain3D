@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "Terrain3DConstants.h"
 #include "data/terrain_3d_runtime_world_manifest.h"
 
 #include "core/logger.h"
@@ -11,17 +12,13 @@
 #include "lighting/terrain_3d_region_lighting.h"
 #include "streaming/terrain_3d_runtime_page_store.h"
 
-#include <algorithm>
-#include <cstring>
+#include <string.h>
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 
-static constexpr uint32_t s_nManifestHeaderBytes = 112u;
-static constexpr uint32_t s_nManifestTopologyBytes = s_nMaxRegionSlots / 8u;
-static constexpr uint32_t s_nManifestRegionBaseBytes = 112u;
 
 static void t3dRuntimeWorldManifestHashBytes( uint64_t &nHash, const void *pData, const size_t nBytes ) {
-	const uint8_t *const pRead = static_cast<const uint8_t *>( pData );
+	const uint8_t *const pRead = ( const uint8_t * )( pData );
 	for ( size_t i = 0; i < nBytes; ++i ) {
 		nHash ^= pRead[i];
 		nHash *= 1099511628211ull;
@@ -37,7 +34,7 @@ static void t3dRuntimeWorldManifestStoreString( const Ref<FileAccess> &rFile, co
 	const uint32_t length = ( uint32_t )( MAX( 0, utf8.length() ) );
 	rFile->store_32( length );
 	if ( length > 0u ) {
-		rFile->store_buffer( reinterpret_cast<const uint8_t *>( utf8.get_data() ), length );
+		rFile->store_buffer( ( const uint8_t * )( utf8.get_data() ), length );
 	}
 }
 
@@ -57,7 +54,7 @@ static bool t3dRuntimeWorldManifestReadString( const Ref<FileAccess> &rFile, Str
 	if ( bytes.size() != length ) {
 		return false;
 	}
-	rValue = String::utf8( reinterpret_cast<const char *>( bytes.ptr() ), ( int )( length ) );
+	rValue = String::utf8( ( const char * )( bytes.ptr() ), ( int )( length ) );
 	return true;
 }
 
@@ -66,6 +63,12 @@ static String t3dRuntimeWorldManifestDescriptorScenePath( const t3dStreamedNodeR
 		return rDescriptor.m_scenePath;
 	}
 	return rDescriptor.m_scene.is_valid() ? rDescriptor.m_scene->get_path() : String();
+}
+
+Terrain3DRuntimeWorldManifest::Terrain3DRuntimeWorldManifest( void ) :
+        m_regions( Terrain3DEastlAllocator::bootstrapAllocator() ),
+        m_sceneDependencies( Terrain3DEastlAllocator::bootstrapAllocator() ),
+        m_regionSceneDependencies( Terrain3DEastlAllocator::bootstrapAllocator() ) {
 }
 
 void Terrain3DRuntimeWorldManifest::reset( void ) {
@@ -81,23 +84,16 @@ void Terrain3DRuntimeWorldManifest::reset( void ) {
 	m_regions.clear();
 	m_sceneDependencies.clear();
 	m_regionSceneDependencies.clear();
-	m_regionLookup.fill( -1 );
-	m_topologyBits.fill( 0u );
+	eastl::fill_n( m_regionLookup, s_nMaxRegionSlots, ( int16_t )-1 );
+	eastl::fill_n( m_topologyBits, s_nMaxRegionSlots / 64, 0u );
 }
 
 void Terrain3DRuntimeWorldManifest::releaseRuntimeAllocatorStorage( void ) {
-	eastl::vector<t3dRuntimeWorldRegionRecord_t> regions( m_regions.begin(), m_regions.end() );
-	eastl::vector<String> scene_dependencies( m_sceneDependencies.begin(), m_sceneDependencies.end() );
-	eastl::vector<uint16_t> region_scene_dependencies(
-			m_regionSceneDependencies.begin(), m_regionSceneDependencies.end() );
-	m_regions.swap( regions );
-	m_sceneDependencies.swap( scene_dependencies );
-	m_regionSceneDependencies.swap( region_scene_dependencies );
+	// Manifest storage is object-lifetime bootstrap ownership and never enters the runtime zone.
 }
 
 String Terrain3DRuntimeWorldManifest::getPath( const String &rDataDirectory ) const {
-	return rDataDirectory.is_empty() ? String()
-									 : rDataDirectory.trim_suffix( "/" ).path_join( "terrain3d_world.t3dmanifest" );
+	return rDataDirectory.is_empty() ? String() : rDataDirectory.trim_suffix( "/" ).path_join( "terrain3d_world.t3dmanifest" );
 }
 
 int Terrain3DRuntimeWorldManifest::findSceneDependency( const String &rPath ) const {
@@ -115,8 +111,8 @@ const String &Terrain3DRuntimeWorldManifest::getSceneDependency( const uint32_t 
 }
 
 void Terrain3DRuntimeWorldManifest::rebuildLookup( void ) {
-	m_regionLookup.fill( -1 );
-	m_topologyBits.fill( 0u );
+	eastl::fill_n( m_regionLookup, s_nMaxRegionSlots, ( int16_t )-1 );
+	eastl::fill_n( m_topologyBits, s_nMaxRegionSlots / 64, 0u );
 	for ( int index = 0; index < ( int )( m_regions.size() ); ++index ) {
 		const int map_index = Terrain3DRegionRepository::getRegionMapIndex( m_regions[( size_t )( index )].m_location );
 		if ( map_index >= 0 && map_index < s_nMaxRegionSlots ) {
@@ -128,17 +124,17 @@ void Terrain3DRuntimeWorldManifest::rebuildLookup( void ) {
 
 bool Terrain3DRuntimeWorldManifest::hasRegion( const Vector2i &rLocation ) const {
 	const int map_index = Terrain3DRegionRepository::getRegionMapIndex( rLocation );
-	return map_index >= 0 && map_index < s_nMaxRegionSlots &&
-			( m_topologyBits[( size_t )( map_index >> 6 )] & ( 1ull << ( map_index & 63 ) ) ) != 0u;
+	return map_index >= 0 && map_index < s_nMaxRegionSlots
+	        && ( m_topologyBits[( size_t )( map_index >> 6 )] & ( 1ull << ( map_index & 63 ) ) ) != 0u;
 }
 
 const t3dRuntimeWorldRegionRecord_t *Terrain3DRuntimeWorldManifest::findRegion( const Vector2i &rLocation ) const {
 	const int map_index = Terrain3DRegionRepository::getRegionMapIndex( rLocation );
 	if ( map_index < 0 || map_index >= s_nMaxRegionSlots ) {
-		return nullptr;
+		return NULL;
 	}
 	const int index = m_regionLookup[( size_t )( map_index )];
-	return index >= 0 && index < ( int )( m_regions.size() ) ? &m_regions[( size_t )( index )] : nullptr;
+	return index >= 0 && index < ( int )( m_regions.size() ) ? &m_regions[( size_t )( index )] : NULL;
 }
 
 bool Terrain3DRuntimeWorldManifest::buildAuthoringIndex( const Terrain3DRegionRepository &rRepository ) {
@@ -182,7 +178,8 @@ bool Terrain3DRuntimeWorldManifest::buildAuthoringIndex( const Terrain3DRegionRe
 		record.m_nodeCoverageMax = s_v2iZero;
 		bool first_coverage = true;
 		record.m_nSceneDependencyFirst = ( uint32_t )( m_regionSceneDependencies.size() );
-		for ( const t3dStreamedNodeRuntimeDescriptor_t &descriptor : nodes ) {
+		for ( size_t iNode = 0u; iNode < ( size_t )( ( nodes ).size() ); iNode++ ) {
+			const t3dStreamedNodeRuntimeDescriptor_t &descriptor = ( nodes )[iNode];
 			if ( descriptor.m_nBoundaryPolicy == STREAMED_NODE_BOUNDARY_COVERAGE ) {
 				if ( first_coverage ) {
 					record.m_nodeCoverageMin = descriptor.m_coverageMin;
@@ -215,8 +212,7 @@ bool Terrain3DRuntimeWorldManifest::buildAuthoringIndex( const Terrain3DRegionRe
 				m_regionSceneDependencies.push_back( ( uint16_t )( dependency ) );
 			}
 		}
-		record.m_nSceneDependencyCount =
-				( uint16_t )( m_regionSceneDependencies.size() - record.m_nSceneDependencyFirst );
+		record.m_nSceneDependencyCount = ( uint16_t )( m_regionSceneDependencies.size() - record.m_nSceneDependencyFirst );
 		const Ref<Terrain3DRegionLighting> pLighting = pRegion->getLighting();
 		if ( pLighting.is_valid() && !pLighting->getLightDataPath().is_empty() ) {
 			int dependency = findSceneDependency( pLighting->getLightDataPath() );
@@ -240,10 +236,9 @@ bool Terrain3DRuntimeWorldManifest::buildAuthoringIndex( const Terrain3DRegionRe
 			record.m_nLightmapBakeSignature = pLighting->getBakeSignature();
 			record.m_nLightmapShadowmaskMode = ( uint16_t )MAX( pLighting->getShadowmaskMode(), 0 );
 			record.m_nLightmapFlags = pLighting->hasProbeData() ? 1u : 0u;
-			record.m_nLightmapTextureCount =
-					( uint16_t )MIN( MAX( pLighting->getLightmapTextureCount(), 0 ), ( int )UINT16_MAX );
+			record.m_nLightmapTextureCount = ( uint16_t )MIN( MAX( pLighting->getLightmapTextureCount(), 0 ), ( int )UINT16_MAX );
 			record.m_nLightmapShadowmaskTextureCount =
-					( uint16_t )MIN( MAX( pLighting->getShadowmaskTextureCount(), 0 ), ( int )UINT16_MAX );
+			        ( uint16_t )MIN( MAX( pLighting->getShadowmaskTextureCount(), 0 ), ( int )UINT16_MAX );
 			record.m_nLightmapClusterSizeRegions = ( uint16_t )pLighting->getClusterSizeRegions();
 			record.m_nLightmapContextRadiusRegions = ( uint16_t )pLighting->getContextRadiusRegions();
 			record.m_nLightmapTerrainProxyLod = ( uint16_t )pLighting->getTerrainProxyLod();
@@ -266,7 +261,8 @@ bool Terrain3DRuntimeWorldManifest::buildAuthoringIndex( const Terrain3DRegionRe
 		Vector2i( -1, 1 ),
 		Vector2i( -1, 0 ),
 		Vector2i( -1, -1 ) };
-	for ( t3dRuntimeWorldRegionRecord_t &record : m_regions ) {
+	for ( size_t iRegion = 0u; iRegion < ( size_t )( ( m_regions ).size() ); iRegion++ ) {
+		t3dRuntimeWorldRegionRecord_t &record = ( m_regions )[iRegion];
 		uint16_t adjacency = 0u;
 		for ( uint16_t bit = 0u; bit < 8u; ++bit ) {
 			if ( hasRegion( record.m_location + s_szNeighbors[bit] ) ) {
@@ -279,10 +275,10 @@ bool Terrain3DRuntimeWorldManifest::buildAuthoringIndex( const Terrain3DRegionRe
 }
 
 bool Terrain3DRuntimeWorldManifest::write( const String &rDataDirectory,
-		const Terrain3DRegionRepository &rRepository,
-		const Terrain3DRuntimePageStore &rPageStore,
-		const t3dRuntimePageConfig_t &rConfig,
-		PackedStringArray *const pErrors ) {
+        const Terrain3DRegionRepository &rRepository,
+        const Terrain3DRuntimePageStore &rPageStore,
+        const t3dRuntimePageConfig_t &rConfig,
+        PackedStringArray *const pErrors ) {
 	if ( !buildAuthoringIndex( rRepository ) ) {
 		if ( pErrors ) {
 			pErrors->push_back( "World manifest has no regions to cook." );
@@ -293,7 +289,8 @@ bool Terrain3DRuntimeWorldManifest::write( const String &rDataDirectory,
 	uint64_t world_signature = 1469598103934665603ull;
 	t3dRuntimeWorldManifestHashU32( world_signature, ( uint32_t )( m_nRegionSize ) );
 	t3dRuntimeWorldManifestHashU32( world_signature, ( uint32_t )( m_regions.size() ) );
-	for ( t3dRuntimeWorldRegionRecord_t &record : m_regions ) {
+	for ( size_t iRegion = 0u; iRegion < ( size_t )( ( m_regions ).size() ); iRegion++ ) {
+		t3dRuntimeWorldRegionRecord_t &record = ( m_regions )[iRegion];
 		const Terrain3DRegion *const pRegion = rRepository.getRegionPtr( record.m_location );
 		uint64_t page_signature = 0u;
 		const String page_path = rPageStore.getPagePath( pRegion, rDataDirectory );
@@ -310,8 +307,7 @@ bool Terrain3DRuntimeWorldManifest::write( const String &rDataDirectory,
 		}
 		t3dRuntimeWorldManifestHashBytes( world_signature, &record.m_location.x, sizeof( record.m_location.x ) );
 		t3dRuntimeWorldManifestHashBytes( world_signature, &record.m_location.y, sizeof( record.m_location.y ) );
-		t3dRuntimeWorldManifestHashBytes(
-				world_signature, &record.m_nPageSourceSignature, sizeof( record.m_nPageSourceSignature ) );
+		t3dRuntimeWorldManifestHashBytes( world_signature, &record.m_nPageSourceSignature, sizeof( record.m_nPageSourceSignature ) );
 		t3dRuntimeWorldManifestHashBytes( world_signature, &record.m_nMaterialMask, sizeof( record.m_nMaterialMask ) );
 		t3dRuntimeWorldManifestHashBytes( world_signature, &record.m_nFlags, sizeof( record.m_nFlags ) );
 	}
@@ -356,10 +352,12 @@ bool Terrain3DRuntimeWorldManifest::write( const String &rDataDirectory,
 	while ( pFile->get_position() < s_nManifestHeaderBytes ) {
 		pFile->store_8( 0u );
 	}
-	for ( uint64_t bits : m_topologyBits ) {
+	for ( size_t iTopology = 0u; iTopology < T3D_ARRAY_COUNT( m_topologyBits ); iTopology++ ) {
+		uint64_t bits = ( m_topologyBits )[iTopology];
 		pFile->store_64( bits );
 	}
-	for ( const t3dRuntimeWorldRegionRecord_t &record : m_regions ) {
+	for ( size_t iRegion = 0u; iRegion < ( size_t )( ( m_regions ).size() ); iRegion++ ) {
+		const t3dRuntimeWorldRegionRecord_t &record = ( m_regions )[iRegion];
 		pFile->store_32( ( uint32_t )( record.m_location.x ) );
 		pFile->store_32( ( uint32_t )( record.m_location.y ) );
 		pFile->store_float( ( float )( record.m_heightRange.x ) );
@@ -391,14 +389,17 @@ bool Terrain3DRuntimeWorldManifest::write( const String &rDataDirectory,
 		pFile->store_16( record.m_nLightmapContextRadiusRegions );
 		pFile->store_16( record.m_nLightmapTerrainProxyLod );
 		pFile->store_16( 0u );
-		for ( uint32_t count : record.m_szInstanceMeshCounts ) {
+		for ( size_t iMesh = 0u; iMesh < T3D_ARRAY_COUNT( record.m_szInstanceMeshCounts ); iMesh++ ) {
+			uint32_t count = ( record.m_szInstanceMeshCounts )[iMesh];
 			pFile->store_32( count );
 		}
 	}
-	for ( uint16_t dependency : m_regionSceneDependencies ) {
+	for ( size_t iDependency = 0u; iDependency < ( size_t )( ( m_regionSceneDependencies ).size() ); iDependency++ ) {
+		uint16_t dependency = ( m_regionSceneDependencies )[iDependency];
 		pFile->store_16( dependency );
 	}
-	for ( const String &dependency : m_sceneDependencies ) {
+	for ( size_t iDependency = 0u; iDependency < ( size_t )( ( m_sceneDependencies ).size() ); iDependency++ ) {
+		const String &dependency = ( m_sceneDependencies )[iDependency];
 		t3dRuntimeWorldManifestStoreString( pFile, dependency );
 	}
 	const Error write_error = pFile->get_error();
@@ -441,8 +442,8 @@ bool Terrain3DRuntimeWorldManifest::load( const String &rDataDirectory, PackedSt
 		}
 		return false;
 	}
-	if ( pFile->get_length() < s_nManifestHeaderBytes || pFile->get_64() != s_nRuntimeWorldManifestMagic ||
-			pFile->get_32() != s_nRuntimeWorldManifestVersion || pFile->get_32() != s_nManifestHeaderBytes ) {
+	if ( pFile->get_length() < s_nManifestHeaderBytes || pFile->get_64() != s_nRuntimeWorldManifestMagic
+	        || pFile->get_32() != s_nRuntimeWorldManifestVersion || pFile->get_32() != s_nManifestHeaderBytes ) {
 		if ( pErrors ) {
 			pErrors->push_back( "Cooked world manifest header is invalid." );
 		}
@@ -465,17 +466,18 @@ bool Terrain3DRuntimeWorldManifest::load( const String &rDataDirectory, PackedSt
 	m_worldRegionMax.y = ( int32_t )( pFile->get_32() );
 	const uint32_t topology_bytes = pFile->get_32();
 	pFile->get_32();
-	if ( !t3dIsValidRegionSize( m_nRegionSize ) || m_nRegionMapSize != s_nActiveWorldTexels / m_nRegionSize ||
-			region_count == 0u || region_count > s_nMaxRegionSlots || dependency_count > UINT16_MAX ||
-			record_bytes != s_nManifestRegionBaseBytes + s_nMaxMeshAssets * sizeof( uint32_t ) ||
-			topology_bytes != s_nManifestTopologyBytes || m_fVertexSpacing < 0.25f || m_fVertexSpacing > 100.0f ) {
+	if ( !t3dIsValidRegionSize( m_nRegionSize ) || m_nRegionMapSize != s_nActiveWorldTexels / m_nRegionSize || region_count == 0u
+	        || region_count > s_nMaxRegionSlots || dependency_count > UINT16_MAX
+	        || record_bytes != s_nManifestRegionBaseBytes + s_nMaxMeshAssets * sizeof( uint32_t )
+	        || topology_bytes != s_nManifestTopologyBytes || m_fVertexSpacing < 0.25f || m_fVertexSpacing > 100.0f ) {
 		if ( pErrors ) {
 			pErrors->push_back( "Cooked world manifest dimensions are invalid." );
 		}
 		return false;
 	}
 	pFile->seek( s_nManifestHeaderBytes );
-	for ( uint64_t &bits : m_topologyBits ) {
+	for ( size_t iTopology = 0u; iTopology < T3D_ARRAY_COUNT( m_topologyBits ); iTopology++ ) {
+		uint64_t &bits = ( m_topologyBits )[iTopology];
 		bits = pFile->get_64();
 	}
 	m_regions.resize( region_count );
@@ -512,16 +514,17 @@ bool Terrain3DRuntimeWorldManifest::load( const String &rDataDirectory, PackedSt
 		record.m_nLightmapContextRadiusRegions = pFile->get_16();
 		record.m_nLightmapTerrainProxyLod = pFile->get_16();
 		pFile->get_16();
-		if ( !t3dRegionLocationValid( record.m_location, m_nRegionMapSize ) || record.m_nMaterialMask == 0u ||
-				record.m_nPageSourceSignature == 0u ||
-				record.m_nSceneDependencyFirst + record.m_nSceneDependencyCount > region_dependency_count ) {
+		if ( !t3dRegionLocationValid( record.m_location, m_nRegionMapSize ) || record.m_nMaterialMask == 0u
+		        || record.m_nPageSourceSignature == 0u
+		        || record.m_nSceneDependencyFirst + record.m_nSceneDependencyCount > region_dependency_count ) {
 			if ( pErrors ) {
 				pErrors->push_back( "Cooked world manifest contains an invalid region record." );
 			}
 			reset();
 			return false;
 		}
-		for ( uint32_t &count : record.m_szInstanceMeshCounts ) {
+		for ( size_t iMesh = 0u; iMesh < T3D_ARRAY_COUNT( record.m_szInstanceMeshCounts ); iMesh++ ) {
+			uint32_t &count = ( record.m_szInstanceMeshCounts )[iMesh];
 			count = pFile->get_32();
 		}
 	}
@@ -539,7 +542,8 @@ bool Terrain3DRuntimeWorldManifest::load( const String &rDataDirectory, PackedSt
 			return false;
 		}
 	}
-	for ( const uint16_t dependency : m_regionSceneDependencies ) {
+	for ( size_t iDependency = 0u; iDependency < ( size_t )( ( m_regionSceneDependencies ).size() ); iDependency++ ) {
+		const uint16_t dependency = ( m_regionSceneDependencies )[iDependency];
 		if ( dependency >= dependency_count ) {
 			if ( pErrors ) {
 				pErrors->push_back( "Cooked world manifest contains an invalid region dependency index." );
@@ -548,10 +552,11 @@ bool Terrain3DRuntimeWorldManifest::load( const String &rDataDirectory, PackedSt
 			return false;
 		}
 	}
-	for ( const t3dRuntimeWorldRegionRecord_t &record : m_regions ) {
-		if ( ( record.m_nLightmapDependency != UINT32_MAX && record.m_nLightmapDependency >= dependency_count ) ||
-				( record.m_nLightmapDirectionalSignatureDependency != UINT32_MAX &&
-						record.m_nLightmapDirectionalSignatureDependency >= dependency_count ) ) {
+	for ( size_t iRegion = 0u; iRegion < ( size_t )( ( m_regions ).size() ); iRegion++ ) {
+		const t3dRuntimeWorldRegionRecord_t &record = ( m_regions )[iRegion];
+		if ( ( record.m_nLightmapDependency != UINT32_MAX && record.m_nLightmapDependency >= dependency_count )
+		        || ( record.m_nLightmapDirectionalSignatureDependency != UINT32_MAX
+		                && record.m_nLightmapDirectionalSignatureDependency >= dependency_count ) ) {
 			if ( pErrors ) {
 				pErrors->push_back( "Cooked world manifest contains an invalid lightmap dependency index." );
 			}
@@ -559,7 +564,7 @@ bool Terrain3DRuntimeWorldManifest::load( const String &rDataDirectory, PackedSt
 			return false;
 		}
 		const String source_path =
-				rDataDirectory.trim_suffix( "/" ) + String( "/" ) + Terrain3DUtil::locationToFilename( record.m_location );
+		        rDataDirectory.trim_suffix( "/" ) + String( "/" ) + Terrain3DUtil::locationToFilename( record.m_location );
 		const String page_path = source_path.get_basename() + String( ".t3dpage" );
 		if ( !FileAccess::file_exists( page_path ) ) {
 			if ( pErrors ) {
@@ -596,10 +601,8 @@ bool Terrain3DRuntimeWorldManifest::stageRepository( const String &rDataDirector
 		pRegion->setHeightRange( record.m_heightRange );
 		pRegion->setChannelFlags( ( int )( record.m_nChannelFlags ) );
 		pRegion->setCookedPageSourceSignatureInternal( record.m_nPageSourceSignature );
-		pRegion->setCookedInstanceMetadataInternal(
-				record.m_szInstanceMeshCounts.data(), record.m_nInstanceCount, record.m_nInstanceMeshCount );
-		pRegion->setCookedStreamedNodeMetadataInternal(
-				record.m_nStreamedNodeCount, record.m_nodeCoverageMin, record.m_nodeCoverageMax );
+		pRegion->setCookedInstanceMetadataInternal( record.m_szInstanceMeshCounts, record.m_nInstanceCount, record.m_nInstanceMeshCount );
+		pRegion->setCookedStreamedNodeMetadataInternal( record.m_nStreamedNodeCount, record.m_nodeCoverageMin, record.m_nodeCoverageMax );
 		if ( record.m_nLightmapDependency != UINT32_MAX && record.m_nLightmapDependency < m_sceneDependencies.size() ) {
 			Ref<Terrain3DRegionLighting> lighting;
 			lighting.instantiate();
@@ -612,10 +615,9 @@ bool Terrain3DRuntimeWorldManifest::stageRepository( const String &rDataDirector
 			lighting->setContextRadiusRegions( record.m_nLightmapContextRadiusRegions );
 			lighting->setShadowmaskMode( record.m_nLightmapShadowmaskMode );
 			lighting->setBakeSignature( record.m_nLightmapBakeSignature );
-			if ( record.m_nLightmapDirectionalSignatureDependency != UINT32_MAX &&
-					record.m_nLightmapDirectionalSignatureDependency < m_sceneDependencies.size() ) {
-				lighting->setDirectionalLightSignature(
-						m_sceneDependencies[record.m_nLightmapDirectionalSignatureDependency] );
+			if ( record.m_nLightmapDirectionalSignatureDependency != UINT32_MAX
+			        && record.m_nLightmapDirectionalSignatureDependency < m_sceneDependencies.size() ) {
+				lighting->setDirectionalLightSignature( m_sceneDependencies[record.m_nLightmapDirectionalSignatureDependency] );
 			}
 			lighting->setReceiverCount( ( int )record.m_nLightmapReceiverCount );
 			lighting->setContributorCount( ( int )record.m_nLightmapContributorCount );

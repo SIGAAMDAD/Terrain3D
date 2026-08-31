@@ -1,14 +1,11 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
-#pragma once
-
 #ifndef TERRAIN3D_COOK_DATABASE_H
 #define TERRAIN3D_COOK_DATABASE_H
 
 #include "Terrain3DConstants.h"
 #include "core/terrain_3d_compiler.h"
 
-#include <array>
-#include <cstdint>
+#include <stdint.h>
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
 
@@ -27,7 +24,7 @@ public:
 
 private:
 	bool m_bLoaded = false;
-	std::array<uint64_t, s_nMaxRegionSlots> m_regionSignatures{};
+	uint64_t m_regionSignatures[s_nMaxRegionSlots]{};
 };
 
 #endif // TERRAIN3D_COOK_DATABASE_H

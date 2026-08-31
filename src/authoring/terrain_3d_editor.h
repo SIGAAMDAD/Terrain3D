@@ -1,7 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_EDITOR_CLASS_H
 #define TERRAIN3D_EDITOR_CLASS_H
 
@@ -10,7 +8,6 @@
 #include "rendering/terrain_3d_compute.h"
 #include "terrain_3d.h"
 
-#include <EASTL/array.h>
 #include <EASTL/vector.h>
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/image_texture.hpp>
@@ -59,12 +56,12 @@ typedef struct t3dAxisSample_s {
 
 typedef struct t3dRegionMapCache_s {
 	Ref<Terrain3DRegion> m_region;
-	Image *m_pMap = nullptr;
-	Image *m_pControlMap = nullptr;
+	Image *m_pMap = NULL;
+	Image *m_pControlMap = NULL;
 	PackedByteArray m_mapData;
 	PackedByteArray m_controlData;
-	uint8_t *m_pMapBytes = nullptr;
-	const uint8_t *m_pControlBytes = nullptr;
+	uint8_t *m_pMapBytes = NULL;
+	const uint8_t *m_pControlBytes = NULL;
 	Vector2i m_location = s_v2iZero;
 	Image::Format m_mapFormat = Image::FORMAT_MAX;
 	bool m_bMapHasMipmaps = false;
@@ -86,7 +83,7 @@ class Terrain3DEditor : public Object {
 
 public: // Constants
 private:
-	Terrain3D *m_pTerrain = nullptr;
+	Terrain3D *m_pTerrain = NULL;
 
 	// Painter settings & variables
 	t3dTool_t m_tool = REGION;
@@ -98,17 +95,17 @@ private:
 	bool m_bIsOperating = false;
 	uint64_t m_nLastRegionBoundsError = 0;
 	TypedArray<Terrain3DRegion> m_originalRegions; // Queue for undo
-	TypedArray<Terrain3DRegion> m_editedRegions; // Queue for redo
-	Array m_originalEditSnapshots; // Targeted map/instance snapshots for undo
-	Array m_editedEditSnapshots; // Targeted map/instance snapshots for redo
-	TypedArray<Vector2i> m_addedRemovedLocations; // Queue for added/removed locations
+	TypedArray<Terrain3DRegion> m_editedRegions;   // Queue for redo
+	Array m_originalEditSnapshots;                 // Targeted map/instance snapshots for undo
+	Array m_editedEditSnapshots;                   // Targeted map/instance snapshots for redo
+	TypedArray<Vector2i> m_addedRemovedLocations;  // Queue for added/removed locations
 	AABB m_modifiedArea;
 	Dictionary m_undoData; // See _get_undo_data for definition
 	uint64_t m_nLastPenTick = 0;
 
 	// Large brushes revisit the same source brush pixels millions of times. Cache gamma-adjusted
 	// alpha values and invalidate the cache whenever brush settings are replaced.
-	Image *m_pCachedBrushImage = nullptr;
+	Image *m_pCachedBrushImage = NULL;
 	Vector2i m_cachedBrushImageSize = s_v2iZero;
 	real_t m_fCachedBrushGamma = -1.f;
 	eastl::vector<float> m_fBrushAlphaCache;
@@ -125,28 +122,19 @@ private:
 
 	void trimBrushScratch( void );
 	void updateBrushAlphaCache( Image *pBrushImage, const Vector2i &rImageSize, const real_t fGamma );
-	static bool isBrushSlopeAllowed( Terrain3DSampler &rSampler,
-			bool bUnrestricted,
-			const Vector2 &rSlopeRange,
-			const Vector3 &rPosition );
+	static bool isBrushSlopeAllowed( Terrain3DSampler &rSampler, bool bUnrestricted, const Vector2 &rSlopeRange, const Vector3 &rPosition );
 	static uint32_t packColorRgba8( const Color &rColor );
 	static Color unpackColorRgba8( uint32_t nValue );
 	static uint32_t readU32( const uint8_t *pBytes, size_t iIndex );
-	static Color
-	readMapPixel( const t3dRegionMapCache_t &rEntry, size_t iIndex, const Vector2i &rPixel, t3dMapType_t mapType );
+	static Color readMapPixel( const t3dRegionMapCache_t &rEntry, size_t iIndex, const Vector2i &rPixel, t3dMapType_t mapType );
 	static uint32_t readControlBits( const t3dRegionMapCache_t &rEntry, size_t iIndex, const Vector2i &rPixel );
-	static void writeMapPixel( t3dRegionMapCache_t &rEntry,
-			size_t iIndex,
-			const Vector2i &rPixel,
-			const Color &clrValue,
-			t3dMapType_t mapType );
+	static void writeMapPixel(
+	        t3dRegionMapCache_t &rEntry, size_t iIndex, const Vector2i &rPixel, const Color &clrValue, t3dMapType_t mapType );
 	static bool locationLess( const Vector2i &rA, const Vector2i &rB );
-	Dictionary captureEditSnapshot( const Ref<Terrain3DRegion> &rRegion,
-			const Dictionary &rTemplate = Dictionary(),
-			bool bMapWasImplicit = false ) const;
-	void applyEditSnapshot( const Dictionary &rSnapshot,
-			eastl::array<eastl::vector<Vector2i>, REGION_TYPE_MAX> &rMapUpdates,
-			bool &bInstancesChanged );
+	Dictionary captureEditSnapshot(
+	        const Ref<Terrain3DRegion> &rRegion, const Dictionary &rTemplate = Dictionary(), bool bMapWasImplicit = false ) const;
+	void applyEditSnapshot(
+	        const Dictionary &rSnapshot, eastl::vector<Vector2i> ( &rMapUpdates )[REGION_TYPE_MAX], bool &bInstancesChanged );
 
 	void sendRegionAabb( const Vector2i &rRegionLoc, const Vector2 &rHeightRange = s_v2Zero );
 	Ref<Terrain3DRegion> operateRegion( const Vector2i &rRegionLoc );
@@ -158,15 +146,17 @@ private:
 	void storeUndo( void );
 	void applyUndo( const Dictionary &rData );
 	float average( const t3dAverageMode_t mode,
-			const Vector3 &rGlobalPosition,
-			const float fBase,
-			const float fNanVal = 0.f,
-			bool bAlt = false ) const;
+	        const Vector3 &rGlobalPosition,
+	        const float fBase,
+	        const float fNanVal = 0.f,
+	        bool bAlt = false ) const;
 	Color average( const Vector3 &rGlobalPosition, const Color &clrBase ) const;
 
 public:
-	EA_FORCE_INLINE Terrain3DEditor( void ) {}
-	EA_FORCE_INLINE ~Terrain3DEditor( void ) {}
+	EA_FORCE_INLINE Terrain3DEditor( void ) {
+	}
+	EA_FORCE_INLINE ~Terrain3DEditor( void ) {
+	}
 
 	EA_FORCE_INLINE void setTerrain( Terrain3D *const pTerrain ) {
 		m_pTerrain = pTerrain;
@@ -238,8 +228,7 @@ EA_FORCE_INLINE bool Terrain3DEditor::isInBounds( const Point2i &rPixel, const P
 	return bPositive && bLessThanMax;
 }
 
-inline Vector2
-Terrain3DEditor::getUvPosition( const Vector3 &rGlobalPosition, const int nRegionSize, const real_t fVertexSpacing ) const {
+inline Vector2 Terrain3DEditor::getUvPosition( const Vector3 &rGlobalPosition, const int nRegionSize, const real_t fVertexSpacing ) const {
 	const Vector2 descaled_position_2d = Vector2( rGlobalPosition.x, rGlobalPosition.z ) / fVertexSpacing;
 	Vector2 region_position = descaled_position_2d / ( real_t )( nRegionSize );
 	region_position = region_position.floor();

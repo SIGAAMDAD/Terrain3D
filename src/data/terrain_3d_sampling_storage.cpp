@@ -1,16 +1,15 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "data/terrain_3d_sampling_storage.h"
+#include "core/terrain_3d_sync.h"
 
 #include "data/terrain_3d_region.h"
 #include "data/terrain_3d_region_repository.h"
 
-#include <algorithm>
-#include <atomic>
-
 Terrain3DSamplingStorage::Terrain3DSamplingStorage( void ) {
-	for ( std::atomic<uint32_t> &generation : m_szRegionSamplingGenerations ) {
-		generation.store( 1u, std::memory_order_relaxed );
+	for ( size_t iRegion = 0u; iRegion < T3D_ARRAY_COUNT( m_szRegionSamplingGenerations ); iRegion++ ) {
+		t3dAtomic_t<uint32_t> &generation = ( m_szRegionSamplingGenerations )[iRegion];
+		generation.store( 1u, T3D_MEMORY_ORDER_RELAXED );
 	}
 }
 
@@ -24,8 +23,7 @@ int Terrain3DSamplingStorage::locationIndex( const Vector2i &rLocation ) {
 
 bool Terrain3DSamplingStorage::claimOrReconfigureActive( const int nRegionSize ) {
 	const uint32_t previousGeneration = m_nActiveStorageGeneration;
-	const bool configured = isActiveOwner() ? t3dActiveStorageReconfigure( this, nRegionSize )
-											: t3dActiveStorageClaim( this, nRegionSize );
+	const bool configured = isActiveOwner() ? t3dActiveStorageReconfigure( this, nRegionSize ) : t3dActiveStorageClaim( this, nRegionSize );
 	if ( !configured ) {
 		return false;
 	}
@@ -86,18 +84,14 @@ bool Terrain3DSamplingStorage::syncActiveRegion( const Vector2i &rLocation, cons
 	return isActiveOwner() && t3dActiveStorageSyncRegion( this, rLocation, pRegion );
 }
 
-bool Terrain3DSamplingStorage::syncActiveHeightPage( const Vector2i &rLocation,
-		const uint8_t *const pHeightBytes,
-		const size_t nHeightBytes ) {
+bool Terrain3DSamplingStorage::syncActiveHeightPage(
+        const Vector2i &rLocation, const uint8_t *const pHeightBytes, const size_t nHeightBytes ) {
 	return isActiveOwner() && t3dActiveStorageSyncHeightPage( this, rLocation, pHeightBytes, nHeightBytes );
 }
 
-bool Terrain3DSamplingStorage::replaceActiveHeightPages( const int nRegionSize,
-		const uint8_t *const *const ppHeightPages,
-		const int *const pSlots,
-		const size_t nPageCount ) {
-	if ( !isActiveOwner() ||
-			!t3dActiveStorageReplaceHeightPages( this, nRegionSize, ppHeightPages, pSlots, nPageCount ) ) {
+bool Terrain3DSamplingStorage::replaceActiveHeightPages(
+        const int nRegionSize, const uint8_t *const *const ppHeightPages, const int *const pSlots, const size_t nPageCount ) {
+	if ( !isActiveOwner() || !t3dActiveStorageReplaceHeightPages( this, nRegionSize, ppHeightPages, pSlots, nPageCount ) ) {
 		return false;
 	}
 	refreshActiveGeneration();
@@ -105,16 +99,13 @@ bool Terrain3DSamplingStorage::replaceActiveHeightPages( const int nRegionSize,
 	return true;
 }
 
-bool Terrain3DSamplingStorage::syncActiveMap( const Vector2i &rLocation,
-		const Terrain3DRegion *const pRegion,
-		const t3dMapType_t eType,
-		const Rect2i &rDirtyRect ) {
+bool Terrain3DSamplingStorage::syncActiveMap(
+        const Vector2i &rLocation, const Terrain3DRegion *const pRegion, const t3dMapType_t eType, const Rect2i &rDirtyRect ) {
 	return isActiveOwner() && t3dActiveStorageSyncMap( this, rLocation, pRegion, eType, rDirtyRect );
 }
 
-bool Terrain3DSamplingStorage::syncActiveDerived( const Vector2i &rLocation,
-		const Terrain3DRegion *const pRegion,
-		const Rect2i &rDirtyRect ) {
+bool Terrain3DSamplingStorage::syncActiveDerived(
+        const Vector2i &rLocation, const Terrain3DRegion *const pRegion, const Rect2i &rDirtyRect ) {
 	return isActiveOwner() && t3dActiveStorageSyncDerived( this, rLocation, pRegion, rDirtyRect );
 }
 
@@ -144,8 +135,8 @@ uint64_t Terrain3DSamplingStorage::getActivePublicationCount( void ) const {
 	return t3dActiveStorageGetPublicationCount();
 }
 
-Terrain3DResidentMapLease Terrain3DSamplingStorage::acquireResident( const Vector2i &rLocation,
-		const Terrain3DRegion *const pRegion ) const {
+Terrain3DResidentMapLease Terrain3DSamplingStorage::acquireResident(
+        const Vector2i &rLocation, const Terrain3DRegion *const pRegion ) const {
 	if ( isActiveOwner() || m_residentPool.getCapacity() <= 0 || !pRegion || pRegion->isDeleted() ) {
 		return {};
 	}
@@ -153,10 +144,10 @@ Terrain3DResidentMapLease Terrain3DSamplingStorage::acquireResident( const Vecto
 }
 
 bool Terrain3DSamplingStorage::configureResidentPool( const int nRegionSize,
-		const int nRegionMapSize,
-		const bool bControlMapsImplicit,
-		const int nRequestedCapacity,
-		const size_t nBudgetBytes ) {
+        const int nRegionMapSize,
+        const bool bControlMapsImplicit,
+        const int nRequestedCapacity,
+        const size_t nBudgetBytes ) {
 	if ( isActiveOwner() ) {
 		clearResidentPool();
 		return true;
@@ -202,18 +193,15 @@ void Terrain3DSamplingStorage::invalidateResident( const Vector2i &rLocation ) {
 	}
 }
 
-void Terrain3DSamplingStorage::syncResidentMap( const Vector2i &rLocation,
-		const Terrain3DRegion *const pRegion,
-		const t3dMapType_t eType,
-		const Rect2i &rDirtyRect ) {
+void Terrain3DSamplingStorage::syncResidentMap(
+        const Vector2i &rLocation, const Terrain3DRegion *const pRegion, const t3dMapType_t eType, const Rect2i &rDirtyRect ) {
 	if ( m_residentPool.getCapacity() > 0 ) {
 		m_residentPool.syncMap( rLocation, pRegion, eType, rDirtyRect );
 	}
 }
 
-void Terrain3DSamplingStorage::syncResidentDerived( const Vector2i &rLocation,
-		const Terrain3DRegion *const pRegion,
-		const Rect2i &rDirtyRect ) {
+void Terrain3DSamplingStorage::syncResidentDerived(
+        const Vector2i &rLocation, const Terrain3DRegion *const pRegion, const Rect2i &rDirtyRect ) {
 	if ( m_residentPool.getCapacity() > 0 ) {
 		m_residentPool.syncDerived( rLocation, pRegion, rDirtyRect );
 	}
@@ -224,9 +212,9 @@ size_t Terrain3DSamplingStorage::getResidentReservedBytes( void ) const {
 }
 
 void Terrain3DSamplingStorage::invalidateAllSamplers( void ) {
-	const uint64_t next = m_nSamplingGeneration.fetch_add( 1u, std::memory_order_acq_rel ) + 1u;
+	const uint64_t next = m_nSamplingGeneration.fetch_add( 1u, T3D_MEMORY_ORDER_ACQ_REL ) + 1u;
 	if ( next == 0u ) {
-		m_nSamplingGeneration.store( 1u, std::memory_order_release );
+		m_nSamplingGeneration.store( 1u, T3D_MEMORY_ORDER_RELEASE );
 	}
 }
 
@@ -235,9 +223,9 @@ void Terrain3DSamplingStorage::publishRegionGeneration( const Vector2i &rLocatio
 	if ( index < 0 ) {
 		return;
 	}
-	std::atomic<uint32_t> &generation = m_szRegionSamplingGenerations[( size_t )( index )];
-	const uint32_t next = generation.fetch_add( 1u, std::memory_order_acq_rel ) + 1u;
+	t3dAtomic_t<uint32_t> &generation = m_szRegionSamplingGenerations[( size_t )( index )];
+	const uint32_t next = generation.fetch_add( 1u, T3D_MEMORY_ORDER_ACQ_REL ) + 1u;
 	if ( next == 0u ) {
-		generation.store( 1u, std::memory_order_release );
+		generation.store( 1u, T3D_MEMORY_ORDER_RELEASE );
 	}
 }

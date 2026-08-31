@@ -7,17 +7,19 @@
 #include "data/terrain_3d_data.h"
 #include "data/terrain_3d_region.h"
 #include "data/terrain_3d_sampler.h"
+#include "memory/terrain_3d_memory.h"
 #include "rendering/terrain_3d_material.h"
 #include "terrain_3d.h"
 
-#include <cfloat>
-#include <cmath>
+#include <float.h>
+#include <math.h>
 
 size_t Terrain3DCollisionSurfaceBuilder::getRetainedBufferBytes( void ) const {
-	return m_fullHeightRowScratch.capacity() * sizeof( float );
+	return m_fullHeightRowScratch.residentBytes();
 }
 
 bool Terrain3DCollisionSurfaceBuilder::prepareRuntimeScratch( const int nAxisSamples ) {
+	Terrain3DColdAllocationScope allocation_scope;
 	if ( nAxisSamples <= 0 || nAxisSamples > s_nMaxCollisionAxisSamples ) {
 		return false;
 	}
@@ -25,15 +27,27 @@ bool Terrain3DCollisionSurfaceBuilder::prepareRuntimeScratch( const int nAxisSam
 		return true;
 	}
 	const size_t sample_count = ( size_t )( nAxisSamples ) * ( size_t )( nAxisSamples );
-	if ( m_fullHeightRowScratch.size() != sample_count ) {
-		m_fullHeightRowScratch.resize( sample_count );
+	if ( sample_count <= m_fullHeightRowScratch.capacity() ) {
+		return true;
 	}
+	Terrain3DMemoryArenaLayout layout( sample_count * sizeof( float ) + s_nArenaDefaultBaseAlignment );
+	t3dMemoryArenaSlice_t scratch_slice;
+	Terrain3DMemoryArena next_arena;
+	if ( !layout.reserveLow( sample_count * sizeof( float ), alignof( float ), scratch_slice ) || !layout.seal()
+	        || !next_arena.initialize( layout ) || !next_arena.commit() || !next_arena.seal() ) {
+		return false;
+	}
+	const t3dMemoryArenaSpan_t span = next_arena.resolve( scratch_slice );
+	if ( !span.valid() || !m_fullHeightRowScratch.bind( ( float * )( span.m_pData ), sample_count ) ) {
+		return false;
+	}
+	m_fullHeightScratchArena.swap( next_arena );
 	return true;
 }
 
 void Terrain3DCollisionSurfaceBuilder::refreshRegionBlendCurve( const int nRegionSize, const real_t fRegionBlend ) {
 	if ( nRegionSize <= 0 ) {
-		m_fRegionBlendCurve.fill( 0.0f );
+		eastl::fill_n( m_fRegionBlendCurve, s_nMaxRegionBlendSamples, 0.0f );
 		m_nRegionBlendCurveSize = 0;
 		m_fRegionBlendCurveSetting = -1.0f;
 		return;
@@ -51,7 +65,7 @@ void Terrain3DCollisionSurfaceBuilder::refreshRegionBlendCurve( const int nRegio
 		real_t fraction = biased - Math::floor( biased );
 		fraction = Math::clamp( fraction, ( real_t )( 1e-8f ), ( real_t )( 1.0f - 1e-8f ) );
 		m_fRegionBlendCurve[( size_t )( local )] =
-				1.0f / ( 1.0f + Math::exp( blend_factor * Math::log( ( 1.0f - fraction ) / fraction ) ) );
+		        1.0f / ( 1.0f + Math::exp( blend_factor * Math::log( ( 1.0f - fraction ) / fraction ) ) );
 	}
 	m_nRegionBlendCurveSize = nRegionSize;
 	m_fRegionBlendCurveSetting = fRegionBlend;
@@ -68,16 +82,13 @@ real_t Terrain3DCollisionSurfaceBuilder::getRegionBlendWeight( const int64_t nGr
 	return m_fRegionBlendCurve[( size_t )( local )];
 }
 
-real_t Terrain3DCollisionSurfaceBuilder::getRegionBlend( const int iX,
-		const int iZ,
-		const int iMinRegionX,
-		const int iMinRegionZ,
-		const int nPresenceWidth ) const {
+real_t Terrain3DCollisionSurfaceBuilder::getRegionBlend(
+        const int iX, const int iZ, const int iMinRegionX, const int iMinRegionZ, const int nPresenceWidth ) const {
 	const int32_t x0 = m_szBlendRegionX0[( size_t )( iX )] - iMinRegionX;
 	const int32_t x1 = m_szBlendRegionX1[( size_t )( iX )] - iMinRegionX;
 	const int32_t z0 = m_szBlendRegionZ0[( size_t )( iZ )] - iMinRegionZ;
 	const int32_t z1 = m_szBlendRegionZ1[( size_t )( iZ )] - iMinRegionZ;
-	const uint8_t *const presence = m_regionPresenceScratch.data();
+	const uint8_t *const presence = m_regionPresenceScratch;
 	const real_t d = ( real_t )( presence[( size_t )( z0 ) * ( size_t )( nPresenceWidth ) + ( size_t )( x0 )] );
 	const real_t c = ( real_t )( presence[( size_t )( z0 ) * ( size_t )( nPresenceWidth ) + ( size_t )( x1 )] );
 	const real_t a = ( real_t )( presence[( size_t )( z1 ) * ( size_t )( nPresenceWidth ) + ( size_t )( x0 )] );
@@ -89,12 +100,12 @@ real_t Terrain3DCollisionSurfaceBuilder::getRegionBlend( const int iX,
 }
 
 bool Terrain3DCollisionSurfaceBuilder::build( const Terrain3DData *const pData,
-		const Ref<Terrain3DMaterial> &rMaterial,
-		const Vector2i &rPosition,
-		const int nSize,
-		PackedFloat32Array &rHeights,
-		float &rMinHeight,
-		float &rMaxHeight ) {
+        const Ref<Terrain3DMaterial> &rMaterial,
+        const Vector2i &rPosition,
+        const int nSize,
+        PackedFloat32Array &rHeights,
+        float &rMinHeight,
+        float &rMaxHeight ) {
 	if ( !pData || !rMaterial.is_valid() || nSize < 1 ) {
 		return false;
 	}
@@ -109,8 +120,7 @@ bool Terrain3DCollisionSurfaceBuilder::build( const Terrain3DData *const pData,
 	}
 
 	const t3dWorldBackground_t background_mode = rMaterial->getWorldBackground();
-	const bool blend_background =
-			background_mode == t3dWorldBackground_t::FLAT || background_mode == t3dWorldBackground_t::NOISE;
+	const bool blend_background = background_mode == t3dWorldBackground_t::FLAT || background_mode == t3dWorldBackground_t::NOISE;
 	const real_t ground_level = rMaterial->get( "ground_level" );
 	const real_t region_blend = rMaterial->get( "region_blend" );
 	const real_t region_texel_size = 1.0f / ( real_t )( region_size );
@@ -130,10 +140,8 @@ bool Terrain3DCollisionSurfaceBuilder::build( const Terrain3DData *const pData,
 		for ( int i = 0; i < width; ++i ) {
 			const int64_t sample_x = ( int64_t )( rPosition.x ) + i;
 			const int64_t sample_z = ( int64_t )( rPosition.y ) + i;
-			const int32_t x0 =
-					( int32_t )( Math::floor( ( double )( sample_x ) * ( double )( region_texel_size )-0.5011 ) );
-			const int32_t z0 =
-					( int32_t )( Math::floor( ( double )( sample_z ) * ( double )( region_texel_size )-0.5011 ) );
+			const int32_t x0 = ( int32_t )( Math::floor( ( double )( sample_x ) * ( double )( region_texel_size )-0.5011 ) );
+			const int32_t z0 = ( int32_t )( Math::floor( ( double )( sample_z ) * ( double )( region_texel_size )-0.5011 ) );
 			m_szBlendRegionX0[( size_t )( i )] = x0;
 			m_szBlendRegionX1[( size_t )( i )] = x0 + 1;
 			m_szBlendRegionZ0[( size_t )( i )] = z0;
@@ -147,26 +155,24 @@ bool Terrain3DCollisionSurfaceBuilder::build( const Terrain3DData *const pData,
 		}
 		const int presence_width = max_blend_region_x - min_blend_region_x + 1;
 		const int presence_height = max_blend_region_z - min_blend_region_z + 1;
-		if ( presence_width <= 0 || presence_height <= 0 ||
-				presence_width * presence_height > s_nRegionPresenceSamples ) {
+		if ( presence_width <= 0 || presence_height <= 0 || presence_width * presence_height > s_nRegionPresenceSamples ) {
 			return false;
 		}
 		for ( int z = 0; z < presence_height; ++z ) {
 			for ( int x = 0; x < presence_width; ++x ) {
-				const Terrain3DRegion *const pRegion =
-						pData->getRegionPtr( Vector2i( min_blend_region_x + x, min_blend_region_z + z ) );
+				const Terrain3DRegion *const pRegion = pData->getRegionPtr( Vector2i( min_blend_region_x + x, min_blend_region_z + z ) );
 				m_regionPresenceScratch[( size_t )( z ) * ( size_t )( presence_width ) + ( size_t )( x )] =
-						pRegion && !pRegion->isDeleted() ? ( uint8_t )( 1 ) : ( uint8_t )( 0 );
+				        pRegion && !pRegion->isDeleted() ? ( uint8_t )( 1 ) : ( uint8_t )( 0 );
 			}
 		}
 	}
 
 	const int sample_count = width * width;
-	float *pHeightScratch = nullptr;
+	float *pHeightScratch = NULL;
 	if ( width <= s_nDynamicScratchAxis ) {
-		pHeightScratch = m_dynamicHeightScratch.data();
+		pHeightScratch = m_dynamicHeightScratch;
 	} else {
-		if ( m_fullHeightRowScratch.size() < ( size_t )sample_count ) {
+		if ( m_fullHeightRowScratch.capacity() < ( size_t )sample_count ) {
 			UtilityFunctions::push_error( "Collision surface scratch capacity exceeded; collision rebuild required" );
 			return false;
 		}
@@ -187,19 +193,16 @@ bool Terrain3DCollisionSurfaceBuilder::build( const Terrain3DData *const pData,
 		const int destination_base = x * width;
 		for ( int z = width - 1, destination = 0; z >= 0; --z, ++destination ) {
 			float height = pHeightScratch[( size_t )( z ) * ( size_t )( width ) + ( size_t )( x )];
-			if ( !std::isnan( height ) && blend_background ) {
+			if ( !isnan( height ) && blend_background ) {
 				height = ( float )Math::lerp( ( real_t )( height ),
-						ground_level,
-						t3dSmoothstep( 0.0f,
-								1.0f,
-								getRegionBlend( x,
-										z,
-										min_blend_region_x,
-										min_blend_region_z,
-										max_blend_region_x - min_blend_region_x + 1 ) ) );
+				        ground_level,
+				        t3dSmoothstep( 0.0f,
+				                1.0f,
+				                getRegionBlend(
+				                        x, z, min_blend_region_x, min_blend_region_z, max_blend_region_x - min_blend_region_x + 1 ) ) );
 			}
 			output[destination_base + destination] = height;
-			if ( !std::isnan( height ) ) {
+			if ( !isnan( height ) ) {
 				rMinHeight = MIN( rMinHeight, height );
 				rMaxHeight = MAX( rMaxHeight, height );
 			}

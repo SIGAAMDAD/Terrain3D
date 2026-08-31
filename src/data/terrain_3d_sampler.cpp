@@ -10,12 +10,12 @@
 #include "data/terrain_3d_region_repository.h"
 #include "data/terrain_3d_sampling_storage.h"
 
-#include <algorithm>
-#include <cmath>
-#include <cstring>
+#include <EASTL/numeric_limits.h>
+#include <math.h>
+#include <string.h>
 #include <godot_cpp/classes/image.hpp>
-#include <limits>
-#include <utility>
+#include <EASTL/algorithm.h>
+#include <EASTL/utility.h>
 
 static bool t3dSamplerSamplerIsExactVertex( const double fGridX, const double fGridZ, const float fVertexSpacing ) {
 	const int64_t rounded_x = ( int64_t )( Math::round( fGridX ) );
@@ -25,14 +25,11 @@ static bool t3dSamplerSamplerIsExactVertex( const double fGridX, const double fG
 	return fDx * fDx + fDz * fDz < 0.0001;
 }
 
-EA_FORCE_INLINE static float t3dSamplerSamplerBilerp3x3( const float fHeights[3][3],
-		const int iX,
-		const int iZ,
-		const real_t fFx,
-		const real_t fFz ) {
+EA_FORCE_INLINE static float t3dSamplerSamplerBilerp3x3(
+        const float fHeights[3][3], const int iX, const int iZ, const real_t fFx, const real_t fFz ) {
 	return Math::lerp( Math::lerp( fHeights[iZ][iX], fHeights[iZ][iX + 1], fFx ),
-			Math::lerp( fHeights[iZ + 1][iX], fHeights[iZ + 1][iX + 1], fFx ),
-			fFz );
+	        Math::lerp( fHeights[iZ + 1][iX], fHeights[iZ + 1][iX + 1], fFx ),
+	        fFz );
 }
 
 void t3dRegionCold_t::reset( void ) {
@@ -48,8 +45,8 @@ Terrain3DSampler::Terrain3DSampler( const t3dSamplingSource_t &rSource ) : m_sou
 		m_nSamplingGeneration = m_source.m_pStorage->getSamplingGeneration();
 		m_nRegionSize = m_source.m_pRepository->getRegionSize();
 		m_nRegionShift = m_nRegionSize > 0 && ( m_nRegionSize & ( m_nRegionSize - 1 ) ) == 0
-				? ( int )( t3dCountrZeroU32( ( uint32_t )( m_nRegionSize ) ) )
-				: -1;
+		        ? ( int )( t3dCountrZeroU32( ( uint32_t )( m_nRegionSize ) ) )
+		        : -1;
 		m_nRegionMask = m_nRegionShift >= 0 ? ( int64_t )( m_nRegionSize - 1 ) : 0;
 		m_fVertexSpacing = m_source.m_pRepository->getVertexSpacing();
 		m_fInverseVertexSpacing = m_fVertexSpacing > 0.0f ? 1.0 / ( double )( m_fVertexSpacing ) : 0.0;
@@ -61,14 +58,14 @@ void Terrain3DSampler::resetCache( const uint64_t nGeneration ) {
 		m_szCacheCold[( size_t )( index )].reset();
 		m_szCache[( size_t )( index )] = t3dRegionView_t{};
 	}
-	m_pLastView = nullptr;
+	m_pLastView = NULL;
 	m_nStamp = 1u;
 	m_nOperation = 1u;
 	m_nSamplingGeneration = nGeneration;
 	m_nRegionSize = m_source.m_pRepository ? m_source.m_pRepository->getRegionSize() : 0;
 	m_nRegionShift = m_nRegionSize > 0 && ( m_nRegionSize & ( m_nRegionSize - 1 ) ) == 0
-			? ( int )( t3dCountrZeroU32( ( uint32_t )( m_nRegionSize ) ) )
-			: -1;
+	        ? ( int )( t3dCountrZeroU32( ( uint32_t )( m_nRegionSize ) ) )
+	        : -1;
 	m_nRegionMask = m_nRegionShift >= 0 ? ( int64_t )( m_nRegionSize - 1 ) : 0;
 	m_fVertexSpacing = m_source.m_pRepository ? m_source.m_pRepository->getVertexSpacing() : 0.0f;
 	m_fInverseVertexSpacing = m_fVertexSpacing > 0.0f ? 1.0 / ( double )( m_fVertexSpacing ) : 0.0;
@@ -78,7 +75,7 @@ void Terrain3DSampler::resetView( t3dRegionView_t *const pView ) {
 	if ( !pView ) {
 		return;
 	}
-	const ptrdiff_t index = pView - m_szCache.data();
+	const ptrdiff_t index = pView - m_szCache;
 	if ( index < 0 || index >= s_nSamplerCacheSize ) {
 		return;
 	}
@@ -96,7 +93,8 @@ bool Terrain3DSampler::validateEpoch( void ) {
 	}
 	if ( ++m_nOperation == 0u ) {
 		m_nOperation = 1u;
-		for ( t3dRegionView_t &entry : m_szCache ) {
+		for ( size_t iCacheEntry = 0u; iCacheEntry < T3D_ARRAY_COUNT( m_szCache ); iCacheEntry++ ) {
+			t3dRegionView_t &entry = ( m_szCache )[iCacheEntry];
 			entry.m_nValidatedOperation = 0u;
 		}
 	}
@@ -136,7 +134,7 @@ uint32_t Terrain3DSampler::readUint( const uint8_t *pBytes, const int iIndex ) {
 		return UINT32_MAX;
 	}
 	uint32_t value = UINT32_MAX;
-	std::memcpy( &value, pBytes + ( size_t )( iIndex ) * sizeof( uint32_t ), sizeof( uint32_t ) );
+	memcpy( &value, pBytes + ( size_t )( iIndex ) * sizeof( uint32_t ), sizeof( uint32_t ) );
 	return value;
 }
 
@@ -149,16 +147,16 @@ uint32_t Terrain3DSampler::readControl( const t3dRegionView_t *pView, const int 
 
 t3dRegionView_t *Terrain3DSampler::validateCachedView( t3dRegionView_t *pView, const Vector2i &rLocation ) {
 	if ( !pView || !pView->m_bLoaded || !pView->m_bValid || pView->m_location != rLocation ) {
-		return nullptr;
+		return NULL;
 	}
 	if ( pView->m_nValidatedOperation != m_nOperation ) {
 		const uint32_t generation = m_source.m_pStorage->getRegionGeneration( rLocation );
 		if ( generation == 0u || generation != pView->m_nRegionGeneration ) {
 			resetView( pView );
 			if ( m_pLastView == pView ) {
-				m_pLastView = nullptr;
+				m_pLastView = NULL;
 			}
-			return nullptr;
+			return NULL;
 		}
 		pView->m_nValidatedOperation = m_nOperation;
 	}
@@ -168,14 +166,15 @@ t3dRegionView_t *Terrain3DSampler::validateCachedView( t3dRegionView_t *pView, c
 
 t3dRegionView_t *Terrain3DSampler::getRegionViewUnchecked( const Vector2i &rLocation ) {
 	if ( !m_source.valid() ) {
-		return nullptr;
+		return NULL;
 	}
 	if ( t3dRegionView_t *hit = validateCachedView( m_pLastView, rLocation ) ) {
 		return hit;
 	}
 
 	t3dRegionView_t *pReplacement = &m_szCache[0];
-	for ( t3dRegionView_t &entry : m_szCache ) {
+	for ( size_t iCacheEntry = 0u; iCacheEntry < T3D_ARRAY_COUNT( m_szCache ); iCacheEntry++ ) {
+		t3dRegionView_t &entry = ( m_szCache )[iCacheEntry];
 		if ( entry.m_bLoaded && entry.m_location == rLocation ) {
 			if ( t3dRegionView_t *hit = validateCachedView( &entry, rLocation ) ) {
 				m_pLastView = hit;
@@ -193,25 +192,24 @@ t3dRegionView_t *Terrain3DSampler::getRegionViewUnchecked( const Vector2i &rLoca
 
 	Terrain3DRegion *const pRegion = m_source.m_pRepository->getRegionPtr( rLocation );
 	if ( !pRegion || pRegion->isDeleted() ) {
-		return nullptr;
+		return NULL;
 	}
 
 	resetView( pReplacement );
-	const size_t replacement_index = ( size_t )( pReplacement - m_szCache.data() );
+	const size_t replacement_index = ( size_t )( pReplacement - m_szCache );
 	t3dRegionCold_t &rCold = m_szCacheCold[replacement_index];
 	pReplacement->m_location = rLocation;
 	pReplacement->m_nStamp = ++m_nStamp;
 	pReplacement->m_bLoaded = true;
 	pReplacement->m_nRegionGeneration = m_source.m_pStorage->getRegionGeneration( rLocation );
 	pReplacement->m_nValidatedOperation = m_nOperation;
-	pReplacement->m_bControlResolved =
-			!pRegion->hasChannel( TYPE_CONTROL ) || pRegion->getMapPtr( TYPE_CONTROL ) != nullptr;
+	pReplacement->m_bControlResolved = !pRegion->hasChannel( TYPE_CONTROL ) || pRegion->getMapPtr( TYPE_CONTROL ) != NULL;
 
 	Terrain3DActiveMapLease active = m_source.m_pStorage->acquireActive( rLocation );
 	if ( active.valid() ) {
 		const t3dActiveMapView_t &view = active.view();
 		pReplacement->m_pHeightBytes = ( const uint8_t * )( view.m_pHeight );
-		rCold.m_activeLease = std::move( active );
+		rCold.m_activeLease = eastl::move( active );
 	} else {
 		Terrain3DResidentMapLease pooled = m_source.m_pStorage->acquireResident( rLocation, pRegion );
 		if ( pooled.valid() ) {
@@ -219,28 +217,28 @@ t3dRegionView_t *Terrain3DSampler::getRegionViewUnchecked( const Vector2i &rLoca
 			pReplacement->m_pHeightBytes = ( const uint8_t * )( view.m_pHeight );
 			pReplacement->m_pControlBytes = ( const uint8_t * )( view.m_pControl );
 			pReplacement->m_pDerivedBytes = ( const uint8_t * )( view.m_pDerived );
-			rCold.m_lease = std::move( pooled );
+			rCold.m_lease = eastl::move( pooled );
 		} else {
 			Image *const height = pRegion->getMapPtr( TYPE_HEIGHT );
 			Image *const control = pRegion->getMapPtr( TYPE_CONTROL );
 			if ( !height || height->get_format() != Image::FORMAT_R16 ) {
-				return nullptr;
+				return NULL;
 			}
 			rCold.m_heightData = height->get_data();
 			const int texels = m_nRegionSize * m_nRegionSize;
 			if ( rCold.m_heightData.size() < texels * ( int )( sizeof( uint16_t ) ) ) {
 				rCold.m_heightData.clear();
-				return nullptr;
+				return NULL;
 			}
 			pReplacement->m_pHeightBytes = rCold.m_heightData.ptr();
 			if ( control ) {
 				if ( control->get_format() != Image::FORMAT_RF ) {
-					return nullptr;
+					return NULL;
 				}
 				rCold.m_controlData = control->get_data();
 				if ( rCold.m_controlData.size() < texels * ( int )( sizeof( uint32_t ) ) ) {
 					rCold.m_controlData.clear();
-					return nullptr;
+					return NULL;
 				}
 				pReplacement->m_pControlBytes = rCold.m_controlData.ptr();
 			}
@@ -251,13 +249,13 @@ t3dRegionView_t *Terrain3DSampler::getRegionViewUnchecked( const Vector2i &rLoca
 		Image *const control = pRegion->getMapPtr( TYPE_CONTROL );
 		if ( control ) {
 			if ( control->get_format() != Image::FORMAT_RF ) {
-				return nullptr;
+				return NULL;
 			}
 			rCold.m_controlData = control->get_data();
 			const int texels = m_nRegionSize * m_nRegionSize;
 			if ( rCold.m_controlData.size() < texels * ( int )( sizeof( uint32_t ) ) ) {
 				rCold.m_controlData.clear();
-				return nullptr;
+				return NULL;
 			}
 			pReplacement->m_pControlBytes = rCold.m_controlData.ptr();
 		}
@@ -278,10 +276,7 @@ t3dRegionView_t *Terrain3DSampler::getRegionViewUnchecked( const Vector2i &rLoca
 	return pReplacement;
 }
 
-bool Terrain3DSampler::resolveGridUnchecked( const int64_t iGridX,
-		const int64_t iGridZ,
-		t3dRegionView_t *&pView,
-		int &iIndex ) {
+bool Terrain3DSampler::resolveGridUnchecked( const int64_t iGridX, const int64_t iGridZ, t3dRegionView_t *&pView, int &iIndex ) {
 	int64_t region_x = 0;
 	int64_t region_z = 0;
 	int local_x = 0;
@@ -295,8 +290,7 @@ bool Terrain3DSampler::resolveGridUnchecked( const int64_t iGridX,
 	if ( !pView ) {
 		return false;
 	}
-	if ( ( uint32_t )( local_x ) >= ( uint32_t )( m_nRegionSize ) ||
-			( uint32_t )( local_z ) >= ( uint32_t )( m_nRegionSize ) ) {
+	if ( ( uint32_t )( local_x ) >= ( uint32_t )( m_nRegionSize ) || ( uint32_t )( local_z ) >= ( uint32_t )( m_nRegionSize ) ) {
 		return false;
 	}
 	iIndex = local_z * m_nRegionSize + local_x;
@@ -304,7 +298,7 @@ bool Terrain3DSampler::resolveGridUnchecked( const int64_t iGridX,
 }
 
 float Terrain3DSampler::sampleHeightGridUnchecked( const int64_t iGridX, const int64_t iGridZ, const bool bRespectHoles ) {
-	t3dRegionView_t *pView = nullptr;
+	t3dRegionView_t *pView = NULL;
 	int index = 0;
 	if ( !resolveGridUnchecked( iGridX, iGridZ, pView, index ) ) {
 		return NAN;
@@ -316,7 +310,7 @@ float Terrain3DSampler::sampleHeightGridUnchecked( const int64_t iGridX, const i
 }
 
 uint32_t Terrain3DSampler::sampleControlGridUnchecked( const int64_t iGridX, const int64_t iGridZ ) {
-	t3dRegionView_t *pView = nullptr;
+	t3dRegionView_t *pView = NULL;
 	int index = 0;
 	if ( !resolveGridUnchecked( iGridX, iGridZ, pView, index ) ) {
 		return UINT32_MAX;
@@ -336,9 +330,8 @@ uint32_t Terrain3DSampler::sampleControl( const Vector3 &rGlobalPosition ) {
 	if ( !validateEpoch() ) {
 		return UINT32_MAX;
 	}
-	return sampleControlGridUnchecked(
-			( int64_t )( Math::floor( ( double )( rGlobalPosition.x ) * m_fInverseVertexSpacing ) ),
-			( int64_t )( Math::floor( ( double )( rGlobalPosition.z ) * m_fInverseVertexSpacing ) ) );
+	return sampleControlGridUnchecked( ( int64_t )( Math::floor( ( double )( rGlobalPosition.x ) * m_fInverseVertexSpacing ) ),
+	        ( int64_t )( Math::floor( ( double )( rGlobalPosition.z ) * m_fInverseVertexSpacing ) ) );
 }
 
 float Terrain3DSampler::sampleHeightUnchecked( const Vector3 &rGlobalPosition ) {
@@ -346,7 +339,7 @@ float Terrain3DSampler::sampleHeightUnchecked( const Vector3 &rGlobalPosition ) 
 	const double fGridZ = ( double )( rGlobalPosition.z ) * m_fInverseVertexSpacing;
 	const int64_t x0 = ( int64_t )( Math::floor( fGridX ) );
 	const int64_t z0 = ( int64_t )( Math::floor( fGridZ ) );
-	t3dRegionView_t *pView = nullptr;
+	t3dRegionView_t *pView = NULL;
 	int index = 0;
 	if ( !resolveGridUnchecked( x0, z0, pView, index ) ) {
 		return NAN;
@@ -384,7 +377,7 @@ float Terrain3DSampler::sampleHeightUnchecked( const Vector3 &rGlobalPosition ) 
 		fH01 = sampleHeightGridUnchecked( x0, z0 + 1, false );
 		fH11 = sampleHeightGridUnchecked( x0 + 1, z0 + 1, false );
 	}
-	if ( std::isnan( fH00 ) || std::isnan( fH10 ) || std::isnan( fH01 ) || std::isnan( fH11 ) ) {
+	if ( isnan( fH00 ) || isnan( fH10 ) || isnan( fH01 ) || isnan( fH11 ) ) {
 		return NAN;
 	}
 	const real_t fFx = ( real_t )( fGridX - ( double )( x0 ) );
@@ -408,7 +401,7 @@ Vector3 Terrain3DSampler::sampleNormalUnchecked( const Vector3 &rGlobalPosition,
 
 	float fHeights[3][3];
 	const int needed = bExactVertex ? 2 : 3;
-	t3dRegionView_t *pView = nullptr;
+	t3dRegionView_t *pView = NULL;
 	int index = 0;
 	if ( !resolveGridUnchecked( x0, z0, pView, index ) ) {
 		return s_v3Nan;
@@ -420,8 +413,7 @@ Vector3 Terrain3DSampler::sampleNormalUnchecked( const Vector3 &rGlobalPosition,
 		const uint32_t c0 = readControl( pView, index );
 		const uint32_t cx = readControl( pView, index + 1 );
 		const uint32_t cz = readControl( pView, index + m_nRegionSize );
-		if ( c0 == UINT32_MAX || cx == UINT32_MAX || cz == UINT32_MAX || t3dIsHole( c0 ) || t3dIsHole( cx ) ||
-				t3dIsHole( cz ) ) {
+		if ( c0 == UINT32_MAX || cx == UINT32_MAX || cz == UINT32_MAX || t3dIsHole( c0 ) || t3dIsHole( cx ) || t3dIsHole( cz ) ) {
 			return s_v3Nan;
 		}
 		for ( int z = 0; z < needed; ++z ) {
@@ -434,14 +426,13 @@ Vector3 Terrain3DSampler::sampleNormalUnchecked( const Vector3 &rGlobalPosition,
 		const uint32_t c0 = sampleControlGridUnchecked( x0, z0 );
 		const uint32_t cx = sampleControlGridUnchecked( x0 + 1, z0 );
 		const uint32_t cz = sampleControlGridUnchecked( x0, z0 + 1 );
-		if ( c0 == UINT32_MAX || cx == UINT32_MAX || cz == UINT32_MAX || t3dIsHole( c0 ) || t3dIsHole( cx ) ||
-				t3dIsHole( cz ) ) {
+		if ( c0 == UINT32_MAX || cx == UINT32_MAX || cz == UINT32_MAX || t3dIsHole( c0 ) || t3dIsHole( cx ) || t3dIsHole( cz ) ) {
 			return s_v3Nan;
 		}
 		for ( int z = 0; z < needed; ++z ) {
 			for ( int x = 0; x < needed; ++x ) {
 				fHeights[z][x] = sampleHeightGridUnchecked( x0 + x, z0 + z, false );
-				if ( std::isnan( fHeights[z][x] ) ) {
+				if ( isnan( fHeights[z][x] ) ) {
 					return s_v3Nan;
 				}
 			}
@@ -475,13 +466,13 @@ bool Terrain3DSampler::sampleHeightAndNormal( const Vector3 &rGlobalPosition, fl
 		return false;
 	}
 	rNormal = sampleNormalUnchecked( rGlobalPosition, &fHeight );
-	return std::isfinite( fHeight ) && rNormal.is_finite();
+	return isfinite( fHeight ) && rNormal.is_finite();
 }
 
 Vector3 Terrain3DSampler::sampleSlopeNormalUnchecked( const Vector3 &rGlobalPosition ) {
 	const int64_t x = ( int64_t )( Math::round( ( double )( rGlobalPosition.x ) * m_fInverseVertexSpacing ) );
 	const int64_t z = ( int64_t )( Math::round( ( double )( rGlobalPosition.z ) * m_fInverseVertexSpacing ) );
-	t3dRegionView_t *pView = nullptr;
+	t3dRegionView_t *pView = NULL;
 	int index = 0;
 	if ( !resolveGridUnchecked( x, z, pView, index ) ) {
 		return s_v3Nan;
@@ -510,9 +501,9 @@ Vector3 Terrain3DSampler::sampleSlopeNormalUnchecked( const Vector3 &rGlobalPosi
 		fHeightX = sampleHeightGridUnchecked( x + 1, z, false );
 		fHeightZ = sampleHeightGridUnchecked( x, z + 1, false );
 	}
-	fHeight = std::isnan( fHeight ) ? 0.0f : fHeight;
-	fHeightX = std::isnan( fHeightX ) ? 0.0f : fHeightX;
-	fHeightZ = std::isnan( fHeightZ ) ? 0.0f : fHeightZ;
+	fHeight = isnan( fHeight ) ? 0.0f : fHeight;
+	fHeightX = isnan( fHeightX ) ? 0.0f : fHeightX;
+	fHeightZ = isnan( fHeightZ ) ? 0.0f : fHeightZ;
 	return Vector3( fHeight - fHeightX, m_fVertexSpacing, fHeight - fHeightZ ).normalized();
 }
 
@@ -526,9 +517,8 @@ bool Terrain3DSampler::sampleControlAndSlopeNormal( const Vector3 &rGlobalPositi
 	if ( !validateEpoch() ) {
 		return false;
 	}
-	nControl = sampleControlGridUnchecked(
-			( int64_t )( Math::floor( ( double )( rGlobalPosition.x ) * m_fInverseVertexSpacing ) ),
-			( int64_t )( Math::floor( ( double )( rGlobalPosition.z ) * m_fInverseVertexSpacing ) ) );
+	nControl = sampleControlGridUnchecked( ( int64_t )( Math::floor( ( double )( rGlobalPosition.x ) * m_fInverseVertexSpacing ) ),
+	        ( int64_t )( Math::floor( ( double )( rGlobalPosition.z ) * m_fInverseVertexSpacing ) ) );
 	if ( nControl == UINT32_MAX ) {
 		return false;
 	}
@@ -541,7 +531,7 @@ bool Terrain3DSampler::sampleHeights( const Vector3 *pPositions, float *pHeights
 		return false;
 	}
 	if ( !validateEpoch() ) {
-		std::fill_n( pHeights, nCount, NAN );
+		eastl::fill_n( pHeights, nCount, NAN );
 		return false;
 	}
 	for ( int index = 0; index < nCount; ++index ) {
@@ -555,14 +545,14 @@ bool Terrain3DSampler::sampleControls( const Vector3 *pPositions, int32_t *pCont
 		return false;
 	}
 	if ( !validateEpoch() ) {
-		std::fill_n( pControls, nCount, ( int32_t )( UINT32_MAX ) );
+		eastl::fill_n( pControls, nCount, ( int32_t )( UINT32_MAX ) );
 		return false;
 	}
 	for ( int index = 0; index < nCount; ++index ) {
 		const Vector3 &position = pPositions[index];
-		pControls[index] = ( int32_t )( sampleControlGridUnchecked(
-				( int64_t )( Math::floor( ( double )( position.x ) * m_fInverseVertexSpacing ) ),
-				( int64_t )( Math::floor( ( double )( position.z ) * m_fInverseVertexSpacing ) ) ) );
+		pControls[index] =
+		        ( int32_t )( sampleControlGridUnchecked( ( int64_t )( Math::floor( ( double )( position.x ) * m_fInverseVertexSpacing ) ),
+		                ( int64_t )( Math::floor( ( double )( position.z ) * m_fInverseVertexSpacing ) ) ) );
 	}
 	return true;
 }
@@ -572,7 +562,7 @@ bool Terrain3DSampler::sampleNormals( const Vector3 *pPositions, Vector3 *pNorma
 		return false;
 	}
 	if ( !validateEpoch() ) {
-		std::fill_n( pNormals, nCount, s_v3Nan );
+		eastl::fill_n( pNormals, nCount, s_v3Nan );
 		return false;
 	}
 	for ( int index = 0; index < nCount; ++index ) {
@@ -582,12 +572,12 @@ bool Terrain3DSampler::sampleNormals( const Vector3 *pPositions, Vector3 *pNorma
 }
 
 bool Terrain3DSampler::copyHeightRect( const int64_t iGridX,
-		const int64_t iGridZ,
-		const int nWidth,
-		const int nHeight,
-		float *const pDestination,
-		const int nDestinationStride,
-		const bool bRespectHoles ) {
+        const int64_t iGridZ,
+        const int nWidth,
+        const int nHeight,
+        float *const pDestination,
+        const int nDestinationStride,
+        const bool bRespectHoles ) {
 	if ( !validateEpoch() || !pDestination || nWidth <= 0 || nHeight <= 0 || nDestinationStride < nWidth ) {
 		return false;
 	}
@@ -606,15 +596,14 @@ bool Terrain3DSampler::copyHeightRect( const int64_t iGridX,
 			resolveAxis( grid_x, region_x, local_x );
 			const int run = MIN( nWidth - copied, m_nRegionSize - local_x );
 			if ( region_x < INT32_MIN || region_x > INT32_MAX || region_z < INT32_MIN || region_z > INT32_MAX ) {
-				std::fill_n( destination + copied, run, NAN );
+				eastl::fill_n( destination + copied, run, NAN );
 				bComplete = false;
 				copied += run;
 				continue;
 			}
-			t3dRegionView_t *const pView =
-					getRegionViewUnchecked( Vector2i( ( int32_t )( region_x ), ( int32_t )( region_z ) ) );
+			t3dRegionView_t *const pView = getRegionViewUnchecked( Vector2i( ( int32_t )( region_x ), ( int32_t )( region_z ) ) );
 			if ( !pView ) {
-				std::fill_n( destination + copied, run, NAN );
+				eastl::fill_n( destination + copied, run, NAN );
 				bComplete = false;
 				copied += run;
 				continue;
@@ -637,16 +626,12 @@ bool Terrain3DSampler::copyHeightRect( const int64_t iGridX,
 	return bComplete;
 }
 
-bool Terrain3DSampler::minimumHeightRect( const int64_t iGridX,
-		const int64_t iGridZ,
-		const int nWidth,
-		const int nHeight,
-		float &fHeight,
-		const bool bRespectHoles ) {
+bool Terrain3DSampler::minimumHeightRect(
+        const int64_t iGridX, const int64_t iGridZ, const int nWidth, const int nHeight, float &fHeight, const bool bRespectHoles ) {
 	if ( !validateEpoch() || nWidth <= 0 || nHeight <= 0 ) {
 		return false;
 	}
-	float fMinimum = std::numeric_limits<float>::infinity();
+	float fMinimum = eastl::numeric_limits<float>::infinity();
 	for ( int row = 0; row < nHeight; ++row ) {
 		const int64_t grid_z = iGridZ + row;
 		int64_t region_z = 0;
@@ -665,8 +650,7 @@ bool Terrain3DSampler::minimumHeightRect( const int64_t iGridX,
 				return false;
 			}
 			const int run = MIN( nWidth - copied, m_nRegionSize - local_x );
-			t3dRegionView_t *const pView =
-					getRegionViewUnchecked( Vector2i( ( int32_t )( region_x ), ( int32_t )( region_z ) ) );
+			t3dRegionView_t *const pView = getRegionViewUnchecked( Vector2i( ( int32_t )( region_x ), ( int32_t )( region_z ) ) );
 			if ( !pView ) {
 				return false;
 			}
@@ -681,7 +665,7 @@ bool Terrain3DSampler::minimumHeightRect( const int64_t iGridX,
 			copied += run;
 		}
 	}
-	if ( !std::isfinite( fMinimum ) ) {
+	if ( !isfinite( fMinimum ) ) {
 		return false;
 	}
 	fHeight = fMinimum;

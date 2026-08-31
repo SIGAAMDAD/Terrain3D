@@ -1,20 +1,17 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
-#ifndef GENERATEDTEXTURE_CLASS_H
-#define GENERATEDTEXTURE_CLASS_H
+#ifndef TERRAIN3D_GENERATED_TEXTURE_H
+#define TERRAIN3D_GENERATED_TEXTURE_H
 
 #include "Terrain3DConstants.h"
 #include "core/terrain_3d_compiler.h"
 #include "rendering/rd/terrain_3d_rd_texture_manager.h"
 
-#include <cstddef>
+#include <stddef.h>
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/variant/rect2i.hpp>
 
-class Terrain3DGeneratedTexture
-{
+class Terrain3DGeneratedTexture {
 	CLASS_NAME_STATIC( "Terrain3DGenTex" );
 
 public:
@@ -43,9 +40,9 @@ private:
 	t3dRdTextureSemantic_t m_semantic = T3D_RD_TEXTURE_LINEAR_DATA;
 	SourceRetentionPolicy m_sourceRetentionPolicy = RETAIN_CPU_SOURCE;
 
-	bool matchesLayout( const Ref<Image>& rImage ) const;
-	bool ensureRegionStaging( const Ref<Image>& rImage );
-	String getResourceName( const String& rSuffix = String() ) const;
+	bool matchesLayout( const Ref<Image> &rImage ) const;
+	bool ensureRegionStaging( const Ref<Image> &rImage );
+	String getResourceName( const String &rSuffix = String() ) const;
 
 public:
 	EA_FORCE_INLINE void setSourceRetentionPolicy( const SourceRetentionPolicy policy ) {
@@ -53,46 +50,39 @@ public:
 	}
 	void releaseCpuSources( void );
 	void clear( void );
-	void swap( Terrain3DGeneratedTexture& rOther );
-	EA_FORCE_INLINE bool isDirty( void ) const
-	{
+	void swap( Terrain3DGeneratedTexture &rOther );
+	EA_FORCE_INLINE bool isDirty( void ) const {
 		return m_bDirty;
 	}
-	RID create( const TypedArray<Image>& rLayers, t3dRdTextureSemantic_t semantic );
-	bool update( const Ref<Image>& rImage, int nLayer );
+	RID create( const TypedArray<Image> &rLayers, t3dRdTextureSemantic_t semantic );
+	bool update( const Ref<Image> &rImage, int nLayer );
 	EA_FORCE_INLINE bool canUpdateLayer( const Ref<Image> &rImage, const int nLayer ) const {
-		return m_hRid.is_valid() && !m_bDirty && m_bLayered && nLayer >= 0 && nLayer < m_nSize &&
-				matchesLayout( rImage );
+		return m_hRid.is_valid() && !m_bDirty && m_bLayered && nLayer >= 0 && nLayer < m_nSize && matchesLayout( rImage );
 	}
 	EA_FORCE_INLINE void commitLayerImage( const Ref<Image> &rImage, const int nLayer ) {
 		if ( m_sourceRetentionPolicy == RETAIN_CPU_SOURCE && canUpdateLayer( rImage, nLayer ) ) {
 			m_layers[nLayer] = rImage;
 		}
 	}
-	RID create( const Ref<Image>& rImage, t3dRdTextureSemantic_t semantic );
-	bool update2d( const Ref<Image>& rImage );
-	bool updateRegion2d( const Ref<Image>& rImage, const Rect2i& rDestination );
-	EA_FORCE_INLINE Ref<Image> getImage( void ) const
-	{
+	RID create( const Ref<Image> &rImage, t3dRdTextureSemantic_t semantic );
+	bool update2d( const Ref<Image> &rImage );
+	bool updateRegion2d( const Ref<Image> &rImage, const Rect2i &rDestination );
+	EA_FORCE_INLINE Ref<Image> getImage( void ) const {
 		return m_image;
 	}
-	EA_FORCE_INLINE Ref<Image> getLayerImage( const int nLayer ) const
-	{
+	EA_FORCE_INLINE Ref<Image> getLayerImage( const int nLayer ) const {
 		if ( !m_bLayered || nLayer < 0 || nLayer >= m_layers.size() ) {
 			return Ref<Image>();
 		}
 		return m_layers[nLayer];
 	}
-	EA_FORCE_INLINE RID getRid( void ) const
-	{
+	EA_FORCE_INLINE RID getRid( void ) const {
 		return m_hRid;
 	}
-	EA_FORCE_INLINE int size( void ) const
-	{
+	EA_FORCE_INLINE int size( void ) const {
 		return m_nSize;
 	}
-	int maxMipmapLevel( void ) const
-	{
+	int maxMipmapLevel( void ) const {
 		if ( !m_bMipmaps || m_nWidth <= 0 || m_nHeight <= 0 ) {
 			return 0;
 		}
@@ -104,10 +94,9 @@ public:
 		}
 		return level;
 	}
-	EA_FORCE_INLINE size_t payloadBytes( void ) const
-	{
+	EA_FORCE_INLINE size_t payloadBytes( void ) const {
 		return m_nPayloadBytes;
 	}
 };
 
-#endif // GENERATEDTEXTURE_CLASS_H
+#endif // TERRAIN3D_GENERATED_TEXTURE_H

@@ -11,8 +11,8 @@
 #include <EASTL/algorithm.h>
 #include <EASTL/sort.h>
 #include <EASTL/vector.h>
-#include <cmath>
-#include <cstdint>
+#include <math.h>
+#include <stdint.h>
 #include <godot_cpp/classes/material.hpp>
 #include <godot_cpp/classes/mesh.hpp>
 #include <godot_cpp/classes/surface_tool.hpp>
@@ -22,6 +22,7 @@
 #include <godot_cpp/variant/packed_int32_array.hpp>
 #include <godot_cpp/variant/packed_vector2_array.hpp>
 #include <godot_cpp/variant/packed_vector3_array.hpp>
+#include <EASTL/utility.h>
 
 typedef struct t3dHlodTriangle_s {
 	Vector3 m_a;
@@ -69,8 +70,7 @@ static real_t t3dHlodBuilderPointAabbDistanceSquared( const Vector3 &p, const AA
 // Squared distance from a point to a triangle. This is the region-test form
 // from the standard closest-point construction and is branchy only in the
 // editor-only bake path.
-static real_t
-t3dHlodBuilderPointTriangleDistanceSquared( const Vector3 &p, const Vector3 &a, const Vector3 &b, const Vector3 &c ) {
+static real_t t3dHlodBuilderPointTriangleDistanceSquared( const Vector3 &p, const Vector3 &a, const Vector3 &b, const Vector3 &c ) {
 	const Vector3 ab = b - a;
 	const Vector3 ac = c - a;
 	const Vector3 ap = p - a;
@@ -134,11 +134,21 @@ EA_FORCE_INLINE static real_t t3dHlodBuilderComponent( const Vector3 &v, const i
 	return axis == 0 ? v.x : ( axis == 1 ? v.y : v.z );
 }
 
+typedef struct t3dHlodTriangleAxisLess_s {
+	const eastl::vector<t3dHlodTriangle_t> *m_pTriangles;
+	int m_nAxis;
+
+	bool operator()( const int nLhs, const int nRhs ) const {
+		return t3dHlodBuilderComponent( ( *m_pTriangles )[( size_t )nLhs].m_center, m_nAxis )
+		        < t3dHlodBuilderComponent( ( *m_pTriangles )[( size_t )nRhs].m_center, m_nAxis );
+	}
+} t3dHlodTriangleAxisLess_t;
+
 static int t3dHlodBuilderBuildBvhRecursive( const eastl::vector<t3dHlodTriangle_t> &triangles,
-		eastl::vector<int> &order,
-		eastl::vector<t3dHlodBvhNode_t> &nodes,
-		const int begin,
-		const int count ) {
+        eastl::vector<int> &order,
+        eastl::vector<t3dHlodBvhNode_t> &nodes,
+        const int begin,
+        const int count ) {
 	t3dHlodBvhNode_t node;
 	node.m_nBegin = begin;
 	node.m_nCount = count;
@@ -164,26 +174,24 @@ static int t3dHlodBuilderBuildBvhRecursive( const eastl::vector<t3dHlodTriangle_
 	}
 
 	const int axis = t3dHlodBuilderLargestAxis( center_bounds.size );
-	eastl::sort(
-			order.begin() + begin, order.begin() + begin + count, [&triangles, axis]( const int lhs, const int rhs ) {
-				return t3dHlodBuilderComponent( triangles[( size_t )lhs].m_center, axis ) <
-						t3dHlodBuilderComponent( triangles[( size_t )rhs].m_center, axis );
-			} );
+	t3dHlodTriangleAxisLess_t less;
+	less.m_pTriangles = &triangles;
+	less.m_nAxis = axis;
+	eastl::sort( order.begin() + begin, order.begin() + begin + count, less );
 	const int left_count = count / 2;
 	const int right_count = count - left_count;
 	nodes[( size_t )node_index].m_nLeft = t3dHlodBuilderBuildBvhRecursive( triangles, order, nodes, begin, left_count );
-	nodes[( size_t )node_index].m_nRight =
-			t3dHlodBuilderBuildBvhRecursive( triangles, order, nodes, begin + left_count, right_count );
+	nodes[( size_t )node_index].m_nRight = t3dHlodBuilderBuildBvhRecursive( triangles, order, nodes, begin + left_count, right_count );
 	nodes[( size_t )node_index].m_nCount = 0;
 	return node_index;
 }
 
 static void t3dHlodBuilderQueryBvhRecursive( const eastl::vector<t3dHlodTriangle_t> &triangles,
-		const eastl::vector<int> &order,
-		const eastl::vector<t3dHlodBvhNode_t> &nodes,
-		const int node_index,
-		const Vector3 &point,
-		real_t &best_squared ) {
+        const eastl::vector<int> &order,
+        const eastl::vector<t3dHlodBvhNode_t> &nodes,
+        const int node_index,
+        const Vector3 &point,
+        real_t &best_squared ) {
 	if ( node_index < 0 ) {
 		return;
 	}
@@ -197,8 +205,8 @@ static void t3dHlodBuilderQueryBvhRecursive( const eastl::vector<t3dHlodTriangle
 			if ( t3dHlodBuilderPointAabbDistanceSquared( point, triangle.m_bounds ) >= best_squared ) {
 				continue;
 			}
-			best_squared = MIN( best_squared,
-					t3dHlodBuilderPointTriangleDistanceSquared( point, triangle.m_a, triangle.m_b, triangle.m_c ) );
+			best_squared =
+			        MIN( best_squared, t3dHlodBuilderPointTriangleDistanceSquared( point, triangle.m_a, triangle.m_b, triangle.m_c ) );
 		}
 		return;
 	}
@@ -243,8 +251,7 @@ static bool t3dHlodBuilderHasUnsupportedStaticAttributes( const Array &arrays ) 
 static Array t3dHlodBuilderCompactSurfaceArrays( const Array &arrays, const PackedInt32Array &indices ) {
 	Array compact;
 	compact.resize( Mesh::ARRAY_MAX );
-	if ( arrays.size() <= Mesh::ARRAY_VERTEX ||
-			arrays[Mesh::ARRAY_VERTEX].get_type() != Variant::PACKED_VECTOR3_ARRAY ) {
+	if ( arrays.size() <= Mesh::ARRAY_VERTEX || arrays[Mesh::ARRAY_VERTEX].get_type() != Variant::PACKED_VECTOR3_ARRAY ) {
 		return Array();
 	}
 	const PackedVector3Array vertices = arrays[Mesh::ARRAY_VERTEX];
@@ -315,7 +322,9 @@ static Array t3dHlodBuilderCompactSurfaceArrays( const Array &arrays, const Pack
 			compact[Mesh::ARRAY_COLOR] = destination;
 		}
 	}
-	for ( const int channel : { Mesh::ARRAY_TEX_UV, Mesh::ARRAY_TEX_UV2 } ) {
+	const int szUvChannels[] = { Mesh::ARRAY_TEX_UV, Mesh::ARRAY_TEX_UV2 };
+	for ( size_t iUvChannel = 0u; iUvChannel < T3D_ARRAY_COUNT( szUvChannels ); iUvChannel++ ) {
+		const int channel = szUvChannels[iUvChannel];
 		if ( arrays[channel].get_type() != Variant::PACKED_VECTOR2_ARRAY ) {
 			continue;
 		}
@@ -363,8 +372,7 @@ static real_t t3dHlodBuilderMeasureVertexDeviation( const Array &source_arrays, 
 		const int ia = proxy_indices[i];
 		const int ib = proxy_indices[i + 1];
 		const int ic = proxy_indices[i + 2];
-		if ( ia < 0 || ib < 0 || ic < 0 || ia >= proxy_vertices.size() || ib >= proxy_vertices.size() ||
-				ic >= proxy_vertices.size() ) {
+		if ( ia < 0 || ib < 0 || ic < 0 || ia >= proxy_vertices.size() || ib >= proxy_vertices.size() || ic >= proxy_vertices.size() ) {
 			continue;
 		}
 		t3dHlodTriangle_t triangle;
@@ -391,7 +399,7 @@ static real_t t3dHlodBuilderMeasureVertexDeviation( const Array &source_arrays, 
 	for ( int i = 0; i < source_vertices.size(); ++i ) {
 		real_t best_squared = INFINITY;
 		t3dHlodBuilderQueryBvhRecursive( triangles, order, nodes, root, source_vertices[i], best_squared );
-		if ( std::isfinite( ( double )best_squared ) ) {
+		if ( isfinite( ( double )best_squared ) ) {
 			max_squared = MAX( max_squared, best_squared );
 		}
 	}
@@ -404,9 +412,11 @@ PackedInt32Array Terrain3DHLODBuilder::getInstancerMeshIds( Terrain3DRegion *con
 		return result;
 	}
 	const Terrain3DInstanceStore &store = pRegion->getInstanceStore();
-	for ( const t3dInstanceMesh_t &mesh : store.meshes() ) {
+	for ( size_t iMesh = 0u; iMesh < ( size_t )( ( store.meshes() ).size() ); iMesh++ ) {
+		const t3dInstanceMesh_t &mesh = ( store.meshes() )[iMesh];
 		bool has_instances = false;
-		for ( const t3dInstanceCell_t &cell : mesh.m_cells ) {
+		for ( size_t iCell = 0u; iCell < ( size_t )( ( mesh.m_cells ).size() ); iCell++ ) {
+			const t3dInstanceCell_t &cell = ( mesh.m_cells )[iCell];
 			if ( !cell.m_transforms.empty() ) {
 				has_instances = true;
 				break;
@@ -419,8 +429,8 @@ PackedInt32Array Terrain3DHLODBuilder::getInstancerMeshIds( Terrain3DRegion *con
 	return result;
 }
 
-Dictionary
-Terrain3DHLODBuilder::buildInstancerSource( Terrain3D *const pTerrain, Terrain3DRegion *const pRegion, const int nMeshId ) const {
+Dictionary Terrain3DHLODBuilder::buildInstancerSource(
+        Terrain3D *const pTerrain, Terrain3DRegion *const pRegion, const int nMeshId ) const {
 	Dictionary result;
 	result["ok"] = false;
 	if ( !pTerrain || !pRegion || pTerrain->getAssets().is_null() || nMeshId < 0 || nMeshId >= s_nMaxMeshAssets ) {
@@ -460,13 +470,15 @@ Terrain3DHLODBuilder::buildInstancerSource( Terrain3D *const pTerrain, Terrain3D
 	Ref<ArrayMesh> merged;
 	merged.instantiate();
 	int64_t instance_count = 0;
-	for ( const t3dInstanceCell_t &cell : source_instances->m_cells ) {
+	for ( size_t iCell = 0u; iCell < ( size_t )( ( source_instances->m_cells ).size() ); iCell++ ) {
+		const t3dInstanceCell_t &cell = ( source_instances->m_cells )[iCell];
 		instance_count += ( int64_t )cell.m_transforms.size();
 		if ( cell.usesColors() ) {
-			for ( const uint32_t color : cell.m_colors ) {
+			for ( size_t iColor = 0u; iColor < ( size_t )( ( cell.m_colors ).size() ); iColor++ ) {
+				const uint32_t color = ( cell.m_colors )[iColor];
 				if ( color != s_nInstanceWhiteRgba8 ) {
 					result["error"] = "per-instance color tinting requires a dedicated HLOD material bake and is "
-									  "excluded from geometry-only proxies";
+					                  "excluded from geometry-only proxies";
 					return result;
 				}
 			}
@@ -490,14 +502,15 @@ Terrain3DHLODBuilder::buildInstancerSource( Terrain3D *const pTerrain, Terrain3D
 		Ref<SurfaceTool> tool;
 		tool.instantiate();
 		tool->begin( Mesh::PRIMITIVE_TRIANGLES );
-		for ( const t3dInstanceCell_t &cell : source_instances->m_cells ) {
+		for ( size_t iCell = 0u; iCell < ( size_t )( ( source_instances->m_cells ).size() ); iCell++ ) {
+			const t3dInstanceCell_t &cell = ( source_instances->m_cells )[iCell];
 			for ( size_t transform_index = 0; transform_index < cell.m_transforms.size(); ++transform_index ) {
-				tool->append_from( mesh, surface, cell.m_transforms[transform_index] );
+				tool->append_from( mesh, surface, cell.getTransform( transform_index ) );
 			}
 		}
 		tool->index();
-		const Ref<Material> material = asset->getMaterialOverride().is_valid() ? asset->getMaterialOverride()
-																			   : mesh->surface_get_material( surface );
+		const Ref<Material> material =
+		        asset->getMaterialOverride().is_valid() ? asset->getMaterialOverride() : mesh->surface_get_material( surface );
 		tool->set_material( material );
 		merged = tool->commit( merged );
 		source_triangles += t3dHlodBuilderTriangleCount( arrays ) * instance_count;
@@ -549,8 +562,7 @@ Dictionary Terrain3DHLODBuilder::simplifyMesh( const Ref<ArrayMesh> &rMesh, cons
 
 		PackedInt32Array simplified_indices = source_indices;
 		if ( source_indices.size() >= 12 && ratio < 0.999f ) {
-			const int target_indices =
-					MAX( 3, ( int )Math::floor( ( real_t )source_indices.size() * ratio / 3.0f ) * 3 );
+			const int target_indices = MAX( 3, ( int )Math::floor( ( real_t )source_indices.size() * ratio / 3.0f ) * 3 );
 			const PackedInt32Array generated = source_tool->generate_lod( 1.0f, target_indices );
 			if ( generated.size() >= 3 && generated.size() <= source_indices.size() ) {
 				simplified_indices = generated;
@@ -580,7 +592,7 @@ Dictionary Terrain3DHLODBuilder::simplifyMesh( const Ref<ArrayMesh> &rMesh, cons
 
 void Terrain3DHLODBuilder::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_instancer_mesh_ids", "region" ), &Terrain3DHLODBuilder::getInstancerMeshIds );
-	ClassDB::bind_method( D_METHOD( "build_instancer_source", "terrain", "region", "mesh_id" ),
-			&Terrain3DHLODBuilder::buildInstancerSource );
+	ClassDB::bind_method(
+	        D_METHOD( "build_instancer_source", "terrain", "region", "mesh_id" ), &Terrain3DHLODBuilder::buildInstancerSource );
 	ClassDB::bind_method( D_METHOD( "simplify_mesh", "mesh", "ratio" ), &Terrain3DHLODBuilder::simplifyMesh );
 }

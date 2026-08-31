@@ -371,6 +371,15 @@ func _bind_terrain(p_terrain: Terrain3D) -> void:
 	_last_terrain = terrain
 	terrain.set_plugin(self)
 	terrain.set_editor(editor)
+	# Bind the editor camera as soon as the terrain becomes the active edited
+	# object. Waiting for _forward_3d_gui_input() means the native renderer can
+	# keep the startup origin-centered clipmap until the user first interacts with
+	# the viewport.
+	var main_viewport := EditorInterface.get_editor_viewport_3d(0)
+	if is_instance_valid(main_viewport):
+		var main_camera := main_viewport.get_camera_3d()
+		if is_instance_valid(main_camera):
+			terrain.set_camera(main_camera)
 	debug = terrain.debug_level
 	editor.set_terrain(terrain)
 	terrain.set_meta("_edit_lock_", true)
@@ -440,6 +449,11 @@ func _forward_3d_gui_input(p_viewport_camera: Camera3D, p_event: InputEvent) -> 
 	if not is_terrain_valid():
 		return AFTER_GUI_INPUT_PASS
 
+	# Camera/navigation input can return PASS from _read_input(). Hand the active
+	# viewport camera to Terrain3D before that early return so a terrain whose
+	# physics snapping was disabled during startup can recover without a brush edit.
+	terrain.set_camera(p_viewport_camera)
+
 	var continue_input: AfterGUIInput = _read_input(p_event)
 	if continue_input != AFTER_GUI_INPUT_CUSTOM:
 		return continue_input
@@ -447,9 +461,6 @@ func _forward_3d_gui_input(p_viewport_camera: Camera3D, p_event: InputEvent) -> 
 	# Always update this for all inputs, as the mouse position can move without
 	# necessarily being a InputEventMouseMotion object. get_intersection() also
 	# returns the last frame position, and should be updated more frequently.
-
-	# Snap terrain to current camera
-	terrain.set_camera(p_viewport_camera)
 
 	# Detect if viewport is set to half_resolution
 	# Structure is: Node3DEditorViewportContainer/Node3DEditorViewport(4)/SubViewportContainer/SubViewport/Camera3D

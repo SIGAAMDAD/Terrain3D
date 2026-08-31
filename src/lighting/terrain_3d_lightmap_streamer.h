@@ -1,10 +1,9 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
-#pragma once
-
 #ifndef TERRAIN3D_LIGHTMAP_STREAMER_H
 #define TERRAIN3D_LIGHTMAP_STREAMER_H
 
 #include "Terrain3DConstants.h"
+#include "core/terrain_3d_eastl_helpers.h"
 #include "data/terrain_3d_runtime_bake_codec.h"
 #include "lighting/terrain_3d_region_lighting.h"
 
@@ -33,7 +32,7 @@ typedef struct t3dActivePackage_s {
 	Ref<Terrain3DRegionLighting> m_ackage;
 	Ref<LightmapGIData> m_sourceData;
 	Ref<LightmapGIData> m_runtimeData;
-	LightmapGI *m_pNode = nullptr;
+	LightmapGI *m_pNode = NULL;
 	uint64_t m_nReceiverSignature = 0u;
 	int m_nReceiverCount = 0;
 	bool m_bDesired = false;
@@ -43,11 +42,9 @@ class Terrain3DLightmapStreamer : public Object {
 	GDCLASS( Terrain3DLightmapStreamer, Object );
 	CLASS_NAME();
 
-	Terrain3D *m_pTerrain = nullptr;
-	t3dActivePackage_t m_szActive[s_nLightmapActiveInstanceLimit];
-	LightmapGI *m_szFreeNodes[s_nLightmapActiveInstanceLimit]{};
-	uint8_t m_nActiveCount = 0u;
-	uint8_t m_nFreeNodeCount = 0u;
+	Terrain3D *m_pTerrain = NULL;
+	eastl::fixed_vector<t3dActivePackage_t, s_nLightmapActiveInstanceLimit, false> m_activePackages;
+	eastl::fixed_vector<LightmapGI *, s_nLightmapActiveInstanceLimit, false> m_freeNodes;
 	bool m_bEnabled = true;
 	int m_nRadiusRegions = 1;
 	int m_nLoadBudget = 2;
@@ -75,22 +72,18 @@ class Terrain3DLightmapStreamer : public Object {
 	t3dActivePackage_t *findActive( const Ref<Terrain3DRegionLighting> &rPackage );
 	const t3dActivePackage_t *findActive( const Ref<Terrain3DRegionLighting> &rPackage ) const;
 	t3dSourceLoadResult_t requestSourceData( const Ref<Terrain3DRegionLighting> &rPackage, Ref<LightmapGIData> &rData );
-	bool
-	collectReceiverState( const Ref<Terrain3DRegionLighting> &rPackage, uint64_t &nSignature, int &nReceiverCount ) const;
+	bool collectReceiverState( const Ref<Terrain3DRegionLighting> &rPackage, uint64_t &nSignature, int &nReceiverCount ) const;
 	bool buildRuntimeData( const Ref<Terrain3DRegionLighting> &rPackage,
-			const Ref<LightmapGIData> &rSource,
-			Ref<LightmapGIData> &rData,
-			uint64_t &nSignature,
-			int &nReceiverCount ) const;
+	        const Ref<LightmapGIData> &rSource,
+	        Ref<LightmapGIData> &rData,
+	        uint64_t &nSignature,
+	        int &nReceiverCount ) const;
 	bool activate( const Ref<Terrain3DRegionLighting> &rPackage,
-			const Ref<LightmapGIData> &rSourceData,
-			const Ref<LightmapGIData> &rRuntimeData,
-			uint64_t nSignature,
-			int nReceiverCount );
-	bool refreshActive( t3dActivePackage_t &rActive,
-			const Ref<LightmapGIData> &rRuntimeData,
-			uint64_t nSignature,
-			int nReceiverCount );
+	        const Ref<LightmapGIData> &rSourceData,
+	        const Ref<LightmapGIData> &rRuntimeData,
+	        uint64_t nSignature,
+	        int nReceiverCount );
+	bool refreshActive( t3dActivePackage_t &rActive, const Ref<LightmapGIData> &rRuntimeData, uint64_t nSignature, int nReceiverCount );
 	bool isPackageCompatibleWithActive( const Ref<Terrain3DRegionLighting> &rPackage ) const;
 	LightmapGI *acquireNode( void );
 	void releaseNode( LightmapGI *pNode );
@@ -143,7 +136,7 @@ public:
 	Dictionary getStatsFast( void ) const;
 
 	EA_FORCE_INLINE int getActivePackageCount( void ) const {
-		return ( int )m_nActiveCount;
+		return ( int )m_activePackages.size();
 	}
 	Dictionary getStats( void ) const;
 

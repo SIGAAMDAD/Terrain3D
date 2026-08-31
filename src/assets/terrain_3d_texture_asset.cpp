@@ -214,10 +214,7 @@ void Terrain3DTextureAsset::setNormalTexture( const Ref<Texture2D> &rTexture ) {
 				LOG( WARN, "Normal texture '", filename, "' has no mipmaps. Change on the Import panel if desired." );
 			}
 			if ( pImg->get_width() != pImg->get_height() ) {
-				LOG( WARN,
-						"Normal texture '",
-						filename,
-						"' is not square. Not recommended. Mipmaps might have artifacts." );
+				LOG( WARN, "Normal texture '", filename, "' is not square. Not recommended. Mipmaps might have artifacts." );
 			}
 			if ( !is_power_of_2( pImg->get_width() ) || !is_power_of_2( pImg->get_height() ) ) {
 				LOG( WARN, "Normal texture '", filename, "' dimensions are not power of 2. This is sub-optimal." );
@@ -236,8 +233,8 @@ void Terrain3DTextureAsset::setSurfaceTexture( const Ref<Texture2D> &rTexture ) 
 		const Ref<Image> pImg = rTexture->get_image();
 		if ( pImg.is_null() || !t3dTextureAssetIsPackedSurfaceFormat( pImg->get_format() ) ) {
 			LOG( ERROR,
-					"Packed PBR textures must use RGBA8, BC3/DXT5, or BC7/BPTC_RGBA "
-					"(R=normal X, G=normal Y, B=roughness, A=AO)." );
+			        "Packed PBR textures must use RGBA8, BC3/DXT5, or BC7/BPTC_RGBA "
+			        "(R=normal X, G=normal Y, B=roughness, A=AO)." );
 			return;
 		}
 		const String filename = rTexture->get_path().get_file().get_basename();
@@ -273,8 +270,8 @@ void Terrain3DTextureAsset::setDisplacementTexture( const Ref<Texture2D> &rTextu
 			pTexture = ImageTexture::create_from_image( pMigrated );
 			pImage = pMigrated;
 			LOG( WARN,
-					"Migrated legacy R16 displacement texture to R8. Save the texture asset to persist the "
-					"migration." );
+			        "Migrated legacy R16 displacement texture to R8. Save the texture asset to persist the "
+			        "migration." );
 		}
 		if ( pImage->get_format() != Image::FORMAT_R8 ) {
 			LOG( ERROR, "Displacement textures must use Image::FORMAT_R8 (R8_UNORM)." );
@@ -283,9 +280,9 @@ void Terrain3DTextureAsset::setDisplacementTexture( const Ref<Texture2D> &rTextu
 		const String filename = pTexture->get_path().get_file().get_basename();
 		if ( !pImage->has_mipmaps() ) {
 			LOG( WARN,
-					"Displacement texture '",
-					filename,
-					"' has no mipmaps. Tessellation LOD sampling remains valid but may alias at distance." );
+			        "Displacement texture '",
+			        filename,
+			        "' has no mipmaps. Tessellation LOD sampling remains valid but may alias at distance." );
 		}
 		if ( !is_power_of_2( pImage->get_width() ) || !is_power_of_2( pImage->get_height() ) ) {
 			LOG( WARN, "Displacement texture '", filename, "' dimensions are not powers of two." );
@@ -322,8 +319,8 @@ void Terrain3DTextureAsset::setPbrTexture( const Ref<Texture2D> &rTexture ) {
 		m_displacementTexture = ImageTexture::create_from_image( pDisplacement );
 		m_pbrTexture.unref();
 		LOG( WARN,
-				"Migrated legacy RGBA16UI PBR texture to RGBA8 packed PBR + R8 displacement. Save the texture asset to "
-				"persist the migration." );
+		        "Migrated legacy RGBA16UI PBR texture to RGBA8 packed PBR + R8 displacement. Save the texture asset to "
+		        "persist the migration." );
 	} else {
 		LOG( ERROR, "Compatibility pbr_texture accepts old RGBA16UI data or an RGBA8/BC3/BC7 packed PBR texture." );
 		return;
@@ -428,24 +425,24 @@ void Terrain3DTextureAsset::setDetilingShift( const real_t fDetilingShift ) {
 	emit_signal( "setting_changed" );
 }
 
-#define SET_EROSION_VALUE( methodName, field_name, min_value, max_value ) \
-	void Terrain3DTextureAsset::methodName( real_t fValueArg ) { \
-		real_t fValue = CLAMP( fValueArg, ( real_t )( min_value ), ( real_t )( max_value ) ); \
-		if ( field_name == fValue ) { \
-			return; \
-		} \
-		field_name = fValue; \
-		emit_signal( "setting_changed" ); \
+#define SET_EROSION_VALUE( methodName, field_name, min_value, max_value )                                                                  \
+	void Terrain3DTextureAsset::methodName( real_t fValueArg ) {                                                                           \
+		real_t fValue = CLAMP( fValueArg, ( real_t )( min_value ), ( real_t )( max_value ) );                                              \
+		if ( field_name == fValue ) {                                                                                                      \
+			return;                                                                                                                        \
+		}                                                                                                                                  \
+		field_name = fValue;                                                                                                               \
+		emit_signal( "setting_changed" );                                                                                                  \
 	}
 
-#define SET_EROSION_TEXTURE_ID( methodName, field_name ) \
-	void Terrain3DTextureAsset::methodName( int32_t valueArg ) { \
-		int32_t value = CLAMP( valueArg, -1, s_nMaxTextureAssets - 1 ); \
-		if ( field_name == value ) { \
-			return; \
-		} \
-		field_name = value; \
-		emit_signal( "setting_changed" ); \
+#define SET_EROSION_TEXTURE_ID( methodName, field_name )                                                                                   \
+	void Terrain3DTextureAsset::methodName( int32_t valueArg ) {                                                                           \
+		int32_t value = CLAMP( valueArg, -1, s_nMaxTextureAssets - 1 );                                                                    \
+		if ( field_name == value ) {                                                                                                       \
+			return;                                                                                                                        \
+		}                                                                                                                                  \
+		field_name = value;                                                                                                                \
+		emit_signal( "setting_changed" );                                                                                                  \
 	}
 
 void Terrain3DTextureAsset::setErosionEnabled( const bool bValue ) {
@@ -485,16 +482,15 @@ SET_EROSION_TEXTURE_ID( setErosionVarnishedTextureId, m_nErosionVarnishedTexture
 // Protected functions
 
 void Terrain3DTextureAsset::_validate_property( PropertyInfo &rProperty ) const {
-	if ( !m_bErosionEnabled && rProperty.name != StringName( "erosion_enabled" ) &&
-			rProperty.name.begins_with( "erosion_" ) ) {
+	if ( !m_bErosionEnabled && rProperty.name != StringName( "erosion_enabled" ) && rProperty.name.begins_with( "erosion_" ) ) {
 		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
 	}
-	if ( rProperty.name == StringName( "pbr_texture" ) || rProperty.name == StringName( "surface_texture" ) ||
-			rProperty.name == StringName( "packed_pbr_resource" ) ||
-			( m_bPackedPbrMode && rProperty.name == StringName( "normal_texture" ) ) ||
-			( !m_bPackedPbrMode &&
-					( rProperty.name == StringName( "packed_pbr_texture" ) ||
-							rProperty.name == StringName( "displacement_texture" ) ) ) ) {
+	if ( rProperty.name == StringName( "pbr_texture" ) || rProperty.name == StringName( "surface_texture" )
+	        || rProperty.name == StringName( "packed_pbr_resource" )
+	        || ( m_bPackedPbrMode && rProperty.name == StringName( "normal_texture" ) )
+	        || ( !m_bPackedPbrMode
+	                && ( rProperty.name == StringName( "packed_pbr_texture" )
+	                        || rProperty.name == StringName( "displacement_texture" ) ) ) ) {
 		rProperty.usage = PROPERTY_USAGE_STORAGE;
 	}
 }
@@ -531,8 +527,7 @@ void Terrain3DTextureAsset::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "set_packed_pbr_resource", "resource" ), &Terrain3DTextureAsset::setPackedPbrResource );
 	ClassDB::bind_method( D_METHOD( "get_packed_pbr_resource" ), &Terrain3DTextureAsset::getPackedPbrResource );
 	ClassDB::bind_method( D_METHOD( "get_effective_surface_texture" ), &Terrain3DTextureAsset::getEffectiveSurfaceTexture );
-	ClassDB::bind_method(
-			D_METHOD( "get_effective_displacement_texture" ), &Terrain3DTextureAsset::getEffectiveDisplacementTexture );
+	ClassDB::bind_method( D_METHOD( "get_effective_displacement_texture" ), &Terrain3DTextureAsset::getEffectiveDisplacementTexture );
 	ClassDB::bind_method( D_METHOD( "get_effective_pbr_texture" ), &Terrain3DTextureAsset::getEffectivePbrTexture );
 	ClassDB::bind_method( D_METHOD( "set_metallic", "metallic" ), &Terrain3DTextureAsset::setMetallic );
 	ClassDB::bind_method( D_METHOD( "get_metallic" ), &Terrain3DTextureAsset::getMetallic );
@@ -545,51 +540,40 @@ void Terrain3DTextureAsset::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_ao_light_affect" ), &Terrain3DTextureAsset::getAoLightAffect );
 	ClassDB::bind_method( D_METHOD( "set_roughness", "roughness" ), &Terrain3DTextureAsset::setRoughness );
 	ClassDB::bind_method( D_METHOD( "get_roughness" ), &Terrain3DTextureAsset::getRoughness );
-	ClassDB::bind_method(
-			D_METHOD( "set_displacement_scale", "displacement_scale" ), &Terrain3DTextureAsset::setDisplacementScale );
+	ClassDB::bind_method( D_METHOD( "set_displacement_scale", "displacement_scale" ), &Terrain3DTextureAsset::setDisplacementScale );
 	ClassDB::bind_method( D_METHOD( "get_displacement_scale" ), &Terrain3DTextureAsset::getDisplacementScale );
-	ClassDB::bind_method(
-			D_METHOD( "set_displacement_offset", "displacement_offset" ), &Terrain3DTextureAsset::setDisplacementOffset );
+	ClassDB::bind_method( D_METHOD( "set_displacement_offset", "displacement_offset" ), &Terrain3DTextureAsset::setDisplacementOffset );
 	ClassDB::bind_method( D_METHOD( "get_displacement_offset" ), &Terrain3DTextureAsset::getDisplacementOffset );
 	ClassDB::bind_method( D_METHOD( "set_uv_scale", "scale" ), &Terrain3DTextureAsset::setUvScale );
 	ClassDB::bind_method( D_METHOD( "get_uv_scale" ), &Terrain3DTextureAsset::getUvScale );
-	ClassDB::bind_method(
-			D_METHOD( "set_detiling_rotation", "detiling_rotation" ), &Terrain3DTextureAsset::setDetilingRotation );
+	ClassDB::bind_method( D_METHOD( "set_detiling_rotation", "detiling_rotation" ), &Terrain3DTextureAsset::setDetilingRotation );
 	ClassDB::bind_method( D_METHOD( "get_detiling_rotation" ), &Terrain3DTextureAsset::getDetilingRotation );
 	ClassDB::bind_method( D_METHOD( "set_detiling_shift", "detiling_shift" ), &Terrain3DTextureAsset::setDetilingShift );
 	ClassDB::bind_method( D_METHOD( "get_detiling_shift" ), &Terrain3DTextureAsset::getDetilingShift );
 
-#define BIND_EROSION_PROPERTY( name, setter, getter ) \
-	ClassDB::bind_method( D_METHOD( "set_" #name, "value" ), &Terrain3DTextureAsset::setter ); \
+#define BIND_EROSION_PROPERTY( name, setter, getter )                                                                                      \
+	ClassDB::bind_method( D_METHOD( "set_" #name, "value" ), &Terrain3DTextureAsset::setter );                                             \
 	ClassDB::bind_method( D_METHOD( "get_" #name ), &Terrain3DTextureAsset::getter )
 
 	BIND_EROSION_PROPERTY( erosion_enabled, setErosionEnabled, getErosionEnabled );
 	BIND_EROSION_PROPERTY( erosion_hardness, setErosionHardness, getErosionHardness );
-	BIND_EROSION_PROPERTY(
-			erosion_hydraulic_erodibility, setErosionHydraulicErodibility, getErosionHydraulicErodibility );
+	BIND_EROSION_PROPERTY( erosion_hydraulic_erodibility, setErosionHydraulicErodibility, getErosionHydraulicErodibility );
 	BIND_EROSION_PROPERTY( erosion_wind_erodibility, setErosionWindErodibility, getErosionWindErodibility );
 	BIND_EROSION_PROPERTY( erosion_wave_erodibility, setErosionWaveErodibility, getErosionWaveErodibility );
-	BIND_EROSION_PROPERTY(
-			erosion_weathering_susceptibility, setErosionWeatheringSusceptibility, getErosionWeatheringSusceptibility );
-	BIND_EROSION_PROPERTY(
-			erosion_oxidation_susceptibility, setErosionOxidationSusceptibility, getErosionOxidationSusceptibility );
+	BIND_EROSION_PROPERTY( erosion_weathering_susceptibility, setErosionWeatheringSusceptibility, getErosionWeatheringSusceptibility );
+	BIND_EROSION_PROPERTY( erosion_oxidation_susceptibility, setErosionOxidationSusceptibility, getErosionOxidationSusceptibility );
 	BIND_EROSION_PROPERTY( erosion_salt_susceptibility, setErosionSaltSusceptibility, getErosionSaltSusceptibility );
-	BIND_EROSION_PROPERTY(
-			erosion_wet_dry_susceptibility, setErosionWetDrySusceptibility, getErosionWetDrySusceptibility );
-	BIND_EROSION_PROPERTY(
-			erosion_infiltration_multiplier, setErosionInfiltrationMultiplier, getErosionInfiltrationMultiplier );
+	BIND_EROSION_PROPERTY( erosion_wet_dry_susceptibility, setErosionWetDrySusceptibility, getErosionWetDrySusceptibility );
+	BIND_EROSION_PROPERTY( erosion_infiltration_multiplier, setErosionInfiltrationMultiplier, getErosionInfiltrationMultiplier );
 	BIND_EROSION_PROPERTY( erosion_traffic_erodibility, setErosionTrafficErodibility, getErosionTrafficErodibility );
 	BIND_EROSION_PROPERTY( erosion_cohesion, setErosionCohesion, getErosionCohesion );
 	BIND_EROSION_PROPERTY( erosion_grain_size, setErosionGrainSize, getErosionGrainSize );
 	BIND_EROSION_PROPERTY( erosion_exposed_texture_id, setErosionExposedTextureId, getErosionExposedTextureId );
 	BIND_EROSION_PROPERTY( erosion_weathered_texture_id, setErosionWeatheredTextureId, getErosionWeatheredTextureId );
 	BIND_EROSION_PROPERTY( erosion_oxidized_texture_id, setErosionOxidizedTextureId, getErosionOxidizedTextureId );
-	BIND_EROSION_PROPERTY(
-			erosion_coarse_deposit_texture_id, setErosionCoarseDepositTextureId, getErosionCoarseDepositTextureId );
-	BIND_EROSION_PROPERTY(
-			erosion_fine_deposit_texture_id, setErosionFineDepositTextureId, getErosionFineDepositTextureId );
-	BIND_EROSION_PROPERTY(
-			erosion_salt_weathered_texture_id, setErosionSaltWeatheredTextureId, getErosionSaltWeatheredTextureId );
+	BIND_EROSION_PROPERTY( erosion_coarse_deposit_texture_id, setErosionCoarseDepositTextureId, getErosionCoarseDepositTextureId );
+	BIND_EROSION_PROPERTY( erosion_fine_deposit_texture_id, setErosionFineDepositTextureId, getErosionFineDepositTextureId );
+	BIND_EROSION_PROPERTY( erosion_salt_weathered_texture_id, setErosionSaltWeatheredTextureId, getErosionSaltWeatheredTextureId );
 	BIND_EROSION_PROPERTY( erosion_pavement_texture_id, setErosionPavementTextureId, getErosionPavementTextureId );
 	BIND_EROSION_PROPERTY( erosion_varnished_texture_id, setErosionVarnishedTextureId, getErosionVarnishedTextureId );
 #undef BIND_EROSION_PROPERTY
@@ -597,155 +581,127 @@ void Terrain3DTextureAsset::_bind_methods( void ) {
 	ADD_GROUP( "General", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::STRING, "name", PROPERTY_HINT_NONE ), "set_name", "get_name" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "id", PROPERTY_HINT_NONE ), "set_id", "get_id" );
-	ADD_PROPERTY( PropertyInfo( Variant::COLOR, "albedo_color", PROPERTY_HINT_COLOR_NO_ALPHA ),
-			"set_albedo_color",
-			"get_albedo_color" );
+	ADD_PROPERTY( PropertyInfo( Variant::COLOR, "albedo_color", PROPERTY_HINT_COLOR_NO_ALPHA ), "set_albedo_color", "get_albedo_color" );
 
 	ADD_GROUP( "Runtime Texture Sources", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT,
-						  "albedo_texture",
-						  PROPERTY_HINT_RESOURCE_TYPE,
-						  "ImageTexture,CompressedTexture2D" ),
-			"set_albedo_texture",
-			"get_albedo_texture" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT,
-						  "normal_texture",
-						  PROPERTY_HINT_RESOURCE_TYPE,
-						  "ImageTexture,CompressedTexture2D" ),
-			"set_normal_texture",
-			"get_normal_texture" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT,
-						  "packed_pbr_texture",
-						  PROPERTY_HINT_RESOURCE_TYPE,
-						  "ImageTexture,CompressedTexture2D" ),
-			"set_packed_pbr_texture",
-			"get_packed_pbr_texture" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT,
-						  "displacement_texture",
-						  PROPERTY_HINT_RESOURCE_TYPE,
-						  "ImageTexture,CompressedTexture2D" ),
-			"set_displacement_texture",
-			"get_displacement_texture" );
+	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "albedo_texture", PROPERTY_HINT_RESOURCE_TYPE, "ImageTexture,CompressedTexture2D" ),
+	        "set_albedo_texture",
+	        "get_albedo_texture" );
+	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "normal_texture", PROPERTY_HINT_RESOURCE_TYPE, "ImageTexture,CompressedTexture2D" ),
+	        "set_normal_texture",
+	        "get_normal_texture" );
+	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "packed_pbr_texture", PROPERTY_HINT_RESOURCE_TYPE, "ImageTexture,CompressedTexture2D" ),
+	        "set_packed_pbr_texture",
+	        "get_packed_pbr_texture" );
+	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "displacement_texture", PROPERTY_HINT_RESOURCE_TYPE, "ImageTexture,CompressedTexture2D" ),
+	        "set_displacement_texture",
+	        "get_displacement_texture" );
 
 	ADD_GROUP( "Surface Response", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "normal_depth", PROPERTY_HINT_RANGE, "0.0, 2.0" ),
-			"set_normal_depth",
-			"get_normal_depth" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "ao_strength", PROPERTY_HINT_RANGE, "0.0, 1.0" ),
-			"set_ao_strength",
-			"get_ao_strength" );
+	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "normal_depth", PROPERTY_HINT_RANGE, "0.0, 2.0" ), "set_normal_depth", "get_normal_depth" );
+	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "ao_strength", PROPERTY_HINT_RANGE, "0.0, 1.0" ), "set_ao_strength", "get_ao_strength" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "ao_light_affect", PROPERTY_HINT_RANGE, "0.0, 1.0" ),
-			"set_ao_light_affect",
-			"get_ao_light_affect" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "roughness", PROPERTY_HINT_RANGE, "-1.0, 1.0" ),
-			"set_roughness",
-			"get_roughness" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "metallic", PROPERTY_HINT_RANGE, "0.0, 1.0, 0.01" ),
-			"set_metallic",
-			"get_metallic" );
+	        "set_ao_light_affect",
+	        "get_ao_light_affect" );
+	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "roughness", PROPERTY_HINT_RANGE, "-1.0, 1.0" ), "set_roughness", "get_roughness" );
+	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "metallic", PROPERTY_HINT_RANGE, "0.0, 1.0, 0.01" ), "set_metallic", "get_metallic" );
 
 	ADD_GROUP( "UV / Scale / Displacement", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "uv_scale", PROPERTY_HINT_RANGE, "0.001, 2.0, or_greater" ),
-			"set_uv_scale",
-			"get_uv_scale" );
+	ADD_PROPERTY(
+	        PropertyInfo( Variant::FLOAT, "uv_scale", PROPERTY_HINT_RANGE, "0.001, 2.0, or_greater" ), "set_uv_scale", "get_uv_scale" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "displacement_scale", PROPERTY_HINT_RANGE, "0.0, 2.0" ),
-			"set_displacement_scale",
-			"get_displacement_scale" );
+	        "set_displacement_scale",
+	        "get_displacement_scale" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "displacement_offset", PROPERTY_HINT_RANGE, "-1.0, 1.0" ),
-			"set_displacement_offset",
-			"get_displacement_offset" );
+	        "set_displacement_offset",
+	        "get_displacement_offset" );
 
 	ADD_GROUP( "Erosion Response", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "erosion_enabled" ), "set_erosion_enabled", "get_erosion_enabled" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "erosion_hardness", PROPERTY_HINT_RANGE, "-1,1,0.01" ),
-			"set_erosion_hardness",
-			"get_erosion_hardness" );
+	        "set_erosion_hardness",
+	        "get_erosion_hardness" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "erosion_hydraulic_erodibility", PROPERTY_HINT_RANGE, "0,8,0.01" ),
-			"set_erosion_hydraulic_erodibility",
-			"get_erosion_hydraulic_erodibility" );
+	        "set_erosion_hydraulic_erodibility",
+	        "get_erosion_hydraulic_erodibility" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "erosion_wind_erodibility", PROPERTY_HINT_RANGE, "0,8,0.01" ),
-			"set_erosion_wind_erodibility",
-			"get_erosion_wind_erodibility" );
+	        "set_erosion_wind_erodibility",
+	        "get_erosion_wind_erodibility" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "erosion_wave_erodibility", PROPERTY_HINT_RANGE, "0,8,0.01" ),
-			"set_erosion_wave_erodibility",
-			"get_erosion_wave_erodibility" );
+	        "set_erosion_wave_erodibility",
+	        "get_erosion_wave_erodibility" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "erosion_weathering_susceptibility", PROPERTY_HINT_RANGE, "0,8,0.01" ),
-			"set_erosion_weathering_susceptibility",
-			"get_erosion_weathering_susceptibility" );
+	        "set_erosion_weathering_susceptibility",
+	        "get_erosion_weathering_susceptibility" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "erosion_oxidation_susceptibility", PROPERTY_HINT_RANGE, "0,8,0.01" ),
-			"set_erosion_oxidation_susceptibility",
-			"get_erosion_oxidation_susceptibility" );
+	        "set_erosion_oxidation_susceptibility",
+	        "get_erosion_oxidation_susceptibility" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "erosion_salt_susceptibility", PROPERTY_HINT_RANGE, "0,8,0.01" ),
-			"set_erosion_salt_susceptibility",
-			"get_erosion_salt_susceptibility" );
+	        "set_erosion_salt_susceptibility",
+	        "get_erosion_salt_susceptibility" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "erosion_wet_dry_susceptibility", PROPERTY_HINT_RANGE, "0,8,0.01" ),
-			"set_erosion_wet_dry_susceptibility",
-			"get_erosion_wet_dry_susceptibility" );
+	        "set_erosion_wet_dry_susceptibility",
+	        "get_erosion_wet_dry_susceptibility" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "erosion_infiltration_multiplier", PROPERTY_HINT_RANGE, "0,8,0.01" ),
-			"set_erosion_infiltration_multiplier",
-			"get_erosion_infiltration_multiplier" );
+	        "set_erosion_infiltration_multiplier",
+	        "get_erosion_infiltration_multiplier" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "erosion_traffic_erodibility", PROPERTY_HINT_RANGE, "0,8,0.01" ),
-			"set_erosion_traffic_erodibility",
-			"get_erosion_traffic_erodibility" );
+	        "set_erosion_traffic_erodibility",
+	        "get_erosion_traffic_erodibility" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "erosion_cohesion", PROPERTY_HINT_RANGE, "0,1,0.01" ),
-			"set_erosion_cohesion",
-			"get_erosion_cohesion" );
+	        "set_erosion_cohesion",
+	        "get_erosion_cohesion" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "erosion_grain_size", PROPERTY_HINT_RANGE, "0,1,0.01" ),
-			"set_erosion_grain_size",
-			"get_erosion_grain_size" );
+	        "set_erosion_grain_size",
+	        "get_erosion_grain_size" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "erosion_exposed_texture_id", PROPERTY_HINT_RANGE, "-1,31,1" ),
-			"set_erosion_exposed_texture_id",
-			"get_erosion_exposed_texture_id" );
+	        "set_erosion_exposed_texture_id",
+	        "get_erosion_exposed_texture_id" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "erosion_weathered_texture_id", PROPERTY_HINT_RANGE, "-1,31,1" ),
-			"set_erosion_weathered_texture_id",
-			"get_erosion_weathered_texture_id" );
+	        "set_erosion_weathered_texture_id",
+	        "get_erosion_weathered_texture_id" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "erosion_oxidized_texture_id", PROPERTY_HINT_RANGE, "-1,31,1" ),
-			"set_erosion_oxidized_texture_id",
-			"get_erosion_oxidized_texture_id" );
+	        "set_erosion_oxidized_texture_id",
+	        "get_erosion_oxidized_texture_id" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "erosion_coarse_deposit_texture_id", PROPERTY_HINT_RANGE, "-1,31,1" ),
-			"set_erosion_coarse_deposit_texture_id",
-			"get_erosion_coarse_deposit_texture_id" );
+	        "set_erosion_coarse_deposit_texture_id",
+	        "get_erosion_coarse_deposit_texture_id" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "erosion_fine_deposit_texture_id", PROPERTY_HINT_RANGE, "-1,31,1" ),
-			"set_erosion_fine_deposit_texture_id",
-			"get_erosion_fine_deposit_texture_id" );
+	        "set_erosion_fine_deposit_texture_id",
+	        "get_erosion_fine_deposit_texture_id" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "erosion_salt_weathered_texture_id", PROPERTY_HINT_RANGE, "-1,31,1" ),
-			"set_erosion_salt_weathered_texture_id",
-			"get_erosion_salt_weathered_texture_id" );
+	        "set_erosion_salt_weathered_texture_id",
+	        "get_erosion_salt_weathered_texture_id" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "erosion_pavement_texture_id", PROPERTY_HINT_RANGE, "-1,31,1" ),
-			"set_erosion_pavement_texture_id",
-			"get_erosion_pavement_texture_id" );
+	        "set_erosion_pavement_texture_id",
+	        "get_erosion_pavement_texture_id" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "erosion_varnished_texture_id", PROPERTY_HINT_RANGE, "-1,31,1" ),
-			"set_erosion_varnished_texture_id",
-			"get_erosion_varnished_texture_id" );
+	        "set_erosion_varnished_texture_id",
+	        "get_erosion_varnished_texture_id" );
 
 	ADD_GROUP( "Detiling", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "detiling_rotation", PROPERTY_HINT_RANGE, "0.0, 1.0" ),
-			"set_detiling_rotation",
-			"get_detiling_rotation" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "detiling_shift", PROPERTY_HINT_RANGE, "0.0, 1.0" ),
-			"set_detiling_shift",
-			"get_detiling_shift" );
+	        "set_detiling_rotation",
+	        "get_detiling_rotation" );
+	ADD_PROPERTY(
+	        PropertyInfo( Variant::FLOAT, "detiling_shift", PROPERTY_HINT_RANGE, "0.0, 1.0" ), "set_detiling_shift", "get_detiling_shift" );
 
 	ADD_GROUP( "Compatibility", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::OBJECT,
-						  "packed_pbr_resource",
-						  PROPERTY_HINT_RESOURCE_TYPE,
-						  "Terrain3DPackedPBRTexture",
-						  PROPERTY_USAGE_STORAGE ),
-			"set_packed_pbr_resource",
-			"get_packed_pbr_resource" );
+	                      "packed_pbr_resource",
+	                      PROPERTY_HINT_RESOURCE_TYPE,
+	                      "Terrain3DPackedPBRTexture",
+	                      PROPERTY_USAGE_STORAGE ),
+	        "set_packed_pbr_resource",
+	        "get_packed_pbr_resource" );
 	ADD_PROPERTY( PropertyInfo( Variant::OBJECT,
-						  "surface_texture",
-						  PROPERTY_HINT_RESOURCE_TYPE,
-						  "ImageTexture,CompressedTexture2D",
-						  PROPERTY_USAGE_STORAGE ),
-			"set_surface_texture",
-			"get_surface_texture" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT,
-						  "pbr_texture",
-						  PROPERTY_HINT_RESOURCE_TYPE,
-						  "ImageTexture",
-						  PROPERTY_USAGE_STORAGE ),
-			"set_pbr_texture",
-			"get_pbr_texture" );
+	                      "surface_texture",
+	                      PROPERTY_HINT_RESOURCE_TYPE,
+	                      "ImageTexture,CompressedTexture2D",
+	                      PROPERTY_USAGE_STORAGE ),
+	        "set_surface_texture",
+	        "get_surface_texture" );
+	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "pbr_texture", PROPERTY_HINT_RESOURCE_TYPE, "ImageTexture", PROPERTY_USAGE_STORAGE ),
+	        "set_pbr_texture",
+	        "get_pbr_texture" );
 }
