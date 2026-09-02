@@ -12,23 +12,24 @@
 #include "streaming/terrain_3d_runtime_page_store.h"
 
 Terrain3DRegionResidency::Terrain3DRegionResidency( Terrain3DRegionRepository *const pRepository,
-		Terrain3DSamplingStorage *const pSamplingStorage,
-		Terrain3DRuntimePageStore *const pRuntimePageStore,
-		Terrain3DActiveHeightResidency *const pActiveHeightResidency,
-		Terrain3DCpuRegionCache *const pCpuRegionCache,
-		Terrain3DInstanceRegionCache *const pInstanceRegionCache,
-		Terrain3DMiddleHeightRegionCache *const pMiddleHeightRegionCache,
-		Terrain3DGpuRegionCache *const pGpuRegionCache,
-		Terrain3DFarSurfaceAtlasCache *const pFarSurfaceAtlasCache ) :
-		m_pRepository( pRepository ),
-		m_pSamplingStorage( pSamplingStorage ),
-		m_pRuntimePageStore( pRuntimePageStore ),
-		m_pActiveHeightResidency( pActiveHeightResidency ),
-		m_pCpuRegionCache( pCpuRegionCache ),
-		m_pInstanceRegionCache( pInstanceRegionCache ),
-		m_pMiddleHeightRegionCache( pMiddleHeightRegionCache ),
-		m_pGpuRegionCache( pGpuRegionCache ),
-		m_pFarSurfaceAtlasCache( pFarSurfaceAtlasCache ) {}
+        Terrain3DSamplingStorage *const pSamplingStorage,
+        Terrain3DRuntimePageStore *const pRuntimePageStore,
+        Terrain3DActiveHeightResidency *const pActiveHeightResidency,
+        Terrain3DCpuRegionCache *const pCpuRegionCache,
+        Terrain3DInstanceRegionCache *const pInstanceRegionCache,
+        Terrain3DMiddleHeightRegionCache *const pMiddleHeightRegionCache,
+        Terrain3DGpuRegionCache *const pGpuRegionCache,
+        Terrain3DFarSurfaceAtlasCache *const pFarSurfaceAtlasCache ) :
+        m_pRepository( pRepository ),
+        m_pSamplingStorage( pSamplingStorage ),
+        m_pRuntimePageStore( pRuntimePageStore ),
+        m_pActiveHeightResidency( pActiveHeightResidency ),
+        m_pCpuRegionCache( pCpuRegionCache ),
+        m_pInstanceRegionCache( pInstanceRegionCache ),
+        m_pMiddleHeightRegionCache( pMiddleHeightRegionCache ),
+        m_pGpuRegionCache( pGpuRegionCache ),
+        m_pFarSurfaceAtlasCache( pFarSurfaceAtlasCache ) {
+}
 
 void Terrain3DRegionResidency::reset( void ) {
 	if ( m_pActiveHeightResidency ) {
@@ -37,8 +38,8 @@ void Terrain3DRegionResidency::reset( void ) {
 }
 
 void Terrain3DRegionResidency::update( Terrain3DData &rData, const t3dResidencyFrameState_t &rFrame, const bool bForce ) {
-	if ( !m_pRepository || !m_pSamplingStorage || !m_pRuntimePageStore || !m_pActiveHeightResidency ||
-			!m_pCpuRegionCache || !m_pInstanceRegionCache || !m_pMiddleHeightRegionCache || !m_pGpuRegionCache ) {
+	if ( !m_pRepository || !m_pSamplingStorage || !m_pRuntimePageStore || !m_pActiveHeightResidency || !m_pCpuRegionCache
+	        || !m_pInstanceRegionCache || !m_pMiddleHeightRegionCache || !m_pGpuRegionCache ) {
 		return;
 	}
 
@@ -82,14 +83,12 @@ void Terrain3DRegionResidency::resetRuntimeCaches( Terrain3DData &rData ) {
 }
 
 void Terrain3DRegionResidency::appendRuntimeProfileSample( const Terrain3DData &, t3dRuntimeProfileSample_t &rSample ) const {
-	const t3dRuntimePageStats_t runtimePageStats =
-			m_pRuntimePageStore ? m_pRuntimePageStore->getStats() : t3dRuntimePageStats_t{};
+	const t3dRuntimePageStats_t runtimePageStats = m_pRuntimePageStore ? m_pRuntimePageStore->getStats() : t3dRuntimePageStats_t{};
 	const t3dGpuRegionCacheStats_t gpu = m_pGpuRegionCache ? m_pGpuRegionCache->getStats() : t3dGpuRegionCacheStats_t{};
 	const t3dCpuRegionCacheStats_t cpu = m_pCpuRegionCache ? m_pCpuRegionCache->getStats() : t3dCpuRegionCacheStats_t{};
 	const t3dInstanceRegionCacheStats_t instance =
-			m_pInstanceRegionCache ? m_pInstanceRegionCache->getStats() : t3dInstanceRegionCacheStats_t{};
-	const t3dFarSurfaceAtlasStats_t far =
-			m_pFarSurfaceAtlasCache ? m_pFarSurfaceAtlasCache->getStats() : t3dFarSurfaceAtlasStats_t{};
+	        m_pInstanceRegionCache ? m_pInstanceRegionCache->getStats() : t3dInstanceRegionCacheStats_t{};
+	const t3dFarSurfaceAtlasStats_t far = m_pFarSurfaceAtlasCache ? m_pFarSurfaceAtlasCache->getStats() : t3dFarSurfaceAtlasStats_t{};
 
 	rSample.m_nStallFlags |= gpu.m_nStallFlagsLastTick | cpu.m_nStallFlagsLastTick | instance.m_nStallFlagsLastTick;
 	rSample.m_nGpuResident = gpu.m_nResident;
@@ -143,9 +142,7 @@ void Terrain3DRegionResidency::appendRuntimeProfileSample( const Terrain3DData &
 	rSample.m_nInstanceSelectionPending = instance.m_bSelectionPending ? 1 : 0;
 }
 
-void Terrain3DRegionResidency::setBudgetOverrides( const int nGpuUploadLayers,
-		const int nCpuLoadLayers,
-		const int nInstanceLoadPages ) {
+void Terrain3DRegionResidency::setBudgetOverrides( const int nGpuUploadLayers, const int nCpuLoadLayers, const int nInstanceLoadPages ) {
 	m_nGpuUploadBudgetOverride = nGpuUploadLayers < 0 ? -1 : CLAMP( nGpuUploadLayers, 0, 64 );
 	m_nCpuLoadBudgetOverride = nCpuLoadLayers < 0 ? -1 : CLAMP( nCpuLoadLayers, 0, 64 );
 	m_nInstanceLoadBudgetOverride = nInstanceLoadPages < 0 ? -1 : CLAMP( nInstanceLoadPages, 0, 64 );

@@ -10,11 +10,11 @@
 static Object *t3dUploadBridgeGetUploadBridge( void ) {
 	Engine *pEngine = Engine::get_singleton();
 	if ( !pEngine ) {
-		return nullptr;
+		return NULL;
 	}
 	static const StringName s_singletonName( "TerrainUploadBridge" );
 	if ( !pEngine->has_singleton( s_singletonName ) ) {
-		return nullptr;
+		return NULL;
 	}
 	return pEngine->get_singleton( s_singletonName );
 }

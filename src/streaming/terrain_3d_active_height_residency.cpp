@@ -10,11 +10,10 @@
 #include <godot_cpp/variant/utility_functions.hpp>
 
 Terrain3DActiveHeightResidency::Terrain3DActiveHeightResidency( Terrain3DRegionRepository *const pRepository,
-		Terrain3DSamplingStorage *const pSamplingStorage,
-		Terrain3DRuntimePageStore *const pRuntimePageStore ) :
-		m_pRepository( pRepository ),
-		m_pSamplingStorage( pSamplingStorage ),
-		m_pRuntimePageStore( pRuntimePageStore ) {}
+        Terrain3DSamplingStorage *const pSamplingStorage,
+        Terrain3DRuntimePageStore *const pRuntimePageStore ) :
+        m_pRepository( pRepository ), m_pSamplingStorage( pSamplingStorage ), m_pRuntimePageStore( pRuntimePageStore ) {
+}
 
 void Terrain3DActiveHeightResidency::reset( void ) {
 	m_bDirty = true;
@@ -24,16 +23,15 @@ void Terrain3DActiveHeightResidency::reset( void ) {
 	m_stats = t3dActiveHeightResidencyStats_t{};
 }
 
-t3dActiveHeightResidencyResult_t Terrain3DActiveHeightResidency::update( const t3dResidencyFrameState_t &rFrame,
-		const bool bForce ) {
+t3dActiveHeightResidencyResult_t Terrain3DActiveHeightResidency::update( const t3dResidencyFrameState_t &rFrame, const bool bForce ) {
 	t3dActiveHeightResidencyResult_t result;
 	m_stats = t3dActiveHeightResidencyStats_t{};
 	if ( !m_pRepository || !m_pSamplingStorage || !m_pRuntimePageStore || !m_pSamplingStorage->isActiveOwner() ) {
 		return result;
 	}
 	const uint64_t topologyGeneration = m_pRepository->getTopologyGeneration();
-	if ( !bForce && !m_bDirty && rFrame.m_nStreamingGeneration == m_nStreamingGenerationLast &&
-			topologyGeneration == m_nTopologyGenerationLast && rFrame.m_activeHeightCenter == m_center ) {
+	if ( !bForce && !m_bDirty && rFrame.m_nStreamingGeneration == m_nStreamingGenerationLast
+	        && topologyGeneration == m_nTopologyGenerationLast && rFrame.m_activeHeightCenter == m_center ) {
 		return result;
 	}
 
@@ -43,7 +41,7 @@ t3dActiveHeightResidencyResult_t Terrain3DActiveHeightResidency::update( const t
 	for ( int slot = 0; slot < m_pRepository->getSlotCount(); ++slot ) {
 		++m_stats.m_nSlotsExaminedLastTick;
 		const Vector2i location = m_pRepository->getSlotsData()[slot];
-		Terrain3DRegion *const pRegion = location == s_v2iMax ? nullptr : m_pRepository->getRegionPtr( location );
+		Terrain3DRegion *const pRegion = location == s_v2iMax ? NULL : m_pRepository->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() ) {
 			continue;
 		}
@@ -52,8 +50,8 @@ t3dActiveHeightResidencyResult_t Terrain3DActiveHeightResidency::update( const t
 		const int deltaX = delta.x < 0 ? -delta.x : delta.x;
 		const int deltaY = delta.y < 0 ? -delta.y : delta.y;
 		const bool insideActiveBank = MAX( deltaX, deltaY ) <= s_nActiveRadius;
-		const bool required = insideActiveBank &&
-				( rFrame.m_bAuthoring || rFrame.streamingState( location ) >= TERRAIN3D_REGION_STREAMING_HOT );
+		const bool required =
+		        insideActiveBank && ( rFrame.m_bAuthoring || rFrame.streamingState( location ) >= TERRAIN3D_REGION_STREAMING_HOT );
 		const bool predicted = !rFrame.m_bAuthoring && rFrame.isPrefetch( location );
 		const bool resident = m_pSamplingStorage->containsActive( location );
 
@@ -79,10 +77,10 @@ t3dActiveHeightResidencyResult_t Terrain3DActiveHeightResidency::update( const t
 			Ref<Image> preparedHeight;
 			PackedByteArray preparedHeightBytes;
 			if ( m_pRuntimePageStore->takeHeight(
-						 location, RUNTIME_PAGE_CONSUMER_ACTIVE_HEIGHT, preparedHeight, false, &preparedHeightBytes ) &&
-					preparedHeight.is_valid() ) {
+			             location, RUNTIME_PAGE_CONSUMER_ACTIVE_HEIGHT, preparedHeight, false, &preparedHeightBytes )
+			        && preparedHeight.is_valid() ) {
 				published = m_pSamplingStorage->syncActiveHeightPage(
-						location, preparedHeightBytes.ptr(), ( size_t )( preparedHeightBytes.size() ) );
+				        location, preparedHeightBytes.ptr(), ( size_t )( preparedHeightBytes.size() ) );
 			}
 		}
 
@@ -101,8 +99,8 @@ t3dActiveHeightResidencyResult_t Terrain3DActiveHeightResidency::update( const t
 			continue;
 		}
 		if ( rFrame.m_bAuthoring && !m_pSamplingStorage->syncActiveRegion( location, pRegion ) ) {
-			UtilityFunctions::push_error( vformat(
-					"Terrain3D: Failed to publish required authoring height payload for region %s.", location ) );
+			UtilityFunctions::push_error(
+			        vformat( "Terrain3D: Failed to publish required authoring height payload for region %s.", location ) );
 		}
 	}
 

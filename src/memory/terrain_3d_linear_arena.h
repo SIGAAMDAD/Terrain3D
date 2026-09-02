@@ -1,7 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 // Fixed-capacity linear arenas and non-owning typed buffers for bulk-lifetime data.
-#pragma once
-
 #ifndef TERRAIN3D_LINEAR_ARENA_H
 #define TERRAIN3D_LINEAR_ARENA_H
 
@@ -9,17 +7,17 @@
 #include "memory/terrain_3d_memory.h"
 #include "memory/terrain_3d_memory_constants.h"
 
-#include <algorithm>
-#include <cstddef>
-#include <cstdint>
-#include <cstring>
-#include <limits>
-#include <type_traits>
-#include <utility>
+#include <EASTL/type_traits.h>
+#include <EASTL/numeric_limits.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
+#include <EASTL/algorithm.h>
+#include <EASTL/utility.h>
 
 class Terrain3DLinearArenaLayout {
 public:
-	bool add( const size_t nBytes, const size_t nAlignment, size_t *pOffset = nullptr ) {
+	bool add( const size_t nBytes, const size_t nAlignment, size_t *pOffset = NULL ) {
 		if ( nBytes == 0u ) {
 			if ( pOffset ) {
 				*pOffset = m_nSize;
@@ -27,8 +25,7 @@ public:
 			return true;
 		}
 		size_t aligned_offset = 0u;
-		if ( !alignUp( m_nSize, nAlignment, aligned_offset ) ||
-				nBytes > std::numeric_limits<size_t>::max() - aligned_offset ) {
+		if ( !alignUp( m_nSize, nAlignment, aligned_offset ) || nBytes > eastl::numeric_limits<size_t>::max() - aligned_offset ) {
 			m_bValid = false;
 			return false;
 		}
@@ -39,13 +36,14 @@ public:
 		return true;
 	}
 
-	template <typename T> bool addArray( const size_t nCount ) {
-		static_assert( std::is_trivially_destructible_v<T>, "Linear arena arrays must not require destruction." );
-		if ( nCount > std::numeric_limits<size_t>::max() / sizeof( T ) ) {
+	template <typename T>
+	bool addArray( const size_t nCount ) {
+		static_assert( eastl::is_trivially_destructible_v<T>, "Linear arena arrays must not require destruction." );
+		if ( nCount > eastl::numeric_limits<size_t>::max() / sizeof( T ) ) {
 			m_bValid = false;
 			return false;
 		}
-		return add( nCount * sizeof( T ), std::max<size_t>( alignof( T ), s_nArenaCachelineAlignment ) );
+		return add( nCount * sizeof( T ), MAX( alignof( T ), s_nArenaCachelineAlignment ) );
 	}
 
 	EA_FORCE_INLINE size_t size( void ) const {
@@ -65,7 +63,7 @@ private:
 			return false;
 		}
 		const size_t mask = nAlignment - 1u;
-		if ( nValue > std::numeric_limits<size_t>::max() - mask ) {
+		if ( nValue > eastl::numeric_limits<size_t>::max() - mask ) {
 			return false;
 		}
 		nAligned = ( nValue + mask ) & ~mask;
@@ -87,8 +85,8 @@ public:
 		if ( nBytes == 0u ) {
 			return true;
 		}
-		if ( nBaseAlignment == 0u || ( nBaseAlignment & ( nBaseAlignment - 1u ) ) != 0u ||
-				nBytes > std::numeric_limits<size_t>::max() - ( nBaseAlignment - 1u ) ) {
+		if ( nBaseAlignment == 0u || ( nBaseAlignment & ( nBaseAlignment - 1u ) ) != 0u
+		        || nBytes > eastl::numeric_limits<size_t>::max() - ( nBaseAlignment - 1u ) ) {
 			return false;
 		}
 
@@ -116,8 +114,8 @@ public:
 		if ( m_pRaw ) {
 			t3dMemoryRelease( m_pRaw );
 		}
-		m_pRaw = nullptr;
-		m_pBase = nullptr;
+		m_pRaw = NULL;
+		m_pBase = NULL;
 		m_nCapacity = 0u;
 		m_iOffset = 0u;
 	}
@@ -128,36 +126,35 @@ public:
 
 	void *allocate( const size_t nBytes, const size_t nAlignment ) {
 		if ( nBytes > 0u && !t3dValidateRuntimeAllocationRequest() ) {
-			return nullptr;
+			return NULL;
 		}
 		if ( nBytes == 0u ) {
-			return nullptr;
+			return NULL;
 		}
 		if ( !m_pBase || nAlignment == 0u || ( nAlignment & ( nAlignment - 1u ) ) != 0u ) {
-			return nullptr;
+			return NULL;
 		}
 		const size_t mask = nAlignment - 1u;
-		if ( m_iOffset > std::numeric_limits<size_t>::max() - mask ) {
-			return nullptr;
+		if ( m_iOffset > eastl::numeric_limits<size_t>::max() - mask ) {
+			return NULL;
 		}
 		const size_t aligned_offset = ( m_iOffset + mask ) & ~mask;
 		if ( aligned_offset > m_nCapacity || nBytes > m_nCapacity - aligned_offset ) {
-			return nullptr;
+			return NULL;
 		}
 		void *result = m_pBase + aligned_offset;
 		m_iOffset = aligned_offset + nBytes;
 		return result;
 	}
 
-	template <typename T> T *allocateArray( const size_t nCount ) {
-		static_assert( std::is_trivially_destructible_v<T>, "Linear arena arrays must not require destruction." );
-		if ( nCount == 0u || nCount > std::numeric_limits<size_t>::max() / sizeof( T ) ) {
-			return nullptr;
+	template <typename T>
+	T *allocateArray( const size_t nCount ) {
+		static_assert( eastl::is_trivially_destructible_v<T>, "Linear arena arrays must not require destruction." );
+		if ( nCount == 0u || nCount > eastl::numeric_limits<size_t>::max() / sizeof( T ) ) {
+			return NULL;
 		}
-		return (
-				T * )( allocate( nCount * sizeof( T ), std::max<size_t>( alignof( T ), s_nArenaCachelineAlignment ) ) );
+		return ( T * )( allocate( nCount * sizeof( T ), MAX( alignof( T ), s_nArenaCachelineAlignment ) ) );
 	}
-
 
 	EA_FORCE_INLINE size_t capacity( void ) const {
 		return m_nCapacity;
@@ -172,24 +169,25 @@ public:
 	}
 
 	EA_FORCE_INLINE bool valid( void ) const {
-		return m_pBase != nullptr || m_nCapacity == 0u;
+		return m_pBase != NULL || m_nCapacity == 0u;
 	}
 
 private:
-	void *m_pRaw = nullptr;
-	uint8_t *m_pBase = nullptr;
+	void *m_pRaw = NULL;
+	uint8_t *m_pBase = NULL;
 	size_t m_nCapacity = 0u;
 	size_t m_iOffset = 0u;
 };
 
-template <typename T> class Terrain3DArenaBuffer {
-	static_assert( std::is_trivially_copyable_v<T>, "Arena buffers support trivially copyable values only." );
-	static_assert( std::is_trivially_destructible_v<T>, "Arena buffers support trivially destructible values only." );
+template <typename T>
+class Terrain3DArenaBuffer {
+	static_assert( eastl::is_trivially_copyable_v<T>, "Arena buffers support trivially copyable values only." );
+	static_assert( eastl::is_trivially_destructible_v<T>, "Arena buffers support trivially destructible values only." );
 
 public:
-	using value_type = T;
-	using iterator = T *;
-	using const_iterator = const T *;
+	typedef T value_type;
+	typedef T *iterator;
+	typedef const T *const_iterator;
 
 	Terrain3DArenaBuffer() = default;
 	Terrain3DArenaBuffer( const Terrain3DArenaBuffer & ) = delete;
@@ -220,13 +218,13 @@ public:
 	}
 
 	EA_FORCE_INLINE void clear( void ) {
-		m_pData = nullptr;
+		m_pData = NULL;
 		m_nSize = 0u;
 	}
 
 	EA_FORCE_INLINE void swap( Terrain3DArenaBuffer &rOther ) noexcept {
-		std::swap( m_pData, rOther.m_pData );
-		std::swap( m_nSize, rOther.m_nSize );
+		eastl::swap( m_pData, rOther.m_pData );
+		eastl::swap( m_nSize, rOther.m_nSize );
 	}
 
 	bool copyFrom( const Terrain3DArenaBuffer &rOther ) {
@@ -234,7 +232,7 @@ public:
 			return false;
 		}
 		if ( m_nSize > 0u ) {
-			std::memcpy( m_pData, rOther.m_pData, m_nSize * sizeof( T ) );
+			memcpy( m_pData, rOther.m_pData, m_nSize * sizeof( T ) );
 		}
 		return true;
 	}
@@ -264,11 +262,11 @@ public:
 	}
 
 	EA_FORCE_INLINE iterator end( void ) {
-		return m_pData ? m_pData + m_nSize : nullptr;
+		return m_pData ? m_pData + m_nSize : NULL;
 	}
 
 	EA_FORCE_INLINE const_iterator end( void ) const {
-		return m_pData ? m_pData + m_nSize : nullptr;
+		return m_pData ? m_pData + m_nSize : NULL;
 	}
 
 	EA_FORCE_INLINE size_t size( void ) const {
@@ -280,7 +278,7 @@ public:
 	}
 
 private:
-	T *m_pData = nullptr;
+	T *m_pData = NULL;
 	size_t m_nSize = 0u;
 };
 

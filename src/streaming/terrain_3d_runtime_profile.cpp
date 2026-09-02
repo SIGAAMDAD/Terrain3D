@@ -20,8 +20,7 @@
 #include "streaming/terrain_3d_streaming_policy.h"
 #include "terrain_3d.h"
 
-#include <algorithm>
-#include <cstring>
+#include <string.h>
 #include <godot_cpp/classes/compositor.hpp>
 #include <godot_cpp/classes/directional_light3d.hpp>
 #include <godot_cpp/classes/editor_interface.hpp>
@@ -39,9 +38,6 @@
 #include <godot_cpp/classes/viewport_texture.hpp>
 #include <godot_cpp/classes/world3d.hpp>
 #include <godot_cpp/core/memory.hpp>
-#include <limits>
-#include <numeric>
-#include <utility>
 
 t3dAdaptiveBudgetLimits_t Terrain3D::getRuntimeAdaptiveBudgetLimits( void ) const {
 	t3dAdaptiveBudgetLimits_t limits;
@@ -67,19 +63,19 @@ t3dAdaptiveBudgetLimits_t Terrain3D::getRuntimeAdaptiveBudgetLimits( void ) cons
 t3dAdaptiveBudgetPressure_t Terrain3D::getRuntimeAdaptiveBudgetPressure( void ) const {
 	t3dAdaptiveBudgetPressure_t pressure;
 	if ( m_pData ) {
-		pressure.m_bGpuLimited = effectiveGpuRegionCacheEnabled() &&
-				( m_pData->getGpuRegionStallFlagsLastTick() & TERRAIN3D_PROFILE_STALL_GPU_UPLOAD_LAYER_BUDGET ) != 0u;
-		pressure.m_bCpuLimited = effectiveCpuRegionCacheEnabled() &&
-				( m_pData->getCpuRegionStallFlagsLastTick() & TERRAIN3D_PROFILE_STALL_CPU_LOAD_BUDGET ) != 0u;
-		pressure.m_bInstanceLimited = effectiveInstanceRegionCacheEnabled() &&
-				( m_pData->getInstanceRegionStallFlagsLastTick() & TERRAIN3D_PROFILE_STALL_INSTANCE_LOAD_BUDGET ) != 0u;
+		pressure.m_bGpuLimited = effectiveGpuRegionCacheEnabled()
+		        && ( m_pData->getGpuRegionStallFlagsLastTick() & TERRAIN3D_PROFILE_STALL_GPU_UPLOAD_LAYER_BUDGET ) != 0u;
+		pressure.m_bCpuLimited = effectiveCpuRegionCacheEnabled()
+		        && ( m_pData->getCpuRegionStallFlagsLastTick() & TERRAIN3D_PROFILE_STALL_CPU_LOAD_BUDGET ) != 0u;
+		pressure.m_bInstanceLimited = effectiveInstanceRegionCacheEnabled()
+		        && ( m_pData->getInstanceRegionStallFlagsLastTick() & TERRAIN3D_PROFILE_STALL_INSTANCE_LOAD_BUDGET ) != 0u;
 	}
 	pressure.m_bInstancerLimited =
-			effectiveInstancerCellStreamingEnabled() && m_pInstancer && m_pInstancer->isUpdateBudgetLimitedLastFrame();
-	pressure.m_bNodeLoadLimited = effectiveDynamicNodeStreamingEnabled() && m_pNodeStreamer &&
-			m_pNodeStreamer->isLoadRegionBudgetLimitedLastTick();
-	pressure.m_bNodeUnloadLimited = effectiveDynamicNodeStreamingEnabled() && m_pNodeStreamer &&
-			m_pNodeStreamer->isUnloadRegionBudgetLimitedLastTick();
+	        effectiveInstancerCellStreamingEnabled() && m_pInstancer && m_pInstancer->isUpdateBudgetLimitedLastFrame();
+	pressure.m_bNodeLoadLimited =
+	        effectiveDynamicNodeStreamingEnabled() && m_pNodeStreamer && m_pNodeStreamer->isLoadRegionBudgetLimitedLastTick();
+	pressure.m_bNodeUnloadLimited =
+	        effectiveDynamicNodeStreamingEnabled() && m_pNodeStreamer && m_pNodeStreamer->isUnloadRegionBudgetLimitedLastTick();
 	return pressure;
 }
 
@@ -99,8 +95,7 @@ void Terrain3D::applyRuntimeAdaptiveWorkBudgets( void ) {
 	}
 	const t3dAdaptiveBudgetValues_t &effective = m_nRuntimeAdaptiveBudgetState.m_effective;
 	if ( m_pData ) {
-		m_pData->setRuntimePageBudgetOverrides(
-				effective.m_nGpuPages, effective.m_nCpuPages, effective.m_nInstancePages );
+		m_pData->setRuntimePageBudgetOverrides( effective.m_nGpuPages, effective.m_nCpuPages, effective.m_nInstancePages );
 	}
 	if ( m_pInstancer ) {
 		m_pInstancer->setRuntimeUpdateCellBudgetOverride( effective.m_nInstancerCells );
@@ -114,9 +109,8 @@ void Terrain3D::applyRuntimeAdaptiveWorkBudgets( void ) {
 void Terrain3D::resetRuntimeAdaptiveWorkBudgets( const bool bClearOverrides ) {
 	const t3dAdaptiveBudgetLimits_t limits = getRuntimeAdaptiveBudgetLimits();
 	t3dAdaptiveReset( limits,
-			m_nRuntimeAdaptiveBudgetState,
-			m_bRuntimeAdaptiveWorkBudgetsEnabled ? TERRAIN3D_ADAPTIVE_REASON_INITIALIZED
-												 : TERRAIN3D_ADAPTIVE_REASON_DISABLED );
+	        m_nRuntimeAdaptiveBudgetState,
+	        m_bRuntimeAdaptiveWorkBudgetsEnabled ? TERRAIN3D_ADAPTIVE_REASON_INITIALIZED : TERRAIN3D_ADAPTIVE_REASON_DISABLED );
 	m_nRuntimeAdaptiveLastMeasuredUsec = 0u;
 	if ( bClearOverrides || !m_bRuntimeAdaptiveWorkBudgetsEnabled ) {
 		if ( m_pData ) {
@@ -189,12 +183,12 @@ void Terrain3D::sampleRuntimeProfile( const t3dRuntimeProfileSample_t &rSample )
 	if ( m_material.is_valid() ) {
 		const uint64_t shader_updates = m_material->getShaderUpdateCount();
 		const uint64_t shader_creations = m_material->getShaderVariantCreationCount();
-		sample.m_nShaderUpdates = ( int )( shader_updates >= m_nRuntimeProfileShaderUpdatesSeen
-						? shader_updates - m_nRuntimeProfileShaderUpdatesSeen
-						: shader_updates );
-		sample.m_nShaderVariantCreations = ( int )( shader_creations >= m_nRuntimeProfileShaderCreationsSeen
-						? shader_creations - m_nRuntimeProfileShaderCreationsSeen
-						: shader_creations );
+		sample.m_nShaderUpdates =
+		        ( int )( shader_updates >= m_nRuntimeProfileShaderUpdatesSeen ? shader_updates - m_nRuntimeProfileShaderUpdatesSeen
+		                                                                      : shader_updates );
+		sample.m_nShaderVariantCreations =
+		        ( int )( shader_creations >= m_nRuntimeProfileShaderCreationsSeen ? shader_creations - m_nRuntimeProfileShaderCreationsSeen
+		                                                                          : shader_creations );
 		if ( sample.m_nShaderUpdates > 0 || sample.m_nShaderVariantCreations > 0 ) {
 			sample.m_nShaderSourceSubmissionUsec = m_material->getShaderSourceSubmissionUsecLast();
 		}
@@ -244,8 +238,8 @@ void Terrain3D::sampleRuntimeProfile( const t3dRuntimeProfileSample_t &rSample )
 	if ( sample.m_nShaderVariantCreations > 0 ) {
 		sample.m_nEventFlags |= TERRAIN3D_PROFILE_EVENT_SHADER_VARIANT_CREATED;
 	}
-	if ( sample.m_nPendingCellUpdates > 0 && m_nInstancerUpdateCellBudget > 0 &&
-			sample.m_nPendingCellUpdates >= m_nInstancerUpdateCellBudget ) {
+	if ( sample.m_nPendingCellUpdates > 0 && m_nInstancerUpdateCellBudget > 0
+	        && sample.m_nPendingCellUpdates >= m_nInstancerUpdateCellBudget ) {
 		sample.m_nStallFlags |= TERRAIN3D_PROFILE_STALL_INSTANCE_UPDATE_BUDGET;
 	}
 	if ( m_nDynamicNodeLoadRegionBudget > 0 && sample.m_nNodeLoads >= m_nDynamicNodeLoadRegionBudget ) {
@@ -280,10 +274,7 @@ void Terrain3D::updateCacheThrashEvents( const t3dRuntimeProfileSample_t &rSampl
 			continue;
 		}
 		m_bCacheThrashEventState[( size_t )( index )] = bStates[index];
-		emit_signal( "cache_thrash_state_changed",
-				StringName( s_pszCacheThrashSubsystemNames[index] ),
-				bStates[index],
-				activity[index] );
+		emit_signal( "cache_thrash_state_changed", StringName( s_pszCacheThrashSubsystemNames[index] ), bStates[index], activity[index] );
 	}
 }
 
@@ -480,187 +471,187 @@ Array Terrain3D::getRuntimeProfileProblems( void ) const {
 	const t3dRuntimeProfileSample_t &sample = m_runtimeProfileLastSample;
 	if ( sample.m_nGpuMissingRequired > 0 ) {
 		t3dAppendRuntimeProblem( problems,
-				"error",
-				"gpu_required_pages_missing",
-				"gpu_streaming",
-				"Required detailed terrain pages are not resident.",
-				sample.m_nGpuMissingRequired );
+		        "error",
+		        "gpu_required_pages_missing",
+		        "gpu_streaming",
+		        "Required detailed terrain pages are not resident.",
+		        sample.m_nGpuMissingRequired );
 	}
 	if ( ( sample.m_nStallFlags & TERRAIN3D_PROFILE_STALL_GPU_UPLOAD_LAYER_BUDGET ) != 0u ) {
 		t3dAppendRuntimeProblem( problems,
-				"warning",
-				"gpu_upload_budget_saturated",
-				"gpu_streaming",
-				"GPU publication stopped at the current layer budget.",
-				sample.m_nGpuEffectiveUploadLimit );
+		        "warning",
+		        "gpu_upload_budget_saturated",
+		        "gpu_streaming",
+		        "GPU publication stopped at the current layer budget.",
+		        sample.m_nGpuEffectiveUploadLimit );
 	}
 	if ( ( sample.m_nStallFlags & TERRAIN3D_PROFILE_STALL_GPU_UPLOAD_BYTE_BUDGET ) != 0u ) {
 		t3dAppendRuntimeProblem( problems,
-				"warning",
-				"gpu_upload_byte_budget",
-				"gpu_streaming",
-				"GPU publication stopped at the configured byte budget.",
-				( int64_t )( sample.m_nGpuUploadBytes ) );
+		        "warning",
+		        "gpu_upload_byte_budget",
+		        "gpu_streaming",
+		        "GPU publication stopped at the configured byte budget.",
+		        ( int64_t )( sample.m_nGpuUploadBytes ) );
 	}
 	if ( ( sample.m_nStallFlags & TERRAIN3D_PROFILE_STALL_GPU_UPDATE_CALL_BUDGET ) != 0u ) {
 		t3dAppendRuntimeProblem( problems,
-				"warning",
-				"gpu_update_call_budget",
-				"gpu_streaming",
-				"GPU publication stopped at the texture-update call budget.",
-				sample.m_nGpuUploads );
+		        "warning",
+		        "gpu_update_call_budget",
+		        "gpu_streaming",
+		        "GPU publication stopped at the texture-update call budget.",
+		        sample.m_nGpuUploads );
 	}
 	if ( ( sample.m_nStallFlags & TERRAIN3D_PROFILE_STALL_GPU_PREPARE_PENDING ) != 0u ) {
 		t3dAppendRuntimeProblem( problems,
-				"info",
-				"gpu_prepare_pending",
-				"gpu_streaming",
-				"A required page is still being prepared by the worker pool.",
-				sample.m_nGpuPreparePendingPages );
+		        "info",
+		        "gpu_prepare_pending",
+		        "gpu_streaming",
+		        "A required page is still being prepared by the worker pool.",
+		        sample.m_nGpuPreparePendingPages );
 	}
 	if ( ( sample.m_nStallFlags & TERRAIN3D_PROFILE_STALL_GPU_NO_READY_PAGE ) != 0u ) {
 		t3dAppendRuntimeProblem( problems,
-				"warning",
-				"gpu_no_ready_page",
-				"gpu_streaming",
-				"A required page had no prepared cooked payload ready for publication.",
-				sample.m_nGpuPreparedQueue );
+		        "warning",
+		        "gpu_no_ready_page",
+		        "gpu_streaming",
+		        "A required page had no prepared cooked payload ready for publication.",
+		        sample.m_nGpuPreparedQueue );
 	}
 	if ( ( sample.m_nStallFlags & TERRAIN3D_PROFILE_STALL_GPU_RETIREMENT_CAPACITY ) != 0u ) {
 		t3dAppendRuntimeProblem( problems,
-				"warning",
-				"gpu_retirement_capacity",
-				"gpu_streaming",
-				"No staging layer is free because physical pages are mapped or retiring.",
-				sample.m_nGpuResident );
+		        "warning",
+		        "gpu_retirement_capacity",
+		        "gpu_streaming",
+		        "No staging layer is free because physical pages are mapped or retiring.",
+		        sample.m_nGpuResident );
 	}
 	if ( ( sample.m_nStallFlags & TERRAIN3D_PROFILE_STALL_GPU_PAGE_CAPACITY ) != 0u ) {
 		t3dAppendRuntimeProblem( problems,
-				"error",
-				"gpu_page_capacity_exhausted",
-				"gpu_streaming",
-				"Mapped GPU page capacity is exhausted while required pages are missing.",
-				sample.m_nGpuCapacity );
+		        "error",
+		        "gpu_page_capacity_exhausted",
+		        "gpu_streaming",
+		        "Mapped GPU page capacity is exhausted while required pages are missing.",
+		        sample.m_nGpuCapacity );
 	}
 	if ( ( sample.m_nStallFlags & TERRAIN3D_PROFILE_STALL_CPU_LOAD_BUDGET ) != 0u ) {
 		t3dAppendRuntimeProblem( problems,
-				"info",
-				"cpu_load_budget",
-				"cpu_streaming",
-				"CPU region loading stopped at the page budget.",
-				sample.m_nCpuLoads );
+		        "info",
+		        "cpu_load_budget",
+		        "cpu_streaming",
+		        "CPU region loading stopped at the page budget.",
+		        sample.m_nCpuLoads );
 	}
 	if ( ( sample.m_nStallFlags & TERRAIN3D_PROFILE_STALL_CPU_LOAD_BYTE_BUDGET ) != 0u ) {
 		t3dAppendRuntimeProblem( problems,
-				"info",
-				"cpu_load_byte_budget",
-				"cpu_streaming",
-				"CPU region loading stopped at the byte budget.",
-				( int64_t )( sample.m_nCpuLoadBytes ) );
+		        "info",
+		        "cpu_load_byte_budget",
+		        "cpu_streaming",
+		        "CPU region loading stopped at the byte budget.",
+		        ( int64_t )( sample.m_nCpuLoadBytes ) );
 	}
 	if ( ( sample.m_nStallFlags & TERRAIN3D_PROFILE_STALL_CPU_PINNED_CAPACITY ) != 0u ) {
 		t3dAppendRuntimeProblem( problems,
-				"warning",
-				"cpu_pinned_capacity",
-				"cpu_streaming",
-				"CPU cache replacement could not find an evictable region slot.",
-				sample.m_nCpuPinned );
+		        "warning",
+		        "cpu_pinned_capacity",
+		        "cpu_streaming",
+		        "CPU cache replacement could not find an evictable region slot.",
+		        sample.m_nCpuPinned );
 	}
 	if ( ( sample.m_nStallFlags & TERRAIN3D_PROFILE_STALL_INSTANCE_LOAD_BUDGET ) != 0u ) {
 		t3dAppendRuntimeProblem( problems,
-				"info",
-				"instance_load_budget",
-				"instance_streaming",
-				"Instance page loading stopped at the page budget.",
-				sample.m_nInstanceLoads );
+		        "info",
+		        "instance_load_budget",
+		        "instance_streaming",
+		        "Instance page loading stopped at the page budget.",
+		        sample.m_nInstanceLoads );
 	}
 	if ( ( sample.m_nStallFlags & TERRAIN3D_PROFILE_STALL_INSTANCE_LOAD_BYTE_BUDGET ) != 0u ) {
 		t3dAppendRuntimeProblem( problems,
-				"info",
-				"instance_load_byte_budget",
-				"instance_streaming",
-				"Instance page loading stopped at the byte budget.",
-				( int64_t )( sample.m_nInstanceLoadBytes ) );
+		        "info",
+		        "instance_load_byte_budget",
+		        "instance_streaming",
+		        "Instance page loading stopped at the byte budget.",
+		        ( int64_t )( sample.m_nInstanceLoadBytes ) );
 	}
 	if ( ( sample.m_nStallFlags & TERRAIN3D_PROFILE_STALL_INSTANCE_UPDATE_BUDGET ) != 0u ) {
 		t3dAppendRuntimeProblem( problems,
-				"warning",
-				"instance_update_budget",
-				"instancer",
-				"Instance cell publication remains queued at the per-frame cell budget.",
-				sample.m_nPendingCellUpdates );
+		        "warning",
+		        "instance_update_budget",
+		        "instancer",
+		        "Instance cell publication remains queued at the per-frame cell budget.",
+		        sample.m_nPendingCellUpdates );
 	}
 	if ( ( sample.m_nStallFlags & TERRAIN3D_PROFILE_STALL_NODE_LOAD_BUDGET ) != 0u ) {
 		t3dAppendRuntimeProblem( problems,
-				"info",
-				"node_load_budget",
-				"node_streaming",
-				"Dynamic node loading reached the region budget.",
-				sample.m_nNodeLoads );
+		        "info",
+		        "node_load_budget",
+		        "node_streaming",
+		        "Dynamic node loading reached the region budget.",
+		        sample.m_nNodeLoads );
 	}
 	if ( ( sample.m_nStallFlags & TERRAIN3D_PROFILE_STALL_NODE_UNLOAD_BUDGET ) != 0u ) {
 		t3dAppendRuntimeProblem( problems,
-				"info",
-				"node_unload_budget",
-				"node_streaming",
-				"Dynamic node unloading reached the region budget.",
-				sample.m_nNodeUnloads );
+		        "info",
+		        "node_unload_budget",
+		        "node_streaming",
+		        "Dynamic node unloading reached the region budget.",
+		        sample.m_nNodeUnloads );
 	}
 	if ( sample.m_nGpuCookedMisses > 0 ) {
 		t3dAppendRuntimeProblem( problems,
-				"warning",
-				"cooked_page_miss",
-				"gpu_streaming",
-				"Cooked runtime pages were unavailable and required fallback preparation.",
-				sample.m_nGpuCookedMisses );
+		        "warning",
+		        "cooked_page_miss",
+		        "gpu_streaming",
+		        "Cooked runtime pages were unavailable and required fallback preparation.",
+		        sample.m_nGpuCookedMisses );
 	}
 	if ( sample.m_nPendingCellUpdates > 0 ) {
 		t3dAppendRuntimeProblem( problems,
-				"warning",
-				"instance_cell_backlog",
-				"instancer",
-				"Instance cell updates remain queued after this tick.",
-				sample.m_nPendingCellUpdates );
+		        "warning",
+		        "instance_cell_backlog",
+		        "instancer",
+		        "Instance cell updates remain queued after this tick.",
+		        sample.m_nPendingCellUpdates );
 	}
 	if ( sample.m_nNodeLoadFailures > 0 ) {
 		t3dAppendRuntimeProblem( problems,
-				"error",
-				"node_load_failure",
-				"node_streaming",
-				"One or more streamed node scenes failed to load.",
-				sample.m_nNodeLoadFailures );
+		        "error",
+		        "node_load_failure",
+		        "node_streaming",
+		        "One or more streamed node scenes failed to load.",
+		        sample.m_nNodeLoadFailures );
 	}
 	if ( sample.m_nGpuFarDirtyRegions > 0 ) {
 		t3dAppendRuntimeProblem( problems,
-				"info",
-				"far_atlas_backlog",
-				"far_atlas",
-				"Far-atlas region patches remain dirty.",
-				sample.m_nGpuFarDirtyRegions );
+		        "info",
+		        "far_atlas_backlog",
+		        "far_atlas",
+		        "Far-atlas region patches remain dirty.",
+		        sample.m_nGpuFarDirtyRegions );
 	}
 	if ( sample.m_nShaderUpdates > 0 ) {
 		t3dAppendRuntimeProblem( problems,
-				"info",
-				"shader_update",
-				"shaders",
-				"Terrain shader source was submitted or rebound during this sampled tick.",
-				( int64_t )( sample.m_nShaderUpdateUsec ) );
+		        "info",
+		        "shader_update",
+		        "shaders",
+		        "Terrain shader source was submitted or rebound during this sampled tick.",
+		        ( int64_t )( sample.m_nShaderUpdateUsec ) );
 	}
 	if ( sample.m_nShaderVariantCreations > 0 ) {
 		t3dAppendRuntimeProblem( problems,
-				"info",
-				"shader_variant_created",
-				"shaders",
-				"One or more shader variants were created during this sampled tick.",
-				sample.m_nShaderVariantCreations );
+		        "info",
+		        "shader_variant_created",
+		        "shaders",
+		        "One or more shader variants were created during this sampled tick.",
+		        sample.m_nShaderVariantCreations );
 	}
 	if ( sample.m_nPhysicsTotalUsec >= 2000u ) {
 		t3dAppendRuntimeProblem( problems,
-				"warning",
-				"terrain_frame_over_2ms",
-				"frame",
-				"Terrain3D physics work exceeded 2 ms on the latest sampled tick.",
-				( int64_t )( sample.m_nPhysicsTotalUsec ) );
+		        "warning",
+		        "terrain_frame_over_2ms",
+		        "frame",
+		        "Terrain3D physics work exceeded 2 ms on the latest sampled tick.",
+		        ( int64_t )( sample.m_nPhysicsTotalUsec ) );
 	}
 	return problems;
 }
@@ -675,8 +666,7 @@ Array Terrain3D::getRuntimeProfileHistory( const int nMaxSamples ) const {
 	const size_t start = available - requested;
 	history.resize( ( int )( requested ) );
 	for ( size_t index = 0u; index < requested; ++index ) {
-		history[( int )( index )] =
-				runtimeProfileSampleToDictionary( m_pRuntimeProfileHistory->getOldest( start + index ) );
+		history[( int )( index )] = runtimeProfileSampleToDictionary( m_pRuntimeProfileHistory->getOldest( start + index ) );
 	}
 	return history;
 }
@@ -705,8 +695,7 @@ Array Terrain3D::getRuntimeProfileHistorySince( const int64_t nAfterSequence, co
 	const size_t start = available - requested;
 	history.resize( ( int )( requested ) );
 	for ( size_t index = 0u; index < requested; ++index ) {
-		history[( int )( index )] =
-				runtimeProfileSampleToDictionary( m_pRuntimeProfileHistory->getOldest( start + index ) );
+		history[( int )( index )] = runtimeProfileSampleToDictionary( m_pRuntimeProfileHistory->getOldest( start + index ) );
 	}
 	return history;
 }
@@ -720,72 +709,61 @@ Dictionary Terrain3D::getRuntimeProfileAggregate( void ) const {
 	Dictionary physics;
 	physics["total_usec"] = ( int64_t )( stats.m_nPhysicsTotalUsec );
 	physics["peak_usec"] = ( int64_t )( stats.m_nPhysicsPeakUsec );
-	physics["average_usec"] = stats.m_nSampledTicks > 0u
-			? ( double )( stats.m_nPhysicsTotalUsec ) / ( double )( stats.m_nSampledTicks )
-			: 0.0;
+	physics["average_usec"] =
+	        stats.m_nSampledTicks > 0u ? ( double )( stats.m_nPhysicsTotalUsec ) / ( double )( stats.m_nSampledTicks ) : 0.0;
 	timing["physics"] = physics;
 	Dictionary data_residency;
 	data_residency["total_usec"] = ( int64_t )( stats.m_nDataResidencyTotalUsec );
 	data_residency["peak_usec"] = ( int64_t )( stats.m_nDataResidencyPeakUsec );
-	data_residency["average_usec"] = stats.m_nSampledTicks > 0u
-			? ( double )( stats.m_nDataResidencyTotalUsec ) / ( double )( stats.m_nSampledTicks )
-			: 0.0;
+	data_residency["average_usec"] =
+	        stats.m_nSampledTicks > 0u ? ( double )( stats.m_nDataResidencyTotalUsec ) / ( double )( stats.m_nSampledTicks ) : 0.0;
 	timing["data_residency"] = data_residency;
 	Dictionary hlod_streaming;
 	hlod_streaming["total_usec"] = ( int64_t )( stats.m_nHlodStreamingTotalUsec );
 	hlod_streaming["peak_usec"] = ( int64_t )( stats.m_nHlodStreamingPeakUsec );
-	hlod_streaming["average_usec"] = stats.m_nSampledTicks > 0u
-			? ( double )( stats.m_nHlodStreamingTotalUsec ) / ( double )( stats.m_nSampledTicks )
-			: 0.0;
+	hlod_streaming["average_usec"] =
+	        stats.m_nSampledTicks > 0u ? ( double )( stats.m_nHlodStreamingTotalUsec ) / ( double )( stats.m_nSampledTicks ) : 0.0;
 	timing["hlod_streaming"] = hlod_streaming;
 	Dictionary node_streaming;
 	node_streaming["total_usec"] = ( int64_t )( stats.m_nNodeStreamingTotalUsec );
 	node_streaming["peak_usec"] = ( int64_t )( stats.m_nNodeStreamingPeakUsec );
-	node_streaming["average_usec"] = stats.m_nSampledTicks > 0u
-			? ( double )( stats.m_nNodeStreamingTotalUsec ) / ( double )( stats.m_nSampledTicks )
-			: 0.0;
+	node_streaming["average_usec"] =
+	        stats.m_nSampledTicks > 0u ? ( double )( stats.m_nNodeStreamingTotalUsec ) / ( double )( stats.m_nSampledTicks ) : 0.0;
 	timing["node_streaming"] = node_streaming;
 	Dictionary clipmap_timing;
 	clipmap_timing["total_usec"] = ( int64_t )( stats.m_nClipmapTotalUsec );
 	clipmap_timing["peak_usec"] = ( int64_t )( stats.m_nClipmapPeakUsec );
-	clipmap_timing["average_usec"] = stats.m_nSampledTicks > 0u
-			? ( double )( stats.m_nClipmapTotalUsec ) / ( double )( stats.m_nSampledTicks )
-			: 0.0;
+	clipmap_timing["average_usec"] =
+	        stats.m_nSampledTicks > 0u ? ( double )( stats.m_nClipmapTotalUsec ) / ( double )( stats.m_nSampledTicks ) : 0.0;
 	timing["clipmap"] = clipmap_timing;
 	Dictionary ocean;
 	ocean["total_usec"] = ( int64_t )( stats.m_nOceanTotalUsec );
 	ocean["peak_usec"] = ( int64_t )( stats.m_nOceanPeakUsec );
-	ocean["average_usec"] = stats.m_nSampledTicks > 0u
-			? ( double )( stats.m_nOceanTotalUsec ) / ( double )( stats.m_nSampledTicks )
-			: 0.0;
+	ocean["average_usec"] = stats.m_nSampledTicks > 0u ? ( double )( stats.m_nOceanTotalUsec ) / ( double )( stats.m_nSampledTicks ) : 0.0;
 	timing["ocean"] = ocean;
 	Dictionary instancer_timing;
 	instancer_timing["total_usec"] = ( int64_t )( stats.m_nInstancerTotalUsec );
 	instancer_timing["peak_usec"] = ( int64_t )( stats.m_nInstancerPeakUsec );
-	instancer_timing["average_usec"] = stats.m_nSampledTicks > 0u
-			? ( double )( stats.m_nInstancerTotalUsec ) / ( double )( stats.m_nSampledTicks )
-			: 0.0;
+	instancer_timing["average_usec"] =
+	        stats.m_nSampledTicks > 0u ? ( double )( stats.m_nInstancerTotalUsec ) / ( double )( stats.m_nSampledTicks ) : 0.0;
 	timing["instancer"] = instancer_timing;
 	Dictionary light_sync;
 	light_sync["total_usec"] = ( int64_t )( stats.m_nLightSyncTotalUsec );
 	light_sync["peak_usec"] = ( int64_t )( stats.m_nLightSyncPeakUsec );
-	light_sync["average_usec"] = stats.m_nSampledTicks > 0u
-			? ( double )( stats.m_nLightSyncTotalUsec ) / ( double )( stats.m_nSampledTicks )
-			: 0.0;
+	light_sync["average_usec"] =
+	        stats.m_nSampledTicks > 0u ? ( double )( stats.m_nLightSyncTotalUsec ) / ( double )( stats.m_nSampledTicks ) : 0.0;
 	timing["light_sync"] = light_sync;
 	Dictionary collision;
 	collision["total_usec"] = ( int64_t )( stats.m_nCollisionTotalUsec );
 	collision["peak_usec"] = ( int64_t )( stats.m_nCollisionPeakUsec );
-	collision["average_usec"] = stats.m_nSampledTicks > 0u
-			? ( double )( stats.m_nCollisionTotalUsec ) / ( double )( stats.m_nSampledTicks )
-			: 0.0;
+	collision["average_usec"] =
+	        stats.m_nSampledTicks > 0u ? ( double )( stats.m_nCollisionTotalUsec ) / ( double )( stats.m_nSampledTicks ) : 0.0;
 	timing["collision"] = collision;
 	Dictionary streaming;
 	streaming["total_usec"] = ( int64_t )( stats.m_nStreamingTotalUsec );
 	streaming["peak_usec"] = ( int64_t )( stats.m_nStreamingPeakUsec );
-	streaming["average_usec"] = stats.m_nSampledTicks > 0u
-			? ( double )( stats.m_nStreamingTotalUsec ) / ( double )( stats.m_nSampledTicks )
-			: 0.0;
+	streaming["average_usec"] =
+	        stats.m_nSampledTicks > 0u ? ( double )( stats.m_nStreamingTotalUsec ) / ( double )( stats.m_nSampledTicks ) : 0.0;
 	timing["streaming"] = streaming;
 	aggregate["timing"] = timing;
 
@@ -804,14 +782,11 @@ Dictionary Terrain3D::getRuntimeProfileAggregate( void ) const {
 	gpu["cooked_misses"] = ( int64_t )( stats.m_nGpuCookedMissesTotal );
 	gpu["runtime_prepares"] = ( int64_t )( stats.m_nGpuRuntimePreparesTotal );
 	const uint64_t cooked_attempts = stats.m_nGpuCookedHitsTotal + stats.m_nGpuCookedMissesTotal;
-	gpu["cooked_hit_ratio"] =
-			cooked_attempts > 0u ? ( double )( stats.m_nGpuCookedHitsTotal ) / ( double )( cooked_attempts ) : -1.0;
-	gpu["upload_bytes_per_m"] = stats.m_fDistanceTravelledM > 0.0
-			? ( double )( stats.m_nGpuUploadBytesTotal ) / stats.m_fDistanceTravelledM
-			: 0.0;
-	gpu["evictions_per_km"] = stats.m_fDistanceTravelledM > 0.0
-			? ( double )( stats.m_nGpuEvictionsTotal ) * 1000.0 / stats.m_fDistanceTravelledM
-			: 0.0;
+	gpu["cooked_hit_ratio"] = cooked_attempts > 0u ? ( double )( stats.m_nGpuCookedHitsTotal ) / ( double )( cooked_attempts ) : -1.0;
+	gpu["upload_bytes_per_m"] =
+	        stats.m_fDistanceTravelledM > 0.0 ? ( double )( stats.m_nGpuUploadBytesTotal ) / stats.m_fDistanceTravelledM : 0.0;
+	gpu["evictions_per_km"] =
+	        stats.m_fDistanceTravelledM > 0.0 ? ( double )( stats.m_nGpuEvictionsTotal ) * 1000.0 / stats.m_fDistanceTravelledM : 0.0;
 	aggregate["gpu"] = gpu;
 
 	Dictionary clipmap;
@@ -873,8 +848,7 @@ void Terrain3D::setRuntimeAdaptiveTargetMs( const real_t fTargetMs ) {
 }
 
 void Terrain3D::setRuntimeAdaptiveHardMaxMs( const real_t fHardMaxMs ) {
-	const uint64_t hard_max_usec =
-			( uint64_t )( CLAMP( fHardMaxMs, ( real_t )( 0.05f ), ( real_t )( 100.0f ) ) * 1000.0f );
+	const uint64_t hard_max_usec = ( uint64_t )( CLAMP( fHardMaxMs, ( real_t )( 0.05f ), ( real_t )( 100.0f ) ) * 1000.0f );
 	const uint64_t normalized = MAX( hard_max_usec, m_nRuntimeAdaptiveTargetUsec );
 	if ( m_nRuntimeAdaptiveHardMaxUsec == normalized ) {
 		return;
@@ -1165,7 +1139,8 @@ Array Terrain3D::getPerformanceProfileDiff( void ) const {
 	if ( m_performanceTarget != PERFORMANCE_TARGET_XBOX360_EXPERIMENTAL ) {
 		return differences;
 	}
-	for ( const t3dPerformanceProfileSetting_t &setting : g_szXbox360ExperimentalSettings ) {
+	for ( size_t iSetting = 0u; iSetting < T3D_ARRAY_COUNT( g_szXbox360ExperimentalSettings ); iSetting++ ) {
+		const t3dPerformanceProfileSetting_t &setting = ( g_szXbox360ExperimentalSettings )[iSetting];
 		const Object *pOwner = this;
 		if ( setting.m_owner == T3D_PROFILE_OWNER_MATERIAL ) {
 			if ( m_material.is_null() ) {

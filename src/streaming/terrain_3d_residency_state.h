@@ -1,7 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_RESIDENCY_STATE_H
 #define TERRAIN3D_RESIDENCY_STATE_H
 
@@ -10,7 +8,7 @@
 #include "streaming/terrain_3d_runtime_page_store.h"
 #include "streaming/terrain_3d_streaming_policy.h"
 
-#include <cstdint>
+#include <stdint.h>
 
 typedef struct t3dResidencyFrameState_s {
 	Vector3 m_worldPosition = s_v3Zero;
@@ -18,8 +16,8 @@ typedef struct t3dResidencyFrameState_s {
 	Vector2i m_residencyCenter = s_v2iMax;
 	Vector2i m_predictedCenter = s_v2iMax;
 	Vector2i m_activeHeightCenter = s_v2iMax;
-	const uint8_t *m_pStreamingStates = nullptr;
-	const uint8_t *m_pStreamingPrefetch = nullptr;
+	const uint8_t *m_pStreamingStates = NULL;
+	const uint8_t *m_pStreamingPrefetch = NULL;
 	uint64_t m_nStreamingGeneration = 0u;
 	int m_nRegionMapSize = 0;
 	int m_nStreamingActiveRadius = 0;
@@ -45,8 +43,7 @@ typedef struct t3dResidencyFrameState_s {
 			return TERRAIN3D_REGION_STREAMING_UNLOADED;
 		}
 		const int mapIndex = Terrain3DRegionRepository::getRegionMapIndex( rLocation );
-		return mapIndex >= 0 ? ( t3dRegionStreamingState_t )( m_pStreamingStates[mapIndex] )
-							 : TERRAIN3D_REGION_STREAMING_UNLOADED;
+		return mapIndex >= 0 ? ( t3dRegionStreamingState_t )( m_pStreamingStates[mapIndex] ) : TERRAIN3D_REGION_STREAMING_UNLOADED;
 	}
 
 	bool isPrefetch( const Vector2i &rLocation ) const {

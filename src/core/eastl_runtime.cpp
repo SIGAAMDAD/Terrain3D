@@ -7,18 +7,17 @@
 #include "eastl_config.h"
 
 #include <EASTL/internal/config.h>
-#include <cstdio>
-#include <cstdlib>
+#include <stdio.h>
+#include <stdlib.h>
 
 namespace eastl {
 static void t3dEastlRuntimeEastlAssertDefault( void *pInstructionPointer, const char *pszExpression, void *pContext );
 
 EASTL_AssertionFailureFunctionEx s_pfnAssertionFailure = t3dEastlRuntimeEastlAssertDefault;
-void *s_pAssertionFailureContext = nullptr;
-EASTL_AssertionFailureFunction s_pfnLegacyAssertionFailure = nullptr;
+void *s_pAssertionFailureContext = NULL;
+EASTL_AssertionFailureFunction s_pfnLegacyAssertionFailure = NULL;
 
-static void
-t3dEastlRuntimeEastlAssertLegacyAdapter( void *pInstructionPointer, const char *pszExpression, void *pContext ) {
+static void t3dEastlRuntimeEastlAssertLegacyAdapter( void *pInstructionPointer, const char *pszExpression, void *pContext ) {
 	EA_UNUSED( pInstructionPointer );
 	EA_UNUSED( pContext );
 	if ( s_pfnLegacyAssertionFailure ) {
@@ -26,11 +25,10 @@ t3dEastlRuntimeEastlAssertLegacyAdapter( void *pInstructionPointer, const char *
 	}
 }
 
-EA_FORCE_INLINE static void
-t3dEastlRuntimeEastlAssertDefault( void *pInstructionPointer, const char *pszExpression, void *pContext ) {
+EA_FORCE_INLINE static void t3dEastlRuntimeEastlAssertDefault( void *pInstructionPointer, const char *pszExpression, void *pContext ) {
 	EA_UNUSED( pInstructionPointer );
 	EA_UNUSED( pContext );
-	AssertionFailureFunctionDefault( pszExpression, nullptr );
+	AssertionFailureFunctionDefault( pszExpression, NULL );
 }
 
 void SetAssertionFailureFunction( EASTL_AssertionFailureFunction function, void *pContext ) {
@@ -40,7 +38,7 @@ void SetAssertionFailureFunction( EASTL_AssertionFailureFunction function, void 
 }
 
 void SetAssertionFailureFunction( EASTL_AssertionFailureFunctionEx function, void *pContext ) {
-	s_pfnLegacyAssertionFailure = nullptr;
+	s_pfnLegacyAssertionFailure = NULL;
 	s_pAssertionFailureContext = pContext;
 	s_pfnAssertionFailure = function ? function : t3dEastlRuntimeEastlAssertDefault;
 }
@@ -48,16 +46,16 @@ void SetAssertionFailureFunction( EASTL_AssertionFailureFunctionEx function, voi
 void AssertionFailureFunctionDefault( const char *pszExpression, void *pContext ) {
 	EA_UNUSED( pContext );
 #if EASTL_ASSERT_ENABLED
-	std::fprintf( stderr, "Terrain3D EASTL assertion failed: %s\n", pszExpression ? pszExpression : "<null>" );
-	std::fflush( stderr );
-	std::abort();
+	fprintf( stderr, "Terrain3D EASTL assertion failed: %s\n", pszExpression ? pszExpression : "<null>" );
+	fflush( stderr );
+	abort();
 #else
 	EA_UNUSED( pszExpression );
 #endif
 }
 
 void AssertionFailure( const char *pszExpression ) {
-	AssertionFailure( nullptr, pszExpression );
+	AssertionFailure( NULL, pszExpression );
 }
 
 void AssertionFailure( void *pInstructionPointer, const char *pszExpression ) {

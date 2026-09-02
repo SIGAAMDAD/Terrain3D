@@ -1,37 +1,33 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "memory/terrain_3d_memory_zone.h"
+#include "core/terrain_3d_sync.h"
 
 #include "memory/terrain_3d_memory.h"
 
-#include <algorithm>
-#include <cstdlib>
-#include <cstring>
-#include <limits>
-#include <mutex>
-
-constexpr uint32_t Terrain3DMemoryZone::s_szSmallClasses[Terrain3DMemoryZone::s_nSmallClassCount];
-
+#include <EASTL/numeric_limits.h>
+#include <stdlib.h>
+#include <string.h>
 EA_FORCE_INLINE static void t3dMemoryZoneResetSmallPage( t3dMemoryZoneSmallPage_t &rPage ) {
-	std::memset( &rPage, 0, sizeof( rPage ) );
+	memset( &rPage, 0, sizeof( rPage ) );
 	rPage.m_iFirstFree = UINT32_MAX;
 	rPage.m_iClass = UINT16_MAX;
 }
 
 EA_FORCE_INLINE static void t3dMemoryZoneResetAllocationHeader( t3dMemoryZoneAllocationHeader_t &rHeader ) {
-	std::memset( &rHeader, 0, sizeof( rHeader ) );
+	memset( &rHeader, 0, sizeof( rHeader ) );
 	rHeader.m_iPage = UINT16_MAX;
 	rHeader.m_iClass = UINT16_MAX;
 }
 
 Terrain3DMemoryZone::~Terrain3DMemoryZone() {
 	if ( !release() ) {
-		std::abort();
+		abort();
 	}
 }
 
 bool Terrain3DMemoryZone::alignUp( const size_t nValue, const size_t nAlignment, size_t &rValue ) {
-	if ( !isPowerOfTwo( nAlignment ) || nValue > std::numeric_limits<size_t>::max() - ( nAlignment - 1u ) ) {
+	if ( !isPowerOfTwo( nAlignment ) || nValue > eastl::numeric_limits<size_t>::max() - ( nAlignment - 1u ) ) {
 		return false;
 	}
 	rValue = ( nValue + nAlignment - 1u ) & ~( nAlignment - 1u );
@@ -39,16 +35,16 @@ bool Terrain3DMemoryZone::alignUp( const size_t nValue, const size_t nAlignment,
 }
 
 bool Terrain3DMemoryZone::initialize( void *const pBacking, const size_t nBytes ) {
-	std::lock_guard<std::mutex> lock( m_mutex );
-	if ( !pBacking || nBytes < s_nSmallPageBytes || m_state == T3D_MEMORY_ZONE_ACTIVE ||
-			m_state == T3D_MEMORY_ZONE_DRAINING ) {
+	t3dScopedLock_t lock( m_mutex );
+	if ( !pBacking || nBytes < s_nSmallPageBytes || m_state == T3D_MEMORY_ZONE_ACTIVE || m_state == T3D_MEMORY_ZONE_DRAINING ) {
 		return false;
 	}
-	m_pBase = static_cast<uint8_t *>( pBacking );
+	m_pBase = ( uint8_t * )( pBacking );
 	m_nCapacity = nBytes;
 	m_nFreeExtentCount = 1u;
 	m_szFreeExtents[0] = { 0u, nBytes };
-	for ( t3dMemoryZoneSmallPage_t &page : m_szSmallPages ) {
+	for ( size_t iPage = 0u; iPage < T3D_ARRAY_COUNT( m_szSmallPages ); iPage++ ) {
+		t3dMemoryZoneSmallPage_t &page = ( m_szSmallPages )[iPage];
 		t3dMemoryZoneResetSmallPage( page );
 	}
 	m_nLiveAllocations = 0u;
@@ -88,8 +84,10 @@ bool Terrain3DMemoryZone::insertFreeExtentUnlocked( const size_t nOffset, const 
 	while ( index < m_nFreeExtentCount && m_szFreeExtents[index].m_iOffset < nOffset ) {
 		++index;
 	}
-	for ( uint32_t move = m_nFreeExtentCount; move > index; --move ) {
-		m_szFreeExtents[move] = m_szFreeExtents[move - 1u];
+	if ( index < m_nFreeExtentCount ) {
+		memmove( &m_szFreeExtents[index + 1u],
+		        &m_szFreeExtents[index],
+		        ( size_t )( m_nFreeExtentCount - index ) * sizeof( t3dMemoryZoneExtent_t ) );
 	}
 	m_szFreeExtents[index] = { nOffset, nBytes };
 	++m_nFreeExtentCount;
@@ -97,8 +95,10 @@ bool Terrain3DMemoryZone::insertFreeExtentUnlocked( const size_t nOffset, const 
 		t3dMemoryZoneExtent_t &previous = m_szFreeExtents[index - 1u];
 		if ( previous.m_iOffset + previous.m_nSize == nOffset ) {
 			previous.m_nSize += nBytes;
-			for ( uint32_t move = index; move + 1u < m_nFreeExtentCount; ++move ) {
-				m_szFreeExtents[move] = m_szFreeExtents[move + 1u];
+			if ( index + 1u < m_nFreeExtentCount ) {
+				memmove( &m_szFreeExtents[index],
+				        &m_szFreeExtents[index + 1u],
+				        ( size_t )( m_nFreeExtentCount - index - 1u ) * sizeof( t3dMemoryZoneExtent_t ) );
 			}
 			--m_nFreeExtentCount;
 			index--;
@@ -108,36 +108,39 @@ bool Terrain3DMemoryZone::insertFreeExtentUnlocked( const size_t nOffset, const 
 		t3dMemoryZoneExtent_t &current = m_szFreeExtents[index];
 		if ( current.m_iOffset + current.m_nSize == m_szFreeExtents[index + 1u].m_iOffset ) {
 			current.m_nSize += m_szFreeExtents[index + 1u].m_nSize;
-			for ( uint32_t move = index + 1u; move + 1u < m_nFreeExtentCount; ++move ) {
-				m_szFreeExtents[move] = m_szFreeExtents[move + 1u];
+			if ( index + 2u < m_nFreeExtentCount ) {
+				memmove( &m_szFreeExtents[index + 1u],
+				        &m_szFreeExtents[index + 2u],
+				        ( size_t )( m_nFreeExtentCount - index - 2u ) * sizeof( t3dMemoryZoneExtent_t ) );
 			}
 			--m_nFreeExtentCount;
 		}
 	}
-	m_nPeakFreeExtentCount = std::max( m_nPeakFreeExtentCount, m_nFreeExtentCount );
+	m_nPeakFreeExtentCount = MAX( m_nPeakFreeExtentCount, m_nFreeExtentCount );
 	return true;
 }
 
-bool Terrain3DMemoryZone::takeExtentUnlocked( const size_t nBytes,
-		const size_t nAlignment,
-		const size_t nPrefixBytes,
-		size_t &rExtentOffset,
-		size_t &rUserOffset ) {
+bool Terrain3DMemoryZone::takeExtentUnlocked(
+        const size_t nBytes, const size_t nAlignment, const size_t nPrefixBytes, size_t &rExtentOffset, size_t &rUserOffset ) {
 	for ( uint32_t index = 0u; index < m_nFreeExtentCount; ++index ) {
 		const t3dMemoryZoneExtent_t source = m_szFreeExtents[index];
-		const uintptr_t base = reinterpret_cast<uintptr_t>( m_pBase );
-		if ( source.m_iOffset > std::numeric_limits<uintptr_t>::max() - base - nPrefixBytes ) {
+		const uintptr_t base = ( uintptr_t )( m_pBase );
+		const uintptr_t address_max = eastl::numeric_limits<uintptr_t>::max();
+		if ( base > address_max - source.m_iOffset ) {
+			continue;
+		}
+		const uintptr_t source_address = base + source.m_iOffset;
+		if ( source_address > address_max - nPrefixBytes ) {
 			continue;
 		}
 		size_t aligned_address = 0u;
-		if ( !alignUp( base + source.m_iOffset + nPrefixBytes, nAlignment, aligned_address ) ||
-				aligned_address < base ) {
+		if ( !alignUp( source_address + nPrefixBytes, nAlignment, aligned_address ) || aligned_address < base ) {
 			continue;
 		}
 		const size_t user = aligned_address - base;
 		const size_t start = user - nPrefixBytes;
-		if ( start < source.m_iOffset || nBytes > source.m_nSize - ( start - source.m_iOffset ) ||
-				user > std::numeric_limits<size_t>::max() - nBytes ) {
+		if ( start < source.m_iOffset || nBytes > source.m_nSize - ( start - source.m_iOffset )
+		        || user > eastl::numeric_limits<size_t>::max() - nBytes ) {
 			continue;
 		}
 		const size_t end = user + nBytes;
@@ -145,12 +148,14 @@ bool Terrain3DMemoryZone::takeExtentUnlocked( const size_t nBytes,
 			continue;
 		}
 		const uint32_t required_extent_slots =
-				( start > source.m_iOffset ? 1u : 0u ) + ( end < source.m_iOffset + source.m_nSize ? 1u : 0u );
+		        ( start > source.m_iOffset ? 1u : 0u ) + ( end < source.m_iOffset + source.m_nSize ? 1u : 0u );
 		if ( m_nFreeExtentCount - 1u + required_extent_slots > s_nMaxExtents ) {
 			continue;
 		}
-		for ( uint32_t move = index; move + 1u < m_nFreeExtentCount; ++move ) {
-			m_szFreeExtents[move] = m_szFreeExtents[move + 1u];
+		if ( index + 1u < m_nFreeExtentCount ) {
+			memmove( &m_szFreeExtents[index],
+			        &m_szFreeExtents[index + 1u],
+			        ( size_t )( m_nFreeExtentCount - index - 1u ) * sizeof( t3dMemoryZoneExtent_t ) );
 		}
 		--m_nFreeExtentCount;
 		if ( start > source.m_iOffset ) {
@@ -169,8 +174,7 @@ bool Terrain3DMemoryZone::takeExtentUnlocked( const size_t nBytes,
 void *Terrain3DMemoryZone::allocateSmallUnlocked( const int nClassIndex, const size_t nBytes ) {
 	uint32_t page_index = s_nMaxSmallPages;
 	for ( uint32_t i = 0u; i < s_nMaxSmallPages; ++i ) {
-		if ( m_szSmallPages[i].m_bActive && m_szSmallPages[i].m_iClass == nClassIndex &&
-				m_szSmallPages[i].m_iFirstFree != UINT32_MAX ) {
+		if ( m_szSmallPages[i].m_bActive && m_szSmallPages[i].m_iClass == nClassIndex && m_szSmallPages[i].m_iFirstFree != UINT32_MAX ) {
 			page_index = i;
 			break;
 		}
@@ -183,11 +187,11 @@ void *Terrain3DMemoryZone::allocateSmallUnlocked( const int nClassIndex, const s
 			}
 		}
 		if ( page_index == s_nMaxSmallPages ) {
-			return nullptr;
+			return NULL;
 		}
 		size_t page_offset = 0u, ignored = 0u;
 		if ( !takeExtentUnlocked( s_nSmallPageBytes, 64u, 0u, page_offset, ignored ) ) {
-			return nullptr;
+			return NULL;
 		}
 		t3dMemoryZoneSmallPage_t &page = m_szSmallPages[page_index];
 		t3dMemoryZoneResetSmallPage( page );
@@ -201,20 +205,19 @@ void *Terrain3DMemoryZone::allocateSmallUnlocked( const int nClassIndex, const s
 		page.m_nTotalBlocks = ( uint16_t )( s_nSmallPageBytes / stride );
 		page.m_iFirstFree = 0u;
 		++m_nActiveSmallPages;
-		m_nPeakActiveSmallPages = std::max( m_nPeakActiveSmallPages, m_nActiveSmallPages );
+		m_nPeakActiveSmallPages = MAX( m_nPeakActiveSmallPages, m_nActiveSmallPages );
 		for ( uint32_t block = 0u; block < page.m_nTotalBlocks; ++block ) {
-			uint8_t *payload =
-					m_pBase + page.m_iOffset + ( size_t )block * stride + sizeof( t3dMemoryZoneAllocationHeader_t );
-			*reinterpret_cast<uint32_t *>( payload ) = block + 1u < page.m_nTotalBlocks ? block + 1u : UINT32_MAX;
+			uint8_t *payload = m_pBase + page.m_iOffset + ( size_t )block * stride + sizeof( t3dMemoryZoneAllocationHeader_t );
+			*( uint32_t * )( payload ) = block + 1u < page.m_nTotalBlocks ? block + 1u : UINT32_MAX;
 		}
 	}
 	t3dMemoryZoneSmallPage_t &page = m_szSmallPages[page_index];
 	const uint32_t block = page.m_iFirstFree;
 	uint8_t *const block_start = m_pBase + page.m_iOffset + ( size_t )block * page.m_nBlockStride;
 	uint8_t *const payload = block_start + sizeof( t3dMemoryZoneAllocationHeader_t );
-	page.m_iFirstFree = *reinterpret_cast<uint32_t *>( payload );
+	page.m_iFirstFree = *( uint32_t * )( payload );
 	++page.m_nLiveBlocks;
-	t3dMemoryZoneAllocationHeader_t *const header = reinterpret_cast<t3dMemoryZoneAllocationHeader_t *>( block_start );
+	t3dMemoryZoneAllocationHeader_t *const header = ( t3dMemoryZoneAllocationHeader_t * )( block_start );
 	t3dMemoryZoneResetAllocationHeader( *header );
 	header->m_nMagic = s_nAllocationMagic;
 	header->m_iExtentOffset = page.m_iOffset + ( size_t )block * page.m_nBlockStride;
@@ -229,24 +232,21 @@ void *Terrain3DMemoryZone::allocateSmallUnlocked( const int nClassIndex, const s
 	m_nLivePhysicalBytes += page.m_nBlockStride;
 	m_nLiveMetadataBytes += sizeof( t3dMemoryZoneAllocationHeader_t );
 	m_nLiveSizeClassWasteBytes += s_szSmallClasses[nClassIndex] - nBytes;
-	m_nLiveAlignmentWasteBytes +=
-			page.m_nBlockStride - sizeof( t3dMemoryZoneAllocationHeader_t ) - s_szSmallClasses[nClassIndex];
+	m_nLiveAlignmentWasteBytes += page.m_nBlockStride - sizeof( t3dMemoryZoneAllocationHeader_t ) - s_szSmallClasses[nClassIndex];
 	return payload;
 }
 
 void *Terrain3DMemoryZone::allocateLargeUnlocked( const size_t nBytes, const size_t nAlignment ) {
-	if ( nBytes >
-			std::numeric_limits<size_t>::max() - sizeof( t3dMemoryZoneAllocationHeader_t ) - ( nAlignment - 1u ) ) {
-		return nullptr;
+	if ( nBytes > eastl::numeric_limits<size_t>::max() - sizeof( t3dMemoryZoneAllocationHeader_t ) - ( nAlignment - 1u ) ) {
+		return NULL;
 	}
 	size_t extent_offset = 0u, user_offset = 0u;
-	if ( !takeExtentUnlocked(
-				 nBytes, nAlignment, sizeof( t3dMemoryZoneAllocationHeader_t ), extent_offset, user_offset ) ) {
-		return nullptr;
+	if ( !takeExtentUnlocked( nBytes, nAlignment, sizeof( t3dMemoryZoneAllocationHeader_t ), extent_offset, user_offset ) ) {
+		return NULL;
 	}
 	const size_t used = user_offset + nBytes - extent_offset;
-	t3dMemoryZoneAllocationHeader_t *const header = reinterpret_cast<t3dMemoryZoneAllocationHeader_t *>(
-			m_pBase + user_offset - sizeof( t3dMemoryZoneAllocationHeader_t ) );
+	t3dMemoryZoneAllocationHeader_t *const header =
+	        ( t3dMemoryZoneAllocationHeader_t * )( m_pBase + user_offset - sizeof( t3dMemoryZoneAllocationHeader_t ) );
 	t3dMemoryZoneResetAllocationHeader( *header );
 	header->m_nMagic = s_nAllocationMagic;
 	header->m_iExtentOffset = extent_offset;
@@ -263,19 +263,18 @@ void *Terrain3DMemoryZone::allocateLargeUnlocked( const size_t nBytes, const siz
 
 void *Terrain3DMemoryZone::allocateUnlocked( const size_t nBytes, const size_t nAlignment ) {
 	if ( m_state != T3D_MEMORY_ZONE_ACTIVE || nBytes == 0u || !isPowerOfTwo( nAlignment ) || nAlignment > UINT32_MAX ) {
-		return nullptr;
+		return NULL;
 	}
 	const int class_index = classIndexFor( nBytes, nAlignment );
-	return class_index >= 0 ? allocateSmallUnlocked( class_index, nBytes )
-							: allocateLargeUnlocked( nBytes, nAlignment );
+	return class_index >= 0 ? allocateSmallUnlocked( class_index, nBytes ) : allocateLargeUnlocked( nBytes, nAlignment );
 }
 
 void *Terrain3DMemoryZone::allocate( const size_t nBytes, const size_t nAlignment ) {
 	if ( nBytes == 0u || !t3dValidateRuntimeAllocationRequest() ) {
-		return nullptr;
+		return NULL;
 	}
-	std::lock_guard<std::mutex> lock( m_mutex );
-	void *const pMemory = allocateUnlocked( nBytes, std::max( nAlignment, ( size_t )alignof( void * ) ) );
+	t3dScopedLock_t lock( m_mutex );
+	void *const pMemory = allocateUnlocked( nBytes, MAX( nAlignment, ( size_t )alignof( void * ) ) );
 	if ( !pMemory ) {
 		++m_nFailedAllocations;
 	}
@@ -283,15 +282,13 @@ void *Terrain3DMemoryZone::allocate( const size_t nBytes, const size_t nAlignmen
 }
 
 t3dMemoryZoneAllocationHeader_t *Terrain3DMemoryZone::headerFor( void *const pMemory ) const {
-	return owns( pMemory ) ? reinterpret_cast<t3dMemoryZoneAllocationHeader_t *>(
-									 static_cast<uint8_t *>( pMemory ) - sizeof( t3dMemoryZoneAllocationHeader_t ) )
-						   : nullptr;
+	return owns( pMemory ) ? ( t3dMemoryZoneAllocationHeader_t * )( ( uint8_t * )( pMemory ) - sizeof( t3dMemoryZoneAllocationHeader_t ) )
+	                       : NULL;
 }
 const t3dMemoryZoneAllocationHeader_t *Terrain3DMemoryZone::headerFor( const void *const pMemory ) const {
 	return owns( pMemory )
-			? reinterpret_cast<const t3dMemoryZoneAllocationHeader_t *>(
-					  static_cast<const uint8_t *>( pMemory ) - sizeof( t3dMemoryZoneAllocationHeader_t ) )
-			: nullptr;
+	        ? ( const t3dMemoryZoneAllocationHeader_t * )( ( const uint8_t * )( pMemory ) - sizeof( t3dMemoryZoneAllocationHeader_t ) )
+	        : NULL;
 }
 
 void Terrain3DMemoryZone::freeUnlocked( void *const pMemory ) {
@@ -301,21 +298,35 @@ void Terrain3DMemoryZone::freeUnlocked( void *const pMemory ) {
 	}
 	const size_t requested = header->m_nRequestedBytes;
 	const size_t physical = header->m_nExtentBytes;
+	const size_t extent_offset = header->m_iExtentOffset;
 	const uint16_t page_index = header->m_iPage;
 	const uint16_t class_index = header->m_iClass;
-	header->m_nMagic = 0u;
+	if ( requested == 0u || physical < sizeof( t3dMemoryZoneAllocationHeader_t ) || extent_offset > m_nCapacity
+	        || physical > m_nCapacity - extent_offset || requested > physical - sizeof( t3dMemoryZoneAllocationHeader_t ) ) {
+		return;
+	}
 	if ( page_index != UINT16_MAX ) {
+		if ( page_index >= s_nMaxSmallPages || class_index >= s_nSmallClassCount ) {
+			return;
+		}
 		t3dMemoryZoneSmallPage_t &page = m_szSmallPages[page_index];
-		const uint32_t block = ( uint32_t )( ( header->m_iExtentOffset - page.m_iOffset ) / page.m_nBlockStride );
-		*reinterpret_cast<uint32_t *>( pMemory ) = page.m_iFirstFree;
+		if ( !page.m_bActive || page.m_iClass != class_index || page.m_nBlockStride == 0u || extent_offset < page.m_iOffset
+		        || extent_offset >= page.m_iOffset + page.m_nBytes || ( extent_offset - page.m_iOffset ) % page.m_nBlockStride != 0u ) {
+			return;
+		}
+		const uint32_t block = ( uint32_t )( ( extent_offset - page.m_iOffset ) / page.m_nBlockStride );
+		if ( block >= page.m_nTotalBlocks || requested > s_szSmallClasses[class_index] ) {
+			return;
+		}
+		header->m_nMagic = 0u;
+		*( uint32_t * )( pMemory ) = page.m_iFirstFree;
 		page.m_iFirstFree = block;
 		if ( page.m_nLiveBlocks > 0u ) {
 			--page.m_nLiveBlocks;
 		}
 		page.m_nLiveRequestedBytes -= requested;
 		m_nLiveSizeClassWasteBytes -= s_szSmallClasses[class_index] - requested;
-		m_nLiveAlignmentWasteBytes -=
-				page.m_nBlockStride - sizeof( t3dMemoryZoneAllocationHeader_t ) - s_szSmallClasses[class_index];
+		m_nLiveAlignmentWasteBytes -= page.m_nBlockStride - sizeof( t3dMemoryZoneAllocationHeader_t ) - s_szSmallClasses[class_index];
 		if ( page.m_nLiveBlocks == 0u ) {
 			insertFreeExtentUnlocked( page.m_iOffset, page.m_nBytes );
 			t3dMemoryZoneResetSmallPage( page );
@@ -324,8 +335,12 @@ void Terrain3DMemoryZone::freeUnlocked( void *const pMemory ) {
 			}
 		}
 	} else {
+		if ( class_index != UINT16_MAX ) {
+			return;
+		}
+		header->m_nMagic = 0u;
 		m_nLiveAlignmentWasteBytes -= physical - sizeof( t3dMemoryZoneAllocationHeader_t ) - requested;
-		insertFreeExtentUnlocked( header->m_iExtentOffset, physical );
+		insertFreeExtentUnlocked( extent_offset, physical );
 	}
 	--m_nLiveAllocations;
 	m_nLiveBytes -= requested;
@@ -337,12 +352,12 @@ void Terrain3DMemoryZone::deallocate( void *const pMemory ) {
 	if ( !pMemory ) {
 		return;
 	}
-	std::lock_guard<std::mutex> lock( m_mutex );
+	t3dScopedLock_t lock( m_mutex );
 	freeUnlocked( pMemory );
 }
 
 bool Terrain3DMemoryZone::release() {
-	std::lock_guard<std::mutex> lock( m_mutex );
+	t3dScopedLock_t lock( m_mutex );
 	if ( m_state == T3D_MEMORY_ZONE_UNINITIALIZED || m_state == T3D_MEMORY_ZONE_DEAD ) {
 		return true;
 	}
@@ -350,7 +365,7 @@ bool Terrain3DMemoryZone::release() {
 		m_state = T3D_MEMORY_ZONE_DRAINING;
 		return false;
 	}
-	m_pBase = nullptr;
+	m_pBase = NULL;
 	m_nCapacity = 0u;
 	m_nFreeExtentCount = 0u;
 	m_state = T3D_MEMORY_ZONE_DEAD;
@@ -358,7 +373,7 @@ bool Terrain3DMemoryZone::release() {
 }
 
 size_t Terrain3DMemoryZone::freeExtentBytes( void ) const {
-	std::lock_guard<std::mutex> lock( m_mutex );
+	t3dScopedLock_t lock( m_mutex );
 	size_t bytes = 0u;
 	for ( uint32_t i = 0u; i < m_nFreeExtentCount; ++i ) {
 		bytes += m_szFreeExtents[i].m_nSize;
@@ -367,7 +382,7 @@ size_t Terrain3DMemoryZone::freeExtentBytes( void ) const {
 }
 
 t3dMemoryZoneStats_t Terrain3DMemoryZone::getStats( void ) const {
-	std::lock_guard<std::mutex> lock( m_mutex );
+	t3dScopedLock_t lock( m_mutex );
 	t3dMemoryZoneStats_t stats;
 	stats.m_nReservedBytes = m_nCapacity;
 	stats.m_nLiveRequestedBytes = m_nLiveBytes;
@@ -376,8 +391,7 @@ t3dMemoryZoneStats_t Terrain3DMemoryZone::getStats( void ) const {
 	stats.m_nMetadataBytes = m_nLiveMetadataBytes;
 	stats.m_nAlignmentWasteBytes = m_nLiveAlignmentWasteBytes;
 	stats.m_nSizeClassWasteBytes = m_nLiveSizeClassWasteBytes;
-	stats.m_nInternalFragmentationBytes =
-			m_nLivePhysicalBytes >= m_nLiveBytes ? m_nLivePhysicalBytes - m_nLiveBytes : 0u;
+	stats.m_nInternalFragmentationBytes = m_nLivePhysicalBytes >= m_nLiveBytes ? m_nLivePhysicalBytes - m_nLiveBytes : 0u;
 	stats.m_nFailedAllocations = m_nFailedAllocations;
 	stats.m_nActiveSmallPages = m_nActiveSmallPages;
 	stats.m_nPeakActiveSmallPages = m_nPeakActiveSmallPages;
@@ -393,13 +407,11 @@ t3dMemoryZoneStats_t Terrain3DMemoryZone::getStats( void ) const {
 			continue;
 		}
 		stats.m_nSmallPageReservedBytes += page.m_nBytes;
-		const size_t free_blocks =
-				page.m_nTotalBlocks >= page.m_nLiveBlocks ? ( size_t )page.m_nTotalBlocks - page.m_nLiveBlocks : 0u;
+		const size_t free_blocks = page.m_nTotalBlocks >= page.m_nLiveBlocks ? ( size_t )page.m_nTotalBlocks - page.m_nLiveBlocks : 0u;
 		stats.m_nSmallPageReusablePayloadBytes += free_blocks * s_szSmallClasses[page.m_iClass];
 		stats.m_nSmallPageReusablePhysicalBytes += free_blocks * page.m_nBlockStride;
 		small_live_physical += ( size_t )page.m_nLiveBlocks * page.m_nBlockStride;
 	}
-	stats.m_nLargeAllocationPhysicalBytes =
-			m_nLivePhysicalBytes >= small_live_physical ? m_nLivePhysicalBytes - small_live_physical : 0u;
+	stats.m_nLargeAllocationPhysicalBytes = m_nLivePhysicalBytes >= small_live_physical ? m_nLivePhysicalBytes - small_live_physical : 0u;
 	return stats;
 }

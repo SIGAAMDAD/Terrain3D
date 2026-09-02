@@ -1,18 +1,13 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
-#pragma once
-
 #ifndef TERRAIN3D_INSTANCE_STORE_H
 #define TERRAIN3D_INSTANCE_STORE_H
 
 #include "Terrain3DConstants.h"
 #include "data/terrain_3d_packed_transform.h"
-#include "eastl_config.h"
+#include "core/terrain_3d_eastl_helpers.h"
+#include "core/terrain_3d_slab_array.h"
 #include "instances/terrain_3d_instance_layout.h"
 
-#include <EASTL/algorithm.h>
-#include <EASTL/sort.h>
-#include <EASTL/utility.h>
-#include <EASTL/vector.h>
 #include <godot_cpp/variant/aabb.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/packed_color_array.hpp>
@@ -39,34 +34,24 @@ typedef struct t3dInstanceCell_s {
 	bool m_bCachedAabbValid = false;
 
 	t3dInstanceCell_s( void ) = default;
+	EA_FORCE_INLINE void bindStorage( Terrain3DHighWaterSlab<t3dPackedTransform_t> *pTransformSlab,
+	        Terrain3DHighWaterSlab<uint32_t> *pColorSlab,
+	        Terrain3DHighWaterSlab<uint32_t> *pOwnerSlab ) {
+		m_transforms.bind( pTransformSlab );
+		m_colors.bind( pColorSlab );
+		m_owners.bind( pOwnerSlab );
+	}
+	EA_FORCE_INLINE void rebindStorage( Terrain3DHighWaterSlab<t3dPackedTransform_t> *pTransformSlab,
+	        Terrain3DHighWaterSlab<uint32_t> *pColorSlab,
+	        Terrain3DHighWaterSlab<uint32_t> *pOwnerSlab ) {
+		m_transforms.rebind( pTransformSlab );
+		m_colors.rebind( pColorSlab );
+		m_owners.rebind( pOwnerSlab );
+	}
 	t3dInstanceCell_s( const t3dInstanceCell_s & ) = delete;
 	t3dInstanceCell_s &operator=( const t3dInstanceCell_s & ) = delete;
 	t3dInstanceCell_s( t3dInstanceCell_s && ) noexcept = default;
 	t3dInstanceCell_s &operator=( t3dInstanceCell_s && ) noexcept = default;
-
-	EA_FORCE_INLINE void bindPayloadPools( Terrain3DHighWaterSlab<t3dPackedTransform_t> *const pTransforms,
-			Terrain3DHighWaterSlab<uint32_t> *const pColors,
-			Terrain3DHighWaterSlab<uint32_t> *const pOwners ) {
-		m_transforms.bind( pTransforms );
-		m_colors.bind( pColors );
-		m_owners.bind( pOwners );
-	}
-
-	EA_FORCE_INLINE void rebindPayloadPools( Terrain3DHighWaterSlab<t3dPackedTransform_t> *const pTransforms,
-			Terrain3DHighWaterSlab<uint32_t> *const pColors,
-			Terrain3DHighWaterSlab<uint32_t> *const pOwners ) {
-		m_transforms.rebind( pTransforms );
-		m_colors.rebind( pColors );
-		m_owners.rebind( pOwners );
-	}
-
-	EA_FORCE_INLINE void relocatePayloadsExact( Terrain3DHighWaterSlab<t3dPackedTransform_t> *const pTransforms,
-			Terrain3DHighWaterSlab<uint32_t> *const pColors,
-			Terrain3DHighWaterSlab<uint32_t> *const pOwners ) {
-		m_transforms.relocateExact( pTransforms );
-		m_colors.relocateExact( pColors );
-		m_owners.relocateExact( pOwners );
-	}
 
 	EA_FORCE_INLINE bool usesColors( void ) const {
 		return !m_colors.empty();
@@ -96,54 +81,75 @@ typedef struct t3dInstanceCell_s {
 		m_colors[iIndex] = packColor( clrColor );
 	}
 
-	EA_FORCE_INLINE void pushColor( const Color &clrColor ) {
-		m_colors.pushBack( packColor( clrColor ) );
+	EA_FORCE_INLINE bool pushColor( const Color &clrColor ) {
+		return m_colors.pushBack( packColor( clrColor ) );
 	}
 
-	void reserve( size_t nCount, bool bColorData, bool bOwnerData = false ) {
-		m_transforms.reserve( nCount );
-		if ( bColorData ) {
-			m_colors.reserve( nCount );
+	bool reserve( size_t nCount, bool bColorData, bool bOwnerData = false ) {
+		if ( !m_transforms.reserve( nCount ) ) {
+			return false;
 		}
-		if ( bOwnerData ) {
-			m_owners.reserve( nCount );
+		if ( bColorData && !m_colors.reserve( nCount ) ) {
+			return false;
 		}
+		return !bOwnerData || m_owners.reserve( nCount );
 	}
 
-	EA_FORCE_INLINE void reserveExact( const size_t nCount, const bool bColorData, const bool bOwnerData = false ) {
-		m_transforms.reserveExact( nCount );
-		if ( bColorData ) {
-			m_colors.reserveExact( nCount );
-		}
-		if ( bOwnerData ) {
-			m_owners.reserveExact( nCount );
-		}
+	EA_FORCE_INLINE bool reserveExact( const size_t nCount, const bool bColorData, const bool bOwnerData = false ) {
+		return reserve( nCount, bColorData, bOwnerData );
 	}
 
-	void prepareAppend( size_t nAdditional, bool bColorData, bool bOwnerData = false ) {
+	bool prepareAppend( size_t nAdditional, bool bColorData, bool bOwnerData = false ) {
 		const size_t needed = m_transforms.size() + nAdditional;
-		if ( needed > m_transforms.capacity() ) {
-			m_transforms.reserve( eastl::max(
-					needed, m_transforms.capacity() + eastl::max<size_t>( 32, m_transforms.capacity() / 2 ) ) );
+		if ( needed > m_transforms.capacity()
+		        && !m_transforms.reserve( MAX( needed, m_transforms.capacity() + MAX( 32u, m_transforms.capacity() / 2u ) ) ) ) {
+			return false;
 		}
-		if ( bColorData && m_colors.empty() ) {
-			m_colors.resize( m_transforms.size(), s_nInstanceWhiteRgba8 );
+		if ( bColorData && m_colors.empty() && !m_colors.resize( m_transforms.size(), s_nInstanceWhiteRgba8 ) ) {
+			return false;
 		}
-		if ( !m_colors.empty() && needed > m_colors.capacity() ) {
-			m_colors.reserve(
-					eastl::max( needed, m_colors.capacity() + eastl::max<size_t>( 32, m_colors.capacity() / 2 ) ) );
+		if ( !m_colors.empty() && needed > m_colors.capacity()
+		        && !m_colors.reserve( MAX( needed, m_colors.capacity() + MAX( 32u, m_colors.capacity() / 2u ) ) ) ) {
+			return false;
 		}
-		if ( bOwnerData && m_owners.empty() ) {
-			m_owners.resize( m_transforms.size(), 0u );
+		if ( bOwnerData && m_owners.empty() && !m_owners.resize( m_transforms.size(), 0u ) ) {
+			return false;
 		}
-		if ( !m_owners.empty() && needed > m_owners.capacity() ) {
-			m_owners.reserve(
-					eastl::max( needed, m_owners.capacity() + eastl::max<size_t>( 32, m_owners.capacity() / 2 ) ) );
+		if ( !m_owners.empty() && needed > m_owners.capacity()
+		        && !m_owners.reserve( MAX( needed, m_owners.capacity() + MAX( 32u, m_owners.capacity() / 2u ) ) ) ) {
+			return false;
 		}
+		return true;
+	}
+
+	EA_FORCE_INLINE Transform3D getTransform( const size_t iIndex ) const {
+		return m_transforms[iIndex];
+	}
+	EA_FORCE_INLINE void setTransform( const size_t iIndex, const Transform3D &rTransform ) {
+		m_transforms[iIndex] = rTransform;
+	}
+	EA_FORCE_INLINE bool pushTransform( const Transform3D &rTransform ) {
+		return m_transforms.pushBack( rTransform );
+	}
+	EA_FORCE_INLINE Vector3 getTransformOrigin( const size_t iIndex ) const {
+		return m_transforms.getOrigin( iIndex );
+	}
+	EA_FORCE_INLINE Vector3 getTransformUpAxis( const size_t iIndex ) const {
+		return getTransform( iIndex ).basis.get_column( 1 );
+	}
+	EA_FORCE_INLINE void rescaleTransformOriginXz( const size_t iIndex, const real_t fOldSpacing, const real_t fNewSpacing ) {
+		if ( fOldSpacing == 0.0 ) {
+			return;
+		}
+		m_transforms.rescaleOriginXz( iIndex, fOldSpacing, fNewSpacing );
+	}
+	EA_FORCE_INLINE void setTransformOriginY( const size_t iIndex, const real_t fY ) {
+		m_transforms.setOriginY( iIndex, fY );
 	}
 
 	void compactOwnerSidecar( void ) {
-		for ( const uint32_t owner : m_owners ) {
+		for ( size_t iOwner = 0u; iOwner < ( size_t )( ( m_owners ).size() ); iOwner++ ) {
+			const uint32_t owner = ( m_owners )[iOwner];
 			if ( owner != 0u ) {
 				return;
 			}
@@ -151,7 +157,8 @@ typedef struct t3dInstanceCell_s {
 		m_owners.clear();
 	}
 
-	EA_FORCE_INLINE void compactStorage( void ) {}
+	EA_FORCE_INLINE void compactStorage( void ) {
+	}
 
 	void touch( void ) {
 		m_bModified = true;
@@ -165,7 +172,7 @@ typedef struct t3dInstanceCell_s {
 
 typedef struct t3dInstanceMesh_s {
 	int m_nId = -1;
-	eastl::vector<t3dInstanceCell_t> m_cells;
+	eastl::vector<t3dInstanceCell_t, Terrain3DEastlAllocator> m_cells;
 
 	t3dInstanceMesh_s( void ) = default;
 	t3dInstanceMesh_s( const t3dInstanceMesh_s & ) = delete;
@@ -174,62 +181,138 @@ typedef struct t3dInstanceMesh_s {
 	t3dInstanceMesh_s &operator=( t3dInstanceMesh_s && ) noexcept = default;
 } t3dInstanceMesh_t;
 
+class Terrain3DInstanceMeshRange {
+	t3dInstanceMesh_t *m_pMeshes = NULL;
+	uint16_t *m_pIds = NULL;
+	size_t m_nCount = 0u;
+
+public:
+	class Iterator {
+		t3dInstanceMesh_t *m_pMeshes = NULL;
+		uint16_t *m_pIds = NULL;
+		size_t m_iIndex = 0u;
+
+	public:
+		Iterator( t3dInstanceMesh_t *pMeshes, uint16_t *pIds, size_t iIndex ) : m_pMeshes( pMeshes ), m_pIds( pIds ), m_iIndex( iIndex ) {
+		}
+		EA_FORCE_INLINE bool operator!=( const Iterator &rOther ) const {
+			return m_iIndex != rOther.m_iIndex;
+		}
+		EA_FORCE_INLINE Iterator &operator++( void ) {
+			++m_iIndex;
+			return *this;
+		}
+		EA_FORCE_INLINE t3dInstanceMesh_t &operator*( void ) const {
+			return m_pMeshes[m_pIds[m_iIndex]];
+		}
+	};
+	Terrain3DInstanceMeshRange( t3dInstanceMesh_t *pMeshes, uint16_t *pIds, size_t nCount ) :
+	        m_pMeshes( pMeshes ), m_pIds( pIds ), m_nCount( nCount ) {
+	}
+	EA_FORCE_INLINE Iterator begin( void ) {
+		return Iterator( m_pMeshes, m_pIds, 0u );
+	}
+	EA_FORCE_INLINE Iterator end( void ) {
+		return Iterator( m_pMeshes, m_pIds, m_nCount );
+	}
+	EA_FORCE_INLINE size_t size( void ) const {
+		return m_nCount;
+	}
+	EA_FORCE_INLINE bool empty( void ) const {
+		return m_nCount == 0u;
+	}
+	EA_FORCE_INLINE t3dInstanceMesh_t &operator[]( const size_t iIndex ) {
+		return m_pMeshes[m_pIds[iIndex]];
+	}
+};
+
+class Terrain3DConstInstanceMeshRange {
+	const t3dInstanceMesh_t *m_pMeshes = NULL;
+	const uint16_t *m_pIds = NULL;
+	size_t m_nCount = 0u;
+
+public:
+	class Iterator {
+		const t3dInstanceMesh_t *m_pMeshes = NULL;
+		const uint16_t *m_pIds = NULL;
+		size_t m_iIndex = 0u;
+
+	public:
+		Iterator( const t3dInstanceMesh_t *pMeshes, const uint16_t *pIds, size_t iIndex ) :
+		        m_pMeshes( pMeshes ), m_pIds( pIds ), m_iIndex( iIndex ) {
+		}
+		EA_FORCE_INLINE bool operator!=( const Iterator &rOther ) const {
+			return m_iIndex != rOther.m_iIndex;
+		}
+		EA_FORCE_INLINE Iterator &operator++( void ) {
+			++m_iIndex;
+			return *this;
+		}
+		EA_FORCE_INLINE const t3dInstanceMesh_t &operator*( void ) const {
+			return m_pMeshes[m_pIds[m_iIndex]];
+		}
+	};
+	Terrain3DConstInstanceMeshRange( const t3dInstanceMesh_t *pMeshes, const uint16_t *pIds, size_t nCount ) :
+	        m_pMeshes( pMeshes ), m_pIds( pIds ), m_nCount( nCount ) {
+	}
+	EA_FORCE_INLINE Iterator begin( void ) const {
+		return Iterator( m_pMeshes, m_pIds, 0u );
+	}
+	EA_FORCE_INLINE Iterator end( void ) const {
+		return Iterator( m_pMeshes, m_pIds, m_nCount );
+	}
+	EA_FORCE_INLINE size_t size( void ) const {
+		return m_nCount;
+	}
+	EA_FORCE_INLINE bool empty( void ) const {
+		return m_nCount == 0u;
+	}
+	EA_FORCE_INLINE const t3dInstanceMesh_t &operator[]( const size_t iIndex ) const {
+		return m_pMeshes[m_pIds[iIndex]];
+	}
+};
+
 class Terrain3DInstanceStore {
-	static constexpr uint16_t s_nInvalidMeshSlot = UINT16_MAX;
-	eastl::vector<t3dInstanceMesh_t> m_meshes;
+	eastl::array<t3dInstanceMesh_t, s_nMaxMeshAssets> m_szMeshes;
+	uint16_t m_szActiveMeshIds[s_nMaxMeshAssets];
+	size_t m_nActiveMeshCount = 0u;
 	Terrain3DHighWaterSlab<t3dPackedTransform_t> m_transformSlab;
 	Terrain3DHighWaterSlab<uint32_t> m_colorSlab;
 	Terrain3DHighWaterSlab<uint32_t> m_ownerSlab;
 	t3dInstanceLayout_t m_layout;
-	mutable uint16_t m_szMeshSlots[s_nMaxMeshAssets];
-	mutable bool m_bMeshLookupDirty = true;
 
 	static bool cellLess( const t3dInstanceCell_t &a, const Vector2i &b );
-	static bool meshLess( const t3dInstanceMesh_t &a, int b );
-	static size_t cellLowerBound( const eastl::vector<t3dInstanceCell_t> &cells, const Vector2i &location );
+	static size_t cellLowerBound( const eastl::vector<t3dInstanceCell_t, Terrain3DEastlAllocator> &cells, const Vector2i &location );
 	static size_t findCellIndex( const t3dInstanceMesh_t &mesh, const Vector2i &location );
-	size_t meshLowerBound( int nMeshId ) const;
-	void rebuildMeshLookup( void ) const;
-	void rebindPayloadPools( void );
-	void copyFrom( const Terrain3DInstanceStore &rOther );
-	EA_FORCE_INLINE void bindCellPayloads( t3dInstanceCell_t &rCell ) {
-		rCell.bindPayloadPools( &m_transformSlab, &m_colorSlab, &m_ownerSlab );
-	}
-	EA_FORCE_INLINE void invalidateMeshLookup( void ) {
-		m_bMeshLookupDirty = true;
-	}
+	void rebuildActiveMeshIds( void );
+	void rebindCellStorage( void );
+	bool copyFrom( const Terrain3DInstanceStore &rOther );
 
 public:
-	EA_FORCE_INLINE Terrain3DInstanceStore( void ) {
-		rebuildMeshLookup();
+	Terrain3DInstanceStore( void ) = default;
+	~Terrain3DInstanceStore( void ) {
+		shutdown();
 	}
-	EA_FORCE_INLINE ~Terrain3DInstanceStore( void ) = default;
-	EA_FORCE_INLINE Terrain3DInstanceStore( const Terrain3DInstanceStore &rOther ) {
-		copyFrom( rOther );
+	Terrain3DInstanceStore( const Terrain3DInstanceStore &rOther ) {
+		( void )copyFrom( rOther );
 	}
 	Terrain3DInstanceStore( Terrain3DInstanceStore &&rOther );
 	Terrain3DInstanceStore &operator=( const Terrain3DInstanceStore &rOther );
 	Terrain3DInstanceStore &operator=( Terrain3DInstanceStore &&rOther );
 
 	EA_FORCE_INLINE void clear( void ) {
-		clearRetainCapacity();
+		reset();
 	}
-	void clearRetainCapacity( void );
-	void releaseStorage( void );
+	void reset( void );
+	EA_FORCE_INLINE void clearRetainCapacity( void ) {
+		reset();
+	}
+	void shutdown( void );
+	EA_FORCE_INLINE void releaseStorage( void ) {
+		shutdown();
+	}
 	void compactStorage( void );
-	EA_FORCE_INLINE void reserveMeshCapacity( const size_t nMeshes ) {
-		if ( nMeshes > m_meshes.capacity() ) {
-			m_meshes.reserve( nMeshes );
-		}
-	}
-	EA_FORCE_INLINE bool
-	reservePayloadCapacity( const size_t nTransforms, const size_t nColors, const size_t nOwners ) {
-		return m_transformSlab.reserve( nTransforms ) && m_colorSlab.reserve( nColors ) && m_ownerSlab.reserve( nOwners );
-	}
-	EA_FORCE_INLINE void sealPayloadCapacity( void ) {
-		m_transformSlab.seal();
-		m_colorSlab.seal();
-		m_ownerSlab.seal();
+	EA_FORCE_INLINE void reserveMeshCapacity( const size_t ) {
 	}
 
 	EA_FORCE_INLINE void setLayout( const t3dInstanceLayout_t &rLayout ) {
@@ -242,17 +325,16 @@ public:
 		return m_layout.contains( rLocation.x, rLocation.y );
 	}
 	EA_FORCE_INLINE bool empty( void ) const {
-		return m_meshes.empty();
+		return m_nActiveMeshCount == 0u;
 	}
 	EA_FORCE_INLINE size_t meshCount( void ) const {
-		return m_meshes.size();
+		return m_nActiveMeshCount;
 	}
-	EA_FORCE_INLINE const eastl::vector<t3dInstanceMesh_t> &meshes( void ) const {
-		return m_meshes;
+	EA_FORCE_INLINE Terrain3DConstInstanceMeshRange meshes( void ) const {
+		return Terrain3DConstInstanceMeshRange( m_szMeshes.data(), m_szActiveMeshIds, m_nActiveMeshCount );
 	}
-	EA_FORCE_INLINE eastl::vector<t3dInstanceMesh_t> &meshesMut( void ) {
-		invalidateMeshLookup();
-		return m_meshes;
+	EA_FORCE_INLINE Terrain3DInstanceMeshRange meshesMut( void ) {
+		return Terrain3DInstanceMeshRange( m_szMeshes.data(), m_szActiveMeshIds, m_nActiveMeshCount );
 	}
 
 	const t3dInstanceMesh_t *findMesh( int nMeshId ) const;
@@ -261,21 +343,15 @@ public:
 	bool eraseMesh( int nMeshId );
 	void swapMeshIds( int nSrcId, int nDstId );
 	EA_FORCE_INLINE bool hasMesh( const int nMeshId ) const {
-		return findMesh( nMeshId ) != nullptr;
+		return findMesh( nMeshId ) != NULL;
 	}
 
 	const t3dInstanceCell_t *findCell( int nMeshId, const Vector2i &cell ) const;
 	t3dInstanceCell_t *findCell( int nMeshId, const Vector2i &cell );
-	t3dInstanceCell_t &getOrCreateCell( int nMeshId,
-			const Vector2i &cell,
-			size_t nReserveInstances = 0,
-			bool bColorData = false,
-			bool bOwnerData = false );
-	t3dInstanceCell_t &getOrCreateCellExact( int nMeshId,
-			const Vector2i &cell,
-			size_t nReserveInstances,
-			bool bColorData,
-			bool bOwnerData );
+	t3dInstanceCell_t &getOrCreateCell(
+	        int nMeshId, const Vector2i &cell, size_t nReserveInstances = 0, bool bColorData = false, bool bOwnerData = false );
+	t3dInstanceCell_t &getOrCreateCellExact(
+	        int nMeshId, const Vector2i &cell, size_t nReserveInstances, bool bColorData, bool bOwnerData );
 	bool eraseCell( int nMeshId, const Vector2i &cell );
 
 	void importDictionary( const Dictionary &instances );
@@ -283,15 +359,6 @@ public:
 	Dictionary exportDictionary( void ) const;
 	size_t instanceCount( int nMeshId = -1 ) const;
 	size_t residentBytes( void ) const;
-	EA_FORCE_INLINE size_t transformPayloadCapacity( void ) const {
-		return m_transformSlab.capacity();
-	}
-	EA_FORCE_INLINE size_t colorPayloadCapacity( void ) const {
-		return m_colorSlab.capacity();
-	}
-	EA_FORCE_INLINE size_t ownerPayloadCapacity( void ) const {
-		return m_ownerSlab.capacity();
-	}
 };
 
-#endif
+#endif // TERRAIN3D_INSTANCE_STORE_H

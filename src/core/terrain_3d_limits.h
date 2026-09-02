@@ -1,14 +1,12 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_LIMITS_H
 #define TERRAIN3D_LIMITS_H
 
 #include "Terrain3DConstants.h"
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 
 // Terrain world resolution and region partitioning are independent. The fixed
 // logical world contains 4096x4096 texels; region size only changes how many

@@ -1,7 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_CPU_REGION_CACHE_H
 #define TERRAIN3D_CPU_REGION_CACHE_H
 
@@ -10,8 +8,8 @@
 #include "streaming/terrain_3d_residency_state.h"
 #include "streaming/terrain_3d_runtime_page_store.h"
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 #include <godot_cpp/variant/dictionary.hpp>
 
 class Terrain3DRegion;
@@ -36,9 +34,9 @@ typedef struct t3dCpuRegionCacheStats_s {
 class Terrain3DCpuRegionCache {
 public:
 	Terrain3DCpuRegionCache( Terrain3DRegionRepository *pRepository,
-			Terrain3DRegionPersistence *pPersistence,
-			Terrain3DSamplingStorage *pSamplingStorage,
-			Terrain3DRuntimePageStore *pRuntimePageStore );
+	        Terrain3DRegionPersistence *pPersistence,
+	        Terrain3DSamplingStorage *pSamplingStorage,
+	        Terrain3DRuntimePageStore *pRuntimePageStore );
 
 	bool configure( bool bEnabled, int nBudgetMb, int nLoadLayers, int nLoadBudgetMb );
 	void setRuntimePageConfig( const t3dRuntimePageConfig_t &rConfig );
@@ -83,10 +81,10 @@ public:
 	Dictionary getStatsDictionary( bool bDetailed, int nEffectiveLoadLayers ) const;
 
 private:
-	Terrain3DRegionRepository *m_pRepository = nullptr;
-	Terrain3DRegionPersistence *m_pPersistence = nullptr;
-	Terrain3DSamplingStorage *m_pSamplingStorage = nullptr;
-	Terrain3DRuntimePageStore *m_pRuntimePageStore = nullptr;
+	Terrain3DRegionRepository *m_pRepository = NULL;
+	Terrain3DRegionPersistence *m_pPersistence = NULL;
+	Terrain3DSamplingStorage *m_pSamplingStorage = NULL;
+	Terrain3DRuntimePageStore *m_pRuntimePageStore = NULL;
 	t3dRuntimePageConfig_t m_runtimePageConfig;
 
 	bool m_bEnabled = false;
@@ -122,23 +120,17 @@ private:
 	void reapSourceAsync( const t3dResidencyFrameState_t &rFrame );
 	bool publishSlot( int iSlot, const Vector2i &vLocation, const Ref<Terrain3DRegion> &rSource );
 	bool publishCookedSlot( int iSlot,
-			const Vector2i &vLocation,
-			const Ref<Image> &rHeight,
-			const Ref<Image> &rControl,
-			const Ref<Image> &rColor,
-			const Ref<Image> &rDerived );
+	        const Vector2i &vLocation,
+	        const Ref<Image> &rHeight,
+	        const Ref<Image> &rControl,
+	        const Ref<Image> &rColor,
+	        const Ref<Image> &rDerived );
 	bool cookedRuntimeEnabled( void ) const;
-	bool loadCookedMapsNow( const Vector2i &vLocation,
-			Ref<Image> &rHeight,
-			Ref<Image> &rControl,
-			Ref<Image> &rColor,
-			Ref<Image> &rDerived ) const;
+	bool loadCookedMapsNow(
+	        const Vector2i &vLocation, Ref<Image> &rHeight, Ref<Image> &rControl, Ref<Image> &rColor, Ref<Image> &rDerived ) const;
 	bool evictSlot( int iSlot );
 	bool restoreAllMaps( void );
-	int collectDesired( const t3dResidencyFrameState_t &rFrame,
-			const Vector2i &rCenter,
-			Vector2i *pLocations,
-			int nCapacity ) const;
+	int collectDesired( const t3dResidencyFrameState_t &rFrame, const Vector2i &rCenter, Vector2i *pLocations, int nCapacity ) const;
 };
 
 #endif // TERRAIN3D_CPU_REGION_CACHE_H

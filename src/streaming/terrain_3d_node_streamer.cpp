@@ -9,19 +9,36 @@
 #include "lighting/terrain_3d_lighting_policy.h"
 #include "terrain_3d.h"
 
-#include <algorithm>
 #include <godot_cpp/classes/geometry_instance3d.hpp>
 #include <godot_cpp/classes/resource.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
 #include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/classes/visual_instance3d.hpp>
 #include <godot_cpp/core/memory.hpp>
-#include <limits>
+#include <EASTL/algorithm.h>
+#include <EASTL/utility.h>
+
+static Vector2i t3dNodeStreamerLocationFromIndex( const int iIndex ) {
+	const int nMapSize = s_nActiveMaxRegionMapSize;
+	return Vector2i( iIndex % nMapSize - nMapSize / 2, iIndex / nMapSize - nMapSize / 2 );
+}
+
+typedef struct t3dNodeDesiredRegionLess_s {
+	Vector2i m_center;
+
+	bool operator()( const uint16_t nA, const uint16_t nB ) const {
+		const Vector2i locationA = t3dNodeStreamerLocationFromIndex( nA );
+		const Vector2i locationB = t3dNodeStreamerLocationFromIndex( nB );
+		const int nDistanceA = MAX( Math::abs( locationA.x - m_center.x ), Math::abs( locationA.y - m_center.y ) );
+		const int nDistanceB = MAX( Math::abs( locationB.x - m_center.x ), Math::abs( locationB.y - m_center.y ) );
+		return nDistanceA != nDistanceB ? nDistanceA < nDistanceB : nA < nB;
+	}
+} t3dNodeDesiredRegionLess_t;
 
 static void t3dNodeStreamerApplyStreamedLightingMetadata( Node *pNode,
-		const t3dStreamedNodeRuntimeDescriptor_t &rDescriptor,
-		const bool bShadowProxy = false,
-		const bool bDisableVisibleShadow = false ) {
+        const t3dStreamedNodeRuntimeDescriptor_t &rDescriptor,
+        const bool bShadowProxy = false,
+        const bool bDisableVisibleShadow = false ) {
 	if ( !pNode ) {
 		return;
 	}
@@ -58,8 +75,7 @@ static void t3dNodeStreamerApplyStreamedLightingMetadata( Node *pNode,
 		}
 	}
 	for ( int child_index = 0; child_index < pNode->get_child_count(); ++child_index ) {
-		t3dNodeStreamerApplyStreamedLightingMetadata(
-				pNode->get_child( child_index ), rDescriptor, bShadowProxy, bDisableVisibleShadow );
+		t3dNodeStreamerApplyStreamedLightingMetadata( pNode->get_child( child_index ), rDescriptor, bShadowProxy, bDisableVisibleShadow );
 	}
 }
 
@@ -69,7 +85,7 @@ static Node *t3dNodeStreamerCreateShadowProxy( const t3dStreamedNodeRuntimeDescr
 		proxy_scene = ResourceLoader::get_singleton()->load( rDescriptor.m_shadowProxyScenePath, "PackedScene" );
 	}
 	if ( proxy_scene.is_null() ) {
-		return nullptr;
+		return NULL;
 	}
 	return proxy_scene->instantiate();
 }
@@ -79,8 +95,7 @@ Terrain3DNodeStreamer::~Terrain3DNodeStreamer( void ) {
 }
 
 Vector2i Terrain3DNodeStreamer::locationFromIndex( const int iIndex ) {
-	const int map_size = s_nActiveMaxRegionMapSize;
-	return Vector2i( iIndex % map_size - map_size / 2, iIndex / map_size - map_size / 2 );
+	return t3dNodeStreamerLocationFromIndex( iIndex );
 }
 
 int Terrain3DNodeStreamer::indexFromLocation( const Vector2i &rLocation ) {
@@ -89,12 +104,13 @@ int Terrain3DNodeStreamer::indexFromLocation( const Vector2i &rLocation ) {
 
 Node *Terrain3DNodeStreamer::getActiveNode( const t3dActiveNode_t &rActive ) const {
 	Object *pObject = ObjectDB::get_instance( rActive.m_hObjectId );
-	return pObject ? Object::cast_to<Node>( pObject ) : nullptr;
+	return pObject ? Object::cast_to<Node>( pObject ) : NULL;
 }
 
 bool Terrain3DNodeStreamer::runtimeHasSpawn( const t3dRegionRuntime_t &rRuntime, const int64_t nSpawnId ) const {
-	for ( const t3dActiveNode_t &active : rRuntime.m_nodes ) {
-		if ( active.m_nSpawnId == nSpawnId ) {
+	const t3dActiveNode_t *const pNodes = regionNodes( rRuntime );
+	for ( uint16_t index = 0u; index < rRuntime.m_nNodeCount; ++index ) {
+		if ( pNodes[index].m_nSpawnId == nSpawnId ) {
 			return true;
 		}
 	}
@@ -102,9 +118,10 @@ bool Terrain3DNodeStreamer::runtimeHasSpawn( const t3dRegionRuntime_t &rRuntime,
 }
 
 int Terrain3DNodeStreamer::findActiveNodeIndex( const t3dRegionRuntime_t &rRuntime, const int64_t nSpawnId ) const {
-	for ( int index = 0; index < ( int )( rRuntime.m_nodes.size() ); ++index ) {
-		if ( rRuntime.m_nodes[( size_t )( index )].m_nSpawnId == nSpawnId ) {
-			return index;
+	const t3dActiveNode_t *const pNodes = regionNodes( rRuntime );
+	for ( uint16_t index = 0u; index < rRuntime.m_nNodeCount; ++index ) {
+		if ( pNodes[index].m_nSpawnId == nSpawnId ) {
+			return ( int )( index );
 		}
 	}
 	return -1;
@@ -115,11 +132,11 @@ void Terrain3DNodeStreamer::trackActiveRegion( const int iIndex ) {
 		return;
 	}
 	t3dRegionRuntime_t &runtime = m_szRegions[iIndex];
-	if ( runtime.m_iActiveListPosition >= 0 || m_nActiveRegionCount >= s_nMaxRegionSlots ) {
+	if ( runtime.m_iActiveListPosition >= 0 || m_activeRegionIndices.full() ) {
 		return;
 	}
-	runtime.m_iActiveListPosition = m_nActiveRegionCount;
-	m_szActiveRegionIndices[m_nActiveRegionCount++] = ( uint16_t )iIndex;
+	runtime.m_iActiveListPosition = ( int )( m_activeRegionIndices.size() );
+	m_activeRegionIndices.push_back( ( uint16_t )iIndex );
 }
 
 void Terrain3DNodeStreamer::untrackActiveRegion( const int iIndex ) {
@@ -128,13 +145,15 @@ void Terrain3DNodeStreamer::untrackActiveRegion( const int iIndex ) {
 	}
 	t3dRegionRuntime_t &runtime = m_szRegions[iIndex];
 	const int position = runtime.m_iActiveListPosition;
-	if ( position < 0 || position >= m_nActiveRegionCount ) {
+	if ( position < 0 || position >= ( int )( m_activeRegionIndices.size() ) ) {
 		runtime.m_iActiveListPosition = -1;
 		return;
 	}
-	const int moved_index = m_szActiveRegionIndices[m_nActiveRegionCount - 1];
-	--m_nActiveRegionCount;
-	m_szActiveRegionIndices[position] = ( uint16_t )moved_index;
+	const int moved_index = m_activeRegionIndices.back();
+	m_activeRegionIndices.pop_back();
+	if ( ( size_t )( position ) < m_activeRegionIndices.size() ) {
+		m_activeRegionIndices[( size_t )( position )] = ( uint16_t )moved_index;
+	}
 	runtime.m_iActiveListPosition = -1;
 	if ( moved_index != iIndex ) {
 		m_szRegions[moved_index].m_iActiveListPosition = position;
@@ -154,28 +173,29 @@ void Terrain3DNodeStreamer::trackMovableNode( const int iRegionIndex, const t3dA
 	if ( ( rActive.m_nFlags & NODE_FLAG_STATIC ) != 0 ) {
 		return;
 	}
-	if ( m_movableNodes.size() >= m_nMovableNodeCapacity ) {
+	if ( m_nMovableNodeCount >= m_nMovableNodeCapacity ) {
 		LOG( ERROR, "Streamed-node movable metadata capacity exceeded; cold activation storage rebuild required" );
 		return;
 	}
-	t3dMovableNodeRef_t ref;
+	t3dMovableNodeRef_t &ref = m_pMovableNodes[m_nMovableNodeCount++];
 	ref.m_iRegionIndex = iRegionIndex;
 	ref.m_nSpawnId = rActive.m_nSpawnId;
 	ref.m_hObjectId = rActive.m_hObjectId;
-	m_movableNodes.push_back( ref );
 }
 
 void Terrain3DNodeStreamer::removeMovableNodeAt( const int iIndex ) {
-	if ( iIndex < 0 || iIndex >= ( int )( m_movableNodes.size() ) ) {
+	if ( iIndex < 0 || iIndex >= ( int )( m_nMovableNodeCount ) ) {
 		return;
 	}
-	m_movableNodes[( size_t )( iIndex )] = m_movableNodes.back();
-	m_movableNodes.pop_back();
+	--m_nMovableNodeCount;
+	if ( ( size_t )( iIndex ) != m_nMovableNodeCount ) {
+		m_pMovableNodes[( size_t )( iIndex )] = m_pMovableNodes[m_nMovableNodeCount];
+	}
 }
 
 void Terrain3DNodeStreamer::untrackMovableNode( const int64_t nSpawnId ) {
-	for ( int index = ( int )( m_movableNodes.size() ) - 1; index >= 0; --index ) {
-		if ( m_movableNodes[( size_t )( index )].m_nSpawnId == nSpawnId ) {
+	for ( int index = ( int )( m_nMovableNodeCount )-1; index >= 0; --index ) {
+		if ( m_pMovableNodes[( size_t )( index )].m_nSpawnId == nSpawnId ) {
 			removeMovableNodeAt( index );
 			return;
 		}
@@ -183,85 +203,202 @@ void Terrain3DNodeStreamer::untrackMovableNode( const int64_t nSpawnId ) {
 }
 
 void Terrain3DNodeStreamer::eraseActiveNode( t3dRegionRuntime_t &rRuntime, const int iNodeIndex ) {
-	if ( iNodeIndex < 0 || iNodeIndex >= ( int )( rRuntime.m_nodes.size() ) ) {
+	if ( iNodeIndex < 0 || iNodeIndex >= ( int )( rRuntime.m_nNodeCount ) ) {
 		return;
 	}
-	rRuntime.m_nodes[( size_t )( iNodeIndex )] = rRuntime.m_nodes.back();
-	rRuntime.m_nodes.pop_back();
+	t3dActiveNode_t *const pNodes = regionNodes( rRuntime );
+	--rRuntime.m_nNodeCount;
+	if ( ( uint32_t )( iNodeIndex ) != rRuntime.m_nNodeCount ) {
+		pNodes[( size_t )( iNodeIndex )] = pNodes[rRuntime.m_nNodeCount];
+	}
 }
 
-void Terrain3DNodeStreamer::rebuildActivationStorage( void ) {
-	if ( !m_pTerrain || !m_pTerrain->getData() ) {
+void Terrain3DNodeStreamer::requestActivationStorageRebuild( void ) {
+	m_bActivationStorageRebuildPending = true;
+	if ( g_t3dRuntimeAllocationPermission ) {
+		serviceColdRebuild();
+	}
+}
+
+void Terrain3DNodeStreamer::requestCookedNodeDescriptors( const int iRegionIndex ) {
+	pendingDescriptorRegionSet( iRegionIndex );
+	m_bHasPendingActivation = true;
+}
+
+void Terrain3DNodeStreamer::servicePendingDescriptorLoadsCold( void ) {
+	if ( !g_t3dRuntimeAllocationPermission || !m_pTerrain || !m_pTerrain->getData() ) {
 		return;
 	}
 	Terrain3DData *const pData = m_pTerrain->getData();
-	const size_t migration_spare = ( size_t )( CLAMP( MAX( m_nLoadNodeBudget, 1 ), 1, 64 ) );
-	size_t descriptor_capacity = 0u;
+	for ( int index = 0; index < s_nMaxRegionSlots; ++index ) {
+		if ( !pendingDescriptorRegionTest( index ) ) {
+			continue;
+		}
+		if ( pData->ensureCookedNodeDescriptors( locationFromIndex( index ) ) ) {
+			pendingDescriptorRegionClear( index );
+		}
+	}
+}
+
+void Terrain3DNodeStreamer::serviceColdRebuild( void ) {
+	if ( !g_t3dRuntimeAllocationPermission ) {
+		return;
+	}
+	if ( m_bActivationStorageRebuildPending && rebuildActivationStorageCold() ) {
+		m_bActivationStorageRebuildPending = false;
+	}
+	servicePendingDescriptorLoadsCold();
+}
+
+bool Terrain3DNodeStreamer::rebuildActivationStorageCold( void ) {
+	if ( !g_t3dRuntimeAllocationPermission ) {
+		m_bActivationStorageRebuildPending = true;
+		return false;
+	}
+	if ( !m_pTerrain || !m_pTerrain->getData() ) {
+		return false;
+	}
+	Terrain3DData *const pData = m_pTerrain->getData();
+	const size_t migrationSpare = ( size_t )( CLAMP( MAX( m_nLoadNodeBudget, 1 ), 1, 64 ) );
+	size_t descriptorCapacity = 0u;
+	size_t activeCapacity = 0u;
+	size_t regionCapacities[s_nMaxRegionSlots];
+	size_t regionOffsets[s_nMaxRegionSlots];
+
+	for ( int index = 0; index < s_nMaxRegionSlots; ++index ) {
+		const Vector2i location = locationFromIndex( index );
+		const size_t descriptorCount = ( size_t )( pData->getStreamedNodeCapacityHint( location ) );
+		const size_t liveCount = ( size_t )( m_szRegions[index].m_nNodeCount );
+		if ( descriptorCount > SIZE_MAX - migrationSpare ) {
+			return false;
+		}
+		size_t regionCapacity = descriptorCount + migrationSpare;
+		if ( liveCount > regionCapacity ) {
+			regionCapacity = liveCount;
+		}
+		Terrain3DRegion *const pRegion = pData->getRegionPtr( location );
+		if ( pRegion && !pRegion->isDeleted() && !pRegion->reserveStreamedNodeRuntimeCapacityInternal( regionCapacity ) ) {
+			LOG( ERROR, "Failed reserving streamed-node descriptor capacity for region ", location );
+			return false;
+		}
+		regionOffsets[index] = activeCapacity;
+		regionCapacities[index] = regionCapacity;
+		descriptorCapacity += descriptorCount;
+		activeCapacity += regionCapacity;
+	}
+	if ( m_nMovableNodeCount > activeCapacity ) {
+		LOG( ERROR, "Streamed-node cold rebuild capacity is smaller than live movable-node state" );
+		return false;
+	}
+
+	t3dActiveNode_t *pNewActive =
+	        activeCapacity > 0u ? ( t3dActiveNode_t * )( t3dMemoryAllocate( activeCapacity * sizeof( t3dActiveNode_t ) ) ) : NULL;
+	if ( activeCapacity > 0u && !pNewActive ) {
+		LOG( ERROR, "Failed allocating streamed-node active metadata image" );
+		return false;
+	}
+	t3dMovableNodeRef_t *pNewMovable =
+	        activeCapacity > 0u ? ( t3dMovableNodeRef_t * )( t3dMemoryAllocate( activeCapacity * sizeof( t3dMovableNodeRef_t ) ) ) : NULL;
+	if ( activeCapacity > 0u && !pNewMovable ) {
+		t3dMemoryRelease( pNewActive );
+		LOG( ERROR, "Failed allocating streamed-node movable metadata image" );
+		return false;
+	}
+
+	for ( int index = 0; index < s_nMaxRegionSlots; ++index ) {
+		const t3dRegionRuntime_t &runtime = m_szRegions[index];
+		const size_t copyCount = ( size_t )( runtime.m_nNodeCount );
+		if ( copyCount > 0u && m_pActiveNodeStorage ) {
+			memcpy( pNewActive + regionOffsets[index], regionNodes( runtime ), copyCount * sizeof( t3dActiveNode_t ) );
+		}
+	}
+	if ( m_nMovableNodeCount > 0u && m_pMovableNodes ) {
+		memcpy( pNewMovable, m_pMovableNodes, m_nMovableNodeCount * sizeof( t3dMovableNodeRef_t ) );
+	}
+
+	const int requiredRoots = ( int )( MIN( MAX( descriptorCapacity, m_activeRegionIndices.size() ), ( size_t )( s_nMaxRegionSlots ) ) );
+	eastl::fixed_vector<Node3D *, s_nMaxRegionSlots, false> new_roots;
+	const int newRootCount = MAX( requiredRoots - m_nRegionRootPoolCount, 0 );
+	for ( int index = 0; index < newRootCount; ++index ) {
+		Node3D *const pNewRoot = memnew( Node3D );
+		if ( !pNewRoot ) {
+			for ( size_t iRoot = 0u; iRoot < ( size_t )( ( new_roots ).size() ); iRoot++ ) {
+				Node3D *const pRoot = ( new_roots )[iRoot];
+				memdelete( pRoot );
+			}
+			t3dMemoryRelease( pNewActive );
+			t3dMemoryRelease( pNewMovable );
+			LOG( ERROR, "Failed allocating streamed-node region-root pool" );
+			return false;
+		}
+		pNewRoot->set_name( "Terrain3DStreamRegionRoot" );
+		new_roots.push_back( pNewRoot );
+	}
+
+	t3dActiveNode_t *const pOldActive = m_pActiveNodeStorage;
+	t3dMovableNodeRef_t *const pOldMovable = m_pMovableNodes;
+	m_pActiveNodeStorage = pNewActive;
+	m_nActiveNodeStorageCapacity = activeCapacity;
+	m_pMovableNodes = pNewMovable;
+	m_nMovableNodeCapacity = activeCapacity;
 	for ( int index = 0; index < s_nMaxRegionSlots; ++index ) {
 		t3dRegionRuntime_t &runtime = m_szRegions[index];
+		runtime.m_iNodeOffset = ( uint32_t )( regionOffsets[index] );
+		runtime.m_nNodeCapacity = ( uint32_t )( regionCapacities[index] );
 		const Vector2i location = locationFromIndex( index );
-		const size_t descriptor_count = ( size_t )( pData->getStreamedNodeCapacityHint( location ) );
-		const size_t region_capacity = MAX( descriptor_count, migration_spare );
-		if ( runtime.m_nodes.capacity() < region_capacity ) {
-			runtime.m_nodes.reserve( region_capacity );
-		}
-		runtime.m_nNodeCapacity = runtime.m_nodes.capacity();
-		descriptor_capacity += descriptor_count;
 		if ( m_szRegionRootNames[index].is_empty() ) {
-			m_szRegionRootNames[index] = StringName( String( "Region_" ) + String::num_int64( location.x ) +
-					String( "_" ) + String::num_int64( location.y ) );
+			m_szRegionRootNames[index] =
+			        StringName( String( "Region_" ) + String::num_int64( location.x ) + String( "_" ) + String::num_int64( location.y ) );
 		}
 	}
-	if ( m_movableNodes.capacity() < descriptor_capacity ) {
-		m_movableNodes.reserve( descriptor_capacity );
+	for ( size_t index = 0u; index < new_roots.size(); ++index ) {
+		m_szRegionRootPool[m_nRegionRootPoolCount + ( int )( index )] = new_roots[index];
 	}
-	m_nMovableNodeCapacity = m_movableNodes.capacity();
-	const int required_roots = ( int )( MIN( descriptor_capacity, ( size_t )( s_nMaxRegionSlots ) ) );
-	for ( int index = m_nRegionRootPoolCount; index < required_roots; ++index ) {
-		m_szRegionRootPool[index] = memnew( Node3D );
-		m_szRegionRootPool[index]->set_name( "Terrain3DStreamRegionRoot" );
-	}
-	m_nRegionRootPoolCount = MAX( m_nRegionRootPoolCount, required_roots );
-	eastl::bitset<s_nMaxRegionSlots> leased_roots;
+	m_nRegionRootPoolCount = requiredRoots > m_nRegionRootPoolCount ? requiredRoots : m_nRegionRootPoolCount;
+	t3dMemoryRelease( pOldActive );
+	t3dMemoryRelease( pOldMovable );
+
+	eastl::array<uint64_t, s_nMaxRegionSlots / 64> leased_roots{};
 	for ( int index = 0; index < s_nMaxRegionSlots; ++index ) {
-		const int pool_index = m_szRegions[index].m_iRootPoolIndex;
-		if ( pool_index >= 0 && pool_index < m_nRegionRootPoolCount ) {
-			leased_roots.set( ( size_t )( pool_index ) );
+		const int poolIndex = m_szRegions[index].m_iRootPoolIndex;
+		if ( poolIndex >= 0 && poolIndex < m_nRegionRootPoolCount ) {
+			leased_roots[( size_t )( poolIndex ) >> 6u] |= 1ull << ( ( size_t )( poolIndex ) & 63u );
 		}
 	}
-	m_nFreeRootPoolCount = 0;
+	m_freeRootPoolIndices.clear();
 	for ( int index = 0; index < m_nRegionRootPoolCount; ++index ) {
-		if ( !leased_roots.test( ( size_t )( index ) ) ) {
-			m_szFreeRootPoolIndices[m_nFreeRootPoolCount++] = ( uint16_t )( index );
+		if ( ( leased_roots[( size_t )( index ) >> 6u] & ( 1ull << ( ( size_t )( index ) & 63u ) ) ) == 0u ) {
+			m_freeRootPoolIndices.push_back( ( uint16_t )( index ) );
 		}
 	}
+	return true;
 }
 
 Node3D *Terrain3DNodeStreamer::acquireRegionRoot( const int iIndex, Terrain3DRegion *const pRegion ) {
 	if ( !m_pHost || !pRegion || iIndex < 0 || iIndex >= s_nMaxRegionSlots ) {
-		return nullptr;
+		return NULL;
 	}
 	t3dRegionRuntime_t &runtime = m_szRegions[iIndex];
 	if ( runtime.m_pRoot ) {
 		return runtime.m_pRoot;
 	}
-	if ( m_nFreeRootPoolCount <= 0 ) {
+	if ( m_freeRootPoolIndices.empty() ) {
 		LOG( ERROR, "Streamed-node region-root capacity exceeded; cold activation storage rebuild required" );
-		return nullptr;
+		return NULL;
 	}
-	const int pool_index = m_szFreeRootPoolIndices[--m_nFreeRootPoolCount];
+	const int pool_index = m_freeRootPoolIndices.back();
+	m_freeRootPoolIndices.pop_back();
 	Node3D *const pRoot = m_szRegionRootPool[pool_index];
 	if ( !pRoot || pRoot->get_child_count() != 0 ) {
 		LOG( ERROR, "Invalid streamed-node region-root pool slot ", pool_index );
-		return nullptr;
+		return NULL;
 	}
 	runtime.m_pRoot = pRoot;
 	runtime.m_iRootPoolIndex = pool_index;
 	pRoot->set_name( m_szRegionRootNames[iIndex] );
 	const Vector2i location = pRegion->getLocation();
 	const real_t fWorldSize = ( real_t )( m_pTerrain->getRegionSize() ) * m_pTerrain->getVertexSpacing();
-	pRoot->set_position( Vector3(
-			( real_t )( location.x ) * fWorldSize, 0.0f, ( real_t )( location.y ) * fWorldSize ) );
+	pRoot->set_position( Vector3( ( real_t )( location.x ) * fWorldSize, 0.0f, ( real_t )( location.y ) * fWorldSize ) );
 	m_pHost->add_child( pRoot, false, Node::INTERNAL_MODE_BACK );
 	return pRoot;
 }
@@ -275,26 +412,25 @@ void Terrain3DNodeStreamer::releaseRegionRoot( t3dRegionRuntime_t &rRuntime ) {
 		rRuntime.m_pRoot->get_parent()->remove_child( rRuntime.m_pRoot );
 	}
 	const int pool_index = rRuntime.m_iRootPoolIndex;
-	if ( pool_index < 0 || pool_index >= m_nRegionRootPoolCount ||
-		m_nFreeRootPoolCount >= m_nRegionRootPoolCount ) {
+	if ( pool_index < 0 || pool_index >= m_nRegionRootPoolCount || m_freeRootPoolIndices.size() >= ( size_t )( m_nRegionRootPoolCount ) ) {
 		LOG( ERROR, "Invalid streamed-node region-root release slot ", pool_index );
 	} else {
-		m_szFreeRootPoolIndices[m_nFreeRootPoolCount++] = ( uint16_t )( pool_index );
+		m_freeRootPoolIndices.push_back( ( uint16_t )( pool_index ) );
 	}
-	rRuntime.m_pRoot = nullptr;
+	rRuntime.m_pRoot = NULL;
 	rRuntime.m_iRootPoolIndex = -1;
 }
 
 Node3D *Terrain3DNodeStreamer::ensureRegionRoot( const int iIndex, Terrain3DRegion *const pRegion ) {
 	if ( !m_pTerrain || !pRegion || iIndex < 0 || iIndex >= s_nMaxRegionSlots ) {
-		return nullptr;
+		return NULL;
 	}
 	t3dRegionRuntime_t &runtime = m_szRegions[iIndex];
 	if ( runtime.m_pRoot ) {
 		return runtime.m_pRoot;
 	}
 	if ( !acquireRegionRoot( iIndex, pRegion ) ) {
-		return nullptr;
+		return NULL;
 	}
 	trackActiveRegion( iIndex );
 	setRegionLoading( runtime, true );
@@ -306,7 +442,7 @@ Node3D *Terrain3DNodeStreamer::ensureRegionRoot( const int iIndex, Terrain3DRegi
 
 bool Terrain3DNodeStreamer::migrateActiveNodes( void ) {
 	m_nMigrationUsecLastTick = 0u;
-	if ( !m_pTerrain || !m_pTerrain->getData() || m_movableNodes.empty() ) {
+	if ( !m_pTerrain || !m_pTerrain->getData() || m_nMovableNodeCount == 0u ) {
 		return false;
 	}
 	Time *const pTime = Time::get_singleton();
@@ -318,9 +454,9 @@ bool Terrain3DNodeStreamer::migrateActiveNodes( void ) {
 		return false;
 	}
 	const Transform3D terrain_inverse = m_pTerrain->get_global_transform().affine_inverse();
-	for ( int movable_index = ( int )( m_movableNodes.size() ) - 1; movable_index >= 0; --movable_index ) {
+	for ( int movable_index = ( int )( m_nMovableNodeCount )-1; movable_index >= 0; --movable_index ) {
 		++m_nNodesTestedForMigrationLastTick;
-		t3dMovableNodeRef_t &movable = m_movableNodes[( size_t )( movable_index )];
+		t3dMovableNodeRef_t &movable = m_pMovableNodes[( size_t )( movable_index )];
 		const int source_index = movable.m_iRegionIndex;
 		if ( source_index < 0 || source_index >= s_nMaxRegionSlots ) {
 			removeMovableNodeAt( movable_index );
@@ -333,7 +469,7 @@ bool Terrain3DNodeStreamer::migrateActiveNodes( void ) {
 			removeMovableNodeAt( movable_index );
 			continue;
 		}
-		const t3dActiveNode_t active = source_runtime.m_nodes[( size_t )( active_index )];
+		const t3dActiveNode_t active = regionNodes( source_runtime )[( size_t )( active_index )];
 		Node3D *const pNode = Object::cast_to<Node3D>( getActiveNode( active ) );
 		if ( !pNode ) {
 			pSourceRegion->removeStreamedNode( active.m_nSpawnId );
@@ -341,8 +477,7 @@ bool Terrain3DNodeStreamer::migrateActiveNodes( void ) {
 			removeMovableNodeAt( movable_index );
 			m_nActiveNodeCount = MAX( 0, m_nActiveNodeCount - 1 );
 			bChanged = true;
-			if ( source_runtime.m_pRoot && source_runtime.m_nodes.empty() &&
-					pSourceRegion->getStreamedNodeCount() == 0 ) {
+			if ( source_runtime.m_pRoot && source_runtime.m_nNodeCount == 0u && pSourceRegion->getStreamedNodeCount() == 0 ) {
 				deactivateRegion( source_index, false );
 			}
 			continue;
@@ -355,24 +490,23 @@ bool Terrain3DNodeStreamer::migrateActiveNodes( void ) {
 			// transform fetch and terrain inverse multiply for every movable node.
 			terrain_local = pNode->get_transform();
 			const Vector2i source_location = pSourceRegion->getLocation();
-			destinationLocation = source_location +
-					Vector2i( ( int )( Math::floor( terrain_local.origin.x / fRegionWorldSize ) ),
-							( int )( Math::floor( terrain_local.origin.z / fRegionWorldSize ) ) );
+			destinationLocation = source_location
+			        + Vector2i( ( int )( Math::floor( terrain_local.origin.x / fRegionWorldSize ) ),
+			                ( int )( Math::floor( terrain_local.origin.z / fRegionWorldSize ) ) );
 			terrain_local.origin.x += ( real_t )( source_location.x ) * fRegionWorldSize;
 			terrain_local.origin.z += ( real_t )( source_location.y ) * fRegionWorldSize;
 		} else {
 			++m_nGlobalTransformsReadLastTick;
 			terrain_local = terrain_inverse * pNode->get_global_transform();
 			destinationLocation = Vector2i( ( int )( Math::floor( terrain_local.origin.x / fRegionWorldSize ) ),
-					( int )( Math::floor( terrain_local.origin.z / fRegionWorldSize ) ) );
+			        ( int )( Math::floor( terrain_local.origin.z / fRegionWorldSize ) ) );
 		}
 		const int destination_index = indexFromLocation( destinationLocation );
 		if ( destination_index < 0 || destination_index == source_index ) {
 			continue;
 		}
 
-		const t3dStreamedNodeRuntimeDescriptor_t *pSourceDescriptor =
-				pSourceRegion->findStreamedNodeRuntimeInternal( active.m_nSpawnId );
+		const t3dStreamedNodeRuntimeDescriptor_t *pSourceDescriptor = pSourceRegion->findStreamedNodeRuntimeInternal( active.m_nSpawnId );
 		if ( !pSourceDescriptor ) {
 			continue;
 		}
@@ -391,11 +525,17 @@ bool Terrain3DNodeStreamer::migrateActiveNodes( void ) {
 			continue;
 		}
 		t3dRegionRuntime_t &destination_runtime = m_szRegions[destination_index];
-		if ( destination_runtime.m_nodes.size() >= destination_runtime.m_nNodeCapacity ) {
+		if ( destination_runtime.m_nNodeCount >= destination_runtime.m_nNodeCapacity ) {
 			LOG( ERROR,
-					"Streamed-node destination metadata capacity exceeded at ",
-					destinationLocation,
-					"; migration deferred until a cold activation storage rebuild" );
+			        "Streamed-node destination metadata capacity exceeded at ",
+			        destinationLocation,
+			        "; migration deferred until a cold activation storage rebuild" );
+			requestActivationStorageRebuild();
+			continue;
+		}
+		if ( pDestinationRegion->getStreamedNodesRuntimeInternal().size() + 1u
+		        > pDestinationRegion->getStreamedNodesRuntimeInternal().capacity() ) {
+			requestActivationStorageRebuild();
 			continue;
 		}
 		Transform3D destination_transform = terrain_local;
@@ -410,21 +550,21 @@ bool Terrain3DNodeStreamer::migrateActiveNodes( void ) {
 		const Vector2i destination_coverage_min = source_coverage_min + owner_delta;
 		const Vector2i destination_coverage_max = source_coverage_max + owner_delta;
 		const int64_t transferred_id = !scene_path.is_empty() ? pDestinationRegion->addStreamedNodePath( scene_path,
-																		destination_transform,
-																		state,
-																		flags,
-																		active.m_nSpawnId,
-																		boundary_policy,
-																		destination_coverage_min,
-																		destination_coverage_max )
-															  : pDestinationRegion->addStreamedNode( scene,
-																		destination_transform,
-																		state,
-																		flags,
-																		active.m_nSpawnId,
-																		boundary_policy,
-																		destination_coverage_min,
-																		destination_coverage_max );
+		                                                                destination_transform,
+		                                                                state,
+		                                                                flags,
+		                                                                active.m_nSpawnId,
+		                                                                boundary_policy,
+		                                                                destination_coverage_min,
+		                                                                destination_coverage_max )
+		                                                      : pDestinationRegion->addStreamedNode( scene,
+		                                                                destination_transform,
+		                                                                state,
+		                                                                flags,
+		                                                                active.m_nSpawnId,
+		                                                                boundary_policy,
+		                                                                destination_coverage_min,
+		                                                                destination_coverage_max );
 		if ( transferred_id != active.m_nSpawnId ) {
 			if ( transferred_id > 0 ) {
 				pDestinationRegion->removeStreamedNode( transferred_id );
@@ -439,35 +579,35 @@ bool Terrain3DNodeStreamer::migrateActiveNodes( void ) {
 		if ( !pDestinationRoot ) {
 			if ( !scene_path.is_empty() ) {
 				pSourceRegion->addStreamedNodePath( scene_path,
-						descriptor.m_transform,
-						state,
-						flags,
-						active.m_nSpawnId,
-						boundary_policy,
-						source_coverage_min,
-						source_coverage_max );
+				        descriptor.m_transform,
+				        state,
+				        flags,
+				        active.m_nSpawnId,
+				        boundary_policy,
+				        source_coverage_min,
+				        source_coverage_max );
 			} else {
 				pSourceRegion->addStreamedNode( scene,
-						descriptor.m_transform,
-						state,
-						flags,
-						active.m_nSpawnId,
-						boundary_policy,
-						source_coverage_min,
-						source_coverage_max );
+				        descriptor.m_transform,
+				        state,
+				        flags,
+				        active.m_nSpawnId,
+				        boundary_policy,
+				        source_coverage_min,
+				        source_coverage_max );
 			}
 			pDestinationRegion->removeStreamedNode( active.m_nSpawnId );
 			continue;
 		}
 		pNode->reparent( pDestinationRoot, true );
 		if ( !runtimeHasSpawn( destination_runtime, active.m_nSpawnId ) ) {
-			destination_runtime.m_nodes.push_back( active );
+			regionNodes( destination_runtime )[destination_runtime.m_nNodeCount++] = active;
 		}
 		eraseActiveNode( source_runtime, active_index );
 		movable.m_iRegionIndex = destination_index;
 		++m_nMigrationsLastTick;
 		bChanged = true;
-		if ( source_runtime.m_pRoot && source_runtime.m_nodes.empty() && pSourceRegion->getStreamedNodeCount() == 0 ) {
+		if ( source_runtime.m_pRoot && source_runtime.m_nNodeCount == 0u && pSourceRegion->getStreamedNodeCount() == 0 ) {
 			deactivateRegion( source_index, false );
 		}
 	}
@@ -497,7 +637,7 @@ void Terrain3DNodeStreamer::destroyHost( void ) {
 		m_pHost->get_parent()->remove_child( m_pHost );
 	}
 	memdelete( m_pHost );
-	m_pHost = nullptr;
+	m_pHost = NULL;
 }
 
 bool Terrain3DNodeStreamer::spawnIdExists( const uint64_t nId ) const {
@@ -516,7 +656,8 @@ bool Terrain3DNodeStreamer::spawnIdExists( const uint64_t nId ) const {
 		if ( !pRegion ) {
 			continue;
 		}
-		for ( const t3dStreamedNodeRuntimeDescriptor_t &spawn : pRegion->getStreamedNodesRuntimeInternal() ) {
+		for ( size_t iNode = 0u; iNode < ( size_t )( ( pRegion->getStreamedNodesRuntimeInternal() ).size() ); iNode++ ) {
+			const t3dStreamedNodeRuntimeDescriptor_t &spawn = ( pRegion->getStreamedNodesRuntimeInternal() )[iNode];
 			if ( spawn.m_nId > 0 && ( uint64_t )( spawn.m_nId ) == nId ) {
 				return true;
 			}
@@ -568,11 +709,11 @@ void Terrain3DNodeStreamer::refreshSpawnId( void ) {
 		if ( !pRegion ) {
 			continue;
 		}
-		for ( const t3dStreamedNodeRuntimeDescriptor_t &spawn : pRegion->getStreamedNodesRuntimeInternal() ) {
+		for ( size_t iNode = 0u; iNode < ( size_t )( ( pRegion->getStreamedNodesRuntimeInternal() ).size() ); iNode++ ) {
+			const t3dStreamedNodeRuntimeDescriptor_t &spawn = ( pRegion->getStreamedNodesRuntimeInternal() )[iNode];
 			const int64_t signed_id = spawn.m_nId;
 			if ( signed_id > 0 && ( uint64_t )( signed_id ) >= m_nNextSpawnId ) {
-				m_nNextSpawnId =
-						( uint64_t )( signed_id ) < ( uint64_t )( INT64_MAX ) ? ( uint64_t )( signed_id ) + 1u : 1u;
+				m_nNextSpawnId = ( uint64_t )( signed_id ) < ( uint64_t )( INT64_MAX ) ? ( uint64_t )( signed_id ) + 1u : 1u;
 			}
 		}
 	}
@@ -593,13 +734,11 @@ void Terrain3DNodeStreamer::initialize( Terrain3D *const pTerrain ) {
 	m_methodSaveState = StringName( "terrain3d_stream_save_state" );
 	m_shadowProxyName = StringName( "ShadowProxy" );
 	ensureHost();
-	rebuildActivationStorage();
+	requestActivationStorageRebuild();
 	refreshSpawnId();
 }
 
-void Terrain3DNodeStreamer::captureNodeState( Terrain3DRegion *const pRegion,
-		Node3D *const pRegionRoot,
-		const t3dActiveNode_t &rActive ) {
+void Terrain3DNodeStreamer::captureNodeState( Terrain3DRegion *const pRegion, Node3D *const pRegionRoot, const t3dActiveNode_t &rActive ) {
 	if ( !pRegion ) {
 		return;
 	}
@@ -610,13 +749,11 @@ void Terrain3DNodeStreamer::captureNodeState( Terrain3DRegion *const pRegion,
 	Transform3D local_transform;
 	Node3D *const pNode3d = Object::cast_to<Node3D>( pNode );
 	if ( pNode3d ) {
-		local_transform = pRegionRoot
-				? pRegionRoot->get_global_transform().affine_inverse() * pNode3d->get_global_transform()
-				: pNode3d->get_transform();
+		local_transform = pRegionRoot ? pRegionRoot->get_global_transform().affine_inverse() * pNode3d->get_global_transform()
+		                              : pNode3d->get_transform();
 	}
 	Dictionary state;
-	const t3dStreamedNodeRuntimeDescriptor_t *pDescriptor =
-			pRegion->findStreamedNodeRuntimeInternal( rActive.m_nSpawnId );
+	const t3dStreamedNodeRuntimeDescriptor_t *pDescriptor = pRegion->findStreamedNodeRuntimeInternal( rActive.m_nSpawnId );
 	if ( pDescriptor ) {
 		state = pDescriptor->m_state.duplicate( true );
 	}
@@ -634,6 +771,7 @@ void Terrain3DNodeStreamer::captureNodeState( Terrain3DRegion *const pRegion,
 }
 
 void Terrain3DNodeStreamer::deactivateRegion( const int iIndex, const bool bCaptureState ) {
+	pendingDescriptorRegionClear( iIndex );
 	if ( iIndex < 0 || iIndex >= s_nMaxRegionSlots ) {
 		return;
 	}
@@ -641,10 +779,11 @@ void Terrain3DNodeStreamer::deactivateRegion( const int iIndex, const bool bCapt
 	if ( !runtime.m_pRoot && !runtime.m_bActive && !runtime.m_bLoading ) {
 		return;
 	}
-	Terrain3DRegion *const pRegion = m_pTerrain && m_pTerrain->getData()
-			? m_pTerrain->getData()->getRegionPtr( locationFromIndex( iIndex ) )
-			: nullptr;
-	for ( const t3dActiveNode_t &active : runtime.m_nodes ) {
+	Terrain3DRegion *const pRegion =
+	        m_pTerrain && m_pTerrain->getData() ? m_pTerrain->getData()->getRegionPtr( locationFromIndex( iIndex ) ) : NULL;
+	const t3dActiveNode_t *const pRegionNodes = regionNodes( runtime );
+	for ( uint16_t nodeIndex = 0u; nodeIndex < runtime.m_nNodeCount; ++nodeIndex ) {
+		const t3dActiveNode_t &active = pRegionNodes[nodeIndex];
 		Node *pNode = getActiveNode( active );
 		if ( bCaptureState && pNode ) {
 			captureNodeState( pRegion, runtime.m_pRoot, active );
@@ -664,14 +803,14 @@ void Terrain3DNodeStreamer::deactivateRegion( const int iIndex, const bool bCapt
 			memdelete( pNode );
 		}
 	}
-	const int deactivated_node_count = ( int )( runtime.m_nodes.size() );
+	const int deactivated_node_count = ( int )( runtime.m_nNodeCount );
 	m_nNodesDeactivatedLastTick += deactivated_node_count;
 	if ( deactivated_node_count > 0 ) {
 		++m_nRuntimeGeneration;
 	}
 	m_nActiveNodeCount -= deactivated_node_count;
 	m_nActiveNodeCount = MAX( m_nActiveNodeCount, 0 );
-	runtime.m_nodes.clear();
+	runtime.m_nNodeCount = 0u;
 	releaseRegionRoot( runtime );
 	setRegionLoading( runtime, false );
 	runtime.m_bActive = false;
@@ -681,9 +820,8 @@ void Terrain3DNodeStreamer::deactivateRegion( const int iIndex, const bool bCapt
 	++m_nUnloadsLastTick;
 }
 
-t3dSpawnActivationResult_t Terrain3DNodeStreamer::activateSpawn( Terrain3DRegion *const pRegion,
-		t3dRegionRuntime_t &rRuntime,
-		const t3dStreamedNodeRuntimeDescriptor_t &rSpawn ) {
+t3dSpawnActivationResult_t Terrain3DNodeStreamer::activateSpawn(
+        Terrain3DRegion *const pRegion, t3dRegionRuntime_t &rRuntime, const t3dStreamedNodeRuntimeDescriptor_t &rSpawn ) {
 	if ( !pRegion || rSpawn.m_nId <= 0 ) {
 		return SPAWN_ACTIVATION_FAILED;
 	}
@@ -698,11 +836,11 @@ t3dSpawnActivationResult_t Terrain3DNodeStreamer::activateSpawn( Terrain3DRegion
 	if ( isHlodVisualSuppressed( pRegion->getLocation(), rSpawn ) ) {
 		return SPAWN_ACTIVATION_CONSUMED;
 	}
-	if ( rRuntime.m_nodes.size() >= rRuntime.m_nNodeCapacity ) {
+	if ( rRuntime.m_nNodeCount >= rRuntime.m_nNodeCapacity ) {
 		LOG( ERROR, "Streamed-node active metadata capacity exceeded for region ", pRegion->getLocation() );
 		return SPAWN_ACTIVATION_FAILED;
 	}
-	if ( ( flags & NODE_FLAG_STATIC ) == 0 && m_movableNodes.size() >= m_nMovableNodeCapacity ) {
+	if ( ( flags & NODE_FLAG_STATIC ) == 0 && m_nMovableNodeCount >= m_nMovableNodeCapacity ) {
 		LOG( ERROR, "Streamed-node movable metadata capacity exceeded during activation" );
 		return SPAWN_ACTIVATION_FAILED;
 	}
@@ -716,8 +854,8 @@ t3dSpawnActivationResult_t Terrain3DNodeStreamer::activateSpawn( Terrain3DRegion
 			}
 			const ResourceLoader::ThreadLoadStatus status = pLoader->load_threaded_get_status( scene_path );
 			if ( status == ResourceLoader::THREAD_LOAD_INVALID_RESOURCE ) {
-				const Error request_error = pLoader->load_threaded_request(
-						scene_path, "PackedScene", true, ResourceLoader::CACHE_MODE_REUSE );
+				const Error request_error =
+				        pLoader->load_threaded_request( scene_path, "PackedScene", true, ResourceLoader::CACHE_MODE_REUSE );
 				if ( request_error != OK ) {
 					LOG( ERROR, "Failed requesting streamed scene ", scene_path, ": ", request_error );
 					return SPAWN_ACTIVATION_FAILED;
@@ -790,7 +928,7 @@ t3dSpawnActivationResult_t Terrain3DNodeStreamer::activateSpawn( Terrain3DRegion
 	active.m_nSpawnId = spawn_id;
 	active.m_hObjectId = objectId;
 	active.m_nFlags = flags;
-	rRuntime.m_nodes.push_back( active );
+	regionNodes( rRuntime )[rRuntime.m_nNodeCount++] = active;
 	Node3D *const pActiveNode3d = Object::cast_to<Node3D>( pNode );
 	if ( pActiveNode3d && ( flags & NODE_FLAG_STATIC ) == 0 ) {
 		const int region_index = indexFromLocation( pRegion->getLocation() );
@@ -804,13 +942,14 @@ t3dSpawnActivationResult_t Terrain3DNodeStreamer::activateSpawn( Terrain3DRegion
 	return SPAWN_ACTIVATION_CONSUMED;
 }
 
-void Terrain3DNodeStreamer::requestRegionScenes( const Vector2i &rOwnerLocation,
-		const eastl::vector<t3dStreamedNodeRuntimeDescriptor_t> &rSpawns ) {
+void Terrain3DNodeStreamer::requestRegionScenes(
+        const Vector2i &rOwnerLocation, const eastl::vector<t3dStreamedNodeRuntimeDescriptor_t, Terrain3DEastlAllocator> &rSpawns ) {
 	ResourceLoader *const pLoader = ResourceLoader::get_singleton();
 	if ( !pLoader ) {
 		return;
 	}
-	for ( const t3dStreamedNodeRuntimeDescriptor_t &spawn : rSpawns ) {
+	for ( size_t iSpawn = 0u; iSpawn < ( size_t )( ( rSpawns ).size() ); iSpawn++ ) {
+		const t3dStreamedNodeRuntimeDescriptor_t &spawn = ( rSpawns )[iSpawn];
 		if ( isHlodVisualSuppressed( rOwnerLocation, spawn ) ) {
 			continue;
 		}
@@ -818,12 +957,10 @@ void Terrain3DNodeStreamer::requestRegionScenes( const Vector2i &rOwnerLocation,
 			continue;
 		}
 		const String &scene_path = spawn.m_scenePath;
-		if ( scene_path.is_empty() ||
-				pLoader->load_threaded_get_status( scene_path ) != ResourceLoader::THREAD_LOAD_INVALID_RESOURCE ) {
+		if ( scene_path.is_empty() || pLoader->load_threaded_get_status( scene_path ) != ResourceLoader::THREAD_LOAD_INVALID_RESOURCE ) {
 			continue;
 		}
-		const Error error =
-				pLoader->load_threaded_request( scene_path, "PackedScene", true, ResourceLoader::CACHE_MODE_REUSE );
+		const Error error = pLoader->load_threaded_request( scene_path, "PackedScene", true, ResourceLoader::CACHE_MODE_REUSE );
 		if ( error != OK ) {
 			LOG( ERROR, "Failed requesting streamed scene ", scene_path, ": ", error );
 		} else {
@@ -845,17 +982,13 @@ bool Terrain3DNodeStreamer::activateRegion( const int iIndex, int &nNodeBudget )
 	if ( pRegion->getStreamedNodesRuntimeInternal().empty() && pRegion->getStreamedNodeCount() > 0 ) {
 		if ( !runtime.m_bRequestsStarted ) {
 			ResourceLoader *const pLoader = ResourceLoader::get_singleton();
-			const uint16_t *p_dependencies = nullptr;
+			const uint16_t *p_dependencies = NULL;
 			uint16_t dependency_count = 0u;
-			if ( pLoader &&
-					pData->getCookedSceneDependencySpan( pRegion->getLocation(), p_dependencies, dependency_count ) ) {
+			if ( pLoader && pData->getCookedSceneDependencySpan( pRegion->getLocation(), p_dependencies, dependency_count ) ) {
 				for ( uint16_t dependency_index = 0u; dependency_index < dependency_count; ++dependency_index ) {
 					const String &path = pData->getCookedSceneDependencyPath( p_dependencies[dependency_index] );
-					if ( !path.is_empty() &&
-							pLoader->load_threaded_get_status( path ) ==
-									ResourceLoader::THREAD_LOAD_INVALID_RESOURCE ) {
-						if ( pLoader->load_threaded_request(
-								 path, "PackedScene", true, ResourceLoader::CACHE_MODE_REUSE ) == OK ) {
+					if ( !path.is_empty() && pLoader->load_threaded_get_status( path ) == ResourceLoader::THREAD_LOAD_INVALID_RESOURCE ) {
+						if ( pLoader->load_threaded_request( path, "PackedScene", true, ResourceLoader::CACHE_MODE_REUSE ) == OK ) {
 							++m_nSceneRequestsLastTick;
 						}
 					}
@@ -863,17 +996,14 @@ bool Terrain3DNodeStreamer::activateRegion( const int iIndex, int &nNodeBudget )
 			}
 			runtime.m_bRequestsStarted = true;
 		}
-		if ( !pData->ensureCookedNodeDescriptors( pRegion->getLocation() ) ) {
-			setRegionLoading( runtime, true );
-			m_bHasPendingActivation = true;
-			return true;
-		}
-		runtime.m_bRequestsStarted = false;
+		requestCookedNodeDescriptors( iIndex );
+		setRegionLoading( runtime, true );
+		return true;
 	}
 	if ( !ensureRegionRoot( iIndex, pRegion ) ) {
 		return false;
 	}
-	const eastl::vector<t3dStreamedNodeRuntimeDescriptor_t> &spawns = pRegion->getStreamedNodesRuntimeInternal();
+	const eastl::vector<t3dStreamedNodeRuntimeDescriptor_t, Terrain3DEastlAllocator> &spawns = pRegion->getStreamedNodesRuntimeInternal();
 	if ( spawns.size() > runtime.m_nNodeCapacity ) {
 		LOG( ERROR, "Streamed-node active metadata capacity exceeded; cold activation storage rebuild required" );
 		return false;
@@ -883,8 +1013,7 @@ bool Terrain3DNodeStreamer::activateRegion( const int iIndex, int &nNodeBudget )
 		runtime.m_bRequestsStarted = true;
 	}
 	while ( runtime.m_nNextSpawn < ( int )( spawns.size() ) && nNodeBudget > 0 ) {
-		const t3dSpawnActivationResult_t result =
-				activateSpawn( pRegion, runtime, spawns[( size_t )( runtime.m_nNextSpawn )] );
+		const t3dSpawnActivationResult_t result = activateSpawn( pRegion, runtime, spawns[( size_t )( runtime.m_nNextSpawn )] );
 		if ( result == SPAWN_ACTIVATION_PENDING ) {
 			++m_nScenePendingPollsLastTick;
 			break;
@@ -902,8 +1031,8 @@ bool Terrain3DNodeStreamer::activateRegion( const int iIndex, int &nNodeBudget )
 	return true;
 }
 
-bool Terrain3DNodeStreamer::isHlodVisualSuppressed( const Vector2i &rOwnerLocation,
-		const t3dStreamedNodeRuntimeDescriptor_t &rSpawn ) const {
+bool Terrain3DNodeStreamer::isHlodVisualSuppressed(
+        const Vector2i &rOwnerLocation, const t3dStreamedNodeRuntimeDescriptor_t &rSpawn ) const {
 	if ( !m_pTerrain || ( rSpawn.m_nFlags & NODE_FLAG_HLOD_VISUAL ) == 0 ) {
 		return false;
 	}
@@ -912,11 +1041,11 @@ bool Terrain3DNodeStreamer::isHlodVisualSuppressed( const Vector2i &rOwnerLocati
 }
 
 bool Terrain3DNodeStreamer::streamedSpawnCoverageIntersects( const Vector2i &rOwnerLocation,
-		const t3dStreamedNodeRuntimeDescriptor_t &rSpawn,
-		const Vector2i &rTargetMin,
-		const Vector2i &rTargetMax ) const {
-	if ( rOwnerLocation.x >= rTargetMin.x && rOwnerLocation.x <= rTargetMax.x && rOwnerLocation.y >= rTargetMin.y &&
-			rOwnerLocation.y <= rTargetMax.y ) {
+        const t3dStreamedNodeRuntimeDescriptor_t &rSpawn,
+        const Vector2i &rTargetMin,
+        const Vector2i &rTargetMax ) const {
+	if ( rOwnerLocation.x >= rTargetMin.x && rOwnerLocation.x <= rTargetMax.x && rOwnerLocation.y >= rTargetMin.y
+	        && rOwnerLocation.y <= rTargetMax.y ) {
 		return true;
 	}
 	if ( rSpawn.m_nBoundaryPolicy != STREAMED_NODE_BOUNDARY_COVERAGE ) {
@@ -924,8 +1053,8 @@ bool Terrain3DNodeStreamer::streamedSpawnCoverageIntersects( const Vector2i &rOw
 	}
 	const Vector2i coverage_min = rOwnerLocation + rSpawn.m_coverageMin;
 	const Vector2i coverage_max = rOwnerLocation + rSpawn.m_coverageMax;
-	return coverage_min.x <= rTargetMax.x && coverage_max.x >= rTargetMin.x && coverage_min.y <= rTargetMax.y &&
-			coverage_max.y >= rTargetMin.y;
+	return coverage_min.x <= rTargetMax.x && coverage_max.x >= rTargetMin.x && coverage_min.y <= rTargetMax.y
+	        && coverage_max.y >= rTargetMin.y;
 }
 
 bool Terrain3DNodeStreamer::usesFullAuthoringResidency( void ) const {
@@ -940,8 +1069,8 @@ int Terrain3DNodeStreamer::getEffectiveRadiusRegions( void ) const {
 }
 
 void Terrain3DNodeStreamer::buildDesiredSet( const Vector2i &rCenter ) {
-	m_desiredRegions.reset();
-	m_nDesiredRegionCount = 0u;
+	desiredRegionsReset();
+	m_desiredRegionIndices.clear();
 	if ( !m_pTerrain || !m_pTerrain->getData() ) {
 		return;
 	}
@@ -961,11 +1090,11 @@ void Terrain3DNodeStreamer::buildDesiredSet( const Vector2i &rCenter ) {
 		if ( !pRegion || pRegion->isDeleted() || pRegion->getStreamedNodeCount() == 0 ) {
 			continue;
 		}
-		const int owner_distance =
-				MAX( Math::abs( owner_location.x - rCenter.x ), Math::abs( owner_location.y - rCenter.y ) );
+		const int owner_distance = MAX( Math::abs( owner_location.x - rCenter.x ), Math::abs( owner_location.y - rCenter.y ) );
 		const bool ordinary_owner_desired = full_authoring_residency || owner_distance <= radius;
 		bool region_desired = false;
-		for ( const t3dStreamedNodeRuntimeDescriptor_t &spawn : pRegion->getStreamedNodesRuntimeInternal() ) {
+		for ( size_t iNode = 0u; iNode < ( size_t )( ( pRegion->getStreamedNodesRuntimeInternal() ).size() ); iNode++ ) {
+			const t3dStreamedNodeRuntimeDescriptor_t &spawn = ( pRegion->getStreamedNodesRuntimeInternal() )[iNode];
 			if ( ( spawn.m_nFlags & NODE_FLAG_DISABLED ) != 0 ) {
 				continue;
 			}
@@ -979,8 +1108,7 @@ void Terrain3DNodeStreamer::buildDesiredSet( const Vector2i &rCenter ) {
 					continue;
 				}
 			}
-			if ( ordinary_owner_desired ||
-					streamedSpawnCoverageIntersects( owner_location, spawn, target_min, target_max ) ) {
+			if ( ordinary_owner_desired || streamedSpawnCoverageIntersects( owner_location, spawn, target_min, target_max ) ) {
 				region_desired = true;
 				break;
 			}
@@ -988,29 +1116,21 @@ void Terrain3DNodeStreamer::buildDesiredSet( const Vector2i &rCenter ) {
 		if ( region_desired ) {
 			const int index = indexFromLocation( owner_location );
 			if ( index >= 0 ) {
-				m_desiredRegions.set( ( size_t )index );
-				if ( m_nDesiredRegionCount < s_nMaxRegionSlots ) {
-					m_szDesiredRegionIndices[m_nDesiredRegionCount++] = ( uint16_t )index;
+				desiredRegionSet( index );
+				if ( !m_desiredRegionIndices.full() ) {
+					m_desiredRegionIndices.push_back( ( uint16_t )index );
 				}
 			}
 		}
 	}
-	std::sort( m_szDesiredRegionIndices,
-			m_szDesiredRegionIndices + m_nDesiredRegionCount,
-			[rCenter]( const uint16_t a, const uint16_t b ) {
-				const Vector2i location_a = locationFromIndex( a );
-				const Vector2i location_b = locationFromIndex( b );
-				const int distance_a =
-						MAX( Math::abs( location_a.x - rCenter.x ), Math::abs( location_a.y - rCenter.y ) );
-				const int distance_b =
-						MAX( Math::abs( location_b.x - rCenter.x ), Math::abs( location_b.y - rCenter.y ) );
-				return distance_a != distance_b ? distance_a < distance_b : a < b;
-			} );
+	t3dNodeDesiredRegionLess_t less;
+	less.m_center = rCenter;
+	eastl::sort( m_desiredRegionIndices.begin(), m_desiredRegionIndices.end(), less );
 }
 
 bool Terrain3DNodeStreamer::isRegionDesired( const Vector2i &rLocation ) const {
 	const int index = indexFromLocation( rLocation );
-	return index >= 0 && m_desiredRegions.test( ( size_t )( index ) );
+	return index >= 0 && desiredRegionTest( index );
 }
 
 void Terrain3DNodeStreamer::deferUpdateForFrame( void ) {
@@ -1067,16 +1187,16 @@ void Terrain3DNodeStreamer::updateResidency( const Vector3 &rTargetPosition, con
 	const Vector3 local_position = inverse.xform( rTargetPosition );
 	const int map_size = m_pTerrain->getData()->getRegionMapSizeInternal();
 	const int half = map_size / 2;
-	const Vector2i rawCenter( ( int )( Math::floor( local_position.x / fRegionWorldSize ) ),
-			( int )( Math::floor( local_position.z / fRegionWorldSize ) ) );
+	const Vector2i rawCenter(
+	        ( int )( Math::floor( local_position.x / fRegionWorldSize ) ), ( int )( Math::floor( local_position.z / fRegionWorldSize ) ) );
 	const Vector2i center( CLAMP( rawCenter.x, -half, half - 1 ), CLAMP( rawCenter.y, -half, half - 1 ) );
 	const bool bRebuildDesired = bForce || bOwnershipChanged || center != m_center;
 	if ( !bRebuildDesired && m_nLoadingRegionCount == 0 && !m_bHasPendingActivation ) {
 		bool bPendingUnload = false;
-		for ( int active_i = 0; active_i < m_nActiveRegionCount; ++active_i ) {
-			const int index = m_szActiveRegionIndices[active_i];
+		for ( int active_i = 0; active_i < ( int )( m_activeRegionIndices.size() ); ++active_i ) {
+			const int index = m_activeRegionIndices[active_i];
 			++m_nActiveRegionsExaminedLastTick;
-			if ( !m_desiredRegions.test( ( size_t )( index ) ) ) {
+			if ( !desiredRegionTest( index ) ) {
 				bPendingUnload = true;
 				break;
 			}
@@ -1092,13 +1212,13 @@ void Terrain3DNodeStreamer::updateResidency( const Vector3 &rTargetPosition, con
 	const bool authoring_full_residency = usesFullAuthoringResidency();
 	m_bHasPendingActivation = false;
 	const int effective_unload_budget =
-			authoring_full_residency ? MAX( 1, getEffectiveUnloadRegionBudget() ) : getEffectiveUnloadRegionBudget();
+	        authoring_full_residency ? MAX( 1, getEffectiveUnloadRegionBudget() ) : getEffectiveUnloadRegionBudget();
 	int unload_budget = effective_unload_budget;
 	int active_position = 0;
-	while ( active_position < m_nActiveRegionCount && unload_budget > 0 ) {
-		const int index = m_szActiveRegionIndices[active_position];
+	while ( active_position < ( int )( m_activeRegionIndices.size() ) && unload_budget > 0 ) {
+		const int index = m_activeRegionIndices[active_position];
 		++m_nActiveRegionsExaminedLastTick;
-		if ( !m_desiredRegions.test( ( size_t )( index ) ) ) {
+		if ( !desiredRegionTest( index ) ) {
 			deactivateRegion( index, true );
 			--unload_budget;
 			continue;
@@ -1106,24 +1226,23 @@ void Terrain3DNodeStreamer::updateResidency( const Vector3 &rTargetPosition, con
 		++active_position;
 	}
 	if ( unload_budget == 0 ) {
-		for ( ; active_position < m_nActiveRegionCount; ++active_position ) {
+		for ( ; active_position < ( int )( m_activeRegionIndices.size() ); ++active_position ) {
 			++m_nActiveRegionsExaminedLastTick;
-			if ( !m_desiredRegions.test( ( size_t )m_szActiveRegionIndices[active_position] ) ) {
+			if ( !desiredRegionTest( m_activeRegionIndices[active_position] ) ) {
 				m_bUnloadRegionBudgetLimitedLastTick = true;
 				break;
 			}
 		}
 	}
 	m_nUnloadRegionBudgetUsedLastTick = effective_unload_budget - unload_budget;
-	const int effective_load_budget =
-			authoring_full_residency ? MAX( 1, getEffectiveLoadRegionBudget() ) : getEffectiveLoadRegionBudget();
+	const int effective_load_budget = authoring_full_residency ? MAX( 1, getEffectiveLoadRegionBudget() ) : getEffectiveLoadRegionBudget();
 	int region_budget = effective_load_budget;
 	int node_budget = authoring_full_residency ? MAX( 1, m_nLoadNodeBudget ) : m_nLoadNodeBudget;
 	// Desired owners are rebuilt only when selection changes and are sorted nearest
 	// first. Service that compact list directly instead of re-walking every square
 	// inside every radius on each activation tick.
-	for ( uint16_t desired_i = 0u; desired_i < m_nDesiredRegionCount; ++desired_i ) {
-		const int index = m_szDesiredRegionIndices[desired_i];
+	for ( uint16_t desired_i = 0u; desired_i < ( uint16_t )( m_desiredRegionIndices.size() ); ++desired_i ) {
+		const int index = m_desiredRegionIndices[desired_i];
 		if ( node_budget <= 0 ) {
 			break;
 		}
@@ -1133,64 +1252,70 @@ void Terrain3DNodeStreamer::updateResidency( const Vector3 &rTargetPosition, con
 			m_bHasPendingActivation = true;
 			continue;
 		}
-		const bool bHadRoot = runtime.m_pRoot != nullptr;
+		const bool bHadRoot = runtime.m_pRoot != NULL;
 		if ( activateRegion( index, node_budget ) && !bHadRoot ) {
 			--region_budget;
 			++m_nLoadsLastTick;
 		}
 	}
-	for ( uint16_t desired_i = 0u; desired_i < m_nDesiredRegionCount; ++desired_i ) {
-		const int index = m_szDesiredRegionIndices[desired_i];
+	for ( uint16_t desired_i = 0u; desired_i < ( uint16_t )( m_desiredRegionIndices.size() ); ++desired_i ) {
+		const int index = m_desiredRegionIndices[desired_i];
 		if ( !m_szRegions[index].m_bActive ) {
 			m_bHasPendingActivation = true;
 			break;
 		}
 	}
 	m_nLoadRegionBudgetUsedLastTick = effective_load_budget - region_budget;
-	m_nLoadNodeBudgetUsedLastTick = authoring_full_residency ? MAX( 0, MAX( 1, m_nLoadNodeBudget ) - node_budget )
-															 : m_nLoadNodeBudget - node_budget;
+	m_nLoadNodeBudgetUsedLastTick =
+	        authoring_full_residency ? MAX( 0, MAX( 1, m_nLoadNodeBudget ) - node_budget ) : m_nLoadNodeBudget - node_budget;
 }
 
 void Terrain3DNodeStreamer::suspend( void ) {
-	while ( m_nActiveRegionCount > 0 ) {
-		deactivateRegion( m_szActiveRegionIndices[m_nActiveRegionCount - 1], true );
+	while ( !m_activeRegionIndices.empty() ) {
+		deactivateRegion( m_activeRegionIndices.back(), true );
 	}
-	m_desiredRegions.reset();
-	m_nDesiredRegionCount = 0u;
+	desiredRegionsReset();
+	memset( m_szPendingDescriptorRegionBits, 0, sizeof( m_szPendingDescriptorRegionBits ) );
+	m_desiredRegionIndices.clear();
 	m_bHasPendingActivation = false;
 	m_center = s_v2iMax;
 }
 
 void Terrain3DNodeStreamer::destroy( const bool bCaptureState ) {
-	while ( m_nActiveRegionCount > 0 ) {
-		deactivateRegion( m_szActiveRegionIndices[m_nActiveRegionCount - 1], bCaptureState );
+	while ( !m_activeRegionIndices.empty() ) {
+		deactivateRegion( m_activeRegionIndices.back(), bCaptureState );
 	}
 	for ( int index = 0; index < s_nMaxRegionSlots; ++index ) {
-		// Normal residency churn retains node-vector capacity so revisiting a region
-		// does not return to the allocator. Full streamer teardown is the cold path
-		// where retained capacity should actually be released.
-		eastl::vector<t3dActiveNode_t>().swap( m_szRegions[index].m_nodes );
+		m_szRegions[index].m_iNodeOffset = 0u;
+		m_szRegions[index].m_nNodeCount = 0u;
 		m_szRegions[index].m_nNodeCapacity = 0u;
 		m_szRegions[index].m_iRootPoolIndex = -1;
 		m_szRegions[index].m_iActiveListPosition = -1;
 	}
-	m_nActiveRegionCount = 0;
-	m_nDesiredRegionCount = 0u;
-	eastl::vector<t3dMovableNodeRef_t>().swap( m_movableNodes );
+	m_activeRegionIndices.clear();
+	m_desiredRegionIndices.clear();
+	t3dMemoryRelease( m_pActiveNodeStorage );
+	t3dMemoryRelease( m_pMovableNodes );
+	m_pActiveNodeStorage = NULL;
+	m_nActiveNodeStorageCapacity = 0u;
+	m_pMovableNodes = NULL;
+	m_nMovableNodeCount = 0u;
 	m_nMovableNodeCapacity = 0u;
+	m_bActivationStorageRebuildPending = false;
 	for ( int index = 0; index < m_nRegionRootPoolCount; ++index ) {
 		if ( m_szRegionRootPool[index] ) {
 			memdelete( m_szRegionRootPool[index] );
-			m_szRegionRootPool[index] = nullptr;
+			m_szRegionRootPool[index] = NULL;
 		}
 	}
 	m_nRegionRootPoolCount = 0;
-	m_nFreeRootPoolCount = 0;
+	m_freeRootPoolIndices.clear();
 	destroyHost();
-	m_desiredRegions.reset();
-	m_pTerrain = nullptr;
+	desiredRegionsReset();
+	memset( m_szPendingDescriptorRegionBits, 0, sizeof( m_szPendingDescriptorRegionBits ) );
+	m_pTerrain = NULL;
 	m_center = s_v2iMax;
-	m_nActiveRegionCount = 0;
+	m_activeRegionIndices.clear();
 	m_nActiveNodeCount = 0;
 	m_nLoadingRegionCount = 0;
 	m_bHasPendingActivation = false;
@@ -1213,16 +1338,16 @@ void Terrain3DNodeStreamer::setLoadNodeBudget( const int nBudget ) {
 	}
 	m_nLoadNodeBudget = budget;
 	if ( m_pTerrain ) {
-		rebuildActivationStorage();
+		requestActivationStorageRebuild();
 	}
 }
 
 int64_t Terrain3DNodeStreamer::addStreamedSceneInternal( const Ref<PackedScene> &rScene,
-		const String &rScenePath,
-		const Transform3D &rGlobalTransform,
-		const Dictionary &rState,
-		const int nFlags,
-		const int nHlodMinLevel ) {
+        const String &rScenePath,
+        const Transform3D &rGlobalTransform,
+        const Dictionary &rState,
+        const int nFlags,
+        const int nHlodMinLevel ) {
 	if ( !m_pTerrain || !m_pTerrain->getData() || ( rScene.is_null() && rScenePath.is_empty() ) ) {
 		return 0;
 	}
@@ -1231,8 +1356,8 @@ int64_t Terrain3DNodeStreamer::addStreamedSceneInternal( const Ref<PackedScene> 
 	if ( fRegionWorldSize <= 0.0f ) {
 		return 0;
 	}
-	const Vector2i location( ( int )( Math::floor( local.origin.x / fRegionWorldSize ) ),
-			( int )( Math::floor( local.origin.z / fRegionWorldSize ) ) );
+	const Vector2i location(
+	        ( int )( Math::floor( local.origin.x / fRegionWorldSize ) ), ( int )( Math::floor( local.origin.z / fRegionWorldSize ) ) );
 	if ( Terrain3DData::getRegionMapIndex( location ) < 0 ) {
 		return 0;
 	}
@@ -1253,23 +1378,23 @@ int64_t Terrain3DNodeStreamer::addStreamedSceneInternal( const Ref<PackedScene> 
 	}
 	const int effective_flags = ( nFlags & NODE_FLAG_HLOD_VISUAL ) != 0 ? ( nFlags | NODE_FLAG_STATIC ) : nFlags;
 	const int64_t stored_id = !rScenePath.is_empty() ? pRegion->addStreamedNodePath( rScenePath,
-															   region_local,
-															   rState,
-															   effective_flags,
-															   id,
-															   STREAMED_NODE_BOUNDARY_ANCHOR,
-															   s_v2iZero,
-															   s_v2iZero,
-															   nHlodMinLevel )
-													 : pRegion->addStreamedNode( rScene,
-															   region_local,
-															   rState,
-															   effective_flags,
-															   id,
-															   STREAMED_NODE_BOUNDARY_ANCHOR,
-															   s_v2iZero,
-															   s_v2iZero,
-															   nHlodMinLevel );
+	                                                           region_local,
+	                                                           rState,
+	                                                           effective_flags,
+	                                                           id,
+	                                                           STREAMED_NODE_BOUNDARY_ANCHOR,
+	                                                           s_v2iZero,
+	                                                           s_v2iZero,
+	                                                           nHlodMinLevel )
+	                                                 : pRegion->addStreamedNode( rScene,
+	                                                           region_local,
+	                                                           rState,
+	                                                           effective_flags,
+	                                                           id,
+	                                                           STREAMED_NODE_BOUNDARY_ANCHOR,
+	                                                           s_v2iZero,
+	                                                           s_v2iZero,
+	                                                           nHlodMinLevel );
 	if ( stored_id != id ) {
 		if ( stored_id > 0 ) {
 			pRegion->removeStreamedNode( stored_id );
@@ -1280,24 +1405,24 @@ int64_t Terrain3DNodeStreamer::addStreamedSceneInternal( const Ref<PackedScene> 
 	if ( index >= 0 && m_szRegions[index].m_pRoot ) {
 		deactivateRegion( index, true );
 	}
-	rebuildActivationStorage();
+	requestActivationStorageRebuild();
 	m_center = s_v2iMax;
 	return id;
 }
 
 int64_t Terrain3DNodeStreamer::addStreamedScene( const Ref<PackedScene> &rScene,
-		const Transform3D &rGlobalTransform,
-		const Dictionary &rState,
-		const int nFlags,
-		const int nHlodMinLevel ) {
+        const Transform3D &rGlobalTransform,
+        const Dictionary &rState,
+        const int nFlags,
+        const int nHlodMinLevel ) {
 	return addStreamedSceneInternal( rScene, String(), rGlobalTransform, rState, nFlags, nHlodMinLevel );
 }
 
 int64_t Terrain3DNodeStreamer::addStreamedScenePath( const String &rScenePath,
-		const Transform3D &rGlobalTransform,
-		const Dictionary &rState,
-		const int nFlags,
-		const int nHlodMinLevel ) {
+        const Transform3D &rGlobalTransform,
+        const Dictionary &rState,
+        const int nFlags,
+        const int nHlodMinLevel ) {
 	return addStreamedSceneInternal( Ref<PackedScene>(), rScenePath, rGlobalTransform, rState, nFlags, nHlodMinLevel );
 }
 
@@ -1314,7 +1439,7 @@ bool Terrain3DNodeStreamer::removeStreamedScene( const int64_t nSpawnId ) {
 		if ( m_szRegions[index].m_pRoot ) {
 			deactivateRegion( index, false );
 		}
-		rebuildActivationStorage();
+		requestActivationStorageRebuild();
 		m_center = s_v2iMax;
 		return true;
 	}
@@ -1322,12 +1447,7 @@ bool Terrain3DNodeStreamer::removeStreamedScene( const int64_t nSpawnId ) {
 }
 
 size_t Terrain3DNodeStreamer::getRetainedCapacityBytes( void ) const {
-	size_t bytes = 0u;
-	for ( int index = 0; index < s_nMaxRegionSlots; ++index ) {
-		bytes += m_szRegions[index].m_nodes.capacity() * sizeof( t3dActiveNode_t );
-	}
-	bytes += m_movableNodes.capacity() * sizeof( t3dMovableNodeRef_t );
-	return bytes;
+	return m_nActiveNodeStorageCapacity * sizeof( t3dActiveNode_t ) + m_nMovableNodeCapacity * sizeof( t3dMovableNodeRef_t );
 }
 
 void Terrain3DNodeStreamer::onHlodRepresentationChanged( const Vector2i &rRegion ) {
@@ -1340,8 +1460,8 @@ void Terrain3DNodeStreamer::onHlodRepresentationChanged( const Vector2i &rRegion
 	if ( !pRegion ) {
 		return;
 	}
-	for ( int i = ( int )runtime.m_nodes.size() - 1; i >= 0; --i ) {
-		const t3dActiveNode_t active = runtime.m_nodes[( size_t )i];
+	for ( int i = ( int )runtime.m_nNodeCount - 1; i >= 0; --i ) {
+		const t3dActiveNode_t active = regionNodes( runtime )[( size_t )i];
 		if ( ( active.m_nFlags & NODE_FLAG_HLOD_VISUAL ) == 0 ) {
 			continue;
 		}
@@ -1387,7 +1507,8 @@ bool Terrain3DNodeStreamer::areHlodVisualRegionsReady( const Vector2i &rRegionMi
 				continue;
 			}
 			const t3dRegionRuntime_t &runtime = m_szRegions[index];
-			for ( const t3dStreamedNodeRuntimeDescriptor_t &spawn : pRegion->getStreamedNodesRuntimeInternal() ) {
+			for ( size_t iNode = 0u; iNode < ( size_t )( ( pRegion->getStreamedNodesRuntimeInternal() ).size() ); iNode++ ) {
+				const t3dStreamedNodeRuntimeDescriptor_t &spawn = ( pRegion->getStreamedNodesRuntimeInternal() )[iNode];
 				if ( ( spawn.m_nFlags & NODE_FLAG_HLOD_VISUAL ) == 0 ) {
 					continue;
 				}
@@ -1411,9 +1532,9 @@ Dictionary Terrain3DNodeStreamer::getStats( void ) const {
 	stats["effective_radius_regions"] = getEffectiveRadiusRegions();
 	stats["editor_preview"] = m_pTerrain && m_pTerrain->isEditorNodeStreamingPreviewActive();
 	stats["full_authoring_residency"] = usesFullAuthoringResidency();
-	stats["active_regions"] = m_nActiveRegionCount;
+	stats["active_regions"] = ( int )( m_activeRegionIndices.size() );
 	stats["active_nodes"] = m_nActiveNodeCount;
-	stats["movable_nodes"] = ( int )( m_movableNodes.size() );
+	stats["movable_nodes"] = ( int )( m_nMovableNodeCount );
 	stats["loads_last_tick"] = m_nLoadsLastTick;
 	stats["unloads_last_tick"] = m_nUnloadsLastTick;
 	stats["scene_load_failures_last_tick"] = m_nSceneLoadFailuresLastTick;
@@ -1456,15 +1577,15 @@ Dictionary Terrain3DNodeStreamer::getStats( void ) const {
 				virtual_nodes += pRegion->getStreamedNodeCount();
 			}
 		}
-		for ( uint16_t desired_i = 0u; desired_i < m_nDesiredRegionCount; ++desired_i ) {
-			const int index = m_szDesiredRegionIndices[desired_i];
+		for ( uint16_t desired_i = 0u; desired_i < ( uint16_t )( m_desiredRegionIndices.size() ); ++desired_i ) {
+			const int index = m_desiredRegionIndices[desired_i];
 			if ( !m_szRegions[index].m_bActive ) {
 				++pending_regions;
 			}
 		}
-		for ( int active_i = 0; active_i < m_nActiveRegionCount; ++active_i ) {
-			const int index = m_szActiveRegionIndices[active_i];
-			if ( !m_desiredRegions.test( ( size_t )( index ) ) ) {
+		for ( int active_i = 0; active_i < ( int )( m_activeRegionIndices.size() ); ++active_i ) {
+			const int index = m_activeRegionIndices[active_i];
+			if ( !desiredRegionTest( index ) ) {
 				++pending_unloads;
 			}
 			if ( m_szRegions[index].m_bLoading ) {
@@ -1475,13 +1596,13 @@ Dictionary Terrain3DNodeStreamer::getStats( void ) const {
 		}
 	}
 	stats["virtual_nodes"] = virtual_nodes;
-	stats["desired_regions"] = ( int )m_nDesiredRegionCount;
+	stats["desired_regions"] = ( int )( m_desiredRegionIndices.size() );
 	stats["pending_spawns"] = pending_spawns;
 	stats["pending_regions"] = pending_regions;
 	stats["pending_unloads"] = pending_unloads;
 	stats["load_region_budget_saturated_last_tick"] = m_bLoadRegionBudgetLimitedLastTick;
 	stats["load_node_budget_saturated_last_tick"] =
-			m_nLoadNodeBudget > 0 && m_nLoadNodeBudgetUsedLastTick >= m_nLoadNodeBudget && pending_spawns > 0;
+	        m_nLoadNodeBudget > 0 && m_nLoadNodeBudgetUsedLastTick >= m_nLoadNodeBudget && pending_spawns > 0;
 	stats["unload_region_budget_saturated_last_tick"] = m_bUnloadRegionBudgetLimitedLastTick;
 	return stats;
 }
@@ -1501,18 +1622,16 @@ void Terrain3DNodeStreamer::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_load_node_budget" ), &Terrain3DNodeStreamer::getLoadNodeBudget );
 	ClassDB::bind_method( D_METHOD( "set_unload_region_budget", "budget" ), &Terrain3DNodeStreamer::setUnloadRegionBudget );
 	ClassDB::bind_method( D_METHOD( "get_unload_region_budget" ), &Terrain3DNodeStreamer::getUnloadRegionBudget );
-	ClassDB::bind_method(
-			D_METHOD( "add_streamed_scene", "scene", "global_transform", "state", "flags", "hlod_min_level" ),
-			&Terrain3DNodeStreamer::addStreamedScene,
-			DEFVAL( Dictionary() ),
-			DEFVAL( NODE_FLAG_NONE ),
-			DEFVAL( 1 ) );
-	ClassDB::bind_method(
-			D_METHOD( "add_streamed_scene_path", "scene_path", "global_transform", "state", "flags", "hlod_min_level" ),
-			&Terrain3DNodeStreamer::addStreamedScenePath,
-			DEFVAL( Dictionary() ),
-			DEFVAL( NODE_FLAG_NONE ),
-			DEFVAL( 1 ) );
+	ClassDB::bind_method( D_METHOD( "add_streamed_scene", "scene", "global_transform", "state", "flags", "hlod_min_level" ),
+	        &Terrain3DNodeStreamer::addStreamedScene,
+	        DEFVAL( Dictionary() ),
+	        DEFVAL( NODE_FLAG_NONE ),
+	        DEFVAL( 1 ) );
+	ClassDB::bind_method( D_METHOD( "add_streamed_scene_path", "scene_path", "global_transform", "state", "flags", "hlod_min_level" ),
+	        &Terrain3DNodeStreamer::addStreamedScenePath,
+	        DEFVAL( Dictionary() ),
+	        DEFVAL( NODE_FLAG_NONE ),
+	        DEFVAL( 1 ) );
 	ClassDB::bind_method( D_METHOD( "remove_streamed_scene", "spawn_id" ), &Terrain3DNodeStreamer::removeStreamedScene );
 	ClassDB::bind_method( D_METHOD( "get_stats" ), &Terrain3DNodeStreamer::getStats );
 }

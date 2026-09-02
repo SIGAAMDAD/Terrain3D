@@ -1,7 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_INSTANCE_REGION_CACHE_H
 #define TERRAIN3D_INSTANCE_REGION_CACHE_H
 
@@ -10,8 +8,8 @@
 #include "instances/terrain_3d_instance_cache_constants.h"
 #include "streaming/terrain_3d_residency_state.h"
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 #include <godot_cpp/variant/dictionary.hpp>
 
 class Terrain3DRegionRepository;
@@ -45,20 +43,12 @@ class Terrain3DInstanceRegionCache {
 public:
 	Terrain3DInstanceRegionCache( Terrain3DRegionRepository *pRepository, Terrain3DRuntimePageStore *pRuntimePageStore );
 
-	void configure( bool bEnabled,
-			int nBudgetMb,
-			int nLoadPages,
-			int nLoadBudgetMb,
-			t3dInstanceRegionCacheChanges_t *pChanges = nullptr );
-	void reset( bool bRestoreAll, t3dInstanceRegionCacheChanges_t *pChanges = nullptr );
-	void invalidate( const Vector2i &vLocation, t3dInstanceRegionCacheChanges_t *pChanges = nullptr );
-	bool evict( const Vector2i &vLocation, t3dInstanceRegionCacheChanges_t *pChanges = nullptr );
-	bool
-	ensureResident( const Vector2i &vLocation, bool bDemandLoad, t3dInstanceRegionCacheChanges_t *pChanges = nullptr );
-	void update( const t3dResidencyFrameState_t &rFrame,
-			bool bForce,
-			int nEffectiveLoadPages,
-			t3dInstanceRegionCacheChanges_t &rChanges );
+	void configure( bool bEnabled, int nBudgetMb, int nLoadPages, int nLoadBudgetMb, t3dInstanceRegionCacheChanges_t *pChanges = NULL );
+	void reset( bool bRestoreAll, t3dInstanceRegionCacheChanges_t *pChanges = NULL );
+	void invalidate( const Vector2i &vLocation, t3dInstanceRegionCacheChanges_t *pChanges = NULL );
+	bool evict( const Vector2i &vLocation, t3dInstanceRegionCacheChanges_t *pChanges = NULL );
+	bool ensureResident( const Vector2i &vLocation, bool bDemandLoad, t3dInstanceRegionCacheChanges_t *pChanges = NULL );
+	void update( const t3dResidencyFrameState_t &rFrame, bool bForce, int nEffectiveLoadPages, t3dInstanceRegionCacheChanges_t &rChanges );
 
 	EA_FORCE_INLINE bool isEnabled( void ) const {
 		return m_bEnabled;
@@ -85,8 +75,8 @@ public:
 	Dictionary getStatsDictionary( bool bDetailed, int nEffectiveLoadPages ) const;
 
 private:
-	Terrain3DRegionRepository *m_pRepository = nullptr;
-	Terrain3DRuntimePageStore *m_pRuntimePageStore = nullptr;
+	Terrain3DRegionRepository *m_pRepository = NULL;
+	Terrain3DRuntimePageStore *m_pRuntimePageStore = NULL;
 
 	bool m_bEnabled = false;
 	bool m_bSelectionDirty = true;
@@ -110,10 +100,7 @@ private:
 
 	int findSlot( const Vector2i &vLocation ) const;
 	bool evictSlot( int iSlot, t3dInstanceRegionCacheChanges_t *pChanges );
-	int collectDesired( const t3dResidencyFrameState_t &rFrame,
-			const Vector2i &rCenter,
-			Vector2i *pLocations,
-			int nCapacity ) const;
+	int collectDesired( const t3dResidencyFrameState_t &rFrame, const Vector2i &rCenter, Vector2i *pLocations, int nCapacity ) const;
 };
 
 #endif // TERRAIN3D_INSTANCE_REGION_CACHE_H

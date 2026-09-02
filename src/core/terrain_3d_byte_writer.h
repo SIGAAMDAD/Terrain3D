@@ -1,24 +1,22 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
-#pragma once
-
 #ifndef TERRAIN3D_BYTE_WRITER_H
 #define TERRAIN3D_BYTE_WRITER_H
 
 #include "core/terrain_3d_compiler.h"
 
-#include <cstddef>
-#include <cstdint>
-#include <cstring>
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
 
 typedef struct t3dByteWriter_s {
-	uint8_t *m_pData = nullptr;
+	uint8_t *m_pData = NULL;
 	size_t m_nCapacity = 0u;
 	size_t m_iOffset = 0u;
 	bool m_bValid = true;
 
 	t3dByteWriter_s() = default;
-	EA_FORCE_INLINE t3dByteWriter_s( uint8_t *pBytes, const size_t nBytes ) :
-			m_pData( pBytes ), m_nCapacity( nBytes ) {}
+	EA_FORCE_INLINE t3dByteWriter_s( uint8_t *pBytes, const size_t nBytes ) : m_pData( pBytes ), m_nCapacity( nBytes ) {
+	}
 
 	EA_FORCE_INLINE bool canWrite( const size_t nBytes ) const {
 		return m_bValid && m_iOffset <= m_nCapacity && nBytes <= m_nCapacity - m_iOffset;
@@ -71,17 +69,17 @@ typedef struct t3dByteWriter_s {
 	}
 	EA_FORCE_INLINE bool writeF32( const float fValue ) {
 		uint32_t bits = 0u;
-		std::memcpy( &bits, &fValue, sizeof( bits ) );
+		memcpy( &bits, &fValue, sizeof( bits ) );
 		return writeU32( bits );
 	}
 	EA_FORCE_INLINE bool writeBytes( const void *pSource, const size_t nBytes ) {
 		if ( nBytes == 0u ) {
 			return true;
 		}
-		if ( pSource == nullptr || !canWrite( nBytes ) ) {
+		if ( pSource == NULL || !canWrite( nBytes ) ) {
 			return fail();
 		}
-		std::memcpy( m_pData + m_iOffset, pSource, nBytes );
+		memcpy( m_pData + m_iOffset, pSource, nBytes );
 		m_iOffset += nBytes;
 		return true;
 	}
@@ -89,7 +87,7 @@ typedef struct t3dByteWriter_s {
 		if ( !canWrite( nBytes ) ) {
 			return fail();
 		}
-		std::memset( m_pData + m_iOffset, 0, nBytes );
+		memset( m_pData + m_iOffset, 0, nBytes );
 		m_iOffset += nBytes;
 		return true;
 	}

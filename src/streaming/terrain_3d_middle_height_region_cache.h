@@ -1,7 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_MIDDLE_HEIGHT_REGION_CACHE_H
 #define TERRAIN3D_MIDDLE_HEIGHT_REGION_CACHE_H
 
@@ -11,8 +9,8 @@
 #include "streaming/terrain_3d_gpu_cache_constants.h"
 #include "streaming/terrain_3d_residency_state.h"
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 #include <godot_cpp/variant/dictionary.hpp>
 
 class Terrain3DRegionRepository;
@@ -43,15 +41,15 @@ typedef struct t3dMiddleHeightRegionCacheStats_s {
 class Terrain3DMiddleHeightRegionCache {
 public:
 	Terrain3DMiddleHeightRegionCache( Terrain3DRegionRepository *pRepository,
-			Terrain3DSamplingStorage *pSamplingStorage,
-			Terrain3DRuntimePageStore *pRuntimePageStore );
+	        Terrain3DSamplingStorage *pSamplingStorage,
+	        Terrain3DRuntimePageStore *pRuntimePageStore );
 
 	void reset( void );
 	bool configure( const t3dMiddleHeightRegionCacheConfig_t &rConfig );
 	void update( const t3dResidencyFrameState_t &rFrame,
-			bool bForce,
-			int nEffectiveUploadLayers,
-			const t3dMiddleHeightRegionCacheConfig_t &rConfig );
+	        bool bForce,
+	        int nEffectiveUploadLayers,
+	        const t3dMiddleHeightRegionCacheConfig_t &rConfig );
 	void invalidate( const Vector2i &vLocation );
 	EA_FORCE_INLINE void markSelectionDirty( void ) {
 		m_bSelectionDirty = true;
@@ -84,9 +82,9 @@ public:
 	size_t getReservedBytes( void ) const;
 
 private:
-	Terrain3DRegionRepository *m_pRepository = nullptr;
-	Terrain3DSamplingStorage *m_pSamplingStorage = nullptr;
-	Terrain3DRuntimePageStore *m_pRuntimePageStore = nullptr;
+	Terrain3DRegionRepository *m_pRepository = NULL;
+	Terrain3DSamplingStorage *m_pSamplingStorage = NULL;
+	Terrain3DRuntimePageStore *m_pRuntimePageStore = NULL;
 	t3dMiddleHeightRegionCacheConfig_t m_config;
 
 	Terrain3DGeneratedTexture m_generatedHeightMaps;
@@ -113,10 +111,10 @@ private:
 	int findSlot( const Vector2i &vLocation ) const;
 	bool uploadLayer( int nLayer, const Vector2i &vLocation, const Ref<Image> &rPreparedHeight = Ref<Image>() );
 	int collectDesired( const t3dResidencyFrameState_t &rFrame,
-			const Vector2i &rCenter,
-			Vector2i *pLocations,
-			int nCapacity,
-			int &rRequiredCount ) const;
+	        const Vector2i &rCenter,
+	        Vector2i *pLocations,
+	        int nCapacity,
+	        int &rRequiredCount ) const;
 	bool updatePageTableTexture( void );
 };
 

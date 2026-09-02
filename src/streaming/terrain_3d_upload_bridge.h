@@ -1,11 +1,9 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_UPLOAD_BRIDGE_H
 #define TERRAIN3D_UPLOAD_BRIDGE_H
 
-#include <cstdint>
+#include <stdint.h>
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/rid.hpp>

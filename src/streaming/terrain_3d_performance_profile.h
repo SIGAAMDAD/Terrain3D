@@ -1,17 +1,15 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
-#pragma once
-
-#ifndef TERRAIN_3D_PERFORMANCE_PROFILE_H
-#define TERRAIN_3D_PERFORMANCE_PROFILE_H
+#ifndef TERRAIN3D_PERFORMANCE_PROFILE_H
+#define TERRAIN3D_PERFORMANCE_PROFILE_H
 
 #include "Terrain3DConstants.h"
 #include "core/terrain_3d_compiler.h"
 
-#include <cstddef>
-#include <cstdint>
-#include <cstring>
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
 
-EA_FORCE_INLINE constexpr size_t t3dPerformanceProfileSettingCount( void ) {
+EA_FORCE_INLINE size_t t3dPerformanceProfileSettingCount( void ) {
 	return g_nXbox360ExperimentalSettingCount;
 }
 
@@ -43,7 +41,8 @@ inline uint64_t t3dPerformanceProfileComputeSignature( void ) {
 	uint64_t nHash = s_nProfileFnvOffset;
 	t3dPerformanceProfileSignatureAppendUint32( nHash, s_nProfileVersion );
 	t3dPerformanceProfileSignatureAppendString( nHash, s_pszProfileKey );
-	for ( const t3dPerformanceProfileSetting_t &setting : g_szXbox360ExperimentalSettings ) {
+	for ( size_t iSetting = 0u; iSetting < T3D_ARRAY_COUNT( g_szXbox360ExperimentalSettings ); iSetting++ ) {
+		const t3dPerformanceProfileSetting_t &setting = ( g_szXbox360ExperimentalSettings )[iSetting];
 		t3dPerformanceProfileSignatureAppendByte( nHash, ( uint8_t )( setting.m_owner ) );
 		t3dPerformanceProfileSignatureAppendByte( nHash, ( uint8_t )( setting.m_kind ) );
 		t3dPerformanceProfileSignatureAppendString( nHash, setting.m_pszProperty );
@@ -53,9 +52,9 @@ inline uint64_t t3dPerformanceProfileComputeSignature( void ) {
 				break;
 			case T3D_PROFILE_VALUE_FLOAT: {
 				uint64_t bits = 0u;
-				static_assert( sizeof( bits ) == sizeof( setting.m_fFloatValue ),
-						"profile float t3dPerformanceProfileSignature size mismatch" );
-				std::memcpy( &bits, &setting.m_fFloatValue, sizeof( bits ) );
+				static_assert(
+				        sizeof( bits ) == sizeof( setting.m_fFloatValue ), "profile float t3dPerformanceProfileSignature size mismatch" );
+				memcpy( &bits, &setting.m_fFloatValue, sizeof( bits ) );
 				t3dPerformanceProfileSignatureAppendUint64( nHash, bits );
 				break;
 			}
@@ -72,4 +71,4 @@ EA_FORCE_INLINE uint64_t t3dPerformanceProfileSignature( void ) {
 	return s_nCachedSignature;
 }
 
-#endif // TERRAIN_3D_PERFORMANCE_PROFILE_H
+#endif // TERRAIN3D_PERFORMANCE_PROFILE_H

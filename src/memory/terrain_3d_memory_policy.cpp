@@ -13,18 +13,20 @@
 #include "lighting/terrain_3d_lightmap_streamer.h"
 #include "memory/terrain_3d_linear_arena.h"
 #include "memory/terrain_3d_zone_allocator.h"
-#include "rendering/terrain_3d_compute.h"
 #include "rendering/rd/terrain_3d_rd_context.h"
 #include "rendering/rd/terrain_3d_render_coordinator.h"
+#include "rendering/terrain_3d_compute.h"
 #include "simd/terrain_3d_parallel.h"
 #include "streaming/terrain_3d_node_streamer.h"
+
+#include <EASTL/numeric_limits.h>
+#include <assert.h>
 #include "streaming/terrain_3d_performance_profile.h"
 #include "streaming/terrain_3d_streaming_policy.h"
 #include "terrain_3d.h"
 
-#include <algorithm>
-#include <cmath>
-#include <cstring>
+#include <math.h>
+#include <string.h>
 #include <godot_cpp/classes/compositor.hpp>
 #include <godot_cpp/classes/directional_light3d.hpp>
 #include <godot_cpp/classes/editor_interface.hpp>
@@ -42,23 +44,37 @@
 #include <godot_cpp/classes/viewport_texture.hpp>
 #include <godot_cpp/classes/world3d.hpp>
 #include <godot_cpp/core/memory.hpp>
-#include <limits>
-#include <numeric>
-#include <utility>
 
 bool Terrain3D::initializeRuntimeMemory( void ) {
 	if ( m_bRuntimeMemoryReady ) {
-		if ( Terrain3DZoneAllocatorRouter::zone() != &m_runtimeMemoryZone ||
-				m_runtimeMemoryZone.state() != T3D_MEMORY_ZONE_ACTIVE ) {
+		if ( m_runtimeMemoryZone.state() != T3D_MEMORY_ZONE_ACTIVE ) {
 			return false;
 		}
+		Terrain3DMemoryZone *pOwner = Terrain3DZoneAllocatorRouter::zone();
+		if ( pOwner && pOwner != &m_runtimeMemoryZone ) {
+			return false;
+		}
+		if ( !pOwner ) {
+			if ( !Terrain3DZoneAllocatorRouter::reserve( &m_runtimeMemoryZone ) ) {
+				return false;
+			}
+			pOwner = &m_runtimeMemoryZone;
+		}
+		if ( !Terrain3DZoneAllocatorRouter::isRouting( &m_runtimeMemoryZone )
+		        && !Terrain3DZoneAllocatorRouter::startRouting( &m_runtimeMemoryZone ) ) {
+			if ( Terrain3DZoneAllocatorRouter::zone() == &m_runtimeMemoryZone ) {
+				Terrain3DZoneAllocatorRouter::uninstall( &m_runtimeMemoryZone );
+			}
+			return false;
+		}
+		Terrain3DZoneAllocatorRouter::setOverflowPolicy(
+		        Engine::get_singleton()->is_editor_hint() ? TERRAIN3D_ALLOCATOR_OVERFLOW_HEAP : TERRAIN3D_ALLOCATOR_OVERFLOW_STRICT );
 		if ( m_pData && m_pData->isActiveStorageOwnerInternal() ) {
 			return true;
 		}
 		const t3dMemoryArenaSpan_t active_span = m_runtimeMemoryArena.resolve( m_runtimeActiveHeightSlice );
-		return m_pData && active_span.valid() &&
-				m_pData->bindActiveStorageInternal(
-						( int )( m_nRegionSize ), active_span.m_pData, active_span.m_nSize );
+		return m_pData && active_span.valid()
+		        && m_pData->bindActiveStorageInternal( ( int )( m_nRegionSize ), active_span.m_pData, active_span.m_nSize );
 	}
 	if ( !Terrain3DZoneAllocatorRouter::canInstall( &m_runtimeMemoryZone ) ) {
 		return false;
@@ -67,20 +83,20 @@ bool Terrain3D::initializeRuntimeMemory( void ) {
 	// page banks retain independent storage and must never route through this allocator.
 	const size_t active_bytes = t3dActiveStorageRequiredBytes( ( int )( m_nRegionSize ) );
 	const size_t zone_bytes = calculateRuntimeAllocatorZoneBytes();
-	if ( active_bytes == 0u || zone_bytes < Terrain3DMemoryZone::s_nSmallPageBytes ||
-			active_bytes > std::numeric_limits<size_t>::max() - zone_bytes - 2u * s_nArenaDefaultBaseAlignment ) {
+	if ( active_bytes == 0u || zone_bytes < s_nSmallPageBytes
+	        || active_bytes > eastl::numeric_limits<size_t>::max() - zone_bytes - 2u * s_nArenaDefaultBaseAlignment ) {
 		return false;
 	}
 	Terrain3DMemoryArenaLayout layout( active_bytes + zone_bytes + 2u * s_nArenaDefaultBaseAlignment );
-	if ( !layout.reserveLow( active_bytes, s_nActiveStorageAlignment, m_runtimeActiveHeightSlice ) ||
-			!layout.reserveLow( zone_bytes, s_nArenaDefaultBaseAlignment, m_runtimeZoneSlice ) || !layout.seal() ||
-			!m_runtimeMemoryArena.initialize( layout ) || !m_runtimeMemoryArena.commit() ) {
+	if ( !layout.reserveLow( active_bytes, s_nActiveStorageAlignment, m_runtimeActiveHeightSlice )
+	        || !layout.reserveLow( zone_bytes, s_nArenaDefaultBaseAlignment, m_runtimeZoneSlice ) || !layout.seal()
+	        || !m_runtimeMemoryArena.initialize( layout ) || !m_runtimeMemoryArena.commit() ) {
 		return false;
 	}
 	const t3dMemoryArenaSpan_t active_span = m_runtimeMemoryArena.resolve( m_runtimeActiveHeightSlice );
 	const t3dMemoryArenaSpan_t zone_span = m_runtimeMemoryArena.resolve( m_runtimeZoneSlice );
-	if ( !m_pData || !active_span.valid() || !zone_span.valid() ||
-			!m_runtimeMemoryZone.initialize( zone_span.m_pData, zone_span.m_nSize ) ) {
+	if ( !m_pData || !active_span.valid() || !zone_span.valid()
+	        || !m_runtimeMemoryZone.initialize( zone_span.m_pData, zone_span.m_nSize ) ) {
 		m_runtimeMemoryArena.release();
 		return false;
 	}
@@ -90,8 +106,8 @@ bool Terrain3D::initializeRuntimeMemory( void ) {
 		m_runtimeMemoryArena.release();
 		return false;
 	}
-	if ( !m_pData->bindActiveStorageInternal( ( int )( m_nRegionSize ), active_span.m_pData, active_span.m_nSize ) ||
-			!m_runtimeMemoryArena.seal() ) {
+	if ( !m_pData->bindActiveStorageInternal( ( int )( m_nRegionSize ), active_span.m_pData, active_span.m_nSize )
+	        || !m_runtimeMemoryArena.seal() ) {
 		m_pData->deactivateRuntimeStorage( this );
 		m_runtimeMemoryZone.beginDraining();
 		m_runtimeMemoryZone.release();
@@ -99,9 +115,8 @@ bool Terrain3D::initializeRuntimeMemory( void ) {
 		m_runtimeMemoryArena.release();
 		return false;
 	}
-	Terrain3DZoneAllocatorRouter::setOverflowPolicy( Engine::get_singleton()->is_editor_hint()
-					? TERRAIN3D_ALLOCATOR_OVERFLOW_HEAP
-					: TERRAIN3D_ALLOCATOR_OVERFLOW_STRICT );
+	Terrain3DZoneAllocatorRouter::setOverflowPolicy(
+	        Engine::get_singleton()->is_editor_hint() ? TERRAIN3D_ALLOCATOR_OVERFLOW_HEAP : TERRAIN3D_ALLOCATOR_OVERFLOW_STRICT );
 	if ( !Terrain3DZoneAllocatorRouter::startRouting( &m_runtimeMemoryZone ) ) {
 		m_pData->deactivateRuntimeStorage( this );
 		m_runtimeMemoryZone.beginDraining();
@@ -119,9 +134,9 @@ bool Terrain3D::beginRuntimeMemoryDrain( void ) {
 		return true;
 	}
 	Terrain3DMemoryZone *const pOwner = Terrain3DZoneAllocatorRouter::zone();
-	if ( pOwner && pOwner != &m_runtimeMemoryZone ) {
-		return false;
-	}
+	// A detached Terrain3D may be destroyed while a different scene instance owns
+	// the process-global allocation router. That does not prevent this private zone
+	// from draining: only stop routing when this exact zone is the active owner.
 	if ( pOwner == &m_runtimeMemoryZone && !Terrain3DZoneAllocatorRouter::stopRouting( &m_runtimeMemoryZone ) ) {
 		return false;
 	}
@@ -129,20 +144,30 @@ bool Terrain3D::beginRuntimeMemoryDrain( void ) {
 	if ( state == T3D_MEMORY_ZONE_ACTIVE ) {
 		return m_runtimeMemoryZone.beginDraining();
 	}
-	return state == T3D_MEMORY_ZONE_DRAINING || state == T3D_MEMORY_ZONE_DEAD ||
-			state == T3D_MEMORY_ZONE_UNINITIALIZED;
+	return state == T3D_MEMORY_ZONE_DRAINING || state == T3D_MEMORY_ZONE_DEAD || state == T3D_MEMORY_ZONE_UNINITIALIZED;
 }
 
 bool Terrain3D::releaseRuntimeMemory( void ) {
 	if ( !m_bRuntimeMemoryReady ) {
 		return true;
 	}
-	if ( !beginRuntimeMemoryDrain() || ( m_pData && m_pData->isActiveStorageOwnerInternal() ) ||
-			m_runtimeMemoryZone.liveAllocations() != 0u || !m_runtimeMemoryZone.release() ) {
+	if ( !beginRuntimeMemoryDrain() || ( m_pData && m_pData->isActiveStorageOwnerInternal() ) ) {
 		return false;
 	}
-	if ( Terrain3DZoneAllocatorRouter::zone() == &m_runtimeMemoryZone &&
-			!Terrain3DZoneAllocatorRouter::uninstall( &m_runtimeMemoryZone ) ) {
+	if ( m_runtimeMemoryZone.liveAllocations() != 0u ) {
+		if ( Terrain3DZoneAllocatorRouter::zone() == &m_runtimeMemoryZone ) {
+			Terrain3DZoneAllocatorRouter::uninstall( &m_runtimeMemoryZone );
+		}
+		return false;
+	}
+	if ( Terrain3DZoneAllocatorRouter::zone() == &m_runtimeMemoryZone
+	        && !Terrain3DZoneAllocatorRouter::uninstall( &m_runtimeMemoryZone ) ) {
+		return false;
+	}
+#if !defined( NDEBUG )
+	assert( m_runtimeMemoryZone.liveAllocations() == 0u );
+#endif
+	if ( !m_runtimeMemoryZone.release() ) {
 		return false;
 	}
 	m_runtimeMemoryArena.release();
@@ -150,6 +175,30 @@ bool Terrain3D::releaseRuntimeMemory( void ) {
 	m_runtimeZoneSlice = {};
 	m_bRuntimeMemoryReady = false;
 	return true;
+}
+
+bool Terrain3D::shutdownRuntimeMemoryImage( void ) {
+	if ( !m_bRuntimeMemoryReady ) {
+		m_runtimeLifecycleState = TERRAIN3D_RUNTIME_COLD;
+		return true;
+	}
+	m_runtimeLifecycleState = TERRAIN3D_RUNTIME_SHUTTING_DOWN;
+	if ( releaseRuntimeMemory() ) {
+		m_runtimeLifecycleState = TERRAIN3D_RUNTIME_COLD;
+		return true;
+	}
+	const t3dMemoryZoneStats_t stats = m_runtimeMemoryZone.getStats();
+	LOG( ERROR,
+	        "[lifecycle] Final runtime memory drain failed: live allocations=",
+	        stats.m_nLiveAllocationCount,
+	        "; live requested bytes=",
+	        stats.m_nLiveRequestedBytes,
+	        "; live physical bytes=",
+	        stats.m_nLivePhysicalBytes,
+	        "; zone_state=",
+	        ( int )( m_runtimeMemoryZone.state() ) );
+	m_runtimeLifecycleState = TERRAIN3D_RUNTIME_DRAIN_FAILED;
+	return false;
 }
 
 void Terrain3D::markMemoryBudgetDirty( void ) {
@@ -180,12 +229,12 @@ size_t Terrain3D::calculateRuntimeAllocatorZoneBytes( void ) const {
 	target = MAX( target, ( uint64_t )s_nRuntimeAllocatorMinBytes );
 	target = MIN( target, ( uint64_t )s_nRuntimeAllocatorMaxBytes );
 	const uint64_t fixed_floor = ( uint64_t )active_bytes + transient_bytes;
-	if ( total_bytes <= fixed_floor + Terrain3DMemoryZone::s_nSmallPageBytes ) {
+	if ( total_bytes <= fixed_floor + s_nSmallPageBytes ) {
 		return 0u;
 	}
 	target = MIN( target, total_bytes - fixed_floor );
-	target &= ~( ( uint64_t )Terrain3DMemoryZone::s_nSmallPageBytes - 1u );
-	return target >= Terrain3DMemoryZone::s_nSmallPageBytes && target <= SIZE_MAX ? ( size_t )target : 0u;
+	target &= ~( ( uint64_t )s_nSmallPageBytes - 1u );
+	return target >= s_nSmallPageBytes && target <= SIZE_MAX ? ( size_t )target : 0u;
 }
 
 uint64_t Terrain3D::calculateFixedMemoryBytes( void ) const {
@@ -240,9 +289,8 @@ t3dMemoryBudgetInput_t Terrain3D::buildMemoryBudgetInput( void ) const {
 	t3dMemoryBudgetInput_t input;
 	input.m_nTotalBudgetBytes = ( uint64_t )( m_nTotalMemoryBudgetMb )*s_nMemoryMib;
 	input.m_nFixedBytes = calculateFixedMemoryBytes();
-	input.m_nAllocatorReserveBytes = m_runtimeMemoryZone.capacity() > 0u
-			? ( uint64_t )m_runtimeMemoryZone.capacity()
-			: ( uint64_t )calculateRuntimeAllocatorZoneBytes();
+	input.m_nAllocatorReserveBytes = m_runtimeMemoryZone.capacity() > 0u ? ( uint64_t )m_runtimeMemoryZone.capacity()
+	                                                                     : ( uint64_t )calculateRuntimeAllocatorZoneBytes();
 	input.m_nTransientReserveBytes = ( uint64_t )( m_nMemoryTransientReserveMb )*s_nMemoryMib;
 
 	t3dMemorySubsystemInput_t &gpu = input.m_szSubsystems[TERRAIN3D_MEMORY_GPU_TERRAIN_PAGES];
@@ -288,8 +336,7 @@ t3dMemoryBudgetInput_t Terrain3D::buildMemoryBudgetInput( void ) const {
 	t3dMemorySubsystemInput_t &shader = input.m_szSubsystems[TERRAIN3D_MEMORY_SHADER_CACHE];
 	shader.m_bEnabled = m_material.is_valid();
 	shader.m_bAutomatic = m_bShaderCacheBudgetAuto;
-	shader.m_nManualBytes =
-			( uint64_t )( m_material.is_valid() ? m_material->getShaderVariantSourceBudgetMb() : 8 ) * s_nMemoryMib;
+	shader.m_nManualBytes = ( uint64_t )( m_material.is_valid() ? m_material->getShaderVariantSourceBudgetMb() : 8 ) * s_nMemoryMib;
 	shader.m_nMinimumBytes = ( uint64_t )( s_nMinShaderVariantSourceBudgetMb )*s_nMemoryMib;
 	shader.m_nHardCapBytes = ( uint64_t )( s_nMaxShaderVariantSourceBudgetMb )*s_nMemoryMib;
 	shader.m_nWeight = 1u;
@@ -306,63 +353,55 @@ void Terrain3D::applyMemoryBudgetResult( const t3dMemoryBudgetResult_t &rResult,
 		m_nEffectiveShaderCacheBudgetMb,
 	};
 	const uint64_t fixed_far_bytes = getGpuFarAtlasBytes();
-	const uint64_t gpu_bytes =
-			rResult.m_szSubsystems[TERRAIN3D_MEMORY_GPU_TERRAIN_PAGES].m_nEffectiveBytes + fixed_far_bytes;
+	const uint64_t gpu_bytes = rResult.m_szSubsystems[TERRAIN3D_MEMORY_GPU_TERRAIN_PAGES].m_nEffectiveBytes + fixed_far_bytes;
 	const int gpu_mb = MAX( 1, ( int )( ( gpu_bytes + s_nMemoryMib - 1u ) / s_nMemoryMib ) );
 	const int cpu_mb = MAX( 1,
-			( int )( ( rResult.m_szSubsystems[TERRAIN3D_MEMORY_CPU_TERRAIN_PAGES].m_nEffectiveBytes + s_nMemoryMib -
-							 1u ) /
-					s_nMemoryMib ) );
+	        ( int )( ( rResult.m_szSubsystems[TERRAIN3D_MEMORY_CPU_TERRAIN_PAGES].m_nEffectiveBytes + s_nMemoryMib - 1u )
+	                / s_nMemoryMib ) );
 	const int instance_mb = MAX( 1,
-			( int )( ( rResult.m_szSubsystems[TERRAIN3D_MEMORY_INSTANCE_PAGES].m_nEffectiveBytes + s_nMemoryMib - 1u ) /
-					s_nMemoryMib ) );
+	        ( int )( ( rResult.m_szSubsystems[TERRAIN3D_MEMORY_INSTANCE_PAGES].m_nEffectiveBytes + s_nMemoryMib - 1u ) / s_nMemoryMib ) );
 	const int lightmap_mb = MAX( 1,
-			( int )( ( rResult.m_szSubsystems[TERRAIN3D_MEMORY_BAKED_LIGHTING].m_nEffectiveBytes + s_nMemoryMib - 1u ) /
-					s_nMemoryMib ) );
-	const int hlod_mb = MAX( 1,
-			( int )( ( rResult.m_szSubsystems[TERRAIN3D_MEMORY_HLOD_PROXIES].m_nEffectiveBytes + s_nMemoryMib - 1u ) /
-					s_nMemoryMib ) );
-	const int shader_mb = MAX( 1,
-			( int )( ( rResult.m_szSubsystems[TERRAIN3D_MEMORY_SHADER_CACHE].m_nEffectiveBytes + s_nMemoryMib - 1u ) /
-					s_nMemoryMib ) );
+	        ( int )( ( rResult.m_szSubsystems[TERRAIN3D_MEMORY_BAKED_LIGHTING].m_nEffectiveBytes + s_nMemoryMib - 1u ) / s_nMemoryMib ) );
+	const int hlod_mb = MAX(
+	        1, ( int )( ( rResult.m_szSubsystems[TERRAIN3D_MEMORY_HLOD_PROXIES].m_nEffectiveBytes + s_nMemoryMib - 1u ) / s_nMemoryMib ) );
+	const int shader_mb = MAX(
+	        1, ( int )( ( rResult.m_szSubsystems[TERRAIN3D_MEMORY_SHADER_CACHE].m_nEffectiveBytes + s_nMemoryMib - 1u ) / s_nMemoryMib ) );
 
 	const int hysteresis_mb = ( int )( s_nMemoryPolicyHysteresisBytes / s_nMemoryMib );
-	const bool bGpuChanged = bForce || std::abs( gpu_mb - m_nEffectiveGpuRegionCacheBudgetMb ) >= hysteresis_mb;
-	const bool bCpuChanged = bForce || std::abs( cpu_mb - m_nEffectiveCpuRegionCacheBudgetMb ) >= hysteresis_mb;
-	const bool bInstanceChanged =
-			bForce || std::abs( instance_mb - m_nEffectiveInstanceRegionCacheBudgetMb ) >= hysteresis_mb;
-	const bool bLightmapChanged =
-			bForce || std::abs( lightmap_mb - m_nEffectiveLightmapResidencyBudgetMb ) >= hysteresis_mb;
-	const bool bHlodChanged = bForce || std::abs( hlod_mb - m_nEffectiveHlodMemoryBudgetMb ) >= hysteresis_mb;
-	const bool bShaderChanged = bForce || std::abs( shader_mb - m_nEffectiveShaderCacheBudgetMb ) >= hysteresis_mb;
+	const bool bGpuChanged = bForce || abs( gpu_mb - m_nEffectiveGpuRegionCacheBudgetMb ) >= hysteresis_mb;
+	const bool bCpuChanged = bForce || abs( cpu_mb - m_nEffectiveCpuRegionCacheBudgetMb ) >= hysteresis_mb;
+	const bool bInstanceChanged = bForce || abs( instance_mb - m_nEffectiveInstanceRegionCacheBudgetMb ) >= hysteresis_mb;
+	const bool bLightmapChanged = bForce || abs( lightmap_mb - m_nEffectiveLightmapResidencyBudgetMb ) >= hysteresis_mb;
+	const bool bHlodChanged = bForce || abs( hlod_mb - m_nEffectiveHlodMemoryBudgetMb ) >= hysteresis_mb;
+	const bool bShaderChanged = bForce || abs( shader_mb - m_nEffectiveShaderCacheBudgetMb ) >= hysteresis_mb;
 
 	if ( bGpuChanged ) {
 		m_nEffectiveGpuRegionCacheBudgetMb = gpu_mb;
 		if ( m_pData ) {
 			m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(),
-					m_nEffectiveGpuRegionCacheBudgetMb,
-					m_nGpuRegionUploadBudgetLayers,
-					m_nGpuRegionUploadBudgetMb,
-					m_nGpuRegionSparePages,
-					m_nGpuRegionRetireFrames );
+			        m_nEffectiveGpuRegionCacheBudgetMb,
+			        m_nGpuRegionUploadBudgetLayers,
+			        m_nGpuRegionUploadBudgetMb,
+			        m_nGpuRegionSparePages,
+			        m_nGpuRegionRetireFrames );
 		}
 	}
 	if ( bCpuChanged ) {
 		m_nEffectiveCpuRegionCacheBudgetMb = cpu_mb;
 		if ( m_pData ) {
 			m_pData->configureCpuRegionCache( effectiveCpuRegionCacheEnabled(),
-					m_nEffectiveCpuRegionCacheBudgetMb,
-					m_nCpuRegionLoadBudgetLayers,
-					m_nCpuRegionLoadBudgetMb );
+			        m_nEffectiveCpuRegionCacheBudgetMb,
+			        m_nCpuRegionLoadBudgetLayers,
+			        m_nCpuRegionLoadBudgetMb );
 		}
 	}
 	if ( bInstanceChanged ) {
 		m_nEffectiveInstanceRegionCacheBudgetMb = instance_mb;
 		if ( m_pData ) {
 			m_pData->configureInstanceRegionCache( effectiveInstanceRegionCacheEnabled(),
-					m_nEffectiveInstanceRegionCacheBudgetMb,
-					m_nInstanceRegionLoadBudgetPages,
-					m_nInstanceRegionLoadBudgetMb );
+			        m_nEffectiveInstanceRegionCacheBudgetMb,
+			        m_nInstanceRegionLoadBudgetPages,
+			        m_nInstanceRegionLoadBudgetMb );
 		}
 	}
 	if ( bLightmapChanged ) {
@@ -397,9 +436,9 @@ void Terrain3D::applyMemoryBudgetResult( const t3dMemoryBudgetResult_t &rResult,
 			continue;
 		}
 		emit_signal( "cache_budget_changed",
-				StringName( s_pszMemorySubsystemNames[index] ),
-				( int64_t )( rResult.m_szSubsystems[( size_t )( index )].m_nEffectiveBytes ),
-				StringName( memoryLimitReasonName( rResult.m_szSubsystems[( size_t )( index )].m_limitingReason ) ) );
+		        StringName( s_pszMemorySubsystemNames[index] ),
+		        ( int64_t )( rResult.m_szSubsystems[( size_t )( index )].m_nEffectiveBytes ),
+		        StringName( memoryLimitReasonName( rResult.m_szSubsystems[( size_t )( index )].m_limitingReason ) ) );
 	}
 }
 
@@ -417,10 +456,7 @@ void Terrain3D::serviceMemoryBudgetPolicy( const bool bForce ) {
 	if ( bPressure != m_bMemoryPressureEventState || result.m_bHardOvercommit != m_bMemoryOvercommitEventState ) {
 		m_bMemoryPressureEventState = bPressure;
 		m_bMemoryOvercommitEventState = result.m_bHardOvercommit;
-		emit_signal( "memory_pressure_changed",
-				bPressure,
-				result.m_bHardOvercommit,
-				( int64_t )( result.m_nHeadroomBytes ) );
+		emit_signal( "memory_pressure_changed", bPressure, result.m_bHardOvercommit, ( int64_t )( result.m_nHeadroomBytes ) );
 	}
 	m_nMemoryBudgetResult = result;
 	m_bMemoryBudgetPolicyDirty = false;
@@ -550,7 +586,7 @@ Dictionary Terrain3D::getMemoryBudgetStats( void ) const {
 	stats["allocator_reserve_bytes"] = ( int64_t )( m_nMemoryBudgetResult.m_nAllocatorReserveBytes );
 	stats["allocator_target_bytes"] = ( int64_t )calculateRuntimeAllocatorZoneBytes();
 	stats["allocator_overflow_policy"] =
-			Terrain3DZoneAllocatorRouter::overflowPolicy() == TERRAIN3D_ALLOCATOR_OVERFLOW_HEAP ? "heap" : "strict";
+	        Terrain3DZoneAllocatorRouter::overflowPolicy() == TERRAIN3D_ALLOCATOR_OVERFLOW_HEAP ? "heap" : "strict";
 	stats["managed_budget_bytes"] = ( int64_t )( m_nMemoryBudgetResult.m_nManagedBudgetBytes );
 	stats["managed_effective_bytes"] = ( int64_t )( m_nMemoryBudgetResult.m_nManagedEffectiveBytes );
 	stats["manual_reserved_bytes"] = ( int64_t )( m_nMemoryBudgetResult.m_nManualReservedBytes );
@@ -599,45 +635,35 @@ Dictionary Terrain3D::getTrackedCurrentResidency( void ) const {
 	const uint64_t middle_height_bytes = m_pData ? ( uint64_t )( m_pData->getMiddleHeightCacheReservedBytes() ) : 0u;
 	const uint64_t cpu_page_bytes = m_pData ? ( uint64_t )( m_pData->getCpuRegionCacheReservedBytes() ) : 0u;
 	const uint64_t instance_page_bytes = m_pData ? ( uint64_t )( m_pData->getInstanceRegionCacheReservedBytes() ) : 0u;
-	const uint64_t lightmap_bytes =
-			m_pLightmapStreamer ? ( uint64_t )( m_pLightmapStreamer->getResidentEstimatedBytes() ) : 0u;
+	const uint64_t lightmap_bytes = m_pLightmapStreamer ? ( uint64_t )( m_pLightmapStreamer->getResidentEstimatedBytes() ) : 0u;
 	const uint64_t hlod_bytes = m_pHlodStreamer ? ( uint64_t )( m_pHlodStreamer->getResidentEstimatedBytes() ) : 0u;
-	const uint64_t shader_source_bytes =
-			m_material.is_valid() ? ( uint64_t )( m_material->getShaderVariantSourceBytesNative() ) : 0u;
+	const uint64_t shader_source_bytes = m_material.is_valid() ? ( uint64_t )( m_material->getShaderVariantSourceBytesNative() ) : 0u;
 	const uint64_t rd_cpu_bytes = m_pRenderCoordinator ? ( uint64_t )( m_pRenderCoordinator->getRetainedCpuBytes() ) : 0u;
 	const Terrain3DRdContext &rd_context = Terrain3DRdContext::getShared();
 	const uint64_t rd_vram_buffer_bytes = rd_context.getLiveGpuBufferBytes();
 	const uint64_t rd_vram_texture_bytes = rd_context.getLiveGpuTextureBytes();
-	const uint64_t compute_local_vram_buffer_bytes =
-			m_pData ? m_pData->getMemoryComputeLocalGpuBytes() : 0u;
-	const uint64_t managed_bytes = middle_height_bytes + cpu_page_bytes + instance_page_bytes +
-			lightmap_bytes + hlod_bytes + shader_source_bytes + rd_cpu_bytes;
+	const uint64_t compute_local_vram_buffer_bytes = m_pData ? m_pData->getMemoryComputeLocalGpuBytes() : 0u;
+	const uint64_t managed_bytes =
+	        middle_height_bytes + cpu_page_bytes + instance_page_bytes + lightmap_bytes + hlod_bytes + shader_source_bytes + rd_cpu_bytes;
 	const uint64_t fixed_bytes = calculateFixedMemoryBytes();
 	const uint64_t transient_bytes = calculateTransientMemoryBytes();
 	const uint64_t tracked_cpu_bytes = fixed_bytes + managed_bytes + transient_bytes;
-	const uint64_t tracked_vram_bytes =
-			rd_vram_buffer_bytes + rd_vram_texture_bytes + compute_local_vram_buffer_bytes;
+	const uint64_t tracked_vram_bytes = rd_vram_buffer_bytes + rd_vram_texture_bytes + compute_local_vram_buffer_bytes;
 	const uint64_t tracked_bytes = tracked_cpu_bytes + tracked_vram_bytes;
 	m_nTrackedMemoryPeakBytes = MAX( m_nTrackedMemoryPeakBytes, tracked_bytes );
 
 	Dictionary fixed;
 	fixed["bytes"] = ( int64_t )( fixed_bytes );
 	fixed["accuracy"] = "estimated";
-	fixed["material_texture_arrays_bytes"] =
-			( int64_t )( m_assets.is_valid() ? m_assets->getGeneratedTexturePayloadBytes() : 0u );
+	fixed["material_texture_arrays_bytes"] = ( int64_t )( m_assets.is_valid() ? m_assets->getGeneratedTexturePayloadBytes() : 0u );
 	fixed["far_atlas_bytes"] = ( int64_t )( getGpuFarAtlasBytes() );
-	fixed["clipmap_geometry_bytes"] =
-			( int64_t )( m_pTerrainMesher ? m_pTerrainMesher->getVisibleGeometryPayloadBytes() : 0u );
-	fixed["shadow_geometry_bytes"] =
-			( int64_t )( m_pTerrainMesher ? m_pTerrainMesher->getShadowGeometryPayloadBytes() : 0u );
-	fixed["repository_and_authoritative_storage_bytes"] =
-			( int64_t )( m_pData ? m_pData->getMemoryFixedRepositoryBytes() : 0u );
-	fixed["node_streamer_retained_bytes"] =
-			( int64_t )( m_pNodeStreamer ? m_pNodeStreamer->getRetainedCapacityBytes() : 0u );
+	fixed["clipmap_geometry_bytes"] = ( int64_t )( m_pTerrainMesher ? m_pTerrainMesher->getVisibleGeometryPayloadBytes() : 0u );
+	fixed["shadow_geometry_bytes"] = ( int64_t )( m_pTerrainMesher ? m_pTerrainMesher->getShadowGeometryPayloadBytes() : 0u );
+	fixed["repository_and_authoritative_storage_bytes"] = ( int64_t )( m_pData ? m_pData->getMemoryFixedRepositoryBytes() : 0u );
+	fixed["node_streamer_retained_bytes"] = ( int64_t )( m_pNodeStreamer ? m_pNodeStreamer->getRetainedCapacityBytes() : 0u );
 	fixed["instancer_retained_bytes"] = ( int64_t )( m_pInstancer ? m_pInstancer->getRetainedContainerBytes() : 0u );
 	fixed["active_multimesh_bytes"] = ( int64_t )( m_pInstancer ? m_pInstancer->getActiveMultimeshBytes() : 0u );
-	fixed["profiler_history_bytes"] =
-			( int64_t )( m_pRuntimeProfileHistory ? sizeof( t3dRuntimeProfileHistory_t ) : 0u );
+	fixed["profiler_history_bytes"] = ( int64_t )( m_pRuntimeProfileHistory ? sizeof( t3dRuntimeProfileHistory_t ) : 0u );
 	memory["fixed_unavoidable"] = fixed;
 
 	Dictionary managed;
@@ -656,12 +682,9 @@ Dictionary Terrain3D::getTrackedCurrentResidency( void ) const {
 	Dictionary transient;
 	transient["bytes"] = ( int64_t )( transient_bytes );
 	transient["accuracy"] = "estimated";
-	transient["data_page_and_far_staging_bytes"] =
-			( int64_t )( m_pData ? m_pData->getMemoryTransientStagingBytes() : 0u );
-	transient["clipmap_streaming_buffer_bytes"] =
-			( int64_t )( m_pTerrainMesher ? m_pTerrainMesher->getStreamingBufferBytes() : 0u );
-	transient["collision_retained_scratch_bytes"] =
-			( int64_t )( m_pCollision ? m_pCollision->getRetainedBufferBytes() : 0u );
+	transient["data_page_and_far_staging_bytes"] = ( int64_t )( m_pData ? m_pData->getMemoryTransientStagingBytes() : 0u );
+	transient["clipmap_streaming_buffer_bytes"] = ( int64_t )( m_pTerrainMesher ? m_pTerrainMesher->getStreamingBufferBytes() : 0u );
+	transient["collision_retained_scratch_bytes"] = ( int64_t )( m_pCollision ? m_pCollision->getRetainedBufferBytes() : 0u );
 	memory["transient_staging"] = transient;
 
 	const t3dEastlAllocationStats_t allocator = Terrain3DEastlAllocator::getAllocationStats();
@@ -676,9 +699,29 @@ Dictionary Terrain3D::getTrackedCurrentResidency( void ) const {
 	allocator_stats["accuracy"] = "exact";
 	allocator_stats["source"] = "release_safe_allocator_telemetry";
 	allocator_stats["included_in_total"] = false;
-	allocator_stats["note"] =
-			"Cross-cutting EASTL telemetry overlaps subsystem container accounting and is not summed twice.";
+	allocator_stats["note"] = "Cross-cutting EASTL telemetry overlaps subsystem container accounting and is not summed twice.";
 	memory["eastl_allocator"] = allocator_stats;
+
+	const t3dRuntimeAllocationPhaseStats_t phase = t3dGetRuntimeAllocationPhaseStats();
+	Dictionary phase_stats;
+	phase_stats["initialization_checks"] = ( int64_t )( phase.m_szValidationChecks[TERRAIN3D_ALLOCATION_PHASE_INITIALIZATION] );
+	phase_stats["cold_rebuild_checks"] = ( int64_t )( phase.m_szValidationChecks[TERRAIN3D_ALLOCATION_PHASE_COLD_REBUILD] );
+	phase_stats["hot_frame_checks"] = ( int64_t )( phase.m_szValidationChecks[TERRAIN3D_ALLOCATION_PHASE_HOT_FRAME] );
+	phase_stats["hot_render_checks"] = ( int64_t )( phase.m_szValidationChecks[TERRAIN3D_ALLOCATION_PHASE_HOT_RENDER] );
+	phase_stats["streaming_worker_checks"] = ( int64_t )( phase.m_szValidationChecks[TERRAIN3D_ALLOCATION_PHASE_STREAMING_WORKER] );
+	phase_stats["shutdown_checks"] = ( int64_t )( phase.m_szValidationChecks[TERRAIN3D_ALLOCATION_PHASE_SHUTDOWN] );
+	phase_stats["hot_frame_denied"] = ( int64_t )( phase.m_szDeniedChecks[TERRAIN3D_ALLOCATION_PHASE_HOT_FRAME] );
+	phase_stats["hot_render_denied"] = ( int64_t )( phase.m_szDeniedChecks[TERRAIN3D_ALLOCATION_PHASE_HOT_RENDER] );
+	phase_stats["streaming_worker_denied"] = ( int64_t )( phase.m_szDeniedChecks[TERRAIN3D_ALLOCATION_PHASE_STREAMING_WORKER] );
+	phase_stats["explicit_cold_overrides"] = ( int64_t )( phase.m_nExplicitColdOverrides );
+	phase_stats["restricted_phase_cold_overrides"] = ( int64_t )( phase.m_nRestrictedColdOverrides );
+	phase_stats["current_phase"] = ( int )( t3dGetRuntimeAllocationPhase() );
+	phase_stats["current_allocation_permission"] = g_t3dRuntimeAllocationPermission;
+	phase_stats["accuracy"] = "exact allocation validation events";
+	phase_stats["note"] = "restricted_phase_cold_overrides exposes explicit cold publication/rebuild work entered from "
+	                      "hot or worker scopes.";
+	memory["allocation_phases"] = phase_stats;
+
 	const t3dMemoryZoneStats_t zone = m_runtimeMemoryZone.getStats();
 	Dictionary zone_stats;
 	zone_stats["state"] = ( int )m_runtimeMemoryZone.state();
@@ -700,8 +743,7 @@ Dictionary Terrain3D::getTrackedCurrentResidency( void ) const {
 	zone_stats["peak_active_small_pages"] = ( int64_t )zone.m_nPeakActiveSmallPages;
 	zone_stats["free_extent_count"] = ( int64_t )zone.m_nFreeExtentCount;
 	zone_stats["peak_free_extent_count"] = ( int64_t )zone.m_nPeakFreeExtentCount;
-	zone_stats["overflow_policy"] =
-			Terrain3DZoneAllocatorRouter::overflowPolicy() == TERRAIN3D_ALLOCATOR_OVERFLOW_HEAP ? "heap" : "strict";
+	zone_stats["overflow_policy"] = Terrain3DZoneAllocatorRouter::overflowPolicy() == TERRAIN3D_ALLOCATOR_OVERFLOW_HEAP ? "heap" : "strict";
 	zone_stats["arena_reserved_bytes"] = ( int64_t )m_runtimeMemoryArena.capacity();
 	zone_stats["arena_committed"] = m_runtimeMemoryArena.committed();
 	zone_stats["arena_sealed"] = m_runtimeMemoryArena.sealed();
@@ -732,8 +774,7 @@ Dictionary Terrain3D::getTrackedCurrentResidency( void ) const {
 	memory["performance_profile_status"] = ( int )( m_performanceProfileStatus );
 	memory["performance_profile_version"] = ( int )( s_nProfileVersion );
 	memory["performance_profile_signature"] = getPerformanceProfileSignature();
-	memory["scope"] =
-			"Terrain3D-owned tracked memory; external Godot/renderer/driver allocations are explicitly unavailable.";
+	memory["scope"] = "Terrain3D-owned tracked memory; external Godot/renderer/driver allocations are explicitly unavailable.";
 	return memory;
 }
 
@@ -747,13 +788,11 @@ Dictionary Terrain3D::getRuntimeMemoryStatsFast( void ) const {
 	const uint64_t middle_height_bytes = m_pData ? ( uint64_t )( m_pData->getMiddleHeightCacheReservedBytes() ) : 0u;
 	const uint64_t cpu_page_bytes = m_pData ? ( uint64_t )( m_pData->getCpuRegionCacheReservedBytes() ) : 0u;
 	const uint64_t instance_page_bytes = m_pData ? ( uint64_t )( m_pData->getInstanceRegionCacheReservedBytes() ) : 0u;
-	const uint64_t lightmap_bytes =
-			m_pLightmapStreamer ? ( uint64_t )( m_pLightmapStreamer->getResidentEstimatedBytes() ) : 0u;
+	const uint64_t lightmap_bytes = m_pLightmapStreamer ? ( uint64_t )( m_pLightmapStreamer->getResidentEstimatedBytes() ) : 0u;
 	const uint64_t hlod_bytes = m_pHlodStreamer ? ( uint64_t )( m_pHlodStreamer->getResidentEstimatedBytes() ) : 0u;
-	const uint64_t shader_source_bytes =
-			m_material.is_valid() ? ( uint64_t )( m_material->getShaderVariantSourceBytesNative() ) : 0u;
-	const uint64_t managed_bytes = gpu_page_bytes + middle_height_bytes + cpu_page_bytes + instance_page_bytes +
-			lightmap_bytes + hlod_bytes + shader_source_bytes;
+	const uint64_t shader_source_bytes = m_material.is_valid() ? ( uint64_t )( m_material->getShaderVariantSourceBytesNative() ) : 0u;
+	const uint64_t managed_bytes =
+	        gpu_page_bytes + middle_height_bytes + cpu_page_bytes + instance_page_bytes + lightmap_bytes + hlod_bytes + shader_source_bytes;
 	const uint64_t fixed_bytes = m_nMemoryBudgetResult.m_nFixedBytes;
 	const uint64_t transient_bytes = calculateTransientMemoryBytes();
 	const uint64_t tracked_bytes = fixed_bytes + managed_bytes + transient_bytes;
@@ -763,8 +802,8 @@ Dictionary Terrain3D::getRuntimeMemoryStatsFast( void ) const {
 	memory["current_known_bytes"] = ( int64_t )tracked_bytes;
 	memory["logical_tracked_bytes"] = ( int64_t )tracked_bytes;
 	memory["allocator_reserve_bytes"] = ( int64_t )m_nMemoryBudgetResult.m_nAllocatorReserveBytes;
-	memory["budget_committed_bytes"] = ( int64_t )( fixed_bytes + m_nMemoryBudgetResult.m_nAllocatorReserveBytes +
-			managed_bytes + transient_bytes );
+	memory["budget_committed_bytes"] =
+	        ( int64_t )( fixed_bytes + m_nMemoryBudgetResult.m_nAllocatorReserveBytes + managed_bytes + transient_bytes );
 	memory["peak_known_bytes"] = ( int64_t )( m_nTrackedMemoryPeakBytes );
 	memory["fixed_bytes"] = ( int64_t )( fixed_bytes );
 	memory["managed_resident_bytes"] = ( int64_t )( managed_bytes );
@@ -772,13 +811,11 @@ Dictionary Terrain3D::getRuntimeMemoryStatsFast( void ) const {
 	memory["transient_bytes"] = ( int64_t )( transient_bytes );
 	memory["known_headroom_bytes"] = ( int64_t )( m_nMemoryBudgetResult.m_nHeadroomBytes );
 	memory["overcommitted"] = m_nMemoryBudgetResult.m_bHardOvercommit;
-	const bool bPressure = m_nMemoryBudgetResult.m_bHardOvercommit ||
-			m_nMemoryBudgetResult.m_nHeadroomBytes < s_nMemoryPolicyHysteresisBytes;
-	memory["pressure_state"] =
-			m_nMemoryBudgetResult.m_bHardOvercommit ? "overcommit" : ( bPressure ? "pressure" : "normal" );
+	const bool bPressure =
+	        m_nMemoryBudgetResult.m_bHardOvercommit || m_nMemoryBudgetResult.m_nHeadroomBytes < s_nMemoryPolicyHysteresisBytes;
+	memory["pressure_state"] = m_nMemoryBudgetResult.m_bHardOvercommit ? "overcommit" : ( bPressure ? "pressure" : "normal" );
 	memory["external_untracked_accuracy"] = "unavailable";
-	memory["external_untracked"] =
-			"Godot object/container overhead, renderer/driver padding, and shader pipeline allocations";
+	memory["external_untracked"] = "Godot object/container overhead, renderer/driver padding, and shader pipeline allocations";
 	memory["budget"] = getMemoryBudgetStats();
 
 	const bool bAutomatic[TERRAIN3D_MEMORY_SUBSYSTEM_COUNT] = { m_bGpuRegionCacheBudgetAuto,
@@ -798,8 +835,8 @@ Dictionary Terrain3D::getRuntimeMemoryStatsFast( void ) const {
 			entry["limiting_constraint"] = memoryLimitReasonName( allocation.m_limitingReason );
 			reallocations.push_back( entry );
 		}
-		if ( allocation.m_limitingReason != TERRAIN3D_MEMORY_LIMIT_NONE &&
-				allocation.m_limitingReason != TERRAIN3D_MEMORY_LIMIT_MANUAL_OVERRIDE ) {
+		if ( allocation.m_limitingReason != TERRAIN3D_MEMORY_LIMIT_NONE
+		        && allocation.m_limitingReason != TERRAIN3D_MEMORY_LIMIT_MANUAL_OVERRIDE ) {
 			constrained.push_back( s_pszMemorySubsystemNames[index] );
 		}
 	}

@@ -1,7 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_REGION_RESIDENCY_H
 #define TERRAIN3D_REGION_RESIDENCY_H
 
@@ -24,14 +22,14 @@ class Terrain3DSamplingStorage;
 class Terrain3DRegionResidency {
 public:
 	Terrain3DRegionResidency( Terrain3DRegionRepository *pRepository,
-			Terrain3DSamplingStorage *pSamplingStorage,
-			Terrain3DRuntimePageStore *pRuntimePageStore,
-			Terrain3DActiveHeightResidency *pActiveHeightResidency,
-			Terrain3DCpuRegionCache *pCpuRegionCache,
-			Terrain3DInstanceRegionCache *pInstanceRegionCache,
-			Terrain3DMiddleHeightRegionCache *pMiddleHeightRegionCache,
-			Terrain3DGpuRegionCache *pGpuRegionCache,
-			Terrain3DFarSurfaceAtlasCache *pFarSurfaceAtlasCache );
+	        Terrain3DSamplingStorage *pSamplingStorage,
+	        Terrain3DRuntimePageStore *pRuntimePageStore,
+	        Terrain3DActiveHeightResidency *pActiveHeightResidency,
+	        Terrain3DCpuRegionCache *pCpuRegionCache,
+	        Terrain3DInstanceRegionCache *pInstanceRegionCache,
+	        Terrain3DMiddleHeightRegionCache *pMiddleHeightRegionCache,
+	        Terrain3DGpuRegionCache *pGpuRegionCache,
+	        Terrain3DFarSurfaceAtlasCache *pFarSurfaceAtlasCache );
 
 	void reset( void );
 	void update( Terrain3DData &rData, const t3dResidencyFrameState_t &rFrame, bool bForce );
@@ -45,15 +43,15 @@ public:
 	int effectiveInstanceLoadPages( int nConfigured ) const;
 
 private:
-	Terrain3DRegionRepository *m_pRepository = nullptr;
-	Terrain3DSamplingStorage *m_pSamplingStorage = nullptr;
-	Terrain3DRuntimePageStore *m_pRuntimePageStore = nullptr;
-	Terrain3DActiveHeightResidency *m_pActiveHeightResidency = nullptr;
-	Terrain3DCpuRegionCache *m_pCpuRegionCache = nullptr;
-	Terrain3DInstanceRegionCache *m_pInstanceRegionCache = nullptr;
-	Terrain3DMiddleHeightRegionCache *m_pMiddleHeightRegionCache = nullptr;
-	Terrain3DGpuRegionCache *m_pGpuRegionCache = nullptr;
-	Terrain3DFarSurfaceAtlasCache *m_pFarSurfaceAtlasCache = nullptr;
+	Terrain3DRegionRepository *m_pRepository = NULL;
+	Terrain3DSamplingStorage *m_pSamplingStorage = NULL;
+	Terrain3DRuntimePageStore *m_pRuntimePageStore = NULL;
+	Terrain3DActiveHeightResidency *m_pActiveHeightResidency = NULL;
+	Terrain3DCpuRegionCache *m_pCpuRegionCache = NULL;
+	Terrain3DInstanceRegionCache *m_pInstanceRegionCache = NULL;
+	Terrain3DMiddleHeightRegionCache *m_pMiddleHeightRegionCache = NULL;
+	Terrain3DGpuRegionCache *m_pGpuRegionCache = NULL;
+	Terrain3DFarSurfaceAtlasCache *m_pFarSurfaceAtlasCache = NULL;
 	int m_nGpuUploadBudgetOverride = -1;
 	int m_nCpuLoadBudgetOverride = -1;
 	int m_nInstanceLoadBudgetOverride = -1;

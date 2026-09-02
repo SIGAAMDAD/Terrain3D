@@ -1,16 +1,14 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_CPU_CACHE_POLICY_H
 #define TERRAIN3D_CPU_CACHE_POLICY_H
 
 #include "Terrain3DConstants.h"
 #include "core/terrain_3d_compiler.h"
 
-#include <cstddef>
-#include <cstdint>
-#include <limits>
+#include <EASTL/numeric_limits.h>
+#include <stddef.h>
+#include <stdint.h>
 
 typedef struct t3dCpuCacheCoord_s {
 	int m_nX = 0;
@@ -18,7 +16,7 @@ typedef struct t3dCpuCacheCoord_s {
 } t3dCpuCacheCoord_t;
 
 static inline bool t3dCpuCacheMultiply( const size_t nA, const size_t nB, size_t &nResult ) {
-	if ( nA != 0u && nB > std::numeric_limits<size_t>::max() / nA ) {
+	if ( nA != 0u && nB > eastl::numeric_limits<size_t>::max() / nA ) {
 		return false;
 	}
 	nResult = nA * nB;
@@ -31,8 +29,8 @@ static inline size_t t3dCpuCacheEstimateLayerBytes( const int nRegionSize ) {
 	}
 	size_t texels = 0u;
 	size_t bytes = 0u;
-	if ( !t3dCpuCacheMultiply( ( size_t )( nRegionSize ), ( size_t )( nRegionSize ), texels ) ||
-			!t3dCpuCacheMultiply( texels, s_nCpuCacheBytesPerTexel, bytes ) ) {
+	if ( !t3dCpuCacheMultiply( ( size_t )( nRegionSize ), ( size_t )( nRegionSize ), texels )
+	        || !t3dCpuCacheMultiply( texels, s_nCpuCacheBytesPerTexel, bytes ) ) {
 		return 0u;
 	}
 	return bytes;

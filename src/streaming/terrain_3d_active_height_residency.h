@@ -1,7 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_ACTIVE_HEIGHT_RESIDENCY_H
 #define TERRAIN3D_ACTIVE_HEIGHT_RESIDENCY_H
 
@@ -10,9 +8,8 @@
 #include "eastl_config.h"
 #include "streaming/terrain_3d_residency_state.h"
 
-#include <EASTL/array.h>
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 
 class Terrain3DRegionRepository;
 class Terrain3DRuntimePageStore;
@@ -29,8 +26,7 @@ typedef struct t3dActiveHeightResidencyStats_s {
 } t3dActiveHeightResidencyStats_t;
 
 typedef struct t3dActiveHeightResidencyResult_s {
-	static constexpr int s_nCpuRequestCapacity = 25;
-	eastl::array<Vector2i, s_nCpuRequestCapacity> m_szCpuSourceRequests{};
+	Vector2i m_szCpuSourceRequests[s_nCpuRequestCapacity]{};
 	int m_nCpuSourceRequestCount = 0;
 
 	void requestCpuSource( const Vector2i &rLocation ) {
@@ -47,8 +43,8 @@ typedef struct t3dActiveHeightResidencyResult_s {
 class Terrain3DActiveHeightResidency {
 public:
 	Terrain3DActiveHeightResidency( Terrain3DRegionRepository *pRepository,
-			Terrain3DSamplingStorage *pSamplingStorage,
-			Terrain3DRuntimePageStore *pRuntimePageStore );
+	        Terrain3DSamplingStorage *pSamplingStorage,
+	        Terrain3DRuntimePageStore *pRuntimePageStore );
 
 	void reset( void );
 	EA_FORCE_INLINE void markDirty( void ) {
@@ -63,11 +59,9 @@ public:
 	}
 
 private:
-	static constexpr int s_nActiveRadius = 2;
-
-	Terrain3DRegionRepository *m_pRepository = nullptr;
-	Terrain3DSamplingStorage *m_pSamplingStorage = nullptr;
-	Terrain3DRuntimePageStore *m_pRuntimePageStore = nullptr;
+	Terrain3DRegionRepository *m_pRepository = NULL;
+	Terrain3DSamplingStorage *m_pSamplingStorage = NULL;
+	Terrain3DRuntimePageStore *m_pRuntimePageStore = NULL;
 	bool m_bDirty = true;
 	uint64_t m_nStreamingGenerationLast = 0u;
 	uint64_t m_nTopologyGenerationLast = 0u;

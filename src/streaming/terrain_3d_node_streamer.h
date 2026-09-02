@@ -1,17 +1,16 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
-#pragma once
-
 #ifndef TERRAIN3D_NODE_STREAMER_H
 #define TERRAIN3D_NODE_STREAMER_H
 
 #include "Terrain3DConstants.h"
+#include "core/terrain_3d_eastl_helpers.h"
 #include "core/terrain_3d_limits.h"
 #include "data/terrain_3d_region.h"
-#include "eastl_config.h"
 
-#include <EASTL/bitset.h>
-#include <EASTL/vector.h>
-#include <cstdint>
+#include "memory/terrain_3d_memory.h"
+
+#include <stdint.h>
+#include <string.h>
 #include <godot_cpp/classes/node3d.hpp>
 #include <godot_cpp/classes/object.hpp>
 #include <godot_cpp/classes/packed_scene.hpp>
@@ -52,9 +51,10 @@ typedef struct t3dActiveNode_s {
 } t3dActiveNode_t;
 
 typedef struct t3dRegionRuntime_s {
-	Node3D *m_pRoot = nullptr;
-	eastl::vector<t3dActiveNode_t> m_nodes;
-	size_t m_nNodeCapacity = 0u;
+	Node3D *m_pRoot = NULL;
+	uint32_t m_iNodeOffset = 0u;
+	uint32_t m_nNodeCount = 0u;
+	uint32_t m_nNodeCapacity = 0u;
 	int m_iRootPoolIndex = -1;
 	int m_nNextSpawn = 0;
 	int m_iActiveListPosition = -1;
@@ -75,20 +75,23 @@ class Terrain3DNodeStreamer : public Object {
 
 public:
 private:
-	Terrain3D *m_pTerrain = nullptr;
-	Node3D *m_pHost = nullptr;
+	Terrain3D *m_pTerrain = NULL;
+	Node3D *m_pHost = NULL;
 	t3dRegionRuntime_t m_szRegions[s_nMaxRegionSlots];
-	eastl::bitset<s_nMaxRegionSlots> m_desiredRegions;
-	uint16_t m_szActiveRegionIndices[s_nMaxRegionSlots] = {};
-	uint16_t m_szDesiredRegionIndices[s_nMaxRegionSlots] = {};
-	uint16_t m_nDesiredRegionCount = 0u;
+	uint64_t m_szDesiredRegionBits[s_nMaxRegionSlots / 64] = {};
+	uint64_t m_szPendingDescriptorRegionBits[s_nMaxRegionSlots / 64] = {};
+	eastl::fixed_vector<uint16_t, s_nMaxRegionSlots, false> m_activeRegionIndices;
+	eastl::fixed_vector<uint16_t, s_nMaxRegionSlots, false> m_desiredRegionIndices;
 	Node3D *m_szRegionRootPool[s_nMaxRegionSlots] = {};
-	uint16_t m_szFreeRootPoolIndices[s_nMaxRegionSlots] = {};
+	eastl::fixed_vector<uint16_t, s_nMaxRegionSlots, false> m_freeRootPoolIndices;
 	StringName m_szRegionRootNames[s_nMaxRegionSlots];
 	int m_nRegionRootPoolCount = 0;
-	int m_nFreeRootPoolCount = 0;
-	eastl::vector<t3dMovableNodeRef_t> m_movableNodes;
+	t3dActiveNode_t *m_pActiveNodeStorage = NULL;
+	size_t m_nActiveNodeStorageCapacity = 0u;
+	t3dMovableNodeRef_t *m_pMovableNodes = NULL;
+	size_t m_nMovableNodeCount = 0u;
 	size_t m_nMovableNodeCapacity = 0u;
+	bool m_bActivationStorageRebuildPending = false;
 	StringName m_methodActivate;
 	StringName m_methodDeactivate;
 	StringName m_methodLoadState;
@@ -101,7 +104,6 @@ private:
 	int m_nLoadNodeBudget = 16;
 	int m_nUnloadRegionBudget = 4;
 	int m_nRuntimeUnloadRegionBudgetOverride = -1;
-	int m_nActiveRegionCount = 0;
 	int m_nActiveNodeCount = 0;
 	int m_nLoadingRegionCount = 0;
 	bool m_bHasPendingActivation = false;
@@ -128,6 +130,40 @@ private:
 	uint64_t m_nRuntimeGeneration = 1u;
 	Vector2i m_center = s_v2iMax;
 
+
+	EA_FORCE_INLINE t3dActiveNode_t *regionNodes( t3dRegionRuntime_t &rRuntime ) {
+		return m_pActiveNodeStorage ? m_pActiveNodeStorage + rRuntime.m_iNodeOffset : NULL;
+	}
+	EA_FORCE_INLINE const t3dActiveNode_t *regionNodes( const t3dRegionRuntime_t &rRuntime ) const {
+		return m_pActiveNodeStorage ? m_pActiveNodeStorage + rRuntime.m_iNodeOffset : NULL;
+	}
+	EA_FORCE_INLINE bool desiredRegionTest( const int iIndex ) const {
+		return iIndex >= 0 && iIndex < s_nMaxRegionSlots
+		        && ( m_szDesiredRegionBits[( size_t )( iIndex ) >> 6u] & ( 1ull << ( ( size_t )( iIndex ) & 63u ) ) ) != 0u;
+	}
+	EA_FORCE_INLINE void desiredRegionSet( const int iIndex ) {
+		if ( iIndex >= 0 && iIndex < s_nMaxRegionSlots ) {
+			m_szDesiredRegionBits[( size_t )( iIndex ) >> 6u] |= 1ull << ( ( size_t )( iIndex ) & 63u );
+		}
+	}
+	EA_FORCE_INLINE void desiredRegionsReset( void ) {
+		memset( m_szDesiredRegionBits, 0, sizeof( m_szDesiredRegionBits ) );
+	}
+	EA_FORCE_INLINE bool pendingDescriptorRegionTest( const int iIndex ) const {
+		return iIndex >= 0 && iIndex < s_nMaxRegionSlots
+		        && ( m_szPendingDescriptorRegionBits[( size_t )( iIndex ) >> 6u] & ( 1ull << ( ( size_t )( iIndex ) & 63u ) ) ) != 0u;
+	}
+	EA_FORCE_INLINE void pendingDescriptorRegionSet( const int iIndex ) {
+		if ( iIndex >= 0 && iIndex < s_nMaxRegionSlots ) {
+			m_szPendingDescriptorRegionBits[( size_t )( iIndex ) >> 6u] |= 1ull << ( ( size_t )( iIndex ) & 63u );
+		}
+	}
+	EA_FORCE_INLINE void pendingDescriptorRegionClear( const int iIndex ) {
+		if ( iIndex >= 0 && iIndex < s_nMaxRegionSlots ) {
+			m_szPendingDescriptorRegionBits[( size_t )( iIndex ) >> 6u] &= ~( 1ull << ( ( size_t )( iIndex ) & 63u ) );
+		}
+	}
+
 	static Vector2i locationFromIndex( int iIndex );
 	static int indexFromLocation( const Vector2i &rLocation );
 	Node *getActiveNode( const t3dActiveNode_t &rActive ) const;
@@ -140,7 +176,10 @@ private:
 	void untrackMovableNode( int64_t nSpawnId );
 	void removeMovableNodeAt( int iIndex );
 	void eraseActiveNode( t3dRegionRuntime_t &rRuntime, int iNodeIndex );
-	void rebuildActivationStorage( void );
+	bool rebuildActivationStorageCold( void );
+	void requestActivationStorageRebuild( void );
+	void requestCookedNodeDescriptors( int iRegionIndex );
+	void servicePendingDescriptorLoadsCold( void );
 	Node3D *acquireRegionRoot( int iIndex, Terrain3DRegion *pRegion );
 	void releaseRegionRoot( t3dRegionRuntime_t &rRuntime );
 	Node3D *ensureRegionRoot( int iIndex, Terrain3DRegion *pRegion );
@@ -150,22 +189,21 @@ private:
 	void captureNodeState( Terrain3DRegion *pRegion, Node3D *pRegionRoot, const t3dActiveNode_t &rActive );
 	void deactivateRegion( int iIndex, bool bCaptureState );
 	bool activateRegion( int iIndex, int &nNodeBudget );
-	t3dSpawnActivationResult_t
-	activateSpawn( Terrain3DRegion *pRegion, t3dRegionRuntime_t &rRuntime, const t3dStreamedNodeRuntimeDescriptor_t &rSpawn );
-	void requestRegionScenes( const Vector2i &rOwnerLocation,
-			const eastl::vector<t3dStreamedNodeRuntimeDescriptor_t> &rSpawns );
-	bool isHlodVisualSuppressed( const Vector2i &rOwnerLocation,
-			const t3dStreamedNodeRuntimeDescriptor_t &rSpawn ) const;
+	t3dSpawnActivationResult_t activateSpawn(
+	        Terrain3DRegion *pRegion, t3dRegionRuntime_t &rRuntime, const t3dStreamedNodeRuntimeDescriptor_t &rSpawn );
+	void requestRegionScenes(
+	        const Vector2i &rOwnerLocation, const eastl::vector<t3dStreamedNodeRuntimeDescriptor_t, Terrain3DEastlAllocator> &rSpawns );
+	bool isHlodVisualSuppressed( const Vector2i &rOwnerLocation, const t3dStreamedNodeRuntimeDescriptor_t &rSpawn ) const;
 	bool streamedSpawnCoverageIntersects( const Vector2i &rOwnerLocation,
-			const t3dStreamedNodeRuntimeDescriptor_t &rSpawn,
-			const Vector2i &rTargetMin,
-			const Vector2i &rTargetMax ) const;
+	        const t3dStreamedNodeRuntimeDescriptor_t &rSpawn,
+	        const Vector2i &rTargetMin,
+	        const Vector2i &rTargetMax ) const;
 	int64_t addStreamedSceneInternal( const Ref<PackedScene> &rScene,
-			const String &rScenePath,
-			const Transform3D &rGlobalTransform,
-			const Dictionary &rState,
-			int nFlags,
-			int nHlodMinLevel );
+	        const String &rScenePath,
+	        const Transform3D &rGlobalTransform,
+	        const Dictionary &rState,
+	        int nFlags,
+	        int nHlodMinLevel );
 	void buildDesiredSet( const Vector2i &rCenter );
 	bool usesFullAuthoringResidency( void ) const;
 	int getEffectiveRadiusRegions( void ) const;
@@ -174,11 +212,13 @@ private:
 	void refreshSpawnId( void );
 
 public:
-	EA_FORCE_INLINE Terrain3DNodeStreamer( void ) {}
+	EA_FORCE_INLINE Terrain3DNodeStreamer( void ) {
+	}
 	~Terrain3DNodeStreamer( void );
 
 	void initialize( Terrain3D *pTerrain );
 	void destroy( bool bCaptureState = true );
+	void serviceColdRebuild( void );
 	void updateResidency( const Vector3 &rTargetPosition, bool bForce = false );
 	void deferUpdateForFrame( void );
 	void suspend( void );
@@ -211,7 +251,7 @@ public:
 	}
 	EA_FORCE_INLINE int getEffectiveLoadRegionBudget( void ) const {
 		return m_nRuntimeLoadRegionBudgetOverride < 0 ? m_nLoadRegionBudget
-													  : MIN( m_nLoadRegionBudget, m_nRuntimeLoadRegionBudgetOverride );
+		                                              : MIN( m_nLoadRegionBudget, m_nRuntimeLoadRegionBudgetOverride );
 	}
 	void setLoadNodeBudget( int nBudget );
 	EA_FORCE_INLINE int getLoadNodeBudget( void ) const {
@@ -227,9 +267,8 @@ public:
 		m_nRuntimeUnloadRegionBudgetOverride = nBudget < 0 ? -1 : CLAMP( nBudget, 0, 64 );
 	}
 	EA_FORCE_INLINE int getEffectiveUnloadRegionBudget( void ) const {
-		return m_nRuntimeUnloadRegionBudgetOverride < 0
-				? m_nUnloadRegionBudget
-				: MIN( m_nUnloadRegionBudget, m_nRuntimeUnloadRegionBudgetOverride );
+		return m_nRuntimeUnloadRegionBudgetOverride < 0 ? m_nUnloadRegionBudget
+		                                                : MIN( m_nUnloadRegionBudget, m_nRuntimeUnloadRegionBudgetOverride );
 	}
 	EA_FORCE_INLINE bool isLoadRegionBudgetLimitedLastTick( void ) const {
 		return m_bLoadRegionBudgetLimitedLastTick;
@@ -239,22 +278,22 @@ public:
 	}
 
 	int64_t addStreamedScene( const Ref<PackedScene> &rScene,
-			const Transform3D &rGlobalTransform,
-			const Dictionary &rState = Dictionary(),
-			int nFlags = NODE_FLAG_NONE,
-			int nHlodMinLevel = 1 );
+	        const Transform3D &rGlobalTransform,
+	        const Dictionary &rState = Dictionary(),
+	        int nFlags = NODE_FLAG_NONE,
+	        int nHlodMinLevel = 1 );
 	int64_t addStreamedScenePath( const String &rScenePath,
-			const Transform3D &rGlobalTransform,
-			const Dictionary &rState = Dictionary(),
-			int nFlags = NODE_FLAG_NONE,
-			int nHlodMinLevel = 1 );
+	        const Transform3D &rGlobalTransform,
+	        const Dictionary &rState = Dictionary(),
+	        int nFlags = NODE_FLAG_NONE,
+	        int nHlodMinLevel = 1 );
 	void onHlodRepresentationChanged( const Vector2i &rRegion );
 	bool areHlodVisualRegionsReady( const Vector2i &rRegionMin, const Vector2i &rRegionMax ) const;
 	bool removeStreamedScene( int64_t nSpawnId );
 	Dictionary getStats( void ) const;
 	size_t getRetainedCapacityBytes( void ) const;
 	EA_FORCE_INLINE int getActiveRegionCount( void ) const {
-		return m_nActiveRegionCount;
+		return ( int )( m_activeRegionIndices.size() );
 	}
 	EA_FORCE_INLINE int getActiveNodeCount( void ) const {
 		return m_nActiveNodeCount;
@@ -266,7 +305,7 @@ public:
 		return m_nLoadingRegionCount == 0 && m_nLoadsLastTick == 0 && m_nNodesActivatedLastTick == 0;
 	}
 	EA_FORCE_INLINE int getMovableNodeCount( void ) const {
-		return ( int )( m_movableNodes.size() );
+		return ( int )( m_nMovableNodeCount );
 	}
 	EA_FORCE_INLINE int getLoadsLastTick( void ) const {
 		return m_nLoadsLastTick;

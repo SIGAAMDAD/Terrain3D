@@ -1,7 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_ACTIVE_STORAGE_H
 #define TERRAIN3D_ACTIVE_STORAGE_H
 
@@ -10,8 +8,8 @@
 #include "core/terrain_3d_limits.h"
 #include "data/terrain_3d_region.h"
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 #include <godot_cpp/variant/rect2i.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
 
@@ -25,14 +23,14 @@ using namespace godot;
 // bytes in place. Control, color, and derived maps remain authoritative in
 // Terrain3DRegion.
 typedef struct t3dActiveMapView_s {
-	const uint16_t *m_pHeight = nullptr;
+	const uint16_t *m_pHeight = NULL;
 	uint32_t m_nOwnerGeneration = 0u;
 	uint32_t m_nRegionGeneration = 0u;
 	int m_nRegionSize = 0;
 	int m_iSlot = -1;
 
 	EA_FORCE_INLINE bool valid( void ) const {
-		return m_pHeight != nullptr && m_iSlot >= 0;
+		return m_pHeight != NULL && m_iSlot >= 0;
 	}
 } t3dActiveMapView_t;
 
@@ -79,24 +77,16 @@ bool t3dActiveStorageContains( const void *pOwner, const Vector2i &rLocation );
 
 Terrain3DActiveMapLease t3dActiveStorageAcquire( const void *pOwner, const Vector2i &rLocation );
 bool t3dActiveStorageSyncRegion( const void *pOwner, const Vector2i &rLocation, const Terrain3DRegion *pRegion );
-bool t3dActiveStorageSyncHeightPage( const void *pOwner,
-		const Vector2i &rLocation,
-		const uint8_t *pHeightBytes,
-		size_t nHeightBytes );
-bool t3dActiveStorageReplaceHeightPages( const void *pOwner,
-		int nRegionSize,
-		const uint8_t *const *pHeightPages,
-		const int *pSlots,
-		size_t nPageCount );
+bool t3dActiveStorageSyncHeightPage( const void *pOwner, const Vector2i &rLocation, const uint8_t *pHeightBytes, size_t nHeightBytes );
+bool t3dActiveStorageReplaceHeightPages(
+        const void *pOwner, int nRegionSize, const uint8_t *const *pHeightPages, const int *pSlots, size_t nPageCount );
 bool t3dActiveStorageSyncMap( const void *pOwner,
-		const Vector2i &rLocation,
-		const Terrain3DRegion *pRegion,
-		t3dMapType_t type,
-		const Rect2i &rDirtyRect = Rect2i() );
-bool t3dActiveStorageSyncDerived( const void *pOwner,
-		const Vector2i &rLocation,
-		const Terrain3DRegion *pRegion,
-		const Rect2i &rDirtyRect = Rect2i() );
+        const Vector2i &rLocation,
+        const Terrain3DRegion *pRegion,
+        t3dMapType_t type,
+        const Rect2i &rDirtyRect = Rect2i() );
+bool t3dActiveStorageSyncDerived(
+        const void *pOwner, const Vector2i &rLocation, const Terrain3DRegion *pRegion, const Rect2i &rDirtyRect = Rect2i() );
 void t3dActiveStorageInvalidate( const void *pOwner, const Vector2i &rLocation );
 
 #endif // TERRAIN3D_ACTIVE_STORAGE_H

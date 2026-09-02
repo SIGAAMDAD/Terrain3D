@@ -1,15 +1,13 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
-#pragma once
-
 #ifndef TERRAIN3D_INSTANCE_CACHE_POLICY_H
 #define TERRAIN3D_INSTANCE_CACHE_POLICY_H
 
 #include "core/terrain_3d_compiler.h"
 #include "instances/terrain_3d_instance_cache_constants.h"
 
-#include <cstddef>
-#include <cstdint>
-#include <limits>
+#include <EASTL/numeric_limits.h>
+#include <stddef.h>
+#include <stdint.h>
 
 typedef struct t3dInstanceCacheCoord_s {
 	int m_nX;
@@ -22,14 +20,11 @@ inline int t3dInstanceCacheDistance( const t3dInstanceCacheCoord_t a, const t3dI
 	const uint64_t abs_x = dx < 0 ? ( uint64_t )( -dx ) : ( uint64_t )( dx );
 	const uint64_t abs_y = dy < 0 ? ( uint64_t )( -dy ) : ( uint64_t )( dy );
 	const uint64_t distance = abs_x > abs_y ? abs_x : abs_y;
-	return distance > ( uint64_t )( std::numeric_limits<int>::max() ) ? std::numeric_limits<int>::max()
-																	  : ( int )( distance );
+	return distance > ( uint64_t )( eastl::numeric_limits<int>::max() ) ? eastl::numeric_limits<int>::max() : ( int )( distance );
 }
 
-inline bool t3dInstanceCacheCanStream( const size_t nResidentBytes,
-		const size_t nIncomingBytes,
-		const size_t nBudgetBytes,
-		const int nResidentPages ) {
+inline bool t3dInstanceCacheCanStream(
+        const size_t nResidentBytes, const size_t nIncomingBytes, const size_t nBudgetBytes, const int nResidentPages ) {
 	if ( nResidentPages <= 0 ) {
 		return true;
 	}

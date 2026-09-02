@@ -1,10 +1,10 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_RUNTIME_PAGE_STORE_H
 #define TERRAIN3D_RUNTIME_PAGE_STORE_H
 
+#include "core/terrain_3d_eastl_helpers.h"
+#include "core/terrain_3d_sync.h"
 #include "Terrain3DConstants.h"
 #include "eastl_config.h"
 #include "data/terrain_3d_runtime_page_constants.h"
@@ -12,11 +12,8 @@
 
 #include <EASTL/array.h>
 #include <EASTL/vector.h>
-#include <cstddef>
-#include <cstdint>
-#include <condition_variable>
-#include <mutex>
-#include <thread>
+#include <stddef.h>
+#include <stdint.h>
 #include <godot_cpp/variant/packed_string_array.hpp>
 #include <godot_cpp/variant/string.hpp>
 
@@ -43,10 +40,8 @@ typedef struct t3dRuntimePageNumericConfig_s {
 	int m_nPrepareThreads = 2;
 } t3dRuntimePageNumericConfig_t;
 
-EA_FORCE_INLINE t3dRuntimePageNumericConfig_t t3dCompileRuntimePageNumericConfig( const int nColorDivisor,
-		const int nDerivedDivisor,
-		const int nMiddleHeightDivisor,
-		const int nPrepareThreads ) {
+EA_FORCE_INLINE t3dRuntimePageNumericConfig_t t3dCompileRuntimePageNumericConfig(
+        const int nColorDivisor, const int nDerivedDivisor, const int nMiddleHeightDivisor, const int nPrepareThreads ) {
 	t3dRuntimePageNumericConfig_t config;
 	config.m_nColorDivisor = nColorDivisor > 0 ? nColorDivisor : 1;
 	config.m_nDerivedDivisor = nDerivedDivisor > 0 ? nDerivedDivisor : 1;
@@ -87,6 +82,24 @@ typedef struct t3dRuntimePageCookPayload_s {
 	uint32_t m_nMaterialMask = 1u;
 } t3dRuntimePageCookPayload_t;
 
+typedef enum t3dRuntimePageProbeState_e : uint8_t {
+	RUNTIME_PAGE_PROBE_MISSING = 0u,
+	RUNTIME_PAGE_PROBE_CURRENT = 1u,
+	RUNTIME_PAGE_PROBE_LEGACY = 2u,
+	RUNTIME_PAGE_PROBE_FUTURE = 3u,
+	RUNTIME_PAGE_PROBE_INVALID = 4u,
+} t3dRuntimePageProbeState_t;
+
+typedef struct t3dRuntimePageProbe_s {
+	t3dRuntimePageProbeState_t m_state = RUNTIME_PAGE_PROBE_MISSING;
+	uint32_t m_nVersion = 0u;
+	uint32_t m_nHeaderBytes = 0u;
+	uint32_t m_nRegionSize = 0u;
+	uint32_t m_nTotalBytes = 0u;
+	uint32_t m_nChannelCount = 0u;
+	uint64_t m_nFileBytes = 0u;
+} t3dRuntimePageProbe_t;
+
 typedef struct t3dRuntimePageStats_s {
 	int m_nPreparedPages = 0;
 	int m_nPreparedLoadedPages = 0;
@@ -105,13 +118,13 @@ typedef struct t3dRuntimePageStats_s {
 } t3dRuntimePageStats_t;
 
 typedef struct t3dRuntimePageServiceState_s {
-	using IsWantedFn = bool ( * )( void *pContext, const Vector2i &rLocation );
+	typedef bool ( *IsWantedFn )( void *pContext, const Vector2i &rLocation );
 
 	t3dRuntimePageConfig_t m_config;
 	Vector2i m_predictedCenter = s_v2iMax;
 	uint64_t m_nStreamingGeneration = 0u;
-	IsWantedFn m_isWanted = nullptr;
-	void *m_pWantedContext = nullptr;
+	IsWantedFn m_isWanted = NULL;
+	void *m_pWantedContext = NULL;
 } t3dRuntimePageServiceState_t;
 
 // Owns cooked runtime-page I/O, validation/materialization, merged consumer
@@ -203,74 +216,63 @@ public:
 	String getPagePath( const Terrain3DRegion *pRegion, const String &rDataDirectory ) const;
 	uint64_t computeSourceSignature( const Terrain3DRegion *pRegion, const t3dRuntimePageConfig_t &rConfig ) const;
 	bool readSourceSignature( const String &rPagePath, uint64_t &nSignature ) const;
+	bool probePage( const String &rPagePath, t3dRuntimePageProbe_t &rProbe ) const;
 	uint32_t readMaterialMask( const String &rPagePath ) const;
 	bool removePageForSource( const String &rSourcePath ) const;
 	bool removePage( const String &rPagePath ) const;
 	bool validatePageForRegion( const Terrain3DRegion *pRegion, const t3dRuntimePageConfig_t &rConfig ) const;
 	bool loadCpuMapsNow( const Vector2i &rLocation,
-			const t3dRuntimePageConfig_t &rConfig,
-			Ref<Image> &rHeight,
-			Ref<Image> &rControl,
-			Ref<Image> &rColor,
-			Ref<Image> &rDerived ) const;
+	        const t3dRuntimePageConfig_t &rConfig,
+	        Ref<Image> &rHeight,
+	        Ref<Image> &rControl,
+	        Ref<Image> &rColor,
+	        Ref<Image> &rDerived ) const;
 	bool loadCollisionNow( const Vector2i &rLocation,
-			const t3dRuntimePageConfig_t &rConfig,
-			PackedByteArray &rHeight,
-			PackedByteArray &rBounds,
-			PackedByteArray &rHoleMask ) const;
+	        const t3dRuntimePageConfig_t &rConfig,
+	        PackedByteArray &rHeight,
+	        PackedByteArray &rBounds,
+	        PackedByteArray &rHoleMask ) const;
 	bool loadNavigationNow( const Vector2i &rLocation,
-			const t3dRuntimePageConfig_t &rConfig,
-			PackedByteArray &rNavigation,
-			PackedByteArray *pCollisionHeight = nullptr,
-			PackedByteArray *pMinMaxHeight = nullptr ) const;
-	bool loadLightingReceiversNow( const Vector2i &rLocation,
-			const t3dRuntimePageConfig_t &rConfig,
-			PackedByteArray &rReceivers ) const;
+	        const t3dRuntimePageConfig_t &rConfig,
+	        PackedByteArray &rNavigation,
+	        PackedByteArray *pCollisionHeight = NULL,
+	        PackedByteArray *pMinMaxHeight = NULL ) const;
+	bool loadLightingReceiversNow( const Vector2i &rLocation, const t3dRuntimePageConfig_t &rConfig, PackedByteArray &rReceivers ) const;
 	bool writePage( Terrain3DRegion *pRegion,
-			const t3dRuntimePageConfig_t &rConfig,
-			const t3dRuntimePageCookPayload_t &rPayload,
-			String *pError = nullptr ) const;
+	        const t3dRuntimePageConfig_t &rConfig,
+	        const t3dRuntimePageCookPayload_t &rPayload,
+	        String *pError = NULL );
 
 	bool collectPageSources( const String &rDataDirectory,
-			PackedStringArray &rSourceFiles,
-			eastl::vector<Vector2i> &rLocations,
-			PackedStringArray &rErrors ) const;
+	        PackedStringArray &rSourceFiles,
+	        eastl::vector<Vector2i, Terrain3DEastlAllocator> &rLocations,
+	        PackedStringArray &rErrors ) const;
 
 	void request( const Vector2i &rLocation, uint16_t nConsumers, uint8_t nPriority, bool bEnabled );
 	void service( const t3dRuntimePageServiceState_t &rState );
 	bool isPending( const Vector2i &rLocation ) const;
 	bool isPrepared( const Vector2i &rLocation ) const;
 
-	bool takeHeight( const Vector2i &rLocation,
-			uint16_t nConsumer,
-			Ref<Image> &rHeight,
-			bool bMiddle,
-			PackedByteArray *pNativeHeightBytes = nullptr );
+	bool takeHeight(
+	        const Vector2i &rLocation, uint16_t nConsumer, Ref<Image> &rHeight, bool bMiddle, PackedByteArray *pNativeHeightBytes = NULL );
 	bool takeInstance( const Vector2i &rLocation,
-			Terrain3DInstanceStore &rStore,
-			PackedByteArray *pInstanceMetadata = nullptr,
-			PackedByteArray *pMultimeshFastStart = nullptr );
-	bool takeCpuMaps( const Vector2i &rLocation,
-			Ref<Image> &rHeight,
-			Ref<Image> &rControl,
-			Ref<Image> &rColor,
-			Ref<Image> &rDerived );
+	        Terrain3DInstanceStore &rStore,
+	        PackedByteArray *pInstanceMetadata = NULL,
+	        PackedByteArray *pMultimeshFastStart = NULL );
+	bool takeCpuMaps( const Vector2i &rLocation, Ref<Image> &rHeight, Ref<Image> &rControl, Ref<Image> &rColor, Ref<Image> &rDerived );
 	bool takeNodeDescriptors( const Vector2i &rLocation, PackedByteArray &rDescriptors );
-	bool takeCollision( const Vector2i &rLocation,
-			PackedByteArray &rHeight,
-			PackedByteArray &rBounds,
-			PackedByteArray &rHoleMask );
+	bool takeCollision( const Vector2i &rLocation, PackedByteArray &rHeight, PackedByteArray &rBounds, PackedByteArray &rHoleMask );
 	bool takeNavigation( const Vector2i &rLocation, PackedByteArray &rNavigation );
 	bool takeTerrainShadowMask( const Vector2i &rLocation, Ref<Image> &rShadowMask );
 	bool takeGpuPage( const Vector2i &rLocation,
-			Ref<Image> &rHeight,
-			Ref<Image> &rControl,
-			Ref<Image> &rColor,
-			Ref<Image> &rDerived,
-			Ref<Image> &rMiddleComposite,
-			uint32_t &rMaterialMask,
-			bool &bAttempted,
-			uint64_t *pRequestedUsec = nullptr );
+	        Ref<Image> &rHeight,
+	        Ref<Image> &rControl,
+	        Ref<Image> &rColor,
+	        Ref<Image> &rDerived,
+	        Ref<Image> &rMiddleComposite,
+	        uint32_t &rMaterialMask,
+	        bool &bAttempted,
+	        uint64_t *pRequestedUsec = NULL );
 
 	t3dRuntimePageStats_t getStats( void ) const;
 	EA_FORCE_INLINE int getPreparedPageCount( void ) const {
@@ -293,8 +295,8 @@ public:
 	}
 
 private:
-	Terrain3DRegionRepository *m_pRepository = nullptr;
-	const Terrain3DRegionPersistence *m_pPersistence = nullptr;
+	Terrain3DRegionRepository *m_pRepository = NULL;
+	const Terrain3DRegionPersistence *m_pPersistence = NULL;
 	eastl::array<t3dRuntimePageMeta_t, s_nGpuCacheMaxLayers> m_preparedPages{};
 	eastl::array<t3dRuntimePageMeta_t, s_nGpuCacheMaxLayers> m_workPages{};
 	eastl::array<t3dRuntimePagePayload_t, s_nGpuCacheMaxLayers> m_payloadSlots{};
@@ -330,10 +332,11 @@ private:
 	String m_sourceDataDirectory;
 	t3dRuntimePageNumericConfig_t m_sourceNumericConfig;
 	bool m_bSourceEditorAuthoring = false;
+	bool m_bRuntimeSourcesDirty = true;
 	uint32_t m_nWorkerScratchBytes = s_nRuntimePageHeaderBytes;
 
-	static constexpr int s_nRuntimeWorkerLimit = 32;
-	eastl::array<std::thread, s_nRuntimeWorkerLimit> m_workers;
+
+	eastl::array<t3dThread_t, s_nRuntimeWorkerLimit> m_workers;
 	eastl::array<t3dRuntimePageWorkerScratch_t, s_nRuntimeWorkerLimit> m_workerScratch{};
 	eastl::array<int16_t, s_nGpuCacheMaxLayers> m_workRing{};
 	eastl::array<int16_t, s_nGpuCacheMaxLayers> m_completionRing{};
@@ -345,18 +348,19 @@ private:
 	int m_nCompletionRingCount = 0;
 	int m_nWorkerThreadCount = 0;
 	bool m_bWorkersStop = false;
-	mutable std::mutex m_workerMutex;
-	std::condition_variable m_workerWake;
-	std::condition_variable m_completionWake;
+	mutable t3dMutex_t m_workerMutex;
+	t3dCondition_t m_workerWake;
+	t3dCondition_t m_completionWake;
 
 	int getPreparedIndex( const Vector2i &rLocation ) const;
 	int getWorkIndex( const Vector2i &rLocation ) const;
 	bool loadSourceRegion( const Vector2i &rLocation, Ref<Terrain3DRegion> &rSource ) const;
+	uint64_t resolveExpectedSourceSignature( const Terrain3DRegion *pRegion, const t3dRuntimePageConfig_t &rConfig ) const;
 	bool loadSnapshot( t3dRuntimePageMeta_t &rMeta,
-			t3dRuntimePagePayload_t &rPayload,
-			t3dRuntimePageWorkerScratch_t &rScratch,
-			const t3dRuntimePageSource_t &rSource,
-			bool bPreserveMaterialized = false ) const;
+	        t3dRuntimePagePayload_t &rPayload,
+	        t3dRuntimePageWorkerScratch_t &rScratch,
+	        const t3dRuntimePageSource_t &rSource,
+	        bool bPreserveMaterialized = false ) const;
 	void prepareWorkIndex( int nWorkIndex, int nWorkerIndex );
 	void workerMain( int nWorkerIndex );
 	void startWorkers( int nWorkerCount );
@@ -368,9 +372,9 @@ private:
 	int acquirePayloadSlot( void );
 	void releasePayloadSlot( int nPayloadSlot );
 	void mergePreparedPayload( t3dRuntimePageMeta_t &rDestinationMeta,
-			t3dRuntimePagePayload_t &rDestinationPayload,
-			const t3dRuntimePageMeta_t &rSourceMeta,
-			t3dRuntimePagePayload_t &rSourcePayload );
+	        t3dRuntimePagePayload_t &rDestinationPayload,
+	        const t3dRuntimePageMeta_t &rSourceMeta,
+	        t3dRuntimePagePayload_t &rSourcePayload );
 	void consumePreparedIndex( int nIndex );
 };
 

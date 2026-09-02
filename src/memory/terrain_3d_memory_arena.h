@@ -1,16 +1,13 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 // Fixed native memory image and deterministic low/high layout planner.
-#pragma once
-
 #ifndef TERRAIN3D_MEMORY_ARENA_H
 #define TERRAIN3D_MEMORY_ARENA_H
 
 #include "core/terrain_3d_compiler.h"
 #include "memory/terrain_3d_memory_constants.h"
 
-#include <cstddef>
-#include <cstdint>
-#include <limits>
+#include <stddef.h>
+#include <stdint.h>
 
 typedef struct t3dMemoryArenaSlice_s {
 	size_t m_iOffset = 0u;
@@ -24,11 +21,11 @@ typedef struct t3dMemoryArenaSlice_s {
 } t3dMemoryArenaSlice_t;
 
 typedef struct t3dMemoryArenaSpan_s {
-	uint8_t *m_pData = nullptr;
+	uint8_t *m_pData = NULL;
 	size_t m_nSize = 0u;
 
 	EA_FORCE_INLINE bool valid( void ) const {
-		return m_pData != nullptr || m_nSize == 0u;
+		return m_pData != NULL || m_nSize == 0u;
 	}
 } t3dMemoryArenaSpan_t;
 
@@ -77,11 +74,14 @@ public:
 	~Terrain3DMemoryArena( void );
 	Terrain3DMemoryArena( const Terrain3DMemoryArena & ) = delete;
 	Terrain3DMemoryArena &operator=( const Terrain3DMemoryArena & ) = delete;
+	Terrain3DMemoryArena( Terrain3DMemoryArena &&rOther ) noexcept;
+	Terrain3DMemoryArena &operator=( Terrain3DMemoryArena &&rOther ) noexcept;
 
 	bool initialize( const Terrain3DMemoryArenaLayout &rLayout );
 	bool commit( void );
 	bool seal( void );
 	void release( void );
+	void swap( Terrain3DMemoryArena &rOther ) noexcept;
 
 	t3dMemoryArenaSpan_t resolve( const t3dMemoryArenaSlice_t &rSlice );
 	t3dMemoryArenaSpan_t resolve( const t3dMemoryArenaSlice_t &rSlice ) const;
@@ -103,8 +103,8 @@ public:
 	}
 
 private:
-	void *m_pRaw = nullptr;
-	uint8_t *m_pBase = nullptr;
+	void *m_pRaw = NULL;
+	uint8_t *m_pBase = NULL;
 	size_t m_nCapacity = 0u;
 	size_t m_nBaseAlignment = s_nArenaDefaultBaseAlignment;
 	bool m_bInitialized = false;
