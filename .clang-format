@@ -1,72 +1,50 @@
 BasedOnStyle: LLVM
 Language: Cpp
 Standard: c++17
-
-# Terrain3D native style: compact late-2000s/early-2010s C++, but never compressed.
-UseTab: Always
-TabWidth: 4
-IndentWidth: 4
-ContinuationIndentWidth: 8
 AccessModifierOffset: -4
-IndentCaseLabels: true
-IndentCaseBlocks: false
-
-ColumnLimit: 120
-BreakBeforeBraces: Attach
-InsertBraces: true
+AlignAfterOpenBracket: DontAlign
+AlignConsecutiveAssignments: None
+AlignConsecutiveDeclarations: None
+AlignOperands: DontAlign
+AllowAllArgumentsOnNextLine: true
+AllowAllParametersOfDeclarationOnNextLine: true
 AllowShortBlocksOnASingleLine: Never
 AllowShortCaseLabelsOnASingleLine: false
 AllowShortEnumsOnASingleLine: false
-AllowShortFunctionsOnASingleLine: Empty
+AllowShortFunctionsOnASingleLine: None
 AllowShortIfStatementsOnASingleLine: Never
-AllowShortLambdasOnASingleLine: Empty
+AllowShortLambdasOnASingleLine: None
 AllowShortLoopsOnASingleLine: false
-
+AlwaysBreakTemplateDeclarations: Yes
 BinPackArguments: false
 BinPackParameters: false
-AllowAllArgumentsOnNextLine: true
-AllowAllParametersOfDeclarationOnNextLine: false
-AlignAfterOpenBracket: DontAlign
-AlignOperands: DontAlign
-AlignEscapedNewlines: DontAlign
-AlignTrailingComments:
-  Kind: Never
-  OverEmptyLines: 0
-
+BreakBeforeBinaryOperators: NonAssignment
+BreakBeforeBraces: Attach
 BreakConstructorInitializers: AfterColon
+BreakInheritanceList: AfterColon
+ColumnLimit: 140
 ConstructorInitializerIndentWidth: 8
+ContinuationIndentWidth: 8
+Cpp11BracedListStyle: false
+DerivePointerAlignment: false
+IncludeBlocks: Preserve
+IndentCaseLabels: true
+IndentPPDirectives: None
+IndentWidth: 4
+InsertBraces: true
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 2
 PackConstructorInitializers: NextLine
-
 PointerAlignment: Right
 ReferenceAlignment: Pointer
-DerivePointerAlignment: false
-SpaceBeforeParens: ControlStatements
-SpacesInParens: Custom
-SpacesInParensOptions:
-  InConditionalStatements: true
-  InCStyleCasts: false
-  InEmptyParentheses: false
-  Other: true
-SpaceAfterCStyleCast: false
-Cpp11BracedListStyle: false
-
-IncludeBlocks: Regroup
-IncludeCategories:
-  - Regex: '".*"'
-    Priority: 1
-  - Regex: '^<.*\\.h>'
-    Priority: 2
-  - Regex: '^<.*'
-    Priority: 3
-SortIncludes: CaseSensitive
-
-KeepEmptyLinesAtTheStartOfBlocks: false
-MaxEmptyLinesToKeep: 1
+QualifierAlignment: Leave
 ReflowComments: false
-RemoveSemicolon: true
-
-AttributeMacros:
-  - EA_FORCE_INLINE
-  - _ALWAYS_INLINE_
-  - _FORCE_INLINE_
-  - _NO_INLINE_
+SortIncludes: Never
+SpaceAfterCStyleCast: false
+SpaceBeforeParens: ControlStatements
+SpacesInAngles: Never
+SpacesInCStyleCastParentheses: true
+SpacesInContainerLiterals: false
+SpacesInParentheses: true
+TabWidth: 4
+UseTab: ForIndentation
