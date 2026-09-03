@@ -4,12 +4,10 @@
 #include "data/terrain_3d_packed_transform.h"
 #include "simd/terrain_3d_simd_internal.h"
 
-#include <algorithm>
-#include <cmath>
-#include <cstring>
+#include <math.h>
+#include <string.h>
 
-#if defined( TERRAIN3D_ENABLE_SSE2_BACKEND ) && \
-		( defined( __SSE2__ ) || defined( _M_X64 ) || ( defined( _M_IX86_FP ) && _M_IX86_FP >= 2 ) )
+#if defined( TERRAIN3D_ENABLE_SSE2_BACKEND ) && ( defined( __SSE2__ ) || defined( _M_X64 ) || ( defined( _M_IX86_FP ) && _M_IX86_FP >= 2 ) )
 #include <emmintrin.h>
 #define TERRAIN3D_COMPILED_SSE2 1
 #else
@@ -48,10 +46,8 @@ static inline void t3dSimdSse2EncodeNormal4( __m128 x, __m128 z, uint8_t *pDesti
 	const __m128 half = _mm_set1_ps( 0.5f );
 	const __m128 zero = _mm_setzero_ps();
 	const __m128 max255 = _mm_set1_ps( s_fByteMaxFloat );
-	x = _mm_min_ps(
-			max255, _mm_max_ps( zero, _mm_add_ps( _mm_mul_ps( _mm_add_ps( x, _mm_set1_ps( 1.0f ) ), scale ), half ) ) );
-	z = _mm_min_ps(
-			max255, _mm_max_ps( zero, _mm_add_ps( _mm_mul_ps( _mm_add_ps( z, _mm_set1_ps( 1.0f ) ), scale ), half ) ) );
+	x = _mm_min_ps( max255, _mm_max_ps( zero, _mm_add_ps( _mm_mul_ps( _mm_add_ps( x, _mm_set1_ps( 1.0f ) ), scale ), half ) ) );
+	z = _mm_min_ps( max255, _mm_max_ps( zero, _mm_add_ps( _mm_mul_ps( _mm_add_ps( z, _mm_set1_ps( 1.0f ) ), scale ), half ) ) );
 	alignas( 16 ) int32_t xi[4];
 	alignas( 16 ) int32_t zi[4];
 	_mm_store_si128( ( __m128i * )( xi ), _mm_cvttps_epi32( x ) );
@@ -62,25 +58,18 @@ static inline void t3dSimdSse2EncodeNormal4( __m128 x, __m128 z, uint8_t *pDesti
 	}
 }
 
-static inline void t3dSimdSse2ScalarNormalPixel( const float *pCenterRow,
-		const float *pDownRow,
-		const int iX,
-		const float fSpacing,
-		uint8_t *pDestination ) {
+static inline void t3dSimdSse2ScalarNormalPixel(
+        const float *pCenterRow, const float *pDownRow, const int iX, const float fSpacing, uint8_t *pDestination ) {
 	const float fDx = pCenterRow[iX] - pCenterRow[iX + 1];
 	const float fDz = pCenterRow[iX] - pDownRow[iX];
-	const float fLength = std::sqrt( fDx * fDx + fSpacing * fSpacing + fDz * fDz );
+	const float fLength = sqrt( fDx * fDx + fSpacing * fSpacing + fDz * fDz );
 	const float fInverse = fLength > 0.0f ? 1.0f / fLength : 0.0f;
-	pDestination[0] = ( uint8_t )( std::floor(
-			std::max( 0.0f, std::min( s_fByteMaxFloat, ( fDx * fInverse + 1.0f ) * s_fByteMidpointFloat ) ) + 0.5f ) );
-	pDestination[1] = ( uint8_t )( std::floor(
-			std::max( 0.0f, std::min( s_fByteMaxFloat, ( fDz * fInverse + 1.0f ) * s_fByteMidpointFloat ) ) + 0.5f ) );
+	pDestination[0] = ( uint8_t )( floor( MAX( 0.0f, MIN( s_fByteMaxFloat, ( fDx * fInverse + 1.0f ) * s_fByteMidpointFloat ) ) + 0.5f ) );
+	pDestination[1] = ( uint8_t )( floor( MAX( 0.0f, MIN( s_fByteMaxFloat, ( fDz * fInverse + 1.0f ) * s_fByteMidpointFloat ) ) + 0.5f ) );
 }
 
-static inline void t3dSimdSse2WriteTransform( const t3dPackedTransform_t &rTransform,
-		const uint32_t nColor,
-		const int nStride,
-		float *pDestination ) {
+static inline void t3dSimdSse2WriteTransform(
+        const t3dPackedTransform_t &rTransform, const uint32_t nColor, const int nStride, float *pDestination ) {
 	alignas( 16 ) float fBasis[12] = {};
 	_mm_store_ps( fBasis, t3dSimdSse2Decode4Exact( rTransform.m_szBasis ) );
 	_mm_store_ps( fBasis + 4, t3dSimdSse2Decode4Exact( rTransform.m_szBasis + 4 ) );
@@ -125,27 +114,19 @@ void t3dSimdSse2HalfToFloat( const uint16_t *pSource, float *pDestination, const
 #endif
 }
 
-void t3dSimdSse2PackedTransforms( const t3dPackedTransform_t *pTransforms,
-		const uint32_t *pColors,
-		const size_t nCount,
-		const int nStride,
-		float *pDestination ) {
+void t3dSimdSse2PackedTransforms(
+        const t3dPackedTransform_t *pTransforms, const uint32_t *pColors, const size_t nCount, const int nStride, float *pDestination ) {
 #if TERRAIN3D_COMPILED_SSE2
 	for ( size_t i = 0u; i < nCount; ++i ) {
-		t3dSimdSse2WriteTransform(
-				pTransforms[i], pColors ? pColors[i] : 0xffffffffu, nStride, pDestination + i * ( size_t )( nStride ) );
+		t3dSimdSse2WriteTransform( pTransforms[i], pColors ? pColors[i] : 0xffffffffu, nStride, pDestination + i * ( size_t )( nStride ) );
 	}
 #else
 	t3dSimdScalarPackedTransforms( pTransforms, pColors, nCount, nStride, pDestination );
 #endif
 }
 
-void t3dSimdSse2DerivedNormals( const float *pHalo,
-		const int nWidth,
-		const int nHeight,
-		const int nHaloStride,
-		const float fSpacing,
-		uint8_t *pDestination ) {
+void t3dSimdSse2DerivedNormals(
+        const float *pHalo, const int nWidth, const int nHeight, const int nHaloStride, const float fSpacing, uint8_t *pDestination ) {
 #if TERRAIN3D_COMPILED_SSE2
 	const __m128 spacing_sq = _mm_set1_ps( fSpacing * fSpacing );
 	for ( int y = 0; y < nHeight; ++y ) {
@@ -157,8 +138,7 @@ void t3dSimdSse2DerivedNormals( const float *pHalo,
 			const __m128 center = _mm_loadu_ps( pCenterRow + x );
 			const __m128 dx = _mm_sub_ps( center, _mm_loadu_ps( pCenterRow + x + 1 ) );
 			const __m128 dz = _mm_sub_ps( center, _mm_loadu_ps( pDownRow + x ) );
-			const __m128 length =
-					_mm_sqrt_ps( _mm_add_ps( spacing_sq, _mm_add_ps( _mm_mul_ps( dx, dx ), _mm_mul_ps( dz, dz ) ) ) );
+			const __m128 length = _mm_sqrt_ps( _mm_add_ps( spacing_sq, _mm_add_ps( _mm_mul_ps( dx, dx ), _mm_mul_ps( dz, dz ) ) ) );
 			const __m128 inv = _mm_div_ps( _mm_set1_ps( 1.0f ), length );
 			t3dSimdSse2EncodeNormal4( _mm_mul_ps( dx, inv ), _mm_mul_ps( dz, inv ), pOut + ( size_t )( x ) * 2u );
 		}
@@ -171,18 +151,15 @@ void t3dSimdSse2DerivedNormals( const float *pHalo,
 #endif
 }
 
-void t3dSimdSse2UpdateCumulativeErosion( const uint8_t *pActive,
-		const float *pInitialHeight,
-		const float *pHeight,
-		float *pCumulativeErosion,
-		const size_t nCount ) {
+void t3dSimdSse2UpdateCumulativeErosion(
+        const uint8_t *pActive, const float *pInitialHeight, const float *pHeight, float *pCumulativeErosion, const size_t nCount ) {
 #if TERRAIN3D_COMPILED_SSE2
 	const __m128 zero = _mm_setzero_ps();
 	const __m128i all_ones = _mm_set1_epi32( -1 );
 	size_t index = 0u;
 	for ( ; nCount - index >= 4u; index += 4u ) {
 		uint32_t active_bits = 0u;
-		std::memcpy( &active_bits, pActive + index, sizeof( active_bits ) );
+		memcpy( &active_bits, pActive + index, sizeof( active_bits ) );
 		__m128i active = _mm_cvtsi32_si128( ( int )( active_bits ) );
 		active = _mm_unpacklo_epi8( active, _mm_setzero_si128() );
 		active = _mm_unpacklo_epi16( active, _mm_setzero_si128() );
@@ -193,11 +170,10 @@ void t3dSimdSse2UpdateCumulativeErosion( const uint8_t *pActive,
 		const __m128 current = _mm_loadu_ps( pCumulativeErosion + index );
 		const __m128 update_mask = _mm_cmplt_ps( current, delta );
 		const __m128 updated = _mm_or_ps( _mm_and_ps( update_mask, delta ), _mm_andnot_ps( update_mask, current ) );
-		_mm_storeu_ps(
-				pCumulativeErosion + index, _mm_or_ps( _mm_and_ps( mask, updated ), _mm_andnot_ps( mask, current ) ) );
+		_mm_storeu_ps( pCumulativeErosion + index, _mm_or_ps( _mm_and_ps( mask, updated ), _mm_andnot_ps( mask, current ) ) );
 	}
 	t3dSimdScalarUpdateCumulativeErosion(
-			pActive + index, pInitialHeight + index, pHeight + index, pCumulativeErosion + index, nCount - index );
+	        pActive + index, pInitialHeight + index, pHeight + index, pCumulativeErosion + index, nCount - index );
 #else
 	t3dSimdScalarUpdateCumulativeErosion( pActive, pInitialHeight, pHeight, pCumulativeErosion, nCount );
 #endif

@@ -1,26 +1,24 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
+#ifndef TERRAIN3D_UNIT_TESTING_H
+#define TERRAIN3D_UNIT_TESTING_H
 
-#ifndef UNIT_TESTING_H
-#define UNIT_TESTING_H
-
-#define EXPECT_FALSE( cond ) \
-	do { \
-		if ( cond ) { \
-			UtilityFunctions::print( "FAILED: ", #cond ); \
-		} else { \
-			UtilityFunctions::print( "PASSED: ", #cond ); \
-		} \
+#define EXPECT_FALSE( cond )                                                                                                               \
+	do {                                                                                                                                   \
+		if ( cond ) {                                                                                                                      \
+			UtilityFunctions::print( "FAILED: ", #cond );                                                                                  \
+		} else {                                                                                                                           \
+			UtilityFunctions::print( "PASSED: ", #cond );                                                                                  \
+		}                                                                                                                                  \
 	} while ( 0 )
 
-#define EXPECT_TRUE( cond ) \
-	do { \
-		if ( cond ) { \
-			UtilityFunctions::print( "PASSED: ", #cond ); \
-		} else { \
-			UtilityFunctions::print( "FAILED: ", #cond ); \
-		} \
+#define EXPECT_TRUE( cond )                                                                                                                \
+	do {                                                                                                                                   \
+		if ( cond ) {                                                                                                                      \
+			UtilityFunctions::print( "PASSED: ", #cond );                                                                                  \
+		} else {                                                                                                                           \
+			UtilityFunctions::print( "FAILED: ", #cond );                                                                                  \
+		}                                                                                                                                  \
 	} while ( 0 )
 
 void t3dTestDiffers( void );
@@ -33,4 +31,4 @@ bool t3dTestRdMaterialAbi( void );
 bool t3dTestRdInstanceAbi( void );
 bool t3dRunRdCpuTests( void );
 
-#endif // UNIT_TESTING_H
+#endif // TERRAIN3D_UNIT_TESTING_H

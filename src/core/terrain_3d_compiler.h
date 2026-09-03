@@ -1,6 +1,7 @@
-// Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
+#ifndef TERRAIN3D_COMPILER_H
+#define TERRAIN3D_COMPILER_H
 
-#pragma once
+// Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #ifndef EA_FORCE_INLINE
 #if defined( _MSC_VER )
@@ -11,3 +12,9 @@
 #define EA_FORCE_INLINE inline
 #endif
 #endif
+
+#ifndef T3D_ARRAY_COUNT
+#define T3D_ARRAY_COUNT( a ) ( sizeof( a ) / sizeof( ( a )[0] ) )
+#endif
+
+#endif // TERRAIN3D_COMPILER_H

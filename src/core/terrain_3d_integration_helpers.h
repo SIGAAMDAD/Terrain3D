@@ -1,9 +1,10 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
+#ifndef TERRAIN3D_INTEGRATION_HELPERS_H
+#define TERRAIN3D_INTEGRATION_HELPERS_H
 
-#include "../Terrain3DConstants.h"
-#include "../streaming/terrain_3d_performance_profile.h"
+#include "Terrain3DConstants.h"
+#include "streaming/terrain_3d_performance_profile.h"
 
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
@@ -21,11 +22,11 @@ static inline int32_t t3dDivideFloor( const int32_t nValue, const int32_t nDivis
 }
 
 static inline void t3dAppendRuntimeProblem( Array &rProblems,
-		const String &rSeverity,
-		const String &rCode,
-		const String &rSubsystem,
-		const String &rMessage,
-		const int64_t nValue ) {
+        const String &rSeverity,
+        const String &rCode,
+        const String &rSubsystem,
+        const String &rMessage,
+        const int64_t nValue ) {
 	Dictionary problem;
 	problem["severity"] = rSeverity;
 	problem["code"] = rCode;
@@ -47,8 +48,7 @@ static inline Variant t3dPerformanceProfileValue( const t3dPerformanceProfileSet
 	return Variant();
 }
 
-static inline bool t3dPerformanceProfileValueMatches( const Variant &rCurrent,
-		const t3dPerformanceProfileSetting_t &rSetting ) {
+static inline bool t3dPerformanceProfileValueMatches( const Variant &rCurrent, const t3dPerformanceProfileSetting_t &rSetting ) {
 	switch ( rSetting.m_kind ) {
 		case T3D_PROFILE_VALUE_INT:
 			return ( int64_t )( rCurrent ) == rSetting.m_nIntValue;
@@ -64,5 +64,7 @@ static inline String t3dPerformanceProfileOwnerName( const t3dPerformanceProfile
 	return owner == T3D_PROFILE_OWNER_MATERIAL ? "Terrain3DMaterial" : "Terrain3D";
 }
 
-#define TERRAIN3D_ALIGN_BAKE_TASK_OFFSET( value ) \
+#define TERRAIN3D_ALIGN_BAKE_TASK_OFFSET( value )                                                                                          \
 	( ( ( value ) + s_nBakeTaskAlignmentElements - 1u ) & ~( s_nBakeTaskAlignmentElements - 1u ) )
+
+#endif // TERRAIN3D_INTEGRATION_HELPERS_H

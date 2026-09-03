@@ -1,9 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
-#ifndef TARGET_NODE3D_CLASS_H
-#define TARGET_NODE3D_CLASS_H
+#ifndef TERRAIN3D_TARGET_NODE_3D_H
+#define TERRAIN3D_TARGET_NODE_3D_H
 
 #include "Terrain3DConstants.h"
 #include "core/terrain_3d_compiler.h"
@@ -31,10 +29,10 @@ public:
 
 	Node3D *getTarget( void ) const {
 		if ( m_instanceId == 0 ) {
-			return nullptr;
+			return NULL;
 		}
 		Object *obj = ObjectDB::get_instance( m_instanceId );
-		return obj ? Object::cast_to<Node3D>( obj ) : nullptr;
+		return obj ? Object::cast_to<Node3D>( obj ) : NULL;
 	}
 
 	EA_FORCE_INLINE Node3D *ptr( void ) const {
@@ -51,4 +49,4 @@ public:
 	}
 };
 
-#endif // TARGET_NODE3D_CLASS_H
+#endif // TERRAIN3D_TARGET_NODE_3D_H

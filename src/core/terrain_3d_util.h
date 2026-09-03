@@ -1,7 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
-#pragma once
-
 #ifndef TERRAIN3D_UTIL_CLASS_H
 #define TERRAIN3D_UTIL_CLASS_H
 
@@ -9,13 +7,13 @@
 #include "assets/generated_texture.h"
 #include "core/terrain_3d_compiler.h"
 
-#include <cmath>
+#include <EASTL/type_traits.h>
+#include <EASTL/numeric_limits.h>
+#include <math.h>
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
-#include <limits>
-#include <type_traits>
 
 class Terrain3D;
 
@@ -30,7 +28,7 @@ class Terrain3DUtil : public Object {
 
 public:
 	// Print info to the console
-	static void printArr( const String &rName, const Array &rArr, const int nLevel = 2 ); // Level 2: DEBUG
+	static void printArr( const String &rName, const Array &rArr, const int nLevel = 2 );        // Level 2: DEBUG
 	static void printDict( const String &rName, const Dictionary &rDict, const int nLevel = 2 ); // Level 2: DEBUG
 	static void dumpGentex( const Terrain3DGeneratedTexture &rGen, const String &rName = "" );
 	static void dumpMaps( const TypedArray<Image> &rMaps, const String &rName = "" );
@@ -47,63 +45,59 @@ public:
 	static Vector2 getMinMax( const Ref<Image> &rImage );
 	static Ref<Image> getThumbnail( const Ref<Image> &rImage, const Vector2i &rSize = V2I( 256 ) );
 	static Ref<Image> getFilledImage( const Vector2i &rSize,
-			const Color &rColor = COLOR_BLACK,
-			const bool bCreateMipmaps = true,
-			const Image::Format eFormat = Image::FORMAT_MAX );
+	        const Color &rColor = COLOR_BLACK,
+	        const bool bCreateMipmaps = true,
+	        const Image::Format eFormat = Image::FORMAT_MAX );
 	static Ref<Image> loadImage( const String &rFileName,
-			const int nCacheMode = ResourceLoader::CACHE_MODE_IGNORE,
-			const Vector2 &rR16HeightRange = Vector2( 0.f, 255.f ),
-			const Vector2i &rR16Size = s_v2iZero );
+	        const int nCacheMode = ResourceLoader::CACHE_MODE_IGNORE,
+	        const Vector2 &rR16HeightRange = Vector2( 0.f, 255.f ),
+	        const Vector2i &rR16Size = s_v2iZero );
 	static Ref<Image> packImage( const Ref<Image> &rSrcRgb,
-			const Ref<Image> &rSrcA,
-			const Ref<Image> &rSrcAo,
-			const bool bInvertGreen = false,
-			const bool bInvertAlpha = false,
-			const bool bNormalizeAlpha = false,
-			const int nAlphaChannel = 0,
-			const int nAoChannel = 0 );
+	        const Ref<Image> &rSrcA,
+	        const Ref<Image> &rSrcAo,
+	        const bool bInvertGreen = false,
+	        const bool bInvertAlpha = false,
+	        const bool bNormalizeAlpha = false,
+	        const int nAlphaChannel = 0,
+	        const int nAoChannel = 0 );
 	// Packs six independently decoded PBR values into one RGBA16UI image:
 	// R high/low = normal X / AO, G high/low = normal Y / metallic,
 	// B = 16-bit roughness, A = 16-bit displacement. Mipmaps are generated
 	// from decoded values before each level is repacked.
 	static Ref<Image> packPbrRgba16ui( const Ref<Image> &rNormal,
-			const Ref<Image> &rRoughness,
-			const Ref<Image> &rDisplacement,
-			const Ref<Image> &rAo = Ref<Image>(),
-			const Ref<Image> &rMetallic = Ref<Image>(),
-			const bool bInvertNormalGreen = false,
-			const int nRoughnessChannel = 0,
-			const int nDisplacementChannel = 0,
-			const int nAoChannel = 0,
-			const int nMetallicChannel = 0,
-			const bool bGenerateMipmaps = true );
+	        const Ref<Image> &rRoughness,
+	        const Ref<Image> &rDisplacement,
+	        const Ref<Image> &rAo = Ref<Image>(),
+	        const Ref<Image> &rMetallic = Ref<Image>(),
+	        const bool bInvertNormalGreen = false,
+	        const int nRoughnessChannel = 0,
+	        const int nDisplacementChannel = 0,
+	        const int nAoChannel = 0,
+	        const int nMetallicChannel = 0,
+	        const bool bGenerateMipmaps = true );
 	static Ref<Image> getDefaultPackedPbrImage( const Vector2i &rSize, const bool bCreateMipmaps = true );
 	// Optimized runtime layout: RGBA8 surface (normal XY, roughness, AO) and
 	// independent R8_UNORM displacement. Terrain displacement is a normalized
 	// material mask, not authoritative terrain elevation, so 8-bit storage avoids
 	// wasting twice the memory and bandwidth for imperceptible precision.
 	static Ref<Image> packSurfaceRgba8( const Ref<Image> &rNormal,
-			const Ref<Image> &rRoughness,
-			const Ref<Image> &rAo = Ref<Image>(),
-			const bool bInvertNormalGreen = false,
-			const int nRoughnessChannel = 0,
-			const int nAoChannel = 0,
-			const bool bGenerateMipmaps = true );
-	static Ref<Image> packDisplacementR8( const Ref<Image> &rDisplacement,
-			const int nDisplacementChannel = 0,
-			const bool bGenerateMipmaps = true );
+	        const Ref<Image> &rRoughness,
+	        const Ref<Image> &rAo = Ref<Image>(),
+	        const bool bInvertNormalGreen = false,
+	        const int nRoughnessChannel = 0,
+	        const int nAoChannel = 0,
+	        const bool bGenerateMipmaps = true );
+	static Ref<Image> packDisplacementR8(
+	        const Ref<Image> &rDisplacement, const int nDisplacementChannel = 0, const bool bGenerateMipmaps = true );
 	// Deprecated compatibility alias. Returns an R8 image.
-	EA_FORCE_INLINE static Ref<Image> packDisplacementR16( const Ref<Image> &rDisplacement,
-			const int nDisplacementChannel = 0,
-			const bool bGenerateMipmaps = true ) {
+	EA_FORCE_INLINE static Ref<Image> packDisplacementR16(
+	        const Ref<Image> &rDisplacement, const int nDisplacementChannel = 0, const bool bGenerateMipmaps = true ) {
 		return packDisplacementR8( rDisplacement, nDisplacementChannel, bGenerateMipmaps );
 	}
 	static Ref<Image> getDefaultSurfaceImage( const Vector2i &rSize, const bool bCreateMipmaps = true );
 	static Ref<Image> getDefaultDisplacementImage( const Vector2i &rSize, const bool bCreateMipmaps = true );
-	static Ref<Image> convertPackedPbrRgba16uiToSurface( const Ref<Image> &rPacked,
-			const bool bGenerateMipmaps = true );
-	static Ref<Image> convertPackedPbrRgba16uiToDisplacement( const Ref<Image> &rPacked,
-			const bool bGenerateMipmaps = true );
+	static Ref<Image> convertPackedPbrRgba16uiToSurface( const Ref<Image> &rPacked, const bool bGenerateMipmaps = true );
+	static Ref<Image> convertPackedPbrRgba16uiToDisplacement( const Ref<Image> &rPacked, const bool bGenerateMipmaps = true );
 	static Error saveDisplacementR8Dds( const Ref<Image> &rDisplacement, const String &rPath );
 	// Deprecated compatibility alias. Accepts R8 data.
 	EA_FORCE_INLINE static Error saveDisplacementR16Dds( const Ref<Image> &rDisplacement, const String &rPath ) {
@@ -153,28 +147,31 @@ EA_FORCE_INLINE bool t3dIsValidRegionSize( int value ) {
 // https://stackoverflow.com/questions/3407012/rounding-up-to-the-nearest-multiple-of-a-number
 
 // Integer round up to a multiple
-template <typename T> EA_FORCE_INLINE T t3dIntCeilMult( const T numToRound, const T multiple ) {
-	static_assert( std::numeric_limits<T>::is_integer, "Only integer types are allowed" );
+template <typename T>
+EA_FORCE_INLINE T t3dIntCeilMult( const T numToRound, const T multiple ) {
+	static_assert( eastl::numeric_limits<T>::is_integer, "Only integer types are allowed" );
 	ASSERT( multiple != 0, 0 );
 	T isPositive = ( T )( numToRound >= 0 );
 	return ( ( numToRound + isPositive * ( multiple - 1 ) ) / multiple ) * multiple;
 }
 
 // Integer round up to a power of 2 multiple (3.7x faster)
-template <typename T> EA_FORCE_INLINE T t3dIntCeilPow2( T numToRound, T multiple ) {
-	static_assert( std::numeric_limits<T>::is_integer, "Only integer types are allowed" );
+template <typename T>
+EA_FORCE_INLINE T t3dIntCeilPow2( T numToRound, T multiple ) {
+	static_assert( eastl::numeric_limits<T>::is_integer, "Only integer types are allowed" );
 	ASSERT( is_power_of_2( multiple ), t3dIntCeilMult( numToRound, multiple ) );
 	return ( numToRound + multiple - 1 ) & -multiple;
 }
 
 // Integer round to nearest +/- multiple
 // https://stackoverflow.com/questions/29557459/round-to-nearest-multiple-of-a-number
-template <typename T> inline T t3dIntRoundMult( const T numToRound, const T multiple ) {
-	static_assert( std::numeric_limits<T>::is_integer, "Only integer types are allowed" );
+template <typename T>
+inline T t3dIntRoundMult( const T numToRound, const T multiple ) {
+	static_assert( eastl::numeric_limits<T>::is_integer, "Only integer types are allowed" );
 	ASSERT( multiple != 0, 0 );
 	T abs_num;
-	if constexpr ( std::is_signed_v<T> ) {
-		abs_num = std::abs( numToRound );
+	if constexpr ( eastl::is_signed_v<T> ) {
+		abs_num = abs( numToRound );
 	} else {
 		abs_num = numToRound;
 	}
@@ -186,34 +183,33 @@ template <typename T> inline T t3dIntRoundMult( const T numToRound, const T mult
 
 // Integer division with rounding up, down, nearest
 // https : //stackoverflow.com/questions/2422712/rounding-integer-division-instead-of-truncating/58568736#58568736
-#define V2I_DIVIDE_CEIL( v, f ) \
-	Vector2i( t3dIntDivideCeil( ( v ).x, ( int32_t )( f ) ), t3dIntDivideCeil( ( v ).y, ( int32_t )( f ) ) )
-#define V2I_DIVIDE_FLOOR( v, f ) \
-	Vector2i( t3dIntDivideFloor( ( v ).x, ( int32_t )( f ) ), t3dIntDivideFloor( ( v ).y, ( int32_t )( f ) ) )
+#define V2I_DIVIDE_CEIL( v, f ) Vector2i( t3dIntDivideCeil( ( v ).x, ( int32_t )( f ) ), t3dIntDivideCeil( ( v ).y, ( int32_t )( f ) ) )
+#define V2I_DIVIDE_FLOOR( v, f ) Vector2i( t3dIntDivideFloor( ( v ).x, ( int32_t )( f ) ), t3dIntDivideFloor( ( v ).y, ( int32_t )( f ) ) )
 
 // Integer division rounding up
-template <typename T> EA_FORCE_INLINE T t3dIntDivideCeil( const T numer, const T denom ) {
-	static_assert( std::numeric_limits<T>::is_integer, "Only integer types are allowed" );
-	T result = ( ( numer ) < 0 ) != ( ( denom ) < 0 )
-			? ( numer ) / ( denom )
-			: ( ( numer ) + ( ( denom ) < 0 ? ( denom ) + 1 : ( denom )-1 ) ) / ( denom );
+template <typename T>
+EA_FORCE_INLINE T t3dIntDivideCeil( const T numer, const T denom ) {
+	static_assert( eastl::numeric_limits<T>::is_integer, "Only integer types are allowed" );
+	T result = ( ( numer ) < 0 ) != ( ( denom ) < 0 ) ? ( numer ) / ( denom )
+	                                                  : ( ( numer ) + ( ( denom ) < 0 ? ( denom ) + 1 : ( denom )-1 ) ) / ( denom );
 	return result;
 }
 
 // Integer division rounding down
-template <typename T> EA_FORCE_INLINE T t3dIntDivideFloor( const T numer, const T denom ) {
-	static_assert( std::numeric_limits<T>::is_integer, "Only integer types are allowed" );
-	T result = ( ( numer ) < 0 ) != ( ( denom ) < 0 )
-			? ( ( numer ) - ( ( denom ) < 0 ? ( denom ) + 1 : ( denom )-1 ) ) / ( denom )
-			: ( numer ) / ( denom );
+template <typename T>
+EA_FORCE_INLINE T t3dIntDivideFloor( const T numer, const T denom ) {
+	static_assert( eastl::numeric_limits<T>::is_integer, "Only integer types are allowed" );
+	T result = ( ( numer ) < 0 ) != ( ( denom ) < 0 ) ? ( ( numer ) - ( ( denom ) < 0 ? ( denom ) + 1 : ( denom )-1 ) ) / ( denom )
+	                                                  : ( numer ) / ( denom );
 	return result;
 }
 
 // Integer division rounding to nearest int
-template <typename T> EA_FORCE_INLINE T t3dIntDivideRound( const T numer, const T denom ) {
-	static_assert( std::numeric_limits<T>::is_integer, "Only integer types are allowed" );
+template <typename T>
+EA_FORCE_INLINE T t3dIntDivideRound( const T numer, const T denom ) {
+	static_assert( eastl::numeric_limits<T>::is_integer, "Only integer types are allowed" );
 	T result = ( ( numer ) < 0 ) != ( ( denom ) < 0 ) ? ( ( numer ) - ( ( denom ) / 2 ) ) / ( denom )
-													  : ( ( numer ) + ( ( denom ) / 2 ) ) / ( denom );
+	                                                  : ( ( numer ) + ( ( denom ) / 2 ) ) / ( denom );
 	return result;
 }
 
@@ -222,12 +218,12 @@ template <typename T> EA_FORCE_INLINE T t3dIntDivideRound( const T numer, const 
 // * Positioned at the 4 corners of the p_pos00 - p_pos11 rectangle
 // * Interpolated to the position p_pos, which is global, not a 0-1 percentage
 inline real_t t3dBilerp( const real_t fV00,
-		const real_t fV01,
-		const real_t fV10,
-		const real_t fV11,
-		const Vector2 &rPos00,
-		const Vector2 &rPos11,
-		const Vector2 &rPos ) {
+        const real_t fV01,
+        const real_t fV10,
+        const real_t fV11,
+        const Vector2 &rPos00,
+        const Vector2 &rPos11,
+        const Vector2 &rPos ) {
 	real_t fX2x1 = rPos11.x - rPos00.x;
 	real_t fY2y1 = rPos11.y - rPos00.y;
 	real_t fX2x = rPos11.x - rPos.x;
@@ -238,12 +234,12 @@ inline real_t t3dBilerp( const real_t fV00,
 }
 
 EA_FORCE_INLINE real_t t3dBilerp( const real_t fV00,
-		const real_t fV01,
-		const real_t fV10,
-		const real_t fV11,
-		const Vector3 &rPos00,
-		const Vector3 &rPos11,
-		const Vector3 &rPos ) {
+        const real_t fV01,
+        const real_t fV10,
+        const real_t fV11,
+        const Vector3 &rPos00,
+        const Vector3 &rPos11,
+        const Vector3 &rPos ) {
 	Vector2 pos00 = Vector2( rPos00.x, rPos00.z );
 	Vector2 pos11 = Vector2( rPos11.x, rPos11.z );
 	Vector2 pos = Vector2( rPos.x, rPos.z );
@@ -435,8 +431,9 @@ EA_FORCE_INLINE String t3dPtrToStr( const void *pPtr ) {
 // Two arrays/dicts with different pointers could have the same value, this will return true
 // Two strings or ints with different pointers but the same value will return false
 // Could be extended for PackedArray and other special types
-template <typename T> EA_FORCE_INLINE bool t3dDiffers( const T &a, const T &b ) {
-	if constexpr ( std::is_base_of_v<String, T> ) {
+template <typename T>
+EA_FORCE_INLINE bool t3dDiffers( const T &a, const T &b ) {
+	if constexpr ( eastl::is_base_of_v<String, T> ) {
 		if ( a.length() != b.length() ) {
 			return true;
 		}
@@ -448,7 +445,7 @@ template <typename T> EA_FORCE_INLINE bool t3dDiffers( const T &a, const T &b ) 
 			return false;
 		}
 		return a != b; // Full comparison
-	} else if constexpr ( std::is_base_of_v<Array, T> || std::is_base_of_v<Dictionary, T> ) {
+	} else if constexpr ( eastl::is_base_of_v<Array, T> || eastl::is_base_of_v<Dictionary, T> ) {
 		if ( a.size() != b.size() ) { // Redundant but common path predictable
 			return true;
 		}
@@ -460,10 +457,10 @@ template <typename T> EA_FORCE_INLINE bool t3dDiffers( const T &a, const T &b ) 
 }
 
 // Sets A if different from B, otherwise returns
-#define SET_IF_DIFF( a, b ) \
-	if ( t3dDiffers( a, b ) ) { \
-		a = b; \
-	} else { \
-		return; \
+#define SET_IF_DIFF( a, b )                                                                                                                \
+	if ( t3dDiffers( a, b ) ) {                                                                                                            \
+		a = b;                                                                                                                             \
+	} else {                                                                                                                               \
+		return;                                                                                                                            \
 	}
 #endif // TERRAIN3D_UTIL_CLASS_H

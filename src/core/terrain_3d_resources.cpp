@@ -1,6 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "Terrain3DConstants.h"
+#include "core/terrain_3d_sync.h"
 #include "authoring/terrain_3d_editor.h"
 #include "core/logger.h"
 #include "core/terrain_3d_integration_helpers.h"
@@ -21,8 +22,7 @@
 #include "streaming/terrain_3d_streaming_policy.h"
 #include "terrain_3d.h"
 
-#include <algorithm>
-#include <cstring>
+#include <string.h>
 #include <godot_cpp/classes/compositor.hpp>
 #include <godot_cpp/classes/directional_light3d.hpp>
 #include <godot_cpp/classes/editor_interface.hpp>
@@ -40,9 +40,6 @@
 #include <godot_cpp/classes/viewport_texture.hpp>
 #include <godot_cpp/classes/world3d.hpp>
 #include <godot_cpp/core/memory.hpp>
-#include <limits>
-#include <numeric>
-#include <utility>
 
 void Terrain3D::connectResourceSignals( const Ref<Terrain3DAssets> &rAssets, const Ref<Terrain3DMaterial> &rMaterial ) {
 	if ( rMaterial.is_null() ) {
@@ -129,7 +126,7 @@ void Terrain3D::applyAutoShaderProfileMode( void ) {
 		// Never reactivate fragment-time procedural classification in this profile.
 		if ( mode == s_nAutoshaderModeLegacyRuntime || mode == s_nAutoshaderModeEditorPreview ) {
 			ERR_PRINT_ONCE( "Terrain3D strict cooked runtime ignores live/legacy autoshader classification; bake the "
-							"profile into control maps before export." );
+			                "profile into control maps before export." );
 		}
 		m_material->setAutoShaderEnabled( false );
 		return;
@@ -154,11 +151,16 @@ void Terrain3D::onGpuRegionPageTableChanged( void ) {
 	if ( m_material.is_valid() && m_material->isInitializedFor( this ) ) {
 		m_material->updateRegionPageTable();
 	}
+	// The compute displacement request captures the physical GPU page table.
+	// Page publication can complete after the initial request, so invalidate the
+	// displacement state independently of clipmap movement and retry next tick.
+	if ( m_nTessellationLevel > 0 ) {
+		m_bComputeDisplacementDirty.store( true, T3D_MEMORY_ORDER_RELEASE );
+	}
 }
 
 void Terrain3D::onAssetsTexturesChanged( void ) {
-	if ( m_assets.is_valid() && m_assets->isInitializedFor( this ) && m_material.is_valid() &&
-			m_material->isInitializedFor( this ) ) {
+	if ( m_assets.is_valid() && m_assets->isInitializedFor( this ) && m_material.is_valid() && m_material->isInitializedFor( this ) ) {
 		m_material->update( TEXTURE_ARRAYS );
 		if ( m_pData ) {
 			m_pData->invalidateGpuFarSurface();
@@ -174,7 +176,8 @@ void Terrain3D::refreshPerformanceProfileConformity( void ) {
 	t3dPerformanceProfileStatus_t next_status = PERFORMANCE_PROFILE_CUSTOM;
 	if ( m_performanceTarget == PERFORMANCE_TARGET_XBOX360_EXPERIMENTAL ) {
 		next_status = PERFORMANCE_PROFILE_EXACT;
-		for ( const t3dPerformanceProfileSetting_t &setting : g_szXbox360ExperimentalSettings ) {
+		for ( size_t iSetting = 0u; iSetting < T3D_ARRAY_COUNT( g_szXbox360ExperimentalSettings ); iSetting++ ) {
+			const t3dPerformanceProfileSetting_t &setting = ( g_szXbox360ExperimentalSettings )[iSetting];
 			Object *pOwner = this;
 			if ( setting.m_owner == T3D_PROFILE_OWNER_MATERIAL ) {
 				if ( m_material.is_null() ) {
@@ -204,7 +207,8 @@ void Terrain3D::onProfileOwnedResourceChanged( void ) {
 }
 
 void Terrain3D::applyPerformanceProfileToTerrain( void ) {
-	for ( const t3dPerformanceProfileSetting_t &setting : g_szXbox360ExperimentalSettings ) {
+	for ( size_t iSetting = 0u; iSetting < T3D_ARRAY_COUNT( g_szXbox360ExperimentalSettings ); iSetting++ ) {
+		const t3dPerformanceProfileSetting_t &setting = ( g_szXbox360ExperimentalSettings )[iSetting];
 		if ( setting.m_owner != T3D_PROFILE_OWNER_TERRAIN ) {
 			continue;
 		}
@@ -222,18 +226,18 @@ void Terrain3D::setDataDirectory( const String dir ) {
 	const String old_dir = m_dataDirectory;
 	const String old_lightmap_default = t3dDefaultRegionLightmapOutputDirectory( old_dir );
 	const bool bFollowLightmapDefault =
-			m_regionLightmapOutputDirectory.is_empty() || m_regionLightmapOutputDirectory == old_lightmap_default;
+	        m_regionLightmapOutputDirectory.is_empty() || m_regionLightmapOutputDirectory == old_lightmap_default;
 	LOG( INFO,
-			"[data-transition] Requested data directory change: ",
-			old_dir,
-			" -> ",
-			dir,
-			"; initialized=",
-			m_bInitialized,
-			"; inside_tree=",
-			is_inside_tree(),
-			"; inside_world=",
-			m_bIsInsideWorld );
+	        "[data-transition] Requested data directory change: ",
+	        old_dir,
+	        " -> ",
+	        dir,
+	        "; initialized=",
+	        m_bInitialized,
+	        "; inside_tree=",
+	        is_inside_tree(),
+	        "; inside_world=",
+	        m_bIsInsideWorld );
 
 	if ( !m_pData ) {
 		m_dataDirectory = dir;
@@ -311,9 +315,7 @@ void Terrain3D::setDataDirectory( const String dir ) {
 		}
 		LOG( INFO, "[data-transition] Repository mutation committed for ", dir );
 	} else {
-		LOG( ERROR,
-				"[data-transition] Data directory change rejected; restoring previous terrain. Error: ",
-				transition_error );
+		LOG( ERROR, "[data-transition] Data directory change rejected; restoring previous terrain. Error: ", transition_error );
 	}
 
 	if ( bWasInitialized ) {
@@ -324,10 +326,10 @@ void Terrain3D::setDataDirectory( const String dir ) {
 		updateDisplacementBuffer();
 		set_physics_process( bWasPhysicsProcessing );
 		LOG( INFO,
-				"[data-transition] Consumer restore complete; initialized=",
-				m_bInitialized,
-				"; physics_process=",
-				is_physics_processing() );
+		        "[data-transition] Consumer restore complete; initialized=",
+		        m_bInitialized,
+		        "; physics_process=",
+		        is_physics_processing() );
 	} else if ( transition_error == OK ) {
 		// Preserve the old setter behavior for pre-tree/property-deserialization
 		// calls: build whatever can be initialized at the current lifecycle stage.
@@ -416,11 +418,11 @@ void Terrain3D::setRegionSize( const t3dRegionSize_t size ) {
 	}
 	if ( ( int )( size ) % m_nInstancerCellSize != 0 ) {
 		LOG( ERROR,
-				"Region size ",
-				( int )( size ),
-				" is incompatible with instancer cell size ",
-				m_nInstancerCellSize,
-				". Change instancer_cell_size first." );
+		        "Region size ",
+		        ( int )( size ),
+		        " is incompatible with instancer cell size ",
+		        m_nInstancerCellSize,
+		        ". Change instancer_cell_size first." );
 		return;
 	}
 	const t3dRegionSize_t previous_size = m_nRegionSize;
@@ -441,25 +443,23 @@ void Terrain3D::setRegionSize( const t3dRegionSize_t size ) {
 			return;
 		}
 		m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(),
-				m_nEffectiveGpuRegionCacheBudgetMb,
-				m_nGpuRegionUploadBudgetLayers,
-				m_nGpuRegionUploadBudgetMb,
-				m_nGpuRegionSparePages,
-				m_nGpuRegionRetireFrames );
+		        m_nEffectiveGpuRegionCacheBudgetMb,
+		        m_nGpuRegionUploadBudgetLayers,
+		        m_nGpuRegionUploadBudgetMb,
+		        m_nGpuRegionSparePages,
+		        m_nGpuRegionRetireFrames );
 		m_pData->configureCpuRegionCache( effectiveCpuRegionCacheEnabled(),
-				m_nEffectiveCpuRegionCacheBudgetMb,
-				m_nCpuRegionLoadBudgetLayers,
-				m_nCpuRegionLoadBudgetMb );
+		        m_nEffectiveCpuRegionCacheBudgetMb,
+		        m_nCpuRegionLoadBudgetLayers,
+		        m_nCpuRegionLoadBudgetMb );
 		m_pData->configureInstanceRegionCache( effectiveInstanceRegionCacheEnabled(),
-				m_nEffectiveInstanceRegionCacheBudgetMb,
-				m_nInstanceRegionLoadBudgetPages,
-				m_nInstanceRegionLoadBudgetMb );
+		        m_nEffectiveInstanceRegionCacheBudgetMb,
+		        m_nInstanceRegionLoadBudgetPages,
+		        m_nInstanceRegionLoadBudgetMb );
 		m_pData->configureResidentPool( 64 );
 		bDataChanged = true;
 	} else if ( m_pData && !bDataOwnerReady && bOwnerChanged ) {
-		LOG( DEBUG,
-				"Deferring Terrain3DData region-size reconciliation until data initialization: ",
-				( int )( m_nRegionSize ) );
+		LOG( DEBUG, "Deferring Terrain3DData region-size reconciliation until data initialization: ", ( int )( m_nRegionSize ) );
 	}
 	// Equality of the owner property does not prove dependent state is already
 	// synchronized. Return only after Terrain3DData has been reconciled.

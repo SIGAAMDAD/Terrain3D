@@ -1,19 +1,16 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 #include "simd/terrain_3d_simd.h"
+#include "core/terrain_3d_sync.h"
 
 #include "core/terrain_3d_compiler.h"
 #include "data/terrain_3d_half_buffer.h"
 #include "data/terrain_3d_packed_transform.h"
 #include "simd/terrain_3d_simd_internal.h"
 
-#include <algorithm>
-#include <atomic>
-#include <cmath>
-#include <cstdlib>
-#include <cstring>
-#include <limits>
-#include <mutex>
-
+#include <EASTL/numeric_limits.h>
+#include <math.h>
+#include <stdlib.h>
+#include <string.h>
 #if defined( _MSC_VER ) && ( defined( _M_IX86 ) || defined( _M_X64 ) )
 #include <intrin.h>
 #elif ( defined( __i386__ ) || defined( __x86_64__ ) ) && ( defined( __GNUC__ ) || defined( __clang__ ) )
@@ -30,8 +27,8 @@
 
 static t3dSimdCapabilities_t s_simdCapabilities;
 static t3dSimdDispatch_t s_szDispatchTables[5];
-static std::once_flag s_simdInitializeOnce;
-static std::atomic<const t3dSimdDispatch_t *> s_pActiveDispatch{ nullptr };
+static t3dOnceFlag_t s_simdInitializeOnce;
+static t3dAtomic_t<const t3dSimdDispatch_t *> s_pActiveDispatch{ NULL };
 
 static uint64_t t3dSimdXgetbv0( void ) {
 #if defined( _MSC_VER ) && ( defined( _M_IX86 ) || defined( _M_X64 ) )
@@ -81,7 +78,7 @@ static void t3dSimdDetectX86( t3dSimdCapabilities_t &rCaps ) {
 	rCaps.m_bF16c = ( ecx & bit_F16C ) != 0u;
 	const bool bOsAvx = bOsxsave && bCpuAvx && ( t3dSimdXgetbv0() & 0x6u ) == 0x6u;
 	rCaps.m_bAvx = bOsAvx;
-	if ( __get_cpuid_max( 0u, nullptr ) >= 7u ) {
+	if ( __get_cpuid_max( 0u, NULL ) >= 7u ) {
 		__cpuid_count( 7u, 0u, eax, ebx, ecx, edx );
 		rCaps.m_bAvx2 = bOsAvx && ( ebx & bit_AVX2 ) != 0u;
 	}
@@ -163,27 +160,27 @@ static bool t3dSimdBackendSupported( const t3dSimdBackend_t backend ) {
 }
 
 static bool t3dSimdParseEnvironmentOverride( t3dSimdBackend_t &rBackend ) {
-	const char *value = std::getenv( "TERRAIN3D_SIMD" );
+	const char *value = getenv( "TERRAIN3D_SIMD" );
 	if ( !value || value[0] == '\0' ) {
 		return false;
 	}
-	if ( std::strcmp( value, "scalar" ) == 0 ) {
+	if ( strcmp( value, "scalar" ) == 0 ) {
 		rBackend = T3D_SIMD_SCALAR;
 		return true;
 	}
-	if ( std::strcmp( value, "sse2" ) == 0 || std::strcmp( value, "sse" ) == 0 ) {
+	if ( strcmp( value, "sse2" ) == 0 || strcmp( value, "sse" ) == 0 ) {
 		rBackend = T3D_SIMD_SSE2;
 		return true;
 	}
-	if ( std::strcmp( value, "avx" ) == 0 || std::strcmp( value, "avx_f16c" ) == 0 ) {
+	if ( strcmp( value, "avx" ) == 0 || strcmp( value, "avx_f16c" ) == 0 ) {
 		rBackend = T3D_SIMD_AVX_F16C;
 		return true;
 	}
-	if ( std::strcmp( value, "avx2" ) == 0 || std::strcmp( value, "avx2_f16c" ) == 0 ) {
+	if ( strcmp( value, "avx2" ) == 0 || strcmp( value, "avx2_f16c" ) == 0 ) {
 		rBackend = T3D_SIMD_AVX2_F16C;
 		return true;
 	}
-	if ( std::strcmp( value, "neon" ) == 0 ) {
+	if ( strcmp( value, "neon" ) == 0 ) {
 		rBackend = T3D_SIMD_NEON;
 		return true;
 	}
@@ -221,16 +218,16 @@ static void t3dSimdInitialize( void ) {
 	if ( t3dSimdParseEnvironmentOverride( requested ) && t3dSimdBackendSupported( requested ) ) {
 		selected = requested;
 	}
-	s_pActiveDispatch.store( t3dSimdDispatchTable( selected ), std::memory_order_release );
+	s_pActiveDispatch.store( t3dSimdDispatchTable( selected ), T3D_MEMORY_ORDER_RELEASE );
 }
 
 EA_FORCE_INLINE static void t3dSimdEnsureInitialized( void ) {
-	std::call_once( s_simdInitializeOnce, t3dSimdInitialize );
+	t3dCallOnce( s_simdInitializeOnce, t3dSimdInitialize );
 }
 
 EA_FORCE_INLINE static uint8_t t3dSimdEncodeNormalComponent( const float fValue ) {
-	const float fEncoded = std::max( 0.0f, std::min( s_fByteMaxFloat, ( fValue * 0.5f + 0.5f ) * s_fByteMaxFloat ) );
-	return ( uint8_t )( std::floor( fEncoded + 0.5f ) );
+	const float fEncoded = MAX( 0.0f, MIN( s_fByteMaxFloat, ( fValue * 0.5f + 0.5f ) * s_fByteMaxFloat ) );
+	return ( uint8_t )( floor( fEncoded + 0.5f ) );
 }
 
 void t3dSimdScalarHalfToFloat( const uint16_t *pSource, float *pDestination, const size_t nCount ) {
@@ -239,11 +236,8 @@ void t3dSimdScalarHalfToFloat( const uint16_t *pSource, float *pDestination, con
 	}
 }
 
-void t3dSimdScalarPackedTransforms( const t3dPackedTransform_t *pTransforms,
-		const uint32_t *pColors,
-		const size_t nCount,
-		const int nStride,
-		float *pDestination ) {
+void t3dSimdScalarPackedTransforms(
+        const t3dPackedTransform_t *pTransforms, const uint32_t *pColors, const size_t nCount, const int nStride, float *pDestination ) {
 	for ( size_t i = 0; i < nCount; ++i ) {
 		const t3dPackedTransform_t &t = pTransforms[i];
 		float *pOut = pDestination + i * ( size_t )( nStride );
@@ -269,18 +263,14 @@ void t3dSimdScalarPackedTransforms( const t3dPackedTransform_t *pTransforms,
 	}
 }
 
-void t3dSimdScalarDerivedNormals( const float *pHalo,
-		const int nWidth,
-		const int nHeight,
-		const int nHaloStride,
-		const float fSpacing,
-		uint8_t *pDestination ) {
+void t3dSimdScalarDerivedNormals(
+        const float *pHalo, const int nWidth, const int nHeight, const int nHaloStride, const float fSpacing, uint8_t *pDestination ) {
 	for ( int y = 0; y < nHeight; ++y ) {
 		for ( int x = 0; x < nWidth; ++x ) {
 			const size_t center = ( size_t )( y + 1 ) * ( size_t )( nHaloStride ) + ( size_t )( x + 1 );
 			const float fDx = pHalo[center] - pHalo[center + 1u];
 			const float fDz = pHalo[center] - pHalo[center + ( size_t )( nHaloStride )];
-			const float fLength = std::sqrt( fDx * fDx + fSpacing * fSpacing + fDz * fDz );
+			const float fLength = sqrt( fDx * fDx + fSpacing * fSpacing + fDz * fDz );
 			const float fInverse = fLength > 0.0f ? 1.0f / fLength : 0.0f;
 			const size_t pOut = ( ( size_t )( y ) * ( size_t )( nWidth ) + ( size_t )( x ) ) * 2u;
 			pDestination[pOut] = t3dSimdEncodeNormalComponent( fDx * fInverse );
@@ -289,15 +279,11 @@ void t3dSimdScalarDerivedNormals( const float *pHalo,
 	}
 }
 
-void t3dSimdScalarUpdateCumulativeErosion( const uint8_t *pActive,
-		const float *pInitialHeight,
-		const float *pHeight,
-		float *pCumulativeErosion,
-		const size_t nCount ) {
+void t3dSimdScalarUpdateCumulativeErosion(
+        const uint8_t *pActive, const float *pInitialHeight, const float *pHeight, float *pCumulativeErosion, const size_t nCount ) {
 	for ( size_t index = 0u; index < nCount; ++index ) {
 		if ( pActive[index] != 0u ) {
-			pCumulativeErosion[index] =
-					std::max( pCumulativeErosion[index], std::max( 0.0f, pInitialHeight[index] - pHeight[index] ) );
+			pCumulativeErosion[index] = MAX( pCumulativeErosion[index], MAX( 0.0f, pInitialHeight[index] - pHeight[index] ) );
 		}
 	}
 }
@@ -309,7 +295,7 @@ const t3dSimdCapabilities_t &t3dSimdGetCapabilities( void ) {
 
 const t3dSimdDispatch_t &t3dSimdGetDispatch( void ) {
 	t3dSimdEnsureInitialized();
-	return *s_pActiveDispatch.load( std::memory_order_acquire );
+	return *s_pActiveDispatch.load( T3D_MEMORY_ORDER_ACQUIRE );
 }
 
 t3dSimdBackend_t t3dSimdGetActiveBackend( void ) {
@@ -339,45 +325,35 @@ void t3dSimdHalfToFloat( const uint16_t *pSource, float *pDestination, const siz
 	t3dSimdGetDispatch().m_pPfnHalfToFloat( pSource, pDestination, nCount );
 }
 
-void t3dSimdPackedTransformsToMultimesh( const t3dPackedTransform_t *pTransforms,
-		const uint32_t *pColors,
-		const size_t nCount,
-		const int nStride,
-		float *pDestination ) {
+void t3dSimdPackedTransformsToMultimesh(
+        const t3dPackedTransform_t *pTransforms, const uint32_t *pColors, const size_t nCount, const int nStride, float *pDestination ) {
 	if ( !pTransforms || !pDestination || nCount == 0u || ( nStride != 12 && nStride != 16 ) ) {
 		return;
 	}
-	if ( nCount > std::numeric_limits<size_t>::max() / ( size_t )( nStride ) ) {
+	if ( nCount > eastl::numeric_limits<size_t>::max() / ( size_t )( nStride ) ) {
 		return;
 	}
 	t3dSimdGetDispatch().m_pPfnPackedTransformsToMultimesh( pTransforms, pColors, nCount, nStride, pDestination );
 }
 
-void t3dSimdDerivedNormalsRg8( const float *pHalo,
-		const int nWidth,
-		const int nHeight,
-		const int nHaloStride,
-		const float fSpacing,
-		uint8_t *pDestination ) {
-	if ( !pHalo || !pDestination || nWidth <= 0 || nHeight <= 0 || nWidth > std::numeric_limits<int>::max() - 2 ||
-			nHaloStride < nWidth + 2 || !std::isfinite( fSpacing ) || fSpacing <= 0.0f ) {
+void t3dSimdDerivedNormalsRg8(
+        const float *pHalo, const int nWidth, const int nHeight, const int nHaloStride, const float fSpacing, uint8_t *pDestination ) {
+	if ( !pHalo || !pDestination || nWidth <= 0 || nHeight <= 0 || nWidth > eastl::numeric_limits<int>::max() - 2
+	        || nHaloStride < nWidth + 2 || !isfinite( fSpacing ) || fSpacing <= 0.0f ) {
 		return;
 	}
 	const size_t width = ( size_t )( nWidth );
 	const size_t height = ( size_t )( nHeight );
 	const size_t stride = ( size_t )( nHaloStride );
-	const size_t maximum = std::numeric_limits<size_t>::max();
+	const size_t maximum = eastl::numeric_limits<size_t>::max();
 	if ( height + 2u > maximum / stride || height > maximum / width || width * height > maximum / 2u ) {
 		return;
 	}
 	t3dSimdGetDispatch().m_pPfnDerivedNormalsRg8( pHalo, nWidth, nHeight, nHaloStride, fSpacing, pDestination );
 }
 
-void t3dSimdUpdateCumulativeErosion( const uint8_t *pActive,
-		const float *pInitialHeight,
-		const float *pHeight,
-		float *pCumulativeErosion,
-		const size_t nCount ) {
+void t3dSimdUpdateCumulativeErosion(
+        const uint8_t *pActive, const float *pInitialHeight, const float *pHeight, float *pCumulativeErosion, const size_t nCount ) {
 	if ( !pActive || !pInitialHeight || !pHeight || !pCumulativeErosion || nCount == 0u ) {
 		return;
 	}
@@ -389,11 +365,11 @@ bool t3dSimdSetBackendOverrideForTests( const t3dSimdBackend_t backend ) {
 	if ( !t3dSimdBackendSupported( backend ) ) {
 		return false;
 	}
-	s_pActiveDispatch.store( t3dSimdDispatchTable( backend ), std::memory_order_release );
+	s_pActiveDispatch.store( t3dSimdDispatchTable( backend ), T3D_MEMORY_ORDER_RELEASE );
 	return true;
 }
 
 void t3dSimdClearBackendOverrideForTests( void ) {
 	t3dSimdEnsureInitialized();
-	s_pActiveDispatch.store( t3dSimdDispatchTable( t3dSimdBestSupportedBackend() ), std::memory_order_release );
+	s_pActiveDispatch.store( t3dSimdDispatchTable( t3dSimdBestSupportedBackend() ), T3D_MEMORY_ORDER_RELEASE );
 }

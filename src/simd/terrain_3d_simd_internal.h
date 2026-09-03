@@ -1,5 +1,3 @@
-#pragma once
-
 #ifndef TERRAIN3D_SIMD_INTERNAL_H
 #define TERRAIN3D_SIMD_INTERNAL_H
 

@@ -1,17 +1,14 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
-#pragma once
-
 #ifndef TERRAIN3D_PARALLEL_H
 #define TERRAIN3D_PARALLEL_H
 
 #include "core/terrain_3d_compiler.h"
+#include "core/terrain_3d_sync.h"
 
-#include <algorithm>
-#include <atomic>
-#include <cstddef>
-#include <cstdint>
+#include <EASTL/numeric_limits.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <godot_cpp/classes/worker_thread_pool.hpp>
-#include <limits>
 
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
 typedef godot::WorkerThreadPool t3dWorkerThreadPool_t;
@@ -24,15 +21,15 @@ typedef void ( *t3dParallelStaticRangeTask_t )( void *, size_t, size_t, int32_t 
 typedef void ( *t3dParallelTileTask_t )( void *, size_t, size_t, size_t, size_t, int32_t );
 
 typedef struct t3dParallelDispatch_s {
-	std::atomic<size_t> m_iNext{ 0u };
+	t3dAtomic_t<size_t> m_iNext{ 0u };
 	size_t m_nCount = 0u;
 	size_t m_nGrain = 1u;
-	t3dParallelRangeTask_t m_task = nullptr;
-	void *m_pContext = nullptr;
+	t3dParallelRangeTask_t m_task = NULL;
+	void *m_pContext = NULL;
 
 	void process( void ) {
 		for ( ;; ) {
-			size_t iBegin = m_iNext.load( std::memory_order_relaxed );
+			size_t iBegin = m_iNext.load( T3D_MEMORY_ORDER_RELAXED );
 			size_t iEnd = 0u;
 			for ( ;; ) {
 				if ( iBegin >= m_nCount ) {
@@ -40,8 +37,7 @@ typedef struct t3dParallelDispatch_s {
 				}
 				const size_t nRemaining = m_nCount - iBegin;
 				iEnd = m_nGrain >= nRemaining ? m_nCount : iBegin + m_nGrain;
-				if ( m_iNext.compare_exchange_weak(
-							 iBegin, iEnd, std::memory_order_relaxed, std::memory_order_relaxed ) ) {
+				if ( m_iNext.compare_exchange_weak( iBegin, iEnd, T3D_MEMORY_ORDER_RELAXED, T3D_MEMORY_ORDER_RELAXED ) ) {
 					break;
 				}
 			}
@@ -58,13 +54,13 @@ typedef struct t3dParallelStaticDispatch_s {
 	size_t m_nCount = 0u;
 	size_t m_nAlignment = 1u;
 	int32_t m_nTaskCount = 1;
-	t3dParallelStaticRangeTask_t m_task = nullptr;
-	void *m_pContext = nullptr;
+	t3dParallelStaticRangeTask_t m_task = NULL;
+	void *m_pContext = NULL;
 
 	EA_FORCE_INLINE static size_t partitionPoint( const size_t nCount, const size_t nPart, const size_t nParts ) {
 		const size_t nBase = nCount / nParts;
 		const size_t nExtra = nCount % nParts;
-		return nBase * nPart + std::min( nPart, nExtra );
+		return nBase * nPart + MIN( nPart, nExtra );
 	}
 
 	static size_t alignedOffset( const size_t nChunk, const size_t nAlignment, const size_t nLimit ) {
@@ -76,8 +72,8 @@ typedef struct t3dParallelStaticDispatch_s {
 
 	void process( const int32_t iWorker ) const {
 		const size_t nChunkCount = m_nCount / m_nAlignment + ( size_t )( m_nCount % m_nAlignment != 0u );
-		const size_t iWorkerClamped = ( size_t )( std::max( 0, iWorker ) );
-		const size_t nWorkers = ( size_t )( std::max( 1, m_nTaskCount ) );
+		const size_t iWorkerClamped = ( size_t )( MAX( 0, iWorker ) );
+		const size_t nWorkers = ( size_t )( MAX( 1, m_nTaskCount ) );
 		const size_t iFirstChunk = partitionPoint( nChunkCount, iWorkerClamped, nWorkers );
 		const size_t iLastChunk = partitionPoint( nChunkCount, iWorkerClamped + 1u, nWorkers );
 		const size_t iBegin = alignedOffset( iFirstChunk, m_nAlignment, m_nCount );
@@ -98,8 +94,8 @@ typedef struct t3dParallelTileDispatchContext_s {
 	size_t m_nTileWidth = 1u;
 	size_t m_nTileHeight = 1u;
 	size_t m_nTilesX = 0u;
-	t3dParallelTileTask_t m_task = nullptr;
-	void *m_pContext = nullptr;
+	t3dParallelTileTask_t m_task = NULL;
+	void *m_pContext = NULL;
 } t3dParallelTileDispatchContext_t;
 
 class Terrain3DParallelExecutor {
@@ -113,10 +109,9 @@ private:
 			const size_t iTileX = iTile - iTileY * pDispatch->m_nTilesX;
 			const size_t iX0 = iTileX * pDispatch->m_nTileWidth;
 			const size_t iY0 = iTileY * pDispatch->m_nTileHeight;
-			const size_t iX1 = pDispatch->m_nTileWidth >= pDispatch->m_nWidth - iX0 ? pDispatch->m_nWidth
-																					: iX0 + pDispatch->m_nTileWidth;
-			const size_t iY1 = pDispatch->m_nTileHeight >= pDispatch->m_nHeight - iY0 ? pDispatch->m_nHeight
-																					  : iY0 + pDispatch->m_nTileHeight;
+			const size_t iX1 = pDispatch->m_nTileWidth >= pDispatch->m_nWidth - iX0 ? pDispatch->m_nWidth : iX0 + pDispatch->m_nTileWidth;
+			const size_t iY1 =
+			        pDispatch->m_nTileHeight >= pDispatch->m_nHeight - iY0 ? pDispatch->m_nHeight : iY0 + pDispatch->m_nTileHeight;
 			pDispatch->m_task( pDispatch->m_pContext, iX0, iY0, iX1, iY1, iWorker );
 		}
 	}
@@ -126,17 +121,17 @@ public:
 	typedef t3dParallelStaticRangeTask_t StaticRangeTask;
 	typedef t3dParallelTileTask_t TileTask;
 
-	EA_FORCE_INLINE explicit Terrain3DParallelExecutor( const int32_t nTaskLimit ) :
-			m_nTaskLimit( std::max( 1, nTaskLimit ) ) {}
+	EA_FORCE_INLINE explicit Terrain3DParallelExecutor( const int32_t nTaskLimit ) : m_nTaskLimit( MAX( 1, nTaskLimit ) ) {
+	}
 
 	void run( const size_t nCount, const size_t nGrain, const RangeTask pTask, void *const pContext ) const {
-		if ( nCount == 0u || pTask == nullptr ) {
+		if ( nCount == 0u || pTask == NULL ) {
 			return;
 		}
 
 		t3dParallelDispatch_t dispatch;
 		dispatch.m_nCount = nCount;
-		dispatch.m_nGrain = std::max<size_t>( 1u, nGrain );
+		dispatch.m_nGrain = MAX( 1u, nGrain );
 		dispatch.m_pContext = pContext;
 		dispatch.m_task = pTask;
 
@@ -145,17 +140,17 @@ public:
 #else
 		t3dWorkerThreadPool_t *const pPool = t3dWorkerThreadPool_t::get_singleton();
 		const size_t nChunkCount = nCount / dispatch.m_nGrain + ( size_t )( nCount % dispatch.m_nGrain != 0u );
-		const int32_t nTaskCount = ( int32_t )( std::min<size_t>( ( size_t )( m_nTaskLimit ), nChunkCount ) );
-		const bool bNestedPoolCall = pPool &&
-				( pPool->get_caller_task_id() != t3dWorkerThreadPool_t::INVALID_TASK_ID ||
-						pPool->get_caller_group_id() != t3dWorkerThreadPool_t::INVALID_TASK_ID );
+		const int32_t nTaskCount = ( int32_t )( MIN( ( size_t )( m_nTaskLimit ), nChunkCount ) );
+		const bool bNestedPoolCall = pPool
+		        && ( pPool->get_caller_task_id() != t3dWorkerThreadPool_t::INVALID_TASK_ID
+		                || pPool->get_caller_group_id() != t3dWorkerThreadPool_t::INVALID_TASK_ID );
 		if ( !pPool || nTaskCount <= 1 || bNestedPoolCall ) {
 			dispatch.process();
 			return;
 		}
 
-		const t3dWorkerThreadPool_t::GroupID hGroup = pPool->add_native_group_task(
-				&t3dParallelDispatch_t::worker, &dispatch, nTaskCount, nTaskCount, false );
+		const t3dWorkerThreadPool_t::GroupID hGroup =
+		        pPool->add_native_group_task( &t3dParallelDispatch_t::worker, &dispatch, nTaskCount, nTaskCount, false );
 		if ( hGroup == t3dWorkerThreadPool_t::INVALID_TASK_ID ) {
 			dispatch.process();
 			return;
@@ -164,15 +159,14 @@ public:
 #endif
 	}
 
-	void
-	runStatic( const size_t nCount, const size_t nAlignment, const StaticRangeTask pTask, void *const pContext ) const {
-		if ( nCount == 0u || pTask == nullptr ) {
+	void runStatic( const size_t nCount, const size_t nAlignment, const StaticRangeTask pTask, void *const pContext ) const {
+		if ( nCount == 0u || pTask == NULL ) {
 			return;
 		}
 
 		t3dParallelStaticDispatch_t dispatch;
 		dispatch.m_nCount = nCount;
-		dispatch.m_nAlignment = std::max<size_t>( 1u, nAlignment );
+		dispatch.m_nAlignment = MAX( 1u, nAlignment );
 		dispatch.m_pContext = pContext;
 		dispatch.m_task = pTask;
 
@@ -182,17 +176,17 @@ public:
 #else
 		t3dWorkerThreadPool_t *const pPool = t3dWorkerThreadPool_t::get_singleton();
 		const size_t nChunkCount = nCount / dispatch.m_nAlignment + ( size_t )( nCount % dispatch.m_nAlignment != 0u );
-		dispatch.m_nTaskCount = ( int32_t )( std::min<size_t>( ( size_t )( m_nTaskLimit ), nChunkCount ) );
-		const bool bNestedPoolCall = pPool &&
-				( pPool->get_caller_task_id() != t3dWorkerThreadPool_t::INVALID_TASK_ID ||
-						pPool->get_caller_group_id() != t3dWorkerThreadPool_t::INVALID_TASK_ID );
+		dispatch.m_nTaskCount = ( int32_t )( MIN( ( size_t )( m_nTaskLimit ), nChunkCount ) );
+		const bool bNestedPoolCall = pPool
+		        && ( pPool->get_caller_task_id() != t3dWorkerThreadPool_t::INVALID_TASK_ID
+		                || pPool->get_caller_group_id() != t3dWorkerThreadPool_t::INVALID_TASK_ID );
 		if ( !pPool || dispatch.m_nTaskCount <= 1 || bNestedPoolCall ) {
 			dispatch.m_nTaskCount = 1;
 			dispatch.process( 0 );
 			return;
 		}
 		const t3dWorkerThreadPool_t::GroupID hGroup = pPool->add_native_group_task(
-				&t3dParallelStaticDispatch_t::worker, &dispatch, dispatch.m_nTaskCount, dispatch.m_nTaskCount, false );
+		        &t3dParallelStaticDispatch_t::worker, &dispatch, dispatch.m_nTaskCount, dispatch.m_nTaskCount, false );
 		if ( hGroup == t3dWorkerThreadPool_t::INVALID_TASK_ID ) {
 			dispatch.m_nTaskCount = 1;
 			dispatch.process( 0 );
@@ -203,23 +197,23 @@ public:
 	}
 
 	void runTiles( const size_t nWidth,
-			const size_t nHeight,
-			const size_t nTileWidth,
-			const size_t nTileHeight,
-			const TileTask pTask,
-			void *const pContext ) const {
-		if ( nWidth == 0u || nHeight == 0u || pTask == nullptr ) {
+	        const size_t nHeight,
+	        const size_t nTileWidth,
+	        const size_t nTileHeight,
+	        const TileTask pTask,
+	        void *const pContext ) const {
+		if ( nWidth == 0u || nHeight == 0u || pTask == NULL ) {
 			return;
 		}
 
 		t3dParallelTileDispatchContext_t dispatch;
 		dispatch.m_nWidth = nWidth;
 		dispatch.m_nHeight = nHeight;
-		dispatch.m_nTileWidth = std::max<size_t>( 1u, nTileWidth );
-		dispatch.m_nTileHeight = std::max<size_t>( 1u, nTileHeight );
+		dispatch.m_nTileWidth = MAX( 1u, nTileWidth );
+		dispatch.m_nTileHeight = MAX( 1u, nTileHeight );
 		dispatch.m_nTilesX = nWidth / dispatch.m_nTileWidth + ( size_t )( nWidth % dispatch.m_nTileWidth != 0u );
 		const size_t nTilesY = nHeight / dispatch.m_nTileHeight + ( size_t )( nHeight % dispatch.m_nTileHeight != 0u );
-		if ( dispatch.m_nTilesX == 0u || nTilesY > std::numeric_limits<size_t>::max() / dispatch.m_nTilesX ) {
+		if ( dispatch.m_nTilesX == 0u || nTilesY > eastl::numeric_limits<size_t>::max() / dispatch.m_nTilesX ) {
 			return;
 		}
 		dispatch.m_task = pTask;

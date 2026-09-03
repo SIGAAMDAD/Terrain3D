@@ -1,13 +1,11 @@
-#pragma once
+#ifndef TERRAIN3D_CPP17_COMPAT_H
+#define TERRAIN3D_CPP17_COMPAT_H
 
-#ifndef TERRAIN_3D_CPP17_COMPAT_H
-#define TERRAIN_3D_CPP17_COMPAT_H
-
-#include <cstdint>
+#include <stdint.h>
 
 // C++17 replacement for std::countr_zero used while configuring power-of-two
 // region geometry.
-constexpr int32_t t3dCountrZeroU32( uint32_t nValue ) noexcept {
+EA_FORCE_INLINE int32_t t3dCountrZeroU32( uint32_t nValue ) noexcept {
 	if ( nValue == 0u ) {
 		return 32;
 	}
@@ -20,4 +18,4 @@ constexpr int32_t t3dCountrZeroU32( uint32_t nValue ) noexcept {
 	return nCount;
 }
 
-#endif // TERRAIN_3D_CPP17_COMPAT_H
+#endif // TERRAIN3D_CPP17_COMPAT_H
