@@ -20,7 +20,7 @@ typedef struct t3dStagedRepository_s t3dStagedRepository_t;
 
 
 typedef struct t3dRuntimeWorldRegionRecord_s {
-	Vector2i m_location = s_v2iMax;
+	t3dRegionCoord_t m_location = t3dInvalidRegionCoord();
 	Vector2 m_heightRange = s_v2Zero;
 	uint32_t m_nChannelFlags = 0u;
 	uint32_t m_nMaterialMask = 1u;
@@ -71,19 +71,19 @@ public:
 		return m_bLoaded;
 	}
 	EA_FORCE_INLINE int getRegionSize( void ) const {
-		return m_nRegionSize;
+		return s_nRegionSize;
 	}
 	EA_FORCE_INLINE int getRegionCount( void ) const {
 		return ( int )( m_regions.size() );
 	}
 	EA_FORCE_INLINE real_t getVertexSpacing( void ) const {
-		return m_fVertexSpacing;
+		return ( real_t )( s_fRegionVertexSpacing );
 	}
 	EA_FORCE_INLINE Vector2i getWorldRegionMin( void ) const {
-		return m_worldRegionMin;
+		return t3dUnpackRegionCoord( m_worldRegionMin );
 	}
 	EA_FORCE_INLINE Vector2i getWorldRegionMax( void ) const {
-		return m_worldRegionMax;
+		return t3dUnpackRegionCoord( m_worldRegionMax );
 	}
 	bool hasRegion( const Vector2i &rLocation ) const;
 	EA_FORCE_INLINE uint64_t getWorldSignature( void ) const {
@@ -111,19 +111,16 @@ public:
 
 private:
 	bool m_bLoaded = false;
-	int m_nRegionSize = 0;
-	int m_nRegionMapSize = 0;
-	real_t m_fVertexSpacing = 1.0;
-	Vector2i m_worldRegionMin = s_v2iZero;
-	Vector2i m_worldRegionMax = s_v2iZero;
+	t3dRegionCoord_t m_worldRegionMin = t3dPackRegionCoord( s_v2iZero );
+	t3dRegionCoord_t m_worldRegionMax = t3dPackRegionCoord( s_v2iZero );
 	uint64_t m_nWorldSignature = 0u;
 	uint64_t m_nMaterialSignature = 0u;
 	Vector2 m_worldHeightRange = s_v2Zero;
 	eastl::vector<t3dRuntimeWorldRegionRecord_t> m_regions;
 	eastl::vector<String> m_sceneDependencies;
 	eastl::vector<uint16_t> m_regionSceneDependencies;
-	int16_t m_regionLookup[s_nMaxRegionSlots]{};
-	uint64_t m_topologyBits[s_nMaxRegionSlots / 64]{};
+	int16_t m_regionLookup[s_nRegionSlots]{};
+	uint64_t m_topologyBits[s_nRegionSlots / 64]{};
 
 	void rebuildLookup( void );
 };

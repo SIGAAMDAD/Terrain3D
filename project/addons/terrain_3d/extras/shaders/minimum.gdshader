@@ -21,9 +21,20 @@ uniform uint _background_mode = 1u; // NONE = 0, FLAT = 1, NOISE = 2
 uniform uint _mouse_layer = 0x80000000u; // Layer 32
 uniform float _vertex_spacing = 1.0;
 uniform float _vertex_density = 1.0; // = 1./_vertex_spacing
-uniform float _region_size = 1024.0;
-uniform float _region_texel_size = 0.0009765625; // = 1./region_size
-uniform int _region_map_size = 32;
+const int T3D_REGION_SIZE = 128;
+const int T3D_REGION_MASK = 127;
+const float T3D_REGION_SIZE_F = 128.0;
+const float T3D_REGION_INV_SIZE = 0.0078125;
+const int T3D_REGION_MAP_SIZE = 32;
+const int T3D_REGION_MAP_HALF = 16;
+
+ivec2 t3d_region_cell_from_grid(const ivec2 grid) {
+	return ivec2(floor(vec2(grid) * T3D_REGION_INV_SIZE));
+}
+
+ivec2 t3d_region_local_from_grid(const ivec2 grid, const ivec2 region_cell) {
+	return grid - region_cell * T3D_REGION_SIZE;
+}
 uniform sampler2D _region_map_texture : filter_nearest, repeat_disable;
 //uniform vec2 _region_locations[1024];
 //uniform float _texture_normal_depth_array[32];
@@ -62,14 +73,14 @@ varying vec3 v_camera_pos;
 
 // Takes in world space XZ (UV) coordinates
 // Returns ivec3 with:
-// XY: (0 to _region_size - 1) coordinates within a region
+// XY: (0 to T3D_REGION_SIZE_F - 1) coordinates within a region
 // Z: layer index used for texturearrays, -1 if not in a region
 ivec3 get_index_coord(const vec2 uv) {
 	vec2 r_uv = round(uv);
-	ivec2 pos = ivec2(floor(r_uv * _region_texel_size)) + (_region_map_size / 2);
-	int bounds = int(uint(pos.x | pos.y) < uint(_region_map_size));
+	ivec2 pos = ivec2(floor(r_uv * T3D_REGION_INV_SIZE)) + T3D_REGION_MAP_HALF;
+	int bounds = int(uint(pos.x | pos.y) < uint(T3D_REGION_MAP_SIZE));
 	int layer_index = (int(round(texelFetch(_region_map_texture, pos, 0).r * 65535.0)) * bounds) - 1;
-	return ivec3(ivec2(mod(r_uv, _region_size)), layer_index);
+	return ivec3(t3d_region_local_from_grid(ivec2(r_uv), t3d_region_cell_from_grid(ivec2(r_uv))), layer_index);
 }
 
 // Takes in world space XZ (UV) and returns if the coordinate should be part of the NONE background.
@@ -133,7 +144,7 @@ void vertex() {
 	UV = v_vertex.xz * _vertex_density;
 
 	// UV coordinates in region space + texel offset. Values are 0 to 1 within regions
-	UV2 = fma(UV, vec2(_region_texel_size), vec2(0.5 * _region_texel_size));
+	UV2 = fma(UV, vec2(T3D_REGION_INV_SIZE), vec2(0.5 * T3D_REGION_INV_SIZE));
 
 	// Discard vertices for Holes. 1 lookup
 	ivec3 v_region = get_index_coord(start_pos);

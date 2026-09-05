@@ -57,7 +57,7 @@ using namespace godot;
 #define s_shadowCastingOnly ( GeometryInstance3D::SHADOW_CASTING_SETTING_SHADOWS_ONLY )
 #define s_nMaxTextureAssets ( 32 )
 #define s_nMaxMeshAssets ( 256 )
-#define s_fDataCurrentVersion ( 0.94f )
+#define s_fDataCurrentVersion ( 0.95f )
 #define s_fRegionHeightMin ( -384.0f )
 #define s_fRegionHeightMax ( 768.0f )
 #define s_fRegionHeightRange ( s_fRegionHeightMax - s_fRegionHeightMin )
@@ -119,7 +119,6 @@ static const int32_t g_t3dConstStorage_s_szErosionOppositeDirection[s_nErosionDi
 #define s_nDefaultResidentPoolBudget ( 64u * 1024u * 1024u )
 #define s_nDiagnosticsVersion ( 1 )
 #define s_nDirectionalReceiverLayer ( 1u << 19u )
-#define s_nErosionRegionLookupCapacity ( 4096 )
 #define s_nErosionTextureProfileCount ( 32 )
 #define s_nFeatureAltValue ( 1u << 0u )
 #define s_nFeatureAngleValue ( 1u << 3u )
@@ -130,17 +129,17 @@ static const int32_t g_t3dConstStorage_s_szErosionOppositeDirection[s_nErosionDi
 #define s_nGpuHeightCacheMinSpareLayers ( 8 )
 #define s_nGpuFarAtlasHeaderBytes ( 52u )
 #define s_nGpuFarAtlasMagic ( 0x5444334641523031ull )
-#define s_nGpuFarAtlasVersion ( 8u )
+#define s_nGpuFarAtlasVersion ( 9u )
 #define s_nGpuRegionCacheMaxBudgetMb ( 128 )
 #define s_nGpuRegionCacheMinBudgetMb ( 1 )
 #define s_nGpuRegionUploadMaxBudgetMb ( 64 )
 #define s_nGpuRegionUploadMaxLayers ( 64 )
 #define s_nInstanceDefaultCellSize ( 32 )
-#define s_nInstanceMaxCellsPerAxis ( 256 )
+#define s_nInstanceMaxCellsPerAxis ( 16 )
 #define s_nInstanceMaxCellSize ( 128 )
-#define s_nInstanceMaxRegionSize ( 2048 )
+#define s_nInstanceMaxRegionSize ( s_nRegionSize )
 #define s_nInstanceMinCellSize ( 8 )
-#define s_nInstanceMinRegionSize ( 64 )
+#define s_nInstanceMinRegionSize ( s_nRegionSize )
 #define s_nInstanceRegionCacheMaxBudgetMb ( 128 )
 #define s_nInstanceRegionCacheMinBudgetMb ( 1 )
 #define s_nInstanceRegionLoadMaxBudgetMb ( 64 )
@@ -155,8 +154,9 @@ static const int32_t g_t3dConstStorage_s_szErosionOppositeDirection[s_nErosionDi
 #define s_nLightmapFnvOffset ( 1469598103934665603ull )
 #define s_nLightmapFnvPrime ( 1099511628211ull )
 #define s_nMaxClipmapLevels ( 16 )
-#define s_nMaxRegionBlendSamples ( 2048 )
+#define s_nMaxRegionBlendSamples ( s_nRegionSize )
 #define s_nMaxCollisionAxisSamples ( s_nMaxRegionBlendSamples + 1 )
+#define s_nMaxCollisionShapeRecords ( 4096 )
 #define s_nMaxRenderBatches ( 5 )
 #define s_nMaxShaderVariantCacheLimit ( 256 )
 #define s_nMaxShaderVariantPrewarmLimit ( 64 )
@@ -166,7 +166,6 @@ static const int32_t g_t3dConstStorage_s_szErosionOppositeDirection[s_nErosionDi
 #define s_nMemoryPolicyIntervalFrames ( 30 )
 #define s_nMeshMaxLodCount ( 10 )
 #define s_nMeshShadowLodId ( -1 )
-#define s_nMinRegionSize ( 64 )
 #define s_nMinShaderVariantCacheLimit ( 8 )
 #define s_nMinShaderVariantPrewarmLimit ( 1 )
 #define s_nMinShaderVariantSourceBudgetMb ( 1 )
@@ -196,8 +195,23 @@ static const int g_t3dConstStorage_s_szRenderControlKernel[5] = { 1, 2, 3, 2, 1 
 #define s_nTypeHeightValue ( 0u )
 #define s_nTypeMaxValue ( 3u )
 #define s_nWorldTexels ( 4096 )
+#define s_nRegionSize ( 128 )
+#define s_nRegionVertexSpacingMeters ( 1u )
+#define s_fRegionVertexSpacing ( 1.0f )
+#define s_nRegionWorldSizeMeters ( s_nRegionSize * s_nRegionVertexSpacingMeters )
+#define s_nRegionShift ( 7 )
+#define s_nRegionMask ( 127 )
+#define s_nRegionMapSize ( 32 )
+#define s_nRegionMapShift ( 5 )
+#define s_nRegionMapMask ( 31 )
+#define s_nRegionSlots ( 1024 )
+#define s_nRegionMapHalf ( 16 )
+#define s_nRegionTexels ( 16384 )
+#define s_nRegionHeightBytes ( 32768 )
+#define s_nRegionGeometrySignature                                                                                                        \
+	( 0x80000000u | ( ( uint32_t )( s_nRegionSize ) << 16u ) | ( ( uint32_t )( s_nRegionVertexSpacingMeters ) << 8u )                    \
+	        | ( uint32_t )( s_nRegionMapSize ) )
 #define s_nXbox360CpuMapCeilingBytes ( 64u * 1024u * 1024u )
-#define s_nActiveMinRegionSize ( s_nMinRegionSize )
 #define s_nActiveWorldTexels ( s_nWorldTexels )
 #define s_nBakeUvCachelineElements ( s_nBakeCachelineBytes / sizeof( Vector2 ) )
 #define s_nBakeVertexCachelineElements ( s_nBakeCachelineBytes / ( sizeof( Vector3 ) / 3u ) )
@@ -208,17 +222,13 @@ static const int g_t3dConstStorage_s_szRenderControlKernel[5] = { 1, 2, 3, 2, 1 
 #define s_nMaxBatchInstances ( s_nMaxClipmapLevels )
 #define s_nMaxBufferShaderVariantCacheLimit ( s_nMaxShaderVariantCacheLimit / 2 )
 #define s_nMaxEditorShaderVariantCacheLimit ( s_nMaxShaderVariantCacheLimit / 4 )
-#define s_nMaxRegionMapSize ( s_nWorldTexels / s_nMinRegionSize )
 #define s_nMemoryPolicyHysteresisBytes ( 2ULL * s_nMemoryMib )
-#define s_nActiveMaxRegionMapSize ( s_nMaxRegionMapSize )
 #define s_nBakeTaskAlignmentElements ( s_nBakeVertexCachelineElements )
 #define s_nLightingManagedLayerMask ( s_nLightingClassLayerMask | s_nDirectionalReceiverLayer )
-#define s_nMaxRegionSlots ( s_nMaxRegionMapSize * s_nMaxRegionMapSize )
-#define s_nResidentWorldSize ( s_nMaxRegionMapSize )
-#define s_nActiveMaxRegionSlots ( s_nMaxRegionSlots )
-#define s_nInstanceRegionTableCapacity ( ( size_t )( s_nMaxRegionSlots ) )
+#define s_nResidentWorldSize ( s_nRegionMapSize )
+#define s_nInstanceRegionTableCapacity ( ( size_t )( s_nRegionSlots ) )
 #define s_nResidentWorldHalf ( s_nResidentWorldSize / 2 )
-#define s_nResidentWorldSlotCount ( s_nMaxRegionSlots )
+#define s_nResidentWorldSlotCount ( s_nRegionSlots )
 #define s_nInstanceRegionUpdateCapacity ( s_nInstanceRegionTableCapacity )
 #define s_fControlAutoFloat ( FLT_TRUE_MIN )
 #define s_nRuntimeMaterialMagic ( 0x5433444D41543031ull ) // T3DMAT01
@@ -235,7 +245,7 @@ static const int g_t3dConstStorage_s_szRenderControlKernel[5] = { 1, 2, 3, 2, 1 
 #define MAX_TEXTURE_ASSETS ( s_nMaxTextureAssets )
 #define MAX_MESH_ASSETS ( s_nMaxMeshAssets )
 #define s_nCookDatabaseMagic ( 0x3142444b43443354ull ) // T3DCKDB1
-#define s_nCookDatabaseVersion ( 1u )
+#define s_nCookDatabaseVersion ( 2u )
 #define s_nCookDatabaseHeaderBytes ( 40u )
 #define s_fByteMaxFloat ( 255.0f )
 #define s_fByteMidpointFloat ( 127.5f )
@@ -253,7 +263,7 @@ static const int g_t3dConstStorage_s_szRenderControlKernel[5] = { 1, 2, 3, 2, 1 
 #define s_nInstanceMetaMagic ( 0x314d4e49u )    // INM1
 #define s_nLightingMagic ( 0x3154474cu )        // LGT1
 #define s_nMultimeshMagic ( 0x31494d4du )       // MMI1
-#define s_nBlobVersion ( 1u )
+#define s_nBlobVersion ( 2u )
 #define s_nFixed ( 8u + 2u + 2u + 4u + 2u + 2u + 16u + 2u + 2u + 4u + 48u + 4u )
 #define s_nRuntimePageAlignment ( 16u )
 #define s_nRuntimePageBlendRecipeVersion ( 4u )
@@ -261,12 +271,12 @@ static const int g_t3dConstStorage_s_szRenderControlKernel[5] = { 1, 2, 3, 2, 1 
 #define s_nRuntimePageHeaderBytes ( 1248u )
 #define s_nRuntimePageMagic ( 0x47503354u )
 #define s_nRuntimePageMaxBytes ( 256u * 1024u * 1024u )
-#define s_nRuntimePageVersion ( 6u )
+#define s_nRuntimePageVersion ( 7u )
 #define s_nManifestHeaderBytes ( 112u )
-#define s_nManifestTopologyBytes ( s_nMaxRegionSlots / 8u )
+#define s_nManifestTopologyBytes ( s_nRegionSlots / 8u )
 #define s_nManifestRegionBaseBytes ( 112u )
 #define s_nRuntimeWorldManifestMagic ( 0x31464e4d57334454ull ) // T3DWMNF1
-#define s_nRuntimeWorldManifestVersion ( 3u )
+#define s_nRuntimeWorldManifestVersion ( 5u )
 #define s_nRuntimeWorldAdjN ( 1u << 0u )
 #define s_nRuntimeWorldAdjNe ( 1u << 1u )
 #define s_nRuntimeWorldAdjE ( 1u << 2u )
@@ -276,7 +286,7 @@ static const int g_t3dConstStorage_s_szRenderControlKernel[5] = { 1, 2, 3, 2, 1 
 #define s_nRuntimeWorldAdjW ( 1u << 6u )
 #define s_nRuntimeWorldAdjNw ( 1u << 7u )
 #define s_nHlodRuntimeMagic ( 0x32444c48u ) // HLD2
-#define s_nHlodRuntimeVersion ( 1u )
+#define s_nHlodRuntimeVersion ( 2u )
 #define s_nInstanceCacheMaxPages ( 64 )
 #define s_nInstanceCacheMib ( 1024u * 1024u )
 #define s_nActivePhysicalPageCount ( 32 )
@@ -298,7 +308,7 @@ static const int g_t3dConstStorage_s_szRenderControlKernel[5] = { 1, 2, 3, 2, 1 
 #define s_nAcquireGateClosed ( UINT32_C( 0x80000000 ) )
 #define s_nAcquireReaderMask ( ~s_nAcquireGateClosed )
 #define s_nBackingBytes ( 512u * 1024u )
-#define s_nCollisionBakedCacheAxis ( ( 2 * ( 256 + 64 + s_nMinRegionSize ) / s_nMinRegionSize ) + 1 )
+#define s_nCollisionBakedCacheAxis ( 8 )
 #define s_nBakedCacheCapacity ( s_nCollisionBakedCacheAxis * s_nCollisionBakedCacheAxis )
 #define s_nDynamicScratchAxis ( 65 )
 #define s_nDynamicScratchSamples ( s_nDynamicScratchAxis * s_nDynamicScratchAxis )
@@ -390,7 +400,7 @@ static const int g_t3dConstStorage_s_szRenderControlKernel[5] = { 1, 2, 3, 2, 1 
 // axis scratch large enough for the maximum supported 2048-texel region.
 
 
-static const Vector2i s_regionMapVSize{ s_nActiveMaxRegionMapSize, s_nActiveMaxRegionMapSize };
+static const Vector2i s_regionMapVSize{ s_nRegionMapSize, s_nRegionMapSize };
 
 
 typedef enum t3dPerformanceProfileOwner_e : uint8_t {
@@ -481,6 +491,51 @@ static const Vector2 s_v2Zero{ 0.f, 0.f };
 static const Vector2 s_v2Max{ FLT_MAX, FLT_MAX };
 static const Vector2i s_v2iZero{ 0, 0 };
 static const Vector2i s_v2iMax{ INT32_MAX, INT32_MAX };
+
+typedef struct t3dRegionCoord_s {
+	int8_t m_x;
+	int8_t m_y;
+} t3dRegionCoord_t;
+
+#define s_nRegionCoordInvalid ( INT8_MAX )
+
+EA_FORCE_INLINE t3dRegionCoord_t t3dPackRegionCoord( const Vector2i &rLocation ) {
+	t3dRegionCoord_t coord;
+	if ( rLocation.x < -s_nRegionMapHalf || rLocation.x >= s_nRegionMapHalf || rLocation.y < -s_nRegionMapHalf
+	        || rLocation.y >= s_nRegionMapHalf ) {
+		coord.m_x = s_nRegionCoordInvalid;
+		coord.m_y = s_nRegionCoordInvalid;
+		return coord;
+	}
+	coord.m_x = ( int8_t )( rLocation.x );
+	coord.m_y = ( int8_t )( rLocation.y );
+	return coord;
+}
+
+EA_FORCE_INLINE t3dRegionCoord_t t3dInvalidRegionCoord( void ) {
+	t3dRegionCoord_t coord;
+	coord.m_x = s_nRegionCoordInvalid;
+	coord.m_y = s_nRegionCoordInvalid;
+	return coord;
+}
+
+EA_FORCE_INLINE bool t3dRegionCoordValid( const t3dRegionCoord_t &rCoord ) {
+	return rCoord.m_x != s_nRegionCoordInvalid && rCoord.m_y != s_nRegionCoordInvalid;
+}
+
+EA_FORCE_INLINE Vector2i t3dUnpackRegionCoord( const t3dRegionCoord_t &rCoord ) {
+	return t3dRegionCoordValid( rCoord ) ? Vector2i( ( int )( rCoord.m_x ), ( int )( rCoord.m_y ) ) : s_v2iMax;
+}
+
+EA_FORCE_INLINE bool t3dRegionCoordEquals( const t3dRegionCoord_t &rCoord, const Vector2i &rLocation ) {
+	return t3dRegionCoordValid( rCoord ) && ( int )( rCoord.m_x ) == rLocation.x && ( int )( rCoord.m_y ) == rLocation.y;
+}
+
+EA_FORCE_INLINE bool t3dRegionCoordEquals( const t3dRegionCoord_t &rA, const t3dRegionCoord_t &rB ) {
+	return rA.m_x == rB.m_x && rA.m_y == rB.m_y;
+}
+
+static_assert( sizeof( t3dRegionCoord_t ) == 2u, "Packed Terrain3D region coordinates must remain two bytes" );
 static const Vector3 s_v3Zero{ 0.f, 0.f, 0.f };
 static const Vector3 s_v3Max{ FLT_MAX, FLT_MAX, FLT_MAX };
 static const Vector3 s_v3Nan{ NAN, NAN, NAN };

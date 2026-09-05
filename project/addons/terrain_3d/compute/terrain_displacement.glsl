@@ -16,8 +16,6 @@ layout(set = 0, binding = 5, std430) restrict readonly buffer MaterialData { vec
 layout(push_constant, std430) uniform Params {
     uint width;
     uint height;
-    uint region_size;
-    uint region_map_size;
     float vertex_spacing;
     float vertex_density;
     float mesh_size;
@@ -46,6 +44,13 @@ layout(push_constant, std430) uniform Params {
 
 const float DIV_255 = 1.0 / 255.0;
 const float TAU_16TH = -0.392699081698724;
+const int REGION_SIZE = 128;
+const int REGION_SHIFT = 7;
+const int REGION_MASK = 127;
+const int REGION_MAP_SIZE = 32;
+const int REGION_MAP_HALF = 16;
+const float REGION_SIZE_F = 128.0;
+const float REGION_INV_SIZE_F = 0.0078125;
 
 struct MaterialAccumulation {
     float height;
@@ -53,22 +58,23 @@ struct MaterialAccumulation {
 };
 
 int region_layer(ivec2 map_pos) {
-    if (any(lessThan(map_pos, ivec2(0))) || any(greaterThanEqual(map_pos, ivec2(int(params.region_map_size))))) {
+    if (any(lessThan(map_pos, ivec2(0))) || any(greaterThanEqual(map_pos, ivec2(REGION_MAP_SIZE)))) {
         return -1;
     }
-    return region_map[map_pos.y * int(params.region_map_size) + map_pos.x] - 1;
+    return region_map[(map_pos.y << 5) + map_pos.x] - 1;
 }
 
 ivec3 index_coord(vec2 world_texel) {
-    vec2 rounded = round(world_texel);
-    ivec2 map_pos = ivec2(floor(rounded / float(params.region_size))) + ivec2(int(params.region_map_size) / 2);
-    vec2 wrapped = mod(rounded, float(params.region_size));
-    return ivec3(ivec2(wrapped), region_layer(map_pos));
+    ivec2 texel = ivec2(round(world_texel));
+    ivec2 region_cell = texel >> REGION_SHIFT;
+    ivec2 map_pos = region_cell + ivec2(REGION_MAP_HALF);
+    ivec2 local = texel & ivec2(REGION_MASK);
+    return ivec3(local, region_layer(map_pos));
 }
 
 void quad_indices(vec2 index_id, out ivec3 i0, out ivec3 i1, out ivec3 i2, out ivec3 i3) {
     i3 = index_coord(index_id);
-    int last_texel = int(params.region_size) - 1;
+    int last_texel = REGION_SIZE - 1;
     if (i3.z >= 0 && i3.x < last_texel && i3.y < last_texel) {
         i2 = ivec3(i3.xy + ivec2(1, 0), i3.z);
         i0 = ivec3(i3.xy + ivec2(0, 1), i3.z);
@@ -82,7 +88,7 @@ void quad_indices(vec2 index_id, out ivec3 i0, out ivec3 i1, out ivec3 i2, out i
 
 ivec3 offset_index(vec2 index_id, ivec3 base_index, ivec2 offset) {
     ivec2 local = base_index.xy + offset;
-    int size_i = int(params.region_size);
+    int size_i = REGION_SIZE;
     if (base_index.z >= 0 && all(greaterThanEqual(local, ivec2(0))) && all(lessThan(local, ivec2(size_i)))) {
         return ivec3(local, base_index.z);
     }
@@ -90,7 +96,7 @@ ivec3 offset_index(vec2 index_id, ivec3 base_index, ivec2 offset) {
 }
 
 float check_region(vec2 region_uv) {
-    ivec2 map_pos = ivec2(floor(region_uv)) + ivec2(int(params.region_map_size) / 2);
+    ivec2 map_pos = ivec2(floor(region_uv)) + ivec2(REGION_MAP_HALF);
     return float(region_layer(map_pos) >= 0);
 }
 
@@ -110,7 +116,7 @@ float flat_region_blend(vec2 region_uv) {
 float terrain_height(ivec3 index, vec2 world_texel) {
     float height = index.z >= 0 ? fma(texelFetch(height_maps, index, 0).r, params.height_range, params.height_min) : 0.0;
     if (params.background_mode == 1u) {
-        float blend = flat_region_blend(world_texel / float(params.region_size));
+        float blend = flat_region_blend(world_texel * REGION_INV_SIZE_F);
         height = mix(height, params.ground_level, smoothstep(0.0, 1.0, blend));
     }
     return height;

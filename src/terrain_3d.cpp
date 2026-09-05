@@ -52,6 +52,10 @@ t3dDebugLevel_t Terrain3D::s_debugLevel{ ERROR };
 // Private functions
 
 void Terrain3D::initializeInternal( void ) {
+	// Initialization is an explicit owner-controlled rebuild boundary. The phase
+	// scopes below label telemetry only; each storage owner decides whether its
+	// backing may change during this transition.
+	Terrain3DColdPhaseScope cold_scope;
 	Terrain3DAllocationPhaseScope allocation_phase( TERRAIN3D_ALLOCATION_PHASE_INITIALIZATION );
 	if ( m_runtimeLifecycleState == TERRAIN3D_RUNTIME_SHUTTING_DOWN || m_runtimeLifecycleState == TERRAIN3D_RUNTIME_DRAIN_FAILED ) {
 		LOG( ERROR,
@@ -106,10 +110,18 @@ void Terrain3D::initializeInternal( void ) {
 	if ( !m_pInstancer ) {
 		LOG( DEBUG, "Creating instancer" );
 		m_pInstancer = memnew( Terrain3DInstancer );
+		if ( !m_pInstancer->bindRuntimeAllocator( &m_runtimeMemoryZone, getRuntimeAllocatorOverflowPolicyInternal() ) ) {
+			LOG( ERROR, "Failed binding instancer runtime allocator ownership" );
+			return;
+		}
 	}
 	if ( !m_pNodeStreamer ) {
 		LOG( DEBUG, "Creating node streamer" );
 		m_pNodeStreamer = memnew( Terrain3DNodeStreamer );
+		if ( !m_pNodeStreamer->bindRuntimeAllocator( &m_runtimeMemoryZone ) ) {
+			LOG( ERROR, "Failed binding node streamer runtime allocator ownership" );
+			return;
+		}
 	}
 	if ( !m_pLightmapStreamer ) {
 		LOG( DEBUG, "Creating lightmap streamer" );
@@ -118,6 +130,10 @@ void Terrain3D::initializeInternal( void ) {
 	if ( !m_pHlodStreamer ) {
 		LOG( DEBUG, "Creating HLOD streamer" );
 		m_pHlodStreamer = memnew( Terrain3DHLODStreamer );
+		if ( !m_pHlodStreamer->bindRuntimeAllocator( &m_runtimeMemoryZone, getRuntimeAllocatorOverflowPolicyInternal() ) ) {
+			LOG( ERROR, "Failed binding HLOD runtime allocator ownership" );
+			return;
+		}
 	}
 	// Connect signals
 	// Any region was changed, update region labels
@@ -182,6 +198,7 @@ void Terrain3D::initializeInternal( void ) {
 		// whole-world authority. Force the first reconciliation even when the actual
 		// center/generation equals the zero/default cached state.
 		updateRegionStreamingPolicy( initial_target, 0.0, true );
+		m_pData->serviceColdInstanceResidency( initial_target, true );
 		m_pData->updateRegionResidency( initial_target, true );
 
 		// Asset arrays and the whole-world far atlases must exist before the tier
@@ -254,7 +271,7 @@ void Terrain3D::initializeInternal( void ) {
 		        "[lifecycle] Main subsystems ready: regions=",
 		        m_pData->getRegionCount(),
 		        "; region_size=",
-		        ( int )( m_nRegionSize ),
+		        ( int )( s_nRegionSize ),
 		        "; mesh_lods=",
 		        m_nMeshLods,
 		        "; tessellation=",
@@ -305,17 +322,9 @@ void Terrain3D::deactivateRuntime( void ) {
 		m_pData->deactivateRuntimeStorage( this );
 	}
 
-	// Stop process-global allocation routing while this Terrain3D is detached so a
-	// different scene instance may own the router. Do not begin draining the zone:
-	// retained allocations keep their owning zone in their allocation headers and
-	// are rebound when this same Terrain3D re-enters.
-	if ( m_bRuntimeMemoryReady && Terrain3DZoneAllocatorRouter::zone() == &m_runtimeMemoryZone ) {
-		if ( !Terrain3DZoneAllocatorRouter::stopRouting( &m_runtimeMemoryZone ) ) {
-			LOG( ERROR, "[lifecycle] Failed to stop runtime allocator routing during scene detach" );
-		} else if ( !Terrain3DZoneAllocatorRouter::uninstall( &m_runtimeMemoryZone ) ) {
-			LOG( ERROR, "[lifecycle] Failed to release runtime allocator routing ownership during scene detach" );
-		}
-	}
+	// Detach preserves this Terrain3D instance's private runtime zone. Retained
+	// runtime containers carry explicit allocator->zone ownership, so another
+	// Terrain3D instance can activate independently without changing their route.
 
 	m_runtimeLifecycleState = m_bRuntimeMemoryReady ? TERRAIN3D_RUNTIME_DETACHED : TERRAIN3D_RUNTIME_COLD;
 }
@@ -329,8 +338,26 @@ void Terrain3D::physicsProcess( const double fDelta ) {
 		return;
 	}
 	serviceMemoryBudgetPolicy( false );
+	if ( !m_hCamera.isValid() ) {
+		LOG( DEBUG, "Camera is null, getting the current one" );
+		grabCamera();
+	}
+	// Resolve the frame target before sealing allocation. Cold services use this
+	// same position so materialized ownership and the following hot selection are
+	// guaranteed to describe one residency frame.
+	const Vector3 clipmap_target_position = getClipmapTargetPosition();
+	updateRegionStreamingPolicy( clipmap_target_position, fDelta, false );
+	if ( m_pData ) {
+		m_pData->serviceColdInstanceResidency( clipmap_target_position, false );
+	}
 	if ( m_pInstancer ) {
 		m_pInstancer->serviceColdCapacity();
+	}
+	if ( m_pNodeStreamer ) {
+		m_pNodeStreamer->serviceColdRebuild();
+	}
+	if ( m_pCollision ) {
+		m_pCollision->serviceColdRebuild();
 	}
 	if ( m_pRenderCoordinator ) {
 		m_pRenderCoordinator->serviceColdCapacity();
@@ -338,10 +365,6 @@ void Terrain3D::physicsProcess( const double fDelta ) {
 	Terrain3DAllocationPhaseScope allocation_phase( TERRAIN3D_ALLOCATION_PHASE_HOT_FRAME );
 	if ( m_bComputeDisplacementFallbackRequested.exchange( false, T3D_MEMORY_ORDER_ACQ_REL ) ) {
 		m_lastBufferPosition = s_v2Max;
-	}
-	if ( !m_hCamera.isValid() ) {
-		LOG( DEBUG, "Camera is null, getting the current one" );
-		grabCamera();
 	}
 
 	t3dRuntimeProfileSample_t profile_sample;
@@ -360,9 +383,8 @@ void Terrain3D::physicsProcess( const double fDelta ) {
 		}
 	}
 
-	// Resolve the target once. Meshing, displacement, streaming, and ocean
-	// snapping must observe one coherent position for this physics tick.
-	const Vector3 clipmap_target_position = getClipmapTargetPosition();
+	// Meshing, displacement, streaming, and ocean snapping use the target that
+	// was resolved for the cold residency phase above.
 	++m_iRuntimePhysicsFrameIndex;
 	const Vector2i target_region = m_pData ? m_pData->getRegionLocation( clipmap_target_position ) : s_v2iMax;
 	if ( target_region != m_runtimeBoundaryTargetRegion ) {
@@ -394,7 +416,6 @@ void Terrain3D::physicsProcess( const double fDelta ) {
 		profile_sample.m_nTargetRegionZ = target_region.y;
 	}
 	if ( m_pData ) {
-		updateRegionStreamingPolicy( clipmap_target_position, fDelta, false );
 		m_pData->updateRegionResidency( clipmap_target_position, false );
 		if ( m_assets.is_valid() && m_assets->isRuntimeMaterialCacheActive() ) {
 			uint8_t material_ids[s_nMaxTextureAssets];
@@ -447,7 +468,7 @@ void Terrain3D::physicsProcess( const double fDelta ) {
 		if ( m_pTerrainMesher && m_material.is_valid() ) {
 			const Vector2 target_position_2d = t3dVector3ToVector2( clipmap_target_position );
 			const real_t fTessellationDensity = 1.0f / ( real_t )( 1u << ( uint32_t )m_nTessellationLevel );
-			const real_t fBufferVertexSpacing = m_fVertexSpacing * fTessellationDensity;
+			const real_t fBufferVertexSpacing = s_fRegionVertexSpacing * fTessellationDensity;
 			const real_t fUpdateDistance = MAX( fBufferVertexSpacing, m_fDisplacementUpdateDistance );
 			const bool bMoved =
 			        MAX( abs( m_lastBufferPosition.x - target_position_2d.x ), abs( m_lastBufferPosition.y - target_position_2d.y ) )
@@ -575,11 +596,7 @@ void Terrain3D::destroyContainers( void ) {
 }
 
 const t3dBakeRegionSnapshot_t *t3dBakeSnapshot_t::getRegion( const int32_t iX, const int32_t iZ ) const {
-	if ( m_nRegionSize <= 0 ) {
-		return NULL;
-	}
-
-	const Vector2i regionLocation( t3dDivideFloor( iX, m_nRegionSize ), t3dDivideFloor( iZ, m_nRegionSize ) );
+	const Vector2i regionLocation = t3dRegionCoordinateFromGrid( Vector2i( iX, iZ ) );
 	const int32_t map_index = Terrain3DData::getRegionMapIndex( regionLocation );
 	if ( map_index < 0 ) {
 		return NULL;
@@ -598,14 +615,9 @@ void t3dBakeSnapshot_t::getSample( const int32_t iX, const int32_t iZ, uint32_t 
 		fHeight = NAN;
 		return;
 	}
-	const int32_t local_x = iX - pRegion->m_location.x * m_nRegionSize;
-	const int32_t local_z = iZ - pRegion->m_location.y * m_nRegionSize;
-	if ( local_x < 0 || local_z < 0 || local_x >= m_nRegionSize || local_z >= m_nRegionSize ) {
-		nControl = UINT32_MAX;
-		fHeight = NAN;
-		return;
-	}
-	const int32_t index = local_z * m_nRegionSize + local_x;
+	const int32_t local_x = t3dRegionLocalFromGrid( iX );
+	const int32_t local_z = t3dRegionLocalFromGrid( iZ );
+	const int32_t index = local_z * s_nRegionSize + local_x;
 	fHeight = ( real_t )( t3dRegionCodecReadHeightBytes( pRegion->m_pHeightBytes, index, Image::FORMAT_R16 ) );
 	if ( pRegion->m_pControlBytes ) {
 		uint32_t control = s_nRegionDefaultControl;
@@ -619,7 +631,7 @@ void t3dBakeSnapshot_t::getSample( const int32_t iX, const int32_t iZ, uint32_t 
 
 bool t3dBakeSnapshot_t::getMinimumRect(
         const int32_t iX, const int32_t iZ, const int32_t nWidth, const int32_t nHeight, real_t &fHeight ) const {
-	if ( m_nRegionSize <= 0 || nWidth <= 0 || nHeight <= 0 ) {
+	if ( nWidth <= 0 || nHeight <= 0 ) {
 		return false;
 	}
 	real_t fMinimum = eastl::numeric_limits<real_t>::infinity();
@@ -632,13 +644,10 @@ bool t3dBakeSnapshot_t::getMinimumRect(
 			if ( !pRegion || !pRegion->m_pHeightBytes ) {
 				return false;
 			}
-			const int32_t local_x = global_x - pRegion->m_location.x * m_nRegionSize;
-			const int32_t local_z = global_z - pRegion->m_location.y * m_nRegionSize;
-			if ( local_x < 0 || local_z < 0 || local_x >= m_nRegionSize || local_z >= m_nRegionSize ) {
-				return false;
-			}
-			const int32_t run = MIN( nWidth - copied, m_nRegionSize - local_x );
-			const int32_t index = local_z * m_nRegionSize + local_x;
+			const int32_t local_x = t3dRegionLocalFromGrid( global_x );
+			const int32_t local_z = t3dRegionLocalFromGrid( global_z );
+			const int32_t run = MIN( nWidth - copied, s_nRegionSize - local_x );
+			const int32_t index = local_z * s_nRegionSize + local_x;
 			const uint16_t *pHeight = ( const uint16_t * )( pRegion->m_pHeightBytes ) + index;
 			const uint32_t *pControl = pRegion->m_pControlBytes ? ( const uint32_t * )( pRegion->m_pControlBytes ) + index : NULL;
 			for ( int32_t i = 0; i < run; ++i ) {
@@ -731,6 +740,7 @@ void Terrain3D::setDebugLevel( const t3dDebugLevel_t level ) {
 		}                                                                                                                                  \
 		FIELD = valueArg;                                                                                                                  \
 		m_oceanPerformancePreset = OCEAN_PRESET_CUSTOM;                                                                                    \
+		markOceanPublicationDirty();                                                                                                       \
 		updateOceanShaderVariant();                                                                                                        \
 	}
 

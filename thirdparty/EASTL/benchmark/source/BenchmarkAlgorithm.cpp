@@ -50,12 +50,12 @@ typedef std::vector<TestObject>      StdVectorTO;
 typedef eastl::vector<TestObject>    EaVectorTO;
 
 
-// We make a fake version of C++11 std::next, as some C++ compilers don't currently 
+// We make a fake version of C++11 std::next, as some C++ compilers don't currently
 // provide the C++11 next algorithm in their standard libraries.
 namespace std__
 {
 	template<typename InputIterator>
-	inline InputIterator 
+	inline InputIterator
 	next(InputIterator it, typename std::iterator_traits<InputIterator>::difference_type n = 1)
 	{
 		std::advance(it, n);
@@ -147,7 +147,7 @@ namespace
 	{
 		stopwatch.Restart();
 		typename Container::iterator it = eastl::unique(c.begin(), c.end());
-		stopwatch.Stop();        
+		stopwatch.Stop();
 		c.erase(it, c.end());
 	}
 
@@ -167,7 +167,7 @@ namespace
 	{
 		stopwatch.Restart();
 		const typename Container::const_iterator it = eastl::min_element(c.begin(), c.end());
-		stopwatch.Stop();        
+		stopwatch.Stop();
 		EA::StdC::Snprintf(Benchmark::gScratchBuffer, Benchmark::kScratchBufferSize, "%p", &it);
 	}
 
@@ -187,7 +187,7 @@ namespace
 	{
 		stopwatch.Restart();
 		const typename Container::difference_type n = eastl::count(c.begin(), c.end(), (typename Container::value_type)999999);
-		stopwatch.Stop();        
+		stopwatch.Stop();
 		EA::StdC::Snprintf(Benchmark::gScratchBuffer, Benchmark::kScratchBufferSize, "%d", (int)n);
 	}
 
@@ -235,7 +235,7 @@ namespace
 			typename Container::const_iterator it = eastl::lower_bound(c.begin(), c.end(), *pBegin++);
 			Benchmark::DoNothing(&it);
 		}
-		stopwatch.Stop();        
+		stopwatch.Stop();
 	}
 
 
@@ -272,7 +272,7 @@ namespace
 		stopwatch.Restart();
 		while(pBegin != pEnd)
 		{
-			std::pair<const typename Container::const_iterator, 
+			std::pair<const typename Container::const_iterator,
 					  const typename Container::const_iterator> itPair = std::equal_range(c.begin(), c.end(), *pBegin++);
 
 			Benchmark::DoNothing(&itPair);
@@ -286,7 +286,7 @@ namespace
 		stopwatch.Restart();
 		while(pBegin != pEnd)
 		{
-			eastl::pair<const typename Container::const_iterator, 
+			eastl::pair<const typename Container::const_iterator,
 						const typename Container::const_iterator> itPair = eastl::equal_range(c.begin(), c.end(), *pBegin++);
 			Benchmark::DoNothing(&itPair);
 		}
@@ -359,7 +359,7 @@ namespace
 	void TestFillStd(EA::StdC::Stopwatch& stopwatch, Iterator first, Iterator last, const Value& v)
 	{
 		stopwatch.Restart();
-		std::fill(first, last, v);
+		eastl::fill(first, last, v);
 		stopwatch.Stop();
 		EA::StdC::Snprintf(Benchmark::gScratchBuffer, Benchmark::kScratchBufferSize, "%p", &*first);
 	}
@@ -379,7 +379,7 @@ namespace
 	void TestFillNStd(EA::StdC::Stopwatch& stopwatch, Iterator first, int n, const Value& v)
 	{
 		stopwatch.Restart();
-		std::fill_n(first, n, v);
+		eastl::fill_n(first, n, v);
 		stopwatch.Stop();
 		EA::StdC::Snprintf(Benchmark::gScratchBuffer, Benchmark::kScratchBufferSize, "%p", &*first);
 	}
@@ -625,7 +625,7 @@ void BenchmarkAlgorithm2(EASTLTest_Rand& rng, EA::StdC::Stopwatch& stopwatch1, E
 				Benchmark::AddResult("algorithm/count/vector<uint64_t>", stopwatch1.GetUnits(), stopwatch1.GetElapsedTime(), stopwatch2.GetElapsedTime());
 
 
-			
+
 			///////////////////////////////
 			// Test adjacent_find
 			///////////////////////////////
@@ -674,9 +674,9 @@ void BenchmarkAlgorithm2(EASTLTest_Rand& rng, EA::StdC::Stopwatch& stopwatch1, E
 			// Test equal_range
 			///////////////////////////////
 
-			// VS2010 (and later versions?) is extremely slow executing this in debug builds. It can take minutes for a 
+			// VS2010 (and later versions?) is extremely slow executing this in debug builds. It can take minutes for a
 			// single TestEqualRangeStd call to complete. It's so slow that it's nearly pointless to execute.
-			#if !defined(_MSC_VER) || (_MSC_VER < 1600) || !defined(_ITERATOR_DEBUG_LEVEL) || (_ITERATOR_DEBUG_LEVEL < 2) 
+			#if !defined(_MSC_VER) || (_MSC_VER < 1600) || !defined(_ITERATOR_DEBUG_LEVEL) || (_ITERATOR_DEBUG_LEVEL < 2)
 				std::sort(stdVectorUint64.begin(), stdVectorUint64.end());
 				eaVectorUint64.assign(&stdVectorUint64[0], &stdVectorUint64[0] + stdVectorUint64.size());
 
@@ -782,7 +782,7 @@ void BenchmarkAlgorithm4(EASTLTest_Rand& /*rng*/, EA::StdC::Stopwatch& stopwatch
 
 			TestFillStd(stopwatch1, stdVectorUint64.begin(), stdVectorUint64.end(), UINT64_C(37));
 			TestFillEa (stopwatch2,  eaVectorUint64.begin(),  eaVectorUint64.end(), UINT64_C(37));
-			TestFillStd(stopwatch1, stdVectorUint64.begin(), stdVectorUint64.end(), UINT64_C(37)); // Intentionally do this a second time, as we are finding 
+			TestFillStd(stopwatch1, stdVectorUint64.begin(), stdVectorUint64.end(), UINT64_C(37)); // Intentionally do this a second time, as we are finding
 			TestFillEa (stopwatch2,  eaVectorUint64.begin(),  eaVectorUint64.end(), UINT64_C(37)); // the results are inconsistent otherwise.
 			if(EA::StdC::Memcheck64(&eaVectorUint64[0], UINT64_C(37), eaVectorUint64.size()))
 				EA::UnitTest::Report("eastl algorithm 64 bit fill failure.");
@@ -797,7 +797,7 @@ void BenchmarkAlgorithm4(EASTLTest_Rand& /*rng*/, EA::StdC::Stopwatch& stopwatch
 
 			TestFillNStd(stopwatch1, stdVectorUint64.begin(), (int)stdVectorUint64.size(), UINT64_C(37));
 			TestFillNEa (stopwatch2,  eaVectorUint64.begin(), (int) eaVectorUint64.size(), UINT64_C(37));
-			TestFillNStd(stopwatch1, stdVectorUint64.begin(), (int)stdVectorUint64.size(), UINT64_C(37)); // Intentionally do this a second time, as we are finding 
+			TestFillNStd(stopwatch1, stdVectorUint64.begin(), (int)stdVectorUint64.size(), UINT64_C(37)); // Intentionally do this a second time, as we are finding
 			TestFillNEa (stopwatch2,  eaVectorUint64.begin(), (int) eaVectorUint64.size(), UINT64_C(37));  // the results are inconsistent otherwise.
 
 			if(i == 1)
@@ -829,29 +829,29 @@ void BenchmarkAlgorithm5(EASTLTest_Rand& /*rng*/, EA::StdC::Stopwatch& stopwatch
 
 			TestFillStd(stopwatch1,    &stdVectorChar[0],     &stdVectorChar[0] + stdVectorChar.size(), 'd'); // Intentionally use ' ' and not casted to any type.
 			TestFillEa (stopwatch2,  eaVectorChar.data(),   eaVectorChar.data() +  eaVectorChar.size(), 'd');
-			TestFillStd(stopwatch1,    &stdVectorChar[0],     &stdVectorChar[0] + stdVectorChar.size(), 'd'); // Intentionally do this a second time, as we are finding 
+			TestFillStd(stopwatch1,    &stdVectorChar[0],     &stdVectorChar[0] + stdVectorChar.size(), 'd'); // Intentionally do this a second time, as we are finding
 			TestFillEa (stopwatch2,  eaVectorChar.data(),   eaVectorChar.data() +  eaVectorChar.size(), 'd'); // the results are inconsistent otherwise.
 
 			if(i == 1)
 				Benchmark::AddResult("algorithm/fill/char[]/'d'", stopwatch1.GetUnits(), stopwatch1.GetElapsedTime(), stopwatch2.GetElapsedTime());
 
-			TestFillStd(stopwatch1, stdVectorChar.begin(), stdVectorChar.end(), (char)'d'); 
+			TestFillStd(stopwatch1, stdVectorChar.begin(), stdVectorChar.end(), (char)'d');
 			TestFillEa (stopwatch2,  eaVectorChar.begin(),  eaVectorChar.end(), (char)'d');
-			TestFillStd(stopwatch1, stdVectorChar.begin(), stdVectorChar.end(), (char)'d'); // Intentionally do this a second time, as we are finding 
+			TestFillStd(stopwatch1, stdVectorChar.begin(), stdVectorChar.end(), (char)'d'); // Intentionally do this a second time, as we are finding
 			TestFillEa (stopwatch2,  eaVectorChar.begin(),  eaVectorChar.end(), (char)'d'); // the results are inconsistent otherwise.
 
 			if(i == 1)
 				Benchmark::AddResult("algorithm/fill/vector<char>/'d'", stopwatch1.GetUnits(), stopwatch1.GetElapsedTime(), stopwatch2.GetElapsedTime());
 
-			TestFillStd(stopwatch1, stdVectorChar.begin(), stdVectorChar.end(), (char)0); 
+			TestFillStd(stopwatch1, stdVectorChar.begin(), stdVectorChar.end(), (char)0);
 			TestFillEa (stopwatch2,  eaVectorChar.begin(),  eaVectorChar.end(), (char)0);
-			TestFillStd(stopwatch1, stdVectorChar.begin(), stdVectorChar.end(), (char)0); // Intentionally do this a second time, as we are finding 
+			TestFillStd(stopwatch1, stdVectorChar.begin(), stdVectorChar.end(), (char)0); // Intentionally do this a second time, as we are finding
 			TestFillEa (stopwatch2,  eaVectorChar.begin(),  eaVectorChar.end(), (char)0); // the results are inconsistent otherwise.
 
 			if(i == 1)
 				Benchmark::AddResult("algorithm/fill/vector<char>/0", stopwatch1.GetUnits(), stopwatch1.GetElapsedTime(), stopwatch2.GetElapsedTime());
 
-			TestFillStd(stopwatch1,  eaVectorBool.data(),   eaVectorBool.data() +  eaVectorBool.size(), false); // Intentionally use eaVectorBool for the array. 
+			TestFillStd(stopwatch1,  eaVectorBool.data(),   eaVectorBool.data() +  eaVectorBool.size(), false); // Intentionally use eaVectorBool for the array.
 			TestFillEa (stopwatch2,  eaVectorBool.data(),   eaVectorBool.data() +  eaVectorBool.size(), false);
 			TestFillStd(stopwatch1,  eaVectorBool.data(),   eaVectorBool.data() +  eaVectorBool.size(), false);
 			TestFillEa (stopwatch2,  eaVectorBool.data(),   eaVectorBool.data() +  eaVectorBool.size(), false);
@@ -866,7 +866,7 @@ void BenchmarkAlgorithm5(EASTLTest_Rand& /*rng*/, EA::StdC::Stopwatch& stopwatch
 
 			TestFillNStd(stopwatch1,  eaVectorChar.data(), (int) eaVectorChar.size(), 'd'); // Intentionally use eaVectorBool for the array.
 			TestFillNEa (stopwatch2,  eaVectorChar.data(), (int) eaVectorChar.size(), 'd');
-			TestFillNStd(stopwatch1,  eaVectorChar.data(), (int) eaVectorChar.size(), 'd'); // Intentionally do this a second time, as we are finding 
+			TestFillNStd(stopwatch1,  eaVectorChar.data(), (int) eaVectorChar.size(), 'd'); // Intentionally do this a second time, as we are finding
 			TestFillNEa (stopwatch2,  eaVectorChar.data(), (int) eaVectorChar.size(), 'd'); // the results are inconsistent otherwise.
 
 			if(i == 1)
@@ -874,7 +874,7 @@ void BenchmarkAlgorithm5(EASTLTest_Rand& /*rng*/, EA::StdC::Stopwatch& stopwatch
 
 			TestFillNStd(stopwatch1,  eaVectorBool.data(), (int) eaVectorBool.size(), false); // Intentionally use eaVectorBool for the array.
 			TestFillNEa (stopwatch2,  eaVectorBool.data(), (int) eaVectorBool.size(), false);
-			TestFillNStd(stopwatch1,  eaVectorBool.data(), (int) eaVectorBool.size(), false); // Intentionally do this a second time, as we are finding 
+			TestFillNStd(stopwatch1,  eaVectorBool.data(), (int) eaVectorBool.size(), false); // Intentionally do this a second time, as we are finding
 			TestFillNEa (stopwatch2,  eaVectorBool.data(), (int) eaVectorBool.size(), false); // the results are inconsistent otherwise.
 
 			if(i == 1)
@@ -1026,7 +1026,7 @@ void BenchmarkAlgorithm7(EASTLTest_Rand& /*rng*/, EA::StdC::Stopwatch& stopwatch
 
 		eastl::vector<TestObject> eaVectorTOSmall(10);
 		eastl::generate(eaVectorTOSmall.begin(), eaVectorTOSmall.end(), GenerateIncrementalIntegers<TestObject>());
-		
+
 
 		for(int i = 0; i < 2; i++)
 		{

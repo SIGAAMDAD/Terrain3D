@@ -13,6 +13,7 @@
 #include "lighting/terrain_3d_lighting_policy.h"
 #include "lighting/terrain_3d_lightmap_streamer.h"
 #include "memory/terrain_3d_linear_arena.h"
+#include "memory/terrain_3d_memory.h"
 #include "memory/terrain_3d_zone_allocator.h"
 #include "rendering/terrain_3d_compute.h"
 #include "rendering/rd/terrain_3d_rd_context.h"
@@ -223,6 +224,12 @@ void Terrain3D::setDataDirectory( const String dir ) {
 		}
 		return;
 	}
+
+	// Replacing the repository can enumerate files, stage EASTL storage, load
+	// Resources, tear down consumers, and rebuild fixed runtime state. Mark the
+	// whole owner transition as a cold-rebuild phase for telemetry; backing-growth
+	// legality remains with the repository and subsystem owners.
+	Terrain3DColdPhaseScope cold_scope;
 	const String old_dir = m_dataDirectory;
 	const String old_lightmap_default = t3dDefaultRegionLightmapOutputDirectory( old_dir );
 	const bool bFollowLightmapDefault =
@@ -405,80 +412,6 @@ void Terrain3D::setPlugin( Object *const pPlugin ) {
 	}
 	SET_IF_DIFF( m_pEditorPlugin, pPlugin );
 	LOG( INFO, "Setting Editor Plugin: ", m_pEditorPlugin );
-}
-
-void Terrain3D::setRegionSize( const t3dRegionSize_t size ) {
-	if ( size != SIZE_128 ) {
-		LOG( ERROR, "This Terrain3D fork is specialized for 128-sample regions and rejects all other sizes" );
-		return;
-	}
-	if ( !t3dIsValidRegionSize( size ) ) {
-		LOG( ERROR, "Invalid region size: ", size, ". Must be power of 2, 64-2048" );
-		return;
-	}
-	if ( ( int )( size ) % m_nInstancerCellSize != 0 ) {
-		LOG( ERROR,
-		        "Region size ",
-		        ( int )( size ),
-		        " is incompatible with instancer cell size ",
-		        m_nInstancerCellSize,
-		        ". Change instancer_cell_size first." );
-		return;
-	}
-	const t3dRegionSize_t previous_size = m_nRegionSize;
-	const bool bOwnerChanged = m_nRegionSize != size;
-	if ( bOwnerChanged ) {
-		refreshPerformanceProfileConformity();
-	}
-	if ( bOwnerChanged && m_pNodeStreamer ) {
-		m_pNodeStreamer->suspend();
-	}
-	m_nRegionSize = size;
-	bool bDataChanged = false;
-	const bool bDataOwnerReady = m_pData && m_pData->isInitializedFor( this );
-	if ( bDataOwnerReady && !m_pData->matchesRegionLayoutInternal( ( int )( m_nRegionSize ) ) ) {
-		if ( !m_pData->setRegionSizeInternal( ( int )( m_nRegionSize ) ) ) {
-			m_nRegionSize = previous_size;
-			LOG( ERROR, "Region size change rejected because active terrain storage could not be reconfigured" );
-			return;
-		}
-		m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(),
-		        m_nEffectiveGpuRegionCacheBudgetMb,
-		        m_nGpuRegionUploadBudgetLayers,
-		        m_nGpuRegionUploadBudgetMb,
-		        m_nGpuRegionSparePages,
-		        m_nGpuRegionRetireFrames );
-		m_pData->configureCpuRegionCache( effectiveCpuRegionCacheEnabled(),
-		        m_nEffectiveCpuRegionCacheBudgetMb,
-		        m_nCpuRegionLoadBudgetLayers,
-		        m_nCpuRegionLoadBudgetMb );
-		m_pData->configureInstanceRegionCache( effectiveInstanceRegionCacheEnabled(),
-		        m_nEffectiveInstanceRegionCacheBudgetMb,
-		        m_nInstanceRegionLoadBudgetPages,
-		        m_nInstanceRegionLoadBudgetMb );
-		m_pData->configureResidentPool( 64 );
-		bDataChanged = true;
-	} else if ( m_pData && !bDataOwnerReady && bOwnerChanged ) {
-		LOG( DEBUG, "Deferring Terrain3DData region-size reconciliation until data initialization: ", ( int )( m_nRegionSize ) );
-	}
-	// Equality of the owner property does not prove dependent state is already
-	// synchronized. Return only after Terrain3DData has been reconciled.
-	if ( !bOwnerChanged && !bDataChanged ) {
-		return;
-	}
-	LOG( INFO, "Setting region size: ", m_nRegionSize );
-	// Runtime migration updates dependent instance layouts only after the data
-	// object has been attached to this terrain. Pre-tree property deserialization
-	// is intentionally reconciled by Terrain3DData::initialize().
-	if ( m_bInitialized && m_pInstancer && !m_pInstancer->refreshResidentRegionLayouts() ) {
-		LOG( ERROR, "Region size changed, but resident instance pages could not be repartitioned" );
-	}
-	if ( m_material.is_valid() && m_material->isInitialized() ) {
-		m_material->update();
-	}
-	if ( m_bInitialized ) {
-		updateDisplacementBuffer();
-	}
 }
 
 void Terrain3D::setSave16Bit( const bool bEnabled ) {

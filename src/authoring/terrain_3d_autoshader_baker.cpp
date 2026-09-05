@@ -418,7 +418,7 @@ static bool t3dAutoshaderBakerBuildMetrics( Terrain3DData *pData,
         const t3dMaskSource_t &rWaterMask,
         Terrain3DLinearArena &rArena,
         t3dRegionMetrics_t &rMetrics ) {
-	const int size = pData->getRegionSizeInternal();
+	const int size = s_nRegionSize;
 	const size_t count = ( size_t )( size ) * ( size_t )( size );
 	const bool bNeedsNeighborhood = rNeeds.m_bSlope || rNeeds.m_bCurvature || rNeeds.m_bConcavity || rNeeds.m_bAspect;
 	const int halo_pitch = size + 2;
@@ -694,7 +694,7 @@ static uint64_t t3dAutoshaderBakerRegionSignature( Terrain3DRegion *pRegion, con
 		result = t3dAutoshaderBakerFnv1aBytes( bytes.ptr(), ( size_t )( bytes.size() ), result );
 	}
 
-	const int region_size = pRegion->getRegionSize();
+	const int region_size = s_nRegionSize;
 	const size_t pixel_count = ( size_t )( region_size ) * ( size_t )( region_size );
 	const Ref<Image> pControlImage = pRegion->getControlMap();
 	PackedByteArray control_bytes;
@@ -910,7 +910,7 @@ Dictionary Terrain3DAutoShaderBaker::bakeRegions(
 	int64_t skipped_manual_count = 0;
 	int processed_region_count = 0;
 
-	const int size = data->getRegionSizeInternal();
+	const int size = s_nRegionSize;
 	const size_t count = ( size_t )( size ) * ( size_t )( size );
 	eastl::vector<t3dRegionWork_t> work( ( size_t )( locations.size() ) );
 	for ( int location_index = 0; location_index < locations.size(); ++location_index ) {
@@ -1099,7 +1099,7 @@ Dictionary Terrain3DAutoShaderBaker::clearBakedRegions(
 		if ( pRegion->getControlMap().is_null() ) {
 			continue;
 		}
-		const int size = pRegion->getRegionSize();
+		const int size = s_nRegionSize;
 		const size_t count = ( size_t )( size ) * ( size_t )( size );
 		PackedByteArray bytes = pRegion->getControlMap()->get_data();
 		if ( pRegion->getControlMap()->get_format() != Image::FORMAT_RF || ( size_t )( bytes.size() ) < count * sizeof( uint32_t ) ) {
@@ -1142,7 +1142,7 @@ Dictionary Terrain3DAutoShaderBaker::clearBakedRegions(
 		if ( !pRegion || pRegion->isDeleted() ) {
 			continue;
 		}
-		const int size = pRegion->getRegionSize();
+		const int size = s_nRegionSize;
 		pRegion->setControlMap( Image::create_from_data( size, size, false, Image::FORMAT_RF, item.m_outputBytes ) );
 		changed_locations.push_back( item.m_location );
 		changed_pixels += item.m_nChangedPixels;

@@ -27,6 +27,9 @@ class Terrain3DRenderCoordinator {
 
 private:
 	Terrain3D *m_pTerrain = NULL;
+	Terrain3DMemoryZone *m_pRuntimeAllocatorZone = NULL;
+	t3dAllocatorOverflowPolicy_t m_eRuntimeAllocatorOverflowPolicy = TERRAIN3D_ALLOCATOR_OVERFLOW_STRICT;
+	bool m_bRuntimeAllocatorBound = false;
 	Ref<Terrain3DRdCompositorEffect> m_effect;
 	Ref<Compositor> m_attachedCompositor;
 	uint64_t m_nAttachedCameraId = 0u;
@@ -100,8 +103,11 @@ private:
 	uint64_t m_nPatchGeneration = 0u;
 	t3dRdPatch_t m_previousPatches[s_nMaxClipmapLevels]{};
 	uint32_t m_nPreviousPatchCount = 0u;
-	uint64_t m_nLastMaterialFingerprint = 0u;
 	uint64_t m_nMaterialGeneration = 0u;
+	uint64_t m_nMaterialSourceGeneration = 0u;
+	t3dRdMaterialLayer_t m_cachedMaterialLayers[s_nRdMaterialLayerCount]{};
+	t3dRdMaterialConfig_t m_cachedMaterialConfig{};
+	uint32_t m_nCachedMaterialLayerCount = 1u;
 	uint64_t m_nTerrainTextureGeneration = 0u;
 	uint64_t m_nMaterialTextureGeneration = 0u;
 	t3dRdTerrainBindings_t m_lastPublishedResources;
@@ -109,6 +115,11 @@ private:
 	bool m_bRegionCacheInitialized = false;
 	bool m_bPatchStateInitialized = false;
 	bool m_bMaterialStateInitialized = false;
+	uint64_t m_nRegionLightingSourceGeneration = 0u;
+	uint64_t m_nRegionLightingScanCount = 0u;
+	uint64_t m_nMaterialStateBuildCount = 0u;
+	uint64_t m_nMeshSourceBuildCount = 0u;
+	uint64_t m_nOceanStaticStateBuildCount = 0u;
 	bool m_bPublishedResourcesInitialized = false;
 
 	Terrain3DGeneratedTexture m_worldNoiseCache;
@@ -147,11 +158,20 @@ private:
 	bool m_bCachedHlodInstanceSceneValid = false;
 	bool m_bCachedInstanceSceneValid = false;
 	eastl::vector<t3dRdExternalMeshSource_t, Terrain3DEastlAllocator> m_cachedHlodMeshSources;
-	uint64_t m_nInstanceMeshFingerprint = 0u;
+	uint64_t m_nInstanceMeshSourceGeneration = 0u;
 	uint64_t m_nInstanceMeshGeneration = 0u;
 	uint64_t m_nInstanceSceneGeneration = 0u;
 	uint64_t m_nHlodSceneGeneration = 0u;
 	uint64_t m_nCombinedInstanceSceneGeneration = 0u;
+	t3dRdOceanState_t m_cachedOceanStaticState{};
+	uint64_t m_nOceanStaticSourceGeneration = 0u;
+	bool m_bOceanStaticStateInitialized = false;
+	bool m_bColdCapacityServiceActive = false;
+	bool m_bInstancePublicationCapacityPending = true;
+	bool m_bInstanceMeshBankCapacityPending = true;
+	uint64_t m_nColdCapacityRebuildCount = 0u;
+	uint64_t m_nCapacityMissCount = 0u;
+	uint64_t m_nOwnerGrowthDeniedCount = 0u;
 	t3dAtomicBool_t m_bRendererInitialized{ false };
 	t3dAtomicBool_t m_bRenderEnabled{ false };
 	t3dAtomicBool_t m_bRendererFailed{ false };
@@ -219,8 +239,11 @@ private:
 	bool ensureMacroNoiseTexture( const Terrain3DMaterial *pMaterial );
 	bool ensureEditorBrushTexture( const Terrain3DMaterial *pMaterial );
 	uint32_t selectWritablePublicationBank( uint32_t nReaderBank, uint32_t nPendingBank ) const;
+	bool hasInstancePublicationCapacity( void ) const;
+	bool hasInstanceMeshBankCapacity( void ) const;
 	bool ensureInstancePublicationStorage( void );
 	bool ensureInstanceMeshBankStorage( void );
+	void recordCapacityMiss( const char *pszOwner, size_t nRequired, size_t nCapacity, bool bMeshBank );
 	void publishSnapshot( void );
 	const t3dRdFrameSnapshotSlot_t *acquireSnapshotOnRenderThread( void );
 	void resetSnapshotPublication( void );
@@ -236,6 +259,7 @@ private:
 	void resetForwardLifecycle( void );
 
 public:
+	bool bindRuntimeAllocator( Terrain3DMemoryZone *pZone, t3dAllocatorOverflowPolicy_t ePolicy );
 	void serviceColdCapacity( void );
 	Terrain3DRenderCoordinator( void ) = default;
 	~Terrain3DRenderCoordinator( void );

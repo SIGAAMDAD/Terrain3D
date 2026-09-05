@@ -96,7 +96,9 @@ private:
 	godot::RID m_hUniformReset;
 	godot::RID m_hUniformPredict[T3D_RW_TIER_COUNT];
 	godot::RID m_hUniformCompact;
+	godot::PackedByteArray m_ResetPush;
 	godot::PackedByteArray m_TierPush[T3D_RW_TIER_COUNT];
+	godot::PackedByteArray m_CompactPush;
 	godot::PackedByteArray m_PageEntryUpload;
 	godot::PackedByteArray m_PhysicalUpload[T3D_RW_VT_CHANNEL_COUNT];
 	godot::Callable m_ReadbackCallback[T3D_RW_GPU_FRAME_RING_COUNT];

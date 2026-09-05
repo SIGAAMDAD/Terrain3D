@@ -85,9 +85,6 @@ private:
 	uint32_t m_nStamp = 1;
 	uint32_t m_nOperation = 1u;
 	uint64_t m_nSamplingGeneration = 0u;
-	int m_nRegionSize = 0;
-	int m_nRegionShift = -1;
-	int64_t m_nRegionMask = 0;
 	real_t m_fVertexSpacing = 0.0f;
 	double m_fInverseVertexSpacing = 0.0;
 
@@ -102,7 +99,6 @@ private:
 	Vector3 sampleSlopeNormalUnchecked( const Vector3 &rGlobalPosition );
 	void resetCache( uint64_t nGeneration );
 	void resetView( t3dRegionView_t *pView );
-	static int64_t floorDiv( int64_t nValue, int64_t nDivisor );
 	void resolveAxis( int64_t nGrid, int64_t &nRegion, int &nLocal ) const;
 	static float readHeight( const uint8_t *pBytes, int iIndex );
 	static uint32_t readUint( const uint8_t *pBytes, int iIndex );

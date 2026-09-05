@@ -20,10 +20,7 @@ class Terrain3DHLODManifest : public Resource {
 	GDCLASS( Terrain3DHLODManifest, Resource );
 	CLASS_NAME();
 
-	int m_nFormat = 1;
-	int m_nRegionMapSize = 64;
-	int m_nRegionSize = 256;
-	real_t m_fVertexSpacing = 1.0f;
+	int m_nFormat = 3;
 	int m_nMaxLevel = 6;
 	int64_t m_nBuildSignature = 0;
 	int64_t m_nBuiltUnix = 0;
@@ -45,39 +42,6 @@ public:
 	}
 	EA_FORCE_INLINE int getFormat( void ) const {
 		return m_nFormat;
-	}
-	EA_FORCE_INLINE void setRegionMapSize( int nValue ) {
-		const int value = MAX( nValue, 1 );
-		if ( m_nRegionMapSize == value ) {
-			return;
-		}
-		m_nRegionMapSize = value;
-		emit_changed();
-	}
-	EA_FORCE_INLINE int getRegionMapSize( void ) const {
-		return m_nRegionMapSize;
-	}
-	EA_FORCE_INLINE void setRegionSize( int nValue ) {
-		const int value = MAX( nValue, 1 );
-		if ( m_nRegionSize == value ) {
-			return;
-		}
-		m_nRegionSize = value;
-		emit_changed();
-	}
-	EA_FORCE_INLINE int getRegionSize( void ) const {
-		return m_nRegionSize;
-	}
-	EA_FORCE_INLINE void setVertexSpacing( real_t fValue ) {
-		const real_t value = MAX( fValue, 0.001f );
-		if ( m_fVertexSpacing == value ) {
-			return;
-		}
-		m_fVertexSpacing = value;
-		emit_changed();
-	}
-	EA_FORCE_INLINE real_t getVertexSpacing( void ) const {
-		return m_fVertexSpacing;
 	}
 	EA_FORCE_INLINE void setMaxLevel( int nValue ) {
 		const int value = CLAMP( nValue, 1, 6 );

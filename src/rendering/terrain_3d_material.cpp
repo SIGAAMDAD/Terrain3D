@@ -2249,6 +2249,7 @@ void Terrain3DMaterial::setRuntimeMaterialParam( const StringName &strName, cons
 		return;
 	}
 	m_runtimeMaterialParams[strName] = rValue;
+	m_nRdPublicationGeneration = m_nRdPublicationGeneration == UINT64_MAX ? 1u : m_nRdPublicationGeneration + 1u;
 }
 
 void Terrain3DMaterial::updateShader( void ) {
@@ -2527,7 +2528,7 @@ void Terrain3DMaterial::invalidateRegionPageTables( void ) {
 }
 
 bool Terrain3DMaterial::updateRegionMapTexture( const PackedInt32Array &rRegionMap, const int nRegionMapSize ) {
-	if ( nRegionMapSize <= 0 || nRegionMapSize > s_nActiveMaxRegionMapSize || rRegionMap.size() != nRegionMapSize * nRegionMapSize ) {
+	if ( nRegionMapSize <= 0 || nRegionMapSize > s_nRegionMapSize || rRegionMap.size() != nRegionMapSize * nRegionMapSize ) {
 		return false;
 	}
 	uint64_t hash = 1469598103934665603ULL;
@@ -2575,7 +2576,7 @@ bool Terrain3DMaterial::updateRegionMapTexture( const PackedInt32Array &rRegionM
 }
 
 bool Terrain3DMaterial::updateLogicalRegionMapTexture( const PackedInt32Array &rRegionMap, const int nRegionMapSize ) {
-	if ( nRegionMapSize <= 0 || nRegionMapSize > s_nActiveMaxRegionMapSize || rRegionMap.size() != nRegionMapSize * nRegionMapSize ) {
+	if ( nRegionMapSize <= 0 || nRegionMapSize > s_nRegionMapSize || rRegionMap.size() != nRegionMapSize * nRegionMapSize ) {
 		return false;
 	}
 	uint64_t hash = 1469598103934665603ULL;
@@ -2636,7 +2637,7 @@ t3dPageTableBuildResult_t Terrain3DMaterial::prepareRegionPageTables( void ) {
 	const PackedInt32Array region_map = pData->getRegionMap();
 	const int region_map_size = pData->getRegionMapSizeInternal();
 	const PackedInt32Array logical_region_map = pData->getLogicalRegionMap();
-	if ( region_map_size <= 0 || region_map_size > s_nActiveMaxRegionMapSize || region_map.size() != region_map_size * region_map_size
+	if ( region_map_size <= 0 || region_map_size > s_nRegionMapSize || region_map.size() != region_map_size * region_map_size
 	        || logical_region_map.size() != region_map_size * region_map_size ) {
 		return PAGE_TABLE_INVALID_DIMENSIONS;
 	}
@@ -2782,6 +2783,7 @@ void Terrain3DMaterial::destroy( void ) {
 }
 
 void Terrain3DMaterial::update( const uint32_t nFlags ) {
+	m_nRdPublicationGeneration = m_nRdPublicationGeneration == UINT64_MAX ? 1u : m_nRdPublicationGeneration + 1u;
 	bool bRebuildShader = ( nFlags & FULL_REBUILD ) != 0u;
 	if ( !bRebuildShader && ( nFlags & REGION_ARRAYS ) != 0u && m_bHasLastBoundVariantState ) {
 		const t3dShaderVariantState_t current_state = captureVariantState();
@@ -2957,6 +2959,10 @@ void Terrain3DMaterial::tierQualityChanged( const t3dShaderTier_t tier, const bo
 		// material update transaction so samplers and generated uniforms remain coherent.
 		update( FULL_REBUILD );
 	} else {
+		// P06 caches the direct-RD material image by this generation. Dynamic
+		// tier values are part of that image even though they do not require a
+		// shader rebuild, so they must invalidate the cached publication too.
+		m_nRdPublicationGeneration = m_nRdPublicationGeneration == UINT64_MAX ? 1u : m_nRdPublicationGeneration + 1u;
 		updateTierUniforms( tier );
 	}
 	emit_changed();
@@ -2970,9 +2976,9 @@ void Terrain3DMaterial::refreshGpuRegionChannelPolicy( void ) {
 	if ( !pData ) {
 		return;
 	}
-	const int effective_budget_mb = m_pTerrain->getEffectiveGpuRegionCacheBudgetMb();
-	pData->configureGpuRegionCache( effective_budget_mb > 0,
-	        effective_budget_mb,
+	const uint64_t effective_budget_bytes = m_pTerrain->getEffectiveGpuRegionCacheBudgetBytes();
+	pData->configureGpuRegionCache( effective_budget_bytes > 0u,
+	        effective_budget_bytes,
 	        m_pTerrain->getGpuRegionUploadBudgetLayers(),
 	        m_pTerrain->getGpuRegionUploadBudgetMb(),
 	        m_pTerrain->getGpuRegionSparePages(),

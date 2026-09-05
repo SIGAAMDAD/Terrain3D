@@ -494,16 +494,16 @@ void Terrain3DLightmapStreamer::markDesired( const Vector2i &rCenter ) {
 	Terrain3DData *const pData = m_pTerrain->getData();
 	Terrain3DNodeStreamer *const pNodeStreamer = m_pTerrain->getNodeStreamer();
 	const bool authoring_full_residency = m_pTerrain->isEditorAuthoringMode();
-	const Vector2i *pLocations = pData->getRegionSlotsInternal();
+	const t3dRegionCoord_t *pLocations = pData->getRegionSlotsInternal();
 	Terrain3DRegion *const *ppRegions = pData->getRegionPtrMapInternal();
 	const int slot_count = pData->getRegionSlotCountInternal();
 	int remaining_loads = authoring_full_residency ? MAX( 1, m_nLoadBudget ) : m_nLoadBudget;
 
 	eastl::fixed_vector<t3dLightmapCandidate_t, s_nLightmapActiveInstanceLimit, false> candidates;
 	int unique_count = 0;
-	eastl::bitset<s_nMaxRegionSlots> seen_clusters;
+	eastl::bitset<s_nRegionSlots> seen_clusters;
 	for ( int slot = 0; slot < slot_count; ++slot ) {
-		const Vector2i location = pLocations[slot];
+		const Vector2i location = t3dUnpackRegionCoord( pLocations[slot] );
 		if ( location == s_v2iMax ) {
 			continue;
 		}

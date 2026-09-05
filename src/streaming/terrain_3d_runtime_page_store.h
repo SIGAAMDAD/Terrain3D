@@ -94,7 +94,6 @@ typedef struct t3dRuntimePageProbe_s {
 	t3dRuntimePageProbeState_t m_state = RUNTIME_PAGE_PROBE_MISSING;
 	uint32_t m_nVersion = 0u;
 	uint32_t m_nHeaderBytes = 0u;
-	uint32_t m_nRegionSize = 0u;
 	uint32_t m_nTotalBytes = 0u;
 	uint32_t m_nChannelCount = 0u;
 	uint64_t m_nFileBytes = 0u;
@@ -115,6 +114,13 @@ typedef struct t3dRuntimePageStats_s {
 	uint64_t m_nPrepareMaterializeUsecLast = 0u;
 	uint64_t m_nPrepareWorkerUsecLast = 0u;
 	uint64_t m_nPrepareReadyWaitUsecLast = 0u;
+	uint64_t m_nPreparedByteBudget = 0u;
+	uint64_t m_nPreparedReservedBytes = 0u;
+	uint64_t m_nPayloadBytesPerSlot = 0u;
+	uint64_t m_nWorkerScratchReservedBytes = 0u;
+	int m_nConfiguredPrepareWorkers = 0;
+	int m_nEffectivePrepareWorkers = 0;
+	bool m_bCapacityFailureLatched = false;
 } t3dRuntimePageStats_t;
 
 typedef struct t3dRuntimePageServiceState_s {
@@ -137,7 +143,6 @@ typedef struct t3dRuntimePageMeta_s {
 	int16_t m_iPayloadSlot = -1;
 	uint32_t m_nExpectedChannelFlags = 0u;
 	uint64_t m_nExpectedSourceSignature = 0u;
-	int m_nRegionSize = 0;
 	int m_nColorDivisor = 1;
 	int m_nDerivedDivisor = 1;
 	int m_nMiddleHeightDivisor = 1;
@@ -187,7 +192,7 @@ typedef struct t3dRuntimePagePayload_s {
 	PackedByteArray m_instanceMetadata;
 	PackedByteArray m_lightingReceivers;
 	PackedByteArray m_multimeshFastStart;
-	Terrain3DInstanceStore m_preparedInstanceStore;
+	Terrain3DInstanceStore m_preparedInstanceStore{ TERRAIN3D_INSTANCE_STORE_RUNTIME_PREPARED };
 } t3dRuntimePagePayload_t;
 
 typedef struct t3dRuntimePageSource_s {
@@ -209,6 +214,14 @@ public:
 	Terrain3DRuntimePageStore( const Terrain3DRuntimePageStore & ) = delete;
 	Terrain3DRuntimePageStore &operator=( const Terrain3DRuntimePageStore & ) = delete;
 
+	bool bindRuntimeAllocator( Terrain3DMemoryZone *pZone, t3dAllocatorOverflowPolicy_t ePolicy = TERRAIN3D_ALLOCATOR_OVERFLOW_STRICT );
+	void setPreparedByteBudget( uint64_t nBytes );
+	EA_FORCE_INLINE uint64_t getPreparedByteBudget( void ) const {
+		return m_nPreparedByteBudget;
+	}
+	EA_FORCE_INLINE uint64_t getPreparedReservedBytes( void ) const {
+		return m_nPreparedReservedBytes;
+	}
 	void reset( void );
 	void resetFrameStats( void );
 	void poll( bool bWait );
@@ -296,15 +309,17 @@ public:
 
 private:
 	Terrain3DRegionRepository *m_pRepository = NULL;
+	Terrain3DMemoryZone *m_pRuntimeAllocatorZone = NULL;
+	t3dAllocatorOverflowPolicy_t m_eRuntimeAllocatorOverflowPolicy = TERRAIN3D_ALLOCATOR_OVERFLOW_STRICT;
 	const Terrain3DRegionPersistence *m_pPersistence = NULL;
 	eastl::array<t3dRuntimePageMeta_t, s_nGpuCacheMaxLayers> m_preparedPages{};
 	eastl::array<t3dRuntimePageMeta_t, s_nGpuCacheMaxLayers> m_workPages{};
 	eastl::array<t3dRuntimePagePayload_t, s_nGpuCacheMaxLayers> m_payloadSlots{};
 	eastl::array<int16_t, s_nGpuCacheMaxLayers> m_freePayloadSlots{};
-	eastl::array<t3dRuntimePageSource_t, s_nMaxRegionSlots> m_pageSources{};
+	eastl::array<t3dRuntimePageSource_t, s_nRegionSlots> m_pageSources{};
 	eastl::array<uint32_t, s_nRuntimePageChannelCount + 1u> m_runtimeChannelCapacities{};
-	eastl::array<int16_t, s_nMaxRegionSlots> m_preparedByRegion{};
-	eastl::array<int16_t, s_nMaxRegionSlots> m_workByRegion{};
+	eastl::array<int16_t, s_nRegionSlots> m_preparedByRegion{};
+	eastl::array<int16_t, s_nRegionSlots> m_workByRegion{};
 	int m_nPreparedPageCount = 0;
 	int m_nPrepareWorkPageCount = 0;
 	int m_nFreePayloadCount = 0;
@@ -320,10 +335,10 @@ private:
 	uint64_t m_nPrepareWorkerUsecLast = 0u;
 	uint64_t m_nPrepareReadyWaitUsecLast = 0u;
 	int m_nPrepareJobWorkers = 0;
-	eastl::array<uint16_t, s_nMaxRegionSlots> m_queuedConsumers{};
-	eastl::array<uint8_t, s_nMaxRegionSlots> m_queuedPriorities{};
-	eastl::array<int16_t, s_nMaxRegionSlots> m_queuedNext{};
-	eastl::array<int16_t, s_nMaxRegionSlots> m_queuedPrev{};
+	eastl::array<uint16_t, s_nRegionSlots> m_queuedConsumers{};
+	eastl::array<uint8_t, s_nRegionSlots> m_queuedPriorities{};
+	eastl::array<int16_t, s_nRegionSlots> m_queuedNext{};
+	eastl::array<int16_t, s_nRegionSlots> m_queuedPrev{};
 	eastl::array<int16_t, 256> m_priorityHeads{};
 	eastl::array<int16_t, 256> m_priorityTails{};
 	int m_nQueuedCount = 0;
@@ -333,8 +348,18 @@ private:
 	t3dRuntimePageNumericConfig_t m_sourceNumericConfig;
 	bool m_bSourceEditorAuthoring = false;
 	bool m_bRuntimeSourcesDirty = true;
+	int m_nEffectivePrepareThreads = 0;
+	bool m_bCapacityFailureLatched = false;
+	uint64_t m_nCapacityFailureTopologyGeneration = 0u;
+	uint64_t m_nCapacityFailurePreparedByteBudget = 0u;
+	t3dRuntimePageNumericConfig_t m_capacityFailureNumericConfig;
+	String m_capacityFailureDataDirectory;
+	bool m_bCapacityFailureEditorAuthoring = false;
 	uint32_t m_nWorkerScratchBytes = s_nRuntimePageHeaderBytes;
-
+	uint64_t m_nPreparedByteBudget = 0u;
+	uint64_t m_nPreparedReservedBytes = 0u;
+	uint64_t m_nPayloadBytesPerSlot = 0u;
+	uint64_t m_nWorkerScratchReservedBytes = 0u;
 
 	eastl::array<t3dThread_t, s_nRuntimeWorkerLimit> m_workers;
 	eastl::array<t3dRuntimePageWorkerScratch_t, s_nRuntimeWorkerLimit> m_workerScratch{};

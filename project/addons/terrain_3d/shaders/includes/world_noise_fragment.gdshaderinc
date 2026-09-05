@@ -17,8 +17,8 @@
 	if (world_noise_fragment_normals) {
 		float noise_region_weight = get_noise_region_blend(uv2);
 		float noise_height = get_noise_height_with_region_weight(uv2, noise_region_weight);
-		u += noise_height - get_noise_height_with_region_weight(uv2 + vec2(_region_texel_size, 0.0), noise_region_weight);
-		v += noise_height - get_noise_height_with_region_weight(uv2 + vec2(0.0, _region_texel_size), noise_region_weight);
+		u += noise_height - get_noise_height_with_region_weight(uv2 + vec2(T3D_REGION_INV_SIZE, 0.0), noise_region_weight);
+		v += noise_height - get_noise_height_with_region_weight(uv2 + vec2(0.0, T3D_REGION_INV_SIZE), noise_region_weight);
 	} else {
 		u += world_noise_ddxy.x;
 		v += world_noise_ddxy.y;
@@ -26,8 +26,8 @@
 #elif T3D_WORLD_NOISE_SHADER_MODE == 2 || T3D_WORLD_NOISE_SHADER_MODE == 4
 	float noise_region_weight = get_noise_region_blend(uv2);
 	float noise_height = get_noise_height_with_region_weight(uv2, noise_region_weight);
-	u += noise_height - get_noise_height_with_region_weight(uv2 + vec2(_region_texel_size, 0.0), noise_region_weight);
-	v += noise_height - get_noise_height_with_region_weight(uv2 + vec2(0.0, _region_texel_size), noise_region_weight);
+	u += noise_height - get_noise_height_with_region_weight(uv2 + vec2(T3D_REGION_INV_SIZE, 0.0), noise_region_weight);
+	v += noise_height - get_noise_height_with_region_weight(uv2 + vec2(0.0, T3D_REGION_INV_SIZE), noise_region_weight);
 #else
 	u += world_noise_ddxy.x;
 	v += world_noise_ddxy.y;

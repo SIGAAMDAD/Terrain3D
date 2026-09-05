@@ -91,8 +91,8 @@ float get_noise_height_with_region_weight(const vec2 uv, float weight) {
 	}
 	// Preserve the public world-space scale and offset behavior. Cached mode
 	// samples a seamless precomputed fractal and uses mip levels as octave LODs.
-	vec2 noise_p = (uv + world_noise_offset.xz * 1024. / _region_size) *
-		world_noise_scale * _region_size / 1024. * .1;
+	vec2 noise_p = (uv + world_noise_offset.xz * 8.0) *
+		world_noise_scale * 0.0125;
 #if T3D_WORLD_NOISE_SHADER_MODE == 0
 	float noise_value = world_noise_cache_enabled ? get_cached_world_noise(noise_p) : world_noise(noise_p);
 #elif T3D_WORLD_NOISE_SHADER_MODE == 1 || T3D_WORLD_NOISE_SHADER_MODE == 2

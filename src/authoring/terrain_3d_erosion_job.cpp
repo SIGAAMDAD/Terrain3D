@@ -489,8 +489,8 @@ typedef struct t3dErosionKernels_s {
 			if ( isnan( source_height ) ) {
 				continue;
 			}
-			const int32_t x = ( int32_t )( source_index % ( size_t )( job->m_nSourceRegionSize ) );
-			const int32_t y = ( int32_t )( source_index / ( size_t )( job->m_nSourceRegionSize ) );
+			const int32_t x = ( int32_t )( source_index % ( size_t )( s_nRegionSize ) );
+			const int32_t y = ( int32_t )( source_index / ( size_t )( s_nRegionSize ) );
 
 			if ( pContext->m_pHeightBytes ) {
 				const float final_height = job->sampleOutput( job->m_height, pContext->m_nRegionId, ( float )( x ), ( float )( y ) );
@@ -1534,7 +1534,7 @@ Terrain3DErosionJob::Terrain3DErosionJob( void ) {
 	m_config.m_curveSamples.set_allocator( bootstrap_allocator );
 	m_regions.set_allocator( bootstrap_allocator );
 	m_szRegionNeighbors.set_allocator( bootstrap_allocator );
-	memset( m_szRegionLookup, ( int32_t )-1, sizeof( *m_szRegionLookup ) * 1024 );
+	memset( m_szRegionLookup, 0xff, sizeof( m_szRegionLookup ) );
 }
 
 void Terrain3DErosionJob::setErrorMessage( const String &rMessage ) {
@@ -1753,7 +1753,7 @@ float Terrain3DErosionJob::sampleCurve( const t3dCurveId_t curve, const int32_t 
 }
 
 uint64_t Terrain3DErosionJob::estimateMemoryBytes( const int32_t nRegionCount, const int32_t nScale ) const {
-	if ( m_nSourceRegionSize <= 0 || nScale <= 0 || nRegionCount <= 0 ) {
+	if ( nScale <= 0 || nRegionCount <= 0 ) {
 		return eastl::numeric_limits<uint64_t>::max();
 	}
 
@@ -1825,9 +1825,9 @@ uint64_t Terrain3DErosionJob::estimateMemoryBytes( const int32_t nRegionCount, c
 	}
 	t3dErosionJobAddMapBytes( bytes_per_cell, m_config.m_bExposureAgeEnabled, 1u, sizeof( float ) );
 
-	const uint64_t simulation_size = ( uint64_t )( m_nSourceRegionSize / nScale );
+	const uint64_t simulation_size = ( uint64_t )( s_nRegionSize / nScale );
 	const uint64_t simulation_cells = ( uint64_t )( nRegionCount )*simulation_size * simulation_size;
-	const uint64_t source_cells = ( uint64_t )( nRegionCount ) * ( uint64_t )( m_nSourceRegionSize ) * ( uint64_t )( m_nSourceRegionSize );
+	const uint64_t source_cells = ( uint64_t )( nRegionCount ) * ( uint64_t )( s_nRegionSize ) * ( uint64_t )( s_nRegionSize );
 	const uint64_t source_snapshot_bytes = source_cells * sizeof( float ) + m_nSourceControlSnapshotBytes;
 	const uint64_t working_bytes = simulation_cells * bytes_per_cell;
 	return source_snapshot_bytes + m_nInputSnapshotBytes + working_bytes + working_bytes / 5ULL + 1024ULL * 1024ULL;
@@ -2333,7 +2333,7 @@ Ref<Image> Terrain3DErosionJob::makeHeightImage( const FloatBuffer &rSource, con
 	if ( rSource.empty() || nRegionId < 0 || nRegionId >= ( int32_t )( m_regions.size() ) ) {
 		return Ref<Image>();
 	}
-	const int32_t size = bFullResolution ? m_nSourceRegionSize : m_nSimulationRegionSize;
+	const int32_t size = bFullResolution ? s_nRegionSize : m_nSimulationRegionSize;
 	const size_t pixel_count = ( size_t )( size ) * ( size_t )( size );
 	PackedByteArray image_data;
 	image_data.resize( ( int64_t )( pixel_count * sizeof( float ) ) );
@@ -2716,9 +2716,9 @@ bool Terrain3DErosionJob::captureSourceRegions( Terrain3DData *const pData ) {
 	const TypedArray<Vector2i> locations = pData->getRegionLocations();
 	m_regions.clear();
 	m_regions.resize( ( size_t )( locations.size() ) );
-	memset( m_szRegionLookup, ( int32_t )( -1 ), sizeof( *m_szRegionLookup ) * 1024 );
+	memset( m_szRegionLookup, 0xff, sizeof( m_szRegionLookup ) );
 
-	const size_t texels = ( size_t )( m_nSourceRegionSize ) * ( size_t )( m_nSourceRegionSize );
+	const size_t texels = ( size_t )( s_nRegionSize ) * ( size_t )( s_nRegionSize );
 	const size_t expected_height_bytes = texels * sizeof( uint16_t );
 	const size_t expected_rf_bytes = texels * sizeof( float );
 	for ( int32_t region_id = 0; region_id < locations.size(); ++region_id ) {
@@ -2734,11 +2734,11 @@ bool Terrain3DErosionJob::captureSourceRegions( Terrain3DData *const pData ) {
 		}
 		const Ref<Image> pHeightMap = pRegion->getHeightMap();
 		const Ref<Image> pControlMap = pRegion->getControlMap();
-		if ( pHeightMap.is_null() || pHeightMap->get_format() != Image::FORMAT_R16 || pHeightMap->get_width() != m_nSourceRegionSize
-		        || pHeightMap->get_height() != m_nSourceRegionSize
+		if ( pHeightMap.is_null() || pHeightMap->get_format() != Image::FORMAT_R16 || pHeightMap->get_width() != s_nRegionSize
+		        || pHeightMap->get_height() != s_nRegionSize
 		        || ( pControlMap.is_valid()
-		                && ( pControlMap->get_format() != Image::FORMAT_RF || pControlMap->get_width() != m_nSourceRegionSize
-		                        || pControlMap->get_height() != m_nSourceRegionSize ) ) ) {
+		                && ( pControlMap->get_format() != Image::FORMAT_RF || pControlMap->get_width() != s_nRegionSize
+		                        || pControlMap->get_height() != s_nRegionSize ) ) ) {
 			setFailed( "Erosion requires compact R16 height maps and optional RF control maps." );
 			return false;
 		}
@@ -2774,28 +2774,28 @@ bool Terrain3DErosionJob::captureSourceRegions( Terrain3DData *const pData ) {
 		snapshot.m_nSourceHash = hashRegionImages( pHeightMap, pControlMap );
 		const int32_t map_index = Terrain3DData::getRegionMapIndex( location );
 		if ( map_index >= 0 ) {
-			m_szRegionLookup[map_index] = region_id;
+			m_szRegionLookup[map_index] = ( int16_t )( region_id );
 		}
 	}
 	// Keep neighboring regions adjacent in every solver plane. Active region
 	// order is editor/history dependent and otherwise turns cross-boundary reads
 	// into arbitrary jumps through the working set.
 	eastl::sort( m_regions.begin(), m_regions.end(), regionSnapshotLess );
-	memset( m_szRegionLookup, ( int32_t )( -1 ), sizeof( *m_szRegionLookup ) * 1024 );
+	memset( m_szRegionLookup, 0xff, sizeof( m_szRegionLookup ) );
 	for ( int32_t region_id = 0; region_id < ( int32_t )( m_regions.size() ); ++region_id ) {
 		const int32_t map_index = Terrain3DData::getRegionMapIndex( m_regions[( size_t )( region_id )].m_location );
 		if ( map_index >= 0 ) {
-			m_szRegionLookup[map_index] = region_id;
+			m_szRegionLookup[map_index] = ( int16_t )( region_id );
 		}
 	}
 	m_szRegionNeighbors.resize( m_regions.size() );
 	for ( int32_t region_id = 0; region_id < ( int32_t )( m_regions.size() ); ++region_id ) {
 		const Vector2i location = m_regions[( size_t )( region_id )].m_location;
-		int32_t( &neighbors )[s_nErosionDirectionCount] = m_szRegionNeighbors[( size_t )( region_id )].m_ids;
+		int16_t( &neighbors )[s_nErosionDirectionCount] = m_szRegionNeighbors[( size_t )( region_id )].m_ids;
 		for ( int32_t direction = 0; direction < s_nErosionDirectionCount; ++direction ) {
 			const int32_t map_index = Terrain3DData::getRegionMapIndex(
 			        location + Vector2i( s_szErosionDirectionX[direction], s_szErosionDirectionY[direction] ) );
-			neighbors[( size_t )( direction )] = map_index >= 0 ? m_szRegionLookup[map_index] : -1;
+			neighbors[( size_t )( direction )] = ( int16_t )( map_index >= 0 ? m_szRegionLookup[map_index] : -1 );
 		}
 	}
 	return true;
@@ -2856,8 +2856,8 @@ bool Terrain3DErosionJob::buildSimulationSnapshot( void ) {
 		maximumLocation.y = MAX( maximumLocation.y, location.y );
 	}
 
-	const Vector2 world_min = Vector2( minimumLocation.x, minimumLocation.y ) * ( float )( m_nSourceRegionSize )*m_fVertexSpacing;
-	const Vector2 world_max = Vector2( maximumLocation.x + 1, maximumLocation.y + 1 ) * ( float )( m_nSourceRegionSize )*m_fVertexSpacing;
+	const Vector2 world_min = Vector2( minimumLocation.x, minimumLocation.y ) * ( float )( s_nRegionSize )*m_fVertexSpacing;
+	const Vector2 world_max = Vector2( maximumLocation.x + 1, maximumLocation.y + 1 ) * ( float )( s_nRegionSize )*m_fVertexSpacing;
 	m_terrainWorldRect = Rect2( world_min, world_max - world_min );
 	if ( m_config.m_simulationMaskWorldRect.size.x <= s_fErosionEpsilon
 	        || m_config.m_simulationMaskWorldRect.size.y <= s_fErosionEpsilon ) {
@@ -2901,7 +2901,7 @@ bool Terrain3DErosionJob::buildSimulationSnapshot( void ) {
 					const int32_t source_y = sy * m_nResolutionScale + oy;
 					for ( int32_t ox = 0; ox < m_nResolutionScale; ++ox ) {
 						const int32_t source_x = sx * m_nResolutionScale + ox;
-						const size_t source_index = ( size_t )( source_y ) * ( size_t )( m_nSourceRegionSize ) + ( size_t )( source_x );
+						const size_t source_index = ( size_t )( source_y ) * ( size_t )( s_nRegionSize ) + ( size_t )( source_x );
 						const float fSourceHeight = t3dErosionJobReadRf( pHeightBytes, source_index );
 						const uint32_t control =
 						        pControlBytes ? t3dAsUint( t3dErosionJobReadRf( pControlBytes, source_index ) ) : s_nRegionDefaultControl;
@@ -2928,8 +2928,8 @@ bool Terrain3DErosionJob::buildSimulationSnapshot( void ) {
 
 				const Vector2i region_location = m_regions[( size_t )( region_id )].m_location;
 				const Vector2 world_position =
-				        ( Vector2( region_location.x * m_nSourceRegionSize + sx * m_nResolutionScale + m_nResolutionScale * 0.5f,
-				                region_location.y * m_nSourceRegionSize + sy * m_nResolutionScale + m_nResolutionScale * 0.5f ) )
+				        ( Vector2( region_location.x * s_nRegionSize + sx * m_nResolutionScale + m_nResolutionScale * 0.5f,
+				                region_location.y * s_nRegionSize + sy * m_nResolutionScale + m_nResolutionScale * 0.5f ) )
 				        * m_fVertexSpacing;
 
 				float fSimulationWeight = sampleImageSnapshot( simulation_mask_image, m_config.m_simulationMaskWorldRect, world_position );
@@ -3037,7 +3037,7 @@ bool Terrain3DErosionJob::buildSimulationSnapshot( void ) {
 					const int32_t source_y = sy * m_nResolutionScale + oy;
 					for ( int32_t ox = 0; ox < m_nResolutionScale; ++ox ) {
 						const int32_t source_x = sx * m_nResolutionScale + ox;
-						const size_t source_index = ( size_t )( source_y ) * ( size_t )( m_nSourceRegionSize ) + ( size_t )( source_x );
+						const size_t source_index = ( size_t )( source_y ) * ( size_t )( s_nRegionSize ) + ( size_t )( source_x );
 						const uint32_t control =
 						        pControlBytes ? t3dAsUint( t3dErosionJobReadRf( pControlBytes, source_index ) ) : s_nRegionDefaultControl;
 						if ( t3dIsHole( control ) ) {
@@ -3269,10 +3269,9 @@ Error Terrain3DErosionJob::setup( Terrain3DData *const pData, const Ref<Terrain3
 		setFailed( "Terrain3D's first active region could not be read." );
 		return ERR_DOES_NOT_EXIST;
 	}
-	m_nSourceRegionSize = pFirstRegion->getRegionSize();
-	m_fVertexSpacing = pFirstRegion->getVertexSpacing();
+		m_fVertexSpacing = pFirstRegion->getVertexSpacing();
 	m_nSourceControlSnapshotBytes = 0;
-	const uint64_t source_texel_count = ( uint64_t )( m_nSourceRegionSize ) * ( uint64_t )( m_nSourceRegionSize );
+	const uint64_t source_texel_count = ( uint64_t )( s_nRegionSize ) * ( uint64_t )( s_nRegionSize );
 	const uint64_t control_bytes_per_region = source_texel_count * sizeof( float );
 	for ( int32_t i = 0; i < locations.size(); ++i ) {
 		const Vector2i location = Vector2i( locations[i] );
@@ -3290,7 +3289,7 @@ Error Terrain3DErosionJob::setup( Terrain3DData *const pData, const Ref<Terrain3
 		}
 	}
 	m_nResolutionScale = selectResolutionScale( locations.size() );
-	if ( m_nSourceRegionSize <= 0 || m_nSourceRegionSize % m_nResolutionScale != 0 ) {
+	if ( s_nRegionSize % m_nResolutionScale != 0 ) {
 		setFailed( "The selected erosion resolution scale does not divide the Terrain3D region size." );
 		return ERR_INVALID_DATA;
 	}
@@ -3300,7 +3299,7 @@ Error Terrain3DErosionJob::setup( Terrain3DData *const pData, const Ref<Terrain3
 		return ERR_OUT_OF_MEMORY;
 	}
 
-	m_nSimulationRegionSize = m_nSourceRegionSize / m_nResolutionScale;
+	m_nSimulationRegionSize = s_nRegionSize / m_nResolutionScale;
 	if ( m_nSimulationRegionSize <= 0 || ( m_nSimulationRegionSize & ( m_nSimulationRegionSize - 1 ) ) != 0 ) {
 		setFailed( "Erosion simulation regions must remain power-of-two for cache-local indexing." );
 		return ERR_INVALID_DATA;
@@ -3899,17 +3898,17 @@ bool Terrain3DErosionJob::verifySourceUnchanged( Terrain3DData *const pData ) co
 			return false;
 		}
 		const Ref<Terrain3DRegion> pRegion = pData->getRegion( snapshot.m_location );
-		if ( pRegion.is_null() || pRegion->getRegionSize() != m_nSourceRegionSize
+		if ( pRegion.is_null() || s_nRegionSize != s_nRegionSize
 		        || !Math::is_equal_approx( pRegion->getVertexSpacing(), m_fVertexSpacing ) ) {
 			return false;
 		}
 		const Ref<Image> pHeightMap = pRegion->getHeightMap();
 		const Ref<Image> pControlMap = pRegion->getControlMap();
-		if ( pHeightMap.is_null() || pHeightMap->get_format() != Image::FORMAT_R16 || pHeightMap->get_width() != m_nSourceRegionSize
-		        || pHeightMap->get_height() != m_nSourceRegionSize
+		if ( pHeightMap.is_null() || pHeightMap->get_format() != Image::FORMAT_R16 || pHeightMap->get_width() != s_nRegionSize
+		        || pHeightMap->get_height() != s_nRegionSize
 		        || ( pControlMap.is_valid()
-		                && ( pControlMap->get_format() != Image::FORMAT_RF || pControlMap->get_width() != m_nSourceRegionSize
-		                        || pControlMap->get_height() != m_nSourceRegionSize ) ) ) {
+		                && ( pControlMap->get_format() != Image::FORMAT_RF || pControlMap->get_width() != s_nRegionSize
+		                        || pControlMap->get_height() != s_nRegionSize ) ) ) {
 			return false;
 		}
 		if ( hashRegionImages( pHeightMap, pControlMap ) != snapshot.m_nSourceHash ) {
@@ -3993,16 +3992,16 @@ Error Terrain3DErosionJob::apply( Terrain3DData *const pData, const bool bForce 
 		const Ref<Image> pHeightMap = pRegion->getHeightMap();
 		const Ref<Image> pControlMap = pRegion->getControlMap();
 		const Ref<Image> pColorMap = pRegion->getColorMap();
-		if ( pHeightMap.is_null() || pHeightMap->get_format() != Image::FORMAT_R16 || pHeightMap->get_width() != m_nSourceRegionSize
-		        || pHeightMap->get_height() != m_nSourceRegionSize
+		if ( pHeightMap.is_null() || pHeightMap->get_format() != Image::FORMAT_R16 || pHeightMap->get_width() != s_nRegionSize
+		        || pHeightMap->get_height() != s_nRegionSize
 		        || ( pControlMap.is_valid()
-		                && ( pControlMap->get_format() != Image::FORMAT_RF || pControlMap->get_width() != m_nSourceRegionSize
-		                        || pControlMap->get_height() != m_nSourceRegionSize ) ) ) {
+		                && ( pControlMap->get_format() != Image::FORMAT_RF || pControlMap->get_width() != s_nRegionSize
+		                        || pControlMap->get_height() != s_nRegionSize ) ) ) {
 			setErrorMessage( "A terrain region no longer has compatible R16 height or optional RF control data." );
 			return ERR_INVALID_DATA;
 		}
 		if ( m_config.m_bOxidationColorEnabled && pColorMap.is_valid()
-		        && ( pColorMap->get_width() != m_nSourceRegionSize || pColorMap->get_height() != m_nSourceRegionSize ) ) {
+		        && ( pColorMap->get_width() != s_nRegionSize || pColorMap->get_height() != s_nRegionSize ) ) {
 			setErrorMessage( "A terrain color map no longer matches the snapshotted region resolution." );
 			return ERR_INVALID_DATA;
 		}
@@ -4011,7 +4010,7 @@ Error Terrain3DErosionJob::apply( Terrain3DData *const pData, const bool bForce 
 
 	const int32_t thread_count = t3dErosionJobResolveThreadCount( m_config.m_nThreadCount );
 	const ParallelExecutor executor( thread_count );
-	const size_t source_pixel_count = ( size_t )( m_nSourceRegionSize ) * ( size_t )( m_nSourceRegionSize );
+	const size_t source_pixel_count = ( size_t )( s_nRegionSize ) * ( size_t )( s_nRegionSize );
 	const size_t apply_grain = MAX( 4096, source_pixel_count / ( size_t )( MAX( 1, thread_count * 16 ) ) );
 
 	// Application is region-serial, so reuse three raw staging buffers instead of
@@ -4134,9 +4133,9 @@ Error Terrain3DErosionJob::apply( Terrain3DData *const pData, const bool bForce 
 			// Non-RGBA8 formats use Image accessors on the main thread. This is slower,
 			// but avoids changing the user's color-map format or touching engine objects
 			// from erosion worker threads.
-			for ( int32_t y = 0; y < m_nSourceRegionSize; ++y ) {
-				for ( int32_t x = 0; x < m_nSourceRegionSize; ++x ) {
-					const size_t source_index = ( size_t )( y ) * ( size_t )( m_nSourceRegionSize ) + ( size_t )( x );
+			for ( int32_t y = 0; y < s_nRegionSize; ++y ) {
+				for ( int32_t x = 0; x < s_nRegionSize; ++x ) {
+					const size_t source_index = ( size_t )( y ) * ( size_t )( s_nRegionSize ) + ( size_t )( x );
 					if ( isnan( t3dErosionJobReadRf( height_source_bytes, source_index ) ) ) {
 						continue;
 					}
@@ -4330,7 +4329,7 @@ Dictionary Terrain3DErosionJob::getStatistics( void ) const {
 	statistics["stage"] = getStageName();
 	statistics["progress"] = getProgress();
 	statistics["region_count"] = ( int32_t )( m_regions.size() );
-	statistics["source_region_size"] = m_nSourceRegionSize;
+	statistics["source_region_size"] = s_nRegionSize;
 	statistics["simulation_region_size"] = m_nSimulationRegionSize;
 	statistics["resolution_scale"] = m_nResolutionScale;
 	statistics["cell_count"] = ( int64_t )( m_nCellCount );
@@ -4499,7 +4498,7 @@ Ref<Image> Terrain3DErosionJob::getRegionOutputMap(
 			break;
 	}
 
-	const int32_t size = bFullResolution ? m_nSourceRegionSize : m_nSimulationRegionSize;
+	const int32_t size = bFullResolution ? s_nRegionSize : m_nSimulationRegionSize;
 	const size_t pixel_count = ( size_t )( size ) * ( size_t )( size );
 	PackedByteArray image_data;
 	image_data.resize( ( int64_t )( pixel_count * sizeof( float ) ) );

@@ -120,7 +120,6 @@ Terrain3DRegion::~Terrain3DRegion( void ) {
 
 void Terrain3DRegion::clear( void ) {
 	m_fVersion = 0.8f;
-	m_nRegionSize = 0;
 	m_heightRange = s_v2Zero;
 	m_heightMap.unref();
 	m_controlMap.unref();
@@ -142,7 +141,7 @@ void Terrain3DRegion::clear( void ) {
 	m_streamedNodeCoverageMax = s_v2iZero;
 	m_bStreamedNodeHasExtendedCoverage = false;
 	m_lighting.unref();
-	m_fVertexSpacing = 1.f;
+	m_bGeometryContractValid = true;
 	m_bDeleted = false;
 	m_bEdited = false;
 	m_bModified = false;
@@ -170,23 +169,6 @@ void Terrain3DRegion::setVersion( const real_t fVersion ) {
 		        vformat( "%.3f", s_fDataCurrentVersion ),
 		        " upon save" );
 	}
-}
-
-void Terrain3DRegion::setRegionSize( const int nRegionSize ) {
-	if ( !t3dIsValidRegionSize( nRegionSize ) ) {
-		LOG( ERROR, "Invalid region size: ", nRegionSize, ". Must be power of 2, 64-2048" );
-		return;
-	}
-	// Mark modified if already initialized and we get a new value
-	if ( m_nRegionSize > 0 && m_nRegionSize != nRegionSize ) {
-		m_bModified = true;
-	}
-	SET_IF_DIFF( m_nRegionSize, nRegionSize );
-	t3dInstanceLayout_t default_layout;
-	if ( m_instanceStore.empty() && t3dInstanceLayoutForRegion( nRegionSize, s_nInstanceDefaultCellSize, default_layout ) ) {
-		m_instanceStore.setLayout( default_layout );
-	}
-	LOG( DEBUG, "Setting region ", m_location, " size: ", nRegionSize );
 }
 
 void Terrain3DRegion::setMap( const t3dMapType_t mapType, const Ref<Image> &rImage ) {
@@ -239,18 +221,18 @@ Ref<Image> Terrain3DRegion::materializeMap( const t3dMapType_t mapType ) {
 	if ( pMap.is_valid() ) {
 		return pMap;
 	}
-	if ( !t3dIsValidRegionSize( m_nRegionSize ) ) {
+	if ( !t3dIsValidRegionSize( s_nRegionSize ) ) {
 		LOG( ERROR, "Cannot materialize map before region_size is valid" );
 		return Ref<Image>();
 	}
 	if ( mapType == TYPE_HEIGHT ) {
-		pMap = Terrain3DUtil::getFilledImage( V2I( m_nRegionSize ), t3dRegionCodecDefaultHeightColor(), false, Image::FORMAT_R16 );
+		pMap = Terrain3DUtil::getFilledImage( V2I( s_nRegionSize ), t3dRegionCodecDefaultHeightColor(), false, Image::FORMAT_R16 );
 	} else if ( mapType == TYPE_CONTROL ) {
-		pMap = Terrain3DUtil::getFilledImage( V2I( m_nRegionSize ), COLOR_CONTROL, false, Image::FORMAT_RF );
+		pMap = Terrain3DUtil::getFilledImage( V2I( s_nRegionSize ), COLOR_CONTROL, false, Image::FORMAT_RF );
 	} else if ( mapType == TYPE_COLOR ) {
 		// CPU region color maps retain only their base level. GPU publication creates
 		// a temporary mipmapped copy, avoiding 33% permanent CPU mip overhead.
-		pMap = Terrain3DUtil::getFilledImage( V2I( m_nRegionSize ), COLOR_ROUGHNESS, false, Image::FORMAT_RGBA8 );
+		pMap = Terrain3DUtil::getFilledImage( V2I( s_nRegionSize ), COLOR_ROUGHNESS, false, Image::FORMAT_RGBA8 );
 	}
 	if ( pMap.is_null() ) {
 		return Ref<Image>();
@@ -284,7 +266,6 @@ void Terrain3DRegion::setMaps( const TypedArray<Image> &rMaps ) {
 		LOG( ERROR, "Expected ", REGION_TYPE_MAX - 1, " maps. Received ", rMaps.size() );
 		return;
 	}
-	m_nRegionSize = 0;
 	setHeightMap( rMaps[TYPE_HEIGHT] );
 	setControlMap( rMaps[TYPE_CONTROL] );
 	setColorMap( rMaps[TYPE_COLOR] );
@@ -301,9 +282,6 @@ TypedArray<Image> Terrain3DRegion::getMaps( void ) const {
 
 void Terrain3DRegion::setHeightMap( const Ref<Image> &rMap ) {
 	LOG( DEBUG, "Setting height map for region: ", ( m_location.x != INT32_MAX ) ? String( m_location ) : "(new)" );
-	if ( m_nRegionSize == 0 && rMap.is_valid() ) {
-		setRegionSize( rMap->get_width() );
-	}
 	const Ref<Image> pOldMap = m_heightMap;
 	const Ref<Image> pMap = sanitizeMap( TYPE_HEIGHT, rMap );
 	if ( rMap.is_valid() && pMap.is_null() ) {
@@ -322,12 +300,9 @@ void Terrain3DRegion::setHeightMap( const Ref<Image> &rMap ) {
 
 void Terrain3DRegion::setControlMap( const Ref<Image> &rMap ) {
 	LOG( DEBUG, "Setting control map for region: ", ( m_location.x != INT32_MAX ) ? String( m_location ) : "(new)" );
-	if ( m_nRegionSize == 0 && rMap.is_valid() ) {
-		setRegionSize( rMap->get_width() );
-	}
 	const Ref<Image> pOldMap = m_controlMap;
 	Ref<Image> pMap = sanitizeMap( TYPE_CONTROL, rMap );
-	if ( t3dRegionImageIsDefaultControl( pMap, m_nRegionSize ) ) {
+	if ( t3dRegionImageIsDefaultControl( pMap, s_nRegionSize ) ) {
 		pMap.unref();
 	}
 	if ( pOldMap == pMap ) {
@@ -345,12 +320,9 @@ void Terrain3DRegion::setControlMap( const Ref<Image> &rMap ) {
 
 void Terrain3DRegion::setColorMap( const Ref<Image> &rMap ) {
 	LOG( DEBUG, "Setting color map for region: ", ( m_location.x != INT32_MAX ) ? String( m_location ) : "(new)" );
-	if ( m_nRegionSize == 0 && rMap.is_valid() ) {
-		setRegionSize( rMap->get_width() );
-	}
 	const Ref<Image> pOldMap = m_colorMap;
 	Ref<Image> pMap = sanitizeMap( TYPE_COLOR, rMap );
-	if ( t3dRegionImageIsDefaultColor( pMap, m_nRegionSize ) ) {
+	if ( t3dRegionImageIsDefaultColor( pMap, s_nRegionSize ) ) {
 		pMap.unref();
 	}
 	if ( pOldMap == pMap ) {
@@ -383,7 +355,7 @@ void Terrain3DRegion::setChannelFlags( const int nFlags ) {
 }
 
 void Terrain3DRegion::setDerivedNormalSlopeMapInternal( const Ref<Image> &rMap ) {
-	if ( rMap.is_null() || rMap->get_width() != m_nRegionSize || rMap->get_height() != m_nRegionSize
+	if ( rMap.is_null() || rMap->get_width() != s_nRegionSize || rMap->get_height() != s_nRegionSize
 	        || rMap->get_format() != Image::FORMAT_RG8 ) {
 		m_derivedNormalSlopeMap.unref();
 		m_bDerivedNormalSlopeValid = false;
@@ -395,10 +367,6 @@ void Terrain3DRegion::setDerivedNormalSlopeMapInternal( const Ref<Image> &rMap )
 }
 
 void Terrain3DRegion::sanitizeMaps( void ) {
-	if ( m_nRegionSize == 0 ) { // blank region, no set_*_map has been called
-		LOG( ERROR, "Set region_size first" );
-		return;
-	}
 	Ref<Image> pMap = sanitizeMap( TYPE_HEIGHT, m_heightMap );
 	if ( m_heightMap != pMap ) {
 		m_bRuntimeMapsModified = true;
@@ -429,9 +397,9 @@ void Terrain3DRegion::sanitizeMaps( void ) {
 bool Terrain3DRegion::isMapDefault( const t3dMapType_t mapType ) const {
 	switch ( mapType ) {
 		case TYPE_CONTROL:
-			return m_controlMap.is_null() || t3dRegionImageIsDefaultControl( m_controlMap, m_nRegionSize );
+			return m_controlMap.is_null() || t3dRegionImageIsDefaultControl( m_controlMap, s_nRegionSize );
 		case TYPE_COLOR:
-			return m_colorMap.is_null() || t3dRegionImageIsDefaultColor( m_colorMap, m_nRegionSize );
+			return m_colorMap.is_null() || t3dRegionImageIsDefaultColor( m_colorMap, s_nRegionSize );
 		default:
 			return false;
 	}
@@ -488,8 +456,8 @@ void Terrain3DRegion::markMapEdited( const t3dMapType_t mapType, const bool bRec
 
 Ref<Image> Terrain3DRegion::sanitizeMap( const t3dMapType_t mapType, const Ref<Image> &rMap ) const {
 	LOG( DEBUG, "Sanitizing map type: ", mapType, ", map: ", rMap );
-	if ( !t3dIsValidRegionSize( m_nRegionSize ) ) {
-		LOG( ERROR, "Invalid region size: ", m_nRegionSize, ". Set it or set a map first. Must be power of 2, 64-2048" );
+	if ( !t3dIsValidRegionSize( s_nRegionSize ) ) {
+		LOG( ERROR, "Invalid region size: ", s_nRegionSize, ". Set it or set a map first. This fork requires exactly 128 samples per region" );
 		return Ref<Image>();
 	}
 	if ( mapType != TYPE_HEIGHT && rMap.is_null() ) {
@@ -497,12 +465,12 @@ Ref<Image> Terrain3DRegion::sanitizeMap( const t3dMapType_t mapType, const Ref<I
 		return Ref<Image>();
 	}
 	if ( mapType == TYPE_HEIGHT ) {
-		if ( rMap.is_valid() && rMap->get_format() == Image::FORMAT_R16 && !t3dRegionCodecHasValidHeightPayload( rMap, m_nRegionSize ) ) {
+		if ( rMap.is_valid() && rMap->get_format() == Image::FORMAT_R16 && !t3dRegionCodecHasValidHeightPayload( rMap, s_nRegionSize ) ) {
 			LOG( ERROR,
 			        "Rejected malformed R16 height payload for region ",
 			        m_location,
 			        ": expected ",
-			        t3dRegionCodecExpectedHeightByteCount( m_nRegionSize, Image::FORMAT_R16 ),
+			        t3dRegionCodecExpectedHeightByteCount( s_nRegionSize, Image::FORMAT_R16 ),
 			        " bytes, received ",
 			        rMap->get_data().size() );
 			return Ref<Image>();
@@ -510,13 +478,13 @@ Ref<Image> Terrain3DRegion::sanitizeMap( const t3dMapType_t mapType, const Ref<I
 
 		uint32_t clamped_count = 0u;
 		uint32_t non_finite_count = 0u;
-		Ref<Image> pConverted = t3dRegionCodecConvertHeightToR16( rMap, m_nRegionSize, clamped_count, non_finite_count );
+		Ref<Image> pConverted = t3dRegionCodecConvertHeightToR16( rMap, s_nRegionSize, clamped_count, non_finite_count );
 		if ( rMap.is_valid() && rMap->get_format() == Image::FORMAT_RF && pConverted.is_valid() ) {
 			LOG( INFO,
 			        "Converted internal RF32 height storage to R16 for region ",
 			        m_location,
 			        " (",
-			        m_nRegionSize * m_nRegionSize,
+			        s_nRegionSize * s_nRegionSize,
 			        " samples)" );
 		}
 		if ( clamped_count > 0u || non_finite_count > 0u ) {
@@ -559,7 +527,7 @@ Ref<Image> Terrain3DRegion::sanitizeMap( const t3dMapType_t mapType, const Ref<I
 	}
 	if ( pMap.is_null() ) {
 		LOG( DEBUG, "Making new image of type: ", type_str );
-		return Terrain3DUtil::getFilledImage( V2I( m_nRegionSize ), color, false, format );
+		return Terrain3DUtil::getFilledImage( V2I( s_nRegionSize ), color, false, format );
 	}
 	if ( mapType == TYPE_COLOR && pMap->has_mipmaps() ) {
 		Ref<Image> pBaseOnly;
@@ -578,11 +546,7 @@ bool Terrain3DRegion::validateMapSize( const Ref<Image> &rMap ) const {
 		return false;
 	}
 	if ( !t3dIsValidRegionSize( region_sizev.x ) || !t3dIsValidRegionSize( region_sizev.y ) ) {
-		LOG( ERROR, "Invalid image size: ", region_sizev, ". Must be power of 2, 64-2048 and square" );
-		return false;
-	}
-	if ( m_nRegionSize != region_sizev.x || m_nRegionSize != region_sizev.y ) {
-		LOG( ERROR, "Image size doesn't match existing images in this region", region_sizev );
+		LOG( ERROR, "Invalid image size: ", region_sizev, ". This fork requires a square 128x128 image" );
 		return false;
 	}
 	return true;
@@ -638,7 +602,7 @@ void Terrain3DRegion::calcHeightRange( void ) {
 
 void Terrain3DRegion::adoptCookedRuntimeMapsInternal(
         const Ref<Image> &rHeight, const Ref<Image> &rControl, const Ref<Image> &rColor, const Ref<Image> &rDerived ) {
-	if ( rHeight.is_null() || rHeight->get_width() != m_nRegionSize || rHeight->get_height() != m_nRegionSize ) {
+	if ( rHeight.is_null() || rHeight->get_width() != s_nRegionSize || rHeight->get_height() != s_nRegionSize ) {
 		return;
 	}
 	m_heightMap = rHeight;
@@ -665,7 +629,7 @@ void Terrain3DRegion::adoptCookedRuntimeMapsInternal(
 }
 
 void Terrain3DRegion::importRuntimeMapsUnmodified( const Terrain3DRegion *pSource ) {
-	if ( !pSource || pSource->m_nRegionSize != m_nRegionSize ) {
+	if ( !pSource ) {
 		return;
 	}
 	m_heightMap = pSource->m_heightMap;
@@ -1209,6 +1173,7 @@ void Terrain3DRegion::setLighting( const Ref<Terrain3DRegionLighting> &rLighting
 		return;
 	}
 	m_lighting = rLighting;
+	Terrain3DRegionLighting::markGlobalPublicationDirtyInternal();
 	m_bModified = true;
 }
 
@@ -1219,9 +1184,9 @@ void Terrain3DRegion::setLocation( const Vector2i &rLocation ) {
 		        "Location ",
 		        rLocation,
 		        " out of bounds. Max: ",
-		        -s_nActiveMaxRegionMapSize / 2,
+		        -s_nRegionMapSize / 2,
 		        " to ",
-		        s_nActiveMaxRegionMapSize / 2 - 1 );
+		        s_nRegionMapSize / 2 - 1 );
 		return;
 	}
 	// Marked modified if setting after initialized
@@ -1288,14 +1253,18 @@ void Terrain3DRegion::setData( const Dictionary &rData ) {
 	// This is a public mutation API, not a deserializer. Route through validated
 	// setters and publish one conservative dirty result instead of copying raw
 	// internal fields with no downstream contract.
-	if ( rData.has( "region_size" ) ) {
-		setRegionSize( ( int )( rData["region_size"] ) );
+	if ( rData.has( "region_size" ) && ( int )( rData["region_size"] ) != s_nRegionSize ) {
+		m_bGeometryContractValid = false;
+		LOG( ERROR, "Rejected region data with legacy geometry: region_size must be exactly 128 samples" );
+		return;
+	}
+	if ( rData.has( "vertex_spacing" ) && ( real_t )( rData["vertex_spacing"] ) != ( real_t )( s_fRegionVertexSpacing ) ) {
+		m_bGeometryContractValid = false;
+		LOG( ERROR, "Rejected region data with legacy geometry: vertex_spacing must be exactly 1.0 metre" );
+		return;
 	}
 	if ( rData.has( "version" ) ) {
 		setVersion( ( real_t )( rData["version"] ) );
-	}
-	if ( rData.has( "vertex_spacing" ) ) {
-		setVertexSpacing( ( real_t )( rData["vertex_spacing"] ) );
 	}
 	if ( rData.has( "location" ) ) {
 		setLocation( Vector2i( rData["location"] ) );
@@ -1340,8 +1309,6 @@ Dictionary Terrain3DRegion::getData( void ) const {
 	dict["edited"] = m_bEdited;
 	dict["modified"] = m_bModified;
 	dict["version"] = m_fVersion;
-	dict["region_size"] = m_nRegionSize;
-	dict["vertex_spacing"] = m_fVertexSpacing;
 	dict["height_range"] = m_heightRange;
 	dict["height_map"] = m_heightMap;
 	dict["control_map"] = m_controlMap;
@@ -1358,8 +1325,7 @@ Ref<Terrain3DRegion> Terrain3DRegion::duplicate( const bool bDeep ) {
 	Ref<Terrain3DRegion> pRegion;
 	pRegion.instantiate();
 	pRegion->m_fVersion = m_fVersion;
-	pRegion->m_nRegionSize = m_nRegionSize;
-	pRegion->m_fVertexSpacing = m_fVertexSpacing;
+	pRegion->m_bGeometryContractValid = m_bGeometryContractValid;
 	pRegion->m_heightRange = m_heightRange;
 	pRegion->m_nChannelFlags = m_nChannelFlags;
 	pRegion->m_bModified = m_bModified;
@@ -1399,9 +1365,9 @@ void Terrain3DRegion::dump( const bool bVerbose ) const {
 	        ", version: ",
 	        vformat( "%.2f", m_fVersion ),
 	        ", size: ",
-	        m_nRegionSize,
+	        s_nRegionSize,
 	        ", spacing: ",
-	        vformat( "%.1f", m_fVertexSpacing ),
+	        vformat( "%.1f", ( real_t )( s_fRegionVertexSpacing ) ),
 	        ", range: ",
 	        vformat( "%.2v", m_heightRange ),
 	        ", flags (",
@@ -1446,6 +1412,25 @@ void Terrain3DRegion::dump( const bool bVerbose ) const {
 // -----------------------------------------------------------------------------
 // Protected functions
 
+bool Terrain3DRegion::_set( const StringName &rName, const Variant &rProperty ) {
+	if ( rName == StringName( "region_size" ) ) {
+		m_bGeometryContractValid = m_bGeometryContractValid && ( int )( rProperty ) == s_nRegionSize;
+		if ( !m_bGeometryContractValid ) {
+			LOG( ERROR, "Rejected legacy Terrain3DRegion resource: region_size must be exactly 128 samples" );
+		}
+		return true;
+	}
+	if ( rName == StringName( "vertex_spacing" ) ) {
+		m_bGeometryContractValid =
+		        m_bGeometryContractValid && ( real_t )( rProperty ) == ( real_t )( s_fRegionVertexSpacing );
+		if ( !m_bGeometryContractValid ) {
+			LOG( ERROR, "Rejected legacy Terrain3DRegion resource: vertex_spacing must be exactly 1.0 metre" );
+		}
+		return true;
+	}
+	return false;
+}
+
 void Terrain3DRegion::_bind_methods( void ) {
 	BIND_ENUM_CONSTANT( LIGHTING_CLASS_TERRAIN );
 	BIND_ENUM_CONSTANT( LIGHTING_CLASS_FOLIAGE_CLUTTER );
@@ -1470,9 +1455,7 @@ void Terrain3DRegion::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "clear" ), &Terrain3DRegion::clear );
 	ClassDB::bind_method( D_METHOD( "set_version", "version" ), &Terrain3DRegion::setVersion );
 	ClassDB::bind_method( D_METHOD( "get_version" ), &Terrain3DRegion::getVersion );
-	ClassDB::bind_method( D_METHOD( "set_region_size", "region_size" ), &Terrain3DRegion::setRegionSize );
 	ClassDB::bind_method( D_METHOD( "get_region_size" ), &Terrain3DRegion::getRegionSize );
-	ClassDB::bind_method( D_METHOD( "set_vertex_spacing", "vertex_spacing" ), &Terrain3DRegion::setVertexSpacing );
 	ClassDB::bind_method( D_METHOD( "get_vertex_spacing" ), &Terrain3DRegion::getVertexSpacing );
 
 	ClassDB::bind_method( D_METHOD( "set_map", "map_type", "map" ), &Terrain3DRegion::setMap );
@@ -1579,10 +1562,6 @@ void Terrain3DRegion::_bind_methods( void ) {
 	const int ro_flags = PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY;
 	ADD_GROUP( "Identity / Format", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "version", PROPERTY_HINT_NONE, "", ro_flags ), "set_version", "get_version" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "region_size", PROPERTY_HINT_NONE, "", ro_flags ), "set_region_size", "get_region_size" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "vertex_spacing", PROPERTY_HINT_NONE, "", ro_flags ),
-	        "set_vertex_spacing",
-	        "get_vertex_spacing" );
 	ADD_PROPERTY(
 	        PropertyInfo( Variant::VECTOR2, "height_range", PROPERTY_HINT_NONE, "", ro_flags ), "set_height_range", "get_height_range" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "channel_flags", PROPERTY_HINT_FLAGS, "Control,Color,Derived", ro_flags ),

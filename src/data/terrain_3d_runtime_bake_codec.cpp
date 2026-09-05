@@ -56,6 +56,10 @@ EA_FORCE_INLINE static bool t3dRuntimeBakeCodecResizeBytes( PackedByteArray &rBy
 	return ( size_t )rBytes.size() == nBytes;
 }
 
+static const uint16_t s_szRuntimeMinMaxLevelSides[] = { 128u, 64u, 32u, 16u, 8u, 4u, 2u, 1u };
+static const uint32_t s_nRuntimeMinMaxLevelCount = 8u;
+static const size_t s_nRuntimeMinMaxBlobBytes = 174836u;
+
 EA_FORCE_INLINE static String t3dRuntimeBakeCodecDescriptorScenePath( const t3dStreamedNodeRuntimeDescriptor_t &rDescriptor ) {
 	if ( !rDescriptor.m_scenePath.is_empty() ) {
 		return rDescriptor.m_scenePath;
@@ -69,15 +73,14 @@ EA_FORCE_INLINE static String t3dRuntimeBakeCodecDescriptorShadowPath( const t3d
 	return rDescriptor.m_shadowProxyScene.is_valid() ? rDescriptor.m_shadowProxyScene->get_path() : String();
 }
 
-PackedByteArray Terrain3DRuntimeBakeCodec::encodeHoleMask( const Ref<Image> &rControl, const int nRegionSize ) {
+PackedByteArray Terrain3DRuntimeBakeCodec::encodeHoleMask( const Ref<Image> &rControl ) {
 	PackedByteArray bytes;
-	if ( nRegionSize <= 0 || nRegionSize > UINT16_MAX
-	        || ( rControl.is_valid()
-	                && ( rControl->get_width() != nRegionSize || rControl->get_height() != nRegionSize
-	                        || rControl->get_format() != Image::FORMAT_RF ) ) ) {
+	if ( rControl.is_valid()
+	        && ( rControl->get_width() != s_nRegionSize || rControl->get_height() != s_nRegionSize
+	                || rControl->get_format() != Image::FORMAT_RF ) ) {
 		return bytes;
 	}
-	const uint32_t samples = ( uint32_t )nRegionSize * ( uint32_t )nRegionSize;
+	const uint32_t samples = ( uint32_t )( s_nRegionTexels );
 	const uint32_t plane = ( samples + 7u ) / 8u;
 	if ( !t3dRuntimeBakeCodecResizeBytes( bytes, 12u + plane ) ) {
 		return PackedByteArray();
@@ -85,7 +88,7 @@ PackedByteArray Terrain3DRuntimeBakeCodec::encodeHoleMask( const Ref<Image> &rCo
 	t3dByteWriter_t writer( bytes.ptrw(), ( size_t )bytes.size() );
 	writer.writeU32( s_nHoleMagic );
 	writer.writeU16( s_nBlobVersion );
-	writer.writeU16( ( uint16_t )nRegionSize );
+	writer.writeU16( ( uint16_t )s_nRegionSize );
 	writer.writeU32( samples );
 	uint8_t *const pBits = bytes.ptrw() + writer.offset();
 	memset( pBits, 0, plane );
@@ -99,15 +102,14 @@ PackedByteArray Terrain3DRuntimeBakeCodec::encodeHoleMask( const Ref<Image> &rCo
 	return bytes;
 }
 
-PackedByteArray Terrain3DRuntimeBakeCodec::encodeNavigationMask( const Ref<Image> &rControl, const int nRegionSize ) {
+PackedByteArray Terrain3DRuntimeBakeCodec::encodeNavigationMask( const Ref<Image> &rControl ) {
 	PackedByteArray bytes;
-	if ( nRegionSize <= 0 || nRegionSize > UINT16_MAX
-	        || ( rControl.is_valid()
-	                && ( rControl->get_width() != nRegionSize || rControl->get_height() != nRegionSize
-	                        || rControl->get_format() != Image::FORMAT_RF ) ) ) {
+	if ( rControl.is_valid()
+	        && ( rControl->get_width() != s_nRegionSize || rControl->get_height() != s_nRegionSize
+	                || rControl->get_format() != Image::FORMAT_RF ) ) {
 		return bytes;
 	}
-	const uint32_t samples = ( uint32_t )nRegionSize * ( uint32_t )nRegionSize;
+	const uint32_t samples = ( uint32_t )( s_nRegionTexels );
 	const uint32_t plane = ( samples + 7u ) / 8u;
 	if ( !t3dRuntimeBakeCodecResizeBytes( bytes, 16u + ( size_t )plane * 2u ) ) {
 		return PackedByteArray();
@@ -115,7 +117,7 @@ PackedByteArray Terrain3DRuntimeBakeCodec::encodeNavigationMask( const Ref<Image
 	t3dByteWriter_t writer( bytes.ptrw(), ( size_t )bytes.size() );
 	writer.writeU32( s_nNavMagic );
 	writer.writeU16( s_nBlobVersion );
-	writer.writeU16( ( uint16_t )nRegionSize );
+	writer.writeU16( ( uint16_t )s_nRegionSize );
 	writer.writeU32( samples );
 	writer.writeU32( plane );
 	uint8_t *const pValid = bytes.ptrw() + writer.offset();
@@ -135,12 +137,13 @@ PackedByteArray Terrain3DRuntimeBakeCodec::encodeNavigationMask( const Ref<Image
 	return bytes;
 }
 
-PackedByteArray Terrain3DRuntimeBakeCodec::encodeNavigationMask( const PackedInt32Array &rControls, const int nWidth ) {
+PackedByteArray Terrain3DRuntimeBakeCodec::encodeNavigationMask( const PackedInt32Array &rControls ) {
 	PackedByteArray bytes;
-	if ( nWidth <= 0 || rControls.size() != nWidth * nWidth || nWidth > UINT16_MAX ) {
+	const int width = s_nRegionSize + 1;
+	if ( rControls.size() != width * width ) {
 		return bytes;
 	}
-	const uint32_t samples = ( uint32_t )nWidth * ( uint32_t )nWidth;
+	const uint32_t samples = ( uint32_t )( width * width );
 	const uint32_t plane = ( samples + 7u ) / 8u;
 	if ( !t3dRuntimeBakeCodecResizeBytes( bytes, 16u + ( size_t )plane * 2u ) ) {
 		return PackedByteArray();
@@ -148,7 +151,7 @@ PackedByteArray Terrain3DRuntimeBakeCodec::encodeNavigationMask( const PackedInt
 	t3dByteWriter_t writer( bytes.ptrw(), ( size_t )bytes.size() );
 	writer.writeU32( s_nNavMagic );
 	writer.writeU16( s_nBlobVersion );
-	writer.writeU16( ( uint16_t )nWidth );
+	writer.writeU16( ( uint16_t )width );
 	writer.writeU32( samples );
 	writer.writeU32( plane );
 	uint8_t *const pValid = bytes.ptrw() + writer.offset();
@@ -180,7 +183,8 @@ bool Terrain3DRuntimeBakeCodec::getNavigationMaskView( const PackedByteArray &rB
 	const uint32_t samples = t3dRuntimeBakeCodecReadU32( p + 8 );
 	const uint32_t plane = t3dRuntimeBakeCodecReadU32( p + 12 );
 	const int64_t required_bytes = 16 + ( int64_t )plane * 2;
-	if ( width == 0u || samples != ( uint32_t )width * width || plane != ( samples + 7u ) / 8u || rBlob.size() < required_bytes ) {
+	if ( ( width != ( uint16_t )s_nRegionSize && width != ( uint16_t )( s_nRegionSize + 1 ) ) || samples != ( uint32_t )width * width
+	        || plane != ( samples + 7u ) / 8u || rBlob.size() < required_bytes ) {
 		return false;
 	}
 	rView.m_pValidBits = p + 16;
@@ -208,65 +212,51 @@ bool Terrain3DRuntimeBakeCodec::decodeNavigationMask(
 	return true;
 }
 
-PackedByteArray Terrain3DRuntimeBakeCodec::encodeMinMaxHierarchy( const Ref<Image> &rHeight, const int nRegionSize ) {
+PackedByteArray Terrain3DRuntimeBakeCodec::encodeMinMaxHierarchy( const Ref<Image> &rHeight ) {
 	PackedByteArray bytes;
-	if ( rHeight.is_null() || nRegionSize <= 0 || nRegionSize > UINT16_MAX || rHeight->get_width() != nRegionSize
-	        || rHeight->get_height() != nRegionSize || rHeight->get_format() != Image::FORMAT_R16 ) {
+	if ( rHeight.is_null() || rHeight->get_width() != s_nRegionSize || rHeight->get_height() != s_nRegionSize
+	        || rHeight->get_format() != Image::FORMAT_R16 ) {
 		return bytes;
 	}
 	const PackedByteArray source = rHeight->get_data();
-	if ( source.size() < ( int64_t )nRegionSize * nRegionSize * 2 ) {
+	if ( source.size() < ( int64_t )s_nRegionTexels * 2 ) {
 		return bytes;
 	}
-	int levels = 1;
-	size_t output_bytes = 12u;
-	for ( int side = nRegionSize;; side = ( side + 1 ) / 2 ) {
-		output_bytes += 8u + ( size_t )side * side * 8u;
-		if ( side == 1 ) {
-			break;
-		}
-		++levels;
-	}
-	if ( !t3dRuntimeBakeCodecResizeBytes( bytes, output_bytes ) ) {
+	if ( !t3dRuntimeBakeCodecResizeBytes( bytes, s_nRuntimeMinMaxBlobBytes ) ) {
 		return PackedByteArray();
 	}
-	t3dByteWriter_t writer( bytes.ptrw(), output_bytes );
+
+	t3dByteWriter_t writer( bytes.ptrw(), s_nRuntimeMinMaxBlobBytes );
 	writer.writeU32( s_nMinmaxMagic );
 	writer.writeU16( s_nBlobVersion );
-	writer.writeU16( ( uint16_t )nRegionSize );
-	writer.writeU32( ( uint32_t )levels );
+	writer.writeU16( ( uint16_t )s_nRegionSize );
+	writer.writeU32( s_nRuntimeMinMaxLevelCount );
+
 	const uint8_t *const pSource = source.ptr();
-	const uint32_t source_count = ( uint32_t )nRegionSize * ( uint32_t )nRegionSize;
-	writer.writeU32( ( uint32_t )nRegionSize );
-	writer.writeU32( source_count );
-	for ( uint32_t i = 0u; i < source_count; ++i ) {
+	writer.writeU32( ( uint32_t )s_nRegionSize );
+	writer.writeU32( ( uint32_t )s_nRegionTexels );
+	for ( uint32_t i = 0u; i < ( uint32_t )s_nRegionTexels; ++i ) {
 		const float h = t3dRegionCodecReadHeightBytes( pSource, ( int )i, Image::FORMAT_R16 );
 		writer.writeF32( h );
 		writer.writeF32( h );
 	}
-	if ( nRegionSize == 1 ) {
-		return writer.complete() ? bytes : PackedByteArray();
-	}
 
-	// Level 0 is emitted directly from the R16 source. Only the first reduced
-	// level is retained, then every later level is reduced in-place into the
-	// beginning of the same high-water buffer. For a 2048 region this reduces
-	// scratch from ~40 MiB (four full float planes) to ~8 MiB.
-	int side = ( nRegionSize + 1 ) / 2;
+	// The 128 m contract has one immutable min/max topology:
+	// 128 -> 64 -> 32 -> 16 -> 8 -> 4 -> 2 -> 1. Keep only the current
+	// reduced plane and shrink it in-place after each emitted level.
+	int side = ( int )s_szRuntimeMinMaxLevelSides[1];
 	eastl::vector<Vector2, Terrain3DEastlAllocator> ranges;
 	ranges.resize( ( size_t )side * side );
 	for ( int z = 0; z < side; ++z ) {
 		for ( int x = 0; x < side; ++x ) {
+			const int source_x = x << 1;
+			const int source_z = z << 1;
 			float minimum = INFINITY;
 			float maximum = -INFINITY;
 			for ( int dz = 0; dz < 2; ++dz ) {
 				for ( int dx = 0; dx < 2; ++dx ) {
-					const int sx = x * 2 + dx;
-					const int sz = z * 2 + dz;
-					if ( sx >= nRegionSize || sz >= nRegionSize ) {
-						continue;
-					}
-					const float h = t3dRegionCodecReadHeightBytes( pSource, sz * nRegionSize + sx, Image::FORMAT_R16 );
+					const float h =
+					        t3dRegionCodecReadHeightBytes( pSource, ( source_z + dz ) * s_nRegionSize + source_x + dx, Image::FORMAT_R16 );
 					minimum = MIN( minimum, h );
 					maximum = MAX( maximum, h );
 				}
@@ -274,7 +264,8 @@ PackedByteArray Terrain3DRuntimeBakeCodec::encodeMinMaxHierarchy( const Ref<Imag
 			ranges[( size_t )z * side + x] = Vector2( minimum, maximum );
 		}
 	}
-	while ( true ) {
+
+	for ( uint32_t level = 1u; level < s_nRuntimeMinMaxLevelCount; ++level ) {
 		const uint32_t count = ( uint32_t )side * ( uint32_t )side;
 		writer.writeU32( ( uint32_t )side );
 		writer.writeU32( count );
@@ -282,27 +273,21 @@ PackedByteArray Terrain3DRuntimeBakeCodec::encodeMinMaxHierarchy( const Ref<Imag
 			writer.writeF32( ranges[i].x );
 			writer.writeF32( ranges[i].y );
 		}
-		if ( side == 1 ) {
+		if ( level + 1u >= s_nRuntimeMinMaxLevelCount ) {
 			break;
 		}
-		const int next_side = ( side + 1 ) / 2;
+
+		const int next_side = ( int )s_szRuntimeMinMaxLevelSides[level + 1u];
 		for ( int z = 0; z < next_side; ++z ) {
 			for ( int x = 0; x < next_side; ++x ) {
-				float minimum = INFINITY;
-				float maximum = -INFINITY;
-				for ( int dz = 0; dz < 2; ++dz ) {
-					for ( int dx = 0; dx < 2; ++dx ) {
-						const int sx = x * 2 + dx;
-						const int sz = z * 2 + dz;
-						if ( sx >= side || sz >= side ) {
-							continue;
-						}
-						const Vector2 range = ranges[( size_t )sz * side + sx];
-						minimum = MIN( minimum, range.x );
-						maximum = MAX( maximum, range.y );
-					}
-				}
-				ranges[( size_t )z * next_side + x] = Vector2( minimum, maximum );
+				const int source_x = x << 1;
+				const int source_z = z << 1;
+				const Vector2 r00 = ranges[( size_t )source_z * side + source_x];
+				const Vector2 r10 = ranges[( size_t )source_z * side + source_x + 1];
+				const Vector2 r01 = ranges[( size_t )( source_z + 1 ) * side + source_x];
+				const Vector2 r11 = ranges[( size_t )( source_z + 1 ) * side + source_x + 1];
+				ranges[( size_t )z * next_side + x] =
+				        Vector2( MIN( MIN( r00.x, r10.x ), MIN( r01.x, r11.x ) ), MAX( MAX( r00.y, r10.y ), MAX( r01.y, r11.y ) ) );
 			}
 		}
 		ranges.resize( ( size_t )next_side * next_side );
@@ -313,30 +298,30 @@ PackedByteArray Terrain3DRuntimeBakeCodec::encodeMinMaxHierarchy( const Ref<Imag
 
 bool Terrain3DRuntimeBakeCodec::getMinMaxLevelView( const PackedByteArray &rBlob, const int nMaximumSide, t3dMinMaxLevelView_t &rView ) {
 	rView = t3dMinMaxLevelView_t();
-	if ( rBlob.size() < 12 || nMaximumSide <= 0 ) {
+	if ( rBlob.size() != ( int64_t )s_nRuntimeMinMaxBlobBytes || nMaximumSide <= 0 ) {
 		return false;
 	}
 	const uint8_t *const p = rBlob.ptr();
-	if ( t3dRuntimeBakeCodecReadU32( p ) != s_nMinmaxMagic || t3dRuntimeBakeCodecReadU16( p + 4 ) != s_nBlobVersion ) {
+	if ( t3dRuntimeBakeCodecReadU32( p ) != s_nMinmaxMagic || t3dRuntimeBakeCodecReadU16( p + 4 ) != s_nBlobVersion
+	        || t3dRuntimeBakeCodecReadU16( p + 6 ) != ( uint16_t )s_nRegionSize
+	        || t3dRuntimeBakeCodecReadU32( p + 8 ) != s_nRuntimeMinMaxLevelCount ) {
 		return false;
 	}
-	const uint16_t source_side = t3dRuntimeBakeCodecReadU16( p + 6 );
-	const uint32_t level_count = t3dRuntimeBakeCodecReadU32( p + 8 );
-	if ( source_side == 0u || level_count == 0u || level_count > 32u ) {
-		return false;
-	}
+
 	size_t offset = 12u;
 	const uint8_t *pSelected = NULL;
 	uint32_t selected_count = 0u;
 	uint16_t selected_side = 0u;
-	for ( uint32_t level = 0u; level < level_count; ++level ) {
+	for ( uint32_t level = 0u; level < s_nRuntimeMinMaxLevelCount; ++level ) {
 		if ( offset + 8u > ( size_t )rBlob.size() ) {
 			return false;
 		}
+		const uint32_t expected_side = s_szRuntimeMinMaxLevelSides[level];
 		const uint32_t side = t3dRuntimeBakeCodecReadU32( p + offset );
 		const uint32_t count = t3dRuntimeBakeCodecReadU32( p + offset + 4u );
 		offset += 8u;
-		if ( side == 0u || side > UINT16_MAX || count != side * side || ( uint64_t )count * 8u > ( uint64_t )rBlob.size() - offset ) {
+		const uint32_t expected_count = expected_side * expected_side;
+		if ( side != expected_side || count != expected_count || ( uint64_t )count * 8u > ( uint64_t )rBlob.size() - offset ) {
 			return false;
 		}
 		if ( selected_side == 0u && ( int )side <= nMaximumSide ) {
@@ -351,7 +336,7 @@ bool Terrain3DRuntimeBakeCodec::getMinMaxLevelView( const PackedByteArray &rBlob
 	}
 	rView.m_pRanges = pSelected;
 	rView.m_nRangeCount = selected_count;
-	rView.m_nSourceSide = source_side;
+	rView.m_nSourceSide = ( uint16_t )s_nRegionSize;
 	rView.m_nLevelSide = selected_side;
 	return true;
 }
@@ -385,9 +370,10 @@ bool Terrain3DRuntimeBakeCodec::decodeMinMaxLevel( const PackedByteArray &rBlob,
 	return true;
 }
 
-PackedByteArray Terrain3DRuntimeBakeCodec::encodeCollisionHeight( const PackedFloat32Array &rHeights, const int nWidth ) {
+PackedByteArray Terrain3DRuntimeBakeCodec::encodeCollisionHeight( const PackedFloat32Array &rHeights ) {
 	PackedByteArray bytes;
-	if ( nWidth <= 0 || nWidth > UINT16_MAX || rHeights.size() != nWidth * nWidth ) {
+	const int width = s_nRegionSize + 1;
+	if ( rHeights.size() != width * width ) {
 		return bytes;
 	}
 	const size_t payload_bytes = ( size_t )rHeights.size() * sizeof( float );
@@ -397,21 +383,22 @@ PackedByteArray Terrain3DRuntimeBakeCodec::encodeCollisionHeight( const PackedFl
 	t3dByteWriter_t writer( bytes.ptrw(), ( size_t )bytes.size() );
 	writer.writeU32( s_nCollisionHeightMagic );
 	writer.writeU16( s_nBlobVersion );
-	writer.writeU16( ( uint16_t )nWidth );
+	writer.writeU16( ( uint16_t )width );
 	writer.writeU32( ( uint32_t )rHeights.size() );
 	writer.writeBytes( rHeights.ptr(), payload_bytes );
 	return writer.complete() ? bytes : PackedByteArray();
 }
 
-PackedByteArray Terrain3DRuntimeBakeCodec::encodeCollisionBounds( const float fMinHeight, const float fMaxHeight, const int nWidth ) {
+PackedByteArray Terrain3DRuntimeBakeCodec::encodeCollisionBounds( const float fMinHeight, const float fMaxHeight ) {
 	PackedByteArray bytes;
-	if ( nWidth <= 0 || nWidth > UINT16_MAX || !t3dRuntimeBakeCodecResizeBytes( bytes, 16u ) ) {
+	const int width = s_nRegionSize + 1;
+	if ( !t3dRuntimeBakeCodecResizeBytes( bytes, 16u ) ) {
 		return bytes;
 	}
 	t3dByteWriter_t writer( bytes.ptrw(), ( size_t )bytes.size() );
 	writer.writeU32( s_nCollisionBoundsMagic );
 	writer.writeU16( s_nBlobVersion );
-	writer.writeU16( ( uint16_t )nWidth );
+	writer.writeU16( ( uint16_t )width );
 	writer.writeF32( fMinHeight );
 	writer.writeF32( fMaxHeight );
 	return writer.complete() ? bytes : PackedByteArray();
@@ -428,7 +415,7 @@ bool Terrain3DRuntimeBakeCodec::decodeCollisionHeight( const PackedByteArray &rB
 	}
 	nWidth = t3dRuntimeBakeCodecReadU16( p + 6 );
 	const uint32_t count = t3dRuntimeBakeCodecReadU32( p + 8 );
-	if ( nWidth <= 0 || count != ( uint32_t )nWidth * nWidth || rBlob.size() < 12 + ( int64_t )count * 4 ) {
+	if ( nWidth != s_nRegionSize + 1 || count != ( uint32_t )nWidth * nWidth || rBlob.size() < 12 + ( int64_t )count * 4 ) {
 		nWidth = 0;
 		return false;
 	}
@@ -449,7 +436,7 @@ bool Terrain3DRuntimeBakeCodec::decodeCollisionHeightInto( const PackedByteArray
 	}
 	nWidth = t3dRuntimeBakeCodecReadU16( p + 6 );
 	const uint32_t count = t3dRuntimeBakeCodecReadU32( p + 8 );
-	if ( nWidth <= 0 || count != ( uint32_t )nWidth * nWidth || rBlob.size() < 12 + ( int64_t )count * 4
+	if ( nWidth != s_nRegionSize + 1 || count != ( uint32_t )nWidth * nWidth || rBlob.size() < 12 + ( int64_t )count * 4
 	        || rHeights.size() != ( int64_t )count ) {
 		nWidth = 0;
 		return false;
@@ -469,7 +456,7 @@ bool Terrain3DRuntimeBakeCodec::decodeCollisionBounds( const PackedByteArray &rB
 	nWidth = t3dRuntimeBakeCodecReadU16( p + 6 );
 	fMinHeight = t3dRuntimeBakeCodecReadF32( p + 8 );
 	fMaxHeight = t3dRuntimeBakeCodecReadF32( p + 12 );
-	return nWidth > 0;
+	return nWidth == s_nRegionSize + 1;
 }
 
 PackedByteArray Terrain3DRuntimeBakeCodec::encodeNodeDescriptors(

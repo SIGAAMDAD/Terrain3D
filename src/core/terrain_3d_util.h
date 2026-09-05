@@ -139,8 +139,8 @@ EA_FORCE_INLINE Vector3 t3dVector2ToVector3( const Vector2 &rV2 ) {
 // -----------------------------------------------------------------------------
 // Math
 
-EA_FORCE_INLINE bool t3dIsValidRegionSize( int value ) {
-	return value >= 64 && value <= 2048 && is_power_of_2( value );
+EA_FORCE_INLINE bool t3dIsValidRegionSize( const int value ) {
+	return value == s_nRegionSize;
 }
 
 // Integer round to multiples
@@ -202,6 +202,32 @@ EA_FORCE_INLINE T t3dIntDivideFloor( const T numer, const T denom ) {
 	T result = ( ( numer ) < 0 ) != ( ( denom ) < 0 ) ? ( ( numer ) - ( ( denom ) < 0 ? ( denom ) + 1 : ( denom )-1 ) ) / ( denom )
 	                                                  : ( numer ) / ( denom );
 	return result;
+}
+
+// Fixed 128-sample terrain-grid addressing. These helpers preserve mathematical
+// floor semantics for negative coordinates without runtime division or modulo.
+EA_FORCE_INLINE int64_t t3dRegionCoordinateFromGrid( const int64_t nGridCoordinate ) {
+	if ( nGridCoordinate >= 0 ) {
+		return nGridCoordinate >> s_nRegionShift;
+	}
+	const uint64_t magnitude = ( uint64_t )( -( nGridCoordinate + 1 ) ) + 1u;
+	return -( int64_t )( ( magnitude + ( uint64_t )( s_nRegionMask ) ) >> s_nRegionShift );
+}
+
+EA_FORCE_INLINE int32_t t3dRegionCoordinateFromGrid( const int32_t nGridCoordinate ) {
+	return ( int32_t )t3dRegionCoordinateFromGrid( ( int64_t )( nGridCoordinate ) );
+}
+
+EA_FORCE_INLINE int64_t t3dRegionLocalFromGrid( const int64_t nGridCoordinate ) {
+	return nGridCoordinate - t3dRegionCoordinateFromGrid( nGridCoordinate ) * ( int64_t )( s_nRegionSize );
+}
+
+EA_FORCE_INLINE int32_t t3dRegionLocalFromGrid( const int32_t nGridCoordinate ) {
+	return ( int32_t )t3dRegionLocalFromGrid( ( int64_t )( nGridCoordinate ) );
+}
+
+EA_FORCE_INLINE Vector2i t3dRegionCoordinateFromGrid( const Vector2i &rGridCoordinate ) {
+	return Vector2i( t3dRegionCoordinateFromGrid( rGridCoordinate.x ), t3dRegionCoordinateFromGrid( rGridCoordinate.y ) );
 }
 
 // Integer division rounding to nearest int

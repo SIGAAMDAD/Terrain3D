@@ -178,7 +178,7 @@ bool Terrain3DRenderWorldController::initializeAuthoringImageCold( void ) {
 		return false;
 	}
 
-	Terrain3DColdAllocationScope cold_scope;
+	Terrain3DColdPhaseScope cold_scope;
 	if ( !m_AuthoringArena.configure( Layout.size() ) ) {
 		return false;
 	}
@@ -375,7 +375,7 @@ bool Terrain3DRenderWorldController::requestColdRebuild( void ) {
 		return false;
 	}
 
-	Terrain3DColdAllocationScope cold_scope;
+	Terrain3DColdPhaseScope cold_scope;
 	m_pConverter->setPolicyCold( buildPolicyCold() );
 	if ( !m_pConverter->rebuildSceneCold( this, m_lastBuildStats ) ) {
 		return false;

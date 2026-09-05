@@ -270,14 +270,16 @@ void *Terrain3DMemoryZone::allocateUnlocked( const size_t nBytes, const size_t n
 }
 
 void *Terrain3DMemoryZone::allocate( const size_t nBytes, const size_t nAlignment ) {
-	if ( nBytes == 0u || !t3dValidateRuntimeAllocationRequest() ) {
+	if ( nBytes == 0u ) {
 		return NULL;
 	}
 	t3dScopedLock_t lock( m_mutex );
 	void *const pMemory = allocateUnlocked( nBytes, MAX( nAlignment, ( size_t )alignof( void * ) ) );
 	if ( !pMemory ) {
 		++m_nFailedAllocations;
+		return NULL;
 	}
+	t3dRecordRuntimeZoneAllocation( nBytes );
 	return pMemory;
 }
 

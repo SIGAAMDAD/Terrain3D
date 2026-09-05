@@ -73,19 +73,16 @@ Terrain3DRuntimeWorldManifest::Terrain3DRuntimeWorldManifest( void ) :
 
 void Terrain3DRuntimeWorldManifest::reset( void ) {
 	m_bLoaded = false;
-	m_nRegionSize = 0;
-	m_nRegionMapSize = 0;
-	m_fVertexSpacing = 1.0;
-	m_worldRegionMin = s_v2iZero;
-	m_worldRegionMax = s_v2iZero;
+	m_worldRegionMin = t3dPackRegionCoord( s_v2iZero );
+	m_worldRegionMax = t3dPackRegionCoord( s_v2iZero );
 	m_nWorldSignature = 0u;
 	m_nMaterialSignature = 0u;
 	m_worldHeightRange = s_v2Zero;
 	m_regions.clear();
 	m_sceneDependencies.clear();
 	m_regionSceneDependencies.clear();
-	eastl::fill_n( m_regionLookup, s_nMaxRegionSlots, ( int16_t )-1 );
-	eastl::fill_n( m_topologyBits, s_nMaxRegionSlots / 64, 0u );
+	eastl::fill_n( m_regionLookup, s_nRegionSlots, ( int16_t )-1 );
+	eastl::fill_n( m_topologyBits, s_nRegionSlots / 64, 0u );
 }
 
 void Terrain3DRuntimeWorldManifest::releaseRuntimeAllocatorStorage( void ) {
@@ -111,11 +108,11 @@ const String &Terrain3DRuntimeWorldManifest::getSceneDependency( const uint32_t 
 }
 
 void Terrain3DRuntimeWorldManifest::rebuildLookup( void ) {
-	eastl::fill_n( m_regionLookup, s_nMaxRegionSlots, ( int16_t )-1 );
-	eastl::fill_n( m_topologyBits, s_nMaxRegionSlots / 64, 0u );
+	eastl::fill_n( m_regionLookup, s_nRegionSlots, ( int16_t )-1 );
+	eastl::fill_n( m_topologyBits, s_nRegionSlots / 64, 0u );
 	for ( int index = 0; index < ( int )( m_regions.size() ); ++index ) {
-		const int map_index = Terrain3DRegionRepository::getRegionMapIndex( m_regions[( size_t )( index )].m_location );
-		if ( map_index >= 0 && map_index < s_nMaxRegionSlots ) {
+		const int map_index = Terrain3DRegionRepository::getRegionMapIndex( t3dUnpackRegionCoord( m_regions[( size_t )( index )].m_location ) );
+		if ( map_index >= 0 && map_index < s_nRegionSlots ) {
 			m_regionLookup[( size_t )( map_index )] = ( int16_t )( index );
 			m_topologyBits[( size_t )( map_index >> 6 )] |= 1ull << ( map_index & 63 );
 		}
@@ -124,13 +121,13 @@ void Terrain3DRuntimeWorldManifest::rebuildLookup( void ) {
 
 bool Terrain3DRuntimeWorldManifest::hasRegion( const Vector2i &rLocation ) const {
 	const int map_index = Terrain3DRegionRepository::getRegionMapIndex( rLocation );
-	return map_index >= 0 && map_index < s_nMaxRegionSlots
+	return map_index >= 0 && map_index < s_nRegionSlots
 	        && ( m_topologyBits[( size_t )( map_index >> 6 )] & ( 1ull << ( map_index & 63 ) ) ) != 0u;
 }
 
 const t3dRuntimeWorldRegionRecord_t *Terrain3DRuntimeWorldManifest::findRegion( const Vector2i &rLocation ) const {
 	const int map_index = Terrain3DRegionRepository::getRegionMapIndex( rLocation );
-	if ( map_index < 0 || map_index >= s_nMaxRegionSlots ) {
+	if ( map_index < 0 || map_index >= s_nRegionSlots ) {
 		return NULL;
 	}
 	const int index = m_regionLookup[( size_t )( map_index )];
@@ -139,31 +136,25 @@ const t3dRuntimeWorldRegionRecord_t *Terrain3DRuntimeWorldManifest::findRegion( 
 
 bool Terrain3DRuntimeWorldManifest::buildAuthoringIndex( const Terrain3DRegionRepository &rRepository ) {
 	reset();
-	m_nRegionSize = rRepository.getRegionSize();
-	m_nRegionMapSize = rRepository.getRegionMapSize();
-	m_fVertexSpacing = rRepository.getVertexSpacing();
-	if ( m_nRegionSize <= 0 || m_nRegionMapSize <= 0 ) {
-		return false;
-	}
 	bool first_height = true;
 	bool first_region = true;
 	for ( int slot = 0; slot < rRepository.getSlotCount(); ++slot ) {
-		const Vector2i location = rRepository.getSlotsData()[slot];
+		const Vector2i location = t3dUnpackRegionCoord( rRepository.getSlotsData()[slot] );
 		const Terrain3DRegion *const pRegion = rRepository.getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() ) {
 			continue;
 		}
 		t3dRuntimeWorldRegionRecord_t record;
-		record.m_location = location;
+		record.m_location = t3dPackRegionCoord( location );
 		if ( first_region ) {
-			m_worldRegionMin = location;
-			m_worldRegionMax = location;
+			m_worldRegionMin = t3dPackRegionCoord( location );
+			m_worldRegionMax = t3dPackRegionCoord( location );
 			first_region = false;
 		} else {
-			m_worldRegionMin.x = MIN( m_worldRegionMin.x, location.x );
-			m_worldRegionMin.y = MIN( m_worldRegionMin.y, location.y );
-			m_worldRegionMax.x = MAX( m_worldRegionMax.x, location.x );
-			m_worldRegionMax.y = MAX( m_worldRegionMax.y, location.y );
+			const Vector2i world_min = t3dUnpackRegionCoord( m_worldRegionMin );
+			const Vector2i world_max = t3dUnpackRegionCoord( m_worldRegionMax );
+			m_worldRegionMin = t3dPackRegionCoord( Vector2i( MIN( world_min.x, location.x ), MIN( world_min.y, location.y ) ) );
+			m_worldRegionMax = t3dPackRegionCoord( Vector2i( MAX( world_max.x, location.x ), MAX( world_max.y, location.y ) ) );
 		}
 		record.m_heightRange = pRegion->getHeightRange();
 		record.m_nChannelFlags = ( uint32_t )( pRegion->getChannelFlags() );
@@ -265,7 +256,7 @@ bool Terrain3DRuntimeWorldManifest::buildAuthoringIndex( const Terrain3DRegionRe
 		t3dRuntimeWorldRegionRecord_t &record = ( m_regions )[iRegion];
 		uint16_t adjacency = 0u;
 		for ( uint16_t bit = 0u; bit < 8u; ++bit ) {
-			if ( hasRegion( record.m_location + s_szNeighbors[bit] ) ) {
+			if ( hasRegion( t3dUnpackRegionCoord( record.m_location ) + s_szNeighbors[bit] ) ) {
 				adjacency |= ( uint16_t )( 1u << bit );
 			}
 		}
@@ -287,16 +278,16 @@ bool Terrain3DRuntimeWorldManifest::write( const String &rDataDirectory,
 	}
 	m_nMaterialSignature = rConfig.m_nMaterialSourceSignature;
 	uint64_t world_signature = 1469598103934665603ull;
-	t3dRuntimeWorldManifestHashU32( world_signature, ( uint32_t )( m_nRegionSize ) );
+	t3dRuntimeWorldManifestHashU32( world_signature, s_nRegionGeometrySignature );
 	t3dRuntimeWorldManifestHashU32( world_signature, ( uint32_t )( m_regions.size() ) );
 	for ( size_t iRegion = 0u; iRegion < ( size_t )( ( m_regions ).size() ); iRegion++ ) {
 		t3dRuntimeWorldRegionRecord_t &record = ( m_regions )[iRegion];
-		const Terrain3DRegion *const pRegion = rRepository.getRegionPtr( record.m_location );
+		const Terrain3DRegion *const pRegion = rRepository.getRegionPtr( t3dUnpackRegionCoord( record.m_location ) );
 		uint64_t page_signature = 0u;
 		const String page_path = rPageStore.getPagePath( pRegion, rDataDirectory );
 		if ( !rPageStore.readSourceSignature( page_path, page_signature ) || page_signature == 0u ) {
 			if ( pErrors ) {
-				pErrors->push_back( String( "Missing/invalid runtime page for manifest region " ) + String( record.m_location ) );
+				pErrors->push_back( String( "Missing/invalid runtime page for manifest region " ) + String( t3dUnpackRegionCoord( record.m_location ) ) );
 			}
 			return false;
 		}
@@ -305,8 +296,7 @@ bool Terrain3DRuntimeWorldManifest::write( const String &rDataDirectory,
 		if ( record.m_nMaterialMask == 0u ) {
 			record.m_nMaterialMask = 1u;
 		}
-		t3dRuntimeWorldManifestHashBytes( world_signature, &record.m_location.x, sizeof( record.m_location.x ) );
-		t3dRuntimeWorldManifestHashBytes( world_signature, &record.m_location.y, sizeof( record.m_location.y ) );
+		t3dRuntimeWorldManifestHashBytes( world_signature, &record.m_location, sizeof( record.m_location ) );
 		t3dRuntimeWorldManifestHashBytes( world_signature, &record.m_nPageSourceSignature, sizeof( record.m_nPageSourceSignature ) );
 		t3dRuntimeWorldManifestHashBytes( world_signature, &record.m_nMaterialMask, sizeof( record.m_nMaterialMask ) );
 		t3dRuntimeWorldManifestHashBytes( world_signature, &record.m_nFlags, sizeof( record.m_nFlags ) );
@@ -332,21 +322,23 @@ bool Terrain3DRuntimeWorldManifest::write( const String &rDataDirectory,
 	pFile->store_64( s_nRuntimeWorldManifestMagic );
 	pFile->store_32( s_nRuntimeWorldManifestVersion );
 	pFile->store_32( s_nManifestHeaderBytes );
-	pFile->store_32( ( uint32_t )( m_nRegionSize ) );
-	pFile->store_32( ( uint32_t )( m_nRegionMapSize ) );
+	pFile->store_32( s_nRegionGeometrySignature );
+	pFile->store_32( 0u );
 	pFile->store_32( ( uint32_t )( m_regions.size() ) );
 	pFile->store_32( ( uint32_t )( m_sceneDependencies.size() ) );
 	pFile->store_32( ( uint32_t )( m_regionSceneDependencies.size() ) );
 	pFile->store_32( s_nManifestRegionBaseBytes + ( uint32_t )( s_nMaxMeshAssets * sizeof( uint32_t ) ) );
 	pFile->store_64( m_nWorldSignature );
 	pFile->store_64( m_nMaterialSignature );
-	pFile->store_float( ( float )( m_fVertexSpacing ) );
+	pFile->store_float( s_fRegionVertexSpacing );
 	pFile->store_float( ( float )( m_worldHeightRange.x ) );
 	pFile->store_float( ( float )( m_worldHeightRange.y ) );
-	pFile->store_32( ( uint32_t )( m_worldRegionMin.x ) );
-	pFile->store_32( ( uint32_t )( m_worldRegionMin.y ) );
-	pFile->store_32( ( uint32_t )( m_worldRegionMax.x ) );
-	pFile->store_32( ( uint32_t )( m_worldRegionMax.y ) );
+	const Vector2i world_region_min = t3dUnpackRegionCoord( m_worldRegionMin );
+	const Vector2i world_region_max = t3dUnpackRegionCoord( m_worldRegionMax );
+	pFile->store_32( ( uint32_t )( world_region_min.x ) );
+	pFile->store_32( ( uint32_t )( world_region_min.y ) );
+	pFile->store_32( ( uint32_t )( world_region_max.x ) );
+	pFile->store_32( ( uint32_t )( world_region_max.y ) );
 	pFile->store_32( s_nManifestTopologyBytes );
 	pFile->store_32( 0u );
 	while ( pFile->get_position() < s_nManifestHeaderBytes ) {
@@ -358,8 +350,11 @@ bool Terrain3DRuntimeWorldManifest::write( const String &rDataDirectory,
 	}
 	for ( size_t iRegion = 0u; iRegion < ( size_t )( ( m_regions ).size() ); iRegion++ ) {
 		const t3dRuntimeWorldRegionRecord_t &record = ( m_regions )[iRegion];
-		pFile->store_32( ( uint32_t )( record.m_location.x ) );
-		pFile->store_32( ( uint32_t )( record.m_location.y ) );
+		pFile->store_8( ( uint8_t )( record.m_location.m_x ) );
+		pFile->store_8( ( uint8_t )( record.m_location.m_y ) );
+		for ( int reserved_coord = 0; reserved_coord < 6; ++reserved_coord ) {
+			pFile->store_8( 0u );
+		}
 		pFile->store_float( ( float )( record.m_heightRange.x ) );
 		pFile->store_float( ( float )( record.m_heightRange.y ) );
 		pFile->store_32( record.m_nChannelFlags );
@@ -449,27 +444,27 @@ bool Terrain3DRuntimeWorldManifest::load( const String &rDataDirectory, PackedSt
 		}
 		return false;
 	}
-	m_nRegionSize = ( int )( pFile->get_32() );
-	m_nRegionMapSize = ( int )( pFile->get_32() );
+	const uint32_t geometry_signature = pFile->get_32();
+	const uint32_t geometry_reserved = pFile->get_32();
 	const uint32_t region_count = pFile->get_32();
 	const uint32_t dependency_count = pFile->get_32();
 	const uint32_t region_dependency_count = pFile->get_32();
 	const uint32_t record_bytes = pFile->get_32();
 	m_nWorldSignature = pFile->get_64();
 	m_nMaterialSignature = pFile->get_64();
-	m_fVertexSpacing = pFile->get_float();
+	const float serialized_vertex_spacing = pFile->get_float();
 	m_worldHeightRange.x = pFile->get_float();
 	m_worldHeightRange.y = pFile->get_float();
-	m_worldRegionMin.x = ( int32_t )( pFile->get_32() );
-	m_worldRegionMin.y = ( int32_t )( pFile->get_32() );
-	m_worldRegionMax.x = ( int32_t )( pFile->get_32() );
-	m_worldRegionMax.y = ( int32_t )( pFile->get_32() );
+	const Vector2i world_region_min( ( int32_t )( pFile->get_32() ), ( int32_t )( pFile->get_32() ) );
+	const Vector2i world_region_max( ( int32_t )( pFile->get_32() ), ( int32_t )( pFile->get_32() ) );
+	m_worldRegionMin = t3dPackRegionCoord( world_region_min );
+	m_worldRegionMax = t3dPackRegionCoord( world_region_max );
 	const uint32_t topology_bytes = pFile->get_32();
 	pFile->get_32();
-	if ( !t3dIsValidRegionSize( m_nRegionSize ) || m_nRegionMapSize != s_nActiveWorldTexels / m_nRegionSize || region_count == 0u
-	        || region_count > s_nMaxRegionSlots || dependency_count > UINT16_MAX
+	if ( geometry_signature != s_nRegionGeometrySignature || geometry_reserved != 0u || region_count == 0u
+	        || region_count > s_nRegionSlots || dependency_count > UINT16_MAX
 	        || record_bytes != s_nManifestRegionBaseBytes + s_nMaxMeshAssets * sizeof( uint32_t )
-	        || topology_bytes != s_nManifestTopologyBytes || m_fVertexSpacing < 0.25f || m_fVertexSpacing > 100.0f ) {
+	        || topology_bytes != s_nManifestTopologyBytes || serialized_vertex_spacing != s_fRegionVertexSpacing ) {
 		if ( pErrors ) {
 			pErrors->push_back( "Cooked world manifest dimensions are invalid." );
 		}
@@ -483,8 +478,11 @@ bool Terrain3DRuntimeWorldManifest::load( const String &rDataDirectory, PackedSt
 	m_regions.resize( region_count );
 	for ( uint32_t index = 0u; index < region_count; ++index ) {
 		t3dRuntimeWorldRegionRecord_t &record = m_regions[index];
-		record.m_location.x = ( int32_t )( pFile->get_32() );
-		record.m_location.y = ( int32_t )( pFile->get_32() );
+		record.m_location.m_x = ( int8_t )( pFile->get_8() );
+		record.m_location.m_y = ( int8_t )( pFile->get_8() );
+		for ( int reserved_coord = 0; reserved_coord < 6; ++reserved_coord ) {
+			( void )pFile->get_8();
+		}
 		record.m_heightRange.x = pFile->get_float();
 		record.m_heightRange.y = pFile->get_float();
 		record.m_nChannelFlags = pFile->get_32();
@@ -514,7 +512,7 @@ bool Terrain3DRuntimeWorldManifest::load( const String &rDataDirectory, PackedSt
 		record.m_nLightmapContextRadiusRegions = pFile->get_16();
 		record.m_nLightmapTerrainProxyLod = pFile->get_16();
 		pFile->get_16();
-		if ( !t3dRegionLocationValid( record.m_location, m_nRegionMapSize ) || record.m_nMaterialMask == 0u
+		if ( !t3dRegionLocationValid( t3dUnpackRegionCoord( record.m_location ), s_nRegionMapSize ) || record.m_nMaterialMask == 0u
 		        || record.m_nPageSourceSignature == 0u
 		        || record.m_nSceneDependencyFirst + record.m_nSceneDependencyCount > region_dependency_count ) {
 			if ( pErrors ) {
@@ -564,7 +562,7 @@ bool Terrain3DRuntimeWorldManifest::load( const String &rDataDirectory, PackedSt
 			return false;
 		}
 		const String source_path =
-		        rDataDirectory.trim_suffix( "/" ) + String( "/" ) + Terrain3DUtil::locationToFilename( record.m_location );
+		        rDataDirectory.trim_suffix( "/" ) + String( "/" ) + Terrain3DUtil::locationToFilename( t3dUnpackRegionCoord( record.m_location ) );
 		const String page_path = source_path.get_basename() + String( ".t3dpage" );
 		if ( !FileAccess::file_exists( page_path ) ) {
 			if ( pErrors ) {
@@ -584,20 +582,17 @@ bool Terrain3DRuntimeWorldManifest::load( const String &rDataDirectory, PackedSt
 }
 
 bool Terrain3DRuntimeWorldManifest::stageRepository( const String &rDataDirectory, t3dStagedRepository_t &rStaged ) const {
-	if ( !m_bLoaded || m_nRegionSize <= 0 || m_regions.empty() ) {
+	if ( !m_bLoaded || m_regions.empty() ) {
 		return false;
 	}
 	rStaged.reset();
 	rStaged.m_bBoundedCpuLoad = true;
-	rStaged.m_nTargetRegionSize = m_nRegionSize;
 	rStaged.m_regions.reserve( m_regions.size() );
 	for ( int slot = 0; slot < ( int )( m_regions.size() ); ++slot ) {
 		const t3dRuntimeWorldRegionRecord_t &record = m_regions[( size_t )( slot )];
 		Ref<Terrain3DRegion> pRegion;
 		pRegion.instantiate();
-		pRegion->setLocation( record.m_location );
-		pRegion->setRegionSize( m_nRegionSize );
-		pRegion->setVertexSpacing( m_fVertexSpacing );
+		pRegion->setLocation( t3dUnpackRegionCoord( record.m_location ) );
 		pRegion->setHeightRange( record.m_heightRange );
 		pRegion->setChannelFlags( ( int )( record.m_nChannelFlags ) );
 		pRegion->setCookedPageSourceSignatureInternal( record.m_nPageSourceSignature );
@@ -607,9 +602,9 @@ bool Terrain3DRuntimeWorldManifest::stageRepository( const String &rDataDirector
 			Ref<Terrain3DRegionLighting> lighting;
 			lighting.instantiate();
 			lighting->setLightDataPath( m_sceneDependencies[record.m_nLightmapDependency] );
-			lighting->setClusterLocation( record.m_location );
-			lighting->setRegionMin( record.m_location );
-			lighting->setRegionMax( record.m_location );
+			lighting->setClusterLocation( t3dUnpackRegionCoord( record.m_location ) );
+			lighting->setRegionMin( t3dUnpackRegionCoord( record.m_location ) );
+			lighting->setRegionMax( t3dUnpackRegionCoord( record.m_location ) );
 			lighting->setClusterSizeRegions( record.m_nLightmapClusterSizeRegions );
 			lighting->setTerrainProxyLod( record.m_nLightmapTerrainProxyLod );
 			lighting->setContextRadiusRegions( record.m_nLightmapContextRadiusRegions );
@@ -630,14 +625,15 @@ bool Terrain3DRuntimeWorldManifest::stageRepository( const String &rDataDirector
 		pRegion->setModified( false );
 		pRegion->markRuntimeMapsCleanInternal();
 		t3dStagedRegion_t entry;
-		entry.m_location = record.m_location;
-		entry.m_path = rDataDirectory.path_join( Terrain3DUtil::locationToFilename( record.m_location ) );
+		entry.m_location = t3dUnpackRegionCoord( record.m_location );
+		entry.m_path = rDataDirectory.path_join( Terrain3DUtil::locationToFilename( t3dUnpackRegionCoord( record.m_location ) ) );
 		entry.m_region = pRegion;
-		const int half_map = m_nRegionMapSize / 2;
-		entry.m_nActiveSlot = ( record.m_location.y + half_map ) * m_nRegionMapSize + record.m_location.x + half_map;
+		const int active_x = ( int )( record.m_location.m_x ) + s_nRegionMapHalf;
+		const int active_y = ( int )( record.m_location.m_y ) + s_nRegionMapHalf;
+		entry.m_nActiveSlot = ( active_y << s_nRegionMapShift ) + active_x;
 		rStaged.m_regions.push_back( entry );
-		const int map_index = Terrain3DRegionRepository::getRegionMapIndex( record.m_location );
-		rStaged.m_resources[record.m_location] = pRegion;
+		const int map_index = Terrain3DRegionRepository::getRegionMapIndex( t3dUnpackRegionCoord( record.m_location ) );
+		rStaged.m_resources[t3dUnpackRegionCoord( record.m_location )] = pRegion;
 		rStaged.m_pRegionPtrs[( size_t )( map_index )] = pRegion.ptr();
 		rStaged.m_regionLocations[( size_t )( slot )] = record.m_location;
 		rStaged.m_logicalRegionMap[( size_t )( map_index )] = ( uint16_t )( slot + 1 );

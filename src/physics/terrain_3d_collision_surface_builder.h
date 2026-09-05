@@ -39,10 +39,9 @@ private:
 	real_t m_fBlendWeightX[s_nMaxCollisionAxisSamples]{};
 	real_t m_fBlendWeightZ[s_nMaxCollisionAxisSamples]{};
 	real_t m_fRegionBlendCurve[s_nMaxRegionBlendSamples]{};
-	int m_nRegionBlendCurveSize = 0;
 	real_t m_fRegionBlendCurveSetting = -1.0f;
 
-	void refreshRegionBlendCurve( int nRegionSize, real_t fRegionBlend );
+	void refreshRegionBlendCurve( real_t fRegionBlend );
 	real_t getRegionBlendWeight( int64_t nGridCoordinate ) const;
 	real_t getRegionBlend( int iX, int iZ, int iMinRegionX, int iMinRegionZ, int nPresenceWidth ) const;
 };

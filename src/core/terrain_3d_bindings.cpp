@@ -449,7 +449,6 @@ void Terrain3D::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_plugin" ), &Terrain3D::getPlugin );
 
 	// Regions
-	ClassDB::bind_method( D_METHOD( "change_region_size", "size" ), &Terrain3D::changeRegionSize );
 	ClassDB::bind_method( D_METHOD( "get_region_size" ), &Terrain3D::getRegionSize );
 	ClassDB::bind_method( D_METHOD( "set_save_16_bit", "enabled" ), &Terrain3D::setSave16Bit );
 	ClassDB::bind_method( D_METHOD( "get_save_16_bit" ), &Terrain3D::getSave16Bit );
@@ -524,7 +523,6 @@ void Terrain3D::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_mesh_size" ), &Terrain3D::getMeshSize );
 	ClassDB::bind_method( D_METHOD( "set_tessellation_level", "size" ), &Terrain3D::setTessellationLevel );
 	ClassDB::bind_method( D_METHOD( "get_tessellation_level" ), &Terrain3D::getTessellationLevel );
-	ClassDB::bind_method( D_METHOD( "set_vertex_spacing", "scale" ), &Terrain3D::setVertexSpacing );
 	ClassDB::bind_method( D_METHOD( "get_vertex_spacing" ), &Terrain3D::getVertexSpacing );
 	ClassDB::bind_method( D_METHOD( "set_cull_margin", "margin" ), &Terrain3D::setCullMargin );
 	ClassDB::bind_method( D_METHOD( "get_cull_margin" ), &Terrain3D::getCullMargin );
@@ -692,7 +690,7 @@ void Terrain3D::_bind_methods( void ) {
 	        "is_editor_runtime_streaming_preview" );
 	ADD_PROPERTY(
 	        PropertyInfo( Variant::INT, "region_size", PROPERTY_HINT_ENUM, "128:128", PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-	        "change_region_size",
+	        "",
 	        "get_region_size" );
 	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "save_16_bit", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
 	        "set_save_16_bit",
@@ -781,7 +779,7 @@ void Terrain3D::_bind_methods( void ) {
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "mesh_size", PROPERTY_HINT_RANGE, "8,256,2" ), "set_mesh_size", "get_mesh_size" );
 	ADD_PROPERTY(
 	        PropertyInfo( Variant::FLOAT, "vertex_spacing", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-	        "set_vertex_spacing",
+	        "",
 	        "get_vertex_spacing" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "cull_margin", PROPERTY_HINT_RANGE, "0.0,10000.0,.5,or_greater" ),
 	        "set_cull_margin",

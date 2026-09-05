@@ -16,11 +16,20 @@ env.Append(CPPPATH=[
     "thirdparty/EASTL/include",
     "thirdparty/EABase/include/Common",
 ])
-sources = [
-    env.File(path)
+source_paths = [
+    path
     for path in sorted(glob("src/**/*.cpp", recursive=True))
     if "gen" not in Path(path).parts[1:-1]
 ]
+
+# Standalone test executables must never enter the GDExtension DLL link.  Keep
+# tests outside src/ and fail closed if a future source move violates that rule.
+for source_path in source_paths:
+    source_parts = Path(source_path).parts
+    if "tests" in source_parts or "test" in source_parts:
+        raise RuntimeError("Standalone test source entered Terrain3D production build: {}".format(source_path))
+
+sources = [env.File(path) for path in source_paths]
 
 # Find gdextension path even if the directory or extension is renamed (e.g. project/addons/example/example.gdextension).
 (extension_path,) = glob("project/addons/terrain_3d/*.gdextension")

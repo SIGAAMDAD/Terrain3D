@@ -81,7 +81,10 @@ public:
 	Terrain3DLinearArena &operator=( const Terrain3DLinearArena & ) = delete;
 
 	bool configure( const size_t nBytes, const size_t nBaseAlignment = s_nArenaDefaultBaseAlignment ) {
-		release();
+		if ( m_bCapacitySealed ) {
+			return false;
+		}
+		releaseBacking();
 		if ( nBytes == 0u ) {
 			return true;
 		}
@@ -103,21 +106,32 @@ public:
 	}
 
 	bool ensureCapacity( const size_t nBytes, const size_t nBaseAlignment = s_nArenaDefaultBaseAlignment ) {
-		if ( nBytes <= m_nCapacity && m_pBase ) {
+		if ( nBytes <= m_nCapacity && ( m_pBase || nBytes == 0u ) ) {
 			m_iOffset = 0u;
 			return true;
+		}
+		if ( m_bCapacitySealed ) {
+			return false;
 		}
 		return configure( nBytes, nBaseAlignment );
 	}
 
+	EA_FORCE_INLINE bool sealCapacity( void ) {
+		m_bCapacitySealed = true;
+		return true;
+	}
+
+	EA_FORCE_INLINE void unsealCapacityCold( void ) {
+		m_bCapacitySealed = false;
+	}
+
+	EA_FORCE_INLINE bool capacitySealed( void ) const {
+		return m_bCapacitySealed;
+	}
+
 	void release( void ) {
-		if ( m_pRaw ) {
-			t3dMemoryRelease( m_pRaw );
-		}
-		m_pRaw = NULL;
-		m_pBase = NULL;
-		m_nCapacity = 0u;
-		m_iOffset = 0u;
+		releaseBacking();
+		m_bCapacitySealed = false;
 	}
 
 	EA_FORCE_INLINE void reset( void ) {
@@ -125,9 +139,6 @@ public:
 	}
 
 	void *allocate( const size_t nBytes, const size_t nAlignment ) {
-		if ( nBytes > 0u && !t3dValidateRuntimeAllocationRequest() ) {
-			return NULL;
-		}
 		if ( nBytes == 0u ) {
 			return NULL;
 		}
@@ -173,10 +184,21 @@ public:
 	}
 
 private:
+	void releaseBacking( void ) {
+		if ( m_pRaw ) {
+			t3dMemoryRelease( m_pRaw );
+		}
+		m_pRaw = NULL;
+		m_pBase = NULL;
+		m_nCapacity = 0u;
+		m_iOffset = 0u;
+	}
+
 	void *m_pRaw = NULL;
 	uint8_t *m_pBase = NULL;
 	size_t m_nCapacity = 0u;
 	size_t m_iOffset = 0u;
+	bool m_bCapacitySealed = false;
 };
 
 template <typename T>

@@ -21,12 +21,6 @@ void Terrain3DHLODManifest::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( getter ), &Terrain3DHLODManifest::get##name )
 	ClassDB::bind_method( D_METHOD( "set_format", "value" ), &Terrain3DHLODManifest::setFormat );
 	ClassDB::bind_method( D_METHOD( "get_format" ), &Terrain3DHLODManifest::getFormat );
-	ClassDB::bind_method( D_METHOD( "set_region_map_size", "value" ), &Terrain3DHLODManifest::setRegionMapSize );
-	ClassDB::bind_method( D_METHOD( "get_region_map_size" ), &Terrain3DHLODManifest::getRegionMapSize );
-	ClassDB::bind_method( D_METHOD( "set_region_size", "value" ), &Terrain3DHLODManifest::setRegionSize );
-	ClassDB::bind_method( D_METHOD( "get_region_size" ), &Terrain3DHLODManifest::getRegionSize );
-	ClassDB::bind_method( D_METHOD( "set_vertex_spacing", "value" ), &Terrain3DHLODManifest::setVertexSpacing );
-	ClassDB::bind_method( D_METHOD( "get_vertex_spacing" ), &Terrain3DHLODManifest::getVertexSpacing );
 	ClassDB::bind_method( D_METHOD( "set_max_level", "value" ), &Terrain3DHLODManifest::setMaxLevel );
 	ClassDB::bind_method( D_METHOD( "get_max_level" ), &Terrain3DHLODManifest::getMaxLevel );
 	ClassDB::bind_method( D_METHOD( "set_build_signature", "value" ), &Terrain3DHLODManifest::setBuildSignature );
@@ -48,9 +42,6 @@ void Terrain3DHLODManifest::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "compile_runtime_blob" ), &Terrain3DHLODManifest::compileRuntimeBlob );
 	ClassDB::bind_method( D_METHOD( "get_entry_count" ), &Terrain3DHLODManifest::getEntryCount );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "format" ), "set_format", "get_format" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "region_map_size" ), "set_region_map_size", "get_region_map_size" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "region_size" ), "set_region_size", "get_region_size" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "vertex_spacing" ), "set_vertex_spacing", "get_vertex_spacing" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "max_level" ), "set_max_level", "get_max_level" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "build_signature" ), "set_build_signature", "get_build_signature" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "built_unix" ), "set_built_unix", "get_built_unix" );

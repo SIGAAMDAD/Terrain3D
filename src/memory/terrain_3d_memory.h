@@ -3,9 +3,15 @@
 #ifndef TERRAIN3D_MEMORY_H
 #define TERRAIN3D_MEMORY_H
 
+#if defined( TERRAIN3D_STANDALONE_ALLOCATOR_TEST )
+#include "core/terrain_3d_compiler.h"
+#ifndef s_nRuntimeAllocationPhaseCount
+#define s_nRuntimeAllocationPhaseCount ( 6u )
+#endif
+#else
 #include "Terrain3DConstants.h"
+#endif
 #include "core/terrain_3d_sync.h"
-#include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -21,102 +27,96 @@ typedef enum t3dRuntimeAllocationPhase_e : uint8_t {
 
 
 typedef struct t3dRuntimeAllocationPhaseStats_s {
-	uint64_t m_szValidationChecks[s_nRuntimeAllocationPhaseCount] = {};
-	uint64_t m_szDeniedChecks[s_nRuntimeAllocationPhaseCount] = {};
-	uint64_t m_nExplicitColdOverrides = 0u;
-	uint64_t m_nRestrictedColdOverrides = 0u;
+	uint64_t m_szEastlEvents[s_nRuntimeAllocationPhaseCount] = {};
+	uint64_t m_szEastlBytes[s_nRuntimeAllocationPhaseCount] = {};
+	uint64_t m_szZoneEvents[s_nRuntimeAllocationPhaseCount] = {};
+	uint64_t m_szZoneBytes[s_nRuntimeAllocationPhaseCount] = {};
+	uint64_t m_szRawEvents[s_nRuntimeAllocationPhaseCount] = {};
+	uint64_t m_szRawBytes[s_nRuntimeAllocationPhaseCount] = {};
 } t3dRuntimeAllocationPhaseStats_t;
 
 inline thread_local t3dRuntimeAllocationPhase_t g_t3dRuntimeAllocationPhase = TERRAIN3D_ALLOCATION_PHASE_COLD_REBUILD;
-inline thread_local bool g_t3dRuntimeAllocationPermission = true;
-inline t3dAtomic_t<uint64_t> g_szT3dRuntimeAllocationValidationChecks[s_nRuntimeAllocationPhaseCount] = {};
-inline t3dAtomic_t<uint64_t> g_szT3dRuntimeAllocationDeniedChecks[s_nRuntimeAllocationPhaseCount] = {};
-inline t3dAtomic_t<uint64_t> g_nT3dRuntimeExplicitColdOverrides{ 0u };
-inline t3dAtomic_t<uint64_t> g_nT3dRuntimeRestrictedColdOverrides{ 0u };
+inline t3dAtomic_t<uint64_t> g_szT3dRuntimeEastlAllocationEvents[s_nRuntimeAllocationPhaseCount] = {};
+inline t3dAtomic_t<uint64_t> g_szT3dRuntimeEastlAllocationBytes[s_nRuntimeAllocationPhaseCount] = {};
+inline t3dAtomic_t<uint64_t> g_szT3dRuntimeZoneAllocationEvents[s_nRuntimeAllocationPhaseCount] = {};
+inline t3dAtomic_t<uint64_t> g_szT3dRuntimeZoneAllocationBytes[s_nRuntimeAllocationPhaseCount] = {};
+inline t3dAtomic_t<uint64_t> g_szT3dRuntimeRawAllocationEvents[s_nRuntimeAllocationPhaseCount] = {};
+inline t3dAtomic_t<uint64_t> g_szT3dRuntimeRawAllocationBytes[s_nRuntimeAllocationPhaseCount] = {};
 
 inline t3dRuntimeAllocationPhase_t t3dGetRuntimeAllocationPhase( void ) {
 	return g_t3dRuntimeAllocationPhase;
 }
 
-inline bool t3dRuntimeAllocationPhaseAllowsAllocation( const t3dRuntimeAllocationPhase_t ePhase ) {
-	return ePhase == TERRAIN3D_ALLOCATION_PHASE_INITIALIZATION || ePhase == TERRAIN3D_ALLOCATION_PHASE_COLD_REBUILD
-	        || ePhase == TERRAIN3D_ALLOCATION_PHASE_SHUTDOWN;
-}
-
-inline bool t3dValidateRuntimeAllocationRequest( void ) {
+EA_FORCE_INLINE void t3dRecordRuntimeEastlAllocation( const size_t nBytes ) {
 	const uint32_t phase = ( uint32_t )( g_t3dRuntimeAllocationPhase );
 	if ( phase < s_nRuntimeAllocationPhaseCount ) {
-		g_szT3dRuntimeAllocationValidationChecks[phase].fetch_add( 1u, T3D_MEMORY_ORDER_RELAXED );
+		g_szT3dRuntimeEastlAllocationEvents[phase].fetch_add( 1u, T3D_MEMORY_ORDER_RELAXED );
+		g_szT3dRuntimeEastlAllocationBytes[phase].fetch_add( ( uint64_t )( nBytes ), T3D_MEMORY_ORDER_RELAXED );
 	}
-	if ( g_t3dRuntimeAllocationPermission ) {
-		return true;
-	}
-	if ( phase < s_nRuntimeAllocationPhaseCount ) {
-		g_szT3dRuntimeAllocationDeniedChecks[phase].fetch_add( 1u, T3D_MEMORY_ORDER_RELAXED );
-	}
-#if !defined( NDEBUG )
-	assert( false && "Terrain3D-owned allocation attempted from a hot runtime phase" );
-#endif
-	return false;
 }
+
+EA_FORCE_INLINE void t3dRecordRuntimeZoneAllocation( const size_t nBytes ) {
+	const uint32_t phase = ( uint32_t )( g_t3dRuntimeAllocationPhase );
+	if ( phase < s_nRuntimeAllocationPhaseCount ) {
+		g_szT3dRuntimeZoneAllocationEvents[phase].fetch_add( 1u, T3D_MEMORY_ORDER_RELAXED );
+		g_szT3dRuntimeZoneAllocationBytes[phase].fetch_add( ( uint64_t )( nBytes ), T3D_MEMORY_ORDER_RELAXED );
+	}
+}
+
+EA_FORCE_INLINE void t3dRecordRuntimeRawAllocation( const size_t nBytes ) {
+	const uint32_t phase = ( uint32_t )( g_t3dRuntimeAllocationPhase );
+	if ( phase < s_nRuntimeAllocationPhaseCount ) {
+		g_szT3dRuntimeRawAllocationEvents[phase].fetch_add( 1u, T3D_MEMORY_ORDER_RELAXED );
+		g_szT3dRuntimeRawAllocationBytes[phase].fetch_add( ( uint64_t )( nBytes ), T3D_MEMORY_ORDER_RELAXED );
+	}
+}
+
 
 inline t3dRuntimeAllocationPhaseStats_t t3dGetRuntimeAllocationPhaseStats( void ) {
 	t3dRuntimeAllocationPhaseStats_t stats;
 	for ( uint32_t phase = 0u; phase < s_nRuntimeAllocationPhaseCount; ++phase ) {
-		stats.m_szValidationChecks[phase] = g_szT3dRuntimeAllocationValidationChecks[phase].load( T3D_MEMORY_ORDER_RELAXED );
-		stats.m_szDeniedChecks[phase] = g_szT3dRuntimeAllocationDeniedChecks[phase].load( T3D_MEMORY_ORDER_RELAXED );
+		stats.m_szEastlEvents[phase] = g_szT3dRuntimeEastlAllocationEvents[phase].load( T3D_MEMORY_ORDER_RELAXED );
+		stats.m_szEastlBytes[phase] = g_szT3dRuntimeEastlAllocationBytes[phase].load( T3D_MEMORY_ORDER_RELAXED );
+		stats.m_szZoneEvents[phase] = g_szT3dRuntimeZoneAllocationEvents[phase].load( T3D_MEMORY_ORDER_RELAXED );
+		stats.m_szZoneBytes[phase] = g_szT3dRuntimeZoneAllocationBytes[phase].load( T3D_MEMORY_ORDER_RELAXED );
+		stats.m_szRawEvents[phase] = g_szT3dRuntimeRawAllocationEvents[phase].load( T3D_MEMORY_ORDER_RELAXED );
+		stats.m_szRawBytes[phase] = g_szT3dRuntimeRawAllocationBytes[phase].load( T3D_MEMORY_ORDER_RELAXED );
 	}
-	stats.m_nExplicitColdOverrides = g_nT3dRuntimeExplicitColdOverrides.load( T3D_MEMORY_ORDER_RELAXED );
-	stats.m_nRestrictedColdOverrides = g_nT3dRuntimeRestrictedColdOverrides.load( T3D_MEMORY_ORDER_RELAXED );
 	return stats;
 }
 
 class Terrain3DAllocationPhaseScope {
 public:
-	explicit Terrain3DAllocationPhaseScope( const t3dRuntimeAllocationPhase_t ePhase ) :
-	        m_ePrevious( g_t3dRuntimeAllocationPhase ), m_bPreviousPermission( g_t3dRuntimeAllocationPermission ) {
+	explicit Terrain3DAllocationPhaseScope( const t3dRuntimeAllocationPhase_t ePhase ) : m_ePrevious( g_t3dRuntimeAllocationPhase ) {
 		g_t3dRuntimeAllocationPhase = ePhase;
-		// A nested phase may restrict allocation permission, but it may not
-		// silently elevate a hot/worker phase back into an allocation-capable
-		// phase. Explicit cold rebuild boundaries use Terrain3DColdAllocationScope.
-		g_t3dRuntimeAllocationPermission = m_bPreviousPermission && t3dRuntimeAllocationPhaseAllowsAllocation( ePhase );
 	}
 	~Terrain3DAllocationPhaseScope( void ) {
 		g_t3dRuntimeAllocationPhase = m_ePrevious;
-		g_t3dRuntimeAllocationPermission = m_bPreviousPermission;
 	}
 	Terrain3DAllocationPhaseScope( const Terrain3DAllocationPhaseScope & ) = delete;
 	Terrain3DAllocationPhaseScope &operator=( const Terrain3DAllocationPhaseScope & ) = delete;
 
 private:
 	t3dRuntimeAllocationPhase_t m_ePrevious;
-	bool m_bPreviousPermission;
 };
 
-// Explicit allocation boundary for known cold rebuild/resource-publication work.
-// This is intentionally a separate type so code review can distinguish a real
-// allocation permission override from a diagnostic phase label.
-class Terrain3DColdAllocationScope {
+// Diagnostic phase marker for explicit owner-controlled rebuild/materialization work.
+// Phase labels never grant or deny allocation. Fixed buffers/slabs and their owning
+// subsystems decide whether backing may grow; allocator layers only service requests,
+// enforce their bound domain/capacity, and record phase telemetry.
+class Terrain3DColdPhaseScope {
 public:
-	Terrain3DColdAllocationScope( void ) :
-	        m_ePrevious( g_t3dRuntimeAllocationPhase ), m_bPreviousPermission( g_t3dRuntimeAllocationPermission ) {
-		g_nT3dRuntimeExplicitColdOverrides.fetch_add( 1u, T3D_MEMORY_ORDER_RELAXED );
-		if ( !m_bPreviousPermission ) {
-			g_nT3dRuntimeRestrictedColdOverrides.fetch_add( 1u, T3D_MEMORY_ORDER_RELAXED );
-		}
+	Terrain3DColdPhaseScope( void ) : m_ePrevious( g_t3dRuntimeAllocationPhase ) {
 		g_t3dRuntimeAllocationPhase = TERRAIN3D_ALLOCATION_PHASE_COLD_REBUILD;
-		g_t3dRuntimeAllocationPermission = true;
 	}
-	~Terrain3DColdAllocationScope( void ) {
+	~Terrain3DColdPhaseScope( void ) {
 		g_t3dRuntimeAllocationPhase = m_ePrevious;
-		g_t3dRuntimeAllocationPermission = m_bPreviousPermission;
 	}
-	Terrain3DColdAllocationScope( const Terrain3DColdAllocationScope & ) = delete;
-	Terrain3DColdAllocationScope &operator=( const Terrain3DColdAllocationScope & ) = delete;
+	Terrain3DColdPhaseScope( const Terrain3DColdPhaseScope & ) = delete;
+	Terrain3DColdPhaseScope &operator=( const Terrain3DColdPhaseScope & ) = delete;
 
 private:
 	t3dRuntimeAllocationPhase_t m_ePrevious;
-	bool m_bPreviousPermission;
 };
 
 #if defined( TERRAIN3D_STANDALONE_ALLOCATOR_TEST )
@@ -126,14 +126,18 @@ private:
 #endif
 
 inline void *t3dMemoryAllocate( const size_t nBytes ) {
-	if ( nBytes == 0u || !t3dValidateRuntimeAllocationRequest() ) {
+	if ( nBytes == 0u ) {
 		return NULL;
 	}
 #if defined( TERRAIN3D_STANDALONE_ALLOCATOR_TEST )
-	return malloc( nBytes );
+	void *const pMemory = malloc( nBytes );
 #else
-	return memalloc( nBytes );
+	void *const pMemory = memalloc( nBytes );
 #endif
+	if ( pMemory ) {
+		t3dRecordRuntimeRawAllocation( nBytes );
+	}
+	return pMemory;
 }
 
 inline void t3dMemoryRelease( void *pPointer ) {

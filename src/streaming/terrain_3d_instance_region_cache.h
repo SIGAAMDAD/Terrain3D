@@ -16,8 +16,8 @@ class Terrain3DRegionRepository;
 class Terrain3DRuntimePageStore;
 
 typedef struct t3dInstanceRegionCacheChanges_s {
-	Vector2i m_szLoaded[s_nInstanceCacheMaxPages] = {};
-	Vector2i m_szEvicted[s_nInstanceCacheMaxPages] = {};
+	t3dRegionCoord_t m_szLoaded[s_nInstanceCacheMaxPages] = {};
+	t3dRegionCoord_t m_szEvicted[s_nInstanceCacheMaxPages] = {};
 	int m_nLoaded = 0;
 	int m_nEvicted = 0;
 
@@ -37,6 +37,10 @@ typedef struct t3dInstanceRegionCacheStats_s {
 	size_t m_nResidentBytes = 0u;
 	size_t m_nLoadBytesLastTick = 0u;
 	uint64_t m_nServiceUsecLast = 0u;
+	bool m_bMaterializationPending = false;
+	bool m_bMaterializationServiceActive = false;
+	uint64_t m_nColdMaterializations = 0u;
+	uint64_t m_nMaterializationMisses = 0u;
 } t3dInstanceRegionCacheStats_t;
 
 class Terrain3DInstanceRegionCache {
@@ -48,6 +52,7 @@ public:
 	void invalidate( const Vector2i &vLocation, t3dInstanceRegionCacheChanges_t *pChanges = NULL );
 	bool evict( const Vector2i &vLocation, t3dInstanceRegionCacheChanges_t *pChanges = NULL );
 	bool ensureResident( const Vector2i &vLocation, bool bDemandLoad, t3dInstanceRegionCacheChanges_t *pChanges = NULL );
+	void serviceColdMaterialization( const t3dResidencyFrameState_t &rFrame, bool bForce, int nEffectiveLoadPages );
 	void update( const t3dResidencyFrameState_t &rFrame, bool bForce, int nEffectiveLoadPages, t3dInstanceRegionCacheChanges_t &rChanges );
 
 	EA_FORCE_INLINE bool isEnabled( void ) const {
@@ -93,12 +98,18 @@ private:
 	size_t m_nResidentBytes = 0u;
 	size_t m_nLoadBytesLastTick = 0u;
 	uint64_t m_nServiceUsecLast = 0u;
+	bool m_bMaterializationPending = false;
+	bool m_bMaterializationServiceActive = false;
+	uint64_t m_nColdMaterializations = 0u;
+	uint64_t m_nMaterializationMisses = 0u;
 	uint64_t m_nPrefetchStreamingGenerationLast = 0u;
 	Vector2i m_center = s_v2iMax;
-	Vector2i m_szLocations[s_nInstanceCacheMaxPages] = {};
-	uint8_t m_szRegionMap[s_nMaxRegionSlots] = {};
+	t3dRegionCoord_t m_szLocations[s_nInstanceCacheMaxPages] = {};
+	uint8_t m_szRegionMap[s_nRegionSlots] = {};
 
 	int findSlot( const Vector2i &vLocation ) const;
+	bool attachResidentStore( const Vector2i &vLocation, bool bDemandLoad, t3dInstanceRegionCacheChanges_t *pChanges );
+	bool materializeRegionCold( const Vector2i &vLocation, const t3dResidencyFrameState_t &rFrame );
 	bool evictSlot( int iSlot, t3dInstanceRegionCacheChanges_t *pChanges );
 	int collectDesired( const t3dResidencyFrameState_t &rFrame, const Vector2i &rCenter, Vector2i *pLocations, int nCapacity ) const;
 };

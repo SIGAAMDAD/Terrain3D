@@ -112,7 +112,7 @@ void Terrain3D::setupTerrainMesher( const Vector3 &rInitialTarget ) {
 	        m_nMeshSize,
 	        m_nMeshLods,
 	        m_nTessellationLevel,
-	        m_fVertexSpacing,
+	        s_fRegionVertexSpacing,
 	        near_lods,
 	        middle_lods,
 	        update_budget,
@@ -546,7 +546,7 @@ void Terrain3D::updateRegionLabels( void ) {
 			pLabel->set_visibility_range_fade_mode( GeometryInstance3D::VISIBILITY_RANGE_FADE_SELF );
 			m_pLabelParent->add_child( pLabel, true );
 			Vector3 pos =
-			        Vector3( ( real_t )( region_loc.x ) + .5f, 0.f, ( real_t )( region_loc.y ) + .5f ) * m_nRegionSize * m_fVertexSpacing;
+			        Vector3( ( real_t )( region_loc.x ) + .5f, 0.f, ( real_t )( region_loc.y ) + .5f ) * s_nRegionSize * s_fRegionVertexSpacing;
 			const real_t fHeight = m_pData->getHeight( pos );
 			pos.y = ( isnan( fHeight ) ) ? 0.f : fHeight;
 			pLabel->set_position( pos );
@@ -909,7 +909,7 @@ void Terrain3D::setMeshLods( const int nCount ) {
 	}
 	if ( m_pData && effectiveGpuRegionCacheEnabled() && !m_bDeferGpuRegionCacheReconfigure ) {
 		m_pData->configureGpuRegionCache( true,
-		        m_nEffectiveGpuRegionCacheBudgetMb,
+		        m_nEffectiveGpuRegionCacheBudgetBytes,
 		        m_nGpuRegionUploadBudgetLayers,
 		        m_nGpuRegionUploadBudgetMb,
 		        m_nGpuRegionSparePages,
@@ -936,7 +936,7 @@ void Terrain3D::setTessellationLevel( const int nLevel ) {
 	}
 	if ( m_pData && effectiveGpuRegionCacheEnabled() && !m_bDeferGpuRegionCacheReconfigure ) {
 		m_pData->configureGpuRegionCache( true,
-		        m_nEffectiveGpuRegionCacheBudgetMb,
+		        m_nEffectiveGpuRegionCacheBudgetBytes,
 		        m_nGpuRegionUploadBudgetLayers,
 		        m_nGpuRegionUploadBudgetMb,
 		        m_nGpuRegionSparePages,
@@ -957,43 +957,11 @@ void Terrain3D::setMeshSize( const int nSize ) {
 	}
 	if ( m_pData && effectiveGpuRegionCacheEnabled() && !m_bDeferGpuRegionCacheReconfigure ) {
 		m_pData->configureGpuRegionCache( true,
-		        m_nEffectiveGpuRegionCacheBudgetMb,
+		        m_nEffectiveGpuRegionCacheBudgetBytes,
 		        m_nGpuRegionUploadBudgetLayers,
 		        m_nGpuRegionUploadBudgetMb,
 		        m_nGpuRegionSparePages,
 		        m_nGpuRegionRetireFrames );
-	}
-}
-
-void Terrain3D::setVertexSpacing( const real_t fSpacing ) {
-	if ( !Math::is_equal_approx( fSpacing, ( real_t )( 1.0f ) ) ) {
-		LOG( ERROR,
-		        "This Terrain3D fork requires 1 metre vertex spacing so every 128-sample region is exactly 128 metres "
-		        "wide" );
-		return;
-	}
-	if ( Math::is_equal_approx( m_fVertexSpacing, ( real_t )( 1.0f ) ) ) {
-		return;
-	}
-	m_fVertexSpacing = 1.0f;
-	LOG( INFO, "Setting fixed vertex spacing: 1 metre" );
-	if ( m_pCollision && m_pData && m_pInstancer && m_material.is_valid() ) {
-		m_pInstancer->updateVertexSpacing( m_fVertexSpacing );
-		m_pData->setVertexSpacingInternal( m_fVertexSpacing );
-		updateRegionLabels();
-		m_material->update();
-		setupTerrainMesher();
-		m_pCollision->destroy();
-		m_pCollision->build();
-		updateDisplacementBuffer();
-		if ( effectiveGpuRegionCacheEnabled() ) {
-			m_pData->configureGpuRegionCache( true,
-			        m_nEffectiveGpuRegionCacheBudgetMb,
-			        m_nGpuRegionUploadBudgetLayers,
-			        m_nGpuRegionUploadBudgetMb,
-			        m_nGpuRegionSparePages,
-			        m_nGpuRegionRetireFrames );
-		}
 	}
 }
 
@@ -1132,6 +1100,9 @@ void Terrain3D::updateOceanShaderVariant( void ) {
 }
 
 void Terrain3D::setOceanPerformancePreset( const t3dOceanPerformancePreset_t preset ) {
+	if ( m_oceanPerformancePreset == preset ) {
+		return;
+	}
 	m_oceanPerformancePreset = preset;
 	switch ( preset ) {
 		case OCEAN_PRESET_BORDER_MINIMUM:
@@ -1170,6 +1141,7 @@ void Terrain3D::setOceanPerformancePreset( const t3dOceanPerformancePreset_t pre
 		default:
 			break;
 	}
+	markOceanPublicationDirty();
 	updateOceanShaderVariant();
 }
 
@@ -1180,6 +1152,7 @@ void Terrain3D::setOceanVertexWaveIterations( const int nIterations ) {
 	}
 	m_nOceanVertexWaveIterations = value;
 	m_oceanPerformancePreset = OCEAN_PRESET_CUSTOM;
+	markOceanPublicationDirty();
 	updateOceanShaderVariant();
 }
 void Terrain3D::setOceanFragmentWaveIterations( const int nIterations ) {
@@ -1189,10 +1162,12 @@ void Terrain3D::setOceanFragmentWaveIterations( const int nIterations ) {
 	}
 	m_nOceanFragmentWaveIterations = value;
 	m_oceanPerformancePreset = OCEAN_PRESET_CUSTOM;
+	markOceanPublicationDirty();
 	updateOceanShaderVariant();
 }
 void Terrain3D::setOceanEnabled( const bool bEnabled ) {
 	SET_IF_DIFF( m_bOceanEnabled, bEnabled );
+	markOceanPublicationDirty();
 	LOG( INFO, "Setting ocean enabled: ", m_bOceanEnabled );
 	if ( m_bOceanEnabled ) {
 		if ( m_oceanMaterial.is_null() ) {
@@ -1203,6 +1178,7 @@ void Terrain3D::setOceanEnabled( const bool bEnabled ) {
 				if ( pOceanMat.is_valid() ) {
 					const Ref<ShaderMaterial> pLocalOcean = pOceanMat->duplicate( true );
 					m_oceanMaterial = pLocalOcean.is_valid() ? pLocalOcean : pOceanMat;
+					connectOceanMaterialPublicationSignal();
 				}
 			}
 		}
@@ -1215,6 +1191,7 @@ void Terrain3D::setOceanEnabled( const bool bEnabled ) {
 
 void Terrain3D::setOceanMeshLods( const int nCount ) {
 	SET_IF_DIFF( m_nOceanMeshLods, CLAMP( nCount, 1, 10 ) );
+	markOceanPublicationDirty();
 	LOG( INFO, "Setting ocean mesh levels: ", m_nOceanMeshLods );
 	if ( m_bOceanEnabled ) {
 		setupOceanMesher();
@@ -1223,6 +1200,7 @@ void Terrain3D::setOceanMeshLods( const int nCount ) {
 
 void Terrain3D::setOceanTessellationLevel( const int nLevel ) {
 	SET_IF_DIFF( m_nOceanTessellationLevel, CLAMP( nLevel, 0, 6 ) );
+	markOceanPublicationDirty();
 	LOG( INFO, "Setting ocean tessellation level: ", nLevel );
 	if ( m_bOceanEnabled ) {
 		setupOceanMesher();
@@ -1231,6 +1209,7 @@ void Terrain3D::setOceanTessellationLevel( const int nLevel ) {
 
 void Terrain3D::setOceanMeshSize( const int nSize ) {
 	SET_IF_DIFF( m_nOceanMeshSize, CLAMP( nSize & ~1, 8, 256 ) ); // Ensure even
+	markOceanPublicationDirty();
 	LOG( INFO, "Setting ocean mesh size: ", m_nOceanMeshSize );
 	if ( m_bOceanEnabled ) {
 		setupOceanMesher();
@@ -1239,6 +1218,7 @@ void Terrain3D::setOceanMeshSize( const int nSize ) {
 
 void Terrain3D::setOceanVertexSpacing( const real_t fSpacing ) {
 	SET_IF_DIFF( m_fOceanVertexSpacing, CLAMP( fSpacing, 0.25f, 100.0f ) );
+	markOceanPublicationDirty();
 	LOG( INFO, "Setting ocean vertex spacing: ", m_fOceanVertexSpacing );
 	if ( m_bOceanEnabled ) {
 		setupOceanMesher();
@@ -1247,6 +1227,7 @@ void Terrain3D::setOceanVertexSpacing( const real_t fSpacing ) {
 
 void Terrain3D::setOceanCullMargin( const real_t fMargin ) {
 	SET_IF_DIFF( m_fOceanCullMargin, CLAMP( fMargin, 0.f, 100000.f ) );
+	markOceanPublicationDirty();
 	LOG( INFO, "Setting extra cull margin: ", m_fOceanCullMargin );
 	if ( m_pOceanMesher ) {
 		m_pOceanMesher->updateAabbs( m_fOceanCullMargin, s_v2Zero );
@@ -1255,6 +1236,7 @@ void Terrain3D::setOceanCullMargin( const real_t fMargin ) {
 
 void Terrain3D::setOceanCastShadows( const GeometryInstance3D::ShadowCastingSetting castShadows ) {
 	SET_IF_DIFF( m_oceanCastShadows, castShadows );
+	markOceanPublicationDirty();
 	if ( m_pOceanMesher ) {
 		m_pOceanMesher->setCastShadows( m_oceanCastShadows );
 	}
@@ -1262,21 +1244,53 @@ void Terrain3D::setOceanCastShadows( const GeometryInstance3D::ShadowCastingSett
 
 void Terrain3D::setOceanGiMode( const GeometryInstance3D::GIMode giMode ) {
 	SET_IF_DIFF( m_oceanGiMode, giMode );
+	markOceanPublicationDirty();
 }
 
 void Terrain3D::setOceanRenderLayers( const uint32_t nLayers ) {
 	SET_IF_DIFF( m_nOceanRenderLayers, nLayers );
+	markOceanPublicationDirty();
 	LOG( INFO, "Setting ocean render layers to: ", nLayers );
 }
 
 void Terrain3D::setOceanMaterial( const Ref<Material> &rMaterial ) {
-	SET_IF_DIFF( m_oceanMaterial, rMaterial );
+	if ( m_oceanMaterial == rMaterial ) {
+		return;
+	}
+	disconnectOceanMaterialPublicationSignal();
+	m_oceanMaterial = rMaterial;
+	connectOceanMaterialPublicationSignal();
+	markOceanPublicationDirty();
 	m_oceanVariantSource = String();
 	m_oceanVariantShader.unref();
 	m_bLightStateValid = false;
 	LOG( INFO, "Setting ocean material" );
 	if ( m_bOceanEnabled ) {
 		setupOceanMesher();
+	}
+}
+
+void Terrain3D::markOceanPublicationDirty( void ) {
+	m_nOceanPublicationGeneration = m_nOceanPublicationGeneration == UINT64_MAX ? 1u : m_nOceanPublicationGeneration + 1u;
+}
+
+void Terrain3D::connectOceanMaterialPublicationSignal( void ) {
+	if ( m_oceanMaterial.is_null() ) {
+		return;
+	}
+	const Callable callback = callable_mp( this, &Terrain3D::markOceanPublicationDirty );
+	if ( !m_oceanMaterial->is_connected( "changed", callback ) ) {
+		m_oceanMaterial->connect( "changed", callback );
+	}
+}
+
+void Terrain3D::disconnectOceanMaterialPublicationSignal( void ) {
+	if ( m_oceanMaterial.is_null() ) {
+		return;
+	}
+	const Callable callback = callable_mp( this, &Terrain3D::markOceanPublicationDirty );
+	if ( m_oceanMaterial->is_connected( "changed", callback ) ) {
+		m_oceanMaterial->disconnect( "changed", callback );
 	}
 }
 
@@ -1398,6 +1412,10 @@ Vector3 Terrain3D::getIntersection( const Vector3 &rSrcPos, const Vector3 &rDire
 void Terrain3D::setupRenderCoordinator( void ) {
 	if ( !m_pRenderCoordinator ) {
 		m_pRenderCoordinator = memnew( Terrain3DRenderCoordinator );
+		if ( !m_pRenderCoordinator->bindRuntimeAllocator( getRuntimeMemoryZoneInternal(), getRuntimeAllocatorOverflowPolicyInternal() ) ) {
+			LOG( ERROR, "Failed binding render coordinator runtime allocator ownership" );
+			return;
+		}
 	}
 	m_pRenderCoordinator->initialize( this );
 }

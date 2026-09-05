@@ -59,7 +59,7 @@ typedef struct t3dRuntimePageHeader_s {
 	uint32_t m_nMagic = s_nRuntimePageMagic;
 	uint32_t m_nVersion = s_nRuntimePageVersion;
 	uint32_t m_nHeaderBytes = s_nRuntimePageHeaderBytes;
-	uint32_t m_nRegionSize = 0u;
+	uint32_t m_nReservedGeometry = 0u;
 	uint32_t m_nColorDivisor = 1u;
 	uint32_t m_nDerivedDivisor = 1u;
 	uint32_t m_nChannelFlags = 0u;
@@ -112,7 +112,7 @@ inline uint32_t t3dRuntimePageChecksum( const uint8_t *pData, const size_t nSize
 
 inline bool t3dRuntimePageValidateHeader( const t3dRuntimePageHeader_t &rHeader, const uint64_t nFileBytes ) {
 	if ( rHeader.m_nMagic != s_nRuntimePageMagic || rHeader.m_nVersion != s_nRuntimePageVersion
-	        || rHeader.m_nHeaderBytes != s_nRuntimePageHeaderBytes || rHeader.m_nRegionSize == 0u || rHeader.m_nColorDivisor == 0u
+	        || rHeader.m_nHeaderBytes != s_nRuntimePageHeaderBytes || rHeader.m_nReservedGeometry != 0u || rHeader.m_nColorDivisor == 0u
 	        || rHeader.m_nDerivedDivisor == 0u || rHeader.m_nTotalBytes < rHeader.m_nHeaderBytes || rHeader.m_nChannelCount == 0u
 	        || rHeader.m_nChannelCount > s_nRuntimePageChannelCount || rHeader.m_iChannelTableOffset != 40u
 	        || rHeader.m_nTotalBytes > s_nRuntimePageMaxBytes || ( uint64_t )( rHeader.m_nTotalBytes ) != nFileBytes

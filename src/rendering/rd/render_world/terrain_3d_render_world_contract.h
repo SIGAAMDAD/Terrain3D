@@ -228,6 +228,10 @@ struct T3DVisibilityFrame {
 	uint32_t nHiZWidth;
 	uint32_t nHiZHeight;
 	uint32_t nHiZMipCount;
+	uint32_t nMaterialCount;
+	uint32_t nVtAllocationCount;
+	uint32_t nVtPageCount;
+	uint32_t nResourceCountReserved;
 };
 
 struct T3DVisibilityCounters {
@@ -326,7 +330,7 @@ static_assert( sizeof( T3DVTAllocationRecord ) == 32, "T3DVTAllocationRecord ABI
 static_assert( sizeof( T3DVTPageTableEntry ) == 16, "T3DVTPageTableEntry ABI mismatch" );
 static_assert( sizeof( T3DVTGpuCounters ) == 32, "T3DVTGpuCounters ABI mismatch" );
 static_assert( sizeof( T3DVTRequest ) == 8, "T3DVTRequest ABI mismatch" );
-static_assert( sizeof( T3DVisibilityFrame ) == 400, "T3DVisibilityFrame ABI mismatch" );
+static_assert( sizeof( T3DVisibilityFrame ) == 416, "T3DVisibilityFrame ABI mismatch" );
 static_assert( sizeof( T3DVisibilityCounters ) == 64, "T3DVisibilityCounters ABI mismatch" );
 static_assert( sizeof( T3DHiZDispatchConstants ) == 16, "T3DHiZDispatchConstants ABI mismatch" );
 

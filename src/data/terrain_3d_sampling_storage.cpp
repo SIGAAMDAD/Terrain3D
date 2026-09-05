@@ -21,9 +21,9 @@ int Terrain3DSamplingStorage::locationIndex( const Vector2i &rLocation ) {
 	return Terrain3DRegionRepository::getRegionMapIndex( rLocation );
 }
 
-bool Terrain3DSamplingStorage::claimOrReconfigureActive( const int nRegionSize ) {
+bool Terrain3DSamplingStorage::claimOrReconfigureActive( void ) {
 	const uint32_t previousGeneration = m_nActiveStorageGeneration;
-	const bool configured = isActiveOwner() ? t3dActiveStorageReconfigure( this, nRegionSize ) : t3dActiveStorageClaim( this, nRegionSize );
+	const bool configured = isActiveOwner() ? t3dActiveStorageReconfigure( this ) : t3dActiveStorageClaim( this );
 	if ( !configured ) {
 		return false;
 	}
@@ -35,9 +35,9 @@ bool Terrain3DSamplingStorage::claimOrReconfigureActive( const int nRegionSize )
 	return true;
 }
 
-bool Terrain3DSamplingStorage::bindActive( const int nRegionSize, void *const pBacking, const size_t nBackingBytes ) {
+bool Terrain3DSamplingStorage::bindActive( void *const pBacking, const size_t nBackingBytes ) {
 	const uint32_t previousGeneration = m_nActiveStorageGeneration;
-	if ( !t3dActiveStorageBind( this, nRegionSize, pBacking, nBackingBytes ) ) {
+	if ( !t3dActiveStorageBind( this, pBacking, nBackingBytes ) ) {
 		return false;
 	}
 	const uint32_t currentGeneration = refreshActiveGeneration();
@@ -90,8 +90,8 @@ bool Terrain3DSamplingStorage::syncActiveHeightPage(
 }
 
 bool Terrain3DSamplingStorage::replaceActiveHeightPages(
-        const int nRegionSize, const uint8_t *const *const ppHeightPages, const int *const pSlots, const size_t nPageCount ) {
-	if ( !isActiveOwner() || !t3dActiveStorageReplaceHeightPages( this, nRegionSize, ppHeightPages, pSlots, nPageCount ) ) {
+        const uint8_t *const *const ppHeightPages, const int *const pSlots, const size_t nPageCount ) {
+	if ( !isActiveOwner() || !t3dActiveStorageReplaceHeightPages( this, ppHeightPages, pSlots, nPageCount ) ) {
 		return false;
 	}
 	refreshActiveGeneration();
@@ -143,33 +143,36 @@ Terrain3DResidentMapLease Terrain3DSamplingStorage::acquireResident(
 	return m_residentPool.acquire( rLocation, pRegion );
 }
 
-bool Terrain3DSamplingStorage::configureResidentPool( const int nRegionSize,
-        const int nRegionMapSize,
-        const bool bControlMapsImplicit,
-        const int nRequestedCapacity,
-        const size_t nBudgetBytes ) {
+bool Terrain3DSamplingStorage::bindRuntimeAllocator( Terrain3DMemoryZone *const pZone ) {
+	return m_residentPool.bindRuntimeAllocator( pZone );
+}
+
+bool Terrain3DSamplingStorage::configureResidentPool( const bool bControlMapsImplicit, const int nRequestedCapacity ) {
 	if ( isActiveOwner() ) {
 		clearResidentPool();
 		return true;
 	}
-	if ( nRegionSize <= 0 || nRegionMapSize <= 0 ) {
-		return false;
-	}
-
 	uint32_t channels = RESIDENT_CHANNEL_HEIGHT;
 	if ( !bControlMapsImplicit ) {
 		channels |= RESIDENT_CHANNEL_CONTROL;
 	}
-	const size_t bytesPerRegion = Terrain3DResidentRegionPool::estimateSlotBytes( nRegionSize, channels );
-	const int budgetCapacity = bytesPerRegion > 0u ? ( int )( MAX<size_t>( 1u, nBudgetBytes / bytesPerRegion ) ) : 1;
-	const int capacity = CLAMP( MIN( nRequestedCapacity, budgetCapacity ), 1, nRegionMapSize * nRegionMapSize );
-	const int oldRegionSize = m_residentPool.getRegionSize();
-	const int oldCapacity = m_residentPool.getCapacity();
-	const uint32_t oldChannels = m_residentPool.getChannels();
-	if ( !m_residentPool.configure( nRegionSize, capacity, channels ) ) {
+	const size_t bytesPerRegion = Terrain3DResidentRegionPool::estimateSlotBytes( channels );
+	const size_t bytesPerSlot = bytesPerRegion + sizeof( t3dSlot_t );
+	const Terrain3DMemoryZone *const pZone = m_residentPool.getRuntimeAllocatorZone();
+	if ( !pZone || bytesPerSlot == 0u ) {
 		return false;
 	}
-	if ( oldRegionSize != nRegionSize || oldCapacity != capacity || oldChannels != channels ) {
+	const int parentCapacity = ( int )MIN<size_t>( s_nRegionSlots, pZone->freeBytes() / bytesPerSlot );
+	if ( parentCapacity <= 0 ) {
+		return false;
+	}
+	const int capacity = CLAMP( MIN( nRequestedCapacity, parentCapacity ), 1, s_nRegionSlots );
+	const int oldCapacity = m_residentPool.getCapacity();
+	const uint32_t oldChannels = m_residentPool.getChannels();
+	if ( !m_residentPool.configure( capacity, channels ) ) {
+		return false;
+	}
+	if ( oldCapacity != capacity || oldChannels != channels ) {
 		invalidateAllSamplers();
 	}
 	return true;

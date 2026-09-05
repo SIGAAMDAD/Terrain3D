@@ -2,9 +2,8 @@
 #ifndef TERRAIN3D_MEMORY_BUDGET_H
 #define TERRAIN3D_MEMORY_BUDGET_H
 
-#include "eastl_config.h"
+#include "core/terrain_3d_compiler.h"
 
-#include <EASTL/numeric_limits.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -31,7 +30,7 @@ typedef struct t3dMemorySubsystemInput_s {
 	bool m_bAutomatic = true;
 	uint64_t m_nManualBytes = 0u;
 	uint64_t m_nMinimumBytes = 0u;
-	uint64_t m_nHardCapBytes = eastl::numeric_limits<uint64_t>::max();
+	uint64_t m_nHardCapBytes = UINT64_MAX;
 	uint32_t m_nWeight = 1u;
 } t3dMemorySubsystemInput_t;
 
@@ -59,12 +58,21 @@ typedef struct t3dMemoryBudgetResult_s {
 	uint64_t m_nManualReservedBytes = 0u;
 	uint64_t m_nAutoMinimumBytes = 0u;
 	uint64_t m_nManagedEffectiveBytes = 0u;
+	uint64_t m_nCommittedBytes = 0u;
 	uint64_t m_nHeadroomBytes = 0u;
 	bool m_bHardOvercommit = false;
 	t3dMemorySubsystemAllocation_t m_szSubsystems[TERRAIN3D_MEMORY_SUBSYSTEM_COUNT]{};
 } t3dMemoryBudgetResult_t;
 
 class Terrain3DMemoryBudgetCoordinator {
+	EA_FORCE_INLINE static uint64_t addChecked( const uint64_t nA, const uint64_t nB, bool &rOverflow ) {
+		if ( nA > UINT64_MAX - nB ) {
+			rOverflow = true;
+			return UINT64_MAX;
+		}
+		return nA + nB;
+	}
+
 	EA_FORCE_INLINE static uint64_t clampToCap( const uint64_t nBytes, const uint64_t nCap ) {
 		return nBytes > nCap ? nCap : nBytes;
 	}
@@ -76,15 +84,12 @@ public:
 		result.m_nFixedBytes = rInput.m_nFixedBytes;
 		result.m_nAllocatorReserveBytes = rInput.m_nAllocatorReserveBytes;
 		result.m_nTransientReserveBytes = rInput.m_nTransientReserveBytes;
-		const uint64_t fixed_and_allocator = rInput.m_nFixedBytes > eastl::numeric_limits<uint64_t>::max() - rInput.m_nAllocatorReserveBytes
-		        ? eastl::numeric_limits<uint64_t>::max()
-		        : rInput.m_nFixedBytes + rInput.m_nAllocatorReserveBytes;
-		const uint64_t fixed_and_transient = fixed_and_allocator > eastl::numeric_limits<uint64_t>::max() - rInput.m_nTransientReserveBytes
-		        ? eastl::numeric_limits<uint64_t>::max()
-		        : fixed_and_allocator + rInput.m_nTransientReserveBytes;
+		bool arithmetic_overflow = false;
+		const uint64_t fixed_and_allocator = addChecked( rInput.m_nFixedBytes, rInput.m_nAllocatorReserveBytes, arithmetic_overflow );
+		const uint64_t fixed_and_transient = addChecked( fixed_and_allocator, rInput.m_nTransientReserveBytes, arithmetic_overflow );
 		result.m_nManagedBudgetBytes =
 		        rInput.m_nTotalBudgetBytes > fixed_and_transient ? rInput.m_nTotalBudgetBytes - fixed_and_transient : 0u;
-		if ( fixed_and_transient > rInput.m_nTotalBudgetBytes ) {
+		if ( arithmetic_overflow || fixed_and_transient > rInput.m_nTotalBudgetBytes ) {
 			result.m_bHardOvercommit = true;
 		}
 
@@ -98,14 +103,14 @@ public:
 			}
 			if ( !input.m_bAutomatic ) {
 				allocation.m_nRequestedBytes = input.m_nManualBytes;
-				allocation.m_nEffectiveBytes = clampToCap( input.m_nManualBytes, input.m_nHardCapBytes );
-				allocation.m_limitingReason = allocation.m_nEffectiveBytes < input.m_nManualBytes ? TERRAIN3D_MEMORY_LIMIT_FIXED_CAP
-				                                                                                  : TERRAIN3D_MEMORY_LIMIT_MANUAL_OVERRIDE;
-				result.m_nManualReservedBytes += allocation.m_nEffectiveBytes;
-				if ( remaining >= allocation.m_nEffectiveBytes ) {
-					remaining -= allocation.m_nEffectiveBytes;
-				} else {
-					remaining = 0u;
+				const uint64_t capped_manual = clampToCap( input.m_nManualBytes, input.m_nHardCapBytes );
+				allocation.m_nEffectiveBytes = capped_manual < remaining ? capped_manual : remaining;
+				allocation.m_limitingReason = allocation.m_nEffectiveBytes < capped_manual
+				        ? TERRAIN3D_MEMORY_LIMIT_TOTAL_BUDGET
+				        : ( capped_manual < input.m_nManualBytes ? TERRAIN3D_MEMORY_LIMIT_FIXED_CAP : TERRAIN3D_MEMORY_LIMIT_MANUAL_OVERRIDE );
+				result.m_nManualReservedBytes = addChecked( result.m_nManualReservedBytes, allocation.m_nEffectiveBytes, arithmetic_overflow );
+				remaining -= allocation.m_nEffectiveBytes;
+				if ( allocation.m_nEffectiveBytes < capped_manual ) {
 					result.m_bHardOvercommit = true;
 				}
 			}
@@ -119,14 +124,12 @@ public:
 			}
 			const uint64_t minimum = clampToCap( input.m_nMinimumBytes, input.m_nHardCapBytes );
 			allocation.m_nRequestedBytes = minimum;
-			allocation.m_nEffectiveBytes = minimum;
-			result.m_nAutoMinimumBytes += minimum;
-			if ( remaining >= minimum ) {
-				remaining -= minimum;
-			} else {
+			allocation.m_nEffectiveBytes = minimum < remaining ? minimum : remaining;
+			result.m_nAutoMinimumBytes = addChecked( result.m_nAutoMinimumBytes, minimum, arithmetic_overflow );
+			remaining -= allocation.m_nEffectiveBytes;
+			if ( allocation.m_nEffectiveBytes < minimum ) {
 				allocation.m_bBelowMinimum = true;
 				allocation.m_limitingReason = TERRAIN3D_MEMORY_LIMIT_TOTAL_BUDGET;
-				remaining = 0u;
 				result.m_bHardOvercommit = true;
 			}
 		}
@@ -137,7 +140,7 @@ public:
 				const t3dMemorySubsystemInput_t &input = rInput.m_szSubsystems[( size_t )( index )];
 				const t3dMemorySubsystemAllocation_t &allocation = result.m_szSubsystems[( size_t )( index )];
 				if ( input.m_bEnabled && input.m_bAutomatic && allocation.m_nEffectiveBytes < input.m_nHardCapBytes ) {
-					total_weight += input.m_nWeight > 0u ? input.m_nWeight : 1u;
+					total_weight = addChecked( total_weight, input.m_nWeight > 0u ? input.m_nWeight : 1u, arithmetic_overflow );
 				}
 			}
 			if ( total_weight == 0u ) {
@@ -162,11 +165,11 @@ public:
 				if ( add == 0u ) {
 					continue;
 				}
-				allocation.m_nRequestedBytes += add;
-				allocation.m_nEffectiveBytes += add;
-				distributed += add;
+				allocation.m_nRequestedBytes = addChecked( allocation.m_nRequestedBytes, add, arithmetic_overflow );
+				allocation.m_nEffectiveBytes = addChecked( allocation.m_nEffectiveBytes, add, arithmetic_overflow );
+				distributed = addChecked( distributed, add, arithmetic_overflow );
 				if ( allocation.m_nEffectiveBytes >= input.m_nHardCapBytes
-				        && input.m_nHardCapBytes != eastl::numeric_limits<uint64_t>::max() ) {
+				        && input.m_nHardCapBytes != UINT64_MAX ) {
 					allocation.m_limitingReason = TERRAIN3D_MEMORY_LIMIT_FIXED_CAP;
 				}
 			}
@@ -179,11 +182,11 @@ public:
 					}
 					const uint64_t room = input.m_nHardCapBytes - allocation.m_nEffectiveBytes;
 					const uint64_t add = remaining < room ? remaining : room;
-					allocation.m_nRequestedBytes += add;
-					allocation.m_nEffectiveBytes += add;
+					allocation.m_nRequestedBytes = addChecked( allocation.m_nRequestedBytes, add, arithmetic_overflow );
+					allocation.m_nEffectiveBytes = addChecked( allocation.m_nEffectiveBytes, add, arithmetic_overflow );
 					distributed = add;
 					if ( allocation.m_nEffectiveBytes >= input.m_nHardCapBytes
-					        && input.m_nHardCapBytes != eastl::numeric_limits<uint64_t>::max() ) {
+					        && input.m_nHardCapBytes != UINT64_MAX ) {
 						allocation.m_limitingReason = TERRAIN3D_MEMORY_LIMIT_FIXED_CAP;
 					}
 					break;
@@ -198,15 +201,14 @@ public:
 		result.m_nManagedEffectiveBytes = 0u;
 		for ( int index = 0; index < TERRAIN3D_MEMORY_SUBSYSTEM_COUNT; ++index ) {
 			t3dMemorySubsystemAllocation_t &allocation = result.m_szSubsystems[( size_t )( index )];
-			result.m_nManagedEffectiveBytes += allocation.m_nEffectiveBytes;
+			result.m_nManagedEffectiveBytes = addChecked( result.m_nManagedEffectiveBytes, allocation.m_nEffectiveBytes, arithmetic_overflow );
 			if ( allocation.m_limitingReason == TERRAIN3D_MEMORY_LIMIT_NONE && allocation.m_nEffectiveBytes > 0u && remaining == 0u ) {
 				allocation.m_limitingReason = TERRAIN3D_MEMORY_LIMIT_TOTAL_BUDGET;
 			}
 		}
-		const uint64_t committed = fixed_and_transient > eastl::numeric_limits<uint64_t>::max() - result.m_nManagedEffectiveBytes
-		        ? eastl::numeric_limits<uint64_t>::max()
-		        : fixed_and_transient + result.m_nManagedEffectiveBytes;
-		result.m_nHeadroomBytes = rInput.m_nTotalBudgetBytes > committed ? rInput.m_nTotalBudgetBytes - committed : 0u;
+		result.m_nCommittedBytes = addChecked( fixed_and_transient, result.m_nManagedEffectiveBytes, arithmetic_overflow );
+		result.m_nHeadroomBytes = rInput.m_nTotalBudgetBytes > result.m_nCommittedBytes ? rInput.m_nTotalBudgetBytes - result.m_nCommittedBytes : 0u;
+		result.m_bHardOvercommit = result.m_bHardOvercommit || arithmetic_overflow || result.m_nCommittedBytes > rInput.m_nTotalBudgetBytes;
 		return result;
 	}
 };

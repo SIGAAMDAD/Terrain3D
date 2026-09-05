@@ -261,6 +261,33 @@ static t3dRdInstanceRecord_t t3dRdPreviewInstanceRecord( const Transform3D &rTra
 	record.m_nColorRgba8 = t3dRdPackGodotRgba32ForGpu( 0xffffffffu );
 	return record;
 }
+
+bool Terrain3DRdInstanceRenderer::bindRuntimeAllocator( Terrain3DMemoryZone *const pZone, const t3dAllocatorOverflowPolicy_t ePolicy ) {
+	if ( !pZone || !m_meshCache.bindRuntimeAllocator( pZone, ePolicy ) ) {
+		return false;
+	}
+	const Terrain3DEastlAllocator allocator = Terrain3DEastlAllocator::zoneAllocator( pZone, ePolicy );
+	m_visibleIndices.set_allocator( allocator );
+	m_motionHistoryRecords.set_allocator( allocator );
+	m_motionHistoryCells.set_allocator( allocator );
+	m_motionPreviousRecords.set_allocator( allocator );
+	m_shadowVisibleIndices.set_allocator( allocator );
+	m_drawPackets.set_allocator( allocator );
+	m_depthPackets.set_allocator( allocator );
+	m_shadowPackets.set_allocator( allocator );
+	m_materialBindings.set_allocator( allocator );
+	m_hlodDescriptors.set_allocator( allocator );
+	m_packetBuildSlots.set_allocator( allocator );
+	m_packetBuildEntries.set_allocator( allocator );
+	m_alphaPackets.set_allocator( allocator );
+	m_alphaSortScratch.set_allocator( allocator );
+	m_packetIndex.set_allocator( allocator );
+	m_motionCurrentOrder.set_allocator( allocator );
+	m_motionPreviousOrder.set_allocator( allocator );
+	m_dirtyInstanceChunks.set_allocator( allocator );
+	return true;
+}
+
 Terrain3DRdInstanceRenderer::Terrain3DRdInstanceRenderer( void ) :
         m_context( Terrain3DRdContext::getShared() ), m_forwardLighting( m_context ) {
 }
@@ -549,9 +576,11 @@ bool Terrain3DRdInstanceRenderer::ensureBuffer( RID &rRid,
 	if ( rRid.is_valid() && rCapacity >= nRequired ) {
 		return true;
 	}
+	++m_nBufferCapacityMissCount;
 	const uint32_t minimum = type == Terrain3DRdContext::RESOURCE_UNIFORM_BUFFER ? 256u : 4096u;
 	const uint32_t capacity = t3dRdNextCapacity( nRequired, minimum );
 	if ( capacity == 0u ) {
+		++m_nBufferRebuildFailureCount;
 		return false;
 	}
 	RenderingDevice *const rd = m_context.getDevice();
@@ -566,9 +595,11 @@ bool Terrain3DRdInstanceRenderer::ensureBuffer( RID &rRid,
 		rRid = rd->storage_buffer_create( capacity );
 	}
 	if ( !rRid.is_valid() || !m_context.registerResource( rRid, rName, type, memory, capacity, owner ) ) {
+		++m_nBufferRebuildFailureCount;
 		return false;
 	}
 	rCapacity = capacity;
+	++m_nBufferRebuildCount;
 	return true;
 }
 
@@ -942,10 +973,21 @@ bool Terrain3DRdInstanceRenderer::uploadScene( const t3dRdInstanceSceneSnapshot_
 	const bool full_instance_upload = !m_hInstanceBuffer.is_valid() || m_nInstanceCapacityBytes < required_instance_capacity
 	        || m_nInstanceUsedBytes != instance_bytes;
 
-	// Scene publication is the only capacity-rebuild boundary for frame-side
-	// instance storage. Preserve the old retained-vector mechanics: storage that
-	// historically only grew keeps its logical high-water size instead of being
-	// shrunk when a smaller scene is published.
+	// Scene publication is an explicit renderer-owner capacity transition. It is
+	// entered only from a Terrain3DColdPhaseScope on the render thread; generic
+	// allocator phase state does not authorize this growth.
+	const bool cpu_capacity_rebuild = m_visibleIndices.size() < m_nVisibleIndexCapacity
+	        || m_shadowVisibleIndices.size() < m_nVisibleIndexCapacity || m_alphaSortScratch.size() < m_nPacketCapacity
+	        || m_motionHistoryRecords.size() < pScene->m_instances.size()
+	        || m_motionPreviousRecords.size() < pScene->m_instances.size() || m_motionHistoryCells.size() < pScene->m_cells.size()
+	        || m_motionCurrentOrder.size() < pScene->m_cells.size() || m_motionPreviousOrder.size() < pScene->m_cells.size()
+	        || m_drawPackets.capacity() < m_nPacketCapacity || m_depthPackets.capacity() < m_nPacketCapacity
+	        || m_shadowPackets.capacity() < m_nPacketCapacity || m_hlodDescriptors.capacity() < m_nPacketCapacity
+	        || m_packetBuildSlots.capacity() < m_nPacketCapacity || m_packetBuildEntries.capacity() < m_nPacketCapacity
+	        || m_alphaPackets.capacity() < m_nPacketCapacity || m_packetIndex.capacity() < m_nPacketCapacity;
+	if ( cpu_capacity_rebuild ) {
+		++m_nCpuCapacityRebuildCount;
+	}
 	bool fixed_storage_ok = true;
 	if ( m_visibleIndices.size() < m_nVisibleIndexCapacity ) {
 		fixed_storage_ok = t3dVectorResizeCold( m_visibleIndices, m_nVisibleIndexCapacity );
@@ -978,11 +1020,13 @@ bool Terrain3DRdInstanceRenderer::uploadScene( const t3dRdInstanceSceneSnapshot_
 	        || !t3dContainerReserveCold( m_packetBuildSlots, m_nPacketCapacity )
 	        || !t3dContainerReserveCold( m_packetBuildEntries, m_nPacketCapacity )
 	        || !t3dContainerReserveCold( m_alphaPackets, m_nPacketCapacity ) ) {
-		setError( "RD instance fixed publication backing could not be established" );
+		++m_nCpuCapacityRebuildFailureCount;
+		setError( "RD instance owner failed to establish fixed publication backing" );
 		return false;
 	}
 	if ( !t3dContainerReserveCold( m_packetIndex, m_nPacketCapacity ) ) {
-		setError( "RD instance packet index capacity could not be established" );
+		++m_nCpuCapacityRebuildFailureCount;
+		setError( "RD instance owner failed to establish packet-index capacity" );
 		return false;
 	}
 
@@ -2082,7 +2126,7 @@ bool Terrain3DRdInstanceRenderer::render( RenderData *const pRenderData,
 		return true;
 	}
 	{
-		Terrain3DColdAllocationScope allocation_scope;
+		Terrain3DColdPhaseScope cold_phase_scope;
 		if ( pMeshes && pMeshes->m_nGeneration != m_meshCache.getSourceGeneration() && !m_materialBindings.empty() ) {
 			m_context.beginResourceRebuild();
 			freeMaterialBindings();
@@ -2271,7 +2315,7 @@ bool Terrain3DRdInstanceRenderer::prepareForwardPass( const t3dRdForwardPassCont
 		return true;
 	}
 	{
-		Terrain3DColdAllocationScope allocation_scope;
+		Terrain3DColdPhaseScope cold_phase_scope;
 		if ( pMeshes && pMeshes->m_nGeneration != m_meshCache.getSourceGeneration() && !m_materialBindings.empty() ) {
 			m_context.beginResourceRebuild();
 			freeMaterialBindings();
@@ -2532,6 +2576,21 @@ Dictionary Terrain3DRdInstanceRenderer::getDiagnostics( void ) const {
 	result["previous_instance_buffer_capacity_bytes"] = ( int64_t )( m_nPreviousInstanceCapacityBytes );
 	result["motion_history_resets"] = ( int64_t )( m_nMotionHistoryResets );
 	result["motion_history_matches"] = ( int64_t )( m_nMotionHistoryMatches );
+	result["owner_buffer_capacity_misses"] = ( int64_t )( m_nBufferCapacityMissCount );
+	result["owner_buffer_rebuilds"] = ( int64_t )( m_nBufferRebuildCount );
+	result["owner_buffer_rebuild_failures"] = ( int64_t )( m_nBufferRebuildFailureCount );
+	result["owner_cpu_capacity_rebuilds"] = ( int64_t )( m_nCpuCapacityRebuildCount );
+	result["owner_cpu_capacity_rebuild_failures"] = ( int64_t )( m_nCpuCapacityRebuildFailureCount );
+	result["mesh_owner_arena_capacity_misses"] = ( int64_t )( m_meshCache.getArenaCapacityMissCount() );
+	result["mesh_owner_arena_growth_requests"] = ( int64_t )( m_meshCache.getArenaGrowthRequestCount() );
+	result["mesh_owner_arena_rebuilds"] = ( int64_t )( m_meshCache.getArenaRebuildCount() );
+	result["mesh_owner_arena_rebuild_failures"] = ( int64_t )( m_meshCache.getArenaRebuildFailureCount() );
+	result["mesh_vertex_used_bytes"] = ( int64_t )( m_meshCache.getVertexUsedBytes() );
+	result["mesh_vertex_capacity_bytes"] = ( int64_t )( m_meshCache.getVertexCapacityBytes() );
+	result["mesh_index16_used_bytes"] = ( int64_t )( m_meshCache.getIndex16UsedBytes() );
+	result["mesh_index16_capacity_bytes"] = ( int64_t )( m_meshCache.getIndex16CapacityBytes() );
+	result["mesh_index32_used_bytes"] = ( int64_t )( m_meshCache.getIndex32UsedBytes() );
+	result["mesh_index32_capacity_bytes"] = ( int64_t )( m_meshCache.getIndex32CapacityBytes() );
 	result["motion_debug_enabled"] = m_bMotionDebug;
 	result["visible_index_capacity_bytes"] = ( int64_t )( m_nVisibleCapacityBytes );
 	result["shadow_visible_index_capacity_bytes"] = ( int64_t )( m_nShadowVisibleCapacityBytes );

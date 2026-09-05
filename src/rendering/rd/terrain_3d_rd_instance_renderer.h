@@ -23,6 +23,9 @@ typedef struct t3dRdInstanceSceneSnapshot_s {
 	Terrain3DFixedBuffer<t3dRdInstanceRecord_t> m_instances;
 	Terrain3DFixedBuffer<t3dRdInstanceCell_t> m_cells;
 
+	EA_FORCE_INLINE bool bindRuntimeAllocator( Terrain3DMemoryZone *const pZone, const t3dAllocatorOverflowPolicy_t ePolicy ) {
+		return m_instances.bindAllocatorZone( pZone, ePolicy ) && m_cells.bindAllocatorZone( pZone, ePolicy );
+	}
 	EA_FORCE_INLINE bool reserveCold( const size_t nInstanceCapacity, const size_t nCellCapacity ) {
 		return m_instances.reserveCold( nInstanceCapacity ) && m_cells.reserveCold( nCellCapacity );
 	}
@@ -261,6 +264,11 @@ private:
 	uint64_t m_nMotionHistorySceneGeneration = 0u;
 	uint64_t m_nMotionHistoryResets = 0u;
 	uint64_t m_nMotionHistoryMatches = 0u;
+	uint64_t m_nBufferCapacityMissCount = 0u;
+	uint64_t m_nBufferRebuildCount = 0u;
+	uint64_t m_nBufferRebuildFailureCount = 0u;
+	uint64_t m_nCpuCapacityRebuildCount = 0u;
+	uint64_t m_nCpuCapacityRebuildFailureCount = 0u;
 	bool m_bMotionHistoryNeedsAdvance = false;
 	uint64_t m_nForwardPreparedSceneGeneration = 0u;
 	t3dRdForwardPassKind_t m_forwardPreparedPacketPassKind = T3D_RD_FORWARD_PASS_INVALID;
@@ -329,6 +337,7 @@ private:
 	void setError( const String &rError );
 
 public:
+	bool bindRuntimeAllocator( Terrain3DMemoryZone *pZone, t3dAllocatorOverflowPolicy_t ePolicy );
 	Terrain3DRdInstanceRenderer( void );
 	~Terrain3DRdInstanceRenderer( void );
 

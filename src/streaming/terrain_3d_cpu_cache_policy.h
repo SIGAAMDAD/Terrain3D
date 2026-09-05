@@ -6,7 +6,6 @@
 #include "Terrain3DConstants.h"
 #include "core/terrain_3d_compiler.h"
 
-#include <EASTL/numeric_limits.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -15,37 +14,16 @@ typedef struct t3dCpuCacheCoord_s {
 	int m_nY = 0;
 } t3dCpuCacheCoord_t;
 
-static inline bool t3dCpuCacheMultiply( const size_t nA, const size_t nB, size_t &nResult ) {
-	if ( nA != 0u && nB > eastl::numeric_limits<size_t>::max() / nA ) {
-		return false;
-	}
-	nResult = nA * nB;
-	return true;
+EA_FORCE_INLINE static size_t t3dCpuCacheEstimateLayerBytes( void ) {
+	return ( size_t )( s_nRegionTexels )*s_nCpuCacheBytesPerTexel;
 }
 
-static inline size_t t3dCpuCacheEstimateLayerBytes( const int nRegionSize ) {
-	if ( nRegionSize <= 0 ) {
-		return 0u;
-	}
-	size_t texels = 0u;
-	size_t bytes = 0u;
-	if ( !t3dCpuCacheMultiply( ( size_t )( nRegionSize ), ( size_t )( nRegionSize ), texels )
-	        || !t3dCpuCacheMultiply( texels, s_nCpuCacheBytesPerTexel, bytes ) ) {
-		return 0u;
-	}
-	return bytes;
-}
-
-static inline int t3dCpuCacheCalculateCapacity( const int nRegionSize, const int nBudgetMb, const int nMaxLayers ) {
-	const size_t layer_bytes = t3dCpuCacheEstimateLayerBytes( nRegionSize );
-	if ( layer_bytes == 0u || nBudgetMb <= 0 || nMaxLayers <= 0 ) {
+EA_FORCE_INLINE static int t3dCpuCacheCalculateCapacity( const int nBudgetMb, const int nMaxLayers ) {
+	if ( nBudgetMb <= 0 || nMaxLayers <= 0 ) {
 		return 0;
 	}
-	size_t budget_bytes = 0u;
-	if ( !t3dCpuCacheMultiply( ( size_t )( nBudgetMb ), s_nCpuCacheMib, budget_bytes ) ) {
-		return 0;
-	}
-	const size_t raw_capacity = budget_bytes / layer_bytes;
+	const size_t budget_bytes = ( size_t )( nBudgetMb )*s_nCpuCacheMib;
+	const size_t raw_capacity = budget_bytes / t3dCpuCacheEstimateLayerBytes();
 	const size_t minimum_capacity = ( size_t )( s_nCpuCacheMinSampleLayers );
 	const size_t legal_capacity = raw_capacity < minimum_capacity ? minimum_capacity : raw_capacity;
 	return ( int )( legal_capacity > ( size_t )( nMaxLayers ) ? ( size_t )( nMaxLayers ) : legal_capacity );

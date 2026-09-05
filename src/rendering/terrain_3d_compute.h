@@ -47,12 +47,11 @@ typedef struct t3dDisplacementRequest_s {
 	uint64_t m_nMaterialDataHash = 0u;
 	uint32_t m_nWidth = 0u;
 	uint32_t m_nHeight = 0u;
-	uint32_t m_nRegionMapSize = 0u;
 
 	bool valid( void ) const {
 		return m_shaderSpirv.is_valid() && m_hHeightTexture.is_valid() && m_hControlTexture.is_valid() && m_hDisplacementTexture.is_valid()
-		        && m_nWidth > 0u && m_nHeight > 0u && m_nRegionMapSize > 0u && m_nRegionMapSize <= 64u
-		        && m_regionMap.size() == ( int64_t )( m_nRegionMapSize ) * ( int64_t )( m_nRegionMapSize ) && !m_materialData.is_empty()
+		        && m_nWidth > 0u && m_nHeight > 0u
+		        && m_regionMap.size() == s_nRegionSlots && !m_materialData.is_empty()
 		        && !m_pushConstants.is_empty();
 	}
 } t3dDisplacementRequest_t;

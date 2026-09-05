@@ -5,12 +5,13 @@ class_name Terrain3DHLODBaker
 
 const NODE_FLAG_HLOD_VISUAL: int = 1 << 2
 const MAX_LEVEL: int = 6
+const REGION_SIZE: int = 128
 const REGION_MAP_SIZE: int = Terrain3DData.REGION_MAP_SIZE
 const REGION_MAP_MIN: int = -REGION_MAP_SIZE / 2
 const DEFAULT_REDUCTION: float = 0.42
 const HLOD_DIR: String = "_hlod"
 const MANIFEST_NAME: String = "terrain3d_hlod_manifest.tres"
-const BUILDER_VERSION: int = 3
+const BUILDER_VERSION: int = 5
 
 class GeometryPart extends RefCounted:
 	var mesh: Mesh
@@ -82,8 +83,7 @@ func validate_generated(terrain: Terrain3D) -> Dictionary:
 	var manifest := ResourceLoader.load(manifest_path, "Terrain3DHLODManifest", ResourceLoader.CACHE_MODE_IGNORE) as Terrain3DHLODManifest
 	if not is_instance_valid(manifest):
 		return {"ok": false, "error": "HLOD manifest could not be loaded", "valid": 0, "missing": 0, "invalid": 1}
-	var manifest_invalid: bool = manifest.format != 1 or manifest.region_map_size != REGION_MAP_SIZE or \
-		manifest.region_size != terrain.region_size or not is_equal_approx(manifest.vertex_spacing, terrain.vertex_spacing)
+	var manifest_invalid: bool = manifest.format != 3
 	var valid: int = 0
 	var missing: int = 0
 	var invalid: int = 1 if manifest_invalid else 0
@@ -148,8 +148,8 @@ func bake(terrain: Terrain3D, dirty_only: bool = true) -> Dictionary:
 	var existing_entries: Dictionary[String, Dictionary] = _index_existing_entries(existing)
 
 	var build_signature: int = _signature_int(
-		"terrain3d-hlod-v%d|max=%d|reduction=%.8f|region_size=%d|vertex_spacing=%.8f" % [
-			BUILDER_VERSION, max_level, reduction_ratio, terrain.region_size, terrain.vertex_spacing])
+		"terrain3d-hlod-v%d|max=%d|reduction=%.8f|geometry=128x1m" % [
+			BUILDER_VERSION, max_level, reduction_ratio])
 	var level_clusters: Dictionary[Vector2i, BuiltCluster] = {}
 	var all_clusters: Array[BuiltCluster] = []
 	var package_updates: PackedStringArray = PackedStringArray()
@@ -193,10 +193,7 @@ func bake(terrain: Terrain3D, dirty_only: bool = true) -> Dictionary:
 		level_clusters = next_clusters
 
 	var manifest := Terrain3DHLODManifest.new()
-	manifest.format = 1
-	manifest.region_map_size = REGION_MAP_SIZE
-	manifest.region_size = terrain.region_size
-	manifest.vertex_spacing = terrain.vertex_spacing
+	manifest.format = 3
 	manifest.max_level = max_level
 	manifest.build_signature = build_signature
 	manifest.built_unix = int(Time.get_unix_time_from_system())
@@ -263,7 +260,7 @@ func clear_generated(terrain: Terrain3D) -> Dictionary:
 
 func _collect_sources(terrain: Terrain3D, max_level: int) -> Array[Source]:
 	var sources: Array[Source] = []
-	var world_region_size: float = float(terrain.region_size) * terrain.vertex_spacing
+	var world_region_size: float = float(REGION_SIZE)
 	for location_value: Variant in terrain.data.get_region_locations():
 		var location: Vector2i = location_value
 		var region: Terrain3DRegion = terrain.data.get_region(location)
@@ -388,7 +385,7 @@ func _build_cluster(terrain: Terrain3D, level: int, cluster_key: Vector2i, input
 	var span: int = 1 << level
 	var region_min := _cluster_region_min(cluster_key, span)
 	var region_max := region_min + Vector2i(span - 1, span - 1)
-	var world_region_size: float = float(terrain.region_size) * terrain.vertex_spacing
+	var world_region_size: float = float(REGION_SIZE)
 	var cluster_origin := Vector3(float(region_min.x) * world_region_size, 0.0,
 		float(region_min.y) * world_region_size)
 	var signature_parts: PackedStringArray = PackedStringArray(["L%d" % level, str(cluster_key), str(build_signature)])

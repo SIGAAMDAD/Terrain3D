@@ -5,7 +5,7 @@
 // #include "res://addons/terrain_3d/extras/shaders/hex_grid.gdshaderinc"
 
 // And this line at the bottom of your shader:
-// 	draw_hex_grid(uv2, _region_texel_size, w_normal, ALBEDO);
+// 	draw_hex_grid(uv2, T3D_REGION_INV_SIZE, w_normal, ALBEDO);
 
 mat2 rotate2d(float _angle) {
 	return mat2(vec2(cos(_angle),-sin(_angle)), vec2(sin(_angle), cos(_angle)));

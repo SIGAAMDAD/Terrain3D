@@ -37,7 +37,7 @@ float sample_terrain_height(const ivec3 index, const vec2 world_texel) {
 // is touched only when the offset crosses a region boundary.
 ivec3 get_offset_index(const vec2 index_id, const ivec3 base_index, const ivec2 offset) {
 	ivec2 local = base_index.xy + offset;
-	int region_size_i = int(_region_size);
+	int region_size_i = int(T3D_REGION_SIZE_F);
 	if (base_index.z >= 0 && uint(local.x | local.y) < uint(region_size_i)) {
 		return ivec3(local, base_index.z);
 	}
@@ -65,7 +65,7 @@ vec4 read_terrain_color_exact_texel(ivec2 local_coord, ivec2 region_cell, const 
 		local_coord.y -= map_size.y;
 		region_delta.y = 1;
 	}
-	int layer = get_region_layer(region_cell + region_delta + (_region_map_size / 2));
+	int layer = get_region_layer(region_cell + region_delta + T3D_REGION_MAP_HALF);
 	return layer >= 0 ? texelFetch(_color_maps, ivec3(local_coord, layer), 0) : COLOR_MAP_DEF;
 #endif
 }

@@ -8,6 +8,7 @@
 #include "data/terrain_3d_region.h"
 
 #include "memory/terrain_3d_memory.h"
+#include "memory/terrain_3d_memory_zone.h"
 
 #include <stdint.h>
 #include <string.h>
@@ -76,15 +77,16 @@ class Terrain3DNodeStreamer : public Object {
 public:
 private:
 	Terrain3D *m_pTerrain = NULL;
+	Terrain3DMemoryZone *m_pRuntimeAllocatorZone = NULL;
 	Node3D *m_pHost = NULL;
-	t3dRegionRuntime_t m_szRegions[s_nMaxRegionSlots];
-	uint64_t m_szDesiredRegionBits[s_nMaxRegionSlots / 64] = {};
-	uint64_t m_szPendingDescriptorRegionBits[s_nMaxRegionSlots / 64] = {};
-	eastl::fixed_vector<uint16_t, s_nMaxRegionSlots, false> m_activeRegionIndices;
-	eastl::fixed_vector<uint16_t, s_nMaxRegionSlots, false> m_desiredRegionIndices;
-	Node3D *m_szRegionRootPool[s_nMaxRegionSlots] = {};
-	eastl::fixed_vector<uint16_t, s_nMaxRegionSlots, false> m_freeRootPoolIndices;
-	StringName m_szRegionRootNames[s_nMaxRegionSlots];
+	t3dRegionRuntime_t m_szRegions[s_nRegionSlots];
+	uint64_t m_szDesiredRegionBits[s_nRegionSlots / 64] = {};
+	uint64_t m_szPendingDescriptorRegionBits[s_nRegionSlots / 64] = {};
+	eastl::fixed_vector<uint16_t, s_nRegionSlots, false> m_activeRegionIndices;
+	eastl::fixed_vector<uint16_t, s_nRegionSlots, false> m_desiredRegionIndices;
+	Node3D *m_szRegionRootPool[s_nRegionSlots] = {};
+	eastl::fixed_vector<uint16_t, s_nRegionSlots, false> m_freeRootPoolIndices;
+	StringName m_szRegionRootNames[s_nRegionSlots];
 	int m_nRegionRootPoolCount = 0;
 	t3dActiveNode_t *m_pActiveNodeStorage = NULL;
 	size_t m_nActiveNodeStorageCapacity = 0u;
@@ -92,6 +94,10 @@ private:
 	size_t m_nMovableNodeCount = 0u;
 	size_t m_nMovableNodeCapacity = 0u;
 	bool m_bActivationStorageRebuildPending = false;
+	bool m_bColdRebuildServiceActive = false;
+	uint64_t m_nColdRebuildCount = 0u;
+	uint64_t m_nColdRebuildFailures = 0u;
+	uint64_t m_nCapacityMissCount = 0u;
 	StringName m_methodActivate;
 	StringName m_methodDeactivate;
 	StringName m_methodLoadState;
@@ -138,11 +144,11 @@ private:
 		return m_pActiveNodeStorage ? m_pActiveNodeStorage + rRuntime.m_iNodeOffset : NULL;
 	}
 	EA_FORCE_INLINE bool desiredRegionTest( const int iIndex ) const {
-		return iIndex >= 0 && iIndex < s_nMaxRegionSlots
+		return iIndex >= 0 && iIndex < s_nRegionSlots
 		        && ( m_szDesiredRegionBits[( size_t )( iIndex ) >> 6u] & ( 1ull << ( ( size_t )( iIndex ) & 63u ) ) ) != 0u;
 	}
 	EA_FORCE_INLINE void desiredRegionSet( const int iIndex ) {
-		if ( iIndex >= 0 && iIndex < s_nMaxRegionSlots ) {
+		if ( iIndex >= 0 && iIndex < s_nRegionSlots ) {
 			m_szDesiredRegionBits[( size_t )( iIndex ) >> 6u] |= 1ull << ( ( size_t )( iIndex ) & 63u );
 		}
 	}
@@ -150,16 +156,16 @@ private:
 		memset( m_szDesiredRegionBits, 0, sizeof( m_szDesiredRegionBits ) );
 	}
 	EA_FORCE_INLINE bool pendingDescriptorRegionTest( const int iIndex ) const {
-		return iIndex >= 0 && iIndex < s_nMaxRegionSlots
+		return iIndex >= 0 && iIndex < s_nRegionSlots
 		        && ( m_szPendingDescriptorRegionBits[( size_t )( iIndex ) >> 6u] & ( 1ull << ( ( size_t )( iIndex ) & 63u ) ) ) != 0u;
 	}
 	EA_FORCE_INLINE void pendingDescriptorRegionSet( const int iIndex ) {
-		if ( iIndex >= 0 && iIndex < s_nMaxRegionSlots ) {
+		if ( iIndex >= 0 && iIndex < s_nRegionSlots ) {
 			m_szPendingDescriptorRegionBits[( size_t )( iIndex ) >> 6u] |= 1ull << ( ( size_t )( iIndex ) & 63u );
 		}
 	}
 	EA_FORCE_INLINE void pendingDescriptorRegionClear( const int iIndex ) {
-		if ( iIndex >= 0 && iIndex < s_nMaxRegionSlots ) {
+		if ( iIndex >= 0 && iIndex < s_nRegionSlots ) {
 			m_szPendingDescriptorRegionBits[( size_t )( iIndex ) >> 6u] &= ~( 1ull << ( ( size_t )( iIndex ) & 63u ) );
 		}
 	}
@@ -216,6 +222,7 @@ public:
 	}
 	~Terrain3DNodeStreamer( void );
 
+	bool bindRuntimeAllocator( Terrain3DMemoryZone *pZone );
 	void initialize( Terrain3D *pTerrain );
 	void destroy( bool bCaptureState = true );
 	void serviceColdRebuild( void );

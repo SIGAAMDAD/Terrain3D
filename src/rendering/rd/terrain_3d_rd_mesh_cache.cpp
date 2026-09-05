@@ -529,6 +529,24 @@ static bool t3dRdAppendMeshSource( const Ref<Mesh> &rMesh,
 	return true;
 }
 
+
+bool Terrain3DRdMeshCache::bindRuntimeAllocator( Terrain3DMemoryZone *const pZone, const t3dAllocatorOverflowPolicy_t ePolicy ) {
+	if ( !pZone ) {
+		return false;
+	}
+	const Terrain3DEastlAllocator allocator = Terrain3DEastlAllocator::zoneAllocator( pZone, ePolicy );
+	m_surfaces.set_allocator( allocator );
+	m_lods.set_allocator( allocator );
+	m_materials.set_allocator( allocator );
+	m_textures.set_allocator( allocator );
+	m_vertexChunkHashes.set_allocator( allocator );
+	m_index16ChunkHashes.set_allocator( allocator );
+	m_index32ChunkHashes.set_allocator( allocator );
+	m_textureSyncNext.set_allocator( allocator );
+	m_textureSyncReused.set_allocator( allocator );
+	return true;
+}
+
 Terrain3DRdMeshCache::Terrain3DRdMeshCache( void ) : m_context( Terrain3DRdContext::getShared() ) {
 }
 
@@ -763,12 +781,16 @@ bool Terrain3DRdMeshCache::ensureArena( RID &rBuffer,
 	if ( rBuffer.is_valid() && rCapacityBytes >= nRequiredBytes ) {
 		return true;
 	}
+	++m_nArenaCapacityMissCount;
+	++m_nArenaGrowthRequestCount;
 	const uint32_t capacity = nextArenaCapacity( nRequiredBytes, minimum );
 	if ( capacity == 0u ) {
+		++m_nArenaRebuildFailureCount;
 		return false;
 	}
 	RenderingDevice *const rd = m_context.getDevice();
 	if ( !rd ) {
+		++m_nArenaRebuildFailureCount;
 		return false;
 	}
 	if ( rBuffer.is_valid() ) {
@@ -783,9 +805,11 @@ bool Terrain3DRdMeshCache::ensureArena( RID &rBuffer,
 	}
 	if ( !rBuffer.is_valid()
 	        || !m_context.registerResource( rBuffer, rName, resourceType, memoryCategory, capacity, Terrain3DRdContext::OWNER_TERRAIN ) ) {
+		++m_nArenaRebuildFailureCount;
 		return false;
 	}
 	rCapacityBytes = capacity;
+	++m_nArenaRebuildCount;
 	return true;
 }
 

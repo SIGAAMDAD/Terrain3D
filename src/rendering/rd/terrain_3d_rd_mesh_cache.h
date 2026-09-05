@@ -71,6 +71,15 @@ typedef struct t3dRdMeshSourceSnapshot_s {
 	eastl::vector<t3dRdMeshSourceLod_t, Terrain3DEastlAllocator> m_lods;
 	eastl::vector<t3dRdInstanceMaterial_t, Terrain3DEastlAllocator> m_materials;
 	eastl::vector<t3dRdImportedTextureSource_t, Terrain3DEastlAllocator> m_textures;
+	EA_FORCE_INLINE void bindRuntimeAllocator( const Terrain3DEastlAllocator &rAllocator ) {
+		m_vertexChunkHashes.set_allocator( rAllocator );
+		m_index16ChunkHashes.set_allocator( rAllocator );
+		m_index32ChunkHashes.set_allocator( rAllocator );
+		m_surfaces.set_allocator( rAllocator );
+		m_lods.set_allocator( rAllocator );
+		m_materials.set_allocator( rAllocator );
+		m_textures.set_allocator( rAllocator );
+	}
 	bool copyFrom( const t3dRdMeshSourceSnapshot_s &rOther ) {
 		if ( rOther.m_vertexChunkHashes.size() > m_vertexChunkHashes.capacity()
 		        || rOther.m_index16ChunkHashes.size() > m_index16ChunkHashes.capacity()
@@ -114,6 +123,10 @@ private:
 	uint32_t m_nIndex32UsedBytes = 0u;
 	uint32_t m_nGeneration = 0u;
 	uint64_t m_nSourceGeneration = 0u;
+	uint64_t m_nArenaCapacityMissCount = 0u;
+	uint64_t m_nArenaGrowthRequestCount = 0u;
+	uint64_t m_nArenaRebuildCount = 0u;
+	uint64_t m_nArenaRebuildFailureCount = 0u;
 	eastl::vector<t3dRdMeshSourceSurface_t, Terrain3DEastlAllocator> m_surfaces;
 	eastl::vector<t3dRdMeshSourceLod_t, Terrain3DEastlAllocator> m_lods;
 	eastl::vector<t3dRdInstanceMaterial_t, Terrain3DEastlAllocator> m_materials;
@@ -144,6 +157,7 @@ private:
 	void discardTextures( void );
 
 public:
+	bool bindRuntimeAllocator( Terrain3DMemoryZone *pZone, t3dAllocatorOverflowPolicy_t ePolicy );
 	Terrain3DRdMeshCache( void );
 	~Terrain3DRdMeshCache( void );
 
@@ -218,6 +232,16 @@ public:
 	EA_FORCE_INLINE bool isReady( void ) const {
 		return m_hVertexArray.is_valid() && m_nGeneration != 0u;
 	}
+	EA_FORCE_INLINE uint64_t getArenaCapacityMissCount( void ) const { return m_nArenaCapacityMissCount; }
+	EA_FORCE_INLINE uint64_t getArenaGrowthRequestCount( void ) const { return m_nArenaGrowthRequestCount; }
+	EA_FORCE_INLINE uint64_t getArenaRebuildCount( void ) const { return m_nArenaRebuildCount; }
+	EA_FORCE_INLINE uint64_t getArenaRebuildFailureCount( void ) const { return m_nArenaRebuildFailureCount; }
+	EA_FORCE_INLINE uint32_t getVertexCapacityBytes( void ) const { return m_nVertexCapacityBytes; }
+	EA_FORCE_INLINE uint32_t getIndex16CapacityBytes( void ) const { return m_nIndex16CapacityBytes; }
+	EA_FORCE_INLINE uint32_t getIndex32CapacityBytes( void ) const { return m_nIndex32CapacityBytes; }
+	EA_FORCE_INLINE uint32_t getVertexUsedBytes( void ) const { return m_nVertexUsedBytes; }
+	EA_FORCE_INLINE uint32_t getIndex16UsedBytes( void ) const { return m_nIndex16UsedBytes; }
+	EA_FORCE_INLINE uint32_t getIndex32UsedBytes( void ) const { return m_nIndex32UsedBytes; }
 };
 
 #endif // TERRAIN3D_RD_MESH_CACHE_H

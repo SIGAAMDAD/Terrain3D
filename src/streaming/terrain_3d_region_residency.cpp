@@ -49,7 +49,7 @@ void Terrain3DRegionResidency::update( Terrain3DData &rData, const t3dResidencyF
 
 	const t3dActiveHeightResidencyResult_t activeResult = m_pActiveHeightResidency->update( rFrame, bForce );
 	for ( int index = 0; index < activeResult.m_nCpuSourceRequestCount; ++index ) {
-		rData.requestCpuRegionSourceAsync( activeResult.m_szCpuSourceRequests[( size_t )( index )] );
+		rData.requestCpuRegionSourceAsync( t3dUnpackRegionCoord( activeResult.m_szCpuSourceRequests[( size_t )( index )] ) );
 	}
 
 	rData.updateInstanceRegionResidencyInternal( rFrame, bForce );

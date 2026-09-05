@@ -720,8 +720,6 @@ typedef struct t3dRdFrameSnapshot_s {
 	uint64_t m_nTerrainTextureGeneration = 0u;
 	uint64_t m_nMaterialTextureGeneration = 0u;
 	uint32_t m_nPatchCount = 0u;
-	uint32_t m_nRegionSize = 128u;
-	uint32_t m_nRegionMapSize = 0u;
 	uint32_t m_nMeshSize = 48u;
 	uint32_t m_nMaterialLayerCount = 1u;
 	uint32_t m_nCameraCullMask = UINT32_MAX;
@@ -771,8 +769,8 @@ typedef struct alignas( 16 ) t3dRdFrameUniforms_s {
 	float m_fLightColorG = 1.0f;
 	float m_fLightColorB = 1.0f;
 	float m_fLightColorA = 1.0f;
-	float m_fRegionSize = 128.0f;
-	float m_fRegionMapSize = 0.0f;
+	float m_fTerrainPadding0 = 0.0f;
+	float m_fTerrainPadding1 = 0.0f;
 	float m_fHeightMin = s_fRegionHeightMin;
 	float m_fHeightRange = s_fRegionHeightRange;
 	float m_fVertexSpacing = 1.0f;
@@ -807,7 +805,6 @@ EA_FORCE_INLINE void t3dRdFrameUniformsInit( t3dRdFrameUniforms_t *pFrame ) {
 	pFrame->m_fLightColorG = 1.0f;
 	pFrame->m_fLightColorB = 1.0f;
 	pFrame->m_fLightColorA = 1.0f;
-	pFrame->m_fRegionSize = 128.0f;
 	pFrame->m_fHeightMin = s_fRegionHeightMin;
 	pFrame->m_fHeightRange = s_fRegionHeightRange;
 	pFrame->m_fVertexSpacing = 1.0f;

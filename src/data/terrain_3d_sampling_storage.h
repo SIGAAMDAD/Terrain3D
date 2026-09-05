@@ -34,8 +34,8 @@ public:
 	Terrain3DSamplingStorage( const Terrain3DSamplingStorage & ) = delete;
 	Terrain3DSamplingStorage &operator=( const Terrain3DSamplingStorage & ) = delete;
 
-	bool claimOrReconfigureActive( int nRegionSize );
-	bool bindActive( int nRegionSize, void *pBacking, size_t nBackingBytes );
+	bool claimOrReconfigureActive( void );
+	bool bindActive( void *pBacking, size_t nBackingBytes );
 	void releaseActive( void );
 	void resetActive( void );
 	EA_FORCE_INLINE bool isActiveOwner( void ) const {
@@ -52,7 +52,7 @@ public:
 	bool containsActive( const Vector2i &rLocation ) const;
 	bool syncActiveRegion( const Vector2i &rLocation, const Terrain3DRegion *pRegion );
 	bool syncActiveHeightPage( const Vector2i &rLocation, const uint8_t *pHeightBytes, size_t nHeightBytes );
-	bool replaceActiveHeightPages( int nRegionSize, const uint8_t *const *ppHeightPages, const int *pSlots, size_t nPageCount );
+	bool replaceActiveHeightPages( const uint8_t *const *ppHeightPages, const int *pSlots, size_t nPageCount );
 	bool syncActiveMap(
 	        const Vector2i &rLocation, const Terrain3DRegion *pRegion, t3dMapType_t eType, const Rect2i &rDirtyRect = Rect2i() );
 	bool syncActiveDerived( const Vector2i &rLocation, const Terrain3DRegion *pRegion, const Rect2i &rDirtyRect = Rect2i() );
@@ -65,8 +65,8 @@ public:
 	uint64_t getActivePublicationCount( void ) const;
 
 	Terrain3DResidentMapLease acquireResident( const Vector2i &rLocation, const Terrain3DRegion *pRegion ) const;
-	bool configureResidentPool(
-	        int nRegionSize, int nRegionMapSize, bool bControlMapsImplicit, int nRequestedCapacity, size_t nBudgetBytes );
+	bool bindRuntimeAllocator( Terrain3DMemoryZone *pZone );
+	bool configureResidentPool( bool bControlMapsImplicit, int nRequestedCapacity );
 	void clearResidentPool( void );
 	void resetResidentPool( void );
 	void invalidateResident( const Vector2i &rLocation );
@@ -89,7 +89,7 @@ private:
 	uint32_t m_nActiveStorageGeneration = 0u;
 	mutable Terrain3DResidentRegionPool m_residentPool;
 	t3dAtomic_t<uint64_t> m_nSamplingGeneration{ 1u };
-	t3dAtomic_t<uint32_t> m_szRegionSamplingGenerations[s_nMaxRegionSlots];
+	t3dAtomic_t<uint32_t> m_szRegionSamplingGenerations[s_nRegionSlots];
 
 	static int locationIndex( const Vector2i &rLocation );
 };

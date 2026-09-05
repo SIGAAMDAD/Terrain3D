@@ -6,7 +6,7 @@
 	v_vertex.xz -= shift_world * clipmap_morph.z;
 
 	UV = v_vertex.xz * _vertex_density;
-	UV2 = fma(UV, vec2(_region_texel_size), vec2(0.5 * _region_texel_size));
+	UV2 = fma(UV, vec2(T3D_REGION_INV_SIZE), vec2(0.5 * T3D_REGION_INV_SIZE));
 
 	bool hidden = false
 #include "res://addons/terrain_3d/shaders/includes/none_check.gdshaderinc"

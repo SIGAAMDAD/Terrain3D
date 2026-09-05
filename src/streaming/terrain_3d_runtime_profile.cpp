@@ -1083,7 +1083,7 @@ void Terrain3D::setPerformanceTarget( const t3dPerformanceTarget_t target ) {
 		setupTerrainMesher();
 	}
 	m_bApplyingPerformanceTarget = false;
-	if ( m_nRegionSize != SIZE_128 || !Math::is_equal_approx( m_fVertexSpacing, ( real_t )( 1.0f ) ) ) {
+	if ( s_nRegionSize != SIZE_128 ) {
 		m_performanceTarget = PERFORMANCE_TARGET_CUSTOM;
 		m_bPerformanceProfileMaterialPendingApply = false;
 		LOG( ERROR, "Xbox 360 performance target requires 128-sample regions at 1 metre vertex spacing" );

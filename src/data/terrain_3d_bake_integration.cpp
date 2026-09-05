@@ -56,16 +56,15 @@ bool Terrain3D::bakeRegionSnapshotLess( const t3dBakeRegionSnapshot_t &rA, const
 
 t3dBakeSnapshot_t Terrain3D::createBakeSnapshot( void ) const {
 	t3dBakeSnapshot_t snapshot;
-	snapshot.m_nRegionSize = ( int32_t )m_nRegionSize;
-	snapshot.m_fVertexSpacing = m_fVertexSpacing;
-	eastl::fill_n( snapshot.m_szRegionLookup, s_nMaxRegionSlots, ( int32_t )( -1 ) );
+	snapshot.m_fVertexSpacing = s_fRegionVertexSpacing;
+	eastl::fill_n( snapshot.m_szRegionLookup, s_nRegionSlots, ( int32_t )( -1 ) );
 
 	const TypedArray<Vector2i> region_locations = m_pData->getRegionLocations();
 	snapshot.m_regions.reserve( region_locations.size() );
 	const int64_t expected_height_bytes =
-	        ( int64_t )( snapshot.m_nRegionSize ) * ( int64_t )( snapshot.m_nRegionSize ) * ( int64_t )( sizeof( uint16_t ) );
+	        ( int64_t )( s_nRegionSize ) * ( int64_t )( s_nRegionSize ) * ( int64_t )( sizeof( uint16_t ) );
 	const int64_t expected_control_bytes =
-	        ( int64_t )( snapshot.m_nRegionSize ) * ( int64_t )( snapshot.m_nRegionSize ) * ( int64_t )( sizeof( uint32_t ) );
+	        ( int64_t )( s_nRegionSize ) * ( int64_t )( s_nRegionSize ) * ( int64_t )( sizeof( uint32_t ) );
 
 	for ( size_t iRegion = 0u; iRegion < ( size_t )( ( region_locations ).size() ); iRegion++ ) {
 		const Vector2i regionLocation = ( region_locations )[iRegion];
@@ -80,11 +79,11 @@ t3dBakeSnapshot_t Terrain3D::createBakeSnapshot( void ) const {
 
 		const Ref<Image> pHeightMap = pRegion->getHeightMap();
 		const Ref<Image> pControlMap = pRegion->getControlMap();
-		if ( pHeightMap.is_null() || pHeightMap->get_format() != Image::FORMAT_R16 || pHeightMap->get_width() != snapshot.m_nRegionSize
-		        || pHeightMap->get_height() != snapshot.m_nRegionSize
+		if ( pHeightMap.is_null() || pHeightMap->get_format() != Image::FORMAT_R16 || pHeightMap->get_width() != s_nRegionSize
+		        || pHeightMap->get_height() != s_nRegionSize
 		        || ( pControlMap.is_valid()
-		                && ( pControlMap->get_format() != Image::FORMAT_RF || pControlMap->get_width() != snapshot.m_nRegionSize
-		                        || pControlMap->get_height() != snapshot.m_nRegionSize ) ) ) {
+		                && ( pControlMap->get_format() != Image::FORMAT_RF || pControlMap->get_width() != s_nRegionSize
+		                        || pControlMap->get_height() != s_nRegionSize ) ) ) {
 			LOG( ERROR, "Skipping invalid terrain region during bake snapshot: ", regionLocation );
 			continue;
 		}
@@ -175,7 +174,7 @@ void Terrain3D::generateTriangles( PackedVector3Array &rVertices,
 	// Whole-terrain bakes are split into row chunks. This parallelizes even a single large region,
 	// while keeping each worker's output isolated and preserving deterministic merge order.
 	if ( !rGlobalAabb.has_volume() ) {
-		const int32_t nRegionSize = ( int32_t )m_nRegionSize;
+		const int32_t nRegionSize = ( int32_t )s_nRegionSize;
 		const int32_t rows_per_task = 16;
 		t3dBakeSnapshot_t snapshot = createBakeSnapshot();
 		for ( size_t iRegion = 0u; iRegion < ( size_t )( ( snapshot.m_regions ).size() ); iRegion++ ) {
@@ -272,10 +271,10 @@ void Terrain3D::generateTriangles( PackedVector3Array &rVertices,
 		// AABB generation is primarily used by runtime navigation baking. Keep it serial because these
 		// requests are generally small and thread setup costs can exceed the geometry work.
 		t3dTriangleBuffer_t buffer;
-		const int32_t z_start = ( int32_t )Math::ceil( rGlobalAabb.position.z / m_fVertexSpacing );
-		const int32_t z_end = ( int32_t )Math::floor( rGlobalAabb.get_end().z / m_fVertexSpacing ) + 1;
-		const int32_t x_start = ( int32_t )Math::ceil( rGlobalAabb.position.x / m_fVertexSpacing );
-		const int32_t x_end = ( int32_t )Math::floor( rGlobalAabb.get_end().x / m_fVertexSpacing ) + 1;
+		const int32_t z_start = ( int32_t )Math::ceil( rGlobalAabb.position.z / s_fRegionVertexSpacing );
+		const int32_t z_end = ( int32_t )Math::floor( rGlobalAabb.get_end().z / s_fRegionVertexSpacing ) + 1;
+		const int32_t x_start = ( int32_t )Math::ceil( rGlobalAabb.position.x / s_fRegionVertexSpacing );
+		const int32_t x_end = ( int32_t )Math::floor( rGlobalAabb.get_end().x / s_fRegionVertexSpacing ) + 1;
 		const size_t column_count = ( size_t )( MAX( 0, x_end - x_start + step - 1 ) / step );
 		const size_t row_count = ( size_t )( MAX( 0, z_end - z_start + step - 1 ) / step );
 		buffer.reserve( column_count * row_count * 6u, generate_uvs );
@@ -283,7 +282,7 @@ void Terrain3D::generateTriangles( PackedVector3Array &rVertices,
 		for ( int32_t z = z_start; z < z_end; z += step ) {
 			for ( int32_t x = x_start; x < x_end; x += step ) {
 				const real_t fHeight =
-				        m_pData->getHeight( Vector3( ( real_t )( x )*m_fVertexSpacing, 0.f, ( real_t )( z )*m_fVertexSpacing ) );
+				        m_pData->getHeight( Vector3( ( real_t )( x )*s_fRegionVertexSpacing, 0.f, ( real_t )( z )*s_fRegionVertexSpacing ) );
 				if ( fHeight >= rGlobalAabb.position.y && fHeight <= rGlobalAabb.get_end().y ) {
 					generateTrianglePair( buffer, generate_uvs, nLod, filter, bRequireNav, x, z );
 				}
@@ -340,10 +339,10 @@ void Terrain3D::generateTrianglePair( t3dTriangleBuffer_t &rBuffer,
         const int32_t z,
         const t3dBakeSnapshot_t *pSnapshot ) const {
 	const int32_t step = 1 << CLAMP( nLod, 0, 8 );
-	const Vector3 xz = Vector3( x, 0.0f, z ) * m_fVertexSpacing;
-	const Vector3 xsz = Vector3( x + step, 0.0f, z ) * m_fVertexSpacing;
-	const Vector3 xzs = Vector3( x, 0.0f, z + step ) * m_fVertexSpacing;
-	const Vector3 xszs = Vector3( x + step, 0.0f, z + step ) * m_fVertexSpacing;
+	const Vector3 xz = Vector3( x, 0.0f, z ) * s_fRegionVertexSpacing;
+	const Vector3 xsz = Vector3( x + step, 0.0f, z ) * s_fRegionVertexSpacing;
+	const Vector3 xzs = Vector3( x, 0.0f, z + step ) * s_fRegionVertexSpacing;
+	const Vector3 xszs = Vector3( x + step, 0.0f, z + step ) * s_fRegionVertexSpacing;
 	uint32_t ctrl1 = UINT32_MAX;
 	uint32_t ctrl2 = UINT32_MAX;
 	uint32_t ctrl3 = UINT32_MAX;
@@ -457,10 +456,10 @@ Ref<Mesh> Terrain3D::bakeLightmapClusterMesh( const Vector2i &rRegionMin,
 	const Vector2i ownerMax( MAX( rRegionMin.x, rRegionMax.x ), MAX( rRegionMin.y, rRegionMax.y ) );
 	const Vector2i min_region = ownerMin - Vector2i( context, context );
 	const Vector2i max_region = ownerMax + Vector2i( context, context );
-	const real_t fMinX = ( real_t )( min_region.x * nRegionSize ) * m_fVertexSpacing;
-	const real_t fMinZ = ( real_t )( min_region.y * nRegionSize ) * m_fVertexSpacing;
-	const real_t fSpanX = ( real_t )( ( max_region.x - min_region.x + 1 ) * nRegionSize ) * m_fVertexSpacing;
-	const real_t fSpanZ = ( real_t )( ( max_region.y - min_region.y + 1 ) * nRegionSize ) * m_fVertexSpacing;
+	const real_t fMinX = ( real_t )( min_region.x * nRegionSize ) * s_fRegionVertexSpacing;
+	const real_t fMinZ = ( real_t )( min_region.y * nRegionSize ) * s_fRegionVertexSpacing;
+	const real_t fSpanX = ( real_t )( ( max_region.x - min_region.x + 1 ) * nRegionSize ) * s_fRegionVertexSpacing;
+	const real_t fSpanZ = ( real_t )( ( max_region.y - min_region.y + 1 ) * nRegionSize ) * s_fRegionVertexSpacing;
 	const AABB bounds( Vector3( fMinX, -1000000.0f, fMinZ ), Vector3( fSpanX, 2000000.0f, fSpanZ ) );
 
 	PackedVector3Array vertices;
@@ -528,12 +527,12 @@ PackedVector3Array Terrain3D::generateNavMeshSourceGeometry( const AABB &rGlobal
 		return faces;
 	}
 
-	const int region_size = ( int )m_nRegionSize;
+	const int region_size = ( int )s_nRegionSize;
 	const int expected_width = region_size + 1;
 	const TypedArray<Vector2i> locations = m_pData->getRegionLocations();
 	for ( size_t iLocation = 0u; iLocation < ( size_t )( ( locations ).size() ); iLocation++ ) {
 		const Vector2i location = ( locations )[iLocation];
-		const real_t region_world = ( real_t )region_size * m_fVertexSpacing;
+		const real_t region_world = ( real_t )region_size * s_fRegionVertexSpacing;
 		const real_t region_min_x = ( real_t )location.x * region_world;
 		const real_t region_min_z = ( real_t )location.y * region_world;
 		if ( rGlobalAabb.has_volume() ) {
@@ -597,18 +596,18 @@ PackedVector3Array Terrain3D::generateNavMeshSourceGeometry( const AABB &rGlobal
 				const bool nav4 = navigation_view.isNavigationSample( ( uint32_t )i4 );
 				const int global_x = location.x * region_size + x;
 				const int global_z = location.y * region_size + z;
-				Vector3 v1( ( real_t )global_x * m_fVertexSpacing,
+				Vector3 v1( ( real_t )global_x * s_fRegionVertexSpacing,
 				        t3dBakeCollisionHeightAt( collision_heights, collision_width, x, z ),
-				        ( real_t )global_z * m_fVertexSpacing );
-				Vector3 v2( ( real_t )( global_x + 1 ) * m_fVertexSpacing,
+				        ( real_t )global_z * s_fRegionVertexSpacing );
+				Vector3 v2( ( real_t )( global_x + 1 ) * s_fRegionVertexSpacing,
 				        t3dBakeCollisionHeightAt( collision_heights, collision_width, x + 1, z ),
-				        ( real_t )global_z * m_fVertexSpacing );
-				Vector3 v3( ( real_t )global_x * m_fVertexSpacing,
+				        ( real_t )global_z * s_fRegionVertexSpacing );
+				Vector3 v3( ( real_t )global_x * s_fRegionVertexSpacing,
 				        t3dBakeCollisionHeightAt( collision_heights, collision_width, x, z + 1 ),
-				        ( real_t )( global_z + 1 ) * m_fVertexSpacing );
-				Vector3 v4( ( real_t )( global_x + 1 ) * m_fVertexSpacing,
+				        ( real_t )( global_z + 1 ) * s_fRegionVertexSpacing );
+				Vector3 v4( ( real_t )( global_x + 1 ) * s_fRegionVertexSpacing,
 				        t3dBakeCollisionHeightAt( collision_heights, collision_width, x + 1, z + 1 ),
-				        ( real_t )( global_z + 1 ) * m_fVertexSpacing );
+				        ( real_t )( global_z + 1 ) * s_fRegionVertexSpacing );
 				if ( rGlobalAabb.has_volume()
 				        && ( v1.y < rGlobalAabb.position.y || v1.y > rGlobalAabb.get_end().y || v1.x < rGlobalAabb.position.x
 				                || v1.x > rGlobalAabb.get_end().x || v1.z < rGlobalAabb.position.z || v1.z > rGlobalAabb.get_end().z ) ) {

@@ -5,7 +5,7 @@
 	vec3 region_uv = get_index_uv(fragment_uv2);
 	bool logical_region_present = region_uv.z >= 0.0;
 	if (region_uv.z < 0.0) {
-		ivec2 logical_map_pos = ivec2(floor(fragment_uv2)) + (_region_map_size / 2);
+		ivec2 logical_map_pos = ivec2(floor(fragment_uv2)) + T3D_REGION_MAP_HALF;
 		logical_region_present = get_logical_region_present(logical_map_pos);
 #include "res://addons/terrain_3d/shaders/includes/middle_none_fragment.gdshaderinc"
 	}

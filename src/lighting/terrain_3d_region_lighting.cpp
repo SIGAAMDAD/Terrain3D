@@ -4,12 +4,20 @@
 
 #include <godot_cpp/core/class_db.hpp>
 
+t3dAtomicU64_t Terrain3DRegionLighting::s_nGlobalPublicationGeneration{ 1u };
+
+void Terrain3DRegionLighting::touchGlobalPublicationGeneration( void ) {
+	s_nGlobalPublicationGeneration.fetch_add( 1u, T3D_MEMORY_ORDER_ACQ_REL );
+}
+
+
 #define T3D_SET_VALUE( methodName, methodSymbol, field_name, value_type )                                                                  \
 	void Terrain3DRegionLighting::methodSymbol( value_type value ) {                                                                       \
 		if ( field_name == value ) {                                                                                                       \
 			return;                                                                                                                        \
 		}                                                                                                                                  \
 		field_name = value;                                                                                                                \
+		touchGlobalPublicationGeneration();                                                                                                \
 		emit_changed();                                                                                                                    \
 	}
 
@@ -19,6 +27,7 @@ void Terrain3DRegionLighting::setLightDataPath( const String &rPath ) {
 		return;
 	}
 	m_lightDataPath = path;
+	touchGlobalPublicationGeneration();
 	emit_changed();
 }
 
@@ -28,6 +37,7 @@ void Terrain3DRegionLighting::setTerrainShadowMaskPath( const String &rPath ) {
 		return;
 	}
 	m_terrainShadowMaskPath = path;
+	touchGlobalPublicationGeneration();
 	emit_changed();
 }
 
@@ -37,6 +47,7 @@ void Terrain3DRegionLighting::setBakedUserData( const Array &rData ) {
 		return;
 	}
 	m_bakedUserData = rData.duplicate( true );
+	touchGlobalPublicationGeneration();
 	emit_changed();
 }
 
@@ -50,6 +61,7 @@ void Terrain3DRegionLighting::setClusterSizeRegions( const int nSize ) {
 		return;
 	}
 	m_nClusterSizeRegions = value;
+	touchGlobalPublicationGeneration();
 	emit_changed();
 }
 
@@ -59,6 +71,7 @@ void Terrain3DRegionLighting::setTerrainProxyLod( const int nLod ) {
 		return;
 	}
 	m_nTerrainProxyLod = value;
+	touchGlobalPublicationGeneration();
 	emit_changed();
 }
 
@@ -68,6 +81,7 @@ void Terrain3DRegionLighting::setContextRadiusRegions( const int nRadius ) {
 		return;
 	}
 	m_nContextRadiusRegions = value;
+	touchGlobalPublicationGeneration();
 	emit_changed();
 }
 
@@ -77,6 +91,7 @@ void Terrain3DRegionLighting::setShadowmaskMode( const int nMode ) {
 		return;
 	}
 	m_nShadowmaskMode = value;
+	touchGlobalPublicationGeneration();
 	emit_changed();
 }
 
@@ -88,6 +103,7 @@ void Terrain3DRegionLighting::setDirectionalLightSignature( const String &rSigna
 		return;
 	}
 	m_directionalLightSignature = signature;
+	touchGlobalPublicationGeneration();
 	emit_changed();
 }
 T3D_SET_VALUE( baked_unix, setBakedUnix, m_nBakedUnix, int64_t )
@@ -98,6 +114,7 @@ void Terrain3DRegionLighting::setReceiverCount( const int nCount ) {
 		return;
 	}
 	m_nReceiverCount = value;
+	touchGlobalPublicationGeneration();
 	emit_changed();
 }
 
@@ -107,6 +124,7 @@ void Terrain3DRegionLighting::setContributorCount( const int nCount ) {
 		return;
 	}
 	m_nContributorCount = value;
+	touchGlobalPublicationGeneration();
 	emit_changed();
 }
 
@@ -116,6 +134,7 @@ void Terrain3DRegionLighting::setLightmapTextureCount( const int nCount ) {
 		return;
 	}
 	m_nLightmapTextureCount = value;
+	touchGlobalPublicationGeneration();
 	emit_changed();
 }
 
@@ -125,6 +144,7 @@ void Terrain3DRegionLighting::setShadowmaskTextureCount( const int nCount ) {
 		return;
 	}
 	m_nShadowmaskTextureCount = value;
+	touchGlobalPublicationGeneration();
 	emit_changed();
 }
 
@@ -133,6 +153,7 @@ void Terrain3DRegionLighting::setHasProbeData( const bool bHasProbes ) {
 		return;
 	}
 	m_bHasProbeData = bHasProbes;
+	touchGlobalPublicationGeneration();
 	emit_changed();
 }
 
@@ -142,6 +163,7 @@ void Terrain3DRegionLighting::setDiskBytes( const int64_t nBytes ) {
 		return;
 	}
 	m_nDiskBytes = value;
+	touchGlobalPublicationGeneration();
 	emit_changed();
 }
 
@@ -151,6 +173,7 @@ void Terrain3DRegionLighting::setEstimatedGpuBytes( const int64_t nBytes ) {
 		return;
 	}
 	m_nEstimatedGpuBytes = value;
+	touchGlobalPublicationGeneration();
 	emit_changed();
 }
 
@@ -177,6 +200,7 @@ int Terrain3DRegionLighting::stripBakedUsersWithPathFragment( const String &rFra
 	}
 	if ( removed > 0 ) {
 		m_bakedUserData = kept;
+		touchGlobalPublicationGeneration();
 		emit_changed();
 	}
 	return removed;

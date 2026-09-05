@@ -135,8 +135,8 @@ void Terrain3D::updateRegionStreamingPolicy( const Vector3 &rWorldPosition, cons
 	double instant_x = 0.0;
 	double instant_z = 0.0;
 	const double delta = MAX( 0.0, fDelta );
-	if ( m_regionStreamingPreviousWorldPosition != s_v3Max && delta > 0.000001 && m_nRegionSize > 0 && m_fVertexSpacing > 0.0f ) {
-		const double region_world_size = ( double )( m_nRegionSize ) * ( double )( m_fVertexSpacing );
+	if ( m_regionStreamingPreviousWorldPosition != s_v3Max && delta > 0.000001 && s_nRegionSize > 0 && s_fRegionVertexSpacing > 0.0f ) {
+		const double region_world_size = ( double )( s_nRegionSize ) * ( double )( s_fRegionVertexSpacing );
 		instant_x = ( ( double )( rWorldPosition.x - m_regionStreamingPreviousWorldPosition.x ) / region_world_size ) / delta;
 		instant_z = ( ( double )( rWorldPosition.z - m_regionStreamingPreviousWorldPosition.z ) / region_world_size ) / delta;
 	}
@@ -155,8 +155,8 @@ void Terrain3D::updateRegionStreamingPolicy( const Vector3 &rWorldPosition, cons
 	// Whole-region velocity prediction rounds to zero at ordinary traversal speeds.
 	// Add a spatial lead near the current boundary so the entering Active/Hot edge
 	// begins asynchronous preparation before the discrete center changes.
-	if ( !authoring && m_nRegionSize > 0 && m_fVertexSpacing > 0.0f ) {
-		const double region_world_size = ( double )( m_nRegionSize ) * ( double )( m_fVertexSpacing );
+	if ( !authoring && s_nRegionSize > 0 && s_fRegionVertexSpacing > 0.0f ) {
+		const double region_world_size = ( double )( s_nRegionSize ) * ( double )( s_fRegionVertexSpacing );
 		const double grid_x = ( double )( rWorldPosition.x ) / region_world_size;
 		const double grid_z = ( double )( rWorldPosition.z ) / region_world_size;
 		const double local_x = grid_x - floor( grid_x );
@@ -186,10 +186,10 @@ void Terrain3D::updateRegionStreamingPolicy( const Vector3 &rWorldPosition, cons
 	m_nRegionStreamingUnloadedCount = 0;
 	m_nRegionStreamingPrefetchCount = 0;
 
-	const Vector2i *locations = m_pData->getRegionSlotsInternal();
+	const t3dRegionCoord_t *locations = m_pData->getRegionSlotsInternal();
 	const int count = m_pData->getRegionSlotCountInternal();
 	for ( int index = 0; index < count; ++index ) {
-		const Vector2i location = locations[index];
+		const Vector2i location = t3dUnpackRegionCoord( locations[index] );
 		if ( location == s_v2iMax || !m_pData->hasRegion( location ) ) {
 			continue;
 		}
@@ -253,14 +253,13 @@ Dictionary Terrain3D::getRegionStreamingConfigurationStatus( void ) const {
 	const int near_lods = MAX( 0, m_nRuntimeNearShaderLods );
 	const int middle_lods = MAX( 0, m_nRuntimeNearShaderLods + m_nRuntimeMiddleShaderLods );
 	const int required_active_radius =
-	        t3dGpuCacheCalculateFootprintRadiusRegions( m_nMeshSize, near_lods, ( double )( m_fVertexSpacing ), ( int )( m_nRegionSize ) );
-	const int required_hot_radius = t3dGpuCacheCalculateFootprintRadiusRegions(
-	        m_nMeshSize, middle_lods, ( double )( m_fVertexSpacing ), ( int )( m_nRegionSize ) );
+	        t3dGpuCacheCalculateFootprintRadiusRegions( m_nMeshSize, near_lods );
+	const int required_hot_radius = t3dGpuCacheCalculateFootprintRadiusRegions( m_nMeshSize, middle_lods );
 	const bool active_range_valid = m_regionStreamingConfig.m_nActiveRadius >= required_active_radius;
 	const bool hot_range_valid = m_regionStreamingConfig.m_nHotRadius >= required_hot_radius;
 	const int active_side = m_regionStreamingConfig.m_nActiveRadius * 2 + 1;
 	const int hot_side = m_regionStreamingConfig.m_nHotRadius * 2 + 1;
-	const int authored_regions = m_pData ? m_pData->getRegionCount() : s_nMaxRegionSlots;
+	const int authored_regions = m_pData ? m_pData->getRegionCount() : s_nRegionSlots;
 	const int required_active_surface_pages = MIN( authored_regions, active_side * active_side );
 	const int required_hot_height_pages = MIN( authored_regions, hot_side * hot_side );
 	int surface_capacity = isEditorAuthoringModeInternal() ? s_nGpuCacheEditorMaxLayers : s_nGpuCacheRuntimeMaxLayers;
@@ -389,7 +388,7 @@ void Terrain3D::applyStreamingPolicy( const bool bForceResidency ) {
 		        m_nInstanceRegionLoadBudgetPages,
 		        m_nInstanceRegionLoadBudgetMb );
 		m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(),
-		        m_nEffectiveGpuRegionCacheBudgetMb,
+		        m_nEffectiveGpuRegionCacheBudgetBytes,
 		        m_nGpuRegionUploadBudgetLayers,
 		        m_nGpuRegionUploadBudgetMb,
 		        m_nGpuRegionSparePages,
@@ -417,7 +416,7 @@ real_t Terrain3D::lodCountToRange( const int nLodCount ) const {
 		return 0.0f;
 	}
 	const real_t fTessellationScale = ( real_t )( ( uint64_t )( 1 ) << ( uint64_t )( CLAMP( m_nTessellationLevel, 0, 6 ) ) );
-	const real_t fBaseExtent = ( real_t )( m_nMeshSize * 2 + 6 ) * m_fVertexSpacing / fTessellationScale;
+	const real_t fBaseExtent = ( real_t )( m_nMeshSize * 2 + 6 ) * s_fRegionVertexSpacing / fTessellationScale;
 	return fBaseExtent * ( real_t )( ( uint64_t )( 1 ) << ( uint64_t )( CLAMP( nLodCount - 1, 0, 15 ) ) );
 }
 
@@ -479,7 +478,7 @@ void Terrain3D::applyRuntimeTierLayout( const bool bForceFullSnap ) {
 	}
 	if ( m_pData && effectiveGpuRegionCacheEnabled() && !m_bDeferGpuRegionCacheReconfigure ) {
 		m_pData->configureGpuRegionCache( true,
-		        m_nEffectiveGpuRegionCacheBudgetMb,
+		        m_nEffectiveGpuRegionCacheBudgetBytes,
 		        m_nGpuRegionUploadBudgetLayers,
 		        m_nGpuRegionUploadBudgetMb,
 		        m_nGpuRegionSparePages,
@@ -577,7 +576,7 @@ void Terrain3D::setGpuRegionCacheEnabled( const bool bEnabled ) {
 	}
 	if ( m_pData ) {
 		m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(),
-		        m_nEffectiveGpuRegionCacheBudgetMb,
+		        m_nEffectiveGpuRegionCacheBudgetBytes,
 		        m_nGpuRegionUploadBudgetLayers,
 		        m_nGpuRegionUploadBudgetMb,
 		        m_nGpuRegionSparePages,
@@ -610,7 +609,7 @@ void Terrain3D::setGpuRegionUploadBudgetLayers( const int nLayers ) {
 	refreshPerformanceProfileConformity();
 	if ( m_pData ) {
 		m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(),
-		        m_nEffectiveGpuRegionCacheBudgetMb,
+		        m_nEffectiveGpuRegionCacheBudgetBytes,
 		        m_nGpuRegionUploadBudgetLayers,
 		        m_nGpuRegionUploadBudgetMb,
 		        m_nGpuRegionSparePages,
@@ -627,7 +626,7 @@ void Terrain3D::setGpuRegionUploadBudgetMb( const int nBudgetMb ) {
 	refreshPerformanceProfileConformity();
 	if ( m_pData ) {
 		m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(),
-		        m_nEffectiveGpuRegionCacheBudgetMb,
+		        m_nEffectiveGpuRegionCacheBudgetBytes,
 		        m_nGpuRegionUploadBudgetLayers,
 		        m_nGpuRegionUploadBudgetMb,
 		        m_nGpuRegionSparePages,
@@ -644,7 +643,7 @@ void Terrain3D::setGpuRegionSparePages( const int nPages ) {
 	refreshPerformanceProfileConformity();
 	if ( m_pData ) {
 		m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(),
-		        m_nEffectiveGpuRegionCacheBudgetMb,
+		        m_nEffectiveGpuRegionCacheBudgetBytes,
 		        m_nGpuRegionUploadBudgetLayers,
 		        m_nGpuRegionUploadBudgetMb,
 		        m_nGpuRegionSparePages,
@@ -661,7 +660,7 @@ void Terrain3D::setGpuRegionRetireFrames( const int nFrames ) {
 	refreshPerformanceProfileConformity();
 	if ( m_pData ) {
 		m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(),
-		        m_nEffectiveGpuRegionCacheBudgetMb,
+		        m_nEffectiveGpuRegionCacheBudgetBytes,
 		        m_nGpuRegionUploadBudgetLayers,
 		        m_nGpuRegionUploadBudgetMb,
 		        m_nGpuRegionSparePages,
@@ -761,7 +760,7 @@ void Terrain3D::setGpuRegionColorResolutionDivisor( const int nDivisor ) {
 	refreshPerformanceProfileConformity();
 	if ( m_pData ) {
 		m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(),
-		        m_nEffectiveGpuRegionCacheBudgetMb,
+		        m_nEffectiveGpuRegionCacheBudgetBytes,
 		        m_nGpuRegionUploadBudgetLayers,
 		        m_nGpuRegionUploadBudgetMb,
 		        m_nGpuRegionSparePages,
@@ -779,7 +778,7 @@ void Terrain3D::setGpuRegionDerivedResolutionDivisor( const int nDivisor ) {
 	refreshPerformanceProfileConformity();
 	if ( m_pData ) {
 		m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(),
-		        m_nEffectiveGpuRegionCacheBudgetMb,
+		        m_nEffectiveGpuRegionCacheBudgetBytes,
 		        m_nGpuRegionUploadBudgetLayers,
 		        m_nGpuRegionUploadBudgetMb,
 		        m_nGpuRegionSparePages,
@@ -811,7 +810,7 @@ void Terrain3D::setEditorGpuRegionCachePages( const int nPages ) {
 	markMemoryBudgetDirty();
 	if ( m_pData && m_bInitialized && isEditorAuthoringMode() ) {
 		m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(),
-		        m_nEffectiveGpuRegionCacheBudgetMb,
+		        m_nEffectiveGpuRegionCacheBudgetBytes,
 		        m_nGpuRegionUploadBudgetLayers,
 		        m_nGpuRegionUploadBudgetMb,
 		        m_nGpuRegionSparePages,
@@ -877,7 +876,7 @@ void Terrain3D::setGpuFarQualityDivisor( const int nDivisor ) {
 		// mesh lattice and must remain stable while surface quality changes.
 		m_pData->invalidateGpuFarSurface();
 		m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(),
-		        m_nEffectiveGpuRegionCacheBudgetMb,
+		        m_nEffectiveGpuRegionCacheBudgetBytes,
 		        m_nGpuRegionUploadBudgetLayers,
 		        m_nGpuRegionUploadBudgetMb,
 		        m_nGpuRegionSparePages,
@@ -916,11 +915,11 @@ void Terrain3D::setFarControlResolution( const int nResolution ) {
 // Both far atlases tile the *live* region map, not the maximum addressable one.
 // Terrain3DFarSurfaceAtlasCache::patchHeightRegion derives
 // samples_per_region = atlas_side / getRegionMapSize(), so sizing either atlas off
-// s_nActiveMaxRegionMapSize silently scales the real sample density by
-// s_nActiveMaxRegionMapSize / getRegionMapSize() and quadruples the allocation.
+// s_nRegionMapSize silently scales the real sample density by
+// s_nRegionMapSize / getRegionMapSize() and quadruples the allocation.
 int Terrain3D::getFarAtlasRegionMapSide( void ) const {
 	const int live = m_pData ? m_pData->getRegionMapSizeInternal() : 0;
-	return live > 0 ? live : s_nActiveMaxRegionMapSize;
+	return live > 0 ? live : s_nRegionMapSize;
 }
 
 int Terrain3D::getGpuFarHeightAtlasSide( void ) const {
@@ -1091,14 +1090,14 @@ void Terrain3D::setInstanceRegionLoadBudgetMb( const int nBudgetMb ) {
 
 void Terrain3D::setInstancerCellSize( const int nCellSize ) {
 	if ( nCellSize < s_nInstanceMinCellSize || nCellSize > s_nInstanceMaxCellSize || ( nCellSize & ( nCellSize - 1 ) ) != 0
-	        || ( int )( m_nRegionSize ) % nCellSize != 0 ) {
+	        || ( int )( s_nRegionSize ) % nCellSize != 0 ) {
 		LOG( ERROR,
 		        "Instancer cell size must be a power of two from ",
 		        s_nInstanceMinCellSize,
 		        " through ",
 		        s_nInstanceMaxCellSize,
 		        " and divide region size ",
-		        ( int )( m_nRegionSize ) );
+		        ( int )( s_nRegionSize ) );
 		return;
 	}
 	if ( m_nInstancerCellSize == nCellSize ) {

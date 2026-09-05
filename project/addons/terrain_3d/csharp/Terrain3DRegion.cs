@@ -162,14 +162,12 @@ public partial class Terrain3DRegion : Resource
 
 	public new long RegionSize
 	{
-		get => Get(GDExtensionPropertyName.RegionSize).As<long>();
-		set => Set(GDExtensionPropertyName.RegionSize, value);
+		get => 128;
 	}
 
 	public new double VertexSpacing
 	{
-		get => Get(GDExtensionPropertyName.VertexSpacing).As<double>();
-		set => Set(GDExtensionPropertyName.VertexSpacing, value);
+		get => 1.0;
 	}
 
 	public new Vector2 HeightRange

@@ -89,8 +89,8 @@ private:
 
 	Terrain3DGeneratedTexture m_generatedHeightMaps;
 	Terrain3DGeneratedTexture m_generatedRegionMap;
-	uint16_t m_szRegionMap[s_nMaxRegionSlots] = {};
-	Vector2i m_szLocations[s_nGpuHeightCacheMaxLayers] = {};
+	uint16_t m_szRegionMap[s_nRegionSlots] = {};
+	t3dRegionCoord_t m_szLocations[s_nGpuHeightCacheMaxLayers] = {};
 	uint64_t m_szLastUseTick[s_nGpuHeightCacheMaxLayers] = {};
 	uint64_t m_szRetireAfterFrame[s_nGpuHeightCacheMaxLayers] = {};
 	uint8_t m_szSlotStates[s_nGpuHeightCacheMaxLayers] = {};

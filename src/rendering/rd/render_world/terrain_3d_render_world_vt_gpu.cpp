@@ -14,6 +14,15 @@
 
 using namespace godot;
 
+struct T3DVTDispatchPushConstants {
+	uint32_t nTier;
+	uint32_t nHashCount;
+	uint32_t nRequestCapacity;
+	uint32_t nReserved;
+};
+
+static_assert( sizeof( T3DVTDispatchPushConstants ) == 16u, "RenderWorld VT dispatch push ABI must remain 16 bytes" );
+
 Terrain3DRenderWorldVTGpu::Terrain3DRenderWorldVTGpu() {
 	m_pRenderingDevice = NULL;
 	m_pResources = NULL;
@@ -42,7 +51,7 @@ bool Terrain3DRenderWorldVTGpu::initialize_cold( const Terrain3DRenderWorldResou
 	if ( m_bInitialized || pRenderingDevice == NULL || pResources == NULL || !pResources->is_initialized() ) {
 		return false;
 	}
-	if ( pLimits.nMaxVtRequests == 0u || pLimits.nMaxReadbackBytesPerFrame > UINT32_MAX ) {
+	if ( pLimits.nMaxVtRequests == 0u || pLimits.nMaxVtRequests > UINT32_MAX / 2u || pLimits.nMaxReadbackBytesPerFrame > UINT32_MAX ) {
 		return false;
 	}
 	const uint64_t nReadbackBytes = sizeof( T3DVTGpuCounters ) + ( uint64_t )pLimits.nMaxVtRequests * sizeof( T3DVTRequest );
@@ -68,14 +77,32 @@ bool Terrain3DRenderWorldVTGpu::initialize_cold( const Terrain3DRenderWorldResou
 		shutdown_cold();
 		return false;
 	}
+	const uint32_t nHashCount = pLimits.nMaxVtRequests * 2u;
+	T3DVTDispatchPushConstants DispatchPush = {};
+	DispatchPush.nHashCount = nHashCount;
+	DispatchPush.nRequestCapacity = pLimits.nMaxVtRequests;
+	m_ResetPush.resize( ( int64_t )sizeof( DispatchPush ) );
+	if ( m_ResetPush.size() != ( int64_t )sizeof( DispatchPush ) ) {
+		shutdown_cold();
+		return false;
+	}
+	memcpy( m_ResetPush.ptrw(), &DispatchPush, sizeof( DispatchPush ) );
 	for ( uint32_t i = 0u; i < T3D_RW_TIER_COUNT; ++i ) {
-		m_TierPush[i].resize( 4 );
-		if ( m_TierPush[i].size() != 4 ) {
+		DispatchPush.nTier = i;
+		m_TierPush[i].resize( ( int64_t )sizeof( DispatchPush ) );
+		if ( m_TierPush[i].size() != ( int64_t )sizeof( DispatchPush ) ) {
 			shutdown_cold();
 			return false;
 		}
-		memcpy( m_TierPush[i].ptrw(), &i, 4u );
+		memcpy( m_TierPush[i].ptrw(), &DispatchPush, sizeof( DispatchPush ) );
 	}
+	DispatchPush.nTier = 0u;
+	m_CompactPush.resize( ( int64_t )sizeof( DispatchPush ) );
+	if ( m_CompactPush.size() != ( int64_t )sizeof( DispatchPush ) ) {
+		shutdown_cold();
+		return false;
+	}
+	memcpy( m_CompactPush.ptrw(), &DispatchPush, sizeof( DispatchPush ) );
 	m_PageEntryUpload.resize( ( int64_t )sizeof( T3DVTPageTableEntry ) );
 	if ( m_PageEntryUpload.size() != ( int64_t )sizeof( T3DVTPageTableEntry ) ) {
 		shutdown_cold();
@@ -112,9 +139,11 @@ void Terrain3DRenderWorldVTGpu::shutdown_cold() {
 			free_rid_cold( m_hShader[i] );
 		}
 	}
+	m_ResetPush.resize( 0 );
 	for ( uint32_t i = 0u; i < T3D_RW_TIER_COUNT; ++i ) {
 		m_TierPush[i].resize( 0 );
 	}
+	m_CompactPush.resize( 0 );
 	m_PageEntryUpload.resize( 0 );
 	for ( uint32_t c = 0u; c < T3D_RW_VT_CHANNEL_COUNT; ++c ) {
 		m_PhysicalUpload[c].resize( 0 );
@@ -250,6 +279,7 @@ bool Terrain3DRenderWorldVTGpu::dispatch_prediction_hot( const T3DRenderWorldLim
 	const int64_t nList = m_pRenderingDevice->compute_list_begin();
 	m_pRenderingDevice->compute_list_bind_compute_pipeline( nList, m_hPipeline[PIPE_RESET] );
 	m_pRenderingDevice->compute_list_bind_uniform_set( nList, m_hUniformReset, 0u );
+	m_pRenderingDevice->compute_list_set_push_constant( nList, m_ResetPush, ( uint32_t )m_ResetPush.size() );
 	m_pRenderingDevice->compute_list_dispatch( nList, nHashGroups, 1u, 1u );
 	++m_Stats.nDispatchCount;
 	m_pRenderingDevice->compute_list_add_barrier( nList );
@@ -261,7 +291,7 @@ bool Terrain3DRenderWorldVTGpu::dispatch_prediction_hot( const T3DRenderWorldLim
 		}
 		m_pRenderingDevice->compute_list_bind_compute_pipeline( nList, m_hPipeline[PIPE_PREDICT] );
 		m_pRenderingDevice->compute_list_bind_uniform_set( nList, m_hUniformPredict[tier], 0u );
-		m_pRenderingDevice->compute_list_set_push_constant( nList, m_TierPush[tier], 4u );
+		m_pRenderingDevice->compute_list_set_push_constant( nList, m_TierPush[tier], ( uint32_t )m_TierPush[tier].size() );
 		m_pRenderingDevice->compute_list_dispatch( nList, nGroups, 1u, 1u );
 		++m_Stats.nDispatchCount;
 		m_pRenderingDevice->compute_list_add_barrier( nList );
@@ -269,6 +299,7 @@ bool Terrain3DRenderWorldVTGpu::dispatch_prediction_hot( const T3DRenderWorldLim
 	}
 	m_pRenderingDevice->compute_list_bind_compute_pipeline( nList, m_hPipeline[PIPE_COMPACT] );
 	m_pRenderingDevice->compute_list_bind_uniform_set( nList, m_hUniformCompact, 0u );
+	m_pRenderingDevice->compute_list_set_push_constant( nList, m_CompactPush, ( uint32_t )m_CompactPush.size() );
 	m_pRenderingDevice->compute_list_dispatch( nList, nHashGroups, 1u, 1u );
 	++m_Stats.nDispatchCount;
 	m_pRenderingDevice->compute_list_add_barrier( nList );

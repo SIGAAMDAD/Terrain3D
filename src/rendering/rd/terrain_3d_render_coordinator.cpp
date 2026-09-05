@@ -153,6 +153,30 @@ static void t3dRdFillTierConfig( t3dRdTierMaterialConfig_t &rConfig,
 	rConfig.m_fQualityLodOffset = fQualityLodOffset;
 }
 
+
+bool Terrain3DRenderCoordinator::bindRuntimeAllocator( Terrain3DMemoryZone *const pZone, const t3dAllocatorOverflowPolicy_t ePolicy ) {
+	if ( !pZone || !m_instanceRenderer.bindRuntimeAllocator( pZone, ePolicy ) || !m_previewRenderer.bindRuntimeAllocator( pZone, ePolicy )
+	        || !m_renderWorldRuntime.bindRuntimeAllocator( pZone ) ) {
+		return false;
+	}
+	const Terrain3DEastlAllocator allocator = Terrain3DEastlAllocator::zoneAllocator( pZone, ePolicy );
+	m_cachedHlodMeshSources.set_allocator( allocator );
+	m_cachedPreviewMeshes.bindRuntimeAllocator( allocator );
+	m_pendingPreviewMeshes.bindRuntimeAllocator( allocator );
+	m_cachedInstanceMeshes.bindRuntimeAllocator( allocator );
+	m_cachedRegularInstanceScene.bindRuntimeAllocator( pZone, ePolicy );
+	m_cachedHlodInstanceScene.bindRuntimeAllocator( pZone, ePolicy );
+	m_cachedInstanceScene.bindRuntimeAllocator( pZone, ePolicy );
+	for ( uint32_t i = 0u; i < s_nRdFrameSnapshotSlotCount; ++i ) {
+		m_instanceMeshBanks[i].m_snapshot.bindRuntimeAllocator( allocator );
+		m_instanceSceneBanks[i].m_snapshot.bindRuntimeAllocator( pZone, ePolicy );
+	}
+	m_pRuntimeAllocatorZone = pZone;
+	m_eRuntimeAllocatorOverflowPolicy = ePolicy;
+	m_bRuntimeAllocatorBound = true;
+	return true;
+}
+
 Terrain3DRenderCoordinator::~Terrain3DRenderCoordinator( void ) {
 	shutdown();
 }
@@ -642,7 +666,6 @@ void Terrain3DRenderCoordinator::buildMaterialState( t3dRdFrameSnapshot_t &rSnap
 		const PackedFloat32Array uv_scales = assets->getTextureUvScales();
 		const PackedVector2Array detiles = assets->getTextureDetiles();
 		const PackedVector2Array displacements = assets->getTextureDisplacements();
-		const PackedInt32Array layer_map = assets->getTextureLayerMap();
 		const uint32_t count = ( uint32_t )( CLAMP( assets->getTextureCount(), 1, ( int )( s_nRdMaterialLayerCount ) ) );
 		rSnapshot.m_nMaterialLayerCount = count;
 		for ( uint32_t i = 0u; i < s_nRdMaterialLayerCount; ++i ) {
@@ -664,7 +687,7 @@ void Terrain3DRenderCoordinator::buildMaterialState( t3dRdFrameSnapshot_t &rSnap
 			const Vector2 displacement = i < ( uint32_t )( displacements.size() ) ? displacements[( int64_t )( i )] : Vector2();
 			layer.m_fDisplacementOffset = ( float )( displacement.x );
 			layer.m_fDisplacementScale = ( float )( displacement.y );
-			const int physical = i < ( uint32_t )( layer_map.size() ) ? layer_map[( int64_t )( i )] : ( int )( i );
+			const int physical = i < s_nMaxTextureAssets ? assets->getTextureLayerPhysicalIndexInternal( ( int )( i ) ) : ( int )( i );
 			layer.m_nPhysicalLayer = ( uint32_t )( MAX( physical, 0 ) );
 			layer.m_nFlags = 0u;
 			if ( assets->usesPackedPbr() ) {
@@ -677,11 +700,7 @@ void Terrain3DRenderCoordinator::buildMaterialState( t3dRdFrameSnapshot_t &rSnap
 	} else {
 		rSnapshot.m_nMaterialLayerCount = 1u;
 	}
-	buildEditorOverlayState( rSnapshot, pMaterial );
-	uint64_t material_hash = hashBytes( rSnapshot.m_szMaterials, sizeof( rSnapshot.m_szMaterials ) );
-	const uint64_t config_hash = hashBytes( &rSnapshot.m_materialConfig, sizeof( rSnapshot.m_materialConfig ) );
-	material_hash ^= config_hash + 0x9E3779B97F4A7C15ULL + ( material_hash << 6u ) + ( material_hash >> 2u );
-	rSnapshot.m_nMaterialGeneration = material_hash;
+	rSnapshot.m_nMaterialGeneration = 0u;
 }
 
 uint32_t Terrain3DRenderCoordinator::selectWritablePublicationBank( const uint32_t nReaderBank, const uint32_t nPendingBank ) const {
@@ -693,7 +712,68 @@ uint32_t Terrain3DRenderCoordinator::selectWritablePublicationBank( const uint32
 	return s_nRdInvalidFrameSnapshotIndex;
 }
 
+bool Terrain3DRenderCoordinator::hasInstancePublicationCapacity( void ) const {
+	Terrain3DInstancer *const instancer = m_pTerrain ? m_pTerrain->getInstancer() : NULL;
+	Terrain3DHLODStreamer *const hlod_streamer = m_pTerrain ? m_pTerrain->getHlodStreamer() : NULL;
+	const size_t regular_instances = instancer ? instancer->getRdSnapshotInstanceCapacity() : 0u;
+	const size_t regular_cells = instancer ? instancer->getRdSnapshotCellCapacity() : 0u;
+	const size_t hlod_entries = hlod_streamer ? hlod_streamer->getRdPublicationCapacity() : 0u;
+	const size_t combined_instances = regular_instances + hlod_entries;
+	const size_t combined_cells = regular_cells + hlod_entries;
+	if ( m_cachedRegularInstanceScene.m_instances.capacity() < regular_instances
+	        || m_cachedRegularInstanceScene.m_cells.capacity() < regular_cells
+	        || m_cachedHlodInstanceScene.m_instances.capacity() < hlod_entries
+	        || m_cachedHlodInstanceScene.m_cells.capacity() < hlod_entries
+	        || m_cachedInstanceScene.m_instances.capacity() < combined_instances
+	        || m_cachedInstanceScene.m_cells.capacity() < combined_cells || m_cachedHlodMeshSources.capacity() < hlod_entries ) {
+		return false;
+	}
+	for ( size_t iBank = 0u; iBank < T3D_ARRAY_COUNT( m_instanceSceneBanks ); iBank++ ) {
+		const t3dRdInstanceSceneBank_t &bank = ( m_instanceSceneBanks )[iBank];
+		if ( bank.m_snapshot.m_instances.capacity() < combined_instances || bank.m_snapshot.m_cells.capacity() < combined_cells ) {
+			return false;
+		}
+	}
+	return true;
+}
+
+bool Terrain3DRenderCoordinator::hasInstanceMeshBankCapacity( void ) const {
+	for ( size_t iBank = 0u; iBank < T3D_ARRAY_COUNT( m_instanceMeshBanks ); iBank++ ) {
+		const t3dRdMeshSourceSnapshot_t &snapshot = ( m_instanceMeshBanks )[iBank].m_snapshot;
+		if ( snapshot.m_vertexChunkHashes.capacity() < m_cachedInstanceMeshes.m_vertexChunkHashes.size()
+		        || snapshot.m_index16ChunkHashes.capacity() < m_cachedInstanceMeshes.m_index16ChunkHashes.size()
+		        || snapshot.m_index32ChunkHashes.capacity() < m_cachedInstanceMeshes.m_index32ChunkHashes.size()
+		        || snapshot.m_surfaces.capacity() < m_cachedInstanceMeshes.m_surfaces.size()
+		        || snapshot.m_lods.capacity() < m_cachedInstanceMeshes.m_lods.size()
+		        || snapshot.m_materials.capacity() < m_cachedInstanceMeshes.m_materials.size()
+		        || snapshot.m_textures.capacity() < m_cachedInstanceMeshes.m_textures.size() ) {
+			return false;
+		}
+	}
+	return true;
+}
+
+void Terrain3DRenderCoordinator::recordCapacityMiss(
+        const char *const pszOwner, const size_t nRequired, const size_t nCapacity, const bool bMeshBank ) {
+	++m_nCapacityMissCount;
+	++m_nOwnerGrowthDeniedCount;
+	const bool already_pending = bMeshBank ? m_bInstanceMeshBankCapacityPending : m_bInstancePublicationCapacityPending;
+	if ( bMeshBank ) {
+		m_bInstanceMeshBankCapacityPending = true;
+	} else {
+		m_bInstancePublicationCapacityPending = true;
+	}
+	if ( !already_pending ) {
+		LOG( WARN, pszOwner, " owner capacity miss; required=", nRequired, ", capacity=", nCapacity, ". Cold capacity rebuild queued." );
+	}
+}
+
 bool Terrain3DRenderCoordinator::ensureInstancePublicationStorage( void ) {
+	if ( !m_bColdCapacityServiceActive ) {
+		++m_nOwnerGrowthDeniedCount;
+		LOG( ERROR, "RD publication owner backing growth requested outside serviceColdCapacity()" );
+		return false;
+	}
 	Terrain3DInstancer *const instancer = m_pTerrain ? m_pTerrain->getInstancer() : NULL;
 	Terrain3DHLODStreamer *const hlod_streamer = m_pTerrain ? m_pTerrain->getHlodStreamer() : NULL;
 	const size_t regular_instances = instancer ? instancer->getRdSnapshotInstanceCapacity() : 0u;
@@ -718,7 +798,6 @@ bool Terrain3DRenderCoordinator::ensureInstancePublicationStorage( void ) {
 		return true;
 	}
 
-	Terrain3DColdAllocationScope allocation_scope;
 	if ( m_cachedRegularInstanceScene.m_instances.capacity() < regular_instances ) {
 		if ( !m_cachedRegularInstanceScene.m_instances.reserveCold( regular_instances ) ) {
 			return false;
@@ -771,7 +850,11 @@ bool Terrain3DRenderCoordinator::ensureInstancePublicationStorage( void ) {
 }
 
 bool Terrain3DRenderCoordinator::ensureInstanceMeshBankStorage( void ) {
-	Terrain3DColdAllocationScope allocation_scope;
+	if ( !m_bColdCapacityServiceActive ) {
+		++m_nOwnerGrowthDeniedCount;
+		LOG( ERROR, "RD mesh-bank owner backing growth requested outside serviceColdCapacity()" );
+		return false;
+	}
 	for ( size_t iBank = 0u; iBank < T3D_ARRAY_COUNT( m_instanceMeshBanks ); iBank++ ) {
 		t3dRdInstanceMeshBank_t &bank = ( m_instanceMeshBanks )[iBank];
 		t3dRdMeshSourceSnapshot_t &snapshot = bank.m_snapshot;
@@ -815,9 +898,39 @@ bool Terrain3DRenderCoordinator::ensureInstanceMeshBankStorage( void ) {
 }
 
 void Terrain3DRenderCoordinator::serviceColdCapacity( void ) {
-	if ( !ensureInstancePublicationStorage() || !ensureInstanceMeshBankStorage() ) {
+	const bool publication_needed = m_bInstancePublicationCapacityPending || !hasInstancePublicationCapacity();
+	// Mesh-bank requirements are not known until the immutable source snapshot
+	// has been built. Keep the pending bit armed until that discovery exists;
+	// otherwise initialization clears the request against an empty snapshot and
+	// the first real publication observes capacity=0.
+	const bool mesh_bank_needed = m_bCachedInstanceMeshesValid && ( m_bInstanceMeshBankCapacityPending || !hasInstanceMeshBankCapacity() );
+	if ( !publication_needed && !mesh_bank_needed ) {
+		return;
+	}
+	Terrain3DColdPhaseScope phase_scope;
+	m_bColdCapacityServiceActive = true;
+	++m_nColdCapacityRebuildCount;
+	bool success = true;
+	if ( publication_needed ) {
+		if ( ensureInstancePublicationStorage() ) {
+			m_bInstancePublicationCapacityPending = false;
+		} else {
+			m_bInstancePublicationCapacityPending = true;
+			success = false;
+		}
+	}
+	if ( mesh_bank_needed ) {
+		if ( ensureInstanceMeshBankStorage() ) {
+			m_bInstanceMeshBankCapacityPending = false;
+		} else {
+			m_bInstanceMeshBankCapacityPending = true;
+			success = false;
+		}
+	}
+	m_bColdCapacityServiceActive = false;
+	if ( !success ) {
 		t3dScopedLock_t lock( m_diagnosticsMutex );
-		m_initializationError = "Failed to establish fixed RD publication capacity";
+		m_initializationError = "RD publication owner could not establish requested cold capacity";
 	}
 }
 
@@ -829,8 +942,12 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 		m_bRendererFailed.store( true, T3D_MEMORY_ORDER_RELEASE );
 		return;
 	}
-	if ( !ensureInstancePublicationStorage() ) {
-		m_bRendererFailed.store( true, T3D_MEMORY_ORDER_RELEASE );
+	if ( !hasInstancePublicationCapacity() ) {
+		Terrain3DInstancer *const instancer = m_pTerrain->getInstancer();
+		Terrain3DHLODStreamer *const hlod_streamer = m_pTerrain->getHlodStreamer();
+		const size_t required = ( instancer ? instancer->getRdSnapshotInstanceCapacity() : 0u )
+		        + ( hlod_streamer ? hlod_streamer->getRdPublicationCapacity() : 0u );
+		recordCapacityMiss( "RD instance publication", required, m_cachedInstanceScene.m_instances.capacity(), false );
 		return;
 	}
 	// The exchange still owns frame slots exactly as before. Large immutable
@@ -843,10 +960,8 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 	const uint32_t pending_slot = t3dRdFrameSnapshotTokenIsPublished( exchange_token ) ? t3dRdFrameSnapshotTokenIndex( exchange_token )
 	                                                                                   : s_nRdInvalidFrameSnapshotIndex;
 	const t3dRdFrameSnapshotSlot_t *const pPending = pending_slot < s_nRdFrameSnapshotSlotCount ? &m_snapshotSlots[pending_slot] : NULL;
-	snapshot.m_nRegionSize = ( uint32_t )( m_pTerrain->getRegionSize() );
-	snapshot.m_nRegionMapSize = ( uint32_t )( m_pTerrain->getData()->getRegionMapSizeInternal() );
 	snapshot.m_nMeshSize = ( uint32_t )( m_pTerrain->getMeshSize() );
-	snapshot.m_fVertexSpacing = ( float )( m_pTerrain->getVertexSpacing() );
+	snapshot.m_fVertexSpacing = ( float )( s_fRegionVertexSpacing );
 	snapshot.m_targetPosition = m_pTerrain->getClipmapTargetPosition();
 	snapshot.m_fSubdiv = ( float )( 1 << m_pTerrain->getTessellationLevel() );
 	snapshot.m_fHeightMin = s_fRegionHeightMin;
@@ -916,14 +1031,58 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 		LOG( ERROR, "Unable to publish Terrain3D direct RD editor brush texture" );
 		return;
 	}
-	buildMaterialState( snapshot );
-	const uint64_t material_fingerprint = snapshot.m_nMaterialGeneration;
-	if ( !m_bMaterialStateInitialized || material_fingerprint != m_nLastMaterialFingerprint ) {
+	const Ref<Terrain3DAssets> rd_assets = m_pTerrain->getAssets();
+	Terrain3DData *const data = m_pTerrain->getData();
+	const RID derived_maps = data ? data->getDerivedMapsRid() : RID();
+	const RID middle_composite_maps = data ? data->getMiddleCompositeMapsRid() : RID();
+	const RID middle_height_maps = data ? data->getMiddleHeightMapsRid() : RID();
+	const RID middle_height_region_map = data ? data->getMiddleHeightRegionMapRid() : RID();
+	const RID far_height_map = data ? data->getFarHeightMapRid() : RID();
+	const RID far_color_map = data ? data->getFarColorMapRid() : RID();
+	const RID far_albedo_map = rd_assets.is_valid() ? rd_assets->getFarAlbedoArrayRid() : RID();
+	const RID displacement_map = m_pTerrain->getComputeDisplacementTextureRid();
+	const RID world_noise_map = m_worldNoiseCache.getRid();
+	const RID macro_noise_map = m_macroNoiseTexture.getRid();
+	const uint64_t material_sources[] = { rd_material.is_valid() ? rd_material->getRdPublicationGeneration() : 0u,
+		rd_assets.is_valid() ? rd_assets->getTexturePublicationGeneration() : 0u,
+		rd_assets.is_valid() ? rd_assets->getTextureLayerMappingGeneration() : 0u,
+		data ? data->getActiveStorageGeneration() : 0u,
+		data && data->areControlMapsImplicit() ? 1u : 0u,
+		data && data->areColorMapsImplicit() ? 1u : 0u,
+		m_pTerrain->isComputeDisplacementActive() ? 1u : 0u,
+		( uint64_t )( derived_maps.get_id() ),
+		( uint64_t )( middle_composite_maps.get_id() ),
+		( uint64_t )( middle_height_maps.get_id() ),
+		( uint64_t )( middle_height_region_map.get_id() ),
+		( uint64_t )( far_height_map.get_id() ),
+		( uint64_t )( far_color_map.get_id() ),
+		( uint64_t )( far_albedo_map.get_id() ),
+		( uint64_t )( displacement_map.get_id() ),
+		( uint64_t )( world_noise_map.get_id() ),
+		( uint64_t )( macro_noise_map.get_id() ),
+		( uint64_t )( m_worldNoiseCache.maxMipmapLevel() + 1 ),
+		rd_assets.is_valid() ? ( uint64_t )( rd_assets->getGeneratedArraySize() ) : 0u,
+		rd_assets.is_valid() ? ( uint64_t )( rd_assets->getNormalArraySize() ) : 0u,
+		rd_assets.is_valid() ? ( uint64_t )( rd_assets->getSurfaceArraySize() ) : 0u,
+		rd_assets.is_valid() ? ( uint64_t )( rd_assets->getDisplacementArraySize() ) : 0u,
+		rd_assets.is_valid() ? ( uint64_t )( rd_assets->getFarAlbedoArraySize() ) : 0u };
+	const uint64_t material_source_generation = hashBytes( material_sources, sizeof( material_sources ) );
+	if ( !m_bMaterialStateInitialized || material_source_generation != m_nMaterialSourceGeneration ) {
+		buildMaterialState( snapshot );
+		memcpy( m_cachedMaterialLayers, snapshot.m_szMaterials, sizeof( m_cachedMaterialLayers ) );
+		m_cachedMaterialConfig = snapshot.m_materialConfig;
+		m_nCachedMaterialLayerCount = snapshot.m_nMaterialLayerCount;
 		m_nMaterialGeneration = advanceGeneration( m_nMaterialGeneration );
-		m_nLastMaterialFingerprint = material_fingerprint;
+		m_nMaterialSourceGeneration = material_source_generation;
+		++m_nMaterialStateBuildCount;
 		m_bMaterialStateInitialized = true;
+	} else {
+		memcpy( snapshot.m_szMaterials, m_cachedMaterialLayers, sizeof( m_cachedMaterialLayers ) );
+		snapshot.m_materialConfig = m_cachedMaterialConfig;
+		snapshot.m_nMaterialLayerCount = m_nCachedMaterialLayerCount;
 	}
 	snapshot.m_nMaterialGeneration = m_nMaterialGeneration;
+	buildEditorOverlayState( snapshot, rd_material.ptr() );
 	DirectionalLight3D *const light = Object::cast_to<DirectionalLight3D>( m_pTerrain->getLightTarget() );
 	if ( light ) {
 		snapshot.m_lightColor = light->get_color() * light->get_param( DirectionalLight3D::PARAM_ENERGY );
@@ -942,55 +1101,66 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 		}
 	}
 
+	const uint64_t ocean_source_generation = m_pTerrain->getOceanPublicationGeneration();
+	if ( !m_bOceanStaticStateInitialized || ocean_source_generation != m_nOceanStaticSourceGeneration ) {
+		memset( &m_cachedOceanStaticState, 0, sizeof( m_cachedOceanStaticState ) );
+		t3dRdOceanState_t &static_ocean = m_cachedOceanStaticState;
+		static_ocean.m_nEnabled = m_pTerrain->isOceanEnabled() && m_pTerrain->getOceanMesher() ? 1u : 0u;
+		if ( static_ocean.m_nEnabled != 0u ) {
+			static_ocean.m_nRenderLayers = m_pTerrain->getOceanRenderLayers();
+			static_ocean.m_nCastShadows = m_pTerrain->getOceanCastShadows() != GeometryInstance3D::SHADOW_CASTING_SETTING_OFF ? 1u : 0u;
+			static_ocean.m_nVertexIterations = ( uint32_t )( MAX( m_pTerrain->getOceanVertexWaveIterations(), 0 ) );
+			static_ocean.m_nFragmentIterations = ( uint32_t )( MAX( m_pTerrain->getOceanFragmentWaveIterations(), 0 ) );
+			static_ocean.m_nRefractionMode = ( uint32_t )( m_pTerrain->getOceanRefractionMode() );
+			static_ocean.m_nFoamMode = ( uint32_t )( m_pTerrain->getOceanFoamMode() );
+			static_ocean.m_nScatteringMode = ( uint32_t )( m_pTerrain->getOceanScatteringMode() );
+			static_ocean.m_nShadingMode = ( uint32_t )( m_pTerrain->getOceanShadingMode() );
+			static_ocean.m_fMeshSize = ( float )( m_pTerrain->getOceanMeshSize() );
+			static_ocean.m_fVertexSpacing = ( float )( m_pTerrain->getOceanVertexSpacing() );
+			static_ocean.m_fSubdiv = ( float )( 1 << m_pTerrain->getOceanTessellationLevel() );
+			static_ocean.m_fCullMargin = ( float )( m_pTerrain->getOceanCullMargin() );
+			const Ref<Material> ocean_material = m_pTerrain->getOceanMaterial();
+			const ShaderMaterial *const shader_material = Object::cast_to<ShaderMaterial>( ocean_material.ptr() );
+			static_ocean.m_fSeaLevel = t3dRdOceanFloatParam( shader_material, "sea_level", 5.0f );
+			const Color water = t3dRdOceanColorParam( shader_material, "water_color", Color( 0.1058, 0.1568, 0.2117, 1.0 ) );
+			static_ocean.m_szWaterColor[0] = ( float )( water.r );
+			static_ocean.m_szWaterColor[1] = ( float )( water.g );
+			static_ocean.m_szWaterColor[2] = ( float )( water.b );
+			static_ocean.m_szWaterColor[3] = ( float )( water.a );
+			static_ocean.m_fVisibleDepth = t3dRdOceanFloatParam( shader_material, "visible_depth", 256.0f );
+			static_ocean.m_fDepthCurve = t3dRdOceanFloatParam( shader_material, "depth_curve", 0.1f );
+			static_ocean.m_fShoreBlend = t3dRdOceanFloatParam( shader_material, "shore_blend", 1.0f );
+			static_ocean.m_fRefractionStrength = t3dRdOceanFloatParam( shader_material, "refraction_strength", 0.02f );
+			static_ocean.m_fTimeScale = t3dRdOceanFloatParam( shader_material, "time_scale", 8.0f );
+			static_ocean.m_fHeightScale = t3dRdOceanFloatParam( shader_material, "height_scale", 3.0f );
+			static_ocean.m_fOceanScale = t3dRdOceanFloatParam( shader_material, "ocean_scale", 2.0f );
+			static_ocean.m_fFresnelScale = t3dRdOceanFloatParam( shader_material, "fresnel_scale", 0.5f );
+			static_ocean.m_fFresnelPower = t3dRdOceanFloatParam( shader_material, "fresnel_power", 1.0f );
+			static_ocean.m_fSpecular = t3dRdOceanFloatParam( shader_material, "specular", 1.0f );
+			static_ocean.m_fFoamHeight = t3dRdOceanFloatParam( shader_material, "foam_height", 1.35f );
+			static_ocean.m_fFoamTopIntensity = t3dRdOceanFloatParam( shader_material, "foam_top_intensity", 2.0f );
+			static_ocean.m_fFoamDistance = t3dRdOceanFloatParam( shader_material, "foam_distance", 3072.0f );
+			static_ocean.m_fFoamShoreIntensity = t3dRdOceanFloatParam( shader_material, "foam_shore_intensity", 1.3f );
+			static_ocean.m_fFoamNoiseScale = t3dRdOceanFloatParam( shader_material, "foam_noise_scale", 1.5f );
+			static_ocean.m_fHeightScattering = t3dRdOceanFloatParam( shader_material, "height_scattering", 6.0f );
+			static_ocean.m_fHeightThreshold = t3dRdOceanFloatParam( shader_material, "height_threshold", 0.1f );
+			static_ocean.m_fHeightAngleThreshold = t3dRdOceanFloatParam( shader_material, "height_angle_threshold", 0.21f );
+			static_ocean.m_fFresnelScattering = t3dRdOceanFloatParam( shader_material, "fersnel_scattering", 20.0f );
+			static_ocean.m_fDirectScattering = t3dRdOceanFloatParam( shader_material, "direct_scattering", 10.0f );
+		}
+		m_nOceanStaticSourceGeneration = ocean_source_generation;
+		m_bOceanStaticStateInitialized = true;
+		++m_nOceanStaticStateBuildCount;
+	}
 	t3dRdOceanState_t &ocean = snapshot.m_ocean;
-	ocean.m_nEnabled = m_pTerrain->isOceanEnabled() && m_pTerrain->getOceanMesher() ? 1u : 0u;
+	ocean = m_cachedOceanStaticState;
 	if ( ocean.m_nEnabled != 0u ) {
 		ocean.m_nPatchCount = ( uint32_t )( m_pTerrain->getOceanMesher()->fillRdPatches( ocean.m_szPatches, s_nMaxClipmapLevels ) );
-		ocean.m_nRenderLayers = m_pTerrain->getOceanRenderLayers();
-		ocean.m_nCastShadows = m_pTerrain->getOceanCastShadows() != GeometryInstance3D::SHADOW_CASTING_SETTING_OFF ? 1u : 0u;
-		ocean.m_nVertexIterations = ( uint32_t )( MAX( m_pTerrain->getOceanVertexWaveIterations(), 0 ) );
-		ocean.m_nFragmentIterations = ( uint32_t )( MAX( m_pTerrain->getOceanFragmentWaveIterations(), 0 ) );
-		ocean.m_nRefractionMode = ( uint32_t )( m_pTerrain->getOceanRefractionMode() );
-		ocean.m_nFoamMode = ( uint32_t )( m_pTerrain->getOceanFoamMode() );
-		ocean.m_nScatteringMode = ( uint32_t )( m_pTerrain->getOceanScatteringMode() );
-		ocean.m_nShadingMode = ( uint32_t )( m_pTerrain->getOceanShadingMode() );
 		ocean.m_fTimeSeconds = Time::get_singleton() ? ( float )( Time::get_singleton()->get_ticks_msec() * 0.001 ) : 0.0f;
-		ocean.m_fMeshSize = ( float )( m_pTerrain->getOceanMeshSize() );
-		ocean.m_fVertexSpacing = ( float )( m_pTerrain->getOceanVertexSpacing() );
-		ocean.m_fSubdiv = ( float )( 1 << m_pTerrain->getOceanTessellationLevel() );
 		const Vector3 target = m_pTerrain->getClipmapTargetPosition();
 		ocean.m_fTargetX = ( float )( target.x );
 		ocean.m_fTargetY = ( float )( target.y );
 		ocean.m_fTargetZ = ( float )( target.z );
-		ocean.m_fCullMargin = ( float )( m_pTerrain->getOceanCullMargin() );
-		const Ref<Material> ocean_material = m_pTerrain->getOceanMaterial();
-		const ShaderMaterial *const shader_material = Object::cast_to<ShaderMaterial>( ocean_material.ptr() );
-		ocean.m_fSeaLevel = t3dRdOceanFloatParam( shader_material, "sea_level", 5.0f );
-		const Color water = t3dRdOceanColorParam( shader_material, "water_color", Color( 0.1058, 0.1568, 0.2117, 1.0 ) );
-		ocean.m_szWaterColor[0] = ( float )( water.r );
-		ocean.m_szWaterColor[1] = ( float )( water.g );
-		ocean.m_szWaterColor[2] = ( float )( water.b );
-		ocean.m_szWaterColor[3] = ( float )( water.a );
-		ocean.m_fVisibleDepth = t3dRdOceanFloatParam( shader_material, "visible_depth", 256.0f );
-		ocean.m_fDepthCurve = t3dRdOceanFloatParam( shader_material, "depth_curve", 0.1f );
-		ocean.m_fShoreBlend = t3dRdOceanFloatParam( shader_material, "shore_blend", 1.0f );
-		ocean.m_fRefractionStrength = t3dRdOceanFloatParam( shader_material, "refraction_strength", 0.02f );
-		ocean.m_fTimeScale = t3dRdOceanFloatParam( shader_material, "time_scale", 8.0f );
-		ocean.m_fHeightScale = t3dRdOceanFloatParam( shader_material, "height_scale", 3.0f );
-		ocean.m_fOceanScale = t3dRdOceanFloatParam( shader_material, "ocean_scale", 2.0f );
-		ocean.m_fFresnelScale = t3dRdOceanFloatParam( shader_material, "fresnel_scale", 0.5f );
-		ocean.m_fFresnelPower = t3dRdOceanFloatParam( shader_material, "fresnel_power", 1.0f );
-		ocean.m_fSpecular = t3dRdOceanFloatParam( shader_material, "specular", 1.0f );
-		ocean.m_fFoamHeight = t3dRdOceanFloatParam( shader_material, "foam_height", 1.35f );
-		ocean.m_fFoamTopIntensity = t3dRdOceanFloatParam( shader_material, "foam_top_intensity", 2.0f );
-		ocean.m_fFoamDistance = t3dRdOceanFloatParam( shader_material, "foam_distance", 3072.0f );
-		ocean.m_fFoamShoreIntensity = t3dRdOceanFloatParam( shader_material, "foam_shore_intensity", 1.3f );
-		ocean.m_fFoamNoiseScale = t3dRdOceanFloatParam( shader_material, "foam_noise_scale", 1.5f );
-		ocean.m_fHeightScattering = t3dRdOceanFloatParam( shader_material, "height_scattering", 6.0f );
-		ocean.m_fHeightThreshold = t3dRdOceanFloatParam( shader_material, "height_threshold", 0.1f );
-		ocean.m_fHeightAngleThreshold = t3dRdOceanFloatParam( shader_material, "height_angle_threshold", 0.21f );
-		ocean.m_fFresnelScattering = t3dRdOceanFloatParam( shader_material, "fersnel_scattering", 20.0f );
-		ocean.m_fDirectScattering = t3dRdOceanFloatParam( shader_material, "direct_scattering", 10.0f );
 		ocean.m_nGeneration = 0u;
 		ocean.m_nGeneration = hashBytes( &ocean, sizeof( ocean ) );
 	}
@@ -1011,41 +1181,49 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 		publication.m_nOceanTopologyBank = m_nCurrentOceanTopologyBank;
 	}
 
-	Terrain3DData *const data = m_pTerrain->getData();
 	const Ref<Terrain3DAssets> assets = m_pTerrain->getAssets();
 	const uint64_t region_topology_generation = data->getRegionTopologyGenerationInternal();
 	const uint64_t physical_region_map_generation = data->getPhysicalRegionMapGenerationInternal();
-	const int region_map_size = data->getRegionMapSizeInternal();
-	const int64_t region_map_count = ( int64_t )( region_map_size )*region_map_size;
+	const int64_t region_map_count = s_nRegionSlots;
 	const uint16_t *const pPhysicalRegionMap = data->getPhysicalRegionMapDataInternal();
 	const uint16_t *const pLogicalRegionMap = data->getLogicalRegionMapDataInternal();
-	if ( region_map_size <= 0 || !pPhysicalRegionMap || !pLogicalRegionMap ) {
+	if ( !pPhysicalRegionMap || !pLogicalRegionMap ) {
 		LOG( ERROR, "Physical/logical region map storage unavailable" );
 		return;
 	}
-	const int region_map_half = region_map_size / 2;
-	uint64_t region_lighting_signature = 1469598103934665603ull;
-	for ( int64_t i = 0; i < region_map_count; ++i ) {
-		const int source_index = Terrain3DData::getRegionMapIndex(
-		        Vector2i( ( int )( i % region_map_size ) - region_map_half, ( int )( i / region_map_size ) - region_map_half ) );
-		if ( source_index < 0 || pLogicalRegionMap[source_index] == 0u ) {
-			continue;
-		}
-		const Vector2i location( ( int )( i % region_map_size ) - region_map_half, ( int )( i / region_map_size ) - region_map_half );
-		Terrain3DRegion *const pRegion = data->getRegionPtr( location );
-		uint64_t value = ( uint64_t )( ( uint32_t )( location.x ) ) | ( ( uint64_t )( ( uint32_t )( location.y ) ) << 32u );
-		if ( pRegion && !pRegion->isDeleted() ) {
-			const Ref<Terrain3DRegionLighting> lighting = pRegion->getLighting();
-			if ( lighting.is_valid() ) {
-				value ^= ( uint64_t )( CLAMP( lighting->getShadowmaskMode(), 0, 2 ) + 1 ) << 8u;
-				value ^= ( uint64_t )( lighting->hasTerrainShadowMask() ? 1u : 0u ) << 16u;
-				value ^= ( uint64_t )( lighting->getBakeSignature() );
+	const uint64_t region_lighting_source_generation = Terrain3DRegionLighting::getGlobalPublicationGeneration();
+	const bool bRegionLightingSourceDirty = !m_bRegionMapInitialized
+	        || region_lighting_source_generation != m_nRegionLightingSourceGeneration
+	        || region_topology_generation != m_nRegionTopologyGeneration;
+	uint64_t region_lighting_signature = m_nRegionLightingSignature;
+	if ( bRegionLightingSourceDirty ) {
+		region_lighting_signature = 1469598103934665603ull;
+		for ( int64_t i = 0; i < region_map_count; ++i ) {
+			const int source_index = Terrain3DData::getRegionMapIndex(
+			        Vector2i( ( int )( i & s_nRegionMapMask ) - s_nRegionMapHalf, ( int )( i >> s_nRegionMapShift ) - s_nRegionMapHalf ) );
+			if ( source_index < 0 || pLogicalRegionMap[source_index] == 0u ) {
+				continue;
 			}
+			const Vector2i location(
+			        ( int )( i & s_nRegionMapMask ) - s_nRegionMapHalf, ( int )( i >> s_nRegionMapShift ) - s_nRegionMapHalf );
+			Terrain3DRegion *const pRegion = data->getRegionPtr( location );
+			uint64_t value = ( uint64_t )( ( uint32_t )( location.x ) ) | ( ( uint64_t )( ( uint32_t )( location.y ) ) << 32u );
+			if ( pRegion && !pRegion->isDeleted() ) {
+				const Ref<Terrain3DRegionLighting> lighting = pRegion->getLighting();
+				if ( lighting.is_valid() ) {
+					value ^= ( uint64_t )( CLAMP( lighting->getShadowmaskMode(), 0, 2 ) + 1 ) << 8u;
+					value ^= ( uint64_t )( lighting->hasTerrainShadowMask() ? 1u : 0u ) << 16u;
+					value ^= ( uint64_t )( lighting->getBakeSignature() );
+				}
+			}
+			region_lighting_signature ^= value;
+			region_lighting_signature *= 1099511628211ull;
 		}
-		region_lighting_signature ^= value;
-		region_lighting_signature *= 1099511628211ull;
+		m_nRegionLightingSourceGeneration = region_lighting_source_generation;
+		++m_nRegionLightingScanCount;
 	}
-	const bool bRegionLightingChanged = !m_bRegionMapInitialized || region_lighting_signature != m_nRegionLightingSignature;
+	const bool bRegionLightingChanged =
+	        !m_bRegionMapInitialized || ( bRegionLightingSourceDirty && region_lighting_signature != m_nRegionLightingSignature );
 	if ( bRegionLightingChanged && !data->refreshTerrainShadowMasksInternal() ) {
 		LOG( ERROR, "Unable to refresh Terrain3D regional shadowmask residency after lighting change" );
 		return;
@@ -1067,14 +1245,14 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 		uint8_t *const pPackedRegionMap = m_regionMapBanks[bank].m_bytes.ptrw();
 		for ( int64_t i = 0; i < region_map_count; ++i ) {
 			const Vector2i map_location(
-			        ( int )( i % region_map_size ) - region_map_half, ( int )( i / region_map_size ) - region_map_half );
+			        ( int )( i & s_nRegionMapMask ) - s_nRegionMapHalf, ( int )( i >> s_nRegionMapShift ) - s_nRegionMapHalf );
 			const int source_index = Terrain3DData::getRegionMapIndex( map_location );
 			const uint32_t nPhysicalLayer = source_index >= 0 ? pPhysicalRegionMap[source_index] : 0u;
 			const uint32_t nLogicalPresent = source_index >= 0 && pLogicalRegionMap[source_index] != 0u ? 0x80000000u : 0u;
 			uint32_t nShadowmaskMode = 0u;
 			if ( nLogicalPresent != 0u ) {
 				const Vector2i location(
-				        ( int )( i % region_map_size ) - region_map_half, ( int )( i / region_map_size ) - region_map_half );
+				        ( int )( i & s_nRegionMapMask ) - s_nRegionMapHalf, ( int )( i >> s_nRegionMapShift ) - s_nRegionMapHalf );
 				Terrain3DRegion *const pRegion = data->getRegionPtr( location );
 				if ( pRegion && !pRegion->isDeleted() ) {
 					const Ref<Terrain3DRegionLighting> lighting = pRegion->getLighting();
@@ -1185,17 +1363,18 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 		m_nHlodSceneGeneration = hlod_generation;
 	}
 
-	const uint64_t mesh_fingerprint = Terrain3DRdMeshCache::computeSourceFingerprint(
-	        instance_assets, m_cachedHlodMeshSources.data(), m_cachedHlodMeshSources.size() );
-	if ( !m_bCachedInstanceMeshesValid || mesh_fingerprint != m_nInstanceMeshFingerprint ) {
-		Terrain3DColdAllocationScope allocation_scope;
+	const uint64_t mesh_source_generations[2] = { instance_assets.is_valid() ? instance_assets->getMeshSourceGeneration() : 0u,
+		hlod_generation };
+	const uint64_t mesh_source_generation = hashBytes( mesh_source_generations, sizeof( mesh_source_generations ) );
+	if ( !m_bCachedInstanceMeshesValid || mesh_source_generation != m_nInstanceMeshSourceGeneration ) {
+		Terrain3DColdPhaseScope cold_phase_scope;
 		m_nInstanceMeshGeneration = advanceGeneration( m_nInstanceMeshGeneration );
 		String mesh_error;
 		const bool built = Terrain3DRdMeshCache::buildSourceSnapshot( instance_assets,
 		        m_cachedHlodMeshSources.data(),
 		        m_cachedHlodMeshSources.size(),
 		        m_cachedInstanceMeshes,
-		        mesh_fingerprint,
+		        mesh_source_generation,
 		        m_nInstanceMeshGeneration,
 		        &mesh_error );
 		if ( !built ) {
@@ -1203,13 +1382,21 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 			m_initializationError = "Failed to publish RD instance/HLOD meshes: " + mesh_error;
 			return;
 		}
-		if ( !ensureInstanceMeshBankStorage() ) {
-			t3dScopedLock_t lock( m_diagnosticsMutex );
-			m_initializationError = "Fixed RD instance mesh bank capacity allocation failed";
+		// Discovery is complete even if the publication bank still needs a cold
+		// reserve. Preserve this immutable source image so the cold service can
+		// size directly from it without rebuilding the mesh source a second time.
+		m_bCachedInstanceMeshesValid = true;
+		m_nInstanceMeshSourceGeneration = mesh_source_generation;
+		++m_nMeshSourceBuildCount;
+		if ( !hasInstanceMeshBankCapacity() ) {
+			const size_t required = m_cachedInstanceMeshes.m_surfaces.size() + m_cachedInstanceMeshes.m_lods.size()
+			        + m_cachedInstanceMeshes.m_materials.size() + m_cachedInstanceMeshes.m_textures.size();
+			const size_t capacity = m_instanceMeshBanks[0].m_snapshot.m_surfaces.capacity()
+			        + m_instanceMeshBanks[0].m_snapshot.m_lods.capacity() + m_instanceMeshBanks[0].m_snapshot.m_materials.capacity()
+			        + m_instanceMeshBanks[0].m_snapshot.m_textures.capacity();
+			recordCapacityMiss( "RD instance mesh bank", required, capacity, true );
 			return;
 		}
-		m_bCachedInstanceMeshesValid = true;
-		m_nInstanceMeshFingerprint = mesh_fingerprint;
 	}
 
 	Terrain3DInstancer *const instancer = m_pTerrain->getInstancer();
@@ -1428,8 +1615,19 @@ void Terrain3DRenderCoordinator::resetSnapshotPublication( void ) {
 	m_nLastPatchFingerprint = 0u;
 	m_nPatchGeneration = 0u;
 	m_nPreviousPatchCount = 0u;
-	m_nLastMaterialFingerprint = 0u;
 	m_nMaterialGeneration = 0u;
+	m_nMaterialSourceGeneration = 0u;
+	memset( m_cachedMaterialLayers, 0, sizeof( m_cachedMaterialLayers ) );
+	m_cachedMaterialConfig = t3dRdMaterialConfig_t{};
+	m_nCachedMaterialLayerCount = 1u;
+	m_nRegionLightingSourceGeneration = 0u;
+	m_nRegionLightingScanCount = 0u;
+	m_nMaterialStateBuildCount = 0u;
+	m_nMeshSourceBuildCount = 0u;
+	m_nOceanStaticStateBuildCount = 0u;
+	m_cachedOceanStaticState = t3dRdOceanState_t{};
+	m_nOceanStaticSourceGeneration = 0u;
+	m_bOceanStaticStateInitialized = false;
 	m_nTerrainTextureGeneration = 0u;
 	m_nMaterialTextureGeneration = 0u;
 	m_lastPublishedResources = t3dRdTerrainBindings_t{};
@@ -1600,9 +1798,17 @@ void Terrain3DRenderCoordinator::initialize( Terrain3D *const pTerrain ) {
 	if ( !m_pTerrain ) {
 		return;
 	}
+	// shutdown() deliberately destroys retained publication backing. Re-bind the
+	// explicit Terrain3D owner before any cold capacity is re-established.
+	if ( !m_bRuntimeAllocatorBound || !m_pRuntimeAllocatorZone
+	        || !bindRuntimeAllocator( m_pRuntimeAllocatorZone, m_eRuntimeAllocatorOverflowPolicy ) ) {
+		t3dScopedLock_t lock( m_diagnosticsMutex );
+		m_initializationError = "RD publication owner allocator is not bound";
+		return;
+	}
 	{
-		Terrain3DColdAllocationScope allocation_scope;
-		const int64_t region_map_bank_bytes = ( int64_t )( s_nMaxRegionSlots * sizeof( uint32_t ) );
+		Terrain3DColdPhaseScope cold_phase_scope;
+		const int64_t region_map_bank_bytes = ( int64_t )( s_nRegionSlots * sizeof( uint32_t ) );
 		for ( size_t iBank = 0u; iBank < T3D_ARRAY_COUNT( m_regionMapBanks ); iBank++ ) {
 			t3dRdRegionMapBank_t &bank = ( m_regionMapBanks )[iBank];
 			bank.m_bytes.resize( region_map_bank_bytes );
@@ -1641,7 +1847,28 @@ void Terrain3DRenderCoordinator::initialize( Terrain3D *const pTerrain ) {
 		m_initializationError = "Failed to prepare packed RenderingDevice clipmap topology";
 	}
 	initializeOcean();
+	// The coordinator owns these retained publication banks. Establish their
+	// initial capacity before the first snapshot instead of treating capacity=0
+	// as a runtime miss and waiting for the first physics-frame cold service.
+	serviceColdCapacity();
+	if ( !hasInstancePublicationCapacity() || !hasInstanceMeshBankCapacity() ) {
+		t3dScopedLock_t lock( m_diagnosticsMutex );
+		m_initializationError = "RD publication owner could not establish initial capacity";
+		return;
+	}
 	publishSnapshot();
+	// The first cold publication may discover immutable mesh-source sizes that
+	// were unavailable before publishSnapshot(). If so, satisfy that owner request
+	// immediately and retry before initialization is exposed to READY/physics.
+	if ( m_bInstancePublicationCapacityPending || m_bInstanceMeshBankCapacityPending ) {
+		serviceColdCapacity();
+		if ( m_bInstancePublicationCapacityPending || m_bInstanceMeshBankCapacityPending ) {
+			t3dScopedLock_t lock( m_diagnosticsMutex );
+			m_initializationError = "RD publication owner could not satisfy discovered initial capacity";
+			return;
+		}
+		publishSnapshot();
+	}
 	updateRenderRoute();
 	if ( m_bCompositorDebugEnabled ) {
 		attachEffectToActiveCamera();
@@ -1711,7 +1938,7 @@ void Terrain3DRenderCoordinator::shutdown( void ) {
 	m_cachedOceanTopology = t3dRdOceanTopologySnapshot_t{};
 	m_bCachedOceanTopologyValid = false;
 	m_cachedHlodMeshSources.clear();
-	m_nInstanceMeshFingerprint = 0u;
+	m_nInstanceMeshSourceGeneration = 0u;
 	m_nInstanceMeshGeneration = 0u;
 	m_nInstanceSceneGeneration = 0u;
 	m_nHlodSceneGeneration = 0u;
@@ -2121,7 +2348,7 @@ bool Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 			{
 				// RenderWorld pipeline/shader/descriptor mutation is an explicit PREPARE-only
 				// cold boundary. It is never allowed to occur from SUBMIT/hot rendering.
-				Terrain3DColdAllocationScope cold_scope;
+				Terrain3DColdPhaseScope cold_scope;
 				render_world_ready = m_renderWorldRuntime.is_initialized()
 				        ? m_renderWorldRuntime.rebuild_raster_cold( rContext.m_nFramebufferFormat )
 				        : m_renderWorldRuntime.initialize_cold(
@@ -2283,6 +2510,12 @@ Dictionary Terrain3DRenderCoordinator::getDiagnostics( void ) const {
 		}
 	}
 	result["rd_retained_cpu_bytes"] = ( int64_t )( getRetainedCpuBytes() );
+	result["owner_capacity_misses"] = ( int64_t )( m_nCapacityMissCount );
+	result["owner_growth_denied"] = ( int64_t )( m_nOwnerGrowthDeniedCount );
+	result["owner_cold_capacity_rebuilds"] = ( int64_t )( m_nColdCapacityRebuildCount );
+	result["owner_publication_capacity_pending"] = m_bInstancePublicationCapacityPending;
+	result["owner_mesh_bank_capacity_pending"] = m_bInstanceMeshBankCapacityPending;
+	result["owner_cold_capacity_service_active"] = m_bColdCapacityServiceActive;
 	result["rd_live_gpu_buffer_bytes"] = ( int64_t )( Terrain3DRdContext::getShared().getLiveGpuBufferBytes() );
 	result["rd_live_gpu_texture_bytes"] = ( int64_t )( Terrain3DRdContext::getShared().getLiveGpuTextureBytes() );
 	result["native_shadow_proxy_active"] = false;
@@ -2321,6 +2554,10 @@ Dictionary Terrain3DRenderCoordinator::getDiagnostics( void ) const {
 	result["render_world_hiz_enabled"] = m_renderWorldRuntime.is_hiz_enabled();
 	result["render_world_cpu_image_bytes"] = ( int64_t )( m_renderWorldRuntime.get_cpu_image_bytes() );
 	result["render_world_operation_events"] = ( int64_t )( m_renderWorldRuntime.get_operation_event_count() );
+	result["coordinator_material_state_builds"] = ( int64_t )( m_nMaterialStateBuildCount );
+	result["coordinator_region_lighting_scans"] = ( int64_t )( m_nRegionLightingScanCount );
+	result["coordinator_mesh_source_builds"] = ( int64_t )( m_nMeshSourceBuildCount );
+	result["coordinator_ocean_static_state_builds"] = ( int64_t )( m_nOceanStaticStateBuildCount );
 	result["renderer_initialized"] = m_bRendererInitialized.load( T3D_MEMORY_ORDER_ACQUIRE );
 	result["renderer_failure_latched"] = m_bFailureLatched;
 	result["callbacks"] = ( int64_t )( m_nCallbackCount.load( T3D_MEMORY_ORDER_ACQUIRE ) );

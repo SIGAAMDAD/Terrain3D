@@ -208,9 +208,8 @@ typedef struct t3dBakeRegionSnapshot_s {
 } t3dBakeRegionSnapshot_t;
 
 typedef struct t3dBakeSnapshot_s {
-	int32_t m_nRegionSize = 0;
 	real_t m_fVertexSpacing = 1.f;
-	int32_t m_szRegionLookup[s_nActiveMaxRegionMapSize * s_nActiveMaxRegionMapSize] = {};
+	int32_t m_szRegionLookup[s_nRegionMapSize * s_nRegionMapSize] = {};
 	eastl::vector<t3dBakeRegionSnapshot_t, Terrain3DEastlAllocator> m_regions;
 
 	const t3dBakeRegionSnapshot_t *getRegion( const int32_t iX, const int32_t iZ ) const;
@@ -266,7 +265,6 @@ private:
 	Object *m_pEditorPlugin = NULL;
 
 	// Regions
-	t3dRegionSize_t m_nRegionSize = SIZE_128;
 	bool m_bSave16Bit = false;
 	t3dPerformanceTarget_t m_performanceTarget = PERFORMANCE_TARGET_CUSTOM;
 	t3dPerformanceProfileStatus_t m_performanceProfileStatus = PERFORMANCE_PROFILE_CUSTOM;
@@ -285,8 +283,8 @@ private:
 	// no renderer/object cache is allowed to invent a separate world footprint.
 	t3dRegionStreamingConfig_t m_regionStreamingConfig{};
 	t3dRuntimeStreamingConfig_t m_runtimeStreamingConfig = t3dStreamingCompileConfig( m_regionStreamingConfig );
-	uint8_t m_szRegionStreamingStates[s_nMaxRegionSlots] = {};
-	uint8_t m_szRegionStreamingPrefetch[s_nMaxRegionSlots] = {};
+	uint8_t m_szRegionStreamingStates[s_nRegionSlots] = {};
+	uint8_t m_szRegionStreamingPrefetch[s_nRegionSlots] = {};
 	Vector2i m_regionStreamingCenter = s_v2iMax;
 	Vector2i m_regionStreamingPredictedCenter = s_v2iMax;
 	Vector3 m_regionStreamingPreviousWorldPosition = s_v3Max;
@@ -407,6 +405,7 @@ private:
 	bool m_bHlodMemoryBudgetAuto = true;
 	bool m_bShaderCacheBudgetAuto = true;
 	int m_nLightmapResidencyBudgetMb = 16;
+	uint64_t m_nEffectiveGpuRegionCacheBudgetBytes = 16u * s_nMemoryMib;
 	int m_nEffectiveGpuRegionCacheBudgetMb = 16;
 	int m_nEffectiveCpuRegionCacheBudgetMb = 16;
 	int m_nEffectiveInstanceRegionCacheBudgetMb = 16;
@@ -454,7 +453,6 @@ private:
 	int m_nMeshLods = 7;
 	int m_nTessellationLevel = 0;
 	int m_nMeshSize = 48;
-	real_t m_fVertexSpacing = 1.0f;
 	real_t m_fCullMargin = 0.0f;
 	GeometryInstance3D::ShadowCastingSetting m_castShadows = GeometryInstance3D::SHADOW_CASTING_SETTING_ON;
 	int m_nShadowLodCount = 2;
@@ -503,6 +501,7 @@ private:
 	Ref<Material> m_oceanMaterial;
 	Ref<Shader> m_oceanVariantShader;
 	String m_oceanVariantSource;
+	uint64_t m_nOceanPublicationGeneration = 1u;
 	t3dOceanPerformancePreset_t m_oceanPerformancePreset = OCEAN_PRESET_BORDER_BALANCED;
 	int m_nOceanVertexWaveIterations = 1;
 	int m_nOceanFragmentWaveIterations = 1;
@@ -510,6 +509,9 @@ private:
 	t3dOceanFoamMode_t m_oceanFoamMode = OCEAN_FOAM_SHORE;
 	t3dOceanScatteringMode_t m_oceanScatteringMode = OCEAN_SCATTERING_APPROXIMATE;
 	t3dOceanShadingMode_t m_oceanShadingMode = OCEAN_SHADING_LAMBERT_GGX;
+	void markOceanPublicationDirty( void );
+	void connectOceanMaterialPublicationSignal( void );
+	void disconnectOceanMaterialPublicationSignal( void );
 
 	// Rendering
 	Terrain3DRenderCoordinator *m_pRenderCoordinator = NULL;
@@ -690,6 +692,8 @@ public:
 	EA_FORCE_INLINE Terrain3DData *getData( void ) const {
 		return m_pData;
 	}
+	EA_FORCE_INLINE Terrain3DMemoryZone *getRuntimeMemoryZoneInternal( void ) { return &m_runtimeMemoryZone; }
+	t3dAllocatorOverflowPolicy_t getRuntimeAllocatorOverflowPolicyInternal( void ) const;
 	void setAssets( const Ref<Terrain3DAssets> &rAssets );
 	EA_FORCE_INLINE Ref<Terrain3DAssets> getAssets( void ) const {
 		return m_assets;
@@ -727,20 +731,8 @@ public:
 	}
 
 	// Regions
-	void setRegionSize( const t3dRegionSize_t size );
 	EA_FORCE_INLINE t3dRegionSize_t getRegionSize( void ) const {
 		return SIZE_128;
-	}
-	void changeRegionSize( const t3dRegionSize_t size ) {
-		if ( m_pData && m_pData->isInitializedFor( this ) ) {
-			m_pData->changeRegionSize( size );
-		} else {
-			// Property deserialization can create Terrain3DData before the node enters
-			// the tree/world and before Terrain3DData::initialize() assigns its owner.
-			// At that stage there is no repository to migrate; retain the requested
-			// owner setting and let Terrain3DData::initialize() reconcile storage later.
-			setRegionSize( size );
-		}
 	}
 	void setSave16Bit( const bool bEnabled );
 	EA_FORCE_INLINE bool getSave16Bit( void ) const {
@@ -894,6 +886,9 @@ public:
 	}
 	EA_FORCE_INLINE int getEffectiveGpuRegionCacheBudgetMb( void ) const {
 		return effectiveGpuRegionCacheEnabled() ? m_nEffectiveGpuRegionCacheBudgetMb : 0;
+	}
+	EA_FORCE_INLINE uint64_t getEffectiveGpuRegionCacheBudgetBytes( void ) const {
+		return effectiveGpuRegionCacheEnabled() ? m_nEffectiveGpuRegionCacheBudgetBytes : 0u;
 	}
 	EA_FORCE_INLINE int getEffectiveCpuRegionCacheBudgetMb( void ) const {
 		return effectiveCpuRegionCacheEnabled() ? m_nEffectiveCpuRegionCacheBudgetMb : 0;
@@ -1441,9 +1436,8 @@ public:
 	EA_FORCE_INLINE int getMeshSize( void ) const {
 		return m_nMeshSize;
 	}
-	void setVertexSpacing( const real_t fSpacing );
 	EA_FORCE_INLINE real_t getVertexSpacing( void ) const {
-		return m_fVertexSpacing;
+		return ( real_t )( s_fRegionVertexSpacing );
 	}
 	void setCullMargin( const real_t fMargin );
 	EA_FORCE_INLINE real_t getCullMargin( void ) const {
@@ -1590,6 +1584,9 @@ public:
 	void setOceanMaterial( const Ref<Material> &rMaterial );
 	EA_FORCE_INLINE Ref<Material> getOceanMaterial( void ) const {
 		return m_oceanMaterial;
+	}
+	EA_FORCE_INLINE uint64_t getOceanPublicationGeneration( void ) const {
+		return m_nOceanPublicationGeneration;
 	}
 
 	// Rendering

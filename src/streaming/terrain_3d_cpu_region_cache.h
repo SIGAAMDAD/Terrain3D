@@ -108,10 +108,10 @@ private:
 	int m_nAsyncReadyLastTick = 0;
 	int m_nAsyncPendingLastTick = 0;
 	int m_nAsyncOutstanding = 0;
-	uint8_t m_szAsyncState[s_nMaxRegionSlots] = {};
+	uint8_t m_szAsyncState[s_nRegionSlots] = {};
 	Vector2i m_center = s_v2iMax;
-	Vector2i m_szLocations[s_nCpuCacheMaxLayers] = {};
-	uint8_t m_szRegionMap[s_nMaxRegionSlots] = {};
+	t3dRegionCoord_t m_szLocations[s_nCpuCacheMaxLayers] = {};
+	uint8_t m_szRegionMap[s_nRegionSlots] = {};
 
 	int calculateCapacity( void ) const;
 	int findSlot( const Vector2i &vLocation ) const;

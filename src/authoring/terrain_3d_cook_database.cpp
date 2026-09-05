@@ -19,17 +19,17 @@ String Terrain3DCookDatabase::getPath( const String &rDataDirectory ) const {
 	return rDataDirectory.path_join( "terrain3d_cook.t3ddb" );
 }
 
-bool Terrain3DCookDatabase::load( const String &rDataDirectory, const int nRegionSize, const uint64_t nMaterialSignature ) {
+bool Terrain3DCookDatabase::load( const String &rDataDirectory, const uint64_t nMaterialSignature ) {
 	reset();
 	const String path = getPath( rDataDirectory );
 	Ref<FileAccess> file = FileAccess::open( path, FileAccess::READ );
 	if ( file.is_null() ) {
 		return false;
 	}
-	const uint64_t expected_bytes = s_nCookDatabaseHeaderBytes + ( uint64_t )s_nMaxRegionSlots * sizeof( uint64_t );
+	const uint64_t expected_bytes = s_nCookDatabaseHeaderBytes + ( uint64_t )s_nRegionSlots * sizeof( uint64_t );
 	if ( ( uint64_t )file->get_length() != expected_bytes || file->get_64() != s_nCookDatabaseMagic
 	        || file->get_32() != s_nCookDatabaseVersion || file->get_32() != s_nRuntimePageVersion
-	        || ( int )file->get_32() != nRegionSize ) {
+	        || file->get_32() != s_nRegionGeometrySignature ) {
 		return false;
 	}
 	file->get_32(); // reserved
@@ -49,8 +49,8 @@ bool Terrain3DCookDatabase::load( const String &rDataDirectory, const int nRegio
 	return true;
 }
 
-bool Terrain3DCookDatabase::write( const String &rDataDirectory, const int nRegionSize, const uint64_t nMaterialSignature ) const {
-	if ( rDataDirectory.is_empty() || nRegionSize <= 0 ) {
+bool Terrain3DCookDatabase::write( const String &rDataDirectory, const uint64_t nMaterialSignature ) const {
+	if ( rDataDirectory.is_empty() ) {
 		return false;
 	}
 	const String path = getPath( rDataDirectory );
@@ -62,7 +62,7 @@ bool Terrain3DCookDatabase::write( const String &rDataDirectory, const int nRegi
 	file->store_64( s_nCookDatabaseMagic );
 	file->store_32( s_nCookDatabaseVersion );
 	file->store_32( s_nRuntimePageVersion );
-	file->store_32( ( uint32_t )nRegionSize );
+	file->store_32( s_nRegionGeometrySignature );
 	file->store_32( 0u );
 	file->store_64( nMaterialSignature );
 	file->store_64( 0u );

@@ -7,16 +7,32 @@
 
 #include <stdint.h>
 
+EA_FORCE_INLINE uint8_t t3dInstanceCellShift( const int nCellSize ) {
+	switch ( nCellSize ) {
+		case 8:
+			return 3u;
+		case 16:
+			return 4u;
+		case 32:
+			return 5u;
+		case 64:
+			return 6u;
+		case 128:
+			return 7u;
+		default:
+			return UINT8_MAX;
+	}
+}
+
 typedef struct t3dInstanceLayout_s {
 	uint16_t m_nCellSize = s_nInstanceDefaultCellSize;
-	uint16_t m_nCellsPerAxis = 4;
+	uint16_t m_nCellsPerAxis = s_nRegionSize >> 5;
+	uint8_t m_nCellShift = 5u;
 
 	bool isValid( void ) const {
-		return m_nCellSize >= s_nInstanceMinCellSize && m_nCellSize <= s_nInstanceMaxCellSize
-		        && ( m_nCellSize & ( m_nCellSize - 1u ) ) == 0u && m_nCellsPerAxis > 0u && m_nCellsPerAxis <= s_nInstanceMaxCellsPerAxis
-		        && ( m_nCellsPerAxis & ( m_nCellsPerAxis - 1u ) ) == 0u
-		        && ( uint32_t )( m_nCellSize ) * ( uint32_t )( m_nCellsPerAxis ) >= s_nInstanceMinRegionSize
-		        && ( uint32_t )( m_nCellSize ) * ( uint32_t )( m_nCellsPerAxis ) <= s_nInstanceMaxRegionSize;
+		return m_nCellSize >= s_nInstanceMinCellSize && m_nCellSize <= s_nInstanceMaxCellSize && m_nCellShift != UINT8_MAX
+		        && m_nCellSize == ( uint16_t )( 1u << m_nCellShift ) && m_nCellsPerAxis == ( uint16_t )( s_nRegionSize >> m_nCellShift )
+		        && m_nCellsPerAxis > 0u && m_nCellsPerAxis <= s_nInstanceMaxCellsPerAxis;
 	}
 
 	EA_FORCE_INLINE bool contains( const int iX, const int iY ) const {
@@ -28,18 +44,15 @@ typedef struct t3dInstanceLayout_s {
 	}
 } t3dInstanceLayout_t;
 
-inline bool t3dInstanceLayoutForRegion( const int nRegionSize, const int nCellSize, t3dInstanceLayout_t &rLayout ) {
-	if ( nRegionSize <= 0 || nCellSize < s_nInstanceMinCellSize || nCellSize > s_nInstanceMaxCellSize
-	        || ( nCellSize & ( nCellSize - 1 ) ) != 0 || nRegionSize % nCellSize != 0 ) {
-		return false;
-	}
-	const int cells_per_axis = nRegionSize / nCellSize;
-	if ( cells_per_axis <= 0 || cells_per_axis > s_nInstanceMaxCellsPerAxis ) {
+EA_FORCE_INLINE bool t3dInstanceLayoutForCellSize( const int nCellSize, t3dInstanceLayout_t &rLayout ) {
+	const uint8_t cell_shift = t3dInstanceCellShift( nCellSize );
+	if ( cell_shift == UINT8_MAX || nCellSize < s_nInstanceMinCellSize || nCellSize > s_nInstanceMaxCellSize ) {
 		return false;
 	}
 	rLayout.m_nCellSize = ( uint16_t )( nCellSize );
-	rLayout.m_nCellsPerAxis = ( uint16_t )( cells_per_axis );
-	return true;
+	rLayout.m_nCellShift = cell_shift;
+	rLayout.m_nCellsPerAxis = ( uint16_t )( s_nRegionSize >> cell_shift );
+	return rLayout.isValid();
 }
 
 #endif // TERRAIN3D_INSTANCE_LAYOUT_H

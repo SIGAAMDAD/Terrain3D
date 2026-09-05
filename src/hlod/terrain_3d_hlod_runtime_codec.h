@@ -19,9 +19,15 @@ using namespace godot;
 
 typedef struct t3dHlodRuntimeEntryRecord_s {
 	int m_nLevel = 1;
-	Vector2i m_cluster = s_v2iZero;
-	Vector2i m_regionMin = s_v2iZero;
-	Vector2i m_regionMax = s_v2iZero;
+	t3dRegionCoord_t m_cluster = t3dPackRegionCoord( s_v2iZero );
+	t3dRegionCoord_t m_regionMin = t3dPackRegionCoord( s_v2iZero );
+	t3dRegionCoord_t m_regionMax = t3dPackRegionCoord( s_v2iZero );
+	EA_FORCE_INLINE Vector2i getCluster( void ) const { return t3dUnpackRegionCoord( m_cluster ); }
+	EA_FORCE_INLINE Vector2i getRegionMin( void ) const { return t3dUnpackRegionCoord( m_regionMin ); }
+	EA_FORCE_INLINE Vector2i getRegionMax( void ) const { return t3dUnpackRegionCoord( m_regionMax ); }
+	EA_FORCE_INLINE void setCluster( const Vector2i &rValue ) { m_cluster = t3dPackRegionCoord( rValue ); }
+	EA_FORCE_INLINE void setRegionMin( const Vector2i &rValue ) { m_regionMin = t3dPackRegionCoord( rValue ); }
+	EA_FORCE_INLINE void setRegionMax( const Vector2i &rValue ) { m_regionMax = t3dPackRegionCoord( rValue ); }
 	AABB m_localBounds;
 	String m_packagePath;
 	real_t m_fGeometricError = 1.0f;
@@ -42,7 +48,7 @@ typedef struct t3dHlodRuntimeData_s {
 	eastl::vector<int, Terrain3DEastlAllocator> m_roots;
 	eastl::vector<uint8_t, Terrain3DEastlAllocator> m_instancerMinLevels;
 	eastl::vector<t3dHlodRuntimeNodePolicyRecord_t, Terrain3DEastlAllocator> m_nodePolicies;
-	uint32_t m_szNodePolicyOffsets[s_nMaxRegionSlots + 1]{};
+	uint32_t m_szNodePolicyOffsets[s_nRegionSlots + 1]{};
 } t3dHlodRuntimeData_t;
 
 class Terrain3DHLODRuntimeCodec {

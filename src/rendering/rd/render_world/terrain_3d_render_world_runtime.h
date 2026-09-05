@@ -5,6 +5,7 @@
 
 #include "rendering/rd/render_world/terrain_3d_render_world.h"
 #include "core/terrain_3d_sync.h"
+#include "memory/terrain_3d_memory_zone.h"
 #include "rendering/rd/render_world/terrain_3d_render_world_terrain_integration_gpu.h"
 #include "rendering/rd/terrain_3d_rd_forward_lighting.h"
 #include "rendering/rd/terrain_3d_rd_types.h"
@@ -17,6 +18,7 @@ public:
 	Terrain3DRenderWorldRuntime();
 	~Terrain3DRenderWorldRuntime();
 
+	bool bindRuntimeAllocator( Terrain3DMemoryZone *pZone );
 	bool initialize_cold( Terrain3DRdContext &rContext, const t3dRdRenderWorldShaderBundle_t &rShaders, int64_t pFramebufferFormat );
 	void shutdown_cold();
 	bool rebuild_raster_cold( int64_t pFramebufferFormat );
@@ -89,6 +91,7 @@ private:
 	T3DVTResidencyState m_Residency;
 	T3DVTStreamingState m_Streaming;
 
+	Terrain3DMemoryZone *m_pRuntimeAllocatorZone;
 	void *m_pCpuImage;
 	uint64_t m_nCpuImageBytes;
 	T3DVTPageTableEntry *m_pPageTable;

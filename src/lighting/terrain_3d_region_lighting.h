@@ -4,6 +4,7 @@
 
 #include "Terrain3DConstants.h"
 #include "core/terrain_3d_compiler.h"
+#include "core/terrain_3d_sync.h"
 
 #include <godot_cpp/classes/lightmap_gi_data.hpp>
 #include <godot_cpp/classes/resource.hpp>
@@ -16,6 +17,8 @@ class Terrain3DRegionLighting : public Resource {
 	CLASS_NAME();
 
 private:
+	static t3dAtomicU64_t s_nGlobalPublicationGeneration;
+	static void touchGlobalPublicationGeneration( void );
 	// Keep the heavy LightmapGIData external. Holding a serialized Ref here would
 	// eagerly retain its atlas and shadowmask textures whenever terrain regions
 	// are loaded, defeating the residency streamer.
@@ -44,6 +47,12 @@ private:
 public:
 	Terrain3DRegionLighting( void ) = default;
 	~Terrain3DRegionLighting( void ) = default;
+	EA_FORCE_INLINE static void markGlobalPublicationDirtyInternal( void ) {
+		touchGlobalPublicationGeneration();
+	}
+	EA_FORCE_INLINE static uint64_t getGlobalPublicationGeneration( void ) {
+		return s_nGlobalPublicationGeneration.load( T3D_MEMORY_ORDER_ACQUIRE );
+	}
 
 	void setLightDataPath( const String &rPath );
 	EA_FORCE_INLINE String getLightDataPath( void ) const {

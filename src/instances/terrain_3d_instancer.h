@@ -299,7 +299,7 @@ private:
 	eastl::vector<Transform3D, Terrain3DEastlAllocator> m_placementTransforms;
 	eastl::vector<Color, Terrain3DEastlAllocator> m_placementColors;
 	eastl::vector<t3dPendingPlacement_t, Terrain3DEastlAllocator> m_placementPending;
-	eastl::fixed_vector<Terrain3DRegion *, s_nMaxRegionSlots, false> m_touchedRegions;
+	eastl::fixed_vector<Terrain3DRegion *, s_nRegionSlots, false> m_touchedRegions;
 	uint64_t m_nRdPublicationGeneration = 1u;
 	mutable t3dRdSnapshotRangeMap_t m_rdSnapshotRanges;
 	size_t m_nRenderCellCapacity = 0u;
@@ -307,13 +307,16 @@ private:
 	size_t m_nTransitionBucketCapacity = 0u;
 	size_t m_nCellUpdateQueueCapacity = 0u;
 	bool m_bRuntimeStorageRebuildPending = false;
+	uint64_t m_nCapacityMissCount = 0u;
+	uint64_t m_nColdRebuildCount = 0u;
+	uint64_t m_nOwnerGrowthDeniedCount = 0u;
 
 	static t3dRenderCellKey_t makeRenderKey( const t3dRenderCell_t &rCell );
 	void markRdPublicationDirty( void );
 	bool rebuildRuntimeStorageCapacities( void );
 	bool appendBuildingCellUpdate( const t3dCellUpdateKey_t &rKey );
 	bool insertStreamingUpdate( const t3dCellUpdateKey_t &rKey );
-	bool reportRuntimeCapacityExceeded( const char *pszStorage, size_t nRequired, size_t nCapacity ) const;
+	bool reportRuntimeCapacityExceeded( const char *pszStorage, size_t nRequired, size_t nCapacity );
 	static int getRegionTableIndex( const Vector2i &vRegion );
 	uint32_t allocateRenderRegionNode( size_t iRenderCell, uint16_t nRegionIndex );
 	void releaseRenderRegionNode( uint32_t nNode, uint16_t nRegionIndex );
@@ -399,6 +402,7 @@ private:
 	t3dInstancerMode_t m_mode = NORMAL;
 	uint32_t m_nDensityCounter = 0;
 	int m_nCellSize = s_nInstanceDefaultCellSize;
+	uint8_t m_nCellShift = 5u;
 	bool m_bCellStreamingEnabled = true;
 	// Single-LOD mode publishes one resident render descriptor per logical cell.
 	// Disabling it retains one logical descriptor per LOD for reference-style cross-fades.
@@ -410,7 +414,7 @@ private:
 	Vector3 m_lastStreamPosition = s_v3Zero;
 	bool m_bStreamPositionValid = false;
 
-	Vector2i getCellForLocalPosition( const Vector3 &rLocalPosition, int nRegionSize, int nCellSize ) const;
+	Vector2i getCellForLocalPosition( const Vector3 &rLocalPosition, uint8_t nCellShift ) const;
 	bool buildRepartitionedStore(
 	        const Terrain3DRegion *pRegion, const t3dInstanceLayout_t &rLayout, Terrain3DInstanceStore &rStore ) const;
 	bool repartitionRegionStore( Terrain3DRegion *pRegion, const t3dInstanceLayout_t &rLayout );
@@ -421,7 +425,6 @@ private:
 	void updateMmiByRegion( Terrain3DRegion *pRegion, const int nMeshId );
 	void updateMmiCell( Terrain3DRegion *pRegion, const int nMeshId, t3dInstanceCell_t &rCell, const Ref<Terrain3DMeshAsset> &rAsset );
 	void ensureCellAabb( t3dInstanceCell_t &rCell, const AABB &rSourceMeshAabb );
-	void updateVertexSpacing( const real_t fVertexSpacing );
 	// Renderer teardown never mutates persistent content accounting. Callers that
 	// change Terrain3DInstanceStore must update logical counts explicitly.
 	void destroyMmisByRegion( const Vector2i &rRegionLoc );
@@ -444,7 +447,7 @@ private:
 	void backupRegion( const Ref<Terrain3DRegion> &rRegion );
 	void fillMultimeshBuffer(
 	        const t3dInstanceCell_t &rCell, PackedFloat32Array &rBuffer, const AABB *pSourceMeshAabb = NULL, AABB *pCellAabb = NULL ) const;
-	Vector2i getCell( const Vector3 &rGlobalPosition, const int nRegionSize ) const;
+	Vector2i getCell( const Vector3 &rGlobalPosition ) const;
 	t3dUsableHeight_t getUsableHeight( Terrain3DSampler &rSampler,
 	        const Vector3 &rGlobalPosition,
 	        const Vector2 &rSlopeRange,
@@ -453,6 +456,7 @@ private:
 	        bool bSampleNormal = false ) const;
 
 public:
+	bool bindRuntimeAllocator( Terrain3DMemoryZone *pZone, t3dAllocatorOverflowPolicy_t ePolicy );
 	EA_FORCE_INLINE Terrain3DInstancer( void ) {
 	}
 	EA_FORCE_INLINE ~Terrain3DInstancer( void ) {

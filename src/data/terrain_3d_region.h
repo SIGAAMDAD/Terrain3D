@@ -103,7 +103,6 @@ private:
 
 	// Saved data
 	real_t m_fVersion = 0.8f; // Set to first version to ensure we always upgrades this
-	int m_nRegionSize = 0;
 	Vector2 m_heightRange = s_v2Zero;
 	// Maps
 	Ref<Image> m_heightMap;
@@ -143,7 +142,7 @@ private:
 	Vector2i m_streamedNodeCoverageMax = s_v2iZero;
 	bool m_bStreamedNodeHasExtendedCoverage = false;
 	Ref<Terrain3DRegionLighting> m_lighting;
-	real_t m_fVertexSpacing = 1.f; // Spacing that instancer transforms are currently scaled by.
+	bool m_bGeometryContractValid = true;
 
 	// Working data not saved to disk
 	bool m_bDeleted = false;  // Marked for deletion on save
@@ -160,9 +159,8 @@ public:
 	EA_FORCE_INLINE real_t getVersion( void ) const {
 		return m_fVersion;
 	}
-	void setRegionSize( const int nRegionSize );
 	EA_FORCE_INLINE int getRegionSize( void ) const {
-		return m_nRegionSize;
+		return s_nRegionSize;
 	}
 
 	// Maps
@@ -318,6 +316,12 @@ public:
 		ensureInstanceStoreResident();
 		return m_instanceStore;
 	}
+	EA_FORCE_INLINE const Terrain3DInstanceStore *getResidentInstanceStoreInternal( void ) const {
+		return m_bInstanceStoreResident ? &m_instanceStore : NULL;
+	}
+	EA_FORCE_INLINE Terrain3DInstanceStore *getResidentInstanceStoreInternalMut( void ) {
+		return m_bInstanceStoreResident ? &m_instanceStore : NULL;
+	}
 	EA_FORCE_INLINE bool hasInstances( void ) const {
 		return m_bInstanceStoreResident ? !m_instanceStore.empty() : m_nInstanceCount > 0u;
 	}
@@ -372,11 +376,11 @@ public:
 	EA_FORCE_INLINE bool hasLighting( void ) const {
 		return m_lighting.is_valid() && m_lighting->hasLightData();
 	}
-	EA_FORCE_INLINE void setVertexSpacing( const real_t fVertexSpacing ) {
-		m_fVertexSpacing = CLAMP( fVertexSpacing, 0.25f, 100.f );
-	}
 	EA_FORCE_INLINE real_t getVertexSpacing( void ) const {
-		return m_fVertexSpacing;
+		return ( real_t )( s_fRegionVertexSpacing );
+	}
+	EA_FORCE_INLINE bool hasValidGeometryContractInternal( void ) const {
+		return m_bGeometryContractValid;
 	}
 
 	// Working Data
@@ -419,6 +423,7 @@ public:
 	void dump( const bool bVerbose = false ) const;
 
 protected:
+	bool _set( const StringName &rName, const Variant &rProperty );
 	static void _bind_methods( void );
 };
 VARIANT_ENUM_CAST( t3dMapType_t );

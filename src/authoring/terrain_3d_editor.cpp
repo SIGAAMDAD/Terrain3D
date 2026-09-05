@@ -255,7 +255,7 @@ void Terrain3DEditor::applyEditSnapshot(
 			mip_width = MAX( mip_width >> 1, 1 );
 			mip_height = MAX( mip_height >> 1, 1 );
 		} while ( true );
-		if ( width != pRegion->getRegionSize() || height != pRegion->getRegionSize() || format_value != ( int )( expected_format )
+		if ( width != s_nRegionSize || height != s_nRegionSize || format_value != ( int )( expected_format )
 		        || ( size_t )( bytes.size() ) != expected_bytes ) {
 			LOG( ERROR, "Rejected invalid Terrain3D edit snapshot for region ", location );
 			return;
@@ -281,7 +281,7 @@ void Terrain3DEditor::applyEditSnapshot(
 
 // Sends the whole region aabb to edited_area
 void Terrain3DEditor::sendRegionAabb( const Vector2i &rRegionLoc, const Vector2 &rHeightRange ) {
-	const t3dRegionSize_t region_size = m_pTerrain->getRegionSize();
+	const int region_size = s_nRegionSize;
 	AABB edited_area;
 	edited_area.position = Vector3( rRegionLoc.x * region_size, rHeightRange.x, rRegionLoc.y * region_size );
 	edited_area.size = Vector3( region_size, rHeightRange.y - rHeightRange.x, region_size );
@@ -308,9 +308,9 @@ Ref<Terrain3DRegion> Terrain3DEditor::operateRegion( const Vector2i &rRegionLoc 
 			        "Location ",
 			        rRegionLoc,
 			        " out of bounds. Max: ",
-			        -pData->getRegionMapSizeInternal() / 2,
+			        -s_nRegionMapSize / 2,
 			        " to ",
-			        pData->getRegionMapSizeInternal() / 2 - 1 );
+			        s_nRegionMapSize / 2 - 1 );
 		}
 		return Ref<Terrain3DRegion>();
 	}
@@ -372,7 +372,7 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 		return;
 	}
 
-	const int region_size = m_pTerrain->getRegionSize();
+	const int region_size = s_nRegionSize;
 	const Vector2i region_vsize = V2I( region_size );
 
 	// If no region and can't add one, skip whole function. Checked again later
@@ -1645,9 +1645,9 @@ void Terrain3DEditor::trimBrushScratch( void ) {
 	}
 
 	// Retain no more region-cache entries than the active logical terrain can use.
-	int region_map_size = s_nActiveMaxRegionMapSize;
+	int region_map_size = s_nRegionMapSize;
 	if ( m_pTerrain && m_pTerrain->getData() ) {
-		region_map_size = m_pTerrain->getData()->getRegionMapSizeInternal();
+		region_map_size = s_nRegionMapSize;
 	}
 	const size_t region_cache_limit = ( size_t )( region_map_size ) * ( size_t )( region_map_size );
 	if ( m_regionCacheScratch.capacity() > region_cache_limit ) {

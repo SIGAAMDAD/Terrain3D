@@ -373,6 +373,7 @@ private:
 	// Mirrors values pushed to private/runtime uniforms so hot callers never read
 	// runtime material state back to the CPU.
 	mutable Dictionary m_runtimeMaterialParams;
+	uint64_t m_nRdPublicationGeneration = 1u;
 	uint64_t m_nShaderParameterListQueryCount = 0u;
 	uint64_t m_nShaderParameterDefaultQueryCount = 0u;
 	mutable uint64_t m_nShaderInspectorRuntimeReadCount = 0u;
@@ -622,6 +623,9 @@ public:
 	}
 	EA_FORCE_INLINE Terrain3D *getTerrainOwner( void ) const {
 		return m_pTerrain;
+	}
+	EA_FORCE_INLINE uint64_t getRdPublicationGeneration( void ) const {
+		return m_nRdPublicationGeneration;
 	}
 	void uninitialize( Terrain3D *pTerrain );
 	void destroy( void );

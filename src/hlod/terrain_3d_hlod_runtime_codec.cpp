@@ -71,9 +71,9 @@ static bool t3dHlodRuntimeCodecParseEntry( const Variant &rValue, t3dHlodRuntime
 		return false;
 	}
 	rEntry.m_nLevel = CLAMP( ( int )d["level"], 1, 6 );
-	rEntry.m_cluster = d["cluster"];
-	rEntry.m_regionMin = d["region_min"];
-	rEntry.m_regionMax = d["region_max"];
+	rEntry.setCluster( d["cluster"] );
+	rEntry.setRegionMin( d["region_min"] );
+	rEntry.setRegionMax( d["region_max"] );
 	rEntry.m_localBounds = d.get( "local_bounds", AABB() );
 	rEntry.m_packagePath = String( d["package_path"] );
 	rEntry.m_fGeometricError = MAX( ( real_t )d.get( "geometric_error", 1.0 ), 0.001f );
@@ -101,17 +101,17 @@ PackedByteArray Terrain3DHLODRuntimeCodec::encode( const Array &rEntries,
 	for ( int i = 0; i < ( int )entries.size(); ++i ) {
 		t3dHlodRuntimeEntryRecord_t &entry = entries[( size_t )i];
 		const Vector2i parent_cluster(
-		        t3dHlodRuntimeCodecFloorDiv( entry.m_cluster.x, 2 ), t3dHlodRuntimeCodecFloorDiv( entry.m_cluster.y, 2 ) );
+		        t3dHlodRuntimeCodecFloorDiv( entry.getCluster().x, 2 ), t3dHlodRuntimeCodecFloorDiv( entry.getCluster().y, 2 ) );
 		int parent = -1;
 		for ( int j = 0; j < ( int )entries.size(); ++j ) {
-			if ( entries[( size_t )j].m_nLevel == entry.m_nLevel + 1 && entries[( size_t )j].m_cluster == parent_cluster ) {
+			if ( entries[( size_t )j].m_nLevel == entry.m_nLevel + 1 && entries[( size_t )j].getCluster() == parent_cluster ) {
 				parent = j;
 				break;
 			}
 		}
 		entry.m_nParent = parent;
 		if ( parent >= 0 ) {
-			const int local_x = entry.m_cluster.x - parent_cluster.x * 2, local_y = entry.m_cluster.y - parent_cluster.y * 2;
+			const int local_x = entry.getCluster().x - parent_cluster.x * 2, local_y = entry.getCluster().y - parent_cluster.y * 2;
 			entries[( size_t )parent].m_szChildren[CLAMP( local_y, 0, 1 ) * 2 + CLAMP( local_x, 0, 1 )] = i;
 		}
 	}
@@ -128,7 +128,7 @@ PackedByteArray Terrain3DHLODRuntimeCodec::encode( const Array &rEntries,
 	for ( int i = 0; i < node_count; ++i ) {
 		const int region = rNodeRegionIndices[i];
 		const uint8_t level = rNodeMinLevels[i];
-		if ( region >= 0 && region < s_nMaxRegionSlots && level > 0 ) {
+		if ( region >= 0 && region < s_nRegionSlots && level > 0 ) {
 			nodes.push_back( { ( uint16_t )region, rNodeSpawnIds[i], level } );
 		}
 	}
@@ -161,12 +161,12 @@ PackedByteArray Terrain3DHLODRuntimeCodec::encode( const Array &rEntries,
 		writer.writeU8( ( uint8_t )entry.m_nLevel );
 		writer.writeU8( 0u );
 		writer.writeU16( 0u );
-		writer.writeI32( entry.m_cluster.x );
-		writer.writeI32( entry.m_cluster.y );
-		writer.writeI32( entry.m_regionMin.x );
-		writer.writeI32( entry.m_regionMin.y );
-		writer.writeI32( entry.m_regionMax.x );
-		writer.writeI32( entry.m_regionMax.y );
+		writer.writeI32( entry.getCluster().x );
+		writer.writeI32( entry.getCluster().y );
+		writer.writeI32( entry.getRegionMin().x );
+		writer.writeI32( entry.getRegionMin().y );
+		writer.writeI32( entry.getRegionMax().x );
+		writer.writeI32( entry.getRegionMax().y );
 		writer.writeF32( entry.m_localBounds.position.x );
 		writer.writeF32( entry.m_localBounds.position.y );
 		writer.writeF32( entry.m_localBounds.position.z );
@@ -221,7 +221,7 @@ bool Terrain3DHLODRuntimeCodec::decode( const PackedByteArray &rBlob, t3dHlodRun
 	offset += 4u;
 	const uint32_t node_count = t3dHlodRuntimeCodecRu32( p + offset );
 	offset += 4u;
-	if ( entry_count > 65535u || root_count > entry_count || mesh_bytes > ( uint32_t )( s_nMaxRegionSlots * s_nMaxMeshAssets )
+	if ( entry_count > 65535u || root_count > entry_count || mesh_bytes > ( uint32_t )( s_nRegionSlots * s_nMaxMeshAssets )
 	        || node_count > 1000000u ) {
 		return false;
 	}
@@ -235,11 +235,11 @@ bool Terrain3DHLODRuntimeCodec::decode( const PackedByteArray &rBlob, t3dHlodRun
 		t3dHlodRuntimeEntryRecord_t &entry = rData.m_entries[i];
 		entry.m_nLevel = t3dHlodRuntimeCodecRu8( p + offset );
 		offset += 4u;
-		entry.m_cluster = Vector2i( t3dHlodRuntimeCodecRi32( p + offset ), t3dHlodRuntimeCodecRi32( p + offset + 4u ) );
+		entry.setCluster( Vector2i( t3dHlodRuntimeCodecRi32( p + offset ), t3dHlodRuntimeCodecRi32( p + offset + 4u ) ) );
 		offset += 8u;
-		entry.m_regionMin = Vector2i( t3dHlodRuntimeCodecRi32( p + offset ), t3dHlodRuntimeCodecRi32( p + offset + 4u ) );
+		entry.setRegionMin( Vector2i( t3dHlodRuntimeCodecRi32( p + offset ), t3dHlodRuntimeCodecRi32( p + offset + 4u ) ) );
 		offset += 8u;
-		entry.m_regionMax = Vector2i( t3dHlodRuntimeCodecRi32( p + offset ), t3dHlodRuntimeCodecRi32( p + offset + 4u ) );
+		entry.setRegionMax( Vector2i( t3dHlodRuntimeCodecRi32( p + offset ), t3dHlodRuntimeCodecRi32( p + offset + 4u ) ) );
 		offset += 8u;
 		entry.m_localBounds = AABB( Vector3( t3dHlodRuntimeCodecRf32( p + offset ),
 		                                    t3dHlodRuntimeCodecRf32( p + offset + 4u ),
@@ -313,7 +313,7 @@ bool Terrain3DHLODRuntimeCodec::decode( const PackedByteArray &rBlob, t3dHlodRun
 	if ( !t3dVectorResizeCold( rData.m_nodePolicies, node_count ) ) {
 		return false;
 	}
-	eastl::fill_n( rData.m_szNodePolicyOffsets, s_nMaxRegionSlots + 1u, 0u );
+	eastl::fill_n( rData.m_szNodePolicyOffsets, s_nRegionSlots + 1u, 0u );
 	uint16_t previous_region = 0u;
 	bool have_region = false;
 	for ( uint32_t i = 0u; i < node_count; ++i ) {
@@ -321,7 +321,7 @@ bool Terrain3DHLODRuntimeCodec::decode( const PackedByteArray &rBlob, t3dHlodRun
 		const uint8_t level = t3dHlodRuntimeCodecRu8( p + offset + 2u );
 		const int64_t spawn = t3dHlodRuntimeCodecRi64( p + offset + 4u );
 		offset += 12u;
-		if ( region >= s_nMaxRegionSlots || level == 0u || ( have_region && region < previous_region ) ) {
+		if ( region >= s_nRegionSlots || level == 0u || ( have_region && region < previous_region ) ) {
 			return false;
 		}
 		previous_region = region;
@@ -329,7 +329,7 @@ bool Terrain3DHLODRuntimeCodec::decode( const PackedByteArray &rBlob, t3dHlodRun
 		rData.m_nodePolicies[i] = { spawn, level };
 		++rData.m_szNodePolicyOffsets[( size_t )region + 1u];
 	}
-	for ( int i = 0; i < s_nMaxRegionSlots; ++i ) {
+	for ( int i = 0; i < s_nRegionSlots; ++i ) {
 		rData.m_szNodePolicyOffsets[( size_t )i + 1u] += rData.m_szNodePolicyOffsets[( size_t )i];
 	}
 	return offset == ( size_t )rBlob.size();

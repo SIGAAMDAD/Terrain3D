@@ -17,6 +17,7 @@ struct Frame {
     uvec4 counts1;
     uvec4 capacities0;
     uvec4 capacities1;
+    uvec4 resourceCounts;
 };
 struct Cluster {
     vec4 sphere;
@@ -129,6 +130,23 @@ static const char *const T3D_RW_RASTER_FRAGMENT_PREAMBLE = R"T3DRWGLSL(
 )T3DRWGLSL";
 
 static const char *const T3D_RW_RASTER_FRAGMENT_BODY = R"T3DRWGLSL(
+struct Frame {
+    mat4 viewProjection;
+    mat4 previousViewProjection;
+    mat4 viewMatrix;
+    vec4 frustumPlanes[6];
+    vec4 cameraAndMaxDistance;
+    vec4 viewportAndMotion;
+    vec4 motionJitter;
+    uvec4 counts0;
+    uvec4 counts1;
+    uvec4 capacities0;
+    uvec4 capacities1;
+    uvec4 resourceCounts;
+};
+layout(set = 0, binding = 0, std430) readonly buffer FrameBuffer {
+    Frame f;
+};
 struct Material {
     uvec4 vt;
     vec4 baseColor;
@@ -250,7 +268,7 @@ uint t3d_rw_mip_base_page(Allocation a, uint mip) {
 bool t3d_rw_resolve_page(uint wantedPage, out uint physicalPacked, out uint resolvedMip) {
     uint page = wantedPage;
     for (uint i = 0u; i < 18u; ++i) {
-        if (page == T3D_RW_INVALID_ID || page >= pageTable.length()) {
+        if (page == T3D_RW_INVALID_ID || page >= f.resourceCounts.z) {
             break;
         }
         PageEntry e = pageTable[page];
@@ -381,7 +399,7 @@ vec4 t3d_rw_sample_surface_bank(uint bank, uint layer, vec2 uv) {
     }
 }
 bool t3d_rw_resolve_vt(uint allocationId, vec2 uv, bool repeatUv, out uint bank, out uint layer, out vec2 tileUv) {
-    if (allocationId == T3D_RW_INVALID_ID || allocationId >= allocations.length()) {
+    if (allocationId == T3D_RW_INVALID_ID || allocationId >= f.resourceCounts.y) {
         return false;
     }
     Allocation a = allocations[allocationId];
@@ -430,7 +448,7 @@ vec4 t3d_rw_sample_surface(uint allocationId, vec2 uv, bool repeatUv) {
     return t3d_rw_resolve_vt(allocationId, uv, repeatUv, bank, layer, tileUv) ? t3d_rw_sample_surface_bank(bank, layer, tileUv) : vec4(1.0);
 }
 void main() {
-    if (inMaterialId >= materials.length()) {
+    if (inMaterialId >= f.resourceCounts.x) {
         discard;
     }
     Material material = materials[inMaterialId];

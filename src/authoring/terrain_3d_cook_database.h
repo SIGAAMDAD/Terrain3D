@@ -12,8 +12,8 @@
 class Terrain3DCookDatabase {
 public:
 	void reset( void );
-	bool load( const String &rDataDirectory, int nRegionSize, uint64_t nMaterialSignature );
-	bool write( const String &rDataDirectory, int nRegionSize, uint64_t nMaterialSignature ) const;
+	bool load( const String &rDataDirectory, uint64_t nMaterialSignature );
+	bool write( const String &rDataDirectory, uint64_t nMaterialSignature ) const;
 	bool hasCurrentRegion( const Vector2i &rLocation, uint64_t nSourceSignature ) const;
 	void setRegion( const Vector2i &rLocation, uint64_t nSourceSignature );
 	void clearRegion( const Vector2i &rLocation );
@@ -24,7 +24,7 @@ public:
 
 private:
 	bool m_bLoaded = false;
-	uint64_t m_regionSignatures[s_nMaxRegionSlots]{};
+	uint64_t m_regionSignatures[s_nRegionSlots]{};
 };
 
 #endif // TERRAIN3D_COOK_DATABASE_H

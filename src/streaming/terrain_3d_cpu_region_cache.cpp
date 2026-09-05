@@ -6,6 +6,7 @@
 #include "data/terrain_3d_region_persistence.h"
 #include "data/terrain_3d_region_repository.h"
 #include "data/terrain_3d_sampling_storage.h"
+#include "core/terrain_3d_util.h"
 #include "streaming/terrain_3d_cpu_cache_policy.h"
 #include "streaming/terrain_3d_runtime_profile.h"
 
@@ -64,12 +65,13 @@ static bool t3dCpuRegionCacheForEachSquareRing(
 	return true;
 }
 
-static Rect2i t3dCpuRegionCacheGetRegionBoundsForArea( const Rect2i &rArea, const int nRegionSize ) {
-	if ( nRegionSize <= 0 || rArea.size.x <= 0 || rArea.size.y <= 0 ) {
+static Rect2i t3dCpuRegionCacheGetRegionBoundsForArea( const Rect2i &rArea ) {
+	if ( rArea.size.x <= 0 || rArea.size.y <= 0 ) {
 		return Rect2i();
 	}
-	const Vector2i begin = V2I_DIVIDE_FLOOR( rArea.position, nRegionSize );
-	const Vector2i end = V2I_DIVIDE_CEIL( rArea.get_end(), nRegionSize );
+	const Vector2i begin = t3dRegionCoordinateFromGrid( rArea.position );
+	const Vector2i inclusive_end = rArea.get_end() - Vector2i( 1, 1 );
+	const Vector2i end = t3dRegionCoordinateFromGrid( inclusive_end ) + Vector2i( 1, 1 );
 	return Rect2i( begin, end - begin );
 }
 
@@ -81,7 +83,7 @@ Terrain3DCpuRegionCache::Terrain3DCpuRegionCache( Terrain3DRegionRepository *con
         m_pPersistence( pPersistence ),
         m_pSamplingStorage( pSamplingStorage ),
         m_pRuntimePageStore( pRuntimePageStore ) {
-	eastl::fill_n( m_szLocations, s_nCpuCacheMaxLayers, s_v2iMax );
+	eastl::fill_n( m_szLocations, s_nCpuCacheMaxLayers, t3dInvalidRegionCoord() );
 }
 
 void Terrain3DCpuRegionCache::setRuntimePageConfig( const t3dRuntimePageConfig_t &rConfig ) {
@@ -99,11 +101,11 @@ bool Terrain3DCpuRegionCache::loadCookedMapsNow(
 }
 
 int Terrain3DCpuRegionCache::calculateCapacity( void ) const {
-	return m_pRepository ? t3dCpuCacheCalculateCapacity( m_pRepository->getRegionSize(), m_nBudgetMb, s_nCpuCacheMaxLayers ) : 0;
+	return m_pRepository ? t3dCpuCacheCalculateCapacity( m_nBudgetMb, s_nCpuCacheMaxLayers ) : 0;
 }
 
 size_t Terrain3DCpuRegionCache::estimateLayerBytes( void ) const {
-	return m_pRepository ? t3dCpuCacheEstimateLayerBytes( m_pRepository->getRegionSize() ) : 0u;
+	return m_pRepository ? t3dCpuCacheEstimateLayerBytes() : 0u;
 }
 
 void Terrain3DCpuRegionCache::reset( const bool bReleaseCleanMaps ) {
@@ -112,8 +114,8 @@ void Terrain3DCpuRegionCache::reset( const bool bReleaseCleanMaps ) {
 			evictSlot( slot );
 		}
 	}
-	eastl::fill_n( m_szRegionMap, s_nMaxRegionSlots, ( uint8_t )( 0 ) );
-	eastl::fill_n( m_szLocations, s_nCpuCacheMaxLayers, s_v2iMax );
+	eastl::fill_n( m_szRegionMap, s_nRegionSlots, ( uint8_t )( 0 ) );
+	eastl::fill_n( m_szLocations, s_nCpuCacheMaxLayers, t3dInvalidRegionCoord() );
 	m_nCapacity = 0;
 	m_nResidentCount = 0;
 	m_nDesiredLastTick = 0;
@@ -127,7 +129,7 @@ void Terrain3DCpuRegionCache::reset( const bool bReleaseCleanMaps ) {
 	m_nAsyncPendingLastTick = 0;
 	m_nAsyncOutstanding = 0;
 	m_nPrefetchStreamingGenerationLast = 0u;
-	eastl::fill_n( m_szAsyncState, s_nMaxRegionSlots, ( uint8_t )( 0 ) );
+	eastl::fill_n( m_szAsyncState, s_nRegionSlots, ( uint8_t )( 0 ) );
 	m_center = s_v2iMax;
 	m_bSelectionDirty = true;
 }
@@ -151,7 +153,7 @@ int Terrain3DCpuRegionCache::findSlot( const Vector2i &vLocation ) const {
 		return -1;
 	}
 	const int slot = ( int )( m_szRegionMap[mapIndex] ) - 1;
-	if ( slot < 0 || slot >= m_nCapacity || m_szLocations[slot] != vLocation ) {
+	if ( slot < 0 || slot >= m_nCapacity || !t3dRegionCoordEquals( m_szLocations[slot], vLocation ) ) {
 		return -1;
 	}
 	return slot;
@@ -166,7 +168,7 @@ void Terrain3DCpuRegionCache::invalidate( const Vector2i &vLocation ) {
 	if ( mapIndex >= 0 ) {
 		m_szRegionMap[mapIndex] = 0u;
 	}
-	m_szLocations[slot] = s_v2iMax;
+	m_szLocations[slot] = t3dInvalidRegionCoord();
 	m_nResidentCount = MAX( 0, m_nResidentCount - 1 );
 	m_bSelectionDirty = true;
 }
@@ -184,7 +186,7 @@ bool Terrain3DCpuRegionCache::loadSource( const Vector2i &vLocation, Ref<Terrain
 		rSource = Ref<Terrain3DRegion>( pRegion );
 		return true;
 	}
-	return m_pPersistence->loadRuntimeRegionSource( pRegion->get_path(), m_pRepository->getRegionSize(), rSource );
+	return m_pPersistence->loadRuntimeRegionSource( pRegion->get_path(), rSource );
 }
 
 bool Terrain3DCpuRegionCache::requestSourceAsync( const Vector2i &vLocation ) {
@@ -260,7 +262,7 @@ bool Terrain3DCpuRegionCache::takeSourceAsync( const Vector2i &vLocation, Ref<Te
 	const Ref<Terrain3DRegion> pLoaded = pResource;
 	m_szAsyncState[mapIndex] = 0u;
 	m_nAsyncOutstanding = MAX( 0, m_nAsyncOutstanding - 1 );
-	if ( !m_pPersistence->prepareRuntimeRegionSource( pLoaded, m_pRepository->getRegionSize(), rSource ) ) {
+	if ( !m_pPersistence->prepareRuntimeRegionSource( pLoaded, rSource ) ) {
 		return false;
 	}
 	++m_nAsyncReadyLastTick;
@@ -295,7 +297,7 @@ void Terrain3DCpuRegionCache::reapSourceAsync( const t3dResidencyFrameState_t &r
 		const Vector2i predictedCenter = rFrame.m_predictedCenter;
 		const int activeRadius = rFrame.m_nStreamingActiveRadius;
 		for ( int slot = 0; slot < m_pRepository->getSlotCount() && m_nAsyncOutstanding > 0; ++slot ) {
-			const Vector2i location = m_pRepository->getSlotsData()[slot];
+			const Vector2i location = t3dUnpackRegionCoord( m_pRepository->getSlotsData()[slot] );
 			const int mapIndex = location == s_v2iMax ? -1 : Terrain3DRegionRepository::getRegionMapIndex( location );
 			if ( mapIndex < 0 || m_szAsyncState[mapIndex] == 0u ) {
 				continue;
@@ -319,7 +321,7 @@ void Terrain3DCpuRegionCache::reapSourceAsync( const t3dResidencyFrameState_t &r
 	const Vector2i predictedCenter = rFrame.m_predictedCenter;
 	const int activeRadius = rFrame.m_nStreamingActiveRadius;
 	for ( int slot = 0; slot < m_pRepository->getSlotCount() && m_nAsyncOutstanding > 0; ++slot ) {
-		const Vector2i location = m_pRepository->getSlotsData()[slot];
+		const Vector2i location = t3dUnpackRegionCoord( m_pRepository->getSlotsData()[slot] );
 		const int mapIndex = location == s_v2iMax ? -1 : Terrain3DRegionRepository::getRegionMapIndex( location );
 		if ( mapIndex < 0 || m_szAsyncState[mapIndex] == 0u ) {
 			continue;
@@ -366,7 +368,7 @@ bool Terrain3DCpuRegionCache::publishSlot( const int iSlot, const Vector2i &vLoc
 	if ( mapIndex < 0 ) {
 		return false;
 	}
-	m_szLocations[iSlot] = vLocation;
+	m_szLocations[iSlot] = t3dPackRegionCoord( vLocation );
 	m_szRegionMap[mapIndex] = ( uint8_t )( iSlot + 1 );
 	++m_nResidentCount;
 	if ( m_pSamplingStorage ) {
@@ -396,7 +398,7 @@ bool Terrain3DCpuRegionCache::publishCookedSlot( const int iSlot,
 	if ( mapIndex < 0 ) {
 		return false;
 	}
-	m_szLocations[iSlot] = vLocation;
+	m_szLocations[iSlot] = t3dPackRegionCoord( vLocation );
 	m_szRegionMap[mapIndex] = ( uint8_t )( iSlot + 1 );
 	++m_nResidentCount;
 	if ( m_pSamplingStorage ) {
@@ -409,7 +411,7 @@ bool Terrain3DCpuRegionCache::evictSlot( const int iSlot ) {
 	if ( iSlot < 0 || iSlot >= m_nCapacity || !m_pRepository ) {
 		return false;
 	}
-	const Vector2i location = m_szLocations[iSlot];
+	const Vector2i location = t3dUnpackRegionCoord( m_szLocations[iSlot] );
 	if ( location == s_v2iMax ) {
 		return true;
 	}
@@ -427,7 +429,7 @@ bool Terrain3DCpuRegionCache::evictSlot( const int iSlot ) {
 	if ( mapIndex >= 0 ) {
 		m_szRegionMap[mapIndex] = 0u;
 	}
-	m_szLocations[iSlot] = s_v2iMax;
+	m_szLocations[iSlot] = t3dInvalidRegionCoord();
 	m_nResidentCount = MAX( 0, m_nResidentCount - 1 );
 	if ( m_pSamplingStorage ) {
 		m_pSamplingStorage->publishRegionGeneration( location );
@@ -461,7 +463,7 @@ bool Terrain3DCpuRegionCache::ensureResident( const Vector2i &vLocation, const b
 	}
 	int targetSlot = -1;
 	for ( int slot = 0; slot < m_nCapacity; ++slot ) {
-		if ( m_szLocations[slot] == s_v2iMax ) {
+		if ( !t3dRegionCoordValid( m_szLocations[slot] ) ) {
 			targetSlot = slot;
 			break;
 		}
@@ -471,7 +473,7 @@ bool Terrain3DCpuRegionCache::ensureResident( const Vector2i &vLocation, const b
 		const Vector2i evictionCenter = m_center == s_v2iMax ? vLocation : m_center;
 		const t3dCpuCacheCoord_t center = { evictionCenter.x, evictionCenter.y };
 		for ( int slot = 0; slot < m_nCapacity; ++slot ) {
-			const Vector2i oldLocation = m_szLocations[slot];
+			const Vector2i oldLocation = t3dUnpackRegionCoord( m_szLocations[slot] );
 			Terrain3DRegion *const pOldRegion = m_pRepository->getRegionPtr( oldLocation );
 			if ( !pOldRegion || !pOldRegion->runtimeMapsEvictableInternal() ) {
 				continue;
@@ -486,7 +488,7 @@ bool Terrain3DCpuRegionCache::ensureResident( const Vector2i &vLocation, const b
 	if ( targetSlot < 0 ) {
 		return false;
 	}
-	if ( m_szLocations[targetSlot] != s_v2iMax ) {
+	if ( t3dRegionCoordValid( m_szLocations[targetSlot] ) ) {
 		if ( !evictSlot( targetSlot ) ) {
 			return false;
 		}
@@ -507,7 +509,7 @@ void Terrain3DCpuRegionCache::releaseUntrackedMaps( void ) {
 		return;
 	}
 	for ( int slot = 0; slot < m_pRepository->getSlotCount(); ++slot ) {
-		const Vector2i location = m_pRepository->getSlotsData()[slot];
+		const Vector2i location = t3dUnpackRegionCoord( m_pRepository->getSlotsData()[slot] );
 		if ( location == s_v2iMax || findSlot( location ) >= 0 ) {
 			continue;
 		}
@@ -531,7 +533,7 @@ bool Terrain3DCpuRegionCache::restoreAllMaps( void ) {
 	}
 	bool bSuccess = true;
 	for ( int slot = 0; slot < m_pRepository->getSlotCount(); ++slot ) {
-		const Vector2i location = m_pRepository->getSlotsData()[slot];
+		const Vector2i location = t3dUnpackRegionCoord( m_pRepository->getSlotsData()[slot] );
 		Terrain3DRegion *const pRegion = location == s_v2iMax ? NULL : m_pRepository->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() || pRegion->hasRuntimeMapPayloadInternal() ) {
 			continue;
@@ -626,15 +628,13 @@ bool Terrain3DCpuRegionCache::configure( const bool bEnabled, const int nBudgetM
 }
 
 bool Terrain3DCpuRegionCache::ensureSampleArea( const Vector3 &rWorldPosition, const int nRadiusTexels ) {
-	if ( !m_bEnabled || !m_pRepository || m_pRepository->getRegionSize() <= 0 || m_pRepository->getVertexSpacing() <= 0.0f ) {
+	if ( !m_bEnabled || !m_pRepository ) {
 		return true;
 	}
 	const int radius = MAX( 0, nRadiusTexels ) + 1;
-	const Vector2i center( ( int )( Math::floor( rWorldPosition.x / m_pRepository->getVertexSpacing() ) ),
-	        ( int )( Math::floor( rWorldPosition.z / m_pRepository->getVertexSpacing() ) ) );
+	const Vector2i center( ( int )Math::floor( rWorldPosition.x ), ( int )Math::floor( rWorldPosition.z ) );
 	const Vector2i extent( radius * 2 + 1, radius * 2 + 1 );
-	const Rect2i bounds = t3dCpuRegionCacheGetRegionBoundsForArea(
-	        Rect2i( center - Vector2i( radius, radius ), extent ), m_pRepository->getRegionSize() );
+	const Rect2i bounds = t3dCpuRegionCacheGetRegionBoundsForArea( Rect2i( center - Vector2i( radius, radius ), extent ) );
 	bool bSuccess = true;
 	for ( int y = bounds.position.y; y < bounds.get_end().y; ++y ) {
 		for ( int x = bounds.position.x; x < bounds.get_end().x; ++x ) {
@@ -658,8 +658,7 @@ void Terrain3DCpuRegionCache::update( const t3dResidencyFrameState_t &rFrame, co
 	m_nAsyncRequestsLastTick = 0;
 	m_nAsyncReadyLastTick = 0;
 	m_nAsyncPendingLastTick = 0;
-	if ( !m_bEnabled || m_nCapacity <= 0 || !m_pRepository || m_pRepository->getRegionSize() <= 0
-	        || m_pRepository->getVertexSpacing() <= 0.0f ) {
+	if ( !m_bEnabled || m_nCapacity <= 0 || !m_pRepository ) {
 		return;
 	}
 
@@ -677,7 +676,7 @@ void Terrain3DCpuRegionCache::update( const t3dResidencyFrameState_t &rFrame, co
 	Vector2i desired[s_nCpuCacheMaxLayers];
 	const int desiredCount = collectDesired( rFrame, center, desired, m_nCapacity );
 	m_nDesiredLastTick = desiredCount;
-	uint8_t desiredMap[s_nMaxRegionSlots] = {};
+	uint8_t desiredMap[s_nRegionSlots] = {};
 	for ( int index = 0; index < desiredCount; ++index ) {
 		const int mapIndex = Terrain3DRegionRepository::getRegionMapIndex( desired[index] );
 		if ( mapIndex >= 0 ) {
@@ -735,7 +734,7 @@ void Terrain3DCpuRegionCache::update( const t3dResidencyFrameState_t &rFrame, co
 		}
 		int targetSlot = -1;
 		for ( int slot = 0; slot < m_nCapacity; ++slot ) {
-			if ( m_szLocations[slot] == s_v2iMax ) {
+			if ( !t3dRegionCoordValid( m_szLocations[slot] ) ) {
 				targetSlot = slot;
 				break;
 			}
@@ -743,7 +742,7 @@ void Terrain3DCpuRegionCache::update( const t3dResidencyFrameState_t &rFrame, co
 		if ( targetSlot < 0 ) {
 			int farthestDistance = -1;
 			for ( int slot = 0; slot < m_nCapacity; ++slot ) {
-				const Vector2i oldLocation = m_szLocations[slot];
+				const Vector2i oldLocation = t3dUnpackRegionCoord( m_szLocations[slot] );
 				const int oldMapIndex = Terrain3DRegionRepository::getRegionMapIndex( oldLocation );
 				if ( oldMapIndex >= 0 && desiredMap[oldMapIndex] != 0u ) {
 					continue;
@@ -764,7 +763,7 @@ void Terrain3DCpuRegionCache::update( const t3dResidencyFrameState_t &rFrame, co
 			m_nStallFlagsLastTick |= TERRAIN3D_PROFILE_STALL_CPU_PINNED_CAPACITY;
 			continue;
 		}
-		if ( m_szLocations[targetSlot] != s_v2iMax ) {
+		if ( t3dRegionCoordValid( m_szLocations[targetSlot] ) ) {
 			if ( !evictSlot( targetSlot ) ) {
 				continue;
 			}
@@ -857,7 +856,7 @@ Dictionary Terrain3DCpuRegionCache::getStatsDictionary( const bool bDetailed, co
 	int pinnedPayloadCount = 0;
 	int totalPayloadCount = 0;
 	for ( int slot = 0; slot < m_pRepository->getSlotCount(); ++slot ) {
-		const Vector2i location = m_pRepository->getSlotsData()[slot];
+		const Vector2i location = t3dUnpackRegionCoord( m_pRepository->getSlotsData()[slot] );
 		const Terrain3DRegion *const pRegion = location == s_v2iMax ? NULL : m_pRepository->getRegionPtr( location );
 		if ( !pRegion || pRegion->isDeleted() || !pRegion->hasRuntimeMapPayloadInternal() ) {
 			continue;
@@ -877,7 +876,7 @@ Dictionary Terrain3DCpuRegionCache::getStatsDictionary( const bool bDetailed, co
 	const size_t worstCaseBytes = layerBytes * ( size_t )( MAX( 0, m_nCapacity ) );
 	const size_t budgetBytes = ( size_t )( m_nBudgetMb )*s_nCpuCacheMib;
 	const size_t activeHeightBytes = m_pSamplingStorage ? m_pSamplingStorage->getActiveReservedBytes() : 0u;
-	const size_t defaultMapBytes = m_pRepository->getRegionSize() > 0 ? layerBytes : 0u;
+	const size_t defaultMapBytes = layerBytes;
 	const size_t payloadBytes = layerBytes * ( size_t )( MAX( 0, totalPayloadCount ) );
 	const size_t pinnedBytes = layerBytes * ( size_t )( MAX( 0, pinnedPayloadCount ) );
 	const size_t totalMapBytes = activeHeightBytes + defaultMapBytes + payloadBytes;

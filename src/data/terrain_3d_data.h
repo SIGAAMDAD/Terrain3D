@@ -55,6 +55,8 @@ public: // Constants
 		// Maximum logical grid. The active grid is s_nActiveWorldTexels / region_size.
 private:
 	Terrain3D *m_pTerrain = NULL;
+	Terrain3DMemoryZone *m_pRuntimeAllocatorZone = NULL;
+	t3dAllocatorOverflowPolicy_t m_eRuntimeAllocatorOverflowPolicy = TERRAIN3D_ALLOCATOR_OVERFLOW_STRICT;
 
 	Terrain3DRegionRepository m_regionRepository;
 	Terrain3DSamplingStorage m_samplingStorage;
@@ -117,9 +119,9 @@ private:
 		m_samplingStorage.publishRegionGeneration( vLocation );
 	}
 	void ensureDefaultMaps( void );
-	bool setRegionSizeInternal( int nRegionSize );
-	EA_FORCE_INLINE bool bindActiveStorageInternal( int nRegionSize, void *pBacking, size_t nBackingBytes ) {
-		return m_samplingStorage.bindActive( nRegionSize, pBacking, nBackingBytes );
+	bool setRegionSizeInternal( void );
+	EA_FORCE_INLINE bool bindActiveStorageInternal( void *pBacking, size_t nBackingBytes ) {
+		return m_samplingStorage.bindActive( pBacking, nBackingBytes );
 	}
 	EA_FORCE_INLINE bool isActiveStorageOwnerInternal( void ) const {
 		return m_samplingStorage.isActiveOwner();
@@ -200,8 +202,10 @@ private:
 	t3dResidencyFrameState_t makeResidencyFrameState( const Vector3 &rWorldPosition ) const;
 	void updateCpuRegionResidencyInternal( const t3dResidencyFrameState_t &rFrame, bool bForce );
 	void updateInstanceRegionResidencyInternal( const t3dResidencyFrameState_t &rFrame, bool bForce );
+	void serviceColdInstanceResidencyInternal( const t3dResidencyFrameState_t &rFrame, bool bForce );
 	void updateGpuRegionResidencyInternal( const t3dResidencyFrameState_t &rFrame, bool bForce );
 	bool releaseRuntimeAllocatorStorageInternal( void );
+	bool bindRuntimeAllocatorInternal( Terrain3DMemoryZone *pZone, t3dAllocatorOverflowPolicy_t ePolicy );
 
 public:
 	Terrain3DData( void );
@@ -233,7 +237,7 @@ public:
 	// shaders require this exact ordering to match the texture arrays.
 	TypedArray<Vector2i> getRegionSlots( void ) const;
 	TypedArray<Vector2i> getRenderRegionSlots( void ) const;
-	EA_FORCE_INLINE const Vector2i *getRegionSlotsInternal( void ) const {
+	EA_FORCE_INLINE const t3dRegionCoord_t *getRegionSlotsInternal( void ) const {
 		return m_regionRepository.getSlotsData();
 	}
 	EA_FORCE_INLINE int getRegionSlotCountInternal( void ) const {
@@ -243,13 +247,13 @@ public:
 		return m_regionRepository.getRegionPtrMapData();
 	}
 	EA_FORCE_INLINE int getRegionSizeInternal( void ) const {
-		return m_regionRepository.getRegionSize();
+		return s_nRegionSize;
 	}
 	EA_FORCE_INLINE int getRegionMapSizeInternal( void ) const {
-		return m_regionRepository.getRegionMapSize();
+		return s_nRegionMapSize;
 	}
 	EA_FORCE_INLINE bool matchesRegionLayoutInternal( const int nRegionSize ) const {
-		return m_regionRepository.getRegionSize() == nRegionSize && m_regionRepository.getRegionSizeVector() == V2I( nRegionSize );
+		return nRegionSize == s_nRegionSize;
 	}
 	EA_FORCE_INLINE t3dRegionRepositoryView_t getRegionRepositoryViewInternal( void ) const {
 		return m_regionRepository.getView();
@@ -265,9 +269,6 @@ public:
 	}
 	EA_FORCE_INLINE const uint16_t *getLogicalRegionMapDataInternal( void ) const {
 		return m_regionRepository.getLogicalRegionMapData();
-	}
-	EA_FORCE_INLINE void setVertexSpacingInternal( const real_t fVertexSpacing ) {
-		m_regionRepository.setVertexSpacing( fVertexSpacing );
 	}
 	EA_FORCE_INLINE bool isRegionLocationValidInternal( const Vector2i &vLocation ) const {
 		return m_regionRepository.isLocationValid( vLocation );
@@ -285,12 +286,11 @@ public:
 	PackedInt32Array getRegionMap( void ) const;
 	PackedInt32Array getLogicalRegionMap( void ) const;
 	EA_FORCE_INLINE int getRegionMapSize( void ) const {
-		return m_regionRepository.getRegionMapSize();
+		return s_nRegionMapSize;
 	}
 	static int getRegionMapIndex( const Vector2i &rRegionLoc );
 
 	void doForRegions( const Rect2i &rArea, const Callable &rCallback );
-	void changeRegionSize( int region_size );
 
 	Vector2i getRegionLocation( const Vector3 &rGlobalPosition ) const;
 	int getRegionId( const Vector2i &rRegionLoc ) const;
@@ -348,7 +348,7 @@ public:
 	}
 	void configureResidentPool( int nCapacity = 64 );
 	void configureGpuRegionCache( bool bEnabled,
-	        int nBudgetMb = 16,
+	        uint64_t nBudgetBytes = 16u * 1024u * 1024u,
 	        int nUploadLayers = 4,
 	        int nUploadBudgetMb = 2,
 	        int nSparePages = s_nGpuCacheDefaultSpareLayers,
@@ -395,6 +395,7 @@ public:
 	void requestCookedNavigationTile( const Vector2i &vLocation, uint8_t nPriority = 0u );
 	void requestCookedTerrainShadowMask( const Vector2i &vLocation, uint8_t nPriority = 0u );
 	void updateCpuRegionResidency( const Vector3 &rWorldPosition, bool bForce = false );
+	void serviceColdInstanceResidency( const Vector3 &rWorldPosition, bool bForce = false );
 	void updateInstanceRegionResidency( const Vector3 &rWorldPosition, bool bForce = false );
 	void updateGpuRegionResidency( const Vector3 &rWorldPosition, bool bForce = false );
 	void updateRegionResidency( const Vector3 &rWorldPosition, bool bForce = false );
@@ -433,6 +434,9 @@ public:
 	EA_FORCE_INLINE size_t getInstanceRegionCacheReservedBytes( void ) const {
 		return m_instanceRegionCache.getReservedBytes();
 	}
+	void setRuntimePagePreparedByteBudget( uint64_t nBytes );
+	size_t getMemoryRuntimePagePreparedBytes( void ) const;
+	size_t getMemoryNonPageTransientStagingBytes( void ) const;
 	size_t getMemoryTransientStagingBytes( void ) const;
 	size_t getMemoryFixedRepositoryBytes( void ) const;
 	uint64_t getMemoryComputeLocalGpuBytes( void ) const;

@@ -20,8 +20,8 @@ if grep -Eq 'uint32_t mesh_counts\[s_nMaxMeshAssets\]|memset\( mesh_counts' "$PA
 fi
 
 # Persistent indexed tables remain raw by contract; this patch must not convert them.
-grep -q 't3dCollisionShapeRecord_t m_szShapeRecords\[s_nMaxRegionSlots\];' "$ROOT/physics/terrain_3d_collision.h" || fail "collision slot table was altered"
-grep -q 'uint16_t m_szRegionMap\[s_nMaxRegionSlots\] = {};' "$ROOT/data/terrain_3d_region_repository.h" || fail "repository region map was altered"
-grep -q 't3dRegionRuntime_t m_szRegions\[s_nMaxRegionSlots\];' "$ROOT/streaming/terrain_3d_node_streamer.h" || fail "node-streamer region table was altered"
+grep -q 't3dCollisionShapeRecord_t m_szShapeRecords\[s_nMaxCollisionShapeRecords\];' "$ROOT/physics/terrain_3d_collision.h" || fail "collision slot table was altered"
+grep -q 'uint16_t m_szRegionMap\[s_nRegionSlots\] = {};' "$ROOT/data/terrain_3d_region_repository.h" || fail "repository region map was altered"
+grep -q 't3dRegionRuntime_t m_szRegions\[s_nRegionSlots\];' "$ROOT/streaming/terrain_3d_node_streamer.h" || fail "node-streamer region table was altered"
 
 echo "Terrain3D refactor patch 7 gate: PASS"

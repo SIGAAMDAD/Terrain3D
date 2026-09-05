@@ -11,10 +11,10 @@ struct VTPageTableEntry {
     uint mip_flags;
 };
 bool t3d_vt_resolve_page(
-    uint wanted_page, readonly buffer VTPageTable { VTPageTableEntry page_table[]; }, out uint physical_slot, out uint resolved_mip) {
+    uint wanted_page, uint page_table_count, readonly buffer VTPageTable { VTPageTableEntry page_table[]; }, out uint physical_slot, out uint resolved_mip) {
     uint page = wanted_page;
     for (uint i = 0u; i < 18u; ++i) {
-        if (page == 0xffffffffu || page >= page_table.length()) {
+        if (page == 0xffffffffu || page >= page_table_count) {
             break;
         }
         VTPageTableEntry e = page_table[page];

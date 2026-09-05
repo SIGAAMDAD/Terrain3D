@@ -272,6 +272,12 @@ public:
 	}
 };
 
+
+typedef enum t3dInstanceStoreAllocationClass_e : uint8_t {
+	TERRAIN3D_INSTANCE_STORE_PERSISTENT_RESOURCE = 0u,
+	TERRAIN3D_INSTANCE_STORE_RUNTIME_PREPARED,
+} t3dInstanceStoreAllocationClass_t;
+
 class Terrain3DInstanceStore {
 	eastl::array<t3dInstanceMesh_t, s_nMaxMeshAssets> m_szMeshes;
 	uint16_t m_szActiveMeshIds[s_nMaxMeshAssets];
@@ -280,6 +286,9 @@ class Terrain3DInstanceStore {
 	Terrain3DHighWaterSlab<uint32_t> m_colorSlab;
 	Terrain3DHighWaterSlab<uint32_t> m_ownerSlab;
 	t3dInstanceLayout_t m_layout;
+	t3dInstanceStoreAllocationClass_t m_eAllocationClass = TERRAIN3D_INSTANCE_STORE_PERSISTENT_RESOURCE;
+	Terrain3DMemoryZone *m_pRuntimeAllocatorZone = NULL;
+	t3dAllocatorOverflowPolicy_t m_eRuntimeAllocatorOverflowPolicy = TERRAIN3D_ALLOCATOR_OVERFLOW_STRICT;
 
 	static bool cellLess( const t3dInstanceCell_t &a, const Vector2i &b );
 	static size_t cellLowerBound( const eastl::vector<t3dInstanceCell_t, Terrain3DEastlAllocator> &cells, const Vector2i &location );
@@ -289,13 +298,11 @@ class Terrain3DInstanceStore {
 	bool copyFrom( const Terrain3DInstanceStore &rOther );
 
 public:
-	Terrain3DInstanceStore( void ) = default;
+	explicit Terrain3DInstanceStore( t3dInstanceStoreAllocationClass_t eAllocationClass = TERRAIN3D_INSTANCE_STORE_PERSISTENT_RESOURCE );
 	~Terrain3DInstanceStore( void ) {
 		shutdown();
 	}
-	Terrain3DInstanceStore( const Terrain3DInstanceStore &rOther ) {
-		( void )copyFrom( rOther );
-	}
+	Terrain3DInstanceStore( const Terrain3DInstanceStore &rOther );
 	Terrain3DInstanceStore( Terrain3DInstanceStore &&rOther );
 	Terrain3DInstanceStore &operator=( const Terrain3DInstanceStore &rOther );
 	Terrain3DInstanceStore &operator=( Terrain3DInstanceStore &&rOther );
@@ -310,6 +317,13 @@ public:
 	void shutdown( void );
 	EA_FORCE_INLINE void releaseStorage( void ) {
 		shutdown();
+	}
+	bool bindRuntimeAllocator( Terrain3DMemoryZone *pZone, t3dAllocatorOverflowPolicy_t ePolicy = TERRAIN3D_ALLOCATOR_OVERFLOW_STRICT );
+	EA_FORCE_INLINE bool runtimeAllocatorReady( void ) const {
+		return m_eAllocationClass != TERRAIN3D_INSTANCE_STORE_RUNTIME_PREPARED || m_pRuntimeAllocatorZone != NULL;
+	}
+	EA_FORCE_INLINE t3dInstanceStoreAllocationClass_t allocationClass( void ) const {
+		return m_eAllocationClass;
 	}
 	void compactStorage( void );
 	EA_FORCE_INLINE void reserveMeshCapacity( const size_t ) {

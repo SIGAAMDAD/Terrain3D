@@ -3,7 +3,7 @@
 // Quad order matches the near-tier fragment arrays: 01, 11, 10, 00.
 void get_quad_indices(const vec2 base, out ivec3 i01, out ivec3 i11, out ivec3 i10, out ivec3 i00) {
 	i00 = get_index_coord(base);
-	int last_texel = int(_region_size) - 1;
+	int last_texel = int(T3D_REGION_SIZE_F) - 1;
 	if (i00.z >= 0 && i00.x < last_texel && i00.y < last_texel) {
 		i10 = ivec3(i00.xy + ivec2(1, 0), i00.z);
 		i01 = ivec3(i00.xy + ivec2(0, 1), i00.z);

@@ -30,10 +30,9 @@ typedef struct t3dStagedRegion_s {
 typedef struct t3dStagedRepository_s {
 	eastl::vector<t3dStagedRegion_t, Terrain3DEastlAllocator> m_regions;
 	Dictionary m_resources;
-	eastl::array<Terrain3DRegion *, s_nMaxRegionSlots> m_pRegionPtrs = {};
-	eastl::array<Vector2i, s_nMaxRegionSlots> m_regionLocations = {};
-	eastl::array<uint16_t, s_nMaxRegionSlots> m_logicalRegionMap = {};
-	int m_nTargetRegionSize = 0;
+	eastl::array<Terrain3DRegion *, s_nRegionSlots> m_pRegionPtrs = {};
+	eastl::array<t3dRegionCoord_t, s_nRegionSlots> m_regionLocations = {};
+	eastl::array<uint16_t, s_nRegionSlots> m_logicalRegionMap = {};
 	bool m_bBoundedCpuLoad = false;
 
 	void reset( void );
@@ -111,8 +110,8 @@ public:
 
 	t3dRegionLoadResult_t loadRegion( const Vector2i &rLocation, const String &rDirectory ) const;
 	void publishLoadedRegionPath( const t3dRegionLoadResult_t &rResult ) const;
-	bool loadRuntimeRegionSource( const String &rPath, int nExpectedRegionSize, Ref<Terrain3DRegion> &rSource ) const;
-	bool prepareRuntimeRegionSource( const Ref<Terrain3DRegion> &rCandidate, int nExpectedRegionSize, Ref<Terrain3DRegion> &rSource ) const;
+	bool loadRuntimeRegionSource( const String &rPath, Ref<Terrain3DRegion> &rSource ) const;
+	bool prepareRuntimeRegionSource( const Ref<Terrain3DRegion> &rCandidate, Ref<Terrain3DRegion> &rSource ) const;
 
 	t3dRegionSaveResult_t saveRegion( const Vector2i &rLocation,
 	        const String &rDirectory,
@@ -137,8 +136,7 @@ private:
 	void resetLoadStats( void );
 	static void updateEditorFile( const String &rPath );
 	static bool validateHeightPayload( const Ref<Terrain3DRegion> &rRegion, const String &rPath );
-	void normalizeLoadedRegion(
-	        const Vector2i &rLocation, const Ref<Terrain3DRegion> &rRegion, bool bApplyRepositorySpacing, bool &rStorageUpgrade ) const;
+	void normalizeLoadedRegion( const Vector2i &rLocation, const Ref<Terrain3DRegion> &rRegion, bool &rStorageUpgrade ) const;
 };
 
 #endif // TERRAIN3D_REGION_PERSISTENCE_H

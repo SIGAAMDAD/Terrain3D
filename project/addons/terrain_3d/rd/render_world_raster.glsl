@@ -199,7 +199,7 @@ uint t3d_rw_mip_base_page(Allocation a, uint mip) {
 bool t3d_rw_resolve_page(uint wantedPage, out uint physicalPacked, out uint resolvedMip) {
     uint page = wantedPage;
     for (uint i = 0u; i < 18u; ++i) {
-        if (page == T3D_RW_INVALID_ID || page >= pageTable.length())
+        if (page == T3D_RW_INVALID_ID || page >= f.resourceCounts.z)
             break;
         PageEntry e = pageTable[page];
         uint flags = e.packedMipFlags >> 16u;
@@ -329,7 +329,7 @@ vec4 t3d_rw_sample_surface_bank(uint bank, uint layer, vec2 uv) {
     }
 }
 bool t3d_rw_resolve_vt(uint allocationId, vec2 uv, bool repeatUv, out uint bank, out uint layer, out vec2 tileUv) {
-    if (allocationId == T3D_RW_INVALID_ID || allocationId >= allocations.length())
+    if (allocationId == T3D_RW_INVALID_ID || allocationId >= f.resourceCounts.y)
         return false;
     Allocation a = allocations[allocationId];
     uint mipCount = a.packedMipChannel & 0xffffu;
@@ -375,7 +375,7 @@ vec4 t3d_rw_sample_surface(uint allocationId, vec2 uv, bool repeatUv) {
     return t3d_rw_resolve_vt(allocationId, uv, repeatUv, bank, layer, tileUv) ? t3d_rw_sample_surface_bank(bank, layer, tileUv) : vec4(1.0);
 }
 void main() {
-    if (inMaterialId >= materials.length())
+    if (inMaterialId >= f.resourceCounts.x)
         discard;
     Material material = materials[inMaterialId];
     vec2 materialUv = inUv * material.uvScaleBias.xy + material.uvScaleBias.zw;

@@ -6,17 +6,73 @@
 #include <assert.h>
 #include <string.h>
 
+Terrain3DInstanceStore::Terrain3DInstanceStore( const t3dInstanceStoreAllocationClass_t eAllocationClass ) :
+        m_eAllocationClass( eAllocationClass ) {
+	if ( m_eAllocationClass == TERRAIN3D_INSTANCE_STORE_RUNTIME_PREPARED ) {
+		m_transformSlab.requireRuntimeZone();
+		m_colorSlab.requireRuntimeZone();
+		m_ownerSlab.requireRuntimeZone();
+	}
+}
+
+Terrain3DInstanceStore::Terrain3DInstanceStore( const Terrain3DInstanceStore &rOther ) :
+        Terrain3DInstanceStore( rOther.m_eAllocationClass ) {
+	if ( rOther.m_pRuntimeAllocatorZone ) {
+		bindRuntimeAllocator( rOther.m_pRuntimeAllocatorZone, rOther.m_eRuntimeAllocatorOverflowPolicy );
+	}
+	( void )copyFrom( rOther );
+}
+
+bool Terrain3DInstanceStore::bindRuntimeAllocator( Terrain3DMemoryZone *const pZone, const t3dAllocatorOverflowPolicy_t ePolicy ) {
+	if ( !pZone || ( m_pRuntimeAllocatorZone && m_pRuntimeAllocatorZone != pZone ) ) {
+		return false;
+	}
+	for ( int nMeshId = 0; nMeshId < s_nMaxMeshAssets; ++nMeshId ) {
+		const eastl::vector<t3dInstanceCell_t, Terrain3DEastlAllocator> &rCells = m_szMeshes[nMeshId].m_cells;
+		if ( ( !rCells.empty() || rCells.capacity() != 0u ) && rCells.get_allocator().zone() != pZone ) {
+			return false;
+		}
+	}
+	if ( !m_transformSlab.canBindAllocatorZone( pZone ) || !m_colorSlab.canBindAllocatorZone( pZone )
+	        || !m_ownerSlab.canBindAllocatorZone( pZone ) ) {
+		return false;
+	}
+
+	const Terrain3DEastlAllocator allocator = Terrain3DEastlAllocator::zoneAllocator( pZone, ePolicy );
+	for ( int nMeshId = 0; nMeshId < s_nMaxMeshAssets; ++nMeshId ) {
+		if ( m_szMeshes[nMeshId].m_cells.empty() && m_szMeshes[nMeshId].m_cells.capacity() == 0u ) {
+			m_szMeshes[nMeshId].m_cells.set_allocator( allocator );
+		}
+	}
+	m_transformSlab.requireRuntimeZone();
+	m_colorSlab.requireRuntimeZone();
+	m_ownerSlab.requireRuntimeZone();
+	if ( !m_transformSlab.bindAllocatorZone( pZone, ePolicy ) || !m_colorSlab.bindAllocatorZone( pZone, ePolicy )
+	        || !m_ownerSlab.bindAllocatorZone( pZone, ePolicy ) ) {
+		return false;
+	}
+	m_eAllocationClass = TERRAIN3D_INSTANCE_STORE_RUNTIME_PREPARED;
+	m_pRuntimeAllocatorZone = pZone;
+	m_eRuntimeAllocatorOverflowPolicy = ePolicy;
+	return true;
+}
+
 Terrain3DInstanceStore::Terrain3DInstanceStore( Terrain3DInstanceStore &&rOther ) :
         m_transformSlab( eastl::move( rOther.m_transformSlab ) ),
         m_colorSlab( eastl::move( rOther.m_colorSlab ) ),
         m_ownerSlab( eastl::move( rOther.m_ownerSlab ) ),
-        m_layout( rOther.m_layout ) {
+        m_layout( rOther.m_layout ),
+        m_eAllocationClass( rOther.m_eAllocationClass ),
+        m_pRuntimeAllocatorZone( rOther.m_pRuntimeAllocatorZone ),
+        m_eRuntimeAllocatorOverflowPolicy( rOther.m_eRuntimeAllocatorOverflowPolicy ) {
 	for ( int nMeshId = 0; nMeshId < s_nMaxMeshAssets; nMeshId++ ) {
 		m_szMeshes[nMeshId] = eastl::move( rOther.m_szMeshes[nMeshId] );
 	}
 	rebindCellStorage();
 	rebuildActiveMeshIds();
 	rOther.m_nActiveMeshCount = 0u;
+	rOther.m_eAllocationClass = TERRAIN3D_INSTANCE_STORE_PERSISTENT_RESOURCE;
+	rOther.m_pRuntimeAllocatorZone = NULL;
 	for ( int nMeshId = 0; nMeshId < s_nMaxMeshAssets; nMeshId++ ) {
 		rOther.m_szMeshes[nMeshId].m_nId = -1;
 	}
@@ -24,7 +80,10 @@ Terrain3DInstanceStore::Terrain3DInstanceStore( Terrain3DInstanceStore &&rOther 
 
 Terrain3DInstanceStore &Terrain3DInstanceStore::operator=( const Terrain3DInstanceStore &rOther ) {
 	if ( this != &rOther ) {
-		Terrain3DInstanceStore replacement;
+		Terrain3DInstanceStore replacement( m_eAllocationClass );
+		if ( m_pRuntimeAllocatorZone ) {
+			replacement.bindRuntimeAllocator( m_pRuntimeAllocatorZone, m_eRuntimeAllocatorOverflowPolicy );
+		}
 		if ( replacement.copyFrom( rOther ) ) {
 			*this = eastl::move( replacement );
 		}
@@ -40,6 +99,9 @@ Terrain3DInstanceStore &Terrain3DInstanceStore::operator=( Terrain3DInstanceStor
 	m_transformSlab = eastl::move( rOther.m_transformSlab );
 	m_colorSlab = eastl::move( rOther.m_colorSlab );
 	m_ownerSlab = eastl::move( rOther.m_ownerSlab );
+	m_eAllocationClass = rOther.m_eAllocationClass;
+	m_pRuntimeAllocatorZone = rOther.m_pRuntimeAllocatorZone;
+	m_eRuntimeAllocatorOverflowPolicy = rOther.m_eRuntimeAllocatorOverflowPolicy;
 	for ( int nMeshId = 0; nMeshId < s_nMaxMeshAssets; nMeshId++ ) {
 		m_szMeshes[nMeshId] = eastl::move( rOther.m_szMeshes[nMeshId] );
 	}
@@ -47,6 +109,8 @@ Terrain3DInstanceStore &Terrain3DInstanceStore::operator=( Terrain3DInstanceStor
 	rebindCellStorage();
 	rebuildActiveMeshIds();
 	rOther.m_nActiveMeshCount = 0u;
+	rOther.m_eAllocationClass = TERRAIN3D_INSTANCE_STORE_PERSISTENT_RESOURCE;
+	rOther.m_pRuntimeAllocatorZone = NULL;
 	for ( int nMeshId = 0; nMeshId < s_nMaxMeshAssets; nMeshId++ ) {
 		rOther.m_szMeshes[nMeshId].m_nId = -1;
 	}
@@ -72,6 +136,9 @@ void Terrain3DInstanceStore::rebindCellStorage( void ) {
 }
 
 bool Terrain3DInstanceStore::copyFrom( const Terrain3DInstanceStore &rOther ) {
+	if ( !runtimeAllocatorReady() ) {
+		return false;
+	}
 	clearRetainCapacity();
 	m_layout = rOther.m_layout;
 	for ( size_t iMesh = 0u; iMesh < ( size_t )( ( rOther.meshes() ).size() ); iMesh++ ) {
@@ -182,7 +249,10 @@ void Terrain3DInstanceStore::compactStorage( void ) {
 	// Build the compacted image off to the side. The old store remains fully
 	// valid until every mesh/cell/payload copy succeeds, so allocation failure
 	// cannot leave live cells rebound to partially constructed replacement slabs.
-	Terrain3DInstanceStore compacted;
+	Terrain3DInstanceStore compacted( m_eAllocationClass );
+	if ( m_pRuntimeAllocatorZone ) {
+		compacted.bindRuntimeAllocator( m_pRuntimeAllocatorZone, m_eRuntimeAllocatorOverflowPolicy );
+	}
 	if ( !compacted.copyFrom( *this ) ) {
 		return;
 	}

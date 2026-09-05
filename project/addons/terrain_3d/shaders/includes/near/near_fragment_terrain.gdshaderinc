@@ -9,7 +9,7 @@
 	bool far_cached_region = false;
 	int far_cached_material_id = 0;
 	if (region_uv.z < 0.0) {
-		ivec2 logical_map_pos = ivec2(floor(uv2)) + (_region_map_size / 2);
+		ivec2 logical_map_pos = ivec2(floor(uv2)) + T3D_REGION_MAP_HALF;
 		far_cached_region = get_logical_region_present(logical_map_pos);
 		if (!far_cached_region) {
 			discard;

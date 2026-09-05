@@ -1240,8 +1240,6 @@ bool Terrain3DRdClipmapRenderer::updateFrameUniforms( const t3dRdFrameSnapshot_t
 	frame.m_fLightColorG = ( float )( rSnapshot.m_lightColor.g );
 	frame.m_fLightColorB = ( float )( rSnapshot.m_lightColor.b );
 	frame.m_fLightColorA = ( float )( rSnapshot.m_lightColor.a );
-	frame.m_fRegionSize = ( float )( rSnapshot.m_nRegionSize );
-	frame.m_fRegionMapSize = ( float )( rSnapshot.m_nRegionMapSize );
 	frame.m_fHeightMin = rSnapshot.m_fHeightMin;
 	frame.m_fHeightRange = rSnapshot.m_fHeightRange;
 	frame.m_fVertexSpacing = rSnapshot.m_fVertexSpacing;

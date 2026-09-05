@@ -2,8 +2,11 @@
 #version 450
 #include "render_world_common_inc.glsl"
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
-layout(push_constant, std430) uniform TierPush {
+layout(push_constant, std430) uniform VtDispatchPush {
     uint tier;
+    uint hashCount;
+    uint requestCapacity;
+    uint reserved;
 }
 pc;
 layout(set = 0, binding = 0, std430) readonly buffer FrameBuffer {
@@ -33,11 +36,11 @@ layout(set = 0, binding = 6, std430) readonly buffer PageTable {
     PageEntry entries[];
 }
 page_table;
-layout(set = 0, binding = 7, std430) buffer Hash {
+layout(set = 0, binding = 7, std430) buffer VtHashBuffer {
     uvec4 entries[];
 }
 hash_table;
-layout(set = 0, binding = 8, std430) buffer Counters {
+layout(set = 0, binding = 8, std430) buffer VtCounterBuffer {
     uint words[];
 }
 counters;
@@ -59,16 +62,16 @@ uint mip_base_page(Allocation a, uint mip) {
     return page;
 }
 bool page_is_resident(uint page) {
-    if (page >= page_table.entries.length())
+    if (page >= f.resourceCounts.z)
         return false;
     PageEntry e = page_table.entries[page];
     uint flags = e.packedMipFlags >> 16u;
     return (flags & 2u) != 0u && e.physicalSlot != 0xffffffffu;
 }
 void request_page(uint page, uint wantedMip, uint priority) {
-    if (page >= page_table.entries.length() || page_is_resident(page))
+    if (page >= f.resourceCounts.z || page_is_resident(page))
         return;
-    uint hashCount = hash_table.entries.length();
+    uint hashCount = pc.hashCount;
     if (hashCount == 0u)
         return;
     for (uint probe = 0u; probe < 8u; ++probe) {
@@ -85,7 +88,7 @@ void request_page(uint page, uint wantedMip, uint priority) {
 }
 void request_allocation(
     uint allocationId, vec2 uvMinIn, vec2 uvMaxIn, float worldDiameter, float projectedPixels, float texelDensity, uint priority) {
-    if (allocationId == 0xffffffffu || allocationId >= allocations.values.length())
+    if (allocationId == 0xffffffffu || allocationId >= f.resourceCounts.y)
         return;
     Allocation a = allocations.values[allocationId];
     uint mipCount = a.packedMipChannel & 0xffffu;
@@ -125,15 +128,16 @@ void request_allocation(
 void main() {
     uint i = gl_GlobalInvocationID.x;
     uint actualCount = counters.words[2u + pc.tier];
-    if (i >= actualCount || i >= visible_clusters.visible.length())
+    uint visibleCapacity = pc.tier == 0u ? f.capacities0.z : (pc.tier == 1u ? f.capacities0.w : f.capacities1.x);
+    if (i >= actualCount || i >= visibleCapacity)
         return;
     uvec2 vc = visible_clusters.visible[i];
-    if (vc.x >= clusters.values.length() || vc.y >= instances.values.length())
+    if (vc.x >= f.counts1.w || vc.y >= f.counts1.x)
         return;
     Cluster cl = clusters.values[vc.x];
     Instance inst = instances.values[vc.y];
     uint materialId = inst.ids.y != 0xffffffffu ? inst.ids.y : cl.materialId;
-    if (materialId >= materials.values.length())
+    if (materialId >= f.resourceCounts.x)
         return;
     Material material = materials.values[materialId];
 

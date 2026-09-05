@@ -323,14 +323,13 @@ private:
 	typedef Terrain3DArenaBuffer<uint8_t> ByteBuffer;
 	typedef Terrain3DArenaBuffer<int64_t> IndexBuffer;
 	struct RegionNeighbors {
-		int32_t m_ids[4]{};
+		int16_t m_ids[s_nErosionDirectionCount]{};
 	};
 
 	t3dConfig_t m_config;
 	eastl::vector<t3dRegionSnapshot_t> m_regions;
 	eastl::vector<RegionNeighbors> m_szRegionNeighbors;
-	int32_t m_szRegionLookup[s_nErosionRegionLookupCapacity] = {};
-	int32_t m_nSourceRegionSize = 0;
+	int16_t m_szRegionLookup[s_nRegionSlots] = {};
 	int32_t m_nSimulationRegionSize = 0;
 	int32_t m_nSimulationRegionShift = 0;
 	int32_t m_nSimulationRegionMask = 0;

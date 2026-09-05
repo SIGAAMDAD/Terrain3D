@@ -19,21 +19,18 @@
 #include <godot_cpp/variant/typed_array.hpp>
 
 typedef struct t3dRegionLocationReconcileResult_s {
-	eastl::fixed_vector<Vector2i, s_nMaxRegionSlots, false> m_removedLocations;
-	eastl::fixed_vector<int, s_nMaxRegionSlots, false> m_addedSlots;
+	eastl::fixed_vector<Vector2i, s_nRegionSlots, false> m_removedLocations;
+	eastl::fixed_vector<int, s_nRegionSlots, false> m_addedSlots;
 	int m_nOldSlotCount = 0;
 	bool m_bSlotsChanged = false;
 	bool m_bCapacityExceeded = false;
 } t3dRegionLocationReconcileResult_t;
 
 typedef struct t3dRegionRepositoryView_s {
-	const Vector2i *m_pSlots = NULL;
+	const t3dRegionCoord_t *m_pSlots = NULL;
 	Terrain3DRegion *const *m_ppRegionMap = NULL;
 	const uint16_t *m_pLogicalRegionMap = NULL;
 	int m_nSlotCount = 0;
-	int m_nRegionSize = 0;
-	int m_nRegionMapSize = 0;
-	real_t m_fVertexSpacing = 1.0f;
 	uint64_t m_nTopologyGeneration = 0u;
 } t3dRegionRepositoryView_t;
 
@@ -45,22 +42,20 @@ EA_FORCE_INLINE bool t3dRegionLocationValid( const Vector2i &rLocation, const in
 	return rLocation.x >= -half && rLocation.x < half && rLocation.y >= -half && rLocation.y < half;
 }
 
+static_assert( sizeof( t3dRegionCoord_t ) * s_nRegionSlots == 2048u, "Packed repository slot table must remain 2 KiB" );
+
 class Terrain3DRegionRepository {
 private:
-	int m_nRegionSize = 0;
-	int m_nRegionMapSize = 0;
-	Vector2i m_regionSizev = s_v2iZero;
-	real_t m_fVertexSpacing = 1.0f;
 	bool m_bLoaded = false;
 
-	Ref<Terrain3DRegion> m_szRegionRefs[s_nMaxRegionSlots];
-	Terrain3DRegion *m_pszRegionPtrMap[s_nMaxRegionSlots] = {};
+	Ref<Terrain3DRegion> m_szRegionRefs[s_nRegionSlots];
+	Terrain3DRegion *m_pszRegionPtrMap[s_nRegionSlots] = {};
 	int m_nRegionResourceCount = 0;
-	Vector2i m_szRegionLocations[s_nMaxRegionSlots] = {};
+	t3dRegionCoord_t m_szRegionLocations[s_nRegionSlots] = {};
 	int m_nRegionLocationCount = 0;
-	eastl::fixed_vector<uint16_t, s_nMaxRegionSlots, false> m_freeRegionSlots;
+	eastl::fixed_vector<uint16_t, s_nRegionSlots, false> m_freeRegionSlots;
 	int m_nActiveRegionCount = 0;
-	uint16_t m_szRegionMap[s_nMaxRegionSlots] = {};
+	uint16_t m_szRegionMap[s_nRegionSlots] = {};
 	bool m_bRegionMapDirty = true;
 	uint64_t m_nTopologyGeneration = 1u;
 
@@ -74,20 +69,18 @@ public:
 
 	void clear( void );
 	bool releaseRuntimeAllocatorStorage( void );
-	void configureGeometry( int nRegionSize, real_t fVertexSpacing );
-	void setVertexSpacing( real_t fVertexSpacing );
 
 	EA_FORCE_INLINE int getRegionSize( void ) const {
-		return m_nRegionSize;
+		return s_nRegionSize;
 	}
 	EA_FORCE_INLINE int getRegionMapSize( void ) const {
-		return m_nRegionMapSize;
+		return s_nRegionMapSize;
 	}
 	EA_FORCE_INLINE Vector2i getRegionSizeVector( void ) const {
-		return m_regionSizev;
+		return V2I( s_nRegionSize );
 	}
 	EA_FORCE_INLINE real_t getVertexSpacing( void ) const {
-		return m_fVertexSpacing;
+		return ( real_t )( s_fRegionVertexSpacing );
 	}
 	EA_FORCE_INLINE int getActiveRegionCount( void ) const {
 		return m_nActiveRegionCount;
@@ -111,7 +104,7 @@ public:
 		return m_nTopologyGeneration;
 	}
 
-	EA_FORCE_INLINE const Vector2i *getSlotsData( void ) const {
+	EA_FORCE_INLINE const t3dRegionCoord_t *getSlotsData( void ) const {
 		return m_szRegionLocations;
 	}
 	EA_FORCE_INLINE Terrain3DRegion *const *getRegionPtrMapData( void ) const {
@@ -149,7 +142,7 @@ public:
 	void rebuildRegionMapFromSlots( void );
 	void replaceAll( const Dictionary &rRegions,
 	        Terrain3DRegion *const *ppRegionMap,
-	        const Vector2i *pLocations,
+	        const t3dRegionCoord_t *pLocations,
 	        int nLocationCount,
 	        const uint16_t *pLogicalRegionMap );
 

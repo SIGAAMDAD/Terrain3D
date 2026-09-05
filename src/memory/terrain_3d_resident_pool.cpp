@@ -63,18 +63,13 @@ bool Terrain3DResidentRegionPool::alignUp( const size_t nValue, const size_t nAl
 	return true;
 }
 
-bool Terrain3DResidentRegionPool::buildSlotLayout(
-        const int nRegionSize, const uint32_t nChannels, t3dSlotLayout_t &rLayout, size_t &nTexelCount ) {
+bool Terrain3DResidentRegionPool::buildSlotLayout( const uint32_t nChannels, t3dSlotLayout_t &rLayout, size_t &nTexelCount ) {
 	rLayout = {};
 	nTexelCount = 0u;
-	if ( nRegionSize <= 0 || ( nChannels & RESIDENT_CHANNEL_HEIGHT ) == 0u ) {
+	if ( ( nChannels & RESIDENT_CHANNEL_HEIGHT ) == 0u ) {
 		return false;
 	}
-	const size_t size = ( size_t )( nRegionSize );
-	if ( size > eastl::numeric_limits<size_t>::max() / size ) {
-		return false;
-	}
-	const size_t texels = size * size;
+	const size_t texels = ( size_t )s_nRegionTexels;
 	if ( texels > eastl::numeric_limits<size_t>::max() / sizeof( uint16_t ) ) {
 		return false;
 	}
@@ -130,28 +125,26 @@ bool Terrain3DResidentRegionPool::addEstimatedOptionalBytes(
 	return true;
 }
 
-size_t Terrain3DResidentRegionPool::estimateSlotBytes( const int nRegionSize, const uint32_t nChannels ) {
+size_t Terrain3DResidentRegionPool::estimateSlotBytes( const uint32_t nChannels ) {
 	t3dSlotLayout_t layout;
 	size_t texel_count = 0u;
-	if ( !buildSlotLayout( nRegionSize, nChannels, layout, texel_count ) ) {
+	if ( !buildSlotLayout( nChannels, layout, texel_count ) ) {
 		return 0u;
 	}
 	return layout.m_nStride;
 }
 
-bool t3dAlignedAllocation_t::allocate( const size_t nRequestedBytes, const size_t nAlignment ) {
+bool t3dAlignedAllocation_t::allocate( Terrain3DMemoryZone *const pZone, const size_t nRequestedBytes, const size_t nAlignment ) {
 	release();
-	if ( nRequestedBytes == 0u || nAlignment == 0u || ( nAlignment & ( nAlignment - 1u ) ) != 0u
-	        || nRequestedBytes > eastl::numeric_limits<size_t>::max() - ( nAlignment - 1u ) ) {
+	if ( !pZone || nRequestedBytes == 0u || nAlignment == 0u || ( nAlignment & ( nAlignment - 1u ) ) != 0u ) {
 		return false;
 	}
-	m_pRaw = t3dMemoryAllocate( nRequestedBytes + nAlignment - 1u );
+	m_pRaw = pZone->allocate( nRequestedBytes, nAlignment );
 	if ( !m_pRaw ) {
 		return false;
 	}
-	const uintptr_t start = ( uintptr_t )( m_pRaw );
-	const uintptr_t mask = ( uintptr_t )( nAlignment - 1u );
-	m_pAligned = ( uint8_t * )( ( start + mask ) & ~mask );
+	m_pZone = pZone;
+	m_pAligned = ( uint8_t * )m_pRaw;
 	m_nBytes = nRequestedBytes;
 	m_bOwned = true;
 	memset( m_pAligned, 0, m_nBytes );
@@ -159,9 +152,10 @@ bool t3dAlignedAllocation_t::allocate( const size_t nRequestedBytes, const size_
 }
 
 void t3dAlignedAllocation_t::release( void ) {
-	if ( m_bOwned ) {
-		t3dMemoryRelease( m_pRaw );
+	if ( m_bOwned && m_pZone ) {
+		m_pZone->deallocate( m_pRaw );
 	}
+	m_pZone = NULL;
 	m_pRaw = NULL;
 	m_pAligned = NULL;
 	m_nBytes = 0u;
@@ -232,7 +226,10 @@ bool Terrain3DResidentRegionPool::allocateSlotsUnlocked( const int nCapacity ) {
 	if ( nCapacity <= 0 || ( size_t )( nCapacity ) > eastl::numeric_limits<size_t>::max() / sizeof( t3dSlot_t ) ) {
 		return false;
 	}
-	m_pSlots = ( t3dSlot_t * )( t3dMemoryAllocate( ( size_t )( nCapacity ) * sizeof( t3dSlot_t ) ) );
+	if ( !m_pRuntimeAllocatorZone ) {
+		return false;
+	}
+	m_pSlots = ( t3dSlot_t * )( m_pRuntimeAllocatorZone->allocate( ( size_t )( nCapacity ) * sizeof( t3dSlot_t ), alignof( t3dSlot_t ) ) );
 	if ( !m_pSlots ) {
 		return false;
 	}
@@ -286,8 +283,8 @@ void Terrain3DResidentRegionPool::releaseSlotsUnlocked( void ) {
 		t3dSlot_t &slot = m_pSlots[( size_t )( i )];
 		slot.~t3dSlot_s();
 	}
-	if ( m_bSlotsOwned ) {
-		t3dMemoryRelease( m_pSlots );
+	if ( m_bSlotsOwned && m_pRuntimeAllocatorZone ) {
+		m_pRuntimeAllocatorZone->deallocate( m_pSlots );
 	}
 	m_pSlots = NULL;
 	m_bSlotsOwned = false;
@@ -300,23 +297,31 @@ void Terrain3DResidentRegionPool::clearUnlocked( void ) {
 		t3dAtomic_t<int16_t> &mapping = ( m_szLocationToSlot )[iSlot];
 		mapping.store( -1, T3D_MEMORY_ORDER_RELAXED );
 	}
-	m_nRegionSize = 0;
 	m_nCapacity = 0;
 	m_nChannels = 0u;
-	m_nTexelCount = 0u;
 	m_nBackingBytes = 0u;
 	m_nMetadataBytes = 0u;
 	m_iSlotLayout = {};
 	m_iClockHand = 0;
 }
 
-bool Terrain3DResidentRegionPool::configure( const int nRegionSize, const int nCapacity, const uint32_t nChannels ) {
+bool Terrain3DResidentRegionPool::bindRuntimeAllocator( Terrain3DMemoryZone *const pZone ) {
 	t3dScopedLock_t lock( m_mutex );
-	if ( nRegionSize <= 0 || nCapacity <= 0 || nCapacity > s_nResidentWorldSlotCount || ( nChannels & RESIDENT_CHANNEL_HEIGHT ) == 0u ) {
+	if ( !pZone || ( m_pRuntimeAllocatorZone && m_pRuntimeAllocatorZone != pZone ) || m_pSlots || m_mapMemory.m_pAligned ) {
+		return m_pRuntimeAllocatorZone == pZone && !m_pSlots && !m_mapMemory.m_pAligned;
+	}
+	m_pRuntimeAllocatorZone = pZone;
+	return true;
+}
+
+bool Terrain3DResidentRegionPool::configure( const int nCapacity, const uint32_t nChannels ) {
+	t3dScopedLock_t lock( m_mutex );
+	if ( !m_pRuntimeAllocatorZone || nCapacity <= 0 || nCapacity > s_nResidentWorldSlotCount
+	        || ( nChannels & RESIDENT_CHANNEL_HEIGHT ) == 0u ) {
 		return false;
 	}
-	if ( m_nLifecycle.load( T3D_MEMORY_ORDER_ACQUIRE ) == T3D_RESIDENT_POOL_ACTIVE && m_nRegionSize == nRegionSize
-	        && m_nCapacity == nCapacity && m_nChannels == nChannels && m_mapMemory.m_pAligned && m_pSlots ) {
+	if ( m_nLifecycle.load( T3D_MEMORY_ORDER_ACQUIRE ) == T3D_RESIDENT_POOL_ACTIVE && m_nCapacity == nCapacity && m_nChannels == nChannels
+	        && m_mapMemory.m_pAligned && m_pSlots ) {
 		return true;
 	}
 	beginDrainUnlocked();
@@ -324,21 +329,19 @@ bool Terrain3DResidentRegionPool::configure( const int nRegionSize, const int nC
 	clearUnlocked();
 	t3dSlotLayout_t layout;
 	size_t texel_count = 0u;
-	if ( !buildSlotLayout( nRegionSize, nChannels, layout, texel_count )
+	if ( !buildSlotLayout( nChannels, layout, texel_count )
 	        || ( size_t )( nCapacity ) > eastl::numeric_limits<size_t>::max() / layout.m_nStride ) {
 		deactivateUnlocked();
 		return false;
 	}
 	const size_t total_bytes = ( size_t )( nCapacity )*layout.m_nStride;
-	if ( !m_mapMemory.allocate( total_bytes, s_nResidentCacheAlignment ) ) {
+	if ( !m_mapMemory.allocate( m_pRuntimeAllocatorZone, total_bytes, s_nResidentCacheAlignment ) ) {
 		deactivateUnlocked();
 		return false;
 	}
 
-	m_nRegionSize = nRegionSize;
 	m_nCapacity = nCapacity;
 	m_nChannels = nChannels;
-	m_nTexelCount = texel_count;
 	m_nBackingBytes = total_bytes;
 	m_nMetadataBytes = ( size_t )nCapacity * sizeof( t3dSlot_t );
 	m_iSlotLayout = layout;
@@ -374,15 +377,15 @@ bool Terrain3DResidentRegionPool::resetSlotStorage( const int iSlot, const bool 
 	}
 	t3dSlot_t &slot = m_pSlots[( size_t )( iSlot )];
 	if ( bZero ) {
-		memset( slot.m_pHeight, 0, m_nTexelCount * sizeof( uint16_t ) );
+		memset( slot.m_pHeight, 0, s_nRegionTexels * sizeof( uint16_t ) );
 		if ( slot.m_pControl ) {
-			memset( slot.m_pControl, 0, m_nTexelCount * sizeof( uint32_t ) );
+			memset( slot.m_pControl, 0, s_nRegionTexels * sizeof( uint32_t ) );
 		}
 		if ( slot.m_pColor ) {
-			memset( slot.m_pColor, 0, m_nTexelCount * sizeof( uint32_t ) );
+			memset( slot.m_pColor, 0, s_nRegionTexels * sizeof( uint32_t ) );
 		}
 		if ( slot.m_pDerived ) {
-			memset( slot.m_pDerived, 0, m_nTexelCount * sizeof( uint16_t ) );
+			memset( slot.m_pDerived, 0, s_nRegionTexels * sizeof( uint16_t ) );
 		}
 	}
 	slot.m_nValidChannels.store( 0u, T3D_MEMORY_ORDER_RELEASE );
@@ -543,7 +546,7 @@ void Terrain3DResidentRegionPool::releaseLease( const int iSlot, const uint32_t 
 }
 
 bool Terrain3DResidentRegionPool::copyMap( const int iSlot, const Terrain3DRegion *pRegion, const t3dMapType_t eType ) {
-	return copyMapRect( iSlot, pRegion, eType, Rect2i( s_v2iZero, V2I( m_nRegionSize ) ) );
+	return copyMapRect( iSlot, pRegion, eType, Rect2i( s_v2iZero, V2I( s_nRegionSize ) ) );
 }
 
 bool Terrain3DResidentRegionPool::copyMapRect(
@@ -551,7 +554,7 @@ bool Terrain3DResidentRegionPool::copyMapRect(
 	if ( !pRegion || iSlot < 0 || iSlot >= m_nCapacity ) {
 		return false;
 	}
-	const Rect2i bounds( s_v2iZero, V2I( m_nRegionSize ) );
+	const Rect2i bounds( s_v2iZero, V2I( s_nRegionSize ) );
 	Rect2i rect = rDirtyRect.size.x > 0 && rDirtyRect.size.y > 0 ? rDirtyRect.intersection( bounds ) : bounds;
 	if ( rect.size.x <= 0 || rect.size.y <= 0 ) {
 		return true;
@@ -562,12 +565,12 @@ bool Terrain3DResidentRegionPool::copyMapRect(
 		if ( !slot.m_pHeight ) {
 			return true;
 		}
-		if ( !pImage || pImage->get_format() != Image::FORMAT_R16 || pImage->get_width() != m_nRegionSize
-		        || pImage->get_height() != m_nRegionSize ) {
+		if ( !pImage || pImage->get_format() != Image::FORMAT_R16 || pImage->get_width() != s_nRegionSize
+		        || pImage->get_height() != s_nRegionSize ) {
 			return false;
 		}
 		const PackedByteArray data = pImage->get_data();
-		const size_t bytes = m_nTexelCount * sizeof( uint16_t );
+		const size_t bytes = s_nRegionTexels * sizeof( uint16_t );
 		if ( ( size_t )( data.size() ) < bytes ) {
 			return false;
 		}
@@ -576,7 +579,7 @@ bool Terrain3DResidentRegionPool::copyMapRect(
 			memcpy( slot.m_pHeight, pSource, bytes );
 		} else {
 			for ( int y = rect.position.y; y < rect.get_end().y; ++y ) {
-				const size_t offset = ( size_t )( y ) * ( size_t )( m_nRegionSize ) + ( size_t )( rect.position.x );
+				const size_t offset = ( size_t )( y ) * ( size_t )( s_nRegionSize ) + ( size_t )( rect.position.x );
 				memcpy( slot.m_pHeight + offset, pSource + offset, ( size_t )( rect.size.x ) * sizeof( uint16_t ) );
 			}
 		}
@@ -602,11 +605,11 @@ bool Terrain3DResidentRegionPool::copyMapRect(
 		return false;
 	}
 	const Image::Format expected = eType == TYPE_CONTROL ? Image::FORMAT_RF : Image::FORMAT_RGBA8;
-	if ( pImage->get_format() != expected || pImage->get_width() != m_nRegionSize || pImage->get_height() != m_nRegionSize ) {
+	if ( pImage->get_format() != expected || pImage->get_width() != s_nRegionSize || pImage->get_height() != s_nRegionSize ) {
 		return false;
 	}
 	const PackedByteArray data = pImage->get_data();
-	const size_t bytes = m_nTexelCount * sizeof( uint32_t );
+	const size_t bytes = s_nRegionTexels * sizeof( uint32_t );
 	if ( ( size_t )( data.size() ) < bytes ) {
 		return false;
 	}
@@ -616,7 +619,7 @@ bool Terrain3DResidentRegionPool::copyMapRect(
 		memcpy( plane, pSource, bytes );
 	} else {
 		for ( int y = rect.position.y; y < rect.get_end().y; ++y ) {
-			const size_t offset = ( size_t )( y ) * ( size_t )( m_nRegionSize ) + ( size_t )( rect.position.x );
+			const size_t offset = ( size_t )( y ) * ( size_t )( s_nRegionSize ) + ( size_t )( rect.position.x );
 			memcpy( plane + offset, pSource + offset, ( size_t )( rect.size.x ) * sizeof( uint32_t ) );
 		}
 	}
@@ -625,7 +628,7 @@ bool Terrain3DResidentRegionPool::copyMapRect(
 }
 
 bool Terrain3DResidentRegionPool::copyDerived( const int iSlot, const Terrain3DRegion *pRegion ) {
-	return copyDerivedRect( iSlot, pRegion, Rect2i( s_v2iZero, V2I( m_nRegionSize ) ) );
+	return copyDerivedRect( iSlot, pRegion, Rect2i( s_v2iZero, V2I( s_nRegionSize ) ) );
 }
 
 bool Terrain3DResidentRegionPool::copyDerivedRect( const int iSlot, const Terrain3DRegion *pRegion, const Rect2i &rDirtyRect ) {
@@ -638,9 +641,9 @@ bool Terrain3DResidentRegionPool::copyDerivedRect( const int iSlot, const Terrai
 		return true;
 	}
 	const Ref<Image> pImage = pRegion->getDerivedNormalSlopeMap();
-	const size_t bytes = m_nTexelCount * 2u;
-	if ( pImage.is_null() || pImage->get_format() != Image::FORMAT_RG8 || pImage->get_width() != m_nRegionSize
-	        || pImage->get_height() != m_nRegionSize ) {
+	const size_t bytes = s_nRegionTexels * 2u;
+	if ( pImage.is_null() || pImage->get_format() != Image::FORMAT_RG8 || pImage->get_width() != s_nRegionSize
+	        || pImage->get_height() != s_nRegionSize ) {
 		slot.m_nValidChannels.fetch_and( ( uint8_t )~RESIDENT_CHANNEL_DERIVED, T3D_MEMORY_ORDER_RELEASE );
 		return true;
 	}
@@ -652,7 +655,7 @@ bool Terrain3DResidentRegionPool::copyDerivedRect( const int iSlot, const Terrai
 		return false;
 	}
 	const bool bHadPlane = ( slot.m_nValidChannels.load( T3D_MEMORY_ORDER_ACQUIRE ) & RESIDENT_CHANNEL_DERIVED ) != 0u;
-	const Rect2i bounds( s_v2iZero, V2I( m_nRegionSize ) );
+	const Rect2i bounds( s_v2iZero, V2I( s_nRegionSize ) );
 	const Rect2i rect = rDirtyRect.size.x > 0 && rDirtyRect.size.y > 0 ? rDirtyRect.intersection( bounds ) : bounds;
 	if ( rect.size.x <= 0 || rect.size.y <= 0 ) {
 		return true;
@@ -661,7 +664,7 @@ bool Terrain3DResidentRegionPool::copyDerivedRect( const int iSlot, const Terrai
 		memcpy( slot.m_pDerived, data.ptr(), bytes );
 	} else {
 		for ( int y = rect.position.y; y < rect.get_end().y; ++y ) {
-			const size_t offset = ( ( size_t )( y ) * ( size_t )( m_nRegionSize ) + ( size_t )( rect.position.x ) ) * 2u;
+			const size_t offset = ( ( size_t )( y ) * ( size_t )( s_nRegionSize ) + ( size_t )( rect.position.x ) ) * 2u;
 			memcpy( slot.m_pDerived + offset, data.ptr() + offset, ( size_t )( rect.size.x ) * 2u );
 		}
 	}

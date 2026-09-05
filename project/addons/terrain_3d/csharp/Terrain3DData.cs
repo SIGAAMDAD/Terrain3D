@@ -306,10 +306,6 @@ public partial class Terrain3DData : GodotObject
 		/// </summary>
 		public new static readonly StringName DoForRegions = "do_for_regions";
 		/// <summary>
-		/// Cached name for the 'change_region_size' member.
-		/// </summary>
-		public new static readonly StringName ChangeRegionSize = "change_region_size";
-		/// <summary>
 		/// Cached name for the 'get_region_location' member.
 		/// </summary>
 		public new static readonly StringName GetRegionLocation = "get_region_location";
@@ -590,9 +586,6 @@ public partial class Terrain3DData : GodotObject
 
 	public new void DoForRegions(Rect2I area, Callable callback) =>
 		Call(GDExtensionMethodName.DoForRegions, [area, callback]);
-
-	public new void ChangeRegionSize(long regionSize) =>
-		Call(GDExtensionMethodName.ChangeRegionSize, [regionSize]);
 
 	public new Vector2I GetRegionLocation(Vector3 globalPosition) =>
 		Call(GDExtensionMethodName.GetRegionLocation, [globalPosition]).As<Vector2I>();

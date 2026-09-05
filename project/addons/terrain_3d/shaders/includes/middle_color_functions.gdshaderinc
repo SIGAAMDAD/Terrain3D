@@ -28,7 +28,7 @@ vec4 read_terrain_color_exact_texel(ivec2 local_coord, ivec2 region_cell, const 
 		local_coord.y -= map_size.y;
 		region_delta.y = 1;
 	}
-	int layer = get_region_layer(region_cell + region_delta + (_region_map_size / 2));
+	int layer = get_region_layer(region_cell + region_delta + T3D_REGION_MAP_HALF);
 	return layer >= 0 ? texelFetch(_color_maps, ivec3(local_coord, layer), 0) : COLOR_MAP_DEF;
 #endif
 }

@@ -76,11 +76,14 @@ private:
 	// submitting a changed heightmap remains linear in the sample count.
 	RID m_hStaticBodyRid;               // Physics Server Static Body
 	StaticBody3D *m_pStaticBody = NULL; // Editor mode StaticBody3D
-	t3dCollisionShapeRecord_t m_szShapeRecords[s_nMaxRegionSlots];
+	t3dCollisionShapeRecord_t m_szShapeRecords[s_nMaxCollisionShapeRecords];
 	int m_nShapeRecordCount = 0;
 	bool m_bColdRebuildPending = false;
-	int32_t m_gridScratch[s_nMaxRegionSlots] = {};
-	eastl::fixed_vector<int32_t, s_nMaxRegionSlots, false> m_inactiveShapeIds;
+	bool m_bColdRebuildServiceActive = false;
+	uint64_t m_nColdRebuildCount = 0u;
+	uint64_t m_nColdRebuildFailures = 0u;
+	int32_t m_gridScratch[s_nMaxCollisionShapeRecords] = {};
+	eastl::fixed_vector<int32_t, s_nMaxCollisionShapeRecords, false> m_inactiveShapeIds;
 	PackedRealArray m_fullHeightScratch;
 	PackedFloat32Array m_fullBakedHeightScratch;
 	PackedFloat32Array m_collisionSurfaceScratch;
@@ -88,7 +91,7 @@ private:
 
 
 	t3dCollisionRegionCacheEntry_t m_bakedRegionCache[s_nBakedCacheCapacity];
-	int16_t m_bakedRegionByMap[s_nMaxRegionSlots] = {};
+	int16_t m_bakedRegionByMap[s_nRegionSlots] = {};
 	int m_nBakedRegionCacheCount = 0;
 	uint64_t m_nBakedRegionCacheTick = 0u;
 	uint64_t m_nPreparationUsecLast = 0u;
@@ -99,10 +102,10 @@ private:
 	bool m_bInitialized = false;
 	bool m_bRegionMapUpdatePending = false;
 	Vector2i m_lastSnappedPos = s_v2iMax;
-	Vector2i m_szFullRegionSlots[s_nMaxRegionSlots];
+	t3dRegionCoord_t m_szFullRegionSlots[s_nRegionSlots];
 	int m_nFullRegionSlotCount = 0;
 	uint64_t m_nStreamingGenerationLast = 0u;
-	uint8_t m_szFullStreamingResident[s_nMaxRegionSlots] = {};
+	uint8_t m_szFullStreamingResident[s_nRegionSlots] = {};
 	uint64_t m_nUpdateUsecLast = 0u;
 	int m_nShapesRebuiltLastUpdate = 0;
 	int m_nShapesReusedLastUpdate = 0;
@@ -139,9 +142,9 @@ private:
 
 public:
 	EA_FORCE_INLINE Terrain3DCollision( void ) {
-		for ( int i = 0; i < s_nMaxRegionSlots; ++i ) {
+		for ( int i = 0; i < s_nRegionSlots; ++i ) {
 			m_bakedRegionByMap[i] = ( int16_t )( -1 );
-			m_szFullRegionSlots[i] = s_v2iMax;
+			m_szFullRegionSlots[i] = t3dInvalidRegionCoord();
 		}
 	}
 	EA_FORCE_INLINE ~Terrain3DCollision( void ) {

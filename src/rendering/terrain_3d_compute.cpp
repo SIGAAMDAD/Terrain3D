@@ -546,9 +546,7 @@ bool Terrain3DCompute::prepareDisplacementRequest(
 	rRequest.m_hControlTexture = data->getControlMapsRid();
 	rRequest.m_hDisplacementTexture = pAssets->getDisplacementArrayRid();
 	rRequest.m_regionMap = data->getRegionMap();
-	rRequest.m_nRegionMapSize = ( uint32_t )( data->getRegionMapSizeInternal() );
-	if ( rRequest.m_nWidth == 0u || rRequest.m_nHeight == 0u || rRequest.m_nRegionMapSize == 0u
-	        || rRequest.m_regionMap.size() != ( int64_t )( rRequest.m_nRegionMapSize ) * ( int64_t )( rRequest.m_nRegionMapSize )
+	if ( rRequest.m_nWidth == 0u || rRequest.m_nHeight == 0u || rRequest.m_regionMap.size() != s_nRegionSlots
 	        || !rRequest.m_hHeightTexture.is_valid() || !rRequest.m_hControlTexture.is_valid()
 	        || !rRequest.m_hDisplacementTexture.is_valid() ) {
 		setError( "Displacement compute inputs are incomplete" );
@@ -576,7 +574,7 @@ bool Terrain3DCompute::prepareDisplacementRequest(
 	rRequest.m_nMaterialDataHash = t3dComputeHashBytes( rRequest.m_materialData.ptr(), ( size_t )( rRequest.m_materialData.size() ) );
 
 	typedef struct t3dDisplacementParams_s {
-		uint32_t m_nWidth, m_nHeight, m_nRegionSize, m_nRegionMapSize;
+		uint32_t m_nWidth, m_nHeight;
 		float m_fVertexSpacing, m_fVertexDensity, m_fMeshSize, m_fTessellationLevel;
 		float m_fTargetX, m_fTargetZ, m_fBlendSharpness, m_fDisplacementSharpness;
 		float m_fAutoSlope, m_fAutoHeightReduction;
@@ -588,12 +586,10 @@ bool Terrain3DCompute::prepareDisplacementRequest(
 	} t3dDisplacementParams_t;
 	t3dDisplacementParams_t params;
 	memset( &params, 0, sizeof( params ) );
-	static_assert( sizeof( t3dDisplacementParams_t ) == 112u, "Displacement push constants must match GLSL" );
+	static_assert( sizeof( t3dDisplacementParams_t ) == 104u, "Displacement push constants must match GLSL" );
 	params.m_nWidth = rRequest.m_nWidth;
 	params.m_nHeight = rRequest.m_nHeight;
-	params.m_nRegionSize = ( uint32_t )( pTerrain->getRegionSize() );
-	params.m_nRegionMapSize = rRequest.m_nRegionMapSize;
-	params.m_fVertexSpacing = ( float )( pTerrain->getVertexSpacing() );
+	params.m_fVertexSpacing = ( float )( s_fRegionVertexSpacing );
 	params.m_fVertexDensity = 1.0f / params.m_fVertexSpacing;
 	params.m_fMeshSize = ( float )( pTerrain->getMeshSize() );
 	params.m_fTessellationLevel = ( float )( pTerrain->getTessellationLevel() );

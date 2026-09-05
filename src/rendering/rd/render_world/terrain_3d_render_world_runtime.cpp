@@ -68,6 +68,7 @@ Terrain3DRenderWorldRuntime::Terrain3DRenderWorldRuntime() : m_ForwardLighting( 
 	memset( &m_Streaming, 0, sizeof( m_Streaming ) );
 	memset( &m_TerrainStageA, 0, sizeof( m_TerrainStageA ) );
 	memset( &m_SharedVTBindings, 0, sizeof( m_SharedVTBindings ) );
+	m_pRuntimeAllocatorZone = NULL;
 	m_pCpuImage = NULL;
 	m_nCpuImageBytes = 0u;
 	m_pPageTable = NULL;
@@ -121,8 +122,16 @@ void Terrain3DRenderWorldRuntime::record_operation( const uint64_t pFrameId,
 	++m_nOperationWriteIndex;
 }
 
+bool Terrain3DRenderWorldRuntime::bindRuntimeAllocator( Terrain3DMemoryZone *const pZone ) {
+	if ( !pZone || ( m_pRuntimeAllocatorZone && m_pRuntimeAllocatorZone != pZone ) || m_pCpuImage ) {
+		return m_pRuntimeAllocatorZone == pZone && m_pCpuImage == NULL;
+	}
+	m_pRuntimeAllocatorZone = pZone;
+	return true;
+}
+
 bool Terrain3DRenderWorldRuntime::allocate_cpu_image_cold() {
-	if ( m_pCpuImage != NULL ) {
+	if ( m_pCpuImage != NULL || !m_pRuntimeAllocatorZone ) {
 		return false;
 	}
 	uint64_t nBytes = 0u;
@@ -141,7 +150,7 @@ bool Terrain3DRenderWorldRuntime::allocate_cpu_image_cold() {
 	if ( nBytes > SIZE_MAX ) {
 		return false;
 	}
-	m_pCpuImage = t3dMemoryAllocate( ( size_t )nBytes );
+	m_pCpuImage = m_pRuntimeAllocatorZone->allocate( ( size_t )nBytes, 64u );
 	if ( m_pCpuImage == NULL ) {
 		return false;
 	}
@@ -177,7 +186,9 @@ bool Terrain3DRenderWorldRuntime::allocate_cpu_image_cold() {
 }
 
 void Terrain3DRenderWorldRuntime::release_cpu_image_cold() {
-	t3dMemoryRelease( m_pCpuImage );
+	if ( m_pCpuImage && m_pRuntimeAllocatorZone ) {
+		m_pRuntimeAllocatorZone->deallocate( m_pCpuImage );
+	}
 	m_pCpuImage = NULL;
 	m_nCpuImageBytes = 0u;
 	m_pPageTable = NULL;
@@ -508,6 +519,12 @@ void Terrain3DRenderWorldRuntime::build_visibility_frame_hot( const t3dRdForward
 	rFrame.nVisibleWorldCapacity = m_Limits.nMaxVisibleClusters[T3D_RW_TIER_WORLD];
 	rFrame.nVisibleClutterCapacity = m_Limits.nMaxVisibleClusters[T3D_RW_TIER_CLUTTER];
 	rFrame.nVisibleFoliageCapacity = m_Limits.nMaxVisibleClusters[T3D_RW_TIER_FOLIAGE];
+	rFrame.nMaterialCount = MIN( m_nPublishedMaterialCount, m_Limits.nMaxMaterials );
+	if ( m_Residency.pDatabase && m_Residency.pDatabase->pHeader ) {
+		const uint64_t allocation_capacity = ( uint64_t )( m_Limits.nMaxMaterials ) * ( uint64_t )( T3D_RW_VT_CHANNELS );
+		rFrame.nVtAllocationCount = ( uint32_t )MIN<uint64_t>( m_Residency.pDatabase->pHeader->nAllocationCount, allocation_capacity );
+		rFrame.nVtPageCount = MIN( m_Residency.pDatabase->pHeader->nPageCount, m_Limits.nMaxVtVirtualPages );
+	}
 	rFrame.nHiZWidth = MIN( ( uint32_t )MAX( 1, pContext.m_renderSize.x ), m_Profile.nHiZWidth );
 	rFrame.nHiZHeight = MIN( ( uint32_t )MAX( 1, pContext.m_renderSize.y ), m_Profile.nHiZHeight );
 	rFrame.nHiZMipCount = 1u;

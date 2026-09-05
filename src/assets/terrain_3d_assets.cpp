@@ -39,6 +39,17 @@ static void t3dAssetsMaterialHashU64( uint64_t &rHash, const uint64_t nValue ) {
 	}
 }
 
+void Terrain3DAssets::advanceTexturePublicationGeneration( const bool bMappingChanged ) {
+	m_nTexturePublicationGeneration = m_nTexturePublicationGeneration == UINT64_MAX ? 1u : m_nTexturePublicationGeneration + 1u;
+	if ( bMappingChanged ) {
+		m_nTextureLayerMappingGeneration = m_nTextureLayerMappingGeneration == UINT64_MAX ? 1u : m_nTextureLayerMappingGeneration + 1u;
+	}
+}
+
+void Terrain3DAssets::advanceMeshSourceGeneration( void ) {
+	m_nMeshSourceGeneration = m_nMeshSourceGeneration == UINT64_MAX ? 1u : m_nMeshSourceGeneration + 1u;
+}
+
 template <typename T>
 static void t3dAssetsAppendResourceSignature( uint64_t &rHash, const Ref<T> &rResource ) {
 	if ( rResource.is_null() ) {
@@ -69,6 +80,25 @@ static bool t3dAssetsIsNativePackedSurfaceFormat( const Image::Format format ) {
 	// Terrain3D's optimized surface uses all four channels (normal XY, roughness, AO).
 	// BC3 and BC7 preserve those channels and are directly usable by the sampler.
 	return format == Image::FORMAT_RGBA8 || format == Image::FORMAT_DXT5 || format == Image::FORMAT_BPTC_RGBA;
+}
+
+static Image::Format t3dAssetsSelectPackedSurfaceArrayFormat( const Image::Format current, const Image::Format incoming ) {
+	if ( current == incoming || incoming == Image::FORMAT_MAX ) {
+		return current;
+	}
+	if ( current == Image::FORMAT_MAX ) {
+		return incoming;
+	}
+	// Keep the array GPU-compressed when compatible packed-surface sources mix
+	// RGBA8 with BC3/BC7. Prefer BC7 when any layer already supplies it, then
+	// BC3, and use RGBA8 only when no compressed source exists.
+	if ( current == Image::FORMAT_BPTC_RGBA || incoming == Image::FORMAT_BPTC_RGBA ) {
+		return Image::FORMAT_BPTC_RGBA;
+	}
+	if ( current == Image::FORMAT_DXT5 || incoming == Image::FORMAT_DXT5 ) {
+		return Image::FORMAT_DXT5;
+	}
+	return Image::FORMAT_RGBA8;
 }
 
 EA_FORCE_INLINE static bool t3dAssetsIsSupportedNativeArrayFormat( const Image::Format format ) {
@@ -204,6 +234,7 @@ uint64_t Terrain3DAssets::computeRuntimeMaterialSourceSignature( void ) const {
 }
 
 void Terrain3DAssets::resetRuntimeMaterialCacheState( const bool bClearGeneratedArrays ) {
+	stopRuntimeMaterialWorker();
 	m_bRuntimeMaterialCacheActive = false;
 	m_bRuntimeMaterialCookedValid = false;
 	m_runtimeMaterialCachePath = String();
@@ -213,8 +244,15 @@ void Terrain3DAssets::resetRuntimeMaterialCacheState( const bool bClearGenerated
 	m_nRuntimeMaterialResidentCount = 0;
 	m_nRuntimeMaterialUploadsLastTick = 0;
 	m_nRuntimeMaterialEvictionsLastTick = 0;
+	m_nRuntimeMaterialReadBytesLastTick = 0u;
+	m_nRuntimeMaterialUploadBytesLastTick = 0u;
+	m_nRuntimeMaterialBudgetRejects = 0u;
+	m_nRuntimeMaterialChecksumCacheHits = 0u;
+	m_nRuntimeMaterialWorkerFileOpens = 0u;
+	m_nRuntimeMaterialCompletionsLastTick = 0;
 	m_bRuntimeMaterialSourceTexturesReleased = false;
 	for ( int index = 0; index < s_nMaxTextureAssets; ++index ) {
+		memset( m_runtimeMaterialChecksumVerified[index], 0, sizeof( m_runtimeMaterialChecksumVerified[index] ) );
 		m_runtimeMaterialLogicalToPhysical[( size_t )( index )] = -1;
 		m_runtimeMaterialPhysicalToLogical[( size_t )( index )] = -1;
 		m_runtimeMaterialLastUseTick[( size_t )( index )] = 0u;
@@ -228,6 +266,7 @@ void Terrain3DAssets::resetRuntimeMaterialCacheState( const bool bClearGenerated
 		m_generatedDisplacementTextures.clear();
 	}
 	m_generatedFarAlbedoTextures.clear();
+	advanceTexturePublicationGeneration( true );
 }
 
 bool Terrain3DAssets::initializeFarMaterialArray( void ) {
@@ -338,6 +377,12 @@ bool Terrain3DAssets::loadRuntimeMaterialCookedIndex( void ) {
 	}
 	// Publish the index only after the entire descriptor table is valid. A failed
 	// reload must never leave a partially overwritten live cache snapshot behind.
+	const bool cooked_identity_changed = m_runtimeMaterialCachePath != path || m_nRuntimeMaterialCookedSignature != signature;
+	if ( cooked_identity_changed ) {
+		for ( int logical = 0; logical < s_nMaxTextureAssets; ++logical ) {
+			memset( m_runtimeMaterialChecksumVerified[logical], 0, sizeof( m_runtimeMaterialChecksumVerified[logical] ) );
+		}
+	}
 	memcpy( m_runtimeMaterialCookedLayers, loaded_layers, sizeof( loaded_layers[0] ) * ( size_t )( s_nMaxTextureAssets ) );
 	m_runtimeMaterialCachePath = path;
 	m_nRuntimeMaterialCookedSignature = signature;
@@ -425,6 +470,277 @@ Ref<Image> Terrain3DAssets::loadRuntimeMaterialCookedImage( const int nLogicalId
 	return Image::create_from_data( info.m_nWidth, info.m_nHeight, info.m_nMipmaps != 0u, ( Image::Format )( info.m_nFormat ), bytes );
 }
 
+static const uint64_t s_nRuntimeMaterialDiskBytesPerSecond = 64ull * 1024ull * 1024ull;
+static const uint64_t s_nRuntimeMaterialDiskBurstBytes = 64ull * 1024ull * 1024ull;
+static const uint64_t s_nRuntimeMaterialPreparedByteLimit = 64ull * 1024ull * 1024ull;
+static const uint64_t s_nRuntimeMaterialGpuBytesPerSecond = 128ull * 1024ull * 1024ull;
+static const uint64_t s_nRuntimeMaterialGpuBurstBytes = 128ull * 1024ull * 1024ull;
+static const uint64_t s_nRuntimeMaterialUpdateCallsPerSecond = 240ull;
+static const uint64_t s_nRuntimeMaterialUpdateCallBurst = 16ull;
+
+void Terrain3DAssets::refillRuntimeMaterialBucket( t3dRuntimeMaterialTokenBucket_t &rBucket, const uint64_t nNowUsec ) {
+	if ( rBucket.m_nLastRefillUsec == 0u ) {
+		rBucket.m_nLastRefillUsec = nNowUsec;
+		rBucket.m_nTokens = rBucket.m_nBurst;
+		return;
+	}
+	if ( nNowUsec <= rBucket.m_nLastRefillUsec || rBucket.m_nRatePerSecond == 0u ) {
+		return;
+	}
+	const uint64_t elapsed = nNowUsec - rBucket.m_nLastRefillUsec;
+	const uint64_t add =
+	        elapsed > UINT64_MAX / rBucket.m_nRatePerSecond ? rBucket.m_nBurst : elapsed * rBucket.m_nRatePerSecond / 1000000ull;
+	if ( add > 0u ) {
+		rBucket.m_nTokens = MIN( rBucket.m_nBurst, rBucket.m_nTokens + MIN( add, rBucket.m_nBurst ) );
+		rBucket.m_nLastRefillUsec = nNowUsec;
+	}
+}
+
+bool Terrain3DAssets::consumeRuntimeMaterialBucket(
+        t3dRuntimeMaterialTokenBucket_t &rBucket, const uint64_t nAmount, const uint64_t nNowUsec ) {
+	refillRuntimeMaterialBucket( rBucket, nNowUsec );
+	if ( nAmount > rBucket.m_nTokens ) {
+		return false;
+	}
+	rBucket.m_nTokens -= nAmount;
+	return true;
+}
+
+void Terrain3DAssets::initializeRuntimeMaterialBudgets( void ) {
+	const uint64_t now = t3dSteadyClockUsec();
+	m_runtimeMaterialDiskBucket = {
+		s_nRuntimeMaterialDiskBurstBytes, s_nRuntimeMaterialDiskBytesPerSecond, s_nRuntimeMaterialDiskBurstBytes, now
+	};
+	m_runtimeMaterialGpuBucket = {
+		s_nRuntimeMaterialGpuBurstBytes, s_nRuntimeMaterialGpuBytesPerSecond, s_nRuntimeMaterialGpuBurstBytes, now
+	};
+	m_runtimeMaterialUpdateCallBucket = {
+		s_nRuntimeMaterialUpdateCallBurst, s_nRuntimeMaterialUpdateCallsPerSecond, s_nRuntimeMaterialUpdateCallBurst, now
+	};
+}
+
+void Terrain3DAssets::startRuntimeMaterialWorker( void ) {
+	if ( m_bRuntimeMaterialWorkerRunning || !m_bRuntimeMaterialCookedValid || m_runtimeMaterialCachePath.is_empty() ) {
+		return;
+	}
+	initializeRuntimeMaterialBudgets();
+	{
+		t3dScopedLock_t lock( m_runtimeMaterialWorkerMutex );
+		m_bRuntimeMaterialWorkerStop = false;
+		m_bRuntimeMaterialWorkerRunning = true;
+	}
+	m_runtimeMaterialWorker = t3dThread_t( &Terrain3DAssets::runtimeMaterialWorkerMain, this );
+}
+
+void Terrain3DAssets::stopRuntimeMaterialWorker( void ) {
+	if ( !m_bRuntimeMaterialWorkerRunning && !m_runtimeMaterialWorker.joinable() ) {
+		return;
+	}
+	{
+		t3dScopedLock_t lock( m_runtimeMaterialWorkerMutex );
+		m_bRuntimeMaterialWorkerStop = true;
+	}
+	m_runtimeMaterialWorkerWake.notifyAll();
+	if ( m_runtimeMaterialWorker.joinable() ) {
+		m_runtimeMaterialWorker.join();
+	}
+	{
+		t3dScopedLock_t lock( m_runtimeMaterialWorkerMutex );
+		for ( int i = 0; i < s_nMaxTextureAssets; ++i ) {
+			m_runtimeMaterialRequestState[i] = 0u;
+			m_runtimeMaterialCompletionRing[i] = t3dRuntimeMaterialCompletion_t{};
+		}
+		m_iRuntimeMaterialRequestRead = 0;
+		m_iRuntimeMaterialRequestWrite = 0;
+		m_nRuntimeMaterialRequestCount = 0;
+		m_iRuntimeMaterialCompletionRead = 0;
+		m_iRuntimeMaterialCompletionWrite = 0;
+		m_nRuntimeMaterialCompletionCount = 0;
+		m_nRuntimeMaterialPreparedBytesInFlight = 0u;
+		m_bRuntimeMaterialWorkerStop = false;
+		m_bRuntimeMaterialWorkerRunning = false;
+	}
+}
+
+bool Terrain3DAssets::queueRuntimeMaterialRead( const int nLogicalId ) {
+	if ( !m_bRuntimeMaterialWorkerRunning || nLogicalId <= 0 || nLogicalId >= m_textureList.size() ) {
+		return false;
+	}
+	uint64_t read_bytes = 0u;
+	uint64_t prepared_bytes = 0u;
+	for ( int channel = 0; channel <= RUNTIME_MATERIAL_CHANNEL_DISPLACEMENT; ++channel ) {
+		const t3dRuntimeMaterialImageInfo_t &info = m_runtimeMaterialCookedLayers[( size_t )nLogicalId].m_szChannels[channel];
+		read_bytes += info.m_nSize;
+		prepared_bytes += info.m_nSize;
+	}
+	if ( read_bytes == 0u || read_bytes > UINT32_MAX || prepared_bytes > UINT32_MAX ) {
+		return false;
+	}
+	const uint64_t now = t3dSteadyClockUsec();
+	t3dScopedLock_t lock( m_runtimeMaterialWorkerMutex );
+	if ( m_runtimeMaterialRequestState[nLogicalId] != 0u ) {
+		return true;
+	}
+	if ( m_nRuntimeMaterialRequestCount >= s_nMaxTextureAssets
+	        || m_nRuntimeMaterialPreparedBytesInFlight + prepared_bytes > s_nRuntimeMaterialPreparedByteLimit ) {
+		++m_nRuntimeMaterialBudgetRejects;
+		return false;
+	}
+	if ( !consumeRuntimeMaterialBucket( m_runtimeMaterialDiskBucket, read_bytes, now ) ) {
+		++m_nRuntimeMaterialBudgetRejects;
+		return false;
+	}
+	t3dRuntimeMaterialReadRequest_t &request = m_runtimeMaterialRequestRing[m_iRuntimeMaterialRequestWrite];
+	request.m_nLogicalId = ( int16_t )nLogicalId;
+	request.m_nReadBytes = ( uint32_t )read_bytes;
+	request.m_nPreparedBytes = ( uint32_t )prepared_bytes;
+	m_iRuntimeMaterialRequestWrite = ( m_iRuntimeMaterialRequestWrite + 1 ) % s_nMaxTextureAssets;
+	++m_nRuntimeMaterialRequestCount;
+	m_nRuntimeMaterialPreparedBytesInFlight += prepared_bytes;
+	m_runtimeMaterialRequestState[nLogicalId] = 1u;
+	m_runtimeMaterialWorkerWake.notifyOne();
+	return true;
+}
+
+bool Terrain3DAssets::peekRuntimeMaterialCompletion( t3dRuntimeMaterialCompletion_t &rCompletion ) const {
+	t3dScopedLock_t lock( m_runtimeMaterialWorkerMutex );
+	if ( m_nRuntimeMaterialCompletionCount <= 0 ) {
+		return false;
+	}
+	rCompletion = m_runtimeMaterialCompletionRing[m_iRuntimeMaterialCompletionRead];
+	return true;
+}
+
+void Terrain3DAssets::popRuntimeMaterialCompletion( void ) {
+	t3dScopedLock_t lock( m_runtimeMaterialWorkerMutex );
+	if ( m_nRuntimeMaterialCompletionCount <= 0 ) {
+		return;
+	}
+	t3dRuntimeMaterialCompletion_t &completion = m_runtimeMaterialCompletionRing[m_iRuntimeMaterialCompletionRead];
+	const int logical = completion.m_nLogicalId;
+	if ( completion.m_nUploadBytes <= m_nRuntimeMaterialPreparedBytesInFlight ) {
+		m_nRuntimeMaterialPreparedBytesInFlight -= completion.m_nUploadBytes;
+	} else {
+		m_nRuntimeMaterialPreparedBytesInFlight = 0u;
+	}
+	if ( logical >= 0 && logical < s_nMaxTextureAssets ) {
+		m_runtimeMaterialRequestState[logical] = 0u;
+	}
+	completion = t3dRuntimeMaterialCompletion_t{};
+	m_iRuntimeMaterialCompletionRead = ( m_iRuntimeMaterialCompletionRead + 1 ) % s_nMaxTextureAssets;
+	--m_nRuntimeMaterialCompletionCount;
+}
+
+void Terrain3DAssets::runtimeMaterialWorkerMain( void ) {
+	Terrain3DAllocationPhaseScope phase_scope( TERRAIN3D_ALLOCATION_PHASE_STREAMING_WORKER );
+	const Ref<FileAccess> pFile = FileAccess::open( m_runtimeMaterialCachePath, FileAccess::READ );
+	{
+		t3dScopedLock_t lock( m_runtimeMaterialWorkerMutex );
+		++m_nRuntimeMaterialWorkerFileOpens;
+	}
+	for ( ;; ) {
+		t3dRuntimeMaterialReadRequest_t request;
+		{
+			t3dUniqueLock_t lock( m_runtimeMaterialWorkerMutex );
+			while ( m_nRuntimeMaterialRequestCount <= 0 && !m_bRuntimeMaterialWorkerStop ) {
+				m_runtimeMaterialWorkerWake.wait( lock );
+			}
+			if ( m_bRuntimeMaterialWorkerStop ) {
+				break;
+			}
+			request = m_runtimeMaterialRequestRing[m_iRuntimeMaterialRequestRead];
+			m_iRuntimeMaterialRequestRead = ( m_iRuntimeMaterialRequestRead + 1 ) % s_nMaxTextureAssets;
+			--m_nRuntimeMaterialRequestCount;
+		}
+
+		t3dRuntimeMaterialCompletion_t completion;
+		completion.m_nLogicalId = request.m_nLogicalId;
+		completion.m_nReadBytes = request.m_nReadBytes;
+		completion.m_nUploadBytes = request.m_nPreparedBytes;
+		completion.m_bSuccess = pFile.is_valid();
+		if ( completion.m_bSuccess ) {
+			for ( int channel = 0; channel <= RUNTIME_MATERIAL_CHANNEL_DISPLACEMENT; ++channel ) {
+				const t3dRuntimeMaterialImageInfo_t &info =
+				        m_runtimeMaterialCookedLayers[( size_t )request.m_nLogicalId].m_szChannels[channel];
+				if ( info.m_nSize == 0u ) {
+					continue;
+				}
+				pFile->seek( info.m_iOffset );
+				const PackedByteArray bytes = pFile->get_buffer( info.m_nSize );
+				if ( bytes.size() != ( int64_t )info.m_nSize ) {
+					completion.m_bSuccess = false;
+					break;
+				}
+				if ( !m_runtimeMaterialChecksumVerified[( size_t )request.m_nLogicalId][channel] ) {
+					if ( t3dAssetsMaterialChecksum( bytes.ptr(), ( size_t )bytes.size() ) != info.m_nChecksum ) {
+						completion.m_bSuccess = false;
+						break;
+					}
+					m_runtimeMaterialChecksumVerified[( size_t )request.m_nLogicalId][channel] = 1u;
+				} else {
+					t3dScopedLock_t lock( m_runtimeMaterialWorkerMutex );
+					++m_nRuntimeMaterialChecksumCacheHits;
+				}
+				completion.m_szImages[channel] = Image::create_from_data(
+				        info.m_nWidth, info.m_nHeight, info.m_nMipmaps != 0u, ( Image::Format )info.m_nFormat, bytes );
+				if ( completion.m_szImages[channel].is_null() ) {
+					completion.m_bSuccess = false;
+					break;
+				}
+				++completion.m_nTextureUpdateCalls;
+			}
+		}
+		{
+			t3dScopedLock_t lock( m_runtimeMaterialWorkerMutex );
+			if ( m_nRuntimeMaterialCompletionCount < s_nMaxTextureAssets ) {
+				m_runtimeMaterialCompletionRing[m_iRuntimeMaterialCompletionWrite] = completion;
+				m_iRuntimeMaterialCompletionWrite = ( m_iRuntimeMaterialCompletionWrite + 1 ) % s_nMaxTextureAssets;
+				++m_nRuntimeMaterialCompletionCount;
+				if ( request.m_nLogicalId >= 0 && request.m_nLogicalId < s_nMaxTextureAssets ) {
+					m_runtimeMaterialRequestState[request.m_nLogicalId] = 2u;
+				}
+			} else {
+				if ( request.m_nPreparedBytes <= m_nRuntimeMaterialPreparedBytesInFlight ) {
+					m_nRuntimeMaterialPreparedBytesInFlight -= request.m_nPreparedBytes;
+				} else {
+					m_nRuntimeMaterialPreparedBytesInFlight = 0u;
+				}
+				if ( request.m_nLogicalId >= 0 && request.m_nLogicalId < s_nMaxTextureAssets ) {
+					m_runtimeMaterialRequestState[request.m_nLogicalId] = 0u;
+				}
+			}
+		}
+	}
+}
+
+bool Terrain3DAssets::publishRuntimeMaterialPreparedLayer( const t3dRuntimeMaterialCompletion_t &rCompletion, const int nPhysicalLayer ) {
+	const int logical = rCompletion.m_nLogicalId;
+	if ( !m_bRuntimeMaterialCacheActive || !rCompletion.m_bSuccess || logical <= 0 || logical >= m_textureList.size() || nPhysicalLayer <= 0
+	        || nPhysicalLayer >= m_nRuntimeMaterialPhysicalLayers ) {
+		return false;
+	}
+	const Ref<Image> &pAlbedo = rCompletion.m_szImages[RUNTIME_MATERIAL_CHANNEL_ALBEDO];
+	const Ref<Image> &pNormal = rCompletion.m_szImages[RUNTIME_MATERIAL_CHANNEL_NORMAL];
+	const Ref<Image> &pSurface = rCompletion.m_szImages[RUNTIME_MATERIAL_CHANNEL_SURFACE];
+	const Ref<Image> &pDisplacement = rCompletion.m_szImages[RUNTIME_MATERIAL_CHANNEL_DISPLACEMENT];
+	if ( pAlbedo.is_null() || !m_generatedAlbedoTextures.update( pAlbedo, nPhysicalLayer ) ) {
+		return false;
+	}
+	if ( m_generatedNormalTextures.getRid().is_valid()
+	        && ( pNormal.is_null() || !m_generatedNormalTextures.update( pNormal, nPhysicalLayer ) ) ) {
+		return false;
+	}
+	if ( m_generatedSurfaceTextures.getRid().is_valid()
+	        && ( pSurface.is_null() || !m_generatedSurfaceTextures.update( pSurface, nPhysicalLayer ) ) ) {
+		return false;
+	}
+	if ( m_generatedDisplacementTextures.getRid().is_valid()
+	        && ( pDisplacement.is_null() || !m_generatedDisplacementTextures.update( pDisplacement, nPhysicalLayer ) ) ) {
+		return false;
+	}
+	return true;
+}
+
 bool Terrain3DAssets::createRuntimeMaterialChannelArray(
         Terrain3DGeneratedTexture &rGenerated, const int nChannel, const int nPhysicalLayers, const bool bFullyResident ) const {
 	const Ref<Image> pDefault = loadRuntimeMaterialCookedImage( 0, nChannel );
@@ -501,33 +817,7 @@ bool Terrain3DAssets::initializeRuntimeMaterialPhysicalArrays( const int nLayerL
 		m_runtimeMaterialLastUseTick[( size_t )( physical )] = ++m_nRuntimeMaterialTick;
 	}
 	m_bRuntimeMaterialCacheActive = true;
-	return true;
-}
-
-bool Terrain3DAssets::publishRuntimeMaterialLayer( const int nLogicalId, const int nPhysicalLayer ) {
-	if ( !m_bRuntimeMaterialCacheActive || nLogicalId < 0 || nLogicalId >= m_textureList.size() || nPhysicalLayer <= 0
-	        || nPhysicalLayer >= m_nRuntimeMaterialPhysicalLayers ) {
-		return false;
-	}
-	const Ref<Image> pAlbedo = loadRuntimeMaterialCookedImage( nLogicalId, 0 );
-	const Ref<Image> pNormal = loadRuntimeMaterialCookedImage( nLogicalId, 1 );
-	const Ref<Image> pSurface = loadRuntimeMaterialCookedImage( nLogicalId, 2 );
-	const Ref<Image> pDisplacement = loadRuntimeMaterialCookedImage( nLogicalId, 3 );
-	if ( pAlbedo.is_null() || !m_generatedAlbedoTextures.update( pAlbedo, nPhysicalLayer ) ) {
-		return false;
-	}
-	if ( m_generatedNormalTextures.getRid().is_valid()
-	        && ( pNormal.is_null() || !m_generatedNormalTextures.update( pNormal, nPhysicalLayer ) ) ) {
-		return false;
-	}
-	if ( m_generatedSurfaceTextures.getRid().is_valid()
-	        && ( pSurface.is_null() || !m_generatedSurfaceTextures.update( pSurface, nPhysicalLayer ) ) ) {
-		return false;
-	}
-	if ( m_generatedDisplacementTextures.getRid().is_valid()
-	        && ( pDisplacement.is_null() || !m_generatedDisplacementTextures.update( pDisplacement, nPhysicalLayer ) ) ) {
-		return false;
-	}
+	advanceTexturePublicationGeneration( true );
 	return true;
 }
 
@@ -552,6 +842,7 @@ void Terrain3DAssets::releaseRuntimeMaterialSourceTextures( void ) {
 }
 
 bool Terrain3DAssets::configureRuntimeMaterialCache( void ) {
+	stopRuntimeMaterialWorker();
 	if ( !m_pTerrain || m_textureList.is_empty() ) {
 		m_bRuntimeMaterialCacheActive = false;
 		return false;
@@ -612,10 +903,11 @@ bool Terrain3DAssets::configureRuntimeMaterialCache( void ) {
 		return m_bRuntimeMaterialCacheActive;
 	}
 
-	// Cold runtime startup and Editor Runtime Profile must expose the same
-	// material working set before the first visible frame. Populate the bounded
-	// cache from the already-established GPU region priorities in one bootstrap
-	// pass; subsequent motion returns to the configured per-frame upload budget.
+	startRuntimeMaterialWorker();
+
+	// Seed the first priority set without blocking startup. The owner admits
+	// byte-bounded requests here; the worker prepares them asynchronously and
+	// later owner ticks publish completed layers within upload/call budgets.
 	if ( m_pTerrain->getData() ) {
 		uint8_t priority_ids[s_nMaxTextureAssets] = {};
 		const int priority_count = m_pTerrain->getData()->fillGpuMaterialPriorityIds( priority_ids, s_nMaxTextureAssets );
@@ -633,85 +925,143 @@ void Terrain3DAssets::updateRuntimeMaterialResidencyInternal(
         const uint8_t *const pPriorityIds, const int nPriorityCount, const int nUploadBudget ) {
 	m_nRuntimeMaterialUploadsLastTick = 0;
 	m_nRuntimeMaterialEvictionsLastTick = 0;
+	m_nRuntimeMaterialReadBytesLastTick = 0u;
+	m_nRuntimeMaterialUploadBytesLastTick = 0u;
+	m_nRuntimeMaterialCompletionsLastTick = 0;
 	if ( !m_bRuntimeMaterialCacheActive || !m_pTerrain || !pPriorityIds || nPriorityCount <= 0 ) {
 		return;
 	}
+
 	++m_nRuntimeMaterialTick;
 	for ( int physical = 1; physical < m_nRuntimeMaterialPhysicalLayers; ++physical ) {
-		if ( m_runtimeMaterialPhysicalToLogical[( size_t )( physical )] == -2
-		        && m_nRuntimeMaterialTick >= m_runtimeMaterialRetireAfterTick[( size_t )( physical )] ) {
-			m_runtimeMaterialPhysicalToLogical[( size_t )( physical )] = -1;
-			m_runtimeMaterialRetireAfterTick[( size_t )( physical )] = 0u;
+		if ( m_runtimeMaterialPhysicalToLogical[( size_t )physical] == -2
+		        && m_nRuntimeMaterialTick >= m_runtimeMaterialRetireAfterTick[( size_t )physical] ) {
+			m_runtimeMaterialPhysicalToLogical[( size_t )physical] = -1;
+			m_runtimeMaterialRetireAfterTick[( size_t )physical] = 0u;
 		}
 	}
+
 	uint32_t desired_mask = 1u;
 	for ( int index = 0; index < nPriorityCount; ++index ) {
-		const int id = ( int )( pPriorityIds[index] );
-		if ( id >= 0 && id < m_textureList.size() ) {
-			desired_mask |= 1u << ( uint32_t )( id );
+		const int logical = ( int )pPriorityIds[index];
+		if ( logical >= 0 && logical < m_textureList.size() ) {
+			desired_mask |= 1u << ( uint32_t )logical;
 		}
 	}
+
+	// Admission is metadata-only on the owner. Disk I/O, checksum validation and
+	// Image construction are performed by the persistent streaming worker.
+	for ( int priority = 0; priority < nPriorityCount; ++priority ) {
+		const int logical = ( int )pPriorityIds[priority];
+		if ( logical <= 0 || logical >= m_textureList.size() ) {
+			continue;
+		}
+		const int existing = m_runtimeMaterialLogicalToPhysical[( size_t )logical];
+		if ( existing > 0 && existing < m_nRuntimeMaterialPhysicalLayers
+		        && m_runtimeMaterialPhysicalToLogical[( size_t )existing] == logical ) {
+			m_runtimeMaterialLastUseTick[( size_t )existing] = m_nRuntimeMaterialTick;
+			continue;
+		}
+		queueRuntimeMaterialRead( logical );
+	}
+
 	const int mapped_capacity = MAX( 1, m_nRuntimeMaterialPhysicalLayers - s_nRuntimeMaterialSpareLayers );
-	const int upload_budget = MAX( 1, nUploadBudget );
+	const int completion_budget = MAX( 1, nUploadBudget );
 	bool mapping_changed = false;
-	for ( int priority = 0; priority < nPriorityCount && m_nRuntimeMaterialUploadsLastTick < upload_budget; ++priority ) {
-		const int logical = ( int )( pPriorityIds[priority] );
-		if ( logical < 0 || logical >= m_textureList.size() ) {
+	while ( m_nRuntimeMaterialCompletionsLastTick < completion_budget ) {
+		t3dRuntimeMaterialCompletion_t completion;
+		if ( !peekRuntimeMaterialCompletion( completion ) ) {
+			break;
+		}
+
+		const int logical = completion.m_nLogicalId;
+		if ( logical <= 0 || logical >= m_textureList.size() || ( desired_mask & ( 1u << ( uint32_t )logical ) ) == 0u
+		        || !completion.m_bSuccess ) {
+			m_nRuntimeMaterialReadBytesLastTick += completion.m_nReadBytes;
+			popRuntimeMaterialCompletion();
+			++m_nRuntimeMaterialCompletionsLastTick;
 			continue;
 		}
-		const int existing = m_runtimeMaterialLogicalToPhysical[( size_t )( logical )];
-		if ( logical == 0
-		        || ( existing > 0 && existing < m_nRuntimeMaterialPhysicalLayers
-		                && m_runtimeMaterialPhysicalToLogical[( size_t )( existing )] == logical ) ) {
-			m_runtimeMaterialLastUseTick[( size_t )( existing )] = m_nRuntimeMaterialTick;
+
+		const int existing = m_runtimeMaterialLogicalToPhysical[( size_t )logical];
+		if ( existing > 0 && existing < m_nRuntimeMaterialPhysicalLayers
+		        && m_runtimeMaterialPhysicalToLogical[( size_t )existing] == logical ) {
+			m_runtimeMaterialLastUseTick[( size_t )existing] = m_nRuntimeMaterialTick;
+			m_nRuntimeMaterialReadBytesLastTick += completion.m_nReadBytes;
+			popRuntimeMaterialCompletion();
+			++m_nRuntimeMaterialCompletionsLastTick;
 			continue;
 		}
+
+		const uint64_t now = t3dSteadyClockUsec();
+		refillRuntimeMaterialBucket( m_runtimeMaterialGpuBucket, now );
+		refillRuntimeMaterialBucket( m_runtimeMaterialUpdateCallBucket, now );
+		if ( completion.m_nUploadBytes > m_runtimeMaterialGpuBucket.m_nTokens
+		        || completion.m_nTextureUpdateCalls > m_runtimeMaterialUpdateCallBucket.m_nTokens ) {
+			++m_nRuntimeMaterialBudgetRejects;
+			break;
+		}
+
 		if ( m_nRuntimeMaterialResidentCount >= mapped_capacity ) {
 			int victim_physical = -1;
 			uint64_t oldest = eastl::numeric_limits<uint64_t>::max();
 			for ( int physical = 1; physical < m_nRuntimeMaterialPhysicalLayers; ++physical ) {
-				const int victim_logical = m_runtimeMaterialPhysicalToLogical[( size_t )( physical )];
-				if ( victim_logical <= 0 || ( desired_mask & ( 1u << ( uint32_t )( victim_logical ) ) ) != 0u ) {
+				const int victim_logical = m_runtimeMaterialPhysicalToLogical[( size_t )physical];
+				if ( victim_logical <= 0 || ( desired_mask & ( 1u << ( uint32_t )victim_logical ) ) != 0u ) {
 					continue;
 				}
-				if ( m_runtimeMaterialLastUseTick[( size_t )( physical )] < oldest ) {
-					oldest = m_runtimeMaterialLastUseTick[( size_t )( physical )];
+				if ( m_runtimeMaterialLastUseTick[( size_t )physical] < oldest ) {
+					oldest = m_runtimeMaterialLastUseTick[( size_t )physical];
 					victim_physical = physical;
 				}
 			}
-			if ( victim_physical >= 0 ) {
-				const int victim_logical = m_runtimeMaterialPhysicalToLogical[( size_t )( victim_physical )];
-				m_runtimeMaterialLogicalToPhysical[( size_t )( victim_logical )] = -1;
-				m_runtimeMaterialPhysicalToLogical[( size_t )( victim_physical )] = -2;
-				m_runtimeMaterialRetireAfterTick[( size_t )( victim_physical )] = m_nRuntimeMaterialTick + 4u;
-				--m_nRuntimeMaterialResidentCount;
-				++m_nRuntimeMaterialEvictionsLastTick;
-				mapping_changed = true;
-			} else {
-				// All mapped pages are currently desired. Never consume retirement/staging
-				// layers as extra logical capacity; the lower-priority material will use
-				// physical fallback zero until a mapped slot becomes replaceable.
-				continue;
+			if ( victim_physical < 0 ) {
+				// Keep the prepared completion queued. It is already byte-accounted and
+				// can publish as soon as a mapped layer becomes replaceable.
+				break;
 			}
+			const int victim_logical = m_runtimeMaterialPhysicalToLogical[( size_t )victim_physical];
+			m_runtimeMaterialLogicalToPhysical[( size_t )victim_logical] = -1;
+			m_runtimeMaterialPhysicalToLogical[( size_t )victim_physical] = -2;
+			m_runtimeMaterialRetireAfterTick[( size_t )victim_physical] = m_nRuntimeMaterialTick + 4u;
+			--m_nRuntimeMaterialResidentCount;
+			++m_nRuntimeMaterialEvictionsLastTick;
+			mapping_changed = true;
 		}
+
 		int free_physical = -1;
 		for ( int physical = 1; physical < m_nRuntimeMaterialPhysicalLayers; ++physical ) {
-			if ( m_runtimeMaterialPhysicalToLogical[( size_t )( physical )] == -1 ) {
+			if ( m_runtimeMaterialPhysicalToLogical[( size_t )physical] == -1 ) {
 				free_physical = physical;
 				break;
 			}
 		}
-		if ( free_physical < 0 || !publishRuntimeMaterialLayer( logical, free_physical ) ) {
+		if ( free_physical < 0 ) {
+			break;
+		}
+
+		m_runtimeMaterialGpuBucket.m_nTokens -= completion.m_nUploadBytes;
+		m_runtimeMaterialUpdateCallBucket.m_nTokens -= completion.m_nTextureUpdateCalls;
+
+		const bool published = publishRuntimeMaterialPreparedLayer( completion, free_physical );
+		m_nRuntimeMaterialReadBytesLastTick += completion.m_nReadBytes;
+		popRuntimeMaterialCompletion();
+		++m_nRuntimeMaterialCompletionsLastTick;
+		if ( !published ) {
 			continue;
 		}
-		m_runtimeMaterialPhysicalToLogical[( size_t )( free_physical )] = logical;
-		m_runtimeMaterialLogicalToPhysical[( size_t )( logical )] = free_physical;
-		m_runtimeMaterialLastUseTick[( size_t )( free_physical )] = m_nRuntimeMaterialTick;
+
+		m_runtimeMaterialPhysicalToLogical[( size_t )free_physical] = logical;
+		m_runtimeMaterialLogicalToPhysical[( size_t )logical] = free_physical;
+		m_runtimeMaterialLastUseTick[( size_t )free_physical] = m_nRuntimeMaterialTick;
 		++m_nRuntimeMaterialResidentCount;
 		++m_nRuntimeMaterialUploadsLastTick;
+		m_nRuntimeMaterialUploadBytesLastTick += completion.m_nUploadBytes;
 		mapping_changed = true;
 	}
+
 	if ( mapping_changed ) {
+		advanceTexturePublicationGeneration( true );
 		const Ref<Terrain3DMaterial> pMaterial = m_pTerrain->getMaterial();
 		if ( pMaterial.is_valid() && pMaterial->isInitializedFor( m_pTerrain ) ) {
 			pMaterial->updateRuntimeMaterialLayerMap();
@@ -754,6 +1104,23 @@ Dictionary Terrain3DAssets::getRuntimeMaterialCacheStats( void ) const {
 	stats["resident"] = m_nRuntimeMaterialResidentCount;
 	stats["uploads_last_tick"] = m_nRuntimeMaterialUploadsLastTick;
 	stats["evictions_last_tick"] = m_nRuntimeMaterialEvictionsLastTick;
+	stats["read_bytes_last_tick"] = ( int64_t )m_nRuntimeMaterialReadBytesLastTick;
+	stats["upload_bytes_last_tick"] = ( int64_t )m_nRuntimeMaterialUploadBytesLastTick;
+	stats["completed_layers_last_tick"] = m_nRuntimeMaterialCompletionsLastTick;
+	{
+		t3dScopedLock_t lock( m_runtimeMaterialWorkerMutex );
+		stats["queued_reads"] = m_nRuntimeMaterialRequestCount;
+		stats["prepared_completions"] = m_nRuntimeMaterialCompletionCount;
+		stats["prepared_bytes_in_flight"] = ( int64_t )m_nRuntimeMaterialPreparedBytesInFlight;
+		stats["budget_rejects"] = ( int64_t )m_nRuntimeMaterialBudgetRejects;
+		stats["checksum_cache_hits"] = ( int64_t )m_nRuntimeMaterialChecksumCacheHits;
+		stats["worker_file_opens"] = ( int64_t )m_nRuntimeMaterialWorkerFileOpens;
+		stats["worker_running"] = m_bRuntimeMaterialWorkerRunning;
+	}
+	stats["disk_budget_bytes_per_second"] = ( int64_t )s_nRuntimeMaterialDiskBytesPerSecond;
+	stats["prepared_byte_limit"] = ( int64_t )s_nRuntimeMaterialPreparedByteLimit;
+	stats["gpu_budget_bytes_per_second"] = ( int64_t )s_nRuntimeMaterialGpuBytesPerSecond;
+	stats["texture_update_calls_per_second"] = ( int64_t )s_nRuntimeMaterialUpdateCallsPerSecond;
 	stats["generated_payload_bytes"] = ( int64_t )( getGeneratedTexturePayloadBytes() );
 	stats["far_albedo_layers"] = m_generatedFarAlbedoTextures.size();
 	stats["far_albedo_max_lod"] = m_generatedFarAlbedoTextures.maxMipmapLevel();
@@ -790,6 +1157,7 @@ Dictionary Terrain3DAssets::getRuntimeMaterialCacheStats( void ) const {
 }
 
 Dictionary Terrain3DAssets::cookRuntimeMaterialCache( void ) {
+	stopRuntimeMaterialWorker();
 	Dictionary result;
 	result["complete"] = false;
 	result["materials"] = m_textureList.size();
@@ -1381,14 +1749,19 @@ void Terrain3DAssets::validateArrayMember( const Ref<Texture2D> &rTexture,
 	}
 	if ( eFormat != rLayout.m_eFormat ) {
 		rLayout.m_bNeedsNormalization = true;
-		LOG( WARN,
-		        "Texture ID ",
-		        rAsset->getId(),
-		        " ",
-		        rLabel,
-		        " format ",
-		        ( int )( eFormat ),
-		        " differs from another layer in the same array; the array will be normalized instead of rejected." );
+		if ( bAllowCompressedSurface && t3dAssetsIsNativePackedSurfaceFormat( rLayout.m_eFormat )
+		        && t3dAssetsIsNativePackedSurfaceFormat( eFormat ) ) {
+			rLayout.m_eFormat = t3dAssetsSelectPackedSurfaceArrayFormat( rLayout.m_eFormat, eFormat );
+		} else {
+			LOG( WARN,
+			        "Texture ID ",
+			        rAsset->getId(),
+			        " ",
+			        rLabel,
+			        " format ",
+			        ( int )( eFormat ),
+			        " differs from another layer in the same array; the array will be normalized instead of rejected." );
+		}
 	}
 	if ( bMipmaps != rLayout.m_bMipmaps ) {
 		rLayout.m_bNeedsNormalization = true;
@@ -1403,6 +1776,7 @@ void Terrain3DAssets::validateArrayMember( const Ref<Texture2D> &rTexture,
 }
 
 void Terrain3DAssets::updateTextureFiles( void ) {
+	advanceTexturePublicationGeneration( false );
 	m_bPersistenceDirty = true;
 	IS_INIT( VOID );
 	LOG( DEBUG, "Received texture_changed signal" );
@@ -1487,13 +1861,13 @@ void Terrain3DAssets::updateTextureFiles( void ) {
 
 	// GPU texture arrays require a uniform layout only among their own layers.
 	// Albedo, packed surface/PBR, normal, and displacement are separate arrays and
-	// deliberately keep independent dimensions and formats. Preserve identical
-	// native compressed layers byte-for-byte; only fall back to a canonical
-	// uncompressed representation when layers *within the same array* disagree.
+	// deliberately keep independent dimensions and formats. Preserve native packed
+	// surface compression across size/mipmap normalization and transcode mixed
+	// RGBA8/BC3/BC7 surface sources to one compatible compressed array format.
 	if ( albedoLayout.m_bNeedsNormalization ) {
 		albedoLayout.m_eFormat = Image::FORMAT_RGBA8;
 	}
-	if ( secondaryLayout.m_bNeedsNormalization ) {
+	if ( secondaryLayout.m_bNeedsNormalization && ( !bPackedPbr || !t3dAssetsIsNativePackedSurfaceFormat( secondaryLayout.m_eFormat ) ) ) {
 		secondaryLayout.m_eFormat = Image::FORMAT_RGBA8;
 	}
 	if ( displacementLayout.m_bNeedsNormalization ) {
@@ -1657,6 +2031,7 @@ void Terrain3DAssets::updateTextureFiles( void ) {
 }
 
 void Terrain3DAssets::updateTextureSettingsInternal( const bool bPersistentChange ) {
+	advanceTexturePublicationGeneration( false );
 	if ( bPersistentChange ) {
 		m_bPersistenceDirty = true;
 	}
@@ -1746,6 +2121,7 @@ void Terrain3DAssets::updateTexturePreview( void ) {
 }
 
 void Terrain3DAssets::updateMeshInternal( const int nId, const bool bPersistentChange ) {
+	advanceMeshSourceGeneration();
 	if ( bPersistentChange ) {
 		m_bPersistenceDirty = true;
 	}
@@ -1844,10 +2220,12 @@ void Terrain3DAssets::uninitialize( Terrain3D *pTerrain ) {
 		LOG( DEBUG, "Ignoring stale asset uninitialize request from ", pTerrain, "; current owner: ", m_pTerrain );
 		return;
 	}
+	stopRuntimeMaterialWorker();
 	LOG( INFO, "Uninitializing assets" );
 }
 
 void Terrain3DAssets::destroy( void ) {
+	stopRuntimeMaterialWorker();
 	LOG( INFO, "Destroying assets" );
 	for ( size_t iTexture = 0u; iTexture < ( size_t )( ( m_textureList ).size() ); iTexture++ ) {
 		const Ref<Terrain3DTextureAsset> pAsset = ( m_textureList )[iTexture];
@@ -2029,6 +2407,7 @@ void Terrain3DAssets::createMeshThumbnails( const int nId, const Vector2i &rSize
 
 void Terrain3DAssets::updateMeshList( void ) {
 	m_bPersistenceDirty = true;
+	advanceMeshSourceGeneration();
 	IS_INSTANCER_INIT( VOID );
 	LOG( INFO, "Updating mesh registry" );
 	if ( m_meshList.is_empty() ) {

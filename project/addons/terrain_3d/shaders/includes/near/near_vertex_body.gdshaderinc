@@ -13,7 +13,7 @@
 	UV = v_vertex.xz * _vertex_density;
 
 	// UV coordinates in region space + texel offset. Values are 0 to 1 within regions
-	UV2 = fma(UV, vec2(_region_texel_size), vec2(0.5 * _region_texel_size));
+	UV2 = fma(UV, vec2(T3D_REGION_INV_SIZE), vec2(0.5 * T3D_REGION_INV_SIZE));
 
 	ivec3 v_region = get_index_coord(start_pos);
 	uint control = read_terrain_control(v_region);

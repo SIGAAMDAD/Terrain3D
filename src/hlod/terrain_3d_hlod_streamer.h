@@ -24,9 +24,15 @@ class Terrain3D;
 
 typedef struct t3dEntry_s {
 	int m_nLevel = 1;
-	Vector2i m_cluster = s_v2iZero;
-	Vector2i m_regionMin = s_v2iZero;
-	Vector2i m_regionMax = s_v2iZero;
+	t3dRegionCoord_t m_cluster = t3dPackRegionCoord( s_v2iZero );
+	t3dRegionCoord_t m_regionMin = t3dPackRegionCoord( s_v2iZero );
+	t3dRegionCoord_t m_regionMax = t3dPackRegionCoord( s_v2iZero );
+	EA_FORCE_INLINE Vector2i getCluster( void ) const { return t3dUnpackRegionCoord( m_cluster ); }
+	EA_FORCE_INLINE Vector2i getRegionMin( void ) const { return t3dUnpackRegionCoord( m_regionMin ); }
+	EA_FORCE_INLINE Vector2i getRegionMax( void ) const { return t3dUnpackRegionCoord( m_regionMax ); }
+	EA_FORCE_INLINE void setCluster( const Vector2i &rValue ) { m_cluster = t3dPackRegionCoord( rValue ); }
+	EA_FORCE_INLINE void setRegionMin( const Vector2i &rValue ) { m_regionMin = t3dPackRegionCoord( rValue ); }
+	EA_FORCE_INLINE void setRegionMax( const Vector2i &rValue ) { m_regionMax = t3dPackRegionCoord( rValue ); }
 	AABB m_localBounds;
 	String m_packagePath;
 	real_t m_fGeometricError = 1.0f;
@@ -59,10 +65,10 @@ class Terrain3DHLODStreamer : public Object {
 	eastl::vector<int, Terrain3DEastlAllocator> m_roots;
 	eastl::vector<uint8_t, Terrain3DEastlAllocator> m_instancerMinLevels;
 	eastl::vector<t3dNodePolicy_t, Terrain3DEastlAllocator> m_nodePolicies;
-	uint32_t m_nodePolicyOffsets[s_nMaxRegionSlots + 1]{};
-	uint8_t m_szRegionRepresentationLevel[s_nMaxRegionSlots] = {};
-	eastl::bitset<s_nMaxRegionSlots> m_managedRegions;
-	eastl::bitset<s_nMaxRegionSlots> m_detailRequiredRegions;
+	uint32_t m_nodePolicyOffsets[s_nRegionSlots + 1]{};
+	uint8_t m_szRegionRepresentationLevel[s_nRegionSlots] = {};
+	eastl::bitset<s_nRegionSlots> m_managedRegions;
+	eastl::bitset<s_nRegionSlots> m_detailRequiredRegions;
 	bool m_bEnabled = true;
 	String m_manifestPath;
 	real_t m_fTargetErrorPixels = 3.0f;
@@ -87,6 +93,8 @@ class Terrain3DHLODStreamer : public Object {
 	bool m_bHasSelectionContext = false;
 	bool m_bSelectionDirty = true;
 	uint64_t m_nRdPublicationGeneration = 1u;
+	mutable uint64_t m_nCapacityMissCount = 0u;
+	uint64_t m_nColdRebuildCount = 0u;
 
 	static int floorDiv( int value, int divisor );
 	static int regionIndex( const Vector2i &rRegion );
@@ -111,6 +119,7 @@ class Terrain3DHLODStreamer : public Object {
 	static uint64_t rdMeshSourceKey( int nEntryIndex );
 
 public:
+	bool bindRuntimeAllocator( Terrain3DMemoryZone *pZone, t3dAllocatorOverflowPolicy_t ePolicy );
 	Terrain3DHLODStreamer( void ) = default;
 	EA_FORCE_INLINE ~Terrain3DHLODStreamer( void ) {
 		destroy();

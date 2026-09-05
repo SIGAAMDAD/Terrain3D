@@ -22,7 +22,7 @@ vec4 sample_far_color(const vec2 world_texel) {
 
 #include "res://addons/terrain_3d/shaders/includes/terrain_far_normal.gdshaderinc"
 int get_middle_height_layer(const ivec2 map_pos) {
-	if (uint(map_pos.x | map_pos.y) >= uint(_region_map_size)) {
+	if (uint(map_pos.x | map_pos.y) >= uint(T3D_REGION_MAP_SIZE)) {
 		return -1;
 	}
 	return int(round(texelFetch(_middle_height_region_map_texture, map_pos, 0).r * 65535.0)) - 1;
@@ -97,16 +97,17 @@ vec3 sample_middle_far_material(const int texture_id, const vec2 world_texel) {
 #endif
 
 float sample_terrain_height(const ivec3 index, const vec2 world_texel) {
-	vec2 rounded_uv = round(world_texel);
-	ivec2 map_pos = ivec2(floor(rounded_uv * _region_texel_size)) + (_region_map_size / 2);
+	ivec2 grid = ivec2(round(world_texel));
+	ivec2 region_cell = t3d_region_cell_from_grid(grid);
+	ivec2 map_pos = region_cell + ivec2(T3D_REGION_MAP_HALF);
 	int height_layer = get_middle_height_layer(map_pos);
 	if (height_layer >= 0) {
-		ivec2 local_coord = ivec2(mod(rounded_uv, _region_size));
+		ivec2 local_coord = t3d_region_local_from_grid(grid, region_cell);
 		ivec2 height_size = textureSize(_middle_height_maps, 0).xy;
-		if (height_size.x == int(_region_size) && height_size.y == int(_region_size)) {
+		if (height_size.x == T3D_REGION_SIZE && height_size.y == T3D_REGION_SIZE) {
 			return decode_terrain_height(texelFetch(_middle_height_maps, ivec3(local_coord, height_layer), 0).r);
 		}
-		vec2 reduced_texel = vec2(local_coord) * vec2(height_size) / _region_size;
+		vec2 reduced_texel = vec2(local_coord) * vec2(height_size) / T3D_REGION_SIZE_F;
 		vec2 reduced_uv = (reduced_texel + vec2(0.5)) / vec2(height_size);
 		return decode_terrain_height(textureLod(_middle_height_maps, vec3(reduced_uv, float(height_layer)), 0.0).r);
 	}

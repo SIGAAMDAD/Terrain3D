@@ -76,13 +76,13 @@ class Terrain3DRuntimeBakeCodec {
 	CLASS_NAME_STATIC( "Terrain3DRuntimeBakeCodec" );
 
 public:
-	static PackedByteArray encodeHoleMask( const Ref<Image> &rControl, int nRegionSize );
-	static PackedByteArray encodeNavigationMask( const Ref<Image> &rControl, int nRegionSize );
-	static PackedByteArray encodeNavigationMask( const PackedInt32Array &rControls, int nWidth );
+	static PackedByteArray encodeHoleMask( const Ref<Image> &rControl );
+	static PackedByteArray encodeNavigationMask( const Ref<Image> &rControl );
+	static PackedByteArray encodeNavigationMask( const PackedInt32Array &rControls );
 	static bool getNavigationMaskView( const PackedByteArray &rBlob, t3dNavigationMaskView_t &rView );
 	static bool decodeNavigationMask(
 	        const PackedByteArray &rBlob, int &nWidth, PackedByteArray &rValidBits, PackedByteArray &rNavigationBits );
-	static PackedByteArray encodeMinMaxHierarchy( const Ref<Image> &rHeight, int nRegionSize );
+	static PackedByteArray encodeMinMaxHierarchy( const Ref<Image> &rHeight );
 	static bool getMinMaxLevelView( const PackedByteArray &rBlob, int nMaximumSide, t3dMinMaxLevelView_t &rView );
 	static Vector2 getMinMaxRange( const t3dMinMaxLevelView_t &rView, uint32_t nIndex );
 	static bool decodeMinMaxLevel( const PackedByteArray &rBlob,
@@ -90,8 +90,8 @@ public:
 	        int &nSourceSide,
 	        int &nLevelSide,
 	        eastl::vector<Vector2, Terrain3DEastlAllocator> &rRanges );
-	static PackedByteArray encodeCollisionHeight( const PackedFloat32Array &rHeights, int nWidth );
-	static PackedByteArray encodeCollisionBounds( float fMinHeight, float fMaxHeight, int nWidth );
+	static PackedByteArray encodeCollisionHeight( const PackedFloat32Array &rHeights );
+	static PackedByteArray encodeCollisionBounds( float fMinHeight, float fMaxHeight );
 	static bool decodeCollisionHeight( const PackedByteArray &rBlob, PackedFloat32Array &rHeights, int &nWidth );
 	static bool decodeCollisionHeightInto( const PackedByteArray &rBlob, PackedFloat32Array &rHeights, int &nWidth );
 	static bool decodeCollisionBounds( const PackedByteArray &rBlob, float &fMinHeight, float &fMaxHeight, int &nWidth );

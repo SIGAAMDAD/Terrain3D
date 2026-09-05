@@ -16,6 +16,7 @@ struct Frame {
     uvec4 counts1;
     uvec4 capacities0;
     uvec4 capacities1;
+    uvec4 resourceCounts;
 };
 
 struct Cell {

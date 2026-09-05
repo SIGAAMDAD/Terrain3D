@@ -879,7 +879,6 @@ typedef struct t3dLandformCalculateContext_s {
 	Vector2 m_areaCenter = Vector2();
 	float m_fAreaRadius = 0.0f;
 	float m_fSpacing = 1.0f;
-	int m_nRegionSize = 0;
 	t3dAtomic_t<bool> *m_pInvalidOutput = NULL;
 	float *m_pWorkerScratch = NULL;
 	size_t m_nWorkerScratchStride = 0u;
@@ -902,24 +901,24 @@ static void t3dCalculateLandformRegions( void *pContext, const size_t nBegin, co
 		const int relaxation_passes = settings.m_mode == THERMAL_RELAXATION ? settings.m_nIterations : 1;
 		for ( int pass = 0; pass < relaxation_passes; ++pass ) {
 			memcpy( pNext, pWorking, source_values.size() * sizeof( float ) );
-			for ( int y = 0; y < context->m_nRegionSize; ++y ) {
-				for ( int x = 0; x < context->m_nRegionSize; ++x ) {
-					const float fWorldX = ( float )( edit.m_location.x * context->m_nRegionSize + x ) * context->m_fSpacing;
-					const float fWorldZ = ( float )( edit.m_location.y * context->m_nRegionSize + y ) * context->m_fSpacing;
+			for ( int y = 0; y < s_nRegionSize; ++y ) {
+				for ( int x = 0; x < s_nRegionSize; ++x ) {
+					const float fWorldX = ( float )( edit.m_location.x * s_nRegionSize + x ) * context->m_fSpacing;
+					const float fWorldZ = ( float )( edit.m_location.y * s_nRegionSize + y ) * context->m_fSpacing;
 					if ( fWorldX < edited_area.position.x || fWorldX > edited_area.get_end().x || fWorldZ < edited_area.position.z
 					        || fWorldZ > edited_area.get_end().z ) {
 						continue;
 					}
 					const Vector2 world( fWorldX, fWorldZ );
 					const t3dPathProjection_t projection = t3dLandformBakerProjectToPath( operation_path, world );
-					const float fSource = pWorking[( size_t )( y * context->m_nRegionSize + x )];
+					const float fSource = pWorking[( size_t )( y * s_nRegionSize + x )];
 					float fNeighborTarget = fSource;
 					if ( settings.m_mode == THERMAL_RELAXATION ) {
 						fNeighborTarget = t3dLandformBakerThermalTarget(
-						        pWorking, context->m_nRegionSize, x, y, context->m_fSpacing, settings.m_fAngleOfRepose );
+						        pWorking, s_nRegionSize, x, y, context->m_fSpacing, settings.m_fAngleOfRepose );
 					} else if ( settings.m_mode == MORPHOLOGY ) {
 						fNeighborTarget =
-						        t3dLandformBakerMorphologyTarget( pWorking, context->m_nRegionSize, x, y, settings.m_morphologyMode );
+						        t3dLandformBakerMorphologyTarget( pWorking, s_nRegionSize, x, y, settings.m_morphologyMode );
 					}
 					const float fEvaluated = t3dLandformBakerEvaluateHeight( settings,
 					        projection,
@@ -934,7 +933,7 @@ static void t3dCalculateLandformRegions( void *pContext, const size_t nBegin, co
 						context->m_pInvalidOutput->store( true, T3D_MEMORY_ORDER_RELAXED );
 						continue;
 					}
-					pNext[( size_t )( y * context->m_nRegionSize + x )] = CLAMP( fEvaluated, s_fRegionHeightMin, s_fRegionHeightMax );
+					pNext[( size_t )( y * s_nRegionSize + x )] = CLAMP( fEvaluated, s_fRegionHeightMin, s_fRegionHeightMax );
 				}
 			}
 			eastl::swap( pWorking, pNext );
@@ -971,7 +970,7 @@ Dictionary Terrain3DLandformBaker::apply( Terrain3D *const pTerrain, const Packe
 	const PackedVector3Array operation_path = t3dLandformBakerSmoothPath( arrPath, 2 );
 	const t3dBasinProfile_t basin_profile = t3dLandformBakerBuildBasinProfile( operation_path );
 	Terrain3DData *const data = pTerrain->getData();
-	const int region_size = pTerrain->getRegionSize();
+	const int region_size = s_nRegionSize;
 	const float spacing = pTerrain->getVertexSpacing();
 	const float fWorldRegionSize = ( float )( region_size )*spacing;
 	const AABB edited_area = t3dLandformBakerCalculateBounds( operation_path, settings, spacing );
@@ -1089,7 +1088,6 @@ Dictionary Terrain3DLandformBaker::apply( Terrain3D *const pTerrain, const Packe
 	calculate_context.m_areaCenter = areaCenter;
 	calculate_context.m_fAreaRadius = area_radius;
 	calculate_context.m_fSpacing = spacing;
-	calculate_context.m_nRegionSize = region_size;
 	calculate_context.m_pInvalidOutput = &invalid_output;
 	calculate_context.m_pWorkerScratch = calculate_scratch.data();
 	calculate_context.m_nWorkerScratchStride = pixel_count;

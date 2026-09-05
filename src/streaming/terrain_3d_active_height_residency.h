@@ -26,12 +26,12 @@ typedef struct t3dActiveHeightResidencyStats_s {
 } t3dActiveHeightResidencyStats_t;
 
 typedef struct t3dActiveHeightResidencyResult_s {
-	Vector2i m_szCpuSourceRequests[s_nCpuRequestCapacity]{};
+	t3dRegionCoord_t m_szCpuSourceRequests[s_nCpuRequestCapacity]{};
 	int m_nCpuSourceRequestCount = 0;
 
 	void requestCpuSource( const Vector2i &rLocation ) {
 		if ( m_nCpuSourceRequestCount < s_nCpuRequestCapacity ) {
-			m_szCpuSourceRequests[( size_t )( m_nCpuSourceRequestCount++ )] = rLocation;
+			m_szCpuSourceRequests[( size_t )( m_nCpuSourceRequestCount++ )] = t3dPackRegionCoord( rLocation );
 		}
 	}
 } t3dActiveHeightResidencyResult_t;

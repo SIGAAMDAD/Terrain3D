@@ -49,9 +49,20 @@ uniform float instance_spacing = 0.5;
 uniform uint _background_mode = 0u;
 uniform float _vertex_spacing = 1.0;
 uniform float _vertex_density = 1.0; // = 1/_vertex_spacing
-uniform float _region_size = 1024.0;
-uniform float _region_texel_size = 0.0009765625; // = 1/REGION_SIZE
-uniform int _region_map_size = 32;
+const int T3D_REGION_SIZE = 128;
+const int T3D_REGION_MASK = 127;
+const float T3D_REGION_SIZE_F = 128.0;
+const float T3D_REGION_INV_SIZE = 0.0078125;
+const int T3D_REGION_MAP_SIZE = 32;
+const int T3D_REGION_MAP_HALF = 16;
+
+ivec2 t3d_region_cell_from_grid(const ivec2 grid) {
+	return ivec2(floor(vec2(grid) * T3D_REGION_INV_SIZE));
+}
+
+ivec2 t3d_region_local_from_grid(const ivec2 grid, const ivec2 region_cell) {
+	return grid - region_cell * T3D_REGION_SIZE;
+}
 uniform sampler2D _region_map_texture : filter_nearest, repeat_disable;
 uniform vec2 _region_locations[1024];
 uniform vec2 _height_decode = vec2(-384.0, 1152.0);
@@ -80,22 +91,22 @@ vec4 read_terrain_color(ivec3 index) {
 
 // Takes in world space XZ (UV) coordinates
 // Returns ivec3 with:
-// XY: (0 to _region_size - 1) coordinates within a region
+// XY: (0 to T3D_REGION_SIZE_F - 1) coordinates within a region
 // Z: layer index used for texturearrays, -1 if not in a region
 ivec3 get_index_coord(const vec2 uv) {
 	vec2 r_uv = round(uv);
-	ivec2 pos = ivec2(floor(r_uv * _region_texel_size)) + (_region_map_size / 2);
-	int bounds = int(uint(pos.x | pos.y) < uint(_region_map_size));
+	ivec2 pos = ivec2(floor(r_uv * T3D_REGION_INV_SIZE)) + T3D_REGION_MAP_HALF;
+	int bounds = int(uint(pos.x | pos.y) < uint(T3D_REGION_MAP_SIZE));
 	int layer_index = (int(round(texelFetch(_region_map_texture, pos, 0).r * 65535.0)) * bounds) - 1;
-	return ivec3(ivec2(mod(r_uv, _region_size)), layer_index);
+	return ivec3(t3d_region_local_from_grid(ivec2(r_uv), t3d_region_cell_from_grid(ivec2(r_uv))), layer_index);
 }
 
 
 // Takes in UV2 region space coordinates, returns 1.0 or 0.0 if a region is present or not.
 float check_region(const vec2 uv2) {
-	ivec2 pos = ivec2(floor(uv2)) + (_region_map_size / 2);
+	ivec2 pos = ivec2(floor(uv2)) + T3D_REGION_MAP_HALF;
 	int layer_index = 0;
-	if (uint(pos.x | pos.y) < uint(_region_map_size)) {
+	if (uint(pos.x | pos.y) < uint(T3D_REGION_MAP_SIZE)) {
 		layer_index = clamp(int(round(texelFetch(_region_map_texture, pos, 0).r * 65535.0)) - 1, -1, 0) + 1;
 	}
 	return float(layer_index);
@@ -119,7 +130,7 @@ float get_region_blend(vec2 uv2) {
 float get_height(vec2 index_id, vec2 offset) {
 	float height = decode_terrain_height(texelFetch(_height_maps, get_index_coord(index_id + offset), 0).r);
 	if (_background_mode != 0u) {
-		float blend = get_region_blend(index_id * _region_texel_size + offset * _region_texel_size);
+		float blend = get_region_blend(index_id * T3D_REGION_INV_SIZE + offset * T3D_REGION_INV_SIZE);
 		height = mix(height, ground_level, smoothstep(0., 1., blend));
 	}
 

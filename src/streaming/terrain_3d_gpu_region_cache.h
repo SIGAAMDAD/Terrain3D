@@ -31,6 +31,7 @@ typedef struct t3dGpuRegionCacheStats_s {
 	bool m_bTexturesReady = false;
 	bool m_bSelectionPending = true;
 	bool m_bCameraMovedLastTick = false;
+	uint64_t m_nBudgetBytes = 0u;
 	int m_nBudgetMb = 0;
 	int m_nCapacity = 0;
 	int m_nPhysicalLayers = 0;
@@ -88,8 +89,12 @@ typedef struct t3dGpuRegionPendingUpload_s {
 	uint64_t m_nLastUseTick = 0u;
 	uint64_t m_nLoadedTick = 0u;
 	uint64_t m_nVictimLastUseTick = 0u;
-	Vector2i m_location;
-	Vector2i m_victimLocation;
+	t3dRegionCoord_t m_location = t3dInvalidRegionCoord();
+	t3dRegionCoord_t m_victimLocation = t3dInvalidRegionCoord();
+	EA_FORCE_INLINE Vector2i getLocation( void ) const { return t3dUnpackRegionCoord( m_location ); }
+	EA_FORCE_INLINE Vector2i getVictimLocation( void ) const { return t3dUnpackRegionCoord( m_victimLocation ); }
+	EA_FORCE_INLINE void setLocation( const Vector2i &rLocation ) { m_location = t3dPackRegionCoord( rLocation ); }
+	EA_FORCE_INLINE void setVictimLocation( const Vector2i &rLocation ) { m_victimLocation = t3dPackRegionCoord( rLocation ); }
 	int m_nVictimLayer = -1;
 	uint8_t m_nPublication = TERRAIN3D_GPU_PENDING_PUBLICATION_NONE;
 	uint8_t m_nPrefetchOrigin = 0u;
@@ -114,7 +119,7 @@ public:
 	        const Ref<Image> &rDerived,
 	        bool bControlImplicit,
 	        bool bColorImplicit );
-	bool configure( bool bEnabled, int nBudgetMb, int nUploadLayers, int nUploadBudgetMb, int nSparePages, int nRetireFrames );
+	bool configure( bool bEnabled, uint64_t nBudgetBytes, int nUploadLayers, int nUploadBudgetMb, int nSparePages, int nRetireFrames );
 	void reset( bool bClearTextures );
 	t3dGpuRegionCacheUpdateResult_t update(
 	        const t3dResidencyFrameState_t &rFrame, bool bForce, int nEffectiveUploadLayers, Terrain3DCompute *pCompute );
@@ -157,7 +162,7 @@ public:
 		return calculateGpuRegionRequiredRadius();
 	}
 	EA_FORCE_INLINE int getAuthoringBudgetMb( void ) const {
-		return calculateAuthoringGpuRegionBudgetMb();
+		return ( int )( calculateAuthoringGpuRegionBudgetBytes() / ( uint64_t )( s_nGpuCacheMib ) );
 	}
 	EA_FORCE_INLINE int getUploadBudgetLayers( void ) const {
 		return m_nGpuRegionUploadBudgetLayers;
@@ -237,7 +242,7 @@ private:
 	bool m_bGpuRegionCacheEnabled = false;
 	bool m_bGpuRegionCacheTexturesReady = false;
 	bool m_bGpuRegionCacheSelectionDirty = true;
-	int m_nGpuRegionCacheBudgetMb = 16;
+	uint64_t m_nGpuRegionCacheBudgetBytes = 16u * ( uint64_t )( s_nGpuCacheMib );
 	int m_nGpuRegionUploadBudgetLayers = 4;
 	int m_nGpuRegionUploadBudgetMb = 2;
 	int m_nGpuRegionSparePages = s_nGpuCacheDefaultSpareLayers;
@@ -247,7 +252,7 @@ private:
 	int m_nGpuRegionSpareLayerCount = 0;
 	int m_nGpuRegionResidentCount = 0;
 	int m_nGpuRegionRetiredCount = 0;
-	uint8_t m_szGpuRegionRepublishPending[s_nMaxRegionSlots] = {};
+	uint8_t m_szGpuRegionRepublishPending[s_nRegionSlots] = {};
 	int m_nGpuRegionRepublishPendingCount = 0;
 	int m_nGpuRegionRepublishCursor = 0;
 	int m_nGpuRegionDesiredLastTick = 0;
@@ -292,10 +297,10 @@ private:
 	Vector2i m_gpuRegionCacheCenter = s_v2iMax;
 	Vector2i m_gpuRegionPredictionDirection = s_v2iZero;
 	uint64_t m_nGpuRegionStreamingGenerationLast = 0u;
-	Vector2i m_szGpuRegionPriorityLocations[s_nGpuCacheMaxLayers] = {};
+	t3dRegionCoord_t m_szGpuRegionPriorityLocations[s_nGpuCacheMaxLayers] = {};
 	uint8_t m_szGpuRegionPriorityClasses[s_nGpuCacheMaxLayers] = {};
 	int m_nGpuRegionPriorityCount = 0;
-	Vector2i m_szGpuRegionLocations[s_nGpuCacheMaxLayers] = {};
+	t3dRegionCoord_t m_szGpuRegionLocations[s_nGpuCacheMaxLayers] = {};
 	uint64_t m_szGpuRegionLastUseTick[s_nGpuCacheMaxLayers] = {};
 	uint64_t m_szGpuRegionLoadedTick[s_nGpuCacheMaxLayers] = {};
 	uint64_t m_szGpuRegionRetireAfterFrame[s_nGpuCacheMaxLayers] = {};
@@ -310,7 +315,7 @@ private:
 	uint64_t m_nGpuRegionPrefetchDiscardedTotal = 0u;
 	uint64_t m_nGpuRegionResidentTicksTotal = 0u;
 	uint64_t m_nGpuRegionDepartedPagesTotal = 0u;
-	uint16_t m_szGpuRegionMap[s_nMaxRegionSlots] = {};
+	uint16_t m_szGpuRegionMap[s_nRegionSlots] = {};
 	uint64_t m_nPhysicalPageTableGeneration = 0u;
 	TypedArray<Image> m_gpuHeightMaps;
 	TypedArray<Image> m_gpuControlMaps;
@@ -334,7 +339,7 @@ private:
 	int calculateGpuRegionRequiredRadius( void ) const;
 	int calculateGpuRegionRequestedPages( void ) const;
 	int calculateGpuRegionPhysicalLayers( int nMappedCapacity ) const;
-	int calculateAuthoringGpuRegionBudgetMb( void ) const;
+	uint64_t calculateAuthoringGpuRegionBudgetBytes( void ) const;
 	int estimateGpuRegionUploadCalls( const Terrain3DRegion *pRegion, int nLayer ) const;
 	size_t estimateGpuRegionUploadBytes( const Terrain3DRegion *pRegion, int nLayer ) const;
 	int getGpuRegionTextureUpdateCallsLastTick( void ) const;

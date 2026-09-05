@@ -7,6 +7,7 @@
 #include "core/terrain_3d_compiler.h"
 #include "core/terrain_3d_limits.h"
 #include "data/terrain_3d_region.h"
+#include "memory/terrain_3d_memory_zone.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -69,11 +70,12 @@ typedef enum t3dResidentPoolState_e : uint8_t {
 } t3dResidentPoolState_t;
 
 typedef struct t3dAlignedAllocation_s {
+	Terrain3DMemoryZone *m_pZone = NULL;
 	void *m_pRaw = NULL;
 	uint8_t *m_pAligned = NULL;
 	size_t m_nBytes = 0u;
 	bool m_bOwned = false;
-	bool allocate( size_t nRequestedBytes, size_t nAlignment );
+	bool allocate( Terrain3DMemoryZone *pZone, size_t nRequestedBytes, size_t nAlignment );
 	void release( void );
 } t3dAlignedAllocation_t;
 
@@ -107,8 +109,9 @@ public:
 	Terrain3DResidentRegionPool( const Terrain3DResidentRegionPool & ) = delete;
 	Terrain3DResidentRegionPool &operator=( const Terrain3DResidentRegionPool & ) = delete;
 
-	static size_t estimateSlotBytes( int nRegionSize, uint32_t nChannels );
-	bool configure( int nRegionSize, int nCapacity, uint32_t nChannels );
+	static size_t estimateSlotBytes( uint32_t nChannels );
+	bool bindRuntimeAllocator( Terrain3DMemoryZone *pZone );
+	bool configure( int nCapacity, uint32_t nChannels );
 	void clear( void );
 	void resetResidency( void );
 	Terrain3DResidentMapLease acquire( const Vector2i &rLocation, const Terrain3DRegion *pRegion );
@@ -119,8 +122,11 @@ public:
 	EA_FORCE_INLINE int getCapacity( void ) const {
 		return m_nCapacity;
 	}
+	EA_FORCE_INLINE Terrain3DMemoryZone *getRuntimeAllocatorZone( void ) const {
+		return m_pRuntimeAllocatorZone;
+	}
 	EA_FORCE_INLINE int getRegionSize( void ) const {
-		return m_nRegionSize;
+		return s_nRegionSize;
 	}
 	EA_FORCE_INLINE uint32_t getChannels( void ) const {
 		return m_nChannels;
@@ -140,10 +146,9 @@ private:
 	// cacheline and prevent adjacent slot metadata from sharing that line; sparse
 	// allocation ownership and plane pointers are cold outside acquire/sync.
 
-	int m_nRegionSize = 0;
+	Terrain3DMemoryZone *m_pRuntimeAllocatorZone = NULL;
 	int m_nCapacity = 0;
 	uint32_t m_nChannels = 0u;
-	size_t m_nTexelCount = 0u;
 	size_t m_nBackingBytes = 0u;
 	size_t m_nMetadataBytes = 0u;
 	t3dSlotLayout_t m_iSlotLayout;
@@ -158,7 +163,7 @@ private:
 
 
 	static bool alignUp( size_t nValue, size_t nAlignment, size_t &nAligned );
-	static bool buildSlotLayout( int nRegionSize, uint32_t nChannels, t3dSlotLayout_t &rLayout, size_t &nTexelCount );
+	static bool buildSlotLayout( uint32_t nChannels, t3dSlotLayout_t &rLayout, size_t &nTexelCount );
 	static bool addEstimatedOptionalBytes(
 	        uint32_t nChannels, uint32_t nChannel, size_t nTexelCount, size_t nBytesPerTexel, size_t &nTotal );
 	static int locationIndex( const Vector2i &rLocation );

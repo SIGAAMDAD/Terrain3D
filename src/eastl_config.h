@@ -54,7 +54,8 @@ typedef struct t3dEastlAllocationHeader_s {
 
 class Terrain3DEastlAllocator {
 	typedef t3dEastlAllocationHeader_t AllocationHeader;
-	bool m_bBootstrapOnly = false;
+	Terrain3DMemoryZone *m_pZone = NULL;
+	t3dAllocatorOverflowPolicy_t m_eOverflowPolicy = TERRAIN3D_ALLOCATOR_OVERFLOW_STRICT;
 
 	inline static t3dAtomic_t<size_t> s_nLiveBytes{ 0u };
 	inline static t3dAtomic_t<size_t> s_nPeakBytes{ 0u };
@@ -86,13 +87,24 @@ public:
 	}
 	Terrain3DEastlAllocator( const Terrain3DEastlAllocator & ) = default;
 	EA_FORCE_INLINE Terrain3DEastlAllocator( const Terrain3DEastlAllocator &rOther, const char * ) :
-	        m_bBootstrapOnly( rOther.m_bBootstrapOnly ) {
+	        m_pZone( rOther.m_pZone ), m_eOverflowPolicy( rOther.m_eOverflowPolicy ) {
 	}
 	Terrain3DEastlAllocator &operator=( const Terrain3DEastlAllocator & ) = default;
 	EA_FORCE_INLINE static Terrain3DEastlAllocator bootstrapAllocator( void ) {
+		return Terrain3DEastlAllocator();
+	}
+	EA_FORCE_INLINE static Terrain3DEastlAllocator zoneAllocator( Terrain3DMemoryZone *const pZone,
+	        const t3dAllocatorOverflowPolicy_t eOverflowPolicy = TERRAIN3D_ALLOCATOR_OVERFLOW_STRICT ) {
 		Terrain3DEastlAllocator allocator;
-		allocator.m_bBootstrapOnly = true;
+		allocator.m_pZone = pZone;
+		allocator.m_eOverflowPolicy = eOverflowPolicy;
 		return allocator;
+	}
+	EA_FORCE_INLINE Terrain3DMemoryZone *zone( void ) const {
+		return m_pZone;
+	}
+	EA_FORCE_INLINE bool isBootstrap( void ) const {
+		return m_pZone == NULL;
 	}
 	EA_FORCE_INLINE const char *getName( void ) const {
 		return EASTL_ALLOCATOR_DEFAULT_NAME;
@@ -104,10 +116,6 @@ public:
 		return allocate( n, alignof( max_align_t ), 0, 0 );
 	}
 	void *allocate( const size_t n, size_t alignment, const size_t alignment_offset, int = 0 ) {
-		if ( n > 0u && !t3dValidateRuntimeAllocationRequest() ) {
-			recordFailure();
-			return NULL;
-		}
 		if ( alignment < alignof( void * ) ) {
 			alignment = alignof( void * );
 		}
@@ -125,15 +133,12 @@ public:
 			return NULL;
 		}
 		const size_t total = n + header_size + alignment_slack;
-		Terrain3DMemoryZone *const pZone = m_bBootstrapOnly ? NULL : Terrain3DZoneAllocatorRouter::beginAllocationRoute();
+		Terrain3DMemoryZone *const pZone = m_pZone;
 		void *pRaw = pZone ? pZone->allocate( total, alignment ) : t3dMemoryAllocate( total );
 		uint8_t origin = pZone ? TERRAIN3D_ALLOCATION_ZONE : TERRAIN3D_ALLOCATION_BOOTSTRAP;
-		if ( !pRaw && pZone && Terrain3DZoneAllocatorRouter::overflowPolicy() == TERRAIN3D_ALLOCATOR_OVERFLOW_HEAP ) {
-			Terrain3DZoneAllocatorRouter::endAllocationRoute();
+		if ( !pRaw && pZone && m_eOverflowPolicy == TERRAIN3D_ALLOCATOR_OVERFLOW_HEAP ) {
 			pRaw = t3dMemoryAllocate( total );
 			origin = TERRAIN3D_ALLOCATION_OVERFLOW;
-		} else if ( pZone && !pRaw ) {
-			Terrain3DZoneAllocatorRouter::endAllocationRoute();
 		}
 		if ( !pRaw ) {
 			recordFailure();
@@ -150,9 +155,7 @@ public:
 		header.m_nOrigin = origin;
 		memcpy( ( void * )( aligned - header_size ), &header, header_size );
 		recordAllocation( n, origin );
-		if ( origin == TERRAIN3D_ALLOCATION_ZONE ) {
-			Terrain3DZoneAllocatorRouter::endAllocationRoute();
-		}
+		t3dRecordRuntimeEastlAllocation( n );
 		return ( void * )aligned;
 	}
 
@@ -194,7 +197,7 @@ public:
 	}
 
 	friend bool operator==( const Terrain3DEastlAllocator &rLeft, const Terrain3DEastlAllocator &rRight ) {
-		return rLeft.m_bBootstrapOnly == rRight.m_bBootstrapOnly;
+		return rLeft.m_pZone == rRight.m_pZone && rLeft.m_eOverflowPolicy == rRight.m_eOverflowPolicy;
 	}
 	friend bool operator!=( const Terrain3DEastlAllocator &rLeft, const Terrain3DEastlAllocator &rRight ) {
 		return !( rLeft == rRight );

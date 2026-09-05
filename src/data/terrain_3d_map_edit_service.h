@@ -115,8 +115,7 @@ public:
 
 	size_t getTransientScratchBytes( void ) const;
 
-	static Rect2i getRegionDirtyRect(
-	        const Vector2i &rLocation, int nRegionSize, real_t fVertexSpacing, const AABB &rEditedArea, int nMargin = 0 );
+	static Rect2i getRegionDirtyRect( const Vector2i &rLocation, const AABB &rEditedArea, int nMargin = 0 );
 
 private:
 	Terrain3DRegionRepository *m_pRepository = NULL;

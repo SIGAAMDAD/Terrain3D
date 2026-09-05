@@ -26,7 +26,6 @@ typedef struct t3dActiveMapView_s {
 	const uint16_t *m_pHeight = NULL;
 	uint32_t m_nOwnerGeneration = 0u;
 	uint32_t m_nRegionGeneration = 0u;
-	int m_nRegionSize = 0;
 	int m_iSlot = -1;
 
 	EA_FORCE_INLINE bool valid( void ) const {
@@ -59,10 +58,10 @@ private:
 	Terrain3DActiveMapLease( int iSlot, const t3dActiveMapView_t &rView );
 };
 
-bool t3dActiveStorageClaim( const void *pOwner, int nRegionSize );
-size_t t3dActiveStorageRequiredBytes( int nRegionSize );
-bool t3dActiveStorageBind( const void *pOwner, int nRegionSize, void *pBacking, size_t nBackingBytes );
-bool t3dActiveStorageReconfigure( const void *pOwner, int nRegionSize );
+bool t3dActiveStorageClaim( const void *pOwner );
+size_t t3dActiveStorageRequiredBytes( void );
+bool t3dActiveStorageBind( const void *pOwner, void *pBacking, size_t nBackingBytes );
+bool t3dActiveStorageReconfigure( const void *pOwner );
 void t3dActiveStorageRelease( const void *pOwner );
 void t3dActiveStorageReset( const void *pOwner );
 bool t3dActiveStorageIsOwner( const void *pOwner );
@@ -79,7 +78,7 @@ Terrain3DActiveMapLease t3dActiveStorageAcquire( const void *pOwner, const Vecto
 bool t3dActiveStorageSyncRegion( const void *pOwner, const Vector2i &rLocation, const Terrain3DRegion *pRegion );
 bool t3dActiveStorageSyncHeightPage( const void *pOwner, const Vector2i &rLocation, const uint8_t *pHeightBytes, size_t nHeightBytes );
 bool t3dActiveStorageReplaceHeightPages(
-        const void *pOwner, int nRegionSize, const uint8_t *const *pHeightPages, const int *pSlots, size_t nPageCount );
+        const void *pOwner, const uint8_t *const *pHeightPages, const int *pSlots, size_t nPageCount );
 bool t3dActiveStorageSyncMap( const void *pOwner,
         const Vector2i &rLocation,
         const Terrain3DRegion *pRegion,

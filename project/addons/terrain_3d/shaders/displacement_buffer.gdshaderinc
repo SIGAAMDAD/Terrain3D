@@ -37,10 +37,22 @@ uniform vec3 _target_pos = vec3(0.f);
 uniform float _mesh_size = 48.f;
 uniform float _vertex_spacing = 1.0;
 uniform float _vertex_density = 1.0; // = 1./_vertex_spacing
-uniform float _region_size = 1024.0;
-uniform float _region_texel_size = 0.0009765625; // = 1./region_size
+const int T3D_REGION_SIZE = 128;
+const int T3D_REGION_SHIFT = 7;
+const int T3D_REGION_MASK = 127;
+const float T3D_REGION_SIZE_F = 128.0;
+const float T3D_REGION_INV_SIZE = 0.0078125;
+const int T3D_REGION_MAP_SIZE = 32;
+const int T3D_REGION_MAP_HALF = 16;
+
+ivec2 t3d_region_cell_from_grid(const ivec2 grid) {
+	return ivec2(floor(vec2(grid) * T3D_REGION_INV_SIZE));
+}
+
+ivec2 t3d_region_local_from_grid(const ivec2 grid, const ivec2 region_cell) {
+	return grid - region_cell * T3D_REGION_SIZE;
+}
 uniform vec2 _height_decode = vec2(-384.0, 1152.0);
-uniform int _region_map_size = 32;
 uniform sampler2D _region_map_texture : filter_nearest, repeat_disable;
 uniform sampler2D _logical_region_map_texture : filter_linear, repeat_disable;
 uniform vec2 _control_rotation_cs[16];
@@ -86,7 +98,7 @@ group_uniforms;
 // Background helpers are included before the main index functions, so the
 // logical-region predicate must be declared here rather than later in the file.
 bool get_logical_region_present(const ivec2 map_pos) {
-	if (uint(map_pos.x | map_pos.y) >= uint(_region_map_size)) {
+	if (uint(map_pos.x | map_pos.y) >= uint(T3D_REGION_MAP_SIZE)) {
 		return false;
 	}
 	return texelFetch(_logical_region_map_texture, map_pos, 0).r > 0.5;
@@ -118,24 +130,25 @@ struct material {
 
 // Takes in world space XZ (UV) coordinates
 // Returns ivec3 with:
-// XY: (0 to _region_size - 1) coordinates within a region
+// XY: (0 to T3D_REGION_SIZE_F - 1) coordinates within a region
 // Z: layer index used for texturearrays, -1 if not in a region
 int get_region_layer(const ivec2 map_pos) {
-	if (uint(map_pos.x | map_pos.y) >= uint(_region_map_size)) {
+	if (uint(map_pos.x | map_pos.y) >= uint(T3D_REGION_MAP_SIZE)) {
 		return -1;
 	}
 	return int(round(texelFetch(_region_map_texture, map_pos, 0).r * 65535.0)) - 1;
 }
 
 ivec3 get_index_coord(const vec2 uv) {
-	vec2 r_uv = round(uv);
-	ivec2 map_pos = ivec2(floor(r_uv * _region_texel_size)) + (_region_map_size / 2);
-	return ivec3(ivec2(mod(r_uv, _region_size)), get_region_layer(map_pos));
+	ivec2 grid = ivec2(round(uv));
+	ivec2 region_cell = t3d_region_cell_from_grid(grid);
+	ivec2 map_pos = region_cell + ivec2(T3D_REGION_MAP_HALF);
+	return ivec3(t3d_region_local_from_grid(grid, region_cell), get_region_layer(map_pos));
 }
 
 void get_quad_indices(const vec2 index_id, out ivec3 i0, out ivec3 i1, out ivec3 i2, out ivec3 i3) {
 	i3 = get_index_coord(index_id);
-	int last_texel = int(_region_size) - 1;
+	int last_texel = T3D_REGION_MASK;
 	if (i3.z >= 0 && i3.x < last_texel && i3.y < last_texel) {
 		i2 = ivec3(i3.xy + ivec2(1, 0), i3.z);
 		i0 = ivec3(i3.xy + ivec2(0, 1), i3.z);
@@ -149,8 +162,7 @@ void get_quad_indices(const vec2 index_id, out ivec3 i0, out ivec3 i1, out ivec3
 
 ivec3 get_offset_index(const vec2 index_id, const ivec3 base_index, const ivec2 offset) {
 	ivec2 local = base_index.xy + offset;
-	int region_size_i = int(_region_size);
-	if (base_index.z >= 0 && uint(local.x | local.y) < uint(region_size_i)) {
+	if (base_index.z >= 0 && uint(local.x | local.y) < uint(T3D_REGION_SIZE)) {
 		return ivec3(local, base_index.z);
 	}
 	return get_index_coord(index_id + vec2(offset));
@@ -158,7 +170,7 @@ ivec3 get_offset_index(const vec2 index_id, const ivec3 base_index, const ivec2 
 
 vec3 get_index_uv(const vec2 uv2) {
 	vec2 region_pos = floor(uv2);
-	ivec2 map_pos = ivec2(region_pos) + (_region_map_size / 2);
+	ivec2 map_pos = ivec2(region_pos) + T3D_REGION_MAP_HALF;
 	return vec3(uv2 - region_pos, float(get_region_layer(map_pos)));
 }
 

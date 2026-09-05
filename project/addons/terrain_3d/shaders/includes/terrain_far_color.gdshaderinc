@@ -1,7 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 vec2 get_far_atlas_uv(const vec2 world_texel) {
-	float world_size = _region_size * float(_region_map_size);
+	float world_size = T3D_REGION_SIZE_F * float(T3D_REGION_MAP_SIZE);
 	return clamp((world_texel + vec2(world_size * 0.5)) / world_size, vec2(0.0), vec2(1.0));
 }
 

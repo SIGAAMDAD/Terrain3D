@@ -10,11 +10,11 @@
 		vec3 __pixel_pos = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz * _vertex_density;
 		vec2 __p = __pixel_pos.xz;
 		// Region Grid
-		vec2 __g = abs(fract((__p + _region_size * 0.5) / _region_size) - 0.5) * _region_size;
+		vec2 __g = abs(fract((__p + T3D_REGION_SIZE_F * 0.5) / T3D_REGION_SIZE_F) - 0.5) * T3D_REGION_SIZE_F;
 		float __grid_d = min(__g.x, __g.y);
 		float __grid_mask = 1.0 - smoothstep(__line_thickness - fwidth(__grid_d), __line_thickness + fwidth(__grid_d), __grid_d);
 		// Region Map Boundry
-		float __hmap = _region_size * 16.0;
+		float __hmap = T3D_REGION_SIZE_F * 16.0;
 		vec2 __bp = abs(__p) - __hmap;
 		float __box_d = abs(max(__bp.x, __bp.y));
 		float __box_mask = 1.0 - smoothstep( __line_thickness - fwidth(__box_d), __line_thickness + fwidth(__box_d), __box_d);

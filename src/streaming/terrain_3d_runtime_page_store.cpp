@@ -58,16 +58,15 @@ static void t3dRuntimePageStoreFnv1a64AppendString( uint64_t &nHash, const Strin
 	}
 }
 
-static bool t3dRuntimePageStoreFnv1a64AppendR16HeightEdge(
-        uint64_t &nHash, const Ref<Image> &rHeight, const int nRegionSize, const bool bFirstColumn ) {
-	if ( rHeight.is_null() || rHeight->get_width() != nRegionSize || rHeight->get_height() != nRegionSize
+static bool t3dRuntimePageStoreFnv1a64AppendR16HeightEdge( uint64_t &nHash, const Ref<Image> &rHeight, const bool bFirstColumn ) {
+	if ( rHeight.is_null() || rHeight->get_width() != s_nRegionSize || rHeight->get_height() != s_nRegionSize
 	        || rHeight->get_format() != Image::FORMAT_R16 || rHeight->has_mipmaps() ) {
 		return false;
 	}
 	const PackedByteArray bytes = rHeight->get_data();
 	const size_t sample_bytes = sizeof( uint16_t );
-	const size_t row_bytes = ( size_t )( nRegionSize )*sample_bytes;
-	const size_t expected_bytes = row_bytes * ( size_t )( nRegionSize );
+	const size_t row_bytes = ( size_t )( s_nRegionSize )*sample_bytes;
+	const size_t expected_bytes = row_bytes * ( size_t )( s_nRegionSize );
 	if ( ( size_t )( bytes.size() ) != expected_bytes ) {
 		return false;
 	}
@@ -75,19 +74,19 @@ static bool t3dRuntimePageStoreFnv1a64AppendR16HeightEdge(
 		t3dRuntimePageStoreFnv1a64Append( nHash, bytes.ptr(), row_bytes );
 		return true;
 	}
-	for ( int row = 0; row < nRegionSize; ++row ) {
+	for ( int row = 0; row < s_nRegionSize; ++row ) {
 		t3dRuntimePageStoreFnv1a64Append( nHash, bytes.ptr() + ( size_t )( row )*row_bytes, sample_bytes );
 	}
 	return true;
 }
 
-static bool t3dRuntimePageStoreFnv1a64AppendR16HeightCorner( uint64_t &nHash, const Ref<Image> &rHeight, const int nRegionSize ) {
-	if ( rHeight.is_null() || rHeight->get_width() != nRegionSize || rHeight->get_height() != nRegionSize
+static bool t3dRuntimePageStoreFnv1a64AppendR16HeightCorner( uint64_t &nHash, const Ref<Image> &rHeight ) {
+	if ( rHeight.is_null() || rHeight->get_width() != s_nRegionSize || rHeight->get_height() != s_nRegionSize
 	        || rHeight->get_format() != Image::FORMAT_R16 || rHeight->has_mipmaps() ) {
 		return false;
 	}
 	const PackedByteArray bytes = rHeight->get_data();
-	const size_t expected_bytes = ( size_t )( nRegionSize ) * ( size_t )( nRegionSize ) * sizeof( uint16_t );
+	const size_t expected_bytes = ( size_t )( s_nRegionTexels ) * sizeof( uint16_t );
 	if ( ( size_t )( bytes.size() ) != expected_bytes ) {
 		return false;
 	}
@@ -119,7 +118,7 @@ static bool t3dRuntimePageStoreEncodeHeader( PackedByteArray &rBytes, const t3dR
 	t3dRuntimePageStoreWriteU32Raw( pWrite, rHeader.m_nMagic );
 	t3dRuntimePageStoreWriteU32Raw( pWrite, rHeader.m_nVersion );
 	t3dRuntimePageStoreWriteU32Raw( pWrite, rHeader.m_nHeaderBytes );
-	t3dRuntimePageStoreWriteU32Raw( pWrite, rHeader.m_nRegionSize );
+	t3dRuntimePageStoreWriteU32Raw( pWrite, rHeader.m_nReservedGeometry );
 	t3dRuntimePageStoreWriteU32Raw( pWrite, rHeader.m_nColorDivisor );
 	t3dRuntimePageStoreWriteU32Raw( pWrite, rHeader.m_nDerivedDivisor );
 	t3dRuntimePageStoreWriteU32Raw( pWrite, rHeader.m_nChannelFlags );
@@ -163,7 +162,7 @@ static t3dRuntimePageHeader_t t3dRuntimePageStoreDecodeHeaderRaw( const uint8_t 
 	header.m_nMagic = t3dRuntimePageStoreReadU32Raw( pRead );
 	header.m_nVersion = t3dRuntimePageStoreReadU32Raw( pRead );
 	header.m_nHeaderBytes = t3dRuntimePageStoreReadU32Raw( pRead );
-	header.m_nRegionSize = t3dRuntimePageStoreReadU32Raw( pRead );
+	header.m_nReservedGeometry = t3dRuntimePageStoreReadU32Raw( pRead );
 	header.m_nColorDivisor = t3dRuntimePageStoreReadU32Raw( pRead );
 	header.m_nDerivedDivisor = t3dRuntimePageStoreReadU32Raw( pRead );
 	header.m_nChannelFlags = t3dRuntimePageStoreReadU32Raw( pRead );
@@ -802,7 +801,6 @@ static void t3dRuntimePageStoreResetMeta( t3dRuntimePageMeta_t &rMeta ) {
 	rMeta.m_iPayloadSlot = -1;
 	rMeta.m_nExpectedChannelFlags = 0u;
 	rMeta.m_nExpectedSourceSignature = 0u;
-	rMeta.m_nRegionSize = 0;
 	rMeta.m_nColorDivisor = 1;
 	rMeta.m_nDerivedDivisor = 1;
 	rMeta.m_nMiddleHeightDivisor = 1;
@@ -876,7 +874,7 @@ static void t3dRuntimePageStoreUpdateEditorFile( const String &rPath ) {
 Terrain3DRuntimePageStore::Terrain3DRuntimePageStore(
         Terrain3DRegionRepository *const pRepository, const Terrain3DRegionPersistence *const pPersistence ) :
         m_pRepository( pRepository ), m_pPersistence( pPersistence ) {
-	for ( int index = 0; index < s_nMaxRegionSlots; ++index ) {
+	for ( int index = 0; index < s_nRegionSlots; ++index ) {
 		m_preparedByRegion[( size_t )( index )] = ( int16_t )-1;
 		m_workByRegion[( size_t )( index )] = ( int16_t )-1;
 		m_queuedNext[( size_t )( index )] = ( int16_t )-1;
@@ -896,6 +894,29 @@ Terrain3DRuntimePageStore::~Terrain3DRuntimePageStore( void ) {
 	poll( true );
 	stopWorkers();
 	reset();
+}
+
+bool Terrain3DRuntimePageStore::bindRuntimeAllocator( Terrain3DMemoryZone *const pZone, const t3dAllocatorOverflowPolicy_t ePolicy ) {
+	if ( !pZone || ( m_pRuntimeAllocatorZone && m_pRuntimeAllocatorZone != pZone ) ) {
+		return false;
+	}
+	for ( size_t i = 0u; i < m_payloadSlots.size(); ++i ) {
+		if ( !m_payloadSlots[i].m_preparedInstanceStore.bindRuntimeAllocator( pZone, ePolicy ) ) {
+			return false;
+		}
+	}
+	m_pRuntimeAllocatorZone = pZone;
+	m_eRuntimeAllocatorOverflowPolicy = ePolicy;
+	return true;
+}
+
+void Terrain3DRuntimePageStore::setPreparedByteBudget( const uint64_t nBytes ) {
+	if ( m_nPreparedByteBudget == nBytes ) {
+		return;
+	}
+	m_nPreparedByteBudget = nBytes;
+	m_bRuntimeSourcesDirty = true;
+	m_bCapacityFailureLatched = false;
 }
 
 void Terrain3DRuntimePageStore::reset( void ) {
@@ -919,12 +940,22 @@ void Terrain3DRuntimePageStore::reset( void ) {
 	m_nQueuedCount = 0;
 	m_nStreamingGenerationLast = 0u;
 	m_nSourceTopologyGeneration = 0u;
+	m_nPreparedReservedBytes = 0u;
+	m_nPayloadBytesPerSlot = 0u;
+	m_nWorkerScratchReservedBytes = 0u;
 	m_sourceDataDirectory = String();
 	m_bRuntimeSourcesDirty = true;
+	m_nEffectivePrepareThreads = 0;
+	m_bCapacityFailureLatched = false;
+	m_nCapacityFailureTopologyGeneration = 0u;
+	m_nCapacityFailurePreparedByteBudget = 0u;
+	m_capacityFailureNumericConfig = t3dRuntimePageNumericConfig_t();
+	m_capacityFailureDataDirectory = String();
+	m_bCapacityFailureEditorAuthoring = false;
 	memset( m_runtimeChannelCapacities.data(), 0, sizeof( m_runtimeChannelCapacities ) );
 	memset( m_queuedConsumers.data(), 0, sizeof( m_queuedConsumers ) );
 	memset( m_queuedPriorities.data(), 0, sizeof( m_queuedPriorities ) );
-	for ( int index = 0; index < s_nMaxRegionSlots; ++index ) {
+	for ( int index = 0; index < s_nRegionSlots; ++index ) {
 		m_preparedByRegion[( size_t )( index )] = ( int16_t )-1;
 		m_workByRegion[( size_t )( index )] = ( int16_t )-1;
 		m_queuedNext[( size_t )( index )] = ( int16_t )-1;
@@ -935,10 +966,15 @@ void Terrain3DRuntimePageStore::reset( void ) {
 		m_priorityHeads[( size_t )( priority )] = ( int16_t )-1;
 		m_priorityTails[( size_t )( priority )] = ( int16_t )-1;
 	}
-	m_nFreePayloadCount = s_nGpuCacheMaxLayers;
+	eastl::array<uint32_t, s_nRuntimePageChannelCount + 1u> empty_capacities{};
 	for ( int slot = 0; slot < s_nGpuCacheMaxLayers; ++slot ) {
-		m_freePayloadSlots[( size_t )( slot )] = ( int16_t )( s_nGpuCacheMaxLayers - slot - 1 );
+		t3dRuntimePageStorePreparePayloadStorage( m_payloadSlots[( size_t )( slot )], empty_capacities );
+		m_freePayloadSlots[( size_t )( slot )] = ( int16_t )-1;
 	}
+	for ( int worker = 0; worker < s_nRuntimeWorkerLimit; ++worker ) {
+		m_workerScratch[( size_t )( worker )].m_ioBytes.resize( 0 );
+	}
+	m_nFreePayloadCount = 0;
 	{
 		t3dScopedLock_t lock( m_workerMutex );
 		m_iWorkRead = 0;
@@ -977,7 +1013,7 @@ bool Terrain3DRuntimePageStore::loadSourceRegion( const Vector2i &rLocation, Ref
 		rSource = Ref<Terrain3DRegion>( pRegion );
 		return true;
 	}
-	return m_pPersistence && m_pPersistence->loadRuntimeRegionSource( pRegion->get_path(), m_pRepository->getRegionSize(), rSource );
+	return m_pPersistence && m_pPersistence->loadRuntimeRegionSource( pRegion->get_path(), rSource );
 }
 
 String Terrain3DRuntimePageStore::getPagePath( const Terrain3DRegion *const pRegion, const String &rDataDirectory ) const {
@@ -997,10 +1033,10 @@ uint64_t Terrain3DRuntimePageStore::computeSourceSignature(
 	if ( !pRegion || !m_pRepository ) {
 		return 0u;
 	}
-	const int region_size = m_pRepository->getRegionSize();
+	const int region_size = s_nRegionSize;
 	uint64_t hash = 1469598103934665603ull;
 	t3dRuntimePageStoreFnv1a64AppendU32( hash, ( uint32_t )( region_size ) );
-	t3dRuntimePageStoreFnv1a64AppendF32( hash, ( float )( m_pRepository->getVertexSpacing() ) );
+	t3dRuntimePageStoreFnv1a64AppendF32( hash, ( float )( s_fRegionVertexSpacing ) );
 	t3dRuntimePageStoreFnv1a64AppendU32( hash, ( uint32_t )( rConfig.m_nColorDivisor ) );
 	t3dRuntimePageStoreFnv1a64AppendU32( hash, ( uint32_t )( rConfig.m_nDerivedDivisor ) );
 	t3dRuntimePageStoreFnv1a64AppendU32( hash, ( uint32_t )( rConfig.m_nMiddleHeightDivisor ) );
@@ -1053,9 +1089,8 @@ uint64_t Terrain3DRuntimePageStore::computeSourceSignature(
 		}
 		t3dRuntimePageStoreFnv1a64AppendU32( hash, ( uint32_t )( dependency ) );
 		const bool dependency_valid = region && !region->isDeleted()
-		        && ( dependency < 2 ? t3dRuntimePageStoreFnv1a64AppendR16HeightEdge(
-		                                      hash, region->getHeightMap(), region_size, dependency == 0 )
-		                            : t3dRuntimePageStoreFnv1a64AppendR16HeightCorner( hash, region->getHeightMap(), region_size ) );
+		        && ( dependency < 2 ? t3dRuntimePageStoreFnv1a64AppendR16HeightEdge( hash, region->getHeightMap(), dependency == 0 )
+		                            : t3dRuntimePageStoreFnv1a64AppendR16HeightCorner( hash, region->getHeightMap() ) );
 		if ( !dependency_valid ) {
 			t3dRuntimePageStoreFnv1a64AppendU32( hash, 0u );
 			continue;
@@ -1167,7 +1202,6 @@ bool Terrain3DRuntimePageStore::probePage( const String &rPagePath, t3dRuntimePa
 		rProbe.m_state = RUNTIME_PAGE_PROBE_INVALID;
 		return false;
 	}
-	rProbe.m_nRegionSize = header.m_nRegionSize;
 	rProbe.m_nTotalBytes = header.m_nTotalBytes;
 	rProbe.m_nChannelCount = header.m_nChannelCount;
 	rProbe.m_state = RUNTIME_PAGE_PROBE_CURRENT;
@@ -1285,7 +1319,7 @@ bool Terrain3DRuntimePageStore::loadSnapshot( t3dRuntimePageMeta_t &rMeta,
 	validation_started = pTime ? pTime->get_ticks_usec() : 0u;
 	const t3dRuntimePageHeader_t header = t3dRuntimePageStoreDecodeHeaderRaw( rScratch.m_ioBytes.ptr(), s_nRuntimePageHeaderBytes );
 	const uint64_t header_source_signature = ( uint64_t )header.m_nSourceSignatureLo | ( ( uint64_t )header.m_nSourceSignatureHi << 32u );
-	if ( !t3dRuntimePageValidateHeader( header, file_length ) || header.m_nRegionSize != ( uint32_t )( rMeta.m_nRegionSize )
+	if ( !t3dRuntimePageValidateHeader( header, file_length ) || header.m_nReservedGeometry != 0u
 	        || header.m_nColorDivisor != ( uint32_t )( rMeta.m_nColorDivisor )
 	        || header.m_nDerivedDivisor != ( uint32_t )( rMeta.m_nDerivedDivisor )
 	        || header.m_nMiddleHeightDivisor != ( uint32_t )( rMeta.m_nMiddleHeightDivisor ) || header.m_nRegionX != rMeta.m_location.x
@@ -1524,12 +1558,11 @@ bool Terrain3DRuntimePageStore::loadSnapshot( t3dRuntimePageMeta_t &rMeta,
 	}
 
 	validation_started = pTime ? pTime->get_ticks_usec() : 0u;
-	const int color_size = MAX( 1, rMeta.m_nRegionSize / rMeta.m_nColorDivisor );
-	const int derived_size = MAX( 1, rMeta.m_nRegionSize / rMeta.m_nDerivedDivisor );
-	const int middle_height_size = MAX( 1, ( rMeta.m_nRegionSize + rMeta.m_nMiddleHeightDivisor - 1 ) / rMeta.m_nMiddleHeightDivisor );
+	const int color_size = MAX( 1, s_nRegionSize / rMeta.m_nColorDivisor );
+	const int derived_size = MAX( 1, s_nRegionSize / rMeta.m_nDerivedDivisor );
+	const int middle_height_size = MAX( 1, ( s_nRegionSize + rMeta.m_nMiddleHeightDivisor - 1 ) / rMeta.m_nMiddleHeightDivisor );
 	if ( ( bMaterializeHeight
-	             && !t3dRuntimePageStoreValidImage(
-	                     rPayload.m_height, rMeta.m_nRegionSize, rMeta.m_nRegionSize, Image::FORMAT_R16, false ) )
+	             && !t3dRuntimePageStoreValidImage( rPayload.m_height, s_nRegionSize, s_nRegionSize, Image::FORMAT_R16, false ) )
 	        || ( ( bNeedGpu || bNeedCpu )
 	                && !t3dRuntimePageStoreValidImage( rPayload.m_derived, derived_size, derived_size, Image::FORMAT_RG8, false ) )
 	        || ( bNeedMiddle
@@ -1543,8 +1576,7 @@ bool Terrain3DRuntimePageStore::loadSnapshot( t3dRuntimePageMeta_t &rMeta,
 	                        || !rPayload.m_terrainShadowMask->has_mipmaps()
 	                        || rPayload.m_terrainShadowMask->get_width() != rPayload.m_terrainShadowMask->get_height() ) )
 	        || ( rPayload.m_control.is_valid()
-	                && !t3dRuntimePageStoreValidImage(
-	                        rPayload.m_control, rMeta.m_nRegionSize, rMeta.m_nRegionSize, Image::FORMAT_RF, false ) )
+	                && !t3dRuntimePageStoreValidImage( rPayload.m_control, s_nRegionSize, s_nRegionSize, Image::FORMAT_RF, false ) )
 	        || ( rPayload.m_color.is_valid()
 	                && !t3dRuntimePageStoreValidImage( rPayload.m_color, color_size, color_size, Image::FORMAT_RGBA8, true ) ) ) {
 		rMeta.m_nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
@@ -1565,7 +1597,6 @@ bool Terrain3DRuntimePageStore::validatePageForRegion( const Terrain3DRegion *co
 	meta.m_location = pRegion->getLocation();
 	meta.m_nExpectedChannelFlags = ( uint32_t )( pRegion->getChannelFlags() );
 	meta.m_nExpectedSourceSignature = resolveExpectedSourceSignature( pRegion, rConfig );
-	meta.m_nRegionSize = m_pRepository->getRegionSize();
 	meta.m_nColorDivisor = rConfig.m_nColorDivisor;
 	meta.m_nDerivedDivisor = rConfig.m_nDerivedDivisor;
 	meta.m_nMiddleHeightDivisor = rConfig.m_nMiddleHeightDivisor;
@@ -1610,7 +1641,6 @@ bool Terrain3DRuntimePageStore::loadCpuMapsNow( const Vector2i &rLocation,
 	meta.m_location = rLocation;
 	meta.m_nExpectedChannelFlags = ( uint32_t )pRegion->getChannelFlags();
 	meta.m_nExpectedSourceSignature = resolveExpectedSourceSignature( pRegion, rConfig );
-	meta.m_nRegionSize = m_pRepository->getRegionSize();
 	meta.m_nColorDivisor = rConfig.m_nColorDivisor;
 	meta.m_nDerivedDivisor = rConfig.m_nDerivedDivisor;
 	meta.m_nMiddleHeightDivisor = rConfig.m_nMiddleHeightDivisor;
@@ -1654,7 +1684,6 @@ bool Terrain3DRuntimePageStore::loadCollisionNow( const Vector2i &rLocation,
 	meta.m_location = rLocation;
 	meta.m_nExpectedChannelFlags = ( uint32_t )pRegion->getChannelFlags();
 	meta.m_nExpectedSourceSignature = resolveExpectedSourceSignature( pRegion, rConfig );
-	meta.m_nRegionSize = m_pRepository->getRegionSize();
 	meta.m_nColorDivisor = rConfig.m_nColorDivisor;
 	meta.m_nDerivedDivisor = rConfig.m_nDerivedDivisor;
 	meta.m_nMiddleHeightDivisor = rConfig.m_nMiddleHeightDivisor;
@@ -1701,7 +1730,6 @@ bool Terrain3DRuntimePageStore::loadNavigationNow( const Vector2i &rLocation,
 	meta.m_location = rLocation;
 	meta.m_nExpectedChannelFlags = ( uint32_t )pRegion->getChannelFlags();
 	meta.m_nExpectedSourceSignature = resolveExpectedSourceSignature( pRegion, rConfig );
-	meta.m_nRegionSize = m_pRepository->getRegionSize();
 	meta.m_nColorDivisor = rConfig.m_nColorDivisor;
 	meta.m_nDerivedDivisor = rConfig.m_nDerivedDivisor;
 	meta.m_nMiddleHeightDivisor = rConfig.m_nMiddleHeightDivisor;
@@ -1750,7 +1778,7 @@ bool Terrain3DRuntimePageStore::loadLightingReceiversNow(
 	const t3dRuntimePageHeader_t header = t3dRuntimePageStoreDecodeHeader( header_bytes );
 	const uint64_t header_source_signature = ( uint64_t )header.m_nSourceSignatureLo | ( ( uint64_t )header.m_nSourceSignatureHi << 32u );
 	const uint64_t expected_source_signature = resolveExpectedSourceSignature( pRegion, rConfig );
-	if ( !t3dRuntimePageValidateHeader( header, pFile->get_length() ) || header.m_nRegionSize != ( uint32_t )m_pRepository->getRegionSize()
+	if ( !t3dRuntimePageValidateHeader( header, pFile->get_length() ) || header.m_nReservedGeometry != 0u
 	        || header.m_nRegionX != rLocation.x || header.m_nRegionZ != rLocation.y
 	        || header.m_nBlendRecipeVersion != s_nRuntimePageBlendRecipeVersion || header_source_signature == 0u
 	        || ( rConfig.m_bEditorAuthoring && expected_source_signature == 0u )
@@ -1783,7 +1811,7 @@ bool Terrain3DRuntimePageStore::writePage( Terrain3DRegion *const pRegion,
 	if ( !pRegion || pRegion->isDeleted() || !m_pRepository ) {
 		return t3dRuntimePageStoreWriteFail( pError, "region/repository is unavailable" );
 	}
-	const int region_size = m_pRepository->getRegionSize();
+	const int region_size = s_nRegionSize;
 	const int color_size = MAX( 1, region_size / rConfig.m_nColorDivisor );
 	const int derived_size = MAX( 1, region_size / rConfig.m_nDerivedDivisor );
 	const int middle_height_size = MAX( 1, ( region_size + rConfig.m_nMiddleHeightDivisor - 1 ) / rConfig.m_nMiddleHeightDivisor );
@@ -1851,7 +1879,7 @@ bool Terrain3DRuntimePageStore::writePage( Terrain3DRegion *const pRegion,
 	}
 
 	t3dRuntimePageHeader_t header;
-	header.m_nRegionSize = ( uint32_t )( region_size );
+	header.m_nReservedGeometry = 0u;
 	header.m_nColorDivisor = ( uint32_t )( rConfig.m_nColorDivisor );
 	header.m_nDerivedDivisor = ( uint32_t )( rConfig.m_nDerivedDivisor );
 	header.m_nChannelFlags = ( uint32_t )( pRegion->getChannelFlags() ) | ( uint32_t )( REGION_CHANNEL_DERIVED );
@@ -1861,7 +1889,7 @@ bool Terrain3DRuntimePageStore::writePage( Terrain3DRegion *const pRegion,
 	header.m_nMaterialMask = rPayload.m_nMaterialMask;
 	header.m_nMiddleHeightDivisor = ( uint32_t )( rConfig.m_nMiddleHeightDivisor );
 	uint64_t world_signature = 1469598103934665603ull;
-	t3dRuntimePageStoreFnv1a64AppendU32( world_signature, ( uint32_t )( region_size ) );
+	t3dRuntimePageStoreFnv1a64AppendU32( world_signature, s_nRegionGeometrySignature );
 	t3dRuntimePageStoreFnv1a64AppendU32( world_signature, ( uint32_t )( rConfig.m_nColorDivisor ) );
 	t3dRuntimePageStoreFnv1a64AppendU32( world_signature, ( uint32_t )( rConfig.m_nDerivedDivisor ) );
 	t3dRuntimePageStoreFnv1a64AppendU32( world_signature, s_nRuntimePageBlendRecipeVersion );
@@ -1972,6 +2000,7 @@ bool Terrain3DRuntimePageStore::writePage( Terrain3DRegion *const pRegion,
 	// the next service pass to rebuild it so worker jobs cannot keep validating a
 	// freshly cooked page against the pre-edit signature.
 	m_bRuntimeSourcesDirty = true;
+	m_bCapacityFailureLatched = false;
 	t3dRuntimePageStoreUpdateEditorFile( page_path );
 	return true;
 }
@@ -2000,7 +2029,7 @@ bool Terrain3DRuntimePageStore::collectPageSources( const String &rDataDirectory
 		return false;
 	}
 
-	eastl::bitset<s_nActiveMaxRegionMapSize * s_nActiveMaxRegionMapSize> source_locations;
+	eastl::bitset<s_nRegionMapSize * s_nRegionMapSize> source_locations;
 	rLocations.reserve( ( size_t )( rSourceFiles.size() ) );
 	for ( size_t iFile = 0u; iFile < ( size_t )( ( rSourceFiles ).size() ); iFile++ ) {
 		const String &fname = ( rSourceFiles )[iFile];
@@ -2045,7 +2074,7 @@ bool Terrain3DRuntimePageStore::collectPageSources( const String &rDataDirectory
 }
 
 void Terrain3DRuntimePageStore::queueUnlink( const int nMapIndex ) {
-	if ( nMapIndex < 0 || nMapIndex >= s_nMaxRegionSlots ) {
+	if ( nMapIndex < 0 || nMapIndex >= s_nRegionSlots ) {
 		return;
 	}
 	const uint8_t priority = m_queuedPriorities[( size_t )( nMapIndex )];
@@ -2072,7 +2101,7 @@ void Terrain3DRuntimePageStore::queueUnlink( const int nMapIndex ) {
 }
 
 void Terrain3DRuntimePageStore::queueLink( const int nMapIndex, const uint8_t nPriority ) {
-	if ( nMapIndex < 0 || nMapIndex >= s_nMaxRegionSlots || m_queuedConsumers[( size_t )( nMapIndex )] == 0u ) {
+	if ( nMapIndex < 0 || nMapIndex >= s_nRegionSlots || m_queuedConsumers[( size_t )( nMapIndex )] == 0u ) {
 		return;
 	}
 	if ( m_queuedPriorities[( size_t )( nMapIndex )] != 0u ) {
@@ -2102,9 +2131,9 @@ int Terrain3DRuntimePageStore::popBestQueued( const Vector2i &rPredictedCenter )
 		while ( map_index >= 0 ) {
 			const int next = m_queuedNext[( size_t )( map_index )];
 			if ( m_queuedConsumers[( size_t )( map_index )] != 0u ) {
-				const int map_x = map_index % s_nActiveMaxRegionMapSize;
-				const int map_y = map_index / s_nActiveMaxRegionMapSize;
-				const Vector2i location( map_x - s_nActiveMaxRegionMapSize / 2, map_y - s_nActiveMaxRegionMapSize / 2 );
+				const int map_x = map_index % s_nRegionMapSize;
+				const int map_y = map_index / s_nRegionMapSize;
+				const Vector2i location( map_x - s_nRegionMapSize / 2, map_y - s_nRegionMapSize / 2 );
 				const int distance = MAX( Math::abs( location.x - rPredictedCenter.x ), Math::abs( location.y - rPredictedCenter.y ) );
 				if ( distance < best_distance || ( distance == best_distance && ( best_map_index < 0 || map_index < best_map_index ) ) ) {
 					best_distance = distance;
@@ -2184,7 +2213,7 @@ void Terrain3DRuntimePageStore::prepareWorkIndex( const int nWorkIndex, const in
 	}
 	t3dRuntimePageMeta_t &meta = m_workPages[( size_t )( nWorkIndex )];
 	if ( meta.m_iPayloadSlot < 0 || meta.m_iPayloadSlot >= m_nRuntimePayloadLimit || meta.m_iSourceIndex < 0
-	        || meta.m_iSourceIndex >= s_nMaxRegionSlots ) {
+	        || meta.m_iSourceIndex >= s_nRegionSlots ) {
 		return;
 	}
 	t3dRuntimePagePayload_t &payload = m_payloadSlots[( size_t )( meta.m_iPayloadSlot )];
@@ -2255,21 +2284,45 @@ bool Terrain3DRuntimePageStore::rebuildRuntimeSources( const t3dRuntimePageServi
 	        && numeric.m_nMiddleHeightDivisor == m_sourceNumericConfig.m_nMiddleHeightDivisor
 	        && numeric.m_nPrepareThreads == m_sourceNumericConfig.m_nPrepareThreads
 	        && rState.m_config.m_bEditorAuthoring == m_bSourceEditorAuthoring;
-	if ( same_config && m_nWorkerThreadCount == numeric.m_nPrepareThreads ) {
+	if ( same_config && m_nWorkerThreadCount == m_nEffectivePrepareThreads ) {
 		return true;
 	}
+
+	const bool same_capacity_failure = m_bCapacityFailureLatched && topology_generation == m_nCapacityFailureTopologyGeneration
+	        && m_nPreparedByteBudget == m_nCapacityFailurePreparedByteBudget
+	        && rState.m_config.m_dataDirectory == m_capacityFailureDataDirectory
+	        && numeric.m_nColorDivisor == m_capacityFailureNumericConfig.m_nColorDivisor
+	        && numeric.m_nDerivedDivisor == m_capacityFailureNumericConfig.m_nDerivedDivisor
+	        && numeric.m_nMiddleHeightDivisor == m_capacityFailureNumericConfig.m_nMiddleHeightDivisor
+	        && numeric.m_nPrepareThreads == m_capacityFailureNumericConfig.m_nPrepareThreads
+	        && rState.m_config.m_bEditorAuthoring == m_bCapacityFailureEditorAuthoring;
+	if ( same_capacity_failure ) {
+		return false;
+	}
+	m_bCapacityFailureLatched = false;
+
+	// Source discovery is a cold rebuild: it waits for workers, reads page
+	// headers, may load authored region Resources to resolve source signatures,
+	// and resizes retained payload/scratch storage. The cold scope labels this
+	// owner-controlled transition for telemetry; it does not grant allocation.
+	Terrain3DColdPhaseScope cold_scope;
 	poll( true );
-	while ( m_nPreparedPageCount > 0 ) {
-		consumePreparedIndex( m_nPreparedPageCount - 1 );
-	}
 	stopWorkers();
-	for ( int index = 0; index < s_nMaxRegionSlots; ++index ) {
-		t3dRuntimePageStoreResetSource( m_pageSources[( size_t )( index )] );
-	}
-	memset( m_runtimeChannelCapacities.data(), 0, sizeof( m_runtimeChannelCapacities ) );
+
+	// Discover the replacement image before releasing the current retained image.
+	// This keeps an impossible central grant from destructively tearing down valid
+	// prepared pages every service pass. The grant failure is latched below and is
+	// retried only after an input that can change the capacity result changes.
+	eastl::array<t3dRuntimePageSource_t, s_nRegionSlots> source_candidates{};
+	eastl::array<uint32_t, s_nRuntimePageChannelCount + 1u> channel_capacities{};
 	uint32_t scratch_bytes = s_nRuntimePageHeaderBytes;
+	uint32_t largest_scratch_channel = 0u;
+	uint32_t largest_scratch_compressed_bytes = 0u;
+	uint32_t largest_scratch_uncompressed_bytes = 0u;
+	Vector2i largest_scratch_location = s_v2iMax;
+	int runtime_source_count = 0;
 	for ( int slot = 0; slot < m_pRepository->getSlotCount(); ++slot ) {
-		const Vector2i location = m_pRepository->getSlotsData()[slot];
+		const Vector2i location = t3dUnpackRegionCoord( m_pRepository->getSlotsData()[slot] );
 		if ( location == s_v2iMax ) {
 			continue;
 		}
@@ -2278,7 +2331,7 @@ bool Terrain3DRuntimePageStore::rebuildRuntimeSources( const t3dRuntimePageServi
 		if ( map_index < 0 || !pRegion || pRegion->isDeleted() || !pRegion->runtimeMapsEvictableInternal() ) {
 			continue;
 		}
-		t3dRuntimePageSource_t &source = m_pageSources[( size_t )( map_index )];
+		t3dRuntimePageSource_t &source = source_candidates[( size_t )( map_index )];
 		source.m_pagePath = getPagePath( pRegion, rState.m_config.m_dataDirectory );
 		source.m_sourcePath = pRegion->get_path();
 		source.m_nExpectedChannelFlags = ( uint32_t )pRegion->getChannelFlags();
@@ -2308,39 +2361,167 @@ bool Terrain3DRuntimePageStore::rebuildRuntimeSources( const t3dRuntimePageServi
 				if ( !pBuffer ) {
 					continue;
 				}
-				uint32_t &capacity = m_runtimeChannelCapacities[info.m_nType];
+				uint32_t &capacity = channel_capacities[info.m_nType];
 				if ( info.m_nFormat != UINT32_MAX && capacity != 0u && capacity != info.m_nUncompressedBytes ) {
 					fixed_compatible = false;
 					break;
 				}
 				capacity = MAX( capacity, info.m_nUncompressedBytes );
-				scratch_bytes = MAX( scratch_bytes, info.m_nCompressedBytes );
+				if ( info.m_nCompressedBytes > scratch_bytes ) {
+					scratch_bytes = info.m_nCompressedBytes;
+					largest_scratch_channel = info.m_nType;
+					largest_scratch_compressed_bytes = info.m_nCompressedBytes;
+					largest_scratch_uncompressed_bytes = info.m_nUncompressedBytes;
+					largest_scratch_location = location;
+				}
 			}
 			source.m_bPresent = fixed_compatible;
+			if ( source.m_bPresent ) {
+				++runtime_source_count;
+			}
 		}
 	}
-	m_nRuntimePayloadLimit = rState.m_config.m_bEditorAuthoring ? s_nGpuCacheEditorMaxLayers : s_nGpuCacheRuntimeMaxLayers;
+
+	uint64_t payload_slot_bytes = 0u;
+	for ( uint32_t channel = 1u; channel <= s_nRuntimePageChannelCount; ++channel ) {
+		if ( payload_slot_bytes > UINT64_MAX - channel_capacities[channel] ) {
+			return false;
+		}
+		payload_slot_bytes += channel_capacities[channel];
+	}
+
+	int effective_prepare_threads = 0;
+	uint64_t worker_scratch_bytes = 0u;
+	if ( runtime_source_count > 0 ) {
+		const uint64_t minimum_payload_bytes = payload_slot_bytes;
+		if ( minimum_payload_bytes > UINT64_MAX - ( uint64_t )scratch_bytes ) {
+			return false;
+		}
+		const uint64_t minimum_required_bytes = minimum_payload_bytes + ( uint64_t )scratch_bytes;
+		if ( m_nPreparedByteBudget < minimum_required_bytes ) {
+			// Preserve a still-in-budget prepared image, but never retain an old
+			// image whose reservation already exceeds a newly reduced grant.
+			if ( m_nPreparedReservedBytes > m_nPreparedByteBudget ) {
+				while ( m_nPreparedPageCount > 0 ) {
+					consumePreparedIndex( m_nPreparedPageCount - 1 );
+				}
+				eastl::array<uint32_t, s_nRuntimePageChannelCount + 1u> empty_capacities{};
+				for ( int slot = 0; slot < s_nGpuCacheMaxLayers; ++slot ) {
+					t3dRuntimePageStorePreparePayloadStorage( m_payloadSlots[( size_t )( slot )], empty_capacities );
+				}
+				for ( int worker = 0; worker < s_nRuntimeWorkerLimit; ++worker ) {
+					m_workerScratch[( size_t )( worker )].m_ioBytes.resize( 0 );
+				}
+				m_nRuntimePayloadLimit = 0;
+				m_nFreePayloadCount = 0;
+				m_nEffectivePrepareThreads = 0;
+				m_nPreparedReservedBytes = 0u;
+				m_nPayloadBytesPerSlot = 0u;
+				m_nWorkerScratchReservedBytes = 0u;
+				memset( m_runtimeChannelCapacities.data(), 0, sizeof( m_runtimeChannelCapacities ) );
+			}
+
+			m_bCapacityFailureLatched = true;
+			m_nCapacityFailureTopologyGeneration = topology_generation;
+			m_nCapacityFailurePreparedByteBudget = m_nPreparedByteBudget;
+			m_capacityFailureNumericConfig = numeric;
+			m_capacityFailureDataDirectory = rState.m_config.m_dataDirectory;
+			m_bCapacityFailureEditorAuthoring = rState.m_config.m_bEditorAuthoring;
+
+			String error =
+			        String( "Terrain3D: Runtime-page prepared-byte grant cannot cover one worker scratch plus one fixed payload slot." );
+			error += String( " grant=" ) + String::num_uint64( m_nPreparedByteBudget ) + String( ", minimum=" )
+			        + String::num_uint64( minimum_required_bytes ) + String( ", worker_scratch=" ) + String::num_uint64( scratch_bytes )
+			        + String( ", payload_slot=" ) + String::num_uint64( payload_slot_bytes ) + String( ", requested_workers=" )
+			        + String::num_int64( numeric.m_nPrepareThreads );
+			if ( largest_scratch_channel != 0u ) {
+				error += String( ", largest_channel=" ) + String::num_uint64( largest_scratch_channel ) + String( ", region=(" )
+				        + String::num_int64( largest_scratch_location.x ) + String( "," ) + String::num_int64( largest_scratch_location.y )
+				        + String( "), compressed=" ) + String::num_uint64( largest_scratch_compressed_bytes ) + String( ", uncompressed=" )
+				        + String::num_uint64( largest_scratch_uncompressed_bytes );
+			}
+			UtilityFunctions::push_error( error );
+			return false;
+		}
+
+		const uint64_t worker_budget = m_nPreparedByteBudget - minimum_payload_bytes;
+		const uint64_t budget_worker_limit = scratch_bytes > 0u ? worker_budget / ( uint64_t )scratch_bytes : 0u;
+		effective_prepare_threads = ( int )MIN( ( uint64_t )numeric.m_nPrepareThreads, budget_worker_limit );
+		effective_prepare_threads = MAX( 1, effective_prepare_threads );
+		worker_scratch_bytes = ( uint64_t )scratch_bytes * ( uint64_t )effective_prepare_threads;
+		if ( worker_scratch_bytes / ( uint64_t )effective_prepare_threads != scratch_bytes ) {
+			return false;
+		}
+	}
+
+	const int hard_limit = rState.m_config.m_bEditorAuthoring ? s_nGpuCacheEditorMaxLayers : s_nGpuCacheRuntimeMaxLayers;
+	const uint64_t payload_budget = m_nPreparedByteBudget >= worker_scratch_bytes ? m_nPreparedByteBudget - worker_scratch_bytes : 0u;
+	const uint64_t byte_limited_slots =
+	        runtime_source_count <= 0 ? 0u : ( payload_slot_bytes > 0u ? payload_budget / payload_slot_bytes : ( uint64_t )hard_limit );
+	const int runtime_payload_limit = ( int )MIN( ( uint64_t )hard_limit, byte_limited_slots );
+	if ( runtime_source_count > 0 && runtime_payload_limit <= 0 ) {
+		return false;
+	}
+
+	// Capacity is viable. Replace the old retained image exactly once.
+	while ( m_nPreparedPageCount > 0 ) {
+		consumePreparedIndex( m_nPreparedPageCount - 1 );
+	}
+	eastl::array<uint32_t, s_nRuntimePageChannelCount + 1u> empty_capacities{};
+	for ( int slot = 0; slot < s_nGpuCacheMaxLayers; ++slot ) {
+		if ( !t3dRuntimePageStorePreparePayloadStorage( m_payloadSlots[( size_t )( slot )], empty_capacities ) ) {
+			return false;
+		}
+	}
+	for ( int worker = 0; worker < s_nRuntimeWorkerLimit; ++worker ) {
+		m_workerScratch[( size_t )( worker )].m_ioBytes.resize( 0 );
+	}
+	m_nPreparedReservedBytes = 0u;
+	m_nPayloadBytesPerSlot = 0u;
+	m_nWorkerScratchReservedBytes = 0u;
+	m_nFreePayloadCount = 0;
+	for ( int index = 0; index < s_nRegionSlots; ++index ) {
+		m_pageSources[( size_t )( index )] = source_candidates[( size_t )( index )];
+	}
+	memcpy( m_runtimeChannelCapacities.data(), channel_capacities.data(), sizeof( m_runtimeChannelCapacities ) );
+
+	m_nRuntimePayloadLimit = runtime_payload_limit;
 	m_nFreePayloadCount = m_nRuntimePayloadLimit;
-	for ( int slot = 0; slot < m_nRuntimePayloadLimit; ++slot ) {
-		m_freePayloadSlots[( size_t )( slot )] = ( int16_t )( m_nRuntimePayloadLimit - slot - 1 );
-		if ( !t3dRuntimePageStorePreparePayloadStorage( m_payloadSlots[( size_t )( slot )], m_runtimeChannelCapacities ) ) {
+	for ( int slot = 0; slot < s_nGpuCacheMaxLayers; ++slot ) {
+		if ( slot < m_nRuntimePayloadLimit ) {
+			m_freePayloadSlots[( size_t )( slot )] = ( int16_t )( m_nRuntimePayloadLimit - slot - 1 );
+			if ( !t3dRuntimePageStorePreparePayloadStorage( m_payloadSlots[( size_t )( slot )], m_runtimeChannelCapacities ) ) {
+				return false;
+			}
+		} else if ( !t3dRuntimePageStorePreparePayloadStorage( m_payloadSlots[( size_t )( slot )], empty_capacities ) ) {
 			return false;
 		}
 	}
 	m_nWorkerScratchBytes = scratch_bytes;
-	for ( int worker = 0; worker < numeric.m_nPrepareThreads; ++worker ) {
+	for ( int worker = 0; worker < s_nRuntimeWorkerLimit; ++worker ) {
 		t3dRuntimePageWorkerScratch_t &scratch = m_workerScratch[( size_t )( worker )];
-		scratch.m_ioBytes.resize( scratch_bytes );
-		if ( scratch.m_ioBytes.size() != ( int64_t )( scratch_bytes ) ) {
+		const uint32_t bytes = worker < effective_prepare_threads ? scratch_bytes : 0u;
+		scratch.m_ioBytes.resize( bytes );
+		if ( scratch.m_ioBytes.size() != ( int64_t )bytes ) {
 			return false;
 		}
+	}
+	m_nPayloadBytesPerSlot = payload_slot_bytes;
+	m_nWorkerScratchReservedBytes = worker_scratch_bytes;
+	m_nPreparedReservedBytes = worker_scratch_bytes + payload_slot_bytes * ( uint64_t )m_nRuntimePayloadLimit;
+	if ( m_nPreparedReservedBytes > m_nPreparedByteBudget ) {
+		return false;
 	}
 	m_nSourceTopologyGeneration = topology_generation;
 	m_sourceDataDirectory = rState.m_config.m_dataDirectory;
 	m_sourceNumericConfig = numeric;
 	m_bSourceEditorAuthoring = rState.m_config.m_bEditorAuthoring;
+	m_nEffectivePrepareThreads = effective_prepare_threads;
 	m_bRuntimeSourcesDirty = false;
-	startWorkers( numeric.m_nPrepareThreads );
+	m_bCapacityFailureLatched = false;
+	if ( m_nEffectivePrepareThreads > 0 ) {
+		startWorkers( m_nEffectivePrepareThreads );
+	}
 	return true;
 }
 
@@ -2581,9 +2762,9 @@ void Terrain3DRuntimePageStore::service( const t3dRuntimePageServiceState_t &rSt
 			int map_index = m_priorityHeads[( size_t )( priority )];
 			while ( map_index >= 0 ) {
 				const int next = m_queuedNext[( size_t )( map_index )];
-				const int map_x = map_index % s_nActiveMaxRegionMapSize;
-				const int map_y = map_index / s_nActiveMaxRegionMapSize;
-				const Vector2i location( map_x - s_nActiveMaxRegionMapSize / 2, map_y - s_nActiveMaxRegionMapSize / 2 );
+				const int map_x = map_index % s_nRegionMapSize;
+				const int map_y = map_index / s_nRegionMapSize;
+				const Vector2i location( map_x - s_nRegionMapSize / 2, map_y - s_nRegionMapSize / 2 );
 				const bool wanted = m_pRepository->getRegionPtr( location )
 				        && ( !rState.m_isWanted || rState.m_isWanted( rState.m_pWantedContext, location ) );
 				if ( !wanted ) {
@@ -2608,17 +2789,16 @@ void Terrain3DRuntimePageStore::service( const t3dRuntimePageServiceState_t &rSt
 		return;
 	}
 
-	const int batch_limit =
-	        MIN( m_nFreePayloadCount, MIN( m_nRuntimePayloadLimit, MAX( 2, m_sourceNumericConfig.m_nPrepareThreads * 2 ) ) );
+	const int batch_limit = MIN( m_nFreePayloadCount, MIN( m_nRuntimePayloadLimit, MAX( 2, m_nEffectivePrepareThreads * 2 ) ) );
 	m_nPrepareWorkPageCount = 0;
 	while ( m_nPrepareWorkPageCount < batch_limit && m_nQueuedCount > 0 ) {
 		const int map_index = popBestQueued( rState.m_predictedCenter );
 		if ( map_index < 0 ) {
 			break;
 		}
-		const int map_x = map_index % s_nActiveMaxRegionMapSize;
-		const int map_y = map_index / s_nActiveMaxRegionMapSize;
-		const Vector2i location( map_x - s_nActiveMaxRegionMapSize / 2, map_y - s_nActiveMaxRegionMapSize / 2 );
+		const int map_x = map_index % s_nRegionMapSize;
+		const int map_y = map_index / s_nRegionMapSize;
+		const Vector2i location( map_x - s_nRegionMapSize / 2, map_y - s_nRegionMapSize / 2 );
 		const t3dRuntimePageSource_t &source = m_pageSources[( size_t )( map_index )];
 		Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
 		if ( !source.m_bPresent || !pRegion || pRegion->isDeleted() || !pRegion->runtimeMapsEvictableInternal()
@@ -2640,7 +2820,6 @@ void Terrain3DRuntimePageStore::service( const t3dRuntimePageServiceState_t &rSt
 		meta.m_iPayloadSlot = ( int16_t )payload_slot;
 		meta.m_nExpectedChannelFlags = source.m_nExpectedChannelFlags;
 		meta.m_nExpectedSourceSignature = source.m_nExpectedSourceSignature;
-		meta.m_nRegionSize = m_pRepository->getRegionSize();
 		meta.m_nColorDivisor = m_sourceNumericConfig.m_nColorDivisor;
 		meta.m_nDerivedDivisor = m_sourceNumericConfig.m_nDerivedDivisor;
 		meta.m_nMiddleHeightDivisor = m_sourceNumericConfig.m_nMiddleHeightDivisor;
@@ -2747,7 +2926,7 @@ bool Terrain3DRuntimePageStore::takeInstance( const Vector2i &rLocation,
 		// InstanceStore decode may need to establish larger retained slab/vector backing.
 		// Keep that allocation out of STREAMING_WORKER and make the cold owner-side
 		// materialization boundary explicit. Subsequent reuse retains the capacity.
-		Terrain3DColdAllocationScope allocation_scope;
+		Terrain3DColdPhaseScope cold_phase_scope;
 		uint32_t szMeshCounts[s_nMaxMeshAssets];
 		memset( szMeshCounts, 0, sizeof( szMeshCounts ) );
 		uint32_t instance_count = 0u;
@@ -2764,9 +2943,11 @@ bool Terrain3DRuntimePageStore::takeInstance( const Vector2i &rLocation,
 	}
 	const bool loaded = ( meta.m_nLoadedConsumerMask & RUNTIME_PAGE_CONSUMER_INSTANCE_STORE ) != 0u && meta.m_bInstanceLoaded;
 	if ( loaded ) {
-		Terrain3DInstanceStore previous = eastl::move( rStore );
 		rStore = eastl::move( payload.m_preparedInstanceStore );
-		payload.m_preparedInstanceStore = eastl::move( previous );
+		payload.m_preparedInstanceStore = Terrain3DInstanceStore( TERRAIN3D_INSTANCE_STORE_RUNTIME_PREPARED );
+		if ( !payload.m_preparedInstanceStore.bindRuntimeAllocator( m_pRuntimeAllocatorZone, m_eRuntimeAllocatorOverflowPolicy ) ) {
+			return false;
+		}
 		if ( pInstanceMetadata ) {
 			if ( payload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_INSTANCE_METADATA] > 0u ) {
 				*pInstanceMetadata = payload.m_instanceMetadata;
@@ -2987,5 +3168,13 @@ t3dRuntimePageStats_t Terrain3DRuntimePageStore::getStats( void ) const {
 	stats.m_nPrepareMaterializeUsecLast = m_nPrepareMaterializeUsecLast;
 	stats.m_nPrepareWorkerUsecLast = m_nPrepareWorkerUsecLast;
 	stats.m_nPrepareReadyWaitUsecLast = m_nPrepareReadyWaitUsecLast;
+	stats.m_nPreparedByteBudget = m_nPreparedByteBudget;
+	stats.m_nPreparedReservedBytes = m_nPreparedReservedBytes;
+	stats.m_nPayloadBytesPerSlot = m_nPayloadBytesPerSlot;
+	stats.m_nWorkerScratchReservedBytes = m_nWorkerScratchReservedBytes;
+	stats.m_nConfiguredPrepareWorkers =
+	        m_bCapacityFailureLatched ? m_capacityFailureNumericConfig.m_nPrepareThreads : m_sourceNumericConfig.m_nPrepareThreads;
+	stats.m_nEffectivePrepareWorkers = m_nEffectivePrepareThreads;
+	stats.m_bCapacityFailureLatched = m_bCapacityFailureLatched;
 	return stats;
 }

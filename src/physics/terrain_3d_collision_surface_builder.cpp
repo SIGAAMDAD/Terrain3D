@@ -19,7 +19,7 @@ size_t Terrain3DCollisionSurfaceBuilder::getRetainedBufferBytes( void ) const {
 }
 
 bool Terrain3DCollisionSurfaceBuilder::prepareRuntimeScratch( const int nAxisSamples ) {
-	Terrain3DColdAllocationScope allocation_scope;
+	Terrain3DColdPhaseScope cold_phase_scope;
 	if ( nAxisSamples <= 0 || nAxisSamples > s_nMaxCollisionAxisSamples ) {
 		return false;
 	}
@@ -45,41 +45,26 @@ bool Terrain3DCollisionSurfaceBuilder::prepareRuntimeScratch( const int nAxisSam
 	return true;
 }
 
-void Terrain3DCollisionSurfaceBuilder::refreshRegionBlendCurve( const int nRegionSize, const real_t fRegionBlend ) {
-	if ( nRegionSize <= 0 ) {
-		eastl::fill_n( m_fRegionBlendCurve, s_nMaxRegionBlendSamples, 0.0f );
-		m_nRegionBlendCurveSize = 0;
-		m_fRegionBlendCurveSetting = -1.0f;
-		return;
-	}
-	if ( m_nRegionBlendCurveSize == nRegionSize && Math::is_equal_approx( m_fRegionBlendCurveSetting, fRegionBlend ) ) {
-		return;
-	}
-	if ( nRegionSize > s_nMaxRegionBlendSamples ) {
-		m_nRegionBlendCurveSize = 0;
+void Terrain3DCollisionSurfaceBuilder::refreshRegionBlendCurve( const real_t fRegionBlend ) {
+	if ( Math::is_equal_approx( m_fRegionBlendCurveSetting, fRegionBlend ) ) {
 		return;
 	}
 	const real_t blend_factor = 2.0f + 126.0f * ( 1.0f - fRegionBlend );
-	for ( int local = 0; local < nRegionSize; ++local ) {
-		const real_t biased = ( real_t )( local ) / ( real_t )( nRegionSize )-0.5011f;
+	for ( int local = 0; local < s_nRegionSize; ++local ) {
+		const real_t biased = ( real_t )( local ) * ( 1.0f / ( real_t )( s_nRegionSize ) ) - 0.5011f;
 		real_t fraction = biased - Math::floor( biased );
 		fraction = Math::clamp( fraction, ( real_t )( 1e-8f ), ( real_t )( 1.0f - 1e-8f ) );
 		m_fRegionBlendCurve[( size_t )( local )] =
 		        1.0f / ( 1.0f + Math::exp( blend_factor * Math::log( ( 1.0f - fraction ) / fraction ) ) );
 	}
-	m_nRegionBlendCurveSize = nRegionSize;
 	m_fRegionBlendCurveSetting = fRegionBlend;
 }
 
 real_t Terrain3DCollisionSurfaceBuilder::getRegionBlendWeight( const int64_t nGridCoordinate ) const {
-	if ( m_nRegionBlendCurveSize <= 0 ) {
+	if ( m_fRegionBlendCurveSetting < 0.0f ) {
 		return 0.0f;
 	}
-	int64_t local = nGridCoordinate % ( int64_t )( m_nRegionBlendCurveSize );
-	if ( local < 0 ) {
-		local += m_nRegionBlendCurveSize;
-	}
-	return m_fRegionBlendCurve[( size_t )( local )];
+	return m_fRegionBlendCurve[( size_t )( t3dRegionLocalFromGrid( nGridCoordinate ) )];
 }
 
 real_t Terrain3DCollisionSurfaceBuilder::getRegionBlend(
@@ -109,11 +94,7 @@ bool Terrain3DCollisionSurfaceBuilder::build( const Terrain3DData *const pData,
 	if ( !pData || !rMaterial.is_valid() || nSize < 1 ) {
 		return false;
 	}
-	const int region_size = pData->getRegionSizeInternal();
-	if ( region_size <= 0 ) {
-		return false;
-	}
-	const Vector2i origin_location = V2I_DIVIDE_FLOOR( rPosition, region_size );
+	const Vector2i origin_location = t3dRegionCoordinateFromGrid( rPosition );
 	const Terrain3DRegion *const pOriginRegion = pData->getRegionPtr( origin_location );
 	if ( !pOriginRegion || pOriginRegion->isDeleted() ) {
 		return false;
@@ -123,9 +104,9 @@ bool Terrain3DCollisionSurfaceBuilder::build( const Terrain3DData *const pData,
 	const bool blend_background = background_mode == t3dWorldBackground_t::FLAT || background_mode == t3dWorldBackground_t::NOISE;
 	const real_t ground_level = rMaterial->get( "ground_level" );
 	const real_t region_blend = rMaterial->get( "region_blend" );
-	const real_t region_texel_size = 1.0f / ( real_t )( region_size );
+	const real_t region_texel_size = 1.0f / ( real_t )( s_nRegionSize );
 	if ( blend_background ) {
-		refreshRegionBlendCurve( region_size, region_blend );
+		refreshRegionBlendCurve( region_blend );
 	}
 
 	const int width = nSize + 1;

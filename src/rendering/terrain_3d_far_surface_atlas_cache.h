@@ -105,8 +105,8 @@ private:
 	Terrain3DGeneratedTexture m_generatedColorMap;
 	Ref<Image> m_heightImage;
 	Ref<Image> m_colorImage;
-	eastl::bitset<s_nMaxRegionSlots> m_heightDirtyRegions;
-	eastl::bitset<s_nMaxRegionSlots> m_colorDirtyRegions;
+	eastl::bitset<s_nRegionSlots> m_heightDirtyRegions;
+	eastl::bitset<s_nRegionSlots> m_colorDirtyRegions;
 	bool m_bHeightDirty = true;
 	bool m_bColorDirty = true;
 	bool m_bHeightDirtyAll = true;

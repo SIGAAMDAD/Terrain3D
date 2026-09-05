@@ -141,7 +141,6 @@ private:
 	void operateMap( const Vector3 &rGlobalPosition, const real_t fCameraDirection );
 	t3dMapType_t getMapType( void ) const;
 	bool isInBounds( const Point2i &rPixel, const Point2i &rSize ) const;
-	Vector2 getUvPosition( const Vector3 &rGlobalPosition, const int nRegionSize, const real_t fVertexSpacing ) const;
 	Vector2 getRotatedUv( const Vector2 &rUv, const real_t fAngle ) const;
 	void storeUndo( void );
 	void applyUndo( const Dictionary &rData );
@@ -228,13 +227,6 @@ EA_FORCE_INLINE bool Terrain3DEditor::isInBounds( const Point2i &rPixel, const P
 	return bPositive && bLessThanMax;
 }
 
-inline Vector2 Terrain3DEditor::getUvPosition( const Vector3 &rGlobalPosition, const int nRegionSize, const real_t fVertexSpacing ) const {
-	const Vector2 descaled_position_2d = Vector2( rGlobalPosition.x, rGlobalPosition.z ) / fVertexSpacing;
-	Vector2 region_position = descaled_position_2d / ( real_t )( nRegionSize );
-	region_position = region_position.floor();
-	Vector2 uv_position = ( descaled_position_2d / ( real_t )( nRegionSize ) ) - region_position;
-	return uv_position;
-}
 
 EA_FORCE_INLINE Vector2 Terrain3DEditor::getRotatedUv( const Vector2 &rUv, const real_t fAngle ) const {
 	const Vector2 rotation_offset = V2( 0.5f );

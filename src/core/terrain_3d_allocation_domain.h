@@ -1,0 +1,13 @@
+// Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
+#ifndef TERRAIN3D_ALLOCATION_DOMAIN_H
+#define TERRAIN3D_ALLOCATION_DOMAIN_H
+
+#include <stdint.h>
+
+typedef enum t3dNativeAllocationDomain_e : uint8_t {
+	TERRAIN3D_NATIVE_ALLOCATION_PERSISTENT_RESOURCE = 0u,
+	TERRAIN3D_NATIVE_ALLOCATION_RUNTIME_ZONE_REQUIRED,
+	TERRAIN3D_NATIVE_ALLOCATION_PARENT_BOUND,
+} t3dNativeAllocationDomain_t;
+
+#endif // TERRAIN3D_ALLOCATION_DOMAIN_H

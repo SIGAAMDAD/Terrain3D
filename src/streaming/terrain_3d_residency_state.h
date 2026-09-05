@@ -19,7 +19,6 @@ typedef struct t3dResidencyFrameState_s {
 	const uint8_t *m_pStreamingStates = NULL;
 	const uint8_t *m_pStreamingPrefetch = NULL;
 	uint64_t m_nStreamingGeneration = 0u;
-	int m_nRegionMapSize = 0;
 	int m_nStreamingActiveRadius = 0;
 	int m_nMiddleLods = 0;
 	int m_nGpuHysteresisTicks = s_nGpuCacheDefaultHysteresisTicks;
@@ -31,11 +30,7 @@ typedef struct t3dResidencyFrameState_s {
 	t3dRuntimePageConfig_t m_runtimePageConfig;
 
 	bool containsLocation( const Vector2i &rLocation ) const {
-		if ( m_nRegionMapSize <= 0 ) {
-			return false;
-		}
-		const int half = m_nRegionMapSize / 2;
-		return rLocation.x >= -half && rLocation.x < half && rLocation.y >= -half && rLocation.y < half;
+		return t3dRegionLocationValid( rLocation, s_nRegionMapSize );
 	}
 
 	t3dRegionStreamingState_t streamingState( const Vector2i &rLocation ) const {

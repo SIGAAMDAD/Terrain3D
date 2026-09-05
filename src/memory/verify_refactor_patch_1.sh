@@ -11,9 +11,9 @@ LIGHT_CPP="$ROOT/lighting/terrain_3d_lightmap_streamer.cpp"
 AUDIT="$(cd "$ROOT/.." && pwd)/PATCH_8_RAW_STORAGE_AUDIT.tsv"
 
 # Repository reconciliation lists own their size through non-overflowing inline storage.
-grep -q 'eastl::fixed_vector<Vector2i, s_nMaxRegionSlots, false> m_removedLocations;' "$REPO_H" || fail "removed-location list is not fixed vector storage"
-grep -q 'eastl::fixed_vector<int, s_nMaxRegionSlots, false> m_addedSlots;' "$REPO_H" || fail "added-slot list is not fixed vector storage"
-grep -q 'eastl::fixed_vector<Vector2i, s_nMaxRegionSlots, false> uniqueLocations;' "$REPO_CPP" || fail "unique reconciliation locations still use array+count storage"
+grep -q 'eastl::fixed_vector<Vector2i, s_nRegionSlots, false> m_removedLocations;' "$REPO_H" || fail "removed-location list is not fixed vector storage"
+grep -q 'eastl::fixed_vector<int, s_nRegionSlots, false> m_addedSlots;' "$REPO_H" || fail "added-slot list is not fixed vector storage"
+grep -q 'eastl::fixed_vector<Vector2i, s_nRegionSlots, false> uniqueLocations;' "$REPO_CPP" || fail "unique reconciliation locations still use array+count storage"
 
 if grep -Eq 'm_szRemovedLocations|m_nRemovedLocationCount|m_szAddedSlots|m_nAddedSlotCount|uniqueLocationCount' "$REPO_H" "$REPO_CPP" "$DATA_CPP"; then
     fail "legacy reconciliation array/count bookkeeping remains"

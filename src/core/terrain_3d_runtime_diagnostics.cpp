@@ -51,18 +51,18 @@ Dictionary Terrain3D::getHeightSourceDiagnostics( const Vector3 &rWorldPosition 
 	const int first_far_lod = CLAMP( m_nRuntimeNearShaderLods + m_nRuntimeMiddleShaderLods, 0, 30 );
 	const real_t tessellation_scale = ( real_t )( ( uint64_t )( 1 ) << ( uint64_t )( CLAMP( m_nTessellationLevel, 0, 6 ) ) );
 	const real_t mesh_spacing =
-	        m_fVertexSpacing * ( real_t )( ( uint64_t )( 1 ) << ( uint64_t )( CLAMP( mesh_lod, 0, 30 ) ) ) / tessellation_scale;
+	        s_fRegionVertexSpacing * ( real_t )( ( uint64_t )( 1 ) << ( uint64_t )( CLAMP( mesh_lod, 0, 30 ) ) ) / tessellation_scale;
 	const real_t far_source_spacing =
-	        m_fVertexSpacing * ( real_t )( s_nActiveWorldTexels ) / ( real_t )( MAX( 1, getGpuFarHeightAtlasSide() ) );
+	        s_fRegionVertexSpacing * ( real_t )( s_nActiveWorldTexels ) / ( real_t )( MAX( 1, getGpuFarHeightAtlasSide() ) );
 
 	String height_source = "none";
 	real_t source_spacing = 0.0f;
 	if ( isEditorAuthoringModeInternal() || state == TERRAIN3D_REGION_STREAMING_ACTIVE ) {
 		height_source = "near_region_height";
-		source_spacing = m_fVertexSpacing;
+		source_spacing = s_fRegionVertexSpacing;
 	} else if ( state == TERRAIN3D_REGION_STREAMING_HOT ) {
 		height_source = "middle_height_cache";
-		source_spacing = m_fVertexSpacing * ( real_t )( isEditorAuthoringModeInternal() ? 1 : getGpuMiddleHeightResolutionDivisor() );
+		source_spacing = s_fRegionVertexSpacing * ( real_t )( isEditorAuthoringModeInternal() ? 1 : getGpuMiddleHeightResolutionDivisor() );
 	} else if ( state == TERRAIN3D_REGION_STREAMING_COLD ) {
 		height_source = "far_height_lattice";
 		source_spacing = far_source_spacing;
@@ -76,7 +76,7 @@ Dictionary Terrain3D::getHeightSourceDiagnostics( const Vector3 &rWorldPosition 
 	diagnostics["mesh_vertex_spacing"] = mesh_spacing;
 	diagnostics["first_far_mesh_lod"] = first_far_lod;
 	diagnostics["first_far_mesh_spacing"] =
-	        m_fVertexSpacing * ( real_t )( ( uint64_t )( 1 ) << ( uint64_t )( first_far_lod ) ) / tessellation_scale;
+	        s_fRegionVertexSpacing * ( real_t )( ( uint64_t )( 1 ) << ( uint64_t )( first_far_lod ) ) / tessellation_scale;
 	diagnostics["height_source"] = height_source;
 	diagnostics["height_source_spacing"] = source_spacing;
 	diagnostics["far_height_atlas_side"] = getGpuFarHeightAtlasSide();
@@ -84,7 +84,7 @@ Dictionary Terrain3D::getHeightSourceDiagnostics( const Vector3 &rWorldPosition 
 	diagnostics["surface_gpu_resident"] = m_pData && m_pData->isGpuSurfaceRegionResident( region );
 	diagnostics["middle_height_resident"] = m_pData && m_pData->isMiddleHeightRegionResident( region );
 	diagnostics["geometry_source_invariant_valid"] =
-	        state == TERRAIN3D_REGION_STREAMING_UNLOADED || source_spacing <= MAX( mesh_spacing, m_fVertexSpacing ) + 0.0001f;
+	        state == TERRAIN3D_REGION_STREAMING_UNLOADED || source_spacing <= MAX( mesh_spacing, s_fRegionVertexSpacing ) + 0.0001f;
 	return diagnostics;
 }
 
@@ -473,7 +473,7 @@ Dictionary Terrain3D::getRuntimeDiagnostics( const bool bDeep ) const {
 	clipmap["tessellation_level"] = m_nTessellationLevel;
 	clipmap["total_levels"] = getTotalClipmapLevels();
 	clipmap["mesh_size"] = m_nMeshSize;
-	clipmap["vertex_spacing"] = m_fVertexSpacing;
+	clipmap["vertex_spacing"] = s_fRegionVertexSpacing;
 	clipmap["near_lods"] = m_nRuntimeNearShaderLods;
 	clipmap["middle_lods"] = m_nRuntimeMiddleShaderLods;
 	clipmap["near_range_end_m"] = getRuntimeNearRangeEndM();
@@ -534,8 +534,8 @@ Dictionary Terrain3D::getRuntimeDiagnostics( const bool bDeep ) const {
 	}
 
 	Dictionary configuration;
-	configuration["region_size"] = ( int )( m_nRegionSize );
-	configuration["world_region_size_m"] = ( real_t )( m_nRegionSize )*m_fVertexSpacing;
+	configuration["region_size"] = ( int )( s_nRegionSize );
+	configuration["world_region_size_m"] = ( real_t )( s_nRegionSize )*s_fRegionVertexSpacing;
 	configuration["gpu_cache_enabled"] = m_bGpuRegionCacheEnabled;
 	configuration["gpu_cache_effective"] = effectiveGpuRegionCacheEnabled();
 	configuration["gpu_cache_budget_mb"] = m_nGpuRegionCacheBudgetMb;

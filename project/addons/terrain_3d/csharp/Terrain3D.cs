@@ -1266,8 +1266,7 @@ public partial class Terrain3D : Node3D
 
 	public new Terrain3D.RegionSizeEnum RegionSize
 	{
-		get => Get(GDExtensionPropertyName.RegionSize).As<Terrain3D.RegionSizeEnum>();
-		set => Set(GDExtensionPropertyName.RegionSize, Variant.From(value));
+		get => Terrain3D.RegionSizeEnum.Size128;
 	}
 
 	public new bool Save16Bit
@@ -1374,8 +1373,7 @@ public partial class Terrain3D : Node3D
 
 	public new double VertexSpacing
 	{
-		get => Get(GDExtensionPropertyName.VertexSpacing).As<double>();
-		set => Set(GDExtensionPropertyName.VertexSpacing, value);
+		get => 1.0;
 	}
 
 	public new double CullMargin
