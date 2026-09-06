@@ -57,6 +57,7 @@ typedef struct t3dGpuRegionCacheStats_s {
 	int m_nControlUpdatesLastTick = 0;
 	int m_nColorUpdatesLastTick = 0;
 	int m_nDerivedUpdatesLastTick = 0;
+	int m_nMiddleCompositeUpdatesLastTick = 0;
 	int m_nTerrainShadowUpdatesLastTick = 0;
 	int m_nRuntimeColorMipsLastTick = 0;
 	int m_nRuntimeDerivedBuildsLastTick = 0;
@@ -69,6 +70,8 @@ typedef struct t3dGpuRegionCacheStats_s {
 	size_t m_nControlBytesLastTick = 0u;
 	size_t m_nColorBytesLastTick = 0u;
 	size_t m_nDerivedBytesLastTick = 0u;
+	size_t m_nMiddleCompositeBytesLastTick = 0u;
+	size_t m_nTerrainShadowBytesLastTick = 0u;
 	uint64_t m_nServiceUsecLast = 0u;
 	uint64_t m_nPreparePublicationUsecLast = 0u;
 	uint64_t m_nPrepareEndToEndUsecLast = 0u;
@@ -245,6 +248,9 @@ private:
 	uint64_t m_nGpuRegionCacheBudgetBytes = 16u * ( uint64_t )( s_nGpuCacheMib );
 	int m_nGpuRegionUploadBudgetLayers = 4;
 	int m_nGpuRegionUploadBudgetMb = 2;
+	uint64_t m_nGpuRegionUploadByteTokens = 0u;
+	uint64_t m_nGpuRegionUploadCallTokens = 0u;
+	uint64_t m_nGpuRegionUploadTokenRefillUsec = 0u;
 	int m_nGpuRegionSparePages = s_nGpuCacheDefaultSpareLayers;
 	int m_nGpuRegionRetireFrames = s_nGpuCacheDefaultRetireFrames;
 	int m_nGpuRegionCacheCapacity = 0;
@@ -280,6 +286,7 @@ private:
 	int m_nGpuRegionControlUpdatesLastTick = 0;
 	int m_nGpuRegionColorUpdatesLastTick = 0;
 	int m_nGpuRegionDerivedUpdatesLastTick = 0;
+	int m_nGpuRegionMiddleCompositeUpdatesLastTick = 0;
 	int m_nGpuRegionTerrainShadowUpdatesLastTick = 0;
 	int m_nGpuRegionRuntimeColorMipsLastTick = 0;
 	int m_nGpuRegionRuntimeDerivedBuildsLastTick = 0;
@@ -292,6 +299,8 @@ private:
 	size_t m_nGpuRegionControlBytesLastTick = 0u;
 	size_t m_nGpuRegionColorBytesLastTick = 0u;
 	size_t m_nGpuRegionDerivedBytesLastTick = 0u;
+	size_t m_nGpuRegionMiddleCompositeBytesLastTick = 0u;
+	size_t m_nGpuRegionTerrainShadowBytesLastTick = 0u;
 	uint64_t m_nGpuRegionTick = 0u;
 	uint64_t m_nGpuRegionLastPublicationTick = 0u;
 	Vector2i m_gpuRegionCacheCenter = s_v2iMax;
@@ -353,6 +362,7 @@ private:
 	void clearPendingGpuRegionUpload( int nLayer );
 	void finalizePendingGpuRegionUploads( void );
 	bool uploadGpuRegionLayer( int nLayer, const Vector2i &vLocation, t3dMapType_t eMapType, bool bAllowCookedPage = true );
+	void refillGpuUploadTokens( int nCallBurst );
 	int processPendingGpuRegionRepublishes( int nLimit );
 	int collectDesiredGpuRegions( const t3dResidencyFrameState_t &rFrame,
 	        const Vector2i &rCenter,

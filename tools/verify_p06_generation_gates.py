@@ -84,9 +84,8 @@ lighting_replace = block('src/data/terrain_3d_region.cpp',
                          'void Terrain3DRegion::setLocation')
 if 'markGlobalPublicationDirtyInternal' not in lighting_replace:
     failures.append('P06 replacing a region lighting resource does not invalidate lighting generation')
-# Explicitly reject P07/P08-only markers in this isolated P06 package.
+# P07 is intentionally layered on this package; continue rejecting P08-only markers.
 for rel, needle, label in (
-    ('src/streaming/terrain_3d_gpu_region_cache.cpp', 'm_nGpuRegionMiddleCompositeBytesLastTick', 'P07 contamination'),
     ('src/rendering/rd/render_world/terrain_3d_render_world.h', 'prepare_camera_visibility_hot', 'P08 contamination'),
     ('src/rendering/rd/terrain_3d_render_coordinator.cpp', 'render_world_compute_prepares', 'P08 diagnostics contamination'),
 ):

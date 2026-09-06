@@ -749,7 +749,7 @@ int Terrain3DGpuRegionCache::estimateGpuRegionUploadCalls( const Terrain3DRegion
 	}
 	const uint8_t source_flags = ( uint8_t )( pRegion->getChannelFlags() );
 	const uint8_t layer_flags = m_szGpuRegionLayerChannelFlags[nLayer];
-	int calls = 2; // Height and terrain shadowmask are always published.
+	int calls = 3; // Height, middle composite, and terrain shadowmask are always published for a complete page.
 	if ( isDerivedChannelEnabled() ) {
 		++calls;
 	}
@@ -773,7 +773,7 @@ size_t Terrain3DGpuRegionCache::estimateGpuRegionUploadBytes( const Terrain3DReg
 	if ( full_texels == 0u || derived_texels == 0u ) {
 		return 0u;
 	}
-	size_t bytes = full_texels * 2u + ( full_texels * 4u ) / 3u;
+	size_t bytes = full_texels * 2u + t3dGpuCacheColorBytes( 1 ) + t3dGpuCacheShadowBytes( 1 );
 	if ( isDerivedChannelEnabled() ) {
 		bytes += derived_texels * 2u;
 	}
@@ -792,7 +792,29 @@ size_t Terrain3DGpuRegionCache::estimateGpuRegionUploadBytes( const Terrain3DReg
 
 int Terrain3DGpuRegionCache::getGpuRegionTextureUpdateCallsLastTick( void ) const {
 	return m_nGpuRegionHeightUpdatesLastTick + m_nGpuRegionControlUpdatesLastTick + m_nGpuRegionColorUpdatesLastTick
-	        + m_nGpuRegionDerivedUpdatesLastTick + m_nGpuRegionTerrainShadowUpdatesLastTick + m_nGpuRegionPageTableUpdatesLastTick;
+	        + m_nGpuRegionDerivedUpdatesLastTick + m_nGpuRegionMiddleCompositeUpdatesLastTick + m_nGpuRegionTerrainShadowUpdatesLastTick
+	        + m_nGpuRegionPageTableUpdatesLastTick;
+}
+
+void Terrain3DGpuRegionCache::refillGpuUploadTokens( const int nCallBurst ) {
+	const uint64_t now = t3dSteadyClockUsec();
+	const uint64_t byte_burst = ( uint64_t )( MAX( 1, m_nGpuRegionUploadBudgetMb ) ) * ( uint64_t )( s_nGpuCacheMib );
+	const uint64_t call_burst = ( uint64_t )( MAX( 1, nCallBurst ) );
+	if ( m_nGpuRegionUploadTokenRefillUsec == 0u || now <= m_nGpuRegionUploadTokenRefillUsec ) {
+		m_nGpuRegionUploadByteTokens = byte_burst;
+		m_nGpuRegionUploadCallTokens = call_burst;
+		m_nGpuRegionUploadTokenRefillUsec = now;
+		return;
+	}
+	const uint64_t elapsed = now - m_nGpuRegionUploadTokenRefillUsec;
+	const uint64_t byte_rate = byte_burst * 60u;
+	const uint64_t call_rate = call_burst * 60u;
+	const uint64_t refill_usec = MIN( elapsed, 1000000ull );
+	const uint64_t added_bytes = ( byte_rate * refill_usec ) / 1000000ull;
+	const uint64_t added_calls = ( call_rate * refill_usec ) / 1000000ull;
+	m_nGpuRegionUploadByteTokens = MIN( byte_burst, m_nGpuRegionUploadByteTokens + added_bytes );
+	m_nGpuRegionUploadCallTokens = MIN( call_burst, m_nGpuRegionUploadCallTokens + added_calls );
+	m_nGpuRegionUploadTokenRefillUsec = now;
 }
 
 void Terrain3DGpuRegionCache::reset( const bool bClearTextures ) {
@@ -847,6 +869,7 @@ void Terrain3DGpuRegionCache::reset( const bool bClearTextures ) {
 	m_nGpuRegionControlUpdatesLastTick = 0;
 	m_nGpuRegionColorUpdatesLastTick = 0;
 	m_nGpuRegionDerivedUpdatesLastTick = 0;
+	m_nGpuRegionMiddleCompositeUpdatesLastTick = 0;
 	m_nGpuRegionTerrainShadowUpdatesLastTick = 0;
 	m_nGpuRegionRuntimeColorMipsLastTick = 0;
 	m_nGpuRegionRuntimeDerivedBuildsLastTick = 0;
@@ -859,6 +882,8 @@ void Terrain3DGpuRegionCache::reset( const bool bClearTextures ) {
 	m_nGpuRegionControlBytesLastTick = 0u;
 	m_nGpuRegionColorBytesLastTick = 0u;
 	m_nGpuRegionDerivedBytesLastTick = 0u;
+	m_nGpuRegionMiddleCompositeBytesLastTick = 0u;
+	m_nGpuRegionTerrainShadowBytesLastTick = 0u;
 	m_nGpuRegionPrefetchUsedTotal = 0u;
 	m_nGpuRegionPrefetchDiscardedTotal = 0u;
 	m_nGpuRegionResidentTicksTotal = 0u;
@@ -1595,15 +1620,12 @@ bool Terrain3DGpuRegionCache::uploadGpuRegionLayer(
 			return false;
 		}
 		if ( !bPreparedAttempted ) {
-			// Shipping/runtime keeps cooked pages authoritative and waits for the
-			// prepared source. Editor authoring has live region maps available and
-			// must never require a valid/still-current cook merely to display the
-			// authored heightfield.
-			if ( !m_pTerrain || !m_pTerrain->isEditorAuthoringMode() ) {
-				m_nGpuRegionStallFlagsLastTick |= TERRAIN3D_PROFILE_STALL_GPU_NO_READY_PAGE;
-				m_szGpuRegionSlotStates[nLayer] = previous_state;
-				return false;
-			}
+			// When cooked-page residency is enabled, prepared pages are authoritative
+			// for full-page publication in both runtime and editor. Never fall through
+			// to synchronous control/composite synthesis from the HOT_FRAME service.
+			m_nGpuRegionStallFlagsLastTick |= TERRAIN3D_PROFILE_STALL_GPU_NO_READY_PAGE;
+			m_szGpuRegionSlotStates[nLayer] = previous_state;
+			return false;
 		}
 		if ( bCookedPage ) {
 			++m_nGpuRegionCookedHitsLastTick;
@@ -1763,14 +1785,9 @@ bool Terrain3DGpuRegionCache::uploadGpuRegionLayer(
 		}
 		if ( !bBatchReady ) {
 			m_szGpuRegionSlotStates[nLayer] = previous_state;
-			// A cooked page is an acceleration source, never the authority in
-			// editor/runtime authoring. If one of its materialized GPU images is
-			// incompatible with the current persistent texture layout, retry the
-			// publication once from the live region maps instead of leaving the
-			// logical region unmapped and silently rendering Far height forever.
-			if ( bCookedPage && m_pTerrain && m_pTerrain->isEditorAuthoringMode() ) {
-				return uploadGpuRegionLayer( nLayer, vLocation, eMapType, false );
-			}
+			// A malformed/incompatible prepared page fails closed. Re-entering the
+			// live synthesis path here would put full-page CPU preparation back into
+			// HOT_FRAME and defeat the prepared-page ownership boundary.
 			return false;
 		}
 		const uint64_t upload_generation = pTextureManager->nextTrackedTextureBatchGeneration();
@@ -1809,10 +1826,15 @@ bool Terrain3DGpuRegionCache::uploadGpuRegionLayer(
 			m_nGpuRegionUploadBytesLastTick += color_bytes;
 		}
 		m_generatedMiddleCompositeMaps.commitLayerImage( pMiddleComposite, nLayer );
-		m_nGpuRegionUploadBytesLastTick += t3dGpuRegionCacheGpuImageBytes( pMiddleComposite );
+		++m_nGpuRegionMiddleCompositeUpdatesLastTick;
+		const size_t middle_composite_bytes = t3dGpuRegionCacheGpuImageBytes( pMiddleComposite );
+		m_nGpuRegionMiddleCompositeBytesLastTick += middle_composite_bytes;
+		m_nGpuRegionUploadBytesLastTick += middle_composite_bytes;
 		m_generatedTerrainShadowMasks.commitLayerImage( pTerrainShadowMask, nLayer );
 		++m_nGpuRegionTerrainShadowUpdatesLastTick;
-		m_nGpuRegionUploadBytesLastTick += t3dGpuRegionCacheGpuImageBytes( pTerrainShadowMask );
+		const size_t terrain_shadow_bytes = t3dGpuRegionCacheGpuImageBytes( pTerrainShadowMask );
+		m_nGpuRegionTerrainShadowBytesLastTick += terrain_shadow_bytes;
+		m_nGpuRegionUploadBytesLastTick += terrain_shadow_bytes;
 		m_szGpuRegionLayerChannelFlags[nLayer] = published_flags;
 		m_szGpuRegionMaterialMasks[nLayer] = material_mask;
 		if ( bDerivedChannelEnabled && !bCookedPage && !IS_EDITOR && pDerived != m_defaultDerivedMap ) {
@@ -1864,21 +1886,23 @@ bool Terrain3DGpuRegionCache::uploadGpuRegionLayer(
 	if ( bUploadOk && eMapType == REGION_TYPE_MAX ) {
 		bUploadOk = m_generatedMiddleCompositeMaps.update( pMiddleComposite, nLayer );
 		if ( bUploadOk ) {
-			m_nGpuRegionUploadBytesLastTick += t3dGpuRegionCacheGpuImageBytes( pMiddleComposite );
+			++m_nGpuRegionMiddleCompositeUpdatesLastTick;
+			const size_t bytes = t3dGpuRegionCacheGpuImageBytes( pMiddleComposite );
+			m_nGpuRegionMiddleCompositeBytesLastTick += bytes;
+			m_nGpuRegionUploadBytesLastTick += bytes;
 		}
 	}
 	if ( bUploadOk && eMapType == REGION_TYPE_MAX ) {
 		bUploadOk = m_generatedTerrainShadowMasks.update( pTerrainShadowMask, nLayer );
 		if ( bUploadOk ) {
 			++m_nGpuRegionTerrainShadowUpdatesLastTick;
-			m_nGpuRegionUploadBytesLastTick += t3dGpuRegionCacheGpuImageBytes( pTerrainShadowMask );
+			const size_t bytes = t3dGpuRegionCacheGpuImageBytes( pTerrainShadowMask );
+			m_nGpuRegionTerrainShadowBytesLastTick += bytes;
+			m_nGpuRegionUploadBytesLastTick += bytes;
 		}
 	}
 	if ( !bUploadOk ) {
 		m_szGpuRegionSlotStates[nLayer] = previous_state;
-		if ( bCookedPage && m_pTerrain && m_pTerrain->isEditorAuthoringMode() ) {
-			return uploadGpuRegionLayer( nLayer, vLocation, eMapType, false );
-		}
 		return false;
 	}
 	m_szGpuRegionLayerChannelFlags[nLayer] = published_flags;
@@ -1925,6 +1949,11 @@ bool Terrain3DGpuRegionCache::configure( const bool bEnabled,
 	m_nGpuRegionCacheBudgetBytes = nBudgetBytes < hard_cap ? nBudgetBytes : hard_cap;
 	m_nGpuRegionUploadBudgetLayers = CLAMP( nUploadLayers, 1, s_nGpuRegionUploadMaxLayers );
 	m_nGpuRegionUploadBudgetMb = CLAMP( nUploadBudgetMb, 1, s_nGpuRegionUploadMaxBudgetMb );
+	if ( old_upload_budget != m_nGpuRegionUploadBudgetMb ) {
+		m_nGpuRegionUploadByteTokens = 0u;
+		m_nGpuRegionUploadCallTokens = 0u;
+		m_nGpuRegionUploadTokenRefillUsec = 0u;
+	}
 	m_nGpuRegionSparePages = CLAMP( nSparePages, s_nGpuCacheMinSpareLayers, s_nGpuCacheRuntimeMaxLayers - 1 );
 	m_nGpuRegionRetireFrames = CLAMP( nRetireFrames, 1, 16 );
 
@@ -1979,6 +2008,7 @@ t3dGpuRegionCacheUpdateResult_t Terrain3DGpuRegionCache::update(
 	m_nGpuRegionControlUpdatesLastTick = 0;
 	m_nGpuRegionColorUpdatesLastTick = 0;
 	m_nGpuRegionDerivedUpdatesLastTick = 0;
+	m_nGpuRegionMiddleCompositeUpdatesLastTick = 0;
 	m_nGpuRegionTerrainShadowUpdatesLastTick = 0;
 	m_nGpuRegionRuntimeColorMipsLastTick = 0;
 	m_nGpuRegionRuntimeDerivedBuildsLastTick = 0;
@@ -1992,6 +2022,8 @@ t3dGpuRegionCacheUpdateResult_t Terrain3DGpuRegionCache::update(
 	m_nGpuRegionControlBytesLastTick = 0u;
 	m_nGpuRegionColorBytesLastTick = 0u;
 	m_nGpuRegionDerivedBytesLastTick = 0u;
+	m_nGpuRegionMiddleCompositeBytesLastTick = 0u;
+	m_nGpuRegionTerrainShadowBytesLastTick = 0u;
 	m_nGpuRegionHysteresisLastTick = 0;
 	m_nGpuRegionMissingRequiredLastTick = 0;
 	if ( !m_bGpuRegionCacheEnabled || s_nRegionSize <= 0 || s_fRegionVertexSpacing <= 0.0f ) {
@@ -2105,9 +2137,10 @@ t3dGpuRegionCacheUpdateResult_t Terrain3DGpuRegionCache::update(
 	}
 
 	bool bMapChanged = false;
+	bool bPageTableCallReserved = false;
 	bool bAllDesiredResident = true;
-	const size_t byte_budget = ( size_t )( m_nGpuRegionUploadBudgetMb )*s_nGpuCacheMib;
 	const int update_call_budget = MAX( 7, effective_upload_limit * 6 + 1 );
+	refillGpuUploadTokens( update_call_budget );
 	for ( int desired_index = 0; desired_index < desired_count; ++desired_index ) {
 		const Vector2i location = desired[desired_index];
 		const int existing_layer = findGpuRegionSlot( location );
@@ -2138,13 +2171,12 @@ t3dGpuRegionCacheUpdateResult_t Terrain3DGpuRegionCache::update(
 		}
 		const size_t expected_bytes = estimateGpuRegionUploadBytes( pUploadRegion, target_layer );
 		const int expected_calls = estimateGpuRegionUploadCalls( pUploadRegion, target_layer );
-		const int page_table_reserve = bMapChanged ? 0 : 1;
-		if ( m_nGpuRegionUploadsLastTick > 0 && m_nGpuRegionUploadBytesLastTick + expected_bytes > byte_budget ) {
+		const int page_table_reserve = ( bMapChanged || bPageTableCallReserved ) ? 0 : 1;
+		if ( expected_bytes > m_nGpuRegionUploadByteTokens ) {
 			m_nGpuRegionStallFlagsLastTick |= TERRAIN3D_PROFILE_STALL_GPU_UPLOAD_BYTE_BUDGET;
 			break;
 		}
-		if ( m_nGpuRegionUploadsLastTick > 0
-		        && getGpuRegionTextureUpdateCallsLastTick() + expected_calls + page_table_reserve > update_call_budget ) {
+		if ( ( uint64_t )( expected_calls + page_table_reserve ) > m_nGpuRegionUploadCallTokens ) {
 			m_nGpuRegionStallFlagsLastTick |= TERRAIN3D_PROFILE_STALL_GPU_UPDATE_CALL_BUDGET;
 			break;
 		}
@@ -2181,8 +2213,19 @@ t3dGpuRegionCacheUpdateResult_t Terrain3DGpuRegionCache::update(
 
 		// The staging layer is not referenced by the page table. All channel
 		// updates therefore complete before any shader can sample the new page.
-		if ( !uploadGpuRegionLayer( target_layer, location, REGION_TYPE_MAX ) ) {
+		const size_t upload_bytes_before = m_nGpuRegionUploadBytesLastTick;
+		const int upload_calls_before = getGpuRegionTextureUpdateCallsLastTick();
+		const bool bUploaded = uploadGpuRegionLayer( target_layer, location, REGION_TYPE_MAX );
+		const size_t uploaded_bytes = m_nGpuRegionUploadBytesLastTick - upload_bytes_before;
+		const int uploaded_calls = getGpuRegionTextureUpdateCallsLastTick() - upload_calls_before;
+		m_nGpuRegionUploadByteTokens -= MIN( m_nGpuRegionUploadByteTokens, ( uint64_t )( uploaded_bytes ) );
+		m_nGpuRegionUploadCallTokens -= MIN( m_nGpuRegionUploadCallTokens, ( uint64_t )( MAX( uploaded_calls, 0 ) ) );
+		if ( !bUploaded ) {
 			continue;
+		}
+		if ( page_table_reserve > 0 ) {
+			m_nGpuRegionUploadCallTokens -= MIN( m_nGpuRegionUploadCallTokens, ( uint64_t )page_table_reserve );
+			bPageTableCallReserved = true;
 		}
 		t3dGpuRegionPendingUpload_t &pending = m_szGpuRegionPendingUploads[target_layer];
 		if ( pending.m_nGeneration != 0u ) {
@@ -2278,7 +2321,9 @@ bool Terrain3DGpuRegionCache::refreshTerrainShadowMasks( void ) {
 			return false;
 		}
 		++m_nGpuRegionTerrainShadowUpdatesLastTick;
-		m_nGpuRegionUploadBytesLastTick += t3dGpuRegionCacheGpuImageBytes( pShadowMask );
+		const size_t shadow_bytes = t3dGpuRegionCacheGpuImageBytes( pShadowMask );
+		m_nGpuRegionTerrainShadowBytesLastTick += shadow_bytes;
+		m_nGpuRegionUploadBytesLastTick += shadow_bytes;
 	}
 	return true;
 }
@@ -2400,6 +2445,7 @@ t3dGpuRegionCacheStats_t Terrain3DGpuRegionCache::getStats( void ) const {
 	stats.m_nControlUpdatesLastTick = m_nGpuRegionControlUpdatesLastTick;
 	stats.m_nColorUpdatesLastTick = m_nGpuRegionColorUpdatesLastTick;
 	stats.m_nDerivedUpdatesLastTick = m_nGpuRegionDerivedUpdatesLastTick;
+	stats.m_nMiddleCompositeUpdatesLastTick = m_nGpuRegionMiddleCompositeUpdatesLastTick;
 	stats.m_nTerrainShadowUpdatesLastTick = m_nGpuRegionTerrainShadowUpdatesLastTick;
 	stats.m_nRuntimeColorMipsLastTick = m_nGpuRegionRuntimeColorMipsLastTick;
 	stats.m_nRuntimeDerivedBuildsLastTick = m_nGpuRegionRuntimeDerivedBuildsLastTick;
@@ -2412,6 +2458,8 @@ t3dGpuRegionCacheStats_t Terrain3DGpuRegionCache::getStats( void ) const {
 	stats.m_nControlBytesLastTick = m_nGpuRegionControlBytesLastTick;
 	stats.m_nColorBytesLastTick = m_nGpuRegionColorBytesLastTick;
 	stats.m_nDerivedBytesLastTick = m_nGpuRegionDerivedBytesLastTick;
+	stats.m_nMiddleCompositeBytesLastTick = m_nGpuRegionMiddleCompositeBytesLastTick;
+	stats.m_nTerrainShadowBytesLastTick = m_nGpuRegionTerrainShadowBytesLastTick;
 	stats.m_nServiceUsecLast = m_nGpuRegionServiceUsecLast;
 	stats.m_nPreparePublicationUsecLast = m_nGpuPreparePublicationUsecLast;
 	stats.m_nPrepareEndToEndUsecLast = m_nGpuPrepareEndToEndUsecLast;
@@ -2458,6 +2506,7 @@ Dictionary Terrain3DGpuRegionCache::getStatsDictionary( const bool bDetailed ) c
 	stats["control_updates_last_tick"] = m_nGpuRegionControlUpdatesLastTick;
 	stats["color_updates_last_tick"] = m_nGpuRegionColorUpdatesLastTick;
 	stats["derived_updates_last_tick"] = m_nGpuRegionDerivedUpdatesLastTick;
+	stats["middle_composite_updates_last_tick"] = m_nGpuRegionMiddleCompositeUpdatesLastTick;
 	stats["terrain_shadow_updates_last_tick"] = m_nGpuRegionTerrainShadowUpdatesLastTick;
 	stats["runtime_color_mips_last_tick"] = m_nGpuRegionRuntimeColorMipsLastTick;
 	stats["runtime_derived_builds_last_tick"] = m_nGpuRegionRuntimeDerivedBuildsLastTick;
@@ -2475,6 +2524,14 @@ Dictionary Terrain3DGpuRegionCache::getStatsDictionary( const bool bDetailed ) c
 	stats["prepare_end_to_end_usec_last"] = ( int64_t )( m_nGpuPrepareEndToEndUsecLast );
 	stats["service_cpu_usec_last"] = ( int64_t )( m_nGpuRegionServiceUsecLast );
 	stats["upload_bytes_last_tick"] = ( int64_t )( m_nGpuRegionUploadBytesLastTick );
+	stats["height_bytes_last_tick"] = ( int64_t )( m_nGpuRegionHeightBytesLastTick );
+	stats["derived_bytes_last_tick"] = ( int64_t )( m_nGpuRegionDerivedBytesLastTick );
+	stats["control_bytes_last_tick"] = ( int64_t )( m_nGpuRegionControlBytesLastTick );
+	stats["color_bytes_last_tick"] = ( int64_t )( m_nGpuRegionColorBytesLastTick );
+	stats["middle_composite_bytes_last_tick"] = ( int64_t )( m_nGpuRegionMiddleCompositeBytesLastTick );
+	stats["terrain_shadow_bytes_last_tick"] = ( int64_t )( m_nGpuRegionTerrainShadowBytesLastTick );
+	stats["upload_byte_tokens"] = ( int64_t )( m_nGpuRegionUploadByteTokens );
+	stats["upload_call_tokens"] = ( int64_t )( m_nGpuRegionUploadCallTokens );
 	stats["reserved_bytes"] = ( int64_t )( getReservedBytes() );
 	stats["estimated_layer_bytes"] = ( int64_t )( estimateLayerBytes() );
 	stats["estimated_shared_bytes"] = ( int64_t )( estimateSharedBytes() );

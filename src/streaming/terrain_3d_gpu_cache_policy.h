@@ -44,12 +44,49 @@ inline size_t t3dGpuCacheTexelCount( const int nDivisor ) {
 }
 
 inline size_t t3dGpuCacheColorBytes( const int nDivisor ) {
-	const size_t texels = t3dGpuCacheTexelCount( nDivisor );
-	if ( texels == 0u || texels > ( SIZE_MAX - 2u ) / 16u ) {
+	if ( nDivisor <= 0 ) {
 		return 0u;
 	}
-	// RGBA8 plus a complete mip chain: 4 bytes * 4/3.
-	return ( texels * 16u + 2u ) / 3u;
+	size_t side = ( size_t )( ( s_nRegionSize + nDivisor - 1 ) / nDivisor );
+	size_t bytes = 0u;
+	for ( ;; ) {
+		if ( side > SIZE_MAX / side ) {
+			return 0u;
+		}
+		const size_t texels = side * side;
+		if ( texels > ( SIZE_MAX - bytes ) / 4u ) {
+			return 0u;
+		}
+		bytes += texels * 4u;
+		if ( side == 1u ) {
+			break;
+		}
+		side >>= 1u;
+	}
+	return bytes;
+}
+
+inline size_t t3dGpuCacheShadowBytes( const int nDivisor ) {
+	if ( nDivisor <= 0 ) {
+		return 0u;
+	}
+	size_t side = ( size_t )( ( s_nRegionSize + nDivisor - 1 ) / nDivisor );
+	size_t bytes = 0u;
+	for ( ;; ) {
+		if ( side > SIZE_MAX / side ) {
+			return 0u;
+		}
+		const size_t texels = side * side;
+		if ( texels > SIZE_MAX - bytes ) {
+			return 0u;
+		}
+		bytes += texels;
+		if ( side == 1u ) {
+			break;
+		}
+		side >>= 1u;
+	}
+	return bytes;
 }
 
 inline size_t t3dGpuCacheEstimateLayerBytes( const bool bControlImplicit,
@@ -93,11 +130,10 @@ inline size_t t3dGpuCacheEstimateResidentLayerBytes( const bool bControlImplicit
 	const size_t base_bytes =
 	        t3dGpuCacheEstimateLayerBytes( bControlImplicit, bColorImplicit, bDerivedEnabled, nColorDivisor, nDerivedDivisor );
 	const size_t middle_composite_bytes = t3dGpuCacheColorBytes( nColorDivisor );
-	const size_t shadow_texels = t3dGpuCacheTexelCount( 1 );
-	if ( base_bytes == 0u || middle_composite_bytes == 0u || shadow_texels == 0u || shadow_texels > ( SIZE_MAX - 2u ) / 4u ) {
+	const size_t shadow_bytes = t3dGpuCacheShadowBytes( 1 );
+	if ( base_bytes == 0u || middle_composite_bytes == 0u || shadow_bytes == 0u ) {
 		return 0u;
 	}
-	const size_t shadow_bytes = ( shadow_texels * 4u + 2u ) / 3u; // R8 plus complete mip chain.
 	if ( base_bytes > SIZE_MAX - middle_composite_bytes ) {
 		return 0u;
 	}
